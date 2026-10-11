@@ -40,7 +40,7 @@ const (
 	buttonProbeSalt uint64 = 0x636861742d62746e
 
 	tipKeep     = "Keep this conversation's messages on boxer.facts, to read later in play. The host keeps them only when its BOXER_LLM_RETAIN is durable: the badge reads keep asked until the first answer says, then kept or not kept. Fixed at the first send."
-	tipContext  = "Tokens the last answered call used, prompt and answer. The whole conversation is resent each turn, so this grows until the model's context is full, and then the turn fails."
+	tipContext  = "Tokens the last answered call used, prompt and answer: about what the next request carries before your message. The conversation is resent each turn, so this grows with it."
 	tipPast     = "This window holds one conversation for as long as it is open. A kept conversation is read afterwards in play, over SQL on boxer.facts: the llmMessage rows, whose text is their llmMessageBody."
 	tipApps     = "The model may ask you to share windows with it and work in them through their operations. Fixed at the first send. The host answers only a chat listed in BOXER_AGENT_COORDINATORS."
 	tipNoApps   = "This conversation was started without Apps: its model has no tools and cannot open, read or drive windows, and will say so if asked. Apps is chosen before the first message — New conversation, turn Apps on in Settings, and ask again."
@@ -63,7 +63,8 @@ const (
 
 	// contextBarW is the context meter's width; contextWarnPercent how
 	// full the context is, in percent of the model's size, when the meter
-	// turns and the composer warns — the one meter decides (tokenmeter).
+	// turns and the composer warns while compaction is off — while it is
+	// on, the trigger decides instead (contextFill).
 	contextBarW        float32 = 180
 	contextWarnPercent int64   = 80
 )
@@ -297,16 +298,36 @@ func (inst *App) renderRename() {
 	}
 }
 
+// contextFill is what the context meter and the composer's warning read:
+// the last answered call's tokens, the model's context size, and the
+// compaction trigger, zero while compaction is off (ADR-0316). The
+// reported prompt is the base the compaction plan anchors to, so a fill
+// at the trigger is a next turn that compacts before it is sent. over
+// says the meter turns: at the trigger while compaction is on, at
+// contextWarnPercent of the size while it is off.
+func (inst *App) contextFill() (used int64, limit int64, trigger int64, over bool) {
+	conv := inst.conv
+	used = tokenmeter.Used(conv.lastIn, conv.lastOut, nil)
+	limit = int64(inst.model.ContextTokens)
+	if inst.coord != nil {
+		trigger = inst.coord.compactTrigger()
+	}
+	if trigger > 0 {
+		over = used >= trigger
+	} else {
+		over = tokenmeter.Over(used, limit, contextWarnPercent)
+	}
+	return
+}
+
 // renderContext is how full the model's context is: the last answered
 // call's prompt and answer against the size llm.describe reports, a bar
 // once the size is known, and a count without it.
 func (inst *App) renderContext() {
-	conv := inst.conv
-	used := tokenmeter.Used(conv.lastIn, conv.lastOut, nil)
+	used, limit, trigger, over := inst.contextFill()
 	if used <= 0 {
 		return
 	}
-	limit := int64(inst.model.ContextTokens)
 	if limit <= 0 {
 		for range c.HoverText(tipContext + " The host does not know the model's context size; BOXER_LLM_CONTEXT_TOKENS states it.").KeepIter() {
 			c.Label("context " + tokens(used)).Selectable(false).Send()
@@ -315,25 +336,31 @@ func (inst *App) renderContext() {
 	}
 	frac := tokenmeter.Fraction(used, limit)
 	tip := tipContext + " The size is " + strconv.FormatInt(limit, 10) + " tokens, from " + inst.model.ContextSource + "."
+	if trigger > 0 {
+		tip += " At " + tokens(trigger) + " (" + strconv.FormatInt(trigger*100/limit, 10) + " %) the next turn compacts first: large tool results are elided and older turns summarised; your messages are never summarised."
+	} else {
+		tip += " Compaction is off for this conversation, so a full context fails the turn."
+	}
 	for range c.HoverText(tip).KeepIter() {
 		bar := c.ProgressBar(min(frac, 1)).DesiredWidth(contextBarW).Text("context " + tokens(used) + " / " + tokens(limit))
-		if tokenmeter.Over(used, limit, contextWarnPercent) {
+		if over {
 			bar = bar.Fill(color.Hex(styletokens.WarningDefault.AsHex()))
 		}
 		bar.Send()
 	}
 }
 
-// contextWarning is the line above the composer once the conversation
-// nears the model's context size.
+// contextWarning is the line above the composer once the meter turns:
+// the next turn compacts, or, with compaction off, may not fit.
 func (inst *App) contextWarning() (line string, ok bool) {
-	conv := inst.conv
-	limit := int64(inst.model.ContextTokens)
-	used := tokenmeter.Used(conv.lastIn, conv.lastOut, nil)
-	if !tokenmeter.Over(used, limit, contextWarnPercent) {
+	used, limit, trigger, over := inst.contextFill()
+	if !over || limit <= 0 {
 		return "", false
 	}
 	pct := strconv.FormatInt(used*100/limit, 10)
+	if trigger > 0 {
+		return "This conversation fills " + pct + " % of the model's context, past the " + strconv.FormatInt(trigger*100/limit, 10) + " % at which it compacts: the next turn elides or summarises older turns first. Your messages are never summarised.", true
+	}
 	return "This conversation fills " + pct + " % of the model's context, and every turn resends it: the next answer may not fit. New conversation starts over.", true
 }
 

@@ -57,7 +57,7 @@ func (inst *coordinator) compactConstants(headTokens int64) (c projection.Consta
 		return
 	}
 	c = p.Compact
-	c.TriggerTokens = int64(size) * int64(p.CompactTriggerPercent) / 100
+	c.TriggerTokens = triggerTokens(p, size)
 	if int64(size) < p.CompactContextFloor {
 		if err := c.Validate(headTokens); err != nil {
 			if _, logged := compactOff.LoadOrStore(inst.conversation, true); !logged {
@@ -66,11 +66,34 @@ func (inst *coordinator) compactConstants(headTokens int64) (c projection.Consta
 			return projection.Constants{}
 		}
 	}
+	compactOff.Delete(inst.conversation)
 	return
 }
 
-// compactOff holds the conversations told once that compaction is off.
+// compactOff holds the conversations whose last request found compaction
+// off by the thrash check, each told once until it is on again.
 var compactOff sync.Map
+
+// triggerTokens is the profile's share of a route's context.
+func triggerTokens(p ProfileT, size int32) int64 {
+	return int64(size) * int64(p.CompactTriggerPercent) / 100
+}
+
+// compactTrigger is the trigger the context meter shows: the one the
+// last request was planned under, zero when compaction is off — no
+// route context, no run open, or the thrash check turned it off.
+func (inst *coordinator) compactTrigger() (trigger int64) {
+	inst.mu.Lock()
+	p, size := inst.profile, inst.route.context
+	inst.mu.Unlock()
+	if size <= 0 || p.Id == "" {
+		return
+	}
+	if _, off := compactOff.Load(inst.conversation); off {
+		return
+	}
+	return triggerTokens(p, size)
+}
 
 // headTokens is the size of the batch's head: what the thrash check is
 // run against.

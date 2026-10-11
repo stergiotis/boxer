@@ -105,6 +105,29 @@ func TestTheContextWarning(t *testing.T) {
 	inst.model.ContextTokens = 4000
 	_, ok = inst.contextWarning()
 	assert.False(t, ok)
+
+	// With compaction on, the trigger decides, not the warning share: 850
+	// of 1000 is past a 70 % trigger, 600 is under it.
+	inst.coord = newCoordinator(nil, nil, "context-warning")
+	inst.coord.profile = defaultProfile()
+	inst.coord.setRoute("host", false, 1000)
+	inst.model.ContextTokens = 1000
+	line, ok = inst.contextWarning()
+	require.True(t, ok)
+	assert.Contains(t, line, "past the 70 %")
+	assert.NotContains(t, line, "New conversation")
+	inst.conv.lastIn, inst.conv.lastOut = 550, 50
+	_, ok = inst.contextWarning()
+	assert.False(t, ok, "under the trigger and under the warning share")
+
+	// Compaction turned off by the thrash check falls back to the share.
+	compactOff.Store("context-warning", true)
+	defer compactOff.Delete("context-warning")
+	inst.conv.lastIn, inst.conv.lastOut = 800, 50
+	line, ok = inst.contextWarning()
+	require.True(t, ok)
+	assert.Contains(t, line, "New conversation")
+
 	assert.Equal(t, "950", tokens(950))
 	assert.Equal(t, "12.3k", tokens(12345))
 	assert.Equal(t, "131k", tokens(131072))
