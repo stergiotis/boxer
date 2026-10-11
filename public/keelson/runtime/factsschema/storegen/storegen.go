@@ -153,6 +153,9 @@ type Input struct {
 	// facts canonical wire encoder `factsschema/ra` carries (ADR-0327
 	// (proposed) §SD2); nothing is emitted for it.
 	CanonWire bool
+	// Evidence is the evidence profile (ADR-0327 (proposed) §SD2). Its
+	// components' memberships must be in Ids, like every other component's.
+	Evidence *gen.Evidence
 }
 
 // sharedRA is not an option either.
@@ -236,6 +239,7 @@ func (inst Input) Generate() (err error) {
 		SharedRA:       &sharedRA,
 		DDL:            inst.DDL,
 		CanonWire:      inst.CanonWire,
+		Evidence:       inst.Evidence,
 		// Not a parameter — see the externallyProvisioned doc.
 		ExternallyProvisioned: externallyProvisioned,
 	}.Generate()

@@ -283,6 +283,12 @@ type Input struct {
 	// derived counterparts and Indexes are taken as given; the runtime
 	// DDLTail remains a raw suffix on top of whatever is composed here.
 	DDL *clickhouse.TableOptions
+
+	// Evidence is the evidence profile (ADR-0327 (proposed) §SD2): the
+	// chain and the written-by component, emitted into the store's package
+	// as components of its own and taken through the component pipeline
+	// with the hand-written ones. nil opts into nothing.
+	Evidence *Evidence
 }
 
 // Generate emits the store package: <table>_ddl_clickhouse.out.sql, one
@@ -327,6 +333,10 @@ func (inst Input) Generate() (err error) {
 	if err != nil {
 		err = eh.Errorf("naming convention: %w", err)
 		return
+	}
+	// A chained store digests its rows' canonical items (ADR-0325 §SD2).
+	if inst.evidenceChain() {
+		inst.CanonWire = true
 	}
 	tableStylable := naming.MustBeValidStylableName(inst.TableName + "_table")
 
@@ -406,9 +416,18 @@ func (inst Input) Generate() (err error) {
 		err = eb.Build().Type("wrapper", wrapper).Errorf("Wrapper does not provide generation-time membership ids (marshallgen.MembershipIdSourceI) — the store bakes ids into its Scan filter SQL and the <Store>MembershipIds map")
 		return
 	}
+	// The evidence profile's own components, emitted and then taken as the
+	// hand-written ones are (ADR-0327 (proposed) §SD2).
+	if inst.evidenceOn() {
+		var emitted []string
+		if emitted, err = inst.emitEvidenceDTOs(); err != nil {
+			return
+		}
+		inst.ComponentPaths = append(append([]string(nil), inst.ComponentPaths...), emitted...)
+	}
 	plans := make([]*mappingplan.Plan, 0, len(inst.ComponentPaths))
 	for _, in := range inst.ComponentPaths {
-		out := strings.TrimSuffix(filepath.Base(in), ".go") + ".out.go"
+		out := codecFileName(in)
 		var plan *mappingplan.Plan
 		plan, err = marshallgen.ParsePlan(in)
 		if err != nil {

@@ -224,6 +224,9 @@ func (inst Input) emitStore(ir *common.IntermediateTableRepresentation, conv com
 		err = eb.Build().Str("goType", model.key.goType).Errorf("KeyStream mints a tagged uint64 id; the Key column must derive to uint64")
 		return
 	}
+	if err = inst.evidencePreconditions(model.key.goType, model.order.goType); err != nil {
+		return
+	}
 	if inst.TombstoneView && model.stateView {
 		err = eb.Build().Str("lifecycleColumn", model.lifecycle.name).Errorf("TombstoneView is set, but the schema binds a u8 EntityLifecycle role — the state view exists already, with the u8 marker as the tombstone pair's default binding")
 		return
@@ -1086,6 +1089,9 @@ func (inst emitter) emitStoreHeader(sb *strings.Builder, key, order, lifecycle e
 	// and Raw marks it, whether or not any component is bound.
 	p("\tdmlruntime %q", "github.com/stergiotis/boxer/public/semistructured/leeway/dml/runtime")
 	p("\t%q", "github.com/stergiotis/boxer/public/storage/recordstore")
+	if inst.evidenceOn() {
+		p("\t%q", "github.com/stergiotis/boxer/public/storage/recordstore/evidence")
+	}
 	if inst.Cas {
 		p("\t%q", "github.com/stergiotis/boxer/public/storage/recordstore/rowcas")
 	}
@@ -1290,6 +1296,12 @@ func (inst emitter) emitStoreType(sb *strings.Builder) {
 		p("\t// ids unique across every process that leases from the same stream,")
 		p("\t// never an order. Nil leaves MintKey refusing.")
 		p("\tKeys identifier.IdGeneratorI")
+	}
+	if inst.evidenceChain() {
+		p("\t// Scheme is the hash constructions the chain's digests and commitments")
+		p("\t// are under (ADR-0327 (proposed) §SD1); its name is recorded on every")
+		p("\t// row. The zero value leaves AppendChained refusing.")
+		p("\tScheme evidence.Scheme")
 	}
 	if inst.stateViewOn() {
 		p("\t// TombstoneDetect is the read half of the state-view tombstone pair")
@@ -1766,7 +1778,18 @@ func (inst emitter) emitBuilder(sb *strings.Builder, comps []storeComponent, sta
 	p("// BeginCtx is Begin with the context the configured stampers consult")
 	p("// (ADR-0295 §SD7) — where a call identity reaches an actor stamper. The")
 	p("// store stays single-goroutine; ctx is read during this call only.")
-	p("func (inst *%s) BeginCtx(ctx context.Context, %s) *%s {", inst.storeType(), params, inst.builderType())
+	if inst.evidenceWrittenBy() {
+		p("func (inst *%s) BeginCtx(ctx context.Context, %s) *%s {", inst.storeType(), params, inst.builderType())
+		p("\treturn inst.beginCtx(ctx, %s, true)", args)
+		p("}")
+		p("")
+		p("// beginCtx is BeginCtx; attest false leaves the written-by component to the")
+		p("// caller, for an entity re-entered with its own (CanonicalItem,")
+		p("// AppendChained).")
+		p("func (inst *%s) beginCtx(ctx context.Context, %s, attest bool) *%s {", inst.storeType(), params, inst.builderType())
+	} else {
+		p("func (inst *%s) BeginCtx(ctx context.Context, %s) *%s {", inst.storeType(), params, inst.builderType())
+	}
 	lit := fmt.Sprintf("%s{ID: id, %s: %s", inst.entityType(), inst.orderEntityField(), inst.orderArg())
 	if inst.model.stateView {
 		lit += ", Lifecycle: recordstore.LifecycleLive"
@@ -1779,6 +1802,11 @@ func (inst emitter) emitBuilder(sb *strings.Builder, comps []storeComponent, sta
 	p("\tb := &%s{store: inst, key: id, ent: %s}", inst.builderType(), lit)
 	p("\tb.ident, _ = callident.CallIdentityFrom(ctx)")
 	p("\tb.pushed = inst.applyStampers(ctx)")
+	if inst.evidenceWrittenBy() {
+		p("\tif attest {")
+		p("\t\tb.Add%s(inst.writtenByOf(ctx))", evidenceWrittenByKind)
+		p("\t}")
+	}
 	p("\treturn b")
 	p("}")
 	p("")
@@ -2037,6 +2065,9 @@ func (inst emitter) emitFlush(sb *strings.Builder) {
 	if inst.CanonWire {
 		inst.emitDrainCanonical(p)
 		inst.emitCanonicalItem(p)
+	}
+	if inst.evidenceOn() {
+		inst.emitEvidenceVerbs(p)
 	}
 	p("// FlushIfDue is Flush once cfg.FlushEvery rows are buffered, and a no-op")
 	p("// before that — or always, when FlushEvery is zero. Call it between")
@@ -3101,7 +3132,11 @@ func (inst emitter) emitCanonicalItem(p func(string, ...any)) {
 	if hasPT {
 		args += ", ent." + inst.StoreName + "Envelope"
 	}
-	p("\tb := inst.scratch.Begin(%s)", args)
+	if inst.evidenceWrittenBy() {
+		p("\tb := inst.scratch.beginCtx(context.Background(), %s, false)", args)
+	} else {
+		p("\tb := inst.scratch.Begin(%s)", args)
+	}
 	for _, c := range inst.comps {
 		p("\tif ent.%s.Has {", c.Kind)
 		p("\t\tb.Add%s(ent.%s.Val)", c.Kind, c.Kind)
