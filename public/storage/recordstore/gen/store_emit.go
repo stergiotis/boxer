@@ -72,6 +72,9 @@ type emitter struct {
 	// comps is the classified component set, for the verbs emitted from a
 	// function that is not handed it (CanonicalItem).
 	comps []storeComponent
+	// vaultPlans are the vaulted components' plans (Evidence.Vault): the
+	// kinds the emitted vault wrapper splits content into.
+	vaultPlans []*mappingplan.Plan
 }
 
 // plainRole classifies one plain (backbone) column. The three roles drive
@@ -185,7 +188,7 @@ type envelopeCol struct {
 // 2026-07-04 that deferred them is superseded). Component decode coverage
 // is gated by marshallgen.ReadRowSupported (carrier channels and
 // tuple / nested sections remain uncovered).
-func (inst Input) emitStore(ir *common.IntermediateTableRepresentation, conv common.NamingConventionI, plans []*mappingplan.Plan) (code []byte, err error) {
+func (inst Input) emitStore(ir *common.IntermediateTableRepresentation, conv common.NamingConventionI, plans []*mappingplan.Plan, vaultPlans []*mappingplan.Plan) (code []byte, err error) {
 	info := readback.NewInformationRetrieval(conv)
 	err = info.LoadTable(ir, inst.RowConfig)
 	if err != nil {
@@ -387,7 +390,7 @@ func (inst Input) emitStore(ir *common.IntermediateTableRepresentation, conv com
 	em := emitter{Input: inst, keyGoType: model.key.goType, orderGoType: model.order.goType, cas: cas,
 		model: model, hasComps: len(comps) > 0,
 		stampLane: stampLane, stampLaneAsData: stampLaneAsData,
-		registryIds: hasIdSrc && idSrc.GloballyUniqueIds(), comps: comps}
+		registryIds: hasIdSrc && idSrc.GloballyUniqueIds(), comps: comps, vaultPlans: vaultPlans}
 	var sb strings.Builder
 	em.emitStoreHeader(&sb, key, order, lifecycle, stateView)
 	em.emitMembershipIds(&sb, comps)
@@ -1127,6 +1130,14 @@ func (inst emitter) emitStoreHeader(sb *strings.Builder, key, order, lifecycle e
 	}
 	if inst.model.revision != nil {
 		p("\t%sColRevision = `\"%s\"`", inst.StoreName, inst.model.revision.physical)
+	}
+	if inst.passthroughCols {
+		for _, c := range inst.model.passthrough {
+			if c.revision {
+				continue
+			}
+			p("\t%sCol%s = `\"%s\"`", inst.StoreName, c.pascal, c.physical)
+		}
 	}
 	p(")")
 	p("")

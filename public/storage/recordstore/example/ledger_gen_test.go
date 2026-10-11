@@ -30,11 +30,12 @@ func TestGenerateLedgerStore(t *testing.T) {
 		TableName:      "ledger",
 		Table:          td,
 		RowConfig:      TableRowConfig,
-		ComponentPaths: []string{"./ledgernote_dto.go"},
+		ComponentPaths: []string{"./ledgermeta_dto.go"},
 		OutDir:         ".",
 		ImportPath:     "github.com/stergiotis/boxer/public/storage/recordstore/example",
 		Roles:          gen.Roles{Order: "ordinal"},
 		Wrapper:        marshallgen.FixedIdsWrapper{Ids: ledgerGenIds},
-		Evidence:       &gen.Evidence{Chain: true, WrittenBy: true},
+		// The note is the vault's: the ledger holds no content (§SD4).
+		Evidence: &gen.Evidence{Chain: true, WrittenBy: true, Vault: []string{"./ledgernote_dto.go"}},
 	}.Generate())
 }

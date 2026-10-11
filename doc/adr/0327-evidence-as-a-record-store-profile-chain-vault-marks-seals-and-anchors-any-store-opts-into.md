@@ -166,18 +166,23 @@ preconditions checked at generation:
 | Switch | What the store gains | Requires |
 | --- | --- | --- |
 | `Chain` | the chain component on every row; `Append` that assigns the ordinal, computes the canonical item with the chain fields at zero, chains to the scope's head and commits; `Head(scope)`; `VerifyChain(scope, seed)`; a **chain-head row** per scope (SD9) | a u64 Key as the scope and a u64 Order as the ordinal; not `Cas` |
-| `Vault` | a sibling table over the same data sections, one row per (scope, ordinal, component); the ledger's chain component carries one commitment per vaulted component and the scheme; `Destroy(scope, keep)`, `Erase(scope, ordinal, components)`; a joined read that opens every commitment and reports which did not open | `Chain`; the vaulted components named |
+| `Vault` | a second store, `<Store>Vault`, over a sibling table with the same data sections and the envelope widened by a `component` column, one row per (scope, ordinal, component) holding that component and its opening; the ledger's chain component carries one commitment per component and the scheme; `<Store>Vaulted` over both: `Append` (content first, then the ledger row), `Join` and `Rows` (the openings handed to the laws), `VerifyChain`, `Erase(scope, ordinals, components)`, `Destroy(scope, keep)` | `Chain`; the vaulted components' DTO sources, which are the vault store's and not among the ledger's — a ledger that could scan and decode content it never stores would say the wrong thing about itself; the store's own scaffolding (no `SharedRA`) |
 | `Seals` | a seal row per durable flush (SD5); `VerifySeals` | not `Chain` on the same table |
 | `WrittenBy` | the written-by component on every row, filled from the call identity on `BeginCtx`'s context (SD6) | — |
 
-The profile's components are leeway components the generator ships as
-DTO sources (`evidenceChain`, `evidenceVault`, `evidenceMark`,
-`evidenceWrittenBy`, `evidenceSeal`), on plain scalar and list slots so
-they are readable as components on every path. Their memberships are
-registered in the vocabulary the consumer's table is written against,
-the way the trail's are in the runtime vocabulary; the generator takes
-their ids from the same `Wrapper` as every other component, so a store
-cannot bake ids its writers do not use.
+The profile's components are leeway components the generator emits as
+DTO sources into the store's package (`evidenceChain`, which carries the
+mark and the commitments; `evidenceWrittenBy`; `evidenceOpening` on a
+vault row; `evidenceSeal`), on plain scalar and list slots so they are
+readable as components on every path. They bind the facts data sections
+by name — `symbol`, `stringArray`, `u64Array` — and the plain `id`
+column, so a table under the profile carries those, as a table built
+over factsschema's data sections does. Their memberships are registered
+in the vocabulary the consumer's table is written against, the way the
+trail's are in the runtime vocabulary; the generator takes their ids from
+the same `Wrapper` as every other component, so a store cannot bake ids
+its writers do not use — and since the profile's components share
+sections, a wrapper of declaration-order ids cannot serve it.
 
 Two generator changes carry the profile and stand on their own:
 
@@ -225,16 +230,19 @@ A row's content lives in the vault one **component** at a time: the vault
 table's envelope is the scope, the ordinal and the component's name, and
 each vault row carries that component and its own 32-byte opening. The
 ledger's chain component carries, per vaulted component, the commitment
-over that vault row's canonical item without the opening. Erasure is per
-component; a domain whose rows vault one component has the journal's
-per-row behaviour as the one-component case. A shredded JSON field is one
-component, so a body of attributes erases as a unit, as it does in the
-journal.
+over that vault row's canonical item without the opening. A vaulted
+component is the vault store's, never the ledger's: the ledger has no
+scan, no reader and no entity field for content it never stores, so the
+writer hands the ledger row and its content rows to the vaulted store
+separately, and a ledger row by itself holds no content by construction. Erasure is per component; a domain whose rows vault one
+component has the journal's per-row behaviour as the one-component case.
+A shredded JSON field is one component, so a body of attributes erases
+as a unit, as it does in the journal.
 
 The verifier opens every commitment it can and reports, per component,
-opened / erased-and-explained / unexplained. A reader that joins ledger
-and vault does so in SQL on the three envelope columns; the generated
-store emits that read.
+opened / erased-and-explained / unexplained. A reader joins ledger and
+vault on the scope and the ordinal and hands the laws the openings; the
+generated store emits that read.
 
 ### SD5 — Seals for stores with many writers
 

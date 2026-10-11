@@ -52,6 +52,7 @@ func GetLedgerSchemaInManipulator() (manip *common.TableManipulator, err error) 
 // generated LedgerMembershipIds is the store's own copy of it.)
 var ledgerGenIds = map[string]uint64{
 	"ledgerNoteText":                9001,
+	"ledgerMetaLabel":               9002,
 	"evidenceKindChain":             9101,
 	"evidenceChainPrev":             9102,
 	"evidenceChainDigest":           9103,
@@ -72,4 +73,6 @@ var ledgerGenIds = map[string]uint64{
 	"evidenceWrittenByPurpose":      9208,
 	"evidenceWrittenByCorrelation":  9209,
 	"evidenceWrittenByBatch":        9210,
+	"evidenceKindOpening":           9301,
+	"evidenceOpeningValue":          9302,
 }

@@ -100,8 +100,8 @@ func ledgerOrderBy(opts recordstore.ScanOpts) (clause string, err error) {
 // cannot see it. Compare this map against the writer's before pointing a
 // regenerated store at existing rows.
 var LedgerMembershipIds = map[string]map[string]uint64{
-	"LedgerNote": {
-		"ledgerNoteText": 9001,
+	"LedgerMeta": {
+		"ledgerMetaLabel": 9002,
 	},
 	"EvidenceChain": {
 		"evidenceKindChain":             9101,
@@ -138,15 +138,15 @@ type LedgerEntity struct {
 	// Ord is the Order role value — the caller-supplied, per-key
 	// strictly monotonic sequence (ADR-0100 SD2).
 	Ord               uint64
-	LedgerNote        option.Option[LedgerNote]
+	LedgerMeta        option.Option[LedgerMeta]
 	EvidenceChain     option.Option[EvidenceChain]
 	EvidenceWrittenBy option.Option[EvidenceWrittenBy]
 }
 
 // Archetype reports which components the entity carries, in schema order.
 func (inst *LedgerEntity) Archetype() (a []string) {
-	if inst.LedgerNote.Has {
-		a = append(a, "ledgerNote")
+	if inst.LedgerMeta.Has {
+		a = append(a, "ledgerMeta")
 	}
 	if inst.EvidenceChain.Has {
 		a = append(a, "evidenceChain")
@@ -493,12 +493,12 @@ type LedgerEntityBuilder struct {
 // section, after every component that contributed to it has written.
 func (inst *LedgerEntityBuilder) endSection(section string) error {
 	switch section {
-	case "stringArray":
-		inst.store.dml.GetSectionStringArray().EndSection()
 	case "symbol":
 		inst.store.dml.GetSectionSymbol().EndSection()
 	case "u64Array":
 		inst.store.dml.GetSectionU64Array().EndSection()
+	case "stringArray":
+		inst.store.dml.GetSectionStringArray().EndSection()
 	}
 	return nil
 }
@@ -532,7 +532,7 @@ func (inst *LedgerStore) beginCtx(ctx context.Context, id uint64, ord uint64, at
 	return b
 }
 
-// AddLedgerNote contributes the LedgerNote component to the open entity.
+// AddLedgerMeta contributes the LedgerMeta component to the open entity.
 //
 // The attributes are buffered, not written: a section frame closes for
 // good, so a component that closed its own sections would shut out the
@@ -543,15 +543,15 @@ func (inst *LedgerStore) beginCtx(ctx context.Context, id uint64, ord uint64, at
 // Raw(), is refused: both used to mark the row un-mirrorable and carry
 // on, which made its read-back shape depend on a call the writer had
 // probably made by accident.
-func (inst *LedgerEntityBuilder) AddLedgerNote(row LedgerNote) *LedgerEntityBuilder {
-	if err := inst.buf.StartKind("LedgerNote"); err != nil {
+func (inst *LedgerEntityBuilder) AddLedgerMeta(row LedgerMeta) *LedgerEntityBuilder {
+	if err := inst.buf.StartKind("LedgerMeta"); err != nil {
 		inst.store.dml.AppendError(err)
 		return inst
 	}
-	inst.buf.Enqueue("stringArray", "LedgerNote", func() error {
-		return ledgerNoteEmitSectionStringArray(inst.store.dml.GetSectionStringArray(), row)
+	inst.buf.Enqueue("symbol", "LedgerMeta", func() error {
+		return ledgerMetaEmitSectionSymbol(inst.store.dml.GetSectionSymbol(), row)
 	})
-	inst.ent.LedgerNote = option.Some(row)
+	inst.ent.LedgerMeta = option.Some(row)
 	return inst
 }
 
@@ -665,30 +665,30 @@ func (inst *LedgerEntityBuilder) Rollback() (err error) {
 	return lowlevel.InEntityLedgerTableRollbackEntity(inst.store.dml)
 }
 
-// IngestLedgerNote buffers one whole entity per row carrying only the
-// LedgerNote component, all stamped with ord — rows ship on the next Flush,
+// IngestLedgerMeta buffers one whole entity per row carrying only the
+// LedgerMeta component, all stamped with ord — rows ship on the next Flush,
 // like every write. Keys must be distinct within one call (rows
 // share ord, so duplicates would tie on Order): a duplicate returns
 // recordstore.ErrDuplicateIngestKey. On any error the rows buffered
 // so far remain buffered — Flush ships them, DiscardPending drops
 // them.
-func (inst *LedgerStore) IngestLedgerNote(ord uint64, rows []LedgerNote) (err error) {
-	return inst.IngestLedgerNoteCtx(context.Background(), ord, rows)
+func (inst *LedgerStore) IngestLedgerMeta(ord uint64, rows []LedgerMeta) (err error) {
+	return inst.IngestLedgerMetaCtx(context.Background(), ord, rows)
 }
 
-// IngestLedgerNoteCtx is IngestLedgerNote with the context BeginCtx hands the
+// IngestLedgerMetaCtx is IngestLedgerMeta with the context BeginCtx hands the
 // configured stampers (ADR-0295 §SD7).
-func (inst *LedgerStore) IngestLedgerNoteCtx(ctx context.Context, ord uint64, rows []LedgerNote) (err error) {
+func (inst *LedgerStore) IngestLedgerMetaCtx(ctx context.Context, ord uint64, rows []LedgerMeta) (err error) {
 	seen := make(map[uint64]struct{}, len(rows))
 	for i := range rows {
 		if _, dup := seen[rows[i].ID]; dup {
-			err = eh.Errorf("ingest ledgerNote row %d: %w: key %v", i, recordstore.ErrDuplicateIngestKey, rows[i].ID)
+			err = eh.Errorf("ingest ledgerMeta row %d: %w: key %v", i, recordstore.ErrDuplicateIngestKey, rows[i].ID)
 			return
 		}
 		seen[rows[i].ID] = struct{}{}
-		err = inst.BeginCtx(ctx, rows[i].ID, ord).AddLedgerNote(rows[i]).Commit()
+		err = inst.BeginCtx(ctx, rows[i].ID, ord).AddLedgerMeta(rows[i]).Commit()
 		if err != nil {
-			err = eh.Errorf("ingest ledgerNote row %d: %w", i, err)
+			err = eh.Errorf("ingest ledgerMeta row %d: %w", i, err)
 			return
 		}
 	}
@@ -886,8 +886,8 @@ func (inst *LedgerStore) CanonicalItem(ent *LedgerEntity) (item []byte, err erro
 		inst.scratch = NewLedgerStore(nil, nil, LedgerStoreConfig{})
 	}
 	b := inst.scratch.beginCtx(context.Background(), ent.ID, ent.Ord, false)
-	if ent.LedgerNote.Has {
-		b.AddLedgerNote(ent.LedgerNote.Val)
+	if ent.LedgerMeta.Has {
+		b.AddLedgerMeta(ent.LedgerMeta.Val)
 	}
 	if ent.EvidenceChain.Has {
 		b.AddEvidenceChain(ent.EvidenceChain.Val)
@@ -975,8 +975,8 @@ func (inst *LedgerStore) AppendChained(ctx context.Context, head evidence.Head, 
 	ch.Digest = digest
 	ent.EvidenceChain = option.Some(ch)
 	b := inst.beginCtx(ctx, ent.ID, ent.Ord, false)
-	if ent.LedgerNote.Has {
-		b.AddLedgerNote(ent.LedgerNote.Val)
+	if ent.LedgerMeta.Has {
+		b.AddLedgerMeta(ent.LedgerMeta.Val)
 	}
 	if ent.EvidenceChain.Has {
 		b.AddEvidenceChain(ent.EvidenceChain.Val)
@@ -1097,6 +1097,255 @@ func (inst *ledgerChainRow) Head() (ordinal uint64, digest string, ok bool) {
 		return
 	}
 	return ch.MarkTarget, ch.HeadDigest.Val, true
+}
+
+// LedgerVaulted is the store a host runs under the profile's vault (ADR-0327
+// (proposed) §SD4): a ledger that never holds content and a vault with one
+// row per (scope, ordinal, component), each with the opening the ledger's
+// commitment opens under. Append writes the content first, then the ledger
+// row with one commitment per component; reads join the two and hand the
+// laws the openings; erasure is per component, a rewrite of the vault's
+// part. Safe for concurrent use as far as its stores are: Append, Flush and
+// Close are the single writer's; the reads take the stores' executors.
+type LedgerVaulted struct {
+	ledger *LedgerStore
+	vault  *LedgerVaultStore
+}
+
+// NewLedgerVaulted is the ledger and its vault; the scheme is the ledger's.
+func NewLedgerVaulted(ledger *LedgerStore, vault *LedgerVaultStore) *LedgerVaulted {
+	return &LedgerVaulted{ledger: ledger, vault: vault}
+}
+
+// Ledger and Vault are the stores underneath.
+func (inst *LedgerVaulted) Ledger() *LedgerStore     { return inst.ledger }
+func (inst *LedgerVaulted) Vault() *LedgerVaultStore { return inst.vault }
+
+// LedgerVaultComponents are the kind tags of the vaulted components, the
+// names the ledger's commitments and the vault's component column carry.
+var LedgerVaultComponents = []string{
+	"ledgerNote",
+}
+
+// Split prepares content for the row at ordinal: for each content row the
+// component it holds names it, the opening is drawn, the commitment to the
+// row's canonical item without the opening goes onto ent's chain component,
+// and the row gains its opening. A content row must hold exactly one
+// vaulted component. ent and content are updated in place.
+func (inst *LedgerVaulted) Split(ent *LedgerEntity, ordinal uint64, content []*LedgerVaultEntity) (err error) {
+	if inst.ledger.cfg.Scheme.IsZero() {
+		err = eh.Errorf("split: the ledger has no scheme (LedgerStoreConfig.Scheme)")
+		return
+	}
+	ch := ent.EvidenceChain.Val
+	ch.CommitComponents, ch.Commitments = nil, nil
+	for _, v := range content {
+		component := ""
+		if v.LedgerNote.Has {
+			if component != "" {
+				err = eh.Errorf("split: a content row holds more than one vaulted component")
+				return
+			}
+			component = "ledgerNote"
+		}
+		if component == "" {
+			err = eh.Errorf("split: a content row holds no vaulted component")
+			return
+		}
+		v.ID, v.Ord = ent.ID, ordinal
+		v.LedgerVaultEnvelope.Component = component
+		v.EvidenceOpening = option.None[EvidenceOpening]()
+		item, e := inst.vault.CanonicalItem(v)
+		if e != nil {
+			err = eh.Errorf("split: %w", e)
+			return
+		}
+		opening := evidence.NewOpening()
+		v.EvidenceOpening = option.Some(EvidenceOpening{Kind: EvidenceOpeningKind, Opening: evidence.OpeningText(opening)})
+		ch.CommitComponents = append(ch.CommitComponents, component)
+		ch.Commitments = append(ch.Commitments, inst.ledger.cfg.Scheme.Commit(opening, item))
+	}
+	ent.EvidenceChain = option.Some(ch)
+	return
+}
+
+// Append is Split, the content rows into the vault, and the ledger row
+// through AppendChained, in that order: a ledger row whose content is
+// missing reads as erased and breaks law L31 unless the chain explains it,
+// while a vault row without its ledger row is dead weight nothing reads.
+// Both stores buffer; Flush makes the rows durable, vault first.
+func (inst *LedgerVaulted) Append(ctx context.Context, head evidence.Head, ent *LedgerEntity, content []*LedgerVaultEntity) (digest string, err error) {
+	if err = inst.Split(ent, head.Ordinal+1, content); err != nil {
+		return
+	}
+	for _, v := range content {
+		b := inst.vault.BeginCtx(ctx, v.ID, v.Ord, v.LedgerVaultEnvelope)
+		if v.LedgerNote.Has {
+			b.AddLedgerNote(v.LedgerNote.Val)
+		}
+		if v.EvidenceOpening.Has {
+			b.AddEvidenceOpening(v.EvidenceOpening.Val)
+		}
+		if err = b.Commit(); err != nil {
+			err = eh.Errorf("append: vault: %w", err)
+			return
+		}
+	}
+	return inst.ledger.AppendChained(ctx, head, ent)
+}
+
+// Flush makes the buffered rows durable, the vault's before the ledger's.
+func (inst *LedgerVaulted) Flush(ctx context.Context) (err error) {
+	if _, err = inst.vault.Flush(ctx); err != nil {
+		return eh.Errorf("flush: vault: %w", err)
+	}
+	if _, err = inst.ledger.Flush(ctx); err != nil {
+		return eh.Errorf("flush: ledger: %w", err)
+	}
+	return
+}
+
+// Close closes both stores.
+func (inst *LedgerVaulted) Close() {
+	inst.vault.Close()
+	inst.ledger.Close()
+}
+
+// Join is the ledger rows as the laws read them with the vault's openings
+// and items attached, and the content rows grouped by ordinal. Of several
+// vault rows for one (ordinal, component) the last listed stands; the
+// laws say whether it opens.
+func (inst *LedgerVaulted) Join(ledger []*LedgerEntity, content []*LedgerVaultEntity) (rows []evidence.RowI, byOrdinal map[uint64][]*LedgerVaultEntity) {
+	byOrdinal = make(map[uint64][]*LedgerVaultEntity)
+	for _, v := range content {
+		byOrdinal[v.Ord] = append(byOrdinal[v.Ord], v)
+	}
+	for _, e := range ledger {
+		row := inst.ledger.ChainRow(e).(*ledgerChainRow)
+		vaults := make(map[string]*LedgerVaultEntity)
+		for _, v := range byOrdinal[e.Ord] {
+			if v.ID != e.ID {
+				continue
+			}
+			vaults[v.LedgerVaultEnvelope.Component] = v
+		}
+		row.openings = make(map[string][]byte, len(vaults))
+		for component, v := range vaults {
+			if v.EvidenceOpening.Has {
+				if o := evidence.OpeningOf(v.EvidenceOpening.Val.Opening); o != nil {
+					row.openings[component] = o
+				}
+			}
+		}
+		row.vaultItem = func(component string) ([]byte, error) {
+			v, ok := vaults[component]
+			if !ok {
+				return nil, eh.Errorf("vault item: no row for the component")
+			}
+			c := *v
+			c.EvidenceOpening = option.None[EvidenceOpening]()
+			return inst.vault.CanonicalItem(&c)
+		}
+		rows = append(rows, row)
+	}
+	return
+}
+
+// Rows reads scope's rows from an ordinal on, ledger and vault, and joins
+// them.
+func (inst *LedgerVaulted) Rows(ctx context.Context, scope uint64, from uint64) (rows []evidence.RowI, byOrdinal map[uint64][]*LedgerVaultEntity, err error) {
+	var ledger []*LedgerEntity
+	for e, er := range inst.ledger.Replay(ctx, scope, from, recordstore.ReplayOptsU64{}) {
+		if er != nil {
+			err = eh.Errorf("rows: ledger: %w", er)
+			return
+		}
+		ledger = append(ledger, e)
+	}
+	var content []*LedgerVaultEntity
+	for v, er := range inst.vault.Replay(ctx, scope, from, recordstore.ReplayOptsU64{}) {
+		if er != nil {
+			err = eh.Errorf("rows: vault: %w", er)
+			return
+		}
+		content = append(content, v)
+	}
+	rows, byOrdinal = inst.Join(ledger, content)
+	return
+}
+
+// VerifyChain is law L31 over scope from seed, the vault's openings in hand.
+func (inst *LedgerVaulted) VerifyChain(ctx context.Context, scope uint64, seed string) (broken uint64, why evidence.BreakE, err error) {
+	rows, _, err := inst.Rows(ctx, scope, 0)
+	if err != nil {
+		return
+	}
+	return evidence.Verify(inst.ledger.cfg.Scheme, seed, rows)
+}
+
+// Erase rewrites the vault rows at ordinals out of the table, all their
+// components or only those named: ALTER TABLE … DELETE with
+// mutations_sync = 2, so the bytes are gone when it returns, not masked
+// for a later merge (ADR-0320 §SD4). The erased mark that explains the
+// absence is the writer's to append first (ADR-0327 (proposed) §SD3).
+func (inst *LedgerVaulted) Erase(ctx context.Context, scope uint64, ordinals []uint64, components []string) (err error) {
+	if len(ordinals) == 0 {
+		return
+	}
+	where := LedgerVaultColKey + " = " + strconv.FormatUint(scope, 10) + " AND " + LedgerVaultColOrder + " IN (" + evidenceOrdinals(ordinals) + ")"
+	if len(components) > 0 {
+		var names string
+		if names, err = evidenceComponentLiterals(components); err != nil {
+			return
+		}
+		where += " AND " + LedgerVaultColComponent + " IN (" + names + ")"
+	}
+	return inst.mutate(ctx, where)
+}
+
+// Destroy rewrites scope's vault rows out of the table but those at keep.
+func (inst *LedgerVaulted) Destroy(ctx context.Context, scope uint64, keep []uint64) (err error) {
+	where := LedgerVaultColKey + " = " + strconv.FormatUint(scope, 10)
+	if len(keep) > 0 {
+		where += " AND " + LedgerVaultColOrder + " NOT IN (" + evidenceOrdinals(keep) + ")"
+	}
+	return inst.mutate(ctx, where)
+}
+
+func (inst *LedgerVaulted) mutate(ctx context.Context, where string) (err error) {
+	if inst.vault.exec == nil {
+		return eh.Errorf("the vault has no executor")
+	}
+	if err = inst.vault.exec.Exec(ctx, "ALTER TABLE "+inst.vault.writeTable()+" DELETE WHERE "+where+" SETTINGS mutations_sync = 2"); err != nil {
+		err = eh.Errorf("erase vault rows: %w", err)
+	}
+	return
+}
+
+// evidenceOrdinals are ordinals as the order column's literals.
+func evidenceOrdinals(ordinals []uint64) string {
+	parts := make([]string, 0, len(ordinals))
+	for _, o := range ordinals {
+		parts = append(parts, strconv.FormatUint(o, 10))
+	}
+	return strings.Join(parts, ", ")
+}
+
+// evidenceComponentLiterals are kind tags as string literals; a tag is a
+// Go identifier, so anything else is refused rather than quoted.
+func evidenceComponentLiterals(components []string) (s string, err error) {
+	parts := make([]string, 0, len(components))
+	for _, c := range components {
+		for _, r := range c {
+			if !(r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || r == '_') {
+				err = eh.Errorf("a component name is not a kind tag")
+				return
+			}
+		}
+		parts = append(parts, "'"+c+"'")
+	}
+	s = strings.Join(parts, ", ")
+	return
 }
 
 // FlushIfDue is Flush once cfg.FlushEvery rows are buffered, and a no-op
@@ -1398,12 +1647,12 @@ func (inst *ledgerFetcher) FetchItemSinglePartition(ctx context.Context, partiti
 // Baked ADR-0066 Filter artefacts: rows carrying a conforming
 // component. Generated from Plan ⋈ IR; membership ids are literals.
 const (
-	ledgerScanLedgerNoteFilter        = "has(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9001) AND countEqual(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9001) = 1 AND if(has(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9001), \"tv:stringArray:len:len:u64:4D:::0::data\"[arrayFirstIndex(cum -> cum >= indexOf(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9001), arrayCumSum(\"tv:stringArray:lrcard:lrcard:u64:4E:::0::data\"))], 0) = 1"
+	ledgerScanLedgerMetaFilter        = "has(\"tv:symbol:lr:lr:u64:1247:::0::data\", 9002) AND countEqual(\"tv:symbol:lr:lr:u64:1247:::0::data\", 9002) = 1"
 	ledgerScanEvidenceChainFilter     = "hasAll(\"tv:symbol:lr:lr:u64:1247:::0::data\", [9101, 9104, 9105]) AND hasAll(\"tv:u64Array:lr:lr:u64:1247:::0::data\", [9102, 9106]) AND has(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9103) AND countEqual(\"tv:symbol:lr:lr:u64:1247:::0::data\", 9101) = 1 AND countEqual(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 9102) = 1 AND if(has(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 9102), \"tv:u64Array:len:len:u64:4D:::0::data\"[arrayFirstIndex(cum -> cum >= indexOf(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 9102), arrayCumSum(\"tv:u64Array:lrcard:lrcard:u64:4E:::0::data\"))], 0) = 1 AND countEqual(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9103) = 1 AND if(has(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9103), \"tv:stringArray:len:len:u64:4D:::0::data\"[arrayFirstIndex(cum -> cum >= indexOf(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9103), arrayCumSum(\"tv:stringArray:lrcard:lrcard:u64:4E:::0::data\"))], 0) = 1 AND countEqual(\"tv:symbol:lr:lr:u64:1247:::0::data\", 9104) = 1 AND countEqual(\"tv:symbol:lr:lr:u64:1247:::0::data\", 9105) = 1 AND countEqual(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 9106) = 1 AND if(has(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 9106), \"tv:u64Array:len:len:u64:4D:::0::data\"[arrayFirstIndex(cum -> cum >= indexOf(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 9106), arrayCumSum(\"tv:u64Array:lrcard:lrcard:u64:4E:::0::data\"))], 0) = 1 AND countEqual(\"tv:symbol:lr:lr:u64:1247:::0::data\", 9107) <= 1 AND countEqual(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9108) <= 1 AND if(has(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9108), \"tv:stringArray:len:len:u64:4D:::0::data\"[arrayFirstIndex(cum -> cum >= indexOf(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9108), arrayCumSum(\"tv:stringArray:lrcard:lrcard:u64:4E:::0::data\"))], 0) <= 1 AND countEqual(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9109) <= 1 AND countEqual(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9110) <= 1"
 	ledgerScanEvidenceWrittenByFilter = "hasAll(\"tv:symbol:lr:lr:u64:1247:::0::data\", [9201, 9205, 9207]) AND has(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 9204) AND countEqual(\"tv:symbol:lr:lr:u64:1247:::0::data\", 9201) = 1 AND countEqual(\"tv:symbol:lr:lr:u64:1247:::0::data\", 9202) <= 1 AND countEqual(\"tv:symbol:lr:lr:u64:1247:::0::data\", 9203) <= 1 AND countEqual(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 9204) = 1 AND if(has(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 9204), \"tv:u64Array:len:len:u64:4D:::0::data\"[arrayFirstIndex(cum -> cum >= indexOf(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 9204), arrayCumSum(\"tv:u64Array:lrcard:lrcard:u64:4E:::0::data\"))], 0) = 1 AND countEqual(\"tv:symbol:lr:lr:u64:1247:::0::data\", 9205) = 1 AND countEqual(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9206) <= 1 AND if(has(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9206), \"tv:stringArray:len:len:u64:4D:::0::data\"[arrayFirstIndex(cum -> cum >= indexOf(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9206), arrayCumSum(\"tv:stringArray:lrcard:lrcard:u64:4E:::0::data\"))], 0) <= 1 AND countEqual(\"tv:symbol:lr:lr:u64:1247:::0::data\", 9207) = 1 AND countEqual(\"tv:symbol:lr:lr:u64:1247:::0::data\", 9208) <= 1 AND countEqual(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9209) <= 1 AND if(has(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9209), \"tv:stringArray:len:len:u64:4D:::0::data\"[arrayFirstIndex(cum -> cum >= indexOf(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9209), arrayCumSum(\"tv:stringArray:lrcard:lrcard:u64:4E:::0::data\"))], 0) <= 1 AND countEqual(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9210) <= 1 AND if(has(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9210), \"tv:stringArray:len:len:u64:4D:::0::data\"[arrayFirstIndex(cum -> cum >= indexOf(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9210), arrayCumSum(\"tv:stringArray:lrcard:lrcard:u64:4E:::0::data\"))], 0) <= 1"
 )
 
-// ScanLedgerNote iterates the entities whose rows carry a conforming LedgerNote
+// ScanLedgerMeta iterates the entities whose rows carry a conforming LedgerMeta
 // component, ordered by (Order, Key) — or by opts.OrderBy's envelope
 // column, opts.Descending reversing either — so entities sharing an Order
 // still come out in a fixed sequence. Rows that tie on BOTH (the same
@@ -1420,7 +1669,7 @@ const (
 // single-use; ctx must stay valid until iteration completes; an
 // error ends it as a final (nil, err) pair. Scans see only flushed
 // rows.
-func (inst *LedgerStore) ScanLedgerNote(ctx context.Context, opts recordstore.ScanOpts) iter.Seq2[*LedgerEntity, error] {
+func (inst *LedgerStore) ScanLedgerMeta(ctx context.Context, opts recordstore.ScanOpts) iter.Seq2[*LedgerEntity, error] {
 	if opts.KeyPrefix != "" {
 		return recordstore.RefuseKeyPrefix[*LedgerEntity]()
 	}
@@ -1428,7 +1677,7 @@ func (inst *LedgerStore) ScanLedgerNote(ctx context.Context, opts recordstore.Sc
 	if err != nil {
 		return recordstore.FailScan[*LedgerEntity](err)
 	}
-	where := ledgerScanLedgerNoteFilter
+	where := ledgerScanLedgerMetaFilter
 	if opts.ExtraPredicate != "" {
 		where = "(" + where + ") AND (" + opts.ExtraPredicate + ")"
 	}
@@ -1578,11 +1827,11 @@ var LedgerComponentSQL = componentsql.Set{
 	Store: "Ledger",
 	Table: LedgerTableName,
 	Kinds: map[string]componentsql.Artefacts{
-		"LedgerNote": {
-			Presence:   "has(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9001)",
-			Validator:  "countEqual(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9001) = 1 AND if(has(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9001), \"tv:stringArray:len:len:u64:4D:::0::data\"[arrayFirstIndex(cum -> cum >= indexOf(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9001), arrayCumSum(\"tv:stringArray:lrcard:lrcard:u64:4E:::0::data\"))], 0) = 1",
-			Filter:     ledgerScanLedgerNoteFilter,
-			Projection: "CAST(tuple(\"id:id:u64:47::0:\", LW_LIST_BY_TAG_EQUAL(\"tv:stringArray:value:val:sh:4:::0::data\", \"tv:stringArray:len:len:u64:4D:::0::data\", \"tv:stringArray:lr:lr:u64:1247:::0::data\", 9001, LW_RAGGED_PARENT_IDS(\"tv:stringArray:lrcard:lrcard:u64:4E:::0::data\"))[1]), 'Tuple(ID UInt64, Text String)')",
+		"LedgerMeta": {
+			Presence:   "has(\"tv:symbol:lr:lr:u64:1247:::0::data\", 9002)",
+			Validator:  "countEqual(\"tv:symbol:lr:lr:u64:1247:::0::data\", 9002) = 1",
+			Filter:     ledgerScanLedgerMetaFilter,
+			Projection: "CAST(tuple(\"id:id:u64:47::0:\", LW_VALUE_BY_TAG_EQUAL(\"tv:symbol:value:val:s:124:::0::data\", \"tv:symbol:lr:lr:u64:1247:::0::data\", 9002, LW_RAGGED_PARENT_IDS(\"tv:symbol:lrcard:lrcard:u64:4E:::0::data\"))), 'Tuple(ID UInt64, Label String)')",
 		},
 		"EvidenceChain": {
 			Presence:   "hasAll(\"tv:symbol:lr:lr:u64:1247:::0::data\", [9101, 9104, 9105]) AND hasAll(\"tv:u64Array:lr:lr:u64:1247:::0::data\", [9102, 9106]) AND has(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9103)",
@@ -1651,10 +1900,10 @@ func (inst *LedgerStore) iterateEntities(ctx context.Context, sql string) iter.S
 // kind-homogeneous helpers cannot decode them).
 func decodeLedgerRecord(rec arrow.RecordBatch) (ents []*LedgerEntity, err error) {
 	idR := lowlevel.NewReadAccessLedgerTablePlainEntityIdAttributes()
-	stringArrayR := lowlevel.NewReadAccessLedgerTableTaggedStringArray()
 	symbolR := lowlevel.NewReadAccessLedgerTableTaggedSymbol()
 	u64ArrayR := lowlevel.NewReadAccessLedgerTableTaggedU64Array()
-	readers := []ledgerSectionReaderI{idR, stringArrayR, symbolR, u64ArrayR}
+	stringArrayR := lowlevel.NewReadAccessLedgerTableTaggedStringArray()
+	readers := []ledgerSectionReaderI{idR, symbolR, u64ArrayR, stringArrayR}
 	for _, r := range readers {
 		err = r.LoadFromRecord(rec)
 		if err != nil {
@@ -1676,14 +1925,14 @@ func decodeLedgerRecord(rec arrow.RecordBatch) (ents []*LedgerEntity, err error)
 			Ord: idR.ValueOrdinal.Value(i),
 		}
 		{
-			row, ok, e := ledgerNoteReadRow(i, stringArrayR.GetAttributes(), stringArrayR.GetMemberships())
+			row, ok, e := ledgerMetaReadRow(i, symbolR.GetAttributes(), symbolR.GetMemberships())
 			if e != nil {
-				err = eh.Errorf("read ledgerNote component: %w", e)
+				err = eh.Errorf("read ledgerMeta component: %w", e)
 				return
 			}
 			if ok {
 				row.ID = ent.ID
-				ent.LedgerNote = option.Some(row)
+				ent.LedgerMeta = option.Some(row)
 			}
 		}
 		{

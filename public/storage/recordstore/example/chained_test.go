@@ -21,9 +21,9 @@ func newLedger(t *testing.T) *LedgerStore {
 	return st
 }
 
-func note(scope uint64, text string) *LedgerEntity {
+func note(scope uint64, label string) *LedgerEntity {
 	ent := &LedgerEntity{ID: scope}
-	ent.LedgerNote = option.Some(LedgerNote{Text: text})
+	ent.LedgerMeta = option.Some(LedgerMeta{Label: label})
 	return ent
 }
 
@@ -62,7 +62,7 @@ func TestAppendChainedRowsVerifyFromTheSeed(t *testing.T) {
 	require.NoError(t, err)
 	require.Zero(t, broken, why.String())
 
-	b.LedgerNote = option.Some(LedgerNote{Text: "B"})
+	b.LedgerMeta = option.Some(LedgerMeta{Label: "B"})
 	broken, why, _ = evidence.Verify(ledgerScheme, "seed", rows)
 	require.Equal(t, uint64(2), broken)
 	require.Equal(t, evidence.BreakDigest, why)

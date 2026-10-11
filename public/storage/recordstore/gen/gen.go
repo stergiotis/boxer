@@ -285,10 +285,18 @@ type Input struct {
 	DDL *clickhouse.TableOptions
 
 	// Evidence is the evidence profile (ADR-0327 (proposed) §SD2): the
-	// chain and the written-by component, emitted into the store's package
-	// as components of its own and taken through the component pipeline
-	// with the hand-written ones. nil opts into nothing.
+	// chain, the written-by component and the vault, emitted into the
+	// store's package as components and a store of its own and taken
+	// through the component pipeline with the hand-written ones. nil opts
+	// into nothing.
 	Evidence *Evidence
+
+	// passthroughCols emits a <Store>Col<Field> constant per pass-through
+	// envelope column beside ColKey and ColOrder. Set by the vault store's
+	// generation, whose component column the ledger's wrapper predicates
+	// on; every store could carry them, and would on its next
+	// regeneration, which is why it is not yet a public option.
+	passthroughCols bool
 }
 
 // Generate emits the store package: <table>_ddl_clickhouse.out.sql, one
@@ -310,6 +318,9 @@ func (inst Input) Generate() (err error) {
 			err = eh.Errorf("SharedRA: %w", err)
 			return
 		}
+	}
+	if err = inst.vaultPreconditions(); err != nil {
+		return
 	}
 	// The store emitter derives the DML/RA class names by capitalizing
 	// TableName's first letter; a multi-word name would disagree with the
@@ -455,7 +466,13 @@ func (inst Input) Generate() (err error) {
 	// composition so the role gates (duplicate roles, unsupported shapes)
 	// report their domain-level errors rather than a downstream
 	// column-reference failure.
-	storeCode, err := inst.emitStore(ir, conv, plans)
+	var vaultPlans []*mappingplan.Plan
+	if inst.evidenceVault() {
+		if vaultPlans, err = inst.parseVaultPlans(); err != nil {
+			return
+		}
+	}
+	storeCode, err := inst.emitStore(ir, conv, plans, vaultPlans)
 	if err != nil {
 		err = eh.Errorf("emit store: %w", err)
 		return
@@ -482,6 +499,11 @@ func (inst Input) Generate() (err error) {
 		ddlSql = "CREATE DATABASE IF NOT EXISTS " + inst.Database + ";\n\n" + ddlSql
 	}
 	err = inst.write(inst.TableName+"_ddl_clickhouse.out.sql", []byte(ddlSql))
+	if err != nil || !inst.evidenceVault() {
+		return
+	}
+	// 7. The vault store beside the ledger (ADR-0327 (proposed) §SD4).
+	err = inst.generateVault()
 	return
 }
 

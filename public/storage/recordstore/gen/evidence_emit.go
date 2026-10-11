@@ -3,9 +3,18 @@ package gen
 import (
 	"fmt"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes/ctabb"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/common"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/encodingaspects"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/mappingplan"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/marshall/go/marshallgen"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/naming"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/valueaspects"
 )
 
 // Evidence is the evidence profile (ADR-0327 (proposed) §SD2): the
@@ -30,23 +39,106 @@ type Evidence struct {
 	// (evidence.IdentityFrom), so who wrote a row is in the row and, on a
 	// chained store, inside the digest (law L35).
 	WrittenBy bool
+	// Vault names the lw:-tagged DTO sources of the vaulted components
+	// (ADR-0327 (proposed) §SD4), one kind per file, beside ComponentPaths
+	// and not in it: they are the vault store's, and a ledger that could
+	// scan and decode content it never stores would say the wrong thing
+	// about itself. The generator emits a second store, <Store>VaultStore
+	// over <table>vault — the same data sections, the envelope widened by
+	// a `component` column — holding one row per (scope, ordinal,
+	// component) with the component and its opening, and <Store>Vaulted,
+	// the writer and reader over both: content first, the ledger row with
+	// one commitment per component, reads that join and open, erasure per
+	// component. Requires Chain, and the store's own scaffolding (no
+	// SharedRA): the vault is a table of the store's.
+	Vault []string
 }
 
 // The profile's component kinds and the files they are emitted to.
 const (
 	evidenceChainKind     = "EvidenceChain"
 	evidenceWrittenByKind = "EvidenceWrittenBy"
+	evidenceOpeningKind   = "EvidenceOpening"
 	evidenceChainFile     = "evidencechain_dto.out.go"
 	evidenceWrittenByFile = "evidencewrittenby_dto.out.go"
+	evidenceOpeningFile   = "evidenceopening_dto.out.go"
+	// vaultComponentColumn is the envelope column the vault adds: the
+	// component a row holds, by its kind tag.
+	vaultComponentColumn = "component"
 )
 
 // evidenceOn says the profile is set with anything in it.
 func (inst Input) evidenceOn() bool {
-	return inst.Evidence != nil && (inst.Evidence.Chain || inst.Evidence.WrittenBy)
+	return inst.Evidence != nil && (inst.Evidence.Chain || inst.Evidence.WrittenBy || len(inst.Evidence.Vault) > 0)
 }
 
 func (inst Input) evidenceChain() bool     { return inst.Evidence != nil && inst.Evidence.Chain }
 func (inst Input) evidenceWrittenBy() bool { return inst.Evidence != nil && inst.Evidence.WrittenBy }
+func (inst Input) evidenceVault() bool     { return inst.Evidence != nil && len(inst.Evidence.Vault) > 0 }
+
+// vaultStoreName and vaultTableName name the vault store and its table.
+func (inst Input) vaultStoreName() string { return inst.StoreName + "Vault" }
+func (inst Input) vaultTableName() string { return inst.TableName + "vault" }
+
+// vaultTableDesc is the ledger's description widened by the component
+// column: a string EntityId beside the Key, which the generator carries as
+// a pass-through envelope field.
+func (inst Input) vaultTableDesc() (td common.TableDesc) {
+	td = inst.Table
+	td.DictionaryEntry.Name = naming.MustBeValidStylableName(inst.vaultTableName())
+	td.PlainValuesNames = append(slices.Clone(td.PlainValuesNames), naming.MustBeValidStylableName(vaultComponentColumn))
+	td.PlainValuesTypes = append(slices.Clone(td.PlainValuesTypes), ctabb.S)
+	td.PlainValuesEncodingHints = append(slices.Clone(td.PlainValuesEncodingHints), encodingaspects.EmptyAspectSet)
+	td.PlainValuesItemTypes = append(slices.Clone(td.PlainValuesItemTypes), common.PlainItemTypeEntityId)
+	td.PlainValuesValueSemantics = append(slices.Clone(td.PlainValuesValueSemantics), valueaspects.EmptyAspectSet)
+	return
+}
+
+// parseVaultPlans parses the vaulted components' sources.
+func (inst Input) parseVaultPlans() (plans []*mappingplan.Plan, err error) {
+	for _, in := range inst.Evidence.Vault {
+		var plan *mappingplan.Plan
+		if plan, err = marshallgen.ParsePlan(in); err != nil {
+			err = eb.Build().Str("componentPath", in).Errorf("parse vaulted component: %w", err)
+			return
+		}
+		plans = append(plans, plan)
+	}
+	return
+}
+
+// generateVault emits the vault store: the ledger's Input over the widened
+// description, the vaulted components and the opening component, with
+// CanonWire (the commitments are over the vault rows' canonical items) and
+// no profile of its own.
+func (inst Input) generateVault() (err error) {
+	if err = inst.write(evidenceOpeningFile, []byte(inst.evidenceOpeningDTO())); err != nil {
+		return
+	}
+	vault := Input{
+		PackageName:           inst.PackageName,
+		StoreName:             inst.vaultStoreName(),
+		TableName:             inst.vaultTableName(),
+		Database:              inst.Database,
+		Table:                 inst.vaultTableDesc(),
+		Roles:                 Roles{Key: inst.Roles.Key, Order: inst.Roles.Order},
+		RowConfig:             inst.RowConfig,
+		ComponentPaths:        append(slices.Clone(inst.Evidence.Vault), filepath.Join(inst.OutDir, evidenceOpeningFile)),
+		OutDir:                inst.OutDir,
+		ImportPath:            inst.ImportPath,
+		Flat:                  inst.Flat,
+		FullCodecs:            inst.FullCodecs,
+		Wrapper:               inst.Wrapper,
+		ExternallyProvisioned: inst.ExternallyProvisioned,
+		InsertSettings:        inst.InsertSettings,
+		CanonWire:             true,
+		passthroughCols:       true,
+	}
+	if err = vault.Generate(); err != nil {
+		err = eh.Errorf("generate the vault store: %w", err)
+	}
+	return
+}
 
 // emitEvidenceDTOs writes the profile's component sources into OutDir and
 // returns their paths, for the component pipeline to take as it takes a
@@ -161,16 +253,292 @@ type EvidenceWrittenBy struct {
 `
 }
 
-// evidenceComps is the component set without the profile's own kinds: what
-// the chain re-enters beside them.
-func (inst emitter) evidenceUserComps() (out []storeComponent) {
-	for _, c := range inst.comps {
-		if c.Kind == evidenceChainKind || c.Kind == evidenceWrittenByKind {
-			continue
-		}
-		out = append(out, c)
+func (inst Input) evidenceOpeningDTO() string {
+	return `// Code generated by github.com/stergiotis/boxer/public/storage/recordstore/gen — DO NOT EDIT.
+
+package ` + inst.PackageName + `
+
+// EvidenceOpeningKind is the value of EvidenceOpening.Kind.
+const EvidenceOpeningKind = "evidenceOpening"
+
+// EvidenceOpening is the evidence profile's opening component on a vault
+// row (ADR-0327 (proposed) §SD4): the opening the ledger's commitment to
+// the row's component opens under, as hex. It is destroyed with the row
+// and is never in the row's canonical item: the commitment is over the
+// item without it.
+type EvidenceOpening struct {
+	_ struct{} ` + "`kind:\"evidenceOpening\"`" + `
+
+	Id uint64 ` + "`lw:\",id\"`" + `
+	// Kind's value is EvidenceOpeningKind.
+	Kind string ` + "`lw:\"evidenceKindOpening,symbol\"`" + `
+	// Opening is evidence.OpeningText of the opening.
+	Opening string ` + "`lw:\"evidenceOpeningValue,stringArray,unit\"`" + `
+}
+`
+}
+
+// emitVaulted writes <Store>Vaulted, the writer and reader over the ledger
+// and its vault store (ADR-0327 (proposed) §SD4).
+func (inst emitter) emitVaulted(p func(string, ...any)) {
+	st, ent, chain := inst.storeType(), inst.entityType(), evidenceChainKind
+	vst, vent, venv := inst.vaultStoreName()+"Store", inst.vaultStoreName()+"Entity", inst.vaultStoreName()+"Envelope"
+	wrapped := inst.StoreName + "Vaulted"
+	rowType := lowerFirst(inst.StoreName) + "ChainRow"
+	ord := inst.orderEntityField()
+	p("// %s is the store a host runs under the profile's vault (ADR-0327", wrapped)
+	p("// (proposed) §SD4): a ledger that never holds content and a vault with one")
+	p("// row per (scope, ordinal, component), each with the opening the ledger's")
+	p("// commitment opens under. Append writes the content first, then the ledger")
+	p("// row with one commitment per component; reads join the two and hand the")
+	p("// laws the openings; erasure is per component, a rewrite of the vault's")
+	p("// part. Safe for concurrent use as far as its stores are: Append, Flush and")
+	p("// Close are the single writer's; the reads take the stores' executors.")
+	p("type %s struct {", wrapped)
+	p("\tledger *%s", st)
+	p("\tvault  *%s", vst)
+	p("}")
+	p("")
+	p("// New%s is the ledger and its vault; the scheme is the ledger's.", wrapped)
+	p("func New%s(ledger *%s, vault *%s) *%s { return &%s{ledger: ledger, vault: vault} }", wrapped, st, vst, wrapped, wrapped)
+	p("")
+	p("// Ledger and Vault are the stores underneath.")
+	p("func (inst *%s) Ledger() *%s { return inst.ledger }", wrapped, st)
+	p("func (inst *%s) Vault() *%s  { return inst.vault }", wrapped, vst)
+	p("")
+	p("// %sVaultComponents are the kind tags of the vaulted components, the", inst.StoreName)
+	p("// names the ledger's commitments and the vault's component column carry.")
+	p("var %sVaultComponents = []string{", inst.StoreName)
+	for _, vp := range inst.vaultPlans {
+		p("\t%q,", vp.KindName)
 	}
-	return
+	p("}")
+	p("")
+	p("// Split prepares content for the row at ordinal: for each content row the")
+	p("// component it holds names it, the opening is drawn, the commitment to the")
+	p("// row's canonical item without the opening goes onto ent's chain component,")
+	p("// and the row gains its opening. A content row must hold exactly one")
+	p("// vaulted component. ent and content are updated in place.")
+	p("func (inst *%s) Split(ent *%s, ordinal uint64, content []*%s) (err error) {", wrapped, ent, vent)
+	p("\tif inst.ledger.cfg.Scheme.IsZero() {")
+	p("\t\terr = eh.Errorf(\"split: the ledger has no scheme (%sStoreConfig.Scheme)\")", inst.StoreName)
+	p("\t\treturn")
+	p("\t}")
+	p("\tch := ent.%s.Val", chain)
+	p("\tch.CommitComponents, ch.Commitments = nil, nil")
+	p("\tfor _, v := range content {")
+	p("\t\tcomponent := \"\"")
+	for _, vp := range inst.vaultPlans {
+		p("\t\tif v.%s.Has {", vp.KindType)
+		p("\t\t\tif component != \"\" {")
+		p("\t\t\t\terr = eh.Errorf(\"split: a content row holds more than one vaulted component\")")
+		p("\t\t\t\treturn")
+		p("\t\t\t}")
+		p("\t\t\tcomponent = %q", vp.KindName)
+		p("\t\t}")
+	}
+	p("\t\tif component == \"\" {")
+	p("\t\t\terr = eh.Errorf(\"split: a content row holds no vaulted component\")")
+	p("\t\t\treturn")
+	p("\t\t}")
+	p("\t\tv.ID, v.%s = ent.ID, ordinal", ord)
+	p("\t\tv.%s.Component = component", venv)
+	p("\t\tv.%s = option.None[%s]()", evidenceOpeningKind, evidenceOpeningKind)
+	p("\t\titem, e := inst.vault.CanonicalItem(v)")
+	p("\t\tif e != nil {")
+	p("\t\t\terr = eh.Errorf(\"split: %%w\", e)")
+	p("\t\t\treturn")
+	p("\t\t}")
+	p("\t\topening := evidence.NewOpening()")
+	p("\t\tv.%s = option.Some(%s{Kind: %sKind, Opening: evidence.OpeningText(opening)})", evidenceOpeningKind, evidenceOpeningKind, evidenceOpeningKind)
+	p("\t\tch.CommitComponents = append(ch.CommitComponents, component)")
+	p("\t\tch.Commitments = append(ch.Commitments, inst.ledger.cfg.Scheme.Commit(opening, item))")
+	p("\t}")
+	p("\tent.%s = option.Some(ch)", chain)
+	p("\treturn")
+	p("}")
+	p("")
+	p("// Append is Split, the content rows into the vault, and the ledger row")
+	p("// through AppendChained, in that order: a ledger row whose content is")
+	p("// missing reads as erased and breaks law L31 unless the chain explains it,")
+	p("// while a vault row without its ledger row is dead weight nothing reads.")
+	p("// Both stores buffer; Flush makes the rows durable, vault first.")
+	p("func (inst *%s) Append(ctx context.Context, head evidence.Head, ent *%s, content []*%s) (digest string, err error) {", wrapped, ent, vent)
+	p("\tif err = inst.Split(ent, head.Ordinal+1, content); err != nil {")
+	p("\t\treturn")
+	p("\t}")
+	p("\tfor _, v := range content {")
+	p("\t\tb := inst.vault.BeginCtx(ctx, v.ID, v.%s, v.%s)", ord, venv)
+	for _, vp := range inst.vaultPlans {
+		p("\t\tif v.%s.Has {", vp.KindType)
+		p("\t\t\tb.Add%s(v.%s.Val)", vp.KindType, vp.KindType)
+		p("\t\t}")
+	}
+	p("\t\tif v.%s.Has {", evidenceOpeningKind)
+	p("\t\t\tb.Add%s(v.%s.Val)", evidenceOpeningKind, evidenceOpeningKind)
+	p("\t\t}")
+	p("\t\tif err = b.Commit(); err != nil {")
+	p("\t\t\terr = eh.Errorf(\"append: vault: %%w\", err)")
+	p("\t\t\treturn")
+	p("\t\t}")
+	p("\t}")
+	p("\treturn inst.ledger.AppendChained(ctx, head, ent)")
+	p("}")
+	p("")
+	p("// Flush makes the buffered rows durable, the vault's before the ledger's.")
+	p("func (inst *%s) Flush(ctx context.Context) (err error) {", wrapped)
+	p("\tif _, err = inst.vault.Flush(ctx); err != nil {")
+	p("\t\treturn eh.Errorf(\"flush: vault: %%w\", err)")
+	p("\t}")
+	p("\tif _, err = inst.ledger.Flush(ctx); err != nil {")
+	p("\t\treturn eh.Errorf(\"flush: ledger: %%w\", err)")
+	p("\t}")
+	p("\treturn")
+	p("}")
+	p("")
+	p("// Close closes both stores.")
+	p("func (inst *%s) Close() {", wrapped)
+	p("\tinst.vault.Close()")
+	p("\tinst.ledger.Close()")
+	p("}")
+	p("")
+	p("// Join is the ledger rows as the laws read them with the vault's openings")
+	p("// and items attached, and the content rows grouped by ordinal. Of several")
+	p("// vault rows for one (ordinal, component) the last listed stands; the")
+	p("// laws say whether it opens.")
+	p("func (inst *%s) Join(ledger []*%s, content []*%s) (rows []evidence.RowI, byOrdinal map[uint64][]*%s) {", wrapped, ent, vent, vent)
+	p("\tbyOrdinal = make(map[uint64][]*%s)", vent)
+	p("\tfor _, v := range content {")
+	p("\t\tbyOrdinal[v.%s] = append(byOrdinal[v.%s], v)", ord, ord)
+	p("\t}")
+	p("\tfor _, e := range ledger {")
+	p("\t\trow := inst.ledger.ChainRow(e).(*%s)", rowType)
+	p("\t\tvaults := make(map[string]*%s)", vent)
+	p("\t\tfor _, v := range byOrdinal[e.%s] {", ord)
+	p("\t\t\tif v.ID != e.ID {")
+	p("\t\t\t\tcontinue")
+	p("\t\t\t}")
+	p("\t\t\tvaults[v.%s.Component] = v", venv)
+	p("\t\t}")
+	p("\t\trow.openings = make(map[string][]byte, len(vaults))")
+	p("\t\tfor component, v := range vaults {")
+	p("\t\t\tif v.%s.Has {", evidenceOpeningKind)
+	p("\t\t\t\tif o := evidence.OpeningOf(v.%s.Val.Opening); o != nil {", evidenceOpeningKind)
+	p("\t\t\t\t\trow.openings[component] = o")
+	p("\t\t\t\t}")
+	p("\t\t\t}")
+	p("\t\t}")
+	p("\t\trow.vaultItem = func(component string) ([]byte, error) {")
+	p("\t\t\tv, ok := vaults[component]")
+	p("\t\t\tif !ok {")
+	p("\t\t\t\treturn nil, eh.Errorf(\"vault item: no row for the component\")")
+	p("\t\t\t}")
+	p("\t\t\tc := *v")
+	p("\t\t\tc.%s = option.None[%s]()", evidenceOpeningKind, evidenceOpeningKind)
+	p("\t\t\treturn inst.vault.CanonicalItem(&c)")
+	p("\t\t}")
+	p("\t\trows = append(rows, row)")
+	p("\t}")
+	p("\treturn")
+	p("}")
+	p("")
+	p("// Rows reads scope's rows from an ordinal on, ledger and vault, and joins")
+	p("// them.")
+	p("func (inst *%s) Rows(ctx context.Context, scope uint64, from uint64) (rows []evidence.RowI, byOrdinal map[uint64][]*%s, err error) {", wrapped, vent)
+	p("\tvar ledger []*%s", ent)
+	p("\tfor e, er := range inst.ledger.Replay(ctx, scope, from, recordstore.ReplayOptsU64{}) {")
+	p("\t\tif er != nil {")
+	p("\t\t\terr = eh.Errorf(\"rows: ledger: %%w\", er)")
+	p("\t\t\treturn")
+	p("\t\t}")
+	p("\t\tledger = append(ledger, e)")
+	p("\t}")
+	p("\tvar content []*%s", vent)
+	p("\tfor v, er := range inst.vault.Replay(ctx, scope, from, recordstore.ReplayOptsU64{}) {")
+	p("\t\tif er != nil {")
+	p("\t\t\terr = eh.Errorf(\"rows: vault: %%w\", er)")
+	p("\t\t\treturn")
+	p("\t\t}")
+	p("\t\tcontent = append(content, v)")
+	p("\t}")
+	p("\trows, byOrdinal = inst.Join(ledger, content)")
+	p("\treturn")
+	p("}")
+	p("")
+	p("// VerifyChain is law L31 over scope from seed, the vault's openings in hand.")
+	p("func (inst *%s) VerifyChain(ctx context.Context, scope uint64, seed string) (broken uint64, why evidence.BreakE, err error) {", wrapped)
+	p("\trows, _, err := inst.Rows(ctx, scope, 0)")
+	p("\tif err != nil {")
+	p("\t\treturn")
+	p("\t}")
+	p("\treturn evidence.Verify(inst.ledger.cfg.Scheme, seed, rows)")
+	p("}")
+	p("")
+	p("// Erase rewrites the vault rows at ordinals out of the table, all their")
+	p("// components or only those named: ALTER TABLE … DELETE with")
+	p("// mutations_sync = 2, so the bytes are gone when it returns, not masked")
+	p("// for a later merge (ADR-0320 §SD4). The erased mark that explains the")
+	p("// absence is the writer's to append first (ADR-0327 (proposed) §SD3).")
+	p("func (inst *%s) Erase(ctx context.Context, scope uint64, ordinals []uint64, components []string) (err error) {", wrapped)
+	p("\tif len(ordinals) == 0 {")
+	p("\t\treturn")
+	p("\t}")
+	p("\twhere := %sColKey + \" = \" + strconv.FormatUint(scope, 10) + \" AND \" + %sColOrder + \" IN (\" + evidenceOrdinals(ordinals) + \")\"", inst.vaultStoreName(), inst.vaultStoreName())
+	p("\tif len(components) > 0 {")
+	p("\t\tvar names string")
+	p("\t\tif names, err = evidenceComponentLiterals(components); err != nil {")
+	p("\t\t\treturn")
+	p("\t\t}")
+	p("\t\twhere += \" AND \" + %sColComponent + \" IN (\" + names + \")\"", inst.vaultStoreName())
+	p("\t}")
+	p("\treturn inst.mutate(ctx, where)")
+	p("}")
+	p("")
+	p("// Destroy rewrites scope's vault rows out of the table but those at keep.")
+	p("func (inst *%s) Destroy(ctx context.Context, scope uint64, keep []uint64) (err error) {", wrapped)
+	p("\twhere := %sColKey + \" = \" + strconv.FormatUint(scope, 10)", inst.vaultStoreName())
+	p("\tif len(keep) > 0 {")
+	p("\t\twhere += \" AND \" + %sColOrder + \" NOT IN (\" + evidenceOrdinals(keep) + \")\"", inst.vaultStoreName())
+	p("\t}")
+	p("\treturn inst.mutate(ctx, where)")
+	p("}")
+	p("")
+	p("func (inst *%s) mutate(ctx context.Context, where string) (err error) {", wrapped)
+	p("\tif inst.vault.exec == nil {")
+	p("\t\treturn eh.Errorf(\"the vault has no executor\")")
+	p("\t}")
+	p("\tif err = inst.vault.exec.Exec(ctx, \"ALTER TABLE \"+inst.vault.writeTable()+\" DELETE WHERE \"+where+\" SETTINGS mutations_sync = 2\"); err != nil {")
+	p("\t\terr = eh.Errorf(\"erase vault rows: %%w\", err)")
+	p("\t}")
+	p("\treturn")
+	p("}")
+	p("")
+	p("// evidenceOrdinals are ordinals as the order column's literals.")
+	p("func evidenceOrdinals(ordinals []uint64) string {")
+	p("\tparts := make([]string, 0, len(ordinals))")
+	p("\tfor _, o := range ordinals {")
+	p("\t\tparts = append(parts, strconv.FormatUint(o, 10))")
+	p("\t}")
+	p("\treturn strings.Join(parts, \", \")")
+	p("}")
+	p("")
+	p("// evidenceComponentLiterals are kind tags as string literals; a tag is a")
+	p("// Go identifier, so anything else is refused rather than quoted.")
+	p("func evidenceComponentLiterals(components []string) (s string, err error) {")
+	p("\tparts := make([]string, 0, len(components))")
+	p("\tfor _, c := range components {")
+	p("\t\tfor _, r := range c {")
+	p("\t\t\tif !(r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || r == '_') {")
+	p("\t\t\t\terr = eh.Errorf(\"a component name is not a kind tag\")")
+	p("\t\t\t\treturn")
+	p("\t\t\t}")
+	p("\t\t}")
+	p("\t\tparts = append(parts, \"'\"+c+\"'\")")
+	p("\t}")
+	p("\ts = strings.Join(parts, \", \")")
+	p("\treturn")
+	p("}")
+	p("")
 }
 
 // emitEvidenceVerbs writes the profile's verbs: the written-by filler and
@@ -361,6 +729,9 @@ func (inst emitter) emitEvidenceVerbs(p func(string, ...any)) {
 	p("\treturn ch.MarkTarget, ch.HeadDigest.Val, true")
 	p("}")
 	p("")
+	if inst.evidenceVault() {
+		inst.emitVaulted(p)
+	}
 }
 
 // codecFileName is the per-component codec file for a DTO source: the
@@ -388,6 +759,20 @@ func (inst Input) evidencePreconditions(keyGoType, orderGoType string) (err erro
 		err = fmt.Errorf("Evidence.Chain needs a uint64 Order as the ordinal (Roles.Order on a plain uint64 column); this schema's Order is %s", orderGoType)
 	case inst.Cas:
 		err = fmt.Errorf("Evidence.Chain is refused with Cas: a row rewritten in place has no chain")
+	}
+	return
+}
+
+// vaultPreconditions are the vault's generation-time gates.
+func (inst Input) vaultPreconditions() (err error) {
+	if !inst.evidenceVault() {
+		return
+	}
+	switch {
+	case !inst.evidenceChain():
+		err = fmt.Errorf("Evidence.Vault needs Evidence.Chain: the commitments ride the chain component")
+	case inst.SharedRA != nil:
+		err = fmt.Errorf("Evidence.Vault is refused with SharedRA: the vault is a table of the store's own, with scaffolding of its own")
 	}
 	return
 }
