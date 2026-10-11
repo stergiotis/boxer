@@ -303,6 +303,36 @@ trip unless the deployment passes another size (SD4). The record store's
 Update of this date). The journal's tables bind their streams in
 plan002's B5, together with the chain-form change the u64 run id brings.
 
+
+### 2026-10-11 — SD7 shipped: the writer lease, as one host makes it
+
+Every writer of a journal is a process on the deployment's one host, so the
+holder is a runtime run with its pid, and whether it is alive is a local
+check rather than a heartbeat's age. A holder is alive while its pid names a
+process whose environment does not carry another run's id. Where the system
+cannot say, an existing process counts as alive, and the run is refused
+rather than taken.
+
+- **The lease lives on the run row** (holder, pid, epoch), kept by the SQL
+  store. An open run is held. A run that leaves the open state releases its
+  lease, so any process may resume, erase or delete a closed run.
+- **The claim is the act's first step**, not a separate verb. Each act reads
+  the row as the table holds it. A live holder refuses it with
+  `agentrun.ErrHeldElsewhere`. A released row, or one whose holder has
+  gone, is taken over by bumping the epoch. A reopen only reads, so two
+  processes can show one run and only the second writer is refused.
+- **Entries are written at revision 2×epoch**, and a tombstone one above.
+  A batch that had passed its claim when its holder was taken over loses
+  every ordinal the new holder writes. The confirming rewrite is guarded on
+  holder, epoch and version.
+- **Reads stop at the run row's head**, so rows past it are invisible. A
+  repair adopts only the prefix of the tail that chains from the head. A
+  takeover that adopts a gone holder's unconfirmed batch refuses the act in
+  hand, whose writer reopens to see it.
+- **The vault keeps the row that opens.** Two rows at one ordinal
+  (ADR-0320) are the normal residue of such a batch, and the vault's join
+  now tries each one instead of the last.
+
 ## References
 
 - [ADR-0106](./0106-identity-fibonacci-tags-build-tag-retirement.md) — the tagged id scheme, the planning API, the pruning function.

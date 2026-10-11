@@ -532,6 +532,66 @@ func NewMembershipPackAgentrunTableShared1RunDeletedAt() (inst *MembershipPackAg
 	return
 }
 
+func NewMembershipPackAgentrunTableShared1RunHolder() (inst *MembershipPackAgentrunTableShared1) {
+	inst = &MembershipPackAgentrunTableShared1{}
+	inst.AccelHighCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipHighCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelLowCardVerbatim = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipLowCardVerbatimIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelMixedLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelMixedRefHighCardParameters = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedRefHighCardParametersIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.ColumnIndexHighCardRef = 214
+	inst.ColumnIndexHighCardRefAccel = 219
+	inst.ColumnIndexLowCardRef = 215
+	inst.ColumnIndexLowCardRefAccel = 220
+	inst.ColumnIndexLowCardVerbatim = 216
+	inst.ColumnIndexLowCardVerbatimAccel = 221
+	inst.ColumnIndexMixedLowCardRef = 217
+	inst.ColumnIndexMixedLowCardRefAccel = 222
+	inst.ColumnIndexMixedRefHighCardParameters = 218
+	inst.ColumnIndexMixedRefHighCardParametersAccel = 222
+	return
+}
+
+func NewMembershipPackAgentrunTableShared1RunHolderPid() (inst *MembershipPackAgentrunTableShared1) {
+	inst = &MembershipPackAgentrunTableShared1{}
+	inst.AccelHighCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipHighCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelLowCardVerbatim = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipLowCardVerbatimIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelMixedLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelMixedRefHighCardParameters = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedRefHighCardParametersIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.ColumnIndexHighCardRef = 224
+	inst.ColumnIndexHighCardRefAccel = 229
+	inst.ColumnIndexLowCardRef = 225
+	inst.ColumnIndexLowCardRefAccel = 230
+	inst.ColumnIndexLowCardVerbatim = 226
+	inst.ColumnIndexLowCardVerbatimAccel = 231
+	inst.ColumnIndexMixedLowCardRef = 227
+	inst.ColumnIndexMixedLowCardRefAccel = 232
+	inst.ColumnIndexMixedRefHighCardParameters = 228
+	inst.ColumnIndexMixedRefHighCardParametersAccel = 232
+	return
+}
+
+func NewMembershipPackAgentrunTableShared1RunEpoch() (inst *MembershipPackAgentrunTableShared1) {
+	inst = &MembershipPackAgentrunTableShared1{}
+	inst.AccelHighCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipHighCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelLowCardVerbatim = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipLowCardVerbatimIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelMixedLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelMixedRefHighCardParameters = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedRefHighCardParametersIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.ColumnIndexHighCardRef = 234
+	inst.ColumnIndexHighCardRefAccel = 239
+	inst.ColumnIndexLowCardRef = 235
+	inst.ColumnIndexLowCardRefAccel = 240
+	inst.ColumnIndexLowCardVerbatim = 236
+	inst.ColumnIndexLowCardVerbatimAccel = 241
+	inst.ColumnIndexMixedLowCardRef = 237
+	inst.ColumnIndexMixedLowCardRefAccel = 242
+	inst.ColumnIndexMixedRefHighCardParameters = 238
+	inst.ColumnIndexMixedRefHighCardParametersAccel = 242
+	return
+}
+
 func (inst *MembershipPackAgentrunTableShared1) Release() {
 	runtime.ReleaseIfNotNil(inst.ValueHighCardRef)
 	runtime.ReleaseIfNotNil(inst.ValueHighCardRefElements)
@@ -830,6 +890,12 @@ type ReadAccessAgentrunTableTaggedRunDigestAttributes struct {
 	ValueValueElements *array.String
 }
 
+type ReadAccessAgentrunTableTaggedRunEpochAttributes struct {
+	ValueValue         *array.List
+	ColumnIndexValue   uint32
+	ValueValueElements *array.Uint32
+}
+
 type ReadAccessAgentrunTableTaggedRunFingerprintAttributes struct {
 	ValueValue         *array.List
 	ColumnIndexValue   uint32
@@ -840,6 +906,18 @@ type ReadAccessAgentrunTableTaggedRunHeadAttributes struct {
 	ValueValue         *array.List
 	ColumnIndexValue   uint32
 	ValueValueElements *array.String
+}
+
+type ReadAccessAgentrunTableTaggedRunHolderAttributes struct {
+	ValueValue         *array.List
+	ColumnIndexValue   uint32
+	ValueValueElements *array.String
+}
+
+type ReadAccessAgentrunTableTaggedRunHolderPidAttributes struct {
+	ValueValue         *array.List
+	ColumnIndexValue   uint32
+	ValueValueElements *array.Uint32
 }
 
 type ReadAccessAgentrunTableTaggedRunLabelExposureAttributes struct {
@@ -1250,6 +1328,35 @@ func (inst *ReadAccessAgentrunTableTaggedRunDigestAttributes) SetColumnIndices(i
 
 var _ runtime.ColumnIndexHandlingI = (*ReadAccessAgentrunTableTaggedRunDigestAttributes)(nil)
 
+func NewReadAccessAgentrunTableTaggedRunEpochAttributes() (inst *ReadAccessAgentrunTableTaggedRunEpochAttributes) {
+	inst = &ReadAccessAgentrunTableTaggedRunEpochAttributes{}
+	inst.ColumnIndexValue = 233
+	return
+}
+
+func (inst *ReadAccessAgentrunTableTaggedRunEpochAttributes) GetColumnIndices() (columnIndices []uint32) {
+	columnIndices = []uint32{
+		inst.ColumnIndexValue,
+	}
+	return
+}
+
+func (inst *ReadAccessAgentrunTableTaggedRunEpochAttributes) GetColumnIndexFieldNames() (fieldNames []string) {
+	fieldNames = []string{
+		"ReadAccessAgentrunTableTaggedRunEpochAttributes.ColumnIndexValue",
+	}
+	return
+}
+
+func (inst *ReadAccessAgentrunTableTaggedRunEpochAttributes) SetColumnIndices(indices []uint32) (rest []uint32) {
+	inst.ColumnIndexValue = indices[0]
+
+	rest = indices[1:]
+	return
+}
+
+var _ runtime.ColumnIndexHandlingI = (*ReadAccessAgentrunTableTaggedRunEpochAttributes)(nil)
+
 func NewReadAccessAgentrunTableTaggedRunFingerprintAttributes() (inst *ReadAccessAgentrunTableTaggedRunFingerprintAttributes) {
 	inst = &ReadAccessAgentrunTableTaggedRunFingerprintAttributes{}
 	inst.ColumnIndexValue = 53
@@ -1307,6 +1414,64 @@ func (inst *ReadAccessAgentrunTableTaggedRunHeadAttributes) SetColumnIndices(ind
 }
 
 var _ runtime.ColumnIndexHandlingI = (*ReadAccessAgentrunTableTaggedRunHeadAttributes)(nil)
+
+func NewReadAccessAgentrunTableTaggedRunHolderAttributes() (inst *ReadAccessAgentrunTableTaggedRunHolderAttributes) {
+	inst = &ReadAccessAgentrunTableTaggedRunHolderAttributes{}
+	inst.ColumnIndexValue = 213
+	return
+}
+
+func (inst *ReadAccessAgentrunTableTaggedRunHolderAttributes) GetColumnIndices() (columnIndices []uint32) {
+	columnIndices = []uint32{
+		inst.ColumnIndexValue,
+	}
+	return
+}
+
+func (inst *ReadAccessAgentrunTableTaggedRunHolderAttributes) GetColumnIndexFieldNames() (fieldNames []string) {
+	fieldNames = []string{
+		"ReadAccessAgentrunTableTaggedRunHolderAttributes.ColumnIndexValue",
+	}
+	return
+}
+
+func (inst *ReadAccessAgentrunTableTaggedRunHolderAttributes) SetColumnIndices(indices []uint32) (rest []uint32) {
+	inst.ColumnIndexValue = indices[0]
+
+	rest = indices[1:]
+	return
+}
+
+var _ runtime.ColumnIndexHandlingI = (*ReadAccessAgentrunTableTaggedRunHolderAttributes)(nil)
+
+func NewReadAccessAgentrunTableTaggedRunHolderPidAttributes() (inst *ReadAccessAgentrunTableTaggedRunHolderPidAttributes) {
+	inst = &ReadAccessAgentrunTableTaggedRunHolderPidAttributes{}
+	inst.ColumnIndexValue = 223
+	return
+}
+
+func (inst *ReadAccessAgentrunTableTaggedRunHolderPidAttributes) GetColumnIndices() (columnIndices []uint32) {
+	columnIndices = []uint32{
+		inst.ColumnIndexValue,
+	}
+	return
+}
+
+func (inst *ReadAccessAgentrunTableTaggedRunHolderPidAttributes) GetColumnIndexFieldNames() (fieldNames []string) {
+	fieldNames = []string{
+		"ReadAccessAgentrunTableTaggedRunHolderPidAttributes.ColumnIndexValue",
+	}
+	return
+}
+
+func (inst *ReadAccessAgentrunTableTaggedRunHolderPidAttributes) SetColumnIndices(indices []uint32) (rest []uint32) {
+	inst.ColumnIndexValue = indices[0]
+
+	rest = indices[1:]
+	return
+}
+
+var _ runtime.ColumnIndexHandlingI = (*ReadAccessAgentrunTableTaggedRunHolderPidAttributes)(nil)
 
 func NewReadAccessAgentrunTableTaggedRunLabelExposureAttributes() (inst *ReadAccessAgentrunTableTaggedRunLabelExposureAttributes) {
 	inst = &ReadAccessAgentrunTableTaggedRunLabelExposureAttributes{}
@@ -1660,12 +1825,27 @@ func (inst *ReadAccessAgentrunTableTaggedRunDigestAttributes) Reset() {
 	inst.ValueValueElements = nil
 }
 
+func (inst *ReadAccessAgentrunTableTaggedRunEpochAttributes) Reset() {
+	inst.ValueValue = nil
+	inst.ValueValueElements = nil
+}
+
 func (inst *ReadAccessAgentrunTableTaggedRunFingerprintAttributes) Reset() {
 	inst.ValueValue = nil
 	inst.ValueValueElements = nil
 }
 
 func (inst *ReadAccessAgentrunTableTaggedRunHeadAttributes) Reset() {
+	inst.ValueValue = nil
+	inst.ValueValueElements = nil
+}
+
+func (inst *ReadAccessAgentrunTableTaggedRunHolderAttributes) Reset() {
+	inst.ValueValue = nil
+	inst.ValueValueElements = nil
+}
+
+func (inst *ReadAccessAgentrunTableTaggedRunHolderPidAttributes) Reset() {
 	inst.ValueValue = nil
 	inst.ValueValueElements = nil
 }
@@ -1806,6 +1986,13 @@ func (inst *ReadAccessAgentrunTableTaggedRunDigestAttributes) Release() {
 	runtime.ReleaseIfNotNil(inst.ValueValueElements)
 }
 
+var _ runtime.ReleasableI = (*ReadAccessAgentrunTableTaggedRunEpochAttributes)(nil)
+
+func (inst *ReadAccessAgentrunTableTaggedRunEpochAttributes) Release() {
+	runtime.ReleaseIfNotNil(inst.ValueValue)
+	runtime.ReleaseIfNotNil(inst.ValueValueElements)
+}
+
 var _ runtime.ReleasableI = (*ReadAccessAgentrunTableTaggedRunFingerprintAttributes)(nil)
 
 func (inst *ReadAccessAgentrunTableTaggedRunFingerprintAttributes) Release() {
@@ -1816,6 +2003,20 @@ func (inst *ReadAccessAgentrunTableTaggedRunFingerprintAttributes) Release() {
 var _ runtime.ReleasableI = (*ReadAccessAgentrunTableTaggedRunHeadAttributes)(nil)
 
 func (inst *ReadAccessAgentrunTableTaggedRunHeadAttributes) Release() {
+	runtime.ReleaseIfNotNil(inst.ValueValue)
+	runtime.ReleaseIfNotNil(inst.ValueValueElements)
+}
+
+var _ runtime.ReleasableI = (*ReadAccessAgentrunTableTaggedRunHolderAttributes)(nil)
+
+func (inst *ReadAccessAgentrunTableTaggedRunHolderAttributes) Release() {
+	runtime.ReleaseIfNotNil(inst.ValueValue)
+	runtime.ReleaseIfNotNil(inst.ValueValueElements)
+}
+
+var _ runtime.ReleasableI = (*ReadAccessAgentrunTableTaggedRunHolderPidAttributes)(nil)
+
+func (inst *ReadAccessAgentrunTableTaggedRunHolderPidAttributes) Release() {
 	runtime.ReleaseIfNotNil(inst.ValueValue)
 	runtime.ReleaseIfNotNil(inst.ValueValueElements)
 }
@@ -1979,6 +2180,13 @@ func (inst *ReadAccessAgentrunTableTaggedRunDigestAttributes) Len() (nEntities i
 	return
 }
 
+func (inst *ReadAccessAgentrunTableTaggedRunEpochAttributes) Len() (nEntities int) {
+	if inst.ValueValue != nil {
+		nEntities = inst.ValueValue.Len()
+	}
+	return
+}
+
 func (inst *ReadAccessAgentrunTableTaggedRunFingerprintAttributes) Len() (nEntities int) {
 	if inst.ValueValue != nil {
 		nEntities = inst.ValueValue.Len()
@@ -1987,6 +2195,20 @@ func (inst *ReadAccessAgentrunTableTaggedRunFingerprintAttributes) Len() (nEntit
 }
 
 func (inst *ReadAccessAgentrunTableTaggedRunHeadAttributes) Len() (nEntities int) {
+	if inst.ValueValue != nil {
+		nEntities = inst.ValueValue.Len()
+	}
+	return
+}
+
+func (inst *ReadAccessAgentrunTableTaggedRunHolderAttributes) Len() (nEntities int) {
+	if inst.ValueValue != nil {
+		nEntities = inst.ValueValue.Len()
+	}
+	return
+}
+
+func (inst *ReadAccessAgentrunTableTaggedRunHolderPidAttributes) Len() (nEntities int) {
 	if inst.ValueValue != nil {
 		nEntities = inst.ValueValue.Len()
 	}
@@ -2164,6 +2386,14 @@ func (inst *ReadAccessAgentrunTableTaggedRunDigestAttributes) LoadFromRecord(rec
 	return
 }
 
+func (inst *ReadAccessAgentrunTableTaggedRunEpochAttributes) LoadFromRecord(rec runtime.RecordI) (err error) {
+	err = runtime.LoadNonScalarValueFieldFromRecord(inst.ColumnIndexValue, arrow.UINT32, rec, &inst.ValueValue, &inst.ValueValueElements, array.NewUint32Data)
+	if err != nil {
+		return
+	}
+	return
+}
+
 func (inst *ReadAccessAgentrunTableTaggedRunFingerprintAttributes) LoadFromRecord(rec runtime.RecordI) (err error) {
 	err = runtime.LoadNonScalarValueFieldFromRecord(inst.ColumnIndexValue, arrow.STRING, rec, &inst.ValueValue, &inst.ValueValueElements, array.NewStringData)
 	if err != nil {
@@ -2174,6 +2404,22 @@ func (inst *ReadAccessAgentrunTableTaggedRunFingerprintAttributes) LoadFromRecor
 
 func (inst *ReadAccessAgentrunTableTaggedRunHeadAttributes) LoadFromRecord(rec runtime.RecordI) (err error) {
 	err = runtime.LoadNonScalarValueFieldFromRecord(inst.ColumnIndexValue, arrow.STRING, rec, &inst.ValueValue, &inst.ValueValueElements, array.NewStringData)
+	if err != nil {
+		return
+	}
+	return
+}
+
+func (inst *ReadAccessAgentrunTableTaggedRunHolderAttributes) LoadFromRecord(rec runtime.RecordI) (err error) {
+	err = runtime.LoadNonScalarValueFieldFromRecord(inst.ColumnIndexValue, arrow.STRING, rec, &inst.ValueValue, &inst.ValueValueElements, array.NewStringData)
+	if err != nil {
+		return
+	}
+	return
+}
+
+func (inst *ReadAccessAgentrunTableTaggedRunHolderPidAttributes) LoadFromRecord(rec runtime.RecordI) (err error) {
+	err = runtime.LoadNonScalarValueFieldFromRecord(inst.ColumnIndexValue, arrow.UINT32, rec, &inst.ValueValue, &inst.ValueValueElements, array.NewUint32Data)
 	if err != nil {
 		return
 	}
@@ -2428,6 +2674,30 @@ func (inst *ReadAccessAgentrunTableTaggedRunDeletedAtAttributes) GetAttrValueVal
 	scalarAttrValue = inst.ValueValueElements.Value(int(b) + int(attrIdx)).ToTime(arrow.Nanosecond)
 	return
 }
+func (inst *ReadAccessAgentrunTableTaggedRunHolderAttributes) GetAttrValueValue(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (scalarAttrValue string) {
+	b, e := inst.ValueValue.ValueOffsets(int(entityIdx))
+	if int64(attrIdx) >= (e - b) {
+		log.Panic().Str("attribute", "Value").Int("beginIncl", int(b)).Int("endExcl", int(e)).Int("attrIdx", int(attrIdx)).Msg("attribute index is out of range")
+	}
+	scalarAttrValue = inst.ValueValueElements.Value(int(b) + int(attrIdx))
+	return
+}
+func (inst *ReadAccessAgentrunTableTaggedRunHolderPidAttributes) GetAttrValueValue(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (scalarAttrValue uint32) {
+	b, e := inst.ValueValue.ValueOffsets(int(entityIdx))
+	if int64(attrIdx) >= (e - b) {
+		log.Panic().Str("attribute", "Value").Int("beginIncl", int(b)).Int("endExcl", int(e)).Int("attrIdx", int(attrIdx)).Msg("attribute index is out of range")
+	}
+	scalarAttrValue = inst.ValueValueElements.Value(int(b) + int(attrIdx))
+	return
+}
+func (inst *ReadAccessAgentrunTableTaggedRunEpochAttributes) GetAttrValueValue(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (scalarAttrValue uint32) {
+	b, e := inst.ValueValue.ValueOffsets(int(entityIdx))
+	if int64(attrIdx) >= (e - b) {
+		log.Panic().Str("attribute", "Value").Int("beginIncl", int(b)).Int("endExcl", int(e)).Int("attrIdx", int(attrIdx)).Msg("attribute index is out of range")
+	}
+	scalarAttrValue = inst.ValueValueElements.Value(int(b) + int(attrIdx))
+	return
+}
 func (inst *ReadAccessAgentrunTablePlainEntityIdAttributes) GetAttrValueId(entityIdx runtime.EntityIdx) (scalarAttrValue string) {
 	scalarAttrValue = inst.ValueId.Value(int(entityIdx))
 	return
@@ -2547,6 +2817,21 @@ func (inst *ReadAccessAgentrunTableTaggedRunDeletedByAttributes) GetNumberOfAttr
 	return
 }
 func (inst *ReadAccessAgentrunTableTaggedRunDeletedAtAttributes) GetNumberOfAttributes(entityIdx runtime.EntityIdx) (nAttributes int64) {
+	b, e := inst.ValueValue.ValueOffsets(int(entityIdx))
+	nAttributes = e - b
+	return
+}
+func (inst *ReadAccessAgentrunTableTaggedRunHolderAttributes) GetNumberOfAttributes(entityIdx runtime.EntityIdx) (nAttributes int64) {
+	b, e := inst.ValueValue.ValueOffsets(int(entityIdx))
+	nAttributes = e - b
+	return
+}
+func (inst *ReadAccessAgentrunTableTaggedRunHolderPidAttributes) GetNumberOfAttributes(entityIdx runtime.EntityIdx) (nAttributes int64) {
+	b, e := inst.ValueValue.ValueOffsets(int(entityIdx))
+	nAttributes = e - b
+	return
+}
+func (inst *ReadAccessAgentrunTableTaggedRunEpochAttributes) GetNumberOfAttributes(entityIdx runtime.EntityIdx) (nAttributes int64) {
 	b, e := inst.ValueValue.ValueOffsets(int(entityIdx))
 	nAttributes = e - b
 	return
@@ -2704,6 +2989,27 @@ type ReadAccessAgentrunTableTaggedRunDeletedAt struct {
 
 var _ runtime.ColumnIndexHandlingI = (*ReadAccessAgentrunTableTaggedRunDeletedAt)(nil)
 
+type ReadAccessAgentrunTableTaggedRunHolder struct {
+	Attributes  *ReadAccessAgentrunTableTaggedRunHolderAttributes
+	Memberships *MembershipPackAgentrunTableShared1
+}
+
+var _ runtime.ColumnIndexHandlingI = (*ReadAccessAgentrunTableTaggedRunHolder)(nil)
+
+type ReadAccessAgentrunTableTaggedRunHolderPid struct {
+	Attributes  *ReadAccessAgentrunTableTaggedRunHolderPidAttributes
+	Memberships *MembershipPackAgentrunTableShared1
+}
+
+var _ runtime.ColumnIndexHandlingI = (*ReadAccessAgentrunTableTaggedRunHolderPid)(nil)
+
+type ReadAccessAgentrunTableTaggedRunEpoch struct {
+	Attributes  *ReadAccessAgentrunTableTaggedRunEpochAttributes
+	Memberships *MembershipPackAgentrunTableShared1
+}
+
+var _ runtime.ColumnIndexHandlingI = (*ReadAccessAgentrunTableTaggedRunEpoch)(nil)
+
 func NewReadAccessAgentrunTableTaggedRunCell() (inst *ReadAccessAgentrunTableTaggedRunCell) {
 	inst = &ReadAccessAgentrunTableTaggedRunCell{}
 	inst.Attributes = NewReadAccessAgentrunTableTaggedRunCellAttributes()
@@ -2848,6 +3154,27 @@ func NewReadAccessAgentrunTableTaggedRunDeletedAt() (inst *ReadAccessAgentrunTab
 	inst = &ReadAccessAgentrunTableTaggedRunDeletedAt{}
 	inst.Attributes = NewReadAccessAgentrunTableTaggedRunDeletedAtAttributes()
 	inst.Memberships = NewMembershipPackAgentrunTableShared1RunDeletedAt()
+	return
+}
+
+func NewReadAccessAgentrunTableTaggedRunHolder() (inst *ReadAccessAgentrunTableTaggedRunHolder) {
+	inst = &ReadAccessAgentrunTableTaggedRunHolder{}
+	inst.Attributes = NewReadAccessAgentrunTableTaggedRunHolderAttributes()
+	inst.Memberships = NewMembershipPackAgentrunTableShared1RunHolder()
+	return
+}
+
+func NewReadAccessAgentrunTableTaggedRunHolderPid() (inst *ReadAccessAgentrunTableTaggedRunHolderPid) {
+	inst = &ReadAccessAgentrunTableTaggedRunHolderPid{}
+	inst.Attributes = NewReadAccessAgentrunTableTaggedRunHolderPidAttributes()
+	inst.Memberships = NewMembershipPackAgentrunTableShared1RunHolderPid()
+	return
+}
+
+func NewReadAccessAgentrunTableTaggedRunEpoch() (inst *ReadAccessAgentrunTableTaggedRunEpoch) {
+	inst = &ReadAccessAgentrunTableTaggedRunEpoch{}
+	inst.Attributes = NewReadAccessAgentrunTableTaggedRunEpochAttributes()
+	inst.Memberships = NewMembershipPackAgentrunTableShared1RunEpoch()
 	return
 }
 
@@ -2998,6 +3325,27 @@ func (inst *ReadAccessAgentrunTableTaggedRunDeletedAt) SetColumnIndices(indices 
 	return
 }
 
+func (inst *ReadAccessAgentrunTableTaggedRunHolder) SetColumnIndices(indices []uint32) (restIndices []uint32) {
+	restIndices = indices
+	restIndices = inst.Attributes.SetColumnIndices(restIndices)
+	restIndices = inst.Memberships.SetColumnIndices(restIndices)
+	return
+}
+
+func (inst *ReadAccessAgentrunTableTaggedRunHolderPid) SetColumnIndices(indices []uint32) (restIndices []uint32) {
+	restIndices = indices
+	restIndices = inst.Attributes.SetColumnIndices(restIndices)
+	restIndices = inst.Memberships.SetColumnIndices(restIndices)
+	return
+}
+
+func (inst *ReadAccessAgentrunTableTaggedRunEpoch) SetColumnIndices(indices []uint32) (restIndices []uint32) {
+	restIndices = indices
+	restIndices = inst.Attributes.SetColumnIndices(restIndices)
+	restIndices = inst.Memberships.SetColumnIndices(restIndices)
+	return
+}
+
 func (inst *ReadAccessAgentrunTableTaggedRunCell) GetColumnIndices() (columnIndices []uint32) {
 	columnIndices = slices.Concat(columnIndices, inst.Attributes.GetColumnIndices())
 	columnIndices = slices.Concat(columnIndices, inst.Memberships.GetColumnIndices())
@@ -3119,6 +3467,24 @@ func (inst *ReadAccessAgentrunTableTaggedRunDeletedBy) GetColumnIndices() (colum
 }
 
 func (inst *ReadAccessAgentrunTableTaggedRunDeletedAt) GetColumnIndices() (columnIndices []uint32) {
+	columnIndices = slices.Concat(columnIndices, inst.Attributes.GetColumnIndices())
+	columnIndices = slices.Concat(columnIndices, inst.Memberships.GetColumnIndices())
+	return
+}
+
+func (inst *ReadAccessAgentrunTableTaggedRunHolder) GetColumnIndices() (columnIndices []uint32) {
+	columnIndices = slices.Concat(columnIndices, inst.Attributes.GetColumnIndices())
+	columnIndices = slices.Concat(columnIndices, inst.Memberships.GetColumnIndices())
+	return
+}
+
+func (inst *ReadAccessAgentrunTableTaggedRunHolderPid) GetColumnIndices() (columnIndices []uint32) {
+	columnIndices = slices.Concat(columnIndices, inst.Attributes.GetColumnIndices())
+	columnIndices = slices.Concat(columnIndices, inst.Memberships.GetColumnIndices())
+	return
+}
+
+func (inst *ReadAccessAgentrunTableTaggedRunEpoch) GetColumnIndices() (columnIndices []uint32) {
 	columnIndices = slices.Concat(columnIndices, inst.Attributes.GetColumnIndices())
 	columnIndices = slices.Concat(columnIndices, inst.Memberships.GetColumnIndices())
 	return
@@ -3250,6 +3616,24 @@ func (inst *ReadAccessAgentrunTableTaggedRunDeletedAt) GetColumnIndexFieldNames(
 	return
 }
 
+func (inst *ReadAccessAgentrunTableTaggedRunHolder) GetColumnIndexFieldNames() (fieldNames []string) {
+	fieldNames = slices.Concat(fieldNames, inst.Attributes.GetColumnIndexFieldNames())
+	fieldNames = slices.Concat(fieldNames, inst.Memberships.GetColumnIndexFieldNames())
+	return
+}
+
+func (inst *ReadAccessAgentrunTableTaggedRunHolderPid) GetColumnIndexFieldNames() (fieldNames []string) {
+	fieldNames = slices.Concat(fieldNames, inst.Attributes.GetColumnIndexFieldNames())
+	fieldNames = slices.Concat(fieldNames, inst.Memberships.GetColumnIndexFieldNames())
+	return
+}
+
+func (inst *ReadAccessAgentrunTableTaggedRunEpoch) GetColumnIndexFieldNames() (fieldNames []string) {
+	fieldNames = slices.Concat(fieldNames, inst.Attributes.GetColumnIndexFieldNames())
+	fieldNames = slices.Concat(fieldNames, inst.Memberships.GetColumnIndexFieldNames())
+	return
+}
+
 func (inst *ReadAccessAgentrunTableTaggedRunCell) Release() {
 	runtime.ReleaseIfNotNil(inst.Attributes)
 	runtime.ReleaseIfNotNil(inst.Memberships)
@@ -3351,6 +3735,21 @@ func (inst *ReadAccessAgentrunTableTaggedRunDeletedBy) Release() {
 }
 
 func (inst *ReadAccessAgentrunTableTaggedRunDeletedAt) Release() {
+	runtime.ReleaseIfNotNil(inst.Attributes)
+	runtime.ReleaseIfNotNil(inst.Memberships)
+}
+
+func (inst *ReadAccessAgentrunTableTaggedRunHolder) Release() {
+	runtime.ReleaseIfNotNil(inst.Attributes)
+	runtime.ReleaseIfNotNil(inst.Memberships)
+}
+
+func (inst *ReadAccessAgentrunTableTaggedRunHolderPid) Release() {
+	runtime.ReleaseIfNotNil(inst.Attributes)
+	runtime.ReleaseIfNotNil(inst.Memberships)
+}
+
+func (inst *ReadAccessAgentrunTableTaggedRunEpoch) Release() {
 	runtime.ReleaseIfNotNil(inst.Attributes)
 	runtime.ReleaseIfNotNil(inst.Memberships)
 }
@@ -3649,6 +4048,48 @@ func (inst *ReadAccessAgentrunTableTaggedRunDeletedAt) LoadFromRecord(rec runtim
 	return
 }
 
+func (inst *ReadAccessAgentrunTableTaggedRunHolder) LoadFromRecord(rec runtime.RecordI) (err error) {
+	err = inst.Attributes.LoadFromRecord(rec)
+	if err != nil {
+		err = eb.Build().Errorf("unable to load from record: %w", err)
+		return
+	}
+	err = inst.Memberships.LoadFromRecord(rec)
+	if err != nil {
+		err = eb.Build().Errorf("unable to load from record: %w", err)
+		return
+	}
+	return
+}
+
+func (inst *ReadAccessAgentrunTableTaggedRunHolderPid) LoadFromRecord(rec runtime.RecordI) (err error) {
+	err = inst.Attributes.LoadFromRecord(rec)
+	if err != nil {
+		err = eb.Build().Errorf("unable to load from record: %w", err)
+		return
+	}
+	err = inst.Memberships.LoadFromRecord(rec)
+	if err != nil {
+		err = eb.Build().Errorf("unable to load from record: %w", err)
+		return
+	}
+	return
+}
+
+func (inst *ReadAccessAgentrunTableTaggedRunEpoch) LoadFromRecord(rec runtime.RecordI) (err error) {
+	err = inst.Attributes.LoadFromRecord(rec)
+	if err != nil {
+		err = eb.Build().Errorf("unable to load from record: %w", err)
+		return
+	}
+	err = inst.Memberships.LoadFromRecord(rec)
+	if err != nil {
+		err = eb.Build().Errorf("unable to load from record: %w", err)
+		return
+	}
+	return
+}
+
 func (inst *ReadAccessAgentrunTableTaggedRunCell) Len() (nEntities int) {
 	nEntities = inst.Memberships.Len()
 	return
@@ -3754,6 +4195,21 @@ func (inst *ReadAccessAgentrunTableTaggedRunDeletedAt) Len() (nEntities int) {
 	return
 }
 
+func (inst *ReadAccessAgentrunTableTaggedRunHolder) Len() (nEntities int) {
+	nEntities = inst.Memberships.Len()
+	return
+}
+
+func (inst *ReadAccessAgentrunTableTaggedRunHolderPid) Len() (nEntities int) {
+	nEntities = inst.Memberships.Len()
+	return
+}
+
+func (inst *ReadAccessAgentrunTableTaggedRunEpoch) Len() (nEntities int) {
+	nEntities = inst.Memberships.Len()
+	return
+}
+
 func (inst *ReadAccessAgentrunTableTaggedRunCell) GetAttributes() *ReadAccessAgentrunTableTaggedRunCellAttributes {
 	return inst.Attributes
 }
@@ -3838,6 +4294,18 @@ func (inst *ReadAccessAgentrunTableTaggedRunDeletedAt) GetAttributes() *ReadAcce
 	return inst.Attributes
 }
 
+func (inst *ReadAccessAgentrunTableTaggedRunHolder) GetAttributes() *ReadAccessAgentrunTableTaggedRunHolderAttributes {
+	return inst.Attributes
+}
+
+func (inst *ReadAccessAgentrunTableTaggedRunHolderPid) GetAttributes() *ReadAccessAgentrunTableTaggedRunHolderPidAttributes {
+	return inst.Attributes
+}
+
+func (inst *ReadAccessAgentrunTableTaggedRunEpoch) GetAttributes() *ReadAccessAgentrunTableTaggedRunEpochAttributes {
+	return inst.Attributes
+}
+
 func (inst *ReadAccessAgentrunTableTaggedRunCell) GetMemberships() *MembershipPackAgentrunTableShared1 {
 	return inst.Memberships
 }
@@ -3919,6 +4387,18 @@ func (inst *ReadAccessAgentrunTableTaggedRunDeletedBy) GetMemberships() *Members
 }
 
 func (inst *ReadAccessAgentrunTableTaggedRunDeletedAt) GetMemberships() *MembershipPackAgentrunTableShared1 {
+	return inst.Memberships
+}
+
+func (inst *ReadAccessAgentrunTableTaggedRunHolder) GetMemberships() *MembershipPackAgentrunTableShared1 {
+	return inst.Memberships
+}
+
+func (inst *ReadAccessAgentrunTableTaggedRunHolderPid) GetMemberships() *MembershipPackAgentrunTableShared1 {
+	return inst.Memberships
+}
+
+func (inst *ReadAccessAgentrunTableTaggedRunEpoch) GetMemberships() *MembershipPackAgentrunTableShared1 {
 	return inst.Memberships
 }
 
@@ -4048,6 +4528,24 @@ func (inst *ReadAccessAgentrunTableTaggedRunDeletedAt) GetSectionName() naming.S
 
 var _ fatruntime.SectionIntrospectionI = (*ReadAccessAgentrunTableTaggedRunDeletedAt)(nil)
 
+func (inst *ReadAccessAgentrunTableTaggedRunHolder) GetSectionName() naming.StylableName {
+	return "run-holder"
+}
+
+var _ fatruntime.SectionIntrospectionI = (*ReadAccessAgentrunTableTaggedRunHolder)(nil)
+
+func (inst *ReadAccessAgentrunTableTaggedRunHolderPid) GetSectionName() naming.StylableName {
+	return "run-holder-pid"
+}
+
+var _ fatruntime.SectionIntrospectionI = (*ReadAccessAgentrunTableTaggedRunHolderPid)(nil)
+
+func (inst *ReadAccessAgentrunTableTaggedRunEpoch) GetSectionName() naming.StylableName {
+	return "run-epoch"
+}
+
+var _ fatruntime.SectionIntrospectionI = (*ReadAccessAgentrunTableTaggedRunEpoch)(nil)
+
 func (inst *ReadAccessAgentrunTableTaggedRunCell) GetSectionUseAspects() useaspects.AspectSet {
 	return ""
 }
@@ -4129,6 +4627,18 @@ func (inst *ReadAccessAgentrunTableTaggedRunDeletedBy) GetSectionUseAspects() us
 }
 
 func (inst *ReadAccessAgentrunTableTaggedRunDeletedAt) GetSectionUseAspects() useaspects.AspectSet {
+	return ""
+}
+
+func (inst *ReadAccessAgentrunTableTaggedRunHolder) GetSectionUseAspects() useaspects.AspectSet {
+	return ""
+}
+
+func (inst *ReadAccessAgentrunTableTaggedRunHolderPid) GetSectionUseAspects() useaspects.AspectSet {
+	return ""
+}
+
+func (inst *ReadAccessAgentrunTableTaggedRunEpoch) GetSectionUseAspects() useaspects.AspectSet {
 	return ""
 }
 
@@ -4216,6 +4726,18 @@ func (inst *ReadAccessAgentrunTableTaggedRunDeletedAt) GetSectionStreamingGroup(
 	return "data"
 }
 
+func (inst *ReadAccessAgentrunTableTaggedRunHolder) GetSectionStreamingGroup() naming.Key {
+	return "data"
+}
+
+func (inst *ReadAccessAgentrunTableTaggedRunHolderPid) GetSectionStreamingGroup() naming.Key {
+	return "data"
+}
+
+func (inst *ReadAccessAgentrunTableTaggedRunEpoch) GetSectionStreamingGroup() naming.Key {
+	return "data"
+}
+
 func (inst *ReadAccessAgentrunTableTaggedRunCell) GetSectionCoSectionGroup() naming.Key {
 	return ""
 }
@@ -4297,6 +4819,18 @@ func (inst *ReadAccessAgentrunTableTaggedRunDeletedBy) GetSectionCoSectionGroup(
 }
 
 func (inst *ReadAccessAgentrunTableTaggedRunDeletedAt) GetSectionCoSectionGroup() naming.Key {
+	return ""
+}
+
+func (inst *ReadAccessAgentrunTableTaggedRunHolder) GetSectionCoSectionGroup() naming.Key {
+	return ""
+}
+
+func (inst *ReadAccessAgentrunTableTaggedRunHolderPid) GetSectionCoSectionGroup() naming.Key {
+	return ""
+}
+
+func (inst *ReadAccessAgentrunTableTaggedRunEpoch) GetSectionCoSectionGroup() naming.Key {
 	return ""
 }
 
@@ -4384,6 +4918,18 @@ func (inst *ReadAccessAgentrunTableTaggedRunDeletedAt) GetSectionMembershipSpec(
 	return 0b111001
 }
 
+func (inst *ReadAccessAgentrunTableTaggedRunHolder) GetSectionMembershipSpec() common.MembershipSpecE {
+	return 0b111001
+}
+
+func (inst *ReadAccessAgentrunTableTaggedRunHolderPid) GetSectionMembershipSpec() common.MembershipSpecE {
+	return 0b111001
+}
+
+func (inst *ReadAccessAgentrunTableTaggedRunEpoch) GetSectionMembershipSpec() common.MembershipSpecE {
+	return 0b111001
+}
+
 ///////////////////////////////////////////////////////////////////
 // code generator
 // readaccess.(*GoClassBuilder).composeEntityClasses
@@ -4414,6 +4960,9 @@ type ReadAccessAgentrunTable struct {
 	RunVersion       *ReadAccessAgentrunTableTaggedRunVersion
 	RunDeletedBy     *ReadAccessAgentrunTableTaggedRunDeletedBy
 	RunDeletedAt     *ReadAccessAgentrunTableTaggedRunDeletedAt
+	RunHolder        *ReadAccessAgentrunTableTaggedRunHolder
+	RunHolderPid     *ReadAccessAgentrunTableTaggedRunHolderPid
+	RunEpoch         *ReadAccessAgentrunTableTaggedRunEpoch
 }
 
 func NewReadAccessAgentrunTable() (inst *ReadAccessAgentrunTable) {
@@ -4442,6 +4991,9 @@ func NewReadAccessAgentrunTable() (inst *ReadAccessAgentrunTable) {
 	inst.RunVersion = NewReadAccessAgentrunTableTaggedRunVersion()
 	inst.RunDeletedBy = NewReadAccessAgentrunTableTaggedRunDeletedBy()
 	inst.RunDeletedAt = NewReadAccessAgentrunTableTaggedRunDeletedAt()
+	inst.RunHolder = NewReadAccessAgentrunTableTaggedRunHolder()
+	inst.RunHolderPid = NewReadAccessAgentrunTableTaggedRunHolderPid()
+	inst.RunEpoch = NewReadAccessAgentrunTableTaggedRunEpoch()
 	return
 }
 
@@ -4470,6 +5022,9 @@ func (inst *ReadAccessAgentrunTable) Release() {
 	runtime.ReleaseIfNotNil(inst.RunVersion)
 	runtime.ReleaseIfNotNil(inst.RunDeletedBy)
 	runtime.ReleaseIfNotNil(inst.RunDeletedAt)
+	runtime.ReleaseIfNotNil(inst.RunHolder)
+	runtime.ReleaseIfNotNil(inst.RunHolderPid)
+	runtime.ReleaseIfNotNil(inst.RunEpoch)
 }
 
 func (inst *ReadAccessAgentrunTable) LoadFromRecord(rec runtime.RecordI) (err error) {
@@ -4641,6 +5196,27 @@ func (inst *ReadAccessAgentrunTable) LoadFromRecord(rec runtime.RecordI) (err er
 			return
 		}
 	}
+	if inst.RunHolder != nil {
+		err = inst.RunHolder.LoadFromRecord(rec)
+		if err != nil {
+			err = eb.Build().Str("tableName", "agentrun-table").Str("fieldName", "RunHolder").Errorf("unable to load from record: %w", err)
+			return
+		}
+	}
+	if inst.RunHolderPid != nil {
+		err = inst.RunHolderPid.LoadFromRecord(rec)
+		if err != nil {
+			err = eb.Build().Str("tableName", "agentrun-table").Str("fieldName", "RunHolderPid").Errorf("unable to load from record: %w", err)
+			return
+		}
+	}
+	if inst.RunEpoch != nil {
+		err = inst.RunEpoch.LoadFromRecord(rec)
+		if err != nil {
+			err = eb.Build().Str("tableName", "agentrun-table").Str("fieldName", "RunEpoch").Errorf("unable to load from record: %w", err)
+			return
+		}
+	}
 	return
 }
 
@@ -4718,6 +5294,15 @@ func (inst *ReadAccessAgentrunTable) SetColumnIndices(indices []uint32) (rest []
 	if inst.RunDeletedAt != nil {
 		rest = inst.RunDeletedAt.SetColumnIndices(rest)
 	}
+	if inst.RunHolder != nil {
+		rest = inst.RunHolder.SetColumnIndices(rest)
+	}
+	if inst.RunHolderPid != nil {
+		rest = inst.RunHolderPid.SetColumnIndices(rest)
+	}
+	if inst.RunEpoch != nil {
+		rest = inst.RunEpoch.SetColumnIndices(rest)
+	}
 	return
 }
 
@@ -4794,6 +5379,15 @@ func (inst *ReadAccessAgentrunTable) GetColumnIndices() (columnIndices []uint32)
 	if inst.RunDeletedAt != nil {
 		columnIndices = slices.Concat(columnIndices, inst.RunDeletedAt.GetColumnIndices())
 	}
+	if inst.RunHolder != nil {
+		columnIndices = slices.Concat(columnIndices, inst.RunHolder.GetColumnIndices())
+	}
+	if inst.RunHolderPid != nil {
+		columnIndices = slices.Concat(columnIndices, inst.RunHolderPid.GetColumnIndices())
+	}
+	if inst.RunEpoch != nil {
+		columnIndices = slices.Concat(columnIndices, inst.RunEpoch.GetColumnIndices())
+	}
 	return
 }
 
@@ -4869,6 +5463,15 @@ func (inst *ReadAccessAgentrunTable) GetColumnIndexFieldNames() (fieldNames []st
 	}
 	if inst.RunDeletedAt != nil {
 		fieldNames = slices.Concat(fieldNames, inst.RunDeletedAt.GetColumnIndexFieldNames())
+	}
+	if inst.RunHolder != nil {
+		fieldNames = slices.Concat(fieldNames, inst.RunHolder.GetColumnIndexFieldNames())
+	}
+	if inst.RunHolderPid != nil {
+		fieldNames = slices.Concat(fieldNames, inst.RunHolderPid.GetColumnIndexFieldNames())
+	}
+	if inst.RunEpoch != nil {
+		fieldNames = slices.Concat(fieldNames, inst.RunEpoch.GetColumnIndexFieldNames())
 	}
 	return
 }

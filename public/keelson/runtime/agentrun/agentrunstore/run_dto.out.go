@@ -35,6 +35,9 @@ const (
 	kindAgentrunVersion       uint64 = 9223372049739678052
 	kindAgentrunDeletedBy     uint64 = 9223372049739678021
 	kindAgentrunDeletedAt     uint64 = 9223372049739678022
+	kindAgentrunHolder        uint64 = 9223372049739678057
+	kindAgentrunHolderPid     uint64 = 9223372049739678058
+	kindAgentrunEpoch         uint64 = 9223372049739678059
 )
 
 // runRunCellAttrI is the InAttr-side view of the runCell section. P-variants only —
@@ -352,6 +355,51 @@ type runRunDeletedAtSecI[Attr any, Ent any] interface {
 	EndSection() Ent
 }
 
+// runRunHolderAttrI is the InAttr-side view of the runHolder section. P-variants only —
+// every method returns void so no F-bounded `[Self]` parameter is
+// needed.
+type runRunHolderAttrI interface {
+	dmlruntime.InAttributeMembershipLowCardRefPI
+	EndAttributeP()
+}
+
+// runRunHolderSecI is the Section-side view: opens an attribute and closes
+// the section. Attr and Ent are bound at the call site by inference.
+type runRunHolderSecI[Attr any, Ent any] interface {
+	BeginAttribute(value string) Attr
+	EndSection() Ent
+}
+
+// runRunHolderPidAttrI is the InAttr-side view of the runHolderPid section. P-variants only —
+// every method returns void so no F-bounded `[Self]` parameter is
+// needed.
+type runRunHolderPidAttrI interface {
+	dmlruntime.InAttributeMembershipLowCardRefPI
+	EndAttributeP()
+}
+
+// runRunHolderPidSecI is the Section-side view: opens an attribute and closes
+// the section. Attr and Ent are bound at the call site by inference.
+type runRunHolderPidSecI[Attr any, Ent any] interface {
+	BeginAttribute(value uint32) Attr
+	EndSection() Ent
+}
+
+// runRunEpochAttrI is the InAttr-side view of the runEpoch section. P-variants only —
+// every method returns void so no F-bounded `[Self]` parameter is
+// needed.
+type runRunEpochAttrI interface {
+	dmlruntime.InAttributeMembershipLowCardRefPI
+	EndAttributeP()
+}
+
+// runRunEpochSecI is the Section-side view: opens an attribute and closes
+// the section. Attr and Ent are bound at the call site by inference.
+type runRunEpochSecI[Attr any, Ent any] interface {
+	BeginAttribute(value uint32) Attr
+	EndSection() Ent
+}
+
 // runEntityI is the entity-builder surface runAddSections drives.
 // It always lists the per-section getters; the entity-frame methods
 // (BeginEntity / plain setters / CommitEntity) are added only for the
@@ -402,6 +450,12 @@ type runEntityI[
 	RunDeletedBySec runRunDeletedBySecI[RunDeletedByAttr, Ent],
 	RunDeletedAtAttr runRunDeletedAtAttrI,
 	RunDeletedAtSec runRunDeletedAtSecI[RunDeletedAtAttr, Ent],
+	RunHolderAttr runRunHolderAttrI,
+	RunHolderSec runRunHolderSecI[RunHolderAttr, Ent],
+	RunHolderPidAttr runRunHolderPidAttrI,
+	RunHolderPidSec runRunHolderPidSecI[RunHolderPidAttr, Ent],
+	RunEpochAttr runRunEpochAttrI,
+	RunEpochSec runRunEpochSecI[RunEpochAttr, Ent],
 	Ent any,
 ] interface {
 	GetSectionRunCell() RunCellSec
@@ -425,6 +479,9 @@ type runEntityI[
 	GetSectionRunVersion() RunVersionSec
 	GetSectionRunDeletedBy() RunDeletedBySec
 	GetSectionRunDeletedAt() RunDeletedAtSec
+	GetSectionRunHolder() RunHolderSec
+	GetSectionRunHolderPid() RunHolderPidSec
+	GetSectionRunEpoch() RunEpochSec
 }
 
 // runEmitSectionRunCell writes this kind's runCell attributes into an
@@ -742,6 +799,51 @@ func runEmitSectionRunDeletedAt[
 	return
 }
 
+// runEmitSectionRunHolder writes this kind's runHolder attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func runEmitSectionRunHolder[
+	RunHolderAttr runRunHolderAttrI,
+	RunHolderSec runRunHolderSecI[RunHolderAttr, Ent],
+	Ent any,
+](runHolderSec RunHolderSec, row Run) (err error) {
+	runHolderSecAttr_Holder := runHolderSec.BeginAttribute(row.Holder)
+	runHolderSecAttr_Holder.AddMembershipLowCardRefP(kindAgentrunHolder)
+	runHolderSecAttr_Holder.EndAttributeP()
+	return
+}
+
+// runEmitSectionRunHolderPid writes this kind's runHolderPid attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func runEmitSectionRunHolderPid[
+	RunHolderPidAttr runRunHolderPidAttrI,
+	RunHolderPidSec runRunHolderPidSecI[RunHolderPidAttr, Ent],
+	Ent any,
+](runHolderPidSec RunHolderPidSec, row Run) (err error) {
+	runHolderPidSecAttr_HolderPid := runHolderPidSec.BeginAttribute(row.HolderPid)
+	runHolderPidSecAttr_HolderPid.AddMembershipLowCardRefP(kindAgentrunHolderPid)
+	runHolderPidSecAttr_HolderPid.EndAttributeP()
+	return
+}
+
+// runEmitSectionRunEpoch writes this kind's runEpoch attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func runEmitSectionRunEpoch[
+	RunEpochAttr runRunEpochAttrI,
+	RunEpochSec runRunEpochSecI[RunEpochAttr, Ent],
+	Ent any,
+](runEpochSec RunEpochSec, row Run) (err error) {
+	runEpochSecAttr_Epoch := runEpochSec.BeginAttribute(row.Epoch)
+	runEpochSecAttr_Epoch.AddMembershipLowCardRefP(kindAgentrunEpoch)
+	runEpochSecAttr_Epoch.EndAttributeP()
+	return
+}
+
 // runAddSections contributes this kind's tagged sections to the OPEN
 // entity on dml — the BuildEntities body without the entity frame.
 // The caller owns BeginEntity / plain setters / CommitEntity.
@@ -788,6 +890,12 @@ func runAddSections[
 	RunDeletedBySec runRunDeletedBySecI[RunDeletedByAttr, Ent],
 	RunDeletedAtAttr runRunDeletedAtAttrI,
 	RunDeletedAtSec runRunDeletedAtSecI[RunDeletedAtAttr, Ent],
+	RunHolderAttr runRunHolderAttrI,
+	RunHolderSec runRunHolderSecI[RunHolderAttr, Ent],
+	RunHolderPidAttr runRunHolderPidAttrI,
+	RunHolderPidSec runRunHolderPidSecI[RunHolderPidAttr, Ent],
+	RunEpochAttr runRunEpochAttrI,
+	RunEpochSec runRunEpochSecI[RunEpochAttr, Ent],
 	Ent any,
 	DML runEntityI[
 		RunCellAttr, RunCellSec,
@@ -811,6 +919,9 @@ func runAddSections[
 		RunVersionAttr, RunVersionSec,
 		RunDeletedByAttr, RunDeletedBySec,
 		RunDeletedAtAttr, RunDeletedAtSec,
+		RunHolderAttr, RunHolderSec,
+		RunHolderPidAttr, RunHolderPidSec,
+		RunEpochAttr, RunEpochSec,
 		Ent,
 	],
 ](dml DML, row Run) (err error) {
@@ -961,6 +1072,27 @@ func runAddSections[
 		return
 	}
 	runDeletedAtSec.EndSection()
+	// --- runHolder. ---
+	runHolderSec := dml.GetSectionRunHolder()
+	err = runEmitSectionRunHolder(runHolderSec, row)
+	if err != nil {
+		return
+	}
+	runHolderSec.EndSection()
+	// --- runHolderPid. ---
+	runHolderPidSec := dml.GetSectionRunHolderPid()
+	err = runEmitSectionRunHolderPid(runHolderPidSec, row)
+	if err != nil {
+		return
+	}
+	runHolderPidSec.EndSection()
+	// --- runEpoch. ---
+	runEpochSec := dml.GetSectionRunEpoch()
+	err = runEmitSectionRunEpoch(runEpochSec, row)
+	if err != nil {
+		return
+	}
+	runEpochSec.EndSection()
 	return
 }
 
@@ -1195,6 +1327,39 @@ type runRunDeletedAtMembsReadI interface {
 	GetMembValueLowCardRef(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) iter.Seq[uint64]
 }
 
+// runRunHolderAttrsReadI is the Attributes-side view of the runHolder section.
+type runRunHolderAttrsReadI interface {
+	GetAttrValueValue(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) string
+	GetNumberOfAttributes(entityIdx raruntime.EntityIdx) int64
+}
+
+// runRunHolderMembsReadI is the Memberships-side view of the runHolder section.
+type runRunHolderMembsReadI interface {
+	GetMembValueLowCardRef(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) iter.Seq[uint64]
+}
+
+// runRunHolderPidAttrsReadI is the Attributes-side view of the runHolderPid section.
+type runRunHolderPidAttrsReadI interface {
+	GetAttrValueValue(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) uint32
+	GetNumberOfAttributes(entityIdx raruntime.EntityIdx) int64
+}
+
+// runRunHolderPidMembsReadI is the Memberships-side view of the runHolderPid section.
+type runRunHolderPidMembsReadI interface {
+	GetMembValueLowCardRef(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) iter.Seq[uint64]
+}
+
+// runRunEpochAttrsReadI is the Attributes-side view of the runEpoch section.
+type runRunEpochAttrsReadI interface {
+	GetAttrValueValue(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) uint32
+	GetNumberOfAttributes(entityIdx raruntime.EntityIdx) int64
+}
+
+// runRunEpochMembsReadI is the Memberships-side view of the runEpoch section.
+type runRunEpochMembsReadI interface {
+	GetMembValueLowCardRef(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) iter.Seq[uint64]
+}
+
 // runReadRow reads row i as one optional Run component: presence-
 // gated (a row carrying none of the kind's memberships yields
 // present=false), membership-matched. A slot carrying more
@@ -1246,6 +1411,12 @@ func runReadRow[
 	RunDeletedByMembs runRunDeletedByMembsReadI,
 	RunDeletedAtAttrs runRunDeletedAtAttrsReadI,
 	RunDeletedAtMembs runRunDeletedAtMembsReadI,
+	RunHolderAttrs runRunHolderAttrsReadI,
+	RunHolderMembs runRunHolderMembsReadI,
+	RunHolderPidAttrs runRunHolderPidAttrsReadI,
+	RunHolderPidMembs runRunHolderPidMembsReadI,
+	RunEpochAttrs runRunEpochAttrsReadI,
+	RunEpochMembs runRunEpochMembsReadI,
 ](
 	i int,
 	runCellAttrs RunCellAttrs,
@@ -1290,6 +1461,12 @@ func runReadRow[
 	runDeletedByMembs RunDeletedByMembs,
 	runDeletedAtAttrs RunDeletedAtAttrs,
 	runDeletedAtMembs RunDeletedAtMembs,
+	runHolderAttrs RunHolderAttrs,
+	runHolderMembs RunHolderMembs,
+	runHolderPidAttrs RunHolderPidAttrs,
+	runHolderPidMembs RunHolderPidMembs,
+	runEpochAttrs RunEpochAttrs,
+	runEpochMembs RunEpochMembs,
 ) (row Run, present bool, err error) {
 	// --- runCell. ---
 	var runCellCellVal string
@@ -1835,6 +2012,84 @@ func runReadRow[
 	}
 	if runDeletedAtDeletedAtCount == 1 {
 		row.DeletedAt = runDeletedAtDeletedAtVal
+		present = true
+	}
+	// --- runHolder. ---
+	var runHolderHolderVal string
+	var runHolderHolderCount int
+	var runHolderHolderLastAttr int64
+	nrunHolder := runHolderAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
+	for attrJ := int64(0); attrJ < nrunHolder; attrJ++ {
+		for membID := range runHolderMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
+			switch membID {
+			case kindAgentrunHolder:
+				if runHolderHolderLastAttr != attrJ+1 {
+					runHolderHolderLastAttr = attrJ + 1
+					runHolderHolderCount++
+				}
+				val := runHolderAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				runHolderHolderVal = val
+			}
+		}
+	}
+	if runHolderHolderCount > 1 {
+		err = eb.Build().Int("row", i).Str("section", "runHolder").Str("membership", "agentrunHolder").Int("got", runHolderHolderCount).Errorf("slot runHolder@agentrunHolder (field Holder) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", runHolderHolderCount)
+		return
+	}
+	if runHolderHolderCount == 1 {
+		row.Holder = runHolderHolderVal
+		present = true
+	}
+	// --- runHolderPid. ---
+	var runHolderPidHolderPidVal uint32
+	var runHolderPidHolderPidCount int
+	var runHolderPidHolderPidLastAttr int64
+	nrunHolderPid := runHolderPidAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
+	for attrJ := int64(0); attrJ < nrunHolderPid; attrJ++ {
+		for membID := range runHolderPidMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
+			switch membID {
+			case kindAgentrunHolderPid:
+				if runHolderPidHolderPidLastAttr != attrJ+1 {
+					runHolderPidHolderPidLastAttr = attrJ + 1
+					runHolderPidHolderPidCount++
+				}
+				val := runHolderPidAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				runHolderPidHolderPidVal = val
+			}
+		}
+	}
+	if runHolderPidHolderPidCount > 1 {
+		err = eb.Build().Int("row", i).Str("section", "runHolderPid").Str("membership", "agentrunHolderPid").Int("got", runHolderPidHolderPidCount).Errorf("slot runHolderPid@agentrunHolderPid (field HolderPid) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", runHolderPidHolderPidCount)
+		return
+	}
+	if runHolderPidHolderPidCount == 1 {
+		row.HolderPid = runHolderPidHolderPidVal
+		present = true
+	}
+	// --- runEpoch. ---
+	var runEpochEpochVal uint32
+	var runEpochEpochCount int
+	var runEpochEpochLastAttr int64
+	nrunEpoch := runEpochAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
+	for attrJ := int64(0); attrJ < nrunEpoch; attrJ++ {
+		for membID := range runEpochMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
+			switch membID {
+			case kindAgentrunEpoch:
+				if runEpochEpochLastAttr != attrJ+1 {
+					runEpochEpochLastAttr = attrJ + 1
+					runEpochEpochCount++
+				}
+				val := runEpochAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				runEpochEpochVal = val
+			}
+		}
+	}
+	if runEpochEpochCount > 1 {
+		err = eb.Build().Int("row", i).Str("section", "runEpoch").Str("membership", "agentrunEpoch").Int("got", runEpochEpochCount).Errorf("slot runEpoch@agentrunEpoch (field Epoch) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", runEpochEpochCount)
+		return
+	}
+	if runEpochEpochCount == 1 {
+		row.Epoch = runEpochEpochVal
 		present = true
 	}
 	return

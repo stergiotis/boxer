@@ -30,4 +30,10 @@ type Run struct {
 	Version       uint32    `lw:"agentrunVersion,runVersion"`
 	DeletedBy     string    `lw:"agentrunDeletedBy,runDeletedBy"`
 	DeletedAt     time.Time `lw:"agentrunDeletedAt,runDeletedAt"`
+	// Holder, HolderPid and Epoch are the writer lease (ADR-0319 §SD7):
+	// the run that holds the journal run, its process, and the epoch a
+	// takeover bumps.
+	Holder    string `lw:"agentrunHolder,runHolder"`
+	HolderPid uint32 `lw:"agentrunHolderPid,runHolderPid"`
+	Epoch     uint32 `lw:"agentrunEpoch,runEpoch"`
 }

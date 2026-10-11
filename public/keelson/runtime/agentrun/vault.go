@@ -251,18 +251,28 @@ func (inst *VaultedStore) joined(entries []Entry, bodies []Body) (out []Entry) {
 		run string
 		ord uint32
 	}
-	byKey := make(map[key]Body, len(bodies))
+	// An ordinal can hold more than one row — an append retried after its
+	// ledger write failed, or a batch in flight when another process took
+	// the run over (ADR-0319 §SD7) — so every row is tried and the one
+	// that opens is kept.
+	byKey := make(map[key][]Body, len(bodies))
 	for _, b := range bodies {
-		byKey[key{b.Run, b.Ordinal}] = b
+		k := key{b.Run, b.Ordinal}
+		byKey[k] = append(byKey[k], b)
 	}
 	out = make([]Entry, 0, len(entries))
 	for _, e := range entries {
-		if b, ok := byKey[key{e.Run, e.Ordinal}]; ok {
-			with := e
-			with.Opening, with.Body, with.Calls = b.Opening, b.Body, b.Calls
-			if with.BodiesMatch() {
-				e = with
-			} else {
+		if rows, ok := byKey[key{e.Run, e.Ordinal}]; ok {
+			opened := false
+			for _, b := range rows {
+				with := e
+				with.Opening, with.Body, with.Calls = b.Opening, b.Body, b.Calls
+				if with.BodiesMatch() {
+					e, opened = with, true
+					break
+				}
+			}
+			if !opened {
 				inst.Log.Warn().Str("run", e.Run).Uint32("ordinal", e.Ordinal).Msg("a vault row does not open its entry's commitments; the entry reads as erased")
 			}
 		}

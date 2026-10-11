@@ -386,6 +386,14 @@ entry's content without deleting the run. The `KeyId` column this section
 reserved names the scheme. The host runs a `VaultedStore` over the SQL store
 and the vault; a writer sees the entry as before.
 
+
+### 2026-10-11 — SD9: one writer per run, across processes
+
+ADR-0319 §SD7's writer lease shipped (that record's Update of this date).
+A second process can no longer write an open run its holder still runs,
+which closes the gap the previous Update left. Concurrent coordinators
+within one process stay serialised by the service's per-run lock.
+
 ## References
 
 - [ADR-0303](./0303-a-conversation-outlives-its-process-a-run-journal-written-before-each-act.md) (superseded by this record) — the journal, resume fold, grant rule and pinning carried forward.

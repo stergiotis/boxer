@@ -208,39 +208,143 @@ func TestARunRowThatLagsItsEntriesIsRepaired(t *testing.T) {
 	assert.Equal(t, more[0].Digest, r.Head)
 }
 
-// Two stores over one table, as two processes would be: both read the
-// run row, the first rewrites it, and the second's rewrite — guarded on
-// the version it read — loses instead of overwriting (ADR-0308 §SD9).
-// The loser's cache is dropped, so its next read sees the winner's row.
-func TestASecondStoreLosesTheRunRow(t *testing.T) {
-	ctx := context.Background()
+// deadLiveness reports every holder but one's own as gone.
+type deadLiveness struct{}
+
+func (deadLiveness) Alive(context.Context, Holder) (bool, error) { return false, nil }
+
+func leaseStores(t *testing.T) (exec *chexec.LocalExecutor, layout agentrunstore.Layout, a *SqlStore, b *SqlStore) {
+	t.Helper()
 	exec, err := chexec.NewLocalExecutor(filepath.Join(t.TempDir(), "chdb"), memory.NewGoAllocator())
 	if err != nil {
 		t.Skipf("clickhouse-local unavailable: %v", err)
 	}
-	layout := agentrunstore.Layout{Database: "artest"}
-	require.NoError(t, agentrunstore.ProvisionIn(ctx, exec, layout))
-	a, b := NewSqlStore(exec, layout), NewSqlStore(exec, layout)
-	defer a.Close()
-	defer b.Close()
+	layout = agentrunstore.Layout{Database: "artest"}
+	require.NoError(t, agentrunstore.ProvisionIn(context.Background(), exec, layout))
+	a, b = NewSqlStore(exec, layout), NewSqlStore(exec, layout)
+	t.Cleanup(a.Close)
+	t.Cleanup(b.Close)
+	require.NotEqual(t, a.Holder.Run, b.Holder.Run, "two stores write as two holders")
+	return
+}
+
+// The writer lease (ADR-0319 §SD7): while a live process holds an open
+// run, another is refused before it writes; closing releases the lease,
+// the next act takes the run over at the next epoch, and the first holder
+// is then the one refused. A holder that no longer runs is taken over.
+func TestTheWriterLease(t *testing.T) {
+	ctx := context.Background()
+	exec, layout, a, b := leaseStores(t)
 	require.NoError(t, a.CreateRun(ctx, Run{Id: "r1", OwnerApp: "chat", State: StateOpen, Version: 1}))
-	ra, found, err := a.GetRun(ctx, "r1")
+	r, _, err := b.GetRun(ctx, "r1")
 	require.NoError(t, err)
-	require.True(t, found)
-	rb, found, err := b.GetRun(ctx, "r1")
-	require.NoError(t, err)
-	require.True(t, found)
+	assert.Equal(t, a.Holder.Run, r.Holder)
+	assert.EqualValues(t, 1, r.Epoch)
 
-	ra.Fingerprint, ra.Version = "from-a", 2
+	r.Fingerprint, r.Version = "from-b", r.Version+1
+	assert.ErrorIs(t, b.UpdateRun(ctx, r), ErrHeldElsewhere, "a live holder keeps an open run")
+
+	ra, _, err := a.GetRun(ctx, "r1")
+	require.NoError(t, err)
+	ra.State, ra.Version = StateClosed, ra.Version+1
 	require.NoError(t, a.UpdateRun(ctx, ra))
-	rb.Fingerprint, rb.Version = "from-b", 2
-	require.ErrorContains(t, b.UpdateRun(ctx, rb), "another writer holds the run")
-
-	got, _, err := b.GetRun(ctx, "r1")
+	got, _, err := NewSqlStore(exec, layout).GetRun(ctx, "r1")
 	require.NoError(t, err)
-	assert.Equal(t, "from-a", got.Fingerprint, "the loser reads the winner's row")
-	assert.Equal(t, uint32(2), got.Version)
+	assert.Empty(t, got.Holder, "a closed run has no writer")
+
+	rb, _, err := b.GetRun(ctx, "r1")
+	require.NoError(t, err)
+	rb.State, rb.Version = StateOpen, rb.Version+1
+	require.NoError(t, b.UpdateRun(ctx, rb), "a released run is taken over")
+	got, _, err = NewSqlStore(exec, layout).GetRun(ctx, "r1")
+	require.NoError(t, err)
+	assert.Equal(t, b.Holder.Run, got.Holder)
+	assert.EqualValues(t, 2, got.Epoch)
+
+	ra, _, err = a.GetRun(ctx, "r1")
+	require.NoError(t, err)
+	ra.Fingerprint, ra.Version = "from-a", ra.Version+1
+	assert.ErrorIs(t, a.UpdateRun(ctx, ra), ErrHeldElsewhere, "the first holder is now the one refused")
+
+	a.Liveness = deadLiveness{}
+	ra, _, err = a.GetRun(ctx, "r1")
+	require.NoError(t, err)
+	ra.Fingerprint, ra.Version = "from-a", ra.Version+1
+	require.NoError(t, a.UpdateRun(ctx, ra), "a holder that no longer runs is taken over")
+	got, _, err = NewSqlStore(exec, layout).GetRun(ctx, "r1")
+	require.NoError(t, err)
+	assert.Equal(t, a.Holder.Run, got.Holder)
+	assert.EqualValues(t, 3, got.Epoch)
+	assert.Equal(t, "from-a", got.Fingerprint)
 	assert.EqualValues(t, 1, runRowCount(t, ctx, exec, layout, "r1"), "one row per run, rewritten in place")
+}
+
+// takeoverBeforeInsert runs a takeover once, just before the next insert
+// into the entry table: the window a holder's in-flight batch is in when
+// the holder is declared gone.
+type takeoverBeforeInsert struct {
+	recordstore.ExecutorI
+	table string
+	run   func()
+}
+
+func (inst *takeoverBeforeInsert) InsertArrow(ctx context.Context, table string, records []arrow.RecordBatch) (err error) {
+	if inst.run != nil && table == inst.table {
+		f := inst.run
+		inst.run = nil
+		f()
+	}
+	return inst.ExecutorI.InsertArrow(ctx, table, records)
+}
+
+// The epoch fence: a batch that had passed its claim lands after another
+// process took the run over and wrote the same ordinal. The new holder's
+// entry is at a higher revision and wins the ordinal; the old holder's
+// confirm fails; a fresh reader sees the new holder's chain, and it holds.
+func TestABatchInFlightAtATakeoverLosesItsOrdinals(t *testing.T) {
+	fixedOpenings(t)
+	ctx := context.Background()
+	local, layout, _, ledgerB := leaseStores(t)
+	require.NoError(t, agentrunstore.ProvisionBodyIn(ctx, local, layout))
+	exec := &takeoverBeforeInsert{ExecutorI: local, table: layout.EntryTable()}
+	ledgerA := NewSqlStore(exec, layout)
+	defer ledgerA.Close()
+	ledgerB.Liveness = deadLiveness{}
+	vault := func(e recordstore.ExecutorI) *SqlBodyStore {
+		v := NewSqlBodyStore(e, layout)
+		t.Cleanup(v.Close)
+		return v
+	}
+	// The host's shape (ADR-0320 §SD1): a ledger under a vault.
+	a, b := NewVaulted(ledgerA, vault(exec)), NewVaulted(ledgerB, vault(local))
+
+	wa, err := Open(ctx, a, Run{Id: "r1", OwnerApp: "chat"})
+	require.NoError(t, err)
+	_, err = wa.Append(ctx, Entry{Kind: KindUser, Role: "user", Body: "one"})
+	require.NoError(t, err)
+
+	exec.run = func() {
+		wb, rerr := Reopen(ctx, b, "r1")
+		require.NoError(t, rerr)
+		_, aerr := wb.Append(ctx, Entry{Kind: KindUser, Role: "user", Body: "two, from b"})
+		require.NoError(t, aerr, "the dead holder's run is taken over and written")
+	}
+	_, err = wa.Append(ctx, Entry{Kind: KindUser, Role: "user", Body: "two, from a"})
+	require.Error(t, err, "the old holder's confirm fails after the takeover")
+
+	freshLedger := NewSqlStore(local, layout)
+	defer freshLedger.Close()
+	fresh := NewVaulted(freshLedger, vault(local))
+	r, _, err := fresh.GetRun(ctx, "r1")
+	require.NoError(t, err)
+	assert.Equal(t, ledgerB.Holder.Run, r.Holder)
+	entries, err := fresh.Entries(ctx, "r1", 0)
+	require.NoError(t, err)
+	require.Len(t, entries, 2)
+	assert.Equal(t, "two, from b", entries[1].Body, "the new holder's revision wins the ordinal")
+	broken, err := VerifyRun(r, entries)
+	require.NoError(t, err)
+	assert.Zero(t, broken, "the chain holds from the head")
 }
 
 // runRowCount is the raw number of rows the run table holds for a run.

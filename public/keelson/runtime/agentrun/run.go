@@ -80,4 +80,11 @@ type Run struct {
 	// DeletedBy and DeletedAt record a tombstone.
 	DeletedBy string
 	DeletedAt time.Time
+	// Holder, HolderPid and Epoch are the writer lease (ADR-0319 §SD7):
+	// the run that holds the journal run, its process, and the epoch a
+	// takeover bumps. The SQL store keeps them on the row; other stores
+	// and the wire leave them zero, and an update never moves them.
+	Holder    string
+	HolderPid uint32
+	Epoch     uint32
 }

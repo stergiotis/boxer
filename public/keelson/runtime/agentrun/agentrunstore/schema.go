@@ -66,6 +66,9 @@ func GetRunSchemaInManipulator() (manip *common.TableManipulator, err error) {
 	sec("runVersion", ctabb.U32, plain...)
 	sec("runDeletedBy", ctabb.S, low...)
 	sec("runDeletedAt", ctabb.Z64, plain...)
+	sec("runHolder", ctabb.S, low...)
+	sec("runHolderPid", ctabb.U32, plain...)
+	sec("runEpoch", ctabb.U32, plain...)
 	return
 }
 

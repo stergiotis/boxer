@@ -613,6 +613,13 @@ var (
 	MembLlmCallTier     = NkRegistry.MustBegin("llmCallTier", 359).End()
 	MembLlmCallApproval = NkRegistry.MustBegin("llmCallApproval", 360).End()
 
+	// The run row's writer lease (ADR-0319 §SD7): the run that holds the
+	// run, its process, and the lease epoch a takeover bumps. In the room
+	// 361.. left below the vault's ids; the revision role took no id.
+	MembAgentrunHolder    = NkRegistry.MustBegin("agentrunHolder", 361).End()
+	MembAgentrunHolderPid = NkRegistry.MustBegin("agentrunHolderPid", 362).End()
+	MembAgentrunEpoch     = NkRegistry.MustBegin("agentrunEpoch", 363).End()
+
 	// The vault table (ADR-0320 §SD1): the fields that could be personal,
 	// keyed like the entry table, with the opening the chain's
 	// commitments open under. Ids from 370 leave room under 361 for the
@@ -715,4 +722,5 @@ var AllMembs = []registry.RegisteredNaturalKey{
 	MembAgentrunEntryDigest, MembAgentrunEntryKeyId, MembAgentrunEntryParent, MembAgentrunEntryAttachments,
 	MembAgentrunEntryBodyDigest, MembAgentrunEntryCallsDigest, MembAgentrunHead, MembAgentrunVersion,
 	MembAgentrunBodyOrdinal, MembAgentrunBodyOpening, MembAgentrunBodyText, MembAgentrunBodyCalls,
+	MembAgentrunHolder, MembAgentrunHolderPid, MembAgentrunEpoch,
 }
