@@ -14,6 +14,26 @@ status: draft
 
 # plan002: the journal store, finished in the generator and made data-centric
 
+## Progress, 2026-10-11
+
+Part A has landed, each step a commit with its ADR Update:
+
+| Step | Shipped as | Differs from the brief |
+| --- | --- | --- |
+| A1 | `gen.Roles.Revision`; the journal tombstones at the next revision | The deletion of the originals stays, made exact by revision. Dropping it would leave a deleted run's bodies in the parts. |
+| A2 | `gen.Input.Cas`, `UpdateIf`, and typed set and guard helpers; the run row is rewritten in place | A win is the row reading back as written, not a version match. |
+| A2b | the watchbill job table is generated Cas; `claim.go` uses the generated names | The pinned statements are run as written, not through `UpdateIf`, which brackets its guard and refuses the unguarded cancel request. |
+| A3 | `ScanOpts.OrderBy` and `Descending`; `ListRuns` is one bounded scan | The run table's Order is its creation instant, so `OrderBy` stays empty. |
+| A4 | `recordstore.InsertSettings` and `InsertSettingsI`; journal inserts carry `async_insert = 0` | The vault's body store is not configured; its generation is ADR-0320's. |
+| A5 | — | Nothing was left to shrink; A1–A4 removed their own workarounds. |
+| A6 | `gen.Input.KeyStream` with `rowalloc.NewSequence`; the writer lease | Holder = run and pid, alive by a local check (there is no cross-host writer). The lease is claimed at a process's first act, not at reopen, and released when the run leaves the open state. |
+
+Part B is held. ADR-0320 (bodies in a vault, commitments in the chain)
+landed in the same tables and changes what B0–B5 start from: the bodies
+are already out of the ledger, and the chain commits to commitments. B
+waits for ADR-0320's review, and is then reconciled with it before B0
+starts.
+
 Two parts, in order. Part A closes four `recordstore/gen` gaps the journal's
 SQL store worked around by hand. Part B, which depends on A's first step,
 first moves the journal's two tables onto the `boxer.facts` section
@@ -119,7 +139,7 @@ that changes the form, and not again.
 - Accepted ADRs change only by dated `## Updates` entries. ADR-0100 (record
   store), ADR-0223 (watchbill store and `rowcas`), ADR-0308, ADR-0309,
   ADR-0313, ADR-0314, ADR-0316 and ADR-0319 are the ones a step below may
-  touch; ADR-0320 is new, written in B5.
+  touch, and ADR-0320 (the vault) once accepted; B5's own ADR is new.
 - One membership channel per section: `marshallreflect.PlanFor` refuses a
   section mixing channels across fields. Static components and
   semi-structured attributes mix within a row, never within a section.
@@ -552,8 +572,9 @@ same writer, order kept as an array). Every golden with a digest in it is
 re-recorded in this commit: `apps/chat/testdata/preserve/*`,
 `agentrun/testdata`, `projection/testdata`.
 
-**Record.** A new ADR, ADR-0320 "the journal's canonical form is the
-canonical wire" (settled 2026-10-11). It supersedes ADR-0314 §SD1 (the
+**Record.** A new ADR, "the journal's canonical form is the canonical
+wire" (settled 2026-10-11; numbered when written: ADR-0320 and ADR-0321
+are taken). It supersedes ADR-0314 §SD1 (the
 record form is no longer deferred) and ADR-0309 §SD3 (the message item is
 the same writer), and covers the v2 digest name, B4's endorsement digest
 and the u64 ids. The superseded sections and ADR-0316 each gain a dated
@@ -612,7 +633,7 @@ Before Part B:
    and `~n` for a lexical number.
 7. Lossless mode for the journal.
 8. No closed shape stays as text.
-9. B5 is recorded by a new ADR-0320, with B4 in the same commit.
+9. B5 is recorded by a new ADR, with B4 in the same commit.
 10. B6 is decided once B1–B5 have landed.
 
 No question is open.
