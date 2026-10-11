@@ -51,6 +51,12 @@ type Scaffold struct {
 	Package string
 	// Stylable is the table name the package was generated under.
 	Stylable string
+	// CanonWire says the package also carries the table's canonical wire
+	// encoder (ADR-0210), generated under the same Stylable, so a store
+	// bound to it may set Input.CanonWire: DrainCanonical and
+	// CanonicalItem then call the shared encoder instead of an emitted
+	// one (ADR-0327 (proposed) §SD2).
+	CanonWire bool
 }
 
 // valid reports the first thing missing, so a half-filled Scaffold fails
@@ -251,11 +257,12 @@ type Input struct {
 	// CanonWire emits the table's canonical wire encoder (ADR-0210) beside
 	// the read-access scaffolding, and gives the store DrainCanonical,
 	// which encodes the rows buffered since the last Flush as canonical
-	// wire items instead of inserting them. A store opened for nothing
+	// wire items instead of inserting them, and CanonicalItem, the item of
+	// one entity as the store would write it. A store opened for nothing
 	// else needs no executor: it is how a writer computes the canonical
-	// item of a row it has not stored (ADR-0325 §SD2). Requires the
-	// default scaffolding (no SharedRA), since the encoder reads the
-	// read-access classes by name.
+	// item of a row it has not stored (ADR-0325 §SD2). The encoder reads
+	// the read-access classes by name, so under SharedRA the bound package
+	// must carry one (Scaffold.CanonWire; ADR-0327 (proposed) §SD2).
 	CanonWire bool
 
 	// Contributions gives the builder StartContribution and one
@@ -365,12 +372,14 @@ func (inst Input) Generate() (err error) {
 		}
 	}
 
-	// 3b. The canonical wire encoder over the read-access classes.
-	if inst.CanonWire {
-		if inst.SharedRA != nil {
-			err = eh.Errorf("CanonWire needs the store's own read-access scaffolding; SharedRA binds another package's")
-			return
-		}
+	// 3b. The canonical wire encoder over the read-access classes: emitted
+	// beside the store's own, or bound from the shared package when that
+	// package carries it (Scaffold.CanonWire).
+	if inst.CanonWire && inst.SharedRA != nil && !inst.SharedRA.CanonWire {
+		err = eh.Errorf("CanonWire needs a canonical wire encoder over the read-access classes; SharedRA binds a package that carries none (set Scaffold.CanonWire once it does)")
+		return
+	}
+	if inst.CanonWire && inst.SharedRA == nil {
 		cwSrc, wellFormed, cwErr := canonwire.NewGoCodeGeneratorDriver(conv, clickhouse.NewTechnologySpecificCodeGenerator()).EncoderOnly().
 			GenerateGoClasses(inst.scaffoldPkg(), tableStylable, inst.Table, inst.RowConfig, gocodegen.NewMultiTablePerPackageGoClassNamer())
 		if cwErr != nil {

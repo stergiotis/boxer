@@ -18,7 +18,8 @@ import (
 // owns boxer.facts (ADR-0184 §SD2).
 //
 // The context components lead: every row carries Origin, so it leads each
-// entity's archetype.
+// entity's archetype. The store binds the facts canonical wire encoder
+// (CanonWire), the preimage of the seals ADR-0327 (proposed) §SD5 adds.
 func TestGenerateTrailStore(t *testing.T) {
 	ids, err := storegen.MembershipIds(vocab.NkRegistry)
 	require.NoError(t, err)
@@ -34,5 +35,6 @@ func TestGenerateTrailStore(t *testing.T) {
 		OutDir:     ".",
 		ImportPath: "github.com/stergiotis/boxer/public/keelson/runtime/trail",
 		Ids:        ids,
+		CanonWire:  true,
 	}.Generate())
 }

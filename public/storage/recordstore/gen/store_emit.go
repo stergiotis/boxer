@@ -69,6 +69,9 @@ type emitter struct {
 	// declaration order — it selects the emitted <Store>MembershipIds doc
 	// text.
 	registryIds bool
+	// comps is the classified component set, for the verbs emitted from a
+	// function that is not handed it (CanonicalItem).
+	comps []storeComponent
 }
 
 // plainRole classifies one plain (backbone) column. The three roles drive
@@ -115,10 +118,10 @@ type plainGroup struct {
 // groups), and the pass-through columns in canonical order. stateView is
 // set when a u8 EntityLifecycle column bound the Lifecycle role.
 type plainModel struct {
-	groups      []plainGroup
-	key         *plainCol
-	order       *plainCol
-	lifecycle   *plainCol
+	groups    []plainGroup
+	key       *plainCol
+	order     *plainCol
+	lifecycle *plainCol
 	// revision is the Roles.Revision column, nil when unbound; it is also
 	// one of the passthrough columns.
 	revision    *plainCol
@@ -381,7 +384,7 @@ func (inst Input) emitStore(ir *common.IntermediateTableRepresentation, conv com
 	em := emitter{Input: inst, keyGoType: model.key.goType, orderGoType: model.order.goType, cas: cas,
 		model: model, hasComps: len(comps) > 0,
 		stampLane: stampLane, stampLaneAsData: stampLaneAsData,
-		registryIds: hasIdSrc && idSrc.GloballyUniqueIds()}
+		registryIds: hasIdSrc && idSrc.GloballyUniqueIds(), comps: comps}
 	var sb strings.Builder
 	em.emitStoreHeader(&sb, key, order, lifecycle, stateView)
 	em.emitMembershipIds(&sb, comps)
@@ -973,11 +976,16 @@ func (inst Input) dmlType() string { return "InEntity" + upperFirst(inst.TableNa
 // StylableName the RA package was generated under — this generator's own
 // (TableName + "_table"), or the bound package's when SharedRA states a
 // different one.
-func (inst Input) raPrefix() string {
+func (inst Input) raPrefix() string { return "ReadAccess" + inst.raStylable() }
+
+// raStylable is the class-name stem the read-access classes — and the
+// canonical wire encoder beside them — were generated under: the bound
+// package's Stylable, or this generator's own TableName + "Table".
+func (inst Input) raStylable() string {
 	if inst.SharedRA != nil {
-		return "ReadAccess" + upperFirst(inst.SharedRA.Stylable)
+		return upperFirst(inst.SharedRA.Stylable)
 	}
-	return "ReadAccess" + upperFirst(inst.TableName) + "Table"
+	return upperFirst(inst.TableName) + "Table"
 }
 
 func (inst Input) entityType() string      { return inst.StoreName + "Entity" }
@@ -1026,6 +1034,9 @@ func (inst emitter) emitStoreHeader(sb *strings.Builder, key, order, lifecycle e
 	p("package %s", inst.PackageName)
 	p("")
 	p("import (")
+	if inst.CanonWire {
+		p("\t%q", "bytes")
+	}
 	p("\t%q", "context")
 	if inst.CanonWire {
 		p("\t%q", "io")
@@ -1042,6 +1053,9 @@ func (inst emitter) emitStoreHeader(sb *strings.Builder, key, order, lifecycle e
 	}
 	p("\t%q", "strconv")
 	p("\t%q", "strings")
+	if inst.CanonWire {
+		p("\t%q", "sync")
+	}
 	p("\t%q", "time")
 	p("")
 	p("\t%q", "github.com/apache/arrow-go/v18/arrow")
@@ -1346,6 +1360,14 @@ func (inst emitter) emitStoreType(sb *strings.Builder) {
 	p("\t// has not yet been told are durable or discarded (ADR-0295 §SD7); empty")
 	p("\t// without an observer.")
 	p("\twritten []recordstore.WrittenKey[%s, %s]", inst.keyGoType, inst.orderGoType)
+	if inst.CanonWire {
+		p("\t// scratch is the executor-less store CanonicalItem re-enters an")
+		p("\t// entity into and drains, made on first use; scratchMu serialises")
+		p("\t// it, the one verb of the store safe to call from several")
+		p("\t// goroutines.")
+		p("\tscratchMu sync.Mutex")
+		p("\tscratch   *%s", inst.storeType())
+	}
 	p("}")
 	p("")
 	p("// New%s wires the store. A nil alloc selects the Go allocator.", inst.storeType())
@@ -2014,6 +2036,7 @@ func (inst emitter) emitFlush(sb *strings.Builder) {
 	p("")
 	if inst.CanonWire {
 		inst.emitDrainCanonical(p)
+		inst.emitCanonicalItem(p)
 	}
 	p("// FlushIfDue is Flush once cfg.FlushEvery rows are buffered, and a no-op")
 	p("// before that — or always, when FlushEvery is zero. Call it between")
@@ -2067,6 +2090,14 @@ func (inst emitter) emitFlush(sb *strings.Builder) {
 		p("\t%s%sReleaseBuilder(inst.dml)", inst.lowQ(), inst.dmlType())
 	} else {
 		p("\tinst.dml.Builder().Release()")
+	}
+	if inst.CanonWire {
+		p("\tinst.scratchMu.Lock()")
+		p("\tif inst.scratch != nil {")
+		p("\t\tinst.scratch.Close()")
+		p("\t\tinst.scratch = nil")
+		p("\t}")
+		p("\tinst.scratchMu.Unlock()")
 	}
 	p("}")
 	p("")
@@ -2982,7 +3013,7 @@ func (inst emitter) emitMintKey(sb *strings.Builder) {
 
 // emitDrainCanonical writes DrainCanonical, the CanonWire option's verb.
 func (inst emitter) emitDrainCanonical(p func(string, ...any)) {
-	tbl := upperFirst(inst.TableName) + "Table"
+	tbl := inst.raStylable()
 	p("// DrainCanonical writes the rows buffered since the last Flush to w as")
 	p("// canonical wire items (ADR-0210), one per entity in commit order, as a")
 	p("// CBOR sequence, and discards them: nothing is inserted, and the store")
@@ -3009,25 +3040,89 @@ func (inst emitter) emitDrainCanonical(p func(string, ...any)) {
 	p("\t\t\tinst.cfg.WriteObserver.Discarded(inst.takeWritten())")
 	p("\t\t}")
 	p("\t}()")
-	p("\tra := %sNewReadAccess%s()", inst.lowQ(), tbl)
-	p("\tenc, err := %sNewCanonWireEncoder%s(ra, %sCanonWireOrdinalTagger%s{})", inst.lowQ(), tbl, inst.lowQ(), tbl)
+	// The accessor is not named ra: under SharedRA that is the package.
+	p("\tacc := %sNewReadAccess%s()", inst.raQ(), tbl)
+	p("\tenc, err := %sNewCanonWireEncoder%s(acc, %sCanonWireOrdinalTagger%s{})", inst.raQ(), tbl, inst.raQ(), tbl)
 	p("\tif err != nil {")
 	p("\t\terr = eh.Errorf(\"canonical wire encoder: %%w\", err)")
 	p("\t\treturn")
 	p("\t}")
 	p("\tfor _, rec := range records {")
-	p("\t\tif err = ra.LoadFromRecord(rec); err != nil {")
+	p("\t\tif err = acc.LoadFromRecord(rec); err != nil {")
 	p("\t\t\terr = eh.Errorf(\"load the buffered rows: %%w\", err)")
 	p("\t\t\treturn")
 	p("\t\t}")
 	p("\t\terr = enc.EncodeAll(w)")
 	p("\t\tn += int(rec.NumRows())")
-	p("\t\tra.Release()")
+	p("\t\tacc.Release()")
 	p("\t\tif err != nil {")
 	p("\t\t\terr = eh.Errorf(\"encode the buffered rows: %%w\", err)")
 	p("\t\t\treturn")
 	p("\t\t}")
 	p("\t}")
+	p("\treturn")
+	p("}")
+	p("")
+}
+
+// emitCanonicalItem writes CanonicalItem, the CanonWire option's verb over
+// one entity (ADR-0327 (proposed) §SD2).
+func (inst emitter) emitCanonicalItem(p func(string, ...any)) {
+	hasPT := len(inst.model.passthrough) > 0
+	p("// CanonicalItem is the canonical wire item (ADR-0210) of ent as this store")
+	p("// would write it: the entity re-entered into a scratch store with no")
+	p("// executor and drained, so a row read back from the server has the item")
+	p("// the writer chained. The scratch store carries no stampers and no")
+	p("// observer; what a stamper adds to a stored row is not in the item. An")
+	p("// entity with a tombstone lifecycle, or whose row carried hand-written")
+	p("// contributions, is not reproducible from its decoded form: the first is")
+	p("// refused, the second drains without them. Safe for concurrent use.")
+	p("func (inst *%s) CanonicalItem(ent *%s) (item []byte, err error) {", inst.storeType(), inst.entityType())
+	p("\tif ent == nil {")
+	p("\t\terr = eh.Errorf(\"canonical item: nil entity\")")
+	p("\t\treturn")
+	p("\t}")
+	if inst.model.stateView {
+		p("\tif ent.Lifecycle != recordstore.LifecycleLive {")
+		p("\t\terr = eh.Errorf(\"canonical item: a tombstoned entity is not reproducible from its decoded form\")")
+		p("\t\treturn")
+		p("\t}")
+	}
+	p("\tinst.scratchMu.Lock()")
+	p("\tdefer inst.scratchMu.Unlock()")
+	p("\tif inst.scratch == nil {")
+	if inst.stateViewOn() {
+		p("\t\tinst.scratch = New%s(nil, nil, %sStoreConfig{TombstoneDetect: inst.cfg.TombstoneDetect, TombstoneWrite: inst.cfg.TombstoneWrite})", inst.storeType(), inst.StoreName)
+	} else {
+		p("\t\tinst.scratch = New%s(nil, nil, %sStoreConfig{})", inst.storeType(), inst.StoreName)
+	}
+	p("\t}")
+	args := "ent.ID, ent." + inst.orderEntityField()
+	if hasPT {
+		args += ", ent." + inst.StoreName + "Envelope"
+	}
+	p("\tb := inst.scratch.Begin(%s)", args)
+	for _, c := range inst.comps {
+		p("\tif ent.%s.Has {", c.Kind)
+		p("\t\tb.Add%s(ent.%s.Val)", c.Kind, c.Kind)
+		p("\t}")
+	}
+	p("\tif err = b.Commit(); err != nil {")
+	p("\t\tinst.scratch.DiscardPending()")
+	p("\t\terr = eh.Errorf(\"canonical item: %%w\", err)")
+	p("\t\treturn")
+	p("\t}")
+	p("\tvar buf bytes.Buffer")
+	p("\tn, err := inst.scratch.DrainCanonical(&buf)")
+	p("\tif err != nil {")
+	p("\t\terr = eh.Errorf(\"canonical item: %%w\", err)")
+	p("\t\treturn")
+	p("\t}")
+	p("\tif n != 1 {")
+	p("\t\terr = eh.Errorf(\"canonical item: the entity drained as %%d items, not one\", n)")
+	p("\t\treturn")
+	p("\t}")
+	p("\titem = buf.Bytes()")
 	p("\treturn")
 	p("}")
 	p("")

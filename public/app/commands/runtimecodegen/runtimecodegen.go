@@ -17,6 +17,7 @@
 //	runtimecodegen dml         — Arrow record builders (chstore ingest)
 //	runtimecodegen dml-cbor    — same DML against arrowrowcbor shim
 //	runtimecodegen readaccess  — alias: ra — typed read helpers
+//	runtimecodegen canonwire   — alias: cw — the canonical wire encoder over them
 //	runtimecodegen ddl         — CH CREATE TABLE wrapper
 //	runtimecodegen all         — regenerate everything (default)
 package runtimecodegen
@@ -52,8 +53,32 @@ func Subcommands() (cmds []*cli.Command) {
 		newDMLCommand(),
 		newDMLCBORCommand(),
 		newReadAccessCommand(),
+		newCanonWireCommand(),
 		newDDLCommand(),
 		newAllCommand(),
+	}
+	return
+}
+
+func newCanonWireCommand() (cmd *cli.Command) {
+	cmd = &cli.Command{
+		Name:    "canonwire",
+		Aliases: []string{"cw"},
+		Usage:   "regenerate " + codegen.DefaultCanonWireOutputPath,
+		Flags: []cli.Flag{
+			&cli.StringFlag{
+				Name:  "out",
+				Value: codegen.DefaultCanonWireOutputPath,
+				Usage: "output path for the generated canonical wire encoder",
+			},
+		},
+		Action: func(ctx context.Context, cmd *cli.Command) (err error) {
+			err = codegen.GenerateCanonWire(cmd.String("out"))
+			if err != nil {
+				err = eh.Errorf("runtimecodegen canonwire: %w", err)
+			}
+			return
+		},
 	}
 	return
 }
@@ -172,6 +197,11 @@ func runAll() (err error) {
 	err = codegen.GenerateReadAccess(codegen.DefaultReadAccessOutputPath)
 	if err != nil {
 		err = eh.Errorf("runtimecodegen all: readaccess: %w", err)
+		return
+	}
+	err = codegen.GenerateCanonWire(codegen.DefaultCanonWireOutputPath)
+	if err != nil {
+		err = eh.Errorf("runtimecodegen all: canonwire: %w", err)
 		return
 	}
 	err = codegen.GenerateDDL(codegen.DefaultDDLOutputPath)

@@ -8,10 +8,13 @@
 package trail
 
 import (
+	"bytes"
 	"context"
+	"io"
 	"iter"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/apache/arrow-go/v18/arrow"
@@ -450,6 +453,12 @@ type TrailStore struct {
 	// has not yet been told are durable or discarded (ADR-0295 §SD7); empty
 	// without an observer.
 	written []recordstore.WrittenKey[uint64, time.Time]
+	// scratch is the executor-less store CanonicalItem re-enters an
+	// entity into and drains, made on first use; scratchMu serialises
+	// it, the one verb of the store safe to call from several
+	// goroutines.
+	scratchMu sync.Mutex
+	scratch   *TrailStore
 }
 
 // NewTrailStore wires the store. A nil alloc selects the Go allocator.
@@ -1703,6 +1712,134 @@ func (inst *TrailStore) Flush(ctx context.Context) (n int, err error) {
 	return
 }
 
+// DrainCanonical writes the rows buffered since the last Flush to w as
+// canonical wire items (ADR-0210), one per entity in commit order, as a
+// CBOR sequence, and discards them: nothing is inserted, and the store
+// is as DiscardPending leaves it. n is the number of items written. A
+// store opened for nothing else needs no executor (ADR-0325 §SD2).
+func (inst *TrailStore) DrainCanonical(w io.Writer) (n int, err error) {
+	records, err := lowlevel.InEntityFactsTableTransferRecords(inst.dml, nil)
+	if err != nil {
+		err = eh.Errorf("transfer records: %w", err)
+		return
+	}
+	records = append(inst.pending, records...)
+	inst.pending = nil
+	defer func() {
+		for _, rec := range records {
+			rec.Release()
+		}
+		inst.buffered = 0
+		for k := range inst.dirty {
+			inst.notifyWrite(k, nil)
+		}
+		clear(inst.dirty)
+		if len(inst.written) > 0 {
+			inst.cfg.WriteObserver.Discarded(inst.takeWritten())
+		}
+	}()
+	acc := ra.NewReadAccessFacts()
+	enc, err := ra.NewCanonWireEncoderFacts(acc, ra.CanonWireOrdinalTaggerFacts{})
+	if err != nil {
+		err = eh.Errorf("canonical wire encoder: %w", err)
+		return
+	}
+	for _, rec := range records {
+		if err = acc.LoadFromRecord(rec); err != nil {
+			err = eh.Errorf("load the buffered rows: %w", err)
+			return
+		}
+		err = enc.EncodeAll(w)
+		n += int(rec.NumRows())
+		acc.Release()
+		if err != nil {
+			err = eh.Errorf("encode the buffered rows: %w", err)
+			return
+		}
+	}
+	return
+}
+
+// CanonicalItem is the canonical wire item (ADR-0210) of ent as this store
+// would write it: the entity re-entered into a scratch store with no
+// executor and drained, so a row read back from the server has the item
+// the writer chained. The scratch store carries no stampers and no
+// observer; what a stamper adds to a stored row is not in the item. An
+// entity with a tombstone lifecycle, or whose row carried hand-written
+// contributions, is not reproducible from its decoded form: the first is
+// refused, the second drains without them. Safe for concurrent use.
+func (inst *TrailStore) CanonicalItem(ent *TrailEntity) (item []byte, err error) {
+	if ent == nil {
+		err = eh.Errorf("canonical item: nil entity")
+		return
+	}
+	inst.scratchMu.Lock()
+	defer inst.scratchMu.Unlock()
+	if inst.scratch == nil {
+		inst.scratch = NewTrailStore(nil, nil, TrailStoreConfig{})
+	}
+	b := inst.scratch.Begin(ent.ID, ent.Ts, ent.TrailEnvelope)
+	if ent.Origin.Has {
+		b.AddOrigin(ent.Origin.Val)
+	}
+	if ent.Conversation.Has {
+		b.AddConversation(ent.Conversation.Val)
+	}
+	if ent.Delegation.Has {
+		b.AddDelegation(ent.Delegation.Val)
+	}
+	if ent.Cause.Has {
+		b.AddCause(ent.Cause.Val)
+	}
+	if ent.LlmCall.Has {
+		b.AddLlmCall(ent.LlmCall.Val)
+	}
+	if ent.LlmMessage.Has {
+		b.AddLlmMessage(ent.LlmMessage.Val)
+	}
+	if ent.LlmMessageBody.Has {
+		b.AddLlmMessageBody(ent.LlmMessageBody.Val)
+	}
+	if ent.AgentAction.Has {
+		b.AddAgentAction(ent.AgentAction.Val)
+	}
+	if ent.AgentGrant.Has {
+		b.AddAgentGrant(ent.AgentGrant.Val)
+	}
+	if ent.HttpFetch.Has {
+		b.AddHttpFetch(ent.HttpFetch.Val)
+	}
+	if ent.AgentCapture.Has {
+		b.AddAgentCapture(ent.AgentCapture.Val)
+	}
+	if ent.AgentDisclosure.Has {
+		b.AddAgentDisclosure(ent.AgentDisclosure.Val)
+	}
+	if ent.AdhocDataset.Has {
+		b.AddAdhocDataset(ent.AdhocDataset.Val)
+	}
+	if ent.AuditEvent.Has {
+		b.AddAuditEvent(ent.AuditEvent.Val)
+	}
+	if err = b.Commit(); err != nil {
+		inst.scratch.DiscardPending()
+		err = eh.Errorf("canonical item: %w", err)
+		return
+	}
+	var buf bytes.Buffer
+	n, err := inst.scratch.DrainCanonical(&buf)
+	if err != nil {
+		err = eh.Errorf("canonical item: %w", err)
+		return
+	}
+	if n != 1 {
+		err = eh.Errorf("canonical item: the entity drained as %d items, not one", n)
+		return
+	}
+	item = buf.Bytes()
+	return
+}
+
 // FlushIfDue is Flush once cfg.FlushEvery rows are buffered, and a no-op
 // before that — or always, when FlushEvery is zero. Call it between
 // entities (after Commit): like Flush it errors on an open frame. A
@@ -1752,6 +1889,12 @@ func (inst *TrailStore) DiscardPending() {
 func (inst *TrailStore) Close() {
 	inst.DiscardPending()
 	lowlevel.InEntityFactsTableReleaseBuilder(inst.dml)
+	inst.scratchMu.Lock()
+	if inst.scratch != nil {
+		inst.scratch.Close()
+		inst.scratch = nil
+	}
+	inst.scratchMu.Unlock()
 }
 
 // TrailCacheConfig parameterizes an attached read-through cache view.

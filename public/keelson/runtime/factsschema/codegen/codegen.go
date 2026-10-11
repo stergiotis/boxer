@@ -3,7 +3,7 @@
 // the spinnaker pattern at boxerstaging/spinnaker/codegen but targets
 // runtime/factsschema.
 //
-// Four artefacts are produced — all checked into the tree under
+// Five artefacts are produced — all checked into the tree under
 // runtime/factsschema/, all regenerated on demand when
 // factsschema.LoadRuntimeFactsMapping changes:
 //
@@ -14,6 +14,9 @@
 //     CBOR (the buscodec target per ADR-0042).
 //   - ra/runtime_facts_ra.out.go        — typed readaccess code
 //     over the same Arrow schema (universal read).
+//   - ra/runtime_facts_canonwire.out.go — the canonical wire encoder
+//     (ADR-0210) over those readaccess classes, which a facts-bound
+//     record store generated with CanonWire binds (ADR-0327 (proposed)).
 //   - ddl/runtime_facts_ddl.out.go      — CH CREATE TABLE wrapper
 //     with the column block baked as a string constant and a runtime
 //     ComposeCreateTableSql(engineClause) entrypoint.
@@ -22,7 +25,7 @@
 //
 //	./boxer.sh runtimecodegen all
 //
-// or the individual subcommands. Note that these four are reached only by that
+// or the individual subcommands. Note that these five are reached only by that
 // command — scripts/dev/generate.sh invokes it explicitly, and there is no
 // //go:generate directive that a bare `go generate ./...` would sweep. A change
 // to the leeway aspect vocabularies renames physical columns, so it has to run
@@ -44,6 +47,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsschema"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/canonwire"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/common"
 	leewayddl "github.com/stergiotis/boxer/public/semistructured/leeway/ddl"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/ddl/clickhouse"
@@ -71,6 +75,10 @@ const (
 	// DefaultDDLOutputPath is the relative location of the generated
 	// CH-DDL Go source.
 	DefaultDDLOutputPath = "public/keelson/runtime/factsschema/ddl/runtime_facts_ddl.out.go"
+
+	// DefaultCanonWireOutputPath is the relative location of the generated
+	// canonical wire encoder, beside the readaccess classes it binds.
+	DefaultCanonWireOutputPath = "public/keelson/runtime/factsschema/ra/runtime_facts_canonwire.out.go"
 
 	// DefaultOutputPath is retained for backwards compatibility with the
 	// original DML-only entrypoint.
@@ -202,6 +210,47 @@ func GenerateReadAccess(outPath string) (err error) {
 	)
 	if err != nil {
 		err = eh.Errorf("codegen: generate readaccess go classes: %w", err)
+		return
+	}
+	return writeFile(outPath, code)
+}
+
+// GenerateCanonWire emits the boxer.facts canonical wire encoder
+// (ADR-0210) to outPath, into the readaccess package, over the same table
+// description and class namer as GenerateReadAccess — the encoder calls
+// the readaccess classes by name, so the two are one package. A
+// facts-bound record store generated with CanonWire binds it
+// (ADR-0327 (proposed) §SD2).
+func GenerateCanonWire(outPath string) (err error) {
+	var tbl common.TableDesc
+	tbl, err = buildTableDesc()
+	if err != nil {
+		return
+	}
+	var conv *leewayddl.HumanReadableNamingConvention
+	conv, err = leewayddl.NewHumanReadableNamingConvention(namingSeparator)
+	if err != nil {
+		err = eh.Errorf("codegen: naming convention: %w", err)
+		return
+	}
+	tech := leewayddlgolang.NewTechnologySpecificCodeGenerator()
+	driver := canonwire.NewGoCodeGeneratorDriver(conv, tech).EncoderOnly()
+	clsNamer := gocodegen.NewMultiTablePerPackageGoClassNamer()
+	var code []byte
+	var wellFormed bool
+	code, wellFormed, err = driver.GenerateGoClasses(
+		readAccessPackageName,
+		tbl.DictionaryEntry.Name,
+		tbl,
+		factsschema.TableRowConfig,
+		clsNamer,
+	)
+	if err != nil {
+		err = eh.Errorf("codegen: generate canonwire go classes: %w", err)
+		return
+	}
+	if !wellFormed {
+		err = eh.Errorf("codegen: generate canonwire: the emitted source is not well-formed")
 		return
 	}
 	return writeFile(outPath, code)

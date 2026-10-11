@@ -149,6 +149,10 @@ type Input struct {
 	// statement of intent here and not applied by the store: `chstore` owns
 	// this table's DDL (ADR-0184 SD2/SD5).
 	DDL *clickhouse.TableOptions
+	// CanonWire gives the store DrainCanonical and CanonicalItem over the
+	// facts canonical wire encoder `factsschema/ra` carries (ADR-0327
+	// (proposed) §SD2); nothing is emitted for it.
+	CanonWire bool
 }
 
 // sharedRA is not an option either.
@@ -174,6 +178,9 @@ var sharedRA = gen.Scaffold{
 	// factsschema/codegen generates under the bare table name, where this
 	// generator's default would be "facts_table".
 	Stylable: factsschema.TableName,
+	// The package carries the canonical wire encoder too
+	// (codegen.GenerateCanonWire), so a store may bind it.
+	CanonWire: true,
 }
 
 // externallyProvisioned is not an option.
@@ -228,6 +235,7 @@ func (inst Input) Generate() (err error) {
 		Wrapper:        marshallgen.FixedIdsWrapper{Ids: inst.Ids},
 		SharedRA:       &sharedRA,
 		DDL:            inst.DDL,
+		CanonWire:      inst.CanonWire,
 		// Not a parameter — see the externallyProvisioned doc.
 		ExternallyProvisioned: externallyProvisioned,
 	}.Generate()

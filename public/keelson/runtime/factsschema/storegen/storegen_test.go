@@ -238,6 +238,33 @@ func TestGenerate_EmitsNoDdlExecutionSurface(t *testing.T) {
 		"CREATE TABLE IF NOT EXISTS boxer.facts")
 }
 
+// TestGenerate_CanonWireBindsTheFactsEncoder is ADR-0327 (proposed) §SD2:
+// a facts-bound store generated with CanonWire emits no encoder of its own
+// and calls the one `factsschema/ra` carries, under factsschema's stylable
+// name, so DrainCanonical and CanonicalItem compute the same item every
+// facts-bound store does.
+func TestGenerate_CanonWireBindsTheFactsEncoder(t *testing.T) {
+	out := t.TempDir()
+	require.NoError(t, storegen.Input{
+		PackageName:    "probe",
+		StoreName:      "Probe",
+		ComponentPaths: []string{"./testdata/probe_dto.go"},
+		OutDir:         out,
+		ImportPath:     "example.com/probe",
+		Ids:            map[string]uint64{"storegenProbeHost": 7001, "storegenProbeCount": 7002, "storegenProbeRatio": 7003},
+		CanonWire:      true,
+	}.Generate())
+
+	store := readFile(t, filepath.Join(out, "probe_store.out.go"))
+	assert.Contains(t, store, "func (inst *ProbeStore) DrainCanonical(w io.Writer)")
+	assert.Contains(t, store, "func (inst *ProbeStore) CanonicalItem(ent *ProbeEntity)")
+	assert.Contains(t, store, "acc := ra.NewReadAccessFacts()")
+	assert.Contains(t, store, "ra.NewCanonWireEncoderFacts(acc, ra.CanonWireOrdinalTaggerFacts{})",
+		"the encoder is the shared package's, under factsschema's stylable name")
+	_, err := os.Stat(filepath.Join(out, "internal", "lowlevel", "facts_canonwire.out.go"))
+	assert.True(t, os.IsNotExist(err), "a facts-bound store must not emit its own encoder copy")
+}
+
 func TestGenerate_RefusesComponentFromAnotherPackage(t *testing.T) {
 	// The failure this prevents is a `go build` error naming neither the DTO
 	// nor the setting that caused it, raised whenever someone first compiles

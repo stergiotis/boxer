@@ -8,12 +8,14 @@
 package agentrunstore
 
 import (
+	"bytes"
 	"context"
 	_ "embed"
 	"io"
 	"iter"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/apache/arrow-go/v18/arrow"
@@ -325,6 +327,12 @@ type EntryStore struct {
 	// has not yet been told are durable or discarded (ADR-0295 §SD7); empty
 	// without an observer.
 	written []recordstore.WrittenKey[uint64, uint64]
+	// scratch is the executor-less store CanonicalItem re-enters an
+	// entity into and drains, made on first use; scratchMu serialises
+	// it, the one verb of the store safe to call from several
+	// goroutines.
+	scratchMu sync.Mutex
+	scratch   *EntryStore
 }
 
 // NewEntryStore wires the store. A nil alloc selects the Go allocator.
@@ -1300,25 +1308,90 @@ func (inst *EntryStore) DrainCanonical(w io.Writer) (n int, err error) {
 			inst.cfg.WriteObserver.Discarded(inst.takeWritten())
 		}
 	}()
-	ra := lowlevel.NewReadAccessAgentrunentryTable()
-	enc, err := lowlevel.NewCanonWireEncoderAgentrunentryTable(ra, lowlevel.CanonWireOrdinalTaggerAgentrunentryTable{})
+	acc := lowlevel.NewReadAccessAgentrunentryTable()
+	enc, err := lowlevel.NewCanonWireEncoderAgentrunentryTable(acc, lowlevel.CanonWireOrdinalTaggerAgentrunentryTable{})
 	if err != nil {
 		err = eh.Errorf("canonical wire encoder: %w", err)
 		return
 	}
 	for _, rec := range records {
-		if err = ra.LoadFromRecord(rec); err != nil {
+		if err = acc.LoadFromRecord(rec); err != nil {
 			err = eh.Errorf("load the buffered rows: %w", err)
 			return
 		}
 		err = enc.EncodeAll(w)
 		n += int(rec.NumRows())
-		ra.Release()
+		acc.Release()
 		if err != nil {
 			err = eh.Errorf("encode the buffered rows: %w", err)
 			return
 		}
 	}
+	return
+}
+
+// CanonicalItem is the canonical wire item (ADR-0210) of ent as this store
+// would write it: the entity re-entered into a scratch store with no
+// executor and drained, so a row read back from the server has the item
+// the writer chained. The scratch store carries no stampers and no
+// observer; what a stamper adds to a stored row is not in the item. An
+// entity with a tombstone lifecycle, or whose row carried hand-written
+// contributions, is not reproducible from its decoded form: the first is
+// refused, the second drains without them. Safe for concurrent use.
+func (inst *EntryStore) CanonicalItem(ent *EntryEntity) (item []byte, err error) {
+	if ent == nil {
+		err = eh.Errorf("canonical item: nil entity")
+		return
+	}
+	inst.scratchMu.Lock()
+	defer inst.scratchMu.Unlock()
+	if inst.scratch == nil {
+		inst.scratch = NewEntryStore(nil, nil, EntryStoreConfig{})
+	}
+	b := inst.scratch.Begin(ent.ID, ent.Ord, ent.EntryEnvelope)
+	if ent.Entry.Has {
+		b.AddEntry(ent.Entry.Val)
+	}
+	if ent.RequestMeta.Has {
+		b.AddRequestMeta(ent.RequestMeta.Val)
+	}
+	if ent.ReplyMeta.Has {
+		b.AddReplyMeta(ent.ReplyMeta.Val)
+	}
+	if ent.CompactIntent.Has {
+		b.AddCompactIntent(ent.CompactIntent.Val)
+	}
+	if ent.ApprovalDecision.Has {
+		b.AddApprovalDecision(ent.ApprovalDecision.Val)
+	}
+	if ent.HeadRecord.Has {
+		b.AddHeadRecord(ent.HeadRecord.Val)
+	}
+	if ent.ProfileRecord.Has {
+		b.AddProfileRecord(ent.ProfileRecord.Val)
+	}
+	if ent.TurnState.Has {
+		b.AddTurnState(ent.TurnState.Val)
+	}
+	if ent.ToolCatalog.Has {
+		b.AddToolCatalog(ent.ToolCatalog.Val)
+	}
+	if err = b.Commit(); err != nil {
+		inst.scratch.DiscardPending()
+		err = eh.Errorf("canonical item: %w", err)
+		return
+	}
+	var buf bytes.Buffer
+	n, err := inst.scratch.DrainCanonical(&buf)
+	if err != nil {
+		err = eh.Errorf("canonical item: %w", err)
+		return
+	}
+	if n != 1 {
+		err = eh.Errorf("canonical item: the entity drained as %d items, not one", n)
+		return
+	}
+	item = buf.Bytes()
 	return
 }
 
@@ -1371,6 +1444,12 @@ func (inst *EntryStore) DiscardPending() {
 func (inst *EntryStore) Close() {
 	inst.DiscardPending()
 	lowlevel.InEntityAgentrunentryTableReleaseBuilder(inst.dml)
+	inst.scratchMu.Lock()
+	if inst.scratch != nil {
+		inst.scratch.Close()
+		inst.scratch = nil
+	}
+	inst.scratchMu.Unlock()
 }
 
 // EntryCacheConfig parameterizes an attached read-through cache view.
