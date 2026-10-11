@@ -19,6 +19,24 @@ into the entries. The machinery sections every entry repeats (coverage,
 breaking changes, …) are omitted; the compilation process is described in
 [README.md](./README.md).
 
+## [2026-09-30 – 2026-10-11](./2026-09-30--2026-10-11.md)
+
+- [Apps that agents can operate (ADR-0269, ADR-0270)](./2026-09-30--2026-10-11.md#apps-that-agents-can-operate-adr-0269-adr-0270)
+- [The chat as coordinator](./2026-09-30--2026-10-11.md#the-chat-as-coordinator)
+- [Limits on what the model may do](./2026-09-30--2026-10-11.md#limits-on-what-the-model-may-do)
+- [One audit trail (ADR-0277, ADR-0295, ADR-0296)](./2026-09-30--2026-10-11.md#one-audit-trail-adr-0277-adr-0295-adr-0296)
+- [The agent harness: a run journal (ADR-0307 – ADR-0320, ADR-0325)](./2026-09-30--2026-10-11.md#the-agent-harness-a-run-journal-adr-0307--adr-0320-adr-0325)
+- [What an agent sees on the desktop](./2026-09-30--2026-10-11.md#what-an-agent-sees-on-the-desktop)
+- [Ad-hoc bundles (ADR-0288)](./2026-09-30--2026-10-11.md#ad-hoc-bundles-adr-0288)
+- [Leeway rows for readers (ADR-0289)](./2026-09-30--2026-10-11.md#leeway-rows-for-readers-adr-0289)
+- [In a browser tab, for any module (ADR-0278)](./2026-09-30--2026-10-11.md#in-a-browser-tab-for-any-module-adr-0278)
+- [Real wind with no server (ADR-0290 – ADR-0292)](./2026-09-30--2026-10-11.md#real-wind-with-no-server-adr-0290--adr-0292)
+- [play's Map, History and dock](./2026-09-30--2026-10-11.md#plays-map-history-and-dock)
+- [imzero2](./2026-09-30--2026-10-11.md#imzero2)
+- [Platform and smaller surfaces](./2026-09-30--2026-10-11.md#platform-and-smaller-surfaces)
+- [SQL parsing speed (ADR-0304 – ADR-0306)](./2026-09-30--2026-10-11.md#sql-parsing-speed-adr-0304--adr-0306)
+- [Tree-wide changes](./2026-09-30--2026-10-11.md#tree-wide-changes)
+
 ## [2026-09-13 – 2026-09-30](./2026-09-13--2026-09-30.md)
 
 - [analytics/graph: an in-process graph engine (ADR-0229)](./2026-09-13--2026-09-30.md#analyticsgraph-an-in-process-graph-engine-adr-0229)
