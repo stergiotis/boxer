@@ -11,7 +11,6 @@ import (
 	"github.com/stergiotis/boxer/public/identity/tagmint"
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsschema/storegen"
 	"github.com/stergiotis/boxer/public/keelson/vdd"
-	"github.com/stergiotis/boxer/public/observability/eh/eb/ebtest"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/namemint/contract"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/namemint/registry"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/naming"
@@ -265,21 +264,24 @@ func TestGenerate_CanonWireBindsTheFactsEncoder(t *testing.T) {
 	assert.True(t, os.IsNotExist(err), "a facts-bound store must not emit its own encoder copy")
 }
 
-func TestGenerate_RefusesComponentFromAnotherPackage(t *testing.T) {
-	// The failure this prevents is a `go build` error naming neither the DTO
-	// nor the setting that caused it, raised whenever someone first compiles
-	// the generated package.
-	err := storegen.Input{
+// A component may be defined in another package: the emitted codec
+// declares the store's package, not the DTO's, and refers to the DTO's
+// type by its bare name, which the store's package provides as a type
+// alias (ADR-0327 (proposed) §SD8: the trail's audit event is the audit
+// package's).
+func TestGenerate_TakesAComponentFromAnotherPackage(t *testing.T) {
+	out := t.TempDir()
+	require.NoError(t, storegen.Input{
 		PackageName:    "somethingElse",
 		StoreName:      "Probe",
 		ComponentPaths: []string{"./testdata/probe_dto.go"},
-		OutDir:         t.TempDir(),
+		OutDir:         out,
 		ImportPath:     "example.com/probe",
-		Ids:            map[string]uint64{"storegenProbeHost": 7001},
-	}.Generate()
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "declare different packages")
-	assert.Equal(t, "somethingElse", ebtest.Fields(t, err)["packageName"])
+		Ids:            map[string]uint64{"storegenProbeHost": 7001, "storegenProbeCount": 7002, "storegenProbeRatio": 7003},
+	}.Generate())
+	codec := readFile(t, filepath.Join(out, "probe_dto.out.go"))
+	assert.Contains(t, codec, "package somethingElse\n", "the codec declares the store's package")
+	assert.NotContains(t, codec, "package probe\n")
 }
 
 func readFile(t *testing.T, path string) string {

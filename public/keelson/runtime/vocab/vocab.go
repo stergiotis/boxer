@@ -737,6 +737,9 @@ var (
 	MembEvidenceWrittenByBatch        = NkRegistry.MustBegin("evidenceWrittenByBatch", 479).End()
 	MembEvidenceKindOpening           = NkRegistry.MustBegin("evidenceKindOpening", 480).End()
 	MembEvidenceOpeningValue          = NkRegistry.MustBegin("evidenceOpeningValue", 481).End()
+	// How an audit event's origin was established (ADR-0327 (proposed)
+	// §SD6), beside PrincipalBy.
+	MembAuditEventOriginBy = NkRegistry.MustBegin("auditEventOriginBy", 482).End()
 )
 
 // AllMembs is the enumerated set of registered runtime memberships. Tests
@@ -854,5 +857,5 @@ var AllMembs = []registry.RegisteredNaturalKey{
 	MembEvidenceChainCommitComponents, MembEvidenceChainCommitments, MembEvidenceKindWrittenBy, MembEvidenceWrittenByRun,
 	MembEvidenceWrittenByApp, MembEvidenceWrittenByInstance, MembEvidenceWrittenByOriginBy, MembEvidenceWrittenByPrincipal,
 	MembEvidenceWrittenByPrincipalBy, MembEvidenceWrittenByPurpose, MembEvidenceWrittenByCorrelation, MembEvidenceWrittenByBatch,
-	MembEvidenceKindOpening, MembEvidenceOpeningValue,
+	MembEvidenceKindOpening, MembEvidenceOpeningValue, MembAuditEventOriginBy,
 }

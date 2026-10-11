@@ -515,6 +515,7 @@ var kindViews = []kindView{
 		{"outcome", "symbol", vocab.MembAuditEventOutcome, scalar},
 		{"principal", "stringArray", vocab.MembAuditEventPrincipal, first},
 		{"principal-by", "symbol", vocab.MembAuditEventPrincipalBy, scalar},
+		{"origin-by", "symbol", vocab.MembAuditEventOriginBy, scalar},
 		{"purpose", "symbol", vocab.MembAuditEventPurpose, scalar},
 		{"node", "symbol", vocab.MembAuditEventNode, scalar},
 		{"subject", "u64Array", vocab.MembAuditEventSubject, first},

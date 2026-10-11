@@ -30,7 +30,10 @@ func TestGenerateTrailStore(t *testing.T) {
 			"./origin_dto.go", "./conversation_dto.go", "./delegation_dto.go", "./cause_dto.go",
 			"./llmcall_dto.go", "./llmmessage_dto.go", "./llmmessagebody_dto.go",
 			"./agentaction_dto.go", "./agentgrant_dto.go", "./httpfetch_dto.go", "./agentcapture_dto.go",
-			"./agentdisclosure_dto.go", "./adhocdataset_dto.go", "./auditevent_dto.go",
+			"./agentdisclosure_dto.go", "./adhocdataset_dto.go",
+			// The audit event is the audit package's (ADR-0327 §SD8); the
+			// store binds it through the alias in auditevent.go.
+			"../../../storage/recordstore/evidence/audit/auditevent_dto.go",
 		},
 		OutDir:     ".",
 		ImportPath: "github.com/stergiotis/boxer/public/keelson/runtime/trail",

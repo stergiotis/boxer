@@ -1,4 +1,4 @@
-package trail
+package audit
 
 import (
 	"strconv"
@@ -7,15 +7,16 @@ import (
 	"github.com/stergiotis/boxer/public/functional/option"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/naming"
+	"github.com/stergiotis/boxer/public/storage/recordstore/evidence"
 )
 
 // AuditEvent is one event in a consumer's own records-of-processing
 // vocabulary (ADR-0296 §SD1): what was done, to whose data, by whom, with
 // what outcome. Everything a consumer varies — domain and action names,
 // reference types, retention classes — is a value here, so a new action is
-// a new constant and no membership. Who wrote it is the row's [Origin],
-// which for this component the writing process states itself; the task,
-// when the event is agent-caused, its [Delegation].
+// a new constant and no membership. Who wrote it is the row's origin
+// component; OriginBy says how that origin was established (ADR-0327
+// (proposed) §SD6), as PrincipalBy does for the principal.
 //
 // No field carries a personal value: Principal is a pseudonymous reference,
 // references are ids or hashes, attributes are short codes. The row's
@@ -37,6 +38,11 @@ type AuditEvent struct {
 	// one of the PrincipalBy constants: how much a reader may trust it.
 	Principal   option.Option[string] `lw:"auditEventPrincipal,stringArray,unit"`
 	PrincipalBy string                `lw:"auditEventPrincipalBy,symbol"`
+	// OriginBy is how the row's origin was established, one of
+	// evidence.OriginByE's names: the host's own service wrote it, the host
+	// took it from a bus envelope's sender, or the writing process stated
+	// it (ADR-0327 (proposed) §SD6).
+	OriginBy string `lw:"auditEventOriginBy,symbol"`
 	// Purpose is the opaque purpose code the claims stated, when one was.
 	Purpose option.Option[string] `lw:"auditEventPurpose,symbol"`
 	// Node is the cell or node that wrote the event; absent on a
@@ -77,7 +83,7 @@ const (
 	PrincipalByNone = "none"
 )
 
-// The recorder's own domain and its actions (ADR-0296 §SD4): rows the
+// The recorder's own domain and its actions (ADR-0296 §SD4): rows a
 // recorder writes about itself, in the retention class RetentionTrail.
 const (
 	TrailDomain        = "trail"
@@ -103,15 +109,15 @@ const (
 // are lower-spinal [naming.StylableName]s, enumerations hold one of their
 // constants, values are non-empty valid UTF-8 under their bound, the
 // parallel lists agree in length, and a principal and its PrincipalBy
-// agree. The recorder replaces a row that fails with an audit-invalid row.
+// agree. A recorder replaces a row that fails with an audit-invalid row.
 func (inst AuditEvent) Validate() (err error) {
-	if err = checkName("domain", inst.Domain); err != nil {
+	if err = CheckName("domain", inst.Domain); err != nil {
 		return
 	}
-	if err = checkName("action", inst.Action); err != nil {
+	if err = CheckName("action", inst.Action); err != nil {
 		return
 	}
-	if err = checkName("retention", inst.Retention); err != nil {
+	if err = CheckName("retention", inst.Retention); err != nil {
 		return
 	}
 	switch inst.Outcome {
@@ -131,18 +137,21 @@ func (inst AuditEvent) Validate() (err error) {
 	default:
 		return eh.Errorf("principal-by %q is not system, env, os or none", inst.PrincipalBy)
 	}
+	if _, ok := evidence.ParseOriginBy(inst.OriginBy); !ok {
+		return eh.Errorf("origin-by %q is not self, envelope or host", inst.OriginBy)
+	}
 	if inst.Principal.Has {
-		if err = checkValue("principal", inst.Principal.Val); err != nil {
+		if err = CheckValue("principal", inst.Principal.Val); err != nil {
 			return
 		}
 	}
 	if inst.Purpose.Has {
-		if err = checkValue("purpose", inst.Purpose.Val); err != nil {
+		if err = CheckValue("purpose", inst.Purpose.Val); err != nil {
 			return
 		}
 	}
 	if inst.Node.Has {
-		if err = checkValue("node", inst.Node.Val); err != nil {
+		if err = CheckValue("node", inst.Node.Val); err != nil {
 			return
 		}
 	}
@@ -153,10 +162,10 @@ func (inst AuditEvent) Validate() (err error) {
 		return eh.Errorf("%d references, more than %d", len(inst.RefTypes), MaxRefs)
 	}
 	for i, ty := range inst.RefTypes {
-		if err = checkName("reference type "+strconv.Itoa(i), ty); err != nil {
+		if err = CheckName("reference type "+strconv.Itoa(i), ty); err != nil {
 			return
 		}
-		if err = checkValue("reference value "+strconv.Itoa(i), inst.RefValues[i]); err != nil {
+		if err = CheckValue("reference value "+strconv.Itoa(i), inst.RefValues[i]); err != nil {
 			return
 		}
 	}
@@ -167,19 +176,20 @@ func (inst AuditEvent) Validate() (err error) {
 		return eh.Errorf("%d attributes, more than %d", len(inst.AttrKeys), MaxAttrs)
 	}
 	for i, k := range inst.AttrKeys {
-		if err = checkName("attribute key "+strconv.Itoa(i), k); err != nil {
+		if err = CheckName("attribute key "+strconv.Itoa(i), k); err != nil {
 			return
 		}
-		if err = checkValue("attribute value "+strconv.Itoa(i), inst.AttrValues[i]); err != nil {
+		if err = CheckValue("attribute value "+strconv.Itoa(i), inst.AttrValues[i]); err != nil {
 			return
 		}
 	}
 	return nil
 }
 
-// checkName is a lower-spinal StylableName under MaxNameRunes.
-func checkName(what string, s string) (err error) {
-	if err = checkValue(what, s); err != nil {
+// CheckName says s is a lower-spinal StylableName under MaxNameRunes;
+// what names it in the error.
+func CheckName(what string, s string) (err error) {
+	if err = CheckValue(what, s); err != nil {
 		return
 	}
 	if utf8.RuneCountInString(s) > MaxNameRunes {
@@ -195,8 +205,9 @@ func checkName(what string, s string) (err error) {
 	return nil
 }
 
-// checkValue is non-empty valid UTF-8 under MaxValueRunes.
-func checkValue(what string, s string) (err error) {
+// CheckValue says s is non-empty valid UTF-8 under MaxValueRunes; what
+// names it in the error.
+func CheckValue(what string, s string) (err error) {
 	if s == "" {
 		return eh.Errorf("%s is empty", what)
 	}
@@ -207,4 +218,29 @@ func checkValue(what string, s string) (err error) {
 		return eh.Errorf("%s is longer than %d runes", what, MaxValueRunes)
 	}
 	return nil
+}
+
+// Bounded is s as an attribute value: valid UTF-8, non-empty, under the
+// bound — what a recorder writes about a row it could not take as it was.
+func Bounded(s string) (out string) {
+	out = toValidUTF8(s)
+	if out == "" {
+		return "-"
+	}
+	if utf8.RuneCountInString(out) > MaxValueRunes {
+		r := []rune(out)
+		out = string(r[:MaxValueRunes])
+	}
+	return
+}
+
+func toValidUTF8(s string) string {
+	if utf8.ValidString(s) {
+		return s
+	}
+	out := make([]rune, 0, len(s))
+	for _, r := range s {
+		out = append(out, r)
+	}
+	return string(out)
 }

@@ -19,6 +19,7 @@ const (
 	kindAuditEventOutcome     uint64 = 9223372049739677989
 	kindAuditEventPrincipal   uint64 = 9223372049739677990
 	kindAuditEventPrincipalBy uint64 = 9223372049739677991
+	kindAuditEventOriginBy    uint64 = 9223372049739678178
 	kindAuditEventPurpose     uint64 = 9223372049739677992
 	kindAuditEventNode        uint64 = 9223372049739677993
 	kindAuditEventSubject     uint64 = 9223372049739677994
@@ -121,6 +122,9 @@ func auditEventEmitSectionSymbol[
 	symbolSecAttr_PrincipalBy := symbolSec.BeginAttribute(row.PrincipalBy)
 	symbolSecAttr_PrincipalBy.AddMembershipLowCardRefP(kindAuditEventPrincipalBy)
 	symbolSecAttr_PrincipalBy.EndAttributeP()
+	symbolSecAttr_OriginBy := symbolSec.BeginAttribute(row.OriginBy)
+	symbolSecAttr_OriginBy.AddMembershipLowCardRefP(kindAuditEventOriginBy)
+	symbolSecAttr_OriginBy.EndAttributeP()
 	if row.Purpose.Has {
 		symbolSecAttr_Purpose := symbolSec.BeginAttribute(row.Purpose.Val)
 		symbolSecAttr_Purpose.AddMembershipLowCardRefP(kindAuditEventPurpose)
@@ -317,6 +321,9 @@ func auditEventReadRow[
 	var symbolPrincipalByVal string
 	var symbolPrincipalByCount int
 	var symbolPrincipalByLastAttr int64
+	var symbolOriginByVal string
+	var symbolOriginByCount int
+	var symbolOriginByLastAttr int64
 	var symbolPurposeVal string
 	var symbolPurposeCount int
 	var symbolPurposeLastAttr int64
@@ -365,6 +372,13 @@ func auditEventReadRow[
 				}
 				val := symbolAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 				symbolPrincipalByVal = val
+			case kindAuditEventOriginBy:
+				if symbolOriginByLastAttr != attrJ+1 {
+					symbolOriginByLastAttr = attrJ + 1
+					symbolOriginByCount++
+				}
+				val := symbolAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				symbolOriginByVal = val
 			case kindAuditEventPurpose:
 				if symbolPurposeLastAttr != attrJ+1 {
 					symbolPurposeLastAttr = attrJ + 1
@@ -427,6 +441,14 @@ func auditEventReadRow[
 	}
 	if symbolPrincipalByCount == 1 {
 		row.PrincipalBy = symbolPrincipalByVal
+		present = true
+	}
+	if symbolOriginByCount > 1 {
+		err = eb.Build().Int("row", i).Str("section", "symbol").Str("membership", "auditEventOriginBy").Int("got", symbolOriginByCount).Errorf("slot symbol@auditEventOriginBy (field OriginBy) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", symbolOriginByCount)
+		return
+	}
+	if symbolOriginByCount == 1 {
+		row.OriginBy = symbolOriginByVal
 		present = true
 	}
 	if symbolPurposeCount > 1 {

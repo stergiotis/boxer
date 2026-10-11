@@ -10,17 +10,19 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/stergiotis/boxer/public/storage/recordstore/evidence/audit"
 )
 
 // collectForwarder keeps what it is handed, and can refuse.
 type collectForwarder struct {
 	mu     sync.Mutex
-	got    []*TrailEntity
+	got    []audit.Event
 	calls  int
 	refuse bool
 }
 
-func (inst *collectForwarder) Forward(_ context.Context, events []*TrailEntity) error {
+func (inst *collectForwarder) Forward(_ context.Context, events []audit.Event) error {
 	inst.mu.Lock()
 	defer inst.mu.Unlock()
 	inst.calls++
@@ -35,7 +37,7 @@ func (inst *collectForwarder) ids() (ids []uint64) {
 	inst.mu.Lock()
 	defer inst.mu.Unlock()
 	for _, e := range inst.got {
-		ids = append(ids, e.ID)
+		ids = append(ids, e.Id)
 	}
 	return
 }
@@ -63,12 +65,12 @@ func TestPromptPathForwardsDurableEvents(t *testing.T) {
 	fwd.mu.Lock()
 	first := fwd.got[0]
 	fwd.mu.Unlock()
-	require.True(t, first.AuditEvent.Has)
-	assert.Equal(t, "vault-resolve", first.AuditEvent.Val.Action)
-	assert.Equal(t, "auditEvent", first.AuditEvent.Val.Kind)
-	require.True(t, first.Origin.Has)
-	assert.Equal(t, Origin{Id: first.ID, Run: "run-1", App: "apps/dmdm", Instance: 2}, first.Origin.Val)
-	assert.NotEmpty(t, first.NaturalKey)
+	assert.Equal(t, "vault-resolve", first.Row.Action)
+	assert.Equal(t, "auditEvent", first.Row.Kind)
+	assert.Equal(t, "self", first.Row.OriginBy, "a recorder without an attestation states its own origin")
+	assert.Equal(t, audit.Origin{Run: "run-1", App: "apps/dmdm", Instance: 2}, first.Origin)
+	assert.NotZero(t, first.Id)
+	assert.False(t, first.At.IsZero())
 	c := rec.Counts()
 	assert.EqualValues(t, 2, c.Forwarded)
 	assert.EqualValues(t, 0, c.ForwardDropped)
@@ -111,9 +113,9 @@ func TestDiscardedRowsAreNotForwardedAndGapRowsAre(t *testing.T) {
 	fwd.mu.Lock()
 	defer fwd.mu.Unlock()
 	require.Len(t, fwd.got, 2, "the one held event that landed, and the gap row")
-	assert.Equal(t, "vault-resolve", fwd.got[0].AuditEvent.Val.Action)
-	assert.Equal(t, ActionAuditGap, fwd.got[1].AuditEvent.Val.Action)
-	assert.Equal(t, "2", fwd.got[1].AuditEvent.Val.AttrValues[0])
+	assert.Equal(t, "vault-resolve", fwd.got[0].Row.Action)
+	assert.Equal(t, ActionAuditGap, fwd.got[1].Row.Action)
+	assert.Equal(t, "2", fwd.got[1].Row.AttrValues[0])
 	rec.mu.Lock()
 	assert.Empty(t, rec.fwd.pending, "nothing is kept for a row that will never be durable")
 	rec.mu.Unlock()

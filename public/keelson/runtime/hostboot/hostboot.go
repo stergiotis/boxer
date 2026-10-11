@@ -65,6 +65,7 @@ import (
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/storage/recordstore"
+	"github.com/stergiotis/boxer/public/storage/recordstore/evidence"
 	"github.com/stergiotis/boxer/public/thestack/fffi2/runtime"
 	"github.com/stergiotis/boxer/public/thestack/fffi2/typed"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/application"
@@ -506,10 +507,19 @@ func (rt *Runtime) bootServices(ctx context.Context, factsCfg chstore.Config) {
 	if rt.RunInfo != nil {
 		runId = rt.RunInfo.RunId
 	}
-	rt.Trail = trail.NewRecorder(rt.PersistExec, runId, logger)
+	// The host's own recorder: an audit event it writes has its origin
+	// established by the host (ADR-0327 §SD6).
+	rt.Trail = trail.NewRecorder(rt.PersistExec, runId, logger, trail.WithOriginBy(evidence.OriginByHost))
 	rt.cleanups = append(rt.cleanups, rt.Trail.Close)
 	if trail.RequiredEnv.Get() && !rt.Trail.Durable() {
 		logger.Warn().Msg("trail: BOXER_TRAIL_REQUIRED is set and this host has no durable backend; model calls and egress fetches will be refused")
+	}
+	// runtime.audit.{app}: an app's audit events, their origin the
+	// envelope's sender (ADR-0327 §SD8).
+	if auditSvc, aerr := trail.NewAuditService(rt.Bus, logger, rt.Trail); aerr != nil {
+		logger.Warn().Err(aerr).Msg("trail: audit service start failed; runtime.audit.* will be unbound")
+	} else {
+		rt.cleanups = append(rt.cleanups, auditSvc.Close)
 	}
 	rt.bootAgentRun(ctx)
 	if svc.AppState {

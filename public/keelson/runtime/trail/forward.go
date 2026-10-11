@@ -8,17 +8,8 @@ import (
 
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/storage/recordstore"
+	"github.com/stergiotis/boxer/public/storage/recordstore/evidence/audit"
 )
-
-// ForwarderI is the seam a downstream carrier adapter implements (ADR-0296
-// §SD6): it is handed audit-event rows that are durable on the server,
-// never buffered ones. Delivery is at least once — the prompt path and
-// the backstop can both hand over the same row — and the receiving side
-// deduplicates by the row's id. An error is counted and logged; the
-// backstop is what sends the rows again.
-type ForwarderI interface {
-	Forward(ctx context.Context, events []*TrailEntity) error
-}
 
 // DefaultForwardQueue bounds the batches the prompt path holds for a
 // forwarder that has not taken them yet; past it a batch is dropped from
@@ -211,10 +202,25 @@ func (inst *Recorder) forwardLoop() {
 	}
 }
 
+// eventOf is a trail row as the forwarder is handed it: a plain value
+// (ADR-0327 §SD8).
+func eventOf(ent *TrailEntity) (e audit.Event) {
+	e = audit.Event{Id: ent.ID, At: ent.Ts, Row: ent.AuditEvent.Val}
+	if ent.Origin.Has {
+		o := ent.Origin.Val
+		e.Origin = audit.Origin{Run: o.Run, App: o.App, Instance: o.Instance}
+	}
+	return
+}
+
 // forward is one hand-over: on success the ids are remembered for the
 // backstop to skip; on failure they are counted and left to it.
 func (inst *Recorder) forward(ctx context.Context, batch []*TrailEntity) (ok bool) {
-	if err := inst.forwarder.Forward(ctx, batch); err != nil {
+	events := make([]audit.Event, 0, len(batch))
+	for _, ent := range batch {
+		events = append(events, eventOf(ent))
+	}
+	if err := inst.forwarder.Forward(ctx, events); err != nil {
 		inst.forwardDropped.Add(uint64(len(batch)))
 		inst.log.Warn().Err(err).Int("events", len(batch)).Msg("trail: the forwarder refused a batch; the backstop sends it again")
 		return false

@@ -299,23 +299,38 @@ the `keep` mark.
 
 ### SD8 — The audit event below the runtime, and the subject
 
-`AuditEvent`, its bounds, the `audit-gap` and `audit-invalid` rows and
+`AuditEvent`, its bounds, the constants of the recorder's own domain and
 `ForwarderI` move to `storage/recordstore/evidence/audit`. The trail's
-recorder keeps `Event` and re-exports the type. A process that links no
-runtime package builds a recorder over the audit package, its own
-executor and a forwarder; its rows say `originBy = self`.
+recorder keeps `Event` and the `audit-gap` and `audit-invalid` rows, and
+re-exports the type and the constants as aliases. The forwarder is handed
+`audit.Event` — id, time, origin and the row, a plain value — rather than
+the trail's entity, so a carrier adapter links no store. A process that
+links no runtime package builds a recorder over the audit package, its
+own executor and a forwarder; its rows say `originBy = self`.
+
+The audit event is not a row under the profile — the trail store has no
+chain — so it carries `originBy` as a column of its own beside
+`principalBy` (SD6's two trust columns), set by the recorder: the host's
+recorder is built with `host`; a context attested through
+`evidence.WithAttestation` overrides it; a recorder built without the
+option writes `self`. A generated store takes a component defined in
+another package for this: the emitted codec declares the store's
+package and reaches the DTO through a type alias, which retires
+`storegen`'s one-package check.
 
 The subject `runtime.audit.{app}` ADR-0026 §SD3 lists as a read-only
-stream becomes a **write** verb: an app sends an audit event; the host
-takes `Origin` from the envelope's sender, refuses a row whose node or
-origin names another app, and records it through the trail with
-`originBy = envelope`. Principal and purpose remain the app's claims. This
-closes ADR-0296 §SD7's deferred host wiring by a route that needs no
-context handed to an app, and does not reopen the mechanism it declined.
+stream becomes a **write** verb: an app sends an audit event to the
+subject that names it; the host takes `Origin` from the envelope's
+sender, refuses a row sent to another app's subject or in the recorder's
+own domain, and records it through the trail with `originBy = envelope`.
+Principal and purpose remain the app's claims. This closes ADR-0296
+§SD7's deferred host wiring by a route that needs no context handed to an
+app, and does not reopen the mechanism it declined.
 
-Audit events gain **write-ahead** as an option of the recorder, the
-guarantee the journal's entries have and ADR-0296 deferred: a caller that
-asks is told whether the event is durable before it acts.
+Audit events gain **write-ahead** as a verb of the recorder
+(`EventWriteAhead`), the guarantee the journal's entries have and
+ADR-0296 deferred: a caller that asks is told whether the event is
+durable before it acts.
 
 ### SD9 — The journal on the profile
 
@@ -401,7 +416,8 @@ row for now, and the ledger's `Head` reads the latest row.
 - **M1 — The evidence package; the canonical wire under shared scaffolding; the canonical item of a stored row (SD1, SD2's first two generator changes).** ✓
 - **M2 — The profile: `Chain`, `Vault`, marks, `WrittenBy`, the shredded component, `storegen`'s options (SD2, SD3, SD4, SD6).** ✓
 - **M3 — The journal on the profile; digests v4 (SD9).** ✓
-- **M4 — Seals; the audit event and the forwarder below the runtime; write-ahead for events; `runtime.audit.{app}`; `originBy` (SD5, SD8).**
+- **M4a — The audit event and the forwarder below the runtime; write-ahead for events; `runtime.audit.{app}`; `originBy` on audit events (SD8, SD6).** ✓
+- **M4b — Seals (SD5).**
 - **M5 — Anchors by scope; L32 generic; the verification relations served in-process (SD7).**
 - **M6 — The dated Updates on the ADRs this reshapes.**
 
@@ -413,10 +429,11 @@ row for now, and the ledger's `Head` reads the latest row.
 | `boxer.agentrunentry`, `boxer.agentrunbody`, `boxer.agentrun` DDL | the chain component replaces the entry's chain fields; the vault keyed by component; the run row over the head row | `agentrunstore` regeneration; chat's journal call sites; the preservation goldens |
 | journal digests | `…/agentrun-chain/v4` | every golden with a digest; `headstore`'s L32 relation |
 | runtime vocabulary | memberships for the profile's five components; the mark and `originBy` symbols | the vocabulary golden |
-| `boxer.facts` trail rows | the written-by component; seal rows; `originBy` on audit events | trail views; `trailviews`; the vocabulary golden |
+| `boxer.facts` trail rows | seal rows; `originBy` on audit events | trail views; `trailviews`; the vocabulary golden |
+| `marshallgen.EmitOpts` | `Package` overrides the codec's package clause | `recordstore/gen` passes the store's; `storegen` drops its one-package check |
 | capability subjects (ADR-0026 §SD3) | `runtime.audit.{app}` becomes a write verb | the subject taxonomy's dated Update; the host's handler |
 | `runtime.anchor.*` | `(cell, scope, ordinal, scheme)` | the bus codec; `keelson('anchors')` |
-| exported Go API | `agentrun.ChainDigest`, `Verify`, `VerifyRun`, `CommitVault`, `OpensVault`, `NewOpening`, `BodyStoreI`, `VaultedStore`, `headstore.Head/StoreI/Cadence/Ship/VerifyHeads`, `trail.AuditEvent/ForwarderI` move or take the profile's types | the package doc of each; a downstream that compiles against them |
+| exported Go API | `agentrun.ChainDigest`, `Verify`, `VerifyRun`, `CommitVault`, `OpensVault`, `NewOpening`, `BodyStoreI`, `VaultedStore`, `headstore.Head/StoreI/Cadence/Ship/VerifyHeads`, `trail.AuditEvent/ForwarderI` move or take the profile's types; `ForwarderI` takes `[]audit.Event` | the package doc of each; a downstream that compiles against them |
 
 ## Alternatives
 

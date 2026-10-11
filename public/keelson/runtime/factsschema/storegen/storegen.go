@@ -33,9 +33,6 @@
 package storegen
 
 import (
-	"go/ast"
-	"go/parser"
-	"go/token"
 	"iter"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsschema"
@@ -215,10 +212,6 @@ func (inst Input) Generate() (err error) {
 		err = eh.Errorf("storegen: empty membership-id snapshot — pass the result of MembershipIds over the vocabulary the components are written against")
 		return
 	}
-	err = inst.checkComponentPackages()
-	if err != nil {
-		return
-	}
 	manip, err := factsschema.GetSchemaInManipulator()
 	if err != nil {
 		err = eh.Errorf("storegen: facts schema: %w", err)
@@ -251,37 +244,6 @@ func (inst Input) Generate() (err error) {
 	}.Generate()
 	if err != nil {
 		err = eb.Build().Str("storeName", inst.StoreName).Errorf("storegen: generate store: %w", err)
-	}
-	return
-}
-
-// checkComponentPackages refuses a component whose own package clause differs
-// from PackageName.
-//
-// The emitted per-component codec takes its package from the DTO source, while
-// the store file takes its from PackageName, so a mismatch emits two packages
-// into one directory. That fails at `go build` with "found packages x and y",
-// naming neither the DTO nor the setting that caused it — and it fails only
-// once someone compiles the output, which for a freshly generated package can
-// be much later. Hence the check here, where both values are in hand.
-//
-// This is a property of recordstore/gen generally, not of facts-bound stores;
-// it lives here because that generator is shared and this milestone does not
-// own it. Lifting it is recorded as a candidate in ADR-0184.
-func (inst Input) checkComponentPackages() (err error) {
-	fset := token.NewFileSet()
-	for _, path := range inst.ComponentPaths {
-		var f *ast.File
-		f, err = parser.ParseFile(fset, path, nil, parser.PackageClauseOnly)
-		if err != nil {
-			err = eb.Build().Str("component", path).Errorf("storegen: parse component package clause: %w", err)
-			return
-		}
-		if got := f.Name.Name; got != inst.PackageName {
-			err = eb.Build().Str("component", path).Str("componentPackage", got).
-				Str("packageName", inst.PackageName).Errorf("storegen: the component and the generated store declare different packages — the emitted codec keeps the component's own package clause, so the two would land in one directory as two packages")
-			return
-		}
 	}
 	return
 }

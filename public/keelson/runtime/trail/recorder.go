@@ -5,11 +5,9 @@ import (
 	"encoding/hex"
 	"iter"
 	"strconv"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
-	"unicode/utf8"
 
 	"github.com/rs/zerolog"
 	"github.com/zeebo/xxh3"
@@ -22,6 +20,8 @@ import (
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/storage/recordstore"
+	"github.com/stergiotis/boxer/public/storage/recordstore/evidence"
+	"github.com/stergiotis/boxer/public/storage/recordstore/evidence/audit"
 )
 
 // RequiredEnv decides what happens to work that leaves the machine — a
@@ -99,6 +99,10 @@ type Recorder struct {
 	readTable string
 	forwarder ForwarderI
 	fwd       *forwardState
+	// originBy is how an audit event's origin was established when the
+	// context says nothing (ADR-0327 §SD6): the host's recorder writes as
+	// host, any other as self.
+	originBy evidence.OriginByE
 
 	wake chan struct{}
 	stop chan struct{}
@@ -171,6 +175,15 @@ func WithWriteObserver(o recordstore.WriteObserverI[uint64, time.Time]) Recorder
 // to the facts table. Empty reads the table written to.
 func WithReadTable(table string) RecorderOption {
 	return func(inst *Recorder) { inst.readTable = table }
+}
+
+// WithOriginBy says how an audit event's origin is established when the
+// context carries no attestation (ADR-0327 §SD6): the host's own recorder
+// writes as host; the default, self, is a process stating its own origin.
+// A context attested through evidence.WithAttestation overrides it, as the
+// audit subject's handler does for an app's row.
+func WithOriginBy(o evidence.OriginByE) RecorderOption {
+	return func(inst *Recorder) { inst.originBy = o }
 }
 
 // NewRecorder builds the recorder of the run named run. exec reaches the
@@ -466,12 +479,30 @@ func (inst *Recorder) Event(ctx context.Context, at time.Time, c Context, row Au
 	if !row.Principal.Has {
 		row.PrincipalBy = PrincipalByNone
 	}
+	row.OriginBy = inst.originBy.String()
+	if a, ok := evidence.AttestationFrom(ctx); ok {
+		row.OriginBy = a.OriginBy.String()
+	}
 	if verr := row.Validate(); verr != nil {
-		inst.log.Error().Err(verr).Str("domain", bounded(row.Domain)).Str("action", bounded(row.Action)).Msg("trail: an audit event is outside its bounds; an audit-invalid row is written in its place")
+		inst.log.Error().Err(verr).Str("domain", audit.Bounded(row.Domain)).Str("action", audit.Bounded(row.Action)).Msg("trail: an audit event is outside its bounds; an audit-invalid row is written in its place")
 		row = inst.invalidEvent(row, verr)
 		inst.invalid.Add(1)
 	}
 	return inst.writeEvent(ctx, at, c, row)
+}
+
+// EventWriteAhead is Event, then the row made durable before the caller
+// acts (ADR-0327 §SD8, the write-ahead ADR-0296 deferred): durable says it
+// landed; refuse is set when it did not and BOXER_TRAIL_REQUIRED says such
+// work must not proceed.
+func (inst *Recorder) EventWriteAhead(ctx context.Context, at time.Time, c Context, row AuditEvent) (durable bool, refuse error) {
+	if inst == nil {
+		return false, nil
+	}
+	if err := inst.Event(ctx, at, c, row); err != nil {
+		return false, err
+	}
+	return inst.WriteAhead(ctx)
 }
 
 // writeEvent buffers an audit event row and, when a forwarder is
@@ -511,11 +542,14 @@ func (inst *Recorder) writeEvent(ctx context.Context, at time.Time, c Context, r
 func (inst *Recorder) invalidEvent(row AuditEvent, verr error) (out AuditEvent) {
 	out = AuditEvent{
 		Domain: TrailDomain, Action: ActionAuditInvalid, Outcome: OutcomeFailed,
-		PrincipalBy: PrincipalByNone, Subject: row.Subject, Retention: RetentionTrail,
+		PrincipalBy: PrincipalByNone, OriginBy: row.OriginBy, Subject: row.Subject, Retention: RetentionTrail,
 		AttrKeys:   []string{"domain", "action", "reason"},
-		AttrValues: []string{bounded(row.Domain), bounded(row.Action), bounded(verr.Error())},
+		AttrValues: []string{audit.Bounded(row.Domain), audit.Bounded(row.Action), audit.Bounded(verr.Error())},
 	}
-	if row.Principal.Has && checkValue("principal", row.Principal.Val) == nil {
+	if _, ok := evidence.ParseOriginBy(out.OriginBy); !ok {
+		out.OriginBy = inst.originBy.String()
+	}
+	if row.Principal.Has && audit.CheckValue("principal", row.Principal.Val) == nil {
 		out.Principal = row.Principal
 		switch row.PrincipalBy {
 		case PrincipalBySystem, PrincipalByEnv, PrincipalByOs:
@@ -523,20 +557,6 @@ func (inst *Recorder) invalidEvent(row AuditEvent, verr error) (out AuditEvent) 
 		default:
 			out.PrincipalBy = PrincipalByEnv
 		}
-	}
-	return
-}
-
-// bounded is s as an attribute value: valid UTF-8, non-empty, under the
-// bound.
-func bounded(s string) (out string) {
-	out = strings.ToValidUTF8(s, "\uFFFD")
-	if out == "" {
-		return "-"
-	}
-	if utf8.RuneCountInString(out) > MaxValueRunes {
-		r := []rune(out)
-		out = string(r[:MaxValueRunes])
 	}
 	return
 }
@@ -607,7 +627,7 @@ func (inst *Recorder) writeGap() {
 	inst.gap = gap{}
 	row := AuditEvent{
 		Domain: TrailDomain, Action: ActionAuditGap, Outcome: OutcomeFailed,
-		PrincipalBy: PrincipalByNone, Retention: RetentionTrail,
+		PrincipalBy: PrincipalByNone, OriginBy: inst.originBy.String(), Retention: RetentionTrail,
 		AttrKeys:   []string{"rows", "from", "to"},
 		AttrValues: []string{strconv.Itoa(g.rows), g.first.Format(time.RFC3339Nano), g.last.Format(time.RFC3339Nano)},
 	}

@@ -28,9 +28,15 @@ const (
 	EmitModeStoreSupport EmitModeE = 1
 )
 
-// EmitOpts parameterizes EmitPlan. The zero value is the full codec.
+// EmitOpts parameterizes EmitPlan. The zero value is the full codec in the
+// DTO's own package.
 type EmitOpts struct {
 	Mode EmitModeE
+	// Package is the package clause the codec declares; empty keeps the
+	// plan's. A store that takes a component defined in another package
+	// emits the codec into its own and refers to the DTO's type by its
+	// bare name, which it provides as a type alias.
+	Package string
 }
 
 // kindIdent renders the kind-derived identifier prefix for emitted
@@ -159,7 +165,11 @@ func EmitPlan(plan *mappingplan.Plan, wrapper WrapperEmitterI, opts EmitOpts) (o
 	}
 
 	var sb strings.Builder
-	writeHeader(&sb, plan)
+	pkg := opts.Package
+	if pkg == "" {
+		pkg = plan.PackageName
+	}
+	writeHeader(&sb, pkg)
 	writeImports(&sb, plan, wrapper, strings.Contains(body.String(), "eb.Build("), strings.Contains(body.String(), "iter."), opts.Mode)
 	sb.WriteString(body.String())
 

@@ -23,6 +23,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/trail"
 	"github.com/stergiotis/boxer/public/storage/recordstore"
 	"github.com/stergiotis/boxer/public/storage/recordstore/chexec"
+	"github.com/stergiotis/boxer/public/storage/recordstore/evidence/audit"
 )
 
 // localFacts provisions boxer.facts on clickhouse-local, or skips.
@@ -266,7 +267,7 @@ type pageForwarder struct {
 	refuse bool
 }
 
-func (inst *pageForwarder) Forward(_ context.Context, events []*trail.TrailEntity) error {
+func (inst *pageForwarder) Forward(_ context.Context, events []audit.Event) error {
 	inst.mu.Lock()
 	defer inst.mu.Unlock()
 	if inst.refuse {
@@ -274,7 +275,7 @@ func (inst *pageForwarder) Forward(_ context.Context, events []*trail.TrailEntit
 	}
 	var ids []uint64
 	for _, e := range events {
-		ids = append(ids, e.ID)
+		ids = append(ids, e.Id)
 	}
 	inst.pages = append(inst.pages, ids)
 	return nil

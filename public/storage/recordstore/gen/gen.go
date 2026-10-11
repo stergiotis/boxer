@@ -450,7 +450,9 @@ func (inst Input) Generate() (err error) {
 			mode = marshallgen.EmitModeCodec
 		}
 		var rendered []byte
-		rendered, err = marshallgen.EmitPlan(plan, wrapper, marshallgen.EmitOpts{Mode: mode})
+		// The codec declares the store's package: a component defined in
+		// another package is taken through a type alias in this one.
+		rendered, err = marshallgen.EmitPlan(plan, wrapper, marshallgen.EmitOpts{Mode: mode, Package: inst.PackageName})
 		if err != nil {
 			err = eb.Build().Str("componentPath", in).Errorf("emit component codec: %w", err)
 			return
