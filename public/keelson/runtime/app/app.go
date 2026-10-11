@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/rs/zerolog"
+	"github.com/stergiotis/boxer/public/keelson/runtime/lifetime"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 )
 
@@ -15,8 +16,12 @@ import (
 //   - Mount runs when the host activates the app (dock tile opened, CLI
 //     command resolved). It is the place to acquire bus subscriptions and
 //     load persisted state.
-//   - Frame runs once per frame the app holds focus (or per
-//     BackgroundTickHz when unfocused, if non-zero). For SurfaceHeadless
+//   - Frame runs once per render pass of the host, for every open window,
+//     focused or not (Manifest.BackgroundTickHz is read by no host,
+//     ADR-0322). A pass happens on input, when an app asks for a repaint,
+//     and otherwise on the render loop's idle heartbeat, so work that
+//     finishes off the render goroutine lands on a later Frame within that
+//     heartbeat at the latest. For SurfaceHeadless
 //     apps, Frame is a no-op invoked once before Unmount. **For
 //     SurfaceWindowed apps, Frame is invoked inside a runtime-owned
 //     window scope (title from Manifest.Title, icon from Manifest.Icon).
@@ -26,11 +31,13 @@ import (
 //     subscriptions, runtime capability grants, tasks spawned through
 //     task.ForApp — are released by the host at the closing edge whether or
 //     not Unmount does so (ADR-0188): the host closes MountContextI.Cancel()
-//     first, then runs Unmount, then closes the instance's bus client. An
-//     app may therefore still use its bus inside Unmount; a goroutine that
-//     outlives Unmount and keeps the client sees a closed-client error rather
-//     than a silently live one. Releasing an effect early stays a no-op at
-//     close.
+//     first, then runs Unmount, then drains the instance's lifetime scope
+//     (see [LifetimeI]), then closes the instance's bus client. An app may
+//     therefore still use its bus inside Unmount, and work it counted into
+//     its scope may write its tail until the drain ends; a goroutine that
+//     outlives the drain and keeps the client sees a closed-client error
+//     rather than a silently live one. Releasing an effect early stays a
+//     no-op at close.
 //
 // Goroutine: Mount, Frame and Unmount run on the host's render goroutine,
 // the one running the imzero2 render loop, and every open app shares it —
@@ -143,6 +150,35 @@ type FrameContextI interface {
 //	}
 type WindowFocusI interface {
 	WindowFocused() (focused bool)
+}
+
+// LifetimeI is the optional mount-context capability a host provides when it
+// drains an instance between Unmount and unload (ADR-0322, proposed). The
+// scope is retired with Cancel(), before Unmount; after Unmount the host
+// waits — off the render goroutine, up to a deadline — until the scope is
+// done, then closes the bus client. Work an app counts into the scope (with
+// Enter, Go, a child scope, or a task spawned through task.ForApp) therefore
+// keeps a live bus for its tail. Past the deadline the scope is abandoned:
+// tails see their context end, and the bus closes regardless.
+//
+// Tails and drain hooks run beside the app, not on the render goroutine,
+// and after Unmount has returned (ADR-0322 §SD6): they make no imzero2
+// call, and touch only state that is safe to share with the app's other
+// goroutines. A goroutine the app starts without counting it in is not
+// waited for.
+//
+// Type-assert from the MountContextI, or call [LifetimeOf]; a nil scope means
+// the host does not drain, and a child of nil is a root scope the app owns.
+type LifetimeI interface {
+	Lifetime() (s *lifetime.Scope)
+}
+
+// LifetimeOf is ctx's lifetime scope, nil when the host provides none.
+func LifetimeOf(ctx MountContextI) (s *lifetime.Scope) {
+	if l, ok := ctx.(LifetimeI); ok {
+		s = l.Lifetime()
+	}
+	return
 }
 
 // BusI is the cap-broker / inter-app message bus described by ADR-0026 §SD3

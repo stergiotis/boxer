@@ -279,7 +279,11 @@ type Manifest struct {
 	// Caps is the set of NATS-style SubjectFilters the app declares it needs.
 	// Forward-declared in M1 (the broker arrives in M2); hosts may store
 	// declared caps for later audit but do not gate behaviour on them yet.
-	Caps             []SubjectFilter
+	Caps []SubjectFilter
+	// BackgroundTickHz is read by no host: every open window's Frame runs on
+	// every render pass, focused or not, so there is no unfocused rate to set
+	// (ADR-0322). Kept because keelson('apps') and the carousel's app list
+	// carry it as a column, the latter addressed by position.
 	BackgroundTickHz uint8
 
 	// PersistedKeys is the set of cold-state keys the runtime will auto-manage

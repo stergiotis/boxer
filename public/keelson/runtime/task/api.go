@@ -7,6 +7,7 @@ import (
 	"github.com/rs/zerolog"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
+	"github.com/stergiotis/boxer/public/keelson/runtime/lifetime"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
@@ -90,6 +91,13 @@ type ApiConfig struct {
 	// window close cascades into worker cancellation.
 	MountCancel <-chan struct{}
 
+	// Lifetime is the app instance's lifetime scope (ADR-0322, proposed).
+	// When non-nil, every spawned task holds it until the worker calls Done
+	// or Error on the handle, so the host's drain waits for the worker to
+	// finish rather than for the handle to turn terminal, which a mount
+	// cancel does at once. A spawn after the scope retired is refused.
+	Lifetime *lifetime.Scope
+
 	// ListTimeoutMs caps the bus.Request timeout for ListInflight.
 	// Defaults to DefaultListTimeoutMs (2000ms) when zero.
 	ListTimeoutMs int64
@@ -158,8 +166,40 @@ func (inst *BusApi) Spawn(callerCtx context.Context, opts SpawnOpts) (h HandleI,
 	// MountCancel is threaded directly into the handle's single monitor
 	// goroutine (see spawnWithCancel) so a window close cascades into the
 	// task without a per-task watcher goroutine or composed context.
+	if inst.cfg.Lifetime == nil {
+		h, err = spawnWithCancel(parent, inst.cfg.Bus, opts, time.Now, inst.cfg.MountCancel)
+		return
+	}
+	leave, ok := inst.cfg.Lifetime.Enter()
+	if !ok {
+		err = eb.Build().Str("kind", opts.Kind).Errorf("task: spawn: the app instance is closing")
+		return
+	}
 	h, err = spawnWithCancel(parent, inst.cfg.Bus, opts, time.Now, inst.cfg.MountCancel)
+	if err != nil {
+		leave()
+		return
+	}
+	h = &heldHandle{HandleI: h, leave: leave}
 	return
+}
+
+// heldHandle releases its hold on the instance's lifetime scope when the
+// worker reports its end. A handle a mount cancel turned terminal is still
+// held: the worker may be writing its tail.
+type heldHandle struct {
+	HandleI
+	leave func()
+}
+
+func (inst *heldHandle) Done(result []byte) (err error) {
+	defer inst.leave()
+	return inst.HandleI.Done(result)
+}
+
+func (inst *heldHandle) Error(err error, reason string) (rerr error) {
+	defer inst.leave()
+	return inst.HandleI.Error(err, reason)
 }
 
 // WatchAll registers an observer on task.> over the host bus.
@@ -258,6 +298,7 @@ func ForApp(ctx app.MountContextI) (api TaskApiI) {
 		RunId:       ctx.RunId(),
 		Logger:      ctx.Log(),
 		MountCancel: ctx.Cancel(),
+		Lifetime:    app.LifetimeOf(ctx),
 	})
 	return
 }

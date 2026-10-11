@@ -359,6 +359,17 @@ Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded
 
 ## Updates
 
+### 2026-10-11 — `BackgroundTickHz` is read by no host; the closing edge drains
+
+The window host runs every open window's `Frame` on every render pass,
+focused or not, and the render loop's idle heartbeat bounds how late a pass
+comes; no host reads `Manifest.BackgroundTickHz`, and the host does not own
+frame cadence the way this record's Consequences describe — apps ask for a
+repaint themselves. The field stays declared for the columns that carry it.
+Between `Unmount` and the bus close the host now drains the instance's
+lifetime scope ([ADR-0322](./0322-app-instances-drain-a-lifetime-scope-between-unmount-and-unload.md),
+proposed).
+
 ### 2026-10-11 — subjects the agent harness adds
 
 Three subject families join the taxonomy of §SD3. `runtime.agentrun.*`

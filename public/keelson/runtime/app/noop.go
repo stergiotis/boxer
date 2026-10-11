@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/rs/zerolog"
+	"github.com/stergiotis/boxer/public/keelson/runtime/lifetime"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 )
@@ -69,9 +70,23 @@ type StaticMountContext struct {
 	runId        string
 	launchConfig []byte
 	launchReason LaunchReasonE
+	lifetime     *lifetime.Scope
 }
 
 var _ MountContextI = (*StaticMountContext)(nil)
+var _ LifetimeI = (*StaticMountContext)(nil)
+
+// SetLifetime records the instance's lifetime scope (ADR-0322, proposed),
+// which the host retires at the closing edge and drains before it closes
+// the bus. Unset, Lifetime returns nil: the host does not drain.
+func (inst *StaticMountContext) SetLifetime(s *lifetime.Scope) {
+	inst.lifetime = s
+}
+
+func (inst *StaticMountContext) Lifetime() (s *lifetime.Scope) {
+	s = inst.lifetime
+	return
+}
 
 // NewStaticMountContext wires the provided deps. Nil storage / bus are
 // replaced with the corresponding Noop type so the context is usable

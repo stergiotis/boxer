@@ -66,7 +66,8 @@ Lifecycle: `Mount` once → `Frame` N times → `Unmount` once.
   hands you a logger pre-tagged with your `AppId`, a `BusI` scoped to your
   declared caps, a `StorageI` for state (CH+leeway-backed in production),
   and a `Cancel()` channel that closes on host teardown.
-- **`Frame`** runs once per frame while you hold focus. The
+- **`Frame`** runs on every render pass, for every open window, focused
+  or not. The
   `FrameContextI` adds an egui rendering scope (`EguiScope()` — typed as
   `any` until the M3 window host wires real scopes; today's hosts pass nil
   and apps fall back to the package-global `c.NewWidgetIdStack`). Headless
@@ -74,6 +75,12 @@ Lifecycle: `Mount` once → `Frame` N times → `Unmount` once.
 - **`Unmount`** is your cleanup hook. The M1 launcher does not call it on
   swap-out (will be fixed when M3 lands); long-lived hosts will call it
   reliably.
+- **Work that outlives a frame** counts itself into the instance's
+  lifetime scope (`app.LifetimeOf(ctx)`, package `lifetime`, ADR-0322):
+  the scope's work context ends with `Cancel()`, its tail context
+  survives it, and the window host waits for the scope after `Unmount`
+  and before it closes the bus, up to a deadline. Tasks spawned through
+  `task.ForApp` are counted in until the worker calls `Done` or `Error`.
 
 ### The manifest
 
@@ -94,7 +101,7 @@ type Manifest struct {
     SurfaceHints SurfaceHints  // initial size / screenshot stage
 
     Caps             []SubjectFilter // declared subject permissions
-    BackgroundTickHz uint8           // unfocused tick rate; 0 = no tick
+    BackgroundTickHz uint8           // read by no host (ADR-0322)
 
     PersistedKeys []string  // auto-managed state keys (M2.5+ via storage)
 

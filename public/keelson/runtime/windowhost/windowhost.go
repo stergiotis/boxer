@@ -1,6 +1,7 @@
 package windowhost
 
 import (
+	"context"
 	"github.com/stergiotis/boxer/public/keelson/runtime/inscribe"
 	"slices"
 	"strconv"
@@ -17,6 +18,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/codec/kindcheck"
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsstore"
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
+	"github.com/stergiotis/boxer/public/keelson/runtime/lifetime"
 	"github.com/stergiotis/boxer/public/keelson/runtime/persist"
 	"github.com/stergiotis/boxer/public/keelson/runtime/statestore"
 	"github.com/stergiotis/boxer/public/keelson/runtime/task"
@@ -78,6 +80,10 @@ type window struct {
 	// singleton's carried window from closing it twice.
 	stop     chan struct{}
 	stopOnce sync.Once
+	// lifetime is the scope behind app.LifetimeI (ADR-0322, proposed):
+	// retired with stop, drained after Unmount and before the bus client
+	// closes (windowhost_drain.go).
+	lifetime *lifetime.Scope
 
 	// appIds is the per-window WidgetIdStack handed to the app via
 	// MountCtx.Ids(). The host pre-pushes an instance-unique salt
@@ -326,6 +332,10 @@ type Inst struct {
 	// (ADR-0269 §SD5): a badge row in each window a task works in, and the
 	// host's dialogs. nil draws nothing. Set before the first Frame.
 	agentChrome AgentChromeI
+
+	// drains bounds and counts the drain step of the closing edge
+	// (windowhost_drain.go).
+	drains drainState
 }
 
 // NewInst constructs a WindowHost backed by registry. logger is used
@@ -643,7 +653,9 @@ func (inst *Inst) OpenWithConfig(appId app.AppIdT, kind string, cfg []byte) (key
 	// the closing edge, before Unmount. Before this the host passed nil,
 	// which selects never, so task.ForApp's cascade-cancel was inert.
 	stop := make(chan struct{})
+	scope := lifetime.New(nil)
 	mountCtx := app.NewStaticMountContext(m.Id, perWindowLogger, storageC, busC, stop)
+	mountCtx.SetLifetime(scope)
 	mountCtx.SetInstanceKey(uint64(key))
 	mountCtx.SetRunId(inst.runId)
 	mountCtx.SetLaunchConfig(cfg)
@@ -681,6 +693,7 @@ func (inst *Inst) OpenWithConfig(appId app.AppIdT, kind string, cfg []byte) (key
 		mount:       ms,
 		openFlag:    true,
 		stop:        stop,
+		lifetime:    scope,
 		opened:      time.Now(),
 	})
 	runId := inst.runId
@@ -755,12 +768,13 @@ func (inst *Inst) ReapAll(reason string) {
 	facts := inst.facts
 	inst.mu.Unlock()
 
+	// Every instance is unmounted first, on this goroutine; their drains
+	// then run in parallel within one shutdown budget (ADR-0322, proposed).
+	cls := make([]closing, 0, len(wins))
 	for _, w := range wins {
-		inst.reapWindow(w, reason, "windowhost: unmount on shutdown error")
-		if facts != nil {
-			emitStopped(facts, inst.logger, runId, w, reason)
-		}
+		cls = append(cls, inst.reapWindow(w, reason, "windowhost: unmount on shutdown error"))
 	}
+	inst.releaseAll(cls, facts, runId)
 }
 
 // releaseMount decrements the shared per-AppI-instance mount refcount for w
@@ -803,14 +817,17 @@ func (inst *Inst) releaseMount(w *window) (unmountCtx *app.StaticMountContext, s
 	return
 }
 
-// leave closes a window's stop channel — the first step of the closing
-// edge (ADR-0188 §SD2). Idempotent.
+// leave closes a window's stop channel and retires its lifetime scope — the
+// first step of the closing edge (ADR-0188 §SD2). Idempotent.
 func (w *window) leave() {
 	w.stopOnce.Do(func() {
 		if w.stop != nil {
 			close(w.stop)
 		}
 	})
+	if w.lifetime != nil {
+		w.lifetime.Retire()
+	}
 }
 
 // unload closes a window's bus client — the last step of the closing edge
@@ -839,16 +856,20 @@ func (w *window) unload(logger zerolog.Logger) {
 // caller's context in the failure log (reap vs shutdown).
 //
 // The closing edge runs in a fixed order (ADR-0188 §SD2, documented on
-// AppI): leave — close the stop channel, so Cancel() fires and tasks
-// cascade-cancel while the app is still mounted; unmount — the workingset
-// pull and the app's own Unmount, with its bus still usable; unload — close
-// the bus client, releasing every subscription and runtime grant the
-// instance still held. A window that closes while its singleton instance
+// AppI): leave — close the stop channel and retire the lifetime scope, so
+// Cancel() fires and tasks cascade-cancel while the app is still mounted;
+// unmount — the workingset pull and the app's own Unmount, with its bus
+// still usable; drain — wait for the lifetime scope (ADR-0322, proposed);
+// unload — close the bus client, releasing every subscription and runtime
+// grant the instance still held. reapWindow runs leave and unmount and
+// returns the rest as cl, for the caller to drain and release
+// (windowhost_drain.go). A window that closes while its singleton instance
 // stays mounted through another window releases nothing the app may still
 // be holding: if it is the mounting window its resources are carried to
 // the last release, otherwise its own (unobserved) stop channel and client
 // close now.
-func (inst *Inst) reapWindow(w *window, reason string, unmountMsg string) {
+func (inst *Inst) reapWindow(w *window, reason string, unmountMsg string) (cl closing) {
+	cl = closing{w: w, reason: reason}
 	inst.frameTimes.forget(w.key)
 	uc, shared, carried := inst.releaseMount(w)
 	if shared {
@@ -881,11 +902,9 @@ func (inst *Inst) reapWindow(w *window, reason string, unmountMsg string) {
 			Uint64("windowKey", uint64(w.key)).
 			Msg(unmountMsg)
 	}
-	// unload
-	for _, cw := range carried {
-		cw.unload(inst.logger)
-	}
-	w.unload(inst.logger)
+	// drain, then unload: the caller's
+	cl.unload = append(append(cl.unload, carried...), w)
+	return
 }
 
 func containsWindow(ws []*window, w *window) (found bool) {
@@ -1050,11 +1069,13 @@ func (inst *Inst) reapClosed() {
 	inst.mu.Unlock()
 
 	for _, w := range reaped {
-		reason := defaultStopReason(w)
-		inst.reapWindow(w, reason, "windowhost: unmount error")
-		if facts != nil {
-			emitStopped(facts, inst.logger, runId, w, reason)
+		cl := inst.reapWindow(w, defaultStopReason(w), "windowhost: unmount error")
+		if cl.isDrained() {
+			// Nothing to wait for: released now, as before the drain step.
+			inst.drainAndRelease(context.Background(), cl, facts, runId)
+			continue
 		}
+		inst.releaseLater(cl, facts, runId)
 	}
 }
 

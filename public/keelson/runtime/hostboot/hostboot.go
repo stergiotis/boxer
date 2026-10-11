@@ -654,6 +654,14 @@ func (rt *Runtime) bootWindowHost() (err error) {
 	}
 	host := windowhost.NewInst(reg, logger)
 	host.SetBus(rt.Bus)
+	// The shutdown drain (ADR-0322, proposed) is cut from the grace: the
+	// signal handler forces the exit one grace after it reaps, and the
+	// drain must end well before that.
+	grace := rt.opts.ShutdownGrace
+	if grace <= 0 {
+		grace = DefaultShutdownGrace
+	}
+	host.SetDrainDeadlines(0, grace/2)
 	// The launcher (ADR-0214 §SD1/§SD3). Registered at init like every other
 	// app; what it cannot know until now is the host it opens through, so the
 	// two halves meet here. *Inst satisfies launcher.HostI structurally —
