@@ -41,9 +41,13 @@ const (
 	MinQuickChoice = 2
 )
 
-// ClientCaps is what an app declares in Manifest.Caps to post questions.
+// ClientCaps is what an app declares in Manifest.Caps to post questions
+// and to read and set its conversations' levels.
 func ClientCaps(reason string) (caps []app.SubjectFilter) {
-	return []app.SubjectFilter{{Pattern: SubjectAll, Direction: app.CapDirectionPub, Reason: reason, Sticky: true}}
+	return []app.SubjectFilter{
+		{Pattern: SubjectAll, Direction: app.CapDirectionPub, Reason: reason, Sticky: true},
+		{Pattern: SubjectChanged, Direction: app.CapDirectionSub, Reason: reason + " (the levels' changes)", Sticky: true},
+	}
 }
 
 // QuestionOption is one choice of a question, as the model wrote it.
@@ -304,23 +308,27 @@ type wireKey struct {
 
 const wireVersion uint8 = 1
 
-// BusService answers SubjectAll for a Questions store.
+// BusService answers SubjectAll: the questions apps post, and the levels
+// they read and set.
 type BusService struct {
 	q      *Questions
+	levels *Levels
 	client *inprocbus.Client
 	unsub  func()
 	log    zerolog.Logger
 }
 
-// NewBusService subscribes the store's subjects.
-func NewBusService(bus *inprocbus.Inst, q *Questions, log zerolog.Logger) (s *BusService, err error) {
-	if bus == nil || q == nil {
-		err = eh.Errorf("nil bus or store")
+// NewBusService subscribes the service's subjects and announces each change
+// of its levels.
+func NewBusService(bus *inprocbus.Inst, svc *Service, log zerolog.Logger) (s *BusService, err error) {
+	if bus == nil || svc == nil || svc.Questions == nil || svc.Levels == nil {
+		err = eh.Errorf("nil bus or service")
 		return
 	}
-	s = &BusService{q: q, log: log}
+	s = &BusService{q: svc.Questions, levels: svc.Levels, log: log}
 	s.client = bus.NewClient(ServiceAppId, []app.SubjectFilter{
-		{Pattern: SubjectAll, Direction: app.CapDirectionSub, Reason: "attention: serve the person's queue of questions (ADR-0324)"},
+		{Pattern: SubjectAll, Direction: app.CapDirectionSub, Reason: "attention: serve the person's queue of questions and the levels (ADR-0323, ADR-0324)"},
+		{Pattern: SubjectChanged, Direction: app.CapDirectionPub, Reason: "attention: announce a change of the levels (ADR-0323 §SD7)"},
 		{Pattern: inprocbus.InboxPrefix + ">", Direction: app.CapDirectionPub, Reason: "attention: reply to inboxes"},
 	})
 	if s.unsub, err = s.client.Subscribe(SubjectAll, s.handle); err != nil {
@@ -328,6 +336,7 @@ func NewBusService(bus *inprocbus.Inst, q *Questions, log zerolog.Logger) (s *Bu
 		err = eh.Errorf("subscribe: %w", err)
 		return nil, err
 	}
+	svc.Levels.SetOnChange(s.announce)
 	return
 }
 
@@ -365,6 +374,10 @@ func (inst *BusService) handle(msg *app.Msg) {
 			inst.q.Withdraw(msg.Sender, msg.SenderInstance, req.Key)
 		}
 		rep = wireKey{V: wireVersion}
+	case SubjectLevels:
+		rep = inst.levelsReply(msg)
+	case SubjectLevelSet:
+		rep = inst.levelSet(msg)
 	default:
 		return
 	}

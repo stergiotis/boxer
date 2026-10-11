@@ -90,7 +90,7 @@ func TestAPostedQuestionIsClipped(t *testing.T) {
 func TestQuestionsOverTheBus(t *testing.T) {
 	bus := inprocbus.NewInst(zerolog.Nop())
 	qs := NewQuestions(nil)
-	svc, err := NewBusService(bus, qs, zerolog.Nop())
+	svc, err := NewBusService(bus, &Service{Questions: qs, Levels: &Levels{}}, zerolog.Nop())
 	require.NoError(t, err)
 	defer svc.Close()
 	cli := bus.NewClient("chat", ClientCaps("test"))

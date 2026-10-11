@@ -168,9 +168,64 @@ type Levels struct {
 	person map[Key]LevelE
 	conv   map[string]map[Key]LevelE
 	// onWaiting is told every change on the waiting scale, for the trail
-	// (§SD5).
+	// (§SD5); onChange every change, with the new version, for readers
+	// (§SD7).
 	onWaiting func(Change)
+	onChange  func(version uint64)
 	version   uint64
+}
+
+// SetOnChange installs the hook told the version after every change.
+func (inst *Levels) SetOnChange(f func(version uint64)) {
+	inst.mu.Lock()
+	defer inst.mu.Unlock()
+	inst.onChange = f
+}
+
+// Snapshot is the table as one conversation sees it: the person's
+// overrides and the conversation's, at a version. Its zero value classifies
+// by the defaults alone, so a reader without a host classifies as the host
+// would before any override (ADR-0323 §SD7).
+type Snapshot struct {
+	Version      uint64
+	Person       map[Key]LevelE
+	Conversation map[Key]LevelE
+}
+
+// Snapshot is the table for conversation, copied.
+func (inst *Levels) Snapshot(conversation string) (s Snapshot) {
+	inst.mu.Lock()
+	defer inst.mu.Unlock()
+	s.Version = inst.version
+	s.Person = make(map[Key]LevelE, len(inst.person))
+	for k, v := range inst.person {
+		s.Person[k] = v
+	}
+	if m := inst.conv[conversation]; conversation != "" && m != nil {
+		s.Conversation = make(map[Key]LevelE, len(m))
+		for k, v := range m {
+			s.Conversation[k] = v
+		}
+	}
+	return
+}
+
+// Classify is ev's level under the snapshot: the conversation's overrides,
+// then the person's, then the defaults; the most specific key first.
+func (inst Snapshot) Classify(ev Event) (l LevelE) {
+	return classify(inst.Person, inst.Conversation, ev)
+}
+
+func classify(person map[Key]LevelE, conv map[Key]LevelE, ev Event) (l LevelE) {
+	keys := [4]Key{{ev.Kind, ev.Effect, ev.App}, {ev.Kind, ev.Effect, ""}, {ev.Kind, 0, ev.App}, {ev.Kind, 0, ""}}
+	for _, m := range [2]map[Key]LevelE{conv, person} {
+		for _, k := range keys {
+			if l = m[k]; l != LevelUnspecified {
+				return
+			}
+		}
+	}
+	return DefaultLevel(ev)
 }
 
 // SetOnWaitingChange installs the hook told of every change on the waiting
@@ -193,22 +248,11 @@ func (inst *Levels) Version() (v uint64) {
 func (inst *Levels) Classify(ev Event) (l LevelE) {
 	inst.mu.Lock()
 	defer inst.mu.Unlock()
-	keys := [4]Key{{ev.Kind, ev.Effect, ev.App}, {ev.Kind, ev.Effect, ""}, {ev.Kind, 0, ev.App}, {ev.Kind, 0, ""}}
+	var conv map[Key]LevelE
 	if ev.Conversation != "" {
-		if m := inst.conv[ev.Conversation]; m != nil {
-			for _, k := range keys {
-				if l = m[k]; l != LevelUnspecified {
-					return
-				}
-			}
-		}
+		conv = inst.conv[ev.Conversation]
 	}
-	for _, k := range keys {
-		if l = inst.person[k]; l != LevelUnspecified {
-			return
-		}
-	}
-	return DefaultLevel(ev)
+	return classify(inst.person, conv, ev)
 }
 
 // DefaultLevel is ev's level by the defaults of ADR-0323 §SD6. A kind
@@ -291,10 +335,15 @@ func (inst *Levels) Clear(author AuthorE, by app.AppIdT, conversation string, ke
 // ClearConversation drops a conversation's overrides, when it is deleted.
 func (inst *Levels) ClearConversation(conversation string) {
 	inst.mu.Lock()
-	defer inst.mu.Unlock()
-	if _, ok := inst.conv[conversation]; ok {
+	_, ok := inst.conv[conversation]
+	if ok {
 		delete(inst.conv, conversation)
 		inst.version++
+	}
+	v, hook := inst.version, inst.onChange
+	inst.mu.Unlock()
+	if ok && hook != nil {
+		hook(v)
 	}
 }
 
@@ -321,10 +370,13 @@ func (inst *Levels) store(ch Change, scale ScaleE) {
 		m[ch.Key] = ch.Level
 	}
 	inst.version++
-	hook := inst.onWaiting
+	hook, changed, v := inst.onWaiting, inst.onChange, inst.version
 	inst.mu.Unlock()
 	if scale == ScaleWaiting && hook != nil {
 		hook(ch)
+	}
+	if changed != nil {
+		changed(v)
 	}
 }
 

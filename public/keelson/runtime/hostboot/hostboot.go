@@ -913,7 +913,7 @@ func (rt *Runtime) bootAgent() {
 	// The person's acknowledgements, shelves and waiting-scale changes are
 	// on the trail (ADR-0323 §SD5, ADR-0324 §SD4).
 	attention.AttachTrail(cfg.Attention, rt.Trail, logger)
-	if qs, qerr := attention.NewBusService(rt.Bus, cfg.Attention.Questions, logger); qerr != nil {
+	if qs, qerr := attention.NewBusService(rt.Bus, cfg.Attention, logger); qerr != nil {
 		logger.Warn().Err(qerr).Msg("attention: question service start failed; apps' questions stay in their windows")
 	} else {
 		rt.cleanups = append(rt.cleanups, qs.Close)
