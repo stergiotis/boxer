@@ -360,6 +360,19 @@ empty, and every read keeps the highest revision of an ordinal in SQL. The
 sort, are gone. The later deletion of the originals stays best-effort and
 now names them by revision 0, so it is exact.
 
+### 2026-10-11 — SD9: the run row is rewritten by compare-and-set
+
+The run table is generated with `gen.Input.Cas` (ADR-0223's Update of this
+date). A run's one row is inserted when the run is created and then
+rewritten in place, guarded on the version the store last read. The
+rewrite counts as won only when the row reads back as exactly what was
+written. A second store, in another process, that moved the row first makes
+this store's rewrite fail, and this store then drops its cached row. It
+used to append a row the reads would also have taken. So the version check
+no longer holds only within one process, but this is not yet the writer
+lease of ADR-0319 §SD7: two coordinators can still interleave entries on
+one run until that lands.
+
 ## References
 
 - [ADR-0303](./0303-a-conversation-outlives-its-process-a-run-journal-written-before-each-act.md) (superseded by this record) — the journal, resume fold, grant rule and pinning carried forward.

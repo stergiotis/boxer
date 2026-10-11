@@ -61,6 +61,9 @@ type emitter struct {
 	// second wall for when that ADR-0100 deferral lifts.
 	stampLane       bool
 	stampLaneAsData bool
+	// cas is the in-place-rewritable component set of an Input.Cas store,
+	// nil otherwise.
+	cas []casComponent
 	// registryIds is set when the configured wrapper's ids are globally
 	// unique (a caller-assigned registry snapshot) rather than per-plan
 	// declaration order — it selects the emitted <Store>MembershipIds doc
@@ -356,7 +359,14 @@ func (inst Input) emitStore(ir *common.IntermediateTableRepresentation, conv com
 		}
 	}
 
-	em := emitter{Input: inst, keyGoType: model.key.goType, orderGoType: model.order.goType,
+	var cas []casComponent
+	if inst.Cas {
+		cas, err = inst.casComponents(comps, info)
+		if err != nil {
+			return
+		}
+	}
+	em := emitter{Input: inst, keyGoType: model.key.goType, orderGoType: model.order.goType, cas: cas,
 		model: model, hasComps: len(comps) > 0,
 		stampLane: stampLane, stampLaneAsData: stampLaneAsData,
 		registryIds: hasIdSrc && idSrc.GloballyUniqueIds()}
@@ -374,6 +384,9 @@ func (inst Input) emitStore(ir *common.IntermediateTableRepresentation, conv com
 	em.emitFlush(&sb)
 	em.emitCacheView(&sb, stateView)
 	em.emitQueryVerbs(&sb, comps, stateView)
+	if inst.Cas {
+		em.emitCas(&sb, cas)
+	}
 	em.emitComponentSQL(&sb, comps)
 	em.emitDecode(&sb, comps, stateView)
 
@@ -971,7 +984,7 @@ func (inst emitter) emitStoreHeader(sb *strings.Builder, key, order, lifecycle e
 	p("\t%q", "github.com/apache/arrow-go/v18/arrow/array")
 	p("\t%q", "github.com/apache/arrow-go/v18/arrow/memory")
 	p("\t%q", "github.com/stergiotis/boxer/public/caching")
-	if inst.keyGoType == "string" {
+	if inst.keyGoType == "string" || casNeedsMarshalling(inst.cas) {
 		p("\t%q", "github.com/stergiotis/boxer/public/db/clickhouse/dsl/marshalling")
 	}
 	p("\t%q", "github.com/stergiotis/boxer/public/functional")
@@ -989,6 +1002,9 @@ func (inst emitter) emitStoreHeader(sb *strings.Builder, key, order, lifecycle e
 	// and Raw marks it, whether or not any component is bound.
 	p("\tdmlruntime %q", "github.com/stergiotis/boxer/public/semistructured/leeway/dml/runtime")
 	p("\t%q", "github.com/stergiotis/boxer/public/storage/recordstore")
+	if inst.Cas {
+		p("\t%q", "github.com/stergiotis/boxer/public/storage/recordstore/rowcas")
+	}
 	if !inst.Flat {
 		p("\t%q", inst.ImportPath+"/internal/lowlevel")
 	}
@@ -1375,6 +1391,12 @@ func (inst emitter) emitStoreType(sb *strings.Builder) {
 		p("\tif inst.cfg.DDLTail != \"\" {")
 		p("\t\tstmts[len(stmts)-1] += \" \" + inst.cfg.DDLTail")
 		p("\t}")
+		if inst.Cas {
+			p("\t// A table created before the block-position settings gains them;")
+			p("\t// MODIFY SETTING is idempotent and the one ALTER a compare-and-set")
+			p("\t// table admits (rowcas).")
+			p("\tstmts = append(stmts, rowcas.AlterTableSettingsSQL(inst.writeTable()))")
+		}
 		p("\tfor _, sql := range stmts {")
 		p("\t\terr = inst.exec.Exec(ctx, sql)")
 		p("\t\tif err != nil {")

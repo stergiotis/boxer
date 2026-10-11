@@ -29,6 +29,7 @@ import (
 	"github.com/stergiotis/boxer/public/semistructured/leeway/marshall/clickhouse/componentsql"
 	raruntime "github.com/stergiotis/boxer/public/semistructured/leeway/readaccess/runtime"
 	"github.com/stergiotis/boxer/public/storage/recordstore"
+	"github.com/stergiotis/boxer/public/storage/recordstore/rowcas"
 )
 
 // The complete CREATE TABLE composed at generation time through the
@@ -365,6 +366,10 @@ func (inst *RunStore) EnsureTable(ctx context.Context) (err error) {
 	if inst.cfg.DDLTail != "" {
 		stmts[len(stmts)-1] += " " + inst.cfg.DDLTail
 	}
+	// A table created before the block-position settings gains them;
+	// MODIFY SETTING is idempotent and the one ALTER a compare-and-set
+	// table admits (rowcas).
+	stmts = append(stmts, rowcas.AlterTableSettingsSQL(inst.writeTable()))
 	for _, sql := range stmts {
 		err = inst.exec.Exec(ctx, sql)
 		if err != nil {
@@ -1295,6 +1300,302 @@ func (inst *RunStore) ScanLiveRun(ctx context.Context, opts recordstore.ScanOpts
 				return
 			}
 		}
+	}
+}
+
+// UpdateIf is the compare-and-set on key's row (ADR-0223 §SD3): one
+// lightweight update, guarded by where on the row's current values, that
+// applies sets. It does not report whether it won — the caller reads the
+// row back and decides, since the read-back is the answer. where is SQL
+// over the physical columns, trusted input only (the <Kind>Guard<Field>
+// helpers render it); an empty one is refused, since an unguarded update
+// is not a compare-and-set. A key with buffered, unflushed rows is
+// refused too: the update sees only flushed rows. Attached cache views
+// drop the key, so the next read refetches what the update left.
+//
+// The table lives under rowcas's conditions: the sequential update mode
+// on every statement, the block-position settings (EnsureTable applies
+// them), no heavyweight mutation ever, an immutable key, no async_insert
+// on the claim path, and one server (ADR-0319 §SD1).
+func (inst *RunStore) UpdateIf(ctx context.Context, key string, where string, sets ...rowcas.Set) (err error) {
+	if strings.TrimSpace(where) == "" {
+		return eh.Errorf("compare-and-set without a guard")
+	}
+	if len(sets) == 0 {
+		return eh.Errorf("compare-and-set with nothing to set")
+	}
+	if _, d := inst.dirty[key]; d {
+		return eh.Errorf("compare-and-set on a key with buffered rows; Flush first")
+	}
+	sql := rowcas.UpdateSQL(inst.writeTable(), sets, RunColKey+" = "+agentrunKeyLiteral(key)+" AND ("+where+")")
+	err = inst.exec.Exec(ctx, sql)
+	inst.notifyWrite(key, nil)
+	if err != nil {
+		err = eh.Errorf("compare-and-set on %s: %w", inst.writeTable(), err)
+	}
+	return
+}
+
+// The physical value columns of Run's fields: each section holds one
+// attribute, so element [1] is the field's value (Input.Cas).
+const (
+	RunValueColCell          = `"tv:runCell:value:val:s:24:::0::data"`
+	RunValueColConversation  = `"tv:runConversation:value:val:s:4:::0::data"`
+	RunValueColOwnerApp      = `"tv:runOwnerApp:value:val:s:24:::0::data"`
+	RunValueColCoordinator   = `"tv:runCoordinator:value:val:s:24:::0::data"`
+	RunValueColState         = `"tv:runState:value:val:s:24:::0::data"`
+	RunValueColFingerprint   = `"tv:runFingerprint:value:val:s:24:::0::data"`
+	RunValueColBuild         = `"tv:runBuild:value:val:s:24:::0::data"`
+	RunValueColProfile       = `"tv:runProfile:value:val:s:24:::0::data"`
+	RunValueColSettings      = `"tv:runSettings:value:val:s:4:::0::data"`
+	RunValueColLabelLevel    = `"tv:runLabelLevel:value:val:u32:4:::0::data"`
+	RunValueColLabelTier     = `"tv:runLabelTier:value:val:u32:4:::0::data"`
+	RunValueColLabelExposure = `"tv:runLabelExposure:value:val:s:24:::0::data"`
+	RunValueColLabelOrigin   = `"tv:runLabelOrigin:value:val:s:24:::0::data"`
+	RunValueColCreated       = `"tv:runCreated:value:val:z64:4:::0::data"`
+	RunValueColLastOrdinal   = `"tv:runLastOrdinal:value:val:u32:4:::0::data"`
+	RunValueColClosed        = `"tv:runClosed:value:val:z64:4:::0::data"`
+	RunValueColDigest        = `"tv:runDigest:value:val:s:4:::0::data"`
+	RunValueColHead          = `"tv:runHead:value:val:s:4:::0::data"`
+	RunValueColVersion       = `"tv:runVersion:value:val:u32:4:::0::data"`
+	RunValueColDeletedBy     = `"tv:runDeletedBy:value:val:s:24:::0::data"`
+	RunValueColDeletedAt     = `"tv:runDeletedAt:value:val:z64:4:::0::data"`
+)
+
+// RunSetCell rewrites Run.Cell in place, for UpdateIf.
+func RunSetCell(v string) rowcas.Set {
+	return rowcas.Set{Column: RunValueColCell, Expr: "[" + marshalling.EscapeString(v) + "]"}
+}
+
+// RunGuardCell is the guard "Run.Cell equals v", for UpdateIf.
+func RunGuardCell(v string) string {
+	return RunValueColCell + "[1] = " + marshalling.EscapeString(v)
+}
+
+// RunSetConversation rewrites Run.Conversation in place, for UpdateIf.
+func RunSetConversation(v string) rowcas.Set {
+	return rowcas.Set{Column: RunValueColConversation, Expr: "[" + marshalling.EscapeString(v) + "]"}
+}
+
+// RunGuardConversation is the guard "Run.Conversation equals v", for UpdateIf.
+func RunGuardConversation(v string) string {
+	return RunValueColConversation + "[1] = " + marshalling.EscapeString(v)
+}
+
+// RunSetOwnerApp rewrites Run.OwnerApp in place, for UpdateIf.
+func RunSetOwnerApp(v string) rowcas.Set {
+	return rowcas.Set{Column: RunValueColOwnerApp, Expr: "[" + marshalling.EscapeString(v) + "]"}
+}
+
+// RunGuardOwnerApp is the guard "Run.OwnerApp equals v", for UpdateIf.
+func RunGuardOwnerApp(v string) string {
+	return RunValueColOwnerApp + "[1] = " + marshalling.EscapeString(v)
+}
+
+// RunSetCoordinator rewrites Run.Coordinator in place, for UpdateIf.
+func RunSetCoordinator(v string) rowcas.Set {
+	return rowcas.Set{Column: RunValueColCoordinator, Expr: "[" + marshalling.EscapeString(v) + "]"}
+}
+
+// RunGuardCoordinator is the guard "Run.Coordinator equals v", for UpdateIf.
+func RunGuardCoordinator(v string) string {
+	return RunValueColCoordinator + "[1] = " + marshalling.EscapeString(v)
+}
+
+// RunSetState rewrites Run.State in place, for UpdateIf.
+func RunSetState(v string) rowcas.Set {
+	return rowcas.Set{Column: RunValueColState, Expr: "[" + marshalling.EscapeString(v) + "]"}
+}
+
+// RunGuardState is the guard "Run.State equals v", for UpdateIf.
+func RunGuardState(v string) string {
+	return RunValueColState + "[1] = " + marshalling.EscapeString(v)
+}
+
+// RunSetFingerprint rewrites Run.Fingerprint in place, for UpdateIf.
+func RunSetFingerprint(v string) rowcas.Set {
+	return rowcas.Set{Column: RunValueColFingerprint, Expr: "[" + marshalling.EscapeString(v) + "]"}
+}
+
+// RunGuardFingerprint is the guard "Run.Fingerprint equals v", for UpdateIf.
+func RunGuardFingerprint(v string) string {
+	return RunValueColFingerprint + "[1] = " + marshalling.EscapeString(v)
+}
+
+// RunSetBuild rewrites Run.Build in place, for UpdateIf.
+func RunSetBuild(v string) rowcas.Set {
+	return rowcas.Set{Column: RunValueColBuild, Expr: "[" + marshalling.EscapeString(v) + "]"}
+}
+
+// RunGuardBuild is the guard "Run.Build equals v", for UpdateIf.
+func RunGuardBuild(v string) string {
+	return RunValueColBuild + "[1] = " + marshalling.EscapeString(v)
+}
+
+// RunSetProfile rewrites Run.Profile in place, for UpdateIf.
+func RunSetProfile(v string) rowcas.Set {
+	return rowcas.Set{Column: RunValueColProfile, Expr: "[" + marshalling.EscapeString(v) + "]"}
+}
+
+// RunGuardProfile is the guard "Run.Profile equals v", for UpdateIf.
+func RunGuardProfile(v string) string {
+	return RunValueColProfile + "[1] = " + marshalling.EscapeString(v)
+}
+
+// RunSetSettings rewrites Run.Settings in place, for UpdateIf.
+func RunSetSettings(v string) rowcas.Set {
+	return rowcas.Set{Column: RunValueColSettings, Expr: "[" + marshalling.EscapeString(v) + "]"}
+}
+
+// RunGuardSettings is the guard "Run.Settings equals v", for UpdateIf.
+func RunGuardSettings(v string) string {
+	return RunValueColSettings + "[1] = " + marshalling.EscapeString(v)
+}
+
+// RunSetLabelLevel rewrites Run.LabelLevel in place, for UpdateIf.
+func RunSetLabelLevel(v uint32) rowcas.Set {
+	return rowcas.Set{Column: RunValueColLabelLevel, Expr: "[" + strconv.FormatUint(uint64(v), 10) + "]"}
+}
+
+// RunGuardLabelLevel is the guard "Run.LabelLevel equals v", for UpdateIf.
+func RunGuardLabelLevel(v uint32) string {
+	return RunValueColLabelLevel + "[1] = " + strconv.FormatUint(uint64(v), 10)
+}
+
+// RunSetLabelTier rewrites Run.LabelTier in place, for UpdateIf.
+func RunSetLabelTier(v uint32) rowcas.Set {
+	return rowcas.Set{Column: RunValueColLabelTier, Expr: "[" + strconv.FormatUint(uint64(v), 10) + "]"}
+}
+
+// RunGuardLabelTier is the guard "Run.LabelTier equals v", for UpdateIf.
+func RunGuardLabelTier(v uint32) string {
+	return RunValueColLabelTier + "[1] = " + strconv.FormatUint(uint64(v), 10)
+}
+
+// RunSetLabelExposure rewrites Run.LabelExposure in place, for UpdateIf.
+func RunSetLabelExposure(v string) rowcas.Set {
+	return rowcas.Set{Column: RunValueColLabelExposure, Expr: "[" + marshalling.EscapeString(v) + "]"}
+}
+
+// RunGuardLabelExposure is the guard "Run.LabelExposure equals v", for UpdateIf.
+func RunGuardLabelExposure(v string) string {
+	return RunValueColLabelExposure + "[1] = " + marshalling.EscapeString(v)
+}
+
+// RunSetLabelOrigin rewrites Run.LabelOrigin in place, for UpdateIf.
+func RunSetLabelOrigin(v string) rowcas.Set {
+	return rowcas.Set{Column: RunValueColLabelOrigin, Expr: "[" + marshalling.EscapeString(v) + "]"}
+}
+
+// RunGuardLabelOrigin is the guard "Run.LabelOrigin equals v", for UpdateIf.
+func RunGuardLabelOrigin(v string) string {
+	return RunValueColLabelOrigin + "[1] = " + marshalling.EscapeString(v)
+}
+
+// RunSetCreated rewrites Run.Created in place, for UpdateIf.
+func RunSetCreated(v time.Time) rowcas.Set {
+	return rowcas.Set{Column: RunValueColCreated, Expr: "[" + "fromUnixTimestamp64Nano(" + strconv.FormatInt(v.UnixNano(), 10) + ")" + "]"}
+}
+
+// RunGuardCreated is the guard "Run.Created equals v", for UpdateIf.
+func RunGuardCreated(v time.Time) string {
+	return RunValueColCreated + "[1] = " + "fromUnixTimestamp64Nano(" + strconv.FormatInt(v.UnixNano(), 10) + ")"
+}
+
+// RunSetLastOrdinal rewrites Run.LastOrdinal in place, for UpdateIf.
+func RunSetLastOrdinal(v uint32) rowcas.Set {
+	return rowcas.Set{Column: RunValueColLastOrdinal, Expr: "[" + strconv.FormatUint(uint64(v), 10) + "]"}
+}
+
+// RunGuardLastOrdinal is the guard "Run.LastOrdinal equals v", for UpdateIf.
+func RunGuardLastOrdinal(v uint32) string {
+	return RunValueColLastOrdinal + "[1] = " + strconv.FormatUint(uint64(v), 10)
+}
+
+// RunSetClosed rewrites Run.Closed in place, for UpdateIf.
+func RunSetClosed(v time.Time) rowcas.Set {
+	return rowcas.Set{Column: RunValueColClosed, Expr: "[" + "fromUnixTimestamp64Nano(" + strconv.FormatInt(v.UnixNano(), 10) + ")" + "]"}
+}
+
+// RunGuardClosed is the guard "Run.Closed equals v", for UpdateIf.
+func RunGuardClosed(v time.Time) string {
+	return RunValueColClosed + "[1] = " + "fromUnixTimestamp64Nano(" + strconv.FormatInt(v.UnixNano(), 10) + ")"
+}
+
+// RunSetDigest rewrites Run.Digest in place, for UpdateIf.
+func RunSetDigest(v string) rowcas.Set {
+	return rowcas.Set{Column: RunValueColDigest, Expr: "[" + marshalling.EscapeString(v) + "]"}
+}
+
+// RunGuardDigest is the guard "Run.Digest equals v", for UpdateIf.
+func RunGuardDigest(v string) string {
+	return RunValueColDigest + "[1] = " + marshalling.EscapeString(v)
+}
+
+// RunSetHead rewrites Run.Head in place, for UpdateIf.
+func RunSetHead(v string) rowcas.Set {
+	return rowcas.Set{Column: RunValueColHead, Expr: "[" + marshalling.EscapeString(v) + "]"}
+}
+
+// RunGuardHead is the guard "Run.Head equals v", for UpdateIf.
+func RunGuardHead(v string) string {
+	return RunValueColHead + "[1] = " + marshalling.EscapeString(v)
+}
+
+// RunSetVersion rewrites Run.Version in place, for UpdateIf.
+func RunSetVersion(v uint32) rowcas.Set {
+	return rowcas.Set{Column: RunValueColVersion, Expr: "[" + strconv.FormatUint(uint64(v), 10) + "]"}
+}
+
+// RunGuardVersion is the guard "Run.Version equals v", for UpdateIf.
+func RunGuardVersion(v uint32) string {
+	return RunValueColVersion + "[1] = " + strconv.FormatUint(uint64(v), 10)
+}
+
+// RunSetDeletedBy rewrites Run.DeletedBy in place, for UpdateIf.
+func RunSetDeletedBy(v string) rowcas.Set {
+	return rowcas.Set{Column: RunValueColDeletedBy, Expr: "[" + marshalling.EscapeString(v) + "]"}
+}
+
+// RunGuardDeletedBy is the guard "Run.DeletedBy equals v", for UpdateIf.
+func RunGuardDeletedBy(v string) string {
+	return RunValueColDeletedBy + "[1] = " + marshalling.EscapeString(v)
+}
+
+// RunSetDeletedAt rewrites Run.DeletedAt in place, for UpdateIf.
+func RunSetDeletedAt(v time.Time) rowcas.Set {
+	return rowcas.Set{Column: RunValueColDeletedAt, Expr: "[" + "fromUnixTimestamp64Nano(" + strconv.FormatInt(v.UnixNano(), 10) + ")" + "]"}
+}
+
+// RunGuardDeletedAt is the guard "Run.DeletedAt equals v", for UpdateIf.
+func RunGuardDeletedAt(v time.Time) string {
+	return RunValueColDeletedAt + "[1] = " + "fromUnixTimestamp64Nano(" + strconv.FormatInt(v.UnixNano(), 10) + ")"
+}
+
+// RunSets rewrites every field of a Run in place: a whole-row update.
+func RunSets(row Run) []rowcas.Set {
+	return []rowcas.Set{
+		RunSetCell(row.Cell),
+		RunSetConversation(row.Conversation),
+		RunSetOwnerApp(row.OwnerApp),
+		RunSetCoordinator(row.Coordinator),
+		RunSetState(row.State),
+		RunSetFingerprint(row.Fingerprint),
+		RunSetBuild(row.Build),
+		RunSetProfile(row.Profile),
+		RunSetSettings(row.Settings),
+		RunSetLabelLevel(row.LabelLevel),
+		RunSetLabelTier(row.LabelTier),
+		RunSetLabelExposure(row.LabelExposure),
+		RunSetLabelOrigin(row.LabelOrigin),
+		RunSetCreated(row.Created),
+		RunSetLastOrdinal(row.LastOrdinal),
+		RunSetClosed(row.Closed),
+		RunSetDigest(row.Digest),
+		RunSetHead(row.Head),
+		RunSetVersion(row.Version),
+		RunSetDeletedBy(row.DeletedBy),
+		RunSetDeletedAt(row.DeletedAt),
 	}
 }
 

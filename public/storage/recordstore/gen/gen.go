@@ -216,6 +216,20 @@ type Input struct {
 	// already, with the u8 marker as the pair's default binding.
 	TombstoneView bool
 
+	// Cas makes the table a compare-and-set table (ADR-0223 §SD3, through
+	// rowcas): its rows are rewritten in place by a guarded lightweight
+	// update instead of superseded by a newer row. The DDL carries the
+	// block-position settings, EnsureTable applies them to a table that
+	// exists already, and the store gains UpdateIf plus, per component,
+	// the value-column constants and the typed set and guard helpers.
+	// Every component must be rewritable in place — plain scalar fields,
+	// one per section, on a static low-cardinality membership, sections
+	// unshared — or generation refuses. The table then lives under
+	// rowcas's conditions, which the store's doc states: no heavyweight
+	// mutation ever, an immutable key, no async_insert on the claim path,
+	// one server.
+	Cas bool
+
 	// DDL overrides the table-level clauses (ADR-0102 seam). nil derives
 	// the defaults: CREATE TABLE IF NOT EXISTS, ENGINE MergeTree(),
 	// ORDER BY (Key[, Order]) resolved to physical names, and the
@@ -397,6 +411,11 @@ func (inst Input) tableOptions() (opts clickhouse.TableOptions) {
 		Mode:     clickhouse.CreateModeIfNotExists,
 		Engine:   "MergeTree()",
 		Settings: []string{"allow_suspicious_low_cardinality_types=1"},
+	}
+	if inst.Cas {
+		// rowcas.TableSettingsTail, as settings: the block-position columns
+		// a lightweight update needs.
+		opts.Settings = append(opts.Settings, "enable_block_number_column=1", "enable_block_offset_column=1")
 	}
 	keyName, hasKey := firstPlainName(inst.Table, common.PlainItemTypeEntityId)
 	if inst.Roles.Key != "" {

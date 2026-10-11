@@ -21,9 +21,11 @@ import (
 // executor they were opened on: the record of ADR-0308 §SD1. The
 // generated stores are single-goroutine, so every method takes one mutex,
 // and every write flushes before it returns, which is what lets a writer
-// refuse an act the record does not hold. The host's store is the one
-// writer of its tables, so it keeps the live run rows in memory and reads
-// the table only for a row it has not seen.
+// refuse an act the record does not hold. A run row is inserted once and
+// then rewritten in place by a compare-and-set on its version (the run
+// table is generated Cas, through rowcas), so a writer in another process
+// that moved the row first makes this one's rewrite fail rather than be
+// overwritten (ADR-0308 §SD9). The live run rows are a read cache.
 //
 // deferred: ADR-0309 §SD4 asks for async_insert = 0 on journal inserts;
 // the executor seam (recordstore.ExecutorI.InsertArrow) carries no
@@ -39,6 +41,10 @@ type SqlStore struct {
 	Log zerolog.Logger
 	// live are the run rows as last written or read, by id.
 	live map[string]Run
+	// stored is the version the table holds for a run, as this store last
+	// wrote or read it: the guard of the next compare-and-set. It differs
+	// from live's when a repair rebuilt a row it could not write.
+	stored map[string]uint32
 	// dirty are the runs whose entries went to the record and whose row
 	// did not: the row is rebuilt from the entry tail at the next read.
 	dirty map[string]bool
@@ -51,7 +57,7 @@ var _ EntriesOfI = (*SqlStore)(nil)
 // NewSqlStore opens the stores over exec in layout; the caller provisions
 // first (agentrunstore.ProvisionIn) and closes afterwards.
 func NewSqlStore(exec recordstore.ExecutorI, layout agentrunstore.Layout) (inst *SqlStore) {
-	return &SqlStore{exec: exec, layout: layout, st: agentrunstore.NewStores(exec, layout), live: make(map[string]Run), dirty: make(map[string]bool), Log: zerolog.Nop()}
+	return &SqlStore{exec: exec, layout: layout, st: agentrunstore.NewStores(exec, layout), live: make(map[string]Run), stored: make(map[string]uint32), dirty: make(map[string]bool), Log: zerolog.Nop()}
 }
 
 // Close releases the generated stores.
@@ -74,7 +80,7 @@ func (inst *SqlStore) CreateRun(ctx context.Context, r Run) (err error) {
 	if r.Version == 0 {
 		r.Version = 1
 	}
-	return inst.writeRunLocked(ctx, r)
+	return inst.insertRunLocked(ctx, r)
 }
 
 func (inst *SqlStore) UpdateRun(ctx context.Context, r Run) (err error) {
@@ -93,10 +99,8 @@ func (inst *SqlStore) UpdateRun(ctx context.Context, r Run) (err error) {
 	return inst.writeRunLocked(ctx, r)
 }
 
-// writeRunLocked appends a run row; the state view folds the latest per
-// id, ordered by the row's version, which is how the row is updated in
-// place without a clock deciding.
-func (inst *SqlStore) writeRunLocked(ctx context.Context, r Run) (err error) {
+// insertRunLocked writes a new run row, the one row the run has.
+func (inst *SqlStore) insertRunLocked(ctx context.Context, r Run) (err error) {
 	if err = inst.st.Run.Begin(r.Id, versionTs(r)).AddRun(runRow(r)).Commit(); err != nil {
 		inst.st.Run.DiscardPending()
 		return eb.Build().Str("run", r.Id).Errorf("buffer run: %w", err)
@@ -105,13 +109,51 @@ func (inst *SqlStore) writeRunLocked(ctx context.Context, r Run) (err error) {
 		inst.st.Run.DiscardPending()
 		return eh.Errorf("flush run: %w", err)
 	}
-	inst.live[r.Id] = r
+	inst.live[r.Id], inst.stored[r.Id] = r, r.Version
 	return
 }
 
-// versionTs is the run row's order instant: its creation plus its version
-// as nanoseconds, so every write of a row is later than the one before
-// whatever the clock did.
+// writeRunLocked rewrites a run row in place: one compare-and-set guarded
+// on the version the table held when this store last saw it, then the
+// read-back, which is the answer. The rewrite won when the row reads back
+// as exactly the row written; a version match alone would not say so, since
+// two writers moving one version to the next both read the next back.
+// A lost rewrite drops the cached row, so the next read sees the record.
+func (inst *SqlStore) writeRunLocked(ctx context.Context, r Run) (err error) {
+	from, ok := inst.stored[r.Id]
+	if !ok {
+		return eb.Build().Str("run", r.Id).Errorf("the run row is rewritten before it was read")
+	}
+	if err = inst.st.Run.UpdateIf(ctx, r.Id, agentrunstore.RunGuardVersion(from), agentrunstore.RunSets(runRow(r))...); err != nil {
+		return eb.Build().Str("run", r.Id).Errorf("rewrite run: %w", err)
+	}
+	got, found, err := inst.readRunLocked(ctx, r.Id)
+	if err != nil {
+		return
+	}
+	if !found || !sameRow(runRow(got), runRow(r)) {
+		delete(inst.live, r.Id)
+		delete(inst.stored, r.Id)
+		return eb.Build().Str("run", r.Id).Uint32("from", from).Uint32("version", r.Version).Errorf("the run row moved since this store read it: another writer holds the run (ADR-0308 §SD9)")
+	}
+	inst.live[r.Id], inst.stored[r.Id] = r, r.Version
+	return
+}
+
+// sameRow compares two run rows as the table stores them, instants by
+// their nanoseconds.
+func sameRow(a, b agentrunstore.Run) bool {
+	norm := func(r agentrunstore.Run) agentrunstore.Run {
+		r.Created, r.Closed, r.DeletedAt = nanos(r.Created), nanos(r.Closed), nanos(r.DeletedAt)
+		return r
+	}
+	return norm(a) == norm(b)
+}
+
+func nanos(t time.Time) time.Time { return time.Unix(0, t.UnixNano()).UTC() }
+
+// versionTs is the run row's order instant: its creation plus its first
+// version as nanoseconds. Later versions rewrite the row in place.
 func versionTs(r Run) time.Time {
 	return utc(r.Created).Add(time.Duration(r.Version))
 }
@@ -129,6 +171,17 @@ func (inst *SqlStore) getRunLocked(ctx context.Context, id string) (r Run, found
 		}
 		return
 	}
+	if r, found, err = inst.readRunLocked(ctx, id); err != nil {
+		return
+	}
+	if found {
+		inst.live[id], inst.stored[id] = r, r.Version
+	}
+	return
+}
+
+// readRunLocked reads one run row from the table, past the cache.
+func (inst *SqlStore) readRunLocked(ctx context.Context, id string) (r Run, found bool, err error) {
 	for ent, serr := range inst.st.Run.ScanLiveRun(ctx, recordstore.ScanOpts{ExtraPredicate: agentrunstore.RunColKey + " = " + marshalling.EscapeString(id)}) {
 		if serr != nil {
 			return r, false, eb.Build().Str("run", id).Errorf("read run: %w", serr)
@@ -136,9 +189,6 @@ func (inst *SqlStore) getRunLocked(ctx context.Context, id string) (r Run, found
 		if ent != nil && ent.Run.Has {
 			r, found = runOf(ent.Run.Val), true
 		}
-	}
-	if found {
-		inst.live[id] = r
 	}
 	return
 }
@@ -160,7 +210,7 @@ func (inst *SqlStore) ListRuns(ctx context.Context, ownerApp string, limit int) 
 		if cached, ok := inst.live[r.Id]; ok && cached.Version >= r.Version {
 			r = cached
 		} else {
-			inst.live[r.Id] = r
+			inst.live[r.Id], inst.stored[r.Id] = r, r.Version
 		}
 		if ownerApp == "" || r.OwnerApp == ownerApp {
 			runs = append(runs, r)

@@ -32,6 +32,7 @@ func TestGenerateAgentrunStores(t *testing.T) {
 		PackageName: "agentrunstore", StoreName: "Run", TableName: TableNameRun, Database: DatabaseName,
 		Table: runTd, RowConfig: TableRowConfig, ComponentPaths: []string{"./run_dto.go"}, OutDir: ".",
 		ImportPath: importPath, Wrapper: marshallgen.FixedIdsWrapper{Ids: ids},
+		Cas: true,
 	}.Generate())
 
 	entryManip, err := GetEntrySchemaInManipulator()

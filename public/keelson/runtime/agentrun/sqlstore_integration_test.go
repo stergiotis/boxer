@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/apache/arrow-go/v18/arrow"
@@ -128,7 +129,8 @@ func rowCount(t *testing.T, ctx context.Context, exec recordstore.ExecutorI, lay
 	return
 }
 
-// laggingExecutor fails the next insert into one table, once.
+// laggingExecutor fails the next write to one table, once: an insert, or
+// the in-place update a run row is rewritten by.
 type laggingExecutor struct {
 	recordstore.ExecutorI
 	table string
@@ -141,6 +143,14 @@ func (inst *laggingExecutor) InsertArrow(ctx context.Context, table string, reco
 		return errors.New("the run table is away")
 	}
 	return inst.ExecutorI.InsertArrow(ctx, table, records)
+}
+
+func (inst *laggingExecutor) Exec(ctx context.Context, sql string) (err error) {
+	if inst.fail && strings.HasPrefix(sql, "UPDATE "+inst.table+" ") {
+		inst.fail = false
+		return errors.New("the run table is away")
+	}
+	return inst.ExecutorI.Exec(ctx, sql)
 }
 
 // A run row write that fails after its entries landed does not wedge the
@@ -182,4 +192,52 @@ func TestARunRowThatLagsItsEntriesIsRepaired(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, uint32(3), r.LastOrdinal, "the repaired row was written")
 	assert.Equal(t, more[0].Digest, r.Head)
+}
+
+// Two stores over one table, as two processes would be: both read the
+// run row, the first rewrites it, and the second's rewrite — guarded on
+// the version it read — loses instead of overwriting (ADR-0308 §SD9).
+// The loser's cache is dropped, so its next read sees the winner's row.
+func TestASecondStoreLosesTheRunRow(t *testing.T) {
+	ctx := context.Background()
+	exec, err := chexec.NewLocalExecutor(filepath.Join(t.TempDir(), "chdb"), memory.NewGoAllocator())
+	if err != nil {
+		t.Skipf("clickhouse-local unavailable: %v", err)
+	}
+	layout := agentrunstore.Layout{Database: "artest"}
+	require.NoError(t, agentrunstore.ProvisionIn(ctx, exec, layout))
+	a, b := NewSqlStore(exec, layout), NewSqlStore(exec, layout)
+	defer a.Close()
+	defer b.Close()
+	require.NoError(t, a.CreateRun(ctx, Run{Id: "r1", OwnerApp: "chat", State: StateOpen, Version: 1}))
+	ra, found, err := a.GetRun(ctx, "r1")
+	require.NoError(t, err)
+	require.True(t, found)
+	rb, found, err := b.GetRun(ctx, "r1")
+	require.NoError(t, err)
+	require.True(t, found)
+
+	ra.Fingerprint, ra.Version = "from-a", 2
+	require.NoError(t, a.UpdateRun(ctx, ra))
+	rb.Fingerprint, rb.Version = "from-b", 2
+	require.ErrorContains(t, b.UpdateRun(ctx, rb), "another writer holds the run")
+
+	got, _, err := b.GetRun(ctx, "r1")
+	require.NoError(t, err)
+	assert.Equal(t, "from-a", got.Fingerprint, "the loser reads the winner's row")
+	assert.Equal(t, uint32(2), got.Version)
+	assert.EqualValues(t, 1, runRowCount(t, ctx, exec, layout, "r1"), "one row per run, rewritten in place")
+}
+
+// runRowCount is the raw number of rows the run table holds for a run.
+func runRowCount(t *testing.T, ctx context.Context, exec recordstore.ExecutorI, layout agentrunstore.Layout, run string) (n uint64) {
+	t.Helper()
+	for rec, err := range exec.QueryArrow(ctx, "SELECT count() FROM "+layout.RunTable()+" WHERE "+agentrunstore.RunColKey+" = "+marshalling.EscapeString(run)) {
+		require.NoError(t, err)
+		if rec.NumRows() > 0 {
+			n = rec.Column(0).(*array.Uint64).Value(0)
+		}
+		rec.Release()
+	}
+	return
 }

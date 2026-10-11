@@ -502,6 +502,23 @@ negative: the timeout fired at once, or the retry was due in the past.
 The worker now saturates both, and bounds the backoff at 30 days
 (`maxBackoff`).
 
+
+### 2026-10-11 — the compare-and-set is a generator option: `gen.Input.Cas`
+
+The one-row compare-and-set this record composes by hand in
+`watchbillstore/claim.go` is now available to any generated store. A store
+generated with `gen.Input.Cas` carries the block-position settings in its
+DDL, applies `rowcas.AlterTableSettingsSQL` in `EnsureTable`, and gains
+`UpdateIf(ctx, key, where, sets...)` over `rowcas.UpdateSQL`. `where` is the
+caller's guard. An empty guard is refused, and so is a key with unflushed
+rows. Per component it also gains the value-column constants and typed set
+and guard helpers. Generation refuses a component it cannot rewrite
+faithfully in place: anything but one plain scalar per section, on a static
+low-cardinality membership, in a section no other component shares. The
+caller reads the row back and decides whether it won, as the watchbill claim
+does. The run journal's run table is the first consumer (ADR-0308 §SD9's
+Update of this date). The watchbill claim moves onto it in a later step.
+
 ## References
 
 - [ADR-0038](./0038-keelson-background-task-primitive.md) — the task primitive; the Update of 2026-06-22 this ADR withdraws.
