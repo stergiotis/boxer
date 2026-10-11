@@ -49,12 +49,12 @@ the second, and an id is a function of the window and the widget's path.
 {"do":"wait","valueContains":"3 rows ·","role":"label","comment":"play's own summary of the agent's run"}
 {"do":"wait","name":" agent · act","role":"button","comment":"the badge: the task works here and is not paused"}
 {"do":"capture","text":"chat-coordinator-play"}
-{"do":"focus","id":15565883789046076047,"comment":"the person, in play's editor"}
+{"do":"focus","id":8428115019067692845,"comment":"the person, in play's editor"}
 {"do":"key","text":"A","modifiers":16}
-{"do":"type","id":15565883789046076047,"text":"SELECT name FROM keelson('apps') LIMIT 2"}
+{"do":"type","id":8428115019067692845,"text":"SELECT name FROM keelson('apps') LIMIT 2"}
 {"do":"wait","name":" agent · act · paused","role":"button","comment":"the task had read the buffer"}
-{"do":"focus","id":13282790709624229129,"comment":"the chat's composer"}
-{"do":"type","id":13282790709624229129,"text":"Now the last three instead."}
+{"do":"focus","id":10519974525881031313,"comment":"the chat's composer"}
+{"do":"type","id":10519974525881031313,"text":"Now the last three instead."}
 {"do":"click","contains":"Send","role":"button","comment":"turn 2"}
 {"do":"wait","valueContains":"The buffer changed since I read it","role":"label","settleMs":1000}
 {"do":"wait","valueContains":"⚙ set_sql in window 2 · conflict","role":"label","comment":"a write that expects the revision the task last saw"}

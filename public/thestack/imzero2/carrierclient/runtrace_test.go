@@ -160,6 +160,13 @@ func TestRunTraceTypeWaitsForFocusThenForTheText(t *testing.T) {
 	require.NoError(t, RunTrace(c, []Step{{Do: "type", ID: 7, Text: "hello"}}, RunOptions{Timeout: 2 * time.Second, Logger: zerolog.Nop()}))
 }
 
+func TestRunTraceTypeOverTheSameTextLands(t *testing.T) {
+	ws, server := pipeConn(t)
+	fakeCarrier(t, server, &TreeSnapshot{Nodes: []*TreeNode{{Id: 7, Role: "text_input", Flags: FlagFocused, Value: "hello"}}})
+	c := &Client{ws: ws, log: zerolog.Nop()}
+	require.NoError(t, RunTrace(c, []Step{{Do: "type", ID: 7, Text: "hello"}}, RunOptions{Timeout: 500 * time.Millisecond, Logger: zerolog.Nop()}))
+}
+
 func TestRunTraceTypeFailsWhenTheTextDoesNotLand(t *testing.T) {
 	ws, server := pipeConn(t)
 	fakeCarrier(t, server, &TreeSnapshot{Nodes: []*TreeNode{{Id: 7, Role: "text_input", Flags: FlagFocused}}})

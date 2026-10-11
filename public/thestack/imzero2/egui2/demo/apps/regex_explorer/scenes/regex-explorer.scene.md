@@ -25,19 +25,19 @@ report hits.
 
 ```jsonl trace
 {"do":"wait","valueContains":"engine check ✓","role":"label","settleMs":1500}
-{"do":"type","id":11728253319578034029,"text":"ab"}
+{"do":"type","id":8979643996807345111,"text":"ab"}
 {"do":"key","text":"ArrowLeft"}
 {"do":"click","name":"Character classes"}
 {"do":"click","name":"\\d","role":"button"}
 {"do":"click","name":"\\w","role":"button"}
-{"do":"read","id":11728253319578034029,"pattern":"^(?P<built>a\\\\d\\\\wb)$"}
+{"do":"read","id":8979643996807345111,"pattern":"^(?P<built>a\\\\d\\\\wb)$"}
 {"do":"click","name":"capture groups (user@host)","role":"button"}
 {"do":"wait","name":"Matches (3)","settleMs":500}
 {"do":"capture","text":"regex-explorer-matches"}
 {"do":"click","name":"ClickHouse functions"}
 {"do":"wait","valueContains":"ClickHouse answered in","role":"label","settleMs":1000}
 {"do":"wait","valueContains":"✓ same","role":"label","nth":5}
-{"do":"type","id":380914638141582870,"text":"<\\2>"}
+{"do":"type","id":16637523780117944924,"text":"<\\2>"}
 {"do":"wait","valueContains":"<example.com> <test.org> <sub.domain.net>","role":"label","settleMs":800}
 {"do":"capture","text":"regex-explorer-functions"}
 {"do":"click","name":"Multi-pattern (VectorScan)"}

@@ -20,9 +20,9 @@ and rasterizes it: the PNG shows the demo window and nothing of the console
 or the shell.
 
 ```jsonl trace
-{"do":"focus","id":10463678445297493114,"comment":"the console's app field"}
+{"do":"focus","id":5722754586042386624,"comment":"the console's app field"}
 {"do":"key","text":"A","modifiers":16}
-{"do":"type","id":10463678445297493114,"text":"opsdemo"}
+{"do":"type","id":5722754586042386624,"text":"opsdemo"}
 {"do":"click","name":"Open","role":"button","settleMs":2500}
 {"do":"read","valueContains":"opened window","role":"label","pattern":"opened window (?P<ops>\\d+)"}
 {"do":"click","name":"Request grant","role":"button"}

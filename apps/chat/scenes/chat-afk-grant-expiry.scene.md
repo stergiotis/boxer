@@ -30,13 +30,19 @@ Tagged slow, since it waits out the timeout.
 {"do":"note","text":"ADR-0265: an expired grant request does not block asking again"}
 {"do":"wait","valueContains":"→ scripted","role":"label"}
 {"do":"click","contains":"Send","role":"button"}
-{"do":"wait","valueContains":"asks to start a task","role":"label"}
+{"do":"wait","contains":"your turn","role":"button","comment":"the request waits in the person's queue (ADR-0324)"}
+{"do":"click","contains":"your turn","role":"button"}
+{"do":"click","contains":"Next","role":"button","comment":"its card, non-modal"}
+{"do":"wait","valueContains":"asks to start a task","role":"label","nth":0}
 {"do":"capture","text":"chat-afk-grant-expiry-asked"}
 {"do":"sleep","settleMs":14000,"comment":"the person is away past the request timeout"}
 {"do":"wait","valueContains":"the person did not decide in time","role":"label"}
 {"do":"wait","valueContains":"The request expired before you decided.","role":"label"}
-{"do":"type","id":13282790709624229129,"text":"I am back, try again.","comment":"the composer"}
+{"do":"type","id":10519974525881031313,"text":"I am back, try again.","comment":"the composer"}
 {"do":"click","contains":"Send","role":"button"}
-{"do":"wait","valueContains":"asks to start a task","role":"label","comment":"a new dialog, not the repeat check"}
+{"do":"wait","contains":"your turn","role":"button","comment":"the request waits in the person's queue (ADR-0324)"}
+{"do":"click","contains":"your turn","role":"button"}
+{"do":"click","contains":"Next","role":"button","comment":"its card, non-modal"}
+{"do":"wait","valueContains":"asks to start a task","role":"label","nth":0,"comment":"a new dialog, not the repeat check"}
 {"do":"capture","text":"chat-afk-grant-expiry-asked-again"}
 ```

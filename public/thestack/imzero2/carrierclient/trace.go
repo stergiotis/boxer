@@ -593,8 +593,10 @@ func typeInto(c *Client, st Step, node *TreeNode, opts RunOptions) (err error) {
 	if st.Text == "" || !IsEditableRole(node.GetRole()) {
 		return nil
 	}
+	// The text landed when the value moved, or when it now reads as typed:
+	// typing over a selection of the same text changes nothing.
 	last, err := pollNode(c, id, opts.Timeout, func(n *TreeNode, _ *TreeSnapshot) bool {
-		return n.GetValue() != before
+		return n.GetValue() != before || n.GetValue() == st.Text
 	})
 	if err != nil {
 		return eb.Build().Uint64("node", id).Str("read", last.GetValue()).Str("typed", st.Text).

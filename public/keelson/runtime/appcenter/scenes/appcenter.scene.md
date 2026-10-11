@@ -38,7 +38,7 @@ its Timeline tab from the introspection endpoint.
 {"do":"click","name":"Runs"}
 {"do":"capture","text":"appcenter-play-logs","settleMs":500}
 {"do":"click","name":"Runs"}
-{"do":"click","id":12875594712639319915,"comment":"the Runs section's Open in play; every section's button shares the name"}
+{"do":"click","id":762874038834222291,"comment":"the Runs section's Open in play; every section's button shares the name"}
 {"do":"read","valueContains":"rows ·","role":"label","pattern":"(?P<rows>\\d+) rows","comment":"play has run the statement"}
 {"do":"expect","of":"rows","min":1}
 {"do":"capture","text":"appcenter-open-in-play","settleMs":1000}

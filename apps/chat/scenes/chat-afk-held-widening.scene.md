@@ -29,13 +29,19 @@ Tagged slow, since it waits out those ten seconds.
 {"do":"note","text":"ADR-0265: a held call waits with the turn"}
 {"do":"wait","valueContains":"→ scripted","role":"label"}
 {"do":"click","contains":"Send","role":"button"}
-{"do":"wait","valueContains":"asks to start a task","role":"label"}
+{"do":"wait","contains":"your turn","role":"button","comment":"the request waits in the person's queue (ADR-0324)"}
+{"do":"click","contains":"your turn","role":"button"}
+{"do":"click","contains":"Next","role":"button","comment":"its card, non-modal"}
+{"do":"wait","valueContains":"asks to start a task","role":"label","nth":0}
 {"do":"click","name":"Approve","role":"button","settleMs":1500}
 {"do":"wait","contains":"agent · act","role":"button"}
 {"do":"click","contains":"agent · act","role":"button","settleMs":500,"comment":"the play window's badge"}
 {"do":"click","name":"observe","settleMs":500,"comment":"the person lowers play to observe"}
 {"do":"key","text":"Escape","settleMs":300}
-{"do":"wait","valueContains":"asks to call set_sql","role":"label","comment":"the write is held as a widening"}
+{"do":"wait","contains":"your turn","role":"button","comment":"the request waits in the person's queue (ADR-0324)"}
+{"do":"click","contains":"your turn","role":"button"}
+{"do":"click","contains":"Next","role":"button","comment":"its card, non-modal"}
+{"do":"wait","valueContains":"asks to call set_sql","role":"label","nth":0,"comment":"the write is held as a widening"}
 {"do":"wait","valueContains":"waiting for you","role":"label"}
 {"do":"sleep","settleMs":12000,"comment":"the person is away past the chat's ten seconds"}
 {"do":"wait","valueContains":"waiting for you","role":"label","comment":"still waiting, not answered input_required"}

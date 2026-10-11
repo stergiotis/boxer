@@ -30,13 +30,19 @@ Tagged slow with the other scenes of the person being away.
 {"do":"note","text":"ADR-0269: cancel withdraws a held call"}
 {"do":"wait","valueContains":"→ scripted","role":"label"}
 {"do":"click","contains":"Send","role":"button"}
-{"do":"wait","valueContains":"asks to start a task","role":"label"}
+{"do":"wait","contains":"your turn","role":"button","comment":"the request waits in the person's queue (ADR-0324)"}
+{"do":"click","contains":"your turn","role":"button"}
+{"do":"click","contains":"Next","role":"button","comment":"its card, non-modal"}
+{"do":"wait","valueContains":"asks to start a task","role":"label","nth":0}
 {"do":"click","name":"Approve","role":"button","settleMs":1500}
 {"do":"wait","contains":"agent · act","role":"button"}
 {"do":"click","contains":"agent · act","role":"button","settleMs":500,"comment":"the play window's badge"}
 {"do":"click","name":"observe","settleMs":500}
 {"do":"key","text":"Escape","settleMs":300}
-{"do":"wait","valueContains":"asks to call set_sql","role":"label"}
+{"do":"wait","contains":"your turn","role":"button","comment":"the request waits in the person's queue (ADR-0324)"}
+{"do":"click","contains":"your turn","role":"button"}
+{"do":"click","contains":"Next","role":"button","comment":"its card, non-modal"}
+{"do":"wait","valueContains":"asks to call set_sql","role":"label","nth":0}
 {"do":"wait","valueContains":"waiting for you","role":"label"}
 {"do":"click","contains":"Cancel","role":"button","comment":"the person stops the turn"}
 {"do":"wait","contains":"Send","role":"button"}

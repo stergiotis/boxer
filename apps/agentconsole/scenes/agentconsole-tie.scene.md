@@ -40,18 +40,18 @@ the second, and an id is a function of the window and the widget's path.
 {"do":"wait","valueContains":"grant task-","role":"label"}
 {"do":"click","name":"Call","role":"button","comment":"k1: get_state with {}, the read the writes below start from"}
 {"do":"wait","valueContains":"k1 · get_state · completed","role":"label"}
-{"do":"focus","id":3557791720187110425,"comment":"the console's operation field"}
+{"do":"focus","id":17222585601186924707,"comment":"the console's operation field"}
 {"do":"key","text":"A","modifiers":16}
-{"do":"type","id":3557791720187110425,"text":"set_note"}
-{"do":"focus","id":13823422873042478622,"comment":"the console's arguments field"}
+{"do":"type","id":17222585601186924707,"text":"set_note"}
+{"do":"focus","id":7028873545952381604,"comment":"the console's arguments field"}
 {"do":"key","text":"A","modifiers":16}
-{"do":"type","id":13823422873042478622,"text":"{\"text\":\"from the agent\"}"}
+{"do":"type","id":7028873545952381604,"text":"{\"text\":\"from the agent\"}"}
 {"do":"click","name":"Call","role":"button","comment":"k2: no expectation given, so the dispatcher uses the revision k1 read"}
 {"do":"wait","valueContains":"k2 · set_note · rendered","role":"label","settleMs":500}
-{"do":"read","id":10593799850196568197,"pattern":"^(?P<agentValue>from the agent)$","comment":"the demo's note took the command's value"}
-{"do":"focus","id":10593799850196568197,"comment":"the demo's note"}
-{"do":"type","id":10593799850196568197,"text":" and the person","comment":"the person's edit lands in the write-back and moves the note's revision"}
-{"do":"read","id":10593799850196568197,"pattern":"(?P<merged>from the agent.*and the person|and the person.*from the agent)","comment":"the edit builds on the command's value"}
+{"do":"read","id":12013363430533946716,"pattern":"^(?P<agentValue>from the agent)$","comment":"the demo's note took the command's value"}
+{"do":"focus","id":12013363430533946716,"comment":"the demo's note"}
+{"do":"type","id":12013363430533946716,"text":" and the person","comment":"the person's edit lands in the write-back and moves the note's revision"}
+{"do":"read","id":12013363430533946716,"pattern":"(?P<merged>from the agent.*and the person|and the person.*from the agent)","comment":"the edit builds on the command's value"}
 {"do":"click","name":"Call","role":"button","comment":"k3: set_note again; the person changed what the task read"}
 {"do":"wait","valueContains":"k3 · set_note · refused · paused","role":"label","comment":"the dispatcher pauses the task here until its next turn"}
 {"do":"wait","contains":"agent · act · paused","role":"button","comment":"the badge says so"}
@@ -60,22 +60,22 @@ the second, and an id is a function of the window and the widget's path.
 {"do":"click","name":"Call","role":"button","comment":"k4: set_note without reading again, still expecting the revision k2 left"}
 {"do":"wait","valueContains":"k4 · set_note · conflict","role":"label","comment":"the queue's re-check: the person's write-back moved the note"}
 {"do":"wait","valueContains":"moved since it was read","role":"label"}
-{"do":"read","id":10593799850196568197,"pattern":"(?P<kept>and the person)","comment":"the person's text stands"}
+{"do":"read","id":12013363430533946716,"pattern":"(?P<kept>and the person)","comment":"the person's text stands"}
 {"do":"capture","text":"agentconsole-tie"}
-{"do":"focus","id":3557791720187110425}
+{"do":"focus","id":17222585601186924707}
 {"do":"key","text":"A","modifiers":16}
-{"do":"type","id":3557791720187110425,"text":"get_state"}
-{"do":"focus","id":13823422873042478622}
+{"do":"type","id":17222585601186924707,"text":"get_state"}
+{"do":"focus","id":7028873545952381604}
 {"do":"key","text":"A","modifiers":16}
-{"do":"type","id":13823422873042478622,"text":"{}"}
+{"do":"type","id":7028873545952381604,"text":"{}"}
 {"do":"click","name":"Call","role":"button","comment":"k5: read again"}
 {"do":"wait","valueContains":"k5 · get_state · completed","role":"label"}
-{"do":"focus","id":3557791720187110425}
+{"do":"focus","id":17222585601186924707}
 {"do":"key","text":"A","modifiers":16}
-{"do":"type","id":3557791720187110425,"text":"set_level"}
-{"do":"focus","id":13823422873042478622}
+{"do":"type","id":17222585601186924707,"text":"set_level"}
+{"do":"focus","id":7028873545952381604}
 {"do":"key","text":"A","modifiers":16}
-{"do":"type","id":13823422873042478622,"text":"{\"level\":80}"}
+{"do":"type","id":7028873545952381604,"text":"{\"level\":80}"}
 {"do":"click","name":"Call","role":"button","comment":"k6: a write after a fresh read applies"}
 {"do":"wait","valueContains":"k6 · set_level · rendered","role":"label"}
 {"do":"read","valueContains":"level 80.0","role":"label","pattern":"level (?P<level>[\\d.]+)"}

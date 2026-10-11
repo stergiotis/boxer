@@ -46,8 +46,8 @@ stands in for the person's approval.
 {"do":"click","name":"Read","role":"radio_button","comment":"At most: read"}
 {"do":"wait","valueContains":"now read · may read","role":"label","settleMs":500}
 {"do":"capture","text":"chat-settings-read"}
-{"do":"focus","id":13282790709624229129,"comment":"the chat's composer"}
-{"do":"type","id":13282790709624229129,"text":"Write it again."}
+{"do":"focus","id":10519974525881031313,"comment":"the chat's composer"}
+{"do":"type","id":10519974525881031313,"text":"Write it again."}
 {"do":"click","contains":"Send","role":"button","comment":"turn 2"}
 {"do":"wait","valueContains":"The settings let me only read now","role":"label","settleMs":1000}
 {"do":"wait","valueContains":"set_note in window 2 · refused","role":"label","comment":"refused by the host, above the ceiling"}

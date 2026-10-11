@@ -30,10 +30,16 @@ reads its outcome. Tagged slow, since it waits out the deadline.
 {"do":"note","text":"ADR-0269: a late task's held call is reported as held"}
 {"do":"wait","valueContains":"→ scripted","role":"label"}
 {"do":"click","contains":"Send","role":"button"}
-{"do":"wait","valueContains":"asks to start a task","role":"label"}
+{"do":"wait","contains":"your turn","role":"button","comment":"the request waits in the person's queue (ADR-0324)"}
+{"do":"click","contains":"your turn","role":"button"}
+{"do":"click","contains":"Next","role":"button","comment":"its card, non-modal"}
+{"do":"wait","valueContains":"asks to start a task","role":"label","nth":0}
 {"do":"click","name":"Approve","role":"button"}
 {"do":"sleep","settleMs":12000,"comment":"the model takes its time; the deadline passes"}
-{"do":"wait","valueContains":"deadline has passed","role":"label"}
+{"do":"wait","contains":"your turn","role":"button","comment":"the request waits in the person's queue (ADR-0324)"}
+{"do":"click","contains":"your turn","role":"button"}
+{"do":"click","contains":"Next","role":"button","comment":"its card, non-modal"}
+{"do":"wait","valueContains":"deadline has passed","role":"label","nth":0}
 {"do":"wait","valueContains":"waiting for you","role":"label"}
 {"do":"sleep","settleMs":11000,"comment":"past the chat's ten seconds"}
 {"do":"wait","valueContains":"waiting for you","role":"label"}
