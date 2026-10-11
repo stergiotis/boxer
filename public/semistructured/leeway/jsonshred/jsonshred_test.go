@@ -208,3 +208,34 @@ func FuzzLosslessRoundTrip(f *testing.F) {
 		require.Equal(t, string(want), string(got))
 	})
 }
+
+// A number is classified by its value, not its spelling: an integer
+// written with an exponent is the integer, which is how the canonical form
+// writes it back, and negative zero stays a float, whose sign the
+// canonical form keeps. Either way the canonical form explodes as the
+// document did.
+func TestNumbersAreClassifiedByValue(t *testing.T) {
+	for _, c := range []struct {
+		raw string
+		sec SectionE
+		v   any
+	}{
+		{"1e+02", SectionI64, int64(100)},
+		{"1e+00", SectionI64, int64(1)},
+		{"100.0", SectionI64, int64(100)},
+		{"1e+21", SectionF64, 1e21},
+		{"-0", SectionF64, math.Copysign(0, -1)},
+		{"-0.0", SectionF64, math.Copysign(0, -1)},
+	} {
+		sec, v := Number(c.raw)
+		assert.Equal(t, c.sec, sec, c.raw)
+		assert.Equal(t, c.v, v, c.raw)
+		attrs, err := Explode([]byte(c.raw), Options{})
+		require.NoError(t, err)
+		canon, err := Canonical([]byte(c.raw))
+		require.NoError(t, err)
+		again, err := Explode(canon, Options{})
+		require.NoError(t, err)
+		assert.Equal(t, attrs, again, "%s and its canonical form %s explode alike", c.raw, canon)
+	}
+}

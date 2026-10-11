@@ -34,6 +34,7 @@ import (
 	"bytes"
 	"encoding/json/jsontext"
 	"io"
+	"math"
 	"math/big"
 	"slices"
 	"strconv"
@@ -227,12 +228,19 @@ func (inst *exploder) value(dec *jsontext.Decoder, path string, params []uint64)
 	return
 }
 
-// Number classifies a JSON number's text: an integer within int64 is
-// SectionI64; a number whose shortest float64 form is the same number is
-// SectionF64; anything else keeps its text, SectionString.
+// Number classifies a JSON number by its value, not its spelling: an
+// integer within int64 is SectionI64; another number whose shortest
+// float64 form is the same number is SectionF64; anything else keeps its
+// text, SectionString. A float64 whose shortest form is plain digits
+// (`1e+02` is 100) is the integer it names, since that is how the
+// canonical form writes it and how the canonical form reads back.
+// Negative zero stays a float64, whose sign the canonical form keeps.
 func Number(raw string) (sec SectionE, v any) {
 	if !strings.ContainsAny(raw, ".eE") {
 		if i, err := strconv.ParseInt(raw, 10, 64); err == nil {
+			if i == 0 && strings.HasPrefix(raw, "-") {
+				return SectionF64, math.Copysign(0, -1)
+			}
 			return SectionI64, i
 		}
 		return SectionString, raw
@@ -241,10 +249,16 @@ func Number(raw string) (sec SectionE, v any) {
 	if err != nil {
 		return SectionString, raw
 	}
+	short := FormatFloat(f)
 	want, ok1 := new(big.Rat).SetString(raw)
-	got, ok2 := new(big.Rat).SetString(FormatFloat(f))
+	got, ok2 := new(big.Rat).SetString(short)
 	if !ok1 || !ok2 || want.Cmp(got) != 0 {
 		return SectionString, raw
+	}
+	if !strings.ContainsAny(short, ".eE") && !(f == 0 && math.Signbit(f)) {
+		if i, ierr := strconv.ParseInt(short, 10, 64); ierr == nil {
+			return SectionI64, i
+		}
 	}
 	return SectionF64, f
 }
