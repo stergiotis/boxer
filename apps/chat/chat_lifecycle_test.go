@@ -16,6 +16,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/agentrun"
 	"github.com/stergiotis/boxer/public/keelson/runtime/agentrun/projection"
 	"github.com/stergiotis/boxer/public/keelson/runtime/inprocbus"
+	"github.com/stergiotis/boxer/public/keelson/runtime/lifetime"
 	"github.com/stergiotis/boxer/public/keelson/runtime/llm"
 	"github.com/stergiotis/boxer/public/llm/openaichat"
 )
@@ -236,4 +237,27 @@ func TestTheEffectClassIsTheCatalogsInTheDefaultConfig(t *testing.T) {
 	assert.Equal(t, agentrun.EffectNone, effects[`{"window":100,"operation":"get_note","args":{}}`], "a query")
 	assert.Equal(t, agentrun.EffectDocument, effects[`{"window":100,"operation":"set_note","args":{"text":"tidied"}}`], "the catalog's class")
 	assert.Equal(t, agentrun.EffectConsequential, effects[`{"window":999,"operation":"set_note","args":{"text":"x"}}`], "a window nothing listed")
+}
+
+// A window that closes while a turn runs keeps its bus until the run is
+// closed (ADR-0322, proposed): the coordinator's scope is a child of the
+// window's, so the host's drain, which ends before the bus closes, ends
+// only after the stopped turn wrote its tail and the late close landed.
+func TestTheWindowDrainWaitsForTheRunsClose(t *testing.T) {
+	store := slowCloseStore{agentrun.NewMemStore(), 200 * time.Millisecond}
+	inst := appOver(t, blockingModel{}, store)
+	window := lifetime.New(nil)
+	inst.scope = window
+	inst.coord = inst.newCoordinator(inst.conv.id)
+	inst.coord.store = store
+	require.True(t, inst.startTurn("q1"))
+	id := inst.conv.id
+	require.Eventually(t, func() bool { r, ok, _ := store.GetRun(context.Background(), id); return ok && r.State == agentrun.StateOpen }, 5*time.Second, 5*time.Millisecond)
+	window.Retire()
+	require.NoError(t, inst.Unmount(nil))
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	require.NoError(t, window.Drain(ctx))
+	r, _, _ := store.GetRun(context.Background(), id)
+	assert.Equal(t, agentrun.StateClosed, r.State, "the close landed before the drain ended")
 }

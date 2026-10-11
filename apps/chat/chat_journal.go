@@ -86,7 +86,7 @@ type journalSettings struct {
 // next turn, the chain verified, and the record says so.
 func (inst *coordinator) openJournal(ctx context.Context, keep bool) (w *agentrun.Writer, err error) {
 	inst.mu.Lock()
-	w, store, retired, failed := inst.journal, inst.store, inst.retired, inst.journalFailed
+	w, store, retired, failed := inst.journal, inst.store, inst.scope.IsRetired(), inst.journalFailed
 	apps, questions, art := inst.apps, inst.questions, inst.art != nil
 	ceiling := inst.ceiling
 	inst.mu.Unlock()
@@ -596,50 +596,26 @@ func durableHeads(entries []agentrun.Entry) (out []agentrun.Entry) {
 	return
 }
 
-// retire ends the coordinator's run: now, when no turn runs over it, or
-// from the turn's own exit once it has written its tail, so the close
-// never cuts a turn's record short. closed is done once the run is.
+// retire ends the coordinator's run: its scope is retired, and the run
+// closes once no turn runs over it — at once when none does, else after
+// the last turn has written its tail — so the close never cuts a turn's
+// record short. The scope is done once the run is.
 func (inst *coordinator) retire() {
-	inst.mu.Lock()
-	inst.retired = true
-	running := inst.turns > 0
-	inst.mu.Unlock()
-	if running {
-		return
-	}
-	go inst.closeJournal()
+	inst.scope.Retire()
 }
 
 // enterTurn counts a turn in, unless the coordinator retired already: a
-// turn that starts after the conversation moved on writes nothing.
-// leaveTurn counts it out and closes the run when the coordinator retired
-// meanwhile.
-func (inst *coordinator) enterTurn() (entered bool) {
-	inst.mu.Lock()
-	defer inst.mu.Unlock()
-	if inst.retired {
-		return false
-	}
-	inst.turns++
-	return true
-}
-
-func (inst *coordinator) leaveTurn() {
-	inst.mu.Lock()
-	inst.turns--
-	closing := inst.turns == 0 && inst.retired
-	inst.mu.Unlock()
-	if closing {
-		inst.closeJournal()
-	}
+// turn that starts after the conversation moved on writes nothing. leave
+// counts it out.
+func (inst *coordinator) enterTurn() (leave func(), entered bool) {
+	return inst.scope.Enter()
 }
 
 // closeJournal ends the run: a last head, then the close (ADR-0314
 // §SD3), under its own bound since the conversation that owned it is
-// gone. A run that is stranded or deleted stays as it is. closed is done
-// afterwards, whatever happened.
-func (inst *coordinator) closeJournal() {
-	defer inst.closeOnce.Do(func() { close(inst.closed) })
+// gone. A run that is stranded or deleted stays as it is. It is the
+// scope's drain hook: tail ends only if the host abandons the drain.
+func (inst *coordinator) closeJournal(tail context.Context) {
 	w := inst.journalNow()
 	if w == nil {
 		return
@@ -648,7 +624,7 @@ func (inst *coordinator) closeJournal() {
 	case agentrun.StateStranded, agentrun.StateDeleted:
 		return
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), agentrun.DefaultTimeout)
+	ctx, cancel := context.WithTimeout(tail, agentrun.DefaultTimeout)
 	defer cancel()
 	inst.shipHead(ctx, w, func(c headstore.Cadence) bool { return c.PerRunClose })
 	if err := w.Close(ctx, agentrun.StateClosed); err != nil {
@@ -661,7 +637,7 @@ func (inst *coordinator) closeJournal() {
 // closes, so the wait is only for a retired one.
 func (inst *coordinator) awaitClosed(ctx context.Context) (closed bool) {
 	select {
-	case <-inst.closed:
+	case <-inst.scope.Done():
 		return true
 	case <-ctx.Done():
 		return false

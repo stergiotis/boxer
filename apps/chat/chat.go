@@ -22,7 +22,9 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/bgjob"
 	"github.com/stergiotis/boxer/public/keelson/runtime/headstore"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect/keelsonquery"
+	"github.com/stergiotis/boxer/public/keelson/runtime/lifetime"
 	"github.com/stergiotis/boxer/public/keelson/runtime/llm"
+	"github.com/stergiotis/boxer/public/keelson/runtime/task"
 	"github.com/stergiotis/boxer/public/thestack/fffi2/typed"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/chatview"
@@ -133,6 +135,14 @@ type App struct {
 	// from, by run id, until their runs are closed: a resume of such a run
 	// waits for the close rather than racing it (ADR-0308 §SD9).
 	retiring map[string]*coordinator
+	// scope is the window's lifetime (app.LifetimeI): every coordinator's
+	// is a child of it, so the host waits for a retired run's close before
+	// it closes the bus. nil without a host, where each coordinator owns
+	// its own.
+	scope *lifetime.Scope
+	// tasks spawns the turn as a keelson task, which the task monitor shows
+	// and can cancel; nil without a host.
+	tasks task.TaskApiI
 	// later holds the actions clicked while the transcript draws, run
 	// once it is drawn.
 	later []func()
@@ -186,6 +196,7 @@ func (inst *App) Mount(ctx app.MountContextI) (err error) {
 	inst.ids = ctx.Ids()
 	inst.log = ctx.Log()
 	inst.runId, inst.window = ctx.RunId(), ctx.InstanceKey()
+	inst.scope = app.LifetimeOf(ctx)
 	inst.turnChip = inst.newTurnChip()
 	bus := ctx.Bus()
 	if bus == nil {
@@ -194,6 +205,7 @@ func (inst *App) Mount(ctx app.MountContextI) (err error) {
 	}
 	cli := llm.NewClient(bus)
 	inst.cli, inst.bus = cli, bus
+	inst.tasks = task.ForApp(ctx)
 	for i := range inst.bandKeys {
 		inst.bandKeys[i] = ecdf.BandJobKey(inst.ids.ProbeSeq("chat-stats-band-" + strconv.Itoa(i)))
 	}
@@ -220,7 +232,9 @@ func (inst *App) Unmount(ctx app.MountContextI) (err error) {
 	inst.turn.Cancel()
 	if inst.coord != nil {
 		// The run closes with its last head (ADR-0314 §SD3), once the
-		// cancelled turn has written its tail.
+		// cancelled turn has written its tail; the host drains the
+		// window's scope before it closes the bus the close is written
+		// over.
 		inst.coord.retire()
 	}
 	inst.describe.Cancel()
@@ -367,7 +381,7 @@ func (inst *App) startTurn(text string) (started bool) {
 	// The limit the turn runs under, for its progress line.
 	coord.setRounds(limit)
 	logProfile()
-	ok := inst.turn.StartReporting(nil, bgjob.Spec{Kind: "chat-turn", Title: "answer"},
+	ok := inst.turn.StartReporting(inst.tasks, bgjob.Spec{Kind: "chat-turn", Title: "answer"},
 		func(ctx context.Context, report bgjob.Reporter) (res *turnResult, err error) {
 			return runTurn(ctx, cli, coord, req, func(round int, doing string) {
 				note := "round " + strconv.Itoa(round+1) + " of " + strconv.Itoa(limit)
@@ -391,7 +405,7 @@ func (inst *App) startTurn(text string) (started bool) {
 // newCoordinator is a coordinator for a conversation, writing its journal
 // through the host's service and knowing its route.
 func (inst *App) newCoordinator(conversation string) (coord *coordinator) {
-	coord = newCoordinator(inst.agentCli, inst.kq, conversation)
+	coord = newCoordinatorIn(inst.scope, inst.agentCli, inst.kq, conversation)
 	switch {
 	case inst.journals != nil:
 		coord.store = inst.journals

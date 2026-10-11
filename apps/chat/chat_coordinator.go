@@ -15,6 +15,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/agentrun"
 	"github.com/stergiotis/boxer/public/keelson/runtime/headstore"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect/keelsonquery"
+	"github.com/stergiotis/boxer/public/keelson/runtime/lifetime"
 	"github.com/stergiotis/boxer/public/keelson/runtime/llm"
 	"github.com/stergiotis/boxer/public/keelson/runtime/queryengine"
 	"github.com/stergiotis/boxer/public/keelson/runtime/trail"
@@ -191,26 +192,31 @@ type coordinator struct {
 	// (chat_endorse.go).
 	lastWriter  writerRef
 	lastDecided string
-	// turns counts the turns running over this coordinator, and retired
-	// says the conversation moved on: the run closes once the last turn
-	// has written its tail (chat_journal.go retire). Guarded by mu.
-	turns   int
-	retired bool
-	// closed is done once the run is closed after a retire; closeOnce
-	// guards it. journalFailed says the writer refused a write and the next
-	// turn reopens the run before its first act.
-	closed        chan struct{}
-	closeOnce     sync.Once
+	// scope is the conversation's lifetime (ADR-0322, proposed): a turn
+	// counts itself in, retire retires it, and the run closes once the last
+	// turn has written its tail (chat_journal.go retire). A child of the
+	// window's scope, so the host's drain waits for the close.
+	scope *lifetime.Scope
+	// journalFailed says the writer refused a write and the next turn
+	// reopens the run before its first act.
 	journalFailed bool
 }
 
 // newCoordinator is a coordinator over an in-process journal store; the
 // app replaces the store with the host's service before the first act.
 func newCoordinator(cli *agent.Client, kq *keelsonquery.Client, conversation string) (inst *coordinator) {
-	return &coordinator{cli: cli, kq: kq, conversation: conversation, opTools: OperationToolsSeed.Get(), ask: &asker{}, steps: &turnSteps{},
+	return newCoordinatorIn(nil, cli, kq, conversation)
+}
+
+// newCoordinatorIn is newCoordinator with its lifetime a child of parent; a
+// nil parent makes it a root the coordinator owns.
+func newCoordinatorIn(parent *lifetime.Scope, cli *agent.Client, kq *keelsonquery.Client, conversation string) (inst *coordinator) {
+	inst = &coordinator{cli: cli, kq: kq, conversation: conversation, opTools: OperationToolsSeed.Get(), ask: &asker{}, steps: &turnSteps{},
 		ceiling: defaultPermissions().ceiling(true), store: agentrun.NewVaulted(agentrun.NewMemStore(), agentrun.NewMemBodyStore()),
 		refused: make(map[string]string), typed: make(map[string]typedOp), opCache: make(map[string][]agent.Operation), windowApps: make(map[uint64]string),
-		opEffects: make(map[string]map[string]string), closed: make(chan struct{})}
+		opEffects: make(map[string]map[string]string), scope: lifetime.New(parent)}
+	inst.scope.OnDrained(inst.closeJournal)
+	return
 }
 
 // setOptions takes the window's settings: the ceiling and whether each

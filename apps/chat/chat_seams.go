@@ -384,14 +384,17 @@ func runTurn(ctx context.Context, cli completerI, coord *coordinator, req llm.Re
 	}()
 	// The journal is written under a context a Stop does not end: what
 	// happened is recorded whether or not the person waited for it.
-	jctx := journalCtx(ctx)
-	if !coord.enterTurn() {
+	// It is the scope's tail: it ends only when the host abandons the
+	// window's drain (ADR-0322, proposed).
+	jctx := coord.scope.Tail(ctx)
+	leave, entered := coord.enterTurn()
+	if !entered {
 		// The conversation moved on before the turn began: nothing is
 		// written for a turn that will not be shown.
 		err = eb.Build().Str("conversation", coord.conversation).Errorf("the conversation was replaced")
 		return
 	}
-	defer coord.leaveTurn()
+	defer leave()
 	w, err := coord.openJournal(jctx, req.Retain)
 	if err != nil {
 		return

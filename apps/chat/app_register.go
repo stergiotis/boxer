@@ -16,6 +16,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect/keelsonquery"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect/providersgui"
 	"github.com/stergiotis/boxer/public/keelson/runtime/llm"
+	"github.com/stergiotis/boxer/public/keelson/runtime/task"
 	"github.com/stergiotis/boxer/public/keelson/runtime/windowhost"
 )
 
@@ -54,6 +55,9 @@ var manifest = app.Manifest{
 		agentrun.ClientCaps("chat: write and read the conversation's run journal"),
 		// Chain heads to the anchor store at each turn's end (ADR-0314).
 		headstore.ClientCaps("chat: anchor the journal's chain heads"),
+		// The turn is a keelson task (ADR-0322, proposed): the task monitor
+		// shows and cancels it, and the window's drain waits for it.
+		task.ProducerCaps(),
 		// The desktop as data (ADR-0276 §SD2): every window's state and the
 		// work area, for the coordinator's query_windows.
 		keelsonquery.ClientCaps(providersgui.TableWindows, providersgui.TableDesktop),
