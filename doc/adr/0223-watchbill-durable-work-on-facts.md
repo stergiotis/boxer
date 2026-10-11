@@ -517,7 +517,13 @@ faithfully in place: anything but one plain scalar per section, on a static
 low-cardinality membership, in a section no other component shares. The
 caller reads the row back and decides whether it won, as the watchbill claim
 does. The run journal's run table is the first consumer (ADR-0308 §SD9's
-Update of this date). The watchbill claim moves onto it in a later step.
+Update of this date). The watchbill job table is the second: it is
+generated Cas, so `EnsureTable` carries the settings. `claim.go` takes its
+column names from the generated constants instead of a regular expression
+over the DDL, and its sets and guards from the typed helpers. Its pinned
+statements are byte-identical, and the store still runs them as written:
+`UpdateIf` brackets its guard and refuses an empty one, and the cancel
+request is deliberately unguarded.
 
 ## References
 

@@ -40,6 +40,7 @@ func TestGenerateWatchbillStores(t *testing.T) {
 		OutDir:         ".",
 		ImportPath:     importPath,
 		Wrapper:        marshallgen.FixedIdsWrapper{Ids: ids},
+		Cas:            true,
 	}.Generate())
 
 	eventManip, err := GetEventSchemaInManipulator()

@@ -9,7 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// The value columns are read out of the generated DDL; every section the
+// The value columns come from the generated constants; every section the
 // statements name must resolve, and the names must be the DDL's.
 func TestValueColumnsResolveFromTheGeneratedDDL(t *testing.T) {
 	for _, s := range []string{"jobKind", "jobState", "jobAttempt", "jobRunAfter", "jobWorkerRun", "jobFinishedAt", "jobLastError", "jobPriority"} {
@@ -76,7 +76,7 @@ func TestSweepAndExpireSQL(t *testing.T) {
 	assert.Equal(t, `"tv:jobState:value:val:s:24:::0::data"[1] IN ('running', 'cancel') AND "tv:jobWorkerRun:value:val:s:24:::0::data"[1] = 'r1'`, HeldPredicate([]string{StateRunning, StateCancel}, "r1"))
 	assert.Equal(t, `"tv:jobState:value:val:s:24:::0::data"[1] IN ('running')`, HeldPredicate([]string{StateRunning}, ""))
 	assert.Equal(t, `DELETE FROM wb.watchbill WHERE "tv:jobState:value:val:s:24:::0::data"[1] IN ('succeeded', 'discarded', 'cancelled', 'abandoned') AND "tv:jobFinishedAt:value:val:z64:4:::0::data"[1] < fromUnixTimestamp64Nano(1788955200000000000) SETTINGS lightweight_delete_mode='lightweight_update'`, ExpireSQL(testLayout, testNow))
-	assert.Equal(t, "ALTER TABLE wb.watchbill MODIFY SETTING enable_block_number_column=1, enable_block_offset_column=1", AlterJobTableSettingsSQL(testLayout))
+	assert.Contains(t, watchbillDDLCreate, "enable_block_number_column=1, enable_block_offset_column=1", "the job table is generated Cas")
 }
 
 func TestLayoutDefaults(t *testing.T) {

@@ -10,6 +10,7 @@ package watchbillstore
 import (
 	"context"
 	_ "embed"
+	"encoding/hex"
 	"iter"
 	"strconv"
 	"strings"
@@ -29,6 +30,7 @@ import (
 	"github.com/stergiotis/boxer/public/semistructured/leeway/marshall/clickhouse/componentsql"
 	raruntime "github.com/stergiotis/boxer/public/semistructured/leeway/readaccess/runtime"
 	"github.com/stergiotis/boxer/public/storage/recordstore"
+	"github.com/stergiotis/boxer/public/storage/recordstore/rowcas"
 )
 
 // The complete CREATE TABLE composed at generation time through the
@@ -316,6 +318,10 @@ func (inst *JobStore) EnsureTable(ctx context.Context) (err error) {
 	if inst.cfg.DDLTail != "" {
 		stmts[len(stmts)-1] += " " + inst.cfg.DDLTail
 	}
+	// A table created before the block-position settings gains them;
+	// MODIFY SETTING is idempotent and the one ALTER a compare-and-set
+	// table admits (rowcas).
+	stmts = append(stmts, rowcas.AlterTableSettingsSQL(inst.writeTable()))
 	for _, sql := range stmts {
 		err = inst.exec.Exec(ctx, sql)
 		if err != nil {
@@ -1090,6 +1096,266 @@ func (inst *JobStore) Replay(ctx context.Context, key string, fromOrder time.Tim
 	}
 	sql += watchbillArrowOutputSettings
 	return inst.iterateEntities(ctx, sql)
+}
+
+// UpdateIf is the compare-and-set on key's row (ADR-0223 §SD3): one
+// lightweight update, guarded by where on the row's current values, that
+// applies sets. It does not report whether it won — the caller reads the
+// row back and decides, since the read-back is the answer. where is SQL
+// over the physical columns, trusted input only (the <Kind>Guard<Field>
+// helpers render it); an empty one is refused, since an unguarded update
+// is not a compare-and-set. A key with buffered, unflushed rows is
+// refused too: the update sees only flushed rows. Attached cache views
+// drop the key, so the next read refetches what the update left.
+//
+// The table lives under rowcas's conditions: the sequential update mode
+// on every statement, the block-position settings (EnsureTable applies
+// them), no heavyweight mutation ever, an immutable key, no async_insert
+// on the claim path, and one server (ADR-0319 §SD1).
+func (inst *JobStore) UpdateIf(ctx context.Context, key string, where string, sets ...rowcas.Set) (err error) {
+	if strings.TrimSpace(where) == "" {
+		return eh.Errorf("compare-and-set without a guard")
+	}
+	if len(sets) == 0 {
+		return eh.Errorf("compare-and-set with nothing to set")
+	}
+	if _, d := inst.dirty[key]; d {
+		return eh.Errorf("compare-and-set on a key with buffered rows; Flush first")
+	}
+	sql := rowcas.UpdateSQL(inst.writeTable(), sets, JobColKey+" = "+watchbillKeyLiteral(key)+" AND ("+where+")")
+	err = inst.exec.Exec(ctx, sql)
+	inst.notifyWrite(key, nil)
+	if err != nil {
+		err = eh.Errorf("compare-and-set on %s: %w", inst.writeTable(), err)
+	}
+	return
+}
+
+// The physical value columns of Job's fields: each section holds one
+// attribute, so element [1] is the field's value (Input.Cas).
+const (
+	JobValueColKind          = `"tv:jobKind:value:val:s:24:::0::data"`
+	JobValueColSubject       = `"tv:jobSubject:value:val:s:4:::0::data"`
+	JobValueColQueue         = `"tv:jobQueue:value:val:s:24:::0::data"`
+	JobValueColPriority      = `"tv:jobPriority:value:val:u32:4:::0::data"`
+	JobValueColMaxAttempts   = `"tv:jobMaxAttempts:value:val:u32:4:::0::data"`
+	JobValueColBackoff       = `"tv:jobBackoff:value:val:s:24:::0::data"`
+	JobValueColBackoffBaseMs = `"tv:jobBackoffBaseMs:value:val:u64:4:::0::data"`
+	JobValueColTimeoutMs     = `"tv:jobTimeoutMs:value:val:u64:4:::0::data"`
+	JobValueColOwnerAppId    = `"tv:jobOwnerApp:value:val:s:24:::0::data"`
+	JobValueColRequesterRun  = `"tv:jobRequesterRun:value:val:s:24:::0::data"`
+	JobValueColArgsKind      = `"tv:jobArgsKind:value:val:s:24:::0::data"`
+	JobValueColArgs          = `"tv:jobArgs:value:val:y:4:::0::data"`
+	JobValueColState         = `"tv:jobState:value:val:s:24:::0::data"`
+	JobValueColAttempt       = `"tv:jobAttempt:value:val:u32:4:::0::data"`
+	JobValueColRunAfter      = `"tv:jobRunAfter:value:val:z64:4:::0::data"`
+	JobValueColWorkerRun     = `"tv:jobWorkerRun:value:val:s:24:::0::data"`
+	JobValueColFinishedAt    = `"tv:jobFinishedAt:value:val:z64:4:::0::data"`
+	JobValueColLastError     = `"tv:jobLastError:value:val:s:4:::0::data"`
+)
+
+// JobSetKind rewrites Job.Kind in place, for UpdateIf.
+func JobSetKind(v string) rowcas.Set {
+	return rowcas.Set{Column: JobValueColKind, Expr: "[" + marshalling.EscapeString(v) + "]"}
+}
+
+// JobGuardKind is the guard "Job.Kind equals v", for UpdateIf.
+func JobGuardKind(v string) string {
+	return JobValueColKind + "[1] = " + marshalling.EscapeString(v)
+}
+
+// JobSetSubject rewrites Job.Subject in place, for UpdateIf.
+func JobSetSubject(v string) rowcas.Set {
+	return rowcas.Set{Column: JobValueColSubject, Expr: "[" + marshalling.EscapeString(v) + "]"}
+}
+
+// JobGuardSubject is the guard "Job.Subject equals v", for UpdateIf.
+func JobGuardSubject(v string) string {
+	return JobValueColSubject + "[1] = " + marshalling.EscapeString(v)
+}
+
+// JobSetQueue rewrites Job.Queue in place, for UpdateIf.
+func JobSetQueue(v string) rowcas.Set {
+	return rowcas.Set{Column: JobValueColQueue, Expr: "[" + marshalling.EscapeString(v) + "]"}
+}
+
+// JobGuardQueue is the guard "Job.Queue equals v", for UpdateIf.
+func JobGuardQueue(v string) string {
+	return JobValueColQueue + "[1] = " + marshalling.EscapeString(v)
+}
+
+// JobSetPriority rewrites Job.Priority in place, for UpdateIf.
+func JobSetPriority(v uint32) rowcas.Set {
+	return rowcas.Set{Column: JobValueColPriority, Expr: "[" + strconv.FormatUint(uint64(v), 10) + "]"}
+}
+
+// JobGuardPriority is the guard "Job.Priority equals v", for UpdateIf.
+func JobGuardPriority(v uint32) string {
+	return JobValueColPriority + "[1] = " + strconv.FormatUint(uint64(v), 10)
+}
+
+// JobSetMaxAttempts rewrites Job.MaxAttempts in place, for UpdateIf.
+func JobSetMaxAttempts(v uint32) rowcas.Set {
+	return rowcas.Set{Column: JobValueColMaxAttempts, Expr: "[" + strconv.FormatUint(uint64(v), 10) + "]"}
+}
+
+// JobGuardMaxAttempts is the guard "Job.MaxAttempts equals v", for UpdateIf.
+func JobGuardMaxAttempts(v uint32) string {
+	return JobValueColMaxAttempts + "[1] = " + strconv.FormatUint(uint64(v), 10)
+}
+
+// JobSetBackoff rewrites Job.Backoff in place, for UpdateIf.
+func JobSetBackoff(v string) rowcas.Set {
+	return rowcas.Set{Column: JobValueColBackoff, Expr: "[" + marshalling.EscapeString(v) + "]"}
+}
+
+// JobGuardBackoff is the guard "Job.Backoff equals v", for UpdateIf.
+func JobGuardBackoff(v string) string {
+	return JobValueColBackoff + "[1] = " + marshalling.EscapeString(v)
+}
+
+// JobSetBackoffBaseMs rewrites Job.BackoffBaseMs in place, for UpdateIf.
+func JobSetBackoffBaseMs(v uint64) rowcas.Set {
+	return rowcas.Set{Column: JobValueColBackoffBaseMs, Expr: "[" + strconv.FormatUint(uint64(v), 10) + "]"}
+}
+
+// JobGuardBackoffBaseMs is the guard "Job.BackoffBaseMs equals v", for UpdateIf.
+func JobGuardBackoffBaseMs(v uint64) string {
+	return JobValueColBackoffBaseMs + "[1] = " + strconv.FormatUint(uint64(v), 10)
+}
+
+// JobSetTimeoutMs rewrites Job.TimeoutMs in place, for UpdateIf.
+func JobSetTimeoutMs(v uint64) rowcas.Set {
+	return rowcas.Set{Column: JobValueColTimeoutMs, Expr: "[" + strconv.FormatUint(uint64(v), 10) + "]"}
+}
+
+// JobGuardTimeoutMs is the guard "Job.TimeoutMs equals v", for UpdateIf.
+func JobGuardTimeoutMs(v uint64) string {
+	return JobValueColTimeoutMs + "[1] = " + strconv.FormatUint(uint64(v), 10)
+}
+
+// JobSetOwnerAppId rewrites Job.OwnerAppId in place, for UpdateIf.
+func JobSetOwnerAppId(v string) rowcas.Set {
+	return rowcas.Set{Column: JobValueColOwnerAppId, Expr: "[" + marshalling.EscapeString(v) + "]"}
+}
+
+// JobGuardOwnerAppId is the guard "Job.OwnerAppId equals v", for UpdateIf.
+func JobGuardOwnerAppId(v string) string {
+	return JobValueColOwnerAppId + "[1] = " + marshalling.EscapeString(v)
+}
+
+// JobSetRequesterRun rewrites Job.RequesterRun in place, for UpdateIf.
+func JobSetRequesterRun(v string) rowcas.Set {
+	return rowcas.Set{Column: JobValueColRequesterRun, Expr: "[" + marshalling.EscapeString(v) + "]"}
+}
+
+// JobGuardRequesterRun is the guard "Job.RequesterRun equals v", for UpdateIf.
+func JobGuardRequesterRun(v string) string {
+	return JobValueColRequesterRun + "[1] = " + marshalling.EscapeString(v)
+}
+
+// JobSetArgsKind rewrites Job.ArgsKind in place, for UpdateIf.
+func JobSetArgsKind(v string) rowcas.Set {
+	return rowcas.Set{Column: JobValueColArgsKind, Expr: "[" + marshalling.EscapeString(v) + "]"}
+}
+
+// JobGuardArgsKind is the guard "Job.ArgsKind equals v", for UpdateIf.
+func JobGuardArgsKind(v string) string {
+	return JobValueColArgsKind + "[1] = " + marshalling.EscapeString(v)
+}
+
+// JobSetArgs rewrites Job.Args in place, for UpdateIf.
+func JobSetArgs(v []byte) rowcas.Set {
+	return rowcas.Set{Column: JobValueColArgs, Expr: "[" + "unhex('" + hex.EncodeToString(v) + "')" + "]"}
+}
+
+// JobGuardArgs is the guard "Job.Args equals v", for UpdateIf.
+func JobGuardArgs(v []byte) string {
+	return JobValueColArgs + "[1] = " + "unhex('" + hex.EncodeToString(v) + "')"
+}
+
+// JobSetState rewrites Job.State in place, for UpdateIf.
+func JobSetState(v string) rowcas.Set {
+	return rowcas.Set{Column: JobValueColState, Expr: "[" + marshalling.EscapeString(v) + "]"}
+}
+
+// JobGuardState is the guard "Job.State equals v", for UpdateIf.
+func JobGuardState(v string) string {
+	return JobValueColState + "[1] = " + marshalling.EscapeString(v)
+}
+
+// JobSetAttempt rewrites Job.Attempt in place, for UpdateIf.
+func JobSetAttempt(v uint32) rowcas.Set {
+	return rowcas.Set{Column: JobValueColAttempt, Expr: "[" + strconv.FormatUint(uint64(v), 10) + "]"}
+}
+
+// JobGuardAttempt is the guard "Job.Attempt equals v", for UpdateIf.
+func JobGuardAttempt(v uint32) string {
+	return JobValueColAttempt + "[1] = " + strconv.FormatUint(uint64(v), 10)
+}
+
+// JobSetRunAfter rewrites Job.RunAfter in place, for UpdateIf.
+func JobSetRunAfter(v time.Time) rowcas.Set {
+	return rowcas.Set{Column: JobValueColRunAfter, Expr: "[" + "fromUnixTimestamp64Nano(" + strconv.FormatInt(v.UnixNano(), 10) + ")" + "]"}
+}
+
+// JobGuardRunAfter is the guard "Job.RunAfter equals v", for UpdateIf.
+func JobGuardRunAfter(v time.Time) string {
+	return JobValueColRunAfter + "[1] = " + "fromUnixTimestamp64Nano(" + strconv.FormatInt(v.UnixNano(), 10) + ")"
+}
+
+// JobSetWorkerRun rewrites Job.WorkerRun in place, for UpdateIf.
+func JobSetWorkerRun(v string) rowcas.Set {
+	return rowcas.Set{Column: JobValueColWorkerRun, Expr: "[" + marshalling.EscapeString(v) + "]"}
+}
+
+// JobGuardWorkerRun is the guard "Job.WorkerRun equals v", for UpdateIf.
+func JobGuardWorkerRun(v string) string {
+	return JobValueColWorkerRun + "[1] = " + marshalling.EscapeString(v)
+}
+
+// JobSetFinishedAt rewrites Job.FinishedAt in place, for UpdateIf.
+func JobSetFinishedAt(v time.Time) rowcas.Set {
+	return rowcas.Set{Column: JobValueColFinishedAt, Expr: "[" + "fromUnixTimestamp64Nano(" + strconv.FormatInt(v.UnixNano(), 10) + ")" + "]"}
+}
+
+// JobGuardFinishedAt is the guard "Job.FinishedAt equals v", for UpdateIf.
+func JobGuardFinishedAt(v time.Time) string {
+	return JobValueColFinishedAt + "[1] = " + "fromUnixTimestamp64Nano(" + strconv.FormatInt(v.UnixNano(), 10) + ")"
+}
+
+// JobSetLastError rewrites Job.LastError in place, for UpdateIf.
+func JobSetLastError(v string) rowcas.Set {
+	return rowcas.Set{Column: JobValueColLastError, Expr: "[" + marshalling.EscapeString(v) + "]"}
+}
+
+// JobGuardLastError is the guard "Job.LastError equals v", for UpdateIf.
+func JobGuardLastError(v string) string {
+	return JobValueColLastError + "[1] = " + marshalling.EscapeString(v)
+}
+
+// JobSets rewrites every field of a Job in place: a whole-row update.
+func JobSets(row Job) []rowcas.Set {
+	return []rowcas.Set{
+		JobSetKind(row.Kind),
+		JobSetSubject(row.Subject),
+		JobSetQueue(row.Queue),
+		JobSetPriority(row.Priority),
+		JobSetMaxAttempts(row.MaxAttempts),
+		JobSetBackoff(row.Backoff),
+		JobSetBackoffBaseMs(row.BackoffBaseMs),
+		JobSetTimeoutMs(row.TimeoutMs),
+		JobSetOwnerAppId(row.OwnerAppId),
+		JobSetRequesterRun(row.RequesterRun),
+		JobSetArgsKind(row.ArgsKind),
+		JobSetArgs(row.Args),
+		JobSetState(row.State),
+		JobSetAttempt(row.Attempt),
+		JobSetRunAfter(row.RunAfter),
+		JobSetWorkerRun(row.WorkerRun),
+		JobSetFinishedAt(row.FinishedAt),
+		JobSetLastError(row.LastError),
+	}
 }
 
 // JobComponentSQL publishes this store's ADR-0066 read-back artefacts —

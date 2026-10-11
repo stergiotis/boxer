@@ -969,6 +969,9 @@ func (inst emitter) emitStoreHeader(sb *strings.Builder, key, order, lifecycle e
 	p("")
 	p("import (")
 	p("\t%q", "context")
+	if casNeedsHex(inst.cas) {
+		p("\t%q", "encoding/hex")
+	}
 	if !inst.ExternallyProvisioned {
 		p("\t_ %q", "embed")
 	}

@@ -40,6 +40,8 @@ func casLiteral(goType string, v string) string {
 		return "strconv.FormatBool(" + v + ")"
 	case "time.Time":
 		return "\"fromUnixTimestamp64Nano(\" + strconv.FormatInt(" + v + ".UnixNano(), 10) + \")\""
+	case "[]byte":
+		return "\"unhex('\" + hex.EncodeToString(" + v + ") + \"')\""
 	}
 	return ""
 }
@@ -98,10 +100,15 @@ func casFieldOk(kind, section string, f mappingplan.TaggedField) (err error) {
 }
 
 // casNeedsMarshalling reports whether a helper renders a string literal.
-func casNeedsMarshalling(cs []casComponent) bool {
+func casNeedsMarshalling(cs []casComponent) bool { return casUses(cs, "string") }
+
+// casNeedsHex reports whether a helper renders a byte-string literal.
+func casNeedsHex(cs []casComponent) bool { return casUses(cs, "[]byte") }
+
+func casUses(cs []casComponent, goType string) bool {
 	for _, c := range cs {
 		for _, f := range c.fields {
-			if f.goType == "string" {
+			if f.goType == goType {
 				return true
 			}
 		}

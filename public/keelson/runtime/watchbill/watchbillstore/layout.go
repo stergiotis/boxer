@@ -61,9 +61,10 @@ func (inst Stores) Close() {
 	}
 }
 
-// ProvisionIn creates both tables and puts the job table's settings in
-// place. Idempotent — every statement is IF NOT EXISTS or a MODIFY SETTING
-// — so it runs at every start.
+// ProvisionIn creates both tables; the job table's EnsureTable puts its
+// compare-and-set settings in place (it is generated Cas). Idempotent —
+// every statement is IF NOT EXISTS or a MODIFY SETTING — so it runs at
+// every start.
 func ProvisionIn(ctx context.Context, exec recordstore.ExecutorI, layout Layout) (err error) {
 	st := NewStores(exec, layout)
 	defer st.Close()
@@ -72,9 +73,6 @@ func ProvisionIn(ctx context.Context, exec recordstore.ExecutorI, layout Layout)
 	}
 	if err = st.Event.EnsureTable(ctx); err != nil {
 		return eh.Errorf("ensure event table: %w", err)
-	}
-	if err = exec.Exec(ctx, AlterJobTableSettingsSQL(layout)); err != nil {
-		return eh.Errorf("job table settings: %w", err)
 	}
 	return
 }
