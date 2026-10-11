@@ -28,6 +28,7 @@ import (
 var ErrWriteOnly = eh.New("the Arrow IPC stream executor is write-only")
 
 var _ recordstore.ExecutorI = (*StreamExecutor)(nil)
+var _ recordstore.InsertSettingsI = (*StreamExecutor)(nil)
 
 // StreamExecutor appends batches to one Arrow IPC stream. It is
 // single-goroutine like the store that drives it.
@@ -77,6 +78,12 @@ func (inst *StreamExecutor) InsertArrow(ctx context.Context, table string, recor
 		}
 	}
 	return
+}
+
+// InsertArrowWith is InsertArrow: a stream has no server for the settings
+// to reach, so there is nothing they could fail to apply to.
+func (inst *StreamExecutor) InsertArrowWith(ctx context.Context, table string, records []arrow.RecordBatch, settings recordstore.InsertSettings) (applied bool, err error) {
+	return true, inst.InsertArrow(ctx, table, records)
 }
 
 // Close finishes the stream (writing the schema when nothing was inserted)

@@ -212,6 +212,7 @@ type ObservingExecutor struct {
 }
 
 var _ ExecutorI = (*ObservingExecutor)(nil)
+var _ InsertSettingsI = (*ObservingExecutor)(nil)
 
 // ObserveExecutor decorates inner so that every call emits one done event to
 // every observer (ADR-0295 §SD4), with unkeyed digests. See
@@ -351,8 +352,21 @@ var errStreamPanicked = errors.New("the query stream ended by a panic in its con
 // without an event: ExecutorI makes it a no-op that sends no request, so there
 // is no call to record — as with a query sequence that is never iterated.
 func (inst *ObservingExecutor) InsertArrow(ctx context.Context, table string, records []arrow.RecordBatch) (err error) {
+	_, err = inst.insert(ctx, table, records, InsertSettings{})
+	return
+}
+
+// InsertArrowWith observes an insert with settings exactly as InsertArrow
+// does, forwarding the settings to the inner executor when it carries
+// them; applied is the inner executor's answer, so the wrapper never hides
+// the seam.
+func (inst *ObservingExecutor) InsertArrowWith(ctx context.Context, table string, records []arrow.RecordBatch, settings InsertSettings) (applied bool, err error) {
+	return inst.insert(ctx, table, records, settings)
+}
+
+func (inst *ObservingExecutor) insert(ctx context.Context, table string, records []arrow.RecordBatch, settings InsertSettings) (applied bool, err error) {
 	if len(records) == 0 {
-		return inst.inner.InsertArrow(ctx, table, records)
+		return InsertArrowWith(ctx, inst.inner, table, records, settings)
 	}
 	ev, ctx := inst.begin(ctx, CallOpInsert, "INSERT INTO "+table)
 	ev.Table = table
@@ -363,7 +377,7 @@ func (inst *ObservingExecutor) InsertArrow(ctx context.Context, table string, re
 	for _, rec := range records {
 		ev.Rows += rec.NumRows()
 	}
-	err = inst.inner.InsertArrow(ctx, table, records)
+	applied, err = InsertArrowWith(ctx, inst.inner, table, records, settings)
 	inst.done(ctx, &ev, err)
 	return
 }

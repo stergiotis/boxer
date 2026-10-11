@@ -10,6 +10,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsschema/storegen"
 	"github.com/stergiotis/boxer/public/keelson/runtime/vocab"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/marshall/go/marshallgen"
+	"github.com/stergiotis/boxer/public/storage/recordstore"
 	"github.com/stergiotis/boxer/public/storage/recordstore/gen"
 )
 
@@ -44,5 +45,7 @@ func TestGenerateAgentrunStores(t *testing.T) {
 		Table: entryTd, RowConfig: TableRowConfig, ComponentPaths: []string{"./entry_dto.go"}, OutDir: ".",
 		ImportPath: importPath, Wrapper: marshallgen.FixedIdsWrapper{Ids: ids},
 		Roles: gen.Roles{Revision: EntryRevisionColumn},
+		// ADR-0309 §SD4: a journal insert is durable before the act leaves.
+		InsertSettings: recordstore.InsertSettings{AsyncInsert: recordstore.ToggleOff},
 	}.Generate())
 }

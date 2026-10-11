@@ -25,6 +25,7 @@ import (
 )
 
 var _ recordstore.ExecutorI = (*LocalExecutor)(nil)
+var _ recordstore.InsertSettingsI = (*LocalExecutor)(nil)
 
 type LocalExecutor struct {
 	binary string
@@ -142,6 +143,15 @@ func (inst *LocalExecutor) queryArrowBuffered(ctx context.Context, sql string) (
 }
 
 func (inst *LocalExecutor) InsertArrow(ctx context.Context, table string, records []arrow.RecordBatch) (err error) {
+	return inst.insert(ctx, table, records, recordstore.InsertSettings{})
+}
+
+// InsertArrowWith is InsertArrow with the settings on the statement.
+func (inst *LocalExecutor) InsertArrowWith(ctx context.Context, table string, records []arrow.RecordBatch, settings recordstore.InsertSettings) (applied bool, err error) {
+	return true, inst.insert(ctx, table, records, settings)
+}
+
+func (inst *LocalExecutor) insert(ctx context.Context, table string, records []arrow.RecordBatch, settings recordstore.InsertSettings) (err error) {
 	if len(records) == 0 {
 		return
 	}
@@ -163,6 +173,6 @@ func (inst *LocalExecutor) InsertArrow(ctx context.Context, table string, record
 		err = eh.Errorf("close arrow writer: %w", err)
 		return
 	}
-	_, err = inst.run(ctx, "INSERT INTO "+table+" FORMAT Arrow", "", buf.Bytes())
+	_, err = inst.run(ctx, "INSERT INTO "+table+settings.SQL()+" FORMAT Arrow", "", buf.Bytes())
 	return
 }

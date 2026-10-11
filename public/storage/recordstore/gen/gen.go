@@ -25,6 +25,7 @@ import (
 	"github.com/stergiotis/boxer/public/semistructured/leeway/marshall/go/marshallgen"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/naming"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/readaccess"
+	"github.com/stergiotis/boxer/public/storage/recordstore"
 )
 
 // tableNameRe is the shape TableName must have: a single lowercase word
@@ -229,6 +230,15 @@ type Input struct {
 	// mutation ever, an immutable key, no async_insert on the claim path,
 	// one server.
 	Cas bool
+
+	// InsertSettings are the settings every insert of the store carries
+	// (ADR-0309 §SD4: async_insert = 0 on journal inserts). Flush sends
+	// them through an executor that implements recordstore.InsertSettingsI
+	// and falls back to a plain insert otherwise, logging a deferred
+	// warning once per store. A Cas table always inserts with
+	// async_insert = 0, whatever this says: async_insert never sits on the
+	// claim path (rowcas).
+	InsertSettings recordstore.InsertSettings
 
 	// DDL overrides the table-level clauses (ADR-0102 seam). nil derives
 	// the defaults: CREATE TABLE IF NOT EXISTS, ENGINE MergeTree(),
@@ -462,6 +472,27 @@ func (inst Input) tableOptions() (opts clickhouse.TableOptions) {
 	opts.Indexes = o.Indexes
 	opts.SkipIndexes = o.SkipIndexes
 	return
+}
+
+// insertSettings is the settings the store bakes: InsertSettings, with
+// async_insert forced off on a Cas table.
+func (inst Input) insertSettings() (s recordstore.InsertSettings) {
+	s = inst.InsertSettings
+	if inst.Cas {
+		s.AsyncInsert = recordstore.ToggleOff
+	}
+	return
+}
+
+// toggleLiteral is a ToggleE as the Go expression naming it.
+func toggleLiteral(t recordstore.ToggleE) string {
+	switch t {
+	case recordstore.ToggleOn:
+		return "recordstore.ToggleOn"
+	case recordstore.ToggleOff:
+		return "recordstore.ToggleOff"
+	}
+	return "recordstore.ToggleUnset"
 }
 
 // firstPlainName returns the leeway name of the first plain column carrying

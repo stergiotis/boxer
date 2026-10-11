@@ -19,6 +19,7 @@ import (
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/array"
 	"github.com/apache/arrow-go/v18/arrow/memory"
+	"github.com/rs/zerolog/log"
 	"github.com/stergiotis/boxer/public/caching"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/marshalling"
 	"github.com/stergiotis/boxer/public/functional"
@@ -51,6 +52,10 @@ const (
 	JobColKey   = `"id:id:s:4::0:"`
 	JobColOrder = `"ts:ts:z64:47::0:"`
 )
+
+// watchbillInsertSettings are the settings every insert carries
+// (gen.Input.InsertSettings; async_insert is off on a Cas table).
+var watchbillInsertSettings = recordstore.InsertSettings{AsyncInsert: recordstore.ToggleOff, WaitForAsyncInsert: recordstore.ToggleUnset}
 
 // Arrow output shape the read-access classes expect.
 const watchbillArrowOutputSettings = " SETTINGS output_format_arrow_string_as_string=1, output_format_arrow_low_cardinality_as_dictionary=0"
@@ -214,6 +219,9 @@ type JobStore struct {
 	// remaining guard for writes the views could not materialize (Raw
 	// commits) and for InvalidateAll inside a dirty window.
 	dirty map[string]struct{}
+	// insertSettingsUnapplied latches the one warning a store logs when
+	// its executor cannot carry the per-insert settings.
+	insertSettingsUnapplied bool
 	// onWrite/onFlush hold the write-through hooks of attached cache
 	// views (NewJobCache registers one pair per view): onWrite populates
 	// and pins the committed entity (nil = not materializable or a
@@ -734,7 +742,12 @@ func (inst *JobStore) Flush(ctx context.Context) (n int, err error) {
 	batch := recordstore.NewBatchId()
 	bctx := recordstore.WithBatchId(ctx, batch)
 	if len(records) > 0 {
-		err = inst.exec.InsertArrow(bctx, inst.writeTable(), records)
+		var applied bool
+		applied, err = recordstore.InsertArrowWith(bctx, inst.exec, inst.writeTable(), records, watchbillInsertSettings)
+		if err == nil && !applied && !inst.insertSettingsUnapplied {
+			inst.insertSettingsUnapplied = true
+			log.Warn().Str("table", inst.writeTable()).Msg("deferred: the executor carries no per-insert settings, so this store's inserts run under the session's")
+		}
 		if err != nil {
 			inst.pending = records
 			err = eh.Errorf("insert into %s: %w", inst.writeTable(), err)

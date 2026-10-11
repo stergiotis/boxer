@@ -27,10 +27,10 @@ import (
 // that moved the row first makes this one's rewrite fail rather than be
 // overwritten (ADR-0308 §SD9). The live run rows are a read cache.
 //
-// deferred: ADR-0309 §SD4 asks for async_insert = 0 on journal inserts;
-// the executor seam (recordstore.ExecutorI.InsertArrow) carries no
-// per-insert settings, so the setting is the executor's session's to
-// hold until the seam gains one.
+// Journal inserts carry async_insert = 0 (ADR-0309 §SD4): the entry store
+// is generated with it and the Cas run table forces it, and an executor
+// without the per-insert seam (recordstore.InsertSettingsI) makes the
+// store log a deferred warning instead.
 type SqlStore struct {
 	mu     sync.Mutex
 	exec   recordstore.ExecutorI

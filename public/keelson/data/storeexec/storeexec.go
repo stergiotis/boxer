@@ -76,6 +76,7 @@ import (
 )
 
 var _ recordstore.ExecutorI = (*Executor)(nil)
+var _ recordstore.InsertSettingsI = (*Executor)(nil)
 
 // arrowStreamFormat is the output-format clause QueryArrow appends. Stream,
 // not file: the file format carries its footer last and would force the whole
@@ -210,6 +211,25 @@ func (inst *Executor) InsertArrow(ctx context.Context, table string, records []a
 		err = eb.Build().Str("table", table).Errorf("storeexec: insert failed: %w", err)
 	}
 	return
+}
+
+// InsertArrowWith is InsertArrow with the settings riding the request
+// beside the call stamp.
+func (inst *Executor) InsertArrowWith(ctx context.Context, table string, records []arrow.RecordBatch, settings recordstore.InsertSettings) (applied bool, err error) {
+	merged := inst.settings(ctx)
+	if extra := settings.Map(); len(extra) > 0 {
+		if merged == nil {
+			merged = make(map[string]string, len(extra))
+		}
+		for k, v := range extra {
+			merged[k] = v
+		}
+	}
+	err = inst.client.InsertArrowSettings(ctx, table, records, merged)
+	if err != nil {
+		err = eb.Build().Str("table", table).Errorf("storeexec: insert failed: %w", err)
+	}
+	return true, err
 }
 
 // withArrowStreamFormat appends the output-format clause. A trailing

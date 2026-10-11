@@ -309,13 +309,19 @@ Accepted 2026-10-11.
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers (Tier 1 in-place / Tier 2 dated `## Updates` entry / Tier 3 new superseding ADR).
 
-<!--
 ## Updates
 
-Tier-2 dated entries land here when implementation reveals a refinement, an aspirational
-claim turns out false, or a milestone records what shipped. Single H2; add H3s dated
-YYYY-MM-DD. Remove this HTML comment when the section first gains a real entry.
--->
+### 2026-10-11 — SD4: journal inserts carry `async_insert = 0`
+
+The executor seam now carries per-insert settings: `recordstore.InsertSettings`
+and the optional `recordstore.InsertSettingsI`, implemented by the
+`clickhouse-local`, stream, server and observing executors. The observing
+executor forwards the settings rather than hiding them. A store generated with
+`gen.Input.InsertSettings` sends them on every insert. A `Cas` table always
+inserts with `async_insert = 0`. When the executor lacks the seam, a store
+inserts plainly and logs a `deferred` warning once. The journal's entry store
+is generated with `async_insert = 0`, and its `Cas` run table forces it. The
+vault's body store (ADR-0320) is not configured yet.
 
 ## References
 

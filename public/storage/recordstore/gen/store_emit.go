@@ -986,6 +986,9 @@ func (inst emitter) emitStoreHeader(sb *strings.Builder, key, order, lifecycle e
 	p("\t%q", "github.com/apache/arrow-go/v18/arrow")
 	p("\t%q", "github.com/apache/arrow-go/v18/arrow/array")
 	p("\t%q", "github.com/apache/arrow-go/v18/arrow/memory")
+	if !inst.insertSettings().IsZero() {
+		p("\t%q", "github.com/rs/zerolog/log")
+	}
 	p("\t%q", "github.com/stergiotis/boxer/public/caching")
 	if inst.keyGoType == "string" || casNeedsMarshalling(inst.cas) {
 		p("\t%q", "github.com/stergiotis/boxer/public/db/clickhouse/dsl/marshalling")
@@ -1043,6 +1046,12 @@ func (inst emitter) emitStoreHeader(sb *strings.Builder, key, order, lifecycle e
 	}
 	p(")")
 	p("")
+	if st := inst.insertSettings(); !st.IsZero() {
+		p("// %sInsertSettings are the settings every insert carries", inst.TableName)
+		p("// (gen.Input.InsertSettings; async_insert is off on a Cas table).")
+		p("var %sInsertSettings = recordstore.InsertSettings{AsyncInsert: %s, WaitForAsyncInsert: %s}", inst.TableName, toggleLiteral(st.AsyncInsert), toggleLiteral(st.WaitForAsyncInsert))
+		p("")
+	}
 	p("// Arrow output shape the read-access classes expect.")
 	p("const %sArrowOutputSettings = \" SETTINGS output_format_arrow_string_as_string=1, output_format_arrow_low_cardinality_as_dictionary=0\"", inst.TableName)
 	p("")
@@ -1249,6 +1258,11 @@ func (inst emitter) emitStoreType(sb *strings.Builder) {
 	p("\t// remaining guard for writes the views could not materialize (Raw")
 	p("\t// commits) and for InvalidateAll inside a dirty window.")
 	p("\tdirty map[%s]struct{}", inst.keyGoType)
+	if !inst.insertSettings().IsZero() {
+		p("\t// insertSettingsUnapplied latches the one warning a store logs when")
+		p("\t// its executor cannot carry the per-insert settings.")
+		p("\tinsertSettingsUnapplied bool")
+	}
 	p("\t// onWrite/onFlush hold the write-through hooks of attached cache")
 	p("\t// views (New%s registers one pair per view): onWrite populates", inst.cacheType())
 	p("\t// and pins the committed entity (nil = not materializable or a")
@@ -1883,7 +1897,16 @@ func (inst emitter) emitFlush(sb *strings.Builder) {
 	p("\tbatch := recordstore.NewBatchId()")
 	p("\tbctx := recordstore.WithBatchId(ctx, batch)")
 	p("\tif len(records) > 0 {")
-	p("\t\terr = inst.exec.InsertArrow(bctx, inst.writeTable(), records)")
+	if s := inst.insertSettings(); !s.IsZero() {
+		p("\t\tvar applied bool")
+		p("\t\tapplied, err = recordstore.InsertArrowWith(bctx, inst.exec, inst.writeTable(), records, %sInsertSettings)", inst.TableName)
+		p("\t\tif err == nil && !applied && !inst.insertSettingsUnapplied {")
+		p("\t\t\tinst.insertSettingsUnapplied = true")
+		p("\t\t\tlog.Warn().Str(\"table\", inst.writeTable()).Msg(\"deferred: the executor carries no per-insert settings, so this store's inserts run under the session's\")")
+		p("\t\t}")
+	} else {
+		p("\t\terr = inst.exec.InsertArrow(bctx, inst.writeTable(), records)")
+	}
 	p("\t\tif err != nil {")
 	p("\t\t\tinst.pending = records")
 	p("\t\t\terr = eh.Errorf(\"insert into %%s: %%w\", inst.writeTable(), err)")
