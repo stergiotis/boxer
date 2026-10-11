@@ -341,13 +341,28 @@ Accepted 2026-10-11.
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers (Tier 1 in-place / Tier 2 dated `## Updates` entry / Tier 3 new superseding ADR).
 
-<!--
 ## Updates
 
-Tier-2 dated entries land here when implementation reveals a refinement, an aspirational
-claim turns out false, or a milestone records what shipped. Single H2; add H3s dated
-YYYY-MM-DD. Remove this HTML comment when the section first gains a real entry.
--->
+### 2026-10-11 — Limits in the profile, starting values on the run row
+
+SD7's gap — rounds, pixels and image budgets fingerprinted but read from
+their `BOXER_CHAT_*` variables — is closed by splitting what SD7 listed in
+two. A **limit** the person cannot move (the rounds range, the Pixels
+ceiling and the local-only rule, the image budgets) is the profile's: the
+default profile resolves it from its variable, the chat reads it from the
+profile, and a changed limit changes the fingerprint, so a resume under it
+is read-only. A **starting value** for a setting the person moves (the
+rounds, the Pixels level and local-only switch, the operation tools, what a
+window offers) leaves the profile and its fingerprint: it stays a seed, and
+the conversation's own setting is fixed on the run row at the first send
+and restored on resume.
+
+SD8 changes with it: the `BOXER_CHAT_*` variables do not retire. A limit's
+variable is the default the profile resolves from, so the value is
+configurable before a profile can be supplied from outside the chat; a
+seed's variable stays a seed. Retiring a variable remains open for a
+constant no deployment sets. Background:
+[env-registry-scope-problem](../adr-background-work/env-registry-scope-problem.md).
 
 ## References
 

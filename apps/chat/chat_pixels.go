@@ -78,10 +78,24 @@ func pixelsOf(v string) agent.PixelsE {
 // pixelsSeed is PixelsSeed as a level.
 func pixelsSeed() agent.PixelsE { return pixelsOf(PixelsSeed.Get()) }
 
-// pixelsCap is the host's cap: the highest level, and whether the pixels
-// must stay on a local model.
+// pixelsNameOf is a level as a variable's value; pixelsOf reads it back.
+func pixelsNameOf(p agent.PixelsE) string {
+	switch p {
+	case agent.PixelsAskEach:
+		return "ask"
+	case agent.PixelsAskOnce:
+		return "ask-once"
+	case agent.PixelsCaptures:
+		return "captures"
+	}
+	return "none"
+}
+
+// pixelsCap is the host's cap, as the profile holds it: the highest
+// level, and whether the pixels must stay on a local model.
 func pixelsCap() (level agent.PixelsE, localRequired bool) {
-	return pixelsOf(PixelsMaxEnv.Get()), PixelsLocalRequiredEnv.Get()
+	p := profileNow()
+	return pixelsOf(p.PixelsMax), p.PixelsLocalRequired
 }
 
 // capPixels is a level and its switch under the host's cap; the panel's
@@ -95,6 +109,7 @@ func capPixels(level agent.PixelsE, localOnly bool) (agent.PixelsE, bool) {
 func (inst pixelPolicy) capped() (out pixelPolicy) {
 	out = inst
 	out.level, out.localOnly = capPixels(inst.level, inst.localOnly)
+	out.chosen, _ = capPixels(inst.chosen, false)
 	return
 }
 
@@ -121,6 +136,9 @@ const (
 type pixelPolicy struct {
 	level     agent.PixelsE
 	localOnly bool
+	// chosen is the level the person set, which level lowers to none
+	// while apps or the artefact are off; the run row keeps it.
+	chosen agent.PixelsE
 	// modelLocal says the host sends confined content to this
 	// conversation's model (llm.Description.Local).
 	modelLocal bool

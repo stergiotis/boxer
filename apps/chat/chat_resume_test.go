@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/stergiotis/boxer/public/keelson/runtime/agent"
 	"github.com/stergiotis/boxer/public/keelson/runtime/agentrun"
 	"github.com/stergiotis/boxer/public/keelson/runtime/agentrun/projection"
 	"github.com/stergiotis/boxer/public/keelson/runtime/inprocbus"
@@ -350,4 +351,30 @@ func TestDeletingTheCurrentConversationWaitsForTheTurn(t *testing.T) {
 	require.Eventually(t, func() bool { inst.drain(); return inst.conv.stranded }, 5*time.Second, 5*time.Millisecond, "delete: %s", inst.note.text)
 	r, _, _ := store.GetRun(context.Background(), inst.conv.id)
 	assert.Equal(t, agentrun.StateDeleted, r.State)
+}
+
+// The Settings the person moves are fixed on the run row at the first
+// send, and a resume puts the window's back to them, whatever the seeds
+// of the window that resumes; they are not in the fingerprint, so the run
+// continues.
+func TestAResumeRestoresTheSettings(t *testing.T) {
+	store := agentrun.NewMemStore()
+	first := appOver(t, &fakeModel{}, store)
+	first.keep, first.rounds, first.opTools = true, 10, true
+	first.perms = first.perms.withPixels(agent.PixelsAskOnce, true)
+	first.syncAuthority()
+	require.True(t, first.startTurn("q1"))
+	drainUntil(t, first)
+	settleTitle(t, first)
+	id := first.conv.id
+
+	second := appOver(t, &fakeModel{}, store)
+	require.NotEqual(t, 10.0, second.rounds, "the seed is not the run's")
+	second.resumeRun(id)
+	require.Eventually(t, func() bool { second.drain(); return second.conv.id == id }, 5*time.Second, 5*time.Millisecond)
+	assert.False(t, second.conv.stranded)
+	assert.Equal(t, 10.0, second.rounds)
+	assert.True(t, second.opTools)
+	assert.Equal(t, agent.PixelsAskOnce, second.perms.pixels)
+	assert.True(t, second.perms.pixelsLocal)
 }

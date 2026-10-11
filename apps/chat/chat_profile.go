@@ -5,6 +5,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 
 	"github.com/rs/zerolog/log"
 	"lukechampine.com/blake3"
@@ -18,20 +19,21 @@ import (
 
 // The harness profile (ADR-0310 §SD7 and §SD11): what the harness made
 // data — the tool registry, the prompt book, the seams' elements by name,
-// the route, the round limit, the compaction constants and the other
-// BOXER_CHAT_* constants — as one value a run can be pinned to and
-// compared by. Exactly one profile is registered, equal to the
-// compile-date constants; the selector variable is wired and has one
-// choice. The id and fingerprint go on the run row and on every call row
-// the run makes (ADR-0310 §SD7), and keelson('harness_profiles') lists the
-// values.
+// the route, the round range, the compaction constants and the host's
+// other limits — as one value a run can be pinned to and compared by.
+// Exactly one profile is registered: the compile-date constants with the
+// limits the BOXER_CHAT_* variables resolve to; the selector variable is
+// wired and has one choice. The id and fingerprint go on the run row and
+// on every call row the run makes (ADR-0310 §SD7), and
+// keelson('harness_profiles') lists the values.
 //
-// The BOXER_CHAT_* variables keep working beside the profile: each one is
-// a seed or a host cap the person or the deployment still sets, so the
-// rounds and the pixels a chat runs under are the variables', while the
-// fingerprint names the compile-date constants. A profile carries no
-// authority (no grant, ceiling or consent class): that stays compiled in
-// the dispatcher.
+// A limit is the profile's and the chat reads it from the profile, so a
+// changed limit changes the fingerprint. A starting value — the rounds,
+// the Pixels level, the operation tools, what a new window offers — is
+// only where a conversation's own setting begins: it stays a BOXER_CHAT_*
+// seed, outside the profile, and the setting itself is fixed on the run
+// row (journalSettings). A profile carries no authority (no grant, ceiling
+// or consent class): that stays compiled in the dispatcher.
 
 // ProfileT is one harness profile.
 type ProfileT struct {
@@ -52,25 +54,14 @@ type ProfileT struct {
 	// Route is the model route's id; empty is the host's one route under
 	// its default capabilities.
 	Route string
-	// Rounds is the rounds a turn starts with, within RoundsMin and
-	// RoundsMax.
-	Rounds    int
+	// RoundsMin and RoundsMax are the range the person picks a turn's
+	// rounds from.
 	RoundsMin int
 	RoundsMax int
-	// OperationTools offers each operation of a task's windows as a typed
-	// tool.
-	OperationTools bool
-	// Pixels is the Pixels level a window starts with and PixelsMax the
-	// host's cap; PixelsLocal starts Only to a local model and
-	// PixelsLocalRequired makes it the host's rule.
-	Pixels              string
+	// PixelsMax is the highest Pixels level a chat may use and
+	// PixelsLocalRequired makes Only to a local model the host's rule.
 	PixelsMax           string
-	PixelsLocal         bool
 	PixelsLocalRequired bool
-	// Apps, Questions and Artefact are what a new window offers.
-	Apps      bool
-	Questions bool
-	Artefact  bool
 	// ImageBudgetBytes, ImageBudgetCount and ImageMaxPixels bound the
 	// artefact's screenshots.
 	ImageBudgetBytes int64
@@ -91,7 +82,7 @@ type ProfileT struct {
 
 // Validate checks the profile against what this build registers: every
 // tool and seam element named exists in its declared order, the slot is
-// filled, the prompt book is the chat's, and the rounds are a range.
+// filled, the prompt book is the chat's, and the round range is one.
 func (inst ProfileT) Validate() (err error) {
 	if inst.Id == "" {
 		return eb.Build().Errorf("a profile has no id")
@@ -124,15 +115,13 @@ func (inst ProfileT) Validate() (err error) {
 	if mode, _ := s.toolMode.Get(); inst.ToolMode != mode {
 		return eb.Build().Str("profile", inst.ToolMode).Str("built", mode).Errorf("the tool mode is not the build's")
 	}
-	if inst.RoundsMin < 2 || inst.RoundsMax < inst.RoundsMin || inst.Rounds < inst.RoundsMin || inst.Rounds > inst.RoundsMax {
-		return eb.Build().Int("rounds", inst.Rounds).Int("min", inst.RoundsMin).Int("max", inst.RoundsMax).Errorf("the rounds are not a range")
+	if inst.RoundsMin < 2 || inst.RoundsMax < inst.RoundsMin {
+		return eb.Build().Int("min", inst.RoundsMin).Int("max", inst.RoundsMax).Errorf("the rounds are not a range")
 	}
-	for _, p := range []string{inst.Pixels, inst.PixelsMax} {
-		switch p {
-		case "none", "ask", "ask-once", "captures":
-		default:
-			return eb.Build().Str("pixels", p).Errorf("no such Pixels level")
-		}
+	switch inst.PixelsMax {
+	case "none", "ask", "ask-once", "captures":
+	default:
+		return eb.Build().Str("pixels", inst.PixelsMax).Errorf("no such Pixels level")
 	}
 	if inst.CompactTriggerPercent < 1 || inst.CompactTriggerPercent > 100 || inst.CompactContextFloor <= 0 {
 		return eb.Build().Int("percent", inst.CompactTriggerPercent).Int64("floor", inst.CompactContextFloor).Errorf("the compaction trigger is not a share of a context")
@@ -164,10 +153,8 @@ func (inst ProfileT) Fingerprint() string {
 	w("toolmode", inst.ToolMode)
 	w(append([]string{"stop"}, inst.Stop...)...)
 	w("route", inst.Route)
-	w("rounds", strconv.Itoa(inst.Rounds), strconv.Itoa(inst.RoundsMin), strconv.Itoa(inst.RoundsMax))
-	w("optools", strconv.FormatBool(inst.OperationTools))
-	w("pixels", inst.Pixels, inst.PixelsMax, strconv.FormatBool(inst.PixelsLocal), strconv.FormatBool(inst.PixelsLocalRequired))
-	w("offers", strconv.FormatBool(inst.Apps), strconv.FormatBool(inst.Questions), strconv.FormatBool(inst.Artefact))
+	w("rounds", strconv.Itoa(inst.RoundsMin), strconv.Itoa(inst.RoundsMax))
+	w("pixels", inst.PixelsMax, strconv.FormatBool(inst.PixelsLocalRequired))
 	w("images", strconv.FormatInt(inst.ImageBudgetBytes, 10), strconv.FormatInt(inst.ImageBudgetCount, 10), strconv.FormatInt(inst.ImageMaxPixels, 10))
 	c := inst.Compact
 	w("compact", strconv.Itoa(inst.CompactTriggerPercent), strconv.FormatInt(inst.CompactContextFloor, 10), strconv.Itoa(c.KeepTurns), strconv.Itoa(c.PinBytes), strconv.Itoa(c.ElideMinBytes),
@@ -178,17 +165,20 @@ func (inst ProfileT) Fingerprint() string {
 // defaultProfileId names the one registered profile.
 const defaultProfileId = "default"
 
-// defaultProfile is the compile-date constants as one value.
+// defaultProfile is the compile-date constants as one value, with the
+// limits the BOXER_CHAT_* variables resolve to.
 func defaultProfile() (p ProfileT) {
 	s := turnSeamsNow()
 	mode, _ := s.toolMode.Get()
 	p = ProfileT{Id: defaultProfileId, PromptBook: promptBookId,
 		Inject: s.inject.Names(), Configure: s.configure.Names(), Recover: s.recover.Names(), ToolMode: mode, Stop: s.stop.Names(),
-		Rounds: defaultRounds, RoundsMin: defaultRoundsLo, RoundsMax: defaultRoundsHi,
-		Pixels: "none", PixelsMax: "captures",
-		ImageBudgetBytes: defaultImageBudgetBytes, ImageBudgetCount: defaultImageBudgetCount, ImageMaxPixels: defaultImageMaxPixels,
+		PixelsMax: PixelsMaxEnv.Get(), PixelsLocalRequired: PixelsLocalRequiredEnv.Get(),
+		ImageBudgetBytes: ImageBudgetBytes.Get(), ImageBudgetCount: ImageBudgetCount.Get(), ImageMaxPixels: ImageMaxPixels.Get(),
 		Compact:               projection.Constants{KeepTurns: 2, PinBytes: 4096, ElideMinBytes: 512, SummaryTokens: 1024, TailTokens: 2048, RoundMarginTokens: 1024},
 		CompactTriggerPercent: 70, CompactContextFloor: 16384, AnchorCadence: headstore.DefaultCadence()}
+	// One round would be the last, with no tools at all.
+	p.RoundsMin = max(int(RoundsMinEnv.Get()), 2)
+	p.RoundsMax = max(int(RoundsMaxEnv.Get()), p.RoundsMin)
 	for i := range coordinatorTools {
 		p.Tools = append(p.Tools, coordinatorTools[i].name)
 	}
@@ -241,10 +231,8 @@ func (inst ProfileT) fields() map[string]string {
 		"prompt_book": inst.PromptBook, "tools": strings.Join(inst.Tools, ","),
 		"inject": strings.Join(inst.Inject, ","), "configure": strings.Join(inst.Configure, ","), "recover": strings.Join(inst.Recover, ","),
 		"tool_mode": inst.ToolMode, "stop": strings.Join(inst.Stop, ","), "route": inst.Route,
-		"rounds": strconv.Itoa(inst.Rounds), "rounds_min": strconv.Itoa(inst.RoundsMin), "rounds_max": strconv.Itoa(inst.RoundsMax),
-		"operation_tools": strconv.FormatBool(inst.OperationTools),
-		"pixels":          inst.Pixels, "pixels_max": inst.PixelsMax, "pixels_local": strconv.FormatBool(inst.PixelsLocal), "pixels_local_required": strconv.FormatBool(inst.PixelsLocalRequired),
-		"apps": strconv.FormatBool(inst.Apps), "questions": strconv.FormatBool(inst.Questions), "artefact": strconv.FormatBool(inst.Artefact),
+		"rounds_min": strconv.Itoa(inst.RoundsMin), "rounds_max": strconv.Itoa(inst.RoundsMax),
+		"pixels_max": inst.PixelsMax, "pixels_local_required": strconv.FormatBool(inst.PixelsLocalRequired),
 		"image_budget_bytes": strconv.FormatInt(inst.ImageBudgetBytes, 10), "image_budget_count": strconv.FormatInt(inst.ImageBudgetCount, 10), "image_max_pixels": strconv.FormatInt(inst.ImageMaxPixels, 10),
 		"compact_trigger_percent": strconv.Itoa(inst.CompactTriggerPercent), "compact_context_floor": strconv.FormatInt(inst.CompactContextFloor, 10),
 		"compact_keep_turns": strconv.Itoa(c.KeepTurns), "compact_pin_bytes": strconv.Itoa(c.PinBytes), "compact_elide_min_bytes": strconv.Itoa(c.ElideMinBytes),
@@ -253,9 +241,16 @@ func (inst ProfileT) fields() map[string]string {
 	}
 }
 
+// profileForTest, when set, is the profile profileNow returns
+// (setProfileForTest).
+var profileForTest atomic.Pointer[ProfileT]
+
 // profileNow is the profile the selector names, the default when the name
 // is not registered.
 func profileNow() (p ProfileT) {
+	if t := profileForTest.Load(); t != nil {
+		return *t
+	}
 	p, ok := profiles().Lookup(ProfileEnv.Get())
 	if !ok {
 		p, _ = profiles().Lookup(defaultProfileId)

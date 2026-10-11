@@ -32,8 +32,8 @@ import (
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/imagedecode"
 )
 
-// The budget's ceilings (ADR-0284 §SD4), per conversation, as the
-// profile records them (chat_profile.go).
+// The budget's ceilings (ADR-0284 §SD4), per conversation: the variables'
+// defaults; the profile holds what they resolve to (chat_profile.go).
 const (
 	defaultImageBudgetBytes = 256 << 20
 	defaultImageBudgetCount = 64
@@ -120,7 +120,7 @@ func (inst artImage) rootHash() string {
 	return inst.root
 }
 
-// imageLimits are the budget's ceilings.
+// imageLimits are the budget's ceilings, as the profile holds them.
 type imageLimits struct {
 	bytes  int64
 	count  int
@@ -128,7 +128,8 @@ type imageLimits struct {
 }
 
 func imageLimitsNow() imageLimits {
-	return imageLimits{bytes: ImageBudgetBytes.Get(), count: int(ImageBudgetCount.Get()), pixels: ImageMaxPixels.Get()}
+	p := profileNow()
+	return imageLimits{bytes: p.ImageBudgetBytes, count: int(p.ImageBudgetCount), pixels: p.ImageMaxPixels}
 }
 
 // errImageBudget is a change the budget refuses.

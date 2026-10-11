@@ -352,7 +352,7 @@ func (inst *App) startTurn(text string) (started bool) {
 		return false
 	}
 	if inst.conv.stranded {
-		inst.setNote("this conversation is read-only: it resumed under another prompt or tool set, or was deleted; New conversation starts over", true)
+		inst.setNote("this conversation is read-only: it resumed under another prompt, tool set or host limits, or was deleted; New conversation starts over", true)
 		return false
 	}
 	if inst.deleting != "" && inst.deleting == inst.conv.id {

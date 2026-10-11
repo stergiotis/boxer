@@ -364,7 +364,9 @@ func TestTheLastRoundNoteIsDeclaredLeftOut(t *testing.T) {
 	conv.coord.offer(false, false)
 	// Two rounds: the first calls a tool it was not offered, the second is
 	// the last and carries the note.
-	RoundsMinEnv.SetForTest(t, "2")
+	p := defaultProfile()
+	p.RoundsMin = 2
+	setProfileForTest(t, p)
 	conv.coord.setRounds(2)
 	turn(t, cli, conv, "q1")
 	require.Len(t, model.seen, 2)

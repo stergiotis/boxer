@@ -78,6 +78,15 @@ type journalSettings struct {
 	// CeilingSpec is the ceiling itself, which resume restores; Ceiling
 	// is its level, for a reader of the row.
 	CeilingSpec *agent.Ceiling `json:"ceiling_spec,omitempty"`
+	// Rounds, Pixels, PixelsLocal and OperationTools are the Settings the
+	// person moves, as they stood at the first send; the BOXER_CHAT_*
+	// seeds are only where a new window starts them. A row written before
+	// they were kept has Rounds zero, and resume leaves the window's as
+	// they are.
+	Rounds         int    `json:"rounds,omitempty"`
+	Pixels         string `json:"pixels,omitempty"`
+	PixelsLocal    bool   `json:"pixels_local,omitempty"`
+	OperationTools bool   `json:"operation_tools,omitempty"`
 }
 
 // openJournal opens the run on the first act of a conversation: the run
@@ -89,6 +98,7 @@ func (inst *coordinator) openJournal(ctx context.Context, keep bool) (w *agentru
 	w, store, retired, failed := inst.journal, inst.store, inst.scope.IsRetired(), inst.journalFailed
 	apps, questions, art := inst.apps, inst.questions, inst.art != nil
 	ceiling := inst.ceiling
+	rounds, pix, opTools := inst.rounds, inst.pix.policy, inst.opTools
 	inst.mu.Unlock()
 	if w != nil && failed {
 		return inst.reopenJournal(ctx, w)
@@ -107,7 +117,8 @@ func (inst *coordinator) openJournal(ctx context.Context, keep bool) (w *agentru
 		return
 	}
 	p := profileNow()
-	settings, _ := json.Marshal(journalSettings{Keep: keep, Apps: apps, Questions: questions, Artefact: art, Ceiling: ceiling.Level().String(), CeilingSpec: &ceiling})
+	settings, _ := json.Marshal(journalSettings{Keep: keep, Apps: apps, Questions: questions, Artefact: art, Ceiling: ceiling.Level().String(), CeilingSpec: &ceiling,
+		Rounds: clampRounds(rounds), Pixels: pixelsNameOf(pix.chosen), PixelsLocal: pix.localOnly, OperationTools: opTools})
 	w, err = agentrun.Open(ctx, store, agentrun.Run{Id: inst.conversation, Conversation: inst.conversation, OwnerApp: string(ManifestId),
 		Coordinator: inst.window, Profile: p.Id, Fingerprint: p.Fingerprint(), Settings: string(settings)})
 	if err != nil {

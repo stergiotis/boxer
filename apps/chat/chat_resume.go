@@ -378,6 +378,12 @@ func (inst *App) adopt(r *resumed) {
 	var settings journalSettings
 	_ = json.Unmarshal([]byte(r.run.Settings), &settings)
 	conv.keep, conv.apps, conv.questions, conv.artefact = settings.Keep, settings.Apps, settings.Questions, settings.Artefact
+	if settings.Rounds > 0 {
+		// The Settings the run was started under, within the profile's
+		// limits; syncAuthority hands them to the coordinator.
+		inst.rounds, inst.opTools = float64(clampRounds(settings.Rounds)), settings.OperationTools
+		inst.perms = inst.perms.withPixels(pixelsOf(settings.Pixels), settings.PixelsLocal)
+	}
 	conv.stranded = r.stranded || r.run.State == agentrun.StateDeleted || r.fold.Deleted
 	conv.entries = transcriptOf(r.entries)
 	conv.parent, conv.lastIn, conv.lastOut = lastReplyOf(r.entries)
@@ -432,7 +438,7 @@ func lastReplyOf(entries []agentrun.Entry) (parent string, lastIn int32, lastOut
 func (inst *App) resumeNotes(r *resumed) {
 	if r.stranded {
 		inst.conv.entries = append(inst.conv.entries, entry{speaker: speakerTool, atMs: time.Now().UnixMilli(),
-			text: "resumed read-only: this conversation was started under another prompt or tool set (fingerprint " + clip(r.run.Fingerprint, 12) + "), stranded, or deleted; continuing it is a new conversation"})
+			text: "resumed read-only: this conversation was started under another prompt, tool set or host limits (fingerprint " + clip(r.run.Fingerprint, 12) + "), stranded, or deleted; continuing it is a new conversation"})
 		return
 	}
 	if len(r.lines) == 0 {

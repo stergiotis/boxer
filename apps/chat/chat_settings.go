@@ -275,7 +275,7 @@ func (inst *App) syncAuthority() {
 // pixelPolicy is the Pixels setting as the coordinator applies it.
 func (inst *App) pixelPolicy() (p pixelPolicy) {
 	perms := inst.perms.pixelsCapped()
-	p = pixelPolicy{level: perms.pixelsIn(inst.artefactOn(), inst.appsOn()), localOnly: perms.pixelsLocal}
+	p = pixelPolicy{level: perms.pixelsIn(inst.artefactOn(), inst.appsOn()), localOnly: perms.pixelsLocal, chosen: perms.pixels}
 	if inst.answered && inst.model.Configured {
 		m := inst.model
 		p.modelLocal = m.Local
@@ -560,8 +560,8 @@ func (inst permissions) withPixels(p agent.PixelsE, localOnly bool) (out permiss
 	return out.pixelsCapped()
 }
 
-// pixelsCapped is the permissions under the host's cap (PixelsMaxEnv,
-// PixelsLocalRequiredEnv): what the panel shows is what binds.
+// pixelsCapped is the permissions under the host's cap (the profile's
+// PixelsMax and PixelsLocalRequired): what the panel shows is what binds.
 func (inst permissions) pixelsCapped() (out permissions) {
 	out = inst
 	out.pixels, out.pixelsLocal = capPixels(inst.pixels, inst.pixelsLocal)

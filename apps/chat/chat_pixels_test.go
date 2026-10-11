@@ -423,8 +423,9 @@ func TestAViewTheHostCannotRecordIsNotShown(t *testing.T) {
 // The host's cap binds in the coordinator whatever the window sends, and in
 // the permissions the panel draws.
 func TestTheHostCapsThePixels(t *testing.T) {
-	PixelsMaxEnv.SetForTest(t, "ask")
-	PixelsLocalRequiredEnv.SetForTest(t, "true")
+	prof := defaultProfile()
+	prof.PixelsMax, prof.PixelsLocalRequired = "ask", true
+	setProfileForTest(t, prof)
 	coord, _ := pixelRig(t, agent.PixelsCaptures)
 	p := coord.pixelsNow()
 	assert.Equal(t, agent.PixelsAskEach, p.level)
@@ -434,7 +435,8 @@ func TestTheHostCapsThePixels(t *testing.T) {
 	assert.Equal(t, agent.PixelsAskEach, perms.pixels)
 	assert.True(t, perms.pixelsLocal)
 
-	PixelsMaxEnv.SetForTest(t, "none")
+	prof.PixelsMax = "none"
+	setProfileForTest(t, prof)
 	coord.setPixels(pixelPolicy{level: agent.PixelsCaptures, modelLocal: true})
 	assert.NotContains(t, toolNames(coord.tools(context.Background())), "artefact_view_image")
 }

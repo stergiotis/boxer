@@ -50,25 +50,22 @@ var RoundsEnv = env.NewInt(env.Spec{
 
 var RoundsMinEnv = env.NewInt(env.Spec{
 	Name:        "BOXER_CHAT_ROUNDS_MIN",
-	Default:     "4",
+	Default:     strconv.Itoa(defaultRoundsLo),
 	Description: "the fewest rounds of model calls a chat turn with tools may be given in the chat's Settings; the last round of a turn offers no tools, so it ends with an answer",
 	Category:    env.CategoryE("boxer-chat"),
 })
 
 var RoundsMaxEnv = env.NewInt(env.Spec{
 	Name:        "BOXER_CHAT_ROUNDS_MAX",
-	Default:     "96",
+	Default:     strconv.Itoa(defaultRoundsHi),
 	Description: "the most rounds of model calls a chat turn with tools may be given in the chat's Settings",
 	Category:    env.CategoryE("boxer-chat"),
 })
 
-// roundRange is the range the Settings slider offers.
+// roundRange is the range the Settings slider offers: the profile's.
 func roundRange() (lo int, hi int) {
-	if lo = int(RoundsMinEnv.Get()); lo < 2 {
-		// One round would be the last, with no tools at all.
-		lo = 2
-	}
-	return lo, max(int(RoundsMaxEnv.Get()), lo)
+	p := profileNow()
+	return p.RoundsMin, p.RoundsMax
 }
 
 // clampRounds is n within roundRange; zero is RoundsEnv.
