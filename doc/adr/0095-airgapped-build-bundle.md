@@ -379,7 +379,7 @@ dependency) was never exercised offline at all. It now compiles the declared hea
 That is a pre-existing gap, not one the 2026-08-25 entry introduced.
 
 The verify also moves onto `airgap_verify_imzero2_heads`, the primitive
-hackathon2026 uses to check a whole menu of heads. Boxer declares no menu — its
+a downstream bundle uses to check a whole menu of heads. Boxer declares no menu — its
 unbundler runs a fixed script rather than taking a head argument — so here it
 verifies one head; the point is that the toolchain pinning, the graded failure and
 the timing report do not exist in two versions.
@@ -403,7 +403,7 @@ shipping a build script it could not run.
 head: the encoder lane is compiled in under `headless_raster` and spawns it as
 soon as the carrier or the H264 sink is configured (2026-08-25 entry). So the one
 component the target cannot do without was also the only one it could not change
-— against a bundle whose entire point is that boxer and hackathon stay editable
+— against a bundle whose entire point is that boxer and its downstream modules stay editable
 source. `--without-h264` drops openh264 and two thirds of the added weight for an
 AV1+VP9 build.
 

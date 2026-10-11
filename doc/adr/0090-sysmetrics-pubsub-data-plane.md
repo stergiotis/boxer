@@ -200,7 +200,7 @@ provisions it.
 ### 2026-10-06 — The payload-independent half is lifted into `runtime/planebus`
 
 A second plane wants this one's shape: a downstream Redpanda observability
-plane (hackathon_2026 ADR-0054) publishes cluster snapshots per domain.
+plane publishes cluster snapshots per domain.
 And one hand copy already existed: `coveragebus` (ADR-0169) re-implemented
 the Consumer and Codec around its own payload. So the parts that do not
 depend on the payload now live once, generic over it, in

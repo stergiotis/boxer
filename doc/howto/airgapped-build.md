@@ -83,8 +83,8 @@ Because those sources are architecture-independent and need no network to build,
 the encoder can also be compiled *after* packing, on a host of the target's
 architecture — which is how a bundle for a foreign arch gets an ffmpeg at all. The
 library carries the pieces (`airgap_emit_ffmpeg_sidecar`,
-`airgap_apply_ffmpeg_sidecar`, `airgap_augment_ffmpeg`); the downstream wrapper is
-`hackathon2026`'s `scripts/dev/airgap-augment.sh`.
+`airgap_apply_ffmpeg_sidecar`, `airgap_augment_ffmpeg`); a downstream module wraps them
+in its own augment script.
 Verify a bundled binary with `scripts/dev/verify-ffmpeg-lanes.sh`.
 
 **`tinygo` is bundled as a pinned upstream binary** at `_airgap/toolchains/tinygo`

@@ -226,7 +226,7 @@ order, after the task supervisor and before any window opens. A service
 that fails to start is logged and left out, like every optional service;
 one that starts has its stop run at `Close`, and `Runtime.HostServices`
 names those that started. The first user is the co-located scraper of a
-downstream Redpanda plane (hackathon_2026 ADR-0054 §SD2).
+downstream Redpanda plane.
 
 ## References
 

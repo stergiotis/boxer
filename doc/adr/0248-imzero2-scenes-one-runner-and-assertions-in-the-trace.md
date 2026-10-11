@@ -351,7 +351,7 @@ Not done, and why:
 
 ### 2026-09-22 — a downstream host: its own directory, its own package
 
-The first downstream adopter (hackathon_2026's dspℓ host, which links apps
+The first downstream adopter (a host in another module, which links apps
 boxer's host does not) found two places where "the repository root" meant two
 things. `Options.RepoRoot` located the Rust client and the fonts *and* was the
 host's working directory, so a downstream host ran in boxer's checkout and its
