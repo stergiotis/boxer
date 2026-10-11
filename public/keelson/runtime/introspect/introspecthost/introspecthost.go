@@ -20,8 +20,13 @@ import (
 	"github.com/stergiotis/boxer/public/config/env"
 	"github.com/stergiotis/boxer/public/keelson/data/chlocalbroker"
 	"github.com/stergiotis/boxer/public/keelson/runtime/agent"
+	"github.com/stergiotis/boxer/public/keelson/runtime/agentrun"
+	"github.com/stergiotis/boxer/public/keelson/runtime/agentschema"
+	"github.com/stergiotis/boxer/public/keelson/runtime/anchorstore"
 	runtimeapp "github.com/stergiotis/boxer/public/keelson/runtime/app"
+	"github.com/stergiotis/boxer/public/keelson/runtime/cell"
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsstore"
+	"github.com/stergiotis/boxer/public/keelson/runtime/harness"
 	"github.com/stergiotis/boxer/public/keelson/runtime/httpegress"
 	"github.com/stergiotis/boxer/public/keelson/runtime/inprocbus"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect"
@@ -102,6 +107,16 @@ type Deps struct {
 	// than absent; keelson.subscriptions and keelson.client_caps read Bus.
 	// Same typed-nil trap: assign only a supervisor that started.
 	Tasks *supervisor.Supervisor
+	// Cell is the cell declaration, backing keelson.sinks (ADR-0312 §SD1);
+	// nil registers the default declaration's sinks.
+	Cell func() cell.Declaration
+	// Anchors is the anchor store, backing keelson.anchors (ADR-0314); nil
+	// registers an empty table.
+	Anchors anchorstore.StoreI
+	// AgentRuns is the run journal's store, backing keelson.agent_runs and
+	// keelson.agent_run_entries (ADR-0308 §SD10). nil leaves them empty
+	// rather than absent; same typed-nil trap: assign only a started store.
+	AgentRuns agentrun.StoreI
 	// PersistExec is the executor the app-state store was opened over,
 	// backing the persist half of keelson.runtime_events (ADR-0191 §SD7)
 	// and keelson.app_state (ADR-0185 §SD1).
@@ -268,6 +283,31 @@ func Start(deps Deps) (stop func(context.Context) error, err error) {
 	// destination any app could name. Registered unconditionally.
 	if e := httpegress.RegisterIntrospect(reg, deps.HTTPCalls); e != nil {
 		deps.Log.Warn().Err(e).Msg("introspecthost: http_calls provider registration failed")
+	}
+	// ADR-0308 §SD10: the run journal's runs and entries. Registered
+	// unconditionally.
+	if e := agentrun.RegisterIntrospect(reg, deps.AgentRuns); e != nil {
+		deps.Log.Warn().Err(e).Msg("introspecthost: agent run provider registration failed")
+	}
+	// ADR-0312 §SD1: the sinks the cell declaration derives; ADR-0313 §SD6:
+	// the agent's declared relations.
+	decl := deps.Cell
+	if decl == nil {
+		decl = cell.Defaults
+	}
+	if e := cell.RegisterIntrospect(reg, decl); e != nil {
+		deps.Log.Warn().Err(e).Msg("introspecthost: sinks provider registration failed")
+	}
+	if e := agentschema.RegisterIntrospect(reg, agentschema.JournalRelations()); e != nil {
+		deps.Log.Warn().Err(e).Msg("introspecthost: agent relations provider registration failed")
+	}
+	// ADR-0310 §SD7: the harness profiles the apps in this process
+	// published; ADR-0314 §SD2: the chain heads the anchor store holds.
+	if e := harness.RegisterIntrospect(reg); e != nil {
+		deps.Log.Warn().Err(e).Msg("introspecthost: harness profiles provider registration failed")
+	}
+	if e := anchorstore.RegisterIntrospect(reg, deps.Anchors); e != nil {
+		deps.Log.Warn().Err(e).Msg("introspecthost: anchors provider registration failed")
 	}
 	// ADR-0269 §SD9: the task grants and the action record. Registered
 	// unconditionally.

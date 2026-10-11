@@ -515,6 +515,18 @@ Loss accounting now covers every verb: dropped batches are counted and
 written back as an `audit-gap` row once the server takes rows again, and
 `Close` counts what it loses.
 
+### 2026-10-11 — the call row carries the harness profile, route, tier and approval
+
+`llmCall` gains four columns under the agent harness: `llmCallProfile`
+(the profile reference, `<id>@<fingerprint prefix>`) and `llmCallRoute`
+(the route id) from [ADR-0310](./0310-harness-profile-and-registry-composition-declared-per-seam.md)
+§SD4 and §SD7; `llmCallTier`, the TLP tier the route's wall saw, and
+`llmCallApproval`, the key of the journal's approval entry an exit above
+the clearance went under, from [ADR-0312](./0312-exits-sinks-from-the-cell-boundary-approval-tiers-and-exit-budgets.md)
+§SD3, which law L33 joins to the journal. `keelson('llm_calls')` serves
+them as `profile`, `route`, `tier` and `approval`. A caller that declares
+none leaves the symbols absent and the tier CLEAR.
+
 ## References
 
 - [ADR-0191](./0191-runtime-instance-attribution.md) — the `(run id, instance key)` decision this extends to the generated kinds.

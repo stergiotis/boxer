@@ -17,12 +17,16 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/data/storeexec"
 	"github.com/stergiotis/boxer/public/keelson/runtime/adhocdata"
 	"github.com/stergiotis/boxer/public/keelson/runtime/agent"
+	"github.com/stergiotis/boxer/public/keelson/runtime/agentrun"
+	"github.com/stergiotis/boxer/public/keelson/runtime/agentrun/agentrunstore"
+	"github.com/stergiotis/boxer/public/keelson/runtime/anchorstore"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/appcenter"
 	appcenterlaunch "github.com/stergiotis/boxer/public/keelson/runtime/appcenter/launchcfg"
 	"github.com/stergiotis/boxer/public/keelson/runtime/appstate"
 	"github.com/stergiotis/boxer/public/keelson/runtime/audit"
 	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
+	"github.com/stergiotis/boxer/public/keelson/runtime/cell"
 	"github.com/stergiotis/boxer/public/keelson/runtime/clipboardbroker"
 	"github.com/stergiotis/boxer/public/keelson/runtime/coveragebus"
 	"github.com/stergiotis/boxer/public/keelson/runtime/covscrape"
@@ -215,6 +219,15 @@ type Options struct {
 // label, inspect or extend it, plus the render loop and the shutdown edge.
 type Runtime struct {
 	RunInfo *runinfo.Inst
+	// AgentRuns is the run journal's store (ADR-0308) and Anchors the
+	// chain heads' (ADR-0314); nil when the service did not start.
+	AgentRuns agentrun.StoreI
+	Anchors   anchorstore.StoreI
+	// Cell is the deployment's declared boundary (ADR-0307 §SD1), built
+	// once before any service starts and shared by the model service, the
+	// egress service, the clipboard broker and keelson('sinks'), so the
+	// four enforce and show one declaration.
+	Cell *cell.Declaration
 	// Facts is the audit trail; IsChStore tells whether it reached ClickHouse.
 	Facts     factsstore.FactsStoreI
 	IsChStore bool
@@ -486,6 +499,7 @@ func (rt *Runtime) bootServices(ctx context.Context, factsCfg chstore.Config) {
 	if trail.RequiredEnv.Get() && !rt.Trail.Durable() {
 		logger.Warn().Msg("trail: BOXER_TRAIL_REQUIRED is set and this host has no durable backend; model calls and egress fetches will be refused")
 	}
+	rt.bootAgentRun(ctx)
 	if svc.AppState {
 		// Only the durable backend can clear what another run could see;
 		// the in-memory fallbacks leave the service refusing with the
@@ -503,11 +517,26 @@ func (rt *Runtime) bootServices(ctx context.Context, factsCfg chstore.Config) {
 			rt.cleanups = append(rt.cleanups, asSvc.Close)
 		}
 	}
+	// The cell (ADR-0307 §SD1, ADR-0312 §SD1): one declaration from the
+	// registry, with every registered egress destination, before any sink
+	// is served; the services read it and never the environment again.
+	decl := cell.FromEnvLogged(llm.ParseTrustedHosts(llm.TrustedHosts.Get()), logger)
+	for _, d := range httpegress.DeclaredDestinations() {
+		decl.Egress = append(decl.Egress, cell.EgressDestination{Name: d.Name, Local: d.Local})
+	}
+	decl.ModelHost, decl.ModelLocal = llm.EndpointHost(llm.Endpoint.Get()), false
+	rt.Cell = &decl
 	if svc.LLM {
 		// Durable where the trail is (ADR-0254 §SD4); the in-memory fallback
 		// keeps the service's own record.
 		llmCfg := llm.ConfigFromEnv()
 		llmCfg.Trail = rt.Trail
+		llmCfg.Cell = rt.Cell
+		if rt.AgentRuns != nil {
+			// The route verifies an approved exit against the journal
+			// (ADR-0312 §SD3); without the store every approval is refused.
+			llmCfg.Approvals = llm.StoreApprovals(rt.AgentRuns)
+		}
 		llmCfg = withModerator(llmCfg)
 		if path := llm.ScriptEnv.Get(); path != "" {
 			// A scripted model, for scenes (ADR-0269 M6): on the headless
@@ -535,7 +564,7 @@ func (rt *Runtime) bootServices(ctx context.Context, factsCfg chstore.Config) {
 		}
 	}
 	if svc.HTTP {
-		httpSvc, hErr := httpegress.NewService(rt.Bus, logger, httpegress.Config{Trail: rt.Trail})
+		httpSvc, hErr := httpegress.NewService(rt.Bus, logger, httpegress.Config{Trail: rt.Trail, Cell: rt.Cell})
 		if hErr != nil {
 			logger.Warn().Err(hErr).Msg("httpegress: service start failed; net.http.fetch.* will be unbound")
 		} else {
@@ -586,7 +615,11 @@ func (rt *Runtime) bootServices(ctx context.Context, factsCfg chstore.Config) {
 		}
 	}
 	if svc.Clipboard {
-		clipSvc, clipErr := clipboardbroker.NewService(rt.Bus, logger)
+		// The clipboard policy is the cell's (ADR-0317 §SD4): the channel's
+		// clearance is the free tier, the approval mapping says what may go
+		// above it, and an organisation-managed host enforces where an
+		// administered one records.
+		clipSvc, clipErr := clipboardbroker.NewServiceWithPolicy(rt.Bus, logger, clipboardbroker.PolicyOf(*rt.Cell))
 		if clipErr != nil {
 			logger.Warn().Err(clipErr).Msg("clipboardbroker: service start failed; clipboard.* will be unbound")
 		} else {
@@ -923,6 +956,20 @@ func (rt *Runtime) bootIntrospect() {
 		PersistExec:      rt.PersistExec,
 		Log:              logger,
 	}
+	if rt.AgentRuns != nil {
+		deps.AgentRuns = rt.AgentRuns
+	}
+	if rt.Anchors != nil {
+		deps.Anchors = rt.Anchors
+	}
+	if rt.LLM != nil {
+		// The declaration as the model service enforces it, its route's
+		// locality filled in.
+		deps.Cell = rt.LLM.Cell
+	} else if rt.Cell != nil {
+		c := *rt.Cell
+		deps.Cell = func() cell.Declaration { return c }
+	}
 	if rt.State != nil {
 		deps.State = rt.State
 	}
@@ -1003,6 +1050,55 @@ func (rt *Runtime) statusSnapshot() (s *runtimestatus.Snapshot) {
 		s.PersistBackend = rt.PersistBackend
 	}
 	return
+}
+
+// bootAgentRun starts the run journal service (ADR-0308 §SD1, §SD10): its
+// tables in the house layout over the persist executor where the host has
+// one, an in-process store otherwise, whose runs last the process. The
+// service scopes every call to its sender; the coordinator is each run's
+// writer.
+func (rt *Runtime) bootAgentRun(ctx context.Context) {
+	logger := rt.opts.Log
+	var store agentrun.StoreI
+	if rt.PersistExec != nil {
+		layout := agentrunstore.Layout{}
+		pctx, cancel := context.WithTimeout(ctx, persistOpenTimeout)
+		err := agentrunstore.ProvisionIn(pctx, rt.PersistExec, layout)
+		cancel()
+		if err != nil {
+			logger.Warn().Err(err).Msg("agentrun: provisioning failed; runs are kept in process only")
+		} else {
+			sql := agentrun.NewSqlStore(rt.PersistExec, layout)
+			rt.cleanups = append(rt.cleanups, sql.Close)
+			store = sql
+		}
+	}
+	if store == nil {
+		store = agentrun.NewMemStore()
+	}
+	svc, err := agentrun.NewService(rt.Bus, logger, store)
+	if err != nil {
+		logger.Warn().Err(err).Msg("agentrun: service start failed; runtime.agentrun.* will be unbound")
+		return
+	}
+	rt.AgentRuns = store
+	rt.cleanups = append(rt.cleanups, svc.Close)
+	// The anchor store (ADR-0314 §SD2) is the organisation's to run outside
+	// any person's control. This host holds heads in memory: there is no
+	// setting that names an organisation store yet, so every receipt is
+	// non-durable, the journal marks such heads local, and the record
+	// says plainly that nothing outside the host anchors them.
+	anchors := anchorstore.NewMemStore()
+	asvc, aerr := anchorstore.NewService(rt.Bus, logger, anchors)
+	if aerr != nil {
+		logger.Warn().Err(aerr).Msg("anchorstore: service start failed; runtime.anchor.* will be unbound")
+		return
+	}
+	// Heads are scoped to the run's owner as the journal records it, so an
+	// app cannot read or pre-anchor another app's run.
+	asvc.Owners = anchorstore.RunOwners(store)
+	rt.Anchors = anchors
+	rt.cleanups = append(rt.cleanups, asvc.Close)
 }
 
 // bootWatchbill starts the process's worker (ADR-0223 §SD8) over the
