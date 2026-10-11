@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"os"
 	"os/signal"
+	"slices"
 	"sync"
 	"syscall"
 	"time"
@@ -212,6 +213,11 @@ type Options struct {
 	// ShutdownGrace bounds a signal-driven shutdown; zero is
 	// DefaultShutdownGrace.
 	ShutdownGrace time.Duration
+	// Cell, when non-nil, is the deployment's declared boundary (ADR-0307
+	// §SD1) in place of the one built from the BOXER_CELL_* environment;
+	// Boot copies it and adds what the binary registers (the egress
+	// destinations, the model host), so the caller's value is not changed.
+	Cell *cell.Declaration
 	// ScreenshotDir, when non-empty, selects screenshot mode with that
 	// destination; empty reads IMZERO2_SCREENSHOT_DIR. Env values are cached
 	// process-wide on first read, so tests set this rather than the variable.
@@ -523,10 +529,17 @@ func (rt *Runtime) bootServices(ctx context.Context, factsCfg chstore.Config) {
 			rt.cleanups = append(rt.cleanups, asSvc.Close)
 		}
 	}
-	// The cell (ADR-0307 §SD1, ADR-0312 §SD1): one declaration from the
-	// registry, with every registered egress destination, before any sink
-	// is served; the services read it and never the environment again.
-	decl := cell.FromEnvLogged(llm.ParseTrustedHosts(llm.TrustedHosts.Get()), logger)
+	// The cell (ADR-0307 §SD1, ADR-0312 §SD1): one declaration — the
+	// caller's, or the registry's — with every registered egress
+	// destination, before any sink is served; the services and the apps
+	// read it and never the environment again.
+	var decl cell.Declaration
+	if rt.opts.Cell != nil {
+		decl = *rt.opts.Cell
+		decl.Egress = slices.Clone(decl.Egress)
+	} else {
+		decl = cell.FromEnvLogged(llm.ParseTrustedHosts(llm.TrustedHosts.Get()), logger)
+	}
 	for _, d := range httpegress.DeclaredDestinations() {
 		decl.Egress = append(decl.Egress, cell.EgressDestination{Name: d.Name, Local: d.Local})
 	}
@@ -659,6 +672,10 @@ func (rt *Runtime) bootWindowHost() (err error) {
 	}
 	host := windowhost.NewInst(reg, logger)
 	host.SetBus(rt.Bus)
+	if rt.Cell != nil {
+		// The apps label by the host's declaration (cell.OfMount).
+		host.SetMountValue(cell.MountKey{}, rt.Cell)
+	}
 	// The shutdown drain (ADR-0322, proposed) is cut from the grace: the
 	// signal handler forces the exit one grace after it reaps, and the
 	// drain must end well before that.

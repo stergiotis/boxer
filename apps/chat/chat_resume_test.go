@@ -253,7 +253,7 @@ func TestAResumeSettlesTheCallsTheProcessLeftOpen(t *testing.T) {
 	p := profileNow()
 	settings, _ := json.Marshal(journalSettings{Keep: true, Apps: true})
 	w, err := agentrun.Open(context.Background(), store, agentrun.Run{Conversation: "chat-crashed-1", OwnerApp: string(ManifestId),
-		Profile: p.Id, Fingerprint: p.Fingerprint(), Settings: string(settings)})
+		Profile: p.Id, Fingerprint: runFingerprint(p.Fingerprint(), fallbackConfinedTier()), Settings: string(settings)})
 	require.NoError(t, err)
 	_, err = w.Append(context.Background(),
 		agentrun.Entry{Kind: agentrun.KindSection, Name: "coordinator", Book: promptBookId, Body: promptText("coordinator"), Label: harnessLabel()},

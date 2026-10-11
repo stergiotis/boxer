@@ -321,7 +321,7 @@ func (sequentialTools) run(s *roundState) {
 			}
 		}
 		if _, s.err = s.coord.append(s.jctx, s.w, agentrun.Entry{Kind: agentrun.KindOutcome, Key: o.key(), Name: tc.Id, Role: projection.RoleTool, Body: content,
-			Form: activity, Turn: s.turn, Label: outcomeLabel(untrusted, confined).Join(writer.label), WriterRun: writer.run, WriterTurn: writer.turn, WriterOrdinal: writer.ordinal}); s.err != nil {
+			Form: activity, Turn: s.turn, Label: outcomeLabel(untrusted, confined, coord.confinedTier).Join(writer.label), WriterRun: writer.run, WriterTurn: writer.turn, WriterOrdinal: writer.ordinal}); s.err != nil {
 			return
 		}
 	}

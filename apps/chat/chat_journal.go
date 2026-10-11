@@ -38,11 +38,11 @@ import (
 // exposure mark on every request sent to it and the origin mark on every
 // reply from it.
 
-// confinedTierNow is the tier the compile-date `confined` bit maps to
-// (ADR-0311 §SD1, ADR-0312): the cell declaration's, read from the same
-// environment the host builds its declaration from, since an app has no
-// handle on the host's copy.
-var confinedTierNow = sync.OnceValue(func() agentrun.TierE {
+// fallbackConfinedTier is the tier the compile-date `confined` bit maps to
+// (ADR-0311 §SD1, ADR-0312) when the host hands the app no declaration
+// (cell.OfMount): a host without a cell, a test. Under a host that hands
+// one, the window and its coordinators carry that declaration's tier.
+var fallbackConfinedTier = sync.OnceValue(func() agentrun.TierE {
 	return cell.FromEnv(nil).ConfinedTier
 })
 
@@ -121,7 +121,7 @@ func (inst *coordinator) openJournal(ctx context.Context, keep bool) (w *agentru
 	settings, _ := json.Marshal(journalSettings{Keep: keep, Apps: apps, Questions: questions, Artefact: art, Ceiling: ceiling.Level().String(), CeilingSpec: &ceiling,
 		Rounds: clampRounds(rounds), Pixels: pixelsNameOf(pix.chosen), PixelsLocal: pix.localOnly, OperationTools: opTools})
 	w, err = agentrun.Open(ctx, store, agentrun.Run{Conversation: inst.conversation, OwnerApp: string(ManifestId),
-		Coordinator: inst.window, Profile: p.Id, Fingerprint: p.Fingerprint(), Settings: string(settings)})
+		Coordinator: inst.window, Profile: p.Id, Fingerprint: runFingerprint(p.Fingerprint(), inst.confinedTier), Settings: string(settings)})
 	if err != nil {
 		return
 	}
@@ -309,13 +309,13 @@ func (inst *coordinator) requestLabel(batch projection.Batch) (l agentrun.Label)
 // outcomeLabel is a tool result's label: external content when the app's
 // text is untrusted, the host's own data otherwise; the confined tier
 // when the result derives from sealed data.
-func outcomeLabel(untrusted bool, confined bool) (l agentrun.Label) {
+func outcomeLabel(untrusted bool, confined bool, tier agentrun.TierE) (l agentrun.Label) {
 	l.Level = agentrun.LevelSystem
 	if untrusted {
 		l.Level = agentrun.LevelExternal
 	}
 	if confined {
-		l.Tier = confinedTierNow()
+		l.Tier = tier
 	}
 	return
 }

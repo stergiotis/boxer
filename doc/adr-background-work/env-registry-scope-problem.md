@@ -116,11 +116,11 @@ the cell rather than its own application:
 
 ## Open questions
 
-- How the declaration reaches an app: on `MountContextI`, on the bus as a
-  read-only service, or in the app's launch config.
-- Whether `ProfileT` grows to carry the cell's confined tier, so one
-  fingerprint covers both, or the run records the declaration's own digest
-  beside the profile's.
+- Settled 2026-10-11: the declaration reaches an app on its mount context
+  (ADR-0307 Update, §SD1), and the run's fingerprint folds in the confined
+  tier, not a digest of the whole declaration (ADR-0308 Update, SD5).
+- How an integrator supplies profiles to the chat, and selects one per
+  run.
 - Whether the model service's trail rows should name the declaration a call
   was checked against, not only its tier and route. (Not verified against
   the trail's row shape.)

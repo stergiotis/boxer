@@ -408,6 +408,20 @@ one section per attribute: it is the row the compare-and-set rewrites in
 place, which needs a field alone in its section. Provisioning checks each
 table's shape after creating it, so a table left by an earlier schema
 fails provisioning instead of the first insert.
+
+### 2026-10-11 — SD5: the run is pinned to the confined tier as well
+
+The fingerprint a run row carries, and a resume compares, folds the tier
+the host's declaration maps confined content to
+([ADR-0307](./0307-threat-model-for-an-interactive-single-person-cell.md)
+§SD1) into the profile's. The journal's labels were computed under that
+tier, so a run resumed under a host that maps confined content elsewhere is
+stranded, read-only. The rest of the declaration is not folded in: the
+host's services enforce the clearances, approvals and canaries at every
+exit as they stand, so a resumed run is held to the current ones without a
+strand. The call rows and the `profile` entry keep the profile's own
+fingerprint, the one `keelson('harness_profiles')` lists.
+
 ## References
 
 - [ADR-0303](./0303-a-conversation-outlives-its-process-a-run-journal-written-before-each-act.md) (superseded by this record) — the journal, resume fold, grant rule and pinning carried forward.

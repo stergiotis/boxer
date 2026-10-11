@@ -145,6 +145,9 @@ type coordinator struct {
 	tasks    []string
 	tainted  bool
 	confined bool
+	// confinedTier is the tier confined content is labelled with: the
+	// host's declaration's, fixed at construction.
+	confinedTier agentrun.TierE
 	// refused holds the calls refused in this turn since the last call that
 	// was not, by tool and arguments; refusal is the current call's, set
 	// while it runs.
@@ -211,7 +214,7 @@ func newCoordinatorIn(parent *lifetime.Scope, cli *agent.Client, kq *keelsonquer
 	inst = &coordinator{cli: cli, kq: kq, conversation: conversation, opTools: OperationToolsSeed.Get(), ask: &asker{}, steps: &turnSteps{},
 		ceiling: defaultPermissions().ceiling(true), store: agentrun.NewVaulted(agentrun.NewMemStore(), agentrun.NewMemBodyStore()),
 		refused: make(map[string]string), typed: make(map[string]typedOp), opCache: make(map[string][]agent.Operation), windowApps: make(map[uint64]string),
-		opEffects: make(map[string]map[string]string), scope: lifetime.New(parent)}
+		opEffects: make(map[string]map[string]string), scope: lifetime.New(parent), confinedTier: fallbackConfinedTier()}
 	inst.scope.OnDrained(inst.closeJournal)
 	return
 }

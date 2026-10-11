@@ -339,6 +339,20 @@ type Inst struct {
 	// drains bounds and counts the drain step of the closing edge
 	// (windowhost_drain.go).
 	drains drainState
+
+	// mountValues are handed to every app the host mounts
+	// (app.MountValuesI); SetMountValue before the first Open.
+	mountValues map[any]any
+}
+
+// SetMountValue hands v under key to every app mounted after the call
+// (app.MountValuesI): what the host built once — the cell declaration —
+// reaches the app as that one copy. Call it before the first Open.
+func (inst *Inst) SetMountValue(key any, v any) {
+	if inst.mountValues == nil {
+		inst.mountValues = make(map[any]any)
+	}
+	inst.mountValues[key] = v
 }
 
 // NewInst constructs a WindowHost backed by registry. logger is used
@@ -663,6 +677,9 @@ func (inst *Inst) OpenWithConfig(appId app.AppIdT, kind string, cfg []byte) (key
 	mountCtx.SetRunId(inst.runId)
 	mountCtx.SetLaunchConfig(cfg)
 	mountCtx.SetLaunchReason(reason)
+	for k, v := range inst.mountValues {
+		mountCtx.SetMountValue(k, v)
+	}
 	appIds := c.NewWidgetIdStack()
 	mountCtx.SetIds(appIds)
 	frameCtx := app.NewStaticFrameContext(mountCtx, nil)

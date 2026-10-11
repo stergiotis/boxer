@@ -71,10 +71,26 @@ type StaticMountContext struct {
 	launchConfig []byte
 	launchReason LaunchReasonE
 	lifetime     *lifetime.Scope
+	values       map[any]any
 }
 
 var _ MountContextI = (*StaticMountContext)(nil)
 var _ LifetimeI = (*StaticMountContext)(nil)
+var _ MountValuesI = (*StaticMountContext)(nil)
+
+// SetMountValue records v under key (MountValuesI); hosts call it before
+// Mount.
+func (inst *StaticMountContext) SetMountValue(key any, v any) {
+	if inst.values == nil {
+		inst.values = make(map[any]any)
+	}
+	inst.values[key] = v
+}
+
+func (inst *StaticMountContext) MountValue(key any) (v any) {
+	v = inst.values[key]
+	return
+}
 
 // SetLifetime records the instance's lifetime scope (ADR-0322, proposed),
 // which the host retires at the closing edge and drains before it closes

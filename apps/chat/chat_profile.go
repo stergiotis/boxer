@@ -11,6 +11,7 @@ import (
 	"lukechampine.com/blake3"
 
 	"github.com/stergiotis/boxer/public/config/env"
+	"github.com/stergiotis/boxer/public/keelson/runtime/agentrun"
 	"github.com/stergiotis/boxer/public/keelson/runtime/agentrun/projection"
 	"github.com/stergiotis/boxer/public/keelson/runtime/harness"
 	"github.com/stergiotis/boxer/public/keelson/runtime/headstore"
@@ -133,6 +134,23 @@ func (inst ProfileT) Validate() (err error) {
 		return eb.Build().Errorf("compaction: %w", err)
 	}
 	return
+}
+
+// runFingerprint is what a run is pinned to and a resume compares
+// (ADR-0308 §SD5): the profile's fingerprint and the tier the host's
+// declaration maps confined content to. The tier is the part of the
+// declaration the journal's labels were computed under; the rest — the
+// clearances, the approvals, the canaries — the host's services enforce at
+// every exit as they stand, so a change there needs no strand. The call
+// rows and the profile entry carry the profile's own fingerprint, which
+// keelson('harness_profiles') joins on.
+func runFingerprint(profile string, confined agentrun.TierE) string {
+	h := blake3.New(32, nil)
+	for _, p := range []string{"profile", profile, "confined", confined.String()} {
+		_, _ = h.Write([]byte(p))
+		_, _ = h.Write([]byte{0})
+	}
+	return hex.EncodeToString(h.Sum(nil))
 }
 
 // Fingerprint is the digest of the profile's values and of the prompt

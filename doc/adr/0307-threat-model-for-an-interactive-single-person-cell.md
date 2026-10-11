@@ -301,6 +301,20 @@ keeps those bodies in a vault beside the ledger, commits to them under a
 per-entry opening, and erases by destroying both; the reserved key column
 names the commitment scheme. The rest of the list stands.
 
+### 2026-10-11 — §SD1: one declaration, handed to the apps and to the host
+
+The declaration is built once per host, and every reader takes that copy.
+An app reads it from its mount context — `cell.OfMount`, over the optional
+`app.MountValuesI` capability the window host fills from `Runtime.Cell` —
+rather than building its own from `BOXER_CELL_*`; the chat's confined tier
+was the one such second read. A host that hands no declaration (a browser
+tab, a test) leaves the app on the registry's, as before.
+
+A host built from boxer as a library supplies the declaration instead of
+the environment through `hostboot.Options.Cell`; boot adds what the binary
+registers (the egress destinations, the model host) to a copy. The
+registry stays the default when nothing is supplied. Background:
+[env-registry-scope-problem](../adr-background-work/env-registry-scope-problem.md).
 
 ## References
 

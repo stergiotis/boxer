@@ -485,7 +485,7 @@ func (inst *coordinator) takeShownEntry(turn string) (e agentrun.Entry, ok bool)
 	e = agentrun.Entry{Kind: agentrun.KindUser, Role: projection.RoleUser, Form: formPixels, Body: b.String(), Attachments: projection.AttachmentsBody(atts),
 		Turn: turn, Label: agentrun.Label{Level: agentrun.LevelExternal}}
 	if localOnly {
-		e.Label.Tier = confinedTierNow()
+		e.Label.Tier = inst.confinedTier
 	}
 	return e, true
 }

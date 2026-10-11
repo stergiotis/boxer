@@ -20,6 +20,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/agentrun"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/bgjob"
+	"github.com/stergiotis/boxer/public/keelson/runtime/cell"
 	"github.com/stergiotis/boxer/public/keelson/runtime/headstore"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect/keelsonquery"
 	"github.com/stergiotis/boxer/public/keelson/runtime/lifetime"
@@ -140,6 +141,9 @@ type App struct {
 	// it closes the bus. nil without a host, where each coordinator owns
 	// its own.
 	scope *lifetime.Scope
+	// confinedTier is the tier the host's declaration maps confined
+	// content to (cell.OfMount), handed to every coordinator.
+	confinedTier agentrun.TierE
 	// tasks spawns the turn as a keelson task, which the task monitor shows
 	// and can cancel; nil without a host.
 	tasks task.TaskApiI
@@ -184,7 +188,7 @@ var _ app.AppI = (*App)(nil)
 func newApp() (inst *App) {
 	inst = &App{turnMachine: newTurnMachine(), log: zerolog.Nop(), ids: c.NewWidgetIdStack(), keep: true, draft: DraftSeed.Get(), conv: newConversation(), apps: AppsSeed.Get() || registeredCoordinator(),
 		questions: QuestionsSeed.Get(), artefact: ArtefactSeed.Get(), showArtefact: ArtefactSeed.Get(), advanced: AdvancedSeed.Get(), pubs: newStatsPublishers(), perms: defaultPermissions().withPixels(pixelsSeed(), PixelsLocalSeed.Get()),
-		opTools: OperationToolsSeed.Get(), rounds: float64(clampRounds(0))}
+		opTools: OperationToolsSeed.Get(), rounds: float64(clampRounds(0)), confinedTier: fallbackConfinedTier()}
 	return
 }
 
@@ -197,6 +201,9 @@ func (inst *App) Mount(ctx app.MountContextI) (err error) {
 	inst.log = ctx.Log()
 	inst.runId, inst.window = ctx.RunId(), ctx.InstanceKey()
 	inst.scope = app.LifetimeOf(ctx)
+	if d, ok := cell.OfMount(ctx); ok {
+		inst.confinedTier = d.ConfinedTier
+	}
 	inst.turnChip = inst.newTurnChip()
 	bus := ctx.Bus()
 	if bus == nil {
@@ -352,7 +359,7 @@ func (inst *App) startTurn(text string) (started bool) {
 		return false
 	}
 	if inst.conv.stranded {
-		inst.setNote("this conversation is read-only: it resumed under another prompt, tool set or host limits, or was deleted; New conversation starts over", true)
+		inst.setNote("this conversation is read-only: it resumed under another prompt, tool set, host limits or confined tier, or was deleted; New conversation starts over", true)
 		return false
 	}
 	if inst.deleting != "" && inst.deleting == inst.conv.id {
@@ -418,6 +425,7 @@ func (inst *App) newCoordinator(conversation string) (coord *coordinator) {
 		coord.store = inst.coord.store
 	}
 	coord.window = strconv.FormatUint(inst.window, 10)
+	coord.confinedTier = inst.confinedTier
 	if inst.anchors != nil {
 		coord.anchors = inst.anchors
 	} else if inst.coord != nil {

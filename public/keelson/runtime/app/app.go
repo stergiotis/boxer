@@ -181,6 +181,26 @@ func LifetimeOf(ctx MountContextI) (s *lifetime.Scope) {
 	return
 }
 
+// MountValuesI is an optional capability of a MountContextI: values the
+// host hands every app it mounts, keyed as context.Context's are, so a
+// package this one cannot import — the cell declaration (package cell) —
+// reaches an app as the host's one copy rather than a second read of the
+// environment. The package that owns a value owns its key and a typed
+// accessor over [MountValueOf]. Type-assert from the MountContextI, or
+// call MountValueOf; a context without the capability carries no values.
+type MountValuesI interface {
+	MountValue(key any) (v any)
+}
+
+// MountValueOf is the value ctx carries under key, nil when it carries
+// none.
+func MountValueOf(ctx MountContextI, key any) (v any) {
+	if m, ok := ctx.(MountValuesI); ok {
+		v = m.MountValue(key)
+	}
+	return
+}
+
 // BusI is the cap-broker / inter-app message bus described by ADR-0026 §SD3
 // and §SD5. M1 hosts hand back a NoopBus; M2 introduces the in-proc client
 // (package runtime/inprocbus); M4 swaps the in-proc transport for a NATS

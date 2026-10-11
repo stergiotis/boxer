@@ -96,7 +96,7 @@ func (inst *App) resumeRun(id string) {
 		inst.setNote("this conversation is being deleted", true)
 		return
 	}
-	fingerprint := profileNow().Fingerprint()
+	fingerprint := runFingerprint(profileNow().Fingerprint(), inst.confinedTier)
 	retiring := inst.retiring[id]
 	delete(inst.retiring, id)
 	inst.resumeJob.Start(nil, bgjob.Spec{Kind: "chat-resume", Title: "resume"}, func(ctx context.Context) (r *resumed, err error) {
@@ -413,9 +413,11 @@ func (inst *App) adopt(r *resumed) {
 	}
 	coord := inst.newCoordinator(conv.id)
 	coord.mu.Lock()
-	coord.journal, coord.profile, coord.fingerprint = r.writer, profileNow(), r.run.Fingerprint
+	// The coordinator's fingerprint is the profile's, which the call rows
+	// name; the run row's folds in the confined tier (runFingerprint).
+	coord.journal, coord.profile, coord.fingerprint = r.writer, profileNow(), profileNow().Fingerprint()
 	coord.tainted = r.fold.Label.Level >= agentrun.LevelExternal
-	coord.confined = r.fold.Label.Tier >= confinedTierNow()
+	coord.confined = r.fold.Label.Tier >= coord.confinedTier
 	coord.compacted = slices.ContainsFunc(r.entries, func(e agentrun.Entry) bool { return e.Kind == agentrun.KindCompact })
 	if settings.CeilingSpec != nil {
 		coord.ceiling = *settings.CeilingSpec
@@ -453,7 +455,7 @@ func lastReplyOf(entries []agentrun.Entry) (parent string, lastIn int32, lastOut
 func (inst *App) resumeNotes(r *resumed) {
 	if r.stranded {
 		inst.conv.entries = append(inst.conv.entries, entry{speaker: speakerTool, atMs: time.Now().UnixMilli(),
-			text: "resumed read-only: this conversation was started under another prompt, tool set or host limits (fingerprint " + clip(r.run.Fingerprint, 12) + "), stranded, or deleted; continuing it is a new conversation"})
+			text: "resumed read-only: this conversation was started under another prompt, tool set, host limits or confined tier (fingerprint " + clip(r.run.Fingerprint, 12) + "), stranded, or deleted; continuing it is a new conversation"})
 		return
 	}
 	if len(r.lines) == 0 {
