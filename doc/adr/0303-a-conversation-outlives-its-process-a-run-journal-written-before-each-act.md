@@ -1,12 +1,12 @@
 ---
 type: adr
-status: proposed
+status: superseded
+superseded-by: ADR-0308
+superseded-date: 2026-10-11
 date: 2026-10-09
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to accepted
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
 ---
 
-> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
+> **Superseded by [ADR-0308](./0308-the-run-journal-is-the-only-source-of-model-input.md) (2026-10-11).** The journal, its write-ahead rule, the resume fold, the grant rule and the pinning are carried forward there under a stronger reading — the journal is the only source of model input — with a widened entry, Keep governing the trail only, and deletion as a tombstone. This document remains the record of the first proposal; do not implement from it.
 
 # ADR-0303: A conversation outlives its process — a run journal written before each act, resumed by the person, with grants asked again
 
@@ -363,7 +363,7 @@ O1, O2, O3 and O5 are weighed in the QOC above. Three narrower choices:
 
 ## Status
 
-Proposed — awaiting review by the code owner.
+Superseded by ADR-0308 on 2026-10-11, before any milestone was built.
 
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers (Tier 1 in-place / Tier 2 dated `## Updates` entry / Tier 3 new superseding ADR).
