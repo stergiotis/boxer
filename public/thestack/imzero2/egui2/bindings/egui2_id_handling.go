@@ -52,9 +52,7 @@ const zeroIdReplacement uint64 = 0xd6e8feb86659fd93
 // reaches for.
 //
 // Applied at the derive boundary rather than at construction, so a
-// relative id whose XOR chain cancels to zero (nesting the same key twice:
-// PrepareStr("a") inside IdScope(PrepareStr("a"))) is caught too — that
-// case used to put a zero id on the wire and panic the client.
+// relative id whose combination with its scope lands on zero is caught too.
 func ensureNotZeroId(id uint64) uint64 {
 	if id == 0 {
 		return zeroIdReplacement
@@ -175,7 +173,7 @@ func NewWidgetIdStack() *WidgetIdStack {
 
 // SetBaseSalt installs a permanent instance salt: it acts as the empty
 // stack's base id, so every derived id — and every scope built on the stack
-// — XORs with it, and unlike a pushed scope it survives Reset. A multi-stack
+// — is combined with it, and unlike a pushed scope it survives Reset. A multi-stack
 // component (e.g. a PlayApp instance and its per-driver stacks) salts all
 // its stacks with one per-instance value so two instances rendering in the
 // same frame cannot collide in the global seenIds registry or share egui
@@ -188,12 +186,35 @@ func (inst *WidgetIdStack) SetBaseSalt(salt uint64) {
 
 var _ WidgetIdCreatorI = (*WidgetIdStack)(nil)
 
+// Derive combines the prepared id with the enclosing scope (the top of the
+// stack, or the base salt when the stack is empty) through [combineScopeId].
 func (inst *WidgetIdStack) Derive() (id uint64) {
 	inst.transitionState(WidgetIdStackInitial, WidgetIdStackPrepared)
-	id = inst.currentId
-	last := inst.peekIdFromStack()
-	id = ensureNotZeroId(last ^ id)
+	id = ensureNotZeroId(combineScopeId(inst.peekIdFromStack(), inst.currentId))
 	return
+}
+
+// combineScopeId is the one place a scope and a scope-relative id meet.
+//
+// The scope is scrambled before it is XORed with the local id, which makes
+// the combination order-sensitive: IdScope(a){W(b)} and IdScope(b){W(a)}
+// derive unrelated ids, and a widget keyed like its own scope does not
+// cancel back to the scope's parent. A plain XOR of the two is symmetric
+// and self-inverse, so every widget keyed by two ordinals (row and column,
+// node and column, window and tab) collided whenever the ordinals traded
+// places.
+//
+// For a fixed scope the map from local id to derived id is still XOR with a
+// constant, a bijection: distinct ids under one scope stay distinct.
+//
+// The empty, unsalted scope (zero) is left as is, so a relative id derived
+// at the root equals the absolute id of the same value. Pushed scopes are
+// never zero ([ensureNotZeroId] runs on every derived id).
+func combineScopeId(scope uint64, local uint64) uint64 {
+	if scope != 0 {
+		scope = splitmix64.Forward(scope)
+	}
+	return scope ^ local
 }
 func (inst *WidgetIdStack) DeriveStacked() uint64 {
 	id := inst.Derive()
@@ -215,9 +236,9 @@ func (inst *WidgetIdStack) verifyState(allowed WidgetIdStackStateE) {
 
 // PrepareStr, PrepareSeq and PrepareHighEntropy keep the caller's value
 // verbatim; the non-zero guard runs once at [WidgetIdStack.Derive], after
-// the XOR with the enclosing scope. Normalising here instead would be both
-// too early (the XOR can still land on zero) and lossy, since it applied
-// to distinct arguments before they were ever combined.
+// the combination with the enclosing scope. Normalising here instead would
+// be both too early (the combination can still land on zero) and lossy,
+// since it applied to distinct arguments before they were ever combined.
 func (inst *WidgetIdStack) PrepareStr(str string) *WidgetIdStack {
 	inst.transitionState(WidgetIdStackPrepared, WidgetIdStackInitial)
 	inst.currentName = str

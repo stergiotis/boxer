@@ -295,7 +295,7 @@ var dockTabBodyBuffers = runtime.RegisterBufferHint("dockTabBody")
 // their captured bodies, then pops the dock id via PopIdFromStackChecked.
 //
 // Inside the scope, any PrepareStr / IdScope used within a tab body is
-// XOR'd with the dock id on its way down the stack, so two dock areas in
+// combined with the dock id on its way down the stack, so two dock areas in
 // the same app with identically-named internal widgets do not collide,
 // and moving a tab around a dock does not shift sibling widget ids.
 //

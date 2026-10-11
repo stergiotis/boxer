@@ -54,6 +54,45 @@ func TestIdDerivationIsInjective(t *testing.T) {
 	}
 }
 
+// TestScopedIdsAreOrderSensitive pins that a scope and the id inside it do
+// not commute: a widget keyed by two ordinals — row and column, node and
+// column — must not share an id with the one whose ordinals are swapped,
+// and a widget keyed like its own scope must not cancel back to the scope's
+// parent. Both held for a plain XOR of scope and id.
+func TestScopedIdsAreOrderSensitive(t *testing.T) {
+	const n = 64
+	ids := NewWidgetIdStack()
+	seen := make(map[uint64][2]uint64, n*n)
+	for range IdScope(ids.PrepareStr("cell")) {
+		root := ids.PrepareStr("cell").Derive()
+		for a := range uint64(n) {
+			for range IdScope(ids.PrepareSeq(a)) {
+				for b := range uint64(n) {
+					id := ids.PrepareSeq(b).Derive()
+					if prev, dup := seen[id]; dup {
+						t.Fatalf("Seq(%d)/Seq(%d) and Seq(%d)/Seq(%d) both derive %#x", prev[0], prev[1], a, b, id)
+					}
+					seen[id] = [2]uint64{a, b}
+					if a == b {
+						assert.NotEqual(t, root, id, "Seq(%d) inside Seq(%d) cancelled to the parent", b, a)
+					}
+				}
+			}
+		}
+	}
+	assert.Zero(t, ids.Depth(), "scopes pop back to the empty stack")
+}
+
+// TestRootRelativeIdEqualsAbsolute pins that the empty, unsalted stack
+// leaves an id as it is: a relative id at the root and the absolute id of
+// the same value put the same id on the wire.
+func TestRootRelativeIdEqualsAbsolute(t *testing.T) {
+	ids := NewWidgetIdStack()
+	assert.Equal(t, MakeAbsoluteIdStr("topbar").Derive(), ids.PrepareStr("topbar").Derive())
+	assert.Equal(t, MakeAbsoluteIdSeq(7).Derive(), ids.PrepareSeq(7).Derive())
+	assert.Equal(t, MakeAbsoluteIdHighEntropy(0xdeadbeef).Derive(), ids.PrepareHighEntropy(0xdeadbeef).Derive())
+}
+
 // TestAbsoluteIdRawEqualsDerived pins that an AbsoluteWidgetId's numeric
 // value is the id that goes on the wire. Several call sites key their own
 // side tables with uint64(absId) (probe seqs, retained per-widget state)
@@ -78,18 +117,17 @@ func TestAbsoluteIdRawEqualsDerived(t *testing.T) {
 // builds every id with Id::from_high_entropy_bits, which panics on zero,
 // so a zero id is a client crash rather than a misbehaving widget.
 //
-// The reachable case is a relative id whose XOR chain cancels: nesting a
-// scope under a scope of the same key. The stack's base salt is a second
-// route to the same cancellation.
+// The routes to it are a caller-supplied zero, and a relative id at the
+// unsalted root, where the local id is the derived id.
 func TestDerivedIdIsNeverZero(t *testing.T) {
 	assert.Equal(t, zeroIdReplacement, MakeAbsoluteIdHighEntropy(0).Derive())
 	assert.Equal(t, zeroIdReplacement, AbsoluteWidgetId(0).Derive())
+	assert.Equal(t, zeroIdReplacement, NewWidgetIdStack().PrepareHighEntropy(0).Derive())
 
 	ids := NewWidgetIdStack()
 	outer := ids.PrepareStr("a").DeriveStacked()
 	inner := ids.PrepareStr("a").Derive()
 	assert.NotZero(t, inner, "same key nested under itself must not cancel to zero")
-	assert.Equal(t, zeroIdReplacement, inner)
 	ids.PopIdFromStackChecked(outer)
 
 	salted := NewWidgetIdStack()
@@ -114,7 +152,8 @@ func TestWidgetIdStackBaseSalt(t *testing.T) {
 	assert.NotEqual(t, idPlain, idA)
 	assert.NotEqual(t, idPlain, idB)
 	assert.NotEqual(t, idA, idB, "same label under different salts must differ")
-	assert.Equal(t, idPlain^0x1111, idA, "the salt is the empty stack's XOR base")
+	assert.Equal(t, combineScopeId(0x1111, hashLabelToId("topbar")), idA,
+		"the salt is the empty stack's base scope")
 
 	// A zero salt is the legacy behaviour.
 	z := NewWidgetIdStack()
@@ -130,7 +169,7 @@ func TestWidgetIdStackBaseSalt(t *testing.T) {
 	// Scopes compose on top of the salt and pop back to it.
 	base := b.PrepareStr("scope").DeriveStacked()
 	inScope := b.PrepareStr("leaf").Derive()
-	assert.Equal(t, base^unsalted.PrepareStr("leaf").Derive(), inScope)
+	assert.Equal(t, combineScopeId(base, unsalted.PrepareStr("leaf").Derive()), inScope)
 	b.PopIdFromStackChecked(base)
 	assert.Equal(t, idB, b.PrepareStr("topbar").Derive())
 }

@@ -1277,8 +1277,8 @@ func (inst *Inst) Frame(ids *c.WidgetIdStack) (err error) {
 			// already consumed the prepared id and pushed/popped its
 			// stacked scope this pass, so the WidgetIdStack is back at
 			// the same outer state — derive here gives the same wire
-			// id the window painted under (XOR-with-stack-top is
-			// deterministic for the same input + stack state).
+			// id the window painted under (derivation is deterministic
+			// for the same input + stack state).
 			ids.PrepareStr("window-" +
 				strconv.FormatUint(uint64(key), 10))
 			h := widgethandle.Make(ids.Derive())
@@ -1450,18 +1450,10 @@ func (inst *Inst) renderEmptyState(ids *c.WidgetIdStack) {
 var windowhostDebugRender = DebugRender.Get() != ""
 
 // windowhostInstanceSalt derives the per-window widget-id salt that
-// renderWindowBody pushes around each app's Frame. The salt MUST live
-// outside the sequence-id space that PrepareSeq(index) draws from
-// (makeHighEntropy of small integers): the widget-id stack combines a
-// pushed salt and a child's PrepareSeq(index) by XOR, so a salt of
-// makeHighEntropy(w.key) — what an earlier appIds.PrepareSeq(w.key)
-// produced — aliased option ids across windows whenever a window key
-// equalled a child index. Two open windows then shared the tab whose
-// index matched the other window's key (e.g. window 1 tab 2 == window 2
-// tab 1), colliding in the global seenIds registry and sharing egui
-// widget state. Multiplying the key by the golden-ratio odd constant and
-// XOR-ing a domain tag moves the salt clear of that space, mirroring the
-// play app's playInstanceSalt.
+// renderWindowBody pushes around each app's Frame, so two windows of one app
+// do not share widget ids. The key is spread by the golden-ratio odd
+// constant and tagged with a domain constant, which keeps the salt clear of
+// the ids PrepareSeq draws from small integers.
 func windowhostInstanceSalt(key WindowKeyT) uint64 {
 	const saltTag = 0x57696e486f737421 // "WinHost!"
 	return (uint64(key) * 0x9e3779b97f4a7c15) ^ saltTag

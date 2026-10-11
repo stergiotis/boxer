@@ -23,8 +23,8 @@
 // in [Events].
 //
 // Multiple instances can coexist safely: Render wraps its body in c.IdScope
-// keyed by scopeKey, so the imzero2 id stack automatically XORs the instance
-// scope into every internal id.
+// keyed by scopeKey, so the imzero2 id stack automatically combines the
+// instance scope into every internal id.
 //
 // # Validation policy
 //

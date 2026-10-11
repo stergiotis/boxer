@@ -218,8 +218,8 @@ func (inst *focusDemoState) panel(ids *c.WidgetIdStack, name string, which int, 
 	inst.handles[which] = id
 
 	// The Frame is created unconditionally and only its decoration varies —
-	// a Frame that appeared and disappeared would XOR every inner widget's id
-	// in and out of the stack (see the row-highlight reference).
+	// a Frame that appeared and disappeared would move every inner widget's
+	// id in and out of its scope (see the row-highlight reference).
 	flags := c.CurrentApplicationState.StateManager.GetResponseByIdRaw(id)
 	stroke, strokeW := color.Transparent, float32(0)
 	if flags.HasFocus() {

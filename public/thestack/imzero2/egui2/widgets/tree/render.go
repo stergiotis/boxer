@@ -123,9 +123,7 @@ var (
 // under the tree's IdScope, and the node (and, for a cell, the column) is one
 // ordinal inside it, so two kinds cannot land on the same id for the same node
 // and two trees in one frame do not collide (ADR-0267 W5). The disclosure
-// control nests in the outline cell and inherits its node from there. The
-// stack composes by XOR, so a path must never carry the same key twice, nor
-// two ordinals that can trade places — either cancels the node out.
+// control nests in the outline cell and inherits its node from there.
 
 // Row chrome colours, from the design-system roles rather than literals
 // (ADR-0031). Selection takes the accent role; the stripe takes the faintest
@@ -683,9 +681,7 @@ func (in Input) outlineCell(r Row, indent float32, density styletokens.DensityE)
 // leaf's label starts where an interior sibling's does.
 //
 // It runs inside paddedCell's frame, whose id already carries the node, so it
-// adds only its kind. A second node scope is not just redundant: the id stack
-// composes by XOR, so under a cell keyed Seq(node) it cancelled the node and
-// gave every row's disclosure the same ids.
+// adds only its kind.
 func (in Input) disclose(r Row) (clicked bool) {
 	for range c.IdScope(in.Ids.PrepareStr("disc")) {
 		clicked = in.discloseSlot(r)
@@ -749,10 +745,8 @@ func (in Input) discloseSlot(r Row) (clicked bool) {
 // a cell still has to live inside.
 func (in Input) paddedCell(r Row, col int, density styletokens.DensityE, body func(r Row)) {
 	pad := cellInset(density)
-	// One ordinal for the (node, column) pair, not a node scope with a column
-	// seq inside it: the id stack composes by XOR, which is symmetric, so
-	// Seq(node)^Seq(col) gives (a, b) and (b, a) one id and cancels outright
-	// when node == col.
+	// One ordinal for the (node, column) pair: the cell is one widget, keyed
+	// once.
 	for range c.IdScope(in.Ids.PrepareStr("cell")) {
 		for range c.Frame(in.Ids.PrepareSeq(uint64(uint32(r.Node))<<32|uint64(uint32(col)))).
 			OuterMargin(0).

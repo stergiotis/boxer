@@ -1,6 +1,6 @@
 ---
 name: imzero2
-description: "Use when writing imzero2 / egui2 GUI code — the FFFI render pipeline, memory management, the deterministic XOR id stack, retained/deferred bodies, and widget contracts."
+description: "Use when writing imzero2 / egui2 GUI code — the FFFI render pipeline, memory management, the deterministic id stack, retained/deferred bodies, and widget contracts."
 type: reference
 audience: contributor
 status: stable
@@ -37,18 +37,18 @@ The FFFI architecture avoids the overhead of shared pointers or CGo garbage coll
 
 ---
 
-# 3. Deterministic ID Management (The XOR Stack)
+# 3. Deterministic ID Management (The ID Stack)
 
-The library uses a **64-bit XOR-stack** to maintain widget identity. Identity is required for the client to know if "Button A" in Frame 1 is the same as "Button A" in Frame 2.
+The library uses a **64-bit id stack** to maintain widget identity. Identity is required for the client to know if "Button A" in Frame 1 is the same as "Button A" in Frame 2.
 
 ### The Formula
-$$ID_{effective} = ID_{stack} \oplus ID_{local}$$
-Where $\oplus$ is the XOR operator. This allows for efficient namespacing: if you move a group of widgets into a new sub-scope, their relative identities remain stable while their effective IDs change.
+$$ID_{effective} = mix(ID_{stack}) \oplus ID_{local}$$
+Where $mix$ is splitmix64 (the identity on an empty, unsalted stack) and $\oplus$ is XOR. Scrambling the scope first makes the combination order-sensitive: `IdScope(a){W(b)}` and `IdScope(b){W(a)}` derive unrelated ids, and a widget keyed like its own scope does not cancel to the scope's parent — so a widget keyed by two ordinals (row and column) needs no packing trick. This allows for efficient namespacing: if you move a group of widgets into a new sub-scope, their relative identities remain stable while their effective IDs change.
 
 ### ID Categories
 | Type                              | Behavior | Best Use Case |
 |:----------------------------------| :--- | :--- |
-| **Relative (`*WidgetIdStack`)**  | XORed with the current stack value. | Standard widgets, list items, nested components. |
+| **Relative (`*WidgetIdStack`)**  | Combined with the current stack value. | Standard widgets, list items, nested components. |
 | **Absolute (`AbsoluteWidgetId`)** | Replaces the stack value; ignores parents. | Top-level Windows, Modals, Global Overlays. |
 Both types do satisfy the `components.WidgetIdCreatorI` interface. The WidgetIdStack must be created by the application:
 ```go
@@ -89,13 +89,14 @@ read-back depends on both:
   creator above. Only one value is rewritten: an id that derives to exactly
   `0`, which egui rejects (`egui::Id` is a `NonZeroU64`), is replaced by a
   fixed high-entropy stand-in. Adjacent integers
-  (`MakeAbsoluteIdHighEntropy(base+0)`, `+1`, `+2`, …) are safe. The scope
-  and the local id are combined by XOR, which cancels and commutes: a
-  widget keyed like its own scope (`IdScope(x)` around `W(x)`) derives to
-  the scope's parent, so two such pairs `x` and `y` share one id, and
-  `IdScope(a){W(b)}` collides with `IdScope(b){W(a)}`. `checkId` logs
-  "id has already been used" when that happens; key a widget differently
-  from the scope it sits in.
+  (`MakeAbsoluteIdHighEntropy(base+0)`, `+1`, `+2`, …) are safe. Across
+  scopes, ids collide only by 64-bit chance: the scope is scrambled
+  before it meets the local id, so swapped ordinals
+  (`IdScope(a){W(b)}` vs `IdScope(b){W(a)}`) and self-keyed scopes
+  (`IdScope(x){W(x)}`) are distinct. What still collides is the same id
+  derived twice under the same scope — the same widget drawn twice in a
+  frame, or two rows sharing a key. `checkId` logs "id has already been
+  used" when that happens.
 - **An `AbsoluteWidgetId`'s numeric value *is* its wire id**, so
   `uint64(absId)` and `absId.Derive()` agree. Side tables keyed by an
   absolute id may use either spelling.
@@ -1608,7 +1609,7 @@ for range dock.Tab(dockID, title) {
 ### 18.6 Composition and correctness
 
 - **Nesting** costs one placeholder frame per level (bounded, visually covered); while an outer region is skipped, inner code — including inner probes — never runs, so the signal composes with block culling automatically.
-- **No id drift.** Each tab body is its own capture buffer and the XOR id stack is unaffected by sibling content; egui memory (scroll, collapse) for a hidden body's ids persists and restores on re-show.
+- **No id drift.** Each tab body is its own capture buffer and the id stack is unaffected by sibling content; egui memory (scroll, collapse) for a hidden body's ids persists and restores on re-show.
 - **Send-once protocols** under a revealed body re-arm through the starved-texture report (`StateManager.TextureStarved`, §12) exactly as after an idle-LRU eviction — that r22 fix is what makes skipping a texture-bearing body safe. Use `JustRevealed()` to re-arm eagerly and shave the round-trip.
 - **Verify in the real bounded host, not the tour.** The tour starts *on* the tab under test, so it never exercises the hidden→visible edge — walk the tabs interactively ([`doc/howto/verify-dock-tab-walk.md`](../../howto/verify-dock-tab-walk.md)).
 
