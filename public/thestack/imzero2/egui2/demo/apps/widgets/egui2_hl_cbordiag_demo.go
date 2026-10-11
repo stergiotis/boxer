@@ -2,7 +2,12 @@ package widgets
 
 import (
 	"encoding/hex"
+	"sync"
 
+	"github.com/rs/zerolog/log"
+
+	runtimeapp "github.com/stergiotis/boxer/public/keelson/runtime/app"
+	"github.com/stergiotis/boxer/public/keelson/runtime/clipboardbroker"
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
 	"github.com/stergiotis/boxer/public/semistructured/cbor/diag"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
@@ -28,6 +33,32 @@ type cbordiagDemoState struct {
 	// One State per view: the compact toggle and the memo belong to the
 	// place a view is drawn, not to the Renderer.
 	stEntity, stSequence, stMalformed cbordiag.State
+	// bus reaches the clipboard broker; nil on a host without one, which
+	// withholds the copy buttons.
+	bus runtimeapp.BusI
+}
+
+// copyDenied logs once per process that the broker refused the copy: the
+// manifest grants clipboard.write, so a refusal is a wiring fault, not a
+// state the person can change by pressing again.
+var copyDenied sync.Once
+
+// copy hands text to the clipboard broker off the frame goroutine, as the
+// apps do; nil without a bus.
+func (inst *cbordiagDemoState) copy() func(text string) {
+	if inst.bus == nil {
+		return nil
+	}
+	bus := inst.bus
+	return func(text string) {
+		go func() {
+			if _, err := bus.Request(clipboardbroker.SubjectWrite, []byte(text)); err != nil {
+				copyDenied.Do(func() {
+					log.Warn().Err(err).Msg("gallery: the clipboard broker refused the cbordiag demo's copy")
+				})
+			}
+		}()
+	}
 }
 
 // The fixtures, as the bytes a wire would carry. Decoded once at init.
@@ -83,8 +114,8 @@ func init() {
 		Flags:       registry.DemoFlagNeedsLargeArea,
 		Kind:        registry.DemoKindUX,
 		Description: "widgets/cbordiag over the cbor/diag printer: CBOR bytes as RFC 8949 §8 diagnostic notation, pretty-printed one element per line past the line width, with known tags labelled in comments and a host hook annotating positions. Compact mode reproduces the fxamacker library's single-line notation byte for byte. Malformed input degrades: the parsed prefix, one error span, the remainder as hex.",
-		Init: func(_ *c.WidgetIdStack) (state any) {
-			state = &cbordiagDemoState{tagComments: true, width: 48}
+		BusInit: func(_ *c.WidgetIdStack, bus runtimeapp.BusI) (state any) {
+			state = &cbordiagDemoState{tagComments: true, width: 48, bus: bus}
 			return
 		},
 		RenderStateful: func(ids *c.WidgetIdStack, state any) {
@@ -111,14 +142,14 @@ func demoCborDiag(ids *c.WidgetIdStack, st *cbordiagDemoState) {
 		annotated := opts
 		annotated.Annotate = cbordiagAnnotate
 		st.stEntity.Verdict = "annotated by the host's path hook"
-		cbordiag.Render(cbordiag.Input{Ids: ids, ScopeKey: "cd-entity", State: &st.stEntity, Item: cbordiagEntity, Options: annotated})
+		cbordiag.Render(cbordiag.Input{Ids: ids, ScopeKey: "cd-entity", State: &st.stEntity, Item: cbordiagEntity, Options: annotated, Copy: st.copy()})
 	}
 	for range c.CollapsingHeader(ids.PrepareStr("sequence"), c.WidgetText().Text("RFC 8949 Appendix A nesting, as a sequence").Keep()).DefaultOpen(true).KeepIter() {
 		seq := opts
 		seq.Sequence = true
-		cbordiag.Render(cbordiag.Input{Ids: ids, ScopeKey: "cd-seq", State: &st.stSequence, Item: cbordiagSequence, Options: seq})
+		cbordiag.Render(cbordiag.Input{Ids: ids, ScopeKey: "cd-seq", State: &st.stSequence, Item: cbordiagSequence, Options: seq, Copy: st.copy()})
 	}
 	for range c.CollapsingHeader(ids.PrepareStr("malformed"), c.WidgetText().Text("malformed (graceful degradation)").Keep()).KeepIter() {
-		cbordiag.Render(cbordiag.Input{Ids: ids, ScopeKey: "cd-bad", State: &st.stMalformed, Item: cbordiagMalformed, Options: opts})
+		cbordiag.Render(cbordiag.Input{Ids: ids, ScopeKey: "cd-bad", State: &st.stMalformed, Item: cbordiagMalformed, Options: opts, Copy: st.copy()})
 	}
 }

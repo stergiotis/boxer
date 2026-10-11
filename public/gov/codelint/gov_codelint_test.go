@@ -587,3 +587,34 @@ func TestIsTestSupportPackage(t *testing.T) {
 		assert.False(t, codelint.IsTestSupportPackage(name), name)
 	}
 }
+
+func TestCS014_FlagsTheClipboardOpcodeOutsideTheBroker(t *testing.T) {
+	root, err := filepath.Abs("./testdata/cs014/bad")
+	require.NoError(t, err)
+	pkgs, err := codelint.LoadPackages(codelint.LoadConfig{}, root)
+	require.NoError(t, err)
+	require.NotEmpty(t, pkgs)
+
+	linter := codelint.NewLinter()
+	linter.Register(codelint.NewRuleCS014())
+	var findings []codelint.Finding
+	for f, runErr := range linter.Run(pkgs) {
+		require.NoError(t, runErr)
+		findings = append(findings, f)
+	}
+	require.Len(t, findings, 4, "a call, a field value, a variable and a dot-import use")
+	for _, f := range findings {
+		assert.Equal(t, "CS014", f.RuleId)
+		assert.Equal(t, codelint.FindingSeverityError, f.Severity)
+		assert.Contains(t, f.Path, "bad.go")
+	}
+
+	good, err := filepath.Abs("./testdata/cs014/good")
+	require.NoError(t, err)
+	pkgs, err = codelint.LoadPackages(codelint.LoadConfig{}, good)
+	require.NoError(t, err)
+	for f, runErr := range linter.Run(pkgs) {
+		require.NoError(t, runErr)
+		t.Errorf("unexpected finding: %+v", f)
+	}
+}

@@ -38,6 +38,11 @@ type Input struct {
 	// State is the host's memo and toggle, one per place a view is drawn.
 	// Required.
 	State *State
+	// Copy puts the notation on the clipboard when the copy button is
+	// pressed: the host's route to the clipboard broker, whose request the
+	// bus audits (ADR-0026 Update 2026-05-30). Nil withholds the button
+	// rather than drawing one that copies nothing.
+	Copy func(text string)
 	// HideToolbar drops the row above the notation. Without it the compact
 	// toggle is whatever State.Compact says and copying is the host's.
 	HideToolbar bool
@@ -166,10 +171,12 @@ func (in Input) renderToolbar(st *State, nBytes int) (copied bool) {
 		c.AddSpace(styletokens.GapInline(density))
 		c.Checkbox(ids.PrepareStr("compact"), st.Compact, "compact").SendRespVal(&st.Compact)
 		c.AddSpace(styletokens.GapInline(density))
-		for range c.HoverText("copy the diagnostic notation").KeepIter() {
-			if c.Button(ids.PrepareStr("copy"), copyAtoms).Small().SendResp().HasPrimaryClicked() {
-				c.CopyTextToClipboard(st.text)
-				copied = true
+		if in.Copy != nil {
+			for range c.HoverText("copy the diagnostic notation").KeepIter() {
+				if c.Button(ids.PrepareStr("copy"), copyAtoms).Small().SendResp().HasPrimaryClicked() {
+					in.Copy(st.text)
+					copied = true
+				}
 			}
 		}
 		if st.Verdict != "" {

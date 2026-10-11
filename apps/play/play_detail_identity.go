@@ -159,12 +159,12 @@ func (inst *identityDetail) render(app *PlayApp, rec arrow.RecordBatch, row int6
 		for rt := range c.RichTextLabel("canonform · attribute items, then the entity item") {
 			rt.Weak().Small()
 		}
-		cbordiag.Render(cbordiag.Input{Ids: inst.ids, ScopeKey: "idn-cf", State: &inst.canonState, Item: canonItems, Options: inst.comp.notes.canonformOptions()})
+		cbordiag.Render(cbordiag.Input{Ids: inst.ids, Copy: copierOf(app), ScopeKey: "idn-cf", State: &inst.canonState, Item: canonItems, Options: inst.comp.notes.canonformOptions()})
 		for rt := range c.RichTextLabel("canonwire · entity item") {
 			rt.Weak().Small()
 		}
 		inst.wireState.Verdict = verdict
-		cbordiag.Render(cbordiag.Input{Ids: inst.ids, ScopeKey: "idn-cw", State: &inst.wireState, Item: wireItem, Options: inst.comp.notes.canonwireOptions()})
+		cbordiag.Render(cbordiag.Input{Ids: inst.ids, Copy: copierOf(app), ScopeKey: "idn-cw", State: &inst.wireState, Item: wireItem, Options: inst.comp.notes.canonwireOptions()})
 	}
 	return true
 }
@@ -203,4 +203,13 @@ func cborKeyUint(key []byte) (n uint64, ok bool) {
 		return uint64(key[1])<<8 | uint64(key[2]), true
 	}
 	return
+}
+
+// copierOf is the app's route to the clipboard broker for a widget's copy
+// button, nil without a bus so the widget withholds the button.
+func copierOf(app *PlayApp) func(text string) {
+	if !app.CanCopy() {
+		return nil
+	}
+	return app.copyToClipboard
 }

@@ -102,6 +102,19 @@ Accepted 2026-05-18. Phase 1 lands incrementally; CS001 ships with this ADR. The
 
 ## Updates
 
+### 2026-10-11 — CS014: the clipboard opcode has one builder
+
+`CS014` reports any use of the egui2 bindings' `CopyTextToClipboard` — a
+call, a function value stored in a field or a variable, a dot-import use —
+outside the clipboard broker package, the host package that drains the
+broker, and the bindings themselves; test files are exempt. It ships at
+`error` severity with an empty allowlist, since every direct caller in the
+tree was routed through the broker in the same change
+([ADR-0026](./0026-app-runtime-and-capability-subjects.md), update of this
+date). It is the lint [ADR-0317](./0317-clipboard-and-export-copy-by-reference-and-one-choke-point.md)
+(proposed) §SD2 names; the plugin that would label the copy on the Rust
+side stays deferred there.
+
 ### 2026-10-08 — the `*E`-suffix rule leaves phase 2
 
 Phase 2's "`*E`-suffix returns error last" has no convention left to check:

@@ -123,6 +123,7 @@ names it.
 * Use `github.com/stergiotis/boxer/semistructured/leeway/naming` for conversions between naming schemes (e.g. snake_case to camelCase).
 * Use `github.com/urfave/cli/v3` for cli commands and flags handling (see [Entry Points](#entry-points)).
 * Use `github.com/dim13/colormap` for scientific color maps (Magma, Inferno, Plasma, Vidiris, Parula).
+* Copy to the clipboard by requesting `clipboard.write` on the bus (`public/keelson/runtime/clipboardbroker`), never by building the egui2 `CopyTextToClipboard` opcode: the broker's request leg is what the audit records, and the host's drain is the opcode's one builder (codelint CS014, [ADR-0026](./doc/adr/0026-app-runtime-and-capability-subjects.md)). A widget takes the host's route as a function and withholds its button without one.
 
 ## Error Handling
 

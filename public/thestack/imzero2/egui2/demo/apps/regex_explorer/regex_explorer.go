@@ -10,10 +10,13 @@ import (
 	"unicode/utf8"
 
 	"github.com/apache/arrow-go/v18/arrow/memory"
+	"github.com/rs/zerolog/log"
+
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/marshalling"
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	"github.com/stergiotis/boxer/public/keelson/runtime/adhocdata"
 	runtimeapp "github.com/stergiotis/boxer/public/keelson/runtime/app"
+	"github.com/stergiotis/boxer/public/keelson/runtime/clipboardbroker"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/color"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/regexedit"
@@ -81,9 +84,11 @@ const (
 //   - compileCache has its own mutex (compileCacheMu) because the
 //     tripwire goroutine shares it with the render thread.
 type App struct {
-	mu       sync.RWMutex
-	pattern  string
-	haystack string
+	// copyDenied logs once that the broker refused a copy.
+	copyDenied sync.Once
+	mu         sync.RWMutex
+	pattern    string
+	haystack   string
 
 	replacement string
 	patternList string
@@ -211,6 +216,26 @@ func newApp() (inst *App) {
 		dotAll: true,
 	}
 	return
+}
+
+// copyToClipboard hands text to the clipboard broker (ADR-0026 Update
+// 2026-05-30), off the frame goroutine since Request blocks until the
+// broker acks; a request, not a publish, so the audit records the copy.
+// The button is withheld without a bus (renderFnRow), so a nil bus here
+// is a frame that lost it since; a refusal is logged once, as the
+// manifest grants the subject.
+func (inst *App) copyToClipboard(text string) {
+	bus := inst.busSnapshot()
+	if bus == nil {
+		return
+	}
+	go func() {
+		if _, err := bus.Request(clipboardbroker.SubjectWrite, []byte(text)); err != nil {
+			inst.copyDenied.Do(func() {
+				log.Warn().Err(err).Msg("regex_explorer: the clipboard broker refused the copy")
+			})
+		}
+	}()
 }
 
 // setBus attaches bus as the transport for subsequent queries. Safe to
@@ -679,9 +704,13 @@ func (inst *App) renderFnRow(fn chFnE, pattern string, chText string, chHas bool
 			cellLabel(nil, goText, maxVerdictRunes)
 		}
 
-		for range c.HoverText("copy " + expr).KeepIter() {
-			if c.Button(inst.ids.PrepareStr("copy"), c.Atoms().Text("copy SQL").Keep()).Small().SendResp().HasPrimaryClicked() {
-				c.CopyTextToClipboard(expr)
+		// The copy goes through the clipboard broker; without a bus there
+		// is no broker, so the button is withheld rather than drawn dead.
+		if inst.busSnapshot() != nil {
+			for range c.HoverText("copy " + expr).KeepIter() {
+				if c.Button(inst.ids.PrepareStr("copy"), c.Atoms().Text("copy SQL").Keep()).Small().SendResp().HasPrimaryClicked() {
+					inst.copyToClipboard(expr)
+				}
 			}
 		}
 

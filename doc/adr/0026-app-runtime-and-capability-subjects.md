@@ -359,6 +359,37 @@ Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded
 
 ## Updates
 
+### 2026-10-11 — subjects the agent harness adds
+
+Three subject families join the taxonomy of §SD3. `runtime.agentrun.*`
+(`create`, `update`, `get`, `list`, `append`, `entries`, `tombstone`) is
+the run journal's host service, scoped to the sender and holding the
+single-writer invariants ([ADR-0308](./0308-the-run-journal-is-the-only-source-of-model-input.md)
+§SD9, §SD10). `runtime.anchor.*` (`append`, `read`) is the anchor store's
+contract, served in process by default
+([ADR-0314](./0314-tamper-evident-records-chain-digests-and-anchored-heads.md)
+§SD2). `clipboard.resolve` answers a copy handle with its labelled payload,
+beside `clipboard.write`, whose payload may now carry a label and a source
+and whose reply is a copy record
+([ADR-0317](./0317-clipboard-and-export-copy-by-reference-and-one-choke-point.md)
+§SD1, §SD3). Each is declared in the owning package's `ServiceCaps` and
+`ClientCaps`, and the chat's manifest requests the two runtime families.
+
+### 2026-10-11 — every copy goes through the broker; CS014 holds it
+
+The three places that still built the `CopyTextToClipboard` opcode
+themselves — the `cbordiag` widget's copy button, the regex explorer's
+"copy SQL" and play's identity detail through the widget — now request
+`clipboard.write` on the bus, so the audit records every copy as the
+2026-05-30 entry intended. The widget takes the host's route as a
+function (`cbordiag.Input.Copy`) and withholds its button without one, so
+a host without a bus draws no button that copies nothing; the gallery and
+the regex explorer declare the capability. Codelint `CS014`
+([ADR-0011](./0011-codelint.md), update of this date) refuses a new direct
+builder outside the broker and the host's drain. The payload that carries
+a label with the copy is [ADR-0317](./0317-clipboard-and-export-copy-by-reference-and-one-choke-point.md)
+(proposed).
+
 ### 2026-09-29 — §SD7: handle and appdata ops run off the requester's goroutine
 
 The in-process bus runs a responder inline, inside the requester's publish,

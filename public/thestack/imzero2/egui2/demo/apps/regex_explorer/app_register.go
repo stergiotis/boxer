@@ -5,6 +5,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	"github.com/stergiotis/boxer/public/keelson/runtime/adhocdata"
 	runtimeapp "github.com/stergiotis/boxer/public/keelson/runtime/app"
+	"github.com/stergiotis/boxer/public/keelson/runtime/clipboardbroker"
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
 	"github.com/stergiotis/boxer/public/keelson/runtime/windowhost"
 )
@@ -44,6 +45,11 @@ var manifest = runtimeapp.Manifest{
 			Pattern:   adhocdata.SubjectPublish,
 			Direction: runtimeapp.CapDirectionPub,
 			Reason:    "regex_explorer: publish the Go and ClickHouse extraction as ad-hoc datasets (ADR-0134)",
+		},
+		{
+			Pattern:   clipboardbroker.SubjectWrite,
+			Direction: runtimeapp.CapDirectionPub,
+			Reason:    "regex_explorer: copy the ClickHouse expression through the clipboard broker (ADR-0026)",
 		},
 		{
 			Pattern:   windowhost.OpenSubject,
