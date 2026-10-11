@@ -1,0 +1,258 @@
+package attention
+
+import (
+	"cmp"
+	"iter"
+	"slices"
+	"sync"
+	"time"
+
+	"github.com/stergiotis/boxer/public/keelson/runtime/app"
+)
+
+// Item is one decision the person owes, as its source reports it (ADR-0324
+// §SD1). Key is unique across sources; Bound is the earliest clock that
+// ends the item — its expiry or its task's deadline — zero for none.
+type Item struct {
+	Key          string
+	Kind         string
+	Effect       app.OperationEffectE
+	App          app.AppIdT
+	Instance     uint64
+	Conversation string
+	Summary      string
+	Created      time.Time
+	Bound        time.Time
+	BoundWhy     string
+}
+
+// SourceI is a host service holding decisions the person owes. The queue
+// reads its items each frame; the source keeps their state.
+type SourceI interface {
+	WaitingItems() iter.Seq[Item]
+}
+
+// Entry is an item as the queue shows it.
+type Entry struct {
+	Item
+	Level LevelE
+	// Acked is the person's acknowledgement: seen, not decided.
+	Acked bool
+	// ShelvedUntil is when a shelved item returns; zero when not shelved.
+	ShelvedUntil time.Time
+	// Escalated is a your-turn item left unacknowledged past the escalation
+	// interval (ADR-0324 §SD4).
+	Escalated bool
+	// NearBound is an item within the escalation interval of its bound.
+	NearBound bool
+}
+
+// ActE is what the person did to an item, for the trail.
+type ActE uint8
+
+const (
+	ActAcknowledge ActE = iota + 1
+	ActShelve
+	ActUnshelve
+)
+
+func (inst ActE) String() (s string) {
+	switch inst {
+	case ActAcknowledge:
+		s = "acknowledge"
+	case ActShelve:
+		s = "shelve"
+	case ActUnshelve:
+		s = "unshelve"
+	default:
+		s = "unspecified"
+	}
+	return
+}
+
+type itemState struct {
+	acked      bool
+	shelfUntil time.Time
+	// opened is set once the queue asked for the item's card to open on
+	// its own, so it asks once.
+	opened bool
+	seen   bool
+}
+
+// Queue orders the waiting items of its sources (ADR-0324 §SD1) and keeps
+// what the person did to them (§SD4). Create it with NewQueue.
+type Queue struct {
+	mu       sync.Mutex
+	levels   *Levels
+	sources  []SourceI
+	state    map[string]*itemState
+	escalate time.Duration
+	onAct    func(ActE, Item, time.Time)
+	scratch  []Entry
+}
+
+// NewQueue is a queue classifying by levels, escalating after escalate (zero
+// never).
+func NewQueue(levels *Levels, escalate time.Duration) (q *Queue) {
+	if levels == nil {
+		levels = &Levels{}
+	}
+	return &Queue{levels: levels, state: make(map[string]*itemState, 16), escalate: escalate}
+}
+
+// AddSource adds a source of items.
+func (inst *Queue) AddSource(s SourceI) {
+	inst.mu.Lock()
+	defer inst.mu.Unlock()
+	inst.sources = append(inst.sources, s)
+}
+
+// SetOnAct installs the hook told of each acknowledgement and shelve, for
+// the trail.
+func (inst *Queue) SetOnAct(f func(ActE, Item, time.Time)) {
+	inst.mu.Lock()
+	defer inst.mu.Unlock()
+	inst.onAct = f
+}
+
+// Snapshot is the queue at now: the items to show, highest level first and
+// oldest first within a level, and the shelved ones apart. The state of
+// items no source reports any more is dropped.
+func (inst *Queue) Snapshot(now time.Time) (open []Entry, shelved []Entry) {
+	inst.mu.Lock()
+	sources := slices.Clone(inst.sources)
+	inst.mu.Unlock()
+	all := make([]Entry, 0, 8)
+	for _, s := range sources {
+		for it := range s.WaitingItems() {
+			all = append(all, Entry{Item: it})
+		}
+	}
+	for i := range all {
+		e := &all[i]
+		e.Level = inst.levels.Classify(Event{Kind: e.Kind, Effect: e.Effect, App: e.App, Conversation: e.Conversation})
+		if e.Level.Scale() != ScaleWaiting {
+			// The floor (ADR-0323 §SD2): what a source reports as waiting
+			// is never shown below your turn.
+			e.Level = LevelYourTurn
+		}
+	}
+	inst.mu.Lock()
+	for _, st := range inst.state {
+		st.seen = false
+	}
+	for i := range all {
+		e := &all[i]
+		st := inst.state[e.Key]
+		if st == nil {
+			st = &itemState{}
+			inst.state[e.Key] = st
+		}
+		st.seen = true
+		if !st.shelfUntil.IsZero() && !now.Before(st.shelfUntil) {
+			// Back from the shelf, unacknowledged (§SD4).
+			st.shelfUntil, st.acked, st.opened = time.Time{}, false, false
+		}
+		e.Acked, e.ShelvedUntil = st.acked, st.shelfUntil
+		if inst.escalate > 0 {
+			e.Escalated = e.Level == LevelYourTurn && !e.Acked && e.ShelvedUntil.IsZero() && now.Sub(e.Created) >= inst.escalate
+			e.NearBound = !e.Bound.IsZero() && e.Bound.Sub(now) <= inst.escalate
+		}
+	}
+	for k, st := range inst.state {
+		if !st.seen {
+			delete(inst.state, k)
+		}
+	}
+	inst.mu.Unlock()
+	slices.SortStableFunc(all, func(a, b Entry) int {
+		if c := cmp.Compare(b.Level, a.Level); c != 0 {
+			return c
+		}
+		return a.Created.Compare(b.Created)
+	})
+	for _, e := range all {
+		if e.ShelvedUntil.IsZero() {
+			open = append(open, e)
+		} else {
+			shelved = append(shelved, e)
+		}
+	}
+	return
+}
+
+// TakeOpens lists the entries whose cards open on their own: a critical
+// item, and an escalated one, each once (ADR-0324 §SD3, §SD4).
+func (inst *Queue) TakeOpens(open []Entry) (keys []string) {
+	inst.mu.Lock()
+	defer inst.mu.Unlock()
+	for _, e := range open {
+		if e.Level != LevelCritical && !e.Escalated {
+			continue
+		}
+		st := inst.state[e.Key]
+		if st == nil || st.opened {
+			continue
+		}
+		st.opened = true
+		keys = append(keys, e.Key)
+	}
+	return
+}
+
+// Acknowledge marks an item seen, not decided; it stops its escalation.
+func (inst *Queue) Acknowledge(it Item, now time.Time) {
+	inst.mu.Lock()
+	st := inst.state[it.Key]
+	if st == nil || st.acked {
+		inst.mu.Unlock()
+		return
+	}
+	st.acked = true
+	hook := inst.onAct
+	inst.mu.Unlock()
+	if hook != nil {
+		hook(ActAcknowledge, it, now)
+	}
+}
+
+// Shelve takes an item out of the count until until, bounded by the item's
+// bound: shelving extends no clock (ADR-0324 §SD4). effective is the time it
+// returns; ok is false when the bound has passed or the item is unknown.
+func (inst *Queue) Shelve(it Item, until time.Time, now time.Time) (effective time.Time, ok bool) {
+	if !it.Bound.IsZero() && until.After(it.Bound) {
+		until = it.Bound
+	}
+	if !until.After(now) {
+		return
+	}
+	inst.mu.Lock()
+	st := inst.state[it.Key]
+	if st == nil {
+		inst.mu.Unlock()
+		return
+	}
+	st.shelfUntil, st.acked = until, true
+	hook := inst.onAct
+	inst.mu.Unlock()
+	if hook != nil {
+		hook(ActShelve, it, now)
+	}
+	return until, true
+}
+
+// Unshelve returns a shelved item to the queue, acknowledged.
+func (inst *Queue) Unshelve(it Item, now time.Time) {
+	inst.mu.Lock()
+	st := inst.state[it.Key]
+	if st == nil || st.shelfUntil.IsZero() {
+		inst.mu.Unlock()
+		return
+	}
+	st.shelfUntil = time.Time{}
+	hook := inst.onAct
+	inst.mu.Unlock()
+	if hook != nil {
+		hook(ActUnshelve, it, now)
+	}
+}
