@@ -10,6 +10,7 @@ import (
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/agentrun"
 	"github.com/stergiotis/boxer/public/keelson/runtime/inprocbus"
+	"github.com/stergiotis/boxer/public/storage/recordstore/evidence/anchor"
 )
 
 // The service appends heads and reads them back by run over the bus; the
@@ -17,7 +18,7 @@ import (
 func TestTheServiceAppendsAndReadsHeads(t *testing.T) {
 	ctx := context.Background()
 	bus := inprocbus.NewInst(zerolog.Nop())
-	store := NewMemStore()
+	store := anchor.NewMemStore()
 	svc, err := NewService(bus, zerolog.Nop(), store)
 	require.NoError(t, err)
 	t.Cleanup(svc.Close)
@@ -44,6 +45,15 @@ func TestTheServiceAppendsAndReadsHeads(t *testing.T) {
 	heads, err = cli.Read(ctx, "c", 98)
 	require.NoError(t, err)
 	assert.Empty(t, heads)
+	// The store holds the head by scope under the journal's scheme.
+	rows := store.All()
+	require.Len(t, rows, 1)
+	assert.Equal(t, anchor.Head{Cell: "c", Scope: 11, Ordinal: 3, Scheme: agentrun.ChainScheme.Name(), Digest: "abc"}, rows[0].Head)
+	_, err = store.Append(ctx, anchor.Head{Cell: "c", Scope: 11, Ordinal: 3, Scheme: "other/v1", Digest: "zzz"})
+	require.NoError(t, err, "another scheme at the ordinal is another anchor")
+	heads, err = cli.Read(ctx, "c", 11)
+	require.NoError(t, err)
+	assert.Len(t, heads, 1, "the journal's view shows the journal's heads")
 }
 
 // Law L32: heads shipped from a chained journal verify against the store;
@@ -52,7 +62,7 @@ func TestTheServiceAppendsAndReadsHeads(t *testing.T) {
 func TestLawL32(t *testing.T) {
 	ctx := context.Background()
 	journal := agentrun.NewMemStore()
-	anchors := NewMemStore()
+	anchors := Over(anchor.NewMemStore())
 	w, err := agentrun.Open(ctx, journal, agentrun.Run{Id: 11, Cell: "c"})
 	require.NoError(t, err)
 	_, err = w.Append(ctx, agentrun.Entry{Kind: agentrun.KindUser, Body: "hello", Turn: "t1"}, agentrun.Entry{Kind: agentrun.KindTurn, Turn: "t1", Body: "answered"})
@@ -103,7 +113,7 @@ func TestLawL32(t *testing.T) {
 func TestLawL32HoldsAgainstDroppedHeadsAndReanchoring(t *testing.T) {
 	ctx := context.Background()
 	journal := agentrun.NewMemStore()
-	anchors := NewMemStore()
+	anchors := Over(anchor.NewMemStore())
 	w, err := agentrun.Open(ctx, journal, agentrun.Run{Id: 11, Cell: "c"})
 	require.NoError(t, err)
 	_, err = w.Append(ctx, agentrun.Entry{Kind: agentrun.KindUser, Body: "hello", Turn: "t1"}, agentrun.Entry{Kind: agentrun.KindTurn, Turn: "t1", Body: "answered"})
@@ -132,7 +142,7 @@ func TestLawL32HoldsAgainstDroppedHeadsAndReanchoring(t *testing.T) {
 	_, err = anchors.Append(ctx, Head{Cell: "c", Run: 11, Ordinal: ord, Digest: digest})
 	assert.Error(t, err, "the store refuses another digest at the ordinal")
 	conflicting := append([]Anchored(nil), anchored...)
-	conflicting = append(conflicting, Anchored{Head: Head{Cell: "c", Run: 11, Ordinal: ord, Digest: digest}, Receipt: Receipt{Id: "anchor-late", At: Now()}})
+	conflicting = append(conflicting, Anchored{Head: Head{Cell: "c", Run: 11, Ordinal: ord, Digest: digest}, Receipt: Receipt{Id: "anchor-late", At: anchor.Now()}})
 	assert.Equal(t, []uint32{ord}, VerifyHeads(w2.Run().Digest, w2.Entries(), conflicting))
 	assert.Equal(t, []uint32{ord}, VerifyHeads(w.Run().Digest, w.Entries(), conflicting), "the conflict breaks the ordinal for the true journal too")
 
@@ -145,7 +155,7 @@ func TestLawL32HoldsAgainstDroppedHeadsAndReanchoring(t *testing.T) {
 func TestLawL32HoldsAfterDeletion(t *testing.T) {
 	ctx := context.Background()
 	journal := agentrun.NewMemStore()
-	anchors := NewMemStore()
+	anchors := Over(anchor.NewMemStore())
 	w, err := agentrun.Open(ctx, journal, agentrun.Run{Id: 11, Cell: "c"})
 	require.NoError(t, err)
 	_, err = w.Append(ctx, agentrun.Entry{Kind: agentrun.KindUser, Body: "hello", Turn: "t1"}, agentrun.Entry{Kind: agentrun.KindTurn, Turn: "t1", Body: "answered"})
@@ -172,7 +182,7 @@ func TestLawL32HoldsAfterDeletion(t *testing.T) {
 func TestTheServiceScopesHeadsToTheRunsOwner(t *testing.T) {
 	ctx := context.Background()
 	bus := inprocbus.NewInst(zerolog.Nop())
-	svc, err := NewService(bus, zerolog.Nop(), NewMemStore())
+	svc, err := NewService(bus, zerolog.Nop(), anchor.NewMemStore())
 	require.NoError(t, err)
 	t.Cleanup(svc.Close)
 	chat := NewClient(bus.NewClient("app.chat", ClientCaps("test")))

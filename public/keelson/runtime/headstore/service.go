@@ -13,19 +13,20 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/inprocbus"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
+	"github.com/stergiotis/boxer/public/storage/recordstore/evidence/anchor"
 )
 
 // ServiceAppId is the identity the host's anchor client holds on the bus.
 const ServiceAppId app.AppIdT = "runtime.anchor"
 
 // The family (ADR-0314, a dated Update on ADR-0026 §SD3): append a head,
-// read a run's heads. Both are scoped to the run's owner: the app the
+// read a scope's heads. Both are scoped to the scope's owner: the app the
 // journal store names as the run's owner when the service has one
-// (Owners), else the sender that anchored the run first; another sender
+// (Owners), else the sender that anchored the scope first; another sender
 // is refused, so no app pre-anchors or reads another's run. The receipt
-// names the sender. A head already held for an ordinal is answered with
-// its first receipt, and another digest for that ordinal is refused: the
-// earliest anchor counts.
+// names the sender. A head already held for an ordinal under its scheme
+// is answered with its first receipt, and another digest there is
+// refused: the earliest anchor counts.
 const (
 	SubjectPrefix = "runtime.anchor."
 	SubjectAll    = "runtime.anchor.*"
@@ -36,13 +37,15 @@ const (
 // DefaultTimeout bounds one request.
 const DefaultTimeout = 30 * time.Second
 
-const wireVersion = 1
+// wireVersion 2 carries the scope and the scheme (ADR-0327 §SD7).
+const wireVersion = 2
 
 type wireHead struct {
 	V       uint8  `json:"v"`
 	Cell    string `json:"cell,omitempty"`
-	Run     uint64 `json:"run"`
-	Ordinal uint32 `json:"ordinal"`
+	Scope   uint64 `json:"scope"`
+	Ordinal uint64 `json:"ordinal"`
+	Scheme  string `json:"scheme"`
 	Digest  string `json:"digest"`
 }
 
@@ -57,15 +60,16 @@ type wireReceipt struct {
 }
 
 type wireRead struct {
-	V    uint8  `json:"v"`
-	Cell string `json:"cell,omitempty"`
-	Run  uint64 `json:"run"`
+	V     uint8  `json:"v"`
+	Cell  string `json:"cell,omitempty"`
+	Scope uint64 `json:"scope"`
 }
 
 type wireAnchored struct {
 	Cell      string    `json:"cell,omitempty"`
-	Run       uint64    `json:"run"`
-	Ordinal   uint32    `json:"ordinal"`
+	Scope     uint64    `json:"scope"`
+	Ordinal   uint64    `json:"ordinal"`
+	Scheme    string    `json:"scheme"`
 	Digest    string    `json:"digest"`
 	ReceiptId string    `json:"receipt_id"`
 	ReceiptAt time.Time `json:"receipt_at"`
@@ -93,24 +97,24 @@ func ClientCaps(reason string) (caps []app.SubjectFilter) {
 	return []app.SubjectFilter{{Pattern: SubjectAll, Direction: app.CapDirectionPub, Reason: reason, Sticky: true}}
 }
 
-// Service answers runtime.anchor.* over a store: the host's client of the
-// organisation's store.
+// Service answers runtime.anchor.* over an anchor store: the host's client
+// of the organisation's store.
 type Service struct {
-	store     StoreI
+	store     anchor.StoreI
 	busClient *inprocbus.Client
 	unsub     func()
 	closeOnce sync.Once
 	log       zerolog.Logger
 	Timeout   time.Duration
-	// Owners resolves a run to the app that owns it; set by the host
-	// over the journal store (RunOwners). Without it the first sender to
-	// anchor a run is taken as its owner.
+	// Owners resolves a scope to the app that owns it; set by the host
+	// over the journal store (RunOwners), where a scope is a run. Without
+	// it the first sender to anchor a scope is taken as its owner.
 	Owners OwnerOfI
 }
 
-// OwnerOfI resolves a run id to the app that owns it.
+// OwnerOfI resolves a scope to the app that owns it.
 type OwnerOfI interface {
-	OwnerOf(ctx context.Context, run uint64) (owner string, found bool, err error)
+	OwnerOf(ctx context.Context, scope uint64) (owner string, found bool, err error)
 }
 
 // RunOwners is OwnerOfI over the journal store: the run row's owner app.
@@ -126,15 +130,15 @@ func (inst runOwners) OwnerOf(ctx context.Context, run uint64) (owner string, fo
 	return r.OwnerApp, true, nil
 }
 
-// allowed says the sender may touch the run's heads: it is the run's
-// owner as the journal store names it, or, without a resolver, the
-// sender the run's first head came from (a run no one anchored is
-// anyone's to anchor first).
-func (inst *Service) allowed(ctx context.Context, cell string, run uint64, sender string) (ok bool, why string, err error) {
+// allowed says the sender may touch the scope's heads: it is the scope's
+// owner as the resolver names it, or, without a resolver, the sender the
+// scope's first head came from (a scope no one anchored is anyone's to
+// anchor first).
+func (inst *Service) allowed(ctx context.Context, cell string, scope uint64, sender string) (ok bool, why string, err error) {
 	if inst.Owners != nil {
-		owner, found, oerr := inst.Owners.OwnerOf(ctx, run)
+		owner, found, oerr := inst.Owners.OwnerOf(ctx, scope)
 		if oerr != nil {
-			return false, "", eb.Build().Uint64("run", run).Errorf("resolve the run's owner: %w", oerr)
+			return false, "", eb.Build().Uint64("scope", scope).Errorf("resolve the scope's owner: %w", oerr)
 		}
 		if !found {
 			return false, "no such run", nil
@@ -144,9 +148,9 @@ func (inst *Service) allowed(ctx context.Context, cell string, run uint64, sende
 		}
 		return true, "", nil
 	}
-	heads, err := inst.store.Read(ctx, cell, run)
+	heads, err := inst.store.Read(ctx, cell, scope)
 	if err != nil {
-		return false, "", eb.Build().Uint64("run", run).Errorf("read heads: %w", err)
+		return false, "", eb.Build().Uint64("scope", scope).Errorf("read heads: %w", err)
 	}
 	for _, a := range heads {
 		if a.Receipt.By != "" && a.Receipt.By != sender {
@@ -157,7 +161,7 @@ func (inst *Service) allowed(ctx context.Context, cell string, run uint64, sende
 }
 
 // NewService subscribes a service over store; the caller closes it.
-func NewService(bus *inprocbus.Inst, log zerolog.Logger, store StoreI) (s *Service, err error) {
+func NewService(bus *inprocbus.Inst, log zerolog.Logger, store anchor.StoreI) (s *Service, err error) {
 	if bus == nil || store == nil {
 		err = eh.Errorf("nil bus or store")
 		return
@@ -196,12 +200,12 @@ func (inst *Service) handle(msg *app.Msg) {
 			inst.reply(msg.Reply, wireReceipt{V: wireVersion, Reason: err.Error()})
 			return
 		}
-		if req.Run == 0 || req.Digest == "" {
-			inst.reply(msg.Reply, wireReceipt{V: wireVersion, Reason: "a head names its run and digest"})
+		if req.Scope == 0 || req.Digest == "" || req.Scheme == "" {
+			inst.reply(msg.Reply, wireReceipt{V: wireVersion, Reason: "a head names its scope, scheme and digest"})
 			return
 		}
-		h := Head{Cell: req.Cell, Run: req.Run, Ordinal: req.Ordinal, Digest: req.Digest}
-		if ok, why, aerr := inst.allowed(ctx, h.Cell, h.Run, string(msg.Sender)); aerr != nil || !ok {
+		h := anchor.Head{Cell: req.Cell, Scope: req.Scope, Ordinal: req.Ordinal, Scheme: req.Scheme, Digest: req.Digest}
+		if ok, why, aerr := inst.allowed(ctx, h.Cell, h.Scope, string(msg.Sender)); aerr != nil || !ok {
 			if aerr != nil {
 				why = aerr.Error()
 			}
@@ -214,8 +218,8 @@ func (inst *Service) handle(msg *app.Msg) {
 			return
 		}
 		if !held {
-			if m, ok := inst.store.(*MemStore); ok {
-				r, err = m.appendBy(h, string(msg.Sender))
+			if m, ok := inst.store.(*anchor.MemStore); ok {
+				r, err = m.AppendBy(h, string(msg.Sender))
 			} else {
 				r, err = inst.store.Append(ctx, h)
 				r.By = string(msg.Sender)
@@ -232,21 +236,21 @@ func (inst *Service) handle(msg *app.Msg) {
 			inst.reply(msg.Reply, wireReadReply{V: wireVersion, Reason: err.Error()})
 			return
 		}
-		if ok, why, aerr := inst.allowed(ctx, req.Cell, req.Run, string(msg.Sender)); aerr != nil || !ok {
+		if ok, why, aerr := inst.allowed(ctx, req.Cell, req.Scope, string(msg.Sender)); aerr != nil || !ok {
 			if aerr != nil {
 				why = aerr.Error()
 			}
 			inst.reply(msg.Reply, wireReadReply{V: wireVersion, Reason: why})
 			return
 		}
-		heads, err := inst.store.Read(ctx, req.Cell, req.Run)
+		heads, err := inst.store.Read(ctx, req.Cell, req.Scope)
 		if err != nil {
 			inst.reply(msg.Reply, wireReadReply{V: wireVersion, Reason: err.Error()})
 			return
 		}
 		rep := wireReadReply{V: wireVersion, Ok: true}
 		for _, a := range heads {
-			rep.Heads = append(rep.Heads, wireAnchored{Cell: a.Cell, Run: a.Run, Ordinal: a.Ordinal, Digest: a.Digest, ReceiptId: a.Receipt.Id, ReceiptAt: a.Receipt.At, By: a.Receipt.By, Durable: a.Receipt.Durable})
+			rep.Heads = append(rep.Heads, wireAnchored{Cell: a.Cell, Scope: a.Scope, Ordinal: a.Ordinal, Scheme: a.Scheme, Digest: a.Digest, ReceiptId: a.Receipt.Id, ReceiptAt: a.Receipt.At, By: a.Receipt.By, Durable: a.Receipt.Durable})
 		}
 		inst.reply(msg.Reply, rep)
 	default:
@@ -254,23 +258,24 @@ func (inst *Service) handle(msg *app.Msg) {
 	}
 }
 
-// held is the earliest receipt the store holds for the head's ordinal,
-// when it holds one; a different digest at that ordinal is an error.
-func (inst *Service) held(ctx context.Context, h Head) (r Receipt, held bool, err error) {
-	heads, err := inst.store.Read(ctx, h.Cell, h.Run)
+// held is the earliest receipt the store holds for the head's ordinal
+// under its scheme, when it holds one; a different digest there is an
+// error.
+func (inst *Service) held(ctx context.Context, h anchor.Head) (r Receipt, held bool, err error) {
+	heads, err := inst.store.Read(ctx, h.Cell, h.Scope)
 	if err != nil {
-		err = eb.Build().Uint64("run", h.Run).Errorf("read heads: %w", err)
+		err = eb.Build().Uint64("scope", h.Scope).Errorf("read heads: %w", err)
 		return
 	}
 	for _, a := range heads {
-		if a.Ordinal != h.Ordinal {
+		if a.Ordinal != h.Ordinal || a.Scheme != h.Scheme {
 			continue
 		}
 		if held && a.Receipt.At.Compare(r.At) >= 0 {
 			continue
 		}
 		if a.Digest != h.Digest {
-			err = eb.Build().Uint64("run", h.Run).Uint32("ordinal", h.Ordinal).Errorf("another digest is anchored at the ordinal")
+			err = eb.Build().Uint64("scope", h.Scope).Uint64("ordinal", h.Ordinal).Str("scheme", h.Scheme).Errorf("another digest is anchored at the ordinal")
 			return
 		}
 		r, held = a.Receipt, true
@@ -284,7 +289,8 @@ func (inst *Service) reply(subject string, v any) {
 	}
 }
 
-// Client is StoreI over the bus.
+// Client is the anchor store over the bus: anchor.StoreI for any scope,
+// and the journal's StoreI through Append and Read on Head.
 type Client struct {
 	bus     app.BusI
 	Timeout time.Duration
@@ -340,8 +346,9 @@ func roundTrip[Req any, Rep any](ctx context.Context, inst *Client, subject stri
 	return
 }
 
-func (inst *Client) Append(ctx context.Context, h Head) (r Receipt, err error) {
-	rep, err := roundTrip[wireHead, wireReceipt](ctx, inst, SubjectAppend, wireHead{V: wireVersion, Cell: h.Cell, Run: h.Run, Ordinal: h.Ordinal, Digest: h.Digest})
+// AppendHead anchors any scope's head.
+func (inst *Client) AppendHead(ctx context.Context, h anchor.Head) (r Receipt, err error) {
+	rep, err := roundTrip[wireHead, wireReceipt](ctx, inst, SubjectAppend, wireHead{V: wireVersion, Cell: h.Cell, Scope: h.Scope, Ordinal: h.Ordinal, Scheme: h.Scheme, Digest: h.Digest})
 	if err != nil {
 		return
 	}
@@ -352,8 +359,9 @@ func (inst *Client) Append(ctx context.Context, h Head) (r Receipt, err error) {
 	return Receipt{Id: rep.Id, At: rep.At, By: rep.By, Durable: rep.Durable}, nil
 }
 
-func (inst *Client) Read(ctx context.Context, cell string, run uint64) (heads []Anchored, err error) {
-	rep, err := roundTrip[wireRead, wireReadReply](ctx, inst, SubjectRead, wireRead{V: wireVersion, Cell: cell, Run: run})
+// ReadScope reads a scope's heads under every scheme.
+func (inst *Client) ReadScope(ctx context.Context, cell string, scope uint64) (heads []anchor.Anchored, err error) {
+	rep, err := roundTrip[wireRead, wireReadReply](ctx, inst, SubjectRead, wireRead{V: wireVersion, Cell: cell, Scope: scope})
 	if err != nil {
 		return
 	}
@@ -362,7 +370,22 @@ func (inst *Client) Read(ctx context.Context, cell string, run uint64) (heads []
 		return
 	}
 	for _, w := range rep.Heads {
-		heads = append(heads, Anchored{Head: Head{Cell: w.Cell, Run: w.Run, Ordinal: w.Ordinal, Digest: w.Digest}, Receipt: Receipt{Id: w.ReceiptId, At: w.ReceiptAt, By: w.By, Durable: w.Durable}})
+		heads = append(heads, anchor.Anchored{Head: anchor.Head{Cell: w.Cell, Scope: w.Scope, Ordinal: w.Ordinal, Scheme: w.Scheme, Digest: w.Digest}, Receipt: Receipt{Id: w.ReceiptId, At: w.ReceiptAt, By: w.By, Durable: w.Durable}})
 	}
 	return
+}
+
+// Append anchors a journal head: the run's scope under the journal's
+// scheme.
+func (inst *Client) Append(ctx context.Context, h Head) (r Receipt, err error) {
+	return inst.AppendHead(ctx, anchorHead(h))
+}
+
+// Read is the run's journal heads.
+func (inst *Client) Read(ctx context.Context, cell string, run uint64) (heads []Anchored, err error) {
+	rows, err := inst.ReadScope(ctx, cell, run)
+	if err != nil {
+		return
+	}
+	return journalHeads(rows), nil
 }

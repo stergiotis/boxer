@@ -21,6 +21,7 @@ import (
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/storage/recordstore"
 	"github.com/stergiotis/boxer/public/storage/recordstore/evidence"
+	"github.com/stergiotis/boxer/public/storage/recordstore/evidence/anchor"
 	"github.com/stergiotis/boxer/public/storage/recordstore/evidence/audit"
 )
 
@@ -112,6 +113,8 @@ type Recorder struct {
 	// context says nothing (ADR-0327 §SD6): the host's recorder writes as
 	// host, any other as self.
 	originBy evidence.OriginByE
+	// anchors is the store each durable seal ships to; nil ships none.
+	anchors anchor.StoreI
 
 	wake chan struct{}
 	stop chan struct{}
@@ -623,9 +626,10 @@ func (inst *Recorder) Flush(ctx context.Context) (err error) {
 		}
 		b.store.Close()
 		inst.written.Add(uint64(b.rows))
-		inst.seals.Add(1)
+		n := inst.seals.Add(1)
 		inst.lastSeal = evidence.SealedRow{Id: b.sealId, Digest: b.sealDigest}
 		inst.backlog = inst.backlog[1:]
+		inst.anchorSeal(ctx, n, b.sealDigest)
 	}
 	inst.capBacklog()
 	if err == nil && inst.gap.rows > 0 {

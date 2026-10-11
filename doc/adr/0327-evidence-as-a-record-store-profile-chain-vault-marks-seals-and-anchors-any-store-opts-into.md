@@ -294,16 +294,31 @@ the digest.
 
 The anchor contract moves to `storage/recordstore/evidence/anchor`:
 append-only `(cell, scope, ordinal, scheme, digest)` answered with a
-receipt, read by `(cell, scope)`, the first receipt for an ordinal
-authoritative, a different digest at an anchored ordinal refused. It is
-ADR-0314 §SD2's contract with the run generalised to a scope and the
-scheme recorded, so a journal run, a trail seal stream and a downstream
-apply log anchor through one store. The memory store and the cadence move
-with it. The bus service `runtime.anchor.*`, its client and the
-introspection relation stay in `keelson/runtime/headstore`, over the
-moved contract. `Ship` and the head entry become the profile's: a chained
-store ships its head through the generic writer, and the head row carries
-the `keep` mark.
+receipt, read by `(cell, scope)`, the first receipt for an ordinal under
+a scheme authoritative, a different digest there refused, another scheme
+at the same ordinal another anchor. It is ADR-0314 §SD2's contract with
+the run generalised to a scope and the scheme recorded, so a journal run,
+a trail seal stream and a downstream apply log anchor through one store.
+The memory store and the cadence move with it. The bus service
+`runtime.anchor.*` (wire v2 carries scope and scheme), its client and the
+`keelson('anchors')` relation stay in `keelson/runtime/headstore`, over
+the moved contract, with the journal's view of a head — a run's ordinal
+under the journal's scheme — the head entry and law L32 over a run.
+
+The trail's seal stream anchors as a scope of its own: the n-th durable
+seal is the head at ordinal n of the scope the run names
+(`trail.SealScope`), under the seal scheme; `VerifySeals` checks the
+anchored ordinals against the stream walked by predecessor
+(`evidence.VerifySealAnchors`, L32 for a sealed store). The host's
+recorder anchors into the host's store, so a seal is anchored wherever a
+journal head is.
+
+The laws are also served in-process as the `keelson('evidence_checks')`
+relation: one row per journal run for L31 and L32, one per trail run for
+L34 and its anchors, each saying whether the law holds and where it
+breaks, computed over the host's stores when the relation is read. A
+chained store ships its head through the journal's `Ship` as before; the
+generic head row under the `keep` mark stays with SD11.
 
 ### SD8 — The audit event below the runtime, and the subject
 
@@ -426,7 +441,7 @@ row for now, and the ledger's `Head` reads the latest row.
 - **M3 — The journal on the profile; digests v4 (SD9).** ✓
 - **M4a — The audit event and the forwarder below the runtime; write-ahead for events; `runtime.audit.{app}`; `originBy` on audit events (SD8, SD6).** ✓
 - **M4b — Seals (SD5).** ✓
-- **M5 — Anchors by scope; L32 generic; the verification relations served in-process (SD7).**
+- **M5 — Anchors by scope; L32 generic; the verification relations served in-process (SD7).** ✓
 - **M6 — The dated Updates on the ADRs this reshapes.**
 
 ## Surfaces — Tier 1
@@ -440,8 +455,8 @@ row for now, and the ledger's `Head` reads the latest row.
 | `boxer.facts` trail rows | seal rows; `originBy` on audit events | trail views; `trailviews`; the vocabulary golden |
 | `marshallgen.EmitOpts` | `Package` overrides the codec's package clause | `recordstore/gen` passes the store's; `storegen` drops its one-package check |
 | capability subjects (ADR-0026 §SD3) | `runtime.audit.{app}` becomes a write verb | the subject taxonomy's dated Update; the host's handler |
-| `runtime.anchor.*` | `(cell, scope, ordinal, scheme)` | the bus codec; `keelson('anchors')` |
-| exported Go API | `agentrun.ChainDigest`, `Verify`, `VerifyRun`, `CommitVault`, `OpensVault`, `NewOpening`, `BodyStoreI`, `VaultedStore`, `headstore.Head/StoreI/Cadence/Ship/VerifyHeads`, `trail.AuditEvent/ForwarderI` move or take the profile's types; `ForwarderI` takes `[]audit.Event` | the package doc of each; a downstream that compiles against them |
+| `runtime.anchor.*` | `(cell, scope, ordinal, scheme)`; wire v2 | the bus codec; `keelson('anchors')` gains `scope` and `scheme`; `keelson('evidence_checks')` is new |
+| exported Go API | `agentrun.ChainDigest`, `Verify`, `VerifyRun`, `CommitVault`, `OpensVault`, `NewOpening`, `BodyStoreI`, `VaultedStore`, `headstore.Head/StoreI/Cadence/Ship/VerifyHeads`, `trail.AuditEvent/ForwarderI` move or take the profile's types; `ForwarderI` takes `[]audit.Event`; `headstore.NewService` and `RegisterIntrospect` take `anchor.StoreI` | the package doc of each; a downstream that compiles against them |
 
 ## Alternatives
 

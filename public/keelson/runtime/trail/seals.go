@@ -10,6 +10,7 @@ import (
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/storage/recordstore"
 	"github.com/stergiotis/boxer/public/storage/recordstore/evidence"
+	"github.com/stergiotis/boxer/public/storage/recordstore/evidence/anchor"
 )
 
 // The recorder seals its flushes (ADR-0327 §SD5, law L34): its rows are
@@ -23,6 +24,29 @@ import (
 // TrailSealScheme is the scheme the recorder's seals and row digests are
 // under.
 var TrailSealScheme = evidence.NewScheme("trail-seal/v1")
+
+// SealScope is the anchor scope of a run's seal stream (ADR-0327 §SD7):
+// the n-th durable seal is the scope's head at ordinal n.
+func SealScope(run string) uint64 { return xxh3.HashString("trail-seal|" + run) }
+
+// WithAnchors ships each durable seal to the anchor store as the head of
+// the run's seal stream (ADR-0327 §SD5, §SD7), best effort: a refused or
+// failed append is logged and the seal stays unanchored. The cell is the
+// host's own.
+func WithAnchors(st anchor.StoreI) RecorderOption {
+	return func(inst *Recorder) { inst.anchors = st }
+}
+
+// anchorSeal ships the n-th durable seal. The caller holds flushMu.
+func (inst *Recorder) anchorSeal(ctx context.Context, n uint64, digest string) {
+	if inst.anchors == nil {
+		return
+	}
+	h := anchor.Head{Scope: SealScope(inst.run), Ordinal: n, Scheme: TrailSealScheme.Name(), Digest: digest}
+	if _, err := inst.anchors.Append(ctx, h); err != nil {
+		inst.log.Warn().Err(err).Uint64("ordinal", n).Msg("trail: the seal could not be anchored; it stays the host's alone")
+	}
+}
 
 // digestLocked notes the row b committed, with its row digest, for the
 // current batch's seal. A row whose item cannot be computed is logged and
@@ -63,14 +87,17 @@ func (inst *Recorder) seal(b *heldBatch) (err error) {
 	return
 }
 
-// VerifySeals is law L34 over the run named run, as its rows read back:
-// the run's seals chain from the stream's start, every row a seal names is
-// there with the digest the seal names, and no row is named twice. broken
-// is the first break, zero when the stream holds; unnamed the run's rows
-// no seal names, other than seals — rows that landed without their seal,
-// or that something other than a recorder wrote. Nothing without a store;
+// VerifySeals is law L34 over the run named run, as its rows read back,
+// and law L32 over its anchored seals: the run's seals chain from the
+// stream's start, every row a seal names is there with the digest the
+// seal names, no row is named twice, and each anchored ordinal holds the
+// digest of the n-th seal. broken is the first break of the stream, zero
+// when it holds; unnamed the run's rows no seal names, other than seals —
+// rows that landed without their seal, or that something other than a
+// recorder wrote; unanchored the anchored ordinals the stream does not
+// reproduce, none without an anchor store. Nothing without a store;
 // buffered rows are not seen until a flush.
-func (inst *Recorder) VerifySeals(ctx context.Context, run string) (broken evidence.SealBreak, unnamed []uint64, err error) {
+func (inst *Recorder) VerifySeals(ctx context.Context, run string) (broken evidence.SealBreak, unnamed []uint64, unanchored []uint64, err error) {
 	if inst == nil {
 		return
 	}
@@ -84,7 +111,7 @@ func (inst *Recorder) VerifySeals(ctx context.Context, run string) (broken evide
 	pred := "has(" + valueColumn("symbol") + ", " + marshalling.EscapeString(run) + ")"
 	for ent, serr := range inst.read.ScanOrigin(ctx, recordstore.ScanOpts{ExtraPredicate: pred}) {
 		if serr != nil {
-			return broken, nil, eh.Errorf("trail: read the run's rows: %w", serr)
+			return broken, nil, nil, eh.Errorf("trail: read the run's rows: %w", serr)
 		}
 		if ent == nil || !ent.Origin.Has || ent.Origin.Val.Run != run {
 			continue
@@ -95,10 +122,19 @@ func (inst *Recorder) VerifySeals(ctx context.Context, run string) (broken evide
 		}
 		item, ierr := inst.canon.CanonicalItem(ent)
 		if ierr != nil {
-			return broken, nil, eh.Errorf("trail: canonical item of row %d: %w", ent.ID, ierr)
+			return broken, nil, nil, eh.Errorf("trail: canonical item of row %d: %w", ent.ID, ierr)
 		}
 		present[ent.ID] = TrailSealScheme.RowDigest(item)
 	}
 	broken, unnamed = evidence.VerifySeals(TrailSealScheme, "", seals, present)
+	if broken.Why != evidence.SealBreakNone || inst.anchors == nil {
+		return
+	}
+	ordered, _ := evidence.OrderSeals(seals)
+	rows, aerr := inst.anchors.Read(ctx, "", SealScope(run))
+	if aerr != nil {
+		return broken, unnamed, nil, eh.Errorf("trail: read the stream's anchors: %w", aerr)
+	}
+	unanchored = evidence.VerifySealAnchors(ordered, anchor.HeadsOf(rows, TrailSealScheme.Name()))
 	return
 }

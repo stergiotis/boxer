@@ -6,21 +6,22 @@ import (
 	"github.com/apache/arrow-go/v18/arrow"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect"
+	"github.com/stergiotis/boxer/public/storage/recordstore/evidence/anchor"
 )
 
-// TableAnchors is keelson('anchors'): the chain heads the host's anchor
-// store holds (ADR-0314 §SD2), what law L32 joins the journals' head
-// entries on.
+// TableAnchors is keelson('anchors'): the heads the host's anchor store
+// holds (ADR-0314 §SD2, by scope and scheme since ADR-0327 §SD7), what law
+// L32 joins the journals' head entries and the trail's seals on.
 const TableAnchors = "anchors"
 
 // AllI is a store that can list every head; the memory store is one. A
 // store that cannot serves an empty table.
 type AllI interface {
-	All() (rows []Anchored)
+	All() (rows []anchor.Anchored)
 }
 
 // RegisterIntrospect registers keelson('anchors') over the store.
-func RegisterIntrospect(reg *introspect.Registry, store StoreI) (err error) {
+func RegisterIntrospect(reg *introspect.Registry, store anchor.StoreI) (err error) {
 	all, _ := store.(AllI)
 	return reg.Register(anchorsProvider{all: all})
 }
@@ -32,7 +33,7 @@ func (anchorsProvider) Freshness() introspect.FreshnessClass { return introspect
 func (anchorsProvider) Schema() *arrow.Schema                { return anchorsTable(nil).Schema() }
 
 func (inst anchorsProvider) Snapshot(proj introspect.Projection) (rec arrow.RecordBatch, err error) {
-	var rows []Anchored
+	var rows []anchor.Anchored
 	if inst.all != nil {
 		rows = inst.all.All()
 	}
@@ -40,11 +41,12 @@ func (inst anchorsProvider) Snapshot(proj introspect.Projection) (rec arrow.Reco
 	return
 }
 
-func anchorsTable(rows []Anchored) *introspect.Table {
+func anchorsTable(rows []anchor.Anchored) *introspect.Table {
 	return introspect.NewTable().
 		String("cell", func(i int) string { return rows[i].Cell }).
-		Uint64("run", func(i int) uint64 { return rows[i].Run }).
-		Uint64("ordinal", func(i int) uint64 { return uint64(rows[i].Ordinal) }).
+		Uint64("scope", func(i int) uint64 { return rows[i].Scope }).
+		Uint64("ordinal", func(i int) uint64 { return rows[i].Ordinal }).
+		String("scheme", func(i int) string { return rows[i].Scheme }).
 		String("digest", func(i int) string { return rows[i].Digest }).
 		String("receipt", func(i int) string { return rows[i].Receipt.Id }).
 		String("received_at", func(i int) string { return rows[i].Receipt.At.UTC().Format(time.RFC3339Nano) }).

@@ -102,18 +102,13 @@ type SealBreak struct {
 // store reports, each either a row that never landed with its seal or a
 // row something else wrote.
 func VerifySeals(scheme Scheme, seed string, seals []Seal, present map[uint64]string) (broken SealBreak, unnamed []uint64) {
-	byPrev := make(map[uint64]Seal, len(seals))
-	for _, s := range seals {
-		if first, forked := byPrev[s.Prev]; forked {
-			return SealBreak{Seal: max(first.Id, s.Id), Why: SealBreakOrder}, nil
-		}
-		byPrev[s.Prev] = s
+	ordered, broken := OrderSeals(seals)
+	if broken.Why != SealBreakNone {
+		return broken, nil
 	}
 	named := make(map[uint64]bool, len(present))
-	reached := make(map[uint64]bool, len(seals))
-	prevId, prevDigest := uint64(0), seed
-	for s, ok := byPrev[prevId]; ok && !reached[s.Id]; s, ok = byPrev[prevId] {
-		reached[s.Id] = true
+	prevDigest := seed
+	for _, s := range ordered {
 		if s.Digest != scheme.SealDigest(prevDigest, s.Rows) {
 			return SealBreak{Seal: s.Id, Why: SealBreakDigest}, nil
 		}
@@ -129,18 +124,7 @@ func VerifySeals(scheme Scheme, seed string, seals []Seal, present map[uint64]st
 			}
 			named[r.Id] = true
 		}
-		prevId, prevDigest = s.Id, s.Digest
-	}
-	if len(reached) < len(seals) {
-		// An orphan: a seal the walk from the first never reached, the
-		// lowest id among them.
-		orphan := uint64(0)
-		for _, s := range seals {
-			if !reached[s.Id] && (orphan == 0 || s.Id < orphan) {
-				orphan = s.Id
-			}
-		}
-		return SealBreak{Seal: orphan, Why: SealBreakPrev}, nil
+		prevDigest = s.Digest
 	}
 	for id := range present {
 		if !named[id] {

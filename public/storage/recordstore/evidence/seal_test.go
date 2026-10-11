@@ -2,6 +2,7 @@ package evidence_test
 
 import (
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -66,6 +67,29 @@ func TestVerifySeals(t *testing.T) {
 			assert.NotEqual(t, "none", broken.Why.String())
 		})
 	}
+	ordered, ob := evidence.OrderSeals([]evidence.Seal{s2, s1})
+	require.Equal(t, evidence.SealBreak{}, ob)
+	assert.Equal(t, []uint64{3, 6}, []uint64{ordered[0].Id, ordered[1].Id})
 	assert.Equal(t, "row-twice", evidence.SealBreakRowTwice.String())
 	assert.Equal(t, "unknown", evidence.SealBreakE(99).String())
+}
+
+// Law L32 for a sealed store: an anchored ordinal names the n-th seal and
+// must hold its digest; the earliest receipt counts; an ordinal past the
+// stream breaks.
+func TestVerifySealAnchors(t *testing.T) {
+	ordered := []evidence.Seal{{Id: 3, Digest: "s1"}, {Id: 6, Prev: 3, Digest: "s2"}}
+	at := time.Date(2026, 10, 12, 0, 0, 0, 0, time.UTC)
+	anchored := []evidence.AnchoredHead{
+		{Ordinal: 1, Digest: "s1", ReceiptAt: at, ReceiptId: "a"},
+		{Ordinal: 2, Digest: "s2", ReceiptAt: at.Add(time.Second), ReceiptId: "b"},
+	}
+	assert.Empty(t, evidence.VerifySealAnchors(ordered, anchored))
+	late := append([]evidence.AnchoredHead(nil), anchored...)
+	late = append(late, evidence.AnchoredHead{Ordinal: 2, Digest: "forged", ReceiptAt: at.Add(time.Hour), ReceiptId: "c"})
+	assert.Equal(t, []uint64{2}, evidence.VerifySealAnchors(ordered, late), "a later conflicting receipt breaks the ordinal")
+	beyond := append([]evidence.AnchoredHead(nil), anchored...)
+	beyond = append(beyond, evidence.AnchoredHead{Ordinal: 3, Digest: "s3", ReceiptAt: at, ReceiptId: "d"})
+	assert.Equal(t, []uint64{3}, evidence.VerifySealAnchors(ordered, beyond), "an anchored seal the stream no longer has")
+	assert.Equal(t, []uint64{1}, evidence.VerifySealAnchors(ordered[1:], anchored[:1]), "the stream reordered under an anchor")
 }

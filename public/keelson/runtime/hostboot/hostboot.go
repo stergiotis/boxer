@@ -66,6 +66,7 @@ import (
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/storage/recordstore"
 	"github.com/stergiotis/boxer/public/storage/recordstore/evidence"
+	"github.com/stergiotis/boxer/public/storage/recordstore/evidence/anchor"
 	"github.com/stergiotis/boxer/public/thestack/fffi2/runtime"
 	"github.com/stergiotis/boxer/public/thestack/fffi2/typed"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/application"
@@ -232,7 +233,7 @@ type Runtime struct {
 	// AgentRuns is the run journal's store (ADR-0308) and Anchors the
 	// chain heads' (ADR-0314); nil when the service did not start.
 	AgentRuns agentrun.StoreI
-	Anchors   headstore.StoreI
+	Anchors   anchor.StoreI
 	// Cell is the deployment's declared boundary (ADR-0307 §SD1), built
 	// once before any service starts and shared by the model service, the
 	// egress service, the clipboard broker and keelson('sinks'), so the
@@ -507,9 +508,16 @@ func (rt *Runtime) bootServices(ctx context.Context, factsCfg chstore.Config) {
 	if rt.RunInfo != nil {
 		runId = rt.RunInfo.RunId
 	}
+	// The anchor store (ADR-0314 §SD2, by scope since ADR-0327 §SD7) is the
+	// organisation's to run outside any person's control. This host holds
+	// heads in memory: there is no setting that names an organisation store
+	// yet, so every receipt is non-durable, the journal marks such heads
+	// local, and the record says plainly that nothing outside the host
+	// anchors them. Built before the trail, whose seals anchor through it.
+	rt.Anchors = anchor.NewMemStore()
 	// The host's own recorder: an audit event it writes has its origin
-	// established by the host (ADR-0327 §SD6).
-	rt.Trail = trail.NewRecorder(rt.PersistExec, runId, logger, trail.WithOriginBy(evidence.OriginByHost))
+	// established by the host (ADR-0327 §SD6), and its seals anchor.
+	rt.Trail = trail.NewRecorder(rt.PersistExec, runId, logger, trail.WithOriginBy(evidence.OriginByHost), trail.WithAnchors(rt.Anchors))
 	rt.cleanups = append(rt.cleanups, rt.Trail.Close)
 	if trail.RequiredEnv.Get() && !rt.Trail.Durable() {
 		logger.Warn().Msg("trail: BOXER_TRAIL_REQUIRED is set and this host has no durable backend; model calls and egress fetches will be refused")
@@ -1033,6 +1041,12 @@ func (rt *Runtime) bootIntrospect() {
 	if rt.Anchors != nil {
 		deps.Anchors = rt.Anchors
 	}
+	if rt.Trail != nil {
+		deps.Trail = rt.Trail
+		if rt.RunInfo != nil {
+			deps.Run = rt.RunInfo.RunId
+		}
+	}
 	if rt.LLM != nil {
 		// The declaration as the model service enforces it, its route's
 		// locality filled in.
@@ -1166,13 +1180,8 @@ func (rt *Runtime) bootAgentRun(ctx context.Context) {
 	}
 	rt.AgentRuns = store
 	rt.cleanups = append(rt.cleanups, svc.Close)
-	// The anchor store (ADR-0314 §SD2) is the organisation's to run outside
-	// any person's control. This host holds heads in memory: there is no
-	// setting that names an organisation store yet, so every receipt is
-	// non-durable, the journal marks such heads local, and the record
-	// says plainly that nothing outside the host anchors them.
-	anchors := headstore.NewMemStore()
-	asvc, aerr := headstore.NewService(rt.Bus, logger, anchors)
+	// runtime.anchor.* over the host's anchor store.
+	asvc, aerr := headstore.NewService(rt.Bus, logger, rt.Anchors)
 	if aerr != nil {
 		logger.Warn().Err(aerr).Msg("headstore: service start failed; runtime.anchor.* will be unbound")
 		return
@@ -1180,7 +1189,6 @@ func (rt *Runtime) bootAgentRun(ctx context.Context) {
 	// Heads are scoped to the run's owner as the journal records it, so an
 	// app cannot read or pre-anchor another app's run.
 	asvc.Owners = headstore.RunOwners(store)
-	rt.Anchors = anchors
 	rt.cleanups = append(rt.cleanups, asvc.Close)
 }
 

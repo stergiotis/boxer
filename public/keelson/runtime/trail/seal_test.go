@@ -8,6 +8,8 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/stergiotis/boxer/public/storage/recordstore/evidence/anchor"
 )
 
 // Every durable flush carries one seal, chained to the one before it; a
@@ -15,7 +17,8 @@ import (
 // second, and a flush that lands nothing seals nothing (ADR-0327 §SD5).
 func TestEveryDurableFlushIsSealedOnce(t *testing.T) {
 	exec := &gateExec{open: true}
-	rec := NewRecorder(exec, "run-1", zerolog.Nop())
+	anchors := anchor.NewMemStore()
+	rec := NewRecorder(exec, "run-1", zerolog.Nop(), WithAnchors(anchors))
 	ctx := context.Background()
 	require.NoError(t, rec.Event(ctx, time.Now(), Context{}, event()))
 	require.NoError(t, rec.LlmCall(time.Now(), Context{}, LlmCall{CallId: "c1"}))
@@ -49,4 +52,9 @@ func TestEveryDurableFlushIsSealedOnce(t *testing.T) {
 	c := rec.Counts()
 	assert.EqualValues(t, 2, c.Seals)
 	assert.EqualValues(t, 3, c.Written, "seals are not among the written rows")
+	// Each durable seal is the stream's head at its ordinal (ADR-0327 §SD7).
+	rows := anchors.All()
+	require.Len(t, rows, 2)
+	assert.Equal(t, anchor.Head{Scope: SealScope("run-1"), Ordinal: 1, Scheme: TrailSealScheme.Name(), Digest: first.Digest}, rows[0].Head)
+	assert.Equal(t, anchor.Head{Scope: SealScope("run-1"), Ordinal: 2, Scheme: TrailSealScheme.Name(), Digest: rec.lastSeal.Digest}, rows[1].Head)
 }

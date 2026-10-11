@@ -43,6 +43,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/watchbill"
 	"github.com/stergiotis/boxer/public/keelson/runtime/windowhost"
 	"github.com/stergiotis/boxer/public/storage/recordstore"
+	"github.com/stergiotis/boxer/public/storage/recordstore/evidence/anchor"
 )
 
 // Enabled gates whether a host that calls [Start] actually stands up the
@@ -110,9 +111,15 @@ type Deps struct {
 	// Cell is the cell declaration, backing keelson.sinks (ADR-0312 §SD1);
 	// nil registers the default declaration's sinks.
 	Cell func() cell.Declaration
-	// Anchors is the anchor store, backing keelson.anchors (ADR-0314); nil
-	// registers an empty table.
-	Anchors headstore.StoreI
+	// Anchors is the anchor store, backing keelson.anchors (ADR-0314,
+	// by scope since ADR-0327 §SD7); nil registers an empty table.
+	Anchors anchor.StoreI
+	// Trail is the trail's recorder and Run this run's id, backing the
+	// trail's rows of keelson.evidence_checks (ADR-0327 §SD7); nil, or an
+	// empty run, leaves those rows out. Same typed-nil trap: assign only
+	// a recorder.
+	Trail SealVerifierI
+	Run   string
 	// AgentRuns is the run journal's store, backing keelson.agent_runs and
 	// keelson.agent_run_entries (ADR-0308 §SD10). nil leaves them empty
 	// rather than absent; same typed-nil trap: assign only a started store.
@@ -288,6 +295,11 @@ func Start(deps Deps) (stop func(context.Context) error, err error) {
 	// unconditionally.
 	if e := agentrun.RegisterIntrospect(reg, deps.AgentRuns); e != nil {
 		deps.Log.Warn().Err(e).Msg("introspecthost: agent run provider registration failed")
+	}
+	// ADR-0327 §SD7: the evidence laws over the journal, the anchors and
+	// the trail, served in-process. Registered unconditionally.
+	if e := registerEvidenceChecks(reg, deps); e != nil {
+		deps.Log.Warn().Err(e).Msg("introspecthost: evidence_checks provider registration failed")
 	}
 	// ADR-0312 §SD1: the sinks the cell declaration derives; ADR-0313 §SD6:
 	// the agent's declared relations.
