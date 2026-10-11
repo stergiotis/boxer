@@ -137,10 +137,12 @@ func (inst *SqlBodyStore) Erase(ctx context.Context, run string, ordinals []uint
 }
 
 // mutateLocked is the deletion that rewrites: ALTER TABLE … DELETE with
-// mutations_sync = 2 waits for every replica's part to be rewritten
-// before it returns, so the bytes are gone from the table when the
-// erasure is reported done (ADR-0320 §SD4), not masked for a later
-// merge as a lightweight DELETE leaves them.
+// mutations_sync = 2 waits for the part to be rewritten before it
+// returns, so the bytes are gone from the table when the erasure is
+// reported done (ADR-0320 §SD4), not masked for a later merge as a
+// lightweight DELETE leaves them. The replaced part stays on disk as an
+// outdated part until the server's cleanup removes it, within seconds
+// under the table's settings (agentrunstore.BodyDDLTail).
 func (inst *SqlBodyStore) mutateLocked(ctx context.Context, run string, where string) (err error) {
 	if err = inst.exec.Exec(ctx, "ALTER TABLE "+inst.layout.BodyTable()+" DELETE WHERE "+where+" SETTINGS mutations_sync = 2"); err != nil {
 		return eb.Build().Str("run", run).Errorf("destroy bodies: %w", err)

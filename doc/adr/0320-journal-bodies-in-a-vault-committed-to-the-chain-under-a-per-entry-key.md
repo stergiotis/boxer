@@ -152,9 +152,18 @@ entry naming the ordinal. The anchored heads are unchanged in kind.
   in its name column and the ordinal as its target, then deletes those
   vault rows. It works on a closed run; it refuses a head entry.
 - The deletion is an `ALTER TABLE … DELETE` with `mutations_sync = 2`: the
-  part is rewritten before the call returns, so the bytes are gone from
-  the table, not masked. Backups and replicas are the operator's
-  (ADR-0025's R5 stands).
+  active part is rewritten before the call returns, so the bytes are gone
+  from the table, not masked for a later merge as a lightweight delete
+  leaves them. The part the mutation replaced stays on disk as an outdated
+  part until the server's cleanup thread removes it, after
+  `old_parts_lifetime` and on the cleanup period, which backs off to
+  `max_cleanup_delay_period` while it finds nothing to do; the vault table
+  pins all three to a second, so the bytes leave the disk within seconds
+  (the integration lane measures under two). Under
+  clickhouse-local, which runs no cleanup, an outdated part stays until a
+  server opens the table. Column compression means a grep of the part
+  files proves nothing either way; the check is `system.parts`. Backups
+  and replicas are the operator's (ADR-0025's R5 stands).
 - The in-memory store erases by dropping the row.
 
 ### SD5 — Reads join and verify
@@ -257,7 +266,9 @@ O1, O2, O4 and O5 are weighed in the QOC. Two narrower choices:
   passes after; a run's deletion keeps head bodies; the vaulted store
   round-trips bodies over the in-memory ledger and reads an entry whose
   vault row does not open as erased. Integration: the vault store under
-  `clickhouse-local`, with the deletion rewriting the part.
+  `clickhouse-local`, with the deletion rewriting the part; two stores
+  over one record; and, under a scratch server, no outdated part left
+  after an erasure once the cleanup has run.
 - **What would fail.** A body column in the ledger with content; an
   opening in a canonical form, an introspection table or an anchor; a
   commitment that opens to two bodies.

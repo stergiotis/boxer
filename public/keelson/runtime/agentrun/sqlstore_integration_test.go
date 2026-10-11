@@ -173,9 +173,12 @@ func TestARunRowThatLagsItsEntriesIsRepaired(t *testing.T) {
 	}
 	layout := agentrunstore.Layout{Database: "artest"}
 	require.NoError(t, agentrunstore.ProvisionIn(ctx, local, layout))
+	require.NoError(t, agentrunstore.ProvisionBodyIn(ctx, local, layout))
 	exec := &laggingExecutor{ExecutorI: local, table: layout.RunTable()}
-	st := NewSqlStore(exec, layout)
-	defer st.Close()
+	ledger, vault := NewSqlStore(exec, layout), NewSqlBodyStore(exec, layout)
+	defer ledger.Close()
+	defer vault.Close()
+	st := NewVaulted(ledger, vault)
 	w, err := Open(ctx, st, Run{Id: "r1", OwnerApp: "chat"})
 	require.NoError(t, err)
 	_, err = w.Append(ctx, Entry{Kind: KindUser, Body: "one", Label: Label{Tier: TierAmber}})
@@ -194,8 +197,9 @@ func TestARunRowThatLagsItsEntriesIsRepaired(t *testing.T) {
 	more, err := again.Append(ctx, Entry{Kind: KindUser, Body: "three"})
 	require.NoError(t, err)
 	assert.Equal(t, uint32(3), more[0].Ordinal)
-	fresh := NewSqlStore(local, layout)
-	defer fresh.Close()
+	freshLedger := NewSqlStore(local, layout)
+	defer freshLedger.Close()
+	fresh := NewVaulted(freshLedger, vault)
 	r, _, err = fresh.GetRun(ctx, "r1")
 	require.NoError(t, err)
 	assert.Equal(t, uint32(3), r.LastOrdinal, "the repaired row was written")
