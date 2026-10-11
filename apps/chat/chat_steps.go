@@ -66,6 +66,9 @@ type turnStep struct {
 	// failed a model call that did not answer.
 	refused bool
 	failed  bool
+	// effect is a tool call's declared effect class (ADR-0269 §SD5), for
+	// its level (ADR-0323).
+	effect string
 }
 
 // turnSteps is the running turn's steps, written by the tool loop and read

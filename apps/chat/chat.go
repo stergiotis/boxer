@@ -172,6 +172,9 @@ type App struct {
 	bandKeys     [3]ecdf.BandJobKey
 	// surface is the panel's agent surface of the conversation (ADR-0283).
 	surface surfaceView
+	// levels is the host's table of levels as this conversation sees it
+	// (ADR-0323, chat_levels.go).
+	levels levelsState
 }
 
 // pendingTurn is a turn in flight.
@@ -212,6 +215,7 @@ func (inst *App) Mount(ctx app.MountContextI) (err error) {
 	}
 	cli := llm.NewClient(bus)
 	inst.cli, inst.bus = cli, bus
+	inst.startLevels()
 	inst.tasks = task.ForApp(ctx)
 	for i := range inst.bandKeys {
 		inst.bandKeys[i] = ecdf.BandJobKey(inst.ids.ProbeSeq("chat-stats-band-" + strconv.Itoa(i)))
@@ -245,6 +249,7 @@ func (inst *App) Unmount(ctx app.MountContextI) (err error) {
 		inst.coord.retire()
 	}
 	inst.describe.Cancel()
+	inst.stopLevels()
 	inst.handover.Cancel()
 	inst.runsJob.Cancel()
 	inst.resumeJob.Cancel()

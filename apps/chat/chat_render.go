@@ -111,6 +111,7 @@ func codeMask(_ string, lang string) (mask uint64) {
 var escMask = keycodes.MaskOf(keycodes.Escape)
 
 func (inst *App) render() {
+	inst.syncLevels()
 	for range c.PanelTopInside(inst.ids.PrepareStr("bar")).Resizable(false).KeepIter() {
 		inst.renderBar()
 	}

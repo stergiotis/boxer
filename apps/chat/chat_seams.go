@@ -298,7 +298,7 @@ func (sequentialTools) run(s *roundState) {
 			Effect: effect, Form: coord.handle(), Turn: s.turn, Label: harnessLabel()}); s.err != nil {
 			return
 		}
-		step := coord.steps.begin(turnStep{kind: stepTool, round: s.round, name: tc.Name, title: coord.peekTitle(tc), args: indentArgs(tc.Arguments)})
+		step := coord.steps.begin(turnStep{kind: stepTool, round: s.round, name: tc.Name, title: coord.peekTitle(tc), args: indentArgs(tc.Arguments), effect: effect})
 		content, activity := coord.exec(s.ctx, o, tc)
 		coord.steps.finish(step, func(st *turnStep) {
 			st.result, st.activity, st.refused = clip(content, stepResultMax), activity, strings.HasPrefix(content, "error:")

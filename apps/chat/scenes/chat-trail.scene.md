@@ -32,6 +32,7 @@ waiting line counts against.
 {"do":"wait","valueContains":"waiting for the answer","role":"label","comment":"the slow third model call"}
 {"do":"wait","valueContains":"model calls · 2 tool calls","role":"label","comment":"the trail's summary line"}
 {"do":"wait","valueContains":"round 3 of 24","role":"label","comment":"the chat's round limit, at its default"}
+{"do":"click","contains":"routine step","settleMs":500,"comment":"the finished reads fold as routine steps (ADR-0323)"}
 {"do":"click","contains":"Reading the desktop (query_windows)","settleMs":500,"comment":"open a finished step"}
 {"do":"wait","valueContains":"came back","role":"label"}
 {"do":"capture","text":"chat-trail-running"}

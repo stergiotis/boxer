@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
+	"github.com/stergiotis/boxer/public/keelson/runtime/attention"
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/color"
@@ -62,10 +63,49 @@ func (inst *App) renderSteps() {
 				}
 			}
 		}
-		for i := first; i < len(steps); i++ {
+		for i := first; i < len(steps); {
+			if n := inst.routineRun(steps, i); n >= foldRun {
+				// A run of routine steps folds under one line (ADR-0323
+				// §SD7): what the person reads is what stands out.
+				for range c.IdScope(inst.ids.PrepareSeq(uint64(i))) {
+					for range c.HoverText(tipFolded).KeepIter() {
+						for range c.CollapsingHeader(inst.ids.PrepareStr("routine"), c.WidgetText().Text(levelMark(attention.LevelData)+" "+plural(n, "routine step")).Keep()).KeepIter() {
+							for j := i; j < i+n; j++ {
+								inst.renderStep(j, &steps[j])
+							}
+						}
+					}
+				}
+				i += n
+				continue
+			}
 			inst.renderStep(i, &steps[i])
+			i++
 		}
 	}
+}
+
+// foldRun is the least run of routine steps the trail folds.
+const foldRun = 2
+
+const tipFolded = "Routine steps — model calls and reads — folded: open to see them. The levels come from the host's table (ADR-0323)."
+
+// routineRun is how many finished data-level steps start at i. The last
+// step never folds: it is what the turn is doing.
+func (inst *App) routineRun(steps []turnStep, i int) (n int) {
+	for j := i; j < len(steps)-1; j++ {
+		s := &steps[j]
+		if !s.done || inst.stepLevel(s) != attention.LevelData {
+			break
+		}
+		n++
+	}
+	return
+}
+
+// markedLine is a step's line behind its level's mark.
+func (inst *App) markedLine(s *turnStep) string {
+	return levelMark(inst.stepLevel(s)) + " " + stepLine(s)
 }
 
 // stepsSummary is the steps in a line: calls by kind, refusals, tokens.
@@ -102,7 +142,7 @@ func (inst *App) renderStep(i int, s *turnStep) {
 			// Not working: waiting on a decision of the person's, in the
 			// host's dialog or in the window.
 			for range c.HoverText(tipWaitingForYou).KeepIter() {
-				for rt := range c.RichTextLabelColored(color.Hex(styletokens.WarningDefault.AsHex()), color.Transparent, stepLine(s)) {
+				for rt := range c.RichTextLabelColored(color.Hex(styletokens.WarningDefault.AsHex()), color.Transparent, inst.markedLine(s)) {
 					rt.Small()
 				}
 			}
@@ -118,7 +158,7 @@ func (inst *App) renderStep(i int, s *turnStep) {
 		if !s.done {
 			for range c.HorizontalTop().KeepIter() {
 				c.Spinner().Send()
-				c.LabelAtoms(c.Atoms().BeginRichText(stepLine(s)).Small().End().Keep()).Selectable(false).Send()
+				c.LabelAtoms(c.Atoms().BeginRichText(inst.markedLine(s)).Small().End().Keep()).Selectable(false).Send()
 			}
 			c.RequestRepaint()
 			return
@@ -127,8 +167,8 @@ func (inst *App) renderStep(i int, s *turnStep) {
 			inst.stepLabel(s)
 			return
 		}
-		for range c.HoverText(tipStep).KeepIter() {
-			for range c.CollapsingHeader(inst.ids.PrepareStr("step"), c.WidgetText().Text(stepLine(s)).Keep()).KeepIter() {
+		for range c.HoverText(tipStep + "\n\n" + levelTip(inst.stepLevel(s))).KeepIter() {
+			for range c.CollapsingHeader(inst.ids.PrepareStr("step"), c.WidgetText().Text(inst.markedLine(s)).Keep()).KeepIter() {
 				inst.renderStepDetail(s)
 			}
 		}
@@ -141,8 +181,10 @@ func (inst *App) stepLabel(s *turnStep) {
 	if s.refused || s.failed {
 		tone = styletokens.ErrorDefault
 	}
-	for rt := range c.RichTextLabelColored(color.Hex(tone.AsHex()), color.Transparent, stepLine(s)) {
-		rt.Small()
+	for range c.HoverText(levelTip(inst.stepLevel(s))).KeepIter() {
+		for rt := range c.RichTextLabelColored(color.Hex(tone.AsHex()), color.Transparent, inst.markedLine(s)) {
+			rt.Small()
+		}
 	}
 }
 
@@ -246,8 +288,24 @@ func stepCopy(s *turnStep) string {
 // left edge as the thread's messages are, and its steps folded under
 // Details.
 func (inst *App) renderToolEntry(e *entry) {
-	c.LabelAtoms(c.Atoms().BeginRichText("⚙ " + e.text).Small().Weak().Italics().End().Keep()).
-		Wrap().Selectable(false).Send()
+	line := "⚙ " + e.text
+	level := attention.LevelData
+	for i := len(e.steps) - 1; i >= 0; i-- {
+		if e.steps[i].kind == stepTool {
+			// The tool call's level, as its step had it (ADR-0323): a
+			// routine call stays weak, one above it reads at full strength.
+			level = inst.stepLevel(&e.steps[i])
+			line = levelMark(level) + " " + line
+			break
+		}
+	}
+	for range c.HoverText(levelTip(level)).KeepIter() {
+		if level > attention.LevelData {
+			c.LabelAtoms(c.Atoms().BeginRichText(line).Small().Italics().End().Keep()).Wrap().Selectable(false).Send()
+		} else {
+			c.LabelAtoms(c.Atoms().BeginRichText(line).Small().Weak().Italics().End().Keep()).Wrap().Selectable(false).Send()
+		}
+	}
 	if len(e.steps) == 0 {
 		return
 	}
@@ -256,7 +314,7 @@ func (inst *App) renderToolEntry(e *entry) {
 			for i := range e.steps {
 				s := &e.steps[i]
 				for range c.IdScope(inst.ids.PrepareSeq(uint64(i))) {
-					for rt := range c.RichTextLabel(stepLine(s)) {
+					for rt := range c.RichTextLabel(inst.markedLine(s)) {
 						rt.Small().Strong()
 					}
 					inst.renderStepDetail(s)
