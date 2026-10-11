@@ -121,6 +121,9 @@ type request struct {
 	// asked is the turn and the model call that asked for the request, as
 	// the coordinator states them; its grant events carry them.
 	asked wireCause
+	// cardWindows are the windows its card offered when it opened
+	// (ADR-0324 §SD2); nil until then.
+	cardWindows []windowRow
 }
 
 func (inst *Service) isCoordinator(id app.AppIdT) (ok bool) {
@@ -223,6 +226,20 @@ func (inst *Service) requestGrant(msg *app.Msg) (rep wireGrantReply) {
 		return inst.testWiden(r)
 	}
 	inst.mu.Lock()
+	if !inst.autoDecides(r) {
+		// What reaches the person counts against the flood limit (ADR-0324
+		// §SD6); what unattended mode decides does not.
+		conv := r.conversation
+		if conv == "" && t != nil {
+			conv = t.conversation
+		}
+		if ok, why := inst.admit(r.actor, r.actorInstance, conv); !ok {
+			rep.Reason = why
+			inst.grantEvent(trail.GrantEventRefused, "host", why, nil, r)
+			inst.mu.Unlock()
+			return
+		}
+	}
 	inst.requests[r.key] = r
 	inst.requestOrder = append(inst.requestOrder, r.key)
 	var route *held
@@ -291,8 +308,9 @@ func (inst *Service) expireRequest(r *request) {
 // holdForWidening turns a call outside the grant into a widening the
 // person decides; the call stays input_required until then. route is the
 // held call when the host approved it in the person's place, for the caller
-// to route after releasing mu. The caller holds mu.
-func (inst *Service) holdForWidening(t *task, rec *callRec, req wireCall, need needE, mode ModeE) (route *held) {
+// to route after releasing mu. refused is the flood limit's refusal (ADR-0324
+// §SD6), the call's outcome instead of a hold. The caller holds mu.
+func (inst *Service) holdForWidening(t *task, rec *callRec, req wireCall, need needE, mode ModeE) (route *held, refused string) {
 	r := &request{key: "req-" + randomHex(8), actor: t.actor, actorInstance: t.actorInstance, task: t,
 		plan: req.Reason, wanted: map[uint64]ModeE{req.Instance: mode}, wantedOps: map[uint64][]string{},
 		created: time.Now(), share: map[uint64]bool{req.Instance: true}, shareFlag: make(map[uint64]*bool),
@@ -301,6 +319,12 @@ func (inst *Service) holdForWidening(t *task, rec *callRec, req wireCall, need n
 		asked: wireCause{Turn: req.Turn, ModelCall: req.ModelCall, ToolCall: req.ToolCall, ToolIndex: req.ToolIndex}}
 	if need == needOperation {
 		r.wantedOps[req.Instance] = []string{req.Operation}
+	}
+	if !inst.autoDecides(r) {
+		if ok, why := inst.admit(t.actor, t.actorInstance, t.conversation); !ok {
+			inst.grantEvent(trail.GrantEventRefused, "host", why, nil, r)
+			return nil, why
+		}
 	}
 	rec.heldBy = r
 	inst.grantEvent(trail.GrantEventRequested, "coordinator", "a call outside the grant: "+req.Operation, nil, r)
@@ -471,13 +495,19 @@ func (inst *Service) routeHeld(h *held) {
 			h.rec.req, h.rec.entry = h.req, e
 			h.rec.proposal = &proposal{confirm: spec.Effect == app.OperationEffectConsequential && consent == "",
 				expects: inst.expectsFor(t, h.req, spec)}
+			if why := inst.admitConfirmation(t, h.rec); why != "" {
+				out = phaseOutcome(opwire.PhaseRefused, why)
+			}
 		}
 		var again *held
 		if out.Phase == opwire.PhaseInputRequired && need != 0 && !t.test {
 			// The widening let the call further, and it needs another — a
 			// spent budget, say: the person is asked for that one too,
 			// rather than the call ending on a question nobody saw.
-			again = inst.holdForWidening(t, h.rec, h.req, need, mode)
+			var refused string
+			if again, refused = inst.holdForWidening(t, h.rec, h.req, need, mode); refused != "" {
+				out = phaseOutcome(opwire.PhaseRefused, refused)
+			}
 		}
 		if out.Phase != opwire.PhaseUnspecified {
 			h.rec.outcome = out

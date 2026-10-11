@@ -514,7 +514,10 @@ func (inst *Service) call(msg *app.Msg) (rep wireCallReply) {
 	}
 	var route *held
 	if out.Phase == opwire.PhaseInputRequired && need != 0 && !t.test {
-		route = inst.holdForWidening(t, rec, req, need, mode)
+		var refused string
+		if route, refused = inst.holdForWidening(t, rec, req, need, mode); refused != "" {
+			out = phaseOutcome(opwire.PhaseRefused, refused)
+		}
 	}
 	// Unattended (ADR-0298): a proposal the grant made may be accepted on
 	// arrival; it is then routed below like any call, and paced as one.
@@ -527,6 +530,10 @@ func (inst *Service) call(msg *app.Msg) (rep wireCallReply) {
 			rec.req, rec.entry = req, e
 			rec.proposal = &proposal{confirm: spec.Effect == app.OperationEffectConsequential && rec.consent == "",
 				expects: inst.expectsFor(t, req, spec)}
+			if why := inst.admitConfirmation(t, rec); why != "" {
+				t.callsUsed--
+				out = phaseOutcome(opwire.PhaseRefused, why)
+			}
 		}
 	}
 	if out.Phase != opwire.PhaseUnspecified {

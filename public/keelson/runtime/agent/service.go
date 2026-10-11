@@ -14,6 +14,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/appops"
 	"github.com/stergiotis/boxer/public/keelson/runtime/appops/opengine"
 	"github.com/stergiotis/boxer/public/keelson/runtime/appops/opwire"
+	"github.com/stergiotis/boxer/public/keelson/runtime/attention"
 	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
 	"github.com/stergiotis/boxer/public/keelson/runtime/capture"
 	"github.com/stergiotis/boxer/public/keelson/runtime/help"
@@ -66,6 +67,11 @@ type Config struct {
 	// (CallsMinEnv, CallsMaxEnv).
 	CallsMin int
 	CallsMax int
+	// Attention is the host's queue of the person's decisions (ADR-0324,
+	// proposed): with it, requests, widenings, confirmations and moderators'
+	// questions are admitted through its flood limit and decided in its cards,
+	// not in modals. nil keeps the modals.
+	Attention *attention.Service
 	// ActionsLog, when set, receives every action record as one JSON line,
 	// for scoring a run after the host exits (ActionsFileEnv); the headless
 	// host sets it.

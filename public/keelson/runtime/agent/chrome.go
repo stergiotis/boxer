@@ -288,8 +288,15 @@ func dialogHeading(title string, width float32) {
 // the oldest consequential command awaiting confirmation. Both are modals
 // (a grant is decided before anything else is clicked, and no window can
 // cover the dialog asking for it).
+//
+// With the attention service installed (ADR-0324, proposed) nothing here is
+// modal: the same decisions are items of the person's queue, drawn as host
+// cards by RenderCard.
 func (inst *Chrome) RenderDialogs(ids *c.WidgetIdStack) (modal bool) {
 	svc := inst.svc
+	if svc.cfg.Attention != nil {
+		return false
+	}
 	// One modal at a time: a moderator's question waits behind nothing
 	// and holds the others back until it is answered.
 	if inst.renderQuestion(ids) {
@@ -349,33 +356,10 @@ func (inst *Chrome) RenderDialogs(ids *c.WidgetIdStack) (modal bool) {
 func (inst *Chrome) renderConfirmation(p proposalRef, waiting int, ids *c.WidgetIdStack) {
 	svc := inst.svc
 	rec := p.rec
-	who := svc.display(p.t.actor) + " (window " + strconv.FormatUint(p.t.actorInstance, 10) + ")"
 	var confirm, decline bool
 	for range c.Modal(ids.PrepareStr("agent-confirm-" + p.t.id + "-" + rec.key)).KeepIter() {
 		dialogHeading("Confirm a change outside the app", confirmWidth)
-		c.Label(who + " asks to " + rec.spec.Summary + " (" + rec.spec.Name + ") in window " +
-			strconv.FormatUint(rec.instance, 10) + ".").Wrap().Send()
-		c.Label("This writes outside the app and cannot be undone from here.").Wrap().Send()
-		if svc.Unattended() {
-			c.Label("The host runs unattended, and still asks a person to confirm every change outside the app (ADR-0298).").Wrap().Send()
-		}
-		if rec.req.Reason != "" {
-			bounded(ids.PrepareStr("agent-confirm-reason-"+rec.key), modelTextHeight, func() {
-				for rt := range c.RichTextLabel("its reason, as the model wrote it: " + rec.req.Reason) {
-					rt.Weak()
-				}
-			})
-		}
-		if waiting > 1 {
-			c.Label(strconv.Itoa(waiting-1) + " more waiting").Send()
-		}
-		c.Separator().Send()
-		// Right-aligned, the decision at the edge: a right-to-left row
-		// places its first child rightmost.
-		for range c.UiWithLayout().MainDirRightToLeft().CrossAlignMin().KeepIter() {
-			confirm = c.Button(ids.PrepareStr("agent-confirm-yes-"+rec.key), c.Atoms().Text("Confirm").Keep()).Kind(c.ButtonKindDanger).SendResp().HasPrimaryClicked()
-			decline = c.Button(ids.PrepareStr("agent-confirm-no-"+rec.key), c.Atoms().Text("Decline").Keep()).SendResp().HasPrimaryClicked()
-		}
+		confirm, decline = inst.renderConfirmationBody(p, waiting, ids)
 	}
 	switch {
 	case confirm:
@@ -383,6 +367,38 @@ func (inst *Chrome) renderConfirmation(p proposalRef, waiting int, ids *c.Widget
 	case decline:
 		svc.rejectProposal(p)
 	}
+}
+
+// renderConfirmationBody is a confirmation's text and buttons, in a modal
+// or a card.
+func (inst *Chrome) renderConfirmationBody(p proposalRef, waiting int, ids *c.WidgetIdStack) (confirm bool, decline bool) {
+	svc := inst.svc
+	rec := p.rec
+	who := svc.display(p.t.actor) + " (window " + strconv.FormatUint(p.t.actorInstance, 10) + ")"
+	c.Label(who + " asks to " + rec.spec.Summary + " (" + rec.spec.Name + ") in window " +
+		strconv.FormatUint(rec.instance, 10) + ".").Wrap().Send()
+	c.Label("This writes outside the app and cannot be undone from here.").Wrap().Send()
+	if svc.Unattended() {
+		c.Label("The host runs unattended, and still asks a person to confirm every change outside the app (ADR-0298).").Wrap().Send()
+	}
+	if rec.req.Reason != "" {
+		bounded(ids.PrepareStr("agent-confirm-reason-"+rec.key), modelTextHeight, func() {
+			for rt := range c.RichTextLabel("its reason, as the model wrote it: " + rec.req.Reason) {
+				rt.Weak()
+			}
+		})
+	}
+	if waiting > 1 {
+		c.Label(strconv.Itoa(waiting-1) + " more waiting").Send()
+	}
+	c.Separator().Send()
+	// Right-aligned, the decision at the edge: a right-to-left row
+	// places its first child rightmost.
+	for range c.UiWithLayout().MainDirRightToLeft().CrossAlignMin().KeepIter() {
+		confirm = c.Button(ids.PrepareStr("agent-confirm-yes-"+rec.key), c.Atoms().Text("Confirm").Keep()).Kind(c.ButtonKindDanger).SendResp().HasPrimaryClicked()
+		decline = c.Button(ids.PrepareStr("agent-confirm-no-"+rec.key), c.Atoms().Text("Decline").Keep()).SendResp().HasPrimaryClicked()
+	}
+	return
 }
 
 type windowRow struct {

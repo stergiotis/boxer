@@ -148,6 +148,15 @@ type AgentChromeI interface {
 // SetAgentChrome installs the agent chrome; call it before the first Frame.
 func (inst *Inst) SetAgentChrome(ch AgentChromeI) { inst.agentChrome = ch }
 
+// CardsChromeI draws the cards of the person's queue at top level, non-modal
+// and above every app window (ADR-0324, proposed), on the render goroutine.
+type CardsChromeI interface {
+	RenderCards(ids *c.WidgetIdStack)
+}
+
+// SetCardsChrome installs the queue's cards; call it before the first Frame.
+func (inst *Inst) SetCardsChrome(ch CardsChromeI) { inst.cards = ch }
+
 // OpsRenderGoroutine is the id of the goroutine that last ran Frame; zero
 // before the first frame.
 func (inst *Inst) OpsRenderGoroutine() (id uint64) { return inst.renderGoroutine.Load() }

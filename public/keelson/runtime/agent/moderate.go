@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/observability/eh"
@@ -80,6 +81,7 @@ type question struct {
 	text      string
 	rule      string
 	answer    chan bool
+	created   time.Time
 }
 
 // SetModerators installs the apps that may use the moderator's verbs.
@@ -216,7 +218,7 @@ func (inst *Service) AskPerson(ctx context.Context, moderator app.AppIdT, text s
 	m := &inst.moderation
 	m.mu.Lock()
 	m.nextKey++
-	q := &question{key: strconv.FormatUint(m.nextKey, 10), moderator: moderator, text: text, rule: rule, answer: make(chan bool, 1)}
+	q := &question{key: strconv.FormatUint(m.nextKey, 10), moderator: moderator, text: text, rule: rule, answer: make(chan bool, 1), created: time.Now()}
 	m.questions = append(m.questions, q)
 	m.mu.Unlock()
 	select {
@@ -261,19 +263,7 @@ func (inst *Chrome) renderQuestion(ids *c.WidgetIdStack) (shown bool) {
 	var allow, decline bool
 	for range c.Modal(ids.PrepareStr("agent-moderator-question-" + q.key)).KeepIter() {
 		dialogHeading("A model-use moderator asks", confirmWidth)
-		c.Label(svc.display(q.moderator) + " asks:").Wrap().Send()
-		bounded(ids.PrepareStr("agent-moderator-question-text-"+q.key), modelTextHeight, func() {
-			c.Label(q.text).Wrap().Send()
-		})
-		c.Label("Allowing it sets this rule, with you as its author: " + q.rule).Wrap().Send()
-		if waiting > 1 {
-			c.Label(strconv.Itoa(waiting-1) + " more waiting").Send()
-		}
-		c.Separator().Send()
-		for range c.UiWithLayout().MainDirRightToLeft().CrossAlignMin().KeepIter() {
-			allow = c.Button(ids.PrepareStr("agent-moderator-allow-"+q.key), c.Atoms().Text("Allow").Keep()).SendResp().HasPrimaryClicked()
-			decline = c.Button(ids.PrepareStr("agent-moderator-decline-"+q.key), c.Atoms().Text("Decline").Keep()).SendResp().HasPrimaryClicked()
-		}
+		allow, decline = inst.renderQuestionBody(q, waiting, ids)
 	}
 	switch {
 	case allow:
@@ -282,4 +272,24 @@ func (inst *Chrome) renderQuestion(ids *c.WidgetIdStack) (shown bool) {
 		svc.answer(q, false)
 	}
 	return true
+}
+
+// renderQuestionBody is a moderator's question and its buttons, in a modal
+// or a card.
+func (inst *Chrome) renderQuestionBody(q *question, waiting int, ids *c.WidgetIdStack) (allow bool, decline bool) {
+	svc := inst.svc
+	c.Label(svc.display(q.moderator) + " asks:").Wrap().Send()
+	bounded(ids.PrepareStr("agent-moderator-question-text-"+q.key), modelTextHeight, func() {
+		c.Label(q.text).Wrap().Send()
+	})
+	c.Label("Allowing it sets this rule, with you as its author: " + q.rule).Wrap().Send()
+	if waiting > 1 {
+		c.Label(strconv.Itoa(waiting-1) + " more waiting").Send()
+	}
+	c.Separator().Send()
+	for range c.UiWithLayout().MainDirRightToLeft().CrossAlignMin().KeepIter() {
+		allow = c.Button(ids.PrepareStr("agent-moderator-allow-"+q.key), c.Atoms().Text("Allow").Keep()).SendResp().HasPrimaryClicked()
+		decline = c.Button(ids.PrepareStr("agent-moderator-decline-"+q.key), c.Atoms().Text("Decline").Keep()).SendResp().HasPrimaryClicked()
+	}
+	return
 }

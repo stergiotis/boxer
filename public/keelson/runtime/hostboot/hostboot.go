@@ -24,6 +24,8 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/appcenter"
 	appcenterlaunch "github.com/stergiotis/boxer/public/keelson/runtime/appcenter/launchcfg"
 	"github.com/stergiotis/boxer/public/keelson/runtime/appstate"
+	"github.com/stergiotis/boxer/public/keelson/runtime/attention"
+	"github.com/stergiotis/boxer/public/keelson/runtime/attention/attentionchrome"
 	"github.com/stergiotis/boxer/public/keelson/runtime/audit"
 	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
 	"github.com/stergiotis/boxer/public/keelson/runtime/cell"
@@ -261,6 +263,9 @@ type Runtime struct {
 	// Agent is the app operations service (ADR-0269); nil when off or
 	// failed to start.
 	Agent *agent.Service
+	// Attention is the person's queue in host chrome (ADR-0324, proposed);
+	// nil without the agent service.
+	Attention *attentionchrome.Chrome
 	// Moderator is the built-in moderator (ADR-0302); nil unless
 	// BOXER_MODERATOR is set.
 	Moderator *moderator.Service
@@ -799,6 +804,9 @@ func (rt *Runtime) bootWindowHost() (err error) {
 	rt.Renderers = append(rt.Renderers, imzhost.DecorateRenderer(inner, rt.chrome(func() {
 		menuIds.Reset()
 		host.RenderAppsMenu(menuIds)
+		if rt.Attention != nil {
+			rt.Attention.RenderControl(menuIds)
+		}
 	}, host)))
 	logger.Info().Int("initialWindows", len(rt.opts.LaunchApps)+len(rt.opts.SeedWindows)).Msg("window host: started")
 	return
@@ -882,6 +890,17 @@ func (rt *Runtime) bootAgent() {
 			rt.cleanups = append(rt.cleanups, ops.Close)
 		}
 	}
+	// The person's decisions wait in a queue in host chrome, not in modals
+	// (ADR-0324, proposed).
+	cfg.Attention = attention.NewService()
+	// The person's acknowledgements, shelves and waiting-scale changes are
+	// on the trail (ADR-0323 §SD5, ADR-0324 §SD4).
+	attention.AttachTrail(cfg.Attention, rt.Trail, logger)
+	if qs, qerr := attention.NewBusService(rt.Bus, cfg.Attention.Questions, logger); qerr != nil {
+		logger.Warn().Err(qerr).Msg("attention: question service start failed; apps' questions stay in their windows")
+	} else {
+		rt.cleanups = append(rt.cleanups, qs.Close)
+	}
 	svc, err := agent.NewService(rt.Bus, logger, cfg)
 	if err != nil {
 		logger.Warn().Err(err).Msg("agent: service start failed; runtime.agent.* will be unbound")
@@ -922,6 +941,22 @@ func (rt *Runtime) bootAgent() {
 		// The person's side: the badge in each window a task works in and
 		// the dialog in which requests are decided (ADR-0269 §SD5).
 		rt.Host.SetAgentChrome(svc.Chrome())
+		reg := rt.opts.Registry
+		if reg == nil {
+			reg = app.DefaultRegistry
+		}
+		host := rt.Host
+		rt.Attention = attentionchrome.New(cfg.Attention, attentionchrome.Options{
+			Display: func(id app.AppIdT) string {
+				if m, ok := reg.LookupManifest(id); ok {
+					return m.Display
+				}
+				return string(id)
+			},
+			Raise: func(instance uint64) { _ = host.OpsRaise(instance) },
+		})
+		rt.Attention.AddSource(svc, svc.Chrome())
+		rt.Host.SetCardsChrome(rt.Attention)
 		rt.Host.SetOpsListener(svc.Listener())
 	}
 	logger.Info().Bool("testGrants", cfg.TestGrants).Bool("durable", svc.Durable()).Msg("agent: service listening on runtime.agent.*")

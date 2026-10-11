@@ -332,6 +332,9 @@ type Inst struct {
 	// (ADR-0269 §SD5): a badge row in each window a task works in, and the
 	// host's dialogs. nil draws nothing. Set before the first Frame.
 	agentChrome AgentChromeI
+	// cards draws the cards of the person's queue (ADR-0324, proposed). nil
+	// draws nothing. Set before the first Frame.
+	cards CardsChromeI
 
 	// drains bounds and counts the drain step of the closing edge
 	// (windowhost_drain.go).
@@ -1285,6 +1288,9 @@ func (inst *Inst) Frame(ids *c.WidgetIdStack) (err error) {
 	inst.dialogModal = false
 	if inst.agentChrome != nil {
 		inst.dialogModal = inst.agentChrome.RenderDialogs(ids)
+	}
+	if inst.cards != nil {
+		inst.cards.RenderCards(ids)
 	}
 	saveEv := inst.saveDialog(ids).Render()
 	switch act, paths := saveEv.Action, saveEv.Paths; act {
