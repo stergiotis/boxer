@@ -212,6 +212,10 @@ func (inst Input) emitStore(ir *common.IntermediateTableRepresentation, conv com
 		err = eb.Build().Str("goType", model.order.goType).Errorf("Order column Go type not supported — Replay and the decode assume the timestamp lane; declare the EntityTimestamp column as a temporal (ctabb.Z64 for nanosecond replay precision), or bind a uint64 column explicitly via Roles.Order")
 		return
 	}
+	if inst.KeyStream && model.key.goType != "uint64" {
+		err = eb.Build().Str("goType", model.key.goType).Errorf("KeyStream mints a tagged uint64 id; the Key column must derive to uint64")
+		return
+	}
 	if inst.TombstoneView && model.stateView {
 		err = eb.Build().Str("lifecycleColumn", model.lifecycle.name).Errorf("TombstoneView is set, but the schema binds a u8 EntityLifecycle role — the state view exists already, with the u8 marker as the tombstone pair's default binding")
 		return
@@ -384,6 +388,9 @@ func (inst Input) emitStore(ir *common.IntermediateTableRepresentation, conv com
 	em.emitFlush(&sb)
 	em.emitCacheView(&sb, stateView)
 	em.emitQueryVerbs(&sb, comps, stateView)
+	if inst.KeyStream {
+		em.emitMintKey(&sb)
+	}
 	if inst.Cas {
 		em.emitCas(&sb, cas)
 	}
@@ -998,6 +1005,9 @@ func (inst emitter) emitStoreHeader(sb *strings.Builder, key, order, lifecycle e
 		p("\t%q", "github.com/stergiotis/boxer/public/functional/option")
 	}
 	p("\t%q", "github.com/stergiotis/boxer/public/identity/callident")
+	if inst.KeyStream {
+		p("\t%q", "github.com/stergiotis/boxer/public/identity/identifier")
+	}
 	p("\t%q", "github.com/stergiotis/boxer/public/observability/eh")
 	if inst.hasComps {
 		// The published artefact Set (ADR-0189 §SD1); emitted only with
@@ -1207,6 +1217,12 @@ func (inst emitter) emitStoreType(sb *strings.Builder) {
 	p("\t// dropped (ADR-0295 §SD7). It is notification-only and independent of")
 	p("\t// attached cache views. Nil (the default) tracks nothing.")
 	p("\tWriteObserver recordstore.WriteObserverI[%s, %s]", inst.keyGoType, inst.orderGoType)
+	if inst.KeyStream {
+		p("\t// Keys is the tagged id stream MintKey draws from (ADR-0319 §SD2):")
+		p("\t// ids unique across every process that leases from the same stream,")
+		p("\t// never an order. Nil leaves MintKey refusing.")
+		p("\tKeys identifier.IdGeneratorI")
+	}
 	if inst.stateViewOn() {
 		p("\t// TombstoneDetect is the read half of the state-view tombstone pair")
 		p("\t// (ADR-0100 Update 2026-08-30): GetLive — the store's and the cache")
@@ -2849,4 +2865,27 @@ func lowerFirst(s string) string {
 		return s
 	}
 	return strings.ToLower(s[:1]) + s[1:]
+}
+
+// emitMintKey writes MintKey, the KeyStream option's verb.
+func (inst emitter) emitMintKey(sb *strings.Builder) {
+	p := func(format string, args ...any) { fmt.Fprintf(sb, format+"\n", args...) }
+	p("// MintKey draws the next Key from cfg.Keys (ADR-0319 §SD2): a tagged id")
+	p("// that says which stream it belongs to and is unique across every")
+	p("// process leasing from it. It identifies a row and orders nothing; pass")
+	p("// it to Begin as the id.")
+	p("func (inst *%s) MintKey(ctx context.Context) (key uint64, err error) {", inst.storeType())
+	p("\tif inst.cfg.Keys == nil {")
+	p("\t\terr = eh.Errorf(\"mint key: the store has no key stream (%sStoreConfig.Keys)\")", inst.StoreName)
+	p("\t\treturn")
+	p("\t}")
+	p("\tid, _, err := inst.cfg.Keys.GetId(ctx, nil)")
+	p("\tif err != nil {")
+	p("\t\terr = eh.Errorf(\"mint key: %%w\", err)")
+	p("\t\treturn")
+	p("\t}")
+	p("\tkey = id.Value()")
+	p("\treturn")
+	p("}")
+	p("")
 }

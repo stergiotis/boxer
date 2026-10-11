@@ -38,7 +38,9 @@ import (
 
 	"github.com/stergiotis/boxer/public/db/clickhouse/chrows"
 	"github.com/stergiotis/boxer/public/identity/identgen"
+	"github.com/stergiotis/boxer/public/identity/identgen/leased"
 	"github.com/stergiotis/boxer/public/identity/identifier"
+	"github.com/stergiotis/boxer/public/identity/tagmint"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/storage/recordstore"
@@ -54,6 +56,12 @@ const TableName = "idlease"
 // DefaultMaxAttempts bounds how many lost compare-and-sets one AllocateBlock
 // retries before it reports contention.
 const DefaultMaxAttempts = 32
+
+// DefaultBlockSize is the block a sequence leases per round trip unless its
+// deployment says otherwise (ADR-0319 §SD4): small enough that a process
+// start burns little of a stream, large enough that a busy writer rarely
+// returns to the server. An appliance may lease far larger blocks.
+const DefaultBlockSize = 1024
 
 const maxUint64 = ^uint64(0)
 
@@ -143,6 +151,21 @@ func NewAllocator(exec recordstore.ExecutorI, layout Layout) (inst *Allocator, e
 	}
 	inst = &Allocator{exec: exec, layout: layout, newToken: randomToken}
 	return
+}
+
+// NewSequence is the sequential generator a store mints from (ADR-0319
+// §SD3): ids under claim's tag value, drawn from blocks of blockSize leased
+// through alloc. A zero blockSize means [DefaultBlockSize]. Only a claimed
+// tag value mints, so a stream's value is the one its golden pins.
+func NewSequence(alloc *Allocator, claim tagmint.ClaimedTagValue, blockSize uint64) (seq *leased.Sequence, err error) {
+	if !claim.IsValid() {
+		err = eh.Errorf("an id stream mints only under a tagmint claim")
+		return
+	}
+	if blockSize == 0 {
+		blockSize = DefaultBlockSize
+	}
+	return leased.NewSequence(alloc, claim.Value(), blockSize)
 }
 
 // lease is the lease row as one read sees it.

@@ -240,6 +240,13 @@ type Input struct {
 	// claim path (rowcas).
 	InsertSettings recordstore.InsertSettings
 
+	// KeyStream mints the Key from a tagged id stream (ADR-0319 §SD2): the
+	// store's config gains Keys, an identifier.IdGeneratorI — typically a
+	// rowalloc sequence leasing blocks from the deployment's one server —
+	// and the store gains MintKey. The Key must derive to uint64; a string
+	// Key is refused at generation.
+	KeyStream bool
+
 	// DDL overrides the table-level clauses (ADR-0102 seam). nil derives
 	// the defaults: CREATE TABLE IF NOT EXISTS, ENGINE MergeTree(),
 	// ORDER BY (Key[, Order]) resolved to physical names, and the

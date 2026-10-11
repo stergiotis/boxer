@@ -292,6 +292,17 @@ plan002's generated compare-and-set on the run row. They change the same
 tables, the same chain seed and the same chat call sites, and doing them
 separately would move each of those twice.
 
+
+### 2026-10-11 — the default block, the sequence, and the store option
+
+`rowalloc.NewSequence` builds the sequential generator a store mints from.
+It takes a `tagmint` claim rather than a bare value, so only a claimed
+stream mints. It leases `rowalloc.DefaultBlockSize` (1024) bodies per round
+trip unless the deployment passes another size (SD4). The record store's
+`gen.Input.KeyStream` binds such a stream to a store's Key (ADR-0100's
+Update of this date). The journal's tables bind their streams in
+plan002's B5, together with the chain-form change the u64 run id brings.
+
 ## References
 
 - [ADR-0106](./0106-identity-fibonacci-tags-build-tag-retirement.md) — the tagged id scheme, the planning API, the pruning function.

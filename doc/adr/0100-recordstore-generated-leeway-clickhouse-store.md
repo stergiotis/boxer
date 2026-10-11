@@ -1215,6 +1215,17 @@ is refused at run time with `recordstore.ErrUnknownOrderColumn` and is never
 rendered as SQL. `ScanLive<Kind>` keeps key order unless the options ask for
 another. The run journal's `ListRuns` is one bounded `ScanLiveRun`.
 
+
+### 2026-10-11 — the Key minted from a tagged id stream: `gen.Input.KeyStream`
+
+ADR-0319 gives each referenced runtime table a tagged id stream leased
+through one row. A store generated with `gen.Input.KeyStream` takes its
+stream as `<Store>StoreConfig.Keys`, an `identifier.IdGeneratorI`, typically
+`rowalloc.NewSequence`, and gains `MintKey(ctx)`. The minted key is passed to
+`Begin` like any id. The Key must derive to uint64, and a string Key is
+refused at generation. `recordstore/example`'s `minted` store is the
+reference.
+
 ## References
 
 - [ADR-0042: Keelson leeway codec SoA generator](0042-keelson-leeway-codec-soa-generator.md)
