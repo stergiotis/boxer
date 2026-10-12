@@ -34,7 +34,7 @@ under `BOXER_FS_APPDATA_DIR`.
 {"do":"expect","of":"tables","min":1}
 {"do":"capture","text":"jackstay-structure"}
 {"do":"click","contains":"Next: Differences","role":"button"}
-{"do":"wait","name":"Compare content","role":"button","settleMs":500}
+{"do":"read","name":"Compare content","role":"button","on":"name","pattern":"(?P<compare>Compare content)","settleMs":500,"comment":"present; enabled only once a table needs no DDL, which depends on what the target holds"}
 {"do":"capture","text":"jackstay-differences"}
 {"do":"click","name":"5 Sync","role":"button"}
 {"do":"read","valueContains":"Recommended:","role":"label","pattern":"^Recommended: (?P<mode>full|repair|sample), because","settleMs":4000}
