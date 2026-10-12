@@ -1,0 +1,3 @@
+# The scripted model of chat-watch.scene.md: one slow answer, so the person
+# can look elsewhere before the turn ends.
+{"content":"The layer is drawn: wind above 15 m/s, in red.","delayMs":4000}

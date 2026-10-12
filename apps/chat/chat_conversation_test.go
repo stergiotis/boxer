@@ -203,7 +203,7 @@ func TestTranscriptModel(t *testing.T) {
 		{speaker: speakerModel, text: "a1", atMs: 5},
 		{speaker: speakerUser, text: "q2", atMs: 20, failed: true, reason: "boom", edited: true},
 	}
-	m, kinds := transcriptModel(conv, true, 30)
+	m, kinds := transcriptModel(conv, -1, true, 30)
 	require.NoError(t, m.Validate(), "times are kept ascending")
 	require.Equal(t, 4, m.Len())
 	assert.EqualValues(t, 1, m.Sender[1])
@@ -212,6 +212,15 @@ func TestTranscriptModel(t *testing.T) {
 	assert.Equal(t, 2, kinds[2].entry)
 	assert.True(t, kinds[3].pending)
 	assert.Equal(t, "q2", m.Body[2], "the thread layout measures nothing, so a body is its text alone")
+
+	m, kinds = transcriptModel(conv, 1, false, 30)
+	require.NoError(t, m.Validate())
+	require.Equal(t, 4, m.Len(), "the mark is a row of its own")
+	assert.True(t, kinds[1].mark)
+	assert.Equal(t, 1, kinds[2].entry)
+	assert.EqualValues(t, 0, ordinalOf(0, 1))
+	assert.EqualValues(t, 2, ordinalOf(1, 1), "from the mark on, one more")
+	assert.EqualValues(t, 2, ordinalOf(2, -1))
 }
 
 // Regenerate and Edit take the last answered turn back: the next request

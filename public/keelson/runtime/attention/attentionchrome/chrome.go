@@ -47,7 +47,12 @@ type Chrome struct {
 	// entries and shelved are the queue as last read.
 	entries []attention.Entry
 	shelved []attention.Entry
+	// notices are the highlights as last read (ADR-0323 §SD4): counted
+	// beside what waits, never opened as cards.
+	notices []attention.Notice
 	read    time.Time
+	display func(app.AppIdT) string
+	raiseW  func(instance uint64)
 }
 
 // Options are what the chrome needs from the host: an app's display name,
@@ -60,7 +65,7 @@ type Options struct {
 // New is the chrome of svc; it draws the cards of the questions apps post
 // (ADR-0324 §SD5) itself.
 func New(svc *attention.Service, opts Options) (inst *Chrome) {
-	inst = &Chrome{svc: svc}
+	inst = &Chrome{svc: svc, display: opts.Display, raiseW: opts.Raise}
 	if svc.Questions != nil {
 		inst.sources = append(inst.sources, &questionCards{q: svc.Questions, display: opts.Display, raise: opts.Raise})
 	}
@@ -81,6 +86,9 @@ func (inst *Chrome) refresh(now time.Time) {
 	}
 	inst.read = now
 	inst.entries, inst.shelved = inst.svc.Queue.Snapshot(now)
+	if inst.svc.Notices != nil {
+		inst.notices = inst.svc.Notices.List()
+	}
 	for _, k := range inst.svc.Queue.TakeOpens(inst.entries) {
 		inst.openCard(k)
 	}
@@ -134,7 +142,7 @@ func levelGlyph(l attention.LevelE) string {
 
 // RenderControl draws the control in the shell's menu bar: the count of
 // items waiting, and a menu of them, highest level first, with Next
-// (ADR-0324 §SD1).
+// (ADR-0324 §SD1); then, quieter, the count of highlights.
 func (inst *Chrome) RenderControl(ids *c.WidgetIdStack) {
 	now := time.Now()
 	inst.refresh(now)
@@ -147,6 +155,10 @@ func (inst *Chrome) RenderControl(ids *c.WidgetIdStack) {
 				break
 			}
 		}
+	}
+	if n := len(inst.notices); n > 0 {
+		// Quieter than what waits: a count, after it.
+		label += "   " + icons.PhStar + " " + strconv.Itoa(n)
 	}
 	// A button and a host window rather than a menu: the list closes when
 	// the person opens an item from it, which a menu here cannot be told.
@@ -194,6 +206,55 @@ func (inst *Chrome) renderList(now time.Time, ids *c.WidgetIdStack) {
 		}
 		if len(inst.entries) == 0 && len(inst.shelved) == 0 {
 			c.Label("Nothing waits on you.").Send()
+		}
+		if len(inst.notices) > 0 {
+			c.Separator().Send()
+			for rt := range c.RichTextLabel(icons.PhStar + " highlights — nothing waits on these") {
+				rt.Weak()
+			}
+			for _, n := range inst.notices {
+				inst.renderNotice(n, now, ids)
+			}
+		}
+	}
+}
+
+// renderNotice draws a highlight: what happened in which conversation, with
+// Open, which raises the window that reported it, and Dismiss. Either
+// drops it.
+func (inst *Chrome) renderNotice(n attention.Notice, now time.Time, ids *c.WidgetIdStack) {
+	k := n.Conversation
+	name := n.Title
+	if name == "" {
+		name = "conversation " + n.Conversation
+	}
+	text := n.Text
+	if text == "" {
+		text = n.Kind
+	}
+	where := string(n.App)
+	if inst.display != nil {
+		where = inst.display(n.App)
+	}
+	for range c.HorizontalTop().KeepIter() {
+		c.Label(icons.PhStar + " " + age(now.Sub(n.Created))).Send()
+		c.Label(text + " · " + name).Send()
+		for rt := range c.RichTextLabel(where) {
+			rt.Weak().Small()
+		}
+	}
+	for range c.HorizontalTop().KeepIter() {
+		if inst.raiseW != nil && n.Instance != 0 {
+			if c.Button(ids.PrepareStr("attention-notice-open-"+k), c.Atoms().Text("Open").Keep()).Small().SendResp().HasPrimaryClicked() {
+				inst.raiseW(n.Instance)
+				inst.svc.Notices.Seen(n.Conversation)
+				inst.listOpen = false
+				inst.read = time.Time{}
+			}
+		}
+		if c.Button(ids.PrepareStr("attention-notice-dismiss-"+k), c.Atoms().Text("Dismiss").Keep()).Small().SendResp().HasPrimaryClicked() {
+			inst.svc.Notices.Seen(n.Conversation)
+			inst.read = time.Time{}
 		}
 	}
 }

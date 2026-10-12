@@ -308,14 +308,15 @@ type wireKey struct {
 
 const wireVersion uint8 = 1
 
-// BusService answers SubjectAll: the questions apps post, and the levels
-// they read and set.
+// BusService answers SubjectAll: the questions apps post, the levels they
+// read and set, and the notices they report.
 type BusService struct {
-	q      *Questions
-	levels *Levels
-	client *inprocbus.Client
-	unsub  func()
-	log    zerolog.Logger
+	q       *Questions
+	levels  *Levels
+	notices *Notices
+	client  *inprocbus.Client
+	unsub   func()
+	log     zerolog.Logger
 }
 
 // NewBusService subscribes the service's subjects and announces each change
@@ -325,7 +326,10 @@ func NewBusService(bus *inprocbus.Inst, svc *Service, log zerolog.Logger) (s *Bu
 		err = eh.Errorf("nil bus or service")
 		return
 	}
-	s = &BusService{q: svc.Questions, levels: svc.Levels, log: log}
+	s = &BusService{q: svc.Questions, levels: svc.Levels, notices: svc.Notices, log: log}
+	if s.notices == nil {
+		s.notices = NewNotices(svc.Levels)
+	}
 	s.client = bus.NewClient(ServiceAppId, []app.SubjectFilter{
 		{Pattern: SubjectAll, Direction: app.CapDirectionSub, Reason: "attention: serve the person's queue of questions and the levels (ADR-0323, ADR-0324)"},
 		{Pattern: SubjectChanged, Direction: app.CapDirectionPub, Reason: "attention: announce a change of the levels (ADR-0323 §SD7)"},
@@ -378,6 +382,8 @@ func (inst *BusService) handle(msg *app.Msg) {
 		rep = inst.levelsReply(msg)
 	case SubjectLevelSet:
 		rep = inst.levelSet(msg)
+	case SubjectNotify, SubjectSeen, SubjectNotices:
+		rep = inst.noticesHandle(msg)
 	default:
 		return
 	}

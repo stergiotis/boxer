@@ -116,6 +116,16 @@ highest level reached since the person last looked). The host serves the
 effective table to apps on the bus and announces changes; an app does not
 keep its own copy of the rules.
 
+A *highlight* is the one attention level that reaches host chrome. An app
+reports an event of its conversation that the person has not seen; the host
+classifies it with its own table and keeps it only at *highlight*, one per
+conversation, the latest. The control of ADR-0324 (proposed) counts these
+after what waits, and lists them apart; they open no card and are not items
+of the queue. One goes when the person looks at the conversation's window or
+dismisses it. Since an app sets its own conversation's attention scale
+(SD5), it can make any of its events a highlight; what that buys it is a
+count the person can dismiss, never a card or a place in the queue.
+
 ### SD8 — Deferred, recorded
 
 - **Highlight words** in a model's text, IRC's raise-on-a-word. Additive:
@@ -131,7 +141,7 @@ keep its own copy of the rules.
 
 | Surface | Change | Moves with it |
 | --- | --- | --- |
-| Host attention service (`runtime.attention`) | added: the table, its scopes, the floor check, the bus subjects that serve the effective table and announce changes | the queue of ADR-0324, which lives in the same service |
+| Host attention service (`runtime.attention`) | added: the table, its scopes, the floor check, the bus subjects that serve the effective table and announce changes, and the highlights apps report | the queue of ADR-0324, which lives in the same service |
 | Run journal kinds (ADR-0308 §SD2) | unchanged; read as keys | a new kind is *data* until the defaults name it |
 | Trail | added: an event for a change on the waiting scale | trail views |
 | Chat app | reads levels for the transcript mark, trail folding and a roster | ADR-0265 gains a dated update on acceptance |

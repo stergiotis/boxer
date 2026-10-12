@@ -9,6 +9,9 @@ type Service struct {
 	// Questions are the questions apps post on a model's behalf; a source of
 	// the queue.
 	Questions *Questions
+	// Notices are the highlights kept for the person; not a source of the
+	// queue.
+	Notices *Notices
 }
 
 // NewService builds the service from the environment (EscalateEnv,
@@ -18,6 +21,7 @@ func NewService() (s *Service) {
 	s = &Service{Levels: levels, Queue: NewQueue(levels, EscalateEnv.Get()),
 		Flood: NewFlood(int(FloodStreamEnv.Get()), int(FloodPersonEnv.Get()))}
 	s.Questions = NewQuestions(s.Flood)
+	s.Notices = NewNotices(levels)
 	s.Queue.AddSource(s.Questions)
 	return
 }

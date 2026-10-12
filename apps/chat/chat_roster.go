@@ -54,6 +54,8 @@ type rosterExtra struct {
 	windows []rosterWindow
 	grants  []rosterGrant
 	titles  map[string]string
+	// notices are the host's highlights (ADR-0323 §SD4).
+	notices []attention.Notice
 }
 
 // rosterRow is one conversation in the roster.
@@ -67,6 +69,8 @@ type rosterRow struct {
 	here   bool
 	// working are the windows its task works in.
 	working []rosterWindow
+	// notice is the host's highlight of it, nil for none.
+	notice *attention.Notice
 }
 
 // buildRoster sorts runs into the roster's groups: per live chat window its
@@ -89,6 +93,10 @@ func buildRoster(runs []agentrun.Run, extra rosterExtra, chatApp string, here st
 			current[r.Coordinator] = i
 		}
 	}
+	noticeOf := make(map[string]*attention.Notice, len(extra.notices))
+	for i := range extra.notices {
+		noticeOf[extra.notices[i].Conversation] = &extra.notices[i]
+	}
 	tasksOf := make(map[string][]string, 4)
 	for _, g := range extra.grants {
 		if g.Revoked == "" {
@@ -99,7 +107,7 @@ func buildRoster(runs []agentrun.Run, extra rosterExtra, chatApp string, here st
 		if r.State == agentrun.StateDeleted {
 			continue
 		}
-		row := rosterRow{run: r, title: extra.titles[r.Conversation]}
+		row := rosterRow{run: r, title: extra.titles[r.Conversation], notice: noticeOf[r.Conversation]}
 		switch {
 		case r.State == agentrun.StateOpen && chatWindows[r.Coordinator] && current[r.Coordinator] == i:
 			row.group, row.window, row.here = rosterLive, r.Coordinator, r.Coordinator == here
@@ -171,7 +179,7 @@ const rosterRefresh = 3 * time.Second
 
 // listRoster reads the windows, the grants and the titles, off the frame.
 func (inst *App) listRoster() {
-	kq, storage, store := inst.kq, inst.storage, inst.journalStore()
+	kq, storage, store, bus := inst.kq, inst.storage, inst.journalStore(), inst.bus
 	inst.rosterAt = time.Now()
 	inst.rosterJob.Start(nil, bgjob.Spec{Kind: "chat-roster", Title: "the roster"}, func(ctx context.Context) (out *rosterExtra, err error) {
 		var runs []agentrun.Run
@@ -190,6 +198,10 @@ func (inst *App) listRoster() {
 				"SELECT task, toString(actor_instance) AS actor_instance, revoked FROM keelson('agent_grants')"); err != nil {
 				return
 			}
+		}
+		if bus != nil {
+			// A host without notices leaves the roster without highlights.
+			x.notices, _ = attention.FetchNotices(bus)
 		}
 		if storage != nil {
 			for _, r := range runs {
@@ -261,22 +273,36 @@ func (inst *App) rosterName(row *rosterRow) string {
 }
 
 // rosterStatus is a conversation's pull-only line and its level: what this
-// window's turn is doing now, the window that holds another, when a run
-// without a window was written.
+// window's turn is doing now, or what landed while the person was away; the
+// host's highlight of another; the window that holds it; when a run without
+// a window was written. A level is the highest reached since the person
+// last looked (ADR-0323 §SD7).
 func (inst *App) rosterStatus(row *rosterRow) (line string, level attention.LevelE) {
 	level = attention.LevelData
 	switch {
 	case row.here:
+		level = max(level, inst.looked.level)
 		steps := inst.stepsNow()
 		if inst.pending == nil || len(steps) == 0 {
-			return "this window · " + inst.observeTurn().String(), level
+			line = "this window · " + inst.observeTurn().String()
+			if inst.looked.mark >= 0 || inst.looked.level > attention.LevelData {
+				line += " · new since you looked"
+			}
+			return line, level
 		}
 		s := &steps[len(steps)-1]
-		level = inst.stepLevel(s)
+		level = max(level, inst.stepLevel(s))
 		for i := range steps {
 			level = max(level, inst.stepLevel(&steps[i]))
 		}
 		return "this window · " + stepLine(s), level
+	case row.notice != nil:
+		n := row.notice
+		line = n.Text + " · " + ago(time.Since(n.Created))
+		if row.group == rosterLive {
+			line += " · in chat window " + row.window
+		}
+		return line, max(level, n.Level)
 	case row.group == rosterLive:
 		return "in chat window " + row.window, level
 	}
@@ -285,6 +311,18 @@ func (inst *App) rosterStatus(row *rosterRow) (line string, level attention.Leve
 		when = row.run.Closed
 	}
 	return row.run.State.String() + " · " + when.Local().Format("2006-01-02 15:04") + " · " + strconv.Itoa(int(row.run.LastOrdinal)) + " entries", level
+}
+
+// ago is a short age.
+func ago(d time.Duration) string {
+	switch {
+	case d < time.Minute:
+		return "just now"
+	case d < time.Hour:
+		return strconv.Itoa(int(d/time.Minute)) + " min ago"
+	default:
+		return strconv.Itoa(int(d/time.Hour)) + " h ago"
+	}
 }
 
 func (inst *App) renderRosterRow(key string, row *rosterRow) {

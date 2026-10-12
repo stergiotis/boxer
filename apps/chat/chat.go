@@ -175,6 +175,9 @@ type App struct {
 	// levels is the host's table of levels as this conversation sees it
 	// (ADR-0323, chat_levels.go).
 	levels levelsState
+	// looked is what the person has seen of the conversation
+	// (chat_watch.go).
+	looked lookState
 	// storage is the app's storage, where each window keeps its
 	// conversation's title for the roster; storedTitle what it last kept.
 	// roster is what the roster read beside the runs, rosterJob reads it
@@ -318,11 +321,12 @@ func (inst *App) drain() {
 	now := time.Now().UnixMilli()
 	// A landed turn is read from its start: the question at the top of the
 	// view, then the answer — a long answer is not entered at its end.
-	asked := int32(inst.conv.lastUser())
+	asked := ordinalOf(inst.conv.lastUser(), inst.looked.mark)
 	if res, _, ok := inst.turn.TakeResult(); ok {
 		inst.stats.addTurn(inst.conv.id, p.req.Turn, p.started, now, res, nil)
 		inst.conv.landTurn(p.req, res, nil, now)
 		inst.pending = nil
+		inst.turnEnded("the turn ended")
 		inst.view.ScrollToStart(asked)
 		inst.maybeTitle()
 		return
@@ -342,12 +346,14 @@ func (inst *App) drain() {
 		inst.stats.addTurn(inst.conv.id, p.req.Turn, p.started, now, inst.answeredSoFar(), err)
 		inst.conv.land(p.req, nil, err, now)
 		inst.pending = nil
+		inst.turnEnded("the turn failed")
 	case bgjob.StateIdle:
 		// A cancelled run resets to idle without a result or an error
 		// (bgjob's contract), so idle with a turn pending is the cancel.
 		inst.stats.addTurn(inst.conv.id, p.req.Turn, p.started, now, inst.answeredSoFar(), context.Canceled)
 		inst.conv.land(p.req, nil, context.Canceled, now)
 		inst.pending = nil
+		inst.turnEnded("the turn was stopped")
 	}
 }
 

@@ -112,6 +112,7 @@ var escMask = keycodes.MaskOf(keycodes.Escape)
 
 func (inst *App) render() {
 	inst.syncLevels()
+	inst.syncLooked()
 	inst.storeTitle()
 	inst.syncRoster()
 	for range c.PanelTopInside(inst.ids.PrepareStr("bar")).Resizable(false).KeepIter() {
@@ -241,8 +242,8 @@ func (inst *App) renderConvId(scope string) {
 	}
 }
 
-// renderTitle is the conversation's title — click to rename — and Open in
-// mdedit.
+// renderTitle is the conversation's title — click to rename — Open in
+// mdedit, and Watch.
 func (inst *App) renderTitle() {
 	conv := inst.conv
 	for range c.HorizontalTop().KeepIter() {
@@ -268,6 +269,7 @@ func (inst *App) renderTitle() {
 				inst.openInMdedit()
 			}
 		}
+		inst.renderWatchToggle()
 	}
 }
 
@@ -557,7 +559,7 @@ func (inst *App) ensureHighlight() {
 // buttons and the code blocks' rows take clicks.
 func (inst *App) renderTranscript() {
 	conv := inst.conv
-	m, kinds := transcriptModel(conv, inst.pending != nil, time.Now().UnixMilli())
+	m, kinds := transcriptModel(conv, inst.looked.mark, inst.pending != nil, time.Now().UnixMilli())
 	// A message's action changes the conversation the transcript is being
 	// drawn from; it runs once the transcript is drawn.
 	inst.later = inst.later[:0]
@@ -574,6 +576,8 @@ func (inst *App) renderTranscript() {
 		Block: func(ord int) (chatview.Block, bool) {
 			k := kinds[ord]
 			switch {
+			case k.mark:
+				return chatview.Block{Render: inst.renderLookedMark}, true
 			case k.pending:
 				if o := inst.openAsk(); o != nil {
 					return chatview.Block{Render: func() { inst.renderAsk(o) }}, true
@@ -753,17 +757,21 @@ func keepBadge(conv *conversation) (label string, tone badge.ToneE) {
 	}
 }
 
-// ordinalKind says what a transcript ordinal shows: an entry, or the
+// ordinalKind says what a transcript ordinal shows: an entry, the line
+// above what landed unseen (mark), or the
 // waiting bubble.
 type ordinalKind struct {
 	entry   int
 	pending bool
+	mark    bool
 }
 
 // transcriptModel builds the chatview model: participant 0 is the user,
-// 1 the model, ordinal i is entry i and the waiting bubble comes last. A
+// 1 the model, ordinal i is entry i — one more from mark on, where the
+// line above what landed unseen is its own row (ordinalOf) — and the
+// waiting bubble comes last. A
 // failed user message is marked failed; its block draws why.
-func transcriptModel(conv *conversation, pending bool, nowMs int64) (m *chatview.Model, kinds []ordinalKind) {
+func transcriptModel(conv *conversation, mark int, pending bool, nowMs int64) (m *chatview.Model, kinds []ordinalKind) {
 	m = &chatview.Model{Participants: []chatview.Participant{{Name: "You"}, {Name: "Model"}}}
 	add := func(atMs int64, sender int32, body string, flags chatview.FlagsE, status chatview.StatusE, k ordinalKind) {
 		if n := len(m.TimeMS); n > 0 && atMs < m.TimeMS[n-1] {
@@ -778,6 +786,9 @@ func transcriptModel(conv *conversation, pending bool, nowMs int64) (m *chatview
 		kinds = append(kinds, k)
 	}
 	for i, e := range conv.entries {
+		if i == mark {
+			add(e.atMs, -1, "new since you looked", chatview.FlagSystem, chatview.StatusNone, ordinalKind{entry: -1, mark: true})
+		}
 		if e.speaker == speakerTool {
 			// The coordinator's activity: a tool call and how it ended.
 			add(e.atMs, -1, "⚙ "+e.text, chatview.FlagSystem, chatview.StatusNone, ordinalKind{entry: i})
@@ -801,6 +812,14 @@ func transcriptModel(conv *conversation, pending bool, nowMs int64) (m *chatview
 		add(nowMs, 1, "…", 0, chatview.StatusNone, ordinalKind{entry: -1, pending: true})
 	}
 	return
+}
+
+// ordinalOf is entry's ordinal in the transcript the model of mark builds.
+func ordinalOf(entry int, mark int) int32 {
+	if mark >= 0 && entry >= mark {
+		return int32(entry + 1)
+	}
+	return int32(entry)
 }
 
 // elapsed is a wait as seconds.
