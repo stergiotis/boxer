@@ -445,7 +445,11 @@ person clearing faster. Points the ADR settles:
    may read it (§5.5).
 7. The flood count's unit and lifetime (§5.6).
 8. Whether watchbill jobs and moderator signals join the same queue, or the
-   queue is the agent dispatcher's alone at first.
+   queue is the agent dispatcher's alone at first. Answered: a job owes the
+   person no decision and stays out of the queue (ADR-0324 §SD8); its
+   terminal state is an attention event the worker reports, a highlight only
+   by the owning app's choice (ADR-0323 §SD6, §SD7); a moderator's question
+   is a waiting item.
 
 ## References
 

@@ -51,8 +51,11 @@ The waiting scale holds: a grant request and a widening (ADR-0269 §SD6), a
 confirmation of a consequential command (ADR-0269 §SD5), a moderator's
 question (ADR-0300 (proposed) §SD9), and a question an app asks on a
 model's behalf — `ask_user` (ADR-0265 §SD7) and the exit approvals of
-ADR-0312. Everything else is on the attention scale. Which scale an event
-is on is code, not configuration.
+ADR-0312. Everything else is on the attention scale, a watchbill job's
+events among it: a job owes the person no decision, so it never blocks a
+turn and never joins the queue (ADR-0324 §SD8); a failure that should reach
+the person is a highlight. Which scale an event is on is code, not
+configuration.
 
 ### SD2 — The floor
 
@@ -102,12 +105,17 @@ with no rule language.
 |---|---|---|
 | `user`, `request`, `reply`, `answered`; a succeeded `outcome`; an `intent` of effect none or view | attention | data |
 | an `intent` of effect document or run; a refused `outcome`; `note`; a `turn` that answered, failed, stopped or was cancelled | attention | message |
+| a watchbill attempt that failed and will be retried under the job's policy | attention | data |
+| a watchbill job discarded after its last attempt, or abandoned | attention | message |
 | — (reached by overrides only) | attention | highlight |
 | grant request, widening, app question, exit approval | waiting | your turn |
 | confirmation of a consequential command; moderator question | waiting | critical |
 
 An event is classified by its kind first and its effect second, so a
-consequential confirmation is one row, not also an `intent` row.
+consequential confirmation is one row, not also an `intent` row. A job's
+events are keyed by the job's terminal state, not by a journal kind; the
+app that owns the job raises them to *highlight* through its own scale
+(SD5), as it would any event of its conversations.
 
 ### SD7 — What reads the levels
 
@@ -121,7 +129,11 @@ keep its own copy of the rules.
 A *highlight* is the one attention level that reaches host chrome. An app
 reports an event of its conversation that the person has not seen; the host
 classifies it with its own table and keeps it only at *highlight*, one per
-conversation, the latest. The control of ADR-0324 (proposed) counts these
+source, the latest. A source is a conversation, or, for a job, the owning
+app and the job id. The watchbill worker reports a job's terminal state
+itself, being host-side and the one that settles the row, so a job enqueued
+by an app that is no longer open still reaches the person; a job's
+highlight points at the watchbill window, where a retry lives. The control of ADR-0324 (proposed) counts these
 after what waits, and lists them apart; they open no card and are not items
 of the queue. One goes when the person looks at the conversation's window or
 dismisses it. Since an app sets its own conversation's attention scale
@@ -145,6 +157,7 @@ count the person can dismiss, never a card or a place in the queue.
 | --- | --- | --- |
 | Host attention service (`runtime.attention`) | added: the table, its scopes, the floor check, the bus subjects that serve the effective table and announce changes, and the highlights apps report | the queue of ADR-0324, which lives in the same service |
 | Run journal kinds (ADR-0308 §SD2) | unchanged; read as keys | a new kind is *data* until the defaults name it |
+| Watchbill worker (ADR-0223) | added: reports a job's terminal state to the attention service as a notice whose source is the owning app and the job id | the management window, which the highlight points at |
 | Trail | added: an event for a change on the waiting scale | trail views |
 | Chat app | reads levels for the transcript mark, trail folding and a roster | ADR-0265 gains a dated update on acceptance |
 
