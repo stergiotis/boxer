@@ -1,0 +1,328 @@
+package chat
+
+import (
+	"context"
+	"slices"
+	"strconv"
+	"time"
+
+	"github.com/stergiotis/boxer/public/keelson/runtime/agent"
+	"github.com/stergiotis/boxer/public/keelson/runtime/agentrun"
+	"github.com/stergiotis/boxer/public/keelson/runtime/attention"
+	"github.com/stergiotis/boxer/public/keelson/runtime/bgjob"
+	"github.com/stergiotis/boxer/public/keelson/runtime/introspect/providersgui"
+	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/badge"
+)
+
+// The roster: the Conversations panel as the streams the person juggles
+// (ADR-0324 background §3.1), not only an archive. Conversations live in a
+// chat window come first, each with the windows its task works in; then the
+// open runs no window holds, which Resume continues; then the closed ones,
+// folded. A run is live when the chat window that writes it is open: the
+// run's coordinator names that window, and the host's keelson('windows')
+// lists the open ones. The windows a task works in come from the same
+// table's agent_tasks and keelson('agent_grants'), which names each task's
+// coordinator window.
+
+// rosterGroupE is where a conversation sits in the roster.
+type rosterGroupE uint8
+
+const (
+	rosterLive rosterGroupE = iota
+	rosterResumable
+	rosterClosed
+)
+
+// rosterWindow is a row of keelson('windows').
+type rosterWindow struct {
+	Key        string   `json:"key"`
+	AppId      string   `json:"app_id"`
+	Display    string   `json:"display"`
+	AgentTasks []string `json:"agent_tasks"`
+}
+
+// rosterGrant is a row of keelson('agent_grants').
+type rosterGrant struct {
+	Task          string `json:"task"`
+	ActorInstance string `json:"actor_instance"`
+	Revoked       string `json:"revoked"`
+}
+
+// rosterExtra is what the roster reads beside the runs.
+type rosterExtra struct {
+	windows []rosterWindow
+	grants  []rosterGrant
+	titles  map[string]string
+}
+
+// rosterRow is one conversation in the roster.
+type rosterRow struct {
+	run   agentrun.Run
+	title string
+	group rosterGroupE
+	// window is the chat window that holds it, when live; here says that
+	// window is this one.
+	window string
+	here   bool
+	// working are the windows its task works in.
+	working []rosterWindow
+}
+
+// buildRoster sorts runs into the roster's groups: per live chat window its
+// newest open run is in a window, other open runs are resumable, the rest
+// closed; deleted runs are left out. here is this window's key.
+func buildRoster(runs []agentrun.Run, extra rosterExtra, chatApp string, here string) (live, resumable, closed []rosterRow) {
+	chatWindows := make(map[string]bool, 4)
+	for _, w := range extra.windows {
+		if w.AppId == chatApp {
+			chatWindows[w.Key] = true
+		}
+	}
+	// Each live window's current conversation: its newest open run.
+	current := make(map[string]int, len(chatWindows))
+	for i, r := range runs {
+		if r.State != agentrun.StateOpen || !chatWindows[r.Coordinator] {
+			continue
+		}
+		if j, ok := current[r.Coordinator]; !ok || r.Created.After(runs[j].Created) {
+			current[r.Coordinator] = i
+		}
+	}
+	tasksOf := make(map[string][]string, 4)
+	for _, g := range extra.grants {
+		if g.Revoked == "" {
+			tasksOf[g.ActorInstance] = append(tasksOf[g.ActorInstance], g.Task)
+		}
+	}
+	for i, r := range runs {
+		if r.State == agentrun.StateDeleted {
+			continue
+		}
+		row := rosterRow{run: r, title: extra.titles[r.Conversation]}
+		switch {
+		case r.State == agentrun.StateOpen && chatWindows[r.Coordinator] && current[r.Coordinator] == i:
+			row.group, row.window, row.here = rosterLive, r.Coordinator, r.Coordinator == here
+			tasks := tasksOf[r.Coordinator]
+			for _, w := range extra.windows {
+				if w.Key == r.Coordinator {
+					continue
+				}
+				for _, t := range w.AgentTasks {
+					if slices.Contains(tasks, t) {
+						row.working = append(row.working, w)
+						break
+					}
+				}
+			}
+			live = append(live, row)
+		case r.State == agentrun.StateOpen:
+			row.group = rosterResumable
+			resumable = append(resumable, row)
+		default:
+			row.group = rosterClosed
+			closed = append(closed, row)
+		}
+	}
+	// This window first, then by when the conversation started.
+	slices.SortStableFunc(live, func(a, b rosterRow) int {
+		switch {
+		case a.here && !b.here:
+			return -1
+		case b.here && !a.here:
+			return 1
+		}
+		return b.run.Created.Compare(a.run.Created)
+	})
+	return
+}
+
+// The titles the roster names conversations by: each window keeps its
+// conversation's title in the app's storage, which every chat window of the
+// host reads.
+const titleStorePrefix = "title/"
+
+// storeTitle keeps the conversation's title once it changed. The render
+// goroutine calls it once per frame; a write happens only on a change.
+func (inst *App) storeTitle() {
+	conv := inst.conv
+	if inst.storage == nil || !conv.started || conv.title == "" || conv.title == inst.storedTitle[conv.id] {
+		return
+	}
+	if inst.storedTitle == nil {
+		inst.storedTitle = make(map[string]string, 4)
+	}
+	inst.storedTitle[conv.id] = conv.title
+	if err := inst.storage.Set(titleStorePrefix+conv.id, []byte(conv.title)); err != nil {
+		inst.log.Debug().Err(err).Msg("chat: keep the conversation's title for the roster")
+	}
+}
+
+// rosterRefresh is how often an open roster reads the windows again.
+const rosterRefresh = 3 * time.Second
+
+// listRoster reads the windows, the grants and the titles, off the frame.
+func (inst *App) listRoster() {
+	kq, storage, store := inst.kq, inst.storage, inst.journalStore()
+	inst.rosterAt = time.Now()
+	inst.rosterJob.Start(nil, bgjob.Spec{Kind: "chat-roster", Title: "the roster"}, func(ctx context.Context) (out *rosterExtra, err error) {
+		var runs []agentrun.Run
+		if store != nil {
+			if runs, err = store.ListRuns(ctx, string(ManifestId), runsListLimit); err != nil {
+				return
+			}
+		}
+		x := rosterExtra{titles: make(map[string]string, len(runs))}
+		if kq != nil {
+			if x.windows, err = queryRows[rosterWindow](ctx, kq, providersgui.TableWindows,
+				"SELECT toString(key) AS key, app_id, display, agent_tasks FROM keelson('windows')"); err != nil {
+				return
+			}
+			if x.grants, err = queryRows[rosterGrant](ctx, kq, agent.TableGrants,
+				"SELECT task, toString(actor_instance) AS actor_instance, revoked FROM keelson('agent_grants')"); err != nil {
+				return
+			}
+		}
+		if storage != nil {
+			for _, r := range runs {
+				if b, found, gerr := storage.Get(titleStorePrefix + r.Conversation); gerr == nil && found {
+					x.titles[r.Conversation] = string(b)
+				}
+			}
+		}
+		return &x, nil
+	})
+}
+
+// syncRoster takes a finished read and starts the next while the panel is
+// open.
+func (inst *App) syncRoster() {
+	if got, _, ok := inst.rosterJob.TakeResult(); ok && got != nil {
+		inst.roster = *got
+	}
+	if !inst.showRuns || inst.rosterJob.Snapshot().State == bgjob.StateRunning || time.Since(inst.rosterAt) < rosterRefresh {
+		return
+	}
+	inst.listRoster()
+}
+
+// renderRoster draws the panel's groups.
+func (inst *App) renderRoster() {
+	here := strconv.FormatUint(inst.window, 10)
+	live, resumable, closed := buildRoster(inst.runs, inst.roster, string(ManifestId), here)
+	if len(live) > 0 {
+		inst.rosterHeading("In windows", len(live))
+		for i := range live {
+			inst.renderRosterRow("live-"+strconv.Itoa(i), &live[i])
+		}
+	}
+	if len(resumable) > 0 {
+		inst.rosterHeading("Resumable — no window", len(resumable))
+		for i := range resumable {
+			inst.renderRosterRow("res-"+strconv.Itoa(i), &resumable[i])
+		}
+	}
+	if len(closed) > 0 {
+		for range c.CollapsingHeader(inst.ids.PrepareStr("roster-closed"), c.WidgetText().Text("Closed · "+strconv.Itoa(len(closed))).Keep()).KeepIter() {
+			for i := range closed {
+				inst.renderRosterRow("closed-"+strconv.Itoa(i), &closed[i])
+			}
+		}
+	}
+	if len(live)+len(resumable)+len(closed) == 0 {
+		c.Label("no conversations kept yet").Send()
+	}
+}
+
+func (inst *App) rosterHeading(title string, n int) {
+	for rt := range c.RichTextLabel(title + " · " + strconv.Itoa(n)) {
+		rt.Small().Strong()
+	}
+}
+
+// rosterName is how the roster names a conversation: its title, else this
+// window's own, else its id.
+func (inst *App) rosterName(row *rosterRow) string {
+	switch {
+	case row.title != "":
+		return row.title
+	case row.run.Conversation == inst.conv.id && inst.conv.title != "":
+		return inst.conv.title
+	}
+	return clip(row.run.Conversation, 28)
+}
+
+// rosterStatus is a conversation's pull-only line and its level: what this
+// window's turn is doing now, the window that holds another, when a run
+// without a window was written.
+func (inst *App) rosterStatus(row *rosterRow) (line string, level attention.LevelE) {
+	level = attention.LevelData
+	switch {
+	case row.here:
+		steps := inst.stepsNow()
+		if inst.pending == nil || len(steps) == 0 {
+			return "this window · " + inst.observeTurn().String(), level
+		}
+		s := &steps[len(steps)-1]
+		level = inst.stepLevel(s)
+		for i := range steps {
+			level = max(level, inst.stepLevel(&steps[i]))
+		}
+		return "this window · " + stepLine(s), level
+	case row.group == rosterLive:
+		return "in chat window " + row.window, level
+	}
+	when := row.run.Created
+	if !row.run.Closed.IsZero() {
+		when = row.run.Closed
+	}
+	return row.run.State.String() + " · " + when.Local().Format("2006-01-02 15:04") + " · " + strconv.Itoa(int(row.run.LastOrdinal)) + " entries", level
+}
+
+func (inst *App) renderRosterRow(key string, row *rosterRow) {
+	r := row.run
+	line, level := inst.rosterStatus(row)
+	for range c.IdScope(inst.ids.PrepareStr("roster-" + key)) {
+		for range c.HorizontalTop().KeepIter() {
+			for range c.HoverText(levelTip(level)).KeepIter() {
+				c.Label(levelMark(level)).Selectable(false).Send()
+			}
+			name := inst.rosterName(row)
+			for range c.HoverText(r.Conversation + "\nrun " + strconv.FormatUint(r.Id, 10) + "\nprofile " + r.Profile + " · " + r.Label.String()).KeepIter() {
+				if row.here {
+					for rt := range c.RichTextLabel(name) {
+						rt.Strong()
+					}
+				} else {
+					c.Label(name).Selectable(false).Send()
+				}
+			}
+			if r.State == agentrun.StateStranded {
+				badge.New(inst.ids.PrepareStr("stranded"), "stranded").Tone(badge.ToneWarning).Variant(badge.VariantSoft).Size(badge.SizeSm).Send()
+			}
+		}
+		for rt := range c.RichTextLabel(line) {
+			rt.Small().Weak()
+		}
+		for _, w := range row.working {
+			for rt := range c.RichTextLabel("    └ " + w.Display + " · window " + w.Key) {
+				rt.Small()
+			}
+		}
+		if row.group != rosterLive || !row.here {
+			for range c.HorizontalTop().KeepIter() {
+				if row.group != rosterLive && r.Conversation != inst.conv.id {
+					if c.Button(inst.ids.PrepareStr("resume"), c.Atoms().Text("Resume").Keep()).Small().SendResp().HasPrimaryClicked() {
+						inst.resumeRun(r.Conversation)
+					}
+				}
+				if row.group != rosterLive {
+					if c.Button(inst.ids.PrepareStr("delete"), c.Atoms().Text("Delete").Keep()).Small().SendResp().HasPrimaryClicked() {
+						inst.deleteRun(r.Conversation)
+					}
+				}
+			}
+		}
+		c.Separator().Send()
+	}
+}

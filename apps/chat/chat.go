@@ -175,6 +175,15 @@ type App struct {
 	// levels is the host's table of levels as this conversation sees it
 	// (ADR-0323, chat_levels.go).
 	levels levelsState
+	// storage is the app's storage, where each window keeps its
+	// conversation's title for the roster; storedTitle what it last kept.
+	// roster is what the roster read beside the runs, rosterJob reads it
+	// and rosterAt is when it last began (chat_roster.go).
+	storage     app.StorageI
+	storedTitle map[string]string
+	roster      rosterExtra
+	rosterJob   bgjob.Runner[rosterExtra]
+	rosterAt    time.Time
 }
 
 // pendingTurn is a turn in flight.
@@ -215,6 +224,7 @@ func (inst *App) Mount(ctx app.MountContextI) (err error) {
 	}
 	cli := llm.NewClient(bus)
 	inst.cli, inst.bus = cli, bus
+	inst.storage = ctx.Storage()
 	inst.startLevels()
 	inst.tasks = task.ForApp(ctx)
 	for i := range inst.bandKeys {
@@ -250,6 +260,7 @@ func (inst *App) Unmount(ctx app.MountContextI) (err error) {
 	}
 	inst.describe.Cancel()
 	inst.stopLevels()
+	inst.rosterJob.Cancel()
 	inst.handover.Cancel()
 	inst.runsJob.Cancel()
 	inst.resumeJob.Cancel()

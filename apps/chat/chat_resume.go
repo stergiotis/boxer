@@ -5,7 +5,6 @@ import (
 	"encoding/json/v2"
 	"slices"
 	"sort"
-	"strconv"
 	"strings"
 	"time"
 
@@ -16,7 +15,6 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/trail"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
-	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/badge"
 )
 
 // Resume (ADR-0308 §SD4–§SD6; ADR-0303 M3–M4, superseded by ADR-0308): a
@@ -520,6 +518,7 @@ func (inst *App) renderRunsToggle() {
 			if inst.showRuns {
 				inst.showSettings, inst.showStats = false, false
 				inst.listRuns()
+				inst.listRoster()
 			}
 		}
 	}
@@ -539,48 +538,7 @@ func (inst *App) renderRunsPanel() {
 			if inst.runsJob.Snapshot().State == bgjob.StateRunning {
 				c.Label("listing…").Selectable(false).Send()
 			}
-			for i, r := range inst.runs {
-				inst.renderRun(i, r)
-			}
-			if len(inst.runs) == 0 {
-				c.Label("no conversations kept yet").Selectable(false).Send()
-			}
+			inst.renderRoster()
 		}
 	}
-}
-
-func (inst *App) renderRun(i int, r agentrun.Run) {
-	key := strconv.Itoa(i)
-	for range c.HorizontalTop().KeepIter() {
-		tone := badge.ToneNeutral
-		switch r.State {
-		case agentrun.StateStranded:
-			tone = badge.ToneWarning
-		case agentrun.StateDeleted:
-			tone = badge.ToneNeutral
-		case agentrun.StateOpen:
-			tone = badge.ToneSuccess
-		}
-		badge.New(inst.ids.PrepareStr("run-state-"+key), r.State.String()).Tone(tone).Variant(badge.VariantSoft).Size(badge.SizeSm).Send()
-		// The run's floating label (ADR-0308 §SD6, ADR-0311 §SD2): what it
-		// has read, as the record says.
-		badge.New(inst.ids.PrepareStr("run-label-"+key), r.Label.String()).Tone(badge.ToneNeutral).Variant(badge.VariantSoft).Size(badge.SizeSm).Send()
-		c.Label(r.Created.Local().Format("2006-01-02 15:04") + " · " + strconv.Itoa(int(r.LastOrdinal)) + " entries").Selectable(false).Send()
-	}
-	for range c.HorizontalTop().KeepIter() {
-		for range c.HoverText(r.Conversation + "\nrun " + strconv.FormatUint(r.Id, 10) + "\nprofile " + r.Profile + " · " + r.Label.String()).KeepIter() {
-			c.Label(clip(r.Conversation, 28)).Selectable(false).Send()
-		}
-		if r.State != agentrun.StateDeleted && r.Conversation != inst.conv.id {
-			if c.Button(inst.ids.PrepareStr("run-resume-"+key), c.Atoms().Text("Resume").Keep()).Small().SendResp().HasPrimaryClicked() {
-				inst.resumeRun(r.Conversation)
-			}
-		}
-		if r.State != agentrun.StateDeleted {
-			if c.Button(inst.ids.PrepareStr("run-delete-"+key), c.Atoms().Text("Delete").Keep()).Small().SendResp().HasPrimaryClicked() {
-				inst.deleteRun(r.Conversation)
-			}
-		}
-	}
-	c.Separator().Send()
 }
