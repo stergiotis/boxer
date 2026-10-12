@@ -55,7 +55,7 @@ var manifest = app.Manifest{
 		// before each act through the host's service.
 		agentrun.ClientCaps("chat: write and read the conversation's run journal"),
 		// The model's questions also wait in the host's queue, answered
-		// there or in the window (ADR-0324, proposed).
+		// there or in the window (ADR-0324).
 		attention.ClientCaps("chat: put the model's questions in the person's queue"),
 		// Chain heads to the anchor store at each turn's end (ADR-0314).
 		headstore.ClientCaps("chat: anchor the journal's chain heads"),

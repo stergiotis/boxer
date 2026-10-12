@@ -11,7 +11,7 @@ import (
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 )
 
-// The dispatcher as a source of the person's queue (ADR-0324, proposed): its
+// The dispatcher as a source of the person's queue (ADR-0324): its
 // grant requests, widenings, confirmations and moderators' questions are
 // items there, decided in host cards rather than modals. The dispatcher keeps
 // their state; the queue reads it each frame.

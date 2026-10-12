@@ -6,7 +6,7 @@ import (
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 )
 
-// Looking and watching (ADR-0323 §SD4, §SD7, proposed). The window keeps
+// Looking and watching (ADR-0323 §SD4, §SD7). The window keeps
 // what the person has seen of its conversation: the entries there were when
 // it last had focus. What lands while it has none is marked "new since you
 // looked" when they come back, until they leave again, and the highest level

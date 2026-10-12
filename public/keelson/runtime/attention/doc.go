@@ -1,6 +1,6 @@
 // Package attention is the host's account of what the person is shown and
-// what they owe: the levels events are shown at (ADR-0323, proposed) and the
-// queue of decisions waiting on the person (ADR-0324, proposed).
+// what they owe: the levels events are shown at (ADR-0323) and the
+// queue of decisions waiting on the person (ADR-0324).
 //
 // [Levels] classifies an event into a level on one of two scales — attention
 // for events nothing waits on, waiting for events a turn is blocked on — from

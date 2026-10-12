@@ -9,7 +9,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
 )
 
-// The levels (ADR-0323 §SD7, proposed): how loud each step of a turn is,
+// The levels (ADR-0323 §SD7): how loud each step of a turn is,
 // from the host's one table — its defaults, the person's overrides and the
 // conversation's. The window keeps the table its conversation sees and reads
 // it again when the host announces a change or the conversation changes;

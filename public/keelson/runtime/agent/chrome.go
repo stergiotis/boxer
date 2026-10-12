@@ -289,7 +289,7 @@ func dialogHeading(title string, width float32) {
 // (a grant is decided before anything else is clicked, and no window can
 // cover the dialog asking for it).
 //
-// With the attention service installed (ADR-0324, proposed) nothing here is
+// With the attention service installed (ADR-0324) nothing here is
 // modal: the same decisions are items of the person's queue, drawn as host
 // cards by RenderCard.
 func (inst *Chrome) RenderDialogs(ids *c.WidgetIdStack) (modal bool) {

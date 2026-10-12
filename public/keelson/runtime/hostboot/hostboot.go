@@ -274,7 +274,7 @@ type Runtime struct {
 	// Agent is the app operations service (ADR-0269); nil when off or
 	// failed to start.
 	Agent *agent.Service
-	// Attention is the person's queue in host chrome (ADR-0324, proposed);
+	// Attention is the person's queue in host chrome (ADR-0324);
 	// nil without the agent service.
 	Attention *attentionchrome.Chrome
 	// Moderator is the built-in moderator (ADR-0302); nil unless
@@ -930,7 +930,7 @@ func (rt *Runtime) bootAgent() {
 		}
 	}
 	// The person's decisions wait in a queue in host chrome, not in modals
-	// (ADR-0324, proposed).
+	// (ADR-0324).
 	cfg.Attention = attention.NewService()
 	// The person's table of levels is kept with the host's state (ADR-0323
 	// §SD4); loaded before the trail is attached, since loading is not the

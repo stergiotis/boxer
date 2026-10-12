@@ -14,7 +14,7 @@ scene:
 
 # chat — a watched turn that ends while the person is elsewhere
 
-ADR-0323 §SD4 and §SD7 (proposed) on the headless host, against the scripted
+ADR-0323 §SD4 and §SD7 on the headless host, against the scripted
 model in [chat-watch.script.jsonl](./chat-watch.script.jsonl), which takes
 four seconds to answer. The person sends, turns on Watch for the
 conversation, and moves to another window. The turn ends there unseen: the host's

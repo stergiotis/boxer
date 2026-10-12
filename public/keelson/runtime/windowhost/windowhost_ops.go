@@ -149,7 +149,7 @@ type AgentChromeI interface {
 func (inst *Inst) SetAgentChrome(ch AgentChromeI) { inst.agentChrome = ch }
 
 // CardsChromeI draws the cards of the person's queue at top level, non-modal
-// and above every app window (ADR-0324, proposed), on the render goroutine.
+// and above every app window (ADR-0324), on the render goroutine.
 type CardsChromeI interface {
 	RenderCards(ids *c.WidgetIdStack)
 }

@@ -11,7 +11,7 @@ scene:
 
 # chat — the person's table of levels, in host chrome
 
-ADR-0323 §SD5 (proposed) on the headless host: the queue's control opens a
+ADR-0323 §SD5 on the headless host: the queue's control opens a
 list with Levels, a grid of the person's table — a row per kind, the cells
 of its scale only, the current level filled. The person raises a finished
 turn to highlight for every conversation, then resets it to the default.

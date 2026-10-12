@@ -13,7 +13,7 @@ import (
 )
 
 // queueRig is a coordinator rig with an attention service whose flood limit
-// admits perStream items per stream (ADR-0324, proposed).
+// admits perStream items per stream (ADR-0324).
 func queueRig(t *testing.T, perStream int) (*rig, *attention.Service) {
 	att := &attention.Service{Levels: &attention.Levels{}, Flood: attention.NewFlood(perStream, 0)}
 	att.Queue = attention.NewQueue(att.Levels, 0)

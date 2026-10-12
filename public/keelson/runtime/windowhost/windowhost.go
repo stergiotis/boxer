@@ -332,7 +332,7 @@ type Inst struct {
 	// (ADR-0269 §SD5): a badge row in each window a task works in, and the
 	// host's dialogs. nil draws nothing. Set before the first Frame.
 	agentChrome AgentChromeI
-	// cards draws the cards of the person's queue (ADR-0324, proposed). nil
+	// cards draws the cards of the person's queue (ADR-0324). nil
 	// draws nothing. Set before the first Frame.
 	cards CardsChromeI
 	// onInput hears the person's input; lastInput is the last frame's

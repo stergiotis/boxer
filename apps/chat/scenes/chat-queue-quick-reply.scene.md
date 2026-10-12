@@ -15,7 +15,7 @@ scene:
 
 # chat — a question answered from the person's queue
 
-ADR-0324 §SD5 (proposed) on the headless host, against the scripted model
+ADR-0324 §SD5 on the headless host, against the scripted model
 in [chat-queue-quick-reply.script.jsonl](./chat-queue-quick-reply.script.jsonl):
 the model asks one single-choice question. It shows in the chat's pending
 bubble and waits in the host's queue; the person opens it from the queue's
