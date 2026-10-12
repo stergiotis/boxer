@@ -114,6 +114,7 @@ func (inst *App) render() {
 	inst.syncLevels()
 	inst.syncLooked()
 	inst.storeTitle()
+	inst.publishTurn()
 	inst.syncRoster()
 	for range c.PanelTopInside(inst.ids.PrepareStr("bar")).Resizable(false).KeepIter() {
 		inst.renderBar()

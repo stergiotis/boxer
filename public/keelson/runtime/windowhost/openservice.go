@@ -41,6 +41,7 @@ type OpenService struct {
 	log       zerolog.Logger
 	busClient *inprocbus.Client
 	unsub     func()
+	unsubR    func()
 }
 
 // NewOpenService constructs the service bound to bus and host and
@@ -57,11 +58,18 @@ func NewOpenService(bus *inprocbus.Inst, host *Inst, log zerolog.Logger) (svc *O
 	}
 	svc.busClient = bus.NewClient(OpenServiceAppId, []app.SubjectFilter{
 		{Pattern: OpenSubject, Direction: app.CapDirectionSub, Reason: "windowhost services open requests"},
+		{Pattern: RaiseSubject, Direction: app.CapDirectionSub, Reason: "windowhost services raise requests"},
 		{Pattern: inprocbus.InboxPrefix + ">", Direction: app.CapDirectionPub, Reason: "windowhost replies to inboxes"},
 	})
 	svc.unsub, err = svc.busClient.Subscribe(OpenSubject, svc.handleRequest)
 	if err != nil {
 		err = eb.Build().Str("openSubject", OpenSubject).Errorf("openservice: subscribe: %w", err)
+		return
+	}
+	svc.unsubR, err = svc.busClient.Subscribe(RaiseSubject, svc.handleRaise)
+	if err != nil {
+		svc.unsub()
+		err = eb.Build().Str("raiseSubject", RaiseSubject).Errorf("openservice: subscribe: %w", err)
 		return
 	}
 	return
@@ -73,6 +81,10 @@ func (inst *OpenService) Close() {
 	if inst.unsub != nil {
 		inst.unsub()
 		inst.unsub = nil
+	}
+	if inst.unsubR != nil {
+		inst.unsubR()
+		inst.unsubR = nil
 	}
 }
 

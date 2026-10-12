@@ -178,6 +178,8 @@ type App struct {
 	// looked is what the person has seen of the conversation
 	// (chat_watch.go).
 	looked lookState
+	// published is the turn this window last kept for the other rosters.
+	published peerTurn
 	// storage is the app's storage, where each window keeps its
 	// conversation's title for the roster; storedTitle what it last kept.
 	// roster is what the roster read beside the runs, rosterJob reads it
@@ -269,6 +271,7 @@ func (inst *App) Unmount(ctx app.MountContextI) (err error) {
 	}
 	inst.describe.Cancel()
 	inst.stopLevels()
+	inst.unpublishTurn()
 	inst.rosterJob.Cancel()
 	inst.handover.Cancel()
 	inst.runsJob.Cancel()

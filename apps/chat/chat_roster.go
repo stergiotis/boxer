@@ -289,30 +289,27 @@ func (inst *App) rosterName(row *rosterRow) string {
 	return clip(row.run.Conversation, 28)
 }
 
-// rosterStatus is a conversation's pull-only line and its level: what this
-// window's turn is doing now, or what landed while the person was away; the
-// host's highlight of another; the window that holds it; when a run without
-// a window was written. A level is the highest reached since the person
+// rosterStatus is a conversation's pull-only line and its level: what the
+// turn of the chat window that holds it is doing now, or what landed there
+// while the person was away; else the host's highlight of it; the window
+// that holds it; when a run without a window was written. A level is the highest reached since the person
 // last looked (ADR-0323 §SD7).
 func (inst *App) rosterStatus(row *rosterRow) (line string, level attention.LevelE) {
 	level = attention.LevelData
 	switch {
 	case row.here:
-		level = max(level, inst.looked.level)
-		steps := inst.stepsNow()
-		if inst.pending == nil || len(steps) == 0 {
-			line = "this window · " + inst.observeTurn().String()
-			if inst.looked.mark >= 0 || inst.looked.level > attention.LevelData {
-				line += " · new since you looked"
+		line, level = inst.turnLine()
+		return "this window · " + line, level
+	case row.group == rosterLive:
+		if p, ok := peerTurnOf(row.window, row.run.Conversation); ok {
+			level = p.level
+			if row.notice != nil {
+				level = max(level, row.notice.Level)
 			}
-			return line, level
+			return "chat window " + row.window + " · " + p.line, level
 		}
-		s := &steps[len(steps)-1]
-		level = max(level, inst.stepLevel(s))
-		for i := range steps {
-			level = max(level, inst.stepLevel(&steps[i]))
-		}
-		return "this window · " + stepLine(s), level
+	}
+	switch {
 	case row.notice != nil:
 		n := row.notice
 		line = n.Text + " · " + ago(time.Since(n.Created))
@@ -382,6 +379,13 @@ func (inst *App) renderRosterRow(key string, row *rosterRow) {
 		}
 		if row.group != rosterLive || !row.here {
 			for range c.HorizontalTop().KeepIter() {
+				if row.group == rosterLive {
+					for range c.HoverText(tipRosterRaise).KeepIter() {
+						if c.Button(inst.ids.PrepareStr("raise"), c.Atoms().Text("Raise").Keep()).Small().SendResp().HasPrimaryClicked() {
+							inst.raiseWindow(row.window)
+						}
+					}
+				}
 				if row.group != rosterLive && r.Conversation != inst.conv.id {
 					if c.Button(inst.ids.PrepareStr("resume"), c.Atoms().Text("Resume").Keep()).Small().SendResp().HasPrimaryClicked() {
 						inst.resumeRun(r.Conversation)
