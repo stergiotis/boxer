@@ -50,7 +50,8 @@ type Locator struct {
 	ValueContains string
 	// Role matches the AccessKit role ("button", "check_box", "text_input"…).
 	Role string
-	// Nth picks among several matches, 0-based. Without it, several matches is
+	// Nth picks among several matches, 0-based, in the order the tree prints
+	// them (depth-first). Without it, several matches is
 	// an error; with it, the caller has said the ambiguity is expected and
 	// which one it wants.
 	Nth int
@@ -93,15 +94,15 @@ func Resolve(snap *TreeSnapshot, loc Locator) (node *TreeNode, err error) {
 	if snap == nil {
 		return nil, eb.Build().Errorf("no tree snapshot to resolve against")
 	}
+	// Depth-first, as the tree prints: Nth counts the matches in the order a
+	// reader of --dumpTree sees them.
 	var hits []*TreeNode
-	for _, n := range snap.GetNodes() {
-		if n.GetFlags()&FlagHidden != 0 {
-			continue
-		}
-		if loc.Matches(n) {
+	walkDepthFirst(snap, 0, func(n *TreeNode, _ int) bool {
+		if n.GetFlags()&FlagHidden == 0 && loc.Matches(n) {
 			hits = append(hits, n)
 		}
-	}
+		return false
+	})
 	switch {
 	case len(hits) == 0:
 		return nil, eb.Build().

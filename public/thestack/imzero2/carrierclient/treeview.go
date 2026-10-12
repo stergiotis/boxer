@@ -127,13 +127,33 @@ func SelectNodes(snap *TreeSnapshot, f TreeFilter) (view TreeView) {
 	if limit <= 0 {
 		limit = DefaultTreeLimit
 	}
+	walkDepthFirst(snap, f.Under, func(n *TreeNode, depth int) (printed bool) {
+		if !f.matches(n) {
+			return false
+		}
+		view.Total++
+		if len(view.Nodes) < limit {
+			view.Nodes = append(view.Nodes, n)
+			view.Depth = append(view.Depth, depth)
+		}
+		return true
+	})
+	return view
+}
+
+// walkDepthFirst visits the snapshot's nodes depth-first from its roots, or
+// from under when it is not 0, children in the order their parent lists
+// them: the order a reader meets them, which the snapshot's flat list is
+// not — that follows when each node was first sent. visit reports whether
+// it counts n as a level of depth for n's descendants.
+func walkDepthFirst(snap *TreeSnapshot, under uint64, visit func(n *TreeNode, depth int) (counted bool)) {
 	byID := make(map[uint64]*TreeNode, len(snap.GetNodes()))
 	for _, n := range snap.GetNodes() {
 		byID[n.GetId()] = n
 	}
 	var roots []*TreeNode
-	if f.Under != 0 {
-		if n := byID[f.Under]; n != nil {
+	if under != 0 {
+		if n := byID[under]; n != nil {
 			roots = append(roots, n)
 		}
 	} else {
@@ -153,12 +173,7 @@ func SelectNodes(snap *TreeSnapshot, f TreeFilter) (view TreeView) {
 			return
 		}
 		seen[n.GetId()] = struct{}{}
-		if f.matches(n) {
-			view.Total++
-			if len(view.Nodes) < limit {
-				view.Nodes = append(view.Nodes, n)
-				view.Depth = append(view.Depth, depth)
-			}
+		if visit(n, depth) {
 			depth++
 		}
 		for _, id := range n.GetChildren() {
@@ -170,7 +185,6 @@ func SelectNodes(snap *TreeSnapshot, f TreeFilter) (view TreeView) {
 	for _, r := range roots {
 		walk(r, 0)
 	}
-	return view
 }
 
 // quoteTreeText quotes a name or value as a JSON string, so it can be pasted

@@ -149,3 +149,22 @@ func TestResolveNameLocatorIgnoresValues(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, uint64(1), got.GetId())
 }
+
+// Nth counts in the order the tree prints, not the snapshot's flat order,
+// which follows when each node was first sent: here the third button was
+// sent before the second.
+func TestResolveNthIsTreeOrder(t *testing.T) {
+	root := node(1, "window", "Chat")
+	root.Children = []uint64{2, 3, 4}
+	first, second, third := node(2, "button", "Details"), node(3, "button", "Details"), node(4, "button", "Details")
+	for _, n := range []*TreeNode{first, second, third} {
+		n.Parent = 1
+	}
+	s := snap(root, first, third, second)
+	got, err := Resolve(s, Locator{Name: "Details", Nth: 1, HasNth: true})
+	require.NoError(t, err)
+	assert.Equal(t, uint64(3), got.GetId())
+	got, err = Resolve(s, Locator{Name: "Details", Nth: 2, HasNth: true})
+	require.NoError(t, err)
+	assert.Equal(t, uint64(4), got.GetId())
+}

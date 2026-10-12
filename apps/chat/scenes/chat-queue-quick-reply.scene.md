@@ -32,7 +32,7 @@ continues with the answer.
 {"do":"capture","text":"chat-queue-menu"}
 {"do":"click","name":"Open","role":"button"}
 {"do":"wait","contains":"Your turn","role":"window","comment":"the card, non-modal, above the chat"}
-{"do":"click","name":"gusts","role":"radio_button","nth":0,"comment":"gusts, in the card: the card is first among the matches"}
+{"do":"click","name":"gusts","role":"radio_button","nth":1,"comment":"gusts, in the card: the tree lists the chat window first, then the card"}
 {"do":"capture","text":"chat-queue-card"}
 {"do":"click","name":"Answer","role":"button","comment":"the card's Answer; the window's carries an icon"}
 {"do":"wait","valueContains":"Drawing the layer","role":"label","comment":"the same turn, answered from the card"}

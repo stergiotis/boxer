@@ -114,7 +114,8 @@ step, or before it for `capture` and `tree`. `modifiers` is a bitmask: 1 alt,
 ## Anchoring
 
 - **An anchor must match exactly one node.** Several matches is an error that
-  lists the candidates; add `role`, use the `id`, or say which with `nth`.
+  lists the candidates; add `role`, use the `id`, or say which with `nth`,
+  which counts from 0 in the order `tree` and `--dumpTree` print the matches.
   `tree` and `--dumpTree` are the exception — their fields are a filter.
 - **Static text has no name.** egui puts a label's text in the value, so anchor
   it with `value` / `valueContains` plus `"role":"label"`. Buttons, check boxes
