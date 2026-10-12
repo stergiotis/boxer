@@ -172,3 +172,12 @@ func TestInitialsAndFirstLine(t *testing.T) {
 	assert.Equal(t, quoteMaxRunes+1, len([]rune(got)))
 	assert.Equal(t, "…", string([]rune(got)[quoteMaxRunes:]))
 }
+
+// A marker row is drawn but not counted among the messages.
+func TestCountMessagesSkipsMarkers(t *testing.T) {
+	m := &Model{Flags: []FlagsE{0, FlagSystem | FlagMarker, 0, FlagSystem}}
+	shown, n := countMessages(m, 1)
+	if shown != 2 || n != 3 {
+		t.Fatalf("countMessages = %d of %d, want 2 of 3", shown, n)
+	}
+}

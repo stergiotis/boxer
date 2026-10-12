@@ -37,6 +37,7 @@ its colour, with the steps it wrote per minute (ADR-0324 background §3.4,
 {"do":"capture","text":"chat-watch-highlight"}
 {"do":"click","name":"Open","role":"button"}
 {"do":"wait","valueContains":"new since you looked","role":"label","comment":"the chat marks what landed while the person was away"}
+{"do":"read","valueContains":" messages","role":"label","pattern":"(?P<count>2 of 2) messages","comment":"the marker is a row, not a message"}
 {"do":"read","contains":"nothing waits on you","role":"button","on":"name","pattern":"(?P<cleared>on you)$","comment":"looking cleared the highlight"}
 {"do":"capture","text":"chat-watch-looked"}
 {"do":"click","contains":"Conversations","role":"button","settleMs":4000,"comment":"the roster samples the runs every three seconds; two samples give a pace"}

@@ -20,6 +20,10 @@ const (
 	FlagDeleted
 	// FlagEdited marks an edited message; [Model.EditedMS] carries when.
 	FlagEdited
+	// FlagMarker marks a row that is not a message — a read marker the host
+	// places between messages. It is drawn as its other flags say and left
+	// out of the header's count.
+	FlagMarker
 )
 
 // StatusE is a message's delivery status, shown on the viewer's own bubbles.

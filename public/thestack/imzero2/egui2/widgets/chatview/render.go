@@ -100,7 +100,7 @@ func Render(in Input) (res Result) {
 		}
 		rows := plan(m, loc, first)
 
-		renderHeader(ids, st, n, first)
+		renderHeader(ids, st, m, first)
 		if !in.FillHost {
 			c.UiSetMinHeight(minHeight)
 		}
@@ -142,9 +142,9 @@ func Render(in Input) (res Result) {
 // renderHeader is the one-line strip above the transcript: the count on the
 // left, the "newest" affordance on the right — always drawn, disabled while
 // following, so the scroll area below never shifts.
-func renderHeader(ids *c.WidgetIdStack, st *State, n, first int) {
+func renderHeader(ids *c.WidgetIdStack, st *State, m *Model, first int) {
 	for range c.HorizontalTop().KeepIter() {
-		shown := n - first
+		shown, n := countMessages(m, first)
 		text := strconv.Itoa(shown) + " of " + strconv.Itoa(n) + " messages"
 		for rt := range c.RichTextLabel(text) {
 			rt.Small().Weak()
@@ -626,4 +626,19 @@ func participantColor(m *Model, p int32) color.Color {
 		return col
 	}
 	return color.Hex(styletokens.QualitativeCycle(int(p)).AsHex())
+}
+
+// countMessages is how many of the model's rows are messages, all and from
+// first on: a FlagMarker row is not one.
+func countMessages(m *Model, first int) (shown int, n int) {
+	for i, f := range m.Flags {
+		if f&FlagMarker != 0 {
+			continue
+		}
+		n++
+		if i >= first {
+			shown++
+		}
+	}
+	return
 }

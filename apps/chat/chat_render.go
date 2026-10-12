@@ -788,7 +788,7 @@ func transcriptModel(conv *conversation, mark int, pending bool, nowMs int64) (m
 	}
 	for i, e := range conv.entries {
 		if i == mark {
-			add(e.atMs, -1, "new since you looked", chatview.FlagSystem, chatview.StatusNone, ordinalKind{entry: -1, mark: true})
+			add(e.atMs, -1, "new since you looked", chatview.FlagSystem|chatview.FlagMarker, chatview.StatusNone, ordinalKind{entry: -1, mark: true})
 		}
 		if e.speaker == speakerTool {
 			// The coordinator's activity: a tool call and how it ended.
