@@ -39,7 +39,7 @@ func (inst *Inst) noteInput(sm *c.StateManager, now time.Time) {
 	moved := cur != inst.lastInput
 	inst.lastInput = cur
 	if moved || scroll.X != 0 || scroll.Y != 0 || (zoom.Zoom != 0 && zoom.Zoom != 1) ||
-		sm.GetF1KeyPressed() || sm.GetF2KeyPressed() || cmdEnter {
+		sm.GetF1KeyPressed() || sm.GetF2KeyPressed() || sm.GetF8KeyPressed() || cmdEnter {
 		inst.onInput(now)
 	}
 }

@@ -70,6 +70,18 @@ func (inst *Fetcher) CollectFetchF2KeyPressed() (pressed bool) {
 	pressed = inst.readB()
 	return
 }
+func (inst *Fetcher) FetchF8KeyPressed() (pressed bool) {
+	inst.invoke(FuncProcIdFetchF8KeyPressed)
+	pressed = inst.readB()
+	return
+}
+func (inst *Fetcher) IssueFetchF8KeyPressed() {
+	inst.invoke(FuncProcIdFetchF8KeyPressed)
+}
+func (inst *Fetcher) CollectFetchF8KeyPressed() (pressed bool) {
+	pressed = inst.readB()
+	return
+}
 func (inst *Fetcher) FetchFrameMetrics() (interpretUs uint64, passNr uint64) {
 	inst.invoke(FuncProcIdFetchFrameMetrics)
 	interpretUs = inst.readU64()

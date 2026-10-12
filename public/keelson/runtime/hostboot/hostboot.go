@@ -844,6 +844,11 @@ func (rt *Runtime) bootWindowHost() (err error) {
 		menuIds.Reset()
 		host.RenderAppsMenu(menuIds)
 		if rt.Attention != nil {
+			// F8: next by weight in the person's queue (ADR-0324). The
+			// one poller of the consumed press, as F1 and F2 have theirs.
+			if c.CurrentApplicationState.StateManager.GetF8KeyPressed() {
+				rt.Attention.Jump()
+			}
 			rt.Attention.RenderControl(menuIds)
 		}
 	}, host)))

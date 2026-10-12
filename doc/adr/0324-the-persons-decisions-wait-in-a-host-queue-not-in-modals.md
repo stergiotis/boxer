@@ -277,6 +277,21 @@ here.
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers.
 
+## Updates
+
+### 2026-10-12 — F8, next by weight
+
+F8 opens the head of the queue — highest level, then oldest — from any
+window, as the list's **Next** does; with nothing waiting it raises the
+window of the newest highlight (ADR-0323 §SD7) and drops the highlight.
+After irssi's Alt-A in the background note (§2.2). It is a host fetcher of
+its own, as F1 and F2 are, consumed so no app sees the press. F8 because no
+browser binds it bare: the viewer page of the headless host and the
+browser tab passes F5, F11 and F12 to the browser and suppresses the rest,
+and F1, F3, F6, F7 and F10 have browser meanings a page cannot always
+override. A chat window's own unseen level is not among what F8 reaches:
+host chrome does not read it.
+
 ## References
 
 - [Juggling — one operator, many streams](../adr-background-work/juggling-many-agent-streams.md)

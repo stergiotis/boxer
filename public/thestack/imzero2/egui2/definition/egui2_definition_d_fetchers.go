@@ -387,6 +387,21 @@ self.io.write_plain_b(pressed)?;
 		AddReturnValue("pressed", ctabb.B).
 		Build())
 
+	// fetchF8KeyPressed — "next by weight" (ADR-0324): the shell chrome
+	// opens the most pressing item of the person's queue, or raises the
+	// window of the newest highlight. Same shape as F1 and F2. F8 because
+	// no browser binds it bare: the viewer page lets F5, F11 and F12
+	// through to the browser and suppresses the rest, and F1, F3, F6, F7
+	// and F10 have browser meanings a page may not always override.
+	fetchers = append(fetchers, idl.NewFetcherNode("fetchF8KeyPressed").
+		WithApplyCodeClientRust(rustClientCode(`
+let pressed = {{EguiContext}}.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::F8));
+self.io.write_plain_b(pressed)?;
+{{SendMessage}}
+`)).
+		AddReturnValue("pressed", ctabb.B).
+		Build())
+
 	// ADR-0140: drains the per-frame canvas wheel captures stamped by a
 	// paintCanvas with .CaptureZoom()/.CaptureScroll() while the pointer was
 	// over it. Six homogeneous arrays keyed by the canvas widget id — a canvas

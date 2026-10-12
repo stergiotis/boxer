@@ -56,6 +56,7 @@ status: draft
 | FetchCommandEnterPressed | Fetcher | No | 0 | 0 | - | - |
 | FetchF1KeyPressed | Fetcher | No | 0 | 0 | - | - |
 | FetchF2KeyPressed | Fetcher | No | 0 | 0 | - | - |
+| FetchF8KeyPressed | Fetcher | No | 0 | 0 | - | - |
 | FetchFrameMetrics | Fetcher | No | 0 | 0 | - | - |
 | FetchPixelsPerPoint | Fetcher | No | 0 | 0 | - | - |
 | FetchR10 | Fetcher | No | 0 | 0 | - | - |
@@ -3145,6 +3146,18 @@ Block
 ---
 
 ### FetchF2KeyPressed
+
+- **Type:** Fetcher
+
+#### Return Values
+
+| Name | Type |
+|------|------|
+| pressed | b |
+
+---
+
+### FetchF8KeyPressed
 
 - **Type:** Fetcher
 

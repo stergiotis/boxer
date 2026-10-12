@@ -278,6 +278,9 @@ type StateManager struct {
 	// launcher; apps must not poll it, for the reason spelled out on
 	// GetF1KeyPressed.
 	f2KeyPressed bool
+	// f8KeyPressed mirrors the per-frame fetchF8KeyPressed drain — "next by
+	// weight" in the person's queue (ADR-0324), the same contract as F1.
+	f8KeyPressed bool
 	// commandEnter mirrors the per-frame fetchCommandEnterPressed drain: the
 	// Ctrl/Cmd+Enter and Ctrl/Cmd+Shift+Enter "submit" pair, each true exactly
 	// once per physical press and never both. Read via
@@ -387,6 +390,14 @@ func (inst *StateManager) GetF1KeyPressed() (pressed bool) {
 // polled it too would act on the same consumed press.
 func (inst *StateManager) GetF2KeyPressed() (pressed bool) {
 	pressed = inst.f2KeyPressed
+	return
+}
+
+// GetF8KeyPressed reports whether the user pressed F8 between this frame's
+// Sync and the previous one — "next by weight" in the person's queue
+// (ADR-0324). One poller, in the host chrome, as for F1.
+func (inst *StateManager) GetF8KeyPressed() (pressed bool) {
+	pressed = inst.f8KeyPressed
 	return
 }
 
@@ -751,6 +762,7 @@ func (inst *StateManager) Sync() {
 	fetcher.IssueFetchR20Pointer()
 	fetcher.IssueFetchF1KeyPressed()
 	fetcher.IssueFetchF2KeyPressed()
+	fetcher.IssueFetchF8KeyPressed()
 	fetcher.IssueFetchCommandEnterPressed()
 	fetcher.IssueFetchR21UiRects()
 	fetcher.IssueFetchR27Windows()
@@ -857,6 +869,7 @@ func (inst *StateManager) Sync() {
 		// explicit per binding rather than pooled behind one "any key" drain.
 		inst.f1KeyPressed = fetcher.CollectFetchF1KeyPressed()
 		inst.f2KeyPressed = fetcher.CollectFetchF2KeyPressed()
+		inst.f8KeyPressed = fetcher.CollectFetchF8KeyPressed()
 	}
 	{
 		// Ctrl/Cmd+Enter and Ctrl/Cmd+Shift+Enter. Draining these at

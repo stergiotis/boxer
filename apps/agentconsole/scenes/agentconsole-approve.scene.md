@@ -46,8 +46,7 @@ goes ahead once the person approves it.
 {"do":"type","id":7028873545952381604,"text":"{\"text\":\"from the agent\"}"}
 {"do":"click","name":"Call","role":"button","comment":"k2: a write in observe mode waits as a widening"}
 {"do":"wait","contains":"your turn","role":"button","comment":"the request waits in the person's queue (ADR-0324)"}
-{"do":"click","contains":"your turn","role":"button"}
-{"do":"click","contains":"Next","role":"button","comment":"its card, non-modal"}
+{"do":"key","text":"F8","comment":"next by weight: the head of the queue opens its card, from the keyboard"}
 {"do":"wait","valueContains":"asks to call set_note in window 2","role":"label","nth":0}
 {"do":"capture","text":"agentconsole-approve-widen"}
 {"do":"click","name":"Approve","role":"button"}

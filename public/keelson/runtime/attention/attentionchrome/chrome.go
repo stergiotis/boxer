@@ -29,6 +29,9 @@ type CardSourceI interface {
 	ForgetCard(key string)
 }
 
+const tipNext = "Open the next item, highest level first. F8 does the same from anywhere, " +
+	"and with nothing waiting raises the window of the newest highlight."
+
 // ShelveFor is how long Shelve takes an item out of the queue, bounded by the
 // item's own clock (ADR-0324 §SD4).
 const ShelveFor = 15 * time.Minute
@@ -190,9 +193,11 @@ func (inst *Chrome) renderList(now time.Time, ids *c.WidgetIdStack) {
 	for range wf.KeepIter() {
 		for range c.HorizontalTop().KeepIter() {
 			if len(inst.entries) > 0 {
-				if c.Button(ids.PrepareStr("attention-next"), c.Atoms().Text("Next "+icons.PhCaretRight).Keep()).Kind(c.ButtonKindPrimary).SendResp().HasPrimaryClicked() {
-					inst.next()
-					inst.listOpen = false
+				for range c.HoverText(tipNext).KeepIter() {
+					if c.Button(ids.PrepareStr("attention-next"), c.Atoms().Text("Next "+icons.PhCaretRight).Keep()).Kind(c.ButtonKindPrimary).SendResp().HasPrimaryClicked() {
+						inst.next()
+						inst.listOpen = false
+					}
 				}
 			}
 			for range c.HoverText(tipLevels).KeepIter() {

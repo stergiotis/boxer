@@ -4476,6 +4476,22 @@ self.apply_widget(w,u,f,Some(i));
                     self.io.flush()?;
                 }
             }
+            FuncProcId::FetchF8KeyPressed => {
+                #[cfg(feature = "puffin")]
+                puffin::profile_scope!("match FuncProcId::FetchF8KeyPressed");
+                if d == 0 {
+                    self.end_consume_message()?;
+                }
+                // apply
+                if !self.capture_replay {
+                    // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+
+                    let pressed =
+                        c.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::F8));
+                    self.io.write_plain_b(pressed)?;
+                    self.io.flush()?;
+                }
+            }
             FuncProcId::FetchFrameMetrics => {
                 #[cfg(feature = "puffin")]
                 puffin::profile_scope!("match FuncProcId::FetchFrameMetrics");
