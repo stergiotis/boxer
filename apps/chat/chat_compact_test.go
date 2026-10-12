@@ -303,7 +303,32 @@ func TestTheProfileDoesNotThrash(t *testing.T) {
 	inst.coord.setRoute("", true, compactContext)
 	assert.Positive(t, inst.coord.compactConstants(2000).TriggerTokens, "at the floor the profile's check stands")
 	inst.coord.setRoute("", true, 4096)
-	assert.Zero(t, inst.coord.compactConstants(500).TriggerTokens, "a 4k context cannot hold the summary, the tail and a round")
+	assert.Positive(t, inst.coord.compactConstants(500).TriggerTokens, "a 4k context compacts for a small head, with the allowances fitted to its trigger")
+	assert.Zero(t, inst.coord.compactConstants(2000).TriggerTokens, "and not for a head that leaves the fitted allowances no room")
+	trigger, off, why := inst.coord.compactState()
+	assert.Positive(t, trigger, "the trigger stays while compaction is off")
+	assert.True(t, off)
+	assert.Contains(t, why, "4096-token context")
+
+	// Below the floor the constants are fitted to the trigger: an 8k
+	// context compacts with a smaller summary and tail for the chat's
+	// starting head, and goes off once the head grows past what the
+	// fitted allowances leave; the flip is told to the meter, and on
+	// again when the head shrinks.
+	inst.coord.setRoute("", true, 8192)
+	c := inst.coord.compactConstants(2500)
+	assert.Positive(t, c.TriggerTokens, "an 8k context compacts with a head of 2.5k")
+	assert.Less(t, c.SummaryTokens, defaultProfile().Compact.SummaryTokens, "with a summary budget fitted to its trigger")
+	assert.Less(t, c.TailTokens, defaultProfile().Compact.TailTokens)
+	_, off, _ = inst.coord.compactState()
+	assert.False(t, off)
+	assert.Zero(t, inst.coord.compactConstants(4500).TriggerTokens, "a head of 4.5k leaves no room under an 8k context")
+	_, off, why = inst.coord.compactState()
+	assert.True(t, off)
+	assert.Contains(t, why, "4500 tokens")
+	assert.Positive(t, inst.coord.compactConstants(2500).TriggerTokens, "and on again once the head shrinks")
+	_, off, _ = inst.coord.compactState()
+	assert.False(t, off)
 	inst.coord.setRoute("", true, 0)
 	assert.Zero(t, inst.coord.compactConstants(0).TriggerTokens, "an unknown context never compacts")
 }

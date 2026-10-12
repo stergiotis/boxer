@@ -45,9 +45,11 @@ const (
 // the trigger is the route's context times the profile's share; a route
 // whose context is unknown never compacts, as its context bar never
 // warns, and so does a coordinator with no run open. A route whose
-// context is below the floor the profile was validated at is checked for
-// thrash again with the head as projected, and compaction is off for it
-// when the check fails.
+// context is below the floor the profile was validated at takes the
+// constants fitted to its trigger (projection.Constants.Fit) and is
+// checked for thrash again with the head as projected; compaction is off
+// for the conversation when even the fitted constants leave the head no
+// room, and the meter says so (compactState).
 func (inst *coordinator) compactConstants(headTokens int64) (c projection.Constants) {
 	inst.mu.Lock()
 	p, size := inst.profile, inst.route.context
@@ -58,9 +60,11 @@ func (inst *coordinator) compactConstants(headTokens int64) (c projection.Consta
 	c = p.Compact
 	c.TriggerTokens = triggerTokens(p, size)
 	if int64(size) < p.CompactContextFloor {
+		c = c.Fit(c.TriggerTokens)
 		if err := c.Validate(headTokens); err != nil {
-			if _, logged := compactOff.LoadOrStore(inst.conversation, true); !logged {
-				log.Warn().Err(err).Str("conversation", inst.conversation).Int32("context", size).Int64("floor", p.CompactContextFloor).Msg("chat: the route's context is below the profile's floor and the constants would thrash under it; compaction is off for this conversation")
+			why := "the head alone, " + strconv.FormatInt(headTokens, 10) + " tokens of system prompt and open windows, leaves no room to compact under a " + strconv.FormatInt(int64(size), 10) + "-token context"
+			if _, logged := compactOff.LoadOrStore(inst.conversation, why); !logged {
+				log.Warn().Err(err).Str("conversation", inst.conversation).Int32("context", size).Int64("head", headTokens).Int64("floor", p.CompactContextFloor).Msg("chat: the route's context is below the profile's floor and the fitted constants would thrash under it; compaction is off for this conversation")
 			}
 			return projection.Constants{}
 		}
@@ -70,7 +74,7 @@ func (inst *coordinator) compactConstants(headTokens int64) (c projection.Consta
 }
 
 // compactOff holds the conversations whose last request found compaction
-// off by the thrash check, each told once until it is on again.
+// off by the thrash check, each with why, told once until it is on again.
 var compactOff sync.Map
 
 // triggerTokens is the profile's share of a route's context.
@@ -78,20 +82,24 @@ func triggerTokens(p ProfileT, size int32) int64 {
 	return int64(size) * int64(p.CompactTriggerPercent) / 100
 }
 
-// compactTrigger is the trigger the context meter shows: the one the
-// last request was planned under, zero when compaction is off — no
-// route context, no run open, or the thrash check turned it off.
-func (inst *coordinator) compactTrigger() (trigger int64) {
+// compactState is what the context meter shows: the trigger the route's
+// context gives, zero with no route context or no run open; off when the
+// thrash check turned compaction off for the conversation at the last
+// request, with why. The trigger stays while compaction is off, so the
+// meter keeps turning where the person was told it would and the line
+// above the composer can say what changed.
+func (inst *coordinator) compactState() (trigger int64, off bool, why string) {
 	inst.mu.Lock()
 	p, size := inst.profile, inst.route.context
 	inst.mu.Unlock()
 	if size <= 0 || p.Id == "" {
 		return
 	}
-	if _, off := compactOff.Load(inst.conversation); off {
-		return
+	trigger = triggerTokens(p, size)
+	if v, ok := compactOff.Load(inst.conversation); ok {
+		off, why = true, v.(string)
 	}
-	return triggerTokens(p, size)
+	return
 }
 
 // headTokens is the size of the batch's head: what the thrash check is

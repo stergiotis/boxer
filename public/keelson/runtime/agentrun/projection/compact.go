@@ -56,6 +56,37 @@ func (inst Constants) Validate(headTokens int64) (err error) {
 	return
 }
 
+// Fit is the constants under a trigger too small for them as declared:
+// the summary budget, the person's pin, the kept tail and the round's
+// margin become shares of the trigger, each with a floor, so a small
+// context compacts with a small summary rather than not at all. Validate
+// then decides whether the head still leaves room; a profile's declared
+// values are never raised.
+func (inst Constants) Fit(trigger int64) (c Constants) {
+	c = inst
+	c.TriggerTokens = trigger
+	cap := func(have int64, share int64, floor int64) int64 {
+		return min(have, max(trigger/share, floor))
+	}
+	c.SummaryTokens = cap(inst.SummaryTokens, fitSummaryShare, fitSummaryFloor)
+	c.PinBytes = int(cap(int64(inst.PinBytes), fitPinShare, fitPinFloor))
+	c.TailTokens = cap(inst.TailTokens, fitTailShare, fitTailFloor)
+	c.RoundMarginTokens = cap(inst.RoundMarginTokens, fitMarginShare, fitMarginFloor)
+	return
+}
+
+// The shares of the trigger Fit bounds the allowances by, and their floors:
+// the summary and the round's margin a tenth each, the person's pin a tenth
+// in tokens (four bytes a token), the kept tail a sixth. Under an 8k
+// context's trigger of 5.7k they leave room for a head of about 3k tokens;
+// the chat's head starts near 2.5k.
+const (
+	fitSummaryShare, fitSummaryFloor = 10, 256
+	fitPinShare, fitPinFloor         = 10 / 4, 1024
+	fitTailShare, fitTailFloor       = 6, 512
+	fitMarginShare, fitMarginFloor   = 10, 256
+)
+
 // summaryAllowance is what a summary message may take: the summariser's
 // answer, the person's words pinned verbatim beside it (law L25), and the
 // message's header and band.

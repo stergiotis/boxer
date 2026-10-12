@@ -120,13 +120,18 @@ func TestTheContextWarning(t *testing.T) {
 	_, ok = inst.contextWarning()
 	assert.False(t, ok, "under the trigger and under the warning share")
 
-	// Compaction turned off by the thrash check falls back to the share.
-	compactOff.Store("context-warning", true)
+	// Compaction turned off by the thrash check keeps the trigger as the
+	// line the meter turns at, and says what changed.
+	compactOff.Store("context-warning", "the head leaves no room")
 	defer compactOff.Delete("context-warning")
-	inst.conv.lastIn, inst.conv.lastOut = 800, 50
+	inst.conv.lastIn, inst.conv.lastOut = 750, 50
 	line, ok = inst.contextWarning()
-	require.True(t, ok)
+	require.True(t, ok, "80 % of 1000 is past the 70 % trigger, which stays")
+	assert.Contains(t, line, "compaction is off for it: the head leaves no room")
 	assert.Contains(t, line, "New conversation")
+	inst.conv.lastIn, inst.conv.lastOut = 600, 50
+	_, ok = inst.contextWarning()
+	assert.False(t, ok, "under the trigger")
 
 	assert.Equal(t, "950", tokens(950))
 	assert.Equal(t, "12.3k", tokens(12345))

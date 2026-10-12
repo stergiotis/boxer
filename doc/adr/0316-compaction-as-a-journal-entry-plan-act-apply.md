@@ -247,13 +247,23 @@ Accepted 2026-10-11.
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers (Tier 1 in-place / Tier 2 dated `## Updates` entry / Tier 3 new superseding ADR).
 
-<!--
 ## Updates
 
-Tier-2 dated entries land here when implementation reveals a refinement, an aspirational
-claim turns out false, or a milestone records what shipped. Single H2; add H3s dated
-YYYY-MM-DD. Remove this HTML comment when the section first gains a real entry.
--->
+### 2026-10-12 — §SD3: the thrash check fits the constants to a small context, and compaction going off is told
+
+The re-check against a route's real trigger, for a context below the
+profile's floor, ran with the profile's declared allowances, which under
+an 8k context fail for any head over about 600 tokens, and under 12k once
+the head grows past about 3.4k as windows open. Compaction then went off
+for the conversation with only a log line, the meter's trigger read as
+zero, and the warning the person had seen at the trigger vanished while
+the bar stayed. The check now first fits the allowances to the trigger
+(`projection.Constants.Fit`: the summary, the pin and the round's margin a
+tenth of it each, the kept tail a sixth, each with a floor), so a small
+context compacts with a small summary rather than not at all; the trigger
+stays what the meter turns at while compaction is off; and the line above
+the composer and the meter's tip say that it is off and why.
+
 
 ## References
 
