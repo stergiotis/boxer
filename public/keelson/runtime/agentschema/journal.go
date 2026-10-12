@@ -21,7 +21,7 @@ const (
 
 // entryColumns are the journal entry table's columns, in its order; a
 // test pins them to keelson('agent_run_entries') as agentrun serves it.
-var entryColumns = []string{"run", "ordinal", "at_ms", "kind", "key", "role", "body", "calls", "arguments", "vault_commitment", "entry_id", "name", "book", "form", "target", "from",
+var entryColumns = []string{"run", "ordinal", "at_ms", "kind", "key", "role", "body", "calls", "arguments", "commitments", "entry_id", "name", "book", "form", "target", "from",
 	"effect", "turn", "label_level", "label_tier", "label_exposure", "label_origin", "writer_run", "writer_turn", "writer_ordinal",
 	"prev", "digest", "key_id", "parent", "attachments"}
 

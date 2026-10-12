@@ -26,7 +26,7 @@ func TestTheWorkerViewsUnderClickhouseLocal(t *testing.T) {
 	}
 	for _, stmt := range []string{
 		"CREATE TABLE agent_runs (id UInt64, conversation String, owner_app String) ENGINE = MergeTree ORDER BY id",
-		"CREATE TABLE agent_run_entries (run UInt64, ordinal UInt64, at_ms Int64, kind String, key String, role String, body String, calls String, arguments String, vault_commitment String, entry_id UInt64, name String, book String, form String, target UInt64, `from` UInt64, effect String, turn String, label_level String, label_tier String, label_exposure Array(String), label_origin Array(String), writer_run UInt64, writer_turn String, writer_ordinal UInt64, prev UInt64, digest String, key_id String, parent UInt64, attachments String) ENGINE = MergeTree ORDER BY (run, ordinal)",
+		"CREATE TABLE agent_run_entries (run UInt64, ordinal UInt64, at_ms Int64, kind String, key String, role String, body String, calls String, arguments String, commitments Array(String), entry_id UInt64, name String, book String, form String, target UInt64, `from` UInt64, effect String, turn String, label_level String, label_tier String, label_exposure Array(String), label_origin Array(String), writer_run UInt64, writer_turn String, writer_ordinal UInt64, prev UInt64, digest String, key_id String, parent UInt64, attachments String) ENGINE = MergeTree ORDER BY (run, ordinal)",
 		"INSERT INTO agent_runs VALUES (11, 'c1', 'chat'), (12, 'c1', 'chat'), (13, 'c2', 'other')",
 		"INSERT INTO agent_run_entries (run, ordinal, kind, body, digest) VALUES (11, 1, 'user', 'hello', 'd1'), (11, 2, 'reply', 'hi', 'd2'), (12, 1, 'user', 'other run', 'd3'), (13, 1, 'user', 'other conversation', 'd4')",
 		"CREATE TABLE scratch_notes (run String, ord UInt64, note String, contact String, secret String, memberships Array(String)) ENGINE = MergeTree ORDER BY ord",
@@ -56,7 +56,7 @@ func TestTheWorkerViewsUnderClickhouseLocal(t *testing.T) {
 	assert.EqualValues(t, 0, count("SELECT * FROM my_run WHERE run != 11"))
 
 	// agent_history carries sizes and the commitment, no body.
-	for rec, qerr := range exec.QueryArrow(ctx, "SELECT body_bytes, vault_commitment FROM agent_history WHERE run = 11 AND ordinal = 1") {
+	for rec, qerr := range exec.QueryArrow(ctx, "SELECT body_bytes, commitments FROM agent_history WHERE run = 11 AND ordinal = 1") {
 		require.NoError(t, qerr)
 		require.EqualValues(t, 1, rec.NumRows())
 		assert.NotEqual(t, "hello", rec.Column(1).ValueStr(0))
