@@ -525,6 +525,30 @@ calls refused before it. The person's message is a change, and a grant
 request that expired while they were away must reach their dialog again
 when they ask for it.
 
+### 2026-10-12 — levels, the host's queue and the roster
+
+[ADR-0323](./0323-attention-levels-one-table-two-scales-configurable-within-a-floor.md)
+gives every step of a turn a level from one table the host holds. The
+window reads it for the transcript's mark per line, for folding the trail's
+*data* steps, and for each conversation's level in the roster: the highest
+reached since the person last looked. A window marks what landed while it
+had no focus as "new since you looked", and **Watch** raises the
+conversation's finished turns to *highlight*, which the host's control
+counts when the turn ends unseen.
+
+[ADR-0324](./0324-the-persons-decisions-wait-in-a-host-queue-not-in-modals.md)
+puts an `ask_user` question (SD7) in the host's queue as well as in the
+pending bubble. A question of one single choice of two to six options is
+answered in its card; the first answer wins, as a tool result the same as
+one given in the window, and the other surface withdraws its form. A
+question past the flood limit is not asked: the model is told the person
+is not taking questions now, and to say what it assumed.
+
+The Conversations panel is a roster: conversations held by a chat window
+first, with what each window's turn is doing, its colour and its pace, and
+Raise; then the open runs no window holds, which Resume continues; then the
+closed ones.
+
 ## References
 
 - [ADR-0264](./0264-retained-model-conversations-on-facts.md) — what the app sends and why it reads nothing back.

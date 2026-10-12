@@ -1,12 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-10-11
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to accepted
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-10-12
 ---
-
-> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
 
 # ADR-0323: Attention levels — one table, two scales, configurable within a floor
 
@@ -17,7 +15,7 @@ events: model calls, tool calls, answers, refusals, and requests that wait
 on the person. Every surface that shows those events has to decide how loud
 each one is — the chat transcript's per-line mark, which steps of a turn's
 trail fold away, a roster of conversations (ADR-0265, accepted), and the
-order of the person's decisions (ADR-0324, proposed). Decided per surface,
+order of the person's decisions (ADR-0324). Decided per surface,
 the same event is loud in one place and silent in another.
 
 Instant-messaging and IRC clients, and industrial alarm practice, answered
@@ -133,8 +131,8 @@ source, the latest. A source is a conversation, or, for a job, the owning
 app and the job id. The watchbill worker reports a job's terminal state
 itself, being host-side and the one that settles the row, so a job enqueued
 by an app that is no longer open still reaches the person; a job's
-highlight points at the watchbill window, where a retry lives. The control of ADR-0324 (proposed) counts these
-after what waits, and lists them apart; they open no card and are not items
+highlight points at the watchbill window, where a retry lives. The control
+of ADR-0324 counts these after what waits, and lists them apart; they open no card and are not items
 of the queue. One goes when the person looks at the conversation's window or
 dismisses it. Since an app sets its own conversation's attention scale
 (SD5), it can make any of its events a highlight; what that buys it is a
@@ -207,8 +205,12 @@ count the person can dismiss, never a card or a place in the queue.
 
 ## Status
 
-Proposed — awaiting review by the code owner. On acceptance, ADR-0265
-gains a dated update naming the transcript, trail and roster uses (SD7).
+Accepted 2026-10-12. ADR-0265 gains a dated update naming the transcript,
+trail and roster uses (SD7).
+
+Built, except the watchbill worker's report: SD6's job rows and SD7's job
+highlights are decided and not built. Until they are, a job's end reaches
+the person only in the watchbill window.
 
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers.
@@ -230,4 +232,4 @@ See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-d
 - [ADR-0312](./0312-exits-sinks-from-the-cell-boundary-approval-tiers-and-exit-budgets.md) —
   exit approvals.
 - [ADR-0324](./0324-the-persons-decisions-wait-in-a-host-queue-not-in-modals.md)
-  (proposed) — the queue these levels order.
+  — the queue these levels order.

@@ -1137,6 +1137,23 @@ agent that characterised a table through play had learned its budget only
 by querying `keelson('agent_grants')`, and had spent its calls sparingly
 for want of it.
 
+### 2026-10-12 — the person's decisions are cards in a host queue
+
+[ADR-0324](./0324-the-persons-decisions-wait-in-a-host-queue-not-in-modals.md)
+replaces the modals of the update of 2026-10-04 wherever the host runs the
+attention service. A task request, a widening and the confirmation of a
+consequential command are items of one host queue, ordered by
+[ADR-0323](./0323-attention-levels-one-table-two-scales-configurable-within-a-floor.md)'s
+waiting levels, and drawn as non-modal host cards: the person can look at
+the window a request names before deciding. A consequential confirmation
+opens its card at once; the others wait for the person or for escalation.
+
+What reaches the person counts against a flood limit per conversation and
+in all; a request past it is refused at admission with a reason the model
+can act on, and the refusal is a grant event like any other. What the
+unattended mode (ADR-0298) decides does not count. An agent service
+configured without the attention service keeps the modals. The fs Powerbox file dialog stays modal.
+
 ## References
 
 - [ADR-0026](./0026-app-runtime-and-capability-subjects.md) — the subject taxonomy SD3 extends; the threat model SD6 keeps.

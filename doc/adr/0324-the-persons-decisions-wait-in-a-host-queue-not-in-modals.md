@@ -1,12 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-10-11
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to accepted
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-10-12
 ---
-
-> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
 
 # ADR-0324: The person's decisions wait in a host queue, not in modals
 
@@ -33,7 +31,7 @@ streams. Messaging clients, IRC clients and alarm practice converged on a
 queue graded by level, entered on the person's terms, with acknowledgement
 apart from decision and a limit on how fast sources may add to it
 ([background](../adr-background-work/juggling-many-agent-streams.md) §3).
-The levels it orders by are ADR-0323's (proposed).
+The levels it orders by are ADR-0323's.
 
 The modal carries three properties a replacement must keep: a waiting item
 **cannot be hidden**; a decision is made **on what it showed**, since
@@ -273,8 +271,8 @@ O1, O2 and O4 lost on the QOC above. Further:
 
 ## Status
 
-Proposed — awaiting review by the code owner. On acceptance, ADR-0269 and
-ADR-0265 gain dated updates pointing here.
+Accepted 2026-10-12. ADR-0269 and ADR-0265 gain dated updates pointing
+here.
 
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers.
@@ -284,7 +282,7 @@ See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-d
 - [Juggling — one operator, many streams](../adr-background-work/juggling-many-agent-streams.md)
   — precedents, options and the open questions this ADR answers.
 - [ADR-0323](./0323-attention-levels-one-table-two-scales-configurable-within-a-floor.md)
-  (proposed) — the levels.
+  — the levels.
 - [ADR-0265](./0265-chat-app-over-retained-model-calls.md) — §SD7 questions,
   §SD8 turn machine, update of 2026-10-08.
 - [ADR-0269](./0269-app-operations-a-command-query-contract-agents-drive-under-a-task-grant.md)
