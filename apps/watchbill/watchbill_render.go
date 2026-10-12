@@ -84,15 +84,10 @@ func (inst *App) renderFilters(snap snapshot, shown int) {
 		if c.Button(inst.ids.PrepareStr("refresh"), c.Atoms().Text("Refresh").Keep()).SendResp().HasPrimaryClicked() {
 			inst.markDirty()
 		}
-		var auto bool
+		c.Checkbox(inst.ids.PrepareStr("auto"), inst.autoDraft, "Auto-refresh").SendRespVal(&inst.autoDraft)
 		inst.mu.Lock()
-		auto = inst.autoRefresh
+		inst.autoRefresh = inst.autoDraft
 		inst.mu.Unlock()
-		if c.Checkbox(inst.ids.PrepareStr("auto"), auto, "Auto-refresh").SendRespVal(&auto).HasChanged() {
-			inst.mu.Lock()
-			inst.autoRefresh = auto
-			inst.mu.Unlock()
-		}
 	}
 	for range c.HorizontalTop().KeepIter() {
 		switch {

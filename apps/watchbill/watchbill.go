@@ -122,10 +122,15 @@ type App struct {
 	// kindH is the kind field's widget, for the catalog's editing check;
 	// frameCtx the frame's context, for routing the person's gestures
 	// through the catalog (ADR-0269).
-	kindH       widgethandle.WidgetHandle
-	frameCtx    app.FrameContextI
-	selectedID  string
-	shownEvent  int
+	kindH      widgethandle.WidgetHandle
+	frameCtx   app.FrameContextI
+	selectedID string
+	shownEvent int
+	// autoDraft is the Auto-refresh check box's value, the render
+	// goroutine's alone: the box writes it back at the next sync, so it
+	// must outlive the frame. autoRefresh, under mu, is what the poller
+	// reads.
+	autoDraft   bool
 	autoRefresh bool
 
 	mu   sync.Mutex
@@ -138,7 +143,7 @@ func newApp() (inst *App) {
 	inst = &App{
 		ids: c.NewWidgetIdStack(), density: styletokens.ActiveDensity(),
 		filters: filters{states: make(map[string]bool, len(watchbillstore.AllStates))},
-		dirty:   make(chan struct{}, 1), shownEvent: -1, autoRefresh: true,
+		dirty:   make(chan struct{}, 1), shownEvent: -1, autoDraft: true, autoRefresh: true,
 	}
 	inst.machine = newJobMachine()
 	inst.split = newSplitState()
