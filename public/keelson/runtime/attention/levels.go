@@ -86,7 +86,7 @@ const (
 	KindExitApproval      = "exit.approval"
 )
 
-var hostKinds = []string{KindGrantRequest, KindWidening, KindConfirmation, KindModeratorQuestion, KindQuestion, KindExitApproval}
+var hostKinds = []string{KindGrantRequest, KindWidening, KindConfirmation, KindModeratorQuestion, KindQuestion, KindExitApproval, KindUrgency}
 
 // ScaleOf is the scale of kind, and whether kind belongs to the closed
 // vocabulary: the host's kinds and the run journal's entry kinds (ADR-0308
@@ -264,7 +264,7 @@ func DefaultLevel(ev Event) (l LevelE) {
 	switch ev.Kind {
 	case KindConfirmation, KindModeratorQuestion:
 		return LevelCritical
-	case KindGrantRequest, KindWidening, KindQuestion, KindExitApproval:
+	case KindGrantRequest, KindWidening, KindQuestion, KindExitApproval, KindUrgency:
 		return LevelYourTurn
 	}
 	k, ok := agentrun.ParseKind(ev.Kind)

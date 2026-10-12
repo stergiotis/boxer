@@ -215,6 +215,24 @@ the person only in the watchbill window.
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers.
 
+## Updates
+
+### 2026-10-12 — Urgent: an app asks, the person confirms in host chrome
+
+SD4's "marking a conversation urgent" has a control. An app asks the host
+to make one of its conversations urgent, or to stop (`runtime.attention.urgent`);
+the request is an item of the queue, of the host's own kind `urgency`
+(*your turn*), drawn as a host card that carries no model text. Only the
+person's **Make urgent** in that card sets the conversation's waiting kinds
+— grant request, widening, confirmation, question, exit approval — to
+*critical*, as the person's change, on the trail (SD5); an app still cannot
+set the waiting scale, so it cannot make itself urgent, whoever drives it.
+The card opens at once only when the request comes from the active window,
+where the person just asked for it; a request from another window waits in
+the queue like any item and counts against the flood limit (ADR-0324
+§SD6). An urgent conversation's items open at once also while the person is
+Busy (ADR-0328 §SD2). The chat's Urgent sits beside Watch.
+
 ## References
 
 - [Juggling — one operator, many streams](../adr-background-work/juggling-many-agent-streams.md)

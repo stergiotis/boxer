@@ -1,0 +1,5 @@
+# The scripted model of chat-urgent.scene.md: a plain answer, then, to the
+# second message, ask_user with one question, then the answer.
+{"content":"A layer of wind above 15 m/s needs a speed to threshold on."}
+{"tool":"ask_user","args":{"title":"Asking about the threshold","questions":[{"question":"Threshold on which speed?","header":"Speed","options":[{"label":"10 m wind"},{"label":"gusts"}]}]}}
+{"content":"Drawing the layer for the speed you chose."}

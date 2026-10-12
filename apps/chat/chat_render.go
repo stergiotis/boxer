@@ -244,7 +244,7 @@ func (inst *App) renderConvId(scope string) {
 }
 
 // renderTitle is the conversation's title — click to rename — Open in
-// mdedit, and Watch.
+// mdedit, Watch and Urgent.
 func (inst *App) renderTitle() {
 	conv := inst.conv
 	for range c.HorizontalTop().KeepIter() {
@@ -271,6 +271,7 @@ func (inst *App) renderTitle() {
 			}
 		}
 		inst.renderWatchToggle()
+		inst.renderUrgentToggle()
 	}
 }
 

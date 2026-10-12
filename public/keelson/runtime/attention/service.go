@@ -16,6 +16,9 @@ type Service struct {
 	Notices *Notices
 	// Presence is the person's status and the away log (ADR-0328).
 	Presence *Presence
+	// Urgencies are the windows' requests to make a conversation urgent; a
+	// source of the queue.
+	Urgencies *Urgencies
 }
 
 // NewService builds the service from the environment (EscalateEnv,
@@ -27,6 +30,8 @@ func NewService() (s *Service) {
 	s.Questions = NewQuestions(s.Flood)
 	s.Notices = NewNotices(levels)
 	s.Queue.AddSource(s.Questions)
+	s.Urgencies = NewUrgencies(levels, s.Flood)
+	s.Queue.AddSource(s.Urgencies)
 	s.Presence = NewPresence(AwayIdleEnv.Get(), time.Now())
 	s.Queue.SetPresence(s.Presence)
 	s.Flood.SetOnRefuse(s.Presence.recordRefusal)

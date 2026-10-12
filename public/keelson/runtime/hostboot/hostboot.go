@@ -1005,7 +1005,8 @@ func (rt *Runtime) bootAgent() {
 				}
 				return string(id)
 			},
-			Raise: func(instance uint64) { _ = host.OpsRaise(instance) },
+			Raise:  func(instance uint64) { _ = host.OpsRaise(instance) },
+			Active: host.ActiveWindow,
 		})
 		rt.Attention.AddSource(svc, svc.Chrome())
 		rt.Host.SetCardsChrome(rt.Attention)

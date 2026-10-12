@@ -386,12 +386,13 @@ const wireVersion uint8 = 1
 // BusService answers SubjectAll: the questions apps post, the levels they
 // read and set, and the notices they report.
 type BusService struct {
-	q       *Questions
-	levels  *Levels
-	notices *Notices
-	client  *inprocbus.Client
-	unsub   func()
-	log     zerolog.Logger
+	q         *Questions
+	urgencies *Urgencies
+	levels    *Levels
+	notices   *Notices
+	client    *inprocbus.Client
+	unsub     func()
+	log       zerolog.Logger
 }
 
 // NewBusService subscribes the service's subjects and announces each change
@@ -401,7 +402,7 @@ func NewBusService(bus *inprocbus.Inst, svc *Service, log zerolog.Logger) (s *Bu
 		err = eh.Errorf("nil bus or service")
 		return
 	}
-	s = &BusService{q: svc.Questions, levels: svc.Levels, notices: svc.Notices, log: log}
+	s = &BusService{q: svc.Questions, urgencies: svc.Urgencies, levels: svc.Levels, notices: svc.Notices, log: log}
 	if s.notices == nil {
 		s.notices = NewNotices(svc.Levels)
 	}
@@ -459,6 +460,8 @@ func (inst *BusService) handle(msg *app.Msg) {
 		rep = inst.levelSet(msg)
 	case SubjectNotify, SubjectSeen, SubjectNotices:
 		rep = inst.noticesHandle(msg)
+	case SubjectUrgent:
+		rep = inst.urgentHandle(msg)
 	default:
 		return
 	}

@@ -192,3 +192,46 @@ func (inst *App) turnEnded(text string) {
 		}
 	}()
 }
+
+const tipUrgent = "Urgent: what this conversation asks of you opens at once, as critical — also while you are Busy (ADR-0328). " +
+	"The host asks you to confirm in a card of its own: an app cannot make itself urgent. Click again to ask the host to stop."
+
+// renderUrgentToggle asks the host to make the conversation urgent, or to
+// stop (ADR-0323 §SD4, update of 2026-10-12). The window does not set the
+// levels: the waiting scale is the host's, and the person confirms in the
+// host's card. Absent without a host; it sits in the title's row, which a
+// conversation has once it has started.
+func (inst *App) renderUrgentToggle() {
+	if inst.bus == nil || !inst.levels.fetched {
+		return
+	}
+	on := inst.urgent()
+	label := icons.PhSiren + " Urgent"
+	if on {
+		label = icons.PhSiren + " Urgent ✓"
+	}
+	for range c.HoverText(tipUrgent).KeepIter() {
+		if c.Button(inst.ids.PrepareStr("urgent-toggle"), c.Atoms().Text(label).Keep()).Small().Selected(on).SendResp().HasPrimaryClicked() {
+			inst.askUrgent(!on)
+		}
+	}
+}
+
+// urgent is whether the person made the conversation urgent, as the
+// window's copy of the table says.
+func (inst *App) urgent() bool {
+	l := &inst.levels
+	return l.fetched && l.conv == inst.conv.id && attention.IsUrgent(l.snap.Conversation)
+}
+
+// askUrgent sends the request off the frame; the host announces the change
+// once the person confirms, and the window reads the table again.
+func (inst *App) askUrgent(on bool) {
+	bus, conv, title := inst.bus, inst.conv.id, inst.conv.title
+	go func() {
+		refused, err := attention.RequestUrgent(bus, conv, title, on)
+		if err != nil || refused != "" {
+			inst.log.Warn().Err(err).Str("refused", refused).Msg("chat: the host did not take the urgency request")
+		}
+	}()
+}

@@ -59,21 +59,29 @@ type Chrome struct {
 	read    time.Time
 	display func(app.AppIdT) string
 	raiseW  func(instance uint64)
+	activeW func() uint64
+	// urgencySeen are the urgency requests already considered for opening
+	// at once.
+	urgencySeen map[string]bool
 }
 
 // Options are what the chrome needs from the host: an app's display name,
-// and how to raise a window.
+// how to raise a window, and which window is active (render goroutine).
 type Options struct {
 	Display func(app.AppIdT) string
 	Raise   func(instance uint64)
+	Active  func() uint64
 }
 
 // New is the chrome of svc; it draws the cards of the questions apps post
 // (ADR-0324 §SD5) itself.
 func New(svc *attention.Service, opts Options) (inst *Chrome) {
-	inst = &Chrome{svc: svc, display: opts.Display, raiseW: opts.Raise}
+	inst = &Chrome{svc: svc, display: opts.Display, raiseW: opts.Raise, activeW: opts.Active}
 	if svc.Questions != nil {
 		inst.sources = append(inst.sources, &questionCards{q: svc.Questions, display: opts.Display, raise: opts.Raise})
+	}
+	if svc.Urgencies != nil {
+		inst.sources = append(inst.sources, &urgencyCards{u: svc.Urgencies, display: opts.Display, raise: opts.Raise})
 	}
 	return
 }
@@ -100,6 +108,36 @@ func (inst *Chrome) refresh(now time.Time) {
 	}
 	for _, k := range inst.svc.Queue.TakeOpens(inst.entries) {
 		inst.openCard(k)
+	}
+	inst.openUrgencies()
+}
+
+// openUrgencies opens, once, the card of an urgency request that came from
+// the active window: the person just asked for it there. One from another
+// window waits in the queue like any item, so an app cannot pop the card
+// from behind.
+func (inst *Chrome) openUrgencies() {
+	if inst.urgencySeen == nil {
+		inst.urgencySeen = make(map[string]bool, 2)
+	}
+	waiting := make(map[string]bool, 2)
+	for _, e := range inst.entries {
+		if e.Kind != attention.KindUrgency {
+			continue
+		}
+		waiting[e.Key] = true
+		if inst.urgencySeen[e.Key] {
+			continue
+		}
+		inst.urgencySeen[e.Key] = true
+		if inst.activeW != nil && e.Instance != 0 && e.Instance == inst.activeW() {
+			inst.openCard(e.Key)
+		}
+	}
+	for k := range inst.urgencySeen {
+		if !waiting[k] {
+			delete(inst.urgencySeen, k)
+		}
 	}
 }
 

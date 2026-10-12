@@ -43,3 +43,7 @@ func (inst *Inst) noteInput(sm *c.StateManager, now time.Time) {
 		inst.onInput(now)
 	}
 }
+
+// ActiveWindow is the shell's active window, zero for none; render
+// goroutine only, as host chrome is.
+func (inst *Inst) ActiveWindow() uint64 { return uint64(inst.activeKey) }
