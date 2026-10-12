@@ -87,7 +87,7 @@ func TestTheRosterShowsAHighlight(t *testing.T) {
 	at := time.Now().Add(-3 * time.Minute)
 	runs := []agentrun.Run{{Conversation: "away", Coordinator: "9", State: agentrun.StateOpen, Created: at}}
 	extra := rosterExtra{notices: []attention.Notice{{Conversation: "away", Text: "the turn ended", Level: attention.LevelHighlight, Created: at}}}
-	_, resumable, _ := buildRoster(runs, extra, "chat", "1")
+	_, resumable, _, _ := buildRoster(runs, extra, "chat", "1")
 	require.Len(t, resumable, 1)
 	line, level := inst.rosterStatus(&resumable[0])
 	assert.Equal(t, attention.LevelHighlight, level)

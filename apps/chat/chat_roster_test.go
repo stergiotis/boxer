@@ -35,7 +35,7 @@ func TestTheRosterGroupsConversations(t *testing.T) {
 		},
 		titles: map[string]string{"other": "Wind field"},
 	}
-	live, resumable, closed := buildRoster(runs, extra, "chat", "1")
+	live, resumable, stranded, closed := buildRoster(runs, extra, "chat", "1")
 
 	require.Len(t, live, 2)
 	assert.Equal(t, "here-now", live[0].run.Conversation, "this window's newest open run, first")
@@ -55,5 +55,7 @@ func TestTheRosterGroupsConversations(t *testing.T) {
 	for _, r := range closed {
 		cl = append(cl, r.run.Conversation)
 	}
-	assert.ElementsMatch(t, []string{"done", "pinned"}, cl, "deleted runs are left out")
+	assert.ElementsMatch(t, []string{"done"}, cl, "deleted runs are left out")
+	require.Len(t, stranded, 1)
+	assert.Equal(t, "pinned", stranded[0].run.Conversation, "a stranded run has its own group")
 }

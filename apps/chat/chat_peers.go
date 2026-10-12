@@ -14,12 +14,18 @@ import (
 // roster reads the others' beside the runs. Nothing is kept: a window of
 // another process, as in a browser tab, has no line here, and its row says
 // only which window holds it.
+//
+// deferred: the background note (§5.1) reads other windows' turns through
+// the operations catalog or the window tables, which would reach every
+// process; reading another window's catalog needs a task grant (ADR-0269),
+// so the roster would need a host-mediated read first.
 
 // peerTurn is a chat window's turn as its roster row shows it.
 type peerTurn struct {
-	conv  string
-	line  string
-	level attention.LevelE
+	conv    string
+	line    string
+	level   attention.LevelE
+	tainted bool
 }
 
 // peerTurns are the chat windows' turns, by window key.
@@ -32,7 +38,8 @@ func (inst *App) publishTurn() {
 		return
 	}
 	line, level := inst.turnLine()
-	p := peerTurn{conv: inst.conv.id, line: line, level: level}
+	_, tainted, _ := inst.coord.stateOrNone()
+	p := peerTurn{conv: inst.conv.id, line: line, level: level, tainted: tainted}
 	if p == inst.published {
 		return
 	}

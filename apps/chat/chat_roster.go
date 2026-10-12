@@ -19,7 +19,8 @@ import (
 // The roster: the Conversations panel as the streams the person juggles
 // (ADR-0324 background §3.1), not only an archive. Conversations live in a
 // chat window come first, each with the windows its task works in; then the
-// open runs no window holds, which Resume continues; then the closed ones,
+// open runs no window holds, which Resume continues; then the stranded ones,
+// written by another build and readable only; then the closed ones,
 // folded. A run is live when the chat window that writes it is open: the
 // run's coordinator names that window, and the host's keelson('windows')
 // lists the open ones. The windows a task works in come from the same
@@ -32,6 +33,9 @@ type rosterGroupE uint8
 const (
 	rosterLive rosterGroupE = iota
 	rosterResumable
+	// rosterStranded is a run another build wrote: readable, not
+	// continuing (ADR-0308 §SD5).
+	rosterStranded
 	rosterClosed
 )
 
@@ -78,9 +82,10 @@ type rosterRow struct {
 }
 
 // buildRoster sorts runs into the roster's groups: per live chat window its
-// newest open run is in a window, other open runs are resumable, the rest
-// closed; deleted runs are left out. here is this window's key.
-func buildRoster(runs []agentrun.Run, extra rosterExtra, chatApp string, here string) (live, resumable, closed []rosterRow) {
+// newest open run is in a window, other open runs are resumable, stranded
+// runs apart, the rest closed; deleted runs are left out. here is this
+// window's key.
+func buildRoster(runs []agentrun.Run, extra rosterExtra, chatApp string, here string) (live, resumable, stranded, closed []rosterRow) {
 	chatWindows := make(map[string]bool, 4)
 	for _, w := range extra.windows {
 		if w.AppId == chatApp {
@@ -131,6 +136,9 @@ func buildRoster(runs []agentrun.Run, extra rosterExtra, chatApp string, here st
 		case r.State == agentrun.StateOpen:
 			row.group = rosterResumable
 			resumable = append(resumable, row)
+		case r.State == agentrun.StateStranded:
+			row.group = rosterStranded
+			stranded = append(stranded, row)
 		default:
 			row.group = rosterClosed
 			closed = append(closed, row)
@@ -234,7 +242,7 @@ func (inst *App) syncRoster() {
 // renderRoster draws the panel's groups.
 func (inst *App) renderRoster() {
 	here := strconv.FormatUint(inst.window, 10)
-	live, resumable, closed := buildRoster(inst.runs, inst.roster, string(ManifestId), here)
+	live, resumable, stranded, closed := buildRoster(inst.runs, inst.roster, string(ManifestId), here)
 	if len(live) > 0 {
 		inst.rosterHeading("In windows", len(live))
 		for i := range live {
@@ -247,6 +255,14 @@ func (inst *App) renderRoster() {
 			inst.renderRosterRow("res-"+strconv.Itoa(i), &resumable[i])
 		}
 	}
+	if len(stranded) > 0 {
+		for range c.HoverText(tipRosterStranded).KeepIter() {
+			inst.rosterHeading("Stranded — another build wrote these; read only", len(stranded))
+		}
+		for i := range stranded {
+			inst.renderRosterRow("str-"+strconv.Itoa(i), &stranded[i])
+		}
+	}
 	if len(closed) > 0 {
 		for range c.CollapsingHeader(inst.ids.PrepareStr("roster-closed"), c.WidgetText().Text("Closed · "+strconv.Itoa(len(closed))).Keep()).KeepIter() {
 			for i := range closed {
@@ -254,7 +270,7 @@ func (inst *App) renderRoster() {
 			}
 		}
 	}
-	if len(live)+len(resumable)+len(closed) == 0 {
+	if len(live)+len(resumable)+len(stranded)+len(closed) == 0 {
 		c.Label("no conversations kept yet").Send()
 	}
 }
@@ -267,6 +283,9 @@ func conversationSwatch(conversation string) {
 		}
 	}
 }
+
+const tipRosterStranded = "A run is stranded when the code now running differs from the code that wrote it (ADR-0308): " +
+	"its transcript opens, but the conversation does not continue."
 
 const tipRosterPace = "The bars are the steps the conversation wrote in each of the last five minutes, newest last, read off its journal while this panel is open. " +
 	"Quiet means an open conversation wrote nothing for two minutes or more: it may be waiting on you, on a slow model, or stuck."
@@ -358,8 +377,10 @@ func (inst *App) renderRosterRow(key string, row *rosterRow) {
 					c.Label(name).Selectable(false).Send()
 				}
 			}
-			if r.State == agentrun.StateStranded {
-				badge.New(inst.ids.PrepareStr("stranded"), "stranded").Tone(badge.ToneWarning).Variant(badge.VariantSoft).Size(badge.SizeSm).Send()
+			if inst.rosterTainted(row) {
+				for range c.HoverText(tipRosterUntrusted).KeepIter() {
+					badge.New(inst.ids.PrepareStr("untrusted"), "untrusted content").Tone(badge.ToneWarning).Variant(badge.VariantSoft).Size(badge.SizeSm).Send()
+				}
 			}
 		}
 		if r.State == agentrun.StateOpen {
@@ -400,4 +421,22 @@ func (inst *App) renderRosterRow(key string, row *rosterRow) {
 		}
 		c.Separator().Send()
 	}
+}
+
+const tipRosterUntrusted = "This conversation has read content an attacker could influence — a window's text, a file, a capture (ADR-0269 §SD7). " +
+	"What its model writes, and asks you, may have been steered by it. Known for the conversations a chat window holds."
+
+// rosterTainted is whether a live conversation has read untrusted content,
+// as the window that holds it knows; false for a run no window holds, whose
+// label cannot tell (every reply already ranks above external content).
+func (inst *App) rosterTainted(row *rosterRow) bool {
+	switch {
+	case row.here:
+		_, tainted, _ := inst.coord.stateOrNone()
+		return tainted
+	case row.group == rosterLive:
+		p, ok := peerTurnOf(row.window, row.run.Conversation)
+		return ok && p.tainted
+	}
+	return false
 }
