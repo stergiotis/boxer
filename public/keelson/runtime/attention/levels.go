@@ -172,7 +172,10 @@ type Levels struct {
 	// (§SD7).
 	onWaiting func(Change)
 	onChange  func(version uint64)
-	version   uint64
+	// onPerson is told the person's table after each change of it, to keep
+	// it (levels_person.go).
+	onPerson func(table map[Key]LevelE)
+	version  uint64
 }
 
 // SetOnChange installs the hook told the version after every change.
@@ -371,9 +374,20 @@ func (inst *Levels) store(ch Change, scale ScaleE) {
 	}
 	inst.version++
 	hook, changed, v := inst.onWaiting, inst.onChange, inst.version
+	var person map[Key]LevelE
+	if ch.Conversation == "" && inst.onPerson != nil {
+		person = make(map[Key]LevelE, len(inst.person))
+		for k, l := range inst.person {
+			person[k] = l
+		}
+	}
+	onPerson := inst.onPerson
 	inst.mu.Unlock()
 	if scale == ScaleWaiting && hook != nil {
 		hook(ch)
+	}
+	if person != nil {
+		onPerson(person)
 	}
 	if changed != nil {
 		changed(v)

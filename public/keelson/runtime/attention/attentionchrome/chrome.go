@@ -39,8 +39,10 @@ const cardWidth float32 = 520
 type Chrome struct {
 	svc     *attention.Service
 	sources []CardSourceI
-	// listOpen is whether the control's list is shown.
-	listOpen bool
+	// listOpen is whether the control's list is shown, levelsOpen whether
+	// the grid of the person's levels is (levels.go).
+	listOpen   bool
+	levelsOpen bool
 	// open are the keys of the open cards, in opening order; raise those
 	// to be raised this frame.
 	open  []string
@@ -187,6 +189,11 @@ func (inst *Chrome) renderList(now time.Time, ids *c.WidgetIdStack) {
 				if c.Button(ids.PrepareStr("attention-next"), c.Atoms().Text("Next "+icons.PhCaretRight).Keep()).Kind(c.ButtonKindPrimary).SendResp().HasPrimaryClicked() {
 					inst.next()
 					inst.listOpen = false
+				}
+			}
+			for range c.HoverText(tipLevels).KeepIter() {
+				if c.Button(ids.PrepareStr("attention-levels-open"), c.Atoms().Text("Levels").Keep()).Selected(inst.levelsOpen).SendResp().HasPrimaryClicked() {
+					inst.levelsOpen = !inst.levelsOpen
 				}
 			}
 			if c.Button(ids.PrepareStr("attention-list-close"), c.Atoms().Text("Close").Keep()).SendResp().HasPrimaryClicked() {
@@ -346,6 +353,7 @@ func (inst *Chrome) RenderCards(ids *c.WidgetIdStack) {
 	now := time.Now()
 	inst.refresh(now)
 	inst.renderList(now, ids)
+	inst.renderLevels(ids)
 	raise := inst.raise
 	inst.raise = inst.raise[:0]
 	for _, key := range slices.Clone(inst.open) {

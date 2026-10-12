@@ -251,6 +251,9 @@ type Runtime struct {
 	Adhoc     *adhocdata.Service
 	Clipboard *clipboardbroker.Service
 	Tasks     *tasksupervisor.Supervisor
+	// persistStore is the backend behind runtime.persist, which host
+	// services keep their own state in too.
+	persistStore persist.StorageBackendI
 	// PersistBackend is the persist backend label ("store" / "mem") and
 	// PersistExec the executor behind a store backend, nil otherwise.
 	PersistBackend string
@@ -490,6 +493,7 @@ func (rt *Runtime) bootServices(ctx context.Context, factsCfg chstore.Config) {
 	persistCancel()
 	rt.cleanups = append(rt.cleanups, backendClose)
 	rt.State = stateStoreFor(backend)
+	rt.persistStore = backend
 	if svc.Persist {
 		persistSvc, pErr := persist.NewService(rt.Bus, logger, backend)
 		if pErr != nil {
@@ -928,6 +932,14 @@ func (rt *Runtime) bootAgent() {
 	// The person's decisions wait in a queue in host chrome, not in modals
 	// (ADR-0324, proposed).
 	cfg.Attention = attention.NewService()
+	// The person's table of levels is kept with the host's state (ADR-0323
+	// §SD4); loaded before the trail is attached, since loading is not the
+	// person's change.
+	if rt.persistStore != nil {
+		if perr := attention.AttachPersonStore(cfg.Attention.Levels, personStore{backend: rt.persistStore}, logger); perr != nil {
+			logger.Warn().Err(perr).Msg("attention: the person's table of levels is not kept; the defaults stand and changes last until the host stops")
+		}
+	}
 	// The person's acknowledgements, shelves and waiting-scale changes are
 	// on the trail (ADR-0323 §SD5, ADR-0324 §SD4).
 	attention.AttachTrail(cfg.Attention, rt.Trail, logger)
@@ -995,6 +1007,20 @@ func (rt *Runtime) bootAgent() {
 		rt.Host.SetOpsListener(svc.Listener())
 	}
 	logger.Info().Bool("testGrants", cfg.TestGrants).Bool("durable", svc.Durable()).Msg("agent: service listening on runtime.agent.*")
+}
+
+// personStore keeps the attention service's person table in the persist
+// backend, under the service's own id.
+type personStore struct{ backend persist.StorageBackendI }
+
+var attentionRef = persist.StorageRef{Alias: persist.AliasOf(attention.ServiceAppId), AppId: attention.ServiceAppId}
+
+func (inst personStore) Get(key string) ([]byte, bool, error) {
+	return inst.backend.Get(attentionRef, key)
+}
+
+func (inst personStore) Set(key string, value []byte) error {
+	return inst.backend.Set(attentionRef, key, value)
 }
 
 // unattendedStatus is the status bar's unattended segment: absent from a

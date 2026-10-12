@@ -79,6 +79,8 @@ app question) for what the host asks. A kind the table does not list is
    "Tell me when this turn ends" is a finished `turn` raised to
    *highlight* for one conversation; marking a conversation urgent is its
    waiting items raised to *critical*. Neither is a mechanism of its own.
+   These last as long as the host that holds them; only the person's table
+   is kept across restarts.
 
 ### SD5 — Who may change what
 
