@@ -188,7 +188,7 @@ and assert on cards.
 ### SD8 — Deferred, recorded
 
 - **The person's status** — here, busy, away; what passes busy; the away
-  log on return. Its own ADR, reading ADR-0323's levels.
+  log on return: ADR-0328.
 - **Watchbill jobs and other non-agent sources** in the queue.
 - **Effects** — a sound, a window flash, an OS notification — per level.
 - **A roster** of conversations in the chat app: an app change under
