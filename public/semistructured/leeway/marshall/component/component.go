@@ -113,8 +113,10 @@ func (r *Registry) Sections() map[string][]string {
 // with more than one claimant is where two components read the same attribute
 // — worth knowing, and deliberately not prevented.
 //
-// A kind owning a section claims every attribute in it, so it is also listed
-// as a claimant of each flat slot other kinds hold in that section. The
+// A kind owning a section may claim any attribute in it — a tuple claims by
+// channel or membership (ADR-0326 §SD4), which this map does not resolve —
+// so it is also listed as a claimant of each flat slot other kinds hold in
+// that section. The
 // reverse fold does not happen: a flat claimant does not claim the whole
 // section, so it does not appear under `section[owns]`.
 func (r *Registry) SlotClaims() map[string][]string {

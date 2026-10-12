@@ -285,7 +285,11 @@ func unmarshalSection(row reflect.Value, g goplan.SectionGroup, readers *Section
 	}
 
 	if ts, ok := g.TupleSpec(); ok {
-		return unmarshalTupleSection(row, g, ts, attrs, membs, i)
+		claim, claimed := ro.tupleClaims[g.Section]
+		if !claimed {
+			claim.all = true
+		}
+		return unmarshalTupleSection(row, g, ts, attrs, membs, i, claim)
 	}
 
 	if len(g.SubColumns) > 1 {
@@ -740,9 +744,11 @@ func unmarshalMultiSubColumn(row reflect.Value, g goplan.SectionGroup, attrs, me
 
 // unmarshalTupleSection decodes a tuple-family section — a dynamic-membership
 // tuple (ADR-0103/0109) or a nested static-membership section (Slice A). Every
-// attribute belongs to the section's field — PlanBuilder.Finish guarantees no
-// other field targets it — so there is no membership matching: each attribute
-// decodes to ONE element, its sub-column values read positionally. A DYNAMIC
+// attribute claim admits belongs to the section's field — under Unmarshal
+// every attribute, since PlanBuilder.Finish guarantees no other field of the
+// kind targets the section; under ReadComponent those the tuple claims on a
+// section other kinds share (ADR-0326 §SD4). Each decodes to ONE element, its
+// sub-column values read positionally. A DYNAMIC
 // tuple additionally distributes each attribute's memberships into the element's
 // `@membership` fields (distributeTupleMemberships); a STATIC nested section has
 // no such fields (its one membership is implied), so that step is skipped.
@@ -750,7 +756,7 @@ func unmarshalMultiSubColumn(row reflect.Value, g goplan.SectionGroup, attrs, me
 // The decoded elements are projected into the row by cardinality: Many → a slice
 // (nil when zero); One → the struct value, requiring exactly one attribute
 // unless the section is all-container (S=0) and spliced to zero.
-func unmarshalTupleSection(row reflect.Value, g goplan.SectionGroup, ts goplan.TupleSpec, attrs, membs reflect.Value, i int) (err error) {
+func unmarshalTupleSection(row reflect.Value, g goplan.SectionGroup, ts goplan.TupleSpec, attrs, membs reflect.Value, i int, claim tupleClaim) (err error) {
 	outFld := row.FieldByName(ts.GoField)
 
 	var elemType reflect.Type
@@ -770,6 +776,9 @@ func unmarshalTupleSection(row reflect.Value, g goplan.SectionGroup, ts goplan.T
 	n := mustCall(attrs, "GetNumberOfAttributes", reflect.ValueOf(entityIdx(i)))[0].Int()
 	elems := make([]reflect.Value, 0, n)
 	for attrJ := range n {
+		if !claim.claims(membs, i, attrJ) {
+			continue
+		}
 		var elem reflect.Value
 		if elem, err = unmarshalTupleElem(elemType, g, ts, attrs, membs, i, attrJ); err != nil {
 			return

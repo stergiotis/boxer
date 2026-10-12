@@ -136,6 +136,10 @@ kinds share:
 - A row with no claimed attribute in any of the kind's sections reads as
   absent.
 
+The reflection front-end's `Detect` and `ReadComponent` claim by the same
+rule, from the read contract: a dynamic tuple's slot names its channels.
+`Unmarshal`, the twin of `FillFromArrow`, keeps the section-owning rule.
+
 The store generator refuses two components of one store whose dynamic
 tuples claim the same section and channel, since neither could tell its
 attributes from the other's.
@@ -148,11 +152,9 @@ attributes from the other's.
   It is decoded in the store's entity read, and SQL readers use the read
   surface (`LW_SEL` by name, `LW_GET` with `param:`).
 - **Raw parameters** (SD1), and moving `capmapfacts` onto a DTO.
-- **Tuple kinds in `FillFromArrow`'s homogeneous decode** keep ADR-0103's
-  rule that a tuple owns its section. SD4's claim rule is `ReadRow`'s.
-- **The reflection front-end's `ReadComponent`** also keeps that rule for
-  tuple kinds. It reads a tuple's whole section, so on a section other
-  kinds share it is not SD4's twin. Generated stores use `ReadRow`.
+- **Tuple kinds in `FillFromArrow`'s homogeneous decode**, and in
+  `Unmarshal`, keep ADR-0103's rule that a tuple owns its section. SD4's
+  claim rule is `ReadRow`'s and `ReadComponent`'s.
 
 ## Alternatives
 
@@ -187,8 +189,8 @@ O2 and O3 are weighed in the QOC. One narrower choice:
   tuple on `mixedLowCardVerbatim` with parameters, for a static nested
   section on `mixedLowCardRef` with parameters (`capmapfacts`' shape, with
   numeric parameters), for a `,unit` value, and for a value-less element.
-  `ReadRow` reads each back from a row whose sections also carry another
-  kind's attributes, and leaves the other kind's alone. The journal's vault
+  `ReadRow` and `ReadComponent` read each back from a row whose sections
+  also carry another kind's attributes, and leave the other kind's alone. The journal's vault
   round trip reads its shredded attributes through the generated entity.
 - **What would fail.** A component that claims another kind's attribute;
   parameters that do not round trip; the two front-ends disagreeing.

@@ -160,7 +160,7 @@ func (inst *SectionReaders) InspectLookup[T any](lookup LookupI, opts ...ReadOpt
 		// A lookup failure is reported as unresolved rather than aborting: the
 		// point of this call is to explain a lookup problem, so it must survive
 		// one.
-		if !s.OwnsSection && s.Membership != "" && !s.Channel.UsesCarrier() && s.Channel.NeedsKindVar() {
+		if slotNeedsID(s) {
 			if id, lerr := lookup.LookupMembership(s.Membership); lerr == nil {
 				obs.ResolvedID, obs.Resolved = id, true
 			}

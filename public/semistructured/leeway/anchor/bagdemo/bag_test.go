@@ -10,6 +10,7 @@ import (
 	"github.com/apache/arrow-go/v18/arrow/memory"
 	"github.com/stretchr/testify/require"
 
+	"github.com/stergiotis/boxer/public/semistructured/leeway/mappingplan"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/marshall/go/marshallreflect"
 )
 
@@ -206,4 +207,31 @@ func TestReadRowClaimsItsAttributesOnSharedSections(t *testing.T) {
 	_, present, err = NotedDocReadRow(1, r.sym.GetAttributes(), r.sym.GetMemberships())
 	require.NoError(t, err)
 	require.False(t, present)
+
+	// The reflection front-end's ReadComponent claims the same attributes.
+	readers := marshallreflect.NewSectionReaders(r.length).
+		PlainColumn("id", r.id.ValueId).
+		Section("stringArray", r.str.GetAttributes(), r.str.GetMemberships()).
+		Section("symbol", r.sym.GetAttributes(), r.sym.GetMemberships()).
+		Section("null", r.null, r.null.GetMemberships())
+	lookup := marshallreflect.MapLookup{"noteSection": kindNoteSection, "plainTitle": kindPlainTitle, "plainTag": kindPlainTag}
+	bag.ID, noted.ID, plain.ID = 1, 1, 1 // ReadComponent reads the envelope
+	reflBag, present, err := readers.ReadComponent[BagDoc](0, lookup)
+	require.NoError(t, err)
+	require.True(t, present)
+	require.Equal(t, bag, reflBag)
+	reflNoted, present, err := readers.ReadComponent[NotedDoc](0, lookup)
+	require.NoError(t, err)
+	require.True(t, present)
+	require.Equal(t, noted, reflNoted)
+	reflPlain, present, err := readers.ReadComponent[PlainDoc](0, lookup)
+	require.NoError(t, err)
+	require.True(t, present)
+	require.Equal(t, plain, reflPlain)
+	p, err := readers.Detect[BagDoc](1, lookup)
+	require.NoError(t, err)
+	require.Equal(t, mappingplan.PresenceAbsent, p)
+	p, err = readers.Detect[NotedDoc](1, lookup)
+	require.NoError(t, err)
+	require.Equal(t, mappingplan.PresenceAbsent, p)
 }

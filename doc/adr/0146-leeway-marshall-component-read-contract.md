@@ -354,6 +354,16 @@ for the edit-policy tiers.
 
 ## Updates
 
+### 2026-10-12 — a tuple slot on a shared section counts what it claims
+
+D1's "unbounded for a tuple-owned section" assumed the tuple's section held
+nothing else. ADR-0326 §SD4 lets kinds share a tuple's section, so `Detect`,
+`DetectContract` and `ReadComponent` now count and decode only the attributes
+a tuple slot claims: a dynamic tuple those carrying a membership on one of
+its channels (`Slot.TupleChannels`), a static nested section those carrying
+its membership. On a section the tuple has to itself the count is unchanged.
+`Unmarshal` keeps ADR-0103's rule that a tuple owns its section.
+
 ### 2026-08-15 — the Context's collision table is a pre-D4 measurement
 
 The three-row table in the Context ("Measured against a row carrying two

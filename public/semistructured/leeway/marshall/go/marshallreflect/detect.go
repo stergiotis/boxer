@@ -46,7 +46,7 @@ func Contract[T any]() (c mappingplan.ReadContract, err error) {
 // only whether the row's attribute layout matches T's contract.
 func (inst *SectionReaders) Detect[T any](i int, lookup LookupI, opts ...ReadOption) (p mappingplan.PresenceE, err error) {
 	defer recoverContract(&err)
-	counts, c, err := slotCounts[T](inst, i, lookup, buildReadOptions(opts))
+	counts, c, _, err := slotCounts[T](inst, i, lookup, buildReadOptions(opts))
 	if err != nil {
 		return
 	}
@@ -109,7 +109,7 @@ func DetectAll[T any](readers *SectionReaders, lookup LookupI, opts ...ReadOptio
 // slotCounts tallies, for row i, how many attributes each of T's slots carries.
 // The tally is keyed by slot index so a slot with an empty membership name (a
 // tuple-owned section) stays distinguishable from a named one.
-func slotCounts[T any](readers *SectionReaders, i int, lookup LookupI, ro readOptions) (counts map[int]int, c mappingplan.ReadContract, err error) {
+func slotCounts[T any](readers *SectionReaders, i int, lookup LookupI, ro readOptions) (counts map[int]int, c mappingplan.ReadContract, ids map[int]uint64, err error) {
 	if lookup == nil {
 		lookup = NoLookup{}
 	}
@@ -125,7 +125,10 @@ func slotCounts[T any](readers *SectionReaders, i int, lookup LookupI, ro readOp
 		return
 	}
 	c = r.contract
-	counts, err = countSlots(readers, i, lookup, c, ro)
+	if ids, err = resolveSlotIDs(lookup, c); err != nil {
+		return
+	}
+	counts, err = countSlotsWithIDs(readers, i, c, ids, ro)
 	return
 }
 
@@ -167,14 +170,14 @@ func countSlots(readers *SectionReaders, i int, lookup LookupI, c mappingplan.Re
 	return countSlotsWithIDs(readers, i, c, ids, ro)
 }
 
-// resolveSlotIDs resolves the ref-channel membership ids the contract's slots
-// match attributes by. A slot on a verbatim channel matches by literal bytes
-// and needs none; a tuple-owned slot matches nothing (every attribute in its
-// section is its own).
+// resolveSlotIDs resolves the membership ids the contract's slots match
+// attributes by (slotNeedsID). A slot on a verbatim channel matches by
+// literal bytes and needs none, nor does a dynamic tuple, which claims by
+// channel.
 func resolveSlotIDs(lookup LookupI, c mappingplan.ReadContract) (ids map[int]uint64, err error) {
 	ids = make(map[int]uint64, len(c.Slots))
 	for si, s := range c.Slots {
-		if s.OwnsSection || s.Membership == "" || s.Channel.UsesCarrier() || !s.Channel.NeedsKindVar() {
+		if !slotNeedsID(s) {
 			continue
 		}
 		var id uint64
@@ -199,17 +202,21 @@ func countSlotsWithIDs(readers *SectionReaders, i int, c mappingplan.ReadContrac
 			return
 		}
 		attrs := reflect.ValueOf(sr.attrs)
-		n := mustCall(attrs, "GetNumberOfAttributes", reflect.ValueOf(entityIdx(i)))[0].Int()
-		if s.OwnsSection || s.Channel.UsesCarrier() {
-			// Every attribute in the section belongs to this slot: tuple
-			// exclusivity (ADR-0103) for the first, and for the second the
+		membs := reflect.ValueOf(sr.membs)
+		if s.OwnsSection {
+			// A tuple counts the attributes it claims, so a section other
+			// kinds share does not inflate it (ADR-0326 §SD4).
+			counts[si] = newTupleClaim(s, ids[si]).count(attrs, membs, i)
+			continue
+		}
+		if s.Channel.UsesCarrier() {
+			// Every attribute in the section belongs to this slot: the
 			// one-membership-per-carrier-section rule resolveCarriers enforces
 			// — a carrier channel's identity is per-row data, so there is no
 			// schema-side name to match it against (ADR-0072's per-row identity).
-			counts[si] = int(n)
+			counts[si] = int(mustCall(attrs, "GetNumberOfAttributes", reflect.ValueOf(entityIdx(i)))[0].Int())
 			continue
 		}
-		membs := reflect.ValueOf(sr.membs)
 		embedsName := s.Channel.EmbedsLiteralName()
 		// The same role filter the decode uses. Detection and decode must agree
 		// about which memberships select, or a row could detect Exact and then
@@ -252,7 +259,7 @@ func (inst *SectionReaders) ReadComponent[T any](i int, lookup LookupI, opts ...
 	if lookup == nil {
 		lookup = NoLookup{}
 	}
-	counts, c, err := slotCounts[T](inst, i, lookup, ro)
+	counts, c, ids, err := slotCounts[T](inst, i, lookup, ro)
 	if err != nil {
 		return
 	}
@@ -273,6 +280,8 @@ func (inst *SectionReaders) ReadComponent[T any](i int, lookup LookupI, opts ...
 	if err != nil {
 		return
 	}
+	// The decode claims the tuple attributes the counts did.
+	ro.tupleClaims = tupleClaims(c, ids)
 	rowVal, err := unmarshalRow(rowType, r.plan, r.groups, inst, i, membIDs, r.contract, ro)
 	if err != nil {
 		return

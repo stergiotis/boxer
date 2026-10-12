@@ -1,6 +1,7 @@
 package mappingplan
 
 import (
+	"slices"
 	"strconv"
 	"strings"
 
@@ -92,8 +93,15 @@ type Slot struct {
 	// OwnsSection marks a slot whose section belongs to it exclusively — a
 	// tuple-family section, which PlanBuilder.Finish already forbids any other
 	// field from targeting. Every attribute in the section belongs to this
-	// slot, so a reader counts attributes rather than matching memberships.
+	// slot, so a kind-homogeneous reader counts attributes rather than
+	// matching memberships. A reader of a section other kinds share claims
+	// instead (ADR-0326 §SD4): a static nested section the attributes
+	// carrying Membership, a dynamic tuple those carrying a membership on
+	// one of TupleChannels.
 	OwnsSection bool
+	// TupleChannels are the channels a dynamic tuple's elements carry their
+	// memberships on, in declaration order. Empty for every other slot.
+	TupleChannels []MembershipChannel
 	// GoFields names the DTO fields projecting from this slot, in Plan order.
 	// Diagnostics only — a slot is identified by (Section, Membership).
 	GoFields []string
@@ -290,15 +298,24 @@ func deriveSectionSlots(plan *Plan, section string, isTuple, isDynamic bool, car
 		default: // Many — one attribute per element.
 			s.MinAttrs, s.MaxAttrs = 0, ArityUnbounded
 		}
-		if !isDynamic {
-			// A STATIC nested section carries one membership from the section
-			// tag, resolved like a flat section; it still owns the section.
-			for i := range plan.Fields {
-				if plan.Fields[i].LWSection == section {
-					s.Membership = plan.Fields[i].LWMembership
-					break
+		for i := range plan.Fields {
+			f := &plan.Fields[i]
+			if f.LWSection != section {
+				continue
+			}
+			if !isDynamic {
+				// A STATIC nested section carries one membership from the
+				// section tag, resolved like a flat section; it still owns
+				// the section.
+				s.Membership = f.LWMembership
+				break
+			}
+			for _, m := range f.TupleMemberships {
+				if !slices.Contains(s.TupleChannels, m.Channel) {
+					s.TupleChannels = append(s.TupleChannels, m.Channel)
 				}
 			}
+			break
 		}
 		out = append(out, s)
 		return

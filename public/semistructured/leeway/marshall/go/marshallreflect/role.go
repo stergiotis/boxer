@@ -45,6 +45,10 @@ type ReadOption func(*readOptions)
 type readOptions struct {
 	classifier     membershiprole.ClassifierI
 	sectionAspects func(section string) useaspects.AspectSet
+	// tupleClaims, keyed by section, makes a tuple section decode only the
+	// attributes it claims (ADR-0326 §SD4). ReadComponent sets it; nil keeps
+	// ADR-0103's rule that a tuple owns its section.
+	tupleClaims map[string]tupleClaim
 }
 
 // WithRoleClassifier makes selection role-filtered: a membership the classifier
