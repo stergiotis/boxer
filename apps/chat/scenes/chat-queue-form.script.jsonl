@@ -1,0 +1,4 @@
+# The scripted model of chat-queue-form.scene.md: ask_user with a form of two
+# questions, the second a multiple choice, then the answer.
+{"tool":"ask_user","args":{"title":"Asking about the layer","questions":[{"question":"Threshold on which speed?","header":"Speed","options":[{"label":"10 m wind","description":"the mean at 10 m"},{"label":"gusts"}]},{"question":"Which layers beside it?","header":"Layers","multi_select":true,"options":[{"label":"waves"},{"label":"rain"},{"label":"pressure"}]}]}}
+{"content":"Drawing the layer with what you chose."}

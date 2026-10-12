@@ -17,15 +17,15 @@ type questionCards struct {
 	q       *attention.Questions
 	display func(app.AppIdT) string
 	raise   func(instance uint64)
-	// choice is the option picked in each open card, -1 for none.
-	choice map[string]int
+	// picked are the options picked in each open card, per question.
+	picked map[string][][]bool
 }
 
 var _ CardSourceI = (*questionCards)(nil)
 
 func (inst *questionCards) OwnsCard(key string) bool { return attention.OwnsItem(key) }
 
-func (inst *questionCards) ForgetCard(key string) { delete(inst.choice, key) }
+func (inst *questionCards) ForgetCard(key string) { delete(inst.picked, key) }
 
 func (inst *questionCards) RenderCard(key string, ids *c.WidgetIdStack) (decided bool) {
 	q, from, instance, ok := inst.q.Lookup(key)
@@ -50,52 +50,92 @@ func (inst *questionCards) RenderCard(key string, ids *c.WidgetIdStack) (decided
 	if q.Tainted {
 		c.Label("This conversation has read untrusted content: what the model writes may have been steered by it.").Wrap().Send()
 	}
-	for range c.Frame(ids.PrepareStr("attention-q-frame-" + key)).KeepIter() {
-		if q.Header != "" {
-			for rt := range c.RichTextLabel(q.Header) {
-				rt.Weak().Italics()
+	form := q.Form()
+	quick := q.Quick()
+	picked := inst.pickedOf(key, form)
+	for qi, fq := range form {
+		for range c.Frame(ids.PrepareStr("attention-q-frame-" + key + "-" + strconv.Itoa(qi))).KeepIter() {
+			if fq.Header != "" {
+				for rt := range c.RichTextLabel(fq.Header) {
+					rt.Weak().Italics()
+				}
 			}
-		}
-		for rt := range c.RichTextLabel(q.Text) {
-			rt.Italics()
-		}
-		if q.Quick() {
-			pick, has := inst.choice[key]
-			if !has {
-				pick = -1
+			for rt := range c.RichTextLabel(fq.Text) {
+				rt.Italics()
 			}
-			for i, o := range q.Options {
+			if !quick {
+				continue
+			}
+			for i, o := range fq.Options {
 				text := o.Label
 				if o.Description != "" {
 					text += " — " + o.Description
 				}
-				clicked := pick == i
-				if c.RadioButton(ids.PrepareStr("attention-q-opt-"+key+"-"+strconv.Itoa(i)), c.Atoms().Text(text).Keep(), pick == i).SendRespVal(&clicked).HasPrimaryClicked() {
-					pick = i
+				id := ids.PrepareStr("attention-q-opt-" + key + "-" + strconv.Itoa(qi) + "-" + strconv.Itoa(i))
+				if fq.Multi {
+					// Bound to the pick itself: the value comes back at the
+					// next sync, into the variable given here, so it must
+					// outlive the frame.
+					c.Checkbox(id, picked[qi][i], text).SendRespVal(&picked[qi][i])
+					continue
+				}
+				clicked := picked[qi][i]
+				if c.RadioButton(id, c.Atoms().Text(text).Keep(), picked[qi][i]).SendRespVal(&clicked).HasPrimaryClicked() {
+					for j := range picked[qi] {
+						picked[qi][j] = j == i
+					}
 				}
 			}
-			if inst.choice == nil {
-				inst.choice = make(map[string]int, 4)
-			}
-			inst.choice[key] = pick
 		}
 	}
-	if !q.Quick() {
+	if !quick {
 		c.Label("This form is answered in its window.").Wrap().Send()
 	}
 	for range c.HorizontalTop().KeepIter() {
-		if q.Quick() {
-			pick := inst.choice[key]
-			if c.Button(ids.PrepareStr("attention-q-answer-"+key), c.Atoms().Text("Answer").Keep()).Kind(c.ButtonKindPrimary).SendResp().HasPrimaryClicked() && pick >= 0 {
-				decided = inst.q.Decide(key, false, pick)
+		if quick {
+			choices := choicesOf(picked)
+			ready := q.ValidChoices(choices)
+			for range c.EnabledUi(ready).KeepIter() {
+				if c.Button(ids.PrepareStr("attention-q-answer-"+key), c.Atoms().Text("Answer").Keep()).Kind(c.ButtonKindPrimary).SendResp().HasPrimaryClicked() && ready {
+					decided = inst.q.Decide(key, false, choices)
+				}
 			}
 			if c.Button(ids.PrepareStr("attention-q-skip-"+key), c.Atoms().Text("Skip").Keep()).SendResp().HasPrimaryClicked() {
-				decided = inst.q.Decide(key, true, 0)
+				decided = inst.q.Decide(key, true, nil)
 			}
 		}
 		if inst.raise != nil && instance != 0 {
 			if c.Button(ids.PrepareStr("attention-q-open-"+key), c.Atoms().Text("Open").Keep()).SendResp().HasPrimaryClicked() {
 				inst.raise(instance)
+			}
+		}
+	}
+	return
+}
+
+// pickedOf is the card's picks, shaped to its form.
+func (inst *questionCards) pickedOf(key string, form []attention.FormQuestion) (picked [][]bool) {
+	if inst.picked == nil {
+		inst.picked = make(map[string][][]bool, 4)
+	}
+	picked = inst.picked[key]
+	if len(picked) != len(form) {
+		picked = make([][]bool, len(form))
+		for i, fq := range form {
+			picked[i] = make([]bool, len(fq.Options))
+		}
+		inst.picked[key] = picked
+	}
+	return
+}
+
+// choicesOf is the picks as the indices Decide takes.
+func choicesOf(picked [][]bool) (choices [][]int) {
+	choices = make([][]int, len(picked))
+	for qi, row := range picked {
+		for i, on := range row {
+			if on {
+				choices[qi] = append(choices[qi], i)
 			}
 		}
 	}

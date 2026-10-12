@@ -9,8 +9,8 @@ import (
 )
 
 // A question the model asks also waits in the host's queue (ADR-0324 §SD1,
-// §SD5, proposed), so the person sees it from any window and answers a small
-// one in its card. The form in the window stays; the first answer wins.
+// §SD5), so the person sees it from any window and answers a form of
+// choices in its card. The form in the window stays; the first answer wins.
 
 // hostQueueI is the host's queue as the asker uses it.
 type hostQueueI interface {
@@ -45,15 +45,20 @@ type hostAsk struct {
 // hostPollInterval is how often the asker reads the host's answer.
 const hostPollInterval = 250 * time.Millisecond
 
-// questionOf is qs as the host's card shows it: the first question, and how
-// many more the form holds.
+// questionOf is qs as the host's card shows it: the whole form, its first
+// question in the Question's own fields.
 func questionOf(qs []askQuestion, via hostAsk) (q attention.Question) {
-	q = attention.Question{Kind: via.kind, Conversation: via.conversation, Title: via.title, Tainted: via.tainted, Note: via.note, More: len(qs) - 1}
-	if len(qs) > 0 {
-		q.Header, q.Text, q.Multi = qs[0].Header, qs[0].Question, qs[0].MultiSelect
-		for _, o := range qs[0].Options {
-			q.Options = append(q.Options, attention.QuestionOption{Label: o.Label, Description: o.Description})
+	q = attention.Question{Kind: via.kind, Conversation: via.conversation, Title: via.title, Tainted: via.tainted, Note: via.note}
+	for i, aq := range qs {
+		fq := attention.FormQuestion{Header: aq.Header, Text: aq.Question, Multi: aq.MultiSelect}
+		for _, o := range aq.Options {
+			fq.Options = append(fq.Options, attention.QuestionOption{Label: o.Label, Description: o.Description})
 		}
+		if i == 0 {
+			q.Header, q.Text, q.Options, q.Multi = fq.Header, fq.Text, fq.Options, fq.Multi
+			continue
+		}
+		q.Rest = append(q.Rest, fq)
 	}
 	return
 }
@@ -65,11 +70,20 @@ func replyOf(qs []askQuestion, a attention.Answer) (r askReply, ok bool) {
 	case attention.PhaseSkipped:
 		return askReply{Skipped: true, Then: skippedThen}, true
 	case attention.PhaseAnswered:
-		if len(qs) == 0 || a.Choice < 0 || a.Choice >= len(qs[0].Options) {
+		if len(qs) == 0 || len(a.Choices) != len(qs) {
 			return
 		}
-		q := qs[0]
-		return askReply{Answers: []askAnswer{{Question: q.Question, Chosen: []askChoice{{Label: q.Options[a.Choice].Label}}}}}, true
+		for i, q := range qs {
+			ans := askAnswer{Question: q.Question}
+			for _, c := range a.Choices[i] {
+				if c < 0 || c >= len(q.Options) {
+					return askReply{}, false
+				}
+				ans.Chosen = append(ans.Chosen, askChoice{Label: q.Options[c].Label})
+			}
+			r.Answers = append(r.Answers, ans)
+		}
+		return r, true
 	}
 	return
 }

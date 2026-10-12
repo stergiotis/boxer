@@ -292,6 +292,18 @@ and F1, F3, F6, F7 and F10 have browser meanings a page cannot always
 override. A chat window's own unseen level is not among what F8 reaches:
 host chrome does not read it.
 
+### 2026-10-12 — a whole form in the card
+
+SD5's bound widens from one single-choice question to a form: up to four
+questions, as `ask_user` allows, each a single or a multiple choice among
+two to six options. The card shows every question, radio buttons for a
+single choice and check boxes for a multiple; Answer is enabled once every
+question has a choice, and the host checks the choices against the form
+before it settles the question. A form the host had to cut to its bounds,
+or one that needs the person's own words, still offers only Open. What the
+card is otherwise — host-written heading, the model's text drawn as the
+model's, Answer, Skip and Open only — is unchanged.
+
 ## References
 
 - [Juggling — one operator, many streams](../adr-background-work/juggling-many-agent-streams.md)

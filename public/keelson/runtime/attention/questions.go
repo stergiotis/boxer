@@ -39,6 +39,9 @@ const (
 	MaxLabelRunes  = 80
 	MaxOptions     = 6
 	MinQuickChoice = 2
+	// MaxFormQuestions is how many questions a form holds, as ask_user
+	// allows; a card answers them all.
+	MaxFormQuestions = 4
 )
 
 // ClientCaps is what an app declares in Manifest.Caps to post questions
@@ -56,9 +59,17 @@ type QuestionOption struct {
 	Description string `json:"description,omitempty"`
 }
 
-// Question is what an app posts: the first question of a model's form, and
-// how many more the form holds. Everything but Kind, Conversation, Title and
-// Tainted is the model's text.
+// FormQuestion is one question of a form after the first.
+type FormQuestion struct {
+	Header  string           `json:"header,omitempty"`
+	Text    string           `json:"text"`
+	Options []QuestionOption `json:"options,omitempty"`
+	Multi   bool             `json:"multi,omitempty"`
+}
+
+// Question is what an app posts: a model's form, its first question here
+// and the others in Rest. Everything but Kind, Conversation, Title, Note,
+// Truncated and Tainted is the model's text.
 type Question struct {
 	// Kind is KindQuestion or KindExitApproval.
 	Kind         string `json:"kind"`
@@ -69,8 +80,11 @@ type Question struct {
 	Text    string           `json:"text"`
 	Options []QuestionOption `json:"options,omitempty"`
 	Multi   bool             `json:"multi,omitempty"`
-	// More is how many further questions the form holds.
-	More int `json:"more,omitempty"`
+	// Rest are the form's further questions.
+	Rest []FormQuestion `json:"rest,omitempty"`
+	// Truncated says the host cut the form to its bounds; the card then
+	// opens the window, where the whole form is.
+	Truncated bool `json:"truncated,omitempty"`
 	// Note is whether an answer needs the person's own words, which a card
 	// does not take.
 	Note bool `json:"note,omitempty"`
@@ -78,10 +92,51 @@ type Question struct {
 	Tainted bool `json:"tainted,omitempty"`
 }
 
-// Quick reports whether a card answers q in place: one question, a single
-// choice among two to six options (ADR-0324 §SD5).
+// Form is the form's questions in order, the first included.
+func (inst Question) Form() (qs []FormQuestion) {
+	qs = make([]FormQuestion, 0, 1+len(inst.Rest))
+	qs = append(qs, FormQuestion{Header: inst.Header, Text: inst.Text, Options: inst.Options, Multi: inst.Multi})
+	return append(qs, inst.Rest...)
+}
+
+// Quick reports whether a card answers q in place (ADR-0324 §SD5, update of
+// 2026-10-12): up to MaxFormQuestions questions, each a single or multiple
+// choice among two to six options, none needing the person's own words, and
+// nothing cut by the host.
 func (inst Question) Quick() bool {
-	return inst.More == 0 && !inst.Multi && !inst.Note && len(inst.Options) >= MinQuickChoice && len(inst.Options) <= MaxOptions
+	if inst.Note || inst.Truncated || 1+len(inst.Rest) > MaxFormQuestions {
+		return false
+	}
+	for _, fq := range inst.Form() {
+		if len(fq.Options) < MinQuickChoice || len(fq.Options) > MaxOptions {
+			return false
+		}
+	}
+	return true
+}
+
+// ValidChoices reports whether choices answer q: one entry per question,
+// each naming distinct options in range, one for a single choice and at
+// least one for a multiple.
+func (inst Question) ValidChoices(choices [][]int) bool {
+	form := inst.Form()
+	if len(choices) != len(form) {
+		return false
+	}
+	for i, fq := range form {
+		cs := choices[i]
+		if len(cs) == 0 || (!fq.Multi && len(cs) != 1) {
+			return false
+		}
+		seen := make(map[int]bool, len(cs))
+		for _, c := range cs {
+			if c < 0 || c >= len(fq.Options) || seen[c] {
+				return false
+			}
+			seen[c] = true
+		}
+	}
+	return true
 }
 
 // PhaseE is where a posted question stands.
@@ -115,11 +170,11 @@ func (inst PhaseE) String() (s string) {
 	return
 }
 
-// Answer is a question's state as its app polls it. Choice is the chosen
-// option's index when answered.
+// Answer is a question's state as its app polls it. Choices are, when
+// answered, the chosen options' indices per question of the form.
 type Answer struct {
-	Phase  PhaseE `json:"phase"`
-	Choice int    `json:"choice"`
+	Phase   PhaseE  `json:"phase"`
+	Choices [][]int `json:"choices,omitempty"`
 }
 
 type posted struct {
@@ -185,12 +240,15 @@ func (inst *Questions) Post(sender app.AppIdT, instance uint64, q Question, now 
 	if q.Text == "" {
 		return "", "a question needs its text"
 	}
-	q.Text, q.Header, q.Title = clip(q.Text, MaxTextRunes), clip(q.Header, MaxLabelRunes), clip(q.Title, MaxLabelRunes)
-	if len(q.Options) > MaxOptions {
-		q.Options, q.More = q.Options[:MaxOptions], max(q.More, 1)
+	q.Title = clip(q.Title, MaxLabelRunes)
+	q.Text, q.Header, q.Options = clipQuestion(q.Text, q.Header, q.Options, &q.Truncated)
+	if len(q.Rest) > MaxFormQuestions-1 {
+		q.Rest, q.Truncated = q.Rest[:MaxFormQuestions-1], true
 	}
-	for i := range q.Options {
-		q.Options[i].Label, q.Options[i].Description = clip(q.Options[i].Label, MaxLabelRunes), clip(q.Options[i].Description, MaxLabelRunes)
+	q.Rest = append([]FormQuestion(nil), q.Rest...)
+	for i := range q.Rest {
+		fq := &q.Rest[i]
+		fq.Text, fq.Header, fq.Options = clipQuestion(fq.Text, fq.Header, fq.Options, &q.Truncated)
 	}
 	stream := q.Conversation
 	if stream == "" {
@@ -205,6 +263,19 @@ func (inst *Questions) Post(sender app.AppIdT, instance uint64, q Question, now 
 	inst.items[key] = &posted{q: q, app: sender, instance: instance, created: now, answer: Answer{Phase: PhaseWaiting}}
 	inst.order = append(inst.order, key)
 	return key, ""
+}
+
+// clipQuestion bounds one question's text and options; cutting options sets
+// truncated.
+func clipQuestion(text string, header string, options []QuestionOption, truncated *bool) (string, string, []QuestionOption) {
+	if len(options) > MaxOptions {
+		options, *truncated = options[:MaxOptions], true
+	}
+	options = append([]QuestionOption(nil), options...)
+	for i := range options {
+		options[i].Label, options[i].Description = clip(options[i].Label, MaxLabelRunes), clip(options[i].Description, MaxLabelRunes)
+	}
+	return clip(text, MaxTextRunes), clip(header, MaxLabelRunes), options
 }
 
 // Status is the question's state for its sender; a status read of a settled
@@ -258,9 +329,9 @@ func (inst *Questions) Lookup(itemKey string) (q Question, app app.AppIdT, insta
 }
 
 // Decide settles a waiting question from its card: an answer with the
-// chosen option, or a skip. The first answer wins; ok is false when the
-// question is no longer waiting.
-func (inst *Questions) Decide(itemKey string, skip bool, choice int) (ok bool) {
+// chosen options per question, or a skip. The first answer wins; ok is
+// false when the question is no longer waiting or choices do not answer it.
+func (inst *Questions) Decide(itemKey string, skip bool, choices [][]int) (ok bool) {
 	key, isQ := cutPrefix(itemKey, questionKeyPrefix)
 	if !isQ {
 		return
@@ -275,10 +346,14 @@ func (inst *Questions) Decide(itemKey string, skip bool, choice int) (ok bool) {
 		p.answer = Answer{Phase: PhaseSkipped}
 		return true
 	}
-	if choice < 0 || choice >= len(p.q.Options) || !p.q.Quick() {
+	if !p.q.Quick() || !p.q.ValidChoices(choices) {
 		return
 	}
-	p.answer = Answer{Phase: PhaseAnswered, Choice: choice}
+	kept := make([][]int, len(choices))
+	for i, cs := range choices {
+		kept[i] = append([]int(nil), cs...)
+	}
+	p.answer = Answer{Phase: PhaseAnswered, Choices: kept}
 	return true
 }
 

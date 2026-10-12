@@ -19,10 +19,18 @@ func TestQuickReplyBounds(t *testing.T) {
 	q := quickQuestion()
 	assert.True(t, q.Quick())
 	q.Multi = true
-	assert.False(t, q.Quick(), "multi-select opens the window")
+	assert.True(t, q.Quick(), "a multiple choice is answered in the card")
 	q = quickQuestion()
-	q.More = 1
-	assert.False(t, q.Quick(), "a form of several questions opens the window")
+	q.Rest = []FormQuestion{{Text: "Colour?", Options: []QuestionOption{{Label: "red"}, {Label: "blue"}}, Multi: true}}
+	assert.True(t, q.Quick(), "a form of several questions is answered in the card")
+	q.Rest = append(q.Rest, q.Rest[0], q.Rest[0], q.Rest[0])
+	assert.False(t, q.Quick(), "more questions than ask_user allows open the window")
+	q = quickQuestion()
+	q.Rest = []FormQuestion{{Text: "Why?", Options: []QuestionOption{{Label: "only one"}}}}
+	assert.False(t, q.Quick(), "every question of the form is bounded")
+	q = quickQuestion()
+	q.Truncated = true
+	assert.False(t, q.Quick(), "a form the host cut opens the window")
 	q = quickQuestion()
 	q.Options = q.Options[:1]
 	assert.False(t, q.Quick())
@@ -46,12 +54,37 @@ func TestAPostedQuestionIsAnItemAndTheFirstAnswerWins(t *testing.T) {
 
 	assert.Equal(t, PhaseGone, qs.Status("chat", 4, key).Phase, "another window cannot read it")
 	assert.Equal(t, PhaseWaiting, qs.Status("chat", 3, key).Phase)
-	require.True(t, qs.Decide(items[0].Key, false, 1))
-	assert.False(t, qs.Decide(items[0].Key, true, 0), "the first answer wins")
+	require.True(t, qs.Decide(items[0].Key, false, [][]int{{1}}))
+	assert.False(t, qs.Decide(items[0].Key, true, nil), "the first answer wins")
 	a := qs.Status("chat", 3, key)
 	assert.Equal(t, PhaseAnswered, a.Phase)
-	assert.Equal(t, 1, a.Choice)
+	assert.Equal(t, [][]int{{1}}, a.Choices)
 	assert.Equal(t, PhaseGone, qs.Status("chat", 3, key).Phase, "a settled question is forgotten once read")
+}
+
+// Choices answer every question of the form: one for a single choice, at
+// least one for a multiple, distinct and in range.
+func TestAFormIsAnsweredWhole(t *testing.T) {
+	q := quickQuestion()
+	q.Rest = []FormQuestion{{Text: "Layers?", Options: []QuestionOption{{Label: "wind"}, {Label: "waves"}, {Label: "rain"}}, Multi: true}}
+	for _, tc := range []struct {
+		choices [][]int
+		ok      bool
+	}{
+		{[][]int{{0}, {0, 2}}, true},
+		{[][]int{{0}}, false},
+		{[][]int{{0, 1}, {0}}, false},
+		{[][]int{{0}, {}}, false},
+		{[][]int{{0}, {1, 1}}, false},
+		{[][]int{{0}, {3}}, false},
+	} {
+		assert.Equal(t, tc.ok, q.ValidChoices(tc.choices), "%v", tc.choices)
+	}
+	qs := NewQuestions(nil)
+	key, _ := qs.Post("chat", 3, q, t0)
+	assert.False(t, qs.Decide(questionKeyPrefix+key, false, [][]int{{0}}), "half a form is not an answer")
+	require.True(t, qs.Decide(questionKeyPrefix+key, false, [][]int{{1}, {0, 2}}))
+	assert.Equal(t, [][]int{{1}, {0, 2}}, qs.Status("chat", 3, key).Choices)
 }
 
 func TestAWithdrawnQuestionLeavesTheQueue(t *testing.T) {
@@ -83,6 +116,7 @@ func TestAPostedQuestionIsClipped(t *testing.T) {
 		got, _, _, ok := qs.Lookup(it.Key)
 		require.True(t, ok)
 		assert.Len(t, got.Options, MaxOptions)
+		assert.True(t, got.Truncated)
 		assert.False(t, got.Quick(), "clipped options are not answered in place")
 	}
 }
@@ -101,7 +135,7 @@ func TestQuestionsOverTheBus(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, PhaseWaiting, a.Phase)
 	for it := range qs.WaitingItems() {
-		require.True(t, qs.Decide(it.Key, true, 0))
+		require.True(t, qs.Decide(it.Key, true, nil))
 	}
 	a, err = Status(cli, key)
 	require.NoError(t, err)

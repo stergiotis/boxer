@@ -67,7 +67,7 @@ func TestAQuestionAnsweredInTheHostsCard(t *testing.T) {
 		done <- r
 	}()
 	require.Eventually(t, func() bool { return a.current() != nil }, time.Second, 5*time.Millisecond, "the window shows it too")
-	q.decide(attention.Answer{Phase: attention.PhaseAnswered, Choice: 1})
+	q.decide(attention.Answer{Phase: attention.PhaseAnswered, Choices: [][]int{{1}}})
 	r := <-done
 	require.Len(t, r.Answers, 1)
 	assert.Equal(t, "gusts", r.Answers[0].Chosen[0].Label)
@@ -124,4 +124,21 @@ func TestAPostedQuestionCarriesTheConversationsTitle(t *testing.T) {
 	inst.coord = newCoordinator(nil, nil, inst.conv.id)
 	inst.storeTitle()
 	assert.Equal(t, "Wind field over the Aegean", inst.coord.hostAsk(attention.KindQuestion).title, "a new coordinator is told too")
+}
+
+// A form of several questions, one of them a multiple choice, is posted
+// whole and answered whole.
+func TestAFormAnsweredInTheHostsCard(t *testing.T) {
+	qs := append(twoOptions(), askQuestion{Question: "Which layers?", MultiSelect: true,
+		Options: []askOption{{Label: "wind"}, {Label: "waves"}, {Label: "rain"}}})
+	posted := questionOf(qs, asQuestion)
+	require.Len(t, posted.Rest, 1)
+	assert.True(t, posted.Quick())
+	r, ok := replyOf(qs, attention.Answer{Phase: attention.PhaseAnswered, Choices: [][]int{{0}, {0, 2}}})
+	require.True(t, ok)
+	require.Len(t, r.Answers, 2)
+	assert.Equal(t, []askChoice{{Label: "10 m wind"}}, r.Answers[0].Chosen)
+	assert.Equal(t, []askChoice{{Label: "wind"}, {Label: "rain"}}, r.Answers[1].Chosen)
+	_, ok = replyOf(qs, attention.Answer{Phase: attention.PhaseAnswered, Choices: [][]int{{0}}})
+	assert.False(t, ok, "half a form is not an answer")
 }

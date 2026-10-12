@@ -549,6 +549,14 @@ first, with what each window's turn is doing, its colour and its pace, and
 Raise; then the open runs no window holds, which Resume continues; then the
 closed ones.
 
+### 2026-10-12 — a whole `ask_user` form in the host's card
+
+The host's card answers the whole form, not only a single choice
+(ADR-0324, update of the same date): up to four questions, single or
+multiple choice. The window's "or answer in your own words" field has no
+counterpart in the card; a form that needs the person's words, such as an
+exit approval's justification, is answered in the window only.
+
 ## References
 
 - [ADR-0264](./0264-retained-model-conversations-on-facts.md) — what the app sends and why it reads nothing back.
