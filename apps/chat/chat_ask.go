@@ -197,8 +197,7 @@ func (inst *coordinator) askUser(ctx context.Context, args map[string]any) (cont
 	if reason != "" {
 		return "error: " + reason, "ask_user: " + reason
 	}
-	_, tainted, _ := inst.state()
-	r, err := inst.ask.askVia(ctx, qs, hostAsk{kind: attention.KindQuestion, conversation: inst.conversation, tainted: tainted})
+	r, err := inst.ask.askVia(ctx, qs, inst.hostAsk(attention.KindQuestion))
 	if err != nil {
 		return "error: the question was withdrawn: " + err.Error(), "question withdrawn"
 	}

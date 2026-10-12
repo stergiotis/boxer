@@ -181,9 +181,12 @@ type App struct {
 	// and rosterAt is when it last began (chat_roster.go).
 	storage     app.StorageI
 	storedTitle map[string]string
-	roster      rosterExtra
-	rosterJob   bgjob.Runner[rosterExtra]
-	rosterAt    time.Time
+	// titled is the coordinator last handed the title, titledAs which.
+	titled    *coordinator
+	titledAs  string
+	roster    rosterExtra
+	rosterJob bgjob.Runner[rosterExtra]
+	rosterAt  time.Time
 }
 
 // pendingTurn is a turn in flight.

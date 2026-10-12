@@ -111,3 +111,17 @@ func TestAnExitApprovalOpensItsWindow(t *testing.T) {
 	q := questionOf(twoOptions(), hostAsk{kind: attention.KindExitApproval, note: true})
 	assert.False(t, q.Quick(), "a justification is the person's words")
 }
+
+func TestAPostedQuestionCarriesTheConversationsTitle(t *testing.T) {
+	inst := newApp()
+	inst.coord = newCoordinator(nil, nil, inst.conv.id)
+	inst.conv.title = "Wind field over the Aegean"
+	inst.storeTitle()
+	q := questionOf(twoOptions(), inst.coord.hostAsk(attention.KindQuestion))
+	assert.Equal(t, "Wind field over the Aegean", q.Title)
+	assert.Equal(t, inst.conv.id, q.Conversation)
+
+	inst.coord = newCoordinator(nil, nil, inst.conv.id)
+	inst.storeTitle()
+	assert.Equal(t, "Wind field over the Aegean", inst.coord.hostAsk(attention.KindQuestion).title, "a new coordinator is told too")
+}

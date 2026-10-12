@@ -113,11 +113,15 @@ type Fence struct {
 	Lang string
 	Role string
 	Text string
+	// Unclosed says the document ended inside the fence; Text is what
+	// followed its opening line.
+	Unclosed bool
 }
 
 // SplitDoc separates frontmatter, fences and prose. Fences open with three
 // backticks at the start of a line and close with a bare three-backtick line,
-// which is the applet book's rule too. It is exported for documents that
+// which is the applet book's rule too. A fence the document ends inside is
+// returned with Unclosed set. It is exported for documents that
 // share the scene document's shape.
 func SplitDoc(src []byte) (front []byte, fences []Fence, prose string) {
 	lines := strings.Split(string(src), "\n")
@@ -158,6 +162,10 @@ func SplitDoc(src []byte) (front []byte, fences []Fence, prose string) {
 		default:
 			text = append(text, line)
 		}
+	}
+	if cur != nil {
+		cur.Text, cur.Unclosed = strings.Join(body, "\n"), true
+		fences = append(fences, *cur)
 	}
 	return front, fences, strings.TrimSpace(strings.Join(text, "\n"))
 }
@@ -214,6 +222,10 @@ func ParseDoc(path string, src []byte) (doc *Doc, err error) {
 	}
 	for _, f := range fences {
 		switch {
+		case f.Unclosed:
+			// Read as prose, a trace fence left open would run nothing and
+			// pass.
+			return nil, eb.Build().Str("path", path).Str("fence", strings.TrimSpace(f.Lang+" "+f.Role)).Errorf("a fence is not closed by a bare ``` line")
 		case f.Lang == "sql" && f.Role == "" && doc.SQL == "":
 			doc.SQL = strings.TrimSpace(f.Text)
 		case f.Lang == "jsonl" && f.Role == "trace":

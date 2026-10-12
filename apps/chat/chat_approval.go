@@ -123,8 +123,9 @@ func (inst *coordinator) askExit(ctx context.Context, w *agentrun.Writer, turn s
 		if attempt > 0 {
 			q.Question = "A justification is required to send it. " + question
 		}
-		_, tainted, _ := inst.state()
-		r, aerr := inst.ask.askVia(ctx, []askQuestion{q}, hostAsk{kind: attention.KindExitApproval, conversation: inst.conversation, tainted: tainted, note: true})
+		via := inst.hostAsk(attention.KindExitApproval)
+		via.note = true
+		r, aerr := inst.ask.askVia(ctx, []askQuestion{q}, via)
 		if aerr != nil {
 			return a, aerr
 		}

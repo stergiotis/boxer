@@ -35,6 +35,7 @@ func (inst busQueue) withdraw(key string) { _ = attention.Withdraw(inst.bus, key
 type hostAsk struct {
 	kind         string
 	conversation string
+	title        string
 	tainted      bool
 	// note is whether an answer needs the person's words; its card only
 	// opens the window.
@@ -47,7 +48,7 @@ const hostPollInterval = 250 * time.Millisecond
 // questionOf is qs as the host's card shows it: the first question, and how
 // many more the form holds.
 func questionOf(qs []askQuestion, via hostAsk) (q attention.Question) {
-	q = attention.Question{Kind: via.kind, Conversation: via.conversation, Tainted: via.tainted, Note: via.note, More: len(qs) - 1}
+	q = attention.Question{Kind: via.kind, Conversation: via.conversation, Title: via.title, Tainted: via.tainted, Note: via.note, More: len(qs) - 1}
 	if len(qs) > 0 {
 		q.Header, q.Text, q.Multi = qs[0].Header, qs[0].Question, qs[0].MultiSelect
 		for _, o := range qs[0].Options {

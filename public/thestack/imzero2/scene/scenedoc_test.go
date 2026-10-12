@@ -63,6 +63,7 @@ func TestParseDocRejects(t *testing.T) {
 		"misspelt spec key": "---\nscene:\n  launch: play\n  sise: 10x10\n---\n",
 		"bad size":          "---\nscene:\n  launch: play\n  size: big\n---\n",
 		"bad trace":         "---\nscene:\n  launch: play\n---\n```jsonl trace\n{\"name\":\"Run\"}\n```\n",
+		"unclosed trace":    "---\nscene:\n  launch: play\n---\n```jsonl trace\n{\"do\":\"note\"}\n",
 		"two traces":        "---\nscene:\n  launch: play\n---\n```jsonl trace\n{\"do\":\"note\"}\n```\n```jsonl trace\n{\"do\":\"note\"}\n```\n",
 		"unknown tag":       "---\nscene:\n  launch: play\n  tags: [sluggish]\n---\n",
 		"slow and fast":     "---\nscene:\n  launch: play\n  tags: [slow, fast]\n---\n",

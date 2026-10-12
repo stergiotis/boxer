@@ -133,6 +133,9 @@ type coordinator struct {
 	// pix is the Pixels setting and what it holds: consents, a view waiting
 	// on the person, the turn's shown screenshots (ADR-0287). Guarded by mu.
 	pix pixelState
+	// title is the conversation's title, which the host's queue shows
+	// beside a question. Guarded by mu.
+	title string
 
 	mu sync.Mutex
 	// apps and questions are what the conversation offers the model, fixed
@@ -225,6 +228,23 @@ func (inst *coordinator) setOptions(ceiling agent.Ceiling, opTools bool) {
 	inst.mu.Lock()
 	inst.ceiling, inst.opTools = ceiling, opTools
 	inst.mu.Unlock()
+}
+
+// setTitle takes the conversation's title, for the questions it posts.
+func (inst *coordinator) setTitle(t string) {
+	inst.mu.Lock()
+	inst.title = t
+	inst.mu.Unlock()
+}
+
+// hostAsk is how the conversation's questions of kind show in the host's
+// queue.
+func (inst *coordinator) hostAsk(kind string) (via hostAsk) {
+	_, tainted, _ := inst.state()
+	inst.mu.Lock()
+	title := inst.title
+	inst.mu.Unlock()
+	return hostAsk{kind: kind, conversation: inst.conversation, title: title, tainted: tainted}
 }
 
 // setRounds takes the person's limit on a turn's rounds; the next turn

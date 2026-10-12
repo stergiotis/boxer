@@ -7,6 +7,7 @@ import (
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/trail"
+	"github.com/stergiotis/boxer/public/storage/recordstore/evidence"
 )
 
 // The rows the queue writes are within the audit event's bounds: a row
@@ -17,7 +18,8 @@ func TestAuditRowsValidate(t *testing.T) {
 		levelRow(Change{Conversation: "c1", Key: Key{Kind: KindQuestion}, Level: LevelCritical, Author: AuthorPerson}),
 		levelRow(Change{Key: Key{Kind: "asked", Effect: app.OperationEffectRun, App: "play"}, Author: AuthorPerson})}
 	for _, row := range rows {
-		row.PrincipalBy = trail.PrincipalByNone
+		// What the recorder fills at write.
+		row.PrincipalBy, row.OriginBy = trail.PrincipalByNone, evidence.OriginByHost.String()
 		assert.NoError(t, row.Validate(), row.Action)
 	}
 }

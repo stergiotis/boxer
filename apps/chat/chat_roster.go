@@ -142,11 +142,19 @@ func buildRoster(runs []agentrun.Run, extra rosterExtra, chatApp string, here st
 // host reads.
 const titleStorePrefix = "title/"
 
-// storeTitle keeps the conversation's title once it changed. The render
-// goroutine calls it once per frame; a write happens only on a change.
+// storeTitle keeps the conversation's title once it changed, and hands it
+// to the coordinator for the questions it posts. The render goroutine calls
+// it once per frame; a write happens only on a change.
 func (inst *App) storeTitle() {
 	conv := inst.conv
-	if inst.storage == nil || !conv.started || conv.title == "" || conv.title == inst.storedTitle[conv.id] {
+	if conv.title == "" {
+		return
+	}
+	if inst.coord != nil && (inst.titled != inst.coord || inst.titledAs != conv.title) {
+		inst.coord.setTitle(conv.title)
+		inst.titled, inst.titledAs = inst.coord, conv.title
+	}
+	if inst.storage == nil || !conv.started || conv.title == inst.storedTitle[conv.id] {
 		return
 	}
 	if inst.storedTitle == nil {
