@@ -86,6 +86,13 @@ type State struct {
 	// reveals the grammar controls below it.
 	formOpen bool
 
+	// widthCtl is the width drag's binding target, which the client writes
+	// back at frame end — after the frame that read it, so it has to be a
+	// field rather than a local. widthSent is what went out last frame: a
+	// widthCtl that differs from it is the reader's drag.
+	widthCtl  uint64
+	widthSent uint64
+
 	summary canonicaltypesummary.State
 }
 

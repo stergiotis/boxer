@@ -161,7 +161,7 @@ func renderEditBody(ids *c.WidgetIdStack, m *Model, st *State) (changed bool) {
 	var formChanged bool
 	if st.formOpen {
 		c.AddSpace(styletokens.PaddingInner(styletokens.ActiveDensity()))
-		formChanged = renderForm(ids, m)
+		formChanged = renderForm(ids, m, st)
 	}
 
 	// Edge ownership: at most one side was edited this frame.
@@ -233,7 +233,7 @@ func renderFormToggle(ids *c.WidgetIdStack, st *State) {
 // renderForm draws the structured controls. Each control sits on the grammar
 // production for the current family, so only applicable modifiers are shown.
 // Returns whether any control changed this frame.
-func renderForm(ids *c.WidgetIdStack, m *Model) (changed bool) {
+func renderForm(ids *c.WidgetIdStack, m *Model, st *State) (changed bool) {
 	fam := familyOf(m.base)
 
 	// Family selector.
@@ -290,15 +290,18 @@ func renderForm(ids *c.WidgetIdStack, m *Model) (changed bool) {
 	if showWidth {
 		for range c.Horizontal().KeepIter() {
 			rowLabel("width")
-			w := uint64(m.width)
-			c.DragValueU64(ids.PrepareStr("width"), w).
+			if st.widthCtl != st.widthSent {
+				if nw := clampWidth(st.widthCtl); nw != m.width {
+					m.width = nw
+					changed = true
+				}
+			}
+			st.widthCtl = uint64(m.width)
+			c.DragValueU64(ids.PrepareStr("width"), st.widthCtl).
 				Speed(1).
 				Suffix(" bits").
-				SendRespVal(&w)
-			if nw := clampWidth(w); nw != m.width {
-				m.width = nw
-				changed = true
-			}
+				SendRespVal(&st.widthCtl)
+			st.widthSent = st.widthCtl
 		}
 	}
 
