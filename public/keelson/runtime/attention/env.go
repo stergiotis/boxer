@@ -29,3 +29,12 @@ var FloodPersonEnv = env.NewInt(env.Spec{
 	Description: "how many decisions all conversations together may ask of the person in ten minutes; the next is refused with a reason the model can act on; 0 does not bound",
 	Category:    env.CategoryDev,
 })
+
+// AwayIdleEnv is how long the host waits without input before it sets the
+// person Away (ADR-0328 §SD1).
+var AwayIdleEnv = env.NewDuration(env.Spec{
+	Name:        "BOXER_ATTENTION_AWAY_IDLE",
+	Default:     "10m",
+	Description: "how long the host waits without the person's input before it sets them Away: cards stop opening on their own and an away log is kept, shown when Away ends — at the next input; 0 never",
+	Category:    env.CategoryDev,
+})

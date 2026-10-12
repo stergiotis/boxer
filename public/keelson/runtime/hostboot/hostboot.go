@@ -1004,6 +1004,10 @@ func (rt *Runtime) bootAgent() {
 		})
 		rt.Attention.AddSource(svc, svc.Chrome())
 		rt.Host.SetCardsChrome(rt.Attention)
+		if p := cfg.Attention.Presence; p != nil {
+			// The person's input ends an Away set for idle time (ADR-0328).
+			rt.Host.SetInputListener(p.Input)
+		}
 		rt.Host.SetOpsListener(svc.Listener())
 	}
 	logger.Info().Bool("testGrants", cfg.TestGrants).Bool("durable", svc.Durable()).Msg("agent: service listening on runtime.agent.*")

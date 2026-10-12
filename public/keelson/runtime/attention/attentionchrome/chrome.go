@@ -88,6 +88,9 @@ func (inst *Chrome) refresh(now time.Time) {
 		return
 	}
 	inst.read = now
+	if inst.svc.Presence != nil {
+		inst.svc.Presence.Tick(now)
+	}
 	inst.entries, inst.shelved = inst.svc.Queue.Snapshot(now)
 	if inst.svc.Notices != nil {
 		inst.notices = inst.svc.Notices.List()
@@ -163,6 +166,7 @@ func (inst *Chrome) RenderControl(ids *c.WidgetIdStack) {
 		// Quieter than what waits: a count, after it.
 		label += "   " + icons.PhStar + " " + strconv.Itoa(n)
 	}
+	label = inst.statusPrefix() + label
 	// A button and a host window rather than a menu: the list closes when
 	// the person opens an item from it, which a menu here cannot be told.
 	if c.Button(ids.PrepareStr("attention-control"), c.Atoms().Text(label).Keep()).Frame(false).Selected(inst.listOpen).SendResp().HasPrimaryClicked() {
@@ -200,6 +204,8 @@ func (inst *Chrome) renderList(now time.Time, ids *c.WidgetIdStack) {
 				inst.listOpen = false
 			}
 		}
+		inst.renderStatus(ids)
+		c.Separator().Send()
 		for _, e := range inst.entries {
 			inst.renderRow(e, now, ids)
 		}
@@ -303,6 +309,11 @@ func (inst *Chrome) renderRow(e attention.Entry, now time.Time, ids *c.WidgetIdS
 				rt.Small()
 			}
 		}
+		if e.Escalated {
+			for rt := range c.RichTextLabel("waiting long") {
+				rt.Small()
+			}
+		}
 	}
 	for range c.HorizontalTop().KeepIter() {
 		if c.Button(ids.PrepareStr("attention-open-"+k), c.Atoms().Text("Open").Keep()).Small().SendResp().HasPrimaryClicked() {
@@ -354,6 +365,7 @@ func (inst *Chrome) RenderCards(ids *c.WidgetIdStack) {
 	inst.refresh(now)
 	inst.renderList(now, ids)
 	inst.renderLevels(ids)
+	inst.renderAwayLog(now, ids)
 	raise := inst.raise
 	inst.raise = inst.raise[:0]
 	for _, key := range slices.Clone(inst.open) {
@@ -376,7 +388,7 @@ func (inst *Chrome) RenderCards(ids *c.WidgetIdStack) {
 		if slices.Contains(raise, key) {
 			c.MoveWindowToTop(wf.Handle())
 		}
-		closeIt := false
+		closeIt, decided := false, false
 		for range wf.KeepIter() {
 			c.UiSetMinWidth(cardWidth)
 			c.UiSetMaxWidth(cardWidth)
@@ -399,7 +411,7 @@ func (inst *Chrome) RenderCards(ids *c.WidgetIdStack) {
 			c.Separator().Send()
 			for range c.PushId(ids.PrepareStr("attention-card-body-" + key)).KeepIter() {
 				if src.RenderCard(key, ids) {
-					closeIt = true
+					closeIt, decided = true, true
 				}
 			}
 			c.Separator().Send()
@@ -409,6 +421,9 @@ func (inst *Chrome) RenderCards(ids *c.WidgetIdStack) {
 					closeIt = true
 				}
 			}
+		}
+		if decided {
+			inst.svc.Queue.Decided(key)
 		}
 		if closeIt {
 			inst.closeCard(key)

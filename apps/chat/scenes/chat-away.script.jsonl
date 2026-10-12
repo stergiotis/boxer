@@ -1,0 +1,3 @@
+# The scripted model of chat-away.scene.md: one slow answer, so the person
+# can set Away before the turn ends.
+{"content":"The layer is drawn: wind above 15 m/s, in red.","delayMs":5000}

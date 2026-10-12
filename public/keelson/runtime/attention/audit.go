@@ -10,11 +10,13 @@ import (
 )
 
 // The audit vocabulary (ADR-0296): what the person did to the queue
-// (ADR-0324 §SD4) and to the waiting scale (ADR-0323 §SD5), each with the
-// person as its author.
+// (ADR-0324 §SD4), to the waiting scale (ADR-0323 §SD5) and to their
+// status (ADR-0328 §SD1), each with the person as its author, or the host
+// for an Away it set for idle time.
 const (
 	auditDomain       = "attention"
 	auditActionLevel  = "level"
+	auditActionStatus = "status"
 	auditRefItem      = "attention-item"
 	auditRefConv      = "conversation"
 	auditRefApp       = "app"
@@ -25,8 +27,9 @@ const (
 	auditScopeConvers = "conversation"
 )
 
-// AttachTrail records the person's acknowledgements, shelves and changes on
-// the waiting scale on rec. A recorder without a backend records nothing.
+// AttachTrail records the person's acknowledgements, shelves, changes on
+// the waiting scale and changes of status on rec. A recorder without a
+// backend records nothing.
 func AttachTrail(svc *Service, rec *trail.Recorder, log zerolog.Logger) {
 	if svc == nil || rec == nil {
 		return
@@ -34,6 +37,9 @@ func AttachTrail(svc *Service, rec *trail.Recorder, log zerolog.Logger) {
 	a := &auditor{rec: rec, log: log}
 	svc.Queue.SetOnAct(a.act)
 	svc.Levels.SetOnWaitingChange(a.level)
+	if svc.Presence != nil {
+		svc.Presence.SetOnChange(a.status)
+	}
 }
 
 type auditor struct {
@@ -44,6 +50,20 @@ type auditor struct {
 func (inst *auditor) act(act ActE, it Item, at time.Time) { inst.write(actRow(act, it), at) }
 
 func (inst *auditor) level(ch Change) { inst.write(levelRow(ch), time.Now()) }
+
+// status records a change of the person's status (ADR-0328 §SD1): by the
+// person, or by the host for idle time.
+func (inst *auditor) status(ch StatusChange) {
+	row := trail.AuditEvent{Domain: auditDomain, Action: auditActionStatus, Outcome: trail.OutcomeOk, Retention: trail.RetentionTrail}
+	attr(&row, "from", ch.From.String())
+	attr(&row, "to", ch.To.String())
+	by := "person"
+	if ch.ByIdle {
+		by = "idle"
+	}
+	attr(&row, "by", by)
+	inst.write(row, ch.At)
+}
 
 func actRow(act ActE, it Item) (row trail.AuditEvent) {
 	row = trail.AuditEvent{Domain: auditDomain, Action: act.String(), Outcome: trail.OutcomeOk, Retention: trail.RetentionTrail}

@@ -54,6 +54,14 @@ type Notices struct {
 	items  []Notice
 	// version counts changes, for a reader that redraws on one.
 	version uint64
+	onKept  func(Notice)
+}
+
+// SetOnKept installs the hook told of each notice kept, outside the lock.
+func (inst *Notices) SetOnKept(f func(Notice)) {
+	inst.mu.Lock()
+	defer inst.mu.Unlock()
+	inst.onKept = f
 }
 
 func NewNotices(levels *Levels) (n *Notices) {
@@ -76,13 +84,17 @@ func (inst *Notices) Notify(sender app.AppIdT, instance uint64, n Notice, now ti
 	n.Title, n.Text = clip(n.Title, MaxLabelRunes), clip(n.Text, MaxLabelRunes)
 	n.App, n.Instance, n.Level, n.Created = sender, instance, level, now
 	inst.mu.Lock()
-	defer inst.mu.Unlock()
 	inst.items = slices.DeleteFunc(inst.items, func(x Notice) bool { return x.Conversation == n.Conversation })
 	inst.items = append(inst.items, n)
 	if len(inst.items) > MaxNotices {
 		inst.items = slices.Delete(inst.items, 0, len(inst.items)-MaxNotices)
 	}
 	inst.version++
+	hook := inst.onKept
+	inst.mu.Unlock()
+	if hook != nil {
+		hook(n)
+	}
 	return
 }
 

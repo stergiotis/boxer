@@ -77,6 +77,10 @@ type itemState struct {
 	// its own, so it asks once.
 	opened bool
 	seen   bool
+	// decided says the person decided it in host chrome; its leaving is
+	// not the away log's (ADR-0328 §SD3).
+	decided bool
+	item    Item
 }
 
 // Queue orders the waiting items of its sources (ADR-0324 §SD1) and keeps
@@ -89,6 +93,8 @@ type Queue struct {
 	escalate time.Duration
 	onAct    func(ActE, Item, time.Time)
 	scratch  []Entry
+	// presence is the person's status (ADR-0328), nil for Here always.
+	presence *Presence
 }
 
 // NewQueue is a queue classifying by levels, escalating after escalate (zero
@@ -105,6 +111,23 @@ func (inst *Queue) AddSource(s SourceI) {
 	inst.mu.Lock()
 	defer inst.mu.Unlock()
 	inst.sources = append(inst.sources, s)
+}
+
+// SetPresence makes the queue open cards by the person's status and log
+// what arrives and leaves while they are away (ADR-0328 §SD2, §SD3).
+func (inst *Queue) SetPresence(p *Presence) {
+	inst.mu.Lock()
+	defer inst.mu.Unlock()
+	inst.presence = p
+}
+
+// Decided says the person decided the item in host chrome.
+func (inst *Queue) Decided(key string) {
+	inst.mu.Lock()
+	defer inst.mu.Unlock()
+	if st := inst.state[key]; st != nil {
+		st.decided = true
+	}
 }
 
 // SetOnAct installs the hook told of each acknowledgement and shelve, for
@@ -138,6 +161,8 @@ func (inst *Queue) Snapshot(now time.Time) (open []Entry, shelved []Entry) {
 		}
 	}
 	inst.mu.Lock()
+	presence := inst.presence
+	var flow []AwayEntry
 	for _, st := range inst.state {
 		st.seen = false
 	}
@@ -147,8 +172,11 @@ func (inst *Queue) Snapshot(now time.Time) (open []Entry, shelved []Entry) {
 		if st == nil {
 			st = &itemState{}
 			inst.state[e.Key] = st
+			if presence != nil {
+				flow = append(flow, awayEntryOf(AwayArrived, "", e.Item, e.Level, now))
+			}
 		}
-		st.seen = true
+		st.seen, st.item = true, e.Item
 		if !st.shelfUntil.IsZero() && !now.Before(st.shelfUntil) {
 			// Back from the shelf, unacknowledged (§SD4).
 			st.shelfUntil, st.acked, st.opened = time.Time{}, false, false
@@ -161,10 +189,20 @@ func (inst *Queue) Snapshot(now time.Time) (open []Entry, shelved []Entry) {
 	}
 	for k, st := range inst.state {
 		if !st.seen {
+			if presence != nil && !st.decided {
+				why := "no longer waits"
+				if !st.item.Bound.IsZero() && !now.Before(st.item.Bound) {
+					why = "expired"
+				}
+				flow = append(flow, awayEntryOf(AwayLeft, why, st.item, LevelYourTurn, now))
+			}
 			delete(inst.state, k)
 		}
 	}
 	inst.mu.Unlock()
+	for _, e := range flow {
+		presence.Record(e)
+	}
 	slices.SortStableFunc(all, func(a, b Entry) int {
 		if c := cmp.Compare(b.Level, a.Level); c != 0 {
 			return c
@@ -182,12 +220,19 @@ func (inst *Queue) Snapshot(now time.Time) (open []Entry, shelved []Entry) {
 }
 
 // TakeOpens lists the entries whose cards open on their own: a critical
-// item, and an escalated one, each once (ADR-0324 §SD3, §SD4).
+// item, and an escalated one, each once (ADR-0324 §SD3, §SD4), as the
+// person's status lets them (ADR-0328 §SD2). One the status holds back does
+// not open later on its own: it is in the list, and while away in the log.
 func (inst *Queue) TakeOpens(open []Entry) (keys []string) {
+	inst.mu.Lock()
+	presence := inst.presence
+	inst.mu.Unlock()
+	status, _ := presence.Status()
 	inst.mu.Lock()
 	defer inst.mu.Unlock()
 	for _, e := range open {
-		if e.Level != LevelCritical && !e.Escalated {
+		critical := e.Level == LevelCritical
+		if !critical && !e.Escalated {
 			continue
 		}
 		st := inst.state[e.Key]
@@ -195,9 +240,16 @@ func (inst *Queue) TakeOpens(open []Entry) (keys []string) {
 			continue
 		}
 		st.opened = true
-		keys = append(keys, e.Key)
+		if status.Opens(critical, e.Escalated) {
+			keys = append(keys, e.Key)
+		}
 	}
 	return
+}
+
+func awayEntryOf(what AwayKindE, why string, it Item, level LevelE, now time.Time) AwayEntry {
+	return AwayEntry{At: now, What: what, Why: why, Key: it.Key, Kind: it.Kind, App: it.App, Instance: it.Instance,
+		Conversation: it.Conversation, Summary: it.Summary, Level: level}
 }
 
 // Acknowledge marks an item seen, not decided; it stops its escalation.

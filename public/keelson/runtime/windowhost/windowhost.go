@@ -335,6 +335,10 @@ type Inst struct {
 	// cards draws the cards of the person's queue (ADR-0324, proposed). nil
 	// draws nothing. Set before the first Frame.
 	cards CardsChromeI
+	// onInput hears the person's input; lastInput is the last frame's
+	// (windowhost_input.go).
+	onInput   func(now time.Time)
+	lastInput inputSeen
 
 	// drains bounds and counts the drain step of the closing edge
 	// (windowhost_drain.go).
@@ -1183,6 +1187,7 @@ func (inst *Inst) Frame(ids *c.WidgetIdStack) (err error) {
 			inst.renderEmptyState(ids)
 		}
 		inst.activeKey = 0
+		inst.noteInput(sm, time.Now())
 		inst.arranging = nil
 		inst.snapshotGeometry(nil)
 		inst.reapClosed()
@@ -1207,6 +1212,7 @@ func (inst *Inst) Frame(ids *c.WidgetIdStack) (err error) {
 		}
 		inst.activeKey = pickActiveWindow(inst.activeKey, facts)
 	}
+	inst.noteInput(sm, time.Now())
 	inst.stepArrange(arrangeCmd, arrangeKeys, snapshot)
 	inst.applyPlaces(places, snapshot)
 	inst.snapshotGeometry(snapshot)

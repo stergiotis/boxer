@@ -19,6 +19,14 @@ type Flood struct {
 	window    time.Duration
 	streams   map[string][]time.Time
 	person    []time.Time
+	onRefuse  func(stream string, reason string, now time.Time)
+}
+
+// SetOnRefuse installs the hook told of each refusal, outside the lock.
+func (inst *Flood) SetOnRefuse(f func(stream string, reason string, now time.Time)) {
+	inst.mu.Lock()
+	defer inst.mu.Unlock()
+	inst.onRefuse = f
 }
 
 func NewFlood(perStream int, perPerson int) (f *Flood) {
@@ -33,7 +41,16 @@ func (inst *Flood) Admit(stream string, now time.Time) (ok bool, reason string) 
 		return true, ""
 	}
 	inst.mu.Lock()
-	defer inst.mu.Unlock()
+	ok, reason = inst.admitLocked(stream, now)
+	hook := inst.onRefuse
+	inst.mu.Unlock()
+	if !ok && hook != nil {
+		hook(stream, reason, now)
+	}
+	return
+}
+
+func (inst *Flood) admitLocked(stream string, now time.Time) (ok bool, reason string) {
 	cut := now.Add(-inst.window)
 	inst.person = prune(inst.person, cut)
 	s := prune(inst.streams[stream], cut)
