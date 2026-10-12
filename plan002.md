@@ -48,7 +48,12 @@ follows (settled with the user, 2026-10-11):
   this plan's session, each file checked for another session's
   uncommitted work first.
 
-Part B so far, recorded by ADR-0325 and its Updates:
+Part B so far, recorded by ADR-0325 and its Updates. Since then ADR-0327
+moved the chain, the vault, the commitments, the tombstone and the erasure
+into the record-store generator's evidence profile (`gen.Input.Evidence`),
+so the vault store and the vaulted store the rows below name as the
+journal's own are now the profile's `<Store>Vault` and `<Store>Vaulted`,
+and `agentrun` keeps the writer's view of them (ADR-0327 M3):
 
 | Step | Shipped as | Differs from the brief |
 | --- | --- | --- |
