@@ -189,7 +189,9 @@ and assert on cards.
 
 - **The person's status** — here, busy, away; what passes busy; the away
   log on return: ADR-0328.
-- **Watchbill jobs and other non-agent sources** in the queue.
+- **Watchbill jobs and other non-agent sources** in the queue. A watchbill
+  job owes the person no decision; a failure that should reach them would
+  be a highlight (ADR-0323), not an item here.
 - **Effects** — a sound, a window flash, an OS notification — per level.
 - **A roster** of conversations in the chat app: an app change under
   ADR-0265, reading ADR-0323's levels.
