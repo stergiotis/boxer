@@ -185,9 +185,12 @@ type App struct {
 	storage     app.StorageI
 	storedTitle map[string]string
 	// titled is the coordinator last handed the title, titledAs which.
-	titled    *coordinator
-	titledAs  string
-	roster    rosterExtra
+	titled   *coordinator
+	titledAs string
+	roster   rosterExtra
+	// pace samples the open conversations for the roster's gauge
+	// (chat_pace.go).
+	pace      paceTracker
 	rosterJob bgjob.Runner[rosterExtra]
 	rosterAt  time.Time
 }

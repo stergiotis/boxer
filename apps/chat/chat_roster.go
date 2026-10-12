@@ -13,6 +13,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect/providersgui"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/badge"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/color"
 )
 
 // The roster: the Conversations panel as the streams the person juggles
@@ -56,6 +57,9 @@ type rosterExtra struct {
 	titles  map[string]string
 	// notices are the host's highlights (ADR-0323 §SD4).
 	notices []attention.Notice
+	// runs are the runs as this read listed them, for the pace.
+	runs []agentrun.Run
+	at   time.Time
 }
 
 // rosterRow is one conversation in the roster.
@@ -188,7 +192,7 @@ func (inst *App) listRoster() {
 				return
 			}
 		}
-		x := rosterExtra{titles: make(map[string]string, len(runs))}
+		x := rosterExtra{titles: make(map[string]string, len(runs)), runs: runs, at: time.Now()}
 		if kq != nil {
 			if x.windows, err = queryRows[rosterWindow](ctx, kq, providersgui.TableWindows,
 				"SELECT toString(key) AS key, app_id, display, agent_tasks FROM keelson('windows')"); err != nil {
@@ -219,6 +223,7 @@ func (inst *App) listRoster() {
 func (inst *App) syncRoster() {
 	if got, _, ok := inst.rosterJob.TakeResult(); ok && got != nil {
 		inst.roster = *got
+		inst.pace.observe(got.runs, got.at)
 	}
 	if !inst.showRuns || inst.rosterJob.Snapshot().State == bgjob.StateRunning || time.Since(inst.rosterAt) < rosterRefresh {
 		return
@@ -253,6 +258,18 @@ func (inst *App) renderRoster() {
 		c.Label("no conversations kept yet").Send()
 	}
 }
+
+// conversationSwatch is the conversation's colour (ADR-0324 background
+// §3.12), as the host's queue shows it too.
+func conversationSwatch(conversation string) {
+	for range c.HoverText("This conversation's colour: the same wherever it is shown, here and in the host's queue.").KeepIter() {
+		for range c.RichTextLabelColored(color.FromImage(attention.ConversationColor(conversation)), color.Transparent, "●") {
+		}
+	}
+}
+
+const tipRosterPace = "The bars are the steps the conversation wrote in each of the last five minutes, newest last, read off its journal while this panel is open. " +
+	"Quiet means an open conversation wrote nothing for two minutes or more: it may be waiting on you, on a slow model, or stuck."
 
 func (inst *App) rosterHeading(title string, n int) {
 	for rt := range c.RichTextLabel(title + " · " + strconv.Itoa(n)) {
@@ -333,6 +350,7 @@ func (inst *App) renderRosterRow(key string, row *rosterRow) {
 			for range c.HoverText(levelTip(level)).KeepIter() {
 				c.Label(levelMark(level)).Selectable(false).Send()
 			}
+			conversationSwatch(r.Conversation)
 			name := inst.rosterName(row)
 			for range c.HoverText(r.Conversation + "\nrun " + strconv.FormatUint(r.Id, 10) + "\nprofile " + r.Profile + " · " + r.Label.String()).KeepIter() {
 				if row.here {
@@ -347,8 +365,15 @@ func (inst *App) renderRosterRow(key string, row *rosterRow) {
 				badge.New(inst.ids.PrepareStr("stranded"), "stranded").Tone(badge.ToneWarning).Variant(badge.VariantSoft).Size(badge.SizeSm).Send()
 			}
 		}
-		for rt := range c.RichTextLabel(line) {
-			rt.Small().Weak()
+		if r.State == agentrun.StateOpen {
+			if g := inst.pace.paceGauge(r.Conversation, time.Now()); g != "" {
+				line += " · " + g
+			}
+		}
+		for range c.HoverText(tipRosterPace).KeepIter() {
+			for rt := range c.RichTextLabel(line) {
+				rt.Small().Weak()
+			}
 		}
 		for _, w := range row.working {
 			for rt := range c.RichTextLabel("    └ " + w.Display + " · window " + w.Key) {

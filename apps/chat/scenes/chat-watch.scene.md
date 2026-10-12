@@ -20,7 +20,9 @@ four seconds to answer. The person sends, turns on Watch for the
 conversation, and moves to another window. The turn ends there unseen: the host's
 control counts one highlight after what waits, and lists it apart. Open
 raises the chat window, which marks what landed as new since the person
-looked, and the highlight goes.
+looked, and the highlight goes. The roster then shows the conversation in
+its colour, with the steps it wrote per minute (ADR-0324 background §3.4,
+§3.12).
 
 ```jsonl trace
 {"do":"note","text":"ADR-0323 SD4: watch a conversation"}
@@ -37,4 +39,7 @@ looked, and the highlight goes.
 {"do":"wait","valueContains":"new since you looked","role":"label","comment":"the chat marks what landed while the person was away"}
 {"do":"read","contains":"nothing waits on you","role":"button","on":"name","pattern":"(?P<cleared>on you)$","comment":"looking cleared the highlight"}
 {"do":"capture","text":"chat-watch-looked"}
+{"do":"click","contains":"Conversations","role":"button","settleMs":4000,"comment":"the roster samples the runs every three seconds; two samples give a pace"}
+{"do":"wait","valueContains":"/min","role":"label","comment":"the pace gauge on the open conversation"}
+{"do":"capture","text":"chat-watch-roster"}
 ```

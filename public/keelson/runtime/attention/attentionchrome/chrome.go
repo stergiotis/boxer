@@ -15,6 +15,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/attention"
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/color"
 )
 
 // CardSourceI is a source that draws the body of its items' cards.
@@ -238,6 +239,7 @@ func (inst *Chrome) renderNotice(n attention.Notice, now time.Time, ids *c.Widge
 	}
 	for range c.HorizontalTop().KeepIter() {
 		c.Label(icons.PhStar + " " + age(now.Sub(n.Created))).Send()
+		swatch(n.Conversation)
 		c.Label(text + " · " + name).Send()
 		for rt := range c.RichTextLabel(where) {
 			rt.Weak().Small()
@@ -282,6 +284,7 @@ func (inst *Chrome) renderRow(e attention.Entry, now time.Time, ids *c.WidgetIdS
 	k := e.Key
 	for range c.HorizontalTop().KeepIter() {
 		c.Label(levelGlyph(e.Level) + " " + e.Level.String() + " · " + age(now.Sub(e.Created))).Send()
+		swatch(e.Conversation)
 		c.Label(e.Summary).Send()
 		if e.Acked && e.ShelvedUntil.IsZero() {
 			for rt := range c.RichTextLabel("acknowledged") {
@@ -369,8 +372,11 @@ func (inst *Chrome) RenderCards(ids *c.WidgetIdStack) {
 		for range wf.KeepIter() {
 			c.UiSetMinWidth(cardWidth)
 			c.UiSetMaxWidth(cardWidth)
-			for rt := range c.RichTextLabel(e.Summary) {
-				rt.Strong()
+			for range c.HorizontalTop().KeepIter() {
+				swatch(e.Conversation)
+				for rt := range c.RichTextLabel(e.Summary) {
+					rt.Strong()
+				}
 			}
 			meta := "waiting " + age(now.Sub(e.Created))
 			if !e.Bound.IsZero() {
@@ -400,6 +406,18 @@ func (inst *Chrome) RenderCards(ids *c.WidgetIdStack) {
 			inst.closeCard(key)
 			inst.read = time.Time{}
 		}
+	}
+}
+
+// swatch is the conversation's colour (ADR-0324 background §3.12), as the
+// chat's roster shows it; nothing for an item of no conversation. It adds
+// to what names the conversation — a question's summary, the card's line
+// beneath — and does not stand in for it.
+func swatch(conversation string) {
+	if conversation == "" {
+		return
+	}
+	for range c.RichTextLabelColored(color.FromImage(attention.ConversationColor(conversation)), color.Transparent, "●") {
 	}
 }
 
