@@ -40,16 +40,20 @@ declared resources, a task grant. Three properties of imztop shape how it joins:
 ## Decision
 
 **SD1 — Queries read the published snapshot and never the window's view.**
-The catalog's snapshot holds the `PublishedSnapshot` pointer the frame drew,
-a copy of the window's view state, and copies of the replay status. Queries
+The catalog's snapshot, taken after each command stage, holds the latest
+`PublishedSnapshot` pointer, a copy of the window's view state, and copies
+of the replay status and the replay coverage. Queries
 take their own arguments: `list_processes` sorts and filters by what the
 caller asks, not by what the person last clicked, so a read never depends on
 the view. The queries are `get_overview`, `list_processes`, `get_process`,
 `get_history`, `get_hardware`, `get_view` and `get_coverage`. Every result is
 bounded: `list_processes` returns at most 50 rows, `get_history` at most 120
-points per series plus min, mean, max, p95 and last over the in-memory window.
-Process names and command lines are attacker-influenceable text, so the
-queries that return them are marked `Untrusted`.
+points per series plus min, mean, max, p95 and last over the in-memory window,
+`get_coverage` the latest 200 runs, and keyed series (per core, per device,
+per interface) are listed as families with a count and the first 32 keys.
+Process names, command lines, filter text and error messages are text
+someone else can influence, so the queries that return any of them are
+marked `Untrusted`.
 
 **SD2 — Commands change the view, set values, and never toggle.** The
 per-window commands are `set_proc_view` (sort key, direction, filter, tree),
@@ -58,11 +62,15 @@ per-window commands are `set_proc_view` (sort key, direction, filter, tree),
 (ADR-0315 §SD4). `show_panel` activates a dock tab once, so the person's
 next click wins; the `panel` resource it writes names the last panel it
 asked for, not the tab in front, because the dock layout is Rust-side state
-the app does not hold. Arranging windows is the host's (ADR-0276).
+the app does not hold. Arranging windows is the host's (ADR-0276). A
+command that finds its value already set applies without effect, replay
+included: `leave_replay` while live, `enter_replay` over the window already
+open, `set_replay_window` to the window already playing (which would
+otherwise restart playback).
 
 **SD3 — Process-wide state is written through one controlling window.** The
-first imztop window to draw claims the controller role; it passes to the next
-window that draws after it unmounts. The resources `live` (freeze) and
+first imztop window to mount claims the controller role; it passes to the
+next window that mounts or draws after it unmounts. The resources `live` (freeze) and
 `replay` (session state, window, pause, speed — not the playback
 position, which moves on its own) carry their real value in the controller
 and a fixed value in every other window, so only the controller ever sees
@@ -71,8 +79,10 @@ it did not make itself — a click in another window, an open completing —
 lands inside a frame and is attributed to the app rather than to the
 person. The commands `set_frozen`, `enter_replay`, `leave_replay`,
 `set_replay_paused`, `set_replay_speed` and `set_replay_window` are
-unavailable elsewhere, and the refusal names the reason. A person's click
-in any window still acts, as it does without a catalog.
+unavailable elsewhere, and the refusal says whether another window holds
+the role or none does. A person's click in any window still acts, as it
+does without a catalog; outside the controller it applies directly rather
+than as a gesture, which would be refused and logged as the person's.
 
 **SD4 — `enter_replay` needs the ClickHouse endpoint in the grant.** Opening
 a session dials the server holding `boxer.facts`. The queries it then runs are
@@ -86,12 +96,12 @@ asynchronous; the caller reads `get_view` for the outcome.
 table's sort headers and tree toggle, the Proc Map and Topology combos, the
 interface combo, Freeze, and the replay transport route through
 `appops.Gesture`, and apply directly when the host offers no gesture path
-(tour, tests) or the window may not run the command (SD3). Two controls are
-exceptions. The filter text box commits on every keystroke, and a revision
-per keystroke buys nothing; its writes are attributed to the person by the
-frame comparison, and a command to `proc_view` while the person types in it
-is a conflict. The availability brush seeks on every drag frame; it applies
-directly and the controller's latch attributes the move.
+(tour, tests) or the window is not the controller (SD3). Two controls are
+exceptions. The filter text box commits on every keystroke, and a log entry
+per keystroke buys nothing; it applies inside the frame, so its writes are
+attributed to the app, and a command to `proc_view` while the person types
+in it is a conflict. The availability brush seeks on every drag frame; it
+applies directly and the controller's latch attributes the move.
 
 **SD6 — What is not an operation.** Signalling a process (ADR-0020 SD11).
 Stepping a paused replay: a relative move, which `set_replay_window` and the
@@ -130,9 +140,13 @@ an ad-hoc dataset is deferred until a task needs more than the summary.
 
 - With two imztop windows open, an agent sharing the second cannot freeze or
   replay until the first closes or is shared too. The refusal says which.
-- The view-state setters change shape: sorting sets a key and a direction
-  instead of toggling, and the header click computes the toggle before
-  calling the command.
+- Some of the person's changes are logged as the app's: typing a filter,
+  dragging the availability brush, and a freeze or replay click outside the
+  controlling window. They move revisions, so a task's next command
+  conflicts, but they do not pause a task the way the person's own
+  intervention does (ADR-0269 §SD8).
+- A controlling window that is collapsed does not draw, so its latch goes
+  stale and no other window takes the role until it unmounts.
 
 ### Neutral
 

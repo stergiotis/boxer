@@ -241,7 +241,7 @@ type App struct {
 	availabilityBrushFromMS int64
 	availabilityBrushToMS   int64
 
-	// Operations state (imztop_ops.go, ADR-0329). frameCtx is the current
+	// Operations state (imztop_ops.go, ADR-0329, proposed). frameCtx is the current
 	// frame's context, for routing the person's controls through the
 	// catalog. pendingTab is a dock tab show_panel asked for, activated once
 	// on the next frame that draws the dock; shownPanel names it, as the
@@ -281,6 +281,7 @@ func (inst *App) Mount(ctx app.MountContextI) (err error) {
 	// Capture the host-provided capability bus for the singleton Sampler to
 	// subscribe on (ADR-0090): imztop consumes metrics, it never reads /proc.
 	setSamplerBus(ctx.Bus())
+	inst.claimController()
 	return
 }
 func (inst *App) Unmount(ctx app.MountContextI) (err error) {
@@ -298,7 +299,7 @@ func (inst *App) Frame(ctx app.FrameContextI) (err error) {
 	inst.density = styletokens.ActiveDensity()
 	inst.frameCtx = ctx
 	// The process-wide resources move inside a frame of the controlling
-	// window, never between frames (ADR-0329 §SD3).
+	// window, never between frames (ADR-0329 (proposed) §SD3).
 	inst.claimController()
 	inst.latchProcessWide()
 	// activeSampler hands back the replay session while one is on and the live

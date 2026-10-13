@@ -73,7 +73,7 @@ func defaultProcView() (out procViewState) {
 
 // setProcSort is the header click: the same key flips the direction, a new
 // key starts in its own. It computes the view and sets it through
-// set_proc_view, which never toggles (ADR-0329 §SD2).
+// set_proc_view, which never toggles (ADR-0329 (proposed) §SD2).
 func (inst *App) setProcSort(by ProcSortByE) {
 	v := inst.procView
 	if v.SortBy == by {

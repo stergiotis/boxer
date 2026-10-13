@@ -47,9 +47,9 @@ func (inst *App) renderTopBar(snap *PublishedSnapshot, s SamplerI) {
 			// Freeze acts on the sampler on screen: the live one, or the
 			// replay session's transport while replay is on.
 			if inst.frameReplay.State == ReplayOn {
-				gestureOr(inst, opSetReplayPaused, SetReplayPausedArgs{Paused: !frozen}, func() { s.Pause(!frozen) })
+				gestureOrShared(inst, opSetReplayPaused, SetReplayPausedArgs{Paused: !frozen}, func() { s.Pause(!frozen) })
 			} else {
-				gestureOr(inst, opSetFrozen, SetFrozenArgs{Frozen: !frozen}, func() { s.Pause(!frozen) })
+				gestureOrShared(inst, opSetFrozen, SetFrozenArgs{Frozen: !frozen}, func() { s.Pause(!frozen) })
 			}
 		}
 		c.Separator().Vertical().Send()

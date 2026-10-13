@@ -10,6 +10,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
+	"github.com/stergiotis/boxer/public/keelson/runtime/appops/opengine"
+	"github.com/stergiotis/boxer/public/keelson/runtime/appops/opwire"
 	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
 	"github.com/stergiotis/boxer/public/observability/sysmetrics/sysmsnap"
 )
@@ -138,7 +140,7 @@ func TestGetProcessAndHistory(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, int64(3000), h.FromUnixMs, "a short series aligns to the fold's end")
 	_, err = query[GetHistoryArgs, GetHistoryResult](t, inst, opGetHistory, GetHistoryArgs{Series: "nope"})
-	assert.Contains(t, refusal(err).Reason, "net_rx:eth0")
+	assert.Contains(t, refusal(err).Reason, "net_rx:<key>")
 }
 
 func TestViewCommandsSetAndNeverToggle(t *testing.T) {
@@ -203,4 +205,137 @@ func TestAnAgentEntersReplayOnlyWithTheEndpointGranted(t *testing.T) {
 
 	r = refusal(command(t, inst, app.OperationCall{}, opEnterReplay, ReplayWindowArgs{FromUnixMs: 5, ToUnixMs: 1}))
 	require.NotNil(t, r)
+}
+
+func TestSeriesListingIsBounded(t *testing.T) {
+	fake := opsFixture(t)
+	for range 40 {
+		fake.snap.HistoryCPUPerCore = append(fake.snap.HistoryCPUPerCore, []float64{1})
+	}
+	out, err := query[struct{}, Overview](t, newApp(), opGetOverview, struct{}{})
+	require.NoError(t, err)
+	assert.NotContains(t, out.HistorySeries, "cpu_core:0")
+	require.Len(t, out.HistoryFamilies, 2)
+	assert.Equal(t, "cpu_core:", out.HistoryFamilies[0].Prefix)
+	assert.Equal(t, 40, out.HistoryFamilies[0].Count)
+	assert.Len(t, out.HistoryFamilies[0].Keys, opsMaxFamilyKeys)
+	assert.Equal(t, []string{"eth0"}, out.HistoryFamilies[1].Keys)
+}
+
+func TestControllerRefusalSaysWhetherAnyWindowHoldsTheRole(t *testing.T) {
+	opsFixture(t)
+	inst := newApp()
+	ok, reason := inst.Operations().Snapshot().Available(opSetFrozen)
+	assert.False(t, ok)
+	assert.Equal(t, noControllerReason, reason)
+	assert.Equal(t, noControllerReason, refusal(command(t, inst, app.OperationCall{}, opLeaveReplay, struct{}{})).Reason)
+}
+
+func TestLeaveReplayIsIdempotent(t *testing.T) {
+	opsFixture(t)
+	inst := newApp()
+	inst.claimController()
+	for range 2 {
+		require.NoError(t, command(t, inst, app.OperationCall{}, opLeaveReplay, struct{}{}))
+	}
+	assert.Equal(t, ReplayOff, CurrentReplayStatus().State)
+}
+
+// engineWindow is a window served by a host engine, with the gesture path
+// installed; frame runs one host frame around body (windowhost's order:
+// begin, command stage, snapshot, the app's frame, end).
+type engineWindow struct {
+	inst *App
+	eng  *opengine.Engine
+}
+
+func newEngineWindow() (w *engineWindow) {
+	inst := newApp()
+	eng := opengine.New(ops.Catalog(), inst.Operations())
+	ctx := app.NewStaticFrameContext(nil, nil)
+	ctx.SetOperationsGesture(eng.Gesture)
+	inst.frameCtx = ctx
+	w = &engineWindow{inst: inst, eng: eng}
+	w.frame(nil)
+	return
+}
+
+func (inst *engineWindow) frame(body func()) {
+	inst.eng.BeginFrame()
+	inst.eng.ApplyQueued()
+	inst.eng.TakeSnapshot()
+	inst.inst.claimController()
+	inst.inst.latchProcessWide()
+	if body != nil {
+		body()
+	}
+	inst.eng.EndFrame()
+}
+
+func (inst *engineWindow) submit(t *testing.T, id string, op string, in any) (out opwire.Outcome) {
+	t.Helper()
+	args, err := buscodec.Encode(in)
+	require.NoError(t, err)
+	// The task read every resource: a revision never bumped is zero.
+	revs := inst.eng.Revisions()
+	expects := map[string]uint64{}
+	for _, r := range []string{resProcView, resProcMapMetric, resTopologyDim, resInterface, resPanel, resLive, resReplay} {
+		expects[r] = revs[r]
+	}
+	inst.eng.Submit(op, opwire.CallRequest{CallId: id, Args: args, Writer: "task:t", Expects: expects})
+	inst.frame(nil)
+	out, ok := inst.eng.Status(id)
+	require.True(t, ok)
+	return
+}
+
+func TestTheEngineAttributesEachWriter(t *testing.T) {
+	opsFixture(t)
+	w := newEngineWindow()
+
+	// An agent's command is the task's, and writes only what it declares.
+	out := w.submit(t, "c1", opSetProcView, SetProcViewArgs{SortBy: "mem"})
+	assert.Equal(t, opwire.PhaseApplied, out.Phase, out.Reason)
+	assert.Equal(t, "task:t", w.eng.Writer(resProcView))
+	// Setting the value already set applies again (ADR-0269 §SD1).
+	out = w.submit(t, "c2", opSetProcView, SetProcViewArgs{SortBy: "mem"})
+	assert.Equal(t, opwire.PhaseApplied, out.Phase, out.Reason)
+	assert.Empty(t, w.eng.UndeclaredWrites(0))
+
+	// A header click is the person's, through the same command.
+	w.frame(func() { w.inst.setProcSort(ProcSortByPID) })
+	assert.Equal(t, opwire.WriterPerson, w.eng.Writer(resProcView))
+	log := w.eng.Log()
+	assert.Equal(t, opSetProcView, log[len(log)-1].Op)
+
+	// The filter box commits inside the frame without a command, so its
+	// writes are the app's (ADR-0329 (proposed) §SD5).
+	w.frame(func() { w.inst.setProcFilter("x") })
+	assert.Equal(t, opwire.WriterApp, w.eng.Writer(resProcView))
+
+	// Freeze by the agent, then again: idempotent.
+	for _, id := range []string{"f1", "f2"} {
+		out = w.submit(t, id, opSetFrozen, SetFrozenArgs{Frozen: true})
+		assert.Equal(t, opwire.PhaseApplied, out.Phase, out.Reason)
+	}
+	assert.Equal(t, "task:t", w.eng.Writer(resLive))
+	assert.Empty(t, w.eng.UndeclaredWrites(0))
+}
+
+func TestAClickInAnotherWindowActsWithoutARefusalAndTheControllerLatchesIt(t *testing.T) {
+	fake := opsFixture(t)
+	a := newEngineWindow()
+	b := newEngineWindow()
+	require.True(t, a.inst.isController())
+
+	seq := b.eng.LogSeq()
+	b.frame(func() { gestureOrShared(b.inst, opSetFrozen, SetFrozenArgs{Frozen: true}, func() { fake.Pause(true) }) })
+	assert.True(t, fake.paused)
+	for _, e := range b.eng.LogSince(seq) {
+		assert.NotEqual(t, opwire.PhaseRefused, e.Phase, "no refusal is logged for a click that acts")
+	}
+
+	a.frame(nil)
+	assert.Equal(t, opwire.WriterApp, a.eng.Writer(resLive), "the controller's latch lands inside its frame")
+	assert.Equal(t, true, a.inst.Operations().ResourceValue(resLive))
 }

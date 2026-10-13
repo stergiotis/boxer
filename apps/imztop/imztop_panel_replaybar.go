@@ -53,7 +53,7 @@ func (inst *App) renderReplayEntry() {
 		SendResp().HasPrimaryClicked()
 	if clicked {
 		// Zero window: enter_replay opens on defaultReplayWindow.
-		gestureOr(inst, opEnterReplay, ReplayWindowArgs{}, func() {
+		gestureOrShared(inst, opEnterReplay, ReplayWindowArgs{}, func() {
 			StartReplay(context.Background(), defaultReplayWindow(), StoreSourceOptions{})
 		})
 	}
@@ -77,7 +77,7 @@ func (inst *App) renderReplayBar(st ReplayStatus) {
 			c.Separator().Vertical().Send()
 			if c.Button(inst.ids.PrepareStr("replay-cancel"), c.Atoms().Text("Cancel").Keep()).
 				SendResp().HasPrimaryClicked() {
-				gestureOr(inst, opLeaveReplay, appops.None{}, func() { _ = LeaveReplay() })
+				gestureOrShared(inst, opLeaveReplay, appops.None{}, func() { _ = LeaveReplay() })
 			}
 		case ReplayFailed:
 			for rt := range c.RichTextLabelColored(colorHot, colorBgClear, icons.PhWarning+" replay unavailable") {
@@ -90,7 +90,7 @@ func (inst *App) renderReplayBar(st ReplayStatus) {
 			c.Separator().Vertical().Send()
 			if c.Button(inst.ids.PrepareStr("replay-dismiss"), c.Atoms().Text("Dismiss").Keep()).
 				SendResp().HasPrimaryClicked() {
-				gestureOr(inst, opLeaveReplay, appops.None{}, func() { _ = LeaveReplay() })
+				gestureOrShared(inst, opLeaveReplay, appops.None{}, func() { _ = LeaveReplay() })
 			}
 		case ReplayOn:
 			inst.renderReplayTransport(st)
@@ -115,7 +115,7 @@ func (inst *App) renderReplayTransport(st ReplayStatus) {
 	if c.Button(inst.ids.PrepareStr("replay-golive"),
 		c.Atoms().Text(icons.PhBroadcast+" Go live").Keep()).
 		SendResp().HasPrimaryClicked() {
-		gestureOr(inst, opLeaveReplay, appops.None{}, func() { _ = LeaveReplay() })
+		gestureOrShared(inst, opLeaveReplay, appops.None{}, func() { _ = LeaveReplay() })
 		return
 	}
 	c.Separator().Vertical().Send()
@@ -128,7 +128,7 @@ func (inst *App) renderReplayTransport(st ReplayStatus) {
 	}
 	if c.Button(inst.ids.PrepareStr("replay-play"), c.Atoms().Text(playGlyph+" "+playLabel).Keep()).
 		SendResp().HasPrimaryClicked() {
-		gestureOr(inst, opSetReplayPaused, SetReplayPausedArgs{Paused: !paused}, func() { session.Pause(!paused) })
+		gestureOrShared(inst, opSetReplayPaused, SetReplayPausedArgs{Paused: !paused}, func() { session.Pause(!paused) })
 	}
 
 	// Stepping is only meaningful while stopped; the button stays rendered
@@ -152,7 +152,7 @@ func (inst *App) renderReplayTransport(st ReplayStatus) {
 			if c.Button(inst.ids.PrepareSeq(uint64(0x900+i)), c.Atoms().Text(replaySpeedLabel(x)).Keep()).
 				Selected(sel).FrameWhenInactive(!sel).Frame(true).
 				SendResp().HasPrimaryClicked() {
-				gestureOr(inst, opSetReplaySpeed, SetReplaySpeedArgs{Speed: x}, func() {
+				gestureOrShared(inst, opSetReplaySpeed, SetReplaySpeedArgs{Speed: x}, func() {
 					replaySpeedIdx = i
 					session.SetSpeed(x)
 				})
@@ -213,7 +213,7 @@ func (inst *App) jogReplay(session *ReplaySampler, dir int) {
 		to = now
 	}
 	from := to.Add(-span)
-	gestureOr(inst, opSetReplayWindow, ReplayWindowArgs{FromUnixMs: from.UnixMilli(), ToUnixMs: to.UnixMilli()},
+	gestureOrShared(inst, opSetReplayWindow, ReplayWindowArgs{FromUnixMs: from.UnixMilli(), ToUnixMs: to.UnixMilli()},
 		func() { session.SeekWindow(from, to) })
 }
 

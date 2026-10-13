@@ -62,9 +62,13 @@ const (
 	opsMaxHistoryPoints = 120
 	opsDefaultHistPts   = 60
 	opsMaxCmdLen        = 256
+	opsMaxCoverageRuns  = 200
 )
 
-const notControllerReason = "another imztop window controls freeze and replay; share that window instead"
+const (
+	notControllerReason = "another imztop window controls freeze and replay; share that window instead"
+	noControllerReason  = "no imztop window controls freeze and replay yet; it is claimed when a window mounts or draws"
+)
 
 // opsLiveSampler is the live sampler the catalog reads and freezes; a test
 // replaces it.
@@ -131,23 +135,31 @@ func unixMsOrZero(t time.Time) (ms int64) {
 // opsSnap is what queries read. pub is shared with the render path, which is
 // safe because a PublishedSnapshot is never written after it is published.
 type opsSnap struct {
-	pub         *PublishedSnapshot
-	replaying   bool
-	frozen      bool
-	intervalMs  int64
-	view        procViewState
-	procMetric  procMetricE
-	topoDim     topoDimE
-	ifaceIdx    int
-	controller  bool
-	replay      ReplayStatus
-	replayErr   string
-	replayWin   sysmreplay.Window
-	replayPos   time.Time
-	replayPosOk bool
-	replayPause bool
-	replaySpeed float64
-	replayDone  bool
+	pub        *PublishedSnapshot
+	replaying  bool
+	frozen     bool
+	intervalMs int64
+	view       procViewState
+	procMetric procMetricE
+	topoDim    topoDimE
+	ifaceIdx   int
+	controller bool
+	// controllerFree: no imztop window holds the controller role.
+	controllerFree bool
+	replay         ReplayStatus
+	replayErr      string
+	replayWin      sysmreplay.Window
+	replayPos      time.Time
+	replayPosOk    bool
+	replayPause    bool
+	replaySpeed    float64
+	replayDone     bool
+	// The coverage the availability strip loaded; the runs slice is
+	// replaced whole, never written, so holding it is safe.
+	coverageRuns []sysmreplay.CoverageRun
+	coverageFrom time.Time
+	coverageTo   time.Time
+	coverageErr  string
 }
 
 func (inst *App) opsSnapshot() (sn opsSnap) {
@@ -155,14 +167,25 @@ func (inst *App) opsSnapshot() (sn opsSnap) {
 	sn.procMetric = inst.procMetric
 	sn.topoDim = inst.topoDim
 	sn.ifaceIdx = inst.netSelectedIfaceIdx
-	sn.controller = inst.isController()
+	cur := controller.Load()
+	sn.controller, sn.controllerFree = cur == inst, cur == nil
 	sn.replay = CurrentReplayStatus()
 	if sn.replay.Err != nil {
 		sn.replayErr = sn.replay.Err.Error()
 		sn.replay.Err = nil
 	}
+	// Freeze is the live sampler's, in either mode.
+	live, liveErr := opsLiveSampler()
+	if liveErr == nil {
+		sn.frozen = live.IsPaused()
+	}
 	if session := ActiveReplay(); session != nil {
 		sn.replaying = true
+		runs, from, to, cErr := coverageSnapshot()
+		sn.coverageRuns, sn.coverageFrom, sn.coverageTo = runs, from, to
+		if cErr != nil {
+			sn.coverageErr = cErr.Error()
+		}
 		sn.pub = session.Latest()
 		sn.replayWin = session.Window()
 		sn.replayPos, sn.replayPosOk = session.Position()
@@ -172,12 +195,19 @@ func (inst *App) opsSnapshot() (sn opsSnap) {
 		sn.intervalMs = session.Interval().Milliseconds()
 		return
 	}
-	if s, err := opsLiveSampler(); err == nil {
-		sn.pub = s.Latest()
-		sn.frozen = s.IsPaused()
-		sn.intervalMs = s.Interval().Milliseconds()
+	if liveErr == nil {
+		sn.pub = live.Latest()
+		sn.intervalMs = live.Interval().Milliseconds()
 	}
 	return
+}
+
+// controllerReason says why a process-wide command is unavailable here.
+func (inst opsSnap) controllerReason() (reason string) {
+	if inst.controllerFree {
+		return noControllerReason
+	}
+	return notControllerReason
 }
 
 func (inst opsSnap) mode() (m string) {
@@ -269,34 +299,41 @@ var panelTabs = []struct {
 // --- argument and result types ---
 
 type Overview struct {
-	Mode            string     `desc:"live or replay"`
-	Frozen          bool       `desc:"live data is frozen on the last sample"`
-	SampledAtUnixMs int64      `desc:"when the sample was taken, epoch milliseconds; 0 before the first sample"`
-	IntervalMs      int64      `desc:"observed time between samples"`
-	CPUPercent      float64    `desc:"total CPU busy, 0 to 100"`
-	LogicalCPUs     int        `desc:"logical CPUs in the sample"`
-	LoadAvg1        float32    `desc:"1-minute load average"`
-	LoadAvg5        float32    `desc:"5-minute load average"`
-	LoadAvg15       float32    `desc:"15-minute load average"`
-	MemUsedBytes    uint64     `desc:"memory in use"`
-	MemTotalBytes   uint64     `desc:"memory installed"`
-	SwapUsedBytes   uint64     `desc:"swap in use"`
-	SwapTotalBytes  uint64     `desc:"swap configured"`
-	DiskReadMiBs    float64    `desc:"block-device reads, MiB/s, summed over devices"`
-	DiskWriteMiBs   float64    `desc:"block-device writes, MiB/s"`
-	NetRxMiBs       float64    `desc:"network receive, MiB/s, summed over interfaces"`
-	NetTxMiBs       float64    `desc:"network transmit, MiB/s"`
-	PSIAvailable    bool       `desc:"pressure-stall information is present"`
-	PSICPUSome10    float32    `desc:"share of time some task stalled on CPU, 10 s average, percent"`
-	PSIMemSome10    float32    `desc:"same for memory"`
-	PSIMemFull10    float32    `desc:"share of time all tasks stalled on memory, 10 s average, percent"`
-	PSIIOSome10     float32    `desc:"same as cpu, for I/O"`
-	PSIIOFull10     float32    `desc:"same as memory full, for I/O"`
-	GPUs            []GPUState `desc:"per GPU"`
-	Batteries       []Battery  `desc:"per battery"`
-	Processes       int        `desc:"processes in the sample"`
-	Errors          []string   `desc:"collectors that failed, as domain: message"`
-	HistorySeries   []string   `desc:"series names get_history accepts"`
+	Mode            string         `desc:"live or replay"`
+	Frozen          bool           `desc:"live data is frozen on the last sample"`
+	SampledAtUnixMs int64          `desc:"when the sample was taken, epoch milliseconds; 0 before the first sample"`
+	IntervalMs      int64          `desc:"observed time between samples"`
+	CPUPercent      float64        `desc:"total CPU busy, 0 to 100"`
+	LogicalCPUs     int            `desc:"logical CPUs in the sample"`
+	LoadAvg1        float32        `desc:"1-minute load average"`
+	LoadAvg5        float32        `desc:"5-minute load average"`
+	LoadAvg15       float32        `desc:"15-minute load average"`
+	MemUsedBytes    uint64         `desc:"memory in use"`
+	MemTotalBytes   uint64         `desc:"memory installed"`
+	SwapUsedBytes   uint64         `desc:"swap in use"`
+	SwapTotalBytes  uint64         `desc:"swap configured"`
+	DiskReadMiBs    float64        `desc:"block-device reads, MiB/s, summed over devices"`
+	DiskWriteMiBs   float64        `desc:"block-device writes, MiB/s"`
+	NetRxMiBs       float64        `desc:"network receive, MiB/s, summed over interfaces"`
+	NetTxMiBs       float64        `desc:"network transmit, MiB/s"`
+	PSIAvailable    bool           `desc:"pressure-stall information is present"`
+	PSICPUSome10    float32        `desc:"share of time some task stalled on CPU, 10 s average, percent"`
+	PSIMemSome10    float32        `desc:"same for memory"`
+	PSIMemFull10    float32        `desc:"share of time all tasks stalled on memory, 10 s average, percent"`
+	PSIIOSome10     float32        `desc:"same as cpu, for I/O"`
+	PSIIOFull10     float32        `desc:"same as memory full, for I/O"`
+	GPUs            []GPUState     `desc:"per GPU"`
+	Batteries       []Battery      `desc:"per battery"`
+	Processes       int            `desc:"processes in the sample"`
+	Errors          []string       `desc:"collectors that failed, as domain: message"`
+	HistorySeries   []string       `desc:"single series names get_history accepts"`
+	HistoryFamilies []SeriesFamily `desc:"keyed series: get_history accepts prefix plus a key"`
+}
+
+type SeriesFamily struct {
+	Prefix string   `desc:"e.g. cpu_core: or net_rx:"`
+	Count  int      `desc:"keys in the latest sample"`
+	Keys   []string `desc:"the first keys, at most 32"`
 }
 
 type GPUState struct {
@@ -427,7 +464,8 @@ type ReplayView struct {
 type CoverageResult struct {
 	FromUnixMs int64         `desc:"start of the range the runs were read over"`
 	ToUnixMs   int64         `desc:"end of that range"`
-	Runs       []CoverageRun `desc:"contiguous stretches with recorded samples"`
+	Runs       []CoverageRun `desc:"contiguous stretches with recorded samples, the latest 200"`
+	Truncated  bool          `desc:"older runs were left out"`
 	Error      string        `desc:"why coverage could not be read"`
 }
 
@@ -585,6 +623,31 @@ func summarise(y []float64, times []float64, n int) (r GetHistoryResult) {
 	return
 }
 
+const opsMaxFamilyKeys = 32
+
+// seriesCatalog splits series names into single series and keyed families,
+// with at most opsMaxFamilyKeys keys listed per family, so the listing stays
+// bounded on a host with hundreds of interfaces.
+func seriesCatalog(series []historySeries) (single []string, families []SeriesFamily) {
+	for _, h := range series {
+		prefix, key, keyed := strings.Cut(h.name, ":")
+		if !keyed {
+			single = append(single, h.name)
+			continue
+		}
+		prefix += ":"
+		if n := len(families); n == 0 || families[n-1].Prefix != prefix {
+			families = append(families, SeriesFamily{Prefix: prefix})
+		}
+		f := &families[len(families)-1]
+		f.Count++
+		if len(f.Keys) < opsMaxFamilyKeys {
+			f.Keys = append(f.Keys, key)
+		}
+	}
+	return
+}
+
 func countTopo(o *sysmsnap.TopoObject, kind sysmsnap.TopoKindE) (n int) {
 	if o == nil {
 		return
@@ -665,9 +728,8 @@ func (inst *App) applyReplayWindow(from, to time.Time) {
 }
 
 // gestureOr routes the person's control through the catalog (ADR-0329
-// §SD5), so the command log sees it as theirs, and applies it directly where
-// no host serves the catalog or the window may not run it — a click in a
-// window that is not the controller still acts, as it always has.
+// (proposed) §SD5), so the command log sees it as theirs, and applies it
+// directly where no host serves the catalog (tour, tests).
 func gestureOr[In any](inst *App, op string, in In, direct func()) {
 	if inst.frameCtx != nil {
 		if _, err := appops.Gesture[In, appops.None](inst.frameCtx, op, in); err == nil {
@@ -677,8 +739,20 @@ func gestureOr[In any](inst *App, op string, in In, direct func()) {
 	direct()
 }
 
+// gestureOrShared is gestureOr for a process-wide control. Outside the
+// controlling window the command would be refused, and the refusal logged as
+// the person's, for a click that then acts anyway; so such a window applies
+// directly (ADR-0329 (proposed) §SD3).
+func gestureOrShared[In any](inst *App, op string, in In, direct func()) {
+	if !inst.isController() {
+		direct()
+		return
+	}
+	gestureOr(inst, op, in, direct)
+}
+
 // clickHouseDestination is how a grant names the server replay reads from
-// (ADR-0329 §SD4), spelled as play spells an endpoint.
+// (ADR-0329 (proposed) §SD4), spelled as play spells an endpoint.
 func clickHouseDestination() (dest string) {
 	raw := chclient.ConfigFromEnv().URL
 	host := strings.TrimSpace(raw)
@@ -686,6 +760,16 @@ func clickHouseDestination() (dest string) {
 		host = u.Host
 	}
 	return "clickhouse:" + host
+}
+
+// sameWindow reports whether session replays w, to the millisecond the
+// arguments carry.
+func sameWindow(session *ReplaySampler, w sysmreplay.Window) (same bool) {
+	if session == nil {
+		return
+	}
+	cur := session.Window()
+	return unixMsOrZero(cur.From) == unixMsOrZero(w.From) && unixMsOrZero(cur.To) == unixMsOrZero(w.To)
 }
 
 func replayWindowArgs(in ReplayWindowArgs) (w sysmreplay.Window, err error) {
@@ -701,7 +785,11 @@ func replayWindowArgs(in ReplayWindowArgs) (w sysmreplay.Window, err error) {
 }
 
 func refuseUnlessController(inst *App) (err error) {
-	if !inst.isController() {
+	switch controller.Load() {
+	case inst:
+	case nil:
+		err = app.RefuseOperation(noControllerReason)
+	default:
 		err = app.RefuseOperation(notControllerReason)
 	}
 	return
@@ -755,7 +843,7 @@ var ops = func() (s *appops.Set[*App, opsSnap]) {
 
 	appops.Query(s, app.OperationSpec{Name: opGetOverview, Version: 1,
 		Summary: "read the latest sample: CPU, memory, disk and network rates, pressure, GPUs, batteries",
-		Agents:  true, Fork: app.OperationForkReadShared},
+		Agents:  true, Untrusted: true, Fork: app.OperationForkReadShared},
 		func(sn opsSnap, _ appops.None) (out Overview, err error) {
 			out.Mode, out.Frozen, out.IntervalMs = sn.mode(), sn.frozen, sn.intervalMs
 			pub := sn.pub
@@ -798,9 +886,7 @@ var ops = func() (s *appops.Set[*App, opsSnap]) {
 				}
 			}
 			sort.Strings(out.Errors)
-			for _, h := range historyOf(pub) {
-				out.HistorySeries = append(out.HistorySeries, h.name)
-			}
+			out.HistorySeries, out.HistoryFamilies = seriesCatalog(historyOf(pub))
 			return
 		})
 
@@ -898,11 +984,12 @@ var ops = func() (s *appops.Set[*App, opsSnap]) {
 			series := historyOf(sn.pub)
 			i := slices.IndexFunc(series, func(h historySeries) bool { return h.name == in.Series })
 			if i < 0 {
-				names := make([]string, 0, len(series))
-				for _, h := range series {
-					names = append(names, h.name)
+				single, families := seriesCatalog(series)
+				for _, f := range families {
+					single = append(single, f.Prefix+"<key>")
 				}
-				err = app.RefuseOperation("series is one of: " + strings.Join(names, ", "))
+				err = app.RefuseOperation("series is one of: " + strings.Join(single, ", ") +
+					"; get_overview lists the keys")
 				return
 			}
 			out = summarise(series[i].y, sn.pub.HistoryTimeUnixSec, n)
@@ -942,7 +1029,7 @@ var ops = func() (s *appops.Set[*App, opsSnap]) {
 	appops.Query(s, app.OperationSpec{Name: opGetView, Version: 1,
 		Summary: "read what this window shows: process table view, panel options, freeze, and the replay session",
 		Reads:   []string{resProcView, resProcMapMetric, resTopologyDim, resInterface, resLive, resReplay},
-		Agents:  true, Fork: app.OperationForkReadShared},
+		Agents:  true, Untrusted: true, Fork: app.OperationForkReadShared},
 		func(sn opsSnap, _ appops.None) (out ViewResult, err error) {
 			out.Mode, out.Controller, out.Frozen = sn.mode(), sn.controller, sn.frozen
 			out.ProcSortBy, out.ProcOrder = procSortName(sn.view.SortBy), orderName(sn.view.Desc)
@@ -965,10 +1052,11 @@ var ops = func() (s *appops.Set[*App, opsSnap]) {
 		Summary: "read where recorded history exists, as the replay availability strip loaded it",
 		Agents:  true, Fork: app.OperationForkReadShared},
 		func(sn opsSnap, _ appops.None) (out CoverageResult, err error) {
-			runs, from, to, cErr := coverageSnapshot()
-			out.FromUnixMs, out.ToUnixMs = unixMsOrZero(from), unixMsOrZero(to)
-			if cErr != nil {
-				out.Error = cErr.Error()
+			runs := sn.coverageRuns
+			out.FromUnixMs, out.ToUnixMs = unixMsOrZero(sn.coverageFrom), unixMsOrZero(sn.coverageTo)
+			out.Error = sn.coverageErr
+			if len(runs) > opsMaxCoverageRuns {
+				runs, out.Truncated = runs[len(runs)-opsMaxCoverageRuns:], true
 			}
 			for _, r := range runs {
 				out.Runs = append(out.Runs, CoverageRun{StartUnixMs: r.StartMS, EndUnixMs: r.EndMS, Rows: r.Rows})
@@ -1072,7 +1160,7 @@ var ops = func() (s *appops.Set[*App, opsSnap]) {
 	controllerOnly := func(name string, extra func(sn opsSnap) (bool, string)) {
 		s.Available(name, func(sn opsSnap) (bool, string) {
 			if !sn.controller {
-				return false, notControllerReason
+				return false, sn.controllerReason()
 			}
 			if extra != nil {
 				return extra(sn)
@@ -1113,6 +1201,21 @@ var ops = func() (s *appops.Set[*App, opsSnap]) {
 			if err != nil {
 				return
 			}
+			// Set, not toggle: a session already opening or open over what
+			// was asked for is the value already set.
+			switch st := CurrentReplayStatus().State; {
+			case st == ReplayOpening && (w.From.IsZero() && w.To.IsZero()):
+				return
+			case st == ReplayOn:
+				if (w.From.IsZero() && w.To.IsZero()) || sameWindow(ActiveReplay(), w) {
+					return
+				}
+				err = app.RefuseOperation("replay is on over another window; use set_replay_window")
+				return
+			case st == ReplayOpening:
+				err = app.RefuseOperation("replay is opening; read get_view, then use set_replay_window")
+				return
+			}
 			if obo := call.OnBehalfOf; obo != nil {
 				if dest := clickHouseDestination(); !slices.Contains(obo.Destinations, dest) {
 					err = app.RefuseForDestinations("replay reads recorded history from "+dest, dest)
@@ -1122,10 +1225,7 @@ var ops = func() (s *appops.Set[*App, opsSnap]) {
 			inst.applyEnterReplay(w)
 			return
 		})
-	controllerOnly(opEnterReplay, func(sn opsSnap) (bool, string) {
-		st := sn.replay.State
-		return st == ReplayOff || st == ReplayFailed, "replay is already " + st.String()
-	})
+	controllerOnly(opEnterReplay, nil)
 
 	appops.Command(s, app.OperationSpec{Name: opLeaveReplay, Version: 1,
 		Summary: "end replay and return every imztop window to live data",
@@ -1138,9 +1238,7 @@ var ops = func() (s *appops.Set[*App, opsSnap]) {
 			inst.applyLeaveReplay()
 			return
 		})
-	controllerOnly(opLeaveReplay, func(sn opsSnap) (bool, string) {
-		return sn.replay.State != ReplayOff, "replay is off"
-	})
+	controllerOnly(opLeaveReplay, nil)
 
 	appops.Command(s, app.OperationSpec{Name: opSetReplayPaused, Version: 1,
 		Summary: "pause or resume replay playback",
@@ -1188,7 +1286,11 @@ var ops = func() (s *appops.Set[*App, opsSnap]) {
 			if err != nil {
 				return
 			}
-			inst.applyReplayWindow(w.From, w.To)
+			if !sameWindow(ActiveReplay(), w) {
+				// A seek restarts playback, so setting the window it already
+				// has must not.
+				inst.applyReplayWindow(w.From, w.To)
+			}
 			return
 		})
 	controllerOnly(opSetReplayWindow, replayOn)
