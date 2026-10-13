@@ -78,6 +78,14 @@ func writeReadRowHelper(sb *strings.Builder, plan *mappingplan.Plan, mode EmitMo
 		linef(sb, 1, "%sMembs %sMembs,", lowerFirst(method), method)
 	}
 	linef(sb, 0, ") (row %s, present bool, err error) {", plan.KindType)
+	hasConst := false
+	for _, f := range plan.Fields {
+		hasConst = hasConst || f.IsConst
+	}
+	if hasConst {
+		// A row missing one of the kind's consts is not of this kind.
+		line(sb, 1, "constAbsent := false")
+	}
 
 	for _, g := range groups {
 		method := methodFor(g.Section)
@@ -107,10 +115,15 @@ func writeReadRowHelper(sb *strings.Builder, plan *mappingplan.Plan, mode EmitMo
 			line(sb, 1, "}")
 			continue
 		}
-		fields := writeSectionMatchLoops(sb, g, attrsVar, membsVar, prefix)
+		fields := writeSectionMatchLoops(sb, g, attrsVar, membsVar, prefix, true)
 		for _, f := range fields {
 			writeReadRowFieldFinish(sb, f, prefix)
 		}
+	}
+	if hasConst {
+		line(sb, 1, "if constAbsent {")
+		linef(sb, 2, "return %s{}, false, nil", plan.KindType)
+		line(sb, 1, "}")
 	}
 	line(sb, 1, "return")
 	line(sb, 0, "}\n")

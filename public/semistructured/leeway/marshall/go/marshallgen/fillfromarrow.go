@@ -260,7 +260,7 @@ func writeSectionDecode(sb *strings.Builder, g goplan.SectionGroup) (err error) 
 		return writeCarrierSectionDecode(sb, g, attrsVar, membsVar, prefix)
 	}
 
-	fields := writeSectionMatchLoops(sb, g, attrsVar, membsVar, prefix)
+	fields := writeSectionMatchLoops(sb, g, attrsVar, membsVar, prefix, false)
 	for _, f := range fields {
 		writeFieldAppend(sb, f, prefix)
 	}
@@ -520,7 +520,7 @@ func membElemGoType(m mappingplan.TupleMembership) string {
 // FillFromArrow (strict, SoA-appending tails) and ReadRow (presence-
 // tolerant, row-assigning tails) build on it. Returns the non-const
 // fields the caller must finish.
-func writeSectionMatchLoops(sb *strings.Builder, g goplan.SectionGroup, attrsVar, membsVar, prefix string) (fields []mappingplan.TaggedField) {
+func writeSectionMatchLoops(sb *strings.Builder, g goplan.SectionGroup, attrsVar, membsVar, prefix string, readRow bool) (fields []mappingplan.TaggedField) {
 	// `fields` is what the caller projects — consts project nothing. `slots` is
 	// what gets counted and arity-checked, which includes consts: a const's
 	// attribute is part of what identifies the kind on the wire, so a row
@@ -554,10 +554,18 @@ func writeSectionMatchLoops(sb *strings.Builder, g goplan.SectionGroup, attrsVar
 	// Const slots have no append tail to carry their arity check, so they are
 	// checked here; value fields are checked by their caller's tail, which
 	// differs between FillFromArrow (requires presence) and ReadRow (tolerates
-	// absence, refuses surplus).
+	// absence, refuses surplus). For ReadRow a missing const means the row
+	// is not of this kind (ADR-0146 D4): it sets constAbsent, which
+	// writeReadRowHelper declares and reads.
 	for si, f := range slots {
-		if f.IsConst {
-			writeSlotArityCheck(sb, f, prefix, true, si)
+		if !f.IsConst {
+			continue
+		}
+		writeSlotArityCheck(sb, f, prefix, !readRow, si)
+		if readRow {
+			linef(sb, 1, "if %sCount == 0 {", accName(f, prefix, si))
+			line(sb, 2, "constAbsent = true")
+			line(sb, 1, "}")
 		}
 	}
 	return
@@ -815,6 +823,8 @@ func writeCarrierContainerDecode(sb *strings.Builder, f mappingplan.TaggedField,
 
 func writeFieldAccumulatorDecl(sb *strings.Builder, f mappingplan.TaggedField, prefix string, constIdx int) {
 	switch {
+	case f.IsConst:
+		// A const projects nothing; only its attributes are counted.
 	case f.IsSlice():
 		linef(sb, 2, "var %s%sSlice []%s", prefix, f.GoFieldName, f.GoType())
 	case f.IsRoaring():

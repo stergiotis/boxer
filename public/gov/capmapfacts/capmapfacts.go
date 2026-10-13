@@ -43,13 +43,12 @@ import (
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/memory"
 
+	"github.com/stergiotis/boxer/public/functional/option"
 	"github.com/stergiotis/boxer/public/gov/capmapcorpus"
-	"github.com/stergiotis/boxer/public/gov/capmapvocab"
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsschema"
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsschema/dml"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
-	"github.com/stergiotis/boxer/public/semistructured/leeway/namemint/registry"
 	"lukechampine.com/blake3"
 )
 
@@ -115,14 +114,19 @@ func BuildRecords(corpus capmapcorpus.Corpus, now time.Time) (records []arrow.Re
 	}
 	ent := dml.NewInEntityFacts(memory.NewGoAllocator(), total)
 	for i := range corpus.Competences {
-		encodeCompetence(ent, corpus.Competences[i], now)
+		if eErr := encodeCompetence(ent, corpus.Competences[i], now); eErr != nil {
+			return nil, stats, eb.Build().Str("slug", corpus.Competences[i].Slug).Errorf("unable to encode competence: %w", eErr)
+		}
 		if cErr := ent.CommitEntity(); cErr != nil {
 			return nil, stats, eb.Build().Str("slug", corpus.Competences[i].Slug).Errorf("unable to commit competence: %w", cErr)
 		}
 		stats.Competences++
 	}
 	for i := range corpus.Relations {
-		encodeRelation(ent, corpus.Relations[i], now)
+		if eErr := encodeRelation(ent, corpus.Relations[i], now); eErr != nil {
+			return nil, stats, eb.Build().Str("sourceSlug", corpus.Relations[i].SourceSlug).Str("target", corpus.Relations[i].Target).
+				Errorf("unable to encode relation: %w", eErr)
+		}
 		if cErr := ent.CommitEntity(); cErr != nil {
 			return nil, stats, eb.Build().Str("sourceSlug", corpus.Relations[i].SourceSlug).Str("target", corpus.Relations[i].Target).
 				Errorf("unable to commit relation: %w", cErr)
@@ -167,108 +171,137 @@ func Ingest(ctx context.Context, corpus capmapcorpus.Corpus, sink RecordSinkI, t
 
 // encodeCompetence writes one competence row: BeginEntity through the last
 // section, with no commit — the caller commits, matching the runtime's own
-// encoders so the batched and single paths cannot drift.
-func encodeCompetence(ent *dml.InEntityFacts, competence capmapcorpus.Competence, now time.Time) {
+// encoders so the batched and single paths cannot drift. The row carries
+// three components (CompetenceRecord, CompetenceTags, CompetenceLifecycle);
+// the symbol section holds attributes of all three.
+func encodeCompetence(ent *dml.InEntityFacts, competence capmapcorpus.Competence, now time.Time) (err error) {
 	nk := competence.NaturalKey
 	ent.BeginEntity().SetId(DeriveId(nk), nk).SetTimestamp(now)
+	rec, tags, lifecycle := competenceComponents(competence)
 
 	sym := ent.GetSectionSymbol()
-	// The kind marker's value repeats the kind as text so a row is legible
-	// without resolving membership ids; the membership is what identifies it.
-	sym.BeginAttribute("competence").AddMembershipLowCardRef(id(capmapvocab.MembKindCompetence)).EndAttribute()
-	sym.BeginAttribute(competence.Slug).AddMembershipLowCardRef(id(capmapvocab.MembCompSlug)).EndAttribute()
-	addSymbolIf(sym, competence.Domain, capmapvocab.MembCompDomain)
-	addSymbolIf(sym, competence.Catalog, capmapvocab.MembCompCatalog)
-	addSymbolIf(sym, competence.Owner, capmapvocab.MembCompOwner)
-	// Tags: one attribute each, all wearing the same membership. A tag set is
-	// a small vocabulary applied across the corpus, which is what the
-	// low-cardinality symbol section is for, and one attribute per tag is what
-	// makes "every competence tagged X" an indexOf rather than a string scan.
-	for _, tag := range competence.Tags {
-		addSymbolIf(sym, tag, capmapvocab.MembCompTag)
+	if err = CompetenceRecordEmitSectionSymbol(sym, rec); err != nil {
+		return
 	}
-	// Lifecycle: one attribute per recorded phase, the phase riding as the
-	// membership's high-card parameter so who stays attached to which phase.
-	for _, ev := range competence.Lifecycle {
-		if ev.By == "" {
-			continue
-		}
-		sym.BeginAttribute(ev.By).AddMembershipMixedLowCardRef(
-			id(capmapvocab.MembCompLifecycleBy), []byte(ev.Phase)).EndAttribute()
+	if err = CompetenceTagsEmitSectionSymbol(sym, tags); err != nil {
+		return
+	}
+	if err = CompetenceLifecycleEmitSectionSymbol(sym, lifecycle); err != nil {
+		return
 	}
 	sym.EndSection()
 
 	str := ent.GetSectionStringArray()
-	addStringIf(str, competence.Name, capmapvocab.MembCompName)
-	addStringIf(str, competence.Abbrev, capmapvocab.MembCompAbbrev)
-	addStringIf(str, competence.Synopsis, capmapvocab.MembCompSynopsis)
-	addStringIf(str, competence.VaultPath, capmapvocab.MembCompVaultPath)
+	if err = CompetenceRecordEmitSectionStringArray(str, rec); err != nil {
+		return
+	}
 	str.EndSection()
 
-	// Scores are written unconditionally, sentinel included: "not assessed" is
-	// a value to select on, not an absence to infer from a missing attribute.
 	u8 := ent.GetSectionU8Array()
-	u8.BeginAttributeSingle(competence.Level).AddMembershipLowCardRef(id(capmapvocab.MembCompLevel)).EndAttribute()
-	u8.BeginAttributeSingle(competence.Maturity).AddMembershipLowCardRef(id(capmapvocab.MembCompMaturity)).EndAttribute()
-	u8.BeginAttributeSingle(competence.Pain).AddMembershipLowCardRef(id(capmapvocab.MembCompPain)).EndAttribute()
+	if err = CompetenceRecordEmitSectionU8Array(u8, rec); err != nil {
+		return
+	}
 	u8.EndSection()
 
-	if len(competence.Sections) > 0 {
-		// The heading rides as the high-card parameter because headings are
-		// authored text and cannot be registered names (ADR-0168 §SD5).
+	if len(rec.Sections) > 0 {
 		txt := ent.GetSectionTextArray()
-		for _, sec := range competence.Sections {
-			txt.BeginAttributeSingle(sec.Text).AddMembershipMixedLowCardRef(
-				id(capmapvocab.MembCompSection), []byte(sec.Heading)).EndAttribute()
+		if err = CompetenceRecordEmitSectionTextArray(txt, rec); err != nil {
+			return
 		}
 		txt.EndSection()
 	}
-
-	if hasLifecycleTimes(competence.Lifecycle) {
+	if len(rec.LifecycleAt) > 0 {
 		tm := ent.GetSectionTimeArray()
-		for _, ev := range competence.Lifecycle {
-			if ev.At.IsZero() {
-				continue
-			}
-			tm.BeginAttributeSingle(ev.At).AddMembershipMixedLowCardRef(
-				id(capmapvocab.MembCompLifecycleAt), []byte(ev.Phase)).EndAttribute()
+		if err = CompetenceRecordEmitSectionTimeArray(tm, rec); err != nil {
+			return
 		}
 		tm.EndSection()
 	}
+	return
+}
+
+// competenceComponents maps a competence onto its row's components. Empty
+// text is left out, as is a lifecycle event without a who (from
+// CompetenceLifecycle) or without a time (from LifecycleAt).
+func competenceComponents(c capmapcorpus.Competence) (rec CompetenceRecord, tags CompetenceTags, lifecycle CompetenceLifecycle) {
+	rec = CompetenceRecord{
+		Slug:      c.Slug,
+		Domain:    nonEmpty(c.Domain),
+		Catalog:   nonEmpty(c.Catalog),
+		Owner:     nonEmpty(c.Owner),
+		Name:      nonEmpty(c.Name),
+		Abbrev:    nonEmpty(c.Abbrev),
+		Synopsis:  nonEmpty(c.Synopsis),
+		VaultPath: nonEmpty(c.VaultPath),
+		Level:     c.Level,
+		Maturity:  c.Maturity,
+		Pain:      c.Pain,
+	}
+	for _, sec := range c.Sections {
+		rec.Sections = append(rec.Sections, CompetenceSection{Heading: sec.Heading, Text: sec.Text})
+	}
+	for _, tag := range c.Tags {
+		if tag != "" {
+			tags.Tags = append(tags.Tags, CompetenceTag{Value: tag})
+		}
+	}
+	for _, ev := range c.Lifecycle {
+		if ev.By != "" {
+			lifecycle.By = append(lifecycle.By, CompetencePhaseBy{Phase: string(ev.Phase), By: ev.By})
+		}
+		if !ev.At.IsZero() {
+			rec.LifecycleAt = append(rec.LifecycleAt, CompetencePhaseAt{Phase: string(ev.Phase), At: ev.At})
+		}
+	}
+	return
 }
 
 // encodeRelation writes one relation row.
-//
-// The target appears twice on purpose: as a foreign key when it resolved to a
-// competence, and always as text. A broken link and a citation have a target
-// worth recording and no row to point at, so the text column is the one that
-// is never empty.
-func encodeRelation(ent *dml.InEntityFacts, rel capmapcorpus.Relation, now time.Time) {
+func encodeRelation(ent *dml.InEntityFacts, rel capmapcorpus.Relation, now time.Time) (err error) {
 	nk := relationNaturalKey(rel)
 	ent.BeginEntity().SetId(DeriveId(nk), nk).SetTimestamp(now)
+	rec := relationRecord(rel)
 
 	sym := ent.GetSectionSymbol()
-	sym.BeginAttribute("relation").AddMembershipLowCardRef(id(capmapvocab.MembKindRelation)).EndAttribute()
-	sym.BeginAttribute(string(rel.Kind)).AddMembershipLowCardRef(id(capmapvocab.MembRelKind)).EndAttribute()
-	sym.BeginAttribute(rel.Resolution.String()).AddMembershipLowCardRef(id(capmapvocab.MembRelResolution)).EndAttribute()
-	sym.BeginAttribute(rel.Target).AddMembershipLowCardRef(id(capmapvocab.MembRelTargetText)).EndAttribute()
-	addSymbolIf(sym, rel.Section, capmapvocab.MembRelSection)
+	if err = RelationRecordEmitSectionSymbol(sym, rec); err != nil {
+		return
+	}
 	sym.EndSection()
 
 	fk := ent.GetSectionForeignKey()
-	fk.BeginAttribute(DeriveId(capmapcorpus.NaturalKey(rel.SourceSlug))).
-		AddMembershipLowCardRef(id(capmapvocab.MembRelSource)).EndAttribute()
-	if resolvesToCompetence(rel.Resolution) {
-		fk.BeginAttribute(DeriveId(capmapcorpus.NaturalKey(rel.Target))).
-			AddMembershipLowCardRef(id(capmapvocab.MembRelTarget)).EndAttribute()
+	if err = RelationRecordEmitSectionForeignKey(fk, rec); err != nil {
+		return
 	}
 	fk.EndSection()
 
-	if rel.Kind == capmapcorpus.RelationKindSimilar {
+	if rec.Ncd.Has {
 		f64 := ent.GetSectionF64Array()
-		f64.BeginAttributeSingle(rel.Ncd).AddMembershipLowCardRef(id(capmapvocab.MembRelNcd)).EndAttribute()
+		if err = RelationRecordEmitSectionF64Array(f64, rec); err != nil {
+			return
+		}
 		f64.EndSection()
 	}
+	return
+}
+
+// relationRecord maps a relation onto its row's component: a foreign key
+// to the target only when it resolved to a competence, a score only for a
+// similarity.
+func relationRecord(rel capmapcorpus.Relation) (rec RelationRecord) {
+	rec = RelationRecord{
+		RelKind:    string(rel.Kind),
+		Resolution: rel.Resolution.String(),
+		TargetText: rel.Target,
+		Section:    nonEmpty(rel.Section),
+		Source:     DeriveId(capmapcorpus.NaturalKey(rel.SourceSlug)),
+	}
+	if resolvesToCompetence(rel.Resolution) {
+		rec.Target = option.Some(DeriveId(capmapcorpus.NaturalKey(rel.Target)))
+	}
+	if rel.Kind == capmapcorpus.RelationKindSimilar {
+		rec.Ncd = option.Some(rel.Ncd)
+	}
+	return
 }
 
 // resolvesToCompetence reports whether the relation's target is a competence
@@ -277,36 +310,10 @@ func resolvesToCompetence(r capmapcorpus.ResolutionE) (ok bool) {
 	return r == capmapcorpus.ResolutionDirect || r == capmapcorpus.ResolutionDirRef
 }
 
-func hasLifecycleTimes(events []capmapcorpus.LifecycleEvent) (any bool) {
-	for _, ev := range events {
-		if !ev.At.IsZero() {
-			return true
-		}
+// nonEmpty is the absence rule for text: empty is not written.
+func nonEmpty(v string) (o option.Option[string]) {
+	if v != "" {
+		o = option.Some(v)
 	}
-	return false
-}
-
-// id is the uint64 the DML builders take for a membership.
-func id(m registry.RegisteredNaturalKey) (v uint64) {
-	return m.GetId().Value()
-}
-
-// addSymbolIf writes a low-cardinality attribute, skipping empty values.
-//
-// Empty is an absence rather than a value here: writing "" would put a
-// meaningless entry in a dictionary-encoded column and make "has no owner"
-// indistinguishable from "owner is the empty string".
-func addSymbolIf(sec *dml.InEntityFactsSectionSymbol, value string, memb registry.RegisteredNaturalKey) {
-	if value == "" {
-		return
-	}
-	sec.BeginAttribute(value).AddMembershipLowCardRef(id(memb)).EndAttribute()
-}
-
-// addStringIf is addSymbolIf for the high-cardinality string section.
-func addStringIf(sec *dml.InEntityFactsSectionStringArray, value string, memb registry.RegisteredNaturalKey) {
-	if value == "" {
-		return
-	}
-	sec.BeginAttributeSingle(value).AddMembershipLowCardRef(id(memb)).EndAttribute()
+	return
 }

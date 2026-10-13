@@ -798,6 +798,32 @@ entries under `## Updates`.
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers (Tier 1 in-place / Tier 2 dated `## Updates` entry / Tier 3 new superseding ADR).
 
+## Updates
+
+### 2026-10-13 — the encoder is written against component codecs, not by hand
+
+§Deferrals' two refusals were both lifted by
+[ADR-0326](./0326-tuple-elements-carry-parameters-and-tuple-kinds-read-in-readrow.md).
+A nested section's element may now carry its mixed-channel membership's
+parameters, as text written as the blob itself (§SD1), and `ReadRow` reads
+tuple kinds by claiming their attributes on sections other kinds share
+(§SD4).
+
+`capmapfacts` now encodes through generated codecs for four components,
+whose ids `FixedIdsWrapper` takes from `capmapvocab` by registered name.
+`CompetenceRecord` carries the flat attributes, with the headings
+(`textArray`) and the lifecycle times (`timeArray`) as nested sections.
+`CompetenceTags` and `CompetenceLifecycle` carry the tags and the
+lifecycle's who; they are kinds of their own because a kind cannot put a
+nested section on the `symbol` section beside its flat fields. `Relation`
+is `RelationRecord`. The rows are unchanged, which was checked byte for
+byte against the hand encoder before it was removed, so §SD11's SQL read
+path is untouched.
+
+The record store stays deferred, for the reason §Deferrals gives for
+`Relation`: `BuildRecords` commits both kinds into one batch, where a
+store owns its entity frame.
+
 ## References
 
 - [Background survey](../adr-background-work/capmap-port.md) — measurements and the reasoning behind each fork.
