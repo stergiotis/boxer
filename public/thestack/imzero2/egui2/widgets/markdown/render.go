@@ -527,30 +527,28 @@ func renderFootnoteRun(r *paragraphRun) {
 // ScrollArea, which is where every markdown document lives, and
 // collapsed the image to invisible).
 //
-// Pixels are re-sent every frame and contentVersion is pinned at 1. The
-// Rust ImageCache keys on (id, version, w, h) and skips the GPU upload
-// when they match, so this costs wire bandwidth — one memcpy each way
-// per frame — and NOT a per-frame texture upload. Fine for icons and
-// diagrams; the wrong cost model for a book of full-page screenshots,
-// which is when the tracker becomes worth its complexity. Skipping it
-// today follows the bindings doc-comment at [c.ImageVersionTracker]
-// ("the per-widget-id one-shot upload cost is negligible") and keeps the
-// package-level retain-once / render-many Doc usable under multiple id
-// scopes — keyed-by-seq trackers silently drop pixels on the second
-// scope.
+// Pixels are sent once per widget id: later frames send the empty slice
+// and the host draws its cached texture, so a frame of a document full of
+// figures costs one image command per figure rather than its pixels. A
+// widget the host reports starved — its texture evicted, or its upload
+// lost in a region the host skipped — is sent the pixels again.
 func renderImageRun(r *paragraphRun, rc *renderCtx) {
 	seq := rc.idSeq
 	rc.idSeq++
+	pixels := r.imgPixels
+	if rc.images != nil {
+		pixels = rc.images.pixelsFor(rc.ids.PrepareSeq(seq).Derive(), rc.imageVersion, pixels)
+	}
 	c.Image(
 		rc.ids.PrepareSeq(seq),
 		r.imgWidthPx, r.imgHeightPx,
-		1, // contentVersion: pinned; pixels ride every frame.
+		rc.imageVersion,
 		uint8(c.FitAspectMaxE),
 		imageFitAxis(rc.imageMaxW, r.imgWidthPx),
 		imageFitAxis(rc.imageMaxH, r.imgHeightPx),
 		uint8(c.FilterLinearE),
 		c.TintNoneRgba,
-		r.imgPixels,
+		pixels,
 	).Send()
 }
 

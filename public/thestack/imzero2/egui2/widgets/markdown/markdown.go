@@ -3,6 +3,8 @@ package markdown
 import (
 	"slices"
 	"strings"
+	"sync"
+	"sync/atomic"
 
 	"github.com/stergiotis/boxer/public/containers"
 	"github.com/stergiotis/boxer/public/semistructured/markdown/obsidian"
@@ -13,20 +15,17 @@ import (
 )
 
 // Doc is a parsed Obsidian-flavored markdown document. Construct with
-// [Parse] or [ParseWith]; render once or many times via [Render]. Doc is immutable
-// after construction and safe to share across goroutines provided the
-// frame-time render path remains single-threaded.
+// [Parse] or [ParseWith]; render once or many times via [Render]. Doc's content is
+// immutable after construction and safe to share across goroutines
+// provided the frame-time render path remains single-threaded.
 //
 // imageMaxW / imageMaxH cap the bounding box for FitAspectMaxE on
 // inline images sourced from [resolver.ResolverI.LoadImage] — see
-// [ParseOptions.ImageMaxW] for the exact meaning. Pixels are decoded once at parse time, stashed on a
-// runKindImage paragraph run, and re-sent every frame; the bindings
-// doc-comment at [c.ImageVersionTracker] explicitly recommends skipping
-// the tracker for static assets ("the per-widget-id one-shot upload
-// cost is negligible") because per-widget-id tracking would silently
-// break the package-level `var doc = markdown.Parse(...)` retain-once /
-// render-many idiom when the same Doc is rendered under multiple id
-// scopes.
+// [ParseOptions.ImageMaxW] for the exact meaning. Pixels are decoded once at parse time and
+// stashed on a runKindImage paragraph run. Each image widget is sent its
+// pixels once and draws from the host's texture cache afterwards; the
+// record of what was sent is the one mutable part of a Doc, keyed by
+// widget id so the same Doc can render under any number of id scopes.
 type Doc struct {
 	segments    []segment
 	frontmatter *containers.BinarySearchGrowingKV[string, any]
@@ -34,6 +33,30 @@ type Doc struct {
 	dropped     map[string]int
 	imageMaxW   uint32
 	imageMaxH   uint32
+	// imageVersion is the content version of every image in this Doc,
+	// unique per Doc, so a Doc rendered under ids another Doc drew with
+	// uploads its own pixels instead of drawing the other's textures.
+	imageVersion uint64
+	images       *imageSends
+}
+
+// docImageVersions hands out [Doc.imageVersion].
+var docImageVersions atomic.Uint64
+
+// imageSends records which image widgets were sent their pixels.
+type imageSends struct {
+	mu      sync.Mutex
+	tracker *c.ImageVersionTracker[uint64]
+}
+
+// pixelsFor is pixels for a widget not yet sent them, or for one the host
+// reported starved last frame, and the empty "draw cached" slice
+// otherwise.
+func (inst *imageSends) pixelsFor(widgetId uint64, version uint64, pixels []uint32) (out []uint32) {
+	inst.mu.Lock()
+	defer inst.mu.Unlock()
+	out = inst.tracker.PixelsToSendFor(widgetId, widgetId, version, pixels)
+	return
 }
 
 // KindCount is one AST node kind the lowering could not represent, and
@@ -272,6 +295,8 @@ func (inst *Doc) render(in Input) (res Result) {
 		ids:            in.Ids,
 		imageMaxW:      inst.imageMaxW,
 		imageMaxH:      inst.imageMaxH,
+		imageVersion:   inst.imageVersion,
+		images:         inst.images,
 		scrollToSlug:   in.ScrollToSection,
 		headings:       inst.headings,
 		actionsEnabled: len(in.ActionLabels) > 0,
@@ -332,6 +357,9 @@ type renderCtx struct {
 	idSeq     uint64
 	imageMaxW uint32
 	imageMaxH uint32
+	// imageVersion and images are the rendered Doc's; see [Doc.images].
+	imageVersion uint64
+	images       *imageSends
 
 	// emittedAny goes true once the first segment of this Render call has
 	// been reached, and exists only so a heading knows whether it opens
@@ -487,6 +515,9 @@ func ParseWith(md []byte, opts ParseOptions) (doc *Doc) {
 		dropped:     dropped,
 		imageMaxW:   cfg.imageMaxW,
 		imageMaxH:   cfg.imageMaxH,
+
+		imageVersion: docImageVersions.Add(1),
+		images:       &imageSends{tracker: c.NewImageVersionTracker[uint64]()},
 	}
 	return
 }
