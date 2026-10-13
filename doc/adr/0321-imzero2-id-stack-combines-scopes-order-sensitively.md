@@ -1,10 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-10-11
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-10-13
 ---
-
-> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
 
 # ADR-0321: The imzero2 id stack combines a scope and its local id order-sensitively
 
@@ -113,4 +113,4 @@ comments no longer cite the XOR algebra.
 
 ## Status
 
-Proposed.
+Accepted 2026-10-13.

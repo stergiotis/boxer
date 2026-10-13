@@ -139,6 +139,10 @@ waiting for them, and names in its answer what is left for them.
   automatically up to a host-wide cap, which is what a task longer than one
   deadline needs.
 
+## Alternatives
+
+The options are weighed in the QOC above; no narrower choice was taken.
+
 ## Consequences
 
 ### Positive
@@ -161,3 +165,11 @@ waiting for them, and names in its answer what is left for them.
 
 - Test grants are unchanged and take precedence for a new grant on the
   headless host.
+
+
+## Status
+
+Proposed — awaiting review by the code owner.
+
+Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
+See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers (Tier 1 in-place / Tier 2 dated `## Updates` entry / Tier 3 new superseding ADR).

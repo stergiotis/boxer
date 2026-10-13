@@ -1,13 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-10-11
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to accepted
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-10-13
 ---
-
-> **Status: proposed — pre-human-review.** Implemented alongside this
-> record; review decides whether it stands.
 
 # ADR-0322: App instances drain a lifetime scope between Unmount and unload
 
@@ -297,7 +294,7 @@ not callbacks run from the goroutine that finished the work.
 
 ## Status
 
-Proposed — awaiting review by the code owner.
+Accepted 2026-10-13.
 
 Deferred, each with its trigger:
 
