@@ -12,7 +12,7 @@ status: draft
 
 # Harness: what is left after the impediment work
 
-Last revised 2026-10-12. The impediments and their mitigations are in
+Last revised 2026-10-13. The impediments and their mitigations are in
 [plan002](../../plan002.md) (store and bodies), ADR-0319 (ids), ADR-0320
 (vault), ADR-0322 (lifetime scope), and the two problem notes beside this
 file. Everything below is open.
@@ -21,7 +21,7 @@ file. Everything below is open.
 
 | Item | Decides | Blocks |
 | --- | --- | --- |
-| Accept or amend ADR-0322 (lifetime scope), 0323 (attention levels), 0324 (decision queue), 0326 (tuple parameters) | the owner | doclint flags accepted docs that link to them |
+| Accept or amend ADR-0321 (id stack), 0322 (lifetime scope), 0326 (tuple parameters) | the owner | doclint flags accepted docs that link to them |
 | Accept or amend ADR-0327 (the evidence profile: chain, vault, marks, seals, anchors by scope, the audit event), which moved the trail onto the journal's laws and the journal onto the generator's profile; M1–M6 have landed | the owner | the open items of its §SD11 |
 | The env registry seam: boxer is handed the cell declaration and the profile rather than reading them | an ADR to write, from `env-registry-scope-problem.md` | the chat's second `cell.FromEnv` read; integrators |
 | The httpegress wall: run label and tier on a fetch, `cell.Decide` at the service, approvals, canaries, trail columns | ADR-0312 §SD4 deferral; owner's own session | laws L14 and L33 over fetches |
@@ -37,11 +37,14 @@ file. Everything below is open.
 | `hostboot` provisions the id lease table once itself and once through `agentrunstore.ProvisionIn`; the first call is redundant | `public/keelson/runtime/hostboot/hostboot.go` | harmless; fold when the function is next touched |
 | Cross-cell receipts for erasure; the read event on the vault seam | ADR-0320 §SD7, ADR-0327 §SD11 | the audit event and the forwarder exist (ADR-0327 M4a); a peer to send to does not |
 | Attachments move to the vault if they ever carry more than references | ADR-0320 §SD8 | no consumer needs it |
+| A job's terminal state reaches the attention service: a notice source that is an owning app and a job id, the worker reporting at settle time, the chrome's highlight opening the watchbill window | ADR-0323 §SD6, §SD7 (accepted 2026-10-12) | not started |
+| A refused or failed compaction, and compaction going off, as a transcript step | `apps/chat/chat_compact.go`, a step kind in `chat_steps.go` and its renderer | the renderer is in the dock work another session holds |
+| The context meter shows the re-projected size right after a compaction instead of one answer later | `apps/chat/chat_render.go` `contextFill` | same file |
+| The context probe treats llama.cpp's `meta.n_ctx_train` as a ceiling, not the loaded size, and warns when the size comes from a fallback field | `public/keelson/runtime/llm/context.go` | unblocked |
 
 ## Found by the verification sweep of 2026-10-12
 
-Not blocked, each a few lines, in files the session that wrote them may
-still hold:
+Not blocked, each a few lines; the files are free as of 2026-10-13:
 
 - codelint CS008: type aliases re-exporting the evidence package's types
   in `trail/auditevent.go` (`AuditEvent`, `ForwarderI`) and
@@ -64,4 +67,6 @@ ids and the writer lease; the lifetime scope and the drain step; the
 `headstore` rename; the small cleanups (the reserved `keyuse` kind, the
 comma rule on marks, the unused JSON helper, one provisioning call);
 ADR-0327's six milestones, the attention levels of ADR-0323 on the bus and
-in the chat, and the conversations roster of ADR-0324's background.
+in the chat, and the conversations roster of ADR-0324's background; the
+thrash check fitted to small contexts and compaction going off told in the
+meter (ADR-0316 Update of 2026-10-12); ADR-0323 and 0324 accepted.
