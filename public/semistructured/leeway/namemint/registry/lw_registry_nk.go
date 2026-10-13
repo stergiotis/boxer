@@ -25,11 +25,19 @@ import (
 // that is checked, and its token cannot be built anywhere else — so a registry
 // cannot exist around the check (ADR-0183 D0).
 //
+// The claim must be in the default id space: membership ids share one set of
+// columns with every other vocabulary's, and the committed assignment goldens
+// key a vocabulary by its value alone.
+//
 // estSize is a capacity hint only — an id is what its registration declares,
 // so nothing here moves when the hint changes.
 func NewNaturalKeyRegistry[C contract.ContractI](claim tagmint.ClaimedTagValue, estSize int, namingStyle naming.NamingStyleE, contr C) (inst *HumanReadableNaturalKeyRegistry[C], err error) {
 	if !claim.IsValid() {
 		err = eb.Build().Errorf("a registry mints under a claimed tag value — claim one with tagmint.MustClaim(name, value, maxExpectedIds)")
+		return
+	}
+	if !claim.Space().IsDefault() {
+		err = eb.Build().Str("claimant", claim.Name()).Str("space", claim.Space().Name()).Errorf("a registry's membership ids share the facts membership columns, so it mints under a claim in the default id space — claim with tagmint.MustClaim, not MustClaimIn")
 		return
 	}
 	tagValue := claim.Value()

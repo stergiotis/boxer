@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"fmt"
 	"io/fs"
+	"maps"
 	"os"
 	"path/filepath"
 	"slices"
@@ -29,12 +30,14 @@ import (
 const StreamGoldenBaseName = "idstream-claims.golden"
 
 // StreamClaim is one row of a stream golden: the claim's name, its tag value,
-// the code width the value carries, and the ids the claimant declared.
+// the code width the value carries, the ids the claimant declared, and the id
+// space the value was claimed in — "" for the default space.
 type StreamClaim struct {
 	Name           string
 	TagValue       uint32
 	Width          int
 	MaxExpectedIds uint64
+	Space          string
 }
 
 // SnapshotStreams reads the claims a package declares, ordered by name. A
@@ -52,17 +55,25 @@ func SnapshotStreams(claims []tagmint.ClaimedTagValue) (r []StreamClaim, err err
 			return
 		}
 		seen[c.Name()] = struct{}{}
-		r = append(r, StreamClaim{Name: c.Name(), TagValue: c.Value().Value(), Width: int(c.Tag().GetTagWidth()), MaxExpectedIds: c.MaxExpectedIds()})
+		r = append(r, StreamClaim{Name: c.Name(), TagValue: c.Value().Value(), Width: int(c.Tag().GetTagWidth()), MaxExpectedIds: c.MaxExpectedIds(), Space: c.Space().Name()})
 	}
 	slices.SortFunc(r, func(a, b StreamClaim) int { return strings.Compare(a.Name, b.Name) })
 	return
 }
 
 // RenderStreams writes a stream golden: a header, then one tab-separated row
-// per claim.
+// per claim. A claim in a named id space carries the space as a fifth field;
+// a claim in the default space omits it.
 func RenderStreams(claims []StreamClaim) string {
 	var sb strings.Builder
-	sb.WriteString("# name\ttagValue\twidth\tmaxExpectedIds\n")
+	header := "# name\ttagValue\twidth\tmaxExpectedIds"
+	for _, c := range claims {
+		if c.Space != "" {
+			header += "\tspace"
+			break
+		}
+	}
+	sb.WriteString(header + "\n")
 	sb.WriteString("# The committed id-stream claims (ADR-0319 §SD2). A changed tag value\n")
 	sb.WriteString("# changes every id already minted under it; a new line does not.\n")
 	sb.WriteString("# Regenerate with " + RegenEnvVar + "=1 go test ./<the claiming package>/...\n")
@@ -74,6 +85,10 @@ func RenderStreams(claims []StreamClaim) string {
 		sb.WriteString(strconv.Itoa(c.Width))
 		sb.WriteByte('\t')
 		sb.WriteString(strconv.FormatUint(c.MaxExpectedIds, 10))
+		if c.Space != "" {
+			sb.WriteByte('\t')
+			sb.WriteString(c.Space)
+		}
 		sb.WriteByte('\n')
 	}
 	return sb.String()
@@ -90,9 +105,17 @@ func ParseStreams(text string) (r []StreamClaim, err error) {
 			continue
 		}
 		parts := strings.Split(line, "\t")
-		if len(parts) != 4 {
-			err = eb.Build().Int("line", lineNo).Str("text", line).Errorf("expected four tab-separated fields")
+		if len(parts) != 4 && len(parts) != 5 {
+			err = eb.Build().Int("line", lineNo).Str("text", line).Errorf("expected four tab-separated fields, or five with an id space")
 			return
+		}
+		var sp string
+		if len(parts) == 5 {
+			sp = parts[4]
+			if sp == "" {
+				err = eb.Build().Int("line", lineNo).Errorf("an empty id space field; the default space omits the field")
+				return
+			}
 		}
 		tv, cerr := strconv.ParseUint(parts[1], 10, 32)
 		if cerr != nil {
@@ -109,7 +132,7 @@ func ParseStreams(text string) (r []StreamClaim, err error) {
 			err = eb.Build().Int("line", lineNo).Errorf("unable to parse maxExpectedIds: %w", cerr)
 			return
 		}
-		r = append(r, StreamClaim{Name: parts[0], TagValue: uint32(tv), Width: width, MaxExpectedIds: n})
+		r = append(r, StreamClaim{Name: parts[0], TagValue: uint32(tv), Width: width, MaxExpectedIds: n, Space: sp})
 	}
 	err = sc.Err()
 	return
@@ -156,9 +179,9 @@ func CompareToStreamGoldenFile(packageDir string, claims []tagmint.ClaimedTagVal
 	return
 }
 
-// DiffStreams compares two stream tables by name. A moved tag value is the
-// breaking edit; a changed declaration is reported too, since it is what the
-// claim's width class was checked against.
+// DiffStreams compares two stream tables by name. A moved tag value or id
+// space is the breaking edit; a changed declaration is reported too, since it
+// is what the claim's width class was checked against.
 func DiffStreams(golden, live []StreamClaim) (differences []string) {
 	byName := make(map[string]StreamClaim, len(golden))
 	for _, g := range golden {
@@ -173,6 +196,8 @@ func DiffStreams(golden, live []StreamClaim) (differences []string) {
 			differences = append(differences, fmt.Sprintf("+ %s claims tag value %d and is not in the golden — append it", l.Name, l.TagValue))
 		case g.TagValue != l.TagValue || g.Width != l.Width:
 			differences = append(differences, fmt.Sprintf("! %s moved from tag value %d to %d — every id minted under the old value keeps it", l.Name, g.TagValue, l.TagValue))
+		case g.Space != l.Space:
+			differences = append(differences, fmt.Sprintf("! %s moved from id space %q to %q — every id minted in the old space keeps it", l.Name, g.Space, l.Space))
 		case g.MaxExpectedIds != l.MaxExpectedIds:
 			differences = append(differences, fmt.Sprintf("~ %s now declares %d ids, not %d", l.Name, l.MaxExpectedIds, g.MaxExpectedIds))
 		}
@@ -198,6 +223,53 @@ func CheckStreamClass(c StreamClaim) (err error) {
 		err = eb.Build().Str("name", c.Name).Uint32("tagValue", c.TagValue).Uint32("advisedFromIncl", lo.Value()).Uint32("advisedToExcl", hi.Value()).Errorf("the stream's tag value is not in the class the planner advises for its declared cardinality")
 	}
 	return
+}
+
+// TagValueKey identifies a claimed tag value in the union check: the id space
+// it was claimed in ("" for the default space) and the value.
+type TagValueKey struct {
+	Space    string
+	TagValue uint32
+}
+
+// CheckTagValuesDisjoint reports every (space, tag value) claimed twice across
+// the committed goldens. A vocabulary's membership ids share the facts
+// membership columns, so its value is claimed in the default space; a stream
+// is keyed by the space its golden row names. One value in two different
+// spaces is not a collision. Inputs are read in path order, so the report is
+// deterministic.
+func CheckTagValuesDisjoint(memberships map[string][]Assignment, streams map[string][]StreamClaim) (collisions []string) {
+	owner := make(map[TagValueKey]string)
+	for _, path := range slices.Sorted(maps.Keys(memberships)) {
+		rows := memberships[path]
+		if len(rows) == 0 {
+			continue
+		}
+		k := TagValueKey{TagValue: TagValueOf(rows[0].Id).Value()}
+		if prev, taken := owner[k]; taken {
+			collisions = append(collisions, fmt.Sprintf("tag value %d is claimed twice in the default id space: %s and %s", k.TagValue, prev, path))
+			continue
+		}
+		owner[k] = path
+	}
+	for _, path := range slices.Sorted(maps.Keys(streams)) {
+		for _, c := range streams[path] {
+			k := TagValueKey{Space: c.Space, TagValue: c.TagValue}
+			if prev, taken := owner[k]; taken {
+				collisions = append(collisions, fmt.Sprintf("tag value %d is claimed twice in %s: %s and %s/%s", k.TagValue, describeSpace(k.Space), prev, path, c.Name))
+				continue
+			}
+			owner[k] = path + "/" + c.Name
+		}
+	}
+	return
+}
+
+func describeSpace(sp string) string {
+	if sp == "" {
+		return "the default id space"
+	}
+	return "id space " + strconv.Quote(sp)
 }
 
 // FindStreamGoldens walks root and returns every committed stream golden,

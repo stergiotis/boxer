@@ -125,14 +125,19 @@ func TestIterateClaimsCoversWhatWasClaimed(t *testing.T) {
 	c, err := tagmint.Claim("tagmintTestIterated", tvTestD, 10)
 	require.NoError(t, err)
 
+	type key struct {
+		space tagmint.Space
+		value identifier.TagValue
+	}
 	var seenRuntimeMint, seenOurs bool
-	values := map[identifier.TagValue]string{}
+	values := map[key]string{}
 	for cl := range tagmint.IterateClaims() {
 		require.True(t, cl.IsValid())
-		if prev, dup := values[cl.Value()]; dup {
-			t.Fatalf("tag value %d yielded twice: %q and %q", cl.Value().Value(), prev, cl.Name())
+		k := key{space: cl.Space(), value: cl.Value()}
+		if prev, dup := values[k]; dup {
+			t.Fatalf("tag value %d yielded twice in space %q: %q and %q", cl.Value().Value(), cl.Space().Name(), prev, cl.Name())
 		}
-		values[cl.Value()] = cl.Name()
+		values[k] = cl.Name()
 		switch cl.Name() {
 		case "runtimeMint":
 			seenRuntimeMint = true
