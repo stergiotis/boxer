@@ -24,6 +24,8 @@ import (
 //     which it never does for the validator's countEqual (verified on 26.5).
 //   - Projection — a CAST to a named Tuple extracting every field, so a
 //     downstream UDF can address slots by name (t.<GoFieldName>). Embed in SELECT.
+//     Empty for a kind with a tuple field (ADR-0326 §SD5): a tuple maps
+//     many attributes through one field, and no single slot holds them.
 //   - Validator — a boolean expression: the exact conformance check. It is
 //     semantically complete on its own but index-blind; embedded without the
 //     Presence terms it forces a full scan.
@@ -113,9 +115,9 @@ func NewGenerator(ir *InformationRetrieval, resolver MembershipResolver) *Genera
 // multi-sub-column sections (one membership, several value columns) count the
 // membership once.
 //
-// Every artefact assumes the flat one-attribute-per-membership-per-row shape,
-// so a Plan carrying a tuple / nested attribute section is rejected rather than
-// mis-generated (see locate).
+// A tuple / nested attribute section is rendered per slot, by the rule
+// <Kind>ReadRow claims its attributes with (ADR-0326 §SD4; see tupleSlot),
+// and leaves the Projection empty.
 func (g *Generator) Generate(plan *mappingplan.Plan) (a Artefacts, err error) {
 	a.Kind = plan.KindName
 	if err = g.validate(plan); err != nil {
@@ -159,8 +161,14 @@ func (g *Generator) Generate(plan *mappingplan.Plan) (a Artefacts, err error) {
 		return
 	}
 
+	hasTuple := false
 	for i := range plan.Fields {
 		f := &plan.Fields[i]
+		if f.TupleField != "" {
+			// Rendered per slot below; locate has checked its columns.
+			hasTuple = true
+			continue
+		}
 		fa, ferr := g.field(f, contract)
 		if ferr != nil {
 			err = eb.Build().Str("field", f.GoFieldName).Str("section", f.LWSection).Str("membership", f.LWMembership).Errorf("unable to generate field: %w", ferr)
@@ -176,7 +184,25 @@ func (g *Generator) Generate(plan *mappingplan.Plan) (a Artefacts, err error) {
 		validator.add(fa.validator)
 	}
 
-	a.Projection = "CAST(tuple(" + strings.Join(exprs, ", ") + "), " + marshalling.EscapeString("Tuple("+strings.Join(slotTypes, ", ")+")") + ")"
+	var anyRaw []string
+	for _, s := range contract.Slots {
+		if !s.OwnsSection {
+			continue
+		}
+		ta, terr := g.tupleSlot(s)
+		if terr != nil {
+			err = eb.Build().Str("section", s.Section).Str("membership", s.Membership).Strs("fields", s.GoFields).Errorf("unable to generate tuple slot: %w", terr)
+			return
+		}
+		presence.add(ta.presence)
+		optPresence.add(ta.optPresence)
+		validator.add(ta.validator)
+		anyRaw = append(anyRaw, ta.anyRaw...)
+	}
+
+	if !hasTuple {
+		a.Projection = "CAST(tuple(" + strings.Join(exprs, ", ") + "), " + marshalling.EscapeString("Tuple("+strings.Join(slotTypes, ", ")+")") + ")"
+	}
 	presenceTerms := presence.terms()
 	if len(presenceTerms) == 0 {
 		// No slot is required, so no conjunction of literals can say the row
@@ -185,7 +211,7 @@ func (g *Generator) Generate(plan *mappingplan.Plan) (a Artefacts, err error) {
 		// mappingplan.ReadContract.Verdict calls `populated`, and what stops a
 		// container-only kind's Filter from matching every row. When some slot
 		// IS required the conjunction implies the disjunction, so it is omitted.
-		if anyTerms := optPresence.anyTerms(); len(anyTerms) > 0 {
+		if anyTerms := append(optPresence.anyTerms(), anyRaw...); len(anyTerms) > 0 {
 			presenceTerms = []string{joinOr(anyTerms)}
 		}
 	}
@@ -307,16 +333,10 @@ func (g *Generator) locate(f *mappingplan.TaggedField) (loc fieldLocators, err e
 	if f.TupleField != "" {
 		// A tuple-family section (a dynamic-membership tuple, ADR-0103/0109, or
 		// a nested attribute section, ADR-0113) maps MANY attributes per row
-		// through one Go field. Every artefact below assumes the flat
-		// one-attribute-per-membership shape: the validator pins
-		// `countEqual(...) = 1` and the projection extracts a single value slot.
-		// Emitting them for a tuple is silently wrong rather than merely
-		// incomplete — a dynamic tuple's per-element memberships are not on the
-		// TaggedField at all (LWMembership is ""), so a verbatim channel would
-		// resolve to the empty literal and match nothing, and a static nested
-		// `[]S` would assert exactly one attribute for an N-attribute section.
-		// Reject here so both Generate and ValidatePlanAgainstIR say so.
-		err = eb.Build().Str("tupleField", f.TupleField).Str("section", f.LWSection).Errorf("tuple / nested attribute sections are not supported by the read-back generator — it maps one attribute per membership per row")
+		// through one Go field, so the flat artefacts below — `countEqual(...)
+		// = 1`, a single projected value — do not fit it. Generate renders it
+		// per slot (tupleSlot); here only its columns are checked.
+		err = g.locateTuple(f)
 		return
 	}
 	sec := f.LWSection
@@ -629,4 +649,118 @@ func slotName(goField string) string {
 		return "_"
 	}
 	return goField
+}
+
+// tupleArtefacts are one tuple slot's contributions: presence literals
+// (required or optional), validator terms, and the raw disjuncts a dynamic
+// tuple's presence is made of.
+type tupleArtefacts struct {
+	presence    []presenceTerm
+	optPresence []presenceTerm
+	validator   string
+	anyRaw      []string
+}
+
+// tupleChannelSpec is channelSpec widened to the mixed channels, which a
+// tuple's membership may use (ADR-0326 §SD1) and a flat field may not.
+func tupleChannelSpec(ch mappingplan.MembershipChannel) (spec common.MembershipSpecE, err error) {
+	switch ch {
+	case mappingplan.MembershipChannelMixedLowCardRef:
+		return common.MembershipSpecMixedLowCardRefHighCardParameters, nil
+	case mappingplan.MembershipChannelMixedLowCardVerbatim:
+		return common.MembershipSpecMixedLowCardVerbatimHighCardParameters, nil
+	}
+	return channelSpec(ch)
+}
+
+// identityColumn returns the section's identity column for channel ch.
+func (g *Generator) identityColumn(section string, ch mappingplan.MembershipChannel) (spec common.MembershipSpecE, col string, err error) {
+	if spec, err = tupleChannelSpec(ch); err != nil {
+		return
+	}
+	roles, err := membershipRoles(spec)
+	if err != nil {
+		return
+	}
+	col, ok := g.support[section][roles.identity]
+	if !ok {
+		err = eb.Build().Str("section", section).Stringer("role", roles.identity).Errorf("membership column not found in schema")
+	}
+	return
+}
+
+// locateTuple checks the columns a tuple field reads: its value sub-column,
+// unless the element has no value (ADR-0326 §SD3), and the identity column
+// of every channel its memberships ride.
+func (g *Generator) locateTuple(f *mappingplan.TaggedField) (err error) {
+	if !f.TupleValueless {
+		subCol := f.LWColumn
+		if subCol == "" {
+			subCol = "value"
+		}
+		if _, ok := g.value[f.LWSection][subCol]; !ok {
+			err = eb.Build().Str("section", f.LWSection).Str("subColumn", subCol).Errorf("value column not found in schema")
+			return
+		}
+	}
+	if len(f.TupleMemberships) == 0 {
+		_, _, err = g.identityColumn(f.LWSection, f.Flags.Channel)
+		return
+	}
+	for _, m := range f.TupleMemberships {
+		if _, _, err = g.identityColumn(f.LWSection, m.Channel); err != nil {
+			return
+		}
+	}
+	return
+}
+
+// tupleSlot renders a tuple slot by the rule <Kind>ReadRow claims its
+// attributes with (ADR-0326 §SD4), so the Filter admits the rows ReadRow
+// reads as present:
+//
+//   - a dynamic tuple claims an attribute carrying any membership on one of
+//     its channels, so it is populated when one of those identity columns
+//     is non-empty. It is unbounded, so it adds no validator term.
+//   - a static nested section claims the attributes carrying its membership,
+//     each carrying it once, so the membership's occurrences count its
+//     attributes: required and exactly one for One with a scalar, at most
+//     one for One without one and for Optional, unbounded for Many.
+//
+// Value counts are not checked. A `,unit` sub-column's one value per
+// attribute is a test over every claimed attribute, so a row another
+// writer gave two values there passes the Filter and fails the Go decode.
+func (g *Generator) tupleSlot(s mappingplan.Slot) (res tupleArtefacts, err error) {
+	if s.Membership == "" {
+		for _, ch := range s.TupleChannels {
+			var col string
+			if _, col, err = g.identityColumn(s.Section, ch); err != nil {
+				return
+			}
+			res.anyRaw = append(res.anyRaw, "notEmpty("+col+")")
+		}
+		return
+	}
+	spec, col, err := g.identityColumn(s.Section, s.Channel)
+	if err != nil {
+		return
+	}
+	resolved, err := g.resolver.Resolve(s.Membership, spec)
+	if err != nil {
+		return
+	}
+	lit := resolved.Identity().Literal
+	term := presenceTerm{col: col, lit: lit}
+	count := lwextract.CountEqual(lwextract.Lanes{Ident: col}, lit)
+	switch {
+	case s.Required():
+		res.presence = []presenceTerm{term}
+		res.validator = count + " = 1"
+	case s.MaxAttrs == 1:
+		res.optPresence = []presenceTerm{term}
+		res.validator = count + " <= 1"
+	default:
+		res.optPresence = []presenceTerm{term}
+	}
+	return
 }

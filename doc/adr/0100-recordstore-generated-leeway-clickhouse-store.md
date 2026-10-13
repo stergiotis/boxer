@@ -1239,6 +1239,13 @@ refuses a store in which a dynamic tuple claims a section and channel
 another component uses. Flat fields on carrier channels stay outside
 `ReadRow`, as the Deferred list says.
 
+### 2026-10-13 — tuple components get Scan verbs
+
+The read-back generator renders tuple slots by `ReadRow`'s claim rule
+(ADR-0326 §SD5), so a tuple component has a Filter and with it
+`Scan<Kind>` and `ScanLive<Kind>`. It has no Projection, so it stays out
+of `<Store>ComponentSQL`, and a `Cas` store still refuses it.
+
 ## References
 
 - [ADR-0042: Keelson leeway codec SoA generator](0042-keelson-leeway-codec-soa-generator.md)

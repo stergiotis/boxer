@@ -152,13 +152,29 @@ The store generator refuses two components of one store whose dynamic
 tuples claim the same section and channel, since neither could tell its
 attributes from the other's.
 
-### SD5: deferred, recorded
+### SD5: tuple slots in the read-back artefacts
 
-- **Read-back artefacts for tuple kinds.** The read-back generator maps
-  one attribute per membership per row and refuses tuple fields. A tuple
-  kind in a store therefore gets no `Scan<Kind>` verb and no `Cas` sets.
-  It is decoded in the store's entity read, and SQL readers use the read
-  surface (`LW_SEL` by name, `LW_GET` with `param:`).
+The read-back generator (ADR-0066) renders a tuple slot by SD4's claim
+rule, so its Filter admits the rows `ReadRow` reads as present:
+
+- a dynamic tuple is populated when one of its channels' identity columns
+  in its section is non-empty (`notEmpty`). It is unbounded, so it adds
+  no validator term;
+- a static nested section is located by its membership like a flat field,
+  with the count bound from its cardinality: exactly one for One with a
+  scalar, at most one for One without one and for Optional, none for
+  Many.
+
+A tuple kind's Projection is empty, since no single slot holds a tuple.
+A store therefore gives a tuple component `Scan<Kind>` and
+`ScanLive<Kind>`, but no entry in `<Store>ComponentSQL`, which requires a
+Projection, and no `Cas` sets. SQL readers use the read surface (`LW_SEL`
+by name, `LW_GET` with `param:`). The Filter does not check a `,unit`
+sub-column's value count over every claimed attribute, so a row another
+writer gave two values there passes the Filter and fails the Go decode.
+
+### SD6: deferred, recorded
+
 - **Moving `capmapfacts` onto a DTO.**
 - **Tuple kinds in `FillFromArrow`'s homogeneous decode**, and in
   `Unmarshal`, keep ADR-0103's rule that a tuple owns its section. SD4's
@@ -184,7 +200,8 @@ O2 and O3 are weighed in the QOC. One narrower choice:
 
 - `ReadRow` gains a second claiming rule, by channel instead of by
   membership id.
-- A tuple kind in a store has no generated SQL read (SD5).
+- A tuple kind in a store has no Projection, so no `ComponentSQL` entry
+  (SD5).
 
 ### Neutral
 
@@ -195,14 +212,19 @@ O2 and O3 are weighed in the QOC. One narrower choice:
 
 - **Lane.** Default: both front-ends write the same bytes for a dynamic
   tuple on `mixedLowCardVerbatim` with parameters, for a static nested
-  section on `mixedLowCardRef` with parameters (`capmapfacts`' shape, with
-  numeric parameters), for a `,unit` value, and for a value-less element.
-  `ReadRow` and `ReadComponent` read each back from a row whose sections
-  also carry another kind's attributes, and leave the other kind's alone. The journal's vault
-  round trip reads its shredded attributes through the generated entity.
+  section on `mixedLowCardRef` with numeric and with text parameters
+  (`capmapfacts`' shape), for a `,unit` value, and for a value-less
+  element. `ReadRow` and `ReadComponent` read each back from a row whose
+  sections also carry another kind's attributes, and leave the other
+  kind's alone. The journal's vault round trip reads its shredded
+  attributes through the generated entity. Against `clickhouse-local`
+  (skipped without it), `Scan` of the shredded component selects the
+  rows carrying it and no row carrying only another component.
 - **What would fail.** A component that claims another kind's attribute;
-  parameters that do not round trip; the two front-ends disagreeing.
-- **Gap.** Read-back artefacts (SD5).
+  parameters that do not round trip; the two front-ends disagreeing; a
+  Filter that admits another component's row.
+- **Gap.** SD5's value-count check. The Filter is checked against
+  `clickhouse-local` for the shredded component only.
 
 ## Status
 

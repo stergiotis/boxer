@@ -154,10 +154,10 @@ type storeComponent struct {
 	presence   string
 	validator  string
 	projection string
-	// bag marks a component with a tuple field (ADR-0326): the read-back
-	// generator maps one attribute per membership and cannot express it, so
-	// the component has no read-back artefacts, no Scan verb and no Cas
-	// sets, and is decoded in the entity read alone (§SD5).
+	// bag marks a component with a tuple field (ADR-0326). Its Filter
+	// renders the tuple by ReadRow's claim rule, so it has Scan verbs; it
+	// has no Projection, so it stays out of the componentsql Set, and no
+	// Cas sets (§SD5).
 	bag bool
 }
 
@@ -867,7 +867,7 @@ func classifyComponent(plan *mappingplan.Plan, info *readback.InformationRetriev
 	for _, f := range plan.Fields {
 		if f.TupleField != "" {
 			sc.bag = true
-			return
+			break
 		}
 	}
 	g := readback.NewGenerator(info, readback.NewLookupResolver(marshallreflect.MapLookup(sc.ids)))
@@ -2454,18 +2454,11 @@ func (inst emitter) emitQueryVerbs(sb *strings.Builder, comps []storeComponent, 
 	p("// component. Generated from Plan ⋈ IR; membership ids are literals.")
 	p("const (")
 	for _, c := range comps {
-		if c.bag {
-			continue
-		}
 		p("\t%sScan%sFilter = %q", inst.TableName, c.Kind, c.filter)
 	}
 	p(")")
 	p("")
 	for _, c := range comps {
-		if c.bag {
-			// No read-back artefacts, so no Scan verb (ADR-0326 §SD5).
-			continue
-		}
 		p("// Scan%s iterates the entities whose rows carry a conforming %s", c.Kind, c.Kind)
 		p("// component, ordered by (Order, Key) — or by opts.OrderBy's envelope")
 		p("// column, opts.Descending reversing either — so entities sharing an Order")
@@ -2683,9 +2676,6 @@ func (inst emitter) emitQueryVerbs(sb *strings.Builder, comps []storeComponent, 
 	p("}")
 	p("")
 	for _, c := range comps {
-		if c.bag {
-			continue
-		}
 		inst.emitScanLive(p, c)
 	}
 }
@@ -2834,6 +2824,7 @@ func (inst emitter) emitComponentSQL(sb *strings.Builder, comps []storeComponent
 	p("\tKinds: map[string]componentsql.Artefacts{")
 	for _, c := range comps {
 		if c.bag {
+			// No Projection to publish (ADR-0326 §SD5).
 			continue
 		}
 		p("\t\t%q: {", c.Kind)

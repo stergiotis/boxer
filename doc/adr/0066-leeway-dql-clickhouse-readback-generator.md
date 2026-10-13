@@ -635,3 +635,16 @@ single-attribute-per-row config is what would exercise it.
 
 The rest of open question 1 — the mixed/parametrized parameter recursion —
 is untouched and still open.
+
+## Update 2026-10-13 — tuple slots render by the claim rule
+
+A Plan with a tuple / nested attribute section was refused, because every
+artefact assumed one attribute per membership per row: a dynamic tuple has
+no static membership to match, and a static nested `[]S` was pinned to
+exactly one attribute. Since
+[ADR-0326](./0326-tuple-elements-carry-parameters-and-tuple-kinds-read-in-readrow.md)
+§SD5 the generator renders such a slot by the rule `<Kind>ReadRow` claims
+its attributes with: a dynamic tuple is populated when an identity column
+on one of its channels is non-empty, and a static nested section counts
+its membership with a bound from its cardinality. The Projection is empty
+for a kind with a tuple field, since no single slot holds one.

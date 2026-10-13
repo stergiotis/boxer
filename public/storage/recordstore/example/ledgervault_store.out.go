@@ -1228,8 +1228,9 @@ func (inst *ledgervaultFetcher) FetchItemSinglePartition(ctx context.Context, pa
 // Baked ADR-0066 Filter artefacts: rows carrying a conforming
 // component. Generated from Plan ⋈ IR; membership ids are literals.
 const (
-	ledgervaultScanLedgerNoteFilter      = "has(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9001) AND countEqual(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9001) = 1 AND if(has(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9001), \"tv:stringArray:len:len:u64:4D:::0::data\"[arrayFirstIndex(cum -> cum >= indexOf(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9001), arrayCumSum(\"tv:stringArray:lrcard:lrcard:u64:4E:::0::data\"))], 0) = 1"
-	ledgervaultScanEvidenceOpeningFilter = "has(\"tv:symbol:lr:lr:u64:1247:::0::data\", 9301) AND has(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9302) AND countEqual(\"tv:symbol:lr:lr:u64:1247:::0::data\", 9301) = 1 AND countEqual(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9302) = 1 AND if(has(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9302), \"tv:stringArray:len:len:u64:4D:::0::data\"[arrayFirstIndex(cum -> cum >= indexOf(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9302), arrayCumSum(\"tv:stringArray:lrcard:lrcard:u64:4E:::0::data\"))], 0) = 1"
+	ledgervaultScanLedgerNoteFilter       = "has(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9001) AND countEqual(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9001) = 1 AND if(has(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9001), \"tv:stringArray:len:len:u64:4D:::0::data\"[arrayFirstIndex(cum -> cum >= indexOf(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9001), arrayCumSum(\"tv:stringArray:lrcard:lrcard:u64:4E:::0::data\"))], 0) = 1"
+	ledgervaultScanEvidenceShreddedFilter = "(notEmpty(\"tv:stringArray:lmv:lmv:y:124:::0::data\") OR notEmpty(\"tv:symbol:lmv:lmv:y:124:::0::data\") OR notEmpty(\"tv:i64Array:lmv:lmv:y:124:::0::data\") OR notEmpty(\"tv:f64Array:lmv:lmv:y:124:::0::data\") OR notEmpty(\"tv:bool:lmv:lmv:y:124:::0::data\") OR notEmpty(\"tv:null:lmv:lmv:y:124:::0::data\") OR notEmpty(\"tv:emptyObject:lmv:lmv:y:124:::0::data\") OR notEmpty(\"tv:emptyArray:lmv:lmv:y:124:::0::data\"))"
+	ledgervaultScanEvidenceOpeningFilter  = "has(\"tv:symbol:lr:lr:u64:1247:::0::data\", 9301) AND has(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9302) AND countEqual(\"tv:symbol:lr:lr:u64:1247:::0::data\", 9301) = 1 AND countEqual(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9302) = 1 AND if(has(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9302), \"tv:stringArray:len:len:u64:4D:::0::data\"[arrayFirstIndex(cum -> cum >= indexOf(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9302), arrayCumSum(\"tv:stringArray:lrcard:lrcard:u64:4E:::0::data\"))], 0) = 1"
 )
 
 // ScanLedgerNote iterates the entities whose rows carry a conforming LedgerNote
@@ -1258,6 +1259,44 @@ func (inst *LedgerVaultStore) ScanLedgerNote(ctx context.Context, opts recordsto
 		return recordstore.FailScan[*LedgerVaultEntity](err)
 	}
 	where := ledgervaultScanLedgerNoteFilter
+	if opts.ExtraPredicate != "" {
+		where = "(" + where + ") AND (" + opts.ExtraPredicate + ")"
+	}
+	sql := "SELECT * FROM " + inst.readTable() +
+		" WHERE " + where + order
+	if opts.Limit > 0 {
+		sql += " LIMIT " + strconv.Itoa(opts.Limit)
+	}
+	sql += ledgervaultArrowOutputSettings
+	return inst.iterateEntities(ctx, sql)
+}
+
+// ScanEvidenceShredded iterates the entities whose rows carry a conforming EvidenceShredded
+// component, ordered by (Order, Key) — or by opts.OrderBy's envelope
+// column, opts.Descending reversing either — so entities sharing an Order
+// still come out in a fixed sequence. Rows that tie on BOTH (the same
+// key written twice at the same Order) are not ordered against each
+// other by this clause; the table keeps newest-per-key, so which of
+// them survives is the engine's choice, not the scan's.
+// opts.KeyPrefix is refused (recordstore.ErrKeyPrefixNumericKey):
+// this store's key is not a string.
+// opts.ExtraPredicate (trusted raw SQL over the physical columns —
+// never untrusted input) further restricts the scan; opts.Limit
+// caps the row count. The Filter artefact uses ClickHouse
+// built-ins only, so this is a single SELECT — no helper UDFs, no
+// multi-statement script (the ExecutorI contract). The sequence is
+// single-use; ctx must stay valid until iteration completes; an
+// error ends it as a final (nil, err) pair. Scans see only flushed
+// rows.
+func (inst *LedgerVaultStore) ScanEvidenceShredded(ctx context.Context, opts recordstore.ScanOpts) iter.Seq2[*LedgerVaultEntity, error] {
+	if opts.KeyPrefix != "" {
+		return recordstore.RefuseKeyPrefix[*LedgerVaultEntity]()
+	}
+	order, err := ledgervaultOrderBy(opts)
+	if err != nil {
+		return recordstore.FailScan[*LedgerVaultEntity](err)
+	}
+	where := ledgervaultScanEvidenceShreddedFilter
 	if opts.ExtraPredicate != "" {
 		where = "(" + where + ") AND (" + opts.ExtraPredicate + ")"
 	}

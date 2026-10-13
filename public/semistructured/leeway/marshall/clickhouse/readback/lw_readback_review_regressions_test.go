@@ -139,38 +139,48 @@ type rbNestedDoc struct {
 	Notes    []rbNestedNote `lw:"droneStatus,symbol"`
 }
 
-// Tuple / nested attribute sections are rejected at generation AND validation
-// time. Every artefact assumes one attribute per membership per row, so
-// emitting for these shapes is silently wrong, not merely incomplete: a
-// dynamic tuple carries no LWMembership (a verbatim channel resolved to the
-// empty literal and matched nothing), and a static nested `[]S` pinned
-// `countEqual(...) = 1` on an N-attribute section. In-tree the hole was masked
-// by recordstore/gen's ReadRowSupported gate — a guard in the caller, not here.
-func TestRegressionTupleAndNestedRejected(t *testing.T) {
+// Tuple / nested attribute sections are rendered per slot (ADR-0326 §SD4),
+// by the rule ReadRow claims their attributes with. The flat artefacts were
+// silently wrong for them, which is why they used to be refused: a dynamic
+// tuple carries no LWMembership, so a verbatim channel resolved to the empty
+// literal and matched nothing, and a static nested `[]S` pinned
+// `countEqual(...) = 1` on an N-attribute section. Neither may come back, and
+// the Projection, which has no single slot to hold a tuple, stays empty.
+func TestRegressionTupleAndNestedRenderPerSlot(t *testing.T) {
 	ir := buildAnchorIR(t)
 	res := NewLookupResolver(marshallreflect.MapLookup{"droneStatus": 1})
 
 	for _, tc := range []struct {
-		name string
-		plan func() (*mappingplan.Plan, error)
+		name   string
+		plan   func() (*mappingplan.Plan, error)
+		filter string
 	}{
-		{"dynamic-membership tuple", func() (*mappingplan.Plan, error) { return marshallreflect.PlanFor[rbTupleDoc]() }},
-		{"static nested Many", func() (*mappingplan.Plan, error) { return marshallreflect.PlanFor[rbNestedDoc]() }},
+		{"dynamic-membership tuple", func() (*mappingplan.Plan, error) { return marshallreflect.PlanFor[rbTupleDoc]() }, "notEmpty("},
+		{"static nested Many", func() (*mappingplan.Plan, error) { return marshallreflect.PlanFor[rbNestedDoc]() }, ", 1)"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			plan, err := tc.plan()
 			if err != nil {
 				t.Fatalf("PlanFor: %v", err)
 			}
-			_, err = NewGenerator(ir, res).Generate(plan)
-			if err == nil {
-				t.Fatal("Generate must reject a tuple / nested section")
+			a, err := NewGenerator(ir, res).Generate(plan)
+			if err != nil {
+				t.Fatalf("Generate: %v", err)
 			}
-			if !strings.Contains(err.Error(), "not supported by the read-back generator") {
-				t.Errorf("unexpected Generate error: %v", err)
+			t.Logf("Filter: %s", a.Filter)
+			if !strings.Contains(a.Filter, tc.filter) {
+				t.Errorf("Filter %q does not contain %q", a.Filter, tc.filter)
 			}
-			if err = ValidatePlanAgainstIR(plan, ir); err == nil {
-				t.Fatal("ValidatePlanAgainstIR must reject a tuple / nested section")
+			for _, bad := range []string{"''", "= 1"} {
+				if strings.Contains(a.Filter, bad) {
+					t.Errorf("Filter %q contains %q", a.Filter, bad)
+				}
+			}
+			if a.Projection != "" {
+				t.Errorf("Projection %q, want empty for a tuple kind", a.Projection)
+			}
+			if err = ValidatePlanAgainstIR(plan, ir); err != nil {
+				t.Fatalf("ValidatePlanAgainstIR: %v", err)
 			}
 		})
 	}
