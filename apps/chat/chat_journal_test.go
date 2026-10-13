@@ -22,6 +22,9 @@ func TestATurnShipsItsChainHead(t *testing.T) {
 	inst.coord.anchors = anchors
 	require.True(t, inst.startTurn("q1"))
 	drainUntil(t, inst)
+	// The title call journals beside the next turn; settled, it cannot
+	// land between that turn's end and its head.
+	settleTitle(t, inst)
 	require.True(t, inst.startTurn("q2"))
 	drainUntil(t, inst)
 	w := inst.coord.journalNow()

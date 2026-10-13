@@ -296,6 +296,9 @@ func TestAResumeSettlesTheCallsTheProcessLeftOpen(t *testing.T) {
 	require.True(t, inst.startTurn("q2"))
 	drainUntil(t, inst)
 	assert.False(t, inst.conv.entries[len(inst.conv.entries)-2].failed, inst.conv.entries[len(inst.conv.entries)-2].reason)
+	// A title call still out when the conversation ends would be left open,
+	// and the next resume would rightly say so.
+	settleTitle(t, inst)
 
 	// A second resume of the same run repeats nothing.
 	n := len(inst.coord.journalNow().Entries())
