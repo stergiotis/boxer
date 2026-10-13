@@ -243,13 +243,17 @@ Accepted 2026-10-11.
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers (Tier 1 in-place / Tier 2 dated `## Updates` entry / Tier 3 new superseding ADR).
 
-<!--
 ## Updates
 
-Tier-2 dated entries land here when implementation reveals a refinement, an aspirational
-claim turns out false, or a milestone records what shipped. Single H2; add H3s dated
-YYYY-MM-DD. Remove this HTML comment when the section first gains a real entry.
--->
+### 2026-10-13 — the verdicts are a relation
+
+The journal's `copy` entry says what was copied; how it left was a ring in
+the broker. `keelson('clipboard_copies')` serves that ring: one row per
+copy, with when and from which app the broker took it — stamped on the
+record and kept off the wire — its digest, label, source, and the verdict,
+`refused`, `handle` or `plaintext`. The handle id is not a column: it
+resolves to the text, and reading the table grants no such right. The
+ring stays bounded, so the table holds the newest copies.
 
 ## References
 

@@ -76,6 +76,8 @@ func TestTheDefaultPolicyRecordsAndForwardsEverything(t *testing.T) {
 	records := svc.Records()
 	require.Len(t, records, 3, "raw text leaves a record with the zero label")
 	assert.True(t, records[0].Raw)
+	assert.False(t, records[0].At.IsZero(), "the ring stamps when it took the copy")
+	assert.NotEmpty(t, records[0].From, "and from which app")
 	assert.Equal(t, agentrun.ContentDigest("raw"), records[0].Digest)
 	assert.Equal(t, "chat/reply", records[1].Source)
 	assert.Equal(t, uint8(agentrun.TierAmber), records[2].Tier)

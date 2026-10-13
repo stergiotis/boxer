@@ -1131,6 +1131,9 @@ func (rt *Runtime) bootIntrospect() {
 	if rt.AttentionQueue != nil {
 		deps.Attention = rt.AttentionQueue
 	}
+	if rt.Clipboard != nil {
+		deps.Clipboard = rt.Clipboard
+	}
 	stop, ierr := introspecthost.Start(deps)
 	if ierr != nil {
 		logger.Warn().Err(ierr).Msg("introspect: table source unavailable")

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/agentrun"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
@@ -113,6 +114,21 @@ type CopyRecord struct {
 	Refused bool   `json:"refused,omitempty"`
 	Reason  string `json:"reason,omitempty"`
 	Bytes   int    `json:"bytes"`
+	// At and From are when and from which app the broker took the copy:
+	// the ring's, for keelson('clipboard_copies'), never on the wire.
+	At   time.Time  `json:"-"`
+	From app.AppIdT `json:"-"`
+}
+
+// Verdict is how the copy left: refused, handle or plaintext.
+func (inst CopyRecord) Verdict() (v string) {
+	switch {
+	case inst.Refused:
+		return "refused"
+	case inst.Handle != "":
+		return "handle"
+	}
+	return "plaintext"
 }
 
 // RefusedError is a copy the broker refused (ADR-0317 §SD4).

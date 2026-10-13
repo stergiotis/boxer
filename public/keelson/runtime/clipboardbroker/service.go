@@ -27,6 +27,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"sync"
+	"time"
 
 	"github.com/rs/zerolog"
 
@@ -347,6 +348,7 @@ func (inst *Service) handleWrite(msg *app.Msg) {
 	} else {
 		text, rec = inst.decideRaw(p.Text)
 	}
+	rec.At, rec.From = time.Now(), msg.Sender
 	inst.note(rec)
 	if rec.Refused {
 		inst.mu.Unlock()
