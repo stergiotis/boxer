@@ -304,6 +304,17 @@ or one that needs the person's own words, still offers only Open. What the
 card is otherwise — host-written heading, the model's text drawn as the
 model's, Answer, Skip and Open only — is unchanged.
 
+### 2026-10-13 — the queue is a relation
+
+`keelson('attention_queue')` serves the queue: one row per item its
+sources report, open and shelved, with its kind, level, bound, the
+person's acknowledgement and shelf, and whether it escalated or nears its
+bound. It reads `Queue.Pending`, which classifies and orders the items as
+`Snapshot` does but keeps no state and logs nothing to the away log —
+`Snapshot` is the chrome's per-frame read and its bookkeeping stays the
+chrome's. A shelf that has come due reads as back. On a host without the
+agent service the queue is not built and the table is empty.
+
 ## References
 
 - [Juggling — one operator, many streams](../adr-background-work/juggling-many-agent-streams.md)

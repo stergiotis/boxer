@@ -142,24 +142,7 @@ func (inst *Queue) SetOnAct(f func(ActE, Item, time.Time)) {
 // oldest first within a level, and the shelved ones apart. The state of
 // items no source reports any more is dropped.
 func (inst *Queue) Snapshot(now time.Time) (open []Entry, shelved []Entry) {
-	inst.mu.Lock()
-	sources := slices.Clone(inst.sources)
-	inst.mu.Unlock()
-	all := make([]Entry, 0, 8)
-	for _, s := range sources {
-		for it := range s.WaitingItems() {
-			all = append(all, Entry{Item: it})
-		}
-	}
-	for i := range all {
-		e := &all[i]
-		e.Level = inst.levels.Classify(Event{Kind: e.Kind, Effect: e.Effect, App: e.App, Conversation: e.Conversation})
-		if e.Level.Scale() != ScaleWaiting {
-			// The floor (ADR-0323 §SD2): what a source reports as waiting
-			// is never shown below your turn.
-			e.Level = LevelYourTurn
-		}
-	}
+	all := inst.gather()
 	inst.mu.Lock()
 	presence := inst.presence
 	var flow []AwayEntry
@@ -203,12 +186,7 @@ func (inst *Queue) Snapshot(now time.Time) (open []Entry, shelved []Entry) {
 	for _, e := range flow {
 		presence.Record(e)
 	}
-	slices.SortStableFunc(all, func(a, b Entry) int {
-		if c := cmp.Compare(b.Level, a.Level); c != 0 {
-			return c
-		}
-		return a.Created.Compare(b.Created)
-	})
+	sortEntries(all)
 	for _, e := range all {
 		if e.ShelvedUntil.IsZero() {
 			open = append(open, e)
@@ -216,6 +194,67 @@ func (inst *Queue) Snapshot(now time.Time) (open []Entry, shelved []Entry) {
 			shelved = append(shelved, e)
 		}
 	}
+	return
+}
+
+// gather reads every source's items and classifies them.
+func (inst *Queue) gather() (all []Entry) {
+	inst.mu.Lock()
+	sources := slices.Clone(inst.sources)
+	inst.mu.Unlock()
+	all = make([]Entry, 0, 8)
+	for _, s := range sources {
+		for it := range s.WaitingItems() {
+			all = append(all, Entry{Item: it})
+		}
+	}
+	for i := range all {
+		e := &all[i]
+		e.Level = inst.levels.Classify(Event{Kind: e.Kind, Effect: e.Effect, App: e.App, Conversation: e.Conversation})
+		if e.Level.Scale() != ScaleWaiting {
+			// The floor (ADR-0323 §SD2): what a source reports as waiting
+			// is never shown below your turn.
+			e.Level = LevelYourTurn
+		}
+	}
+	return
+}
+
+// sortEntries orders entries highest level first, oldest first within a
+// level.
+func sortEntries(all []Entry) {
+	slices.SortStableFunc(all, func(a, b Entry) int {
+		if c := cmp.Compare(b.Level, a.Level); c != 0 {
+			return c
+		}
+		return a.Created.Compare(b.Created)
+	})
+}
+
+// Pending is the queue at now as Snapshot shows it, open and shelved
+// together, in Snapshot's order — without Snapshot's bookkeeping: it keeps
+// no state for a new item, drops none for a gone one and logs nothing for
+// the away log, so a reader other than the chrome may call it from any
+// goroutine (ADR-0324, update of 2026-10-13). A shelf that has come due
+// reads as back, unacknowledged, as the next Snapshot will make it.
+func (inst *Queue) Pending(now time.Time) (all []Entry) {
+	all = inst.gather()
+	inst.mu.Lock()
+	for i := range all {
+		e := &all[i]
+		if st := inst.state[e.Key]; st != nil {
+			e.Acked, e.ShelvedUntil = st.acked, st.shelfUntil
+			if !e.ShelvedUntil.IsZero() && !now.Before(e.ShelvedUntil) {
+				e.Acked, e.ShelvedUntil = false, time.Time{}
+			}
+		}
+		if inst.escalate > 0 {
+			e.Escalated = e.Level == LevelYourTurn && !e.Acked && e.ShelvedUntil.IsZero() && now.Sub(e.Created) >= inst.escalate
+			e.NearBound = !e.Bound.IsZero() && e.Bound.Sub(now) <= inst.escalate
+		}
+	}
+	inst.mu.Unlock()
+	sortEntries(all)
 	return
 }
 

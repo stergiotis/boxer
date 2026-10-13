@@ -23,6 +23,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/agentrun"
 	"github.com/stergiotis/boxer/public/keelson/runtime/agentschema"
 	runtimeapp "github.com/stergiotis/boxer/public/keelson/runtime/app"
+	"github.com/stergiotis/boxer/public/keelson/runtime/attention"
 	"github.com/stergiotis/boxer/public/keelson/runtime/cell"
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsstore"
 	"github.com/stergiotis/boxer/public/keelson/runtime/harness"
@@ -163,6 +164,10 @@ type Deps struct {
 	// keelson.agent_grants and keelson.agent_actions (ADR-0269 §SD9). Same
 	// typed-nil trap: assign only a service that started.
 	Agent agent.RecordsI
+	// Attention is the person's queue as a read side, backing
+	// keelson.attention_queue (ADR-0324, update of 2026-10-13). Same
+	// typed-nil trap: assign only a queue the host built.
+	Attention attention.PendingI
 	// Log is the host logger.
 	Log zerolog.Logger
 }
@@ -325,6 +330,10 @@ func Start(deps Deps) (stop func(context.Context) error, err error) {
 	// unconditionally.
 	if e := agent.RegisterIntrospect(reg, deps.Agent); e != nil {
 		deps.Log.Warn().Err(e).Msg("introspecthost: agent tables registration failed")
+	}
+	// ADR-0324: the decisions the person owes. Registered unconditionally.
+	if e := attention.RegisterIntrospect(reg, deps.Attention); e != nil {
+		deps.Log.Warn().Err(e).Msg("introspecthost: attention_queue provider registration failed")
 	}
 	// And what a model may be asked to do: every registered prompt
 	// document, joinable to llm_calls on purpose.

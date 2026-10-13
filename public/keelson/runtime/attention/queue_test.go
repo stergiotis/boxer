@@ -121,3 +121,25 @@ func TestFlood(t *testing.T) {
 	ok, _ = none.Admit("a", t0)
 	assert.True(t, ok)
 }
+
+// Pending reads the queue as Snapshot shows it and changes nothing: an item
+// it sees first is still new to the next Snapshot.
+func TestPendingKeepsNoState(t *testing.T) {
+	it := Item{Key: "w", Kind: KindWidening, Created: t0, Bound: t0.Add(20 * time.Minute)}
+	src := &fakeSource{items: []Item{it, {Key: "q", Kind: KindQuestion, Created: t0.Add(time.Minute)}}}
+	q := NewQueue(nil, 0)
+	q.AddSource(src)
+	assert.Equal(t, []string{"w", "q"}, keys(q.Pending(t0)))
+	assert.Empty(t, q.state, "a read leaves no state behind")
+
+	q.Snapshot(t0)
+	_, ok := q.Shelve(it, t0.Add(10*time.Minute), t0)
+	require.True(t, ok)
+	es := q.Pending(t0.Add(time.Minute))
+	require.Len(t, es, 2)
+	assert.Equal(t, t0.Add(10*time.Minute), es[0].ShelvedUntil, "a shelved item is in the read, with its shelf")
+	es = q.Pending(t0.Add(15 * time.Minute))
+	assert.True(t, es[0].ShelvedUntil.IsZero(), "a shelf come due reads as back")
+	_, shelved := q.Snapshot(t0.Add(5 * time.Minute))
+	assert.Equal(t, []string{"w"}, keys(shelved), "the read did not take the shelf down")
+}

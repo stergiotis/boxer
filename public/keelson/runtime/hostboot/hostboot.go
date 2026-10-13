@@ -277,6 +277,9 @@ type Runtime struct {
 	// Attention is the person's queue in host chrome (ADR-0324);
 	// nil without the agent service.
 	Attention *attentionchrome.Chrome
+	// AttentionQueue is the queue the chrome reads, nil when the agent
+	// service did not start; keelson('attention_queue') reads it too.
+	AttentionQueue *attention.Queue
 	// Moderator is the built-in moderator (ADR-0302); nil unless
 	// BOXER_MODERATOR is set.
 	Moderator *moderator.Service
@@ -937,6 +940,7 @@ func (rt *Runtime) bootAgent() {
 	// The person's decisions wait in a queue in host chrome, not in modals
 	// (ADR-0324).
 	cfg.Attention = attention.NewService()
+	rt.AttentionQueue = cfg.Attention.Queue
 	// The person's table of levels is kept with the host's state (ADR-0323
 	// §SD4); loaded before the trail is attached, since loading is not the
 	// person's change.
@@ -1123,6 +1127,9 @@ func (rt *Runtime) bootIntrospect() {
 	}
 	if rt.Agent != nil {
 		deps.Agent = rt.Agent
+	}
+	if rt.AttentionQueue != nil {
+		deps.Attention = rt.AttentionQueue
 	}
 	stop, ierr := introspecthost.Start(deps)
 	if ierr != nil {
