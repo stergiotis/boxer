@@ -44,7 +44,13 @@ func (inst *App) renderTopBar(snap *PublishedSnapshot, s SamplerI) {
 		if c.Button(inst.ids.PrepareStr("topbar-freeze"), c.Atoms().Text(freezeLabel).Keep()).
 			Selected(frozen).
 			SendResp().HasPrimaryClicked() {
-			s.Pause(!frozen)
+			// Freeze acts on the sampler on screen: the live one, or the
+			// replay session's transport while replay is on.
+			if inst.frameReplay.State == ReplayOn {
+				gestureOr(inst, opSetReplayPaused, SetReplayPausedArgs{Paused: !frozen}, func() { s.Pause(!frozen) })
+			} else {
+				gestureOr(inst, opSetFrozen, SetFrozenArgs{Frozen: !frozen}, func() { s.Pause(!frozen) })
+			}
 		}
 		c.Separator().Vertical().Send()
 

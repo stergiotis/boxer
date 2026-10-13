@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/stergiotis/boxer/public/keelson/runtime/appops"
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
 	"github.com/stergiotis/boxer/public/keelson/runtime/sysmreplay"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
@@ -51,7 +52,10 @@ func (inst *App) renderReplayEntry() {
 		c.Atoms().Text(icons.PhClockCounterClockwise+" Replay").Keep()).
 		SendResp().HasPrimaryClicked()
 	if clicked {
-		StartReplay(context.Background(), defaultReplayWindow(), StoreSourceOptions{})
+		// Zero window: enter_replay opens on defaultReplayWindow.
+		gestureOr(inst, opEnterReplay, ReplayWindowArgs{}, func() {
+			StartReplay(context.Background(), defaultReplayWindow(), StoreSourceOptions{})
+		})
 	}
 }
 
@@ -73,7 +77,7 @@ func (inst *App) renderReplayBar(st ReplayStatus) {
 			c.Separator().Vertical().Send()
 			if c.Button(inst.ids.PrepareStr("replay-cancel"), c.Atoms().Text("Cancel").Keep()).
 				SendResp().HasPrimaryClicked() {
-				_ = LeaveReplay()
+				gestureOr(inst, opLeaveReplay, appops.None{}, func() { _ = LeaveReplay() })
 			}
 		case ReplayFailed:
 			for rt := range c.RichTextLabelColored(colorHot, colorBgClear, icons.PhWarning+" replay unavailable") {
@@ -86,7 +90,7 @@ func (inst *App) renderReplayBar(st ReplayStatus) {
 			c.Separator().Vertical().Send()
 			if c.Button(inst.ids.PrepareStr("replay-dismiss"), c.Atoms().Text("Dismiss").Keep()).
 				SendResp().HasPrimaryClicked() {
-				_ = LeaveReplay()
+				gestureOr(inst, opLeaveReplay, appops.None{}, func() { _ = LeaveReplay() })
 			}
 		case ReplayOn:
 			inst.renderReplayTransport(st)
@@ -111,7 +115,7 @@ func (inst *App) renderReplayTransport(st ReplayStatus) {
 	if c.Button(inst.ids.PrepareStr("replay-golive"),
 		c.Atoms().Text(icons.PhBroadcast+" Go live").Keep()).
 		SendResp().HasPrimaryClicked() {
-		_ = LeaveReplay()
+		gestureOr(inst, opLeaveReplay, appops.None{}, func() { _ = LeaveReplay() })
 		return
 	}
 	c.Separator().Vertical().Send()
@@ -124,7 +128,7 @@ func (inst *App) renderReplayTransport(st ReplayStatus) {
 	}
 	if c.Button(inst.ids.PrepareStr("replay-play"), c.Atoms().Text(playGlyph+" "+playLabel).Keep()).
 		SendResp().HasPrimaryClicked() {
-		session.Pause(!paused)
+		gestureOr(inst, opSetReplayPaused, SetReplayPausedArgs{Paused: !paused}, func() { session.Pause(!paused) })
 	}
 
 	// Stepping is only meaningful while stopped; the button stays rendered
@@ -148,8 +152,10 @@ func (inst *App) renderReplayTransport(st ReplayStatus) {
 			if c.Button(inst.ids.PrepareSeq(uint64(0x900+i)), c.Atoms().Text(replaySpeedLabel(x)).Keep()).
 				Selected(sel).FrameWhenInactive(!sel).Frame(true).
 				SendResp().HasPrimaryClicked() {
-				replaySpeedIdx = i
-				session.SetSpeed(x)
+				gestureOr(inst, opSetReplaySpeed, SetReplaySpeedArgs{Speed: x}, func() {
+					replaySpeedIdx = i
+					session.SetSpeed(x)
+				})
 			}
 		}
 	}
@@ -206,7 +212,9 @@ func (inst *App) jogReplay(session *ReplaySampler, dir int) {
 	if now := time.Now().UTC(); to.After(now) {
 		to = now
 	}
-	session.SeekWindow(to.Add(-span), to)
+	from := to.Add(-span)
+	gestureOr(inst, opSetReplayWindow, ReplayWindowArgs{FromUnixMs: from.UnixMilli(), ToUnixMs: to.UnixMilli()},
+		func() { session.SeekWindow(from, to) })
 }
 
 // replayBanner is the mode indicator, the ADR-0020 "FROZEN" affordance extended
