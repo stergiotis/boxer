@@ -132,8 +132,9 @@ var InEntityTestTableRenamedSectionIndices = map[string]int{
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1691
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1696
 
+// SetId sets the entity's ident column.
 func (inst *InEntityTestTableRenamed) SetId(ident0 uint64) *InEntityTestTableRenamed {
 	if inst.state != runtime.EntityStateInEntity {
 		inst.AppendError(runtime.ErrInvalidStateTransition)
@@ -147,8 +148,12 @@ func (inst *InEntityTestTableRenamed) SetId(ident0 uint64) *InEntityTestTableRen
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1691
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1696
 
+// SetTimestamp sets the entity's seenAt, stampedAt columns, one positional
+// argument per column in that order. Hand-written code should call the
+// per-column setters (SetSeenAt, SetStampedAt) instead: they cannot swap two
+// arguments of the same type.
 func (inst *InEntityTestTableRenamed) SetTimestamp(seenAt1 time.Time, stampedAt2 []time.Time) *InEntityTestTableRenamed {
 	if inst.state != runtime.EntityStateInEntity {
 		inst.AppendError(runtime.ErrInvalidStateTransition)
@@ -160,8 +165,40 @@ func (inst *InEntityTestTableRenamed) SetTimestamp(seenAt1 time.Time, stampedAt2
 	return inst
 }
 
+///////////////////////////////////////////////////////////////////
+// code generator
+// dml.(*GoClassBuilder).composePlainColumnSetters
+// ./public/semistructured/leeway/dml/lw_dml_plain_setters.go:125
+
+// SetSeenAt sets the entity's seenAt column.
+func (inst *InEntityTestTableRenamed) SetSeenAt(seenAt1 time.Time) *InEntityTestTableRenamed {
+	if inst.state != runtime.EntityStateInEntity {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.plainSeenAt1 = seenAt1
+
+	return inst
+}
+
+///////////////////////////////////////////////////////////////////
+// code generator
+// dml.(*GoClassBuilder).composePlainColumnSetters
+// ./public/semistructured/leeway/dml/lw_dml_plain_setters.go:125
+
+// SetStampedAt sets the entity's stampedAt column.
+func (inst *InEntityTestTableRenamed) SetStampedAt(stampedAt2 []time.Time) *InEntityTestTableRenamed {
+	if inst.state != runtime.EntityStateInEntity {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.plainStampedAt2 = stampedAt2
+
+	return inst
+}
+
 // PushMembershipHighCardRef adds id to the ambient HighCardRef memberships
-// replayed onto every attribute as it closes, until it is popped (ADR-0112 M1).
+// replayed onto every attribute as it closes, until it is popped.
 // The stamp scope — one section vs the whole entity — is the caller's to set.
 func (inst *InEntityTestTableRenamed) PushMembershipHighCardRef(id uint64) {
 	inst.ambientHighCardRef = append(inst.ambientHighCardRef, id)

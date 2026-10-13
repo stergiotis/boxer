@@ -223,8 +223,12 @@ var InEntityLedgerTableSectionIndices = map[string]int{
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1691
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1696
 
+// setId sets the entity's id, ordinal columns, one positional argument per
+// column in that order. Hand-written code should call the per-column setters
+// (setIdColumn, setOrdinal) instead: they cannot swap two arguments of the
+// same type.
 func (inst *InEntityLedgerTable) setId(id0 uint64, ordinal1 uint64) *InEntityLedgerTable {
 	if inst.state != runtime.EntityStateInEntity {
 		inst.AppendError(runtime.ErrInvalidStateTransition)
@@ -236,8 +240,40 @@ func (inst *InEntityLedgerTable) setId(id0 uint64, ordinal1 uint64) *InEntityLed
 	return inst
 }
 
+///////////////////////////////////////////////////////////////////
+// code generator
+// dml.(*GoClassBuilder).composePlainColumnSetters
+// ./public/semistructured/leeway/dml/lw_dml_plain_setters.go:125
+
+// setIdColumn sets the entity's id column.
+func (inst *InEntityLedgerTable) setIdColumn(id0 uint64) *InEntityLedgerTable {
+	if inst.state != runtime.EntityStateInEntity {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.plainId0 = id0
+
+	return inst
+}
+
+///////////////////////////////////////////////////////////////////
+// code generator
+// dml.(*GoClassBuilder).composePlainColumnSetters
+// ./public/semistructured/leeway/dml/lw_dml_plain_setters.go:125
+
+// setOrdinal sets the entity's ordinal column.
+func (inst *InEntityLedgerTable) setOrdinal(ordinal1 uint64) *InEntityLedgerTable {
+	if inst.state != runtime.EntityStateInEntity {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.plainOrdinal1 = ordinal1
+
+	return inst
+}
+
 // PushMembershipHighCardRef adds id to the ambient HighCardRef memberships
-// replayed onto every attribute as it closes, until it is popped (ADR-0112 M1).
+// replayed onto every attribute as it closes, until it is popped.
 // The stamp scope — one section vs the whole entity — is the caller's to set.
 func (inst *InEntityLedgerTable) PushMembershipHighCardRef(id uint64) {
 	inst.ambientHighCardRef = append(inst.ambientHighCardRef, id)
@@ -505,7 +541,7 @@ func (inst *InEntityLedgerTable) GetSchema() (schema *arrow.Schema) {
 	return inst.builder.Schema()
 }
 
-// --- store control drivers (ADR-0100 SD6): exported access to InEntityLedgerTable's
+// --- store control drivers: exported access to InEntityLedgerTable's
 // unexported frame control, callable only from within this package. ---
 func InEntityLedgerTableBeginEntity(e *InEntityLedgerTable) *InEntityLedgerTable {
 	return e.beginEntity()
@@ -521,6 +557,12 @@ func InEntityLedgerTableSetActiveSections(e *InEntityLedgerTable, idxs []int) {
 func InEntityLedgerTableReleaseBuilder(e *InEntityLedgerTable) { e.builder.Release() }
 func InEntityLedgerTableSetId(e *InEntityLedgerTable, id0 uint64, ordinal1 uint64) *InEntityLedgerTable {
 	return e.setId(id0, ordinal1)
+}
+func InEntityLedgerTableSetIdColumn(e *InEntityLedgerTable, id0 uint64) *InEntityLedgerTable {
+	return e.setIdColumn(id0)
+}
+func InEntityLedgerTableSetOrdinal(e *InEntityLedgerTable, ordinal1 uint64) *InEntityLedgerTable {
+	return e.setOrdinal(ordinal1)
 }
 
 func (inst *InEntityLedgerTable) AppendError(err error) {

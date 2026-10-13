@@ -28,7 +28,7 @@ var (
 // canonwire.(*GoClassBuilder).ComposeCodec
 // ./public/semistructured/leeway/canonwire/lw_cw_generator.go:209
 
-// The slot keys of ADR-0210 SD2: a tagged section's CT group, or a co-section
+// The slot keys: a tagged section's CT group, or a co-section
 // group's CT signature. They key the entity item's tagged map and are the only
 // thing on the wire that comes from fixed-table's description: section names, column
 // names, aspects and hints are not.
@@ -81,7 +81,7 @@ func (inst CanonWireSlotFixedTableE) Signature() string {
 }
 
 // Ambiguous reports whether the slot's signature is carried by more than one
-// slot of this table. Those are the slots ADR-0210 SD5's dispatch has to
+// slot of this table. Those are the slots the tagger/dispatcher pair has to
 // resolve: the encoder consults its tagger for every attribute of one, and for
 // no attribute of any other.
 func (inst CanonWireSlotFixedTableE) Ambiguous() bool {
@@ -89,7 +89,7 @@ func (inst CanonWireSlotFixedTableE) Ambiguous() bool {
 	return false
 }
 
-// CanonWireTaggerFixedTableI is the encoder half of ADR-0210 SD5's dispatch pair.
+// CanonWireTaggerFixedTableI is the encoder half of the slot dispatch pair.
 //
 // It is consulted for every attribute of a slot whose signature is ambiguous
 // in this table, and its small opaque integer rides as the attribute item's
@@ -99,7 +99,7 @@ type CanonWireTaggerFixedTableI interface {
 	Tag(slot CanonWireSlotFixedTableE, entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) uint64
 }
 
-// CanonWireOrdinalTaggerFixedTable is the built-in tagger of ADR-0210 SD5.
+// CanonWireOrdinalTaggerFixedTable is the built-in tagger.
 //
 // It returns the slot's ordinal within its ambiguity set, which round-trips
 // between two tables that declare the same sections in the same order and is
@@ -114,7 +114,7 @@ func (inst CanonWireOrdinalTaggerFixedTable) Tag(slot CanonWireSlotFixedTableE, 
 	return 0
 }
 
-// CanonWireEncoderFixedTable writes entities of a loaded ReadAccessFixedTable as the leeway canonical wire (ADR-0210).
+// CanonWireEncoderFixedTable writes entities of a loaded ReadAccessFixedTable as the leeway canonical wire.
 //
 // It reads the generated readaccess accessors directly: no reflection, no
 // arrow.Array type switch, one typed runtime call per column. The buffers are
@@ -173,7 +173,7 @@ func NewCanonWireEncoderFixedTable(ra *ReadAccessFixedTable, tagger CanonWireTag
 
 // EncodeEntity writes one entity item to w: the plain sections under their item
 // types, then the tagged slots under their CT signatures, both in the order the
-// form fixes (ADR-0210 SD1–SD3). The attributes are held back only until the
+// canonical form fixes. The attributes are held back only until the
 // item is complete, which is what lets the writer sort them into canonical
 // order.
 func (inst *CanonWireEncoderFixedTable) EncodeEntity(entityIdx runtime.EntityIdx, w io.Writer) (err error) {
@@ -287,21 +287,21 @@ func (inst *CanonWireEncoderFixedTable) EncodeAll(w io.Writer) (err error) {
 // canonWireAmbiguousFixedTable reports whether any signature of fixed-table is carried by more than one slot.
 // It is what the decoder's constructor checks: an ambiguous table cannot be
 // decoded without a dispatcher, and the refusal is at construction rather than
-// at the first attribute that needs one (ADR-0210 SD5).
+// at the first attribute that needs one.
 const canonWireAmbiguousFixedTable = false
 
 // canonWireAcceptMasksFixedTable holds, per slot in slot order, the membership channels each member
 // section accepts — one bitmask per section in signature order, over the
-// mappingplan channel ordinals. It is the input to the narrowing step of
-// ADR-0210 SD5: a section that cannot store the memberships an attribute
-// carries is not that attribute's target.
+// mappingplan channel ordinals. It is the input to the decoder's narrowing
+// step: a section that cannot store the memberships an attribute carries is
+// not that attribute's target.
 var canonWireAcceptMasksFixedTable = [][]uint32{
 	{0x01}, // codes
 	{0x01}, // code
 	{0x01}, // hash
 }
 
-// CanonWireDispatcherFixedTableI is the decoder half of ADR-0210 SD5's dispatch pair.
+// CanonWireDispatcherFixedTableI is the decoder half of the slot dispatch pair.
 //
 // It is consulted only for an attribute whose signature more than one slot of
 // this table carries *and* whose memberships more than one of those slots can
@@ -316,7 +316,7 @@ type CanonWireDispatcherFixedTableI interface {
 	Dispatch(candidates []CanonWireSlotFixedTableE, attr *cwruntime.AttributeView) (slot CanonWireSlotFixedTableE, err error)
 }
 
-// CanonWireOrdinalDispatcherFixedTable is the built-in dispatcher of ADR-0210 SD5 and the mirror of CanonWireOrdinalTaggerFixedTable: it reads
+// CanonWireOrdinalDispatcherFixedTable is the built-in dispatcher and the mirror of CanonWireOrdinalTaggerFixedTable: it reads
 // the attribute's discriminator as the slot's ordinal within the full
 // ambiguity set. It round-trips between two tables that declare the same
 // sections in the same order, and is explicitly that declaration-order
@@ -333,7 +333,7 @@ func (inst CanonWireOrdinalDispatcherFixedTable) Dispatch(candidates []CanonWire
 	return
 }
 
-// CanonWireDecoderFixedTable decodes leeway canonical wire entities (ADR-0210) into a InEntityFixedTable.
+// CanonWireDecoderFixedTable decodes leeway canonical wire entities into a InEntityFixedTable.
 //
 // It drives the generated dml builders directly: the plain setters, then one
 // BeginAttribute / container append / AddMembership… / EndAttribute per wire
@@ -366,7 +366,7 @@ type CanonWireDecoderFixedTable struct {
 // dispatcher may be nil only for a table with no ambiguous signature — canonWireAmbiguousFixedTable says
 // which this is. A table that has one cannot resolve an attribute's slot from
 // the key alone, so it is refused here rather than at the first attribute that
-// would have needed the hook (ADR-0210 SD5).
+// would have needed the hook.
 func NewCanonWireDecoderFixedTable(dml *InEntityFixedTable, dispatcher CanonWireDispatcherFixedTableI) (inst *CanonWireDecoderFixedTable, err error) {
 	if dml == nil {
 		err = eb.Build().Str("tableName", "fixed-table").Errorf("no dml builder to decode into")
@@ -384,7 +384,7 @@ func NewCanonWireDecoderFixedTable(dml *InEntityFixedTable, dispatcher CanonWire
 	return
 }
 
-// slotAcceptsChannels is the narrowing step of ADR-0210 SD5: every membership
+// slotAcceptsChannels is the narrowing step of slot dispatch: every membership
 // the attribute carries must land on a channel the member section at that
 // group's position declares. It is also the check an unambiguous slot goes
 // through, because a signature match does not imply the carriage matches.

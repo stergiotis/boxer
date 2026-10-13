@@ -229,8 +229,12 @@ var InEntityLedgervaultTableSectionIndices = map[string]int{
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1691
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1696
 
+// setId sets the entity's id, ordinal, component columns, one positional
+// argument per column in that order. Hand-written code should call the
+// per-column setters (setIdColumn, setOrdinal, setComponent) instead: they
+// cannot swap two arguments of the same type.
 func (inst *InEntityLedgervaultTable) setId(id0 uint64, ordinal1 uint64, component2 string) *InEntityLedgervaultTable {
 	if inst.state != runtime.EntityStateInEntity {
 		inst.AppendError(runtime.ErrInvalidStateTransition)
@@ -243,8 +247,56 @@ func (inst *InEntityLedgervaultTable) setId(id0 uint64, ordinal1 uint64, compone
 	return inst
 }
 
+///////////////////////////////////////////////////////////////////
+// code generator
+// dml.(*GoClassBuilder).composePlainColumnSetters
+// ./public/semistructured/leeway/dml/lw_dml_plain_setters.go:125
+
+// setIdColumn sets the entity's id column.
+func (inst *InEntityLedgervaultTable) setIdColumn(id0 uint64) *InEntityLedgervaultTable {
+	if inst.state != runtime.EntityStateInEntity {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.plainId0 = id0
+
+	return inst
+}
+
+///////////////////////////////////////////////////////////////////
+// code generator
+// dml.(*GoClassBuilder).composePlainColumnSetters
+// ./public/semistructured/leeway/dml/lw_dml_plain_setters.go:125
+
+// setOrdinal sets the entity's ordinal column.
+func (inst *InEntityLedgervaultTable) setOrdinal(ordinal1 uint64) *InEntityLedgervaultTable {
+	if inst.state != runtime.EntityStateInEntity {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.plainOrdinal1 = ordinal1
+
+	return inst
+}
+
+///////////////////////////////////////////////////////////////////
+// code generator
+// dml.(*GoClassBuilder).composePlainColumnSetters
+// ./public/semistructured/leeway/dml/lw_dml_plain_setters.go:125
+
+// setComponent sets the entity's component column.
+func (inst *InEntityLedgervaultTable) setComponent(component2 string) *InEntityLedgervaultTable {
+	if inst.state != runtime.EntityStateInEntity {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.plainComponent2 = component2
+
+	return inst
+}
+
 // PushMembershipHighCardRef adds id to the ambient HighCardRef memberships
-// replayed onto every attribute as it closes, until it is popped (ADR-0112 M1).
+// replayed onto every attribute as it closes, until it is popped.
 // The stamp scope — one section vs the whole entity — is the caller's to set.
 func (inst *InEntityLedgervaultTable) PushMembershipHighCardRef(id uint64) {
 	inst.ambientHighCardRef = append(inst.ambientHighCardRef, id)
@@ -516,7 +568,7 @@ func (inst *InEntityLedgervaultTable) GetSchema() (schema *arrow.Schema) {
 	return inst.builder.Schema()
 }
 
-// --- store control drivers (ADR-0100 SD6): exported access to InEntityLedgervaultTable's
+// --- store control drivers: exported access to InEntityLedgervaultTable's
 // unexported frame control, callable only from within this package. ---
 func InEntityLedgervaultTableBeginEntity(e *InEntityLedgervaultTable) *InEntityLedgervaultTable {
 	return e.beginEntity()
@@ -534,6 +586,15 @@ func InEntityLedgervaultTableSetActiveSections(e *InEntityLedgervaultTable, idxs
 func InEntityLedgervaultTableReleaseBuilder(e *InEntityLedgervaultTable) { e.builder.Release() }
 func InEntityLedgervaultTableSetId(e *InEntityLedgervaultTable, id0 uint64, ordinal1 uint64, component2 string) *InEntityLedgervaultTable {
 	return e.setId(id0, ordinal1, component2)
+}
+func InEntityLedgervaultTableSetIdColumn(e *InEntityLedgervaultTable, id0 uint64) *InEntityLedgervaultTable {
+	return e.setIdColumn(id0)
+}
+func InEntityLedgervaultTableSetOrdinal(e *InEntityLedgervaultTable, ordinal1 uint64) *InEntityLedgervaultTable {
+	return e.setOrdinal(ordinal1)
+}
+func InEntityLedgervaultTableSetComponent(e *InEntityLedgervaultTable, component2 string) *InEntityLedgervaultTable {
+	return e.setComponent(component2)
 }
 
 func (inst *InEntityLedgervaultTable) AppendError(err error) {

@@ -102,8 +102,12 @@ var InEntitySeqTableSectionIndices = map[string]int{
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1691
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1696
 
+// setId sets the entity's id, eid columns, one positional argument per column
+// in that order. Hand-written code should call the per-column setters
+// (setIdColumn, setEid) instead: they cannot swap two arguments of the same
+// type.
 func (inst *InEntitySeqTable) setId(id0 uint64, eid1 uint64) *InEntitySeqTable {
 	if inst.state != runtime.EntityStateInEntity {
 		inst.AppendError(runtime.ErrInvalidStateTransition)
@@ -115,8 +119,40 @@ func (inst *InEntitySeqTable) setId(id0 uint64, eid1 uint64) *InEntitySeqTable {
 	return inst
 }
 
+///////////////////////////////////////////////////////////////////
+// code generator
+// dml.(*GoClassBuilder).composePlainColumnSetters
+// ./public/semistructured/leeway/dml/lw_dml_plain_setters.go:125
+
+// setIdColumn sets the entity's id column.
+func (inst *InEntitySeqTable) setIdColumn(id0 uint64) *InEntitySeqTable {
+	if inst.state != runtime.EntityStateInEntity {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.plainId0 = id0
+
+	return inst
+}
+
+///////////////////////////////////////////////////////////////////
+// code generator
+// dml.(*GoClassBuilder).composePlainColumnSetters
+// ./public/semistructured/leeway/dml/lw_dml_plain_setters.go:125
+
+// setEid sets the entity's eid column.
+func (inst *InEntitySeqTable) setEid(eid1 uint64) *InEntitySeqTable {
+	if inst.state != runtime.EntityStateInEntity {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.plainEid1 = eid1
+
+	return inst
+}
+
 // PushMembershipHighCardRef adds id to the ambient HighCardRef memberships
-// replayed onto every attribute as it closes, until it is popped (ADR-0112 M1).
+// replayed onto every attribute as it closes, until it is popped.
 // The stamp scope — one section vs the whole entity — is the caller's to set.
 func (inst *InEntitySeqTable) PushMembershipHighCardRef(id uint64) {
 	inst.ambientHighCardRef = append(inst.ambientHighCardRef, id)
@@ -264,7 +300,7 @@ func (inst *InEntitySeqTable) GetSchema() (schema *arrow.Schema) {
 	return inst.builder.Schema()
 }
 
-// --- store control drivers (ADR-0100 SD6): exported access to InEntitySeqTable's
+// --- store control drivers: exported access to InEntitySeqTable's
 // unexported frame control, callable only from within this package. ---
 func InEntitySeqTableBeginEntity(e *InEntitySeqTable) *InEntitySeqTable { return e.beginEntity() }
 func InEntitySeqTableCommitEntity(e *InEntitySeqTable) error            { return e.commitEntity() }
@@ -276,6 +312,12 @@ func InEntitySeqTableSetActiveSections(e *InEntitySeqTable, idxs []int) { e.setA
 func InEntitySeqTableReleaseBuilder(e *InEntitySeqTable)                { e.builder.Release() }
 func InEntitySeqTableSetId(e *InEntitySeqTable, id0 uint64, eid1 uint64) *InEntitySeqTable {
 	return e.setId(id0, eid1)
+}
+func InEntitySeqTableSetIdColumn(e *InEntitySeqTable, id0 uint64) *InEntitySeqTable {
+	return e.setIdColumn(id0)
+}
+func InEntitySeqTableSetEid(e *InEntitySeqTable, eid1 uint64) *InEntitySeqTable {
+	return e.setEid(eid1)
 }
 
 func (inst *InEntitySeqTable) AppendError(err error) {

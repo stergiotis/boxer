@@ -47,8 +47,9 @@ func (inst *GoClassBuilder) composeControlDrivers(clsNames gocodegen.ClassNames,
 	b := inst.builder
 	icn := clsNames.InEntityClassName
 	rec := inst.builderPkg.RecordType
+	// The walled control surface is ADR-0100 SD6.
 	_, err = fmt.Fprintf(b, `
-// --- store control drivers (ADR-0100 SD6): exported access to %s's
+// --- store control drivers: exported access to %s's
 // unexported frame control, callable only from within this package. ---
 func %sBeginEntity(e *%s) *%s { return e.beginEntity() }
 func %sCommitEntity(e *%s) error { return e.commitEntity() }
@@ -121,6 +122,17 @@ func %sReleaseBuilder(e *%s) { e.builder.Release() }
 			}
 		}
 		_, err = b.WriteString(") }\n")
+		if err != nil {
+			return
+		}
+	}
+	var columnSetters map[common.PlainItemTypeE][]plainColumnSetter
+	columnSetters, err = plainColumnSettersByItemType(plainSetterIRH)
+	if err != nil {
+		return
+	}
+	for _, pt := range common.AllPlainItemTypes {
+		err = inst.composePlainColumnSetterDrivers(icn, columnSetters[pt])
 		if err != nil {
 			return
 		}

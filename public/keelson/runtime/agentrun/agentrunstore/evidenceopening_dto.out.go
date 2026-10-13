@@ -6,7 +6,7 @@ package agentrunstore
 const EvidenceOpeningKind = "evidenceOpening"
 
 // EvidenceOpening is the evidence profile's opening component on a vault
-// row (ADR-0327 (proposed) §SD4): the opening the ledger's commitment to
+// row: the opening the ledger's commitment to
 // the row's component opens under, as hex. It is destroyed with the row
 // and is never in the row's canonical item: the commitment is over the
 // item without it.

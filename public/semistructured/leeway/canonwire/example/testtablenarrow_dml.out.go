@@ -129,8 +129,9 @@ var InEntityTestTableNarrowSectionIndices = map[string]int{
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1691
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1696
 
+// SetId sets the entity's id column.
 func (inst *InEntityTestTableNarrow) SetId(id0 uint64) *InEntityTestTableNarrow {
 	if inst.state != runtime.EntityStateInEntity {
 		inst.AppendError(runtime.ErrInvalidStateTransition)
@@ -144,8 +145,12 @@ func (inst *InEntityTestTableNarrow) SetId(id0 uint64) *InEntityTestTableNarrow 
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1691
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1696
 
+// SetTimestamp sets the entity's ts, proc columns, one positional argument
+// per column in that order. Hand-written code should call the per-column
+// setters (SetTs, SetProc) instead: they cannot swap two arguments of the
+// same type.
 func (inst *InEntityTestTableNarrow) SetTimestamp(ts1 time.Time, proc2 []time.Time) *InEntityTestTableNarrow {
 	if inst.state != runtime.EntityStateInEntity {
 		inst.AppendError(runtime.ErrInvalidStateTransition)
@@ -157,8 +162,40 @@ func (inst *InEntityTestTableNarrow) SetTimestamp(ts1 time.Time, proc2 []time.Ti
 	return inst
 }
 
+///////////////////////////////////////////////////////////////////
+// code generator
+// dml.(*GoClassBuilder).composePlainColumnSetters
+// ./public/semistructured/leeway/dml/lw_dml_plain_setters.go:125
+
+// SetTs sets the entity's ts column.
+func (inst *InEntityTestTableNarrow) SetTs(ts1 time.Time) *InEntityTestTableNarrow {
+	if inst.state != runtime.EntityStateInEntity {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.plainTs1 = ts1
+
+	return inst
+}
+
+///////////////////////////////////////////////////////////////////
+// code generator
+// dml.(*GoClassBuilder).composePlainColumnSetters
+// ./public/semistructured/leeway/dml/lw_dml_plain_setters.go:125
+
+// SetProc sets the entity's proc column.
+func (inst *InEntityTestTableNarrow) SetProc(proc2 []time.Time) *InEntityTestTableNarrow {
+	if inst.state != runtime.EntityStateInEntity {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.plainProc2 = proc2
+
+	return inst
+}
+
 // PushMembershipHighCardRef adds id to the ambient HighCardRef memberships
-// replayed onto every attribute as it closes, until it is popped (ADR-0112 M1).
+// replayed onto every attribute as it closes, until it is popped.
 // The stamp scope — one section vs the whole entity — is the caller's to set.
 func (inst *InEntityTestTableNarrow) PushMembershipHighCardRef(id uint64) {
 	inst.ambientHighCardRef = append(inst.ambientHighCardRef, id)
