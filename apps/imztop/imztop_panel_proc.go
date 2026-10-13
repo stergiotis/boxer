@@ -31,6 +31,12 @@ const (
 	ProcSortByPID
 	ProcSortByUser
 	ProcSortByName
+	// ProcSortByIORead / ProcSortByIOWrite key on the storage-layer
+	// byte rates from /proc/[pid]/io. A process whose rate is unknown
+	// (unreadable io file, first sighting) sorts below every measured
+	// one, idle included.
+	ProcSortByIORead
+	ProcSortByIOWrite
 )
 
 type procViewState struct {
@@ -174,12 +180,37 @@ func procIndexCmp(infos []sysmsnap.ProcInfo, smoothed []float32, by ProcSortByE,
 		cmpf = func(a, b int) int { return cmp.Compare(infos[a].User, infos[b].User) }
 	case ProcSortByName:
 		cmpf = func(a, b int) int { return cmp.Compare(infos[a].Name, infos[b].Name) }
+	case ProcSortByIORead:
+		cmpf = func(a, b int) int { return cmp.Compare(procIOKey(&infos[a], true), procIOKey(&infos[b], true)) }
+	case ProcSortByIOWrite:
+		cmpf = func(a, b int) int { return cmp.Compare(procIOKey(&infos[a], false), procIOKey(&infos[b], false)) }
 	}
 	if cmpf != nil && desc {
 		inner := cmpf
 		cmpf = func(a, b int) int { return -inner(a, b) }
 	}
 	return
+}
+
+// procIOKey is a process's read or write rate as a sort key, -1 when the
+// rate is unknown so unmeasured rows never interleave with measured ones.
+func procIOKey(p *sysmsnap.ProcInfo, read bool) (key int64) {
+	if !p.IOKnown {
+		return -1
+	}
+	if read {
+		return int64(p.IOReadBytesPerSec)
+	}
+	return int64(p.IOWriteBytesPerSec)
+}
+
+// procIORateText formats a read or write rate for the process table, with
+// an en dash for a rate that was not measured.
+func procIORateText(p *sysmsnap.ProcInfo, rate uint64) (text string) {
+	if !p.IOKnown {
+		return "–"
+	}
+	return humanBytes(rate) + "/s"
 }
 
 func (inst *App) renderProcPanel(snap *PublishedSnapshot) {
@@ -235,6 +266,8 @@ func (inst *App) renderProcPanel(snap *PublishedSnapshot) {
 	c.EtColumn(70.0).Resizable(true).Send()  // CPU%  (raw)
 	c.EtColumn(90.0).Resizable(true).Send()  // RSS
 	c.EtColumn(90.0).Resizable(true).Send()  // VSZ
+	c.EtColumn(100.0).Resizable(true).Send() // I/O read rate
+	c.EtColumn(100.0).Resizable(true).Send() // I/O write rate
 	c.EtColumn(50.0).Resizable(true).Send()  // State
 	c.EtColumn(120.0).Resizable(true).Send() // Name
 	c.EtColumn(400.0).Resizable(true).Send() // Cmd
@@ -263,7 +296,7 @@ func (inst *App) renderProcPanel(snap *PublishedSnapshot) {
 	}
 
 	// Emit only the cells egui_table will actually draw. Ungated, every
-	// process built nine deferred blocks per frame and marshalled them
+	// process built a deferred block per column per frame and marshalled them
 	// across FFFI for the Rust side to cull immediately — with a few
 	// hundred processes against ~35 visible rows that is ~90% of the
 	// frame's bytes thrown away, and a CPU profile put this one loop at a
@@ -337,16 +370,26 @@ func (inst *App) renderProcPanel(snap *PublishedSnapshot) {
 		}
 		if colVis[6] {
 			for range et.Cells(r, 6) {
-				procCellLabel(string(p.State))
+				procCellLabel(procIORateText(&p, p.IOReadBytesPerSec))
 			}
 		}
 		if colVis[7] {
 			for range et.Cells(r, 7) {
-				procCellLabel(treeIndent(d, p.Name))
+				procCellLabel(procIORateText(&p, p.IOWriteBytesPerSec))
 			}
 		}
 		if colVis[8] {
 			for range et.Cells(r, 8) {
+				procCellLabel(string(p.State))
+			}
+		}
+		if colVis[9] {
+			for range et.Cells(r, 9) {
+				procCellLabel(treeIndent(d, p.Name))
+			}
+		}
+		if colVis[10] {
+			for range et.Cells(r, 10) {
 				procCellLabel(p.Cmd)
 			}
 		}
@@ -360,7 +403,7 @@ const (
 	// EtColumn declarations in renderProcPanel, the headers table in
 	// renderProcHeader and the per-column visibility gate must all agree
 	// on it.
-	procNumCols = 9
+	procNumCols = 11
 	// procRowHeight is the per-row height in the process table; chosen
 	// to leave ~7 px of vertical breathing room around the default
 	// label font (egui dark, ~14 px) while staying compact enough for
@@ -436,6 +479,8 @@ func (inst *App) renderProcHeader(et c.EndETableFluid, view procViewState) {
 		{"CPU%", ProcSortByCPURaw, 0x603},
 		{"RSS", ProcSortByMem, 0x604},
 		{"VSZ", procSortNoneSentinel, 0x605},
+		{"Read/s", ProcSortByIORead, 0x609},
+		{"Write/s", ProcSortByIOWrite, 0x60a},
 		{"S", procSortNoneSentinel, 0x606},
 		{"Name", ProcSortByName, 0x607},
 		{"Cmd", procSortNoneSentinel, 0x608},

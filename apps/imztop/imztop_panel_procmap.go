@@ -68,22 +68,28 @@ func (inst *App) initProcMap() {
 }
 
 // procMapCellLabel is the treemap's optional secondary line: the humanized area
-// metric (RSS or CPU%) on each leaf / off-path cell. It reads the metric the
-// tree was last built with (procBuiltMetric) so the label and the rectangle area
-// always agree.
+// metric (RSS, CPU% or I/O rate) on each leaf / off-path cell. It reads the
+// metric the tree was last built with (procBuiltMetric) so the label and the
+// rectangle area always agree.
 func (inst *App) procMapCellLabel(n *layout.Node) string {
 	pc := inst.procNodeObj[n]
 	if pc == nil {
 		return ""
 	}
-	if inst.procBuiltMetric == procMetricCPU {
+	switch inst.procBuiltMetric {
+	case procMetricCPU:
 		return fmt.Sprintf("%.0f%%", pc.cpu)
+	case procMetricIO:
+		if !pc.info.IOKnown {
+			return ""
+		}
+		return humanBytes(procIORate(&pc.info)) + "/s"
 	}
 	return humanBytes(pc.info.RSSBytes)
 }
 
 // renderProcMapPanel draws the process tree as a treemap: processes nested by
-// PPID, each rectangle sized by RSS (or CPU%) and tinted by CPU load. See
+// PPID, each rectangle sized by RSS (or CPU% or I/O rate) and tinted by CPU load. See
 // ADR-0020 (Update).
 //
 // The tree is rebuilt only when a new sample lands or the area metric changes,
@@ -124,7 +130,7 @@ func (inst *App) renderProcMapPanel(snap *PublishedSnapshot) {
 		return
 	}
 
-	// Area-metric switch (RSS ↔ CPU%) as a ComboBox — the topology panel's
+	// Area-metric switch (RSS / CPU% / I/O) as a ComboBox — the topology panel's
 	// dim-switch idiom, so the two treemap panels read the same.
 	for range c.ComboBox(
 		inst.ids.PrepareStr("procmap-metric-cb"),
@@ -172,7 +178,8 @@ func (inst *App) renderProcMapPanel(snap *PublishedSnapshot) {
 }
 
 // renderProcMapHoverDetail prints a one-line readout for the hovered process:
-// PID, name, user, smoothed CPU%, RSS, and the command line.
+// PID, name, user, smoothed CPU%, RSS, I/O rates when known, and the command
+// line.
 func (inst *App) renderProcMapHoverDetail() {
 	n := inst.procEvents.Hovered
 	if n == nil {
@@ -191,6 +198,9 @@ func (inst *App) renderProcMapHoverDetail() {
 		fmt.Fprintf(&b, " · %s", p.User)
 	}
 	fmt.Fprintf(&b, " · %.0f%% CPU · %s RSS", pc.cpu, humanBytes(p.RSSBytes))
+	if p.IOKnown {
+		fmt.Fprintf(&b, " · R %s/s W %s/s", humanBytes(p.IOReadBytesPerSec), humanBytes(p.IOWriteBytesPerSec))
+	}
 	if p.Cmd != "" {
 		fmt.Fprintf(&b, " · %s", p.Cmd)
 	}

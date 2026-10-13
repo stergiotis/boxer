@@ -17,6 +17,10 @@ const (
 	// procMetricCPU sizes each box by the EWMA-smoothed CPU%. Idle processes
 	// (cpu==0) floor to the smallest cell (procMetricFloor).
 	procMetricCPU
+	// procMetricIO sizes each box by the combined read+write storage rate.
+	// Idle processes and those whose rate is unknown (sysmsnap.ProcInfo
+	// IOKnown) floor to the smallest cell.
+	procMetricIO
 )
 
 // procMetricFloor is the smallest area weight a leaf can take. It keeps
@@ -26,13 +30,25 @@ const (
 // value lands in (0,1) — inverting the encoding at the low end.
 const procMetricFloor = 1e-3
 
-var procMetrics = []procMetricE{procMetricRSS, procMetricCPU}
+var procMetrics = []procMetricE{procMetricRSS, procMetricCPU, procMetricIO}
 
 func procMetricLabel(m procMetricE) string {
-	if m == procMetricCPU {
+	switch m {
+	case procMetricCPU:
 		return "CPU%"
+	case procMetricIO:
+		return "I/O"
 	}
 	return "RSS"
+}
+
+// procIORate is a process's combined read+write storage rate, zero when
+// unknown.
+func procIORate(p *sysmsnap.ProcInfo) (rate uint64) {
+	if p.IOKnown {
+		rate = p.IOReadBytesPerSec + p.IOWriteBytesPerSec
+	}
+	return
 }
 
 // procCell is the payload hung off every Proc Map layout node: a COPY of the
@@ -51,8 +67,11 @@ type procCell struct {
 // procMetricFloor so zero-valued leaves are the smallest cells (see that const).
 func procMetricValue(p *sysmsnap.ProcInfo, cpu float32, metric procMetricE) float64 {
 	v := float64(p.RSSBytes)
-	if metric == procMetricCPU {
+	switch metric {
+	case procMetricCPU:
 		v = float64(cpu)
+	case procMetricIO:
+		v = float64(procIORate(p))
 	}
 	if v < procMetricFloor {
 		v = procMetricFloor

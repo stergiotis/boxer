@@ -1,11 +1,14 @@
 // Package proc samples the Linux process table by walking
-// /proc/[pid]/{comm,cmdline,stat,statm,status} and yielding one [Info]
+// /proc/[pid]/{comm,cmdline,stat,statm,status,io} and yielding one [Info]
 // per visible process.
 //
 // The collector is stateful: per-process CPU percentages are derived
 // from the prior [Sample]'s utime+stime delta vs. wall-clock. The first
 // call after [New] reports zero CPU%; subsequent calls produce
 // meaningful per-CPU rates (a process pegging one core reads as 100%).
+// Per-process I/O rates are derived the same way from /proc/[pid]/io,
+// which is ptrace-gated: without CAP_SYS_PTRACE another user's process
+// reports IOKnown=false rather than a rate.
 //
 // Both [Collector.Sample] and [Collector.All] eagerly snapshot the
 // entire /proc tree before returning — early break out of the iterator

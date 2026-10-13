@@ -131,3 +131,13 @@ func FuzzParseStatusUidGid(f *testing.F) {
 		_, _, _ = parseStatusUidGid(data)
 	})
 }
+
+func TestParseIO(t *testing.T) {
+	r, w, ok := parseIO([]byte("rchar: 9\nwchar: 9\nsyscr: 1\nsyscw: 1\nread_bytes: 4096\nwrite_bytes: 8192\ncancelled_write_bytes: 0\n"))
+	assert.True(t, ok)
+	assert.Equal(t, uint64(4096), r)
+	assert.Equal(t, uint64(8192), w)
+
+	_, _, ok = parseIO([]byte("rchar: 9\nread_bytes: 4096\n"))
+	assert.False(t, ok, "write_bytes missing")
+}

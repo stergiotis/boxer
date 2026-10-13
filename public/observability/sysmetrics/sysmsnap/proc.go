@@ -35,6 +35,24 @@ type ProcInfo struct {
 	RSSBytes    uint64
 	VMSizeBytes uint64
 
+	// IOReadBytesPerSec and IOWriteBytesPerSec are the storage-layer
+	// rates from /proc/[pid]/io read_bytes / write_bytes, delta over
+	// wall-clock between samples, summed over every thread the process
+	// has had. Page-cache hits are not counted; writes are counted when
+	// pages are dirtied, not at writeback, and truncated dirty pages
+	// (cancelled_write_bytes) are not subtracted. Meaningful only when
+	// IOKnown.
+	IOReadBytesPerSec  uint64
+	IOWriteBytesPerSec uint64
+
+	// IOKnown is true when both this and the prior sample read
+	// /proc/[pid]/io. It stays false on a process's first sighting, for
+	// another user's process when the sampler lacks CAP_SYS_PTRACE (the
+	// file is ptrace-gated), on kernels without task I/O accounting, and
+	// for snapshots recorded before these fields existed. False means
+	// "not measured", not "idle".
+	IOKnown bool
+
 	NumThreads int32
 	Nice       int32
 	Priority   int32

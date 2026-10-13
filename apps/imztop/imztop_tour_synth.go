@@ -208,11 +208,14 @@ func synthBundle(n int64) (snap sysmsnap.BundleSnapshot) {
 		cpu := p.baseCPU + float32(osc(0, float64(perCore[i%synthCores])*0.6, n, 4, float64(i)))
 		procs[i] = sysmsnap.ProcInfo{
 			PID: p.pid, PPID: p.ppid, Name: p.name, Cmd: p.cmd, User: p.user, State: 'S',
-			StartedAtUnixMs: 1_700_000_000_000 + int64(p.pid)*1000, // fixed per PID (EWMA key stability)
-			CPUPercent:      cpu,
-			RSSBytes:        (p.baseRSSMiB << 20) + uint64(osc(0, 16<<20, n, 7, float64(i))),
-			VMSizeBytes:     (p.baseRSSMiB << 20) * 3,
-			NumThreads:      4,
+			StartedAtUnixMs:    1_700_000_000_000 + int64(p.pid)*1000, // fixed per PID (EWMA key stability)
+			CPUPercent:         cpu,
+			RSSBytes:           (p.baseRSSMiB << 20) + uint64(osc(0, 16<<20, n, 7, float64(i))),
+			VMSizeBytes:        (p.baseRSSMiB << 20) * 3,
+			IOReadBytesPerSec:  uint64(osc(0, 6<<20, n, 5, float64(i))),
+			IOWriteBytesPerSec: uint64(osc(0, 3<<20, n, 9, float64(i)+1)),
+			IOKnown:            true,
+			NumThreads:         4,
 		}
 	}
 	snap.Procs = procs

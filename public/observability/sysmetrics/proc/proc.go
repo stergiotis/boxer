@@ -2,6 +2,7 @@ package proc
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"errors"
 	"io/fs"
@@ -84,14 +85,15 @@ type Options struct {
 
 	// MaxProcs caps the number of processes returned per [Collector.Sample]
 	// call. 0 means unlimited (every visible PID is fully sampled). When
-	// >0, every PID is still measured via the cheap pair (comm + stat) so
-	// CPU% and RSS are available, then the slice is truncated to MaxProcs
+	// >0, every PID is still measured via comm + stat + io so CPU%, RSS
+	// and I/O rates are available, then the slice is truncated to MaxProcs
 	// entries ordered by CPU% desc (RSS desc tiebreak — keeps freshly-
 	// spawned heavyweights visible before their first CPU delta).
 	// Component-marked processes (ADR-0126) are cap-exempt: the
 	// appliance's own components must stay visible regardless of CPU
-	// rank, so the result holds at most MaxProcs unmarked processes plus
-	// every marked one. /proc/[pid]/cmdline and /proc/[pid]/status are
+	// rank. The top MaxProcs by I/O rate are kept as well, so the result
+	// holds at most 2*MaxProcs unmarked processes plus every marked one.
+	// /proc/[pid]/cmdline and /proc/[pid]/status are
 	// only read for the survivors, which is where most of the per-tick
 	// syscall and heap pressure live on a busy host.
 	MaxProcs uint32
@@ -136,6 +138,9 @@ type Collector struct {
 	primed     bool
 	prev       map[uint32]procTick
 	prevGlobal uint64
+	// prevNow is the prior sample's wall-clock, the denominator of the
+	// per-process I/O rates.
+	prevNow time.Time
 
 	// componentEnvVar is the mark variable name; componentEnvPrefix is
 	// its precomputed "NAME=" byte form the environ scan matches on.
@@ -152,6 +157,14 @@ type Collector struct {
 
 type procTick struct {
 	cpuTotal uint64 // utime + stime in clock ticks
+
+	// starttimeTicks guards the I/O delta against pid reuse: a recycled
+	// pid's counters restart and would otherwise read as a huge rate or
+	// an underflow.
+	starttimeTicks uint64
+	ioRead         uint64 // /proc/[pid]/io read_bytes
+	ioWrite        uint64 // /proc/[pid]/io write_bytes
+	ioOK           bool   // the io read above succeeded
 }
 
 // procIdent is one process instance's cached identity. starttimeTicks
@@ -269,11 +282,16 @@ func (inst *Collector) collectAll(ctx context.Context) (infos []sysmsnap.ProcInf
 	if inst.primed && globalCPU > inst.prevGlobal {
 		deltaGlobal = globalCPU - inst.prevGlobal
 	}
+	var elapsedSec float64
+	if inst.primed {
+		elapsedSec = now.Sub(inst.prevNow).Seconds()
+	}
 
-	// Phase 1: read comm + stat for every PID. Cheapest pair, enough for
-	// CPU% / RSS / KernelThread / sort keys. cmdline + status (the bulk of
-	// per-tick I/O) are deferred to phase 3 so a MaxProcs cap can suppress
-	// them.
+	// Phase 1: read comm + stat + io for every PID. Enough for CPU% / RSS /
+	// I/O rates / KernelThread / sort keys. cmdline + status (the bulk of
+	// per-tick syscalls) are deferred to phase 3 so a MaxProcs cap can
+	// suppress them. io is read here rather than there because the cap
+	// ranks on it.
 	for _, pid := range pids {
 		select {
 		case <-ctx.Done():
@@ -282,7 +300,7 @@ func (inst *Collector) collectAll(ctx context.Context) (infos []sysmsnap.ProcInf
 		default:
 		}
 		seen[pid] = struct{}{}
-		info, ok := inst.readBasicPID(pid, bootTime, deltaGlobal)
+		info, ok := inst.readBasicPID(pid, bootTime, deltaGlobal, elapsedSec)
 		if !ok {
 			continue
 		}
@@ -296,7 +314,9 @@ func (inst *Collector) collectAll(ctx context.Context) (infos []sysmsnap.ProcInf
 	// freshly-spawned heavyweight visible even when its first sample has
 	// no prior tick to delta against (CPUPercent==0 on first sighting).
 	// Component-marked processes are cap-exempt (ADR-0126): an idle
-	// appliance daemon must not vanish from the table by CPU rank.
+	// appliance daemon must not vanish from the table by CPU rank. The
+	// top MaxProcs by I/O rate are kept as well, so a process blocked on
+	// disk — little CPU, most of the I/O — is not cut by CPU rank.
 	if inst.maxProcs > 0 && uint32(len(infos)) > inst.maxProcs {
 		slices.SortFunc(infos, func(a, b sysmsnap.ProcInfo) int {
 			switch {
@@ -311,14 +331,32 @@ func (inst *Collector) collectAll(ctx context.Context) (infos []sysmsnap.ProcInf
 			}
 			return 0
 		})
-		kept := infos[:0]
+		keep := make([]bool, len(infos))
 		var unmarked uint32
-		for _, info := range infos {
+		for i, info := range infos {
 			if info.Component != "" {
-				kept = append(kept, info)
+				keep[i] = true
 			} else if unmarked < inst.maxProcs {
-				kept = append(kept, info)
+				keep[i] = true
 				unmarked++
+			}
+		}
+		byIO := make([]int, 0, len(infos))
+		for i, info := range infos {
+			if ioRate(info) > 0 {
+				byIO = append(byIO, i)
+			}
+		}
+		slices.SortFunc(byIO, func(a, b int) int {
+			return cmp.Compare(ioRate(infos[b]), ioRate(infos[a]))
+		})
+		for _, i := range byIO[:min(len(byIO), int(inst.maxProcs))] {
+			keep[i] = true
+		}
+		kept := infos[:0]
+		for i, info := range infos {
+			if keep[i] {
+				kept = append(kept, info)
 			}
 		}
 		infos = kept
@@ -331,6 +369,7 @@ func (inst *Collector) collectAll(ctx context.Context) (infos []sysmsnap.ProcInf
 
 	// Update global state and prune stale per-pid state.
 	inst.prevGlobal = globalCPU
+	inst.prevNow = now
 	inst.primed = true
 	for k := range inst.prev {
 		if _, ok := seen[k]; !ok {
@@ -355,12 +394,12 @@ func (inst *Collector) collectAll(ctx context.Context) (infos []sysmsnap.ProcInf
 	return
 }
 
-// readBasicPID reads /proc/[pid]/{comm,stat} and fills every Info field
-// that does not require /proc/[pid]/{cmdline,status}. The CPU% delta map
-// is also updated here — phase 2's CPU%-desc cap relies on a single
-// linear scan to set the sort key. Returns ok=false on dead-pid race
+// readBasicPID reads /proc/[pid]/{comm,stat,io} and fills every Info
+// field that does not require /proc/[pid]/{cmdline,status}. The CPU% and
+// I/O delta map is also updated here — phase 2's cap relies on a single
+// linear scan to set the sort keys. Returns ok=false on dead-pid race
 // (ENOENT on comm), missing stat, or malformed stat.
-func (inst *Collector) readBasicPID(pid uint32, bootTime time.Time, deltaGlobal uint64) (info sysmsnap.ProcInfo, ok bool) {
+func (inst *Collector) readBasicPID(pid uint32, bootTime time.Time, deltaGlobal uint64, elapsedSec float64) (info sysmsnap.ProcInfo, ok bool) {
 	dir := strconv.FormatUint(uint64(pid), 10)
 	info.PID = pid
 
@@ -422,7 +461,23 @@ func (inst *Collector) readBasicPID(pid uint32, bootTime time.Time, deltaGlobal 
 			info.CPUPercent = float32(pct)
 		}
 	}
-	inst.prev[pid] = procTick{cpuTotal: cpuTotal}
+	tick := procTick{cpuTotal: cpuTotal, starttimeTicks: parsed.starttimeTicks}
+
+	// /proc/[pid]/io is ptrace-gated: another user's process reads EACCES
+	// without CAP_SYS_PTRACE, and kernels built without task I/O
+	// accounting have no file. Either way IOKnown stays false.
+	if ioRaw, ierr := inst.proc.ReadFileInto(filepath.Join(dir, "io"), inst.scratch); ierr == nil {
+		inst.scratch = ioRaw
+		tick.ioRead, tick.ioWrite, tick.ioOK = parseIO(ioRaw)
+	}
+	if prev, primedPid := inst.prev[pid]; primedPid && tick.ioOK && prev.ioOK &&
+		prev.starttimeTicks == tick.starttimeTicks && elapsedSec > 0 &&
+		tick.ioRead >= prev.ioRead && tick.ioWrite >= prev.ioWrite {
+		info.IOReadBytesPerSec = uint64(float64(tick.ioRead-prev.ioRead) / elapsedSec)
+		info.IOWriteBytesPerSec = uint64(float64(tick.ioWrite-prev.ioWrite) / elapsedSec)
+		info.IOKnown = true
+	}
+	inst.prev[pid] = tick
 
 	ok = true
 	return
@@ -697,6 +752,40 @@ func parseStat(content []byte) (out statFields, err error) {
 	}
 	if v, perr := strconv.ParseUint(string(fields[21]), 10, 64); perr == nil {
 		out.rssPages = v
+	}
+	return
+}
+
+// parseIO extracts read_bytes and write_bytes from /proc/[pid]/io. ok is
+// false unless both are present and numeric.
+func parseIO(content []byte) (readBytes, writeBytes uint64, ok bool) {
+	var sawRead, sawWrite bool
+	for k, v := range procfs.IterKV(content) {
+		switch string(k) {
+		case "read_bytes":
+			if n, err := strconv.ParseUint(string(v), 10, 64); err == nil {
+				readBytes = n
+				sawRead = true
+			}
+		case "write_bytes":
+			if n, err := strconv.ParseUint(string(v), 10, 64); err == nil {
+				writeBytes = n
+				sawWrite = true
+			}
+		}
+		if sawRead && sawWrite {
+			break
+		}
+	}
+	ok = sawRead && sawWrite
+	return
+}
+
+// ioRate is a process's combined read+write rate, the key the cap ranks
+// on; zero when the rate is unknown.
+func ioRate(info sysmsnap.ProcInfo) (rate uint64) {
+	if info.IOKnown {
+		rate = info.IOReadBytesPerSec + info.IOWriteBytesPerSec
 	}
 	return
 }

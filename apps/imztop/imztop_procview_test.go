@@ -1,6 +1,7 @@
 package imztop
 
 import (
+	"slices"
 	"testing"
 
 	"github.com/stergiotis/boxer/public/observability/sysmetrics/sysmsnap"
@@ -202,6 +203,34 @@ func TestSortKeepsSmoothedAligned(t *testing.T) {
 		}
 		if gotSm[i] != src {
 			t.Fatalf("row %d (%s) smoothed = %v, want %v", i, p.Name, gotSm[i], src)
+		}
+	}
+}
+
+// Sorting by I/O, descending, puts a process whose rate was not measured
+// last — below a measured zero, so "unknown" never reads as "idle".
+func TestProcSortByIOPutsUnknownLast(t *testing.T) {
+	infos := procs(
+		sysmsnap.ProcInfo{PID: 1, Name: "unmeasured"},
+		sysmsnap.ProcInfo{PID: 2, Name: "idle", IOKnown: true},
+		sysmsnap.ProcInfo{PID: 3, Name: "writer", IOKnown: true, IOWriteBytesPerSec: 1 << 20, IOReadBytesPerSec: 10},
+		sysmsnap.ProcInfo{PID: 4, Name: "reader", IOKnown: true, IOReadBytesPerSec: 1 << 20},
+	)
+	smoothed := []float32{0, 0, 0, 0}
+	for _, tc := range []struct {
+		by   ProcSortByE
+		want []uint32
+	}{
+		{ProcSortByIOWrite, []uint32{3, 2, 4, 1}},
+		{ProcSortByIORead, []uint32{4, 3, 2, 1}},
+	} {
+		got, _ := applyProcView(infos, smoothed, procViewState{SortBy: tc.by, Desc: true})
+		pids := make([]uint32, len(got))
+		for i, p := range got {
+			pids[i] = p.PID
+		}
+		if !slices.Equal(pids, tc.want) {
+			t.Errorf("sort %v desc: got %v, want %v", tc.by, pids, tc.want)
 		}
 	}
 }
