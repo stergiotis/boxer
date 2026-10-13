@@ -232,8 +232,13 @@ func (inst *App) syncRoster() {
 	if got, _, ok := inst.rosterJob.TakeResult(); ok && got != nil {
 		inst.roster = *got
 		inst.pace.observe(got.runs, got.at)
+		if got.runs != nil {
+			// The same listing the runs job makes: the rows follow it, so a
+			// conversation started while the tab is in front appears.
+			inst.runs = got.runs
+		}
 	}
-	if !inst.showRuns || inst.rosterJob.Snapshot().State == bgjob.StateRunning || time.Since(inst.rosterAt) < rosterRefresh {
+	if !inst.tabShown(tabConversations) || inst.rosterJob.Snapshot().State == bgjob.StateRunning || time.Since(inst.rosterAt) < rosterRefresh {
 		return
 	}
 	inst.listRoster()
@@ -287,7 +292,7 @@ func conversationSwatch(conversation string) {
 const tipRosterStranded = "A run is stranded when the code now running differs from the code that wrote it (ADR-0308): " +
 	"its transcript opens, but the conversation does not continue."
 
-const tipRosterPace = "The bars are the steps the conversation wrote in each of the last five minutes, newest last, read off its journal while this panel is open. " +
+const tipRosterPace = "The bars are the steps the conversation wrote in each of the last five minutes, newest last, read off its journal while this tab is in front. " +
 	"Quiet means an open conversation wrote nothing for two minutes or more: it may be waiting on you, on a slow model, or stuck."
 
 func (inst *App) rosterHeading(title string, n int) {

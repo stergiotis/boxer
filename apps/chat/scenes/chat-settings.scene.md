@@ -40,14 +40,14 @@ stands in for the person's approval.
 {"do":"wait","valueContains":"set_note in window 2 · rendered","role":"label"}
 {"do":"wait","value":"answered","role":"label","comment":"the state chip: the turn ended answered"}
 {"do":"wait","valueContains":"now edit · may run","role":"label","comment":"the demo app's catalog offers edits, and the task acts in it"}
-{"do":"click","contains":"Settings","role":"button"}
+{"do":"click","name":"Settings","role":"button"}
 {"do":"wait","valueContains":"What the model may do","role":"label"}
 {"do":"capture","text":"chat-settings"}
 {"do":"click","name":"Read","role":"radio_button","comment":"At most: read"}
 {"do":"wait","valueContains":"now read · may read","role":"label","settleMs":500}
 {"do":"capture","text":"chat-settings-read"}
-{"do":"focus","id":10519974525881031313,"comment":"the chat's composer"}
-{"do":"type","id":10519974525881031313,"text":"Write it again."}
+{"do":"focus","id":12790625040306265328,"comment":"the chat's composer"}
+{"do":"type","id":12790625040306265328,"text":"Write it again."}
 {"do":"click","contains":"Send","role":"button","comment":"turn 2"}
 {"do":"wait","valueContains":"The settings let me only read now","role":"label","settleMs":1000}
 {"do":"wait","valueContains":"set_note in window 2 · refused","role":"label","comment":"refused by the host, above the ceiling"}

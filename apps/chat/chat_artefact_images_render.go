@@ -115,7 +115,7 @@ func (inst *App) renderPixelAsk(a *pixelAsk) {
 	section("The model asks to see a screenshot")
 	c.Label(a.name + " · sent at " + strconv.Itoa(a.w) + "×" + strconv.Itoa(a.h) + " px").Selectable(false).Send()
 	weak(a.origin)
-	weak("The preview below is fitted to the panel; the model gets every pixel.")
+	weak("The preview below is fitted to the tab; the model gets every pixel.")
 	to := "the host's model"
 	if a.endpoint != "" {
 		to = a.endpoint

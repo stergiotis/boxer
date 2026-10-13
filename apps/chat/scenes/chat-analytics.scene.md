@@ -35,7 +35,7 @@ used, with one call each.
 {"do":"click","name":"Window","comment":"play opened over the chat: lay the two side by side"}
 {"do":"click","contains":"Side by side"}
 {"do":"key","text":"Escape","comment":"close the menu"}
-{"do":"click","contains":"Analytics","role":"button"}
+{"do":"click","name":"Analytics","role":"button"}
 {"do":"wait","valueContains":"is running","role":"label","comment":"the test grant's task: the surface was read"}
 {"do":"read","valueContains":"granted used","role":"label","pattern":"(?P<used>\\d+) of (?P<granted>\\d+) granted used · (?P<calls>\\d+) calls"}
 {"do":"expect","of":"used","eq":4,"comment":"get_state, set_sql, run, and opening play"}

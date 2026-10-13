@@ -160,7 +160,7 @@ type authorityAsk struct {
 }
 
 const (
-	// settingsPanelW is the Settings panel's width.
+	// settingsPanelW is the width the Settings tab draws its scale at.
 	settingsPanelW float32 = 380
 	// barScaleW is the width of the scale in the bar.
 	barScaleW float32 = 132
@@ -173,7 +173,7 @@ const (
 		"Edit: also change what it holds — text, parameters — and write the artefact.\n" +
 		"Run: also run against a data source.\n" +
 		"Outside: also act outside the app — publish, export — confirmed by you each time."
-	tipChanges = "Ask first: every change waits as a proposal you accept or reject — in the window it changes, or in the Artefact panel. Apply directly: changes land as the model makes them. Reads never wait — except a screenshot's pixels under Pixels' Ask levels — and a change outside the app is confirmed each time either way."
+	tipChanges = "Ask first: every change waits as a proposal you accept or reject — in the window it changes, or in the Artefact tab. Apply directly: changes land as the model makes them. Reads never wait — except a screenshot's pixels under Pixels' Ask levels — and a change outside the app is confirmed each time either way."
 	tipLaunch  = "Let the model ask to open windows of apps. You still decide which, in the host's dialog."
 	tipDesktop = "Let the model ask to arrange every window on the desktop."
 	tipReach   = "How far the model's work may reach beyond the windows. The task's grant names each place, and you approve the list.\n" +
@@ -181,12 +181,12 @@ const (
 		"Data endpoints: also the ClickHouse servers the apps query; At most decides whether the work only reads them.\n" +
 		"Network: also HTTP fetches to the destinations this host declares, and calls to a model service. Anything the host does not recognise counts as network."
 	tipPace     = "At a pace I can follow: the host spaces the model's changes — an edit, a run, a window opened or moved — so you can see each one and stop the task. As fast as it can: they land as the model makes them, faster than you can read or intervene."
-	tipArtefact = "Give this conversation one markdown document the model reads and edits through tools, shown in the Artefact panel. At most and Changes above decide whether it may write and whether each change waits for you."
+	tipArtefact = "Give this conversation one markdown document the model reads and edits through tools, shown in the Artefact tab. At most and Changes above decide whether it may write and whether each change waits for you."
 	tipScore    = "may is what these settings allow, now what the running task was granted, each 0–100: the level picks the band, and what else is allowed — listed below — moves it within the band."
 	tipRounds   = "How many model calls one turn may make before it must answer: each round is a model call and the tool calls it asks for, and the last round offers no tools. A change applies from the next turn."
 	tipPixels   = "Which of the artefact's screenshots the model may see as pixels, sent to the model with the turn.\n" +
 		"Metadata only: names, sizes and where each came from; you see the pixels, the model does not.\n" +
-		"Ask each time: each view waits in the Artefact panel, showing the image and the model it would go to, until you allow or decline it.\n" +
+		"Ask each time: each view waits in the Artefact tab, showing the image and the model it would go to, until you allow or decline it.\n" +
 		"Ask once per image: as above, and an image you allowed is shown again without asking; a crop or a new capture asks.\n" +
 		"This chat's captures: any screenshot of this conversation, without asking — the windows were shared with the task.\n" +
 		"A shown image stays in the model's context for its turn only. What was sent cannot be called back; lowering this binds from the next request on."
@@ -319,14 +319,12 @@ func markers(may agent.Score, now agent.Score) (ms []bandscale.Marker) {
 	}
 }
 
-// renderSettingsToggle is the bar's Settings button and the scale beside it.
+// renderSettingsToggle is the bar's Settings button, which brings the tab
+// to the front, and the scale beside it.
 func (inst *App) renderSettingsToggle() {
 	for range c.HoverText(tipSettings).KeepIter() {
-		if c.Button(inst.ids.PrepareStr("settings-toggle"), atomsSettings).Selected(inst.showSettings).SendResp().HasPrimaryClicked() {
-			inst.showSettings = !inst.showSettings
-			if inst.showSettings {
-				inst.showStats = false
-			}
+		if c.Button(inst.ids.PrepareStr("settings-toggle"), atomsSettings).Selected(inst.tabShown(tabSettings)).SendResp().HasPrimaryClicked() {
+			inst.showTab(tabSettings)
 		}
 	}
 	may, now := inst.scores()
@@ -335,20 +333,6 @@ func (inst *App) renderSettingsToggle() {
 			bandscale.Render(bandscale.Input{Ids: inst.ids, ScopeKey: "bar-scale", Bands: ladder, Markers: markers(may, now),
 				Width: barScaleW, Compact: true})
 			c.Label("now " + now.Level.String() + " · may " + may.Level.String()).Selectable(false).Send()
-		}
-	}
-}
-
-// renderSettingsPanel is the Settings panel, beside the transcript.
-func (inst *App) renderSettingsPanel() {
-	if !inst.showSettings {
-		return
-	}
-	for range c.PanelRightInside(inst.ids.PrepareStr("settings")).ExactSize(settingsPanelW).KeepIter() {
-		for range c.ScrollArea().Vscroll(true).Hscroll(false).KeepIter() {
-			for range c.IdScope(inst.ids.PrepareStr("settings-body")) {
-				inst.renderSettings()
-			}
 		}
 	}
 }

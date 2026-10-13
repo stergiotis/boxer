@@ -38,6 +38,7 @@ const (
 )
 
 const (
+	// artefactPanelW is the width the artefact's previews are drawn for.
 	artefactPanelW float32 = 460
 	// maxDiffShown bounds the diff lines drawn; the rest is counted.
 	maxDiffShown = 400
@@ -113,21 +114,21 @@ func (inst *App) renderArtefactToggle() {
 		label = c.Atoms().Text(icons.PhFileText + " Artefact · waiting").Keep()
 	}
 	for range c.HoverText(tipArtefactPanel).KeepIter() {
-		if c.Button(inst.ids.PrepareStr("artefact-toggle"), label).Selected(inst.showArtefact).SendResp().HasPrimaryClicked() {
-			inst.showArtefact = !inst.showArtefact
+		if c.Button(inst.ids.PrepareStr("artefact-toggle"), label).Selected(inst.tabShown(tabArtefact)).SendResp().HasPrimaryClicked() {
+			inst.showTab(tabArtefact)
 		}
 	}
 }
 
-// renderArtefactPanel is the panel, beside the transcript.
-func (inst *App) renderArtefactPanel() {
-	if !inst.showArtefact || !inst.artefactOn() {
+// renderArtefactTab is the Artefact tab; it says how to have one while the
+// conversation has none.
+func (inst *App) renderArtefactTab() {
+	if !inst.artefactOn() {
+		c.Label("This conversation has no artefact. Turn Artefact on in Settings before the first message.").Wrap().Send()
 		return
 	}
-	for range c.PanelRightInside(inst.ids.PrepareStr("artefact")).DefaultSize(artefactPanelW).Resizable(true).KeepIter() {
-		for range c.IdScope(inst.ids.PrepareStr("artefact-body")) {
-			inst.renderArtefact()
-		}
+	for range c.IdScope(inst.ids.PrepareStr("artefact-body")) {
+		inst.renderArtefact()
 	}
 }
 

@@ -41,7 +41,7 @@ waiting line counts against.
 {"do":"click","name":"Details","nth":2,"settleMs":500,"comment":"the third tool line's steps"}
 {"do":"wait","valueContains":"SELECT work_w, work_h","role":"label"}
 {"do":"capture","text":"chat-trail-details"}
-{"do":"click","contains":"Settings","role":"button","settleMs":500}
+{"do":"click","name":"Settings","role":"button","settleMs":500}
 {"do":"scroll_into_view","name":"rounds per turn","role":"slider","settleMs":500}
 {"do":"capture","text":"chat-trail-rounds"}
 ```

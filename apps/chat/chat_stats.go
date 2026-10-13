@@ -32,7 +32,7 @@ import (
 var AdvancedSeed = env.NewBool(env.Spec{
 	Name:        "BOXER_CHAT_ADVANCED",
 	Default:     "true",
-	Description: "show the chat app's Analytics panel — token and answer statistics of the window's conversations, the conversation's agent surface, and Open in play on them as ad-hoc datasets; false hides it",
+	Description: "fill the chat app's Analytics tab — token and answer statistics of the window's conversations, the conversation's agent surface, and Open in play on them as ad-hoc datasets; false leaves the tab saying how to turn it on",
 	Category:    env.CategoryE("boxer-chat"),
 })
 

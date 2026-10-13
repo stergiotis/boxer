@@ -46,7 +46,7 @@ Tagged slow with the other scenes of the person being away.
 {"do":"wait","valueContains":"waiting for you","role":"label"}
 {"do":"click","contains":"Cancel","role":"button","comment":"the person stops the turn"}
 {"do":"wait","contains":"Send","role":"button"}
-{"do":"click","contains":"Analytics","role":"button","settleMs":800}
+{"do":"click","name":"Analytics","role":"button","settleMs":800}
 {"do":"wait","valueContains":"window 2 · SQL playground","role":"label"}
 {"do":"wait","valueContains":"1 call: 1 failed","role":"label","comment":"set_sql, withdrawn"}
 {"do":"capture","text":"chat-afk-stop-withdraws"}

@@ -25,7 +25,7 @@ shows the local switch as the host's rule rather than a checkbox.
 
 ```jsonl trace
 {"do":"note","text":"ADR-0287: the host's cap binds over the window's setting"}
-{"do":"click","contains":"Settings","role":"button"}
+{"do":"click","name":"Settings","role":"button"}
 {"do":"wait","valueContains":"This host allows at most Ask once per image.","role":"label","settleMs":500}
 {"do":"wait","valueContains":"Only to a local model: required by this host","role":"label"}
 {"do":"capture","text":"chat-pixels-host-cap","settleMs":500}

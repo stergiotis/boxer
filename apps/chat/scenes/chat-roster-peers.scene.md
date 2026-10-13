@@ -29,8 +29,8 @@ of its own.
 {"do":"click","contains":"Send","role":"button","comment":"the seeded draft, in the first chat window"}
 {"do":"type","role":"text_input","nth":0,"text":"chat","settleMs":500,"comment":"the launcher's search field"}
 {"do":"click","contains":"New window","role":"button","comment":"a second chat window"}
-{"do":"wait","contains":"Conversations","role":"button","nth":1}
-{"do":"click","contains":"Conversations","role":"button","nth":1,"comment":"the second window's roster"}
+{"do":"wait","name":"Conversations","role":"button","nth":1}
+{"do":"click","name":"Conversations","role":"button","nth":1,"comment":"the second window's roster"}
 {"do":"read","valueContains":"chat window 1 ·","role":"label","pattern":"(?P<waiting>waiting for the answer)","comment":"the first window's turn waits on the model"}
 {"do":"capture","text":"chat-roster-peers-running"}
 {"do":"read","valueContains":"chat window 1 ·","role":"label","pattern":"(?P<done>· answered)","comment":"then it is answered"}

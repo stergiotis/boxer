@@ -32,6 +32,6 @@ weight.
 {"do":"expect","of":"highlights","eq":1}
 {"do":"key","text":"F8","comment":"next by weight"}
 {"do":"read","contains":"nothing waits on you","role":"button","on":"name","pattern":"(?P<cleared>on you)$","comment":"the highlight went"}
-{"do":"wait","valueContains":"new since you looked","role":"label","comment":"the chat window was raised, and marks what landed"}
+{"do":"wait","value":"\ue03e new since you looked","role":"label","comment":"the chat window was raised, and marks what landed"}
 {"do":"capture","text":"chat-next-key"}
 ```

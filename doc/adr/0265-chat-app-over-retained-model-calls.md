@@ -557,6 +557,21 @@ multiple choice. The window's "or answer in your own words" field has no
 counterpart in the card; a form that needs the person's words, such as an
 exit approval's justification, is answered in the window only.
 
+### 2026-10-12 — the window's body is a dock
+
+The chat window's panes were fixed: the composer a bottom panel, the
+Conversations, Settings, Analytics and Artefact panels side panels of set
+widths, opened by the bar's toggles. The body is now one dock, as play's
+is: the transcript, the composer split below it, and the four as tabs of a
+column beside them. Every divider drags; the initial fractions are a
+preset, and once the person drags one the dock's own state wins for the
+window's life. The composer's input fills its pane. The bar stays fixed,
+and its buttons bring a tab to the front. The tab set is fixed when the
+dock is first built — a tab declared later lands beside the transcript —
+so a tab whose feature is off stays and says how to turn it on. Work a
+tab does only while it is in front, such as the roster's refresh, reads
+whether it was drawn last frame.
+
 ## References
 
 - [ADR-0264](./0264-retained-model-conversations-on-facts.md) — what the app sends and why it reads nothing back.

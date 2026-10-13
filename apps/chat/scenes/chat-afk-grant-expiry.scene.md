@@ -38,7 +38,7 @@ Tagged slow, since it waits out the timeout.
 {"do":"sleep","settleMs":14000,"comment":"the person is away past the request timeout"}
 {"do":"wait","valueContains":"the person did not decide in time","role":"label"}
 {"do":"wait","valueContains":"The request expired before you decided.","role":"label"}
-{"do":"type","id":10519974525881031313,"text":"I am back, try again.","comment":"the composer"}
+{"do":"type","role":"multiline_text_input","text":"I am back, try again.","comment":"the composer"}
 {"do":"click","contains":"Send","role":"button"}
 {"do":"wait","contains":"your turn","role":"button","comment":"the request waits in the person's queue (ADR-0324)"}
 {"do":"click","contains":"your turn","role":"button"}

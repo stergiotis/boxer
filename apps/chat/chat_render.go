@@ -23,10 +23,17 @@ import (
 )
 
 const (
-	// composerRows is the composer's height in text rows.
+	// composerRows is the composer's least height in text rows; dragging the
+	// divider above it gives it more.
 	composerRows = 3
-	// composerMaxHeight is the ceiling on the composer's scroll area.
-	composerMaxHeight float32 = 140
+	// composerChromePx is the input's own frame and margin, held back from
+	// the rows the pane's height holds.
+	composerChromePx float32 = 10
+	// rowSeedFactor turns the body font's size into a row height on the
+	// first frame, before the measurement lands.
+	rowSeedFactor = 1.45
+	// rowProbeSalt names the row-height measurement, through the id stack.
+	rowProbeSalt uint64 = 0x636861742d726f77
 	// fallbackButtonW stands in for Send's measured width on the first
 	// frame; buttonGap is the space between it and the input.
 	fallbackButtonW float32 = 72
@@ -119,19 +126,8 @@ func (inst *App) render() {
 	for range c.PanelTopInside(inst.ids.PrepareStr("bar")).Resizable(false).KeepIter() {
 		inst.renderBar()
 	}
-	for range c.PanelBottomInside(inst.ids.PrepareStr("composer")).Resizable(false).KeepIter() {
-		inst.renderComposer()
-	}
-	inst.renderStatsPanel()
-	inst.renderSettingsPanel()
-	inst.renderArtefactPanel()
-	inst.renderRunsPanel()
 	for range c.PanelCentralInside().KeepIter() {
-		if len(inst.conv.entries) == 0 && inst.pending == nil {
-			inst.renderEmpty()
-		} else {
-			inst.renderTranscript()
-		}
+		inst.renderDock()
 	}
 }
 
@@ -139,7 +135,7 @@ func (inst *App) render() {
 // of what the model may do (ADR-0280), Analytics — and a row of what the
 // conversation is: what it was started with, the context used and the model
 // (ADR-0265 §SD4). Then the task while Apps is on, then at most one notice.
-// The options themselves are in the Settings panel.
+// The options themselves are in the Settings tab.
 func (inst *App) renderBar() {
 	conv := inst.conv
 	if conv.started {
@@ -475,9 +471,16 @@ func (inst *App) renderComposer() {
 		}
 	}
 	inst.renderTransformPicker()
-	w, _, ok := c.CapturePaneSize(c.ProbeSeq("chat", "composer") ^ inst.ids.PrepareHighEntropy(composerProbeSalt).Derive())
+	w, h, ok := c.CapturePaneSize(c.ProbeSeq("chat", "composer") ^ inst.ids.PrepareHighEntropy(composerProbeSalt).Derive())
 	if !ok || w <= 0 {
 		w = fallbackComposerW
+	}
+	if ok && h > 0 {
+		inst.composerH = h
+	}
+	rows := uint32(composerRows)
+	if rh := inst.composerRowHeight(); inst.composerH > 0 && rh > 0 {
+		rows = max(rows, uint32(max((inst.composerH-composerChromePx)/rh, 0)))
 	}
 	btnProbe := c.ProbeSeq("chat", "composer-button") ^ inst.ids.PrepareHighEntropy(buttonProbeSalt).Derive()
 	btnW := fallbackButtonW
@@ -513,10 +516,10 @@ func (inst *App) renderComposer() {
 		// window's minimum width (mdedit's editor found this). The input
 		// stays editable while a turn runs, so the next message can be
 		// written; it is sent once the answer is in.
-		for range c.ScrollArea().Hscroll(true).Vscroll(true).MaxHeight(composerMaxHeight).AutoShrink(false, true).KeepIter() {
+		for range c.ScrollArea().Hscroll(true).Vscroll(true).MaxHeight(max(inst.composerH, 1)).AutoShrink(false, true).KeepIter() {
 			b := c.TextEdit(inst.ids.PrepareStr("draft"), inst.draft, true).
 				DesiredWidth(max(w-btnW-buttonGap, 120)).
-				DesiredRows(composerRows).
+				DesiredRows(rows).
 				HintText(hintDraft)
 			if busy {
 				b = b.CaptureKeys(uint64(escMask))
@@ -880,4 +883,17 @@ func (inst *App) renderTask() {
 			coord.mu.Unlock()
 		}
 	}
+}
+
+// composerRowHeight is the composer's row height: measured once the
+// measurement lands, seeded from the body font's size before; re-armed every
+// frame, as Sync resets the binding (mdedit's measureRowHeight).
+func (inst *App) composerRowHeight() float32 {
+	pt := styletokens.ScaledPt(styletokens.BodyPt, styletokens.DensityStandard)
+	if inst.rowFontPt != pt {
+		inst.rowFontPt, inst.rowPx = pt, float64(pt)*rowSeedFactor
+	}
+	seq := inst.ids.PrepareHighEntropy(rowProbeSalt).Derive()
+	c.MeasureTextSizeBind(seq, seq^1, "Mg", pt, false, nil, &inst.rowPx)
+	return max(float32(inst.rowPx), pt)
 }

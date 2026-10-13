@@ -30,7 +30,6 @@ import (
 
 const (
 	tipRuns       = "Conversations: the runs this window's app wrote, kept by the host; resume one, or delete it (its bodies are blanked, its chain stays)."
-	runsPanelW    = 360
 	runsListLimit = 50
 )
 
@@ -431,7 +430,6 @@ func (inst *App) adopt(r *resumed) {
 	}
 	inst.coord, conv.coord = coord, coord
 	inst.resumeNotes(r)
-	inst.showRuns = false
 }
 
 // lastReplyOf is the last live reply's call id and usage: the next turn's
@@ -507,38 +505,37 @@ func transcriptOf(entries []agentrun.Entry) (out []entry) {
 	return
 }
 
-// renderRunsToggle is the Conversations button.
+// renderRunsToggle is the Conversations button: it brings the tab to the
+// front.
 func (inst *App) renderRunsToggle() {
 	if inst.journalStore() == nil {
 		return
 	}
 	for range c.HoverText(tipRuns).KeepIter() {
-		if c.Button(inst.ids.PrepareStr("runs-toggle"), atomsRuns).Selected(inst.showRuns).SendResp().HasPrimaryClicked() {
-			inst.showRuns = !inst.showRuns
-			if inst.showRuns {
-				inst.showSettings, inst.showStats = false, false
-				inst.listRuns()
-				inst.listRoster()
-			}
+		if c.Button(inst.ids.PrepareStr("runs-toggle"), atomsRuns).Selected(inst.tabShown(tabConversations)).SendResp().HasPrimaryClicked() {
+			inst.showTab(tabConversations)
 		}
 	}
 }
 
-// renderRunsPanel lists the runs with Resume and Delete.
-func (inst *App) renderRunsPanel() {
-	if !inst.showRuns {
+// renderRunsTab lists the conversations with Resume and Delete. It lists
+// them again each time the tab comes to the front.
+func (inst *App) renderRunsTab() {
+	if inst.journalStore() == nil {
+		c.Label("This host keeps no conversations: it has no journal store.").Wrap().Send()
 		return
 	}
+	shown := inst.tabShown(tabConversations)
+	if shown && !inst.runsShown {
+		inst.listRuns()
+		inst.listRoster()
+	}
+	inst.runsShown = shown
 	if runs, _, ok := inst.runsJob.TakeResult(); ok {
 		inst.runs = *runs
 	}
-	for range c.PanelRightInside(inst.ids.PrepareStr("runs")).ExactSize(runsPanelW).KeepIter() {
-		for range c.ScrollArea().Vscroll(true).Hscroll(false).KeepIter() {
-			heading("Conversations")
-			if inst.runsJob.Snapshot().State == bgjob.StateRunning {
-				c.Label("listing…").Selectable(false).Send()
-			}
-			inst.renderRoster()
-		}
+	if inst.runsJob.Snapshot().State == bgjob.StateRunning {
+		c.Label("listing…").Selectable(false).Send()
 	}
+	inst.renderRoster()
 }

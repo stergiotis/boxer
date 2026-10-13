@@ -32,7 +32,7 @@ opens a play window that reads the turns.
 {"do":"wait","valueContains":"→ ","role":"label","comment":"the host offers a model"}
 {"do":"click","contains":"Send","role":"button","comment":"the turn, seeded as the draft"}
 {"do":"wait","valueContains":"a short answer","role":"label","nth":0,"comment":"the turn landed"}
-{"do":"click","contains":"Analytics","role":"button"}
+{"do":"click","name":"Analytics","role":"button"}
 {"do":"wait","valueContains":"1 turns · 1 answered · 2 model calls","role":"label"}
 {"do":"wait","valueContains":"needs two values to draw, has 1","role":"label","comment":"one answer time: no curve yet"}
 {"do":"wait","valueContains":"all 2 values are 1: no spread to draw","role":"label","comment":"both calls answered with one token"}

@@ -32,10 +32,10 @@ panel as a diff.
 {"do":"note","text":"ADR-0282: one markdown document per conversation, edited by the model"}
 {"do":"wait","valueContains":"→ scripted","role":"label"}
 {"do":"wait","valueContains":"revision 0","role":"label","comment":"the Artefact panel, empty"}
-{"do":"click","contains":"Settings","role":"button"}
+{"do":"click","name":"Settings","role":"button"}
 {"do":"click","name":"Ask first","role":"radio_button","comment":"Changes: each write waits"}
 {"do":"wait","valueContains":"may edit","role":"label","comment":"Apps is off: the scale is the artefact's"}
-{"do":"click","contains":"Settings","role":"button","comment":"close Settings"}
+{"do":"click","name":"Artefact","role":"button","comment":"back to the Artefact tab"}
 {"do":"click","contains":"Send","role":"button","comment":"the seeded draft"}
 {"do":"wait","valueContains":"Proposed change","role":"label","settleMs":500}
 {"do":"wait","valueContains":"Drafting the plan · artefact_write","role":"label"}

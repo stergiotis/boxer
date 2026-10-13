@@ -53,8 +53,8 @@ the second, and an id is a function of the window and the widget's path.
 {"do":"key","text":"A","modifiers":16}
 {"do":"type","id":8428115019067692845,"text":"SELECT name FROM keelson('apps') LIMIT 2"}
 {"do":"wait","name":" agent · act · paused","role":"button","comment":"the task had read the buffer"}
-{"do":"focus","id":10519974525881031313,"comment":"the chat's composer"}
-{"do":"type","id":10519974525881031313,"text":"Now the last three instead."}
+{"do":"focus","id":12790625040306265328,"comment":"the chat's composer"}
+{"do":"type","id":12790625040306265328,"text":"Now the last three instead."}
 {"do":"click","contains":"Send","role":"button","comment":"turn 2"}
 {"do":"wait","valueContains":"The buffer changed since I read it","role":"label","settleMs":1000}
 {"do":"wait","valueContains":"⚙ set_sql in window 2 · conflict","role":"label","comment":"a write that expects the revision the task last saw"}

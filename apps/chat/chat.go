@@ -61,11 +61,9 @@ type App struct {
 	// turn is the coordinator's tool loop then too, with or without Apps.
 	questions bool
 	// artefact gives the conversation a markdown document the model edits
-	// (ADR-0282); showArtefact opens its panel (chat_artefact_render.go),
-	// and artView is the panel's state.
-	artefact     bool
-	showArtefact bool
-	artView      artefactView
+	// (ADR-0282); artView is its tab's state (chat_artefact_render.go).
+	artefact bool
+	artView  artefactView
 	// runId and window are the host's run and this window's instance, for
 	// the artefact's chat properties (chat_artefact_meta.go).
 	runId  string
@@ -73,12 +71,12 @@ type App struct {
 
 	conv *conversation
 	// journals is the host's run journal service (ADR-0308), the store the
-	// conversation's coordinator writes through; showRuns opens the
-	// Conversations panel (chat_resume.go), runs is its list, runsJob lists
-	// and resumeJob reopens a run.
+	// conversation's coordinator writes through; runs is the Conversations
+	// tab's list (chat_resume.go), runsShown whether the tab was in front,
+	// runsJob lists and resumeJob reopens a run.
 	journals  *agentrun.Client
 	anchors   headstore.StoreI
-	showRuns  bool
+	runsShown bool
 	runs      []agentrun.Run
 	runsJob   bgjob.Runner[[]agentrun.Run]
 	resumeJob bgjob.Runner[resumed]
@@ -91,13 +89,11 @@ type App struct {
 	log          zerolog.Logger
 	// keep is the Keep toggle; a conversation takes it at its first send.
 	keep bool
-	// showSettings opens the Settings panel (chat_settings.go). perms are
-	// what the person lets the model do and opTools whether each operation
-	// is a tool of its own; authority is the host's account of the task's
-	// two bounds, asked for by authJob.
-	showSettings bool
-	perms        permissions
-	opTools      bool
+	// perms are what the person lets the model do (chat_settings.go) and
+	// opTools whether each operation is a tool of its own; authority is the
+	// host's account of the task's two bounds, asked for by authJob.
+	perms   permissions
+	opTools bool
 	// rounds is the Settings slider's limit on a turn's rounds, a float
 	// for the slider's binding.
 	rounds    float64
@@ -117,6 +113,16 @@ type App struct {
 	// draftId is the composer's widget id: the Escape it captures while a
 	// turn runs cancels the turn.
 	draftId uint64
+	// dockActivate is the tab to bring to the front next frame, zero for
+	// none; tabSeen is which tabs were drawn last frame (chat_dock.go).
+	dockActivate chatTabE
+	tabSeen      [tabEnd]bool
+	// composerH is the room the composer's panel leaves for the input, the
+	// last the probe reported; rowPx and rowFontPt are the input's row height
+	// and the font size it was measured at.
+	composerH float32
+	rowPx     float64
+	rowFontPt float32
 	// pastNoted hides the "past conversations are in play" line once read.
 	pastNoted bool
 
@@ -159,11 +165,10 @@ type App struct {
 	renameDraft string
 	renameId    uint64
 
-	// advanced shows the Analytics panel (AdvancedSeed); stats are the
-	// window's records, across its conversations, and showStats whether
-	// the panel is open. handover publishes them and opens play.
+	// advanced fills the Analytics tab (AdvancedSeed); stats are the
+	// window's records, across its conversations. handover publishes them
+	// and opens play.
 	advanced     bool
-	showStats    bool
 	stats        chatStats
 	bus          app.BusI
 	pubs         statsPublishers
@@ -210,8 +215,13 @@ var _ app.AppI = (*App)(nil)
 
 func newApp() (inst *App) {
 	inst = &App{turnMachine: newTurnMachine(), log: zerolog.Nop(), ids: c.NewWidgetIdStack(), keep: true, draft: DraftSeed.Get(), conv: newConversation(), apps: AppsSeed.Get() || registeredCoordinator(),
-		questions: QuestionsSeed.Get(), artefact: ArtefactSeed.Get(), showArtefact: ArtefactSeed.Get(), advanced: AdvancedSeed.Get(), pubs: newStatsPublishers(), perms: defaultPermissions().withPixels(pixelsSeed(), PixelsLocalSeed.Get()),
+		questions: QuestionsSeed.Get(), artefact: ArtefactSeed.Get(), advanced: AdvancedSeed.Get(), pubs: newStatsPublishers(), perms: defaultPermissions().withPixels(pixelsSeed(), PixelsLocalSeed.Get()),
 		opTools: OperationToolsSeed.Get(), rounds: float64(clampRounds(0)), confinedTier: fallbackConfinedTier()}
+	if inst.artefact {
+		// A window seeded with the artefact opens on its tab, as it opened
+		// on its panel.
+		inst.dockActivate = tabArtefact
+	}
 	return
 }
 

@@ -14,6 +14,8 @@ import (
 const (
 	// statsPanelW is the Analytics panel's width; the plots fill it.
 	statsPanelW float32 = 380
+	// statsScrollPx is held back from the tab's width for its scroll bar.
+	statsScrollPx float32 = 18
 	statsPlotH  float32 = 150
 
 	tipStats     = "Analytics: token and answer statistics of this window's conversations, kept while the window is open, and the agent surface of this conversation."
@@ -25,36 +27,31 @@ var (
 	atomsOpenStats = c.Atoms().Text(icons.PhTable + " Open in play").Keep()
 )
 
-// renderStatsToggle is the bar's Analytics button.
+// renderStatsToggle is the bar's Analytics button, which brings the tab to
+// the front.
 func (inst *App) renderStatsToggle() {
 	if !inst.advanced {
 		return
 	}
 	for range c.HoverText(tipStats).KeepIter() {
-		if c.Button(inst.ids.PrepareStr("stats-toggle"), atomsStats).Selected(inst.showStats).SendResp().HasPrimaryClicked() {
-			inst.showStats = !inst.showStats
-			if inst.showStats {
-				inst.showSettings = false
-			}
+		if c.Button(inst.ids.PrepareStr("stats-toggle"), atomsStats).Selected(inst.tabShown(tabAnalytics)).SendResp().HasPrimaryClicked() {
+			inst.showTab(tabAnalytics)
 		}
 	}
 }
 
-// renderStatsPanel is the Analytics panel, beside the transcript (ADR-0283).
-func (inst *App) renderStatsPanel() {
-	if !inst.advanced || !inst.showStats {
+// renderStatsTab is the Analytics tab (ADR-0283), drawn at the tab's width
+// pane, less its scroll bar; it says how to turn Analytics on while it is
+// off.
+func (inst *App) renderStatsTab(pane float32) {
+	if !inst.advanced {
+		c.Label("Analytics is part of Advanced: turn it on in Settings.").Wrap().Send()
 		return
 	}
-	for range c.PanelRightInside(inst.ids.PrepareStr("stats")).ExactSize(statsPanelW).KeepIter() {
-		for range c.ScrollArea().Vscroll(true).Hscroll(false).KeepIter() {
-			inst.renderStats()
-		}
-	}
-}
-
-func (inst *App) renderStats() {
-	heading("Analytics")
 	w := statsPanelW - 30
+	if pane > 0 {
+		w = max(pane-statsScrollPx, 120)
+	}
 	inst.renderSurface(w)
 	inst.renderTokenStats(w)
 	c.Separator().Send()

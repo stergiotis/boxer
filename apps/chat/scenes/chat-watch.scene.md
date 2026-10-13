@@ -36,11 +36,11 @@ its colour, with the steps it wrote per minute (ADR-0324 background §3.4,
 {"do":"wait","valueContains":"the turn ended","role":"label"}
 {"do":"capture","text":"chat-watch-highlight"}
 {"do":"click","name":"Open","role":"button"}
-{"do":"wait","valueContains":"new since you looked","role":"label","comment":"the chat marks what landed while the person was away"}
+{"do":"wait","value":"\ue03e new since you looked","role":"label","comment":"the chat marks what landed while the person was away"}
 {"do":"read","valueContains":" messages","role":"label","pattern":"(?P<count>2 of 2) messages","comment":"the marker is a row, not a message"}
 {"do":"read","contains":"nothing waits on you","role":"button","on":"name","pattern":"(?P<cleared>on you)$","comment":"looking cleared the highlight"}
 {"do":"capture","text":"chat-watch-looked"}
-{"do":"click","contains":"Conversations","role":"button","settleMs":4000,"comment":"the roster samples the runs every three seconds; two samples give a pace"}
+{"do":"click","name":"Conversations","role":"button","settleMs":4000,"comment":"the roster samples the runs every three seconds; two samples give a pace"}
 {"do":"wait","valueContains":"/min","role":"label","comment":"the pace gauge on the open conversation"}
 {"do":"capture","text":"chat-watch-roster"}
 ```
