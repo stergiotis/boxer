@@ -734,7 +734,7 @@ mod tests {
         let ctx = Context::default();
         let max = ctx.input(|i| i.max_texture_side) as u32;
         let mut c = ScrollingTextureCache::new();
-        let _ = ctx.run_ui(egui::RawInput::default(), |ui| {
+        ctx.run_ui(egui::RawInput::default(), |ui| {
             let r = c.push_and_draw(
                 ui,
                 &ctx,
@@ -750,7 +750,9 @@ mod tests {
                 0.0,
             );
             assert!(!r.fresh_texture);
-        });
+        })
+        .textures_delta
+        .clear();
         assert!(c.entries.is_empty());
     }
 
@@ -759,7 +761,7 @@ mod tests {
         let ctx = Context::default();
         let (mut c, mirror) = cache_with_mirror();
         let column = [0x1122_33ffu32, 0x4455_66ffu32];
-        let _ = ctx.run_ui(egui::RawInput::default(), |ui| {
+        ctx.run_ui(egui::RawInput::default(), |ui| {
             c.push_and_draw(
                 ui,
                 &ctx,
@@ -774,7 +776,9 @@ mod tests {
                 0.0,
                 0.0,
             );
-        });
+        })
+        .textures_delta
+        .clear();
         let tex = tex_id(&c, 4);
         let at = |m: &TexturePixelCache| m.get(tex).map(|t| (t.rgba[4..8].to_vec(), t.nearest));
         assert_eq!(

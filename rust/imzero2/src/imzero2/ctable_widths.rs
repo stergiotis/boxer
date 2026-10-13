@@ -36,7 +36,7 @@ mod tests {
             ..Default::default()
         };
         let mut observed = f32::NAN;
-        let _ = ctx.run_ui(raw, |ui| {
+        ctx.run_ui(raw, |ui| {
             ui.push_id(salt, |ui| {
                 let builder = egui_extras::TableBuilder::new(ui)
                     .column(egui_extras::Column::initial(initial).resizable(true));
@@ -52,7 +52,9 @@ mod tests {
                     });
                 });
             });
-        });
+        })
+        .textures_delta
+        .clear();
         observed
     }
 

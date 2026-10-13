@@ -11605,10 +11605,12 @@ mod tests {
         block.extend_from_slice(&(FuncProcId::AddSpace as u32).to_le_bytes());
         let ctx = egui::Context::default();
         let mut replay_result = None;
-        let _ = ctx.run_ui(egui::RawInput::default(), |ui| {
+        ctx.run_ui(egui::RawInput::default(), |ui| {
             let ctx = ui.ctx().clone();
             replay_result = Some(interp.replay_deferred_block(&ctx, ui, &block));
-        });
+        })
+        .textures_delta
+        .clear();
         assert!(matches!(replay_result, Some(Err(_))));
         assert!(interp.message_offsets.is_empty());
         assert!(interp.message_lengths.is_empty());

@@ -35,13 +35,12 @@ impl CaptureRasterI for SoftCaptureRaster {
             EguiSoftwareRender::new(ColorFieldOrder::Rgba).with_caching(false)
         });
         let now: std::collections::HashSet<egui::TextureId> =
-            textures.set.iter().map(|(id, _)| *id).collect();
-        let stale: Vec<egui::TextureId> = self.held.difference(&now).copied().collect();
+            textures.set.keys().copied().collect();
+        let mut stale = egui::TexturesDelta::default();
+        stale.free.extend(self.held.difference(&now).copied());
         if !stale.is_empty() {
-            render.free_textures(&egui::TexturesDelta {
-                set: Vec::new(),
-                free: stale,
-            });
+            render.free_textures(&stale);
+            stale.clear();
         }
         self.held = now;
         let (w, h) = (width_px as usize, height_px as usize);
@@ -70,7 +69,7 @@ mod tests {
             )),
             ..Default::default()
         };
-        let out = ctx.run_ui(raw, |ui| {
+        let mut out = ctx.run_ui(raw, |ui| {
             ui.painter().rect_filled(
                 egui::Rect::from_min_size(egui::pos2(0.0, 0.0), egui::vec2(8.0, 8.0)),
                 0.0,
@@ -80,6 +79,7 @@ mod tests {
         let clipped = ctx.tessellate(out.shapes, out.pixels_per_point);
         let mut r = SoftCaptureRaster::default();
         let rgba = r.rasterize(&clipped, &out.textures_delta, 32, 16, 1.0).expect("raster");
+        out.textures_delta.clear();
         assert_eq!(rgba.len(), 32 * 16 * 4);
         assert_eq!(&rgba[0..4], &[255, 0, 0, 255]);
         let far = (15 * 32 + 31) * 4;

@@ -323,7 +323,7 @@ mod tests {
         let ctx = egui::Context::default();
         let mut read = |_: &str| -> std::io::Result<Vec<u8>> { Ok(phosphor.clone()) };
         load_custom_fonts_with(&ctx, &config, &mut read);
-        let _ = ctx.run_ui(egui::RawInput::default(), |_| {});
+        ctx.run_ui(egui::RawInput::default(), |_| {}).textures_delta.clear();
         let defaults = egui::FontDefinitions::default();
         for family in [egui::FontFamily::Proportional, egui::FontFamily::Monospace] {
             let chain = ctx.fonts(|f| f.definitions().families[&family].clone());

@@ -1829,15 +1829,16 @@ mod tests {
         let mut rx = c.inner.registry.lock().unwrap().conns[0].mesh_rx.take().unwrap();
         let mut delta = egui::TexturesDelta::default();
         for n in 0..40 {
-            delta.set.push((
+            delta.push(
                 egui::TextureId::Managed(n),
                 egui::epaint::ImageDelta::full(
                     egui::ColorImage::filled([1, 1], egui::Color32::WHITE),
                     egui::TextureOptions::LINEAR,
                 ),
-            ));
+            );
         }
         c.ingest_textures(&delta);
+        delta.clear();
         c.on_meshes(1.0, 640.0, 480.0, &triangle(0.0));
         c.finish_texture_frame();
         // No room for a second batch. Reject it without corrupting the first.
@@ -1865,11 +1866,10 @@ mod tests {
             assert!(rx.try_recv().is_ok());
             assert_eq!(c.inner.registry.lock().unwrap().conns[0].mesh_sent.len(), 1);
         }
-        let delta = egui::TexturesDelta {
-            set: Vec::new(),
-            free: vec![egui::TextureId::Managed(77)],
-        };
+        let mut delta = egui::TexturesDelta::default();
+        delta.free(egui::TextureId::Managed(77));
         c.ingest_textures(&delta);
+        delta.clear();
         c.on_meshes(1.0, 640.0, 480.0, &triangle(199.0));
         let mut batch = rx.try_recv().expect("free-only changes are not deduped");
         assert_eq!(

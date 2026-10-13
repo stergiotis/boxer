@@ -80,7 +80,7 @@ mod tests {
         let seeded = [137.0f32, 42.0, 211.0];
 
         let mut read_back: Vec<f32> = Vec::new();
-        let _ = ctx.run_ui(raw, |ui| {
+        ctx.run_ui(raw, |ui| {
             let bounds = Vec2::new(600.0, 400.0);
             let layout = *ui.layout();
             ui.allocate_ui_with_layout(bounds, layout, |child_ui| {
@@ -106,7 +106,9 @@ mod tests {
                     read_back.push(w);
                 }
             });
-        });
+        })
+        .textures_delta
+        .clear();
 
         assert_eq!(
             read_back.len(),

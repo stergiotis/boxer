@@ -20,7 +20,7 @@ fn main() {
         ..Default::default()
     };
 
-    let full = ctx.run_ui(raw_input, |ui| {
+    let mut full = ctx.run_ui(raw_input, |ui| {
         // --- text ---
         ui.heading("Hello, SVG");
         ui.label("normal body text");
@@ -97,6 +97,8 @@ fn main() {
     // `Context::end_pass` has drained `ctx.graphics()` into `FullOutput`.
     // Read from there. The production plugin path uses
     // `render_svg_from_context` inside `on_end_pass`.
+    // Nothing here uploads textures; egui asserts a dropped delta is empty.
+    full.textures_delta.clear();
     let resolver = svgexport::FontResolver::default();
     let embed_fonts = std::env::args().any(|a| a == "--embed-fonts");
     let svg = svgexport::render_svg_from_shapes(

@@ -322,10 +322,11 @@ mod tests {
             focused: true,
             ..Default::default()
         };
-        let out = ctx.run_ui(raw, |ui| content(ui.ctx()));
+        let mut out = ctx.run_ui(raw, |ui| content(ui.ctx()));
         let clipped = ctx.tessellate(out.shapes, out.pixels_per_point);
         soft.render_and_readback(&clipped, &out.textures_delta, frame)
             .expect("render_and_readback");
+        out.textures_delta.clear();
     }
 
     /// An opaque square sliding across an otherwise untouched frame. Content

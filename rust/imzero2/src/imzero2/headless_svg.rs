@@ -80,8 +80,10 @@ pub fn run_main_loop(config: AppConfig) -> Result<(), Box<dyn std::error::Error>
         // closure; the SVG-export plugin's `on_end_pass` then drains any
         // pending export and writes the file. We keep the returned
         // `FullOutput` only to honour an app-driven viewport close — no
-        // tessellation, render, or readback happens.
-        let out = ctx.run_ui(raw_input, |ui| {
+        // tessellation, render, or readback happens, so its texture deltas
+        // have no consumer and are cleared (egui asserts a dropped one is
+        // empty in debug builds).
+        let mut out = ctx.run_ui(raw_input, |ui| {
             if let Err(e) = fffi.interpret_commands_outer(ui.ctx()) {
                 match e {
                     InterpretError::PeerClosed => {
@@ -99,6 +101,7 @@ pub fn run_main_loop(config: AppConfig) -> Result<(), Box<dyn std::error::Error>
 
         // App-driven viewport close (e.g. a File→Quit) also ends the host —
         // mirrors headless.rs `close_requested`.
+        out.textures_delta.clear();
         let close = out
             .viewport_output
             .values()
