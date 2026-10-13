@@ -44,7 +44,7 @@ func (inst *App) renderNetPanel(snap *PublishedSnapshot) {
 				FrameWhenInactive(!selected).
 				Frame(true).
 				SendResp().HasPrimaryClicked() {
-				inst.netSelectedIfaceIdx = i
+				gestureOr(inst, opSelectInterface, SelectInterfaceArgs{Name: ifc.Name}, func() { inst.netSelectedIfaceIdx = i })
 			}
 		}
 	}

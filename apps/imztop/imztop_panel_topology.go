@@ -175,7 +175,7 @@ func (inst *App) renderTopologyPanel(snap *PublishedSnapshot) {
 				FrameWhenInactive(!sel).
 				Frame(true).
 				SendResp().HasPrimaryClicked() {
-				inst.topoDim = d
+				gestureOr(inst, opSetTopologyDim, SetTopologyDimArgs{Dim: topoDimNames[d]}, func() { inst.topoDim = d })
 			}
 		}
 	}

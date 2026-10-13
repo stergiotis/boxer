@@ -144,7 +144,7 @@ func (inst *App) renderProcMapPanel(snap *PublishedSnapshot) {
 				FrameWhenInactive(!sel).
 				Frame(true).
 				SendResp().HasPrimaryClicked() {
-				inst.procMetric = m
+				gestureOr(inst, opSetProcMapMetric, SetProcMapMetricArgs{Metric: procMetricNames[m]}, func() { inst.procMetric = m })
 			}
 		}
 	}

@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"fmt"
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
+	"github.com/stergiotis/boxer/public/keelson/runtime/widgethandle"
 	"slices"
 	"strconv"
 	"strings"
@@ -70,13 +71,23 @@ func defaultProcView() (out procViewState) {
 // render time now, so the mutex is gone with it: these are only ever
 // touched from the render thread of the window that owns them.
 
+// setProcSort is the header click: the same key flips the direction, a new
+// key starts in its own. It computes the view and sets it through
+// set_proc_view, which never toggles (ADR-0329 §SD2).
 func (inst *App) setProcSort(by ProcSortByE) {
-	if inst.procView.SortBy == by {
-		inst.procView.Desc = !inst.procView.Desc
-		return
+	v := inst.procView
+	if v.SortBy == by {
+		v.Desc = !v.Desc
+	} else {
+		v.SortBy, v.Desc = by, procSortDefaultDesc(by)
 	}
-	inst.procView.SortBy = by
-	inst.procView.Desc = by != ProcSortByPID && by != ProcSortByUser && by != ProcSortByName
+	inst.setProcViewGesture(v)
+}
+
+// setProcViewGesture sets the whole view as the person's gesture.
+func (inst *App) setProcViewGesture(v procViewState) {
+	gestureOr(inst, opSetProcView, SetProcViewArgs{SortBy: procSortName(v.SortBy), Order: orderName(v.Desc),
+		Filter: v.Filter, Tree: v.Tree}, func() { inst.applyProcView(v) })
 }
 
 func (inst *App) setProcFilter(filter string) {
@@ -84,7 +95,9 @@ func (inst *App) setProcFilter(filter string) {
 }
 
 func (inst *App) toggleProcTree() {
-	inst.procView.Tree = !inst.procView.Tree
+	v := inst.procView
+	v.Tree = !v.Tree
+	inst.setProcViewGesture(v)
 }
 
 // viewProcs returns snap's process list filtered and sorted by this
@@ -239,6 +252,7 @@ func (inst *App) renderProcPanel(snap *PublishedSnapshot) {
 		// between frames (one-frame lag per the FFFI databinding
 		// reset rule). A local var would be reset to view.Filter
 		// every frame and the typed text would never accumulate.
+		inst.procFilterH = widgethandle.Make(inst.ids.PrepareStr("proc-filter").Derive())
 		resp := c.TextEdit(inst.ids.PrepareStr("proc-filter"), inst.procFilterDraft, false).
 			DesiredWidth(220).
 			HintText("name or cmd substring").

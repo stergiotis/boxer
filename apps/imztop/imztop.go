@@ -9,6 +9,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/task"
+	"github.com/stergiotis/boxer/public/keelson/runtime/widgethandle"
 	"github.com/stergiotis/boxer/public/observability/sysmetrics/sysmsnap"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/colorscale"
@@ -239,6 +240,20 @@ type App struct {
 	// so two values naming the same instant can differ.
 	availabilityBrushFromMS int64
 	availabilityBrushToMS   int64
+
+	// Operations state (imztop_ops.go, ADR-0329). frameCtx is the current
+	// frame's context, for routing the person's controls through the
+	// catalog. pendingTab is a dock tab show_panel asked for, activated once
+	// on the next frame that draws the dock; shownPanel names it, as the
+	// resource show_panel writes. latchedFrozen / latchedReplay
+	// are the process-wide resources as this window last latched them;
+	// procFilterH is the filter box, for telling the person is typing in it.
+	frameCtx      app.FrameContextI
+	pendingTab    uint64
+	shownPanel    string
+	latchedFrozen bool
+	latchedReplay replayValue
+	procFilterH   widgethandle.WidgetHandle
 }
 
 var _ app.AppI = (*App)(nil)
@@ -266,9 +281,13 @@ func (inst *App) Mount(ctx app.MountContextI) (err error) {
 	// Capture the host-provided capability bus for the singleton Sampler to
 	// subscribe on (ADR-0090): imztop consumes metrics, it never reads /proc.
 	setSamplerBus(ctx.Bus())
+	inst.claimController()
 	return
 }
-func (inst *App) Unmount(ctx app.MountContextI) (err error) { return }
+func (inst *App) Unmount(ctx app.MountContextI) (err error) {
+	inst.releaseController()
+	return
+}
 
 // Frame renders one frame of the imztop window body. The host has
 // already pre-pushed a window-unique salt onto inst.ids via c.IdScope
@@ -278,6 +297,11 @@ func (inst *App) Unmount(ctx app.MountContextI) (err error) { return }
 func (inst *App) Frame(ctx app.FrameContextI) (err error) {
 	// Re-resolve: the density preset is runtime-switchable (Layout ▸ Density).
 	inst.density = styletokens.ActiveDensity()
+	inst.frameCtx = ctx
+	// The process-wide resources move inside a frame of the controlling
+	// window, never between frames (ADR-0329 §SD3).
+	inst.claimController()
+	inst.latchProcessWide()
 	// activeSampler hands back the replay session while one is on and the live
 	// singleton otherwise (ADR-0197 §SD5); the panels cannot tell which.
 	s, sErr := activeSampler()
@@ -420,6 +444,10 @@ func (inst *App) renderApp(snap *PublishedSnapshot, s SamplerI) {
 			// non-interactive capture keeps the target tab selected).
 			if inst.activateTab != 0 {
 				dock.ActivateTab(inst.activateTab)
+			} else if inst.pendingTab != 0 {
+				// show_panel: once, so the person's next click wins.
+				dock.ActivateTab(inst.pendingTab)
+				inst.pendingTab = 0
 			}
 
 			for range dock.Tab(dockTabCPU, "CPU") {
