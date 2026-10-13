@@ -410,6 +410,19 @@ recording the app's row with the envelope's sender as its origin. Audit
 events gain write-ahead, `EventWriteAhead`. §SD4's gap row is named by the
 next flush's seal (ADR-0277's Update of this date).
 
+### 2026-10-13 — Alternatives, Deferred: the bus-request kind gets its own view
+
+The Alternatives keep the bus-request `audit` kind off `AuditEvent`, and
+the Deferred list keeps its migration open; neither gave it a view, so
+from SQL it was readable only by decoding `boxer.facts`. trailviews now
+composes `dm_trail_bus_requests` over that kind — subject, result,
+latency and both sizes beside the shared context columns — and the
+timeline carries it as kind `busRequest` (`ViewsVersion` 12). It is a
+separate data mart, not rows in `dm_trail_audit_events`: a bus-request
+row says that a request crossed the bus, has no principal, data subject
+or retention class, and is written once per request. The writer is
+unchanged, and the migration stays deferred.
+
 ## References
 
 - [ADR-0277](./0277-one-audit-trail-for-model-calls-and-agent-work.md) — the trail: components, `Origin`, the backlog, the read store.
