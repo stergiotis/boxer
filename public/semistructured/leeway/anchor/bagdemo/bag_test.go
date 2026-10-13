@@ -235,3 +235,99 @@ func TestReadRowClaimsItsAttributesOnSharedSections(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, mappingplan.PresenceAbsent, p)
 }
+
+func headedRows() []HeadedDoc {
+	return []HeadedDoc{
+		{ID: 1,
+			Sections: []HeadedSection{{Heading: "Purpose", Text: "why"}, {Heading: "", Text: "untitled"}},
+			Events:   []HeadedEvent{{Phase: []byte("created"), By: "a"}, {By: "b"}},
+			Marks:    []HeadedMark{{Id: 7, Label: "x"}, {Id: 8}}},
+		{ID: 2},
+	}
+}
+
+// Text parameters (ADR-0326 §SD1) are the blob itself: both front-ends
+// write the same bytes, both decodes read them back, and ReadRow and
+// ReadComponent claim HeadedDoc's attributes beside the other kinds'.
+func TestTextParametersRoundTrip(t *testing.T) {
+	rows := headedRows()
+	lookup := marshallreflect.MapLookup{"headedSection": kindHeadedSection, "headedBy": kindHeadedBy}
+	cols := &HeadedDocColumns{}
+	for _, r := range rows {
+		cols.Append(r)
+	}
+	gen := NewInEntityBagTable(memory.NewGoAllocator(), len(rows))
+	require.NoError(t, HeadedDocBuildEntities(gen, cols))
+	genRecs := transfer(t, gen)
+	refl := NewInEntityBagTable(memory.NewGoAllocator(), len(rows))
+	require.NoError(t, marshallreflect.Validate[HeadedDoc](refl))
+	require.NoError(t, marshallreflect.Marshal(refl, rows, lookup))
+	require.Equal(t, ipcBytes(t, genRecs[0]), ipcBytes(t, transfer(t, refl)[0]))
+
+	r := load(t, genRecs[0])
+	got := &HeadedDocColumns{}
+	require.NoError(t, HeadedDocFillFromArrow(got, r.length, r.id.ValueId,
+		r.str.GetAttributes(), r.str.GetMemberships(),
+		r.sym.GetAttributes(), r.sym.GetMemberships(),
+		r.null, r.null.GetMemberships()))
+	for i, want := range rows {
+		require.Equal(t, want, got.Row(i), "row %d", i)
+	}
+	readers := marshallreflect.NewSectionReaders(r.length).
+		PlainColumn("id", r.id.ValueId).
+		Section("stringArray", r.str.GetAttributes(), r.str.GetMemberships()).
+		Section("symbol", r.sym.GetAttributes(), r.sym.GetMemberships()).
+		Section("null", r.null, r.null.GetMemberships())
+	var reflGot []HeadedDoc
+	require.NoError(t, marshallreflect.Unmarshal(readers, &reflGot, lookup))
+	require.Equal(t, rows, reflGot)
+
+	// Shared sections: HeadedDoc beside BagDoc and NotedDoc.
+	headed, bag, noted := rows[0], bagRows()[0], notedRows()[0]
+	table := NewInEntityBagTable(memory.NewGoAllocator(), 1)
+	table.BeginEntity()
+	table.SetId(1)
+	sym := table.GetSectionSymbol()
+	require.NoError(t, BagDocEmitSectionSymbol(sym, bag))
+	require.NoError(t, HeadedDocEmitSectionSymbol(sym, headed))
+	require.NoError(t, NotedDocEmitSectionSymbol(sym, noted))
+	sym.EndSection()
+	str := table.GetSectionStringArray()
+	require.NoError(t, HeadedDocEmitSectionStringArray(str, headed))
+	require.NoError(t, BagDocEmitSectionStringArray(str, bag))
+	str.EndSection()
+	null := table.GetSectionNull()
+	require.NoError(t, BagDocEmitSectionNull(null, bag))
+	require.NoError(t, HeadedDocEmitSectionNull(null, headed))
+	null.EndSection()
+	require.NoError(t, table.CommitEntity())
+	s := load(t, transfer(t, table)[0])
+
+	gotHeaded, present, err := HeadedDocReadRow(0,
+		s.str.GetAttributes(), s.str.GetMemberships(),
+		s.sym.GetAttributes(), s.sym.GetMemberships(),
+		s.null, s.null.GetMemberships())
+	require.NoError(t, err)
+	require.True(t, present)
+	want := headed
+	want.ID = 0
+	require.Equal(t, want, gotHeaded)
+	gotBag, present, err := BagDocReadRow(0,
+		s.str.GetAttributes(), s.str.GetMemberships(),
+		s.sym.GetAttributes(), s.sym.GetMemberships(),
+		s.null, s.null.GetMemberships())
+	require.NoError(t, err)
+	require.True(t, present)
+	bag.ID = 0
+	require.Equal(t, bag, gotBag)
+
+	shared := marshallreflect.NewSectionReaders(s.length).
+		PlainColumn("id", s.id.ValueId).
+		Section("stringArray", s.str.GetAttributes(), s.str.GetMemberships()).
+		Section("symbol", s.sym.GetAttributes(), s.sym.GetMemberships()).
+		Section("null", s.null, s.null.GetMemberships())
+	reflHeaded, present, err := shared.ReadComponent[HeadedDoc](0, lookup)
+	require.NoError(t, err)
+	require.True(t, present)
+	require.Equal(t, headed, reflHeaded)
+}

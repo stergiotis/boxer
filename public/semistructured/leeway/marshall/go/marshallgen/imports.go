@@ -21,9 +21,9 @@ func writeImports(sb *strings.Builder, plan *mappingplan.Plan, wrapper WrapperEm
 	needsLw := false
 	needsMembership := false
 	for _, f := range plan.Fields {
-		// A tuple element's `@params` are encoded and decoded through the
-		// membership package (ADR-0326 §SD1).
-		if f.TupleParamsField != "" {
+		// A tuple element's `@params` indices are encoded and decoded
+		// through the membership package (ADR-0326 §SD1).
+		if f.TupleParamsGoType == "[]uint64" {
 			needsMembership = true
 		}
 		if f.IsRoaring() {

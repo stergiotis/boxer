@@ -1,6 +1,6 @@
 package bagdemo
 
-//go:generate sh -c "go run -tags=\"$(cat ../../../../../tags)\" github.com/stergiotis/boxer/public/app keelsoncodec --target=anchor bagdoc.go noteddoc.go plaindoc.go"
+//go:generate sh -c "go run -tags=\"$(cat ../../../../../tags)\" github.com/stergiotis/boxer/public/app keelsoncodec --target=anchor bagdoc.go headeddoc.go noteddoc.go plaindoc.go"
 
 // BagString is one attribute of the string-array section: a name and its
 // parameters on the mixed verbatim channel, and one value (ADR-0326

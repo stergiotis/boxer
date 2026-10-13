@@ -401,11 +401,19 @@ func writeTupleElemDecode(sb *strings.Builder, depth int, g goplan.SectionGroup,
 		linef(sb, depth+1, `err = eb.Build().Str("section", %q).Str("channel", %q).Int("got", %s).Int("want", 1).Errorf("membership count mismatch on read")`, g.Section, ch.AddMethodSuffix(), nVar)
 		line(sb, depth+1, "return")
 		line(sb, depth, "}")
-		linef(sb, depth, "%s, perr := membership.DecodeParams(%s)", paramsVar, rawVar)
-		linef(sb, depth, "if perr != nil {")
-		linef(sb, depth+1, `err = eb.Build().Str("section", %q).Errorf("decode the membership parameters: %%w", perr)`, g.Section)
-		line(sb, depth+1, "return")
-		line(sb, depth, "}")
+		switch ts.ParamsGoType {
+		case "string":
+			linef(sb, depth, "%s := string(%s)", paramsVar, rawVar)
+		case "[]byte":
+			// A copy: the blob aliases the reused Arrow buffer.
+			linef(sb, depth, "%s := append([]byte(nil), %s...)", paramsVar, rawVar)
+		default:
+			linef(sb, depth, "%s, perr := membership.DecodeParams(%s)", paramsVar, rawVar)
+			linef(sb, depth, "if perr != nil {")
+			linef(sb, depth+1, `err = eb.Build().Str("section", %q).Errorf("decode the membership parameters: %%w", perr)`, g.Section)
+			line(sb, depth+1, "return")
+			line(sb, depth, "}")
+		}
 		return
 	}
 

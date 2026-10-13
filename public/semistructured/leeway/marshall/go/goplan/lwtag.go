@@ -272,9 +272,9 @@ type ParsedTupleElemTag struct {
 	IsMembership bool
 	// IsParams marks the `@params` field (ADR-0326 §SD1).
 	IsParams bool
-	Section      string
-	Column       string
-	Flags        mappingplan.FieldFlags
+	Section  string
+	Column   string
+	Flags    mappingplan.FieldFlags
 }
 
 // SplitTupleElemLW parses the lw: tag on a tuple element struct's field.

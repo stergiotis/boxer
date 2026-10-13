@@ -87,9 +87,18 @@ journal's shredded attributes become a generated component.
 
 ### SD1: an element's parameters
 
-An element may declare one `@params` field, a `[]uint64`, which the
-generators encode through `membership.EncodeParams` on write and decode
-through `membership.DecodeParams` on read. The field is accepted only
+An element may declare one `@params` field of one of two kinds:
+
+- a `[]uint64` of indices, which the generators encode through
+  `membership.EncodeParams` on write and decode through
+  `membership.DecodeParams` on read;
+- a `string` or `[]byte`, written and read as the blob itself. This is
+  what `capmapfacts` writes for a section's heading and a lifecycle
+  phase.
+
+Text parameters are not in `membership`'s canonical form, so
+`DecodeParams`, `ParamsArity` and the positional SQL decode do not apply
+to them; a reader has to know the kind. The field is accepted only
 when the attribute's membership is on a mixed channel, which pairs one
 membership with one parameter blob:
 
@@ -99,13 +108,12 @@ membership with one parameter blob:
   or `mixedLowCardVerbatim`, which is `capmapfacts`' form.
 
 Only an element with a single membership may carry `@params`, since one
-blob belongs to one membership. Raw `[]byte` or text parameters are not
-part of this decision. `capmapfacts` passes text (a heading, a phase), so
-its own DTO waits until it needs one.
+blob belongs to one membership.
 
 ### SD2: one value on an array column
 
-A tuple value field may take `,unit`. A scalar Go value then maps to an
+A tuple value field, or a static nested section's only sub-column, may
+take `,unit`. A scalar Go value then maps to an
 array-typed sub-column as one value per attribute, written by
 `BeginAttributeSingle` and read as the attribute's single value. This
 gives a tuple element on an array column the same spelling a flat section
@@ -151,7 +159,7 @@ attributes from the other's.
   kind in a store therefore gets no `Scan<Kind>` verb and no `Cas` sets.
   It is decoded in the store's entity read, and SQL readers use the read
   surface (`LW_SEL` by name, `LW_GET` with `param:`).
-- **Raw parameters** (SD1), and moving `capmapfacts` onto a DTO.
+- **Moving `capmapfacts` onto a DTO.**
 - **Tuple kinds in `FillFromArrow`'s homogeneous decode**, and in
   `Unmarshal`, keep ADR-0103's rule that a tuple owns its section. SD4's
   claim rule is `ReadRow`'s and `ReadComponent`'s.

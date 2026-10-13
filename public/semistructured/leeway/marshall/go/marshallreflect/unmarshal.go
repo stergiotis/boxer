@@ -886,13 +886,24 @@ func readMixedTupleMembership(elem reflect.Value, ts goplan.TupleSpec, section s
 		err = eb.Build().Str("section", section).Str("channel", ch.AddMethodSuffix()).Int("got", len(keys)).Int("want", 1).Errorf("tuple attribute carries a different membership count than the element declares — membership count mismatch on read")
 		return
 	}
-	params, perr := membership.DecodeParams(raws[0].Bytes())
-	if perr != nil {
-		err = eb.Build().Str("section", section).Errorf("decode the membership parameters: %w", perr)
-		return
-	}
-	if params != nil {
-		elem.FieldByName(ts.ParamsField).Set(reflect.ValueOf(params))
+	fld := elem.FieldByName(ts.ParamsField)
+	switch ts.ParamsGoType {
+	case "string":
+		fld.SetString(string(raws[0].Bytes()))
+	case "[]byte":
+		// A copy: the blob aliases the reused Arrow buffer.
+		if b := raws[0].Bytes(); len(b) > 0 {
+			fld.SetBytes(append([]byte(nil), b...))
+		}
+	default:
+		params, perr := membership.DecodeParams(raws[0].Bytes())
+		if perr != nil {
+			err = eb.Build().Str("section", section).Errorf("decode the membership parameters: %w", perr)
+			return
+		}
+		if params != nil {
+			fld.Set(reflect.ValueOf(params))
+		}
 	}
 	return keys[0], nil
 }

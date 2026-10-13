@@ -685,11 +685,11 @@ func TestPlanFor_TupleRejections(t *testing.T) {
 		_, err := marshallreflect.PlanFor[bad]()
 		require.ErrorContains(t, err, "declares no other membership")
 	})
-	t.Run("params that are not []uint64", func(t *testing.T) {
+	t.Run("params that are neither indices nor text", func(t *testing.T) {
 		type elem struct {
-			Label  string `lw:"@membership,mixedLowCardVerbatim"`
-			Params []byte `lw:"@params"`
-			Value  string `lw:"symbol"`
+			Label  string   `lw:"@membership,mixedLowCardVerbatim"`
+			Params []string `lw:"@params"`
+			Value  string   `lw:"symbol"`
 		}
 		type bad struct {
 			_    struct{} `kind:"bad"`
@@ -697,7 +697,7 @@ func TestPlanFor_TupleRejections(t *testing.T) {
 			Tags []elem   `lw:"symbol"`
 		}
 		_, err := marshallreflect.PlanFor[bad]()
-		require.ErrorContains(t, err, "must be a []uint64")
+		require.ErrorContains(t, err, "must be a []uint64 (indices")
 	})
 	t.Run("parametrized channel", func(t *testing.T) {
 		type elem struct {

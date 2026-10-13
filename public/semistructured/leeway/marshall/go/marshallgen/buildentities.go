@@ -542,7 +542,15 @@ func writeTupleSectionDriver(sb *strings.Builder, g goplan.SectionGroup, ts gopl
 		args = append(args, scalarValueExpr(sc.Fields[0], elemSrc))
 	}
 	paramsVar := attrVar + "Params"
-	if ts.ParamsField != "" {
+	switch {
+	case ts.ParamsField == "":
+	case !ts.ParamsEncoded():
+		// Text parameters are the blob itself (ADR-0326 §SD1).
+		paramsVar = elemSrc.field(ts.ParamsField)
+		if ts.ParamsGoType == "string" {
+			paramsVar = "[]byte(" + paramsVar + ")"
+		}
+	default:
 		// The parameters of the attribute's mixed-channel membership
 		// (ADR-0326 §SD1), encoded before the attribute opens so a failure
 		// leaves no half-written attribute.

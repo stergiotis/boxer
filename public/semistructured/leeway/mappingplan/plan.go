@@ -534,11 +534,14 @@ type TaggedField struct {
 	TupleMemberships []TupleMembership
 
 	// TupleParamsField names the element field holding the parameters of
-	// the attribute's one mixed-channel membership (ADR-0326 §SD1): a
-	// []uint64, encoded by membership.EncodeParams on write and decoded by
-	// membership.DecodeParams on read. "" when the element carries none.
-	// All sub-fields of one tuple carry identical copies.
+	// the attribute's one mixed-channel membership (ADR-0326 §SD1). "" when
+	// the element carries none. All sub-fields of one tuple carry identical
+	// copies.
 	TupleParamsField string
+	// TupleParamsGoType is that field's Go type: "[]uint64", encoded by
+	// membership.EncodeParams on write and decoded by membership.DecodeParams
+	// on read, or "string" / "[]byte", written and read as the blob itself.
+	TupleParamsGoType string
 
 	// TupleValueless marks the one field a tuple records when its element
 	// declares no value field (ADR-0326 §SD3): the section has no value

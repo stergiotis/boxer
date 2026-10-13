@@ -200,10 +200,17 @@ type TupleSpec struct {
 	// ParamsField is the element field holding the parameters of the
 	// attribute's one mixed-channel membership, or "" (ADR-0326 §SD1).
 	ParamsField string
+	// ParamsGoType is ParamsField's Go type (TaggedField.TupleParamsGoType).
+	ParamsGoType string
 	// Valueless marks an element without a value field: every attribute
 	// is BeginAttribute() and its memberships (ADR-0326 §SD3).
 	Valueless bool
 }
+
+// ParamsEncoded reports whether the element's parameters are indices
+// encoded by membership.EncodeParams; text parameters (a string or []byte
+// field) are the blob itself (ADR-0326 §SD1).
+func (ts TupleSpec) ParamsEncoded() bool { return ts.ParamsGoType == "[]uint64" }
 
 // Channels returns the distinct membership channels the tuple's elements
 // carry, in first-seen (declaration) order. The AttrI exposes one
@@ -241,12 +248,13 @@ func (g SectionGroup) TupleSpec() (ts TupleSpec, ok bool) {
 		return
 	}
 	return TupleSpec{
-		GoField:     f.TupleField,
-		StructType:  f.TupleStructType,
-		Memberships: f.TupleMemberships,
-		Cardinality: f.TupleCardinality,
-		ParamsField: f.TupleParamsField,
-		Valueless:   f.TupleValueless,
+		GoField:      f.TupleField,
+		StructType:   f.TupleStructType,
+		Memberships:  f.TupleMemberships,
+		Cardinality:  f.TupleCardinality,
+		ParamsField:  f.TupleParamsField,
+		ParamsGoType: f.TupleParamsGoType,
+		Valueless:    f.TupleValueless,
 	}, true
 }
 

@@ -314,12 +314,10 @@ func marshalTupleSection(sec, row reflect.Value, g goplan.SectionGroup, ts gopla
 		// encoded before the attribute opens, as the generated codec does.
 		var params reflect.Value
 		if ts.ParamsField != "" {
-			raw, perr := membership.EncodeParams(elem.FieldByName(ts.ParamsField).Interface().([]uint64)...)
-			if perr != nil {
-				err = eb.Build().Str("section", g.Section).Errorf("encode the membership parameters: %w", perr)
+			if params, err = tupleParamsBlob(elem.FieldByName(ts.ParamsField), ts); err != nil {
+				err = eb.Build().Str("section", g.Section).Errorf("encode the membership parameters: %w", err)
 				return
 			}
-			params = reflect.ValueOf(raw)
 		}
 		beginMethod, _ := g.TupleBeginMethod()
 		attr := mustCall(sec, beginMethod, args...)[0]
@@ -377,6 +375,23 @@ func marshalTupleSection(sec, row reflect.Value, g goplan.SectionGroup, ts gopla
 }
 
 var uint64Type = reflect.TypeFor[uint64]()
+
+// tupleParamsBlob renders an element's `@params` field as the blob the
+// mixed channel carries (ADR-0326 §SD1): indices through
+// membership.EncodeParams, text as itself.
+func tupleParamsBlob(v reflect.Value, ts goplan.TupleSpec) (blob reflect.Value, err error) {
+	switch ts.ParamsGoType {
+	case "string":
+		return reflect.ValueOf([]byte(v.String())), nil
+	case "[]byte":
+		return reflect.ValueOf(v.Bytes()), nil
+	}
+	raw, err := membership.EncodeParams(v.Interface().([]uint64)...)
+	if err != nil {
+		return
+	}
+	return reflect.ValueOf(raw), nil
+}
 
 // tupleMembArg converts a tuple element's membership value to the argument the
 // AddMembership<Channel>P method takes: a []byte name for a verbatim channel
