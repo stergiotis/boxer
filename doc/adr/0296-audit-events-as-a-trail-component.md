@@ -410,6 +410,23 @@ recording the app's row with the envelope's sender as its origin. Audit
 events gain write-ahead, `EventWriteAhead`. §SD4's gap row is named by the
 next flush's seal (ADR-0277's Update of this date).
 
+### 2026-10-13 — §SD1: how a principal was established, `principalVia`
+
+The row gains `principalVia` beside `principalBy`: an optional
+lower-spinal name for the mechanism that established `principal` (`peer`,
+`mtls`, `token`, `session`, `upstream`, or the emitter's own), set by the
+emitter. `principalBy` stays the trust class with its four values; a
+mechanism is an open vocabulary, so a closed enumeration would make every
+deployment's sign-on a change here. `Validate` refuses a `principalVia`
+that is not a name, or one on a row without a principal; the recorder
+drops it with the principal when the context carries none, and an
+audit-invalid row keeps it beside the principal it keeps. A stated,
+unchecked principal still has no place in the row (`principalBy = none`
+carries none). Additive: no stored value changes meaning, and a reader
+that knows only the four classes is unaffected. The audit-event view
+projects `principal-via`. Asked for by a downstream HTTP authentication
+seam that records the mechanism on every request's rows.
+
 ## References
 
 - [ADR-0277](./0277-one-audit-trail-for-model-calls-and-agent-work.md) — the trail: components, `Origin`, the backlog, the read store.

@@ -20,6 +20,12 @@ const (
 	PrincipalByOs     = audit.PrincipalByOs
 	PrincipalByNone   = audit.PrincipalByNone
 
+	PrincipalViaPeer     = audit.PrincipalViaPeer
+	PrincipalViaMtls     = audit.PrincipalViaMtls
+	PrincipalViaToken    = audit.PrincipalViaToken
+	PrincipalViaSession  = audit.PrincipalViaSession
+	PrincipalViaUpstream = audit.PrincipalViaUpstream
+
 	TrailDomain        = audit.TrailDomain
 	ActionAuditGap     = audit.ActionAuditGap
 	ActionAuditInvalid = audit.ActionAuditInvalid

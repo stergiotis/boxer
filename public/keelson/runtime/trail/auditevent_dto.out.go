@@ -13,21 +13,22 @@ import (
 // --- Caller-assigned membership ids (registry-stable target). ---
 
 const (
-	kindRuntimeKindAuditEvent uint64 = 9223372049739677986
-	kindAuditEventDomain      uint64 = 9223372049739677987
-	kindAuditEventAction      uint64 = 9223372049739677988
-	kindAuditEventOutcome     uint64 = 9223372049739677989
-	kindAuditEventPrincipal   uint64 = 9223372049739677990
-	kindAuditEventPrincipalBy uint64 = 9223372049739677991
-	kindAuditEventOriginBy    uint64 = 9223372049739678178
-	kindAuditEventPurpose     uint64 = 9223372049739677992
-	kindAuditEventNode        uint64 = 9223372049739677993
-	kindAuditEventSubject     uint64 = 9223372049739677994
-	kindAuditEventRetention   uint64 = 9223372049739677995
-	kindAuditEventRefTypes    uint64 = 9223372049739677996
-	kindAuditEventRefValues   uint64 = 9223372049739677997
-	kindAuditEventAttrKeys    uint64 = 9223372049739677998
-	kindAuditEventAttrValues  uint64 = 9223372049739677999
+	kindRuntimeKindAuditEvent  uint64 = 9223372049739677986
+	kindAuditEventDomain       uint64 = 9223372049739677987
+	kindAuditEventAction       uint64 = 9223372049739677988
+	kindAuditEventOutcome      uint64 = 9223372049739677989
+	kindAuditEventPrincipal    uint64 = 9223372049739677990
+	kindAuditEventPrincipalBy  uint64 = 9223372049739677991
+	kindAuditEventPrincipalVia uint64 = 9223372049739678179
+	kindAuditEventOriginBy     uint64 = 9223372049739678178
+	kindAuditEventPurpose      uint64 = 9223372049739677992
+	kindAuditEventNode         uint64 = 9223372049739677993
+	kindAuditEventSubject      uint64 = 9223372049739677994
+	kindAuditEventRetention    uint64 = 9223372049739677995
+	kindAuditEventRefTypes     uint64 = 9223372049739677996
+	kindAuditEventRefValues    uint64 = 9223372049739677997
+	kindAuditEventAttrKeys     uint64 = 9223372049739677998
+	kindAuditEventAttrValues   uint64 = 9223372049739677999
 )
 
 // auditEventSymbolAttrI is the InAttr-side view of the symbol section. P-variants only —
@@ -122,6 +123,11 @@ func auditEventEmitSectionSymbol[
 	symbolSecAttr_PrincipalBy := symbolSec.BeginAttribute(row.PrincipalBy)
 	symbolSecAttr_PrincipalBy.AddMembershipLowCardRefP(kindAuditEventPrincipalBy)
 	symbolSecAttr_PrincipalBy.EndAttributeP()
+	if row.PrincipalVia.Has {
+		symbolSecAttr_PrincipalVia := symbolSec.BeginAttribute(row.PrincipalVia.Val)
+		symbolSecAttr_PrincipalVia.AddMembershipLowCardRefP(kindAuditEventPrincipalVia)
+		symbolSecAttr_PrincipalVia.EndAttributeP()
+	}
 	symbolSecAttr_OriginBy := symbolSec.BeginAttribute(row.OriginBy)
 	symbolSecAttr_OriginBy.AddMembershipLowCardRefP(kindAuditEventOriginBy)
 	symbolSecAttr_OriginBy.EndAttributeP()
@@ -321,6 +327,9 @@ func auditEventReadRow[
 	var symbolPrincipalByVal string
 	var symbolPrincipalByCount int
 	var symbolPrincipalByLastAttr int64
+	var symbolPrincipalViaVal string
+	var symbolPrincipalViaCount int
+	var symbolPrincipalViaLastAttr int64
 	var symbolOriginByVal string
 	var symbolOriginByCount int
 	var symbolOriginByLastAttr int64
@@ -372,6 +381,13 @@ func auditEventReadRow[
 				}
 				val := symbolAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 				symbolPrincipalByVal = val
+			case kindAuditEventPrincipalVia:
+				if symbolPrincipalViaLastAttr != attrJ+1 {
+					symbolPrincipalViaLastAttr = attrJ + 1
+					symbolPrincipalViaCount++
+				}
+				val := symbolAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				symbolPrincipalViaVal = val
 			case kindAuditEventOriginBy:
 				if symbolOriginByLastAttr != attrJ+1 {
 					symbolOriginByLastAttr = attrJ + 1
@@ -441,6 +457,15 @@ func auditEventReadRow[
 	}
 	if symbolPrincipalByCount == 1 {
 		row.PrincipalBy = symbolPrincipalByVal
+		present = true
+	}
+	if symbolPrincipalViaCount > 1 {
+		err = eb.Build().Int("row", i).Str("section", "symbol").Str("membership", "auditEventPrincipalVia").Int("got", symbolPrincipalViaCount).Errorf("slot symbol@auditEventPrincipalVia (field PrincipalVia) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", symbolPrincipalViaCount)
+		return
+	}
+	if symbolPrincipalViaCount == 1 {
+		row.PrincipalVia.Val = symbolPrincipalViaVal
+		row.PrincipalVia.Has = true
 		present = true
 	}
 	if symbolOriginByCount > 1 {

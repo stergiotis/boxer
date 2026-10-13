@@ -38,6 +38,11 @@ type AuditEvent struct {
 	// one of the PrincipalBy constants: how much a reader may trust it.
 	Principal   option.Option[string] `lw:"auditEventPrincipal,stringArray,unit"`
 	PrincipalBy string                `lw:"auditEventPrincipalBy,symbol"`
+	// PrincipalVia is the mechanism that established Principal, a
+	// lower-spinal name the emitter chooses from an open vocabulary (the
+	// PrincipalVia constants, or its own); absent when the emitter does
+	// not say, and always when there is no principal.
+	PrincipalVia option.Option[string] `lw:"auditEventPrincipalVia,symbol"`
 	// OriginBy is how the row's origin was established, one of
 	// evidence.OriginByE's names: the host's own service wrote it, the host
 	// took it from a bus envelope's sender, or the writing process stated
@@ -83,6 +88,24 @@ const (
 	PrincipalByNone = "none"
 )
 
+// Mechanisms that establish a principal, values of AuditEvent.PrincipalVia.
+// The vocabulary is open: an emitter may name its own mechanism.
+const (
+	// PrincipalViaPeer is the kernel's credential of the connecting process
+	// on a Unix socket.
+	PrincipalViaPeer = "peer"
+	// PrincipalViaMtls is a client certificate that verified against the
+	// listener's authorities.
+	PrincipalViaMtls = "mtls"
+	// PrincipalViaToken is a bearer token the service holds and compared.
+	PrincipalViaToken = "token"
+	// PrincipalViaSession is a signed session the service verified.
+	PrincipalViaSession = "session"
+	// PrincipalViaUpstream is a trusted proxy or API that asserted the
+	// principal; the request came from its address.
+	PrincipalViaUpstream = "upstream"
+)
+
 // The recorder's own domain and its actions (ADR-0296 §SD4): rows a
 // recorder writes about itself, in the retention class RetentionTrail.
 const (
@@ -108,8 +131,8 @@ const (
 // Validate says whether the row is within ADR-0296 §SD1's bounds: names
 // are lower-spinal [naming.StylableName]s, enumerations hold one of their
 // constants, values are non-empty valid UTF-8 under their bound, the
-// parallel lists agree in length, and a principal and its PrincipalBy
-// agree. A recorder replaces a row that fails with an audit-invalid row.
+// parallel lists agree in length, a principal and its PrincipalBy agree,
+// and a PrincipalVia is a name and only beside a principal. A recorder replaces a row that fails with an audit-invalid row.
 func (inst AuditEvent) Validate() (err error) {
 	if err = CheckName("domain", inst.Domain); err != nil {
 		return
@@ -136,6 +159,14 @@ func (inst AuditEvent) Validate() (err error) {
 		}
 	default:
 		return eh.Errorf("principal-by %q is not system, env, os or none", inst.PrincipalBy)
+	}
+	if inst.PrincipalVia.Has {
+		if !inst.Principal.Has {
+			return eh.Errorf("principal-via %q with no principal", inst.PrincipalVia.Val)
+		}
+		if err = CheckName("principal-via", inst.PrincipalVia.Val); err != nil {
+			return
+		}
 	}
 	if _, ok := evidence.ParseOriginBy(inst.OriginBy); !ok {
 		return eh.Errorf("origin-by %q is not self, envelope or host", inst.OriginBy)

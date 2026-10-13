@@ -476,7 +476,8 @@ func (inst *Recorder) AdhocDataset(at time.Time, c Context, cause option.Option[
 // carries the call identity on ctx: the origin from its vouched part when
 // one is there, else from c, else the run alone; the principal and the
 // purpose from its claims, replacing whatever row carried. With no
-// principal the row's PrincipalBy becomes none. A row outside the bounds
+// principal the row's PrincipalBy becomes none and its PrincipalVia
+// absent. A row outside the bounds
 // of [AuditEvent.Validate] is replaced by an audit-invalid row naming the
 // attempted domain and action, and logged; the call does not fail for it.
 // The row's natural key names the domain, the action and the subject.
@@ -502,6 +503,7 @@ func (inst *Recorder) Event(ctx context.Context, at time.Time, c Context, row Au
 	}
 	if !row.Principal.Has {
 		row.PrincipalBy = PrincipalByNone
+		row.PrincipalVia = option.None[string]()
 	}
 	row.OriginBy = inst.originBy.String()
 	if a, ok := evidence.AttestationFrom(ctx); ok {
@@ -580,6 +582,9 @@ func (inst *Recorder) invalidEvent(row AuditEvent, verr error) (out AuditEvent) 
 			out.PrincipalBy = row.PrincipalBy
 		default:
 			out.PrincipalBy = PrincipalByEnv
+		}
+		if row.PrincipalVia.Has && audit.CheckName("principal-via", row.PrincipalVia.Val) == nil {
+			out.PrincipalVia = row.PrincipalVia
 		}
 	}
 	return
