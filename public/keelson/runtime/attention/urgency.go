@@ -1,6 +1,7 @@
 package attention
 
 import (
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"iter"
 	"sync"
 	"time"
@@ -159,7 +160,7 @@ func (inst *Urgencies) Decide(itemKey string, accept bool) (ok bool, err error) 
 				kerr = inst.levels.Clear(AuthorPerson, "", conv, k)
 			}
 			if kerr != nil && err == nil {
-				err = eh.Errorf("urgency of %s: %w", kind, kerr)
+				err = eb.Build().Str("kind", kind).Errorf("urgency: %w", kerr)
 			}
 		}
 	}

@@ -142,7 +142,7 @@ func TestLawL32HoldsAgainstDroppedHeadsAndReanchoring(t *testing.T) {
 	_, err = anchors.Append(ctx, Head{Cell: "c", Run: 11, Ordinal: ord, Digest: digest})
 	assert.Error(t, err, "the store refuses another digest at the ordinal")
 	conflicting := append([]Anchored(nil), anchored...)
-	conflicting = append(conflicting, Anchored{Head: Head{Cell: "c", Run: 11, Ordinal: ord, Digest: digest}, Receipt: Receipt{Id: "anchor-late", At: anchor.Now()}})
+	conflicting = append(conflicting, Anchored{Head: Head{Cell: "c", Run: 11, Ordinal: ord, Digest: digest}, Receipt: anchor.Receipt{Id: "anchor-late", At: anchor.Now()}})
 	assert.Equal(t, []uint32{ord}, VerifyHeads(w2.Run().Digest, w2.Entries(), conflicting))
 	assert.Equal(t, []uint32{ord}, VerifyHeads(w.Run().Digest, w.Entries(), conflicting), "the conflict breaks the ordinal for the true journal too")
 

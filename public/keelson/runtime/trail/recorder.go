@@ -107,7 +107,7 @@ type Recorder struct {
 	// the forwarder the prompt path feeds (fwd is its state).
 	observer  recordstore.WriteObserverI[uint64, time.Time]
 	readTable string
-	forwarder ForwarderI
+	forwarder audit.ForwarderI
 	fwd       *forwardState
 	// originBy is how an audit event's origin was established when the
 	// context says nothing (ADR-0327 §SD6): the host's recorder writes as

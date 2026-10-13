@@ -261,7 +261,7 @@ func (inst *Service) handle(msg *app.Msg) {
 // held is the earliest receipt the store holds for the head's ordinal
 // under its scheme, when it holds one; a different digest there is an
 // error.
-func (inst *Service) held(ctx context.Context, h anchor.Head) (r Receipt, held bool, err error) {
+func (inst *Service) held(ctx context.Context, h anchor.Head) (r anchor.Receipt, held bool, err error) {
 	heads, err := inst.store.Read(ctx, h.Cell, h.Scope)
 	if err != nil {
 		err = eb.Build().Uint64("scope", h.Scope).Errorf("read heads: %w", err)
@@ -347,7 +347,7 @@ func roundTrip[Req any, Rep any](ctx context.Context, inst *Client, subject stri
 }
 
 // AppendHead anchors any scope's head.
-func (inst *Client) AppendHead(ctx context.Context, h anchor.Head) (r Receipt, err error) {
+func (inst *Client) AppendHead(ctx context.Context, h anchor.Head) (r anchor.Receipt, err error) {
 	rep, err := roundTrip[wireHead, wireReceipt](ctx, inst, SubjectAppend, wireHead{V: wireVersion, Cell: h.Cell, Scope: h.Scope, Ordinal: h.Ordinal, Scheme: h.Scheme, Digest: h.Digest})
 	if err != nil {
 		return
@@ -356,7 +356,7 @@ func (inst *Client) AppendHead(ctx context.Context, h anchor.Head) (r Receipt, e
 		err = &RefusedError{Reason: rep.Reason}
 		return
 	}
-	return Receipt{Id: rep.Id, At: rep.At, By: rep.By, Durable: rep.Durable}, nil
+	return anchor.Receipt{Id: rep.Id, At: rep.At, By: rep.By, Durable: rep.Durable}, nil
 }
 
 // ReadScope reads a scope's heads under every scheme.
@@ -370,14 +370,14 @@ func (inst *Client) ReadScope(ctx context.Context, cell string, scope uint64) (h
 		return
 	}
 	for _, w := range rep.Heads {
-		heads = append(heads, anchor.Anchored{Head: anchor.Head{Cell: w.Cell, Scope: w.Scope, Ordinal: w.Ordinal, Scheme: w.Scheme, Digest: w.Digest}, Receipt: Receipt{Id: w.ReceiptId, At: w.ReceiptAt, By: w.By, Durable: w.Durable}})
+		heads = append(heads, anchor.Anchored{Head: anchor.Head{Cell: w.Cell, Scope: w.Scope, Ordinal: w.Ordinal, Scheme: w.Scheme, Digest: w.Digest}, Receipt: anchor.Receipt{Id: w.ReceiptId, At: w.ReceiptAt, By: w.By, Durable: w.Durable}})
 	}
 	return
 }
 
 // Append anchors a journal head: the run's scope under the journal's
 // scheme.
-func (inst *Client) Append(ctx context.Context, h Head) (r Receipt, err error) {
+func (inst *Client) Append(ctx context.Context, h Head) (r anchor.Receipt, err error) {
 	return inst.AppendHead(ctx, anchorHead(h))
 }
 

@@ -3,6 +3,7 @@ package chat
 import (
 	"context"
 	"encoding/json/v2"
+	"github.com/stergiotis/boxer/public/storage/recordstore/evidence/anchor"
 	"slices"
 	"strconv"
 	"strings"
@@ -547,7 +548,7 @@ const headFormLocal = "local"
 // store, the default — is recorded as local, anchoring nothing; a
 // coordinator with no store at all, as in a test without a host, ships
 // none.
-func (inst *coordinator) shipHead(ctx context.Context, w *agentrun.Writer, at func(headstore.Cadence) bool) {
+func (inst *coordinator) shipHead(ctx context.Context, w *agentrun.Writer, at func(anchor.Cadence) bool) {
 	inst.mu.Lock()
 	anchors, cadence := inst.anchors, inst.profile.AnchorCadence
 	inst.mu.Unlock()
@@ -618,7 +619,7 @@ func (inst *coordinator) closeJournal(tail context.Context) {
 	}
 	ctx, cancel := context.WithTimeout(tail, agentrun.DefaultTimeout)
 	defer cancel()
-	inst.shipHead(ctx, w, func(c headstore.Cadence) bool { return c.PerRunClose })
+	inst.shipHead(ctx, w, func(c anchor.Cadence) bool { return c.PerRunClose })
 	if err := w.Close(ctx, agentrun.StateClosed); err != nil {
 		log.Warn().Err(err).Uint64("run", w.Run().Id).Msg("chat: the run was not closed")
 	}

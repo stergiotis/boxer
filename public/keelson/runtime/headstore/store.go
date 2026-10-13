@@ -20,26 +20,20 @@ type Head struct {
 	Digest  string
 }
 
-// Receipt is the anchor store's answer to an append.
-type Receipt = anchor.Receipt
-
 // Anchored is one journal head the store holds.
 type Anchored struct {
 	Head
-	Receipt Receipt
+	Receipt anchor.Receipt
 }
 
-// Cadence is when heads are shipped (ADR-0314 §SD3).
-type Cadence = anchor.Cadence
-
 // DefaultCadence is one head per turn end and one at run close.
-func DefaultCadence() (c Cadence) { return anchor.DefaultCadence() }
+func DefaultCadence() (c anchor.Cadence) { return anchor.DefaultCadence() }
 
 // StoreI is the journal's view of the anchor store: append a run's head,
 // read a run's heads. The bus client is one; Over makes one of any
 // anchor.StoreI in-process.
 type StoreI interface {
-	Append(ctx context.Context, h Head) (r Receipt, err error)
+	Append(ctx context.Context, h Head) (r anchor.Receipt, err error)
 	Read(ctx context.Context, cell string, run uint64) (heads []Anchored, err error)
 }
 
@@ -66,7 +60,7 @@ func Over(st anchor.StoreI) StoreI { return over{st: st} }
 
 type over struct{ st anchor.StoreI }
 
-func (inst over) Append(ctx context.Context, h Head) (r Receipt, err error) {
+func (inst over) Append(ctx context.Context, h Head) (r anchor.Receipt, err error) {
 	return inst.st.Append(ctx, anchorHead(h))
 }
 
@@ -81,19 +75,19 @@ func (inst over) Read(ctx context.Context, cell string, run uint64) (heads []Anc
 // HeadRecordOf is the journal's head entry record for a shipped head
 // (ADR-0308 §SD2, a ledger component since ADR-0325 §SD1): the ordinal
 // covered, the digest, the receipt, and the cadence it was shipped under.
-func HeadRecordOf(h Head, r Receipt, c Cadence) agentrun.HeadRecord {
+func HeadRecordOf(h Head, r anchor.Receipt, c anchor.Cadence) agentrun.HeadRecord {
 	return agentrun.HeadRecord{Ordinal: h.Ordinal, Digest: h.Digest, ReceiptId: r.Id, ReceiptAt: r.At.UTC(), Cadence: c.String(), Durable: r.Durable}
 }
 
 // HeadEntry is the journal entry that records a shipped head.
-func HeadEntry(h Head, r Receipt, c Cadence) (e agentrun.Entry, err error) {
+func HeadEntry(h Head, r anchor.Receipt, c anchor.Cadence) (e agentrun.Entry, err error) {
 	rec := HeadRecordOf(h, r, c)
 	return agentrun.Entry{Kind: agentrun.KindHead, Key: r.Id, Target: h.Ordinal, Head: &rec, Label: agentrun.Label{Level: agentrun.LevelSystem}}, nil
 }
 
 // Ship appends the writer's current head to the store and journals the
 // head entry: what the coordinator does at each point the cadence names.
-func Ship(ctx context.Context, store StoreI, w *agentrun.Writer, c Cadence) (e agentrun.Entry, err error) {
+func Ship(ctx context.Context, store StoreI, w *agentrun.Writer, c anchor.Cadence) (e agentrun.Entry, err error) {
 	run := w.Run()
 	ordinal, digest := w.Head()
 	h := Head{Cell: run.Cell, Run: run.Id, Ordinal: ordinal, Digest: digest}

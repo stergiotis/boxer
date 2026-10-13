@@ -54,7 +54,6 @@ func timeLit(t time.Time) (lit string) {
 	return "fromUnixTimestamp64Nano(" + strconv.FormatInt(t.UTC().UnixNano(), 10) + ")"
 }
 
-
 // The settings every statement carries, and the conditions they hold
 // under, are rowcas's (ADR-0223 §SD3; the model in
 // doc/explanation/watchbill-consistency-model.md): the sequential update

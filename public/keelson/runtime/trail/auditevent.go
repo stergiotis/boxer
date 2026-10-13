@@ -4,13 +4,11 @@ import "github.com/stergiotis/boxer/public/storage/recordstore/evidence/audit"
 
 // AuditEvent is the audit package's component (ADR-0327 §SD8): the trail
 // store binds it as one of its kinds, and the recorder's Event writes it.
-// The bounds, the outcomes, the attestations and the recorder's own domain
-// are the audit package's too, re-exported for the host's services.
+// It is an alias, against CS008, because the generated store names its
+// component type unqualified in this package while the DTO lives in the
+// audit package; the alias goes when the generator emits a qualified type
+// for a component from another package.
 type AuditEvent = audit.AuditEvent
-
-// ForwarderI is the audit package's forwarder seam (ADR-0296 §SD6): the
-// recorder hands it durable audit events as plain values.
-type ForwarderI = audit.ForwarderI
 
 const (
 	OutcomeOk     = audit.OutcomeOk

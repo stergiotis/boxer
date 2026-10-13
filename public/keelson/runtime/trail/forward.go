@@ -2,6 +2,7 @@ package trail
 
 import (
 	"context"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"iter"
 	"sync"
 	"time"
@@ -24,7 +25,7 @@ const recentForwarded = 1 << 16
 // batch of audit events as the server takes it, on a goroutine of the
 // recorder's own, behind a queue of DefaultForwardQueue batches. The
 // backstop is [Recorder.ForwardWindow], which the caller schedules.
-func WithForwarder(f ForwarderI) RecorderOption {
+func WithForwarder(f audit.ForwarderI) RecorderOption {
 	return func(inst *Recorder) { inst.forwarder = f }
 }
 
@@ -255,7 +256,7 @@ func (inst *Recorder) ForwardWindow(ctx context.Context, from, to time.Time, pag
 			return nil
 		}
 		if !inst.forward(ctx, batch) {
-			return eh.Errorf("trail: forward %d events", len(batch))
+			return eb.Build().Int("events", len(batch)).Errorf("trail: forward events")
 		}
 		n += len(batch)
 		batch = batch[:0]

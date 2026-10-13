@@ -3,6 +3,7 @@ package chat
 import (
 	"context"
 	"errors"
+	"github.com/stergiotis/boxer/public/storage/recordstore/evidence/anchor"
 	"slices"
 	"strconv"
 	"strings"
@@ -11,7 +12,6 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/agentrun"
 	"github.com/stergiotis/boxer/public/keelson/runtime/agentrun/projection"
 	"github.com/stergiotis/boxer/public/keelson/runtime/harness"
-	"github.com/stergiotis/boxer/public/keelson/runtime/headstore"
 	"github.com/stergiotis/boxer/public/keelson/runtime/llm"
 	"github.com/stergiotis/boxer/public/keelson/runtime/queryengine"
 	"github.com/stergiotis/boxer/public/llm/openaichat"
@@ -441,7 +441,7 @@ func runTurn(ctx context.Context, cli completerI, coord *coordinator, req llm.Re
 		}
 		// A chain head per turn end, covering the turn's end (ADR-0314
 		// §SD3).
-		coord.shipHead(jctx, w, func(c headstore.Cadence) bool { return c.PerTurn })
+		coord.shipHead(jctx, w, func(c anchor.Cadence) bool { return c.PerTurn })
 	}()
 	parent := req.ParentCallId
 	limit := coord.roundLimit()

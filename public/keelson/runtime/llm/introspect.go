@@ -94,7 +94,7 @@ type CallRecord struct {
 	Route         string
 	Tier          uint8
 	ApprovalEntry uint64
-	Queued   time.Duration
+	Queued        time.Duration
 }
 
 // contextOf is the trail context of a call: its origin, and the

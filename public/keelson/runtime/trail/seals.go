@@ -2,6 +2,7 @@ package trail
 
 import (
 	"context"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"time"
 
 	"github.com/zeebo/xxh3"
@@ -122,7 +123,7 @@ func (inst *Recorder) VerifySeals(ctx context.Context, run string) (broken evide
 		}
 		item, ierr := inst.canon.CanonicalItem(ent)
 		if ierr != nil {
-			return broken, nil, nil, eh.Errorf("trail: canonical item of row %d: %w", ent.ID, ierr)
+			return broken, nil, nil, eb.Build().Uint64("row", ent.ID).Errorf("trail: canonical item of row: %w", ierr)
 		}
 		present[ent.ID] = TrailSealScheme.RowDigest(item)
 	}

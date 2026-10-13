@@ -2,6 +2,7 @@ package chat
 
 import (
 	"encoding/hex"
+	"github.com/stergiotis/boxer/public/storage/recordstore/evidence/anchor"
 	"strconv"
 	"strings"
 	"sync"
@@ -78,7 +79,7 @@ type ProfileT struct {
 	// AnchorCadence is when the run's chain heads are shipped to the
 	// anchor store (ADR-0314 §SD3). It shapes the record, not what the
 	// model reads, so it is outside the fingerprint.
-	AnchorCadence headstore.Cadence
+	AnchorCadence anchor.Cadence
 }
 
 // Validate checks the profile against what this build registers: every
