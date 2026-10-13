@@ -457,7 +457,10 @@ func NewLoggingFlags() []cli.Flag {
 // Order of effects: writer → global level → caller frame → correlation
 // id → "application startup" record. The startup record is emitted
 // only when at least one of the host/pid/args/vcs/module flags is set.
-func Apply(ctx context.Context, cmd *cli.Command) (_ context.Context, err error) {
+//
+// The returned context is ctx itself, so a caller may pass it on.
+func Apply(ctx context.Context, cmd *cli.Command) (ctxOut context.Context, err error) {
+	ctxOut = ctx
 	if err = applyWriter(ctx, cmd); err != nil {
 		return
 	}
