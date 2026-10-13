@@ -33,8 +33,19 @@ var contextFields = []string{
 	"max_context_length",
 	"n_ctx",
 	"meta.n_ctx",
-	"meta.n_ctx_train", // llama.cpp: the size it was trained with
+	ContextFieldTrained, // llama.cpp: the size it was trained with
 }
+
+// ContextFieldTrained is the model-list field that names the size a model
+// was trained with, not the size it is loaded with: a ceiling, read last.
+// llama.cpp names the loaded size on its own props endpoint instead, which
+// the probe asks next (llamaPropsField); failing that, the trained size
+// stands and the host says so, since a trigger set from it never fires
+// on a server loaded with less.
+const ContextFieldTrained = "meta.n_ctx_train"
+
+// llamaPropsField is where llama.cpp's GET /props carries the loaded size.
+const llamaPropsField = "default_generation_settings.n_ctx"
 
 // probeContext asks the endpoint once, off the caller's goroutine, and
 // stores what it says; a failure leaves the size unknown and is logged.
@@ -47,6 +58,9 @@ func (inst *Service) probeContext() {
 		inst.log.Debug().Err(err).Msg("llm: the endpoint's model list did not answer; the context size is unknown")
 	case tokens <= 0:
 		inst.log.Debug().Msg("llm: the endpoint's model list names no context size; set BOXER_LLM_CONTEXT_TOKENS")
+	case field == ContextFieldTrained:
+		inst.context.Store(&contextSize{tokens: tokens, source: "endpoint: " + field})
+		inst.log.Warn().Int32("tokens", tokens).Msg("llm: the endpoint names only the size the model was trained with, not the size it is loaded with; a server loaded with less fails a turn before compaction triggers. Set BOXER_LLM_CONTEXT_TOKENS to the loaded size")
 	default:
 		inst.context.Store(&contextSize{tokens: tokens, source: "endpoint: " + field})
 	}
@@ -111,8 +125,56 @@ func ProbeContextTokens(ctx context.Context, hc *http.Client, endpoint string, a
 			v = m[part]
 		}
 		if n, ok := v.(float64); ok && n > 0 && n < 1<<31 {
+			if f == ContextFieldTrained {
+				if loaded, ok := probeLlamaProps(ctx, hc, endpoint, apiKey); ok {
+					return loaded, "props: " + llamaPropsField, nil
+				}
+			}
 			return int32(n), f, nil
 		}
+	}
+	return
+}
+
+// probeLlamaProps reads the loaded context size from llama.cpp's props
+// endpoint, which sits beside the OpenAI-compatible prefix: <base>/props
+// for an endpoint of <base>/v1. Any failure is no size; the caller keeps
+// what the model list said.
+func probeLlamaProps(ctx context.Context, hc *http.Client, endpoint string, apiKey string) (tokens int32, ok bool) {
+	base := strings.TrimSuffix(strings.TrimSuffix(endpoint, "/"), "/v1")
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, base+"/props", nil)
+	if err != nil {
+		return
+	}
+	if apiKey != "" {
+		req.Header.Set("Authorization", "Bearer "+apiKey)
+	}
+	resp, err := hc.Do(req)
+	if err != nil {
+		return
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return
+	}
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	if err != nil {
+		return
+	}
+	var props map[string]any
+	if json.Unmarshal(body, &props) != nil {
+		return
+	}
+	var v any = props
+	for _, part := range strings.Split(llamaPropsField, ".") {
+		m, isMap := v.(map[string]any)
+		if !isMap {
+			return
+		}
+		v = m[part]
+	}
+	if n, isNum := v.(float64); isNum && n > 0 && n < 1<<31 {
+		return int32(n), true
 	}
 	return
 }

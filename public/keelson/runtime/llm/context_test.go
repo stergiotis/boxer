@@ -61,3 +61,24 @@ func TestDescribeReportsTheContextSize(t *testing.T) {
 	}, probeWait, 10e6)
 	assert.Equal(t, "endpoint: max_model_len", d.ContextSource)
 }
+
+// llama.cpp's model list names the size the model was trained with; the
+// loaded size is on its props endpoint, which the probe asks next, and
+// without it the trained size stands under its own field name.
+func TestTheLoadedSizeComesFromLlamaProps(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/v1/models":
+			_, _ = w.Write([]byte(`{"data":[{"id":"file.gguf","meta":{"n_ctx_train":131072}}]}`))
+		case "/props":
+			_, _ = w.Write([]byte(`{"default_generation_settings":{"n_ctx":8192}}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(srv.Close)
+	n, field, err := ProbeContextTokens(context.Background(), srv.Client(), srv.URL+"/v1", "", "file.gguf")
+	require.NoError(t, err)
+	assert.Equal(t, int32(8192), n, "the loaded size, not the trained one")
+	assert.Equal(t, "props: default_generation_settings.n_ctx", field)
+}
