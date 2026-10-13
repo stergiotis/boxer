@@ -5,18 +5,9 @@ import (
 	"time"
 )
 
-// Origin is who wrote an event as the row records it: the run, the app
-// and the app instance (ADR-0277 §SD1). A reader weighs it by the event's
-// OriginBy.
-type Origin struct {
-	Run      string
-	App      string
-	Instance uint64
-}
-
 // Event is one audit event as a forwarder is handed it: the row's id and
 // time, its origin, and the event itself. It is a plain value, so a
-// carrier adapter needs no store to take it.
+// carrier adapter needs no store to take it. Origin.Id is the row's id.
 type Event struct {
 	Id     uint64
 	At     time.Time

@@ -208,8 +208,7 @@ func (inst *Recorder) forwardLoop() {
 func eventOf(ent *TrailEntity) (e audit.Event) {
 	e = audit.Event{Id: ent.ID, At: ent.Ts, Row: ent.AuditEvent.Val}
 	if ent.Origin.Has {
-		o := ent.Origin.Val
-		e.Origin = audit.Origin{Run: o.Run, App: o.App, Instance: o.Instance}
+		e.Origin = ent.Origin.Val
 	}
 	return
 }

@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/stergiotis/boxer/public/identity/callident"
 	"github.com/stergiotis/boxer/public/storage/recordstore/evidence/audit"
 )
 
@@ -42,6 +43,21 @@ func (inst *collectForwarder) ids() (ids []uint64) {
 	return
 }
 
+// An audit event's run is the recorder's even when the call identity names
+// another: the run is the seal stream the row belongs to (ADR-0330 §SD2);
+// the app and the instance are the call identity's.
+func TestEventRunIsTheRecorders(t *testing.T) {
+	exec := &gateExec{open: true}
+	fwd := &collectForwarder{}
+	rec := NewRecorder(exec, "run-1", zerolog.Nop(), WithForwarder(fwd))
+	ctx := callident.WithCallIdentity(context.Background(), callident.CallIdentity{Origin: callident.Origin{Run: "run-other", App: "apps/dmdm", Instance: 3}})
+	require.NoError(t, rec.Event(ctx, time.Now(), Context{Origin: rec.OriginOf("apps/elsewhere", 9)}, event()))
+	require.NoError(t, rec.Flush(context.Background()))
+	rec.Close()
+	require.Len(t, fwd.got, 1)
+	assert.Equal(t, audit.Origin{Id: fwd.got[0].Id, Run: "run-1", App: "apps/dmdm", Instance: 3}, fwd.got[0].Origin)
+}
+
 // The prompt path hands the forwarder the audit events of each batch the
 // server took, with their components, and nothing else: not the other
 // kinds, and not a row until it is durable (ADR-0296 §SD6).
@@ -68,7 +84,7 @@ func TestPromptPathForwardsDurableEvents(t *testing.T) {
 	assert.Equal(t, "vault-resolve", first.Row.Action)
 	assert.Equal(t, "auditEvent", first.Row.Kind)
 	assert.Equal(t, "self", first.Row.OriginBy, "a recorder without an attestation states its own origin")
-	assert.Equal(t, audit.Origin{Run: "run-1", App: "apps/dmdm", Instance: 2}, first.Origin)
+	assert.Equal(t, audit.Origin{Id: first.Id, Run: "run-1", App: "apps/dmdm", Instance: 2}, first.Origin)
 	assert.NotZero(t, first.Id)
 	assert.False(t, first.At.IsZero())
 	c := rec.Counts()
