@@ -19,7 +19,6 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/agent"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/bgjob"
-	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/bandscale"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/selector"
@@ -165,9 +164,8 @@ const (
 	// barScaleW is the width of the scale in the bar.
 	barScaleW float32 = 132
 
-	tipSettings = "This chat's options, and what its model may do in your windows"
-	tipScale    = "What the model may do. The hollow pointer is the most these settings let it ask for; the filled one is what the running task was granted. Settings has the detail."
-	tipAllow    = "The most the model may do in a window you share. The host refuses anything above it, whatever a task was granted.\n" +
+	tipScale = "What the model may do. The hollow pointer is the most these settings let it ask for; the filled one is what the running task was granted. Click to open Settings, which has the detail."
+	tipAllow = "The most the model may do in a window you share. The host refuses anything above it, whatever a task was granted.\n" +
 		"Read: read what windows hold and show.\n" +
 		"View: also change what a window shows — a selection, a camera.\n" +
 		"Edit: also change what it holds — text, parameters — and write the artefact.\n" +
@@ -195,7 +193,6 @@ const (
 )
 
 var (
-	atomsSettings = c.Atoms().Text(icons.IconGear + " Settings").Keep()
 	// ladder is the scale's bands, one per level of agent.AllLevels.
 	ladder = []bandscale.Band{
 		{Label: "talk", Tone: styletokens.ToneNeutral},
@@ -319,20 +316,18 @@ func markers(may agent.Score, now agent.Score) (ms []bandscale.Marker) {
 	}
 }
 
-// renderSettingsToggle is the bar's Settings button, which brings the tab
-// to the front, and the scale beside it.
-func (inst *App) renderSettingsToggle() {
-	for range c.HoverText(tipSettings).KeepIter() {
-		if c.Button(inst.ids.PrepareStr("settings-toggle"), atomsSettings).Selected(inst.tabShown(tabSettings)).SendResp().HasPrimaryClicked() {
-			inst.showTab(tabSettings)
-		}
-	}
+// renderScale is the bar's scale of what the model may do; its line brings
+// the Settings tab, where the scale is set, to the front.
+func (inst *App) renderScale() {
 	may, now := inst.scores()
 	for range c.HoverText(tipScale).KeepIter() {
 		for range c.HorizontalTop().KeepIter() {
 			bandscale.Render(bandscale.Input{Ids: inst.ids, ScopeKey: "bar-scale", Bands: ladder, Markers: markers(may, now),
 				Width: barScaleW, Compact: true})
-			c.Label("now " + now.Level.String() + " · may " + may.Level.String()).Selectable(false).Send()
+			line := c.Atoms().Text("now " + now.Level.String() + " · may " + may.Level.String()).Keep()
+			if c.Button(inst.ids.PrepareStr("scale-settings"), line).Frame(false).SendResp().HasPrimaryClicked() {
+				inst.showTab(tabSettings)
+			}
 		}
 	}
 }

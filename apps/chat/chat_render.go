@@ -146,10 +146,7 @@ func (inst *App) renderBar() {
 			inst.newConversation()
 			conv = inst.conv
 		}
-		inst.renderSettingsToggle()
-		inst.renderStatsToggle()
-		inst.renderArtefactToggle()
-		inst.renderRunsToggle()
+		inst.renderScale()
 		inst.renderTurnState()
 	}
 	// A row of its own for what the conversation is: the controls above

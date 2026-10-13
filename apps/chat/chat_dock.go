@@ -1,6 +1,9 @@
 package chat
 
 import (
+	"strconv"
+
+	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 )
 
@@ -8,8 +11,8 @@ import (
 // split below it, and a column of tabs beside them — Conversations,
 // Settings, Analytics, Artefact. Every divider drags. The split fractions
 // are a preset: once the person drags one, the dock's own state wins for
-// the life of the window. The bar above the dock stays fixed; its buttons
-// bring a tab to the front.
+// the life of the window. The bar above the dock stays fixed; the tabs
+// themselves are how a pane is reached, and their titles carry its state.
 //
 // The tab set is fixed: a tab declared later would land in the first leaf,
 // beside the transcript, rather than in the column. So a tab whose feature
@@ -48,10 +51,11 @@ func (inst chatTabE) title() string {
 
 // The dock's initial splits: the share the transcript keeps above the
 // composer, and the share the transcript and composer keep beside the
-// column.
+// column — at the window's default width, what leaves the column room for
+// its four tab titles.
 const (
 	dockSplitComposer float32 = 0.80
-	dockSplitColumn   float32 = 0.64
+	dockSplitColumn   float32 = 0.56
 )
 
 // tabProbeSalt names each tab's visibility probe, through the id stack and
@@ -99,7 +103,13 @@ func (inst *App) renderDock() {
 			inst.markTabShown(tabComposer)
 			inst.renderComposer()
 		}
-		for range dock.Tab(uint64(tabConversations), tabConversations.title()) {
+		// The tabs carry what the bar's buttons used to: a highlight in
+		// another conversation, a change of the artefact waiting.
+		convTitle := tabConversations.title()
+		if n := len(inst.roster.notices); n > 0 {
+			convTitle += " · " + icons.PhStar + " " + strconv.Itoa(n)
+		}
+		for range dock.Tab(uint64(tabConversations), convTitle) {
 			inst.markTabShown(tabConversations)
 			inst.renderRunsTab()
 		}

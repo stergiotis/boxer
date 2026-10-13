@@ -16,29 +16,14 @@ const (
 	statsPanelW float32 = 380
 	// statsScrollPx is held back from the tab's width for its scroll bar.
 	statsScrollPx float32 = 18
-	statsPlotH  float32 = 150
+	statsPlotH    float32 = 150
 
-	tipStats     = "Analytics: token and answer statistics of this window's conversations, kept while the window is open, and the agent surface of this conversation."
 	tipOpenStats = "Publish the statistics as the ad-hoc datasets chat_turns and chat_calls, the agent surface as chat_surface, and open play on them. A later press republishes."
 )
 
 var (
-	atomsStats     = c.Atoms().Text(icons.PhChartLine + " Analytics").Keep()
 	atomsOpenStats = c.Atoms().Text(icons.PhTable + " Open in play").Keep()
 )
-
-// renderStatsToggle is the bar's Analytics button, which brings the tab to
-// the front.
-func (inst *App) renderStatsToggle() {
-	if !inst.advanced {
-		return
-	}
-	for range c.HoverText(tipStats).KeepIter() {
-		if c.Button(inst.ids.PrepareStr("stats-toggle"), atomsStats).Selected(inst.tabShown(tabAnalytics)).SendResp().HasPrimaryClicked() {
-			inst.showTab(tabAnalytics)
-		}
-	}
-}
 
 // renderStatsTab is the Analytics tab (ADR-0283), drawn at the tab's width
 // pane, less its scroll bar; it says how to turn Analytics on while it is

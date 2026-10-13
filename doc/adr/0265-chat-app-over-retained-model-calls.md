@@ -572,6 +572,16 @@ so a tab whose feature is off stays and says how to turn it on. Work a
 tab does only while it is in front, such as the roster's refresh, reads
 whether it was drawn last frame.
 
+### 2026-10-13 — the tabs without buttons in the bar
+
+The bar's Conversations, Settings, Analytics and Artefact buttons only
+brought their tab to the front, which the tab strip does; they are gone.
+What they carried moved to the tabs: the Artefact tab's title says when a
+change waits, the Conversations tab's counts the highlights. The scale of
+what the model may do stays in the bar, and its line opens the Settings
+tab. The dock draws no close buttons, as no tab closes, so the column's
+four titles fit at the window's default width.
+
 ## References
 
 - [ADR-0264](./0264-retained-model-conversations-on-facts.md) — what the app sends and why it reads nothing back.

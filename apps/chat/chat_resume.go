@@ -11,7 +11,6 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/agentrun"
 	"github.com/stergiotis/boxer/public/keelson/runtime/agentrun/projection"
 	"github.com/stergiotis/boxer/public/keelson/runtime/bgjob"
-	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
 	"github.com/stergiotis/boxer/public/keelson/runtime/trail"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
@@ -28,12 +27,7 @@ import (
 // stranded: readable, not continuing (§SD5). Deleting a run tombstones it
 // (§SD8).
 
-const (
-	tipRuns       = "Conversations: the runs this window's app wrote, kept by the host; resume one, or delete it (its bodies are blanked, its chain stays)."
-	runsListLimit = 50
-)
-
-var atomsRuns = c.Atoms().Text(icons.PhClockCounterClockwise + " Conversations").Keep()
+const runsListLimit = 50
 
 // resumed is what the resume job brings back: the run, its writer, its
 // entries, the fold, and what resume settled, already told to the model.
@@ -503,19 +497,6 @@ func transcriptOf(entries []agentrun.Entry) (out []entry) {
 		}
 	}
 	return
-}
-
-// renderRunsToggle is the Conversations button: it brings the tab to the
-// front.
-func (inst *App) renderRunsToggle() {
-	if inst.journalStore() == nil {
-		return
-	}
-	for range c.HoverText(tipRuns).KeepIter() {
-		if c.Button(inst.ids.PrepareStr("runs-toggle"), atomsRuns).Selected(inst.tabShown(tabConversations)).SendResp().HasPrimaryClicked() {
-			inst.showTab(tabConversations)
-		}
-	}
 }
 
 // renderRunsTab lists the conversations with Resume and Delete. It lists

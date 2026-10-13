@@ -43,15 +43,13 @@ const (
 	// maxDiffShown bounds the diff lines drawn; the rest is counted.
 	maxDiffShown = 400
 
-	tipArtefactPanel = "The conversation's markdown document, which the model edits through tools"
-	tipAccept        = "Make this change the artefact's next revision; the model's call goes on."
-	tipReject        = "Turn the change down; the model is told, and asked not to repeat it."
-	tipRevert        = "Make this revision current again, as a new revision. A later turn's model is told the artefact moved."
-	tipArtMdedit     = "Open the artefact as a new, unsaved document in mdedit, where you can type. Nothing comes back to the chat."
+	tipAccept    = "Make this change the artefact's next revision; the model's call goes on."
+	tipReject    = "Turn the change down; the model is told, and asked not to repeat it."
+	tipRevert    = "Make this revision current again, as a new revision. A later turn's model is told the artefact moved."
+	tipArtMdedit = "Open the artefact as a new, unsaved document in mdedit, where you can type. Nothing comes back to the chat."
 )
 
 var (
-	atomsArtefact   = c.Atoms().Text(icons.PhFileText + " Artefact").Keep()
 	atomsAccept     = c.Atoms().Text(icons.PhCheck + " Accept").Keep()
 	atomsReject     = c.Atoms().Text(icons.PhX + " Reject").Keep()
 	atomsRevert     = c.Atoms().Text(icons.PhArrowCounterClockwise + " Revert to this").Keep()
@@ -101,23 +99,6 @@ func (inst *artefactView) diffOf(key string, old string, new string) []diffLine 
 		inst.diffKey, inst.diff = key, lineDiff(old, new)
 	}
 	return inst.diff
-}
-
-// renderArtefactToggle is the bar's Artefact button, shown for a
-// conversation that has one.
-func (inst *App) renderArtefactToggle() {
-	if !inst.artefactOn() {
-		return
-	}
-	label := atomsArtefact
-	if inst.conv.art.pending() != nil || inst.coord.pixelAskNow() != nil {
-		label = c.Atoms().Text(icons.PhFileText + " Artefact · waiting").Keep()
-	}
-	for range c.HoverText(tipArtefactPanel).KeepIter() {
-		if c.Button(inst.ids.PrepareStr("artefact-toggle"), label).Selected(inst.tabShown(tabArtefact)).SendResp().HasPrimaryClicked() {
-			inst.showTab(tabArtefact)
-		}
-	}
 }
 
 // renderArtefactTab is the Artefact tab; it says how to have one while the

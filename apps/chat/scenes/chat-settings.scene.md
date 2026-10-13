@@ -33,18 +33,18 @@ stands in for the person's approval.
 ```jsonl trace
 {"do":"note","text":"ADR-0280: the chat's settings are a ceiling the host enforces"}
 {"do":"wait","valueContains":"→ scripted","role":"label"}
-{"do":"wait","valueContains":"now talk only · may run","role":"label"}
+{"do":"wait","contains":"now talk only · may run","role":"button"}
 {"do":"wait","valueContains":"chat-","role":"label","comment":"the conversation's id, readable in the bar"}
 {"do":"click","contains":"Send","role":"button","comment":"turn 1, the seeded draft"}
 {"do":"wait","valueContains":"The note is written.","role":"label","settleMs":1000}
 {"do":"wait","valueContains":"set_note in window 2 · rendered","role":"label"}
 {"do":"wait","value":"answered","role":"label","comment":"the state chip: the turn ended answered"}
-{"do":"wait","valueContains":"now edit · may run","role":"label","comment":"the demo app's catalog offers edits, and the task acts in it"}
+{"do":"wait","contains":"now edit · may run","role":"button","comment":"the demo app's catalog offers edits, and the task acts in it"}
 {"do":"click","name":"Settings","role":"button"}
 {"do":"wait","valueContains":"What the model may do","role":"label"}
 {"do":"capture","text":"chat-settings"}
 {"do":"click","name":"Read","role":"radio_button","comment":"At most: read"}
-{"do":"wait","valueContains":"now read · may read","role":"label","settleMs":500}
+{"do":"wait","contains":"now read · may read","role":"button","settleMs":500}
 {"do":"capture","text":"chat-settings-read"}
 {"do":"focus","id":12790625040306265328,"comment":"the chat's composer"}
 {"do":"type","id":12790625040306265328,"text":"Write it again."}
