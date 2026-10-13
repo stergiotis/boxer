@@ -147,8 +147,13 @@ func definitionsDock() []*ir.BuilderFactoryNode {
 			// scrolling one window scrolled the other. area_id is already the
 			// per-instance-salted widget id, so this separates every id below the
 			// dock as well.
+			// No tab closes (FffiDockTabViewer::closeable), so the close
+			// buttons — the tab's and the leaf's close-all — would be marks
+			// that do nothing, each taking a tab's worth of the strip.
 			egui_dock::DockArea::new(&mut dock_state)
 				.id(egui::Id::new(area_id))
+				.show_close_buttons(false)
+				.show_leaf_close_all_buttons(false)
 				.show_inside(child_ui, &mut viewer);
 		});
 
