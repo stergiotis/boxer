@@ -59,6 +59,7 @@ const (
 
 	tipConvId     = "This conversation's id. The host's records name it — keelson('llm_calls') and keelson('agent_actions') in their conversation column, and the audit trail on boxer.facts — so it is what to search for to find what this chat did. New conversation starts a new one."
 	tipCopyConvId = "Copy the conversation's id"
+	tipOpenTrail  = "Open what this conversation did in play: its rows of the audit trail's timeline on boxer.facts, oldest first"
 	tipCopy       = "Copy this message's markdown"
 	tipRetry      = "Send this message again"
 	tipEditFailed = "Put this message back in the composer to change it"
@@ -87,6 +88,7 @@ var (
 	atomsRegenerate = c.Atoms().Text(icons.PhArrowClockwise + " Regenerate").Keep()
 	atomsCopyError  = c.Atoms().Text(icons.PhCopy + " Copy details").Keep()
 	atomsOpenCall   = c.Atoms().Text(icons.PhTable + " Open call in play").Keep()
+	atomsOpenTrail  = c.Atoms().Text(icons.PhFootprints).Keep()
 	atomsCancelEdit = c.Atoms().Text("Cancel edit").Keep()
 	atomsMdedit     = c.Atoms().Text(icons.PhMarkdownLogo + " Open in mdedit").Keep()
 	atomsRenameOk   = c.Atoms().Text(icons.PhCheck).Keep()
@@ -231,6 +233,11 @@ func (inst *App) renderConvId(scope string) {
 		for range c.HoverText(tipCopyConvId).KeepIter() {
 			if c.Button(inst.ids.PrepareStr("copy"), atomsCopy).Frame(false).Small().SendResp().HasPrimaryClicked() {
 				inst.copyText("the conversation's id", id)
+			}
+		}
+		for range c.HoverText(tipOpenTrail).KeepIter() {
+			if c.Button(inst.ids.PrepareStr("trail"), atomsOpenTrail).Frame(false).Small().SendResp().HasPrimaryClicked() {
+				inst.openTrailInPlay(id)
 			}
 		}
 	}
