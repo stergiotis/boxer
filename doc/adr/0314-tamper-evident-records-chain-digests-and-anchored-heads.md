@@ -271,6 +271,23 @@ is `evidence.VerifyHeads` for a chained store and
 `evidence.VerifySealAnchors` for a sealed one; `keelson('evidence_checks')`
 serves L31, L32 and L34 over the host's stores in-process.
 
+### 2026-10-13 — §SD7: a durable client, for a store on a ClickHouse server
+
+The durable client §SD7 deferred is `anchor/anchorsql`: the contract
+over one append-only table on a ClickHouse server, which an organisation
+can run outside any person's control. `BOXER_ANCHOR_STORE_URL` names the
+server (with `_USER`, `_PASSWORD` and `_TABLE`); the host provisions the
+table at boot and anchors there, and without the setting, or when the
+server refuses, it keeps the memory store and says so in its log. The
+table is plain rather than leeway-encoded: it is the organisation's
+record, read by its own tools. "First receipt wins" holds across writers
+that share the table: an append inserts, reads its key back and answers
+with the earliest receipt there, refusing when that receipt has another
+digest. The receipts are `Durable`; that the server is outside the
+person's control is the deployment's statement, made by configuring it,
+and a client cannot check it. A store whose receipts name their sender
+implements `anchor.SenderI`, which the anchor service appends through.
+
 ## References
 
 - [ADR-0201](./0201-leeway-canonical-record-form.md) — the canonical form the digest is over.

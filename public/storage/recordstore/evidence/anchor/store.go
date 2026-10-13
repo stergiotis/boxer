@@ -48,6 +48,12 @@ type StoreI interface {
 	Read(ctx context.Context, cell string, scope uint64) (heads []Anchored, err error)
 }
 
+// SenderI is a store whose receipts name the sender a head came from: the
+// anchor service appends through it when its store is one.
+type SenderI interface {
+	AppendFor(ctx context.Context, h Head, by string) (r Receipt, err error)
+}
+
 // Now is the store's clock; a test replaces it.
 var Now = func() time.Time { return time.Now().UTC() }
 
@@ -63,6 +69,7 @@ type MemStore struct {
 }
 
 var _ StoreI = (*MemStore)(nil)
+var _ SenderI = (*MemStore)(nil)
 
 // NewMemStore is an empty store.
 func NewMemStore() (inst *MemStore) { return &MemStore{} }
@@ -77,6 +84,11 @@ func (inst *MemStore) All() (rows []Anchored) {
 
 func (inst *MemStore) Append(_ context.Context, h Head) (r Receipt, err error) {
 	return inst.AppendBy(h, "")
+}
+
+// AppendFor is SenderI.
+func (inst *MemStore) AppendFor(_ context.Context, h Head, by string) (r Receipt, err error) {
+	return inst.AppendBy(h, by)
 }
 
 // AppendBy is Append with the sender the receipt names.

@@ -218,8 +218,8 @@ func (inst *Service) handle(msg *app.Msg) {
 			return
 		}
 		if !held {
-			if m, ok := inst.store.(*anchor.MemStore); ok {
-				r, err = m.AppendBy(h, string(msg.Sender))
+			if m, ok := inst.store.(anchor.SenderI); ok {
+				r, err = m.AppendFor(ctx, h, string(msg.Sender))
 			} else {
 				r, err = inst.store.Append(ctx, h)
 				r.By = string(msg.Sender)

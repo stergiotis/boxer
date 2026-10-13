@@ -556,6 +556,13 @@ See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-d
 
 ## Updates
 
+### 2026-10-13 — §SD11: the durable anchor client
+
+The durable client §SD11 lists as deferred landed under ADR-0314's update
+of the same date: `anchor/anchorsql`, configured by
+`BOXER_ANCHOR_STORE_URL`. The organisation's store stays the
+deployment's; boxer now ships a client for one kind of it.
+
 ### 2026-10-13 — `evidence_checks` judges the laws the host can
 
 SD7's relation served the evidence laws alone; the other laws were Go

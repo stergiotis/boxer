@@ -522,12 +522,13 @@ func (rt *Runtime) bootServices(ctx context.Context, factsCfg chstore.Config) {
 		runId = rt.RunInfo.RunId
 	}
 	// The anchor store (ADR-0314 §SD2, by scope since ADR-0327 §SD7) is the
-	// organisation's to run outside any person's control. This host holds
-	// heads in memory: there is no setting that names an organisation store
-	// yet, so every receipt is non-durable, the journal marks such heads
-	// local, and the record says plainly that nothing outside the host
-	// anchors them. Built before the trail, whose seals anchor through it.
-	rt.Anchors = anchor.NewMemStore()
+	// organisation's to run outside any person's control: the one
+	// BOXER_ANCHOR_STORE_URL names, whose receipts are durable. Without it,
+	// or when it cannot be reached, the host holds heads in memory, every
+	// receipt is non-durable, the journal marks such heads local, and the
+	// record says plainly that nothing outside the host anchors them. Built
+	// before the trail, whose seals anchor through it.
+	rt.Anchors = orgAnchorStore(ctx, runId, logger)
 	// The host's own recorder: an audit event it writes has its origin
 	// established by the host (ADR-0327 §SD6), and its seals anchor.
 	rt.Trail = trail.NewRecorder(rt.PersistExec, runId, logger, trail.WithOriginBy(evidence.OriginByHost), trail.WithAnchors(rt.Anchors))
