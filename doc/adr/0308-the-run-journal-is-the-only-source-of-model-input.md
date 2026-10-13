@@ -441,6 +441,20 @@ the openings, commits per component and chains (wire v3). SD2's head
 entry records a receipt from the anchor store below the runtime
 (ADR-0314's Update of this date).
 
+### 2026-10-13 — journal views over every run
+
+`keelson('agent_runs')` and `agent_run_entries` are bounded to the newest
+runs, and the ledger tables are leeway-encoded, so nothing read the whole
+journal as rows. `agentrunstore/journalviews` composes two views in the
+ledger's database, written as the trail views are (ADR-0277):
+`dm_journal_runs`, the newest row per run — a deletion's tombstone
+included, so a deleted run reads with its `deleted-by` — and
+`dm_journal_entries`, one row per entry at its newest revision with the
+ledger's metadata: kind, key, role, names, effect, turn, label and writer.
+Neither reads the vault: no body, calls or arguments are a column
+(ADR-0320 §SD1). The views register with the read-surface install, which
+the host runs at boot after the journal's tables are provisioned.
+
 ## References
 
 - [ADR-0303](./0303-a-conversation-outlives-its-process-a-run-journal-written-before-each-act.md) (superseded by this record) — the journal, resume fold, grant rule and pinning carried forward.

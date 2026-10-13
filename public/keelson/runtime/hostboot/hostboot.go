@@ -374,9 +374,6 @@ func Boot(ctx context.Context, opts Options) (rt *Runtime, err error) {
 		}
 		rt.Facts, rt.IsChStore = chstore.NewWithFallback(factsCfg, logger, pingTimeout)
 	}
-	if rt.IsChStore && opts.Services.SQLSurface {
-		installSQLSurface(factsCfg, logger)
-	}
 	if runInst != nil {
 		_, wErr := rt.Facts.WriteRuntimeStart(factsstore.RuntimeStartRow{
 			RunId:        runInst.RunId,
@@ -546,6 +543,11 @@ func (rt *Runtime) bootServices(ctx context.Context, factsCfg chstore.Config) {
 		rt.cleanups = append(rt.cleanups, auditSvc.Close)
 	}
 	rt.bootAgentRun(ctx)
+	// After the journal's tables are provisioned, so the views over them
+	// find them (ADR-0308, update of 2026-10-13).
+	if rt.IsChStore && rt.opts.Services.SQLSurface {
+		installSQLSurface(factsCfg, logger)
+	}
 	if svc.AppState {
 		// Only the durable backend can clear what another run could see;
 		// the in-memory fallbacks leave the service refusing with the

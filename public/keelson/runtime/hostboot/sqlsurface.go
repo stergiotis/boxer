@@ -10,9 +10,11 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsstore/chstore"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/lwsqlsurface"
 
-	// The trail views register as a dependent of the surface install
-	// (lwsqlsurface.RegisterDependent); linking them here is what makes the
-	// boot reconcile create them (ADR-0277, update of 2026-10-13).
+	// The trail views and the journal views register as dependents of the
+	// surface install (lwsqlsurface.RegisterDependent); linking them here is
+	// what makes the boot reconcile create them (ADR-0277 and ADR-0308,
+	// updates of 2026-10-13).
+	_ "github.com/stergiotis/boxer/public/keelson/runtime/agentrun/agentrunstore/journalviews"
 	_ "github.com/stergiotis/boxer/public/keelson/runtime/trail/trailviews"
 )
 
