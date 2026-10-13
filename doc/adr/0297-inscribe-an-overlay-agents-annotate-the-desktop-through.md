@@ -127,7 +127,7 @@ A model never computes the rect of the second kind; SD4 says where it comes from
 - `runtime.agent.mark` and `runtime.agent.unmark` are `runtime.agent.*` verbs, so they inherit the grant check, action records and taint handling ([ADR-0276](./0276-agents-read-and-arrange-windows.md) SD3/SD4).
 - Marking requires suggest or act on every anchored window's entry. A viewport anchor requires desktop mode suggest or act.
 - Each accepted call is an action record (ADR-0269 SD9) with effect `view`. A mark changes what the person sees, not any app's state, so ADR-0269 SD11 is unaffected.
-- **Marks stay until the person clears them**: one task's from that task's badge, or all at once from the **Window** menu or the status bar, which says how many marks are up while there are any. Agents can clear their own. A task's marks are retired when the task ends or its grant is revoked, and a mark is retired when its window leaves the grant or closes, since the authority it was drawn under is gone.
+- **Marks stay until the person clears them**: one task's from that task's badge, or all at once from the **Window** menu or the status bar, which says how many marks are up while there are any. Agents can clear their own. The scene is also served as `keelson('inscribe_marks')`, so what is up can be read as a relation and not only counted in the status bar; where each mark resolves this frame is not stored and is not served. A task's marks are retired when the task ends or its grant is revoked, and a mark is retired when its window leaves the grant or closes, since the authority it was drawn under is gone.
 - While a host modal is open, inscribe draws nothing. The chrome that draws a host modal tells the window host so in that frame, and inscribe, framed after it, reads the flag. No mark can stand beside a decision the person is making.
 
 ### SD9 — Deferred
@@ -146,6 +146,7 @@ A model never computes the rect of the second kind; SD4 says where it comes from
 | `runtime.agent.mark`, `.unmark` | Added | `agent.Service` dispatch, wire types, `HostI`, `agent.Client`, the dispatch test host and the chat's test host |
 | Agent chrome | a per-task clear on the task badge | — |
 | Chat coordinator | `point_out` and `clear_marks` tools; tree parts as targets | Coordinator prompt |
+| `keelson('inscribe_marks')` | Added: one row per mark the scene holds — task, id, op, text, hue, step, arrival order, and each target as the window it names and its spelling | `providersgui.RegisterAll` |
 
 ## Alternatives
 

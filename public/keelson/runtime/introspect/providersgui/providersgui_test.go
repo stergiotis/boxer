@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
+	"github.com/stergiotis/boxer/public/keelson/runtime/inscribe"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect"
 	"github.com/stergiotis/boxer/public/keelson/runtime/windowhost"
 )
@@ -177,4 +178,32 @@ func TestWindowsTableNamesHoldingTasks(t *testing.T) {
 		got = append(got, vals.Value(int(i)))
 	}
 	assert.Equal(t, []string{"task-a", "task-b"}, got)
+}
+
+// keelson('inscribe_marks') spells each target, and a nil host is an empty
+// table rather than none.
+func TestMarksTable(t *testing.T) {
+	items := []inscribe.Item{
+		{Mark: inscribe.Mark{Task: "t1", Id: "a", Op: inscribe.OpCallout, Text: "here",
+			Targets: []inscribe.Anchor{{Window: 7}, {Window: 7, Local: &inscribe.Rect{X: 1, Y: 2, W: 3.5, H: 4}}}}, Hue: 2, Seq: 1},
+		{Mark: inscribe.Mark{Task: "t1", Id: "b", Op: inscribe.OpStep,
+			Targets: []inscribe.Anchor{{Viewport: &inscribe.Rect{W: 10, H: 10}}}}, Step: 1, Seq: 2},
+	}
+	rec := marksTable(items).Build(introspect.AllColumns(), len(items))
+	defer rec.Release()
+	assert.Equal(t, []string{"callout", "step"}, stringColumn(t, rec, "op"))
+	idx := rec.Schema().FieldIndices("targets")
+	require.Len(t, idx, 1)
+	targets := rec.Column(idx[0]).(*array.List)
+	vals := targets.ListValues().(*array.String)
+	var got []string
+	for i := 0; i < vals.Len(); i++ {
+		got = append(got, vals.Value(i))
+	}
+	assert.Equal(t, []string{"window:7", "window:7@1,2,3.5,4", "viewport@0,0,10,10"}, got)
+
+	empty, err := marksProvider{}.Snapshot(introspect.AllColumns())
+	require.NoError(t, err)
+	defer empty.Release()
+	assert.EqualValues(t, 0, empty.NumRows())
 }

@@ -42,10 +42,14 @@ func RegisterFrameTimes(r *introspect.Registry, host *windowhost.Inst) error {
 }
 
 // RegisterAll registers the GUI-coupled providers: demos (a process
-// global) and, when host is non-nil, windows, the desktop and frame times
-// (bound to that host).
+// global), the inscribe marks (empty without a host, so the name does not
+// depend on one) and, when host is non-nil, windows, the desktop and frame
+// times (bound to that host).
 func RegisterAll(r *introspect.Registry, host *windowhost.Inst, tasksOf TasksOfI) (err error) {
 	if err = RegisterDemos(r); err != nil {
+		return
+	}
+	if err = RegisterMarks(r, host); err != nil {
 		return
 	}
 	if host != nil {
