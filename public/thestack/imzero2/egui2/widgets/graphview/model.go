@@ -420,7 +420,7 @@ type Options struct {
 	// layout's reach, until UnpinNode releases it (ADR-0224 §SD10).
 	PinOnDrag bool
 	// VertexBudget bounds the vertices the graph's own geometry may cost in
-	// one frame (ADR-0329, proposed). Past it the picture drops its decorations before
+	// one frame (ADR-0329). Past it the picture drops its decorations before
 	// its data — the pinned rings, then the arrow heads, then a stable 1-in-k
 	// sample of the edges — and PaintStats says what went. 0 takes a share of
 	// the host's budget, which shrinks while the host reports frames past it.

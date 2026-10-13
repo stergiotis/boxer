@@ -96,7 +96,7 @@ type View struct {
 	ringIdx      map[int32]int32
 	edgeLater    []int32 // selected, hovered and labelled edges, drawn over the batches
 	stats        PaintStats
-	budgetScale  float32 // backs off while the host reports frames past its budget (ADR-0329, proposed)
+	budgetScale  float32 // backs off while the host reports frames past its budget (ADR-0329)
 	selOrder     []uint64
 	selEdgeOrder []EdgeRef
 	arcs         []donutArc

@@ -149,7 +149,7 @@ const tipHalfAngle = 0.4
 // as one ring mesh per radius, then donuts, highlights and labels, with the
 // selected, hovered and labelled edges drawn over the batches. Whatever lies
 // wholly outside the canvas is not sent, and the batches are held to the
-// vertex budget (ADR-0329, proposed; paint_batch.go).
+// vertex budget (ADR-0329; paint_batch.go).
 func (v *View) paint(w, h float32) {
 	c.PaintClipPush(0, 0, w, h).Send()
 	defer c.PaintClipPop().Send()

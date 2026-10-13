@@ -642,7 +642,7 @@ declaration:
 
 ### 2026-10-13 — geometry sent as batches, and held to a budget
 
-ADR-0329 (proposed) changes how the widget paints, not what it draws.
+ADR-0329 changes how the widget paints, not what it draws.
 Straight edges go out as one segment mesh per stroke width, arrow heads as
 one triangle mesh, node discs as one mesh marker batch per colour and radius,
 and pinned rings as one ring batch per radius; recoloured and labelled edges

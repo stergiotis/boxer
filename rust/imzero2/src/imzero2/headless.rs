@@ -318,7 +318,7 @@ struct Gpu {
     unpadded_bytes_per_row: u32,
     padded_bytes_per_row: u32,
     max_texture_side: usize,
-    /// The device's largest buffer, which sizes the paint budget (ADR-0329, proposed).
+    /// The device's largest buffer, which sizes the paint budget (ADR-0329).
     max_buffer_size: u64,
     /// Physical size + scale handed to `egui_wgpu` each frame. Held here
     /// rather than beside the loop so that both rasterizers present the same
@@ -524,7 +524,7 @@ fn init_gpu(width_px: u32, height_px: u32, pixels_per_point: f32) -> Result<Gpu,
     tracing::info!(name=%info.name, backend=?info.backend, device_type=?info.device_type, "headless wgpu adapter");
     // The largest buffer the adapter allows, rather than wgpu's 256 MiB
     // default: egui-wgpu holds a frame's vertices in one buffer, and the paint
-    // budget (ADR-0329, proposed) is sized from whatever the device ends up with.
+    // budget (ADR-0329) is sized from whatever the device ends up with.
     let (device, queue) = pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor {
         label: Some("imzero2_headless"),
         required_limits: wgpu::Limits {

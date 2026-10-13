@@ -1,7 +1,9 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-10-13
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-10-13
 ---
 
 # ADR-0329: A vertex budget for the painter lane, and graph geometry sent as batches
@@ -155,8 +157,7 @@ map's or the graph's geometry at an arbitrary point.
 
 ## Status
 
-Proposed. Flip to accepted on review; the citations in code name it as
-proposed until then.
+Accepted 2026-10-13.
 
 ## References
 

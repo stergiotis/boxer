@@ -85,7 +85,7 @@ type FrameMetrics struct {
 	LastPassNr      uint64
 
 	// The previous Rust frame's painter-lane geometry against the host's
-	// vertex budget (ADR-0329, proposed): the estimated vertices, the budget, and the
+	// vertex budget (ADR-0329): the estimated vertices, the budget, and the
 	// paint commands cut short or skipped to stay under it.
 	LastPaintVertices uint64
 	PaintBudget       uint64
@@ -354,7 +354,7 @@ type Snapshot struct {
 	WrittenBytes int64
 	ReadBytes    int64
 	RustPassNr   uint64
-	// Paint geometry against the vertex budget, unsmoothed (ADR-0329, proposed).
+	// Paint geometry against the vertex budget, unsmoothed (ADR-0329).
 	PaintVertices uint64
 	PaintBudget   uint64
 	PaintSkipped  uint32
