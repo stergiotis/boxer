@@ -146,6 +146,26 @@ self.io.write_plain_u64(self.last_pass_nr)?;
 		AddReturnValue("passNr", ctabb.U64).
 		Build())
 
+	// fetchPaintBudget — the previous frame's paint-command geometry against
+	// the host's vertex budget (ADR-0329, proposed): the vertices the painter-lane
+	// commands were estimated to tessellate into, the budget they were held
+	// to, and how many commands were skipped because the next one would have
+	// crossed it. A frame past the budget would ask the GPU for a vertex
+	// buffer larger than the device allows, which wgpu treats as fatal, so a
+	// non-zero skip count means geometry is missing from the picture rather
+	// than the host having crashed. One-frame lag, like fetchFrameMetrics.
+	fetchers = append(fetchers, idl.NewFetcherNode("fetchPaintBudget").
+		WithApplyCodeClientRust(rustClientCode(`
+self.io.write_plain_u64(self.last_paint_vertices)?;
+self.io.write_plain_u64(self.paint_vertex_budget)?;
+self.io.write_plain_u32(self.last_paint_skipped)?;
+{{SendMessage}}
+`)).
+		AddReturnValue("vertices", ctabb.U64).
+		AddReturnValue("budget", ctabb.U64).
+		AddReturnValue("skipped", ctabb.U32).
+		Build())
+
 	// r14 (canvas pointer) is retired. It was one slot for the whole frame,
 	// written by every paintCanvas in turn, so a reader got whichever canvas
 	// rendered last — unusable with more than one canvas, and wrong across two

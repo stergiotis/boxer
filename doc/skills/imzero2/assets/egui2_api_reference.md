@@ -58,6 +58,7 @@ status: draft
 | FetchF2KeyPressed | Fetcher | No | 0 | 0 | - | - |
 | FetchF8KeyPressed | Fetcher | No | 0 | 0 | - | - |
 | FetchFrameMetrics | Fetcher | No | 0 | 0 | - | - |
+| FetchPaintBudget | Fetcher | No | 0 | 0 | - | - |
 | FetchPixelsPerPoint | Fetcher | No | 0 | 0 | - | - |
 | FetchR10 | Fetcher | No | 0 | 0 | - | - |
 | FetchR16ScrollDelta | Fetcher | No | 0 | 0 | - | - |
@@ -121,7 +122,7 @@ status: draft
 | PaintEllipseStroke | BuilderFactory | No | 6 | 0 | 0 | Immediate |
 | PaintImage | BuilderFactory | No | 9 | 0 | 2 | Immediate |
 | PaintLine | BuilderFactory | No | 6 | 0 | 0 | Immediate |
-| PaintMarkers | BuilderFactory | No | 6 | 0 | 0 | Immediate |
+| PaintMarkers | BuilderFactory | No | 6 | 0 | 2 | Immediate |
 | PaintPolygonFilled | BuilderFactory | No | 3 | 0 | 2 | Immediate |
 | PaintPolyline | BuilderFactory | No | 4 | 0 | 0 | Immediate |
 | PaintRectFilled | BuilderFactory | No | 6 | 0 | 0 | Immediate |
@@ -130,6 +131,7 @@ status: draft
 | PaintSegments | BuilderFactory | No | 6 | 0 | 1 | Immediate |
 | PaintSenseRegion | BuilderFactory | Yes | 4 | 0 | 0 | Immediate |
 | PaintText | BuilderFactory | No | 7 | 0 | 1 | Immediate |
+| PaintTriangles | BuilderFactory | No | 3 | 0 | 0 | Immediate |
 | PanelBottom | BuilderFactory | Yes | 0 | 0 | 3 | Immediate, BlockIterator |
 | PanelBottomInside | BuilderFactory | Yes | 0 | 0 | 3 | Immediate, BlockIterator |
 | PanelCentral | BuilderFactory | No | 0 | 0 | 0 | Immediate, BlockIterator |
@@ -1507,6 +1509,11 @@ PaintCmd
 | col | plain | u32 |
 | weight | plain | f32 |
 
+#### Builder Methods
+
+- **Mesh**()
+- **Outline**(oc: u32, ow: f32)
+
 #### Return Type
 
 PaintCmd
@@ -1697,6 +1704,26 @@ PaintCmd
 #### Builder Methods
 
 - **Monospace**()
+
+#### Return Type
+
+PaintCmd
+
+---
+
+### PaintTriangles
+
+- **Type:** BuilderFactory
+- **Identity:** No
+- **Features:** Immediate
+
+#### Constructor Arguments
+
+| Name | Kind | Type |
+|------|------|------|
+| xs | plain | f32h |
+| ys | plain | f32h |
+| cols | plain | u32h |
 
 #### Return Type
 
@@ -3179,6 +3206,20 @@ Block
 |------|------|
 | interpretUs | u64 |
 | passNr | u64 |
+
+---
+
+### FetchPaintBudget
+
+- **Type:** Fetcher
+
+#### Return Values
+
+| Name | Type |
+|------|------|
+| vertices | u64 |
+| budget | u64 |
+| skipped | u32 |
 
 ---
 

@@ -36,6 +36,9 @@ impl<R: std::io::BufRead, W: std::io::Write> App<'_, R, W> {
     /// the headless host (ADR-0024 SD1).
     pub fn new(cc: &eframe::CreationContext<'_>, config: &AppConfig, r: R, w: W) -> Self {
         let (mut fffi, reactive) = apphost::init_common(&cc.egui_ctx, config, r, w);
+        if let Some(rs) = cc.wgpu_render_state.as_ref() {
+            fffi.set_paint_max_buffer_size(rs.device.limits().max_buffer_size);
+        }
         // ADR-0281 §SD5: captures rasterize on the CPU, apart from the GPU frame.
         #[cfg(feature = "capture_raster")]
         fffi.set_capture_raster(Box::new(

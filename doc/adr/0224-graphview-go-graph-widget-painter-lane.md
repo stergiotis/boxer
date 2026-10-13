@@ -640,6 +640,18 @@ declaration:
   An edge whose discs overlap past the trimmed ends paints nothing, label
   included.
 
+### 2026-10-13 — geometry sent as batches, and held to a budget
+
+ADR-0329 (proposed) changes how the widget paints, not what it draws.
+Straight edges go out as one segment mesh per stroke width, arrow heads as
+one triangle mesh, node discs as one mesh marker batch per colour and radius,
+and pinned rings as one ring batch per radius; recoloured and labelled edges
+are drawn over the batches. Edges and nodes wholly outside the canvas are not
+sent. Past a vertex budget (`Options.VertexBudget`, or a share of the host's)
+the picture drops the pinned rings, then the arrow heads, then draws a stable
+1-in-k sample of the edges, and `PaintStats` says what went. Mesh edges and
+heads are not feathered, where the per-shape paint was.
+
 ## References
 
 - [ADR-0069](./0069-imzero2-layeredgraph-widget.md) — the first graph widget

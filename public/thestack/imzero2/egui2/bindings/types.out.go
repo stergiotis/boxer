@@ -388,6 +388,11 @@ type PaintTextFluid struct {
 }
 type PaintTextMethodIdE uint32
 
+type PaintTrianglesFluid struct {
+	r *typed.RetainedFffiBuilder
+}
+type PaintTrianglesMethodIdE uint32
+
 type PanelBottomFluid struct {
 	r     *typed.RetainedFffiBuilder
 	id    uint64

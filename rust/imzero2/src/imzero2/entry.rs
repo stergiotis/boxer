@@ -35,6 +35,19 @@ pub fn run_main_loop(config: appconfig::AppConfig) -> eframe::Result {
     } else {
         egui_wgpu::wgpu::PresentMode::AutoNoVsync
     };
+    // Ask the adapter for its largest buffer rather than wgpu's 256 MiB
+    // default, on top of egui-wgpu's own limits: egui-wgpu holds a frame's
+    // vertices in one buffer, and the paint budget (ADR-0329, proposed) is sized from
+    // the device this produces.
+    if let egui_wgpu::WgpuSetup::CreateNew(create_new) = &mut native_options.wgpu_options.wgpu_setup
+    {
+        let base = std::sync::Arc::clone(&create_new.device_descriptor);
+        create_new.device_descriptor = std::sync::Arc::new(move |adapter| {
+            let mut desc = base(adapter);
+            desc.required_limits.max_buffer_size = adapter.limits().max_buffer_size;
+            desc
+        });
+    }
     eframe::run_native(
         &config.app_title,
         native_options,

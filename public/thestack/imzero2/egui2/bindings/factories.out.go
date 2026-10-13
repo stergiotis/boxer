@@ -1196,6 +1196,20 @@ func PaintText(px float32, py float32, anchorH uint8, anchorV uint8, text string
 	return
 }
 
+func PaintTriangles(xs []float32, ys []float32, cols color.Colors) (inst PaintTrianglesFluid) {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteOpCode(uint32(FuncProcIdPaintTriangles))
+	runtime.PutFloat32SliceArg(r, xs)
+	runtime.PutFloat32SliceArg(r, ys)
+	color.PutColorsSlice(r, cols)
+
+	inst = PaintTrianglesFluid{
+		r: r,
+	}
+
+	return
+}
+
 func PanelBottom(i WidgetIdCreatorI) (inst PanelBottomFluid) {
 	r := typed.NewRetainedFffiBuilder()
 	r.WriteOpCode(uint32(FuncProcIdPanelBottom))

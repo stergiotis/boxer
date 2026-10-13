@@ -143,24 +143,119 @@ func (v *View) edgeGeometry(i int) (geo edgeGeo) {
 // tipHalfAngle is the arrow head's half opening angle.
 const tipHalfAngle = 0.4
 
-// paint emits the frame's paint commands, clipped to the canvas: edges,
-// then nodes batched by colour and radius, then donuts, highlights and
-// labels. Per-node text and strokes are skipped for nodes outside the
-// canvas; markers are one batch and cheap to let the host clip.
+// paint emits the frame's paint commands, clipped to the canvas: the edges
+// as batches (a segment mesh per stroke width, one triangle mesh of arrow
+// heads), the nodes as one disc mesh per colour and radius, the pinned rings
+// as one ring mesh per radius, then donuts, highlights and labels, with the
+// selected, hovered and labelled edges drawn over the batches. Whatever lies
+// wholly outside the canvas is not sent, and the batches are held to the
+// vertex budget (ADR-0329, proposed; paint_batch.go).
 func (v *View) paint(w, h float32) {
 	c.PaintClipPush(0, 0, w, h).Send()
 	defer c.PaintClipPop().Send()
 	style := &v.style
 	o := &v.Opts
+	v.stats = PaintStats{}
+	v.beginBatches()
+	v.edgeLater = v.edgeLater[:0]
 
 	// Auras, beneath everything (ADR-0224 §SD11).
 	v.paintAuras()
 
-	// Edges.
-	for i := range v.g.eFrom {
-		if o.HideEdges {
-			break
+	// Gather the edges. A straight edge in its declared paint joins the
+	// segment batch of its width; a curve or a loop is drawn on its own, as
+	// is an edge the selection or the hover recolours, which goes over the
+	// batches with the labels.
+	if !o.HideEdges {
+		for i := range v.g.eFrom {
+			if !v.edgeMayShow(i, w, h) {
+				v.stats.EdgesCulled++
+				continue
+			}
+			_, sel := v.selEdges[v.g.edgeRef(int32(i))]
+			if sel || int32(i) == v.hoveredEdge || v.g.eLabel[i] != "" {
+				v.edgeLater = append(v.edgeLater, int32(i))
+				continue
+			}
+			geo := v.edgeGeometry(i)
+			if geo.hidden {
+				continue
+			}
+			col := v.g.eCol[i]
+			if isUnset(col) {
+				col = style.EdgeColor
+			}
+			col = fade(col, v.g.eOpacity[i])
+			if geo.kind == edgeKindStraight {
+				v.addSegment(i, &geo, col)
+			} else {
+				v.paintEdgeShape(&geo, col, geo.width)
+				v.stats.Edges++
+			}
+			if geo.hasTip {
+				v.addTip(i, &geo, col)
+			}
 		}
+	}
+
+	// Gather the nodes: the discs by (colour, radius), less those wholly off
+	// the canvas, and the pinned rings by radius.
+	v.buildBatches()
+	strokeW := v.nodeStrokePx()
+	fixed := 0
+	for i := range v.batches {
+		b := &v.batches[i]
+		rpx := radiusPx(b.radius, v.cam.Zoom)
+		reach := rpx + strokeW
+		v.batchXs = v.batchXs[:0]
+		v.batchYs = v.batchYs[:0]
+		for _, s := range b.slots {
+			sx, sy := v.cam.ToScreen(v.g.x[s], v.g.y[s])
+			if !onCanvas(sx, sy, reach, w, h) {
+				v.stats.NodesCulled++
+				continue
+			}
+			v.batchXs = append(v.batchXs, sx)
+			v.batchYs = append(v.batchYs, sy)
+		}
+		b.xs = append(b.xs[:0], v.batchXs...)
+		b.ys = append(b.ys[:0], v.batchYs...)
+		fixed += len(b.xs) * discVertices(rpx, strokeW, true)
+	}
+	for i := range v.g.ids {
+		if !v.g.isPinned(i) {
+			continue
+		}
+		sx, sy := v.cam.ToScreen(v.g.x[i], v.g.y[i])
+		r := v.nodeOuterPx(i) + 1
+		if onCanvas(sx, sy, r+1, w, h) {
+			v.addRing(sx, sy, r)
+		}
+	}
+	v.judge(fixed, styletokens.StrokeHair)
+
+	// Send: edges, then nodes over them, then the rings.
+	v.flushEdges()
+	for i := range v.batches {
+		b := &v.batches[i]
+		if len(b.xs) == 0 {
+			continue
+		}
+		v.stats.Nodes += len(b.xs)
+		m := c.PaintMarkers(b.xs, b.ys, 0, radiusPx(b.radius, v.cam.Zoom), b.col, 0).Mesh()
+		if strokeW > 0 {
+			// The outline fades with the node: the batch key is the faded
+			// fill, so one batch holds one opacity.
+			m = m.Outline(fade(style.NodeStroke, v.g.opacity[b.slots[0]]), strokeW)
+		}
+		m.Send()
+	}
+	v.flushRings(style.PinnedStroke, styletokens.StrokeHair)
+
+	// The edges drawn over the batches: recoloured by the selection or the
+	// hover, or carrying a label.
+	for _, ei := range v.edgeLater {
+		i := int(ei)
 		geo := v.edgeGeometry(i)
 		if geo.hidden {
 			continue
@@ -169,60 +264,26 @@ func (v *View) paint(w, h float32) {
 		if isUnset(col) {
 			col = style.EdgeColor
 		}
-		// The edge's declared paint fades; the selection and hover colours
-		// are the widget's own and stay legible (ADR-0224 §SD14).
 		op := v.g.eOpacity[i]
 		width := geo.width
-		if _, sel := v.selEdges[v.g.edgeRef(int32(i))]; sel {
+		if _, sel := v.selEdges[v.g.edgeRef(ei)]; sel {
 			col, op = style.Selected, 1
 			width += 1
 		}
-		if int32(i) == v.hoveredEdge {
+		if ei == v.hoveredEdge {
 			col, op = style.Highlight, 1
 			width += 1
 		}
 		col = fade(col, op)
-		switch geo.kind {
-		case edgeKindStraight:
-			c.PaintLine(geo.x[0], geo.y[0], geo.x[3], geo.y[3], col, width).Send()
-		default:
-			c.PaintCubicBezier(geo.x[0], geo.y[0], geo.x[1], geo.y[1], geo.x[2], geo.y[2], geo.x[3], geo.y[3], col, width).Send()
-		}
-		if geo.hasTip {
-			size := geo.tipLen
-			ax, ay := rotate(geo.tipDx, geo.tipDy, tipHalfAngle)
-			bx, by := rotate(geo.tipDx, geo.tipDy, -tipHalfAngle)
-			v.tipXs = [3]float32{geo.tipX, geo.tipX - ax*size, geo.tipX - bx*size}
-			v.tipYs = [3]float32{geo.tipY, geo.tipY - ay*size, geo.tipY - by*size}
-			c.PaintPolygonFilled(v.tipXs[:], v.tipYs[:], col).Send()
+		v.paintEdgeShape(&geo, col, width)
+		v.stats.Edges++
+		if geo.hasTip && !v.stats.NoTips {
+			v.paintTip(&geo, col)
 		}
 		if lbl := v.g.eLabel[i]; lbl != "" {
 			lx, ly := edgeLabelPos(geo, lbl, style.EdgeLabelFontSize)
 			if onCanvas(lx, ly, style.EdgeLabelFontSize*4, w, h) {
 				v.paintLabel(lx, ly, 1, 1, lbl, style.EdgeLabelFontSize, fade(style.EdgeLabelColor, v.g.eOpacity[i]))
-			}
-		}
-	}
-
-	// Nodes: one marker batch per (colour, radius), in first-seen order.
-	v.buildBatches()
-	for i := range v.batches {
-		b := &v.batches[i]
-		v.batchXs = v.batchXs[:0]
-		v.batchYs = v.batchYs[:0]
-		for _, s := range b.slots {
-			sx, sy := v.cam.ToScreen(v.g.x[s], v.g.y[s])
-			v.batchXs = append(v.batchXs, sx)
-			v.batchYs = append(v.batchYs, sy)
-		}
-		c.PaintMarkers(v.batchXs, v.batchYs, 0, radiusPx(b.radius, v.cam.Zoom), b.col, 0).Send()
-	}
-	if style.NodeStrokeW > 0 {
-		for i := range v.g.ids {
-			sx, sy := v.cam.ToScreen(v.g.x[i], v.g.y[i])
-			r := v.nodeRadiusPx(i)
-			if onCanvas(sx, sy, r, w, h) {
-				c.PaintCircleStroke(sx, sy, r, fade(style.NodeStroke, v.g.opacity[i]), v.nodeStrokePx()).Send()
 			}
 		}
 	}
@@ -258,25 +319,22 @@ func (v *View) paint(w, h float32) {
 		}
 	}
 
-	// Highlights and labels, for the nodes that have any.
+	// Highlights and labels, for the nodes that have any. The pinned ring is
+	// in the ring batch above.
 	dragging := v.dragSlot()
 	for i := range v.g.ids {
 		id := v.g.ids[i]
 		_, sel := v.selNodes[id]
 		hov := (v.hoveredOk && id == v.hoveredId) || int32(i) == dragging
-		pinned := v.g.isPinned(i)
 		lbl := v.g.label[i]
 		always := o.LabelsAlways || v.g.labelAlways[i]
-		if !(sel || hov || pinned || (always && lbl != "")) {
+		if !(sel || hov || (always && lbl != "")) {
 			continue
 		}
 		sx, sy := v.cam.ToScreen(v.g.x[i], v.g.y[i])
 		r := v.nodeOuterPx(i)
 		if !onCanvas(sx, sy, r+style.LabelFontSize*4, w, h) {
 			continue
-		}
-		if pinned {
-			c.PaintCircleStroke(sx, sy, r+1, style.PinnedStroke, styletokens.StrokeHair).Send()
 		}
 		if sel {
 			c.PaintCircleStroke(sx, sy, r+2, style.Selected, styletokens.StrokeStrong).Send()
@@ -296,6 +354,26 @@ func (v *View) paint(w, h float32) {
 		c.PaintRectFilled(minX, minY, maxX, maxY, 0, style.SelectionBox).Send()
 		c.PaintRectStroke(minX, minY, maxX, maxY, 0, style.Selected, styletokens.StrokeHair).Send()
 	}
+}
+
+// paintEdgeShape draws one edge's stroke on its own: a line or a cubic.
+func (v *View) paintEdgeShape(geo *edgeGeo, col color.Color, width float32) {
+	switch geo.kind {
+	case edgeKindStraight:
+		c.PaintLine(geo.x[0], geo.y[0], geo.x[3], geo.y[3], col, width).Send()
+	default:
+		c.PaintCubicBezier(geo.x[0], geo.y[0], geo.x[1], geo.y[1], geo.x[2], geo.y[2], geo.x[3], geo.y[3], col, width).Send()
+	}
+}
+
+// paintTip draws one arrow head on its own.
+func (v *View) paintTip(geo *edgeGeo, col color.Color) {
+	size := geo.tipLen
+	ax, ay := rotate(geo.tipDx, geo.tipDy, tipHalfAngle)
+	bx, by := rotate(geo.tipDx, geo.tipDy, -tipHalfAngle)
+	xs := [3]float32{geo.tipX, geo.tipX - ax*size, geo.tipX - bx*size}
+	ys := [3]float32{geo.tipY, geo.tipY - ay*size, geo.tipY - by*size}
+	c.PaintPolygonFilled(xs[:], ys[:], col).Send()
 }
 
 // buildBatches groups the nodes by (fill, radius) into v.batches, in the

@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"strconv"
 
+	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/color"
@@ -98,6 +99,12 @@ func Render(in Input) (res Result) {
 			formatBytesFixed(s.WrittenBytes), formatBytesFixed(s.ReadBytes),
 		)
 		monoLabel(body, color.Color{}, false)
+		if s.PaintSkipped > 0 {
+			// Geometry is missing from the frame: the host held the painter
+			// lane under its vertex budget rather than overflow the GPU's
+			// vertex buffer (ADR-0329, proposed).
+			monoLabel(fmt.Sprintf("paint over budget: %d cut  ", s.PaintSkipped), color.Hex(styletokens.WarningDefault.AsHex()), true)
+		}
 		dr := distsummary.Render(distsummary.Input{
 			Ids: in.Ids, ScopeKey: "fps", Digest: metrics.Current.FpsDigest(), State: in.Fps,
 			Title: "frame rate", Format: formatFps, Unit: "fps", Inline: true,

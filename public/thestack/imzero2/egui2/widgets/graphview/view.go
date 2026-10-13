@@ -86,8 +86,17 @@ type View struct {
 	batches      []nodeBatch
 	batchXs      []float32
 	batchYs      []float32
-	tipXs        [3]float32
-	tipYs        [3]float32
+	tipXs        []float32 // the frame's arrow heads, three corners each
+	tipYs        []float32
+	tipCols      color.Colors
+	tipEdge      []int32
+	segs         []segBatch // the frame's straight edges, one batch per width
+	segIdx       map[int32]int32
+	rings        []ringBatch // the frame's pinned rings, one batch per radius
+	ringIdx      map[int32]int32
+	edgeLater    []int32 // selected, hovered and labelled edges, drawn over the batches
+	stats        PaintStats
+	budgetScale  float32 // backs off while the host reports frames past its budget (ADR-0329, proposed)
 	selOrder     []uint64
 	selEdgeOrder []EdgeRef
 	arcs         []donutArc
@@ -102,6 +111,7 @@ type nodeBatch struct {
 	col    color.Color
 	radius float32
 	slots  []int32
+	xs, ys []float32 // the slots on the canvas this frame, in screen pixels
 }
 
 type dragState struct {
@@ -133,6 +143,9 @@ func New(ids *c.WidgetIdStack, key string, opts Options) *View {
 		selEdges:    make(map[EdgeRef]struct{}, 8),
 		hiddenAuras: make(map[string]struct{}, 4),
 		batchIdx:    make(map[uint64]int32, 8),
+		segIdx:      make(map[int32]int32, 4),
+		ringIdx:     make(map[int32]int32, 2),
+		budgetScale: 1,
 		fs:          forceState{lastDisp: nan32},
 	}
 }

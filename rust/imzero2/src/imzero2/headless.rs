@@ -318,6 +318,8 @@ struct Gpu {
     unpadded_bytes_per_row: u32,
     padded_bytes_per_row: u32,
     max_texture_side: usize,
+    /// The device's largest buffer, which sizes the paint budget (ADR-0329, proposed).
+    max_buffer_size: u64,
     /// Physical size + scale handed to `egui_wgpu` each frame. Held here
     /// rather than beside the loop so that both rasterizers present the same
     /// surface behind [`Raster`] — the CPU one has no equivalent type.
@@ -520,8 +522,15 @@ fn init_gpu(width_px: u32, height_px: u32, pixels_per_point: f32) -> Result<Gpu,
     }))?;
     let info = adapter.get_info();
     tracing::info!(name=%info.name, backend=?info.backend, device_type=?info.device_type, "headless wgpu adapter");
+    // The largest buffer the adapter allows, rather than wgpu's 256 MiB
+    // default: egui-wgpu holds a frame's vertices in one buffer, and the paint
+    // budget (ADR-0329, proposed) is sized from whatever the device ends up with.
     let (device, queue) = pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor {
         label: Some("imzero2_headless"),
+        required_limits: wgpu::Limits {
+            max_buffer_size: adapter.limits().max_buffer_size,
+            ..Default::default()
+        },
         ..Default::default()
     }))?;
     let extent = wgpu::Extent3d {
@@ -563,6 +572,7 @@ fn init_gpu(width_px: u32, height_px: u32, pixels_per_point: f32) -> Result<Gpu,
         mapped_at_creation: false,
     });
     let max_texture_side = device.limits().max_texture_dimension_2d as usize;
+    let max_buffer_size = device.limits().max_buffer_size;
     Ok(Gpu {
         device,
         queue,
@@ -574,6 +584,7 @@ fn init_gpu(width_px: u32, height_px: u32, pixels_per_point: f32) -> Result<Gpu,
         unpadded_bytes_per_row,
         padded_bytes_per_row,
         max_texture_side,
+        max_buffer_size,
         screen: egui_wgpu::ScreenDescriptor {
             size_in_pixels: [width_px, height_px],
             pixels_per_point,
@@ -940,6 +951,8 @@ pub fn run_main_loop(config: AppConfig) -> Result<(), HeadlessError> {
     fffi.set_capture_raster(Box::new(
         crate::imzero2::captureraster::SoftCaptureRaster::default(),
     ));
+    #[cfg(feature = "headless_wgpu")]
+    fffi.set_paint_max_buffer_size(raster.max_buffer_size);
     let mut cadence = if reactive {
         Cadence::Reactive
     } else {

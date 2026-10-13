@@ -96,6 +96,22 @@ func (inst *Fetcher) CollectFetchFrameMetrics() (interpretUs uint64, passNr uint
 	passNr = inst.readU64()
 	return
 }
+func (inst *Fetcher) FetchPaintBudget() (vertices uint64, budget uint64, skipped uint32) {
+	inst.invoke(FuncProcIdFetchPaintBudget)
+	vertices = inst.readU64()
+	budget = inst.readU64()
+	skipped = inst.readU32()
+	return
+}
+func (inst *Fetcher) IssueFetchPaintBudget() {
+	inst.invoke(FuncProcIdFetchPaintBudget)
+}
+func (inst *Fetcher) CollectFetchPaintBudget() (vertices uint64, budget uint64, skipped uint32) {
+	vertices = inst.readU64()
+	budget = inst.readU64()
+	skipped = inst.readU32()
+	return
+}
 func (inst *Fetcher) FetchPixelsPerPoint() (pixelsPerPoint float32) {
 	inst.invoke(FuncProcIdFetchPixelsPerPoint)
 	pixelsPerPoint = inst.readF32()

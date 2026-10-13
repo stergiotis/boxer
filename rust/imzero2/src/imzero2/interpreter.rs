@@ -5,6 +5,8 @@ use crate::fffi::io::ImZeroFffiIo;
 
 pub mod capture_replay;
 pub mod optree;
+pub mod paint_budget;
+use paint_budget::{DEFAULT_MAX_BUFFER_SIZE, paint_vertex_budget_for};
 
 // Errors produced by the interpreter dispatch. Boundary between FFFI I/O
 // (typed-error already) and the previously-panicking interpreter loop:
@@ -40,16 +42,17 @@ use crate::imzero2::enums_out::{
     GridBuilderMethodId, HyperlinkBuilderMethodId, HyperlinkToBuilderMethodId,
     LabelAtomsBuilderMethodId, LabelBuilderMethodId, NewTableBuilderMethodId,
     NewTableColumnBuilderMethodId, PaintCanvasBuilderMethodId, PaintImageBuilderMethodId,
-    PaintPolygonFilledBuilderMethodId, PaintSegmentsBuilderMethodId, PaintTextBuilderMethodId,
-    PanelBottomBuilderMethodId, PanelBottomInsideBuilderMethodId, PanelLeftBuilderMethodId,
-    PanelLeftInsideBuilderMethodId, PanelRightBuilderMethodId, PanelRightInsideBuilderMethodId,
-    PanelTopBuilderMethodId, PanelTopInsideBuilderMethodId, ProgressBarBuilderMethodId,
-    ScalarSizeBuilderMethodId, ScrollAreaBuilderMethodId, ScrollingTextureBuilderMethodId,
-    SeparatorBuilderMethodId, SliderF64BuilderMethodId, SliderI64BuilderMethodId,
-    SliderU64BuilderMethodId, SpinnerBuilderMethodId, StyledSectionsBuilderMethodId,
-    TableBuilderMethodId, TableColumnBuilderMethodId, TextEditBuilderMethodId,
-    TimeRangePickerBuilderMethodId, TintedScopeBuilderMethodId, UiWithLayoutBuilderMethodId,
-    VectorSizeBuilderMethodId, WidgetTextBuilderMethodId, WindowBuilderMethodId,
+    PaintMarkersBuilderMethodId, PaintPolygonFilledBuilderMethodId, PaintSegmentsBuilderMethodId,
+    PaintTextBuilderMethodId, PanelBottomBuilderMethodId, PanelBottomInsideBuilderMethodId,
+    PanelLeftBuilderMethodId, PanelLeftInsideBuilderMethodId, PanelRightBuilderMethodId,
+    PanelRightInsideBuilderMethodId, PanelTopBuilderMethodId, PanelTopInsideBuilderMethodId,
+    ProgressBarBuilderMethodId, ScalarSizeBuilderMethodId, ScrollAreaBuilderMethodId,
+    ScrollingTextureBuilderMethodId, SeparatorBuilderMethodId, SliderF64BuilderMethodId,
+    SliderI64BuilderMethodId, SliderU64BuilderMethodId, SpinnerBuilderMethodId,
+    StyledSectionsBuilderMethodId, TableBuilderMethodId, TableColumnBuilderMethodId,
+    TextEditBuilderMethodId, TimeRangePickerBuilderMethodId, TintedScopeBuilderMethodId,
+    UiWithLayoutBuilderMethodId, VectorSizeBuilderMethodId, WidgetTextBuilderMethodId,
+    WindowBuilderMethodId,
 };
 use crate::imzero2::fenums::ResponseFlags;
 use crate::imzero2::image::ImageCache;
@@ -256,6 +259,15 @@ pub enum PaintCmd {
         radius: f32,
         color: egui::Color32,
         weight: f32,
+        // A circle batch drawn as one mesh (ADR-0329, proposed); other shapes ignore it.
+        mesh: bool,
+        // The ring around each circle; zero width draws none.
+        outline: egui::Stroke,
+    },
+    Triangles {
+        xs: Vec<f32>,
+        ys: Vec<f32>,
+        cols: Vec<u32>,
     },
     RectsFilled {
         min_xs: Vec<f32>,
@@ -894,6 +906,20 @@ pub struct ImZeroFffi<'a, R: std::io::BufRead, W: std::io::Write> {
     pub(crate) capture_fonts: Option<std::sync::Arc<crate::imzero2::svgexport::FontResolver>>,
     pub last_pass_nr: u64,
 
+    // Paint geometry budget (ADR-0329, proposed). Every painter-lane command adds an
+    // estimate of the vertices it tessellates into; a command that would take
+    // the frame past `paint_vertex_budget` is skipped and counted instead.
+    // The budget is half the device's largest buffer in vertices, because
+    // egui-wgpu grows its vertex buffer by doubling — a frame needing just
+    // over half the limit can already ask for a buffer past it, which wgpu
+    // treats as fatal. The running pair resets at the top of each pass; the
+    // `last_` pair is the previous pass's, drained by `fetchPaintBudget`.
+    pub paint_vertex_budget: u64,
+    paint_vertices: u64,
+    paint_skipped: u32,
+    pub last_paint_vertices: u64,
+    pub last_paint_skipped: u32,
+
     // Nanoseconds this pass spent BLOCKED waiting for Go to emit the next
     // opcode, accumulated by `begin_consume_message` and subtracted from the
     // wall-clock span in `interpret_commands_outer`.
@@ -1092,6 +1118,11 @@ impl<R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'_, R, W> {
             op_tree: None,
             capture_fonts: None,
             last_pass_nr: 0,
+            paint_vertex_budget: paint_vertex_budget_for(DEFAULT_MAX_BUFFER_SIZE),
+            paint_vertices: 0,
+            paint_skipped: 0,
+            last_paint_vertices: 0,
+            last_paint_skipped: 0,
             read_blocked_ns: 0,
             export_state: std::sync::Arc::new(std::sync::Mutex::new(ExportState::default())),
             texture_cache: std::sync::Arc::new(std::sync::Mutex::new(TexturePixelCache::default())),
@@ -1209,6 +1240,8 @@ impl<R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'_, R, W> {
     pub fn interpret_commands_outer(&mut self, ctx: &egui::Context) -> InterpretResult<()> {
         let t0 = crate::imzero2::clock::Instant::now();
         self.read_blocked_ns = 0;
+        self.paint_vertices = 0;
+        self.paint_skipped = 0;
         Self::handle_screenshot_event(ctx);
         // Advance per-frame state for widgets that need it. Must run exactly
         // once per real frame; `interpret_outer` alone does not qualify
@@ -1260,6 +1293,16 @@ impl<R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'_, R, W> {
             micros as u32
         };
         self.last_pass_nr = ctx.cumulative_pass_nr();
+        if self.paint_skipped > 0 && self.last_paint_skipped == 0 {
+            tracing::warn!(
+                vertices = self.paint_vertices,
+                budget = self.paint_vertex_budget,
+                skipped = self.paint_skipped,
+                "paint geometry past the vertex budget: commands skipped this frame"
+            );
+        }
+        self.last_paint_vertices = self.paint_vertices;
+        self.last_paint_skipped = self.paint_skipped;
         result
     }
     /// Check for Screenshot events and write images to disk as PNG.
@@ -4512,6 +4555,22 @@ self.apply_widget(w,u,f,Some(i));
                     self.io.flush()?;
                 }
             }
+            FuncProcId::FetchPaintBudget => {
+                #[cfg(feature = "puffin")]
+                puffin::profile_scope!("match FuncProcId::FetchPaintBudget");
+                if d == 0 {
+                    self.end_consume_message()?;
+                }
+                // apply
+                if !self.capture_replay {
+                    // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+
+                    self.io.write_plain_u64(self.last_paint_vertices)?;
+                    self.io.write_plain_u64(self.paint_vertex_budget)?;
+                    self.io.write_plain_u32(self.last_paint_skipped)?;
+                    self.io.flush()?;
+                }
+            }
             FuncProcId::FetchPixelsPerPoint => {
                 #[cfg(feature = "puffin")]
                 puffin::profile_scope!("match FuncProcId::FetchPixelsPerPoint");
@@ -6754,6 +6813,33 @@ egui::Modal::new(i);
                 let mut col = self.io.read_plain_u32()?;
                 let mut weight = self.io.read_plain_f32()?;
                 // construct
+
+                let mut w = 0u8;
+                let mut mesh = false;
+                let mut outline_col: u32 = 0;
+                let mut outline_width: f32 = 0.0;
+                // methods
+                loop {
+                    let (m, _) = self.read_from_repr(PaintMarkersBuilderMethodId::from_repr)?;
+                    match m {
+                        PaintMarkersBuilderMethodId::Build => {
+                            break;
+                        }
+                        PaintMarkersBuilderMethodId::Mesh => {
+                            #[cfg(feature = "puffin")]
+                            puffin::profile_scope!("match PaintMarkersBuilderMethodId::Mesh");
+                            mesh = true;
+                        }
+                        PaintMarkersBuilderMethodId::Outline => {
+                            #[cfg(feature = "puffin")]
+                            puffin::profile_scope!("match PaintMarkersBuilderMethodId::Outline");
+                            let mut oc = self.io.read_plain_u32()?;
+                            let mut ow = self.io.read_plain_f32()?;
+                            outline_col = oc;
+                            outline_width = ow;
+                        }
+                    }
+                }
                 if d == 0 {
                     self.end_consume_message()?;
                 }
@@ -6765,6 +6851,8 @@ egui::Modal::new(i);
                     radius,
                     color: color32_from_rgba_u32(col),
                     weight,
+                    mesh,
+                    outline: egui::Stroke::new(outline_width, color32_from_rgba_u32(outline_col)),
                 });
             }
             FuncProcId::PaintPolygonFilled => {
@@ -7031,6 +7119,20 @@ egui::Modal::new(i);
                     color: color32_from_rgba_u32(col),
                     monospace,
                 });
+            }
+            FuncProcId::PaintTriangles => {
+                #[cfg(feature = "puffin")]
+                puffin::profile_scope!("match FuncProcId::PaintTriangles");
+                // arguments
+                let mut xs = self.io.read_plain_f32h()?;
+                let mut ys = self.io.read_plain_f32h()?;
+                let mut cols = self.io.read_plain_u32h()?;
+                // construct
+                if d == 0 {
+                    self.end_consume_message()?;
+                }
+                // apply
+                self.paint_cmds.push(PaintCmd::Triangles { xs, ys, cols });
             }
             FuncProcId::PanelBottom => {
                 #[cfg(feature = "puffin")]
@@ -10508,6 +10610,38 @@ egui::Window::new(label).id(i);
 }
 
 impl<R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'_, R, W> {
+    /// Sizes the paint vertex budget (ADR-0329, proposed) to a device whose largest
+    /// buffer is `max_buffer_size` bytes. A host with a wgpu device calls it
+    /// once the device exists; without the call the budget assumes wgpu's
+    /// default limit, which every device meets.
+    pub fn set_paint_max_buffer_size(&mut self, max_buffer_size: u64) {
+        self.paint_vertex_budget = paint_vertex_budget_for(max_buffer_size);
+    }
+
+    /// Admits `cmd` against the frame's vertex budget: how many of its items
+    /// to draw — all of them, a batch's leading part, or none. Every refusal
+    /// or cut counts once in `paint_skipped`. A capture replay is not held to
+    /// it: it rasterises on the CPU, apart from the GPU frame (ADR-0281).
+    fn admit_paint_cmd(&mut self, cmd: &PaintCmd) -> usize {
+        let (items, per) = cmd.budget_items();
+        if per == 0 || self.capture_replay {
+            return items;
+        }
+        let left = self.paint_vertex_budget.saturating_sub(self.paint_vertices);
+        let fits = if cmd.is_batch() {
+            (left / per).min(items as u64) as usize
+        } else if per <= left {
+            items
+        } else {
+            0
+        };
+        if fits < items {
+            self.paint_skipped = self.paint_skipped.saturating_add(1);
+        }
+        self.paint_vertices += fits as u64 * per;
+        fits
+    }
+
     /// Drains the per-frame `paint_cmds` buffer into the given painter,
     /// offsetting every coordinate by `origin`. Single source of truth
     /// for the cmd-match loop — used by `PaintCanvas` (with origin =
@@ -10533,6 +10667,17 @@ impl<R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'_, R, W> {
         let mut cur = painter.clone();
         let mut clip_stack: Vec<egui::Painter> = Vec::new();
         for cmd in &cmds {
+            // The budget's cut (ADR-0329, proposed): a batch draws its first `limit`
+            // items, anything else draws whole or not at all.
+            let limit = self.admit_paint_cmd(cmd);
+            if limit == 0
+                && !matches!(
+                    cmd,
+                    PaintCmd::ClipPush { .. } | PaintCmd::ClipPop | PaintCmd::SenseRegion { .. }
+                )
+            {
+                continue;
+            }
             match cmd {
                 PaintCmd::CircleFilled {
                     cx,
@@ -10873,6 +11018,8 @@ impl<R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'_, R, W> {
                     radius,
                     color,
                     weight,
+                    mesh,
+                    outline,
                 } => {
                     // Shape numbering is the IDL/ImPlot contract: 0=circle
                     // 1=square 2=diamond 3=up 4=down 5=left 6=right 7=cross
@@ -10880,9 +11027,32 @@ impl<R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'_, R, W> {
                     // Polygon vertices are inscribed in the radius-ra circle.
                     const SIN60: f32 = 0.866_025_4;
                     const INV_SQRT2: f32 = 0.707_106_77;
-                    let n = xs.len().min(ys.len());
+                    let n = xs.len().min(ys.len()).min(limit);
                     let ra = *radius;
                     let st = egui::Stroke::new(*weight, *color);
+                    let circle = !(1..=9).contains(shape);
+                    if circle && *mesh {
+                        // One mesh for the batch (ADR-0329, proposed): a fan per disc,
+                        // the outline as a ring, a feather on the outer edge.
+                        let mut m = egui::Mesh::default();
+                        m.vertices.reserve(
+                            n * paint_budget::disc_mesh_vertices(
+                                ra,
+                                outline.width,
+                                outline.width > 0.0 && outline.color.a() > 0,
+                                color.a() > 0,
+                            ),
+                        );
+                        for k in 0..n {
+                            let p = egui::Pos2::new(origin.x + xs[k], origin.y + ys[k]);
+                            paint_budget::push_disc(&mut m, p, ra, *color, *outline);
+                        }
+                        if !m.indices.is_empty() {
+                            cur.add(egui::Shape::mesh(m));
+                        }
+                        continue;
+                    }
+                    let ringed = circle && outline.width > 0.0 && outline.color.a() > 0;
                     for k in 0..n {
                         let p = egui::Pos2::new(origin.x + xs[k], origin.y + ys[k]);
                         match *shape {
@@ -11008,8 +11178,26 @@ impl<R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'_, R, W> {
                             }
                             _ => {
                                 cur.circle_filled(p, ra, *color);
+                                if ringed {
+                                    cur.circle_stroke(p, ra, *outline);
+                                }
                             }
                         }
+                    }
+                }
+                PaintCmd::Triangles { xs, ys, cols } => {
+                    let mut m = egui::Mesh::default();
+                    paint_budget::push_triangles(
+                        &mut m,
+                        origin,
+                        xs,
+                        ys,
+                        cols,
+                        limit,
+                        color32_from_rgba_u32,
+                    );
+                    if !m.indices.is_empty() {
+                        cur.add(egui::Shape::mesh(m));
                     }
                 }
                 PaintCmd::Image {
@@ -11073,7 +11261,8 @@ impl<R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'_, R, W> {
                         .min(min_ys.len())
                         .min(max_xs.len())
                         .min(max_ys.len())
-                        .min(cols.len());
+                        .min(cols.len())
+                        .min(limit);
                     for k in 0..n {
                         cur.rect_filled(
                             egui::Rect::from_min_max(
@@ -11094,7 +11283,13 @@ impl<R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'_, R, W> {
                     width,
                     tessellated,
                 } => {
-                    let n = x0s.len().min(y0s.len()).min(x1s.len()).min(y1s.len()).min(cols.len());
+                    let n = x0s
+                        .len()
+                        .min(y0s.len())
+                        .min(x1s.len())
+                        .min(y1s.len())
+                        .min(cols.len())
+                        .min(limit);
                     if *tessellated {
                         // The hinted path: a feathered epaint line per segment.
                         for k in 0..n {
@@ -11349,6 +11544,54 @@ fn new_table_render_body_builder<R: std::io::BufRead, W: std::io::Write>(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The paint budget (ADR-0329, proposed) cuts a batch to what fits, skips a single
+    /// shape that does not, never holds back clip bookkeeping, and counts
+    /// each cut once.
+    #[test]
+    fn paint_budget_cuts_batches_and_skips_shapes() {
+        let mut interp = ImZeroFffi::new(std::io::Cursor::new(Vec::<u8>::new()), Vec::<u8>::new());
+        interp.paint_vertex_budget = 100;
+        let segs = |n: usize| PaintCmd::Segments {
+            x0s: vec![0.0; n],
+            y0s: vec![0.0; n],
+            x1s: vec![1.0; n],
+            y1s: vec![1.0; n],
+            cols: vec![0; n],
+            width: 1.0,
+            tessellated: false,
+        };
+        assert_eq!(interp.admit_paint_cmd(&segs(10)), 10, "40 of 100");
+        assert_eq!(
+            interp.admit_paint_cmd(&segs(100)),
+            15,
+            "the 60 left hold 15 quads"
+        );
+        assert_eq!(interp.paint_skipped, 1);
+        let circle = PaintCmd::CircleFilled {
+            cx: 0.0,
+            cy: 0.0,
+            radius: 4.0,
+            fill: egui::Color32::RED,
+        };
+        assert_eq!(
+            interp.admit_paint_cmd(&circle),
+            0,
+            "nothing left for a whole shape"
+        );
+        assert_eq!(
+            interp.admit_paint_cmd(&PaintCmd::ClipPop),
+            0,
+            "costs nothing, so never cut"
+        );
+        assert_eq!(interp.paint_skipped, 2);
+        interp.capture_replay = true;
+        assert_eq!(
+            interp.admit_paint_cmd(&circle),
+            1,
+            "a capture replay is not held to it"
+        );
+    }
 
     /// A deferred block whose message errors mid-apply must not leave that
     /// message's entry on the frame stacks: the enclosing pipe message's
