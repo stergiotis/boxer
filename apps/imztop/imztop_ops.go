@@ -19,7 +19,7 @@ import (
 	"github.com/stergiotis/boxer/public/observability/sysmetrics/sysmsnap"
 )
 
-// The operations catalog (ADR-0329, proposed). Queries read the published
+// The operations catalog (ADR-0329). Queries read the published
 // snapshot the frame drew and never the window's view (§SD1); commands set
 // the view and never toggle (§SD2); the process-wide freeze and replay
 // session are written only through the controlling window (§SD3).
@@ -728,7 +728,7 @@ func (inst *App) applyReplayWindow(from, to time.Time) {
 }
 
 // gestureOr routes the person's control through the catalog (ADR-0329
-// (proposed) §SD5), so the command log sees it as theirs, and applies it
+// §SD5), so the command log sees it as theirs, and applies it
 // directly where no host serves the catalog (tour, tests).
 func gestureOr[In any](inst *App, op string, in In, direct func()) {
 	if inst.frameCtx != nil {
@@ -742,7 +742,7 @@ func gestureOr[In any](inst *App, op string, in In, direct func()) {
 // gestureOrShared is gestureOr for a process-wide control. Outside the
 // controlling window the command would be refused, and the refusal logged as
 // the person's, for a click that then acts anyway; so such a window applies
-// directly (ADR-0329 (proposed) §SD3).
+// directly (ADR-0329 §SD3).
 func gestureOrShared[In any](inst *App, op string, in In, direct func()) {
 	if !inst.isController() {
 		direct()
@@ -752,7 +752,7 @@ func gestureOrShared[In any](inst *App, op string, in In, direct func()) {
 }
 
 // clickHouseDestination is how a grant names the server replay reads from
-// (ADR-0329 (proposed) §SD4), spelled as play spells an endpoint.
+// (ADR-0329 §SD4), spelled as play spells an endpoint.
 func clickHouseDestination() (dest string) {
 	raw := chclient.ConfigFromEnv().URL
 	host := strings.TrimSpace(raw)

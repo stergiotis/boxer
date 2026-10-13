@@ -309,7 +309,7 @@ func TestTheEngineAttributesEachWriter(t *testing.T) {
 	assert.Equal(t, opSetProcView, log[len(log)-1].Op)
 
 	// The filter box commits inside the frame without a command, so its
-	// writes are the app's (ADR-0329 (proposed) §SD5).
+	// writes are the app's (ADR-0329 §SD5).
 	w.frame(func() { w.inst.setProcFilter("x") })
 	assert.Equal(t, opwire.WriterApp, w.eng.Writer(resProcView))
 

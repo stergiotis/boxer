@@ -22,7 +22,7 @@ var manifest = app.Manifest{
 	Topics:   []app.TopicT{app.TopicObservability},
 	Keywords: []string{"top", "htop", "process", "processes", "cpu", "memory"},
 	Surface:  app.SurfaceWindowed,
-	// The operations catalog (ADR-0329, proposed), in imztop_ops.go.
+	// The operations catalog (ADR-0329), in imztop_ops.go.
 	Operations: ops.Catalog(),
 	// imztop consumes the system-metrics plane (ADR-0090): it subscribes to a
 	// scraper's published bundles and holds no filesystem or system-state

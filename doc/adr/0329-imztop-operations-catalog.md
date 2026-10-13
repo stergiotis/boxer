@@ -1,12 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-10-13
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to accepted
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-10-13
 ---
-
-> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
 
 # ADR-0329: imztop's operations catalog — queries over the published snapshot, view commands, and one controlling window for process-wide state
 
@@ -157,7 +155,7 @@ an ad-hoc dataset is deferred until a task needs more than the summary.
 
 ## Status
 
-Proposed — awaiting review by the code owner.
+Accepted 2026-10-13. Implemented in `096122a29` and `2072d56dd`.
 
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers.
