@@ -320,10 +320,12 @@ func TestRoundTrip_Procs_WithCmd(t *testing.T) {
 	in := []sysmsnap.ProcInfo{
 		{PID: 1, PPID: 0, Name: "systemd", Cmd: "/sbin/init splash", State: 'S', UID: 0, GID: 0, User: "root",
 			StartedAtUnixMs: 1_699_000_000_000, CPUPercent: 0.5, RSSBytes: 12 << 20, VMSizeBytes: 200 << 20,
-			NumThreads: 1, Nice: 0, Priority: 20, KernelThread: false, Component: "init", CgroupUnit: "init.scope"},
+			NumThreads: 1, Nice: 0, Priority: 20, KernelThread: false, Component: "init", CgroupUnit: "init.scope",
+			IOKnown: true},
 		{PID: 2, PPID: 0, Name: "kthreadd", Cmd: "", State: 'S', KernelThread: true},
 		{PID: 4242, PPID: 1, Name: "boxer", Cmd: "boxer play --x", State: 'R', UID: 1000, GID: 1000, User: "user",
-			CPUPercent: 12.5, RSSBytes: 300 << 20, NumThreads: 12, Nice: -5, Priority: 15},
+			CPUPercent: 12.5, RSSBytes: 300 << 20, NumThreads: 12, Nice: -5, Priority: 15,
+			IOReadBytesPerSec: 3 << 20, IOWriteBytesPerSec: 40 << 20, IOKnown: true},
 	}
 	row, err := procRow(rtHost, in, rtTs)
 	require.NoError(t, err)

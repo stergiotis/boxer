@@ -61,4 +61,14 @@ type SysProc struct {
 	// the process is unmarked or its environ was unreadable.
 	Component  []string `lw:"sysmProcComponent,symbolArray"`
 	CgroupUnit []string `lw:"sysmProcCgroupUnit,symbolArray"`
+
+	// The two I/O rates are the collector's derivation from consecutive
+	// /proc/[pid]/io read_bytes / write_bytes readings; the cumulative
+	// counters are not carried on the plane. IoKnown rides a u8 lane as 0/1
+	// and separates "not measured" — another user's process read without
+	// CAP_SYS_PTRACE, a first sighting — from a measured zero. Rows written
+	// before these fields existed carry none of the three.
+	IoReadBytesPerSec  []uint64 `lw:"sysmProcIoReadBytesPerSec,u64Array"`
+	IoWriteBytesPerSec []uint64 `lw:"sysmProcIoWriteBytesPerSec,u64Array"`
+	IoKnown            []uint8  `lw:"sysmProcIoKnown,u8Array,ct=u8h"`
 }

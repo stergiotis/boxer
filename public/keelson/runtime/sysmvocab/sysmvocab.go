@@ -406,6 +406,16 @@ var (
 	// stored rather than derived from the node arrays because it is what the
 	// collector observed, and a mismatch between the two is itself a finding.
 	MembTopoLogicalCount = NkRegistry.MustBegin("sysmTopoLogicalCount", 152).End()
+
+	// Per-process storage I/O, appended to the sysmProc* kind. The two rates
+	// are the collector's derivation from consecutive /proc/[pid]/io readings
+	// — like the disk and net rates, the cumulative counters are not carried
+	// on the plane. IoKnown separates "not measured" (another user's process
+	// without CAP_SYS_PTRACE, a first sighting) from a measured zero; rows
+	// written before these memberships existed carry none of the three.
+	MembProcIoReadBytesPerSec  = NkRegistry.MustBegin("sysmProcIoReadBytesPerSec", 153).End()
+	MembProcIoWriteBytesPerSec = NkRegistry.MustBegin("sysmProcIoWriteBytesPerSec", 154).End()
+	MembProcIoKnown            = NkRegistry.MustBegin("sysmProcIoKnown", 155).End()
 )
 
 // AllMembs enumerates every registered sysmetrics membership. Tests iterate it
@@ -461,6 +471,7 @@ var AllMembs = []registry.RegisteredNaturalKey{
 	MembProcRssBytes, MembProcVmSizeBytes, MembProcNumThreads, MembProcNice,
 	MembProcPriority, MembProcKernelThread, MembProcStartedAtMs,
 	MembProcComponent, MembProcCgroupUnit,
+	MembProcIoReadBytesPerSec, MembProcIoWriteBytesPerSec, MembProcIoKnown,
 
 	MembKindProcCmd, MembProcCmdHost,
 	MembProcCmdPid, MembProcCmdLine, MembProcCmdUser, MembProcCmdUid, MembProcCmdGid,

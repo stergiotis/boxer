@@ -77,6 +77,41 @@ func TestBatteryFrom_GroupsAreCheckedSeparately(t *testing.T) {
 	assert.Contains(t, arrayNames(t, err), "AcOnline")
 }
 
+// procRowWithoutIO is a process row as the tee wrote it before the per-process
+// I/O memberships existed.
+func procRowWithoutIO() (row sysmfacts.SysProc) {
+	return sysmfacts.SysProc{
+		Pid: []uint32{1, 2}, Ppid: []uint32{0, 1}, Name: []string{"init", "dd"}, State: []string{"S", "D"},
+		CPUPercent: []float32{0, 3}, RSSBytes: []uint64{0, 0}, VMSizeBytes: []uint64{0, 0},
+		NumThreads: []int32{1, 1}, Nice: []int32{0, 0}, Priority: []int32{20, 20},
+		KernelThread: []uint8{0, 0}, StartedAtUnixMs: []int64{0, 0},
+		Component: []string{"", ""}, CgroupUnit: []string{"", ""},
+	}
+}
+
+// A row stored before the I/O memberships existed carries none of their
+// arrays. It must still decode, with every rate reading "not measured" rather
+// than a measured zero.
+func TestProcsFrom_RowWithoutIODecodesAsUnmeasured(t *testing.T) {
+	procs, err := ProcsFrom(procRowWithoutIO(), nil)
+	require.NoError(t, err)
+	require.Len(t, procs, 2)
+	for _, p := range procs {
+		assert.False(t, p.IOKnown, "pid %d", p.PID)
+		assert.Zero(t, p.IOWriteBytesPerSec, "pid %d", p.PID)
+	}
+}
+
+func TestProcsFrom_RefusesMisalignedIOArrays(t *testing.T) {
+	row := procRowWithoutIO()
+	row.IoReadBytesPerSec = []uint64{0, 1}
+	row.IoWriteBytesPerSec = []uint64{0, 1}
+	row.IoKnown = []uint8{1}
+	_, err := ProcsFrom(row, nil)
+	require.Error(t, err)
+	assert.Equal(t, "sysProc", ebtest.Fields(t, err)["kind"])
+}
+
 func TestProcsFrom_RefusesMisalignedCmdRow(t *testing.T) {
 	row := sysmfacts.SysProc{
 		Pid: []uint32{1}, Ppid: []uint32{0}, Name: []string{"init"}, State: []string{"S"},

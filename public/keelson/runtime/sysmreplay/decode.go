@@ -285,6 +285,10 @@ func GPUFrom(row sysmfacts.SysGpu) (snap *sysmsnap.GPUSnapshot, err error) {
 // and ids, which live in their own opt-in kind (ADR-0184 §SD8) and are absent
 // from a deployment that did not ask for them; nil leaves those fields empty.
 //
+// The I/O arrays are checked apart from the rest: rows written before they
+// existed carry none of the three, and such a row decodes with IOKnown false
+// throughout rather than being refused as misaligned.
+//
 // The two kinds are joined on pid rather than by position. Both are transposed
 // from one slice in one pass, so position would work today, but a join across
 // kinds that happens to hold is not a contract either of them states.
@@ -299,6 +303,15 @@ func ProcsFrom(row sysmfacts.SysProc, cmd *sysmfacts.SysProcCmd) (procs []sysmsn
 		arr{"Component", len(row.Component)}, arr{"CgroupUnit", len(row.CgroupUnit)})
 	if err != nil {
 		return
+	}
+	hasIO := len(row.IoReadBytesPerSec) != 0 || len(row.IoWriteBytesPerSec) != 0 || len(row.IoKnown) != 0
+	if hasIO {
+		_, err = coLen("sysProc",
+			arr{"Pid", len(row.Pid)}, arr{"IoReadBytesPerSec", len(row.IoReadBytesPerSec)},
+			arr{"IoWriteBytesPerSec", len(row.IoWriteBytesPerSec)}, arr{"IoKnown", len(row.IoKnown)})
+		if err != nil {
+			return
+		}
 	}
 	type cmdEntry struct {
 		cmd, user string
@@ -335,6 +348,11 @@ func ProcsFrom(row sysmfacts.SysProc, cmd *sysmfacts.SysProcCmd) (procs []sysmsn
 			StartedAtUnixMs: row.StartedAtUnixMs[i],
 			Component:       row.Component[i],
 			CgroupUnit:      row.CgroupUnit[i],
+		}
+		if hasIO {
+			procs[i].IOReadBytesPerSec = row.IoReadBytesPerSec[i]
+			procs[i].IOWriteBytesPerSec = row.IoWriteBytesPerSec[i]
+			procs[i].IOKnown = u2b(row.IoKnown[i])
 		}
 		if e, ok := byPid[row.Pid[i]]; ok {
 			procs[i].Cmd = e.cmd

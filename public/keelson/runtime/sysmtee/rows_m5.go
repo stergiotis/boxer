@@ -47,6 +47,10 @@ func procRow(host string, procs []sysmsnap.ProcInfo, ts time.Time) (row sysmfact
 		StartedAtUnixMs: make([]int64, n),
 		Component:       make([]string, n),
 		CgroupUnit:      make([]string, n),
+
+		IoReadBytesPerSec:  make([]uint64, n),
+		IoWriteBytesPerSec: make([]uint64, n),
+		IoKnown:            make([]uint8, n),
 	}
 	for i, p := range procs {
 		row.Pid[i] = p.PID
@@ -63,6 +67,9 @@ func procRow(host string, procs []sysmsnap.ProcInfo, ts time.Time) (row sysmfact
 		row.StartedAtUnixMs[i] = p.StartedAtUnixMs
 		row.Component[i] = p.Component
 		row.CgroupUnit[i] = p.CgroupUnit
+		row.IoReadBytesPerSec[i] = p.IOReadBytesPerSec
+		row.IoWriteBytesPerSec[i] = p.IOWriteBytesPerSec
+		row.IoKnown[i] = b2u(p.IOKnown)
 	}
 	return
 }

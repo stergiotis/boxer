@@ -13,22 +13,25 @@ import (
 // --- Caller-assigned membership ids (registry-stable target). ---
 
 const (
-	kindSysmKindProc         uint64 = 2305843022098595946
-	kindSysmProcHost         uint64 = 2305843022098595947
-	kindSysmProcPid          uint64 = 2305843022098595948
-	kindSysmProcPpid         uint64 = 2305843022098595949
-	kindSysmProcName         uint64 = 2305843022098595950
-	kindSysmProcState        uint64 = 2305843022098595951
-	kindSysmProcCpuPct       uint64 = 2305843022098595952
-	kindSysmProcRssBytes     uint64 = 2305843022098595953
-	kindSysmProcVmSizeBytes  uint64 = 2305843022098595954
-	kindSysmProcNumThreads   uint64 = 2305843022098595955
-	kindSysmProcNice         uint64 = 2305843022098595956
-	kindSysmProcPriority     uint64 = 2305843022098595957
-	kindSysmProcKernelThread uint64 = 2305843022098595958
-	kindSysmProcStartedAtMs  uint64 = 2305843022098595959
-	kindSysmProcComponent    uint64 = 2305843022098595960
-	kindSysmProcCgroupUnit   uint64 = 2305843022098595961
+	kindSysmKindProc               uint64 = 2305843022098595946
+	kindSysmProcHost               uint64 = 2305843022098595947
+	kindSysmProcPid                uint64 = 2305843022098595948
+	kindSysmProcPpid               uint64 = 2305843022098595949
+	kindSysmProcName               uint64 = 2305843022098595950
+	kindSysmProcState              uint64 = 2305843022098595951
+	kindSysmProcCpuPct             uint64 = 2305843022098595952
+	kindSysmProcRssBytes           uint64 = 2305843022098595953
+	kindSysmProcVmSizeBytes        uint64 = 2305843022098595954
+	kindSysmProcNumThreads         uint64 = 2305843022098595955
+	kindSysmProcNice               uint64 = 2305843022098595956
+	kindSysmProcPriority           uint64 = 2305843022098595957
+	kindSysmProcKernelThread       uint64 = 2305843022098595958
+	kindSysmProcStartedAtMs        uint64 = 2305843022098595959
+	kindSysmProcComponent          uint64 = 2305843022098595960
+	kindSysmProcCgroupUnit         uint64 = 2305843022098595961
+	kindSysmProcIoReadBytesPerSec  uint64 = 2305843022098595993
+	kindSysmProcIoWriteBytesPerSec uint64 = 2305843022098595994
+	kindSysmProcIoKnown            uint64 = 2305843022098595995
 )
 
 // sysProcSymbolAttrI is the InAttr-side view of the symbol section. P-variants only —
@@ -329,6 +332,22 @@ func sysProcEmitSectionU64Array[
 		u64ArraySecAttr_VMSizeBytes.AddMembershipLowCardRefP(kindSysmProcVmSizeBytes)
 		u64ArraySecAttr_VMSizeBytes.EndAttributeP()
 	}
+	if len(row.IoReadBytesPerSec) > 0 {
+		u64ArraySecAttr_IoReadBytesPerSec := u64ArraySec.BeginAttribute()
+		for _, v := range row.IoReadBytesPerSec {
+			u64ArraySecAttr_IoReadBytesPerSec.AddToContainerP(v)
+		}
+		u64ArraySecAttr_IoReadBytesPerSec.AddMembershipLowCardRefP(kindSysmProcIoReadBytesPerSec)
+		u64ArraySecAttr_IoReadBytesPerSec.EndAttributeP()
+	}
+	if len(row.IoWriteBytesPerSec) > 0 {
+		u64ArraySecAttr_IoWriteBytesPerSec := u64ArraySec.BeginAttribute()
+		for _, v := range row.IoWriteBytesPerSec {
+			u64ArraySecAttr_IoWriteBytesPerSec.AddToContainerP(v)
+		}
+		u64ArraySecAttr_IoWriteBytesPerSec.AddMembershipLowCardRefP(kindSysmProcIoWriteBytesPerSec)
+		u64ArraySecAttr_IoWriteBytesPerSec.EndAttributeP()
+	}
 	return
 }
 
@@ -384,6 +403,14 @@ func sysProcEmitSectionU8Array[
 		}
 		u8ArraySecAttr_KernelThread.AddMembershipLowCardRefP(kindSysmProcKernelThread)
 		u8ArraySecAttr_KernelThread.EndAttributeP()
+	}
+	if len(row.IoKnown) > 0 {
+		u8ArraySecAttr_IoKnown := u8ArraySec.BeginAttribute()
+		for _, v := range row.IoKnown {
+			u8ArraySecAttr_IoKnown.AddToContainerP(v)
+		}
+		u8ArraySecAttr_IoKnown.AddMembershipLowCardRefP(kindSysmProcIoKnown)
+		u8ArraySecAttr_IoKnown.EndAttributeP()
 	}
 	return
 }
@@ -840,6 +867,12 @@ func sysProcReadRow[
 	var u64ArrayVMSizeBytesSlice []uint64
 	var u64ArrayVMSizeBytesCount int
 	var u64ArrayVMSizeBytesLastAttr int64
+	var u64ArrayIoReadBytesPerSecSlice []uint64
+	var u64ArrayIoReadBytesPerSecCount int
+	var u64ArrayIoReadBytesPerSecLastAttr int64
+	var u64ArrayIoWriteBytesPerSecSlice []uint64
+	var u64ArrayIoWriteBytesPerSecCount int
+	var u64ArrayIoWriteBytesPerSecLastAttr int64
 	nu64Array := u64ArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 	for attrJ := int64(0); attrJ < nu64Array; attrJ++ {
 		for membID := range u64ArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
@@ -860,6 +893,22 @@ func sysProcReadRow[
 				for v := range u64ArrayAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 					u64ArrayVMSizeBytesSlice = append(u64ArrayVMSizeBytesSlice, v)
 				}
+			case kindSysmProcIoReadBytesPerSec:
+				if u64ArrayIoReadBytesPerSecLastAttr != attrJ+1 {
+					u64ArrayIoReadBytesPerSecLastAttr = attrJ + 1
+					u64ArrayIoReadBytesPerSecCount++
+				}
+				for v := range u64ArrayAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
+					u64ArrayIoReadBytesPerSecSlice = append(u64ArrayIoReadBytesPerSecSlice, v)
+				}
+			case kindSysmProcIoWriteBytesPerSec:
+				if u64ArrayIoWriteBytesPerSecLastAttr != attrJ+1 {
+					u64ArrayIoWriteBytesPerSecLastAttr = attrJ + 1
+					u64ArrayIoWriteBytesPerSecCount++
+				}
+				for v := range u64ArrayAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
+					u64ArrayIoWriteBytesPerSecSlice = append(u64ArrayIoWriteBytesPerSecSlice, v)
+				}
 			}
 		}
 	}
@@ -877,6 +926,22 @@ func sysProcReadRow[
 	}
 	if u64ArrayVMSizeBytesSlice != nil {
 		row.VMSizeBytes = u64ArrayVMSizeBytesSlice
+		present = true
+	}
+	if u64ArrayIoReadBytesPerSecCount > 1 {
+		err = eb.Build().Int("row", i).Str("section", "u64Array").Str("membership", "sysmProcIoReadBytesPerSec").Int("got", u64ArrayIoReadBytesPerSecCount).Errorf("slot u64Array@sysmProcIoReadBytesPerSec (field IoReadBytesPerSec) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", u64ArrayIoReadBytesPerSecCount)
+		return
+	}
+	if u64ArrayIoReadBytesPerSecSlice != nil {
+		row.IoReadBytesPerSec = u64ArrayIoReadBytesPerSecSlice
+		present = true
+	}
+	if u64ArrayIoWriteBytesPerSecCount > 1 {
+		err = eb.Build().Int("row", i).Str("section", "u64Array").Str("membership", "sysmProcIoWriteBytesPerSec").Int("got", u64ArrayIoWriteBytesPerSecCount).Errorf("slot u64Array@sysmProcIoWriteBytesPerSec (field IoWriteBytesPerSec) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", u64ArrayIoWriteBytesPerSecCount)
+		return
+	}
+	if u64ArrayIoWriteBytesPerSecSlice != nil {
+		row.IoWriteBytesPerSec = u64ArrayIoWriteBytesPerSecSlice
 		present = true
 	}
 	// --- i32Array. ---
@@ -948,6 +1013,9 @@ func sysProcReadRow[
 	var u8ArrayKernelThreadSlice []uint8
 	var u8ArrayKernelThreadCount int
 	var u8ArrayKernelThreadLastAttr int64
+	var u8ArrayIoKnownSlice []uint8
+	var u8ArrayIoKnownCount int
+	var u8ArrayIoKnownLastAttr int64
 	nu8Array := u8ArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 	for attrJ := int64(0); attrJ < nu8Array; attrJ++ {
 		for membID := range u8ArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
@@ -960,6 +1028,14 @@ func sysProcReadRow[
 				for v := range u8ArrayAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 					u8ArrayKernelThreadSlice = append(u8ArrayKernelThreadSlice, v)
 				}
+			case kindSysmProcIoKnown:
+				if u8ArrayIoKnownLastAttr != attrJ+1 {
+					u8ArrayIoKnownLastAttr = attrJ + 1
+					u8ArrayIoKnownCount++
+				}
+				for v := range u8ArrayAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
+					u8ArrayIoKnownSlice = append(u8ArrayIoKnownSlice, v)
+				}
 			}
 		}
 	}
@@ -969,6 +1045,14 @@ func sysProcReadRow[
 	}
 	if u8ArrayKernelThreadSlice != nil {
 		row.KernelThread = u8ArrayKernelThreadSlice
+		present = true
+	}
+	if u8ArrayIoKnownCount > 1 {
+		err = eb.Build().Int("row", i).Str("section", "u8Array").Str("membership", "sysmProcIoKnown").Int("got", u8ArrayIoKnownCount).Errorf("slot u8Array@sysmProcIoKnown (field IoKnown) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", u8ArrayIoKnownCount)
+		return
+	}
+	if u8ArrayIoKnownSlice != nil {
+		row.IoKnown = u8ArrayIoKnownSlice
 		present = true
 	}
 	// --- i64Array. ---

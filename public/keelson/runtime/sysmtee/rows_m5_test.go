@@ -31,7 +31,8 @@ func TestProcRow_TransposesAndAligns(t *testing.T) {
 	for _, n := range []int{len(row.Ppid), len(row.Name), len(row.State), len(row.CPUPercent),
 		len(row.RSSBytes), len(row.VMSizeBytes), len(row.NumThreads), len(row.Nice),
 		len(row.Priority), len(row.KernelThread), len(row.StartedAtUnixMs),
-		len(row.Component), len(row.CgroupUnit)} {
+		len(row.Component), len(row.CgroupUnit),
+		len(row.IoReadBytesPerSec), len(row.IoWriteBytesPerSec), len(row.IoKnown)} {
 		assert.Equal(t, len(row.Pid), n, "every array must have one element per process")
 	}
 

@@ -155,3 +155,6 @@
 150	sysm-topo-freq-governor	2305843022098595990
 151	sysm-topo-freq-driver	2305843022098595991
 152	sysm-topo-logical-count	2305843022098595992
+153	sysm-proc-io-read-bytes-per-sec	2305843022098595993
+154	sysm-proc-io-write-bytes-per-sec	2305843022098595994
+155	sysm-proc-io-known	2305843022098595995
