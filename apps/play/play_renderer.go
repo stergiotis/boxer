@@ -3161,9 +3161,13 @@ func (inst *PlayApp) renderProjectionTab(rec arrow.RecordBatch, loading bool, er
 	}
 	// The frame loop has synced the projector against the result this tab
 	// renders (a bound node's, when the tab is bound), drawn or not.
-	dispatchPanel(projectionPanel{app: inst}, map[ChannelID]channelInput{
+	// A result the projection cannot use says why, as every result pane
+	// does; the pane was blank before.
+	if reject := dispatchPanel(projectionPanel{app: inst}, map[ChannelID]channelInput{
 		chMain: {node: inst.resolvedTabNode("projection"), rec: rec, schema: rec.Schema(), sig: inst.frameSig},
-	}, inst.sigEmit)
+	}, inst.sigEmit); reject != "" {
+		c.LabelAtoms(c.Atoms().BeginRichText(reject).Small().Weak().End().Keep()).Wrap().Send()
+	}
 }
 
 // renderTimelineTab is the Timeline dock tab body: the calendar-axis
