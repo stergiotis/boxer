@@ -104,7 +104,7 @@ import (
 // ViewsVersion is the revision of the views this package composes. Bump it
 // whenever a view's columns or meaning change, so the stamp a deployed view
 // carries tells an operator it predates the build.
-const ViewsVersion = 10
+const ViewsVersion = 11
 
 // agenticTag marks the views over what the agentic side of keelson writes —
 // model calls and their messages, and what agents did under a grant. The
@@ -283,7 +283,7 @@ type column struct {
 func (c column) canonicalType() (ctype string, err error) {
 	elem := map[string]string{
 		"symbol": "s", "bool": "b", "stringArray": "s", "textArray": "s", "symbolArray": "s",
-		"u32Array": "u32", "u64Array": "u64", "i64Array": "i64",
+		"u32Array": "u32", "u64Array": "u64", "i64Array": "i64", "foreignKey": "u64",
 	}[c.section]
 	if elem == "" {
 		return "", eb.Build().Str("section", c.section).Errorf("trailviews: no canonical type for section")
@@ -393,6 +393,15 @@ var kindViews = []kindView{
 		{"history-hash", "stringArray", vocab.MembLlmCallHistoryHash, first},
 		{"omit-from", "u32Array", vocab.MembLlmCallOmitFrom, first},
 		{"omit-to", "u32Array", vocab.MembLlmCallOmitTo, first},
+		{"cached-input-tokens", "u32Array", vocab.MembLlmCallCachedInputTokens, first},
+		{"reasoning-tokens", "u32Array", vocab.MembLlmCallReasoningTokens, first},
+		{"admission", "symbol", vocab.MembLlmCallAdmission, scalar},
+		{"admission-rule", "symbol", vocab.MembLlmCallAdmissionRule, scalar},
+		{"queued-ms", "u64Array", vocab.MembLlmCallQueuedMs, first},
+		{"profile", "symbol", vocab.MembLlmCallProfile, scalar},
+		{"route", "symbol", vocab.MembLlmCallRoute, scalar},
+		{"tier", "u32Array", vocab.MembLlmCallTier, first},
+		{"approval", "foreignKey", vocab.MembLlmCallApproval, scalar},
 	}},
 	{name: ViewModelMessages, kind: vocab.MembKindLlmMessage, columns: []column{
 		{"call-id", "stringArray", vocab.MembLlmMessageCallId, first},

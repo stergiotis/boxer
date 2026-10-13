@@ -122,6 +122,15 @@ func TestViewsReadBackAnEpisodeOverLocal(t *testing.T) {
 	require.EqualValues(t, 10, calls[0]["input-tokens"])
 	require.Equal(t, "tool_calls", calls[0]["finish-reason"])
 
+	admitted := read(trailviews.ViewModelCalls, []string{"admission", "queued-ms", "route", "tier", "approval"}, "ORDER BY {approval} DESC")
+	require.Len(t, admitted, 2)
+	require.Equal(t, "queued", admitted[0]["admission"])
+	require.EqualValues(t, 40, admitted[0]["queued-ms"])
+	require.Equal(t, "local", admitted[0]["route"])
+	require.EqualValues(t, 2, admitted[0]["tier"])
+	require.EqualValues(t, 77, admitted[0]["approval"], "the journal's approval entry, joinable (L33)")
+	require.EqualValues(t, 0, admitted[1]["approval"], "no approval reads zero")
+
 	msgs := read(trailviews.ViewModelMessages, []string{"ordinal", "role", "content", "tool-names"}, "ORDER BY {ordinal}")
 	require.Len(t, msgs, 3)
 	require.Equal(t, "please write a note", msgs[0]["content"])
@@ -217,6 +226,8 @@ func writeEpisode(t *testing.T, exec *chexec.LocalExecutor) {
 	require.NoError(t, rec.LlmCall(callAt, chat, trail.LlmCall{
 		CallId: "call-1", Purpose: "chat/turn", Sensitivity: "ordinary", Model: "m", EndpointHost: "localhost",
 		Messages: 2, InputTokens: 10, OutputTokens: 1, ToolCalls: 1, FinishReason: "tool_calls", Retention: "kept",
+		Admission: option.Some("queued"), QueuedMs: option.Some(uint64(40)), Route: option.Some("local"), Tier: 2,
+		Approval: option.Some(uint64(77)),
 	}))
 	require.NoError(t, rec.LlmMessage(callAt, chat, trail.LlmMessage{CallId: "call-1", Ordinal: 0, Role: "user", Sensitivity: "ordinary", Bytes: 19},
 		option.Some(trail.LlmMessageBody{Content: "please write a note"})))

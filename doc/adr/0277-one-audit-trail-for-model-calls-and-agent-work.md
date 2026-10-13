@@ -543,6 +543,23 @@ took from an app says `envelope`, a recorder built without the host says
 `self` (§SD6). `keelson('evidence_checks')` serves L34 and the seal
 anchors over this run in-process.
 
+### 2026-10-13 — the model-call view carries what the row carries; the host installs the views
+
+`dm_trail_llm_model_calls` lagged its row: the admission (ADR-0300), the
+cached-input and reasoning tokens, and the profile, route, tier and
+approval of the 2026-10-11 entry were written and not projected. The view
+gains them (`ViewsVersion` 11); `approval` is the journal entry's tagged
+id from the `foreignKey` section, zero for none, so a call joins its
+approval as law L33 reads it.
+
+The views were created only by play's reconcile, which runs when a play
+window first opens, or printed by `keelsonddl --trail-views` and applied
+by hand. A host whose facts store reached ClickHouse now reconciles the
+read surface and its dependents at boot, off the boot path
+(`hostboot.Services.SQLSurface`), so the views exist and match the build
+wherever `boxer.facts` is. `keelsonddl` stays the way to place them over
+another table.
+
 ## References
 
 - [ADR-0191](./0191-runtime-instance-attribution.md) — the `(run id, instance key)` decision this extends to the generated kinds.

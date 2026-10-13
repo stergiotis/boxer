@@ -146,6 +146,12 @@ type Services struct {
 	// Agent is runtime.agent.*: the services through which a caller
 	// discovers and calls the operations apps declare (ADR-0269).
 	Agent bool
+	// SQLSurface reconciles leeway's SQL read surface (ADR-0171) on the
+	// facts server at boot, off the boot path, and with it the views
+	// registered as its dependents — the trail's (ADR-0277) wherever
+	// boxer.facts is. Only when the facts store reached ClickHouse; a
+	// failure is a warning, and play's own reconcile stays as it was.
+	SQLSurface bool
 }
 
 // AllServices is every service on — the carousel's configuration.
@@ -153,7 +159,7 @@ func AllServices() Services {
 	return Services{
 		Fs: true, Persist: true, Watchbill: true, ChLocal: true, AdhocData: true,
 		Clipboard: true, Coverage: true, Sysmetrics: true, Introspect: true,
-		AppState: true, LLM: true, HTTP: true, Agent: true,
+		AppState: true, LLM: true, HTTP: true, Agent: true, SQLSurface: true,
 	}
 }
 
@@ -367,6 +373,9 @@ func Boot(ctx context.Context, opts Options) (rt *Runtime, err error) {
 			pingTimeout = DefaultFactsPingTimeout
 		}
 		rt.Facts, rt.IsChStore = chstore.NewWithFallback(factsCfg, logger, pingTimeout)
+	}
+	if rt.IsChStore && opts.Services.SQLSurface {
+		installSQLSurface(factsCfg, logger)
 	}
 	if runInst != nil {
 		_, wErr := rt.Facts.WriteRuntimeStart(factsstore.RuntimeStartRow{
