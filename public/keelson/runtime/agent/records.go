@@ -82,6 +82,11 @@ type GrantRow struct {
 	// Desktop is the task's mode over the desktop as a whole, empty when
 	// the grant does not name it (ADR-0276 §SD4).
 	Desktop string
+	// Ceiling is the rung of the ceiling the coordinator set, as
+	// [LevelE.Code], empty when it set none; Granted the rung the grant
+	// reaches under it right now (ADR-0280).
+	Ceiling string
+	Granted string
 	// Instances are the window keys the task's entries name, ascending:
 	// Entries as numbers, for joining against keelson('windows').
 	Instances []uint64
@@ -410,6 +415,11 @@ func (inst *Service) Grants() (rows []GrantRow) {
 		if t.desktop != ModeUnspecified {
 			g.Desktop = t.desktop.String()
 		}
+		a := inst.authorityOf(t)
+		if a.Limited {
+			g.Ceiling = a.Ceiling.Level().Code()
+		}
+		g.Granted = a.Granted.Level().Code()
 		rows = append(rows, g)
 	}
 	slices.SortFunc(rows, func(a, b GrantRow) int { return a.Created.Compare(b.Created) })
@@ -470,7 +480,11 @@ func grantsTable(rows []GrantRow) *introspect.Table {
 		String("revoked", func(i int) string { return r(i).Revoked }).
 		Int64("created_unix_ms", func(i int) int64 { return r(i).Created.UnixMilli() }).
 		Bool("test", func(i int) bool { return r(i).Test }).
-		String("desktop", func(i int) string { return r(i).Desktop })
+		String("desktop", func(i int) string { return r(i).Desktop }).
+		// The ceiling's rung, empty without one, and the rung granted under
+		// it: talk, read, view, edit, run or outside (ADR-0280).
+		String("ceiling", func(i int) string { return r(i).Ceiling }).
+		String("granted", func(i int) string { return r(i).Granted })
 }
 
 type actionsProvider struct{ svc RecordsI }

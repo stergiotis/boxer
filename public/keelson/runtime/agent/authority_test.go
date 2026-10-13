@@ -156,6 +156,20 @@ func TestCeilingBindsCallsAndMoves(t *testing.T) {
 	assert.Contains(t, out.Reason, "settings")
 	assert.NotEqual(t, "refused", r.call(g, "q", "get_text", "{}").Phase, "reading stays allowed")
 
+	row := grantRowOf(t, r.svc, g.Task)
+	assert.Equal(t, "read", row.Ceiling, "agent_grants carries the ceiling as it moved")
+	assert.Equal(t, "read", row.Granted)
+}
+
+func grantRowOf(t *testing.T, svc *Service, task string) (row GrantRow) {
+	t.Helper()
+	for _, row = range svc.Grants() {
+		if row.Task == task {
+			return
+		}
+	}
+	t.Fatalf("no grant row for task %s", task)
+	return
 }
 
 // Without a ceiling the grant is scored as it stands.
@@ -167,6 +181,9 @@ func TestAuthorityWithoutACeiling(t *testing.T) {
 	assert.False(t, a.Limited)
 	assert.Equal(t, LevelOutside, a.Ceiling.Level())
 	assert.Equal(t, LevelRead, a.Granted.Level())
+	row := grantRowOf(t, r.svc, g.Task)
+	assert.Empty(t, row.Ceiling, "no ceiling is an empty column, not outside")
+	assert.Equal(t, "read", row.Granted)
 }
 
 // A paced task's visible changes are spaced by the dispatcher; reads are not,

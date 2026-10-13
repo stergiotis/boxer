@@ -203,6 +203,24 @@ func (inst LevelE) String() (s string) {
 	return "talk only"
 }
 
+// Code is the rung's stable name, for a relation to compare against:
+// talk, read, view, edit, run or outside. String is the person's phrase.
+func (inst LevelE) Code() (s string) {
+	switch inst {
+	case LevelRead:
+		return "read"
+	case LevelView:
+		return "view"
+	case LevelEdit:
+		return "edit"
+	case LevelRun:
+		return "run"
+	case LevelOutside:
+		return "outside"
+	}
+	return "talk"
+}
+
 // Level is the rung c reaches.
 func (inst Ceiling) Level() (l LevelE) {
 	c := inst.normal()

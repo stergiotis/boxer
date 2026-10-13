@@ -309,6 +309,18 @@ and the weights gain room for it. The *now* marker, the task's grant, does
 not hold it. The *Changes* tooltip's "reads never wait" gains the
 exception of a view waiting for consent.
 
+### 2026-10-13 — the ceiling is a column of `keelson('agent_grants')`
+
+A task's ceiling was readable only over `runtime.agent.authority`, and its
+grant event carries the rung in reason text, so nothing that reads
+relations could say what a task may do. `agent_grants` gains two columns:
+`ceiling`, the rung the coordinator set, empty when it set none, and
+`granted`, the rung the grant reaches under it as it stands. Both are
+`LevelE.Code` — `talk`, `read`, `view`, `edit`, `run`, `outside` — a
+stable name beside `String`, which stays the person's phrase. The
+ceiling's history stays in the trail's grant events; the relation holds
+the current value.
+
 ## References
 
 - [ADR-0265](./0265-chat-app-over-retained-model-calls.md) — the chat app and its coordinator.
