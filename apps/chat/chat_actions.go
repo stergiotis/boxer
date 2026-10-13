@@ -16,6 +16,8 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/bgjob"
 	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
 	"github.com/stergiotis/boxer/public/keelson/runtime/clipboardbroker"
+	"github.com/stergiotis/boxer/public/keelson/runtime/factsschema"
+	"github.com/stergiotis/boxer/public/keelson/runtime/trail/trailviews"
 	"github.com/stergiotis/boxer/public/keelson/runtime/windowhost"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
@@ -188,6 +190,24 @@ func (inst *App) openCallInPlay(callId string) {
 // callRecordSql reads one call's row.
 func callRecordSql(callId string) (sql string) {
 	return "SELECT *\nFROM keelson('llm_calls')\nWHERE call_id = " + marshalling.EscapeString(callId)
+}
+
+// openTrailInPlay opens play on the conversation's rows of the audit
+// trail's timeline, run: what the host recorded this chat doing.
+func (inst *App) openTrailInPlay(convId string) {
+	inst.openPlay("the conversation's trail", launchcfg.PlayLaunch{Sql: trailSql(convId), AutoRun: true, Endpoint: launchcfg.EndpointDefault})
+}
+
+// trailSql reads one conversation's rows of the trail timeline, oldest
+// first; a call's messages share its timestamp and seq is their ordinal.
+func trailSql(convId string) (sql string) {
+	return "-- What this conversation did, from the host's audit trail: one row per\n" +
+		"-- event of any kind. `opaque:text` holds the longer text where the kind\n" +
+		"-- has one; `opaque:*` lists every column.\n" +
+		"SELECT `timestamp:ts`, `opaque:kind`, `opaque:status`, `opaque:headline`, `opaque:app`, `opaque:turn`, `opaque:ref`\n" +
+		"FROM " + factsschema.DatabaseName + "." + trailviews.ViewTimeline + "\n" +
+		"WHERE `opaque:conversation` = " + marshalling.EscapeString(convId) + "\n" +
+		"ORDER BY `timestamp:ts`, `opaque:seq`"
 }
 
 func (inst *App) openPlay(what string, l launchcfg.PlayLaunch) {

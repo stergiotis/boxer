@@ -1,8 +1,11 @@
 package markdown
 
 import (
+	"iter"
 	"testing"
 
+	fffi "github.com/stergiotis/boxer/public/thestack/fffi2/runtime"
+	"github.com/stergiotis/boxer/public/thestack/fffi2/typed"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/graphview/scenetest"
 )
@@ -69,5 +72,57 @@ func TestCodeKeysSurviveAnInsertionAbove(t *testing.T) {
 	dup := codeKeys(Parse([]byte("```sql\nSELECT 1\n```\n\n```sql\nSELECT 1\n```\n")))
 	if dup[0] == dup[1] || dup[0] == 0 || dup[1] == 0 {
 		t.Fatalf("identical blocks must get distinct non-zero keys: %x", dup)
+	}
+}
+
+// byteChannel discards every paint command and counts its bytes.
+type byteChannel struct{ n *int }
+
+func (inst byteChannel) SyncMultiUseMsg(_ uint64, b []byte) { *inst.n += len(b) }
+func (inst byteChannel) SendSingleUseMsg(b []byte)          { *inst.n += len(b) }
+func (byteChannel) FlushMessages()                          {}
+func (byteChannel) ReceiveMsg() iter.Seq[*fffi.Unmarshaller] {
+	return func(func(*fffi.Unmarshaller) bool) {}
+}
+
+// TestRenderSendsImagePixelsOnce pins the send-once contract: an image
+// widget's first frame carries its pixels, later frames do not, a second
+// id scope gets its own first send, and a second Doc gets its own content
+// version so it never draws the first one's textures.
+func TestRenderSendsImagePixelsOnce(t *testing.T) {
+	n := 0
+	typed.SetCurrentFffiVar(fffi.NewFffi2[*fffi.Unmarshaller](byteChannel{n: &n}))
+	sm := c.CurrentApplicationState.StateManager
+	sm.ScriptReset()
+	t.Cleanup(sm.ScriptReset)
+	const w, h = 256, 256
+	const pixelBytes = w * h * 4
+	parse := func() *Doc {
+		r := &stubResolver{imagePayload: make([]uint32, w*h), imageW: w, imageH: h}
+		return ParseWith([]byte("![[fig.png]]\n"), ParseOptions{Resolver: r})
+	}
+	ids := c.NewWidgetIdStack()
+	frame := func(doc *Doc, scope string) int {
+		n = 0
+		Render(Input{Ids: ids, ScopeKey: scope, Doc: doc})
+		sm.ScriptReset()
+		return n
+	}
+	doc := parse()
+	if got := frame(doc, "a"); got < pixelBytes {
+		t.Fatalf("first frame sent %d bytes, want the %d pixel bytes", got, pixelBytes)
+	}
+	if got := frame(doc, "a"); got >= pixelBytes/16 {
+		t.Fatalf("second frame sent %d bytes, want no pixels", got)
+	}
+	if got := frame(doc, "b"); got < pixelBytes {
+		t.Fatalf("first frame in a second scope sent %d bytes, want the pixels", got)
+	}
+	other := parse()
+	if other.imageVersion == doc.imageVersion {
+		t.Fatalf("two Docs share image version %d", doc.imageVersion)
+	}
+	if got := frame(other, "a"); got < pixelBytes {
+		t.Fatalf("a second Doc under the first one's scope sent %d bytes, want its pixels", got)
 	}
 }

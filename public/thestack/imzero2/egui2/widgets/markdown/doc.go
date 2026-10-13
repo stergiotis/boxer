@@ -85,8 +85,10 @@
 // contract is now stated rather than relied on by accident. The
 // per-package `-race` test pins it.
 //
-// A [Doc] is immutable after Parse, so sharing one across goroutines is
-// fine as long as only the render goroutine renders it.
+// A [Doc]'s content is immutable after Parse, so sharing one across
+// goroutines is fine as long as only the render goroutine renders it. The
+// one thing rendering changes, the record of which image widgets were sent
+// their pixels, is behind a lock.
 //
 // # See also
 //

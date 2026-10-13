@@ -1678,25 +1678,6 @@ func TestParse_ObsidianImageEmbed_WithHeading_PassesHeadingInRef(t *testing.T) {
 	}
 }
 
-// TestParse_NoTrackerOnDoc guards the post-cleanup invariant that
-// nothing inside Doc tracks "have I sent pixels for this image
-// before". Per the bindings doc at [c.ImageVersionTracker], keying a
-// tracker by seq instead of widget id silently drops pixels on the
-// second scope; the package therefore re-sends pixels every frame,
-// and a future contributor reintroducing a tracker field would have
-// to defeat this assertion deliberately.
-func TestParse_NoTrackerOnDoc(t *testing.T) {
-	doc := Parse([]byte("hi\n"))
-	v := reflect.ValueOf(*doc)
-	for i := 0; i < v.NumField(); i++ {
-		f := v.Type().Field(i)
-		if strings.Contains(strings.ToLower(f.Name), "version") ||
-			strings.Contains(strings.ToLower(f.Name), "tracker") {
-			t.Errorf("Doc.%s exists; the package contract is to skip per-Doc image trackers", f.Name)
-		}
-	}
-}
-
 func kindsOfRuns(runs []paragraphRun) []runKindE {
 	out := make([]runKindE, len(runs))
 	for i, r := range runs {

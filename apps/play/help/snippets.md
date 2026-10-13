@@ -16,7 +16,8 @@ block to splice it into the editor at the cursor; place the caret where you want
 it first (an empty editor takes the snippet whole). Do not add a `FORMAT` clause
 — the app appends one. The verified, explained versions live on the **Example
 queries** page. The **ADS-B geo-raster** section below targets `planes_mercator`
-from the demo loader (`apps/play/demo/adsb/demo.sh`), not `anchor.facts`.
+from the demo loader (`apps/play/demo/adsb/demo.sh`), not `anchor.facts`. The
+**audit trail** sections read the host's trail views next to `boxer.facts`.
 
 Leeway columns are named by their friendly handles (`` `section:column` ``,
 resolved to physical names before the query ships), and tagged attributes are
@@ -2814,6 +2815,147 @@ FROM planes_mercator
 WHERE in_view
 GROUP BY pos
 ORDER BY pos WITH FILL FROM 0 TO toUInt64(W) * H
+```
+
+## The audit trail, newest first
+
+The host records what its services and agents did on `boxer.facts`: model
+calls and their messages, agent actions, grants, captures and disclosures,
+egress fetches, ad-hoc bundles, and the generic audit events. Reading one
+attribute of a trail row means finding it by membership, so the trail views do
+that once: `dm_trail_*` hold one row per trail row with one column per
+attribute, `agg_trail_*` one row per conversation, task or agent action. Play
+creates or refreshes them at startup on any server that holds `boxer.facts`;
+`leeway sqlsurface install` does the same by hand.
+
+`dm_trail_timeline` is every kind in one shape: `opaque:kind` says which,
+`opaque:headline` is a line to scan, and `opaque:ref` / `opaque:parent-ref` let
+you walk from an action to the model call that asked for it. `opaque:*` lists
+every column.
+
+```sql
+SELECT `timestamp:ts`, `opaque:kind`, `opaque:app`, `opaque:status`, `opaque:headline`, `opaque:conversation`
+FROM boxer.dm_trail_timeline
+ORDER BY `timestamp:ts` DESC, `opaque:seq` DESC
+LIMIT 200
+```
+
+## One conversation's trail
+
+Fill `conversation` with a chat's conversation id; chat's footprints button
+next to the id opens this with the id already filled in. A call's messages
+share its timestamp, so `opaque:seq` orders them.
+
+```sql
+SET param_conversation = '';
+SELECT `timestamp:ts`, `opaque:kind`, `opaque:status`, `opaque:headline`, `opaque:turn`, `opaque:ref`, `opaque:text`
+FROM boxer.dm_trail_timeline
+WHERE `opaque:conversation` = {conversation:String}
+ORDER BY `timestamp:ts`, `opaque:seq`
+```
+
+## The trail on the Timeline tab
+
+One lane per kind over the last day; the label is the headline.
+
+```sql
+SELECT
+  `timestamp:ts`      AS _tl_time,
+  `opaque:kind`       AS _tl_lane,
+  `opaque:headline`   AS _tl_label
+FROM boxer.dm_trail_timeline
+WHERE `timestamp:ts` > now64(9) - INTERVAL 1 DAY
+ORDER BY _tl_time
+```
+
+## Conversations and tasks, one row each
+
+`agg_trail_llm_conversations` sums a conversation: its span, model calls and
+tokens, how its agent actions ended, and its first question and last answer
+where the text was kept. `opaque:facts-ids` lists the trail rows behind each
+row, so you can go from the digest to the rows.
+
+```sql
+SELECT `opaque:conversation`, `opaque:first-ts`, `opaque:span-s`, `opaque:apps`,
+       `opaque:model-call-count`, `opaque:tokens-in`, `opaque:tokens-out`,
+       `opaque:actions`, `opaque:actions-not-done`, `opaque:first-question`
+FROM boxer.agg_trail_llm_conversations
+ORDER BY `opaque:last-ts` DESC
+LIMIT 50
+```
+
+`agg_trail_llm_tasks` is the same for agent tasks: the plan you approved, how
+the grant moved, and what the task did with it.
+
+```sql
+SELECT `opaque:task`, `opaque:first-ts`, `opaque:plan`, `opaque:last-grant-event`,
+       `opaque:actions`, `opaque:actions-done`, `opaque:not-done-reasons`
+FROM boxer.agg_trail_llm_tasks
+ORDER BY `opaque:last-ts` DESC
+LIMIT 50
+```
+
+## Agent actions that did not happen
+
+One row per agent action, not per trail row: the dispatcher writes a row when
+it decides and another when the call ends. `opaque:phases` is the path it took.
+
+```sql
+SELECT `opaque:first-ts`, `opaque:target-app`, `opaque:operation`, `opaque:outcome`,
+       `opaque:phases`, `opaque:reason`, `opaque:conversation`
+FROM boxer.agg_trail_llm_agent_action_outcomes
+WHERE `opaque:not-done`
+ORDER BY `opaque:first-ts` DESC
+LIMIT 100
+```
+
+## Audit events by domain and outcome
+
+The generic audit events a service records (`moderator`, `attention`, the model
+ration, …): who did what to which subject, and how it ended.
+
+```sql
+SELECT `opaque:domain`, `opaque:action`, `opaque:outcome`, count() AS events,
+       max(`timestamp:ts`) AS last
+FROM boxer.dm_trail_audit_events
+GROUP BY `opaque:domain`, `opaque:action`, `opaque:outcome`
+ORDER BY last DESC
+```
+
+## Egress the host refused or that failed
+
+```sql
+SELECT `timestamp:ts`, `opaque:app`, `opaque:method`, `opaque:destination`, `opaque:url`,
+       `opaque:status`, `opaque:refused`, `opaque:error`
+FROM boxer.dm_trail_http_fetches
+WHERE `opaque:refused` OR length(`opaque:error`) > 0
+ORDER BY `timestamp:ts` DESC
+LIMIT 100
+```
+
+## Does the evidence hold?
+
+The views read the trail; they do not check it. The host checks it in process:
+point the **Endpoint** menu at *Keelson introspection* and Run.
+`keelson('evidence_checks')` gives one row per store, scope and law: whether
+the law holds over the stores as they are now, and if not, how many rows break
+it and why.
+
+```sql
+SELECT store, scope, law, holds, broken, why
+FROM keelson('evidence_checks')
+ORDER BY holds, store, scope, law
+```
+
+`keelson('anchors')` is the heads the host anchored. `durable` is false while no
+organisation anchor store is configured (`BOXER_ANCHOR_STORE_URL`), and then the
+anchors only last as long as the process.
+
+```sql
+SELECT cell, scope, ordinal, scheme, digest, received_at, by, durable
+FROM keelson('anchors')
+ORDER BY received_at DESC
+LIMIT 100
 ```
 
 ## Trivial states

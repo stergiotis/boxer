@@ -241,27 +241,26 @@ should iterate `Frontmatter().IteratePairs()` directly.
   bounding box at render time (default `(800, 600)`); the cap is
   per-Doc, not per-image, since Doc has no per-image style hook
   today.
-- **Pixels are re-sent every frame, not tracked.** The bindings
-  doc-comment at `c.ImageVersionTracker` is explicit: a tracker key
-  must be 1:1 with the egui widget id, and for static assets shown
-  a small fixed number of times "skipping the tracker entirely is
-  usually clearer — the per-widget-id one-shot upload cost is
-  negligible." Markdown image pixels are decoded once at parse time
-  and shipped on every frame, with `contentVersion` pinned at 1.
-  What that costs is **wire bandwidth, not GPU uploads**: the Rust
-  `ImageCache` decides on the cache key `(id, contentVersion, w, h)`
-  alone, so a matching key draws the cached texture and ignores the
-  buffer entirely. One memcpy each way per frame per image —
-  negligible for icons and small diagrams, and the wrong cost model
-  for a book of full-page screenshots, which is the trigger for
-  taking the tracker on. (The wire-contract comment in
-  `egui2_definition_d_image.go` used to say a non-empty buffer always
-  forces a re-upload; it does not, and this paragraph used to repeat
-  that claim.) The tracker's own cost is what keeps it off today: a
-  per-`Doc` tracker keyed by segment seq silently breaks the
-  package-level retain-once / render-many idiom under multi-scope
-  rendering, since the second scope's widget ids are distinct from
-  the first scope's and the tracker can't tell them apart.
+- **Pixels are sent once per widget id.** Markdown image pixels are
+  decoded once at parse time. Each `Doc` owns a
+  `c.ImageVersionTracker` keyed by the image's **widget id** — the
+  key the bindings doc-comment requires, and the one the Rust
+  `ImageCache` uses — so the first frame of each image widget ships
+  its pixels and every later frame ships the empty "draw cached"
+  slice. Re-sending every frame used to be the rule; it cost wire
+  bandwidth, not GPU uploads (the cache key `(id, contentVersion, w,
+  h)` alone decides an upload), but for a document of full-page
+  figures that was tens of MiB per frame. Keying by widget id rather
+  than segment seq keeps the retain-once / render-many idiom working
+  under multi-scope rendering: a second scope has distinct widget ids
+  and gets its own first send. `PixelsToSendFor` consults the host's
+  starved-texture report, so a texture evicted by the idle LRU or an
+  upload lost in a host-skipped region (an inactive dock tab, a
+  collapsed block) is re-sent the frame after, at the cost of one
+  blank frame. `contentVersion` is unique per `Doc`, drawn from a
+  package counter at parse time: with it pinned at 1, a second `Doc`
+  rendered under the ids a first one used — same scope key, images of
+  the same size — would draw the first one's textures.
 - **Images never upscale.** `FitAspectMaxE` computes
   `s = min(fw/nw, fh/nh)` with no `s ≤ 1` clamp, so passing the
   configured cap as the fit box blew every smaller image up to fill
