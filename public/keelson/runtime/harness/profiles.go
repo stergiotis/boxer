@@ -70,9 +70,14 @@ func PublishedProfiles() (rows []ProfileRow) {
 	return
 }
 
-// RegisterIntrospect registers keelson('harness_profiles').
+// RegisterIntrospect registers keelson('harness_profiles') and
+// keelson('agent_tools').
 func RegisterIntrospect(reg *introspect.Registry) (err error) {
-	return reg.Register(profilesProvider{})
+	err = reg.Register(profilesProvider{})
+	if err != nil {
+		return
+	}
+	return reg.Register(toolsProvider{})
 }
 
 type profilesProvider struct{}

@@ -225,13 +225,19 @@ Accepted 2026-10-11.
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers (Tier 1 in-place / Tier 2 dated `## Updates` entry / Tier 3 new superseding ADR).
 
-<!--
 ## Updates
 
-Tier-2 dated entries land here when implementation reveals a refinement, an aspirational
-claim turns out false, or a milestone records what shipped. Single H2; add H3s dated
-YYYY-MM-DD. Remove this HTML comment when the section first gains a real entry.
--->
+### 2026-10-13 — the coordinator's tools are a relation
+
+Turning the coordinator's tools into `OperationSpec`s stays deferred
+(SD9), but what they are no longer lives only in the coordinator's
+process state: `keelson('agent_tools')` serves them, one row per tool in
+the order the model sees them, with its group (when it is offered), its
+description, the schema the model is given, its result budget and whether
+it is parallel-safe. An owner publishes its set once through
+`harness.PublishTools`; the chat does at start, since its registry is
+static. The per-window tools a coordinator mints from the apps' catalogs
+are not rows: they are `keelson('app_operations')` under another name.
 
 ## References
 

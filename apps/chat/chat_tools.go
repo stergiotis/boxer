@@ -9,6 +9,7 @@ import (
 	"github.com/rs/zerolog/log"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/agent"
+	"github.com/stergiotis/boxer/public/keelson/runtime/harness"
 	"github.com/stergiotis/boxer/public/llm/openaichat"
 )
 
@@ -52,6 +53,30 @@ const (
 	// was compacted (ADR-0316 §SD2).
 	toolGroupRecall
 )
+
+func (inst toolGroupE) String() (s string) {
+	switch inst {
+	case toolGroupQuestions:
+		return "questions"
+	case toolGroupArtefactRead:
+		return "artefact_read"
+	case toolGroupArtefactWrite:
+		return "artefact_write"
+	case toolGroupImageRead:
+		return "image_read"
+	case toolGroupImageCapture:
+		return "image_capture"
+	case toolGroupImageWrite:
+		return "image_write"
+	case toolGroupView:
+		return "view"
+	case toolGroupFixed:
+		return "fixed"
+	case toolGroupRecall:
+		return "recall"
+	}
+	return "unspecified"
+}
 
 // toolOffer is what the conversation offers at one moment, read once per
 // projection.
@@ -353,6 +378,18 @@ var toolsByName = func() (m map[string]*toolSpec) {
 	}
 	return
 }()
+
+// The registry is keelson('agent_tools')'s rows for this app (ADR-0315,
+// update of 2026-10-13); it is static, so it is published once.
+func init() {
+	rows := make([]harness.ToolRow, 0, len(coordinatorTools))
+	for i := range coordinatorTools {
+		spec := &coordinatorTools[i]
+		rows = append(rows, harness.ToolRow{Name: spec.name, Group: spec.group.String(), Description: spec.description,
+			Schema: string(spec.params), Budget: spec.budget, ParallelSafe: spec.parallelSafe})
+	}
+	harness.PublishTools(string(ManifestId), rows)
+}
 
 // lookupTool is the registry's entry for a tool name, nil for none.
 func lookupTool(name string) (spec *toolSpec) { return toolsByName[name] }

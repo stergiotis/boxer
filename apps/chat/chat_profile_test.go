@@ -5,6 +5,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/stergiotis/boxer/public/keelson/runtime/harness"
 )
 
 // The one registered profile validates and is what the selector names; a
@@ -74,4 +76,22 @@ func TestTheLimitsAreTheProfiles(t *testing.T) {
 	assert.Equal(t, 8, clampRounds(50))
 	assert.Equal(t, 3, imageLimitsNow().count)
 	assert.NotEqual(t, before, profileNow().Fingerprint())
+}
+
+// keelson('agent_tools') holds the registry as the model sees it: every
+// tool, in order, with the schema the model is given and a named group.
+func TestTheToolsArePublished(t *testing.T) {
+	var mine []harness.ToolRow
+	for _, r := range harness.PublishedTools() {
+		if r.App == string(ManifestId) {
+			mine = append(mine, r)
+		}
+	}
+	require.Len(t, mine, len(coordinatorTools))
+	for i, r := range mine {
+		spec := &coordinatorTools[i]
+		assert.Equal(t, spec.name, r.Name)
+		assert.Equal(t, string(spec.params), r.Schema)
+		assert.NotEqual(t, "unspecified", r.Group, "%s has a group the table names", r.Name)
+	}
 }
