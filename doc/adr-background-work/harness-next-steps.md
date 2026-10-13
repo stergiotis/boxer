@@ -21,8 +21,6 @@ file. Everything below is open.
 
 | Item | Decides | Blocks |
 | --- | --- | --- |
-| Accept or amend ADR-0321 (id stack), 0322 (lifetime scope), 0326 (tuple parameters) | the owner | doclint flags accepted docs that link to them |
-| Accept or amend ADR-0327 (the evidence profile: chain, vault, marks, seals, anchors by scope, the audit event), which moved the trail onto the journal's laws and the journal onto the generator's profile; M1–M6 have landed | the owner | the open items of its §SD11 |
 | The env registry seam: boxer is handed the cell declaration and the profile rather than reading them | an ADR to write, from `env-registry-scope-problem.md` | the chat's second `cell.FromEnv` read; integrators |
 | The httpegress wall: run label and tier on a fetch, `cell.Decide` at the service, approvals, canaries, trail columns | ADR-0312 §SD4 deferral; owner's own session | laws L14 and L33 over fetches |
 
@@ -40,25 +38,7 @@ file. Everything below is open.
 | A job's terminal state reaches the attention service: a notice source that is an owning app and a job id, the worker reporting at settle time, the chrome's highlight opening the watchbill window | ADR-0323 §SD6, §SD7 (accepted 2026-10-12) | not started |
 | A refused or failed compaction, and compaction going off, as a transcript step | `apps/chat/chat_compact.go`, a step kind in `chat_steps.go` and its renderer | the renderer is in the dock work another session holds |
 | The context meter shows the re-projected size right after a compaction instead of one answer later | `apps/chat/chat_render.go` `contextFill` | same file |
-| The context probe treats llama.cpp's `meta.n_ctx_train` as a ceiling, not the loaded size, and warns when the size comes from a fallback field | `public/keelson/runtime/llm/context.go` | unblocked |
-
-## Found by the verification sweep of 2026-10-12
-
-Not blocked, each a few lines; the files are free as of 2026-10-13:
-
-- codelint CS008: type aliases re-exporting the evidence package's types
-  in `trail/auditevent.go` (`AuditEvent`, `ForwarderI`) and
-  `headstore/store.go` (`Receipt`, `Cadence`); the house rule wants named
-  types or direct imports.
-- codelint CS013 in `trail/forward.go`: an `eh.Errorf` format carrying a
-  count; the count belongs on `eb.Build().Int(…)`.
-- gofmt drift in `llm/introspect.go` and `watchbillstore/claim.go`.
-- doclint DL010 on ADR-0298, missing `## Alternatives` and `## Status`;
-  pre-existing since 2026-10-09, not from this work.
-- plan002's Part B table and ADR-0320's text still describe the vault as
-  the journal's own `SqlBodyStore`; since ADR-0327 M3 the profile emits
-  it (`<Store>Vault`, `<Store>Vaulted`) and `agentrun` keeps only the
-  writer's view. ADR-0320 has its dated Update; plan002 has a note.
+| The record-store generator emits a qualified type for a component whose DTO lives in another package, so `trail.AuditEvent` stops being an alias (CS008) | `public/storage/recordstore/gen`, `trail/auditevent.go` | a generator change; the alias carries the reason meanwhile |
 
 ## Done 2026-10-11 and 2026-10-12 (for the record, so the list reads as a delta)
 
@@ -69,4 +49,7 @@ comma rule on marks, the unused JSON helper, one provisioning call);
 ADR-0327's six milestones, the attention levels of ADR-0323 on the bus and
 in the chat, and the conversations roster of ADR-0324's background; the
 thrash check fitted to small contexts and compaction going off told in the
-meter (ADR-0316 Update of 2026-10-12); ADR-0323 and 0324 accepted.
+meter (ADR-0316 Update of 2026-10-12); ADR-0321 to 0324, 0326 and 0327
+accepted; the verification sweep's lint and format findings fixed but for
+the one alias generated code needs; the context probe reading llama.cpp's
+loaded size from `/props` (2026-10-13).
