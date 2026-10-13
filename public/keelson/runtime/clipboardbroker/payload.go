@@ -234,8 +234,9 @@ func CheckL20(free agentrun.TierE, records []CopyRecord, forwarded []ForwardedCo
 
 func itoa(i int) string { return strconv.Itoa(i) }
 
-// deferred: L20 has no SQL form yet. The journal's copy entry is written
-// before the act (ADR-0308 §SD2), so it carries the label and the digest
-// and not how the copy left; how it left is the broker's own record, in
-// memory, with no served relation. The SQL twin needs the broker record
-// on the trail; until then CheckL20 over Records is the check.
+// deferred: L20 has no durable SQL form yet. The journal's copy entry is
+// written before the act (ADR-0308 §SD2), so it carries the label and the
+// digest and not how the copy left; how it left is the broker's own
+// record, in memory, served live as keelson('clipboard_copies') and judged
+// by keelson('evidence_checks') through CheckL20. A twin over stored rows
+// needs the broker record on the trail.

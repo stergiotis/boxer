@@ -554,13 +554,26 @@ Accepted 2026-10-13.
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers (Tier 1 in-place / Tier 2 dated `## Updates` entry / Tier 3 new superseding ADR).
 
-<!--
 ## Updates
 
-Tier-2 dated entries land here when implementation reveals a refinement, an aspirational
-claim turns out false, or a milestone records what shipped. Single H2; add H3s dated
-YYYY-MM-DD. Remove this HTML comment when the section first gains a real entry.
--->
+### 2026-10-13 — `evidence_checks` judges the laws the host can
+
+SD7's relation served the evidence laws alone; the other laws were Go
+checks in test lanes or SQL joining live tables on a server. It now also
+judges, over what the host holds, the laws whose Go check needs nothing
+an app keeps to itself: per journal run, L2's boundary rule and L22, L23
+and L25 (`projection.CheckCompaction`, ADR-0316 §SD4); over the model
+calls this process answered by a declared remote route, L14 and L33
+(`cell.L14`, `cell.L33`, ADR-0312), with the approvals of the runs the
+journal store lists; and over the clipboard broker's records, L20's
+first clause (`clipboardbroker.CheckL20`, ADR-0317 §SD4). Each is one row
+with the store (`journal`, `exits`, `clipboard`), its scope, whether it
+holds, the first breach and why. The exits' and copies' rows judge
+bounded rings and say so in `why`; L20's forwarded copies are drained by
+the frame and not kept, so that clause is not judged. Not rows: L4 and
+L24, which need an app's own fold and constants; L10, whose payloads no
+store keeps; L9, a conformance tool; and the scoped SQL laws L11–L13 and
+L18, which run in the worker under their scopes.
 
 ## References
 

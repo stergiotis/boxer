@@ -60,7 +60,7 @@ func TestEvidenceChecksServeTheLawsInProcess(t *testing.T) {
 	rec, err := p.Snapshot(introspect.AllColumns())
 	require.NoError(t, err)
 	defer rec.Release()
-	require.EqualValues(t, 6, rec.NumRows(), "two laws per journal run, two per trail run")
+	require.EqualValues(t, 14, rec.NumRows(), "six laws per journal run, two per trail run")
 
 	type row struct {
 		store, scope, law, why string

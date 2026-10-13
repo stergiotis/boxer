@@ -9,8 +9,11 @@ import (
 	"github.com/apache/arrow-go/v18/arrow"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/agentrun"
+	"github.com/stergiotis/boxer/public/keelson/runtime/cell"
+	"github.com/stergiotis/boxer/public/keelson/runtime/clipboardbroker"
 	"github.com/stergiotis/boxer/public/keelson/runtime/headstore"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect"
+	"github.com/stergiotis/boxer/public/keelson/runtime/llm"
 	"github.com/stergiotis/boxer/public/storage/recordstore/evidence"
 	"github.com/stergiotis/boxer/public/storage/recordstore/evidence/anchor"
 )
@@ -46,10 +49,16 @@ type evidenceChecksProvider struct {
 	anchors anchor.StoreI
 	trail   SealVerifierI
 	run     string
+	// The exits' and the copies' laws (law_checks.go): the model calls
+	// this process answered, the cell declaration, and the broker.
+	calls     llm.CallsI
+	cell      func() cell.Declaration
+	clipboard clipboardbroker.RecordsI
 }
 
 func registerEvidenceChecks(reg *introspect.Registry, deps Deps) (err error) {
-	return reg.Register(evidenceChecksProvider{runs: deps.AgentRuns, anchors: deps.Anchors, trail: deps.Trail, run: deps.Run})
+	return reg.Register(evidenceChecksProvider{runs: deps.AgentRuns, anchors: deps.Anchors, trail: deps.Trail, run: deps.Run,
+		calls: deps.LLMCalls, cell: deps.Cell, clipboard: deps.Clipboard})
 }
 
 func (evidenceChecksProvider) Name() string                         { return TableEvidenceChecks }
@@ -59,21 +68,25 @@ func (evidenceChecksProvider) Schema() *arrow.Schema                { return evi
 func (inst evidenceChecksProvider) Snapshot(proj introspect.Projection) (rec arrow.RecordBatch, err error) {
 	ctx, cancel := context.WithTimeout(context.Background(), checkTimeout)
 	defer cancel()
-	rows := inst.journalChecks(ctx)
+	rows, approvals := inst.journalChecks(ctx)
 	rows = append(rows, inst.trailChecks(ctx)...)
+	rows = append(rows, inst.exitChecks(approvals)...)
+	rows = append(rows, inst.copyChecks()...)
 	rec = evidenceChecksTable(rows).Build(proj, len(rows))
 	return
 }
 
-// journalChecks is L31 and L32 over every run the journal store holds. A
-// run whose entries cannot be read is one row saying so.
-func (inst evidenceChecksProvider) journalChecks(ctx context.Context) (rows []evidenceCheck) {
+// journalChecks is L31, L32 and the compaction laws over every run the
+// journal store lists, and the approval entries it read on the way, for
+// the exits' laws. A run whose entries cannot be read is one row saying
+// so.
+func (inst evidenceChecksProvider) journalChecks(ctx context.Context) (rows []evidenceCheck, approvals []cell.ApprovalEntry) {
 	if inst.runs == nil {
 		return
 	}
 	runs, err := inst.runs.ListRuns(ctx, "", 0)
 	if err != nil {
-		return []evidenceCheck{{Store: "journal", Law: "L31", Why: "list runs: " + err.Error()}}
+		return []evidenceCheck{{Store: "journal", Law: "L31", Why: "list runs: " + err.Error()}}, nil
 	}
 	for _, r := range runs {
 		scope := strconv.FormatUint(r.Id, 10)
@@ -90,6 +103,8 @@ func (inst evidenceChecksProvider) journalChecks(ctx context.Context) (rows []ev
 			row.Why = "the chain breaks at the ordinal"
 		}
 		rows = append(rows, row)
+		rows = append(rows, compactionChecks(scope, entries)...)
+		approvals = append(approvals, approvalsOf(r, entries)...)
 		if inst.anchors == nil {
 			continue
 		}
