@@ -16,13 +16,17 @@ package protogen
 import (
 	"bytes"
 	"context"
+	"maps"
 	"os"
+	"slices"
+	"strings"
 
 	"github.com/bufbuild/protocompile"
 	"github.com/bufbuild/protocompile/protoutil"
 	"github.com/rs/zerolog/log"
 	"github.com/urfave/cli/v3"
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/types/pluginpb"
 
 	"github.com/stergiotis/boxer/public/extbin"
@@ -86,13 +90,20 @@ type Opts struct {
 	ProtoFile  string
 	GoPackage  string
 	OutputFile string
+	// Imports maps an imported proto file (relative to ProtoRoot) to the Go
+	// import path of its generated types, so a contract may build on another
+	// without either carrying a go_package option. The well-known types need
+	// no entry: they declare their own.
+	Imports map[string]string
 }
 
 // Generate compiles Opts.ProtoFile and writes the protoc-gen-go output to
 // Opts.OutputFile. Paths are resolved against the process's working directory.
 func Generate(ctx context.Context, o Opts) (err error) {
+	// The well-known types (google/protobuf/*.proto) are answered from the
+	// compiler's own copies, so a contract may import them without vendoring.
 	compiler := protocompile.Compiler{
-		Resolver:       &protocompile.SourceResolver{ImportPaths: []string{o.ProtoRoot}},
+		Resolver:       protocompile.WithStandardImports(&protocompile.SourceResolver{ImportPaths: []string{o.ProtoRoot}}),
 		SourceInfoMode: protocompile.SourceInfoStandard,
 	}
 	files, err := compiler.Compile(ctx, o.ProtoFile)
@@ -101,12 +112,34 @@ func Generate(ctx context.Context, o Opts) (err error) {
 			Errorf("unable to compile proto file: %w", err)
 		return
 	}
+	// Sorted so the request, and anything derived from it, is the same on
+	// every run.
+	var param strings.Builder
+	param.WriteString("paths=source_relative,M" + o.ProtoFile + "=" + o.GoPackage)
+	for _, file := range slices.Sorted(maps.Keys(o.Imports)) {
+		param.WriteString(",M" + file + "=" + o.Imports[file])
+	}
 	req := &pluginpb.CodeGeneratorRequest{
 		FileToGenerate: []string{o.ProtoFile},
-		Parameter:      new("paths=source_relative,M" + o.ProtoFile + "=" + o.GoPackage),
+		Parameter:      new(param.String()),
+	}
+	// Compile answers only the requested file; the plugin needs every
+	// transitive import too, each before the files that import it.
+	seen := make(map[string]bool)
+	var add func(f protoreflect.FileDescriptor)
+	add = func(f protoreflect.FileDescriptor) {
+		if seen[f.Path()] {
+			return
+		}
+		seen[f.Path()] = true
+		imports := f.Imports()
+		for i := range imports.Len() {
+			add(imports.Get(i).FileDescriptor)
+		}
+		req.ProtoFile = append(req.ProtoFile, protoutil.ProtoFromFileDescriptor(f))
 	}
 	for _, f := range files {
-		req.ProtoFile = append(req.ProtoFile, protoutil.ProtoFromFileDescriptor(f))
+		add(f)
 	}
 	reqBytes, err := proto.Marshal(req)
 	if err != nil {
@@ -143,16 +176,19 @@ func Generate(ctx context.Context, o Opts) (err error) {
 	// One input file, one output. Its suggested name mirrors the proto's
 	// directory layout; the caller has one flat home for it, so take the
 	// content and name it here.
-	for _, f := range resp.GetFile() {
-		if err = os.WriteFile(o.OutputFile, []byte(f.GetContent()), 0o644); err != nil {
-			err = eb.Build().Str("out", o.OutputFile).Errorf("unable to write generated file: %w", err)
-			return
-		}
-		log.Info().
-			Str("out", o.OutputFile).
-			Str("suggestedName", f.GetName()).
-			Int("bytes", len(f.GetContent())).
-			Msg("protogen: wrote generated Go source")
+	if n := len(resp.GetFile()); n != 1 {
+		err = eb.Build().Int("files", n).Errorf("expected protoc-gen-go to answer exactly one file")
+		return
 	}
+	f := resp.GetFile()[0]
+	if err = os.WriteFile(o.OutputFile, []byte(f.GetContent()), 0o644); err != nil {
+		err = eb.Build().Str("out", o.OutputFile).Errorf("unable to write generated file: %w", err)
+		return
+	}
+	log.Info().
+		Str("out", o.OutputFile).
+		Str("suggestedName", f.GetName()).
+		Int("bytes", len(f.GetContent())).
+		Msg("protogen: wrote generated Go source")
 	return
 }
