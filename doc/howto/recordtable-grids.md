@@ -86,6 +86,18 @@ un-glossed value as the text, left-aligned for strings.
   grid) or `WidthType`, or a width fitted to one view is carried to the
   other through the column tier.
 
+## Rows that are Go values, not a record
+
+The grid draws a record, and the sort compares its columns. When your rows
+are a slice of structs, build a record that holds what each column *sorts
+by* — a string, or a number where the shown text does not sort (`3/5`
+attempts, a formatted time) — with row `i` being element `i`. Show the
+struct's own text through `Column.Cell`, which receives that row index.
+Rebuild the record only when the slice changes, keyed on whatever replaces
+it (watchbill keys on its snapshot's refresh time and its filter), and
+release the old one. `apps/watchbill/watchbill_table.go` is the worked
+example.
+
 ## Render, then act on what came back
 
 ```go
