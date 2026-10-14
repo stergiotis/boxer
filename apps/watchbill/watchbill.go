@@ -15,6 +15,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/rs/zerolog"
 
 	"github.com/stergiotis/boxer/apps/watchbill/launchcfg"
@@ -28,6 +29,7 @@ import (
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/colwidth"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/fsmview"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/recordtable"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/taskmonitor"
 )
 
@@ -103,16 +105,16 @@ type App struct {
 	// binding, which event's error is unfolded, and whether the poller
 	// runs on its tick.
 	filters filters
-	sort    tableSort
-	fitted  bool
+	// sort and list are the job list's grid state (watchbill_table.go);
+	// listRec is the record it draws, rebuilt when listRecKey moves.
+	sort       recordtable.SortState
+	list       recordtable.State
+	listRec    arrow.RecordBatch
+	listRecKey jobsRecKey
 	// widths persists the columns the user dragged (ADR-0151), acquired on
 	// the first frame from the host's capability; nil renders the defaults.
 	widths     *colwidth.Resolver
 	widthsInit bool
-	widthsSeen bool
-	// applyGen asks the binding to apply the resolved widths again on a
-	// frame the resolver\'s own epoch would not; see renderList.
-	applyGen uint32
 	// split is the list pane\'s width, kept and persisted by the window;
 	// storage is where it is kept, and splitWrite its pending write.
 	split     splitState
@@ -209,7 +211,8 @@ func (inst *App) applyLaunch(cfg launchcfg.WatchbillLaunch) {
 	}
 }
 
-// Unmount stops the poller, the subscription and the monitor.
+// Unmount stops the poller, the subscription and the monitor, and drops the
+// job list's record.
 func (inst *App) Unmount(ctx app.MountContextI) (err error) {
 	if inst.cancelApp != nil {
 		inst.cancelApp()
@@ -221,6 +224,10 @@ func (inst *App) Unmount(ctx app.MountContextI) (err error) {
 	inst.wg.Wait()
 	if inst.monitor != nil {
 		_ = inst.monitor.Close()
+	}
+	if inst.listRec != nil {
+		inst.listRec.Release()
+		inst.listRec = nil
 	}
 	return
 }
@@ -252,7 +259,8 @@ func (inst *App) ensureWidths(ctx app.FrameContextI) {
 	}
 	res, err := colwidth.New(store, colwidth.Opts{
 		AppId: ctx.AppId(), InstanceKey: ctx.InstanceKey(),
-		MinPoints: colMinWidth, MaxPoints: colMaxWidth,
+		MinPoints: float64(recordtable.DragMinWidth(inst.density)),
+		MaxPoints: float64(recordtable.MaxColumnWidth),
 	})
 	if err != nil {
 		inst.logger.Warn().Err(err).Msg("watchbill app: column-width resolver unavailable")
