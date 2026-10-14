@@ -419,6 +419,12 @@ type Options struct {
 	// PinOnDrag holds a node where the user drops it, out of the force
 	// layout's reach, until UnpinNode releases it (ADR-0224 §SD10).
 	PinOnDrag bool
+	// VertexBudget bounds the vertices the graph's own geometry may cost in
+	// one frame (ADR-0329). Past it the picture drops its decorations before
+	// its data — the pinned rings, then the arrow heads, then a stable 1-in-k
+	// sample of the edges — and PaintStats says what went. 0 takes a share of
+	// the host's budget, which shrinks while the host reports frames past it.
+	VertexBudget int
 	// Auras draws translucent group blobs beneath the nodes that name the
 	// same aura id (ADR-0224 §SD11).
 	Auras AuraParams

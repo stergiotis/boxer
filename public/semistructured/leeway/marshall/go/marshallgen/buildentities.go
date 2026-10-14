@@ -210,8 +210,9 @@ func writeEntityInterface(sb *strings.Builder, plan *mappingplan.Plan, groups []
 	line(sb, 0, "// (BeginEntity / plain setters / CommitEntity) are added only for the")
 	line(sb, 0, "// full codec's BuildEntities. AddSections stacks sections onto a frame")
 	line(sb, 0, "// the caller already owns, so it needs none of them — which lets a")
-	line(sb, 0, "// store drive it with a builder whose frame control is unexported")
-	line(sb, 0, "// (ADR-0100 SD6). Ent is the builder pointer.")
+	// The unexported frame control is ADR-0100 SD6.
+	line(sb, 0, "// store drive it with a builder whose frame control is unexported.")
+	line(sb, 0, "// Ent is the builder pointer.")
 	linef(sb, 0, "type %sEntityI[", kind)
 	for _, g := range groups {
 		method := methodFor(g.Section)

@@ -250,8 +250,8 @@ package ` + inst.PackageName + `
 // name a vault row holding it carries.
 const EvidenceShreddedKind = "evidenceShredded"
 
-// EvidenceShredded is the evidence profile's shredded component (ADR-0327
-// (proposed) §SD4, ADR-0326): a JSON document exploded by jsonshred into
+// EvidenceShredded is the evidence profile's shredded component: a JSON
+// document exploded by jsonshred into
 // one tuple element per leaf, on the facts section of its value, with the
 // JSON Pointer as the mixed-channel membership's name and the array
 // indices as its parameters. EvidenceShreddedOf and Attrs convert to and
@@ -380,8 +380,8 @@ import "github.com/stergiotis/boxer/public/functional/option"
 // EvidenceChainKind is the value of EvidenceChain.Kind.
 const EvidenceChainKind = "evidenceChain"
 
-// EvidenceChain is the evidence profile's chain component (ADR-0327
-// (proposed) §SD2, §SD3): the row's place in its scope's chain, what its
+// EvidenceChain is the evidence profile's chain component: the row's
+// place in its scope's chain, what its
 // mark says about absent content, and the commitments to its vaulted
 // components. AppendChained sets Prev, Digest and Scheme; the writer sets
 // the mark and the vault sets the commitments.
@@ -410,7 +410,7 @@ type EvidenceChain struct {
 	// ordinal it covers (law L32).
 	HeadDigest option.Option[string] ` + "`lw:\"evidenceChainHeadDigest,stringArray,unit\"`" + `
 	// CommitComponents and Commitments are parallel: the vaulted components
-	// of the row and the commitment to each (ADR-0327 (proposed) §SD4).
+	// of the row and the commitment to each.
 	CommitComponents []string ` + "`lw:\"evidenceChainCommitComponents,stringArray\"`" + `
 	Commitments      []string ` + "`lw:\"evidenceChainCommitments,stringArray\"`" + `
 }
@@ -428,7 +428,7 @@ import "github.com/stergiotis/boxer/public/functional/option"
 const EvidenceWrittenByKind = "evidenceWrittenBy"
 
 // EvidenceWrittenBy is the evidence profile's written-by component
-// (ADR-0327 (proposed) §SD6, law L35): the identity the row was committed
+// (law L35): the identity the row was committed
 // under, as evidence.IdentityFrom reads it off BeginCtx's context. The
 // store fills it; a caller's value is replaced.
 type EvidenceWrittenBy struct {
@@ -464,8 +464,8 @@ package ` + inst.PackageName + `
 // EvidenceSealKind is the value of EvidenceSeal.Kind.
 const EvidenceSealKind = "evidenceSeal"
 
-// EvidenceSeal is the evidence profile's seal component (ADR-0327
-// (proposed) §SD5, law L34): one row per durable flush of a sealed store,
+// EvidenceSeal is the evidence profile's seal component (law L34): one
+// row per durable flush of a sealed store,
 // naming the rows that landed with it by their row digests and chained to
 // the previous seal of its stream. SealOf builds it; Seal reads it as
 // evidence.VerifySeals takes it.
@@ -548,7 +548,7 @@ package ` + inst.PackageName + `
 const EvidenceOpeningKind = "evidenceOpening"
 
 // EvidenceOpening is the evidence profile's opening component on a vault
-// row (ADR-0327 (proposed) §SD4): the opening the ledger's commitment to
+// row: the opening the ledger's commitment to
 // the row's component opens under, as hex. It is destroyed with the row
 // and is never in the row's canonical item: the commitment is over the
 // item without it.
@@ -572,8 +572,8 @@ func (inst emitter) emitVaulted(p func(string, ...any)) {
 	wrapped := inst.StoreName + "Vaulted"
 	rowType := lowerFirst(inst.StoreName) + "ChainRow"
 	ord := inst.orderEntityField()
-	p("// %s is the store a host runs under the profile's vault (ADR-0327", wrapped)
-	p("// (proposed) §SD4): a ledger that never holds content and a vault with one")
+	p("// %s is the store a host runs under the profile's vault: a", wrapped)
+	p("// ledger that never holds content and a vault with one")
 	p("// row per (scope, ordinal, component), each with the opening the ledger's")
 	p("// commitment opens under. Append writes the content first, then the ledger")
 	p("// row with one commitment per component; reads join the two and hand the")
@@ -653,7 +653,8 @@ func (inst emitter) emitVaulted(p func(string, ...any)) {
 	p("// Prepare is Split and the ledger's PrepareChained: the content rows named,")
 	p("// opened and committed to on ent's chain component, and ent made the next")
 	p("// row of its scope's chain, nothing written. A writer that must know the")
-	p("// digest before it acts prepares, acts, and writes (ADR-0314 §SD1).")
+	// Prepare-act-write is ADR-0314 §SD1.
+	p("// digest before it acts prepares, acts, and writes.")
 	p("func (inst *%s) Prepare(ctx context.Context, head evidence.Head, ent *%s, content []*%s) (digest string, err error) {", wrapped, ent, vent)
 	p("\tif err = inst.Split(ent, head.Ordinal+1, content); err != nil {")
 	p("\t\treturn")
@@ -839,8 +840,9 @@ func (inst emitter) emitVaulted(p func(string, ...any)) {
 	p("// Erase rewrites the vault rows at ordinals out of the table, all their")
 	p("// components or only those named: ALTER TABLE … DELETE with")
 	p("// mutations_sync = 2, so the bytes are gone when it returns, not masked")
-	p("// for a later merge (ADR-0320 §SD4). The erased mark that explains the")
-	p("// absence is the writer's to append first (ADR-0327 (proposed) §SD3).")
+	// Synchronous erasure is ADR-0320 §SD4; the erased mark ADR-0327 §SD3.
+	p("// for a later merge. The erased mark that explains the")
+	p("// absence is the writer's to append first.")
 	p("func (inst *%s) Erase(ctx context.Context, scope uint64, ordinals []uint64, components []string) (err error) {", wrapped)
 	p("\tif len(ordinals) == 0 {")
 	p("\t\treturn")
@@ -909,7 +911,7 @@ func (inst emitter) emitVaulted(p func(string, ...any)) {
 func (inst emitter) emitEvidenceVerbs(p func(string, ...any)) {
 	if inst.evidenceWrittenBy() {
 		p("// writtenByOf is the written-by component of a row committed under ctx")
-		p("// (ADR-0327 (proposed) §SD6): the call identity's origin and claims, the")
+		p("// (law L35): the call identity's origin and claims, the")
 		p("// batch and the attestation on ctx, as evidence.IdentityFrom reads them.")
 		p("func (inst *%s) writtenByOf(ctx context.Context) (row %s) {", inst.storeType(), evidenceWrittenByKind)
 		p("\tid := evidence.IdentityFrom(ctx)")
@@ -934,13 +936,13 @@ func (inst emitter) emitEvidenceVerbs(p func(string, ...any)) {
 		beginArgs += ", ent." + inst.StoreName + "Envelope"
 	}
 	p("// PrepareChained makes ent the next row of its scope's chain without")
-	p("// writing it (ADR-0327 (proposed) §SD2, law L31): the ordinal after head's,")
+	p("// writing it (law L31): the ordinal after head's,")
 	p("// the chain component's Prev, Digest and Scheme set by the store — the mark")
 	p("// is the caller's — the written-by component the context's, whatever ent")
 	p("// carried, and the digest over the row's canonical item with Prev and")
 	p("// Digest at zero, chained to head's digest (the seed for an empty scope).")
 	p("// A writer that must know the digest before it acts prepares, acts, and")
-	p("// writes (ADR-0314 §SD1). ent is updated in place; digest is what its chain")
+	p("// writes. ent is updated in place; digest is what its chain")
 	p("// component now records.")
 	p("func (inst *%s) PrepareChained(ctx context.Context, head evidence.Head, ent *%s) (digest string, err error) {", st, ent)
 	p("\tif inst.cfg.Scheme.IsZero() {")

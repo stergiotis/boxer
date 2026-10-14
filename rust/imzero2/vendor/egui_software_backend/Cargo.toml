@@ -14,7 +14,7 @@ license = "MIT OR Apache-2.0"
 keywords = ["egui", "raster", "software", "render", "softbuffer"]
 
 [dependencies]
-egui = { version = "0.35", default-features = false }
+egui = { version = "0.36.2", default-features = false }
 strength_reduce = "0.2.4"
 constify = { path = "constify", version = "0.0.1" }
 ahash = { version = "0.8", default-features = false, features = ["no-rng"] }

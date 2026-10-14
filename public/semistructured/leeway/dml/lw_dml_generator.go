@@ -1679,6 +1679,11 @@ func (inst *GoClassBuilder) ComposeEntityCode(clsNamer gocodegen.GoClassNamerI, 
 	}
 
 	b := inst.builder
+	var columnSetters map[common.PlainItemTypeE][]plainColumnSetter
+	columnSetters, err = plainColumnSettersByItemType(plainSetterIRH)
+	if err != nil {
+		return
+	}
 	{ // setter
 		for _, pt := range common.AllPlainItemTypes {
 			setterName := inst.ctrlName(itemTypeToSetterName(pt))
@@ -1689,6 +1694,10 @@ func (inst *GoClassBuilder) ComposeEntityCode(clsNamer gocodegen.GoClassNamerI, 
 				continue
 			}
 			gocodegen.EmitGeneratingCodeLocation(b)
+			err = inst.composeGroupedSetterDoc(setterName, irh, columnSetters[pt])
+			if err != nil {
+				return
+			}
 			_, err = fmt.Fprintf(b, `func (inst *%s) %s(`, clsNames.InEntityClassName, setterName)
 			if err != nil {
 				return
@@ -1735,11 +1744,15 @@ func (inst *GoClassBuilder) ComposeEntityCode(clsNamer gocodegen.GoClassNamerI, 
 			if err != nil {
 				return
 			}
+			err = inst.composePlainColumnSetters(clsNames.InEntityClassName, columnSetters[pt])
+			if err != nil {
+				return
+			}
 		}
 	}
 	{ // ambient memberships (ADR-0112 M1)
 		_, err = fmt.Fprintf(b, `// PushMembershipHighCardRef adds id to the ambient HighCardRef memberships
-// replayed onto every attribute as it closes, until it is popped (ADR-0112 M1).
+// replayed onto every attribute as it closes, until it is popped.
 // The stamp scope — one section vs the whole entity — is the caller's to set.
 func (inst *%s) PushMembershipHighCardRef(id uint64) {
 	inst.ambientHighCardRef = append(inst.ambientHighCardRef, id)

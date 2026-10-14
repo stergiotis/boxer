@@ -29,6 +29,15 @@
 // to catch a collision in any binary that links both claimants, and not enough
 // to prove global disjointness — the committed assignment goldens
 // (ADR-0183 D1) are what make it total.
+//
+// # Id spaces
+//
+// A tag value is unique within an id space: a set of columns in which ids of
+// its claimants can meet. Every claim made through [Claim] lives in the
+// default space, the one the vocabularies and the runtime mint share. A caller
+// whose ids never share a column with another kind of id can claim a [Space]
+// of its own and claim values in it through [ClaimIn]; one value may then be
+// claimed once per space. Names stay unique across all spaces.
 package tagmint
 
 import (
@@ -37,6 +46,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"unicode"
 
 	"github.com/rs/zerolog/log"
 
@@ -69,7 +79,7 @@ const VocabularyTagWidth = 32
 // is a separate decision, deliberately not made here (ADR-0183 D8).
 const RuntimeMintTagValue identifier.TagValue = 3524577
 
-// ClaimedTagValue is proof that a tag value passed through [Claim]. It carries
+// ClaimedTagValue is proof that a tag value passed through [ClaimIn]. It carries
 // a reference to the claim this package holds, so the zero value — the only
 // one another package can produce — reports false from [ClaimedTagValue.IsValid]
 // and is refused by every constructor that asks for a claim.
@@ -79,17 +89,103 @@ type ClaimedTagValue struct {
 
 type claim struct {
 	name           string
+	space          Space
 	value          identifier.TagValue
 	maxExpectedIds uint64
 	origin         string
 }
 
+// Space is a named id space: a set of columns in which ids of its claimants
+// may meet. A tag value may be claimed once per space. The zero Space is the
+// default space, which every claim made through [Claim] lives in; any other
+// Space comes from [ClaimSpace].
+//
+// That two spaces never share a column is the declaring caller's contract,
+// the same way maxExpectedIds is the claimant's honest estimate: this package
+// cannot see columns. Ids that share a column with vocabulary ids — membership
+// ids, the runtime mint — belong in the default space.
+type Space struct {
+	s *space
+}
+
+type space struct {
+	name   string
+	origin string
+}
+
+// valueKey is the uniqueness key of a claimed tag value.
+type valueKey struct {
+	space *space
+	value identifier.TagValue
+}
+
 var (
-	mu        sync.Mutex
-	byName    = map[string]*claim{}
-	byValue   = map[identifier.TagValue]*claim{}
-	claimList []*claim
+	mu          sync.Mutex
+	byName      = map[string]*claim{}
+	byValue     = map[valueKey]*claim{}
+	claimList   []*claim
+	spaceByName = map[string]*space{}
 )
+
+// ClaimSpace registers an id space under name. The name must be non-empty and
+// free of whitespace and control characters, so it can stand as a field in
+// the committed goldens. A second space of one name is refused, with the
+// origin of the first.
+func ClaimSpace(name string) (r Space, err error) {
+	if name == "" {
+		err = eb.Build().Errorf("an id space needs a name")
+		return
+	}
+	if strings.IndexFunc(name, func(c rune) bool { return unicode.IsSpace(c) || unicode.IsControl(c) }) >= 0 {
+		err = eb.Build().Str("space", name).Errorf("an id space name may not contain whitespace or control characters")
+		return
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if prev, has := spaceByName[name]; has {
+		err = eb.Build().Str("space", name).Str("claimedAt", prev.origin).Errorf("id space name is already claimed")
+		return
+	}
+	sp := &space{
+		name:   name,
+		origin: origin(),
+	}
+	spaceByName[name] = sp
+	r = Space{s: sp}
+	return
+}
+
+// MustClaimSpace is [ClaimSpace] for a package-level declaration.
+func MustClaimSpace(name string) (r Space) {
+	var err error
+	r, err = ClaimSpace(name)
+	if err != nil {
+		log.Panic().Err(err).Str("space", name).Msg("unable to claim id space")
+	}
+	return
+}
+
+// IsDefault reports whether inst is the default space.
+func (inst Space) IsDefault() bool {
+	return inst.s == nil
+}
+
+// Name returns the space's name, or "" for the default space.
+func (inst Space) Name() string {
+	if inst.s == nil {
+		return ""
+	}
+	return inst.s.name
+}
+
+// Origin returns the source location that claimed the space, or "" for the
+// default space.
+func (inst Space) Origin() string {
+	if inst.s == nil {
+		return ""
+	}
+	return inst.s.origin
+}
 
 // Claim registers name against value and returns the token the id registries
 // require.
@@ -102,8 +198,16 @@ var (
 //
 // Both the name and the value must be unclaimed in this link set. The error
 // names the code location that claimed first, because the useful question when
-// two packages collide is which one to move.
+// two packages collide is which one to move. The claim lives in the default
+// space; Claim(name, value, n) is ClaimIn(Space{}, name, value, n).
 func Claim(name string, value identifier.TagValue, maxExpectedIds uint64) (r ClaimedTagValue, err error) {
+	return ClaimIn(Space{}, name, value, maxExpectedIds)
+}
+
+// ClaimIn is [Claim] within sp. The value must be unclaimed in sp only; the
+// name must be unclaimed in every space, so a claim's name identifies it in
+// errors and audits without its space.
+func ClaimIn(sp Space, name string, value identifier.TagValue, maxExpectedIds uint64) (r ClaimedTagValue, err error) {
 	if name == "" {
 		err = eb.Build().Errorf("a tag-value claim needs a name")
 		return
@@ -137,18 +241,20 @@ func Claim(name string, value identifier.TagValue, maxExpectedIds uint64) (r Cla
 		err = eb.Build().Str("name", name).Str("claimedAt", prev.origin).Errorf("tag-value name is already claimed")
 		return
 	}
-	if prev, has := byValue[value]; has {
-		err = eb.Build().Str("name", name).Uint32("tagValue", value.Value()).Str("claimant", prev.name).Str("claimedAt", prev.origin).Errorf("the tag value is already claimed — ids under one tag value are one id space, so two claimants collide")
+	key := valueKey{space: sp.s, value: value}
+	if prev, has := byValue[key]; has {
+		err = eb.Build().Str("name", name).Str("space", sp.Name()).Uint32("tagValue", value.Value()).Str("claimant", prev.name).Str("claimedAt", prev.origin).Errorf("the tag value is already claimed in this id space — ids under one tag value in one space can meet in one column, so two claimants collide")
 		return
 	}
 	c := &claim{
 		name:           name,
+		space:          sp,
 		value:          value,
 		maxExpectedIds: maxExpectedIds,
 		origin:         origin(),
 	}
 	byName[name] = c
-	byValue[value] = c
+	byValue[key] = c
 	claimList = append(claimList, c)
 	r = ClaimedTagValue{c: c}
 	return
@@ -166,7 +272,17 @@ func MustClaim(name string, value identifier.TagValue, maxExpectedIds uint64) (r
 	return
 }
 
-// IsValid reports whether inst came from [Claim]. The zero ClaimedTagValue —
+// MustClaimIn is [ClaimIn] for a package-level declaration.
+func MustClaimIn(sp Space, name string, value identifier.TagValue, maxExpectedIds uint64) (r ClaimedTagValue) {
+	var err error
+	r, err = ClaimIn(sp, name, value, maxExpectedIds)
+	if err != nil {
+		log.Panic().Err(err).Str("space", sp.Name()).Str("name", name).Uint32("tagValue", value.Value()).Msg("unable to claim tag value")
+	}
+	return
+}
+
+// IsValid reports whether inst came from [Claim] or [ClaimIn]. The zero ClaimedTagValue —
 // what a `ClaimedTagValue{}` literal outside this package produces — is not
 // valid, which is what makes the token unforgeable in practice.
 func (inst ClaimedTagValue) IsValid() bool {
@@ -185,6 +301,15 @@ func (inst ClaimedTagValue) Value() identifier.TagValue {
 // an unclaimed token.
 func (inst ClaimedTagValue) Tag() identifier.IdTag {
 	return inst.Value().GetTag()
+}
+
+// Space returns the space the claim was made in. An unclaimed token reports
+// the default space.
+func (inst ClaimedTagValue) Space() Space {
+	if inst.c == nil {
+		return Space{}
+	}
+	return inst.c.space
 }
 
 // Name returns the claimant's name, or "" for an unclaimed token.
@@ -213,9 +338,10 @@ func (inst ClaimedTagValue) Origin() string {
 	return inst.c.origin
 }
 
-// IterateClaims yields every claim in this link set, in claim order. It is
-// what an audit — the assignment goldens' union test, a claims-as-facts
-// publication (ADR-0183 D3) — reads.
+// IterateClaims yields every claim in this link set, in claim order, across
+// all spaces; [ClaimedTagValue.Space] tells them apart. It is what an audit —
+// the assignment goldens' union test, a claims-as-facts publication
+// (ADR-0183 D3) — reads, keyed by (space, value).
 func IterateClaims() iter.Seq[ClaimedTagValue] {
 	return func(yield func(ClaimedTagValue) bool) {
 		mu.Lock()

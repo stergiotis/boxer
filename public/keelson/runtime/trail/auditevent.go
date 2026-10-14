@@ -10,6 +10,12 @@ import "github.com/stergiotis/boxer/public/storage/recordstore/evidence/audit"
 // for a component from another package.
 type AuditEvent = audit.AuditEvent
 
+// Origin is who a trail row came from (ADR-0277 §SD1): the audit
+// package's origin component, an alias for the reason AuditEvent is one.
+// On every verb but Event the host stamps it — the run from the process,
+// app and window from the bus envelope — so an app cannot claim another's.
+type Origin = audit.Origin
+
 const (
 	OutcomeOk     = audit.OutcomeOk
 	OutcomeDenied = audit.OutcomeDenied
@@ -19,6 +25,12 @@ const (
 	PrincipalByEnv    = audit.PrincipalByEnv
 	PrincipalByOs     = audit.PrincipalByOs
 	PrincipalByNone   = audit.PrincipalByNone
+
+	PrincipalViaPeer     = audit.PrincipalViaPeer
+	PrincipalViaMtls     = audit.PrincipalViaMtls
+	PrincipalViaToken    = audit.PrincipalViaToken
+	PrincipalViaSession  = audit.PrincipalViaSession
+	PrincipalViaUpstream = audit.PrincipalViaUpstream
 
 	TrailDomain        = audit.TrailDomain
 	ActionAuditGap     = audit.ActionAuditGap

@@ -120,8 +120,9 @@ fn is_copy_command(modifiers: egui::Modifiers, key: egui::Key) -> bool {
 }
 
 /// Per-session translation state. `modifiers` holds the last seen
-/// modifier set so `RawInput::modifiers` can be kept coherent between
-/// events (egui reads it for hover/shortcut state outside event dispatch).
+/// modifier set; egui (0.36+) reads it for hover/shortcut state outside
+/// event dispatch only from `Event::ModifiersChanged`, which
+/// [`InputTranslator::set_modifiers`] emits whenever the set changes.
 /// The rest is what [`InputTranslator::cancel`] needs in order to undo input
 /// that is still held when its owner goes away (ADR-0242 SD2).
 pub struct InputTranslator {
@@ -169,6 +170,15 @@ impl InputTranslator {
         self.focused = true;
     }
 
+    /// Record a modifier set and, when it differs from the last one, append
+    /// the `ModifiersChanged` event that carries it to egui's input state.
+    fn set_modifiers(&mut self, modifiers: egui::Modifiers, out: &mut Vec<egui::Event>) {
+        if self.modifiers != modifiers {
+            self.modifiers = modifiers;
+            out.push(egui::Event::ModifiersChanged(modifiers));
+        }
+    }
+
     /// Undo input the host can no longer attribute to a live owner — an owner
     /// change or a disconnect (ADR-0242 SD2), which is server-side and cannot
     /// wait for a departing browser to tidy up.
@@ -193,7 +203,7 @@ impl InputTranslator {
     /// before releasing keeps the net pointer delta at zero, so a drag that is
     /// being cancelled stops where it actually was rather than 64 points away.
     fn cancel_held(&mut self, out: &mut Vec<egui::Event>) {
-        self.modifiers = egui::Modifiers::default();
+        self.set_modifiers(egui::Modifiers::default(), out);
         for key in self.keys_down.drain(..) {
             out.push(egui::Event::Key {
                 key,
@@ -250,7 +260,7 @@ impl InputTranslator {
                 }
             }
             E::MouseButton(b) => {
-                self.modifiers = modifiers_from_bits(b.modifiers);
+                self.set_modifiers(modifiers_from_bits(b.modifiers), out);
                 if !(b.x.is_finite() && b.y.is_finite()) {
                     tracing::debug!(x = b.x, y = b.y, "dropping non-finite pointer button");
                 } else if let Some(button) = pointer_button(b.button) {
@@ -268,7 +278,7 @@ impl InputTranslator {
                 }
             }
             E::MouseWheel(w) => {
-                self.modifiers = modifiers_from_bits(w.modifiers);
+                self.set_modifiers(modifiers_from_bits(w.modifiers), out);
                 if w.dx.is_finite() && w.dy.is_finite() {
                     let unit = match w.unit {
                         1 => egui::MouseWheelUnit::Line,
@@ -288,7 +298,7 @@ impl InputTranslator {
                 }
             }
             E::Key(k) => {
-                self.modifiers = modifiers_from_bits(k.modifiers);
+                self.set_modifiers(modifiers_from_bits(k.modifiers), out);
                 // Browser KeyboardEvent.key names are accepted by
                 // egui::Key::from_name ("ArrowDown", "Enter", "A", ...);
                 // single letters arrive lowercase from the browser and
@@ -364,7 +374,7 @@ impl InputTranslator {
                 // focus also cancels held input rather than letting the next
                 // release complete a click.
                 self.focused = f.focused;
-                self.modifiers = egui::Modifiers::default();
+                self.set_modifiers(egui::Modifiers::default(), out);
                 out.push(egui::Event::WindowFocused(f.focused));
                 if !f.focused {
                     self.cancel_held(out);
@@ -503,11 +513,12 @@ mod tests {
             }),
             &mut out,
         );
-        assert!(out.is_empty(), "non-finite button position is dropped");
         assert!(
-            t.modifiers.shift,
-            "modifier state (bit 4 = shift) is still tracked"
+            matches!(out.as_slice(), [egui::Event::ModifiersChanged(m)] if m.shift),
+            "non-finite button position is dropped; the modifier change \
+             (bit 4 = shift) still reaches egui: {out:?}"
         );
+        assert!(t.modifiers.shift);
     }
 
     /// The wire numbering is frozen in `input.proto` and read by a
@@ -553,11 +564,11 @@ mod tests {
     fn clipboard_shortcuts_become_clipboard_actions() {
         assert!(matches!(
             run(key("c", COMMAND, true)).as_slice(),
-            [egui::Event::Copy]
+            [egui::Event::ModifiersChanged(_), egui::Event::Copy]
         ));
         assert!(matches!(
             run(key("x", COMMAND, true)).as_slice(),
-            [egui::Event::Cut]
+            [egui::Event::ModifiersChanged(_), egui::Event::Cut]
         ));
         // A keyboard with dedicated clipboard keys sends them by name, with no
         // modifier at all (egui::Key::Copy / ::Cut).
@@ -587,8 +598,12 @@ mod tests {
             ("Enter", 0, true),
         ] {
             let out = run(key(name, modifiers, pressed));
+            let key_events = match out.as_slice() {
+                [egui::Event::ModifiersChanged(_), rest @ ..] if modifiers != 0 => rest,
+                all => all,
+            };
             assert!(
-                matches!(out.as_slice(), [egui::Event::Key { .. }]),
+                matches!(key_events, [egui::Event::Key { .. }]),
                 "{name} (modifiers {modifiers}, pressed {pressed}) => {out:?}"
             );
         }
@@ -604,7 +619,15 @@ mod tests {
         t.translate(key("c", COMMAND, true), &mut out);
         t.translate(key("c", 0, true), &mut out);
         assert!(
-            matches!(out.as_slice(), [egui::Event::Copy, egui::Event::Key { .. }]),
+            matches!(
+                out.as_slice(),
+                [
+                    egui::Event::ModifiersChanged(m),
+                    egui::Event::Copy,
+                    egui::Event::ModifiersChanged(none),
+                    egui::Event::Key { .. },
+                ] if m.command && none.is_none()
+            ),
             "{out:?}"
         );
     }
@@ -645,9 +668,11 @@ mod tests {
         let mut t = InputTranslator::default();
 
         let pass = |time: f64, events: Vec<egui::Event>, text: &mut String| {
-            ctx.run_ui(raw(time, events), |ui| {
+            let mut out = ctx.run_ui(raw(time, events), |ui| {
                 ui.add(egui::TextEdit::singleline(text).id(id));
-            })
+            });
+            out.textures_delta.clear();
+            out
         };
 
         pass(0.0, Vec::new(), &mut text);
@@ -819,7 +844,7 @@ mod tests {
             }
         };
 
-        let _ = ctx.run_ui(raw(0.0, Vec::new()), draw);
+        ctx.run_ui(raw(0.0, Vec::new()), draw).textures_delta.clear();
         let at = rect.get().center();
         let mut t = InputTranslator::default();
 
@@ -829,17 +854,17 @@ mod tests {
             &mut events,
         );
         t.translate(button_event(at.x, at.y, 0, true), &mut events);
-        let _ = ctx.run_ui(raw(0.05, events), draw);
+        ctx.run_ui(raw(0.05, events), draw).textures_delta.clear();
 
         if cancel {
             let mut events = Vec::new();
             t.cancel(&mut events);
-            let _ = ctx.run_ui(raw(0.10, events), draw);
+            ctx.run_ui(raw(0.10, events), draw).textures_delta.clear();
         }
 
         let mut events = Vec::new();
         t.translate(button_event(at.x, at.y, 0, false), &mut events);
-        let _ = ctx.run_ui(raw(0.15, events), draw);
+        ctx.run_ui(raw(0.15, events), draw).textures_delta.clear();
         clicked.get()
     }
 

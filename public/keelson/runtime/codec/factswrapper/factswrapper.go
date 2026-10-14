@@ -239,7 +239,8 @@ func writeActiveHints(sb *strings.Builder, plan *mappingplan.Plan) (err error) {
 	}
 	names := activeSectionNamesByIdx(plan)
 
-	sb.WriteString("// --- ADR-0042 active-section / active-field hints. ---\n\n")
+	// The active-section hints are ADR-0042's.
+	sb.WriteString("// --- Active-section / active-field hints. ---\n\n")
 
 	fmt.Fprintf(sb, "// %sActiveSections is the dml_cbor section-index subset this kind\n", plan.KindType)
 	fmt.Fprintf(sb, "// populates. Passed to InEntityFacts.SetActiveSections so the\n")
@@ -308,7 +309,8 @@ func writePool(sb *strings.Builder, plan *mappingplan.Plan) {
 
 func writeMarshal(sb *strings.Builder, plan *mappingplan.Plan) (err error) {
 	pool := lowerFirst(plan.KindType) + "Pool"
-	sb.WriteString("// --- Sparse-CBOR write (ADR-0042 driver path). ---\n\n")
+	// The sparse-CBOR driver path is ADR-0042's.
+	sb.WriteString("// --- Sparse-CBOR write. ---\n\n")
 	fmt.Fprintf(sb, "// Marshal writes the SoA buffer to w as the sparse-CBOR wire\n")
 	fmt.Fprintf(sb, "// format produced through factsschema/dml_cbor. Thin wrapper\n")
 	fmt.Fprintf(sb, "// around %sBuildEntities — the per-row chain lives there and\n", plan.KindType)

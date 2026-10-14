@@ -407,8 +407,12 @@ var InEntityTestTableSectionIndices = map[string]int{
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1691
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1696
 
+// SetId sets the entity's id, naturalKey columns, one positional argument per
+// column in that order. Hand-written code should call the per-column setters
+// (SetIdColumn, SetNaturalKey) instead: they cannot swap two arguments of the
+// same type.
 func (inst *InEntityTestTable) SetId(id0 uint64, naturalKey1 []byte) *InEntityTestTable {
 	if inst.state != runtime.EntityStateInEntity {
 		inst.AppendError(runtime.ErrInvalidStateTransition)
@@ -420,8 +424,40 @@ func (inst *InEntityTestTable) SetId(id0 uint64, naturalKey1 []byte) *InEntityTe
 	return inst
 }
 
+///////////////////////////////////////////////////////////////////
+// code generator
+// dml.(*GoClassBuilder).composePlainColumnSetters
+// ./public/semistructured/leeway/dml/lw_dml_plain_setters.go:125
+
+// SetIdColumn sets the entity's id column.
+func (inst *InEntityTestTable) SetIdColumn(id0 uint64) *InEntityTestTable {
+	if inst.state != runtime.EntityStateInEntity {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.plainId0 = id0
+
+	return inst
+}
+
+///////////////////////////////////////////////////////////////////
+// code generator
+// dml.(*GoClassBuilder).composePlainColumnSetters
+// ./public/semistructured/leeway/dml/lw_dml_plain_setters.go:125
+
+// SetNaturalKey sets the entity's naturalKey column.
+func (inst *InEntityTestTable) SetNaturalKey(naturalKey1 []byte) *InEntityTestTable {
+	if inst.state != runtime.EntityStateInEntity {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.plainNaturalKey1 = naturalKey1
+
+	return inst
+}
+
 // PushMembershipHighCardRef adds id to the ambient HighCardRef memberships
-// replayed onto every attribute as it closes, until it is popped (ADR-0112 M1).
+// replayed onto every attribute as it closes, until it is popped.
 // The stamp scope — one section vs the whole entity — is the caller's to set.
 func (inst *InEntityTestTable) PushMembershipHighCardRef(id uint64) {
 	inst.ambientHighCardRef = append(inst.ambientHighCardRef, id)

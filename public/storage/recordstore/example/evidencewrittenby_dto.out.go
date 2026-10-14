@@ -8,7 +8,7 @@ import "github.com/stergiotis/boxer/public/functional/option"
 const EvidenceWrittenByKind = "evidenceWrittenBy"
 
 // EvidenceWrittenBy is the evidence profile's written-by component
-// (ADR-0327 (proposed) §SD6, law L35): the identity the row was committed
+// (law L35): the identity the row was committed
 // under, as evidence.IdentityFrom reads it off BeginCtx's context. The
 // store fills it; a caller's value is replaced.
 type EvidenceWrittenBy struct {

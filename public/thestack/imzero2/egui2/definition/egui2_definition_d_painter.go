@@ -330,6 +330,16 @@ self.paint_cmds.push(PaintCmd::PolygonFilled { points, fill: color32_from_rgba_u
 	// 8=plus 9=asterisk; anything else falls back to circle. Shapes 0-6 are
 	// filled with col; 7-9 are line glyphs stroked with col at weight.
 	// radius is the glyph half-extent in pixels.
+	//
+	// outline(col, width) rings each circle (shape 0) with a stroke centred on
+	// its edge; other shapes ignore it. mesh() is a hint to draw a circle batch
+	// as one untextured mesh — a fan per disc, the outline as a ring around it
+	// and a one-pixel feather on the outermost edge only — instead of a
+	// feathered epaint shape per disc (and a second per outline). The segment
+	// count follows the radius, so a small disc costs a few vertices rather
+	// than epaint's sixteen-point minimum per path. With a transparent col a
+	// mesh batch draws the outline rings alone. A host may ignore it; other
+	// shapes draw as before.
 	registered = append(registered, idl.NewBuilderFactoryNode("paintMarkers").
 		AddArguments(idl.NewArgumentsBuilder().
 			PlainArg("xs", ctabb.F32h).
@@ -339,8 +349,18 @@ self.paint_cmds.push(PaintCmd::PolygonFilled { points, fill: color32_from_rgba_u
 			PlainArg("col", ctabb.U32).AsColor().
 			PlainArg("weight", ctabb.F32).
 			Build()).
-		WithConstructionCodeClientRust(ir.EmptyCode).
-		WithApplyCodeClientRust(rustClientCode(`self.paint_cmds.push(PaintCmd::Markers { xs, ys, shape, radius, color: color32_from_rgba_u32(col), weight });
+		AddMethods(idl.NewMethodBuilder().
+			BeginMethod("mesh").
+			CodeClientRust(rustClientCode("mesh = true;\n")).EndMethod().
+			BeginMethod("outline").Arg("oc", ctabb.U32).AsColor().Arg("ow", ctabb.F32).
+			CodeClientRust(rustClientCode("outline_col = oc; outline_width = ow;\n")).EndMethod().
+			Build()...).
+		WithConstructionCodeClientRust(rustClientCode(`0u8;
+let mut mesh = false;
+let mut outline_col: u32 = 0;
+let mut outline_width: f32 = 0.0;
+`)).
+		WithApplyCodeClientRust(rustClientCode(`self.paint_cmds.push(PaintCmd::Markers { xs, ys, shape, radius, color: color32_from_rgba_u32(col), weight, mesh, outline: egui::Stroke::new(outline_width, color32_from_rgba_u32(outline_col)) });
 `)).
 		WithSettingImmediate(true).
 		WithReturnType(structPaintCmd()).
@@ -391,6 +411,26 @@ self.paint_cmds.push(PaintCmd::PolygonFilled { points, fill: color32_from_rgba_u
 let mut tessellated = false;
 `)).
 		WithApplyCodeClientRust(rustClientCode(`self.paint_cmds.push(PaintCmd::Segments { x0s, y0s, x1s, y1s, cols, width: stroke_width, tessellated });
+`)).
+		WithSettingImmediate(true).
+		WithReturnType(structPaintCmd()).
+		Build())
+
+	// paintTriangles — one filled triangle per index k, its corners at
+	// (xs[3k..3k+3], ys[3k..3k+3]), each with its own colour cols[k]; one
+	// opcode for a whole layer of small solid glyphs such as a graph's arrow
+	// heads, which a convex polygon per glyph would send and tessellate one at
+	// a time. Drawn as one untextured mesh, so the edges are not feathered.
+	// Counts are truncated to the shortest of len(xs)/3, len(ys)/3 and
+	// len(cols) Rust-side.
+	registered = append(registered, idl.NewBuilderFactoryNode("paintTriangles").
+		AddArguments(idl.NewArgumentsBuilder().
+			PlainArg("xs", ctabb.F32h).
+			PlainArg("ys", ctabb.F32h).
+			PlainArg("cols", ctabb.U32h).AsColors().
+			Build()).
+		WithConstructionCodeClientRust(ir.EmptyCode).
+		WithApplyCodeClientRust(rustClientCode(`self.paint_cmds.push(PaintCmd::Triangles { xs, ys, cols });
 `)).
 		WithSettingImmediate(true).
 		WithReturnType(structPaintCmd()).

@@ -35,12 +35,13 @@ one egui minor bump measured so far cost zero lines in the render core.
 
 ## Deltas against upstream
 
-Everything below is a deletion or a version pin; no rasterizer logic was
-touched.
+Everything below is a deletion, a version pin or an API adaptation; no
+rasterizer logic was touched.
 
 | What | Why |
 | --- | --- |
-| `egui` `"0.34"` → `"0.35"` | match the imzero2 ring pin. The render core needed no source change; only the two surfaces removed below did. |
+| `egui` `"0.34"` → `"0.35"` → `"0.36.2"` | match the imzero2 ring pin. At 0.35 the render core needed no source change; only the two surfaces removed below did. |
+| `set_textures` walks a list of deltas per texture id | egui 0.36 changed `TexturesDelta::set` from a list of `(id, delta)` pairs to a map from id to the deltas queued for it, in order. The loop flattens the map; its body is unchanged. Marked `// boxer delta:` in `src/lib.rs`. |
 | removed the `winit` feature, its four optional deps (`winit`, `softbuffer`, `egui-winit`, `bytemuck`) and `src/winit.rs` | imzero2 brings its own host. This surface is also the one that does *not* compile at 0.35 (`ViewportBuilder::monitor`, `ViewportCommand::SetMonitor`). |
 | removed the `test_render` feature, its optional deps (`egui_kittest`, `image`) and `src/test_render.rs` | the upstream CPU-vs-GPU comparison harness; it needs dev-dependencies this copy does not carry. |
 | removed `[dev-dependencies]`, `[[example]]` × 4, `[profile.dev*]` | dev-only, and cargo ignores `[profile]` outside the workspace root. |

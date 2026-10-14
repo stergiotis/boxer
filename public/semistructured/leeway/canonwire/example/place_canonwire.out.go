@@ -28,7 +28,7 @@ var (
 // canonwire.(*GoClassBuilder).ComposeCodec
 // ./public/semistructured/leeway/canonwire/lw_cw_generator.go:209
 
-// The slot keys of ADR-0210 SD2: a tagged section's CT group, or a co-section
+// The slot keys: a tagged section's CT group, or a co-section
 // group's CT signature. They key the entity item's tagged map and are the only
 // thing on the wire that comes from place's description: section names, column
 // names, aspects and hints are not.
@@ -73,7 +73,7 @@ func (inst CanonWireSlotPlaceE) Signature() string {
 }
 
 // Ambiguous reports whether the slot's signature is carried by more than one
-// slot of this table. Those are the slots ADR-0210 SD5's dispatch has to
+// slot of this table. Those are the slots the tagger/dispatcher pair has to
 // resolve: the encoder consults its tagger for every attribute of one, and for
 // no attribute of any other.
 func (inst CanonWireSlotPlaceE) Ambiguous() bool {
@@ -81,7 +81,7 @@ func (inst CanonWireSlotPlaceE) Ambiguous() bool {
 	return false
 }
 
-// CanonWireTaggerPlaceI is the encoder half of ADR-0210 SD5's dispatch pair.
+// CanonWireTaggerPlaceI is the encoder half of the slot dispatch pair.
 //
 // It is consulted for every attribute of a slot whose signature is ambiguous
 // in this table, and its small opaque integer rides as the attribute item's
@@ -91,7 +91,7 @@ type CanonWireTaggerPlaceI interface {
 	Tag(slot CanonWireSlotPlaceE, entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) uint64
 }
 
-// CanonWireOrdinalTaggerPlace is the built-in tagger of ADR-0210 SD5.
+// CanonWireOrdinalTaggerPlace is the built-in tagger.
 //
 // It returns the slot's ordinal within its ambiguity set, which round-trips
 // between two tables that declare the same sections in the same order and is
@@ -106,7 +106,7 @@ func (inst CanonWireOrdinalTaggerPlace) Tag(slot CanonWireSlotPlaceE, entityIdx 
 	return 0
 }
 
-// CanonWireEncoderPlace writes entities of a loaded ReadAccessPlace as the leeway canonical wire (ADR-0210).
+// CanonWireEncoderPlace writes entities of a loaded ReadAccessPlace as the leeway canonical wire.
 //
 // It reads the generated readaccess accessors directly: no reflection, no
 // arrow.Array type switch, one typed runtime call per column. The buffers are
@@ -165,7 +165,7 @@ func NewCanonWireEncoderPlace(ra *ReadAccessPlace, tagger CanonWireTaggerPlaceI)
 
 // EncodeEntity writes one entity item to w: the plain sections under their item
 // types, then the tagged slots under their CT signatures, both in the order the
-// form fixes (ADR-0210 SD1–SD3). The attributes are held back only until the
+// canonical form fixes. The attributes are held back only until the
 // item is complete, which is what lets the writer sort them into canonical
 // order.
 func (inst *CanonWireEncoderPlace) EncodeEntity(entityIdx runtime.EntityIdx, w io.Writer) (err error) {
@@ -285,20 +285,20 @@ func (inst *CanonWireEncoderPlace) EncodeAll(w io.Writer) (err error) {
 // canonWireAmbiguousPlace reports whether any signature of place is carried by more than one slot.
 // It is what the decoder's constructor checks: an ambiguous table cannot be
 // decoded without a dispatcher, and the refusal is at construction rather than
-// at the first attribute that needs one (ADR-0210 SD5).
+// at the first attribute that needs one.
 const canonWireAmbiguousPlace = false
 
 // canonWireAcceptMasksPlace holds, per slot in slot order, the membership channels each member
 // section accepts — one bitmask per section in signature order, over the
-// mappingplan channel ordinals. It is the input to the narrowing step of
-// ADR-0210 SD5: a section that cannot store the memberships an attribute
-// carries is not that attribute's target.
+// mappingplan channel ordinals. It is the input to the decoder's narrowing
+// step: a section that cannot store the memberships an attribute carries is
+// not that attribute's target.
 var canonWireAcceptMasksPlace = [][]uint32{
 	{0x01, 0x01}, // geo+h3
 	{0x02},       // tags
 }
 
-// CanonWireDispatcherPlaceI is the decoder half of ADR-0210 SD5's dispatch pair.
+// CanonWireDispatcherPlaceI is the decoder half of the slot dispatch pair.
 //
 // It is consulted only for an attribute whose signature more than one slot of
 // this table carries *and* whose memberships more than one of those slots can
@@ -313,7 +313,7 @@ type CanonWireDispatcherPlaceI interface {
 	Dispatch(candidates []CanonWireSlotPlaceE, attr *cwruntime.AttributeView) (slot CanonWireSlotPlaceE, err error)
 }
 
-// CanonWireOrdinalDispatcherPlace is the built-in dispatcher of ADR-0210 SD5 and the mirror of CanonWireOrdinalTaggerPlace: it reads
+// CanonWireOrdinalDispatcherPlace is the built-in dispatcher and the mirror of CanonWireOrdinalTaggerPlace: it reads
 // the attribute's discriminator as the slot's ordinal within the full
 // ambiguity set. It round-trips between two tables that declare the same
 // sections in the same order, and is explicitly that declaration-order
@@ -330,7 +330,7 @@ func (inst CanonWireOrdinalDispatcherPlace) Dispatch(candidates []CanonWireSlotP
 	return
 }
 
-// CanonWireDecoderPlace decodes leeway canonical wire entities (ADR-0210) into a InEntityPlace.
+// CanonWireDecoderPlace decodes leeway canonical wire entities into a InEntityPlace.
 //
 // It drives the generated dml builders directly: the plain setters, then one
 // BeginAttribute / container append / AddMembership… / EndAttribute per wire
@@ -364,7 +364,7 @@ type CanonWireDecoderPlace struct {
 // dispatcher may be nil only for a table with no ambiguous signature — canonWireAmbiguousPlace says
 // which this is. A table that has one cannot resolve an attribute's slot from
 // the key alone, so it is refused here rather than at the first attribute that
-// would have needed the hook (ADR-0210 SD5).
+// would have needed the hook.
 func NewCanonWireDecoderPlace(dml *InEntityPlace, dispatcher CanonWireDispatcherPlaceI) (inst *CanonWireDecoderPlace, err error) {
 	if dml == nil {
 		err = eb.Build().Str("tableName", "place").Errorf("no dml builder to decode into")
@@ -382,7 +382,7 @@ func NewCanonWireDecoderPlace(dml *InEntityPlace, dispatcher CanonWireDispatcher
 	return
 }
 
-// slotAcceptsChannels is the narrowing step of ADR-0210 SD5: every membership
+// slotAcceptsChannels is the narrowing step of slot dispatch: every membership
 // the attribute carries must land on a channel the member section at that
 // group's position declares. It is also the check an unambiguous slot goes
 // through, because a signature match does not imply the carriage matches.

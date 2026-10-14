@@ -771,6 +771,7 @@ func (inst *StateManager) Sync() {
 	fetcher.IssueFetchR26KeyCaptures()
 	fetcher.IssueFetchR22StarvedTextures()
 	fetcher.IssueFetchFrameMetrics()
+	fetcher.IssueFetchPaintBudget()
 	fetcher.IssueFetchPixelsPerPoint()
 	captureWanted := inst.captureWanted
 	inst.captureWanted = false
@@ -992,6 +993,9 @@ func (inst *StateManager) Sync() {
 	// call whose elapsed it would otherwise need to peek at.
 	interpretUs, passNr := inst.fetcher.CollectFetchFrameMetrics()
 	metrics.Current.RecordRust(interpretUs, passNr)
+	// The painter lane's geometry against the host's vertex budget
+	// (ADR-0329), collected in the position it was issued.
+	metrics.Current.RecordPaintBudget(inst.fetcher.CollectFetchPaintBudget())
 
 	// Collected in the position it was issued, after the frame metrics.
 	inst.pixelsPerPoint = inst.fetcher.CollectFetchPixelsPerPoint()

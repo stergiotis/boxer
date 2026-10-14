@@ -110,8 +110,9 @@ var InEntityProvenanceTableSectionIndices = map[string]int{
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1691
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1696
 
+// setId sets the entity's id column.
 func (inst *InEntityProvenanceTable) setId(id0 uint64) *InEntityProvenanceTable {
 	if inst.state != runtime.EntityStateInEntity {
 		inst.AppendError(runtime.ErrInvalidStateTransition)
@@ -125,8 +126,9 @@ func (inst *InEntityProvenanceTable) setId(id0 uint64) *InEntityProvenanceTable 
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1691
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1696
 
+// setTimestamp sets the entity's ts column.
 func (inst *InEntityProvenanceTable) setTimestamp(ts1 time.Time) *InEntityProvenanceTable {
 	if inst.state != runtime.EntityStateInEntity {
 		inst.AppendError(runtime.ErrInvalidStateTransition)
@@ -138,7 +140,7 @@ func (inst *InEntityProvenanceTable) setTimestamp(ts1 time.Time) *InEntityProven
 }
 
 // PushMembershipHighCardRef adds id to the ambient HighCardRef memberships
-// replayed onto every attribute as it closes, until it is popped (ADR-0112 M1).
+// replayed onto every attribute as it closes, until it is popped.
 // The stamp scope — one section vs the whole entity — is the caller's to set.
 func (inst *InEntityProvenanceTable) PushMembershipHighCardRef(id uint64) {
 	inst.ambientHighCardRef = append(inst.ambientHighCardRef, id)
@@ -301,7 +303,7 @@ func (inst *InEntityProvenanceTable) GetSchema() (schema *arrow.Schema) {
 	return inst.builder.Schema()
 }
 
-// --- store control drivers (ADR-0100 SD6): exported access to InEntityProvenanceTable's
+// --- store control drivers: exported access to InEntityProvenanceTable's
 // unexported frame control, callable only from within this package. ---
 func InEntityProvenanceTableBeginEntity(e *InEntityProvenanceTable) *InEntityProvenanceTable {
 	return e.beginEntity()

@@ -5,8 +5,8 @@ package trail
 // EvidenceSealKind is the value of EvidenceSeal.Kind.
 const EvidenceSealKind = "evidenceSeal"
 
-// EvidenceSeal is the evidence profile's seal component (ADR-0327
-// (proposed) §SD5, law L34): one row per durable flush of a sealed store,
+// EvidenceSeal is the evidence profile's seal component (law L34): one
+// row per durable flush of a sealed store,
 // naming the rows that landed with it by their row digests and chained to
 // the previous seal of its stream. SealOf builds it; Seal reads it as
 // evidence.VerifySeals takes it.

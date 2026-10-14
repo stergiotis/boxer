@@ -84,6 +84,13 @@ type FrameMetrics struct {
 	LastInterpretNs int64
 	LastPassNr      uint64
 
+	// The previous Rust frame's painter-lane geometry against the host's
+	// vertex budget (ADR-0329): the estimated vertices, the budget, and the
+	// paint commands cut short or skipped to stay under it.
+	LastPaintVertices uint64
+	PaintBudget       uint64
+	LastPaintSkipped  uint32
+
 	EmaRenderNs    float64
 	EmaSyncNs      float64
 	EmaTotalNs     float64
@@ -315,6 +322,21 @@ func (inst *FrameMetrics) RecordRust(interpretUs uint64, passNr uint64) {
 	}
 }
 
+// RecordPaintBudget commits the fetchPaintBudget fetcher's reading, with the
+// same one-frame lag as RecordRust. A budget of 0 is a host that reports none.
+func (inst *FrameMetrics) RecordPaintBudget(vertices uint64, budget uint64, skipped uint32) {
+	inst.LastPaintVertices = vertices
+	inst.PaintBudget = budget
+	inst.LastPaintSkipped = skipped
+}
+
+// PaintOverBudget reports that the last Rust frame cut or skipped paint
+// commands to stay under the host's vertex budget — geometry is missing from
+// the picture. A widget that can draw coarser reads it to back off.
+func (inst *FrameMetrics) PaintOverBudget() bool {
+	return inst.LastPaintSkipped > 0
+}
+
 // Snapshot is an immutable view of the last completed frame, suitable for
 // rendering. All ns values are smoothed via EMA; LastTotalNs is also
 // included raw for callers that want the unsmoothed value. SlackNs is the
@@ -332,6 +354,10 @@ type Snapshot struct {
 	WrittenBytes int64
 	ReadBytes    int64
 	RustPassNr   uint64
+	// Paint geometry against the vertex budget, unsmoothed (ADR-0329).
+	PaintVertices uint64
+	PaintBudget   uint64
+	PaintSkipped  uint32
 }
 
 func (inst *FrameMetrics) Snapshot() (s Snapshot) {
@@ -345,6 +371,9 @@ func (inst *FrameMetrics) Snapshot() (s Snapshot) {
 	s.WrittenBytes = int64(inst.EmaWritten)
 	s.ReadBytes = int64(inst.EmaRead)
 	s.RustPassNr = inst.LastPassNr
+	s.PaintVertices = inst.LastPaintVertices
+	s.PaintBudget = inst.PaintBudget
+	s.PaintSkipped = inst.LastPaintSkipped
 	return
 }
 

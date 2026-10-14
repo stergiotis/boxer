@@ -968,7 +968,13 @@ impl EguiSoftwareRender {
     pub fn set_textures(&mut self, textures_delta: &egui::TexturesDelta) {
         #[cfg(feature = "raster_stats")]
         let start = std::time::Instant::now();
-        for (id, delta) in &textures_delta.set {
+        // boxer delta: egui 0.36 keeps a list of deltas per texture id (a
+        // whole upload may be followed by partial ones); apply them in order.
+        for (id, delta) in textures_delta
+            .set
+            .iter()
+            .flat_map(|(id, deltas)| deltas.iter().map(move |delta| (id, delta)))
+        {
             if delta.options.magnification != delta.options.minification {
                 // Would need helper lanes to impl?
                 #[cfg(feature = "log")]

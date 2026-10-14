@@ -389,11 +389,12 @@ mod tests {
             ..Default::default()
         };
         let mut f = Some(f);
-        let out = ctx.run_ui(raw, |ui| {
+        let mut out = ctx.run_ui(raw, |ui| {
             if let Some(f) = f.take() {
                 f(ui, &mut rec);
             }
         });
+        out.textures_delta.clear();
         let mut s = String::new();
         rec.write_json(out.platform_output.accesskit_update.as_ref(), &mut s);
         doc::parse(&s)

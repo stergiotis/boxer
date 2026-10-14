@@ -61,3 +61,28 @@ func Test_Apply_EnvVarsHonored(t *testing.T) {
 	require.NoError(t, err)
 	require.Contains(t, string(data), "env-json", "BOXER_LOG_FILE must capture the event")
 }
+
+// Test_Apply_ReturnsContext proves Apply hands back the context it was given,
+// so a caller chaining its result passes a usable context on.
+func Test_Apply_ReturnsContext(t *testing.T) {
+	type ctxKey struct{}
+	var returned context.Context
+	var actionCtx context.Context
+	app := &cli.Command{
+		Flags: NewLoggingFlags(),
+		Before: func(ctx context.Context, cmd *cli.Command) (context.Context, error) {
+			out, err := Apply(ctx, cmd)
+			returned = out
+			return out, err
+		},
+		Action: func(ctx context.Context, cmd *cli.Command) error {
+			actionCtx = ctx
+			return nil
+		},
+	}
+	ctx := context.WithValue(context.Background(), ctxKey{}, "marker")
+	require.NoError(t, app.Run(ctx, []string{"prog", "--logFile=" + filepath.Join(t.TempDir(), "ctx.log")}))
+	require.NotNil(t, returned)
+	require.Equal(t, "marker", returned.Value(ctxKey{}))
+	require.Equal(t, "marker", actionCtx.Value(ctxKey{}))
+}

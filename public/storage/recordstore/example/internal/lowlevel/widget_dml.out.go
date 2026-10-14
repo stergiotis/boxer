@@ -177,8 +177,12 @@ var InEntityWidgetTableSectionIndices = map[string]int{
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1691
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1696
 
+// setId sets the entity's id, alt columns, one positional argument per column
+// in that order. Hand-written code should call the per-column setters
+// (setIdColumn, setAlt) instead: they cannot swap two arguments of the same
+// type.
 func (inst *InEntityWidgetTable) setId(id0 uint64, alt1 uint64) *InEntityWidgetTable {
 	if inst.state != runtime.EntityStateInEntity {
 		inst.AppendError(runtime.ErrInvalidStateTransition)
@@ -192,9 +196,42 @@ func (inst *InEntityWidgetTable) setId(id0 uint64, alt1 uint64) *InEntityWidgetT
 
 ///////////////////////////////////////////////////////////////////
 // code generator
-// dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1691
+// dml.(*GoClassBuilder).composePlainColumnSetters
+// ./public/semistructured/leeway/dml/lw_dml_plain_setters.go:125
 
+// setIdColumn sets the entity's id column.
+func (inst *InEntityWidgetTable) setIdColumn(id0 uint64) *InEntityWidgetTable {
+	if inst.state != runtime.EntityStateInEntity {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.plainId0 = id0
+
+	return inst
+}
+
+///////////////////////////////////////////////////////////////////
+// code generator
+// dml.(*GoClassBuilder).composePlainColumnSetters
+// ./public/semistructured/leeway/dml/lw_dml_plain_setters.go:125
+
+// setAlt sets the entity's alt column.
+func (inst *InEntityWidgetTable) setAlt(alt1 uint64) *InEntityWidgetTable {
+	if inst.state != runtime.EntityStateInEntity {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.plainAlt1 = alt1
+
+	return inst
+}
+
+///////////////////////////////////////////////////////////////////
+// code generator
+// dml.(*GoClassBuilder).ComposeEntityCode
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1696
+
+// setTimestamp sets the entity's ts column.
 func (inst *InEntityWidgetTable) setTimestamp(ts2 time.Time) *InEntityWidgetTable {
 	if inst.state != runtime.EntityStateInEntity {
 		inst.AppendError(runtime.ErrInvalidStateTransition)
@@ -208,8 +245,12 @@ func (inst *InEntityWidgetTable) setTimestamp(ts2 time.Time) *InEntityWidgetTabl
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1691
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1696
 
+// setRouting sets the entity's region, tags columns, one positional argument
+// per column in that order. Hand-written code should call the per-column
+// setters (setRegion, setTags) instead: they cannot swap two arguments of the
+// same type.
 func (inst *InEntityWidgetTable) setRouting(region3 uint64, tags4 []string) *InEntityWidgetTable {
 	if inst.state != runtime.EntityStateInEntity {
 		inst.AppendError(runtime.ErrInvalidStateTransition)
@@ -223,9 +264,42 @@ func (inst *InEntityWidgetTable) setRouting(region3 uint64, tags4 []string) *InE
 
 ///////////////////////////////////////////////////////////////////
 // code generator
-// dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1691
+// dml.(*GoClassBuilder).composePlainColumnSetters
+// ./public/semistructured/leeway/dml/lw_dml_plain_setters.go:125
 
+// setRegion sets the entity's region column.
+func (inst *InEntityWidgetTable) setRegion(region3 uint64) *InEntityWidgetTable {
+	if inst.state != runtime.EntityStateInEntity {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.plainRegion3 = region3
+
+	return inst
+}
+
+///////////////////////////////////////////////////////////////////
+// code generator
+// dml.(*GoClassBuilder).composePlainColumnSetters
+// ./public/semistructured/leeway/dml/lw_dml_plain_setters.go:125
+
+// setTags sets the entity's tags column.
+func (inst *InEntityWidgetTable) setTags(tags4 []string) *InEntityWidgetTable {
+	if inst.state != runtime.EntityStateInEntity {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.plainTags4 = tags4
+
+	return inst
+}
+
+///////////////////////////////////////////////////////////////////
+// code generator
+// dml.(*GoClassBuilder).ComposeEntityCode
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1696
+
+// setLifecycle sets the entity's lifecycle column.
 func (inst *InEntityWidgetTable) setLifecycle(lifecycle5 uint8) *InEntityWidgetTable {
 	if inst.state != runtime.EntityStateInEntity {
 		inst.AppendError(runtime.ErrInvalidStateTransition)
@@ -237,7 +311,7 @@ func (inst *InEntityWidgetTable) setLifecycle(lifecycle5 uint8) *InEntityWidgetT
 }
 
 // PushMembershipHighCardRef adds id to the ambient HighCardRef memberships
-// replayed onto every attribute as it closes, until it is popped (ADR-0112 M1).
+// replayed onto every attribute as it closes, until it is popped.
 // The stamp scope — one section vs the whole entity — is the caller's to set.
 func (inst *InEntityWidgetTable) PushMembershipHighCardRef(id uint64) {
 	inst.ambientHighCardRef = append(inst.ambientHighCardRef, id)
@@ -449,7 +523,7 @@ func (inst *InEntityWidgetTable) GetSchema() (schema *arrow.Schema) {
 	return inst.builder.Schema()
 }
 
-// --- store control drivers (ADR-0100 SD6): exported access to InEntityWidgetTable's
+// --- store control drivers: exported access to InEntityWidgetTable's
 // unexported frame control, callable only from within this package. ---
 func InEntityWidgetTableBeginEntity(e *InEntityWidgetTable) *InEntityWidgetTable {
 	return e.beginEntity()
@@ -474,6 +548,18 @@ func InEntityWidgetTableSetRouting(e *InEntityWidgetTable, region3 uint64, tags4
 }
 func InEntityWidgetTableSetLifecycle(e *InEntityWidgetTable, lifecycle5 uint8) *InEntityWidgetTable {
 	return e.setLifecycle(lifecycle5)
+}
+func InEntityWidgetTableSetIdColumn(e *InEntityWidgetTable, id0 uint64) *InEntityWidgetTable {
+	return e.setIdColumn(id0)
+}
+func InEntityWidgetTableSetAlt(e *InEntityWidgetTable, alt1 uint64) *InEntityWidgetTable {
+	return e.setAlt(alt1)
+}
+func InEntityWidgetTableSetRegion(e *InEntityWidgetTable, region3 uint64) *InEntityWidgetTable {
+	return e.setRegion(region3)
+}
+func InEntityWidgetTableSetTags(e *InEntityWidgetTable, tags4 []string) *InEntityWidgetTable {
+	return e.setTags(tags4)
 }
 
 func (inst *InEntityWidgetTable) AppendError(err error) {

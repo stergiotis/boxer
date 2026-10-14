@@ -103,8 +103,9 @@ var InEntityAssetTableSectionIndices = map[string]int{
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1691
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1696
 
+// setId sets the entity's id column.
 func (inst *InEntityAssetTable) setId(id0 uint64) *InEntityAssetTable {
 	if inst.state != runtime.EntityStateInEntity {
 		inst.AppendError(runtime.ErrInvalidStateTransition)
@@ -118,8 +119,9 @@ func (inst *InEntityAssetTable) setId(id0 uint64) *InEntityAssetTable {
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1691
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1696
 
+// setTimestamp sets the entity's ts column.
 func (inst *InEntityAssetTable) setTimestamp(ts1 time.Time) *InEntityAssetTable {
 	if inst.state != runtime.EntityStateInEntity {
 		inst.AppendError(runtime.ErrInvalidStateTransition)
@@ -131,7 +133,7 @@ func (inst *InEntityAssetTable) setTimestamp(ts1 time.Time) *InEntityAssetTable 
 }
 
 // PushMembershipHighCardRef adds id to the ambient HighCardRef memberships
-// replayed onto every attribute as it closes, until it is popped (ADR-0112 M1).
+// replayed onto every attribute as it closes, until it is popped.
 // The stamp scope — one section vs the whole entity — is the caller's to set.
 func (inst *InEntityAssetTable) PushMembershipHighCardRef(id uint64) {
 	inst.ambientHighCardRef = append(inst.ambientHighCardRef, id)
@@ -279,7 +281,7 @@ func (inst *InEntityAssetTable) GetSchema() (schema *arrow.Schema) {
 	return inst.builder.Schema()
 }
 
-// --- store control drivers (ADR-0100 SD6): exported access to InEntityAssetTable's
+// --- store control drivers: exported access to InEntityAssetTable's
 // unexported frame control, callable only from within this package. ---
 func InEntityAssetTableBeginEntity(e *InEntityAssetTable) *InEntityAssetTable { return e.beginEntity() }
 func InEntityAssetTableCommitEntity(e *InEntityAssetTable) error              { return e.commitEntity() }

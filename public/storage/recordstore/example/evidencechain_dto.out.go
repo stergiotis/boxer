@@ -7,8 +7,8 @@ import "github.com/stergiotis/boxer/public/functional/option"
 // EvidenceChainKind is the value of EvidenceChain.Kind.
 const EvidenceChainKind = "evidenceChain"
 
-// EvidenceChain is the evidence profile's chain component (ADR-0327
-// (proposed) §SD2, §SD3): the row's place in its scope's chain, what its
+// EvidenceChain is the evidence profile's chain component: the row's
+// place in its scope's chain, what its
 // mark says about absent content, and the commitments to its vaulted
 // components. AppendChained sets Prev, Digest and Scheme; the writer sets
 // the mark and the vault sets the commitments.
@@ -37,7 +37,7 @@ type EvidenceChain struct {
 	// ordinal it covers (law L32).
 	HeadDigest option.Option[string] `lw:"evidenceChainHeadDigest,stringArray,unit"`
 	// CommitComponents and Commitments are parallel: the vaulted components
-	// of the row and the commitment to each (ADR-0327 (proposed) §SD4).
+	// of the row and the commitment to each.
 	CommitComponents []string `lw:"evidenceChainCommitComponents,stringArray"`
 	Commitments      []string `lw:"evidenceChainCommitments,stringArray"`
 }

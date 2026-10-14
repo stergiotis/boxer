@@ -2586,11 +2586,11 @@ mod tests {
             });
         };
         for _ in 0..2 {
-            let _ = ctx.run_ui(raw.clone(), |ctx| show_ui(ctx));
+            ctx.run_ui(raw.clone(), |ctx| show_ui(ctx)).textures_delta.clear();
         }
         let mut alpha_svg: Option<String> = None;
         let mut beta_svg: Option<String> = None;
-        let _ = ctx.run_ui(raw, |ctx| {
+        ctx.run_ui(raw, |ctx| {
             show_ui(ctx);
             alpha_svg = render_svg_window(
                 ctx,
@@ -2612,7 +2612,9 @@ mod tests {
                 WindowMode::Faithful,
                 Some(VIEWPORT_BG),
             );
-        });
+        })
+        .textures_delta
+        .clear();
 
         let alpha = alpha_svg.expect("alpha window rendered");
         let beta = beta_svg.expect("beta window rendered");
@@ -2663,12 +2665,12 @@ mod tests {
             });
         };
         for _ in 0..2 {
-            let _ = ctx.run_ui(raw.clone(), |ctx| show_ui(ctx));
+            ctx.run_ui(raw.clone(), |ctx| show_ui(ctx)).textures_delta.clear();
         }
         let mut faithful: Option<String> = None;
         let mut content_only: Option<String> = None;
         let mut content_only_transparent: Option<String> = None;
-        let _ = ctx.run_ui(raw, |ctx| {
+        ctx.run_ui(raw, |ctx| {
             show_ui(ctx);
             faithful = render_svg_window(
                 ctx,
@@ -2700,7 +2702,9 @@ mod tests {
                 WindowMode::ContentOnly,
                 None,
             );
-        });
+        })
+        .textures_delta
+        .clear();
 
         let faithful = faithful.expect("faithful rendered");
         let content_only = content_only.expect("content-only rendered");
@@ -2796,7 +2800,7 @@ mod tests {
         let raw = egui::RawInput::default();
 
         let mut result: Option<String> = None;
-        let _ = ctx.run_ui(raw, |ctx| {
+        ctx.run_ui(raw, |ctx| {
             result = render_svg_window(
                 ctx,
                 &resolver,
@@ -2807,7 +2811,9 @@ mod tests {
                 WindowMode::Faithful,
                 Some(VIEWPORT_BG),
             );
-        });
+        })
+        .textures_delta
+        .clear();
 
         assert!(result.is_none());
     }
@@ -2848,10 +2854,10 @@ mod tests {
             });
         };
         for _ in 0..2 {
-            let _ = ctx.run_ui(raw.clone(), |ctx| show_ui(ctx));
+            ctx.run_ui(raw.clone(), |ctx| show_ui(ctx)).textures_delta.clear();
         }
         let mut svg: Option<String> = None;
-        let _ = ctx.run_ui(raw, |ctx| {
+        ctx.run_ui(raw, |ctx| {
             show_ui(ctx);
             svg = render_svg_window(
                 ctx,
@@ -2863,7 +2869,9 @@ mod tests {
                 WindowMode::Faithful,
                 Some(VIEWPORT_BG),
             );
-        });
+        })
+        .textures_delta
+        .clear();
         let svg = svg.expect("window export");
         let run = svg
             .lines()

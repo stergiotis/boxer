@@ -68,14 +68,15 @@ func TestEventRowsReadBackWithTheirIdentity(t *testing.T) {
 	withId := callident.WithCallIdentity(ctx, ci)
 	require.NoError(t, rec.Event(withId, at, trail.Context{Delegation: option.Some(trail.Delegation{Task: "task-1", Epoch: 2})}, trail.AuditEvent{
 		Domain: "dmdm", Action: "vault-resolve", Outcome: trail.OutcomeOk, PrincipalBy: trail.PrincipalBySystem,
-		Principal: option.Some("ignored"), Purpose: option.Some("ignored"),
+		PrincipalVia: option.Some(trail.PrincipalViaToken),
+		Principal:    option.Some("ignored"), Purpose: option.Some("ignored"),
 		Node: option.Some("cell-a"), Subject: 42, Retention: "disclosure",
 		RefTypes: []string{"vaultref"}, RefValues: []string{"v-1"},
 	}))
 	// 2. No identity: the origin is what the caller's Context says, under the run.
 	require.NoError(t, rec.Event(ctx, at.Add(time.Second), trail.Context{Origin: rec.OriginOf("apps/dmdm", 5)}, trail.AuditEvent{
 		Domain: "dmdm", Action: "erase-issue", Outcome: trail.OutcomeDenied, PrincipalBy: trail.PrincipalByEnv,
-		Subject: 43, Retention: "erasure",
+		PrincipalVia: option.Some(trail.PrincipalViaToken), Subject: 43, Retention: "erasure",
 	}))
 	// 3. Outside the bounds: replaced.
 	require.NoError(t, rec.Event(withId, at.Add(2*time.Second), trail.Context{}, trail.AuditEvent{
@@ -97,6 +98,7 @@ func TestEventRowsReadBackWithTheirIdentity(t *testing.T) {
 	assert.Equal(t, option.Some("p-1"), e.AuditEvent.Val.Principal, "the principal is the claim, not the row's")
 	assert.Equal(t, option.Some("art-15"), e.AuditEvent.Val.Purpose)
 	assert.Equal(t, trail.PrincipalBySystem, e.AuditEvent.Val.PrincipalBy)
+	assert.Equal(t, option.Some(trail.PrincipalViaToken), e.AuditEvent.Val.PrincipalVia, "the mechanism is the emitter's")
 	assert.Equal(t, option.Some("cell-a"), e.AuditEvent.Val.Node)
 	assert.EqualValues(t, 42, e.AuditEvent.Val.Subject)
 	assert.Equal(t, "disclosure", e.AuditEvent.Val.Retention)
@@ -111,6 +113,7 @@ func TestEventRowsReadBackWithTheirIdentity(t *testing.T) {
 	assert.Equal(t, trail.Origin{Id: e.ID, Run: "run-9", App: "apps/dmdm", Instance: 5}, e.Origin.Val)
 	assert.False(t, e.AuditEvent.Val.Principal.Has)
 	assert.Equal(t, trail.PrincipalByNone, e.AuditEvent.Val.PrincipalBy, "no principal on the context forces none")
+	assert.False(t, e.AuditEvent.Val.PrincipalVia.Has, "and drops the mechanism")
 	assert.Equal(t, trail.OutcomeDenied, e.AuditEvent.Val.Outcome)
 	assert.False(t, e.Delegation.Has)
 

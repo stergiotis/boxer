@@ -644,9 +644,10 @@ func valueReadCall(ct canonicaltypes.PrimitiveAstNodeI) (call string, fixedWidth
 	return
 }
 
+// emitSlotKeys writes the slot keys of ADR-0210 SD2.
 func emitSlotKeys(b *strings.Builder, plan *tablePlan) (err error) {
 	_, err = fmt.Fprintf(b, `
-// The slot keys of ADR-0210 SD2: a tagged section's CT group, or a co-section
+// The slot keys: a tagged section's CT group, or a co-section
 // group's CT signature. They key the entity item's tagged map and are the only
 // thing on the wire that comes from %s's description: section names, column
 // names, aspects and hints are not.
@@ -735,7 +736,7 @@ func (inst %s) Signature() string {
 
 	_, err = fmt.Fprintf(b, `
 // Ambiguous reports whether the slot's signature is carried by more than one
-// slot of this table. Those are the slots ADR-0210 SD5's dispatch has to
+// slot of this table. Those are the slots the tagger/dispatcher pair has to
 // resolve: the encoder consults its tagger for every attribute of one, and for
 // no attribute of any other.
 func (inst %s) Ambiguous() bool {
@@ -769,9 +770,10 @@ func (inst %s) Ambiguous() bool {
 	return
 }
 
+// emitTagger writes the encoder half of ADR-0210 SD5's dispatch pair.
 func emitTagger(b *strings.Builder, plan *tablePlan) (err error) {
 	_, err = fmt.Fprintf(b, `
-// %s is the encoder half of ADR-0210 SD5's dispatch pair.
+// %s is the encoder half of the slot dispatch pair.
 //
 // It is consulted for every attribute of a slot whose signature is ambiguous
 // in this table, and its small opaque integer rides as the attribute item's
@@ -781,7 +783,7 @@ type %s interface {
 	Tag(slot %s, entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) uint64
 }
 
-// %s is the built-in tagger of ADR-0210 SD5.
+// %s is the built-in tagger.
 //
 // It returns the slot's ordinal within its ambiguity set, which round-trips
 // between two tables that declare the same sections in the same order and is
@@ -826,7 +828,7 @@ func (inst %s) Tag(slot %s, entityIdx runtime.EntityIdx, attrIdx runtime.Attribu
 
 func emitEncoder(b *strings.Builder, plan *tablePlan) (err error) {
 	_, err = fmt.Fprintf(b, `
-// %s writes entities of a loaded %s as the leeway canonical wire (ADR-0210).
+// %s writes entities of a loaded %s as the leeway canonical wire.
 //
 // It reads the generated readaccess accessors directly: no reflection, no
 // arrow.Array type switch, one typed runtime call per column. The buffers are
@@ -942,7 +944,7 @@ func emitEncodeEntity(b *strings.Builder, plan *tablePlan) (err error) {
 	_, err = fmt.Fprintf(b, `
 // EncodeEntity writes one entity item to w: the plain sections under their item
 // types, then the tagged slots under their CT signatures, both in the order the
-// form fixes (ADR-0210 SD1–SD3). The attributes are held back only until the
+// canonical form fixes. The attributes are held back only until the
 // item is complete, which is what lets the writer sort them into canonical
 // order.
 func (inst *%s) EncodeEntity(entityIdx runtime.EntityIdx, w io.Writer) (err error) {

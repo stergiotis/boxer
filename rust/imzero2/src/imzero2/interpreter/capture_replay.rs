@@ -515,7 +515,7 @@ impl<R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'_, R, W> {
         }
         let mut replay = None;
         let mut svg = None;
-        let out = ctx.run_ui(raw, |ui| {
+        let mut out = ctx.run_ui(raw, |ui| {
             let r = self.replay_for_capture(ui.ctx(), &[stream]);
             if format == CAPTURE_FORMAT_SVG && r.0.is_ok() {
                 // Inside the pass, while the capture context's graphics
@@ -536,6 +536,11 @@ impl<R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'_, R, W> {
             replay = Some(r);
         });
         let t_pass = t_start.elapsed();
+        // egui 0.36 asserts (debug builds) that a TexturesDelta is empty
+        // when dropped. Move the capture context's own uploads out now, so
+        // the early returns below drop nothing; only the png path uses them.
+        let capture_uploads = std::mem::take(&mut out.textures_delta.set);
+        out.textures_delta.clear();
         let op_tree = self.op_tree.take();
         let Some((result, report)) = replay else {
             return failed(CAPTURE_FAILED, "the capture pass did not run".into());
@@ -593,7 +598,7 @@ impl<R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'_, R, W> {
         self.scrolling_texture.sync_export_mirror();
         let mut textures = egui::TexturesDelta::default();
         let mut known: std::collections::HashSet<egui::TextureId> =
-            out.textures_delta.set.iter().map(|(id, _)| *id).collect();
+            capture_uploads.keys().copied().collect();
         if let Ok(mirror) = self.texture_cache.lock() {
             for (id, t) in mirror.iter() {
                 if known.contains(id) {
@@ -608,11 +613,11 @@ impl<R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'_, R, W> {
                 } else {
                     egui::TextureOptions::LINEAR
                 };
-                textures.set.push((*id, egui::epaint::ImageDelta::full(image, options)));
+                textures.push(*id, egui::epaint::ImageDelta::full(image, options));
                 known.insert(*id);
             }
         }
-        textures.set.extend(out.textures_delta.set);
+        textures.set.extend(capture_uploads);
         let unknown_textures = clipped
             .iter()
             .filter(|p| matches!(&p.primitive, egui::epaint::Primitive::Mesh(m) if !known.contains(&m.texture_id)))
@@ -627,6 +632,7 @@ impl<R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'_, R, W> {
             height_px,
             out.pixels_per_point,
         );
+        textures.clear();
         tracing::info!(
             format = "png",
             context_us = t_context.as_micros() as u64,
@@ -700,21 +706,25 @@ mod tests {
 
     /// Interprets `bytes` as the live frame would, outside a capture replay.
     fn interpret_live(i: &mut Interp, ctx: &egui::Context, bytes: &[u8]) {
-        let _ = ctx.run_ui(egui::RawInput::default(), |ui| {
+        ctx.run_ui(egui::RawInput::default(), |ui| {
             i.io.begin_replay(bytes);
             i.interpret_outer(ui.ctx(), &mut None).expect("live interpretation");
             i.io.end_replay();
-        });
+        })
+        .textures_delta
+        .clear();
     }
 
     fn replay(i: &mut Interp, bytes: &[u8]) -> (InterpretResult<()>, CaptureReplayReport) {
         let live = egui::Context::default();
-        let _ = live.run_ui(egui::RawInput::default(), |_| {});
+        live.run_ui(egui::RawInput::default(), |_| {}).textures_delta.clear();
         let ctx = capture_context(&live);
         let mut out = None;
-        let _ = ctx.run_ui(egui::RawInput::default(), |ui| {
+        ctx.run_ui(egui::RawInput::default(), |ui| {
             out = Some(i.replay_for_capture(ui.ctx(), &[bytes]));
-        });
+        })
+        .textures_delta
+        .clear();
         out.expect("the pass ran")
     }
 
@@ -779,11 +789,13 @@ mod tests {
         );
         live.set_fonts(fonts);
         live.options_mut(|o| o.max_passes = std::num::NonZeroUsize::new(1).unwrap());
-        let _ = live.run_ui(egui::RawInput::default(), |ui| {
+        live.run_ui(egui::RawInput::default(), |ui| {
             ui.ctx().memory_mut(|m| m.data.insert_temp(egui::Id::new("k"), 5u32));
-        });
+        })
+        .textures_delta
+        .clear();
         let ctx = capture_context(&live);
-        let _ = ctx.run_ui(egui::RawInput::default(), |_| {});
+        ctx.run_ui(egui::RawInput::default(), |_| {}).textures_delta.clear();
         assert_eq!(ctx.options(|o| o.max_passes.get()), 1);
         assert_eq!(
             ctx.memory(|m| m.data.get_temp::<u32>(egui::Id::new("k"))),

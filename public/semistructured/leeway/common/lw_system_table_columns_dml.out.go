@@ -152,8 +152,12 @@ var InEntitySystemTableColumnsSectionIndices = map[string]int{
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1691
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1696
 
+// SetId sets the entity's tableHash, columnIndex columns, one positional
+// argument per column in that order. Hand-written code should call the
+// per-column setters (SetTableHash, SetColumnIndex) instead: they cannot swap
+// two arguments of the same type.
 func (inst *InEntitySystemTableColumns) SetId(tableHash0 uint64, columnIndex1 uint64) *InEntitySystemTableColumns {
 	if inst.state != runtime.EntityStateInEntity {
 		inst.AppendError(runtime.ErrInvalidStateTransition)
@@ -167,9 +171,42 @@ func (inst *InEntitySystemTableColumns) SetId(tableHash0 uint64, columnIndex1 ui
 
 ///////////////////////////////////////////////////////////////////
 // code generator
-// dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1691
+// dml.(*GoClassBuilder).composePlainColumnSetters
+// ./public/semistructured/leeway/dml/lw_dml_plain_setters.go:125
 
+// SetTableHash sets the entity's tableHash column.
+func (inst *InEntitySystemTableColumns) SetTableHash(tableHash0 uint64) *InEntitySystemTableColumns {
+	if inst.state != runtime.EntityStateInEntity {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.plainTableHash0 = tableHash0
+
+	return inst
+}
+
+///////////////////////////////////////////////////////////////////
+// code generator
+// dml.(*GoClassBuilder).composePlainColumnSetters
+// ./public/semistructured/leeway/dml/lw_dml_plain_setters.go:125
+
+// SetColumnIndex sets the entity's columnIndex column.
+func (inst *InEntitySystemTableColumns) SetColumnIndex(columnIndex1 uint64) *InEntitySystemTableColumns {
+	if inst.state != runtime.EntityStateInEntity {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.plainColumnIndex1 = columnIndex1
+
+	return inst
+}
+
+///////////////////////////////////////////////////////////////////
+// code generator
+// dml.(*GoClassBuilder).ComposeEntityCode
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1696
+
+// SetRouting sets the entity's tableName column.
 func (inst *InEntitySystemTableColumns) SetRouting(tableName2 string) *InEntitySystemTableColumns {
 	if inst.state != runtime.EntityStateInEntity {
 		inst.AppendError(runtime.ErrInvalidStateTransition)
@@ -181,7 +218,7 @@ func (inst *InEntitySystemTableColumns) SetRouting(tableName2 string) *InEntityS
 }
 
 // PushMembershipHighCardRef adds id to the ambient HighCardRef memberships
-// replayed onto every attribute as it closes, until it is popped (ADR-0112 M1).
+// replayed onto every attribute as it closes, until it is popped.
 // The stamp scope — one section vs the whole entity — is the caller's to set.
 func (inst *InEntitySystemTableColumns) PushMembershipHighCardRef(id uint64) {
 	inst.ambientHighCardRef = append(inst.ambientHighCardRef, id)

@@ -740,6 +740,9 @@ var (
 	// How an audit event's origin was established (ADR-0327 (proposed)
 	// §SD6), beside PrincipalBy.
 	MembAuditEventOriginBy = NkRegistry.MustBegin("auditEventOriginBy", 482).End()
+	// The mechanism that established an audit event's principal, beside
+	// PrincipalBy (ADR-0296 Update 2026-10-13).
+	MembAuditEventPrincipalVia = NkRegistry.MustBegin("auditEventPrincipalVia", 483).End()
 	// The evidence profile's seal component (ADR-0327 (proposed) §SD5): one
 	// row per durable flush of a sealed store, naming the batch's rows.
 	MembEvidenceKindSeal       = NkRegistry.MustBegin("evidenceKindSeal", 490).End()
@@ -866,6 +869,6 @@ var AllMembs = []registry.RegisteredNaturalKey{
 	MembEvidenceChainCommitComponents, MembEvidenceChainCommitments, MembEvidenceKindWrittenBy, MembEvidenceWrittenByRun,
 	MembEvidenceWrittenByApp, MembEvidenceWrittenByInstance, MembEvidenceWrittenByOriginBy, MembEvidenceWrittenByPrincipal,
 	MembEvidenceWrittenByPrincipalBy, MembEvidenceWrittenByPurpose, MembEvidenceWrittenByCorrelation, MembEvidenceWrittenByBatch,
-	MembEvidenceKindOpening, MembEvidenceOpeningValue, MembAuditEventOriginBy,
+	MembEvidenceKindOpening, MembEvidenceOpeningValue, MembAuditEventOriginBy, MembAuditEventPrincipalVia,
 	MembEvidenceKindSeal, MembEvidenceSealStream, MembEvidenceSealPrev, MembEvidenceSealDigest, MembEvidenceSealScheme, MembEvidenceSealRowIds, MembEvidenceSealRowDigests,
 }

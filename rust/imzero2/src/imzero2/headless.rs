@@ -95,6 +95,9 @@ pub enum HeadlessError {
     #[error("readback buffer mapping failed: {0}")]
     BufferMap(#[from] wgpu::BufferAsyncError),
     #[cfg(feature = "headless_wgpu")]
+    #[error("readback buffer view failed: {0}")]
+    BufferView(#[from] wgpu::MapRangeError),
+    #[cfg(feature = "headless_wgpu")]
     #[error("readback channel closed before map completed")]
     MapChannelClosed,
     #[error("io error: {0}")]
@@ -318,6 +321,8 @@ struct Gpu {
     unpadded_bytes_per_row: u32,
     padded_bytes_per_row: u32,
     max_texture_side: usize,
+    /// The device's largest buffer, which sizes the paint budget (ADR-0329).
+    max_buffer_size: u64,
     /// Physical size + scale handed to `egui_wgpu` each frame. Held here
     /// rather than beside the loop so that both rasterizers present the same
     /// surface behind [`Raster`] — the CPU one has no equivalent type.
@@ -517,11 +522,19 @@ fn init_gpu(width_px: u32, height_px: u32, pixels_per_point: f32) -> Result<Gpu,
             wgpu::PowerPreference::from_env().unwrap_or(wgpu::PowerPreference::HighPerformance),
         compatible_surface: None,
         force_fallback_adapter: false,
+        apply_limit_buckets: false,
     }))?;
     let info = adapter.get_info();
     tracing::info!(name=%info.name, backend=?info.backend, device_type=?info.device_type, "headless wgpu adapter");
+    // The largest buffer the adapter allows, rather than wgpu's 256 MiB
+    // default: egui-wgpu holds a frame's vertices in one buffer, and the paint
+    // budget (ADR-0329) is sized from whatever the device ends up with.
     let (device, queue) = pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor {
         label: Some("imzero2_headless"),
+        required_limits: wgpu::Limits {
+            max_buffer_size: adapter.limits().max_buffer_size,
+            ..Default::default()
+        },
         ..Default::default()
     }))?;
     let extent = wgpu::Extent3d {
@@ -563,6 +576,7 @@ fn init_gpu(width_px: u32, height_px: u32, pixels_per_point: f32) -> Result<Gpu,
         mapped_at_creation: false,
     });
     let max_texture_side = device.limits().max_texture_dimension_2d as usize;
+    let max_buffer_size = device.limits().max_buffer_size;
     Ok(Gpu {
         device,
         queue,
@@ -574,6 +588,7 @@ fn init_gpu(width_px: u32, height_px: u32, pixels_per_point: f32) -> Result<Gpu,
         unpadded_bytes_per_row,
         padded_bytes_per_row,
         max_texture_side,
+        max_buffer_size,
         screen: egui_wgpu::ScreenDescriptor {
             size_in_pixels: [width_px, height_px],
             pixels_per_point,
@@ -594,8 +609,10 @@ impl Gpu {
     /// state for a viewer that connects later; the render pass and the
     /// readback are the only parts that can be skipped.
     fn apply_textures_only(&mut self, textures_delta: &egui::TexturesDelta) {
-        for (id, delta) in &textures_delta.set {
-            self.renderer.update_texture(&self.device, &self.queue, *id, delta);
+        for (id, deltas) in &textures_delta.set {
+            for delta in deltas {
+                self.renderer.update_texture(&self.device, &self.queue, *id, delta);
+            }
         }
         for id in &textures_delta.free {
             self.renderer.free_texture(id);
@@ -652,8 +669,10 @@ impl Gpu {
         textures_delta: &egui::TexturesDelta,
         frame: &mut Vec<u8>,
     ) -> Result<(), HeadlessError> {
-        for (id, delta) in &textures_delta.set {
-            self.renderer.update_texture(&self.device, &self.queue, *id, delta);
+        for (id, deltas) in &textures_delta.set {
+            for delta in deltas {
+                self.renderer.update_texture(&self.device, &self.queue, *id, delta);
+            }
         }
         let mut encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
             label: Some("imzero2_headless_encoder"),
@@ -711,7 +730,7 @@ impl Gpu {
         self.device.poll(wgpu::PollType::wait_indefinitely())?;
         rx.recv().map_err(|_e| HeadlessError::MapChannelClosed)??;
         {
-            let data = slice.get_mapped_range();
+            let data = slice.get_mapped_range()?;
             frame.clear();
             frame.reserve(self.unpadded_bytes_per_row as usize * self.extent.height as usize);
             for padded_row in data.chunks(self.padded_bytes_per_row as usize) {
@@ -940,6 +959,8 @@ pub fn run_main_loop(config: AppConfig) -> Result<(), HeadlessError> {
     fffi.set_capture_raster(Box::new(
         crate::imzero2::captureraster::SoftCaptureRaster::default(),
     ));
+    #[cfg(feature = "headless_wgpu")]
+    fffi.set_paint_max_buffer_size(raster.max_buffer_size);
     let mut cadence = if reactive {
         Cadence::Reactive
     } else {
@@ -1188,7 +1209,6 @@ pub fn run_main_loop(config: AppConfig) -> Result<(), HeadlessError> {
             // carrier (local, screenshot, test driver) keeps reporting.
             focused: translator.focused(),
             events: std::mem::take(&mut egui_events),
-            modifiers: translator.modifiers,
             ..Default::default()
         };
         raw_input.viewports.entry(egui::ViewportId::ROOT).or_default().native_pixels_per_point =
@@ -1265,7 +1285,7 @@ pub fn run_main_loop(config: AppConfig) -> Result<(), HeadlessError> {
         // Mirrors eframe 0.34's epi_integration: `run_ui(raw_input, |ui| {
         // app.logic(ui.ctx(), ..) })` — the interpreter dispatches against
         // the live pass exactly as it does under the desktop host.
-        let out = ctx.run_ui(raw_input, |ui| {
+        let mut out = ctx.run_ui(raw_input, |ui| {
             if let Err(e) = fffi.interpret_commands_outer(ui.ctx()) {
                 match e {
                     InterpretError::PeerClosed => {
@@ -1389,7 +1409,12 @@ pub fn run_main_loop(config: AppConfig) -> Result<(), HeadlessError> {
                 let clipped = ctx.tessellate(out.shapes, out.pixels_per_point);
                 raster_stats.record_tessellate(t_tess, &clipped);
                 let t_raster = raster_stats.start();
-                raster.render_and_readback(&clipped, &out.textures_delta, &mut bgra_frame)?;
+                let rendered =
+                    raster.render_and_readback(&clipped, &out.textures_delta, &mut bgra_frame);
+                // Applied above, failed or not; egui asserts (debug builds)
+                // that a dropped TexturesDelta is empty.
+                out.textures_delta.clear();
+                rendered?;
                 raster_stats.record(t_raster, width_px, height_px);
                 for sink in &mut sinks {
                     sink.on_frame(&bgra_frame, width_px, height_px, frame_idx);
@@ -1444,6 +1469,9 @@ pub fn run_main_loop(config: AppConfig) -> Result<(), HeadlessError> {
                 }
             }
         }
+        // Every consumer above has read the deltas by reference. The lean
+        // build with no carrier has none, and has nothing to keep in sync.
+        out.textures_delta.clear();
         frame_idx += 1;
 
         if shutdown {

@@ -387,7 +387,6 @@ impl Host {
             time: Some(self.start.elapsed().as_secs_f64()),
             predicted_dt: NOMINAL_DT,
             focused: true,
-            modifiers: self.translator.modifiers,
             events: std::mem::take(&mut self.pending_events),
             ..Default::default()
         };
@@ -396,7 +395,7 @@ impl Host {
         let t0 = Instant::now();
         let fffi = &mut self.fffi;
         let mut err = None;
-        let out = self.ctx.run_ui(raw_input, |ui| {
+        let mut out = self.ctx.run_ui(raw_input, |ui| {
             // The page's painter clears to black; the native host clears to
             // the theme's panel fill (`App::clear_color`), which a light
             // theme needs under everything an app draws.
@@ -456,6 +455,7 @@ impl Host {
             self.mesh_out.push(m);
             texture_msgs += 1;
         }
+        out.textures_delta.clear();
         let clipped = self.ctx.tessellate(out.shapes, out.pixels_per_point);
         self.stats.last_tessellate_us = t1.elapsed().as_micros() as u64;
 

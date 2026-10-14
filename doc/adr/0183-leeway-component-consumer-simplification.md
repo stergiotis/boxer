@@ -716,13 +716,43 @@ a silent rewrite.
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers.
 
-<!--
 ## Updates
 
-Tier-2 dated entries land here when implementation reveals a refinement, an aspirational
-claim turns out false, or a milestone records what shipped. Single H2; add H3s dated
-YYYY-MM-DD. Remove this HTML comment when the section first gains a real entry.
--->
+### 2026-10-13 — D0, D1, D3, D8: tag values are claimed per id space
+
+D3 deferred namespacing "until a second registry/contract exists". A
+downstream minter supplied one: two kinds of id kept in separate columns,
+never compared, whose minters want one tag value in both. Under D0's rule a
+tag value was one id space, so the second claim was refused, although ids
+that never meet in a column cannot collide. The deferral is resolved as id
+spaces in `identity/tagmint`, not as name namespaces:
+
+- `tagmint.Space` is a named id space — a set of columns in which ids of its
+  claimants can meet — registered once through `ClaimSpace`, which refuses a
+  second space of one name. `ClaimIn(space, name, value, n)` checks the
+  value's uniqueness within that space only; the fit check is unchanged.
+  The zero `Space` is the default space, and `Claim`/`MustClaim` claim in
+  it, so every existing claim, vocabulary and `RuntimeMint` keeps its
+  meaning.
+- Names stay unique across all spaces, so a claim's name identifies it in
+  errors and audits without its space. `ClaimedTagValue.Space()` reports
+  the space, and `IterateClaims` yields claims of every space, to be keyed
+  by (space, value).
+- That two spaces never share a column is the declaring caller's contract,
+  as `maxExpectedIds` is the claimant's estimate; `tagmint` cannot see
+  columns. A natural-key registry refuses a claim outside the default
+  space, since membership ids share the facts membership columns.
+- D1's union keys by (space, value): `assignments.CheckTagValuesDisjoint`
+  accepts one value in two named spaces and refuses a value claimed twice
+  within one. A membership golden is in the default space by the rule
+  above; a stream golden row names its space as a fifth field and omits it
+  for the default, so goldens without named spaces are unchanged.
+- When D3's claim publication and its per-tag lane views are built, they
+  carry the space as a column, and a tag value identifies a claimant only
+  within the space of the column it is read from.
+
+The how-to is [tagmint id spaces](../howto/tagmint-id-spaces.md).
+
 
 ## References
 

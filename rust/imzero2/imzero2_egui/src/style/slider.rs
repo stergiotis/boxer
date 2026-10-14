@@ -83,11 +83,13 @@ mod tests {
         let ctx = egui::Context::default();
         super::super::apply_style_only(&ctx, super::super::tokens::Density::Standard);
         let mut value = 0.4_f32;
-        let _ = ctx.run_ui(egui::RawInput::default(), |ui| {
+        ctx.run_ui(egui::RawInput::default(), |ui| {
             let before = ui.visuals().widgets.inactive.bg_fill;
             ui.add(IdsSlider(Slider::new(&mut value, 0.0..=1.0)));
             assert_eq!(before, ui.visuals().widgets.inactive.bg_fill);
             assert_ne!(before, RAIL);
-        });
+        })
+        .textures_delta
+        .clear();
     }
 }

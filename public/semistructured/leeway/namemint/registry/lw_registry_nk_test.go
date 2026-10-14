@@ -6,6 +6,7 @@ import (
 
 	"github.com/stergiotis/boxer/public/functional"
 	"github.com/stergiotis/boxer/public/identity/identifier"
+	"github.com/stergiotis/boxer/public/identity/tagmint"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/namemint/contract"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/naming"
 	"github.com/stretchr/testify/require"
@@ -39,4 +40,12 @@ func TestNewNaturalKeyRegistry(t *testing.T) {
 	slices.Sort(s)
 	slices.Sort(e)
 	require.Equal(t, s, e)
+}
+
+func TestNewNaturalKeyRegistryRefusesAClaimInANamedSpace(t *testing.T) {
+	sp := tagmint.MustClaimSpace("namemintRegistryTestSpace")
+	claim := tagmint.MustClaimIn(sp, "namemintRegistryTestInSpace", testClaimShapes.Value(), 1<<10)
+	_, err := NewNaturalKeyRegistry[*contract.EphemeralContract](claim, 8, naming.LowerSnakeCase, contract.NewEphemeralContract())
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "default id space")
 }

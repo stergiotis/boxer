@@ -353,8 +353,12 @@ var InEntityFactsTableSectionIndices = map[string]int{
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1691
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1696
 
+// setId sets the entity's id, naturalKey columns, one positional argument per
+// column in that order. Hand-written code should call the per-column setters
+// (setIdColumn, setNaturalKey) instead: they cannot swap two arguments of the
+// same type.
 func (inst *InEntityFactsTable) setId(id0 uint64, naturalKey1 []byte) *InEntityFactsTable {
 	if inst.state != runtime.EntityStateInEntity {
 		inst.AppendError(runtime.ErrInvalidStateTransition)
@@ -368,9 +372,42 @@ func (inst *InEntityFactsTable) setId(id0 uint64, naturalKey1 []byte) *InEntityF
 
 ///////////////////////////////////////////////////////////////////
 // code generator
-// dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1691
+// dml.(*GoClassBuilder).composePlainColumnSetters
+// ./public/semistructured/leeway/dml/lw_dml_plain_setters.go:125
 
+// setIdColumn sets the entity's id column.
+func (inst *InEntityFactsTable) setIdColumn(id0 uint64) *InEntityFactsTable {
+	if inst.state != runtime.EntityStateInEntity {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.plainId0 = id0
+
+	return inst
+}
+
+///////////////////////////////////////////////////////////////////
+// code generator
+// dml.(*GoClassBuilder).composePlainColumnSetters
+// ./public/semistructured/leeway/dml/lw_dml_plain_setters.go:125
+
+// setNaturalKey sets the entity's naturalKey column.
+func (inst *InEntityFactsTable) setNaturalKey(naturalKey1 []byte) *InEntityFactsTable {
+	if inst.state != runtime.EntityStateInEntity {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.plainNaturalKey1 = naturalKey1
+
+	return inst
+}
+
+///////////////////////////////////////////////////////////////////
+// code generator
+// dml.(*GoClassBuilder).ComposeEntityCode
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1696
+
+// setTimestamp sets the entity's ts column.
 func (inst *InEntityFactsTable) setTimestamp(ts2 time.Time) *InEntityFactsTable {
 	if inst.state != runtime.EntityStateInEntity {
 		inst.AppendError(runtime.ErrInvalidStateTransition)
@@ -384,8 +421,9 @@ func (inst *InEntityFactsTable) setTimestamp(ts2 time.Time) *InEntityFactsTable 
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1691
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1696
 
+// setLifecycle sets the entity's expiresAt column.
 func (inst *InEntityFactsTable) setLifecycle(expiresAt3 time.Time) *InEntityFactsTable {
 	if inst.state != runtime.EntityStateInEntity {
 		inst.AppendError(runtime.ErrInvalidStateTransition)
@@ -397,7 +435,7 @@ func (inst *InEntityFactsTable) setLifecycle(expiresAt3 time.Time) *InEntityFact
 }
 
 // PushMembershipHighCardRef adds id to the ambient HighCardRef memberships
-// replayed onto every attribute as it closes, until it is popped (ADR-0112 M1).
+// replayed onto every attribute as it closes, until it is popped.
 // The stamp scope — one section vs the whole entity — is the caller's to set.
 func (inst *InEntityFactsTable) PushMembershipHighCardRef(id uint64) {
 	inst.ambientHighCardRef = append(inst.ambientHighCardRef, id)
@@ -853,7 +891,7 @@ func (inst *InEntityFactsTable) GetSchema() (schema *arrow.Schema) {
 	return inst.builder.Schema()
 }
 
-// --- store control drivers (ADR-0100 SD6): exported access to InEntityFactsTable's
+// --- store control drivers: exported access to InEntityFactsTable's
 // unexported frame control, callable only from within this package. ---
 func InEntityFactsTableBeginEntity(e *InEntityFactsTable) *InEntityFactsTable { return e.beginEntity() }
 func InEntityFactsTableCommitEntity(e *InEntityFactsTable) error              { return e.commitEntity() }
@@ -873,6 +911,12 @@ func InEntityFactsTableSetTimestamp(e *InEntityFactsTable, ts2 time.Time) *InEnt
 }
 func InEntityFactsTableSetLifecycle(e *InEntityFactsTable, expiresAt3 time.Time) *InEntityFactsTable {
 	return e.setLifecycle(expiresAt3)
+}
+func InEntityFactsTableSetIdColumn(e *InEntityFactsTable, id0 uint64) *InEntityFactsTable {
+	return e.setIdColumn(id0)
+}
+func InEntityFactsTableSetNaturalKey(e *InEntityFactsTable, naturalKey1 []byte) *InEntityFactsTable {
+	return e.setNaturalKey(naturalKey1)
 }
 
 func (inst *InEntityFactsTable) AppendError(err error) {

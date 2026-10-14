@@ -15,7 +15,8 @@ func validEvent() audit.AuditEvent {
 	return audit.AuditEvent{
 		Domain: "dmdm", Action: "vault-resolve", Outcome: audit.OutcomeOk,
 		Principal: option.Some("p-1"), PrincipalBy: audit.PrincipalByEnv, OriginBy: "envelope",
-		Purpose: option.Some("art-15"), Node: option.Some("cell-a"),
+		PrincipalVia: option.Some(audit.PrincipalViaToken),
+		Purpose:      option.Some("art-15"), Node: option.Some("cell-a"),
 		Subject: 42, Retention: "disclosure",
 		RefTypes: []string{"vaultref", "slot"}, RefValues: []string{"v-1", "s-1"},
 		AttrKeys: []string{"count"}, AttrValues: []string{"3"},
@@ -23,8 +24,8 @@ func validEvent() audit.AuditEvent {
 }
 
 // Validate holds ADR-0296 §SD1's bounds: names, enumerations, values,
-// parallel lists, the agreement of a principal with its PrincipalBy, and
-// the origin's attestation (ADR-0327 §SD6).
+// parallel lists, the agreement of a principal with its PrincipalBy and
+// PrincipalVia, and the origin's attestation (ADR-0327 §SD6).
 func TestAuditEventValidation(t *testing.T) {
 	require.NoError(t, validEvent().Validate())
 	cases := map[string]func(e *audit.AuditEvent){
@@ -39,11 +40,16 @@ func TestAuditEventValidation(t *testing.T) {
 		"none with principal":   func(e *audit.AuditEvent) { e.PrincipalBy = audit.PrincipalByNone },
 		"env without principal": func(e *audit.AuditEvent) { e.Principal = option.None[string]() },
 		"empty principal":       func(e *audit.AuditEvent) { e.Principal = option.Some("") },
-		"long value":            func(e *audit.AuditEvent) { e.RefValues[0] = strings.Repeat("x", audit.MaxValueRunes+1) },
-		"bad utf8":              func(e *audit.AuditEvent) { e.AttrValues[0] = "\xff" },
-		"ragged refs":           func(e *audit.AuditEvent) { e.RefValues = e.RefValues[:1] },
-		"ragged attrs":          func(e *audit.AuditEvent) { e.AttrKeys = nil },
-		"bad ref type":          func(e *audit.AuditEvent) { e.RefTypes[1] = "Slot" },
+		"camel principal-via":   func(e *audit.AuditEvent) { e.PrincipalVia = option.Some("bearerToken") },
+		"empty principal-via":   func(e *audit.AuditEvent) { e.PrincipalVia = option.Some("") },
+		"via without principal": func(e *audit.AuditEvent) {
+			e.Principal, e.PrincipalBy = option.None[string](), audit.PrincipalByNone
+		},
+		"long value":   func(e *audit.AuditEvent) { e.RefValues[0] = strings.Repeat("x", audit.MaxValueRunes+1) },
+		"bad utf8":     func(e *audit.AuditEvent) { e.AttrValues[0] = "\xff" },
+		"ragged refs":  func(e *audit.AuditEvent) { e.RefValues = e.RefValues[:1] },
+		"ragged attrs": func(e *audit.AuditEvent) { e.AttrKeys = nil },
+		"bad ref type": func(e *audit.AuditEvent) { e.RefTypes[1] = "Slot" },
 		"too many attrs": func(e *audit.AuditEvent) {
 			for range audit.MaxAttrs {
 				e.AttrKeys = append(e.AttrKeys, "k")
@@ -58,9 +64,13 @@ func TestAuditEventValidation(t *testing.T) {
 			assert.Error(t, e.Validate())
 		})
 	}
-	// Optional values may be absent, and lists empty.
+	// An emitter may name its own mechanism.
 	e := validEvent()
-	e.Principal, e.PrincipalBy = option.None[string](), audit.PrincipalByNone
+	e.PrincipalVia = option.Some("oidc")
+	assert.NoError(t, e.Validate())
+	// Optional values may be absent, and lists empty.
+	e = validEvent()
+	e.Principal, e.PrincipalBy, e.PrincipalVia = option.None[string](), audit.PrincipalByNone, option.None[string]()
 	e.Purpose, e.Node = option.None[string](), option.None[string]()
 	e.RefTypes, e.RefValues, e.AttrKeys, e.AttrValues = nil, nil, nil, nil
 	assert.NoError(t, e.Validate())

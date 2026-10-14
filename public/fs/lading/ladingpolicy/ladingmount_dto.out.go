@@ -71,8 +71,8 @@ type ladingMountU64ArraySecI[Attr any, Ent any] interface {
 // (BeginEntity / plain setters / CommitEntity) are added only for the
 // full codec's BuildEntities. AddSections stacks sections onto a frame
 // the caller already owns, so it needs none of them — which lets a
-// store drive it with a builder whose frame control is unexported
-// (ADR-0100 SD6). Ent is the builder pointer.
+// store drive it with a builder whose frame control is unexported.
+// Ent is the builder pointer.
 type ladingMountEntityI[
 	SymbolAttr ladingMountSymbolAttrI,
 	SymbolSec ladingMountSymbolSecI[SymbolAttr, Ent],

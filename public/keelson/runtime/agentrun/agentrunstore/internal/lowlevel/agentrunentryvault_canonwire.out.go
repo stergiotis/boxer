@@ -28,7 +28,7 @@ var (
 // canonwire.(*GoClassBuilder).ComposeCodec
 // ./public/semistructured/leeway/canonwire/lw_cw_generator.go:209
 
-// The slot keys of ADR-0210 SD2: a tagged section's CT group, or a co-section
+// The slot keys: a tagged section's CT group, or a co-section
 // group's CT signature. They key the entity item's tagged map and are the only
 // thing on the wire that comes from agentrunentryvault-table's description: section names, column
 // names, aspects and hints are not.
@@ -241,7 +241,7 @@ func (inst CanonWireSlotAgentrunentryvaultTableE) Signature() string {
 }
 
 // Ambiguous reports whether the slot's signature is carried by more than one
-// slot of this table. Those are the slots ADR-0210 SD5's dispatch has to
+// slot of this table. Those are the slots the tagger/dispatcher pair has to
 // resolve: the encoder consults its tagger for every attribute of one, and for
 // no attribute of any other.
 func (inst CanonWireSlotAgentrunentryvaultTableE) Ambiguous() bool {
@@ -262,7 +262,7 @@ func (inst CanonWireSlotAgentrunentryvaultTableE) Ambiguous() bool {
 	return false
 }
 
-// CanonWireTaggerAgentrunentryvaultTableI is the encoder half of ADR-0210 SD5's dispatch pair.
+// CanonWireTaggerAgentrunentryvaultTableI is the encoder half of the slot dispatch pair.
 //
 // It is consulted for every attribute of a slot whose signature is ambiguous
 // in this table, and its small opaque integer rides as the attribute item's
@@ -272,7 +272,7 @@ type CanonWireTaggerAgentrunentryvaultTableI interface {
 	Tag(slot CanonWireSlotAgentrunentryvaultTableE, entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) uint64
 }
 
-// CanonWireOrdinalTaggerAgentrunentryvaultTable is the built-in tagger of ADR-0210 SD5.
+// CanonWireOrdinalTaggerAgentrunentryvaultTable is the built-in tagger.
 //
 // It returns the slot's ordinal within its ambiguity set, which round-trips
 // between two tables that declare the same sections in the same order and is
@@ -296,7 +296,7 @@ func (inst CanonWireOrdinalTaggerAgentrunentryvaultTable) Tag(slot CanonWireSlot
 	return 0
 }
 
-// CanonWireEncoderAgentrunentryvaultTable writes entities of a loaded ReadAccessAgentrunentryvaultTable as the leeway canonical wire (ADR-0210).
+// CanonWireEncoderAgentrunentryvaultTable writes entities of a loaded ReadAccessAgentrunentryvaultTable as the leeway canonical wire.
 //
 // It reads the generated readaccess accessors directly: no reflection, no
 // arrow.Array type switch, one typed runtime call per column. The buffers are
@@ -516,7 +516,7 @@ func NewCanonWireEncoderAgentrunentryvaultTable(ra *ReadAccessAgentrunentryvault
 
 // EncodeEntity writes one entity item to w: the plain sections under their item
 // types, then the tagged slots under their CT signatures, both in the order the
-// form fixes (ADR-0210 SD1–SD3). The attributes are held back only until the
+// canonical form fixes. The attributes are held back only until the
 // item is complete, which is what lets the writer sort them into canonical
 // order.
 func (inst *CanonWireEncoderAgentrunentryvaultTable) EncodeEntity(entityIdx runtime.EntityIdx, w io.Writer) (err error) {

@@ -307,11 +307,13 @@ mod tests {
     fn the_override_does_not_outlive_the_button() {
         let ctx = egui::Context::default();
         super::super::apply_style_only(&ctx, tokens::density::Density::Standard);
-        let _ = ctx.run_ui(egui::RawInput::default(), |ui| {
+        ctx.run_ui(egui::RawInput::default(), |ui| {
             let before = ui.visuals().clone();
             ui.add(IdsButton(Button::new("x"), KIND_PRIMARY));
             ui.add(IdsButton(Button::new("y"), KIND_DANGER_GHOST));
             assert_eq!(before, *ui.visuals());
-        });
+        })
+        .textures_delta
+        .clear();
     }
 }

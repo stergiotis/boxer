@@ -125,7 +125,7 @@ func casUses(cs []casComponent, goType string) bool {
 // constants, typed setters and guards, and the whole-row set list.
 func (inst emitter) emitCas(sb *strings.Builder, cs []casComponent) {
 	p := func(format string, args ...any) { fmt.Fprintf(sb, format+"\n", args...) }
-	p("// UpdateIf is the compare-and-set on key's row (ADR-0223 §SD3): one")
+	p("// UpdateIf is the compare-and-set on key's row: one")
 	p("// lightweight update, guarded by where on the row's current values, that")
 	p("// applies sets. It does not report whether it won — the caller reads the")
 	p("// row back and decides, since the read-back is the answer. where is SQL")
@@ -138,7 +138,8 @@ func (inst emitter) emitCas(sb *strings.Builder, cs []casComponent) {
 	p("// The table lives under rowcas's conditions: the sequential update mode")
 	p("// on every statement, the block-position settings (EnsureTable applies")
 	p("// them), no heavyweight mutation ever, an immutable key, no async_insert")
-	p("// on the claim path, and one server (ADR-0319 §SD1).")
+	// The single-server condition is ADR-0319 §SD1.
+	p("// on the claim path, and one server.")
 	p("func (inst *%s) UpdateIf(ctx context.Context, key %s, where string, sets ...rowcas.Set) (err error) {", inst.storeType(), inst.keyGoType)
 	p("\tif strings.TrimSpace(where) == \"\" {")
 	p("\t\treturn eh.Errorf(\"compare-and-set without a guard\")")

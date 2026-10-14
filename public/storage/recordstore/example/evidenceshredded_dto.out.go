@@ -6,8 +6,8 @@ package example
 // name a vault row holding it carries.
 const EvidenceShreddedKind = "evidenceShredded"
 
-// EvidenceShredded is the evidence profile's shredded component (ADR-0327
-// (proposed) §SD4, ADR-0326): a JSON document exploded by jsonshred into
+// EvidenceShredded is the evidence profile's shredded component: a JSON
+// document exploded by jsonshred into
 // one tuple element per leaf, on the facts section of its value, with the
 // JSON Pointer as the mixed-channel membership's name and the array
 // indices as its parameters. EvidenceShreddedOf and Attrs convert to and

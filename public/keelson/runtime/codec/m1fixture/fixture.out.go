@@ -68,7 +68,7 @@ func init() {
 	buscodec.Register[M1Sample](m1SampleBusCodec)
 }
 
-// --- ADR-0042 active-section / active-field hints. ---
+// --- Active-section / active-field hints. ---
 
 // M1SampleActiveSections is the dml_cbor section-index subset this kind
 // populates. Passed to InEntityFacts.SetActiveSections so the
@@ -404,8 +404,8 @@ type M1SampleTextArraySecI[Attr any, Ent any] interface {
 // (BeginEntity / plain setters / CommitEntity) are added only for the
 // full codec's BuildEntities. AddSections stacks sections onto a frame
 // the caller already owns, so it needs none of them — which lets a
-// store drive it with a builder whose frame control is unexported
-// (ADR-0100 SD6). Ent is the builder pointer.
+// store drive it with a builder whose frame control is unexported.
+// Ent is the builder pointer.
 type M1SampleEntityI[
 	SymbolAttr M1SampleSymbolAttrI,
 	SymbolSec M1SampleSymbolSecI[SymbolAttr, Ent],
@@ -1973,7 +1973,7 @@ func M1SampleReadRow[
 	return
 }
 
-// --- Sparse-CBOR write (ADR-0042 driver path). ---
+// --- Sparse-CBOR write. ---
 
 // Marshal writes the SoA buffer to w as the sparse-CBOR wire
 // format produced through factsschema/dml_cbor. Thin wrapper

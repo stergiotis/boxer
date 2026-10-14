@@ -2304,9 +2304,25 @@ func (inst PaintLineFluid) Send() {
 
 	r.SendIntermediate()
 }
+func (inst PaintMarkersFluid) Mesh() PaintMarkersFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(PaintMarkersMethodIdMesh))
+
+	return inst
+}
+
+func (inst PaintMarkersFluid) Outline(oc color.Color, ow float32) PaintMarkersFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(PaintMarkersMethodIdOutline))
+	color.PutAsU32(r, oc)
+	r.WriteFloat32(ow)
+
+	return inst
+}
+
 func (inst PaintMarkersFluid) Send() {
 	r := inst.r
-
+	r.WriteOpCode(uint32(PaintMarkersMethodIdBuild))
 	r.SendIntermediate()
 }
 func (inst PaintPolygonFilledFluid) Concave() PaintPolygonFilledFluid {
@@ -2377,6 +2393,11 @@ func (inst PaintTextFluid) Monospace() PaintTextFluid {
 func (inst PaintTextFluid) Send() {
 	r := inst.r
 	r.WriteOpCode(uint32(PaintTextMethodIdBuild))
+	r.SendIntermediate()
+}
+func (inst PaintTrianglesFluid) Send() {
+	r := inst.r
+
 	r.SendIntermediate()
 }
 func (inst PanelBottomFluid) Resizable(val bool) PanelBottomFluid {

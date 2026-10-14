@@ -15,7 +15,6 @@ import (
 
 	"github.com/stergiotis/boxer/public/config/env"
 	"github.com/stergiotis/boxer/public/functional/option"
-	"github.com/stergiotis/boxer/public/identity/callident"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
@@ -473,10 +472,12 @@ func (inst *Recorder) AdhocDataset(at time.Time, c Context, cause option.Option[
 }
 
 // Event buffers one audit event (ADR-0296 §SD2), the one verb whose row
-// carries the call identity on ctx: the origin from its vouched part when
-// one is there, else from c, else the run alone; the principal and the
+// carries the call identity on ctx, by [audit.Stamp] and [audit.OriginOf]:
+// the run is always this recorder's; the app and the instance the call
+// identity's origin when it names them, else c's; the principal and the
 // purpose from its claims, replacing whatever row carried. With no
-// principal the row's PrincipalBy becomes none. A row outside the bounds
+// principal the row's PrincipalBy becomes none and its PrincipalVia
+// absent. A row outside the bounds
 // of [AuditEvent.Validate] is replaced by an audit-invalid row naming the
 // attempted domain and action, and logged; the call does not fail for it.
 // The row's natural key names the domain, the action and the subject.
@@ -484,32 +485,11 @@ func (inst *Recorder) Event(ctx context.Context, at time.Time, c Context, row Au
 	if inst == nil {
 		return nil
 	}
-	if ci, ok := callident.CallIdentityFrom(ctx); ok {
-		if ci.Origin != (callident.Origin{}) {
-			c.Origin = Origin{Run: ci.Origin.Run, App: ci.Origin.App, Instance: ci.Origin.Instance}
-		}
-		row.Principal = option.None[string]()
-		if ci.Claims.Principal != "" {
-			row.Principal = option.Some(ci.Claims.Principal)
-		}
-		row.Purpose = option.None[string]()
-		if ci.Claims.Purpose != "" {
-			row.Purpose = option.Some(ci.Claims.Purpose)
-		}
-	} else {
-		row.Principal = option.None[string]()
-		row.Purpose = option.None[string]()
-	}
-	if !row.Principal.Has {
-		row.PrincipalBy = PrincipalByNone
-	}
-	row.OriginBy = inst.originBy.String()
-	if a, ok := evidence.AttestationFrom(ctx); ok {
-		row.OriginBy = a.OriginBy.String()
-	}
+	c.Origin = audit.OriginOf(ctx, inst.run, c.Origin)
+	row = audit.Stamp(ctx, row, inst.originBy)
 	if verr := row.Validate(); verr != nil {
 		inst.log.Error().Err(verr).Str("domain", audit.Bounded(row.Domain)).Str("action", audit.Bounded(row.Action)).Msg("trail: an audit event is outside its bounds; an audit-invalid row is written in its place")
-		row = inst.invalidEvent(row, verr)
+		row = audit.Invalid(row, verr, inst.originBy)
 		inst.invalid.Add(1)
 	}
 	return inst.writeEvent(ctx, at, c, row)
@@ -557,32 +537,6 @@ func (inst *Recorder) writeEvent(ctx context.Context, at time.Time, c Context, r
 			inst.keepForForward(ent)
 		}
 	})
-}
-
-// invalidEvent is the row written in place of one that failed validation
-// (ADR-0296 §SD4): the recorder's own domain, naming what was attempted
-// and why it was refused, keeping the subject and whatever principal the
-// context vouched for. Built from bounded values, so it needs no check.
-func (inst *Recorder) invalidEvent(row AuditEvent, verr error) (out AuditEvent) {
-	out = AuditEvent{
-		Domain: TrailDomain, Action: ActionAuditInvalid, Outcome: OutcomeFailed,
-		PrincipalBy: PrincipalByNone, OriginBy: row.OriginBy, Subject: row.Subject, Retention: RetentionTrail,
-		AttrKeys:   []string{"domain", "action", "reason"},
-		AttrValues: []string{audit.Bounded(row.Domain), audit.Bounded(row.Action), audit.Bounded(verr.Error())},
-	}
-	if _, ok := evidence.ParseOriginBy(out.OriginBy); !ok {
-		out.OriginBy = inst.originBy.String()
-	}
-	if row.Principal.Has && audit.CheckValue("principal", row.Principal.Val) == nil {
-		out.Principal = row.Principal
-		switch row.PrincipalBy {
-		case PrincipalBySystem, PrincipalByEnv, PrincipalByOs:
-			out.PrincipalBy = row.PrincipalBy
-		default:
-			out.PrincipalBy = PrincipalByEnv
-		}
-	}
-	return
 }
 
 // unique is a key part no other row of this run shares.
@@ -656,12 +610,7 @@ func (inst *Recorder) swapLocked() {
 func (inst *Recorder) writeGap() {
 	g := inst.gap
 	inst.gap = gap{}
-	row := AuditEvent{
-		Domain: TrailDomain, Action: ActionAuditGap, Outcome: OutcomeFailed,
-		PrincipalBy: PrincipalByNone, OriginBy: inst.originBy.String(), Retention: RetentionTrail,
-		AttrKeys:   []string{"rows", "from", "to"},
-		AttrValues: []string{strconv.Itoa(g.rows), g.first.Format(time.RFC3339Nano), g.last.Format(time.RFC3339Nano)},
-	}
+	row := audit.Gap(g.rows, g.first, g.last, inst.originBy, option.None[string]())
 	if err := inst.writeEvent(context.Background(), time.Now(), Context{}, row); err != nil {
 		inst.log.Error().Err(err).Int("rows", g.rows).Msg("trail: the audit-gap row could not be buffered")
 		return

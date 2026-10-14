@@ -3,7 +3,6 @@
 //   (derived from phosphor-icons.ts via tsToJson.py;
 //    icons.ts vendored from @phosphor-icons/core).
 // Regenerate via: bash public/keelson/runtime/icons/generate.sh
-// See ADR-0044 §SD3.
 
 package icons
 

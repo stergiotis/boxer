@@ -347,8 +347,8 @@ func TestLabelAlwaysPaintsUnderTheBudget(t *testing.T) {
 	require.Equal(t, render(false)+1+len(labelHaloOffsets), render(true))
 }
 
-// An undirected picture paints no arrow heads — fewer messages for the same
-// declaration — and picks its edges as before.
+// An undirected picture paints no arrow heads — the one triangle batch that
+// carries every head is gone (ADR-0329) — and picks its edges as before.
 func TestSceneUndirectedPaintsNoHeadAndStillPicks(t *testing.T) {
 	messages, zero, reset := scenetest.InstallCounting()
 	t.Cleanup(reset)
@@ -363,7 +363,7 @@ func TestSceneUndirectedPaintsNoHeadAndStillPicks(t *testing.T) {
 		reset()
 		return messages()
 	}
-	require.Equal(t, count(false)-3, count(true), "one polygon per head is gone")
+	require.Equal(t, count(false)-1, count(true), "the batch of heads is gone")
 
 	s := newScene(t, "heads-pick", Options{Layout: LayoutRandom, Undirected: true, EdgeClicking: true}, 400, 300)
 	s.frame(nodes, edges)

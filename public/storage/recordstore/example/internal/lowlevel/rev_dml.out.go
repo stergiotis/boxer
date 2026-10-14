@@ -108,8 +108,12 @@ var InEntityRevTableSectionIndices = map[string]int{
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1691
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1696
 
+// setId sets the entity's id, ord columns, one positional argument per column
+// in that order. Hand-written code should call the per-column setters
+// (setIdColumn, setOrd) instead: they cannot swap two arguments of the same
+// type.
 func (inst *InEntityRevTable) setId(id0 string, ord1 uint64) *InEntityRevTable {
 	if inst.state != runtime.EntityStateInEntity {
 		inst.AppendError(runtime.ErrInvalidStateTransition)
@@ -123,9 +127,42 @@ func (inst *InEntityRevTable) setId(id0 string, ord1 uint64) *InEntityRevTable {
 
 ///////////////////////////////////////////////////////////////////
 // code generator
-// dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1691
+// dml.(*GoClassBuilder).composePlainColumnSetters
+// ./public/semistructured/leeway/dml/lw_dml_plain_setters.go:125
 
+// setIdColumn sets the entity's id column.
+func (inst *InEntityRevTable) setIdColumn(id0 string) *InEntityRevTable {
+	if inst.state != runtime.EntityStateInEntity {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.plainId0 = id0
+
+	return inst
+}
+
+///////////////////////////////////////////////////////////////////
+// code generator
+// dml.(*GoClassBuilder).composePlainColumnSetters
+// ./public/semistructured/leeway/dml/lw_dml_plain_setters.go:125
+
+// setOrd sets the entity's ord column.
+func (inst *InEntityRevTable) setOrd(ord1 uint64) *InEntityRevTable {
+	if inst.state != runtime.EntityStateInEntity {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.plainOrd1 = ord1
+
+	return inst
+}
+
+///////////////////////////////////////////////////////////////////
+// code generator
+// dml.(*GoClassBuilder).ComposeEntityCode
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1696
+
+// setLifecycle sets the entity's rev column.
 func (inst *InEntityRevTable) setLifecycle(rev2 uint32) *InEntityRevTable {
 	if inst.state != runtime.EntityStateInEntity {
 		inst.AppendError(runtime.ErrInvalidStateTransition)
@@ -137,7 +174,7 @@ func (inst *InEntityRevTable) setLifecycle(rev2 uint32) *InEntityRevTable {
 }
 
 // PushMembershipHighCardRef adds id to the ambient HighCardRef memberships
-// replayed onto every attribute as it closes, until it is popped (ADR-0112 M1).
+// replayed onto every attribute as it closes, until it is popped.
 // The stamp scope — one section vs the whole entity — is the caller's to set.
 func (inst *InEntityRevTable) PushMembershipHighCardRef(id uint64) {
 	inst.ambientHighCardRef = append(inst.ambientHighCardRef, id)
@@ -289,7 +326,7 @@ func (inst *InEntityRevTable) GetSchema() (schema *arrow.Schema) {
 	return inst.builder.Schema()
 }
 
-// --- store control drivers (ADR-0100 SD6): exported access to InEntityRevTable's
+// --- store control drivers: exported access to InEntityRevTable's
 // unexported frame control, callable only from within this package. ---
 func InEntityRevTableBeginEntity(e *InEntityRevTable) *InEntityRevTable { return e.beginEntity() }
 func InEntityRevTableCommitEntity(e *InEntityRevTable) error            { return e.commitEntity() }
@@ -304,6 +341,12 @@ func InEntityRevTableSetId(e *InEntityRevTable, id0 string, ord1 uint64) *InEnti
 }
 func InEntityRevTableSetLifecycle(e *InEntityRevTable, rev2 uint32) *InEntityRevTable {
 	return e.setLifecycle(rev2)
+}
+func InEntityRevTableSetIdColumn(e *InEntityRevTable, id0 string) *InEntityRevTable {
+	return e.setIdColumn(id0)
+}
+func InEntityRevTableSetOrd(e *InEntityRevTable, ord1 uint64) *InEntityRevTable {
+	return e.setOrd(ord1)
 }
 
 func (inst *InEntityRevTable) AppendError(err error) {

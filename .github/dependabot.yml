@@ -53,9 +53,9 @@ updates:
     #
     # Patch updates within a line still flow; only the ring-breaking step is
     # withheld, because it is a human decision about the whole ring at once.
-    # Cargo.toml's `egui` block names the crate currently gating the move and
-    # what to do when it releases. wgpu is here because egui-wgpu pins its
-    # major (0.35 → wgpu 29), so it moves with the ring rather than on its own.
+    # Cargo.toml's `egui` block records the ring's last move and why. wgpu is
+    # here because egui-wgpu pins its major (0.36 → wgpu 30), so it moves with
+    # the ring rather than on its own.
     ignore:
       - dependency-name: "egui"
         update-types: ["version-update:semver-minor", "version-update:semver-major"]

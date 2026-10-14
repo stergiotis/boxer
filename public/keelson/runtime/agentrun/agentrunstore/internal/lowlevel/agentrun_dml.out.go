@@ -415,8 +415,9 @@ var InEntityAgentrunTableSectionIndices = map[string]int{
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1691
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1696
 
+// setId sets the entity's id column.
 func (inst *InEntityAgentrunTable) setId(id0 uint64) *InEntityAgentrunTable {
 	if inst.state != runtime.EntityStateInEntity {
 		inst.AppendError(runtime.ErrInvalidStateTransition)
@@ -430,8 +431,9 @@ func (inst *InEntityAgentrunTable) setId(id0 uint64) *InEntityAgentrunTable {
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1691
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1696
 
+// setTimestamp sets the entity's ts column.
 func (inst *InEntityAgentrunTable) setTimestamp(ts1 time.Time) *InEntityAgentrunTable {
 	if inst.state != runtime.EntityStateInEntity {
 		inst.AppendError(runtime.ErrInvalidStateTransition)
@@ -445,8 +447,9 @@ func (inst *InEntityAgentrunTable) setTimestamp(ts1 time.Time) *InEntityAgentrun
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1691
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1696
 
+// setLifecycle sets the entity's lifecycle column.
 func (inst *InEntityAgentrunTable) setLifecycle(lifecycle2 uint8) *InEntityAgentrunTable {
 	if inst.state != runtime.EntityStateInEntity {
 		inst.AppendError(runtime.ErrInvalidStateTransition)
@@ -458,7 +461,7 @@ func (inst *InEntityAgentrunTable) setLifecycle(lifecycle2 uint8) *InEntityAgent
 }
 
 // PushMembershipHighCardRef adds id to the ambient HighCardRef memberships
-// replayed onto every attribute as it closes, until it is popped (ADR-0112 M1).
+// replayed onto every attribute as it closes, until it is popped.
 // The stamp scope — one section vs the whole entity — is the caller's to set.
 func (inst *InEntityAgentrunTable) PushMembershipHighCardRef(id uint64) {
 	inst.ambientHighCardRef = append(inst.ambientHighCardRef, id)
@@ -955,7 +958,7 @@ func (inst *InEntityAgentrunTable) GetSchema() (schema *arrow.Schema) {
 	return inst.builder.Schema()
 }
 
-// --- store control drivers (ADR-0100 SD6): exported access to InEntityAgentrunTable's
+// --- store control drivers: exported access to InEntityAgentrunTable's
 // unexported frame control, callable only from within this package. ---
 func InEntityAgentrunTableBeginEntity(e *InEntityAgentrunTable) *InEntityAgentrunTable {
 	return e.beginEntity()

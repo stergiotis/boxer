@@ -42,11 +42,15 @@ const (
 	// graphviewMaxVertices / graphviewMaxEdges bound the model (§SD9). Unlike
 	// the Network tab's, these are not a layout engine's ceiling but a frame
 	// budget: the simulation steps inside the same 60 Hz frame that paints the
-	// graph and the rest of the app. Measured on one laptop (not a trial), the
-	// package's parallel Barnes–Hut repulsion is around half a millisecond at
-	// 1 000 nodes and a few at 5 000; legibility gives out well before either.
-	graphviewMaxVertices = 2000
-	graphviewMaxEdges    = 6000
+	// graph and the rest of the app. Measured on one laptop (not a trial), a
+	// layout step is around half a millisecond at 2 000 nodes and around five
+	// at 20 000, and with geometry sent as batches (ADR-0329) a
+	// 20 000-node frame still draws at an interactive rate; past it both costs
+	// keep growing with the graph. A sparse graph of many small components —
+	// nodes pinned by lat/lon over a map — stays readable well past the
+	// legibility of one dense component, which is what the higher caps serve.
+	graphviewMaxVertices = 20000
+	graphviewMaxEdges    = 60000
 
 	// graphviewLabelBudget is the vertex count past which every-node labels
 	// stop being a reading (§SD11). Above it labels follow hover, selection and
@@ -1152,6 +1156,9 @@ func (inst *GraphviewDriver) statusLine() string {
 		fmt.Fprintf(&b, " · %d group(s)", len(inst.groups))
 	}
 	b.WriteString(graphviewSettleStatus(inst.view, inst.paused, inst.frozen))
+	if inst.view != nil {
+		b.WriteString(graphviewPaintNote(inst.view.PaintStats()))
+	}
 	b.WriteString(inst.opts.statusNote())
 	if inst.sizeReason != "" {
 		fmt.Fprintf(&b, " · %s", inst.sizeReason)
@@ -1175,6 +1182,25 @@ func (inst *GraphviewDriver) statusLine() string {
 	}
 	b.WriteString(inst.src.statusSuffix())
 	return b.String()
+}
+
+// graphviewPaintNote reports what the widget's geometry budget took out of
+// the picture (ADR-0329), most visible first; nothing when it took nothing.
+func graphviewPaintNote(st graphview.PaintStats) string {
+	if !st.Coarse() {
+		return ""
+	}
+	var parts []string
+	if st.EdgeStride > 1 {
+		parts = append(parts, fmt.Sprintf("1 in %d edges drawn", st.EdgeStride))
+	}
+	if st.NoTips {
+		parts = append(parts, "no arrow heads")
+	}
+	if st.NoRings {
+		parts = append(parts, "no pinned rings")
+	}
+	return " · geometry budget: " + strings.Join(parts, ", ")
 }
 
 // renderGraphviewTab is the Graphview dock tab body: the same two CTEs the

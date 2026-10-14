@@ -293,7 +293,12 @@ impl TextureStore {
     /// frame to use a texture it frees. Returns incremental texture updates.
     pub fn ingest(&mut self, delta: &egui::TexturesDelta) -> Vec<Vec<u8>> {
         let mut msgs = Vec::new();
-        for (id, d) in &delta.set {
+        // egui 0.36 keys the deltas by texture id in a randomly seeded map;
+        // walk ids in order so the wire output stays reproducible, and each
+        // id's deltas in the order egui queued them.
+        let mut ids: Vec<&egui::TextureId> = delta.set.keys().collect();
+        ids.sort_unstable();
+        for (id, d) in ids.into_iter().flat_map(|id| delta.set[id].iter().map(move |d| (id, d))) {
             let egui::epaint::ImageData::Color(img) = &d.image;
             let key = tex_key(*id);
             let mut patch = Vec::with_capacity(img.pixels.len() * 4);
@@ -340,7 +345,9 @@ impl TextureStore {
                 }
             }
         }
-        self.pending_free.extend(delta.free.iter().map(|id| tex_key(*id)));
+        let mut freed: Vec<u64> = delta.free.iter().map(|id| tex_key(*id)).collect();
+        freed.sort_unstable();
+        self.pending_free.extend(freed);
         msgs
     }
 
@@ -426,11 +433,10 @@ mod tests {
                 rgba: vec![0; 4],
             },
         );
-        let delta = egui::TexturesDelta {
-            set: Vec::new(),
-            free: vec![egui::TextureId::Managed(7)],
-        };
+        let mut delta = egui::TexturesDelta::default();
+        delta.free(egui::TextureId::Managed(7));
         assert!(store.ingest(&delta).is_empty());
+        delta.clear();
         assert!(store.has_pending_frees());
         assert_eq!(
             store.full_messages().len(),
@@ -459,14 +465,13 @@ mod tests {
             },
         );
         let image = egui::ColorImage::filled([1, 1], egui::Color32::WHITE);
-        let delta = egui::TexturesDelta {
-            set: vec![(
-                egui::TextureId::Managed(3),
-                egui::epaint::ImageDelta::partial([1, 0], image, egui::TextureOptions::LINEAR),
-            )],
-            free: Vec::new(),
-        };
+        let mut delta = egui::TexturesDelta::default();
+        delta.push(
+            egui::TextureId::Managed(3),
+            egui::epaint::ImageDelta::partial([1, 0], image, egui::TextureOptions::LINEAR),
+        );
         let updates = store.ingest(&delta);
+        delta.clear();
         assert_eq!(updates.len(), 1);
         store.finish_frame();
         let full = store.full_messages();
@@ -478,14 +483,14 @@ mod tests {
     fn set_use_free_texture_is_in_bootstrap_before_retirement() {
         let mut store = TextureStore::default();
         let image = egui::ColorImage::filled([1, 1], egui::Color32::WHITE);
-        let delta = egui::TexturesDelta {
-            set: vec![(
-                egui::TextureId::Managed(9),
-                egui::epaint::ImageDelta::full(image, egui::TextureOptions::LINEAR),
-            )],
-            free: vec![egui::TextureId::Managed(9)],
-        };
+        let mut delta = egui::TexturesDelta::default();
+        delta.push(
+            egui::TextureId::Managed(9),
+            egui::epaint::ImageDelta::full(image, egui::TextureOptions::LINEAR),
+        );
+        delta.free(egui::TextureId::Managed(9));
         assert_eq!(store.ingest(&delta).len(), 1);
+        delta.clear();
         assert_eq!(store.full_messages().len(), 1);
         assert!(store.live_keys().is_empty());
         store.finish_frame();

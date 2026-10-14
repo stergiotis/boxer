@@ -45,11 +45,11 @@ fn main() {
     // (first pass reserves Shape::Noop slots that the second pass
     // fills with real Rect/Text shapes).
     for _ in 0..2 {
-        let _ = ctx.run_ui(raw.clone(), |ctx| show(ctx, id));
+        ctx.run_ui(raw.clone(), |ctx| show(ctx, id)).textures_delta.clear();
     }
 
     let mut variants: Vec<(&str, Option<String>)> = Vec::new();
-    let _ = ctx.run_ui(raw, |ctx| {
+    ctx.run_ui(raw, |ctx| {
         show(ctx, id);
         variants.push((
             "faithful-dark",
@@ -103,7 +103,9 @@ fn main() {
                 None,
             ),
         ));
-    });
+    })
+    .textures_delta
+    .clear();
 
     for (tag, maybe_svg) in variants {
         let svg = maybe_svg.expect("window painted");

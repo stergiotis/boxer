@@ -28,7 +28,10 @@ func TestGenerateTrailStore(t *testing.T) {
 		PackageName: "trail",
 		StoreName:   "Trail",
 		ComponentPaths: []string{
-			"./origin_dto.go", "./conversation_dto.go", "./delegation_dto.go", "./cause_dto.go",
+			// The origin is the audit package's (ADR-0330 §SD3), bound
+			// through the alias in auditevent.go like the audit event.
+			"../../../storage/recordstore/evidence/audit/origin_dto.go",
+			"./conversation_dto.go", "./delegation_dto.go", "./cause_dto.go",
 			"./llmcall_dto.go", "./llmmessage_dto.go", "./llmmessagebody_dto.go",
 			"./agentaction_dto.go", "./agentgrant_dto.go", "./httpfetch_dto.go", "./agentcapture_dto.go",
 			"./agentdisclosure_dto.go", "./adhocdataset_dto.go",

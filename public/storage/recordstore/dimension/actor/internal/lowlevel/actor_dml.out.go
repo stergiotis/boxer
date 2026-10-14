@@ -103,8 +103,9 @@ var InEntityActorTableSectionIndices = map[string]int{
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1691
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1696
 
+// setId sets the entity's id column.
 func (inst *InEntityActorTable) setId(id0 uint64) *InEntityActorTable {
 	if inst.state != runtime.EntityStateInEntity {
 		inst.AppendError(runtime.ErrInvalidStateTransition)
@@ -118,8 +119,9 @@ func (inst *InEntityActorTable) setId(id0 uint64) *InEntityActorTable {
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1691
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1696
 
+// setTimestamp sets the entity's ts column.
 func (inst *InEntityActorTable) setTimestamp(ts1 time.Time) *InEntityActorTable {
 	if inst.state != runtime.EntityStateInEntity {
 		inst.AppendError(runtime.ErrInvalidStateTransition)
@@ -131,7 +133,7 @@ func (inst *InEntityActorTable) setTimestamp(ts1 time.Time) *InEntityActorTable 
 }
 
 // PushMembershipHighCardRef adds id to the ambient HighCardRef memberships
-// replayed onto every attribute as it closes, until it is popped (ADR-0112 M1).
+// replayed onto every attribute as it closes, until it is popped.
 // The stamp scope — one section vs the whole entity — is the caller's to set.
 func (inst *InEntityActorTable) PushMembershipHighCardRef(id uint64) {
 	inst.ambientHighCardRef = append(inst.ambientHighCardRef, id)
@@ -279,7 +281,7 @@ func (inst *InEntityActorTable) GetSchema() (schema *arrow.Schema) {
 	return inst.builder.Schema()
 }
 
-// --- store control drivers (ADR-0100 SD6): exported access to InEntityActorTable's
+// --- store control drivers: exported access to InEntityActorTable's
 // unexported frame control, callable only from within this package. ---
 func InEntityActorTableBeginEntity(e *InEntityActorTable) *InEntityActorTable { return e.beginEntity() }
 func InEntityActorTableCommitEntity(e *InEntityActorTable) error              { return e.commitEntity() }
