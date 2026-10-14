@@ -8,6 +8,7 @@ import (
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/array"
 	"github.com/apache/arrow-go/v18/arrow/memory"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/recordtable"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -84,38 +85,6 @@ func TestFormatCellDictionaryInvalidUTF8(t *testing.T) {
 	}
 }
 
-// stringLikeArrowType drives the Table pane's left-alignment: string-like
-// columns line up under their left-aligned headers; everything else stays
-// centered.
-func TestStringLikeArrowType(t *testing.T) {
-	dictStr := &arrow.DictionaryType{IndexType: arrow.PrimitiveTypes.Int8, ValueType: arrow.BinaryTypes.String}
-	dictLarge := &arrow.DictionaryType{IndexType: arrow.PrimitiveTypes.Int8, ValueType: arrow.BinaryTypes.LargeString}
-	dictInt := &arrow.DictionaryType{IndexType: arrow.PrimitiveTypes.Int8, ValueType: arrow.PrimitiveTypes.Int64}
-
-	cases := []struct {
-		name string
-		dt   arrow.DataType
-		want bool
-	}{
-		{"string", arrow.BinaryTypes.String, true},
-		{"large_string", arrow.BinaryTypes.LargeString, true},
-		{"dict_string", dictStr, true}, // ClickHouse LowCardinality(String)
-		{"dict_large_string", dictLarge, true},
-		{"dict_int", dictInt, false},
-		{"int64", arrow.PrimitiveTypes.Int64, false},
-		{"float64", arrow.PrimitiveTypes.Float64, false},
-		{"binary", arrow.BinaryTypes.Binary, false}, // rendered as hex, reads like a number
-		// A List column shows a packed "[len=N]" marker in the per-DB-row grid,
-		// not the strings themselves, so it is not left-aligned there.
-		{"list_string", arrow.ListOf(arrow.BinaryTypes.String), false},
-	}
-	for _, tc := range cases {
-		if got := stringLikeArrowType(tc.dt); got != tc.want {
-			t.Errorf("stringLikeArrowType(%s) = %v, want %v", tc.name, got, tc.want)
-		}
-	}
-}
-
 // listElemType unwraps a list to its element so the per-attribute view — which
 // explodes each list value to its inner scalars — classifies alignment against
 // what the exploded cell actually shows.
@@ -131,12 +100,12 @@ func TestListElemType(t *testing.T) {
 		arrow.LargeListOf(arrow.BinaryTypes.String),
 		arrow.FixedSizeListOf(2, arrow.BinaryTypes.String),
 	} {
-		if !stringLikeArrowType(listElemType(lt)) {
+		if !recordtable.StringLike(listElemType(lt)) {
 			t.Errorf("listElemType(%s) not classified string-like", lt)
 		}
 	}
 	// A List<Int64> value column stays numeric once exploded.
-	if stringLikeArrowType(listElemType(arrow.ListOf(arrow.PrimitiveTypes.Int64))) {
+	if recordtable.StringLike(listElemType(arrow.ListOf(arrow.PrimitiveTypes.Int64))) {
 		t.Errorf("List<int64> element classified string-like, want numeric")
 	}
 }

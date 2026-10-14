@@ -22,6 +22,7 @@ import (
 	"github.com/stergiotis/boxer/public/semistructured/leeway/valueaspects"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/colwidth"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/recordtable"
 	"github.com/stergiotis/boxer/public/thestack/utfsafe"
 )
 
@@ -549,7 +550,7 @@ func (inst *PlayApp) renderAttrExplodeGrid(schema *arrow.Schema, visCols []int, 
 	for i := range visCols {
 		col := c.EtColumn(float32(resolved[i+1])).
 			Resizable(true).
-			RangeMinMax(inst.colDragMinWidth(), colDragMaxWidth)
+			RangeMinMax(inst.colDragMinWidth(), recordtable.MaxColumnWidth)
 		if refit && resolved[i+1] == float64(widths[i]) {
 			col = col.AutoSizeThisFrame(true)
 		}
@@ -646,7 +647,7 @@ func (inst *PlayApp) renderAttrExplodeGrid(schema *arrow.Schema, visCols []int, 
 			if vis, _ := et.ColVisible(colPos); !vis {
 				continue
 			}
-			leftAlign := stringLikeArrowType(listElemType(schema.Field(arrowCol).Type))
+			leftAlign := recordtable.StringLike(listElemType(schema.Field(arrowCol).Type))
 			for range et.Cells(local, colPos) {
 				// A gloss/url item is a hyperlink to itself (its text is the
 				// URL: the face is the first line of the value).
@@ -658,7 +659,7 @@ func (inst *PlayApp) renderAttrExplodeGrid(schema *arrow.Schema, visCols []int, 
 				if refit {
 					// Bounded like the per-DB-row grid: the fit must not size
 					// a column to a paragraph.
-					text = fitRunes(text, colMaxRunes)
+					text = recordtable.FitRunes(text, colMaxRunes)
 				}
 				if inst.selectableCell(rowBase+uint64(pos)+1, cellPadX, text, false, selected, true, leftAlign, gloss.ToneNeutral, link, !refit) {
 					emit.Emit(signalSelection, row.absRow)
@@ -709,7 +710,7 @@ func (inst *PlayApp) attrColWidths(schema *arrow.Schema, visCols []int, rows []a
 	const charW = colCharPx
 	const maxW = 420.0
 	const sampleRows = 96
-	// pad is the button's own padding plus the inset cellInset spends on each
+	// pad is the button's own padding plus the inset recordtable.Chrome.Inset spends on each
 	// side of the cell; minW keeps the seed at or above the floor a column can
 	// be dragged to, so a seeded column never starts below its own minimum.
 	pad := 18.0 + 2*styletokens.PaddingTight(inst.density)
@@ -786,7 +787,7 @@ func (inst *PlayApp) ensureColWidthRes(ctx app.FrameContextI) {
 		// floor counts the cell inset on *both* sides, which it did not
 		// before: a column at the old floor put the gridline in the glyphs.
 		MinPoints: float64(inst.colDragMinWidth()),
-		MaxPoints: colDragMaxWidth,
+		MaxPoints: float64(recordtable.MaxColumnWidth),
 	})
 	if err != nil {
 		log.Warn().Err(err).Msg("play: column-width resolver unavailable")

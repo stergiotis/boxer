@@ -41,6 +41,7 @@ import (
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/lazypane"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/markdown"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/pager"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/recordtable"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/regexedit"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/regexsummary"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/schemaview"
@@ -69,18 +70,6 @@ const (
 	// Column-width heuristic bounds (px).
 	colMinWidth = 100.0
 	colMaxWidth = 420.0
-	// colMinContentPx is the narrowest run of *content* a column keeps when
-	// the user drags it in — a couple of monospace glyphs, enough to see that
-	// something is there and to find the resize handle again. The width floor
-	// the grids actually enforce is this plus the cell inset on both sides
-	// (colDragMinWidth): counting only the leading inset, as the floor used
-	// to, left the trailing gridline sitting in the glyphs of the header.
-	colMinContentPx = 24.0
-	// colDragMaxWidth is the widest a column may be dragged, and the ceiling
-	// stored overrides are clamped to. One constant for both so the live drag
-	// and the stored value cannot disagree — a column pinned at the drag
-	// ceiling would otherwise be re-clamped on load and read as a change.
-	colDragMaxWidth = 1200.0
 	// colCharPx is the monospace glyph advance the width seed multiplies a
 	// rune count by. 7.8 is Hack at 13 px (0.6 em), measured on a headless
 	// tour capture: a 20-glyph cell inks 155 px, a 7-glyph one 53. It was
@@ -409,7 +398,7 @@ type PlayApp struct {
 	tableOpts tableDisplayOpts
 
 	// tableSort is the Table pane's header-click sort: a permutation over the
-	// record already in hand, never a re-issued query (play_table_sort.go).
+	// record already in hand, never a re-issued query (recordtable.SortState).
 	tableSort tableSortState
 	// tableDrawn is what the Table's last draw drew from, for get_table and
 	// set_table_options (play_ops_table.go).
@@ -417,6 +406,9 @@ type PlayApp struct {
 	// masterCells replays the master table's cells while nothing they depend
 	// on changes; see play_table_cells_cache.go.
 	masterCells masterCellsCache
+	// tableChrome draws both grids' cells; its Note feeds masterCells
+	// (play_table_chrome.go).
+	tableChrome recordtable.Chrome
 
 	// schemaModel backs the Schema dock tab: the schemaview inspector bound to
 	// a leeway TableDesc inferred from the active result's Arrow schema (plain
@@ -3527,7 +3519,7 @@ func (inst *PlayApp) renderMasterTable(rec arrow.RecordBatch, schema *arrow.Sche
 	for i, arrowCol := range visCols {
 		col := c.EtColumn(float32(resolved[i+1])).
 			Resizable(true).
-			RangeMinMax(inst.colDragMinWidth(), colDragMaxWidth)
+			RangeMinMax(inst.colDragMinWidth(), recordtable.MaxColumnWidth)
 		if refit && resolved[i+1] == float64(inst.colWidths[arrowCol]) {
 			col = col.AutoSizeThisFrame(true)
 		}
@@ -3537,17 +3529,17 @@ func (inst *PlayApp) renderMasterTable(rec arrow.RecordBatch, schema *arrow.Sche
 		pos := len(visCols) + 1 + k
 		col := c.EtColumn(float32(resolved[pos])).
 			Resizable(true).
-			RangeMinMax(inst.colDragMinWidth(), colDragMaxWidth)
+			RangeMinMax(inst.colDragMinWidth(), recordtable.MaxColumnWidth)
 		if refit && resolved[pos] == float64(identityColWidth(cellPadX)) {
 			col = col.AutoSizeThisFrame(true)
 		}
 		col.Send()
 	}
 
-	// The header-click sort (play_table_sort.go) is a permutation of the rows
+	// The header-click sort (recordtable.SortState) is a permutation of the rows
 	// this record already holds: display position p draws record row
 	// order[p]. nil means "record order", the unsorted case.
-	order := inst.tableSort.orderFor(rec, totalRows)
+	order := inst.tableSort.OrderFor(rec, totalRows)
 
 	// The grid is the last thing in the Table tab, so it takes the rest of
 	// it. Without this it falls to the auto-fit cap (400 px) and leaves the
@@ -3564,7 +3556,7 @@ func (inst *PlayApp) renderMasterTable(rec arrow.RecordBatch, schema *arrow.Sche
 	// page-local row when highlighting so the stripe lands on the right line.
 	// Under a sort that is the row's *displayed* position, not its record
 	// index — the selection survives sorting rather than following the line.
-	if selPos := inst.tableSort.displayPos(order, selectedRow); selPos >= pageStart && selPos < pageEnd {
+	if selPos := inst.tableSort.DisplayPos(order, selectedRow); selPos >= pageStart && selPos < pageEnd {
 		et = et.SelectedRow(uint64(selPos - pageStart))
 	}
 
@@ -3618,14 +3610,14 @@ func (inst *PlayApp) renderMasterTable(rec arrow.RecordBatch, schema *arrow.Sche
 				// hides the name it stands for, and abbreviating the type
 				// below loses nothing.
 				for range c.HoverText(hover + " — click to sort").KeepIter() {
-					if c.Button(ids.PrepareSeq(tableSortIDSalt+uint64(arrowCol)),
-						c.Atoms().BeginRichText(name+inst.tableSort.glyph(arrowCol)).Strong().Monospace().End().Keep()).
+					if c.Button(ids.PrepareSeq(recordtable.SortIDSalt+uint64(arrowCol)),
+						c.Atoms().BeginRichText(name+inst.tableSort.Glyph(arrowCol)).Strong().Monospace().End().Keep()).
 						Frame(false).
 						Truncate().
 						SendResp().HasPrimaryClicked() {
 						// Through set_table_options as the person's
 						// gesture (ADR-0270 §SD6); the cycle is the
-						// one tableSortState.clicked draws.
+						// one tableSortState.Clicked draws.
 						inst.requestTableOptions(inst.tableSortClick(schema, arrowCol))
 					}
 				}
@@ -3683,7 +3675,7 @@ func (inst *PlayApp) renderMasterTable(rec arrow.RecordBatch, schema *arrow.Sche
 		result: inst.tableResult, schema: schema,
 		pageStart: pageStart, pageEnd: pageEnd, rowLo: rowLo, rowHi: rowHi,
 		selectedRow: selectedRow, refit: refit, cellPadX: cellPadX,
-		sortActive: inst.tableSort.active, sortCol: inst.tableSort.col, sortDesc: inst.tableSort.desc,
+		sortActive: inst.tableSort.Active, sortCol: inst.tableSort.Col, sortDesc: inst.tableSort.Desc,
 		identityDone: idJob == nil || idJob.isDone(),
 		opts:         inst.tableOpts,
 		columns: foldColumns(visCols, synth, func(pos uint32) bool {
@@ -3700,7 +3692,7 @@ func (inst *PlayApp) renderMasterTable(rec arrow.RecordBatch, schema *arrow.Sche
 	for local := rowLo; local < rowHi; local++ {
 		// The display position walks the page; the record row it draws comes
 		// from the sort permutation (identity when unsorted).
-		absRow := inst.tableSort.rowAt(order, pageStart+int64(local))
+		absRow := inst.tableSort.RowAt(order, pageStart+int64(local))
 		selected := absRow == selectedRow
 		rowBase := cellIdBase + uint64(absRow)*cellColStride
 
@@ -3716,7 +3708,7 @@ func (inst *PlayApp) renderMasterTable(rec arrow.RecordBatch, schema *arrow.Sche
 			if vis, _ := et.ColVisible(colPos); !vis {
 				continue
 			}
-			leftAlign := stringLikeArrowType(schema.Field(arrowCol).Type)
+			leftAlign := recordtable.StringLike(schema.Field(arrowCol).Type)
 			for range et.Cells(local, colPos) {
 				// ADR-0186: the cell text is the column's gloss inline face when
 				// one resolves (and the raw toggle is off), else formatCell; a
@@ -3730,7 +3722,7 @@ func (inst *PlayApp) renderMasterTable(rec arrow.RecordBatch, schema *arrow.Sche
 					// The untruncated re-fit cell must not size a column to a
 					// paragraph: cut what egui measures at the runes that fit
 					// colMaxWidth, the same ceiling the seed has always had.
-					text = fitRunes(text, colMaxRunes)
+					text = recordtable.FitRunes(text, colMaxRunes)
 				}
 				if inst.selectableCell(rowBase+uint64(arrowCol)+1, cellPadX, text, false, selected, false, leftAlign, tone, link, !refit) {
 					emit.Emit(signalSelection, absRow)
@@ -3843,7 +3835,7 @@ func (inst *PlayApp) ensureColWidths(rec arrow.RecordBatch, schema *arrow.Schema
 	widths := make([]float32, ncols)
 	sampleN := min(pageEnd-pageStart, colSampleRows)
 	// Reserve the inset renderMasterTable gives each cell, on both sides
-	// (cellInset), so a padded cell doesn't truncate content that would
+	// (recordtable.Chrome.Inset), so a padded cell doesn't truncate content that would
 	// otherwise fit.
 	cellPadX := styletokens.PaddingTight(inst.density)
 	glossCols := inst.glossColumns(schema)
@@ -3921,23 +3913,6 @@ func (inst *PlayApp) ensureColLabels(schema *arrow.Schema) {
 	}
 	inst.colLabels = lwsql.BuildLabels(names)
 	inst.colLabelsForSchema = schema
-}
-
-// fitRunes cuts s to at most n runes plus an ellipsis: the text a re-fit
-// cell hands egui_table to measure, so a paragraph cannot size its column
-// past colMaxWidth.
-func fitRunes(s string, n int) string {
-	if utf8.RuneCountInString(s) <= n {
-		return s
-	}
-	i := 0
-	for pos := range s {
-		if i == n {
-			return s[:pos] + "…"
-		}
-		i++
-	}
-	return s
 }
 
 func historyLabel(e HistoryEntry) string {

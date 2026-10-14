@@ -1,6 +1,7 @@
 package play
 
 import (
+	"cmp"
 	"path"
 	"regexp"
 	"slices"
@@ -150,7 +151,7 @@ func filesOrder(nodes []*rowNode, by fsbrowser.SortByE, desc bool) {
 		c := 0
 		switch by {
 		case fsbrowser.SortBySize:
-			c = compareOrdered(a.size, b.size)
+			c = cmp.Compare(a.size, b.size)
 		case fsbrowser.SortByModTime:
 			c = a.mtime.Compare(b.mtime)
 		}
