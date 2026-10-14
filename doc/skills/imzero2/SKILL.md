@@ -510,7 +510,7 @@ et.Send()
 **An Arrow record as a grid** needs no hand-rolled etable:
 `widgets/recordtable.RenderGrid` draws one with sortable headers, inset cells
 whose whole rect selects the row, and widths resolved from and captured to a
-`colwidth.Resolver` ([table-column-widths](../../howto/table-column-widths.md)).
+`colwidth.Resolver` ([recordtable-grids](../../howto/recordtable-grids.md)).
 Paging, computed columns and gloss faces go through its `Input` and
 `Column.Cell`; a `CellsKey` lets it replay unchanged cells (play's results
 grid is one). A grid whose rows are not record rows — play's per-attribute
