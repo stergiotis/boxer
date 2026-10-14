@@ -40,6 +40,7 @@ the linked document wins.
 | See how watchbill's pieces fit, and what it serializes | [doc/explanation/watchbill-architecture.md](./doc/explanation/watchbill-architecture.md) |
 | Snapshot a file tree into ClickHouse and query it | [doc/howto/lading-snapshot-store.md](./doc/howto/lading-snapshot-store.md) |
 | Ingest a markdown vault and query its graph, tags and properties | [doc/howto/markdown-facts-obsidian-queries.md](./doc/howto/markdown-facts-obsidian-queries.md) |
+| Show an Arrow record as a table — sortable headers, full-cell row selection, widths that persist | the [recordtable](./public/thestack/imzero2/egui2/widgets/recordtable/doc.go) package doc, then [table-column-widths](./doc/howto/table-column-widths.md) |
 | Draw a graph over a slippy map | [doc/howto/graph-on-a-map.md](./doc/howto/graph-on-a-map.md) |
 | Draw a gridded vector field (wind, currents) on a map | [doc/howto/vector-field-on-a-map.md](./doc/howto/vector-field-on-a-map.md) |
 | Run an app in a browser tab — build the bundle, serve it, what the tab lacks | [doc/howto/imzero2-in-the-browser.md](./doc/howto/imzero2-in-the-browser.md) |

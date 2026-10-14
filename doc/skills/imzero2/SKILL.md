@@ -507,6 +507,15 @@ et.EndCells()
 et.Send()
 ```
 
+**An Arrow record as a grid** needs no hand-rolled etable:
+`widgets/recordtable.RenderGrid` draws one with sortable headers, inset cells
+whose whole rect selects the row, and widths resolved from and captured to a
+`colwidth.Resolver` ([table-column-widths](../../howto/table-column-widths.md)).
+A grid it does not fit — play's Table pane, with paging toggles, gloss faces
+and replayed cells — builds on the same two parts directly:
+`recordtable.SortState` (the header sort as a view permutation) and
+`recordtable.Chrome` (the inset, the header cell, the selectable cell).
+
 ## 6.5 Design Note: Why Not PushRichText?
 
 An earlier API used `PushRichText("text").Strong().Send()` to push styled text into a global register (`r0_atoms`), which a later widget would drain. This was replaced because:
