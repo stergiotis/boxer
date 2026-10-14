@@ -234,3 +234,71 @@ func TestProcSortByIOPutsUnknownLast(t *testing.T) {
 		}
 	}
 }
+
+// The process table's record holds each column's sort value (an unmeasured
+// I/O rate as -1), tree mode hands the grid the forest order with each
+// record row's depth, and the record is rebuilt only for a new sample or
+// view.
+func TestProcTableRecord(t *testing.T) {
+	inst := newApp()
+	procs := []sysmsnap.ProcInfo{
+		{PID: 1, PPID: 0, Name: "init", CPUPercent: 1},
+		{PID: 2, PPID: 9, Name: "orphan", CPUPercent: 2, IOKnown: true, IOReadBytesPerSec: 7},
+		{PID: 3, PPID: 1, Name: "child", CPUPercent: 3},
+	}
+	smoothed := []float32{0.5, 2.5, 3.5}
+	snap := &PublishedSnapshot{}
+	view := defaultProcView()
+
+	rec, order, depth := inst.procTableRecord(snap, procs, smoothed, view)
+	if order != nil {
+		t.Fatalf("flat mode passes no order, got %v", order)
+	}
+	if !slices.Equal(depth, []int{0, 0, 0}) {
+		t.Errorf("flat mode has no depth, got %v", depth)
+	}
+	if got := rec.Column(procColumnOf(ProcSortByCPU)).ValueStr(1); got != "2.5" {
+		t.Errorf("smoothed CPU of row 1 = %q", got)
+	}
+	read := procColumnOf(ProcSortByIORead)
+	if got := rec.Column(read).ValueStr(0); got != "-1" {
+		t.Errorf("an unmeasured read rate keys as -1, got %q", got)
+	}
+	if again, _, _ := inst.procTableRecord(snap, procs, smoothed, view); again != rec {
+		t.Error("the same sample and view must reuse the record")
+	}
+
+	view.Tree = true
+	_, order, depth = inst.procTableRecord(snap, procs, smoothed, view)
+	if !slices.Equal(order, []int64{0, 2, 1}) {
+		t.Errorf("tree order = %v, want init, its child, then the orphan", order)
+	}
+	if !slices.Equal(depth, []int{0, 0, 1}) {
+		t.Errorf("depth by record row = %v", depth)
+	}
+	inst.procTbl.rec.Release()
+}
+
+// Only the CPU column driving the order is tinted, and a non-sortable column
+// is marked so.
+func TestProcGridColumnsTint(t *testing.T) {
+	inst := newApp()
+	procs := []sysmsnap.ProcInfo{{PID: 1, Name: "init", CPUPercent: 40}}
+	cols := inst.procGridColumns(procs, []float32{30}, []int{0}, procViewState{SortBy: ProcSortByCPU, Desc: true})
+	if !cols[procColumnOf(ProcSortByCPU)].Cell(0).Filled {
+		t.Error("the smoothed CPU column drives the order and is tinted")
+	}
+	if cols[procColumnOf(ProcSortByCPURaw)].Cell(0).Filled {
+		t.Error("the raw CPU column does not drive the order")
+	}
+	if got := cols[procColumnOf(ProcSortByCPU)].Cell(0).Text; got != "30.0" {
+		t.Errorf("smoothed cell text = %q", got)
+	}
+	vsz := slices.IndexFunc(procColumns, func(pc procColumn) bool { return pc.header == "VSZ" })
+	if !cols[vsz].NoSort {
+		t.Error("VSZ does not sort")
+	}
+	if !cols[procColumnOf(ProcSortByMem)].DescFirst || cols[procColumnOf(ProcSortByName)].DescFirst {
+		t.Error("measurements start descending, identifiers ascending")
+	}
+}

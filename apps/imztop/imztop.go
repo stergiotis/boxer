@@ -15,6 +15,7 @@ import (
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/colorscale"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/distsummary"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/lazypane"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/recordtable"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/timeline"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/treemap"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/treemap/layout"
@@ -122,6 +123,11 @@ type App struct {
 	// so the work stays once-per-sample now that it happens at render
 	// time. Keyed on the snapshot pointer and the view together.
 	procViewMemo procViewMemo
+	// procTbl is the process table's record and row order for the memoised
+	// view; procSort and procGrid are its grid's sort glyph and state.
+	procTbl  procTable
+	procSort recordtable.SortState
+	procGrid recordtable.State
 
 	// cpuHeatmap holds the per-core CPU% scrolling heatmap state
 	// (HeatmapScroll widget + colormap config + last-published
@@ -286,6 +292,10 @@ func (inst *App) Mount(ctx app.MountContextI) (err error) {
 }
 func (inst *App) Unmount(ctx app.MountContextI) (err error) {
 	inst.releaseController()
+	if inst.procTbl.rec != nil {
+		inst.procTbl.rec.Release()
+		inst.procTbl = procTable{}
+	}
 	return
 }
 

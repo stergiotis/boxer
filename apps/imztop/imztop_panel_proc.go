@@ -3,14 +3,19 @@ package imztop
 import (
 	"cmp"
 	"fmt"
-	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
-	"github.com/stergiotis/boxer/public/keelson/runtime/widgethandle"
 	"slices"
 	"strconv"
 	"strings"
 
+	"github.com/apache/arrow-go/v18/arrow"
+	"github.com/apache/arrow-go/v18/arrow/array"
+	"github.com/apache/arrow-go/v18/arrow/memory"
+
+	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
+	"github.com/stergiotis/boxer/public/keelson/runtime/widgethandle"
 	"github.com/stergiotis/boxer/public/observability/sysmetrics/sysmsnap"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/recordtable"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/imzero2env"
 )
 
@@ -74,13 +79,14 @@ func defaultProcView() (out procViewState) {
 // setProcSort is the header click: the same key flips the direction, a new
 // key starts in its own. It computes the view and sets it through
 // set_proc_view, which never toggles (ADR-0329 §SD2).
+//
+// The cycle is recordtable.SortState's with NoUnsorted — the list always has
+// an order — and each key's own first direction.
 func (inst *App) setProcSort(by ProcSortByE) {
 	v := inst.procView
-	if v.SortBy == by {
-		v.Desc = !v.Desc
-	} else {
-		v.SortBy, v.Desc = by, procSortDefaultDesc(by)
-	}
+	s := recordtable.SortState{NoUnsorted: true, Active: true, Col: procColumnOf(v.SortBy), Desc: v.Desc}
+	s.ClickedFrom(procColumnOf(by), procSortDefaultDesc(by))
+	v.SortBy, v.Desc = by, s.Desc
 	inst.setProcViewGesture(v)
 }
 
@@ -274,269 +280,226 @@ func (inst *App) renderProcPanel(snap *PublishedSnapshot) {
 	}
 	c.AddSpace(inst.spaceInner())
 
-	c.EtColumn(70.0).Resizable(true).Send()  // PID
-	c.EtColumn(110.0).Resizable(true).Send() // User
-	c.EtColumn(70.0).Resizable(true).Send()  // CPU%~ (smoothed)
-	c.EtColumn(70.0).Resizable(true).Send()  // CPU%  (raw)
-	c.EtColumn(90.0).Resizable(true).Send()  // RSS
-	c.EtColumn(90.0).Resizable(true).Send()  // VSZ
-	c.EtColumn(100.0).Resizable(true).Send() // I/O read rate
-	c.EtColumn(100.0).Resizable(true).Send() // I/O write rate
-	c.EtColumn(50.0).Resizable(true).Send()  // State
-	c.EtColumn(120.0).Resizable(true).Send() // Name
-	c.EtColumn(400.0).Resizable(true).Send() // Cmd
+	rec, order, depth := inst.procTableRecord(snap, procs, smoothed, view)
+	// The header shows this window's sort; imztop orders the rows itself
+	// (applyProcView, then the tree), so the grid only draws the glyph and
+	// reports the click.
+	inst.procSort = recordtable.SortState{NoUnsorted: true}
+	if col := procColumnOf(view.SortBy); col >= 0 {
+		inst.procSort.Active, inst.procSort.Col, inst.procSort.Desc = true, col, view.Desc
+	}
+	res := recordtable.RenderGrid(recordtable.Input{
+		Ids: inst.ids, ScopeKey: "proc-tbl", Record: rec,
+		Columns: inst.procGridColumns(procs, smoothed, depth, view),
+		Sort:    &inst.procSort, Order: order,
+		RowHeight: procRowHeight, NoRowNumbers: true,
+		State: &inst.procGrid,
+	})
+	if res.SortClicked >= 0 {
+		s := inst.procSort
+		s.Apply(res)
+		v := inst.procView
+		v.SortBy, v.Desc = procColumns[s.Col].key, s.Desc
+		inst.setProcViewGesture(v)
+	}
+}
 
-	et := c.EndETable(inst.ids.PrepareStr("proc-tbl"),
-		uint64(len(procs)),
-		procRowHeight,
-		1, // numStickyHeaders: keep the sortable header row pinned during scroll
-		0, // numStickyCols: no frozen leading columns
-	).Striped(true).
-		// The table is the last thing in this tab, so it takes the rest of
-		// it. Without this it falls to the auto-fit cap (400 px) and leaves
-		// the bottom of the pane empty on any taller window.
-		FillPane(true)
+// procRowHeight is the per-row height in the process table; chosen to leave
+// ~7 px of vertical breathing room around the default label font (egui dark,
+// ~14 px) while staying compact enough for 1000+ rows on a typical laptop
+// screen.
+const procRowHeight float32 = 24.0
 
-	inst.renderProcHeader(et, view)
+// procColumn is one process-table column: its header, seed width, the sort
+// key a header click selects (procSortNoneSentinel: not sortable), and the
+// value the record holds for it — an integer, a float or a string, exactly
+// one of them, mirroring what procIndexCmp compares.
+type procColumn struct {
+	header string
+	width  float32
+	key    ProcSortByE
+	hover  string
+	i64    func(r procRow) int64
+	f64    func(r procRow) float64
+	str    func(r procRow) string
+	text   func(r procRow) string
+}
 
-	// Tree mode reorders the (already filtered + sorted) rows into a PPID
-	// forest, depth-first; flat mode renders the rows as-is (depth 0). The
-	// reordering is render-only — srcIdx maps an output row back to its index
-	// in the view-applied procs / smoothed pair, so per-row data and the
-	// smoothed-tint lookup stay correct in both modes.
-	var treeOrder, treeDepth []int
+// procRow is what a column reads for one row: the process, its smoothed
+// CPU% and its depth in tree mode.
+type procRow struct {
+	p        *sysmsnap.ProcInfo
+	smoothed float32
+	depth    int
+}
+
+func cpuText(pct float32) string { return strconv.FormatFloat(float64(pct), 'f', 1, 32) }
+
+var procColumns = []procColumn{
+	{header: "PID", width: 70, key: ProcSortByPID, hover: "process id",
+		i64: func(r procRow) int64 { return int64(r.p.PID) }, text: func(r procRow) string { return strconv.FormatUint(uint64(r.p.PID), 10) }},
+	{header: "User", width: 110, key: ProcSortByUser, hover: "the process's owner",
+		str: func(r procRow) string { return r.p.User }, text: func(r procRow) string { return r.p.User }},
+	// "CPU%~" carries the trailing tilde as a visual hint that the column
+	// shows smoothed (EWMA) values rather than the raw sampler-interval
+	// reading of the plain "CPU%" beside it. Only the column driving the
+	// order is tinted (procGridColumns).
+	{header: "CPU%~", width: 70, key: ProcSortByCPU, hover: "CPU%, smoothed (EWMA): the default order, steady across brief spikes",
+		f64: func(r procRow) float64 { return float64(r.smoothed) }, text: func(r procRow) string { return cpuText(r.smoothed) }},
+	{header: "CPU%", width: 70, key: ProcSortByCPURaw, hover: "CPU% over the last sampler interval",
+		f64: func(r procRow) float64 { return float64(r.p.CPUPercent) }, text: func(r procRow) string { return cpuText(r.p.CPUPercent) }},
+	{header: "RSS", width: 90, key: ProcSortByMem, hover: "resident memory",
+		i64: func(r procRow) int64 { return int64(r.p.RSSBytes) }, text: func(r procRow) string { return humanBytes(r.p.RSSBytes) }},
+	{header: "VSZ", width: 90, key: procSortNoneSentinel, hover: "virtual memory size",
+		i64: func(r procRow) int64 { return int64(r.p.VMSizeBytes) }, text: func(r procRow) string { return humanBytes(r.p.VMSizeBytes) }},
+	{header: "Read/s", width: 100, key: ProcSortByIORead, hover: "storage read rate; – where it was not measured, sorted below every measured rate",
+		i64: func(r procRow) int64 { return procIOKey(r.p, true) }, text: func(r procRow) string { return procIORateText(r.p, r.p.IOReadBytesPerSec) }},
+	{header: "Write/s", width: 100, key: ProcSortByIOWrite, hover: "storage write rate; – where it was not measured, sorted below every measured rate",
+		i64: func(r procRow) int64 { return procIOKey(r.p, false) }, text: func(r procRow) string { return procIORateText(r.p, r.p.IOWriteBytesPerSec) }},
+	{header: "S", width: 50, key: procSortNoneSentinel, hover: "process state",
+		str: func(r procRow) string { return string(r.p.State) }, text: func(r procRow) string { return string(r.p.State) }},
+	{header: "Name", width: 120, key: ProcSortByName, hover: "process name; indented under its parent in tree mode",
+		str: func(r procRow) string { return r.p.Name }, text: func(r procRow) string { return treeIndent(r.depth, r.p.Name) }},
+	{header: "Cmd", width: 400, key: procSortNoneSentinel, hover: "command line",
+		str: func(r procRow) string { return r.p.Cmd }, text: func(r procRow) string { return r.p.Cmd }},
+}
+
+// procColumnOf is the column a sort key selects, -1 for none.
+func procColumnOf(by ProcSortByE) (col int) {
+	for i, pc := range procColumns {
+		if pc.key == by {
+			return i
+		}
+	}
+	return -1
+}
+
+// procSchema is the record's shape: one field per column, named by its
+// header, typed by the value it holds.
+var procSchema = func() *arrow.Schema {
+	fields := make([]arrow.Field, len(procColumns))
+	for i, pc := range procColumns {
+		var typ arrow.DataType = arrow.BinaryTypes.String
+		switch {
+		case pc.i64 != nil:
+			typ = arrow.PrimitiveTypes.Int64
+		case pc.f64 != nil:
+			typ = arrow.PrimitiveTypes.Float64
+		}
+		fields[i] = arrow.Field{Name: pc.header, Type: typ}
+	}
+	return arrow.NewSchema(fields, nil)
+}()
+
+// procTable is the process table's record and row order for one published
+// sample under one view: rebuilt with the view-applied process list, so once
+// per sample like the list itself.
+type procTable struct {
+	src   *PublishedSnapshot
+	view  procViewState
+	rec   arrow.RecordBatch
+	order []int64
+	depth []int
+}
+
+// procTableRecord returns the record of procs (row i is procs[i]), the
+// display order — nil in flat mode, the PPID forest in tree mode — and each
+// record row's tree depth.
+func (inst *App) procTableRecord(snap *PublishedSnapshot, procs []sysmsnap.ProcInfo, smoothed []float32, view procViewState) (rec arrow.RecordBatch, order []int64, depth []int) {
+	t := &inst.procTbl
+	if t.rec != nil && t.src == snap && t.view == view {
+		return t.rec, t.order, t.depth
+	}
+	if t.rec != nil {
+		t.rec.Release()
+	}
+	depth = make([]int, len(procs))
 	if view.Tree {
-		treeOrder, treeDepth = buildProcOrder(procs)
-	}
-
-	// Emit only the cells egui_table will actually draw. Ungated, every
-	// process built a deferred block per column per frame and marshalled them
-	// across FFFI for the Rust side to cull immediately — with a few
-	// hundred processes against ~35 visible rows that is ~90% of the
-	// frame's bytes thrown away, and a CPU profile put this one loop at a
-	// third of the whole Go frame (the allocation rate alone dragged the
-	// collector into it). The tree order above is still built over ALL
-	// procs: srcIdx/depth for a visible row depend on the whole forest.
-	//
-	// VisibleRange reports the PREVIOUS frame's window (one-frame lag,
-	// self-correcting); ok is false on the first frame the table is shown,
-	// where the full range is emitted so egui_table can populate its
-	// block-map cache.
-	rowBegin, rowEnd := 0, len(procs)
-	if rb, re, _, _, _, ok := et.VisibleRange(); ok {
-		rowBegin = min(int(rb), rowEnd)
-		rowEnd = min(int(re), rowEnd)
-	}
-	var colVis [procNumCols]bool
-	for col := range colVis {
-		colVis[col], _ = et.ColVisible(uint32(col))
-	}
-	for row := rowBegin; row < rowEnd; row++ {
-		srcIdx, d := row, 0
-		if view.Tree {
-			srcIdx, d = treeOrder[row], treeDepth[row]
-		}
-		p := procs[srcIdx]
-		r := uint64(row)
-		if colVis[0] {
-			for range et.Cells(r, 0) {
-				procCellLabel(strconv.FormatUint(uint64(p.PID), 10))
-			}
-		}
-		if colVis[1] {
-			for range et.Cells(r, 1) {
-				procCellLabel(p.User)
-			}
-		}
-		smoothedPct := p.CPUPercent
-		if srcIdx < len(smoothed) {
-			smoothedPct = smoothed[srcIdx]
-		}
-		if colVis[2] {
-			for range et.Cells(r, 2) {
-				// CPU%~ — smoothed. Tinted with the heatmap palette only
-				// when the smoothed column is driving the sort, so the
-				// background colour reads as a visual hint "this is the
-				// value the row order is keying off". Same idiom on the
-				// raw column below.
-				inst.renderProcCPUCell(r, smoothedPct, view.SortBy == ProcSortByCPU, 0x6000)
-			}
-		}
-		if colVis[3] {
-			for range et.Cells(r, 3) {
-				// CPU% — raw sampler-interval value. Tinted only when the
-				// user has clicked the raw header (sort key flipped to
-				// ProcSortByCPURaw). When neither CPU column is the active
-				// sort, both stay untinted — the heatmap above already
-				// carries the colour-coded load story.
-				inst.renderProcCPUCell(r, p.CPUPercent, view.SortBy == ProcSortByCPURaw, 0x6100)
-			}
-		}
-		if colVis[4] {
-			for range et.Cells(r, 4) {
-				procCellLabel(humanBytes(p.RSSBytes))
-			}
-		}
-		if colVis[5] {
-			for range et.Cells(r, 5) {
-				procCellLabel(humanBytes(p.VMSizeBytes))
-			}
-		}
-		if colVis[6] {
-			for range et.Cells(r, 6) {
-				procCellLabel(procIORateText(&p, p.IOReadBytesPerSec))
-			}
-		}
-		if colVis[7] {
-			for range et.Cells(r, 7) {
-				procCellLabel(procIORateText(&p, p.IOWriteBytesPerSec))
-			}
-		}
-		if colVis[8] {
-			for range et.Cells(r, 8) {
-				procCellLabel(string(p.State))
-			}
-		}
-		if colVis[9] {
-			for range et.Cells(r, 9) {
-				procCellLabel(treeIndent(d, p.Name))
-			}
-		}
-		if colVis[10] {
-			for range et.Cells(r, 10) {
-				procCellLabel(p.Cmd)
-			}
+		// Tree mode reorders the (already filtered + sorted) rows into a
+		// PPID forest, depth-first; it is built over all procs, since a
+		// visible row's depth depends on the whole forest.
+		treeOrder, treeDepth := buildProcOrder(procs)
+		order = make([]int64, len(treeOrder))
+		for k, idx := range treeOrder {
+			order[k] = int64(idx)
+			depth[idx] = treeDepth[k]
 		}
 	}
-
-	et.Send()
+	mem := memory.DefaultAllocator
+	arrs := make([]arrow.Array, len(procColumns))
+	for ci, pc := range procColumns {
+		switch {
+		case pc.i64 != nil:
+			b := array.NewInt64Builder(mem)
+			for i := range procs {
+				b.Append(pc.i64(procRowAt(procs, smoothed, depth, i)))
+			}
+			arrs[ci] = b.NewArray()
+			b.Release()
+		case pc.f64 != nil:
+			b := array.NewFloat64Builder(mem)
+			for i := range procs {
+				b.Append(pc.f64(procRowAt(procs, smoothed, depth, i)))
+			}
+			arrs[ci] = b.NewArray()
+			b.Release()
+		default:
+			b := array.NewStringBuilder(mem)
+			for i := range procs {
+				b.Append(pc.str(procRowAt(procs, smoothed, depth, i)))
+			}
+			arrs[ci] = b.NewArray()
+			b.Release()
+		}
+	}
+	rec = array.NewRecordBatch(procSchema, arrs, int64(len(procs)))
+	for _, a := range arrs {
+		a.Release()
+	}
+	*t = procTable{src: snap, view: view, rec: rec, order: order, depth: depth}
+	return
 }
 
-const (
-	// procNumCols is the number of columns in the process table — the
-	// EtColumn declarations in renderProcPanel, the headers table in
-	// renderProcHeader and the per-column visibility gate must all agree
-	// on it.
-	procNumCols = 11
-	// procRowHeight is the per-row height in the process table; chosen
-	// to leave ~7 px of vertical breathing room around the default
-	// label font (egui dark, ~14 px) while staying compact enough for
-	// 1000+ rows on a typical laptop screen.
-	procRowHeight float32 = 24.0
-	// procCellPadX is the horizontal padding inside each process-table
-	// cell, applied on BOTH sides of the cell's content. Without the
-	// trailing pad, long values (PID, RSS, VSZ, …) butt right up
-	// against the next column's resize line; without the leading pad,
-	// they butt against this column's resize line. 6 px gives enough
-	// breathing room at the IDS body font for both ends while staying
-	// compact at narrow column widths (PID/CPU%/State columns are
-	// 50–70 px).
-	procCellPadX float32 = 6.0
-)
-
-// procCellLabel renders a plain text label inside a process-table cell
-// with symmetric leading + trailing horizontal pad so the text never
-// touches either of the column's resize handles. Use this for every
-// text cell that doesn't need a colour-coded value (those wrap
-// RichTextLabel / TintedScope directly with the same pad pattern).
-func procCellLabel(text string) {
-	for range c.Horizontal().KeepIter() {
-		c.AddSpace(procCellPadX)
-		c.Label(text).Send()
-		c.AddSpace(procCellPadX)
+// procRowAt is record row i's view of the process list. A process without a
+// smoothed reading shows its raw CPU%.
+func procRowAt(procs []sysmsnap.ProcInfo, smoothed []float32, depth []int, i int) (r procRow) {
+	r = procRow{p: &procs[i], smoothed: procs[i].CPUPercent, depth: depth[i]}
+	if i < len(smoothed) {
+		r.smoothed = smoothed[i]
 	}
+	return
 }
 
-// renderProcCPUCell renders one of the process table's CPU% cells.
-// When tint is true the cell background is mapped through the heatmap
-// palette via cpuPercentBgColor(pct), so the row visually advertises
-// "this column drives the sort"; when false the cell is a plain
-// padded label, identical to every other text cell. baseSeq must
-// differ between the smoothed and raw columns so the TintedScope
-// widget id stays unique within the frame even if both columns are
-// ever simultaneously asked to tint (the contract is one-or-none
-// today, but a future toggle could change that).
-func (inst *App) renderProcCPUCell(r uint64, pct float32, tint bool, baseSeq uint64) {
-	text := strconv.FormatFloat(float64(pct), 'f', 1, 32)
-	if !tint {
-		procCellLabel(text)
-		return
-	}
-	bg := inst.cpuPercentBgColor(pct)
-	cellId := inst.ids.PrepareSeq(baseSeq + r)
-	for range c.TintedScope(cellId, bg).KeepIter() {
-		for range c.Horizontal().KeepIter() {
-			c.AddSpace(procCellPadX)
-			c.Label(text).Send()
-			c.AddSpace(procCellPadX)
-		}
-	}
-}
-
-func (inst *App) renderProcHeader(et c.EndETableFluid, view procViewState) {
-	// "CPU%~" carries the trailing tilde as a visual hint that the
-	// column shows smoothed (EWMA) values rather than the raw
-	// sampler-interval reading shown by the plain "CPU%" header
-	// immediately to its right. The two columns are independently
-	// sortable; only the active sort's column is tinted (see
-	// renderProcCPUCell), giving the user a colour cue for which
-	// value drives the row order.
-	headers := []struct {
-		label string
-		key   ProcSortByE
-		seq   uint64
-	}{
-		// Keep this in step with procNumCols and the EtColumn block.
-		{"PID", ProcSortByPID, 0x600},
-		{"User", ProcSortByUser, 0x601},
-		{"CPU%~", ProcSortByCPU, 0x602},
-		{"CPU%", ProcSortByCPURaw, 0x603},
-		{"RSS", ProcSortByMem, 0x604},
-		{"VSZ", procSortNoneSentinel, 0x605},
-		{"Read/s", ProcSortByIORead, 0x609},
-		{"Write/s", ProcSortByIOWrite, 0x60a},
-		{"S", procSortNoneSentinel, 0x606},
-		{"Name", ProcSortByName, 0x607},
-		{"Cmd", procSortNoneSentinel, 0x608},
-	}
-	for col, h := range headers {
-		colu := uint32(col)
-		// Same visibility gate as the body cells: a header block for a
-		// scrolled-out column is built and marshalled for nothing.
-		if vis, _ := et.ColVisible(colu); !vis {
-			continue
-		}
-		hc := h
-		for range et.Headers(0, colu) {
-			label := hc.label
-			if hc.key != procSortNoneSentinel && view.SortBy == hc.key {
-				if view.Desc {
-					label += " ▼"
-				} else {
-					label += " ▲"
-				}
-			}
-			selected := hc.key != procSortNoneSentinel && view.SortBy == hc.key
-			for range c.Horizontal().KeepIter() {
-				c.AddSpace(procCellPadX)
-				if c.Button(inst.ids.PrepareSeq(hc.seq), c.Atoms().Text(label).Keep()).
-					Selected(selected).
-					FrameWhenInactive(false).
-					Frame(false).
-					SendResp().HasPrimaryClicked() {
-					if hc.key != procSortNoneSentinel {
-						inst.setProcSort(hc.key)
+// procGridColumns lays the columns out for the grid. The CPU column that
+// drives the order is tinted with the heatmap palette, so the row order reads
+// as keyed off that value; when neither CPU column is the sort, both stay
+// plain — the heatmap already carries the load story.
+func (inst *App) procGridColumns(procs []sysmsnap.ProcInfo, smoothed []float32, depth []int, view procViewState) (cols []recordtable.Column) {
+	cols = make([]recordtable.Column, len(procColumns))
+	for i, pc := range procColumns {
+		tint := (pc.key == ProcSortByCPU || pc.key == ProcSortByCPURaw) && view.SortBy == pc.key
+		cols[i] = recordtable.Column{
+			Arrow: i, Header: pc.header, Hover: pc.hover, Width: pc.width,
+			NoSort: pc.key == procSortNoneSentinel, DescFirst: procSortDefaultDesc(pc.key),
+			Cell: func(row int64) (cell recordtable.Cell) {
+				r := procRowAt(procs, smoothed, depth, int(row))
+				cell = recordtable.Cell{Text: pc.text(r), LeftAlign: true}
+				if tint {
+					pct := r.p.CPUPercent
+					if pc.key == ProcSortByCPU {
+						pct = r.smoothed
 					}
+					cell.Fill, cell.Filled = inst.cpuPercentBgColor(pct), true
 				}
-				c.AddSpace(procCellPadX)
-			}
+				return
+			},
 		}
 	}
+	return
 }
 
-// procSortNoneSentinel marks header columns that are not sortable. Picked
-// well outside the defined ProcSortByE range so a normal const cannot
-// alias it.
+// procSortNoneSentinel marks columns that are not sortable. Picked well
+// outside the defined ProcSortByE range so a normal const cannot alias it.
 const procSortNoneSentinel ProcSortByE = 255
 
 // treeIndent prefixes a process name with a depth-proportional tree marker.
