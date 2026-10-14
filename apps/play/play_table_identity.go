@@ -9,7 +9,6 @@ import (
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/canonform"
 	cwruntime "github.com/stergiotis/boxer/public/semistructured/leeway/canonwire/runtime"
-	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/colwidth"
 )
 
 // play_table_identity.go is the Table pane's side of ADR-0219 (SD7): an
@@ -51,13 +50,10 @@ func (k identityColKindE) hover() string {
 	return ""
 }
 
-// identityColumnKey is the width-tier identity of a synthetic column: its
-// caption as the name and a fixed format tag as the type, so it never
-// borrows a width from an Arrow column and the Arrow columns never borrow
-// one from it.
-func identityColumnKey(k identityColKindE) colwidth.Column {
-	return colwidth.Column{Name: k.name(), Type: "identity" + tableViewTagRow}
-}
+// identityWidthType is the width-tier type of a synthetic column, its caption
+// the name: a fixed format tag, so it never borrows a width from an Arrow
+// column and the Arrow columns never borrow one from it.
+const identityWidthType = "identity"
 
 // identityCellRunes is how many hex characters a cell shows; the whole
 // value is on hover. Sixteen characters are 64 bits: enough to tell rows

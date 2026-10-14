@@ -8,10 +8,14 @@
 //     both sides of every cell, headers that line up with their values, and
 //     body cells whose whole rect selects the row.
 //
-// The parts came out of play's Table pane, which still draws its grids with
-// them; [RenderGrid] is the same grid without play's paging toggles, gloss
-// faces and replayed cells. Widths persist through a [colwidth.Resolver]
-// (ADR-0151) the host acquires from its frame context.
+// The grid came out of play's Table pane, whose per-DB-row grid is a
+// [RenderGrid]; its per-attribute grid, which draws several grid rows per
+// record row, is built on [Chrome] directly. Widths persist through a
+// [colwidth.Resolver] (ADR-0151) the host acquires from its frame context.
+//
+// A host that can name everything its cells read passes it as
+// Input.CellsKey, and the grid replays the previous frame's cells instead of
+// rebuilding them while nothing moves and no cell is touched.
 //
 // A host keeps a [State] and a [SortState], and per frame:
 //

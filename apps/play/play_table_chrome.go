@@ -11,12 +11,11 @@ import (
 // tableSortState is the Table pane's header-click sort.
 type tableSortState = recordtable.SortState
 
-// chrome is the cell layer both Table grids draw through. Its Note hands every
-// cell button's wire id to the master table's cells cache, which gates a
-// replay on their responses.
+// chrome is the cell layer the per-attribute grid draws through; the
+// per-DB-row grid is a recordtable.RenderGrid, which brings its own.
 func (inst *PlayApp) chrome() *recordtable.Chrome {
 	if inst.tableChrome.Ids != inst.ids {
-		inst.tableChrome = recordtable.Chrome{Ids: inst.ids, Note: inst.masterCells.note}
+		inst.tableChrome = recordtable.Chrome{Ids: inst.ids}
 	}
 	return &inst.tableChrome
 }

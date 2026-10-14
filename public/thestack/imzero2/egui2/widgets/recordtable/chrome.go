@@ -8,26 +8,15 @@ import (
 
 // CellFrameSalt lifts a body cell's *inset-frame* id off the cell's own
 // (button) id, so the frame and the button it wraps get distinct widget ids.
-// [Chrome.SelectableCell] mints it for every cell.
-//
-// A host that packs its cell ids as base + row*stride + col keeps bit 40 clear
-// for any result it can hold: play's per-DB-row grid reaches it only past
-// ~16.7 M rows in one result, and even then the two cells that would collide
-// are that many rows apart, so they are never on screen together. [RenderGrid]
-// scopes its cells per row and keys them by column position, far below it.
+// [Chrome.SelectableCell] mints it for every cell. A host that packs its cell
+// ids as base + row*stride + col keeps bit 40 clear for any result it can
+// hold; [RenderGrid] scopes its cells per row and keys them by column
+// position, far below it.
 const CellFrameSalt uint64 = 1 << 40
 
 // HeaderFrameSalt does the same for a header cell's inset frame, on a bit of
-// its own so a header frame can never collide with a body-cell frame. It is
-// below SortIDSalt, which a host keying its header *buttons* on the cell-id
-// band uses.
+// its own so a header frame can never collide with a body-cell frame.
 const HeaderFrameSalt uint64 = 1 << 60
-
-// SortIDSalt namespaces header sort buttons' ids for a host that keys its cells
-// as base + row*stride + col: that stays below 2^48 for any result a host can
-// hold, so a salt in the top bit cannot collide with them. [RenderGrid] does
-// not need it: its headers have a scope of their own.
-const SortIDSalt uint64 = 1 << 62
 
 // MinContentWidth is the narrowest run of *content* a column keeps when the
 // user drags it in — a couple of monospace glyphs, enough to see that
@@ -110,6 +99,9 @@ type Cell struct {
 	// does not select the row — the row's other cells still do — since a
 	// hyperlink's click is consumed by the widget and not reported back.
 	Link string
+	// Hover, when non-empty, is shown over the cell (the full value of a
+	// shortened one).
+	Hover string
 	// Untruncated lets the text overflow the column. Set it on the one frame
 	// a grid asks egui_table to fit its columns: egui_table sizes a column in
 	// a sizing pass with each cell rect shrunk to the column minimum and
@@ -193,6 +185,14 @@ func (inst *Chrome) HeaderCell(id uint64, padX float32, body func()) {
 // unchanged, since VerticalCenteredJustified is exactly this same top-down
 // cross-justified layout with Center rather than Min cross-alignment.
 func (inst *Chrome) SelectableCell(id uint64, padX float32, cell Cell) (clicked bool) {
+	if cell.Hover != "" {
+		hover := cell.Hover
+		cell.Hover = ""
+		for range c.HoverText(hover).KeepIter() {
+			clicked = inst.SelectableCell(id, padX, cell)
+		}
+		return
+	}
 	emitButton := func() {
 		if cell.Link != "" {
 			c.HyperlinkTo(cell.Text, cell.Link).OpenInNewTab(true).Send()

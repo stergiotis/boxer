@@ -75,7 +75,7 @@ const (
 	// tour capture: a 20-glyph cell inks 155 px, a 7-glyph one 53. It was
 	// 7.0, which under-sized every column whose cells outrun its header. The
 	// seed only lives until the re-fit frame (see renderMasterTable's refit
-	// and selectableCell's truncate parameter, which is what actually fits a
+	// and recordtable.Cell.Untruncated, which is what actually fits a
 	// column to its cells); a calibrated seed keeps that first frame close
 	// to the final layout instead of visibly jumping.
 	colCharPx = 7.8
@@ -403,11 +403,11 @@ type PlayApp struct {
 	// tableDrawn is what the Table's last draw drew from, for get_table and
 	// set_table_options (play_ops_table.go).
 	tableDrawn tableDrawnMark
-	// masterCells replays the master table's cells while nothing they depend
-	// on changes; see play_table_cells_cache.go.
-	masterCells masterCellsCache
-	// tableChrome draws both grids' cells; its Note feeds masterCells
-	// (play_table_chrome.go).
+	// masterGrid is the per-DB-row grid's recordtable state: its fit, its
+	// width read-back gate and the cells it replays while nothing they depend
+	// on changes.
+	masterGrid recordtable.State
+	// tableChrome draws the per-attribute grid's cells (play_table_chrome.go).
 	tableChrome recordtable.Chrome
 
 	// schemaModel backs the Schema dock tab: the schemaview inspector bound to
@@ -722,10 +722,6 @@ type PlayApp struct {
 	// estimator's rather than the user's — capturing it would freeze a
 	// width nobody chose. The first report a table makes is that frame.
 	attrWidthsSeen bool
-	// masterWidthsSeen is the same gate for the per-DB-row grid. It is a
-	// separate flag because the two grids are separate etables with separate
-	// first shows — one is not evidence about the other.
-	masterWidthsSeen bool
 	// attrFitSchema / attrFitCols are the per-attribute grid's memory of the
 	// column set it last re-fitted for (attrColsChanged), the sibling of
 	// tableFitSchema / tableFitCols.
@@ -3420,7 +3416,6 @@ func (inst *PlayApp) renderMasterTable(rec arrow.RecordBatch, schema *arrow.Sche
 	if pageStart > pageEnd {
 		pageStart = pageEnd
 	}
-	displayRows := pageEnd - pageStart
 
 	// visCols is the ordered set of Arrow columns to render: every column for a
 	// non-leeway result, or the value + backbone columns plus whichever support /
@@ -3445,14 +3440,9 @@ func (inst *PlayApp) renderMasterTable(rec arrow.RecordBatch, schema *arrow.Sche
 		idJob = inst.ensureIdentityJob(rec, inst.tableResult)
 	}
 
-	// egui_table draws cell content flush to the cell edge ("Does not add any
-	// margins to cells" — egui_table's own docs say to add them yourself). We
-	// lead every header and body cell with a horizontal AddSpace so content
-	// isn't jammed against the gridline or the neighbouring column's header
-	// type string. The cell ui is laid out left-to-right, so AddSpace advances
-	// the cursor along the row → a left inset. ensureColWidths reserves the
-	// same amount so the inset doesn't eat into a column's fitted width.
-	cellPadX := styletokens.PaddingTight(inst.density)
+	// The inset recordtable.Chrome gives each cell on both sides; the width
+	// seeds reserve it so the inset doesn't eat into a column's fitted width.
+	cellPadX := recordtable.CellPadX(inst.density)
 
 	// Emit per-column widths from the schema-keyed cache. Resampling every
 	// frame from the current page's content would reflow the table each
@@ -3463,355 +3453,143 @@ func (inst *PlayApp) renderMasterTable(rec arrow.RecordBatch, schema *arrow.Sche
 	glossCols := inst.glossColumns(schema)
 	inst.ensureColWidths(rec, schema, pageStart, pageEnd)
 
-	// ADR-0151: a width the user set outranks the sampled estimator, which
-	// becomes the default for columns they have not touched. cols and the
-	// EtColumn sequence stay index-aligned — the leading "#" column takes
-	// part so the positional read-back lines up, and since it is not
-	// resizable the binding reports our own width straight back for it and
-	// nothing is ever captured.
-	cols := inst.masterColumnKeys(schema, visCols)
-	for k := range synth {
-		cols = append(cols, identityColumnKey(identityColKindE(k)))
-	}
-	resolved := make([]float64, 0, len(cols))
-	resolved = append(resolved, masterRowNumColWidth)
-	for _, arrowCol := range visCols {
-		resolved = append(resolved, float64(inst.colWidths[arrowCol]))
-	}
-	for range synth {
-		resolved = append(resolved, float64(identityColWidth(cellPadX)))
-	}
-	if inst.colWidthRes != nil {
-		// Font size 0: play has no single text size to attribute a width to,
-		// and passing one it does not render at would rescale stored widths
-		// against a fiction. Zero disables rescaling, the documented meaning.
-		resolved = inst.colWidthRes.Resolve(masterTableTag, cols, 0, resolved)
-	}
-
-	// egui_table keeps its own width per column *position*, and re-fits to
-	// content only on a table's first show ever — so without this a second
-	// query inherits the first one's widths by position, and a revealed
-	// support column lands in a slot sized for whatever used to sit there.
-	// Asking for a re-fit on the frame the column set changes is what makes
-	// the widths belong to the result on screen. It has to be one frame:
-	// re-fitting continuously would move the columns while the user reads.
-	// On that frame the cells go out untruncated (selectableCell), so the
-	// re-fit measures their real width rather than a truncated one.
-	//
-	// A column whose resolved width is not the seed's carries a user
-	// override, which outranks any fit, so it sits the re-fit out. Without
-	// that test every Run measured the drag away — tableColsChanged compares
-	// the *Schema pointer, and a Run always returns a fresh one, so a re-fit
-	// fires even for a repeat of the same query.
+	// egui_table re-fits to content only on a table's first show ever, so
+	// without asking a second query would inherit the first one's widths by
+	// position. The grid asks on its own when the column identities change;
+	// play also asks on every new result, which a repeat of the same query
+	// is too — tableColsChanged compares the *Schema pointer, and a Run
+	// always returns a fresh one. A column carrying a user override sits the
+	// re-fit out either way.
 	refit := inst.tableColsChanged(schema, append(append([]int(nil), visCols...), synth...))
-	if refit && inst.colWidthRes != nil {
-		// Tell the resolver the crate is about to choose these widths. The
-		// read-back lags, so the fit's result lands a report *after* refit
-		// has gone false; without this window it reads as a drag and every
-		// auto-sized column acquires an override nobody asked for.
-		inst.colWidthRes.MarkReseed(masterTableTag)
-	}
 
-	// Leading "#" selector column (click to select row) + the data columns.
-	// It never takes part in a re-fit: it is not resizable, so egui_table
-	// never stores a width for it and the one emitted here always stands.
-	c.EtColumn(float32(resolved[0])).Resizable(false).Send()
-	for i, arrowCol := range visCols {
-		col := c.EtColumn(float32(resolved[i+1])).
-			Resizable(true).
-			RangeMinMax(inst.colDragMinWidth(), recordtable.MaxColumnWidth)
-		if refit && resolved[i+1] == float64(inst.colWidths[arrowCol]) {
-			col = col.AutoSizeThisFrame(true)
-		}
-		col.Send()
-	}
-	for k := range synth {
-		pos := len(visCols) + 1 + k
-		col := c.EtColumn(float32(resolved[pos])).
-			Resizable(true).
-			RangeMinMax(inst.colDragMinWidth(), recordtable.MaxColumnWidth)
-		if refit && resolved[pos] == float64(identityColWidth(cellPadX)) {
-			col = col.AutoSizeThisFrame(true)
-		}
-		col.Send()
-	}
-
-	// The header-click sort (recordtable.SortState) is a permutation of the rows
-	// this record already holds: display position p draws record row
+	// The header-click sort (recordtable.SortState) is a permutation of the
+	// rows this record already holds: display position p draws record row
 	// order[p]. nil means "record order", the unsorted case.
 	order := inst.tableSort.OrderFor(rec, totalRows)
 
-	// The grid is the last thing in the Table tab, so it takes the rest of
-	// it. Without this it falls to the auto-fit cap (400 px) and leaves the
-	// bottom of the tab empty on any taller window.
-	et := c.EndETable(ids.PrepareStr(masterTableTag),
-		uint64(displayRows),
-		18.0, 1, 1).
-		Striped(true).
-		FillPane(true)
-	if inst.colWidthRes != nil {
-		et = et.ApplyWidths(inst.colWidthRes.Epoch(masterTableTag))
-	}
-	// Selection is stored as an absolute row index; translate to the
-	// page-local row when highlighting so the stripe lands on the right line.
-	// Under a sort that is the row's *displayed* position, not its record
-	// index — the selection survives sorting rather than following the line.
-	if selPos := inst.tableSort.DisplayPos(order, selectedRow); selPos >= pageStart && selPos < pageEnd {
-		et = et.SelectedRow(uint64(selPos - pageStart))
-	}
-
-	// Visibility prefetch: the previous frame's egui_table::prepare pushed
-	// the visible (row, col) ranges + num_sticky_columns. We only emit
-	// cells and headers for columns egui_table will actually draw — cuts
-	// the per-frame cell count from ~pageSize*ncols to ~visibleRows*visibleCols.
-	// First frame has no prefetch yet; ok=false and ColVisible returns
-	// true for everything so egui_table can populate its block-map cache.
-
-	// Header: selector column + data column headers. Tabular data reads
-	// as monospace — column names align with their cells, type strings
-	// stay legible at small size, and the "#" gutter matches the row
-	// numbers below.
-	if vis, _ := et.ColVisible(0); vis {
-		for range et.Headers(0, 0) {
-			inst.headerCell(0, cellPadX, func() {
-				for rt := range c.RichTextLabel("#") {
-					rt.Weak().Monospace()
-				}
-			})
-		}
-	}
-	for pos, arrowCol := range visCols {
-		colPos := uint32(pos + 1)
-		if vis, _ := et.ColVisible(colPos); !vis {
+	columns := masterGridColumns(visCols, synth)
+	for i := range columns {
+		col := &columns[i]
+		if col.Arrow < 0 {
+			kind := identityColKindE(i - len(visCols))
+			col.Width = identityColWidth(cellPadX)
+			col.Hover = kind.hover()
+			col.Sub = []string{"hex"}
+			col.Cell = func(row int64) (cell recordtable.Cell) {
+				text, hover := idJob.cell(kind, row)
+				return recordtable.Cell{Text: text, Weak: text == "…", LeftAlign: true, Hover: hover}
+			}
 			continue
 		}
-		for range et.Headers(0, colPos) {
-			field := schema.Field(arrowCol)
-			gc := &glossCols[arrowCol]
-			name := field.Name
-			if label := inst.colLabels[name]; label != "" {
-				name = label
-			}
-			// A declared column (ADR-0186) is captioned by its label; the
-			// declared media type rides beside the type tag, small, and the
-			// resolution — or the refusal — goes on hover with the rest.
-			if gc.label != "" {
-				name = gc.label
-			}
-			hover := field.Name + " — " + field.Type.String()
-			if gh := glossHover(gc); gh != "" {
-				hover += " — " + gh
-			}
-			inst.headerCell(uint64(arrowCol)+1, cellPadX, func() {
-				// The header is a frameless button: clicking it cycles this
-				// column's sort (asc → desc → unsorted). The physical column
-				// name and the full type stay on hover, as the name did when
-				// the header was a plain label — so a leeway handle never
-				// hides the name it stands for, and abbreviating the type
-				// below loses nothing.
-				for range c.HoverText(hover + " — click to sort").KeepIter() {
-					if c.Button(ids.PrepareSeq(recordtable.SortIDSalt+uint64(arrowCol)),
-						c.Atoms().BeginRichText(name+inst.tableSort.Glyph(arrowCol)).Strong().Monospace().End().Keep()).
-						Frame(false).
-						Truncate().
-						SendResp().HasPrimaryClicked() {
-						// Through set_table_options as the person's
-						// gesture (ADR-0270 §SD6); the cycle is the
-						// one tableSortState.Clicked draws.
-						inst.requestTableOptions(inst.tableSortClick(schema, arrowCol))
-					}
-				}
-				for rt := range c.RichTextLabel(shortArrowType(field.Type)) {
-					rt.Small().Weak().Monospace()
-				}
-				if gc.mediaType != "" {
-					for rt := range c.RichTextLabel(gc.mediaType) {
-						rt.Small().Weak().Monospace()
-					}
-				}
-			})
+		arrowCol := col.Arrow
+		field := schema.Field(arrowCol)
+		gc := &glossCols[arrowCol]
+		col.Width = inst.colWidths[arrowCol]
+		// A declared column (ADR-0186) is captioned by its label; the
+		// declared media type rides beside the type tag, small, and the
+		// resolution — or the refusal — goes on hover with the rest.
+		col.Header = field.Name
+		if label := inst.colLabels[field.Name]; label != "" {
+			col.Header = label
 		}
-	}
-	for k, sentinel := range synth {
-		kind := identityColKindE(k)
-		colPos := uint32(len(visCols) + 1 + k)
-		if vis, _ := et.ColVisible(colPos); !vis {
-			continue
+		if gc.label != "" {
+			col.Header = gc.label
 		}
-		for range et.Headers(0, colPos) {
-			inst.headerCell(uint64(sentinel)+1, cellPadX, func() {
-				for range c.HoverText(kind.hover()).KeepIter() {
-					for rt := range c.RichTextLabel(kind.name()) {
-						rt.Strong().Monospace()
-					}
-				}
-				for rt := range c.RichTextLabel("hex") {
-					rt.Small().Weak().Monospace()
-				}
-			})
+		col.Hover = field.Name + " — " + field.Type.String()
+		if gh := glossHover(gc); gh != "" {
+			col.Hover += " — " + gh
+		}
+		col.Sub = []string{shortArrowType(field.Type)}
+		if gc.mediaType != "" {
+			col.Sub = append(col.Sub, gc.mediaType)
+		}
+		leftAlign := recordtable.StringLike(field.Type)
+		arr := rec.Column(arrowCol)
+		col.Cell = func(row int64) (cell recordtable.Cell) {
+			// ADR-0186: the cell text is the column's gloss inline face when
+			// one resolves (and the raw toggle is off), else formatCell; a
+			// gloss/url cell is a hyperlink to its value. A `<label>_gloss`
+			// companion may name this row's gloss (ADR-0245 §SD2); without
+			// one this is the column's own.
+			cellGloss := inst.rowGloss(rec, glossCols, arrowCol, row)
+			text, tone := inst.glossCell(cellGloss, arr, row, false)
+			cell = recordtable.Cell{Text: text, LeftAlign: leftAlign, Link: inst.glossLink(cellGloss, arr, row)}
+			cell.Tone, cell.Toned = toneColor(tone)
+			return
 		}
 	}
 
-	// Cells: every cell is a frameless selectable button so clicking anywhere
-	// on a row selects it (not just the "#" column). Button ids use a
-	// (row, col) composite seq to avoid collisions with other PrepareSeq
-	// sites in the app. `local` is the page-relative row; `absRow` is the
-	// index into the underlying record batch (used for formatCell and for
-	// the persistent selection).
-	const cellIdBase uint64 = 0x01000000
-	const cellColStride uint64 = 0x00010000
-	rowLo, rowHi := uint64(0), uint64(displayRows)
-	if rb, re, _, _, _, ok := et.VisibleRange(); ok {
-		rowLo, rowHi = rb, re
-		if rowHi > uint64(displayRows) {
-			rowHi = uint64(displayRows)
-		}
-	}
-	// Nothing on a page changes between most frames, so the cells are captured
-	// once and replayed until one of their inputs moves or a cell has a
-	// response the live path would read (a click selects a row). The host
-	// sees the same bytes either way.
-	key := masterCellsKey{
+	// The cells are replayed while nothing they read moves: the grid keys
+	// the window, selection, sort and columns itself; this names the rest.
+	cellsKey := masterCellsKey{
 		result: inst.tableResult, schema: schema,
-		pageStart: pageStart, pageEnd: pageEnd, rowLo: rowLo, rowHi: rowHi,
-		selectedRow: selectedRow, refit: refit, cellPadX: cellPadX,
-		sortActive: inst.tableSort.Active, sortCol: inst.tableSort.Col, sortDesc: inst.tableSort.Desc,
 		identityDone: idJob == nil || idJob.isDone(),
 		opts:         inst.tableOpts,
-		columns: foldColumns(visCols, synth, func(pos uint32) bool {
-			vis, _ := et.ColVisible(pos)
-			return vis
-		}),
 	}
-	if raw := inst.masterCells.retained(key, c.CurrentApplicationState.StateManager); raw != nil {
-		et.SendWithRawCells(raw)
-		inst.captureMasterWidths(et, cols)
-		return
+	res := recordtable.RenderGrid(recordtable.Input{
+		Ids: ids, ScopeKey: masterTableTag, Record: rec, Columns: columns,
+		Widths: inst.colWidthRes, TableTag: masterTableTag, WidthView: tableViewTagRow,
+		Sort: &inst.tableSort, Order: order, PageStart: pageStart, PageEnd: pageEnd,
+		Selected: selectedRow, Refit: refit, CellsKey: cellsKey,
+		State: &inst.masterGrid,
+	})
+	if res.Err != nil {
+		inst.logger.Warn().Err(res.Err).Msg("play: results grid refused its input")
 	}
-	inst.masterCells.beginCapture(key)
-	for local := rowLo; local < rowHi; local++ {
-		// The display position walks the page; the record row it draws comes
-		// from the sort permutation (identity when unsorted).
-		absRow := inst.tableSort.RowAt(order, pageStart+int64(local))
-		selected := absRow == selectedRow
-		rowBase := cellIdBase + uint64(absRow)*cellColStride
+	if res.WidthsErr != nil {
+		inst.logger.Warn().Err(res.WidthsErr).Msg("play: storing column widths failed; will retry")
+	}
+	if res.SortClicked >= 0 {
+		// Through set_table_options as the person's gesture (ADR-0270
+		// §SD6); the cycle is the one SortState.Clicked draws.
+		inst.requestTableOptions(inst.tableSortClick(schema, res.SortClicked))
+	}
+	if res.Clicked >= 0 {
+		emit.Emit(signalSelection, res.Clicked)
+	}
+}
 
-		if vis, _ := et.ColVisible(0); vis {
-			for range et.Cells(local, 0) {
-				if inst.selectableCell(rowBase, cellPadX, fmt.Sprintf("%d", absRow+1), false, selected, false, false, gloss.ToneNeutral, "", !refit) {
-					emit.Emit(signalSelection, absRow)
-				}
-			}
-		}
-		for pos, arrowCol := range visCols {
-			colPos := uint32(pos + 1)
-			if vis, _ := et.ColVisible(colPos); !vis {
-				continue
-			}
-			leftAlign := recordtable.StringLike(schema.Field(arrowCol).Type)
-			for range et.Cells(local, colPos) {
-				// ADR-0186: the cell text is the column's gloss inline face when
-				// one resolves (and the raw toggle is off), else formatCell; a
-				// gloss/url cell is a hyperlink to its value.
-				// A `<label>_gloss` companion may name this row's gloss
-				// (ADR-0245 §SD2); without one this is the column's own.
-				cellGloss := inst.rowGloss(rec, glossCols, arrowCol, absRow)
-				text, tone := inst.glossCell(cellGloss, rec.Column(arrowCol), absRow, false)
-				link := inst.glossLink(cellGloss, rec.Column(arrowCol), absRow)
-				if refit {
-					// The untruncated re-fit cell must not size a column to a
-					// paragraph: cut what egui measures at the runes that fit
-					// colMaxWidth, the same ceiling the seed has always had.
-					text = recordtable.FitRunes(text, colMaxRunes)
-				}
-				if inst.selectableCell(rowBase+uint64(arrowCol)+1, cellPadX, text, false, selected, false, leftAlign, tone, link, !refit) {
-					emit.Emit(signalSelection, absRow)
-				}
-			}
-		}
-		for k, sentinel := range synth {
-			colPos := uint32(len(visCols) + 1 + k)
-			if vis, _ := et.ColVisible(colPos); !vis {
-				continue
-			}
-			text, hover := idJob.cell(identityColKindE(k), absRow)
-			for range et.Cells(local, colPos) {
-				for range c.HoverText(hover).KeepIter() {
-					if inst.selectableCell(rowBase+uint64(sentinel)+1, cellPadX, text, text == "…", selected, false, true, gloss.ToneNeutral, "", !refit) {
-						emit.Emit(signalSelection, absRow)
-					}
-				}
-			}
-		}
-	}
-	inst.masterCells.endCapture(et.CellsBytes())
-	et.Send()
-	inst.captureMasterWidths(et, cols)
+// masterCellsKey names what the per-DB-row grid's cells read that
+// recordtable.RenderGrid cannot see: the result (and so the record and the
+// sort permutation over it), whether the identity job has filled its
+// columns, and the display options the gloss faces follow. Anything a cell
+// reads that is listed neither here nor in the grid's own key is a bug in
+// this list, not in the cache.
+type masterCellsKey struct {
+	result       ResultID
+	schema       *arrow.Schema
+	identityDone bool
+	opts         tableDisplayOpts
 }
 
 // masterTableTag is the stable instance-tier scope for the per-DB-row grid's
-// column-width overrides, and the etable's id. One constant so the two cannot
-// drift apart. It differs from attrTableTag so the two grids keep separate
-// instance-tier entries; the column tier is kept apart by tableViewTagRow.
+// column-width overrides, and the grid's scope key. One constant so the two
+// cannot drift apart. It differs from attrTableTag so the two grids keep
+// separate instance-tier entries; the column tier is kept apart by
+// tableViewTagRow.
 const masterTableTag = "results"
 
-// masterRowNumColWidth is the fixed width of the leading "#" column. It is not
-// resizable, so it never acquires an override; it takes part in the resolver's
-// column list only to keep indices aligned with the EtColumn sequence and with
-// the positional width read-back.
-const masterRowNumColWidth = 44.0
-
-// masterColumnKeys builds the resolver's column identities for the per-DB-row
-// grid, index-aligned with the EtColumn sequence: the leading "#" column
-// first, then the visible data columns.
+// masterGridColumns lays out the per-DB-row grid's columns: the visible Arrow
+// columns, then the synthetic identity columns (ADR-0219 SD7), computed and
+// so never sortable. It carries what the width identity reads — the Arrow
+// index, a computed column's caption and type — so the identity
+// recordtable.WidthColumns builds from it is the one the grid resolves under.
 //
 // Identity is the raw Arrow field name and type rather than the friendly label
 // the header renders, for the reason attrColumnKeys records: the label is
 // derived and would re-key every stored width if the label builder changed.
-// Every type carries tableViewTagRow so a width fitted to this grid's packed
-// `[len=N]` rendering never reaches the per-attribute grid's exploded scalars
-// through the column tier.
-func (inst *PlayApp) masterColumnKeys(schema *arrow.Schema, visCols []int) (cols []colwidth.Column) {
-	cols = make([]colwidth.Column, 0, len(visCols)+1)
-	cols = append(cols, colwidth.Column{Name: "#", Type: "rownum" + tableViewTagRow})
+// The grid appends tableViewTagRow to every type, so a width fitted to this
+// grid's packed `[len=N]` rendering never reaches the per-attribute grid's
+// exploded scalars through the column tier.
+func masterGridColumns(visCols []int, synth []int) (cols []recordtable.Column) {
+	cols = make([]recordtable.Column, 0, len(visCols)+len(synth))
 	for _, arrowCol := range visCols {
-		f := schema.Field(arrowCol)
-		cols = append(cols, colwidth.Column{Name: f.Name, Type: f.Type.String() + tableViewTagRow})
+		cols = append(cols, recordtable.Column{Arrow: arrowCol})
+	}
+	for k := range synth {
+		cols = append(cols, recordtable.Column{Arrow: -1, Header: identityColKindE(k).name(), WidthType: identityWidthType, NoSort: true})
 	}
 	return
-}
-
-// captureMasterWidths feeds the widths egui_table settled on back into the
-// resolver and lets the debounce write them.
-//
-// The first report a table makes is its force-autofit frame, whose widths are
-// the crate's idea rather than the user's; passing firstShow on that frame is
-// what stops the estimator's first result being frozen as an override nobody
-// chose. A re-fit frame is the same kind of frame, and is covered by the
-// MarkReseed at the emission site rather than by a flag here — its result
-// arrives a report later than the frame that asked for it.
-func (inst *PlayApp) captureMasterWidths(et c.EndETableFluid, cols []colwidth.Column) {
-	if inst.colWidthRes == nil {
-		return
-	}
-	now := time.Now()
-	if fetched, ok := et.ColumnWidths(); ok {
-		widths := make([]float64, len(fetched))
-		for i, w := range fetched {
-			widths[i] = float64(w)
-		}
-		firstShow := !inst.masterWidthsSeen
-		inst.masterWidthsSeen = true
-		// refit is not passed here: it describes *this* frame, and the fit it
-		// asks for is only visible a report later. MarkReseed at the emission
-		// site is what covers that, and it covers this frame too.
-		inst.colWidthRes.Observe(masterTableTag, cols, widths, 0, firstShow, now)
-	}
-	if _, err := inst.colWidthRes.Flush(now); err != nil {
-		// inst.logger, not the package logger the attr grid's twin uses:
-		// this file logs through the app's own logger throughout.
-		inst.logger.Warn().Err(err).Msg("play: storing column widths failed; will retry")
-	}
 }
 
 // ensureColWidths samples per-column widths the first time a given schema

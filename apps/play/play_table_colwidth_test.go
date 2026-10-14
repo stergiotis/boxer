@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/colwidth"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/recordtable"
 )
 
 // colWidthTestSchema is a two-column result whose second column is a List —
@@ -21,6 +22,12 @@ func colWidthTestSchema() *arrow.Schema {
 	}, nil)
 }
 
+// masterKeys is the per-DB-row grid's width identity: what RenderGrid
+// resolves under for the columns renderMasterTable lays out.
+func masterKeys(schema *arrow.Schema, visCols []int) []colwidth.Column {
+	return recordtable.WidthColumns(schema, masterGridColumns(visCols, nil), tableViewTagRow)
+}
+
 // The two Table granularities must never share a column-width identity: the
 // column tier (ADR-0151 §SD1) matches on (name, type) alone and crosses
 // tables, so without the view tag a width dragged in one grid would be applied
@@ -30,7 +37,7 @@ func TestColumnKeys_GridsDoNotShareIdentity(t *testing.T) {
 	schema := colWidthTestSchema()
 	visCols := []int{0, 1}
 
-	master := inst.masterColumnKeys(schema, visCols)
+	master := masterKeys(schema, visCols)
 	attr := inst.attrColumnKeys(schema, visCols)
 
 	require.Len(t, master, len(visCols)+1, "leading # column must take part so the positional read-back lines up")
@@ -58,7 +65,7 @@ func TestColumnKeys_TypeChangeStillInvalidates(t *testing.T) {
 		name string
 		keys func(*arrow.Schema, []int) []colwidth.Column
 	}{
-		{"master", inst.masterColumnKeys},
+		{"master", masterKeys},
 		{"attr", inst.attrColumnKeys},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -81,7 +88,7 @@ func TestColumnKeys_RowNumGutterIsDistinctPerGrid(t *testing.T) {
 	inst := &PlayApp{}
 	schema := colWidthTestSchema()
 
-	master := inst.masterColumnKeys(schema, []int{0, 1})
+	master := masterKeys(schema, []int{0, 1})
 	attr := inst.attrColumnKeys(schema, []int{0, 1})
 
 	assert.Equal(t, "#", master[0].Name)

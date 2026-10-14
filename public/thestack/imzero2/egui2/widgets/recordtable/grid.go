@@ -2,6 +2,7 @@ package recordtable
 
 import (
 	"errors"
+	"reflect"
 	"strconv"
 	"strings"
 	"time"
@@ -51,9 +52,8 @@ type Column struct {
 	Width float32
 	// WidthType discriminates the column's stored width (ADR-0151 §SD1): its
 	// identity is the Arrow field name (or Header for a computed column) and
-	// this. Empty means the Arrow type's String(), or "computed". A host
-	// rendering one column two ways appends a view tag, as play does with
-	// ";view=row".
+	// this, with Input.WidthView appended. Empty means the Arrow type's
+	// String(), or "computed".
 	WidthType string
 	// Cell renders one record row's cell; nil means the un-glossed value
 	// (gloss.FormatArrowElem), left-aligned when [StringLike]. Cell sets
@@ -82,19 +82,38 @@ type Input struct {
 	// ScopeKey, then the package default. Keep it stable: changing it orphans
 	// every width stored under the old one.
 	TableTag string
+	// WidthView is appended to every column's width type, the "#" column's
+	// included. A host that renders one column two ways gives each grid its
+	// own (play: ";view=row" and ";view=attr"), so the column tier, which
+	// crosses tables, does not carry a width fitted to one into the other.
+	WidthView string
 	// Sort marks the sorted column's header; nil leaves every header a label.
 	// The grid does not apply a click to it — see Result.SortClicked.
 	Sort *SortState
 	// Order is the display→record permutation, nil for record order —
 	// typically Sort.OrderFor(Record, Record.NumRows()), or a filter's rows.
 	Order []int64
-	// PageStart and PageLen window the display positions drawn; a zero
-	// PageLen draws to the end.
+	// PageStart and PageEnd window the display positions drawn, end
+	// exclusive; a zero PageEnd draws to the end.
 	PageStart int64
-	PageLen   int64
+	PageEnd   int64
 	// Selected is the selected record row, -1 for none. It is highlighted
 	// where it is drawn, so it survives a sort.
 	Selected int64
+	// Refit asks egui_table to fit the columns to their content this frame,
+	// on top of the fit the grid asks for itself when its column set changes.
+	// Play asks on every new result, so the widths belong to the result on
+	// screen; a grid over a polled table should not, or the columns move
+	// under the reader on every poll.
+	Refit bool
+	// CellsKey, when non-nil, lets the grid replay the previous frame's cell
+	// bytes instead of rebuilding them: on a frame whose CellsKey equals the
+	// last one, with the same window, selection, sort and columns, and no
+	// cell clicked, hovered or focused, the capture is sent again. It must
+	// name everything the grid cannot see — the record, the order, whatever
+	// a Column.Cell reads — and be comparable with ==. A key that misses an
+	// input shows stale cells; nil, the default, rebuilds every frame.
+	CellsKey any
 	// RowHeight is zero for [DefaultRowHeight].
 	RowHeight float32
 	// State is required and kept at one address across frames.
@@ -112,6 +131,8 @@ type State struct {
 	// applyGen moves the epoch the binding applies widths under, so the fit
 	// frame re-applies stored overrides egui_table's first show replaced.
 	applyGen uint32
+	// cells is the replay cache Input.CellsKey turns on.
+	cells cellsCache
 }
 
 // Result is what one frame of the grid produced. Its readbacks — the clicks
@@ -135,8 +156,8 @@ type Result struct {
 // row numbers, then in.Columns with their resolved widths, sortable headers
 // and inset, full-cell click targets ([Chrome]). Widths come from the user's
 // stored overrides, else egui_table's fit to the content on the first frame
-// with rows and on any frame the column set changes; a drag is captured back
-// to the resolver.
+// with rows, on any frame the column set changes, and on any frame the host
+// asks (Input.Refit); a drag is captured back to the resolver.
 func RenderGrid(in Input) (res Result) {
 	res.Clicked, res.SortClicked = -1, -1
 	scopeKey := in.ScopeKey
@@ -160,6 +181,9 @@ func (in *Input) validate() (err error) {
 	if in.State == nil {
 		return errors.New("no State")
 	}
+	if in.CellsKey != nil && !reflect.TypeOf(in.CellsKey).Comparable() {
+		return errors.New("CellsKey of type " + reflect.TypeOf(in.CellsKey).String() + " is not comparable")
+	}
 	ncols := 0
 	if in.Record != nil {
 		ncols = int(in.Record.NumCols())
@@ -176,7 +200,7 @@ func (in *Input) validate() (err error) {
 	return
 }
 
-// displayRows is how many rows the grid draws, and the first display position.
+// displayRows is the first display position drawn and how many follow.
 func (in *Input) displayRows() (start int64, n int64) {
 	if in.Record == nil {
 		return
@@ -185,11 +209,12 @@ func (in *Input) displayRows() (start int64, n int64) {
 	if in.Order != nil {
 		total = int64(len(in.Order))
 	}
-	start = min(max(in.PageStart, 0), total)
-	n = total - start
-	if in.PageLen > 0 {
-		n = min(n, in.PageLen)
+	end := total
+	if in.PageEnd > 0 {
+		end = min(in.PageEnd, total)
 	}
+	start = min(max(in.PageStart, 0), end)
+	n = end - start
 	return
 }
 
@@ -206,22 +231,31 @@ func (in *Input) recordRow(pos int64) (row int64) {
 	return
 }
 
-func (in *Input) field(col *Column) (f arrow.Field, ok bool) {
-	if col.Arrow < 0 || in.Record == nil {
-		return
+// WidthColumns names the grid's columns for the resolver, index-aligned with
+// the EtColumn sequence: the "#" column first, then in.Columns. A host passes
+// it to colwidth.Resolver.Clear or ClearAll for a reset gesture.
+func (in *Input) WidthColumns() (cols []colwidth.Column) {
+	var schema *arrow.Schema
+	if in.Record != nil {
+		schema = in.Record.Schema()
 	}
-	return in.Record.Schema().Field(col.Arrow), true
+	return WidthColumns(schema, in.Columns, in.WidthView)
 }
 
-// widthColumns names the columns for the resolver, index-aligned with the
-// EtColumn sequence: the "#" column first, then in.Columns.
-func (in *Input) widthColumns() (cols []colwidth.Column) {
-	cols = make([]colwidth.Column, 0, len(in.Columns)+1)
-	cols = append(cols, colwidth.Column{Name: "#", Type: "rownum"})
-	for i := range in.Columns {
-		col := &in.Columns[i]
+// WidthColumns names columns for the resolver as [RenderGrid] does, from the
+// schema alone: the "#" column, then each column's Arrow field name (a
+// computed column's Header) and width type, view appended to every type.
+// Identity is the raw field name rather than the caption, which a host may
+// derive and change; the type takes part so a column that changes type drops
+// its stored width.
+func WidthColumns(schema *arrow.Schema, columns []Column, view string) (cols []colwidth.Column) {
+	cols = make([]colwidth.Column, 0, len(columns)+1)
+	cols = append(cols, colwidth.Column{Name: "#", Type: "rownum" + view})
+	for i := range columns {
+		col := &columns[i]
 		name, typ := col.Header, col.WidthType
-		if f, ok := in.field(col); ok {
+		if col.Arrow >= 0 && schema != nil && col.Arrow < schema.NumFields() {
+			f := schema.Field(col.Arrow)
 			name = f.Name
 			if typ == "" {
 				typ = f.Type.String()
@@ -230,7 +264,7 @@ func (in *Input) widthColumns() (cols []colwidth.Column) {
 		if typ == "" {
 			typ = "computed"
 		}
-		cols = append(cols, colwidth.Column{Name: name, Type: typ})
+		cols = append(cols, colwidth.Column{Name: name, Type: typ + view})
 	}
 	return
 }
@@ -246,12 +280,18 @@ func widthSignature(cols []colwidth.Column) (sig string) {
 	return sb.String()
 }
 
+func (in *Input) field(col *Column) (f arrow.Field, ok bool) {
+	if col.Arrow < 0 || in.Record == nil {
+		return
+	}
+	return in.Record.Schema().Field(col.Arrow), true
+}
+
 func (in *Input) render(res *Result, scopeKey string) {
 	ids, st := in.Ids, in.State
 	density := styletokens.ActiveDensity()
 	pad := CellPadX(density)
 	floor := DragMinWidth(density)
-	chrome := Chrome{Ids: ids}
 	start, n := in.displayRows()
 	tag := in.TableTag
 	if tag == "" {
@@ -260,7 +300,7 @@ func (in *Input) render(res *Result, scopeKey string) {
 
 	// A width the user set outranks the seed (ADR-0151); the seed is the
 	// default for columns they have not touched.
-	cols := in.widthColumns()
+	cols := in.WidthColumns()
 	seeds := make([]float64, 0, len(cols))
 	seeds = append(seeds, float64(RowNumColWidth))
 	for i := range in.Columns {
@@ -280,12 +320,14 @@ func (in *Input) render(res *Result, scopeKey string) {
 	// egui_table keeps its own width per column *position* and fits to
 	// content only on a table's first show — so without a fit of our own a
 	// changed column set inherits the old widths by position. The fit waits
-	// for rows: fitted on an empty grid, a column would be as wide as its
-	// header and no more. It is one frame: fitting continuously would move
-	// the columns while the user reads.
-	refit := false
+	// for rows unless the host asks: fitted on an empty grid, a column would
+	// be as wide as its header and no more. It is one frame: fitting
+	// continuously would move the columns while the user reads.
+	refit := in.Refit
 	if sig := widthSignature(cols); sig != st.sig && n > 0 {
 		st.sig, refit = sig, true
+	}
+	if refit {
 		if in.Widths != nil {
 			// The read-back lags, so the fit's result lands a report after
 			// this frame; without the settle window it reads as a drag and
@@ -330,7 +372,7 @@ func (in *Input) render(res *Result, scopeKey string) {
 		}
 	}
 
-	in.renderHeaders(res, et, &chrome, pad, refit)
+	in.renderHeaders(res, et, pad, refit)
 
 	// Only the rows and columns egui_table will draw — except on the fit
 	// frame, which measures cells and needs them present: the range read
@@ -342,6 +384,57 @@ func (in *Input) render(res *Result, scopeKey string) {
 	if refit {
 		rowHi = min(rowHi, fitMaxRows)
 	}
+
+	// Nothing on a page changes between most frames, so with a CellsKey the
+	// cells are captured once and replayed until one of their inputs moves
+	// or a cell has a response the live path would read. The host sees the
+	// same bytes either way.
+	chrome := Chrome{Ids: ids}
+	if in.CellsKey != nil {
+		key := in.cellsKey(cols, et, start, n, rowLo, rowHi, refit, pad)
+		if raw := st.cells.retained(key, c.CurrentApplicationState.StateManager); raw != nil {
+			et.SendWithRawCells(raw)
+			in.captureWidths(res, et, cols, tag)
+			return
+		}
+		st.cells.beginCapture(key)
+		chrome.Note = st.cells.note
+	} else {
+		st.cells.drop()
+	}
+	in.renderCells(res, et, &chrome, pad, start, rowLo, rowHi, refit)
+	if in.CellsKey != nil {
+		st.cells.endCapture(et.CellsBytes())
+	}
+	et.Send()
+	in.captureWidths(res, et, cols, tag)
+}
+
+func (in *Input) cellsKey(cols []colwidth.Column, et c.EndETableFluid, start, n, rowLo, rowHi int64, refit bool, pad float32) (key cellsKey) {
+	key = cellsKey{
+		content: in.CellsKey, pageStart: start, pageN: n, rowLo: rowLo, rowHi: rowHi,
+		selected: in.Selected, refit: refit, pad: pad,
+		columns: foldColumns(cols, func(pos int) int {
+			if pos == 0 {
+				return -1
+			}
+			return in.Columns[pos-1].Arrow
+		}, func(pos uint32) bool {
+			vis, _ := et.ColVisible(pos)
+			return vis
+		}),
+	}
+	if in.Sort != nil {
+		key.sortActive, key.sortCol, key.sortDesc = in.Sort.Active, in.Sort.Col, in.Sort.Desc
+	}
+	return
+}
+
+// renderCells emits the cells of display rows [rowLo, rowHi) of the window.
+// Each cell is scoped by its record row and keyed by its column position, so
+// a cell keeps its id across a sort and a page turn.
+func (in *Input) renderCells(res *Result, et c.EndETableFluid, chrome *Chrome, pad float32, start, rowLo, rowHi int64, refit bool) {
+	ids := in.Ids
 	for local := rowLo; local < rowHi; local++ {
 		row := in.recordRow(start + local)
 		if row < 0 {
@@ -376,8 +469,6 @@ func (in *Input) render(res *Result, scopeKey string) {
 			}
 		}
 	}
-	et.Send()
-	in.captureWidths(res, et, cols, tag)
 }
 
 func (in *Input) cell(col *Column, row int64) (cell Cell) {
@@ -392,8 +483,9 @@ func (in *Input) cell(col *Column, row int64) (cell Cell) {
 // button that reports a sort click, or a label for a column that does not
 // sort. The physical name and the type stay on hover, so a caption never
 // hides the name it stands for.
-func (in *Input) renderHeaders(res *Result, et c.EndETableFluid, chrome *Chrome, pad float32, refit bool) {
+func (in *Input) renderHeaders(res *Result, et c.EndETableFluid, pad float32, refit bool) {
 	ids := in.Ids
+	chrome := Chrome{Ids: ids}
 	for range c.IdScope(ids.PrepareStr("header")) {
 		if vis, _ := et.ColVisible(0); vis {
 			for range et.Headers(0, 0) {
