@@ -511,10 +511,12 @@ et.Send()
 `widgets/recordtable.RenderGrid` draws one with sortable headers, inset cells
 whose whole rect selects the row, and widths resolved from and captured to a
 `colwidth.Resolver` ([table-column-widths](../../howto/table-column-widths.md)).
-A grid it does not fit — play's Table pane, with paging toggles, gloss faces
-and replayed cells — builds on the same two parts directly:
-`recordtable.SortState` (the header sort as a view permutation) and
-`recordtable.Chrome` (the inset, the header cell, the selectable cell).
+Paging, computed columns and gloss faces go through its `Input` and
+`Column.Cell`; a `CellsKey` lets it replay unchanged cells (play's results
+grid is one). A grid whose rows are not record rows — play's per-attribute
+view — builds on the same two parts directly: `recordtable.SortState` (the
+header sort as a view permutation) and `recordtable.Chrome` (the inset, the
+header cell, the selectable cell).
 
 ## 6.5 Design Note: Why Not PushRichText?
 
