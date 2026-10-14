@@ -94,6 +94,10 @@ type Cell struct {
 	// Tone colours the text when Toned is set (a ✓ in success, a ✗ in error).
 	Tone  color.Color
 	Toned bool
+	// Fill paints the cell's background when Filled is set — a heat tint on
+	// the value a list is ordered by. A selected cell's SelectedFill wins.
+	Fill   color.Color
+	Filled bool
 	// Link, when non-empty, makes the cell a hyperlink to that URL instead
 	// of a button: clicking it opens the link through the host's opener and
 	// does not select the row — the row's other cells still do — since a
@@ -221,7 +225,11 @@ func (inst *Chrome) SelectableCell(id uint64, padX float32, cell Cell) (clicked 
 		}
 		clicked = btn.SendResp().HasPrimaryClicked()
 	}
-	inst.Inset(id^CellFrameSalt, padX, SelectionFill, cell.SelectedFill && cell.Selected, func() {
+	fill, filled := cell.Fill, cell.Filled
+	if cell.SelectedFill && cell.Selected {
+		fill, filled = SelectionFill, true
+	}
+	inst.Inset(id^CellFrameSalt, padX, fill, filled, func() {
 		if cell.LeftAlign {
 			for range c.UiWithLayout().
 				MainDirTopDown().

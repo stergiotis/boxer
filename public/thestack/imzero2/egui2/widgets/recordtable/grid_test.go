@@ -244,3 +244,24 @@ func TestRenderGridRefusesNilIds(t *testing.T) {
 	var st State
 	assert.Error(t, frame(Input{State: &st}).Err)
 }
+
+// Without the "#" column the width identities and the table positions start
+// at the first column, and a capped grid renders like a filling one.
+func TestRenderGridNoRowNumbers(t *testing.T) {
+	t.Cleanup(scenetest.Install())
+	rec := sortRec(t, []string{"a", "b"}, []bool{false, false}, []int64{1, 2})
+	defer rec.Release()
+	in := Input{Ids: c.NewWidgetIdStack(), Record: rec, Columns: gridColumns(), NoRowNumbers: true, MaxHeight: 120}
+	keys := in.WidthColumns()
+	require.Len(t, keys, len(in.Columns))
+	assert.Equal(t, "name", keys[0].Name)
+	assert.Equal(t, 0, in.lead())
+
+	var st State
+	in.State = &st
+	widths, err := colwidth.New(&mapStore{}, colwidth.Opts{AppId: "org.test.grid"})
+	require.NoError(t, err)
+	in.Widths = widths
+	assert.NoError(t, frame(in).Err, "the reset menu renders on every resizable header")
+	assert.Equal(t, uint32(1), st.applyGen, "and the grid fits as usual")
+}

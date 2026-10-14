@@ -63,6 +63,10 @@ type Column struct {
 	Cell func(row int64) Cell
 	// NoSort keeps the header a label: a click does not sort by it.
 	NoSort bool
+	// DescFirst starts this column's sort descending on its first click —
+	// a CPU or memory column, whose interesting end is the top. See
+	// SortState.Apply.
+	DescFirst bool
 }
 
 // Input is one frame of a grid over an Arrow record.
@@ -123,6 +127,13 @@ type Input struct {
 	CellsKey any
 	// RowHeight is zero for [DefaultRowHeight].
 	RowHeight float32
+	// NoRowNumbers leaves out the leading "#" column, for a grid whose rows
+	// carry their own identity (a path, a PID).
+	NoRowNumbers bool
+	// MaxHeight, when positive, is a ceiling: the grid takes what its rows
+	// need and stops there. Zero fills the rest of the pane, which is what a
+	// grid that is the last thing in its tab wants.
+	MaxHeight float32
 	// State is required and kept at one address across frames.
 	State *State
 }
@@ -149,9 +160,11 @@ type Result struct {
 	// The grid does not select it; the host does, through Selected.
 	Clicked int64
 	// SortClicked is the Arrow column whose header was clicked, -1 for none.
-	// The host applies it — Sort.Clicked(SortClicked) — or routes it first
-	// (play sends it through set_table_options as the person's gesture).
+	// The host applies it — Sort.Apply(res) — or routes it first (play sends
+	// it through set_table_options as the person's gesture).
 	SortClicked int
+	// sortDescFirst is the clicked column's DescFirst, for Apply.
+	sortDescFirst bool
 	// Err is set when the input is unusable; the grid then draws a short
 	// message in its place.
 	Err error
@@ -278,25 +291,27 @@ func (in *Input) recordRow(pos int64) (row int64) {
 }
 
 // WidthColumns names the grid's columns for the resolver, index-aligned with
-// the EtColumn sequence: the "#" column first, then in.Columns. A host passes
-// it to colwidth.Resolver.Clear or ClearAll for a reset gesture.
+// the EtColumn sequence: the "#" column first unless NoRowNumbers, then
+// in.Columns. A host passes it to colwidth.Resolver.Clear or ClearAll.
 func (in *Input) WidthColumns() (cols []colwidth.Column) {
 	var schema *arrow.Schema
 	if in.Record != nil {
 		schema = in.Record.Schema()
 	}
-	return WidthColumns(schema, in.Columns, in.WidthView)
+	return WidthColumns(schema, in.Columns, in.WidthView, !in.NoRowNumbers)
 }
 
 // WidthColumns names columns for the resolver as [RenderGrid] does, from the
-// schema alone: the "#" column, then each column's Arrow field name (a
-// computed column's Header) and width type, view appended to every type.
-// Identity is the raw field name rather than the caption, which a host may
-// derive and change; the type takes part so a column that changes type drops
-// its stored width.
-func WidthColumns(schema *arrow.Schema, columns []Column, view string) (cols []colwidth.Column) {
+// schema alone: the "#" column when rowNumbers, then each column's Arrow
+// field name (a computed column's Header) and width type, view appended to
+// every type. Identity is the raw field name rather than the caption, which
+// a host may derive and change; the type takes part so a column that changes
+// type drops its stored width.
+func WidthColumns(schema *arrow.Schema, columns []Column, view string, rowNumbers bool) (cols []colwidth.Column) {
 	cols = make([]colwidth.Column, 0, len(columns)+1)
-	cols = append(cols, colwidth.Column{Name: "#", Type: "rownum" + view})
+	if rowNumbers {
+		cols = append(cols, colwidth.Column{Name: "#", Type: "rownum" + view})
+	}
 	for i := range columns {
 		col := &columns[i]
 		name, typ := col.Header, col.WidthType
@@ -333,12 +348,22 @@ func (in *Input) field(col *Column) (f arrow.Field, ok bool) {
 	return in.Record.Schema().Field(col.Arrow), true
 }
 
+// lead is the number of columns before in.Columns: 1 for the "#" column, or
+// 0. Column i of in.Columns sits at table position lead+i.
+func (in *Input) lead() (n int) {
+	if in.NoRowNumbers {
+		return 0
+	}
+	return 1
+}
+
 func (in *Input) render(res *Result, scopeKey string) {
 	ids, st := in.Ids, in.State
 	density := styletokens.ActiveDensity()
 	pad := CellPadX(density)
 	floor := DragMinWidth(density)
 	start, n := in.displayRows()
+	lead := in.lead()
 	tag := in.TableTag
 	if tag == "" {
 		tag = scopeKey
@@ -348,7 +373,9 @@ func (in *Input) render(res *Result, scopeKey string) {
 	// default for columns they have not touched.
 	cols := in.WidthColumns()
 	seeds := make([]float64, 0, len(cols))
-	seeds = append(seeds, float64(RowNumColWidth))
+	if lead > 0 {
+		seeds = append(seeds, float64(RowNumColWidth))
+	}
 	for i := range in.Columns {
 		w := in.Columns[i].Width
 		if w <= 0 {
@@ -386,14 +413,16 @@ func (in *Input) render(res *Result, scopeKey string) {
 		st.applyGen++
 	}
 
-	c.EtColumn(float32(resolved[0])).Resizable(false).Send()
+	if lead > 0 {
+		c.EtColumn(float32(resolved[0])).Resizable(false).Send()
+	}
 	for i := range in.Columns {
-		col := c.EtColumn(float32(resolved[i+1])).
+		col := c.EtColumn(float32(resolved[lead+i])).
 			Resizable(true).
 			RangeMinMax(floor, MaxColumnWidth)
 		// A column carrying an override sits the fit out, or every stored
 		// drag would be measured away.
-		if refit && resolved[i+1] == seeds[i+1] {
+		if refit && resolved[lead+i] == seeds[lead+i] {
 			col = col.AutoSizeThisFrame(true)
 		}
 		col.Send()
@@ -403,9 +432,13 @@ func (in *Input) render(res *Result, scopeKey string) {
 	if rowHeight <= 0 {
 		rowHeight = DefaultRowHeight
 	}
-	et := c.EndETable(ids.PrepareStr("table"), uint64(n), rowHeight, 1, 1).
-		Striped(true).
-		FillPane(true)
+	et := c.EndETable(ids.PrepareStr("table"), uint64(n), rowHeight, 1, uint32(lead)).
+		Striped(true)
+	if in.MaxHeight > 0 {
+		et = et.MaxHeight(in.MaxHeight)
+	} else {
+		et = et.FillPane(true)
+	}
 	if in.Widths != nil {
 		et = et.ApplyWidths(in.Widths.Epoch(tag) + st.applyGen<<16)
 	}
@@ -418,7 +451,7 @@ func (in *Input) render(res *Result, scopeKey string) {
 		}
 	}
 
-	in.renderHeaders(res, et, pad, refit)
+	in.renderHeaders(res, et, cols, tag, pad, refit)
 
 	// Only the rows egui_table will draw (cellRows).
 	rb, re, _, _, _, ok := et.VisibleRange()
@@ -450,14 +483,15 @@ func (in *Input) render(res *Result, scopeKey string) {
 }
 
 func (in *Input) cellsKey(cols []colwidth.Column, et c.EndETableFluid, start, n, rowLo, rowHi int64, refit bool, pad float32) (key cellsKey) {
+	lead := in.lead()
 	key = cellsKey{
 		content: in.CellsKey, pageStart: start, pageN: n, rowLo: rowLo, rowHi: rowHi,
 		refit: refit, pad: pad,
 		columns: foldColumns(cols, func(pos int) int {
-			if pos == 0 {
+			if pos < lead {
 				return -1
 			}
-			return in.Columns[pos-1].Arrow
+			return in.Columns[pos-lead].Arrow
 		}, func(pos uint32) bool {
 			vis, _ := et.ColVisible(pos)
 			return vis
@@ -475,6 +509,7 @@ func (in *Input) cellsKey(cols []colwidth.Column, et c.EndETableFluid, start, n,
 // a cell keeps its id across a sort and a page turn.
 func (in *Input) renderCells(res *Result, et c.EndETableFluid, chrome *Chrome, pad float32, start, rowLo, rowHi int64, refit bool) {
 	ids := in.Ids
+	lead := in.lead()
 	sel, hasSel := in.selection()
 	for local := rowLo; local < rowHi; local++ {
 		row := in.recordRow(start + local)
@@ -482,17 +517,19 @@ func (in *Input) renderCells(res *Result, et c.EndETableFluid, chrome *Chrome, p
 			continue
 		}
 		selected := hasSel && row == sel
-		if vis, _ := et.ColVisible(0); vis {
-			for range et.Cells(uint64(local), 0) {
-				for range c.IdScope(ids.PrepareSeq(uint64(row))) {
-					if chrome.SelectableCell(0, pad, Cell{Text: strconv.FormatInt(row+1, 10), Selected: selected, Untruncated: refit}) {
-						res.Clicked = row
+		if lead > 0 {
+			if vis, _ := et.ColVisible(0); vis {
+				for range et.Cells(uint64(local), 0) {
+					for range c.IdScope(ids.PrepareSeq(uint64(row))) {
+						if chrome.SelectableCell(0, pad, Cell{Text: strconv.FormatInt(row+1, 10), Selected: selected, Untruncated: refit}) {
+							res.Clicked = row
+						}
 					}
 				}
 			}
 		}
 		for i := range in.Columns {
-			pos := uint32(i + 1)
+			pos := uint32(lead + i)
 			if vis, _ := et.ColVisible(pos); !vis {
 				continue
 			}
@@ -523,23 +560,28 @@ func (in *Input) cell(col *Column, row int64) (cell Cell) {
 // renderHeaders draws the "#" gutter and one header per column: a frameless
 // button that reports a sort click, or a label for a column that does not
 // sort. The physical name and the type stay on hover, so a caption never
-// hides the name it stands for.
-func (in *Input) renderHeaders(res *Result, et c.EndETableFluid, pad float32, refit bool) {
+// hides the name it stands for. With a resolver, a column's header carries
+// the reset gesture (ADR-0151): a context menu that returns this column, or
+// every column, to its default width.
+func (in *Input) renderHeaders(res *Result, et c.EndETableFluid, cols []colwidth.Column, tag string, pad float32, refit bool) {
 	ids := in.Ids
+	lead := in.lead()
 	chrome := Chrome{Ids: ids}
 	for range c.IdScope(ids.PrepareStr("header")) {
-		if vis, _ := et.ColVisible(0); vis {
-			for range et.Headers(0, 0) {
-				chrome.HeaderCell(0, pad, func() {
-					for rt := range c.RichTextLabel("#") {
-						rt.Weak().Monospace()
-					}
-				})
+		if lead > 0 {
+			if vis, _ := et.ColVisible(0); vis {
+				for range et.Headers(0, 0) {
+					chrome.HeaderCell(0, pad, func() {
+						for rt := range c.RichTextLabel("#") {
+							rt.Weak().Monospace()
+						}
+					})
+				}
 			}
 		}
 		for i := range in.Columns {
 			col := &in.Columns[i]
-			pos := uint32(i + 1)
+			pos := uint32(lead + i)
 			if vis, _ := et.ColVisible(pos); !vis {
 				continue
 			}
@@ -554,7 +596,7 @@ func (in *Input) renderHeaders(res *Result, et c.EndETableFluid, pad float32, re
 				}
 			}
 			sortable := in.Sort != nil && hasField && !col.NoSort
-			for range et.Headers(0, pos) {
+			header := func() {
 				chrome.HeaderCell(uint64(pos), pad, func() {
 					if sortable {
 						for range c.HoverText(hover + " — click to sort").KeepIter() {
@@ -565,7 +607,7 @@ func (in *Input) renderHeaders(res *Result, et c.EndETableFluid, pad float32, re
 								btn = btn.Truncate()
 							}
 							if btn.SendResp().HasPrimaryClicked() {
-								res.SortClicked = col.Arrow
+								res.SortClicked, res.sortDescFirst = col.Arrow, col.DescFirst
 							}
 						}
 					} else if hover != "" {
@@ -585,6 +627,28 @@ func (in *Input) renderHeaders(res *Result, et c.EndETableFluid, pad float32, re
 						}
 					}
 				})
+			}
+			for range et.Headers(0, pos) {
+				if in.Widths == nil {
+					header()
+					continue
+				}
+				// ContextMenu senses hover only, so the sort click still
+				// reaches the header button it wraps.
+				c.ContextMenu().Render(func() {
+					for range c.IdScope(ids.PrepareStr("reset")) {
+						for range c.IdScope(ids.PrepareSeq(uint64(pos))) {
+							if c.Button(ids.PrepareStr("column"), c.Atoms().Text("Reset column width").Keep()).
+								SendResp().HasPrimaryClicked() {
+								_ = in.Widths.Clear(tag, cols[pos])
+							}
+							if c.Button(ids.PrepareStr("all"), c.Atoms().Text("Reset all column widths").Keep()).
+								SendResp().HasPrimaryClicked() {
+								_ = in.Widths.ClearAll(tag, cols)
+							}
+						}
+					}
+				}, header)
 			}
 		}
 	}

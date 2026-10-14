@@ -309,7 +309,7 @@ func TestColumnWidthsPersist(t *testing.T) {
 	res, err := colwidth.New(store, colwidth.Opts{AppId: appId, MinPoints: minW, MaxPoints: maxW, Debounce: time.Millisecond})
 	require.NoError(t, err)
 	require.NoError(t, res.Load())
-	cols := recordtable.WidthColumns(jobsSchema, jobGridColumns(nil), "")
+	cols := recordtable.WidthColumns(jobsSchema, jobGridColumns(nil), "", true)
 	// The identities the list stored widths under before it was a grid, so
 	// a width dragged then is still found.
 	assert.Equal(t, []colwidth.Column{

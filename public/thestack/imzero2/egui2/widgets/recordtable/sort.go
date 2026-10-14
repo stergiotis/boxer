@@ -17,7 +17,9 @@ import (
 //
 // Clicking cycles ascending → descending → unsorted. The third state matters
 // for a query result: it usually arrives in a deliberate ORDER BY, and
-// without a way back the user cannot recover it short of re-running.
+// without a way back the user cannot recover it short of re-running. A list
+// with no order of its own worth returning to (a process table) sets
+// NoUnsorted and flips between the two directions instead.
 
 // SortState is a grid's sort: which Arrow column, which direction, and the
 // cached permutation for the record it was computed over. The cache is keyed
@@ -32,6 +34,9 @@ type SortState struct {
 	Active bool
 	Col    int // Arrow column index, meaningful only while Active
 	Desc   bool
+	// NoUnsorted drops the cycle's third state: a click on the sorted
+	// column flips its direction rather than returning to record order.
+	NoUnsorted bool
 
 	forRec    arrow.RecordBatch
 	forActive bool
@@ -43,16 +48,33 @@ type SortState struct {
 	inv   []int64
 }
 
-// Clicked advances the three-state cycle for col: a new column starts
-// ascending, the sorted column goes descending, then back to unsorted.
+// Clicked advances the cycle for col: a new column starts ascending, the
+// sorted column goes descending, then back to unsorted.
 func (inst *SortState) Clicked(col int) {
+	inst.ClickedFrom(col, false)
+}
+
+// ClickedFrom advances the cycle for col with the column's first direction:
+// a new column starts descending when descFirst, the sorted column takes the
+// other direction, and a second click from there returns to unsorted — or,
+// with NoUnsorted, flips back.
+func (inst *SortState) ClickedFrom(col int, descFirst bool) {
 	switch {
 	case !inst.Active || inst.Col != col:
-		inst.Active, inst.Col, inst.Desc = true, col, false
-	case !inst.Desc:
-		inst.Desc = true
+		inst.Active, inst.Col, inst.Desc = true, col, descFirst
+	case inst.Desc == descFirst || inst.NoUnsorted:
+		inst.Desc = !inst.Desc
 	default:
 		inst.Active, inst.Desc = false, false
+	}
+}
+
+// Apply applies a grid frame's header click, if it had one, with the clicked
+// column's Column.DescFirst. A host that routes the click elsewhere first
+// reads Result.SortClicked instead.
+func (inst *SortState) Apply(res Result) {
+	if res.SortClicked >= 0 {
+		inst.ClickedFrom(res.SortClicked, res.sortDescFirst)
 	}
 }
 

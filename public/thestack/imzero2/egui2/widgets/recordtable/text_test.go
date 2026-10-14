@@ -45,3 +45,13 @@ func TestStringLike(t *testing.T) {
 		assert.Equal(t, tc.want, StringLike(tc.dt), tc.name)
 	}
 }
+
+// StringRecord pads a short row and keeps the rows in order.
+func TestStringRecord(t *testing.T) {
+	rec := StringRecord([]string{"path", "size"}, [][]string{{"/a", "1"}, {"/b"}})
+	defer rec.Release()
+	assert.Equal(t, int64(2), rec.NumRows())
+	assert.Equal(t, "size", rec.Schema().Field(1).Name)
+	assert.Equal(t, "", rec.Column(1).ValueStr(1), "a short row is padded")
+	assert.Equal(t, "/b", rec.Column(0).ValueStr(1))
+}

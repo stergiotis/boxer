@@ -25,7 +25,7 @@ func colWidthTestSchema() *arrow.Schema {
 // masterKeys is the per-DB-row grid's width identity: what RenderGrid
 // resolves under for the columns renderMasterTable lays out.
 func masterKeys(schema *arrow.Schema, visCols []int) []colwidth.Column {
-	return recordtable.WidthColumns(schema, masterGridColumns(visCols, nil), tableViewTagRow)
+	return recordtable.WidthColumns(schema, masterGridColumns(visCols, nil), tableViewTagRow, true)
 }
 
 // The two Table granularities must never share a column-width identity: the
@@ -101,7 +101,7 @@ func TestColumnKeys_RowNumGutterIsDistinctPerGrid(t *testing.T) {
 // with the row view's tag like every other column in this grid.
 func TestColumnKeys_IdentityColumns(t *testing.T) {
 	schema := colWidthTestSchema()
-	keys := recordtable.WidthColumns(schema, masterGridColumns([]int{0}, []int{2, 3}), tableViewTagRow)
+	keys := recordtable.WidthColumns(schema, masterGridColumns([]int{0}, []int{2, 3}), tableViewTagRow, true)
 	require.Len(t, keys, 4)
 	assert.Equal(t, colwidth.Column{Name: "canonform", Type: "identity" + tableViewTagRow}, keys[2])
 	assert.Equal(t, colwidth.Column{Name: "canonwire", Type: "identity" + tableViewTagRow}, keys[3])

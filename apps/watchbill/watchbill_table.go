@@ -180,9 +180,7 @@ func (inst *App) renderList(snap snapshot, jobs []watchbillstore.Job) {
 	if res.WidthsErr != nil {
 		inst.logger.Warn().Err(res.WidthsErr).Msg("watchbill app: storing column widths failed; will retry")
 	}
-	if res.SortClicked >= 0 {
-		inst.sort.Clicked(res.SortClicked)
-	}
+	inst.sort.Apply(res)
 	if res.Clicked >= 0 && res.Clicked < int64(len(jobs)) {
 		clicked := jobs[res.Clicked].ID
 		gesture(inst, opSelect, JobArgs{Id: clicked}, func() { inst.select_(clicked) })

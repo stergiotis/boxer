@@ -163,3 +163,42 @@ func TestSortCacheKeyedOnRecord(t *testing.T) {
 	assert.Equal(t, []int64{0, 1}, s.OrderFor(second, 2), "recomputed for the new record")
 	assert.True(t, s.Active, "the chosen column survives a new result")
 }
+
+// A descending-first column starts at its interesting end; the cycle then
+// runs through the other direction back to unsorted.
+func TestSortDescFirst(t *testing.T) {
+	var s SortState
+	s.ClickedFrom(2, true)
+	assert.True(t, s.Active)
+	assert.True(t, s.Desc, "the first click sorts descending")
+	s.ClickedFrom(2, true)
+	assert.False(t, s.Desc)
+	s.ClickedFrom(2, true)
+	assert.False(t, s.Active, "the third click restores record order")
+}
+
+// NoUnsorted flips between the two directions and never leaves the column.
+func TestSortNoUnsorted(t *testing.T) {
+	s := SortState{NoUnsorted: true}
+	s.ClickedFrom(1, true)
+	for range 3 {
+		was := s.Desc
+		s.ClickedFrom(1, true)
+		assert.True(t, s.Active)
+		assert.Equal(t, !was, s.Desc)
+	}
+	s.Clicked(4)
+	assert.Equal(t, 4, s.Col)
+	assert.False(t, s.Desc, "a new column starts in its own first direction")
+}
+
+// Apply takes the clicked column's first direction from the grid's result,
+// and does nothing on a frame without a click.
+func TestSortApply(t *testing.T) {
+	var s SortState
+	s.Apply(Result{SortClicked: -1})
+	assert.False(t, s.Active)
+	s.Apply(Result{SortClicked: 3, sortDescFirst: true})
+	assert.Equal(t, 3, s.Col)
+	assert.True(t, s.Desc)
+}
