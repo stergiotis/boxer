@@ -13,7 +13,8 @@ import (
 // A host that packs its cell ids as base + row*stride + col keeps bit 40 clear
 // for any result it can hold: play's per-DB-row grid reaches it only past
 // ~16.7 M rows in one result, and even then the two cells that would collide
-// are that many rows apart, so they are never on screen together.
+// are that many rows apart, so they are never on screen together. [RenderGrid]
+// scopes its cells per row and keys them by column position, far below it.
 const CellFrameSalt uint64 = 1 << 40
 
 // HeaderFrameSalt does the same for a header cell's inset frame, on a bit of
@@ -24,7 +25,8 @@ const HeaderFrameSalt uint64 = 1 << 60
 
 // SortIDSalt namespaces header sort buttons' ids for a host that keys its cells
 // as base + row*stride + col: that stays below 2^48 for any result a host can
-// hold, so a salt in the top bit cannot collide with them.
+// hold, so a salt in the top bit cannot collide with them. [RenderGrid] does
+// not need it: its headers have a scope of their own.
 const SortIDSalt uint64 = 1 << 62
 
 // MinContentWidth is the narrowest run of *content* a column keeps when the
@@ -70,7 +72,10 @@ var SelectionFill = color.Hex((styletokens.AccentDefault.AsHex() & 0xffffff00) |
 // and a body cell whose whole rect is the click target.
 //
 // It is the cell layer only — the host still emits the columns, the table and
-// the header/cell blocks. The zero value is unusable: Ids is required.
+// the header/cell blocks. [RenderGrid] is built on it; a host whose grid
+// [RenderGrid] does not fit (play's Table pane, with its paging, gloss faces
+// and replayed cells) uses it directly. The zero value is unusable: Ids is
+// required.
 type Chrome struct {
 	// Ids derives every frame and button id from the id the caller passes.
 	Ids *c.WidgetIdStack
