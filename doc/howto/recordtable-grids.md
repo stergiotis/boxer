@@ -66,7 +66,9 @@ floor makes a column jump on the next start. One resolver serves every grid
 in the app: give each grid its own `TableTag` (or `ScopeKey`, which the tag
 defaults to) and keep it stable, because stored widths are filed under it.
 [table-column-widths](./table-column-widths.md) explains the tiers and what
-the resolver does with a drag.
+the resolver does with a drag. With a resolver, every resizable header also
+carries the reset gesture: a context menu that returns the column, or all of
+them, to its default width.
 
 ## Describe the columns
 
@@ -85,6 +87,15 @@ un-glossed value as the text, left-aligned for strings.
 - **A column rendered two ways in two grids** needs `WidthView` (one per
   grid) or `WidthType`, or a width fitted to one view is carried to the
   other through the column tier.
+- **A column whose interesting end is the top** (CPU, memory, a count)
+  sets `DescFirst`, so its first click sorts descending; one that should
+  not sort sets `NoSort`.
+- **A cell that carries a heat tint** sets `Fill`/`Filled` from its
+  `Cell` function — imztop tints the CPU column the list is ordered by.
+
+Rows that carry their own identity (a path, a PID) can drop the "#" column
+with `NoRowNumbers`. A grid that is not the last thing in its pane caps
+itself with `MaxHeight`; without it the grid fills the rest of the pane.
 
 ## Rows that are Go values, not a record
 
@@ -98,6 +109,11 @@ it (watchbill keys on its snapshot's refresh time and its filter), and
 release the old one. `apps/watchbill/watchbill_table.go` is the worked
 example.
 
+Rows that are already formatted text can go through `StringRecord`, which
+makes one string column per header (tally's result tables do). The text is
+then also what a sort compares, so a column of sizes or counts orders "10"
+before "9" — mark such columns `NoSort`, or keep the typed record.
+
 ## Render, then act on what came back
 
 ```go
@@ -108,17 +124,21 @@ res := recordtable.RenderGrid(recordtable.Input{
     Selected: inst.selected, HasSelection: inst.selected >= 0,
     State: &inst.grid,
 })
-if res.SortClicked >= 0 {
-    inst.sort.Clicked(res.SortClicked)
-}
+inst.sort.Apply(res)
 if res.Clicked >= 0 {
     inst.selected = res.Clicked
 }
 ```
 
 The grid reports a header click and a row click; it applies neither. A host
-that skips the `SortClicked` line has headers that show "click to sort" and
-do nothing. Both clicks, like the widths, are read back from the host, so
+that skips `Apply` has headers that show "click to sort" and do nothing.
+The cycle is ascending, descending, back to record order — or, with the
+column's `DescFirst`, descending first. A list with no order of its own
+worth returning to sets `NoUnsorted` on its `SortState` and flips between
+the two directions. A host whose order lives elsewhere (an operation that
+sets it, a model another panel reads) reads `res.SortClicked`, routes it,
+and sets the `SortState` fields from its own model each frame: imztop sorts
+its processes itself and passes the result as `Order`. Both clicks, like the widths, are read back from the host, so
 they arrive one frame after they were made.
 
 `Selected` and `Clicked` are record rows, not display positions, so a
