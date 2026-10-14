@@ -93,7 +93,8 @@ order := inst.sort.OrderFor(rec, rec.NumRows())
 res := recordtable.RenderGrid(recordtable.Input{
     Ids: ids, ScopeKey: "jobs", Record: rec, Columns: cols,
     Widths: inst.widths, Sort: &inst.sort, Order: order,
-    Selected: inst.selected, State: &inst.grid,
+    Selected: inst.selected, HasSelection: inst.selected >= 0,
+    State: &inst.grid,
 })
 if res.SortClicked >= 0 {
     inst.sort.Clicked(res.SortClicked)
@@ -109,7 +110,9 @@ do nothing. Both clicks, like the widths, are read back from the host, so
 they arrive one frame after they were made.
 
 `Selected` and `Clicked` are record rows, not display positions, so a
-selection stays on its row across a sort and a page turn. `Order` can be a
+selection stays on its row across a sort and a page turn. `Selected` is read
+only while `HasSelection` is set, so an `Input` that leaves both out selects
+nothing rather than row 0. `Order` can be a
 filter's rows instead of the sort's; `PageStart` and `PageEnd` window it for
 a pager.
 

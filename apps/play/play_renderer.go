@@ -3423,9 +3423,7 @@ func (inst *PlayApp) renderMasterTable(rec arrow.RecordBatch, schema *arrow.Sche
 	// tagged section the hide-empty-sections toggle drops for having no
 	// attribute on this page (needs pageStart/pageEnd, hence computed above).
 	// egui_table column positions are 1-based after the "#" selector, so table
-	// position p renders visCols[p-1]. Button ids key on the Arrow column index
-	// (not the display position) so revealing/hiding a column never shifts
-	// another column's cell identity.
+	// position p renders visCols[p-1].
 	visCols := inst.visibleTableCols(rec, schema, pageStart, pageEnd)
 	// A per-attribute grid that fell back to this one draws record rows.
 	inst.tableDrawn.visCols, inst.tableDrawn.perAttr = visCols, false
@@ -3530,7 +3528,7 @@ func (inst *PlayApp) renderMasterTable(rec arrow.RecordBatch, schema *arrow.Sche
 		Ids: ids, ScopeKey: masterTableTag, Record: rec, Columns: columns,
 		Widths: inst.colWidthRes, TableTag: masterTableTag, WidthView: tableViewTagRow,
 		Sort: &inst.tableSort, Order: order, PageStart: pageStart, PageEnd: pageEnd,
-		Selected: selectedRow, Refit: refit, CellsKey: cellsKey,
+		Selected: selectedRow, HasSelection: selectedRow >= 0, Refit: refit, CellsKey: cellsKey,
 		State: &inst.masterGrid,
 	})
 	if res.Err != nil {

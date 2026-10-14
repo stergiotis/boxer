@@ -59,7 +59,7 @@ func TestRenderGridHeadless(t *testing.T) {
 	var st State
 	in := Input{
 		Ids: c.NewWidgetIdStack(), ScopeKey: "t", Record: rec, Columns: gridColumns(),
-		Sort: &sort, Order: sort.OrderFor(rec, rec.NumRows()), Selected: 0, State: &st,
+		Sort: &sort, Order: sort.OrderFor(rec, rec.NumRows()), Selected: 0, HasSelection: true, State: &st,
 	}
 	res := frame(in)
 	require.NoError(t, res.Err)
@@ -185,7 +185,7 @@ func TestRenderGridCellsCache(t *testing.T) {
 	in.CellsKey = "result-2"
 	frame(in)
 	assert.Equal(t, misses+1, st.cells.misses, "a new key rebuilds")
-	in.Selected = 1
+	in.Selected, in.HasSelection = 1, true
 	frame(in)
 	assert.Equal(t, misses+2, st.cells.misses, "so does a new selection")
 
@@ -206,4 +206,41 @@ func TestRenderGridCellsCache(t *testing.T) {
 	in.CellsKey = nil
 	frame(in)
 	assert.False(t, st.cells.valid)
+}
+
+// The cells emitted are the rows on screen, on a fit frame too: a fit
+// measures what the reader sees. Only with nothing on screen last frame does
+// a fit fall back to the window's first rows.
+func TestCellRows(t *testing.T) {
+	type rows struct{ lo, hi int64 }
+	at := func(lo, hi int64) rows { return rows{lo, hi} }
+	got := func(n int64, rb, re uint64, ok, refit bool) rows {
+		lo, hi := cellRows(n, rb, re, ok, refit)
+		return rows{lo, hi}
+	}
+	assert.Equal(t, at(0, 1000), got(1000, 0, 0, false, false), "no range yet: every row")
+	assert.Equal(t, at(600, 630), got(1000, 600, 630, true, false), "the visible rows")
+	assert.Equal(t, at(600, 630), got(1000, 600, 630, true, true), "a fit keeps the visible rows")
+	assert.Equal(t, at(0, fitMaxRows), got(1000, 0, 0, false, true), "a first-frame fit takes the first rows")
+	assert.Equal(t, at(0, fitMaxRows), got(1000, 0, 0, true, true), "so does a fit after an empty frame")
+	assert.Equal(t, at(100, 100+fitMaxRows), got(1000, 100, 900, true, true), "a fit is capped")
+	assert.Equal(t, at(5, 10), got(10, 5, 40, true, false), "the range is clamped to the window")
+}
+
+// The zero Input selects nothing; a selection needs HasSelection and a row.
+func TestGridSelection(t *testing.T) {
+	_, ok := (&Input{}).selection()
+	assert.False(t, ok, "the zero Input does not select row 0")
+	_, ok = (&Input{HasSelection: true, Selected: -1}).selection()
+	assert.False(t, ok, "a negative row is none")
+	row, ok := (&Input{HasSelection: true}).selection()
+	assert.Equal(t, int64(0), row)
+	assert.True(t, ok, "row 0 when asked for")
+}
+
+// A missing id stack is refused like a missing State, not a panic.
+func TestRenderGridRefusesNilIds(t *testing.T) {
+	t.Cleanup(scenetest.Install())
+	var st State
+	assert.Error(t, frame(Input{State: &st}).Err)
 }

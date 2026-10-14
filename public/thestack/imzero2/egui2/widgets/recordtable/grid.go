@@ -41,7 +41,9 @@ type Column struct {
 	// Arrow is the record column the cells come from. A negative index is a
 	// column the host computes (Cell is then required); it is never sortable.
 	Arrow int
-	// Header is the caption; empty means the Arrow field name.
+	// Header is the caption; empty means the Arrow field name. A computed
+	// column's Header is also its width identity, so two computed columns
+	// with the same Header share a stored width.
 	Header string
 	// Sub are small, weak lines under the caption — a type tag, a unit.
 	Sub []string
@@ -92,14 +94,19 @@ type Input struct {
 	Sort *SortState
 	// Order is the display→record permutation, nil for record order —
 	// typically Sort.OrderFor(Record, Record.NumRows()), or a filter's rows.
+	// A row listed twice is drawn twice under the same widget ids, which
+	// egui reports as a clash; list each record row at most once.
 	Order []int64
 	// PageStart and PageEnd window the display positions drawn, end
 	// exclusive; a zero PageEnd draws to the end.
 	PageStart int64
 	PageEnd   int64
-	// Selected is the selected record row, -1 for none. It is highlighted
-	// where it is drawn, so it survives a sort.
-	Selected int64
+	// Selected is the selected record row, read only while HasSelection is
+	// set — so the zero Input selects nothing rather than row 0. It is
+	// highlighted where it is drawn, so it survives a sort. A negative
+	// Selected is none too.
+	Selected     int64
+	HasSelection bool
 	// Refit asks egui_table to fit the columns to their content this frame,
 	// on top of the fit the grid asks for itself when its column set changes.
 	// Play asks on every new result, so the widths belong to the result on
@@ -139,6 +146,7 @@ type State struct {
 // and the widths — describe the previous frame's response, one frame late.
 type Result struct {
 	// Clicked is the record row whose cell was primary-clicked, -1 for none.
+	// The grid does not select it; the host does, through Selected.
 	Clicked int64
 	// SortClicked is the Arrow column whose header was clicked, -1 for none.
 	// The host applies it — Sort.Clicked(SortClicked) — or routes it first
@@ -163,6 +171,13 @@ func RenderGrid(in Input) (res Result) {
 	scopeKey := in.ScopeKey
 	if scopeKey == "" {
 		scopeKey = defaultScopeKey
+	}
+	if in.Ids == nil {
+		res.Err = errors.New("no Ids")
+		for rt := range c.RichTextLabel("recordtable: " + res.Err.Error()) {
+			rt.Weak()
+		}
+		return
 	}
 	for range c.IdScope(in.Ids.PrepareStr(scopeKey)) {
 		res.Err = in.validate()
@@ -215,6 +230,37 @@ func (in *Input) displayRows() (start int64, n int64) {
 	}
 	start = min(max(in.PageStart, 0), end)
 	n = end - start
+	return
+}
+
+// selection is the selected record row, ok false when there is none.
+func (in *Input) selection() (row int64, ok bool) {
+	if !in.HasSelection || in.Selected < 0 {
+		return -1, false
+	}
+	return in.Selected, true
+}
+
+// cellRows is the display rows [lo, hi) of an n-row window whose cells are
+// emitted: the rows egui_table reported visible last frame (rb, re, ok).
+// A fit frame measures the cells it is given, so it gets the visible rows
+// too — the fit belongs to what the reader sees — capped at fitMaxRows; only
+// when last frame showed nothing (the first frame, or one with no rows) does
+// it fall back to the window's first rows.
+func cellRows(n int64, rb, re uint64, ok, refit bool) (lo, hi int64) {
+	if ok {
+		lo, hi = min(int64(rb), n), min(int64(re), n)
+	}
+	if !refit {
+		if !ok {
+			return 0, n
+		}
+		return
+	}
+	if !ok || hi <= lo {
+		lo, hi = 0, n
+	}
+	hi = min(hi, lo+fitMaxRows)
 	return
 }
 
@@ -363,9 +409,9 @@ func (in *Input) render(res *Result, scopeKey string) {
 	if in.Widths != nil {
 		et = et.ApplyWidths(in.Widths.Epoch(tag) + st.applyGen<<16)
 	}
-	if in.Selected >= 0 {
+	if sel, ok := in.selection(); ok {
 		for local := range n {
-			if in.recordRow(start+local) == in.Selected {
+			if in.recordRow(start+local) == sel {
 				et = et.SelectedRow(uint64(local))
 				break
 			}
@@ -374,16 +420,9 @@ func (in *Input) render(res *Result, scopeKey string) {
 
 	in.renderHeaders(res, et, pad, refit)
 
-	// Only the rows and columns egui_table will draw — except on the fit
-	// frame, which measures cells and needs them present: the range read
-	// back there is the previous frame's, which may have had no rows.
-	rowLo, rowHi := int64(0), n
-	if rb, re, _, _, _, ok := et.VisibleRange(); ok && !refit {
-		rowLo, rowHi = min(int64(rb), n), min(int64(re), n)
-	}
-	if refit {
-		rowHi = min(rowHi, fitMaxRows)
-	}
+	// Only the rows egui_table will draw (cellRows).
+	rb, re, _, _, _, ok := et.VisibleRange()
+	rowLo, rowHi := cellRows(n, rb, re, ok, refit)
 
 	// Nothing on a page changes between most frames, so with a CellsKey the
 	// cells are captured once and replayed until one of their inputs moves
@@ -413,7 +452,7 @@ func (in *Input) render(res *Result, scopeKey string) {
 func (in *Input) cellsKey(cols []colwidth.Column, et c.EndETableFluid, start, n, rowLo, rowHi int64, refit bool, pad float32) (key cellsKey) {
 	key = cellsKey{
 		content: in.CellsKey, pageStart: start, pageN: n, rowLo: rowLo, rowHi: rowHi,
-		selected: in.Selected, refit: refit, pad: pad,
+		refit: refit, pad: pad,
 		columns: foldColumns(cols, func(pos int) int {
 			if pos == 0 {
 				return -1
@@ -424,6 +463,7 @@ func (in *Input) cellsKey(cols []colwidth.Column, et c.EndETableFluid, start, n,
 			return vis
 		}),
 	}
+	key.selected, _ = in.selection()
 	if in.Sort != nil {
 		key.sortActive, key.sortCol, key.sortDesc = in.Sort.Active, in.Sort.Col, in.Sort.Desc
 	}
@@ -435,12 +475,13 @@ func (in *Input) cellsKey(cols []colwidth.Column, et c.EndETableFluid, start, n,
 // a cell keeps its id across a sort and a page turn.
 func (in *Input) renderCells(res *Result, et c.EndETableFluid, chrome *Chrome, pad float32, start, rowLo, rowHi int64, refit bool) {
 	ids := in.Ids
+	sel, hasSel := in.selection()
 	for local := rowLo; local < rowHi; local++ {
 		row := in.recordRow(start + local)
 		if row < 0 {
 			continue
 		}
-		selected := row == in.Selected
+		selected := hasSel && row == sel
 		if vis, _ := et.ColVisible(0); vis {
 			for range et.Cells(uint64(local), 0) {
 				for range c.IdScope(ids.PrepareSeq(uint64(row))) {

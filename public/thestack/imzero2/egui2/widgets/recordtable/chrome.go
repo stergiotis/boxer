@@ -61,16 +61,16 @@ var SelectionFill = color.Hex((styletokens.AccentDefault.AsHex() & 0xffffff00) |
 // and a body cell whose whole rect is the click target.
 //
 // It is the cell layer only — the host still emits the columns, the table and
-// the header/cell blocks. [RenderGrid] is built on it; a host whose grid
-// [RenderGrid] does not fit (play's Table pane, with its paging, gloss faces
-// and replayed cells) uses it directly. The zero value is unusable: Ids is
-// required.
+// the header/cell blocks. [RenderGrid] is built on it; a grid whose rows are
+// not record rows (play's per-attribute view, several grid rows per entity)
+// uses it directly. The zero value is unusable: Ids is required.
 type Chrome struct {
 	// Ids derives every frame and button id from the id the caller passes.
 	Ids *c.WidgetIdStack
 	// Note, when set, is handed the wire id of every cell button
-	// [Chrome.SelectableCell] emits. A host that replays captured cell bytes
-	// (play's cells cache) uses it to learn which response ids gate a replay.
+	// [Chrome.SelectableCell] emits. A grid that replays captured cell bytes
+	// ([RenderGrid] with a CellsKey) uses it to learn which response ids gate
+	// a replay.
 	Note func(wire uint64)
 }
 

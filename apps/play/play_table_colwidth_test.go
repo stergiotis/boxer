@@ -96,6 +96,17 @@ func TestColumnKeys_RowNumGutterIsDistinctPerGrid(t *testing.T) {
 	assert.NotEqual(t, master[0].Key(), attr[0].Key())
 }
 
+// The identity columns (ADR-0219) are computed, so their width identity is
+// their caption and a format tag of their own — never an Arrow column's, and
+// with the row view's tag like every other column in this grid.
+func TestColumnKeys_IdentityColumns(t *testing.T) {
+	schema := colWidthTestSchema()
+	keys := recordtable.WidthColumns(schema, masterGridColumns([]int{0}, []int{2, 3}), tableViewTagRow)
+	require.Len(t, keys, 4)
+	assert.Equal(t, colwidth.Column{Name: "canonform", Type: "identity" + tableViewTagRow}, keys[2])
+	assert.Equal(t, colwidth.Column{Name: "canonwire", Type: "identity" + tableViewTagRow}, keys[3])
+}
+
 // The two grids' instance-tier scopes must differ too, or one grid's drag
 // would land on the other's entry even with the column tier kept apart.
 func TestTableTags_DifferBetweenGrids(t *testing.T) {
