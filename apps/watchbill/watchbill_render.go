@@ -41,7 +41,7 @@ func (inst *App) render() {
 	}
 	for range panel.KeepIter() {
 		c.CaptureUiAvailableRect(c.ProbeSeq(string(manifest.Id), "list"))
-		inst.renderList(jobs)
+		inst.renderList(snap, jobs)
 	}
 	for range c.PanelCentralInside().KeepIter() {
 		for range c.ScrollArea().Vscroll(true).AutoShrink(false, false).KeepIter() {

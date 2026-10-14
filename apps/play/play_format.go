@@ -73,26 +73,6 @@ func formatDisplayCell(arr arrow.Array, row int64) string {
 	return utfsafe.EnsureUTF8(head) + "… (" + humanize.IBytes(uint64(len(v))) + ")"
 }
 
-// stringLikeArrowType reports whether values of this Arrow type render as free
-// text: plain and large UTF-8 strings, and dictionary-encoded strings
-// (ClickHouse LowCardinality(String) arrives as a dictionary). The Table pane
-// left-aligns such columns so their text lines up under the left-aligned header,
-// where numeric columns read fine centered. This is deliberately its own
-// predicate, not shared with the world panel's country detector
-// (isWorldStringType): the two ask independent questions — "does this render as
-// text?" vs. "could this hold a country name?" — that only coincide today.
-func stringLikeArrowType(dt arrow.DataType) bool {
-	switch dt.ID() {
-	case arrow.STRING, arrow.LARGE_STRING:
-		return true
-	case arrow.DICTIONARY:
-		if d, ok := dt.(*arrow.DictionaryType); ok {
-			return stringLikeArrowType(d.ValueType)
-		}
-	}
-	return false
-}
-
 // shortArrowType renders an Arrow type as a compact tag for a column header:
 // `list<item: float32>` becomes `[f32]`, `utf8` becomes `str`.
 //

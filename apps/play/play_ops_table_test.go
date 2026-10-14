@@ -112,9 +112,9 @@ func TestGetTableReadsCaptionsSortAndThePage(t *testing.T) {
 	assert.NotEqual(t, "2048", face, "the cell reads as the gloss renders it")
 
 	require.NoError(t, applyOp(t, h, opSetTableOptions, SetTableOptionsArgs{SortBy: strp("size"), Descending: boolp(true)}))
-	assert.True(t, p.tableSort.active)
-	assert.Equal(t, 1, p.tableSort.col)
-	assert.True(t, p.tableSort.desc)
+	assert.True(t, p.tableSort.Active)
+	assert.Equal(t, 1, p.tableSort.Col)
+	assert.True(t, p.tableSort.Desc)
 	r = queryOp[TableReading](t, h, opGetTable, GetTableArgs{Rows: true})
 	require.NotNil(t, r.Sort)
 	assert.Equal(t, "size@gloss/bytes", r.Sort.Column)
@@ -131,7 +131,7 @@ func TestGetTableReadsCaptionsSortAndThePage(t *testing.T) {
 	assert.Equal(t, int32(2), r.More)
 
 	require.NoError(t, applyOp(t, h, opSetTableOptions, SetTableOptionsArgs{SortBy: strp("")}))
-	assert.False(t, p.tableSort.active, "an empty sort_by gives back the result's order")
+	assert.False(t, p.tableSort.Active, "an empty sort_by gives back the result's order")
 }
 
 func TestSetTableOptionsRefusesAndPages(t *testing.T) {
@@ -158,7 +158,7 @@ func TestSetTableOptionsRefusesAndPages(t *testing.T) {
 	} {
 		require.Error(t, applyOp(t, h, opSetTableOptions, in), "%+v", in)
 	}
-	assert.False(t, p.tableSort.active, "a refused call applies nothing")
+	assert.False(t, p.tableSort.Active, "a refused call applies nothing")
 
 	require.NoError(t, applyOp(t, h, opSetTableOptions, SetTableOptionsArgs{PageSize: int64p(50), Row: int64p(110)}))
 	assert.Equal(t, int64(50), p.pager.PageSize())
@@ -183,17 +183,17 @@ func TestTableHeaderClickGoesThroughSetTableOptions(t *testing.T) {
 	assert.Equal(t, opSetTableOptions, e.Op)
 	assert.Equal(t, opwire.WriterPerson, e.Writer)
 	assert.Equal(t, []string{opsResTable}, e.Resources)
-	assert.True(t, p.tableSort.active)
-	assert.False(t, p.tableSort.desc)
+	assert.True(t, p.tableSort.Active)
+	assert.False(t, p.tableSort.Desc)
 	p.requestTableOptions(p.tableSortClick(schema, 0))
-	assert.True(t, p.tableSort.desc)
+	assert.True(t, p.tableSort.Desc)
 	p.requestTableOptions(p.tableSortClick(schema, 0))
-	assert.False(t, p.tableSort.active, "the third click gives back the result's order")
+	assert.False(t, p.tableSort.Active, "the third click gives back the result's order")
 
 	bare, _ := opsLauncher(t)
 	tableResult(t, bare.inner, []string{"b"}, []int64{1})
 	bare.inner.requestTableOptions(bare.inner.tableSortClick(schema, 1))
-	assert.True(t, bare.inner.tableSort.active, "applied directly where no host routes it")
+	assert.True(t, bare.inner.tableSort.Active, "applied directly where no host routes it")
 }
 
 func int64p(v int64) *int64 { return &v }

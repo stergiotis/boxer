@@ -164,7 +164,7 @@ func (inst *App) renderFind(sc *storeConn) {
 	f.table.rows = res.rows
 	f.table.tone = nil
 	f.table.widths = []float32{160, 420, 100, 170, 70, 90, 300}
-	if clicked := f.table.render(inst.ids, inst.density); clicked >= 0 {
+	if clicked := f.table.render(inst.ids); clicked >= 0 {
 		inst.travelToRow(p, res, clicked)
 	}
 }

@@ -3,46 +3,18 @@ package play
 import (
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/array"
-	"github.com/stergiotis/boxer/public/hmi/gloss"
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/streamreadaccess"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
-	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/color"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/selector"
 )
 
-// cellFrameSalt lifts a grid cell's *inset-frame* id off the cell's own
-// (button) id-sequence, so the frame and the button it wraps get distinct
-// widget ids. Both grids mint it for every cell.
-//
-// Bit 40 is clear for every cell id either grid builds: the per-attribute
-// grid's stay below 2^26 (attrCellIdBase/attrColStride, play_table_attr.go),
-// and the per-DB-row grid's are cellIdBase + absRow*cellColStride + col
-// (renderMasterTable), which reaches bit 40 only past ~16.7 M rows in one
-// result — and even then the two cells that would collide are that many rows
-// apart, so they are never on screen together.
-const cellFrameSalt uint64 = 1 << 40
-
-// hdrFrameSalt does the same for a header cell's inset frame, on a bit of its
-// own so a header frame can never collide with a body-cell frame. It is below
-// tableSortIDSalt (1<<62), which the header *buttons* use. Header seqs are
-// small (the column position), so the per-attribute grid offsets its own by
-// attrHdrIdOffset rather than sharing the per-DB-row grid's band.
-const hdrFrameSalt uint64 = 1 << 60
-
 // attrHdrIdOffset keeps the per-attribute grid's header frames off the
-// per-DB-row grid's. The two grids are alternatives — the granularity toggle
-// shows one or the other — so this guards a future in which they are not.
+// per-DB-row grid's (recordtable.Chrome.HeaderCell salts both with
+// recordtable.HeaderFrameSalt; header seqs are small, the column position).
+// The two grids are alternatives — the granularity toggle shows one or the
+// other — so this guards a future in which they are not.
 const attrHdrIdOffset uint64 = 1 << 32
-
-// attrSelFill is the accent wash painted behind a selected per-attribute cell.
-// It is styletokens.AccentDefault at ~35% alpha — the same accent, and roughly
-// the same weight, as egui_table's own selected-row tint
-// (ACCENT_DEFAULT.gamma_multiply(0.35), interpreter.rs) that the per-DB-row grid
-// gets from et.SelectedRow. Built via color.Hex(token.AsHex()) with the alpha
-// byte overridden, so it stays a token reference (designlint L2 flags raw
-// color.RGBA, not Hex).
-var attrSelFill = color.Hex((styletokens.AccentDefault.AsHex() & 0xffffff00) | 0x59)
 
 // play_table_leeway.go carries the Table pane's leeway display modes (ADR-0097
 // Update): a collapsible options bar above the grid whose four orthogonal
@@ -292,153 +264,6 @@ func (inst *PlayApp) renderTableOptionsBar() {
 			}
 		}
 	}
-}
-
-// cellInset gives one grid cell — header or body — the same horizontal margin
-// on each side and cuts its content at the inner edge.
-//
-// egui_table adds no margins of its own ("Does not add any margins to cells",
-// its docs say, "add them yourself") and clips each cell to the column rect.
-// Both grids used to lead with a bare AddSpace, which pads the left only: the
-// column reads off-centre, and anything wider than the column — a header
-// label, a truncated value — is cut on the gridline itself, so the vertical
-// border sits in the glyphs. It is most obvious at the narrowest width a
-// column can be dragged to, where every header is wider than its column.
-//
-// A Frame carries the margin on both sides. Its background, when it has one,
-// still spans the whole cell: egui paints the frame's *outer* rect, margins
-// included, so a selected cell's accent band stays continuous across the row
-// while its text is inset. UiClipToMaxRect then moves the cut from the
-// gridline to the inner edge, which is what keeps the border off the glyphs;
-// without it the Frame would pad content that fits and change nothing for
-// content that does not. The margin also joins what a sizing pass measures,
-// so an auto-fitted column now fits its content *and* its insets.
-//
-// fill is painted behind the cell when filled is set; an unfilled Frame is
-// transparent and paints nothing.
-func (inst *PlayApp) cellInset(id uint64, cellPadX float32, fill color.Color, filled bool, body func()) {
-	fr := c.Frame(inst.ids.PrepareSeq(id)).
-		InnerMarginSides(cellPadX, cellPadX, 0, 0)
-	if filled {
-		fr = fr.Fill(fill)
-	}
-	for range fr.KeepIter() {
-		c.UiClipToMaxRect()
-		body()
-	}
-}
-
-// headerCell insets a header cell the same way body cells are inset, so a
-// column title lines up with the values beneath it on both edges.
-func (inst *PlayApp) headerCell(id uint64, cellPadX float32, body func()) {
-	inst.cellInset(id^hdrFrameSalt, cellPadX, color.Transparent, false, body)
-}
-
-// colDragMinWidth is the narrowest a resizable column may get: the content
-// floor plus the inset cellInset spends on *each* side. It is handed both to
-// egui_table (EtColumn.RangeMinMax, the live drag floor) and to the width
-// resolver (colwidth.Opts.MinPoints, the floor stored overrides are clamped
-// to), because a drag floor below the stored floor would be corrected only on
-// the next load and a column would appear to jump on restart.
-func (inst *PlayApp) colDragMinWidth() float32 {
-	return colMinContentPx + 2*styletokens.PaddingTight(inst.density)
-}
-
-// selectableCell renders one grid cell as a full-width, cross-justified
-// selectable button so a primary click anywhere in the cell — not only on the
-// painted glyphs — selects the row. Both Table grids need this: egui sizes a
-// frameless button to its content, and egui_table senses no clicks of its own
-// (our delegate implements no row_ui), so a bare per-cell button leaves the
-// cell's left inset and every blank cell as a dead click target. That reads as
-// "finicky" in the per-DB-row grid (short values sit in wide columns) and
-// outright breaks the per-attribute grid, whose design blanks most cells (no
-// value is ever repeated). The cross-justified wrapper stretches the button to
-// the column width; a non-small egui Button already floors its height at
-// interact_size.y, so the hit area covers the whole row-height cell. The button
-// id and its click routing are unchanged by the justify wrapper: it adds no
-// id-stack scope, so ids stay keyed exactly as before. Returns true on a
-// primary click. cellPadX is the same inset the headers get, on both sides
-// (cellInset), so cell text still aligns under its header.
-//
-// selBg turns on a per-cell accent background when the cell is selected. The
-// per-DB-row grid leaves it off (false): its whole-row highlight comes from
-// et.SelectedRow, which egui_table paints per row_nr. The per-attribute grid
-// turns it on (true): there one source DB row explodes to several egui_table
-// rows, which a single SelectedRow index cannot cover, so each selected cell
-// paints its own accent band — together highlighting the whole entity. A
-// frameless egui Button never paints a background even when Selected (see
-// button.rs), which is why the band is a fill on the inset Frame rather than
-// the button's own; the band still spans the column because egui paints the
-// frame's outer rect, and the text does not shift versus an unselected cell
-// because every cell wears the same Frame either way.
-//
-// leftAlign moves the text to the cell's left edge instead of centering it, for
-// free-text (string) columns so their values line up under the left-aligned
-// header. It only swaps the cross-axis alignment of the justifying wrapper
-// (Center → Min); everything else — the full-width justify that grows the hit
-// area, the button id, the height flooring, the selection band — is unchanged,
-// since VerticalCenteredJustified is exactly this same top-down cross-justified
-// layout with Center rather than Min cross-alignment.
-//
-// tone colours the text per ADR-0186's inline face (a Luhn ✓ in success, a
-// ✗ in error); gloss.ToneNeutral leaves the cell's text style alone. link,
-// when non-empty, makes the cell a hyperlink to that URL instead of a button
-// (a gloss/url cell): clicking it opens the link through the host's opener
-// and does not select the row — the row's other cells still do — since a
-// hyperlink's click is consumed by the widget and not reported back.
-//
-// truncate is normally true. It is false on the one frame the grid asks
-// egui_table to re-fit its columns: egui_table sizes a column in a sizing
-// pass with each cell rect shrunk to the column minimum and takes the cell's
-// allocated width, so a Truncate()d button reports its truncated width and
-// only the header ever sets the column — a cell wider than its header
-// (`4111 •••• •••• 1111 ✓`, a long URL) truncated for good. Untruncated on
-// that frame, the button reports its intrinsic width and the column fits it;
-// egui_table discards and re-runs the frame, so the overflow is never shown.
-func (inst *PlayApp) selectableCell(id uint64, cellPadX float32, text string, weak bool, selected, selBg, leftAlign bool, tone gloss.ToneE, link string, truncate bool) (clicked bool) {
-	emitButton := func() {
-		if link != "" {
-			c.HyperlinkTo(text, link).OpenInNewTab(true).Send()
-			return
-		}
-		var rt c.RichTextScope
-		if col, toned := toneColor(tone); toned {
-			rt = c.Atoms().BeginRichTextColored(col, color.Transparent, text).Monospace()
-		} else {
-			rt = c.Atoms().BeginRichText(text).Monospace()
-		}
-		if weak {
-			rt = rt.Weak()
-		}
-		// Derive once and hand the button the absolute id: the cells cache
-		// keys its response gate on the wire id, and Derive consumes the
-		// prepared seq.
-		wire := inst.ids.PrepareSeq(id).Derive()
-		inst.masterCells.note(wire)
-		btn := c.Button(c.AbsoluteWidgetId(wire), rt.End().Keep()).
-			Frame(false).
-			Selected(selected)
-		if truncate {
-			btn = btn.Truncate()
-		}
-		clicked = btn.SendResp().HasPrimaryClicked()
-	}
-	inst.cellInset(id^cellFrameSalt, cellPadX, attrSelFill, selBg && selected, func() {
-		if leftAlign {
-			for range c.UiWithLayout().
-				MainDirTopDown().
-				CrossAlignMin().
-				CrossJustify(true).
-				KeepIter() {
-				emitButton()
-			}
-		} else {
-			for range c.VerticalCenteredJustified().KeepIter() {
-				emitButton()
-			}
-		}
-	})
-	return
 }
 
 // renderTableBody dispatches the Table pane's grid to the granularity the

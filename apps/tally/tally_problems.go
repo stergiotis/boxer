@@ -88,7 +88,7 @@ func (inst *App) renderProblems(sc *storeConn) {
 	inst.problemsTable.headers = res.headers
 	inst.problemsTable.rows = res.rows
 	inst.problemsTable.widths = []float32{420, 90, 90, 500}
-	if clicked := inst.problemsTable.render(inst.ids, inst.density); clicked >= 0 {
+	if clicked := inst.problemsTable.render(inst.ids); clicked >= 0 {
 		inst.travelToRow(p, res, clicked)
 	}
 }

@@ -1,20 +1,23 @@
 package tally
 
 import (
-	"time"
+	"strings"
 
-	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
+	"github.com/apache/arrow-go/v18/arrow"
+
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/colwidth"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/color"
-	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/fsbrowser"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/recordtable"
 )
 
 // stringTable is a small result table: fixed headers, rows of cells as text,
-// an optional tone per row, and a click report. It is what the Diff and
-// History tabs render their lanes into — the rows are already strings
-// (gloss.FormatArrowElem did the work), so a general Arrow table would be
-// machinery without a job here.
+// an optional tone per row, and a click report. It is what the Diff, History,
+// Find, Du and Problems tabs render their lanes into — the rows are already
+// strings (gloss.FormatArrowElem did the work) — drawn by
+// recordtable.RenderGrid over a record of those strings. The headers do not
+// sort: the cells are formatted text, and a size or a count compared as text
+// orders "10" before "9".
 type stringTable struct {
 	scopeKey string
 	headers  []string
@@ -30,35 +33,58 @@ type stringTable struct {
 	key       string
 	// res persists the column widths (ADR-0151) under scopeKey as the table
 	// tag, the headers as column names and the table's own view as the
-	// type; nil keeps the widths as given. widthsSeen and widthSig are the
-	// resolver's first-show and column-set bookkeeping.
-	res        *colwidth.Resolver
-	widthsSeen bool
-	widthSig   string
+	// type; nil keeps the widths as given.
+	res *colwidth.Resolver
+	// grid is the grid's own state; rec the record of rows it draws, rebuilt
+	// when the rows or the headers change.
+	grid       recordtable.State
+	rec        arrow.RecordBatch
+	recRows    *[]string
+	recN       int
+	recHeaders string
 }
 
-// widthColumns keys the table's columns for the resolver: the header is the
-// name, the table's scope the view, so a "path" column in the Diff table and
-// one in the Find table can hold different widths.
-func (t *stringTable) widthColumns() []colwidth.Column {
-	cols := make([]colwidth.Column, len(t.headers))
+// widthView is the table's view tag: the scope, so a "path" column in the
+// Diff table and one in the Find table can hold different widths.
+func (t *stringTable) widthView() string {
+	return ";view=" + t.scopeKey
+}
+
+// columns lays the headers out for the grid: every column text, left
+// aligned, seeded from widths, the first toned per row.
+func (t *stringTable) columns() (cols []recordtable.Column) {
+	cols = make([]recordtable.Column, len(t.headers))
 	for i, h := range t.headers {
-		cols[i] = colwidth.Column{Name: h, Type: "text;view=" + t.scopeKey}
-	}
-	return cols
-}
-
-// widthDefaults is what the columns are without an override.
-func (t *stringTable) widthDefaults() []float64 {
-	out := make([]float64, len(t.headers))
-	for i := range t.headers {
 		w := tableDefaultWidth
 		if i < len(t.widths) && t.widths[i] > 0 {
 			w = t.widths[i]
 		}
-		out[i] = float64(w)
+		ci := i
+		cols[i] = recordtable.Column{
+			Arrow: i, Header: h, Hover: h, Width: w, WidthType: "text", NoSort: true,
+			Cell: func(row int64) (cell recordtable.Cell) {
+				cell = recordtable.Cell{LeftAlign: true}
+				if r := t.rows[row]; ci < len(r) {
+					cell.Text = r[ci]
+				}
+				if ci == 0 && int(row) < len(t.tone) && t.tone[row] != color.Transparent {
+					cell.Tone, cell.Toned = t.tone[row], true
+				}
+				return
+			},
+		}
 	}
-	return out
+	return
+}
+
+// widthColumns keys the table's columns for the resolver: the header is the
+// name, "text" plus the table's view the type.
+func (t *stringTable) widthColumns() []colwidth.Column {
+	fields := make([]arrow.Field, len(t.headers))
+	for i, h := range t.headers {
+		fields[i] = arrow.Field{Name: h, Type: arrow.BinaryTypes.String}
+	}
+	return recordtable.WidthColumns(arrow.NewSchema(fields, nil), t.columns(), t.widthView(), false)
 }
 
 // resetFor drops the selection when the table shows a new result.
@@ -68,158 +94,51 @@ func (t *stringTable) resetFor(key string) {
 	}
 }
 
+// record returns the record of t.rows, rebuilding it when the rows or the
+// headers changed since the last frame.
+func (t *stringTable) record() (rec arrow.RecordBatch) {
+	var first *[]string
+	if len(t.rows) > 0 {
+		first = &t.rows[0]
+	}
+	headers := strings.Join(t.headers, "\x00")
+	if t.rec != nil && t.recRows == first && t.recN == len(t.rows) && t.recHeaders == headers {
+		return t.rec
+	}
+	if t.rec != nil {
+		t.rec.Release()
+	}
+	t.rec = recordtable.StringRecord(t.headers, t.rows)
+	t.recRows, t.recN, t.recHeaders = first, len(t.rows), headers
+	return t.rec
+}
+
 const (
-	tableRowHeight     float32 = 22
-	tableDefaultWidth  float32 = 140
-	seqTableRowBase    uint64  = 0x0200_1100_0000_0000
-	seqTableCellBase   uint64  = 0x0200_1200_0000_0000
-	seqTableHeaderBase uint64  = 0x0200_1300_0000_0000
+	tableRowHeight    float32 = 22
+	tableDefaultWidth float32 = 140
 )
 
-// render draws the table and returns the clicked row, -1 for none.
-func (t *stringTable) render(ids *c.WidgetIdStack, density styletokens.DensityE) (clicked int) {
+// render draws the table and returns the clicked row, -1 for none; the
+// clicked row becomes the selection.
+func (t *stringTable) render(ids *c.WidgetIdStack) (clicked int) {
 	clicked = -1
-	ncols := len(t.headers)
-	if ncols == 0 {
+	if len(t.headers) == 0 {
 		return
 	}
-	floor := fsbrowser.MinColumnWidth(density)
-	cols := t.widthColumns()
-	widths := t.widthDefaults()
-	var epoch uint32
-	if t.res != nil {
-		if sig := widthSignature(cols); sig != t.widthSig {
-			if t.widthSig != "" {
-				t.res.MarkReseed(t.scopeKey)
-			}
-			t.widthSig = sig
-		}
-		widths = t.res.Resolve(t.scopeKey, cols, 0, widths)
-		epoch = t.res.Epoch(t.scopeKey)
-	}
-	for range c.IdScope(ids.PrepareStr(t.scopeKey)) {
-		for _, w := range widths {
-			width := float32(w)
-			if width < floor {
-				width = floor
-			}
-			c.EtColumn(width).RangeMinMax(floor, fsbrowser.MaxColumnWidth).Resizable(true).Send()
-		}
-		et := c.EndETable(ids.PrepareStr("t"), uint64(len(t.rows)), tableRowHeight, 1, 0)
-		if t.maxHeight > 0 {
-			// A caller-supplied ceiling: the table takes what its rows need
-			// and stops there. Du sets one so the listing beside the treemap
-			// cannot outgrow it.
-			et = et.MaxHeight(t.maxHeight)
-		} else {
-			// Otherwise the table is the last thing in its tab and takes the
-			// rest of it. Without this it falls to the auto-fit cap (400 px)
-			// and leaves the bottom of the tab empty on any taller window.
-			et = et.FillPane(true)
-		}
-		if t.res != nil {
-			et = et.ApplyWidths(epoch)
-			if fetched, ok := et.ColumnWidths(); ok {
-				firstShow := !t.widthsSeen
-				t.widthsSeen = true
-				f64 := make([]float64, len(fetched))
-				for i, w := range fetched {
-					f64[i] = float64(w)
-				}
-				t.res.Observe(t.scopeKey, cols, f64, 0, firstShow, time.Now())
-			}
-		}
-		pad := styletokens.PaddingInner(density)
-		for i, h := range t.headers {
-			col := uint32(i)
-			header := func() {
-				for range c.Frame(ids.PrepareSeq(seqTableHeaderBase + uint64(col))).
-					OuterMargin(0).InnerMargin(pad).KeepIter() {
-					c.LabelAtoms(c.Atoms().BeginRichText(h).Strong().End().Keep()).Selectable(false).Send()
-				}
-			}
-			for range et.Headers(0, col) {
-				if t.res == nil {
-					header()
-					continue
-				}
-				// The reset gesture (ADR-0151): this column, or all of them,
-				// back to their defaults.
-				c.ContextMenu().Render(func() {
-					if c.Button(ids.PrepareSeq(seqTableHeaderBase+0x100+uint64(col)), c.Atoms().Text("Reset column width").Keep()).
-						SendResp().HasPrimaryClicked() {
-						_ = t.res.Clear(t.scopeKey, cols[col])
-					}
-					if c.Button(ids.PrepareSeq(seqTableHeaderBase+0x200+uint64(col)), c.Atoms().Text("Reset all column widths").Keep()).
-						SendResp().HasPrimaryClicked() {
-						_ = t.res.ClearAll(t.scopeKey, cols)
-					}
-				}, header)
-			}
-		}
-		rowBegin, rowEnd := 0, len(t.rows)
-		if rb, re, _, _, _, ok := et.VisibleRange(); ok {
-			rowBegin = min(int(rb), len(t.rows))
-			rowEnd = min(int(re), rowEnd)
-		}
-		for r := rowBegin; r < rowEnd; r++ {
-			var fr c.FrameFluid
-			fill := color.Transparent
-			strokeW, stroke := float32(0), color.Transparent
-			if r == t.selected {
-				fill = color.Hex(styletokens.AccentSubtle.AsHex())
-				strokeW, stroke = 1, color.Hex(styletokens.AccentDefault.AsHex())
-			} else if r%2 == 1 {
-				fill = color.Hex(styletokens.NeutralBgFaint.AsHex())
-			}
-			for range et.Rows(uint64(r)) {
-				fr = c.Frame(ids.PrepareSeq(seqTableRowBase+uint64(r))).
-					Fill(fill).Stroke(strokeW, stroke).OuterMargin(0).InnerMargin(0).
-					SenseClick().HoverCursorPointer()
-				for range fr.KeepIter() {
-					c.UiSetMinWidthAvailable()
-					c.UiSetMinHeight(tableRowHeight - 1)
-				}
-			}
-			if c.CurrentApplicationState.StateManager.GetResponseByIdRaw(fr.Id()).HasPrimaryClicked() {
-				clicked = r
-			}
-			row := t.rows[r]
-			for ci := 0; ci < ncols; ci++ {
-				cell := ""
-				if ci < len(row) {
-					cell = row[ci]
-				}
-				et.BeginCells(uint64(r), uint32(ci))
-				for range c.Frame(ids.PrepareSeq(seqTableCellBase+uint64(r)*uint64(ncols)+uint64(ci))).
-					OuterMargin(0).InnerMarginSides(pad, pad, 0, 0).KeepIter() {
-					if ci == 0 && r < len(t.tone) && t.tone[r] != color.Transparent {
-						c.LabelAtoms(c.Atoms().BeginRichTextColored(t.tone[r], color.Transparent, cell).End().Keep()).
-							Selectable(false).Send()
-					} else {
-						c.Label(cell).Selectable(false).Truncate().Send()
-					}
-				}
-				et.EndCells()
-			}
-		}
-		et.Send()
-	}
-	if clicked >= 0 {
+	res := recordtable.RenderGrid(recordtable.Input{
+		Ids: ids, ScopeKey: t.scopeKey, Record: t.record(), Columns: t.columns(),
+		Widths: t.res, TableTag: t.scopeKey, WidthView: t.widthView(),
+		Selected: int64(t.selected), HasSelection: t.selected >= 0,
+		RowHeight: tableRowHeight, NoRowNumbers: true,
+		// A caller-supplied ceiling: the table takes what its rows need and
+		// stops there. Du sets one so the listing beside the treemap cannot
+		// outgrow it; without one the table takes the rest of its tab.
+		MaxHeight: t.maxHeight,
+		State:     &t.grid,
+	})
+	if res.Clicked >= 0 {
+		clicked = int(res.Clicked)
 		t.selected = clicked
 	}
 	return
-}
-
-// widthSignature is the column set as one string, so a change of result shape
-// opens the resolver's settle window before the next report.
-func widthSignature(cols []colwidth.Column) string {
-	var b []byte
-	for _, col := range cols {
-		b = append(b, col.Name...)
-		b = append(b, 0)
-		b = append(b, col.Type...)
-		b = append(b, 1)
-	}
-	return string(b)
 }

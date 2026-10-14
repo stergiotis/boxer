@@ -338,14 +338,6 @@ func TestGlossLink(t *testing.T) {
 	assert.Equal(t, "", app.glossLink(&cols[0], urls, 0), "raw cells: no link either")
 }
 
-// fitRunes bounds what a re-fit cell hands egui_table to measure.
-func TestFitRunes(t *testing.T) {
-	assert.Equal(t, "abc", fitRunes("abc", 3))
-	assert.Equal(t, "ab…", fitRunes("abcd", 2))
-	assert.Equal(t, "••…", fitRunes("••••", 2), "runes, not bytes")
-	assert.Equal(t, "", fitRunes("", 5))
-}
-
 // The card's block seam (ADR-0186 Update): only a column whose gloss has a
 // block face in this pane is claimed — gloss/url's hyperlink, the content
 // family — with a height the card reserves; values are counted per column

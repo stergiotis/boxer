@@ -211,8 +211,8 @@ func (inst *PlayApp) tableColumnsOf(schema *arrow.Schema, glossCols []glossColum
 // gloss resolution, from the result the pane was last fed.
 func (inst *PlayApp) tableView(mark paneDrawnMark) (v tableOpsView) {
 	d := inst.tableDrawn
-	v = tableOpsView{drawn: d, opts: inst.tableOpts, sortActive: inst.tableSort.active, sortCol: inst.tableSort.col,
-		sortDesc: inst.tableSort.desc, pageIdx: inst.pager.CurrentPage(), pageSize: inst.pager.PageSize(),
+	v = tableOpsView{drawn: d, opts: inst.tableOpts, sortActive: inst.tableSort.Active, sortCol: inst.tableSort.Col,
+		sortDesc: inst.tableSort.Desc, pageIdx: inst.pager.CurrentPage(), pageSize: inst.pager.PageSize(),
 		pages: inst.pager.NumPages(), hashes: inst.identityJob}
 	v.pageStart, v.pageEnd = inst.pager.Range()
 	if inst.identityJob != nil {
@@ -269,10 +269,10 @@ func (inst *PlayApp) tablePageOf(key tablePageKey, d tableDrawnMark, glossCols [
 		return
 	}
 	n := rec.NumRows()
-	order := inst.tableSort.orderFor(rec, n)
+	order := inst.tableSort.OrderFor(rec, n)
 	end := min(key.end, n, key.start+tablePageCacheRows)
 	for pos := key.start; pos < end; pos++ {
-		row := inst.tableSort.rowAt(order, pos)
+		row := inst.tableSort.RowAt(order, pos)
 		r := TableRowReading{Row: row, Cells: make([]string, 0, len(d.visCols))}
 		anyTone := false
 		tones := make([]string, 0, len(d.visCols))
@@ -464,7 +464,7 @@ func (inst *PlayApp) setTableOptions(in SetTableOptionsArgs) (err error) {
 			return app.RefuseOperation("granularity is " + tableGranDBRow + " or " + tableGranAttr)
 		}
 	}
-	active, col, desc := inst.tableSort.active, inst.tableSort.col, inst.tableSort.desc
+	active, col, desc := inst.tableSort.Active, inst.tableSort.Col, inst.tableSort.Desc
 	if in.SortBy != nil {
 		if name := strings.TrimSpace(*in.SortBy); name == "" {
 			active, desc = false, false
@@ -524,7 +524,7 @@ func (inst *PlayApp) setTableOptions(in SetTableOptionsArgs) (err error) {
 	if in.CanonicalHashes != nil {
 		o.showHashes = *in.CanonicalHashes
 	}
-	inst.tableSort.active, inst.tableSort.col, inst.tableSort.desc = active, col, desc
+	inst.tableSort.Active, inst.tableSort.Col, inst.tableSort.Desc = active, col, desc
 	if in.PageSize != nil {
 		inst.pager.SetPageSize(size)
 	}
@@ -537,8 +537,8 @@ func (inst *PlayApp) setTableOptions(in SetTableOptionsArgs) (err error) {
 			res := snapshotResults(inst)
 			if lr, rerr := res.read(tablePaneId, ""); rerr == nil {
 				if lr.rec != nil && lr.rec.Schema() == d.schema {
-					order := inst.tableSort.orderFor(lr.rec, lr.rec.NumRows())
-					pos = inst.tableSort.displayPos(order, pos)
+					order := inst.tableSort.OrderFor(lr.rec, lr.rec.NumRows())
+					pos = inst.tableSort.DisplayPos(order, pos)
 				}
 				lr.release()
 			}
@@ -556,15 +556,15 @@ func (inst *PlayApp) requestTableOptions(in SetTableOptionsArgs) {
 }
 
 // tableSortClick is the set_table_options a header click asks for: the
-// three-state cycle tableSortState.clicked draws, ascending, descending,
+// three-state cycle tableSortState.Clicked draws, ascending, descending,
 // the result's order.
 func (inst *PlayApp) tableSortClick(schema *arrow.Schema, col int) (in SetTableOptionsArgs) {
 	s := inst.tableSort
 	name := schema.Field(col).Name
 	desc := false
 	switch {
-	case !s.active || s.col != col:
-	case !s.desc:
+	case !s.Active || s.Col != col:
+	case !s.Desc:
 		desc = true
 	default:
 		name = ""
@@ -589,7 +589,7 @@ func tableOptionsDigest(p *PlayApp) string {
 	}
 	return "g=" + strconv.Itoa(int(o.granularity)) + "|s=" + b(o.showSupport) + "|m=" + b(o.showMembership) +
 		"|e=" + b(o.hideEmptySections) + "|r=" + b(o.rawCells) + "|h=" + b(o.showHashes) +
-		"|sort=" + b(s.active) + ":" + strconv.Itoa(s.col) + ":" + b(s.desc) +
+		"|sort=" + b(s.Active) + ":" + strconv.Itoa(s.Col) + ":" + b(s.Desc) +
 		"|page=" + strconv.FormatInt(p.pager.CurrentPage(), 10) + "|size=" + strconv.FormatInt(p.pager.PageSize(), 10)
 }
 

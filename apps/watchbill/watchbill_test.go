@@ -25,6 +25,7 @@ import (
 	wb "github.com/stergiotis/boxer/public/keelson/runtime/watchbill"
 	"github.com/stergiotis/boxer/public/keelson/runtime/watchbill/watchbillstore"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/colwidth"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/recordtable"
 )
 
 // fixture is the window mounted beside a worker over the memory store on
@@ -248,28 +249,54 @@ func TestTableReads(t *testing.T) {
 	assert.Nil(t, newTableReader(nil), "no bus is nil, not a reader that fails")
 }
 
+// The header sort orders the list by the record's sort keys: text by the
+// value, attempt numerically, ties in the listed order, three clicks back
+// to the listed order.
 func TestSortJobs(t *testing.T) {
 	jobs := []watchbillstore.Job{{ID: "b", Attempt: 2, Kind: "x"}, {ID: "a", Attempt: 1, Kind: "y"}, {ID: "c", Attempt: 2, Kind: "x"}}
-	var s tableSort
-	ids := func(js []watchbillstore.Job) (out []string) {
-		for _, j := range js {
-			out = append(out, j.ID)
+	rec := jobsRecord(jobs)
+	defer rec.Release()
+	var s recordtable.SortState
+	ids := func() (out []string) {
+		order := s.OrderFor(rec, rec.NumRows())
+		for pos := range int64(len(jobs)) {
+			out = append(out, jobs[s.RowAt(order, pos)].ID)
 		}
 		return
 	}
-	assert.Equal(t, []string{"b", "a", "c"}, ids(sortJobs(jobs, s)), "no sort keeps the listed order")
-	s.clicked(0)
-	assert.Equal(t, []string{"a", "b", "c"}, ids(sortJobs(jobs, s)))
-	assert.Equal(t, " ▲", s.glyph(0))
-	s.clicked(0)
-	assert.Equal(t, []string{"c", "b", "a"}, ids(sortJobs(jobs, s)))
-	assert.Equal(t, " ▼", s.glyph(0))
-	s.clicked(0)
-	assert.Equal(t, sortNone, s.dir)
-	s.clicked(5)
-	assert.Equal(t, []string{"a", "b", "c"}, ids(sortJobs(jobs, s)), "numeric ascending, stable among equals")
-	s.clicked(1)
-	assert.Equal(t, []string{"b", "c", "a"}, ids(sortJobs(jobs, s)), "another column starts ascending")
+	assert.Equal(t, []string{"b", "a", "c"}, ids(), "no sort keeps the listed order")
+	s.Clicked(0)
+	assert.Equal(t, []string{"a", "b", "c"}, ids())
+	assert.Equal(t, " ▲", s.Glyph(0))
+	s.Clicked(0)
+	assert.Equal(t, []string{"c", "b", "a"}, ids())
+	assert.Equal(t, " ▼", s.Glyph(0))
+	s.Clicked(0)
+	assert.False(t, s.Active)
+	s.Clicked(5)
+	assert.Equal(t, []string{"a", "b", "c"}, ids(), "numeric ascending, stable among equals")
+	s.Clicked(1)
+	assert.Equal(t, []string{"b", "c", "a"}, ids(), "another column starts ascending")
+}
+
+// The list record is rebuilt only when the list or the filter moves, and a
+// cell shows the job's own text and tone, not the sort key.
+func TestListRecord(t *testing.T) {
+	inst := &App{}
+	at := time.Now()
+	jobs := []watchbillstore.Job{{ID: "a", Attempt: 1, MaxAttempts: 3, State: watchbillstore.StateFailed}}
+	rec := inst.listRecord(jobsRecKey{refreshed: at, n: 1}, jobs)
+	assert.Same(t, rec, inst.listRecord(jobsRecKey{refreshed: at, n: 1}, jobs), "an unchanged key reuses the record")
+	assert.NotSame(t, rec, inst.listRecord(jobsRecKey{refreshed: at, kind: "x", n: 1}, jobs), "a filter rebuilds it")
+	defer inst.listRec.Release()
+
+	cols := jobGridColumns(jobs)
+	attempt := cols[5].Cell(0)
+	assert.Equal(t, "1/3", attempt.Text, "the cell shows the job's text; the record holds the attempt to sort by")
+	assert.False(t, attempt.LeftAlign, "numbers centre")
+	state := cols[4].Cell(0)
+	assert.True(t, state.Toned, "the state cell keeps its tone")
+	assert.True(t, state.LeftAlign)
 }
 
 // A dragged width survives the app: observed after the settle window, it
@@ -278,11 +305,20 @@ func TestSortJobs(t *testing.T) {
 func TestColumnWidthsPersist(t *testing.T) {
 	store := statestore.NewMemory()
 	appId := app.AppIdT(manifest.Id)
-	res, err := colwidth.New(store, colwidth.Opts{AppId: appId, MinPoints: colMinWidth, MaxPoints: colMaxWidth, Debounce: time.Millisecond})
+	minW, maxW := float64(recordtable.DragMinWidth(0)), float64(recordtable.MaxColumnWidth)
+	res, err := colwidth.New(store, colwidth.Opts{AppId: appId, MinPoints: minW, MaxPoints: maxW, Debounce: time.Millisecond})
 	require.NoError(t, err)
 	require.NoError(t, res.Load())
-	cols := jobColumnKeys()
-	defaults := []float64{rowNumColWidth}
+	cols := recordtable.WidthColumns(jobsSchema, jobGridColumns(nil), "", true)
+	// The identities the list stored widths under before it was a grid, so
+	// a width dragged then is still found.
+	assert.Equal(t, []colwidth.Column{
+		{Name: "#", Type: "rownum"}, {Name: "id", Type: "text"}, {Name: "kind", Type: "text"},
+		{Name: "subject", Type: "text"}, {Name: "queue", Type: "text"}, {Name: "state", Type: "text"},
+		{Name: "attempt", Type: "number"}, {Name: "run after", Type: "text"},
+		{Name: "worker run", Type: "text"}, {Name: "last error", Type: "text"},
+	}, cols)
+	defaults := []float64{float64(recordtable.RowNumColWidth)}
 	for _, col := range jobColumns {
 		defaults = append(defaults, float64(col.width))
 	}
@@ -303,7 +339,7 @@ func TestColumnWidthsPersist(t *testing.T) {
 	_, err = res.Flush(now.Add(20 * time.Second))
 	require.NoError(t, err)
 
-	again, err := colwidth.New(store, colwidth.Opts{AppId: appId, MinPoints: colMinWidth, MaxPoints: colMaxWidth})
+	again, err := colwidth.New(store, colwidth.Opts{AppId: appId, MinPoints: minW, MaxPoints: maxW})
 	require.NoError(t, err)
 	require.NoError(t, again.Load())
 	got = again.Resolve(jobsTableTag, cols, 0, defaults)

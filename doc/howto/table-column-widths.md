@@ -48,6 +48,14 @@ their widths and a type change deliberately drops the override.
 
 ## Using the resolver
 
+A grid over an Arrow record need not write the loop below:
+[`widgets/recordtable`](../../public/thestack/imzero2/egui2/widgets/recordtable)'s
+`RenderGrid` takes the resolver and a table tag and does the resolve, the
+apply, the fit-once and the capture itself. Build the resolver with
+`MinPoints: recordtable.DragMinWidth(density)` and
+`MaxPoints: recordtable.MaxColumnWidth`, so the stored floor is the drag floor.
+The rest of this section is for a table drawn by hand.
+
 `egui2/colwidth` is pure Go and holds no egui state. One resolver per app,
 built on the first Frame — not at Mount, because the store arrives as a
 frame-context capability (see [Reaching a store](#reaching-a-store)).
@@ -151,9 +159,10 @@ to `EtColumn(...).RangeMinMax(...)`, and derive the floor from the *cell*
 rather than the text: it has to hold the inset on **both** sides, or the
 narrowest column puts its right-hand gridline through the glyphs of its own
 header. egui_table adds no cell margins itself, so whatever inset a cell
-leads with has to be spent again at the trailing edge — play does it with a
-Frame per cell (`cellInset`), whose inner margin also joins what a sizing pass
-measures, so an auto-fitted column fits its content and its insets.
+leads with has to be spent again at the trailing edge — `recordtable.Chrome`
+does it with a Frame per cell (`Inset`), whose inner margin also joins what a
+sizing pass measures, so an auto-fitted column fits its content and its
+insets. `recordtable.DragMinWidth` is that floor for a density.
 
 ## Clearing an override
 

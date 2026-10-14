@@ -15,7 +15,10 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/marshall/clickhouse/componentsql"
+	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/colwidth"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/color"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/graphview/scenetest"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/treemap/layout"
 )
 
@@ -270,14 +273,52 @@ func TestParseMountText(t *testing.T) {
 	assert.False(t, ok)
 }
 
+// The widths keep the identities the table stored them under before it was
+// a grid — the header and "text" in the table's own view — so the same
+// header in two tables is two columns, and an unnamed width takes the
+// default.
 func TestStringTableWidthColumns(t *testing.T) {
 	tb := stringTable{scopeKey: "diff-table", headers: []string{"path", "change"}, widths: []float32{360}}
 	cols := tb.widthColumns()
 	assert.Equal(t, []colwidth.Column{{Name: "path", Type: "text;view=diff-table"}, {Name: "change", Type: "text;view=diff-table"}}, cols)
-	assert.Equal(t, []float64{360, float64(tableDefaultWidth)}, tb.widthDefaults())
+	specs := tb.columns()
+	assert.Equal(t, float32(360), specs[0].Width)
+	assert.Equal(t, tableDefaultWidth, specs[1].Width)
 	other := stringTable{scopeKey: "find-table", headers: []string{"path"}}
 	assert.NotEqual(t, cols[0], other.widthColumns()[0], "the same header in another table is another column")
-	assert.NotEqual(t, widthSignature(cols), widthSignature(cols[:1]))
+}
+
+// The first cell carries the row's tone; the record is rebuilt only when the
+// rows change.
+func TestStringTableCellsAndRecord(t *testing.T) {
+	tb := stringTable{scopeKey: "diff-table", headers: []string{"path", "change"},
+		rows: [][]string{{"/a", "added"}, {"/b"}}, tone: []color.Color{color.Hex(0xff0000ff)}}
+	specs := tb.columns()
+	first := specs[0].Cell(0)
+	assert.Equal(t, "/a", first.Text)
+	assert.True(t, first.Toned)
+	assert.False(t, specs[1].Cell(0).Toned, "only the first cell is toned")
+	assert.Equal(t, "", specs[1].Cell(1).Text, "a short row shows an empty cell")
+	rec := tb.record()
+	assert.Same(t, rec, tb.record(), "unchanged rows reuse the record")
+	tb.rows = [][]string{{"/c", "removed"}}
+	assert.NotSame(t, rec, tb.record(), "new rows rebuild it")
+	tb.rec.Release()
+}
+
+// A populated table renders headless, a click on nothing reports nothing,
+// and a ceiling or none both draw.
+func TestStringTableRenders(t *testing.T) {
+	t.Cleanup(scenetest.Install())
+	ids := c.NewWidgetIdStack()
+	tb := stringTable{scopeKey: "find-table", selected: -1, headers: []string{"path", "size"},
+		rows: [][]string{{"/a", "1 KiB"}, {"/b", "2 KiB"}}}
+	for _, ceiling := range []float32{0, 120} {
+		tb.maxHeight = ceiling
+		assert.Equal(t, -1, tb.render(ids))
+		c.CurrentApplicationState.StateManager.ScriptReset()
+	}
+	tb.rec.Release()
 }
 
 func TestTablesAreWiredToTheResolver(t *testing.T) {
