@@ -1042,7 +1042,7 @@ func (inst *App) renderHistory(sc *storeConn) {
 	inst.historyTable.rows = res.rows
 	inst.historyTable.widths = []float32{200, 80, 110, 170, 300, 90, 170}
 	inst.historyTable.tone = nil
-	if clicked := inst.historyTable.render(inst.ids, inst.density); clicked >= 0 {
+	if clicked := inst.historyTable.render(inst.ids); clicked >= 0 {
 		if snap, ok := snapOfRow(res, clicked); ok {
 			inst.pinSnapshot(p, snap)
 		}
@@ -1180,7 +1180,7 @@ func (inst *App) renderDiff(sc *storeConn) {
 	inst.diffTable.rows = res.rows
 	inst.diffTable.tone = tone
 	inst.diffTable.widths = []float32{360, 90, 100, 100, 170, 170, 200, 200}
-	if clicked := inst.diffTable.render(inst.ids, inst.density); clicked >= 0 {
+	if clicked := inst.diffTable.render(inst.ids); clicked >= 0 {
 		if pc := columnIndex(res.headers, "path"); pc >= 0 && pc < len(res.rows[clicked]) {
 			inst.travelTo(b, res.rows[clicked][pc])
 		}

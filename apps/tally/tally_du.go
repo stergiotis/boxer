@@ -155,7 +155,7 @@ func (inst *App) renderDu(sc *storeConn) {
 			inst.duTable.headers = res.headers
 			inst.duTable.rows = res.rows
 			inst.duTable.widths = []float32{320, 110, 70}
-			if clicked := inst.duTable.render(inst.ids, inst.density); clicked >= 0 {
+			if clicked := inst.duTable.render(inst.ids); clicked >= 0 {
 				if dc := columnIndex(res.headers, "directory"); dc >= 0 && dc < len(res.rows[clicked]) {
 					p.st.SetDir(res.rows[clicked][dc])
 					p.navigated = true
