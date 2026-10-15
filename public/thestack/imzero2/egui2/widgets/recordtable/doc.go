@@ -25,9 +25,7 @@
 //		Widths: widths, Sort: &sort, Order: order,
 //		Selected: sel, HasSelection: sel >= 0, State: &st,
 //	})
-//	if res.SortClicked >= 0 {
-//		sort.Clicked(res.SortClicked)
-//	}
+//	sort.Apply(res)
 //	if res.Clicked >= 0 {
 //		sel = res.Clicked
 //	}
