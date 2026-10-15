@@ -1218,7 +1218,9 @@ fn visit_for_chars(shape: &Shape, used: &mut HashMap<FontFamily, std::collection
                     byte_cursor += g.chr.len_utf8();
                     // A ligature's continuation draws no glyph of its own, but
                     // its char is written out as text, so the subset needs it.
-                    if g.chr.is_whitespace() || (g.uv_rect.is_nothing() && !is_ligature_continuation(g)) {
+                    if g.chr.is_whitespace()
+                        || (g.uv_rect.is_nothing() && !is_ligature_continuation(g))
+                    {
                         continue;
                     }
                     used.entry(family).or_default().insert(g.chr);
@@ -1763,7 +1765,8 @@ impl SvgBuilder {
                     // they are written after it, the glyph's advance shared
                     // evenly among them, so a viewer setting them as plain
                     // letters spaces them as the ligature did.
-                    let folded = glyphs[gi + 1..].iter().take_while(|g| is_ligature_continuation(g)).count();
+                    let folded =
+                        glyphs[gi + 1..].iter().take_while(|g| is_ligature_continuation(g)).count();
                     ligature = (folded > 0).then(|| (bx, advance / (folded + 1) as f32, 1));
                     // The glyph's ink, where egui's own tessellation puts
                     // its quad: position plus the atlas entry's offset, at
@@ -1777,9 +1780,11 @@ impl SvgBuilder {
                     );
                     ink = Some(ink.map_or(glyph_box, |r| r.union(glyph_box)));
                     max_size = max_size.max(em_size);
-                } else if let (true, Some((x0, share, k)), Some(r)) =
-                    (is_ligature_continuation(glyph), ligature.as_mut(), run.as_mut())
-                {
+                } else if let (true, Some((x0, share, k)), Some(r)) = (
+                    is_ligature_continuation(glyph),
+                    ligature.as_mut(),
+                    run.as_mut(),
+                ) {
                     r.push(*x0 + *share * *k as f32, glyph.chr);
                     *k += 1;
                     self.counts.glyphs_emitted += 1;
@@ -2956,7 +2961,10 @@ mod tests {
             .flat_map(|r| r.row.glyphs.iter())
             .filter(|g| is_ligature_continuation(g))
             .count();
-        assert!(folded > 0, "the default font formed no ligature in {TEXT:?}");
+        assert!(
+            folded > 0,
+            "the default font formed no ligature in {TEXT:?}"
+        );
 
         let mut svg: Option<String> = None;
         ctx.run_ui(raw, |ctx| {
@@ -2990,6 +2998,9 @@ mod tests {
             .map(|v| v.parse().expect("an x is a number"))
             .collect();
         assert_eq!(xs.len(), TEXT.chars().count(), "one x per char: {run}");
-        assert!(xs.windows(2).all(|w| w[0] < w[1]), "chars placed left to right: {xs:?}");
+        assert!(
+            xs.windows(2).all(|w| w[0] < w[1]),
+            "chars placed left to right: {xs:?}"
+        );
     }
 }
