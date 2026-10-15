@@ -1179,6 +1179,14 @@ fn collect_used_glyphs(
     used
 }
 
+/// Whether `g` is a ligature's continuation: a char egui's shaper folded into
+/// the glyph before it — the "i" of an "fi" ligature. egui keeps one glyph
+/// per char, so it emits these with no ink and no advance; the ligature glyph
+/// before them draws them.
+fn is_ligature_continuation(g: &egui::epaint::text::Glyph) -> bool {
+    !g.chr.is_whitespace() && g.uv_rect.is_nothing() && g.advance_width == 0.0
+}
+
 fn visit_for_chars(shape: &Shape, used: &mut HashMap<FontFamily, std::collections::HashSet<char>>) {
     match shape {
         Shape::Vec(children) => {
@@ -1208,7 +1216,9 @@ fn visit_for_chars(shape: &Shape, used: &mut HashMap<FontFamily, std::collection
                     }
                     let family = job.sections[section_idx].format.font_id.family.clone();
                     byte_cursor += g.chr.len_utf8();
-                    if g.uv_rect.is_nothing() || g.chr.is_whitespace() {
+                    // A ligature's continuation draws no glyph of its own, but
+                    // its char is written out as text, so the subset needs it.
+                    if g.chr.is_whitespace() || (g.uv_rect.is_nothing() && !is_ligature_continuation(g)) {
                         continue;
                     }
                     used.entry(family).or_default().insert(g.chr);
@@ -1664,7 +1674,11 @@ impl SvgBuilder {
         };
 
         for placed_row in &galley.rows {
-            for glyph in &placed_row.row.glyphs {
+            let glyphs = &placed_row.row.glyphs;
+            // An open ligature: the x of its glyph, the share of its advance
+            // each of its chars gets, and the index of the next char.
+            let mut ligature: Option<(f32, f32, usize)> = None;
+            for (gi, glyph) in glyphs.iter().enumerate() {
                 while section_idx + 1 < job.sections.len()
                     && byte_cursor >= job.sections[section_idx].byte_range.end.0
                 {
@@ -1745,6 +1759,12 @@ impl SvgBuilder {
                         r.push(bx, glyph.chr);
                     }
                     self.counts.glyphs_emitted += 1;
+                    // A ligature glyph draws the chars folded into it too:
+                    // they are written after it, the glyph's advance shared
+                    // evenly among them, so a viewer setting them as plain
+                    // letters spaces them as the ligature did.
+                    let folded = glyphs[gi + 1..].iter().take_while(|g| is_ligature_continuation(g)).count();
+                    ligature = (folded > 0).then(|| (bx, advance / (folded + 1) as f32, 1));
                     // The glyph's ink, where egui's own tessellation puts
                     // its quad: position plus the atlas entry's offset, at
                     // the entry's size. The line box (ascent to descent)
@@ -1757,6 +1777,12 @@ impl SvgBuilder {
                     );
                     ink = Some(ink.map_or(glyph_box, |r| r.union(glyph_box)));
                     max_size = max_size.max(em_size);
+                } else if let (true, Some((x0, share, k)), Some(r)) =
+                    (is_ligature_continuation(glyph), ligature.as_mut(), run.as_mut())
+                {
+                    r.push(*x0 + *share * *k as f32, glyph.chr);
+                    *k += 1;
+                    self.counts.glyphs_emitted += 1;
                 } else if glyph.chr.is_whitespace() && advance > 0.0 {
                     // Whitespace inside a run keeps the string whole; the
                     // run's trailing whitespace is dropped when it is
@@ -1764,12 +1790,14 @@ impl SvgBuilder {
                     if let Some(r) = run.as_mut().filter(|r| r.baseline == baseline) {
                         r.push(bx, glyph.chr);
                     }
+                    ligature = None;
                     self.counts.glyphs_skipped += 1;
                 } else {
                     // No ink (a glyph the fonts lack, or transparent text):
                     // what follows must not read as adjacent to what came
                     // before, so the run ends here.
                     self.flush_text_run(run.take());
+                    ligature = None;
                     self.counts.glyphs_skipped += 1;
                 }
 
@@ -2889,5 +2917,79 @@ mod tests {
             "no per-glyph elements remain:\n{svg}"
         );
         assert!(svg.contains("data-text=\"Alice Chen\""), "{svg}");
+    }
+
+    #[test]
+    fn ligature_continuations_are_written_out() {
+        // egui shapes "fi" and "fl" into one glyph and keeps the folded char
+        // as a zero-advance glyph with no ink. The writer used to drop it as
+        // "no ink", which lost the letter and split the run ("f" + "ag").
+        use egui::{RawInput, Vec2};
+
+        const TEXT: &str = "official flag";
+        let ctx = Context::default();
+        let win_id = egui::Id::new("ligature-window");
+        let resolver = FontResolver::default();
+        let textures: TexturePixelCacheHandle = Arc::new(Mutex::new(TexturePixelCache::default()));
+        let links: LinkZonesHandle = Arc::new(Mutex::new(Vec::new()));
+        let raw = RawInput {
+            screen_rect: Some(Rect::from_min_size(Pos2::ZERO, Vec2::new(800.0, 600.0))),
+            ..Default::default()
+        };
+        let show_ui = |ctx: &Context| {
+            egui::Window::new("W").id(win_id).default_pos([10.0, 10.0]).show(ctx, |ui| {
+                ui.label(TEXT);
+            });
+        };
+        for _ in 0..2 {
+            ctx.run_ui(raw.clone(), |ctx| show_ui(ctx)).textures_delta.clear();
+        }
+
+        // Precondition: the default font really folds a ligature here, or
+        // this test would pass without exercising the fix.
+        let galley = ctx.fonts_mut(|f| {
+            f.layout_no_wrap(TEXT.to_owned(), FontId::proportional(14.0), Color32::WHITE)
+        });
+        let folded = galley
+            .rows
+            .iter()
+            .flat_map(|r| r.row.glyphs.iter())
+            .filter(|g| is_ligature_continuation(g))
+            .count();
+        assert!(folded > 0, "the default font formed no ligature in {TEXT:?}");
+
+        let mut svg: Option<String> = None;
+        ctx.run_ui(raw, |ctx| {
+            show_ui(ctx);
+            svg = render_svg_window(
+                ctx,
+                &resolver,
+                &textures,
+                &links,
+                false,
+                win_id,
+                WindowMode::Faithful,
+                Some(VIEWPORT_BG),
+            );
+        })
+        .textures_delta
+        .clear();
+        let svg = svg.expect("window rendered");
+
+        // The whole string is one run, every char placed, left to right.
+        let run = svg
+            .lines()
+            .find(|l| l.contains(&format!(">{TEXT}</text>")))
+            .unwrap_or_else(|| panic!("no run reads {TEXT:?}:\n{svg}"));
+        let xs: Vec<f32> = run
+            .split(" x=\"")
+            .nth(1)
+            .and_then(|r| r.split('"').next())
+            .expect("the run carries per-char x")
+            .split_whitespace()
+            .map(|v| v.parse().expect("an x is a number"))
+            .collect();
+        assert_eq!(xs.len(), TEXT.chars().count(), "one x per char: {run}");
+        assert!(xs.windows(2).all(|w| w[0] < w[1]), "chars placed left to right: {xs:?}");
     }
 }
