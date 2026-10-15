@@ -41,7 +41,19 @@ type Style struct {
 	Rounding     float32 // box-node corner rounding (points, pre-scale)
 	NodeFontSize float32 // points, pre-scale; node-label fallback when Layout.FontSize == 0
 	EdgeFontSize float32 // points, pre-scale
+	// EdgeDash and EdgeGap are a dashed edge's drawn and skipped lengths, in
+	// pixels like EdgeStrokeW, so a dash stays readable when the drawing is
+	// scaled to fit. A non-positive value takes DefaultEdgeDash or
+	// DefaultEdgeGap.
+	EdgeDash float32
+	EdgeGap  float32
 }
+
+// Default dash pattern of a dashed edge, in pixels.
+const (
+	DefaultEdgeDash = 5.0
+	DefaultEdgeGap  = 3.0
+)
 
 // DefaultStyle returns the IDS-token-based default appearance.
 func DefaultStyle() Style {
@@ -59,6 +71,8 @@ func DefaultStyle() Style {
 		Rounding:     4.0,
 		NodeFontSize: 14.0,
 		EdgeFontSize: 11.0,
+		EdgeDash:     DefaultEdgeDash,
+		EdgeGap:      DefaultEdgeGap,
 	}
 }
 
@@ -311,10 +325,17 @@ func Render(idBase uint64, lay *layeredgraph.Layout, opts RenderOpts) RenderResu
 					strokeW = w
 				}
 			}
-			drawEdge(*e, tf, col, strokeW)
-			if e.LabelPos != nil && e.Label != "" {
-				lx, ly := tf(*e.LabelPos)
-				c.PaintText(lx, ly, 1, 1, e.Label, st.EdgeFontSize*float32(escale), st.EdgeText).Send()
+			drawEdge(e, tf, col, strokeW, st)
+			// The middle label and the two end labels, each centred on the
+			// anchor the engine placed it at.
+			for _, l := range [...]struct {
+				pos  *layeredgraph.Point
+				text string
+			}{{e.LabelPos, e.Label}, {e.HeadLabelPos, e.HeadLabel}, {e.TailLabelPos, e.TailLabel}} {
+				if l.pos != nil && l.text != "" {
+					lx, ly := tf(*l.pos)
+					c.PaintText(lx, ly, 1, 1, l.text, st.EdgeFontSize*float32(escale), st.EdgeText).Send()
+				}
 			}
 		}
 
@@ -501,9 +522,28 @@ func drawNode(sh layeredgraph.NodeShape, cx, cy, w, h float32, st Style, fill co
 	}
 }
 
-func drawEdge(e layeredgraph.EdgeLayout, tf func(layeredgraph.Point) (float32, float32), col color.Color, strokeW float32) {
+func drawEdge(e *layeredgraph.EdgeLayout, tf func(layeredgraph.Point) (float32, float32), col color.Color, strokeW float32, st Style) {
 	pts := e.Points
 	switch {
+	case e.Dashed:
+		// One segment batch per dashed edge: a dash pattern along a spline
+		// is many short strokes, which is what the batch is for.
+		dash, gap := st.EdgeDash, st.EdgeGap
+		if dash <= 0 {
+			dash = DefaultEdgeDash
+		}
+		if gap <= 0 {
+			gap = DefaultEdgeGap
+		}
+		xs, ys := flattenEdge(pts, tf)
+		x0s, y0s, x1s, y1s := dashSegments(xs, ys, dash, gap)
+		if len(x0s) > 0 {
+			cols := color.NewColors(len(x0s))
+			for i := range cols {
+				cols[i] = col.Literal()
+			}
+			c.PaintSegments(x0s, y0s, x1s, y1s, cols, strokeW).Send()
+		}
 	case len(pts) >= 4:
 		// Graphviz B-spline: start point then groups of three cubic controls.
 		for i := 0; i+3 < len(pts); i += 3 {
@@ -521,9 +561,9 @@ func drawEdge(e layeredgraph.EdgeLayout, tf func(layeredgraph.Point) (float32, f
 		}
 		c.PaintPolyline(xs, ys, col, strokeW).Send()
 	}
-	// Arrow head: a solid triangle from the spline end (base) to the head tip,
-	// drawn with the filled-polygon primitive for a clean Graphviz-style head.
-	if e.ArrowHead != nil && len(pts) >= 1 {
+	// Arrow head: a triangle from the spline end (base) to the head tip —
+	// filled for a solid head, outlined for an open one, absent for none.
+	if e.Head != layeredgraph.EdgeHeadNone && e.ArrowHead != nil && len(pts) >= 1 {
 		bx, by := tf(pts[len(pts)-1]) // spline end = arrow base
 		hx, hy := tf(*e.ArrowHead)    // arrow tip
 		dx, dy := hx-bx, hy-by
@@ -535,9 +575,16 @@ func drawEdge(e layeredgraph.EdgeLayout, tf func(layeredgraph.Point) (float32, f
 				hw = 2
 			}
 			px, py := -uy*hw, ux*hw // perpendicular to the shaft
-			xs := []float32{hx, bx + px, bx - px}
-			ys := []float32{hy, by + py, by - py}
-			c.PaintPolygonFilled(xs, ys, col).Send()
+			if e.Head == layeredgraph.EdgeHeadOpen {
+				// Closed outline, in the solid stroke whatever the line's dash.
+				xs := []float32{hx, bx + px, bx - px, hx}
+				ys := []float32{hy, by + py, by - py, hy}
+				c.PaintPolyline(xs, ys, col, strokeW).Send()
+			} else {
+				xs := []float32{hx, bx + px, bx - px}
+				ys := []float32{hy, by + py, by - py}
+				c.PaintPolygonFilled(xs, ys, col).Send()
+			}
 		}
 	}
 }

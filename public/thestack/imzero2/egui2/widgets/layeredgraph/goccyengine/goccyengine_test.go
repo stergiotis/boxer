@@ -4,6 +4,7 @@ package goccyengine_test
 
 import (
 	"context"
+	"math"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -374,4 +375,72 @@ func TestLayout_EdgeIDIsOpaque(t *testing.T) {
 	require.Len(t, lay.Edges, 1)
 	assert.Equal(t, odd, lay.Edges[0].ID)
 	assert.Empty(t, lay.Edges[0].Label, "the ID is not taken for a label")
+}
+
+// Notation passes through the layout: an undirected edge has no head point,
+// an open head keeps its head point, and the dash rides along.
+func TestLayout_EdgeNotationRoundTrips(t *testing.T) {
+	e := newEngine(t)
+	m := layeredgraph.GraphModel{
+		Nodes: []layeredgraph.Node{{ID: "vessel"}, {ID: "encounter"}, {ID: "tracked"}, {ID: "port"}},
+		Edges: []layeredgraph.Edge{
+			{ID: "undirected", From: "encounter", To: "vessel", Head: layeredgraph.EdgeHeadNone},
+			{ID: "realizes", From: "vessel", To: "tracked", Head: layeredgraph.EdgeHeadOpen, Dashed: true},
+			{ID: "plain", From: "vessel", To: "port"},
+		},
+	}
+	lay, err := e.Layout(context.Background(), m, layeredgraph.LayoutOpts{})
+	require.NoError(t, err)
+	require.Len(t, lay.Edges, 3)
+
+	undirected, realizes, plain := lay.Edges[0], lay.Edges[1], lay.Edges[2]
+	assert.Equal(t, layeredgraph.EdgeHeadNone, undirected.Head)
+	assert.Nil(t, undirected.ArrowHead, "an undirected edge has no head point")
+	assert.False(t, undirected.Dashed)
+	assert.NotEmpty(t, undirected.Points)
+
+	assert.Equal(t, layeredgraph.EdgeHeadOpen, realizes.Head)
+	assert.NotNil(t, realizes.ArrowHead, "an open head is still a head")
+	assert.True(t, realizes.Dashed)
+
+	assert.Equal(t, layeredgraph.EdgeHeadSolid, plain.Head)
+	assert.NotNil(t, plain.ArrowHead)
+	assert.False(t, plain.Dashed)
+}
+
+// End labels come back anchored near their own end: the tail label nearer
+// where the route starts, the head label nearer where it ends. An edge
+// without them has no anchors.
+func TestLayout_EndLabelsAreAnchoredAtTheirEnds(t *testing.T) {
+	e := newEngine(t)
+	m := layeredgraph.GraphModel{
+		Nodes: []layeredgraph.Node{{ID: "owner"}, {ID: "vessel"}, {ID: "port"}},
+		Edges: []layeredgraph.Edge{
+			{From: "owner", To: "vessel", Label: "owns", TailLabel: "holder", HeadLabel: "asset",
+				Head: layeredgraph.EdgeHeadNone},
+			{From: "vessel", To: "port", Label: "calls at"},
+		},
+	}
+	lay, err := e.Layout(context.Background(), m, layeredgraph.LayoutOpts{})
+	require.NoError(t, err)
+	require.Len(t, lay.Edges, 2)
+
+	ends := lay.Edges[0]
+	assert.Equal(t, "asset", ends.HeadLabel)
+	assert.Equal(t, "holder", ends.TailLabel)
+	require.NotNil(t, ends.HeadLabelPos)
+	require.NotNil(t, ends.TailLabelPos)
+	require.NotEmpty(t, ends.Points)
+	start, end := ends.Points[0], ends.Points[len(ends.Points)-1]
+	dist := func(a, b layeredgraph.Point) float64 { return math.Hypot(a.X-b.X, a.Y-b.Y) }
+	assert.Less(t, dist(*ends.TailLabelPos, start), dist(*ends.TailLabelPos, end), "tail label sits at the start")
+	assert.Less(t, dist(*ends.HeadLabelPos, end), dist(*ends.HeadLabelPos, start), "head label sits at the end")
+	for _, p := range []layeredgraph.Point{*ends.HeadLabelPos, *ends.TailLabelPos} {
+		assert.True(t, p.X >= 0 && p.X <= lay.Width && p.Y >= 0 && p.Y <= lay.Height, "anchor %v inside the drawing", p)
+	}
+
+	plain := lay.Edges[1]
+	assert.Nil(t, plain.HeadLabelPos, "an edge without end labels has no anchors")
+	assert.Nil(t, plain.TailLabelPos)
+	assert.Empty(t, plain.HeadLabel)
 }

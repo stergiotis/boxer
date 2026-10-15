@@ -232,6 +232,23 @@ func (e *Engine) renderLaidOutDot(ctx context.Context, m layeredgraph.GraphModel
 		if ed.Label != "" {
 			ge.SetLabel(ed.Label)
 		}
+		// Notation is emitted only when an edge departs from the default, so
+		// a graph that uses none of it produces the same DOT as before.
+		switch ed.Head {
+		case layeredgraph.EdgeHeadNone:
+			ge.SetDir(cgraph.NoneDir)
+		case layeredgraph.EdgeHeadOpen:
+			ge.SetArrowHead(cgraph.EmptyArrow)
+		}
+		if ed.Dashed {
+			ge.SetStyle(cgraph.DashedEdgeStyle)
+		}
+		if ed.HeadLabel != "" {
+			ge.SetHeadLabel(ed.HeadLabel)
+		}
+		if ed.TailLabel != "" {
+			ge.SetTailLabel(ed.TailLabel)
+		}
 	}
 
 	var buf bytes.Buffer
@@ -328,11 +345,32 @@ func parseLayout(dot []byte, m layeredgraph.GraphModel, edgeIDs []string, opts l
 			placed[idx] = true
 			me := m.Edges[idx]
 			el := layeredgraph.EdgeLayout{ID: edgeIDs[idx], Index: idx,
-				From: me.From, To: me.To, Label: me.Label, Weight: me.Weight}
+				From: me.From, To: me.To, Label: me.Label, Weight: me.Weight,
+				Head: me.Head, Dashed: me.Dashed,
+				HeadLabel: me.HeadLabel, TailLabel: me.TailLabel}
 			el.Points, el.ArrowHead = parseSpline(ed.GetStr("pos"), flip)
+			if me.Head == layeredgraph.EdgeHeadNone {
+				// Graphviz emits no head point for dir=none; this keeps the
+				// documented "no ArrowHead" true whatever the engine reports.
+				el.ArrowHead = nil
+			}
 			if lx, ly, ok := parsePoint(ed.GetStr("lp")); ok {
 				p := flip(lx, ly)
 				el.LabelPos = &p
+			}
+			// End-label anchors are read only for labels the model gave, so a
+			// position can never stand for text that does not exist.
+			if me.HeadLabel != "" {
+				if lx, ly, ok := parsePoint(ed.GetStr("head_lp")); ok {
+					p := flip(lx, ly)
+					el.HeadLabelPos = &p
+				}
+			}
+			if me.TailLabel != "" {
+				if lx, ly, ok := parsePoint(ed.GetStr("tail_lp")); ok {
+					p := flip(lx, ly)
+					el.TailLabelPos = &p
+				}
 			}
 			laid[idx] = el
 			ed, eerr = g.NextOut(ed)

@@ -70,6 +70,21 @@ type Node struct {
 	Weight float64
 }
 
+// EdgeHead is the mark drawn where an edge meets its To node.
+type EdgeHead uint8
+
+const (
+	// EdgeHeadSolid is a filled arrowhead — the default.
+	EdgeHeadSolid EdgeHead = iota
+	// EdgeHeadNone draws no head: the edge reads as undirected. It changes
+	// how the edge is drawn, not how the graph is ranked; From still ranks
+	// before To.
+	EdgeHeadNone
+	// EdgeHeadOpen is an unfilled triangle, as UML draws a realization or a
+	// generalization.
+	EdgeHeadOpen
+)
+
 // Edge is one directed arc. From and To reference Node.ID values. Several
 // edges may join the same ordered (From, To) pair, a node to itself included;
 // each is laid out, routed and drawn as an edge of its own.
@@ -80,6 +95,16 @@ type Edge struct {
 	ID       string
 	From, To string
 	Label    string
+	// Head is the mark at the To end; the zero value is a solid arrowhead.
+	Head EdgeHead
+	// Dashed draws the edge's line dashed; its head stays solid-lined. What
+	// a dash means is the caller's to decide.
+	Dashed bool
+	// HeadLabel and TailLabel are optional labels drawn near the To and the
+	// From end, beside Label at the middle — the roles at a relation's ends.
+	// The engine places them after layout without reserving room for them,
+	// so on a dense graph they can overlap nodes and other labels.
+	HeadLabel, TailLabel string
 	// Weight is an optional ORDINAL quantity carried by this edge: it orders
 	// and emphasises, and nothing here treats it as conserved or as comparable
 	// across drawings (ADR-0167 §SD1). 0 means *unknown*, not *none* — a
@@ -217,6 +242,14 @@ type EdgeLayout struct {
 	Points    []Point
 	ArrowHead *Point
 	LabelPos  *Point
+	// Head and Dashed are the input edge's notation, carried through for the
+	// renderer. An EdgeHeadNone edge has no ArrowHead.
+	Head   EdgeHead
+	Dashed bool
+	// HeadLabel and TailLabel are the input edge's end labels; HeadLabelPos
+	// and TailLabelPos, when non-nil, are their anchors (label centres).
+	HeadLabel, TailLabel       string
+	HeadLabelPos, TailLabelPos *Point
 	// Weight is the input Edge.Weight, carried through untouched so a renderer
 	// can map it without holding the input model alongside the layout.
 	Weight float64
