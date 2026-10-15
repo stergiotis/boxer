@@ -5,13 +5,14 @@
 // and this package is the only one here that imports the egui2 bindings.
 //
 // layeredgraph coordinates are points, top-left origin, y-down. Render fits
-// them into the target canvas (uniform scale, centred — the v1 "fit to view";
-// pan/zoom is deferred to v2 per ADR-0069), then paints nodes (box/circle),
-// edges (cubic-Bézier splines plus a synthesised arrow head) and labels, and
-// hit-tests the pointer against the painted shapes in Go over the widget's one
-// canvas, so hover and click are reported back without a sense region per node
-// (ADR-0228 §SD6). The reported interaction is from the previous frame
-// (immediate-mode one-frame lag).
+// them into the target canvas (uniform scale, centred; optionally held at a
+// minimum label size), composes the caller's pan and zoom when it passes a
+// ViewState, then paints nodes, edges (cubic-Bézier splines plus a
+// synthesised head) and labels, and hit-tests the pointer against the painted
+// shapes in Go over the widget's one canvas, so hover and click on nodes and
+// edges are reported back without a sense region per element (ADR-0228 §SD6).
+// The reported interaction is from the previous frame (immediate-mode
+// one-frame lag).
 package view
 
 import (
@@ -96,6 +97,12 @@ type RenderOpts struct {
 	// layout is scaled uniformly to fit and centred. When 0, the canvas is the
 	// layout's natural bounding box.
 	CanvasW, CanvasH float32
+	// MinLabelPx, when > 0, stops fitting from shrinking node labels below
+	// this many pixels: a layout that would be fitted smaller is drawn at the
+	// scale where its labels reach MinLabelPx, from the canvas's top-left,
+	// and runs past the canvas. Pair it with State so the rest can be panned
+	// to. It applies only when CanvasW and CanvasH are set.
+	MinLabelPx float32
 	// NodeFill overrides a node's fill by id (e.g. to mark the current FSM
 	// state). Returning ok=false keeps the style default. Optional.
 	NodeFill func(id string) (col color.Color, ok bool)
@@ -232,7 +239,17 @@ func Render(idBase uint64, lay *layeredgraph.Layout, opts RenderOpts) RenderResu
 	}
 
 	sm := c.CurrentApplicationState.StateManager
-	scale, offX, offY, canvasW, canvasH := fit(lay, opts.CanvasW, opts.CanvasH)
+	// The floor is the scale at which a node label of the layout's font —
+	// the smallest a node is laid out at — reaches MinLabelPx.
+	var minScale float64
+	if opts.MinLabelPx > 0 {
+		labelPt := float64(st.NodeFontSize)
+		if lay.FontSize > 0 {
+			labelPt = lay.FontSize
+		}
+		minScale = float64(opts.MinLabelPx) / labelPt
+	}
+	scale, offX, offY, canvasW, canvasH := fitFloor(lay, opts.CanvasW, opts.CanvasH, minScale)
 
 	// Wrap the whole render pass in an IdScope so canvas + per-node ids are
 	// regular stack-derived ids (not absolute ids). PaintCanvas/PaintSenseRegion
@@ -459,6 +476,15 @@ const (
 // size. A non-positive or degenerate target falls back to the layout's natural
 // size at 1:1.
 func fit(lay *layeredgraph.Layout, targetW, targetH float32) (scale, offX, offY float64, canvasW, canvasH float32) {
+	return fitFloor(lay, targetW, targetH, 0)
+}
+
+// fitFloor is fit with the scale held at or above minScale: when fitting
+// would scale the layout smaller, it is drawn at minScale instead, anchored at
+// the canvas's top-left margin rather than centred, since a drawing larger
+// than the canvas has nothing to centre in it and its start is where reading
+// begins. A non-positive minScale is no floor.
+func fitFloor(lay *layeredgraph.Layout, targetW, targetH float32, minScale float64) (scale, offX, offY float64, canvasW, canvasH float32) {
 	w, h := lay.Width, lay.Height
 	if targetW <= 0 || targetH <= 0 || w <= 0 || h <= 0 {
 		if w <= 0 {
@@ -471,6 +497,9 @@ func fit(lay *layeredgraph.Layout, targetW, targetH float32) (scale, offX, offY 
 	}
 	scale = min(float64(targetW)/w, float64(targetH)/h)
 	scale *= 1 - 2*fitPad // leave a margin on every side
+	if minScale > 0 && scale < minScale {
+		return minScale, float64(targetW) * fitPad, float64(targetH) * fitPad, targetW, targetH
+	}
 	// Centring uses the padded scale, so the margin is split evenly.
 	offX = (float64(targetW) - w*scale) / 2
 	offY = (float64(targetH) - h*scale) / 2

@@ -83,3 +83,46 @@ func TestFitCentresTheLayoutInTheCanvas(t *testing.T) {
 	require.InDelta(t, (800-200*scale)/2, offX, 1e-9)
 	require.InDelta(t, (400-100*scale)/2, offY, 1e-9)
 }
+
+// A layout too large to fit at the floor scale is drawn at the floor,
+// from the canvas's top-left margin, running past the canvas.
+func TestFitFloorHoldsTheScaleAndAnchorsTopLeft(t *testing.T) {
+	lay := &layeredgraph.Layout{Width: 4000, Height: 1000}
+	fitted, _, _, _, _ := fit(lay, 800, 400)
+	require.Less(t, fitted, 0.5, "plain fit shrinks this layout")
+
+	scale, offX, offY, cw, ch := fitFloor(lay, 800, 400, 0.5)
+	require.Equal(t, 0.5, scale, "the floor binds")
+	require.InDelta(t, 800*fitPad, offX, 1e-9, "anchored at the left margin")
+	require.InDelta(t, 400*fitPad, offY, 1e-9, "and the top one")
+	require.Equal(t, float32(800), cw, "the canvas keeps its size")
+	require.Equal(t, float32(400), ch)
+	require.Greater(t, lay.Width*scale+offX, float64(cw), "the drawing runs past the canvas")
+}
+
+// A layout that fits above the floor is fitted and centred exactly as
+// without one, and a zero floor is no floor.
+func TestFitFloorLeavesAFittingLayoutAlone(t *testing.T) {
+	lay := &layeredgraph.Layout{Width: 200, Height: 100}
+	s0, x0, y0, w0, h0 := fit(lay, 800, 400)
+	s1, x1, y1, w1, h1 := fitFloor(lay, 800, 400, 0.5)
+	require.Equal(t, []float64{s0, x0, y0}, []float64{s1, x1, y1})
+	require.Equal(t, []float32{w0, h0}, []float32{w1, h1})
+
+	big := &layeredgraph.Layout{Width: 4000, Height: 1000}
+	s0, x0, y0, _, _ = fit(big, 800, 400)
+	s1, x1, y1, _, _ = fitFloor(big, 800, 400, 0)
+	require.Equal(t, []float64{s0, x0, y0}, []float64{s1, x1, y1})
+}
+
+// Without a target canvas the layout is drawn at its natural size, floor or
+// not.
+func TestFitFloorNaturalSize(t *testing.T) {
+	lay := &layeredgraph.Layout{Width: 4000, Height: 1000}
+	scale, offX, offY, cw, ch := fitFloor(lay, 0, 0, 2)
+	require.Equal(t, 1.0, scale)
+	require.Zero(t, offX)
+	require.Zero(t, offY)
+	require.Equal(t, float32(4000), cw)
+	require.Equal(t, float32(1000), ch)
+}

@@ -247,7 +247,7 @@ the rest is reached by panning, so the option is meant to be used with
 | M3 — Diamond ✓ | §SD6 |
 | M4 — Row nodes ✓ | §SD5 |
 | M5 — Edge pick ✓ | §SD7 |
-| M6 — Minimum label size | §SD8 |
+| M6 — Minimum label size ✓ | §SD8 |
 
 M1 comes first because M2 and M5 hang per-edge data on its identity; the others
 are independent of each other.
