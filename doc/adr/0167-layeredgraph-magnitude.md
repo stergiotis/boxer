@@ -359,12 +359,12 @@ about how a picture *reads*, and no test asserts that.
 
 ## Updates
 
-### 2026-10-15 — the edge hooks take the laid-out edge (ADR-0331, proposed)
+### 2026-10-15 — the edge hooks take the laid-out edge (ADR-0331)
 
 §SD2 gave `EdgeWidth` `pipelineview`'s signature exactly, and §Consequences
 counted the match as a gain. Once `layeredgraph` keeps parallel edges,
 `(from, to)` no longer identifies an edge, so
-[ADR-0331](./0331-layeredgraph-entity-diagrams.md) §SD1 (proposed) changes
+[ADR-0331](./0331-layeredgraph-entity-diagrams.md) §SD1 changes
 `EdgeStroke` and `EdgeWidth` to take the `*layeredgraph.EdgeLayout`, and
 `WeightWidth` returns that shape. The mapping is unchanged: the square root,
 the decline of an unknown weight, the decline of everything without weights.

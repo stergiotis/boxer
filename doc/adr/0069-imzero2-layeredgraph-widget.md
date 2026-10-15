@@ -131,9 +131,9 @@ galley had left-aligned them as a block. The vertical metric difference
 therefore needs no margin of its own, unlike the horizontal one the
 2026-06-07 note below describes.
 
-### 2026-10-15 — parallel edges are kept (ADR-0331, proposed)
+### 2026-10-15 — parallel edges are kept (ADR-0331)
 
-[ADR-0331](./0331-layeredgraph-entity-diagrams.md) (proposed) retires the
+[ADR-0331](./0331-layeredgraph-entity-diagrams.md) retires the
 one-edge-per-ordered-pair contract. Every edge of the model is laid out and
 returned, in model order, matched back to its model edge by its Graphviz name
 rather than by its endpoints, so two edges between the same nodes — two loops
