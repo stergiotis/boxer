@@ -73,6 +73,27 @@ type Node struct {
 	// and its weightless twin do not lay out identically, and a caller that
 	// caches layouts must key on the weights.
 	Weight float64
+	// Subtitle and Rows make the node a row node (see IsRowNode): a title
+	// line — Label, with Subtitle beside it — above one row per entry of
+	// Rows, as a record or a class with its fields is drawn. A row node
+	// must be a NodeShapeBox, and its title, subtitle and rows are one line
+	// each; the engine rejects anything else. Every line of a row node is
+	// laid out at the node's one font size.
+	Subtitle string
+	Rows     []Row
+}
+
+// Row is one line of a row node: an ID the caller can correlate (unique
+// within the node) and the text drawn.
+type Row struct {
+	ID   string
+	Text string
+}
+
+// IsRowNode reports whether n is laid out as a row node: it has rows, or a
+// subtitle. A title with neither is an ordinary box.
+func (n Node) IsRowNode() bool {
+	return len(n.Rows) > 0 || n.Subtitle != ""
 }
 
 // EdgeHead is the mark drawn where an edge meets its To node.
@@ -215,6 +236,18 @@ func WeightFontSize(m GraphModel, minPt float64, maxPt float64) func(weight floa
 // pixels, top-left origin, y increasing downward.
 type Point struct{ X, Y float64 }
 
+// Rect is an axis-aligned rectangle in the output space, Min its top-left
+// corner and Max its bottom-right.
+type Rect struct{ Min, Max Point }
+
+// RowLayout is a placed row of a row node: the input Row and the rectangle
+// the engine laid it out in.
+type RowLayout struct {
+	ID   string
+	Text string
+	Rect Rect
+}
+
 // NodeLayout is a placed node. Center is the node centre; W and H are its full
 // bounding-box width and height.
 type NodeLayout struct {
@@ -229,6 +262,18 @@ type NodeLayout struct {
 	// unweighted graph. A renderer paints the label at this size when set, for
 	// the same reason it honours Layout.FontSize: the box was fitted to it.
 	FontSize float64
+	// For a row node (see IsRowNode): Title is the rectangle of the title
+	// line, which holds Label and Subtitle, and Rows the placed rows, in
+	// input order, stacked below it inside the box. All three are zero for
+	// any other node.
+	Subtitle string
+	Title    Rect
+	Rows     []RowLayout
+}
+
+// IsRowNode reports whether n was laid out as a row node.
+func (n NodeLayout) IsRowNode() bool {
+	return n.Title != (Rect{})
 }
 
 // EdgeLayout is a routed edge. Points are the control points of the routed

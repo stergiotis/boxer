@@ -470,3 +470,164 @@ func TestLayout_DiamondShape(t *testing.T) {
 	// shapes, so the diamond is at least as tall, not necessarily taller.
 	assert.GreaterOrEqual(t, hub.H, box.H)
 }
+
+func vesselRowNode() layeredgraph.Node {
+	return layeredgraph.Node{ID: "vessel", Label: "Vessel", Subtitle: "entity", Rows: []layeredgraph.Row{
+		{ID: "imo", Text: "imo: Number"},
+		{ID: "name", Text: "name: Text"},
+		{ID: "flag", Text: "flag: Country"},
+	}}
+}
+
+// Under every rank direction a row node comes back as a title rectangle above
+// its row rectangles, in input order, stacked top to bottom with one shared
+// width, together filling the node's box.
+func TestLayout_RowNodeStacksUnderEveryRankDir(t *testing.T) {
+	e := newEngine(t)
+	for _, dir := range []layeredgraph.RankDir{layeredgraph.RankDirTopBottom, layeredgraph.RankDirLeftRight,
+		layeredgraph.RankDirBottomTop, layeredgraph.RankDirRightLeft} {
+		m := layeredgraph.GraphModel{
+			Nodes: []layeredgraph.Node{vesselRowNode(), {ID: "port"}},
+			Edges: []layeredgraph.Edge{{From: "vessel", To: "port"}},
+		}
+		lay, err := e.Layout(context.Background(), m, layeredgraph.LayoutOpts{RankDir: dir})
+		require.NoError(t, err, "rank dir %d", dir)
+
+		var v layeredgraph.NodeLayout
+		for _, n := range lay.Nodes {
+			if n.ID == "vessel" {
+				v = n
+			}
+		}
+		require.True(t, v.IsRowNode(), "rank dir %d", dir)
+		assert.Equal(t, "Vessel", v.Label)
+		assert.Equal(t, "entity", v.Subtitle)
+		require.Len(t, v.Rows, 3)
+
+		fields := append([]layeredgraph.Rect{v.Title}, func() (r []layeredgraph.Rect) {
+			for _, row := range v.Rows {
+				r = append(r, row.Rect)
+			}
+			return
+		}()...)
+		for i, f := range fields {
+			assert.Less(t, f.Min.Y, f.Max.Y, "rank dir %d field %d has height", dir, i)
+			assert.InDelta(t, fields[0].Min.X, f.Min.X, 0.01, "rank dir %d field %d left edge", dir, i)
+			assert.InDelta(t, fields[0].Max.X, f.Max.X, 0.01, "rank dir %d field %d right edge", dir, i)
+			if i > 0 {
+				assert.InDelta(t, fields[i-1].Max.Y, f.Min.Y, 0.01, "rank dir %d field %d directly below field %d", dir, i, i-1)
+			}
+		}
+		for i, row := range v.Rows {
+			assert.Equal(t, vesselRowNode().Rows[i].ID, row.ID)
+			assert.Equal(t, vesselRowNode().Rows[i].Text, row.Text)
+		}
+		// The fields fill the box the engine reports, within Graphviz's
+		// half-point pen inset.
+		left, top := v.Center.X-v.W/2, v.Center.Y-v.H/2
+		assert.InDelta(t, left, fields[0].Min.X, 0.6, "rank dir %d", dir)
+		assert.InDelta(t, left+v.W, fields[0].Max.X, 0.6, "rank dir %d", dir)
+		assert.InDelta(t, top, fields[0].Min.Y, 0.6, "rank dir %d", dir)
+		assert.InDelta(t, top+v.H, fields[len(fields)-1].Max.Y, 0.6, "rank dir %d", dir)
+	}
+}
+
+// Text full of record syntax stays one field per row: were it not escaped,
+// the braces and bars would split it into fields of its own and the field
+// count would not match the rows.
+func TestLayout_RowTextWithRecordSyntax(t *testing.T) {
+	e := newEngine(t)
+	odd := []layeredgraph.Row{
+		{ID: "a", Text: `tags: {a|b}`},
+		{ID: "b", Text: `<port> \N "quoted"  two  spaces`},
+		{ID: "c", Text: ``},
+	}
+	m := layeredgraph.GraphModel{Nodes: []layeredgraph.Node{{ID: "n", Label: `T{|}`, Subtitle: `<s>`, Rows: odd}}}
+	for _, dir := range []layeredgraph.RankDir{layeredgraph.RankDirTopBottom, layeredgraph.RankDirLeftRight} {
+		lay, err := e.Layout(context.Background(), m, layeredgraph.LayoutOpts{RankDir: dir})
+		require.NoError(t, err)
+		require.Len(t, lay.Nodes, 1)
+		n := lay.Nodes[0]
+		assert.Equal(t, `T{|}`, n.Label)
+		assert.Equal(t, `<s>`, n.Subtitle)
+		require.Len(t, n.Rows, 3)
+		for i := range odd {
+			assert.Equal(t, odd[i].Text, n.Rows[i].Text)
+			assert.Greater(t, n.Rows[i].Rect.Max.Y, n.Rows[i].Rect.Min.Y, "row %d laid out", i)
+		}
+	}
+}
+
+// A subtitle alone makes a row node with no rows: just its title field.
+// Neither rows nor a subtitle is an ordinary box with no title rectangle.
+func TestLayout_RowNodeWithoutRows(t *testing.T) {
+	e := newEngine(t)
+	m := layeredgraph.GraphModel{Nodes: []layeredgraph.Node{
+		{ID: "titled", Label: "Contract", Subtitle: "contract"},
+		{ID: "plain", Label: "Plain"},
+	}}
+	lay, err := e.Layout(context.Background(), m, layeredgraph.LayoutOpts{})
+	require.NoError(t, err)
+	byID := map[string]layeredgraph.NodeLayout{}
+	for _, n := range lay.Nodes {
+		byID[n.ID] = n
+	}
+	assert.True(t, byID["titled"].IsRowNode())
+	assert.Empty(t, byID["titled"].Rows)
+	assert.Greater(t, byID["titled"].Title.Max.Y, byID["titled"].Title.Min.Y)
+	assert.False(t, byID["plain"].IsRowNode())
+	assert.Equal(t, layeredgraph.Rect{}, byID["plain"].Title)
+}
+
+// The engine refuses a row node it could not lay out as one: another shape,
+// a line break in any of its lines, or two rows sharing an ID.
+func TestLayout_InvalidRowNodesError(t *testing.T) {
+	e := newEngine(t)
+	rows := []layeredgraph.Row{{ID: "a", Text: "a"}}
+	for name, n := range map[string]layeredgraph.Node{
+		"ellipse":         {ID: "n", Shape: layeredgraph.NodeShapeEllipse, Rows: rows},
+		"diamond":         {ID: "n", Shape: layeredgraph.NodeShapeDiamond, Subtitle: "s"},
+		"break-in-row":    {ID: "n", Rows: []layeredgraph.Row{{ID: "a", Text: "two\nlines"}}},
+		"break-in-title":  {ID: "n", Label: "two\nlines", Rows: rows},
+		"break-in-sub":    {ID: "n", Subtitle: "two\r\nlines"},
+		"duplicate-rowid": {ID: "n", Rows: []layeredgraph.Row{{ID: "a"}, {ID: "a"}}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			_, err := e.Layout(context.Background(), layeredgraph.GraphModel{Nodes: []layeredgraph.Node{n}}, layeredgraph.LayoutOpts{})
+			require.Error(t, err)
+			assert.Equal(t, "n", ebtest.Fields(t, err)["node"], "the error names the node")
+		})
+	}
+}
+
+// A weighted row node is laid out at its scaled font like any node, and its
+// rows grow with it.
+func TestLayout_WeightedRowNodeScales(t *testing.T) {
+	e := newEngine(t)
+	light, heavy := vesselRowNode(), vesselRowNode()
+	light.ID, light.Weight = "light", 1
+	heavy.ID, heavy.Weight = "heavy", 100
+	m := layeredgraph.GraphModel{Nodes: []layeredgraph.Node{light, heavy}}
+	lay, err := e.Layout(context.Background(), m, layeredgraph.LayoutOpts{NodeFontSize: layeredgraph.WeightFontSize(m, 0, 0)})
+	require.NoError(t, err)
+	byID := map[string]layeredgraph.NodeLayout{}
+	for _, n := range lay.Nodes {
+		byID[n.ID] = n
+	}
+	h, l := byID["heavy"].Rows[0].Rect, byID["light"].Rows[0].Rect
+	assert.Greater(t, h.Max.Y-h.Min.Y, l.Max.Y-l.Min.Y, "a heavier row node has taller rows")
+	assert.Greater(t, h.Max.X-h.Min.X, l.Max.X-l.Min.X, "and wider ones")
+}
+
+// Repeated node IDs merge into the first node, and the layout reports that
+// node's label and rows — the ones the engine actually laid out.
+func TestLayout_DuplicateNodeIDReportsTheFirst(t *testing.T) {
+	e := newEngine(t)
+	first := vesselRowNode()
+	second := layeredgraph.Node{ID: "vessel", Label: "Other"}
+	lay, err := e.Layout(context.Background(), layeredgraph.GraphModel{Nodes: []layeredgraph.Node{first, second}}, layeredgraph.LayoutOpts{})
+	require.NoError(t, err)
+	require.Len(t, lay.Nodes, 1)
+	assert.Equal(t, "Vessel", lay.Nodes[0].Label)
+	assert.Len(t, lay.Nodes[0].Rows, 3)
+}

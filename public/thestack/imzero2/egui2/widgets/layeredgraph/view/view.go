@@ -47,6 +47,15 @@ type Style struct {
 	// DefaultEdgeGap.
 	EdgeDash float32
 	EdgeGap  float32
+	// TitleFill is the band behind a row node's title line, and TitleText its
+	// ink; the band sets the title apart, where a heavier weight would, since
+	// the painter draws one weight. A zero TitleFill draws no band, a zero
+	// TitleText takes NodeText.
+	TitleFill color.Color
+	TitleText color.Color
+	// RowPadX is the gap between a row node's border and its left-aligned
+	// text (and its right-aligned subtitle), in points before scaling.
+	RowPadX float32
 }
 
 // Default dash pattern of a dashed edge, in pixels.
@@ -73,6 +82,9 @@ func DefaultStyle() Style {
 		EdgeFontSize: 11.0,
 		EdgeDash:     DefaultEdgeDash,
 		EdgeGap:      DefaultEdgeGap,
+		TitleFill:    hex(styletokens.NeutralSubtle),
+		TitleText:    hex(styletokens.NeutralTextExtreme),
+		RowPadX:      6.0,
 	}
 }
 
@@ -92,6 +104,10 @@ type RenderOpts struct {
 	// Style.NodeText cannot serve both. Returning ok=false keeps Style.NodeText.
 	// Optional.
 	NodeText func(id string) (col color.Color, ok bool)
+	// RowFill gives a row of a row node a band of colour, by node and row id
+	// (e.g. to mark a key field). Returning ok=false leaves the row on the
+	// node's fill. Optional.
+	RowFill func(nodeID, rowID string) (col color.Color, ok bool)
 	// EdgeStroke overrides an edge's stroke colour (e.g. to mark the active
 	// transition). It is given the laid-out edge — its ID, endpoints and
 	// weight — so parallel edges can be told apart, and must not modify it.
@@ -368,6 +384,10 @@ func Render(idBase uint64, lay *layeredgraph.Layout, opts RenderOpts) RenderResu
 					txt = c2
 				}
 			}
+			if n.IsRowNode() {
+				drawRowNode(&lay.Nodes[i], b, tf, fontPt*float32(escale), float32(escale), st, opts.RowFill, fill, txt, i == hovered)
+				continue
+			}
 			drawNode(n.Shape, cx, cy, w, h, st, fill, i == hovered)
 			c.PaintText(cx, cy, 1, 1, n.Label, fontPt*float32(escale), txt).Send()
 		}
@@ -519,6 +539,93 @@ func diamondOutline(cx, cy, rx, ry, d float32) (xs, ys []float32) {
 	xs = []float32{cx, cx + rx, cx, cx - rx, cx}
 	ys = []float32{cy - ry, cy, cy + ry, cy, cy - ry}
 	return
+}
+
+// drawRowNode paints a row node: the box's fill, the title band and any row
+// bands, the rule under the title, the box's outline, and then the text — the
+// title left-aligned in Style.TitleText, the subtitle right-aligned in
+// Style.EdgeText, each row left-aligned in ink. Bands span the box's full
+// width and meet its border; a band at the top or bottom of the box takes the
+// box's rounded corners there and stays square elsewhere.
+func drawRowNode(n *layeredgraph.NodeLayout, b nodeBox, tf func(layeredgraph.Point) (float32, float32),
+	fontPx float32, escale float32, st Style, rowFill func(nodeID, rowID string) (color.Color, bool),
+	fill color.Color, ink color.Color, hovered bool) {
+	minX, minY, maxX, maxY := b.cx-b.w/2, b.cy-b.h/2, b.cx+b.w/2, b.cy+b.h/2
+	c.PaintRectFilled(minX, minY, maxX, maxY, st.Rounding, fill).Send()
+
+	spans := fieldSpans(n, minY, maxY, tf)
+	last := len(spans) - 1
+	titleTop, titleBottom := spans[0][0], spans[0][1]
+	if st.TitleFill != (color.Color{}) {
+		fillBand(minX, titleTop, maxX, titleBottom, st.Rounding, true, last == 0, st.TitleFill)
+	}
+	if rowFill != nil {
+		for i, r := range n.Rows {
+			if col, ok := rowFill(n.ID, r.ID); ok {
+				fillBand(minX, spans[1+i][0], maxX, spans[1+i][1], st.Rounding, false, 1+i == last, col)
+			}
+		}
+	}
+	if last > 0 {
+		c.PaintLine(minX, titleBottom, maxX, titleBottom, st.NodeStroke, st.NodeStrokeW).Send()
+	}
+	c.PaintRectStroke(minX, minY, maxX, maxY, st.Rounding, st.NodeStroke, st.NodeStrokeW).Send()
+	if hovered {
+		c.PaintRectStroke(minX-2, minY-2, maxX+2, maxY+2, st.Rounding, st.Highlight, st.NodeStrokeW+1.5).Send()
+	}
+
+	pad := st.RowPadX * escale
+	titleInk := st.TitleText
+	if titleInk == (color.Color{}) {
+		titleInk = ink
+	}
+	titleY := (titleTop + titleBottom) / 2
+	c.PaintText(minX+pad, titleY, 0, 1, n.Label, fontPx, titleInk).Send()
+	if n.Subtitle != "" {
+		c.PaintText(maxX-pad, titleY, 2, 1, n.Subtitle, fontPx, st.EdgeText).Send()
+	}
+	for i, r := range n.Rows {
+		c.PaintText(minX+pad, (spans[1+i][0]+spans[1+i][1])/2, 0, 1, r.Text, fontPx, ink).Send()
+	}
+}
+
+// fieldSpans returns the vertical extent on screen of each field of a row
+// node — the title, then each row — as [top, bottom]. Each field runs from
+// its own top to its own bottom, except that the first starts at the box's
+// top (boxTop) and the last ends at its bottom (boxBottom), so no sliver of
+// the node's fill shows between a band and the border.
+func fieldSpans(n *layeredgraph.NodeLayout, boxTop, boxBottom float32, tf func(layeredgraph.Point) (float32, float32)) (spans [][2]float32) {
+	spans = make([][2]float32, 1+len(n.Rows))
+	for i := range spans {
+		r := n.Title
+		if i > 0 {
+			r = n.Rows[i-1].Rect
+		}
+		_, spans[i][0] = tf(r.Min)
+		_, spans[i][1] = tf(r.Max)
+	}
+	spans[0][0] = boxTop
+	spans[len(spans)-1][1] = boxBottom
+	return
+}
+
+// fillBand fills a full-width band of a rounded box: rounded at the top
+// corners when roundTop, at the bottom ones when roundBottom, square
+// otherwise. The rounded fill is squared off by a second, square fill over
+// the half that must not be rounded.
+func fillBand(minX, minY, maxX, maxY, rounding float32, roundTop, roundBottom bool, col color.Color) {
+	if rounding <= 0 || (!roundTop && !roundBottom) {
+		c.PaintRectFilled(minX, minY, maxX, maxY, 0, col).Send()
+		return
+	}
+	c.PaintRectFilled(minX, minY, maxX, maxY, rounding, col).Send()
+	mid := (minY + maxY) / 2
+	if !roundTop {
+		c.PaintRectFilled(minX, minY, maxX, mid, 0, col).Send()
+	}
+	if !roundBottom {
+		c.PaintRectFilled(minX, mid, maxX, maxY, 0, col).Send()
+	}
 }
 
 func drawNode(sh layeredgraph.NodeShape, cx, cy, w, h float32, st Style, fill color.Color, hovered bool) {

@@ -47,3 +47,29 @@ func TestNotationIsEmittedOnlyWhenUsed(t *testing.T) {
 	assert.True(t, strings.Contains(marked, "headlabel=h"), "head label is emitted")
 	assert.True(t, strings.Contains(marked, "taillabel=t"), "tail label is emitted")
 }
+
+// The record label stacks its fields under both rank axes — braces for
+// top-bottom ranks, a flat list for left-right ones — and escapes every
+// character the record parser would otherwise read.
+func TestRecordLabel(t *testing.T) {
+	n := layeredgraph.Node{ID: "n", Subtitle: "s t", Rows: []layeredgraph.Row{{ID: "x", Text: `a|b {c} <d> \e`}, {ID: "y", Text: "z"}}}
+	for dir, want := range map[layeredgraph.RankDir]string{
+		layeredgraph.RankDirTopBottom: `{Title\ \ \ s\ t|<r0> a\|b\ \{c\}\ \<d\>\ \\e|<r1> z}`,
+		layeredgraph.RankDirBottomTop: `{Title\ \ \ s\ t|<r0> a\|b\ \{c\}\ \<d\>\ \\e|<r1> z}`,
+		layeredgraph.RankDirLeftRight: `Title\ \ \ s\ t|<r0> a\|b\ \{c\}\ \<d\>\ \\e|<r1> z`,
+		layeredgraph.RankDirRightLeft: `Title\ \ \ s\ t|<r0> a\|b\ \{c\}\ \<d\>\ \\e|<r1> z`,
+	} {
+		got, err := recordLabel(n, "Title ", dir)
+		require.NoError(t, err)
+		assert.Equal(t, want, got, "rank dir %d", dir)
+	}
+}
+
+// A graph without row nodes emits no record.
+func TestRecordIsEmittedOnlyForRowNodes(t *testing.T) {
+	plain := laidOutDot(t, layeredgraph.GraphModel{Nodes: []layeredgraph.Node{{ID: "a"}, {ID: "b", Shape: layeredgraph.NodeShapeDiamond}}})
+	assert.NotContains(t, plain, "record")
+	rows := laidOutDot(t, layeredgraph.GraphModel{Nodes: []layeredgraph.Node{{ID: "a", Rows: []layeredgraph.Row{{ID: "r", Text: "r"}}}}})
+	assert.Contains(t, rows, "shape=record")
+	assert.Contains(t, rows, "rects=")
+}

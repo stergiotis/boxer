@@ -238,7 +238,7 @@ the rest is reached by panning, so the option is meant to be used with
 | M1 — Identity and parallel edges ✓ | §SD1, §SD2, with the hook callers migrated in the same change |
 | M2 — Edge notation and end labels ✓ | §SD3, §SD4 |
 | M3 — Diamond ✓ | §SD6 |
-| M4 — Row nodes | §SD5 |
+| M4 — Row nodes ✓ | §SD5 |
 | M5 — Edge pick | §SD7 |
 | M6 — Minimum label size | §SD8 |
 

@@ -191,8 +191,19 @@ func (e *Engine) renderLaidOutDot(ctx context.Context, m layeredgraph.GraphModel
 		if label == "" {
 			label = n.ID
 		}
-		gn.SetLabel(label)
-		gn.SetShape(shape(n.Shape))
+		if n.IsRowNode() {
+			// A row node is a record: Graphviz sizes every field from its
+			// text and reports each field's rectangle back as "rects".
+			rec, rerr := recordLabel(n, label, opts.RankDir)
+			if rerr != nil {
+				return nil, rerr
+			}
+			gn.SetLabel(rec)
+			gn.SetShape(recordShape)
+		} else {
+			gn.SetLabel(label)
+			gn.SetShape(shape(n.Shape))
+		}
 		// Size boxes with sans-serif metrics. The imzero2 painter draws labels
 		// in the UI sans font (Noto), but Graphviz defaults to Times — a narrow
 		// serif — so it under-measures the label and long ones overflow the box
@@ -273,9 +284,13 @@ func parseLayout(dot []byte, m layeredgraph.GraphModel, edgeIDs []string, opts l
 	}
 	defer func() { _ = g.Close() }()
 
+	// The first node of a repeated ID is the one renderLaidOutDot emitted, so
+	// it is the one whose label, shape and rows describe the laid-out node.
 	meta := make(map[string]layeredgraph.Node, len(m.Nodes))
 	for _, n := range m.Nodes {
-		meta[n.ID] = n
+		if _, dup := meta[n.ID]; !dup {
+			meta[n.ID] = n
+		}
 	}
 
 	llx, lly, urx, ury := parseBB(g.GetStr("bb"))
@@ -304,7 +319,7 @@ func parseLayout(dot []byte, m layeredgraph.GraphModel, edgeIDs []string, opts l
 			if pt := nodeFontSize(md, opts); pt != effectiveFontSize(opts.FontSize) {
 				fontPt = pt
 			}
-			out.Nodes = append(out.Nodes, layeredgraph.NodeLayout{
+			nl := layeredgraph.NodeLayout{
 				FontSize: fontPt,
 				ID:       name,
 				Label:    label,
@@ -312,7 +327,23 @@ func parseLayout(dot []byte, m layeredgraph.GraphModel, edgeIDs []string, opts l
 				Center:   flip(cx, cy),
 				W:        inchesToPoints(n.GetStr("width")),
 				H:        inchesToPoints(n.GetStr("height")),
-			})
+			}
+			if md.IsRowNode() {
+				// One rectangle per field, in label order: the title, then
+				// each row.
+				rects, rok := parseRects(n.GetStr("rects"), flip)
+				if !rok || len(rects) != 1+len(md.Rows) {
+					return nil, eb.Build().Str("node", name).Int("rects", len(rects)).Int("rows", len(md.Rows)).
+						Errorf("a row node's laid-out fields do not match its rows")
+				}
+				nl.Subtitle = md.Subtitle
+				nl.Title = rects[0]
+				nl.Rows = make([]layeredgraph.RowLayout, len(md.Rows))
+				for i, r := range md.Rows {
+					nl.Rows[i] = layeredgraph.RowLayout{ID: r.ID, Text: r.Text, Rect: rects[1+i]}
+				}
+			}
+			out.Nodes = append(out.Nodes, nl)
 		}
 		n, err = g.NextNode(n)
 	}
