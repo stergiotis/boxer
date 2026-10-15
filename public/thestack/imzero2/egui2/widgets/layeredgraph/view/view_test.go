@@ -11,6 +11,11 @@ import (
 // magnitude overlay's judgement calls live (ADR-0167 §SD2), so it is pinned
 // here.
 
+// weighted is an edge carrying weight w, as the hook is handed it.
+func weighted(w float64) *layeredgraph.EdgeLayout {
+	return &layeredgraph.EdgeLayout{From: "a", To: "b", Weight: w}
+}
+
 func layWith(weights ...float64) *layeredgraph.Layout {
 	lay := &layeredgraph.Layout{}
 	for _, w := range weights {
@@ -25,7 +30,7 @@ func TestWeightWidthSpansTheBounds(t *testing.T) {
 
 	got := make([]float32, 0, 3)
 	for _, w := range []float64{1, 100, 10_000} {
-		width, ok := h("", "", w)
+		width, ok := h(weighted(w))
 		if !ok {
 			t.Fatalf("weight %v declined", w)
 		}
@@ -56,13 +61,13 @@ func TestWeightWidthSpansTheBounds(t *testing.T) {
 // default width instead of becoming a hairline that asserts "no flow".
 func TestWeightWidthDeclinesUnknown(t *testing.T) {
 	h := WeightWidth(layWith(0, 500), 0, 0)
-	if _, ok := h("", "", 0); ok {
+	if _, ok := h(weighted(0)); ok {
 		t.Error("a zero weight was given a width")
 	}
-	if _, ok := h("", "", -1); ok {
+	if _, ok := h(weighted(-1)); ok {
 		t.Error("a negative weight was given a width")
 	}
-	if _, ok := h("", "", 500); !ok {
+	if _, ok := h(weighted(500)); !ok {
 		t.Error("a positive weight was declined")
 	}
 }
@@ -74,10 +79,17 @@ func TestWeightWidthDeclinesEverythingWithoutWeights(t *testing.T) {
 	for _, lay := range []*layeredgraph.Layout{layWith(), layWith(0, 0, 0), nil} {
 		h := WeightWidth(lay, 0, 0)
 		for _, w := range []float64{0, 1, 1e9} {
-			if _, ok := h("a", "b", w); ok {
+			if _, ok := h(weighted(w)); ok {
 				t.Fatalf("a weightless layout gave weight %v a width", w)
 			}
 		}
+	}
+}
+
+// A nil edge is declined rather than dereferenced.
+func TestWeightWidthDeclinesNil(t *testing.T) {
+	if _, ok := WeightWidth(layWith(10), 0, 0)(nil); ok {
+		t.Error("a nil edge was given a width")
 	}
 }
 
@@ -85,7 +97,7 @@ func TestWeightWidthDeclinesEverythingWithoutWeights(t *testing.T) {
 // gets a flat mapping, not an inverted one.
 func TestWeightWidthNormalisesBounds(t *testing.T) {
 	h := WeightWidth(layWith(10), 9, 3)
-	w, ok := h("", "", 10)
+	w, ok := h(weighted(10))
 	if !ok {
 		t.Fatal("declined")
 	}

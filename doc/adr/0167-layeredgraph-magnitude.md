@@ -357,6 +357,22 @@ about how a picture *reads*, and no test asserts that.
 
 §SD7's four deferrals are untouched.
 
+## Updates
+
+### 2026-10-15 — the edge hooks take the laid-out edge (ADR-0331, proposed)
+
+§SD2 gave `EdgeWidth` `pipelineview`'s signature exactly, and §Consequences
+counted the match as a gain. Once `layeredgraph` keeps parallel edges,
+`(from, to)` no longer identifies an edge, so
+[ADR-0331](./0331-layeredgraph-entity-diagrams.md) §SD1 (proposed) changes
+`EdgeStroke` and `EdgeWidth` to take the `*layeredgraph.EdgeLayout`, and
+`WeightWidth` returns that shape. The mapping is unchanged: the square root,
+the decline of an unknown weight, the decline of everything without weights.
+The match with `pipelineview` no longer holds for the two edge hooks; `NodeFill`
+and `NodeText` still match. A colour hook that ramps by weight now reads
+`e.Weight` from the edge it is given, where it had to look the weight up by
+endpoints.
+
 ## References
 
 | Source | What it settles |

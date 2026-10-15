@@ -84,11 +84,15 @@ func Shared() (*Engine, error) {
 // coordinates from the rendered DOT rather than off the live graph because
 // Render frees the layout as it returns.
 func (e *Engine) Layout(ctx context.Context, m layeredgraph.GraphModel, opts layeredgraph.LayoutOpts) (*layeredgraph.Layout, error) {
+	edgeIDs, err := layeredgraph.EdgeIDs(m)
+	if err != nil {
+		return nil, err
+	}
 	dot, err := e.renderLaidOutDot(ctx, m, opts)
 	if err != nil {
 		return nil, err
 	}
-	lay, err := parseLayout(dot, m, opts)
+	lay, err := parseLayout(dot, m, edgeIDs, opts)
 	if err != nil {
 		return nil, err
 	}
@@ -217,7 +221,10 @@ func (e *Engine) renderLaidOutDot(ctx context.Context, m layeredgraph.GraphModel
 		if !ok {
 			return nil, eb.Build().Int("edge", i).Str("to", ed.To).Errorf("edge names an unknown to-node")
 		}
-		// Unique per-edge name keeps parallel edges distinct in the graph.
+		// The edge's model index is its Graphviz name: unique, so parallel
+		// edges stay distinct, and written back as the edge's key, which is
+		// how parseLayout finds the model edge again. Caller IDs never reach
+		// DOT, so they may hold any string.
 		ge, err := graph.CreateEdgeByName(strconv.Itoa(i), tail, head)
 		if err != nil {
 			return nil, eb.Build().Int("edge", i).Str("from", ed.From).Str("to", ed.To).Errorf("create edge: %w", err)
@@ -239,8 +246,10 @@ func (e *Engine) renderLaidOutDot(ctx context.Context, m layeredgraph.GraphModel
 // line-wraps long edge splines; the parser unwraps them. Node labels/shapes
 // are taken from the input model (a node whose label equals its name may be
 // emitted with the "\N" default rather than an explicit label); only geometry
-// is read from Graphviz.
-func parseLayout(dot []byte, m layeredgraph.GraphModel, opts layeredgraph.LayoutOpts) (*layeredgraph.Layout, error) {
+// is read from Graphviz. The same holds for edges, whose ID, label and weight
+// come from the model edge their Graphviz name indexes. edgeIDs are the
+// resolved IDs of m's edges, in model order.
+func parseLayout(dot []byte, m layeredgraph.GraphModel, edgeIDs []string, opts layeredgraph.LayoutOpts) (*layeredgraph.Layout, error) {
 	g, err := graphviz.ParseBytes(dot)
 	if err != nil {
 		return nil, eh.Errorf("reparse laid-out dot: %w", err)
@@ -250,20 +259,6 @@ func parseLayout(dot []byte, m layeredgraph.GraphModel, opts layeredgraph.Layout
 	meta := make(map[string]layeredgraph.Node, len(m.Nodes))
 	for _, n := range m.Nodes {
 		meta[n.ID] = n
-	}
-
-	// Edge weights come back from the model, not from Graphviz: they are never
-	// emitted (ADR-0167 §SD1 keeps them out of layout), so the laid-out DOT
-	// does not carry them. Keyed by the ordered pair, which is the model's own
-	// no-multigraph identity; a repeated pair keeps the first, matching how a
-	// repeated node id keeps the first occurrence's label.
-	type edgeKey struct{ from, to string }
-	emeta := make(map[edgeKey]float64, len(m.Edges))
-	for _, e := range m.Edges {
-		k := edgeKey{e.From, e.To}
-		if _, dup := emeta[k]; !dup {
-			emeta[k] = e.Weight
-		}
 	}
 
 	llx, lly, urx, ury := parseBB(g.GetStr("bb"))
@@ -308,47 +303,39 @@ func parseLayout(dot []byte, m layeredgraph.GraphModel, opts layeredgraph.Layout
 		return nil, eh.Errorf("iterate nodes: %w", err)
 	}
 
-	// Edges: iterate each node's incident edges and process an edge once, from
-	// its tail side. The seen set also collapses a self-loop that Graphviz
-	// reports as both an out- and in-edge of the same node, and matches the v1
-	// single-edge-per-pair contract.
-	seen := make(map[[2]string]bool)
+	// Edges: walk each node's out-edges, so every edge — a self-loop included
+	// — is visited from its tail exactly once. The Graphviz name is the model
+	// index renderLaidOutDot gave it; the model edge supplies everything but
+	// geometry. Endpoints are taken from the model too: they are the caller's
+	// IDs, which the node names already are.
+	laid := make([]layeredgraph.EdgeLayout, len(m.Edges))
+	placed := make([]bool, len(m.Edges))
 	n, err = g.FirstNode()
 	for err == nil && n != nil {
-		nName, _ := n.Name()
-		ed, eerr := g.FirstEdge(n)
+		ed, eerr := g.FirstOut(n)
 		for eerr == nil && ed != nil {
-			tail, terr := ed.Tail()
-			head, herr := ed.Head()
-			if terr == nil && herr == nil && tail != nil && head != nil {
-				tName, _ := tail.Name()
-				hName, _ := head.Name()
-				if tName == nName {
-					key := [2]string{tName, hName}
-					if !seen[key] {
-						seen[key] = true
-						label := ed.GetStr("label")
-						if label == "\\E" {
-							// Graphviz declares the label attribute
-							// graph-wide once ANY edge carries one; edges
-							// without an explicit label then read back the
-							// unexpanded default escape "\E" (the edge
-							// name), which is never a real label. Mixed
-							// labeled/unlabeled graphs hit this.
-							label = ""
-						}
-						el := layeredgraph.EdgeLayout{From: tName, To: hName, Label: label,
-							Weight: emeta[edgeKey{tName, hName}]}
-						el.Points, el.ArrowHead = parseSpline(ed.GetStr("pos"), flip)
-						if lx, ly, ok := parsePoint(ed.GetStr("lp")); ok {
-							p := flip(lx, ly)
-							el.LabelPos = &p
-						}
-						out.Edges = append(out.Edges, el)
-					}
-				}
+			name, nerr := ed.Name()
+			if nerr != nil {
+				return nil, eh.Errorf("read edge name: %w", nerr)
 			}
-			ed, eerr = g.NextEdge(ed, n)
+			idx, aerr := strconv.Atoi(name)
+			if aerr != nil || idx < 0 || idx >= len(m.Edges) {
+				return nil, eb.Build().Str("name", name).Errorf("laid-out edge does not name a model edge")
+			}
+			if placed[idx] {
+				return nil, eb.Build().Int("edge", idx).Errorf("laid-out edge reported twice")
+			}
+			placed[idx] = true
+			me := m.Edges[idx]
+			el := layeredgraph.EdgeLayout{ID: edgeIDs[idx], Index: idx,
+				From: me.From, To: me.To, Label: me.Label, Weight: me.Weight}
+			el.Points, el.ArrowHead = parseSpline(ed.GetStr("pos"), flip)
+			if lx, ly, ok := parsePoint(ed.GetStr("lp")); ok {
+				p := flip(lx, ly)
+				el.LabelPos = &p
+			}
+			laid[idx] = el
+			ed, eerr = g.NextOut(ed)
 		}
 		if eerr != nil {
 			return nil, eh.Errorf("iterate edges: %w", eerr)
@@ -358,6 +345,12 @@ func parseLayout(dot []byte, m layeredgraph.GraphModel, opts layeredgraph.Layout
 	if err != nil {
 		return nil, eh.Errorf("iterate nodes for edges: %w", err)
 	}
+	for i, ok := range placed {
+		if !ok {
+			return nil, eb.Build().Int("edge", i).Str("id", edgeIDs[i]).Errorf("model edge missing from the laid-out graph")
+		}
+	}
+	out.Edges = laid
 
 	return out, nil
 }

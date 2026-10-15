@@ -95,3 +95,29 @@ func TestWeightFontSizeNormalisesBounds(t *testing.T) {
 		t.Errorf("got %v, want the min after the swap collapsed the range", pt)
 	}
 }
+
+// EdgeIDs is the engine-neutral resolution every engine applies: an own ID
+// wins, an empty one is the index, and a collision of either kind fails.
+func TestEdgeIDs(t *testing.T) {
+	ids, err := EdgeIDs(GraphModel{Edges: []Edge{{}, {ID: "named"}, {}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := []string{"0", "named", "2"}; len(ids) != len(want) || ids[0] != want[0] || ids[1] != want[1] || ids[2] != want[2] {
+		t.Errorf("got %q, want %q", ids, want)
+	}
+
+	if ids, err = EdgeIDs(GraphModel{}); err != nil || len(ids) != 0 {
+		t.Errorf("an edgeless model gave %q, %v", ids, err)
+	}
+
+	for _, edges := range [][]Edge{
+		{{ID: "x"}, {ID: "x"}},
+		{{}, {ID: "0"}},
+		{{ID: "1"}, {}},
+	} {
+		if _, err = EdgeIDs(GraphModel{Edges: edges}); err == nil {
+			t.Errorf("%+v resolved without a collision", edges)
+		}
+	}
+}

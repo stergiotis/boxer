@@ -271,12 +271,12 @@ func archNodeFill(meta map[string]nodeMeta, selected CapId) func(id string) (col
 // archEdgeStroke dims edges into a non-effective backend and lights up the
 // selected cap's edges to its backends (focus), mirroring how fsmview lights
 // the next-possible transitions. Other edges keep the style default.
-func archEdgeStroke(meta map[string]nodeMeta, selected CapId) func(from, to string) (color.Color, bool) {
-	return func(from, to string) (color.Color, bool) {
-		if m, ok := meta[to]; ok && m.kind == nodeBackend && m.backendID != ActiveBackend(m.cap) {
+func archEdgeStroke(meta map[string]nodeMeta, selected CapId) func(e *layeredgraph.EdgeLayout) (color.Color, bool) {
+	return func(e *layeredgraph.EdgeLayout) (color.Color, bool) {
+		if m, ok := meta[e.To]; ok && m.kind == nodeBackend && m.backendID != ActiveBackend(m.cap) {
 			return color.Hex(styletokens.NeutralBorderFaint.AsHex()), true
 		}
-		if m, ok := meta[from]; ok && m.kind == nodeCap && m.cap == selected {
+		if m, ok := meta[e.From]; ok && m.kind == nodeCap && m.cap == selected {
 			return color.Hex(styletokens.AccentDefault.AsHex()), true
 		}
 		return color.Color{}, false

@@ -587,8 +587,8 @@ func (inst *View[T]) renderGraph() {
 			}
 			return color.Hex(0), false
 		},
-		EdgeStroke: func(from, _ string) (color.Color, bool) {
-			if from == currentID {
+		EdgeStroke: func(e *layeredgraph.EdgeLayout) (color.Color, bool) {
+			if e.From == currentID {
 				return nextEdgeColor, true
 			}
 			return restEdgeColor, true

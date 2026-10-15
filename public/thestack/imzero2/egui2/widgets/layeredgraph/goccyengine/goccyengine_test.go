@@ -271,3 +271,107 @@ func TestNodeMarginScalesWithTheFont(t *testing.T) {
 	assert.GreaterOrEqualf(t, widthRatio, fontRatio*0.99,
 		"box grew %.3fx for a %.3fx font — the margin did not follow", widthRatio, fontRatio)
 }
+
+// Two edges between the same ordered pair are two facts: each comes back as
+// its own EdgeLayout, with its own ID, label and route.
+func TestLayout_ParallelEdgesAreKept(t *testing.T) {
+	e := newEngine(t)
+	m := layeredgraph.GraphModel{
+		Nodes: []layeredgraph.Node{{ID: "a"}, {ID: "b"}},
+		Edges: []layeredgraph.Edge{
+			{ID: "owner", From: "a", To: "b", Label: "owner"},
+			{ID: "operator", From: "a", To: "b", Label: "operator"},
+		},
+	}
+	lay, err := e.Layout(context.Background(), m, layeredgraph.LayoutOpts{})
+	require.NoError(t, err)
+
+	require.Len(t, lay.Edges, 2, "neither parallel edge is dropped")
+	for i, want := range []string{"owner", "operator"} {
+		got := lay.Edges[i]
+		assert.Equal(t, want, got.ID, "edges come back in model order")
+		assert.Equal(t, i, got.Index)
+		assert.Equal(t, want, got.Label, "each keeps its own label")
+		assert.Equal(t, "a", got.From)
+		assert.Equal(t, "b", got.To)
+		assert.NotEmpty(t, got.Points)
+		require.NotNil(t, got.LabelPos)
+	}
+	assert.NotEqual(t, lay.Edges[0].Points, lay.Edges[1].Points, "the two are routed apart")
+	assert.NotEqual(t, *lay.Edges[0].LabelPos, *lay.Edges[1].LabelPos, "and labelled apart")
+}
+
+// A node with two loops of its own keeps both — the case a pair-keyed parse
+// lost twice over, once for the pair and once for the loop's double report.
+func TestLayout_ParallelSelfLoopsAreKept(t *testing.T) {
+	e := newEngine(t)
+	m := layeredgraph.GraphModel{
+		Nodes: []layeredgraph.Node{{ID: "vessel"}},
+		Edges: []layeredgraph.Edge{
+			{From: "vessel", To: "vessel", Label: "escorts"},
+			{From: "vessel", To: "vessel", Label: "tows"},
+		},
+	}
+	lay, err := e.Layout(context.Background(), m, layeredgraph.LayoutOpts{})
+	require.NoError(t, err)
+
+	require.Len(t, lay.Edges, 2)
+	assert.Equal(t, "escorts", lay.Edges[0].Label)
+	assert.Equal(t, "tows", lay.Edges[1].Label)
+	assert.NotEqual(t, lay.Edges[0].Points, lay.Edges[1].Points, "the loops are routed apart")
+}
+
+// An edge without an ID is identified by its index, so a caller that never
+// names edges still gets a stable, unique ID per edge.
+func TestLayout_EdgeIDDefaultsToIndex(t *testing.T) {
+	e := newEngine(t)
+	m := trafficLight()
+	m.Edges[2].ID = "stop"
+
+	lay, err := e.Layout(context.Background(), m, layeredgraph.LayoutOpts{})
+	require.NoError(t, err)
+
+	require.Len(t, lay.Edges, len(m.Edges))
+	for i, want := range []string{"0", "1", "stop", "3"} {
+		assert.Equal(t, want, lay.Edges[i].ID)
+		assert.Equal(t, i, lay.Edges[i].Index)
+		assert.Equal(t, m.Edges[i].From, lay.Edges[i].From)
+		assert.Equal(t, m.Edges[i].To, lay.Edges[i].To)
+	}
+}
+
+// IDs are how parallel edges are told apart, so two edges resolving to one ID
+// fail the layout — including an explicit ID that collides with another
+// edge's index.
+func TestLayout_DuplicateEdgeIDErrors(t *testing.T) {
+	e := newEngine(t)
+	for name, edges := range map[string][]layeredgraph.Edge{
+		"explicit":        {{ID: "x", From: "a", To: "b"}, {ID: "x", From: "b", To: "a"}},
+		"against-default": {{From: "a", To: "b"}, {ID: "0", From: "b", To: "a"}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			m := layeredgraph.GraphModel{Nodes: []layeredgraph.Node{{ID: "a"}, {ID: "b"}}, Edges: edges}
+			_, err := e.Layout(context.Background(), m, layeredgraph.LayoutOpts{})
+			require.Error(t, err)
+			fields := ebtest.Fields(t, err)
+			assert.Equal(t, uint64(1), fields["edge"], "the error names the second edge")
+			assert.Equal(t, uint64(0), fields["previous"], "and the first")
+		})
+	}
+}
+
+// An ID is opaque to Graphviz: characters that mean something in DOT come
+// back unchanged, and do not disturb the layout.
+func TestLayout_EdgeIDIsOpaque(t *testing.T) {
+	e := newEngine(t)
+	const odd = `a -> b [label="x"]; "\n`
+	m := layeredgraph.GraphModel{
+		Nodes: []layeredgraph.Node{{ID: "a"}, {ID: "b"}},
+		Edges: []layeredgraph.Edge{{ID: odd, From: "a", To: "b"}},
+	}
+	lay, err := e.Layout(context.Background(), m, layeredgraph.LayoutOpts{})
+	require.NoError(t, err)
+	require.Len(t, lay.Edges, 1)
+	assert.Equal(t, odd, lay.Edges[0].ID)
+	assert.Empty(t, lay.Edges[0].Label, "the ID is not taken for a label")
+}

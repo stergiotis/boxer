@@ -289,8 +289,8 @@ func (inst *PlayApp) renderSystemGraph() {
 		}
 		return
 	}
-	edgeStroke := func(from, to string) (col color.Color, ok bool) {
-		if strings.HasPrefix(from, "tab/") && strings.HasPrefix(to, "sig/") {
+	edgeStroke := func(e *layeredgraph.EdgeLayout) (col color.Color, ok bool) {
+		if strings.HasPrefix(e.From, "tab/") && strings.HasPrefix(e.To, "sig/") {
 			// The write-back half of the reactive loop.
 			return color.Hex(styletokens.AccentDefault.AsHex()), true
 		}

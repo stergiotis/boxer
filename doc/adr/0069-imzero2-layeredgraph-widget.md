@@ -110,6 +110,23 @@ Accepted (2026-06-06, reviewed by p@stergiotis). The decision is in force; the `
 
 ## Updates
 
+### 2026-10-15 — parallel edges are kept (ADR-0331, proposed)
+
+[ADR-0331](./0331-layeredgraph-entity-diagrams.md) (proposed) retires the
+one-edge-per-ordered-pair contract. Every edge of the model is laid out and
+returned, in model order, matched back to its model edge by its Graphviz name
+rather than by its endpoints, so two edges between the same nodes — two loops
+on one node included — come back as two `EdgeLayout`s. Each edge carries an
+ID (`Edge.ID`, its index when empty), and the view's `EdgeStroke` and
+`EdgeWidth` hooks take the laid-out edge instead of its endpoints. A consumer
+that passed the same pair twice and saw one edge now sees both.
+
+A correction to the body: §Subsidiary design decisions and
+[Resolutions at acceptance](#resolutions-at-acceptance-2026-06-06) item 3 call
+pan/zoom deferred to v2. It shipped on 2026-06-06 as an opt-in
+`view.ViewState`, passed through `view.RenderOpts.State`; fit-to-view stays the
+default.
+
 ### 2026-08-05 — an ordinal magnitude on both element types (ADR-0167)
 
 [ADR-0167](./0167-layeredgraph-magnitude.md) adds the widget's first magnitude

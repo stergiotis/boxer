@@ -17,6 +17,9 @@ package layeredgraph
 import (
 	"context"
 	"math"
+	"strconv"
+
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 // NodeShape is the drawn boundary of a node, rendered by the imzero2 painter.
@@ -67,10 +70,14 @@ type Node struct {
 	Weight float64
 }
 
-// Edge is one directed arc. From and To reference Node.ID values. v1 assumes
-// at most one edge per ordered (From, To) pair — consistent with the existing
-// `graph` widget's no-multigraph contract; parallel edges collapse to one.
+// Edge is one directed arc. From and To reference Node.ID values. Several
+// edges may join the same ordered (From, To) pair, a node to itself included;
+// each is laid out, routed and drawn as an edge of its own.
 type Edge struct {
+	// ID is caller-assigned and unique among the model's edges; it is echoed
+	// back on the matching EdgeLayout. Empty means the edge's index in
+	// GraphModel.Edges, written in decimal (see EdgeIDs).
+	ID       string
 	From, To string
 	Label    string
 	// Weight is an optional ORDINAL quantity carried by this edge: it orders
@@ -89,6 +96,28 @@ type Edge struct {
 type GraphModel struct {
 	Nodes []Node
 	Edges []Edge
+}
+
+// EdgeIDs resolves the ID of every edge in m, in model order: the edge's own
+// ID, or its index in m.Edges written in decimal when that is empty. Two edges
+// resolving to the same ID are an error, since an ID is how a caller tells
+// parallel edges apart.
+func EdgeIDs(m GraphModel) (ids []string, err error) {
+	ids = make([]string, len(m.Edges))
+	seen := make(map[string]int, len(m.Edges))
+	for i := range m.Edges {
+		id := m.Edges[i].ID
+		if id == "" {
+			id = strconv.Itoa(i)
+		}
+		if prev, dup := seen[id]; dup {
+			err = eb.Build().Str("id", id).Int("edge", i).Int("previous", prev).Errorf("duplicate edge id")
+			return
+		}
+		seen[id] = i
+		ids[i] = id
+	}
+	return
 }
 
 // LayoutOpts tunes the layout. A zero value means "engine default" for each
@@ -179,6 +208,10 @@ type NodeLayout struct {
 // non-nil, is the point the head arrow's tip lands on. LabelPos, when non-nil,
 // is the anchor for Label.
 type EdgeLayout struct {
+	// ID is the edge's resolved ID (see EdgeIDs), and Index its position in
+	// the input GraphModel.Edges.
+	ID        string
+	Index     int
 	From, To  string
 	Label     string
 	Points    []Point
@@ -190,7 +223,8 @@ type EdgeLayout struct {
 }
 
 // Layout is the positioned result. Width and Height are the overall bounding
-// box; every coordinate produced falls within [0,Width] × [0,Height].
+// box; every coordinate produced falls within [0,Width] × [0,Height]. Edges
+// holds one EdgeLayout per input edge, in model order.
 type Layout struct {
 	Nodes  []NodeLayout
 	Edges  []EdgeLayout

@@ -78,20 +78,22 @@ type RenderOpts struct {
 	// Style.NodeText cannot serve both. Returning ok=false keeps Style.NodeText.
 	// Optional.
 	NodeText func(id string) (col color.Color, ok bool)
-	// EdgeStroke overrides an edge's stroke colour by endpoints (e.g. to mark
-	// the active transition). Returning ok=false keeps the style default.
-	EdgeStroke func(from, to string) (col color.Color, ok bool)
-	// EdgeWidth overrides an edge's stroke width in pixels, given the ordinal
-	// quantity the layout carried through (0 when the edge has none).
+	// EdgeStroke overrides an edge's stroke colour (e.g. to mark the active
+	// transition). It is given the laid-out edge — its ID, endpoints and
+	// weight — so parallel edges can be told apart, and must not modify it.
+	// Returning ok=false keeps the style default. Optional.
+	EdgeStroke func(e *layeredgraph.EdgeLayout) (col color.Color, ok bool)
+	// EdgeWidth overrides an edge's stroke width in pixels, typically from the
+	// ordinal quantity the layout carried through on e.Weight (0 when the edge
+	// has none). It is given the laid-out edge and must not modify it.
 	// Returning ok=false keeps Style.EdgeStrokeW.
 	//
-	// This is the magnitude seam (ADR-0167 §SD2), and it is deliberately the
-	// same shape as pipelineview's: a host that knows what its numbers mean
-	// chooses the mapping, and WeightWidth is a ready-made one. Widths are
-	// pixels, not layout units — like Style.EdgeStrokeW and unlike
+	// This is the magnitude seam (ADR-0167 §SD2): a host that knows what its
+	// numbers mean chooses the mapping, and WeightWidth is a ready-made one.
+	// Widths are pixels, not layout units — like Style.EdgeStrokeW and unlike
 	// Style.Rounding, so a hairline stays a hairline when the drawing is
 	// scaled down to fit. Optional.
-	EdgeWidth func(from, to string, weight float64) (w float32, ok bool)
+	EdgeWidth func(e *layeredgraph.EdgeLayout) (w float32, ok bool)
 	// State, when non-nil, enables interactive pan/zoom: Render reads pointer
 	// drag (pan) and the zoom gesture (Ctrl+scroll / pinch / +/-) over the
 	// canvas and updates it in place. The caller holds one ViewState per graph
@@ -139,7 +141,7 @@ const (
 // This is deliberately a near-copy of pipelineview/view.VolumeWidth rather
 // than a shared helper: the two widgets share an idiom and nothing else, and
 // coupling them for a few lines of curve would be the more expensive mistake.
-func WeightWidth(lay *layeredgraph.Layout, minW float32, maxW float32) func(from string, to string, weight float64) (float32, bool) {
+func WeightWidth(lay *layeredgraph.Layout, minW float32, maxW float32) func(e *layeredgraph.EdgeLayout) (float32, bool) {
 	if minW <= 0 {
 		minW = DefaultWeightMinW
 	}
@@ -157,7 +159,11 @@ func WeightWidth(lay *layeredgraph.Layout, minW float32, maxW float32) func(from
 			}
 		}
 	}
-	return func(_ string, _ string, weight float64) (float32, bool) {
+	return func(e *layeredgraph.EdgeLayout) (float32, bool) {
+		if e == nil {
+			return 0, false
+		}
+		weight := e.Weight
 		if maxV <= 0 || weight <= 0 {
 			return 0, false
 		}
@@ -291,20 +297,21 @@ func Render(idBase uint64, lay *layeredgraph.Layout, opts RenderOpts) RenderResu
 		}
 
 		// Edges first, so nodes paint over the spline ends.
-		for _, e := range lay.Edges {
+		for i := range lay.Edges {
+			e := &lay.Edges[i]
 			col := st.EdgeStroke
 			if opts.EdgeStroke != nil {
-				if c2, ok := opts.EdgeStroke(e.From, e.To); ok {
+				if c2, ok := opts.EdgeStroke(e); ok {
 					col = c2
 				}
 			}
 			strokeW := st.EdgeStrokeW
 			if opts.EdgeWidth != nil {
-				if w, ok := opts.EdgeWidth(e.From, e.To, e.Weight); ok {
+				if w, ok := opts.EdgeWidth(e); ok {
 					strokeW = w
 				}
 			}
-			drawEdge(e, tf, col, strokeW)
+			drawEdge(*e, tf, col, strokeW)
 			if e.LabelPos != nil && e.Label != "" {
 				lx, ly := tf(*e.LabelPos)
 				c.PaintText(lx, ly, 1, 1, e.Label, st.EdgeFontSize*float32(escale), st.EdgeText).Send()

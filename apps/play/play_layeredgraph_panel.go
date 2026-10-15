@@ -193,8 +193,8 @@ type networkBuild struct {
 	// declared `selected`, drawn like a click's highlight.
 	opacityOf   map[string]float32
 	declaredSel map[string]struct{}
-	// strokeOf colours an edge by its endpoints, the key view.RenderOpts'
-	// EdgeStroke hook is given. Only edges naming a tone appear.
+	// strokeOf colours an edge by its endpoints, which the EdgeStroke hook
+	// reads off the laid-out edge. Only edges naming a tone appear.
 	strokeOf map[[2]string]color.Color
 	// maxWeight / maxNodeWeight are the heaviest edge and vertex weights seen
 	// (netModel's, carried through): what the magnitude channels normalise
@@ -412,30 +412,19 @@ func (inst *NetworkDriver) render(edgesRec arrow.RecordBatch, ec networkEdgesCla
 	// tone still wins the colour, being the more specific claim; it does not
 	// touch the width, so a toned edge still carries its magnitude.
 	weighted := b.maxWeight > 0
-	var edgeWidth func(from, to string, weight float64) (float32, bool)
-	var edgeWeights map[[2]string]float64
+	var edgeWidth func(e *layeredgraph.EdgeLayout) (float32, bool)
 	if weighted {
 		edgeWidth = view.WeightWidth(inst.layout, 0, 0)
-		// The colour hook is keyed by endpoints only, so it needs the weight
-		// looked up — off the layout, which carries it through for exactly
-		// this reason, rather than off a second copy in the build.
-		edgeWeights = make(map[[2]string]float64, len(inst.layout.Edges))
-		for _, e := range inst.layout.Edges {
-			edgeWeights[[2]string{e.From, e.To}] = e.Weight
-		}
 	}
-	stroke := func(from, to string) (col color.Color, ok bool) {
-		key := [2]string{from, to}
+	stroke := func(e *layeredgraph.EdgeLayout) (col color.Color, ok bool) {
 		if b.strokeOf != nil {
-			if col, ok = b.strokeOf[key]; ok {
+			if col, ok = b.strokeOf[[2]string{e.From, e.To}]; ok {
 				return
 			}
 		}
-		if !weighted {
-			return
-		}
-		w, found := edgeWeights[key]
-		if !found || w <= 0 {
+		// The weight is the one the layout carried through on the edge itself.
+		w := e.Weight
+		if !weighted || w <= 0 {
 			return
 		}
 		// Same square root as the width, so the channels stay in step, then
