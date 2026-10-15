@@ -558,9 +558,9 @@ impl<R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'_, R, W> {
             tracing::info!(
                 format = "tree",
                 context_us = t_context.as_micros() as u64,
-                pass_us = (t_pass - t_context).as_micros() as u64,
+                pass_us = t_pass.saturating_sub(t_context).as_micros() as u64,
                 recorder_us = t.sweep_ns / 1000,
-                write_us = (t_start.elapsed() - t_pass).as_micros() as u64,
+                write_us = t_start.elapsed().saturating_sub(t_pass).as_micros() as u64,
                 bytes = doc.len(),
                 "capture cost"
             );
@@ -577,7 +577,7 @@ impl<R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'_, R, W> {
             tracing::info!(
                 format = "svg",
                 context_us = t_context.as_micros() as u64,
-                pass_us = (t_pass - t_context).as_micros() as u64,
+                pass_us = t_pass.saturating_sub(t_context).as_micros() as u64,
                 bytes = svg.len(),
                 "capture cost"
             );
@@ -636,9 +636,9 @@ impl<R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'_, R, W> {
         tracing::info!(
             format = "png",
             context_us = t_context.as_micros() as u64,
-            pass_us = (t_pass - t_context).as_micros() as u64,
-            tessellate_us = (t_tess - t_pass).as_micros() as u64,
-            raster_us = (t_start.elapsed() - t_tess).as_micros() as u64,
+            pass_us = t_pass.saturating_sub(t_context).as_micros() as u64,
+            tessellate_us = t_tess.saturating_sub(t_pass).as_micros() as u64,
+            raster_us = t_start.elapsed().saturating_sub(t_tess).as_micros() as u64,
             "capture cost"
         );
         match rgba {
