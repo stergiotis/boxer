@@ -452,6 +452,13 @@ func (b nodeBox) contains(x, y float32) bool {
 		}
 		dx, dy := (x-b.cx)/rx, (y-b.cy)/ry
 		return dx*dx+dy*dy <= 1
+	case layeredgraph.NodeShapeDiamond:
+		rx, ry := b.w/2, b.h/2
+		if rx <= 0 || ry <= 0 {
+			return false
+		}
+		dx, dy := (x-b.cx)/rx, (y-b.cy)/ry
+		return abs32(dx)+abs32(dy) <= 1
 	default: // box
 		return x >= b.cx-b.w/2 && x <= b.cx+b.w/2 &&
 			y >= b.cy-b.h/2 && y <= b.cy+b.h/2
@@ -492,6 +499,28 @@ func canvasPointer(sm *c.StateManager, canvas widgethandle.WidgetHandle) (x, y f
 
 func isNaN32(f float32) bool { return f != f }
 
+func abs32(f float32) float32 {
+	if f < 0 {
+		return -f
+	}
+	return f
+}
+
+// diamondOutline is the closed outline of the rhombus with centre (cx, cy)
+// and half-diagonals rx, ry, moved outward by d pixels along each side's
+// normal: the first point repeats as the last, so a polyline closes it.
+func diamondOutline(cx, cy, rx, ry, d float32) (xs, ys []float32) {
+	if d != 0 && rx > 0 && ry > 0 {
+		// A side moved out by d moves each corner out by d·|side|/(other
+		// half-diagonal), |side| being the half-diagonals' hypotenuse.
+		side := float32(math.Hypot(float64(rx), float64(ry)))
+		rx, ry = rx+d*side/ry, ry+d*side/rx
+	}
+	xs = []float32{cx, cx + rx, cx, cx - rx, cx}
+	ys = []float32{cy - ry, cy, cy + ry, cy, cy - ry}
+	return
+}
+
 func drawNode(sh layeredgraph.NodeShape, cx, cy, w, h float32, st Style, fill color.Color, hovered bool) {
 	switch sh {
 	case layeredgraph.NodeShapeCircle:
@@ -511,6 +540,14 @@ func drawNode(sh layeredgraph.NodeShape, cx, cy, w, h float32, st Style, fill co
 		c.PaintEllipseStroke(cx, cy, rx, ry, st.NodeStroke, st.NodeStrokeW).Send()
 		if hovered {
 			c.PaintEllipseStroke(cx, cy, rx+2, ry+2, st.Highlight, st.NodeStrokeW+1.5).Send()
+		}
+	case layeredgraph.NodeShapeDiamond:
+		xs, ys := diamondOutline(cx, cy, w/2, h/2, 0)
+		c.PaintPolygonFilled(xs[:4], ys[:4], fill).Send()
+		c.PaintPolyline(xs, ys, st.NodeStroke, st.NodeStrokeW).Send()
+		if hovered {
+			hx, hy := diamondOutline(cx, cy, w/2, h/2, 2)
+			c.PaintPolyline(hx, hy, st.Highlight, st.NodeStrokeW+1.5).Send()
 		}
 	default: // box
 		minX, minY, maxX, maxY := cx-w/2, cy-h/2, cx+w/2, cy+h/2

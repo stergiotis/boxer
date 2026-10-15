@@ -83,10 +83,3 @@ func TestFitCentresTheLayoutInTheCanvas(t *testing.T) {
 	require.InDelta(t, (800-200*scale)/2, offX, 1e-9)
 	require.InDelta(t, (400-100*scale)/2, offY, 1e-9)
 }
-
-func abs32(f float32) float32 {
-	if f < 0 {
-		return -f
-	}
-	return f
-}

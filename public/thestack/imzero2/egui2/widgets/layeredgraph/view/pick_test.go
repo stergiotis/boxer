@@ -1,6 +1,7 @@
 package view
 
 import (
+	"math"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -40,6 +41,39 @@ func TestEllipseNodeUsesBothRadii(t *testing.T) {
 
 	// A degenerate ellipse is not hit rather than dividing by zero.
 	require.False(t, nodeBox{shape: layeredgraph.NodeShapeEllipse}.contains(0, 0))
+}
+
+func TestDiamondNodeIsPickedByItsRhombus(t *testing.T) {
+	b := nodeBox{shape: layeredgraph.NodeShapeDiamond, cx: 0, cy: 0, w: 100, h: 40}
+	require.True(t, b.contains(0, 0), "centre")
+	require.True(t, b.contains(49, 0), "just inside the right corner")
+	require.True(t, b.contains(0, 19), "just inside the bottom corner")
+	require.True(t, b.contains(24, 9), "just inside a side: 24/50 + 9/20 = 0.93")
+	require.False(t, b.contains(26, 10), "just outside it: 26/50 + 10/20 = 1.02")
+	require.False(t, b.contains(45, 18), "inside the box, outside the diamond")
+
+	require.False(t, nodeBox{shape: layeredgraph.NodeShapeDiamond}.contains(0, 0),
+		"a degenerate diamond is not hit rather than dividing by zero")
+}
+
+// The hover outline sits d pixels outside every side of the diamond it
+// rings, as the box and ellipse outlines sit 2 px outside theirs.
+func TestDiamondOutlineIsOffsetAlongTheNormals(t *testing.T) {
+	const rx, ry, d = 40.0, 30.0, 2.0
+	xs, ys := diamondOutline(0, 0, rx, ry, d)
+	require.Len(t, xs, 5)
+	require.Equal(t, xs[0], xs[4], "closed")
+	require.Equal(t, ys[0], ys[4], "closed")
+
+	// Distance from the origin to the side through (Rx,0) and (0,-Ry) is
+	// Rx·Ry/hypot(Rx,Ry); the outline's must exceed the diamond's by d.
+	sideDist := func(a, b float64) float64 { return a * b / math.Hypot(a, b) }
+	grownRx, grownRy := float64(xs[1]), -float64(ys[0])
+	require.InDelta(t, sideDist(rx, ry)+d, sideDist(grownRx, grownRy), 1e-4)
+
+	plainXs, plainYs := diamondOutline(10, 20, rx, ry, 0)
+	require.Equal(t, []float32{10, 50, 10, -30, 10}, plainXs)
+	require.Equal(t, []float32{-10, 20, 50, 20, -10}, plainYs)
 }
 
 func TestTopmostNodeWins(t *testing.T) {

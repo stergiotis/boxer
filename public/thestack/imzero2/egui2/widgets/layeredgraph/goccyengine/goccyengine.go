@@ -412,6 +412,8 @@ func shape(s layeredgraph.NodeShape) cgraph.Shape {
 		return cgraph.CircleShape
 	case layeredgraph.NodeShapeEllipse:
 		return cgraph.EllipseShape
+	case layeredgraph.NodeShapeDiamond:
+		return cgraph.DiamondShape
 	default:
 		return cgraph.BoxShape
 	}

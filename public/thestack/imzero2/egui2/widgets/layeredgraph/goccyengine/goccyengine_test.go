@@ -444,3 +444,29 @@ func TestLayout_EndLabelsAreAnchoredAtTheirEnds(t *testing.T) {
 	assert.Nil(t, plain.TailLabelPos)
 	assert.Empty(t, plain.HeadLabel)
 }
+
+// A diamond round-trips its shape, and Graphviz sizes it to hold its label
+// inside the rhombus — larger than a box around the same label.
+func TestLayout_DiamondShape(t *testing.T) {
+	e := newEngine(t)
+	m := layeredgraph.GraphModel{
+		Nodes: []layeredgraph.Node{
+			{ID: "hub", Label: "encounter", Shape: layeredgraph.NodeShapeDiamond},
+			{ID: "box", Label: "encounter"},
+		},
+		Edges: []layeredgraph.Edge{{From: "box", To: "hub", Head: layeredgraph.EdgeHeadNone}},
+	}
+	lay, err := e.Layout(context.Background(), m, layeredgraph.LayoutOpts{})
+	require.NoError(t, err)
+
+	byID := make(map[string]layeredgraph.NodeLayout, len(lay.Nodes))
+	for _, n := range lay.Nodes {
+		byID[n.ID] = n
+	}
+	hub, box := byID["hub"], byID["box"]
+	assert.Equal(t, layeredgraph.NodeShapeDiamond, hub.Shape)
+	assert.Greater(t, hub.W, box.W, "the diamond is wider than the box around the same label")
+	// A one-line label sits under Graphviz's minimum node height in both
+	// shapes, so the diamond is at least as tall, not necessarily taller.
+	assert.GreaterOrEqual(t, hub.H, box.H)
+}

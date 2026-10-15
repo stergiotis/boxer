@@ -196,8 +196,9 @@ carry them, and the engine moves to HTML-like labels with draw-op replay
 
 `NodeShapeDiamond` is appended to `NodeShape`, so existing values keep their
 numbers. It is laid out, painted and picked as a rhombus, not by its bounding
-box. Graphviz sizes a diamond at roughly twice its label, so a long name makes
-a large hub.
+box. Graphviz sizes a diamond about twice as wide as a box around the same
+label (166 pt against 85 pt for a nine-letter label at 14 pt, 2026-10-15), so a
+long name makes a large hub.
 
 ### SD7 — The edge under the pointer
 
@@ -236,7 +237,7 @@ the rest is reached by panning, so the option is meant to be used with
 | --- | --- |
 | M1 — Identity and parallel edges ✓ | §SD1, §SD2, with the hook callers migrated in the same change |
 | M2 — Edge notation and end labels ✓ | §SD3, §SD4 |
-| M3 — Diamond | §SD6 |
+| M3 — Diamond ✓ | §SD6 |
 | M4 — Row nodes | §SD5 |
 | M5 — Edge pick | §SD7 |
 | M6 — Minimum label size | §SD8 |

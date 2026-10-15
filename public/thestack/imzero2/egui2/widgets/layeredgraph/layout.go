@@ -34,6 +34,11 @@ const (
 	// NodeShapeEllipse is an oval — Graphviz's natural node shape, which fits a
 	// label more compactly than a circle.
 	NodeShapeEllipse
+	// NodeShapeDiamond is a rhombus with its corners at the middle of each
+	// side of the box — the ER symbol for a relationship and the flowchart
+	// one for a decision. Graphviz makes it about twice as wide as a box
+	// around the same label, so a long name makes a large diamond.
+	NodeShapeDiamond
 )
 
 // RankDir is the primary flow direction of the layered layout: the axis along
