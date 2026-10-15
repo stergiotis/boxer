@@ -129,6 +129,10 @@ func nodeMarginFor(nodePt float64, layoutPt float64) string {
 	return fmt.Sprintf("%g,%g", nodeMarginX*scale, nodeMarginY)
 }
 
+// endLabelDistance is the Graphviz labeldistance of an edge with end labels:
+// how far, in multiples of 10 pt, a head or tail label sits from its end.
+const endLabelDistance = 1.6
+
 // defaultFontSize mirrors Graphviz's own default node font size (points). Used
 // when LayoutOpts.FontSize is unset, so Layout.FontSize reports exactly the size
 // Graphviz laid the boxes out with.
@@ -259,6 +263,11 @@ func (e *Engine) renderLaidOutDot(ctx context.Context, m layeredgraph.GraphModel
 		}
 		if ed.TailLabel != "" {
 			ge.SetTailLabel(ed.TailLabel)
+		}
+		if ed.HeadLabel != "" || ed.TailLabel != "" {
+			// Graphviz puts an end label endLabelDistance×10 pt from the
+			// end; its default of 1 lands the label on a 10 pt arrowhead.
+			ge.SetLabelDistance(endLabelDistance)
 		}
 	}
 

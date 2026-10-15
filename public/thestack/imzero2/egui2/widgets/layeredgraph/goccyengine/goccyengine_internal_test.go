@@ -31,7 +31,7 @@ func TestNotationIsEmittedOnlyWhenUsed(t *testing.T) {
 
 	plain := laidOutDot(t, layeredgraph.GraphModel{Nodes: nodes,
 		Edges: []layeredgraph.Edge{{From: "a", To: "b", Label: "x"}, {From: "b", To: "a"}}})
-	for _, attr := range []string{"dir", "arrowhead", "style", "headlabel", "taillabel"} {
+	for _, attr := range []string{"dir", "arrowhead", "style", "headlabel", "taillabel", "labeldistance"} {
 		// Whole attribute names: rankdir must not count as dir.
 		re := regexp.MustCompile(`(^|[\s\[,])` + attr + `=`)
 		assert.False(t, re.MatchString(plain), "a plain graph carries no %s attribute", attr)
@@ -46,6 +46,7 @@ func TestNotationIsEmittedOnlyWhenUsed(t *testing.T) {
 	assert.True(t, strings.Contains(marked, "style=dashed"), "dashed edge emits style=dashed")
 	assert.True(t, strings.Contains(marked, "headlabel=h"), "head label is emitted")
 	assert.True(t, strings.Contains(marked, "taillabel=t"), "tail label is emitted")
+	assert.True(t, strings.Contains(marked, "labeldistance=1.6"), "an edge with end labels moves them clear of its head")
 }
 
 // The record label stacks its fields under both rank axes — braces for

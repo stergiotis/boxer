@@ -82,7 +82,7 @@ func DefaultStyle() Style {
 		EdgeFontSize: 11.0,
 		EdgeDash:     DefaultEdgeDash,
 		EdgeGap:      DefaultEdgeGap,
-		TitleFill:    hex(styletokens.NeutralSubtle),
+		TitleFill:    hex(styletokens.NeutralBgFaint),
 		TitleText:    hex(styletokens.NeutralTextExtreme),
 		RowPadX:      6.0,
 	}
@@ -342,16 +342,11 @@ func Render(idBase uint64, lay *layeredgraph.Layout, opts RenderOpts) RenderResu
 				}
 			}
 			drawEdge(e, tf, col, strokeW, st)
-			// The middle label and the two end labels, each centred on the
-			// anchor the engine placed it at.
-			for _, l := range [...]struct {
-				pos  *layeredgraph.Point
-				text string
-			}{{e.LabelPos, e.Label}, {e.HeadLabelPos, e.HeadLabel}, {e.TailLabelPos, e.TailLabel}} {
-				if l.pos != nil && l.text != "" {
-					lx, ly := tf(*l.pos)
-					c.PaintText(lx, ly, 1, 1, l.text, st.EdgeFontSize*float32(escale), st.EdgeText).Send()
-				}
+			// The middle label has room reserved for it by the layout, so
+			// it paints with its edge, under the nodes.
+			if e.LabelPos != nil && e.Label != "" {
+				lx, ly := tf(*e.LabelPos)
+				c.PaintText(lx, ly, 1, 1, e.Label, st.EdgeFontSize*float32(escale), st.EdgeText).Send()
 			}
 		}
 
@@ -390,6 +385,21 @@ func Render(idBase uint64, lay *layeredgraph.Layout, opts RenderOpts) RenderResu
 			}
 			drawNode(n.Shape, cx, cy, w, h, st, fill, i == hovered)
 			c.PaintText(cx, cy, 1, 1, n.Label, fontPt*float32(escale), txt).Send()
+		}
+
+		// End labels last: the engine places them without reserving room, so
+		// one may overlap a node, and painted under it it would be cut off.
+		for i := range lay.Edges {
+			e := &lay.Edges[i]
+			for _, l := range [...]struct {
+				pos  *layeredgraph.Point
+				text string
+			}{{e.HeadLabelPos, e.HeadLabel}, {e.TailLabelPos, e.TailLabel}} {
+				if l.pos != nil && l.text != "" {
+					lx, ly := tf(*l.pos)
+					c.PaintText(lx, ly, 1, 1, l.text, st.EdgeFontSize*float32(escale), st.EdgeText).Send()
+				}
+			}
 		}
 
 		// Drain into the canvas, which senses in every case: it carries the

@@ -155,7 +155,12 @@ that deferral is unaffected.
 
 `dot` places end labels after layout. It reserves no room for them and does not
 move them out of the way, so on a dense diagram they can overlap nodes and
-other labels. This is accepted, and the fields' doc comments say so.
+other labels. This is accepted, and the fields' doc comments say so. Two
+placements limit the damage: the engine sets `labeldistance` to 1.6 on edges
+with end labels, since Graphviz's default of 1 puts the label on a 10 pt
+arrowhead, and the view paints end labels after the nodes, so an overlap
+covers a border rather than hiding the label (both found in the gallery
+capture, 2026-10-15).
 
 *Kill clause:* if end labels are unreadable on the diagrams that use them,
 their placement moves into Go with collision avoidance, or the roles go back
