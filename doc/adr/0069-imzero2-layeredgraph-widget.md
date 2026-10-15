@@ -110,6 +110,27 @@ Accepted (2026-06-06, reviewed by p@stergiotis). The decision is in force; the `
 
 ## Updates
 
+### 2026-10-15 — a multi-line label is painted at the pitch it was laid out at
+
+A box sized for a label of several lines could be too short for the painted
+text. Graphviz stacks a label's lines at 1.2 em when it sizes the box; the
+painter drew the label as one egui galley, whose line pitch is wider —
+about 1.37 em at 24 px — and wider still at small sizes, because egui
+rounds line heights to whole pixels (about 1.47 em at 3.4 px). The
+shortfall grows by a line's difference per line. Measured on the gallery's
+multi-line view (2026-10-15), the free space between a five-line label's
+ink and its box's bottom was 3.8 px at 24 px text, 0 px at 8.5 px, and
+−0.3 px at 3.4 px — the overflow a fitted, dense graph shows.
+
+The view now paints a multi-line label line by line, at Graphviz's 1.2 em
+around the anchor. The layout is unchanged, and the painted lines span the
+height the box was sized for at any scale: after the change the same
+measurement gives a constant gap per scale, whatever the line count. Lines
+are centred each, as Graphviz centres the lines of a `\n` label, where the
+galley had left-aligned them as a block. The vertical metric difference
+therefore needs no margin of its own, unlike the horizontal one the
+2026-06-07 note below describes.
+
 ### 2026-10-15 — parallel edges are kept (ADR-0331, proposed)
 
 [ADR-0331](./0331-layeredgraph-entity-diagrams.md) (proposed) retires the

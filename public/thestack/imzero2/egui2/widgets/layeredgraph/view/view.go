@@ -346,7 +346,7 @@ func Render(idBase uint64, lay *layeredgraph.Layout, opts RenderOpts) RenderResu
 			// it paints with its edge, under the nodes.
 			if e.LabelPos != nil && e.Label != "" {
 				lx, ly := tf(*e.LabelPos)
-				c.PaintText(lx, ly, 1, 1, e.Label, st.EdgeFontSize*float32(escale), st.EdgeText).Send()
+				paintLabel(lx, ly, 1, e.Label, st.EdgeFontSize*float32(escale), st.EdgeText)
 			}
 		}
 
@@ -384,7 +384,7 @@ func Render(idBase uint64, lay *layeredgraph.Layout, opts RenderOpts) RenderResu
 				continue
 			}
 			drawNode(n.Shape, cx, cy, w, h, st, fill, i == hovered)
-			c.PaintText(cx, cy, 1, 1, n.Label, fontPt*float32(escale), txt).Send()
+			paintLabel(cx, cy, 1, n.Label, fontPt*float32(escale), txt)
 		}
 
 		// End labels last: the engine places them without reserving room, so
@@ -397,7 +397,7 @@ func Render(idBase uint64, lay *layeredgraph.Layout, opts RenderOpts) RenderResu
 			}{{e.HeadLabelPos, e.HeadLabel}, {e.TailLabelPos, e.TailLabel}} {
 				if l.pos != nil && l.text != "" {
 					lx, ly := tf(*l.pos)
-					c.PaintText(lx, ly, 1, 1, l.text, st.EdgeFontSize*float32(escale), st.EdgeText).Send()
+					paintLabel(lx, ly, 1, l.text, st.EdgeFontSize*float32(escale), st.EdgeText)
 				}
 			}
 		}
