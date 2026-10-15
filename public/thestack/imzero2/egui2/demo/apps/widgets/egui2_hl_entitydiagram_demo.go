@@ -36,7 +36,7 @@ func init() {
 		Stage:       [2]float32{1100, 760},
 		Flags:       registry.DemoFlagNeedsLargeArea,
 		Kind:        registry.DemoKindUX,
-		Description: "An entity diagram on the layered-graph widget: row nodes with a title band and banded key rows, a diamond relation hub with undirected role-labelled ends, parallel edges, a self-loop, cardinalities at edge ends, and a dashed open-headed edge to a contract. Laid out by Graphviz dot in-process via WASM. Hover or click a node.",
+		Description: "An entity diagram on the layered-graph widget: row nodes with a title band and banded key rows, a diamond relation hub with undirected role-labelled ends, parallel edges, a self-loop, cardinalities at edge ends, and a dashed open-headed edge to a contract. Laid out by Graphviz dot in-process via WASM. Hover or click a node or an edge.",
 		Init: func(_ *c.WidgetIdStack) (state any) {
 			return &entityDiagramDemoState{}
 		},
@@ -122,7 +122,13 @@ func demoEntityDiagram(ids *c.WidgetIdStack, st *entityDiagramDemoState) {
 	if res.Clicked != "" {
 		st.lastClicked = res.Clicked
 	}
+	if res.ClickedEdge != "" {
+		st.lastClicked = "edge " + res.ClickedEdge
+	}
 	hovered := res.Hovered
+	if res.HoveredEdge != "" {
+		hovered = "edge " + res.HoveredEdge
+	}
 	if hovered == "" {
 		hovered = "—"
 	}

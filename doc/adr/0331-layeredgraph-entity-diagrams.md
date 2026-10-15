@@ -211,9 +211,11 @@ long name makes a large hub.
 node it already reports. An edge is hit within its stroke width, or a few
 pixels where the stroke is thinner, of the curve as painted. A node under the
 pointer takes priority over an edge, and of two edges the nearer wins. The
-curve-distance helpers are copied from `graphview`, as `WeightWidth` copies
-`pipelineview`'s curve; ADR-0228 §SD6 keeps a shared painter core deferred, and
-this does not change that.
+curve is measured on the polyline the view already flattens dashed edges to
+(§SD3), plus the shaft to the head tip; only the point-to-segment distance is
+copied from `graphview`, as `WeightWidth` copies `pipelineview`'s curve.
+ADR-0228 §SD6 keeps a shared painter core deferred, and this does not change
+that.
 
 ### SD8 — A minimum label size
 
@@ -244,7 +246,7 @@ the rest is reached by panning, so the option is meant to be used with
 | M2 — Edge notation and end labels ✓ | §SD3, §SD4 |
 | M3 — Diamond ✓ | §SD6 |
 | M4 — Row nodes ✓ | §SD5 |
-| M5 — Edge pick | §SD7 |
+| M5 — Edge pick ✓ | §SD7 |
 | M6 — Minimum label size | §SD8 |
 
 M1 comes first because M2 and M5 hang per-edge data on its identity; the others

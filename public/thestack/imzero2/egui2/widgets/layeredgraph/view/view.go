@@ -204,10 +204,14 @@ func WeightWidth(lay *layeredgraph.Layout, minW float32, maxW float32) func(e *l
 
 // RenderResult reports hit-testing from the previous frame: the node currently
 // hovered (empty if none) and the node a primary click landed on this frame
-// (empty if none).
+// (empty if none); and, when the pointer is on no node, the same two for the
+// edge nearest it within a few pixels of its stroke, by edge ID.
 type RenderResult struct {
 	Hovered string
 	Clicked string
+	// HoveredEdge and ClickedEdge are edge IDs (layeredgraph.EdgeLayout.ID).
+	HoveredEdge string
+	ClickedEdge string
 }
 
 // Render paints lay and returns hover/click hit-testing. idBase namespaces
@@ -312,36 +316,54 @@ func Render(idBase uint64, lay *layeredgraph.Layout, opts RenderOpts) RenderResu
 		// an emission order (ADR-0224 §SD3's reasoning, applied here by
 		// ADR-0228 §SD6). A widget that picks from registers is also one that
 		// can be hosted in a canvas it does not own.
-		px, py, posOk := canvasPointer(sm, canvasHandle)
-		hit := -1
-		if posOk && canvasResp.HasContainsPointer() {
-			hit = pickNode(boxes, px, py)
+		//
+		// Each edge's colour and width come from the hooks first: the pick
+		// tolerates a wide stroke more, and the paint uses both.
+		edgeCols := make([]color.Color, len(lay.Edges))
+		edgeWidths := make([]float32, len(lay.Edges))
+		for i := range lay.Edges {
+			e := &lay.Edges[i]
+			edgeCols[i] = st.EdgeStroke
+			if opts.EdgeStroke != nil {
+				if c2, ok := opts.EdgeStroke(e); ok {
+					edgeCols[i] = c2
+				}
+			}
+			edgeWidths[i] = st.EdgeStrokeW
+			if opts.EdgeWidth != nil {
+				if w, ok := opts.EdgeWidth(e); ok {
+					edgeWidths[i] = w
+				}
+			}
 		}
-		hovered := -1
-		if hit >= 0 {
-			hovered = hit
-			res.Hovered = lay.Nodes[hit].ID
-			if canvasResp.HasPrimaryClicked() {
-				res.Clicked = lay.Nodes[hit].ID
+
+		px, py, posOk := canvasPointer(sm, canvasHandle)
+		hovered, hoveredEdge := -1, -1
+		if posOk && canvasResp.HasContainsPointer() {
+			hovered, hoveredEdge = pickAt(boxes, lay.Edges, edgeWidths, tf, px, py)
+		}
+		clicked := canvasResp.HasPrimaryClicked()
+		if hovered >= 0 {
+			res.Hovered = lay.Nodes[hovered].ID
+			if clicked {
+				res.Clicked = res.Hovered
+			}
+		}
+		if hoveredEdge >= 0 {
+			res.HoveredEdge = lay.Edges[hoveredEdge].ID
+			if clicked {
+				res.ClickedEdge = res.HoveredEdge
 			}
 		}
 
 		// Edges first, so nodes paint over the spline ends.
 		for i := range lay.Edges {
 			e := &lay.Edges[i]
-			col := st.EdgeStroke
-			if opts.EdgeStroke != nil {
-				if c2, ok := opts.EdgeStroke(e); ok {
-					col = c2
-				}
+			col := edgeCols[i]
+			if i == hoveredEdge {
+				col = st.Highlight
 			}
-			strokeW := st.EdgeStrokeW
-			if opts.EdgeWidth != nil {
-				if w, ok := opts.EdgeWidth(e); ok {
-					strokeW = w
-				}
-			}
-			drawEdge(e, tf, col, strokeW, st)
+			drawEdge(e, tf, col, edgeWidths[i], st)
 			// The middle label has room reserved for it by the layout, so
 			// it paints with its edge, under the nodes.
 			if e.LabelPos != nil && e.Label != "" {
