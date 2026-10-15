@@ -25,6 +25,13 @@ type layeredGraphDemoState struct {
 	err         error
 	lastClicked string
 	gvState     view.ViewState // interactive pan/zoom
+
+	// multiLine switches to boxes whose labels run one to five lines, the
+	// view in which a box too short for its text shows.
+	multiLine   bool
+	mlLayout    *layeredgraph.Layout
+	mlErr       error
+	mlViewState view.ViewState
 }
 
 func init() {
@@ -91,7 +98,61 @@ func idsNodeStyle() view.Style {
 	return st
 }
 
+// multiLineModel is a chain of boxes whose labels run one to five lines.
+func multiLineModel() layeredgraph.GraphModel {
+	labels := []string{
+		"one line",
+		"two\nlines",
+		"three\nlines\nhere",
+		"four\nlines\nof\ntext",
+		"five\nlines\nof\nlabel\ntext",
+	}
+	var m layeredgraph.GraphModel
+	for i, l := range labels {
+		id := fmt.Sprintf("l%d", i+1)
+		m.Nodes = append(m.Nodes, layeredgraph.Node{ID: id, Label: l})
+		if i > 0 {
+			m.Edges = append(m.Edges, layeredgraph.Edge{From: fmt.Sprintf("l%d", i), To: id})
+		}
+	}
+	return m
+}
+
+func demoLayeredGraphMultiLine(st *layeredGraphDemoState, canvasW float32) {
+	if st.mlLayout == nil {
+		if eng, err := goccyengine.Shared(); err != nil {
+			st.mlErr = err
+		} else {
+			st.mlLayout, st.mlErr = eng.Layout(context.Background(), multiLineModel(),
+				layeredgraph.LayoutOpts{RankDir: layeredgraph.RankDirLeftRight, FontSize: 14})
+		}
+	}
+	if st.mlErr != nil {
+		c.Label("layered-graph error: " + st.mlErr.Error()).Send()
+		return
+	}
+	if st.mlLayout == nil {
+		return
+	}
+	view.Render(layeredGraphDemoIDBase+1, st.mlLayout, view.RenderOpts{
+		CanvasW: canvasW,
+		CanvasH: 440,
+		State:   &st.mlViewState,
+	})
+}
+
 func demoLayeredGraph(ids *c.WidgetIdStack, st *layeredGraphDemoState) {
+	c.Checkbox(ids.PrepareStr("multi-line"), st.multiLine, "multi-line labels").SendRespVal(&st.multiLine)
+	if st.multiLine {
+		availW, _, availOk := c.CapturePaneSize(demoProbeSeq(ids, "layeredgraph-demo", "pane"))
+		canvasW := float32(760)
+		if availOk && availW > 16 {
+			canvasW = availW - 8
+		}
+		demoLayeredGraphMultiLine(st, canvasW)
+		return
+	}
+
 	// Lazily lay out the (static) graph the first time the demo renders — no
 	// WASM runtime spins up for a demo that's never opened — using the
 	// process-shared engine. Retried while no layout exists, so a transient
