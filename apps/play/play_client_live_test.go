@@ -138,3 +138,32 @@ func TestLiveExecuteArrowStreamOverridesAnUnparsedFormatClause(t *testing.T) {
 		t.Fatalf("rows = %d, want 2", rows)
 	}
 }
+
+// The Execution profile's wire path: the plain statement through the client's
+// rewrite, wrapped in EXPLAIN ANALYZE by the transport, decoded as Arrow, and
+// read by the profile parser (26.7+).
+func TestLiveExplainAnalyzeProfile(t *testing.T) {
+	c := NewClient(ClientConfig{URL: liveClickHouseURL(t)}, nil)
+	opts := newExecOptions("diagnostics-analyze")
+	opts.WrapStatement = explainAnalyzeWrap
+	rec, _, _, err := clientExecutor{client: c, opts: opts}.execute(context.Background(),
+		compiledNode{SQL: "SELECT number % 10 AS k, count() FROM numbers(100000) GROUP BY k -- trailing comment"}, memory.NewGoAllocator())
+	if err != nil {
+		if strings.Contains(err.Error(), "Syntax error") {
+			t.Skip("this server predates EXPLAIN ANALYZE (26.7)")
+		}
+		t.Fatalf("execute: %v", err)
+	}
+	defer rec.Release()
+	var lines []string
+	for row := range rec.NumRows() {
+		lines = append(lines, strings.Split(formatCell(rec, 0, row), "\n")...)
+	}
+	p := parseAnalyze(lines)
+	if len(p.Summary) == 0 || len(p.Timed) == 0 {
+		t.Fatalf("profile not read: summary=%q timed=%d", p.Summary, len(p.Timed))
+	}
+	if hot := p.hottest(1); hot[0].Step == "" {
+		t.Fatalf("the costliest line names no step: %+v", hot[0])
+	}
+}
