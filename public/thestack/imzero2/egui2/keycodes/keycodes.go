@@ -200,6 +200,21 @@ func (inst Mask) Has(c Code) bool {
 	return inst&(Mask(1)<<uint(c)) != 0
 }
 
+// Mods is the modifier byte a chord capture requires (ADR-0334 §SD7), in the
+// encoding R26 reports: bit 0 shift, bit 3 the platform command modifier —
+// Ctrl on Linux and Windows, Cmd on macOS. A plain capture ignores modifiers
+// and reports them (ADR-0177 SD5); a chord capture takes the key only while
+// the command modifier is held, with Shift exactly as stated, so the same
+// letter stays typeable without it. Alt and bare Ctrl are not chord
+// modifiers: on some platforms they produce text, and a chord over them
+// would need the text suppression ADR-0177 §SD10 keeps out of this channel.
+type Mods uint8
+
+const (
+	ModShift   Mods = 1 << 0
+	ModCommand Mods = 1 << 3
+)
+
 // Navigation is the set a list- or tree-shaped widget wants: move, page, jump,
 // and activate. Deliberately excludes Tab (see the constant) and Escape, which
 // usually belongs to whatever the widget is inside.

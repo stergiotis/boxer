@@ -102,7 +102,7 @@ func maskBitExpr(codes ...keycodes.Code) string {
 
 func keyCaptureHelperRust(idExpr string, respExpr string) string {
 	return `
-if capture_keys_mask != 0 && ` + respExpr + `.has_focus() {
+if (capture_keys_mask != 0 || capture_chord_mask != 0) && ` + respExpr + `.has_focus() {
     // Consuming the event is NOT enough on its own, and this is the part that
     // is easy to get wrong: egui latches its focus-navigation direction in
     // Focus::begin_pass, from the RAW input, before any widget runs. By the
@@ -139,29 +139,44 @@ if capture_keys_mask != 0 && ` + respExpr + `.has_focus() {
     // A release is taken only by a widget that asked for edges (ADR-0279
     // §SD1); every event carries its edge byte, bit 0 down and bit 1 an
     // auto-repeat press.
-    let mut hits: Vec<(egui::Key, bool, u8, u8)> = Vec::new();
+    // A plain hit (mask) is removed from the queue whatever its modifiers,
+    // the SD5 contract; a chord hit (ADR-0334 §SD7) is removed only for the
+    // event whose own modifiers matched, so the same letter without the
+    // command modifier stays in the queue for whoever types it.
+    let mut hits: Vec<(egui::Key, bool, u8, u8, Option<egui::Modifiers>)> = Vec::new();
     ui.input(|inp| {
         for ev in &inp.events {
-            if let egui::Event::Key { key, pressed, repeat, .. } = ev {
+            if let egui::Event::Key { key, pressed, repeat, modifiers, .. } = ev {
                 if !*pressed && !capture_key_edges {
                     continue;
                 }
                 let code = crate::imzero2::keycodes::imzero_key_code(*key);
-                if code != 0 && (capture_keys_mask & (1u64 << code)) != 0 {
-                    let edges = (*pressed as u8) | ((*repeat as u8) << 1);
-                    hits.push((*key, *pressed, code, edges));
+                if code == 0 {
+                    continue;
+                }
+                let edges = (*pressed as u8) | ((*repeat as u8) << 1);
+                if (capture_keys_mask & (1u64 << code)) != 0 {
+                    hits.push((*key, *pressed, code, edges, None));
+                } else if (capture_chord_mask & (1u64 << code)) != 0
+                    && crate::imzero2::keychord::chord_matches(modifiers, capture_chord_mods)
+                {
+                    hits.push((*key, *pressed, code, edges, Some(*modifiers)));
                 }
             }
         }
     });
     let captured_any = !hits.is_empty();
-    for (key, pressed, code, edges) in hits {
+    for (key, pressed, code, edges, chord_mods) in hits {
         // Remove it from the queue so nothing downstream also acts on it.
         ui.input_mut(|inp| {
             inp.events.retain(|ev| !matches!(ev,
-                egui::Event::Key { key: k, pressed: p, .. } if *k == key && *p == pressed));
+                egui::Event::Key { key: k, pressed: p, modifiers: m, .. }
+                    if *k == key && *p == pressed && chord_mods.is_none_or(|cm| cm == *m)));
         });
-        self.r26_key_capture_push(` + idExpr + `, code, mods_byte, edges);
+        let reported_mods = chord_mods
+            .map(|m| crate::imzero2::keychord::mods_byte(&m))
+            .unwrap_or(mods_byte);
+        self.r26_key_capture_push(` + idExpr + `, code, reported_mods, edges);
     }
     if captured_any {
         // A capture is only half a keypress. R26 is read back at the END of

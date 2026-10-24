@@ -389,6 +389,37 @@ that calls `.captureKeyEdges()` also receives releases. The §SD4 vocabulary
 gains digits, letters and ten punctuation keys (codes 15–60). A widget that
 uses neither sees what it saw before.
 
+### 2026-10-24 — `captureKeyChords`: a shortcut is a key with a required modifier
+
+[ADR-0334](./0334-mdedit-blocks-over-the-source.md) §SD7 needs Ctrl+B, Ctrl+K
+and above all Ctrl+Z inside a focused `TextEdit` — the document's undo lives
+in Go there, and egui's own Ctrl+Z would otherwise run first. ADR-0279 had
+already put the letters in the vocabulary; what a plain `captureKeys` could
+not say was "this letter only with the command modifier", because SD5 matches
+on the key alone and reports the modifiers, and a mask bit on `KeyB` would
+have eaten every b typed.
+
+`Frame` and `textEdit` gain `captureKeyChords(mask, mods)` beside
+`captureKeys`, and `captureKeys` is unchanged, so SD5 holds for every
+adopter. A chord hit is judged against the **event's own** modifiers
+(`keychord.rs`): the command modifier held — Ctrl on Linux and Windows, Cmd
+on macOS, egui's `command` — Shift exactly as the `mods` byte states, Alt not
+held; a byte without the command bit matches nothing. Only the matching event
+leaves the queue, so a plain letter in the same frame still reaches the
+editor, and the modifier byte reported on R26 is that event's rather than the
+frame snapshot's. Alt and bare Ctrl are deliberately not chord modifiers: on
+some platforms they produce `Event::Text` (Option on macOS, AltGr), and a
+chord over them would need the text suppression §SD10 keeps out of this
+channel. egui-winit emits no `Text` for a command-modified letter, which is
+what makes the chord clean without touching the text path.
+
+The shared capture helper registers the focus rect for a chord mask as it
+does for a plain one, and the focus-lock filter is still derived from the
+plain mask alone — a chord never names an arrow. The Go side reads chords
+back as `CapturedKey` rows and tells them from plain hits by `Command()`;
+`keycodes.Mods` names the two honoured bits. Rust unit tests cover the match
+rule; the drift test over the key table is unchanged, since no code was added.
+
 ## References
 
 - [ADR-0140](./0140-imzero2-hover-scoped-wheel-capture.md) — the hover-scoped consuming wheel capture this mirrors, register and all.

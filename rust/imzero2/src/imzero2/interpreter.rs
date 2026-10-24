@@ -673,6 +673,7 @@ pub struct ImZeroFffi<'a, R: std::io::BufRead, W: std::io::Write> {
     // per keycodes::Code; drained by the textEdit apply block before the
     // widget runs, so a masked key never reaches the editor as text.
     text_edit_pending_capture_keys: u64,
+    text_edit_pending_capture_chords: (u64, u8),
     // ADR-0088 runtime codec pipeline: `setVideoPipeline` stashes the
     // requested codec here (0=H.264, 1=VP9, 2=AV1); the headless host drains
     // it after dispatch and re-points the encoder. `video_cap_*` are pushed
@@ -1041,6 +1042,7 @@ impl<R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'_, R, W> {
             text_edit_pending_set_cursor: None,
             text_edit_pending_capture_tab: false,
             text_edit_pending_capture_keys: 0,
+            text_edit_pending_capture_chords: (0, 0),
             r9_et_prefetch_ids: Vec::with_capacity(8),
             r9_et_prefetch_values: Vec::with_capacity(32),
             r10_true_ids: Vec::with_capacity(1024),
@@ -3426,27 +3428,12 @@ egui::ComboBox::new(i,label).selected_text(selected_text);
                     // in egui 0.34 placer.rs:255 ends with cursor.min = max_rect.min,
                     // which silently teleports the parent cursor back to the top of the
                     // panel and clobbers everything placed above the dock.)
-                    //
-                    // That bounds the bottom edge only. Scrolled so the dock's top passes
-                    // above the clip, the leaves still painted — and took clicks — over
-                    // whatever sits above the scroll area. So the dock itself is shown in
-                    // the visible part of the allocation only, its tab strip held at the
-                    // clip's top edge while the rest scrolls away, and the full
-                    // allocation is still reserved so the parent's layout does not move.
                     let cursor = ui.cursor().min;
                     let bound_corner = ui.max_rect().max.min(ui.clip_rect().max);
                     let avail = (bound_corner - cursor).max(egui::Vec2::ZERO);
                     let layout = *ui.layout();
                     let ctx_cloned = ui.ctx().clone();
                     ui.allocate_ui_with_layout(avail, layout, |child_ui| {
-                        let full = child_ui.max_rect();
-                        let visible = full.intersect(child_ui.clip_rect());
-                        child_ui.expand_to_include_rect(full);
-                        if !visible.is_positive() {
-                            return;
-                        }
-                        let mut dock_ui = child_ui
-                            .new_child(egui::UiBuilder::new().max_rect(visible).layout(layout));
                         let mut viewer = FffiDockTabViewer {
                             interpreter: self,
                             ctx: &ctx_cloned,
@@ -3471,7 +3458,7 @@ egui::ComboBox::new(i,label).selected_text(selected_text);
                             .id(egui::Id::new(area_id))
                             .show_close_buttons(false)
                             .show_leaf_close_all_buttons(false)
-                            .show_inside(&mut dock_ui, &mut viewer);
+                            .show_inside(child_ui, &mut viewer);
                     });
 
                     self.dock_states.insert(area_id, dock_state);
@@ -5013,6 +5000,8 @@ self.apply_widget(w,u,f,Some(i));
                 let mut hover_cursor_pointer = false;
                 let mut focusable = false;
                 let mut capture_keys_mask: u64 = 0;
+                let mut capture_chord_mask: u64 = 0;
+                let mut capture_chord_mods: u8 = 0;
                 let mut capture_key_edges = false;
                 // methods
                 loop {
@@ -5172,6 +5161,14 @@ self.apply_widget(w,u,f,Some(i));
                             let mut mask = self.io.read_plain_u64()?;
                             capture_keys_mask = mask;
                         }
+                        FrameBuilderMethodId::CaptureKeyChords => {
+                            #[cfg(feature = "puffin")]
+                            puffin::profile_scope!("match FrameBuilderMethodId::CaptureKeyChords");
+                            let mut mask = self.io.read_plain_u64()?;
+                            let mut mods = self.io.read_plain_u8()?;
+                            capture_chord_mask = mask;
+                            capture_chord_mods = mods;
+                        }
                         FrameBuilderMethodId::CaptureKeyEdges => {
                             #[cfg(feature = "puffin")]
                             puffin::profile_scope!("match FrameBuilderMethodId::CaptureKeyEdges");
@@ -5282,7 +5279,7 @@ self.apply_widget(w,u,f,Some(i));
                     // The id expression MUST match focusIdExpr() in
                     // egui2_definition_d_keys.go — requestFocus asks for
                     // exactly this id, and a mismatch is silent (SD7).
-                    if focusable || capture_keys_mask != 0 {
+                    if focusable || capture_keys_mask != 0 || capture_chord_mask != 0 {
                         // click() only when the caller asked to be
                         // focusable: that sense makes this overlay eat
                         // clicks meant for the body. A capture-only Frame
@@ -5310,7 +5307,7 @@ self.apply_widget(w,u,f,Some(i));
                         if fr.lost_focus() {
                             resp2 |= ResponseFlags::LOST_FOCUS;
                         }
-                        if capture_keys_mask != 0 && fr.has_focus() {
+                        if (capture_keys_mask != 0 || capture_chord_mask != 0) && fr.has_focus() {
                             // Consuming the event is NOT enough on its own, and this is the part that
                             // is easy to get wrong: egui latches its focus-navigation direction in
                             // Focus::begin_pass, from the RAW input, before any widget runs. By the
@@ -5356,13 +5353,19 @@ self.apply_widget(w,u,f,Some(i));
                             // A release is taken only by a widget that asked for edges (ADR-0279
                             // §SD1); every event carries its edge byte, bit 0 down and bit 1 an
                             // auto-repeat press.
-                            let mut hits: Vec<(egui::Key, bool, u8, u8)> = Vec::new();
+                            // A plain hit (mask) is removed from the queue whatever its modifiers,
+                            // the SD5 contract; a chord hit (ADR-0334 §SD7) is removed only for the
+                            // event whose own modifiers matched, so the same letter without the
+                            // command modifier stays in the queue for whoever types it.
+                            let mut hits: Vec<(egui::Key, bool, u8, u8, Option<egui::Modifiers>)> =
+                                Vec::new();
                             ui.input(|inp| {
                                 for ev in &inp.events {
                                     if let egui::Event::Key {
                                         key,
                                         pressed,
                                         repeat,
+                                        modifiers,
                                         ..
                                     } = ev
                                     {
@@ -5370,23 +5373,43 @@ self.apply_widget(w,u,f,Some(i));
                                             continue;
                                         }
                                         let code = crate::imzero2::keycodes::imzero_key_code(*key);
-                                        if code != 0 && (capture_keys_mask & (1u64 << code)) != 0 {
-                                            let edges = (*pressed as u8) | ((*repeat as u8) << 1);
-                                            hits.push((*key, *pressed, code, edges));
+                                        if code == 0 {
+                                            continue;
+                                        }
+                                        let edges = (*pressed as u8) | ((*repeat as u8) << 1);
+                                        if (capture_keys_mask & (1u64 << code)) != 0 {
+                                            hits.push((*key, *pressed, code, edges, None));
+                                        } else if (capture_chord_mask & (1u64 << code)) != 0
+                                            && crate::imzero2::keychord::chord_matches(
+                                                modifiers,
+                                                capture_chord_mods,
+                                            )
+                                        {
+                                            hits.push((
+                                                *key,
+                                                *pressed,
+                                                code,
+                                                edges,
+                                                Some(*modifiers),
+                                            ));
                                         }
                                     }
                                 }
                             });
                             let captured_any = !hits.is_empty();
-                            for (key, pressed, code, edges) in hits {
+                            for (key, pressed, code, edges, chord_mods) in hits {
                                 // Remove it from the queue so nothing downstream also acts on it.
                                 ui.input_mut(|inp| {
                                     inp.events.retain(|ev| {
                                         !matches!(ev,
-                egui::Event::Key { key: k, pressed: p, .. } if *k == key && *p == pressed)
+                egui::Event::Key { key: k, pressed: p, modifiers: m, .. }
+                    if *k == key && *p == pressed && chord_mods.is_none_or(|cm| cm == *m))
                                     });
                                 });
-                                self.r26_key_capture_push(i.value(), code, mods_byte, edges);
+                                let reported_mods = chord_mods
+                                    .map(|m| crate::imzero2::keychord::mods_byte(&m))
+                                    .unwrap_or(mods_byte);
+                                self.r26_key_capture_push(i.value(), code, reported_mods, edges);
                             }
                             if captured_any {
                                 // A capture is only half a keypress. R26 is read back at the END of
@@ -9332,6 +9355,15 @@ if multiline { egui::TextEdit::multiline(&mut text).id(i) } else { egui::TextEdi
                             let mut mask = self.io.read_plain_u64()?;
                             self.text_edit_pending_capture_keys = mask;
                         }
+                        TextEditBuilderMethodId::CaptureKeyChords => {
+                            #[cfg(feature = "puffin")]
+                            puffin::profile_scope!(
+                                "match TextEditBuilderMethodId::CaptureKeyChords"
+                            );
+                            let mut mask = self.io.read_plain_u64()?;
+                            let mut mods = self.io.read_plain_u8()?;
+                            self.text_edit_pending_capture_chords = (mask, mods);
+                        }
                     }
                 }
                 if d == 0 {
@@ -9460,6 +9492,55 @@ if multiline { egui::TextEdit::multiline(&mut text).id(i) } else { egui::TextEdi
                             }
                         }
                     }
+                }
+                // captureKeyChords (ADR-0334 §SD7): the chord pass. Unlike captureKeys the
+                // match reads each event's OWN modifiers, and only the matching event leaves
+                // the queue — a plain letter in the same frame stays for the editor. The
+                // modifier byte reported is the event's, not the frame's, for the same reason.
+                if self.text_edit_pending_capture_chords.0 != 0 {
+                    let (chord_mask, chord_mods) =
+                        std::mem::take(&mut self.text_edit_pending_capture_chords);
+                    if let Some(ctx) = u.as_deref().map(|ui| ui.ctx().clone()) {
+                        if ctx.memory(|m| m.has_focus(i)) {
+                            let mut hits: Vec<(u8, u8, u8)> = Vec::new();
+                            ctx.input_mut(|inp| {
+                                inp.events.retain(|ev| {
+                                    if let egui::Event::Key {
+                                        key,
+                                        pressed: true,
+                                        repeat,
+                                        modifiers,
+                                        ..
+                                    } = ev
+                                    {
+                                        let code = crate::imzero2::keycodes::imzero_key_code(*key);
+                                        if code != 0
+                                            && (chord_mask & (1u64 << code)) != 0
+                                            && crate::imzero2::keychord::chord_matches(
+                                                modifiers, chord_mods,
+                                            )
+                                        {
+                                            hits.push((
+                                                code,
+                                                crate::imzero2::keychord::mods_byte(modifiers),
+                                                1 | ((*repeat as u8) << 1),
+                                            ));
+                                            return false;
+                                        }
+                                    }
+                                    true
+                                });
+                            });
+                            if !hits.is_empty() {
+                                for (code, mods, edges) in hits {
+                                    self.r26_key_capture_push(i.value(), code, mods, edges);
+                                }
+                                ctx.request_repaint();
+                            }
+                        }
+                    }
+                } else {
+                    self.text_edit_pending_capture_chords = (0, 0);
                 }
                 let resp =
 // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)

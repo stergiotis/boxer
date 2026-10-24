@@ -1495,6 +1495,15 @@ func (inst FrameFluid) CaptureKeys(mask uint64) FrameFluid {
 	return inst
 }
 
+func (inst FrameFluid) CaptureKeyChords(mask uint64, mods uint8) FrameFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(FrameMethodIdCaptureKeyChords))
+	r.WriteUint64(mask)
+	r.WriteUint8(mods)
+
+	return inst
+}
+
 func (inst FrameFluid) CaptureKeyEdges() FrameFluid {
 	r := inst.r
 	r.WriteOpCode(uint32(FrameMethodIdCaptureKeyEdges))
@@ -3896,6 +3905,15 @@ func (inst TextEditFluid) CaptureKeys(mask uint64) TextEditFluid {
 	r := inst.r
 	r.WriteOpCode(uint32(TextEditMethodIdCaptureKeys))
 	r.WriteUint64(mask)
+
+	return inst
+}
+
+func (inst TextEditFluid) CaptureKeyChords(mask uint64, mods uint8) TextEditFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(TextEditMethodIdCaptureKeyChords))
+	r.WriteUint64(mask)
+	r.WriteUint8(mods)
 
 	return inst
 }

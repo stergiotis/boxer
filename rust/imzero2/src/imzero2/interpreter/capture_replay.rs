@@ -91,6 +91,7 @@ struct SavedLiveState<'a> {
     text_edit_pending_report_cursor: bool,
     text_edit_pending_capture_tab: bool,
     text_edit_pending_capture_keys: u64,
+    text_edit_pending_capture_chords: (u64, u8),
     scratch_open_binding_id: u64,
     scratch_window_maximized: bool,
     r27_work_rect: egui::Rect,
@@ -211,6 +212,7 @@ impl<'a, R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'a, R, W> {
             text_edit_pending_report_cursor: self.text_edit_pending_report_cursor,
             text_edit_pending_capture_tab: self.text_edit_pending_capture_tab,
             text_edit_pending_capture_keys: self.text_edit_pending_capture_keys,
+            text_edit_pending_capture_chords: self.text_edit_pending_capture_chords,
             scratch_open_binding_id: self.scratch_open_binding_id,
             scratch_window_maximized: self.scratch_window_maximized,
             r27_work_rect: self.r27_work_rect,
@@ -307,6 +309,7 @@ impl<'a, R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'a, R, W> {
         self.text_edit_pending_report_cursor = s.text_edit_pending_report_cursor;
         self.text_edit_pending_capture_tab = s.text_edit_pending_capture_tab;
         self.text_edit_pending_capture_keys = s.text_edit_pending_capture_keys;
+        self.text_edit_pending_capture_chords = s.text_edit_pending_capture_chords;
         self.scratch_open_binding_id = s.scratch_open_binding_id;
         self.scratch_window_maximized = s.scratch_window_maximized;
         self.r27_work_rect = s.r27_work_rect;

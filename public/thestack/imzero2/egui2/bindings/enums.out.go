@@ -194,7 +194,7 @@ const (
 // IdlFingerprint is the IDL these bindings were generated from, as
 // ir.Fingerprint digests it; the Rust client's generated enums carry the same
 // value from the same generation (ADR-0278 SD6, proposed).
-const IdlFingerprint uint64 = 0xdc284f76f52204a6
+const IdlFingerprint uint64 = 0x06db15cc603d9056
 const (
 	AtomsMethodIdBuild AtomsMethodIdE = 0
 
@@ -420,16 +420,17 @@ const (
 	FrameMethodIdSenseDrag           FrameMethodIdE = 12
 	FrameMethodIdFocusable           FrameMethodIdE = 13
 	FrameMethodIdCaptureKeys         FrameMethodIdE = 14
-	FrameMethodIdCaptureKeyEdges     FrameMethodIdE = 15
-	FrameMethodIdHoverCursorPointer  FrameMethodIdE = 16
-	FrameMethodIdPresetGroup         FrameMethodIdE = 17
-	FrameMethodIdPresetWindow        FrameMethodIdE = 18
-	FrameMethodIdPresetPopup         FrameMethodIdE = 19
-	FrameMethodIdPresetMenu          FrameMethodIdE = 20
-	FrameMethodIdPresetCanvas        FrameMethodIdE = 21
-	FrameMethodIdPresetDarkCanvas    FrameMethodIdE = 22
-	FrameMethodIdPresetSideTopPanel  FrameMethodIdE = 23
-	FrameMethodIdPresetCentralPanel  FrameMethodIdE = 24
+	FrameMethodIdCaptureKeyChords    FrameMethodIdE = 15
+	FrameMethodIdCaptureKeyEdges     FrameMethodIdE = 16
+	FrameMethodIdHoverCursorPointer  FrameMethodIdE = 17
+	FrameMethodIdPresetGroup         FrameMethodIdE = 18
+	FrameMethodIdPresetWindow        FrameMethodIdE = 19
+	FrameMethodIdPresetPopup         FrameMethodIdE = 20
+	FrameMethodIdPresetMenu          FrameMethodIdE = 21
+	FrameMethodIdPresetCanvas        FrameMethodIdE = 22
+	FrameMethodIdPresetDarkCanvas    FrameMethodIdE = 23
+	FrameMethodIdPresetSideTopPanel  FrameMethodIdE = 24
+	FrameMethodIdPresetCentralPanel  FrameMethodIdE = 25
 )
 
 const (
@@ -764,25 +765,26 @@ const (
 const (
 	TextEditMethodIdBuild TextEditMethodIdE = 0
 
-	TextEditMethodIdCodeEditor     TextEditMethodIdE = 1
-	TextEditMethodIdFrame          TextEditMethodIdE = 2
-	TextEditMethodIdHintText       TextEditMethodIdE = 3
-	TextEditMethodIdPassword       TextEditMethodIdE = 4
-	TextEditMethodIdInteractive    TextEditMethodIdE = 5
-	TextEditMethodIdDesiredWidth   TextEditMethodIdE = 6
-	TextEditMethodIdDesiredRows    TextEditMethodIdE = 7
-	TextEditMethodIdLockFocus      TextEditMethodIdE = 8
-	TextEditMethodIdCursorAtEnd    TextEditMethodIdE = 9
-	TextEditMethodIdClipText       TextEditMethodIdE = 10
-	TextEditMethodIdCharLimit      TextEditMethodIdE = 11
-	TextEditMethodIdInsertAtCursor TextEditMethodIdE = 12
-	TextEditMethodIdHighlightJob   TextEditMethodIdE = 13
-	TextEditMethodIdSectionStyled  TextEditMethodIdE = 14
-	TextEditMethodIdNoWrapLayout   TextEditMethodIdE = 15
-	TextEditMethodIdReportCursor   TextEditMethodIdE = 16
-	TextEditMethodIdSetCursor      TextEditMethodIdE = 17
-	TextEditMethodIdCaptureTab     TextEditMethodIdE = 18
-	TextEditMethodIdCaptureKeys    TextEditMethodIdE = 19
+	TextEditMethodIdCodeEditor       TextEditMethodIdE = 1
+	TextEditMethodIdFrame            TextEditMethodIdE = 2
+	TextEditMethodIdHintText         TextEditMethodIdE = 3
+	TextEditMethodIdPassword         TextEditMethodIdE = 4
+	TextEditMethodIdInteractive      TextEditMethodIdE = 5
+	TextEditMethodIdDesiredWidth     TextEditMethodIdE = 6
+	TextEditMethodIdDesiredRows      TextEditMethodIdE = 7
+	TextEditMethodIdLockFocus        TextEditMethodIdE = 8
+	TextEditMethodIdCursorAtEnd      TextEditMethodIdE = 9
+	TextEditMethodIdClipText         TextEditMethodIdE = 10
+	TextEditMethodIdCharLimit        TextEditMethodIdE = 11
+	TextEditMethodIdInsertAtCursor   TextEditMethodIdE = 12
+	TextEditMethodIdHighlightJob     TextEditMethodIdE = 13
+	TextEditMethodIdSectionStyled    TextEditMethodIdE = 14
+	TextEditMethodIdNoWrapLayout     TextEditMethodIdE = 15
+	TextEditMethodIdReportCursor     TextEditMethodIdE = 16
+	TextEditMethodIdSetCursor        TextEditMethodIdE = 17
+	TextEditMethodIdCaptureTab       TextEditMethodIdE = 18
+	TextEditMethodIdCaptureKeys      TextEditMethodIdE = 19
+	TextEditMethodIdCaptureKeyChords TextEditMethodIdE = 20
 )
 
 const (

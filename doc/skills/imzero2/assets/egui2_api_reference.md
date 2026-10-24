@@ -81,7 +81,7 @@ status: draft
 | FetchR9U64 | Fetcher | No | 0 | 0 | - | - |
 | FetchVideoCapabilities | Fetcher | No | 0 | 0 | - | - |
 | FetchVideoStreamInfo | Fetcher | No | 0 | 0 | - | - |
-| Frame | BuilderFactory | Yes | 0 | 0 | 24 | Immediate, Retained, BlockIterator |
+| Frame | BuilderFactory | Yes | 0 | 0 | 25 | Immediate, Retained, BlockIterator |
 | Grid | BuilderFactory | Yes | 0 | 0 | 6 | Immediate, BlockIterator |
 | Group | BuilderFactory | No | 0 | 0 | 0 | Immediate, BlockIterator |
 | GuiZoomZoomMenuButtons | Procedural | No | 0 | 0 | - | - |
@@ -176,7 +176,7 @@ status: draft
 | TableCellText | BuilderFactory | No | 1 | 0 | 0 | Immediate, Retained |
 | TableColumn | BuilderFactory | No | 0 | 0 | 8 | Immediate, Retained |
 | TableHeaderText | BuilderFactory | No | 1 | 0 | 0 | Immediate, Retained |
-| TextEdit | BuilderFactory | Yes | 2 | 0 | 19 | Immediate |
+| TextEdit | BuilderFactory | Yes | 2 | 0 | 20 | Immediate |
 | TimeRangePicker | BuilderFactory | Yes | 2 | 0 | 4 | Immediate, Retained |
 | TintedScope | BuilderFactory | Yes | 1 | 0 | 4 | Immediate, Retained, BlockIterator |
 | UiClipToMaxRect | Procedural | No | 0 | 0 | - | - |
@@ -808,6 +808,7 @@ EtHeaderText
 - **SenseDrag**()
 - **Focusable**()
 - **CaptureKeys**(mask: u64)
+- **CaptureKeyChords**(mask: u64, mods: u8)
 - **CaptureKeyEdges**()
 - **HoverCursorPointer**()
 - **PresetGroup**()
@@ -2387,6 +2388,7 @@ TableHeaderText
 - **SetCursor**(sel: u64, focus: b)
 - **CaptureTab**()
 - **CaptureKeys**(mask: u64)
+- **CaptureKeyChords**(mask: u64, mods: u8)
 
 #### Return Type
 

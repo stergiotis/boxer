@@ -35,6 +35,7 @@ pub mod inputmap;
 pub mod inputproto;
 pub mod interpreter;
 /// ADR-0177 key vocabulary — generated from the Go table, see keycodes.rs.
+pub mod keychord;
 pub mod keycodes;
 #[cfg(any(feature = "headless", feature = "browser"))]
 pub mod meshlane;

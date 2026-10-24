@@ -636,6 +636,16 @@ func definitionsWidget() (widgets []*ir.BuilderFactoryNode) {
 				BeginMethod("captureKeys").Arg("mask", ctabb.U64).
 				CodeClientRust(rustClientCode("self.text_edit_pending_capture_keys = mask;\n")).
 				EndMethod().
+				// captureKeyChords (ADR-0334 §SD7): the shortcut form of
+				// captureKeys. A masked key is taken only from an event whose
+				// own modifiers are the chord (keychord.rs: command held,
+				// shift as stated, alt not), so Ctrl+B reaches Go and b reaches
+				// the editor. Needed on a TextEdit above all: egui's own
+				// Ctrl+Z would otherwise undo inside the widget while the
+				// document's history lives in Go (ADR-0334 §SD5).
+				BeginMethod("captureKeyChords").Arg("mask", ctabb.U64).Arg("mods", ctabb.U8).
+				CodeClientRust(rustClientCode("self.text_edit_pending_capture_chords = (mask, mods);\n")).
+				EndMethod().
 				Build()...).
 			WithConstructionCodeClientRust(rustClientCode("if multiline { egui::TextEdit::multiline(&mut text).id({{Id}}) } else { egui::TextEdit::singleline(&mut text).id({{Id}}) };\n")).
 			WithSettingImmediate(true).
@@ -743,6 +753,41 @@ if self.text_edit_pending_capture_keys != 0 {
             }
         }
     }
+}
+// captureKeyChords (ADR-0334 §SD7): the chord pass. Unlike captureKeys the
+// match reads each event's OWN modifiers, and only the matching event leaves
+// the queue — a plain letter in the same frame stays for the editor. The
+// modifier byte reported is the event's, not the frame's, for the same reason.
+if self.text_edit_pending_capture_chords.0 != 0 {
+    let (chord_mask, chord_mods) = std::mem::take(&mut self.text_edit_pending_capture_chords);
+    if let Some(ctx) = {{EguiUiOptionalOuter}}.as_deref().map(|ui| ui.ctx().clone()) {
+        if ctx.memory(|m| m.has_focus({{Id}})) {
+            let mut hits: Vec<(u8, u8, u8)> = Vec::new();
+            ctx.input_mut(|inp| {
+                inp.events.retain(|ev| {
+                    if let egui::Event::Key { key, pressed: true, repeat, modifiers, .. } = ev {
+                        let code = crate::imzero2::keycodes::imzero_key_code(*key);
+                        if code != 0
+                            && (chord_mask & (1u64 << code)) != 0
+                            && crate::imzero2::keychord::chord_matches(modifiers, chord_mods)
+                        {
+                            hits.push((code, crate::imzero2::keychord::mods_byte(modifiers), 1 | ((*repeat as u8) << 1)));
+                            return false;
+                        }
+                    }
+                    true
+                });
+            });
+            if !hits.is_empty() {
+                for (code, mods, edges) in hits {
+                    self.r26_key_capture_push({{Id}}.value(), code, mods, edges);
+                }
+                ctx.request_repaint();
+            }
+        }
+    }
+} else {
+    self.text_edit_pending_capture_chords = (0, 0);
 }
 let resp =`),
 				applyCodeWidgetRust(true),

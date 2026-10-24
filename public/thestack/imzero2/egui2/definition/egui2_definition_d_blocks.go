@@ -353,6 +353,14 @@ func definitionsBlock() (blocks []*ir.BuilderFactoryNode) {
 			// takes focus by calling requestFocus when one of them is hit.
 			BeginMethod("captureKeys").Arg("mask", ctabb.U64).
 			CodeClientRust(rustClientCode("capture_keys_mask = mask;\n")).EndMethod().
+			// captureKeyChords — ADR-0334 §SD7. The shortcut form: a key in
+			// the mask is taken only while the event's own modifiers are the
+			// chord `mods` names (keychord.rs: command held, shift as stated,
+			// alt not), so Ctrl+Z is a shortcut and z stays a letter. Reported
+			// on R26 like any capture; Go tells the two apart by Command().
+			// Registers the focus rect as captureKeys does.
+			BeginMethod("captureKeyChords").Arg("mask", ctabb.U64).Arg("mods", ctabb.U8).
+			CodeClientRust(rustClientCode("capture_chord_mask = mask;\ncapture_chord_mods = mods;\n")).EndMethod().
 			// captureKeyEdges — ADR-0279 §SD1. The capture also takes the
 			// releases of the masked keys, and every event carries an edge
 			// byte (down, repeat). Opt-in, because an adopter that acts on
@@ -392,7 +400,7 @@ func definitionsBlock() (blocks []*ir.BuilderFactoryNode) {
 		WithSettingBlockIterator(true).
 		WithSettingImmediate(true).
 		WithSettingRetained(true).
-		WithConstructionCodeClientRust(rustClientCode("egui::Frame::new();\nlet mut sense_click = false;\nlet mut sense_drag = false;\nlet mut hover_cursor_pointer = false;\nlet mut focusable = false;\nlet mut capture_keys_mask: u64 = 0;\nlet mut capture_key_edges = false;\n")).
+		WithConstructionCodeClientRust(rustClientCode("egui::Frame::new();\nlet mut sense_click = false;\nlet mut sense_drag = false;\nlet mut hover_cursor_pointer = false;\nlet mut focusable = false;\nlet mut capture_keys_mask: u64 = 0;\nlet mut capture_chord_mask: u64 = 0;\nlet mut capture_chord_mods: u8 = 0;\nlet mut capture_key_edges = false;\n")).
 		WithApplyCodeClientRust(rustClientCode(`
 					if {{EguiUiOptionalOuter}}.is_some() {
 						let ui = {{EguiUiOptionalOuter}}.as_mut().unwrap();
@@ -424,7 +432,7 @@ func definitionsBlock() (blocks []*ir.BuilderFactoryNode) {
 						// The id expression MUST match focusIdExpr() in
 						// egui2_definition_d_keys.go — requestFocus asks for
 						// exactly this id, and a mismatch is silent (SD7).
-						if focusable || capture_keys_mask != 0 {
+						if focusable || capture_keys_mask != 0 || capture_chord_mask != 0 {
 							// click() only when the caller asked to be
 							// focusable: that sense makes this overlay eat
 							// clicks meant for the body. A capture-only Frame
