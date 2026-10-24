@@ -200,6 +200,29 @@ func labelBackends(rt *hostboot.Runtime) {
 	} else {
 		capinspector.SetActiveBackend(capinspector.CapTask, "task")
 	}
+	// The services below each have one backend; a cap whose service did not
+	// start stays unlabelled, which the inspector draws as degraded.
+	if rt.Watchbill != nil {
+		capinspector.SetActiveBackend(capinspector.CapWatchbill, "worker")
+	}
+	if rt.AppState != nil {
+		capinspector.SetActiveBackend(capinspector.CapAppState, "service")
+	}
+	if rt.KeelsonQuery {
+		capinspector.SetActiveBackend(capinspector.CapKeelsonQuery, "keelsonquery")
+	}
+	if rt.Adhoc != nil {
+		capinspector.SetActiveBackend(capinspector.CapAdhoc, "adhocdata")
+	}
+	if rt.LLM != nil {
+		capinspector.SetActiveBackend(capinspector.CapLLM, "llm")
+	}
+	if rt.HTTP != nil {
+		capinspector.SetActiveBackend(capinspector.CapHTTP, "httpegress")
+	}
+	if rt.Agent != nil {
+		capinspector.SetActiveBackend(capinspector.CapAgent, "agent")
+	}
 }
 
 // parseLaunchConfigs turns each `<alias>=<path>` of --launch-config into a

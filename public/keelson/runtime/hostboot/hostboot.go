@@ -306,6 +306,9 @@ type Runtime struct {
 	// Introspect is the shared introspection registry (populated whether or
 	// not the HTTP host serves it).
 	Introspect *introspect.Registry
+	// KeelsonQuery reports whether the keelson.query bus service
+	// (ADR-0253) started with the introspection host.
+	KeelsonQuery bool
 	// HostServices names the registered host services that started.
 	HostServices []string
 	Coverage     *coverage.Sampler
@@ -1082,6 +1085,7 @@ func (rt *Runtime) bootIntrospect() {
 		WindowHost:       rt.Host,
 		Bus:              rt.Bus,
 		ChlocalAvailable: rt.ChLocal != nil,
+		QueryStarted:     func() { rt.KeelsonQuery = true },
 		Registry:         rt.Introspect,
 		Facts:            rt.Facts,
 		PersistExec:      rt.PersistExec,

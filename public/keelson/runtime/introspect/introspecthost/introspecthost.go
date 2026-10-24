@@ -82,6 +82,10 @@ type Deps struct {
 	// ChlocalAvailable reports whether the chlocalbroker service is running.
 	// When false, /query is left disabled even if Bus is set.
 	ChlocalAvailable bool
+	// QueryStarted, when set, is called once the keelson.query bus service
+	// (ADR-0253) is up, so the host can report that it runs. It is not
+	// called when the service is off or failed to start.
+	QueryStarted func()
 	// Registry, when set, is the introspection registry to serve instead of
 	// a fresh private one. The runtime passes a shared registry so an
 	// ad-hoc dataset capability (ADR-0134) registering handles into it
@@ -363,6 +367,9 @@ func Start(deps Deps) (stop func(context.Context) error, err error) {
 			deps.Log.Warn().Err(qerr).Msg("introspecthost: keelson.query service start failed; keelson.query.* will be unbound")
 		} else {
 			querySvc = svc
+			if deps.QueryStarted != nil {
+				deps.QueryStarted()
+			}
 		}
 	}
 	closeQuery := func() {
