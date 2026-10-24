@@ -171,7 +171,10 @@ const consoleCborThreshold = 70
 // writer that omits FormatFieldValue therefore prints the raw blob for
 // every bool. The marshal half and the format half are two ends of one
 // codec; this constructor keeps them coupled so they cannot drift.
-func NewConsoleWriter(out io.Writer, noColor bool) (cw zerolog.ConsoleWriter, err error) {
+//
+// Under binary_log the writer also decodes each CBOR event itself before
+// zerolog sees it (see ConsoleWriter).
+func NewConsoleWriter(out io.Writer, noColor bool) (cw ConsoleWriter, err error) {
 	var pp *cborConsolePrinter
 	pp, err = newCborConsolePrinter(consoleCborThreshold)
 	if err != nil {
@@ -181,7 +184,7 @@ func NewConsoleWriter(out io.Writer, noColor bool) (cw zerolog.ConsoleWriter, er
 	fv := func(i any) string {
 		return formatFieldValue(i, pp)
 	}
-	cw = zerolog.ConsoleWriter{
+	cw = ConsoleWriter{ConsoleWriter: zerolog.ConsoleWriter{
 		Out:                 out,
 		NoColor:             noColor,
 		FormatFieldValue:    fv,
@@ -189,9 +192,35 @@ func NewConsoleWriter(out io.Writer, noColor bool) (cw zerolog.ConsoleWriter, er
 		FieldsExclude:       []string{zerolog.ErrorFieldName},
 		FormatExtra:         eh.ConsoleFormatErrorExtra(true),
 		TimeFormat:          time.RFC3339,
-	}
+	}}
 	return
 }
+
+// ConsoleWriter is zerolog's ConsoleWriter with its own reading of a
+// binary_log event: a CBOR event is turned into JSON by zerologCborToJson
+// rather than by zerolog's decoder, which printed unsigned integers at or
+// above 2⁶³ as negative numbers. JSON events pass through unchanged, and an
+// event the transcoder cannot read goes to zerolog as it came.
+type ConsoleWriter struct {
+	zerolog.ConsoleWriter
+}
+
+func (inst ConsoleWriter) Write(p []byte) (n int, err error) {
+	q := p
+	if len(p) > 0 && p[0] > 0x7f { // zerolog's test for a binary event
+		if j, jerr := zerologCborToJson(p); jerr == nil {
+			q = j
+		}
+	}
+	_, err = inst.ConsoleWriter.Write(q)
+	if err != nil {
+		return
+	}
+	n = len(p)
+	return
+}
+
+var _ io.Writer = ConsoleWriter{}
 
 // NewFormatWriter builds the operator-facing writer for `format`,
 // wrapping `out`. It is the single source of truth for translating
@@ -295,7 +324,7 @@ func SetupConsoleLogger(w io.Writer) (err error) {
 	if err = installConsoleCborMarshalers(); err != nil {
 		return
 	}
-	var cw zerolog.ConsoleWriter
+	var cw ConsoleWriter
 	cw, err = NewConsoleWriter(w, false)
 	if err != nil {
 		return
