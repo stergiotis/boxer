@@ -916,7 +916,7 @@ func (inst *GraphviewDriver) rebuild(m *netModel) {
 	inst.deriveChannels(m)
 
 	seqPalette := styletokens.SequentialDefault()
-	bandLo := networkMagnitudeBandLo(seqPalette, styletokens.NeutralBgSurface, styletokens.NeutralBorderDefault)
+	band := networkMagnitudeBand(seqPalette, styletokens.NeutralBgSurface, styletokens.NeutralBorderDefault)
 	ne := m.NumEdges()
 	ec := graphview.EdgeColumns{
 		From:     m.From,
@@ -939,7 +939,7 @@ func (inst *GraphviewDriver) rebuild(m *netModel) {
 		if col, ok := m.edgeStroke(i); ok {
 			ec.Color[i] = col
 		} else if w > 0 && m.maxWeight > 0 {
-			ec.Color[i] = color.Hex(networkMagnitudeRamp(seqPalette, bandLo, w, m.maxWeight).AsHex())
+			ec.Color[i] = color.Hex(networkMagnitudeRamp(seqPalette, band, w, m.maxWeight).AsHex())
 		}
 		ec.Width[i] = graphviewEdgeWidth(w, m.maxWeight)
 	}
@@ -1705,11 +1705,11 @@ func (inst *GraphviewDriver) deriveChannels(m *netModel) {
 			// A quantity ramps, at the same normalised position the edge
 			// channel uses (ADR-0167 §SD4).
 			seq := styletokens.SequentialDefault()
-			bandLo := networkMagnitudeBandLo(seq, styletokens.NeutralBgSurface, styletokens.NeutralBorderDefault)
+			band := networkMagnitudeBand(seq, styletokens.NeutralBgSurface, styletokens.NeutralBorderDefault)
 			maxV := maxOf(num)
 			for i, v := range num {
 				if !math.IsNaN(v) && maxV > 0 {
-					nc.Color[i] = color.Hex(networkMagnitudeRamp(seq, bandLo, max(v, 0), maxV).AsHex())
+					nc.Color[i] = color.Hex(networkMagnitudeRamp(seq, band, max(v, 0), maxV).AsHex())
 				}
 			}
 		case lbl != nil:

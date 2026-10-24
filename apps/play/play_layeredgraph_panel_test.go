@@ -498,9 +498,10 @@ func TestNetworkWithoutWeightColumnHasNoMagnitude(t *testing.T) {
 
 // ADR-0167 §SD4's legibility rule: the weight ramp starts where it is at least
 // as visible as an ordinary edge. A sequential palette spans the whole
-// lightness range, so its far end sinks into the background — and an edge
-// carrying a small but KNOWN weight must not end up harder to see than one
-// carrying no weight at all.
+// lightness range, so the end nearest the background sinks into it — and an
+// edge carrying a small but KNOWN weight must not end up harder to see than
+// one carrying no weight at all. Holds under either theme: on the light one
+// the band runs towards the palette's dark end.
 func TestNetworkMagnitudeBandStaysAboveTheDefaultStroke(t *testing.T) {
 	bg, base := styletokens.NeutralBgPanel, styletokens.NeutralBorderDefault
 	want := contrast.Ratio(base.R, base.G, base.B, bg.R, bg.G, bg.B)
@@ -508,13 +509,14 @@ func TestNetworkMagnitudeBandStaysAboveTheDefaultStroke(t *testing.T) {
 	for _, p := range []styletokens.SequentialE{
 		styletokens.SequentialDefault(), styletokens.SequentialBatlow, styletokens.SequentialLajolla,
 	} {
-		lo := networkMagnitudeBandLo(p, bg, base)
-		require.GreaterOrEqual(t, lo, float32(0))
-		require.Less(t, lo, float32(1))
-		// Every position the ramp can produce — the floor and everything above
-		// it — is at least as legible as the edge it replaces.
+		band := networkMagnitudeBand(p, bg, base)
+		require.True(t, band.to == 0 || band.to == 1, "the heavy end is a palette end")
+		require.NotEqual(t, band.from, band.to)
+		// Every position the ramp can produce — the floor and everything past
+		// it towards the heavy end — is at least as legible as the edge it
+		// replaces.
 		for i := range 21 {
-			tt := lo + (1-lo)*float32(i)/20
+			tt := band.from + (band.to-band.from)*float32(i)/20
 			s := styletokens.Sequential(p, tt)
 			got := contrast.Ratio(s.R, s.G, s.B, bg.R, bg.G, bg.B)
 			assert.GreaterOrEqualf(t, got, want*0.98,
@@ -530,11 +532,13 @@ func TestNetworkMagnitudeBandIsTight(t *testing.T) {
 	bg, base := styletokens.NeutralBgPanel, styletokens.NeutralBorderDefault
 	want := contrast.Ratio(base.R, base.G, base.B, bg.R, bg.G, bg.B)
 
-	lo := networkMagnitudeBandLo(styletokens.SequentialDefault(), bg, base)
-	if lo <= 0 {
+	band := networkMagnitudeBand(styletokens.SequentialDefault(), bg, base)
+	near := 1 - band.to
+	if band.from == near {
 		t.Skip("the whole ramp is usable on this theme")
 	}
-	below := styletokens.Sequential(styletokens.SequentialDefault(), lo-1.0/magnitudeBandSteps)
+	step := (band.to - near) / magnitudeBandSteps
+	below := styletokens.Sequential(styletokens.SequentialDefault(), band.from-step)
 	got := contrast.Ratio(below.R, below.G, below.B, bg.R, bg.G, bg.B)
 	assert.Less(t, got, want, "the step below the floor should be the unusable one")
 }
@@ -594,19 +598,35 @@ func TestNetworkModelKeyTracksNodeWeightOnly(t *testing.T) {
 	assert.Equal(t, k(base), k(heavierEdge), "an edge weight does not — it never reaches the engine")
 }
 
+// Heavier means more visible: along the ramp the contrast against the
+// background never falls by more than a rounding step, whichever theme the
+// background comes from.
+func TestNetworkMagnitudeRampGrowsAwayFromTheBackground(t *testing.T) {
+	bg, base := styletokens.NeutralBgPanel, styletokens.NeutralBorderDefault
+	palette := styletokens.SequentialDefault()
+	band := networkMagnitudeBand(palette, bg, base)
+	prev := 0.0
+	for i := 1; i <= 20; i++ {
+		s := networkMagnitudeRamp(palette, band, float64(i*i), 400)
+		got := contrast.Ratio(s.R, s.G, s.B, bg.R, bg.G, bg.B)
+		assert.GreaterOrEqualf(t, got, prev*0.97, "weight %d/20: %.2f:1 after %.2f:1", i, got, prev)
+		prev = got
+	}
+}
+
 // A ramped node body sweeps the whole lightness range, so its label cannot use
 // one fixed ink. Whatever the ramp paints, the ink chosen for it must clear the
 // WCAG AA floor for body text.
 func TestNetworkInkOnRampStaysReadable(t *testing.T) {
 	palette := styletokens.SequentialDefault()
-	bandLo := networkMagnitudeBandLo(palette, styletokens.NeutralBgPanel, styletokens.NeutralBorderDefault)
+	band := networkMagnitudeBand(palette, styletokens.NeutralBgPanel, styletokens.NeutralBorderDefault)
 
 	for i := range 21 {
 		w := float64(i) / 20
 		if w <= 0 {
 			continue
 		}
-		fill := networkMagnitudeRamp(palette, bandLo, w, 1)
+		fill := networkMagnitudeRamp(palette, band, w, 1)
 		ink := networkInkOn(fill)
 		got := contrast.Ratio(ink.R, ink.G, ink.B, fill.R, fill.G, fill.B)
 		assert.GreaterOrEqualf(t, got, 4.5,

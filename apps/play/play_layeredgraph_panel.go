@@ -342,7 +342,7 @@ func (inst *NetworkDriver) render(edgesRec arrow.RecordBatch, ec networkEdgesCla
 
 	seqPalette := styletokens.SequentialDefault()
 	style := view.DefaultStyle()
-	bandLo := networkMagnitudeBandLo(seqPalette, styletokens.NeutralBgPanel, styletokens.NeutralBorderDefault)
+	band := networkMagnitudeBand(seqPalette, styletokens.NeutralBgPanel, styletokens.NeutralBorderDefault)
 
 	// A vertex `weight` ramps the node body the same way it ramps an edge, and
 	// loses to the same two more-specific claims: the selection highlight, and
@@ -380,7 +380,7 @@ func (inst *NetworkDriver) render(edgesRec arrow.RecordBatch, ec networkEdgesCla
 		if !found || w <= 0 {
 			return faded(id, style.NodeFill)
 		}
-		col = color.Hex(networkMagnitudeRamp(seqPalette, bandLo, w, b.maxNodeWeight).AsHex())
+		col = color.Hex(networkMagnitudeRamp(seqPalette, band, w, b.maxNodeWeight).AsHex())
 		if fcol, wasFaded := faded(id, col); wasFaded {
 			return fcol, true
 		}
@@ -400,7 +400,7 @@ func (inst *NetworkDriver) render(edgesRec arrow.RecordBatch, ec networkEdgesCla
 		if !found || w <= 0 {
 			return
 		}
-		return color.Hex(networkInkOn(networkMagnitudeRamp(seqPalette, bandLo, w, b.maxNodeWeight)).AsHex()), true
+		return color.Hex(networkInkOn(networkMagnitudeRamp(seqPalette, band, w, b.maxNodeWeight)).AsHex()), true
 	}
 	// Edges carrying a `tone` are stroked with it; the rest keep the style
 	// default. Nothing overrides the selection highlight, which is a fill.
@@ -429,7 +429,7 @@ func (inst *NetworkDriver) render(edgesRec arrow.RecordBatch, ec networkEdgesCla
 		}
 		// Same square root as the width, so the channels stay in step, then
 		// mapped onto the legible part of the ramp.
-		return color.Hex(networkMagnitudeRamp(seqPalette, bandLo, w, b.maxWeight).AsHex()), true
+		return color.Hex(networkMagnitudeRamp(seqPalette, band, w, b.maxWeight).AsHex()), true
 	}
 	res := view.Render(networkIDSalt+inst.idSeed, inst.layout, view.RenderOpts{
 		Style:      style,
