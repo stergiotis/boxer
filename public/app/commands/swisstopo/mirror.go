@@ -156,10 +156,11 @@ func mirrorAction(cliCtx context.Context, cmd *cli.Command) (err error) {
 	}
 
 	{ // feed tiles
+	feed:
 		for _, t := range tiles {
 			select {
 			case <-ctx.Done():
-				break
+				break feed
 			case tileCh <- t:
 			}
 		}
