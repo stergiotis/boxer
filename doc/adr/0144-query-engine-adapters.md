@@ -211,6 +211,21 @@ See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-d
 
 ## Updates
 
+### 2026-10-24 — engine 2 delivers the requested FORMAT or fails the run
+
+A statement's own FORMAT clause used to win over the requested one: `chserver`
+sent the request's format as `default_format`, which the server applies only
+to a statement without a clause. play rewrites the clause, but cannot rewrite
+a statement it cannot parse, and a clause left in place reached the Arrow
+decoder as bytes in another format.
+
+`chserver` now also sends `X-ClickHouse-Format`, which a server from 26.8 on
+takes over the statement's clause, and checks the format the response header
+reports. A body in another format — an earlier server, letting the clause
+win — fails the run with both format names rather than being delivered.
+`Request.Format` is therefore the format the bytes are in, as documented,
+rather than a default.
+
 ### 2026-07-26 — The three roles are built, over both shipped engines
 
 `public/keelson/runtime/queryengine` carries the roles; an adapter package

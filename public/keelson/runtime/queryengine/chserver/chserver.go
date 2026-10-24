@@ -192,6 +192,14 @@ func (inst *Engine) Deliver(ctx context.Context, req queryengine.Request) (st qu
 		return
 	}
 	httpReq.Header.Set("Content-Type", "text/plain; charset=utf-8")
+	if req.Format != "" {
+		// Request.Format is the format the caller decodes, so it overrides
+		// a FORMAT clause in the statement — which a server from 26.8 on
+		// does for this header. An earlier server reads it as
+		// default_format and lets the clause win; the check on the response
+		// below turns that into a refusal rather than a decode error.
+		httpReq.Header.Set(chhttp.HeaderFormat, req.Format)
+	}
 	inst.authenticate(httpReq)
 
 	resp, doErr := httpClient.Do(httpReq)
@@ -202,6 +210,11 @@ func (inst *Engine) Deliver(ctx context.Context, req queryengine.Request) (st qu
 	}
 	if resp.StatusCode != http.StatusOK {
 		st = queryengine.NewSliceStream(nil, runstream.Failed(errorFromResponse(resp)), nil)
+		return
+	}
+	if got := resp.Header.Get(chhttp.HeaderFormat); req.Format != "" && got != "" && !sameFormat(got, req.Format) {
+		_ = resp.Body.Close()
+		st = queryengine.NewSliceStream(nil, runstream.Failed(formatMismatch(got, req.Format)), nil)
 		return
 	}
 	summary := ParseSummary(resp.Header.Get(chhttp.HeaderSummary))
@@ -239,8 +252,9 @@ func (inst *Engine) queryString(req queryengine.Request) (qs url.Values, err err
 	if req.Format != "" {
 		// default_format rather than a FORMAT clause appended to the
 		// statement: the statement is finalized by the time it arrives here
-		// and this adapter does not rewrite SQL. A FORMAT the statement
-		// carries itself still wins, which is the server's rule, not ours.
+		// and this adapter does not rewrite SQL. It is what a server before
+		// 26.8 has to go on; later ones take the X-ClickHouse-Format header
+		// Deliver sends over a FORMAT clause the statement carries.
 		qs.Set("default_format", req.Format)
 	}
 	return

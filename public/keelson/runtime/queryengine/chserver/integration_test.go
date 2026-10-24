@@ -241,3 +241,25 @@ func TestLiveMidStreamExceptionFailsTheRun(t *testing.T) {
 		assert.False(t, strings.Contains(string(body), "__exception__"), name)
 	}
 }
+
+// A server from 26.8 on takes X-ClickHouse-Format over the statement's own
+// FORMAT clause, so the requested format is what arrives. An earlier server
+// lets the clause win and the run is refused instead; either way the bytes
+// are never handed over in a format the caller did not ask for.
+func TestLiveRequestedFormatWinsOverTheStatement(t *testing.T) {
+	endpoint := liveEndpoint(t)
+	eng, err := New(Config{Endpoint: endpoint})
+	require.NoError(t, err)
+
+	st, res, err := eng.Deliver(context.Background(), queryengine.Request{SQL: "SELECT 42 FORMAT JSONEachRow", Format: "TabSeparated"})
+	require.NoError(t, err)
+	body, term, err := queryengine.Collect(st)
+	_ = st.Close()
+	require.NoError(t, err)
+	if term.State == runstream.TerminalFailed {
+		assert.ErrorContains(t, term.Err, "not the requested TabSeparated")
+		t.Skip("this server predates X-ClickHouse-Format overriding FORMAT (26.8)")
+	}
+	assert.Equal(t, "42\n", string(body))
+	assert.Contains(t, res.ContentType, "tab-separated")
+}
