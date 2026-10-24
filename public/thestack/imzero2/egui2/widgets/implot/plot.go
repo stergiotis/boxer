@@ -154,6 +154,7 @@ type Plot struct {
 	nextWeight    float32
 	noInputs      bool
 	noLegend      bool
+	noMouseText   bool
 	ended         bool
 	// emitting is true while End invokes item renderers; item declarations
 	// from inside a Custom closure are debug-logged no-ops (they would
@@ -601,6 +602,15 @@ func (p *Plot) SetupAxisTicks(axis AxisE, values []float64, labels []string) *Pl
 // thumbnails. Callable any time before End.
 func (p *Plot) NoInputs() *Plot {
 	p.noInputs = true
+	return p
+}
+
+// NoMouseText drops the hover readout in the plot's corner for the frame
+// and keeps every interaction — upstream's ImPlotFlags_NoMouseText. For a
+// plot that shows its own hover text (a callout, a line under the plot);
+// HoverPlotPos still reports the position.
+func (p *Plot) NoMouseText() *Plot {
+	p.noMouseText = true
 	return p
 }
 

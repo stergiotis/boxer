@@ -59,7 +59,7 @@ func SetChrome(chrome ChromeE) {
 		colTickLabel = 0xaab2c0ff
 		colAxisLabel = 0xcdd3ddff
 		colTitle = 0xe6e9eeff
-		colReadout = 0x8891a0ff
+		colReadout = 0xaab2c0ff
 		colBoxFill = 0x4c72b028
 		colBoxStroke = 0x4c72b0cc
 		colErrorBar = 0xc9cfdaff
@@ -80,7 +80,7 @@ func SetChrome(chrome ChromeE) {
 	colTickLabel = styletokens.NeutralTextSecondary.AsHex()
 	colAxisLabel = styletokens.NeutralTextPrimary.AsHex()
 	colTitle = styletokens.NeutralTextPrimary.AsHex()
-	colReadout = alpha(styletokens.NeutralTextSecondary.AsHex(), 0xb4)
+	colReadout = styletokens.NeutralTextSecondary.AsHex()
 	// Box-zoom is a selection affordance → the accent role, not a data
 	// color (the classic palette borrowed paletteDeep[0]).
 	colBoxFill = alpha(styletokens.AccentDefault.AsHex(), 0x28)

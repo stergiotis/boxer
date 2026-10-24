@@ -1,7 +1,6 @@
 package implot
 
 import (
-	"fmt"
 	"math"
 
 	"github.com/rs/zerolog/log"
@@ -191,14 +190,14 @@ func (p *Plot) End() {
 	c.PaintRectStroke(areaX, areaY, areaX+areaW, areaY+areaH, 0, color.Hex(colBorder), styletokens.StrokeHair).Send()
 
 	// --- Hover readout, ImPlot's mouse-position text, bottom-right
-	// corner. Suppressed on NoInputs plots (sparklines, inert popups):
-	// hover state stays readable through HoverPlotPos, the inlay text
-	// would just be noise there.
-	if st.hoverOk && !p.noInputs {
+	// corner. Suppressed on NoInputs plots (sparklines, inert popups) and
+	// under NoMouseText: hover state stays readable through HoverPlotPos,
+	// the inlay text would just be noise there.
+	if st.hoverOk && !p.noInputs && !p.noMouseText {
 		hx := tr.plotX(st.hoverPos[0])
 		hy := tr.plotY(st.hoverPos[1])
 		c.PaintText(areaX+areaW-4, areaY+areaH-3, 2, 2,
-			fmt.Sprintf("%.6g, %.6g", hx, hy), tickFontSize, color.Hex(colReadout)).Monospace().Send()
+			st.readoutText(hx, hy), tickFontSize, color.Hex(colReadout)).Monospace().Send()
 	}
 
 	// --- Interaction surfaces + the canvas drain. Sense-region emission

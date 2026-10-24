@@ -74,6 +74,11 @@
 //     values; upstream's dedicated symlog locator is not yet ported.
 //   - Time axes label in UTC only and place major ticks only — upstream's
 //     minor time ticks and second-line context labels are deferred.
+//   - The hover readout and TagX/TagY print a ScaleTime value as a dated
+//     UTC instant (readout.go). A time axis drawn as a linear axis with its
+//     own ticks — TimeTicksLocal, for local time — prints seconds, since
+//     nothing marks it as time; a local-time ScaleTime or a per-axis
+//     formatter (upstream's SetupAxisFormat) is deferred.
 //   - Digital channels use fixed bit-height/gap constants (there is no
 //     style system to override upstream's defaults).
 //   - Image takes caller-owned RGBA pixels plus a content version (the
