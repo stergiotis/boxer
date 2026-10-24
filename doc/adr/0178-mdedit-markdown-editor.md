@@ -842,6 +842,29 @@ it is saved to a file or copied out. The chat app's Open in mdedit is the
 first caller (ADR-0265 §SD4). The vocabulary is `mdeditLaunchText` and
 `mdeditLaunchName` in vdd.
 
+### 2026-10-24 — a formatted source pane, the keyboard, and a Blocks mode
+
+[ADR-0334](./0334-mdedit-blocks-over-the-source.md) (proposed) takes the
+editor the rest of the way the §Alternatives entry on a WYSIWYG editor
+declined for M0, and this ADR's contracts hold under it unchanged. The
+source pane is proportional and sized — heading lines scaled by level,
+code and tables monospace — through a font vocabulary the highlight seam
+gained (ADR-0130, same date); it answers Enter with a list or quote
+continuation and an exit on an empty item, Tab with an indent, and
+Ctrl+B / I / K / E with the formatting bar's wraps through the chord
+capture (ADR-0177, same date). The line gestures live in `mdline`, shared
+with the block widget.
+
+Blocks is a fourth view mode: `widgets/mdblocks` edits the same source
+string as a list of blocks, the focused one a TextEdit over its own
+slice, every gesture a byte splice, with tables, fences, images and
+callouts as sub-editors and a document-level undo of its own. The mode
+keeps Decision 1 by construction — nothing but the string is the model —
+and the standing caveat on rebinds is why its own undo exists: a
+document edited from two places cannot share egui's per-widget history.
+`BOXER_MDEDIT_DOC` seeds a window with a document treated as handed over,
+so the scenes under `apps/mdedit/scenes` never touch the person's draft.
+
 ## References
 
 - [ADR-0176](./0176-native-tree-widget.md) — the tree widget the outline
