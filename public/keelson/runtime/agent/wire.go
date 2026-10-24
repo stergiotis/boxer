@@ -373,6 +373,9 @@ type wireInstance struct {
 	// Load is opening, ready or failed; LoadReason says why it failed.
 	Load       string `json:"load,omitempty"`
 	LoadReason string `json:"load_reason,omitempty"`
+	// StalledSecs is how long a ready window has drawn no frame, once that
+	// holds up its calls.
+	StalledSecs uint64 `json:"stalled_secs,omitempty"`
 }
 
 type wireListReply struct {

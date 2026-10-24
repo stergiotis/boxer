@@ -126,8 +126,17 @@ func (inst *Inst) OpsInstances() (out []opwire.InstanceInfo) {
 		out = append(out, opwire.InstanceInfo{
 			App: w.manifest.Id, Alias: w.manifest.Id.SubjectAlias(), Key: uint64(w.key),
 			Title: w.manifest.WindowTitle(), Ops: eng != nil, Confined: eng != nil && eng.Confined(),
-			Load: load, Reason: reason,
+			Load: load, Reason: reason, Stalled: stalledOf(eng),
 		})
+	}
+	return
+}
+
+// stalledOf is how long the window of eng has gone without a frame, once
+// that holds up its calls.
+func stalledOf(eng *opengine.Engine) (d time.Duration) {
+	if eng != nil {
+		d = eng.Stalled()
 	}
 	return
 }

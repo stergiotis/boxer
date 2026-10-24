@@ -9,6 +9,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 )
@@ -260,6 +261,9 @@ type InstanceInfo struct {
 	// it failed.
 	Load   LoadE
 	Reason string
+	// Stalled is how long a window that has drawn has gone without a frame,
+	// once that is long enough to hold up its calls; zero otherwise.
+	Stalled time.Duration
 }
 
 // LoadE is how far a window has come since it opened: a window is opening
