@@ -29,10 +29,16 @@ import (
 type Doc struct {
 	segments    []segment
 	frontmatter *containers.BinarySearchGrowingKV[string, any]
-	headings    []HeadingInfo
-	dropped     map[string]int
-	imageMaxW   uint32
-	imageMaxH   uint32
+	// fmStart / fmStop are the byte range of the YAML frontmatter block,
+	// delimiters included, and fmOk whether the source opened with one. The
+	// parser consumes the block without a node, so it is found by scanning
+	// (see [Doc.FrontmatterSpan]).
+	fmStart, fmStop int
+	fmOk            bool
+	headings        []HeadingInfo
+	dropped         map[string]int
+	imageMaxW       uint32
+	imageMaxH       uint32
 	// imageVersion is the content version of every image in this Doc,
 	// unique per Doc, so a Doc rendered under ids another Doc drew with
 	// uploads its own pixels instead of drawing the other's textures.
@@ -508,9 +514,13 @@ func ParseWith(md []byte, opts ParseOptions) (doc *Doc) {
 
 	segments, frontmatter, headings, dropped := parseAndLower(md, &cfg)
 	assignCodeKeys(segments, map[uint64]uint64{})
+	fmStart, fmStop, fmOk := frontmatterSpan(md)
 	doc = &Doc{
 		segments:    segments,
 		frontmatter: frontmatter,
+		fmStart:     fmStart,
+		fmStop:      fmStop,
+		fmOk:        fmOk,
 		headings:    headings,
 		dropped:     dropped,
 		imageMaxW:   cfg.imageMaxW,
@@ -643,7 +653,13 @@ type paragraphRun struct {
 //     whose items are the definitions,
 //     numbered from the first index.
 type segment struct {
-	kind               segKindE
+	kind segKindE
+	// srcStart / srcStop are the byte range of the source this segment was
+	// lowered from, line-snapped and without the trailing newline, set for
+	// top-level segments only (ADR-0334 §SD2; see [Doc.Blocks]). A
+	// synthetic segment — the footnote definitions goldmark appends — has
+	// srcStop < srcStart.
+	srcStart, srcStop  int
 	runs               []paragraphRun
 	code               typed.RetainedFffiHolderTyped[c.CodeViewJobS]
 	codeBuilt          bool // code holds the job built from codeText/codeLang

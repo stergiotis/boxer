@@ -123,6 +123,7 @@ func parseAndLower(src []byte, cfg *config) (segments []segment, frontmatter *co
 		}
 		seg, ok := lowerBlock(ctx, child)
 		if ok {
+			seg.srcStart, seg.srcStop = blockRange(child, src)
 			segments = append(segments, seg)
 		}
 	}
