@@ -196,7 +196,7 @@ as a note, as `-- play: enum` errors do; the buffer still runs.
 **Affinities in v0**, narrow: `gloss/masked` ← `\bsem:secret\b`, `gloss/url`
 ← `\bsem:url\b`, `application/json` ← `\bsem:json(-scalar|-array|-object)?\b`
 (`gloss/ipaddr` ← the network canonical types joined by the 2026-08-28
-Update). Units have no aspect and hence no affinity; that is what the
+Update, `gloss/uuid` ← the `arrow.uuid` extension by the 2026-10-24 one). Units have no aspect and hence no affinity; that is what the
 directive is for.
 
 **Precedence per column**, strongest first:
@@ -244,6 +244,7 @@ it permutes rows on the raw values.
 | `gloss/masked` | any | — | `••••••`, never length-revealing | same | ← `sem:secret` |
 | `gloss/url` | text | — | the URL, accent tone; a hyperlink cell in the grids | `HyperlinkTo` | ← `sem:url` |
 | `gloss/ipaddr` | numeric, text, bytes | — | the address written out, `2001:db8::1` (added by the 2026-08-28 Update) | — | ← `ct:v`, `ct:w` and their CIDR / array spellings |
+| `gloss/uuid` | text, bytes | — | the UUID written out, `61f0c404-5cb3-11e7-907b-a6006ad3dba0` (added by the 2026-10-24 Update) | — | ← `arrow:extension<arrow.uuid>` |
 | `gloss/raw` | any | — | `formatCell` | — | — |
 
 One or two exemplars per archetype — unit formatting, check digit, masking,
@@ -437,6 +438,28 @@ Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers (Tier 1 in-place / Tier 2 dated `## Updates` entry / Tier 3 new superseding ADR).
 
 ## Updates
+
+### 2026-10-24 — `gloss/uuid`, keyed on the Arrow extension tag
+
+A twelfth presentation gloss: `gloss/uuid` writes 16 packed bytes out as
+`8-4-4-4-12` hex, and canonicalises UUID text to lower case. Without it the
+grids hex-encode a ClickHouse `UUID` as one 32-digit run.
+
+Unlike an address, a UUID column says what it holds. ClickHouse tags it with
+the canonical `arrow.uuid` extension, in RFC 9562 byte order, so the bytes
+written out match what the server prints. play does not register arrow-go's
+canonical extension types — doing so would turn every tagged column's type
+into `EXTENSION` for every `FIXED_SIZE_BINARY` switch in the app — so the
+column decodes as its storage type, `fixed_size_binary[16]`. The host
+therefore spells the spec line's `arrow:` token from the field's
+`ARROW:extension:name` metadata, as arrow-go spells the registered type:
+`arrow:extension<arrow.uuid>`. That is what the affinity keys on, and it is
+open to a rule like any other token.
+
+Sixteen untagged bytes stay plain. Only a bytes cell is read by width: text
+of sixteen characters is not a packed UUID. `Array(UUID)` is not reached,
+because the token is built for the column, not its items; it binds by rule
+over the list spelling.
 
 ### 2026-09-17 — row values: a binding tier above the alias, and `audio/wav`
 

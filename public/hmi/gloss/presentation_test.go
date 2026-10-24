@@ -157,7 +157,7 @@ func TestDefaultOrderPresentation(t *testing.T) {
 	assert.Equal(t, []string{
 		MediaTypeTemperature, MediaTypeLength, MediaTypeVelocity, MediaTypePlaneAngle, MediaTypeCoordinate,
 		MediaTypeEpoch, MediaTypeDuration,
-		MediaTypeBytes, MediaTypeTaggedId, MediaTypeLuhn, MediaTypeMasked, MediaTypeURL, MediaTypeIPAddr, MediaTypeRegexp, MediaTypeRaw,
+		MediaTypeBytes, MediaTypeTaggedId, MediaTypeLuhn, MediaTypeMasked, MediaTypeURL, MediaTypeIPAddr, MediaTypeUUID, MediaTypeRegexp, MediaTypeRaw,
 	}, order[13:]) // past the content family: ADR-0123's eight, application/cbor, the four WAVE spellings
 }
 
@@ -224,4 +224,25 @@ func TestIPAddrFace(t *testing.T) {
 	ok, reason := ip.Accepts(ValueKindTemporal)
 	assert.False(t, ok)
 	assert.Contains(t, reason, "gloss/ipaddr expects numeric or text or bytes, got temporal")
+}
+
+// TestUUIDFace pins the two shapes a UUID arrives in: the 16 packed bytes of
+// an `arrow.uuid` column, in the RFC 9562 order ClickHouse sends, and text a
+// lane already wrote out.
+func TestUUIDFace(t *testing.T) {
+	u := instFor(t, "id@gloss/uuid")
+
+	assert.Equal(t, Inline{Text: "61f0c404-5cb3-11e7-907b-a6006ad3dba0"},
+		u.Inline(byteCell("\x61\xf0\xc4\x04\x5c\xb3\x11\xe7\x90\x7b\xa6\x00\x6a\xd3\xdb\xa0")))
+	assert.Equal(t, Inline{Text: "61f0c404-5cb3-11e7-907b-a6006ad3dba0"},
+		u.Inline(txt("61F0C404-5CB3-11E7-907B-A6006AD3DBA0")), "text is canonicalised to lower case")
+
+	assert.Equal(t, Inline{Text: "61f0c4045cb311e7", Tone: ToneError}, u.Inline(txt("61f0c4045cb311e7")))
+	assert.Equal(t, Inline{Text: "61f0c404-5cb3-11e7-907b-a6006ad3dbzz", Tone: ToneError},
+		u.Inline(txt("61f0c404-5cb3-11e7-907b-a6006ad3dbzz")))
+	assert.Equal(t, Inline{Text: "\x01\x02", Tone: ToneError}, u.Inline(byteCell("\x01\x02")))
+	assert.Equal(t, Inline{}, u.Inline(byteCell("")))
+
+	ok, _ := u.Accepts(ValueKindNumeric)
+	assert.False(t, ok, "a UInt128 is not a UUID")
 }

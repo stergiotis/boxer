@@ -6,6 +6,7 @@ import (
 	"sync"
 
 	"github.com/apache/arrow-go/v18/arrow"
+	"github.com/apache/arrow-go/v18/arrow/ipc"
 	"github.com/stergiotis/boxer/public/hmi/gloss"
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/lwsql"
@@ -193,10 +194,25 @@ func (inst *PlayApp) glossColumns(schema *arrow.Schema) []glossColumn {
 	res.cols = make([]glossColumn, schema.NumFields())
 	for i := range res.cols {
 		field := schema.Field(i)
-		res.cols[i] = inst.resolveGlossColumn(field, specs[i]+" arrow:"+field.Type.String(), rules)
+		res.cols[i] = inst.resolveGlossColumn(field, specs[i]+" arrow:"+arrowSpecType(field), rules)
 	}
 	inst.glossRes = res
 	return res.cols
+}
+
+// arrowSpecType is a column's `arrow:` spec token. A field tagged with an
+// extension this process has not registered decodes as its storage type —
+// ClickHouse's UUID arrives as fixed_size_binary[16] tagged `arrow.uuid` — so
+// the tag is read off the field's metadata and spelled the way arrow-go spells
+// the registered type, `extension<arrow.uuid>`, which is what a rule or an
+// affinity can then match.
+func arrowSpecType(field arrow.Field) string {
+	if field.Type.ID() != arrow.EXTENSION {
+		if i := field.Metadata.FindKey(ipc.ExtensionTypeKeyName); i >= 0 {
+			return "extension<" + field.Metadata.Values()[i] + ">"
+		}
+	}
+	return field.Type.String()
 }
 
 // glossNotes returns the current resolution's directive notes.

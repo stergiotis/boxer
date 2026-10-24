@@ -50,6 +50,7 @@ func TestAffinityRules(t *testing.T) {
 		MediaTypeMasked + ` ← \bsem:secret\b`,
 		MediaTypeURL + ` ← \bsem:url\b`,
 		MediaTypeIPAddr + ` ← \bct:[vw]c?[hm]?\b`,
+		MediaTypeUUID + ` ← \barrow:extension<arrow\.uuid>`,
 	}, got)
 
 	r, ok := MatchFirst(rules, "name:pw section:auth role:val ct:s sem:secret arrow:utf8")
@@ -66,6 +67,11 @@ func TestAffinityRules(t *testing.T) {
 	assert.Equal(t, MediaTypeIPAddr, r.MediaType, "a network canonical type carries its own affinity")
 	_, ok = MatchFirst(rules, "name:weight ct:f64 arrow:float64")
 	assert.False(t, ok, "ct:[vw] is the whole type, not a prefix of another one")
+	r, ok = MatchFirst(rules, "name:id arrow:extension<arrow.uuid>")
+	require.True(t, ok)
+	assert.Equal(t, MediaTypeUUID, r.MediaType, "the canonical extension says the column is a UUID")
+	_, ok = MatchFirst(rules, "name:id arrow:fixed_size_binary[16]")
+	assert.False(t, ok, "sixteen untagged bytes are not a UUID")
 
 	// Directive rules precede affinities by list order; gloss/raw overrides.
 	raw, err := c.CompileRule("gloss/raw", `\bsem:secret\b`, "directive line 1")

@@ -1582,6 +1582,13 @@ and array / set (`h`, `m`) spellings, so:
 A value the gloss cannot read as an address keeps its plain rendering in the
 error tone rather than inventing one.
 
+`gloss/uuid` needs nothing declared on a plain result either. ClickHouse tags
+a `UUID` column with Arrow's `arrow.uuid` extension, and the spec line spells
+that tag as the column's type, `arrow:extension<arrow.uuid>`, which is the
+gloss's affinity. The 16 bytes then read `61f0c404-5cb3-11e7-907b-a6006ad3dba0`,
+as the server prints them, instead of a 32-digit hex run. An `Array(UUID)`
+column is not tagged that way in the spec line; bind it by rule.
+
 `application/cbor` is the content family's binary member. A column holding
 CBOR bytes — a canonform record, a canonwire entity item, a pushout patch —
 reads as a hex blob otherwise; the gloss shows RFC 8949 §8 diagnostic
