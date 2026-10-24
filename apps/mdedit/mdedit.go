@@ -46,6 +46,7 @@ import (
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/codeview"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/markdown"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/markdownhighlight"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/mdblocks"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/tree"
 )
 
@@ -138,6 +139,7 @@ const (
 	tipModeSplit  = "Source beside preview — the editing layout."
 	tipModeSource = "Source only, full width. The preview pauses; the outline stays, since it navigates the caret."
 	tipModeRead   = "Preview only, full width. The editor is hidden and the formatting and replace gestures go with it. Find still counts matches and takes the preview to them."
+	tipModeBlocks = "The document as blocks, full width. Click a block to edit it as text; the others stay rendered. Enter at the end of a block starts a new one, Backspace at a block's start joins it to the one above, Escape selects the block, Ctrl+Z and Ctrl+Y walk the document's own undo. The formatting bar and replace go with the source pane; the outline follows the caret."
 )
 
 // Bar button labels, built once — identical retained bytes across frames
@@ -163,6 +165,8 @@ const (
 	viewSource
 	// viewRead is the preview alone, full width — the reading mode.
 	viewRead
+	// viewBlocks is the block editor alone, full width (ADR-0334 §SD8).
+	viewBlocks
 )
 
 // viewModes is the segmented control, in render order.
@@ -175,6 +179,7 @@ var viewModes = []struct {
 	{"mode-split", viewSplit, tipModeSplit, c.Atoms().Text(icons.PhColumns + " Split").Keep()},
 	{"mode-source", viewSource, tipModeSource, c.Atoms().Text(icons.PhPencilSimple + " Source").Keep()},
 	{"mode-read", viewRead, tipModeRead, c.Atoms().Text(icons.PhBookOpen + " Read").Keep()},
+	{"mode-blocks", viewBlocks, tipModeBlocks, c.Atoms().Text(icons.PhTextAa + " Blocks").Keep()},
 }
 
 // App is the per-window mdedit instance.
@@ -363,6 +368,10 @@ type App struct {
 	// editorFieldId is the source TextEdit's widget id from the last frame,
 	// the handle its captured keys are read back under (mdedit_keys.go).
 	editorFieldId uint64
+
+	// blocks is the block editor the Blocks mode hosts (mdedit_blocks.go),
+	// built on first use.
+	blocks *mdblocks.Editor
 
 	// pendingCaret is a caret move the app is asking the editor for, and
 	// pendingCaretOk whether there is one — a separate flag rather than a
@@ -655,6 +664,10 @@ func (inst *App) renderBody() {
 		}
 	}
 	for range c.PanelCentralInside().KeepIter() {
+		if inst.viewMode == viewBlocks {
+			inst.renderBlocks()
+			continue
+		}
 		if !inst.previewVisible() {
 			// Source-only: the editor takes the central region and with it the
 			// full remainder. renderSource is pane-agnostic — it probes
@@ -1138,13 +1151,14 @@ func (inst *App) dirty() (yes bool) {
 // replace row — gates on it, so a mode never leaves a gesture pointing at a
 // pane that is not there.
 func (inst *App) editorVisible() (yes bool) {
-	yes = inst.viewMode != viewRead
+	yes = inst.viewMode != viewRead && inst.viewMode != viewBlocks
 	return
 }
 
 // previewVisible reports whether the current view mode renders the preview.
+// Blocks mode renders neither pane: the widget is both.
 func (inst *App) previewVisible() (yes bool) {
-	yes = inst.viewMode != viewSource
+	yes = inst.viewMode != viewSource && inst.viewMode != viewBlocks
 	return
 }
 

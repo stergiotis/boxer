@@ -1,9 +1,8 @@
 package mdedit
 
 import (
-	"strings"
-
 	"github.com/stergiotis/boxer/public/keelson/runtime/widgethandle"
+	"github.com/stergiotis/boxer/public/semistructured/markdown/mdline"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/keycodes"
 )
@@ -42,11 +41,6 @@ var editorChords = map[keycodes.Code]string{
 	keycodes.KeyE: "code",
 }
 
-// indentUnit is what Tab adds in front of a list item. A tab, as Obsidian's
-// default has it; the parser reads it as four columns, which is more than the
-// two a `- ` marker needs and the three a `1. ` one does.
-const indentUnit = "\t"
-
 // applyEditorKeys consumes last frame's captures on the source editor. Called
 // at the top of renderSource, before the editor is emitted, so a rebind it
 // issues lands in the same frame's databinding override.
@@ -78,29 +72,26 @@ func (inst *App) applyEditorKeys() {
 	}
 }
 
-// applyEnter is the Enter gesture at a caret, in bytes.
+// applyEnter is the Enter gesture at a caret, in bytes (mdline.Enter).
 func (inst *App) applyEnter(caretByte int, shift bool) {
-	act := enterAction(inst.src, caretByte, shift)
-	switch {
-	case act.exit:
-		if inst.rebindBuffer(act.next) {
-			inst.requestCaret(act.caret, act.caret, true)
-		}
-	default:
-		inst.pendingInsert = act.insert
-	}
+	inst.applyLineAction(mdline.Enter(inst.src, caretByte, shift))
 }
 
-// applyTab is the Tab gesture at a caret, in bytes.
+// applyTab is the Tab gesture at a caret, in bytes (mdline.Tab).
 func (inst *App) applyTab(caretByte int, shift bool) {
-	act := tabAction(inst.src, caretByte, shift)
+	inst.applyLineAction(mdline.Tab(inst.src, caretByte, shift))
+}
+
+// applyLineAction lands a line gesture: a snippet goes to the widget as
+// insertAtCursor, a rewrite is a rebind with the caret moved along.
+func (inst *App) applyLineAction(act mdline.Action) {
 	switch {
-	case act.rebind:
-		if inst.rebindBuffer(act.next) {
-			inst.requestCaret(act.caret, act.caret, true)
+	case act.Rebind:
+		if inst.rebindBuffer(act.Next) {
+			inst.requestCaret(act.Caret, act.Caret, true)
 		}
-	case act.insert != "":
-		inst.pendingInsert = act.insert
+	case act.Insert != "":
+		inst.pendingInsert = act.Insert
 	}
 }
 
@@ -114,188 +105,4 @@ func (inst *App) applyChord(key string) {
 			return
 		}
 	}
-}
-
-// keyAction is what a captured key resolved to: a snippet for the widget to
-// splice, or a rewritten buffer with the caret it should land on.
-type keyAction struct {
-	insert string
-	exit   bool
-	rebind bool
-	next   string
-	caret  int
-}
-
-// linePrefix is the marker run at the start of a line: indentation, any
-// number of `> ` quote markers, and at most one list marker, with the list
-// marker's parts broken out so a continuation can renumber it or reset its
-// task box.
-type linePrefix struct {
-	// text is the whole prefix as written, indentation included.
-	text string
-	// list is the list marker alone ("- ", "1. ", "- [x] "), "" for none.
-	list string
-	// ordered is the list marker's number when it has one.
-	ordered bool
-	number  int
-	// task is the task-box part of a list marker ("[x] "), "" for none.
-	task string
-	// quote says the prefix carries at least one `> `.
-	quote bool
-}
-
-// parseLinePrefix reads the marker run of the line starting at lineStart.
-func parseLinePrefix(line string) (p linePrefix) {
-	i := 0
-	// indentation
-	for i < len(line) && (line[i] == ' ' || line[i] == '\t') {
-		i++
-	}
-	// quote markers, each with its optional following space
-	for i < len(line) && line[i] == '>' {
-		p.quote = true
-		i++
-		if i < len(line) && line[i] == ' ' {
-			i++
-		}
-		for i < len(line) && line[i] == ' ' {
-			i++
-		}
-	}
-	// one list marker
-	markStart := i
-	switch {
-	case i < len(line) && (line[i] == '-' || line[i] == '*' || line[i] == '+') && i+1 < len(line) && line[i+1] == ' ':
-		i += 2
-	default:
-		j := i
-		for j < len(line) && line[j] >= '0' && line[j] <= '9' && j-i < 9 {
-			j++
-		}
-		if j > i && j+1 < len(line) && (line[j] == '.' || line[j] == ')') && line[j+1] == ' ' {
-			p.ordered = true
-			n := 0
-			for _, d := range line[i:j] {
-				n = n*10 + int(d-'0')
-			}
-			p.number = n
-			i = j + 2
-		}
-	}
-	if i > markStart {
-		p.list = line[markStart:i]
-		// a task box right after the marker
-		if i+3 < len(line) && line[i] == '[' && line[i+2] == ']' && line[i+3] == ' ' {
-			p.task = line[i : i+4]
-			i += 4
-		}
-	}
-	p.text = line[:i]
-	return
-}
-
-// continuation is the prefix the next line starts with: the same indentation
-// and quote markers, the list marker renumbered, a task box emptied.
-func (p linePrefix) continuation() string {
-	if p.list == "" {
-		return p.text
-	}
-	head := p.text[:len(p.text)-len(p.list)-len(p.task)]
-	list := p.list
-	if p.ordered {
-		list = itoa(p.number+1) + p.list[len(p.list)-2:]
-	}
-	task := ""
-	if p.task != "" {
-		task = "[ ] "
-	}
-	return head + list + task
-}
-
-// enterAction decides what Enter does at caretByte. Shift gives a bare
-// newline; so does a line with no marker. A marked line continues its marker,
-// and a line that is nothing but its marker exits — the marker is removed and
-// the caret parks where it was.
-func enterAction(src string, caretByte int, shift bool) (act keyAction) {
-	if caretByte < 0 {
-		caretByte = 0
-	}
-	if caretByte > len(src) {
-		caretByte = len(src)
-	}
-	act.insert = "\n"
-	if shift {
-		return
-	}
-	ls := lineStart(src, caretByte)
-	le := len(src)
-	if nl := strings.IndexByte(src[ls:], '\n'); nl >= 0 {
-		le = ls + nl
-	}
-	line := src[ls:le]
-	p := parseLinePrefix(line)
-	if p.list == "" && !p.quote {
-		return
-	}
-	// The caret inside the marker itself gets a plain newline: splitting a
-	// marker in two is what the reader asked for by putting the caret there.
-	if caretByte < ls+len(p.text) {
-		return
-	}
-	if strings.TrimSpace(line[len(p.text):]) == "" {
-		// Nothing but the marker: leave the list. A quote-only line exits
-		// the quote the same way.
-		act = keyAction{exit: true, next: src[:ls] + src[ls+len(p.text):], caret: ls}
-		return
-	}
-	act.insert = "\n" + p.continuation()
-	return
-}
-
-// tabAction decides what Tab does at caretByte: a list line indents by one
-// unit (Shift removes one), anything else inserts a tab character.
-func tabAction(src string, caretByte int, shift bool) (act keyAction) {
-	if caretByte < 0 {
-		caretByte = 0
-	}
-	if caretByte > len(src) {
-		caretByte = len(src)
-	}
-	ls := lineStart(src, caretByte)
-	le := len(src)
-	if nl := strings.IndexByte(src[ls:], '\n'); nl >= 0 {
-		le = ls + nl
-	}
-	line := src[ls:le]
-	p := parseLinePrefix(line)
-	if p.list == "" {
-		if shift {
-			return
-		}
-		act.insert = "\t"
-		return
-	}
-	if !shift {
-		act = keyAction{rebind: true, next: src[:ls] + indentUnit + src[ls:], caret: caretByte + len(indentUnit)}
-		return
-	}
-	// outdent: one tab, or up to four leading spaces
-	remove := 0
-	switch {
-	case strings.HasPrefix(line, "\t"):
-		remove = 1
-	default:
-		for remove < 4 && remove < len(line) && line[remove] == ' ' {
-			remove++
-		}
-	}
-	if remove == 0 {
-		return
-	}
-	caret := caretByte - remove
-	if caret < ls {
-		caret = ls
-	}
-	act = keyAction{rebind: true, next: src[:ls] + src[ls+remove:], caret: caret}
-	return
 }
