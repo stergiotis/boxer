@@ -87,6 +87,10 @@ type Editor struct {
 
 	hist history
 
+	// sub is the open sub-editor, when the focused block is a fence, a
+	// table, an image or a callout (subeditors.go).
+	sub subState
+
 	// paneW is what the pane probe last reported.
 	paneW float32
 
@@ -124,6 +128,7 @@ func (e *Editor) SetSource(src string) {
 	e.selMode = false
 	e.hist.clear()
 	e.pendingInsert = ""
+	e.sub = subState{}
 	e.reparse()
 }
 
@@ -251,8 +256,13 @@ func (e *Editor) Render() (ev Events) {
 	e.changed = false
 	e.copyRequest = ""
 	e.reparse()
-	e.applyWriteBack()
-	e.applyEditorKeys()
+	if e.sub.kind != subNone {
+		e.applySubWriteBack()
+		e.applySubKeys()
+	} else {
+		e.applyWriteBack()
+		e.applyEditorKeys()
+	}
 	e.applyFrameKeys()
 	e.reparse()
 	e.deriveBuffer()
@@ -628,6 +638,20 @@ func (e *Editor) deriveBuffer() {
 		start, stop = e.blocks[f].start, e.blocks[f].stop
 	}
 	text := e.src[start:stop]
+	if f := blockAt(e.blocks, e.caret); f >= 0 {
+		e.openSub(e.blocks[f])
+	} else {
+		e.sub = subState{}
+	}
+	if e.sub.kind != subNone {
+		// The sub-editor's fields are the binding; the block's range is its
+		// identity and the caret stays on the block.
+		e.bufStart, e.bufStop = start, stop
+		e.buf = text
+		e.caret = start
+		e.pendingCaretOk = false
+		return
+	}
 	if start != e.bufStart || stop != e.bufStop || text != e.buf {
 		e.buf = text
 		e.bufStart, e.bufStop = start, stop
@@ -667,7 +691,11 @@ func (e *Editor) renderBlocks() (links []markdown.LinkClick) {
 			c.AddSpace(gap)
 		}
 		if editing && !inGap && blk.start == edStart && blk.stop == edStop {
-			e.renderEditor()
+			if e.sub.kind != subNone {
+				e.renderSub(i)
+			} else {
+				e.renderEditor()
+			}
 			drawnEditor = true
 			continue
 		}

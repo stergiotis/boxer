@@ -367,7 +367,16 @@ them.
   And what the TextEdit writes back at a frame's end already carries that
   frame's insert, cursor and rebind, so nothing is ever skipped as stale;
   only a caret the host or a gesture queued since the report wins over it.
-- **M4 — sub-editors**: code fence, table grid, image, callout.
+- **M4 — sub-editors**: code fence, table grid, image, callout. ✓ Each
+  parses the block into fields on open, composes the block from them after
+  every write-back and splices only the bytes that differ; a table re-emits
+  only the rows whose cells changed and keeps the others verbatim, padding
+  and all. A structural key gesture — Tab past the last cell adding a row —
+  splices in the same pass, since the fields are reloaded only when the
+  block's text moved past what they were loaded from. A fence body has no
+  syntax colours of its own in this cut, and a rendered code block carries
+  no text to click on in the accessibility tree, so the scene reaches it
+  with ArrowDown from the block above — the seam §SD4 names.
 - **M5 — mdedit Blocks mode**, help, scenes.
 
 ## Status
