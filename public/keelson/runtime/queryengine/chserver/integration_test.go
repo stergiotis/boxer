@@ -210,3 +210,56 @@ func liveScalar(t *testing.T, eng *Engine, sql string, params map[string]string)
 	value = strings.TrimSpace(string(body))
 	return
 }
+
+// A run that breaks after rows went out arrives either as a 200 whose body
+// ends in the server's tagged exception trailer, or — when the server was
+// still buffering, as it does for compressed output — as a 500 whose body
+// is the rows and then the exception. Either way the terminal must say
+// failed and carry the server's diagnostic, never the rows or the trailer,
+// on both transports, since the progress one parses the response itself.
+func TestLiveMidStreamExceptionFailsTheRun(t *testing.T) {
+	endpoint := liveEndpoint(t)
+	eng, err := New(Config{Endpoint: endpoint})
+	require.NoError(t, err)
+
+	for name, onProgress := range map[string]func(runstream.Progress){
+		"stock":    nil,
+		"progress": func(runstream.Progress) {},
+	} {
+		st, _, err := eng.Deliver(context.Background(), queryengine.Request{
+			SQL:        "SELECT number, throwIf(number = 350000, 'mid-stream boom') FROM numbers(500000)",
+			Format:     "TabSeparated",
+			Settings:   map[string]string{"max_block_size": "10000"},
+			OnProgress: onProgress,
+		})
+		require.NoError(t, err, name)
+		body, term, err := queryengine.Collect(st)
+		_ = st.Close()
+		require.NoError(t, err, name)
+		require.Equal(t, runstream.TerminalFailed, term.State, name)
+		assert.ErrorContains(t, term.Err, "mid-stream boom", name)
+		assert.False(t, strings.Contains(string(body), "__exception__"), name)
+	}
+}
+
+// A server from 26.8 on takes X-ClickHouse-Format over the statement's own
+// FORMAT clause, so the requested format is what arrives. An earlier server
+// lets the clause win and the run is refused instead; either way the bytes
+// are never handed over in a format the caller did not ask for.
+func TestLiveRequestedFormatWinsOverTheStatement(t *testing.T) {
+	endpoint := liveEndpoint(t)
+	eng, err := New(Config{Endpoint: endpoint})
+	require.NoError(t, err)
+
+	st, res, err := eng.Deliver(context.Background(), queryengine.Request{SQL: "SELECT 42 FORMAT JSONEachRow", Format: "TabSeparated"})
+	require.NoError(t, err)
+	body, term, err := queryengine.Collect(st)
+	_ = st.Close()
+	require.NoError(t, err)
+	if term.State == runstream.TerminalFailed {
+		assert.ErrorContains(t, term.Err, "not the requested TabSeparated")
+		t.Skip("this server predates X-ClickHouse-Format overriding FORMAT (26.8)")
+	}
+	assert.Equal(t, "42\n", string(body))
+	assert.Contains(t, res.ContentType, "tab-separated")
+}

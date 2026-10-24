@@ -43,6 +43,8 @@ import (
 //     failure demotes the buffer to a single raw statement).
 //   - Last run — the active result's execution error, or the same summary
 //     line the status bar shows.
+//   - Execution profile — on request, the active result's query run again
+//     under EXPLAIN ANALYZE (play_diagnostics_analyze.go).
 //
 // The probe mirrors a real Run precisely: it wraps Client.buildResidual — the
 // same SET-prelude harvest and pre-execute rewrites BuildStatement applies —
@@ -122,6 +124,15 @@ type DiagnosticsDriver struct {
 	secKnown     bool
 	secClass     analysis.QuerySecurityClassE
 	secWitnesses []analysis.SecurityWitness
+
+	// analyzeLane runs the Execution profile (play_diagnostics_analyze.go):
+	// the active result's query under EXPLAIN ANALYZE. Armed only by the
+	// pane's button, since the profile executes the query; analyzeReq is the
+	// demand the last press compiled.
+	analyzeLane     *nodeLane
+	analyzeArmed    bool
+	analyzeReq      compiledNode
+	analyzeProgress progressTracker
 }
 
 // probeExecutor is the probe lane's nodeExecutorI: a verdict-only POST via
@@ -158,14 +169,23 @@ func NewDiagnosticsDriver(client *Client) *DiagnosticsDriver {
 			memory.NewGoAllocator(), diagProbeTimeout)
 		d.buildResidual = client.buildResidual
 		d.substitute = client.ExprSubstituted
+		opts := newExecOptions("diagnostics-analyze")
+		opts.WrapStatement = explainAnalyzeWrap
+		// No timeout: the profile takes as long as the query does, and the
+		// pane offers Cancel while it runs.
+		d.analyzeLane = newNodeLane(clientExecutor{client: client, opts: opts}, memory.NewGoAllocator(), 0)
 	}
 	return d
 }
 
-// close tears down the probe lane (PlayApp.Close). Idempotent, nil-safe.
+// close tears down the probe and profile lanes (PlayApp.Close). Idempotent,
+// nil-safe.
 func (inst *DiagnosticsDriver) close() {
 	if inst.lane != nil {
 		inst.lane.close()
+	}
+	if inst.analyzeLane != nil {
+		inst.analyzeLane.close()
 	}
 }
 
@@ -403,6 +423,8 @@ func (inst *PlayApp) renderDiagnosticsTab(numRows int64, elapsed time.Duration, 
 	inst.renderDiagSignalEmits()
 	c.Separator().Send()
 	inst.renderDiagLastRun(numRows, elapsed, summary, executed, err, inst.activeTruncation())
+	c.Separator().Send()
+	inst.renderDiagAnalyze()
 }
 
 // renderDiagSignalEmits names the panel emits the store declined to record

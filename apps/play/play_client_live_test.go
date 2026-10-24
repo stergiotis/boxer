@@ -4,6 +4,7 @@ package play
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/apache/arrow-go/v18/arrow/memory"
@@ -108,5 +109,61 @@ func TestLiveExecuteArrowStreamStringParamEscapes(t *testing.T) {
 		if got := formatCell(rec, i, 0); got != want {
 			t.Errorf("col %d = %q, want %q", i, got, want)
 		}
+	}
+}
+
+// A statement outside the grammar keeps its own FORMAT clause — the rewrite
+// cannot replace what it cannot parse — and the requested format still
+// arrives, because the engine names it in X-ClickHouse-Format (26.8+).
+func TestLiveExecuteArrowStreamOverridesAnUnparsedFormatClause(t *testing.T) {
+	c := NewClient(ClientConfig{URL: liveClickHouseURL(t)}, nil)
+	const sql = `FROM numbers(3) |> WHERE number > 0 FORMAT TabSeparated`
+	rdr, rs, _, err := c.ExecuteArrowStream(context.Background(), sql, memory.NewGoAllocator(), nil, nil, c.Dispatch(sql, ""))
+	if err != nil {
+		t.Fatalf("ExecuteArrowStream: %v", err)
+	}
+	defer rs.Close()
+	batches, _, err := drainRun(rdr, rs)
+	if err != nil {
+		if strings.Contains(err.Error(), "not the requested ArrowStream") {
+			t.Skip("this server predates X-ClickHouse-Format overriding FORMAT (26.8)")
+		}
+		t.Fatalf("drain: %v", err)
+	}
+	var rows int64
+	for _, b := range batches {
+		rows += b.NumRows()
+	}
+	if rows != 2 {
+		t.Fatalf("rows = %d, want 2", rows)
+	}
+}
+
+// The Execution profile's wire path: the plain statement through the client's
+// rewrite, wrapped in EXPLAIN ANALYZE by the transport, decoded as Arrow, and
+// read by the profile parser (26.7+).
+func TestLiveExplainAnalyzeProfile(t *testing.T) {
+	c := NewClient(ClientConfig{URL: liveClickHouseURL(t)}, nil)
+	opts := newExecOptions("diagnostics-analyze")
+	opts.WrapStatement = explainAnalyzeWrap
+	rec, _, _, err := clientExecutor{client: c, opts: opts}.execute(context.Background(),
+		compiledNode{SQL: "SELECT number % 10 AS k, count() FROM numbers(100000) GROUP BY k -- trailing comment"}, memory.NewGoAllocator())
+	if err != nil {
+		if strings.Contains(err.Error(), "Syntax error") {
+			t.Skip("this server predates EXPLAIN ANALYZE (26.7)")
+		}
+		t.Fatalf("execute: %v", err)
+	}
+	defer rec.Release()
+	var lines []string
+	for row := range rec.NumRows() {
+		lines = append(lines, strings.Split(formatCell(rec, 0, row), "\n")...)
+	}
+	p := parseAnalyze(lines)
+	if len(p.Summary) == 0 || len(p.Timed) == 0 {
+		t.Fatalf("profile not read: summary=%q timed=%d", p.Summary, len(p.Timed))
+	}
+	if hot := p.hottest(1); hot[0].Step == "" {
+		t.Fatalf("the costliest line names no step: %+v", hot[0])
 	}
 }

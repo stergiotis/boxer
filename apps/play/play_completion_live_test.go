@@ -67,6 +67,7 @@ func newLiveCompletionRig(t *testing.T) *liveCompletionRig {
 	app.client = NewClient(ClientConfig{URL: liveClickHouseURL(t)}, nil)
 	app.client.passes = passes
 	app.completion.catalog = newCatalogProbe(app.client)
+	app.vocab = newVocabProbe(app.client)
 	return &liveCompletionRig{
 		engine: &sqlcomplete.Engine{
 			Vocab:            vocab,
@@ -244,6 +245,30 @@ func TestLiveCatalogueProbesAnswer(t *testing.T) {
 			assert.NotEmptyf(t, items, "%s answered empty", c.name)
 		})
 	}
+}
+
+// TestLiveCombinatorFormsAreOffered checks the combinator pairs reach an
+// expression position once their probe lands, and that what is offered is a
+// spelling the server accepts: system.functions does not list `sumIf`, so
+// before the pairs were wired the engine had no source that offered it.
+func TestLiveCombinatorFormsAreOffered(t *testing.T) {
+	rig := newLiveCompletionRig(t)
+	var offered *sqlcomplete.Item
+	deadline := time.Now().Add(30 * time.Second)
+	for offered == nil && time.Now().Before(deadline) {
+		_, res := rig.completeAtLive(t, "SELECT sumI| FROM numbers(3)")
+		for i := range res.Items {
+			if res.Items[i].Text == "sumIf" {
+				offered = &res.Items[i]
+			}
+		}
+		if offered == nil {
+			time.Sleep(50 * time.Millisecond)
+		}
+	}
+	require.NotNil(t, offered, "sumIf was never offered")
+	assert.Equal(t, "system.completions", offered.Source)
+	assert.NoError(t, rig.analyses(t, "SELECT sumIf(number, number > 0) FROM numbers(3) LIMIT 0"))
 }
 
 // The component family's two names are what the pane offers a kind for; if the

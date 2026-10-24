@@ -192,6 +192,14 @@ func (inst *Engine) Deliver(ctx context.Context, req queryengine.Request) (st qu
 		return
 	}
 	httpReq.Header.Set("Content-Type", "text/plain; charset=utf-8")
+	if req.Format != "" {
+		// Request.Format is the format the caller decodes, so it overrides
+		// a FORMAT clause in the statement — which a server from 26.8 on
+		// does for this header. An earlier server reads it as
+		// default_format and lets the clause win; the check on the response
+		// below turns that into a refusal rather than a decode error.
+		httpReq.Header.Set(chhttp.HeaderFormat, req.Format)
+	}
 	inst.authenticate(httpReq)
 
 	resp, doErr := httpClient.Do(httpReq)
@@ -204,12 +212,21 @@ func (inst *Engine) Deliver(ctx context.Context, req queryengine.Request) (st qu
 		st = queryengine.NewSliceStream(nil, runstream.Failed(errorFromResponse(resp)), nil)
 		return
 	}
+	if got := resp.Header.Get(chhttp.HeaderFormat); req.Format != "" && got != "" && !sameFormat(got, req.Format) {
+		_ = resp.Body.Close()
+		st = queryengine.NewSliceStream(nil, runstream.Failed(formatMismatch(got, req.Format)), nil)
+		return
+	}
 	summary := ParseSummary(resp.Header.Get(chhttp.HeaderSummary))
 	res = queryengine.Result{
 		ContentType: resp.Header.Get("Content-Type"),
 		Summary:     summary,
 	}
-	st = queryengine.NewReaderStream(resp.Body, req.Cap.TerminalFor(summary.ResultRows), resp.Body, 0)
+	var body io.Reader = resp.Body
+	if tag := resp.Header.Get(headerExceptionTag); tag != "" {
+		body = newExceptionTrailerReader(resp.Body, tag)
+	}
+	st = queryengine.NewReaderStream(body, req.Cap.TerminalFor(summary.ResultRows), resp.Body, 0)
 	return
 }
 
@@ -235,8 +252,9 @@ func (inst *Engine) queryString(req queryengine.Request) (qs url.Values, err err
 	if req.Format != "" {
 		// default_format rather than a FORMAT clause appended to the
 		// statement: the statement is finalized by the time it arrives here
-		// and this adapter does not rewrite SQL. A FORMAT the statement
-		// carries itself still wins, which is the server's rule, not ours.
+		// and this adapter does not rewrite SQL. It is what a server before
+		// 26.8 has to go on; later ones take the X-ClickHouse-Format header
+		// Deliver sends over a FORMAT clause the statement carries.
 		qs.Set("default_format", req.Format)
 	}
 	return
@@ -253,9 +271,14 @@ func (inst *Engine) authenticate(req *http.Request) {
 
 // errorFromResponse folds a non-200 into an error carrying the server's own
 // diagnostic, in the shape callers parse ("clickhouse http <code>: <body>").
+//
+// The diagnostic is not always the start of the body: a run can fail after
+// it produced rows and still be answered 500, and then the rows come first
+// (see diagnosticOf).
 func errorFromResponse(resp *http.Response) (err error) {
-	raw, _ := io.ReadAll(io.LimitReader(resp.Body, maxErrorBodyBytes))
+	raw, _ := io.ReadAll(io.LimitReader(resp.Body, maxErrorDrainBytes))
 	_ = resp.Body.Close()
+	raw = diagnosticOf(raw, resp.Header.Get(chhttp.HeaderExceptionCode), resp.Header.Get(headerExceptionTag))
 	detail := strings.TrimSpace(string(raw))
 	bld := eb.Build().Int("statusCode", resp.StatusCode).Str("body", detail)
 	if detail == "" {

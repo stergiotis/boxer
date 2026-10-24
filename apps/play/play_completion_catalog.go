@@ -233,6 +233,18 @@ func (inst *catalogProbe) formats() ([]sqlcomplete.Item, bool) {
 		oneColumn(sqlcomplete.ItemFormat, "system.formats"))
 }
 
+// combinators answers the aggregate functions spelled with a combinator —
+// `sumIf`, `uniqArray`, `argMaxState` — which `system.functions` does not
+// list. `system.completions` does, one level deep, as its "aggregate function
+// combinator pair" rows. The listing is an addition to the function domain
+// rather than a domain of its own, so a server without the table (it is
+// recent) leaves the pairs out instead of holding the expression position up.
+func (inst *catalogProbe) combinators() ([]sqlcomplete.Item, bool) {
+	return inst.demand("combinators", "combinators",
+		"SELECT word FROM system.completions WHERE context = 'aggregate function combinator pair' ORDER BY word",
+		oneColumn(sqlcomplete.ItemFunction, "system.completions"))
+}
+
 func (inst *catalogProbe) dictionaries() ([]sqlcomplete.Item, bool) {
 	return inst.demand("dictionaries", "dictionaries",
 		"SELECT name, comment FROM system.dictionaries ORDER BY name",

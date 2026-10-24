@@ -190,6 +190,9 @@ func opsCompletionEngine(view completionOpsView, missing *notReadyLog) (e *sqlco
 			} else {
 				missing.add("the endpoint's functions")
 			}
+			// Optional, as in the pane: a server without system.completions
+			// would otherwise be reported as not ready forever.
+			items = append(items, cp.memo["combinators"]...)
 			sortCompletionItems(items)
 			return items, true
 		}

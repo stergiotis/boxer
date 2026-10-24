@@ -313,6 +313,10 @@ func (inst *PlayApp) addEndpointCompletionProviders(p *sqlcomplete.Providers) {
 	// it.
 	p.Expressions = func(table string) (items []sqlcomplete.Item, ready bool) {
 		st := &inst.completion
+		// Asked before the memo check: a catalog answer is banked by the
+		// demand that finds it landed, and banking it is what moves gen.
+		// Asked after, it would sit unbanked behind the memo it invalidates.
+		pairs, pairsReady := st.catalog.combinators()
 		gen := inst.completionProbeGen()
 		if st.exprValid && st.exprTable == table && st.exprGen == gen {
 			return st.exprItems, true
@@ -338,6 +342,9 @@ func (inst *PlayApp) addEndpointCompletionProviders(p *sqlcomplete.Providers) {
 					Text: name, Kind: sqlcomplete.ItemFunction, Source: "on this endpoint",
 				})
 			}
+		}
+		if pairsReady {
+			items = append(items, pairs...)
 		}
 		sortCompletionItems(items)
 		st.exprItems = items

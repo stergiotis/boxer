@@ -88,6 +88,7 @@ func TestDeliverPostsTheStatementAndItsBindings(t *testing.T) {
 	assert.Equal(t, "42", query.Get(chhttp.ParamPrefix+"n"), "bindings are named once, and prefixed here")
 	assert.Equal(t, "play-main-box-7-1", query.Get("query_id"), "the run id is the join key everything else uses (R7)")
 	assert.Equal(t, "ArrowStream", query.Get("default_format"))
+	assert.Equal(t, "ArrowStream", header.Get(chhttp.HeaderFormat), "the decoded format overrides a FORMAT clause the statement carries")
 	assert.Equal(t, "{}", query.Get("log_comment"), "settings ride through verbatim")
 	assert.Equal(t, "1", query.Get("replace_running_query"))
 	assert.Equal(t, "u", header.Get("X-ClickHouse-User"))

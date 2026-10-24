@@ -41,6 +41,11 @@ const (
 	// HeaderExceptionCode carries the numeric ClickHouse error code beside
 	// the exception body.
 	HeaderExceptionCode = "X-ClickHouse-Exception-Code"
+	// HeaderFormat names the output format. On a request, a server from 26.8
+	// on takes it over any FORMAT clause the statement carries (earlier ones
+	// treat it as default_format); on a response, it reports the format the
+	// body is actually in, spelled as the request or the statement spelled it.
+	HeaderFormat = "X-ClickHouse-Format"
 	// HeaderQueryID echoes the run identity the request carried, as the
 	// server does. It is the client's evidence that the id it minted was
 	// received rather than dropped, which matters because an id nobody

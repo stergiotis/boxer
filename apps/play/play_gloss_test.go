@@ -6,6 +6,7 @@ import (
 
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/array"
+	"github.com/apache/arrow-go/v18/arrow/ipc"
 	"github.com/apache/arrow-go/v18/arrow/memory"
 	"github.com/stergiotis/boxer/public/hmi/gloss"
 	"github.com/stergiotis/boxer/public/hmi/gloss/glosssql"
@@ -578,4 +579,40 @@ func TestGlossIPAddrOnLeewaySchema(t *testing.T) {
 	app.tableOpts.rawCells = true
 	text, _ = app.glossCell(&cols[1], peers.ListValues(), 0, true)
 	assert.Equal(t, "20010db8000000000000000000000001", text)
+}
+
+// A plain result's UUID column reaches gloss/uuid with nothing declared: the
+// field carries the canonical `arrow.uuid` tag, which the spec line spells as
+// the Arrow type even though this process decodes the storage type.
+func TestGlossUUIDFromExtensionMetadata(t *testing.T) {
+	mem := memory.NewGoAllocator()
+	b := array.NewFixedSizeBinaryBuilder(mem, &arrow.FixedSizeBinaryType{ByteWidth: 16})
+	defer b.Release()
+	b.Append([]byte("\x61\xf0\xc4\x04\x5c\xb3\x11\xe7\x90\x7b\xa6\x00\x6a\xd3\xdb\xa0"))
+	ids := b.NewArray()
+	defer ids.Release()
+	hashes := array.NewFixedSizeBinaryBuilder(mem, &arrow.FixedSizeBinaryType{ByteWidth: 16})
+	defer hashes.Release()
+	hashes.Append(make([]byte, 16))
+	hs := hashes.NewArray()
+	defer hs.Release()
+
+	tagged := arrow.NewMetadata([]string{ipc.ExtensionTypeKeyName, ipc.ExtensionMetadataKeyName}, []string{"arrow.uuid", ""})
+	schema := arrow.NewSchema([]arrow.Field{
+		{Name: "id", Type: ids.DataType(), Metadata: tagged},
+		{Name: "h", Type: hs.DataType()},
+	}, nil)
+	rec := array.NewRecordBatch(schema, []arrow.Array{ids, hs}, 1)
+	defer rec.Release()
+
+	app := &PlayApp{}
+	cols := app.glossColumns(rec.Schema())
+	require.Len(t, cols, 2)
+	assert.Equal(t, gloss.MediaTypeUUID, cols[0].mediaType)
+	assert.Contains(t, cols[0].specLine, "arrow:extension<arrow.uuid>")
+	assert.Empty(t, cols[1].mediaType, "sixteen untagged bytes are not a UUID")
+
+	text, tone := app.glossCell(&cols[0], rec.Column(0), 0, false)
+	assert.Equal(t, "61f0c404-5cb3-11e7-907b-a6006ad3dba0", text)
+	assert.Equal(t, gloss.ToneNeutral, tone)
 }

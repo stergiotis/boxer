@@ -1369,7 +1369,7 @@ it is what would actually be sent.
 ### Diagnostics
 
 The single home of the playground's error texts — the other tabs only point here.
-Seven sections, in order. **Statement** is the parse status of the (debounced) editor buffer;
+Eight sections, in order. **Statement** is the parse status of the (debounced) editor buffer;
 when boxer's built-in grammar rejects it, an `EXPLAIN AST` probe against the live
 endpoint tells you whether that is just a boxer grammar gap (ClickHouse parses it —
 the statement will run, with the canonical preview, parameter widgets, query-graph
@@ -1385,7 +1385,20 @@ split status of the last Run. **Signal emits** reports panel signal writes the
 store dropped. **Last run** carries the full execution error — the status bar
 shows only its first line — or the usual result summary.
 
-An agent reads the same seven sections with `get_diagnostics`: the statement's
+**Execution profile** runs only when you press **Profile the active result**,
+because it executes the query again: the active result's statement goes to the
+server under `EXPLAIN ANALYZE` (ClickHouse 26.7 or later), routed, rewritten and
+bound exactly as its Run was, and the result is discarded there. What comes
+back is the plan with what each step measured — rows and bytes in and out, wall
+time and its share of the execution, parallelism. The section shows the query's
+summary (time, rows read, peak memory), names the three steps that took the
+largest share, and draws the plan with lines of 10% and more toned. **Cancel**
+stops waiting for a long profile. The profile keeps showing after a new Run and
+says when it no longer describes the active result; **Profile again** refreshes
+it. A result computed in play rather than by a query, and an endpoint without
+`EXPLAIN`, have nothing to profile and say so.
+
+An agent reads the first seven sections with `get_diagnostics`: the statement's
 status with ClickHouse's own diagnostic when the grammar rejects it, the skipped
 rewrites once the pane has measured them, the unresolved handles with candidates,
 the security class with its witnesses and the tables returned as stored, the split,
@@ -1581,6 +1594,13 @@ and array / set (`h`, `m`) spellings, so:
 
 A value the gloss cannot read as an address keeps its plain rendering in the
 error tone rather than inventing one.
+
+`gloss/uuid` needs nothing declared on a plain result either. ClickHouse tags
+a `UUID` column with Arrow's `arrow.uuid` extension, and the spec line spells
+that tag as the column's type, `arrow:extension<arrow.uuid>`, which is the
+gloss's affinity. The 16 bytes then read `61f0c404-5cb3-11e7-907b-a6006ad3dba0`,
+as the server prints them, instead of a 32-digit hex run. An `Array(UUID)`
+column is not tagged that way in the spec line; bind it by rule.
 
 `application/cbor` is the content family's binary member. A column holding
 CBOR bytes — a canonform record, a canonwire entity item, a pushout patch —
