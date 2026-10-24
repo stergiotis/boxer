@@ -469,14 +469,19 @@ func TestLabelForFitsAndDeclines(t *testing.T) {
 func TestContrastTextPicksTheReadableNeutral(t *testing.T) {
 	mid := styletokens.Sequential(styletokens.SequentialLajolla, 0.6).AsHex() // a mid flame-band fill
 	dark := styletokens.NeutralBgPanel.AsHex()
-	if got := contrastText(0xffffffff); got != styletokens.NeutralBgExtreme.AsHex() {
+	if got := contrastText(0xffffffff); got != inkDark {
 		t.Errorf("ink on white = %08x, want the dark neutral", got)
 	}
-	if got := contrastText(0x000000ff); got != styletokens.NeutralTextExtreme.AsHex() {
+	if got := contrastText(0x000000ff); got != inkLite {
 		t.Errorf("ink on black = %08x, want the light neutral", got)
 	}
-	if got := contrastText(dark); got != styletokens.NeutralTextExtreme.AsHex() {
-		t.Errorf("ink on the panel neutral = %08x, want the light neutral", got)
+	if implot.RelativeLuminance(inkDark) >= implot.RelativeLuminance(inkLite) {
+		t.Errorf("dark ink %08x is not darker than light ink %08x", inkDark, inkLite)
+	}
+	// The panel is dark under the dark theme and light under the light one;
+	// either way its ink is the other end.
+	if got := contrastText(dark); implot.ContrastRatio(got, dark) < 4.5 {
+		t.Errorf("ink on the panel neutral = %08x, which reads at %.2f:1", got, implot.ContrastRatio(got, dark))
 	}
 	// Whatever it picks for a mid palette colour, it must be one of the two
 	// tokens and never an invented value.
@@ -490,10 +495,9 @@ func TestContrastTextPicksTheReadableNeutral(t *testing.T) {
 // the palette is regenerated. This pins what it derives to today and, more to
 // the point, that it really is the balance point rather than a rounded one.
 func TestInkSwitchIsTheEqualContrastPoint(t *testing.T) {
-	d := styletokens.NeutralBgExtreme.AsHex()
-	l := styletokens.NeutralTextExtreme.AsHex()
-	if math.Abs(inkSwitchL-0.173365) > 1e-5 {
-		t.Errorf("inkSwitchL = %v, want 0.173365 for the palette as it stands", inkSwitchL)
+	d, l := inkDark, inkLite
+	if styletokens.ActiveTheme() == styletokens.ThemeDark && math.Abs(inkSwitchL-0.173365) > 1e-5 {
+		t.Errorf("inkSwitchL = %v, want 0.173365 for the dark palette as it stands", inkSwitchL)
 	}
 	// A fill exactly at the switch contrasts equally with either ink. The
 	// identity is on the luminance, not on a colour: no byte triple lands
@@ -508,15 +512,20 @@ func TestInkSwitchIsTheEqualContrastPoint(t *testing.T) {
 	if contrastText(0xffffffff) != d || contrastText(0x000000ff) != l {
 		t.Error("the switch runs the wrong way: dark ink belongs on the brighter fill")
 	}
-	// And the whole flame band stays within a whisker of 4.5:1 under it. The
+	// And the whole flame band reads at least at the switch's contrast. The
 	// band is a dark-to-light ramp, so it crosses the switch, and at the
-	// crossing the two inks meet at 4.45:1 — that is the floor pinned here;
-	// everything off the crossing reads higher.
+	// crossing the two inks meet at toDark — 4.45:1 under the dark palette,
+	// pinned here as within a whisker of 4.5:1; the light palette's extreme
+	// neutrals are closer together and meet lower. Everything off the
+	// crossing reads higher, whichever the theme.
+	if styletokens.ActiveTheme() == styletokens.ThemeDark && toDark < 4.4 {
+		t.Errorf("the inks meet at %.4f:1, want about 4.45:1 under the dark palette", toDark)
+	}
 	for i := range 256 {
 		t01 := flameBandLo + (flameBandHi-flameBandLo)*float32(i)/255
 		fill := styletokens.Sequential(styletokens.SequentialLajolla, t01).AsHex()
-		if cr := implot.ContrastRatio(fill, contrastText(fill)); cr < 4.4 {
-			t.Errorf("flame band at t=%.3f (%08x) reads at only %.4f:1", t01, fill, cr)
+		if cr := implot.ContrastRatio(fill, contrastText(fill)); cr < toDark-1e-9 {
+			t.Errorf("flame band at t=%.3f (%08x) reads at only %.4f:1, under the switch's %.4f:1", t01, fill, cr, toDark)
 		}
 	}
 }
