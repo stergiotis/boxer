@@ -88,6 +88,16 @@ func SetChrome(chrome ChromeE) {
 	colErrorBar = styletokens.NeutralTextPrimary.AsHex()
 	colLegendBg = alpha(styletokens.NeutralBgPanel.AsHex(), 0xee)
 	colLegendHidden = styletokens.NeutralTextDisabled.AsHex()
-	colContrastDark = styletokens.NeutralBgFaint.AsHex()
-	colContrastLite = styletokens.NeutralTextPrimary.AsHex()
+	colContrastDark, colContrastLite = inksByLuminance(styletokens.NeutralBgFaint.AsHex(), styletokens.NeutralTextPrimary.AsHex())
+}
+
+// inksByLuminance orders contrastText's two inks by what they are rather
+// than by which token they come from: the faint background is the dark ink
+// under the dark theme and the light one under the light theme, and the
+// primary text the other way round.
+func inksByLuminance(a uint32, b uint32) (dark uint32, lite uint32) {
+	if RelativeLuminance(a) > RelativeLuminance(b) {
+		return b, a
+	}
+	return a, b
 }

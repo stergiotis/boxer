@@ -52,3 +52,29 @@ func TestSetChromePalettes(t *testing.T) {
 		t.Errorf("contrastText(black) = %#x, want the light branch %#x", got, colContrastLite)
 	}
 }
+
+// The ink contrastText picks reads on the fill it was picked for, under the
+// active theme: run once plain and once with IMZERO2_THEME=fresh. Before the
+// inks were ordered by luminance, the light theme handed a light box a light
+// ink.
+func TestContrastTextInkReadsOnFill(t *testing.T) {
+	for _, chrome := range []ChromeE{ChromeIDS, ChromeClassic} {
+		SetChrome(chrome)
+		for _, fill := range []uint32{0xffffffff, 0x000000ff, 0x56b4e9ff, 0xf0e442ff} {
+			ink := contrastText(fill)
+			if r := ContrastRatio(ink, fill); r < 4.5 {
+				t.Errorf("chrome %d: ink %08x on fill %08x is %.2f:1, want ≥ 4.5:1", chrome, ink, fill, r)
+			}
+		}
+	}
+	SetChrome(ChromeIDS)
+}
+
+func TestInksByLuminance(t *testing.T) {
+	if dark, lite := inksByLuminance(0xe9edf5ff, 0x24262cff); dark != 0x24262cff || lite != 0xe9edf5ff {
+		t.Errorf("light-theme pair ordered %#x, %#x", dark, lite)
+	}
+	if dark, lite := inksByLuminance(0x101214ff, 0xe5e8ebff); dark != 0x101214ff || lite != 0xe5e8ebff {
+		t.Errorf("dark-theme pair ordered %#x, %#x", dark, lite)
+	}
+}
