@@ -41,6 +41,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
 	"github.com/stergiotis/boxer/public/thestack/fffi2/typed"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/keycodes"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/badge"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/codeview"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/markdown"
@@ -359,6 +360,10 @@ type App struct {
 	// the TextEdit as insertAtCursor and cleared once emitted.
 	pendingInsert string
 
+	// editorFieldId is the source TextEdit's widget id from the last frame,
+	// the handle its captured keys are read back under (mdedit_keys.go).
+	editorFieldId uint64
+
 	// pendingCaret is a caret move the app is asking the editor for, and
 	// pendingCaretOk whether there is one — a separate flag rather than a
 	// sentinel, so the zero value means "no request" and not "select the first
@@ -476,6 +481,10 @@ func (inst *App) Mount(ctx app.MountContextI) (err error) {
 	if inst.handOver(ctx.LaunchConfig()) {
 		return
 	}
+	if seed := DocSeed.Get(); seed != "" {
+		inst.adoptDocument(seed, "a seeded document")
+		return
+	}
 	if inst.store != nil {
 		go inst.restore()
 	}
@@ -497,14 +506,21 @@ func (inst *App) handOver(raw []byte) (handed bool) {
 		inst.logger.Warn().Err(err).Msg("mdedit: the launch config does not decode; opening as usual")
 		return false
 	}
-	inst.store = nil
-	inst.src = l.Text
 	name := l.Name
 	if name == "" {
 		name = "a handed-over document"
 	}
-	inst.status = "opened " + name + " — not autosaved: Save to keep it"
+	inst.adoptDocument(l.Text, name)
 	return true
+}
+
+// adoptDocument makes text this window's document without a store behind
+// it: no restore, no autosave, the person's own draft untouched. Shared by
+// a handed-over document and a seeded one.
+func (inst *App) adoptDocument(text string, name string) {
+	inst.store = nil
+	inst.src = text
+	inst.status = "opened " + name + " — not autosaved: Save to keep it"
 }
 
 // Unmount persists the buffer one last time, synchronously. Every other
@@ -924,6 +940,11 @@ func (inst *App) ensureHighlight() {
 	// is sized for play's handful of sections; a find can paint hundreds, and
 	// they move only when this key does.
 	secs := matchSections(inst.find.matches, inst.find.idx, maxPaintedMatches)
+	// The pane is formatted (ADR-0334 §SD6): proportional prose, heading
+	// lines scaled by level, code and tables monospace. Derived from the
+	// same spans as the colours, so the two cannot disagree about where a
+	// heading ends, and keyed by the same src through this function's gate.
+	secs = codeview.MarkdownFontSections(inst.src, inst.lexSpans, secs)
 	spans := splitSpansAt(inst.lexSpans, matchCuts(inst.find.matches, inst.find.idx, maxPaintedMatches))
 	inst.hlJob = codeview.BuildMarkdownFromSpans(inst.src, spans)
 	inst.hlJobOk = true
@@ -969,8 +990,10 @@ func (inst *App) measureRowHeight() {
 		inst.rowFontPt = pt
 		inst.rowPx = float64(pt) * rowHeightSeedFactor
 	}
+	// Proportional, since the body of the formatted pane is. Heading rows are
+	// taller than this and the row count is a floor the scroll area absorbs.
 	c.MeasureTextSizeBind(inst.paneProbeSeq("row-w"), inst.paneProbeSeq("row-h"),
-		rowProbeText, pt, true, nil, &inst.rowPx)
+		rowProbeText, pt, false, nil, &inst.rowPx)
 }
 
 // renderSource emits the editing surface, sized to fill the pane it is given.
@@ -979,6 +1002,9 @@ func (inst *App) measureRowHeight() {
 // scrolled content instead.
 func (inst *App) renderSource() {
 	inst.measureRowHeight()
+	// Last frame's captured keys, before the editor is emitted: a rebind they
+	// issue has to precede the emit to land in this frame's override.
+	inst.applyEditorKeys()
 
 	// Probe first, before placing anything. CaptureUiAvailableRect reports the
 	// space left for the NEXT widget, which from here is the editor's whole
@@ -1022,7 +1048,14 @@ func (inst *App) renderSource() {
 			DesiredWidth(width).
 			DesiredRows(rows).
 			HintText(hintEmpty).
-			ReportCursor()
+			ReportCursor().
+			// The keyboard the pane answers for (mdedit_keys.go): Enter
+			// plainly, Tab, and the formatting letters only under the
+			// command modifier.
+			CaptureKeys(uint64(editorKeyMask)).
+			CaptureTab().
+			CaptureKeyChords(uint64(editorChordMask), uint8(keycodes.ModCommand))
+		inst.editorFieldId = b.Id()
 		if inst.hlJobOk {
 			b = b.HighlightJob(inst.hlJob)
 			// Only inside the branch, and that is not tidiness: the styled

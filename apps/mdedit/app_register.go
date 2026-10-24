@@ -2,6 +2,7 @@ package mdedit
 
 import (
 	"github.com/rs/zerolog/log"
+	"github.com/stergiotis/boxer/public/config/env"
 
 	"github.com/stergiotis/boxer/apps/mdedit/launchcfg"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
@@ -81,6 +82,18 @@ var manifest = app.Manifest{
 	},
 	PersistedKeys: []string{docKey},
 }
+
+// DocSeed puts a document in a new window (ADR-0009 seed variable, the
+// BOXER_CHAT_DRAFT shape): a scene needs a document of its own to drive, and
+// the one mdedit keeps belongs to the person. A seeded window is treated as a
+// handed-over one (ADR-0178, 2026-10-03) — it neither restores nor autosaves,
+// so the person's draft is never touched, and the text stays unsaved until it
+// is saved to a file or copied out. A caller's launch config wins over it.
+var DocSeed = env.NewString(env.Spec{
+	Name:        "BOXER_MDEDIT_DOC",
+	Description: "markdown for a new mdedit window to open as an unsaved document of its own, neither restored nor autosaved; for scenes and demos",
+	Category:    env.CategoryE("boxer-mdedit"),
+})
 
 // init registers the app into app.DefaultRegistry. Factory ctor so two open
 // windows get independent App state — including independent buffers, which

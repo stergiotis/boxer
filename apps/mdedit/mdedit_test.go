@@ -495,11 +495,14 @@ func TestEnsureHighlight_RebuildsWhenTheMatchSetMoves(t *testing.T) {
 	inst.refreshDerived()
 	assert.NotEqual(t, first, inst.hlKey)
 
-	// Clearing the query drops the overlay entirely.
+	// Clearing the query drops the match overlay. The styled list stays,
+	// because the font overlay the formatted pane rides on (ADR-0334 §SD6)
+	// is derived from the text and covers it whenever there is any.
 	inst.find.query = ""
 	inst.refreshDerived()
-	assert.False(t, inst.hlStyledOk, "a cleared query paints nothing")
-	assert.True(t, inst.hlJobOk, "the colours stay — only the overlay goes")
+	assert.True(t, inst.hlStyledOk, "the font overlay outlives the match set")
+	assert.True(t, inst.hlJobOk, "the colours stay")
+	assert.Empty(t, matchSections(inst.find.matches, inst.find.idx, maxPaintedMatches), "a cleared query paints no match")
 }
 
 // ---------------------------------------------------------------------------
