@@ -143,13 +143,11 @@ func TestQualitativeCyclePairwiseDistinctCVD(t *testing.T) {
 // WCAG 1.4.11 (3:1 for graphical objects). NeutralBgSurface is the binding
 // case — it is the lightest of the three dark surfaces, so clearing it
 // clears NeutralBgPanel and NeutralBgFaint too. The light theme fails it
-// (QualitativeCycle's doc says which entries), so it runs on the dark one.
+// (QualitativeCycle's doc says which entries), so it measures against the
+// dark surface whatever theme the test runs under.
 func TestQualitativeCycleContrastOnSurface(t *testing.T) {
-	if styletokens.ActiveTheme() != styletokens.ThemeDark {
-		t.Skip("the cycle clears 3:1 on the dark theme only; a light-theme cycle is deferred")
-	}
 	floor := contrast.AAFloor(contrast.KindUI)
-	bg := styletokens.NeutralBgSurface
+	bg := styletokens.DarkSurface
 	for i := range styletokens.QualitativeCycleLen {
 		c := styletokens.QualitativeCycle(i)
 		r := contrast.Ratio(c.R, c.G, c.B, bg.R, bg.G, bg.B)
