@@ -49,6 +49,16 @@ const (
 	AspectVelocitySI          AspectE = 38
 	AspectVolumeSI            AspectE = 39
 	AspectTorqueSI            AspectE = 40
+
+	// AspectDimensionOneSI is a quantity of dimension one (SI): a count, or a
+	// ratio of two quantities of one kind. Its coherent unit is one; %, ‰ and
+	// ppm are linear scale factors of one. Plane and solid angles, logarithmic
+	// ratios and information keep aspects of their own.
+	AspectDimensionOneSI AspectE = 41
+	// AspectLogarithmicRatioSI is a logarithmic ratio: a level or a gain in bel,
+	// decibel or neper. Its reference unit is the bel. Kept apart from
+	// AspectDimensionOneSI because a level does not convert linearly to one.
+	AspectLogarithmicRatioSI AspectE = 42
 )
 
 var MaxAspectExcl = slices.Max(AllAspects) + 1
@@ -97,6 +107,9 @@ var AllAspects = []AspectE{
 	AspectVelocitySI,
 	AspectVolumeSI,
 	AspectTorqueSI,
+
+	AspectDimensionOneSI,
+	AspectLogarithmicRatioSI,
 }
 
 const InvalidAspectEnumValueString = "<invalid AspectE>"
@@ -189,6 +202,11 @@ func (inst AspectE) String() string {
 		return "volume-si"
 	case AspectTorqueSI:
 		return "torque-si"
+
+	case AspectDimensionOneSI:
+		return "dimension-one-si"
+	case AspectLogarithmicRatioSI:
+		return "logarithmic-ratio-si"
 	}
 	return InvalidAspectEnumValueString
 }
