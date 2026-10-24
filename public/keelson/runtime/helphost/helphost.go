@@ -243,6 +243,9 @@ func (inst *HelpHost) Unmount(ctx app.MountContextI) (err error) {
 // PanelLeftInside + PanelCentralInside without wrapping a Window of
 // our own.
 func (inst *HelpHost) Frame(ctx app.FrameContextI) (err error) {
+	// A ref F1 pushed while this window was already open (PushRef): the
+	// raise half of the open-or-raise.
+	inst.OpenRef(popRef())
 	for range c.PanelLeftInside(inst.ids.PrepareStr("nav")).
 		DefaultSize(navPanelDefaultWidth).
 		Resizable(true).

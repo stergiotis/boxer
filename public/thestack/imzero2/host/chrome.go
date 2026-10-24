@@ -5,6 +5,7 @@ import (
 	"github.com/stergiotis/boxer/apps/capinspector"
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
+	"github.com/stergiotis/boxer/public/keelson/runtime/help"
 	"github.com/stergiotis/boxer/public/keelson/runtime/helphost"
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
 	"github.com/stergiotis/boxer/public/keelson/runtime/windowhost"
@@ -116,6 +117,10 @@ func DecorateRenderer(inner func() error, cc ChromeConfig) func() error {
 		// stacking another. Skipped in tour mode (host == nil) since
 		// there's no windowhost to open into.
 		if cc.HelpHost && cc.Host != nil && c.CurrentApplicationState.StateManager.GetF1KeyPressed() {
+			// Help opens on the active window's help book, so F1 over an
+			// app reads that app's help; over a window without a book, or
+			// with nothing active, help opens (or stays) where it was.
+			helphost.PushRef(helphost.RefForApp(help.DefaultLibrary, activeAppId(cc.Host)))
 			if _, _, openErr := cc.Host.OpenOrRaise(helphost.ManifestId); openErr != nil {
 				log.Warn().Err(openErr).Msg("F1: helphost open failed")
 			}
@@ -290,4 +295,20 @@ func DecorateRenderer(inner func() error, cc ChromeConfig) func() error {
 		}
 		return inner()
 	}
+}
+
+// activeAppId returns the app of the shell's active window, or "" when no
+// window is active.
+func activeAppId(host *windowhost.Inst) (appId app.AppIdT) {
+	key := windowhost.WindowKeyT(host.ActiveWindow())
+	if key == 0 {
+		return
+	}
+	for _, w := range host.WindowInfos() {
+		if w.Key == key {
+			appId = w.AppId
+			return
+		}
+	}
+	return
 }
