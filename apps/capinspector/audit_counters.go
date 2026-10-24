@@ -24,12 +24,13 @@ import (
 // the data flat; a future sliding-window variant can wrap this with
 // a periodic tick that resets stale buckets.
 type Counters struct {
-	run     atomic.Uint64
-	facts   atomic.Uint64
-	bus     atomic.Uint64
-	fs      atomic.Uint64
-	persist atomic.Uint64
-	task    atomic.Uint64
+	// perCap holds one counter and sliding-window histogram per
+	// registered cap (allCapIdsOrdered). Built once by NewCounters and
+	// never written afterwards, so concurrent Record / Snapshot calls
+	// read it without a lock. Keying by CapId rather than one field per
+	// cap keeps a newly registered cap from silently falling into
+	// "other" because the switch here was not extended with it.
+	perCap map[CapId]*capCounter
 	// other accumulates anything that doesn't match a known cap
 	// prefix — surfaced in the inspector as "unclassified" so new
 	// subject families show up loud rather than silently increment
@@ -40,25 +41,33 @@ type Counters struct {
 	// total - (other + per-cap) so "bus" reads as "everything the
 	// router moved" rather than "rows the classifier punted".
 	total atomic.Uint64
-	// Per-cap sliding-window histograms feeding the in-box activity
-	// sparkline. Each bucket covers sparkBucketWidth wall-clock time;
-	// the head advances on record/snapshot so old data ages out
-	// without a sweeper. Bus is the universal substrate so its
-	// histogram increments on every record, mirroring Count(CapBus).
-	runHist     auditHistogram
-	factsHist   auditHistogram
-	busHist     auditHistogram
-	fsHist      auditHistogram
-	persistHist auditHistogram
-	taskHist    auditHistogram
+}
+
+// capCounter is one cap's monotonic count and the sliding-window
+// histogram feeding its activity sparkline. Each bucket covers
+// sparkBucketWidth wall-clock time; the head advances on
+// record/snapshot so old data ages out without a sweeper.
+type capCounter struct {
+	n    atomic.Uint64
+	hist auditHistogram
 }
 
 var _ audit.AuditSinkI = (*Counters)(nil)
 
+// NewCounters returns a Counters with a slot for every registered cap.
+func NewCounters() (inst *Counters) {
+	caps := allCapIdsOrdered()
+	inst = &Counters{perCap: make(map[CapId]*capCounter, len(caps))}
+	for _, capId := range caps {
+		inst.perCap[capId] = &capCounter{}
+	}
+	return
+}
+
 // Tally is the package-singleton Counters the carousel wires via
 // MultiSink. Inspector windows read from it directly; no DI needed
 // because the inspector is itself a carousel-owned package.
-var Tally = &Counters{}
+var Tally = NewCounters()
 
 func (inst *Counters) Record(rec audit.AuditRecord) {
 	inst.recordAt(rec, time.Now())
@@ -69,31 +78,21 @@ func (inst *Counters) Record(rec audit.AuditRecord) {
 // histograms without sleeping.
 func (inst *Counters) recordAt(rec audit.AuditRecord, now time.Time) {
 	inst.total.Add(1)
-	// busHist counts every audit row, matching Count(CapBus)'s
-	// universal-substrate semantics.
-	inst.busHist.record(now)
-	switch classify(rec.Subject) {
-	case CapFs:
-		inst.fs.Add(1)
-		inst.fsHist.record(now)
-	case CapPersist:
-		inst.persist.Add(1)
-		inst.persistHist.record(now)
-	case CapTask:
-		inst.task.Add(1)
-		inst.taskHist.record(now)
-	case CapFacts:
-		inst.facts.Add(1)
-		inst.factsHist.record(now)
-	case CapRun:
-		inst.run.Add(1)
-		inst.runHist.record(now)
-	case CapBus:
-		// Reserved — no subject family currently maps here; the bus
-		// cap's number is derived from total in Count below.
-	default:
-		inst.other.Add(1)
+	// The bus histogram counts every audit row, matching
+	// Count(CapBus)'s universal-substrate semantics.
+	if bus := inst.perCap[CapBus]; bus != nil {
+		bus.hist.record(now)
 	}
+	capId := classify(rec.Subject)
+	cc := inst.perCap[capId]
+	if capId == CapBus || cc == nil {
+		// CapBus is reserved — no subject family maps there; its
+		// number is derived from total in Count below.
+		inst.other.Add(1)
+		return
+	}
+	cc.n.Add(1)
+	cc.hist.record(now)
 }
 
 // Count returns the live row count for one cap. CapBus is special:
@@ -101,19 +100,12 @@ func (inst *Counters) recordAt(rec audit.AuditRecord, now time.Time) {
 // that crossed it (total). The other caps return their classifier
 // bucket. Unknown capIds return 0.
 func (inst *Counters) Count(capId CapId) (n uint64) {
-	switch capId {
-	case CapRun:
-		n = inst.run.Load()
-	case CapFacts:
-		n = inst.facts.Load()
-	case CapBus:
+	if capId == CapBus {
 		n = inst.total.Load()
-	case CapFs:
-		n = inst.fs.Load()
-	case CapPersist:
-		n = inst.persist.Load()
-	case CapTask:
-		n = inst.task.Load()
+		return
+	}
+	if cc := inst.perCap[capId]; cc != nil {
+		n = cc.n.Load()
 	}
 	return
 }
@@ -128,19 +120,8 @@ func (inst *Counters) Snapshot(capId CapId) (out SparkSnapshot) {
 // snapshotAt is the time-injectable core of Snapshot. Tests drive it
 // with explicit timestamps; production passes time.Now.
 func (inst *Counters) snapshotAt(capId CapId, now time.Time) (out SparkSnapshot) {
-	switch capId {
-	case CapRun:
-		out = inst.runHist.snapshot(now)
-	case CapFacts:
-		out = inst.factsHist.snapshot(now)
-	case CapBus:
-		out = inst.busHist.snapshot(now)
-	case CapFs:
-		out = inst.fsHist.snapshot(now)
-	case CapPersist:
-		out = inst.persistHist.snapshot(now)
-	case CapTask:
-		out = inst.taskHist.snapshot(now)
+	if cc := inst.perCap[capId]; cc != nil {
+		out = cc.hist.snapshot(now)
 	}
 	return
 }
@@ -149,20 +130,12 @@ func (inst *Counters) snapshotAt(capId CapId, now time.Time) (out SparkSnapshot)
 // helper; the production path never resets — the inspector renders
 // monotonic counts and a rolling sparkline.
 func (inst *Counters) Reset() {
-	inst.run.Store(0)
-	inst.facts.Store(0)
-	inst.bus.Store(0)
-	inst.fs.Store(0)
-	inst.persist.Store(0)
-	inst.task.Store(0)
+	for _, cc := range inst.perCap {
+		cc.n.Store(0)
+		cc.hist.reset()
+	}
 	inst.other.Store(0)
 	inst.total.Store(0)
-	inst.runHist.reset()
-	inst.factsHist.reset()
-	inst.busHist.reset()
-	inst.fsHist.reset()
-	inst.persistHist.reset()
-	inst.taskHist.reset()
 }
 
 // classify maps a bus subject to a CapId. The match is the lowest
@@ -184,6 +157,8 @@ func classify(subject string) (capId CapId) {
 		capId = CapAppState
 	case strings.HasPrefix(subject, keelsonquery.SubjectPrefix):
 		capId = CapKeelsonQuery
+	case strings.HasPrefix(subject, adhocSubjectPrefix):
+		capId = CapAdhoc
 	case strings.HasPrefix(subject, llm.SubjectPrefix):
 		capId = CapLLM
 	case strings.HasPrefix(subject, httpegress.SubjectPrefix):
@@ -194,6 +169,8 @@ func classify(subject string) (capId CapId) {
 		capId = CapAgent
 	case strings.HasPrefix(subject, "task."):
 		capId = CapTask
+	case strings.HasPrefix(subject, "watchbill."):
+		capId = CapWatchbill
 	case strings.HasPrefix(subject, "runtime.facts."):
 		// Reserved — no subject lands here today (factsstore writes
 		// happen out-of-band, not via the bus). Kept for the read-

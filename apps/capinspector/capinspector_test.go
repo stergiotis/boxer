@@ -11,12 +11,12 @@ import (
 )
 
 func TestRegistry_HasAllShippedCaps(t *testing.T) {
-	wantIds := []CapId{CapRun, CapFacts, CapBus, CapFs, CapPersist, CapTask, CapWatchbill, CapAppState, CapKeelsonQuery, CapLLM, CapHTTP, CapAgent}
+	wantIds := []CapId{CapRun, CapFacts, CapBus, CapFs, CapPersist, CapTask, CapWatchbill, CapAppState, CapKeelsonQuery, CapAdhoc, CapLLM, CapHTTP, CapAgent}
 	for _, id := range wantIds {
 		_, ok := Registry[id]
 		assert.True(t, ok, "Registry must contain %q", id)
 	}
-	assert.Len(t, Registry, 12, "exactly twelve shipped caps; adding a cap means appending to caps.go")
+	assert.Len(t, Registry, 13, "exactly thirteen shipped caps; adding a cap means appending to caps.go")
 }
 
 func TestAllCapIdsOrdered_StableAcrossCalls(t *testing.T) {
@@ -70,6 +70,12 @@ func TestConsumePendingSelection_AdoptsPushAfterRaise(t *testing.T) {
 	// An empty queue leaves the current selection alone — ordinary
 	// frames must not reset what the in-window picker chose.
 	a.selectedCap = CapPersist
+	a.consumePendingSelection()
+	assert.Equal(t, CapPersist, a.selectedCap)
+
+	// A status-bar segment the Registry does not know must not blank the
+	// page it was clicked over.
+	PushSelection(CapId("no-such-cap"))
 	a.consumePendingSelection()
 	assert.Equal(t, CapPersist, a.selectedCap)
 }

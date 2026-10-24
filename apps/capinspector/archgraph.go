@@ -2,7 +2,7 @@ package capinspector
 
 // archgraph.go renders the cap-broker schematic as a static layered (Sugiyama)
 // graph through the layeredgraph widget (ADR-0069): the App→capability→backend
-// DAG is laid out once by Graphviz `dot` in-process (cgo-free WASM via
+// DAG is laid out once, left to right, by Graphviz `dot` in-process (cgo-free WASM via
 // goccyengine) and painted through the existing imzero2 binding. Only the
 // per-frame colours vary — selected cap, effective backend, degraded cap —
 // applied through view.RenderOpts hooks. The live audit activity that used to
@@ -15,6 +15,7 @@ import (
 	"context"
 
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
+	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/color"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/layeredgraph"
@@ -113,8 +114,11 @@ func ensureArchLayout() (*layeredgraph.Layout, map[string]nodeMeta, error) {
 			capArchLayoutErr = err
 			return nil, nil, err
 		}
+		// Left to right: the cap and backend ranks are the long ones, and
+		// laid across the canvas they shrink every label to a few pixels to
+		// fit; stacked down it they keep the fit scale near one.
 		capArchLayout, capArchLayoutErr = eng.Layout(context.Background(), capGraphModel(),
-			layeredgraph.LayoutOpts{RankDir: layeredgraph.RankDirTopBottom, FontSize: 14})
+			layeredgraph.LayoutOpts{RankDir: layeredgraph.RankDirLeftRight, FontSize: 14})
 		if capArchLayout != nil {
 			capArchNodeMeta = buildNodeMeta()
 		}
@@ -145,9 +149,9 @@ const (
 	archMinCanvasW float32 = 460.0
 	archMaxCanvasW float32 = 1400.0
 	archFallbackW  float32 = 820.0
-	// The schematic is wide (caps + backends in a row) and short (three
-	// ranks); clamp the height derived from its own aspect so it neither
-	// floats in a tall empty box nor squashes flat.
+	// The schematic is tall (the caps and backends stack down the canvas)
+	// and narrow (three ranks across); clamp the height derived from its
+	// own aspect so it neither squashes flat nor outgrows the window.
 	archMinCanvasH float32 = 200.0
 	archMaxCanvasH float32 = 680.0
 )
@@ -159,6 +163,13 @@ const (
 // that cap (the picker row above is the equivalent affordance). Static
 // fit-to-view for v1 (no pan/zoom) — the graph is small and a fixed frame keeps
 // captures deterministic.
+//
+// deferred: the nodes have no accessibility-tree entries — layeredgraph
+// hit-tests the canvas pointer rather than registering a widget per node, and
+// the bindings have no way to name an interactive painted region. Until both
+// exist a screen reader cannot reach a node and a scene clicks one by
+// coordinates (scenes/capinspector.scene.md); the picker row is the
+// accessible equivalent.
 func (inst *App) renderGraph(spec CapSpec) {
 	lay, meta, err := ensureArchLayout()
 	if err != nil {
@@ -182,8 +193,8 @@ func (inst *App) renderGraph(spec CapSpec) {
 		canvasW = availW - archChromeW
 	}
 	canvasW = max(min(canvasW, archMaxCanvasW), archMinCanvasW)
-	// Height from the layout's own aspect so the short three-rank graph fills
-	// the canvas instead of sitting in a tall empty box.
+	// Height from the layout's own aspect, so the graph fills the canvas
+	// instead of sitting in an empty box.
 	canvasH := archMinCanvasH
 	if lay.Width > 0 {
 		canvasH = canvasW * float32(lay.Height/lay.Width)
@@ -205,8 +216,53 @@ func (inst *App) renderGraph(spec CapSpec) {
 		}
 	}
 
+	inst.renderArchLegend()
 	c.AddSpace(styletokens.GapItems(inst.density))
 	inst.renderActivityStrip(canvasW, spec.Id)
+}
+
+// archLegendEntry is one key in the legend row: a filled swatch for a node
+// tone, or a short stroke for an edge tone.
+type archLegendEntry struct {
+	tone  func() color.Color
+	edge  bool
+	label string
+}
+
+var archLegendEntries = []archLegendEntry{
+	{tone: archToneApp, label: "App"},
+	{tone: archToneSelected, label: "selected capability"},
+	{tone: archToneDegraded, label: "no active backend"},
+	{tone: archToneEffective, label: "active backend"},
+	{tone: archToneIdle, label: "idle / inactive"},
+	{tone: archToneFocusEdge, edge: true, label: "selected wiring"},
+	{tone: archToneUnusedEdge, edge: true, label: "to inactive backend"},
+}
+
+// renderArchLegend draws one wrapped row keying the schematic's colours,
+// inline under the graph so it is read together with it. Each entry is one
+// label — swatch glyph and text as atoms of a single widget — so a wrap
+// never separates a swatch from its text, and the row wraps instead of
+// widening the window. A node swatch is the square outline glyph in the
+// graph's node-outline ink over the tone as background, which keeps the
+// dark App / idle tones visible; an edge swatch is a dash in the tone.
+func (inst *App) renderArchLegend() {
+	outline := color.Hex(styletokens.NeutralBorderDefault.AsHex())
+	gap := styletokens.GapItems(inst.density)
+	for range c.HorizontalWrapped().KeepIter() {
+		for i, e := range archLegendEntries {
+			if i > 0 {
+				c.AddSpace(gap)
+			}
+			atoms := c.Atoms()
+			if e.edge {
+				atoms = atoms.BeginRichTextColored(e.tone(), color.Transparent, icons.PhMinus).End()
+			} else {
+				atoms = atoms.BeginRichTextColored(outline, e.tone(), icons.PhSquare).End()
+			}
+			c.LabelAtoms(atoms.BeginRichText(" " + e.label).End().Keep()).Extend().Send()
+		}
+	}
 }
 
 // archNodeText pairs each node's label ink with the fill archNodeFill picked.
@@ -235,6 +291,17 @@ func archNodeText(meta map[string]nodeMeta, selected CapId) func(id string) (col
 	}
 }
 
+// The schematic's tones, shared by the fill / stroke hooks and the legend
+// row beneath the graph so the two cannot drift apart. Resolved per call so
+// they follow the active theme.
+func archToneApp() color.Color        { return color.Hex(styletokens.AccentSubtle.AsHex()) }
+func archToneSelected() color.Color   { return color.Hex(styletokens.SuccessDefault.AsHex()) }
+func archToneDegraded() color.Color   { return color.Hex(styletokens.ErrorDefault.AsHex()) }
+func archToneEffective() color.Color  { return color.Hex(styletokens.WarningDefault.AsHex()) }
+func archToneIdle() color.Color       { return color.Hex(styletokens.NeutralSubtle.AsHex()) }
+func archToneFocusEdge() color.Color  { return color.Hex(styletokens.AccentDefault.AsHex()) }
+func archToneUnusedEdge() color.Color { return color.Hex(styletokens.NeutralBorderFaint.AsHex()) }
+
 // archNodeFill colours each node by its role and live state, preserving the
 // prior schematic's semantics with IDS tones: blue App root, green selected
 // cap, red degraded cap (no effective backend — replaces the old "!" badge),
@@ -249,20 +316,20 @@ func archNodeFill(meta map[string]nodeMeta, selected CapId) func(id string) (col
 		}
 		switch m.kind {
 		case nodeApp:
-			return color.Hex(styletokens.AccentSubtle.AsHex()), true
+			return archToneApp(), true
 		case nodeCap:
 			switch {
 			case m.cap == selected:
-				return color.Hex(styletokens.SuccessDefault.AsHex()), true
+				return archToneSelected(), true
 			case ActiveBackend(m.cap) == "":
-				return color.Hex(styletokens.ErrorDefault.AsHex()), true
+				return archToneDegraded(), true
 			}
-			return color.Hex(styletokens.NeutralSubtle.AsHex()), true
+			return archToneIdle(), true
 		case nodeBackend:
 			if m.backendID == ActiveBackend(m.cap) {
-				return color.Hex(styletokens.WarningDefault.AsHex()), true
+				return archToneEffective(), true
 			}
-			return color.Hex(styletokens.NeutralSubtle.AsHex()), true
+			return archToneIdle(), true
 		}
 		return color.Color{}, false
 	}
@@ -274,10 +341,10 @@ func archNodeFill(meta map[string]nodeMeta, selected CapId) func(id string) (col
 func archEdgeStroke(meta map[string]nodeMeta, selected CapId) func(e *layeredgraph.EdgeLayout) (color.Color, bool) {
 	return func(e *layeredgraph.EdgeLayout) (color.Color, bool) {
 		if m, ok := meta[e.To]; ok && m.kind == nodeBackend && m.backendID != ActiveBackend(m.cap) {
-			return color.Hex(styletokens.NeutralBorderFaint.AsHex()), true
+			return archToneUnusedEdge(), true
 		}
 		if m, ok := meta[e.From]; ok && m.kind == nodeCap && m.cap == selected {
-			return color.Hex(styletokens.AccentDefault.AsHex()), true
+			return archToneFocusEdge(), true
 		}
 		return color.Color{}, false
 	}

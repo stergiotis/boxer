@@ -31,7 +31,7 @@ var capTourScenes = []struct {
 }{
 	{"capinspector-facts", CapFacts, icons.PhPlug + " capability inspector — facts",
 		"The cap-broker schematic on the layeredgraph widget (ADR-0069): App → capability → " +
-			"backend laid out top-down by Graphviz dot in-process. The selected facts cap is green; " +
+			"backend laid out left to right by Graphviz dot in-process. The selected facts cap is green; " +
 			"its effective backend (chstore) is amber and the alternative (InMem) dim. The strip below " +
 			"is the companion per-cap audit-activity sparkline (idle in the gallery; live in the carousel)."},
 	{"capinspector-task", CapTask, icons.PhPlug + " capability inspector — task",
@@ -110,4 +110,11 @@ func seedTourBackends() {
 	SetActiveBackend(CapFs, "fsbroker")
 	SetActiveBackend(CapPersist, "store")
 	SetActiveBackend(CapTask, "task")
+	SetActiveBackend(CapWatchbill, "worker")
+	SetActiveBackend(CapAppState, "service")
+	SetActiveBackend(CapKeelsonQuery, "keelsonquery")
+	SetActiveBackend(CapAdhoc, "adhocdata")
+	SetActiveBackend(CapLLM, "llm")
+	SetActiveBackend(CapHTTP, "httpegress")
+	SetActiveBackend(CapAgent, "agent")
 }

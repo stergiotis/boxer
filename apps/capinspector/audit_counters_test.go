@@ -26,7 +26,7 @@ func TestClassify_Subjects(t *testing.T) {
 }
 
 func TestCounters_Record_PerCap(t *testing.T) {
-	c := &Counters{}
+	c := NewCounters()
 	c.Record(audit.AuditRecord{Subject: "fs.dialog.read"})
 	c.Record(audit.AuditRecord{Subject: "fs.handle.abc.read"})
 	c.Record(audit.AuditRecord{Subject: "runtime.persist.play.x.set"})
@@ -42,7 +42,7 @@ func TestCounters_Record_PerCap(t *testing.T) {
 }
 
 func TestCounters_Reset(t *testing.T) {
-	c := &Counters{}
+	c := NewCounters()
 	c.Record(audit.AuditRecord{Subject: "fs.dialog.read"})
 	c.Reset()
 	assert.EqualValues(t, 0, c.Count(CapFs))

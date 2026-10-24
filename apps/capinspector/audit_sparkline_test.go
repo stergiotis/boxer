@@ -100,7 +100,7 @@ func TestAuditHistogram_Record_AccumulatesWithinBucket(t *testing.T) {
 // must show up in both the CapFs sparkline (classifier match) and
 // the CapBus sparkline (universal substrate).
 func TestCounters_Snapshot_PerCap(t *testing.T) {
-	c := &Counters{}
+	c := NewCounters()
 	t0 := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
 	c.recordAt(audit.AuditRecord{Subject: "fs.dialog.read"}, t0)
 
@@ -115,11 +115,10 @@ func TestCounters_Snapshot_PerCap(t *testing.T) {
 	}
 }
 
-// TestCounters_Snapshot_UnknownCapIsZero exercises the default arm
-// of the switch — an unknown capId must return a zero array, not
-// panic.
+// TestCounters_Snapshot_UnknownCapIsZero checks that an unknown
+// capId returns a zero array, not a panic.
 func TestCounters_Snapshot_UnknownCapIsZero(t *testing.T) {
-	c := &Counters{}
+	c := NewCounters()
 	snap := c.snapshotAt(CapId("unknown"), time.Now())
 	for i, v := range snap {
 		assert.EqualValues(t, 0, v, "bucket %d", i)
@@ -129,7 +128,7 @@ func TestCounters_Snapshot_UnknownCapIsZero(t *testing.T) {
 // TestCounters_Reset_ZerosHistograms verifies Reset clears both the
 // monotonic counters and the sliding-window histograms.
 func TestCounters_Reset_ZerosHistograms(t *testing.T) {
-	c := &Counters{}
+	c := NewCounters()
 	t0 := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
 	c.recordAt(audit.AuditRecord{Subject: "fs.dialog.read"}, t0)
 	c.Reset()
@@ -140,5 +139,42 @@ func TestCounters_Reset_ZerosHistograms(t *testing.T) {
 	bus := c.snapshotAt(CapBus, t0)
 	for i, v := range bus {
 		assert.EqualValues(t, 0, v, "bus bucket %d", i)
+	}
+}
+
+// TestCounters_Snapshot_EveryRegisteredCap records one subject per
+// registered cap and requires it in that cap's sparkline. A cap added
+// to allCapIdsOrdered without a sample subject here fails the test, so
+// a new cap cannot ship with a strip that never pulses.
+func TestCounters_Snapshot_EveryRegisteredCap(t *testing.T) {
+	samples := map[CapId]string{
+		CapRun:          "runtime.run.start",
+		CapFacts:        "runtime.facts.read",
+		CapFs:           "fs.dialog.read",
+		CapPersist:      "runtime.persist.play.editor.set",
+		CapTask:         "task.start",
+		CapWatchbill:    "watchbill.job.enqueue",
+		CapAppState:     "runtime.appstate.delete",
+		CapKeelsonQuery: "keelson.query.apps",
+		CapAdhoc:        "adhoc.publish",
+		CapLLM:          "llm.complete",
+		CapHTTP:         "net.http.fetch.example",
+		CapAgent:        "runtime.agent.list",
+	}
+	t0 := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
+	for _, capId := range allCapIdsOrdered() {
+		if capId == CapBus {
+			continue // derived from total; covered by TestCounters_Snapshot_PerCap
+		}
+		subj, ok := samples[capId]
+		if !assert.True(t, ok, "no sample subject for cap %q", capId) {
+			continue
+		}
+		c := NewCounters()
+		c.recordAt(audit.AuditRecord{Subject: subj}, t0)
+		snap := c.snapshotAt(capId, t0)
+		assert.EqualValues(t, 1, snap[sparkBuckets-1], "cap %q newest bucket", capId)
+		assert.EqualValues(t, 1, c.Count(capId), "cap %q count", capId)
+		assert.EqualValues(t, 0, c.other.Load(), "cap %q leaked into other", capId)
 	}
 }

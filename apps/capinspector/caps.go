@@ -40,6 +40,11 @@ const (
 	// the grant an app holds per keelson() table it reads, and the service
 	// the host runs over the in-process engine.
 	CapKeelsonQuery CapId = "keelsonquery"
+	// CapAdhoc is the ad-hoc dataset capability (ADR-0240): an app hands
+	// a table it computed to SQL for as long as its window lives, and the
+	// service that holds the sealed files behind the aliases. The id is the
+	// status bar's segment id, so a click on that segment opens this entry.
+	CapAdhoc CapId = "adhoc"
 	// CapLLM is model inference (ADR-0254): the grant an app holds to
 	// send text to the host's one model, and the service that decides
 	// what may reach it.
@@ -52,6 +57,11 @@ const (
 	// declare, under a task grant the person approved.
 	CapAgent CapId = "agent"
 )
+
+// adhocSubjectPrefix is the common prefix of every adhocdata subject
+// (adhocdata.SubjectPublish and siblings); the package names the subjects
+// one by one and exports no prefix of its own.
+const adhocSubjectPrefix = "adhoc."
 
 // BackendImpl is one realisation of a capability's contract. A cap
 // can have several (e.g. Facts: InMemoryFactsStore vs chstore.Store);
@@ -388,6 +398,27 @@ var Registry = map[CapId]CapSpec{
 			{Id: "keelsonquery", Display: "keelsonquery.Service"},
 		},
 	},
+	CapAdhoc: {
+		Id:            CapAdhoc,
+		Display:       "adhoc.* ad-hoc datasets",
+		SubjectFamily: "adhoc.{publish|retract|resolve|read} (request/reply), adhoc.bundle.*, adhoc.event.*",
+		Description: "Handing a table an app computed to SQL without storing it " +
+			"(ADR-0240): the app publishes an Arrow stream under an alias, " +
+			"the service seals it into a file with no name under a key that " +
+			"exists only in the process, and registers it under an " +
+			"unguessable handle a keelson() query can name. The dataset lives " +
+			"as long as the publishing window unless the publisher says " +
+			"otherwise; closing the window retracts it. Publishing is a " +
+			"request, so every publish lands an audit row with the app as " +
+			"sender; keelson('adhoc') lists what is live.",
+		Backend: "runtime/adhocdata over runtime/sealed",
+		AppFilter: func(f app.SubjectFilter) bool {
+			return strings.HasPrefix(f.Pattern, adhocSubjectPrefix)
+		},
+		Backends: []BackendImpl{
+			{Id: "adhocdata", Display: "adhocdata.Service"},
+		},
+	},
 	CapLLM: {
 		Id:            CapLLM,
 		Display:       "llm.* model inference",
@@ -466,6 +497,6 @@ var Registry = map[CapId]CapSpec{
 // inspector picker UI doesn't shuffle entries across frames (Go map
 // iteration is randomised).
 func allCapIdsOrdered() (ids []CapId) {
-	ids = []CapId{CapRun, CapFacts, CapBus, CapFs, CapPersist, CapTask, CapWatchbill, CapAppState, CapKeelsonQuery, CapLLM, CapHTTP, CapAgent}
+	ids = []CapId{CapRun, CapFacts, CapBus, CapFs, CapPersist, CapTask, CapWatchbill, CapAppState, CapKeelsonQuery, CapAdhoc, CapLLM, CapHTTP, CapAgent}
 	return
 }

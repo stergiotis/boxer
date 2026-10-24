@@ -171,9 +171,15 @@ func (inst *App) Frame(ctx app.FrameContextI) (err error) {
 // sees it. With several inspectors open (the Apps menu opens freely) the
 // first instance to Frame wins the pop; the status bar's OpenOrRaise
 // keeps the steady state at one.
+//
+// An id the Registry does not know leaves the selection alone: the status
+// bar names its segments independently of this package, and a segment
+// without an entry here would otherwise blank the page it was clicked over.
 func (inst *App) consumePendingSelection() {
 	if capId := popSelection(); capId != "" {
-		inst.selectedCap = capId
+		if _, ok := Registry[capId]; ok {
+			inst.selectedCap = capId
+		}
 	}
 }
 
@@ -195,13 +201,19 @@ func (inst *App) renderBody() {
 // the inspector body. Clicking one swaps selectedCap without opening
 // another window; the schematic and prose below update on the same
 // frame.
+//
+// The row wraps: thirteen caps do not fit one line at the window's
+// preferred width, and a clipped row hides the caps past the edge.
 func (inst *App) renderPicker() {
 	sel := selector.Segmented(inst.ids, "cap-picker", &inst.selectedCap).
-		Style(selector.StyleSelectable)
+		Style(selector.StyleSelectable).
+		Inline()
 	for _, capId := range allCapIdsOrdered() {
 		sel = sel.Option(capId, Registry[capId].Display)
 	}
-	sel.SendResp()
+	for range c.HorizontalWrapped().KeepIter() {
+		sel.SendResp()
+	}
 }
 
 func (inst *App) renderDetail(spec CapSpec) {
@@ -279,6 +291,8 @@ func diagramCapLabel(capId CapId) (s string) {
 		s = "App-state manager"
 	case CapKeelsonQuery:
 		s = "Table reads"
+	case CapAdhoc:
+		s = "Ad-hoc datasets"
 	case CapLLM:
 		s = "Model inference"
 	case CapHTTP:

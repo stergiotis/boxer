@@ -16,10 +16,12 @@ view per registered capability.
 
 ## Picker
 
-The horizontal row at the top is the capability picker. Each chip is
-a registered capability id (`boxer.facts`, `runtime.bus`,
-`runtime.fs`, `runtime.task`, …). Click a chip to switch the detail
-view; the active chip carries the accent fill.
+The rows at the top are the capability picker; they wrap to the
+window's width. Each chip is a registered capability (`boxer.facts`,
+`runtime.bus`, `runtime.fs`, `runtime.task`, …). Click a chip — or a
+capability or backend node in the schematic — to switch the detail
+view; the active chip carries the accent fill. A click on a segment of
+the status bar opens the inspector on that segment's capability.
 
 ## Detail view
 
@@ -29,7 +31,8 @@ For the selected capability:
   capability (e.g. `chstore` for `boxer.facts`, `inprocbus` for
   `runtime.bus`).
 - **Schematic** — a small canvas showing producers and consumers,
-  drawn with the IDS palette so callers stand out.
+  drawn with the IDS palette so callers stand out. The row beneath it
+  keys the colours.
 - **Prose** — a short description of what the capability promises
   and what guarantees the active backend honours.
 - **Storage schema** — for a capability whose backend persists into a
@@ -49,8 +52,10 @@ process startup via the runtime configuration, not from here.
 
 ## Audit counters and sparklines
 
-The bottom strip shows recent traffic per capability, sourced from
-`boxer.facts`. A flat line is no recent activity; a busy
-sparkline means the runtime is exercising the capability heavily.
-Useful as a sanity check that the chosen backend is actually being
-exercised.
+The strip under the schematic shows the last minute of audited bus
+requests per capability, counted in process as the bus records them.
+A flat line is no recent activity; a busy sparkline means the runtime
+is exercising the capability heavily. Useful as a sanity check that
+the chosen backend is actually being exercised. Bus counts every
+request; a capability whose service publishes rather than requests
+shows little here even when busy.
