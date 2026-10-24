@@ -9,6 +9,7 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 	"github.com/stergiotis/boxer/public/hmi/progressbar"
+	"github.com/stergiotis/boxer/public/observability/logging"
 )
 
 // mirrorProgress wraps progressbar.Bar with download-specific counters.
@@ -56,11 +57,15 @@ func (inst *mirrorProgress) LogWriter() (w io.Writer) { return inst.bar.LogWrite
 //	restore := routeLogsThrough(bar.LogWriter())
 //	defer restore()
 //
-// The swapped logger uses zerolog defaults (colored, RFC3339Nano time),
-// which approximates the app's --logFormat=console setup; the original
-// logger is restored verbatim.
+// The swapped logger is colored and otherwise built like the app's
+// --logFormat=console writer (logging.NewConsoleWriter), so field values
+// print the same; the original logger is restored verbatim.
 func routeLogsThrough(w io.Writer) (restore func()) {
 	orig := log.Logger
-	log.Logger = log.Output(zerolog.ConsoleWriter{Out: w})
+	var out io.Writer = zerolog.ConsoleWriter{Out: w}
+	if cw, err := logging.NewConsoleWriter(w, false); err == nil {
+		out = cw
+	}
+	log.Logger = log.Output(out)
 	return func() { log.Logger = orig }
 }

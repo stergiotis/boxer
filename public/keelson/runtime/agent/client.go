@@ -578,6 +578,10 @@ type Instance struct {
 	// why it failed.
 	Load       string
 	LoadReason string
+	// StalledSecs is how long a ready window has drawn no frame, once that
+	// holds up its calls: a command waits queued and a query reads the last
+	// frame until it draws again.
+	StalledSecs uint64 `json:",omitzero"`
 }
 
 // List lists the task's open instances.

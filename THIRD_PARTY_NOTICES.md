@@ -471,6 +471,21 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 - Not covered by `scripts/ci/license_gate.sh` for the same reason as 1.8:
   the port is first-party Go source, not a module dependency.
 
+### 1.10 The winit contributors -- winit (Apache-2.0)
+
+- Directory: `rust/imzero2/vendor/winit/`, which replaces the crates.io
+  `winit` for the imzero2 desktop client through `[patch.crates-io]`.
+- Origin: <https://github.com/rust-windowing/winit>, release `0.30.13` as
+  published on crates.io.
+- Use: the windowing library under eframe; carried for a bounded wait on
+  Wayland frame callbacks (ADR-0332).
+- Licence: Apache-2.0; the text travels with the directory (`LICENSE`).
+  Apache-2.0 §4(b) asks that modified files say so: every changed site is
+  marked `// boxer delta:`, and the deltas are listed with their reasons in
+  [`.../vendor/winit/VENDORING.md`](rust/imzero2/vendor/winit/VENDORING.md),
+  which is also the re-sync procedure. Upstream ships no NOTICE file.
+- Not covered by `scripts/ci/license_gate.sh`, for the reason given in 1.8.
+
 ## 2. Vendored binary artifacts
 
 ### 2.1 h3.wasm -- H3 hierarchical geospatial index (Apache-2.0)

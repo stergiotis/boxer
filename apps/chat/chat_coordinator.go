@@ -991,8 +991,11 @@ func (inst *coordinator) call(ctx context.Context, o toolOrigin, toolCall string
 	case "refused", "denied", "conflict":
 		inst.refuse(out.Reason)
 	}
-	if out.Phase == "refused" && (!hasArgs || a == nil) {
+	if out.Phase == "refused" && (!hasArgs || a == nil) && inst.takesArgs(ctx, instance, op, out.Remedy) {
 		co.Reason = strings.TrimSpace(co.Reason + "; you sent no args: the operation's arguments go under args")
+	}
+	if out.Phase == "accepted" && out.Reason == "" {
+		co.Reason = "still queued when the wait ended: it applies at the window's next frame, so read its effect later"
 	}
 	untrustedSource := ""
 	if out.ResultRef != "" {

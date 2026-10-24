@@ -302,6 +302,53 @@ func TestLayout_ParallelEdgesAreKept(t *testing.T) {
 	assert.NotEqual(t, *lay.Edges[0].LabelPos, *lay.Edges[1].LabelPos, "and labelled apart")
 }
 
+// LG-12: two parallel edges' middle labels do not overlap once painted. The
+// widths are the labels' advances in Noto Sans Regular, the painter's sans
+// (measured 2026-10-24); Graphviz puts the two side by side with no gap, so
+// they clear only if it measured each at least as wide as it is painted.
+func TestLayout_ParallelEdgeLabelsClearEachOther(t *testing.T) {
+	e := newEngine(t)
+	notoEm := map[string]float64{"first": 1.855, "second": 3.361, "title": 1.802, "flight": 2.454}
+	for _, pair := range [][2]string{{"first", "second"}, {"title", "flight"}} {
+		m := layeredgraph.GraphModel{
+			Nodes: []layeredgraph.Node{{ID: "Encounter"}, {ID: "Vessel"}},
+			Edges: []layeredgraph.Edge{
+				{From: "Encounter", To: "Vessel", Label: pair[0]},
+				{From: "Encounter", To: "Vessel", Label: pair[1]},
+			},
+		}
+		for _, pt := range []float64{0, 13} {
+			for _, rd := range []layeredgraph.RankDir{layeredgraph.RankDirTopBottom, layeredgraph.RankDirLeftRight} {
+				lay, err := e.Layout(context.Background(), m, layeredgraph.LayoutOpts{RankDir: rd, EdgeFontSize: pt})
+				require.NoError(t, err)
+				painted := lay.EdgeFontSize
+				a, b := *lay.Edges[0].LabelPos, *lay.Edges[1].LabelPos
+				if rd == layeredgraph.RankDirTopBottom {
+					// Side by side: the centres must be half of each width apart.
+					need := painted * (notoEm[pair[0]] + notoEm[pair[1]]) / 2
+					assert.GreaterOrEqualf(t, math.Abs(a.X-b.X), need, "%v at %g pt, rankdir %v", pair, painted, rd)
+				} else {
+					// Stacked: one line each.
+					assert.GreaterOrEqualf(t, math.Abs(a.Y-b.Y), painted*1.2, "%v at %g pt, rankdir %v", pair, painted, rd)
+				}
+			}
+		}
+	}
+}
+
+func TestLayout_ReportsEdgeFontSize(t *testing.T) {
+	e := newEngine(t)
+	m := trafficLight()
+
+	explicit, err := e.Layout(context.Background(), m, layeredgraph.LayoutOpts{EdgeFontSize: 13})
+	require.NoError(t, err)
+	assert.Equal(t, 13.0, explicit.EdgeFontSize, "explicit edge font size is echoed on the Layout")
+
+	def, err := e.Layout(context.Background(), m, layeredgraph.LayoutOpts{})
+	require.NoError(t, err)
+	assert.Equal(t, layeredgraph.DefaultEdgeFontPt, def.EdgeFontSize)
+}
+
 // A node with two loops of its own keeps both — the case a pair-keyed parse
 // lost twice over, once for the pair and once for the loop's double report.
 func TestLayout_ParallelSelfLoopsAreKept(t *testing.T) {

@@ -84,7 +84,7 @@ impl OpTreeRecorder {
 
     /// Opens a row for one replay of a deferred block.
     pub fn begin_block(&mut self, ctx: &egui::Context, blocks_read: u64) {
-        self.open(ctx, BLOCK_OP.to_string(), blocks_read, None);
+        self.open(ctx, BLOCK_OP.to_owned(), blocks_read, None);
     }
 
     fn open(&mut self, ctx: &egui::Context, name: String, blocks_read: u64, at: Option<usize>) {
@@ -277,10 +277,10 @@ impl OpTreeRecorder {
                 escape(&r.name)
             );
             write_rect(out, sub);
-            if parent == -1 {
-                if let Some(at) = r.root_at {
-                    let _ = write!(out, ",\"at\":{at}");
-                }
+            if parent == -1
+                && let Some(at) = r.root_at
+            {
+                let _ = write!(out, ",\"at\":{at}");
             }
             if clipped[i] > 0 {
                 let _ = write!(out, ",\"clipped\":{}", clipped[i]);
@@ -607,13 +607,13 @@ mod tests {
         /// Parses exactly the shape `write_json` writes, field by field.
         pub fn parse(s: &str) -> Doc {
             let mut d = Doc {
-                raw: s.to_string(),
+                raw: s.to_owned(),
                 ..Default::default()
             };
             let body = s.split_once("\"ops\":[").expect("ops").1;
             for chunk in body.split("{\"op\":\"").skip(1) {
                 let mut op = Op {
-                    op: chunk.split('"').next().unwrap().to_string(),
+                    op: chunk.split('"').next().unwrap().to_owned(),
                     ..Default::default()
                 };
                 let head = chunk.split_once("\"widgets\":[").unwrap();
@@ -652,7 +652,7 @@ mod tests {
             let end = s.find('}').unwrap_or(s.len());
             let s = &s[..end];
             s.split_once(key).map_or(String::new(), |(_, r)| {
-                r.split('"').next().unwrap().to_string()
+                r.split('"').next().unwrap().to_owned()
             })
         }
     }

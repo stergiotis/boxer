@@ -1174,7 +1174,8 @@ func (inst *Service) list(msg *app.Msg) (rep wireListReply) {
 		}
 		load, reason := loadOf(info)
 		rep.Instances = append(rep.Instances, wireInstance{Instance: info.Key, App: string(info.App), Title: title,
-			Mode: e.mode.String(), Ops: info.Ops, Confined: info.Confined, Load: load.String(), LoadReason: reason})
+			Mode: e.mode.String(), Ops: info.Ops, Confined: info.Confined, Load: load.String(), LoadReason: reason,
+			StalledSecs: uint64(info.Stalled / time.Second)})
 	}
 	if tainted {
 		// Titles are untrusted text (ADR-0269 §SD7).

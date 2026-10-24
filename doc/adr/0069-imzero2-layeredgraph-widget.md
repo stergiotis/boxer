@@ -110,6 +110,29 @@ Accepted (2026-06-06, reviewed by p@stergiotis). The decision is in force; the `
 
 ## Updates
 
+### 2026-10-24 — edge labels are measured as painted
+
+Two parallel edges' middle labels overlapped once painted. Graphviz sets an
+edge's middle label beside its neighbour with no gap, at the width it
+measured, and it measured edge labels in its default Times at 14 pt while the
+view painted them in the UI sans at `Style.EdgeFontSize`. Measured on
+2026-10-24, the labels "first" and "second" of two parallel edges got centres
+30.8 pt apart, and painted in Noto Sans at 13 pt they need 33.9 pt: the
+narrow serif under-measured the sans by more than the 1 pt between the sizes.
+
+Edge labels now take the node labels' arrangement from the 2026-06-07 note
+below: `fontname=Helvetica` and a reported size the view paints at.
+`LayoutOpts.EdgeFontSize` is the painted size (default
+`layeredgraph.DefaultEdgeFontPt`, the view's former 11 pt), the engine
+measures at that size times a headroom of 1.2, since Noto runs 3–17 % wider
+than Graphviz's Helvetica on lowercase words, and `Layout.EdgeFontSize`
+reports the painted size. The view paints middle and end labels at it, and
+`Style.EdgeFontSize` becomes the fallback for a Layout without one, as
+`Style.NodeFontSize` already was. A caller that set only
+`Style.EdgeFontSize` paints at the layout's size until it passes the same
+value as `LayoutOpts.EdgeFontSize`. End labels take the same font, though
+Graphviz still reserves no room for them (ADR-0331 §SD4).
+
 ### 2026-10-15 — a multi-line label is painted at the pitch it was laid out at
 
 A box sized for a label of several lines could be too short for the painted

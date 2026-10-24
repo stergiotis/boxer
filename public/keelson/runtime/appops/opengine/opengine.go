@@ -17,8 +17,8 @@
 //	EndFrame       changes the app's own frame logic made are bumped with
 //	               the app as writer
 //
-// Submit, Status and Cancel are safe from any goroutine; everything else
-// runs on the render goroutine.
+// Submit, Status, Cancel, SinceDrawn and Stalled are safe from any
+// goroutine; everything else runs on the render goroutine.
 package opengine
 
 import (
@@ -45,6 +45,10 @@ const DefaultKeepLog = 1024
 // QueryWait bounds how long a query waits for a frame to build the view it
 // reads; above the host's one-second idle heartbeat.
 const QueryWait = 2 * time.Second
+
+// StallAfter is how long a window may go without a frame before what the
+// engine answers about it says so.
+const StallAfter = 5 * time.Second
 
 // LogEntry is one change in the command log: a command, a gesture, or a
 // change the engine observed (a write-back, the app's frame logic).
@@ -79,6 +83,7 @@ type call struct {
 
 type snapshot struct {
 	asOf uint64
+	at   time.Time
 	// view is nil when no one could read it as the frame began.
 	view     app.OperationsSnapshotI
 	revs     map[string]uint64
@@ -108,6 +113,10 @@ type Engine struct {
 	queryWait time.Duration
 
 	snap atomic.Pointer[snapshot]
+	// drawnAt is when the last frame began, in Unix nanoseconds; zero
+	// before the first.
+	drawnAt atomic.Int64
+	clock   func() time.Time
 
 	// Render goroutine only.
 	frame       uint64
@@ -127,7 +136,7 @@ func New(catalog *app.OperationsCatalog, h app.OperationsHandlerI) (inst *Engine
 		values:  make(map[string]any),
 		revs:    make(map[string]uint64),
 		writers: make(map[string]string),
-		viewed:  make(chan struct{}), queryWait: QueryWait,
+		viewed:  make(chan struct{}), queryWait: QueryWait, clock: time.Now,
 	}
 	for _, r := range catalog.Resources {
 		inst.resourceSet = append(inst.resourceSet, r.Name)
@@ -179,7 +188,7 @@ func (inst *Engine) query(spec app.OperationSpec, req opwire.CallRequest) (out o
 		s = inst.awaitView(inst.queryWait)
 	}
 	if s == nil || s.view == nil {
-		out = opwire.Outcome{Phase: opwire.PhaseRefused, Reason: "the window has not drawn yet"}
+		out = opwire.Outcome{Phase: opwire.PhaseRefused, Reason: inst.notDrawn()}
 		return
 	}
 	var result []byte
@@ -196,7 +205,46 @@ func (inst *Engine) query(spec app.OperationSpec, req opwire.CallRequest) (out o
 	}
 	out.AsOf, out.Seq, out.Confined = s.asOf, s.logSeq, s.confined || confined
 	out.Revisions = pick(s.revs, spec.Reads)
+	if age := inst.clock().Sub(s.at); out.Phase == opwire.PhaseCompleted && age >= StallAfter {
+		out.Reason = "read as of the window's last frame; " + stallNote(age)
+	}
 	return
+}
+
+// SinceDrawn is how long ago the window's last frame began; drawn is false
+// before its first.
+func (inst *Engine) SinceDrawn() (d time.Duration, drawn bool) {
+	at := inst.drawnAt.Load()
+	if at == 0 {
+		return
+	}
+	d, drawn = inst.clock().Sub(time.Unix(0, at)), true
+	return
+}
+
+// Stalled is how long the window has gone without a frame, once that is
+// StallAfter or longer; zero otherwise.
+func (inst *Engine) Stalled() (d time.Duration) {
+	if since, drawn := inst.SinceDrawn(); drawn && since >= StallAfter {
+		d = since
+	}
+	return
+}
+
+// notDrawn is why no frame answered a query.
+func (inst *Engine) notDrawn() (reason string) {
+	d, drawn := inst.SinceDrawn()
+	if !drawn {
+		return "the window has not drawn yet"
+	}
+	return stallNote(d)
+}
+
+// stallNote says that the window has drawn no frame for d, and what that
+// means for a call.
+func stallNote(d time.Duration) (note string) {
+	return "the window has drawn no frame for " + d.Round(time.Second).String() +
+		"; the desktop may have stopped drawing the host, and calls wait for its next frame"
 }
 
 // awaitView waits up to wait for a snapshot that carries a view, and
@@ -277,6 +325,9 @@ func (inst *Engine) Status(id string) (out opwire.Outcome, ok bool) {
 	c, ok := inst.calls[id]
 	if ok {
 		out = c.outcome
+		if d := inst.Stalled(); out.Phase == opwire.PhaseAccepted && out.Reason == "" && d > 0 {
+			out.Reason = "queued for the window's next frame; " + stallNote(d)
+		}
 	}
 	return
 }
@@ -350,6 +401,7 @@ func (inst *Engine) Waiting() (waiting bool) {
 // BeginFrame runs once the previous frame's write-back has landed.
 func (inst *Engine) BeginFrame() {
 	inst.frame++
+	inst.drawnAt.Store(inst.clock().UnixNano())
 	if len(inst.toBeDrawn) > 0 {
 		inst.mu.Lock()
 		for _, c := range inst.toBeDrawn {
@@ -528,7 +580,7 @@ func (inst *Engine) SnapshotRevisions() (revs map[string]uint64, asOf uint64) {
 // view is built only when someone could read it: a task is attached or a
 // query waits.
 func (inst *Engine) TakeSnapshot() {
-	s := &snapshot{asOf: inst.frame, revs: maps.Clone(inst.revs), logSeq: inst.LogSeq(), confined: inst.h.Confined()}
+	s := &snapshot{asOf: inst.frame, at: inst.clock(), revs: maps.Clone(inst.revs), logSeq: inst.LogSeq(), confined: inst.h.Confined()}
 	inst.mu.Lock()
 	wanted := inst.attached > 0 || inst.waiting > 0
 	inst.mu.Unlock()

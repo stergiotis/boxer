@@ -1154,6 +1154,18 @@ can act on, and the refusal is a grant event like any other. What the
 unattended mode (ADR-0298) decides does not count. An agent service
 configured without the attention service keeps the modals. The fs Powerbox file dialog stays modal.
 
+### 2026-10-24 — a window that stops drawing says so
+
+SD4's bound on how long a queued command waits holds only while the client
+paints. On Wayland the desktop client got no redraws while its window was not
+shown, so an agent's command stayed `accepted`, and its queries were refused
+or read a snapshot minutes old, with nothing telling slow from dropped.
+[ADR-0332](./0332-a-hidden-desktop-host-keeps-running-passes.md) keeps a
+hidden desktop client passing. The engine now records when its window last
+drew; past five seconds without a frame, a queued command's status, a query's
+answer or refusal, and the window list (`StalledSecs`) say how long. "The
+window has not drawn yet" is kept for a window that never drew.
+
 ## References
 
 - [ADR-0026](./0026-app-runtime-and-capability-subjects.md) — the subject taxonomy SD3 extends; the threat model SD6 keeps.

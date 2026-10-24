@@ -3,11 +3,11 @@ members = [".", "imzero2_egui", "browser"]
 # The browser module is a wasm32 cdylib built by build_rust_browser.sh; a
 # plain `cargo build` here does not link it natively.
 default-members = [".", "imzero2_egui"]
-# Vendored third-party source (vendor/egui_software_backend, see its
-# VENDORING.md) is a path dependency but NOT a member: `check.sh` runs
+# Vendored third-party source (vendor/egui_software_backend and vendor/winit,
+# see each VENDORING.md) is a path dependency but NOT a member: `check.sh` runs
 # `cargo fmt --all` and `cargo clippy --workspace -- -D warnings`, and neither
 # should reformat or gate on code we did not write.
-exclude = ["vendor/egui_software_backend", "vendor/egui_software_backend/constify"]
+exclude = ["vendor/egui_software_backend", "vendor/egui_software_backend/constify", "vendor/winit"]
 resolver = "2"
 
 [package]
@@ -319,6 +319,9 @@ opt-level = 2
 
 
 [patch.crates-io]
+# winit with a bounded wait for Wayland frame callbacks, so a window the
+# compositor does not show keeps running passes; see vendor/winit/VENDORING.md.
+winit = { path = "vendor/winit" }
 
 # If you want to use the bleeding edge version of egui and eframe:
 # egui = { git = "https://github.com/emilk/egui", branch = "main" }

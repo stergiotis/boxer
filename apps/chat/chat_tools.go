@@ -277,7 +277,7 @@ var coordinatorTools = []toolSpec{
 			return
 		}},
 	{name: "list_windows", group: toolGroupFixed,
-		description:  "List the windows of your task, with their app, mode and load (opening, ready or failed).",
+		description:  "List the windows of your task, with their app, mode and load (opening, ready or failed). StalledSecs, when present, is how long a window has drawn no frame: its commands wait queued and its queries read its last frame until it draws again.",
 		schema:       `{"type":"object","properties":{},"additionalProperties":false}`,
 		parallelSafe: true,
 		exec: func(ctx context.Context, inst *coordinator, spec *toolSpec, o toolOrigin, call openaichat.ToolCall, args map[string]any) (content string, activity string) {

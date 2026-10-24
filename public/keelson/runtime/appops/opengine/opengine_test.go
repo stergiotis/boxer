@@ -270,8 +270,50 @@ func TestAQueryThatNoFrameAnswersIsRefused(t *testing.T) {
 	eng.TakeSnapshot()
 	out := eng.Submit("get_text", opwire.CallRequest{CallId: "q"})
 	assert.Equal(t, opwire.PhaseRefused, out.Phase)
-	assert.Equal(t, "the window has not drawn yet", out.Reason)
+	assert.Contains(t, out.Reason, "the window has drawn no frame for", "a window that drew once says how long ago, not that it never drew")
 	assert.False(t, eng.Busy())
+}
+
+// fakeClock is a settable clock for the engine.
+type fakeClock struct{ now time.Time }
+
+func (inst *fakeClock) Now() time.Time { return inst.now }
+
+// A window whose frames stopped says so: in the status of a command still
+// queued, in a query answered from the last frame's snapshot, and in
+// Stalled, which the host's window list reports.
+func TestAStalledWindowSaysHowLongItHasNotDrawn(t *testing.T) {
+	h := newHarness(t)
+	clock := &fakeClock{now: time.Unix(1_000_000, 0)}
+	h.eng.clock = clock.Now
+	h.frame(nil)
+	_, rev := h.read()
+	assert.Zero(t, h.eng.Stalled())
+
+	out := h.call("set_text", setTextArgs{Text: "agent"}, map[string]uint64{"text": rev})
+	require.Equal(t, opwire.PhaseAccepted, out.Phase)
+	id := string(rune('a' + h.n))
+	st, _ := h.eng.Status(id)
+	assert.Empty(t, st.Reason, "a command queued behind a live window says nothing more")
+
+	clock.now = clock.now.Add(4*time.Minute + 12*time.Second)
+	assert.Equal(t, 4*time.Minute+12*time.Second, h.eng.Stalled())
+	st, _ = h.eng.Status(id)
+	assert.Equal(t, opwire.PhaseAccepted, st.Phase)
+	assert.Contains(t, st.Reason, "queued for the window's next frame")
+	assert.Contains(t, st.Reason, "no frame for 4m12s")
+
+	q := h.call("get_text", nil, nil)
+	require.Equal(t, opwire.PhaseCompleted, q.Phase, "the last frame's snapshot still answers")
+	assert.Contains(t, q.Reason, "read as of the window's last frame")
+
+	h.frame(nil)
+	assert.Zero(t, h.eng.Stalled())
+	st, _ = h.eng.Status(id)
+	assert.Equal(t, opwire.PhaseApplied, st.Phase)
+	assert.Empty(t, st.Reason)
+	q = h.call("get_text", nil, nil)
+	assert.Empty(t, q.Reason)
 }
 
 // A command is checked for availability even when no view was built.
