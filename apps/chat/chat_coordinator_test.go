@@ -761,3 +761,24 @@ func TestAStoppedTurnKeepsItsAnsweredCalls(t *testing.T) {
 	assert.Equal(t, 1, st.turns[0].rounds)
 	assert.Len(t, st.calls, 1)
 }
+
+// The hint that arguments go under args follows only a refusal of an
+// operation that takes some: a window that cannot answer refuses get_state
+// for a reason no argument changes.
+func TestTheArgsHintFollowsOnlyAnOperationThatTakesArgs(t *testing.T) {
+	assert.False(t, schemaTakesArgs(`{"type":"object","properties":{},"additionalProperties":false}`))
+	assert.False(t, schemaTakesArgs(`{"type":"object"}`))
+	assert.False(t, schemaTakesArgs(""))
+	assert.True(t, schemaTakesArgs(`{"type":"object","properties":{"text":{"type":"string"}}}`))
+
+	inst := &coordinator{windowApps: map[uint64]string{}, opCache: map[string][]agent.Operation{
+		"notes": {{Name: "get_note", ArgsSchema: `{"type":"object","properties":{}}`},
+			{Name: "set_note", ArgsSchema: `{"type":"object","properties":{"text":{"type":"string"}}}`}},
+	}}
+	inst.windowApps[7] = "notes"
+	ctx := context.Background()
+	assert.False(t, inst.takesArgs(ctx, 7, "get_note", nil))
+	assert.True(t, inst.takesArgs(ctx, 7, "set_note", nil))
+	assert.False(t, inst.takesArgs(ctx, 8, "set_note", nil), "an operation it cannot look up takes none")
+	assert.True(t, inst.takesArgs(ctx, 8, "set_note", &agent.Remedy{ArgsSchema: `{}`}), "a refusal naming a schema answers it")
+}

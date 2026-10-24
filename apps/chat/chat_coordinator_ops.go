@@ -224,6 +224,38 @@ func (inst *coordinator) noteEffects(apps []agent.AppOperations) {
 	}
 }
 
+// takesArgs reports whether op in window takes arguments: a refusal that
+// names the schema they have to fit says so, otherwise the operation's
+// schema does. An operation it cannot look up takes none.
+func (inst *coordinator) takesArgs(ctx context.Context, window uint64, op string, remedy *agent.Remedy) (takes bool) {
+	if remedy != nil && remedy.ArgsSchema != "" {
+		return true
+	}
+	inst.mu.Lock()
+	appId := inst.windowApps[window]
+	inst.mu.Unlock()
+	if appId == "" {
+		return
+	}
+	for _, o := range inst.operationsOf(ctx, appId) {
+		if o.Name == op {
+			return schemaTakesArgs(o.ArgsSchema)
+		}
+	}
+	return
+}
+
+// schemaTakesArgs reports whether an object schema declares any property.
+func schemaTakesArgs(argsSchema string) (takes bool) {
+	var s struct {
+		Properties map[string]jsontext.Value `json:"properties"`
+	}
+	if json.Unmarshal([]byte(argsSchema), &s) != nil {
+		return
+	}
+	return len(s.Properties) > 0
+}
+
 // withReason is an operation's argument schema with the one-line reason
 // and the title every call may carry; titled is false when the operation
 // has a title argument of its own, which then stays the operation's.
