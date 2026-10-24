@@ -458,13 +458,25 @@ and M1, reduces §SD10–SD12 and M4 to one key, and discharges its O2 deferral.
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers (Tier 1 in-place / Tier 2 dated `## Updates` entry / Tier 3 new superseding ADR).
 
-<!--
 ## Updates
 
-Tier-2 dated entries land here when implementation reveals a refinement, an aspirational
-claim turns out false, or a milestone records what shipped. Single H2; add H3s dated
-YYYY-MM-DD. Remove this HTML comment when the section first gains a real entry.
--->
+### 2026-10-24 — B5 widened to the aggregate combinator forms
+
+`system.functions` lists `sum` but not `sumIf`, `uniqArray` or `argMaxState`,
+so an aggregate spelled with a combinator had no source of truth and was never
+offered. `system.completions` lists them, one combinator deep, as its
+`aggregate function combinator pair` rows; B5 now takes those rows beside
+`system.functions`, as `ItemFunction` candidates whose provenance is
+`system.completions`.
+
+The listing is an addition to the function domain, not a domain of its own: an
+endpoint without the table leaves the forms out rather than holding the
+expression position at not-ready, and `complete_sql` does not name it in
+`not_ready`.
+
+`system.completions` also lists the server's keywords. They stay out: the list
+carries no clause, so offering it at an expression position is the plausible
+band SD1 rules out, and per-clause keywords remain out of scope (A12).
 
 ## References
 
