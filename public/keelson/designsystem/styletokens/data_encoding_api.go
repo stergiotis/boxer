@@ -129,9 +129,12 @@ const QualitativeCycleLen = len(data_encoding.OkabeIto)
 // it can be called with any cycle index. Mirrors the Rust
 // `style::tokens::qualitative_cycle` accessor.
 //
-// Every entry clears WCAG 1.4.11's 3:1 against NeutralBgSurface — the
-// lightest, and therefore hardest, IDS surface — so the cycle is usable as
-// a stroke, marker or glyph colour, not only as a fill. That is the
+// Under the dark theme every entry clears WCAG 1.4.11's 3:1 against
+// NeutralBgSurface — the lightest, and therefore hardest, dark surface — so
+// the cycle is usable as a stroke, marker or glyph colour, not only as a
+// fill. Under the light theme (ADR-0258) it does not: entries 0, 1, 3 and 6
+// fall below 3:1 against that theme's surface, and only 2, 4 and 5 clear it
+// in both themes. deferred: a cycle for the light theme. That is the
 // property the previous palette (Crameri batlowS) lacked: four of its ten
 // entries sat below 3:1 and one was at the background's own luminance.
 // ADR-0156 records the change and the numbers behind it.
