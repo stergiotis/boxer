@@ -209,7 +209,11 @@ func (inst *Engine) Deliver(ctx context.Context, req queryengine.Request) (st qu
 		ContentType: resp.Header.Get("Content-Type"),
 		Summary:     summary,
 	}
-	st = queryengine.NewReaderStream(resp.Body, req.Cap.TerminalFor(summary.ResultRows), resp.Body, 0)
+	var body io.Reader = resp.Body
+	if tag := resp.Header.Get(headerExceptionTag); tag != "" {
+		body = newExceptionTrailerReader(resp.Body, tag)
+	}
+	st = queryengine.NewReaderStream(body, req.Cap.TerminalFor(summary.ResultRows), resp.Body, 0)
 	return
 }
 
@@ -253,9 +257,14 @@ func (inst *Engine) authenticate(req *http.Request) {
 
 // errorFromResponse folds a non-200 into an error carrying the server's own
 // diagnostic, in the shape callers parse ("clickhouse http <code>: <body>").
+//
+// The diagnostic is not always the start of the body: a run can fail after
+// it produced rows and still be answered 500, and then the rows come first
+// (see diagnosticOf).
 func errorFromResponse(resp *http.Response) (err error) {
-	raw, _ := io.ReadAll(io.LimitReader(resp.Body, maxErrorBodyBytes))
+	raw, _ := io.ReadAll(io.LimitReader(resp.Body, maxErrorDrainBytes))
 	_ = resp.Body.Close()
+	raw = diagnosticOf(raw, resp.Header.Get(chhttp.HeaderExceptionCode), resp.Header.Get(headerExceptionTag))
 	detail := strings.TrimSpace(string(raw))
 	bld := eb.Build().Int("statusCode", resp.StatusCode).Str("body", detail)
 	if detail == "" {
