@@ -99,6 +99,7 @@ func (e *Engine) Layout(ctx context.Context, m layeredgraph.GraphModel, opts lay
 	// Report the size the boxes were sized to fit so a renderer paints node
 	// labels at the same size — no layout/render font drift.
 	lay.FontSize = effectiveFontSize(opts.FontSize)
+	lay.EdgeFontSize = effectiveEdgeFontSize(opts.EdgeFontSize)
 	return lay, nil
 }
 
@@ -128,6 +129,22 @@ func nodeMarginFor(nodePt float64, layoutPt float64) string {
 	}
 	return fmt.Sprintf("%g,%g", nodeMarginX*scale, nodeMarginY)
 }
+
+// effectiveEdgeFontSize resolves the size edge labels are painted at.
+func effectiveEdgeFontSize(f float64) float64 {
+	if f > 0 {
+		return f
+	}
+	return layeredgraph.DefaultEdgeFontPt
+}
+
+// edgeLabelHeadroom is how much larger than painted an edge label is
+// measured. Graphviz has no margin for an edge label: two parallel edges'
+// middle labels abut at the width it measures, so any shortfall overlaps.
+// It measures in Helvetica, and the painter's sans (Noto Sans, measured
+// 2026-10-24) runs 3–17 % wider on lowercase words — "first" 15 %, "title"
+// 16 % — with t, f and r the widest letters against it.
+const edgeLabelHeadroom = 1.2
 
 // endLabelDistance is the Graphviz labeldistance of an edge with end labels:
 // how far, in multiples of 10 pt, a head or tail label sits from its end.
@@ -263,6 +280,13 @@ func (e *Engine) renderLaidOutDot(ctx context.Context, m layeredgraph.GraphModel
 		}
 		if ed.TailLabel != "" {
 			ge.SetTailLabel(ed.TailLabel)
+		}
+		if ed.Label != "" || ed.HeadLabel != "" || ed.TailLabel != "" {
+			// Measured in the painter's metric family, as node labels are,
+			// at the painted size plus headroom (LG-12: parallel edges'
+			// labels overlapped when Graphviz measured them in Times).
+			ge.SetFontName("Helvetica")
+			ge.SetFontSize(effectiveEdgeFontSize(opts.EdgeFontSize) * edgeLabelHeadroom)
 		}
 		if ed.HeadLabel != "" || ed.TailLabel != "" {
 			// Graphviz puts an end label endLabelDistance×10 pt from the

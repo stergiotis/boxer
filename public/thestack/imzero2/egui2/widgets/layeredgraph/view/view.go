@@ -41,7 +41,7 @@ type Style struct {
 	EdgeStrokeW  float32
 	Rounding     float32 // box-node corner rounding (points, pre-scale)
 	NodeFontSize float32 // points, pre-scale; node-label fallback when Layout.FontSize == 0
-	EdgeFontSize float32 // points, pre-scale
+	EdgeFontSize float32 // points, pre-scale; edge-label fallback when Layout.EdgeFontSize == 0
 	// EdgeDash and EdgeGap are a dashed edge's drawn and skipped lengths, in
 	// pixels like EdgeStrokeW, so a dash stays readable when the drawing is
 	// scaled to fit. A non-positive value takes DefaultEdgeDash or
@@ -80,7 +80,7 @@ func DefaultStyle() Style {
 		EdgeStrokeW:  1.25,
 		Rounding:     4.0,
 		NodeFontSize: 14.0,
-		EdgeFontSize: 11.0,
+		EdgeFontSize: layeredgraph.DefaultEdgeFontPt,
 		EdgeDash:     DefaultEdgeDash,
 		EdgeGap:      DefaultEdgeGap,
 		TitleFill:    hex(styletokens.NeutralBgFaint),
@@ -373,6 +373,13 @@ func Render(idBase uint64, lay *layeredgraph.Layout, opts RenderOpts) RenderResu
 			}
 		}
 
+		// Edge labels paint at the size the layout reserved for them, as
+		// node labels do; Style.EdgeFontSize is the fallback.
+		edgeFontPt := st.EdgeFontSize
+		if lay.EdgeFontSize > 0 {
+			edgeFontPt = float32(lay.EdgeFontSize)
+		}
+
 		// Edges first, so nodes paint over the spline ends.
 		for i := range lay.Edges {
 			e := &lay.Edges[i]
@@ -385,7 +392,7 @@ func Render(idBase uint64, lay *layeredgraph.Layout, opts RenderOpts) RenderResu
 			// it paints with its edge, under the nodes.
 			if e.LabelPos != nil && e.Label != "" {
 				lx, ly := tf(*e.LabelPos)
-				paintLabel(lx, ly, 1, e.Label, st.EdgeFontSize*float32(escale), st.EdgeText)
+				paintLabel(lx, ly, 1, e.Label, edgeFontPt*float32(escale), st.EdgeText)
 			}
 		}
 
@@ -436,7 +443,7 @@ func Render(idBase uint64, lay *layeredgraph.Layout, opts RenderOpts) RenderResu
 			}{{e.HeadLabelPos, e.HeadLabel}, {e.TailLabelPos, e.TailLabel}} {
 				if l.pos != nil && l.text != "" {
 					lx, ly := tf(*l.pos)
-					paintLabel(lx, ly, 1, l.text, st.EdgeFontSize*float32(escale), st.EdgeText)
+					paintLabel(lx, ly, 1, l.text, edgeFontPt*float32(escale), st.EdgeText)
 				}
 			}
 		}

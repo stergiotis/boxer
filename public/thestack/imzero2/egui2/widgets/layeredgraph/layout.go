@@ -188,7 +188,17 @@ type LayoutOpts struct {
 	// view because a node's size has to be decided before layout runs, where
 	// an edge's width is chosen when the edge is stroked.
 	NodeFontSize func(weight float64) (pt float64, ok bool)
+	// EdgeFontSize is the size, in points, edge labels — middle and end — are
+	// painted at; 0 takes DefaultEdgeFontPt. The engine reserves room for a
+	// middle label at this size, so two labels side by side (parallel edges)
+	// do not overlap once painted, and reports the size as
+	// Layout.EdgeFontSize for the renderer to paint at.
+	EdgeFontSize float64
 }
+
+// DefaultEdgeFontPt is the edge-label size, in points, when
+// LayoutOpts.EdgeFontSize is unset.
+const DefaultEdgeFontPt = 11.0
 
 // Magnitude font sizes, in points. The minimum is Graphviz's own default node
 // font size, so the lightest carrying node looks like an ordinary one.
@@ -319,6 +329,10 @@ type Layout struct {
 	// font and the render font from drifting apart. 0 means the engine reported
 	// none (e.g. a hand-built Layout); a renderer then falls back to its style.
 	FontSize float64
+	// EdgeFontSize is the edge-label font size (points) the engine reserved
+	// room for, for the same reason and with the same 0. A renderer paints
+	// middle and end labels at it.
+	EdgeFontSize float64
 }
 
 // Engine computes a static layered layout for a GraphModel. Implementations
