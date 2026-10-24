@@ -3426,12 +3426,27 @@ egui::ComboBox::new(i,label).selected_text(selected_text);
                     // in egui 0.34 placer.rs:255 ends with cursor.min = max_rect.min,
                     // which silently teleports the parent cursor back to the top of the
                     // panel and clobbers everything placed above the dock.)
+                    //
+                    // That bounds the bottom edge only. Scrolled so the dock's top passes
+                    // above the clip, the leaves still painted — and took clicks — over
+                    // whatever sits above the scroll area. So the dock itself is shown in
+                    // the visible part of the allocation only, its tab strip held at the
+                    // clip's top edge while the rest scrolls away, and the full
+                    // allocation is still reserved so the parent's layout does not move.
                     let cursor = ui.cursor().min;
                     let bound_corner = ui.max_rect().max.min(ui.clip_rect().max);
                     let avail = (bound_corner - cursor).max(egui::Vec2::ZERO);
                     let layout = *ui.layout();
                     let ctx_cloned = ui.ctx().clone();
                     ui.allocate_ui_with_layout(avail, layout, |child_ui| {
+                        let full = child_ui.max_rect();
+                        let visible = full.intersect(child_ui.clip_rect());
+                        child_ui.expand_to_include_rect(full);
+                        if !visible.is_positive() {
+                            return;
+                        }
+                        let mut dock_ui = child_ui
+                            .new_child(egui::UiBuilder::new().max_rect(visible).layout(layout));
                         let mut viewer = FffiDockTabViewer {
                             interpreter: self,
                             ctx: &ctx_cloned,
@@ -3456,7 +3471,7 @@ egui::ComboBox::new(i,label).selected_text(selected_text);
                             .id(egui::Id::new(area_id))
                             .show_close_buttons(false)
                             .show_leaf_close_all_buttons(false)
-                            .show_inside(child_ui, &mut viewer);
+                            .show_inside(&mut dock_ui, &mut viewer);
                     });
 
                     self.dock_states.insert(area_id, dock_state);
@@ -8818,6 +8833,27 @@ self.apply_widget(imzero2_egui::style::slider::IdsSlider(w),u,f,Some(i));
                                 byte_stop,
                                 flags,
                                 color: col,
+                                family: text_edit_highlight::FONT_FAMILY_INHERIT,
+                                size: 0.0,
+                            });
+                        }
+                        StyledSectionsBuilderMethodId::SectionFont => {
+                            #[cfg(feature = "puffin")]
+                            puffin::profile_scope!(
+                                "match StyledSectionsBuilderMethodId::SectionFont"
+                            );
+                            let mut byte_start = self.io.read_plain_u32()?;
+                            let mut byte_stop = self.io.read_plain_u32()?;
+                            let mut family = self.io.read_plain_u32()?;
+                            let mut size = self.io.read_plain_f32()?;
+                            // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+                            self.r24_styled_sections.push(text_edit_highlight::StyledSection {
+                                byte_start,
+                                byte_stop,
+                                flags: text_edit_highlight::STYLE_FONT,
+                                color: egui::Color32::TRANSPARENT,
+                                family,
+                                size,
                             });
                         }
                     }

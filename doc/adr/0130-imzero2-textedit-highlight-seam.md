@@ -878,6 +878,41 @@ spellings now. Unhandled beside it: the function spelling `in(x, r)`, which
 nothing canonicalises away in the editor's buffer — left until a buffer shows
 it.
 
+### 2026-10-24 — `sectionFont`: the styled channel carries a font
+
+[ADR-0334](./0334-mdedit-blocks-over-the-source.md) §SD6 needs an editable
+buffer whose heading lines are large and whose code spans are monospace
+inside proportional prose. The styled channel gains that vocabulary rather
+than `Section`, for the reason §Alternatives gave and the 2026-07-25 entry
+restated: the colour struct is shared with the read-only codeview producers.
+
+The wire grows one builder method on `styledSections`, `sectionFont(byteStart,
+byteStop, family, size)`, pushing onto the same register under a `STYLE_FONT`
+flag; `section` is byte-identical to before. `family` is 0 inherit, 1
+proportional, 2 monospace; `size` is a factor of the editor's base font size,
+with zero keeping it. Go callers set `codeview.StyleFont` with `Family` and
+`Size` on a `StyledSection`, and `BuildStyledSections` emits the two kinds of
+entry apart.
+
+One rule differs from the four decorations, and is why the font is a flag
+rather than four more bits applied by `apply_styles`: a decoration
+overlap-merges into every colour section it touches, which is fine because
+an underline inside one shaping run is still an underline, but a font change
+inside one shaping run lands on the wrong bytes. So the layouter **splits**
+the resolved colour sections at every font boundary first and then takes the
+**narrowest** font section containing each piece — narrowest rather than
+last, because the natural producer lists a whole-buffer body font and
+smaller spans over it, and `[0, n)` sorts first. The reconcile shift applies
+to font sections unchanged. Weight is not in the vocabulary: the host embeds
+regular faces only, so "strong" stays a colour.
+
+`codeview.MarkdownFontSections` derives the overlay a markdown source pane
+wants from the lex-tier spans it already has: body proportional, ATX heading
+lines scaled by level, and every column-aligned span — code, fences,
+frontmatter, tables, raw HTML — monospace at its line's size, coalesced per
+line. Rust unit tests cover the split, the narrowest-wins rule and the shift;
+Go tests cover the derivation.
+
 ## References
 
 - [sql-editor-highlighting-survey](../explanation/sql-editor-highlighting-survey.md) —

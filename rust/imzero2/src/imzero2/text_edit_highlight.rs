@@ -19,6 +19,16 @@
 //! clamping, dropping inverted ranges and sorting, but deliberately do **not**
 //! gap-fill: an uncovered byte simply has no styling.
 //!
+//! A third vocabulary rides the styled channel (ADR-0334 §SD6, `sectionFont`):
+//! a section flagged [`STYLE_FONT`] carries a font family and a size factor,
+//! so a heading line can be large and a code span monospace inside one
+//! editable buffer. Font differs from the four decorations in one respect: it
+//! cannot be overlap-merged into a colour section, because a section is one
+//! shaping run and a font change inside it would land on the wrong bytes. So
+//! the resolved colour sections are **split** at every font boundary first
+//! ([`split_at_font_boundaries`]), after which a font section either contains a
+//! colour section or misses it, and the narrowest containing font wins.
+//!
 //! Text stays authoritative in the `TextEdit`; everything here is presentation.
 //! Galley memoisation is egui's own (`Fonts` caches by job hash) — no cache
 //! lives here.
@@ -32,16 +42,28 @@ pub const STYLE_UNDERLINE: u32 = 1 << 0;
 pub const STYLE_BACKGROUND: u32 = 1 << 1;
 pub const STYLE_STRIKETHROUGH: u32 = 1 << 2;
 pub const STYLE_ITALICS: u32 = 1 << 3;
+/// The section's `family` and `size` are meaningful (ADR-0334 §SD6). Set by
+/// the `sectionFont` builder method, never by `section`.
+pub const STYLE_FONT: u32 = 1 << 4;
+
+/// Font families a [`STYLE_FONT`] section may name. `INHERIT` keeps the
+/// editor's base family (monospace) and only scales it.
+pub const FONT_FAMILY_INHERIT: u32 = 0;
+pub const FONT_FAMILY_PROPORTIONAL: u32 = 1;
+pub const FONT_FAMILY_MONOSPACE: u32 = 2;
 
 /// One sparse style overlay over a byte range of the buffer. `color` is the
 /// stroke color for underline/strikethrough and the fill for background;
-/// italics ignores it.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+/// italics ignores it. `family` and `size` (a factor of the editor's base
+/// font size; `<= 0` keeps the base size) are read only under [`STYLE_FONT`].
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub struct StyledSection {
     pub byte_start: u32,
     pub byte_stop: u32,
     pub flags: u32,
     pub color: egui::Color32,
+    pub family: u32,
+    pub size: f32,
 }
 
 /// Builds the `TextEdit::layouter` closure for one apply. Both lists are moved
@@ -71,6 +93,7 @@ fn layout_reconciled(
     // The styled list describes the same job-space buffer, so it rides the
     // same edit-region shift; normalization keeps it sparse.
     let styled = resolve_styled(live, &reconcile_styled(&job.text, live, styled));
+    let resolved = split_at_font_boundaries(resolved, &styled);
 
     let font_id = egui::TextStyle::Monospace.resolve(ui.style());
     let default_color = ui.visuals().text_color();
@@ -92,6 +115,7 @@ fn layout_reconciled(
             ..Default::default()
         };
         apply_styles(&mut format, r.start, r.stop, &styled);
+        apply_font(&mut format, r.start, r.stop, &styled, &font_id);
         layout_job.sections.push(egui::text::LayoutSection {
             leading_space: 0.0,
             byte_range: egui::text::ByteIndex(r.start)..egui::text::ByteIndex(r.stop),
@@ -148,6 +172,101 @@ fn apply_styles(
             format.italics = true;
         }
     }
+}
+
+/// Sets `format.font_id` from the narrowest [`STYLE_FONT`] section that
+/// contains `[start, stop)`. Containment is what [`split_at_font_boundaries`]
+/// guarantees: after the split a font section either covers a colour section
+/// whole or does not touch it, so "overlaps" and "contains" coincide here.
+///
+/// Narrowest wins rather than last wins, because the obvious producer emits
+/// one whole-buffer section for the body family and smaller ones for the
+/// spans that differ (a heading line, a code span), and `[0, n)` sorts before
+/// `[a, b)` whenever `a > 0` — order would make the body win over the heading.
+/// Sorted input is the same precondition [`apply_styles`] states.
+fn apply_font(
+    format: &mut egui::TextFormat,
+    start: usize,
+    stop: usize,
+    styled: &[StyledSection],
+    base: &egui::FontId,
+) {
+    let mut best: Option<&StyledSection> = None;
+    for s in styled {
+        let (ss, se) = (s.byte_start as usize, s.byte_stop as usize);
+        if se <= start {
+            continue;
+        }
+        if ss >= stop {
+            break; // sorted by start — nothing later can overlap
+        }
+        if s.flags & STYLE_FONT == 0 {
+            continue;
+        }
+        let narrower = match best {
+            Some(b) => (se - ss) < (b.byte_stop - b.byte_start) as usize,
+            None => true,
+        };
+        if narrower {
+            best = Some(s);
+        }
+    }
+    if let Some(s) = best {
+        let family = match s.family {
+            FONT_FAMILY_PROPORTIONAL => egui::FontFamily::Proportional,
+            FONT_FAMILY_MONOSPACE => egui::FontFamily::Monospace,
+            _ => base.family.clone(),
+        };
+        let size = if s.size > 0.0 && s.size.is_finite() {
+            base.size * s.size
+        } else {
+            base.size
+        };
+        format.font_id = egui::FontId::new(size, family);
+    }
+}
+
+/// Splits the resolved colour sections at every boundary of a [`STYLE_FONT`]
+/// section, so no shaping run straddles a font change. Boundaries already on
+/// char boundaries (normalized by [`resolve_styled`]) and inside `[0, len)`
+/// are the only ones that can fall strictly inside a resolved section, so the
+/// covering invariant (ascending, gap-free, ends at `len`) is preserved.
+fn split_at_font_boundaries(resolved: Vec<Resolved>, styled: &[StyledSection]) -> Vec<Resolved> {
+    let mut cuts: Vec<usize> = styled
+        .iter()
+        .filter(|s| s.flags & STYLE_FONT != 0)
+        .flat_map(|s| [s.byte_start as usize, s.byte_stop as usize])
+        .collect();
+    if cuts.is_empty() {
+        return resolved;
+    }
+    cuts.sort_unstable();
+    cuts.dedup();
+
+    let mut out = Vec::with_capacity(resolved.len() + cuts.len());
+    for r in resolved {
+        let mut start = r.start;
+        for &c in &cuts {
+            if c <= start {
+                continue;
+            }
+            if c >= r.stop {
+                break;
+            }
+            out.push(Resolved {
+                start,
+                stop: c,
+                color: r.color,
+            });
+            start = c;
+        }
+        out.push(Resolved {
+            start,
+            stop: r.stop,
+            color: r.color,
+        });
+    }
+    out
 }
 
 /// A normalized render section over the live buffer. `color: None` marks a
@@ -504,7 +623,110 @@ mod tests {
             byte_stop: stop,
             flags,
             color: egui::Color32::RED,
+            family: FONT_FAMILY_INHERIT,
+            size: 0.0,
         }
+    }
+
+    fn font(start: u32, stop: u32, family: u32, size: f32) -> StyledSection {
+        StyledSection {
+            byte_start: start,
+            byte_stop: stop,
+            flags: STYLE_FONT,
+            color: egui::Color32::TRANSPARENT,
+            family,
+            size,
+        }
+    }
+
+    // --- font channel (ADR-0334 §SD6) ---
+
+    #[test]
+    fn font_boundaries_split_colour_sections_and_keep_coverage() {
+        // one prose colour section over "# Title body"; the heading font
+        // covers the first word only, so the section must split at 7.
+        let live = "# Title body";
+        let res = resolve_sections(live, &[sec(0, 12, 1)]);
+        let styled = resolve_styled(live, &[font(0, 7, FONT_FAMILY_PROPORTIONAL, 1.6)]);
+        let split = split_at_font_boundaries(res, &styled);
+        assert_covering(live, &split);
+        assert_eq!(split.len(), 2);
+        assert_eq!((split[0].start, split[0].stop), (0, 7));
+        assert_eq!((split[1].start, split[1].stop), (7, 12));
+        assert!(split.iter().all(|r| r.color == Some(egui::Color32::from_gray(1))));
+    }
+
+    #[test]
+    fn font_split_is_a_no_op_without_font_sections() {
+        let live = "SELECT a";
+        let res = resolve_sections(live, &[sec(0, 6, 1), sec(6, 8, 2)]);
+        let styled = resolve_styled(live, &[styled(0, 6, STYLE_UNDERLINE)]);
+        let split = split_at_font_boundaries(res.clone(), &styled);
+        assert_eq!(split, res);
+    }
+
+    #[test]
+    fn narrowest_font_section_wins_over_the_body_font() {
+        // a whole-buffer proportional body, a heading-sized first line and a
+        // monospace span inside the heading: the span gets mono at heading size.
+        let live = "# `x` here\nbody";
+        let base = egui::FontId::monospace(10.0);
+        let styled = resolve_styled(
+            live,
+            &[
+                font(0, 15, FONT_FAMILY_PROPORTIONAL, 1.0),
+                font(0, 10, FONT_FAMILY_INHERIT, 1.5),
+                font(2, 5, FONT_FAMILY_MONOSPACE, 1.5),
+            ],
+        );
+        let mut heading_word = egui::TextFormat::default();
+        apply_font(&mut heading_word, 6, 10, &styled, &base);
+        assert_eq!(
+            heading_word.font_id,
+            egui::FontId::new(15.0, egui::FontFamily::Monospace)
+        );
+        let mut code = egui::TextFormat::default();
+        apply_font(&mut code, 2, 5, &styled, &base);
+        assert_eq!(
+            code.font_id,
+            egui::FontId::new(15.0, egui::FontFamily::Monospace)
+        );
+        let mut body = egui::TextFormat::default();
+        apply_font(&mut body, 11, 15, &styled, &base);
+        assert_eq!(
+            body.font_id,
+            egui::FontId::new(10.0, egui::FontFamily::Proportional)
+        );
+    }
+
+    #[test]
+    fn font_without_a_size_keeps_the_base_size_and_a_decoration_ignores_font() {
+        let live = "abc";
+        let base = egui::FontId::monospace(12.0);
+        let no_size = resolve_styled(live, &[font(0, 3, FONT_FAMILY_PROPORTIONAL, 0.0)]);
+        let mut f = egui::TextFormat::default();
+        apply_font(&mut f, 0, 3, &no_size, &base);
+        assert_eq!(
+            f.font_id,
+            egui::FontId::new(12.0, egui::FontFamily::Proportional)
+        );
+        // a plain decoration never touches the font
+        let only_deco = resolve_styled(live, &[styled(0, 3, STYLE_UNDERLINE)]);
+        let mut g = egui::TextFormat::default();
+        apply_font(&mut g, 0, 3, &only_deco, &base);
+        assert_eq!(g.font_id, egui::TextFormat::default().font_id);
+    }
+
+    #[test]
+    fn font_fields_survive_the_reconcile_shift() {
+        // a char typed before the heading moves the font section right intact.
+        let job = "x\n# T";
+        let live = "xy\n# T";
+        let rec = reconcile_styled(job, live, &[font(2, 5, FONT_FAMILY_PROPORTIONAL, 1.6)]);
+        assert_eq!(rec.len(), 1);
+        assert_eq!((rec[0].byte_start, rec[0].byte_stop), (3, 6));
+        assert_eq!(rec[0].family, FONT_FAMILY_PROPORTIONAL);
+        assert_eq!(rec[0].size, 1.6);
     }
 
     // --- styled channel (ADR-0130 L3) ---

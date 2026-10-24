@@ -43,7 +43,8 @@ func definitionsCodeView() (nodes []*ir.BuilderFactoryNode) {
 	// Usage: StyledSections().Section(12, 19, underline|background, red).Keep()
 	//
 	// flags are the STYLE_* bits from text_edit_highlight.rs; a section with
-	// no bits set expresses nothing and is dropped Rust-side.
+	// no bits set expresses nothing and is dropped Rust-side. A font overlay
+	// (ADR-0334 §SD6) goes through sectionFont, below, on the same register.
 	nodes = append(nodes, idl.NewBuilderFactoryNode("styledSections").
 		AddMethods(idl.NewMethodBuilder().
 			BeginMethod("section").
@@ -51,7 +52,20 @@ func definitionsCodeView() (nodes []*ir.BuilderFactoryNode) {
 			Arg("byteStop", ctabb.U32).
 			Arg("flags", ctabb.U32).
 			EvaluatedArg("col", structColor32()).AsColor().
-			CodeClientRust(rustClientCode("{{StyledSectionsRegister0Reference}}.push(text_edit_highlight::StyledSection{byte_start, byte_stop, flags, color: col});\n")).
+			CodeClientRust(rustClientCode("{{StyledSectionsRegister0Reference}}.push(text_edit_highlight::StyledSection{byte_start, byte_stop, flags, color: col, family: text_edit_highlight::FONT_FAMILY_INHERIT, size: 0.0});\n")).
+			EndMethod().
+			// sectionFont (ADR-0334 §SD6): a font overlay — family (0 inherit,
+			// 1 proportional, 2 monospace) and a size factor of the editor's
+			// base font (<= 0 keeps it). Rides the styled register under the
+			// STYLE_FONT flag; the layouter splits colour sections at its
+			// boundaries rather than overlap-merging it, since a font change
+			// inside one shaping run would land on the wrong bytes.
+			BeginMethod("sectionFont").
+			Arg("byteStart", ctabb.U32).
+			Arg("byteStop", ctabb.U32).
+			Arg("family", ctabb.U32).
+			Arg("size", ctabb.F32).
+			CodeClientRust(rustClientCode("{{StyledSectionsRegister0Reference}}.push(text_edit_highlight::StyledSection{byte_start, byte_stop, flags: text_edit_highlight::STYLE_FONT, color: egui::Color32::TRANSPARENT, family, size});\n")).
 			EndMethod().
 			Build()...).
 		WithConstructionCodeClientRust(rustClientCode(`{

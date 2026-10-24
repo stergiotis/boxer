@@ -3575,6 +3575,17 @@ func (inst StyledSectionsFluid) Section(byteStart uint32, byteStop uint32, flags
 	return inst
 }
 
+func (inst StyledSectionsFluid) SectionFont(byteStart uint32, byteStop uint32, family uint32, size float32) StyledSectionsFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(StyledSectionsMethodIdSectionFont))
+	r.WriteUint32(byteStart)
+	r.WriteUint32(byteStop)
+	r.WriteUint32(family)
+	r.WriteFloat32(size)
+
+	return inst
+}
+
 func (inst StyledSectionsFluid) Keep() typed.RetainedFffiHolderTyped[StyledSectionsS] {
 	r := inst.r
 	r.WriteOpCode(uint32(StyledSectionsMethodIdBuild))

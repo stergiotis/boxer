@@ -169,7 +169,7 @@ status: draft
 | SliderI64 | BuilderFactory | Yes | 3 | 0 | 19 | Immediate, Retained |
 | SliderU64 | BuilderFactory | Yes | 3 | 0 | 19 | Immediate, Retained |
 | Spinner | BuilderFactory | No | 0 | 0 | 1 | Immediate |
-| StyledSections | BuilderFactory | No | 0 | 0 | 1 | Retained |
+| StyledSections | BuilderFactory | No | 0 | 0 | 2 | Retained |
 | SurrenderFocus | Procedural | No | 1 | 0 | - | - |
 | Table | BuilderFactory | Yes | 2 | 0 | 6 | Immediate, Retained |
 | TableCellRichText | BuilderFactory | No | 0 | 1 | 0 | Immediate, Retained |
@@ -2240,6 +2240,7 @@ Spinner
 #### Builder Methods
 
 - **Section**(byteStart: u32, byteStop: u32, flags: u32)
+- **SectionFont**(byteStart: u32, byteStop: u32, family: u32, size: f32)
 
 #### Return Type
 
