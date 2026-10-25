@@ -289,9 +289,11 @@ them.
 - **A table's dragged column widths across sessions.** The grid's columns
   resize and egui keeps the widths for the session; the deferred-body
   table op has no width read-back, so nothing reaches the width store the
-  record grid uses. The rendered table does not honour the delimiter row's
-  alignment either, for want of an alignment knob on its op. Trigger: a
-  column width or an alignment that has to survive a restart.
+  record grid uses. Trigger: a column width that has to survive a restart.
+  The alignment the grid writes into the delimiter row is honoured by the
+  rendered table since the table op's column took an alignment; the
+  grid's own cells stay left, a text field having no alignment of its
+  own.
 
 ## Surfaces — Tier 1
 

@@ -18,7 +18,8 @@ above every column, and the handles' menus hold what the productivity tools
 offer on a table — insert, move, delete, align, sort — over the one GFM
 source; Ctrl+↑/↓ moves the row the caret is in. The source pane at the end
 shows the bytes: the rows re-emitted in their new order, the delimiter row
-carrying the alignment, the heading untouched.
+carrying the alignment, the heading untouched; the Read mode before it shows
+the rendered table honouring that alignment.
 
 The handles are one Phosphor glyph, U+E208 (dots-three-vertical), written
 into the JSON as the character, so a trace anchors them by `nth` in the
@@ -52,6 +53,8 @@ is the accessibility click.
 {"do":"click","name":"","role":"button","pointer":true,"nth":2,"settleMs":400,"comment":"the n column's handle again; the added column's handle sits after it"}
 {"do":"click","name":"Align right","role":"button","pointer":true,"settleMs":500}
 {"do":"capture","text":"tables-reshaped"}
+{"do":"click","contains":"Read","role":"button","settleMs":500}
+{"do":"capture","text":"tables-rendered","comment":"the rendered table honours the delimiter row: the n column right-aligned"}
 {"do":"click","contains":"Source","role":"button","settleMs":500}
 {"do":"wait","role":"multiline_text_input","value":"# Data\n\n| name | n |  |\n| --- | --: | --- |\n| beta | 2 |  |\n| alpha | 10 |  |\n| gamma |  |  |\n\nAfter.\n","settleMs":400,"comment":"the bytes: every row re-emitted since the column was added, the delimiter row aligned, the heading and the paragraph untouched"}
 ```

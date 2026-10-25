@@ -84,8 +84,9 @@ needed. A pipe typed into a cell is escaped in the source.
 
 What a GFM table cannot carry, the grid does not offer: merged cells, more
 than one line in a cell, several header rows, captions, cell colours. The
-alignment a column is given is written into the delimiter row and honoured
-by other renderers; the rendered table here does not read it yet.
+alignment a column is given is written into the delimiter row, where the
+rendered table and other renderers read it; the grid's own cells stay left
+while the table is open.
 
 ## Code, images and callouts
 
