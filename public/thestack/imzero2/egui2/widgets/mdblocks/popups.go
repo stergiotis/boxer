@@ -371,7 +371,10 @@ func (e *Editor) renderSlash(r c.TextRectsValue, at int, query string) {
 		for range c.Vertical().KeepIter() {
 			for n, i := range s.matches {
 				it := slashItems[i]
-				if c.Button(e.ids.PrepareSeq(uint64(i)), it.atoms).Frame(false).Selected(n == s.sel).SendResp().HasPrimaryClicked() {
+				// egui's selectable recipe: a frame shown unhovered only on
+				// the highlighted entry, filled as a selection; a frameless
+				// selected button paints nothing.
+				if c.Button(e.ids.PrepareSeq(uint64(i)), it.atoms).Frame(true).FrameWhenInactive(n == s.sel).Selected(n == s.sel).SendResp().HasPrimaryClicked() {
 					e.chooseSlash(i)
 				}
 			}

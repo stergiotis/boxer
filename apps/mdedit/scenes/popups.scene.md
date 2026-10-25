@@ -36,7 +36,6 @@ slash menu. The source pane at the end shows every popup's splice.
 {"do":"key","text":"ArrowLeft","settleMs":100}
 {"do":"key","text":"ArrowLeft","settleMs":500,"comment":"eight steps left: the caret sits just inside the link's closing parenthesis"}
 {"do":"wait","role":"text_input","value":"https://example.com/a","settleMs":400,"comment":"the link popover, its field holding the target"}
-{"do":"click","role":"text_input","value":"https://example.com/a","pointer":true,"settleMs":500,"comment":"a pointer press takes focus into the field; the driver's accessibility focus request does not reach a field inside the popup window (ADR-0334 M6)"}
 {"do":"type","role":"text_input","value":"https://example.com/a","text":"b","settleMs":500}
 {"do":"wait","role":"multiline_text_input","valueContains":"example.com/ab","settleMs":400,"comment":"the field wrote through to the block"}
 {"do":"capture","text":"popups-link"}

@@ -459,6 +459,21 @@ Accepted 2026-10-25, after milestones M0–M6 had shipped against the
 proposal; a milestone's `✓` records what shipped. Changes from here are
 dated entries under an Updates section.
 
+## Updates
+
+### 2026-10-25 — the popover's field takes the accessibility focus request
+
+The M6 note records that the driver's accessibility focus request did not
+land in the link popover's field while a pointer press did, and the scene
+pressed. The gap closed the same day when the popups' ids were brought
+under the widget contract's id rule (ADR-0267 W5): the windows had been
+named from formatted strings and their contents sat outside any scope of
+their own; now each popup is a scope with the window under a sequence id
+and its fields under literal keys. With that, the field focuses on the
+request alone, as every other field does, and the scene types into it
+without a press. The mechanism by which the earlier ids defeated the
+request was not traced further than the fix.
+
 ## References
 
 - [rich-text-editor-design-space-survey](../adr-background-work/rich-text-editor-design-space-survey.md) — the clean-room survey this decision rests on; §9 maps the shapes, §10 the forks.

@@ -247,7 +247,9 @@ func tableItem(label string) typed.RetainedFffiHolderTyped[c.AtomsS] {
 // menuItem is one item of a handle's menu; the key must be stable across
 // frames, the body rendering only while the menu is open.
 func (e *Editor) menuItem(key, label string, selected bool) bool {
-	return c.Button(e.ids.PrepareStr(key), tableItem(label)).Frame(false).Selected(selected).SendResp().HasPrimaryClicked()
+	// A selected item shows its frame unhovered, filled as a selection;
+	// frameless, the selected flag paints nothing (egui's selectable recipe).
+	return c.Button(e.ids.PrepareStr(key), tableItem(label)).Frame(true).FrameWhenInactive(selected).Selected(selected).SendResp().HasPrimaryClicked()
 }
 
 // ensureCellSlots sizes the per-cell widget ids and carets to the rows.
