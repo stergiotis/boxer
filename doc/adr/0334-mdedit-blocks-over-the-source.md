@@ -191,7 +191,7 @@ converged on:
 | Ctrl+B / I / K / E | wrap the selection in `**`, `*`, a link, a code span — the formatting bar's actions, from the keyboard |
 | Ctrl+Z / Ctrl+Y | the document-level undo and redo (§SD5). Ctrl+Y rather than Ctrl+Shift+Z: a widget captures one chord modifier set (§SD7), and Ctrl+Y is the Windows and Linux convention the host runs on |
 | In a table cell: ↑/↓, ←/→ at the text's edges | the cell above or below; the previous or next cell, wrapping at a row's ends; ↑ from the header and ↓ from the last row leave the table for the neighbouring block |
-| In a table cell: Ctrl+↑/↓, Ctrl+←/→ | move the row or the column the caret is in, the header staying first. Typora's Ctrl+Enter for a row below is not taken: the window host polls the command-Enter fetcher every frame as its sign of input, and whoever polls it owns the chord for the process; a row below is the row handle's menu, or Enter in the last row |
+| In a table cell: Ctrl+↑/↓, Ctrl+←/→ | move the row or the column the caret is in, the header staying first; the word jump Ctrl+←/→ would be in a field is given up in a cell. Typora's Ctrl+Enter for a row below is not taken: the window host polls the command-Enter fetcher every frame as its sign of input, and whoever polls it owns the chord for the process; a row below is the row handle's menu, or Enter in the last row |
 
 A split and a merge are inverses and land as one undo entry each. Pasting
 multi-paragraph text into a block splits it into blocks after the splice,

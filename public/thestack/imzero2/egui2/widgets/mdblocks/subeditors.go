@@ -262,10 +262,12 @@ func (e *Editor) applySubWriteBack() {
 		// never the one the caret is on now.
 		return
 	}
+	sealed := e.sealNext
+	e.sealNext = false
 	if e.sub.kind == subTable && e.sub.tbl.expandPasted() {
 		// A pasted block of cells is its own undo entry and reshaped the
 		// rows, so every cell rebinds.
-		e.hist.seal()
+		sealed = true
 		e.sub.rebind = true
 	}
 	cur := e.src[blk.start:blk.stop]
@@ -273,8 +275,6 @@ func (e *Editor) applySubWriteBack() {
 	if next == e.sub.composed || next == cur {
 		return
 	}
-	sealed := e.sealNext
-	e.sealNext = false
 	at, oldMid, newMid := editRegion(cur, next)
 	e.splice(blk.start+at, oldMid, newMid, blk.start, sealed)
 	e.sub.loadedText = next
@@ -306,8 +306,8 @@ func (e *Editor) applySubKeys() {
 	if e.sub.kind == subNone {
 		return
 	}
-	if e.sub.kind == subTable {
-		e.applyTableOp()
+	if e.sub.kind == subTable && e.applyTableOp() {
+		return
 	}
 	sm := c.CurrentApplicationState.StateManager
 	for _, id := range e.sub.fieldIds() {

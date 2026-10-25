@@ -102,7 +102,7 @@ func TestTableSortIsNumericAwareAndStable(t *testing.T) {
 
 func TestTableExpandsAPastedBlockAndReadsOutTSV(t *testing.T) {
 	tb := loadTable(tableSrc)
-	tb.rows[1][1] = "p\tq\r\nr\ts\tt\n"
+	tb.rows[1][1] = "p\tq\t\r\nr\ts\tt\n\n"
 	if !tb.expandPasted() || tb.expandPasted() {
 		t.Fatal("expanded once")
 	}
@@ -134,7 +134,7 @@ func TestTableMenuOperationSplicesAndUndoesAsOne(t *testing.T) {
 		t.Fatal("no grid")
 	}
 	// a menu click lands as a recorded operation, applied next frame
-	e.sub.tbl.op = func() { e.sub.tbl.sortBody(1, true) }
+	e.sub.tbl.op = func() bool { e.sub.tbl.sortBody(1, true); return true }
 	frame(e)
 	if e.src != "intro\n\n| a | b |\n| - | - |\n| y | 10 |\n| x | 2 |\n" {
 		t.Fatalf("sorted: %q", e.src)
@@ -154,7 +154,7 @@ func TestTableKeysReshapeAndWalk(t *testing.T) {
 	e.FocusAt(1)
 	frame(e)
 	// the row menu's "insert below" on x, recorded for the next frame
-	e.sub.tbl.op = func() { e.sub.tbl.insertRow(2); e.sub.tbl.setFocus(2, 0, -1) }
+	e.sub.tbl.op = func() bool { e.sub.tbl.insertRow(2); e.sub.tbl.setFocus(2, 0, -1); return true }
 	frame(e)
 	if e.src != "| a | b |\n| - | - |\n| x | 2 |\n|  |  |\n| y | 10 |" || e.sub.tbl.focus || e.sub.tbl.focusR != 2 {
 		t.Fatalf("insert below: %q focus %v", e.src, e.sub.tbl.focus)
@@ -219,5 +219,81 @@ func TestTablePasteIntoACellExpands(t *testing.T) {
 	frame(e)
 	if e.src != "| a | b |  |\n| - | - | --- |\n| x | 2 |  |\n| y | 7 | new |" {
 		t.Fatalf("%q", e.src)
+	}
+}
+
+func TestTableLoadKeepsTheDelimiterWidth(t *testing.T) {
+	tb := loadTable("| a | b |\n|-|-|\n| 1 | 2 | 3 |\n| 4 |")
+	if tb.cols() != 2 || len(tb.rows[1]) != 3 || len(tb.rows[2]) != 2 {
+		t.Fatalf("%v", tb.rows)
+	}
+	tb.rows[2][0] = "44"
+	if tb.compose() != "| a | b |\n|-|-|\n| 1 | 2 | 3 |\n| 44 |  |" {
+		t.Fatalf("the hidden cell stays, the delimiter row stays: %q", tb.compose())
+	}
+	if w := tb.widestCells(); len(w) != 2 || w[0] != 2 {
+		t.Fatalf("%v", w)
+	}
+}
+
+func TestCellNumbersArePlainDecimals(t *testing.T) {
+	for _, s := range []string{"NaN", "Inf", "0x10", "1,000", "$9", "1e"} {
+		if _, ok := cellNumber(s); ok {
+			t.Fatalf("%q is a number", s)
+		}
+	}
+	for _, s := range []string{"7", "-1.5", ".5", "2e3", " 10 "} {
+		if _, ok := cellNumber(s); !ok {
+			t.Fatalf("%q is not a number", s)
+		}
+	}
+	tb := loadTable("| n |\n| - |\n| Nan |\n| Bob |\n| 3 |\n| Al |")
+	tb.sortBody(0, false)
+	if got := []string{tb.rows[1][0], tb.rows[2][0], tb.rows[3][0], tb.rows[4][0]}; !equalCells(got, []string{"3", "Al", "Bob", "Nan"}) {
+		t.Fatalf("%v", got)
+	}
+}
+
+func TestTableOperationsAreTheirOwnUndoEntries(t *testing.T) {
+	e := newTestEditor(t, tableSrc)
+	e.FocusAt(1)
+	frame(e)
+	e.sub.tbl.op = func() bool { e.sub.tbl.setAlign(0, alignRight); return true }
+	frame(e)
+	// then typing: one entry for the operation, one for the typing
+	e.sub.tbl.rows[1][0] = "xa"
+	frame(e)
+	e.sub.tbl.rows[1][0] = "xab"
+	frame(e)
+	if n := len(e.hist.undo); n != 2 {
+		t.Fatalf("entries: %d", n)
+	}
+	// a refused move records nothing and seals nothing
+	e.sub.tbl.op = func() bool { return e.sub.tbl.moveRow(1, -1) }
+	frame(e)
+	e.sub.tbl.rows[1][0] = "xabc"
+	frame(e)
+	if n := len(e.hist.undo); n != 2 {
+		t.Fatalf("after a refused move: %d", n)
+	}
+	// a paste is sealed on both sides
+	e.sub.tbl.rows[1][1] = "2\tq"
+	frame(e)
+	e.sub.tbl.rows[1][2] = "qr"
+	frame(e)
+	if n := len(e.hist.undo); n != 4 {
+		t.Fatalf("after a paste and typing: %d", n)
+	}
+}
+
+func TestAKeyOnAReshapedRowIsDropped(t *testing.T) {
+	e := newTestEditor(t, tableSrc)
+	e.FocusAt(1)
+	frame(e)
+	e.sub.tbl.op = func() bool { return e.sub.tbl.deleteRow(2) }
+	e.sub.tbl.op()
+	e.sub.tbl.op = nil
+	if _, _, ok := e.sub.tbl.cellOf(e.sub.tbl.ids[2][0]); ok {
+		t.Fatal("a cell of the deleted row")
 	}
 }

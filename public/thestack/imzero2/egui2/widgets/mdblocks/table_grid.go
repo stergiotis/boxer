@@ -20,9 +20,10 @@ import (
 //
 // A menu's click lands as a response one frame late and would reshape the
 // rows while they are being drawn, so it is recorded as the pending
-// operation and applied at the start of the next frame, before the
-// write-back that frame composes. That is the same frame the click's
-// response would have arrived in anyway.
+// operation and applied at the start of the next frame, after that
+// frame's write-back has put last frame's typing in the cells it was typed
+// in. That is the same frame the click's response would have arrived in
+// anyway.
 
 // tableKeyMask is what every cell captures unmodified: Escape leaves for a
 // block selection, Enter walks down, the vertical arrows walk the rows (a
@@ -62,11 +63,13 @@ func (t *tableState) setFocus(r, col, char int) {
 	t.focusR, t.focusC, t.focusChar, t.focus = r, col, char, true
 }
 
+// cellOf is the cell whose field has id, when the rows still have it:
+// the ids are last frame's and an operation may have reshaped the rows.
 func (t *tableState) cellOf(id uint64) (r, col int, ok bool) {
 	for r := range t.ids {
 		for col := range t.ids[r] {
 			if t.ids[r][col] == id {
-				return r, col, true
+				return r, col, r < len(t.rows) && col < len(t.rows[r])
 			}
 		}
 	}
@@ -107,12 +110,20 @@ func (t *tableState) moveCell(r, col int, tab, shift bool) (added bool) {
 
 // tableOp runs a structural operation as an undo entry of its own and
 // splices it now, so the parse this frame derives from already holds it.
-func (e *Editor) tableOp(op func()) {
-	e.hist.seal()
-	op()
+// An operation that changed nothing (a move the header refused) records
+// nothing. The cells' carets are positional and the rows moved under
+// them, so they are forgotten with the shape; every cell rebinds.
+func (e *Editor) tableOp(op func() bool) {
+	if !op() {
+		return
+	}
+	e.sub.tbl.cursors = nil
 	e.sub.rebind = true
-	e.applySubWriteBack()
 	e.sealNext = true
+	e.applySubWriteBack()
+	// An operation whose bytes came out the same spliced nothing; the
+	// seal it asked for must not fall on the next typing.
+	e.sealNext = false
 }
 
 // applyTableKey consumes one capture from cell id. Escape is the caller's.
@@ -132,29 +143,24 @@ func (e *Editor) applyTableKey(id uint64, k c.CapturedKey) {
 			e.Undo()
 		case keycodes.KeyY:
 			e.Redo()
-		case keycodes.ArrowUp:
-			e.tableOp(func() {
-				if t.moveRow(r, -1) {
-					t.setFocus(r-1, col, -1)
+		case keycodes.ArrowUp, keycodes.ArrowDown, keycodes.ArrowLeft, keycodes.ArrowRight:
+			dr, dc := 0, 0
+			switch k.Code {
+			case keycodes.ArrowUp:
+				dr = -1
+			case keycodes.ArrowDown:
+				dr = +1
+			case keycodes.ArrowLeft:
+				dc = -1
+			default:
+				dc = +1
+			}
+			e.tableOp(func() bool {
+				moved := (dr != 0 && t.moveRow(r, dr)) || (dc != 0 && t.moveColumn(col, dc))
+				if moved {
+					t.setFocus(r+dr, col+dc, -1)
 				}
-			})
-		case keycodes.ArrowDown:
-			e.tableOp(func() {
-				if t.moveRow(r, +1) {
-					t.setFocus(r+1, col, -1)
-				}
-			})
-		case keycodes.ArrowLeft:
-			e.tableOp(func() {
-				if t.moveColumn(col, -1) {
-					t.setFocus(r, col-1, -1)
-				}
-			})
-		case keycodes.ArrowRight:
-			e.tableOp(func() {
-				if t.moveColumn(col, +1) {
-					t.setFocus(r, col+1, -1)
-				}
+				return moved
 			})
 		default:
 			if name, ok := chordWraps[k.Code]; ok {
@@ -164,11 +170,7 @@ func (e *Editor) applyTableKey(id uint64, k c.CapturedKey) {
 		}
 	case k.Code == keycodes.Enter || k.Code == keycodes.Tab:
 		if t.moveCell(r, col, k.Code == keycodes.Tab, k.Shift()) {
-			// The row added is spliced now, so the parse this frame
-			// derives from already holds it.
-			e.hist.seal()
-			e.sub.rebind = true
-			e.applySubWriteBack()
+			e.tableOp(func() bool { return true })
 		}
 	case k.Code == keycodes.ArrowUp:
 		if r == 0 {
@@ -183,26 +185,37 @@ func (e *Editor) applyTableKey(id uint64, k c.CapturedKey) {
 			t.setFocus(r+1, col, -1)
 		}
 	case k.Code == keycodes.ArrowLeft && lo == hi && lo == 0:
-		if col > 0 {
+		switch {
+		case col > 0:
 			t.setFocus(r, col-1, -1)
-		} else if r > 0 {
+		case r > 0:
 			t.setFocus(r-1, t.cols()-1, -1)
+		default:
+			e.moveToNeighbour(-1)
 		}
 	case k.Code == keycodes.ArrowRight && lo == hi && int(lo) >= utf8.RuneCountInString(cur):
-		if col < t.cols()-1 {
+		switch {
+		case col < t.cols()-1:
 			t.setFocus(r, col+1, 0)
-		} else if r < last {
+		case r < last:
 			t.setFocus(r+1, 0, 0)
+		default:
+			e.moveToNeighbour(+1)
 		}
 	}
 }
 
-// applyTableOp runs the operation a menu recorded last frame.
-func (e *Editor) applyTableOp() {
-	if op := e.sub.tbl.op; op != nil {
-		e.sub.tbl.op = nil
-		e.tableOp(op)
+// applyTableOp runs the operation a menu recorded last frame, and says
+// so: the keys captured that frame name cells of the old shape and are
+// dropped.
+func (e *Editor) applyTableOp() bool {
+	op := e.sub.tbl.op
+	if op == nil {
+		return false
 	}
+	e.sub.tbl.op = nil
+	e.tableOp(op)
+	return true
 }
 
 // --- rendering ---
@@ -237,7 +250,7 @@ func (e *Editor) menuItem(key, label string, selected bool) bool {
 // ensureCellSlots sizes the per-cell widget ids and carets to the rows.
 func (t *tableState) ensureCellSlots() {
 	cols := t.cols()
-	if len(t.ids) != len(t.rows) || (len(t.ids) > 0 && len(t.ids[0]) != cols) {
+	if len(t.ids) != len(t.rows) || len(t.cursors) != len(t.rows) {
 		t.ids = make([][]uint64, len(t.rows))
 		t.cursors = make([][]uint64, len(t.rows))
 	}
@@ -301,6 +314,10 @@ func (e *Editor) renderTableSub() {
 }
 
 // renderCell is one cell's field, bound to its string, its caret reported.
+// The field is a one-row multiline one: a single-line field flattens the
+// newlines of a paste to spaces, and the paste of a block of cells is the
+// one way more than one row gets in. Enter is captured, so no newline is
+// typed.
 func (e *Editor) renderCell(r, col int) {
 	t := &e.sub.tbl
 	text := t.rows[r][col]
@@ -312,7 +329,8 @@ func (e *Editor) renderCell(r, col int) {
 	if lo == hi && int(lo) >= utf8.RuneCountInString(text) {
 		mask |= keycodes.MaskOf(keycodes.ArrowRight)
 	}
-	te := c.TextEdit(e.ids.PrepareSeq(uint64(col)), text, false).
+	te := c.TextEdit(e.ids.PrepareSeq(uint64(col)), text, true).
+		DesiredRows(1).
 		DesiredWidth(1e6).
 		ReportCursor().
 		CaptureKeys(uint64(mask)).
@@ -341,16 +359,17 @@ func (e *Editor) renderTableMenu() {
 	t := &e.sub.tbl
 	for range c.MenuButton(atomsTableMenu).KeepIter() {
 		if e.menuItem("add-row", "Add row", false) {
-			t.op = func() { t.insertRow(len(t.rows)); t.setFocus(len(t.rows)-1, 0, -1) }
+			t.op = func() bool { t.insertRow(len(t.rows)); t.setFocus(len(t.rows)-1, 0, -1); return true }
 		}
 		if e.menuItem("add-col", "Add column", false) {
-			t.op = func() { t.insertColumn(t.cols()) }
+			t.op = func() bool { t.insertColumn(t.cols()); return true }
 		}
+		// Neither of these touches the rows: no operation, no undo entry.
 		if e.menuItem("copy-table", "Copy table as TSV", false) {
-			t.op = func() { e.copyRequest = tsv(t.rows) }
+			e.copyRequest = tsv(t.rows)
 		}
 		if e.menuItem("reset-widths", "Reset column widths", false) {
-			t.op = func() { t.widthEpoch++ }
+			t.widthEpoch++
 		}
 	}
 }
@@ -359,16 +378,16 @@ func (e *Editor) renderColumnMenu(col int) {
 	t := &e.sub.tbl
 	for range c.MenuButton(atomsColMenu).KeepIter() {
 		if e.menuItem("ins-left", "Insert column left", false) {
-			t.op = func() { t.insertColumn(col); t.setFocus(0, col, -1) }
+			t.op = func() bool { t.insertColumn(col); t.setFocus(0, col, -1); return true }
 		}
 		if e.menuItem("ins-right", "Insert column right", false) {
-			t.op = func() { t.insertColumn(col + 1); t.setFocus(0, col+1, -1) }
+			t.op = func() bool { t.insertColumn(col + 1); t.setFocus(0, col+1, -1); return true }
 		}
 		if col > 0 && e.menuItem("move-left", "Move column left", false) {
-			t.op = func() { t.moveColumn(col, -1) }
+			t.op = func() bool { return t.moveColumn(col, -1) }
 		}
 		if col < t.cols()-1 && e.menuItem("move-right", "Move column right", false) {
-			t.op = func() { t.moveColumn(col, +1) }
+			t.op = func() bool { return t.moveColumn(col, +1) }
 		}
 		c.Separator().Send()
 		cur := alignOf(t.align[col])
@@ -376,25 +395,26 @@ func (e *Editor) renderColumnMenu(col int) {
 			key, label string
 			al         alignE
 		}{{"al-left", "Align left", alignLeft}, {"al-center", "Align center", alignCenter}, {"al-right", "Align right", alignRight}, {"al-none", "Align default", alignNone}} {
-			if e.menuItem(a.key, a.label, cur == a.al) {
-				t.op = func() { t.setAlign(col, a.al) }
+			if cur != a.al && e.menuItem(a.key, a.label, cur == a.al) {
+				t.op = func() bool { t.setAlign(col, a.al); return true }
 			}
 		}
 		if len(t.rows) > 2 {
 			c.Separator().Send()
 			if e.menuItem("sort-asc", "Sort ascending", false) {
-				t.op = func() { t.sortBody(col, false) }
+				t.op = func() bool { t.sortBody(col, false); return true }
 			}
 			if e.menuItem("sort-desc", "Sort descending", false) {
-				t.op = func() { t.sortBody(col, true) }
+				t.op = func() bool { t.sortBody(col, true); return true }
 			}
 		}
 		if t.cols() > 1 {
 			c.Separator().Send()
 			if e.menuItem("del-col", "Delete column", false) {
-				t.op = func() {
-					t.deleteColumn(col)
+				t.op = func() bool {
+					ok := t.deleteColumn(col)
 					t.setFocus(0, min(col, t.cols()-1), -1)
+					return ok
 				}
 			}
 		}
@@ -405,26 +425,27 @@ func (e *Editor) renderRowMenu(r int) {
 	t := &e.sub.tbl
 	for range c.MenuButton(atomsRowMenu).KeepIter() {
 		if r > 0 && e.menuItem("ins-above", "Insert row above", false) {
-			t.op = func() { t.insertRow(r); t.setFocus(r, 0, -1) }
+			t.op = func() bool { t.insertRow(r); t.setFocus(r, 0, -1); return true }
 		}
 		if e.menuItem("ins-below", "Insert row below", false) {
-			t.op = func() { t.insertRow(r + 1); t.setFocus(r+1, 0, -1) }
+			t.op = func() bool { t.insertRow(r + 1); t.setFocus(r+1, 0, -1); return true }
 		}
 		if r > 1 && e.menuItem("move-up", "Move row up", false) {
-			t.op = func() { t.moveRow(r, -1) }
+			t.op = func() bool { return t.moveRow(r, -1) }
 		}
 		if r > 0 && r < len(t.rows)-1 && e.menuItem("move-down", "Move row down", false) {
-			t.op = func() { t.moveRow(r, +1) }
+			t.op = func() bool { return t.moveRow(r, +1) }
 		}
 		if e.menuItem("copy-row", "Copy row as TSV", false) {
-			t.op = func() { e.copyRequest = tsv(t.rows[r : r+1]) }
+			e.copyRequest = tsv(t.rows[r : r+1])
 		}
 		if len(t.rows) > 1 {
 			c.Separator().Send()
 			if e.menuItem("del-row", "Delete row", false) {
-				t.op = func() {
-					t.deleteRow(r)
+				t.op = func() bool {
+					ok := t.deleteRow(r)
 					t.setFocus(min(r, len(t.rows)-1), 0, -1)
+					return ok
 				}
 			}
 		}

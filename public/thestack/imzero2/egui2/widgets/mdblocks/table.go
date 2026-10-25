@@ -1,6 +1,7 @@
 package mdblocks
 
 import (
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -42,7 +43,7 @@ type tableState struct {
 	// insert is a snippet for one cell's caret on the next emit; op is a
 	// menu's operation, recorded for the next frame.
 	insert cellInsert
-	op     func()
+	op     func() bool
 	// widthEpoch bumps when the columns are asked to re-take their initial
 	// widths; the table op re-applies them once per change.
 	widthEpoch uint32
@@ -75,8 +76,11 @@ func alignOf(token string) alignE {
 	return alignNone
 }
 
-// load splits the block's text into rows; a short row is padded to the
-// widest, as goldmark pads it.
+// load splits the block's text into rows. The delimiter row sets the
+// width, as it does for goldmark: a shorter row is padded to it, and a
+// longer row keeps its extra cells — unseen in the grid as they are in the
+// rendered table, kept in the source when the row is re-emitted, and
+// shown once a column is added.
 func (t *tableState) load(text string) {
 	*t = tableState{lines: strings.Split(text, "\n")}
 	t.align = splitRow(t.lines[1])
@@ -87,15 +91,8 @@ func (t *tableState) load(text string) {
 		t.rows = append(t.rows, splitRow(l))
 		t.src = append(t.src, i)
 	}
-	width := len(t.align)
-	for _, r := range t.rows {
-		width = max(width, len(r))
-	}
-	for len(t.align) < width {
-		t.align = append(t.align, alignTokens[alignNone])
-	}
 	for i := range t.rows {
-		for len(t.rows[i]) < width {
+		for len(t.rows[i]) < len(t.align) {
 			t.rows[i] = append(t.rows[i], "")
 		}
 	}
@@ -287,27 +284,43 @@ func (t *tableState) sortBody(col int, desc bool) {
 }
 
 // cellLess orders two cells: both numeric by value, else text by folded
-// case, with a number before text.
+// case, with a number before text. A number is a plain decimal — not the
+// `NaN`, `Inf` and hex spellings ParseFloat also takes, which are words in
+// a table and NaN would not even order.
 func cellLess(a, b string) bool {
-	fa, oka := strconv.ParseFloat(strings.TrimSpace(a), 64)
-	fb, okb := strconv.ParseFloat(strings.TrimSpace(b), 64)
+	fa, oka := cellNumber(a)
+	fb, okb := cellNumber(b)
 	switch {
-	case oka == nil && okb == nil:
+	case oka && okb:
 		return fa < fb
-	case oka == nil:
+	case oka:
 		return true
-	case okb == nil:
+	case okb:
 		return false
 	}
 	return strings.ToLower(a) < strings.ToLower(b)
 }
 
+var decimalRe = regexp.MustCompile(`^[+-]?(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?$`)
+
+func cellNumber(s string) (f float64, ok bool) {
+	s = strings.TrimSpace(s)
+	if !decimalRe.MatchString(s) {
+		return 0, false
+	}
+	f, err := strconv.ParseFloat(s, 64)
+	return f, err == nil
+}
+
 // --- paste and copy ---
 
 // expandPasted turns a cell holding tabs or newlines — which only a paste
-// puts there, the cells being single-line fields with Tab captured — into
-// a block of cells from that position on, growing the table as it goes.
-// Reports whether any cell was expanded.
+// puts there, the cells being fields with Tab and Enter captured — into a
+// block of cells from that position on, growing the table as it goes. A
+// spreadsheet's copy ends its lines with a tab for each blank trailing
+// cell and the block with a newline; those add nothing. Text the cell held
+// around the caret stays with the first and the last pasted cell, as it
+// would in any field. Reports whether any cell was expanded.
 func (t *tableState) expandPasted() (expanded bool) {
 	for r := 0; r < len(t.rows); r++ {
 		for col := 0; col < len(t.rows[r]); col++ {
@@ -317,9 +330,9 @@ func (t *tableState) expandPasted() (expanded bool) {
 			}
 			expanded = true
 			cell = strings.ReplaceAll(cell, "\r\n", "\n")
-			lines := strings.Split(strings.TrimSuffix(cell, "\n"), "\n")
+			lines := trimTrailingEmpty(strings.Split(cell, "\n"))
 			for li, line := range lines {
-				for ci, v := range strings.Split(line, "\t") {
+				for ci, v := range trimTrailingEmpty(strings.Split(line, "\t")) {
 					rr, cc := r+li, col+ci
 					for rr >= len(t.rows) {
 						t.insertRow(len(t.rows))
@@ -333,6 +346,14 @@ func (t *tableState) expandPasted() (expanded bool) {
 		}
 	}
 	return
+}
+
+// trimTrailingEmpty drops the empty fields at the end, keeping one.
+func trimTrailingEmpty(fields []string) []string {
+	for len(fields) > 1 && strings.TrimSpace(fields[len(fields)-1]) == "" {
+		fields = fields[:len(fields)-1]
+	}
+	return fields
 }
 
 // tsv is rows as tab-separated lines, the shape a spreadsheet pastes.
@@ -350,6 +371,9 @@ func (t *tableState) widestCells() (runes []uint32) {
 	runes = make([]uint32, t.cols())
 	for _, r := range t.rows {
 		for col, cell := range r {
+			if col >= len(runes) {
+				break
+			}
 			if n := uint32(len([]rune(cell))); n > runes[col] {
 				runes[col] = n
 			}

@@ -33,14 +33,14 @@ is the accessibility click.
 {"do":"click","contains":"Blocks","role":"button","settleMs":500}
 {"do":"wait","value":"beta","role":"label","settleMs":400}
 {"do":"click","value":"beta","role":"label","pointer":true,"settleMs":600,"comment":"the hit frame opens the table as a grid"}
-{"do":"wait","role":"text_input","value":"beta","settleMs":300}
+{"do":"wait","role":"multiline_text_input","value":"beta","settleMs":300}
 {"do":"click","name":"","role":"button","pointer":true,"nth":1,"settleMs":400,"comment":"the beta row's handle"}
 {"do":"click","name":"Insert row below","role":"button","pointer":true,"settleMs":500}
 {"do":"type","id":16008724364808582617,"text":"gamma","settleMs":400,"comment":"the new row's first cell, by its id: it sits at the row ordinal alpha had"}
-{"do":"wait","role":"text_input","value":"gamma","settleMs":300}
-{"do":"focus","role":"text_input","value":"gamma"}
+{"do":"wait","role":"multiline_text_input","value":"gamma","settleMs":300}
+{"do":"focus","role":"multiline_text_input","value":"gamma"}
 {"do":"key","text":"ArrowDown","modifiers":18,"settleMs":500,"comment":"Ctrl+↓ moves the gamma row below alpha"}
-{"do":"wait","role":"text_input","value":"gamma","settleMs":300}
+{"do":"wait","role":"multiline_text_input","value":"gamma","settleMs":300}
 {"do":"click","name":"","role":"button","pointer":true,"nth":1,"settleMs":400,"comment":"the n column's handle"}
 {"do":"click","name":"Sort descending","role":"button","pointer":true,"settleMs":500}
 {"do":"capture","text":"tables-sorted","comment":"the body sorted by n, the empty cell last"}
