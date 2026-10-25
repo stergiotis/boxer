@@ -3740,6 +3740,20 @@ func (inst TableColumnFluid) ClipContents(val bool) TableColumnFluid {
 	return inst
 }
 
+func (inst TableColumnFluid) AlignCenter() TableColumnFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(TableColumnMethodIdAlignCenter))
+
+	return inst
+}
+
+func (inst TableColumnFluid) AlignRight() TableColumnFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(TableColumnMethodIdAlignRight))
+
+	return inst
+}
+
 func (inst TableColumnFluid) Send() {
 	r := inst.r
 	r.WriteOpCode(uint32(TableColumnMethodIdBuild))

@@ -6,7 +6,8 @@ package definition
 //
 // Architecture: REGISTER-DRAIN pattern (same as tree widget)
 //
-//   1. Go pushes column defs into self.table_columns      (via tableColumn)
+//   1. Go pushes column defs into self.table_columns      (via tableColumn),
+//      and each column's text alignment into self.table_column_aligns
 //   2. Go pushes header texts into self.table_header_texts (via tableHeaderText)
 //   3. Go pushes cell content into self.table_cells        (via tableCellText / tableCellRichText)
 //   4. The table node (Immediate+Retained, NOT BlockIterator) drains and renders
@@ -71,9 +72,18 @@ func definitionsTableRegistered() []*ir.BuilderFactoryNode {
 			CodeClientRust(rustClientCode("{{Instance}} = {{Instance}}.resizable(val);\n")).EndMethod().
 			BeginMethod("clipContents").Arg("val", ctabb.B).
 			CodeClientRust(rustClientCode("{{Instance}} = {{Instance}}.clip(val);\n")).EndMethod().
+			// The column's text alignment, for its header and its cells:
+			// left unless said otherwise. egui_extras::Column carries no
+			// alignment, so it rides a register of its own beside the
+			// columns and the table node applies it as a cell layout
+			// (table_cell_aligned).
+			BeginMethod("alignCenter").
+			CodeClientRust(rustClientCode("align = egui::Align::Center;\n")).EndMethod().
+			BeginMethod("alignRight").
+			CodeClientRust(rustClientCode("align = egui::Align::Max;\n")).EndMethod().
 			Build()...).
-		WithConstructionCodeClientRust(rustClientCode("egui_extras::Column::auto();\n")).
-		WithApplyCodeClientRust(rustClientCode("self.table_columns.push({{Instance}});\n")).
+		WithConstructionCodeClientRust(rustClientCode("egui_extras::Column::auto();\nlet mut align = egui::Align::Min;\n")).
+		WithApplyCodeClientRust(rustClientCode("self.table_columns.push({{Instance}});\nself.table_column_aligns.push(align);\n")).
 		WithSettingRetained(true).
 		WithSettingImmediate(true).
 		WithReturnType(structTableColumn()).
@@ -224,6 +234,7 @@ if {{EguiUiOptionalOuter}}.is_some() {
 
 	let cells: Vec<TableCell> = self.table_cells.drain(..).collect();
 	let header_texts: Vec<String> = self.table_header_texts.drain(..).collect();
+	let aligns: Vec<egui::Align> = self.table_column_aligns.drain(..).collect();
 
 	if header_texts.is_empty() {
 		builder.body(|body| {
@@ -234,7 +245,7 @@ if {{EguiUiOptionalOuter}}.is_some() {
 					let cell_idx = cell_offset + col_idx;
 					row.col(|ui| {
 						if cell_idx < cells.len() {
-							cells[cell_idx].render(ui);
+							table_cell_aligned(ui, aligns.get(col_idx).copied(), |ui| cells[cell_idx].render(ui));
 						}
 					});
 				}
@@ -242,9 +253,11 @@ if {{EguiUiOptionalOuter}}.is_some() {
 		});
 	} else {
 		builder.header(row_height, |mut header| {
-			for ht in header_texts.iter() {
+			for (col_idx, ht) in header_texts.iter().enumerate() {
 				header.col(|ui| {
-					ui.heading(ht.as_str());
+					table_cell_aligned(ui, aligns.get(col_idx).copied(), |ui| {
+						ui.heading(ht.as_str());
+					});
 				});
 			}
 		}).body(|body| {
@@ -255,7 +268,7 @@ if {{EguiUiOptionalOuter}}.is_some() {
 					let cell_idx = cell_offset + col_idx;
 					row.col(|ui| {
 						if cell_idx < cells.len() {
-							cells[cell_idx].render(ui);
+							table_cell_aligned(ui, aligns.get(col_idx).copied(), |ui| cells[cell_idx].render(ui));
 						}
 					});
 				}
@@ -265,6 +278,7 @@ if {{EguiUiOptionalOuter}}.is_some() {
 	});
 } else {
 	self.table_columns.clear();
+	self.table_column_aligns.clear();
 	self.table_header_texts.clear();
 	self.table_cells.clear();
 }

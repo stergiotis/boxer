@@ -11,6 +11,7 @@ import (
 	"github.com/stergiotis/boxer/public/semistructured/markdown/obsidian/resolver"
 	"github.com/stergiotis/boxer/public/thestack/fffi2/typed"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
+	east "github.com/yuin/goldmark/extension/ast"
 	"github.com/zeebo/xxh3"
 )
 
@@ -652,7 +653,9 @@ type paragraphRun struct {
 //     cannot disagree. tableColRunes is
 //     the widest cell per column, in
 //     runes, and drives the initial
-//     column widths.
+//     column widths; tableAligns the
+//     delimiter row's alignment per
+//     column.
 //   - segKindFootnotes:                  children is one ordered segKindList
 //     whose items are the definitions,
 //     numbered from the first index.
@@ -682,6 +685,7 @@ type segment struct {
 	calloutDefaultOpen bool
 	tableCols          uint32
 	tableColRunes      []uint32
+	tableAligns        []east.Alignment
 	tableHeader        []string
 	tableCells         []string
 }

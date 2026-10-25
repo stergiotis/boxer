@@ -50,6 +50,7 @@ struct SavedLiveState<'a> {
     pending_window_place: std::collections::HashMap<u64, egui::Rect>,
     r27_windows: Vec<WindowGeomRow>,
     table_columns: Vec<egui_extras::Column>,
+    table_column_aligns: Vec<egui::Align>,
     table_header_texts: Vec<String>,
     table_cells: Vec<TableCell>,
     et_columns: Vec<egui_table::Column>,
@@ -171,6 +172,7 @@ impl<'a, R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'a, R, W> {
             pending_window_place: std::mem::take(&mut self.pending_window_place),
             r27_windows: std::mem::take(&mut self.r27_windows),
             table_columns: std::mem::take(&mut self.table_columns),
+            table_column_aligns: std::mem::take(&mut self.table_column_aligns),
             table_header_texts: std::mem::take(&mut self.table_header_texts),
             table_cells: std::mem::take(&mut self.table_cells),
             et_columns: std::mem::take(&mut self.et_columns),
@@ -268,6 +270,7 @@ impl<'a, R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'a, R, W> {
         self.pending_window_place = s.pending_window_place;
         self.r27_windows = s.r27_windows;
         self.table_columns = s.table_columns;
+        self.table_column_aligns = s.table_column_aligns;
         self.table_header_texts = s.table_header_texts;
         self.table_cells = s.table_cells;
         self.et_columns = s.et_columns;
