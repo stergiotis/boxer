@@ -174,7 +174,10 @@ None: the stream is opt-in per request.
 
 ## Status
 
-Proposed 2026-10-05. Nothing built.
+Proposed 2026-10-05. SD1 built 2026-10-25: `openaichat.CompleteStream`
+behind `StreamingClientI`, with the recorded-stream and refusal tests the
+verification plan names. SD2, SD3 and SD4 — the service, the bus inbox
+and the chat — are not built, and the open questions stand.
 
 ## Updates
 

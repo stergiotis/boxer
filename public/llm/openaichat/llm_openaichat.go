@@ -465,6 +465,7 @@ type wireRequest struct {
 	Seed               *int64              `json:"seed,omitempty"`
 	Stop               []string            `json:"stop,omitempty"`
 	Stream             bool                `json:"stream"`
+	StreamOptions      *wireStreamOptions  `json:"stream_options,omitempty"`
 	Options            *wireOptions        `json:"options,omitempty"`
 	ChatTemplateKwargs map[string]any      `json:"chat_template_kwargs,omitempty"`
 	ResponseFormat     *wireResponseFormat `json:"response_format,omitempty"`
@@ -475,6 +476,13 @@ type wireRequest struct {
 	// name error, which is the collision guarantee CompletionRequest.Extra
 	// documents.
 	Extra map[string]any `json:",embed"`
+}
+
+// wireStreamOptions asks a streaming endpoint for a usage chunk at the end
+// (OpenAI's `stream_options.include_usage`), so a streamed call reports
+// the counts the plain call does.
+type wireStreamOptions struct {
+	IncludeUsage bool `json:"include_usage"`
 }
 
 type wireChoice struct {
@@ -910,8 +918,14 @@ func EncodeRequest(req CompletionRequest) (body []byte, err error) {
 }
 
 // Encode is the request as the wire carries it under the route: the late
-// system messages travel as the route declares.
+// system messages travel as the route declares. The bytes are the plain
+// call's; a streamed call ([Client.CompleteStream]) adds the stream flags
+// and is otherwise the same request.
 func (inst Route) Encode(req CompletionRequest) (body []byte, err error) {
+	return inst.encode(req, false)
+}
+
+func (inst Route) encode(req CompletionRequest, stream bool) (body []byte, err error) {
 	wreq := wireRequest{
 		Model:       req.ModelId,
 		Messages:    make([]wireOutMessage, 0, len(req.Messages)),
@@ -919,8 +933,11 @@ func (inst Route) Encode(req CompletionRequest) (body []byte, err error) {
 		MaxTokens:   req.MaxTokens,
 		Seed:        req.Seed,
 		Stop:        req.Stop,
-		Stream:      false,
+		Stream:      stream,
 		Extra:       req.Extra,
+	}
+	if stream {
+		wreq.StreamOptions = &wireStreamOptions{IncludeUsage: true}
 	}
 	if req.NumCtx > 0 {
 		wreq.Options = &wireOptions{NumCtx: req.NumCtx}
