@@ -189,6 +189,9 @@ converged on:
 | Tab, Shift+Tab inside a list | indent or outdent the item by one tab, the unit Obsidian's default writes; elsewhere Tab inserts a tab |
 | `# `, `- `, `1. `, `> `, `[] `, a fence at line start | the line-start shortcuts, applied inside the focused block as text |
 | Ctrl+B / I / K / E | wrap the selection in `**`, `*`, a link, a code span — the formatting bar's actions, from the keyboard |
+| A selection | a bubble toolbar above it with the inline wraps — the formatting bar's buttons, from the same table as the chords |
+| The caret inside a link | a popover under it: the target as a field that writes through, Copy, and Unlink, which leaves the label |
+| `/` at a line's start | a menu under the caret of the block types to insert — headings, lists, quote, callout, code, table, image, divider — narrowed by what is typed after the slash; ↑/↓ and Enter choose, Escape dismisses it for that slash. On a line after the block's first the choice starts a block of its own |
 | Ctrl+Z / Ctrl+Y | the document-level undo and redo (§SD5). Ctrl+Y rather than Ctrl+Shift+Z: a widget captures one chord modifier set (§SD7), and Ctrl+Y is the Windows and Linux convention the host runs on |
 | In a table cell: ↑/↓, ←/→ at the text's edges | the cell above or below; the previous or next cell, wrapping at a row's ends; ↑ from the header and ↓ from the last row leave the table for the neighbouring block |
 | In a table cell: Ctrl+↑/↓, Ctrl+←/→ | move the row or the column the caret is in, the header staying first; the word jump Ctrl+←/→ would be in a field is given up in a cell. Typora's Ctrl+Enter for a row below is not taken: the window host polls the command-Enter fetcher every frame as its sign of input, and whoever polls it owns the chord for the process; a row below is the row handle's menu, or Enter in the last row |
@@ -265,11 +268,6 @@ them.
   for properties they cannot type.
 - **Nested blocks inside callouts and list items.** Trigger: a callout body
   that needs a table or a code fence.
-- **A bubble toolbar over the selection, a link popover, a slash menu at
-  the caret.** The geometry they anchor to is reported now (ADR-0130,
-  `reportCursorRects`, which also gave ↑/↓ their row); the popups
-  themselves are not built. Trigger: the formatting bar's distance from
-  the selection being the complaint.
 - **Windows line endings.** Block ranges keep a `\r`; a gap the editor pads
   gets `\n` alone. Trigger: a CRLF document edited in Blocks mode.
 - **A URL pasted over a selection becoming a link.** Paste is egui's own
@@ -438,6 +436,20 @@ them.
   inline help for any mode, so the book (`apps/mdedit/help`, through
   `Manifest.Help` as ADR-0047 has it) is two pages: the app, and the
   Blocks mode with its keys as the §SD4 table reads to a user.
+- **M6 — the caret popups**: the bubble toolbar, the link popover and the
+  slash menu (§SD4), over the cursor geometry ADR-0130's
+  `reportCursorRects` reports. ✓ Each is a title-less window placed at
+  the caret by `defaultPos`, re-made under a fresh id when the anchor
+  moves since egui keeps a window's first position; what it does to the
+  text is a splice with the caret set and focus asked back, the line
+  gesture's path, so the click that took focus to a button leaves no
+  trace. The bubble sits above the selection's top row and the other two
+  under the caret's row. One thing the scene found and this does not
+  resolve: the driver's accessibility focus request does not land in the
+  popover's field, while a pointer press does, so the scene presses. The
+  cause sits in the focus plumbing for a widget inside an always-on-top
+  window and is open; a keyboard-only or screen-reader path into the
+  field is untested until it is found.
 
 ## Status
 

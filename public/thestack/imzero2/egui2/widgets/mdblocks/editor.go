@@ -105,6 +105,11 @@ type Editor struct {
 	// table, an image or a callout (subeditors.go).
 	sub subState
 
+	// The popups over an open text block (popups.go).
+	bubble anchorSeq
+	link   linkState
+	slash  slashState
+
 	// paneW is what the pane probe last reported.
 	paneW float32
 
@@ -298,6 +303,7 @@ func (e *Editor) Render() (ev Events) {
 		for range kf.KeepIter() {
 			ev.Links = e.renderBlocks()
 		}
+		e.renderPopups()
 	}
 	if e.pendingOpenOk {
 		e.pendingOpenOk = false
@@ -379,6 +385,9 @@ func (e *Editor) applyEditorKeys() {
 	keys := c.CurrentApplicationState.StateManager.GetCapturedKeys(widgethandle.Make(e.editorId))
 	for _, k := range keys {
 		cb := clampInt(e.caret-e.bufStart, 0, len(e.buf))
+		if e.applySlashKey(k) {
+			return
+		}
 		switch {
 		case k.Command():
 			e.applyChord(k.Code)
@@ -887,6 +896,9 @@ func edgeKeyMask(caret, n int, collapsed bool, rects c.TextRectsValue, haveRects
 func (e *Editor) renderEditor() {
 	e.ensureHighlight()
 	mask := editorKeyMask | e.edgeKeys()
+	if e.slash.open {
+		mask |= slashKeyMask
+	}
 	width := float32(480)
 	if e.paneW > 0 {
 		width = max(e.paneW-16, 1)

@@ -38,6 +38,25 @@ gesture or a menu operation is an entry of its own.
 | Ctrl+Z, Ctrl+Y | undo and redo, over the whole document |
 | Escape | closes the block and selects it |
 
+## Popups at the caret
+
+Three things appear beside the caret while a text block is open, and go
+away when what called them up is gone:
+
+- **A bubble toolbar** above a selection: bold, italic, inline code,
+  strikethrough, highlight and link, the formatting bar's buttons. A click
+  wraps the selection and puts the caret after it.
+- **A link popover** under the caret when it sits inside a link, in either
+  spelling. The target is a field that writes through to the source as
+  you type; *Copy* puts it on the clipboard; *Unlink* leaves the label in
+  place of the link.
+- **A slash menu** under the caret after a `/` typed at the start of a
+  line, listing the block types to insert: headings, bulleted, numbered
+  and task lists, quote, callout, code block, table, image and divider.
+  Typing after the slash narrows the list; Up and Down move the highlight,
+  Enter or a click inserts, Escape dismisses the menu for that slash. On a
+  line after the block's first the choice starts a block of its own.
+
 ## A selected block
 
 Escape, or Backspace against a block that cannot be joined, leaves text
