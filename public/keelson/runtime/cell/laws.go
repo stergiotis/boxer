@@ -111,19 +111,38 @@ func L33(policy ApprovalPolicy, sinks []Sink, exits []ExitRow, approvals []Appro
 	return
 }
 
-// ExitsSQL is the model-route exits as the trail shows them: every
-// answered call of keelson('llm_calls') by a route the declaration lists
-// as a sink, with the tier the wall saw and the approval key it went
+// ModelRouteExitsSQL is the model-route exits as the trail shows them:
+// every answered call of keelson('llm_calls') by a route the declaration
+// lists as a sink, with the tier the wall saw and the approval key it went
 // under. A call refused never left; a call to a loopback or trusted route
 // stayed inside the cell and is no exit, which the join to keelson('sinks')
 // says. The ordinal is the call's display id, an identity and not a
 // position in any journal.
-const ExitsSQL = `
+const ModelRouteExitsSQL = `
 SELECT c.conversation AS conversation, c.id AS ordinal, c.call_id AS call_id, c.at AS at,
        'model-route' AS sink, c.endpoint_host AS edge, toUInt8(c.tier) AS tier, c.approval_entry AS approval_entry
 FROM keelson('llm_calls') AS c
 INNER JOIN keelson('sinks') AS s ON s.kind = 'model-route' AND s.edge = c.endpoint_host
 WHERE NOT c.refused`
+
+// FetchExitsSQL is the egress exits in the same columns: every fetch of
+// keelson('http_calls') answered to a destination the declaration lists as
+// a sink, with the tier the wall saw — the higher of the sender's
+// declaration and the run's tier the dispatcher attested (ADR-0312 §SD4).
+// A fetch has no approval path, so its approval entry is 0: L14 holds for
+// it only while its tier is at or below the destination's clearance. The
+// conversation is the dispatcher's word, empty for an app's own fetch.
+const FetchExitsSQL = `
+SELECT f.conversation AS conversation, f.id AS ordinal, f.task_call AS call_id, f.at AS at,
+       'egress' AS sink, f.destination AS edge, toUInt8(f.tier) AS tier, toUInt64(0) AS approval_entry
+FROM keelson('http_calls') AS f
+INNER JOIN keelson('sinks') AS s ON s.kind = 'egress' AND s.edge = f.destination
+WHERE NOT f.refused`
+
+// ExitsSQL is every exit the trail shows, model-route and egress, in the
+// columns L14SQLOver and L33SQLOver read.
+const ExitsSQL = ModelRouteExitsSQL + `
+UNION ALL` + FetchExitsSQL
 
 // ApprovalsSQL is the approval entries of the journal with their id, the
 // conversation of their run, path, sink and time, over

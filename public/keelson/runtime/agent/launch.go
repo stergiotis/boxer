@@ -139,7 +139,7 @@ func (inst *Service) launch(msg *app.Msg) (rep wireLaunchReply) {
 	// The launch leaves an action row naming the window it opened, so which
 	// task opened a window is a join on the window's key (ADR-0277 §SD7).
 	rec := &callRec{key: req.Key, callId: inst.mintCallId(t), app: id,
-		spec: app.OperationSpec{Name: launchOperation}, turn: req.Turn,
+		spec: app.OperationSpec{Name: launchOperation}, turn: req.Turn, tier: req.Tier,
 		cause: causeOf(wireCall{ModelCall: req.ModelCall, ToolCall: req.ToolCall, ToolIndex: req.ToolIndex}), created: time.Now()}
 	t.keys[req.Key] = rec
 	defer func() {
@@ -306,7 +306,7 @@ func (inst *Client) Launch(ctx context.Context, handle string, key string, appNa
 func (inst *Client) LaunchFrom(ctx context.Context, from CallRequest, appName string, kind string, config []byte) (out Launched, err error) {
 	rep, err := roundTrip[wireLaunch, wireLaunchReply](ctx, inst, SubjectLaunch,
 		wireLaunch{V: wireVersion, Handle: from.Handle, App: appName, Kind: kind, Config: config,
-			Key: from.Key, Turn: from.Turn, ModelCall: from.ModelCall, ToolCall: from.ToolCall, ToolIndex: from.ToolIndex})
+			Key: from.Key, Turn: from.Turn, ModelCall: from.ModelCall, ToolCall: from.ToolCall, ToolIndex: from.ToolIndex, Tier: from.Tier})
 	if err != nil {
 		return
 	}

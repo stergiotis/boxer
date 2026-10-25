@@ -354,6 +354,33 @@ impl TableCell {
         }
     }
 }
+
+/// Draws one table cell's content under the column's alignment. A left
+/// column keeps the cell's own layout, which egui_extras inherits from
+/// the table's surroundings; the other two keep that layout's vertical
+/// placement and move only the horizontal one, so the three read on one
+/// baseline. Under a vertical layout that is its cross alignment; under
+/// a horizontal one the direction is reversed for the right edge, and
+/// the centre takes egui's centred layout.
+pub fn table_cell_aligned(
+    ui: &mut egui::Ui,
+    align: Option<egui::Align>,
+    add: impl FnOnce(&mut egui::Ui),
+) {
+    let a = match align {
+        Some(a) if a != egui::Align::Min => a,
+        _ => return add(ui),
+    };
+    let base = *ui.layout();
+    let layout = if base.is_vertical() {
+        base.with_cross_align(a)
+    } else if a == egui::Align::Max {
+        egui::Layout::right_to_left(base.cross_align)
+    } else {
+        egui::Layout::centered_and_justified(egui::Direction::LeftToRight)
+    };
+    ui.with_layout(layout, add);
+}
 /// Parse the Go-side initial-layout descriptor passed via the
 /// `initialLayout` arg on `dockAreaRaw`. The wire format is
 /// little-endian:
@@ -758,6 +785,9 @@ pub struct ImZeroFffi<'a, R: std::io::BufRead, W: std::io::Write> {
     desync_already_logged: bool,
 
     pub table_columns: Vec<egui_extras::Column>,
+    // One per table_columns entry: the column's text alignment, which
+    // egui_extras::Column cannot carry.
+    pub table_column_aligns: Vec<egui::Align>,
     pub table_header_texts: Vec<String>,
     pub table_cells: Vec<TableCell>,
     pub et_columns: Vec<egui_table::Column>,
@@ -1067,6 +1097,7 @@ impl<R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'_, R, W> {
             desync_already_logged: false,
             r11_color32: egui::Color32::TRANSPARENT,
             table_columns: Vec::with_capacity(16),
+            table_column_aligns: Vec::with_capacity(16),
             table_header_texts: Vec::with_capacity(16),
             table_cells: Vec::with_capacity(256),
             et_columns: Vec::with_capacity(16),
@@ -1221,6 +1252,7 @@ impl<R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'_, R, W> {
         }
 
         self.table_columns.clear();
+        self.table_column_aligns.clear();
         self.table_header_texts.clear();
         self.table_cells.clear();
         self.et_columns.clear();
@@ -9041,6 +9073,7 @@ self.apply_widget(imzero2_egui::style::slider::IdsSlider(w),u,f,Some(i));
 
                         let cells: Vec<TableCell> = self.table_cells.drain(..).collect();
                         let header_texts: Vec<String> = self.table_header_texts.drain(..).collect();
+                        let aligns: Vec<egui::Align> = self.table_column_aligns.drain(..).collect();
 
                         if header_texts.is_empty() {
                             builder.body(|body| {
@@ -9051,7 +9084,11 @@ self.apply_widget(imzero2_egui::style::slider::IdsSlider(w),u,f,Some(i));
                                         let cell_idx = cell_offset + col_idx;
                                         row.col(|ui| {
                                             if cell_idx < cells.len() {
-                                                cells[cell_idx].render(ui);
+                                                table_cell_aligned(
+                                                    ui,
+                                                    aligns.get(col_idx).copied(),
+                                                    |ui| cells[cell_idx].render(ui),
+                                                );
                                             }
                                         });
                                     }
@@ -9060,9 +9097,15 @@ self.apply_widget(imzero2_egui::style::slider::IdsSlider(w),u,f,Some(i));
                         } else {
                             builder
                                 .header(row_height, |mut header| {
-                                    for ht in header_texts.iter() {
+                                    for (col_idx, ht) in header_texts.iter().enumerate() {
                                         header.col(|ui| {
-                                            ui.heading(ht.as_str());
+                                            table_cell_aligned(
+                                                ui,
+                                                aligns.get(col_idx).copied(),
+                                                |ui| {
+                                                    ui.heading(ht.as_str());
+                                                },
+                                            );
                                         });
                                     }
                                 })
@@ -9074,7 +9117,11 @@ self.apply_widget(imzero2_egui::style::slider::IdsSlider(w),u,f,Some(i));
                                             let cell_idx = cell_offset + col_idx;
                                             row.col(|ui| {
                                                 if cell_idx < cells.len() {
-                                                    cells[cell_idx].render(ui);
+                                                    table_cell_aligned(
+                                                        ui,
+                                                        aligns.get(col_idx).copied(),
+                                                        |ui| cells[cell_idx].render(ui),
+                                                    );
                                                 }
                                             });
                                         }
@@ -9084,6 +9131,7 @@ self.apply_widget(imzero2_egui::style::slider::IdsSlider(w),u,f,Some(i));
                     });
                 } else {
                     self.table_columns.clear();
+                    self.table_column_aligns.clear();
                     self.table_header_texts.clear();
                     self.table_cells.clear();
                 }
@@ -9130,6 +9178,7 @@ self.apply_widget(imzero2_egui::style::slider::IdsSlider(w),u,f,Some(i));
                 // construct
 
                 let mut w = egui_extras::Column::auto();
+                let mut align = egui::Align::Min;
                 // methods
                 loop {
                     let (m, _) = self.read_from_repr(TableColumnBuilderMethodId::from_repr)?;
@@ -9193,6 +9242,16 @@ self.apply_widget(imzero2_egui::style::slider::IdsSlider(w),u,f,Some(i));
                             // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
                             w = w.clip(val);
                         }
+                        TableColumnBuilderMethodId::AlignCenter => {
+                            #[cfg(feature = "puffin")]
+                            puffin::profile_scope!("match TableColumnBuilderMethodId::AlignCenter");
+                            align = egui::Align::Center;
+                        }
+                        TableColumnBuilderMethodId::AlignRight => {
+                            #[cfg(feature = "puffin")]
+                            puffin::profile_scope!("match TableColumnBuilderMethodId::AlignRight");
+                            align = egui::Align::Max;
+                        }
                     }
                 }
                 if d == 0 {
@@ -9201,6 +9260,7 @@ self.apply_widget(imzero2_egui::style::slider::IdsSlider(w),u,f,Some(i));
                 // apply
                 // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
                 self.table_columns.push(w);
+                self.table_column_aligns.push(align);
             }
             FuncProcId::TableHeaderText => {
                 #[cfg(feature = "puffin")]

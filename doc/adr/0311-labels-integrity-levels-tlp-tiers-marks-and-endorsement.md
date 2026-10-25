@@ -277,6 +277,16 @@ two spellings of the same arguments give one digest
 §SD4). The artefact's endorsement still names the content digest of the
 text. The endorsement is now a vault component, not a JSON body.
 
+### 2026-10-25 — SD8: L6 as a query; L26 is not metadata
+
+L6 runs in the integration lane as a query over the entries view
+(`journallaws`, [ADR-0309](./0309-context-projection-as-sql-over-the-journal-in-a-local-worker.md)
+Update of this date): a reply's level and tier at least its request's, and
+its marks a superset of them. L3 runs beside it over each compaction's
+span. L8 waits for fan-out as before. L26 cannot be read from the views:
+whether a consequential command ran is the outcome's phase, which is
+content, so the chat's L15 check over a run's entries keeps covering
+completed acts.
 
 ## References
 

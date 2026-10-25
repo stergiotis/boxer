@@ -19,7 +19,8 @@ type wireRequest struct {
 	Purpose     string `json:"purpose,omitempty"`
 	Sensitivity uint8  `json:"sensitivity,omitempty"`
 	// Tier is the request's TLP tier (ADR-0312 §SD4) as the caller
-	// declares it; 0 is CLEAR, which is what every caller sends today.
+	// declares it; 0 is CLEAR. On agent-caused work the service takes the
+	// higher of this and the tier the dispatcher attests for the run.
 	Tier uint8 `json:"tier,omitempty"`
 	// DeadlineUnixNanos carries the caller's ctx deadline, since the
 	// handler has no ctx of its own. 0 means none.

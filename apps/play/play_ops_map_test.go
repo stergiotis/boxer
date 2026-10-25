@@ -135,7 +135,7 @@ func TestSetMapOptionsKeepsTheSQLFragmentsThePersons(t *testing.T) {
 	l, h := opsLauncher(t)
 	d := l.inner.mapDriver
 	before, beforeColor := d.table, d.customColorSQL
-	agent := app.OperationCall{Writer: "task:t", OnBehalfOf: &app.OnBehalfOf{Task: "t", Epoch: 1}}
+	agent := app.OperationCall{Writer: "task:t", OnBehalfOf: &app.OnBehalfOf{Task: "t", Epoch: 1, Destinations: []string{mapTilesDestination}}}
 	for _, in := range []SetMapOptionsArgs{
 		{Table: strp("url('https://host/x', CSV)")},
 		{ColorSql: strp("255 AS red, 0 AS green, 0 AS blue")},
@@ -149,4 +149,29 @@ func TestSetMapOptionsKeepsTheSQLFragmentsThePersons(t *testing.T) {
 
 	_, err := h.ApplyCommand(agent, opSetMapOptions, mustEncode(t, SetMapOptionsArgs{Render: strp("density")}))
 	require.NoError(t, err, "the other settings stay an agent's")
+}
+
+// ADR-0312 §SD4 (Update of 2026-10-25): under a task, the Map's commands
+// need the basemap destination in the grant, since the view they set is
+// fetched as tiles in the task's name; the refusal names the destination
+// so the model can ask for it. The person's gestures carry no task.
+func TestTheMapsCommandsNeedTheBasemapDestination(t *testing.T) {
+	l, h := opsLauncher(t)
+	without := app.OperationCall{Writer: "task:t", OnBehalfOf: &app.OnBehalfOf{Task: "t", Epoch: 1, Destinations: []string{"sql:somewhere"}}}
+	for _, c := range []struct {
+		op   string
+		args any
+	}{{opSetMapView, SetMapViewArgs{Center: &MapPoint{Lat: 50, Lon: 8}}}, {opSetMapOptions, SetMapOptionsArgs{Render: strp("density")}}} {
+		_, err := h.ApplyCommand(without, c.op, mustEncode(t, c.args))
+		var refusal *app.OperationRefusal
+		require.ErrorAs(t, err, &refusal, c.op)
+		assert.Equal(t, []string{mapTilesDestination}, refusal.Destinations, c.op)
+		assert.Contains(t, refusal.Reason, mapTilesDestination)
+	}
+	mapPaneLaidOut(t, l.inner)
+	with := app.OperationCall{Writer: "task:t", OnBehalfOf: &app.OnBehalfOf{Task: "t", Epoch: 1, Destinations: []string{mapTilesDestination}}}
+	_, err := h.ApplyCommand(with, opSetMapView, mustEncode(t, SetMapViewArgs{Center: &MapPoint{Lat: 50, Lon: 8}}))
+	require.NoError(t, err)
+	assert.Equal(t, with.OnBehalfOf, l.inner.AgentMark(), "the command marks the window, and so its tiles, as the task's")
+	require.NoError(t, applyOp(t, h, opSetMapView, SetMapViewArgs{Center: &MapPoint{Lat: 51, Lon: 9}}), "the person's gesture passes")
 }

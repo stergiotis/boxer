@@ -145,6 +145,7 @@ type wireLaunch struct {
 	ModelCall string `json:"model_call,omitempty"`
 	ToolCall  string `json:"tool_call,omitempty"`
 	ToolIndex uint32 `json:"tool_index,omitempty"`
+	Tier      uint8  `json:"tier,omitempty"`
 }
 
 type wireLaunchReply struct {
@@ -207,6 +208,10 @@ type wireCall struct {
 	ModelCall string `json:"model_call,omitempty"`
 	ToolCall  string `json:"tool_call,omitempty"`
 	ToolIndex uint32 `json:"tool_index,omitempty"`
+	// Tier is the run's current TLP tier as the coordinator declares it
+	// (ADR-0312 §SD4); recorded, stamped on the on-behalf-of context and
+	// attested back to a wall that asks.
+	Tier uint8 `json:"tier,omitempty"`
 }
 
 type wireOutcome struct {

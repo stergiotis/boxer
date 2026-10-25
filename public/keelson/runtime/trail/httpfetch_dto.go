@@ -18,7 +18,10 @@ type HttpFetch struct {
 	Status    uint32 `lw:"httpFetchStatus,u32Array,unit"`
 	Bytes     uint64 `lw:"httpFetchBytes,u64Array,unit"`
 	ElapsedMs uint64 `lw:"httpFetchElapsedMs,u64Array,unit"`
-	Refused   bool   `lw:"httpFetchRefused,bool"`
+	// Tier is the TLP tier the wall saw (ADR-0312 §SD4): the higher of the
+	// sender's declaration and the run's, as the dispatcher attested it.
+	Tier    uint32 `lw:"httpFetchTier,u32Array,unit"`
+	Refused bool   `lw:"httpFetchRefused,bool"`
 	// Error is the failure or the refusal reason: one element when there is one.
 	Error []string `lw:"httpFetchError,stringArray"`
 }

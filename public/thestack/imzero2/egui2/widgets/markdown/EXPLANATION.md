@@ -327,14 +327,12 @@ should iterate `Frontmatter().IteratePairs()` directly.
   along the way — those carry their visible text in node fields rather
   than in child `Text` nodes, so a cell holding only one of them used to
   flatten to the empty string.
-- **GFM column alignment is parsed and not applied.** `:---`, `:--:` and
-  `---:` reach the lowering as `Table.Alignments`, and the lowering uses
-  them only for their column count. Neither `tableColumn` nor the cell
-  ops carry an alignment knob, and the interpreter's cell renderer is a
-  bare `ui.label`, so applying alignment means changing the IDL and the
-  Rust interpreter — out of scope here. Every column renders
-  left-aligned; a right-aligned numeric column in a source document will
-  not look like the author intended.
+- **GFM column alignment rides the column.** `:---`, `:--:` and `---:`
+  reach the lowering as `Table.Alignments`; the segment keeps them per
+  column and the renderer hands each to `tableColumn`, whose
+  `alignCenter` and `alignRight` the interpreter applies as a cell
+  layout around the header and every cell. A column without one is
+  left-aligned, the cell's own layout.
 - **Callouts collapse a 20+ type vocabulary into 5 families.** Obsidian
   recognises `note`, `info`, `tip`, `hint`, `important`, `success`,
   `check`, `done`, `question`, `help`, `faq`, `warning`, `caution`,

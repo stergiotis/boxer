@@ -258,14 +258,13 @@ func lowerBlock(ctx *lowerCtx, n ast.Node) (seg segment, ok bool) {
 // are reduced to their visible text. A degenerate table with no columns
 // is dropped rather than emitted as an empty widget.
 //
-// GFM's per-column alignment (`:---`, `:--:`, `---:`) is parsed but NOT
-// applied: neither `tableColumn` nor `tableCellText` carries an
-// alignment knob, and every cell is drawn by the interpreter as a plain
-// `ui.label`, so honouring it would need an IDL and interpreter change.
-// Every column renders left-aligned.
+// GFM's per-column alignment (`:---`, `:--:`, `---:`) is kept per column
+// for the renderer, which hands it to the table op's column; a column
+// without one is left-aligned.
 func lowerTable(ctx *lowerCtx, t *east.Table) (seg segment, ok bool) {
 	seg.kind = segKindTable
 	cols := len(t.Alignments)
+	seg.tableAligns = append([]east.Alignment(nil), t.Alignments...)
 	if cols == 0 {
 		for row := t.FirstChild(); row != nil; row = row.NextSibling() {
 			if n := row.ChildCount(); n > cols {

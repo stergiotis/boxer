@@ -364,6 +364,17 @@ seed's variable stays a seed. Retiring a variable remains open for a
 constant no deployment sets. Background:
 [env-registry-scope-problem](../adr-background-work/env-registry-scope-problem.md).
 
+### 2026-10-25 — SD10: the lane runs law queries; L27 to L29 wait on their data
+
+The integration lane now runs journal laws as queries
+([ADR-0309](./0309-context-projection-as-sql-over-the-journal-in-a-local-worker.md)
+Update of this date), so "the lane does not run yet" no longer holds L27,
+L28 and L29 back. What does: L27's limits are in the profile entry's body,
+which the journal views do not expose; L28 compares the declared profile
+with the passes and tools the journal shows, content as well; L29 still has
+one profile. They stay open until a metadata column, or the worker's read
+path, carries what they compare.
+
 ## References
 
 - [ADR-0009](./0009-environment-variable-registry.md) — a variable selects, it does not toggle.

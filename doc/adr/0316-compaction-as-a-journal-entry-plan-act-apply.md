@@ -264,6 +264,14 @@ context compacts with a small summary rather than not at all; the trigger
 stays what the meter turns at while compaction is off; and the line above
 the composer and the meter's tip say that it is off and why.
 
+### 2026-10-25 — §SD4: L22 and L23 as queries
+
+The journal laws package carries L22 and L23 as window queries over the
+entries view, with L3 beside them, and the integration lane asserts each
+over planted breaches
+([ADR-0309](./0309-context-projection-as-sql-over-the-journal-in-a-local-worker.md)
+Update of this date). L25 and L2's boundary rule stay Go checks in
+`projection.CheckCompaction`: both read bodies.
 
 ## References
 

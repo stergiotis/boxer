@@ -334,6 +334,19 @@ corpus golden was re-recorded.
 The vault's body store is now generated with `async_insert = 0` as well,
 which the SD4 entry above left open.
 
+### 2026-10-25 — SD6: the laws as queries run in the integration lane
+
+`journallaws`, beside the journal views, composes L1, L3, L6, L22 and L23
+as SELECTs over `dm_journal_entries`, each returning the breaches as (run,
+ordinal, why) with the view's physical columns resolved from its
+composition. The integration lane writes a journal with planted breaches
+through the SQL store onto clickhouse local, installs the views and asserts
+each law returns its plants alone. L1's query form is written. L7 and L28
+stay unwritten for a reason the lane no longer supplies: both read content
+— the request's notes, the profile's components — and the views carry
+metadata alone ([ADR-0320](./0320-journal-bodies-in-a-vault-committed-to-the-chain-under-a-per-entry-key.md)).
+L30 goes with the worker move as before.
+
 ## References
 
 - [ADR-0028](./0028-chlocal-low-latency-sql-cap.md) — the worker pool.

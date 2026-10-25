@@ -1,6 +1,8 @@
 package mdedit
 
 import (
+	"embed"
+
 	"github.com/rs/zerolog/log"
 	"github.com/stergiotis/boxer/public/config/env"
 
@@ -8,9 +10,16 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/clipboardbroker"
 	"github.com/stergiotis/boxer/public/keelson/runtime/fsbroker"
+	"github.com/stergiotis/boxer/public/keelson/runtime/help"
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
 	"github.com/stergiotis/boxer/public/keelson/runtime/windowhost"
 )
+
+// helpFS embeds the inline help (apps/mdedit/help/*.md), indexed by the
+// help library and shown by the HelpHost on F1 (ADR-0047).
+//
+//go:embed help/*.md
+var helpFS embed.FS
 
 // manifest is the per-process AppI descriptor. Static; every newApp() returns
 // the same Manifest value.
@@ -52,6 +61,7 @@ var manifest = app.Manifest{
 	// Operations are how the agentic harness reads the document and
 	// proposes changes to it; mdedit holds no model grant (ADR-0318).
 	Operations: ops.Catalog(),
+	Help:       help.MustSub(helpFS, "help"),
 	SurfaceHints: app.SurfaceHints{
 		// Wide enough that the source and the preview both read comfortably
 		// at the default split, tall enough for a screenful of either.

@@ -1034,10 +1034,8 @@ func TestParse_GFMTable_InlineContentFlattensToText(t *testing.T) {
 }
 
 func TestParse_GFMTable_AlignmentRow_DoesNotLeakIntoCells(t *testing.T) {
-	// Alignment is parsed by goldmark and deliberately not applied by
-	// the renderer (no alignment knob on tableColumn / tableCellText).
-	// What must hold regardless: the `:---:` delimiter row is consumed
-	// as structure and never surfaces as a body row.
+	// The `:---:` delimiter row is consumed as structure — kept per
+	// column for the renderer — and never surfaces as a body row.
 	src := strings.Join([]string{
 		"| left | centre | right |",
 		"|:-----|:------:|------:|",
@@ -1050,6 +1048,10 @@ func TestParse_GFMTable_AlignmentRow_DoesNotLeakIntoCells(t *testing.T) {
 	}
 	if !reflect.DeepEqual(seg.tableCells, []string{"1", "2", "3"}) {
 		t.Errorf("tableCells: got %#v want [1 2 3]", seg.tableCells)
+	}
+	wantAligns := []east.Alignment{east.AlignLeft, east.AlignCenter, east.AlignRight}
+	if !reflect.DeepEqual(seg.tableAligns, wantAligns) {
+		t.Errorf("tableAligns: got %#v want %#v", seg.tableAligns, wantAligns)
 	}
 }
 
