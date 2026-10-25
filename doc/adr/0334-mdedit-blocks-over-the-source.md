@@ -1,10 +1,12 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-10-24
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-10-25
 ---
 
-> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
+> **Status: accepted.** Reviewed by the code owner on 2026-10-25.
 
 # ADR-0334: mdedit edits markdown as blocks over the source — a block widget, a formatted source pane, and two seams
 
@@ -453,8 +455,9 @@ them.
 
 ## Status
 
-Proposed — awaiting review by the code owner. Implementation began the day
-the dialogue settled the shape; a milestone's `✓` records what shipped.
+Accepted 2026-10-25, after milestones M0–M6 had shipped against the
+proposal; a milestone's `✓` records what shipped. Changes from here are
+dated entries under an Updates section.
 
 ## References
 
