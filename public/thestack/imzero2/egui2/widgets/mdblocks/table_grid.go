@@ -224,11 +224,13 @@ func (e *Editor) applyTableOp() bool {
 
 // The handles' glyphs come from the Phosphor icon font the client loads,
 // as the tree widget's disclosure glyphs do: a symbol from the text font's
-// fallback chain draws at the fallback face's size and baseline.
+// fallback chain draws at the fallback face's size and baseline. A row
+// and a column share one glyph, since their handles are the same thing —
+// the menu for what sits beside them — and the dots carry neither the
+// sort hint of a caret nor a grab.
 var (
 	atomsTableMenu = c.Atoms().Text(icons.PhGridFour).Keep()
-	atomsColMenu   = c.Atoms().Text(icons.PhCaretDown).Keep()
-	atomsRowMenu   = c.Atoms().Text(icons.PhDotsThreeVertical).Keep()
+	atomsLineMenu  = c.Atoms().Text(icons.PhDotsThreeVertical).Keep()
 	// The menu items' labels, retained on first use: the bodies render
 	// only while open, so each label is built once and kept.
 	tableItemAtoms = map[string]typed.RetainedFffiHolderTyped[c.AtomsS]{}
@@ -378,7 +380,7 @@ func (e *Editor) renderTableMenu() {
 
 func (e *Editor) renderColumnMenu(col int) {
 	t := &e.sub.tbl
-	for range c.MenuButton(atomsColMenu).KeepIter() {
+	for range c.MenuButton(atomsLineMenu).KeepIter() {
 		if e.menuItem("ins-left", "Insert column left", false) {
 			t.op = func() bool { t.insertColumn(col); t.setFocus(0, col, -1); return true }
 		}
@@ -425,7 +427,7 @@ func (e *Editor) renderColumnMenu(col int) {
 
 func (e *Editor) renderRowMenu(r int) {
 	t := &e.sub.tbl
-	for range c.MenuButton(atomsRowMenu).KeepIter() {
+	for range c.MenuButton(atomsLineMenu).KeepIter() {
 		if r > 0 && e.menuItem("ins-above", "Insert row above", false) {
 			t.op = func() bool { t.insertRow(r); t.setFocus(r, 0, -1); return true }
 		}
