@@ -141,8 +141,12 @@ var InEntityFixtureSectionIndices = map[string]int{
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1691
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1696
 
+// SetId sets the entity's id, internalKey, naturalKey columns, one positional
+// argument per column in that order. Hand-written code should call the
+// per-column setters (SetIdColumn, SetInternalKey, SetNaturalKey) instead:
+// they cannot swap two arguments of the same type.
 func (inst *InEntityFixture) SetId(id0 uint64, internalKey1 string, naturalKey2 string) *InEntityFixture {
 	if inst.state != runtime.EntityStateInEntity {
 		inst.AppendError(runtime.ErrInvalidStateTransition)
@@ -155,8 +159,56 @@ func (inst *InEntityFixture) SetId(id0 uint64, internalKey1 string, naturalKey2 
 	return inst
 }
 
+///////////////////////////////////////////////////////////////////
+// code generator
+// dml.(*GoClassBuilder).composePlainColumnSetters
+// ./public/semistructured/leeway/dml/lw_dml_plain_setters.go:125
+
+// SetIdColumn sets the entity's id column.
+func (inst *InEntityFixture) SetIdColumn(id0 uint64) *InEntityFixture {
+	if inst.state != runtime.EntityStateInEntity {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.plainId0 = id0
+
+	return inst
+}
+
+///////////////////////////////////////////////////////////////////
+// code generator
+// dml.(*GoClassBuilder).composePlainColumnSetters
+// ./public/semistructured/leeway/dml/lw_dml_plain_setters.go:125
+
+// SetInternalKey sets the entity's internalKey column.
+func (inst *InEntityFixture) SetInternalKey(internalKey1 string) *InEntityFixture {
+	if inst.state != runtime.EntityStateInEntity {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.plainInternalKey1 = internalKey1
+
+	return inst
+}
+
+///////////////////////////////////////////////////////////////////
+// code generator
+// dml.(*GoClassBuilder).composePlainColumnSetters
+// ./public/semistructured/leeway/dml/lw_dml_plain_setters.go:125
+
+// SetNaturalKey sets the entity's naturalKey column.
+func (inst *InEntityFixture) SetNaturalKey(naturalKey2 string) *InEntityFixture {
+	if inst.state != runtime.EntityStateInEntity {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.plainNaturalKey2 = naturalKey2
+
+	return inst
+}
+
 // PushMembershipHighCardRef adds id to the ambient HighCardRef memberships
-// replayed onto every attribute as it closes, until it is popped (ADR-0112 M1).
+// replayed onto every attribute as it closes, until it is popped.
 // The stamp scope — one section vs the whole entity — is the caller's to set.
 func (inst *InEntityFixture) PushMembershipHighCardRef(id uint64) {
 	inst.ambientHighCardRef = append(inst.ambientHighCardRef, id)
