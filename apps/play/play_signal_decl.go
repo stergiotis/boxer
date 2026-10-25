@@ -96,6 +96,7 @@ type signalShapeE uint8
 const (
 	// shapeFollowed: the value holds until the pane's next gesture, and the
 	// pane draws from it or ignores it harmlessly.
+	//lint:ignore U1000 the zero value: an entry that names no Shape is followed
 	shapeFollowed signalShapeE = iota
 	// shapeRepublished: the pane writes the signal again every frame it
 	// draws, so another writer's value lasts until the pane is next drawn.

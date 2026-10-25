@@ -49,12 +49,16 @@ func (inst *Fetcher) readU64h() (r []uint64) {
 	}
 	return
 }
+
+//lint:ignore U1000 generated fetchers call inst.read<Type>() per declared return type (fffi2 goserver); kept for the first fetcher returning this type
 func (inst *Fetcher) readI64h() (r []int64) {
 	for u := range typed.GetCurrentFffiVar().ReceiveMsg() {
 		return runtime.GetInt64SliceRetr[*runtime.Unmarshaller, int64](u)
 	}
 	return
 }
+
+//lint:ignore U1000 generated fetchers call inst.read<Type>() per declared return type (fffi2 goserver); kept for the first fetcher returning this type
 func (inst *Fetcher) readF64h() (r []float64) {
 	for u := range typed.GetCurrentFffiVar().ReceiveMsg() {
 		return runtime.GetFloat64SliceRetr[*runtime.Unmarshaller, float64](u)
@@ -124,6 +128,8 @@ func (inst *Fetcher) readF32() float32 {
 	}
 	return 0
 }
+
+//lint:ignore U1000 generated fetchers call inst.read<Type>() per declared return type (fffi2 goserver); kept for the first fetcher returning this type
 func (inst *Fetcher) readF64() float64 {
 	for u := range typed.GetCurrentFffiVar().ReceiveMsg() {
 		return runtime.GetFloat64Retr[*runtime.Unmarshaller, float64](u)
