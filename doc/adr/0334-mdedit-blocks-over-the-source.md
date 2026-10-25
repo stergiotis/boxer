@@ -431,8 +431,10 @@ them.
   syntax colours of its own in this cut, and a rendered code block carries
   no text to click on in the accessibility tree, so the scene reaches it
   with ArrowDown from the block above — the seam §SD4 names.
-- **M5 — a help page** for the Blocks mode and its keys; mdedit has none
-  for any mode yet.
+- **M5 — a help page** for the Blocks mode and its keys. ✓ mdedit had no
+  inline help for any mode, so the book (`apps/mdedit/help`, through
+  `Manifest.Help` as ADR-0047 has it) is two pages: the app, and the
+  Blocks mode with its keys as the §SD4 table reads to a user.
 
 ## Status
 
