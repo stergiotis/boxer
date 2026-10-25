@@ -40,6 +40,9 @@ type entry struct {
 	// opsDiagnostic says why the manifest's operations catalog was
 	// withdrawn at registration; empty when it was kept or absent.
 	opsDiagnostic string
+	// origin is the code that registered, observed at registration
+	// (ADR-0335).
+	origin Origin
 }
 
 // Registration is one registry row: a manifest plus how it was
@@ -55,6 +58,9 @@ type Registration struct {
 	// OperationsDiagnostic says why the operations catalog was withdrawn
 	// (ADR-0269 §SD2); empty when it was kept or none was declared.
 	OperationsDiagnostic string
+	// Origin is the package and module whose code registered the app
+	// (ADR-0335), observed rather than declared.
+	Origin Origin
 }
 
 // Registry is the canonical list of apps in this process. Apps register
@@ -194,6 +200,7 @@ func (inst *Registry) register(m Manifest, ctor AppCtor, singleton bool) (err er
 			m.Operations = nil
 		}
 	}
+	origin := observeOrigin()
 	inst.mu.Lock()
 	defer inst.mu.Unlock()
 	_, exists := inst.byId[m.Id]
@@ -221,7 +228,7 @@ func (inst *Registry) register(m Manifest, ctor AppCtor, singleton bool) (err er
 	})
 	inst.entries = append(inst.entries, entry{})
 	copy(inst.entries[idx+1:], inst.entries[idx:])
-	inst.entries[idx] = entry{manifest: m, ctor: ctor, singleton: singleton, opsDiagnostic: opsDiagnostic}
+	inst.entries[idx] = entry{manifest: m, ctor: ctor, singleton: singleton, opsDiagnostic: opsDiagnostic, origin: origin}
 	for i := idx; i < len(inst.entries); i++ {
 		inst.byId[inst.entries[i].manifest.Id] = i
 	}
@@ -365,7 +372,7 @@ func (inst *Registry) Registrations() (regs []Registration) {
 	defer inst.mu.RUnlock()
 	regs = make([]Registration, len(inst.entries))
 	for i, e := range inst.entries {
-		regs[i] = Registration{Manifest: e.manifest, Singleton: e.singleton, OperationsDiagnostic: e.opsDiagnostic}
+		regs[i] = Registration{Manifest: e.manifest, Singleton: e.singleton, OperationsDiagnostic: e.opsDiagnostic, Origin: e.origin}
 	}
 	return
 }
@@ -379,6 +386,20 @@ func (inst *Registry) OperationsDiagnostic(id AppIdT) (diagnostic string) {
 	if idx, ok := inst.byId[id]; ok {
 		diagnostic = inst.entries[idx].opsDiagnostic
 	}
+	return
+}
+
+// Origin returns the package and module whose code registered id
+// (ADR-0335); ok is false when id is not registered.
+func (inst *Registry) Origin(id AppIdT) (o Origin, ok bool) {
+	inst.mu.RLock()
+	defer inst.mu.RUnlock()
+	idx, exists := inst.byId[id]
+	if !exists {
+		return
+	}
+	o = inst.entries[idx].origin
+	ok = true
 	return
 }
 

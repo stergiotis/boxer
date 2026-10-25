@@ -201,7 +201,19 @@ func appsTable(reg *app.Registry, rs []app.Registration) *introspect.Table {
 		Bool("shell", func(i int) bool { return m(i).Shell }).
 		// Whether a window may be opened under the launch limit
 		// (KEELSON_LAUNCHABLE_APPS_WHERE, ADR-0272); true when none is set.
-		Bool("launchable", func(i int) bool { return reg.Launchable(m(i).Id) })
+		Bool("launchable", func(i int) bool { return reg.Launchable(m(i).Id) }).
+		// Where the app came from (ADR-0335): the package whose code
+		// registered it and the module that package was built from, read
+		// off the binary's build information rather than declared. A
+		// module_version of "(devel)" is a module built from a local
+		// directory, such as a workspace member; keelson.build carries the
+		// revision that is the nearest stand-in.
+		String("package", func(i int) string { return rs[i].Origin.Package }).
+		String("module", func(i int) string { return rs[i].Origin.Module }).
+		String("module_version", func(i int) string { return rs[i].Origin.ModuleVersion }).
+		String("module_sum", func(i int) string { return rs[i].Origin.ModuleSum }).
+		String("module_replace", func(i int) string { return rs[i].Origin.Replace }).
+		Bool("module_main", func(i int) bool { return rs[i].Origin.Main })
 }
 
 // --- build (runinfo + vcs) ---------------------------------------------------
