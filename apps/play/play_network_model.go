@@ -138,50 +138,61 @@ func networkGroupColor(idx int) color.Color {
 	return color.Hex(networkGroupPalette[idx%len(networkGroupPalette)].AsHex())
 }
 
-// magnitudeBandSteps is how finely networkMagnitudeBandLo searches the ramp.
+// magnitudeBandSteps is how finely networkMagnitudeBand searches the ramp.
 // The band floor only has to be found to within a few percent — it is a
 // legibility threshold, not a value — and a coarse walk keeps this cheap
 // enough to run per render rather than being cached against a theme change.
 const magnitudeBandSteps = 40
 
-// networkMagnitudeBandLo is the palette position the weight ramp starts at:
-// the first one whose contrast against the drawing's background reaches the
-// ordinary edge stroke's.
+// magnitudeBand is the stretch of a sequential palette the weight ramp spans:
+// from, the first position as visible on the background as an ordinary edge,
+// to to, the palette end that contrasts most with the background, which the
+// heaviest weight takes. On a dark surface that is the light end and from < to;
+// on a light surface it is the dark end and the band runs downwards.
+type magnitudeBand struct {
+	from, to float32
+}
+
+// networkMagnitudeBand finds the band the weight ramp spans on a background.
 //
 // The rule it enforces is that **no weighted edge is less visible than an
 // unweighted one**. A sequential palette runs from one end of the lightness
-// range to the other, so on a dark surface its low end sinks into the
-// background — and an edge that carries a small but *known* weight would then
-// be harder to see than one carrying no weight at all, which is backwards.
+// range to the other, so the end nearest the background's lightness sinks into
+// it — and an edge that carries a small but *known* weight would then be
+// harder to see than one carrying no weight at all, which is backwards.
 // (Measured against the dark theme's panel, the default stroke sits at 4.55:1
 // and Batlow only reaches that around t=0.5, so half the ramp is unusable.)
 //
-// Derived rather than pinned as a constant because both ends of the comparison
-// are theme tokens: under a light theme the palette's dark end is the visible
-// one and the floor lands elsewhere. The icicle's flame band (ADR-0160) solves
-// the same problem with fixed bounds, which it can because it owns its plot
+// Heavier always means more visible, so the far end is chosen by contrast
+// rather than fixed at the top of the palette: on the light theme the top is
+// the end that vanishes. Derived rather than pinned because both ends of the
+// comparison are theme tokens. The icicle's flame band (ADR-0160) solves the
+// same problem with fixed bounds, which it can because it owns its plot
 // surface; this ramp is drawn on whatever surface the style carries.
 //
-// No ceiling: the top of the ramp is the most visible colour available, which
-// is exactly what the heaviest edge should be.
-func networkMagnitudeBandLo(palette styletokens.SequentialE, bg styletokens.RGBA8, base styletokens.RGBA8) float32 {
+// No ceiling: the far end is the most visible colour available, which is
+// exactly what the heaviest edge should be.
+func networkMagnitudeBand(palette styletokens.SequentialE, bg styletokens.RGBA8, base styletokens.RGBA8) magnitudeBand {
 	want := contrast.Ratio(base.R, base.G, base.B, bg.R, bg.G, bg.B)
-	for i := range magnitudeBandSteps {
-		t := float32(i) / float32(magnitudeBandSteps)
+	ratio := func(t float32) float64 {
 		s := styletokens.Sequential(palette, t)
-		if contrast.Ratio(s.R, s.G, s.B, bg.R, bg.G, bg.B) >= want {
-			return t
+		return contrast.Ratio(s.R, s.G, s.B, bg.R, bg.G, bg.B)
+	}
+	near, far := float32(0), float32(1)
+	if ratio(0) > ratio(1) {
+		near, far = 1, 0
+	}
+	for i := range magnitudeBandSteps {
+		t := near + (far-near)*float32(i)/float32(magnitudeBandSteps)
+		if ratio(t) >= want {
+			return magnitudeBand{from: t, to: far}
 		}
 	}
 	// Nothing in the ramp reaches it. Fall back to the whole range rather than
 	// collapsing to a single colour: a less legible ordering still orders.
-	return 0
+	return magnitudeBand{from: near, to: far}
 }
 
-// networkMagnitudeRamp samples the magnitude ramp for one weight — a node's or
-// an edge's. Shared by every channel that spends one, so a fill, an ink and a
-// stroke cannot drift onto different colours, and it carries the same square
-// root the edge and node widths use (ADR-0167 §SD4).
 // noVerticesClaim is the claim of a query without a vertices CTE: every
 // column index -1, so the build infers the vertices from the edge endpoints.
 func noVerticesClaim() networkVerticesClaim {
@@ -202,13 +213,19 @@ func noEdgesClaim() networkEdgesClaim {
 		idCol: -1, opacityCol: -1, pickCol: -1, selectedCol: -1, lengthCol: -1, strengthCol: -1}
 }
 
-func networkMagnitudeRamp(palette styletokens.SequentialE, bandLo float32, w float64, maxW float64) styletokens.RGBA8 {
+// networkMagnitudeRamp samples the magnitude ramp for one weight — a node's or
+// an edge's. Shared by every channel that spends one, so a fill, an ink and a
+// stroke cannot drift onto different colours, and it carries the same square
+// root the edge and node widths use (ADR-0167 §SD4).
+func networkMagnitudeRamp(palette styletokens.SequentialE, band magnitudeBand, w float64, maxW float64) styletokens.RGBA8 {
 	t := float32(math.Sqrt(min(w, maxW) / maxW))
-	return styletokens.Sequential(palette, bandLo+(1-bandLo)*t)
+	return styletokens.Sequential(palette, band.from+(band.to-band.from)*t)
 }
 
 // networkInkOn picks the label colour for a ramped node body: whichever of the
-// style's own ink and the dark extreme contrasts better with the fill.
+// two extreme neutrals — the darkest and the lightest the theme has —
+// contrasts better with the fill. The style's own ink is not a candidate: on
+// the light theme it is a dark grey a mid-lightness fill holds to about 4:1.
 //
 // The group and tone palettes are all *Subtle background tones, chosen dark so
 // the one light ink reads on every one of them — a fixed pairing that works
@@ -218,13 +235,11 @@ func networkMagnitudeRamp(palette styletokens.SequentialE, bandLo float32, w flo
 // choosing by measured contrast is what keeps the pairing honest as either the
 // palette or the theme moves.
 func networkInkOn(fill styletokens.RGBA8) styletokens.RGBA8 {
-	light, dark := styletokens.NeutralTextPrimary, styletokens.NeutralBgExtreme
-	lr := contrast.Ratio(light.R, light.G, light.B, fill.R, fill.G, fill.B)
-	dr := contrast.Ratio(dark.R, dark.G, dark.B, fill.R, fill.G, fill.B)
-	if dr > lr {
-		return dark
+	a, b := styletokens.NeutralBgExtreme, styletokens.NeutralTextExtreme
+	if contrast.Ratio(b.R, b.G, b.B, fill.R, fill.G, fill.B) > contrast.Ratio(a.R, a.G, a.B, fill.R, fill.G, fill.B) {
+		return b
 	}
-	return light
+	return a
 }
 
 // networkTone maps a `tone` cell to a design-system colour. The vocabulary is

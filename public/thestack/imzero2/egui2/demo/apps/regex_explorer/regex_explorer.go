@@ -577,7 +577,7 @@ func (inst *App) renderFunctionsTab() {
 			inst.renderFnRow(fn, a.pattern, chText, chHas, fnValue(fn, predicted), modelled)
 		}
 		for range c.IdScope(inst.ids.PrepareStr("replace-row")) {
-			c.Label("replacement").Send()
+			c.Label("Replacement").Send()
 			c.Label("").Send()
 			c.Label("").Send()
 			inst.replacementEdit.set(inst.ids.PrepareStr("replacement").Derive())
@@ -944,7 +944,7 @@ func (inst *App) renderMultiLines(lines []multiLine) {
 				case !view.Fresh:
 					mark = "…"
 				case line.Rejected != "":
-					mark = "⛔"
+					mark = "⊘"
 				case line.Hit:
 					mark = "✓"
 				}
@@ -1011,9 +1011,9 @@ func (inst *App) renderStatusBar() {
 		a := inst.analysis()
 		switch a.state {
 		case patternEmpty:
-			c.Label("no pattern").Send()
+			c.Label("No pattern").Send()
 		case patternInvalid:
-			coloredLabel(warnFg, "pattern does not compile")
+			coloredLabel(warnFg, "Pattern does not compile")
 		default:
 			c.Label(fmt.Sprintf("%d match(es)", len(a.matches))).Send()
 		}

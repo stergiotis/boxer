@@ -342,8 +342,9 @@ func readCrameriTxt(path, name string, expected int) (l lut, err error) {
 // enforcing — a palette that misses any of them is not emitted.
 const (
 	// gateMinRatio is WCAG 1.4.11's floor for graphical objects. Measured
-	// against NeutralBgSurface, the lightest of the three IDS dark
-	// surfaces and therefore the binding one.
+	// against the dark theme's NeutralBgSurface (styletokens.DarkSurface),
+	// the lightest of the three IDS dark surfaces and therefore the binding
+	// one, whatever theme the converter runs under.
 	gateMinRatio = 3.0
 	// gateMinDeltaE is the normal-vision OKLab separation floor, the same
 	// number ADR-0031 §SD5 uses for the semantic palette.
@@ -363,7 +364,7 @@ const (
 // grounds that publication pre-validates them, but publications validate
 // CVD safety, not contrast against one particular dark UI surface.
 func gateQualitative(l lut) (findings []string) {
-	bg := styletokens.NeutralBgSurface
+	bg := styletokens.DarkSurface
 	for i, c := range l.RGB {
 		r := contrast.Ratio(c[0], c[1], c[2], bg.R, bg.G, bg.B)
 		if r < gateMinRatio {

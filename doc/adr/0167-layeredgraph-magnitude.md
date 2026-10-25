@@ -359,6 +359,27 @@ about how a picture *reads*, and no test asserts that.
 
 ## Updates
 
+### 2026-10-24 — the ramp runs away from the background under either theme
+
+§SD4 says the floor "lands elsewhere" under a light theme, as though deriving
+it were enough. It was not: the panel walked the palette upwards from its
+start and gave the heaviest weight the top, and on the light theme the top is
+the end that vanishes. Under `IMZERO2_THEME=fresh` the default palette fell
+from 3.22:1 at t=0.55 to 1.26:1 at t=1 against the panel, so the heavier an
+edge, the harder it was to see.
+
+The ramp now spans a band from the first legible position to whichever
+palette end contrasts most with the background, and the heaviest weight takes
+that end: the top on the dark theme, as before, and the bottom on the light
+one. §SD4's rule is unchanged, and the dark theme draws as it did.
+
+The ink paired with a ramped node body changes with it. It chose between the
+style's own ink and the darkest neutral; on the light theme the style's ink is
+a dark grey, and a mid-lightness fill held it to about 4:1. It now chooses
+between the darkest and the lightest neutral, which clears 4.5:1 along the
+default palette's ramp in both themes (sampled at twenty weights). On the dark theme the light ink moves
+from the primary text neutral to the extreme one, a few steps brighter.
+
 ### 2026-10-15 — the edge hooks take the laid-out edge (ADR-0331)
 
 §SD2 gave `EdgeWidth` `pipelineview`'s signature exactly, and §Consequences

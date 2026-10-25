@@ -238,11 +238,6 @@ func (lane *queryLane[T]) blockedFor(key queryKey) bool {
 	return lane.errFinal || time.Since(lane.errAt) < transientRetryDelay
 }
 
-// running reports whether a run is in flight, for the spinner.
-func (lane *queryLane[T]) running() bool {
-	return lane.job.Running()
-}
-
 // view is the render-side snapshot of a lane: the value to draw, whether
 // it describes the inputs currently on screen, and the run state around
 // it. Fresh is false when the value is a retained last-good from older

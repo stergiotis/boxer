@@ -75,14 +75,13 @@ var subplotPool = make(map[uint64]*subplotState, 4)
 // upstream's implicit BeginSubplots/EndSubplots cursor: Go gets an
 // explicit per-cell callback (doc.go records the deviation).
 type SubplotCtx struct {
-	ids    *c.WidgetIdStack
-	st     *subplotState
-	flags  SubplotFlags
-	cellW  float32
-	cellH  float32
-	row    int
-	col    int
-	titled string
+	ids   *c.WidgetIdStack
+	st    *subplotState
+	flags SubplotFlags
+	cellW float32
+	cellH float32
+	row   int
+	col   int
 }
 
 // Scoped opens this cell's plot and yields it exactly once; End runs

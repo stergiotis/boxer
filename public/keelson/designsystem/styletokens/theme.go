@@ -52,6 +52,14 @@ func parseTheme(v string) (th ThemeE) {
 // SetActiveTheme — such a copy would not follow a later switch.
 var activeTheme ThemeE
 
+// DarkSurface is NeutralBgSurface of the dark theme, whichever theme this
+// process runs. Data-encoding palettes are measured against it (ADR-0156), and
+// a generator or a test that did so through NeutralBgSurface would give a
+// different answer under IMZERO2_THEME=fresh. A package variable is
+// initialised before init applies the light palette, so it keeps the dark
+// value.
+var DarkSurface = NeutralBgSurface
+
 // ActiveTheme is the theme this process runs with. Chosen at launch from
 // IMZERO2_THEME and fixed for the life of the process (ADR-0258 §SD3);
 // the Rust overlay reads the same variable, so both sides agree.

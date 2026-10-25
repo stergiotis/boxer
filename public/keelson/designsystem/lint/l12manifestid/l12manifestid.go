@@ -88,6 +88,22 @@ var AllowedSpecialIds = map[string]bool{
 	// runtime.windowhost.ops — the window host's side of the operation
 	// subjects (ADR-0269 §SD3). Same class.
 	"runtime.windowhost.ops": true,
+	// runtime.moderator — the moderator's bus identity (ADR-0302 §SD1).
+	// Same class.
+	"runtime.moderator": true,
+	// runtime.agentrun — the host's run-journal service (ADR-0308 §SD10).
+	// Same class.
+	"runtime.agentrun": true,
+	// runtime.anchor — the host's anchor client for the head family
+	// (ADR-0314). Same class.
+	"runtime.anchor": true,
+	// runtime.attention — the attention service's questions (ADR-0324).
+	// Same class.
+	"runtime.attention": true,
+	// runtime.audit — the host's audit service, whose subject is
+	// ADR-0026 §SD3's runtime.audit.{id} (a write verb since ADR-0327 §SD8).
+	// Same class.
+	"runtime.audit": true,
 }
 
 // Analyzer is the L12 default analyzer used by the designlint binary.

@@ -889,14 +889,25 @@ func (s *state) drawLabels(dc implot.DrawCtx) {
 // Both ends are IDS neutrals rather than pure black and white.
 func contrastText(fill uint32) uint32 {
 	if implot.RelativeLuminance(fill) > inkSwitchL {
-		return styletokens.NeutralBgExtreme.AsHex()
+		return inkDark
 	}
-	return styletokens.NeutralTextExtreme.AsHex()
+	return inkLite
 }
+
+// inkDark and inkLite are the extreme background and the extreme text
+// neutral, ordered by luminance: the background is the dark one under the
+// dark theme and the light one under the light theme.
+var inkDark, inkLite = func() (dark uint32, lite uint32) {
+	dark, lite = styletokens.NeutralBgExtreme.AsHex(), styletokens.NeutralTextExtreme.AsHex()
+	if implot.RelativeLuminance(dark) > implot.RelativeLuminance(lite) {
+		dark, lite = lite, dark
+	}
+	return
+}()
 
 // inkSwitchL is the fill luminance at which the two neutrals contrast equally
 // against it; above the switch the dark ink is the better of the two. It works
-// out at 0.1734 for the palette as it stands, where both inks give 4.45:1.
+// out at 0.1734 for the dark palette as it stands, where both inks give 4.45:1.
 //
 // Derived rather than written down, so that regenerating the IDS palette
 // moves it instead of leaving a stale constant behind. It is not the line
@@ -906,7 +917,7 @@ func contrastText(fill uint32) uint32 {
 // under WCAG AA's 4.5 and the band's single worst point; the classic
 // flamegraph draws black on its deepest red at nearer 3:1.
 var inkSwitchL = func() float64 {
-	d := implot.RelativeLuminance(styletokens.NeutralBgExtreme.AsHex())
-	l := implot.RelativeLuminance(styletokens.NeutralTextExtreme.AsHex())
+	d := implot.RelativeLuminance(inkDark)
+	l := implot.RelativeLuminance(inkLite)
 	return math.Sqrt((d+0.05)*(l+0.05)) - 0.05
 }()

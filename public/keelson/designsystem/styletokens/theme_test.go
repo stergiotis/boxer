@@ -22,7 +22,9 @@ func TestParseThemeAcceptsFreshOnly(t *testing.T) {
 
 // TestFreshPaletteIsLight is the property the theme exists for: after the
 // apply-function runs, the spine reads as paper under ink. Restores the
-// IDS values afterwards so the other tests keep the palette they expect.
+// values it found afterwards so the other tests keep the palette they expect.
+// Under IMZERO2_THEME=fresh the palette is fresh before the test starts, so
+// the accent can only be seen to change from the dark theme.
 func TestFreshPaletteIsLight(t *testing.T) {
 	saved := []RGBA8{NeutralBgPanel, NeutralBgSurface, NeutralTextPrimary, AccentDefault}
 	defer func() {
@@ -36,7 +38,7 @@ func TestFreshPaletteIsLight(t *testing.T) {
 	if lum(NeutralTextPrimary) > 3*80 {
 		t.Errorf("fresh text is not ink: %v", NeutralTextPrimary)
 	}
-	if AccentDefault == saved[3] {
+	if ActiveTheme() == ThemeDark && AccentDefault == saved[3] {
 		t.Error("applyFreshPalette left the accent at the IDS value")
 	}
 }

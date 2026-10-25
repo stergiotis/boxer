@@ -26,6 +26,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/scctree"
 )
@@ -140,7 +141,7 @@ func Compose(groups []scctree.SccGroup, opts Options) (doc []byte, st Stats, err
 	b.WriteString("---\ntype: reference\naudience: end-user\nstatus: draft\n")
 	b.WriteString("title: \"Repository complexity map\"\n")
 	b.WriteString("summary: \"Lines of code and cyclomatic complexity per directory, as a snapshot\"\n")
-	b.WriteString("icon: \"🗺\"\ntabs: [treemap, table, detail@side]\n---\n\n")
+	b.WriteString("icon: \"" + icons.IconMap + "\"\ntabs: [treemap, table, detail@side]\n---\n\n")
 	b.WriteString("# Repository complexity map\n\n")
 	if opts.Revision != "" {
 		fmt.Fprintf(&b, "A snapshot of the repository at `%s`: ", opts.Revision)
