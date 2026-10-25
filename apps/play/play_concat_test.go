@@ -14,7 +14,7 @@ func int64Batch(mem memory.Allocator, schema *arrow.Schema, vals ...int64) arrow
 	b.AppendValues(vals, nil)
 	arr := b.NewArray()
 	defer arr.Release()
-	return array.NewRecord(schema, []arrow.Array{arr}, int64(len(vals)))
+	return array.NewRecordBatch(schema, []arrow.Array{arr}, int64(len(vals)))
 }
 
 func TestConcatBatchesEmpty(t *testing.T) {

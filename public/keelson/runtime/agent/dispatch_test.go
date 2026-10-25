@@ -30,7 +30,6 @@ import (
 // The test participant: a document with text and a consequential export.
 
 type doc struct {
-	mu       sync.Mutex
 	text     string
 	editing  bool
 	confined bool

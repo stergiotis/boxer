@@ -33,7 +33,6 @@ func TestDqlTypedLiteralGeneration(t *testing.T) {
 	type row struct {
 		label string
 		sql   string
-		err   error
 	}
 	mustSQL := func(v any) string {
 		s, err := marshalling.MarshalGoValueToSQL(v)

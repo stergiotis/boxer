@@ -113,21 +113,6 @@ func (a adj) reach() [][]bool {
 	return r
 }
 
-// samePartition reports whether two labelings induce the same partition.
-func samePartition(x, y []int32) bool {
-	if len(x) != len(y) {
-		return false
-	}
-	for i := range x {
-		for j := range x {
-			if (x[i] == x[j]) != (y[i] == y[j]) {
-				return false
-			}
-		}
-	}
-	return true
-}
-
 func (a adj) pageRankOracle(damping float64, iters int) []float64 {
 	n := a.n
 	rank := make([]float64, n)

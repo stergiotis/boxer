@@ -48,7 +48,7 @@ import (
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/markdown"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/markdownhighlight"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/mdblocks"
-	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/tree"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/mdoutline"
 )
 
 const (
@@ -239,23 +239,12 @@ type App struct {
 	// window opens in the split.
 	viewMode viewModeE
 
-	// The outline pane's state (see mdedit_outline.go). outline is the
-	// hierarchy, rebuilt whenever outlineDoc stops matching the current parse;
-	// outlineState is the tree widget's own expansion and selection, and the
-	// authority for which sections are closed. It survives a reparse because
-	// the hierarchy carries a key column (slug#ord) for the widget to file
-	// under — a node index would name a different heading one keystroke later.
-	// Only the selection is projected, from the caret.
-	outline      outlineModel
-	outlineDoc   *markdown.Doc
-	outlineState tree.State
-	// outlineRevealed is the section the outline last scrolled itself to, so a
-	// caret that has stayed put does not re-issue the scroll every frame.
-	outlineRevealed string
-	// outlinePaneW/H are what the outline's pane probe last reported, held
-	// across frames for the same reason paneW/paneH are.
-	outlinePaneW float32
-	outlinePaneH float32
+	// outline is the heading outline (see mdedit_outline.go): the hierarchy,
+	// rebuilt whenever the parse moves, and the tree widget's own expansion
+	// and selection, which survive a reparse because the hierarchy carries a
+	// key column (slug#ord) for the widget to file under. Only the selection
+	// is projected, from the caret.
+	outline mdoutline.View
 
 	// paneW/paneH are what the editor's pane probe reported last, held across
 	// frames so a frame in which the probe does not come back (the pane was

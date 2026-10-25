@@ -198,8 +198,3 @@ func (inst *bitReader) bits(width uint8) (v uint64) {
 func (inst *bitReader) alignByte() {
 	inst.pos = (inst.pos + 7) &^ 7
 }
-
-func (inst *bitReader) bytePos() (n int) {
-	n = int(inst.pos >> 3)
-	return
-}

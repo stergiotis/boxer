@@ -110,9 +110,8 @@ func newFieldGrid(win *vectorfield.Window, proj projectionI) (grid *fieldGrid) {
 	return
 }
 
-// x1 and y1 are the world position of the last sample.
+// x1 is the world x of the last sample column.
 func (inst *fieldGrid) x1() float64 { return inst.x0 + float64(inst.cols-1)*inst.dx }
-func (inst *fieldGrid) y1() float64 { return inst.y0 + float64(inst.rows-1)*inst.dy }
 
 // sample interpolates bilinearly and strictly: a missing corner is a missing
 // value.

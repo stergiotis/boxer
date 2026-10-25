@@ -167,6 +167,37 @@ func TestAppsTableRendersRegistrationMode(t *testing.T) {
 	assert.Equal(t, "singleton", col.Value(1), "the row a workingset audit would flag")
 }
 
+// TestAppsTableRendersOrigin covers the ADR-0335 columns: which module's
+// code registered each app, as the registry observed it.
+func TestAppsTableRendersOrigin(t *testing.T) {
+	rs := []app.Registration{
+		{Manifest: app.Manifest{Id: "test.native", Display: "Native", Summary: "fixture summary"},
+			Origin: app.Origin{Package: "example.com/main/apps/a", Module: "example.com/main", ModuleVersion: "(devel)", Main: true}},
+		{Manifest: app.Manifest{Id: "test.dep", Display: "Dep", Summary: "fixture summary"},
+			Origin: app.Origin{Package: "example.com/dep/apps/b", Module: "example.com/dep", ModuleVersion: "v1.2.3", ModuleSum: "h1:x", Replace: "../dep"}},
+	}
+	rec := appsTable(app.NewRegistry(), rs).Build(introspect.AllColumns(), len(rs))
+	defer rec.Release()
+
+	str := func(name string, row int) string {
+		idx := rec.Schema().FieldIndices(name)
+		require.NotEmpty(t, idx, name)
+		return rec.Column(idx[0]).(*array.String).Value(row)
+	}
+	assert.Equal(t, "example.com/main/apps/a", str("package", 0))
+	assert.Equal(t, "example.com/main", str("module", 0))
+	assert.Equal(t, "(devel)", str("module_version", 0))
+	assert.Equal(t, "example.com/dep", str("module", 1))
+	assert.Equal(t, "v1.2.3", str("module_version", 1))
+	assert.Equal(t, "h1:x", str("module_sum", 1))
+	assert.Equal(t, "../dep", str("module_replace", 1))
+	idx := rec.Schema().FieldIndices("module_main")
+	require.NotEmpty(t, idx)
+	mainCol := rec.Column(idx[0]).(*array.Boolean)
+	assert.True(t, mainCol.Value(0))
+	assert.False(t, mainCol.Value(1))
+}
+
 // TestAppsTableRendersClassification covers the ADR-0158 columns: the
 // subject axis as a list, the free keyword layer, and provenance as a
 // column rather than a section.

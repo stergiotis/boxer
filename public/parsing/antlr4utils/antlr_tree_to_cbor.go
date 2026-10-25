@@ -147,28 +147,6 @@ func FormatContextTypeName(val any) string {
 	s = strings.ToLower(string(s[0])) + s[1:] // to match rule name
 	return s
 }
-func (inst *AntlrTreeToCbor[E]) formatSourceInterval(rctxt *antlr.BaseParserRuleContext) (err error) {
-	start := rctxt.GetStart()
-	stop := rctxt.GetStop()
-	enc := inst.enc
-	_, err = enc.EncodeString("start")
-	if err != nil {
-		return
-	}
-	_, err = enc.EncodeUint(uint64(start.GetStart()))
-	if err != nil {
-		return
-	}
-	_, err = enc.EncodeString("stop")
-	if err != nil {
-		return
-	}
-	_, err = enc.EncodeUint(uint64(stop.GetStop()))
-	if err != nil {
-		return
-	}
-	return
-}
 
 const EOFTerminalString = "<EOF>"
 

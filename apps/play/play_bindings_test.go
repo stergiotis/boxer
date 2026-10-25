@@ -32,7 +32,7 @@ func leewayRec(t *testing.T, ids []uint64) arrow.RecordBatch {
 		nb.Append(int64(i))
 	}
 	ia, na := ib.NewArray(), nb.NewArray()
-	rec := array.NewRecord(schema, []arrow.Array{ia, na}, int64(len(ids)))
+	rec := array.NewRecordBatch(schema, []arrow.Array{ia, na}, int64(len(ids)))
 	ib.Release()
 	nb.Release()
 	ia.Release()

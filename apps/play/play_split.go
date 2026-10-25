@@ -641,7 +641,7 @@ func cteBodyText(pr *nanopass.ParseResult, cte nanopass.CTEDef) string {
 // so it CAN differ from the source slice (that is why cteBodyText exists);
 // when it does, -1 records "no anchor" instead of a guess.
 func srcOffsetOf(pr *nanopass.ParseResult, cte nanopass.CTEDef, body string) int {
-	var ctx antlr.ParserRuleContext = cte.Node
+	ctx := cte.Node
 	if q := bodyQueryCtx(cte); q != nil {
 		ctx = q
 	}

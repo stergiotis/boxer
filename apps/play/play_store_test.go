@@ -29,7 +29,7 @@ func arrowStreamBytes(t *testing.T, vals []int64) []byte {
 	b.AppendValues(vals, nil)
 	arr := b.NewArray()
 	defer arr.Release()
-	rec := array.NewRecord(schema, []arrow.Array{arr}, int64(len(vals)))
+	rec := array.NewRecordBatch(schema, []arrow.Array{arr}, int64(len(vals)))
 	defer rec.Release()
 	var buf bytes.Buffer
 	w := ipc.NewWriter(&buf, ipc.WithSchema(schema), ipc.WithAllocator(mem))

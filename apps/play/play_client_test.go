@@ -30,7 +30,7 @@ func emptyArrowStream(t *testing.T) []byte {
 	schema := arrow.NewSchema([]arrow.Field{}, nil)
 	var buf bytes.Buffer
 	w := ipc.NewWriter(&buf, ipc.WithSchema(schema), ipc.WithAllocator(alloc))
-	rec := array.NewRecord(schema, nil, 0)
+	rec := array.NewRecordBatch(schema, nil, 0)
 	defer rec.Release()
 	if err := w.Write(rec); err != nil {
 		t.Fatalf("ipc write: %v", err)

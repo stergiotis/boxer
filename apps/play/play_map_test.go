@@ -36,7 +36,7 @@ func rgbaRec(r, g, b, a []uint8) arrow.RecordBatch {
 		cols[i] = bld.NewArray()
 		bld.Release()
 	}
-	rec := array.NewRecord(schema, cols, int64(len(r)))
+	rec := array.NewRecordBatch(schema, cols, int64(len(r)))
 	for _, col := range cols {
 		col.Release()
 	}

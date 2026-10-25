@@ -49,14 +49,8 @@ func structDateTimePickerButton() ir.ConcreteType {
 func structTimeRangePicker() ir.ConcreteType {
 	return ir.NewConcreteType("timeRangePicker", traitWidget())
 }
-func structPassthrough() ir.ConcreteType {
-	return ir.NewConcreteType("passthrough")
-}
 func structColor32() ir.ConcreteType {
 	return ir.NewConcreteType("color32")
-}
-func structRichText() ir.ConcreteType {
-	return ir.NewConcreteType("richText")
 }
 func structTableColumn() ir.ConcreteType {
 	return ir.NewConcreteType("tableColumn")

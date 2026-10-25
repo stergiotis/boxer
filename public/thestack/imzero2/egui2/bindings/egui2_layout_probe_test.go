@@ -24,8 +24,8 @@ func TestStackProbeSeqIsScopeDependent(t *testing.T) {
 	if a != seqUnder("left") {
 		t.Fatalf("slot is not stable across frames: %#x vs %#x", a, seqUnder("left"))
 	}
-	if ProbeSeq("chat", "pane") != ProbeSeq("chat", "pane") {
-		t.Fatal("stack-free ProbeSeq should be deterministic")
+	if p, q := ProbeSeq("chat", "pane"), ProbeSeq("chat", "pane"); p != q {
+		t.Fatalf("stack-free ProbeSeq should be deterministic: %#x vs %#x", p, q)
 	}
 }
 

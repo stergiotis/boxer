@@ -152,7 +152,7 @@ func bandRec(fromMS, toMS int64, color string) arrow.RecordBatch {
 	cb := array.NewStringBuilder(mem)
 	cb.Append(color)
 	fa, ta, ca := fb.NewArray(), tb.NewArray(), cb.NewArray()
-	rec := array.NewRecord(schema, []arrow.Array{fa, ta, ca}, 1)
+	rec := array.NewRecordBatch(schema, []arrow.Array{fa, ta, ca}, 1)
 	fb.Release()
 	tb.Release()
 	cb.Release()

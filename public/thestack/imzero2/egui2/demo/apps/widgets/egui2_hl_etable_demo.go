@@ -143,7 +143,6 @@ func demoETableRichHeaders(ids *c.WidgetIdStack) {
 
 func demoETableLarge(ids *c.WidgetIdStack) {
 	const numRows = 10_000
-	const numCols = 3
 
 	c.EtColumn(80.0).Resizable(true).Send()
 	c.EtColumn(200.0).Resizable(true).Send()
@@ -180,7 +179,6 @@ func demoETableLarge(ids *c.WidgetIdStack) {
 
 func demoETableDense10k(ids *c.WidgetIdStack) {
 	const numRows = 10_000
-	const numCols = 5
 
 	c.EtColumn(60.0).Resizable(true).Send()
 	c.EtColumn(120.0).Resizable(true).Send()
@@ -237,7 +235,6 @@ func demoETableDense10k(ids *c.WidgetIdStack) {
 
 func demoETableSparse10k(ids *c.WidgetIdStack) {
 	const numRows = 10_000
-	const numCols = 5
 
 	c.EtColumn(60.0).Resizable(true).Send()
 	c.EtColumn(120.0).Resizable(true).Send()

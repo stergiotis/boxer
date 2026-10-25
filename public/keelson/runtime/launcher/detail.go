@@ -158,6 +158,11 @@ func (inst *Inst) renderDetailMeta(m app.Manifest) {
 	if m.Version != "" {
 		rows = append(rows, [2]string{"Version", m.Version})
 	}
+	if o, ok := inst.registry.Origin(m.Id); ok {
+		if label := originLabel(o); label != "" {
+			rows = append(rows, [2]string{"Provided by", label})
+		}
+	}
 	if m.LaunchKind != "" {
 		rows = append(rows, [2]string{"Opens with", m.LaunchKind})
 	}
@@ -179,6 +184,26 @@ func (inst *Inst) renderDetailMeta(m app.Manifest) {
 		}
 	}
 	c.AddSpace(styletokens.GapItems(inst.density))
+}
+
+// originLabel renders where an app came from (ADR-0335) as one line: the
+// module, its version when the build selected one, and a replacement when
+// there is one. "(devel)" is dropped rather than shown: it says the module was
+// built from a local directory, which is the absence of a version, not one.
+// Without a module the registering package is the best answer there is.
+func originLabel(o app.Origin) (label string) {
+	if o.Module == "" {
+		label = o.Package
+		return
+	}
+	label = o.Module
+	if o.ModuleVersion != "" && o.ModuleVersion != "(devel)" {
+		label += "@" + o.ModuleVersion
+	}
+	if o.Replace != "" {
+		label += " → " + o.Replace
+	}
+	return
 }
 
 // renderDetailCaps draws "what it touches" from the declared SubjectFilters.

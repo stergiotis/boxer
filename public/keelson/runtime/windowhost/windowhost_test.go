@@ -21,10 +21,9 @@ import (
 // we don't invoke Frame here because c.Window needs the Rust FFFI
 // runtime that unit tests don't bring up.
 type counterApp struct {
-	manifest    app.Manifest
-	mountCalls  int
-	unmountErrs int
-	mountErr    error
+	manifest   app.Manifest
+	mountCalls int
+	mountErr   error
 }
 
 var _ app.AppI = (*counterApp)(nil)

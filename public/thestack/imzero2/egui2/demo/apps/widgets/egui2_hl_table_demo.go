@@ -172,33 +172,6 @@ func demoRichTextTable(ids *c.WidgetIdStack) {
 }
 
 // =============================================================================
-// DEMO 5: Table inside a window
-// =============================================================================
-
-func demoTableInWindow(ids *c.WidgetIdStack) {
-	employees := sampleEmployees()
-
-	for range c.Window(ids.PrepareStr("emp-window"), c.WidgetText().Text("Employee Directory").Keep()).DefaultOpen(true).Resizable(true).KeepIter() {
-
-		c.TableColumn().Initial(150.0).Resizable(true).Send()
-		c.TableColumn().Initial(120.0).Resizable(true).Send()
-		c.TableColumn().Remainder().Send()
-
-		c.TableHeaderText("Name").Send()
-		c.TableHeaderText("Department").Send()
-		c.TableHeaderText("Salary").Send()
-
-		for _, emp := range employees {
-			c.TableCellText(emp.Name).Send()
-			c.TableCellText(emp.Department).Send()
-			c.TableCellText(fmt.Sprintf("$%d", emp.Salary)).Send()
-		}
-
-		c.Table(ids.PrepareStr("window-table"), 20.0, uint64(len(employees))).Striped(true).Vscroll(true).Send()
-	}
-}
-
-// =============================================================================
 // DEMO 6: Large table (virtualization test)
 // =============================================================================
 //

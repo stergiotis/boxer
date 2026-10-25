@@ -51,6 +51,7 @@ import (
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/codeview"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/color"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/markdownhighlight"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/mdoutline"
 )
 
 const (
@@ -524,7 +525,7 @@ func (inst *App) gotoMatch(idx int, focus bool) {
 		// click records: the caret has not moved yet, and claiming its new
 		// section now would make the next frame read the real one as a change
 		// and drag the preview back.
-		inst.pendingScroll = headingSlugAt(inst.src, inst.doc.Headings(), m.Start)
+		inst.pendingScroll = mdoutline.SectionAt(inst.src, inst.doc.Headings(), m.Start)
 	}
 }
 

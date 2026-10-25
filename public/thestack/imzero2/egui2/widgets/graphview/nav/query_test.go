@@ -130,7 +130,6 @@ func TestShortestPathAgreesWithABreadthFirstOracle(t *testing.T) {
 		got := n.ShortestPath(src, dst, DirectionBoth)
 
 		// Oracle: hop counts by repeated relaxation over the declared edges.
-		const inf = 1 << 30
 		dist := map[uint64]int{src: 0}
 		for range cnt {
 			for _, e := range es {
