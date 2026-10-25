@@ -281,8 +281,8 @@ func TestReadoutMeasureIdIsPerDial(t *testing.T) {
 		}
 		return
 	}
-	if seq("battery") != seq("battery") {
-		t.Error("measure id not stable across frames")
+	if a, b := seq("battery"), seq("battery"); a != b {
+		t.Errorf("measure id not stable across frames: %#x vs %#x", a, b)
 	}
 	if seq("battery") == seq("cpu") {
 		t.Error("two dials share a measure slot")
