@@ -42,9 +42,11 @@ var tableChordMask = keycodes.MaskOf(keycodes.KeyZ, keycodes.KeyY, keycodes.KeyB
 	keycodes.ArrowUp, keycodes.ArrowDown, keycodes.ArrowLeft, keycodes.ArrowRight)
 
 const (
-	// tableHandleWidth is the handle column's width, enough for one glyph
-	// of a small button.
-	tableHandleWidth float32 = 26
+	// tableHandleWidth is the handle column's width: a menu button's frame
+	// and padding around one glyph, plus the cell's own padding. A cell
+	// clips what it holds, so a narrower column cuts the button's right
+	// edge off.
+	tableHandleWidth float32 = 38
 	// tableCellPad is what a field adds to the renderer's row height and
 	// column width: its frame.
 	tableCellPad float32 = 8
