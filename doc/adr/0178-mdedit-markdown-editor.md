@@ -865,6 +865,21 @@ document edited from two places cannot share egui's per-widget history.
 `BOXER_MDEDIT_DOC` seeds a window with a document treated as handed over,
 so the scenes under `apps/mdedit/scenes` never touch the person's draft.
 
+### 2026-10-25 — the outline is a widget
+
+The heading outline moved out of this app into
+`public/thestack/imzero2/egui2/widgets/mdoutline`, so a second reader of
+markdown (Code Scope in hackathon_2026, which reads a module's documents
+beside its Go) draws the same outline without a copy. The package keeps the
+split the 2026-08-09 update made: `Model` is the pure hierarchy (nesting by
+level, keys of `slug#ord` so a fold survives a reparse, descendant counts)
+and `View` holds the tree widget's state, the reveal-on-change and the frame,
+with `SectionAt` resolving a byte offset to its section. What stayed here is
+what a click means in an editor (the caret goes to the heading's line and
+the preview scrolls), the numbering pair, which `Input.Controls` places
+beside the widget's expand and collapse buttons, and the pane's share of the
+window. The pure tests moved with the code; the app keeps the click tests.
+
 ## References
 
 - [ADR-0176](./0176-native-tree-widget.md) — the tree widget the outline
