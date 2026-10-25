@@ -144,8 +144,15 @@ func TestATurnOverTheTriggerIsSummarised(t *testing.T) {
 	assert.Equal(t, 1, intents)
 	assert.Equal(t, 1, requests, "the summariser's call has a request entry of its own")
 	assert.Equal(t, 1, outcomes)
+	// The compaction is a step of the turn, with what it cut.
+	names, steps := compactSteps(inst)
+	require.Equal(t, []string{"summarised"}, names)
+	assert.True(t, steps[0].done)
+	assert.False(t, steps[0].failed)
+	assert.Contains(t, steps[0].result, "cut at ordinal "+strconv.FormatUint(uint64(c.Target), 10))
+	assert.Zero(t, inst.coord.projectedSize(), "the turn's answer reported its own size since")
 	assert.Empty(t, projection.CheckCompaction(entries))
-	assert.Empty(t, projection.CheckBound(entries, sectionOrder(), inst.coord.compactConstants(0), lastReported))
+	assert.Empty(t, projection.CheckBound(entries, sectionOrder(), constantsOf(inst.coord, 0), lastReported))
 	broken, err := agentrun.Verify(w.Run().Digest, entries)
 	require.NoError(t, err)
 	assert.Zero(t, broken)
@@ -188,6 +195,10 @@ func TestAFailedSummariserLeavesTheRequestOverTheTrigger(t *testing.T) {
 	assert.Zero(t, compacts)
 	assert.Equal(t, 1, intents)
 	assert.Equal(t, 1, failed)
+	names, steps := compactSteps(inst)
+	require.Equal(t, []string{"failed"}, names, "the failure is a step of the turn")
+	assert.True(t, steps[0].failed)
+	assert.Contains(t, steps[0].result, errSummariser.Error())
 	require.True(t, inst.startTurn("q5"))
 	drainUntil(t, inst)
 	assert.Equal(t, 2, model.summaries, "the next turn asks again")
@@ -231,8 +242,15 @@ func TestAHeavyResultIsElidedAndRecalled(t *testing.T) {
 	}
 	require.Len(t, refused, 1, "the first turn had no cut outside the kept turns")
 	assert.Equal(t, compactNoteRefused, refused[0].Form)
+	names, steps := compactSteps(inst)
+	require.Equal(t, []string{"refused"}, names, "the refusal is a step of the turn")
+	assert.True(t, steps[0].refused)
+	assert.Contains(t, steps[0].result, "over the trigger")
 	require.True(t, inst.startTurn("q2"))
 	drainUntil(t, inst)
+	names, steps = compactSteps(inst)
+	require.Equal(t, []string{"elided"}, names, "the elision is a step of the turn")
+	assert.Contains(t, steps[0].result, "cut at ordinal")
 	require.Len(t, model.seen, 2, "no summariser call")
 	req := model.seen[1]
 	require.Equal(t, openaichat.ChatRoleSystem, req.Messages[0].Role)
@@ -301,10 +319,10 @@ func TestTheProfileDoesNotThrash(t *testing.T) {
 	_, err := inst.coord.openJournal(context.Background(), false)
 	require.NoError(t, err)
 	inst.coord.setRoute("", true, compactContext)
-	assert.Positive(t, inst.coord.compactConstants(2000).TriggerTokens, "at the floor the profile's check stands")
+	assert.Positive(t, constantsOf(inst.coord, 2000).TriggerTokens, "at the floor the profile's check stands")
 	inst.coord.setRoute("", true, 4096)
-	assert.Positive(t, inst.coord.compactConstants(500).TriggerTokens, "a 4k context compacts for a small head, with the allowances fitted to its trigger")
-	assert.Zero(t, inst.coord.compactConstants(2000).TriggerTokens, "and not for a head that leaves the fitted allowances no room")
+	assert.Positive(t, constantsOf(inst.coord, 500).TriggerTokens, "a 4k context compacts for a small head, with the allowances fitted to its trigger")
+	assert.Zero(t, constantsOf(inst.coord, 2000).TriggerTokens, "and not for a head that leaves the fitted allowances no room")
 	trigger, off, why := inst.coord.compactState()
 	assert.Positive(t, trigger, "the trigger stays while compaction is off")
 	assert.True(t, off)
@@ -316,19 +334,54 @@ func TestTheProfileDoesNotThrash(t *testing.T) {
 	// fitted allowances leave; the flip is told to the meter, and on
 	// again when the head shrinks.
 	inst.coord.setRoute("", true, 8192)
-	c := inst.coord.compactConstants(2500)
+	c := constantsOf(inst.coord, 2500)
 	assert.Positive(t, c.TriggerTokens, "an 8k context compacts with a head of 2.5k")
 	assert.Less(t, c.SummaryTokens, defaultProfile().Compact.SummaryTokens, "with a summary budget fitted to its trigger")
 	assert.Less(t, c.TailTokens, defaultProfile().Compact.TailTokens)
 	_, off, _ = inst.coord.compactState()
 	assert.False(t, off)
-	assert.Zero(t, inst.coord.compactConstants(4500).TriggerTokens, "a head of 4.5k leaves no room under an 8k context")
+	assert.Zero(t, constantsOf(inst.coord, 4500).TriggerTokens, "a head of 4.5k leaves no room under an 8k context")
 	_, off, why = inst.coord.compactState()
 	assert.True(t, off)
 	assert.Contains(t, why, "4500 tokens")
-	assert.Positive(t, inst.coord.compactConstants(2500).TriggerTokens, "and on again once the head shrinks")
+	assert.Positive(t, constantsOf(inst.coord, 2500).TriggerTokens, "and on again once the head shrinks")
 	_, off, _ = inst.coord.compactState()
 	assert.False(t, off)
 	inst.coord.setRoute("", true, 0)
-	assert.Zero(t, inst.coord.compactConstants(0).TriggerTokens, "an unknown context never compacts")
+	assert.Zero(t, constantsOf(inst.coord, 0).TriggerTokens, "an unknown context never compacts")
+}
+
+// constantsOf is the compaction constants alone, for the tests that read
+// no more of compactConstants.
+func constantsOf(c *coordinator, head int64) projection.Constants {
+	k, _, _ := c.compactConstants(head)
+	return k
+}
+
+// compactSteps are the last turn's compaction steps, by name.
+func compactSteps(inst *App) (names []string, steps []turnStep) {
+	all, _, _ := inst.coord.steps.snapshot(0)
+	for _, s := range all {
+		if s.kind == stepCompact {
+			names = append(names, s.name)
+			steps = append(steps, s)
+		}
+	}
+	return
+}
+
+// The context meter reads the re-projected size after a cut until the
+// next answer reports its own (ADR-0316).
+func TestTheMeterShowsTheReprojectedSizeAfterACut(t *testing.T) {
+	inst := appOver(t, &sizedModel{answerBytes: 100}, agentrun.NewMemStore())
+	inst.model.ContextTokens = 10000
+	inst.conv.lastIn, inst.conv.lastOut = 8000, 100
+	used, _, _, _, _, _ := inst.contextFill()
+	assert.EqualValues(t, 8100, used, "the last answer's size")
+	inst.coord.setProjected(3000)
+	used, _, _, _, _, _ = inst.contextFill()
+	assert.EqualValues(t, 3000, used, "the re-projected request stands in")
+	inst.coord.noteAnswered(callStat{})
+	used, _, _, _, _, _ = inst.contextFill()
+	assert.EqualValues(t, 8100, used, "an answer reports its own size again")
 }

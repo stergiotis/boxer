@@ -87,6 +87,12 @@ func (inst *App) syncLevels() {
 func stepEvent(s *turnStep, conversation string) (ev attention.Event) {
 	ev.Conversation = conversation
 	switch {
+	case s.kind == stepCompact && (s.failed || s.refused):
+		// A compaction not made is a note to the person: the request went
+		// out over the trigger (ADR-0316).
+		ev.Kind = "note"
+	case s.kind == stepCompact:
+		ev.Kind = "compact"
 	case s.kind == stepModel && s.failed:
 		ev.Kind = "turn"
 	case s.kind == stepModel:

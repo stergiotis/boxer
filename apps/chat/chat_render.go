@@ -306,7 +306,8 @@ func (inst *App) renderRename() {
 }
 
 // contextFill is what the context meter and the composer's warning read:
-// the last answered call's tokens, the model's context size, the
+// the last answered call's tokens, or the re-projected size right after
+// a compaction until the next answer, the model's context size, the
 // compaction trigger, zero with no route or run (ADR-0316), and whether
 // the thrash check turned compaction off for the conversation, with why.
 // The reported prompt is the base the compaction plan anchors to, so a
@@ -320,6 +321,11 @@ func (inst *App) contextFill() (used int64, limit int64, trigger int64, over boo
 	limit = int64(inst.model.ContextTokens)
 	if inst.coord != nil {
 		trigger, off, why = inst.coord.compactState()
+		// Right after a compaction the request's re-projected size is the
+		// fill, not what the answer before the cut reported (ADR-0316).
+		if p := inst.coord.projectedSize(); p > 0 {
+			used = p
+		}
 	}
 	if trigger > 0 {
 		over = used >= trigger

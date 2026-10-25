@@ -35,8 +35,6 @@ file. Everything below is open.
 | `hostboot` provisions the id lease table once itself and once through `agentrunstore.ProvisionIn`; the first call is redundant | `public/keelson/runtime/hostboot/hostboot.go` | harmless; fold when the function is next touched |
 | Cross-cell receipts for erasure; the read event on the vault seam | ADR-0320 §SD7, ADR-0327 §SD11 | the audit event and the forwarder exist (ADR-0327 M4a); a peer to send to does not |
 | Attachments move to the vault if they ever carry more than references | ADR-0320 §SD8 | no consumer needs it |
-| A refused or failed compaction, and compaction going off, as a transcript step | `apps/chat/chat_compact.go`, a step kind in `chat_steps.go` and its renderer | the renderer is in the dock work another session holds |
-| The context meter shows the re-projected size right after a compaction instead of one answer later | `apps/chat/chat_render.go` `contextFill` | same file |
 | The record-store generator emits a qualified type for a component whose DTO lives in another package, so `trail.AuditEvent` stops being an alias (CS008) | `public/storage/recordstore/gen`, `trail/auditevent.go` | a generator change; the alias carries the reason meanwhile |
 
 ## Done 2026-10-11 and 2026-10-12 (for the record, so the list reads as a delta)

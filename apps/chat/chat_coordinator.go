@@ -192,8 +192,11 @@ type coordinator struct {
 	anchors     headstore.StoreI
 	// lastUntrusted says the running call's result was untrusted text.
 	lastUntrusted bool
-	// compacted says the run's history was compacted (chat_compact.go).
+	// compacted says the run's history was compacted (chat_compact.go);
+	// projected is the request's size as re-projected after the latest
+	// cut, shown by the meter until the next answer reports its own.
 	compacted bool
+	projected int64
 	// lastWriter is who wrote the running call's result when a model did,
 	// and lastDecided who decided the call when the person was asked
 	// (chat_endorse.go).
@@ -263,6 +266,9 @@ func (inst *coordinator) setRounds(n int) {
 func (inst *coordinator) noteAnswered(cs callStat) {
 	inst.mu.Lock()
 	inst.answered = append(inst.answered, cs)
+	// The answer reports the request's size; a re-projection after a cut
+	// stood in for it until now.
+	inst.projected = 0
 	inst.mu.Unlock()
 }
 

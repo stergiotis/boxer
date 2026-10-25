@@ -25,6 +25,9 @@ func TestStepsClassifyByTheDefaults(t *testing.T) {
 		{turnStep{kind: stepTool, done: true, effect: agentrun.EffectRun, refused: true}, attention.LevelMessage},
 		{turnStep{kind: stepTool, waitSince: time.Now(), effect: agentrun.EffectRun}, attention.LevelYourTurn},
 		{turnStep{kind: stepTool, waitSince: time.Now(), effect: agentrun.EffectConsequential}, attention.LevelCritical},
+		{turnStep{kind: stepCompact, done: true, name: "elided"}, attention.LevelData},
+		{turnStep{kind: stepCompact, done: true, name: "refused", refused: true}, attention.LevelMessage},
+		{turnStep{kind: stepCompact, done: true, name: "failed", failed: true}, attention.LevelMessage},
 	}
 	for i, c := range cases {
 		assert.Equal(t, c.want, inst.stepLevel(&c.s), "case %d", i)

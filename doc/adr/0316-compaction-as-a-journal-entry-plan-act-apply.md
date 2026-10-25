@@ -273,6 +273,18 @@ over planted breaches
 Update of this date). L25 and L2's boundary rule stay Go checks in
 `projection.CheckCompaction`: both read bodies.
 
+### 2026-10-25 — §SD3: a compaction's outcome is a step of the turn, and the meter reads the cut at once
+
+A compaction made, refused or failed, and compaction going off for the
+conversation, is a step in the turn's trail beside the model and tool
+calls: the waiting bubble shows it as it happens, and the round's first
+tool entry keeps it with its model call. A made one names where it cut
+and what it brought the request from and to; a refused or failed one
+carries why, and classifies as a note (ADR-0323), since the request went
+out over the trigger. The context meter, which read the last answer's
+reported size one answer too long, reads the request as re-projected
+after a cut until the next answer reports its own.
+
 ## References
 
 - [ADR-0265](./0265-chat-app-over-retained-model-calls.md) §SD5 — the deferred context window.

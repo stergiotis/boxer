@@ -50,7 +50,9 @@ const (
 // checked for thrash again with the head as projected; compaction is off
 // for the conversation when even the fitted constants leave the head no
 // room, and the meter says so (compactState).
-func (inst *coordinator) compactConstants(headTokens int64) (c projection.Constants) {
+// It also says whether the check turned compaction off just now, the one
+// time the turn tells it as a step.
+func (inst *coordinator) compactConstants(headTokens int64) (c projection.Constants, turnedOff bool, why string) {
 	inst.mu.Lock()
 	p, size := inst.profile, inst.route.context
 	inst.mu.Unlock()
@@ -62,15 +64,40 @@ func (inst *coordinator) compactConstants(headTokens int64) (c projection.Consta
 	if int64(size) < p.CompactContextFloor {
 		c = c.Fit(c.TriggerTokens)
 		if err := c.Validate(headTokens); err != nil {
-			why := "the head alone, " + strconv.FormatInt(headTokens, 10) + " tokens of system prompt and open windows, leaves no room to compact under a " + strconv.FormatInt(int64(size), 10) + "-token context"
+			why = "the head alone, " + strconv.FormatInt(headTokens, 10) + " tokens of system prompt and open windows, leaves no room to compact under a " + strconv.FormatInt(int64(size), 10) + "-token context"
 			if _, logged := compactOff.LoadOrStore(inst.conversation, why); !logged {
+				turnedOff = true
 				log.Warn().Err(err).Str("conversation", inst.conversation).Int32("context", size).Int64("head", headTokens).Int64("floor", p.CompactContextFloor).Msg("chat: the route's context is below the profile's floor and the fitted constants would thrash under it; compaction is off for this conversation")
 			}
-			return projection.Constants{}
+			return projection.Constants{}, turnedOff, why
 		}
 	}
 	compactOff.Delete(inst.conversation)
 	return
+}
+
+// compactStep records a compaction's outcome as a step of the turn: what
+// it did or why not, for the waiting bubble and the landed turn's details.
+func (inst *coordinator) compactStep(round int, name string, why string, refused bool, failed bool) {
+	i := inst.steps.begin(turnStep{kind: stepCompact, round: round, name: name, result: why, refused: refused, failed: failed})
+	inst.steps.finish(i, func(*turnStep) {})
+}
+
+// setProjected is the request's size as re-projected after a compaction,
+// what the context meter shows until the next answer reports its own;
+// zero clears it.
+func (inst *coordinator) setProjected(tokens int64) {
+	inst.mu.Lock()
+	inst.projected = tokens
+	inst.mu.Unlock()
+}
+
+// projectedSize is the re-projected size after a compaction, zero once an
+// answer has reported since.
+func (inst *coordinator) projectedSize() (tokens int64) {
+	inst.mu.Lock()
+	defer inst.mu.Unlock()
+	return inst.projected
 }
 
 // compactOff holds the conversations whose last request found compaction
@@ -121,7 +148,10 @@ func configureCompaction(s *requestState) {
 	if s.err != nil {
 		return
 	}
-	c := s.coord.compactConstants(headTokens(s.batch))
+	c, turnedOff, offWhy := s.coord.compactConstants(headTokens(s.batch))
+	if turnedOff {
+		s.coord.compactStep(s.round, "off for this conversation", offWhy, false, true)
+	}
 	if c.TriggerTokens <= 0 {
 		return
 	}
@@ -136,8 +166,10 @@ func configureCompaction(s *requestState) {
 		// trigger: the request goes out as it is, and the journal says so
 		// once a turn.
 		if !compactNoted(entries, s.req.Turn, compactNoteRefused) {
+			why := "the request is " + strconv.FormatInt(plan.Estimated, 10) + " tokens, over the trigger of " + strconv.FormatInt(c.TriggerTokens, 10) + ", and no cut outside the kept turns brings it under"
 			log.Warn().Str("conversation", s.coord.conversation).Int64("estimated", plan.Estimated).Int64("trigger", c.TriggerTokens).Msg("chat: the request is over the trigger and no cut outside the kept turns fits")
-			s.err = s.coord.noteCompaction(s.jctx, s.w, s.req.Turn, compactNoteRefused, "the request is "+strconv.FormatInt(plan.Estimated, 10)+" tokens, over the trigger of "+strconv.FormatInt(c.TriggerTokens, 10)+", and no cut outside the kept turns brings it under")
+			s.coord.compactStep(s.round, "refused", why, true, false)
+			s.err = s.coord.noteCompaction(s.jctx, s.w, s.req.Turn, compactNoteRefused, why)
 		}
 		return
 	case projection.VerdictSummarise:
@@ -160,6 +192,9 @@ func configureCompaction(s *requestState) {
 	}
 	s.req.Messages, s.req.Tools = s.msgs, tools
 	s.req.Tier = uint8(s.coord.requestLabel(s.batch).Tier)
+	// The meter shows the request as it goes out now, not the size the
+	// last answer reported before the cut.
+	s.coord.setProjected(projection.Tokens(s.batch))
 }
 
 // The forms of the journal's records of a compaction not made.
@@ -222,6 +257,7 @@ func (inst *coordinator) compact(s *requestState, plan projection.Plan, c projec
 	entry := agentrun.Entry{Kind: agentrun.KindCompact, Run: w.Run().Id, Target: plan.Cut, From: plan.From, Turn: req.Turn, Form: projection.FormElide, Body: plan.Elided, Label: plan.Label}
 	if plan.Verdict == projection.VerdictSummarise {
 		if cli == nil {
+			inst.compactStep(s.round, "failed", "no model to summarise with", false, true)
 			return inst.noteCompaction(jctx, w, req.Turn, compactNoteFailed, "no model to summarise with")
 		}
 		key := "compact#" + strconv.FormatUint(uint64(plan.Cut), 10)
@@ -236,16 +272,24 @@ func (inst *coordinator) compact(s *requestState, plan projection.Plan, c projec
 			agentrun.Entry{Kind: agentrun.KindRequest, Key: key, Request: request, Turn: req.Turn, Label: rl}); err != nil {
 			return
 		}
+		step := inst.steps.begin(turnStep{kind: stepCompact, round: s.round, name: "summarising"})
 		res, cerr := cli.Complete(ctx, sreq)
 		outcome := agentrun.Entry{Kind: agentrun.KindOutcome, Key: key, Name: res.CallId, Turn: req.Turn, Label: inst.replyLabel(rl), WriterRun: w.Run().Id, WriterTurn: req.Turn}
 		if cerr != nil {
 			outcome.Body = "error: " + cerr.Error()
 			log.Warn().Err(cerr).Str("conversation", inst.conversation).Msg("chat: the summariser failed; the request goes out over the trigger this turn")
+			inst.steps.finish(step, func(st *turnStep) {
+				st.name, st.result, st.failed = "failed", "the summariser failed: "+cerr.Error()+"; the request stays over the trigger", true
+			})
 			if _, err = inst.append(jctx, w, outcome); err != nil {
 				return
 			}
 			return inst.noteCompaction(jctx, w, req.Turn, compactNoteFailed, "the summariser failed: "+cerr.Error()+"; the request stays over the trigger")
 		}
+		inst.steps.finish(step, func(st *turnStep) {
+			st.name, st.inTokens, st.outTokens = "summarised", res.InputTokens, res.OutputTokens
+			st.result = compactWhat(plan)
+		})
 		outcome.Reply = replyMeta(res.CallId, res.FinishReason, res.InputTokens, res.OutputTokens)
 		entry.Form, entry.Key = projection.FormSummary, res.CallId
 		entry.Body = res.Content + projection.PersonVerbatim(plan.Person, c.PinBytes)
@@ -257,6 +301,9 @@ func (inst *coordinator) compact(s *requestState, plan projection.Plan, c projec
 	}
 	if _, err = inst.append(jctx, w, entry); err != nil {
 		return
+	}
+	if plan.Verdict != projection.VerdictSummarise {
+		inst.compactStep(s.round, "elided", compactWhat(plan), false, false)
 	}
 	inst.mu.Lock()
 	inst.compacted = true
@@ -318,4 +365,11 @@ func cutRunes(s string, n int) string {
 		n--
 	}
 	return s[:n]
+}
+
+// compactWhat is a made compaction's line: where it cut and what it
+// brought the request from and to, as the plan estimated.
+func compactWhat(plan projection.Plan) string {
+	return "cut at ordinal " + strconv.FormatUint(uint64(plan.Cut), 10) + ", from " + strconv.FormatUint(uint64(plan.From), 10) +
+		": about " + strconv.FormatInt(plan.Estimated, 10) + " tokens to about " + strconv.FormatInt(plan.After, 10)
 }

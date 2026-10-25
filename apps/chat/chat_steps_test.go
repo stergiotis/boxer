@@ -62,6 +62,25 @@ func TestTheStepsRecordEveryStep(t *testing.T) {
 	}
 }
 
+// A compaction before a round's first tool call travels with it, as the
+// model call does; one with no tool call after it stays in the running
+// steps alone.
+func TestStepsOfToolsCarriesACompactionWithTheNextTool(t *testing.T) {
+	steps := []turnStep{{kind: stepCompact, name: "elided"}, {kind: stepModel, round: 0}, {kind: stepTool, name: "a"}, {kind: stepTool, name: "b"}}
+	got := stepsOfTools(steps)
+	require.Len(t, got, 2)
+	assert.Equal(t, []stepKindE{stepCompact, stepModel, stepTool}, kindsOf(got[0]))
+	assert.Equal(t, []stepKindE{stepTool}, kindsOf(got[1]))
+	assert.Contains(t, stepLine(&steps[0]), "compaction · elided")
+}
+
+func kindsOf(steps []turnStep) (kinds []stepKindE) {
+	for _, s := range steps {
+		kinds = append(kinds, s.kind)
+	}
+	return
+}
+
 func TestStepsOfToolsPairsARoundsFirstToolWithItsModelCall(t *testing.T) {
 	steps := []turnStep{{kind: stepModel, round: 0}, {kind: stepTool, name: "a"}, {kind: stepTool, name: "b"}, {kind: stepModel, round: 1}}
 	got := stepsOfTools(steps)

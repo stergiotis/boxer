@@ -200,6 +200,11 @@ func stepLine(s *turnStep) (line string) {
 		took = time.Since(s.started)
 	}
 	switch s.kind {
+	case stepCompact:
+		line = icons.PhScissors + " compaction · " + s.name
+		if !s.done {
+			line += " · " + duration(took)
+		}
 	case stepModel:
 		line = icons.PhRobot + " model, round " + strconv.Itoa(s.round+1) + " · " + duration(took)
 		switch {
@@ -247,7 +252,11 @@ func (inst *App) renderStepDetail(s *turnStep) {
 	inst.stepText("content", "wrote", s.content)
 	inst.stepText("reasoning", "reasoned", s.reasoning)
 	inst.stepText("args", "arguments", s.args)
-	inst.stepText("result", "came back", s.result)
+	if s.kind == stepCompact {
+		inst.stepText("result", "why", s.result)
+	} else {
+		inst.stepText("result", "came back", s.result)
+	}
 	if s.hasDetail() && c.Button(inst.ids.PrepareStr("copy-step"), atomsCopyStep).Small().SendResp().HasPrimaryClicked() {
 		inst.copyText("the step", stepCopy(s))
 	}

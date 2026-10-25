@@ -403,7 +403,7 @@ func (h *preserveHarness) checkL4() {
 	require.NoError(h.t, err)
 	require.Empty(h.t, headstore.VerifyHeads(w.Run().Digest, entries, anchored), "L32: the heads verify against the store")
 	require.Empty(h.t, projection.CheckCompaction(entries), "L22, L23, L25")
-	if c := h.coord.compactConstants(headTokens(projection.Fold(entries, sectionOrder()))); c.TriggerTokens > 0 {
+	if c := constantsOf(h.coord, headTokens(projection.Fold(entries, sectionOrder()))); c.TriggerTokens > 0 {
 		require.Empty(h.t, projection.CheckBound(entries, sectionOrder(), c, lastReported), "L24")
 	}
 	require.Empty(h.t, checkEndorsed(entries), "L15")

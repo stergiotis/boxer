@@ -21,6 +21,10 @@ type stepKindE uint8
 const (
 	stepModel stepKindE = iota
 	stepTool
+	// stepCompact is a compaction (ADR-0316): made, refused, failed, or
+	// compaction going off for the conversation. Its name is the outcome,
+	// its result why or what it cut.
+	stepCompact
 )
 
 // Bounds on what a step keeps of the text it shows: a result or a
@@ -203,23 +207,19 @@ func indentArgs(raw string) string {
 }
 
 // stepsOfTools pairs each tool step of a landed turn with the model step
-// that asked for it, the latter only on the round's first tool step: the
-// details a tool entry keeps. The tool steps are in the order of the
-// turn's activity lines.
+// that asked for it and the compaction before it, each only on the
+// round's first tool step: the details a tool entry keeps. The tool steps
+// are in the order of the turn's activity lines.
 func stepsOfTools(steps []turnStep) (out [][]turnStep) {
-	var model *turnStep
+	var before []turnStep
 	for i := range steps {
 		s := &steps[i]
-		if s.kind == stepModel {
-			model = s
+		if s.kind != stepTool {
+			before = append(before, *s)
 			continue
 		}
-		var own []turnStep
-		if model != nil {
-			own = append(own, *model)
-			model = nil
-		}
-		out = append(out, append(own, *s))
+		out = append(out, append(before, *s))
+		before = nil
 	}
 	return
 }
