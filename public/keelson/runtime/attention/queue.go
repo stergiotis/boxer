@@ -92,7 +92,6 @@ type Queue struct {
 	state    map[string]*itemState
 	escalate time.Duration
 	onAct    func(ActE, Item, time.Time)
-	scratch  []Entry
 	// presence is the person's status (ADR-0328), nil for Here always.
 	presence *Presence
 }

@@ -31,15 +31,6 @@ func splitInRunes(str string) (r []string) {
 	return
 }
 
-func ngram(str string, n int) (r []string) {
-	runes := splitInRunes(str)
-	r = make([]string, 0, 32)
-	for c := range slices.Chunk(runes, n) {
-		r = append(r, strings.Join(c, ""))
-	}
-	return
-}
-
 func ngramWindowed(str string, n int) (r []string) {
 	runes := splitInRunes(str)
 	r = []string{}

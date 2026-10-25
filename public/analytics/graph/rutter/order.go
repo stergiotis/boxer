@@ -149,7 +149,6 @@ type dissector struct {
 	proj  []float64
 	order []int32
 	sep   []int32
-	comp  []int32
 	stack []int32
 }
 

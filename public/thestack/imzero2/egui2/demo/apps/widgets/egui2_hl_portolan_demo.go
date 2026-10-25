@@ -40,7 +40,6 @@ const (
 // handle serves every demo window, and cell math is window-independent.
 var (
 	h3InitOnce sync.Once
-	h3Runtime  *h3.Runtime
 	h3Handle   *h3.Handle
 	h3InitErr  error
 )
@@ -60,7 +59,6 @@ func ensureH3() error {
 			log.Error().Err(err).Msg("h3 handle acquire failed")
 			return
 		}
-		h3Runtime = rt
 		h3Handle = handle
 		log.Info().Msg("h3 runtime ready")
 	})
