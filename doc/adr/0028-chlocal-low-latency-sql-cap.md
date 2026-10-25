@@ -569,6 +569,33 @@ worker. Two observable differences: the pool's log lines lose their
 rather than handed out — a ClickHouse worker reports that only once its
 caller waits on it, so in practice nothing changes for this pool.
 
+### 2026-10-24 — re-measured on 26.9; O2 reconsidered in ADR-0333
+
+The M0 entry's harness, `experiments/chlocal-preload/`, was never committed,
+so nothing re-checked the warm-pool premise after a version bump. The M0 arms
+now run as `BenchmarkM0_*`, and the decision gate as
+`TestM0_WarmWorkerPreloads`, in the integration lane of
+[`github.com/stergiotis/boxer/public/keelson/data/chlocalpool`](../../public/keelson/data/chlocalpool).
+
+On 26.9.13.15 (2026-10-24, 32 cores, load average ~2.5, `-benchtime 30x
+-count 2`), a warm worker answered `SELECT 1` in 13.4–14.1 ms. The first
+result byte arrived at 3.4–3.6 ms; the rest is process exit. The pool still
+has to wait for the exit. A statement that fails mid-stream writes a
+well-formed ArrowStream, end-of-stream marker included
+(`TestArrow_MidStreamErrorReadsAsCompleteStream`), so the exit status is the
+only failure signal. It carries the ClickHouse error code modulo 256.
+
+The 1 GiB worker cap still fails fast. The spill-to-disk defaults ClickHouse
+added for joins and `DISTINCT` between 26.4 and 26.9 measure against server
+or user limits, not the query-level `--max_memory_usage` a worker starts with
+(`TestWorker_MemoryCapFailsFastInsteadOfSpilling`).
+
+O2 was re-tested against `SYSTEM START LISTEN` (26.6) and proposed as a
+second shape in
+[ADR-0333](./0333-listener-pools-a-long-lived-gated-clickhouse-local-behind-ch-local-exec.md)
+(withdrawn). The proposal was withdrawn: the gain had no consumer that needed
+it, at the cost of a second worker shape. One-shot stays the only shape.
+
 ## References
 
 - [ADR-0026 — App runtime and capability subjects](./0026-app-runtime-and-capability-subjects.md) — parent framework; this ADR extends §SD3 (subject taxonomy) and §SD10 (capslock).
