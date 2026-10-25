@@ -2,6 +2,7 @@ package mdedit
 
 import (
 	"errors"
+	"github.com/stergiotis/boxer/public/semistructured/markdown/mdline"
 	"strconv"
 	"strings"
 	"testing"
@@ -44,8 +45,8 @@ func TestCharToByte(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := charToByte(tc.src, tc.charOff); got != tc.want {
-				t.Errorf("charToByte(%q, %d): got %d want %d", tc.src, tc.charOff, got, tc.want)
+			if got := mdline.CharToByte(tc.src, tc.charOff); got != tc.want {
+				t.Errorf("mdline.CharToByte(%q, %d): got %d want %d", tc.src, tc.charOff, got, tc.want)
 			}
 		})
 	}
@@ -96,8 +97,8 @@ func TestByteToChar_RoundTripsWithCharToByte(t *testing.T) {
 		"",
 	} {
 		for charOff := 0; charOff <= len([]rune(src)); charOff++ {
-			b := charToByte(src, charOff)
-			if got := byteToChar(src, b); got != charOff {
+			b := mdline.CharToByte(src, charOff)
+			if got := mdline.ByteToChar(src, b); got != charOff {
 				t.Fatalf("%q char %d -> byte %d -> char %d", src, charOff, b, got)
 			}
 		}
@@ -106,13 +107,13 @@ func TestByteToChar_RoundTripsWithCharToByte(t *testing.T) {
 
 func TestByteToChar_Clamps(t *testing.T) {
 	const src = "héllo" // 5 runes, 6 bytes
-	assert.Equal(t, 0, byteToChar(src, -3))
-	assert.Equal(t, 0, byteToChar(src, 0))
-	assert.Equal(t, 5, byteToChar(src, 999))
+	assert.Equal(t, 0, mdline.ByteToChar(src, -3))
+	assert.Equal(t, 0, mdline.ByteToChar(src, 0))
+	assert.Equal(t, 5, mdline.ByteToChar(src, 999))
 	// Byte 2 is the second byte of é, which belongs to char 1 — an interior
 	// byte must not report the NEXT char, or a caret set from it lands past
 	// the character the offset pointed into.
-	assert.Equal(t, 1, byteToChar(src, 2))
+	assert.Equal(t, 1, mdline.ByteToChar(src, 2))
 }
 
 // ---------------------------------------------------------------------------
@@ -568,10 +569,12 @@ func TestFormatSnippet_LinkKeepsTheLabelAndLeavesTheUrl(t *testing.T) {
 // appearing here means that decision was undone without being revisited.
 func TestFormatActions_AreInlineOnly(t *testing.T) {
 	for _, a := range formatActions {
-		assert.NotEmpty(t, a.open, "action %q has no opening marker", a.key)
-		assert.NotEmpty(t, a.placeholder, "action %q has no placeholder", a.key)
-		assert.NotContains(t, a.open, "\n", "action %q spans lines", a.key)
-		assert.NotContains(t, a.close, "\n", "action %q spans lines", a.key)
+		w, ok := mdline.Wraps[a.key]
+		assert.True(t, ok, "action %q has no wrap", a.key)
+		assert.NotEmpty(t, w.Open, "action %q has no opening marker", a.key)
+		assert.NotEmpty(t, w.Placeholder, "action %q has no placeholder", a.key)
+		assert.NotContains(t, w.Open, "\n", "action %q spans lines", a.key)
+		assert.NotContains(t, w.Close, "\n", "action %q spans lines", a.key)
 	}
 }
 

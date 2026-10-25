@@ -1,6 +1,7 @@
 package mdedit
 
 import (
+	"github.com/stergiotis/boxer/public/semistructured/markdown/mdline"
 	"strings"
 
 	"github.com/stergiotis/boxer/public/thestack/fffi2/typed"
@@ -29,50 +30,30 @@ import (
 // history — a worse trade than typing `## ` by hand. They wait for a
 // line-aware seam.
 
-// formatAction is one button on the bar.
+// formatAction is one button on the bar: its id-stack key, which is also
+// its name in [mdline.Wraps], the label it shows and the tip at the widget.
 type formatAction struct {
-	// key is the id-stack label — stable across relabelling.
-	key string
-	// label is what the button shows.
+	key   string
 	label string
-	// open and close bracket the selection.
-	open  string
-	close string
-	// placeholder stands in when there is no selection, so the button always
-	// does something visible and leaves a word to overwrite.
-	placeholder string
-	// tip explains the action at the widget.
-	tip string
+	tip   string
 }
 
 // formatActions is the bar, in the order it renders.
 var formatActions = []formatAction{
-	{key: "bold", label: "B", open: "**", close: "**", placeholder: "bold", tip: "Bold — wraps the selection in ** **, or inserts a placeholder."},
-	{key: "italic", label: "I", open: "*", close: "*", placeholder: "italic", tip: "Italic — wraps the selection in * *, or inserts a placeholder."},
-	{key: "code", label: "`", open: "`", close: "`", placeholder: "code", tip: "Inline code — wraps the selection in backticks."},
-	{key: "strike", label: "S", open: "~~", close: "~~", placeholder: "struck", tip: "Strikethrough — wraps the selection in ~~ ~~."},
-	{key: "mark", label: "H", open: "==", close: "==", placeholder: "marked", tip: "Highlight — wraps the selection in == ==, the Obsidian highlight."},
-	{key: "link", label: "link", open: "[", close: "](url)", placeholder: "label", tip: "Link — wraps the selection as a link label and leaves `url` to fill in."},
+	{key: "bold", label: "B", tip: "Bold — wraps the selection in ** **, or inserts a placeholder."},
+	{key: "italic", label: "I", tip: "Italic — wraps the selection in * *, or inserts a placeholder."},
+	{key: "code", label: "`", tip: "Inline code — wraps the selection in backticks."},
+	{key: "strike", label: "S", tip: "Strikethrough — wraps the selection in ~~ ~~."},
+	{key: "mark", label: "H", tip: "Highlight — wraps the selection in == ==, the Obsidian highlight."},
+	{key: "link", label: "link", tip: "Link — wraps the selection as a link label and leaves `url` to fill in."},
 }
 
-// formatSnippet computes the replacement text for one action against a
-// selection given as CHAR offsets, the unit the caret report carries.
-//
-// A collapsed caret (start == end) has no selection, so the placeholder is
-// wrapped instead: the button always produces something, and what it produces
-// is a word the reader can immediately type over.
+// formatSnippet is the replacement text for one action against a selection
+// given as CHAR offsets, the unit the caret report carries: the selection
+// wrapped, or the placeholder when the caret is collapsed — the button
+// always produces a word to type over.
 func formatSnippet(src string, act formatAction, selStart, selEnd int) (snippet string) {
-	inner := act.placeholder
-	if selStart != selEnd {
-		lo, hi := selStart, selEnd
-		if lo > hi {
-			lo, hi = hi, lo
-		}
-		if sel := src[charToByte(src, lo):charToByte(src, hi)]; sel != "" {
-			inner = sel
-		}
-	}
-	return act.open + inner + act.close
+	return mdline.WrapSnippet(src, mdline.Wraps[act.key], selStart, selEnd)
 }
 
 // renderFormatBar draws the formatting buttons and returns the snippet a click

@@ -11,7 +11,10 @@
 // by one unit — a tab, the unit Obsidian's default writes.
 package mdline
 
-import "strings"
+import (
+	"strconv"
+	"strings"
+)
 
 // IndentUnit is what Tab adds in front of a list item. The parser reads a
 // tab as four columns, more than the two a `- ` marker needs and the three a
@@ -98,7 +101,7 @@ func (p Prefix) Continuation() string {
 	head := p.Text[:len(p.Text)-len(p.List)-len(p.Task)]
 	list := p.List
 	if p.Ordered {
-		list = itoa(p.Number+1) + p.List[len(p.List)-2:]
+		list = strconv.Itoa(p.Number+1) + p.List[len(p.List)-2:]
 	}
 	task := ""
 	if p.Task != "" {
@@ -201,24 +204,73 @@ func clamp(v, n int) int {
 	return v
 }
 
-func itoa(n int) string {
-	if n == 0 {
-		return "0"
+// CharToByte converts a char offset into s — the unit the caret channel
+// speaks — to a byte offset, clamped to [0, len(s)].
+func CharToByte(s string, charOff int) int {
+	if charOff <= 0 {
+		return 0
 	}
-	neg := n < 0
-	if neg {
-		n = -n
+	n := 0
+	for i := range s {
+		if n == charOff {
+			return i
+		}
+		n++
 	}
-	var b [20]byte
-	i := len(b)
-	for n > 0 {
-		i--
-		b[i] = byte('0' + n%10)
-		n /= 10
+	return len(s)
+}
+
+// ByteToChar converts a byte offset into s to a char offset, clamped. An
+// offset inside a rune belongs to that rune: a caret cannot sit mid-
+// character, and rounding up would put it one past where the byte pointed.
+func ByteToChar(s string, byteOff int) int {
+	if byteOff <= 0 {
+		return 0
 	}
-	if neg {
-		i--
-		b[i] = '-'
+	n := 0
+	for i := range s {
+		if i == byteOff {
+			return n
+		}
+		if i > byteOff {
+			return n - 1
+		}
+		n++
 	}
-	return string(b[i:])
+	return n
+}
+
+// Wrap is one inline formatting: what goes before and after the selection,
+// and what stands in for it when nothing is selected, so the gesture always
+// leaves a word to type over.
+type Wrap struct {
+	Open, Close, Placeholder string
+}
+
+// Wraps are the inline formattings by name — the formatting bar's buttons
+// and the editors' Ctrl chords, from one table so the two cannot disagree.
+var Wraps = map[string]Wrap{
+	"bold":   {"**", "**", "bold"},
+	"italic": {"*", "*", "italic"},
+	"code":   {"`", "`", "code"},
+	"strike": {"~~", "~~", "struck"},
+	"mark":   {"==", "==", "marked"},
+	"link":   {"[", "](url)", "label"},
+}
+
+// WrapSnippet is the text that replaces the selection [selStart, selEnd) of
+// src, given as char offsets in either order: the selection wrapped, or the
+// placeholder wrapped when the selection is empty.
+func WrapSnippet(src string, w Wrap, selStart, selEnd int) string {
+	inner := w.Placeholder
+	if selStart != selEnd {
+		lo, hi := selStart, selEnd
+		if lo > hi {
+			lo, hi = hi, lo
+		}
+		if sel := src[CharToByte(src, lo):CharToByte(src, hi)]; sel != "" {
+			inner = sel
+		}
+	}
+	return w.Open + inner + w.Close
 }

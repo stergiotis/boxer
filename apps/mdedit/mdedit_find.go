@@ -38,6 +38,7 @@ package mdedit
 // match is in, which is somewhere the reader can see.
 
 import (
+	"github.com/stergiotis/boxer/public/semistructured/markdown/mdline"
 	"strings"
 	"unicode"
 	"unicode/utf8"
@@ -309,7 +310,7 @@ func (inst *App) ensureMatches() {
 		anchor = m.Start
 	default:
 		caret, _ := c.UnpackCursorRange(inst.cursor)
-		anchor = charToByte(inst.src, caret)
+		anchor = mdline.CharToByte(inst.src, caret)
 	}
 	f.resumeAtOk = false
 

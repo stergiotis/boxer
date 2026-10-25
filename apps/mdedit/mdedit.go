@@ -26,6 +26,7 @@
 package mdedit
 
 import (
+	"github.com/stergiotis/boxer/public/semistructured/markdown/mdline"
 	"strings"
 	"sync"
 	"time"
@@ -1096,7 +1097,7 @@ func (inst *App) renderSource() {
 		if inst.pendingCaretOk {
 			r := inst.pendingCaret
 			b = b.SetCursor(c.PackCursorRange(
-				byteToChar(inst.src, r.Start), byteToChar(inst.src, r.Stop)), r.Focus)
+				mdline.ByteToChar(inst.src, r.Start), mdline.ByteToChar(inst.src, r.Stop)), r.Focus)
 			inst.pendingCaretOk = false
 		}
 		_ = b.SendRespValCursor(&inst.src, &inst.cursor)

@@ -53,7 +53,7 @@ func (inst *App) applyEditorKeys() {
 		return
 	}
 	caret, _ := c.UnpackCursorRange(inst.cursor)
-	caretByte := charToByte(inst.src, caret)
+	caretByte := mdline.CharToByte(inst.src, caret)
 	for _, k := range keys {
 		switch {
 		case k.Code == keycodes.Enter:

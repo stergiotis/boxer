@@ -90,3 +90,35 @@ func TestLineBounds(t *testing.T) {
 		t.Fatal("bounds")
 	}
 }
+
+func TestCharByteConversions(t *testing.T) {
+	s := "aé中b"
+	cases := []struct{ ch, by int }{{0, 0}, {1, 1}, {2, 3}, {3, 6}, {4, 7}}
+	for _, tc := range cases {
+		if got := CharToByte(s, tc.ch); got != tc.by {
+			t.Errorf("CharToByte(%d) = %d want %d", tc.ch, got, tc.by)
+		}
+		if got := ByteToChar(s, tc.by); got != tc.ch {
+			t.Errorf("ByteToChar(%d) = %d want %d", tc.by, got, tc.ch)
+		}
+	}
+	if CharToByte(s, 99) != len(s) || ByteToChar(s, 99) != 4 || ByteToChar(s, -1) != 0 {
+		t.Error("clamping")
+	}
+	if ByteToChar(s, 2) != 1 || ByteToChar(s, 4) != 2 {
+		t.Error("an offset inside a rune belongs to that rune")
+	}
+}
+
+func TestWrapSnippet(t *testing.T) {
+	src := "some word here"
+	if got := WrapSnippet(src, Wraps["bold"], 5, 9); got != "**word**" {
+		t.Errorf("selection: %q", got)
+	}
+	if got := WrapSnippet(src, Wraps["bold"], 9, 5); got != "**word**" {
+		t.Errorf("reversed selection: %q", got)
+	}
+	if got := WrapSnippet(src, Wraps["link"], 3, 3); got != "[label](url)" {
+		t.Errorf("placeholder: %q", got)
+	}
+}

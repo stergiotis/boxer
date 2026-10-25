@@ -1,55 +1,11 @@
 package mdedit
 
 import (
+	"github.com/stergiotis/boxer/public/semistructured/markdown/mdline"
 	"strings"
 
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/markdown"
 )
-
-// charToByte converts a CHAR offset — the unit the editor's caret report
-// carries — into a byte offset into src, clamped to [0, len(src)].
-//
-// The conversion runs against Go's own copy of the buffer, never the live one.
-// Text and caret arrive on two databindings keyed by the same widget id and
-// carry the same one-frame lag, so they agree with each other; neither agrees
-// with what the reader has typed since (ADR-0130 §Decision 1).
-func charToByte(src string, charOff int) (byteOff int) {
-	if charOff <= 0 {
-		return 0
-	}
-	n := 0
-	for i := range src {
-		if n == charOff {
-			return i
-		}
-		n++
-	}
-	return len(src)
-}
-
-// byteToChar converts a byte offset into src to a CHAR offset, the unit the
-// caret channel speaks in both directions. Inverse of charToByte, clamped the
-// same way.
-func byteToChar(src string, byteOff int) (charOff int) {
-	if byteOff <= 0 {
-		return 0
-	}
-	n := 0
-	for i := range src {
-		if i == byteOff {
-			return n
-		}
-		if i > byteOff {
-			// byteOff fell INSIDE the previous rune. A caret cannot sit
-			// mid-character, so it belongs to that rune and not the next one
-			// — rounding up would place it one character past where the byte
-			// offset pointed.
-			return n - 1
-		}
-		n++
-	}
-	return n
-}
 
 // lineStart returns the byte offset of the first byte of the line containing
 // off.
@@ -100,7 +56,7 @@ func headingSlugAt(src string, headings []markdown.HeadingInfo, off int) (slug s
 // the preview, so the reader can never scroll it by hand. The option's own doc
 // comment names this guard, and helphost implements the same one.
 func scrollTarget(src string, headings []markdown.HeadingInfo, caretChar int, last string) (slug string, changed bool) {
-	slug = headingSlugAt(src, headings, charToByte(src, caretChar))
+	slug = headingSlugAt(src, headings, mdline.CharToByte(src, caretChar))
 	changed = slug != last
 	return
 }
