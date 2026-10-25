@@ -43,6 +43,15 @@ type fixture struct {
 	running  atomic.Int32
 	release  chan struct{}
 	blocking atomic.Bool
+	// told is what the worker reported as terminal states (SetNotices).
+	told   []string
+	toldMu sync.Mutex
+}
+
+func (f *fixture) JobEnded(_ time.Time, job watchbillstore.Job, state string, note string) {
+	f.toldMu.Lock()
+	defer f.toldMu.Unlock()
+	f.told = append(f.told, job.ID+":"+state)
 }
 
 func newFixture(t *testing.T, runId string, opts ...func(*Config)) (f *fixture) {
@@ -71,6 +80,7 @@ func newFixture(t *testing.T, runId string, opts ...func(*Config)) (f *fixture) 
 	var err error
 	f.w, err = New(cfg)
 	require.NoError(t, err)
+	f.w.SetNotices(f)
 	return
 }
 
@@ -183,6 +193,8 @@ func TestRetryPolicyAndDiscard(t *testing.T) {
 	assert.Equal(t, []string{"running", "failed", "running", "failed", "running", "discarded"}, states(evs))
 	assert.Contains(t, string(evs[1].Event.Error), "boom")
 	assert.Equal(t, uint32(1), evs[1].Event.Attempt)
+	// ADR-0323 §SD7: each terminal state is reported as it is settled.
+	assert.Equal(t, []string{id + ":failed", id + ":failed", id + ":discarded"}, f.told)
 }
 
 // A cancel requested on a running job is honoured within a poll: the
@@ -252,6 +264,8 @@ func TestSweepAbandonsDeadRuns(t *testing.T) {
 	assert.Equal(t, watchbillstore.StateSucceeded, j.State)
 	assert.EqualValues(t, 2, j.Attempt)
 	assert.Equal(t, []string{"abandoned", "queued", "running", "succeeded"}, states(f.store.Events(dead)))
+	// ADR-0323 §SD7: an abandonment is reported, a success is not.
+	assert.ElementsMatch(t, []string{dead + ":abandoned", deadLast + ":abandoned"}, f.told)
 }
 
 // Finished rows older than Keep are deleted at the sweep; their events stay.

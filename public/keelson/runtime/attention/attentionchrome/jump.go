@@ -8,7 +8,8 @@ import (
 // after irssi's Alt-A): the most pressing thing first, whatever came first.
 // The head of the queue — highest level, then oldest — opens its card, or,
 // when it is open, comes to the front; with nothing waiting, the newest
-// highlight raises the window that reported it and goes. It reports whether
+// highlight raises the window that reported it, or the watchbill window for
+// a job, and goes. It reports whether
 // there was anywhere to go. Call it on the render goroutine.
 func (inst *Chrome) Jump() (went bool) {
 	now := time.Now()
@@ -20,11 +21,10 @@ func (inst *Chrome) Jump() (went bool) {
 		return true
 	}
 	for _, n := range inst.notices {
-		if inst.raiseW == nil || n.Instance == 0 {
+		if !inst.canOpen(n) {
 			continue
 		}
-		inst.raiseW(n.Instance)
-		inst.svc.Notices.Seen(n.Conversation)
+		inst.openNotice(n)
 		inst.read = time.Time{}
 		return true
 	}

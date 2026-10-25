@@ -12,6 +12,7 @@ import (
 
 	"github.com/rs/zerolog"
 
+	watchbilllaunch "github.com/stergiotis/boxer/apps/watchbill/launchcfg"
 	"github.com/stergiotis/boxer/public/identity/identgen/leased/rowalloc"
 	"github.com/stergiotis/boxer/public/keelson/data/chclient"
 	"github.com/stergiotis/boxer/public/keelson/data/chlocalbroker"
@@ -967,6 +968,11 @@ func (rt *Runtime) bootAgent() {
 	// The person's acknowledgements, shelves and waiting-scale changes are
 	// on the trail (ADR-0323 §SD5, ADR-0324 §SD4).
 	attention.AttachTrail(cfg.Attention, rt.Trail, logger)
+	// The watchbill worker reports a job's terminal state itself (ADR-0323
+	// §SD7); the worker started before this service existed.
+	if rt.Watchbill != nil {
+		rt.Watchbill.SetNotices(jobNotices{n: cfg.Attention.Notices})
+	}
 	if qs, qerr := attention.NewBusService(rt.Bus, cfg.Attention, logger); qerr != nil {
 		logger.Warn().Err(qerr).Msg("attention: question service start failed; apps' questions stay in their windows")
 	} else {
@@ -1026,6 +1032,9 @@ func (rt *Runtime) bootAgent() {
 			},
 			Raise:  func(instance uint64) { _ = host.OpsRaise(instance) },
 			Active: host.ActiveWindow,
+			// A job's highlight points at the watchbill window (ADR-0323
+			// §SD7).
+			OpenJobs: func() { _, _, _ = host.OpenOrRaise(watchbilllaunch.AppId) },
 		})
 		rt.Attention.AddSource(svc, svc.Chrome())
 		rt.Host.SetCardsChrome(rt.Attention)
@@ -1480,4 +1489,28 @@ func (rt *Runtime) Run(cfg *application.Config) (err error) {
 		return
 	}
 	return
+}
+
+// jobNotices hands the watchbill worker's terminal states to the attention
+// service (ADR-0323 §SD6, §SD7): the state is the kind, the owning app the
+// key the table narrows by.
+type jobNotices struct{ n *attention.Notices }
+
+func (inst jobNotices) JobEnded(at time.Time, job watchbillstore.Job, state string, note string) {
+	var kind string
+	switch state {
+	case watchbillstore.StateFailed:
+		kind = attention.KindJobFailed
+	case watchbillstore.StateDiscarded:
+		kind = attention.KindJobDiscarded
+	case watchbillstore.StateAbandoned:
+		kind = attention.KindJobAbandoned
+	default:
+		return
+	}
+	text := job.Kind + ": " + state
+	if note != "" {
+		text += ", " + note
+	}
+	inst.n.NotifyJob(app.AppIdT(job.OwnerAppId), job.ID, kind, text, at)
 }

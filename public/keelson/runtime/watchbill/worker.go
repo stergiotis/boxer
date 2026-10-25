@@ -79,6 +79,9 @@ type Worker struct {
 	lastTick time.Time
 	ticks    uint64
 	unsubReq func()
+	// notices is told a job's terminal state (SetNotices); nil tells
+	// no one.
+	notices atomic.Pointer[noticesRef]
 }
 
 // run is one claimed job in flight.
@@ -368,6 +371,7 @@ func (inst *Worker) abandon(ctx context.Context, j watchbillstore.Job, now time.
 	if err = inst.event(ctx, now, job, watchbillstore.StateAbandoned, nil, "worker run "+j.WorkerRun+" showed no life"); err != nil {
 		return
 	}
+	inst.notify(now, job, watchbillstore.StateAbandoned, "worker run "+j.WorkerRun+" showed no life")
 	if job.Attempt >= job.MaxAttempts {
 		return
 	}
@@ -617,6 +621,9 @@ func (inst *Worker) settle(job watchbillstore.Job, outcome outcomeE, runErr erro
 	if err = inst.event(ctx, now, after, eventState, runErr, note); err != nil {
 		inst.log.Warn().Err(err).Str("id", job.ID).Msg("watchbill: settle event")
 	}
+	if eventState == watchbillstore.StateFailed || eventState == watchbillstore.StateDiscarded {
+		inst.notify(now, after, eventState, note)
+	}
 	// A re-queued attempt that is due already should not wait a poll:
 	// ring the worker's own bell. One with a backoff waits its runAfter,
 	// which the next poll or wake reads.
@@ -695,3 +702,35 @@ func (inst noopHandle) Report(task.ProgressReport)       {}
 func (inst noopHandle) Note(string)                      {}
 func (inst noopHandle) Done([]byte) (err error)          { return }
 func (inst noopHandle) Error(error, string) (rerr error) { return }
+
+// NoticesI is told a job's terminal state as the worker settles the row
+// (ADR-0323 §SD7): an attempt that failed and will be retried, a job
+// discarded after its last attempt, or one abandoned because its worker
+// showed no life. The host hands the attention service's notices here;
+// the worker reports, being host-side and the one that settles the row,
+// so a job enqueued by an app that is no longer open still reaches the
+// person. Succeeded and cancelled are not reported: the table of ADR-0323
+// §SD6 names no row for them.
+type NoticesI interface {
+	JobEnded(at time.Time, job watchbillstore.Job, state string, note string)
+}
+
+type noticesRef struct{ n NoticesI }
+
+// SetNotices installs the listener told of terminal states; nil removes
+// it. It may be set after Start, since the host builds the attention
+// service after the worker.
+func (inst *Worker) SetNotices(n NoticesI) {
+	if n == nil {
+		inst.notices.Store(nil)
+		return
+	}
+	inst.notices.Store(&noticesRef{n: n})
+}
+
+// notify tells the listener, if any, of a terminal state.
+func (inst *Worker) notify(at time.Time, job watchbillstore.Job, state string, note string) {
+	if ref := inst.notices.Load(); ref != nil && ref.n != nil {
+		ref.n.JobEnded(at, job, state, note)
+	}
+}

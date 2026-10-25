@@ -233,6 +233,21 @@ the queue like any item and counts against the flood limit (ADR-0324
 §SD6). An urgent conversation's items open at once also while the person is
 Busy (ADR-0328 §SD2). The chat's Urgent sits beside Watch.
 
+### 2026-10-25 — SD6 and SD7: the watchbill worker reports a job's end
+
+The Status's one exception closes. The worker tells a listener the host
+installs (`Worker.SetNotices`) of each terminal state it settles — an
+attempt that failed and will be retried, a job discarded after its last
+attempt, a job abandoned for a worker that showed no life — and the host
+hands them to the attention service as the kinds `job.failed`,
+`job.discarded` and `job.abandoned`, with SD6's defaults (data, message,
+message) and the owning app as the key's app. A notice's source is then a
+conversation or an owner and a job id, the latest per source kept; a job's
+highlight shows in the control's list with Open, which opens or raises the
+watchbill window, and goes when opened or dismissed. The person's grid
+offers the three kinds. Succeeded and cancelled are not reported, since
+SD6 names no row for them.
+
 ## References
 
 - [Juggling — one operator, many streams](../adr-background-work/juggling-many-agent-streams.md)

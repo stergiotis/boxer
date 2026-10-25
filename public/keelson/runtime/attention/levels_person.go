@@ -118,6 +118,9 @@ func GridRows() (rows []GridRow) {
 	for _, kind := range hostKinds {
 		add(Key{Kind: kind}, "")
 	}
+	for _, kind := range jobKinds {
+		add(Key{Kind: kind}, "")
+	}
 	return
 }
 

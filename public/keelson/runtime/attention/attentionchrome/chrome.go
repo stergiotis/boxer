@@ -55,11 +55,12 @@ type Chrome struct {
 	shelved []attention.Entry
 	// notices are the highlights as last read (ADR-0323 §SD4): counted
 	// beside what waits, never opened as cards.
-	notices []attention.Notice
-	read    time.Time
-	display func(app.AppIdT) string
-	raiseW  func(instance uint64)
-	activeW func() uint64
+	notices  []attention.Notice
+	read     time.Time
+	display  func(app.AppIdT) string
+	raiseW   func(instance uint64)
+	activeW  func() uint64
+	openJobs func()
 	// urgencySeen are the urgency requests already considered for opening
 	// at once.
 	urgencySeen map[string]bool
@@ -71,12 +72,15 @@ type Options struct {
 	Display func(app.AppIdT) string
 	Raise   func(instance uint64)
 	Active  func() uint64
+	// OpenJobs opens or raises the watchbill window, where a job's
+	// highlight points (ADR-0323 §SD7); nil offers no Open on one.
+	OpenJobs func()
 }
 
 // New is the chrome of svc; it draws the cards of the questions apps post
 // (ADR-0324 §SD5) itself.
 func New(svc *attention.Service, opts Options) (inst *Chrome) {
-	inst = &Chrome{svc: svc, display: opts.Display, raiseW: opts.Raise, activeW: opts.Active}
+	inst = &Chrome{svc: svc, display: opts.Display, raiseW: opts.Raise, activeW: opts.Active, openJobs: opts.OpenJobs}
 	if svc.Questions != nil {
 		inst.sources = append(inst.sources, &questionCards{q: svc.Questions, display: opts.Display, raise: opts.Raise})
 	}
@@ -276,11 +280,14 @@ func (inst *Chrome) renderList(now time.Time, ids *c.WidgetIdStack) {
 	}
 }
 
-// renderNotice draws a highlight: what happened in which conversation, with
-// Open, which raises the window that reported it, and Dismiss. Either
-// drops it.
+// renderNotice draws a highlight: what happened in which conversation, or
+// to which job, with Open, which raises the window that reported it or
+// the watchbill window for a job, and Dismiss. Either drops it.
 func (inst *Chrome) renderNotice(n attention.Notice, now time.Time, ids *c.WidgetIdStack) {
 	k := n.Conversation
+	if n.Job != "" {
+		k = "job:" + string(n.App) + "/" + n.Job
+	}
 	name := n.Title
 	if name == "" {
 		name = "conversation " + n.Conversation
@@ -302,19 +309,46 @@ func (inst *Chrome) renderNotice(n attention.Notice, now time.Time, ids *c.Widge
 		}
 	}
 	for range c.HorizontalTop().KeepIter() {
-		if inst.raiseW != nil && n.Instance != 0 {
+		if inst.canOpen(n) {
 			if c.Button(ids.PrepareStr("attention-notice-open-"+k), c.Atoms().Text("Open").Keep()).Small().SendResp().HasPrimaryClicked() {
-				inst.raiseW(n.Instance)
-				inst.svc.Notices.Seen(n.Conversation)
+				inst.openNotice(n)
 				inst.listOpen = false
 				inst.read = time.Time{}
 			}
 		}
 		if c.Button(ids.PrepareStr("attention-notice-dismiss-"+k), c.Atoms().Text("Dismiss").Keep()).Small().SendResp().HasPrimaryClicked() {
-			inst.svc.Notices.Seen(n.Conversation)
+			inst.seen(n)
 			inst.read = time.Time{}
 		}
 	}
+}
+
+// canOpen says the notice has somewhere to go: the window that reported
+// it, or the watchbill window for a job.
+func (inst *Chrome) canOpen(n attention.Notice) bool {
+	if n.Job != "" {
+		return inst.openJobs != nil
+	}
+	return inst.raiseW != nil && n.Instance != 0
+}
+
+// openNotice goes where the notice points and drops it.
+func (inst *Chrome) openNotice(n attention.Notice) {
+	if n.Job != "" {
+		inst.openJobs()
+	} else {
+		inst.raiseW(n.Instance)
+	}
+	inst.seen(n)
+}
+
+// seen drops the notice, by its source.
+func (inst *Chrome) seen(n attention.Notice) {
+	if n.Job != "" {
+		inst.svc.Notices.SeenJob(n.App, n.Job)
+		return
+	}
+	inst.svc.Notices.Seen(n.Conversation)
 }
 
 // Where the list first opens: under the menu bar's control.

@@ -69,3 +69,43 @@ func TestNoticesOverTheBus(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, got)
 }
+
+// A job's terminal state is a notice keyed by its owner and id (ADR-0323
+// §SD6, §SD7): data or message by default, a highlight once the person or
+// the owning app's key raises it; the latest per job is kept, and it goes
+// when seen.
+func TestAJobsEndIsKeptBySource(t *testing.T) {
+	levels := &Levels{}
+	n := NewNotices(levels)
+	now := time.Now()
+	assert.Equal(t, LevelData, n.NotifyJob("play", "j1", KindJobFailed, "attempt failed", now), "a retried attempt is data")
+	assert.Equal(t, LevelMessage, n.NotifyJob("play", "j1", KindJobDiscarded, "attempts exhausted", now), "a discarded job is a message")
+	assert.Equal(t, LevelMessage, n.NotifyJob("play", "j1", KindJobAbandoned, "no life", now))
+	assert.Empty(t, n.List())
+	assert.Equal(t, LevelUnspecified, n.NotifyJob("play", "", KindJobDiscarded, "", now), "a job notice names its job")
+	assert.Equal(t, LevelUnspecified, n.NotifyJob("play", "j1", KindQuestion, "", now), "a waiting kind is no notice")
+
+	require.NoError(t, levels.Set(AuthorPerson, "", "", Key{Kind: KindJobDiscarded, App: "play"}, LevelHighlight), "the owning app's key")
+	assert.Equal(t, LevelHighlight, n.NotifyJob("play", "j1", KindJobDiscarded, "attempts exhausted", now))
+	assert.Equal(t, LevelHighlight, n.NotifyJob("play", "j1", KindJobDiscarded, "discarded again", now.Add(time.Second)))
+	assert.Equal(t, LevelMessage, n.NotifyJob("chat", "j1", KindJobDiscarded, "another owner", now), "the key narrows by the owner")
+	got := n.List()
+	require.Len(t, got, 1, "one per job")
+	assert.Equal(t, "discarded again", got[0].Text)
+	assert.Equal(t, "j1", got[0].Job)
+	assert.Equal(t, "job j1", got[0].Title)
+	assert.Empty(t, got[0].Conversation)
+
+	n.Seen("")
+	assert.Len(t, n.List(), 1, "a conversation seen drops no job's notice")
+	n.SeenJob("chat", "j1")
+	assert.Len(t, n.List(), 1, "another owner's job is not this one")
+	n.SeenJob("play", "j1")
+	assert.Empty(t, n.List())
+
+	var kinds []string
+	for _, r := range GridRows() {
+		kinds = append(kinds, r.Key.Kind)
+	}
+	assert.Subset(t, kinds, []string{KindJobFailed, KindJobDiscarded, KindJobAbandoned}, "the person's grid offers the job kinds")
+}

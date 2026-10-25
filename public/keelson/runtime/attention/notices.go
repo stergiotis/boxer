@@ -15,8 +15,11 @@ import (
 // (§SD4). An app reports the event; the host classifies it with its own
 // table and keeps it only at highlight. A notice is not an item of the
 // queue: it opens no card and is counted apart from what waits. One is kept
-// per conversation, the latest; it goes when the person looks at the
-// conversation's window or dismisses it.
+// per source, the latest — a conversation, or, for a job, the owning app
+// and the job id (§SD7); it goes when the person looks at the
+// conversation's window or dismisses it. A job's notice is reported by the
+// watchbill worker in process (NotifyJob), never over the bus, since no
+// window owns it.
 
 const (
 	// SubjectNotify reports an event the app's copy of the table classed as
@@ -34,6 +37,9 @@ const MaxNotices = 32
 // Notice is a highlight kept for the person.
 type Notice struct {
 	Conversation string `json:"conversation"`
+	// Job is the job id when the source is a job rather than a
+	// conversation; App is then the app that owns the job.
+	Job string `json:"job,omitempty"`
 	// Title is the conversation's title, as the app reports it.
 	Title string `json:"title,omitempty"`
 	// Kind and Effect are the event's, as ADR-0323 §SD3 keys it.
@@ -98,12 +104,55 @@ func (inst *Notices) Notify(sender app.AppIdT, instance uint64, n Notice, now ti
 	return
 }
 
+// NotifyJob keeps a job's terminal state as owner's notice when the table
+// classes it as a highlight under owner's key (ADR-0323 §SD6, §SD7),
+// replacing the job's earlier notice; text is the worker's line for it.
+// It reports the level the table gave it.
+func (inst *Notices) NotifyJob(owner app.AppIdT, job string, kind string, text string, now time.Time) (level LevelE) {
+	if job == "" {
+		return LevelUnspecified
+	}
+	if s, known := ScaleOf(kind); !known || s != ScaleAttention {
+		return LevelUnspecified
+	}
+	level = inst.levels.Classify(Event{Kind: kind, App: owner})
+	if level != LevelHighlight {
+		return
+	}
+	n := Notice{Job: job, App: owner, Kind: kind, Title: clip("job "+job, MaxLabelRunes), Text: clip(text, MaxLabelRunes), Level: level, Created: now}
+	inst.mu.Lock()
+	inst.items = slices.DeleteFunc(inst.items, func(x Notice) bool { return x.Job == job && x.App == owner })
+	inst.items = append(inst.items, n)
+	if len(inst.items) > MaxNotices {
+		inst.items = slices.Delete(inst.items, 0, len(inst.items)-MaxNotices)
+	}
+	inst.version++
+	hook := inst.onKept
+	inst.mu.Unlock()
+	if hook != nil {
+		hook(n)
+	}
+	return
+}
+
+// SeenJob drops a job's notice: the person opened the watchbill window
+// from it, or dismissed it.
+func (inst *Notices) SeenJob(owner app.AppIdT, job string) {
+	inst.mu.Lock()
+	defer inst.mu.Unlock()
+	n := len(inst.items)
+	inst.items = slices.DeleteFunc(inst.items, func(x Notice) bool { return x.Job == job && x.App == owner && x.Job != "" })
+	if len(inst.items) != n {
+		inst.version++
+	}
+}
+
 // Seen drops the conversation's notice.
 func (inst *Notices) Seen(conversation string) {
 	inst.mu.Lock()
 	defer inst.mu.Unlock()
 	n := len(inst.items)
-	inst.items = slices.DeleteFunc(inst.items, func(x Notice) bool { return x.Conversation == conversation })
+	inst.items = slices.DeleteFunc(inst.items, func(x Notice) bool { return x.Conversation == conversation && x.Job == "" })
 	if len(inst.items) != n {
 		inst.version++
 	}

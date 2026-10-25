@@ -88,6 +88,22 @@ const (
 
 var hostKinds = []string{KindGrantRequest, KindWidening, KindConfirmation, KindModeratorQuestion, KindQuestion, KindExitApproval, KindUrgency}
 
+// A job's terminal states as kinds (ADR-0323 §SD6): keyed by the state
+// the watchbill worker settled the row to, not by a journal kind, and
+// reported by the worker itself (§SD7). Every one is on the attention
+// scale; the app that owns the job raises them through its own key.
+const (
+	// KindJobFailed is an attempt that failed and will be retried under
+	// the job's policy.
+	KindJobFailed = "job.failed"
+	// KindJobDiscarded is a job discarded after its last attempt.
+	KindJobDiscarded = "job.discarded"
+	// KindJobAbandoned is a job whose worker showed no life.
+	KindJobAbandoned = "job.abandoned"
+)
+
+var jobKinds = []string{KindJobFailed, KindJobDiscarded, KindJobAbandoned}
+
 // ScaleOf is the scale of kind, and whether kind belongs to the closed
 // vocabulary: the host's kinds and the run journal's entry kinds (ADR-0308
 // §SD2). Which scale a kind is on is code, never configuration (ADR-0323
@@ -96,6 +112,11 @@ func ScaleOf(kind string) (s ScaleE, known bool) {
 	for _, k := range hostKinds {
 		if k == kind {
 			return ScaleWaiting, true
+		}
+	}
+	for _, k := range jobKinds {
+		if k == kind {
+			return ScaleAttention, true
 		}
 	}
 	if k, ok := agentrun.ParseKind(kind); ok {
@@ -266,6 +287,10 @@ func DefaultLevel(ev Event) (l LevelE) {
 		return LevelCritical
 	case KindGrantRequest, KindWidening, KindQuestion, KindExitApproval, KindUrgency:
 		return LevelYourTurn
+	case KindJobDiscarded, KindJobAbandoned:
+		return LevelMessage
+	case KindJobFailed:
+		return LevelData
 	}
 	k, ok := agentrun.ParseKind(ev.Kind)
 	if !ok {
