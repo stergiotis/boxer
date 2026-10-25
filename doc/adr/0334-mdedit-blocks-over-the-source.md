@@ -162,9 +162,12 @@ marker).
 
 Four blocks get sub-editors instead of a text field: a **code fence** (a
 bordered monospace field for the body, a language field, Tab indents, no
-markdown behaviours inside), a **table** (a grid of cell fields, Tab and
-Enter between cells, Tab in the last cell adds a row, a button adds a
-column, no merged cells), an **image** (the picture, with alt text and the
+markdown behaviours inside), a **table** (a grid of cell fields in resizable
+columns, Tab and Enter between cells, Tab in the last cell adds a row, a
+handle before every row and above every column whose menu inserts, moves,
+deletes, aligns and sorts — the operations the productivity tools converge
+on that a GFM table can carry — and a paste of tab-separated text into a
+cell expanding into cells; no merged cells, no multi-line cells), an **image** (the picture, with alt text and the
 Obsidian `|WxH` size as fields), and a **callout** (a type menu and a fold
 toggle over the rendered callout, the body as a text field). Everything else
 focuses as text.
@@ -187,6 +190,8 @@ converged on:
 | `# `, `- `, `1. `, `> `, `[] `, a fence at line start | the line-start shortcuts, applied inside the focused block as text |
 | Ctrl+B / I / K / E | wrap the selection in `**`, `*`, a link, a code span — the formatting bar's actions, from the keyboard |
 | Ctrl+Z / Ctrl+Y | the document-level undo and redo (§SD5). Ctrl+Y rather than Ctrl+Shift+Z: a widget captures one chord modifier set (§SD7), and Ctrl+Y is the Windows and Linux convention the host runs on |
+| In a table cell: ↑/↓, ←/→ at the text's edges | the cell above or below; the previous or next cell, wrapping at a row's ends; ↑ from the header and ↓ from the last row leave the table for the neighbouring block |
+| In a table cell: Ctrl+↑/↓, Ctrl+←/→ | move the row or the column the caret is in, the header staying first. Typora's Ctrl+Enter for a row below is not taken: the window host polls the command-Enter fetcher every frame as its sign of input, and whoever polls it owns the chord for the process; a row below is the row handle's menu, or Enter in the last row |
 
 A split and a merge are inverses and land as one undo entry each. Pasting
 multi-paragraph text into a block splits it into blocks after the splice,
@@ -269,6 +274,24 @@ them.
 - **A URL pasted over a selection becoming a link.** Paste is egui's own
   text paste; nothing tells a pasted URL from typed text. Trigger: a user
   asking for it.
+- **What a GFM table cannot carry**: merged cells, multi-line cells,
+  several header rows, captions, cell colours. MultiMarkdown spells a
+  colspan as trailing pipes and markdown-it-multimd-table a rowspan as
+  `^^` and a line break as a trailing backslash; Pandoc's grid tables take
+  block content in a cell. None parses in goldmark, Obsidian or GitHub, so
+  a document using them renders broken everywhere but here. Even the
+  GFM-legal `<br>` in a cell stays out while the renderer drops raw HTML.
+  Trigger: a reader asking for one of these in a document that stays in
+  Blocks mode.
+- **Dragging a row or column handle to reorder.** The bindings carry no
+  drag source or drop zone; the handle's menu and Ctrl+arrows move. Trigger:
+  a table long enough that moving by steps is the complaint.
+- **A table's dragged column widths across sessions.** The grid's columns
+  resize and egui keeps the widths for the session; the deferred-body
+  table op has no width read-back, so nothing reaches the width store the
+  record grid uses. The rendered table does not honour the delimiter row's
+  alignment either, for want of an alignment knob on its op. Trigger: a
+  column width or an alignment that has to survive a restart.
 
 ## Surfaces — Tier 1
 
@@ -389,7 +412,13 @@ them.
   as stale; only a caret the host or a gesture queued since the report wins
   over it. And a write-back moves the binding's range along with the text,
   so plain typing never rebinds the widget.
-- **M4 — sub-editors**: code fence, table grid, image, callout. ✓ Each
+- **M4 — sub-editors**: code fence, table grid, image, callout. ✓ The
+  grid's handles, menus, keys, sort and paste expansion followed as the
+  survey of the productivity tools' tables (PowerPoint's Layout tab,
+  Google Docs, Notion, Obsidian 1.5, Typora, Advanced Tables) sorted by
+  what the GFM source can carry: the structural operations yes, widths and
+  the like as presentation the source never holds, spans and multi-line
+  cells not at all (§SD9). Each sub-editor
   parses the block into fields on open, composes the block from them after
   every write-back and splices only the bytes that differ — and nothing
   while the fields still compose to what they composed to on open, so a

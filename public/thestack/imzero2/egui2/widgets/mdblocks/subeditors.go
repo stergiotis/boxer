@@ -3,7 +3,6 @@ package mdblocks
 import (
 	"regexp"
 	"strings"
-	"unicode/utf8"
 
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	"github.com/stergiotis/boxer/public/keelson/runtime/widgethandle"
@@ -16,7 +15,8 @@ import (
 // The sub-editors (ADR-0334 §SD3): four kinds of block are not edited as
 // one text field. A fenced code block is a language field over a monospace
 // body with the fence lines kept out of reach; a table is a grid of cell
-// fields with Tab and Enter between them; an image is its picture over
+// fields with Tab and Enter between them and handles whose menus reshape
+// it (table.go, table_grid.go); an image is its picture over
 // fields for the alt text, the target and the size; a callout is a type
 // menu, a fold switch and a title over a body with the `> ` prefixes
 // stripped. Each parses the block's text into fields on open, composes the
@@ -67,15 +67,8 @@ type subState struct {
 	imgAlt, imgTarget, imgSize, imgTit string
 	imgIds                             [3]uint64
 
-	// table: rows of cells (the delimiter row is not a row here), the
-	// delimiter line's alignment tokens, and which cell has focus.
-	tblRows   [][]string
-	tblAlign  []string
-	tblLines  []string
-	tblIds    [][]uint64
-	tblFocusR int
-	tblFocusC int
-	tblFocus  bool
+	// table: the rows and what reshapes them (table.go).
+	tbl tableState
 
 	rebind bool
 }
@@ -178,26 +171,7 @@ func (s *subState) load(text string, kind subKindE, start int) {
 			s.imgTarget, s.imgSize = m[1], m[2]
 		}
 	case subTable:
-		s.tblLines = strings.Split(text, "\n")
-		s.tblAlign = splitRow(s.tblLines[1])
-		for i, l := range s.tblLines {
-			if i == 1 {
-				continue
-			}
-			s.tblRows = append(s.tblRows, splitRow(l))
-		}
-		width := len(s.tblAlign)
-		for _, r := range s.tblRows {
-			width = max(width, len(r))
-		}
-		for len(s.tblAlign) < width {
-			s.tblAlign = append(s.tblAlign, "---")
-		}
-		for i := range s.tblRows {
-			for len(s.tblRows[i]) < width {
-				s.tblRows[i] = append(s.tblRows[i], "")
-			}
-		}
+		s.tbl.load(text)
 	}
 	s.composed = s.compose()
 }
@@ -241,89 +215,9 @@ func (s *subState) compose() string {
 		}
 		return out + ")"
 	case subTable:
-		lines := make([]string, 0, len(s.tblRows)+1)
-		for i, r := range s.tblRows {
-			if i == 1 {
-				lines = append(lines, composeRow(s.tblAlign, 1, s.tblLines))
-			}
-			lines = append(lines, composeRow(r, lineIndexOfRow(i), s.tblLines))
-		}
-		if len(s.tblRows) == 1 {
-			lines = append(lines, composeRow(s.tblAlign, 1, s.tblLines))
-		}
-		return strings.Join(lines, "\n")
+		return s.tbl.compose()
 	}
 	return ""
-}
-
-// lineIndexOfRow maps a row index (delimiter row excluded) to its line.
-func lineIndexOfRow(i int) int {
-	if i == 0 {
-		return 0
-	}
-	return i + 1
-}
-
-// composeRow re-emits a row from its cells, unless the original line still
-// splits to the same cells — then it is kept verbatim, padding and all.
-func composeRow(cells []string, lineIdx int, lines []string) string {
-	if lineIdx >= 0 && lineIdx < len(lines) && equalCells(splitRow(lines[lineIdx]), cells) {
-		return lines[lineIdx]
-	}
-	esc := make([]string, len(cells))
-	for i, cell := range cells {
-		esc[i] = strings.ReplaceAll(cell, "|", `\|`)
-	}
-	return "| " + strings.Join(esc, " | ") + " |"
-}
-
-func equalCells(a, b []string) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	for i := range a {
-		if a[i] != b[i] {
-			return false
-		}
-	}
-	return true
-}
-
-// splitRow is a GFM table line's cells: the outer pipes dropped, split on
-// unescaped pipes, trimmed, escapes unescaped.
-func splitRow(line string) (cells []string) {
-	l := strings.TrimSpace(line)
-	l = strings.TrimPrefix(l, "|")
-	l = strings.TrimSuffix(l, "|")
-	var cur strings.Builder
-	for i := 0; i < len(l); i++ {
-		switch {
-		case l[i] == '\\' && i+1 < len(l) && l[i+1] == '|':
-			cur.WriteByte('|')
-			i++
-		case l[i] == '|':
-			cells = append(cells, strings.TrimSpace(cur.String()))
-			cur.Reset()
-		default:
-			cur.WriteByte(l[i])
-		}
-	}
-	cells = append(cells, strings.TrimSpace(cur.String()))
-	return
-}
-
-// addColumn and addRow grow the table.
-func (s *subState) addColumn() {
-	s.tblAlign = append(s.tblAlign, "---")
-	for i := range s.tblRows {
-		s.tblRows[i] = append(s.tblRows[i], "")
-	}
-	s.rebind = true
-}
-
-func (s *subState) addRow() {
-	s.tblRows = append(s.tblRows, make([]string, len(s.tblAlign)))
-	s.rebind = true
 }
 
 // --- the editor's hooks ---
@@ -346,9 +240,9 @@ func (e *Editor) openSub(blk block) {
 		// The block's text moved past what the fields were loaded from —
 		// the parse re-split it after a splice, or the source changed under
 		// the editor. Reload, keeping the cell that had focus.
-		focusR, focusC, focus := e.sub.tblFocusR, e.sub.tblFocusC, e.sub.tblFocus
+		focusR, focusC, focusChar, focus := e.sub.tbl.focusR, e.sub.tbl.focusC, e.sub.tbl.focusChar, e.sub.tbl.focus
 		e.sub.load(text, kind, blk.start)
-		e.sub.tblFocusR, e.sub.tblFocusC, e.sub.tblFocus = focusR, focusC, focus
+		e.sub.tbl.focusR, e.sub.tbl.focusC, e.sub.tbl.focusChar, e.sub.tbl.focus = focusR, focusC, focusChar, focus
 		return
 	}
 	e.sub.load(text, kind, blk.start)
@@ -368,13 +262,21 @@ func (e *Editor) applySubWriteBack() {
 		// never the one the caret is on now.
 		return
 	}
+	if e.sub.kind == subTable && e.sub.tbl.expandPasted() {
+		// A pasted block of cells is its own undo entry and reshaped the
+		// rows, so every cell rebinds.
+		e.hist.seal()
+		e.sub.rebind = true
+	}
 	cur := e.src[blk.start:blk.stop]
 	next := e.sub.compose()
 	if next == e.sub.composed || next == cur {
 		return
 	}
+	sealed := e.sealNext
+	e.sealNext = false
 	at, oldMid, newMid := editRegion(cur, next)
-	e.splice(blk.start+at, oldMid, newMid, blk.start, false)
+	e.splice(blk.start+at, oldMid, newMid, blk.start, sealed)
 	e.sub.loadedText = next
 	e.sub.composed = next
 }
@@ -389,7 +291,7 @@ func (s *subState) fieldIds() (ids []uint64) {
 	case subImage:
 		ids = append(ids, s.imgIds[:]...)
 	case subTable:
-		for _, row := range s.tblIds {
+		for _, row := range s.tbl.ids {
 			ids = append(ids, row...)
 		}
 	}
@@ -397,11 +299,15 @@ func (s *subState) fieldIds() (ids []uint64) {
 }
 
 // applySubKeys consumes the captures on the sub-editor's fields: Escape
-// leaves for a block selection everywhere; Tab in a code body inserts a tab;
-// Tab and Enter walk a table's cells, and past the last cell add a row.
+// leaves for a block selection everywhere; Tab in a code body inserts a
+// tab; a table's cells have the keys of table_grid.go, one gesture per
+// frame, and a menu's operation lands first.
 func (e *Editor) applySubKeys() {
 	if e.sub.kind == subNone {
 		return
+	}
+	if e.sub.kind == subTable {
+		e.applyTableOp()
 	}
 	sm := c.CurrentApplicationState.StateManager
 	for _, id := range e.sub.fieldIds() {
@@ -415,59 +321,12 @@ func (e *Editor) applySubKeys() {
 				return
 			case e.sub.kind == subCode && k.Code == keycodes.Tab && id == e.sub.codeBodyId:
 				e.sub.codeInsert = "\t"
-			case e.sub.kind == subTable && (k.Code == keycodes.Tab || k.Code == keycodes.Enter):
-				r, col, ok := e.sub.cellOf(id)
-				if !ok {
-					continue
-				}
-				e.sub.moveCell(r, col, k.Code == keycodes.Tab, k.Shift())
-				// A row added by the move is spliced now, so the parse this
-				// frame derives from already holds it.
-				e.hist.seal()
-				e.applySubWriteBack()
+			case e.sub.kind == subTable:
+				e.applyTableKey(id, k)
+				return
 			}
 		}
 	}
-}
-
-func (s *subState) cellOf(id uint64) (r, col int, ok bool) {
-	for r := range s.tblIds {
-		for col := range s.tblIds[r] {
-			if s.tblIds[r][col] == id {
-				return r, col, true
-			}
-		}
-	}
-	return 0, 0, false
-}
-
-// moveCell is Tab (next cell, Shift back) or Enter (next row, same column)
-// from a cell; past the last row either adds one.
-func (s *subState) moveCell(r, col int, tab, shift bool) {
-	cols := len(s.tblAlign)
-	switch {
-	case tab && shift:
-		col--
-		if col < 0 {
-			col = cols - 1
-			r--
-		}
-		if r < 0 {
-			return
-		}
-	case tab:
-		col++
-		if col >= cols {
-			col = 0
-			r++
-		}
-	default:
-		r++
-	}
-	if r >= len(s.tblRows) {
-		s.addRow()
-	}
-	s.tblFocusR, s.tblFocusC, s.tblFocus = r, col, true
 }
 
 var (
@@ -600,52 +459,6 @@ func (e *Editor) renderImageSub(blk block) {
 			e.sub.imgIds[1] = e.field("target", &e.sub.imgTarget, 260, "url")
 			e.sub.imgIds[2] = e.field("title", &e.sub.imgTit, 140, "title")
 			c.Label(")").Selectable(false).Send()
-		}
-	}
-}
-
-func (e *Editor) renderTableSub() {
-	s := &e.sub
-	cols := len(s.tblAlign)
-	if len(s.tblIds) != len(s.tblRows) {
-		s.tblIds = make([][]uint64, len(s.tblRows))
-	}
-	cellW := max((e.width()-float32(cols)*8)/float32(max(cols, 1)), 60)
-	for r := range s.tblRows {
-		if len(s.tblIds[r]) != cols {
-			s.tblIds[r] = make([]uint64, cols)
-		}
-		for range c.IdScope(e.ids.PrepareSeq(uint64(r))) {
-			for range c.Horizontal().KeepIter() {
-				for col := 0; col < cols; col++ {
-					te := c.TextEdit(e.ids.PrepareSeq(uint64(col)), s.tblRows[r][col], false).
-						DesiredWidth(cellW).
-						CaptureKeys(uint64(keycodes.MaskOf(keycodes.Escape, keycodes.Enter))).
-						CaptureTab()
-					if s.tblFocus && s.tblFocusR == r && s.tblFocusC == col {
-						end := utf8.RuneCountInString(s.tblRows[r][col])
-						te = te.SetCursor(c.PackCursorRange(end, end), true)
-					}
-					s.tblIds[r][col] = te.Id()
-					te.SendRespVal(&s.tblRows[r][col])
-					if s.rebind {
-						c.CurrentApplicationState.StateManager.OverrideDatabindingSPtr(&s.tblRows[r][col])
-					}
-				}
-			}
-		}
-		if r == 0 {
-			c.Separator().Send()
-		}
-	}
-	s.tblFocus = false
-	for range c.Horizontal().KeepIter() {
-		if c.Button(e.ids.PrepareStr("add-row"), c.Atoms().Text("+ row").Keep()).Small().SendResp().HasPrimaryClicked() {
-			s.addRow()
-			s.tblFocusR, s.tblFocusC, s.tblFocus = len(s.tblRows)-1, 0, true
-		}
-		if c.Button(e.ids.PrepareStr("add-col"), c.Atoms().Text("+ column").Keep()).Small().SendResp().HasPrimaryClicked() {
-			s.addColumn()
 		}
 	}
 }
