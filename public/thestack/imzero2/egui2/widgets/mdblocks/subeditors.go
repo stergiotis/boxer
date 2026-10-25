@@ -3,6 +3,7 @@ package mdblocks
 import (
 	"regexp"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	"github.com/stergiotis/boxer/public/keelson/runtime/widgethandle"
@@ -42,7 +43,11 @@ type subState struct {
 	// text they last composed and spliced. A block whose text still equals
 	// it has nothing newer than the fields; one that differs — the parse
 	// re-split it, or the source moved under the editor — reloads them.
+	// composed is what the fields composed to at that point: while they
+	// still compose to it nothing was edited, and a spelling the composer
+	// would normalise stays as written.
 	loadedText string
+	composed   string
 
 	// code: the fence lines verbatim and what sits between them.
 	codeOpenRun, codeClose string
@@ -194,6 +199,7 @@ func (s *subState) load(text string, kind subKindE, start int) {
 			}
 		}
 	}
+	s.composed = s.compose()
 }
 
 // compose is the block's text as the fields now say it.
@@ -364,12 +370,13 @@ func (e *Editor) applySubWriteBack() {
 	}
 	cur := e.src[blk.start:blk.stop]
 	next := e.sub.compose()
-	if next == cur {
+	if next == e.sub.composed || next == cur {
 		return
 	}
 	at, oldMid, newMid := editRegion(cur, next)
 	e.splice(blk.start+at, oldMid, newMid, blk.start, false)
 	e.sub.loadedText = next
+	e.sub.composed = next
 }
 
 // subFieldIds lists the sub-editor's bound fields, for reading captures.
@@ -616,7 +623,8 @@ func (e *Editor) renderTableSub() {
 						CaptureKeys(uint64(keycodes.MaskOf(keycodes.Escape, keycodes.Enter))).
 						CaptureTab()
 					if s.tblFocus && s.tblFocusR == r && s.tblFocusC == col {
-						te = te.SetCursor(c.PackCursorRange(len(s.tblRows[r][col]), len(s.tblRows[r][col])), true)
+						end := utf8.RuneCountInString(s.tblRows[r][col])
+						te = te.SetCursor(c.PackCursorRange(end, end), true)
 					}
 					s.tblIds[r][col] = te.Id()
 					te.SendRespVal(&s.tblRows[r][col])

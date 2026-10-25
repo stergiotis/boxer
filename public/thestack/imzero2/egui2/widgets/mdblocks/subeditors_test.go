@@ -152,3 +152,32 @@ func TestLeavingASubEditorForAnotherBlockSplicesNothing(t *testing.T) {
 		t.Fatalf("src %q sub %v buf %q", e.src, e.sub.kind, e.buf)
 	}
 }
+
+func TestOpeningASubEditorRewritesNothing(t *testing.T) {
+	for _, src := range []string{
+		"``` go \nx\n```",
+		"| a | b |\n| - | - |\n| 1 |",
+		">body\n>\n>[!note]",
+		"> [!note]\n>body",
+		`![a](u  "t") `,
+	} {
+		e := newTestEditor(t, src)
+		e.FocusAt(1)
+		frame(e)
+		frame(e)
+		if e.src != src || len(e.hist.undo) != 0 {
+			t.Errorf("%q: opened as %q with %d undo entries", src, e.src, len(e.hist.undo))
+		}
+	}
+}
+
+func TestEditingASubEditorFieldStillSplices(t *testing.T) {
+	e := newTestEditor(t, "``` go \nx\n```")
+	e.FocusAt(1)
+	frame(e)
+	e.sub.codeLang = "rust"
+	frame(e)
+	if e.src != "```rust\nx\n```" {
+		t.Fatalf("%q", e.src)
+	}
+}

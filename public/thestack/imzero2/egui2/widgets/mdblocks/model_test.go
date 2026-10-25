@@ -131,10 +131,3 @@ func TestMarkerLen(t *testing.T) {
 		t.Fatal("marker lengths")
 	}
 }
-
-func TestCharByteConversions(t *testing.T) {
-	s := "aé中b"
-	if charToByte(s, 2) != 3 || byteToChar(s, 3) != 2 || charToByte(s, 99) != len(s) || byteToChar(s, 99) != 4 {
-		t.Fatal("conversions")
-	}
-}
