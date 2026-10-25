@@ -34,6 +34,7 @@ type standardWidgetsDemoState struct {
 
 	// Selection (Checkbox / Radio / SelectableLabel)
 	checkBasic  bool
+	checkEdges  int // HasChanged edges seen on checkBasic
 	checkIndet  bool
 	radioChoice uint8
 	radioTheme  uint8
@@ -336,14 +337,14 @@ func swSelectionSection(ids *c.WidgetIdStack, st *standardWidgetsDemoState) {
 		"SendRespVal writes back next frame; HasChanged() is the change edge")
 	if c.Checkbox(ids.PrepareStr("ck-basic"), st.checkBasic, "enable feature").
 		SendRespVal(&st.checkBasic).HasChanged() {
-		// edge — useful for triggering side effects
+		st.checkEdges++
 	}
+	c.Label(fmt.Sprintf("changed %d times", st.checkEdges)).Send()
 
 	stdSection("Checkbox — indeterminate",
 		"third visual state independent of true/false; toggle independently")
-	if c.Checkbox(ids.PrepareStr("ck-indet"), st.checkIndet, "indeterminate visual").
-		Indeterminate(true).SendRespVal(&st.checkIndet).HasChanged() {
-	}
+	c.Checkbox(ids.PrepareStr("ck-indet"), st.checkIndet, "indeterminate visual").
+		Indeterminate(true).SendRespVal(&st.checkIndet)
 
 	stdSection("override the binding",
 		"OverrideDatabindingBPtr forces Rust state to match Go — needed when external code mutates the var between frames")
