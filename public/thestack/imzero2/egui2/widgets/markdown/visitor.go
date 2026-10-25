@@ -784,10 +784,12 @@ func emitInline(ctx *lowerCtx, n ast.Node, b *inlineBuilder, parentStyle styleE)
 		// review: a silent drop contradicting this package's own contract
 		// comment on [ParseOptions.Features].
 		//
-		// A glyph, not a real Checkbox widget: nothing maps render
-		// geometry back to source bytes (ADR-0178 rejected WYSIWYG), so a
-		// click would have nowhere to write. The affordance-glyph rule
-		// puts this on icons.Ph* rather than on a fallback-chain rune.
+		// A glyph that reports its click with the `[`'s byte offset
+		// ([TaskClick]): the parser eats the box from the start of the
+		// item's text block, so the block's first line starts on the
+		// bracket. The host that owns the source flips the box; this
+		// widget still writes nothing. The affordance-glyph rule puts
+		// the box on icons.Ph* rather than on a fallback-chain rune.
 		//
 		// deferred: Obsidian also dims and strikes the text of a checked
 		// item. That needs the checkbox to inject style into its SIBLING
@@ -798,7 +800,11 @@ func emitInline(ctx *lowerCtx, n ast.Node, b *inlineBuilder, parentStyle styleE)
 		if v.IsChecked {
 			glyph = icons.PhCheckSquare
 		}
-		b.emitText(glyph+" ", parentStyle)
+		off := -1
+		if p := v.Parent(); p != nil && p.Lines() != nil && p.Lines().Len() > 0 {
+			off = p.Lines().At(0).Start
+		}
+		b.emitTask(glyph, v.IsChecked, off)
 	case *east.FootnoteLink:
 		// A resolved reference (ADR-0255 §SD2). An index with no tip cannot
 		// happen while goldmark only forms a link for a defined label; the
@@ -918,6 +924,19 @@ func (inst *inlineBuilder) emitLink(label, url string) {
 		kind:  runKindLink,
 		label: label,
 		url:   url,
+	})
+}
+
+// emitTask appends a task box as its own run: the glyph, the state it
+// shows, and where its bracket sits in the source.
+func (inst *inlineBuilder) emitTask(glyph string, checked bool, offset int) {
+	inst.flushAtoms()
+	inst.runs = append(inst.runs, paragraphRun{
+		kind:        runKindTask,
+		atoms:       c.Atoms().Text(glyph).Keep(),
+		label:       glyph,
+		taskOffset:  offset,
+		taskChecked: checked,
 	})
 }
 

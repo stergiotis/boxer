@@ -133,6 +133,7 @@ func RenderBlock(in Input, index int) (res Result) {
 		doc.segments[index].render(&rc)
 		res.Actions = rc.codeActions
 		res.Links = rc.links
+		res.Tasks = rc.tasks
 	}
 	return
 }

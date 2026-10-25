@@ -581,18 +581,23 @@ func emittedInlineText(n ast.Node, src []byte) (s string) {
 func TestEmitInline_TaskCheckBox_EmitsItsGlyph(t *testing.T) {
 	// C1 in the rendering review: goldmark's task-list parser eats the
 	// whole `[x] ` marker into this node, so with no case in emitInline
-	// the state vanished and the item read as an ordinary bullet.
+	// the state vanished and the item read as an ordinary bullet. The box
+	// is a run of its own now, carrying the glyph and — for a node with
+	// no parent block to read a line from — no offset.
 	cases := []struct {
 		checked bool
 		want    string
 	}{
-		{true, icons.PhCheckSquare + " "},
-		{false, icons.PhSquare + " "},
+		{true, icons.PhCheckSquare},
+		{false, icons.PhSquare},
 	}
 	for _, tc := range cases {
-		got := emittedInlineText(east.NewTaskCheckBox(tc.checked), nil)
-		if got != tc.want {
-			t.Errorf("TaskCheckBox(checked=%v): emitted %q want %q", tc.checked, got, tc.want)
+		ctx := &lowerCtx{resolver: resolver.NoopResolver{}}
+		b := newInlineBuilder(0, ctx.resolver)
+		emitInline(ctx, east.NewTaskCheckBox(tc.checked), &b, styleNone)
+		if len(b.runs) != 1 || b.runs[0].kind != runKindTask || b.runs[0].label != tc.want ||
+			b.runs[0].taskChecked != tc.checked || b.runs[0].taskOffset != -1 {
+			t.Errorf("TaskCheckBox(checked=%v): runs %+v", tc.checked, b.runs)
 		}
 	}
 }
@@ -651,8 +656,8 @@ func TestParse_TaskList_ShapeIsAnOrdinaryList(t *testing.T) {
 			t.Errorf("children[%d]: want one paragraph body, got %v", i, kindsOf(item.children))
 			continue
 		}
-		if got := kindsOfRuns(item.children[0].runs); !reflect.DeepEqual(got, []runKindE{runKindAtoms}) {
-			t.Errorf("children[%d] runs: got %v want one coalesced atoms run", i, got)
+		if got := kindsOfRuns(item.children[0].runs); !reflect.DeepEqual(got, []runKindE{runKindTask, runKindAtoms}) {
+			t.Errorf("children[%d] runs: got %v want the box then one coalesced atoms run", i, got)
 		}
 	}
 }
@@ -2046,5 +2051,29 @@ func TestParse_FieldCarriedNodesHaveNoChildren(t *testing.T) {
 	})
 	if seen != 4 {
 		t.Errorf("fixture drift: matched %d field-carrying nodes, want 4", seen)
+	}
+}
+
+func TestParse_TaskBoxIsARunWithItsSourceOffset(t *testing.T) {
+	src := "intro\n\n- [ ] open\n- [x] done\n"
+	doc := Parse([]byte(src))
+	if len(doc.segments) != 2 || doc.segments[1].kind != segKindList {
+		t.Fatalf("segments: %v", kindsOf(doc.segments))
+	}
+	items := doc.segments[1].children
+	if len(items) != 2 {
+		t.Fatalf("items: %d", len(items))
+	}
+	for i, want := range []struct {
+		off     int
+		checked bool
+	}{{9, false}, {20, true}} {
+		runs := items[i].children[0].runs
+		if len(runs) < 2 || runs[0].kind != runKindTask {
+			t.Fatalf("item %d runs: %v", i, kindsOfRuns(runs))
+		}
+		if runs[0].taskOffset != want.off || runs[0].taskChecked != want.checked || src[runs[0].taskOffset] != '[' {
+			t.Fatalf("item %d: offset %d checked %v", i, runs[0].taskOffset, runs[0].taskChecked)
+		}
 	}
 }

@@ -629,3 +629,31 @@ func formatFrontmatterValue(v any) (out string) {
 	}
 	return
 }
+
+// SplitSpansAt cuts spans at the given ascending byte offsets, producing
+// the same colouring in more sections, so an overlay laid over some of
+// those bytes lands on exactly them and not on the whole run around them
+// — a styled section reaches a whole colour section on the Rust side.
+// Offsets outside a span, or on a boundary it already has, change
+// nothing. Span.Text is dropped rather than re-sliced: the lex tier
+// leaves it empty and the job builder never reads it.
+func SplitSpansAt(spans []Span, cuts []int) (out []Span) {
+	if len(cuts) == 0 {
+		return spans
+	}
+	out = make([]Span, 0, len(spans)+len(cuts))
+	ci := 0
+	for _, s := range spans {
+		start := s.Start
+		for ci < len(cuts) && int32(cuts[ci]) <= start {
+			ci++
+		}
+		for ci < len(cuts) && int32(cuts[ci]) < s.Stop {
+			out = append(out, Span{Start: start, Stop: int32(cuts[ci]), Category: s.Category})
+			start = int32(cuts[ci])
+			ci++
+		}
+		out = append(out, Span{Start: start, Stop: s.Stop, Category: s.Category})
+	}
+	return out
+}

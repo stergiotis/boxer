@@ -261,6 +261,14 @@ type LinkClick struct {
 	URL   string
 }
 
+// TaskClick is one task box clicked this frame: the byte offset of its
+// `[` in the source the Doc was parsed from, and the state it showed. A
+// host that owns the source flips the character after the bracket.
+type TaskClick struct {
+	Offset  int
+	Checked bool
+}
+
 // Result is what one Render reports.
 type Result struct {
 	// Actions are the code-block buttons clicked this frame, in document
@@ -270,6 +278,8 @@ type Result struct {
 	// A host that navigates in response records the intent and acts on it
 	// after the frame.
 	Links []LinkClick
+	// Tasks are the task boxes clicked this frame.
+	Tasks []TaskClick
 }
 
 // Render emits the document into the current egui Ui scope. It opens one
@@ -330,6 +340,7 @@ func (inst *Doc) render(in Input) (res Result) {
 	}
 	res.Actions = rc.codeActions
 	res.Links = rc.links
+	res.Tasks = rc.tasks
 	return
 }
 
@@ -403,6 +414,8 @@ type renderCtx struct {
 	// collect in links.
 	linkClaims func(url string) bool
 	links      []LinkClick
+	// tasks collects the task boxes clicked this frame.
+	tasks []TaskClick
 
 	// actionAccept gates the per-block action buttons ([Input.CodeActionFilter]).
 	// Nil accepts every block.
@@ -591,6 +604,11 @@ const (
 	// definition flattened to plain text, shown as the marker's hover
 	// tooltip (ADR-0255).
 	runKindFootnote
+	// runKindTask is a GFM task box: a glyph that reports a click with the
+	// byte offset of its `[` in the source, so a host that owns the source
+	// can flip it. taskOffset is -1 when the offset is not known, which
+	// renders the glyph as plain text.
+	runKindTask
 )
 
 // paragraphRun is one slice of a paragraph or heading. A paragraph with
@@ -603,6 +621,10 @@ type paragraphRun struct {
 	label string
 	url   string
 	tip   string
+
+	// runKindTask fields.
+	taskOffset  int
+	taskChecked bool
 
 	// runKindImage fields. imgPixels is row-major RGBA8 in
 	// (imgHeightPx × imgWidthPx) order. Alt-text / Title are not

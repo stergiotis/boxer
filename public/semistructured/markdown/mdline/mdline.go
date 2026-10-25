@@ -274,3 +274,47 @@ func WrapSnippet(src string, w Wrap, selStart, selEnd int) string {
 	}
 	return w.Open + inner + w.Close
 }
+
+// SetHeading rewrites the caret's line to the heading level asked for, 0
+// for a paragraph: an ATX marker already there is replaced, a quote prefix
+// is kept, and a list item is left alone — its line is the item, not a
+// heading. The caret keeps its place in the line's text. A line already at
+// the level asked for is no action.
+func SetHeading(src string, caret int, level int) (act Action) {
+	if level < 0 || level > 6 {
+		return
+	}
+	ls, le := lineBounds(src, caret)
+	line := src[ls:le]
+	p := ParsePrefix(line)
+	if p.List != "" {
+		return
+	}
+	rest := line[len(p.Text):]
+	n := 0
+	for n < len(rest) && rest[n] == '#' {
+		n++
+	}
+	body := rest
+	if n > 0 && n <= 6 && (n == len(rest) || rest[n] == ' ' || rest[n] == '\t') {
+		body = strings.TrimLeft(rest[n:], " \t")
+	}
+	marker := ""
+	if level > 0 {
+		marker = strings.Repeat("#", level) + " "
+	}
+	next := p.Text + marker + body
+	if next == line {
+		return
+	}
+	// The caret's offset into the body, floored at its start when it sat
+	// inside the marker being replaced.
+	off := caret - ls - (len(line) - len(body))
+	if off < 0 {
+		off = 0
+	}
+	act.Rebind = true
+	act.Next = src[:ls] + next + src[le:]
+	act.Caret = ls + len(p.Text) + len(marker) + off
+	return
+}

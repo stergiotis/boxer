@@ -501,6 +501,8 @@ func renderRuns(runs []paragraphRun, rc *renderCtx) {
 				renderImageRun(r, rc)
 			case runKindFootnote:
 				renderFootnoteRun(r)
+			case runKindTask:
+				renderTaskRun(r, rc)
 			}
 		}
 	}
@@ -530,6 +532,21 @@ func renderLinkRun(r *paragraphRun, rc *renderCtx) {
 		Frame(false).
 		SendResp().HasPrimaryClicked() {
 		rc.links = append(rc.links, LinkClick{Label: r.label, URL: r.url})
+	}
+}
+
+// renderTaskRun emits one task box as a frameless button whose click is
+// reported with the box's source offset; a box whose offset is unknown is
+// the glyph alone.
+func renderTaskRun(r *paragraphRun, rc *renderCtx) {
+	if r.taskOffset < 0 {
+		c.LabelAtoms(r.atoms).Send()
+		return
+	}
+	seq := rc.idSeq
+	rc.idSeq++
+	if c.Button(rc.ids.PrepareSeq(seq), r.atoms).Frame(false).SendResp().HasPrimaryClicked() {
+		rc.tasks = append(rc.tasks, TaskClick{Offset: r.taskOffset, Checked: r.taskChecked})
 	}
 }
 

@@ -122,3 +122,34 @@ func TestWrapSnippet(t *testing.T) {
 		t.Errorf("placeholder: %q", got)
 	}
 }
+
+func TestSetHeading(t *testing.T) {
+	cases := []struct {
+		src   string
+		caret int
+		level int
+		next  string
+		at    int
+		act   bool
+	}{
+		{"para", 2, 2, "## para", 5, true},
+		{"## para", 5, 0, "para", 2, true},
+		{"## para", 5, 3, "### para", 6, true},
+		{"## para", 1, 1, "# para", 2, true},
+		{"> para", 4, 1, "> # para", 6, true},
+		{"- item", 3, 1, "", 0, false},
+		{"# same", 3, 1, "", 0, false},
+		{"a\n\npara\n\nb", 5, 1, "a\n\n# para\n\nb", 7, true},
+		{"#notatag", 3, 1, "# #notatag", 5, true},
+	}
+	for _, tc := range cases {
+		act := SetHeading(tc.src, tc.caret, tc.level)
+		if act.Rebind != tc.act {
+			t.Errorf("%q level %d: rebind %v", tc.src, tc.level, act.Rebind)
+			continue
+		}
+		if tc.act && (act.Next != tc.next || act.Caret != tc.at) {
+			t.Errorf("%q level %d: next %q caret %d", tc.src, tc.level, act.Next, act.Caret)
+		}
+	}
+}
