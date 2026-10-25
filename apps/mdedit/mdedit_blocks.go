@@ -1,6 +1,7 @@
 package mdedit
 
 import (
+	"github.com/stergiotis/boxer/public/semistructured/markdown/mdline"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/mdblocks"
 )
@@ -54,7 +55,7 @@ func (inst *App) renderBlocks() {
 		inst.rebindSrc = true
 	}
 	if ev.Caret >= 0 {
-		ch := byteToChar(inst.src, ev.Caret)
+		ch := mdline.ByteToChar(inst.src, ev.Caret)
 		inst.cursor = c.PackCursorRange(ch, ch)
 	}
 	if ev.CopyRequest != "" {

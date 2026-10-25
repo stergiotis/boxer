@@ -272,6 +272,23 @@ func tableColumnWidth(runes uint32, colCap float32) (w float32) {
 	return
 }
 
+// TableColumnInitialWidth is the initial width, in points, the renderer
+// gives a column whose widest cell is runes long in a table of cols
+// columns: the estimate [tableColumnWidth] makes under the cap
+// [tableColumnCap] sets. Exported so a grid that edits a table starts its
+// columns where the rendered table had them.
+func TableColumnInitialWidth(runes uint32, cols int) (w float32) {
+	w = tableColumnWidth(runes, tableColumnCap(cols))
+	return
+}
+
+// TableRowHeight is the fixed row height the renderer draws a table's
+// rows at — see [tableRowHeight].
+func TableRowHeight(hasHeader bool) (h float32) {
+	h = tableRowHeight(hasHeader)
+	return
+}
+
 // renderTable emits one GFM table through the table op's register-drain
 // protocol: columns first, then the header texts, then the body cells
 // row-major, then the table node that drains all three and renders. The

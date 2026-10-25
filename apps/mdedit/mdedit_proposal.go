@@ -16,6 +16,7 @@ package mdedit
 // verdicts.
 
 import (
+	"github.com/stergiotis/boxer/public/semistructured/markdown/mdline"
 	"strings"
 
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
@@ -114,7 +115,7 @@ func (inst *App) selectionSpan() (start, stop int, ok bool) {
 	if a > b {
 		a, b = b, a
 	}
-	return charToByte(inst.src, a), charToByte(inst.src, b), true
+	return mdline.CharToByte(inst.src, a), mdline.CharToByte(inst.src, b), true
 }
 
 // offerProposal opens the pane on a replacement of src[start:stop]. The

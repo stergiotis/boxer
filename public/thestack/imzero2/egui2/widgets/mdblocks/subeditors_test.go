@@ -78,18 +78,18 @@ func TestTableSubKeepsUntouchedRowsVerbatim(t *testing.T) {
 	var s subState
 	text := "| a  |  b |\n|:--|--:|\n| 1 | two \\| pipe |\n|3|4|"
 	s.load(text, subTable, 0)
-	if len(s.tblRows) != 3 || len(s.tblAlign) != 2 || s.tblRows[1][1] != "two | pipe" || s.tblRows[2][0] != "3" {
-		t.Fatalf("%+v", s.tblRows)
+	if len(s.tbl.rows) != 3 || len(s.tbl.align) != 2 || s.tbl.rows[1][1] != "two | pipe" || s.tbl.rows[2][0] != "3" {
+		t.Fatalf("%+v", s.tbl.rows)
 	}
 	if s.compose() != text {
 		t.Fatalf("round trip:\n%q\n%q", s.compose(), text)
 	}
-	s.tblRows[2][1] = "four"
+	s.tbl.rows[2][1] = "four"
 	want := "| a  |  b |\n|:--|--:|\n| 1 | two \\| pipe |\n| 3 | four |"
 	if s.compose() != want {
 		t.Fatalf("edited row only:\n%q\n%q", s.compose(), want)
 	}
-	s.addColumn()
+	s.tbl.insertColumn(s.tbl.cols())
 	if s.compose() != "| a | b |  |\n| :-- | --: | --- |\n| 1 | two \\| pipe |  |\n| 3 | four |  |" {
 		t.Fatalf("add column:\n%q", s.compose())
 	}
@@ -98,21 +98,19 @@ func TestTableSubKeepsUntouchedRowsVerbatim(t *testing.T) {
 func TestTableMoveCellAddsARowPastTheEnd(t *testing.T) {
 	var s subState
 	s.load("| a | b |\n| - | - |\n| 1 | 2 |", subTable, 0)
-	s.moveCell(1, 0, true, false)
-	if s.tblFocusR != 1 || s.tblFocusC != 1 || len(s.tblRows) != 2 {
+	if s.tbl.moveCell(1, 0, true, false) || s.tbl.focusR != 1 || s.tbl.focusC != 1 || len(s.tbl.rows) != 2 {
 		t.Fatalf("tab: %+v", s)
 	}
-	s.moveCell(1, 1, true, false)
-	if s.tblFocusR != 2 || s.tblFocusC != 0 || len(s.tblRows) != 3 {
-		t.Fatalf("tab past the end adds a row: %d %d %d", s.tblFocusR, s.tblFocusC, len(s.tblRows))
+	if !s.tbl.moveCell(1, 1, true, false) || s.tbl.focusR != 2 || s.tbl.focusC != 0 || len(s.tbl.rows) != 3 {
+		t.Fatalf("tab past the end adds a row: %d %d %d", s.tbl.focusR, s.tbl.focusC, len(s.tbl.rows))
 	}
-	s.moveCell(2, 0, true, true)
-	if s.tblFocusR != 1 || s.tblFocusC != 1 {
-		t.Fatalf("shift+tab: %d %d", s.tblFocusR, s.tblFocusC)
+	s.tbl.moveCell(2, 0, true, true)
+	if s.tbl.focusR != 1 || s.tbl.focusC != 1 {
+		t.Fatalf("shift+tab: %d %d", s.tbl.focusR, s.tbl.focusC)
 	}
-	s.moveCell(0, 1, false, false)
-	if s.tblFocusR != 1 || s.tblFocusC != 1 {
-		t.Fatalf("enter: %d %d", s.tblFocusR, s.tblFocusC)
+	s.tbl.moveCell(0, 1, false, false)
+	if s.tbl.focusR != 1 || s.tbl.focusC != 1 {
+		t.Fatalf("enter: %d %d", s.tbl.focusR, s.tbl.focusC)
 	}
 }
 
@@ -150,5 +148,34 @@ func TestLeavingASubEditorForAnotherBlockSplicesNothing(t *testing.T) {
 	frame(e)
 	if e.src != src || e.sub.kind != subNone || e.buf != "para" {
 		t.Fatalf("src %q sub %v buf %q", e.src, e.sub.kind, e.buf)
+	}
+}
+
+func TestOpeningASubEditorRewritesNothing(t *testing.T) {
+	for _, src := range []string{
+		"``` go \nx\n```",
+		"| a | b |\n| - | - |\n| 1 |",
+		">body\n>\n>[!note]",
+		"> [!note]\n>body",
+		`![a](u  "t") `,
+	} {
+		e := newTestEditor(t, src)
+		e.FocusAt(1)
+		frame(e)
+		frame(e)
+		if e.src != src || len(e.hist.undo) != 0 {
+			t.Errorf("%q: opened as %q with %d undo entries", src, e.src, len(e.hist.undo))
+		}
+	}
+}
+
+func TestEditingASubEditorFieldStillSplices(t *testing.T) {
+	e := newTestEditor(t, "``` go \nx\n```")
+	e.FocusAt(1)
+	frame(e)
+	e.sub.codeLang = "rust"
+	frame(e)
+	if e.src != "```rust\nx\n```" {
+		t.Fatalf("%q", e.src)
 	}
 }

@@ -1,8 +1,6 @@
 package mdblocks
 
 import (
-	"strings"
-
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	"github.com/stergiotis/boxer/public/keelson/runtime/widgethandle"
 	"github.com/stergiotis/boxer/public/semistructured/markdown/mdline"
@@ -79,6 +77,22 @@ type Editor struct {
 	pendingCaretOk bool
 	pendingFocus   bool
 	pendingInsert  string
+	// sealNext says the next write-back lands a gesture — a wrap, a marker
+	// continuation, a soft break — that is an undo entry of its own.
+	sealNext bool
+	// tailAt is where Shift+Enter at the end of a block puts the caret: the
+	// empty line right after it, one past the block's end. While the caret
+	// is there the binding extends over that newline, so the next text
+	// typed continues the block as a soft break instead of opening a gap.
+	// Cleared once the caret is anywhere else.
+	tailAt  int
+	tailOk  bool
+	rebinds int
+	// pendingOpen is a block a click asked to open this frame, applied
+	// after the blocks are drawn so the editor already emitted this frame
+	// does not consume its caret.
+	pendingOpen   int
+	pendingOpenOk bool
 
 	// Block selection (Escape): a range of block indexes, inclusive.
 	selMode    bool
@@ -128,6 +142,8 @@ func (e *Editor) SetSource(src string) {
 	e.selMode = false
 	e.hist.clear()
 	e.pendingInsert = ""
+	e.sealNext = false
+	e.tailOk = false
 	e.sub = subState{}
 	e.reparse()
 }
@@ -206,6 +222,10 @@ func (e *Editor) reparse() {
 // caret. sealed marks a structural gesture that must not coalesce with
 // typing around it.
 func (e *Editor) splice(at int, old, new string, caretAfter int, sealed bool) {
+	if old == new {
+		e.caret = clampInt(caretAfter, 0, len(e.src))
+		return
+	}
 	before := e.caret
 	e.src = apply(e.src, at, old, new)
 	e.caret = clampInt(caretAfter, 0, len(e.src))
@@ -234,12 +254,12 @@ var editorChordMask = keycodes.MaskOf(keycodes.KeyZ, keycodes.KeyY, keycodes.Key
 var frameKeyMask = keycodes.MaskOf(keycodes.Escape, keycodes.Enter, keycodes.ArrowUp, keycodes.ArrowDown, keycodes.Delete, keycodes.Backspace)
 var frameChordMask = keycodes.MaskOf(keycodes.KeyZ, keycodes.KeyY, keycodes.KeyC)
 
-// wraps are the formatting chords: the bar's wraps from the keyboard.
-var wraps = map[keycodes.Code]struct{ open, close, placeholder string }{
-	keycodes.KeyB: {"**", "**", "bold"},
-	keycodes.KeyI: {"*", "*", "italic"},
-	keycodes.KeyK: {"[", "](url)", "label"},
-	keycodes.KeyE: {"`", "`", "code"},
+// chordWraps names the formatting chord each key is, in [mdline.Wraps].
+var chordWraps = map[keycodes.Code]string{
+	keycodes.KeyB: "bold",
+	keycodes.KeyI: "italic",
+	keycodes.KeyK: "link",
+	keycodes.KeyE: "code",
 }
 
 var (
@@ -279,6 +299,12 @@ func (e *Editor) Render() (ev Events) {
 			ev.Links = e.renderBlocks()
 		}
 	}
+	if e.pendingOpenOk {
+		e.pendingOpenOk = false
+		if e.pendingOpen < len(e.blocks) {
+			e.openBlock(e.pendingOpen, e.blocks[e.pendingOpen].stop)
+		}
+	}
 	ev.Changed = e.changed
 	ev.Caret = e.Caret()
 	ev.Editing = e.editing
@@ -301,23 +327,34 @@ func (e *Editor) applyWriteBack() {
 	if e.buf != e.lastEmitted {
 		old := e.lastEmitted
 		at, oldMid, newMid := editRegion(old, e.buf)
-		caretAfter := e.bufStart + charToByte(e.buf, cursorStart)
+		caretAfter := e.bufStart + mdline.CharToByte(e.buf, cursorStart)
 		if e.pendingCaretOk {
 			caretAfter = e.caret
 		}
+		sealed := e.sealNext
+		e.sealNext = false
 		if e.bufStart == e.bufStop && newMid != "" {
-			// The first text in a gap becomes a block of its own.
+			// The first text in a gap becomes a block of its own, the
+			// padding recorded with it so the typing that follows joins
+			// the entry. The binding moves onto the new block: its text
+			// is what the widget holds, so no rebind is needed.
 			before, after := e.gapPadding(e.bufStart)
-			e.splice(e.bufStart, "", before+e.buf+after, e.bufStart+len(before)+charToByte(e.buf, cursorStart), false)
 			e.hist.seal()
+			e.splice(e.bufStart, "", before+e.buf+after, e.bufStart+len(before)+mdline.CharToByte(e.buf, cursorStart), false)
+			if n := len(e.hist.undo); n > 0 {
+				e.hist.undo[n-1].tail = len(after)
+			}
+			e.bufStart += len(before)
+			e.bufStop = e.bufStart + len(e.buf)
 			return
 		}
-		e.splice(e.bufStart+at, oldMid, newMid, caretAfter, false)
+		e.splice(e.bufStart+at, oldMid, newMid, caretAfter, sealed)
+		e.bufStop += len(newMid) - len(oldMid)
 		return
 	}
 	// No text change: the caret may still have moved inside the block.
 	if !e.pendingCaretOk {
-		e.caret = clampInt(e.bufStart+charToByte(e.buf, cursorStart), 0, len(e.src))
+		e.caret = clampInt(e.bufStart+mdline.CharToByte(e.buf, cursorStart), 0, len(e.src))
 	}
 }
 
@@ -383,7 +420,9 @@ func (e *Editor) applyFrameKeys() {
 			}
 		case !e.selMode:
 			// Nothing selected: the frame holds focus only between modes.
-		case k.Code == keycodes.Escape || k.Code == keycodes.Enter:
+		case k.Code == keycodes.Escape:
+			e.selMode = false
+		case k.Code == keycodes.Enter:
 			_, b := e.selRange()
 			e.openBlock(b, e.blocks[b].stop)
 		case k.Code == keycodes.ArrowUp || k.Code == keycodes.ArrowDown:
@@ -420,21 +459,13 @@ func (e *Editor) applyChord(code keycodes.Code) {
 	case keycodes.KeyY:
 		e.Redo()
 	default:
-		w, ok := wraps[code]
+		name, ok := chordWraps[code]
 		if !ok {
 			return
 		}
 		lo, hi := c.UnpackCursorRange(e.bufCursor)
-		if lo > hi {
-			lo, hi = hi, lo
-		}
-		inner := w.placeholder
-		if lo != hi {
-			if sel := e.buf[charToByte(e.buf, lo):charToByte(e.buf, hi)]; sel != "" {
-				inner = sel
-			}
-		}
-		e.pendingInsert = w.open + inner + w.close
+		e.pendingInsert = mdline.WrapSnippet(e.buf, mdline.Wraps[name], lo, hi)
+		e.sealNext = true
 	}
 }
 
@@ -446,8 +477,14 @@ func (e *Editor) applyEnter(cb int, shift bool) {
 		kind = e.blocks[f].kind
 	}
 	switch {
-	case shift, kind == kindCode, kind == kindTable, kind == kindFrontmatter:
+	case shift, kind == kindCode, kind == kindTable, kind == kindFrontmatter, kind == kindRaw:
+		// A soft break. At the end of a text block the newline would fall
+		// outside the block's range, so the binding is told to keep it.
 		e.pendingInsert = "\n"
+		e.sealNext = true
+		if shift && f >= 0 && cb >= len(e.buf) && kind != kindHeading {
+			e.tailAt, e.tailOk = e.blocks[f].stop+1, true
+		}
 	case kind == kindList, kind == kindQuote, kind == kindCallout:
 		e.applyLine(mdline.Enter(e.buf, cb, false))
 	case f < 0:
@@ -485,6 +522,7 @@ func (e *Editor) applyLine(act mdline.Action) {
 		e.pendingCaretOk = true
 	case act.Insert != "":
 		e.pendingInsert = act.Insert
+		e.sealNext = true
 	}
 }
 
@@ -514,20 +552,34 @@ func (e *Editor) applyBackspaceAtStart() {
 		e.pendingCaretOk = true
 		return
 	}
+	if b.kind == kindHeading {
+		// A setext heading demotes by losing its underline.
+		le := mdline.LineEnd(e.src, b.start)
+		e.splice(le, e.src[le:b.stop], "", b.start, true)
+		e.pendingCaretOk = true
+		return
+	}
 	if f == 0 {
 		return
 	}
 	prev := e.blocks[f-1]
-	switch prev.kind {
-	case kindCode, kindTable, kindRule, kindFrontmatter:
+	prevText := e.src[prev.start:prev.stop]
+	join := "\n"
+	switch {
+	case prev.kind == kindHeading && markerLen(prevText, kindHeading) > 0:
+		// Text joins an ATX heading on its one line; a newline would leave
+		// two blocks and change nothing.
+		join = ""
+	case prev.kind == kindCode, prev.kind == kindTable, prev.kind == kindRule, prev.kind == kindFrontmatter,
+		prev.kind == kindRaw, prev.kind == kindHeading, subKindOf(prevText, prev.kind) == subImage:
 		e.selMode, e.selA, e.selB = true, f-1, f-1
 		e.editing = false
 		c.SurrenderFocus(e.editorId)
 		c.RequestFocus(e.frameId)
 		return
 	}
-	// Join: the gap becomes one newline, a soft break inside the block above.
-	e.splice(prev.stop, e.src[prev.stop:b.start], "\n", prev.stop+1, true)
+	// Join: the gap becomes the join, a soft break inside the block above.
+	e.splice(prev.stop, e.src[prev.stop:b.start], join, prev.stop+len(join), true)
 	e.pendingCaretOk = true
 }
 
@@ -618,7 +670,6 @@ func (e *Editor) deleteSelection() {
 	} else {
 		end = len(e.src)
 	}
-	e.hist.seal()
 	e.splice(start, e.src[start:end], "", start, true)
 	e.selMode = false
 	e.editing = true
@@ -634,11 +685,17 @@ func (e *Editor) deriveBuffer() {
 	}
 	e.caret = clampInt(e.caret, 0, len(e.src))
 	start, stop := e.caret, e.caret
-	if f := blockAt(e.blocks, e.caret); f >= 0 {
+	f := blockAt(e.blocks, e.caret)
+	if e.tailOk && e.caret != e.tailAt && e.caret != e.tailAt-1 {
+		e.tailOk = false
+	}
+	if f >= 0 {
 		start, stop = e.blocks[f].start, e.blocks[f].stop
+	} else if prev := blockBefore(e.blocks, e.caret); e.tailOk && e.caret == e.tailAt && prev >= 0 && e.caret == e.blocks[prev].stop+1 {
+		start = e.blocks[prev].start
 	}
 	text := e.src[start:stop]
-	if f := blockAt(e.blocks, e.caret); f >= 0 {
+	if f >= 0 {
 		e.openSub(e.blocks[f])
 	} else {
 		e.sub = subState{}
@@ -700,7 +757,11 @@ func (e *Editor) renderBlocks() (links []markdown.LinkClick) {
 			continue
 		}
 		selected := e.selMode && i >= a && i <= b
-		links = append(links, e.renderBlock(i, selected)...)
+		blockLinks, clicked := e.renderBlock(i, selected)
+		links = append(links, blockLinks...)
+		if clicked {
+			e.pendingOpen, e.pendingOpenOk = i, true
+		}
 	}
 	if editing && !drawnEditor {
 		if len(e.blocks) > 0 {
@@ -715,9 +776,10 @@ func (e *Editor) renderBlocks() (links []markdown.LinkClick) {
 	return
 }
 
-// renderBlock draws one unfocused block inside a hit frame; a click opens
-// it with the caret at its end.
-func (e *Editor) renderBlock(i int, selected bool) (links []markdown.LinkClick) {
+// renderBlock draws one unfocused block inside a hit frame and reports a
+// click on it, which Render turns into opening the block with the caret at
+// its end once every block is drawn.
+func (e *Editor) renderBlock(i int, selected bool) (links []markdown.LinkClick, clicked bool) {
 	blk := e.blocks[i]
 	fill, strokeW, stroke := clearFill, float32(0), clearFill
 	if selected {
@@ -736,17 +798,19 @@ func (e *Editor) renderBlock(i int, selected bool) (links []markdown.LinkClick) 
 			SenseClick().Focusable().HoverCursorPointer()
 		for range fr.KeepIter() {
 			c.UiSetMinWidthAvailable()
-			if blk.docIndex < 0 {
+			switch {
+			case blk.kind == kindRaw:
+				c.Label(e.src[blk.start:blk.stop]).Selectable(false).Send()
+			case blk.docIndex < 0:
 				markdown.RenderFrontmatter(e.doc)
-			} else {
+			default:
 				res := markdown.RenderBlock(markdown.Input{Ids: e.ids, ScopeKey: "block", Doc: e.doc, LinkClaims: e.opts.LinkClaims}, blk.docIndex)
 				links = res.Links
 			}
 		}
 	}
-	if flags := c.CurrentApplicationState.StateManager.GetResponseByIdRaw(fr.Id()); flags.HasPrimaryClicked() || flags.HasGainedFocus() {
-		e.openBlock(i, blk.stop)
-	}
+	flags := c.CurrentApplicationState.StateManager.GetResponseByIdRaw(fr.Id())
+	clicked = flags.HasPrimaryClicked() || flags.HasGainedFocus()
 	return
 }
 
@@ -816,7 +880,7 @@ func (e *Editor) renderEditor() {
 		e.pendingInsert = ""
 	}
 	if e.pendingCaretOk {
-		ch := byteToChar(e.buf, e.pendingCaret)
+		ch := mdline.ByteToChar(e.buf, e.pendingCaret)
 		b = b.SetCursor(c.PackCursorRange(ch, ch), e.pendingFocus)
 		// The report the widget writes back carries this caret; keep the
 		// field in step so the next frame's derivation sees no stale value.
@@ -830,6 +894,7 @@ func (e *Editor) renderEditor() {
 	if e.rebind {
 		c.CurrentApplicationState.StateManager.OverrideDatabindingSPtr(&e.buf)
 		e.rebind = false
+		e.rebinds++
 	}
 }
 
@@ -848,10 +913,4 @@ func (e *Editor) ensureHighlight() {
 	e.hlJob = codeview.BuildMarkdownFromSpans(e.buf, spans)
 	e.hlJobOk = true
 	e.hlStyled, e.hlStyledOk = codeview.BuildStyledSections(codeview.MarkdownFontSections(e.buf, spans, nil))
-}
-
-// blockText is the source of block i.
-func (e *Editor) blockText(i int) string {
-	b := e.blocks[i]
-	return strings.Clone(e.src[b.start:b.stop])
 }

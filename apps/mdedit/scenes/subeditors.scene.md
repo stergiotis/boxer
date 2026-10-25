@@ -25,15 +25,15 @@ the new row appended, the fence relabelled.
 {"do":"click","contains":"Blocks","role":"button","settleMs":500}
 {"do":"wait","value":"alpha","role":"label","settleMs":400,"comment":"the table renders as a block"}
 {"do":"click","value":"alpha","role":"label","pointer":true,"settleMs":600,"comment":"the hit frame opens the table as a grid"}
-{"do":"wait","role":"text_input","value":"alpha","settleMs":300,"comment":"the cell is a field now"}
-{"do":"focus","role":"text_input","value":"alpha"}
+{"do":"wait","role":"multiline_text_input","value":"alpha","settleMs":300,"comment":"the cell is a field now"}
+{"do":"focus","role":"multiline_text_input","value":"alpha"}
 {"do":"key","text":"End"}
-{"do":"type","role":"text_input","value":"alpha","text":"s","settleMs":300}
-{"do":"wait","role":"text_input","value":"alphas","settleMs":300}
-{"do":"focus","role":"text_input","value":"1"}
+{"do":"type","role":"multiline_text_input","value":"alpha","text":"s","settleMs":300}
+{"do":"wait","role":"multiline_text_input","value":"alphas","settleMs":300}
+{"do":"focus","role":"multiline_text_input","value":"1"}
 {"do":"key","text":"Tab","settleMs":500,"comment":"Tab in the last cell adds a row and moves into it"}
 {"do":"type","id":16008724364808582617,"text":"beta","settleMs":400,"comment":"the new row's first cell, by its id: an empty value is no anchor, and a node id is a function of the widget's path"}
-{"do":"wait","role":"text_input","value":"beta","settleMs":300}
+{"do":"wait","role":"multiline_text_input","value":"beta","settleMs":300}
 {"do":"capture","text":"subeditors-table","comment":"the table grid: a row edited, a row added by Tab"}
 {"do":"click","value":"Before the code.","role":"label","pointer":true,"settleMs":600,"comment":"a rendered code block has no text to anchor on; open the paragraph above it and arrow down"}
 {"do":"wait","role":"multiline_text_input","value":"Before the code.","settleMs":300}

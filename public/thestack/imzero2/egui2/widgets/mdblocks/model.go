@@ -28,6 +28,11 @@ const (
 	kindCallout
 	kindTable
 	kindFrontmatter
+	// kindRaw is source the parse turned into no block — an HTML block, a
+	// link reference definition, a line the lowering dropped. It is edited
+	// as text so that nothing in the document is out of reach, and it is
+	// never merged into or deleted along with a neighbour.
+	kindRaw
 )
 
 // block is one editable block: its byte range in the source (line-snapped,
@@ -43,11 +48,23 @@ type block struct {
 }
 
 // blocksOf lists the editable blocks of a parsed source, frontmatter first,
-// skipping what the parse reports synthetic. Keys hash the kind and the
-// text with an ordinal among identical blocks, the way the markdown widget
-// keys its code blocks: a block keeps its id when text moves above it and
-// takes a new one when its own text changes.
+// skipping what the parse reports synthetic, with every run of non-blank
+// lines the parse left between blocks as a raw block, so the blocks and
+// the blank lines between them are the whole source. Keys hash the kind
+// and the text with an ordinal among identical blocks, the way the markdown
+// widget keys its code blocks: a block keeps its id when text moves above
+// it and takes a new one when its own text changes.
 func blocksOf(src string, doc *markdown.Doc) (out []block) {
+	var parsed []block
+	if s, e, ok := doc.FrontmatterSpan(); ok {
+		parsed = append(parsed, block{start: s, stop: e, kind: kindFrontmatter, docIndex: -1})
+	}
+	for i, bi := range doc.Blocks() {
+		if bi.Synthetic {
+			continue
+		}
+		parsed = append(parsed, block{start: bi.Start, stop: bi.Stop, kind: kindOf(bi.Kind), docIndex: i})
+	}
 	seen := map[uint64]int{}
 	add := func(b block) {
 		h := fnv.New64a()
@@ -59,14 +76,52 @@ func blocksOf(src string, doc *markdown.Doc) (out []block) {
 		b.key = base ^ (uint64(ord) * 0x9e3779b97f4a7c15)
 		out = append(out, b)
 	}
-	if s, e, ok := doc.FrontmatterSpan(); ok {
-		add(block{start: s, stop: e, kind: kindFrontmatter, docIndex: -1})
-	}
-	for i, bi := range doc.Blocks() {
-		if bi.Synthetic {
-			continue
+	prev := 0
+	for _, b := range parsed {
+		for _, r := range rawRuns(src, prev, b.start) {
+			add(r)
 		}
-		add(block{start: bi.Start, stop: bi.Stop, kind: kindOf(bi.Kind), docIndex: i})
+		add(b)
+		prev = b.stop
+	}
+	for _, r := range rawRuns(src, prev, len(src)) {
+		add(r)
+	}
+	return
+}
+
+// rawRuns lists the raw blocks in src[from:to], a gap between parsed
+// blocks: each maximal run of lines holding something other than
+// whitespace, line-snapped and without its trailing newline.
+func rawRuns(src string, from, to int) (runs []block) {
+	if from >= to {
+		return
+	}
+	pos := from
+	start := -1
+	for pos < to {
+		le := strings.IndexByte(src[pos:to], '\n')
+		if le < 0 {
+			le = to
+		} else {
+			le += pos
+		}
+		blank := strings.TrimSpace(src[pos:le]) == ""
+		switch {
+		case !blank && start < 0:
+			start = pos
+		case blank && start >= 0:
+			runs = append(runs, block{start: start, stop: pos - 1, kind: kindRaw, docIndex: -1})
+			start = -1
+		}
+		pos = le + 1
+	}
+	if start >= 0 {
+		stop := to
+		if stop > 0 && src[stop-1] == '\n' {
+			stop--
+		}
+		runs = append(runs, block{start: start, stop: stop, kind: kindRaw, docIndex: -1})
 	}
 	return
 }
@@ -172,12 +227,16 @@ func gapPadding(src string, pos int) (before, after string) {
 }
 
 // entry is one splice in the history: at [at, at+len(new)) the source now
-// holds new where it held old, with the caret before and after.
+// holds new where it held old, with the caret before and after. tail is
+// how many bytes at the end of new are padding the typing sits in front
+// of — the blank lines a gap insertion added below the text — so that the
+// next keystroke still joins the entry.
 type entry struct {
 	at          int
 	old, new    string
 	caretBefore int
 	caretAfter  int
+	tail        int
 	at_         time.Time
 	sealed      bool
 }
@@ -212,8 +271,9 @@ func (h *history) record(e entry) {
 		last := &h.undo[n-1]
 		if !last.sealed && e.at_.Sub(last.at_) <= coalesceWindow {
 			switch {
-			case e.old == "" && last.old == "" && e.at == last.at+len(last.new):
-				last.new += e.new
+			case e.old == "" && last.old == "" && e.at == last.at+len(last.new)-last.tail:
+				head := last.new[:len(last.new)-last.tail]
+				last.new = head + e.new + last.new[len(head):]
 				last.caretAfter = e.caretAfter
 				last.at_ = e.at_
 				return
@@ -274,37 +334,6 @@ func apply(src string, at int, old, new string) string {
 // invert is the splice that undoes e.
 func invert(e entry) entry {
 	return entry{at: e.at, old: e.new, new: e.old, caretBefore: e.caretAfter, caretAfter: e.caretBefore, sealed: true}
-}
-
-// charToByte converts a char offset into s, the unit the caret channel
-// speaks, to a byte offset, clamped.
-func charToByte(s string, charOff int) int {
-	if charOff <= 0 {
-		return 0
-	}
-	n := 0
-	for i := range s {
-		if n == charOff {
-			return i
-		}
-		n++
-	}
-	return len(s)
-}
-
-// byteToChar converts a byte offset into s to a char offset, clamped.
-func byteToChar(s string, byteOff int) int {
-	if byteOff <= 0 {
-		return 0
-	}
-	n := 0
-	for i := range s {
-		if i >= byteOff {
-			return n
-		}
-		n++
-	}
-	return n
 }
 
 // countLines is the number of lines s occupies, one for an empty string.

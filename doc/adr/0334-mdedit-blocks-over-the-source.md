@@ -125,14 +125,21 @@ survey's one "very high" fidelity risk.
 ### SD2 — A block is a top-level block of the parse
 
 Blocks are goldmark's top-level block nodes — paragraph, heading, list,
-blockquote or callout, fenced or indented code, table, thematic break, HTML
-block, frontmatter — each with a `[start, stop)` byte range taken from the
-node's position and its last descendant's lines, snapped to line ends, the
-recipe `mdspan` ([ADR-0282](./0282-chat-artefact-one-markdown-document-per-conversation.md) §SD5)
-already uses and whose `Splice` the model reuses. Frontmatter, which the
-parser consumes without a node, is found the way `mdspan` finds it. A list is one block: Enter inside
-it continues the item (§SD4) rather than splitting the list, which is what
-every surveyed product does. Block identity across reparses is positional
+blockquote or callout, fenced or indented code, table, thematic break,
+frontmatter — each with a `[start, stop)` byte range taken from the node's
+position and its last descendant's lines, snapped to line ends, the recipe
+`mdspan` ([ADR-0282](./0282-chat-artefact-one-markdown-document-per-conversation.md) §SD5)
+already uses, written again beside the lowering rather than exported from
+`mdspan`, whose helpers work over its own line index. A fence's closing
+line and a setext heading's underline, which goldmark keeps out of the
+node's lines, are part of the range. Frontmatter, which the parser consumes
+without a node, is found the way `mdspan` finds it. Source the parse turns
+into no block — an HTML block, a link reference definition, a node the
+lowering drops — is a raw block: edited as text, never merged into or
+deleted along with a neighbour, so the blocks and the blank lines between
+them are the whole document and no gesture can reach bytes the view does
+not show. A list is one block: Enter inside it continues the item (§SD4)
+rather than splitting the list, which is what every surveyed product does. Block identity across reparses is positional
 plus content-keyed, the way the outline keys collapse state by `slug#ord`:
 the focused block is re-found after a splice by the range the splice
 produced, never by index.
@@ -155,9 +162,12 @@ marker).
 
 Four blocks get sub-editors instead of a text field: a **code fence** (a
 bordered monospace field for the body, a language field, Tab indents, no
-markdown behaviours inside), a **table** (a grid of cell fields, Tab and
-Enter between cells, Tab in the last cell adds a row, a button adds a
-column, no merged cells), an **image** (the picture, with alt text and the
+markdown behaviours inside), a **table** (a grid of cell fields in resizable
+columns, Tab and Enter between cells, Tab in the last cell adds a row, a
+handle before every row and above every column whose menu inserts, moves,
+deletes, aligns and sorts — the operations the productivity tools converge
+on that a GFM table can carry — and a paste of tab-separated text into a
+cell expanding into cells; no merged cells, no multi-line cells), an **image** (the picture, with alt text and the
 Obsidian `|WxH` size as fields), and a **callout** (a type menu and a fold
 toggle over the rendered callout, the body as a text field). Everything else
 focuses as text.
@@ -174,12 +184,14 @@ converged on:
 | Enter inside a list, quote or callout | continue the line's marker on the next line; Enter on an empty item removes the marker and exits |
 | Shift+Enter | a soft line break inside the block |
 | Backspace at the start of a block | a heading or list item demotes to a paragraph first; a paragraph merges into the previous text block; a non-text neighbour (image, rule, table) is selected instead |
-| ↑ on the first row, ↓ on the last | focus moves to the neighbouring block, caret at its end or start |
-| Escape | leaves text editing and selects the block; Shift+↑/↓ extends the block selection; Delete removes it; Escape again clears |
+| ↑ with the caret at the block's start, ↓ at its end | focus moves to the neighbouring block, caret at its end or start. The row the caret is on is not known to Go (§SD9, byte-range-to-rect), so the edge of the text stands in for the edge row |
+| Escape | leaves text editing and selects the block; Shift+↑/↓ extends the block selection; Delete removes it; Enter opens the block; Escape again clears the selection |
 | Tab, Shift+Tab inside a list | indent or outdent the item by one tab, the unit Obsidian's default writes; elsewhere Tab inserts a tab |
 | `# `, `- `, `1. `, `> `, `[] `, a fence at line start | the line-start shortcuts, applied inside the focused block as text |
 | Ctrl+B / I / K / E | wrap the selection in `**`, `*`, a link, a code span — the formatting bar's actions, from the keyboard |
-| Ctrl+Z / Ctrl+Shift+Z | the document-level undo (§SD5) |
+| Ctrl+Z / Ctrl+Y | the document-level undo and redo (§SD5). Ctrl+Y rather than Ctrl+Shift+Z: a widget captures one chord modifier set (§SD7), and Ctrl+Y is the Windows and Linux convention the host runs on |
+| In a table cell: ↑/↓, ←/→ at the text's edges | the cell above or below; the previous or next cell, wrapping at a row's ends; ↑ from the header and ↓ from the last row leave the table for the neighbouring block |
+| In a table cell: Ctrl+↑/↓, Ctrl+←/→ | move the row or the column the caret is in, the header staying first; the word jump Ctrl+←/→ would be in a field is given up in a cell. Typora's Ctrl+Enter for a row below is not taken: the window host polls the command-Enter fetcher every frame as its sign of input, and whoever polls it owns the chord for the process; a row below is the row handle's menu, or Enter in the last row |
 
 A split and a merge are inverses and land as one undo entry each. Pasting
 multi-paragraph text into a block splits it into blocks after the splice,
@@ -193,8 +205,10 @@ after — owned by the widget, with the coalescing rules the frameworks
 document: contiguous typing at the caret within 500 ms joins the open
 entry; a caret move, a structural gesture, a paste or a formatting command
 closes it. egui's per-widget `Undoer` would fight this history, so Ctrl+Z
-and Ctrl+Shift+Z are captured in the focused block (§SD7) before egui sees
-them. Undo restores the focused block and its caret.
+and Ctrl+Y are captured in the focused block (§SD7) before egui sees them.
+Undo restores the focused block and its caret. The first text typed into a
+gap is recorded with the blank lines that make it a block, and the typing
+that follows still joins that entry.
 
 ### SD6 — Per-section fonts in the highlight seam
 
@@ -251,8 +265,33 @@ them.
   for properties they cannot type.
 - **Nested blocks inside callouts and list items.** Trigger: a callout body
   that needs a table or a code fence.
-- **Byte-range-to-rect**, for a bubble toolbar and a link popover. Trigger:
-  the formatting bar's distance from the selection being the complaint.
+- **Byte-range-to-rect**, for a bubble toolbar, a link popover, and ↑/↓
+  by the caret's row rather than the text's edge. Trigger: the formatting
+  bar's distance from the selection being the complaint, or ↑ from a
+  wrapped line's second row being expected to stay in the block.
+- **Windows line endings.** Block ranges keep a `\r`; a gap the editor pads
+  gets `\n` alone. Trigger: a CRLF document edited in Blocks mode.
+- **A URL pasted over a selection becoming a link.** Paste is egui's own
+  text paste; nothing tells a pasted URL from typed text. Trigger: a user
+  asking for it.
+- **What a GFM table cannot carry**: merged cells, multi-line cells,
+  several header rows, captions, cell colours. MultiMarkdown spells a
+  colspan as trailing pipes and markdown-it-multimd-table a rowspan as
+  `^^` and a line break as a trailing backslash; Pandoc's grid tables take
+  block content in a cell. None parses in goldmark, Obsidian or GitHub, so
+  a document using them renders broken everywhere but here. Even the
+  GFM-legal `<br>` in a cell stays out while the renderer drops raw HTML.
+  Trigger: a reader asking for one of these in a document that stays in
+  Blocks mode.
+- **Dragging a row or column handle to reorder.** The bindings carry no
+  drag source or drop zone; the handle's menu and Ctrl+arrows move. Trigger:
+  a table long enough that moving by steps is the complaint.
+- **A table's dragged column widths across sessions.** The grid's columns
+  resize and egui keeps the widths for the session; the deferred-body
+  table op has no width read-back, so nothing reaches the width store the
+  record grid uses. The rendered table does not honour the delimiter row's
+  alignment either, for want of an alignment knob on its op. Trigger: a
+  column width or an alignment that has to survive a restart.
 
 ## Surfaces — Tier 1
 
@@ -336,12 +375,14 @@ them.
 - **Lane.** Default `go test` for the block model (splice, reparse, undo
   coalescing, block identity after a splice), the Rust unit tests beside the
   highlight seam's reconcile, `widgets/conformance`, and headless scenes
-  under `apps/mdedit/scenes` driving the Blocks mode: Enter continues a
-  list and exits on an empty item; Backspace at a block start demotes then
-  merges; ↑ from the first row lands in the previous block; Ctrl+B wraps the
-  selection; Ctrl+Z after a split restores one block; a URL pasted over a
-  selection becomes a link; Tab in the last table cell adds a row; and after
-  every scene the saved bytes outside the edited range equal the originals.
+  under `apps/mdedit/scenes` driving the Blocks mode: Enter at a
+  paragraph's end opens a gap and typing pads it; Ctrl+Z and Ctrl+Y undo
+  and redo it; a click on another block leaves the open one; Ctrl+B
+  inserts its wrap; the sub-editors round-trip a fence and a table; and the
+  source pane read at the end shows the bytes outside the edited range
+  equal to the originals. The default lane's unit tests cover the rest of
+  the §SD4 table: list continuation and exit, Backspace demoting then
+  merging, the arrows, Escape, the soft break, and the raw blocks.
 - **What would fail.** A seam gesture doing something other than the §SD4
   table; a byte outside a splice changing.
 - **Gap.** IME composition inside a block, and the accessibility tree across
@@ -360,16 +401,29 @@ them.
   handed over, so a scene never touches the person's draft.
 - **M3 — `mdblocks` core**: document model, splice and reparse, undo,
   paragraph and heading blocks, the §SD4 seams, block selection; a gallery
-  demo; mdedit's Blocks mode (§SD8) and its scene. ✓ Two things the design
-  did not say. A click on a rendered block lands on a focusable frame above
-  the block's own text, read as the frame gaining focus, and puts the caret
-  at the block's end — there is no channel from a click position to a byte.
-  And what the TextEdit writes back at a frame's end already carries that
-  frame's insert, cursor and rebind, so nothing is ever skipped as stale;
-  only a caret the host or a gesture queued since the report wins over it.
-- **M4 — sub-editors**: code fence, table grid, image, callout. ✓ Each
+  demo; mdedit's Blocks mode (§SD8) and its scene. ✓ Three things the
+  design did not say. A click on a rendered block lands on a focusable
+  frame above the block's own text, read as the frame gaining focus, and
+  puts the caret at the block's end — there is no channel from a click
+  position to a byte; the open is applied after every block is drawn, since
+  an editor emitted later in the same frame would otherwise consume the
+  caret it queued. What the TextEdit writes back at a frame's end already
+  carries that frame's insert, cursor and rebind, so nothing is ever skipped
+  as stale; only a caret the host or a gesture queued since the report wins
+  over it. And a write-back moves the binding's range along with the text,
+  so plain typing never rebinds the widget.
+- **M4 — sub-editors**: code fence, table grid, image, callout. ✓ The
+  grid's handles, menus, keys, sort and paste expansion followed as the
+  survey of the productivity tools' tables (PowerPoint's Layout tab,
+  Google Docs, Notion, Obsidian 1.5, Typora, Advanced Tables) sorted by
+  what the GFM source can carry: the structural operations yes, widths and
+  the like as presentation the source never holds, spans and multi-line
+  cells not at all (§SD9). Each sub-editor
   parses the block into fields on open, composes the block from them after
-  every write-back and splices only the bytes that differ; a table re-emits
+  every write-back and splices only the bytes that differ — and nothing
+  while the fields still compose to what they composed to on open, so a
+  spelling the composer would normalise stays as written until a field is
+  edited; a table re-emits
   only the rows whose cells changed and keeps the others verbatim, padding
   and all. A structural key gesture — Tab past the last cell adding a row —
   splices in the same pass, since the fields are reloaded only when the
@@ -377,7 +431,8 @@ them.
   syntax colours of its own in this cut, and a rendered code block carries
   no text to click on in the accessibility tree, so the scene reaches it
   with ArrowDown from the block above — the seam §SD4 names.
-- **M5 — mdedit Blocks mode**, help, scenes.
+- **M5 — a help page** for the Blocks mode and its keys; mdedit has none
+  for any mode yet.
 
 ## Status
 

@@ -16,8 +16,9 @@ scene:
 ADR-0334 M3: the document edited as blocks over its source. A click on a
 rendered block opens it as text; Enter at its end starts a new block; typing
 into the new block pads it with the blank lines that make it one; Ctrl+Z is
-the document's own undo; and the source pane, opened at the end, shows the
-bytes every gesture left — the untouched ones unchanged.
+the document's own undo; a click on another block leaves the open one;
+Ctrl+B wraps from the keyboard; and the source pane, opened at the end,
+shows the bytes every gesture left — the untouched ones unchanged.
 
 ```jsonl trace
 {"do":"note","text":"ADR-0334 M3 — blocks over the source"}
@@ -38,6 +39,10 @@ bytes every gesture left — the untouched ones unchanged.
 {"do":"key","text":"Y","modifiers":18,"settleMs":500,"comment":"Ctrl+Y: and redo brings it back"}
 {"do":"wait","role":"multiline_text_input","value":"New block","settleMs":300}
 {"do":"capture","text":"blocks-editing","comment":"Blocks mode: the heading and the list rendered, the new block open as text"}
+{"do":"click","value":"First para. More","role":"label","pointer":true,"settleMs":600,"comment":"a click on a block above the open one leaves it: the open block closes and the clicked one opens with the caret at its end"}
+{"do":"wait","role":"multiline_text_input","value":"First para. More","settleMs":300}
+{"do":"key","text":"B","modifiers":18,"settleMs":500,"comment":"Ctrl+B with nothing selected inserts the bold placeholder"}
+{"do":"wait","role":"multiline_text_input","value":"First para. More**bold**","settleMs":300}
 {"do":"click","contains":"Source","role":"button","settleMs":500}
-{"do":"wait","role":"multiline_text_input","value":"# Title\n\nFirst para. More\n\nNew block\n\n- one\n- two\n","settleMs":400,"comment":"the source pane shows the bytes: the heading and the list untouched, the paragraph edited in place, the new block padded by blank lines"}
+{"do":"wait","role":"multiline_text_input","value":"# Title\n\nFirst para. More**bold**\n\nNew block\n\n- one\n- two\n","settleMs":400,"comment":"the source pane shows the bytes: the heading and the list untouched, the paragraph edited in place, the new block padded by blank lines"}
 ```

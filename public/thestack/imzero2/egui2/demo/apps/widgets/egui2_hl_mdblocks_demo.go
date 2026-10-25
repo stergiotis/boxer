@@ -5,6 +5,7 @@ import (
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/demo/apps/registry"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/mdblocks"
+	"strconv"
 )
 
 func init() {
@@ -87,28 +88,10 @@ func demoMdblocks(ids *c.WidgetIdStack, st *mdblocksDemoState) {
 		st.copied = ev.CopyRequest
 	}
 	c.Separator().Send()
-	c.Label("changes: " + itoaDemo(st.changes) + ", caret: " + itoaDemo(ev.Caret) + ", undo depth: " + itoaDemo(len(st.ed.Source())-len(mdblocksSample))).Selectable(false).Send()
+	undo := "no"
+	if st.ed.CanUndo() {
+		undo = "yes"
+	}
+	c.Label("changes: " + strconv.Itoa(st.changes) + ", caret: " + strconv.Itoa(ev.Caret) + ", undo: " + undo).Selectable(false).Send()
 	c.Label(st.ed.Source()).Selectable(true).Send()
-}
-
-func itoaDemo(n int) string {
-	if n == 0 {
-		return "0"
-	}
-	neg := n < 0
-	if neg {
-		n = -n
-	}
-	var b [20]byte
-	i := len(b)
-	for n > 0 {
-		i--
-		b[i] = byte('0' + n%10)
-		n /= 10
-	}
-	if neg {
-		i--
-		b[i] = '-'
-	}
-	return string(b[i:])
 }
