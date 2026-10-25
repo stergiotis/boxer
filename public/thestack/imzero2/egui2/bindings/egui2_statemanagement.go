@@ -107,6 +107,20 @@ func (v CanvasCursorValue) Ctrl() bool    { return v.Mods&2 != 0 }
 func (v CanvasCursorValue) Alt() bool     { return v.Mods&4 != 0 }
 func (v CanvasCursorValue) Command() bool { return v.Mods&8 != 0 }
 
+// TextRectsValue is one R28 row: what a textEdit that asked with
+// .ReportCursorRects() laid out last frame, in screen points. Primary and
+// Secondary are the two ends of egui's cursor range as caret rectangles —
+// one glyph row tall, zero wide — primary being the end the person moved,
+// so a selection keeps its direction; Text is the laid-out text and Clip
+// the part of it the widget shows. Row is the primary caret's row and Rows
+// the row count, so an edge-row test needs no geometry. A caret egui never
+// placed (the editor was never focused) reports the text's end. One-frame
+// lag like every register.
+type TextRectsValue struct {
+	Primary, Secondary, Text, Clip UiRectValue
+	Row, Rows                      uint32
+}
+
 // CapturedKey is one R26 key-capture row (ADR-0177 SD6): a key a widget
 // declared in its `.CaptureKeys()` mask, pressed while that widget had focus,
 // and CONSUMED from egui's queue so nothing else acts on it.
@@ -258,6 +272,10 @@ type StateManager struct {
 	// GetCapturedKeys. Backing arrays are reused across frames, so a caller
 	// that needs to keep a slice past the next Sync must copy it.
 	r26KeyCaptures map[uint64][]CapturedKey
+	// r28TextRects holds LAST frame's cursor geometry rows (ADR-0130,
+	// reportCursorRects), keyed by textEdit id. Rebuilt each Sync; read via
+	// GetTextRects.
+	r28TextRects map[uint64]TextRectsValue
 	// r22StarvedTextures holds LAST frame's starved-texture report: ids the
 	// host interpreted with no pixels and no usable cache entry (a send-once
 	// upload lost to a discarded hidden-tab buffer, or an idle-LRU eviction).
@@ -309,6 +327,7 @@ func NewStateManager() *StateManager {
 		r23CanvasWheel:       make(map[uint64]CanvasWheelValue, 8),
 		r24CanvasPointers:    make(map[uint64]CanvasCursorValue, 8),
 		r26KeyCaptures:       make(map[uint64][]CapturedKey, 4),
+		r28TextRects:         make(map[uint64]TextRectsValue, 8),
 		r22StarvedTextures:   make(map[uint64]struct{}, 8),
 	}
 }
@@ -503,6 +522,14 @@ func (inst *StateManager) GetCanvasCursor(h widgethandle.WidgetHandle) (v Canvas
 // next Sync; copy it if it must outlive the frame.
 func (inst *StateManager) GetCapturedKeys(h widgethandle.WidgetHandle) []CapturedKey {
 	return inst.r26KeyCaptures[h.Resolve()]
+}
+
+// GetTextRects returns last frame's R28 row for the textEdit behind the
+// handle (see TextRectsValue). ok=false when the widget did not render last
+// frame or did not ask with .ReportCursorRects().
+func (inst *StateManager) GetTextRects(h widgethandle.WidgetHandle) (v TextRectsValue, ok bool) {
+	v, ok = inst.r28TextRects[h.Resolve()]
+	return
 }
 
 // GetPointer returns last frame's R20 latest-pointer-position from egui's
@@ -769,6 +796,7 @@ func (inst *StateManager) Sync() {
 	fetcher.IssueFetchR23CanvasWheel()
 	fetcher.IssueFetchR24CanvasPointers()
 	fetcher.IssueFetchR26KeyCaptures()
+	fetcher.IssueFetchR28TextRects()
 	fetcher.IssueFetchR22StarvedTextures()
 	fetcher.IssueFetchFrameMetrics()
 	fetcher.IssueFetchPaintBudget()
@@ -976,6 +1004,27 @@ func (inst *StateManager) Sync() {
 				Mods:  mods[i],
 				Edges: edges,
 			})
+			i++
+		}
+	}
+	{
+		// Sixteen floats per row, four rectangles in a fixed order; the
+		// row count iterator paces the loop as the mods one does above.
+		ids, rects, rows, rowCountsSeq := fetcher.CollectFetchR28TextRects()
+		clear(inst.r28TextRects)
+		i := 0
+		for rowCount := range rowCountsSeq {
+			if i >= len(ids) || i >= len(rows) || (i+1)*16 > len(rects) {
+				break
+			}
+			v := rects[i*16 : (i+1)*16]
+			rect := func(k int) UiRectValue {
+				return UiRectValue{MinX: v[k], MinY: v[k+1], MaxX: v[k+2], MaxY: v[k+3]}
+			}
+			inst.r28TextRects[ids[i]] = TextRectsValue{
+				Primary: rect(0), Secondary: rect(4), Text: rect(8), Clip: rect(12),
+				Row: rows[i], Rows: rowCount,
+			}
 			i++
 		}
 	}

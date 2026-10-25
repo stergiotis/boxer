@@ -73,6 +73,10 @@ struct SavedLiveState<'a> {
     r24_canvas_pointer_pos_x: Vec<f32>,
     r24_canvas_pointer_pos_y: Vec<f32>,
     r24_canvas_pointer_mods: Vec<u8>,
+    r28_text_rect_ids: Vec<u64>,
+    r28_text_rect_vals: Vec<f32>,
+    r28_text_rect_rows: Vec<u32>,
+    r28_text_rect_row_counts: Vec<u32>,
     r26_key_capture_ids: Vec<u64>,
     r26_key_capture_codes: Vec<u8>,
     r26_key_capture_mods: Vec<u8>,
@@ -195,6 +199,10 @@ impl<'a, R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'a, R, W> {
             r24_canvas_pointer_pos_x: std::mem::take(&mut self.r24_canvas_pointer_pos_x),
             r24_canvas_pointer_pos_y: std::mem::take(&mut self.r24_canvas_pointer_pos_y),
             r24_canvas_pointer_mods: std::mem::take(&mut self.r24_canvas_pointer_mods),
+            r28_text_rect_ids: std::mem::take(&mut self.r28_text_rect_ids),
+            r28_text_rect_vals: std::mem::take(&mut self.r28_text_rect_vals),
+            r28_text_rect_rows: std::mem::take(&mut self.r28_text_rect_rows),
+            r28_text_rect_row_counts: std::mem::take(&mut self.r28_text_rect_row_counts),
             r26_key_capture_ids: std::mem::take(&mut self.r26_key_capture_ids),
             r26_key_capture_codes: std::mem::take(&mut self.r26_key_capture_codes),
             r26_key_capture_mods: std::mem::take(&mut self.r26_key_capture_mods),
@@ -293,6 +301,10 @@ impl<'a, R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'a, R, W> {
         self.r24_canvas_pointer_pos_x = s.r24_canvas_pointer_pos_x;
         self.r24_canvas_pointer_pos_y = s.r24_canvas_pointer_pos_y;
         self.r24_canvas_pointer_mods = s.r24_canvas_pointer_mods;
+        self.r28_text_rect_ids = s.r28_text_rect_ids;
+        self.r28_text_rect_vals = s.r28_text_rect_vals;
+        self.r28_text_rect_rows = s.r28_text_rect_rows;
+        self.r28_text_rect_row_counts = s.r28_text_rect_row_counts;
         self.r26_key_capture_ids = s.r26_key_capture_ids;
         self.r26_key_capture_codes = s.r26_key_capture_codes;
         self.r26_key_capture_mods = s.r26_key_capture_mods;

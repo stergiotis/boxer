@@ -360,6 +360,24 @@ func (inst *Fetcher) CollectFetchR27Windows() (ids []uint64, minX []float32, min
 	workMaxY = inst.readF32()
 	return
 }
+func (inst *Fetcher) FetchR28TextRects() (ids []uint64, rects []float32, rows []uint32, rowCounts iter.Seq[uint32]) {
+	inst.invoke(FuncProcIdFetchR28TextRects)
+	ids = inst.readU64h()
+	rects = inst.readF32h()
+	rows = inst.readU32h()
+	rowCounts = inst.iterateU32h()
+	return
+}
+func (inst *Fetcher) IssueFetchR28TextRects() {
+	inst.invoke(FuncProcIdFetchR28TextRects)
+}
+func (inst *Fetcher) CollectFetchR28TextRects() (ids []uint64, rects []float32, rows []uint32, rowCounts iter.Seq[uint32]) {
+	ids = inst.readU64h()
+	rects = inst.readF32h()
+	rows = inst.readU32h()
+	rowCounts = inst.iterateU32h()
+	return
+}
 func (inst *Fetcher) FetchR7() (ids []uint64, responses iter.Seq[uint32]) {
 	inst.invoke(FuncProcIdFetchR7)
 	ids = inst.readU64h()

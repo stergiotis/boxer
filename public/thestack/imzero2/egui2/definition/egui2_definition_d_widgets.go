@@ -574,6 +574,21 @@ func definitionsWidget() (widgets []*ir.BuilderFactoryNode) {
 				BeginMethod("reportCursor").
 				CodeClientRust(rustClientCode("self.text_edit_pending_report_cursor = true;\n")).
 				EndMethod().
+				// reportCursorRects (ADR-0130, update of 2026-10-25): the
+				// geometry half of the caret channel. The apply block below
+				// pushes one R28 row per frame the method is present: the
+				// primary and the secondary cursor's rectangles, the laid-out
+				// text's rectangle and the clip rectangle, in screen points,
+				// plus the primary cursor's row and the row count — read from
+				// the galley TextEdit::show hands back, which is why the
+				// textEdit is shown through apply_text_edit rather than
+				// apply_widget. What it answers: is the caret on the first or
+				// the last row, and where on screen is the selection — the
+				// questions a row-aware arrow key, a bubble toolbar and a link
+				// popover ask (ADR-0334 §SD9).
+				BeginMethod("reportCursorRects").
+				CodeClientRust(rustClientCode("self.text_edit_pending_report_rects = true;\n")).
+				EndMethod().
 				// setCursor: the inbound half of the caret channel, taking the
 				// same packed u64 reportCursor emits (low half start, high
 				// half end, CHAR offsets) so a range read out of an editor can
@@ -789,10 +804,8 @@ if self.text_edit_pending_capture_chords.0 != 0 {
 } else {
     self.text_edit_pending_capture_chords = (0, 0);
 }
-let resp =`),
-				applyCodeWidgetRust(true),
-				rustClientCode(`
-let mut changed = resp.is_some() && resp.unwrap().changed();
+let out = self.apply_text_edit({{Instance}}, {{EguiUiOptionalOuter}}, {{FuncProcIdOuter}}, Some({{Id}}));
+let mut changed = out.as_ref().map(|o| o.response.changed()).unwrap_or(false);
 // A builder method stashed the snippet on self.text_edit_pending_insert.
 // Splice it at the editor's persisted caret (replacing any selection) and
 // force the push: a programmatic edit never sets egui's .changed(). With no
@@ -869,6 +882,24 @@ if std::mem::take(&mut self.text_edit_pending_report_cursor) {
 		.map(|cr| { let r = cr.as_sorted_char_range(); (r.start.0 as u64, r.end.0 as u64) })
 		.unwrap_or((end, end));
 	self.r9_u64_push({{Id}}.value(), cs.min(CARET_HALF_MAX) | (ce.min(CARET_HALF_MAX) << 32));
+}
+// reportCursorRects: the galley this frame laid out, read before the text
+// moves out below. The cursor range is egui's own, primary first — the end
+// the person moved — so a selection's direction is kept; no range (the
+// editor was never focused) reports the text's end, as the caret report
+// does. Galley coordinates are translated to the screen by galley_pos.
+if std::mem::take(&mut self.text_edit_pending_report_rects) {
+	if let Some(o) = out.as_ref() {
+		let end = egui::text::CCursor::new(text.chars().count());
+		let (p, s) = o.cursor_range.map(|cr| (cr.primary, cr.secondary)).unwrap_or((end, end));
+		let off = o.galley_pos.to_vec2();
+		let pr = o.galley.pos_from_cursor(p).translate(off);
+		let sr = o.galley.pos_from_cursor(s).translate(off);
+		let tr = egui::Rect::from_min_size(o.galley_pos, o.galley.size());
+		let row = o.galley.layout_from_cursor(p).row as u32;
+		let rows = o.galley.rows.len() as u32;
+		self.r28_text_rect_push({{Id}}.value(), [pr, sr, tr, o.text_clip_rect], row, rows);
+	}
 }
 if changed {
 	self.r9_s_push({{Id}}.value(), text);

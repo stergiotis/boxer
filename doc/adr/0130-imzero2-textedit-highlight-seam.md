@@ -913,6 +913,32 @@ frontmatter, tables, raw HTML — monospace at its line's size, coalesced per
 line. Rust unit tests cover the split, the narrowest-wins rule and the shift;
 Go tests cover the derivation.
 
+### 2026-10-25 — `reportCursorRects`: the caret channel gains its geometry
+
+`reportCursor` says where the caret is in the text; nothing said where it
+is on the screen, or on which row of a wrapped buffer. ADR-0334 §SD9 named
+that gap ("byte-range-to-rect") as what stood between the block editor and
+↑/↓ by the caret's row, a bubble toolbar over the selection and a link
+popover.
+
+`reportCursorRects` is the outbound half, in the register idiom of
+`fetchR24CanvasPointers`: one R28 row per frame the method is present,
+keyed by the textEdit id, carrying the primary and the secondary cursor's
+rectangles, the laid-out text's rectangle and the clip rectangle in screen
+points, then the primary cursor's row and the row count. Go reads it with
+`StateManager.GetTextRects`, one frame late like every register, and a
+test scripts it with `ScriptTextRects`. The primary cursor is the end the
+person moved, so a selection keeps its direction; a cursor egui never
+placed reports the text's end, as `reportCursor` does.
+
+The galley is what answers these, and `ui.add` drops it: the textEdit is
+now shown through `apply_text_edit`, `TextEdit::show` with the same r7
+response send `apply_widget` performs, for every textEdit and not only
+the asking ones — one call site, and the output is a handle to what egui
+laid out anyway. The row index rather than a rect comparison is what the
+first consumer wanted: the block editor captures ↑ on the first row and ↓
+on the last, so a wrapped paragraph's inner rows stay with the field.
+
 ## References
 
 - [sql-editor-highlighting-survey](../explanation/sql-editor-highlighting-survey.md) —

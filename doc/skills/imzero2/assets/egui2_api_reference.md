@@ -73,6 +73,7 @@ status: draft
 | FetchR25EtColWidths | Fetcher | No | 0 | 0 | - | - |
 | FetchR26KeyCaptures | Fetcher | No | 0 | 0 | - | - |
 | FetchR27Windows | Fetcher | No | 0 | 0 | - | - |
+| FetchR28TextRects | Fetcher | No | 0 | 0 | - | - |
 | FetchR7 | Fetcher | No | 0 | 0 | - | - |
 | FetchR9EtPrefetch | Fetcher | No | 0 | 0 | - | - |
 | FetchR9F64 | Fetcher | No | 0 | 0 | - | - |
@@ -176,7 +177,7 @@ status: draft
 | TableCellText | BuilderFactory | No | 1 | 0 | 0 | Immediate, Retained |
 | TableColumn | BuilderFactory | No | 0 | 0 | 10 | Immediate, Retained |
 | TableHeaderText | BuilderFactory | No | 1 | 0 | 0 | Immediate, Retained |
-| TextEdit | BuilderFactory | Yes | 2 | 0 | 20 | Immediate |
+| TextEdit | BuilderFactory | Yes | 2 | 0 | 21 | Immediate |
 | TimeRangePicker | BuilderFactory | Yes | 2 | 0 | 4 | Immediate, Retained |
 | TintedScope | BuilderFactory | Yes | 1 | 0 | 4 | Immediate, Retained, BlockIterator |
 | UiClipToMaxRect | Procedural | No | 0 | 0 | - | - |
@@ -2387,6 +2388,7 @@ TableHeaderText
 - **SectionStyled**()
 - **NoWrapLayout**()
 - **ReportCursor**()
+- **ReportCursorRects**()
 - **SetCursor**(sel: u64, focus: b)
 - **CaptureTab**()
 - **CaptureKeys**(mask: u64)
@@ -3433,6 +3435,21 @@ Block
 | workMinY | f32 |
 | workMaxX | f32 |
 | workMaxY | f32 |
+
+---
+
+### FetchR28TextRects
+
+- **Type:** Fetcher
+
+#### Return Values
+
+| Name | Type |
+|------|------|
+| ids | u64h |
+| rects | f32h |
+| rows | u32h |
+| rowCounts | u32h |
 
 ---
 

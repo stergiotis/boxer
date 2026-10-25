@@ -684,6 +684,7 @@ pub struct ImZeroFffi<'a, R: std::io::BufRead, W: std::io::Write> {
     // block reads the persisted TextEditState it already loads for
     // insertAtCursor and pushes the sorted cursor char range as a packed u64.
     text_edit_pending_report_cursor: bool,
+    text_edit_pending_report_rects: bool,
     // Scratch slot for TextEditFluid.SetCursor: the inbound half of the caret
     // channel, packed exactly like ReportCursor's outbound value (low half
     // start, high half end, CHAR offsets). One-shot like insertAtCursor —
@@ -842,6 +843,15 @@ pub struct ImZeroFffi<'a, R: std::io::BufRead, W: std::io::Write> {
     r24_canvas_pointer_pos_x: Vec<f32>,
     r24_canvas_pointer_pos_y: Vec<f32>,
     r24_canvas_pointer_mods: Vec<u8>,
+
+    // reportCursorRects rows, keyed by the textEdit id: sixteen floats per
+    // row (the primary and the secondary cursor's, the text's and the clip
+    // rectangle), the primary cursor's row and the row count. Drained by
+    // FetchR28TextRects; cleared in prepare_next_frame.
+    r28_text_rect_ids: Vec<u64>,
+    r28_text_rect_vals: Vec<f32>,
+    r28_text_rect_rows: Vec<u32>,
+    r28_text_rect_row_counts: Vec<u32>,
 
     // ADR-0177 SD6 key captures, per id: one row per captured key EVENT, so a
     // widget that sees two presses in a frame contributes two rows — unlike
@@ -1069,6 +1079,7 @@ impl<R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'_, R, W> {
             text_edit_pending_styled: None,
             text_edit_pending_no_wrap: false,
             text_edit_pending_report_cursor: false,
+            text_edit_pending_report_rects: false,
             text_edit_pending_set_cursor: None,
             text_edit_pending_capture_tab: false,
             text_edit_pending_capture_keys: 0,
@@ -1121,6 +1132,10 @@ impl<R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'_, R, W> {
             r24_canvas_pointer_pos_x: Vec::with_capacity(16),
             r24_canvas_pointer_pos_y: Vec::with_capacity(16),
             r24_canvas_pointer_mods: Vec::with_capacity(16),
+            r28_text_rect_ids: Vec::with_capacity(8),
+            r28_text_rect_vals: Vec::with_capacity(8 * 16),
+            r28_text_rect_rows: Vec::with_capacity(8),
+            r28_text_rect_row_counts: Vec::with_capacity(8),
             r26_key_capture_ids: Vec::with_capacity(8),
             r26_key_capture_codes: Vec::with_capacity(8),
             r26_key_capture_mods: Vec::with_capacity(8),
@@ -1210,6 +1225,11 @@ impl<R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'_, R, W> {
             self.r24_canvas_pointer_pos_x.clear();
             self.r24_canvas_pointer_pos_y.clear();
             self.r24_canvas_pointer_mods.clear();
+            // r28 rows likewise: re-stamped by every asking textEdit.
+            self.r28_text_rect_ids.clear();
+            self.r28_text_rect_vals.clear();
+            self.r28_text_rect_rows.clear();
+            self.r28_text_rect_row_counts.clear();
         }
 
         {
@@ -4904,6 +4924,27 @@ self.apply_widget(w,u,f,Some(i));
                     self.io.write_plain_f32(w.min.y)?;
                     self.io.write_plain_f32(w.max.x)?;
                     self.io.write_plain_f32(w.max.y)?;
+                    self.io.flush()?;
+                }
+            }
+            FuncProcId::FetchR28TextRects => {
+                #[cfg(feature = "puffin")]
+                puffin::profile_scope!("match FuncProcId::FetchR28TextRects");
+                if d == 0 {
+                    self.end_consume_message()?;
+                }
+                // apply
+                if !self.capture_replay {
+                    // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+
+                    let len = self.r28_text_rect_ids.len();
+                    debug_assert_eq!(len * 16, self.r28_text_rect_vals.len());
+                    debug_assert_eq!(len, self.r28_text_rect_rows.len());
+                    debug_assert_eq!(len, self.r28_text_rect_row_counts.len());
+                    self.io.write_plain_u64h(len, self.r28_text_rect_ids.drain(..))?;
+                    self.io.write_plain_f32h(len * 16, self.r28_text_rect_vals.drain(..))?;
+                    self.io.write_plain_u32h(len, self.r28_text_rect_rows.drain(..))?;
+                    self.io.write_plain_u32h(len, self.r28_text_rect_row_counts.drain(..))?;
                     self.io.flush()?;
                 }
             }
@@ -9412,6 +9453,13 @@ if multiline { egui::TextEdit::multiline(&mut text).id(i) } else { egui::TextEdi
                             puffin::profile_scope!("match TextEditBuilderMethodId::ReportCursor");
                             self.text_edit_pending_report_cursor = true;
                         }
+                        TextEditBuilderMethodId::ReportCursorRects => {
+                            #[cfg(feature = "puffin")]
+                            puffin::profile_scope!(
+                                "match TextEditBuilderMethodId::ReportCursorRects"
+                            );
+                            self.text_edit_pending_report_rects = true;
+                        }
                         TextEditBuilderMethodId::SetCursor => {
                             #[cfg(feature = "puffin")]
                             puffin::profile_scope!("match TextEditBuilderMethodId::SetCursor");
@@ -9617,12 +9665,8 @@ if multiline { egui::TextEdit::multiline(&mut text).id(i) } else { egui::TextEdi
                 } else {
                     self.text_edit_pending_capture_chords = (0, 0);
                 }
-                let resp =
-// generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
-self.apply_widget(w,u,f,Some(i));
-                // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
-
-                let mut changed = resp.is_some() && resp.unwrap().changed();
+                let out = self.apply_text_edit(w, u, f, Some(i));
+                let mut changed = out.as_ref().map(|o| o.response.changed()).unwrap_or(false);
                 // A builder method stashed the snippet on self.text_edit_pending_insert.
                 // Splice it at the editor's persisted caret (replacing any selection) and
                 // force the push: a programmatic edit never sets egui's .changed(). With no
@@ -9711,6 +9755,32 @@ self.apply_widget(w,u,f,Some(i));
                         i.value(),
                         cs.min(CARET_HALF_MAX) | (ce.min(CARET_HALF_MAX) << 32),
                     );
+                }
+                // reportCursorRects: the galley this frame laid out, read before the text
+                // moves out below. The cursor range is egui's own, primary first — the end
+                // the person moved — so a selection's direction is kept; no range (the
+                // editor was never focused) reports the text's end, as the caret report
+                // does. Galley coordinates are translated to the screen by galley_pos.
+                if std::mem::take(&mut self.text_edit_pending_report_rects) {
+                    if let Some(o) = out.as_ref() {
+                        let end = egui::text::CCursor::new(text.chars().count());
+                        let (p, s) = o
+                            .cursor_range
+                            .map(|cr| (cr.primary, cr.secondary))
+                            .unwrap_or((end, end));
+                        let off = o.galley_pos.to_vec2();
+                        let pr = o.galley.pos_from_cursor(p).translate(off);
+                        let sr = o.galley.pos_from_cursor(s).translate(off);
+                        let tr = egui::Rect::from_min_size(o.galley_pos, o.galley.size());
+                        let row = o.galley.layout_from_cursor(p).row as u32;
+                        let rows = o.galley.rows.len() as u32;
+                        self.r28_text_rect_push(
+                            i.value(),
+                            [pr, sr, tr, o.text_clip_rect],
+                            row,
+                            rows,
+                        );
+                    }
                 }
                 if changed {
                     self.r9_s_push(i.value(), text);
@@ -10712,6 +10782,14 @@ egui::Window::new(label).id(i);
         self.r24_canvas_pointer_pos_y.push(py);
         self.r24_canvas_pointer_mods.push(mods);
     }
+    pub fn r28_text_rect_push(&mut self, i: u64, rects: [egui::Rect; 4], row: u32, rows: u32) {
+        self.r28_text_rect_ids.push(i);
+        for r in rects {
+            self.r28_text_rect_vals.extend_from_slice(&[r.min.x, r.min.y, r.max.x, r.max.y]);
+        }
+        self.r28_text_rect_rows.push(row);
+        self.r28_text_rect_row_counts.push(rows);
+    }
     pub fn r9_u64_push(&mut self, i: u64, r: u64) {
         self.r9_u64_ids.push(i);
         self.r9_u64_values.push(r);
@@ -10774,6 +10852,27 @@ egui::Window::new(label).id(i);
         }
         //tracing::debug!("late culled widget {:?}", f);
         None
+    }
+    /// apply_widget for a TextEdit: shown through TextEdit::show so the
+    /// galley it laid out is kept for reportCursorRects, with the response
+    /// sent through r7 exactly as apply_widget sends it.
+    pub fn apply_text_edit(
+        &mut self,
+        w: egui::TextEdit<'_>,
+        u: &mut Option<&mut egui::Ui>,
+        _f: &FuncProcId,
+        i: Option<egui::Id>,
+    ) -> Option<egui::text_edit::TextEditOutput> {
+        let ui = u.as_mut()?;
+        let out = w.show(ui);
+        if let Some(i) = i
+            && self.r8_response_flags_filter.match_response_any(&out.response)
+        {
+            let mut res = ResponseFlags::empty();
+            res.populate(&out.response);
+            self.r7_push(i.value(), res);
+        }
+        Some(out)
     }
     pub fn read_from_repr<T>(
         &mut self,

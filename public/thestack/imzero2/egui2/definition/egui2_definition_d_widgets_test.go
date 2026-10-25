@@ -12,13 +12,16 @@ var statefulPushPattern = regexp.MustCompile(`\b(r10_push|r9_[a-z0-9]+_push)\b`)
 // guarding a state push. Both consume the `resp.is_some() && resp.unwrap().<event>()`
 // predicate; they differ only in how the result is used:
 //   - the `if` form is what applyCodeWidgetRustOnEvent emits (checkbox, radioButton);
-//   - the `let mut changed =` form is textEdit's, which folds the event check
-//     into a `changed` flag also raised by a programmatic insert-at-cursor, then
-//     gates the single push on that flag. A plain if-gate would drop the
-//     insert path (it never sets egui's .changed()). See ADR-0063.
+//   - the `let mut changed =` forms fold the event check into a `changed`
+//     flag also raised by a programmatic insert-at-cursor, then gate the
+//     single push on that flag. A plain if-gate would drop the insert path
+//     (it never sets egui's .changed()). See ADR-0063. textEdit reads the
+//     event off the TextEditOutput its apply_text_edit returns (ADR-0130,
+//     reportCursorRects), which is the second spelling.
 var gateSubstrings = []string{
 	"if resp.is_some() && resp.unwrap().",
 	"let mut changed = resp.is_some() && resp.unwrap().",
+	"let mut changed = out.as_ref().map(|o| o.response.changed()).unwrap_or(false);",
 }
 
 // TestStatefulWidgetsAreGated catches the historical RadioButton drift —

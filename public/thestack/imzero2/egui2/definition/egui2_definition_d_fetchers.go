@@ -486,6 +486,30 @@ self.io.write_plain_u8h(len, self.r24_canvas_pointer_mods.drain(..))?;
 		AddReturnValue("mods", ctabb.U8h).
 		Build())
 
+	// ADR-0130 (update of 2026-10-25): drains the reportCursorRects rows —
+	// one per textEdit that asked, keyed by its id. rects holds sixteen
+	// floats per row: the primary cursor's, the secondary cursor's, the
+	// laid-out text's and the clip rectangle, each as min x, min y, max x,
+	// max y in screen points; rows is the primary cursor's row and rowCounts
+	// the galley's row count.
+	fetchers = append(fetchers, idl.NewFetcherNode("fetchR28TextRects").
+		WithApplyCodeClientRust(rustClientCode(`
+let len = self.r28_text_rect_ids.len();
+debug_assert_eq!(len * 16, self.r28_text_rect_vals.len());
+debug_assert_eq!(len, self.r28_text_rect_rows.len());
+debug_assert_eq!(len, self.r28_text_rect_row_counts.len());
+self.io.write_plain_u64h(len, self.r28_text_rect_ids.drain(..))?;
+self.io.write_plain_f32h(len * 16, self.r28_text_rect_vals.drain(..))?;
+self.io.write_plain_u32h(len, self.r28_text_rect_rows.drain(..))?;
+self.io.write_plain_u32h(len, self.r28_text_rect_row_counts.drain(..))?;
+{{SendMessage}}
+`)).
+		AddReturnValue("ids", ctabb.U64h).
+		AddReturnValue("rects", ctabb.F32h).
+		AddReturnValue("rows", ctabb.U32h).
+		AddReturnValue("rowCounts", ctabb.U32h).
+		Build())
+
 	// fetchCommandEnterPressed — drains the per-frame Ctrl+Enter /
 	// Ctrl+Shift+Enter press events, the conventional "submit what I am
 	// editing" pair. Two bools, one per shortcut, each true exactly once per

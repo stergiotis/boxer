@@ -25,6 +25,12 @@ func (inst *StateManager) ScriptCanvasCursor(h widgethandle.WidgetHandle, v Canv
 	inst.r24CanvasPointers[h.Resolve()] = v
 }
 
+// ScriptTextRects sets a textEdit's R28 cursor geometry row, what the
+// widget would have laid out last frame.
+func (inst *StateManager) ScriptTextRects(h widgethandle.WidgetHandle, v TextRectsValue) {
+	inst.r28TextRects[h.Resolve()] = v
+}
+
 // ScriptCanvasWheel sets a paintCanvas's R23 wheel capture; an absent row
 // reads as the identity, so a script sets it for the gesture's frame and
 // clears it after.
@@ -45,6 +51,7 @@ func (inst *StateManager) ScriptReset() {
 	seenIds.Clear()
 	inst.responseFlags.Reset()
 	clear(inst.r24CanvasPointers)
+	clear(inst.r28TextRects)
 	clear(inst.r23CanvasWheel)
 	inst.r20Pointer = PointerValue{}
 	inst.r17Modifiers = ModifiersValue{}

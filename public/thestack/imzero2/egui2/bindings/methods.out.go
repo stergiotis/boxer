@@ -3899,6 +3899,13 @@ func (inst TextEditFluid) ReportCursor() TextEditFluid {
 	return inst
 }
 
+func (inst TextEditFluid) ReportCursorRects() TextEditFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(TextEditMethodIdReportCursorRects))
+
+	return inst
+}
+
 func (inst TextEditFluid) SetCursor(sel uint64, focus bool) TextEditFluid {
 	r := inst.r
 	r.WriteOpCode(uint32(TextEditMethodIdSetCursor))
