@@ -885,13 +885,21 @@ if std::mem::take(&mut self.text_edit_pending_report_cursor) {
 }
 // reportCursorRects: the galley this frame laid out, read before the text
 // moves out below. The cursor range is egui's own, primary first — the end
-// the person moved — so a selection's direction is kept; no range (the
-// editor was never focused) reports the text's end, as the caret report
-// does. Galley coordinates are translated to the screen by galley_pos.
+// the person moved — so a selection's direction is kept. The output
+// carries a range only while the widget has focus; without focus the
+// persisted state's range stands, the one the caret report reads, so a
+// popup that takes focus from the editor does not see the caret jump; no
+// range at all (the editor was never focused) reports the text's end, as
+// the caret report does. Galley coordinates are translated to the screen
+// by galley_pos.
 if std::mem::take(&mut self.text_edit_pending_report_rects) {
 	if let Some(o) = out.as_ref() {
 		let end = egui::text::CCursor::new(text.chars().count());
-		let (p, s) = o.cursor_range.map(|cr| (cr.primary, cr.secondary)).unwrap_or((end, end));
+		let (p, s) = o
+			.cursor_range
+			.or_else(|| o.state.cursor.char_range())
+			.map(|cr| (cr.primary, cr.secondary))
+			.unwrap_or((end, end));
 		let off = o.galley_pos.to_vec2();
 		let pr = o.galley.pos_from_cursor(p).translate(off);
 		let sr = o.galley.pos_from_cursor(s).translate(off);
