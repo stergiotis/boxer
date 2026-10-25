@@ -33,7 +33,7 @@ gesture or a menu operation is an entry of its own.
 | Shift+Enter | a soft line break inside the block |
 | Tab, Shift+Tab on a list item | indents or outdents the item by one tab; elsewhere Tab inserts a tab |
 | Backspace at the start of a block | a heading or list item becomes a paragraph first; a paragraph joins the text block above it; a block that cannot be joined (an image, a rule, a table) is selected instead |
-| Up with the caret at the block's start, Down at its end | moves into the block above or below, caret at its end or start. The text's edge stands in for the edge row, so Up on the second row of a wrapped line leaves the block |
+| Up on the first row, Down on the last row | moves into the block above or below, caret at its end or start; on the rows between, the arrows move by row as in any field |
 | Ctrl+B / I / E / K | wraps the selection in bold, italic, inline code or a link, as the formatting bar does |
 | Ctrl+Z, Ctrl+Y | undo and redo, over the whole document |
 | Escape | closes the block and selects it |

@@ -355,3 +355,34 @@ func TestAClickOpensAfterTheFrameIsDrawn(t *testing.T) {
 		t.Fatalf("buf %q caret %d", e.buf, e.caret)
 	}
 }
+
+func TestEdgeKeyMaskFollowsTheCaretRow(t *testing.T) {
+	up, down, bs := keycodes.MaskOf(keycodes.ArrowUp), keycodes.MaskOf(keycodes.ArrowDown), keycodes.MaskOf(keycodes.Backspace)
+	// No geometry yet: the text's edges stand in for the rows.
+	if m := edgeKeyMask(3, 10, true, c.TextRectsValue{}, false); m != 0 {
+		t.Fatalf("mid-text without geometry: %b", m)
+	}
+	if m := edgeKeyMask(0, 10, true, c.TextRectsValue{}, false); m != up|bs {
+		t.Fatalf("start without geometry: %b", m)
+	}
+	if m := edgeKeyMask(10, 10, true, c.TextRectsValue{}, false); m != down {
+		t.Fatalf("end without geometry: %b", m)
+	}
+	// With geometry the row decides, wherever the caret is in the text.
+	if m := edgeKeyMask(5, 10, true, c.TextRectsValue{Row: 0, Rows: 3}, true); m != up {
+		t.Fatalf("first row: %b", m)
+	}
+	if m := edgeKeyMask(5, 10, true, c.TextRectsValue{Row: 1, Rows: 3}, true); m != 0 {
+		t.Fatalf("middle row: %b", m)
+	}
+	if m := edgeKeyMask(5, 10, true, c.TextRectsValue{Row: 2, Rows: 3}, true); m != down {
+		t.Fatalf("last row: %b", m)
+	}
+	if m := edgeKeyMask(0, 10, true, c.TextRectsValue{Row: 0, Rows: 1}, true); m != up|down|bs {
+		t.Fatalf("one row at the start: %b", m)
+	}
+	// A selection captures nothing: Shift+arrows extend it.
+	if m := edgeKeyMask(0, 10, false, c.TextRectsValue{Row: 0, Rows: 1}, true); m != 0 {
+		t.Fatalf("selection: %b", m)
+	}
+}

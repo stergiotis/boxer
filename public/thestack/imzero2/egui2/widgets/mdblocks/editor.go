@@ -842,19 +842,51 @@ func (e *Editor) renderTail(gap float32, drawnEditor bool) {
 	}
 }
 
+// edgeKeys is what the focused TextEdit captures only at its edges:
+// Backspace at the text's start, ↑ on the first row and ↓ on the last
+// (ADR-0334 §SD4). The row comes from last frame's cursor geometry
+// (reportCursorRects, ADR-0130); until the widget has reported one — its
+// first frame — the text's edges stand in for the edge rows.
+func (e *Editor) edgeKeys() keycodes.Mask {
+	cb := clampInt(e.caret-e.bufStart, 0, len(e.buf))
+	lo, hi := c.UnpackCursorRange(e.bufCursor)
+	var rects c.TextRectsValue
+	ok := false
+	if e.editorId != 0 {
+		rects, ok = c.CurrentApplicationState.StateManager.GetTextRects(widgethandle.Make(e.editorId))
+	}
+	return edgeKeyMask(cb, len(e.buf), lo == hi, rects, ok)
+}
+
+// edgeKeyMask is edgeKeys over its inputs: the caret as a byte offset into
+// a buffer of n bytes, whether the cursor is collapsed, and the geometry
+// report when there is one. A selection captures nothing, so Shift+arrows
+// extend it as in any field.
+func edgeKeyMask(caret, n int, collapsed bool, rects c.TextRectsValue, haveRects bool) (m keycodes.Mask) {
+	if !collapsed {
+		return 0
+	}
+	if caret == 0 {
+		m |= keycodes.MaskOf(keycodes.Backspace)
+	}
+	first, last := caret == 0, caret >= n
+	if haveRects && rects.Rows > 0 {
+		first, last = rects.Row == 0, rects.Row+1 >= rects.Rows
+	}
+	if first {
+		m |= keycodes.MaskOf(keycodes.ArrowUp)
+	}
+	if last {
+		m |= keycodes.MaskOf(keycodes.ArrowDown)
+	}
+	return
+}
+
 // renderEditor emits the focused TextEdit over buf and applies what was
 // queued for it: the snippet, the caret, the rebind.
 func (e *Editor) renderEditor() {
 	e.ensureHighlight()
-	mask := editorKeyMask
-	cb := clampInt(e.caret-e.bufStart, 0, len(e.buf))
-	lo, hi := c.UnpackCursorRange(e.bufCursor)
-	if cb == 0 && lo == hi {
-		mask |= keycodes.MaskOf(keycodes.Backspace, keycodes.ArrowUp)
-	}
-	if cb >= len(e.buf) && lo == hi {
-		mask |= keycodes.MaskOf(keycodes.ArrowDown)
-	}
+	mask := editorKeyMask | e.edgeKeys()
 	width := float32(480)
 	if e.paneW > 0 {
 		width = max(e.paneW-16, 1)
@@ -866,6 +898,7 @@ func (e *Editor) renderEditor() {
 		DesiredRows(rows).
 		HintText(e.opts.HintText).
 		ReportCursor().
+		ReportCursorRects().
 		CaptureKeys(uint64(mask)).
 		CaptureTab().
 		CaptureKeyChords(uint64(editorChordMask), uint8(keycodes.ModCommand))

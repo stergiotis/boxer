@@ -184,7 +184,7 @@ converged on:
 | Enter inside a list, quote or callout | continue the line's marker on the next line; Enter on an empty item removes the marker and exits |
 | Shift+Enter | a soft line break inside the block |
 | Backspace at the start of a block | a heading or list item demotes to a paragraph first; a paragraph merges into the previous text block; a non-text neighbour (image, rule, table) is selected instead |
-| ↑ with the caret at the block's start, ↓ at its end | focus moves to the neighbouring block, caret at its end or start. The row the caret is on is not known to Go (§SD9, byte-range-to-rect), so the edge of the text stands in for the edge row |
+| ↑ with the caret on the first row, ↓ on the last | focus moves to the neighbouring block, caret at its end or start. The row comes from the editor's cursor geometry report (ADR-0130, `reportCursorRects`); on the frame before the first report the text's edges stand in |
 | Escape | leaves text editing and selects the block; Shift+↑/↓ extends the block selection; Delete removes it; Enter opens the block; Escape again clears the selection |
 | Tab, Shift+Tab inside a list | indent or outdent the item by one tab, the unit Obsidian's default writes; elsewhere Tab inserts a tab |
 | `# `, `- `, `1. `, `> `, `[] `, a fence at line start | the line-start shortcuts, applied inside the focused block as text |
@@ -265,10 +265,11 @@ them.
   for properties they cannot type.
 - **Nested blocks inside callouts and list items.** Trigger: a callout body
   that needs a table or a code fence.
-- **Byte-range-to-rect**, for a bubble toolbar, a link popover, and ↑/↓
-  by the caret's row rather than the text's edge. Trigger: the formatting
-  bar's distance from the selection being the complaint, or ↑ from a
-  wrapped line's second row being expected to stay in the block.
+- **A bubble toolbar over the selection, a link popover, a slash menu at
+  the caret.** The geometry they anchor to is reported now (ADR-0130,
+  `reportCursorRects`, which also gave ↑/↓ their row); the popups
+  themselves are not built. Trigger: the formatting bar's distance from
+  the selection being the complaint.
 - **Windows line endings.** Block ranges keep a `\r`; a gap the editor pads
   gets `\n` alone. Trigger: a CRLF document edited in Blocks mode.
 - **A URL pasted over a selection becoming a link.** Paste is egui's own
