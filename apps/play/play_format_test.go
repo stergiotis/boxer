@@ -15,7 +15,7 @@ import (
 // recOfColumn wraps a single Arrow array in a one-column record batch.
 func recOfColumn(name string, arr arrow.Array) arrow.RecordBatch {
 	schema := arrow.NewSchema([]arrow.Field{{Name: name, Type: arr.DataType()}}, nil)
-	rec := array.NewRecord(schema, []arrow.Array{arr}, int64(arr.Len()))
+	rec := array.NewRecordBatch(schema, []arrow.Array{arr}, int64(arr.Len()))
 	return rec
 }
 

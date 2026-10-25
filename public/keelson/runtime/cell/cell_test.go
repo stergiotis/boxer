@@ -163,9 +163,10 @@ func TestTheExitLawsReturnTheRowsThatBreakThem(t *testing.T) {
 
 // The same laws as SQL, run on clickhouse local: the fixture forms over
 // the law relations, and the production compositions over tables shaped
-// as keelson('llm_calls'), keelson('sinks') and keelson('agent_run_entries')
-// serve them, with a loopback call that is no exit. The rows they return
-// are the rows the Go checks return.
+// as keelson('llm_calls'), keelson('http_calls'), keelson('sinks') and
+// keelson('agent_run_entries') serve them, with a loopback call that is no
+// exit. The rows they return are the rows the Go checks return; the
+// served form adds the fetches, which the fixture does not hold.
 func TestTheExitLawsSQLAgreeWithTheGoChecks(t *testing.T) {
 	bin, err := chlocalpool.LookupBinary()
 	if err != nil {
@@ -178,6 +179,7 @@ func TestTheExitLawsSQLAgreeWithTheGoChecks(t *testing.T) {
 	ddl.WriteString("CREATE TABLE exits (conversation String, ordinal UInt32, call_id String, at String, sink String, edge String, tier UInt8, approval_entry UInt64) ENGINE = Memory;\n")
 	ddl.WriteString("CREATE TABLE approvals (entry_id UInt64, run UInt64, conversation String, ordinal UInt32, at_ms Int64, path String, channel String, edge String) ENGINE = Memory;\n")
 	ddl.WriteString("CREATE TABLE llm_calls (conversation String, id UInt32, call_id String, at String, endpoint_host String, tier UInt8, refused Bool, approval_entry UInt64) ENGINE = Memory;\n")
+	ddl.WriteString("CREATE TABLE http_calls (conversation String, id UInt32, task_call String, at String, destination String, tier UInt8, refused Bool) ENGINE = Memory;\n")
 	ddl.WriteString("CREATE TABLE agent_run_entries (entry_id UInt64, run UInt64, ordinal UInt32, at_ms Int64, kind String, body String) ENGINE = Memory;\n")
 	ddl.WriteString("CREATE TABLE agent_runs (id UInt64, conversation String) ENGINE = Memory;\n")
 	ddl.WriteString("INSERT INTO agent_runs VALUES (1, 'x'), (2, 'y');\n")
@@ -194,6 +196,17 @@ func TestTheExitLawsSQLAgreeWithTheGoChecks(t *testing.T) {
 	// neither is an exit.
 	ddl.WriteString("INSERT INTO llm_calls VALUES ('x', 90, 'c90', '" + rfc(exits[0].At) + "', 'r', 4, true, 0);\n")
 	ddl.WriteString("INSERT INTO llm_calls VALUES ('x', 91, 'c91', '" + rfc(exits[0].At) + "', '127.0.0.1:1234', 4, false, 0);\n")
+	// Fetches (ADR-0312 §SD4): an egress destination the declaration lists
+	// is a sink, and a fetch has no approval path, so an AMBER fetch to a
+	// GREEN destination breaks L14 and L33 alike; a GREEN one, a refused
+	// one and one to a destination that is no sink are not exits. The
+	// fixture's own egress exit (13) names a sink the declaration omits,
+	// which the served form cannot see.
+	ddl.WriteString("INSERT INTO sinks VALUES ('egress', 'tiles', 'GREEN', " + itoa(uint32(agentrun.TierGreen)) + ");\n")
+	ddl.WriteString("INSERT INTO http_calls VALUES ('x', 30, 'f30', '" + rfc(exits[0].At) + "', 'tiles', " + itoa(uint32(agentrun.TierAmber)) + ", false);\n")
+	ddl.WriteString("INSERT INTO http_calls VALUES ('x', 31, 'f31', '" + rfc(exits[0].At) + "', 'tiles', " + itoa(uint32(agentrun.TierGreen)) + ", false);\n")
+	ddl.WriteString("INSERT INTO http_calls VALUES ('x', 32, 'f32', '" + rfc(exits[0].At) + "', 'tiles', " + itoa(uint32(agentrun.TierAmber)) + ", true);\n")
+	ddl.WriteString("INSERT INTO http_calls VALUES ('', 33, '', '" + rfc(exits[0].At) + "', 'other', " + itoa(uint32(agentrun.TierAmber)) + ", false);\n")
 	for _, a := range approvals {
 		body, berr := a.Approval.Body()
 		require.NoError(t, berr)
@@ -210,9 +223,10 @@ func TestTheExitLawsSQLAgreeWithTheGoChecks(t *testing.T) {
 	}
 	assert.Equal(t, []string{"12", "13", "17"}, run(L14SQLOver("exits", "sinks", "approvals")))
 	assert.Equal(t, []string{"12", "14", "15", "16", "17"}, run(L33SQLOver("exits", "sinks", "approvals", "("+PolicySQL(DefaultApprovalPolicy())+")")))
-	served := strings.NewReplacer("keelson('llm_calls')", "llm_calls", "keelson('sinks')", "sinks", "keelson('agent_run_entries')", "agent_run_entries", "keelson('agent_runs')", "agent_runs")
-	assert.Equal(t, []string{"17"}, run(served.Replace(L14SQL)), "over the served shapes: model-route rows only")
-	assert.Equal(t, []string{"15", "16", "17"}, run(served.Replace(L33SQLFor(DefaultApprovalPolicy()))))
+	served := strings.NewReplacer("keelson('llm_calls')", "llm_calls", "keelson('http_calls')", "http_calls", "keelson('sinks')", "sinks",
+		"keelson('agent_run_entries')", "agent_run_entries", "keelson('agent_runs')", "agent_runs")
+	assert.Equal(t, []string{"17", "30"}, run(served.Replace(L14SQL)), "over the served shapes: the model-route rows and the fetch above its clearance")
+	assert.Equal(t, []string{"15", "16", "17", "30"}, run(served.Replace(L33SQLFor(DefaultApprovalPolicy()))))
 }
 
 func u64(v uint64) string { return strconv.FormatUint(v, 10) }

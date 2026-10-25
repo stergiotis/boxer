@@ -195,7 +195,7 @@ func drainRun(rdr *ipc.Reader, rs *resultStream) (batches []arrow.RecordBatch, t
 	}
 
 	for rdr.Next() {
-		b := rdr.Record()
+		b := rdr.RecordBatch()
 		b.Retain()
 		pushErr := col.Push(runstream.DataFrame(next(), b))
 		if pushErr != nil {

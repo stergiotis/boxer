@@ -410,7 +410,6 @@ func TestEveryMount(t *testing.T) {
 // a single value reaches every pass factory.
 type bundledVisibility struct {
 	ladingsql.MountVisibilityI
-	somethingElse int
 }
 
 // A wildcard resolves through such a bundle. It did not while enumerability

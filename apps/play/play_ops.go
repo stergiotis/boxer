@@ -767,6 +767,9 @@ func (inst *PlayApp) setAgentDriven(obo *app.OnBehalfOf) {
 	if inst.client != nil {
 		inst.client.SetAgentMark(obo)
 	}
+	if inst.tiles != nil {
+		inst.tiles.SetAgentMark(obo)
+	}
 }
 
 // settleAgentMark records, at the end of the frame an agent's command ran

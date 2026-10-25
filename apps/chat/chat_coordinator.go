@@ -115,6 +115,10 @@ type coordinator struct {
 	artToldN bool
 	// curTitle is the running call's title, for the revision it makes.
 	curTitle string
+	// curTier is the run's current TLP tier, the label of the request
+	// whose reply is being acted on; declared on every call the loop
+	// makes so the work it causes carries it (ADR-0312 §SD4).
+	curTier agentrun.TierE
 	// stage is what the running tool loop is doing, and waiting how many of
 	// its calls wait on the person; the window reads both for the turn's
 	// state (chat_turnstate.go).
@@ -715,8 +719,11 @@ func (inst *coordinator) openWindow(ctx context.Context, o toolOrigin, toolCall 
 	if h == "" {
 		return "error: no task yet; call request_access first", "open_window: no task"
 	}
+	inst.mu.Lock()
+	tier := inst.curTier
+	inst.mu.Unlock()
 	got, err := inst.cli.LaunchFrom(ctx, agent.CallRequest{Handle: h, Key: o.key(), Turn: o.turn, ModelCall: o.modelCall,
-		ToolCall: toolCall, ToolIndex: uint32(max(o.index, 0))}, appName, "", nil)
+		ToolCall: toolCall, ToolIndex: uint32(max(o.index, 0)), Tier: uint8(tier)}, appName, "", nil)
 	if err != nil {
 		inst.refuse(err.Error())
 		return "error: " + err.Error() + openNext(appName, err.Error()), "open " + appName + ": " + err.Error()
@@ -975,10 +982,10 @@ func (inst *coordinator) call(ctx context.Context, o toolOrigin, toolCall string
 	key := o.key()
 	instance := uint64(window)
 	inst.mu.Lock()
-	title := inst.curTitle
+	title, tier := inst.curTitle, inst.curTier
 	inst.mu.Unlock()
 	out, err := inst.cli.Call(ctx, agent.CallRequest{Handle: h, Instance: instance, Operation: op, Args: opArgs, Key: key, Reason: reason,
-		Title: title, Turn: o.turn, ModelCall: o.modelCall, ToolCall: toolCall, ToolIndex: uint32(max(o.index, 0))})
+		Title: title, Turn: o.turn, ModelCall: o.modelCall, ToolCall: toolCall, ToolIndex: uint32(max(o.index, 0)), Tier: uint8(tier)})
 	where := op + " in window " + strconv.FormatUint(instance, 10)
 	if err != nil {
 		return "error: " + err.Error(), where + ": " + err.Error()

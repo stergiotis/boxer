@@ -232,7 +232,17 @@ type Tiles struct {
 	getter atomic.Pointer[httpegress.Getter]
 	// Purpose names the consumer on every call, e.g. "play: map".
 	purpose string
+	// mark is the agent call whose work the tiles are while it is set
+	// (SetAgentMark): the fetch then carries the call's context and the
+	// run's tier to the egress wall (ADR-0269 §SD6, ADR-0312 §SD4).
+	mark atomic.Pointer[app.OnBehalfOf]
 }
+
+// SetAgentMark makes every tile fetched from now on the work of an agent's
+// call, until the mark is cleared with nil. An app sets it when an agent's
+// command moved the view, and clears it when the view is the person's
+// again, as it does for the queries it runs.
+func (inst *Tiles) SetAgentMark(obo *app.OnBehalfOf) { inst.mark.Store(obo) }
 
 // NewTiles returns a fetcher over bus, which may be nil until Bind.
 func NewTiles(bus app.BusI, purpose string) (inst *Tiles) {
@@ -261,7 +271,7 @@ func (inst *Tiles) Get(ctx context.Context, url string) (data []byte, err error)
 	if g == nil {
 		return nil, errUnbound
 	}
-	return g.Get(ctx, url)
+	return g.GetFor(ctx, url, inst.mark.Load())
 }
 
 // maxDirectTileBytes bounds a tile fetched directly, like the loader's own cap.

@@ -45,13 +45,6 @@ func (inst *Broker) SetFactsStore(s factsstore.FactsStoreI) {
 	inst.mu.Unlock()
 }
 
-func (inst *Broker) currentFactsStore() (s factsstore.FactsStoreI) {
-	inst.mu.Lock()
-	defer inst.mu.Unlock()
-	s = inst.factsStore
-	return
-}
-
 // GrantRecord captures one approved grant. M2.3 retains this in memory only;
 // M2.5 mirrors it into boxer.facts under KindGrant.
 type GrantRecord struct {

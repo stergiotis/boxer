@@ -44,9 +44,10 @@ type Request struct {
 	// Tier is the request's TLP tier (ADR-0312 §SD4, as agentrun.TierE),
 	// checked against the destination's clearance; zero is CLEAR, and
 	// confined content carries at least the confined tier. Declaring it
-	// is the caller's duty: the service cannot see provenance. No caller
-	// in the tree sets it yet, so every fetch is CLEAR at this wall and
-	// only the sensitivity bit refuses.
+	// is the caller's duty: the service cannot see provenance. Work an
+	// agent's call caused carries the run's tier from OnBehalfOf, and
+	// the service takes the higher of this and the dispatcher's attested
+	// copy, so an app cannot lower what the harness declared.
 	Tier uint8
 	// OnBehalfOf is set when the fetch is work an agent's call started: the
 	// service then refuses a destination the task's grant does not list
@@ -154,9 +155,20 @@ type Getter struct {
 	Sensitivity queryengine.SensitivityE
 }
 
-// Get fetches url's body.
+// Get fetches url's body as the app's own work.
 func (inst Getter) Get(ctx context.Context, url string) (data []byte, err error) {
-	res, err := inst.Client.Fetch(ctx, inst.Destination, Request{URL: url, Purpose: inst.Purpose, Sensitivity: inst.Sensitivity})
+	return inst.GetFor(ctx, url, nil)
+}
+
+// GetFor fetches url's body as work an agent's call caused when obo is
+// set: the fetch carries the call's context and the run's tier
+// (ADR-0269 §SD6, ADR-0312 §SD4). nil is the app's own fetch.
+func (inst Getter) GetFor(ctx context.Context, url string, obo *app.OnBehalfOf) (data []byte, err error) {
+	r := Request{URL: url, Purpose: inst.Purpose, Sensitivity: inst.Sensitivity, OnBehalfOf: obo}
+	if obo != nil {
+		r.Tier = obo.Tier
+	}
+	res, err := inst.Client.Fetch(ctx, inst.Destination, r)
 	if err != nil {
 		return
 	}

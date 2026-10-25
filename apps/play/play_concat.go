@@ -41,7 +41,7 @@ func concatBatches(batches []arrow.RecordBatch, alloc memory.Allocator) (out arr
 		}
 		cols = append(cols, merged)
 	}
-	rec := array.NewRecord(schema, cols, totalRows)
+	rec := array.NewRecordBatch(schema, cols, totalRows)
 	// NewRecord retains each col; we can release our local refs.
 	for _, a := range cols {
 		a.Release()

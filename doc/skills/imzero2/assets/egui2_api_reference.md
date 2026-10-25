@@ -174,7 +174,7 @@ status: draft
 | Table | BuilderFactory | Yes | 2 | 0 | 6 | Immediate, Retained |
 | TableCellRichText | BuilderFactory | No | 0 | 1 | 0 | Immediate, Retained |
 | TableCellText | BuilderFactory | No | 1 | 0 | 0 | Immediate, Retained |
-| TableColumn | BuilderFactory | No | 0 | 0 | 8 | Immediate, Retained |
+| TableColumn | BuilderFactory | No | 0 | 0 | 10 | Immediate, Retained |
 | TableHeaderText | BuilderFactory | No | 1 | 0 | 0 | Immediate, Retained |
 | TextEdit | BuilderFactory | Yes | 2 | 0 | 20 | Immediate |
 | TimeRangePicker | BuilderFactory | Yes | 2 | 0 | 4 | Immediate, Retained |
@@ -2329,6 +2329,8 @@ TableCell
 - **AtMost**(maxWidth: f32)
 - **Resizable**(val: b)
 - **ClipContents**(val: b)
+- **AlignCenter**()
+- **AlignRight**()
 
 #### Return Type
 

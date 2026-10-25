@@ -22,6 +22,7 @@ const (
 	kindHttpFetchStatus      uint64 = 9223372049739677919
 	kindHttpFetchBytes       uint64 = 9223372049739677920
 	kindHttpFetchElapsedMs   uint64 = 9223372049739677921
+	kindHttpFetchTier        uint64 = 9223372049739678193
 	kindHttpFetchRefused     uint64 = 9223372049739677922
 	kindHttpFetchError       uint64 = 9223372049739677923
 )
@@ -192,6 +193,9 @@ func httpFetchEmitSectionU32Array[
 	u32ArraySecAttr_Status := u32ArraySec.BeginAttributeSingle(row.Status)
 	u32ArraySecAttr_Status.AddMembershipLowCardRefP(kindHttpFetchStatus)
 	u32ArraySecAttr_Status.EndAttributeP()
+	u32ArraySecAttr_Tier := u32ArraySec.BeginAttributeSingle(row.Tier)
+	u32ArraySecAttr_Tier.AddMembershipLowCardRefP(kindHttpFetchTier)
+	u32ArraySecAttr_Tier.EndAttributeP()
 	return
 }
 
@@ -529,6 +533,9 @@ func httpFetchReadRow[
 	var u32ArrayStatusVal uint32
 	var u32ArrayStatusCount int
 	var u32ArrayStatusLastAttr int64
+	var u32ArrayTierVal uint32
+	var u32ArrayTierCount int
+	var u32ArrayTierLastAttr int64
 	nu32Array := u32ArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 	for attrJ := int64(0); attrJ < nu32Array; attrJ++ {
 		for membID := range u32ArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
@@ -544,6 +551,17 @@ func httpFetchReadRow[
 					return
 				}
 				u32ArrayStatusVal = val
+			case kindHttpFetchTier:
+				if u32ArrayTierLastAttr != attrJ+1 {
+					u32ArrayTierLastAttr = attrJ + 1
+					u32ArrayTierCount++
+				}
+				val, valErr := u32ArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				if valErr != nil {
+					err = eb.Build().Int("row", i).Str("section", "u32Array").Str("membership", "httpFetchTier").Str("field", "Tier").Errorf("slot u32Array@httpFetchTier (field Tier) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+					return
+				}
+				u32ArrayTierVal = val
 			}
 		}
 	}
@@ -553,6 +571,14 @@ func httpFetchReadRow[
 	}
 	if u32ArrayStatusCount == 1 {
 		row.Status = u32ArrayStatusVal
+		present = true
+	}
+	if u32ArrayTierCount > 1 {
+		err = eb.Build().Int("row", i).Str("section", "u32Array").Str("membership", "httpFetchTier").Int("got", u32ArrayTierCount).Errorf("slot u32Array@httpFetchTier (field Tier) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", u32ArrayTierCount)
+		return
+	}
+	if u32ArrayTierCount == 1 {
+		row.Tier = u32ArrayTierVal
 		present = true
 	}
 	// --- u64Array. ---

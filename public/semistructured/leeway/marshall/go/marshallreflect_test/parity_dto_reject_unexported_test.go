@@ -5,7 +5,8 @@ package marshallreflect_test
 // accept would compile in-package while silently diverging from reflect's
 // accept set (ADR-0113 review fallout).
 type parityRejectUnexported struct {
-	_      struct{} `kind:"parityRejectUnexported"`
-	ID     uint64   `lw:",id"`
-	status string   `lw:"status,symbol"`
+	_  struct{} `kind:"parityRejectUnexported"`
+	ID uint64   `lw:",id"`
+	//lint:ignore U1000 the unexported tagged field is what both front-ends must reject
+	status string `lw:"status,symbol"`
 }

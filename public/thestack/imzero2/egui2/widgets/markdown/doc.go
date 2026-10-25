@@ -41,8 +41,7 @@
 //
 // Tables render through the native table op, which fixes every row to
 // one height: cell text does not wrap, taller content is clipped, a
-// hyperlink in a cell shows as its label rather than as a link, and
-// GFM's per-column alignment (`:---:`) is parsed but not applied. See
+// hyperlink in a cell shows as its label rather than as a link. See
 // EXPLANATION.md for why.
 //
 // Footnotes ([obsidian.FeatureFootnote], ADR-0255) render as a

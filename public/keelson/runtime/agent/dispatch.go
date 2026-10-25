@@ -142,6 +142,10 @@ type callRec struct {
 	turn         string
 	cause        option.Option[trail.Cause]
 	conversation string
+	// tier is the run's TLP tier the coordinator declared on the call
+	// (ADR-0312 §SD4), stamped on the on-behalf-of context and attested
+	// through CallContext.
+	tier uint8
 	// title and why are the model's title for the call and the reason it
 	// gave, bounded, for the dispatch row.
 	title string
@@ -495,7 +499,7 @@ func (inst *Service) call(msg *app.Msg) (rep wireCallReply) {
 		return
 	}
 	rec := &callRec{key: req.Key, instance: req.Instance, argsDigest: digest(req.Args), created: time.Now(),
-		turn: req.Turn, cause: causeOf(req), title: boundLabel(req.Title, maxCallTitleRunes), why: boundLabel(req.Reason, maxCallReasonRunes)}
+		turn: req.Turn, cause: causeOf(req), tier: req.Tier, title: boundLabel(req.Title, maxCallTitleRunes), why: boundLabel(req.Reason, maxCallReasonRunes)}
 	if t.test {
 		rec.args = req.Args
 	}
@@ -626,7 +630,7 @@ func (inst *Service) route(t *task, rec *callRec, req wireCall, spec app.Operati
 		return
 	}
 	creq := opwire.CallRequest{V: opwire.WireVersion, CallId: rec.callId, Args: args, Expects: expects,
-		Writer: opwire.WriterTask(t.id), Key: req.Key, Reason: req.Reason, RefData: refData, OnBehalfOf: inst.onBehalfOf(t, e, rec.callId)}
+		Writer: opwire.WriterTask(t.id), Key: req.Key, Reason: req.Reason, RefData: refData, OnBehalfOf: inst.onBehalfOf(t, e, rec)}
 	payload, err := buscodec.Encode(creq)
 	if err != nil {
 		out := phaseOutcome(opwire.PhaseFailed, "encode: "+err.Error())

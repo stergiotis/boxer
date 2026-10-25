@@ -289,9 +289,11 @@ them.
 - **A table's dragged column widths across sessions.** The grid's columns
   resize and egui keeps the widths for the session; the deferred-body
   table op has no width read-back, so nothing reaches the width store the
-  record grid uses. The rendered table does not honour the delimiter row's
-  alignment either, for want of an alignment knob on its op. Trigger: a
-  column width or an alignment that has to survive a restart.
+  record grid uses. Trigger: a column width that has to survive a restart.
+  The alignment the grid writes into the delimiter row is honoured by the
+  rendered table since the table op's column took an alignment; the
+  grid's own cells stay left, a text field having no alignment of its
+  own.
 
 ## Surfaces — Tier 1
 
@@ -431,8 +433,10 @@ them.
   syntax colours of its own in this cut, and a rendered code block carries
   no text to click on in the accessibility tree, so the scene reaches it
   with ArrowDown from the block above — the seam §SD4 names.
-- **M5 — a help page** for the Blocks mode and its keys; mdedit has none
-  for any mode yet.
+- **M5 — a help page** for the Blocks mode and its keys. ✓ mdedit had no
+  inline help for any mode, so the book (`apps/mdedit/help`, through
+  `Manifest.Help` as ADR-0047 has it) is two pages: the app, and the
+  Blocks mode with its keys as the §SD4 table reads to a user.
 
 ## Status
 

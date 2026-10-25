@@ -39,8 +39,7 @@ func TestDocsCandidatesOrder(t *testing.T) {
 
 type docsClock struct{ t time.Time }
 
-func (inst *docsClock) now() time.Time          { return inst.t }
-func (inst *docsClock) advance(d time.Duration) { inst.t = inst.t.Add(d) }
+func (inst *docsClock) now() time.Time { return inst.t }
 
 // newDocsDriver with no source leaves lookups unavailable, which is the shape
 // a client-less session has; the cache half still works, which is what these

@@ -6,6 +6,7 @@ import (
 	"github.com/apache/arrow-go/v18/arrow"
 
 	"github.com/stergiotis/boxer/public/functional/option"
+	"github.com/stergiotis/boxer/public/keelson/runtime/agentrun"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect"
 	"github.com/stergiotis/boxer/public/keelson/runtime/queryengine"
@@ -33,8 +34,16 @@ type CallRecord struct {
 	Task      string
 	TaskEpoch uint64
 	TaskCall  string
-	Refused   bool
-	Error     string
+	// Conversation is the conversation the dispatcher attested the call
+	// to, empty for the app's own fetch.
+	Conversation string
+	// Tier is the TLP tier the wall saw (ADR-0312 §SD4): the higher of
+	// what the sender declared and what the dispatcher attested for the
+	// run, confined content raised to the confined tier. Zero on a
+	// request refused before the wall.
+	Tier    agentrun.TierE
+	Refused bool
+	Error   string
 }
 
 // DestinationRecord is one registered destination as the host resolved it.
@@ -137,7 +146,10 @@ func callsTable(rows []CallRecord) *introspect.Table {
 		String("destination", func(i int) string { return rows[i].Destination }).
 		String("purpose", func(i int) string { return rows[i].Purpose }).
 		String("task", func(i int) string { return rows[i].Task }).
+		String("task_call", func(i int) string { return rows[i].TaskCall }).
+		String("conversation", func(i int) string { return rows[i].Conversation }).
 		String("sensitivity", func(i int) string { return sensitivityName(rows[i].Sensitivity) }).
+		Uint64("tier", func(i int) uint64 { return uint64(rows[i].Tier) }).
 		String("method", func(i int) string { return rows[i].Method }).
 		String("url", func(i int) string { return rows[i].URL }).
 		Int64("status", func(i int) int64 { return int64(rows[i].Status) }).
@@ -193,6 +205,9 @@ func (inst *Service) persist(rec CallRecord) {
 		return
 	}
 	c := trail.Context{Origin: inst.cfg.Trail.OriginOf(rec.Sender, rec.SenderInstance)}
+	if rec.Conversation != "" {
+		c.Conversation = option.Some(trail.Conversation{Conversation: rec.Conversation})
+	}
 	if rec.Task != "" {
 		d := trail.Delegation{Task: rec.Task, Epoch: rec.TaskEpoch}
 		if rec.TaskCall != "" {
@@ -203,7 +218,7 @@ func (inst *Service) persist(rec CallRecord) {
 	row := trail.HttpFetch{
 		Destination: rec.Destination, Purpose: rec.Purpose, Sensitivity: sensitivityName(rec.Sensitivity), Method: rec.Method,
 		Url: rec.URL, Status: uint32(max(rec.Status, 0)), Bytes: uint64(max(rec.Bytes, 0)),
-		ElapsedMs: uint64(max(rec.Elapsed.Milliseconds(), 0)), Refused: rec.Refused,
+		ElapsedMs: uint64(max(rec.Elapsed.Milliseconds(), 0)), Tier: uint32(rec.Tier), Refused: rec.Refused,
 	}
 	if rec.Error != "" {
 		row.Error = []string{rec.Error}

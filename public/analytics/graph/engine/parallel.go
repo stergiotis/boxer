@@ -18,7 +18,6 @@ const ReduceChunk = 4096
 type Engine struct {
 	workers int
 	next    []bool
-	sparse  []int32
 	partial []float64
 }
 

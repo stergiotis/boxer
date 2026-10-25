@@ -27,12 +27,6 @@ func addNumber[N constraints.Unsigned](s *strings.Builder, num N) {
 	ns := strconv.FormatUint(uint64(num), 10)
 	s.WriteString(ns)
 }
-func addIfNonzeroNumber[N constraints.Unsigned](s *strings.Builder, num N) {
-	if num > 0 {
-		ns := strconv.FormatUint(uint64(num), 10)
-		s.WriteString(ns)
-	}
-}
 func addIfNonzeroNumber2[R ~rune, N constraints.Unsigned](s *strings.Builder, r R, num N) {
 	if r != 0 {
 		s.WriteRune(rune(r))

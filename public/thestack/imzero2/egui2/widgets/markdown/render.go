@@ -6,6 +6,7 @@ import (
 
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
+	east "github.com/yuin/goldmark/extension/ast"
 )
 
 // padDefault resolves the IDS Padding.Default token at the active
@@ -324,18 +325,19 @@ func renderTable(s *segment, rc *renderCtx) {
 	// Every column but the last starts at roughly its content width and
 	// can be dragged; the last takes whatever width is left so the table
 	// fills the pane instead of ending in a ragged edge. All of them
-	// clip, which egui renders as an ellipsis where it can.
+	// clip, which egui renders as an ellipsis where it can, and each
+	// carries the delimiter row's alignment.
 	colCap := tableColumnCap(cols)
 	for i := 0; i < cols-1; i++ {
 		var runes uint32
 		if i < len(s.tableColRunes) {
 			runes = s.tableColRunes[i]
 		}
-		c.TableColumn().Initial(tableColumnWidth(runes, colCap)).
+		tableColumnAligned(c.TableColumn().Initial(tableColumnWidth(runes, colCap)).
 			AtLeast(tableColumnMinWidth).
-			Resizable(true).ClipContents(true).Send()
+			Resizable(true).ClipContents(true), s.tableAligns, i).Send()
 	}
-	c.TableColumn().Remainder().ClipContents(true).Send()
+	tableColumnAligned(c.TableColumn().Remainder().ClipContents(true), s.tableAligns, cols-1).Send()
 
 	// Zero header pushes render a headerless body — that is the op's
 	// documented behaviour, and what a table whose header row lowered to
@@ -358,6 +360,21 @@ func renderTable(s *segment, rc *renderCtx) {
 		tbl = tbl.MaxScrollHeight(maxScroll)
 	}
 	tbl.Send()
+}
+
+// tableColumnAligned gives column i the delimiter row's alignment; a
+// column without one, or past the aligns the lowering kept, stays left.
+func tableColumnAligned(col c.TableColumnFluid, aligns []east.Alignment, i int) c.TableColumnFluid {
+	if i >= len(aligns) {
+		return col
+	}
+	switch aligns[i] {
+	case east.AlignCenter:
+		return col.AlignCenter()
+	case east.AlignRight:
+		return col.AlignRight()
+	}
+	return col
 }
 
 // renderCodeActionButtons emits a horizontal row of small IDS buttons above

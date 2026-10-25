@@ -101,7 +101,6 @@ func animSpecCount(frames []ViewEvents, pick func(ViewEvents) bool) (n int) {
 }
 
 func animSpecZoomEnd(e ViewEvents) bool { return e.ZoomEnd }
-func animSpecMoveEnd(e ViewEvents) bool { return e.MoveEnd }
 
 // describe('#setView') — the `it`s with pan/zoom options; the rest are in
 // view_test.go.

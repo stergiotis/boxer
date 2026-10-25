@@ -341,7 +341,7 @@ func (inst *Service) handleWrite(msg *app.Msg) {
 		return
 	}
 	inst.mu.Lock()
-	text := p.Text
+	var text string
 	var rec CopyRecord
 	if labelled {
 		text, rec = inst.decide(p)

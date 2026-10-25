@@ -55,7 +55,8 @@ func TestPlanFor_RejectsJSONRawMessage(t *testing.T) {
 type unexportedTaggedDTO struct {
 	_  struct{} `kind:"unexp"`
 	Id uint64   `lw:",id"`
-	x  string   `lw:"x,symbol"` //nolint:unused // intentionally unexported for the test
+	//lint:ignore U1000 the unexported tagged field is what the test expects PlanFor to reject
+	x string `lw:"x,symbol"`
 }
 
 func TestPlanFor_RejectsUnexportedTaggedField(t *testing.T) {

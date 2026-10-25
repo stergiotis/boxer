@@ -285,7 +285,7 @@ func (inst *MemStore) ListEvents(_ context.Context, limit int) (events []EventRo
 		if limit > 0 && len(events) >= limit {
 			break
 		}
-		events = append(events, EventRow{At: e.At, Event: e.Event})
+		events = append(events, EventRow(e))
 	}
 	return
 }

@@ -117,7 +117,7 @@ func TestByteToChar_Clamps(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// headingSlugAt
+// Section fixtures, shared with the scrollTarget tests
 // ---------------------------------------------------------------------------
 
 // headingDoc is a source whose heading TEXT offsets are deliberately a couple
@@ -142,65 +142,6 @@ func TestHeadingFixtureOffsets(t *testing.T) {
 		if got != h.Text {
 			t.Errorf("heading %q: byte %d holds %q", h.Text, h.ByteOffset, got)
 		}
-	}
-}
-
-func TestHeadingSlugAt(t *testing.T) {
-	hs := headingsOf()
-
-	cases := []struct {
-		name string
-		off  int
-		want string
-	}{
-		{"before any heading is the doc-level section", 3, ""},
-		{"on the heading marker resolves to that heading", 13, "first"},
-		{"on the heading text", 16, "first"},
-		{"inside the first body", 25, "first"},
-		{"on the second marker", 34, "second"},
-		{"inside the second body", 48, "second"},
-		{"past the end stays in the last section", 999, "second"},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			if got := headingSlugAt(headingDoc, hs, tc.off); got != tc.want {
-				t.Errorf("headingSlugAt(%d): got %q want %q", tc.off, got, tc.want)
-			}
-		})
-	}
-}
-
-// TestHeadingSlugAt_MarkerNormalisation pins the reason lineStart exists: a
-// caret on the `#` sits BEFORE the reported heading offset, and without
-// normalising to the line start it would resolve to the previous section —
-// the preview jumping backwards exactly when the reader clicks into a heading.
-func TestHeadingSlugAt_MarkerNormalisation(t *testing.T) {
-	hs := headingsOf()
-	markerOff := 13 // the '#' of "# First"
-	if headingDoc[markerOff] != '#' {
-		t.Fatalf("fixture drift: byte %d is %q, want '#'", markerOff, headingDoc[markerOff])
-	}
-	if got := headingSlugAt(headingDoc, hs, markerOff); got != "first" {
-		t.Errorf("caret on the heading marker: got %q want %q", got, "first")
-	}
-}
-
-// TestHeadingSlugAt_DegenerateHeading covers the `##`-alone case, which the
-// markdown package reports with ByteOffset -1 and an empty slug. It names no
-// section, so it must not shadow the heading above it.
-func TestHeadingSlugAt_DegenerateHeading(t *testing.T) {
-	hs := []markdown.HeadingInfo{
-		{Text: "First", Slug: "first", Level: 1, ByteOffset: 15},
-		{Text: "", Slug: "", Level: 2, ByteOffset: -1},
-	}
-	if got := headingSlugAt(headingDoc, hs, 40); got != "first" {
-		t.Errorf("degenerate heading: got %q want %q", got, "first")
-	}
-}
-
-func TestHeadingSlugAt_NoHeadings(t *testing.T) {
-	if got := headingSlugAt("just prose\n", nil, 4); got != "" {
-		t.Errorf("no headings: got %q want empty", got)
 	}
 }
 
