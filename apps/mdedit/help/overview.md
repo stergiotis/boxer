@@ -71,6 +71,10 @@ own faces. Three keys do more than type:
 - **Tab** and **Shift+Tab** indent and outdent a list item by one tab, the
   unit Obsidian writes. On any other line Tab inserts a tab.
 - **Ctrl+B / I / E / K** apply the formatting bar's wraps.
+- **Ctrl+1 to Ctrl+6** make the caret's line a heading of that level, and
+  **Ctrl+0** a paragraph.
+
+A task box in the preview is a button: a click flips it in the source.
 
 ## Outline, find and replace
 

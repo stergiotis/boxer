@@ -1,11 +1,14 @@
 package mdblocks
 
 import (
+	"reflect"
 	"testing"
 
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/keycodes"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/codeview"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/graphview/scenetest"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/markdown"
 )
 
 func newTestEditor(t *testing.T, src string) *Editor {
@@ -384,5 +387,143 @@ func TestEdgeKeyMaskFollowsTheCaretRow(t *testing.T) {
 	// A selection captures nothing: Shift+arrows extend it.
 	if m := edgeKeyMask(0, 10, false, c.TextRectsValue{Row: 0, Rows: 1}, true); m != 0 {
 		t.Fatalf("selection: %b", m)
+	}
+}
+
+func TestToggleTaskFlipsTheBoxInPlace(t *testing.T) {
+	e := newTestEditor(t, "- [ ] a\n- [x] b\n")
+	frame(e)
+	e.toggleTask(markdown.TaskClick{Offset: 2})
+	e.toggleTask(markdown.TaskClick{Offset: 10, Checked: true})
+	if e.src != "- [x] a\n- [ ] b\n" {
+		t.Fatalf("%q", e.src)
+	}
+	// Not a box: nothing happens.
+	e.toggleTask(markdown.TaskClick{Offset: 0})
+	e.toggleTask(markdown.TaskClick{Offset: 99})
+	if e.src != "- [x] a\n- [ ] b\n" {
+		t.Fatalf("%q", e.src)
+	}
+	e.Undo()
+	if e.src != "- [x] a\n- [x] b\n" {
+		t.Fatalf("undo: %q", e.src)
+	}
+}
+
+func TestBlockChordsMoveDuplicateAndSetHeadings(t *testing.T) {
+	e := newTestEditor(t, "one\n\ntwo\n\nthree")
+	e.FocusAt(6) // "t|wo"
+	frame(e)
+	if !e.applyBlockChord(keycodes.ArrowUp) || e.src != "two\n\none\n\nthree" || e.caret != 1 {
+		t.Fatalf("up: %q caret %d", e.src, e.caret)
+	}
+	frame(e)
+	if !e.applyBlockChord(keycodes.ArrowDown) || e.src != "one\n\ntwo\n\nthree" || e.caret != 6 {
+		t.Fatalf("down: %q caret %d", e.src, e.caret)
+	}
+	frame(e)
+	if !e.applyBlockChord(keycodes.KeyD) || e.src != "one\n\ntwo\n\ntwo\n\nthree" || e.caret != 11 {
+		t.Fatalf("duplicate: %q caret %d", e.src, e.caret)
+	}
+	frame(e)
+	if !e.applyBlockChord(keycodes.Digit2) {
+		t.Fatal("heading chord")
+	}
+	if e.src != "one\n\ntwo\n\n## two\n\nthree" || e.caret != 14 {
+		t.Fatalf("heading: %q caret %d", e.src, e.caret)
+	}
+	frame(e)
+	if !e.applyBlockChord(keycodes.Digit0) || e.src != "one\n\ntwo\n\ntwo\n\nthree" {
+		t.Fatalf("paragraph: %q", e.src)
+	}
+	if e.applyBlockChord(keycodes.KeyB) {
+		t.Fatal("a wrap is not a block chord")
+	}
+	// The first block cannot move up; the last cannot move down.
+	e.FocusAt(1)
+	frame(e)
+	if e.applyBlockChord(keycodes.ArrowUp); e.src != "one\n\ntwo\n\ntwo\n\nthree" {
+		t.Fatalf("first up: %q", e.src)
+	}
+}
+
+func TestSelectionChordsMoveAndDuplicateTheRange(t *testing.T) {
+	e := newTestEditor(t, "a\n\nb\n\nc\n\nd")
+	e.FocusAt(3)
+	frame(e)
+	e.selectCurrent()
+	e.selB = 2 // b..c
+	if !e.moveBlocks(1, 2, 1) || e.src != "a\n\nd\n\nb\n\nc" || e.selA != 2 || e.selB != 3 {
+		t.Fatalf("move down: %q sel %d..%d", e.src, e.selA, e.selB)
+	}
+	if !e.duplicateBlocks(2, 3) || e.src != "a\n\nd\n\nb\n\nc\n\nb\n\nc" || e.selA != 4 || e.selB != 5 {
+		t.Fatalf("duplicate: %q sel %d..%d", e.src, e.selA, e.selB)
+	}
+}
+
+func TestPastedURLOverASelectionBecomesALink(t *testing.T) {
+	if _, ok := pastedLink("", "https://x.y"); ok {
+		t.Fatal("no selection")
+	}
+	if _, ok := pastedLink("two\nlines", "https://x.y"); ok {
+		t.Fatal("multi-line selection")
+	}
+	if _, ok := pastedLink("word", "plain text"); ok {
+		t.Fatal("not an address")
+	}
+	if _, ok := pastedLink("https://a.b", "https://x.y"); ok {
+		t.Fatal("an address over an address")
+	}
+	if l, ok := pastedLink("docs", "www.example.com/d"); !ok || l != "[docs](www.example.com/d)" {
+		t.Fatalf("%q %v", l, ok)
+	}
+	e := newTestEditor(t, "see docs here")
+	e.FocusAt(4)
+	frame(e)
+	// The widget held "docs" selected as of that emit, then wrote back the
+	// selection replaced by a pasted address sharing its first letter —
+	// which a diff of the two buffers would split in the wrong place.
+	e.bufCursor = c.PackCursorRange(4, 8)
+	frame(e)
+	typeInto(e, "see https://docs.x.y/d here", 22)
+	frame(e)
+	if e.src != "see [docs](https://docs.x.y/d) here" || e.caret != 30 {
+		t.Fatalf("%q caret %d", e.src, e.caret)
+	}
+	frame(e)
+	if e.buf != "see [docs](https://docs.x.y/d) here" {
+		t.Fatalf("rebound: %q", e.buf)
+	}
+	e.Undo()
+	if e.src != "see docs here" {
+		t.Fatalf("undo: %q", e.src)
+	}
+}
+
+func TestMatchesPaintOnlyInsideTheOpenBlock(t *testing.T) {
+	e := newTestEditor(t, "one two\n\nthree two")
+	e.SetMatches([]Span{{4, 7}, {15, 18}}, 1)
+	if secs, cuts, key := e.matchOverlays(); secs != nil || cuts != nil || key != "" {
+		t.Fatalf("nothing open: %v %v %q", secs, cuts, key)
+	}
+	e.FocusAt(10)
+	frame(e)
+	secs, cuts, key := e.matchOverlays()
+	if len(secs) != 1 || secs[0].Start != 6 || secs[0].Stop != 9 || secs[0].Flags&codeview.StyleUnderline == 0 {
+		t.Fatalf("current match in the open block: %+v", secs)
+	}
+	if !reflect.DeepEqual(cuts, []int{6, 9}) || key != "6:9* " {
+		t.Fatalf("cuts %v key %q", cuts, key)
+	}
+	e.SetMatches([]Span{{4, 7}, {15, 18}}, 0)
+	secs, _, key = e.matchOverlays()
+	if secs[0].Flags&codeview.StyleUnderline != 0 || key != "6:9 " {
+		t.Fatalf("not current: %+v %q", secs, key)
+	}
+	// A match straddling the block's start is clipped to it.
+	e.SetMatches([]Span{{7, 11}}, -1)
+	secs, _, _ = e.matchOverlays()
+	if len(secs) != 1 || secs[0].Start != 0 || secs[0].Stop != 2 {
+		t.Fatalf("clipped: %+v", secs)
 	}
 }

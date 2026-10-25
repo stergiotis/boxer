@@ -393,32 +393,10 @@ func matchCuts(ms []matchSpan, idx, limit int) (cuts []int) {
 	return cuts
 }
 
-// splitSpansAt cuts spans at the given ascending offsets, producing the same
-// colouring in more sections. Offsets outside a span, or falling on a boundary
-// it already has, change nothing.
-//
-// Span.Text is dropped rather than re-sliced: the lex tier leaves it empty and
-// the job builder never reads it, so carrying it would be inventing a field's
-// contents to satisfy a field nobody consults.
-func splitSpansAt(spans []markdownhighlight.Span, cuts []int) (out []markdownhighlight.Span) {
-	if len(cuts) == 0 {
-		return spans
-	}
-	out = make([]markdownhighlight.Span, 0, len(spans)+len(cuts))
-	ci := 0
-	for _, s := range spans {
-		start := s.Start
-		for ci < len(cuts) && int32(cuts[ci]) <= start {
-			ci++
-		}
-		for ci < len(cuts) && int32(cuts[ci]) < s.Stop {
-			out = append(out, markdownhighlight.Span{Start: start, Stop: int32(cuts[ci]), Category: s.Category})
-			start = int32(cuts[ci])
-			ci++
-		}
-		out = append(out, markdownhighlight.Span{Start: start, Stop: s.Stop, Category: s.Category})
-	}
-	return out
+// splitSpansAt is markdownhighlight.SplitSpansAt, the cut the block editor
+// makes too, so the two paint a match the same way.
+func splitSpansAt(spans []markdownhighlight.Span, cuts []int) []markdownhighlight.Span {
+	return markdownhighlight.SplitSpansAt(spans, cuts)
 }
 
 // ---------------------------------------------------------------------------

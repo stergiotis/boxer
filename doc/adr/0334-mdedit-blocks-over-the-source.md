@@ -474,6 +474,34 @@ request alone, as every other field does, and the scene types into it
 without a press. The mechanism by which the earlier ids defeated the
 request was not traced further than the fix.
 
+### 2026-10-25 — five gestures the survey's editors share, in Go alone
+
+Each one is a splice of the source and none needed the host:
+
+- **Task boxes click.** The markdown widget's task box is a run of its own
+  that reports a click with the byte offset of its `[` (`TaskClick`); the
+  block editor and mdedit's preview flip the character after it. Same
+  length either way, so nothing else moves.
+- **Blocks move and duplicate.** Ctrl+↑/↓ swaps the open block, or the
+  block selection, with its neighbour, the gap between them kept;
+  Ctrl+D puts a copy after it, a blank line between. The caret moves
+  with its block.
+- **Heading levels by chord.** Ctrl+1 to 6 set the caret's line to that
+  level and Ctrl+0 makes it a paragraph, in both panes, through
+  `mdline.SetHeading` so the two cannot disagree; a list item is left
+  alone.
+- **A web address pasted over a selection becomes a link**, the
+  selection its label — the one §SD9 deferral that waited for a user,
+  taken because the write-back diff already tells a paste over a
+  selection from typing: a one-line selection replaced by an address in
+  one frame. The block editor alone; the source pane's write-back is
+  egui's own.
+- **Find paints in the open block.** The host hands the editor its match
+  list (`SetMatches`) and the open block lays the same overlay the
+  source pane does over the matches it holds, the current one warmer,
+  cutting its colour spans through `markdownhighlight.SplitSpansAt`, now
+  shared with mdedit. Rendered blocks paint nothing.
+
 ## References
 
 - [rich-text-editor-design-space-survey](../adr-background-work/rich-text-editor-design-space-survey.md) — the clean-room survey this decision rests on; §9 maps the shapes, §10 the forks.

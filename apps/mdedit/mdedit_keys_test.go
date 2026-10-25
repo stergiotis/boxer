@@ -3,6 +3,7 @@ package mdedit
 import (
 	"testing"
 
+	"github.com/stergiotis/boxer/public/semistructured/markdown/mdline"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 )
 
@@ -33,5 +34,18 @@ func TestApplyTabIndentsThroughRebind(t *testing.T) {
 	inst.applyTab(5, false)
 	if inst.pendingInsert != "\t" || inst.rebindSrc {
 		t.Fatalf("tab: insert %q rebind %v", inst.pendingInsert, inst.rebindSrc)
+	}
+}
+
+func TestHeadingChordRewritesTheLineThroughRebind(t *testing.T) {
+	inst := &App{src: "para\n\nmore"}
+	inst.applyLineAction(mdline.SetHeading(inst.src, 2, 2))
+	if !inst.rebindSrc || inst.src != "## para\n\nmore" || inst.pendingCaret.Start != 5 || !inst.pendingCaret.Focus {
+		t.Fatalf("heading: src %q rebind %v caret %+v", inst.src, inst.rebindSrc, inst.pendingCaret)
+	}
+	inst = &App{src: "- item"}
+	inst.applyLineAction(mdline.SetHeading(inst.src, 3, 1))
+	if inst.rebindSrc || inst.pendingInsert != "" {
+		t.Fatalf("a list item is left alone: %+v", inst)
 	}
 }

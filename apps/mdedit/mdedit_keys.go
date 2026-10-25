@@ -19,6 +19,8 @@ import (
 //   - Ctrl+B / I / K / E as chords (ADR-0177, update of 2026-10-24): the
 //     formatting bar's wraps from the keyboard. The letters without the
 //     modifier are never captured and type as before.
+//   - Ctrl+0..6 as chords: the caret's line becomes a heading of that
+//     level, or a paragraph for 0 (mdline.SetHeading).
 //
 // Each capture is read back one frame after the press and applied before the
 // editor re-renders, the same cadence the find field's Enter has. What it
@@ -32,7 +34,16 @@ var editorKeyMask = keycodes.MaskOf(keycodes.Enter)
 
 // editorChordMask is what the source editor captures only under the command
 // modifier, and editorChords maps each key to the bar action it triggers.
-var editorChordMask = keycodes.MaskOf(keycodes.KeyB, keycodes.KeyI, keycodes.KeyK, keycodes.KeyE)
+var editorChordMask = keycodes.MaskOf(keycodes.KeyB, keycodes.KeyI, keycodes.KeyK, keycodes.KeyE,
+	keycodes.Digit0, keycodes.Digit1, keycodes.Digit2, keycodes.Digit3, keycodes.Digit4, keycodes.Digit5, keycodes.Digit6)
+
+// headingChords maps Ctrl+0..6 to a heading level, 0 a paragraph: the
+// caret's line is rewritten through mdline.SetHeading, the same rewrite the
+// block editor's chord makes.
+var headingChords = map[keycodes.Code]int{
+	keycodes.Digit0: 0, keycodes.Digit1: 1, keycodes.Digit2: 2, keycodes.Digit3: 3,
+	keycodes.Digit4: 4, keycodes.Digit5: 5, keycodes.Digit6: 6,
+}
 
 var editorChords = map[keycodes.Code]string{
 	keycodes.KeyB: "bold",
@@ -63,6 +74,8 @@ func (inst *App) applyEditorKeys() {
 		case k.Command():
 			if key, ok := editorChords[k.Code]; ok {
 				inst.applyChord(key)
+			} else if level, ok := headingChords[k.Code]; ok {
+				inst.applyLineAction(mdline.SetHeading(inst.src, caretByte, level))
 			}
 		}
 		// One gesture per frame: a second key in the same batch would act on

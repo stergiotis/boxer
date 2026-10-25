@@ -373,6 +373,10 @@ type App struct {
 	// blocks is the block editor the Blocks mode hosts (mdedit_blocks.go),
 	// built on first use.
 	blocks *mdblocks.Editor
+	// matchSpans is find's match list as the block editor takes it, and
+	// matchSpansFor the list it was built from (mdedit_blocks.go).
+	matchSpans    []mdblocks.Span
+	matchSpansFor *matchSpan
 
 	// pendingCaret is a caret move the app is asking the editor for, and
 	// pendingCaretOk whether there is one — a separate flag rather than a
@@ -1133,7 +1137,30 @@ func (inst *App) renderPreview() {
 	if slug, changed := inst.takeScrollTarget(); changed {
 		in.ScrollToSection = slug
 	}
-	markdown.Render(in)
+	res := markdown.Render(in)
+	// A task box clicked in the preview flips in the source: the character
+	// after its bracket, same length either way. A rebind from outside the
+	// editor, like a replace — not an edit its undo describes.
+	for _, t := range res.Tasks {
+		if next, ok := toggleTaskAt(inst.src, t.Offset); ok {
+			inst.rebindBuffer(next)
+		}
+	}
+}
+
+// toggleTaskAt flips the task box whose bracket sits at off in src.
+func toggleTaskAt(src string, off int) (next string, ok bool) {
+	i := off + 1
+	if off < 0 || i >= len(src) || src[off] != '[' {
+		return
+	}
+	switch src[i] {
+	case ' ':
+		return src[:i] + "x" + src[i+1:], true
+	case 'x', 'X':
+		return src[:i] + " " + src[i+1:], true
+	}
+	return
 }
 
 // ---------------------------------------------------------------------------

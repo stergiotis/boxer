@@ -38,6 +38,9 @@ func (inst *App) renderBlocks() {
 	if inst.blocks.Source() != inst.src {
 		inst.blocks.SetSource(inst.src)
 	}
+	// Find's matches, painted by the open block (the rendered ones paint
+	// nothing); the slice is rebuilt only when the match list moves.
+	inst.blocks.SetMatches(inst.blockMatches(), inst.find.idx)
 	if inst.pendingCaretOk {
 		// A jump from the outline or from find: the widget opens the block
 		// holding the offset. Focus is the requester's call, as it is for the
@@ -61,4 +64,23 @@ func (inst *App) renderBlocks() {
 	if ev.CopyRequest != "" {
 		inst.copyToClipboard(ev.CopyRequest, false)
 	}
+}
+
+// blockMatches is find's match list in the block editor's shape, rebuilt
+// when the list changes identity and reused otherwise, since the widget
+// keeps the slice it is handed.
+func (inst *App) blockMatches() []mdblocks.Span {
+	if len(inst.find.matches) == 0 {
+		inst.matchSpans, inst.matchSpansFor = nil, nil
+		return nil
+	}
+	if len(inst.matchSpans) == len(inst.find.matches) && inst.matchSpansFor == &inst.find.matches[0] {
+		return inst.matchSpans
+	}
+	out := make([]mdblocks.Span, len(inst.find.matches))
+	for i, m := range inst.find.matches {
+		out[i] = mdblocks.Span{Start: m.Start, Stop: m.Stop}
+	}
+	inst.matchSpans, inst.matchSpansFor = out, &inst.find.matches[0]
+	return out
 }

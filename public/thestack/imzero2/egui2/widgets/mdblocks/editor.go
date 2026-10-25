@@ -1,6 +1,9 @@
 package mdblocks
 
 import (
+	"strconv"
+	"strings"
+
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	"github.com/stergiotis/boxer/public/keelson/runtime/widgethandle"
 	"github.com/stergiotis/boxer/public/semistructured/markdown/mdline"
@@ -69,7 +72,11 @@ type Editor struct {
 	bufStop     int
 	bufCursor   uint64
 	lastEmitted string
-	editorId    uint64
+	// lastCursor is the cursor the widget held as of the last emit — the
+	// selection a paste replaced, which the write-back's diff alone cannot
+	// tell when the pasted text shares letters with it.
+	lastCursor uint64
+	editorId   uint64
 	// rebind asks for the databinding override after the next emit; the
 	// pending caret rides with it, or alone after a gesture moved the caret.
 	rebind         bool
@@ -93,6 +100,9 @@ type Editor struct {
 	// does not consume its caret.
 	pendingOpen   int
 	pendingOpenOk bool
+	// pendingTasks are task boxes clicked in rendered blocks this frame,
+	// flipped after the blocks are drawn (toggleTask).
+	pendingTasks []markdown.TaskClick
 
 	// Block selection (Escape): a range of block indexes, inclusive.
 	selMode    bool
@@ -113,8 +123,14 @@ type Editor struct {
 	// paneW is what the pane probe last reported.
 	paneW float32
 
-	// The focused block's highlight, keyed by its text.
+	// matches are the host's find matches as source byte ranges, with
+	// the current one; the open block paints those it holds (SetMatches).
+	matches  []Span
+	matchCur int
+	// The focused block's highlight, keyed by its text and the matches
+	// painted over it.
 	hlSrc      string
+	hlMatchKey string
 	hlJob      typed.RetainedFffiHolderTyped[c.CodeViewJobS]
 	hlStyled   typed.RetainedFffiHolderTyped[c.StyledSectionsS]
 	hlJobOk    bool
@@ -251,13 +267,16 @@ func (e *Editor) splice(at int, old, new string, caretAfter int, sealed bool) {
 var editorKeyMask = keycodes.MaskOf(keycodes.Enter, keycodes.Escape)
 
 // editorChordMask is what the focused TextEdit captures under the command
-// modifier: undo, redo, and the formatting wraps.
-var editorChordMask = keycodes.MaskOf(keycodes.KeyZ, keycodes.KeyY, keycodes.KeyB, keycodes.KeyI, keycodes.KeyK, keycodes.KeyE)
+// modifier: undo, redo, the formatting wraps, the heading levels, and the
+// block's move and duplicate (blockops.go).
+var editorChordMask = keycodes.MaskOf(keycodes.KeyZ, keycodes.KeyY, keycodes.KeyB, keycodes.KeyI, keycodes.KeyK, keycodes.KeyE,
+	keycodes.KeyD, keycodes.ArrowUp, keycodes.ArrowDown,
+	keycodes.Digit0, keycodes.Digit1, keycodes.Digit2, keycodes.Digit3, keycodes.Digit4, keycodes.Digit5, keycodes.Digit6)
 
 // frameKeyMask is what the container captures while a block selection has
 // focus; frameChordMask its chords.
 var frameKeyMask = keycodes.MaskOf(keycodes.Escape, keycodes.Enter, keycodes.ArrowUp, keycodes.ArrowDown, keycodes.Delete, keycodes.Backspace)
-var frameChordMask = keycodes.MaskOf(keycodes.KeyZ, keycodes.KeyY, keycodes.KeyC)
+var frameChordMask = keycodes.MaskOf(keycodes.KeyZ, keycodes.KeyY, keycodes.KeyC, keycodes.KeyD, keycodes.ArrowUp, keycodes.ArrowDown)
 
 // chordWraps names the formatting chord each key is, in [mdline.Wraps].
 var chordWraps = map[keycodes.Code]string{
@@ -311,10 +330,17 @@ func (e *Editor) Render() (ev Events) {
 			e.openBlock(e.pendingOpen, e.blocks[e.pendingOpen].stop)
 		}
 	}
+	for _, t := range e.pendingTasks {
+		e.toggleTask(t)
+	}
+	e.pendingTasks = e.pendingTasks[:0]
 	ev.Changed = e.changed
 	ev.Caret = e.Caret()
 	ev.Editing = e.editing
 	ev.CopyRequest = e.copyRequest
+	// What the widget holds as this frame ends, before the next report
+	// replaces it.
+	e.lastCursor = e.bufCursor
 	return
 }
 
@@ -339,6 +365,15 @@ func (e *Editor) applyWriteBack() {
 		}
 		sealed := e.sealNext
 		e.sealNext = false
+		if la, sel, link, isLink := e.pastedOverSelection(); isLink {
+			// A web address pasted over a selection: the selection becomes
+			// the label of a link to it (blockops.go). The widget holds
+			// the bare address, so the buffer is re-derived and rebound.
+			e.splice(e.bufStart+la, sel, link, e.bufStart+la+len(link), true)
+			e.bufStop += len(link) - len(sel)
+			e.pendingCaretOk = true
+			return
+		}
 		if e.bufStart == e.bufStop && newMid != "" {
 			// The first text in a gap becomes a block of its own, the
 			// padding recorded with it so the typing that follows joins
@@ -427,6 +462,20 @@ func (e *Editor) applyFrameKeys() {
 				a, b := e.selRange()
 				e.copyRequest = e.src[e.blocks[a].start:e.blocks[b].stop]
 			}
+		case k.Command() && (k.Code == keycodes.ArrowUp || k.Code == keycodes.ArrowDown):
+			if e.selMode {
+				a, b := e.selRange()
+				d := -1
+				if k.Code == keycodes.ArrowDown {
+					d = 1
+				}
+				e.moveBlocks(a, b, d)
+			}
+		case k.Command() && k.Code == keycodes.KeyD:
+			if e.selMode {
+				a, b := e.selRange()
+				e.duplicateBlocks(a, b)
+			}
 		case !e.selMode:
 			// Nothing selected: the frame holds focus only between modes.
 		case k.Code == keycodes.Escape:
@@ -468,6 +517,9 @@ func (e *Editor) applyChord(code keycodes.Code) {
 	case keycodes.KeyY:
 		e.Redo()
 	default:
+		if e.applyBlockChord(code) {
+			return
+		}
 		name, ok := chordWraps[code]
 		if !ok {
 			return
@@ -666,6 +718,25 @@ func (e *Editor) openBlock(i int, off int) {
 	e.pendingFocus = true
 }
 
+// toggleTask flips the task box a rendered block reported a click on: the
+// character after its bracket, a space to an x and either case of x to a
+// space. Same length either way, so nothing else in the document moves;
+// an entry of its own in the history.
+func (e *Editor) toggleTask(t markdown.TaskClick) {
+	i := t.Offset + 1
+	if t.Offset < 0 || i >= len(e.src) || e.src[t.Offset] != '[' {
+		return
+	}
+	old := e.src[i : i+1]
+	next := "x"
+	if old == "x" || old == "X" {
+		next = " "
+	} else if old != " " {
+		return
+	}
+	e.splice(i, old, next, e.caret, true)
+}
+
 // deleteSelection removes the selected blocks and the gap after them.
 func (e *Editor) deleteSelection() {
 	a, b := e.selRange()
@@ -815,6 +886,9 @@ func (e *Editor) renderBlock(i int, selected bool) (links []markdown.LinkClick, 
 			default:
 				res := markdown.RenderBlock(markdown.Input{Ids: e.ids, ScopeKey: "block", Doc: e.doc, LinkClaims: e.opts.LinkClaims}, blk.docIndex)
 				links = res.Links
+				for _, t := range res.Tasks {
+					e.pendingTasks = append(e.pendingTasks, t)
+				}
 			}
 		}
 	}
@@ -946,16 +1020,76 @@ func (e *Editor) renderEditor() {
 // ensureHighlight builds the focused block's colours and fonts, keyed by
 // its text.
 func (e *Editor) ensureHighlight() {
-	if e.hlJobOk && e.hlSrc == e.buf {
+	secs, cuts, key := e.matchOverlays()
+	if e.hlJobOk && e.hlSrc == e.buf && e.hlMatchKey == key {
 		return
 	}
-	e.hlSrc = e.buf
+	e.hlSrc, e.hlMatchKey = e.buf, key
 	if e.buf == "" {
 		e.hlJobOk, e.hlStyledOk = false, false
 		return
 	}
-	spans := markdownhighlight.HighlightLex([]byte(e.buf))
+	spans := markdownhighlight.SplitSpansAt(markdownhighlight.HighlightLex([]byte(e.buf)), cuts)
 	e.hlJob = codeview.BuildMarkdownFromSpans(e.buf, spans)
 	e.hlJobOk = true
-	e.hlStyled, e.hlStyledOk = codeview.BuildStyledSections(codeview.MarkdownFontSections(e.buf, spans, nil))
+	e.hlStyled, e.hlStyledOk = codeview.BuildStyledSections(codeview.MarkdownFontSections(e.buf, spans, secs))
+}
+
+// Span is a byte range of the source, start inclusive and stop exclusive.
+type Span struct {
+	Start, Stop int
+}
+
+// SetMatches hands the editor the host's find matches, as ascending and
+// disjoint source byte ranges, and which of them is current (-1 for none).
+// The open block paints the ones it holds, the current one in the warmer
+// tone, through the same overlay the source pane's find uses; rendered
+// blocks paint nothing. The slice is kept, not copied: hand over one that
+// stays as it is until the next call.
+func (e *Editor) SetMatches(matches []Span, current int) {
+	e.matches, e.matchCur = matches, current
+}
+
+// Match tones: an alpha over the editor's background rather than a
+// palette background token, for the reason mdedit's find records — the
+// background family sits within a few levels of the editor's near-black.
+var (
+	// designlint:ignore=L2 (no mid-tone background token exists; see above)
+	toneMatch = color.RGBA(styletokens.AccentDefault.R, styletokens.AccentDefault.G, styletokens.AccentDefault.B, 0x38)
+	// designlint:ignore=L2 (no mid-tone background token exists; see above)
+	toneMatchCurrent = color.RGBA(styletokens.WarningDefault.R, styletokens.WarningDefault.G, styletokens.WarningDefault.B, 0x70)
+)
+
+// matchOverlays is the overlay list for the matches inside the open block,
+// in the block's own offsets, with the cuts the colour spans need at their
+// bounds and a key that changes when the list does.
+func (e *Editor) matchOverlays() (secs []codeview.StyledSection, cuts []int, key string) {
+	if len(e.matches) == 0 || !e.editing {
+		return
+	}
+	var b strings.Builder
+	for i, m := range e.matches {
+		if m.Stop <= e.bufStart || m.Start >= e.bufStop || m.Start >= m.Stop {
+			continue
+		}
+		lo, hi := max(m.Start, e.bufStart)-e.bufStart, min(m.Stop, e.bufStop)-e.bufStart
+		tone, flags := toneMatch, codeview.StyleBackground
+		if i == e.matchCur {
+			tone, flags = toneMatchCurrent, codeview.StyleBackground|codeview.StyleUnderline
+		}
+		secs = append(secs, codeview.StyledSection{Start: uint32(lo), Stop: uint32(hi), Flags: flags, Color: tone})
+		if n := len(cuts); n == 0 || cuts[n-1] != lo {
+			cuts = append(cuts, lo)
+		}
+		cuts = append(cuts, hi)
+		b.WriteString(strconv.Itoa(lo))
+		b.WriteByte(':')
+		b.WriteString(strconv.Itoa(hi))
+		if i == e.matchCur {
+			b.WriteByte('*')
+		}
+		b.WriteByte(' ')
+	}
+	key = b.String()
+	return
 }

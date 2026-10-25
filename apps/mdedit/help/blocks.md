@@ -35,8 +35,21 @@ gesture or a menu operation is an entry of its own.
 | Backspace at the start of a block | a heading or list item becomes a paragraph first; a paragraph joins the text block above it; a block that cannot be joined (an image, a rule, a table) is selected instead |
 | Up on the first row, Down on the last row | moves into the block above or below, caret at its end or start; on the rows between, the arrows move by row as in any field |
 | Ctrl+B / I / E / K | wraps the selection in bold, italic, inline code or a link, as the formatting bar does |
+| Ctrl+1 to Ctrl+6, Ctrl+0 | makes the caret's line a heading of that level, or a paragraph |
+| Ctrl+Up, Ctrl+Down | moves the block past the one above or below it |
+| Ctrl+D | duplicates the block below itself |
 | Ctrl+Z, Ctrl+Y | undo and redo, over the whole document |
 | Escape | closes the block and selects it |
+
+Pasting a web address over a selected word or phrase makes it a link, the
+selection as the label. Find's matches are painted in the open block, the
+current one in the warmer tone.
+
+## Task boxes
+
+A task box in a rendered list item is a button: a click flips it between
+open and done in the source, without opening the block. The preview in
+the other modes does the same.
 
 ## Popups at the caret
 
@@ -69,6 +82,8 @@ editing with the block selected.
 | Enter | opens the selected block, caret at its end |
 | Delete, Backspace | removes the selected blocks |
 | Ctrl+C | copies the selected blocks' source to the clipboard |
+| Ctrl+Up, Ctrl+Down | moves the selected blocks past their neighbour |
+| Ctrl+D | duplicates the selected blocks below themselves |
 | Ctrl+Z, Ctrl+Y | undo and redo |
 | Escape | clears the selection |
 
