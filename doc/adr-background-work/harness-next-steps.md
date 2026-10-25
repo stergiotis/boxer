@@ -21,7 +21,7 @@ file. Everything below is open.
 
 | Item | Decides | Blocks |
 | --- | --- | --- |
-| The env registry seam: boxer is handed the cell declaration and the profile rather than reading them | an ADR to write, from `env-registry-scope-problem.md` | the chat's second `cell.FromEnv` read; integrators |
+| The profile seam: the host hands the chat the profile registry in force, and the selector is checked against it (the cell half landed 2026-10-11, ADR-0307 §SD1 Update) | ADR-0335 (accepted 2026-10-25), from `env-registry-scope-problem.md`; nothing built | an integrator with a second profile |
 | The httpegress wall, what is left: canaries on fetch bodies, and whether a fetch above the clearance ever gets an approval path rather than a refusal | ADR-0312 §SD6, §SD7 (the tier, the trail column and L14/L33 over fetches landed with the Update of 2026-10-25) | law L10 over fetches |
 
 ## Code to migrate

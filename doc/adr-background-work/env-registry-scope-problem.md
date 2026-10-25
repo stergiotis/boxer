@@ -119,11 +119,12 @@ the cell rather than its own application:
 - Settled 2026-10-11: the declaration reaches an app on its mount context
   (ADR-0307 Update, §SD1), and the run's fingerprint folds in the confined
   tier, not a digest of the whole declaration (ADR-0308 Update, SD5).
-- How an integrator supplies profiles to the chat, and selects one per
-  run.
-- Whether the model service's trail rows should name the declaration a call
-  was checked against, not only its tier and route. (Not verified against
-  the trail's row shape.)
+- Settled 2026-10-25: how an integrator supplies profiles to the chat,
+  and selects one per run, is
+  [ADR-0335](../adr/0335-profiles-are-handed-to-the-host-a-mount-value-seam-and-a-selector-over-the-registry-in-force.md)
+  — a mount-value seam like the cell's, and the selector checked against
+  the registry in force; it also declines to put the declaration on the
+  trail's rows (its §SD4).
 
 ## What to read
 
