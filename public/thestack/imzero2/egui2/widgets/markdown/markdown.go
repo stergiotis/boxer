@@ -514,7 +514,11 @@ func ParseWith(md []byte, opts ParseOptions) (doc *Doc) {
 
 	segments, frontmatter, headings, dropped := parseAndLower(md, &cfg)
 	assignCodeKeys(segments, map[uint64]uint64{})
-	fmStart, fmStop, fmOk := frontmatterSpan(md)
+	var fmStart, fmStop int
+	var fmOk bool
+	if cfg.features&obsidian.FeatureFrontmatter != 0 {
+		fmStart, fmStop, fmOk = frontmatterSpan(md)
+	}
 	doc = &Doc{
 		segments:    segments,
 		frontmatter: frontmatter,

@@ -128,9 +128,7 @@ func RenderBlock(in Input, index int) (res Result) {
 			if doc.segments[i].kind == segKindHeading {
 				rc.headingIdx++
 			}
-			if doc.segments[i].kind == segKindCodeBlock {
-				rc.codeBlockIdx++
-			}
+			rc.codeBlockIdx += countCodeBlocks(&doc.segments[i])
 		}
 		doc.segments[index].render(&rc)
 		res.Actions = rc.codeActions
@@ -160,6 +158,19 @@ func blockKindOf(k segKindE) BlockKindE {
 	default:
 		return BlockParagraph
 	}
+}
+
+// countCodeBlocks is how many code blocks a full [Render] would have
+// counted by the time it finished seg: the segment itself and any nested
+// in a list item or a quote, the order the action ordinals are issued in.
+func countCodeBlocks(seg *segment) (n int) {
+	if seg.kind == segKindCodeBlock {
+		n++
+	}
+	for i := range seg.children {
+		n += countCodeBlocks(&seg.children[i])
+	}
+	return
 }
 
 // blockRange is the source range of a top-level block node: from the start
@@ -204,10 +215,40 @@ func blockRange(n ast.Node, src []byte) (start, stop int) {
 	}
 	start = lineStartAt(src, off)
 	stop = lineEndAt(src, last)
-	if fc, ok := n.(*ast.FencedCodeBlock); ok {
-		stop = closingFenceEnd(src, start, stop, fc)
+	switch n.(type) {
+	case *ast.FencedCodeBlock:
+		stop = closingFenceEnd(src, start, stop)
+	case *ast.Heading:
+		stop = setextUnderlineEnd(src, start, stop)
 	}
 	return
+}
+
+// setextUnderlineEnd extends a setext heading's range over its underline,
+// which goldmark keeps out of the heading's Lines(): when the heading's
+// first line is not an ATX one, the line after its last is the underline
+// if it is nothing but `=` or `-` after up to three spaces.
+func setextUnderlineEnd(src []byte, start, stop int) int {
+	if isATXLine(src[start:lineEndAt(src, start)]) {
+		return stop
+	}
+	next := stop + 1
+	if next > len(src) {
+		return stop
+	}
+	le := lineEndAt(src, next)
+	line := bytes.TrimRight(src[next:le], " \t\r")
+	line = bytes.TrimLeft(line, " ")
+	if len(line) == 0 || (line[0] != '=' && line[0] != '-') || bytes.Count(line, line[:1]) != len(line) {
+		return stop
+	}
+	return le
+}
+
+// isATXLine says whether a line opens an ATX heading: `#` after up to three
+// spaces of indentation.
+func isATXLine(line []byte) bool {
+	return len(bytes.TrimLeft(line, " ")) > 0 && bytes.TrimLeft(line, " ")[0] == '#'
 }
 
 // closingFenceEnd extends a fenced block's range over its closing fence
@@ -215,16 +256,14 @@ func blockRange(n ast.Node, src []byte) (start, stop int) {
 // last body line is the closing fence when it is the opening fence's
 // character, at least as long, with nothing but spaces around it. An
 // unclosed fence runs to the end of its container and gets no extension.
-func closingFenceEnd(src []byte, start, stop int, fc *ast.FencedCodeBlock) int {
+func closingFenceEnd(src []byte, start, stop int) int {
 	ch, n := fenceRun(src[start:lineEndAt(src, start)])
 	if n == 0 {
 		return stop
 	}
-	// An empty body: the "last line" found is the opening fence itself.
+	// With an empty body the "last line" found is the opening fence
+	// itself, and the line after it is still the candidate.
 	next := stop + 1
-	if fc.Lines() == nil || fc.Lines().Len() == 0 {
-		next = stop + 1
-	}
 	if next > len(src) {
 		return stop
 	}
