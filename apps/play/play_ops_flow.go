@@ -222,7 +222,7 @@ func flowGraphOps(g flowGraph, budget int) (nodes []FlowNode, edges []FlowEdge, 
 	}
 	for _, e := range g.Edges {
 		if kept[e.From] && kept[e.To] {
-			edges = append(edges, FlowEdge{From: e.From, To: e.To, Label: e.Label})
+			edges = append(edges, FlowEdge(e))
 		}
 	}
 	return

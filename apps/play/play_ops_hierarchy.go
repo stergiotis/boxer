@@ -160,14 +160,6 @@ func hierColorKindName(k hierColorKindE) string {
 	return "none"
 }
 
-// colourByName is what the fill encodes, as the colour bar names it.
-func (inst *treemapDriver) colourByName() string {
-	if inst.color.kind == hierColorNone || inst.colorMode == treemapColorDepth {
-		return "depth"
-	}
-	return treemapColorDataLabel(inst.color.kind)
-}
-
 // treemapSynthetic reports whether root is the container a forest is
 // wrapped in, which no row describes.
 func treemapSynthetic(root *layout.Node, idxOf map[*layout.Node]int32) bool {

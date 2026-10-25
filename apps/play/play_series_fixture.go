@@ -49,8 +49,6 @@ const (
 	// values, not times; a minute is the step that makes a default fixture
 	// span a readable handful of days rather than a blur or a geological era.
 	fixtureStepSec = 60
-	// fixturePublishTimeout bounds one publish round.
-	fixturePublishTimeout = 30 * time.Second
 )
 
 // fixtureTimeType is the Arrow type the PUBLISHED tables carry. Microsecond,

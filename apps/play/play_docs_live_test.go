@@ -147,6 +147,9 @@ func TestLiveDocsBodiesCarryFencedSqlExamples(t *testing.T) {
 	require.Contains(t, got[0].Body, "```sql", "examples are fenced as sql")
 }
 
+// advance moves the test clock; only the live debounce test steps it.
+func (inst *docsClock) advance(d time.Duration) { inst.t = inst.t.Add(d) }
+
 // End to end through the driver: the debounce holds the query back until the
 // name settles, and the answer lands in the cache.
 func TestLiveDocsDriverDebouncesThenCaches(t *testing.T) {

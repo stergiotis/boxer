@@ -148,11 +148,11 @@ func TestLiveExprReachesTheWireBody(t *testing.T) {
 	cl := NewClient(ClientConfig{URL: "http://localhost:8123/"}, nil)
 	const sql = "SELECT number FROM numbers(10) WHERE {cond:Expr}"
 
-	body, params := cl.BuildStatement(sql)
+	body, _ := cl.BuildStatement(sql)
 	require.Contains(t, body, "{cond:Expr}", "nothing to substitute yet")
 
 	cl.SetExprValues(map[string]string{"cond": "number % 2 = 0"})
-	body, params = cl.BuildStatement(sql)
+	body, params := cl.BuildStatement(sql)
 	require.Contains(t, body, "(number % 2 = 0)")
 	require.NotContains(t, body, "{cond:Expr}")
 	require.NotContains(t, params, "param_cond")

@@ -59,7 +59,7 @@ func int64Rec(col string, vals ...int64) (rec arrow.RecordBatch) {
 	b.AppendValues(vals, nil)
 	arr := b.NewArray()
 	defer arr.Release()
-	rec = array.NewRecord(schema, []arrow.Array{arr}, int64(len(vals)))
+	rec = array.NewRecordBatch(schema, []arrow.Array{arr}, int64(len(vals)))
 	return
 }
 

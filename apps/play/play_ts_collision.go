@@ -1,7 +1,6 @@
 package play
 
 import (
-	"strings"
 	"time"
 
 	"github.com/apache/arrow-go/v18/arrow/memory"
@@ -90,31 +89,4 @@ func (inst *PlayApp) renderTsCollisionWarning(call *tsCall) {
 		"reachable from any other client, and from this one under a different name.") {
 		rt.Small().Weak()
 	}
-}
-
-// tsClientNodesOf lists the client calls of a split, for the panes that
-// caption them. Order follows the split's own.
-func tsClientNodesOf(split splitResult) (out []splitNode) {
-	for i := range split.Nodes {
-		if split.Nodes[i].Client != nil {
-			out = append(out, split.Nodes[i])
-		}
-	}
-	return
-}
-
-// tsEngineSummary is the one-line engine split for a buffer, for the places
-// that report on the whole statement rather than on one node. Empty when the
-// buffer holds no client call, so an ordinary session never sees it.
-func tsEngineSummary(split splitResult) (line string) {
-	nodes := tsClientNodesOf(split)
-	if len(nodes) == 0 {
-		return ""
-	}
-	names := make([]string, 0, len(nodes))
-	for i := range nodes {
-		names = append(names, string(nodes[i].ID)+" ("+nodes[i].Client.Spec.Name+")")
-	}
-	return "two engines: " + strings.Join(names, ", ") +
-		" computed in play, everything else on ClickHouse"
 }
