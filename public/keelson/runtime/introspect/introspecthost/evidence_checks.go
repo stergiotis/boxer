@@ -12,6 +12,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/cell"
 	"github.com/stergiotis/boxer/public/keelson/runtime/clipboardbroker"
 	"github.com/stergiotis/boxer/public/keelson/runtime/headstore"
+	"github.com/stergiotis/boxer/public/keelson/runtime/httpegress"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect"
 	"github.com/stergiotis/boxer/public/keelson/runtime/llm"
 	"github.com/stergiotis/boxer/public/storage/recordstore/evidence"
@@ -52,13 +53,14 @@ type evidenceChecksProvider struct {
 	// The exits' and the copies' laws (law_checks.go): the model calls
 	// this process answered, the cell declaration, and the broker.
 	calls     llm.CallsI
+	fetches   httpegress.CallsI
 	cell      func() cell.Declaration
 	clipboard clipboardbroker.RecordsI
 }
 
 func registerEvidenceChecks(reg *introspect.Registry, deps Deps) (err error) {
 	return reg.Register(evidenceChecksProvider{runs: deps.AgentRuns, anchors: deps.Anchors, trail: deps.Trail, run: deps.Run,
-		calls: deps.LLMCalls, cell: deps.Cell, clipboard: deps.Clipboard})
+		calls: deps.LLMCalls, fetches: deps.HTTPCalls, cell: deps.Cell, clipboard: deps.Clipboard})
 }
 
 func (evidenceChecksProvider) Name() string                         { return TableEvidenceChecks }

@@ -61,34 +61,57 @@ func approvalsOf(r agentrun.Run, entries []agentrun.Entry) (out []cell.ApprovalE
 	return
 }
 
-// exitChecks is L14 and L33 over the model-route exits: the answered calls
-// of this process's ring by a route the declaration lists as a sink, as
-// cell.ExitsSQL selects them. The ring is bounded, so the rows judge the
-// calls it still holds, and the approvals the journal store lists.
+// exitChecks is L14 and L33 over the exits this process holds, one pair
+// of rows per sink kind: the model-route exits are the answered calls of
+// the model service's ring by a route the declaration lists as a sink, the
+// egress exits the answered fetches of the egress service's ring to a
+// destination it lists — as cell.ModelRouteExitsSQL and cell.FetchExitsSQL
+// select them. The rings are bounded, so the rows judge the calls they
+// still hold, and the approvals the journal store lists.
 func (inst evidenceChecksProvider) exitChecks(approvals []cell.ApprovalEntry) (rows []evidenceCheck) {
-	if inst.calls == nil || inst.cell == nil {
+	if inst.cell == nil {
 		return
 	}
 	decl := inst.cell()
 	sinks := decl.Sinks()
-	routes := map[string]bool{}
+	edges := map[cell.SinkKindE]map[string]bool{}
 	for _, s := range sinks {
-		if s.Kind == cell.SinkKindModelRoute {
-			routes[s.Edge] = true
+		if edges[s.Kind] == nil {
+			edges[s.Kind] = map[string]bool{}
 		}
-	}
-	var exits []cell.ExitRow
-	for _, c := range inst.calls.Calls() {
-		if c.Refused || !routes[c.EndpointHost] {
-			continue
-		}
-		exits = append(exits, cell.ExitRow{Conversation: c.Conversation, Ordinal: uint32(c.Id), CallId: c.CallId, At: c.At,
-			Sink: cell.SinkKindModelRoute, Edge: c.EndpointHost, Tier: agentrun.TierE(c.Tier), ApprovalEntry: c.ApprovalEntry})
+		edges[s.Kind][s.Edge] = true
 	}
 	policy := decl.Approvals
 	if policy == nil {
 		policy = cell.DefaultApprovalPolicy()
 	}
+	if inst.calls != nil {
+		var exits []cell.ExitRow
+		for _, c := range inst.calls.Calls() {
+			if c.Refused || !edges[cell.SinkKindModelRoute][c.EndpointHost] {
+				continue
+			}
+			exits = append(exits, cell.ExitRow{Conversation: c.Conversation, Ordinal: uint32(c.Id), CallId: c.CallId, At: c.At,
+				Sink: cell.SinkKindModelRoute, Edge: c.EndpointHost, Tier: agentrun.TierE(c.Tier), ApprovalEntry: c.ApprovalEntry})
+		}
+		rows = append(rows, exitLawRows(cell.SinkKindModelRoute, policy, sinks, exits, approvals)...)
+	}
+	if inst.fetches != nil {
+		var exits []cell.ExitRow
+		for _, f := range inst.fetches.Calls() {
+			if f.Refused || !edges[cell.SinkKindEgress][f.Destination] {
+				continue
+			}
+			exits = append(exits, cell.ExitRow{Conversation: f.Conversation, Ordinal: uint32(f.Id), CallId: f.TaskCall, At: f.At,
+				Sink: cell.SinkKindEgress, Edge: f.Destination, Tier: f.Tier})
+		}
+		rows = append(rows, exitLawRows(cell.SinkKindEgress, policy, sinks, exits, approvals)...)
+	}
+	return
+}
+
+// exitLawRows is L14 and L33 over one sink kind's exits, as two rows.
+func exitLawRows(kind cell.SinkKindE, policy cell.ApprovalPolicy, sinks []cell.Sink, exits []cell.ExitRow, approvals []cell.ApprovalEntry) (rows []evidenceCheck) {
 	for _, law := range []struct {
 		name       string
 		violations []cell.ExitRow
@@ -96,7 +119,7 @@ func (inst evidenceChecksProvider) exitChecks(approvals []cell.ApprovalEntry) (r
 		{"L14", cell.L14(sinks, exits, approvals)},
 		{"L33", cell.L33(policy, sinks, exits, approvals)},
 	} {
-		row := evidenceCheck{Store: "exits", Scope: cell.SinkKindModelRoute.String(), Law: law.name, Holds: len(law.violations) == 0,
+		row := evidenceCheck{Store: "exits", Scope: kind.String(), Law: law.name, Holds: len(law.violations) == 0,
 			Why: strconv.Itoa(len(exits)) + " exits in this process's ring"}
 		if len(law.violations) > 0 {
 			v := law.violations[0]

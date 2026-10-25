@@ -2,11 +2,14 @@ package play
 
 import (
 	"math"
+	"slices"
 	"strconv"
 	"strings"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/appops"
+	"github.com/stergiotis/boxer/public/keelson/runtime/httpegress"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/basemap"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/portolan"
 )
 
@@ -405,11 +408,15 @@ func addMapOps(s *appops.Set[*PlayLauncher, opsSnap]) {
 		Summary: "move the Map pane's camera: centre and zoom, or frame a lat/lon box",
 		Effect:  app.OperationEffectView, Writes: []string{opsResMap}, Agents: true,
 		Follows: []string{"the raster is fetched once for the new view, whether or not the person's live switch is on",
-			"the fetch writes the vp_* signals with the task as writer; Live reruns a query that reads them"}},
+			"the fetch writes the vp_* signals with the task as writer; Live reruns a query that reads them",
+			"the view's tiles are fetched from the basemap destination as the task's work: the grant must list " + mapTilesDestination}},
 		func(inst *PlayLauncher, call app.OperationCall, in SetMapViewArgs) (appops.None, error) {
 			p := inst.inner
 			if p == nil {
 				return appops.None{}, app.RefuseOperation("the window has not mounted")
+			}
+			if err := mapNeedsTilesDestination(call); err != nil {
+				return appops.None{}, err
 			}
 			writer := paneSignalWriter(call, mapPaneId)
 			if err := p.mapDriver.setMapView(in, writer, mapFollows(writer)); err != nil {
@@ -424,11 +431,15 @@ func addMapOps(s *appops.Set[*PlayLauncher, opsSnap]) {
 		Gesture: "the render combo, Clear area, and drawing a box with select area on",
 		Follows: []string{"the raster is fetched again with the new settings, on the pane's lane, under the agent limits",
 			"an area is written at once as the area_* signals; Live reruns a query that reads them",
-			"get_map gives a source or expression the server rejected as the query error"}},
+			"get_map gives a source or expression the server rejected as the query error",
+			"the tiles drawn again are fetched as the task's work: the grant must list " + mapTilesDestination}},
 		func(inst *PlayLauncher, call app.OperationCall, in SetMapOptionsArgs) (appops.None, error) {
 			p := inst.inner
 			if p == nil {
 				return appops.None{}, app.RefuseOperation("the window has not mounted")
+			}
+			if err := mapNeedsTilesDestination(call); err != nil {
+				return appops.None{}, err
 			}
 			// The table source and the colour expression are SQL the raster
 			// lane runs on every draw whose viewport moves, long after the
@@ -444,4 +455,22 @@ func addMapOps(s *appops.Set[*PlayLauncher, opsSnap]) {
 			p.markAgent(call.OnBehalfOf)
 			return appops.None{}, nil
 		})
+}
+
+// mapTilesDestination is the grant destination of the basemap tiles the
+// Map fetches, as the egress service names it (ADR-0269 §SD6).
+var mapTilesDestination = httpegress.DelegationDestination(basemap.Destination)
+
+// mapNeedsTilesDestination refuses an agent's command that moves or redraws
+// the Map while the task's grant does not list the basemap destination:
+// the view it sets is fetched as tiles from outside the cell, work the
+// egress service checks against the grant (ADR-0269 §SD6) and against the
+// run's tier (ADR-0312 §SD4). Refusing here names the destination the
+// grant would have to list; refused at the tile fetch, the Map would only
+// go blank. The person's own gestures carry no task and pass.
+func mapNeedsTilesDestination(call app.OperationCall) (err error) {
+	if call.OnBehalfOf == nil || slices.Contains(call.OnBehalfOf.Destinations, mapTilesDestination) {
+		return nil
+	}
+	return app.RefuseForDestinations("the grant does not list "+mapTilesDestination+", whose tiles the Map fetches for the view this sets", mapTilesDestination)
 }

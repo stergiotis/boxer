@@ -752,6 +752,9 @@ var (
 	MembEvidenceSealScheme     = NkRegistry.MustBegin("evidenceSealScheme", 494).End()
 	MembEvidenceSealRowIds     = NkRegistry.MustBegin("evidenceSealRowIds", 495).End()
 	MembEvidenceSealRowDigests = NkRegistry.MustBegin("evidenceSealRowDigests", 496).End()
+	// The tier the egress wall saw on a fetch (ADR-0312 §SD4), beside the
+	// fetch record's other attributes (217–227).
+	MembHttpFetchTier = NkRegistry.MustBegin("httpFetchTier", 497).End()
 )
 
 // AllMembs is the enumerated set of registered runtime memberships. Tests
@@ -871,4 +874,5 @@ var AllMembs = []registry.RegisteredNaturalKey{
 	MembEvidenceWrittenByPrincipalBy, MembEvidenceWrittenByPurpose, MembEvidenceWrittenByCorrelation, MembEvidenceWrittenByBatch,
 	MembEvidenceKindOpening, MembEvidenceOpeningValue, MembAuditEventOriginBy, MembAuditEventPrincipalVia,
 	MembEvidenceKindSeal, MembEvidenceSealStream, MembEvidenceSealPrev, MembEvidenceSealDigest, MembEvidenceSealScheme, MembEvidenceSealRowIds, MembEvidenceSealRowDigests,
+	MembHttpFetchTier,
 }

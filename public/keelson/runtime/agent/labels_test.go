@@ -237,7 +237,7 @@ func TestCallContextIsTheDispatchersRecord(t *testing.T) {
 	g, err := r.cli.Request(ctx, GrantRequest{Conversation: "conv-1", Entries: []GrantEntry{{Instance: r.docKey, Mode: ModeAct}}})
 	require.NoError(t, err)
 	out, err := r.cli.Call(ctx, CallRequest{Handle: g.Handle, Instance: r.docKey, Operation: "get_text", Args: "{}", Key: "k1",
-		Turn: "turn-3", ModelCall: "llm-5", ToolCall: "call_x", ToolIndex: 2})
+		Turn: "turn-3", ModelCall: "llm-5", ToolCall: "call_x", ToolIndex: 2, Tier: 3})
 	require.NoError(t, err)
 	require.Equal(t, "completed", out.Phase, out.Reason)
 	var callId string
@@ -256,6 +256,7 @@ func TestCallContextIsTheDispatchersRecord(t *testing.T) {
 	assert.Equal(t, "call_x", cc.ToolCall)
 	assert.Equal(t, uint32(2), cc.ToolIndex)
 	assert.Equal(t, "get_text", cc.Operation)
+	assert.Equal(t, uint8(3), cc.Tier, "the tier the coordinator declared, attested")
 	assert.False(t, cc.InFlight, "the call was answered before the service asked")
 
 	_, ok, why = r.svc.CallContext(g.Task, 1, callId, docAppId, r.docKey+1)

@@ -242,7 +242,11 @@ func (inst *Service) handleRequest(msg *app.Msg) {
 			inst.refuse(msg, "agent-caused work the dispatcher does not attest: "+why, rec)
 			return
 		}
-		rec.Task, rec.TaskEpoch, rec.TaskCall = cc.Task, cc.Epoch, cc.Call
+		rec.Task, rec.TaskEpoch, rec.TaskCall, rec.Conversation = cc.Task, cc.Epoch, cc.Call, cc.Conversation
+		// The run's tier is the dispatcher's word (ADR-0312 §SD4): the
+		// coordinator declared it on the call, and the sender cannot
+		// lower it by declaring less on the fetch the call caused.
+		req.Tier = max(req.Tier, cc.Tier)
 		if ok, why := ref.d.AllowDestination(cc.Task, cc.Epoch, DelegationDestination(name)); !ok {
 			inst.refuse(msg, "agent-caused work: "+why, rec)
 			return
@@ -274,6 +278,7 @@ func (inst *Service) handleRequest(msg *app.Msg) {
 	// labelled content's, the same shape as the model route's.
 	decl := inst.cellOf()
 	tier := decl.TierOf(agentrun.TierE(req.Tier), rec.Sensitivity == queryengine.SensitivityConfined)
+	rec.Tier = tier
 	if clearance := decl.EgressClearance(r.local); tier > clearance {
 		inst.refuse(msg, "the request is "+tier.String()+", above the clearance ("+clearance.String()+") of destination "+name+", a sink of the cell", rec)
 		return

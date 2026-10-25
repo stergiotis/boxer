@@ -260,6 +260,23 @@ id in decimal
 becomes "the exit's conversation", read through the approval's run row,
 since the trail row names the conversation and not the run.
 
+### 2026-10-25 — SD4: the run's tier reaches the egress wall
+
+The harness declares the run's current tier on every call its loop makes
+(`agent.CallRequest.Tier`: the label of the request whose reply asked for
+the call). The dispatcher records it, stamps it on the on-behalf-of context
+and attests it through `app.CallContext`. The egress service takes the
+higher of the tier the sender declares and the attested one, so a callee
+cannot lower what the harness declared, and records the tier the wall saw
+on `keelson('http_calls')` and the trail's fetch row (`httpFetchTier`).
+play's Map commands carry the mark onto the tiles they cause and, under a
+task whose grant does not list the basemap destination, refuse naming it
+([ADR-0270](./0270-play-operations-catalog-and-agent-limits.md) Update of
+the same date). `cell.ExitsSQL` is now the model-route and the egress exits
+together, so L14 and L33 read fetches, and `keelson('evidence_checks')`
+judges the egress ring beside the model route's. SD4's deferral closes;
+of SD7's list, canaries on fetch bodies (SD6) stay open, and a fetch above
+the clearance is still refused rather than offered an approval path.
 
 ## References
 

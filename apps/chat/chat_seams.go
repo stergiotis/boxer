@@ -167,9 +167,14 @@ func configureRound(s *requestState) {
 	if s.confine {
 		s.req.Sensitivity = queryengine.SensitivityConfined
 	}
-	// The request's tier, for the route's clearance (ADR-0312 §SD2), and
-	// the profile and route ids for the call's row (ADR-0310 §SD4).
-	s.req.Tier = uint8(s.coord.requestLabel(s.batch).Tier)
+	// The request's tier, for the route's clearance (ADR-0312 §SD2) and
+	// for the calls its reply asks for (§SD4), and the profile and route
+	// ids for the call's row (ADR-0310 §SD4).
+	tier := s.coord.requestLabel(s.batch).Tier
+	s.req.Tier = uint8(tier)
+	s.coord.mu.Lock()
+	s.coord.curTier = tier
+	s.coord.mu.Unlock()
 	s.req.Profile, s.req.Route = s.coord.profileRef()
 }
 

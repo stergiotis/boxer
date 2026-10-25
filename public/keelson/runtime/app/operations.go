@@ -560,6 +560,12 @@ type OnBehalfOf struct {
 	Act []string
 	// Destinations are what the grant lets agent-caused work reach.
 	Destinations []string
+	// Tier is the run's current TLP tier (agentrun.TierE) as the
+	// coordinator declared it on the call (ADR-0312 §SD4). A callee carries
+	// it on the onward requests the call causes — a fetch — so a wall that
+	// reads a tier sees the run's; the host checks the dispatcher's
+	// attested copy ([CallContext]), never the callee's word alone.
+	Tier uint8
 }
 
 // DelegationI is what a host service that reaches outside asks about an
@@ -591,6 +597,10 @@ type CallContext struct {
 	App       AppIdT
 	Instance  uint64
 	Operation string
+	// Tier is the run's TLP tier the coordinator declared on the call
+	// (ADR-0312 §SD4), as the dispatcher recorded it; 0 where it declared
+	// none. A wall takes the higher of this and what the sender declares.
+	Tier uint8
 	// InFlight is true when the window had not answered the call yet:
 	// work its handler did. False is work the window did later, under a
 	// call it had answered while the task stayed live (ADR-0288

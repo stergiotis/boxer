@@ -1183,6 +1183,18 @@ listing `publish:<prefix>` spares the person a confirmation for each name
 starting with the prefix. `get_projection`'s `published` names each
 dataset with its handle.
 
+### 2026-10-25 — the Map's commands need the basemap destination
+
+`set_map_view` and `set_map_options` under a task refuse, naming
+`http:basemap`, unless the grant lists it: the view they set is fetched as
+tiles, and the tiles now travel as the task's work with the run's tier
+([ADR-0312](./0312-exits-sinks-from-the-cell-boundary-approval-tiers-and-exit-budgets.md)
+§SD4, Update of this date). Refused at the command, the model is told
+which destination to ask for; refused at the fetch, the Map would only go
+blank. The person's gestures pass as before. This is the fetch half of
+[ADR-0315](./0315-coordinator-tools-as-operation-specs-and-a-contract-for-stateful-tools.md)
+§SD8's first gap; the live re-run declarations stay as they were.
+
 ## References
 
 - [ADR-0269](./0269-app-operations-a-command-query-contract-agents-drive-under-a-task-grant.md) — the contract this catalog serves.

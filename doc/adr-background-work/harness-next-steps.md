@@ -12,7 +12,7 @@ status: draft
 
 # Harness: what is left after the impediment work
 
-Last revised 2026-10-13. The impediments and their mitigations are in
+Last revised 2026-10-25. The impediments and their mitigations are in
 [plan002](../../plan002.md) (store and bodies), ADR-0319 (ids), ADR-0320
 (vault), ADR-0322 (lifetime scope), and the two problem notes beside this
 file. Everything below is open.
@@ -22,7 +22,7 @@ file. Everything below is open.
 | Item | Decides | Blocks |
 | --- | --- | --- |
 | The env registry seam: boxer is handed the cell declaration and the profile rather than reading them | an ADR to write, from `env-registry-scope-problem.md` | the chat's second `cell.FromEnv` read; integrators |
-| The httpegress wall: run label and tier on a fetch, `cell.Decide` at the service, approvals, canaries, trail columns | ADR-0312 §SD4 deferral; owner's own session | laws L14 and L33 over fetches |
+| The httpegress wall, what is left: canaries on fetch bodies, and whether a fetch above the clearance ever gets an approval path rather than a refusal | ADR-0312 §SD6, §SD7 (the tier, the trail column and L14/L33 over fetches landed with the Update of 2026-10-25) | law L10 over fetches |
 
 ## Code to migrate
 
