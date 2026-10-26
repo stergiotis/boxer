@@ -36,8 +36,12 @@ inside its box.
 
 **Click to walk.** Clicking a table row, or a node in the graph, publishes that
 competence as `selection_key`, which the graph re-reads: parents above,
-children below, hop by hop. Typing a slug into the `selection_key` field does
-the same. Empty focuses the root of the largest catalog.
+children below, hop by hop. The row publishes through its `key` column, which
+repeats the slug because that is the one column name play's Table publishes.
+Typing a slug into the `selection_key` field does the same. Empty focuses the
+root of the largest catalog. A treemap leaf is not part of the walk: its pin
+publishes the cell's label, which here is an abbreviation or a name rather
+than a slug, so pinning a leaf leaves the graph with nothing to focus.
 
 **The whole note is a column.** `body` carries the competence's markdown
 reassembled from its sections, declared as `text/markdown` in the column name,
@@ -196,6 +200,10 @@ WITH RECURSIVE
            c.owner AS owner,
            c.tags AS tags,
            c.vault_path AS vault_path,
+           -- What a row click publishes as selection_key: play's Table
+           -- publishes a column named `key` and nothing else, so without
+           -- this the list cannot drive the graph.
+           c.slug AS key,
            s.body AS `body@text/markdown`
     FROM keelson('competence') AS c
     LEFT JOIN sections AS s ON c.slug = s.slug
@@ -206,11 +214,16 @@ WITH RECURSIVE
   focus AS (
     -- Nothing clicked yet: the root of the largest catalog, which is the one
     -- reading a competence map usually starts from. A level-1 competence is a
-    -- root by construction.
+    -- root by construction; a catalog with no level-1 note has no root to
+    -- offer, so the largest catalog that has one wins.
     SELECT if({selection_key:String} != '',
               {selection_key:String},
-              (SELECT slug FROM keelson('competence')
-               WHERE level = 1 ORDER BY section_count DESC, slug LIMIT 1)) AS id
+              (SELECT r.slug
+               FROM keelson('competence') AS r
+               INNER JOIN (SELECT catalog, count() AS n FROM keelson('competence') GROUP BY catalog) AS k
+                 ON r.catalog = k.catalog
+               WHERE r.level = 1
+               ORDER BY k.n DESC, r.slug LIMIT 1)) AS id
   ),
   near AS (
     SELECT id FROM focus

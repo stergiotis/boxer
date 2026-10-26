@@ -15,7 +15,7 @@ tabs: [table]
 # Competence overview
 
 What the vault holds, and how much of it has been judged. Read this first when
-the other three applets look empty: the `competences` row says whether there is
+the other two applets look empty: the `competences` row says whether there is
 a corpus at all.
 
 The tables read the vault **live** — markdown on disk, not a database — so these
@@ -80,12 +80,11 @@ FROM facts
 ORDER BY ord, metric
 ```
 
-## The other three
+## The other two
 
-- **Competence browser** — one competence at a time: its metadata, its whole
-  note as markdown, and its parents and children as a graph.
-- **Competence map** — the hierarchy as a treemap, sized by how much has been
-  written about each part and coloured by domain.
+- **Competence browser** — the hierarchy as a treemap sized by how much has
+  been written about each part, the focused competence's whole note beside it,
+  and the corpus as a list with the focus's parents and children as a graph.
 - **Competence links** — every link the corpus declares, and which of them
   point at nothing.
 

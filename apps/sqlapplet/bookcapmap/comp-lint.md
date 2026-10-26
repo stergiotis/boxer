@@ -25,7 +25,7 @@ them is a defect:
 | `resolution` | Means | A defect? |
 |---|---|---|
 | `direct` | The target is a competence, found by its slug. | No |
-| `dirref` | The target exists, but only as `{slug}/competence.md`. The link resolves here and dangles in Obsidian. | Mechanical: write `[[slug/competence]]` |
+| `dirref` | The target exists, but only as `{slug}/capability.md`. The link resolves here and dangles in Obsidian. | Mechanical: write `[[slug/capability]]` |
 | `external` | The text cannot be a competence slug at all — a citation key like `Jouppi-1990` or `GDPR-Art-17`. It names something outside the corpus. | No |
 | `unresolved` | A well-formed slug that no competence in this vault carries. | Yes — mostly |
 
@@ -90,7 +90,10 @@ markdown edit and a re-Run, not a write through this applet. The three shapes
 worth acting on:
 
 - **`dirref`** — the target is right and the spelling is not. Rewriting
-  `[[thing]]` as `[[thing/competence]]` makes it resolve in Obsidian too.
+  `[[thing]]` as `[[thing/capability]]` makes it resolve in Obsidian too.
+  The vault keeps the literature's word in its file names and links even
+  though boxer says *competence* (ADR-0168 §SD6), so `capability` is the
+  spelling that resolves.
 - **`unresolved` with a high `cited_by`** — many competences agree that
   something should exist. Either it should be written, or it lives in a
   reference tree and these links are fine as they are.

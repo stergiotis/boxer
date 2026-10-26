@@ -2,6 +2,7 @@ package sqlapplet
 
 import (
 	"context"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -107,6 +108,20 @@ func TestCapmapBookCorpus(t *testing.T) {
 	// The browser's body column declares its media type, which is what makes
 	// the Detail tab render markdown rather than escaped text (ADR-0123 §SD2).
 	assert.Contains(t, bySlug["comp-browser"].SQL, "body@text/markdown")
+
+	// The vault is written in the literature's word (ADR-0168 §SD6): a
+	// directory-backed note is `capability.md` and a link to it is
+	// `[[slug/capability]]`. A document advising boxer's own word instead
+	// tells its reader to write a link that resolves nowhere.
+	entries, err := fs.ReadDir(bookcapmapFS, "bookcapmap")
+	require.NoError(t, err)
+	for _, e := range entries {
+		b, rErr := fs.ReadFile(bookcapmapFS, "bookcapmap/"+e.Name())
+		require.NoError(t, rErr)
+		for _, wrong := range []string{"/competence]]", "/competence.md"} {
+			assert.NotContains(t, string(b), wrong, "%s: the vault spells it /capability", e.Name())
+		}
+	}
 }
 
 // TestMintCapmapBook mints the book beside its siblings, guarding slug
@@ -132,8 +147,17 @@ func TestMintCapmapBook(t *testing.T) {
 	assert.Equal(t, []app.TopicT{app.TopicCode}, m.Topics)
 }
 
-// capmapTestVault materialises a small vault that exercises every shape the
-// book's three buffers read, and points the corpus at it for the test.
+// capmapTestVault materialises the fixture vault and points this process's
+// corpus at it for the test.
+func capmapTestVault(t *testing.T) {
+	t.Helper()
+	capmapcorpus.SetVaultForTest(t, writeCapmapFixtureVault(t))
+}
+
+// writeCapmapFixtureVault writes a small vault that exercises every shape the
+// book's three buffers read, and returns its root. The scene test hands the
+// root to a host process through the environment; capmapTestVault points this
+// process at it.
 //
 // A fixture rather than this repository's own doc/competences, because that
 // directory is git-ignored (ADR-0168 §SD7): CI has no corpus, and a test that
@@ -142,9 +166,9 @@ func TestMintCapmapBook(t *testing.T) {
 // directory-backed competence (a `capability.md`, the vault's own spelling),
 // a multi-parent level-4 leaf, an interior node
 // with prose of its own, a citation, a dirref and a genuinely dangling link.
-func capmapTestVault(t *testing.T) {
+func writeCapmapFixtureVault(t testing.TB) (root string) {
 	t.Helper()
-	root := t.TempDir()
+	root = t.TempDir()
 	files := map[string]string{
 		"toolbelt/capability.md": "---\nname: Toolbelt\nlevel: 1\ndomain: boxer-toolbelt\ncatalog: boxer\n---\n\n" +
 			"# Vision and Scope\n\nThe root has prose of its own, which is what earns it a rectangle.\n",
@@ -170,7 +194,7 @@ func capmapTestVault(t *testing.T) {
 		require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
 		require.NoError(t, os.WriteFile(path, []byte(content), 0o644))
 	}
-	capmapcorpus.SetVaultForTest(t, root)
+	return root
 }
 
 // overSink swaps a buffer's final statement for another one over the same
@@ -269,6 +293,19 @@ func TestCapmapBookQueriesExecute(t *testing.T) {
 	require.Len(t, rows, 1)
 	assert.Contains(t, rows[0], "# Vision and Scope", "the body is the note's own markdown")
 	assert.Contains(t, rows[0], "# Standards")
+
+	// A row click publishes the `key` column and nothing else, so the list
+	// drives the graph only while `key` carries the slug the graph focuses on.
+	rows, err = query(strings.Replace(asAuthored(bySlug["comp-browser"]), "SELECT * FROM comps",
+		"SELECT count(), countIf(key = slug) FROM comps", 1))
+	require.NoError(t, err)
+	assert.Equal(t, []string{"5\t5"}, rows, "every listed row publishes its own slug")
+
+	// Nothing clicked: the focus is the root of the largest catalog.
+	rows, err = query(strings.Replace(asAuthored(bySlug["comp-browser"]), "SELECT * FROM comps",
+		"SELECT id FROM focus", 1))
+	require.NoError(t, err)
+	assert.Equal(t, []string{"toolbelt"}, rows)
 
 	// …and its graph lanes answer for a focus, the way a click drives them.
 	focused := "SET param_selection_key = 'observability';\n" + bySlug["comp-browser"].SQL
