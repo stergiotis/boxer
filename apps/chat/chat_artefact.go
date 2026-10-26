@@ -236,6 +236,14 @@ func (inst *artefact) headLocked() (n int, text string) {
 	return r.n, r.text
 }
 
+// headWithImages is head and a copy of its screenshot set, read together.
+func (inst *artefact) headWithImages() (n int, text string, set []artImage) {
+	inst.mu.Lock()
+	defer inst.mu.Unlock()
+	n, text = inst.headLocked()
+	return n, text, append(set, inst.headImagesLocked()...)
+}
+
 // revisions is a copy of the revision list, oldest first.
 func (inst *artefact) revisions() (out []artRevision) {
 	inst.mu.Lock()

@@ -22,6 +22,7 @@ import (
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/codeview"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/color"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/imagedecode"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/markdown"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/selector"
 )
@@ -78,15 +79,34 @@ type artefactView struct {
 	diff    []diffLine
 	// thumbs records which screenshot thumbnails the host holds.
 	thumbs *c.ImageVersionTracker[uint64]
+	// inline holds the screenshots the document embeds, decoded at the
+	// inline bound, by hash; a revision that keeps an image does not decode
+	// it again.
+	inline map[string]imagedecode.Thumbnail
 }
 
-// ensure builds the views of revision n.
-func (inst *artefactView) ensure(n int, text string) {
+// ensure builds the views of revision n; set is its screenshots, which the
+// document shows where it embeds them.
+func (inst *artefactView) ensure(n int, text string, set []artImage, store *imageStore) {
 	if inst.built && inst.builtFor == n {
 		return
 	}
 	inst.built, inst.builtFor = true, n
-	inst.doc = markdown.Parse([]byte(text))
+	if inst.inline == nil {
+		inst.inline = make(map[string]imagedecode.Thumbnail)
+	}
+	inst.doc = markdown.ParseWith([]byte(text), markdown.ParseOptions{
+		Resolver:  &artImageResolver{set: set, store: store, decoded: inst.inline},
+		ImageMaxW: uint32(artefactPanelW) - 40,
+		ImageMaxH: pixelPreviewH,
+	})
+	// The parsed document holds the pixels it shows; the cache keeps only
+	// what this revision names.
+	for hash := range inst.inline {
+		if !setNamesHash(set, hash) {
+			delete(inst.inline, hash)
+		}
+	}
 	inst.srcOk = text != ""
 	if inst.srcOk {
 		inst.srcJob = codeview.BuildMarkdownLex(text)
@@ -116,8 +136,8 @@ func (inst *App) renderArtefactTab() {
 func (inst *App) renderArtefact() {
 	art := inst.conv.art
 	v := &inst.artView
-	n, text := art.head()
-	v.ensure(n, text)
+	n, text, set := art.headWithImages()
+	v.ensure(n, text, set, art.store)
 	heading("Artefact")
 	for range c.HorizontalTop().KeepIter() {
 		c.Label("revision " + strconv.Itoa(n) + " · " + plural(lineCount(text), "line")).Selectable(false).Send()

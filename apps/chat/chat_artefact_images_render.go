@@ -4,7 +4,9 @@ package chat
 // thumbnail, size and source per name, the budget's use, and Remove and
 // Purge — the person's way out of a full budget; and an image change
 // waiting under Ask first, shown as the image it adds or removes; and a view
-// of a screenshot waiting under Pixels' Ask levels (ADR-0287 §SD3).
+// of a screenshot waiting under Pixels' Ask levels (ADR-0287 §SD3); and the
+// screenshots the document embeds, drawn where it embeds them (ADR-0284
+// update of 2026-10-26).
 
 import (
 	"strconv"
@@ -12,7 +14,9 @@ import (
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/agent"
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
+	"github.com/stergiotis/boxer/public/semistructured/markdown/obsidian/resolver"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/imagedecode"
 )
 
 const (
@@ -24,8 +28,13 @@ const (
 	tipPixelAllow   = "Send this screenshot to the model with the turn. It stays in the model's context for this turn only; what was sent cannot be called back."
 	tipPixelDecline = "Keep this screenshot from the model; it is told you declined, and asked not to ask again."
 
-	// pixelPreviewH bounds the height of the image a view's consent shows.
+	// pixelPreviewH bounds the height of the image a view's consent shows,
+	// and of a screenshot the document embeds.
 	pixelPreviewH uint32 = 480
+	// imageInlineSide bounds the longer side, in pixels, of a screenshot
+	// decoded for the document: about twice the box it is drawn in, so a
+	// high-density display draws it sharp.
+	imageInlineSide = 960
 )
 
 var (
@@ -199,6 +208,49 @@ func imageOrigin(e artImage) string {
 		s += ", cropped"
 	}
 	return s
+}
+
+// artImageResolver shows the document's embeds of its screenshots —
+// `![[name]]`, or `![alt](name)` — as the images. Anything else is
+// NoopResolver's, as is an embed of a name the set does not hold or whose
+// bytes were purged: a link with the image glyph, not an image.
+type artImageResolver struct {
+	resolver.NoopResolver
+	set   []artImage
+	store *imageStore
+	// decoded is the panel's cache, by hash; LoadImage adds to it.
+	decoded map[string]imagedecode.Thumbnail
+}
+
+func (inst *artImageResolver) LoadImage(ref string) (pixels []uint32, widthPx uint32, heightPx uint32, ok bool) {
+	name, _, _ := strings.Cut(ref, "#")
+	i := findImage(inst.set, name)
+	if i < 0 || inst.set[i].purged {
+		return
+	}
+	hash := inst.set[i].hash
+	t, has := inst.decoded[hash]
+	if !has {
+		data, err := inst.store.read(hash)
+		if err != nil {
+			return
+		}
+		if t, err = imagedecode.DecodeThumbnailRGBA8(data, int(inst.store.limits.pixels), imageInlineSide); err != nil {
+			return
+		}
+		inst.decoded[hash] = t
+	}
+	return t.Pixels, t.WidthPx, t.HeightPx, len(t.Pixels) > 0
+}
+
+// setNamesHash says whether an entry of set has hash's bytes.
+func setNamesHash(set []artImage, hash string) bool {
+	for _, e := range set {
+		if e.hash == hash && !e.purged {
+			return true
+		}
+	}
+	return false
 }
 
 // humanBytes is a byte count as the panel shows it.

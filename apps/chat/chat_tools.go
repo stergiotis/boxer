@@ -153,7 +153,7 @@ func (inst *toolSpec) tool() openaichat.Tool {
 const (
 	baseRevisionProperty = `"base_revision":{"type":"integer","minimum":0,"description":"the revision you read"}`
 	headingProperty      = `"heading":{"type":"array","items":{"type":"string"},"minItems":1,"description":"heading path, outermost first; the last element names the heading, the ones before its nearest ancestors"}`
-	imageNameProperty    = `"name":{"type":"string","description":"lower-case letters, digits, '.', '-' and '_', ending in .png; omitted, the chat picks screenshot-<n>.png"}`
+	imageNameProperty    = `"name":{"type":"string","description":"lower-case letters, digits, '.', '-' and '_', ending in .png; omitted, the chat picks screenshot-<n>.png; the artefact's text shows the image where it embeds ![[name]]"}`
 )
 
 // maxTreeBytes bounds the outline read_window_tree hands the model; a busy

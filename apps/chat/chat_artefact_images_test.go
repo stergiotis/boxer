@@ -15,6 +15,7 @@ import (
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/sealed"
 	"github.com/stergiotis/boxer/public/llm/openaichat"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/imagedecode"
 )
 
 // testPNG is a w×h PNG whose pixels depend on seed, so two seeds differ.
@@ -358,4 +359,35 @@ func TestUnionBounds(t *testing.T) {
 		unionBounds([]windowGeom{{X: 10, Y: 20, W: 300, H: 200}, {X: 200, Y: 5, W: 300, H: 50}}))
 	assert.Equal(t, &[4]float32{0, 0, 90, 40}, unionBounds([]windowGeom{{X: -10, Y: -10, W: 100, H: 50}}),
 		"clipped to the viewport's top-left")
+}
+
+func TestTheDocumentShowsTheScreenshotsItEmbeds(t *testing.T) {
+	s := testStore(t, roomy())
+	hash, w, h, err := s.put(testPNG(t, 40, 30, 1))
+	require.NoError(t, err)
+	purged, _, _, err := s.put(testPNG(t, 40, 30, 2))
+	require.NoError(t, err)
+	set := []artImage{
+		{name: "screenshot-1.png", hash: hash, w: w, h: h},
+		{name: "gone.png", hash: purged, w: w, h: h, purged: true},
+	}
+	r := &artImageResolver{set: set, store: s, decoded: map[string]imagedecode.Thumbnail{}}
+
+	px, pw, ph, ok := r.LoadImage("screenshot-1.png")
+	require.True(t, ok)
+	assert.Equal(t, [2]uint32{40, 30}, [2]uint32{pw, ph})
+	assert.Len(t, px, 40*30)
+	_, _, _, ok = r.LoadImage("screenshot-1.png#section")
+	assert.True(t, ok, "an embed's heading does not change the image")
+	_, _, _, ok = r.LoadImage("gone.png")
+	assert.False(t, ok, "purged bytes are a link, not an image")
+	_, _, _, ok = r.LoadImage("other.png")
+	assert.False(t, ok, "a name not in the set is a link")
+	assert.Len(t, r.decoded, 1)
+
+	var v artefactView
+	v.ensure(1, "# A\n\n![[screenshot-1.png]]\n", set, s)
+	assert.Contains(t, v.inline, hash)
+	v.ensure(2, "# A\n", nil, s)
+	assert.Empty(t, v.inline, "a revision without the image drops it from the cache")
 }

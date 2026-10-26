@@ -241,7 +241,19 @@ tools.
 
 ## Updates
 
-None.
+### 2026-10-26 — the document shows the screenshots it embeds
+
+Part of §SD6's "references from the markdown" is taken up. The panel's
+Document tab parses the head revision with a resolver over that revision's
+set (`artImageResolver`), so `![[name]]`, or a CommonMark image naming it, draws the
+screenshot inline. The name property in the image tools' schema tells the
+model the syntax. The bytes are decoded on the render goroutine, the first
+time a revision embeds a hash, reduced to a bound of about twice the box they
+are drawn in, and held only while the head names them. This adds to the
+decoded memory §SD1 kept to thumbnails, up to one reduced image per embedded
+hash. A name that is not in the set, or whose bytes were purged, stays
+the glyph link it was. Still deferred: the linter's rule for such a name,
+and carrying the images along with Copy and Open in mdedit.
 
 ## References
 
