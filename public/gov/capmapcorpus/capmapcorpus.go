@@ -121,7 +121,14 @@ type Competence struct {
 	Sections []Section
 	// Lifecycle holds only the phases that carry a record. A phase nothing has
 	// been recorded for is absent rather than zero-valued.
+	//
+	// For the boxer catalog the phases are derived rather than authored
+	// (ADR-0337 §SD6); the field stays for a vault that carries them.
 	Lifecycle []LifecycleEvent
+	// Assessment holds the competence's claims, one per dimension, in
+	// authored order (ADR-0337 §SD2). A dimension absent here is unassessed,
+	// which is what retires the [NotAssessed] sentinel for new notes.
+	Assessment []Claim
 }
 
 // Corpus is one read of a vault: the competences it defines, the relations
@@ -220,6 +227,10 @@ type Relation struct {
 	// Ncd is the normalised compression distance for
 	// [RelationKindSimilar], and zero otherwise.
 	Ncd float64
+	// TargetStatus is what an anchor's own corpus says about its target —
+	// a decision's status, for an `adr` anchor — and empty for every other
+	// kind and for the non-anchor kinds. See [AnchorResolution.Status].
+	TargetStatus string
 
 	// qualified records that the link was written as `[[slug/capability]]`
 	// rather than `[[slug]]` — the vault's spelling, kept verbatim. Both name
@@ -243,6 +254,14 @@ const (
 	// RelationKindWikilink is a `[[link]]` found in a body section, and
 	// carries the section it was found under.
 	RelationKindWikilink RelationKindE = "wikilink"
+	// RelationKindRealisedBy is an anchor from frontmatter `realised_by`
+	// (ADR-0337 §SD1): the target is the anchor text, `kind:key`, and the
+	// resolution is the anchor's kind resolver's answer.
+	RelationKindRealisedBy RelationKindE = "realised-by"
+	// RelationKindBasis is an anchor from a claim's `basis` (ADR-0337 §SD2).
+	// Section carries the claim's dimension, which is what makes "what does
+	// the readiness claim rest on" a filter.
+	RelationKindBasis RelationKindE = "basis"
 )
 
 // ResolutionE reports whether a relation's target was found in the corpus, and
@@ -280,6 +299,12 @@ const (
 	// almost all of them in the Standards and Obligations sections, which are
 	// bibliographies. Counting them as broken links would bury the real ones.
 	ResolutionExternal
+	// ResolutionUnchecked means the target is an anchor whose kind's corpus
+	// could not be reached from where the parse ran — no checkout, no
+	// process — so nothing is known either way (ADR-0337 §SD1). It is
+	// neither a defect nor a pass, and the lint lens lists it apart from
+	// both. Only the anchor kinds take it.
+	ResolutionUnchecked
 )
 
 // String renders the resolution as the stable lower-case token consumers
@@ -298,6 +323,8 @@ func (inst ResolutionE) String() (s string) {
 		return "external"
 	case ResolutionUnresolved:
 		return "unresolved"
+	case ResolutionUnchecked:
+		return "unchecked"
 	default:
 		return "unknown"
 	}
@@ -317,6 +344,8 @@ func ParseResolution(s string) (r ResolutionE) {
 		return ResolutionDirRef
 	case "external":
 		return ResolutionExternal
+	case "unchecked":
+		return ResolutionUnchecked
 	default:
 		return ResolutionUnresolved
 	}

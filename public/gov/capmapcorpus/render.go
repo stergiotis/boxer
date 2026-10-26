@@ -52,10 +52,15 @@ type renderFrontmatter struct {
 	Domain    string   `yaml:"domain,omitempty"`
 	Catalog   string   `yaml:"catalog,omitempty"`
 	Owner     string   `yaml:"owner,omitempty"`
-	// Scores are always emitted, sentinel included, matching both the vault's
-	// convention and the encoding's (ADR-0168 §SD1): "not assessed" is a value.
-	Maturity      uint8           `yaml:"maturity"`
-	Pain          uint8           `yaml:"pain"`
+	// Anchors, as the vault spells them (ADR-0337 §SD1).
+	RealisedBy []string `yaml:"realised_by,omitempty"`
+	// The bare scores are written only when a judgement was recorded, so a
+	// vault that carries them round-trips and a new note never gets the
+	// sentinel written into it (ADR-0337 §SD2): for new notes the absence
+	// of a claim is what says "unassessed".
+	Maturity      *uint8          `yaml:"maturity,omitempty"`
+	Pain          *uint8          `yaml:"pain,omitempty"`
+	Assessment    []renderClaim   `yaml:"assessment,omitempty"`
 	Tags          []string        `yaml:"tags,omitempty"`
 	Similar       []renderSimilar `yaml:"similar,omitempty"`
 	IdentifiedBy  string          `yaml:"lifecycle_identified_by,omitempty"`
@@ -82,6 +87,17 @@ type renderSimilar struct {
 	Ncd float64 `yaml:"ncd"`
 }
 
+// renderClaim is one assessment claim in the emitted stanza, in the field
+// order ADR-0337 §SD2 shows. Problems are not written: they are the lint's
+// reading of the claim, not part of it.
+type renderClaim struct {
+	Dimension string   `yaml:"dimension"`
+	Rating    string   `yaml:"rating"`
+	Basis     []string `yaml:"basis"`
+	By        string   `yaml:"by,omitempty"`
+	At        string   `yaml:"at,omitempty"`
+}
+
 // RenderCompetence renders one competence as the markdown of its vault file:
 // the YAML stanza, then the body sections in document order.
 //
@@ -100,8 +116,8 @@ func RenderCompetence(comp Competence, rels []Relation) (out []byte, err error) 
 		Domain:    comp.Domain,
 		Catalog:   comp.Catalog,
 		Owner:     comp.Owner,
-		Maturity:  comp.Maturity,
-		Pain:      comp.Pain,
+		Maturity:  recordedScore(comp.Maturity),
+		Pain:      recordedScore(comp.Pain),
 		Tags:      comp.Tags,
 	}
 	for _, rel := range rels {
@@ -113,7 +129,16 @@ func RenderCompetence(comp Competence, rels []Relation) (out []byte, err error) 
 			fm.ParentIds = append(fm.ParentIds, renderRef(rel))
 		case RelationKindSimilar:
 			fm.Similar = append(fm.Similar, renderSimilar{Ref: renderRef(rel), Ncd: rel.Ncd})
+		case RelationKindRealisedBy:
+			fm.RealisedBy = append(fm.RealisedBy, rel.Target)
 		}
+	}
+	for _, claim := range comp.Assessment {
+		rc := renderClaim{Dimension: claim.Dimension, Rating: claim.Rating, Basis: []string{}, By: claim.By, At: renderTimestamp(claim.At)}
+		for _, a := range claim.Basis {
+			rc.Basis = append(rc.Basis, a.String())
+		}
+		fm.Assessment = append(fm.Assessment, rc)
 	}
 	applyLifecycle(&fm, comp.Lifecycle)
 
@@ -133,6 +158,15 @@ func RenderCompetence(comp Competence, rels []Relation) (out []byte, err error) 
 		b.WriteString("\n")
 	}
 	return []byte(b.String()), nil
+}
+
+// recordedScore is a bare score for the stanza, or nil for the sentinel so
+// the key is left out.
+func recordedScore(v uint8) (p *uint8) {
+	if v == NotAssessed {
+		return nil
+	}
+	return &v
 }
 
 // applyLifecycle spreads the recorded events back over the flat frontmatter

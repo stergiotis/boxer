@@ -26,6 +26,13 @@ func TestFactsRowsReadBackAsTheirComponents(t *testing.T) {
 				Lifecycle: []capmapcorpus.LifecycleEvent{
 					{Phase: capmapcorpus.PhaseDefined, By: "J", At: now},
 					{Phase: capmapcorpus.PhasePlanned, By: "K"},
+				},
+				Assessment: []capmapcorpus.Claim{
+					{Dimension: "readiness", Rating: "7", By: "J", At: now,
+						Basis: []capmapcorpus.Anchor{{Kind: capmapcorpus.AnchorKindAdr, Key: "0223"}, {Kind: capmapcorpus.AnchorKindHowto, Key: "jobs"}}},
+					{Dimension: "evolution", Rating: "product",
+						Basis: []capmapcorpus.Anchor{{Kind: capmapcorpus.AnchorKindAdr, Key: "0223"}}},
+					{Dimension: "pain", Rating: "1", By: "J"},
 				}},
 		},
 		Relations: []capmapcorpus.Relation{
@@ -45,7 +52,7 @@ func TestFactsRowsReadBackAsTheirComponents(t *testing.T) {
 	fk, f64 := acc.ForeignKey, acc.F64Array
 
 	for i, c := range corpus.Competences {
-		wantRec, wantTags, wantLifecycle := competenceComponents(c)
+		wantRec, wantTags, wantLifecycle, wantClaims, wantBases := competenceComponents(c)
 		rec, present, err := CompetenceRecordReadRow(i,
 			sym.GetAttributes(), sym.GetMemberships(),
 			str.GetAttributes(), str.GetMemberships(),
@@ -63,6 +70,20 @@ func TestFactsRowsReadBackAsTheirComponents(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, len(wantLifecycle.By) > 0, present)
 		require.Equal(t, wantLifecycle, lifecycle)
+		// The claims spread over three sections and the bases are a
+		// component of their own (ADR-0337 §SD7); both read back whole,
+		// the dimension parameter keeping each field with its claim.
+		claims, present, err := CompetenceClaimsReadRow(i,
+			sym.GetAttributes(), sym.GetMemberships(),
+			str.GetAttributes(), str.GetMemberships(),
+			tm.GetAttributes(), tm.GetMemberships())
+		require.NoError(t, err)
+		require.Equal(t, len(wantClaims.Rating) > 0, present)
+		require.Equal(t, wantClaims, claims)
+		bases, present, err := CompetenceClaimBasesReadRow(i, sym.GetAttributes(), sym.GetMemberships())
+		require.NoError(t, err)
+		require.Equal(t, len(wantBases.Basis) > 0, present)
+		require.Equal(t, wantBases, bases)
 		_, present, err = RelationRecordReadRow(i,
 			sym.GetAttributes(), sym.GetMemberships(),
 			fk.GetAttributes(), fk.GetMemberships(),

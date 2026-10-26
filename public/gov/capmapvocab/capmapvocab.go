@@ -154,6 +154,24 @@ var (
 	// declared after the relation ones because ids are ordinals and this
 	// membership was added later; see the block comment.
 	MembCompTag = NkRegistry.MustBegin("capmapCompetenceTag", 23).End()
+
+	// ADR-0337 §SD7: appended after the twenty-fourth ordinal.
+	//
+	// MembRelTargetStatus is what an anchor's own corpus says about its
+	// target — a decision's status — on the symbol section of the relation
+	// row, present for anchor relations only.
+	MembRelTargetStatus = NkRegistry.MustBegin("capmapRelationTargetStatus", 24).End()
+
+	// A competence's assessment claims (§SD2), one claim per dimension. Each
+	// is a mixed low-card-ref carrying the dimension as its high-card
+	// parameter, which is what groups a claim's fields without a claim
+	// ordinal: the rating and the assessor on the symbol section, the date
+	// on the time section, and one attribute per basis anchor on the symbol
+	// section — the shape capmapCompetenceTag uses for a list.
+	MembCompClaimRating = NkRegistry.MustBegin("capmapCompetenceClaimRating", 25).End()
+	MembCompClaimBy     = NkRegistry.MustBegin("capmapCompetenceClaimBy", 26).End()
+	MembCompClaimAt     = NkRegistry.MustBegin("capmapCompetenceClaimAt", 27).End()
+	MembCompClaimBasis  = NkRegistry.MustBegin("capmapCompetenceClaimBasis", 28).End()
 )
 
 // AllMembs enumerates every registered capmap membership. Tests iterate it to
@@ -171,4 +189,6 @@ var AllMembs = []registry.RegisteredNaturalKey{
 	MembRelSection,
 	MembRelNcd,
 	MembCompTag,
+	MembRelTargetStatus,
+	MembCompClaimRating, MembCompClaimBy, MembCompClaimAt, MembCompClaimBasis,
 }

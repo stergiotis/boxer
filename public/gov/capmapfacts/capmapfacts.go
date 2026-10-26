@@ -172,12 +172,13 @@ func Ingest(ctx context.Context, corpus capmapcorpus.Corpus, sink RecordSinkI, t
 // encodeCompetence writes one competence row: BeginEntity through the last
 // section, with no commit — the caller commits, matching the runtime's own
 // encoders so the batched and single paths cannot drift. The row carries
-// three components (CompetenceRecord, CompetenceTags, CompetenceLifecycle);
-// the symbol section holds attributes of all three.
+// five components (CompetenceRecord, CompetenceTags, CompetenceLifecycle,
+// CompetenceClaims, CompetenceClaimBases); the symbol section holds
+// attributes of all five, the string and time sections of two each.
 func encodeCompetence(ent *dml.InEntityFacts, competence capmapcorpus.Competence, now time.Time) (err error) {
 	nk := competence.NaturalKey
 	ent.BeginEntity().SetId(DeriveId(nk), nk).SetTimestamp(now)
-	rec, tags, lifecycle := competenceComponents(competence)
+	rec, tags, lifecycle, claims, bases := competenceComponents(competence)
 
 	sym := ent.GetSectionSymbol()
 	if err = CompetenceRecordEmitSectionSymbol(sym, rec); err != nil {
@@ -189,10 +190,19 @@ func encodeCompetence(ent *dml.InEntityFacts, competence capmapcorpus.Competence
 	if err = CompetenceLifecycleEmitSectionSymbol(sym, lifecycle); err != nil {
 		return
 	}
+	if err = CompetenceClaimsEmitSectionSymbol(sym, claims); err != nil {
+		return
+	}
+	if err = CompetenceClaimBasesEmitSectionSymbol(sym, bases); err != nil {
+		return
+	}
 	sym.EndSection()
 
 	str := ent.GetSectionStringArray()
 	if err = CompetenceRecordEmitSectionStringArray(str, rec); err != nil {
+		return
+	}
+	if err = CompetenceClaimsEmitSectionStringArray(str, claims); err != nil {
 		return
 	}
 	str.EndSection()
@@ -210,9 +220,12 @@ func encodeCompetence(ent *dml.InEntityFacts, competence capmapcorpus.Competence
 		}
 		txt.EndSection()
 	}
-	if len(rec.LifecycleAt) > 0 {
+	if len(rec.LifecycleAt) > 0 || len(claims.At) > 0 {
 		tm := ent.GetSectionTimeArray()
 		if err = CompetenceRecordEmitSectionTimeArray(tm, rec); err != nil {
+			return
+		}
+		if err = CompetenceClaimsEmitSectionTimeArray(tm, claims); err != nil {
 			return
 		}
 		tm.EndSection()
@@ -222,8 +235,11 @@ func encodeCompetence(ent *dml.InEntityFacts, competence capmapcorpus.Competence
 
 // competenceComponents maps a competence onto its row's components. Empty
 // text is left out, as is a lifecycle event without a who (from
-// CompetenceLifecycle) or without a time (from LifecycleAt).
-func competenceComponents(c capmapcorpus.Competence) (rec CompetenceRecord, tags CompetenceTags, lifecycle CompetenceLifecycle) {
+// CompetenceLifecycle) or without a time (from LifecycleAt), a claim's
+// assessor or date when absent, and a claim marked as a duplicate of an
+// earlier one on its dimension — the parameter would collide, and the first
+// claim is the one that counts.
+func competenceComponents(c capmapcorpus.Competence) (rec CompetenceRecord, tags CompetenceTags, lifecycle CompetenceLifecycle, claims CompetenceClaims, bases CompetenceClaimBases) {
 	rec = CompetenceRecord{
 		Slug:      c.Slug,
 		Domain:    nonEmpty(c.Domain),
@@ -251,6 +267,21 @@ func competenceComponents(c capmapcorpus.Competence) (rec CompetenceRecord, tags
 		}
 		if !ev.At.IsZero() {
 			rec.LifecycleAt = append(rec.LifecycleAt, CompetencePhaseAt{Phase: string(ev.Phase), At: ev.At})
+		}
+	}
+	for _, claim := range c.Assessment {
+		if claim.HasProblem(capmapcorpus.ClaimProblemDuplicateDimension) {
+			continue
+		}
+		claims.Rating = append(claims.Rating, ClaimRating{Dimension: claim.Dimension, Rating: claim.Rating})
+		if claim.By != "" {
+			claims.By = append(claims.By, ClaimBy{Dimension: claim.Dimension, By: claim.By})
+		}
+		if !claim.At.IsZero() {
+			claims.At = append(claims.At, ClaimAt{Dimension: claim.Dimension, At: claim.At})
+		}
+		for _, a := range claim.Basis {
+			bases.Basis = append(bases.Basis, ClaimBasis{Dimension: claim.Dimension, Anchor: a.String()})
 		}
 	}
 	return
@@ -289,11 +320,12 @@ func encodeRelation(ent *dml.InEntityFacts, rel capmapcorpus.Relation, now time.
 // similarity.
 func relationRecord(rel capmapcorpus.Relation) (rec RelationRecord) {
 	rec = RelationRecord{
-		RelKind:    string(rel.Kind),
-		Resolution: rel.Resolution.String(),
-		TargetText: rel.Target,
-		Section:    nonEmpty(rel.Section),
-		Source:     DeriveId(capmapcorpus.NaturalKey(rel.SourceSlug)),
+		RelKind:      string(rel.Kind),
+		Resolution:   rel.Resolution.String(),
+		TargetText:   rel.Target,
+		Section:      nonEmpty(rel.Section),
+		TargetStatus: nonEmpty(rel.TargetStatus),
+		Source:       DeriveId(capmapcorpus.NaturalKey(rel.SourceSlug)),
 	}
 	if resolvesToCompetence(rel.Resolution) {
 		rec.Target = option.Some(DeriveId(capmapcorpus.NaturalKey(rel.Target)))

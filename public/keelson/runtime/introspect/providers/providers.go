@@ -35,10 +35,12 @@ import (
 // here. The plane-fed topology tables (procs, sockets) are the exception —
 // they need a consumer, so they register via RegisterTopology.
 func RegisterStatic(r *introspect.Registry) (err error) {
+	installAnchorResolver()
 	for _, p := range []introspect.Provider{
 		envProvider{}, appsProvider{}, buildProvider{}, sbomProvider{}, sqlPassesProvider{}, extbinProvider{},
 		adrProvider{}, subtaskProvider{}, coderefProvider{}, adrcontentProvider{}, componentsProvider{},
 		competenceProvider{}, competencesectionProvider{}, competencerelationProvider{},
+		competenceclaimProvider{}, competenceevidenceProvider{},
 		helpsectionsProvider{}, adrsectionsProvider{}, panelShapesProvider{},
 		membershipsProvider{}, lwComponentsProvider{}, operationsProvider{},
 	} {

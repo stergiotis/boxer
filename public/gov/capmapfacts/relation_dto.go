@@ -20,6 +20,9 @@ type RelationRecord struct {
 	Resolution string                `lw:"capmapRelationResolution,symbol"`
 	TargetText string                `lw:"capmapRelationTargetText,symbol"`
 	Section    option.Option[string] `lw:"capmapRelationSection,symbol"`
+	// TargetStatus is what an anchor's corpus says about its target
+	// (ADR-0337 §SD1), present for anchor relations that carry one.
+	TargetStatus option.Option[string] `lw:"capmapRelationTargetStatus,symbol"`
 
 	Source uint64                `lw:"capmapRelationSource,foreignKey"`
 	Target option.Option[uint64] `lw:"capmapRelationTarget,foreignKey"`

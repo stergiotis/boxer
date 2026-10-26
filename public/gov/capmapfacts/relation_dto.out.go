@@ -16,14 +16,15 @@ import (
 // --- Caller-assigned membership ids (registry-stable target). ---
 
 const (
-	kindCapmapKindRelation       uint64 = 4611686031312289793
-	kindCapmapRelationKind       uint64 = 4611686031312289811
-	kindCapmapRelationResolution uint64 = 4611686031312289812
-	kindCapmapRelationTargetText uint64 = 4611686031312289810
-	kindCapmapRelationSection    uint64 = 4611686031312289813
-	kindCapmapRelationSource     uint64 = 4611686031312289808
-	kindCapmapRelationTarget     uint64 = 4611686031312289809
-	kindCapmapRelationNcd        uint64 = 4611686031312289814
+	kindCapmapKindRelation         uint64 = 4611686031312289793
+	kindCapmapRelationKind         uint64 = 4611686031312289811
+	kindCapmapRelationResolution   uint64 = 4611686031312289812
+	kindCapmapRelationTargetText   uint64 = 4611686031312289810
+	kindCapmapRelationSection      uint64 = 4611686031312289813
+	kindCapmapRelationTargetStatus uint64 = 4611686031312289816
+	kindCapmapRelationSource       uint64 = 4611686031312289808
+	kindCapmapRelationTarget       uint64 = 4611686031312289809
+	kindCapmapRelationNcd          uint64 = 4611686031312289814
 )
 
 // --- SoA columns + AoS Append adapter. ---
@@ -33,16 +34,18 @@ const (
 type RelationRecordColumns struct {
 	ID []uint64
 
-	RelKind    []string
-	Resolution []string
-	TargetText []string
-	SectionVal []string
-	SectionHas []bool
-	Source     []uint64
-	TargetVal  []uint64
-	TargetHas  []bool
-	NcdVal     []float64
-	NcdHas     []bool
+	RelKind         []string
+	Resolution      []string
+	TargetText      []string
+	SectionVal      []string
+	SectionHas      []bool
+	TargetStatusVal []string
+	TargetStatusHas []bool
+	Source          []uint64
+	TargetVal       []uint64
+	TargetHas       []bool
+	NcdVal          []float64
+	NcdHas          []bool
 }
 
 // Len returns the number of rows currently in the batch.
@@ -61,6 +64,8 @@ func (c *RelationRecordColumns) Append(row RelationRecord) {
 	c.TargetText = append(c.TargetText, row.TargetText)
 	c.SectionVal = append(c.SectionVal, row.Section.Val)
 	c.SectionHas = append(c.SectionHas, row.Section.Has)
+	c.TargetStatusVal = append(c.TargetStatusVal, row.TargetStatus.Val)
+	c.TargetStatusHas = append(c.TargetStatusHas, row.TargetStatus.Has)
 	c.Source = append(c.Source, row.Source)
 	c.TargetVal = append(c.TargetVal, row.Target.Val)
 	c.TargetHas = append(c.TargetHas, row.Target.Has)
@@ -78,6 +83,8 @@ func (c *RelationRecordColumns) Row(i int) (row RelationRecord) {
 	row.TargetText = c.TargetText[i]
 	row.Section.Val = c.SectionVal[i]
 	row.Section.Has = c.SectionHas[i]
+	row.TargetStatus.Val = c.TargetStatusVal[i]
+	row.TargetStatus.Has = c.TargetStatusHas[i]
 	row.Source = c.Source[i]
 	row.Target.Val = c.TargetVal[i]
 	row.Target.Has = c.TargetHas[i]
@@ -210,6 +217,11 @@ func RelationRecordBuildEntities[
 			symbolSecAttr_Section.AddMembershipLowCardRefP(kindCapmapRelationSection)
 			symbolSecAttr_Section.EndAttributeP()
 		}
+		if c.TargetStatusHas[i] {
+			symbolSecAttr_TargetStatus := symbolSec.BeginAttribute(c.TargetStatusVal[i])
+			symbolSecAttr_TargetStatus.AddMembershipLowCardRefP(kindCapmapRelationTargetStatus)
+			symbolSecAttr_TargetStatus.EndAttributeP()
+		}
 		symbolSec.EndSection()
 		// --- foreignKey. ---
 		foreignKeySec := dml.GetSectionForeignKey()
@@ -264,6 +276,11 @@ func RelationRecordEmitSectionSymbol[
 		symbolSecAttr_Section := symbolSec.BeginAttribute(row.Section.Val)
 		symbolSecAttr_Section.AddMembershipLowCardRefP(kindCapmapRelationSection)
 		symbolSecAttr_Section.EndAttributeP()
+	}
+	if row.TargetStatus.Has {
+		symbolSecAttr_TargetStatus := symbolSec.BeginAttribute(row.TargetStatus.Val)
+		symbolSecAttr_TargetStatus.AddMembershipLowCardRefP(kindCapmapRelationTargetStatus)
+		symbolSecAttr_TargetStatus.EndAttributeP()
 	}
 	return
 }
@@ -426,6 +443,9 @@ func RelationRecordFillFromArrow[
 		var symbolSectionVal string
 		var symbolSectionCount int
 		var symbolSectionLastAttr int64
+		var symbolTargetStatusVal string
+		var symbolTargetStatusCount int
+		var symbolTargetStatusLastAttr int64
 		nsymbol := symbolAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 		for attrJ := int64(0); attrJ < nsymbol; attrJ++ {
 			for membID := range symbolMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
@@ -463,6 +483,13 @@ func RelationRecordFillFromArrow[
 					}
 					val := symbolAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 					symbolSectionVal = val
+				case kindCapmapRelationTargetStatus:
+					if symbolTargetStatusLastAttr != attrJ+1 {
+						symbolTargetStatusLastAttr = attrJ + 1
+						symbolTargetStatusCount++
+					}
+					val := symbolAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+					symbolTargetStatusVal = val
 				}
 			}
 		}
@@ -496,6 +523,18 @@ func RelationRecordFillFromArrow[
 			var zero string
 			c.SectionVal = append(c.SectionVal, zero)
 			c.SectionHas = append(c.SectionHas, false)
+		}
+		if symbolTargetStatusCount > 1 {
+			err = eb.Build().Int("row", i).Str("section", "symbol").Str("membership", "capmapRelationTargetStatus").Int("got", symbolTargetStatusCount).Errorf("slot symbol@capmapRelationTargetStatus (field TargetStatus) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", symbolTargetStatusCount)
+			return
+		}
+		if symbolTargetStatusCount == 1 {
+			c.TargetStatusVal = append(c.TargetStatusVal, symbolTargetStatusVal)
+			c.TargetStatusHas = append(c.TargetStatusHas, true)
+		} else {
+			var zero string
+			c.TargetStatusVal = append(c.TargetStatusVal, zero)
+			c.TargetStatusHas = append(c.TargetStatusHas, false)
 		}
 		// --- foreignKey. ---
 		var foreignKeySourceVal uint64
@@ -620,6 +659,9 @@ func RelationRecordReadRow[
 	var symbolSectionVal string
 	var symbolSectionCount int
 	var symbolSectionLastAttr int64
+	var symbolTargetStatusVal string
+	var symbolTargetStatusCount int
+	var symbolTargetStatusLastAttr int64
 	nsymbol := symbolAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 	for attrJ := int64(0); attrJ < nsymbol; attrJ++ {
 		for membID := range symbolMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
@@ -657,6 +699,13 @@ func RelationRecordReadRow[
 				}
 				val := symbolAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 				symbolSectionVal = val
+			case kindCapmapRelationTargetStatus:
+				if symbolTargetStatusLastAttr != attrJ+1 {
+					symbolTargetStatusLastAttr = attrJ + 1
+					symbolTargetStatusCount++
+				}
+				val := symbolAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				symbolTargetStatusVal = val
 			}
 		}
 	}
@@ -698,6 +747,15 @@ func RelationRecordReadRow[
 	if symbolSectionCount == 1 {
 		row.Section.Val = symbolSectionVal
 		row.Section.Has = true
+		present = true
+	}
+	if symbolTargetStatusCount > 1 {
+		err = eb.Build().Int("row", i).Str("section", "symbol").Str("membership", "capmapRelationTargetStatus").Int("got", symbolTargetStatusCount).Errorf("slot symbol@capmapRelationTargetStatus (field TargetStatus) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", symbolTargetStatusCount)
+		return
+	}
+	if symbolTargetStatusCount == 1 {
+		row.TargetStatus.Val = symbolTargetStatusVal
+		row.TargetStatus.Has = true
 		present = true
 	}
 	// --- foreignKey. ---

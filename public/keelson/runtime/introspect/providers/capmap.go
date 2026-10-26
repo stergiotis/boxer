@@ -2,18 +2,23 @@ package providers
 
 import (
 	"strings"
+	"sync"
 
 	"github.com/apache/arrow-go/v18/arrow"
 
+	"github.com/stergiotis/boxer/public/gov/capmapanchors"
 	"github.com/stergiotis/boxer/public/gov/capmapcorpus"
 	"github.com/stergiotis/boxer/public/gov/capmapfacts"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect"
 )
 
-// The business-capability corpus as three keelson tables — `competence` (one
-// row per competence), `competencesection` (one row per body section) and
-// `competencerelation` (one row per link between them) — so a capability map is
-// queryable from any host pointed at this process (ADR-0168 §SD8).
+// The business-capability corpus as five keelson tables — `competence` (one
+// row per competence), `competencesection` (one row per body section),
+// `competencerelation` (one row per link between them), `competenceclaim`
+// (one row per assessment claim) and `competenceevidence` (one row per
+// signal the tree carries for a competence's anchors) — so a capability map
+// is queryable from any host pointed at this process (ADR-0168 §SD8,
+// ADR-0337 §SD2–§SD3).
 //
 // # Why the tables are not called `capability`
 //
@@ -49,6 +54,24 @@ import (
 // erroring** off-repo, because a binary with no checkout around it has no
 // corpus and that is a fact about the process; and the corpus root is pinned
 // by BOXER_CAPMAP_VAULT, discovered by walking up only when unset.
+//
+// Anchors are resolved against the checkout and this process's registries by
+// one resolver (ADR-0337 §SD1), installed into the corpus's loader when the
+// providers register and read by the evidence table; off-repo it reports
+// every anchor unchecked, which is neither a defect nor a pass.
+
+// treeResolver is the one resolver every capmap table shares, built on first
+// use so the checkout is found from the working directory the host runs in.
+var treeResolver = sync.OnceValue(func() *capmapanchors.TreeResolver {
+	return capmapanchors.New("")
+})
+
+// installAnchorResolver points the corpus's loader at the tree resolver.
+// RegisterStatic calls it; a test that wants a resolver of its own calls
+// capmapcorpus.SetAnchorResolver after registering.
+func installAnchorResolver() {
+	capmapcorpus.SetAnchorResolver(treeResolver())
+}
 
 // competenceProvider exposes each competence as keelson.competence: the
 // frontmatter metadata, without the prose.
@@ -119,6 +142,86 @@ func (competencerelationProvider) Snapshot(proj introspect.Projection) (arrow.Re
 	return competencerelationTable(rows).Build(proj, len(rows)), nil
 }
 
+// competenceclaimProvider exposes each assessment claim as
+// keelson.competenceclaim: one row per competence per dimension (ADR-0337
+// §SD2).
+//
+// `problems` is the lint: an empty basis, a basis anchor the tree does not
+// carry or that names a retired decision, a missing assessor or date, a
+// second claim on one dimension. `supported_rung` is filled for readiness
+// claims only — the rung the competence's anchors support, from the
+// evidence table's rule — and sits beside `rank` so the two differing is a
+// row to read, not an error.
+type competenceclaimProvider struct{}
+
+func (competenceclaimProvider) Name() string                         { return "competenceclaim" }
+func (competenceclaimProvider) Freshness() introspect.FreshnessClass { return introspect.FreshnessLive }
+func (competenceclaimProvider) Schema() *arrow.Schema                { return competenceclaimTable(nil).Schema() }
+
+func (competenceclaimProvider) Snapshot(proj introspect.Projection) (arrow.RecordBatch, error) {
+	rows := flattenClaims(capmapcorpus.Load())
+	return competenceclaimTable(rows).Build(proj, len(rows)), nil
+}
+
+// competenceevidenceProvider exposes what the tree carries for each
+// competence's anchors as keelson.competenceevidence: one row per competence
+// per signal (ADR-0337 §SD3). It states what is there and writes no claim;
+// the rung column is what each signal is evidence for, and the claims table
+// folds the signals into the supported rung.
+type competenceevidenceProvider struct{}
+
+func (competenceevidenceProvider) Name() string { return "competenceevidence" }
+func (competenceevidenceProvider) Freshness() introspect.FreshnessClass {
+	return introspect.FreshnessLive
+}
+func (competenceevidenceProvider) Schema() *arrow.Schema {
+	return competenceevidenceTable(nil).Schema()
+}
+
+func (competenceevidenceProvider) Snapshot(proj introspect.Projection) (arrow.RecordBatch, error) {
+	rows := allSignals(capmapcorpus.Load())
+	return competenceevidenceTable(rows).Build(proj, len(rows)), nil
+}
+
+// competenceclaimRow is one flattened claim with the derived columns
+// beside it.
+type competenceclaimRow struct {
+	Slug          string
+	Claim         capmapcorpus.Claim
+	Rank          int
+	RungName      string
+	SupportedRung int
+}
+
+func flattenClaims(corpus capmapcorpus.Corpus) (rows []competenceclaimRow) {
+	for i := range corpus.Competences {
+		comp := &corpus.Competences[i]
+		if len(comp.Assessment) == 0 {
+			continue
+		}
+		supported := capmapanchors.SupportedRung(treeResolver().SignalsFor(comp.Slug, corpus.Relations))
+		for _, claim := range comp.Assessment {
+			row := competenceclaimRow{Slug: comp.Slug, Claim: claim}
+			if spec, ok := capmapcorpus.LookupDimension(claim.Dimension); ok {
+				row.Rank, _ = spec.Rank(claim.Rating)
+				row.RungName = spec.RungName(claim.Rating)
+			}
+			if claim.Dimension == capmapcorpus.DimensionReadiness {
+				row.SupportedRung = supported
+			}
+			rows = append(rows, row)
+		}
+	}
+	return rows
+}
+
+func allSignals(corpus capmapcorpus.Corpus) (rows []capmapanchors.Signal) {
+	for i := range corpus.Competences {
+		rows = append(rows, treeResolver().SignalsFor(corpus.Competences[i].Slug, corpus.Relations)...)
+	}
+	return rows
+}
+
 // competencesectionRow is one flattened body section. It carries the owning slug so
 // the table stands on its own, and an ordinal so document order survives a
 // query that does not preserve row order.
@@ -167,8 +270,16 @@ func competenceTable(rows []capmapcorpus.Competence) *introspect.Table {
 		Int32("maturity", func(i int) int32 { return int32(rows[i].Maturity) }).
 		Int32("pain", func(i int) int32 { return int32(rows[i].Pain) }).
 		Int32("section_count", func(i int) int32 { return int32(len(rows[i].Sections)) }).
+		Int32("claim_count", func(i int) int32 { return int32(len(rows[i].Assessment)) }).
 		String("vault_path", func(i int) string { return rows[i].VaultPath }).
 		StringList("tags", func(i int) []string { return rows[i].Tags }).
+		StringList("dimensions", func(i int) []string {
+			out := make([]string, 0, len(rows[i].Assessment))
+			for _, c := range rows[i].Assessment {
+				out = append(out, c.Dimension)
+			}
+			return out
+		}).
 		Uint64("fact_id", func(i int) uint64 { return capmapfacts.DeriveId(rows[i].NaturalKey) }).
 		StringList("lifecycle_phases", func(i int) []string {
 			out := make([]string, 0, len(rows[i].Lifecycle))
@@ -203,12 +314,51 @@ func competencesectionTable(rows []competencesectionRow) *introspect.Table {
 		String("text@text/markdown", func(i int) string { return rows[i].Text })
 }
 
+func competenceclaimTable(rows []competenceclaimRow) *introspect.Table {
+	return introspect.NewTable().
+		String("slug", func(i int) string { return rows[i].Slug }).
+		String("dimension", func(i int) string { return rows[i].Claim.Dimension }).
+		String("rating", func(i int) string { return rows[i].Claim.Rating }).
+		Int32("rank", func(i int) int32 { return int32(rows[i].Rank) }).
+		String("rung_name", func(i int) string { return rows[i].RungName }).
+		Int32("supported_rung", func(i int) int32 { return int32(rows[i].SupportedRung) }).
+		StringList("basis", func(i int) []string {
+			out := make([]string, 0, len(rows[i].Claim.Basis))
+			for _, a := range rows[i].Claim.Basis {
+				out = append(out, a.String())
+			}
+			return out
+		}).
+		Int32("basis_count", func(i int) int32 { return int32(len(rows[i].Claim.Basis)) }).
+		String("by", func(i int) string { return rows[i].Claim.By }).
+		String("at", func(i int) string {
+			return isoOrEmpty(rows[i].Claim.At, func() string { return rows[i].Claim.At.UTC().Format("2006-01-02") })
+		}).
+		StringList("problems", func(i int) []string {
+			out := make([]string, 0, len(rows[i].Claim.Problems))
+			for _, p := range rows[i].Claim.Problems {
+				out = append(out, string(p))
+			}
+			return out
+		})
+}
+
+func competenceevidenceTable(rows []capmapanchors.Signal) *introspect.Table {
+	return introspect.NewTable().
+		String("slug", func(i int) string { return rows[i].Slug }).
+		String("anchor", func(i int) string { return rows[i].Anchor }).
+		String("signal", func(i int) string { return rows[i].Name }).
+		String("value", func(i int) string { return rows[i].Value }).
+		Int32("rung", func(i int) int32 { return int32(rows[i].Rung) })
+}
+
 func competencerelationTable(rows []capmapcorpus.Relation) *introspect.Table {
 	return introspect.NewTable().
 		String("source_slug", func(i int) string { return rows[i].SourceSlug }).
 		String("target", func(i int) string { return rows[i].Target }).
 		String("kind", func(i int) string { return string(rows[i].Kind) }).
 		String("resolution", func(i int) string { return rows[i].Resolution.String() }).
+		String("target_status", func(i int) string { return rows[i].TargetStatus }).
 		String("section", func(i int) string { return rows[i].Section }).
 		Float64("ncd", func(i int) float64 { return rows[i].Ncd }).
 		Uint64("source_fact_id", func(i int) uint64 {

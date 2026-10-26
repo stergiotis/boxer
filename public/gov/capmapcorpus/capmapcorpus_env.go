@@ -97,7 +97,22 @@ var (
 	// window, and keeps the memo from leaking between tests.
 	loadedKey    string
 	loadedCorpus Corpus
+	// loadResolver resolves anchors for [Load]. It is set once by the
+	// package that implements the tree's resolvers, which this package cannot
+	// import; nil leaves every anchor unchecked.
+	loadResolver AnchorResolverI
 )
+
+// SetAnchorResolver installs the resolver [Load] parses with (ADR-0337 §SD1)
+// and drops the shared snapshot, so the next read is resolved with it. The
+// tree's resolvers live in capmapanchors; a host wires them at start-up, a
+// test may pass its own.
+func SetAnchorResolver(r AnchorResolverI) {
+	loadMu.Lock()
+	defer loadMu.Unlock()
+	loadResolver = r
+	loadedKey, loadedAt, loadedCorpus = "", time.Time{}, Corpus{}
+}
 
 // Load resolves the vault and reads it whole. Reads within [LoadWindow] of one
 // another for the same vault share a snapshot.
@@ -121,7 +136,7 @@ func Load() (corpus Corpus) {
 	if vaultDir == loadedKey && !loadedAt.IsZero() && time.Since(loadedAt) < LoadWindow {
 		return loadedCorpus
 	}
-	if corpus, err = ParseDir(vaultDir); err != nil {
+	if corpus, err = ParseDirWith(vaultDir, loadResolver); err != nil {
 		return Corpus{}
 	}
 	loadedKey, loadedAt, loadedCorpus = vaultDir, time.Now(), corpus

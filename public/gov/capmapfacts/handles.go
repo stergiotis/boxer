@@ -40,6 +40,10 @@ const (
 	hSymValue = "`symbol:value`"
 	hSymMrhp  = "`symbol:mrhp`"
 
+	hStrValue = "`stringArray:value`"
+	hStrMrhp  = "`stringArray:mrhp`"
+	hStrLen   = "`stringArray:len`"
+
 	hTxtValue = "`textArray:value`"
 	hTxtMrhp  = "`textArray:mrhp`"
 	hTxtLen   = "`textArray:len`"

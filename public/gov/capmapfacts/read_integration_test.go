@@ -124,6 +124,11 @@ func writeIntegrationVault(t *testing.T) (root string) {
 			"name: Robustness\nabbrev: Rob\nlevel: 2\nparent_ids:\n  - \"[[analytics]]\"\n" +
 			"domain: boxer-toolbelt\ncatalog: boxer\nowner: Platform Lead\nmaturity: 3\npain: 0\n" +
 			"tags: [needs-owner, workflow/triage]\n" +
+			"realised_by: [adr:0223, pkg:public/streaming/watchbill]\n" +
+			"assessment:\n" +
+			"  - {dimension: readiness, rating: 6, basis: [adr:0223, howto:watchbill-jobs], by: maintainer, at: 2026-10-26}\n" +
+			"  - {dimension: evolution, rating: product, basis: [adr:0223], by: maintainer, at: 2026-10-26}\n" +
+			"  - {dimension: pain, rating: 1, basis: []}\n" +
 			"similar:\n  - ref: \"[[shared-block]]\"\n    ncd: 0.4548\n" +
 			"lifecycle_defined_by: J. Smith\nlifecycle_defined_at: 2026-03-15\n" +
 			"lifecycle_assessed_by: R. Jones\nlifecycle_assessed_at: 2026-04-01 09:30:00\n" +

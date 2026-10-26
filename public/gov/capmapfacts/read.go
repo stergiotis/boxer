@@ -125,6 +125,18 @@ type competenceRow struct {
 	LifecycleBy       []string `json:"lifecycle_by"`
 	LifecycleAtPhases []string `json:"lifecycle_at_phases"`
 	LifecycleAt       []string `json:"lifecycle_at"`
+
+	// The claims, each field as a parallel pair of (dimension, value)
+	// arrays, since each rides its own membership with the dimension as
+	// the parameter (ADR-0337 §SD7).
+	ClaimRatingDims []string `json:"claim_rating_dims"`
+	ClaimRatings    []string `json:"claim_ratings"`
+	ClaimByDims     []string `json:"claim_by_dims"`
+	ClaimBy         []string `json:"claim_by"`
+	ClaimAtDims     []string `json:"claim_at_dims"`
+	ClaimAt         []string `json:"claim_at"`
+	ClaimBasisDims  []string `json:"claim_basis_dims"`
+	ClaimBasis      []string `json:"claim_basis"`
 }
 
 // relationRow is one decoded relation.
@@ -136,6 +148,8 @@ type relationRow struct {
 	Resolution string  `json:"resolution"`
 	Section    string  `json:"section"`
 	Ncd        float64 `json:"ncd"`
+	// TargetStatus is the anchor target's status (ADR-0337 §SD1).
+	TargetStatus string `json:"target_status"`
 }
 
 func readCompetences(ctx context.Context, q QuerierI, table string) (comps []capmapcorpus.Competence, err error) {
@@ -168,9 +182,10 @@ func readCompetences(ctx context.Context, q QuerierI, table string) (comps []cap
 			// yields nil for a competence with no tags. They mean the same
 			// thing and must compare the same, so the store's answer is
 			// normalised to the parser's.
-			Tags:      nilIfEmpty(r.Tags),
-			Sections:  sectionsOf(r),
-			Lifecycle: lifecycleOf(r),
+			Tags:       nilIfEmpty(r.Tags),
+			Sections:   sectionsOf(r),
+			Lifecycle:  lifecycleOf(r),
+			Assessment: claimsOf(r),
 		}
 		comps = append(comps, comp)
 	}
@@ -268,6 +283,66 @@ func lifecycleOf(r competenceRow) (events []capmapcorpus.LifecycleEvent) {
 	return events
 }
 
+// claimsOf rejoins a competence's claims from the four parallel pairs the
+// query returns, keyed by the dimension each field rides as its parameter.
+// Claim order is the rating's write order, which is the vault's authored
+// order; the basis keeps its order within each dimension. Problems are not
+// stored, so a corpus read back carries the parse-time ones only after it
+// is rendered and parsed again — which is what a dump is for.
+func claimsOf(r competenceRow) (claims []capmapcorpus.Claim) {
+	if len(r.ClaimRatingDims) == 0 {
+		return nil
+	}
+	by := pairUp(r.ClaimByDims, r.ClaimBy)
+	at := pairUp(r.ClaimAtDims, r.ClaimAt)
+	basis := make(map[string][]capmapcorpus.Anchor, len(r.ClaimBasisDims))
+	for i, dim := range r.ClaimBasisDims {
+		if i >= len(r.ClaimBasis) {
+			break
+		}
+		if a, err := capmapcorpus.ParseAnchor(r.ClaimBasis[i]); err == nil {
+			basis[dim] = append(basis[dim], a)
+		}
+	}
+	claims = make([]capmapcorpus.Claim, 0, len(r.ClaimRatingDims))
+	for i, dim := range r.ClaimRatingDims {
+		if i >= len(r.ClaimRatings) {
+			break
+		}
+		claim := capmapcorpus.Claim{Dimension: dim, Rating: r.ClaimRatings[i], By: by[dim], At: parseFactsTime(at[dim]), Basis: basis[dim]}
+		claim.Problems = storedClaimProblems(claim)
+		claims = append(claims, claim)
+	}
+	return claims
+}
+
+// storedClaimProblems recomputes the problems a parse would find from the
+// claim's own fields — the ones that need no resolver — so a corpus read
+// back compares equal to the vault it came from.
+func storedClaimProblems(claim capmapcorpus.Claim) (problems []capmapcorpus.ClaimProblemE) {
+	if len(claim.Basis) == 0 {
+		problems = append(problems, capmapcorpus.ClaimProblemEmptyBasis)
+	}
+	if claim.By == "" {
+		problems = append(problems, capmapcorpus.ClaimProblemNoAssessor)
+	}
+	if claim.At.IsZero() {
+		problems = append(problems, capmapcorpus.ClaimProblemNoDate)
+	}
+	return problems
+}
+
+// pairUp zips two parallel arrays into a map, the first being the keys.
+func pairUp(keys, values []string) (m map[string]string) {
+	m = make(map[string]string, len(keys))
+	for i, k := range keys {
+		if i < len(values) {
+			m[k] = values[i]
+		}
+	}
+	return m
+}
+
 // factsTimeLayout is what the read-back query formats a lifecycle timestamp as,
 // in Go's spelling. Its ClickHouse spelling is `%Y-%m-%d %H:%i:%S` — note `%i`
 // for minutes, where `%M` is the month's *name* and silently produces
@@ -312,12 +387,13 @@ func readRelations(ctx context.Context, q QuerierI, table string, slugById map[u
 				Errorf("capmapfacts: relation has a source id no competence in the table carries")
 		}
 		rels = append(rels, capmapcorpus.Relation{
-			SourceSlug: source,
-			Target:     r.Target,
-			Kind:       capmapcorpus.RelationKindE(r.Kind),
-			Resolution: capmapcorpus.ParseResolution(r.Resolution),
-			Section:    r.Section,
-			Ncd:        r.Ncd,
+			SourceSlug:   source,
+			Target:       r.Target,
+			Kind:         capmapcorpus.RelationKindE(r.Kind),
+			Resolution:   capmapcorpus.ParseResolution(r.Resolution),
+			Section:      r.Section,
+			Ncd:          r.Ncd,
+			TargetStatus: r.TargetStatus,
 		})
 	}
 	return rels, nil
@@ -457,7 +533,15 @@ func competenceSQL(table string) (sql string) {
   %s AS lifecycle_by_phases,
   %s AS lifecycle_by,
   %s AS lifecycle_at_phases,
-  arrayMap(v -> formatDateTime(v, '%%Y-%%m-%%d %%H:%%i:%%S', 'UTC'), %s) AS lifecycle_at
+  arrayMap(v -> formatDateTime(v, '%%Y-%%m-%%d %%H:%%i:%%S', 'UTC'), %s) AS lifecycle_at,
+  %s AS claim_rating_dims,
+  %s AS claim_ratings,
+  %s AS claim_by_dims,
+  %s AS claim_by,
+  %s AS claim_at_dims,
+  arrayMap(v -> formatDateTime(v, '%%Y-%%m-%%d %%H:%%i:%%S', 'UTC'), %s) AS claim_at,
+  %s AS claim_basis_dims,
+  %s AS claim_basis
 FROM %s
 WHERE has(%s, %d)
 %s`,
@@ -479,6 +563,14 @@ WHERE has(%s, %d)
 		selValues("symbol", membId(capmapvocab.MembCompLifecycleBy), mixedChannel, hSymValue),
 		selParameters("timeArray", membId(capmapvocab.MembCompLifecycleAt), hTimeMrhp),
 		selArrayValues("timeArray", membId(capmapvocab.MembCompLifecycleAt), mixedChannel, hTimeValue, hTimeLen),
+		selParameters("symbol", membId(capmapvocab.MembCompClaimRating), hSymMrhp),
+		selValues("symbol", membId(capmapvocab.MembCompClaimRating), mixedChannel, hSymValue),
+		selParameters("stringArray", membId(capmapvocab.MembCompClaimBy), hStrMrhp),
+		selArrayValues("stringArray", membId(capmapvocab.MembCompClaimBy), mixedChannel, hStrValue, hStrLen),
+		selParameters("timeArray", membId(capmapvocab.MembCompClaimAt), hTimeMrhp),
+		selArrayValues("timeArray", membId(capmapvocab.MembCompClaimAt), mixedChannel, hTimeValue, hTimeLen),
+		selParameters("symbol", membId(capmapvocab.MembCompClaimBasis), hSymMrhp),
+		selValues("symbol", membId(capmapvocab.MembCompClaimBasis), mixedChannel, hSymValue),
 		table,
 		hSymLr, membId(capmapvocab.MembKindCompetence),
 		newestPerId())
@@ -492,7 +584,8 @@ func relationSQL(table string) (sql string) {
   %s AS kind,
   %s AS resolution,
   %s AS section,
-  %s AS ncd
+  %s AS ncd,
+  %s AS target_status
 FROM %s
 WHERE has(%s, %d)
 %s`,
@@ -503,6 +596,7 @@ WHERE has(%s, %d)
 		getScalar("symbol", membId(capmapvocab.MembRelResolution)),
 		getScalar("symbol", membId(capmapvocab.MembRelSection)),
 		getListFirst("f64Array", membId(capmapvocab.MembRelNcd)),
+		getScalar("symbol", membId(capmapvocab.MembRelTargetStatus)),
 		table,
 		hSymLr, membId(capmapvocab.MembKindRelation),
 		newestPerId())

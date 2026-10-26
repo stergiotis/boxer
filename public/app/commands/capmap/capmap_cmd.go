@@ -35,11 +35,13 @@ import (
 	"fmt"
 	"os"
 	"sort"
+	"strings"
 	"text/tabwriter"
 	"time"
 
 	cli "github.com/urfave/cli/v3"
 
+	"github.com/stergiotis/boxer/public/gov/capmapanchors"
 	"github.com/stergiotis/boxer/public/gov/capmapcorpus"
 	"github.com/stergiotis/boxer/public/gov/capmapfacts"
 	"github.com/stergiotis/boxer/public/keelson/data/chclient"
@@ -133,7 +135,9 @@ func readVault(ctx context.Context, cmd *cli.Command) (corpus capmapcorpus.Corpu
 			return corpus, "", err
 		}
 	}
-	if corpus, err = capmapcorpus.ParseDir(dir); err != nil {
+	// Anchors resolve against the checkout the command runs in (ADR-0337
+	// §SD1); outside one they are reported unchecked rather than guessed.
+	if corpus, err = capmapcorpus.ParseDirWith(dir, capmapanchors.New("")); err != nil {
 		return corpus, dir, eb.Build().Str("dir", dir).Errorf("unable to read vault: %w", err)
 	}
 	return corpus, dir, nil
@@ -159,18 +163,91 @@ func actionParse(ctx context.Context, cmd *cli.Command) (err error) {
 	for _, r := range []capmapcorpus.ResolutionE{
 		capmapcorpus.ResolutionDirect, capmapcorpus.ResolutionDirRef,
 		capmapcorpus.ResolutionExternal, capmapcorpus.ResolutionUnresolved,
+		capmapcorpus.ResolutionUnchecked,
 	} {
 		fmt.Fprintf(out, "  %s\t%d\n", r, byResolution[r])
 	}
+	anchors := capmapcorpus.AnchorRelations(corpus.Relations)
+	claims, problems := countClaims(corpus.Competences)
+	fmt.Fprintf(out, "anchors\t%d\n", len(anchors))
+	fmt.Fprintf(out, "claims\t%d\n", claims)
+	fmt.Fprintf(out, "  with problems\t%d\n", problems)
 	fmt.Fprintf(out, "skipped files\t%d\n", len(corpus.Skipped))
 	_ = out.Flush()
 
-	// The two lists worth acting on. Citations and dirrefs are deliberately
+	// The lists worth acting on. Citations and dirrefs are deliberately
 	// absent: the first are not defects and the second are a mechanical
 	// rewrite, so mixing either in here would dilute what is left.
 	reportSkipped(corpus.Skipped)
 	reportUnresolved(capmapcorpus.UnresolvedRelations(corpus.Relations))
+	reportRetiredAnchors(anchors)
+	reportClaimProblems(corpus.Competences)
 	return nil
+}
+
+func countClaims(comps []capmapcorpus.Competence) (claims, withProblems int) {
+	for _, c := range comps {
+		for _, claim := range c.Assessment {
+			claims++
+			if len(claim.Problems) > 0 {
+				withProblems++
+			}
+		}
+	}
+	return claims, withProblems
+}
+
+// reportRetiredAnchors lists anchors that resolve to a retired decision. They
+// are not broken — the competence may describe something the tree no longer
+// does — which is why they are listed apart from the unresolved ones.
+func reportRetiredAnchors(anchors []capmapcorpus.Relation) {
+	var retired []capmapcorpus.Relation
+	for _, r := range anchors {
+		if capmapcorpus.IsRetiredStatus(r.TargetStatus) {
+			retired = append(retired, r)
+		}
+	}
+	if len(retired) == 0 {
+		return
+	}
+	fmt.Printf("\nanchors to retired decisions, showing %d of %d:\n", min(len(retired), maxReported), len(retired))
+	for i, r := range retired {
+		if i >= maxReported {
+			break
+		}
+		fmt.Printf("  %s [%s] -> %s (%s)\n", r.SourceSlug, r.Kind, r.Target, r.TargetStatus)
+	}
+}
+
+// reportClaimProblems lists the claims the lint found wanting: an empty
+// basis, a basis the tree does not carry, no assessor, no date.
+func reportClaimProblems(comps []capmapcorpus.Competence) {
+	type finding struct {
+		slug  string
+		claim capmapcorpus.Claim
+	}
+	var findings []finding
+	for _, c := range comps {
+		for _, claim := range c.Assessment {
+			if len(claim.Problems) > 0 {
+				findings = append(findings, finding{c.Slug, claim})
+			}
+		}
+	}
+	if len(findings) == 0 {
+		return
+	}
+	fmt.Printf("\nclaims with problems, showing %d of %d:\n", min(len(findings), maxReported), len(findings))
+	for i, f := range findings {
+		if i >= maxReported {
+			break
+		}
+		probs := make([]string, 0, len(f.claim.Problems))
+		for _, p := range f.claim.Problems {
+			probs = append(probs, string(p))
+		}
+		fmt.Printf("  %s [%s=%s] %s\n", f.slug, f.claim.Dimension, f.claim.Rating, strings.Join(probs, ", "))
+	}
 }
 
 func reportSkipped(skipped []capmapcorpus.SkippedFile) {

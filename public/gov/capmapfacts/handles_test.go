@@ -14,6 +14,7 @@ import (
 var allHandles = []string{
 	hId, hTs, hSymLr,
 	hSymValue, hSymMrhp,
+	hStrValue, hStrMrhp, hStrLen,
 	hTxtValue, hTxtMrhp, hTxtLen,
 	hTimeValue, hTimeMrhp, hTimeLen,
 }

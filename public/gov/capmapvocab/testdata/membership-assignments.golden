@@ -26,3 +26,8 @@
 21	capmap-relation-section	4611686031312289813
 22	capmap-relation-ncd	4611686031312289814
 23	capmap-competence-tag	4611686031312289815
+24	capmap-relation-target-status	4611686031312289816
+25	capmap-competence-claim-rating	4611686031312289817
+26	capmap-competence-claim-by	4611686031312289818
+27	capmap-competence-claim-at	4611686031312289819
+28	capmap-competence-claim-basis	4611686031312289820

@@ -50,7 +50,20 @@ type frontmatter struct {
 	Owner       string          `yaml:"owner"`
 	Tags        tagList         `yaml:"tags"`
 	Similar     []similarEntry  `yaml:"similar"`
+	RealisedBy  []string        `yaml:"realised_by"`
+	Assessment  []claimEntry    `yaml:"assessment"`
 	Lifecycle   lifecycleFields `yaml:",inline"`
+}
+
+// claimEntry is one assessment claim in frontmatter (ADR-0337 §SD2). The
+// rating is read as a string whatever the dimension's scale, since YAML
+// would otherwise type `7` and `product` differently.
+type claimEntry struct {
+	Dimension string   `yaml:"dimension"`
+	Rating    string   `yaml:"rating"`
+	Basis     []string `yaml:"basis"`
+	By        string   `yaml:"by"`
+	At        string   `yaml:"at"`
 }
 
 // similarEntry is one scored resemblance in frontmatter.
@@ -96,6 +109,20 @@ type lifecycleFields struct {
 // that is an authoring error to fix and dropping it would understate the
 // corpus with no signal.
 func ParseDir(vaultDir string) (corpus Corpus, err error) {
+	return ParseDirWith(vaultDir, nil)
+}
+
+// ParseDirWith is [ParseDir] with the anchors — `realised_by` and the claims'
+// bases — resolved against the tree by resolver (ADR-0337 §SD1). A nil
+// resolver leaves every anchor [ResolutionUnchecked], which is what a parse
+// with no checkout around it can honestly say.
+//
+// Anchors are resolved after the slug set is known, like wikilinks, and the
+// claim problems that depend on resolution are filled in the same pass.
+func ParseDirWith(vaultDir string, resolver AnchorResolverI) (corpus Corpus, err error) {
+	if resolver == nil {
+		resolver = uncheckedResolver{}
+	}
 	type parsedFile struct {
 		path string
 		slug string
@@ -186,8 +213,60 @@ func ParseDir(vaultDir string) (corpus Corpus, err error) {
 		corpus.Relations = append(corpus.Relations, files[i].rels...)
 	}
 	resolveRelations(corpus.Relations, known, dirBacked)
+	resolveAnchors(corpus.Relations, resolver)
+	for i := range corpus.Competences {
+		markBasisProblems(&corpus.Competences[i], corpus.Relations)
+	}
 	sort.Slice(corpus.Skipped, func(a, b int) bool { return corpus.Skipped[a].Path < corpus.Skipped[b].Path })
 	return corpus, nil
+}
+
+// resolveAnchors asks the resolver about every anchor relation, in place.
+// A target that will not parse as an anchor never reaches here: parseFile
+// refuses it, since an anchor of an unknown kind is an authoring error rather
+// than a link nobody could vouch for.
+func resolveAnchors(rels []Relation, resolver AnchorResolverI) {
+	for i := range rels {
+		if rels[i].Kind != RelationKindRealisedBy && rels[i].Kind != RelationKindBasis {
+			continue
+		}
+		a, err := ParseAnchor(rels[i].Target)
+		if err != nil {
+			rels[i].Resolution = ResolutionUnresolved
+			continue
+		}
+		res := resolver.ResolveAnchor(a)
+		rels[i].Resolution = res.Resolution
+		rels[i].TargetStatus = res.Status
+	}
+}
+
+// markBasisProblems adds the resolution-dependent problems to a competence's
+// claims: a basis anchor the tree does not carry, or one that resolves to a
+// retired decision. The basis relations are the record; this folds their
+// answer back onto the claim so a reader of one grain sees it.
+func markBasisProblems(comp *Competence, rels []Relation) {
+	for i := range comp.Assessment {
+		claim := &comp.Assessment[i]
+		var unresolved, retired bool
+		for _, rel := range rels {
+			if rel.SourceSlug != comp.Slug || rel.Kind != RelationKindBasis || rel.Section != claim.Dimension {
+				continue
+			}
+			if rel.Resolution == ResolutionUnresolved {
+				unresolved = true
+			}
+			if IsRetiredStatus(rel.TargetStatus) {
+				retired = true
+			}
+		}
+		if unresolved {
+			claim.Problems = append(claim.Problems, ClaimProblemUnresolvedBasis)
+		}
+		if retired {
+			claim.Problems = append(claim.Problems, ClaimProblemRetiredBasis)
+		}
+	}
 }
 
 // isReadme reports whether a file name is a README, in any of the spellings a
@@ -254,7 +333,23 @@ func parseFile(path string, slug string, vaultDir string) (comp Competence, rels
 		}
 	}
 
-	rels = make([]Relation, 0, len(fm.ParentSlugs)+len(fm.Similar))
+	if comp.Assessment, err = parseClaims(fm.Assessment); err != nil {
+		return comp, nil, eb.Build().Str("path", path).Errorf("unable to parse assessment: %w", err)
+	}
+
+	rels = make([]Relation, 0, len(fm.ParentSlugs)+len(fm.Similar)+len(fm.RealisedBy))
+	for _, raw := range fm.RealisedBy {
+		a, aErr := ParseAnchor(raw)
+		if aErr != nil {
+			return comp, nil, eb.Build().Str("path", path).Errorf("unable to parse realised_by: %w", aErr)
+		}
+		rels = append(rels, anchorRelation(slug, a, RelationKindRealisedBy, ""))
+	}
+	for _, claim := range comp.Assessment {
+		for _, a := range claim.Basis {
+			rels = append(rels, anchorRelation(slug, a, RelationKindBasis, claim.Dimension))
+		}
+	}
 	for _, raw := range fm.ParentSlugs {
 		if rel, ok := makeRelation(slug, stripWikilink(raw), RelationKindParent, ""); ok {
 			rels = append(rels, rel)
@@ -268,6 +363,61 @@ func parseFile(path string, slug string, vaultDir string) (comp Competence, rels
 	}
 	rels = append(rels, sectionWikilinks(slug, comp.Sections)...)
 	return comp, rels, nil
+}
+
+// anchorRelation builds the relation an anchor becomes. Its resolution is
+// the zero value until resolveAnchors runs; a caller that never resolves
+// reads it as unresolved, on the same forgetting-cannot-pass rule as every
+// other relation.
+func anchorRelation(source string, a Anchor, kind RelationKindE, section string) (rel Relation) {
+	return Relation{SourceSlug: source, Target: a.String(), Kind: kind, Section: section}
+}
+
+// parseClaims reads the assessment list. A claim on a dimension this build
+// does not register, or with a rating its scale does not hold, fails the
+// parse: both are authoring errors with one right spelling, and reading them
+// as something else would put a value in the corpus the vault does not hold.
+// What is a judgement rather than a spelling — an empty basis, a missing
+// assessor or date — is recorded as a problem on the claim instead.
+func parseClaims(entries []claimEntry) (claims []Claim, err error) {
+	if len(entries) == 0 {
+		return nil, nil
+	}
+	claims = make([]Claim, 0, len(entries))
+	seen := make(map[string]struct{}, len(entries))
+	for _, e := range entries {
+		spec, ok := LookupDimension(strings.TrimSpace(e.Dimension))
+		if !ok {
+			return nil, eb.Build().Str("dimension", e.Dimension).Errorf("unknown assessment dimension")
+		}
+		rating := strings.TrimSpace(e.Rating)
+		if _, ok = spec.Rank(rating); !ok {
+			return nil, eb.Build().Str("dimension", spec.Name).Str("rating", rating).Errorf("rating is not on the dimension's scale")
+		}
+		claim := Claim{Dimension: spec.Name, Rating: rating, By: strings.TrimSpace(e.By), At: parseTimestamp(e.At)}
+		for _, raw := range e.Basis {
+			a, aErr := ParseAnchor(raw)
+			if aErr != nil {
+				return nil, eb.Build().Str("dimension", spec.Name).Errorf("unable to parse basis: %w", aErr)
+			}
+			claim.Basis = append(claim.Basis, a)
+		}
+		if len(claim.Basis) == 0 {
+			claim.Problems = append(claim.Problems, ClaimProblemEmptyBasis)
+		}
+		if claim.By == "" {
+			claim.Problems = append(claim.Problems, ClaimProblemNoAssessor)
+		}
+		if claim.At.IsZero() {
+			claim.Problems = append(claim.Problems, ClaimProblemNoDate)
+		}
+		if _, dup := seen[spec.Name]; dup {
+			claim.Problems = append(claim.Problems, ClaimProblemDuplicateDimension)
+		}
+		seen[spec.Name] = struct{}{}
+		claims = append(claims, claim)
+	}
+	return claims, nil
 }
 
 // makeRelation builds one relation from a raw link target, pre-marking the

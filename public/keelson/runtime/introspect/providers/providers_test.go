@@ -20,7 +20,7 @@ func TestRegisterStatic(t *testing.T) {
 	r := introspect.NewRegistry()
 	require.NoError(t, RegisterStatic(r))
 	assert.Equal(t, []string{"adr", "adrcontent", "adrsections", "app_operations", "apps", "build",
-		"coderef", "competence", "competencerelation", "competencesection",
+		"coderef", "competence", "competenceclaim", "competenceevidence", "competencerelation", "competencesection",
 		"components", "env", "extbin", "go_modules", "go_symbols", "helpsections",
 		"lw_components", "memberships", "panel_shapes", "sbom", "sql_passes", "subtask"},
 		r.Names())
