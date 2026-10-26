@@ -824,6 +824,18 @@ The record store stays deferred, for the reason §Deferrals gives for
 `Relation`: `BuildRecords` commits both kinds into one batch, where a
 store owns its entity frame.
 
+### 2026-10-26 — anchors, claims and a versioned catalog (ADR-0337, proposed)
+
+[ADR-0337](./0337-competences-anchored-to-the-tree-and-assessed-by-evidenced-claims.md)
+binds a competence to the tree by typed anchors, replaces the two bare
+scores with dimensioned claims that carry a basis, and narrows §SD7: the
+`boxer` catalog under `doc/competences` is versioned, every other catalog
+there stays ignored. `maturity` and `pain` are still read, and written only
+when recorded. The vocabulary appends five memberships after
+`capmapCompetenceTag`; the facts rows gain a fifth and sixth component. The
+corpus's shape — vault authoritative, two grains, prose verbatim, relations
+as rows — is unchanged.
+
 ## References
 
 - [Background survey](../adr-background-work/capmap-port.md) — measurements and the reasoning behind each fork.
