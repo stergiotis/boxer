@@ -33,7 +33,7 @@ func treemapTestDriver(t *testing.T, cols ...icicleTestCol) *treemapDriver {
 
 	inst := &treemapDriver{}
 	inst.tree, inst.stats = buildHierarchy(rec, cl)
-	inst.rebuildTree()
+	inst.rebuildTree(nil)
 	return inst
 }
 
@@ -636,10 +636,12 @@ func TestTreemapNestingLadder(t *testing.T) {
 	assert.Less(t, treemapNestThree.depth(), treemapNestFour.depth())
 }
 
-// A new result drops the pin, and the dropped pin is published: a Live query
-// filtering on selection_key would otherwise keep the label the pane no
-// longer shows. Without a pin, a new result publishes nothing.
-func TestTreemapNewTreePublishesTheDroppedPin(t *testing.T) {
+// A new result keeps a pin whose key still names a leaf — the re-run a pin
+// causes in a Live query reading selection_key must not undo it — and drops
+// one whose key does not, publishing the drop: a Live query filtering on
+// selection_key would otherwise keep a key the pane no longer shows. Without
+// a pin, a new result publishes nothing.
+func TestTreemapNewTreeKeepsAPinItStillHas(t *testing.T) {
 	rec := icicleTestRec(t,
 		icicleTestCol{name: "stack", paths: [][]string{{"disk", "db"}, {"disk", "other"}}},
 		icicleTestCol{name: "value", num: []float64{1, 2}},
@@ -653,19 +655,25 @@ func TestTreemapNewTreePublishesTheDroppedPin(t *testing.T) {
 	inst.syncTree(rec, rec.Schema(), cl, probe)
 	assert.Empty(t, probe.ids, "a first tree with nothing pinned publishes nothing")
 
-	inst.selected = "db"
-	inst.syncTree(rec, rec.Schema(), cl, probe)
-	assert.Empty(t, probe.ids, "the same result keeps the pin")
-	assert.Equal(t, "db", inst.selected)
-
+	inst.selected, inst.selectedLabel = "db", "db"
 	inst.pendingExecuted = inst.forExecuted.Add(time.Second)
 	inst.syncTree(rec, rec.Schema(), cl, probe)
+	assert.Empty(t, probe.ids, "a re-run that still has the leaf keeps the pin")
+	assert.Equal(t, "db", inst.selected)
+
+	gone := icicleTestRec(t,
+		icicleTestCol{name: "stack", paths: [][]string{{"disk", "other"}}},
+		icicleTestCol{name: "value", num: []float64{2}},
+	)
+	defer gone.Release()
+	inst.pendingExecuted = inst.pendingExecuted.Add(time.Second)
+	inst.syncTree(gone, gone.Schema(), cl, probe)
 	assert.Empty(t, inst.selected)
 	require.Equal(t, []SignalID{signalSelectionKey}, probe.ids)
 	assert.Equal(t, "", probe.vals[0])
 
 	probe = &emitProbe{}
 	inst.pendingExecuted = inst.pendingExecuted.Add(time.Second)
-	inst.syncTree(rec, rec.Schema(), cl, probe)
+	inst.syncTree(gone, gone.Schema(), cl, probe)
 	assert.Empty(t, probe.ids, "no pin to drop, nothing to publish")
 }

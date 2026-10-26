@@ -479,6 +479,25 @@ func (inst *Treemap) SetRoot(root *layout.Node) {
 	inst.anim.Cancel()
 }
 
+// SetRootAt is [Treemap.SetRoot] for a rebuilt tree the reader was already
+// inside: path — from the new root down, as [Treemap.NavigateTo] takes it —
+// becomes the breadcrumb at once, with no zoom and no Nav event, since the
+// reader did not move. A host re-running a query hands the widget a new tree
+// with the same shape, and SetRoot alone would put the reader back at the top
+// on every run. An empty path focuses the root; one that does not lead down
+// the new tree focuses the root too and reports [ErrInvalidPath].
+func (inst *Treemap) SetRootAt(root *layout.Node, path []*layout.Node) (err error) {
+	inst.SetRoot(root)
+	if len(path) == 0 {
+		return
+	}
+	if !inst.validPath(path) {
+		return ErrInvalidPath
+	}
+	inst.breadcrumb = append([]*layout.Node(nil), path...)
+	return
+}
+
 // Focused returns the current tail of the breadcrumb.
 func (inst *Treemap) Focused() *layout.Node { return inst.breadcrumb[len(inst.breadcrumb)-1] }
 

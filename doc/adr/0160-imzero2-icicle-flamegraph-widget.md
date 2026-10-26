@@ -580,6 +580,11 @@ nodes-form result and its label for a folded one, as the Treemap's does
 `WHERE has(stack, {selection_key:String})` follow-up above is the folded case
 and reads as before.
 
+A new result keeps the pin where its path still leads, as a re-layout already
+did, rather than dropping it; it is dropped, and an empty key published, only
+where the path leads nowhere. The re-run a pin causes in a Live query reading
+`selection_key` used to undo the pin (ADR-0166 Update of this date).
+
 ## References
 
 ### Method sources (clean room — papers and public documentation only)

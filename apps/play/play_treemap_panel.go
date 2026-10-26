@@ -420,25 +420,95 @@ func (inst *treemapDriver) pathOf(n *layout.Node) (path []string) {
 	return
 }
 
-// syncTree rebuilds the tree when the result is new. A new tree invalidates a
-// pin taken against the old one, and the dropped pin is published as an empty
-// selection_key: the key is the pin's only reader outside the pane, and a
-// Live query filtering on it would otherwise keep the label the pane no
-// longer shows.
+// syncTree rebuilds the tree when the result is new, and keeps the reader
+// where they were in it: the drill by its labels, the pin by its key.
+//
+// A pin whose key no longer names a leaf is dropped, and the drop is published
+// as an empty selection_key: the key is the pin's only reader outside the
+// pane, and a Live query filtering on it would otherwise keep a key the pane
+// no longer shows. One that still names a leaf is kept, because the commonest
+// new result is the one the pin itself caused — a Live query reading
+// selection_key re-runs on the click — and dropping the pin there undid the
+// click before anything had read it.
 func (inst *treemapDriver) syncTree(rec arrow.RecordBatch, schema *arrow.Schema, cl hierClaim, emit SignalEmitterI) {
 	if schema == inst.forSchema && inst.pendingExecuted.Equal(inst.forExecuted) && inst.treeGen != 0 {
 		return
 	}
+	drill := inst.drillLabels()
 	inst.tree, inst.stats = buildHierarchy(rec, cl)
 	inst.forSchema, inst.forExecuted = schema, inst.pendingExecuted
 	inst.treeGen++
-	inst.rebuildTree()
-	if inst.selected != "" {
-		inst.selected, inst.selectedLabel = "", ""
-		if emit != nil {
-			emit.Emit(signalSelectionKey, "")
+	inst.rebuildTree(drill)
+	if inst.selected == "" {
+		return
+	}
+	if label, ok := inst.leafByKey(inst.selected); ok {
+		inst.selectedLabel = label
+		return
+	}
+	inst.selected, inst.selectedLabel = "", ""
+	if emit != nil {
+		emit.Emit(signalSelectionKey, "")
+	}
+}
+
+// drillLabels is the widget's drill position as the labels from the result's
+// root down, which outlive the tree they were read from; nil at the top or
+// before the widget exists. A forest's container is no part of it.
+func (inst *treemapDriver) drillLabels() (labels []string) {
+	if inst.tm == nil || inst.root == nil {
+		return
+	}
+	crumb := inst.tm.Breadcrumb()
+	if len(crumb) <= 1 {
+		return
+	}
+	if treemapSynthetic(inst.root, inst.idxOf) {
+		crumb = crumb[1:]
+	}
+	labels = make([]string, 0, len(crumb))
+	for _, n := range crumb {
+		labels = append(labels, n.Name)
+	}
+	return
+}
+
+// drillPath resolves drill labels against the current tree into the node path
+// the widget takes, root first; nil when they no longer lead anywhere.
+func (inst *treemapDriver) drillPath(labels []string) (path []*layout.Node) {
+	if len(labels) == 0 || inst.root == nil {
+		return
+	}
+	synthetic := treemapSynthetic(inst.root, inst.idxOf)
+	if synthetic {
+		path = append(path, inst.root)
+	}
+	level := treemapTops(inst.root, synthetic)
+	for _, name := range labels {
+		var next *layout.Node
+		for _, c := range level {
+			if c.Name == name {
+				next = c
+				break
+			}
+		}
+		if next == nil {
+			return nil
+		}
+		path = append(path, next)
+		level = next.Children
+	}
+	return
+}
+
+// leafByKey finds a leaf whose key is key, and its label.
+func (inst *treemapDriver) leafByKey(key string) (label string, ok bool) {
+	for n, i := range inst.idxOf {
+		if len(n.Children) == 0 && inst.tree.KeyOf(i) == key {
+			return n.Name, true
 		}
 	}
+	return
 }
 
 // ensureWidget constructs the widget on first use. It is built here rather than
@@ -469,7 +539,7 @@ func (inst *treemapDriver) ensureWidget() {
 // from a single root, and a result with several roots is an ordinary shape
 // (§SD1's forest). A single-rooted tree is passed through unwrapped, so the
 // breadcrumb names the result's own root rather than a placeholder.
-func (inst *treemapDriver) rebuildTree() {
+func (inst *treemapDriver) rebuildTree(drill []string) {
 	n := inst.tree.Len()
 	inst.idxOf = make(map[*layout.Node]int32, n)
 	if n == 0 {
@@ -509,7 +579,9 @@ func (inst *treemapDriver) rebuildTree() {
 	inst.color = inst.resolveColorInfo()
 	inst.rebuildColormap()
 	if inst.tm != nil && inst.root != nil {
-		inst.tm.SetRoot(inst.root)
+		// A drill that no longer leads anywhere leaves the top focused, as a
+		// new tree always did.
+		_ = inst.tm.SetRootAt(inst.root, inst.drillPath(drill))
 		inst.tm.Opts.Coloring = inst.coloring()
 	}
 }

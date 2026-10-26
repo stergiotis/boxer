@@ -168,7 +168,12 @@ type IcicleDriver struct {
 	tree icicle.Tree
 	// keys is each node's key beside tree (hierTree.KeyOf); empty for a
 	// folded result, whose key is the label.
-	keys        []string
+	keys []string
+	// carryPin is the pinned frame's path across a new tree, and carryKey what
+	// it published; the next layout resolves the path (syncLayout), and
+	// render publishes the outcome when it differs.
+	carryPin    []string
+	carryKey    string
 	forExecuted time.Time
 	forSchema   *arrow.Schema
 	treeGen     uint64
@@ -261,6 +266,7 @@ func (inst *IcicleDriver) render(rec arrow.RecordBatch, schema *arrow.Schema, cl
 		// go on reporting the previous result's total beside a pane that is now
 		// empty — the one lie a status line must not tell.
 		inst.layout, inst.layoutKey, inst.layoutErr = nil, icicleLayoutKey{}, nil
+		inst.settleCarriedPin(emit)
 		c.Label(inst.statusLine()).Send()
 		for rt := range c.RichTextLabel("No frames: every row was missing a path and an id, or carried a value " +
 			"that is not a finite, non-negative number.") {
@@ -269,7 +275,10 @@ func (inst *IcicleDriver) render(rec arrow.RecordBatch, schema *arrow.Schema, cl
 		return
 	}
 
-	if inst.syncLayout() && emit != nil {
+	if inst.carryPin != nil {
+		inst.syncLayout()
+		inst.settleCarriedPin(emit)
+	} else if inst.syncLayout() && emit != nil {
 		emit.Emit(signalSelectionKey, "")
 	}
 	if inst.layout == nil {
@@ -358,6 +367,10 @@ func (inst *IcicleDriver) syncLayout() (dropped bool) {
 	var pinned []string
 	if !inst.selected.None() && inst.layoutKey.gen == key.gen {
 		pinned = icicleFrameLabels(inst.layout, int(inst.selected.Node))
+	} else if inst.carryPin != nil {
+		// A new tree: the path syncTree carried, which settleCarriedPin
+		// publishes the outcome of.
+		pinned = inst.carryPin
 	}
 	inst.layoutKey = key
 	inst.layout, inst.layoutErr = icicle.Compute(inst.tree,
@@ -390,22 +403,38 @@ func (inst *IcicleDriver) requestSelect(in SelectIcicleFrameArgs, emit SignalEmi
 	}
 }
 
-// syncTree rebuilds the tree when the result is new. A new tree invalidates a
-// pin taken against the old one: the index would still resolve, and to a
-// different frame. The dropped pin is published as an empty selection_key, so
-// a Live query filtering on it does not keep the label the pane no longer
-// pins.
+// syncTree rebuilds the tree when the result is new. The pin's index would
+// still resolve, and to a different frame, so the pin travels by its path
+// instead (carryPin) and the next layout puts it back where the path still
+// leads — the commonest new result is the one the pin caused, a Live query
+// reading selection_key re-running on the click. Where the path leads nowhere
+// the pin is dropped and the drop published as an empty selection_key, so a
+// Live query filtering on it does not keep a key the pane no longer pins.
 func (inst *IcicleDriver) syncTree(rec arrow.RecordBatch, schema *arrow.Schema, cl icicleClaim, emit SignalEmitterI) {
 	if schema == inst.forSchema && inst.pendingExecuted.Equal(inst.forExecuted) && inst.treeGen != 0 {
 		return
 	}
-	pinned := inst.selected != (icicleview.Hit{})
+	if n := inst.nodeAt(inst.selected); n != nil {
+		inst.carryPin = icicleFrameLabels(inst.layout, int(inst.selected.Node))
+		inst.carryKey = inst.selectedKey()
+	}
 	inst.tree, inst.keys, inst.stats = buildIcicleTreeKeyed(rec, cl)
 	inst.forSchema, inst.forExecuted = schema, inst.pendingExecuted
 	inst.treeGen++
 	inst.selected, inst.hover = icicleview.Hit{}, icicleview.Hit{}
-	if pinned && emit != nil {
-		emit.Emit(signalSelectionKey, "")
+}
+
+// settleCarriedPin publishes what became of a pin carried across a new tree:
+// nothing when it landed on a frame with the same key, that frame's key when
+// the key changed, and an empty key when it was dropped.
+func (inst *IcicleDriver) settleCarriedPin(emit SignalEmitterI) {
+	if inst.carryPin == nil {
+		return
+	}
+	was := inst.carryKey
+	inst.carryPin, inst.carryKey = nil, ""
+	if now := inst.selectedKey(); now != was && emit != nil {
+		emit.Emit(signalSelectionKey, now)
 	}
 }
 

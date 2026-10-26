@@ -469,9 +469,10 @@ func icicleNodeInLayout(t *testing.T, lay *icicle.Layout, label string) int {
 	return -1
 }
 
-// A new result drops the pin, and the dropped pin is published as an empty
-// selection_key, as the Treemap's is.
-func TestIcicleNewTreePublishesTheDroppedPin(t *testing.T) {
+// A new result keeps the pin where its path still leads — the re-run a pin
+// causes in a Live query reading selection_key must not undo it — and drops
+// it, publishing an empty selection_key, where the path leads nowhere.
+func TestIcicleNewTreeKeepsAPinItStillHas(t *testing.T) {
 	rec := icicleTestRec(t,
 		icicleTestCol{name: "stack", paths: [][]string{{"main", "run"}, {"main", "emit"}}},
 		icicleTestCol{name: "value", num: []float64{1, 2}},
@@ -483,12 +484,28 @@ func TestIcicleNewTreePublishesTheDroppedPin(t *testing.T) {
 	inst := &IcicleDriver{}
 	probe := &emitProbe{}
 	inst.syncTree(rec, rec.Schema(), cl, probe)
-	assert.Empty(t, probe.ids)
+	inst.syncLayout()
+	at, ok := icicleFrameByPath(inst.layout, []string{"main", "emit"})
+	require.True(t, ok)
+	inst.selected = icicleview.NodeHit(at)
 
-	inst.selected = icicleview.NodeHit(1)
 	inst.pendingExecuted = inst.forExecuted.Add(time.Second)
 	inst.syncTree(rec, rec.Schema(), cl, probe)
-	assert.Equal(t, icicleview.Hit{}, inst.selected)
+	inst.syncLayout()
+	inst.settleCarriedPin(probe)
+	assert.Empty(t, probe.ids, "the same frame, the same key: nothing to publish")
+	assert.Equal(t, "emit", inst.selectedKey())
+
+	gone := icicleTestRec(t,
+		icicleTestCol{name: "stack", paths: [][]string{{"main", "run"}}},
+		icicleTestCol{name: "value", num: []float64{1}},
+	)
+	defer gone.Release()
+	inst.pendingExecuted = inst.pendingExecuted.Add(time.Second)
+	inst.syncTree(gone, gone.Schema(), cl, probe)
+	inst.syncLayout()
+	inst.settleCarriedPin(probe)
+	assert.Empty(t, inst.selectedKey())
 	require.Equal(t, []SignalID{signalSelectionKey}, probe.ids)
 	assert.Equal(t, "", probe.vals[0])
 }

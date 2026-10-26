@@ -276,6 +276,40 @@ func TestValidPath(t *testing.T) {
 	}
 }
 
+// SetRootAt keeps a valid path as the breadcrumb, without a zoom in flight,
+// and falls back to the root for an empty or foreign one.
+func TestSetRootAt(t *testing.T) {
+	root := sampleTree()
+	a := root.Children[0]
+	a1 := a.Children[0]
+	tm := &Treemap{}
+
+	if err := tm.SetRootAt(root, []*layout.Node{root, a, a1}); err != nil {
+		t.Fatalf("SetRootAt(valid) = %v", err)
+	}
+	if !pathsEqual(tm.Breadcrumb(), []*layout.Node{root, a, a1}) {
+		t.Errorf("breadcrumb = %v, want root → A → A1", tm.Breadcrumb())
+	}
+	if tm.anim.IsRunning() {
+		t.Error("a restored path must not start a zoom")
+	}
+
+	if err := tm.SetRootAt(root, nil); err != nil {
+		t.Fatalf("SetRootAt(empty) = %v", err)
+	}
+	if tm.Depth() != 0 {
+		t.Errorf("depth = %d after an empty path, want 0", tm.Depth())
+	}
+
+	other := sampleTree()
+	if err := tm.SetRootAt(root, []*layout.Node{other, other.Children[0]}); err != ErrInvalidPath {
+		t.Errorf("SetRootAt(foreign) = %v, want ErrInvalidPath", err)
+	}
+	if tm.Depth() != 0 || tm.Focused() != root {
+		t.Error("a foreign path must leave the new root focused")
+	}
+}
+
 func TestClassifyNav(t *testing.T) {
 	root := sampleTree()
 	a := root.Children[0]

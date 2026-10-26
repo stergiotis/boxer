@@ -387,6 +387,19 @@ than by label. A label pinned whichever cell first carried it, and in folded
 input a leaf's label is commonly repeated under other parents. The Icicle
 publishes the same key for the same result (ADR-0160 Update of this date).
 
+### 2026-10-26 — a new result keeps the pin and the drill it still has
+
+A new result used to drop the pin and return the picture to the top. The
+commonest new result is the one the pin causes: a Live query reading
+`selection_key` re-runs on the click, so the pin was dropped, and an empty key
+published, before anything had read it — the browser's map leaf, driven in the
+headless lane, focused the graph for one run and then let go. A new result now
+keeps a pin whose key still names a leaf, and drops and publishes it only when
+the key is gone; the drill is kept by its labels where they still lead. The
+widget gained `SetRootAt` for the second half: `SetRoot` with the breadcrumb put
+back, and no zoom, since the reader did not move. The Icicle carries its pin by
+path across a new tree the same way (ADR-0160 Update of this date).
+
 ## References
 
 ### Method sources (clean room — papers and public documentation only)
