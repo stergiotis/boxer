@@ -454,9 +454,9 @@ is one of §SD11's helpers when it lands.
 | `recordtable.Column` | gains `Agg`, `AggCell` | `WidthColumns` unchanged; a group line has no width identity |
 | `recordtable.Result` | gains `GroupToggled`, `GroupClicked`, `GroupOrderClicked` | hosts that route gestures (play, imztop) read them; others call `GroupState.Apply` |
 | `recordtable.State` | the cells key folds the group generation and layout identity | the cache's key test |
-| play `set_table_options` / `get_table` | gain `group_by` (levels with order), `expand` / `collapse` (a path or all), and report the groups drawn | play's ops schema and its help page |
+| play `set_table_options` / `get_table` | gain `group_by` (levels with order), `expand` / `collapse` (a group's printed path — its keys joined by ` / `, a null key as `(null)` — or `all`), and report the levels, the line count and the page's group lines | play's ops schema and its help page |
 | `apps/play` options bar | a group picker over the result's columns, the per-level order, the null edge | `tableDisplayOpts` |
-| `apps/play` per-attribute view | the explode sink builds an Arrow record; the bespoke etable loop retires (§SD12) | the `;view=attr` width tag, the per-attribute refusals in `set_table_options`, scene `01_table_leeway` and a per-attribute scene |
+| `apps/play` per-attribute view | the explode sink builds an Arrow record; the bespoke etable loop retires (§SD12) | the `;view=attr` width tag on the exploded record's columns, the sort refusal in `set_table_options` (the fold and the page read now work), scene `02_table_per_attribute` |
 
 No IDL or Rust change: the row block, the visible-range read-back and
 scroll-to-row already exist.
@@ -553,8 +553,10 @@ scroll-to-row already exist.
   that folds by chevron and by band, selects a leaf through the group
   lines, selects a `KeyIsRow` band without folding it, and reveals a
   buried row, asserting the line count and the readout after each; with
-  M3, a play scene that groups a seeded result, folds a group, sorts a
-  leaf column and asserts the group order held, and
+  M3, a play scene (`apps/play/scenes/02_table_grouped.scene.md`) that
+  groups a `numbers()` result two levels deep from the picker, folds by
+  chevron and by the buttons, reverses a level and asserts the pager's
+  line count after each; with M3b,
   a second play scene over `anchor.facts` in the per-attribute granularity
   that groups by entity then by path, folds a prefix, and asserts the leaf
   count on the entity's line. Layout tests cover a path level: filler
@@ -585,11 +587,31 @@ scroll-to-row already exist.
   above. Shipped 2026-10-26; the capture showed the band's text clipped
   under the gutter and a fill that did not read, both fixed in §SD5's
   terms, and the reveal scroll, which M1 had left out.
-- **M3 — play.** The options-bar picker, `set_table_options` and
-  `get_table`, `Reveal` from the detail pane's selection.
-- **M3b — play's per-attribute view** as an exploded record grouped by a
-  plain attribute and then by the membership path (§SD12), with the
-  `jsonshred` segmenter.
+- **M3 — play.** ✓ The picker on the pager row (`play_table_group.go`),
+  `set_table_options` with `group_by`, `expand` and `collapse`,
+  `get_table` with the levels, the line count and each group line's
+  path, counts and fold state; the band, chevron and grouped-header
+  gestures routed through `set_table_options`; a selection made in
+  another pane revealed, with the page turned to its line; the pager
+  counting lines. The spec is held by column name, so it survives a
+  rerun and waits through a result without its columns. Shipped
+  2026-10-26 with scene `apps/play/scenes/02_table_grouped.scene.md`.
+  Aggregates and the null edge have no control in the picker yet; the
+  op takes `nulls_first`.
+- **M3b — play's per-attribute view** ✓ as an exploded record grouped by
+  the entity and then by the membership path (§SD12), with a segmenter
+  that reads the `jsonshred` grammar. Shipped 2026-10-26 in
+  `apps/play/play_table_attr.go`: the sink builds the record — source row,
+  section, attribute index, path, parameters, then the visible columns'
+  cells as text, kept while the page, the columns and the glosses hold —
+  and the bespoke etable loop retired; scene
+  `apps/play/scenes/02_table_per_attribute.scene.md`. What §SD12 names and
+  this cut leaves: a plain attribute other than the entity as the first
+  level, the sort (the header sorts nothing; `set_table_options` still
+  refuses it there), a ref membership's name through the registries (a ref
+  is spelled `#` and its number, as the record card spells it), and the
+  parameters' spelling, read as a list of indices whatever joins them until
+  a writer fixes it.
 - **M4 — Deferrals as triggered** (SD11), each a dated entry here.
 
 ## Status

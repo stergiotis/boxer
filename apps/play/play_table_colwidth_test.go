@@ -41,13 +41,15 @@ func TestColumnKeys_GridsDoNotShareIdentity(t *testing.T) {
 	attr := inst.attrColumnKeys(schema, visCols)
 
 	require.Len(t, master, len(visCols)+1, "leading # column must take part so the positional read-back lines up")
-	require.Len(t, attr, len(visCols)+1)
+	fixed := 3 // the section, the path and the parameters; src and attr are not drawn
+	require.Len(t, attr, len(visCols)+fixed, "the fixed columns, then the data columns; no # gutter")
 
-	for i := range master {
-		assert.Equal(t, master[i].Name, attr[i].Name,
-			"the two grids show the same field at slot %d; only the render type may differ", i)
-		assert.NotEqual(t, master[i].Key(), attr[i].Key(),
-			"slot %d (%q) must not share a column-tier key across grids", i, master[i].Name)
+	for i := range visCols {
+		m, a := master[i+1], attr[i+fixed]
+		assert.Equal(t, m.Name, a.Name,
+			"the two grids show the same field at data slot %d; only the render type may differ", i)
+		assert.NotEqual(t, m.Key(), a.Key(),
+			"data slot %d (%q) must not share a column-tier key across grids", i, m.Name)
 	}
 }
 
@@ -71,20 +73,24 @@ func TestColumnKeys_TypeChangeStillInvalidates(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			before := tc.keys(asU64, visCols)
 			after := tc.keys(asStr, visCols)
-			// Slot 1 is the data column; slot 0 is the fixed "#" gutter.
-			assert.NotEqual(t, before[1].Key(), after[1].Key(),
+			// The last slot is the data column; slot 0 is a fixed one — the
+			// "#" gutter, or the exploded record's section.
+			last := len(before) - 1
+			assert.NotEqual(t, before[last].Key(), after[last].Key(),
 				"a column whose Arrow type changed must drop its stored width")
 			assert.Equal(t, before[0].Key(), after[0].Key(),
-				"the # gutter's identity does not depend on the result's types")
+				"a fixed column's identity does not depend on the result's types")
 		})
 	}
 }
 
-// The "#" gutter is fixed-width and never resizable, so it can never acquire
-// an override — but it must still be present and distinct per grid, because
+// The per-DB-row grid's "#" gutter is fixed-width and never resizable, so
+// it can never acquire an override — but it must still be present, because
 // the width read-back is positional and a missing leading entry would shift
-// every later column onto the wrong identity.
-func TestColumnKeys_RowNumGutterIsDistinctPerGrid(t *testing.T) {
+// every later column onto the wrong identity. The exploded grid has no
+// gutter: its fixed columns are the section, the path and the parameters,
+// each under the per-attribute view tag.
+func TestColumnKeys_LeadingColumnsPerGrid(t *testing.T) {
 	inst := &PlayApp{}
 	schema := colWidthTestSchema()
 
@@ -92,8 +98,8 @@ func TestColumnKeys_RowNumGutterIsDistinctPerGrid(t *testing.T) {
 	attr := inst.attrColumnKeys(schema, []int{0, 1})
 
 	assert.Equal(t, "#", master[0].Name)
-	assert.Equal(t, "#", attr[0].Name)
-	assert.NotEqual(t, master[0].Key(), attr[0].Key())
+	assert.Equal(t, []string{"section", "path", "params"}, []string{attr[0].Name, attr[1].Name, attr[2].Name})
+	assert.Contains(t, attr[0].Type, tableViewTagAttr)
 }
 
 // The identity columns (ADR-0219) are computed, so their width identity is

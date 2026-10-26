@@ -409,6 +409,16 @@ type PlayApp struct {
 	masterGrid recordtable.State
 	// tableChrome draws the per-attribute grid's cells (play_table_chrome.go).
 	tableChrome recordtable.Chrome
+	// tableGroupSpec is the Table pane's row grouping as set, by column
+	// name; tableGroups holds the grid's levels and expansion
+	// (play_table_group.go, ADR-0336). tableSelSeen is the selection the
+	// grid last drew, so a selection made elsewhere reveals its row;
+	// tableOwnClick marks the frame after the grid's own click, whose
+	// selection needs no reveal.
+	tableGroupSpec []tableGroupLevel
+	tableGroups    recordtable.GroupState
+	tableSelSeen   int64
+	tableOwnClick  bool
 
 	// schemaModel backs the Schema dock tab: the schemaview inspector bound to
 	// a leeway TableDesc inferred from the active result's Arrow schema (plain
@@ -717,11 +727,6 @@ type PlayApp struct {
 	// Frame, since the capability rides the frame context.
 	colWidthRes     *colwidth.Resolver
 	colWidthResInit bool
-	// attrWidthsSeen gates the first width report for the attr grid. The
-	// crate force-autofits on its first show, and that result is the
-	// estimator's rather than the user's — capturing it would freeze a
-	// width nobody chose. The first report a table makes is that frame.
-	attrWidthsSeen bool
 	// attrFitSchema / attrFitCols are the per-attribute grid's memory of the
 	// column set it last re-fitted for (attrColsChanged), the sibling of
 	// tableFitSchema / tableFitCols.
@@ -734,6 +739,13 @@ type PlayApp struct {
 	// the render path allocation-free in steady state instead of building a fresh
 	// sink (and thousands of throwaway row maps) each frame.
 	attrSink attrExplodeSink
+	// attrView is the exploded record the per-attribute grid draws, kept
+	// while the page, the columns and the glosses hold; attrGrid and
+	// attrGroups are that grid's recordtable state and its grouping — the
+	// entity, then the membership path (ADR-0336 §SD12).
+	attrView   attrExplodedView
+	attrGrid   recordtable.State
+	attrGroups recordtable.GroupState
 
 	// Analytical FunctionEvaluator that runs alongside the canonicalisers in
 	// updatePreview. Its handlers return ControlFlow{PassDiscardOutput} so
@@ -3092,7 +3104,13 @@ func (inst *PlayApp) renderTableTab(rec arrow.RecordBatch, schema *arrow.Schema,
 		inst.pagerSeenExecuted = executed
 		inst.pager.Reset()
 	}
-	inst.pager.Configure(rec.NumRows())
+	// A grouped grid pages over its lines, whose count the last draw of
+	// this result knows; the first grouped frame pages over the rows.
+	total := rec.NumRows()
+	if inst.tableGroupingActive() && prevDrawn.schema == schema && prevDrawn.lines > 0 {
+		total = prevDrawn.lines
+	}
+	inst.pager.Configure(total)
 	// Leeway display-mode bar: a collapsible toolbar of the three orthogonal
 	// controls (row granularity, reveal support / membership columns). Shown only
 	// for a leeway-shaped result — a non-leeway result has no structure to reshape
@@ -3130,6 +3148,11 @@ func (inst *PlayApp) renderTableTab(rec arrow.RecordBatch, schema *arrow.Schema,
 		// ADR-0186 raw toggle: bypass every gloss for the session — the escape
 		// hatch a wrong rule needs. Offered only once a column is glossed.
 		inst.renderGlossToggle(schema)
+		// The grouping picker (ADR-0336 M3): the per-DB-row grid's; the
+		// per-attribute grid groups by hand until M3b.
+		if prevDrawn.schema == schema && !prevDrawn.perAttr {
+			inst.renderTableGroupPicker(schema, prevDrawn.visCols)
+		}
 	}
 	inst.renderGlossNotes()
 	c.AddSpace(pad)
@@ -3531,13 +3554,34 @@ func (inst *PlayApp) renderMasterTable(rec arrow.RecordBatch, schema *arrow.Sche
 		identityDone: idJob == nil || idJob.isDone(),
 		opts:         inst.tableOpts,
 	}
+	// The grouping (ADR-0336): the spec resolved against this schema, and a
+	// selection made in another pane revealed — its ancestors opened, its
+	// page turned, its line scrolled to — unless the grid's own click made it.
+	inst.applyTableGrouping(schema)
+	ownClick := inst.tableOwnClick
+	inst.tableOwnClick = false
+	if selectedRow != inst.tableSelSeen {
+		inst.tableSelSeen = selectedRow
+		if selectedRow >= 0 && !ownClick && inst.tableGroups.Active() {
+			inst.tableGroups.Reveal(selectedRow)
+		}
+	}
+	var groups *recordtable.GroupState
+	if inst.tableGroups.Active() {
+		groups = &inst.tableGroups
+	}
 	res := recordtable.RenderGrid(recordtable.Input{
 		Ids: ids, ScopeKey: masterTableTag, Record: rec, Columns: columns,
 		Widths: inst.colWidthRes, TableTag: masterTableTag, WidthView: tableViewTagRow,
 		Sort: &inst.tableSort, Order: order, PageStart: pageStart, PageEnd: pageEnd,
 		Selected: selectedRow, HasSelection: selectedRow >= 0, Refit: refit, CellsKey: cellsKey,
-		State: &inst.masterGrid,
+		Groups: groups, State: &inst.masterGrid,
 	})
+	if groups != nil {
+		inst.tableDrawn.lines = groups.Layout().Len()
+		inst.routeTableGroupGestures(res)
+		inst.followTableReveal(pageStart, pageEnd)
+	}
 	if res.Err != nil {
 		inst.logger.Warn().Err(res.Err).Msg("play: results grid refused its input")
 	}
@@ -3550,6 +3594,7 @@ func (inst *PlayApp) renderMasterTable(rec arrow.RecordBatch, schema *arrow.Sche
 		inst.requestTableOptions(inst.tableSortClick(schema, res.SortClicked))
 	}
 	if res.Clicked >= 0 {
+		inst.tableOwnClick = true
 		emit.Emit(signalSelection, res.Clicked)
 	}
 }

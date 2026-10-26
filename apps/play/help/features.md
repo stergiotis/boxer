@@ -513,6 +513,31 @@ Above the grid, the pager pages through large results and lets you pick the page
 (50 to 10000 rows); a `rows A–B of N` label shows the current window. Column widths
 are sized from a sample of the first rows and are drag-resizable.
 
+**Group by** on the pager row groups the rows held ([ADR-0336](../../../doc/adr/0336-recordtable-row-grouping-a-line-sequence-over-the-permutation.md)):
+pick a column from **+ column** to add a level, nested in the one before;
+each level's chip shows its direction, and a click cycles it: reversed,
+then dropped. A band per group carries its chevron, its
+key and the number of rows under it, the null group last; the rows under an
+open group keep the sort's order. A click on a band or its chevron folds
+it, **expand all** and **collapse all** fold every group, and the pager
+then counts lines — bands and the rows open under them — rather than rows.
+A selection made in another pane opens the ancestors of its row and
+scrolls to it. The grouping stays across a rerun of the same query and
+waits, flat, through a result that lacks its columns. Agents set and read
+it through `set_table_options` (`group_by`, `expand`, `collapse`) and
+`get_table`, which lists each group's path.
+
+For a leeway-shaped result the **Leeway display** bar's **per attribute**
+switch explodes the page: one row per attribute, per item of a list value,
+grouped by the result's row and then by the attribute's membership path,
+its steps read by the jsonshred grammar (a `_` step takes the next
+parameter). A band per row of the result carries its number and attribute
+count; a click on it selects the row, the chevron folds it, and the pager
+keeps counting the result's rows. The section, the path and the parameters
+lead the columns; the other sections' columns are blank on an attribute's
+row, so sections stack as the Detail card does. `get_table` reads the
+exploded page line by line.
+
 Empty/loading states are explicit: a spinner with *Executing query…* while running,
 *Run a query to see results.* before the first query, and *0 rows — the query ran but
 matched nothing.* for an empty result.

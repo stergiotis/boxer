@@ -458,3 +458,24 @@ func TestGroupKeyFunc(t *testing.T) {
 	assert.Equal(t, "v0 .0 .3 v1 .1 .2", draw(lay))
 	assert.Equal(t, "below one", lay.Groups[lay.GroupAt(0)].Key.Label)
 }
+
+func TestGroupPathOf(t *testing.T) {
+	rec := groupRec(t, []int64{1, 1, 2}, []string{"/a/x", "/a/y", "/b/x"}, []float64{1, 2, 3})
+	defer rec.Release()
+	var st GroupState
+	st.SetLevels([]GroupLevel{{Arrow: colEnt}, {Segments: segments(rec)}})
+	lay, err := st.LayoutFor(rec, nil, rec.NumRows(), nil)
+	require.NoError(t, err)
+	assert.Empty(t, lay.PathOf(0), "the root has no path")
+	var a int32 = -1
+	for i := range lay.Groups {
+		if lay.Groups[i].Key.Value == "a" {
+			a = int32(i)
+		}
+	}
+	require.NotEqual(t, int32(-1), a)
+	keys := lay.PathOf(a)
+	require.Len(t, keys, 2)
+	assert.Equal(t, "1", keys[0].Value)
+	assert.Equal(t, "a", keys[1].Value)
+}

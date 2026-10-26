@@ -2,20 +2,18 @@ package play
 
 import (
 	"slices"
-	"time"
-
 	"strconv"
 	"strings"
-	"unicode/utf8"
 
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/array"
+	"github.com/apache/arrow-go/v18/arrow/memory"
 	"github.com/rs/zerolog/log"
 	"github.com/stergiotis/boxer/public/hmi/gloss"
-	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/common"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/jsonshred"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/naming"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/streamreadaccess"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/useaspects"
@@ -26,102 +24,68 @@ import (
 	"github.com/stergiotis/boxer/public/thestack/utfsafe"
 )
 
-// play_table_attr.go is the Table pane's per-attribute leeway view — the perAttr
-// granularity of the options bar (play_table_leeway.go). It keeps the *same
-// columns* as the per-DB-row grid but explodes each section down its own rows so
-// that every cell holds one scalar:
+// play_table_attr.go is the Table pane's per-attribute leeway view — the
+// perAttr granularity of the options bar (play_table_leeway.go). The page's
+// entities are exploded into an Arrow record of one row per attribute (per
+// item of a non-scalar value), carrying the source row, the section, the
+// attribute's membership path and parameters, and the visible columns' cells
+// as text; recordtable.RenderGrid draws it grouped two levels deep
+// (ADR-0336 §SD12): the entity, whose band stands for the source row and
+// selects it, then the membership path, whose steps nest as the jsonshred
+// grammar reads them. Sections stack — one attribute per row, the other
+// sections' columns blank on it — as the Detail pane's record card does.
 //
-//   - A section with N attributes for one DB row occupies N stacked rows; a
-//     non-scalar (array/set) value column further explodes each item to its own
-//     row. Sections are un-nested independently, so cells line up only *within*
-//     a section (same attribute), never across sections.
-//   - No value is ever repeated: the `#` gutter and the backbone columns show
-//     once on the DB row's top row (blank below), a per-attribute membership /
-//     support value shows once on its attribute's first row, and array items
-//     fill straight down. Missing cells are empty.
-//
-// The exploded stream comes from the streamreadaccess.Driver — it already walks
-// section → attribute → item with the nested-array cardinality it owns, so the
-// value + backbone cells are re-laid-out from its walk rather than re-derived.
-// Revealed membership/support columns (the (b)/(c) toggles) are read raw from
-// the batch per attribute (like the per-DB-row grid, they show the same physical
-// value), so this sink does not implement MembershipSinkI — the Driver skips
-// membership rendering it would otherwise do.
-//
-// A row click selects the source DB row (the same signalSelection the per-DB-row
-// grid emits), so per-attribute rows cross-filter the app exactly as DB rows do.
+// The exploded record is rebuilt when the page, the columns shown or the
+// glosses change, and kept otherwise, so the grid's layout and cells cache
+// hold between frames.
 
-const (
-	attrRowHeight  = 20.0
-	attrCellIdBase = uint64(0x02000000)
-	attrColStride  = uint64(0x00010000)
-)
-
-// attrGridRow is one exploded visual row: its cells are indexed by *position in
-// visCols* ("" = empty), so a lookup is an index rather than a map probe and the
-// whole row is one slice allocation instead of a map. absRow is the source DB
-// row; firstOfEntity marks the entity's top row (where the `#` gutter and the
-// once-per-entity backbone cells appear).
-type attrGridRow struct {
-	absRow        int64
-	firstOfEntity bool
-	cells         []string
-}
-
-// attrExplodeSink walks a leeway batch into the exploded grid rows. It
-// implements streamreadaccess.SinkI (structure + values) but deliberately not
-// MembershipSinkI: membership *columns* are read raw per attribute in
-// flushAttr, so the Driver's rendered memberships are neither needed nor driven.
-//
-// It is pooled on PlayApp and re-driven every frame the per-attribute view is
-// shown, so it holds all its working storage as reusable buffers: reset()
-// rebinds the per-drive inputs and BeginBatch reslices the output to [:0],
-// letting the steady-state render reuse last frame's backing arrays rather than
-// allocating fresh maps/slices per cell.
+// attrExplodeSink walks a leeway batch into the exploded record. It
+// implements streamreadaccess.SinkI for the values and MembershipSinkI for
+// the path; the revealed membership and support columns are read raw per
+// attribute, as the per-DB-row grid shows them.
 type attrExplodeSink struct {
 	rec       arrow.RecordBatch // the page slice — for raw per-attribute reads
 	pageStart int64
 
-	// Revealed membership/support columns to raw-read per attribute, grouped by
-	// section identity (built from ColumnClasses ∩ visCols).
+	// Revealed membership/support columns to raw-read per attribute, grouped
+	// by section identity (built from ColumnClasses ∩ visCols).
 	taggedExtra map[string][]int
 	plainExtra  map[common.PlainItemTypeE][]int
 
-	// colToVis maps an Arrow column index to its position in visCols (-1 when not
-	// visible); nCols is len(visCols), the width of every output row. Rebuilt in
-	// place each drive by reset → setVisCols.
+	// colToVis maps an Arrow column index to its position in visCols (-1 when
+	// not visible); nCols is len(visCols).
 	colToVis []int
 	nCols    int
 
-	rows []attrGridRow // output (backing array reused across frames)
-
-	// glossFn, when set, passes each value cell's text through the column's
-	// gloss inline face (ADR-0186) — arrowIdx is the value column, text the
-	// driver-marshalled item. Nil = identity. Bound per drive by reset's
-	// caller, since the resolution belongs to the schema, not the sink.
+	// glossFn passes each value cell's text through the column's gloss
+	// inline face (ADR-0186). Nil = identity.
 	glossFn func(arrowIdx int, text string) string
 
-	// Per-entity / per-section running state. entityStart is the index in rows
-	// where the current entity's first visual row sits; secRow is the running
-	// visual-row offset (from entityStart) within the current section — sections
-	// overlay from offset 0, attributes stack down within a section.
-	entityIdx   int
-	entityStart int
-	secRow      int
+	// The record under construction: the fixed columns, then one text
+	// column per visible column.
+	mem     memory.Allocator
+	srcB    *array.Int64Builder
+	secB    *array.StringBuilder
+	attrB   *array.Int32Builder
+	pathB   *array.StringBuilder
+	paramsB *array.StringBuilder
+	cellB   []*array.StringBuilder
+	rows    int64
+	out     arrow.RecordBatch
 
-	// Current section.
-	curExtras []int // revealed member/support arrowIdx for the section
-	curAttr   int   // attribute index within the section (for raw reads)
-
-	// Current attribute (Begin{Plain,Tagged}Value): value columns as parallel
-	// arrays (Arrow index + its item list), recycled per attribute. inAttr guards
-	// EndColumn against columns driven outside an attribute. itemsFree pools the
-	// per-column item slices so EndColumn reuses backing arrays across attributes
-	// and frames.
-	inAttr       bool
-	attrColIdx   []int
-	attrColItems [][]string
-	itemsFree    [][]string
+	// Per-entity / per-section / per-attribute running state.
+	entityIdx  int
+	curSection string
+	curExtras  []int
+	curAttr    int
+	inAttr     bool
+	attrColIdx []int
+	attrItems  [][]string
+	itemsFree  [][]string
+	path       string
+	params     string
+	hasPath    bool
+	hasParams  bool
 
 	// Per-column scratch.
 	curCol       int
@@ -132,17 +96,44 @@ type attrExplodeSink struct {
 	err error
 }
 
-var _ streamreadaccess.SinkI = (*attrExplodeSink)(nil)
+var (
+	_ streamreadaccess.SinkI           = (*attrExplodeSink)(nil)
+	_ streamreadaccess.MembershipSinkI = (*attrExplodeSink)(nil)
+)
 
-// reset rebinds the pooled sink to a new page drive, keeping every backing array
-// so the steady-state render (same page, same schema) reuses them. The output
-// slice and per-drive flags are reset in BeginBatch (the Driver's entry point).
+// The exploded record's fixed columns; the visible columns' cells follow.
+const (
+	attrXSrc = iota
+	attrXSection
+	attrXAttr
+	attrXPath
+	attrXParams
+	attrXCells
+)
+
+// reset binds the sink to a page drive. The builders are made per drive —
+// an Arrow builder is not reusable past NewArray — and the row count starts
+// over; the lookup slices keep their backing arrays.
 func (inst *attrExplodeSink) reset(rec arrow.RecordBatch, pageStart int64, taggedExtra map[string][]int, plainExtra map[common.PlainItemTypeE][]int, visCols []int, nFields int) {
 	inst.rec = rec
 	inst.pageStart = pageStart
 	inst.taggedExtra = taggedExtra
 	inst.plainExtra = plainExtra
 	inst.setVisCols(visCols, nFields)
+	if inst.mem == nil {
+		inst.mem = memory.NewGoAllocator()
+	}
+	inst.srcB = array.NewInt64Builder(inst.mem)
+	inst.secB = array.NewStringBuilder(inst.mem)
+	inst.attrB = array.NewInt32Builder(inst.mem)
+	inst.pathB = array.NewStringBuilder(inst.mem)
+	inst.paramsB = array.NewStringBuilder(inst.mem)
+	inst.cellB = inst.cellB[:0]
+	for range visCols {
+		inst.cellB = append(inst.cellB, array.NewStringBuilder(inst.mem))
+	}
+	inst.rows = 0
+	inst.out = nil
 }
 
 // setVisCols rebuilds the Arrow-index → visCols-position lookup in place.
@@ -171,59 +162,72 @@ func (inst *attrExplodeSink) visPos(arrowIdx int) int {
 	return inst.colToVis[arrowIdx]
 }
 
+// attrExplodedSchema is the exploded record's schema for a set of visible
+// columns: the fixed columns, then one text column per visible column under
+// the source field's name, so a stored width keyed on the name carries over.
+func attrExplodedSchema(schema *arrow.Schema, visCols []int) *arrow.Schema {
+	fields := []arrow.Field{
+		{Name: "src", Type: arrow.PrimitiveTypes.Int64},
+		{Name: "section", Type: arrow.BinaryTypes.String},
+		{Name: "attr", Type: arrow.PrimitiveTypes.Int32},
+		{Name: "path", Type: arrow.BinaryTypes.String, Nullable: true},
+		{Name: "params", Type: arrow.BinaryTypes.String, Nullable: true},
+	}
+	for _, col := range visCols {
+		name := strconv.Itoa(col)
+		if schema != nil && col >= 0 && col < schema.NumFields() {
+			name = schema.Field(col).Name
+		}
+		fields = append(fields, arrow.Field{Name: name, Type: arrow.BinaryTypes.String, Nullable: true})
+	}
+	return arrow.NewSchema(fields, nil)
+}
+
+// record finishes the drive: the exploded record over the schema, which the
+// caller owns, or nil when the drive failed.
+func (inst *attrExplodeSink) record(schema *arrow.Schema) arrow.RecordBatch {
+	if inst.err != nil || inst.srcB == nil {
+		return nil
+	}
+	arrs := []arrow.Array{inst.srcB.NewArray(), inst.secB.NewArray(), inst.attrB.NewArray(), inst.pathB.NewArray(), inst.paramsB.NewArray()}
+	for _, b := range inst.cellB {
+		arrs = append(arrs, b.NewArray())
+	}
+	rec := array.NewRecordBatch(schema, arrs, inst.rows)
+	for _, a := range arrs {
+		a.Release()
+	}
+	for _, b := range []interface{ Release() }{inst.srcB, inst.secB, inst.attrB, inst.pathB, inst.paramsB} {
+		b.Release()
+	}
+	for _, b := range inst.cellB {
+		b.Release()
+	}
+	inst.srcB, inst.secB, inst.attrB, inst.pathB, inst.paramsB, inst.cellB = nil, nil, nil, nil, nil, inst.cellB[:0]
+	return rec
+}
+
 // --- batch / entity ---
 
 func (inst *attrExplodeSink) BeginBatch() {
-	inst.rows = inst.rows[:0]
 	inst.entityIdx = 0
 	inst.inAttr = false
 	inst.err = nil
 }
 func (inst *attrExplodeSink) EndBatch() error { return inst.err }
 
-func (inst *attrExplodeSink) BeginEntity() { inst.entityStart = len(inst.rows) }
-
-// EndEntity just advances the entity counter: the exploded rows were written
-// straight into inst.rows as sections/attributes were flushed (flushAttr →
-// ensureRow), so no transpose or per-row map merge is needed.
+func (inst *attrExplodeSink) BeginEntity() {}
 func (inst *attrExplodeSink) EndEntity() error {
 	inst.entityIdx++
 	return inst.err
 }
 
-// ensureRow returns the cells slice for the current entity's visual row at the
-// given offset (from entityStart), creating or recycling it. flushAttr fills
-// offsets densely from 0, so the target index is always ≤ len(rows): an index
-// below len(rows) is an existing row of this entity (a later section overlaying
-// its own columns onto an earlier section's row), and one equal to len(rows)
-// appends — reusing the slot's backing []string when the pooled rows slice still
-// has capacity from a previous frame.
-func (inst *attrExplodeSink) ensureRow(off int) []string {
-	vrow := inst.entityStart + off
-	if vrow < len(inst.rows) {
-		return inst.rows[vrow].cells
-	}
-	absRow := inst.pageStart + int64(inst.entityIdx)
-	first := vrow == inst.entityStart
-	if vrow < cap(inst.rows) {
-		inst.rows = inst.rows[:vrow+1]
-		r := &inst.rows[vrow]
-		r.absRow = absRow
-		r.firstOfEntity = first
-		r.cells = clearAndSize(r.cells, inst.nCols)
-		return r.cells
-	}
-	cells := make([]string, inst.nCols)
-	inst.rows = append(inst.rows, attrGridRow{absRow: absRow, firstOfEntity: first, cells: cells})
-	return cells
-}
-
 // --- sections ---
 
 func (inst *attrExplodeSink) BeginPlainSection(itemType common.PlainItemTypeE, _ []naming.StylableName, _ []canonicaltypes.PrimitiveAstNodeI, _ int) {
-	inst.beginSection(inst.plainExtra[itemType])
+	inst.beginSection(itemType.String(), inst.plainExtra[itemType])
 }
-func (inst *attrExplodeSink) EndPlainSection() error { return inst.endSection() }
+func (inst *attrExplodeSink) EndPlainSection() error { return inst.err }
 
 func (inst *attrExplodeSink) BeginTaggedSections()     {}
 func (inst *attrExplodeSink) EndTaggedSections() error { return inst.err }
@@ -232,16 +236,15 @@ func (inst *attrExplodeSink) BeginCoSectionGroup(naming.Key) {}
 func (inst *attrExplodeSink) EndCoSectionGroup() error       { return inst.err }
 
 func (inst *attrExplodeSink) BeginSection(name naming.StylableName, _ []naming.StylableName, _ []canonicaltypes.PrimitiveAstNodeI, _ useaspects.AspectSet, _ int) {
-	inst.beginSection(inst.taggedExtra[string(name)])
+	inst.beginSection(string(name), inst.taggedExtra[string(name)])
 }
-func (inst *attrExplodeSink) EndSection() error { return inst.endSection() }
+func (inst *attrExplodeSink) EndSection() error { return inst.err }
 
-func (inst *attrExplodeSink) beginSection(extras []int) {
+func (inst *attrExplodeSink) beginSection(name string, extras []int) {
+	inst.curSection = name
 	inst.curExtras = extras
 	inst.curAttr = 0
-	inst.secRow = 0
 }
-func (inst *attrExplodeSink) endSection() error { return inst.err }
 
 // --- attributes ---
 
@@ -260,50 +263,73 @@ func (inst *attrExplodeSink) EndTaggedValue() error {
 func (inst *attrExplodeSink) beginAttr() {
 	inst.inAttr = true
 	inst.attrColIdx = inst.attrColIdx[:0]
-	inst.attrColItems = inst.attrColItems[:0]
+	inst.attrItems = inst.attrItems[:0]
+	inst.path, inst.params, inst.hasPath, inst.hasParams = "", "", false, false
 }
 
-// flushAttr turns the current attribute's buffered value columns into
-// K = max(item count, 1) exploded rows written straight into inst.rows at the
-// section's running offset. Row j takes each value column's j-th item (empty
-// when that column has fewer — no repeat); row 0 additionally carries the
-// revealed membership/support columns, read raw at this attribute's index. The
-// per-column item slices are then recycled into itemsFree.
+// flushAttr appends the current attribute's K = max(item count, 1) rows:
+// row j takes each value column's j-th item (null where that column has
+// fewer); row 0 additionally carries the revealed membership/support
+// columns, read raw at this attribute's index. The per-column item slices
+// are then recycled.
 func (inst *attrExplodeSink) flushAttr() {
+	if inst.srcB == nil {
+		return
+	}
 	k := 1
-	for _, items := range inst.attrColItems {
+	for _, items := range inst.attrItems {
 		if len(items) > k {
 			k = len(items)
 		}
 	}
 	for j := 0; j < k; j++ {
-		cells := inst.ensureRow(inst.secRow + j)
+		inst.srcB.Append(inst.pageStart + int64(inst.entityIdx))
+		inst.secB.Append(inst.curSection)
+		inst.attrB.Append(int32(inst.curAttr))
+		if inst.hasPath {
+			inst.pathB.Append(inst.path)
+		} else {
+			inst.pathB.AppendNull()
+		}
+		if inst.hasParams {
+			inst.paramsB.Append(inst.params)
+		} else {
+			inst.paramsB.AppendNull()
+		}
+		set := make([]bool, inst.nCols)
 		for e, arrowIdx := range inst.attrColIdx {
-			items := inst.attrColItems[e]
+			items := inst.attrItems[e]
 			if j < len(items) {
 				if p := inst.visPos(arrowIdx); p >= 0 {
-					cells[p] = items[j]
+					inst.cellB[p].Append(items[j])
+					set[p] = true
 				}
 			}
 		}
 		if j == 0 {
 			for _, ax := range inst.curExtras {
 				p := inst.visPos(ax)
-				if p < 0 {
+				if p < 0 || set[p] {
 					continue
 				}
 				if v := listInnerScalar(inst.rec, ax, inst.entityIdx, inst.curAttr); v != "" {
-					cells[p] = v
+					inst.cellB[p].Append(v)
+					set[p] = true
 				}
 			}
 		}
+		for p, ok := range set {
+			if !ok {
+				inst.cellB[p].AppendNull()
+			}
+		}
+		inst.rows++
 	}
-	inst.secRow += k
-	for _, items := range inst.attrColItems {
+	for _, items := range inst.attrItems {
 		inst.itemsFree = append(inst.itemsFree, items[:0])
 	}
 	inst.attrColIdx = inst.attrColIdx[:0]
-	inst.attrColItems = inst.attrColItems[:0]
+	inst.attrItems = inst.attrItems[:0]
 	inst.inAttr = false
 }
 
@@ -326,7 +352,7 @@ func (inst *attrExplodeSink) EndColumn() {
 		items = append(items, inst.glossed(utfsafe.EnsureUTF8(inst.curBuf.String())))
 	}
 	inst.attrColIdx = append(inst.attrColIdx, inst.curCol)
-	inst.attrColItems = append(inst.attrColItems, items)
+	inst.attrItems = append(inst.attrItems, items)
 }
 
 // takeItems returns a reset item slice, reused from itemsFree when available.
@@ -340,17 +366,6 @@ func (inst *attrExplodeSink) takeItems() []string {
 	return items[:0]
 }
 
-// clearAndSize returns a length-n []string reusing s's backing array when it is
-// large enough (zeroing it so no last-frame string is retained), else a fresh one.
-func clearAndSize(s []string, n int) []string {
-	if cap(s) >= n {
-		s = s[:n]
-		clear(s)
-		return s
-	}
-	return make([]string, n)
-}
-
 func (inst *attrExplodeSink) BeginScalarValue()             { inst.isCollection = false }
 func (inst *attrExplodeSink) EndScalarValue() error         { return inst.err }
 func (inst *attrExplodeSink) BeginHomogenousArrayValue(int) { inst.isCollection = true }
@@ -358,8 +373,7 @@ func (inst *attrExplodeSink) EndHomogenousArrayValue()      {}
 func (inst *attrExplodeSink) BeginSetValue(int)             { inst.isCollection = true }
 func (inst *attrExplodeSink) EndSetValue()                  {}
 
-// BeginValueItem starts a fresh item buffer — items become separate rows, so
-// (unlike the packed view) they are not joined.
+// BeginValueItem starts a fresh item buffer — items become separate rows.
 func (inst *attrExplodeSink) BeginValueItem(int) { inst.curBuf.Reset() }
 func (inst *attrExplodeSink) EndValueItem() {
 	inst.curItems = append(inst.curItems, inst.glossed(utfsafe.EnsureUTF8(inst.curBuf.String())))
@@ -376,16 +390,56 @@ func (inst *attrExplodeSink) glossed(text string) string {
 func (inst *attrExplodeSink) Write(pp []byte) (int, error)       { return inst.curBuf.Write(pp) }
 func (inst *attrExplodeSink) WriteString(ss string) (int, error) { return inst.curBuf.WriteString(ss) }
 
-// BeginTags/EndTags are driven for the tag count even without MembershipSinkI;
-// this view reads membership columns raw, so both are no-ops.
+// --- memberships: the attribute's path and parameters ---
+
 func (inst *attrExplodeSink) BeginTags(int) {}
 func (inst *attrExplodeSink) EndTags()      {}
+
+// The first low-cardinality membership is the attribute's path; a
+// high-cardinality one, or a parametrized one's parameters, its parameters.
+// A ref is spelled as the record card spells it, "#" and the number.
+func (inst *attrExplodeSink) setPath(p string) {
+	if !inst.hasPath {
+		inst.path, inst.hasPath = p, true
+	}
+}
+func (inst *attrExplodeSink) setParams(p string) {
+	if !inst.hasParams && p != "" {
+		inst.params, inst.hasParams = p, true
+	}
+}
+func (inst *attrExplodeSink) AddMembershipRef(lowCard bool, ref uint64) {
+	if lowCard {
+		inst.setPath("#" + strconv.FormatUint(ref, 10))
+	} else {
+		inst.setParams("#" + strconv.FormatUint(ref, 10))
+	}
+}
+func (inst *attrExplodeSink) AddMembershipVerbatim(lowCard bool, verbatim string) {
+	verbatim = utfsafe.EnsureUTF8(verbatim)
+	if lowCard {
+		inst.setPath(verbatim)
+	} else {
+		inst.setParams(verbatim)
+	}
+}
+func (inst *attrExplodeSink) AddMembershipRefParametrized(lowCard bool, ref uint64, params string) {
+	inst.AddMembershipRef(lowCard, ref)
+	inst.setParams(utfsafe.EnsureUTF8(params))
+}
+func (inst *attrExplodeSink) AddMembershipMixedLowCardRefHighCardParam(ref uint64, params string) {
+	inst.AddMembershipRefParametrized(true, ref, params)
+}
+func (inst *attrExplodeSink) AddMembershipMixedLowCardVerbatimHighCardParam(verbatim string, params string) {
+	inst.AddMembershipVerbatim(true, verbatim)
+	inst.setParams(utfsafe.EnsureUTF8(params))
+}
 
 // listInnerScalar returns the k-th inner value of a List column for one entity
 // row, formatted as its per-DB-row cell would be (empty when absent). A non-list
 // (scalar/backbone) column has one value, treated as attribute 0.
 func listInnerScalar(rec arrow.RecordBatch, arrowIdx int, entityRow int, k int) string {
-	if arrowIdx < 0 || arrowIdx >= int(rec.NumCols()) || entityRow < 0 || k < 0 {
+	if rec == nil || arrowIdx < 0 || arrowIdx >= int(rec.NumCols()) || entityRow < 0 || k < 0 {
 		return ""
 	}
 	switch l := rec.Column(arrowIdx).(type) {
@@ -417,11 +471,57 @@ func listInnerScalar(rec arrow.RecordBatch, arrowIdx int, entityRow int, k int) 
 	}
 }
 
+// --- the path level's segmenter ---
+
+// attrPathSegments reads a membership path by the jsonshred grammar: a JSON
+// Pointer split on "/", each step's "~0" / "~1" / "~2" escapes undone, a
+// "~n" number marker dropped, and each "_" step replaced by the next of the
+// attribute's parameters, spelled "[i]". The parameters are read as the
+// writer spelled them, a list of indices in order, whatever joins them. An
+// empty path is the level's null group.
+func attrPathSegments(path, params string) (segs []recordtable.Key) {
+	path = strings.TrimSuffix(strings.TrimSpace(path), jsonshred.NumberSuffix)
+	if path == "" {
+		return nil
+	}
+	var ps []string
+	if params != "" {
+		ps = strings.FieldsFunc(params, func(r rune) bool {
+			return r == ',' || r == ' ' || r == '/' || r == '[' || r == ']' || r == '\t'
+		})
+	}
+	for _, step := range strings.Split(strings.TrimPrefix(path, "/"), "/") {
+		if step == jsonshred.Placeholder {
+			idx := jsonshred.Placeholder
+			if len(ps) > 0 {
+				idx, ps = ps[0], ps[1:]
+			}
+			segs = append(segs, recordtable.Key{Value: idx, Label: "[" + idx + "]"})
+			continue
+		}
+		segs = append(segs, recordtable.Key{Value: jsonshred.UnescapeKey(step)})
+	}
+	return
+}
+
 // --- rendering ---
 
-// renderAttrTable drives the current page through the CardDriver's Driver into
-// an attrExplodeSink and renders the exploded grid. Falls back to the per-DB-row
-// grid when the Driver or classification is unavailable.
+// attrExplodedView is the exploded record the grid draws, and what it was
+// built from, so it is rebuilt only when that changes.
+type attrExplodedView struct {
+	rec     arrow.RecordBatch
+	schema  *arrow.Schema
+	source  arrow.RecordBatch
+	start   int64
+	end     int64
+	visCols []int
+	opts    tableDisplayOpts
+}
+
+// renderAttrTable drives the current page through the CardDriver's Driver
+// into an attrExplodeSink and draws the exploded record grouped by entity and
+// path. Falls back to the per-DB-row grid when the Driver or classification
+// is unavailable.
 func (inst *PlayApp) renderAttrTable(rec arrow.RecordBatch, schema *arrow.Schema, numRows int64, selectedRow int64, emit SignalEmitterI) {
 	inst.cards.EnsureFor(schema)
 	driver := inst.cards.Driver()
@@ -446,11 +546,36 @@ func (inst *PlayApp) renderAttrTable(rec arrow.RecordBatch, schema *arrow.Schema
 		return
 	}
 
-	slice := rec.NewSlice(pageStart, pageEnd)
-	defer slice.Release()
-
 	visCols := inst.visibleTableCols(rec, schema, pageStart, pageEnd)
 	inst.tableDrawn.visCols = visCols
+	v := &inst.attrView
+	if v.rec == nil || v.source != rec || v.start != pageStart || v.end != pageEnd || !slices.Equal(v.visCols, visCols) || v.opts != inst.tableOpts {
+		xrec, err := inst.explodeAttrPage(rec, schema, classes, driver, pageStart, pageEnd, visCols)
+		if err != nil {
+			log.Warn().Err(err).Msg("play: per-attribute drive failed — falling back to per-DB-row grid")
+			inst.renderMasterTable(rec, schema, numRows, selectedRow, emit)
+			return
+		}
+		if v.rec != nil {
+			v.rec.Release()
+		}
+		*v = attrExplodedView{rec: xrec, schema: xrec.Schema(), source: rec, start: pageStart, end: pageEnd,
+			visCols: append([]int(nil), visCols...), opts: inst.tableOpts}
+		// The levels read the exploded record, so they are set with it —
+		// and only then: a SetLevels repartitions. The expansion, keyed by
+		// path, carries over to the new record.
+		inst.attrGroups.SetLevels([]recordtable.GroupLevel{
+			{Arrow: attrXSrc, Key: attrEntityKeyOf(xrec), KeyIsRow: true, Order: recordtable.GroupOrder{Appearance: true}},
+			{Segments: attrSegmentsOf(xrec)},
+		})
+	}
+	inst.renderAttrExplodeGrid(schema, visCols, v, selectedRow, emit)
+}
+
+// explodeAttrPage builds the exploded record of one page.
+func (inst *PlayApp) explodeAttrPage(rec arrow.RecordBatch, schema *arrow.Schema, classes []streamreadaccess.ColumnClass, driver *streamreadaccess.Driver, pageStart, pageEnd int64, visCols []int) (xrec arrow.RecordBatch, err error) {
+	slice := rec.NewSlice(pageStart, pageEnd)
+	defer slice.Release()
 	taggedExtra, plainExtra := buildAttrExtras(classes, visCols)
 	sink := &inst.attrSink
 	sink.reset(slice, pageStart, taggedExtra, plainExtra, visCols, schema.NumFields())
@@ -463,12 +588,11 @@ func (inst *PlayApp) renderAttrTable(rec arrow.RecordBatch, schema *arrow.Schema
 		}
 		return inst.glossText(&glossCols[arrowIdx], text, gloss.KindOfArrow(listElemType(schema.Field(arrowIdx).Type)))
 	}
-	if err := driver.DriveRecordBatch(sink, slice); err != nil {
-		log.Warn().Err(err).Msg("play: per-attribute drive failed — falling back to per-DB-row grid")
-		inst.renderMasterTable(rec, schema, numRows, selectedRow, emit)
+	if err = driver.DriveRecordBatch(sink, slice); err != nil {
 		return
 	}
-	inst.renderAttrExplodeGrid(schema, visCols, sink.rows, selectedRow, emit)
+	xrec = sink.record(attrExplodedSchema(schema, visCols))
+	return
 }
 
 // buildAttrExtras groups the revealed (in visCols) membership and support
@@ -497,258 +621,140 @@ func buildAttrExtras(classes []streamreadaccess.ColumnClass, visCols []int) (tag
 	return
 }
 
-// renderAttrExplodeGrid lays the exploded rows out with the *same* columns as
-// the per-DB-row grid — the visCols order, the friendly leeway labels, the same
-// left inset. Widths are sampled from the exploded (scalar) cells rather than
-// the packed per-DB-row content. A row click selects the source DB row.
-func (inst *PlayApp) renderAttrExplodeGrid(schema *arrow.Schema, visCols []int, rows []attrGridRow, selectedRow int64, emit SignalEmitterI) {
-	ids := inst.ids
-	cellPadX := styletokens.PaddingTight(inst.density)
+// attrGridColumns lays the exploded record out: the section, the path and
+// the parameters, then the visible columns under the per-DB-row grid's
+// captions. A cell's width identity keeps the source column's type with the
+// per-attribute view tag, so a width stored before the exploded record
+// carries over.
+func (inst *PlayApp) attrGridColumns(schema *arrow.Schema, visCols []int, xrec arrow.RecordBatch) (cols []recordtable.Column) {
+	cols = make([]recordtable.Column, 0, attrXCells-attrXSection+len(visCols))
+	cols = append(cols,
+		recordtable.Column{Arrow: attrXSection, Header: "section", Hover: "the attribute's section", NoSort: true},
+		recordtable.Column{Arrow: attrXPath, Header: "path", Hover: "the attribute's membership path, as the grouping reads it", NoSort: true},
+		recordtable.Column{Arrow: attrXParams, Header: "params", Hover: "the membership's high-cardinality parameters", NoSort: true},
+	)
 	inst.ensureColLabels(schema)
-	widths := inst.attrColWidths(schema, visCols, rows)
-
-	// ADR-0151: a width the user set outranks the sampled estimator, which
-	// becomes the default for columns they have not touched. cols and the
-	// EtColumn sequence stay index-aligned — the leading "#" column takes
-	// part so the read-back lines up, and since it is not resizable the
-	// binding reports our own width back for it and nothing is captured.
-	cols := inst.attrColumnKeys(schema, visCols)
-	resolved := make([]float64, 0, len(cols))
-	resolved = append(resolved, attrRowNumColWidth)
-	for _, w := range widths {
-		resolved = append(resolved, float64(w))
-	}
-	if inst.colWidthRes != nil {
-		// Font size 0: play has no single text size to attribute a width
-		// to, and passing one it does not render at would rescale stored
-		// widths against a fiction. Zero disables rescaling, which is the
-		// documented meaning.
-		resolved = inst.colWidthRes.Resolve(attrTableTag, cols, 0, resolved)
-	}
-
-	// One-frame re-fit on the frame the column set changes, as the per-DB-row
-	// grid does (tableColsChanged): the sampled seed is an estimate, and this
-	// is the frame the crate measures the real header and cells. Two things
-	// keep it inside ADR-0151's contract. A column whose resolved width is
-	// not the seed's carries a user override, which outranks any fit, so
-	// only seed-width columns are auto-sized; and captureAttrWidths adopts
-	// this frame's read-back as the crate's idea, not the user's, so nothing
-	// it settles on is frozen as an override. Cells go out untruncated on
-	// this frame (selectableCell), else the fit would see their truncated
-	// width and only ever fit the header.
-	refit := inst.attrColsChanged(schema, visCols)
-	if refit && inst.colWidthRes != nil {
-		// See the per-DB-row grid: the fit's result lands a report after this
-		// frame, so the window has to be opened here rather than inferred
-		// from a flag at capture time.
-		inst.colWidthRes.MarkReseed(attrTableTag)
-	}
-
-	// Leading "#" (source DB row) column + the data columns, same order as the
-	// per-DB-row grid.
-	c.EtColumn(float32(resolved[0])).Resizable(false).Send()
-	for i := range visCols {
-		col := c.EtColumn(float32(resolved[i+1])).
-			Resizable(true).
-			RangeMinMax(inst.colDragMinWidth(), recordtable.MaxColumnWidth)
-		if refit && resolved[i+1] == float64(widths[i]) {
-			col = col.AutoSizeThisFrame(true)
-		}
-		col.Send()
-	}
-
-	// FillPane for the per-DB-row grid's reason: this grid is the last
-	// thing in the Table tab and takes the rest of it.
-	et := c.EndETable(ids.PrepareStr(attrTableTag), uint64(len(rows)), attrRowHeight, 1, 1).
-		Striped(true).
-		FillPane(true)
-	if inst.colWidthRes != nil {
-		et = et.ApplyWidths(inst.colWidthRes.Epoch(attrTableTag))
-	}
-
-	if vis, _ := et.ColVisible(0); vis {
-		for range et.Headers(0, 0) {
-			inst.headerCell(attrHdrIdOffset, cellPadX, func() {
-				for rt := range c.RichTextLabel("#") {
-					rt.Weak().Monospace()
-				}
-			})
-		}
-	}
 	glossCols := inst.glossColumns(schema)
+	raw := inst.tableOpts.rawCells
 	for pos, arrowCol := range visCols {
-		colPos := uint32(pos + 1)
-		if vis, _ := et.ColVisible(colPos); !vis {
-			continue
+		field := schema.Field(arrowCol)
+		gc := &glossCols[arrowCol]
+		col := recordtable.Column{Arrow: attrXCells + pos, Header: field.Name, WidthType: field.Type.String(), NoSort: true}
+		if label := inst.colLabels[field.Name]; label != "" {
+			col.Header = label
 		}
-		for range et.Headers(0, colPos) {
-			field := schema.Field(arrowCol)
-			gc := &glossCols[arrowCol]
-			// The full type goes on hover and the header carries the short
-			// tag, for the same reason the per-DB-row grid does it: whatever
-			// the header renders is a floor under the column's width, and the
-			// spelled-out type is routinely wider than the values below it.
-			// A glossed column (ADR-0186) adds its media type, small, and its
-			// resolution to the hover.
-			hover := field.Type.String()
-			if label := inst.colLabels[field.Name]; label != "" {
-				hover = field.Name + " — " + hover
-			}
-			if gh := glossHover(gc); gh != "" {
-				hover += " — " + gh
-			}
-			inst.headerCell(attrHdrIdOffset+uint64(arrowCol)+1, cellPadX, func() {
-				caption := field.Name
-				if label := inst.colLabels[field.Name]; label != "" {
-					caption = label
-				}
-				for range c.HoverText(hover).KeepIter() {
-					for rt := range c.RichTextLabel(caption) {
-						rt.Strong().Monospace()
-					}
-				}
-				for rt := range c.RichTextLabel(shortArrowType(field.Type)) {
-					rt.Small().Weak().Monospace()
-				}
-				if gc.mediaType != "" {
-					for rt := range c.RichTextLabel(gc.mediaType) {
-						rt.Small().Weak().Monospace()
-					}
-				}
-			})
+		col.Hover = field.Name + " — " + field.Type.String()
+		if gh := glossHover(gc); gh != "" {
+			col.Hover += " — " + gh
 		}
+		col.Sub = []string{shortArrowType(field.Type)}
+		if gc.mediaType != "" {
+			col.Sub = append(col.Sub, gc.mediaType)
+		}
+		leftAlign := recordtable.StringLike(listElemType(field.Type))
+		xcol := xrec.Column(attrXCells + pos).(*array.String)
+		linkable := gc.mediaType == gloss.MediaTypeURL && gc.glossedElem() && !raw
+		col.Cell = func(row int64) (cell recordtable.Cell) {
+			if xcol.IsNull(int(row)) {
+				return recordtable.Cell{LeftAlign: leftAlign}
+			}
+			text := xcol.Value(int(row))
+			cell = recordtable.Cell{Text: text, LeftAlign: leftAlign}
+			if linkable {
+				cell.Link = text
+			}
+			return
+		}
+		cols = append(cols, col)
 	}
-
-	rowLo, rowHi := uint64(0), uint64(len(rows))
-	if rb, re, _, _, _, ok := et.VisibleRange(); ok {
-		rowLo, rowHi = rb, re
-		if rowHi > uint64(len(rows)) {
-			rowHi = uint64(len(rows))
-		}
-	}
-	for local := rowLo; local < rowHi; local++ {
-		row := rows[local]
-		selected := row.absRow == selectedRow
-		rowBase := attrCellIdBase + local*attrColStride
-
-		if vis, _ := et.ColVisible(0); vis {
-			for range et.Cells(local, 0) {
-				marker := ""
-				if row.firstOfEntity {
-					marker = strconv.FormatInt(row.absRow+1, 10)
-				}
-				if inst.selectableCell(rowBase, cellPadX, marker, true, selected, true, false, gloss.ToneNeutral, "", true) {
-					emit.Emit(signalSelection, row.absRow)
-				}
-			}
-		}
-		for pos, arrowCol := range visCols {
-			colPos := uint32(pos + 1)
-			if vis, _ := et.ColVisible(colPos); !vis {
-				continue
-			}
-			leftAlign := recordtable.StringLike(listElemType(schema.Field(arrowCol).Type))
-			for range et.Cells(local, colPos) {
-				// A gloss/url item is a hyperlink to itself (its text is the
-				// URL: the face is the first line of the value).
-				link := ""
-				if gc := &glossCols[visCols[pos]]; gc.mediaType == gloss.MediaTypeURL && gc.glossedElem() && !inst.tableOpts.rawCells {
-					link = row.cells[pos]
-				}
-				text := row.cells[pos]
-				if refit {
-					// Bounded like the per-DB-row grid: the fit must not size
-					// a column to a paragraph.
-					text = recordtable.FitRunes(text, colMaxRunes)
-				}
-				if inst.selectableCell(rowBase+uint64(pos)+1, cellPadX, text, false, selected, true, leftAlign, gloss.ToneNeutral, link, !refit) {
-					emit.Emit(signalSelection, row.absRow)
-				}
-			}
-		}
-	}
-	et.Send()
-	inst.captureAttrWidths(et, cols)
+	return
 }
 
-// captureAttrWidths feeds the widths egui_table settled on back into the
-// resolver and lets the debounce write them.
-//
-// The first report a table makes is its force-autofit frame, whose widths
-// are the crate's idea rather than the user's; passing firstShow on that
-// frame is what stops the estimator's first result being frozen as an
-// override nobody chose. A re-fit frame is the same kind of frame, and is
-// covered by the MarkReseed at the emission site rather than by a flag here —
-// its result arrives a report later than the frame that asked for it.
-func (inst *PlayApp) captureAttrWidths(et c.EndETableFluid, cols []colwidth.Column) {
-	if inst.colWidthRes == nil {
+// attrSegmentsOf is the path level's segmenter over an exploded record.
+func attrSegmentsOf(xrec arrow.RecordBatch) func(row int64) []recordtable.Key {
+	paths := xrec.Column(attrXPath).(*array.String)
+	params := xrec.Column(attrXParams).(*array.String)
+	return func(row int64) []recordtable.Key {
+		if paths.IsNull(int(row)) {
+			return nil
+		}
+		p := ""
+		if !params.IsNull(int(row)) {
+			p = params.Value(int(row))
+		}
+		return attrPathSegments(paths.Value(int(row)), p)
+	}
+}
+
+// attrEntityKeyOf keys the entity level on the source row (KeyIsRow), the
+// band captioned by the row's number as the per-DB-row gutter shows it.
+func attrEntityKeyOf(xrec arrow.RecordBatch) func(row int64) recordtable.Key {
+	src := xrec.Column(attrXSrc).(*array.Int64)
+	return func(row int64) recordtable.Key {
+		s := src.Value(int(row))
+		return recordtable.Key{Value: strconv.FormatInt(s, 10), Label: "row " + strconv.FormatInt(s+1, 10)}
+	}
+}
+
+// renderAttrExplodeGrid draws the exploded record through RenderGrid with the
+// two fixed levels. A leaf click and a band click both select the source
+// row; the fold gestures go through set_table_options as the per-DB-row
+// grid's do; a header click has nothing to sort.
+func (inst *PlayApp) renderAttrExplodeGrid(schema *arrow.Schema, visCols []int, v *attrExplodedView, selectedRow int64, emit SignalEmitterI) {
+	xrec := v.rec
+	cols := inst.attrGridColumns(schema, visCols, xrec)
+	refit := inst.attrColsChanged(schema, visCols)
+	res := recordtable.RenderGrid(recordtable.Input{
+		Ids: inst.ids, ScopeKey: attrTableTag, Record: xrec, Columns: cols,
+		Widths: inst.colWidthRes, TableTag: attrTableTag, WidthView: tableViewTagAttr,
+		NoRowNumbers: true, Refit: refit,
+		Groups: &inst.attrGroups, SelectedKeyRow: selectedRow, HasSelectedKeyRow: selectedRow >= 0,
+		CellsKey: attrCellsKey{rec: xrec},
+		State:    &inst.attrGrid,
+	})
+	if res.Err != nil {
+		log.Warn().Err(res.Err).Msg("play: per-attribute grid refused its input")
 		return
 	}
-	now := time.Now()
-	if fetched, ok := et.ColumnWidths(); ok {
-		widths := make([]float64, len(fetched))
-		for i, w := range fetched {
-			widths[i] = float64(w)
-		}
-		firstShow := !inst.attrWidthsSeen
-		inst.attrWidthsSeen = true
-		inst.colWidthRes.Observe(attrTableTag, cols, widths, 0, firstShow, now)
+	if res.WidthsErr != nil {
+		log.Warn().Err(res.WidthsErr).Msg("play: storing column widths failed; will retry")
 	}
-	if _, err := inst.colWidthRes.Flush(now); err != nil {
-		log.Warn().Err(err).Msg("play: storing column widths failed; will retry")
+	inst.tableDrawn.lines = inst.attrGroups.Layout().Len()
+	inst.routeAttrGroupGestures(res)
+	if res.Clicked >= 0 {
+		emit.Emit(signalSelection, xrec.Column(attrXSrc).(*array.Int64).Value(int(res.Clicked)))
+	}
+	if res.GroupClicked >= 0 {
+		emit.Emit(signalSelection, res.GroupClicked)
 	}
 }
 
-// attrColWidths sizes each data column to its exploded (scalar) content, sampled
-// over the leading rows, floored to the friendly header label. The per-DB-row
-// cache is sampled from the packed representation (`[len=N]`), so it under-sizes
-// the un-packed scalars; this samples the grid the exploded view actually shows.
-func (inst *PlayApp) attrColWidths(schema *arrow.Schema, visCols []int, rows []attrGridRow) []float32 {
-	// charW is the per-DB-row grid's colCharPx: the measured monospace advance
-	// (Hack at 13 px). Runes, not bytes — a glossed `••••••` is six glyphs and
-	// eighteen bytes.
-	const charW = colCharPx
-	const maxW = 420.0
-	const sampleRows = 96
-	// pad is the button's own padding plus the inset recordtable.Chrome.Inset spends on each
-	// side of the cell; minW keeps the seed at or above the floor a column can
-	// be dragged to, so a seeded column never starts below its own minimum.
-	pad := 18.0 + 2*styletokens.PaddingTight(inst.density)
-	minW := max(float32(44.0), inst.colDragMinWidth())
-	widths := make([]float32, len(visCols))
-	for i, arrowCol := range visCols {
-		field := schema.Field(arrowCol)
-		maxChars := utf8.RuneCountInString(field.Name)
-		if lbl := inst.colLabels[field.Name]; lbl != "" {
-			maxChars = utf8.RuneCountInString(lbl)
+// attrCellsKey names what the exploded grid's cells read that the grid
+// cannot see: the exploded record, which is rebuilt whenever the page, the
+// columns or the glosses change.
+type attrCellsKey struct {
+	rec arrow.RecordBatch
+}
+
+// routeAttrGroupGestures folds a group through set_table_options, as the
+// per-DB-row grid does; the levels are fixed, so a header has no level to
+// reverse.
+func (inst *PlayApp) routeAttrGroupGestures(res recordtable.Result) {
+	lay := inst.attrGroups.Layout()
+	if g := res.GroupToggled; g >= 0 && int(g) < len(lay.Groups) {
+		path := tableGroupPath(lay, g)
+		if lay.Groups[g].Open {
+			inst.requestTableOptions(SetTableOptionsArgs{Collapse: &path})
+		} else {
+			inst.requestTableOptions(SetTableOptionsArgs{Expand: &path})
 		}
-		for r := 0; r < len(rows) && r < sampleRows; r++ {
-			if v := rows[r].cells[i]; utf8.RuneCountInString(v) > maxChars {
-				maxChars = utf8.RuneCountInString(v)
-			}
-		}
-		w := float32(maxChars)*charW + pad
-		if w < minW {
-			w = minW
-		}
-		if w > maxW {
-			w = maxW
-		}
-		widths[i] = w
 	}
-	return widths
 }
 
 // attrTableTag is the stable instance-tier scope for the attr grid's
-// column-width overrides, and the etable's id. One constant so the two
+// column-width overrides, and the grid's scope key. One constant so the two
 // cannot drift apart.
 const attrTableTag = "attr-results"
-
-// attrRowNumColWidth is the fixed width of the leading "#" column. It is
-// not resizable, so it never acquires an override; it takes part in the
-// resolver's column list only to keep indices aligned with the EtColumn
-// sequence and with the width read-back.
-const attrRowNumColWidth = 48.0
 
 // ensureColWidthRes acquires the column-width resolver once, on the first
 // Frame. The capability rides the frame context (ADR-0155 §SD1), so it
@@ -799,25 +805,28 @@ func (inst *PlayApp) ensureColWidthRes(ctx app.FrameContextI) {
 	inst.colWidthRes = res
 }
 
-// attrColumnKeys builds the resolver's column identities for the attr
-// grid, index-aligned with the EtColumn sequence: the leading "#" column
-// first, then the visible data columns.
-//
-// Identity is the raw Arrow field name and type, not the friendly label
-// the header renders: the label is derived, so an override keyed on it
-// would change identity if the label builder ever did, while the field
-// name is what the query actually returned. The type participates so a
-// column that changes type drops its stored width.
-//
-// Every type carries tableViewTagAttr, so this grid's widths never reach the
-// per-DB-row grid through the column tier: the two show the same column's
-// contents differently and a width fitted to one does not fit the other.
+// attrColumnKeys is the resolver's column identities for the attr grid, as
+// RenderGrid builds them: the fixed columns, then the visible data columns
+// under the source field's name and type, every type carrying
+// tableViewTagAttr so this grid's widths never reach the per-DB-row grid
+// through the column tier — the two show the same column's contents
+// differently and a width fitted to one does not fit the other.
 func (inst *PlayApp) attrColumnKeys(schema *arrow.Schema, visCols []int) (cols []colwidth.Column) {
-	cols = make([]colwidth.Column, 0, len(visCols)+1)
-	cols = append(cols, colwidth.Column{Name: "#", Type: "rownum" + tableViewTagAttr})
-	for _, arrowCol := range visCols {
-		f := schema.Field(arrowCol)
-		cols = append(cols, colwidth.Column{Name: f.Name, Type: f.Type.String() + tableViewTagAttr})
+	xs := attrExplodedSchema(schema, visCols)
+	cols = recordtable.WidthColumns(xs, inst.attrGridColumnsForKeys(schema, visCols), tableViewTagAttr, false)
+	return
+}
+
+// attrGridColumnsForKeys is attrGridColumns without a record: the column
+// identities alone.
+func (inst *PlayApp) attrGridColumnsForKeys(schema *arrow.Schema, visCols []int) (cols []recordtable.Column) {
+	cols = append(cols,
+		recordtable.Column{Arrow: attrXSection, Header: "section"},
+		recordtable.Column{Arrow: attrXPath, Header: "path"},
+		recordtable.Column{Arrow: attrXParams, Header: "params"},
+	)
+	for pos, arrowCol := range visCols {
+		cols = append(cols, recordtable.Column{Arrow: attrXCells + pos, WidthType: schema.Field(arrowCol).Type.String()})
 	}
 	return
 }

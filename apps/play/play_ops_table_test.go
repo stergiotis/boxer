@@ -13,6 +13,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/appops/opwire"
 	"github.com/stergiotis/boxer/public/keelson/runtime/runstream"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/recordtable"
 )
 
 // ADR-0270, update of 2026-10-05: the Table, Files, Chat and Map panes'
@@ -197,3 +198,105 @@ func TestTableHeaderClickGoesThroughSetTableOptions(t *testing.T) {
 }
 
 func int64p(v int64) *int64 { return &v }
+
+// tableDrawGrouped stands in for the grid's grouped draw: the spec resolved
+// against the schema, the layout computed, and what the draw records of it.
+func tableDrawGrouped(t *testing.T, p *PlayApp, rec arrow.RecordBatch) {
+	t.Helper()
+	p.applyTableGrouping(rec.Schema())
+	cols := masterGridColumns(p.tableDrawn.visCols, nil)
+	order := p.tableSort.OrderFor(rec, rec.NumRows())
+	lay, err := p.tableGroups.LayoutFor(rec, order, rec.NumRows(), cols)
+	require.NoError(t, err)
+	p.tableDrawn.lines = lay.Len()
+	p.pager.Configure(lay.Len())
+}
+
+// ADR-0336 M3: set_table_options groups the rows held, folds a group by the
+// path get_table prints, and refuses what it cannot do.
+func TestSetTableOptionsGroupsAndFolds(t *testing.T) {
+	l, h := opsLauncher(t)
+	p := l.inner
+	rec, _ := tableResult(t, p, []string{"b", "", "a", "b"}, []int64{10, 2048, 7, 3})
+
+	for _, in := range []SetTableOptionsArgs{
+		{GroupBy: []TableGroupLevelArgs{{Column: "nope"}}},
+		{GroupBy: []TableGroupLevelArgs{{Column: "name"}, {Column: "name"}}},
+		{Expand: strp(tableGroupAll)},
+		{Expand: strp("a"), Collapse: strp("a")},
+		{GroupBy: []TableGroupLevelArgs{{Column: "name"}}, Expand: strp(tableGroupAll)},
+	} {
+		require.Error(t, applyOp(t, h, opSetTableOptions, in), "%+v", in)
+	}
+	assert.False(t, p.tableGroupingActive(), "a refused call applies nothing")
+
+	require.NoError(t, applyOp(t, h, opSetTableOptions, SetTableOptionsArgs{GroupBy: []TableGroupLevelArgs{{Column: "name", Descending: true}}}))
+	require.Len(t, p.tableGroupSpec, 1)
+	r := queryOp[TableReading](t, h, opGetTable, GetTableArgs{})
+	require.Len(t, r.GroupBy, 1)
+	assert.Equal(t, "name", r.GroupBy[0].Column)
+	assert.True(t, r.GroupBy[0].Descending)
+	assert.Zero(t, r.Lines, "nothing grouped has drawn yet")
+	require.Error(t, applyOp(t, h, opSetTableOptions, SetTableOptionsArgs{Expand: strp(tableGroupAll)}), "a fold waits for the draw")
+
+	tableDrawGrouped(t, p, rec)
+	r = queryOp[TableReading](t, h, opGetTable, GetTableArgs{Rows: true})
+	assert.Equal(t, int64(7), r.Lines, "three groups and four rows")
+	require.Len(t, r.PageRows, 7)
+	assert.Equal(t, "b", r.PageRows[0].Group, "descending by key; the null group keeps the edge")
+	assert.Equal(t, int64(-1), r.PageRows[0].Row)
+	assert.Equal(t, int64(2), r.PageRows[0].Leaves)
+	assert.False(t, r.PageRows[0].Folded)
+	assert.Equal(t, int64(0), r.PageRows[1].Row)
+	assert.Equal(t, int64(3), r.PageRows[2].Row, "leaves keep the result's order within their group")
+	assert.Equal(t, "a", r.PageRows[3].Group)
+	assert.Equal(t, "(null)", r.PageRows[5].Group)
+	assert.Equal(t, int64(1), r.PageRows[6].Row)
+
+	require.NoError(t, applyOp(t, h, opSetTableOptions, SetTableOptionsArgs{Collapse: strp("b")}))
+	tableDrawGrouped(t, p, rec)
+	r = queryOp[TableReading](t, h, opGetTable, GetTableArgs{Rows: true})
+	assert.Equal(t, int64(5), r.Lines)
+	require.Len(t, r.PageRows, 5)
+	assert.True(t, r.PageRows[0].Folded)
+	assert.Equal(t, "a", r.PageRows[1].Group)
+	require.Error(t, applyOp(t, h, opSetTableOptions, SetTableOptionsArgs{Collapse: strp("zzz")}))
+
+	require.NoError(t, applyOp(t, h, opSetTableOptions, SetTableOptionsArgs{Expand: strp(tableGroupAll)}))
+	tableDrawGrouped(t, p, rec)
+	assert.Equal(t, int64(7), p.tableDrawn.lines)
+	assert.Contains(t, tableOptionsDigest(p), "|group=name:d@")
+
+	// Page by a record row: grouped, the row's line is revealed.
+	require.NoError(t, applyOp(t, h, opSetTableOptions, SetTableOptionsArgs{Row: int64p(1)}))
+	tableDrawGrouped(t, p, rec)
+	assert.Equal(t, int64(6), p.tableGroups.Layout().Revealed, "the null group's row, on the last line")
+
+	require.NoError(t, applyOp(t, h, opSetTableOptions, SetTableOptionsArgs{GroupBy: []TableGroupLevelArgs{}}))
+	assert.False(t, p.tableGroupingActive(), "an empty group_by draws the rows flat")
+	r = queryOp[TableReading](t, h, opGetTable, GetTableArgs{})
+	assert.Empty(t, r.GroupBy)
+}
+
+// A band click and a grouped header's click go through set_table_options,
+// logged as the person's.
+func TestTableGroupGesturesGoThroughSetTableOptions(t *testing.T) {
+	l, eng := gestureLauncher(t)
+	p := l.inner
+	rec, _ := tableResult(t, p, []string{"b", "a", "b"}, []int64{1, 2, 3})
+	p.requestTableOptions(SetTableOptionsArgs{GroupBy: tableGroupSpecArgs(nil, -1, "name")})
+	require.Len(t, p.tableGroupSpec, 1)
+	tableDrawGrouped(t, p, rec)
+	lay := p.tableGroups.Layout()
+	require.Len(t, lay.Groups, 3, "the root and two groups")
+
+	p.routeTableGroupGestures(recordtable.Result{GroupToggled: 1, GroupClicked: -1, GroupOrderClicked: -1})
+	e := lastEntry(t, eng)
+	assert.Equal(t, opSetTableOptions, e.Op)
+	assert.Equal(t, opwire.WriterPerson, e.Writer)
+	assert.False(t, p.tableGroups.IsOpen(lay.Groups[1]), "the band click folded its group")
+
+	p.routeTableGroupGestures(recordtable.Result{GroupToggled: -1, GroupClicked: -1, GroupOrderClicked: 0})
+	assert.True(t, p.tableGroupSpec[0].desc, "the grouped header reversed its level")
+	assert.Equal(t, opSetTableOptions, lastEntry(t, eng).Op)
+}

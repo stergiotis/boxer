@@ -297,6 +297,18 @@ func (inst *Layout) PosOf(row int64) (line int64) {
 	return inst.rowLine[row]
 }
 
+// PathOf is the keys of a group's ancestors and its own, root-level first:
+// what a host prints to name the group, and reads back to find it.
+func (inst *Layout) PathOf(group int32) (keys []Key) {
+	for g := group; g > 0 && int(g) < len(inst.Groups); g = inst.Groups[g].Parent {
+		keys = append(keys, inst.Groups[g].Key)
+	}
+	for i, j := 0, len(keys)-1; i < j; i, j = i+1, j-1 {
+		keys[i], keys[j] = keys[j], keys[i]
+	}
+	return
+}
+
 // GroupAt is the group a line draws, -1 on a leaf line.
 func (inst *Layout) GroupAt(line int64) (group int32) {
 	if line < 0 || line >= int64(len(inst.Lines)) || !inst.Lines[line].IsGroup() {
