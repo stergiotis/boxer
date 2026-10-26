@@ -6,7 +6,7 @@ reviewed-by: "p@stergiotis"
 reviewed-date: 2026-10-13
 ---
 
-# ADR-0329: A vertex budget for the painter lane, and graph geometry sent as batches
+# ADR-0338: A vertex budget for the painter lane, and graph geometry sent as batches
 
 ## Context
 
@@ -167,3 +167,13 @@ Accepted 2026-10-13.
 - ADR-0228 — hosted canvas rendering (a graph inside a portolan map).
 - ADR-0249 §SD5 — `paintSegments`, the batched-mesh precedent.
 - ADR-0281 §SD5 — capture replay.
+
+## Updates
+
+### 2026-10-26 — renumbered from 0329 to 0338
+
+This record and the imztop operations catalog were both filed as 0329 on
+2026-10-13. The operations catalog was filed first and keeps the number; this
+record takes the next free one. Citations of `ADR-0329` that concern the
+painter lane's vertex budget or batched graph geometry, in code and in docs
+committed before this date, mean this record.

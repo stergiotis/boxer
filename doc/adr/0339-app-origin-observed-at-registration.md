@@ -6,7 +6,7 @@ date: 2026-10-25
 
 > **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
 
-# ADR-0335: An app's origin is observed at registration, not declared — package and module from the call stack and the build information
+# ADR-0339: An app's origin is observed at registration, not declared — package and module from the call stack and the build information
 
 ## Context
 

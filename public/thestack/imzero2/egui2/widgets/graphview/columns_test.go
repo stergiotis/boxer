@@ -348,7 +348,7 @@ func TestLabelAlwaysPaintsUnderTheBudget(t *testing.T) {
 }
 
 // An undirected picture paints no arrow heads — the one triangle batch that
-// carries every head is gone (ADR-0329) — and picks its edges as before.
+// carries every head is gone (ADR-0338) — and picks its edges as before.
 func TestSceneUndirectedPaintsNoHeadAndStillPicks(t *testing.T) {
 	messages, zero, reset := scenetest.InstallCounting()
 	t.Cleanup(reset)

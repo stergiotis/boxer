@@ -1,4 +1,4 @@
-//! The painter lane's geometry budget and its batched meshes (ADR-0329).
+//! The painter lane's geometry budget and its batched meshes (ADR-0338).
 //!
 //! egui-wgpu uploads a frame's tessellated vertices into one GPU buffer and
 //! grows it by doubling. A buffer past the device's `max_buffer_size` is a

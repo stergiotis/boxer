@@ -167,7 +167,7 @@ func TestAppsTableRendersRegistrationMode(t *testing.T) {
 	assert.Equal(t, "singleton", col.Value(1), "the row a workingset audit would flag")
 }
 
-// TestAppsTableRendersOrigin covers the ADR-0335 columns: which module's
+// TestAppsTableRendersOrigin covers the ADR-0339 columns: which module's
 // code registered each app, as the registry observed it.
 func TestAppsTableRendersOrigin(t *testing.T) {
 	rs := []app.Registration{
