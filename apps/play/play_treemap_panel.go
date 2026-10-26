@@ -528,6 +528,12 @@ func (inst *treemapDriver) ensureWidget() {
 		// widget's line under the container would say the same thing again in
 		// bytes, and would be a row of the pane's height to reserve for it.
 		HideStatusLine: true,
+		// A drill lays out the drilled container alone, filling the pane. With
+		// the siblings kept, hatched, the container stayed in its own share of
+		// the top level — a seventh of the picture for one of seven roots — and
+		// its children got that share between them; the breadcrumb bar is the
+		// way back to the context.
+		FilterSiblings: true,
 	})
 }
 

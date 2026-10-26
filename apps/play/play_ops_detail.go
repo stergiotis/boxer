@@ -145,7 +145,7 @@ func getDetail(r *opsResults, signals []SignalState, v detailOpsView, in DetailA
 	}
 	out = DetailReading{ResultId: uint64(lr.id), Node: string(lr.node), Row: row, Rows: lr.numRows, Embedded: v.embedded, Note: detailOpsNote}
 	out.Entity, out.NaturalKey = entityHeader(lr.rec, row)
-	if out.Entity == "<not-a-tagged-id>" {
+	if out.Entity == notTaggedEntityLabel {
 		out.Entity = ""
 	}
 	recipe, leeway := discoverCardRecipe(lr.schema)

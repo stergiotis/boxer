@@ -362,6 +362,14 @@ func TestCapmapBookQueriesExecute(t *testing.T) {
 	rows, err = query(overMap("SELECT id, parent, color FROM @node WHERE parent = ''"))
 	require.NoError(t, err)
 	require.Len(t, rows, 1, "exactly one root, or the treemap draws a forest it was not asked for")
+	assert.Equal(t, "toolbelt\t\tboxer-toolbelt", rows[0], "the map colours by domain unless asked otherwise")
+
+	branched := strings.Replace(asAuthored(bySlug["comp-browser"]),
+		"SET param_color_by = 'domain';", "SET param_color_by = 'branch';", 1)
+	require.NotEqual(t, asAuthored(bySlug["comp-browser"]), branched, "the document's colour default moved")
+	rows, err = query(overSink(branched, "SELECT id, parent, color FROM "+mapNode+" WHERE parent = ''"))
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
 	assert.Equal(t, "toolbelt\t\ttoolbelt", rows[0],
 		"a root with no level-2 ancestor colours by its topmost ancestor, which is itself")
 

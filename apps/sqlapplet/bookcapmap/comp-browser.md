@@ -45,8 +45,11 @@ into the `selection_key` field does the same. Empty focuses the root of the
 largest catalog.
 
 **The whole note is a column.** `body` carries the competence's markdown
-reassembled from its sections, declared as `text/markdown` in the column name,
-so the Detail tab renders it as prose rather than as a wall of escaped text. It
+reassembled from its sections, each a second-level heading, declared as
+`text/markdown` in the column name, so the Detail tab renders it as prose
+rather than as a wall of escaped text. It comes right after the columns that
+say which note this is, ahead of the measures, because the Detail tab lists a
+row's columns in order and the note is what it is for. It
 is the source verbatim — the corpus keeps prose as prose rather than shredding
 it into an AST — so what you read here is what is in the file.
 
@@ -70,9 +73,12 @@ overview counts its coverage — so this is a control removed, not a signal.
 counts whitespace-separated tokens in the competence's own prose, `bytes`
 counts its markdown source including the syntax, and `count` gives every
 competence the same area so the picture becomes shape rather than volume.
-`color_by` picks the colour: `branch` is the level-2 ancestor — which part of
-the toolbelt this belongs to, and the reading that makes the map worth
-colouring at all — with `domain`, `catalog` and `level` as alternatives.
+`color_by` picks the colour. `domain`, the default, is the domain a note
+declares, which a catalog usually gives a whole subtree, so the map reads as
+blocks of one colour and the nesting inside them carries the rest. `branch` is
+the level-2 ancestor — finer, and on a large catalog more branches than the
+palette has colours, which turns the map into a patchwork. `catalog` and
+`level` are the coarse alternatives.
 
 `maturity` and `pain` render as `—` when nothing has been assessed, which is not
 the same as a zero: a zero is the judgement "none".
@@ -87,16 +93,16 @@ swatches, because `color_by` names a category. The panel's other legend — a
 gradient bar with a readout of where the values sit, min to max through the
 quartiles and the upper tail — appears when a document's `color` is a number,
 and this one's is not: a column is a string or a number by its type, not by a
-parameter, so a document picks one. Here the branch reading won.
+parameter, so a document picks one. Here a category won.
 
 ```sql
 SET param_level = 0;
 SET param_catalog = '';
 SET param_size_by = 'words';
-SET param_color_by = 'branch';
+SET param_color_by = 'domain';
 -- play: enum level 0=All levels,1=Macro,2=Meso,3=Micro,4=Block
 -- play: enum size_by words=prose words,bytes=prose bytes,count=one each
--- play: enum color_by branch,domain,catalog,level
+-- play: enum color_by domain,branch,catalog,level
 -- play: enum catalog =All catalogs from catalogs
 
 WITH RECURSIVE
@@ -110,7 +116,7 @@ WITH RECURSIVE
            sum(bytes) AS bytes,
            sum(words) AS words,
            arrayStringConcat(
-             arrayMap(x -> concat('# ', x.2, '\n\n', x.3),
+             arrayMap(x -> concat('## ', x.2, '\n\n', x.3),
                       arraySort(x -> x.1, groupArray((ordinal, heading, `text@text/markdown`)))),
              '\n\n') AS body
     FROM keelson('competencesection')
@@ -191,20 +197,23 @@ WITH RECURSIVE
                    toString(c.level)) AS tier,
            c.domain AS domain,
            c.catalog AS catalog,
+           -- The note comes before the measures: the Detail tab lists a row's
+           -- columns in order, and behind sixteen metadata lines the note it
+           -- exists to show was below the fold of the side pane.
+           c.synopsis AS synopsis,
+           s.body AS `body@text/markdown`,
            if(c.maturity = 255, '—', toString(c.maturity)) AS maturity,
            if(c.pain = 255, '—', toString(c.pain)) AS pain,
            s.words AS words,
            s.bytes AS bytes,
            c.section_count AS sections,
-           c.synopsis AS synopsis,
            c.owner AS owner,
            c.tags AS tags,
            c.vault_path AS vault_path,
            -- What a row click publishes as selection_key: play's Table
            -- publishes a column named `key` and nothing else, so without
            -- this the list cannot drive the graph.
-           c.slug AS key,
-           s.body AS `body@text/markdown`
+           c.slug AS key
     FROM keelson('competence') AS c
     LEFT JOIN sections AS s ON c.slug = s.slug
     WHERE ({level:UInt8} = 0 OR c.level = {level:UInt8})
@@ -276,13 +285,13 @@ SELECT * FROM comps
   markdown source, so a section dense with wikilinks and headings weighs more
   than the same number of words of plain prose. Neither is wrong; `words` is
   closer to "how much was said" and `bytes` to "how much is stored".
-- **There are usually more branches than colours.** The qualitative palette has
-  seven; this repository's own catalog has thirteen level-2 competences, so six
-  of them reuse a colour. The panel reports the overlap in its status line
-  rather than hiding it — read colour as "these two boxes are the same branch"
-  only when they are adjacent under one parent, and read the breadcrumb
-  otherwise. `color_by = 'level'` has four values and never collides, at the
-  cost of saying something the nesting already showed.
+- **There can be more categories than colours.** The qualitative palette has
+  seven, and a catalog with more domains than that — or any sizeable one under
+  `branch` — reuses them. The panel reports the overlap in its status line
+  rather than hiding it — read colour as "these two boxes are the same
+  category" only when they are adjacent under one parent, and read the
+  breadcrumb otherwise. `color_by = 'level'` has four values and never
+  collides, at the cost of saying something the nesting already showed.
 - **`color_by = 'branch'` falls back** to a competence's topmost ancestor when
   no level-2 ancestor exists, so a shallow catalog still colours. The ancestor
   walk is depth-bounded at 8; a cycle in `parent_ids` would otherwise not

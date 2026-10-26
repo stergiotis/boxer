@@ -400,6 +400,17 @@ widget gained `SetRootAt` for the second half: `SetRoot` with the breadcrumb put
 back, and no zoom, since the reader did not move. The Icicle carries its pin by
 path across a new tree the same way (ADR-0160 Update of this date).
 
+### 2026-10-26 — a drill lays out the drilled container alone
+
+A drill used to keep the top level, hatch the siblings, and nest the drilled
+container inside its own share of the picture: on a catalog of seven roots that
+was a seventh of the pane for the subtree the reader asked to see. Set against
+the prototype capmap browser, which re-roots on a drill, the difference was the
+whole reading of the map. The panel now sets the widget's `FilterSiblings`, so
+the drilled container is laid out alone and fills the pane; the breadcrumb bar
+remains the way back to the context. Pinning is unaffected — a frontier leaf
+of a drilled container still pins.
+
 ## References
 
 ### Method sources (clean room — papers and public documentation only)

@@ -135,13 +135,18 @@ func (inst *PlayApp) renderDetailPane(rec arrow.RecordBatch, schema *arrow.Schem
 			humanize.Comma(row+1), humanize.Comma(rec.NumRows()))).Send()
 		c.Separator().Horizontal().Send()
 
-		for range c.Horizontal().KeepIter() {
-			for rt := range c.RichTextLabel(entityLabel) {
-				rt.Strong()
-			}
-			if natKey != "" {
-				c.Label("·").Send()
-				c.Label(natKey).Truncate().Send()
+		// A row with no leeway identity has nothing to head the card with; the
+		// sentinel said so on every ad-hoc result, a line of the pane spent on
+		// a fact about the encoding rather than the row.
+		if entityLabel != notTaggedEntityLabel || natKey != "" {
+			for range c.Horizontal().KeepIter() {
+				for rt := range c.RichTextLabel(entityLabel) {
+					rt.Strong()
+				}
+				if natKey != "" {
+					c.Label("·").Send()
+					c.Label(natKey).Truncate().Send()
+				}
 			}
 		}
 
@@ -248,6 +253,10 @@ func (inst *PlayApp) renderAdHocDetail(rec arrow.RecordBatch, schema *arrow.Sche
 	inst.renderDetailSection(rec, schema, row, sectionRare, "meta")
 }
 
+// notTaggedEntityLabel is entityHeader's type label for a row whose result
+// carries no leeway tagged id — every ad-hoc SQL result.
+const notTaggedEntityLabel = "<not-a-tagged-id>"
+
 // entityHeader resolves the row's entity type + natural key for the card head.
 func entityHeader(rec arrow.RecordBatch, row int64) (typeLabel string, natKey string) {
 	if id, ok := extractTaggedId(rec, row); ok {
@@ -255,7 +264,7 @@ func entityHeader(rec arrow.RecordBatch, row int64) (typeLabel string, natKey st
 		name := tagNameForIdTagValue(tv)
 		typeLabel = fmt.Sprintf("[%s]", name)
 	} else {
-		typeLabel = "<not-a-tagged-id>"
+		typeLabel = notTaggedEntityLabel
 	}
 	schema := rec.Schema()
 	for i := 0; i < schema.NumFields(); i++ {
