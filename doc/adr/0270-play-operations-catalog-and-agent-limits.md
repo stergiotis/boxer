@@ -298,14 +298,14 @@ label, each with its direction and null edge), `expand` and `collapse` (a
 group's printed path, or `all`); `get_table` reports the levels, the line
 count a grouped draw pages over, and a group line among the page's rows
 with its path, depth, row count and fold state
-(ADR-0336 §SD6 and M3, proposed; this entry names it without linking it
-until it is accepted). The picker on the pager row, a band's or chevron's click and a
+([ADR-0336](./0336-recordtable-row-grouping-a-line-sequence-over-the-permutation.md)
+§SD6, M3). The picker on the pager row, a band's or chevron's click and a
 grouped column's header click are gestures through the same command, as
 the sort's header click is (§SD6). A fold is refused until the grouping
 has drawn, since the path names a group of the layout drawn.
 
 The per-attribute grid is a `RenderGrid` over an exploded record from the
-same date (ADR-0336 §SD12, M3b), so `get_table` now reads its page line by
+same date (ADR-0336 §SD12, M3b, linked above), so `get_table` now reads its page line by
 line — a group line per entity and per path prefix, a leaf per attribute
 with the source row as `row` — and `set_table_options` folds its groups by
 path; `group_by` is refused there, its levels being fixed, and the sort

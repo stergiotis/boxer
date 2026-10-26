@@ -1,12 +1,12 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-10-26
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to accepted
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-10-26
 ---
 
-> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
+> **Status: accepted.** Reviewed by the code owner on 2026-10-26.
 
 # ADR-0336: recordtable groups rows as a line sequence over the sort permutation — group rows are a row kind, identified by their key path
 
@@ -623,18 +623,27 @@ scroll-to-row already exist.
 
 ## Status
 
-Proposed — awaiting review by the code owner.
+Accepted 2026-10-26, after milestones M0–M3b had shipped against the
+proposal and a review's fixes had landed; a milestone's `✓` records what
+shipped. Changes from here are dated entries under Updates.
 
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers (Tier 1 in-place / Tier 2 dated `## Updates` entry / Tier 3 new superseding ADR).
 
-<!--
 ## Updates
 
-Tier-2 dated entries land here when implementation reveals a refinement, an aspirational
-claim turns out false, or a milestone records what shipped. Single H2; add H3s dated
-YYYY-MM-DD. Remove this HTML comment when the section first gains a real entry.
--->
+### 2026-10-26 — accepted with M0–M3b shipped and a review's fixes landed
+
+The proposal was accepted after its milestones through M3b had shipped
+and a four-part code review of them had been fixed: a key value could
+forge a path element, the partition identity missed a moved aggregate
+source, NaN keys broke the sibling order, the cells key missed the
+aggregate declarations, play's grouped page window was clamped to the
+row count, and its `get_table` page copy went stale after a fold. §SD1,
+§SD9 and §SD12 were edited in place to the shipped shapes before the
+flip; `LayoutGen` joined `GroupState` for readers that copy a layout.
+From here the text changes only by dated entries.
+
 
 ## References
 
