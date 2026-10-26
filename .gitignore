@@ -73,8 +73,12 @@ rust/*/target/
 # and under what licence, is not settled, and committing the tree now would
 # decide that by accident. Only the README is tracked — it says what belongs
 # here.
+# The competence vault (ADR-0168 §SD7, narrowed by ADR-0337 §SD5): the
+# boxer catalog is versioned; every other catalog under the directory stays
+# out, since which of them may be published has not been settled.
 /doc/competences/*
 !/doc/competences/README.md
+!/doc/competences/boxer/
 
 # Local Claude Code settings (machine-specific); the .claude/skills symlink stays tracked.
 .claude/settings.local.json

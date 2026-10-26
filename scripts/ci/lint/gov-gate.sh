@@ -33,6 +33,11 @@ tags="$(cat ./tags | tr -d "\n")"
 # because its payload is fenced SQL and the prose around it really is
 # documentation.
 #
+# `--exclude 'doc/competences/'` withholds the competence vault (ADR-0337
+# §SD5). Its notes are Obsidian-shaped and carry the vault's front matter, not
+# the doc standard's, and the vault has a lint of its own: `boxer capmap parse`
+# is the gate that runs over it.
+#
 # Five steps in one process rather than five separate boxer.sh invocations also
 # stops the binary being rebuilt per step (~38s -> ~18s here).
 #
@@ -45,6 +50,7 @@ if out=$(./boxer.sh gov gate \
         --entry-points-baseline scripts/ci/entry-points-baseline.txt \
         --naming-baseline scripts/ci/naming-baseline.txt \
         --exclude 'prompts/' \
+        --exclude 'doc/competences/' \
         --tab-pkg ./public/thestack/cmd/imzero2tab \
         --tab-pkg ./public/thestack/cmd/imzero2tabdemo \
         2>"$gate_err"); then
