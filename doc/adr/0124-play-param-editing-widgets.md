@@ -784,6 +784,26 @@ tree pair `uiSetMaxHeight` with a scroll area the same way and claim the same
 scrolling — the Map's table-source editor and the Projection pane's explanation
 — and they have not been re-measured.
 
+### 2026-10-26 — the strip packs its claims into rows
+
+One claim per row filled the strip's ceiling with five knobs, and the panes
+below were left with almost no height: in a four-pane applet at the host's
+fallback window, measured in the headless lane, the treemap and the table drew
+nothing at all, and at the widest surface archetype the table drew one row. The
+strip now flows its claims left to right and starts a new row when the next one
+would cross the edge. The Editor tab keeps one claim per row, because there a
+typed value can be a long SQL expression and the editor below gives rows back —
+the same two-site argument as the ceiling's. A free-text knob in the strip has
+a bounded width; filling its row would leave nothing beside it to wrap.
+
+The rows are packed in Go rather than by egui's wrapped layout, which wraps
+single widgets only: a claim is a frame around a row of them, and in that
+layout each claim overran the edge instead of starting a line, a step lower
+than the last. Each claim stamps its rect and the strip its width, read back a
+frame later, so a claim seen for the first time is placed by a guessed width
+for one frame. A range pair's fold label does not wrap in the strip, so a
+claim's measured width does not depend on the row it was packed into.
+
 ## References
 
 - [ADR-0016](./0016-imzero2-time-range-picker.md) — the range picker and its

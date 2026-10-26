@@ -1572,7 +1572,7 @@ func (inst *PlayApp) render() error {
 		// widget ids stay single-writer. refreshParamSlotsFromParse runs in
 		// updatePreview, so the slots are fresh without an editor.
 		if !inst.editorTabPresent() {
-			inst.renderParamSlots(paramBlockMaxHeightStrip)
+			inst.renderParamSlots(paramBlockMaxHeightStrip, paramBlockWrapped)
 		}
 	}
 	for range c.PanelBottomInside(ids.PrepareStr("status")).Resizable(false).KeepIter() {
@@ -2665,7 +2665,7 @@ func (inst *PlayApp) renderEditorTab() {
 		// Param-slot widgets render above the editor; they author the
 		// leading SET prelude. Rendered first so the editor below claims
 		// the remaining vertical space.
-		inst.renderParamSlots(paramBlockMaxHeightEditor)
+		inst.renderParamSlots(paramBlockMaxHeightEditor, paramBlockRows)
 
 		// Editor binding. Default mode keeps the leading SET prelude
 		// inside the main editor; hide-prelude mode slices the prelude
@@ -3111,20 +3111,27 @@ func (inst *PlayApp) renderTableTab(rec arrow.RecordBatch, schema *arrow.Schema,
 	if prevDrawn.schema == schema {
 		inst.tableDrawn = prevDrawn
 	}
+	//
+	// The pager and the raw toggle share one row: each used to take its own,
+	// and in an applet window where the table shares the height with three
+	// other panes, the second row was a table row fewer.
 	page, size := inst.pager.CurrentPage(), inst.pager.PageSize()
-	if ev := inst.pager.Render(); ev.Changed {
-		newPage, newSize := inst.pager.CurrentPage()+1, inst.pager.PageSize()
-		inst.pager.SetPageSize(size)
-		inst.pager.GoToIndex(page * size)
-		in := SetTableOptionsArgs{Page: &newPage}
-		if newSize != size {
-			in.PageSize = &newSize
+	for range c.Horizontal().KeepIter() {
+		if ev := inst.pager.Render(); ev.Changed {
+			newPage, newSize := inst.pager.CurrentPage()+1, inst.pager.PageSize()
+			inst.pager.SetPageSize(size)
+			inst.pager.GoToIndex(page * size)
+			in := SetTableOptionsArgs{Page: &newPage}
+			if newSize != size {
+				in.PageSize = &newSize
+			}
+			inst.requestTableOptions(in)
 		}
-		inst.requestTableOptions(in)
+		// ADR-0186 raw toggle: bypass every gloss for the session — the escape
+		// hatch a wrong rule needs. Offered only once a column is glossed.
+		inst.renderGlossToggle(schema)
 	}
-	// ADR-0186 raw toggle: bypass every gloss for the session — the escape
-	// hatch a wrong rule needs. Offered only once a column is glossed.
-	inst.renderGlossControl(schema)
+	inst.renderGlossNotes()
 	c.AddSpace(pad)
 	c.Separator().Send()
 	dispatchPanel(tablePanel{app: inst}, map[ChannelID]channelInput{

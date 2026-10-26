@@ -1,7 +1,6 @@
 package play
 
 import (
-	"math"
 	"sort"
 	"strings"
 
@@ -235,7 +234,7 @@ func (w *exprWidget) Render(ctx *paramCtx) {
 		if cat == exprCatNone {
 			continue
 		}
-		w.renderOne(ctx.Ids, s, cat, draft)
+		w.renderOne(ctx.Ids, s, cat, draft, ctx.FieldWidth)
 	}
 }
 
@@ -244,7 +243,7 @@ func (w *exprWidget) Render(ctx *paramCtx) {
 // No IdScope: the field is a single TextEdit under a per-slot id, unlike the
 // enum widget's combo, which draws one button per option off the shared stack
 // and therefore needs the scope.
-func (w *exprWidget) renderOne(ids *c.WidgetIdStack, s paramSlot, cat paramExprCategoryE, draft *string) {
+func (w *exprWidget) renderOne(ids *c.WidgetIdStack, s paramSlot, cat paramExprCategoryE, draft *string, width float32) {
 	for range c.Horizontal().KeepIter() {
 		for rt := range c.RichTextLabel(s.Name + " : " + s.Type) {
 			rt.Small().Weak()
@@ -266,8 +265,9 @@ func (w *exprWidget) renderOne(ids *c.WidgetIdStack, s paramSlot, cat paramExprC
 			// field is bound to — exprMarkFor already subtracted the splice
 			// origin, so nothing here has to know where the value landed.
 			Mark: w.marks[s.Name],
-			// The pane's own idiom for "fill the row", as the scalar tail uses.
-			Width: float32(math.Inf(1)),
+			// The block's field width, as the scalar tail uses: +Inf fills
+			// the row one claim per row, bounded in a wrapped strip.
+			Width: width,
 		})
 	}
 }

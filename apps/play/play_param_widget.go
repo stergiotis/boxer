@@ -2,7 +2,6 @@ package play
 
 import (
 	"context"
-	"math"
 	"strings"
 	"time"
 
@@ -47,6 +46,10 @@ type paramCtx struct {
 	Ids    *c.WidgetIdStack
 	Slots  []paramSlot
 	Drafts map[string]*string
+	// FieldWidth is the width a free-text field asks for: +Inf fills the row,
+	// which is right one claim per row and wrong in a wrapped block, where it
+	// would leave nothing beside the field (paramBlockLayoutE).
+	FieldWidth float32
 }
 
 // timeRangeEvaluatorI is the minimal shape the range widget needs
@@ -424,7 +427,7 @@ func (w *scalarTextWidget) Render(ctx *paramCtx) {
 				rt.Small().Weak()
 			}
 			c.TextEdit(ctx.Ids.PrepareStr("paramSlotScalar-"+s.Name), *draft, false).
-				DesiredWidth(float32(math.Inf(1))).
+				DesiredWidth(ctx.FieldWidth).
 				HintText("value for {" + s.Name + " : " + s.Type + "}").
 				SendRespVal(draft)
 		}

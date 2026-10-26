@@ -277,18 +277,15 @@ func (inst *IcicleDriver) render(rec arrow.RecordBatch, schema *arrow.Schema, cl
 	// Show, and it puts the total, the warnings and the hover readout where a
 	// pane too short for the plot cannot push them out of sight (the note
 	// ADR-0159's play Update left for the next consumer).
-	c.Label(inst.pointerLine(inst.hover)).Send()
-
-	// The hint goes above the plot too, and here it is what lets the plot be the
-	// LAST widget in the body: the probe below reports the room left for the
-	// next widget, so with the hint underneath, taking that room would push it
-	// past the fold and hold a scrollbar open — which narrows the pane, which
-	// resizes the plot.
-	for rt := range c.RichTextLabel("hover a frame, click to zoom the value axis to it and pin it; " +
-		"double-click fits the whole tree, drag scrolls the depth — over the plot the wheel is the plot's, " +
-		"elsewhere it scrolls the pane") {
-		rt.Small().Weak()
-	}
+	//
+	// The gesture hint rides on the readout's hover rather than taking a line,
+	// which keeps the plot the LAST widget in the body: the probe below reports
+	// the room left for the next widget, so anything drawn underneath would be
+	// pushed past the fold and hold a scrollbar open — which narrows the pane,
+	// which resizes the plot.
+	renderReadoutWithHint(inst.pointerLine(inst.hover), "hover a frame, click to zoom the value axis to it and pin it; "+
+		"double-click fits the whole tree, drag scrolls the depth — over the plot the wheel is the plot's, "+
+		"elsewhere it scrolls the pane")
 
 	// Fill the pane. The height used to be a fixed 0.31 of the width, measured
 	// off a tour capture of one leaf, because the pane's own height was

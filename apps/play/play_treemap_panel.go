@@ -344,17 +344,15 @@ func (inst *treemapDriver) render(rec arrow.RecordBatch, schema *arrow.Schema, c
 	// reason: a hover is a register read and so is a frame behind anyway, and
 	// this keeps the total and the warnings where a pane too short for the
 	// picture cannot push them out of sight.
-	c.Label(inst.pointerLine()).Send()
+	//
+	// The gesture hint rides on the readout's hover rather than taking a line,
+	// which keeps the picture the LAST widget in the body: the probe below
+	// reports the room left for the next widget, so anything drawn underneath
+	// would be pushed past the fold and hold a scrollbar open — which narrows
+	// the pane, which resizes the picture.
+	renderReadoutWithHint(inst.pointerLine(), "hover a cell for its share; click a container to drill in, "+
+		"the breadcrumb to drill back out, a leaf to pin it")
 	inst.renderLegend()
-	// The hint goes above the picture too, and here it is what lets the picture
-	// be the LAST widget in the body: the probe below reports the room left for
-	// the next widget, so with the hint underneath, taking that room would push
-	// it past the fold and hold a scrollbar open — which narrows the pane, which
-	// resizes the picture.
-	for rt := range c.RichTextLabel("hover a cell for its share; click a container to drill in, the breadcrumb " +
-		"to drill back out, a leaf to pin it") {
-		rt.Small().Weak()
-	}
 	c.Separator().Horizontal().Send()
 
 	// Fill the pane. The height used to be a fixed 0.56 of the width — a

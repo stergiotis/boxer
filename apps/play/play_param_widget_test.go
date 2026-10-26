@@ -1,6 +1,8 @@
 package play
 
 import (
+	"math"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -418,5 +420,32 @@ func TestParseFormatChDateTimeRoundTrip(t *testing.T) {
 	}
 	if got := formatChDateTime(t2); got != canonical {
 		t.Errorf("RFC3339 round-trip = %q, want %q", got, canonical)
+	}
+}
+
+// packParamRows is the wrapped strip's layout: rows filled in order, a new row
+// when the next claim would cross the edge, and a too-wide claim alone on its
+// row rather than dropped.
+func TestPackParamRows(t *testing.T) {
+	cases := []struct {
+		name   string
+		widths []float32
+		avail  float32
+		want   []int
+	}{
+		{name: "empty", widths: nil, avail: 500, want: nil},
+		{name: "all fit", widths: []float32{100, 100, 100}, avail: 320, want: []int{0}},
+		{name: "gap counts", widths: []float32{100, 100, 100}, avail: 319, want: []int{0, 2}},
+		{name: "one per row", widths: []float32{300, 300, 300}, avail: 400, want: []int{0, 1, 2}},
+		{name: "too wide alone", widths: []float32{100, 600, 100}, avail: 400, want: []int{0, 1, 2}},
+		{name: "unmeasured strip", widths: []float32{300, 300, 300}, avail: float32(math.Inf(1)), want: []int{0}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := packParamRows(tc.widths, tc.avail, 10)
+			if !slices.Equal(got, tc.want) {
+				t.Errorf("packParamRows(%v, %v) = %v, want %v", tc.widths, tc.avail, got, tc.want)
+			}
+		})
 	}
 }

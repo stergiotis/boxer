@@ -365,23 +365,24 @@ func (inst *PlayApp) anyGlossed(schema *arrow.Schema) bool {
 	return false
 }
 
-// renderGlossControl draws the raw-cells toggle in the Table tab's toolbar
-// row when the result has a glossed column, and the directive notes — a
-// `-- play: gloss` line that did not compile, with why — beside it.
-func (inst *PlayApp) renderGlossControl(schema *arrow.Schema) {
-	glossed := inst.anyGlossed(schema)
-	notes := inst.glossNotes()
-	if !glossed && len(notes) == 0 {
+// renderGlossToggle draws the raw-cells toggle in the Table tab's toolbar row
+// when the result has a glossed column.
+func (inst *PlayApp) renderGlossToggle(schema *arrow.Schema) {
+	if !inst.anyGlossed(schema) {
 		return
 	}
-	if glossed {
-		for range c.HoverText("Show every cell as its plain value, ignoring the glosses (ADR-0186) — for this session.").KeepIter() {
-			c.Checkbox(inst.ids.PrepareStr("table-raw-cells"),
-				inst.tableOpts.rawCells, "Raw cells").
-				SendRespVal(&inst.tableOpts.rawCells)
-		}
+	for range c.HoverText("Show every cell as its plain value, ignoring the glosses (ADR-0186) — for this session.").KeepIter() {
+		c.Checkbox(inst.ids.PrepareStr("table-raw-cells"),
+			inst.tableOpts.rawCells, "Raw cells").
+			SendRespVal(&inst.tableOpts.rawCells)
 	}
-	for _, n := range notes {
+}
+
+// renderGlossNotes draws the directive notes — a `-- play: gloss` line that
+// did not compile, with why — under the toolbar row rather than in it: a note
+// is a sentence, and a row does not wrap.
+func (inst *PlayApp) renderGlossNotes() {
+	for _, n := range inst.glossNotes() {
 		for rt := range c.RichTextLabel(n) {
 			rt.Small().Weak()
 		}

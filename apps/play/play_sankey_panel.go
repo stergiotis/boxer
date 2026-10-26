@@ -711,17 +711,14 @@ func (inst *SankeyDriver) render(flowsRec arrow.RecordBatch, fc sankeyFlowsClaim
 	// read always is — so nothing is lost by drawing them before the frame's
 	// own Show, and it puts the total, the warnings and the hover readout where
 	// a pane too short for the diagram cannot push them out of sight.
-	c.Label(inst.pointerLine(inst.hover)).Send()
-
-	// The hint goes above the plot too, and here it is what lets the plot be the
-	// LAST widget in the body: the probe below reports the room left for the
-	// next widget, so with the hint underneath, taking that room would push it
-	// past the fold and hold a scrollbar open — which narrows the pane, which
-	// resizes the plot.
-	for rt := range c.RichTextLabel("hover a bar or a ribbon, click to pin it; drag pans and the wheel zooms — " +
-		"over the diagram the wheel is the plot's, elsewhere it scrolls the pane") {
-		rt.Small().Weak()
-	}
+	//
+	// The gesture hint rides on the readout's hover rather than taking a line,
+	// which keeps the plot the LAST widget in the body: the probe below reports
+	// the room left for the next widget, so anything drawn underneath would be
+	// pushed past the fold and hold a scrollbar open — which narrows the pane,
+	// which resizes the plot.
+	renderReadoutWithHint(inst.pointerLine(inst.hover), "hover a bar or a ribbon, click to pin it; drag pans and "+
+		"the wheel zooms — over the diagram the wheel is the plot's, elsewhere it scrolls the pane")
 
 	// Fill the pane: a full-width separator, then a seq-keyed probe of the free
 	// rect that reads back next frame (a per-seq r21 slot, so it contends with

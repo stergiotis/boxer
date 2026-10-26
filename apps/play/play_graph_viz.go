@@ -325,5 +325,17 @@ func nextVizSeed() uint64 {
 	return vizSeedCounter
 }
 
+// renderReadoutWithHint draws a pane's readout line with the pane's gesture
+// hint as its hover text. The hint used to be a line of its own between the
+// readout and the picture; in an applet, where a pane shares the window with
+// three others, that line was height taken from the picture on every frame to
+// say something a reader needs once. The readout is where they are already
+// looking when they wonder what the picture does.
+func renderReadoutWithHint(line string, hint string) {
+	for range c.HoverText(hint).KeepIter() {
+		c.Label(line).Send()
+	}
+}
+
 // vizSeedCounter is render-thread-only (NewPlayApp runs there).
 var vizSeedCounter uint64

@@ -2,6 +2,7 @@ package play
 
 import (
 	"maps"
+	"math"
 
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
@@ -156,6 +157,27 @@ const (
 	paramBlockMaxHeightStrip  float32 = 180
 )
 
+// paramBlockLayoutE is how a params block places its claims, one per render
+// site for the reason the ceilings above differ.
+type paramBlockLayoutE uint8
+
+const (
+	// paramBlockRows is one claim per row, a text field filling its row: the
+	// Editor tab, where a typed value can be a long SQL expression and the
+	// editor below gives rows back.
+	paramBlockRows paramBlockLayoutE = iota
+	// paramBlockWrapped flows the claims left to right and wraps them, a text
+	// field at [paramFieldWidthWrapped]: an applet's strip, where the knobs
+	// are the author's and every row they take is a row the result panes
+	// lose. Five knobs one per row filled the strip's ceiling before any pane
+	// had drawn.
+	paramBlockWrapped
+)
+
+// paramFieldWidthWrapped is a free-text knob's width in a wrapped block. A
+// field that filled its row would leave nothing beside it to wrap.
+const paramFieldWidthWrapped float32 = 240
+
 // renderParamSlots draws the per-slot widgets above the SQL editor,
 // closed by a horizontal rule that divides them from the editor below.
 // Each registered widget is offered the remaining (unconsumed) slots in
@@ -174,7 +196,7 @@ const (
 // commits the new sql + updated cache. Widget-driven mutations
 // surface one frame after the click (the FFFI2 SendRespVal apply
 // runs at end-of-frame), which is acceptable for picker UX.
-func (inst *PlayApp) renderParamSlots(maxHeight float32) {
+func (inst *PlayApp) renderParamSlots(maxHeight float32, layout paramBlockLayoutE) {
 	slots := inst.paramSlots
 	if len(slots) == 0 {
 		return
@@ -206,7 +228,7 @@ func (inst *PlayApp) renderParamSlots(maxHeight float32) {
 	// what put maxHeight on the binding. Vertical auto-shrink stays ON, so a
 	// two-slot buffer occupies two rows and only a taller one scrolls.
 	for range c.ScrollArea().Vscroll(true).MaxHeight(maxHeight).AutoShrink(false, true).KeepIter() {
-		inst.renderParamClaims(slots, enums, exprs)
+		inst.renderParamClaims(slots, enums, exprs, layout)
 	}
 
 	// Divider between the parameter block and the SQL editor below it.
@@ -234,49 +256,132 @@ func (inst *PlayApp) setParamWidgetHints() (enums map[string][]enumOption, exprs
 
 // renderParamClaims runs one dispatch pass over the registered widgets and
 // closes with the near-miss note. It is the scrolled part of the params block
-// — everything whose height grows with the number of slots.
-func (inst *PlayApp) renderParamClaims(slots []paramSlot, enums map[string][]enumOption, exprs map[string]string) {
+// — everything whose height grows with the number of slots. The note stays
+// outside the rows of a wrapped block: it is a sentence, and would otherwise
+// be squeezed into whatever was left of the last row of knobs.
+func (inst *PlayApp) renderParamClaims(slots []paramSlot, enums map[string][]enumOption, exprs map[string]string, layout paramBlockLayoutE) {
 	ungroup := scanUngroupHint(inst.sql)
 	halfPinned, mixed := inst.mixedTierRangeHalves(slots)
 	unfilled := inst.unfilledSet()
 	claims, grouped := inst.dispatchParamClaims(slots, ungroup, halfPinned)
-	for _, cl := range claims {
-		subset, w := cl.slots, cl.widget
-		if w.IsGroup() {
-			inst.renderFoldLabel(subset)
-		}
-		// The tier control sits beside the claim it migrates, drawn by
-		// the orchestrator for the renderFoldLabel reason: a widget
-		// deciding its own tier would have to know about the buffer's
-		// prelude, which is exactly what §SD4 keeps away from it.
-		//
-		// The row is always framed, outlined only when the caret is in one
-		// of its placeholders (ADR-0130 L3's caret report). Always framed,
-		// so the widget tree keeps one shape — a frame that came and went
-		// would move every inner widget's id with it, and with it the
-		// editor state egui holds per id.
-		row := c.Frame(inst.ids.PrepareStr("paramClaim:" + subset[0].Name)).
-			Fill(color.Transparent).InnerMargin(styletokens.PaddingHair(styletokens.ActiveDensity()))
-		if inst.caretOnClaim(subset) {
-			// Hairline: the outline marks the row without competing with the
-			// text inside it, which the paragraph on styleCaretRowMark records.
-			row = row.Stroke(styletokens.StrokeHair, styleCaretRowMark)
-		}
-		for range row.KeepIter() {
-			for range c.Horizontal().KeepIter() {
-				inst.renderClaimTierControl(subset)
-				inst.renderClaimUnfilledMark(subset, unfilled)
-				w.Render(&paramCtx{
-					Ids:    inst.ids,
-					Slots:  subset,
-					Drafts: inst.paramDrafts,
-				})
-			}
+	switch layout {
+	case paramBlockWrapped:
+		inst.renderParamClaimsWrapped(claims, unfilled)
+	default:
+		for _, cl := range claims {
+			inst.renderParamClaim(cl, unfilled, float32(math.Inf(1)), layout)
 		}
 	}
 
 	inst.renderNearMissNote(slots, grouped, ungroup, mixed,
 		orphanEnumHints(enums, slots), orphanExprHints(exprs, slots))
+}
+
+// paramClaimWidthGuess is what a claim not yet measured is assumed to take in
+// a wrapped block — on the first frame, and for a claim that has just
+// appeared. It is about one enum knob with its tier control; the next frame
+// packs by the measured width.
+const paramClaimWidthGuess float32 = 300
+
+// renderParamClaimsWrapped packs the claims into rows itself rather than
+// handing them to egui's wrapped layout, which wraps single widgets only: a
+// claim is a frame around a row of them, and in a wrapped layout it overran
+// the edge instead of starting a new line, each one a step lower than the
+// last. Each claim stamps its own rect and the strip its width, both read back
+// a frame later (CapturePaneSize, CaptureUiRect), and [packParamRows] splits
+// the claims by them. The rows are top-aligned, so a taller knob does not push
+// its neighbours down.
+func (inst *PlayApp) renderParamClaimsWrapped(claims []paramClaim, unfilled map[string]bool) {
+	avail, _, measured := c.CapturePaneSize(c.ProbeSeq("", "play-param-strip") ^ inst.vizSeed)
+	if !measured {
+		// One frame on one row, rather than one frame a claim per row: the
+		// panes below then move once, by the rows the strip turns out to need.
+		avail = float32(math.Inf(1))
+	}
+	widths := make([]float32, len(claims))
+	for i, cl := range claims {
+		widths[i] = paramClaimWidthGuess
+		if r, ok := c.CurrentApplicationState.StateManager.GetUiRect(inst.paramClaimSeq(cl)); ok {
+			widths[i] = r.MaxX - r.MinX
+		}
+	}
+	starts := packParamRows(widths, avail, styletokens.GapItems(styletokens.ActiveDensity()))
+	for ri, start := range starts {
+		end := len(claims)
+		if ri+1 < len(starts) {
+			end = starts[ri+1]
+		}
+		for range c.HorizontalTop().KeepIter() {
+			for _, cl := range claims[start:end] {
+				for range c.Vertical().KeepIter() {
+					inst.renderParamClaim(cl, unfilled, paramFieldWidthWrapped, paramBlockWrapped)
+					c.CaptureUiRect(inst.paramClaimSeq(cl))
+				}
+			}
+		}
+	}
+}
+
+// paramClaimSeq is a claim's rect slot: keyed by its first slot's name, which
+// is how its frame is keyed, and by the instance, so two applet windows
+// showing the same knob do not read each other's width.
+func (inst *PlayApp) paramClaimSeq(cl paramClaim) uint64 {
+	return c.ProbeSeq(cl.slots[0].Name, "play-param-claim") ^ inst.vizSeed
+}
+
+// packParamRows splits claims of the given widths, in order, into rows no
+// wider than avail with gap between neighbours, and returns the index each row
+// starts at. A claim wider than avail gets a row of its own rather than none.
+func packParamRows(widths []float32, avail float32, gap float32) (starts []int) {
+	var rowW float32
+	for i, w := range widths {
+		if i == 0 || rowW+gap+w > avail {
+			starts = append(starts, i)
+			rowW = w
+			continue
+		}
+		rowW += gap + w
+	}
+	return
+}
+
+// renderParamClaim draws one claim: the fold label of a group, then the claim
+// in its frame. fieldWidth is what a free-text knob asks for; +Inf fills the
+// row.
+func (inst *PlayApp) renderParamClaim(cl paramClaim, unfilled map[string]bool, fieldWidth float32, layout paramBlockLayoutE) {
+	subset, w := cl.slots, cl.widget
+	if w.IsGroup() {
+		inst.renderFoldLabel(subset, layout)
+	}
+	// The tier control sits beside the claim it migrates, drawn by
+	// the orchestrator for the renderFoldLabel reason: a widget
+	// deciding its own tier would have to know about the buffer's
+	// prelude, which is exactly what §SD4 keeps away from it.
+	//
+	// The row is always framed, outlined only when the caret is in one
+	// of its placeholders (ADR-0130 L3's caret report). Always framed,
+	// so the widget tree keeps one shape — a frame that came and went
+	// would move every inner widget's id with it, and with it the
+	// editor state egui holds per id.
+	row := c.Frame(inst.ids.PrepareStr("paramClaim:" + subset[0].Name)).
+		Fill(color.Transparent).InnerMargin(styletokens.PaddingHair(styletokens.ActiveDensity()))
+	if inst.caretOnClaim(subset) {
+		// Hairline: the outline marks the row without competing with the
+		// text inside it, which the paragraph on styleCaretRowMark records.
+		row = row.Stroke(styletokens.StrokeHair, styleCaretRowMark)
+	}
+	for range row.KeepIter() {
+		for range c.Horizontal().KeepIter() {
+			inst.renderClaimTierControl(subset)
+			inst.renderClaimUnfilledMark(subset, unfilled)
+			w.Render(&paramCtx{
+				Ids:        inst.ids,
+				Slots:      subset,
+				Drafts:     inst.paramDrafts,
+				FieldWidth: fieldWidth,
+			})
+		}
+	}
 }
 
 // renderFoldLabel names a fold the registry inferred and its opt-out, so the
@@ -289,7 +394,11 @@ func (inst *PlayApp) renderParamClaims(slots []paramSlot, enums map[string][]enu
 // was chosen would need to know about the alternatives it was chosen over —
 // dateTimePairWidget does not know an evaluator exists, and coupling it to
 // §SD3 for a label would be the wrong trade.
-func (inst *PlayApp) renderFoldLabel(subset []paramSlot) {
+//
+// In a wrapped block the label does not wrap: the block packs its rows by each
+// claim's measured width, and a label wrapped to whatever its row had left
+// would make that width depend on the packing it feeds.
+func (inst *PlayApp) renderFoldLabel(subset []paramSlot, layout paramBlockLayoutE) {
 	if len(subset) != 2 {
 		return
 	}
@@ -301,6 +410,10 @@ func (inst *PlayApp) renderFoldLabel(subset []paramSlot) {
 		note += " · no evaluator: expressions unavailable"
 	}
 	note += ` · "-- play: ungroup" splits it`
+	if layout == paramBlockWrapped {
+		c.LabelAtoms(c.Atoms().BeginRichText(note).Small().Weak().End().Keep()).Extend().Send()
+		return
+	}
 	for rt := range c.RichTextLabel(note) {
 		rt.Small().Weak()
 	}
