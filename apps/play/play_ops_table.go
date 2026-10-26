@@ -94,7 +94,7 @@ type TableReading struct {
 	Last              int64                    `desc:"one past the last display position on the page"`
 	Sort              *TableSortReading        `json:",omitzero" desc:"the sort; absent when the rows draw in the result's own order"`
 	GroupBy           []TableGroupLevelReading `json:",omitzero" desc:"the grouping, first level first; absent when the rows draw flat"`
-	Lines             int64                    `json:",omitzero" desc:"grouped: the lines drawn — a line per group, and per record row under an open group — which the page windows instead of rows"`
+	Lines             int64                    `json:",omitzero" desc:"grouped: the lines drawn — a line per group, and per record row under an open group — which the page windows instead of rows; in the per-attribute granularity the page's exploded lines, while the page itself windows the result's rows"`
 	Leeway            bool                     `json:",omitzero" desc:"the result is leeway-shaped, so the leeway display options apply"`
 	Granularity       string                   `json:",omitzero" desc:"leeway only: per_db_row, or per_attribute (each tagged attribute on a row of its own)"`
 	SupportColumns    bool                     `json:",omitzero" desc:"leeway only: the support (cardinality, length) columns are shown"`
@@ -177,6 +177,7 @@ type tablePageKey struct {
 	glossK     *glossColumn
 	vis        string
 	groupGen   uint64
+	lines      int64
 }
 
 // tablePageView is the page as drawn: rows in display order with their
@@ -270,9 +271,12 @@ func (inst *PlayApp) tableView(mark paneDrawnMark) (v tableOpsView) {
 	key := tablePageKey{result: mark.result, schema: d.schema, start: v.pageStart, end: v.pageEnd,
 		sortActive: v.sortActive, sortCol: v.sortCol, sortDesc: v.sortDesc, raw: v.opts.rawCells, glossK: glossK, vis: vis.String()}
 	if d.lines > 0 {
-		key.groupGen = inst.tableGroups.Gen()
+		// The generation the drawn layout was computed under, not the one
+		// asked for: a fold queued before this frame's draw moves Gen but
+		// not yet the layout the copy reads.
+		key.groupGen, key.lines = inst.tableGroups.LayoutGen(), d.lines
 		if d.perAttr {
-			key.groupGen = inst.attrGroups.Gen()
+			key.groupGen = inst.attrGroups.LayoutGen()
 		}
 	}
 	v.groupBy = inst.tableGroupReadings(d.schema)
@@ -586,17 +590,25 @@ func (inst *PlayApp) setTableOptions(in SetTableOptionsArgs) (err error) {
 	}
 	spec := inst.tableGroupSpec
 	if in.GroupBy != nil {
-		if gran == tableRowPerAttr {
+		if perAttr {
 			return app.RefuseOperation("the per-attribute grid groups by the entity and then the membership path; set granularity per_db_row to group by columns")
+		}
+		// A level the spec already holds by that name is kept even when
+		// this result lacks the column — the spec waits for one that has
+		// it — so a gesture that re-sends the spec is not refused for it.
+		held := make(map[string]bool, len(inst.tableGroupSpec))
+		for _, lvl := range inst.tableGroupSpec {
+			held[lvl.column] = true
 		}
 		spec = make([]tableGroupLevel, 0, len(in.GroupBy))
 		seen := make(map[string]bool, len(in.GroupBy))
 		for _, lvl := range in.GroupBy {
-			i := inst.tableColumnIndex(d.schema, lvl.Column)
-			if i < 0 {
+			name := strings.TrimSpace(lvl.Column)
+			if i := inst.tableColumnIndex(d.schema, name); i >= 0 {
+				name = d.schema.Field(i).Name
+			} else if !held[name] {
 				return app.RefuseOperation("no column of the result the Table draws is named " + strconv.Quote(lvl.Column) + "; get_table lists them")
 			}
-			name := d.schema.Field(i).Name
 			if seen[name] {
 				return app.RefuseOperation("group_by names " + strconv.Quote(name) + " twice")
 			}
@@ -693,7 +705,7 @@ func (inst *PlayApp) setTableOptions(in SetTableOptionsArgs) (err error) {
 	switch {
 	case in.Page != nil:
 		inst.pager.GoToIndex((*in.Page - 1) * size)
-	case in.Row != nil && len(spec) > 0 && !perAttr:
+	case in.Row != nil && !perAttr && inst.tableGroups.Active():
 		// Grouped, a row's page is the one its line falls on once its
 		// ancestors are open: the grid's reveal turns to it (play_table_group.go).
 		inst.tableGroups.Reveal(*in.Row)
@@ -777,6 +789,7 @@ func tableGroupDigest(p *PlayApp) string {
 		}
 	}
 	sb.WriteString("@" + strconv.FormatUint(p.tableGroups.Gen(), 10))
+	sb.WriteString("|attr=" + strconv.FormatUint(p.attrGroups.Gen(), 10))
 	return sb.String()
 }
 

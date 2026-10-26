@@ -32,6 +32,9 @@ type cellsKey struct {
 	groupGen uint64
 	lines    int64
 	keyRow   int64
+	// aggs folds each column's aggregate declaration: a changed Agg
+	// redraws the group cells with no change of generation or line count.
+	aggs uint64
 	// columns folds the column identities, their Arrow indices and the
 	// host's per-position visibility.
 	columns uint64

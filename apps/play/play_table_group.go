@@ -38,9 +38,11 @@ func (inst *PlayApp) tableGroupingActive() bool { return len(inst.tableGroupSpec
 
 // tableGroupLevelsFor resolves the spec against a schema: a level whose
 // column the result lacks is dropped, so a result with other columns draws
-// flat and the spec waits for one that has them.
-func (inst *PlayApp) tableGroupLevelsFor(schema *arrow.Schema) (levels []recordtable.GroupLevel) {
-	for _, lvl := range inst.tableGroupSpec {
+// flat and the spec waits for one that has them. specIdx maps each level
+// returned to its index in the spec, for a gesture the grid reports by
+// resolved level.
+func (inst *PlayApp) tableGroupLevelsFor(schema *arrow.Schema) (levels []recordtable.GroupLevel, specIdx []int) {
+	for i, lvl := range inst.tableGroupSpec {
 		idx := schema.FieldIndices(lvl.column)
 		if len(idx) == 0 {
 			continue
@@ -49,6 +51,7 @@ func (inst *PlayApp) tableGroupLevelsFor(schema *arrow.Schema) (levels []recordt
 			Arrow: idx[0],
 			Order: recordtable.GroupOrder{Desc: lvl.desc, NullsFirst: lvl.nullsFirst},
 		})
+		specIdx = append(specIdx, i)
 	}
 	return
 }
@@ -58,7 +61,7 @@ func (inst *PlayApp) tableGroupLevelsFor(schema *arrow.Schema) (levels []recordt
 // SetLevels repartitions and resets nothing it need not, so it is made only
 // on a change.
 func (inst *PlayApp) applyTableGrouping(schema *arrow.Schema) {
-	want := inst.tableGroupLevelsFor(schema)
+	want, _ := inst.tableGroupLevelsFor(schema)
 	have := inst.tableGroups.Levels()
 	same := len(want) == len(have)
 	for i := 0; same && i < len(want); i++ {
@@ -70,8 +73,9 @@ func (inst *PlayApp) applyTableGrouping(schema *arrow.Schema) {
 }
 
 // tableGroupPath prints a group's path: its keys from the first level down,
-// joined; a null key prints as (null). It is what get_table lists and what
-// expand / collapse take back.
+// joined; a null key prints as (null), and a key that contains the joiner
+// spells it with a fraction slash, so no key can read as two. It is what
+// get_table lists and what expand / collapse take back.
 func tableGroupPath(lay *recordtable.Layout, group int32) string {
 	keys := lay.PathOf(group)
 	parts := make([]string, 0, len(keys))
@@ -80,13 +84,16 @@ func tableGroupPath(lay *recordtable.Layout, group int32) string {
 		case k.Null:
 			parts = append(parts, "(null)")
 		case k.Label != "":
-			parts = append(parts, k.Label)
+			parts = append(parts, strings.ReplaceAll(k.Label, tableGroupPathSep, tableGroupPathSepEscaped))
 		default:
-			parts = append(parts, k.Value)
+			parts = append(parts, strings.ReplaceAll(k.Value, tableGroupPathSep, tableGroupPathSepEscaped))
 		}
 	}
 	return strings.Join(parts, tableGroupPathSep)
 }
+
+// tableGroupPathSepEscaped stands in for the joiner inside a key.
+const tableGroupPathSepEscaped = " \u2044 "
 
 // tableGroupByPath finds the group a printed path names in the layout
 // drawn, -1 when none. The root (the empty path) is not a group.
@@ -235,8 +242,13 @@ func (inst *PlayApp) routeTableGroupGestures(res recordtable.Result) {
 			inst.requestTableOptions(SetTableOptionsArgs{Expand: &path})
 		}
 	}
-	if lvl := res.GroupOrderClicked; lvl >= 0 && lvl < len(inst.tableGroupSpec) {
-		inst.requestTableOptions(SetTableOptionsArgs{GroupBy: tableGroupSpecWith(inst.tableGroupSpec, lvl, !inst.tableGroupSpec[lvl].desc)})
+	// The grid reports the level among those resolved against the schema
+	// drawn, which is the spec's level only while every column resolves.
+	if lvl := res.GroupOrderClicked; lvl >= 0 && inst.tableDrawn.schema != nil {
+		if _, specIdx := inst.tableGroupLevelsFor(inst.tableDrawn.schema); lvl < len(specIdx) {
+			i := specIdx[lvl]
+			inst.requestTableOptions(SetTableOptionsArgs{GroupBy: tableGroupSpecWith(inst.tableGroupSpec, i, !inst.tableGroupSpec[i].desc)})
+		}
 	}
 }
 
@@ -249,6 +261,9 @@ func (inst *PlayApp) followTableReveal(pageStart, pageEnd int64) {
 	if line < 0 || (line >= pageStart && line < pageEnd) || line >= lay.Len() {
 		return
 	}
-	inst.pager.GoToIndex(line)
-	inst.tableGroups.Reveal(lay.Lines[line].Row)
+	// A page that does not move cannot bring the line in; asking again
+	// would re-flatten every frame.
+	if inst.pager.GoToIndex(line) {
+		inst.tableGroups.Reveal(lay.Lines[line].Row)
+	}
 }

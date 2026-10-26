@@ -1,6 +1,7 @@
 package recordtable
 
 import (
+	"strconv"
 	"strings"
 	"testing"
 
@@ -102,9 +103,7 @@ func draw(lay *Layout) string {
 	return b.String()
 }
 
-func itoa(n int64) string {
-	return strings.TrimSpace(strings.Repeat(" ", 0) + string(rune('0'+n%10)))
-}
+func itoa(n int64) string { return strconv.FormatInt(n, 10) }
 
 // The zero state groups nothing: the lines are the leaves in order under
 // the root, and every query is the identity.
@@ -478,4 +477,105 @@ func TestGroupPathOf(t *testing.T) {
 	require.Len(t, keys, 2)
 	assert.Equal(t, "1", keys[0].Value)
 	assert.Equal(t, "a", keys[1].Value)
+}
+
+// A key value that spells a path element cannot collide with a nested
+// group: groups are found by parent, level and key, and the path escapes
+// the separator.
+func TestGroupKeyCannotForgeAPath(t *testing.T) {
+	rec := groupRec(t, []int64{1, 1}, []string{"a\x1e1:=b", "a"}, []float64{1, 2})
+	defer rec.Release()
+	var st GroupState
+	st.SetLevels([]GroupLevel{{Arrow: colPath}, {Key: func(row int64) Key {
+		if row == 0 {
+			return Key{Value: "c"}
+		}
+		return Key{Value: "b"}
+	}}})
+	lay, err := st.LayoutFor(rec, nil, rec.NumRows(), nil)
+	require.NoError(t, err)
+	require.Len(t, lay.Groups, 5, "the root, two first-level groups and a subgroup under each")
+	for g := 1; g < 5; g++ {
+		assert.NotContains(t, lay.Groups[g].Path, "\x1e1:=b\x1e", "the value's separator is escaped in the path")
+	}
+	assert.Equal(t, "va .vb ..1 va\x1e1:=b .vc ..0", draw(lay))
+}
+
+// Moving an aggregate's source column with the same aggregate sequence
+// repartitions: the cache identity covers the Arrow index.
+func TestGroupAggregateSourceMoves(t *testing.T) {
+	rec := groupRec(t, []int64{1, 1, 2}, []string{"/a", "/b", "/c"}, []float64{10, 20, 30})
+	defer rec.Release()
+	var st GroupState
+	st.SetLevels([]GroupLevel{{Arrow: colEnt}})
+	cols := []Column{{Arrow: colVal, Agg: AggSum}, {Arrow: colEnt, Agg: AggSum}}
+	lay, err := st.LayoutFor(rec, nil, rec.NumRows(), cols)
+	require.NoError(t, err)
+	v, ok := lay.Aggregate(1, 0)
+	require.True(t, ok)
+	assert.EqualValues(t, 30, v.Sum)
+	cols[0], cols[1] = cols[1], cols[0]
+	lay, err = st.LayoutFor(rec, nil, rec.NumRows(), cols)
+	require.NoError(t, err)
+	v, ok = lay.Aggregate(1, 0)
+	require.True(t, ok)
+	assert.EqualValues(t, 2, v.Sum, "column 0 now sums the entity column")
+}
+
+// A NaN key joins the null group rather than tying with every key.
+func TestGroupNaNKeyIsNull(t *testing.T) {
+	rec := groupRec(t, []int64{1, 2, 3, 4}, []string{"", "", "", ""}, []float64{3, null, 1, null})
+	defer rec.Release()
+	var st GroupState
+	st.SetLevels([]GroupLevel{{Arrow: colVal}})
+	lay, err := st.LayoutFor(rec, nil, rec.NumRows(), nil)
+	require.NoError(t, err)
+	assert.Equal(t, "v1 .2 v3 .0 v~ .1 .3", draw(lay))
+}
+
+// After an error nothing of the previous layout answers.
+func TestGroupErrorClearsTheLayout(t *testing.T) {
+	rec := groupRec(t, []int64{1, 1}, []string{"/a", "/b"}, []float64{1, 2})
+	defer rec.Release()
+	var st GroupState
+	st.SetLevels([]GroupLevel{{Arrow: colEnt}})
+	lay, err := st.LayoutFor(rec, nil, rec.NumRows(), nil)
+	require.NoError(t, err)
+	assert.Equal(t, int64(2), lay.PosOf(1))
+	st.Reveal(1)
+	st.SetLevels([]GroupLevel{{Arrow: 9}})
+	lay, err = st.LayoutFor(rec, nil, rec.NumRows(), nil)
+	require.Error(t, err)
+	assert.Equal(t, int64(-1), lay.PosOf(1))
+	assert.Equal(t, int64(0), lay.Len())
+	st.SetLevels([]GroupLevel{{Arrow: colEnt}})
+	lay, err = st.LayoutFor(rec, nil, rec.NumRows(), nil)
+	require.NoError(t, err)
+	assert.Equal(t, int64(-1), lay.Revealed, "the reveal did not outlive the error")
+	_, err = st.LayoutFor(rec, nil, rec.NumRows(), []Column{{Arrow: 9, Agg: AggSum}})
+	require.Error(t, err, "an aggregate of a column the record lacks is refused, not a panic")
+}
+
+// Under a path level a leaf orders by its last segment's Value, as a
+// sibling group does; a Label is presentation.
+func TestGroupPathLeafOrdersByValue(t *testing.T) {
+	rec := groupRec(t, []int64{1, 1, 1}, []string{"b/x", "a", "c"}, []float64{1, 2, 3})
+	defer rec.Release()
+	var st GroupState
+	st.SetLevels([]GroupLevel{{Segments: func(row int64) (segs []Key) {
+		for _, s := range strings.Split(rec.Column(colPath).(*array.String).Value(int(row)), "/") {
+			k := Key{Value: s}
+			if s == "a" {
+				k.Label = "zzz"
+			}
+			if s == "c" {
+				k.Label = "0"
+			}
+			segs = append(segs, k)
+		}
+		return
+	}}})
+	lay, err := st.LayoutFor(rec, nil, rec.NumRows(), nil)
+	require.NoError(t, err)
+	assert.Equal(t, "1 vb .0 2", draw(lay))
 }

@@ -1,6 +1,7 @@
 package play
 
 import (
+	"strconv"
 	"testing"
 	"time"
 
@@ -299,4 +300,51 @@ func TestTableGroupGesturesGoThroughSetTableOptions(t *testing.T) {
 	p.routeTableGroupGestures(recordtable.Result{GroupToggled: -1, GroupClicked: -1, GroupOrderClicked: 0})
 	assert.True(t, p.tableGroupSpec[0].desc, "the grouped header reversed its level")
 	assert.Equal(t, opSetTableOptions, lastEntry(t, eng).Op)
+}
+
+// A fold queued before the pane's next draw does not stale the page copy:
+// the copy is keyed on the generation the drawn layout was computed under,
+// so the draw after the fold re-copies.
+func TestGetTableRecopiesAfterAFold(t *testing.T) {
+	l, h := opsLauncher(t)
+	p := l.inner
+	names := make([]string, 400)
+	sizes := make([]int64, 400)
+	for i := range names {
+		names[i] = "g" + strconv.Itoa(i/100)
+		sizes[i] = int64(i)
+	}
+	rec, _ := tableResult(t, p, names, sizes)
+	require.NoError(t, applyOp(t, h, opSetTableOptions, SetTableOptionsArgs{GroupBy: []TableGroupLevelArgs{{Column: "name"}}}))
+	tableDrawGrouped(t, p, rec)
+	r := queryOp[TableReading](t, h, opGetTable, GetTableArgs{Rows: true})
+	assert.Equal(t, int64(404), r.Lines)
+	require.NotEmpty(t, r.PageRows)
+	assert.Equal(t, "g0", r.PageRows[0].Group)
+	assert.False(t, r.PageRows[0].Folded)
+
+	require.NoError(t, applyOp(t, h, opSetTableOptions, SetTableOptionsArgs{Collapse: strp("g0")}))
+	r = queryOp[TableReading](t, h, opGetTable, GetTableArgs{Rows: true})
+	assert.False(t, r.PageRows[0].Folded, "before the draw the copy is of the layout drawn")
+	tableDrawGrouped(t, p, rec)
+	r = queryOp[TableReading](t, h, opGetTable, GetTableArgs{Rows: true})
+	assert.Equal(t, int64(304), r.Lines)
+	require.True(t, len(r.PageRows) > 1)
+	assert.True(t, r.PageRows[0].Folded, "after the draw the copy is of the folded layout")
+	assert.Equal(t, "g1", r.PageRows[1].Group)
+}
+
+// A spec that names a column this result lacks keeps that level across a
+// gesture that re-sends the spec; a name the spec does not hold is a typo.
+func TestSetTableOptionsKeepsAnAbsentLevel(t *testing.T) {
+	l, h := opsLauncher(t)
+	p := l.inner
+	tableResult(t, p, []string{"b", "a"}, []int64{1, 2})
+	require.NoError(t, applyOp(t, h, opSetTableOptions, SetTableOptionsArgs{GroupBy: []TableGroupLevelArgs{{Column: "name"}}}))
+	p.tableGroupSpec = append([]tableGroupLevel{{column: "region"}}, p.tableGroupSpec...)
+	require.NoError(t, applyOp(t, h, opSetTableOptions, SetTableOptionsArgs{GroupBy: tableGroupSpecWith(p.tableGroupSpec, 1, true)}),
+		"the held level survives the gesture")
+	require.Len(t, p.tableGroupSpec, 2)
+	assert.True(t, p.tableGroupSpec[1].desc)
+	require.Error(t, applyOp(t, h, opSetTableOptions, SetTableOptionsArgs{GroupBy: []TableGroupLevelArgs{{Column: "nope"}}}))
 }

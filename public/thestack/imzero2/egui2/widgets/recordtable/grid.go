@@ -71,6 +71,9 @@ type Column struct {
 	// this column at every group: a fold over the leaves the layout holds,
 	// merged upward, so a parent's mean is never an average of averages.
 	// Read by GroupState.LayoutFor; AggNone, the default, computes nothing.
+	// The band's label is clipped at the first column that aggregates, so
+	// an aggregate on the first drawn column leaves the band no room for
+	// its chevron and key.
 	Agg AggE
 	// AggCell, when set, draws the column's cell on a group line and wins
 	// over Agg; the host computes what the built-ins do not offer. Read by
@@ -145,6 +148,8 @@ type Input struct {
 	// name everything the grid cannot see — the record, the order, whatever
 	// a Column.Cell reads — and be comparable with ==. A key that misses an
 	// input shows stale cells; nil, the default, rebuilds every frame.
+	// A Column.Cell or Column.AggCell closure reads what only the host
+	// knows; a key that misses it shows stale cells.
 	CellsKey any
 	// RowHeight is zero for [DefaultRowHeight].
 	RowHeight float32
@@ -501,9 +506,15 @@ func (in *Input) render(res *Result, scopeKey string) {
 	} else {
 		et = et.FillPane(true)
 	}
+	// The epoch gates the width read-back as well as the apply: a grid
+	// without a resolver applies its seeds once, under a constant epoch,
+	// so egui_table reports the widths it fitted — which the band's label
+	// span reads (bandLabelSpan).
+	epoch := st.applyGen << 16
 	if in.Widths != nil {
-		et = et.ApplyWidths(in.Widths.Epoch(tag) + st.applyGen<<16)
+		epoch += in.Widths.Epoch(tag)
 	}
+	et = et.ApplyWidths(epoch)
 	if sel, ok := in.selection(); ok {
 		if lay != nil {
 			if pos := lay.PosOf(sel); pos >= start && pos < start+n {
@@ -589,6 +600,13 @@ func (in *Input) cellsKey(cols []colwidth.Column, et c.EndETableFluid, lay *Layo
 		key.groupGen, key.lines = in.Groups.Gen(), lay.Len()
 		if in.HasSelectedKeyRow {
 			key.keyRow = in.SelectedKeyRow
+		}
+		for i := range in.Columns {
+			col := &in.Columns[i]
+			key.aggs = key.aggs*31 + uint64(col.Agg)*2
+			if col.AggCell != nil {
+				key.aggs++
+			}
 		}
 	}
 	return

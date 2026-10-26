@@ -423,6 +423,7 @@ type PlayApp struct {
 	tableGroupSpec []tableGroupLevel
 	tableGroups    recordtable.GroupState
 	tableSelSeen   int64
+	tableSelResult ResultID
 	tableOwnClick  bool
 
 	// schemaModel backs the Schema dock tab: the schemaview inspector bound to
@@ -1298,6 +1299,7 @@ func (inst *PlayApp) Close() {
 	if inst.mapDriver != nil && inst.mapDriver.lane != nil {
 		inst.mapDriver.lane.close()
 	}
+	inst.attrView.release()
 	if inst.timeline != nil && inst.timeline.bandsLane != nil {
 		inst.timeline.bandsLane.close()
 	}
@@ -3112,7 +3114,7 @@ func (inst *PlayApp) renderTableTab(rec arrow.RecordBatch, schema *arrow.Schema,
 	// A grouped grid pages over its lines, whose count the last draw of
 	// this result knows; the first grouped frame pages over the rows.
 	total := rec.NumRows()
-	if inst.tableGroupingActive() && prevDrawn.schema == schema && prevDrawn.lines > 0 {
+	if inst.tableGroupingActive() && prevDrawn.schema == schema && !prevDrawn.perAttr && prevDrawn.lines > 0 {
 		total = prevDrawn.lines
 	}
 	inst.pager.Configure(total)
@@ -3443,14 +3445,19 @@ func (inst *PlayApp) renderMasterTable(rec arrow.RecordBatch, schema *arrow.Sche
 	totalRows := min(rec.NumRows(), numRows)
 
 	// Slice to the current page. The pager was Configure()d with totalRows
-	// before this function is called.
+	// before this function is called — or, grouped, with the lines the
+	// last draw drew: then the window is over lines, which the grid clamps
+	// to the layout, and the record window below is only what the column
+	// sampling and the empty-section rule read.
 	pageStart, pageEnd := inst.pager.Range()
-	if pageEnd > totalRows {
+	grouped := inst.tableGroupingActive()
+	if !grouped && pageEnd > totalRows {
 		pageEnd = totalRows
 	}
 	if pageStart > pageEnd {
 		pageStart = pageEnd
 	}
+	recStart, recEnd := min(pageStart, totalRows), min(pageEnd, totalRows)
 
 	// visCols is the ordered set of Arrow columns to render: every column for a
 	// non-leeway result, or the value + backbone columns plus whichever support /
@@ -3459,7 +3466,7 @@ func (inst *PlayApp) renderMasterTable(rec arrow.RecordBatch, schema *arrow.Sche
 	// attribute on this page (needs pageStart/pageEnd, hence computed above).
 	// egui_table column positions are 1-based after the "#" selector, so table
 	// position p renders visCols[p-1].
-	visCols := inst.visibleTableCols(rec, schema, pageStart, pageEnd)
+	visCols := inst.visibleTableCols(rec, schema, recStart, recEnd)
 	// A per-attribute grid that fell back to this one draws record rows.
 	inst.tableDrawn.visCols, inst.tableDrawn.perAttr = visCols, false
 	// The synthetic identity columns (ADR-0219 SD7) sit after the Arrow
@@ -3484,7 +3491,7 @@ func (inst *PlayApp) renderMasterTable(rec arrow.RecordBatch, schema *arrow.Sche
 	// changes, i.e. on a new query.
 	inst.ensureColLabels(schema)
 	glossCols := inst.glossColumns(schema)
-	inst.ensureColWidths(rec, schema, pageStart, pageEnd)
+	inst.ensureColWidths(rec, schema, recStart, recEnd)
 
 	// egui_table re-fits to content only on a table's first show ever, so
 	// without asking a second query would inherit the first one's widths by
@@ -3565,9 +3572,11 @@ func (inst *PlayApp) renderMasterTable(rec arrow.RecordBatch, schema *arrow.Sche
 	inst.applyTableGrouping(schema)
 	ownClick := inst.tableOwnClick
 	inst.tableOwnClick = false
-	if selectedRow != inst.tableSelSeen {
-		inst.tableSelSeen = selectedRow
-		if selectedRow >= 0 && !ownClick && inst.tableGroups.Active() {
+	if selectedRow != inst.tableSelSeen || inst.tableResult != inst.tableSelResult {
+		// A new result's selection is the clamp's, not a reader's: no reveal.
+		reveal := selectedRow >= 0 && !ownClick && inst.tableGroups.Active() && inst.tableResult == inst.tableSelResult
+		inst.tableSelSeen, inst.tableSelResult = selectedRow, inst.tableResult
+		if reveal {
 			inst.tableGroups.Reveal(selectedRow)
 		}
 	}

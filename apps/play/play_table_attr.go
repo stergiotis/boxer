@@ -183,10 +183,25 @@ func attrExplodedSchema(schema *arrow.Schema, visCols []int) *arrow.Schema {
 	return arrow.NewSchema(fields, nil)
 }
 
+// discard releases the builders of a drive that failed.
+func (inst *attrExplodeSink) discard() {
+	if inst.srcB == nil {
+		return
+	}
+	for _, b := range []interface{ Release() }{inst.srcB, inst.secB, inst.attrB, inst.pathB, inst.paramsB} {
+		b.Release()
+	}
+	for _, b := range inst.cellB {
+		b.Release()
+	}
+	inst.srcB, inst.secB, inst.attrB, inst.pathB, inst.paramsB, inst.cellB = nil, nil, nil, nil, nil, inst.cellB[:0]
+}
+
 // record finishes the drive: the exploded record over the schema, which the
 // caller owns, or nil when the drive failed.
 func (inst *attrExplodeSink) record(schema *arrow.Schema) arrow.RecordBatch {
 	if inst.err != nil || inst.srcB == nil {
+		inst.discard()
 		return nil
 	}
 	arrs := []arrow.Array{inst.srcB.NewArray(), inst.secB.NewArray(), inst.attrB.NewArray(), inst.pathB.NewArray(), inst.paramsB.NewArray()}
@@ -399,7 +414,7 @@ func (inst *attrExplodeSink) EndTags()      {}
 // high-cardinality one, or a parametrized one's parameters, its parameters.
 // A ref is spelled as the record card spells it, "#" and the number.
 func (inst *attrExplodeSink) setPath(p string) {
-	if !inst.hasPath {
+	if !inst.hasPath && p != "" {
 		inst.path, inst.hasPath = p, true
 	}
 }
@@ -518,6 +533,14 @@ type attrExplodedView struct {
 	opts    tableDisplayOpts
 }
 
+// release drops the exploded record, at teardown or when the view is left.
+func (inst *attrExplodedView) release() {
+	if inst.rec != nil {
+		inst.rec.Release()
+	}
+	*inst = attrExplodedView{}
+}
+
 // renderAttrTable drives the current page through the CardDriver's Driver
 // into an attrExplodeSink and draws the exploded record grouped by entity and
 // path. Falls back to the per-DB-row grid when the Driver or classification
@@ -556,9 +579,7 @@ func (inst *PlayApp) renderAttrTable(rec arrow.RecordBatch, schema *arrow.Schema
 			inst.renderMasterTable(rec, schema, numRows, selectedRow, emit)
 			return
 		}
-		if v.rec != nil {
-			v.rec.Release()
-		}
+		v.release()
 		*v = attrExplodedView{rec: xrec, schema: xrec.Schema(), source: rec, start: pageStart, end: pageEnd,
 			visCols: append([]int(nil), visCols...), opts: inst.tableOpts}
 		// The levels read the exploded record, so they are set with it —
@@ -588,10 +609,16 @@ func (inst *PlayApp) explodeAttrPage(rec arrow.RecordBatch, schema *arrow.Schema
 		}
 		return inst.glossText(&glossCols[arrowIdx], text, gloss.KindOfArrow(listElemType(schema.Field(arrowIdx).Type)))
 	}
-	if err = driver.DriveRecordBatch(sink, slice); err != nil {
+	err = driver.DriveRecordBatch(sink, slice)
+	sink.rec = nil // the slice is released on return; nothing reads it after the drive
+	if err != nil {
+		sink.discard()
 		return
 	}
 	xrec = sink.record(attrExplodedSchema(schema, visCols))
+	if xrec == nil {
+		err = sink.err
+	}
 	return
 }
 

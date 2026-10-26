@@ -140,15 +140,15 @@ func (in *Input) renderBand(res *Result, chrome *Chrome, lay *Layout, group int3
 		fill = SelectionFill
 	}
 	for range c.IdScope(ids.PrepareStr(g.Path)) {
+		// The row block is live on every frame, so its ids are not noted
+		// into the cells replay gate: noting them would miss the cache
+		// whenever the pointer rests on a band.
 		fr := c.Frame(ids.PrepareStr("band")).
 			Fill(fill).
 			OuterMargin(0).
 			InnerMargin(0).
 			SenseClick().
 			HoverCursorPointer()
-		if chrome.Note != nil {
-			chrome.Note(fr.Id())
-		}
 		chevron := false
 		for range fr.KeepIter() {
 			c.UiSetMinWidthAvailable()
@@ -172,9 +172,6 @@ func (in *Input) renderBand(res *Result, chrome *Chrome, lay *Layout, group int3
 				// Frameless, so the band shows through; still a Button, so
 				// it wins the pointer over the band's sense behind it.
 				wire := ids.PrepareStr("disc").Derive()
-				if chrome.Note != nil {
-					chrome.Note(wire)
-				}
 				chevron = c.Button(c.MakeAbsoluteIdHighEntropy(wire), c.Atoms().Text(glyph).Keep()).
 					Frame(false).
 					Small().
@@ -185,8 +182,11 @@ func (in *Input) renderBand(res *Result, chrome *Chrome, lay *Layout, group int3
 					label = g.Key.Value
 				}
 				rt := c.Atoms().BeginRichText(label).Strong()
-				if g.Key.Null {
+				switch {
+				case g.Key.Null:
 					rt = c.Atoms().BeginRichText("(null)").Weak()
+				case label == "":
+					rt = c.Atoms().BeginRichText("(empty)").Weak()
 				}
 				// Selectable(false): a selectable label senses drags and
 				// would eat the band's click on its own rect.

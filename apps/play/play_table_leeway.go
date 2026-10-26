@@ -276,5 +276,6 @@ func (inst *PlayApp) renderTableBody(rec arrow.RecordBatch, schema *arrow.Schema
 		inst.renderAttrTable(rec, schema, numRows, selectedRow, emit)
 		return
 	}
+	inst.attrView.release() // the exploded record is rebuilt when the view is next shown
 	inst.renderMasterTable(rec, schema, numRows, selectedRow, emit)
 }

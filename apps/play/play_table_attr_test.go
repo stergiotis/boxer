@@ -259,3 +259,29 @@ func TestAttrExplode_groupsByEntityThenPath(t *testing.T) {
 	require.True(t, ok)
 	assert.Equal(t, int64(10), row, "the entity band stands for the source row")
 }
+
+// A plain section's attribute is a row with no path, an empty collection
+// still yields one row, and an empty verbatim does not claim the path.
+func TestAttrExplode_plainSectionAndEmptyCollection(t *testing.T) {
+	rec := explode(t, 0, []int{0, 1}, 2, []tEntity{{sections: []tSection{
+		{name: "", attrs: []tAttr{{cols: []tCol{{idx: 0, items: []string{"id-1"}}}}}},
+		{name: "a", attrs: []tAttr{
+			{cols: []tCol{{idx: 1, items: nil, coll: true}}, path: "/empty"},
+			{cols: []tCol{{idx: 1, items: []string{"v"}}}, path: "", params: "7"},
+		}},
+	}}})
+	require.EqualValues(t, 3, rec.NumRows())
+	src, section, path, cells := xrow(rec, 0)
+	assert.Equal(t, int64(0), src)
+	assert.NotEmpty(t, section, "a plain section is named by its item type")
+	assert.Equal(t, "∅", path)
+	assert.Equal(t, []string{"id-1", "∅"}, cells)
+	_, _, path, cells = xrow(rec, 1)
+	assert.Equal(t, "/empty", path)
+	assert.Equal(t, []string{"∅", "∅"}, cells, "an empty collection is one row with no value")
+	_, _, path, _ = xrow(rec, 2)
+	assert.Equal(t, "∅", path, "a parameter alone does not make a path")
+	for c := 0; c < int(rec.NumCols()); c++ {
+		assert.EqualValues(t, rec.NumRows(), rec.Column(c).Len(), "column %d", c)
+	}
+}

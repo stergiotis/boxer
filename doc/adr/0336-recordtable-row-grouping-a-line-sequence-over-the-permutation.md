@@ -160,12 +160,15 @@ type Key struct {
 }
 
 type GroupOrder struct {
-    ByKey      bool // default when the zero value: by Key.Value, typed where the column is
-    Desc       bool
-    ByAgg      int  // index into Input.Columns whose aggregate orders the groups; -1 for none
+    Desc       bool // reverses the order
     Appearance bool // first appearance in the incoming permutation
-    NullsFirst bool // the null group leads rather than trails
+    ByAgg      bool // by the aggregate of Input.Columns[AggColumn], whose Agg must be set
+    AggColumn  int
+    NullsFirst bool // the null group leads rather than trails; Desc does not move it
 }
+// The zero value orders by Key.Value, typed where the key is the column's.
+// A Value may hold any text; the group's Path spells the joiner U+001E as
+// U+001F, and groups are found by parent, level and key while partitioning.
 ```
 
 The order of `Levels` is the nesting order. A level is one of two kinds. A
@@ -361,10 +364,13 @@ row.
 ### SD9 — Every grouping input joins the cells key
 
 The cells cache replays bytes while its key holds. `GroupState` carries a
-generation that moves on any change to levels, orders, expansion or
-aggregate declarations, and the grid folds that generation, the layout's
-identity and the page window into `cellsKey`. A host's `CellsKey` still
-names what the grid cannot see.
+generation that moves on any change to levels, orders or expansion, and
+the grid folds that generation, the columns' aggregate declarations, the
+line count, the selected key row and the page window into `cellsKey`. A
+host's `CellsKey` still names what the grid cannot see, an `AggCell`
+closure's inputs among it. A reader that copies a layout keys the copy on
+`LayoutGen`, the generation the layout was computed under, since a change
+asked before a frame's draw moves `Gen` first.
 
 ### SD10 — The widget groups what it holds; it never reads SQL
 
@@ -406,13 +412,14 @@ AST knows `WITH TOTALS` was asked for and that `ArrowStream` dropped it.
 
 The leeway `Driver` walk that fills `attrExplodeSink` builds an **exploded
 Arrow record** instead of grid rows: one row per attribute — per item for a
-non-scalar value — carrying the source row number, the section name (the
-record card's spelling: `tagged · metric`, `co · <key> · <inner>`), the
-attribute index, the membership's low-cardinality path and its
-high-cardinality parameters as columns beside the value, support and
-membership columns the options bar reveals, and the backbone columns
-repeated on every row of their entity. play hands it to `RenderGrid` with
-two levels:
+non-scalar value — carrying the source row number, the section name (a
+tagged section's own; a plain section its item type's; a co-section
+group its first section's, as the driver names it), the attribute index,
+the membership's low-cardinality path and its high-cardinality parameters
+as columns beside the value, support and membership columns the options
+bar reveals. A backbone attribute is a row of its own, like any other, and
+the other columns are blank on it. play hands it to `RenderGrid` with two
+levels:
 
 1. **A plain-section attribute** — a backbone column of the exploded
    record: the entity by default, with `KeyIsRow` so the group line is the

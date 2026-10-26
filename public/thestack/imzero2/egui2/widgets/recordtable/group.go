@@ -1,11 +1,13 @@
 package recordtable
 
 import (
+	"math"
 	"slices"
 	"strconv"
 	"strings"
 
 	"github.com/apache/arrow-go/v18/arrow"
+	"github.com/apache/arrow-go/v18/arrow/array"
 
 	"github.com/stergiotis/boxer/public/db/clickhouse/chrows"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
@@ -36,7 +38,8 @@ import (
 
 // Key is a group's identity and face. Two rows with equal Value are one
 // group, whatever their Label; the first row's Label is the group's. A
-// Value must not contain U+001E, which joins the segments of a path.
+// Value may hold any text; in a group's Path, U+001E, which joins the
+// path's elements, is spelled U+001F.
 type Key struct {
 	Value string
 	// Label is what the group line shows; empty means Value.
@@ -247,6 +250,14 @@ func (inst Group) KeyRow() (row int64, ok bool) {
 	return row, err == nil
 }
 
+// groupKey identifies a group while partitioning.
+type groupKey struct {
+	parent int32
+	level  int32
+	null   bool
+	value  string
+}
+
 // item is one child of a node in its ordered sibling set: a subgroup or a
 // direct leaf.
 type item struct {
@@ -281,8 +292,9 @@ type Layout struct {
 	// [group*len(aggCols)+k].
 	aggCols []int
 	aggs    []AggValue
-	// byPath finds a group by its path while partitioning.
-	byPath map[string]int32
+	// byKey finds a group by its parent, level and key while partitioning:
+	// a lookup the key's text cannot forge, whatever it contains.
+	byKey map[groupKey]int32
 }
 
 // Len is the number of lines.
@@ -369,7 +381,7 @@ type GroupState struct {
 	forOrderN  int
 	forN       int64
 	forSpecGen uint32
-	forAggs    []AggE
+	forAggs    []aggDecl
 	forExpGen  uint32
 	partValid  bool
 }
@@ -432,6 +444,13 @@ func (inst *GroupState) Glyph(level int) (s string) {
 		return " ▼"
 	}
 	return " ▲"
+}
+
+// LayoutGen is the generation the layout was last computed under: what a
+// reader of Layout keys a copy on, since Gen moves when a change is asked
+// and LayoutGen when the next LayoutFor has served it.
+func (inst *GroupState) LayoutGen() uint64 {
+	return uint64(inst.forSpecGen)<<32 | uint64(inst.forExpGen)
 }
 
 // Gen moves on every change a layout depends on besides its record and
@@ -518,7 +537,8 @@ func (inst *GroupState) Reveal(row int64) {
 // aggregates cols declare. The result is the state's own and valid until
 // the next call. A changed permutation must be a different slice or n: the
 // partition is skipped while rec, order's identity, n, the spec and the
-// aggregate declarations hold, and expansion alone re-flattens.
+// aggregate declarations (each column's Agg and, where one is set, its
+// Arrow) hold, and expansion alone re-flattens.
 //
 // With no levels the lines are the leaves in order, under the root alone.
 func (inst *GroupState) LayoutFor(rec arrow.RecordBatch, order []int64, n int64, cols []Column) (lay *Layout, err error) {
@@ -540,7 +560,7 @@ func (inst *GroupState) LayoutFor(rec arrow.RecordBatch, order []int64, n int64,
 		if !aggsSame {
 			break
 		}
-		aggsSame = inst.forAggs[i] == cols[i].Agg
+		aggsSame = inst.forAggs[i] == aggDeclOf(&cols[i])
 	}
 	same := inst.partValid && inst.forRec == rec && inst.forOrder == orderP && inst.forOrderN == len(order) &&
 		inst.forN == n && inst.forSpecGen == inst.specGen && aggsSame
@@ -549,12 +569,15 @@ func (inst *GroupState) LayoutFor(rec arrow.RecordBatch, order []int64, n int64,
 		inst.forRec, inst.forOrder, inst.forOrderN, inst.forN, inst.forSpecGen = rec, orderP, len(order), n, inst.specGen
 		inst.forAggs = inst.forAggs[:0]
 		for i := range cols {
-			inst.forAggs = append(inst.forAggs, cols[i].Agg)
+			inst.forAggs = append(inst.forAggs, aggDeclOf(&cols[i]))
 		}
 		inst.partValid = err == nil
 		if err != nil {
-			lay.Lines, lay.Groups = lay.Lines[:0], lay.Groups[:0]
+			// Nothing of the previous layout answers for this one: no lines,
+			// no groups, no line for any row, and the reveal is dropped.
+			lay.Lines, lay.Groups, lay.rowLine = lay.Lines[:0], lay.Groups[:0], lay.rowLine[:0]
 			lay.Revealed = -1
+			inst.revealP1 = 0
 			return
 		}
 		inst.forExpGen = inst.expGen - 1 // force the flatten
@@ -566,6 +589,21 @@ func (inst *GroupState) LayoutFor(rec arrow.RecordBatch, order []int64, n int64,
 		lay.Revealed = -1 // a reveal is served by the flatten that opened it, once
 	}
 	return
+}
+
+// aggDecl is what the partition reads of a column: its source and its
+// aggregate. The identity the cache keeps covers both, so a column set that
+// keeps its aggregates but moves their sources is repartitioned.
+type aggDecl struct {
+	arrow int
+	agg   AggE
+}
+
+func aggDeclOf(col *Column) aggDecl {
+	if col.Agg == AggNone {
+		return aggDecl{arrow: -1}
+	}
+	return aggDecl{arrow: col.Arrow, agg: col.Agg}
 }
 
 func (inst *GroupState) validate(rec arrow.RecordBatch, cols []Column) (err error) {
@@ -587,6 +625,12 @@ func (inst *GroupState) validate(rec arrow.RecordBatch, cols []Column) (err erro
 				Errorf("group level orders by an aggregate of a column that declares none")
 		}
 	}
+	for i := range cols {
+		if col := &cols[i]; ncols >= 0 && col.Agg != AggNone && col.Agg != AggCount && col.Arrow >= ncols {
+			return eb.Build().Int("column", i).Int("arrow", col.Arrow).Int("columns", ncols).
+				Errorf("column aggregates a record column the record does not have")
+		}
+	}
 	return
 }
 
@@ -599,10 +643,10 @@ func (inst *GroupState) partition(rec arrow.RecordBatch, order []int64, n int64,
 	}
 	lay.Groups = append(lay.Groups[:0], Group{Level: -1, Depth: -1, Parent: -1, Line: -1, rep: -1, seen: -1})
 	lay.leafNode, lay.leafRow, lay.leafName, lay.leafSeen = lay.leafNode[:0], lay.leafRow[:0], lay.leafName[:0], lay.leafSeen[:0]
-	if lay.byPath == nil {
-		lay.byPath = make(map[string]int32, 64)
+	if lay.byKey == nil {
+		lay.byKey = make(map[groupKey]int32, 64)
 	} else {
-		clear(lay.byPath)
+		clear(lay.byKey)
 	}
 	lay.aggCols = lay.aggCols[:0]
 	for i := range cols {
@@ -639,9 +683,6 @@ func (inst *GroupState) partition(rec arrow.RecordBatch, order []int64, n int64,
 				node = inst.child(node, int32(li), seg, row, pos, &pathBuf)
 			}
 			name = segs[len(segs)-1].Value
-			if segs[len(segs)-1].Label != "" {
-				name = segs[len(segs)-1].Label
-			}
 		}
 		lay.leafNode = append(lay.leafNode, node)
 		lay.leafRow = append(lay.leafRow, row)
@@ -687,6 +728,18 @@ func (inst *GroupState) keyOf(rec arrow.RecordBatch, lvl *GroupLevel, row int64)
 	if arr.IsNull(int(row)) {
 		return Key{Null: true}
 	}
+	// A NaN compares equal to nothing, itself included, so it can be no
+	// group's key: it joins the null group, where the edge rule places it.
+	switch a := arr.(type) {
+	case *array.Float64:
+		if math.IsNaN(a.Value(int(row))) {
+			return Key{Null: true}
+		}
+	case *array.Float32:
+		if math.IsNaN(float64(a.Value(int(row)))) {
+			return Key{Null: true}
+		}
+	}
 	return Key{Value: arr.ValueStr(int(row))}
 }
 
@@ -695,6 +748,13 @@ func (inst *GroupState) keyOf(rec arrow.RecordBatch, lvl *GroupLevel, row int64)
 // aggregates by one node.
 func (inst *GroupState) child(parent int32, level int32, k Key, row int64, pos int64, buf *strings.Builder) (g int32) {
 	lay := &inst.layout
+	gk := groupKey{parent: parent, level: level, null: k.Null, value: k.Value}
+	if k.Null {
+		gk.value = ""
+	}
+	if g, ok := lay.byKey[gk]; ok {
+		return g
+	}
 	buf.Reset()
 	buf.WriteString(lay.Groups[parent].Path)
 	buf.WriteString(pathSep)
@@ -703,18 +763,15 @@ func (inst *GroupState) child(parent int32, level int32, k Key, row int64, pos i
 		buf.WriteString(":~")
 	} else {
 		buf.WriteString(":=")
-		buf.WriteString(k.Value)
+		buf.WriteString(strings.ReplaceAll(k.Value, pathSep, "\x1f"))
 	}
 	path := buf.String()
-	if g, ok := lay.byPath[path]; ok {
-		return g
-	}
 	g = int32(len(lay.Groups))
 	lay.Groups = append(lay.Groups, Group{
 		Path: path, Level: level, Depth: lay.Groups[parent].Depth + 1, Key: k,
 		Parent: parent, Line: -1, rep: row, seen: pos,
 	})
-	lay.byPath[path] = g
+	lay.byKey[gk] = g
 	for range lay.aggCols {
 		lay.aggs = append(lay.aggs, AggValue{})
 	}
@@ -829,6 +886,9 @@ func (inst *GroupState) cmpItems(rec arrow.RecordBatch, cols []Column, a, b item
 		k := lay.aggSlot(o.AggColumn)
 		va, oka := lay.aggs[int(a.group)*len(lay.aggCols)+k].Of(agg)
 		vb, okb := lay.aggs[int(b.group)*len(lay.aggCols)+k].Of(agg)
+		// A NaN would tie with everything and break the ordering; it
+		// counts as no value.
+		oka, okb = oka && !math.IsNaN(va), okb && !math.IsNaN(vb)
 		switch {
 		case oka != okb:
 			// A group with no value sorts last, in either direction.
@@ -842,6 +902,9 @@ func (inst *GroupState) cmpItems(rec arrow.RecordBatch, cols []Column, a, b item
 			c = 1
 		}
 	default:
+		// The null edge holds among one level's siblings: with levels of
+		// two kinds under one node, a lower level's items precede a
+		// higher's whatever their keys.
 		switch {
 		case lvl.IsPath():
 			c = strings.Compare(inst.nameOf(a), inst.nameOf(b))
