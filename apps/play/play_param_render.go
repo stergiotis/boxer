@@ -239,12 +239,30 @@ func (inst *PlayApp) renderParamSlots(maxHeight float32, layout paramBlockLayout
 
 // setParamWidgetHints hands the buffer's declared option lists and SQL
 // fields to the widgets that read them, and returns them.
+//
+// A sourced knob's options are its literal ones followed by what its source
+// last answered (demandEnumSources); one whose source has not answered yet is
+// pending, which the enum widget needs to claim it before it has options.
 func (inst *PlayApp) setParamWidgetHints() (enums map[string][]enumOption, exprs map[string]string) {
-	enums = scanEnumHints(inst.sql)
+	enums, sources := scanEnumDirectives(inst.sql)
+	var pending map[string]bool
+	for slot := range sources {
+		st, answered := inst.enumSources[slot]
+		if !answered || st.loading {
+			if pending == nil {
+				pending = make(map[string]bool, len(sources))
+			}
+			pending[slot] = true
+		}
+		enums[slot] = mergeEnumOptions(enums[slot], st.rows)
+	}
 	exprs = scanExprHints(inst.sql)
 	for _, w := range inst.paramWidgets {
 		if aware, ok := w.(enumHintAwareI); ok {
 			aware.SetEnumHints(enums)
+		}
+		if aware, ok := w.(enumPendingAwareI); ok {
+			aware.SetEnumPending(pending)
 		}
 		if aware, ok := w.(exprHintAwareI); ok {
 			aware.SetExprHints(exprs)
@@ -275,6 +293,11 @@ func (inst *PlayApp) renderParamClaims(slots []paramSlot, enums map[string][]enu
 
 	inst.renderNearMissNote(slots, grouped, ungroup, mixed,
 		orphanEnumHints(enums, slots), orphanExprHints(exprs, slots))
+	if note := enumSourceNote(inst.enumSources); note != "" {
+		for rt := range c.RichTextLabel(note) {
+			rt.Small().Weak()
+		}
+	}
 }
 
 // paramClaimWidthGuess is what a claim not yet measured is assumed to take in

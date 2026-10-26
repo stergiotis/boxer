@@ -304,6 +304,11 @@ type PlayApp struct {
 	boundLanes    map[NodeID]*nodeLane
 	boundViews    map[NodeID]laneView
 	resolvedNodes map[string]NodeID
+	// enumLanes holds one lane per CTE a `-- play: enum … from <cte>` names,
+	// and enumSources what each sourced knob's lane last answered, keyed by
+	// slot (demandEnumSources).
+	enumLanes   map[NodeID]*nodeLane
+	enumSources map[string]enumSourceState
 	// System-graph drawing state (play_graph_viz.go): the layout is cached
 	// on the topology fingerprint (vizKey); vizView carries pan/zoom;
 	// vizSeed keeps two live instances' canvas ids apart.

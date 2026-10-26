@@ -99,9 +99,14 @@ func (inst *PlayApp) gcBoundLanes() {
 
 // forgetBoundLanes drops every bound lane's memo (the executeRun force — a
 // fresh Run re-executes bound nodes against possibly-changed data, exactly
-// as the observed-intermediate lane forgets).
+// as the observed-intermediate lane forgets). A knob's option source is
+// forgotten with them: a Run is also how a reader asks for the corpus as it
+// now is.
 func (inst *PlayApp) forgetBoundLanes() {
 	for _, lane := range inst.boundLanes {
+		lane.forget()
+	}
+	for _, lane := range inst.enumLanes {
 		lane.forget()
 	}
 }
@@ -112,6 +117,72 @@ func (inst *PlayApp) closeBoundLanes() {
 		lane.close()
 		delete(inst.boundLanes, node)
 	}
+	for node, lane := range inst.enumLanes {
+		lane.close()
+		delete(inst.enumLanes, node)
+	}
+}
+
+// demandEnumSources drives one lane per CTE a sourced knob names (`-- play:
+// enum <slot> … from <cte>`) and records what each answered, for the strip to
+// merge after the literal options. It is the bound-pane path with a knob for
+// the pane: the lane recompiles against the frame's signals and re-runs only
+// when that changes the SQL, and serves its last good rows while a run is in
+// flight. A lane no knob names any more is closed here, since nothing else
+// holds a reference to it.
+func (inst *PlayApp) demandEnumSources() {
+	sources := scanEnumSources(inst.sql)
+	prev := inst.enumSources
+	inst.enumSources = nil
+	used := make(map[NodeID]bool, len(sources))
+	split := inst.currentSplit
+	for slot, cte := range sources {
+		st := enumSourceState{cte: cte}
+		node, ok := findSplitNode(split, NodeID(cte))
+		if !ok || node.Kind != splitNodeCTE {
+			st.problem = "names no CTE of this buffer"
+			inst.setEnumSource(slot, st)
+			continue
+		}
+		used[node.ID] = true
+		lane, has := inst.enumLanes[node.ID]
+		if !has {
+			if inst.enumLanes == nil {
+				inst.enumLanes = make(map[NodeID]*nodeLane, 1)
+			}
+			lane = newNodeLane(clientExecutor{client: inst.client, opts: newExecOptions("enum-" + string(node.ID))}, inst.graph.alloc, 0)
+			inst.enumLanes[node.ID] = lane
+		}
+		v := lane.demand(compileNodeFor(split, node, inst.lastRunBound, inst.frameSig))
+		st.loading = v.loading
+		switch {
+		case v.rec != nil:
+			st.rows, st.cut = enumOptionsFromRecord(v.rec, enumDataMaxOptions)
+			v.rec.Release()
+		case v.loading:
+			// Nothing served yet on this lane: keep what the knob showed.
+			if p, held := prev[slot]; held && p.cte == cte {
+				st.rows, st.cut = p.rows, p.cut
+			}
+		}
+		if v.err != nil {
+			st.problem = "failed: " + v.err.Error()
+		}
+		inst.setEnumSource(slot, st)
+	}
+	for id, lane := range inst.enumLanes {
+		if !used[id] {
+			lane.close()
+			delete(inst.enumLanes, id)
+		}
+	}
+}
+
+func (inst *PlayApp) setEnumSource(slot string, st enumSourceState) {
+	if inst.enumSources == nil {
+		inst.enumSources = make(map[string]enumSourceState, 1)
+	}
+	inst.enumSources[slot] = st
 }
 
 // selectionNodeRaw returns the raw `selection_node` value ("" when unset).
@@ -174,6 +245,8 @@ func (inst *PlayApp) demandBoundNodes() (release func()) {
 		// the terminal-leaf error points at.
 		inst.boundViews[nodeID] = lane.demand(compileNodeFor(split, node, inst.lastRunBound, inst.frameSig))
 	}
+
+	inst.demandEnumSources()
 
 	// Detail follows the selection's node by default (an explicit Detail
 	// binding, handled above, wins). Follow resolves only to nodes that are

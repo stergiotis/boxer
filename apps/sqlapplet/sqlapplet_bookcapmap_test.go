@@ -307,6 +307,14 @@ func TestCapmapBookQueriesExecute(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, []string{"toolbelt"}, rows)
 
+	// The catalog knob's source answers the vault's catalogs, in the
+	// `value` column the strip reads, and is declared as the knob's source.
+	rows, err = query(strings.Replace(asAuthored(bySlug["comp-browser"]), "SELECT * FROM comps",
+		"SELECT value FROM catalogs", 1))
+	require.NoError(t, err)
+	assert.Equal(t, []string{"boxer"}, rows)
+	assert.Contains(t, bySlug["comp-browser"].SQL, "-- play: enum catalog =All catalogs from catalogs")
+
 	// …and its graph lanes answer for a focus, the way a click drives them.
 	focused := "SET param_selection_key = 'observability';\n" + bySlug["comp-browser"].SQL
 	vertSQL := strings.Replace(focused, "SELECT * FROM comps", "SELECT id, tone FROM vertices ORDER BY id", 1)

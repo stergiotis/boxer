@@ -804,6 +804,32 @@ frame later, so a claim seen for the first time is placed by a guessed width
 for one frame. A range pair's fold label does not wrap in the strip, so a
 claim's measured width does not depend on the row it was packed into.
 
+### 2026-10-26 — a declared-options knob can take its values from a CTE
+
+`-- play: enum <slot> [<options>] from <cte>` lists the rows of a CTE of the
+buffer after the literal options. The 2026-08-14 Update left this unbuilt
+because it raised three questions; these are the answers.
+
+- **The second execution** is a node lane, the one a pane bound to a CTE
+  already gets: it recompiles against each frame's signals, re-runs only when
+  that changes its SQL, and serves its last good rows while a run is in
+  flight. A knob the CTE does not read cannot re-trigger it, and a Run forgets
+  it with the bound panes', since a Run is also how a reader asks for the
+  corpus as it now is.
+- **The shape** is a `value` column, else the first column, and an optional
+  `label`. Empty and repeated values are skipped, and the list stops at a cap
+  that the strip's note states rather than applies silently.
+- **The literal options come first** and keep a value the rows repeat, which
+  is where a "no filter" entry such as `=All catalogs` belongs.
+
+A sourced knob is a dropdown from the first frame, before its rows arrive,
+rather than a text field that turns into one; a value the list does not carry
+yet reads as loading rather than as missing. A source that names no CTE,
+fails, or answers nothing is said in the strip's note line, and with no
+literal options the knob then falls back to the text field. The trailing
+`from <cte>` is read only when the last word is an identifier, so a label
+cannot end in `from` and a word.
+
 ## References
 
 - [ADR-0016](./0016-imzero2-time-range-picker.md) — the range picker and its

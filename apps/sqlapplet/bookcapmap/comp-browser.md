@@ -55,23 +55,16 @@ keeps one tier (1 macro ▸ 4 building block) or all of them at `0`, and picks
 from a list rather than taking a number. `catalog` reaches the **map** as well,
 because a catalog is a whole subtree and removing one leaves the rest a tree,
 while a tier filter would cut interior nodes out from under their children and
-is therefore not allowed near the partition. It stays a text field, because the
-catalogs are whatever the vault holds and a declared list could only ever be
-out of date.
+is therefore not allowed near the partition. Its list is read from the vault
+(`from catalogs`, the CTE of that name), so it offers whatever the vault holds
+rather than a declared list that could only ever be out of date.
 
-**Four knobs, and the reason is the map.** Each prelude-bound knob costs a row
-of the pane strip whatever it filters, and the panels that draw into a fixed
-box have a floor below which they keep their size and scroll rather than
-shrink — so six knobs did not make the treemap smaller, they made it *clipped*,
-losing its deepest leaves to carry two controls. The two that went are the two
-that filter on nothing here: a substring `filter` over slug, name and synopsis,
-which the Table's own column filters already do and which a predicate bar is
-the designed answer to, and a `tag` filter over the `tags:` frontmatter, which
-no note in the shipped catalog carries. The tag channel itself is intact — the
-column is on every row and the overview counts its coverage — so this is a
-control removed, not a signal. It is a workaround: the strip stacks one knob
-per row because a free-text field asks for the whole line, and a strip that
-flowed would carry all six in one.
+**Four knobs.** Two that an earlier version carried filter on nothing here: a
+substring `filter` over slug, name and synopsis, which the Table's own column
+filters already do and which a predicate bar is the designed answer to, and a
+`tag` filter over the `tags:` frontmatter, which no note in the shipped catalog
+carries. The tag channel itself is intact — the column is on every row and the
+overview counts its coverage — so this is a control removed, not a signal.
 
 `size_by` and `color_by` are the map's own. `size_by` picks the area: `words`
 counts whitespace-separated tokens in the competence's own prose, `bytes`
@@ -104,8 +97,14 @@ SET param_color_by = 'branch';
 -- play: enum level 0=All levels,1=Macro,2=Meso,3=Micro,4=Block
 -- play: enum size_by words=prose words,bytes=prose bytes,count=one each
 -- play: enum color_by branch,domain,catalog,level
+-- play: enum catalog =All catalogs from catalogs
 
 WITH RECURSIVE
+  -- The catalog knob's options: the strip runs this on a lane of its own and
+  -- lists the rows after "All catalogs".
+  catalogs AS (
+    SELECT DISTINCT catalog AS value FROM keelson('competence') ORDER BY value
+  ),
   sections AS (
     SELECT slug,
            sum(bytes) AS bytes,

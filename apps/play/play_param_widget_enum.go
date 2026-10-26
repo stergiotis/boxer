@@ -2,7 +2,10 @@ package play
 
 import (
 	"sort"
+	"strconv"
 	"strings"
+
+	"github.com/apache/arrow-go/v18/arrow"
 
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 )
@@ -25,14 +28,17 @@ import (
 // in the same vocabulary; this is that shape, used for the case where the
 // declaration is the only possible source.
 //
-// # What it deliberately is not
+// # Options from the data
 //
-// The options are literal, so a knob whose values come from the data — every
-// catalog in the corpus, every domain — cannot be declared here. That variant
-// wants the values from a query, which means a second execution, a shape
-// contract for its result, and a decision about when it re-runs; it is a
-// bigger feature wearing the same syntax, and it is not built. A document that
-// wants it writes a text field today and says so in its prose.
+// `-- play: enum <slot> [<options>] from <cte>` adds the rows of a CTE of the
+// buffer after the literal options (ADR-0124 Update 2026-10-26): every catalog
+// in the corpus, every domain. The three questions the literal form left open
+// have these answers. The second execution is a node lane, the one a pane bound
+// to a CTE gets (demandEnumSources), so it re-runs exactly when its compiled
+// SQL does and a knob it does not read cannot re-trigger it. The shape is a
+// `value` column, else the first, and an optional `label`. And the literal
+// options stay first and win a repeated value, which is where `=All catalogs`
+// belongs.
 
 // enumOption is one declared choice: the value that lands in the buffer, and
 // the label the reader picks it by.
@@ -49,7 +55,9 @@ type enumOption struct {
 // leading `--` is stripped and the rest lowercased.
 const enumMarkerPrefix = "play: enum "
 
-// scanEnumHints reads every `-- play: enum <slot> <options>` line in sql.
+// scanEnumHints reads every `-- play: enum <slot> <options>` line in sql: the
+// literal options, keyed by slot. A slot whose line names only a source has an
+// empty list here and an entry in [scanEnumSources].
 //
 // Malformed hints are dropped rather than reported as errors: this runs every
 // frame over a buffer somebody may be halfway through typing, and a marker that
@@ -62,6 +70,19 @@ const enumMarkerPrefix = "play: enum "
 // mistake either way, and taking the first makes the pane's answer independent
 // of where in the buffer the author added the second.
 func scanEnumHints(sql string) (hints map[string][]enumOption) {
+	hints, _ = scanEnumDirectives(sql)
+	return
+}
+
+// scanEnumSources names the CTE each sourced knob takes its options from.
+func scanEnumSources(sql string) (sources map[string]string) {
+	_, sources = scanEnumDirectives(sql)
+	return
+}
+
+// scanEnumDirectives is the one pass behind [scanEnumHints] and
+// [scanEnumSources], so the first-hint-wins rule decides both together.
+func scanEnumDirectives(sql string) (hints map[string][]enumOption, sources map[string]string) {
 	for line := range strings.SplitSeq(sql, "\n") {
 		ln := strings.TrimSpace(line)
 		if !strings.HasPrefix(ln, "--") {
@@ -80,8 +101,9 @@ func scanEnumHints(sql string) (hints map[string][]enumOption) {
 		if name == "" {
 			continue
 		}
-		opts := parseEnumOptions(spec)
-		if len(opts) == 0 {
+		static, source := splitEnumSource(spec)
+		opts := parseEnumOptions(static)
+		if len(opts) == 0 && source == "" {
 			continue
 		}
 		if _, taken := hints[name]; taken {
@@ -91,8 +113,131 @@ func scanEnumHints(sql string) (hints map[string][]enumOption) {
 			hints = make(map[string][]enumOption, 2)
 		}
 		hints[name] = opts
+		if source != "" {
+			if sources == nil {
+				sources = make(map[string]string, 1)
+			}
+			sources[name] = source
+		}
 	}
-	return hints
+	return
+}
+
+// splitEnumSource takes a trailing `from <cte>` off an option spec. Only the
+// last two words count, and only when the last is an identifier, so a label
+// may still contain the word: `=Data from disk` reads as a source named disk,
+// which is the one spelling a label cannot have.
+func splitEnumSource(spec string) (static string, source string) {
+	spec = strings.TrimSpace(spec)
+	at := strings.LastIndexAny(spec, " \t")
+	if at < 0 {
+		return spec, ""
+	}
+	ident := spec[at+1:]
+	before := strings.TrimSpace(spec[:at])
+	if !isEnumSourceIdent(ident) {
+		return spec, ""
+	}
+	switch lower := strings.ToLower(before); {
+	case lower == "from":
+		return "", ident
+	case strings.HasSuffix(lower, " from") || strings.HasSuffix(lower, "\tfrom"):
+		return strings.TrimSpace(before[:len(before)-len("from")]), ident
+	}
+	return spec, ""
+}
+
+// isEnumSourceIdent reports whether s can name a CTE without quoting.
+func isEnumSourceIdent(s string) bool {
+	if s == "" {
+		return false
+	}
+	for i, r := range s {
+		switch {
+		case r == '_' || (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z'):
+		case i > 0 && r >= '0' && r <= '9':
+		default:
+			return false
+		}
+	}
+	return true
+}
+
+// enumDataMaxOptions caps the options a source contributes. A dropdown past a
+// few hundred entries is a search problem, not a list, and the cap is said in
+// the strip's note rather than silently applied.
+const enumDataMaxOptions = 500
+
+// enumSourceState is what a sourced knob's lane last answered: the options its
+// rows give, whether a run is in flight, and why it gave none.
+type enumSourceState struct {
+	cte     string
+	rows    []enumOption
+	loading bool
+	cut     bool
+	problem string
+}
+
+// enumOptionsFromRecord reads a source's rows as options: `value`, else the
+// first column, labelled by `label` when the result has one. Empty values are
+// skipped — "no filter" is the literal option's to say — and so is a value
+// already listed, keeping its first label.
+func enumOptionsFromRecord(rec arrow.RecordBatch, max int) (opts []enumOption, cut bool) {
+	if rec == nil || rec.NumCols() == 0 {
+		return
+	}
+	valueCol, labelCol := 0, -1
+	for i, f := range rec.Schema().Fields() {
+		switch pathColumnLabel(f.Name) {
+		case "value":
+			valueCol = i
+		case "label":
+			labelCol = i
+		}
+	}
+	seen := make(map[string]struct{}, rec.NumRows())
+	for row := range rec.NumRows() {
+		v := formatCell(rec, valueCol, row)
+		if v == "" {
+			continue
+		}
+		if _, dup := seen[v]; dup {
+			continue
+		}
+		if len(opts) >= max {
+			return opts, true
+		}
+		seen[v] = struct{}{}
+		label := v
+		if labelCol >= 0 {
+			if l := formatCell(rec, labelCol, row); l != "" {
+				label = l
+			}
+		}
+		opts = append(opts, enumOption{Value: v, Label: label})
+	}
+	return
+}
+
+// mergeEnumOptions is the literal options, then the source's rows whose value
+// none of them carries.
+func mergeEnumOptions(static []enumOption, data []enumOption) (opts []enumOption) {
+	if len(data) == 0 {
+		return static
+	}
+	opts = make([]enumOption, 0, len(static)+len(data))
+	opts = append(opts, static...)
+	have := make(map[string]struct{}, len(static))
+	for _, o := range static {
+		have[o.Value] = struct{}{}
+	}
+	for _, o := range data {
+		if _, dup := have[o.Value]; dup {
+			continue
+		}
+		opts = append(opts, o)
+	}
+	return
 }
 
 // parseEnumOptions splits the comma-separated option list. An option is
@@ -191,19 +336,64 @@ type enumHintAwareI interface {
 	SetEnumHints(hints map[string][]enumOption)
 }
 
+// enumPendingAwareI is the opt-in for the sourced knobs still waiting for
+// their rows (enumWidget.pending).
+type enumPendingAwareI interface {
+	SetEnumPending(pending map[string]bool)
+}
+
+// enumSourceNote is the strip's advisory line for the sources that gave a knob
+// less than they were asked for: a name that is not a CTE of the buffer, a run
+// that failed, an empty answer, a list cut at [enumDataMaxOptions]. Pure over
+// the states, in slot order, so it is testable without a frame.
+func enumSourceNote(states map[string]enumSourceState) (note string) {
+	if len(states) == 0 {
+		return ""
+	}
+	slots := make([]string, 0, len(states))
+	for slot := range states {
+		slots = append(slots, slot)
+	}
+	sort.Strings(slots)
+	var parts []string
+	for _, slot := range slots {
+		st := states[slot]
+		head := `"` + slot + ` from ` + st.cte + `" `
+		switch {
+		case st.problem != "":
+			parts = append(parts, head+st.problem)
+		case st.cut:
+			parts = append(parts, head+"lists the first "+strconv.Itoa(enumDataMaxOptions)+" values")
+		case !st.loading && len(st.rows) == 0:
+			parts = append(parts, head+"answered no values")
+		}
+	}
+	return strings.Join(parts, "; ")
+}
+
 // enumWidget renders a declared-options knob as a dropdown.
+//
+// pending names the sourced knobs whose options have not all arrived: such a
+// knob is claimed even with none yet, so it does not render as a text field
+// for the length of its first run and then turn into a dropdown, and a value
+// the list does not carry yet is not called out as missing from it.
 type enumWidget struct {
-	hints map[string][]enumOption
+	hints   map[string][]enumOption
+	pending map[string]bool
 }
 
 func newEnumWidget() *enumWidget { return &enumWidget{} }
 
 var (
-	_ paramWidgetI   = (*enumWidget)(nil)
-	_ enumHintAwareI = (*enumWidget)(nil)
+	_ paramWidgetI      = (*enumWidget)(nil)
+	_ enumHintAwareI    = (*enumWidget)(nil)
+	_ enumPendingAwareI = (*enumWidget)(nil)
 )
 
 func (w *enumWidget) SetEnumHints(hints map[string][]enumOption) { w.hints = hints }
+
+// SetEnumPending names the sourced knobs still waiting for their rows.
+func (w *enumWidget) SetEnumPending(pending map[string]bool) { w.pending = pending }
 
 // Matches claims one slot per call — the first with a hint — so the dispatch
 // loop can hand it several in a row, the way it does the scalar tail.
@@ -212,7 +402,7 @@ func (w *enumWidget) Matches(slots []paramSlot) (consumedIdx []int, ok bool) {
 		return
 	}
 	for i, s := range slots {
-		if len(w.hints[s.Name]) == 0 {
+		if len(w.hints[s.Name]) == 0 && !w.pending[s.Name] {
 			continue
 		}
 		return []int{i}, true
@@ -227,10 +417,10 @@ func (w *enumWidget) Render(ctx *paramCtx) {
 			continue
 		}
 		opts := w.hints[s.Name]
-		if len(opts) == 0 {
+		if len(opts) == 0 && !w.pending[s.Name] {
 			continue
 		}
-		w.renderOne(ctx.Ids, s, draft, opts)
+		w.renderOne(ctx.Ids, s, draft, opts, w.pending[s.Name])
 	}
 }
 
@@ -241,7 +431,7 @@ func (w *enumWidget) Render(ctx *paramCtx) {
 // button per option off the shared stack, and two knobs in one strip would
 // otherwise derive the same ids for their nth options — which does not fail
 // loudly, it silently routes one control's click to the other.
-func (w *enumWidget) renderOne(ids *c.WidgetIdStack, s paramSlot, draft *string, opts []enumOption) {
+func (w *enumWidget) renderOne(ids *c.WidgetIdStack, s paramSlot, draft *string, opts []enumOption, pending bool) {
 	for range c.Horizontal().KeepIter() {
 		for rt := range c.RichTextLabel(s.Name + " : " + s.Type) {
 			rt.Small().Weak()
@@ -262,7 +452,13 @@ func (w *enumWidget) renderOne(ids *c.WidgetIdStack, s paramSlot, draft *string,
 				}
 			}
 		}
-		if !known {
+		switch {
+		case !known && pending:
+			// The value may well be among the rows still on their way.
+			for rt := range c.RichTextLabel("· loading options") {
+				rt.Small().Weak()
+			}
+		case !known:
 			// The buffer holds something the list does not offer — a hand-edited
 			// SET, or a list that changed under a saved value. Saying so beats
 			// showing a blank control, and picking any option repairs it.
