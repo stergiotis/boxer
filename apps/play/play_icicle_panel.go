@@ -35,7 +35,8 @@ import (
 // cursor derived from a frame would point at an arbitrary member of its
 // subtree. A clicked frame publishes its label as `selection_key` instead, a
 // value rather than a cursor, which is also what a follow-up query wants:
-// `WHERE has(stack, {selection_key:String})`.
+// `WHERE has(stack, {selection_key:String})`. A nodes-form result publishes
+// the frame's `id`, which is what such a query joins on (hierTree.KeyOf).
 
 // icicleForm is this pane's vocabulary in a shared reject message.
 var icicleForm = hierForm{noun: "flame view", elem: "frame"}
@@ -100,8 +101,16 @@ func resolveIcicleColumns(schema *arrow.Schema) (cl icicleClaim, reason string) 
 // shape minus the colour channel, which this form has no room for: its fill
 // already encodes the frame name or the depth (ADR-0160 §SD6).
 func buildIcicleTree(rec arrow.RecordBatch, cl icicleClaim) (t icicle.Tree, st icicleStats) {
+	t, _, st = buildIcicleTreeKeyed(rec, cl)
+	return
+}
+
+// buildIcicleTreeKeyed is buildIcicleTree with each node's key beside it
+// (hierTree.KeyOf), which the widget's tree has no field for and a pin
+// publishes.
+func buildIcicleTreeKeyed(rec arrow.RecordBatch, cl icicleClaim) (t icicle.Tree, keys []string, st icicleStats) {
 	h, st := buildHierarchy(rec, cl)
-	return icicle.Tree{Labels: h.Labels, Parents: h.Parents, Self: h.Self}, st
+	return icicle.Tree{Labels: h.Labels, Parents: h.Parents, Self: h.Self}, h.Keys, st
 }
 
 // icicleTreeOpts is the layout half of the driver's controls.
@@ -156,7 +165,10 @@ type IcicleDriver struct {
 	// freshness token the pager, World and Kanban use) plus the schema the
 	// claim was resolved from. Interning a big result is per-node work and has
 	// no business running every frame.
-	tree        icicle.Tree
+	tree icicle.Tree
+	// keys is each node's key beside tree (hierTree.KeyOf); empty for a
+	// folded result, whose key is the label.
+	keys        []string
 	forExecuted time.Time
 	forSchema   *arrow.Schema
 	treeGen     uint64
@@ -374,7 +386,7 @@ func (inst *IcicleDriver) requestSelect(in SelectIcicleFrameArgs, emit SignalEmi
 	}
 	inst.selected = hit
 	if emit != nil {
-		emit.Emit(signalSelectionKey, inst.selectedLabel())
+		emit.Emit(signalSelectionKey, inst.selectedKey())
 	}
 }
 
@@ -388,7 +400,7 @@ func (inst *IcicleDriver) syncTree(rec arrow.RecordBatch, schema *arrow.Schema, 
 		return
 	}
 	pinned := inst.selected != (icicleview.Hit{})
-	inst.tree, inst.stats = buildIcicleTree(rec, cl)
+	inst.tree, inst.keys, inst.stats = buildIcicleTreeKeyed(rec, cl)
 	inst.forSchema, inst.forExecuted = schema, inst.pendingExecuted
 	inst.treeGen++
 	inst.selected, inst.hover = icicleview.Hit{}, icicleview.Hit{}
@@ -397,11 +409,16 @@ func (inst *IcicleDriver) syncTree(rec arrow.RecordBatch, schema *arrow.Schema, 
 	}
 }
 
-// selectedLabel is the pinned frame's label, or "" when nothing is pinned.
-func (inst *IcicleDriver) selectedLabel() string {
+// selectedKey is what the pin publishes as selection_key — the pinned frame's
+// id in a nodes-form result, its label in a folded one — or "" when nothing is
+// pinned.
+func (inst *IcicleDriver) selectedKey() string {
 	n := inst.nodeAt(inst.selected)
 	if n == nil {
 		return ""
+	}
+	if n.Index >= 0 && int(n.Index) < len(inst.keys) {
+		return inst.keys[n.Index]
 	}
 	return n.Label
 }

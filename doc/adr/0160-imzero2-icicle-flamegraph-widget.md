@@ -572,6 +572,14 @@ two call sites. By-label and by-depth stay as options, unchanged. The
 hairline gap stays as well: under by-branch, siblings deep in a small subtree
 are close in colour by design.
 
+### 2026-10-26 — a nodes-form pin publishes the id
+
+The play tab's pinned frame publishes its row's `id` as `selection_key` for a
+nodes-form result and its label for a folded one, as the Treemap's does
+(ADR-0166 Update of this date, which carries the reason). The
+`WHERE has(stack, {selection_key:String})` follow-up above is the folded case
+and reads as before.
+
 ## References
 
 ### Method sources (clean room — papers and public documentation only)

@@ -157,10 +157,31 @@ type hierTree struct {
 	ColorNum  []float64
 	ColorKey  []string
 	ColorKind hierColorKindE
+	// Keys is each node's `id` in a nodes-form result; empty in folded mode,
+	// where a node is a path element and its label is all that names it.
+	Keys []string
 }
 
 // Len returns the node count.
 func (t hierTree) Len() int { return len(t.Labels) }
+
+// KeyOf is what a pin on node i publishes as selection_key: the row's `id` in
+// a nodes-form result, the label in a folded one. The label is what the
+// picture shows, and in nodes form it is often a `label` column — a name, an
+// abbreviation — that a query filtering on {selection_key:String} cannot join
+// back to a row; the id is the column the result was built from.
+func (t hierTree) KeyOf(i int32) string {
+	if i < 0 {
+		return ""
+	}
+	if int(i) < len(t.Keys) {
+		return t.Keys[i]
+	}
+	if int(i) < len(t.Labels) {
+		return t.Labels[i]
+	}
+	return ""
+}
 
 // hierStats is what one build noticed: the tree it produced and everything it
 // had to drop, demote or truncate to get there. Reported in a panel's status
@@ -656,6 +677,7 @@ func buildHierarchyNodes(rec arrow.RecordBatch, cl hierClaim) (t hierTree, st hi
 		}
 		index[id] = int32(len(t.Labels))
 		t.Labels = append(t.Labels, label)
+		t.Keys = append(t.Keys, id)
 		t.Parents = append(t.Parents, -1)
 		t.Self = append(t.Self, v)
 		parentOf = append(parentOf, formatCell(rec, cl.parentCol, row))

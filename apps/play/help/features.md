@@ -331,7 +331,7 @@ The names the panes write are reserved, with fixed types:
 | `selection` | `Int64` | a click on a row: Table, Projection, Timeline, World, Kanban, Chat, Cards, Distribution, Series, Chart, Files |
 | `selection_node` | `String` | stamped with every `selection`: the query node the row belongs to |
 | `selection_id` | `UInt64` | stamped with `selection` when the result has a leeway id column |
-| `selection_key` | `String` | stamped with `selection` when the result has a column named `key`; written directly by Network, Graphview and Sankey (a vertex id), Icicle (a frame label), Treemap (a leaf name) and Files (a path) |
+| `selection_key` | `String` | stamped with `selection` when the result has a column named `key`; written directly by Network, Graphview and Sankey (a vertex id), Icicle and Treemap (a frame or leaf: its `id` in a nodes-form result, its label in a folded one) and Files (a path) |
 | `selection_country` | `String` | World: the clicked country |
 | `vp_min_x`, `vp_max_x`, `vp_min_y`, `vp_max_y`, `vp_w`, `vp_h` | `UInt32` | Map: the settled viewport in packed mercator, and its pixel size |
 | `tl_min`, `tl_max` | `DateTime64(3, 'UTC')` | Timeline: the extent of the events drawn |

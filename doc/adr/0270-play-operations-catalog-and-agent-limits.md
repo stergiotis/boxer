@@ -1195,6 +1195,13 @@ blank. The person's gestures pass as before. This is the fetch half of
 [ADR-0315](./0315-coordinator-tools-as-operation-specs-and-a-contract-for-stateful-tools.md)
 §SD8's first gap; the live re-run declarations stay as they were.
 
+### 2026-10-26 — a hierarchy pin writes the node's key
+
+`select_treemap_node` and `select_icicle_frame` write the pinned node's key to
+`selection_key`: its `id` in a nodes-form result, its label in a folded one
+(ADR-0166 Update of this date). The reads carry the key beside the label path,
+so a caller can tell what a pin will publish before making it.
+
 ## References
 
 - [ADR-0269](./0269-app-operations-a-command-query-contract-agents-drive-under-a-task-grant.md) — the contract this catalog serves.

@@ -3,6 +3,7 @@ package play
 import (
 	"fmt"
 	"math"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -36,9 +37,10 @@ import (
 // NAVIGATION AND SELECTION ARE LOCAL. Clicking a container drills into it and
 // clicking the breadcrumb drills back out; neither is published, because a
 // drill position is a place in a view rather than a fact about the result.
-// Clicking a leaf pins it and publishes its label as `selection_key`, matching
+// Clicking a leaf pins it and publishes its key as `selection_key`, matching
 // Network, Sankey and Icicle: in folded mode a cell is a path PREFIX, so it
-// spans many rows and no single row cursor would be honest about it.
+// spans many rows and no single row cursor would be honest about it. The key
+// is the row's `id` in nodes form and the label in folded form (hierTree.KeyOf).
 
 // treemapForm is this pane's vocabulary in a shared reject message.
 var treemapForm = hierForm{noun: "treemap", elem: "cell"}
@@ -263,9 +265,11 @@ type treemapDriver struct {
 	inherited int
 	mixed     int
 
-	// selected is the click-pinned LEAF label, published as selection_key. The
-	// drill position is the widget's and is deliberately not mirrored here.
-	selected string
+	// selected is the click-pinned LEAF's key, published as selection_key, and
+	// selectedLabel what the readout shows of it. The drill position is the
+	// widget's and is deliberately not mirrored here.
+	selected      string
+	selectedLabel string
 	// onSelect routes a leaf click through select_treemap_node (ADR-0270
 	// §SD6); nil pins directly.
 	onSelect func(SelectTreemapNodeArgs)
@@ -374,9 +378,12 @@ func (inst *treemapDriver) render(rec arrow.RecordBatch, schema *arrow.Schema, c
 	// the gesture is its own undo. Container clicks are the widget's drill and
 	// never reach here. An empty key is the honest "nothing focused" value a
 	// query reading {selection_key:String} sees before anything is clicked.
+	//
+	// The click names its leaf by path: a label pins whichever cell first
+	// carries it, and a leaf's label is commonly repeated under other parents.
 	if leaf := inst.events.ClickedLeaf; leaf != nil {
-		in := SelectTreemapNodeArgs{Label: leaf.Name}
-		if leaf.Name == inst.selected {
+		in := SelectTreemapNodeArgs{Path: inst.pathOf(leaf)}
+		if i, known := inst.idxOf[leaf]; known && inst.selected != "" && inst.tree.KeyOf(i) == inst.selected {
 			in = SelectTreemapNodeArgs{Clear: true}
 		}
 		inst.requestSelect(in, emit)
@@ -390,14 +397,27 @@ func (inst *treemapDriver) requestSelect(in SelectTreemapNodeArgs, emit SignalEm
 		inst.onSelect(in)
 		return
 	}
-	label, err := inst.pinFor(in)
+	key, label, err := inst.pinFor(in)
 	if err != nil {
 		return
 	}
-	inst.selected = label
+	inst.selected, inst.selectedLabel = key, label
 	if emit != nil {
-		emit.Emit(signalSelectionKey, label)
+		emit.Emit(signalSelectionKey, key)
 	}
+}
+
+// pathOf is a node's path as get_treemap gives it: labels from the result's
+// root down, each cut as a read cuts it. Bounded by the node count, so a cycle
+// the build demoted cannot loop.
+func (inst *treemapDriver) pathOf(n *layout.Node) (path []string) {
+	i, ok := inst.idxOf[n]
+	for steps := 0; ok && i >= 0 && int(i) < inst.tree.Len() && steps <= inst.tree.Len(); steps++ {
+		path = append(path, hierPathLabel(inst.tree.Labels[i]))
+		i = inst.tree.Parents[i]
+	}
+	slices.Reverse(path)
+	return
 }
 
 // syncTree rebuilds the tree when the result is new. A new tree invalidates a
@@ -414,7 +434,7 @@ func (inst *treemapDriver) syncTree(rec arrow.RecordBatch, schema *arrow.Schema,
 	inst.treeGen++
 	inst.rebuildTree()
 	if inst.selected != "" {
-		inst.selected = ""
+		inst.selected, inst.selectedLabel = "", ""
 		if emit != nil {
 			emit.Emit(signalSelectionKey, "")
 		}
@@ -1013,7 +1033,7 @@ func (inst *treemapDriver) pointerLine() string {
 		return inst.describeNode(n)
 	}
 	if inst.selected != "" {
-		return "pinned: " + truncateRunes(inst.selected, 64)
+		return "pinned: " + truncateRunes(inst.selectedLabel, 64)
 	}
 	return inst.statusLine()
 }

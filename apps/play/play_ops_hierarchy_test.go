@@ -13,6 +13,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/appops/opwire"
 	icicleview "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/icicle/view"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/treemap/layout"
 )
 
 func TestHierarchyOpsCatalogEntries(t *testing.T) {
@@ -141,6 +142,88 @@ func TestSelectTreemapNodePinsAndPublishes(t *testing.T) {
 	assert.Empty(t, key)
 }
 
+// hierLabelledNodes is a nodes-form result whose labels are not its ids, and
+// whose two leaves share a label under different parents: Root (r) › X (x) ›
+// Leaf (a), and Root › Y (y) › Leaf (b).
+func hierLabelledNodes(t *testing.T) arrow.RecordBatch {
+	t.Helper()
+	return icicleTestRec(t,
+		icicleTestCol{name: "id", str: []string{"r", "x", "y", "a", "b"}},
+		icicleTestCol{name: "parent", str: []string{"", "r", "r", "x", "y"}},
+		icicleTestCol{name: "label", str: []string{"Root", "X", "Y", "Leaf", "Leaf"}},
+		icicleTestCol{name: "value", num: []float64{0, 0, 0, 1, 2}},
+	)
+}
+
+// A nodes-form pin publishes the row's id, not the label the cell shows: a
+// query reading {selection_key:String} joins on the id, and a label may be
+// shared. The click names its leaf by path, so the leaf clicked is the leaf
+// pinned even when another carries the same label.
+func TestTreemapPinPublishesTheNodesId(t *testing.T) {
+	l, h := opsLauncher(t)
+	p := l.inner
+	rec := hierLabelledNodes(t)
+	defer rec.Release()
+	cl, reason := resolveHierarchy(rec.Schema(), treemapForm)
+	require.Empty(t, reason)
+	d := p.treemapDriver
+	d.noteExecuted(time.Unix(1, 0))
+	d.syncTree(rec, rec.Schema(), cl, nil)
+	drawnPane(p, treemapPaneId, 3, rec.Schema())
+
+	var leafB *layout.Node
+	for n, i := range d.idxOf {
+		if d.tree.KeyOf(i) == "b" {
+			leafB = n
+		}
+	}
+	require.NotNil(t, leafB)
+	assert.Equal(t, []string{"Root", "Y", "Leaf"}, d.pathOf(leafB))
+
+	require.NoError(t, applyOp(t, h, opSelectTreemapNode, SelectTreemapNodeArgs{Path: d.pathOf(leafB)}))
+	key, _ := signalOf(t, p, signalSelectionKey)
+	assert.Equal(t, "b", key, "the id, not the label two leaves share")
+	r := queryOp[TreemapReading](t, h, opGetTreemap, GetTreemapArgs{Focus: []string{"Root", "X"}})
+	assert.Equal(t, "Leaf", r.Pinned)
+	assert.Equal(t, "b", r.PinnedKey)
+	require.Len(t, r.Nodes, 1)
+	assert.Equal(t, "a", r.Nodes[0].Key)
+
+	// The pane's own emitter, as a click with no launcher routing it.
+	d.onSelect = nil
+	probe := &emitProbe{}
+	d.requestSelect(SelectTreemapNodeArgs{Path: []string{"Root", "X", "Leaf"}}, probe)
+	assert.Equal(t, []any{"a"}, probe.vals)
+	assert.Equal(t, "Leaf", d.selectedLabel)
+}
+
+// The Icicle publishes the same key for the same result.
+func TestIciclePinPublishesTheNodesId(t *testing.T) {
+	l, h := opsLauncher(t)
+	p := l.inner
+	rec := hierLabelledNodes(t)
+	defer rec.Release()
+	cl, reason := resolveIcicleColumns(rec.Schema())
+	require.Empty(t, reason)
+	d := p.icicleDriver
+	d.noteExecuted(time.Unix(1, 0))
+	d.syncTree(rec, rec.Schema(), cl, nil)
+	d.syncLayout()
+	require.NotNil(t, d.layout)
+	drawnPane(p, iciclePaneId, 6, rec.Schema())
+
+	require.NoError(t, applyOp(t, h, opSelectIcicleFrame, SelectIcicleFrameArgs{Path: []string{"Root", "Y", "Leaf"}}))
+	assert.Equal(t, "b", d.selectedKey())
+	r := queryOp[IcicleReading](t, h, opGetIcicle, GetIcicleArgs{Focus: []string{"Root", "Y"}})
+	keys := map[string]string{}
+	for _, f := range r.List {
+		keys[strings.Join(f.Path, " › ")] = f.Key
+	}
+	assert.Equal(t, "b", keys["Root › Y › Leaf"])
+	key, _ := signalOf(t, p, signalSelectionKey)
+	assert.Equal(t, "b", key)
+}
+
 // iciclePane lays out main › run (1), main › emit (2), main › tiny
 // (0.001), the last under the 0.1% prune.
 func iciclePane(t *testing.T, p *PlayApp) arrow.RecordBatch {
@@ -209,7 +292,7 @@ func TestIcicleSelectAndOptionsKeepThePinByPath(t *testing.T) {
 	name := "name"
 	require.NoError(t, applyOp(t, h, opSetIcicleOptions, SetIcicleOptionsArgs{Order: &name}))
 	assert.False(t, d.syncLayout(), "the pinned frame is still laid out")
-	assert.Equal(t, "run", d.selectedLabel())
+	assert.Equal(t, "run", d.selectedKey())
 	r := queryOp[IcicleReading](t, h, opGetIcicle, GetIcicleArgs{})
 	assert.Equal(t, []string{"main", "run"}, r.Pinned)
 	assert.Equal(t, "name", r.Order)
@@ -253,7 +336,7 @@ func TestHierarchyClicksGoThroughTheirCommands(t *testing.T) {
 	p.icicleDriver.requestSelect(SelectIcicleFrameArgs{Path: []string{"main", "emit"}}, nil)
 	e = lastEntry(t, eng)
 	assert.Equal(t, opSelectIcicleFrame, e.Op)
-	assert.Equal(t, "emit", p.icicleDriver.selectedLabel())
+	assert.Equal(t, "emit", p.icicleDriver.selectedKey())
 
 	bare, _ := opsLauncher(t)
 	brec := treemapForest(t, bare.inner)
@@ -285,12 +368,12 @@ func TestSelectIcicleFrameByNumber(t *testing.T) {
 	frame := int32(at)
 
 	require.NoError(t, applyOp(t, h, opSelectIcicleFrame, SelectIcicleFrameArgs{Frame: &frame}))
-	assert.Equal(t, "emit", d.selectedLabel())
+	assert.Equal(t, "emit", d.selectedKey())
 	require.NoError(t, applyOp(t, h, opSelectIcicleFrame, SelectIcicleFrameArgs{Frame: &frame, Path: []string{"main", "emit"}}))
 	require.Error(t, applyOp(t, h, opSelectIcicleFrame, SelectIcicleFrameArgs{Frame: &frame, Path: []string{"main", "run"}}))
 	far := int32(len(d.layout.Nodes))
 	require.Error(t, applyOp(t, h, opSelectIcicleFrame, SelectIcicleFrameArgs{Frame: &far}))
-	assert.Equal(t, "emit", d.selectedLabel(), "a refused select keeps the pin")
+	assert.Equal(t, "emit", d.selectedKey(), "a refused select keeps the pin")
 
 	r := queryOp[IcicleReading](t, h, opGetIcicle, GetIcicleArgs{})
 	for _, f := range r.List {

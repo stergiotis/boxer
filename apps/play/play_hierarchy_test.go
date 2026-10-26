@@ -278,3 +278,33 @@ func hierNodeByPath(tr hierTree, path ...string) int {
 	}
 	return int(cur)
 }
+
+// A nodes-form tree keeps each row's id as the node's key; a folded tree has
+// none, and its key is the label.
+func TestHierTreeKeyOf(t *testing.T) {
+	rec := icicleTestRec(t,
+		icicleTestCol{name: "id", str: []string{"r", "a"}},
+		icicleTestCol{name: "parent", str: []string{"", "r"}},
+		icicleTestCol{name: "label", str: []string{"Root", "Leaf"}},
+		icicleTestCol{name: "value", num: []float64{0, 1}},
+	)
+	defer rec.Release()
+	cl, reason := resolveHierarchy(rec.Schema(), treemapTestForm)
+	require.Empty(t, reason)
+	tr, _ := buildHierarchy(rec, cl)
+	assert.Equal(t, []string{"Root", "Leaf"}, tr.Labels)
+	assert.Equal(t, "a", tr.KeyOf(1))
+	assert.Empty(t, tr.KeyOf(-1))
+	assert.Empty(t, tr.KeyOf(2))
+
+	folded := icicleTestRec(t,
+		icicleTestCol{name: "stack", paths: [][]string{{"main", "run"}}},
+		icicleTestCol{name: "value", num: []float64{1}},
+	)
+	defer folded.Release()
+	cl, reason = resolveHierarchy(folded.Schema(), treemapTestForm)
+	require.Empty(t, reason)
+	tr, _ = buildHierarchy(folded, cl)
+	assert.Empty(t, tr.Keys)
+	assert.Equal(t, "run", tr.KeyOf(int32(hierNodeByPath(tr, "main", "run"))))
+}

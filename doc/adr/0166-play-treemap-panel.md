@@ -369,6 +369,24 @@ already reads a cell, in the result's unit where the widget's says bytes; that
 line has been below the fold since the panel was built, and filling the pane
 would otherwise have been what finally revealed it.
 
+## Updates
+
+### 2026-10-26 — a nodes-form pin publishes the id
+
+A pinned leaf publishes its row's `id` as `selection_key` when the result is in
+nodes form, and its label only in folded form, where the label is the path
+element and all there is. SD5's "publishes its label" was written for folded
+input, where the two are one; in nodes form a `label` column is commonly a name
+or an abbreviation, and the competence browser (ADR-0168) found the
+consequence: a pinned leaf focused nothing, because the query reading the key
+joins on the id. The readout and `get_treemap`'s `Pinned` still show the label;
+`PinnedKey` and each node reading's `Key` say what the key carries.
+
+The pane's click now names its leaf to `select_treemap_node` by path rather
+than by label. A label pinned whichever cell first carried it, and in folded
+input a leaf's label is commonly repeated under other parents. The Icicle
+publishes the same key for the same result (ADR-0160 Update of this date).
+
 ## References
 
 ### Method sources (clean room — papers and public documentation only)

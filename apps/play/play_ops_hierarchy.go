@@ -19,7 +19,9 @@ import (
 // their totals, shares and own values, which is the question either
 // picture is asked, and the losses the build counted. A pin is the pane's
 // own: select_treemap_node and select_icicle_frame set it and publish its
-// label as selection_key together, and the pane's click goes through them.
+// key as selection_key together — the node's `id` in a nodes-form result, its
+// label in a folded one (hierTree.KeyOf) — and the pane's click goes through
+// them.
 
 const (
 	opGetTreemap         = "get_treemap"
@@ -60,6 +62,7 @@ func hierLossesOf(st hierStats) HierLosses {
 // HierNodeReading is one node of a treemap.
 type HierNodeReading struct {
 	Path      []string `desc:"labels from the result's root down to the node, each cut at 128 bytes; give it back to select or focus"`
+	Key       string   `json:",omitzero" desc:"the node's id, in a nodes-form result: what selection_key carries when it is pinned"`
 	Total     *float64 `desc:"the node's value with everything below it"`
 	Share     *float64 `json:",omitzero" desc:"total as a fraction of the whole tree"`
 	Own       *float64 `json:",omitzero" desc:"a container's own value, apart from its children's"`
@@ -85,20 +88,21 @@ type TreemapColourReading struct {
 
 // TreemapReading is get_treemap's result.
 type TreemapReading struct {
-	Drawn    PaneDraw              `desc:"which draw this is of, its status line, and why it drew nothing when it did not"`
-	Input    string                `json:",omitzero" desc:"folded (a stack array per row) or nodes (id, parent, value)"`
-	Cells    int64                 `json:",omitzero" desc:"nodes in the tree"`
-	Total    *float64              `json:",omitzero" desc:"the whole tree's value"`
-	Unit     string                `json:",omitzero" desc:"the value's unit"`
-	Losses   HierLosses            `desc:"what the build dropped or cut"`
-	ColourBy string                `desc:"what the fill encodes: value or category (the color column), or depth"`
-	Show     string                `desc:"how deep the cells nest: drill, 3 deep, 4 deep or full"`
-	Colour   *TreemapColourReading `json:",omitzero" desc:"the colour channel"`
-	Pinned   string                `json:",omitzero" desc:"the pinned leaf's label, which selection_key carries"`
-	Drilled  []string              `json:",omitzero" desc:"the container the person drilled into, as a path; absent at the top"`
-	Focus    *HierNodeReading      `json:",omitzero" desc:"the node the list is of: the focus asked for, else the drilled container, else the top"`
-	Nodes    []HierNodeReading     `json:",omitzero" desc:"the focus's children, largest total first"`
-	More     int32                 `json:",omitzero" desc:"children past the ones listed; raise limit or focus deeper"`
+	Drawn     PaneDraw              `desc:"which draw this is of, its status line, and why it drew nothing when it did not"`
+	Input     string                `json:",omitzero" desc:"folded (a stack array per row) or nodes (id, parent, value)"`
+	Cells     int64                 `json:",omitzero" desc:"nodes in the tree"`
+	Total     *float64              `json:",omitzero" desc:"the whole tree's value"`
+	Unit      string                `json:",omitzero" desc:"the value's unit"`
+	Losses    HierLosses            `desc:"what the build dropped or cut"`
+	ColourBy  string                `desc:"what the fill encodes: value or category (the color column), or depth"`
+	Show      string                `desc:"how deep the cells nest: drill, 3 deep, 4 deep or full"`
+	Colour    *TreemapColourReading `json:",omitzero" desc:"the colour channel"`
+	Pinned    string                `json:",omitzero" desc:"the pinned leaf's label"`
+	PinnedKey string                `json:",omitzero" desc:"what selection_key carries for the pin: the leaf's id in a nodes-form result, its label in a folded one"`
+	Drilled   []string              `json:",omitzero" desc:"the container the person drilled into, as a path; absent at the top"`
+	Focus     *HierNodeReading      `json:",omitzero" desc:"the node the list is of: the focus asked for, else the drilled container, else the top"`
+	Nodes     []HierNodeReading     `json:",omitzero" desc:"the focus's children, largest total first"`
+	More      int32                 `json:",omitzero" desc:"children past the ones listed; raise limit or focus deeper"`
 }
 
 // GetTreemapArgs is get_treemap's argument.
@@ -116,7 +120,7 @@ type SetTreemapOptionsArgs struct {
 // SelectTreemapNodeArgs is select_treemap_node's argument.
 type SelectTreemapNodeArgs struct {
 	Path  []string `json:",omitzero" desc:"the leaf's path, as get_treemap gives it"`
-	Label string   `json:",omitzero" desc:"or the leaf's label; the pin and selection_key are a label"`
+	Label string   `json:",omitzero" desc:"or the leaf's label, when one leaf carries it; selection_key becomes the leaf's id in a nodes-form result, its label in a folded one"`
 	Clear bool     `json:",omitzero" desc:"drop the pin; selection_key becomes empty"`
 }
 
@@ -124,21 +128,22 @@ type SelectTreemapNodeArgs struct {
 // (every slice and node is replaced by a rebuild, never edited), and the
 // settings as they stand.
 type treemapOpsView struct {
-	root      *layout.Node
-	synthetic bool
-	idxOf     map[*layout.Node]int32
-	tree      hierTree
-	effNum    []float64
-	effKey    []string
-	color     treemapColorInfo
-	spread    string
-	stats     hierStats
-	inherited int
-	mixed     int
-	colorMode treemapColorModeE
-	nesting   treemapNestingE
-	selected  string
-	drilled   []string
+	root          *layout.Node
+	synthetic     bool
+	idxOf         map[*layout.Node]int32
+	tree          hierTree
+	effNum        []float64
+	effKey        []string
+	color         treemapColorInfo
+	spread        string
+	stats         hierStats
+	inherited     int
+	mixed         int
+	colorMode     treemapColorModeE
+	nesting       treemapNestingE
+	selected      string
+	selectedLabel string
+	drilled       []string
 }
 
 var treemapNestingNames = []string{"drill", "3 deep", "4 deep", "full"}
@@ -175,7 +180,7 @@ func (inst *treemapDriver) opsView() (v treemapOpsView) {
 	v = treemapOpsView{root: inst.root, idxOf: inst.idxOf, tree: inst.tree, effNum: inst.effColorNum,
 		effKey: inst.effColorKey, color: inst.color, spread: inst.quantileLine(), stats: inst.stats,
 		inherited: inst.inherited, mixed: inst.mixed, colorMode: inst.colorMode, nesting: inst.nesting,
-		selected: inst.selected}
+		selected: inst.selected, selectedLabel: inst.selectedLabel}
 	v.synthetic = treemapSynthetic(inst.root, inst.idxOf)
 	if inst.tm != nil && inst.root != nil {
 		// The breadcrumb runs from the root to the drilled container; a
@@ -285,47 +290,57 @@ func treemapLeafByLabel(root *layout.Node, label string) (n *layout.Node, found 
 	return container, container != nil
 }
 
-// pinFor is the label a select pins, checked against the tree drawn.
-func (inst *treemapDriver) pinFor(in SelectTreemapNodeArgs) (label string, err error) {
+// pinFor is the leaf a select pins, checked against the tree drawn: the key
+// selection_key carries (hierTree.KeyOf) and the label the readout shows.
+func (inst *treemapDriver) pinFor(in SelectTreemapNodeArgs) (key string, label string, err error) {
 	if in.Clear {
 		if len(in.Path) > 0 || in.Label != "" {
-			return "", app.RefuseOperation("clear drops the pin; give it alone, or give a path or a label without it")
+			err = app.RefuseOperation("clear drops the pin; give it alone, or give a path or a label without it")
 		}
-		return "", nil
+		return
 	}
 	if inst.root == nil {
-		return "", app.RefuseOperation("the treemap has no cells to pin: run a hierarchy result, and show_pane treemap")
+		err = app.RefuseOperation("the treemap has no cells to pin: run a hierarchy result, and show_pane treemap")
+		return
 	}
 	var n *layout.Node
 	switch {
 	case len(in.Path) > 0:
 		var ok bool
 		if n, ok = treemapResolve(inst.root, treemapSynthetic(inst.root, inst.idxOf), in.Path); !ok {
-			return "", app.RefuseOperation("no node at " + strconv.Quote(strings.Join(in.Path, " › ")) + "; get_treemap lists the paths")
+			err = app.RefuseOperation("no node at " + strconv.Quote(strings.Join(in.Path, " › ")) + "; get_treemap lists the paths")
+			return
 		}
 	case in.Label != "":
 		var ok bool
 		if n, ok = treemapLeafByLabel(inst.root, in.Label); !ok {
-			return "", app.RefuseOperation("no cell is labelled " + strconv.Quote(in.Label))
+			err = app.RefuseOperation("no cell is labelled " + strconv.Quote(in.Label))
+			return
 		}
 	default:
-		return "", app.RefuseOperation("name the leaf to pin by its path or its label, or clear the pin")
+		err = app.RefuseOperation("name the leaf to pin by its path or its label, or clear the pin")
+		return
 	}
 	if len(n.Children) > 0 {
-		return "", app.RefuseOperation(strconv.Quote(n.Name) + " is a container; a click on it drills, and only a leaf pins")
+		err = app.RefuseOperation(strconv.Quote(n.Name) + " is a container; a click on it drills, and only a leaf pins")
+		return
 	}
-	return n.Name, nil
+	key, label = n.Name, n.Name
+	if i, known := inst.idxOf[n]; known {
+		key = inst.tree.KeyOf(i)
+	}
+	return
 }
 
 // selectTreemapNode is select_treemap_node: the pin and selection_key
 // together.
 func (inst *PlayApp) selectTreemapNode(in SelectTreemapNodeArgs, writer string) (err error) {
-	label, err := inst.treemapDriver.pinFor(in)
+	key, label, err := inst.treemapDriver.pinFor(in)
 	if err != nil {
 		return
 	}
-	inst.treemapDriver.selected = label
-	inst.graph.setSignalRawFrom(signalSelectionKey, label, writer)
+	inst.treemapDriver.selected, inst.treemapDriver.selectedLabel = key, label
+	inst.graph.setSignalRawFrom(signalSelectionKey, key, writer)
 	return
 }
 
@@ -376,6 +391,9 @@ func (v *treemapOpsView) nodeReading(n *layout.Node, path []string, whole float6
 	if !known {
 		return
 	}
+	if int(i) < len(v.tree.Keys) {
+		r.Key = v.tree.Keys[i]
+	}
 	own := false
 	switch v.tree.ColorKind {
 	case hierColorNumeric:
@@ -409,7 +427,7 @@ func treemapReading(sn *opsSnap, in GetTreemapArgs) (out TreemapReading, err err
 		return
 	}
 	v := &sn.paneViews.treemap
-	out = TreemapReading{Drawn: d, ColourBy: "depth", Show: v.nesting.name(), Pinned: v.selected}
+	out = TreemapReading{Drawn: d, ColourBy: "depth", Show: v.nesting.name(), Pinned: v.selectedLabel, PinnedKey: v.selected}
 	if v.color.kind != hierColorNone && v.colorMode == treemapColorData {
 		out.ColourBy = treemapColorDataLabel(v.color.kind)
 	}
@@ -491,6 +509,7 @@ func treemapOptionsDigest(p *PlayApp) string {
 type IcicleFrameReading struct {
 	Path  []string `desc:"labels from the root frame down to this one, each cut at 128 bytes; give it back to select or focus"`
 	Frame int32    `desc:"the frame's number in this layout; select_icicle_frame takes it beside the path when sibling labels agree"`
+	Key   string   `json:",omitzero" desc:"the frame's id, in a nodes-form result: what selection_key carries when it is pinned"`
 	Total *float64 `desc:"the frame's value with everything below it"`
 	Self  *float64 `desc:"the frame's own value, which no child covers"`
 	Share *float64 `json:",omitzero" desc:"total as a fraction of the whole"`
@@ -513,7 +532,7 @@ type IcicleReading struct {
 	ColourBy    string               `desc:"branch, label or depth"`
 	Prune       string               `desc:"off, 0.1% or 1%: frames under that share of the total are left out"`
 	Labels      bool                 `desc:"whether frames carry their labels"`
-	Pinned      []string             `json:",omitzero" desc:"the pinned frame's path; selection_key carries its label"`
+	Pinned      []string             `json:",omitzero" desc:"the pinned frame's path; selection_key carries its id in a nodes-form result, its label in a folded one"`
 	By          string               `json:",omitzero" desc:"total: the focus's children by total; self: every frame under the focus by its own value"`
 	Focus       *IcicleFrameReading  `json:",omitzero" desc:"the frame the list is under; absent at the top"`
 	List        []IcicleFrameReading `json:",omitzero" desc:"the frames, largest first"`
@@ -555,6 +574,7 @@ var (
 // returns a new one and nothing edits it), and the settings.
 type icicleOpsView struct {
 	layout     *icicle.Layout
+	keys       []string
 	stats      hierStats
 	orient     icicle.OrientationE
 	order      icicle.OrderE
@@ -572,7 +592,7 @@ func nameAt(names []string, i int) string {
 }
 
 func (inst *IcicleDriver) opsView() icicleOpsView {
-	v := icicleOpsView{layout: inst.layout, stats: inst.stats, orient: inst.orient, order: inst.order,
+	v := icicleOpsView{layout: inst.layout, keys: inst.keys, stats: inst.stats, orient: inst.orient, order: inst.order,
 		colorBy: inst.colorBy, prune: inst.prune, hideLabels: inst.hideLabels, pinned: -1}
 	if inst.layout != nil && !inst.selected.None() && int(inst.selected.Node) < len(inst.layout.Nodes) {
 		v.pinned = inst.selected.Node
@@ -697,7 +717,7 @@ func (inst *PlayApp) selectIcicleFrame(in SelectIcicleFrameArgs, writer string) 
 		return
 	}
 	d.selected = hit
-	inst.graph.setSignalRawFrom(signalSelectionKey, d.selectedLabel(), writer)
+	inst.graph.setSignalRawFrom(signalSelectionKey, d.selectedKey(), writer)
 	return
 }
 
@@ -754,6 +774,9 @@ func (v *icicleOpsView) frameReading(i int) IcicleFrameReading {
 	r := IcicleFrameReading{Path: icicleFrameLabels(v.layout, i), Frame: int32(i), Total: finite(n.Total), Self: finite(n.Self), Depth: n.Depth}
 	if t := v.layout.Report.Total; t > 0 {
 		r.Share = finite(n.Total / t)
+	}
+	if n.Index >= 0 && int(n.Index) < len(v.keys) {
+		r.Key = v.keys[n.Index]
 	}
 	return r
 }
@@ -861,7 +884,7 @@ func addHierarchyOps(s *appops.Set[*PlayLauncher, opsSnap]) {
 		apply:      func(p *PlayApp, in SetTreemapOptionsArgs) error { return p.treemapDriver.setOptions(in) },
 	})
 	appops.Command(s, app.OperationSpec{Name: opSelectTreemapNode, Version: 1,
-		Summary: "pin a leaf of the Treemap, or drop the pin; its label becomes selection_key",
+		Summary: "pin a leaf of the Treemap, or drop the pin; its key becomes selection_key",
 		Effect:  app.OperationEffectDocument, Writes: []string{opsResSignals, opsResTreemap}, Agents: true,
 		Gesture: "clicking a leaf of the treemap",
 		Follows: []string{"Live reruns a query that reads selection_key", "a new result drops the pin and empties selection_key"}},
@@ -892,7 +915,7 @@ func addHierarchyOps(s *appops.Set[*PlayLauncher, opsSnap]) {
 		apply: func(p *PlayApp, in SetIcicleOptionsArgs) error { return p.icicleDriver.setOptions(in) },
 	})
 	appops.Command(s, app.OperationSpec{Name: opSelectIcicleFrame, Version: 1,
-		Summary: "pin a frame of the Icicle, or drop the pin; its label becomes selection_key",
+		Summary: "pin a frame of the Icicle, or drop the pin; its key becomes selection_key",
 		Effect:  app.OperationEffectDocument, Writes: []string{opsResSignals, opsResIcicle}, Agents: true,
 		Gesture: "clicking a frame of the icicle",
 		Follows: []string{"Live reruns a query that reads selection_key",

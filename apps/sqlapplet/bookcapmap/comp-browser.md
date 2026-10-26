@@ -34,14 +34,15 @@ competence written about at length and one that is a bare heading over twelve
 children look different here, because the first gets a rectangle of its own
 inside its box.
 
-**Click to walk.** Clicking a table row, or a node in the graph, publishes that
-competence as `selection_key`, which the graph re-reads: parents above,
-children below, hop by hop. The row publishes through its `key` column, which
-repeats the slug because that is the one column name play's Table publishes.
-Typing a slug into the `selection_key` field does the same. Empty focuses the
-root of the largest catalog. A treemap leaf is not part of the walk: its pin
-publishes the cell's label, which here is an abbreviation or a name rather
-than a slug, so pinning a leaf leaves the graph with nothing to focus.
+**Click to walk.** Clicking a table row, a leaf of the map, or a node in the
+graph publishes that competence as `selection_key`, which the graph re-reads:
+parents above, children below, hop by hop. The row publishes through its `key`
+column, which repeats the slug because that is the one column name play's Table
+publishes; a map leaf publishes its `id`, which is the slug, not the
+abbreviation drawn on it. A container of the map drills rather than pins, so
+only the competences with nothing below them walk from there. Typing a slug
+into the `selection_key` field does the same. Empty focuses the root of the
+largest catalog.
 
 **The whole note is a column.** `body` carries the competence's markdown
 reassembled from its sections, declared as `text/markdown` in the column name,
