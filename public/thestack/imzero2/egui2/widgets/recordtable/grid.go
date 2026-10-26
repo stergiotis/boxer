@@ -67,6 +67,15 @@ type Column struct {
 	// a CPU or memory column, whose interesting end is the top. See
 	// SortState.Apply.
 	DescFirst bool
+	// Agg is the built-in aggregate a grouped grid (ADR-0336) computes for
+	// this column at every group: a fold over the leaves the layout holds,
+	// merged upward, so a parent's mean is never an average of averages.
+	// Read by GroupState.LayoutFor; AggNone, the default, computes nothing.
+	Agg AggE
+	// AggCell, when set, draws the column's cell on a group line and wins
+	// over Agg; the host computes what the built-ins do not offer. Read by
+	// the renderer (M1 of ADR-0336), not by the layout.
+	AggCell func(g Group) Cell
 }
 
 // Input is one frame of a grid over an Arrow record.
@@ -111,6 +120,18 @@ type Input struct {
 	// Selected is none too.
 	Selected     int64
 	HasSelection bool
+	// Groups, when set and active, draws the rows grouped (ADR-0336): the
+	// state's layout is the line sequence in place of the permutation, a
+	// group line is a full-width band with the aggregates its columns
+	// declare, and a leaf keeps its record row. The grid applies no group
+	// gesture itself: the host passes the Result to GroupState.Apply, or
+	// routes it first.
+	Groups *GroupState
+	// SelectedKeyRow highlights the group line of a KeyIsRow level whose key
+	// reads as this row — the source row an exploded record's host selected
+	// — read only while HasSelectedKeyRow is set.
+	SelectedKeyRow    int64
+	HasSelectedKeyRow bool
 	// Refit asks egui_table to fit the columns to their content this frame,
 	// on top of the fit the grid asks for itself when its column set changes.
 	// Play asks on every new result, so the widths belong to the result on
@@ -165,6 +186,16 @@ type Result struct {
 	SortClicked int
 	// sortDescFirst is the clicked column's DescFirst, for Apply.
 	sortDescFirst bool
+	// GroupToggled is the group — an index into Groups.Layout().Groups —
+	// whose band or chevron was clicked to fold or unfold it, -1 for none.
+	GroupToggled int32
+	// GroupClicked is the key row of a KeyIsRow group line whose band was
+	// clicked, -1 for none; the host selects it, and the chevron still
+	// toggles.
+	GroupClicked int64
+	// GroupOrderClicked is the level whose grouped column's header was
+	// clicked, -1 for none: the gesture that reverses that level's order.
+	GroupOrderClicked int
 	// Err is set when the input is unusable; the grid then draws a short
 	// message in its place.
 	Err error
@@ -181,6 +212,7 @@ type Result struct {
 // asks (Input.Refit); a drag is captured back to the resolver.
 func RenderGrid(in Input) (res Result) {
 	res.Clicked, res.SortClicked = -1, -1
+	res.GroupToggled, res.GroupClicked, res.GroupOrderClicked = -1, -1, -1
 	scopeKey := in.ScopeKey
 	if scopeKey == "" {
 		scopeKey = defaultScopeKey
@@ -228,14 +260,31 @@ func (in *Input) validate() (err error) {
 	return
 }
 
-// displayRows is the first display position drawn and how many follow.
-func (in *Input) displayRows() (start int64, n int64) {
+// sourceRows is how many rows the permutation names: the record's, or the
+// order's.
+func (in *Input) sourceRows() (total int64) {
 	if in.Record == nil {
 		return
 	}
-	total := in.Record.NumRows()
+	total = in.Record.NumRows()
 	if in.Order != nil {
 		total = int64(len(in.Order))
+	}
+	return
+}
+
+// grouped reports whether the frame draws the rows grouped.
+func (in *Input) grouped() bool { return in.Groups != nil && in.Groups.Active() }
+
+// displayRows is the first display position drawn and how many follow —
+// over the layout's lines when the rows are grouped, else the permutation.
+func (in *Input) displayRows(lay *Layout) (start int64, n int64) {
+	if in.Record == nil {
+		return
+	}
+	total := in.sourceRows()
+	if lay != nil {
+		total = lay.Len()
 	}
 	end := total
 	if in.PageEnd > 0 {
@@ -362,7 +411,17 @@ func (in *Input) render(res *Result, scopeKey string) {
 	density := styletokens.ActiveDensity()
 	pad := CellPadX(density)
 	floor := DragMinWidth(density)
-	start, n := in.displayRows()
+	var lay *Layout
+	if in.grouped() {
+		lay, res.Err = in.Groups.LayoutFor(in.Record, in.Order, in.sourceRows(), in.Columns)
+		if res.Err != nil {
+			for rt := range c.RichTextLabel("recordtable: " + res.Err.Error()) {
+				rt.Weak()
+			}
+			return
+		}
+	}
+	start, n := in.displayRows(lay)
 	lead := in.lead()
 	tag := in.TableTag
 	if tag == "" {
@@ -432,8 +491,11 @@ func (in *Input) render(res *Result, scopeKey string) {
 	if rowHeight <= 0 {
 		rowHeight = DefaultRowHeight
 	}
+	// A grouped grid paints its own stripes in its row blocks: egui_table's
+	// stripe is painted per cell over the row block, and would cover a
+	// group line's band and label.
 	et := c.EndETable(ids.PrepareStr("table"), uint64(n), rowHeight, 1, uint32(lead)).
-		Striped(true)
+		Striped(lay == nil)
 	if in.MaxHeight > 0 {
 		et = et.MaxHeight(in.MaxHeight)
 	} else {
@@ -443,12 +505,24 @@ func (in *Input) render(res *Result, scopeKey string) {
 		et = et.ApplyWidths(in.Widths.Epoch(tag) + st.applyGen<<16)
 	}
 	if sel, ok := in.selection(); ok {
-		for local := range n {
-			if in.recordRow(start+local) == sel {
-				et = et.SelectedRow(uint64(local))
-				break
+		if lay != nil {
+			if pos := lay.PosOf(sel); pos >= start && pos < start+n {
+				et = et.SelectedRow(uint64(pos - start))
+			}
+		} else {
+			for local := range n {
+				if in.recordRow(start+local) == sel {
+					et = et.SelectedRow(uint64(local))
+					break
+				}
 			}
 		}
+	}
+	// A reveal is served once: the layout that opened the row's ancestors
+	// names its line, and the grid scrolls there. A line outside the page
+	// window is the host's to turn to.
+	if lay != nil && lay.Revealed >= start && lay.Revealed < start+n {
+		et = et.ScrollToRow(uint64(lay.Revealed-start), scrollAlignCenter)
 	}
 
 	in.renderHeaders(res, et, cols, tag, pad, refit)
@@ -460,21 +534,31 @@ func (in *Input) render(res *Result, scopeKey string) {
 	// Nothing on a page changes between most frames, so with a CellsKey the
 	// cells are captured once and replayed until one of their inputs moves
 	// or a cell has a response the live path would read. The host sees the
-	// same bytes either way.
+	// same bytes either way. The row blocks are not in the capture — the
+	// replay carries this frame's — so they are emitted on both paths, and
+	// their responses read, before the paths part.
 	chrome := Chrome{Ids: ids}
+	var raw []byte
 	if in.CellsKey != nil {
-		key := in.cellsKey(cols, et, start, n, rowLo, rowHi, refit, pad)
-		if raw := st.cells.retained(key, c.CurrentApplicationState.StateManager); raw != nil {
-			et.SendWithRawCells(raw)
-			in.captureWidths(res, et, cols, tag)
-			return
+		key := in.cellsKey(cols, et, lay, start, n, rowLo, rowHi, refit, pad)
+		raw = st.cells.retained(key, c.CurrentApplicationState.StateManager)
+		if raw == nil {
+			st.cells.beginCapture(key)
+			chrome.Note = st.cells.note
 		}
-		st.cells.beginCapture(key)
-		chrome.Note = st.cells.note
 	} else {
 		st.cells.drop()
 	}
-	in.renderCells(res, et, &chrome, pad, start, rowLo, rowHi, refit)
+	if lay != nil {
+		leadW, labelW := in.bandLabelSpan(et, resolved)
+		in.renderRowBlocks(res, et, &chrome, lay, start, rowLo, rowHi, pad, rowHeight, leadW, labelW)
+	}
+	if raw != nil {
+		et.SendWithRawCells(raw)
+		in.captureWidths(res, et, cols, tag)
+		return
+	}
+	in.renderCells(res, et, &chrome, lay, pad, start, rowLo, rowHi, refit)
 	if in.CellsKey != nil {
 		st.cells.endCapture(et.CellsBytes())
 	}
@@ -482,11 +566,11 @@ func (in *Input) render(res *Result, scopeKey string) {
 	in.captureWidths(res, et, cols, tag)
 }
 
-func (in *Input) cellsKey(cols []colwidth.Column, et c.EndETableFluid, start, n, rowLo, rowHi int64, refit bool, pad float32) (key cellsKey) {
+func (in *Input) cellsKey(cols []colwidth.Column, et c.EndETableFluid, lay *Layout, start, n, rowLo, rowHi int64, refit bool, pad float32) (key cellsKey) {
 	lead := in.lead()
 	key = cellsKey{
 		content: in.CellsKey, pageStart: start, pageN: n, rowLo: rowLo, rowHi: rowHi,
-		refit: refit, pad: pad,
+		refit: refit, pad: pad, keyRow: -1,
 		columns: foldColumns(cols, func(pos int) int {
 			if pos < lead {
 				return -1
@@ -501,18 +585,34 @@ func (in *Input) cellsKey(cols []colwidth.Column, et c.EndETableFluid, start, n,
 	if in.Sort != nil {
 		key.sortActive, key.sortCol, key.sortDesc = in.Sort.Active, in.Sort.Col, in.Sort.Desc
 	}
+	if lay != nil {
+		key.groupGen, key.lines = in.Groups.Gen(), lay.Len()
+		if in.HasSelectedKeyRow {
+			key.keyRow = in.SelectedKeyRow
+		}
+	}
 	return
 }
 
 // renderCells emits the cells of display rows [rowLo, rowHi) of the window.
 // Each cell is scoped by its record row and keyed by its column position, so
 // a cell keeps its id across a sort and a page turn.
-func (in *Input) renderCells(res *Result, et c.EndETableFluid, chrome *Chrome, pad float32, start, rowLo, rowHi int64, refit bool) {
+func (in *Input) renderCells(res *Result, et c.EndETableFluid, chrome *Chrome, lay *Layout, pad float32, start, rowLo, rowHi int64, refit bool) {
 	ids := in.Ids
 	lead := in.lead()
 	sel, hasSel := in.selection()
 	for local := rowLo; local < rowHi; local++ {
-		row := in.recordRow(start + local)
+		var row int64
+		if lay != nil {
+			ln := lay.Lines[start+local]
+			if ln.IsGroup() {
+				in.renderGroupCells(et, chrome, lay, ln.Group, local, pad, refit)
+				continue
+			}
+			row = ln.Row
+		} else {
+			row = in.recordRow(start + local)
+		}
 		if row < 0 {
 			continue
 		}
@@ -595,19 +695,35 @@ func (in *Input) renderHeaders(res *Result, et c.EndETableFluid, cols []colwidth
 					hover = f.Name + " — " + f.Type.String()
 				}
 			}
-			sortable := in.Sort != nil && hasField && !col.NoSort
+			// A column the rows are grouped by has one value per group, so
+			// its header reverses the groups rather than sorting the leaves.
+			level := -1
+			if hasField {
+				level = in.groupLevelOf(col.Arrow)
+			}
+			sortable := hasField && !col.NoSort && (in.Sort != nil || level >= 0)
 			header := func() {
 				chrome.HeaderCell(uint64(pos), pad, func() {
 					if sortable {
-						for range c.HoverText(hover + " — click to sort").KeepIter() {
+						glyph, hint := "", " — click to sort"
+						if level >= 0 {
+							glyph, hint = in.Groups.Glyph(level), " — click to reverse the groups"
+						} else {
+							glyph = in.Sort.Glyph(col.Arrow)
+						}
+						for range c.HoverText(hover + hint).KeepIter() {
 							btn := c.Button(ids.PrepareSeq(uint64(pos)),
-								c.Atoms().BeginRichText(name+in.Sort.Glyph(col.Arrow)).Strong().Monospace().End().Keep()).
+								c.Atoms().BeginRichText(name+glyph).Strong().Monospace().End().Keep()).
 								Frame(false)
 							if !refit {
 								btn = btn.Truncate()
 							}
 							if btn.SendResp().HasPrimaryClicked() {
-								res.SortClicked, res.sortDescFirst = col.Arrow, col.DescFirst
+								if level >= 0 {
+									res.GroupOrderClicked = level
+								} else {
+									res.SortClicked, res.sortDescFirst = col.Arrow, col.DescFirst
+								}
 							}
 						}
 					} else if hover != "" {

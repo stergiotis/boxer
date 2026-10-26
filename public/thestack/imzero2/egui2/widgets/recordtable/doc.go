@@ -13,6 +13,15 @@
 // record row, is built on [Chrome] directly. Widths persist through a
 // [colwidth.Resolver] (ADR-0151) the host acquires from its frame context.
 //
+// A [GroupState] groups the rows (ADR-0336): an ordered list of levels — a
+// column's key, or a path's segments — and an expansion keyed by the
+// group's key path. [GroupState.LayoutFor] turns the record and the sort
+// permutation into a [Layout] of lines, group and leaf, with the aggregates
+// the columns declare; leaves keep their record row and the permutation's
+// order within their group. The grid draws a group line as a band — chevron,
+// key and leaf count — with the aggregates under their columns, and reports
+// its clicks for the host's [GroupState.Apply].
+//
 // A host that can name everything its cells read passes it as
 // Input.CellsKey, and the grid replays the previous frame's cells instead of
 // rebuilding them while nothing moves and no cell is touched.

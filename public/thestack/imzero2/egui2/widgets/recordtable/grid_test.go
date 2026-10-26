@@ -141,11 +141,11 @@ func TestGridDisplayRows(t *testing.T) {
 	rec := sortRec(t, []string{"a", "b", "c", "d"}, []bool{false, false, false, false}, []int64{1, 2, 3, 4})
 	defer rec.Release()
 	in := Input{Record: rec}
-	start, n := in.displayRows()
+	start, n := in.displayRows(nil)
 	assert.Equal(t, [2]int64{0, 4}, [2]int64{start, n})
 
 	in.PageStart, in.PageEnd = 1, 3
-	start, n = in.displayRows()
+	start, n = in.displayRows(nil)
 	assert.Equal(t, [2]int64{1, 2}, [2]int64{start, n})
 	assert.Equal(t, int64(1), in.recordRow(start))
 
@@ -153,10 +153,10 @@ func TestGridDisplayRows(t *testing.T) {
 	assert.Equal(t, int64(2), in.recordRow(start), "display position 1 of a reversed order")
 
 	in.PageStart, in.PageEnd = 2, 2
-	_, n = in.displayRows()
+	_, n = in.displayRows(nil)
 	assert.Equal(t, int64(0), n, "an empty window draws nothing")
 	in.PageStart, in.PageEnd = 10, 0
-	_, n = in.displayRows()
+	_, n = in.displayRows(nil)
 	assert.Equal(t, int64(0), n, "a window past the end draws nothing")
 
 	in.Order = []int64{9}

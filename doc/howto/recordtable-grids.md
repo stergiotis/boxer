@@ -169,10 +169,55 @@ the key must cover the rest — the record, the order, and everything a
 key that misses one shows stale cells until something else moves. Leave it
 nil unless you have measured a reason.
 
+## Group the rows
+
+A `GroupState` beside the `SortState` groups the rows
+([ADR-0336](../adr/0336-recordtable-row-grouping-a-line-sequence-over-the-permutation.md)).
+It is the host's, kept at one address like the other state, and set once:
+
+```go
+inst.groups.SetLevels([]recordtable.GroupLevel{
+    {Arrow: 2},                                  // one group per distinct value, typed order
+    {Segments: func(row int64) []recordtable.Key { // a path: one group per prefix
+        return segmentsOf(rec, row)
+    }},
+})
+cols[3].Agg = recordtable.AggSum                  // a built-in, merged upward
+res := recordtable.RenderGrid(recordtable.Input{ /* as above */, Groups: &inst.groups })
+inst.sort.Apply(res)
+inst.groups.Apply(res)
+```
+
+What the grid then draws: a band per group with a chevron, the key and a
+leaf count, inset by depth; the aggregates of the columns that declare one,
+under their headers on the band's line; the leaves beneath, in the sort's
+order within their group. The sort still sorts the leaves; the header of a
+grouped column reverses that level's groups instead. A click on a band or
+its chevron reports `GroupToggled`, and `Apply` folds the group; nothing is
+applied by the grid itself, so a host that routes gestures reads the
+`Result` as it does the sort's. Expansion is keyed by the group's key path,
+so it survives a new record with the same keys; `Reveal(row)` opens a
+row's ancestors and the grid scrolls to it once.
+
+Three things to know. A level's `Key` is the one seam for bucketing (a
+timestamp to its day): the grid never parses a value. The band's label
+starts after the row-number column and is clipped at the first column that
+aggregates, so put the aggregating columns to the right. And a level whose
+key is a record row of another record —
+the source row of a record you exploded — sets `KeyIsRow`: the band's click
+then reports `GroupClicked` for the host to select, the chevron still
+toggles, and `SelectedKeyRow` paints the selected band.
+
+The cells cache folds the grouping in; a `CellsKey` need not name it.
+The gallery's `recordtable` demo
+(`demo/apps/widgets/egui2_hl_recordtable_demo.go`) is the worked example:
+both level kinds, the host's controls, and a readout its scene asserts.
+
 ## When not to use RenderGrid
 
-`RenderGrid` draws one grid row per record row. A grid that breaks that —
-play's per-attribute view, which draws several rows per entity — builds on
+`RenderGrid` draws one grid row per record row, or a group line. A grid
+that breaks that — play's per-attribute view, which draws several rows per
+entity from a walk, not a record — builds on
 the same parts directly: `SortState` for the sort, `Chrome` for the inset
 cells and headers, `DragMinWidth` for the floor. Play's
 `play_table_attr.go` is the worked example.

@@ -27,6 +27,11 @@ type cellsKey struct {
 	sortActive bool
 	sortCol    int
 	sortDesc   bool
+	// groupGen and lines are the grouping's generation and line count
+	// (ADR-0336); keyRow the selected key row, -1 for none.
+	groupGen uint64
+	lines    int64
+	keyRow   int64
 	// columns folds the column identities, their Arrow indices and the
 	// host's per-position visibility.
 	columns uint64
