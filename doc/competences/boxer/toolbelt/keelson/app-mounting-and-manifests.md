@@ -11,7 +11,7 @@ realised_by:
   - adr:0158
   - adr:0214
   - adr:0260
-  - adr:0335
+  - adr:0339
   - pkg:public/keelson/runtime/app
   - table:keelson/apps
 assessment:

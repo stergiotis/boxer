@@ -4,12 +4,12 @@
 // before opening so the next-allocated App captures the right
 // initial selection.
 //
-// Phase 1 (this package): static descriptions per cap + a layered
-// (Sugiyama) schematic of App → capability → backend, laid out by
-// Graphviz dot in-process and painted through the layeredgraph widget
-// (ADR-0069, see archgraph.go). The layout is cached (the cap registry
-// is closed); only the per-frame colours — selected cap, effective
-// backend, degraded cap — vary. Live audit activity renders as a
+// Phase 1 (this package): static descriptions per cap + a schematic of
+// the App over one card per capability listing its backends, sized by
+// Graphviz dot in-process, packed into a grid as wide as the panel and
+// painted through the layeredgraph widget (ADR-0069, see archgraph.go).
+// The layouts are cached (the cap registry is closed); only the per-frame
+// colours — selected cap, effective backend, degraded cap — vary. Live audit activity renders as a
 // companion sparkline strip beneath the schematic.
 package capinspector
 
@@ -25,6 +25,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/layeredgraph"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/markdown"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/schemaview"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/selector"
@@ -125,6 +126,12 @@ type App struct {
 	schemaCap   CapId
 	schemaErr   error
 	schemaScope string
+
+	// archDrawn and archEdges are the per-frame copy of the schematic's
+	// cached layout with the selected cap's edge reordered last
+	// (archSelectedLast); held here so the copy allocates once per window.
+	archDrawn layeredgraph.Layout
+	archEdges []layeredgraph.EdgeLayout
 }
 
 var _ app.AppI = (*App)(nil)

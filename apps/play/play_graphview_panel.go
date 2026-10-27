@@ -44,7 +44,7 @@ const (
 	// budget: the simulation steps inside the same 60 Hz frame that paints the
 	// graph and the rest of the app. Measured on one laptop (not a trial), a
 	// layout step is around half a millisecond at 2 000 nodes and around five
-	// at 20 000, and with geometry sent as batches (ADR-0329) a
+	// at 20 000, and with geometry sent as batches (ADR-0338) a
 	// 20 000-node frame still draws at an interactive rate; past it both costs
 	// keep growing with the graph. A sparse graph of many small components —
 	// nodes pinned by lat/lon over a map — stays readable well past the
@@ -1185,7 +1185,7 @@ func (inst *GraphviewDriver) statusLine() string {
 }
 
 // graphviewPaintNote reports what the widget's geometry budget took out of
-// the picture (ADR-0329), most visible first; nothing when it took nothing.
+// the picture (ADR-0338), most visible first; nothing when it took nothing.
 func graphviewPaintNote(st graphview.PaintStats) string {
 	if !st.Coarse() {
 		return ""

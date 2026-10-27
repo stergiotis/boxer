@@ -9,7 +9,7 @@ import (
 )
 
 // paint_batch.go holds the frame's batched geometry and the budget it is held
-// to (ADR-0329). Straight edges go out as one segment mesh per stroke width,
+// to (ADR-0338). Straight edges go out as one segment mesh per stroke width,
 // arrow heads as one triangle mesh, node discs as one mesh per (colour,
 // radius) and pinned rings as one ring mesh per radius; what lies wholly
 // outside the canvas is not sent at all. A picture past the vertex budget

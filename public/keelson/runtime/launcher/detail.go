@@ -186,7 +186,7 @@ func (inst *Inst) renderDetailMeta(m app.Manifest) {
 	c.AddSpace(styletokens.GapItems(inst.density))
 }
 
-// originLabel renders where an app came from (ADR-0335) as one line: the
+// originLabel renders where an app came from (ADR-0339) as one line: the
 // module, its version when the build selected one, and a replacement when
 // there is one. "(devel)" is dropped rather than shown: it says the module was
 // built from a local directory, which is the absence of a version, not one.

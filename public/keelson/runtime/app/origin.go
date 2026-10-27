@@ -9,7 +9,7 @@ import (
 )
 
 // Origin is where a registration came from, as the registry observed it
-// (ADR-0335): the Go package whose code called Register or RegisterFactory,
+// (ADR-0339): the Go package whose code called Register or RegisterFactory,
 // and the module that package was built from, resolved against the binary's
 // own build information.
 //

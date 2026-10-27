@@ -138,7 +138,7 @@ Both pass through the layout onto `EdgeLayout`.
 The dash and gap lengths are a `view.Style` concern, in pixels like
 `Style.EdgeStrokeW`, so a dashed edge stays readable when the drawing is scaled
 to fit. A dashed edge's dashes are sent as one batch, following
-[ADR-0329](./0329-painter-lane-vertex-budget-and-batched-graph-geometry.md)
+[ADR-0338](./0338-painter-lane-vertex-budget-and-batched-graph-geometry.md)
 §SD5.
 
 The widget provides the mechanism; what a dash *means* is the caller's.
@@ -366,5 +366,5 @@ See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-d
   there) that stays deferred.
 - [ADR-0228](./0228-hosted-canvas-rendering-and-graph-widget-sharing.md) — the
   Go-side pick §SD7 extends to edges, and the painter-core deferral it keeps.
-- [ADR-0329](./0329-painter-lane-vertex-budget-and-batched-graph-geometry.md) —
+- [ADR-0338](./0338-painter-lane-vertex-budget-and-batched-graph-geometry.md) —
   the batching §SD3 follows for dashes.

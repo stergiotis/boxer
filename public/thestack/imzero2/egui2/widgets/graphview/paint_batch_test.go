@@ -29,7 +29,7 @@ func resetHostBudget(t *testing.T) {
 
 // What lies wholly outside the canvas is not sent: zoomed in on one end of a
 // long line, most nodes and edges are culled, and the drawn and culled
-// counts add up to the declaration (ADR-0329).
+// counts add up to the declaration (ADR-0338).
 func TestPaintCullsWhatLiesOffTheCanvas(t *testing.T) {
 	resetHostBudget(t)
 	nodes, edges := pinnedLine(100, 50)
@@ -79,7 +79,7 @@ func TestBudgetDropsRingsThenHeadsThenThinsEdges(t *testing.T) {
 
 // A host frame past its budget backs the graph's own budget off, and frames
 // under it let it recover — so a map and the graph it hosts settle under the
-// host's line between them (ADR-0329).
+// host's line between them (ADR-0338).
 func TestHostOverBudgetBacksTheGraphOff(t *testing.T) {
 	resetHostBudget(t)
 	v := New(nil, "backoff", Options{VertexBudget: 1000})

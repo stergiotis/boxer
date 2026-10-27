@@ -259,7 +259,7 @@ pub enum PaintCmd {
         radius: f32,
         color: egui::Color32,
         weight: f32,
-        // A circle batch drawn as one mesh (ADR-0329); other shapes ignore it.
+        // A circle batch drawn as one mesh (ADR-0338); other shapes ignore it.
         mesh: bool,
         // The ring around each circle; zero width draws none.
         outline: egui::Stroke,
@@ -947,7 +947,7 @@ pub struct ImZeroFffi<'a, R: std::io::BufRead, W: std::io::Write> {
     pub(crate) capture_fonts: Option<std::sync::Arc<crate::imzero2::svgexport::FontResolver>>,
     pub last_pass_nr: u64,
 
-    // Paint geometry budget (ADR-0329). Every painter-lane command adds an
+    // Paint geometry budget (ADR-0338). Every painter-lane command adds an
     // estimate of the vertices it tessellates into; a command that would take
     // the frame past `paint_vertex_budget` is skipped and counted instead.
     // The budget is half the device's largest buffer in vertices, because
@@ -10906,7 +10906,7 @@ egui::Window::new(label).id(i);
 }
 
 impl<R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'_, R, W> {
-    /// Sizes the paint vertex budget (ADR-0329) to a device whose largest
+    /// Sizes the paint vertex budget (ADR-0338) to a device whose largest
     /// buffer is `max_buffer_size` bytes. A host with a wgpu device calls it
     /// once the device exists; without the call the budget assumes wgpu's
     /// default limit, which every device meets.
@@ -10963,7 +10963,7 @@ impl<R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'_, R, W> {
         let mut cur = painter.clone();
         let mut clip_stack: Vec<egui::Painter> = Vec::new();
         for cmd in &cmds {
-            // The budget's cut (ADR-0329): a batch draws its first `limit`
+            // The budget's cut (ADR-0338): a batch draws its first `limit`
             // items, anything else draws whole or not at all.
             let limit = self.admit_paint_cmd(cmd);
             if limit == 0
@@ -11328,7 +11328,7 @@ impl<R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'_, R, W> {
                     let st = egui::Stroke::new(*weight, *color);
                     let circle = !(1..=9).contains(shape);
                     if circle && *mesh {
-                        // One mesh for the batch (ADR-0329): a fan per disc,
+                        // One mesh for the batch (ADR-0338): a fan per disc,
                         // the outline as a ring, a feather on the outer edge.
                         let mut m = egui::Mesh::default();
                         m.vertices.reserve(
@@ -11841,7 +11841,7 @@ fn new_table_render_body_builder<R: std::io::BufRead, W: std::io::Write>(
 mod tests {
     use super::*;
 
-    /// The paint budget (ADR-0329) cuts a batch to what fits, skips a single
+    /// The paint budget (ADR-0338) cuts a batch to what fits, skips a single
     /// shape that does not, never holds back clip bookkeeping, and counts
     /// each cut once.
     #[test]

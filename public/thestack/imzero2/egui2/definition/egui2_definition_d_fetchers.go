@@ -147,7 +147,7 @@ self.io.write_plain_u64(self.last_pass_nr)?;
 		Build())
 
 	// fetchPaintBudget — the previous frame's paint-command geometry against
-	// the host's vertex budget (ADR-0329): the vertices the painter-lane
+	// the host's vertex budget (ADR-0338): the vertices the painter-lane
 	// commands were estimated to tessellate into, the budget they were held
 	// to, and how many commands were skipped because the next one would have
 	// crossed it. A frame past the budget would ask the GPU for a vertex

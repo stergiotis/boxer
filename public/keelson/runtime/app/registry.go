@@ -41,7 +41,7 @@ type entry struct {
 	// withdrawn at registration; empty when it was kept or absent.
 	opsDiagnostic string
 	// origin is the code that registered, observed at registration
-	// (ADR-0335).
+	// (ADR-0339).
 	origin Origin
 }
 
@@ -59,7 +59,7 @@ type Registration struct {
 	// (ADR-0269 §SD2); empty when it was kept or none was declared.
 	OperationsDiagnostic string
 	// Origin is the package and module whose code registered the app
-	// (ADR-0335), observed rather than declared.
+	// (ADR-0339), observed rather than declared.
 	Origin Origin
 }
 
@@ -390,7 +390,7 @@ func (inst *Registry) OperationsDiagnostic(id AppIdT) (diagnostic string) {
 }
 
 // Origin returns the package and module whose code registered id
-// (ADR-0335); ok is false when id is not registered.
+// (ADR-0339); ok is false when id is not registered.
 func (inst *Registry) Origin(id AppIdT) (o Origin, ok bool) {
 	inst.mu.RLock()
 	defer inst.mu.RUnlock()

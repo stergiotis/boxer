@@ -40,12 +40,12 @@ accessibility node, so the scene does not open it.
 {"do":"click","name":"Audit + facts backend","role":"button","settleMs":1200,"comment":"the first frame of a cap lays the graph out; give it a moment"}
 {"do":"wait","valueContains":"Backend: runtime/factsstore","role":"label"}
 {"do":"wait","valueContains":" no active backend","role":"label","comment":"the legend row is up; each entry is its swatch glyph and its text in one label"}
-{"do":"wait","valueContains":" to inactive backend","role":"label"}
+{"do":"wait","valueContains":" idle capability","role":"label"}
 {"do":"wait","value":"This capability is a runtime-level service; every app inherits it implicitly.","role":"label","comment":"facts has no per-app filter"}
-{"do":"capture","text":"capinspector-facts","comment":"facts selected: green cap, amber chstore, legend and activity strip below"}
+{"do":"capture","text":"capinspector-facts","comment":"facts selected: green card, amber chstore row, the grid four columns wide in this window"}
 
 {"do":"note","text":"--- a click on a graph node selects its cap ---"}
-{"do":"click","x":401,"y":491,"pointer":true,"comment":"the 'Subject router' node; coordinates because the graph has no accessibility nodes"}
+{"do":"click","x":523,"y":452,"pointer":true,"comment":"the 'Subject router' card; coordinates because the graph has no accessibility nodes"}
 {"do":"wait","value":"Subject family: (all subjects)","role":"label"}
 {"do":"click","name":"llm.* model inference","role":"button"}
 {"do":"wait","valueContains":"Live consumers in this registry:","role":"label","comment":"llm has a per-app filter, so the line lists the apps that declare it"}

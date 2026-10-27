@@ -204,7 +204,7 @@ func appsTable(reg *app.Registry, rs []app.Registration) *introspect.Table {
 		// Whether a window may be opened under the launch limit
 		// (KEELSON_LAUNCHABLE_APPS_WHERE, ADR-0272); true when none is set.
 		Bool("launchable", func(i int) bool { return reg.Launchable(m(i).Id) }).
-		// Where the app came from (ADR-0335): the package whose code
+		// Where the app came from (ADR-0339): the package whose code
 		// registered it and the module that package was built from, read
 		// off the binary's build information rather than declared. A
 		// module_version of "(devel)" is a module built from a local

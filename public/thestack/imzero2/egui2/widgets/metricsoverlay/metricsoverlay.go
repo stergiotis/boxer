@@ -102,7 +102,7 @@ func Render(in Input) (res Result) {
 		if s.PaintSkipped > 0 {
 			// Geometry is missing from the frame: the host held the painter
 			// lane under its vertex budget rather than overflow the GPU's
-			// vertex buffer (ADR-0329).
+			// vertex buffer (ADR-0338).
 			monoLabel(fmt.Sprintf("paint over budget: %d cut  ", s.PaintSkipped), color.Hex(styletokens.WarningDefault.AsHex()), true)
 		}
 		dr := distsummary.Render(distsummary.Input{
