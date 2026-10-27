@@ -48,6 +48,9 @@ type entry struct {
 	// steps are a tool entry's steps of the turn: the model call that
 	// asked for it, on a round's first tool, and the tool call itself.
 	steps []turnStep
+	// cites are a reply's verdicts (ADR-0340 §SD6), the latest per
+	// assertion of its turn.
+	cites []citationMark
 }
 
 // failure is what a failed turn leaves to inspect: the error's whole text,
@@ -283,6 +286,9 @@ func (inst *conversation) rewind() (text string, undo *rewound, ok bool) {
 	}
 	// The turn's artefact revisions go with it.
 	undo.artDropped, undo.artAt = inst.art.truncate(m.artRev), m.artRev
+	if inst.coord != nil {
+		inst.coord.syncArtefactJournal(journalCtx(context.Background()), inst.coord.journalNow(), m.turn, artefactFormRewind)
+	}
 	inst.entries = inst.entries[:m.user:m.user]
 	inst.parent, inst.omitTo, inst.lastIn, inst.lastOut = m.parent, m.omitTo, m.lastIn, m.lastOut
 	inst.mark = nil
@@ -307,6 +313,9 @@ func (inst *conversation) restore(undo *rewound) (ok bool) {
 				return false
 			}
 		}
+	}
+	if inst.coord != nil {
+		inst.coord.syncArtefactJournal(journalCtx(context.Background()), inst.coord.journalNow(), undo.mark.turn, artefactFormRestore)
 	}
 	before := turnMark{user: undo.mark.user, turn: undo.mark.turn, parent: inst.parent, omitTo: inst.omitTo, lastIn: inst.lastIn, lastOut: inst.lastOut, artRev: undo.artAt}
 	inst.entries = append(inst.entries, undo.entries...)
@@ -382,6 +391,13 @@ func (inst *conversation) landTurn(req llm.Request, res *turnResult, err error, 
 		return
 	}
 	inst.land(req, &res.final, nil, atMs)
+	if inst.coord != nil {
+		if w := inst.coord.journalNow(); w != nil && len(inst.entries) > 0 {
+			if last := &inst.entries[len(inst.entries)-1]; last.speaker == speakerModel {
+				last.cites = marksOf(w.Entries(), req.Turn)
+			}
+		}
+	}
 	// A screenshot shown this turn stayed for this turn: the journal now
 	// carries a placeholder in its place (ADR-0287 §SD5), and the host
 	// keeps the next request in full, as a rewrite (ADR-0264 §SD3).

@@ -41,6 +41,10 @@ type resumed struct {
 	stranded bool
 	// lines are what resume settled, as the person reads them.
 	lines []string
+	// storedTitle is the title the roster keeps for the conversation in
+	// the app's storage, where a rename lives (chat_roster.go); empty
+	// when there is none.
+	storedTitle string
 }
 
 // listRuns asks the host for this app's runs, off the frame.
@@ -88,6 +92,7 @@ func (inst *App) resumeRun(id string) {
 		return
 	}
 	fingerprint := runFingerprint(profileNow().Fingerprint(), inst.confinedTier)
+	storage := inst.storage
 	retiring := inst.retiring[id]
 	delete(inst.retiring, id)
 	inst.resumeJob.Start(nil, bgjob.Spec{Kind: "chat-resume", Title: "resume"}, func(ctx context.Context) (r *resumed, err error) {
@@ -118,6 +123,11 @@ func (inst *App) resumeRun(id string) {
 		case !r.stranded && run.State == agentrun.StateClosed:
 			if err = w.Resume(ctx); err != nil {
 				return
+			}
+		}
+		if storage != nil {
+			if v, found, serr := storage.Get(titleStorePrefix + id); serr == nil && found {
+				r.storedTitle = cleanConvTitle(string(v))
 			}
 		}
 		// What the record left open, read before anything settles it.
@@ -303,6 +313,9 @@ func resumeLines(r *resumed) (lines []string) {
 	if r.fold.OpenTurn != "" {
 		lines = append(lines, "the turn "+r.fold.OpenTurn+" was cut short; its calls stand as listed")
 	}
+	if n, _, ok := artefactOfEntries(r.writer.Entries()); ok && n > 0 {
+		lines = append(lines, artefactResumeLine(n))
+	}
 	return
 }
 
@@ -394,14 +407,7 @@ func (inst *App) adopt(r *resumed) {
 	conv.stranded = r.stranded || r.run.State == agentrun.StateDeleted || r.fold.Deleted
 	conv.entries = transcriptOf(r.entries)
 	conv.parent, conv.lastIn, conv.lastOut = lastReplyOf(r.entries)
-	if conv.titleSource == titleNone {
-		for _, e := range conv.entries {
-			if e.speaker == speakerUser {
-				conv.title, conv.titleSource = firstLineTitle(e.text), titleFirstLine
-				break
-			}
-		}
-	}
+	inst.adoptTitle(r)
 	coord := inst.newCoordinator(conv.id)
 	coord.mu.Lock()
 	// The coordinator's fingerprint is the profile's, which the call rows
@@ -416,14 +422,43 @@ func (inst *App) adopt(r *resumed) {
 	coord.mu.Unlock()
 	coord.offer(conv.apps, conv.questions)
 	if conv.artefact {
-		// deferred: the artefact's text is not rebuilt from the journal
-		// (its revisions live in the artefact store, not in entries), so a
-		// resumed conversation offers an empty artefact; the snapshot note
-		// re-told at the next turn says so to the model.
+		// The head the journal last wrote is the artefact again
+		// (chat_artefact_journal.go); the snapshot note re-told at the
+		// next turn tells the model where it stands.
+		if n, text, ok := artefactOfEntries(r.entries); ok && conv.art.restore(n, text) {
+			coord.mu.Lock()
+			coord.artJournaled, coord.artJournaledText = n, text
+			coord.mu.Unlock()
+		}
 		coord.offerArtefact(conv.art)
 	}
 	inst.coord, conv.coord = coord, coord
 	inst.resumeNotes(r)
+}
+
+// adoptTitle gives a resumed conversation its title: the one the roster
+// kept, when the person renamed it; else the model's, read back from the
+// title call's outcome; else the first message's first line. A title the
+// model was asked for is not asked for again.
+func (inst *App) adoptTitle(r *resumed) {
+	conv := inst.conv
+	first := ""
+	for _, e := range conv.entries {
+		if e.speaker == speakerUser {
+			first = firstLineTitle(e.text)
+			break
+		}
+	}
+	model, asked := titleOfEntries(r.entries)
+	conv.titleAsked = asked
+	switch {
+	case r.storedTitle != "" && r.storedTitle != model && r.storedTitle != first:
+		conv.title, conv.titleSource = r.storedTitle, titleManual
+	case model != "":
+		conv.title, conv.titleSource = model, titleModel
+	case first != "":
+		conv.title, conv.titleSource = first, titleFirstLine
+	}
 }
 
 // lastReplyOf is the last live reply's call id and usage: the next turn's
@@ -484,7 +519,7 @@ func transcriptOf(entries []agentrun.Entry) (out []entry) {
 				continue
 			}
 			replies[e.Key] = true
-			out = append(out, entry{speaker: speakerModel, text: e.Body, atMs: at})
+			out = append(out, entry{speaker: speakerModel, text: e.Body, atMs: at, cites: marksOf(entries, e.Turn)})
 		case agentrun.KindOutcome:
 			if e.Role != projection.RoleTool {
 				continue

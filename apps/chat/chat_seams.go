@@ -9,6 +9,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/stergiotis/boxer/public/keelson/runtime/agent"
 	"github.com/stergiotis/boxer/public/keelson/runtime/agentrun"
 	"github.com/stergiotis/boxer/public/keelson/runtime/agentrun/projection"
 	"github.com/stergiotis/boxer/public/keelson/runtime/harness"
@@ -68,13 +69,11 @@ type contextItem struct {
 // contextSource is one source of mid-turn context: compose returns its
 // text when it is news to the model and nothing otherwise. Each source
 // keeps its own "told" watermark; the injector decides nothing about news
-// beyond asking the sources in order.
-//
-// deferred: a source's watermark advances when its note is composed and is
-// not restored when the turn fails, so a note composed for a turn that got
-// no answer is not repeated on the next. The preservation golden
-// (failed-turns) records that behaviour; restoring the watermark is a
-// visible change for the profile record, not for this refactor.
+// beyond asking the sources in order. A watermark advances when the note
+// is composed; a turn that ends without an answer puts it back (untell),
+// since the turn's notes leave the projection with it and the model
+// never read them. The changes notice is the host's to repeat: its
+// watermark is the task's, kept by the dispatcher per turn asked.
 type contextSource struct {
 	name    string
 	form    contextFormE
@@ -87,6 +86,52 @@ var contextSources = []contextSource{
 	{name: "artefact", form: contextFormSnapshot, compose: func(_ context.Context, inst *coordinator, _ string) string { return inst.artefactNote() }},
 	{name: "pixels", form: contextFormNotice, compose: func(_ context.Context, inst *coordinator, _ string) string { return inst.pixelsNote() }},
 	{name: "changes", form: contextFormNotice, compose: func(ctx context.Context, inst *coordinator, turn string) string { return inst.changesNote(ctx, turn) }},
+}
+
+// toldMarks are the snapshot sources' watermarks as they stood before a
+// turn composed its notes, and how many cuts the history had: what untell
+// puts back when the turn ends unanswered.
+type toldMarks struct {
+	ceiling     agent.Ceiling
+	ceilingOnce bool
+	art         int
+	artN        bool
+	pix         pixelPolicy
+	pixOnce     bool
+	pixSees     bool
+	cuts        int
+}
+
+// toldNow reads the watermarks.
+func (inst *coordinator) toldNow() (m toldMarks) {
+	inst.mu.Lock()
+	defer inst.mu.Unlock()
+	return toldMarks{ceiling: inst.told, ceilingOnce: inst.toldOnce, art: inst.artTold, artN: inst.artToldN,
+		pix: inst.pix.told, pixOnce: inst.pix.toldOnce, pixSees: inst.pix.toldSees, cuts: inst.cuts}
+}
+
+// untell puts the watermarks back as they stood before the turn, so the
+// notes the turn composed are composed again for the next: the turn's
+// entries left the projection unread. A watermark cleared since — by a
+// compaction, which re-tells the snapshots — stays cleared; and after a cut
+// made in the turn the marks before it are stale too, since the cut took
+// the notes that carried them, so every snapshot is news again.
+func (inst *coordinator) untell(m toldMarks) {
+	inst.mu.Lock()
+	defer inst.mu.Unlock()
+	if inst.cuts != m.cuts {
+		inst.toldOnce, inst.artToldN, inst.pix.toldOnce = false, false, false
+		return
+	}
+	if inst.toldOnce {
+		inst.told, inst.toldOnce = m.ceiling, m.ceilingOnce
+	}
+	if inst.artToldN {
+		inst.artTold, inst.artToldN = m.art, m.artN
+	}
+	if inst.pix.toldOnce {
+		inst.pix.told, inst.pix.toldOnce, inst.pix.toldSees = m.pix, m.pixOnce, m.pixSees
+	}
 }
 
 // inject is what the host tells the model before the person's message
@@ -411,6 +456,7 @@ func runTurn(ctx context.Context, cli completerI, coord *coordinator, req llm.Re
 	if err = coord.syncSections(jctx, w); err != nil {
 		return
 	}
+	marks := coord.toldNow()
 	in := injectState{ctx: ctx, coord: coord, turn: req.Turn}
 	seams.inject.Apply(&in)
 	text := ""
@@ -435,7 +481,10 @@ func runTurn(ctx context.Context, cli completerI, coord *coordinator, req llm.Re
 			if _, derr := coord.dropTurn(jctx, w, req.Turn); derr != nil && err == nil {
 				err = derr
 			}
+			coord.untell(marks)
 		}
+		// The artefact as the turn leaves it, for a resume (ADR-0282 §SD7).
+		coord.syncArtefactJournal(jctx, w, req.Turn, artefactFormTurn)
 		// A screenshot shown this turn stays for this turn: the next turn
 		// sends a placeholder in its place (ADR-0287 §SD5).
 		if _, serr := coord.stripPixelsJournal(jctx, w); serr != nil && err == nil {

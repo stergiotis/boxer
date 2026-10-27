@@ -57,6 +57,9 @@ type App struct {
 	// kq reads the window tables the coordinator queries (ADR-0276 §SD2).
 	kq    *keelsonquery.Client
 	coord *coordinator
+	// citeConfirmed are the copies and hand-offs held once for citing a
+	// claim that did not hold, by gesture and digest (chat_citations.go).
+	citeConfirmed map[string]bool
 	// questions lets the model ask the person with a form (ask_user); the
 	// turn is the coordinator's tool loop then too, with or without Apps.
 	questions bool

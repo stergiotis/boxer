@@ -76,6 +76,12 @@ func TestTheServiceScopesRunsToTheSender(t *testing.T) {
 	require.NoError(t, err)
 	defer rec.Release()
 	assert.EqualValues(t, 2, rec.NumRows())
+	v, ok := reg.Lookup(TableVerdicts)
+	require.True(t, ok, "keelson('agent_verdicts') is registered beside the entries")
+	vrec, err := v.Snapshot(introspect.Projection{})
+	require.NoError(t, err)
+	defer vrec.Release()
+	assert.EqualValues(t, 0, vrec.NumRows())
 	var _ app.BusI = bus.NewClient("x", nil)
 }
 

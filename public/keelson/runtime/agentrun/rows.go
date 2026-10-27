@@ -72,6 +72,10 @@ func ledgerEntity(e Entry) (ent *agentrunstore.EntryEntity, err error) {
 	if t := e.Tools; t != nil {
 		ent.ToolCatalog = option.Some(agentrunstore.ToolCatalog{Names: t.Names})
 	}
+	if v := e.Verdict; v != nil {
+		ent.VerdictRecord = option.Some(agentrunstore.VerdictRecord{Form: v.Form, Outcome: v.Outcome, RestsOn: v.RestsOn, Result: v.Result,
+			Digest: v.Digest, Source: v.Source, Endpoint: v.Endpoint, Reason: v.Reason})
+	}
 	ent.EvidenceChain = option.Some(chainOf(e))
 	if w := e.WrittenBy; w != nil {
 		ent.EvidenceWrittenBy = option.Some(writtenByRow(*w))
@@ -185,6 +189,10 @@ func entryOfLedger(ent *agentrunstore.EntryEntity) (e Entry) {
 	} else if k == KindTools {
 		// A catalog of no tools writes no attribute.
 		e.Tools = &ToolCatalog{}
+	}
+	if ent.VerdictRecord.Has {
+		c := ent.VerdictRecord.Val
+		e.Verdict = &Verdict{Form: c.Form, Outcome: c.Outcome, RestsOn: c.RestsOn, Result: c.Result, Digest: c.Digest, Source: c.Source, Endpoint: c.Endpoint, Reason: c.Reason}
 	}
 	return
 }

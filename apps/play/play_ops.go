@@ -154,6 +154,9 @@ type ResultDescription struct {
 	// carry leeway's encoding, and how to write against them.
 	Leeway  bool   `json:",omitzero" desc:"true when the result's columns carry leeway's encoding; write their handles"`
 	Reading string `json:",omitzero" desc:"for a leeway result, how to read leeway columns in play"`
+	// StatementDigest names the statement that produced the result, for
+	// the main result (ADR-0340 (proposed) §SD3).
+	StatementDigest string `json:",omitzero" desc:"for the main result, a digest of the statement that produced it in its canonical form; check reports the same digest as its source"`
 	// GlossNote says when the columns' glosses could not be reported.
 	GlossNote string `json:",omitzero" desc:"why the columns carry no gloss state"`
 }
@@ -190,6 +193,7 @@ type SampleRows struct {
 	Truncated        bool      `desc:"true when the row or byte bound cut the sample"`
 	TruncationReason string    `json:",omitzero" desc:"which bound cut the sample, and where to read on"`
 	ResultPrefix     string    `json:",omitzero" desc:"why the result itself is a prefix of what the statement returns; empty when it is whole"`
+	StatementDigest  string    `json:",omitzero" desc:"for the main result, a digest of the statement that produced it in its canonical form; check reports the same digest as its source"`
 }
 
 // SetSqlArgs is set_sql's argument.
@@ -280,8 +284,10 @@ type opsSnap struct {
 	// are not bound yet, with why (play_ops_datasets.go).
 	waiting map[string]string
 	// results is what describe_result and sample_rows resolve a pane or a
-	// node against (play_ops_result.go).
+	// node against (play_ops_result.go); check is what a check reads of the
+	// main result (play_ops_check.go).
 	results opsResults
+	check   checkSnap
 	// runSql is the text a run would ship (runBuffer): the buffer, or the
 	// caret's statement of a multi-statement buffer with the prelude. The
 	// statement reads that take an optional sql default to it.
@@ -376,7 +382,11 @@ var playOps = func() (s *appops.Set[*PlayLauncher, opsSnap]) {
 			if !sn.mounted {
 				return out, app.RefuseOperation("the window has not mounted")
 			}
-			return describeResult(&sn.results, sn.glossColumns, in)
+			out, err = describeResult(&sn.results, sn.glossColumns, in)
+			if err == nil && out.Id != 0 && out.Id == sn.check.resultId {
+				out.StatementDigest = statementDigest(sn.check.source)
+			}
+			return
 		})
 	appops.Query(s, app.OperationSpec{Name: opSampleRows, Version: 2,
 		Summary: "read up to 50 rows of a result — the one the panels draw, a pane's, or a drawn node's — as cell text, NULL kept apart from empty",
@@ -385,7 +395,11 @@ var playOps = func() (s *appops.Set[*PlayLauncher, opsSnap]) {
 			if !sn.mounted {
 				return out, app.RefuseOperation("the window has not mounted")
 			}
-			return sampleResult(&sn.results, in)
+			out, err = sampleResult(&sn.results, in)
+			if err == nil && out.ResultId != 0 && out.ResultId == sn.check.resultId {
+				out.StatementDigest = statementDigest(sn.check.source)
+			}
+			return
 		})
 	appops.Command(s, app.OperationSpec{Name: opSetSql, Version: 1, Summary: "replace the SQL buffer",
 		Effect: app.OperationEffectDocument, Writes: []string{opsResSql}, Agents: true, Gesture: "typing in the editor",
@@ -480,6 +494,7 @@ var playOps = func() (s *appops.Set[*PlayLauncher, opsSnap]) {
 	addRunOps(s)
 	addReferenceOps(s)
 	addSchemaOps(s)
+	addCheckOp(s)
 	addSchemaPaneOps(s)
 	addRewriteOps(s)
 	addDatasetOps(s)
@@ -667,6 +682,7 @@ func snapshotPlay(inst *PlayLauncher) (sn opsSnap) {
 		sn.panes.Panes = append(sn.panes.Panes, ps)
 	}
 	sn.results = snapshotResults(p)
+	sn.check = snapshotCheck(p)
 	for _, n := range p.currentSplit.Nodes {
 		sn.panes.Nodes = append(sn.panes.Nodes, string(n.ID))
 	}

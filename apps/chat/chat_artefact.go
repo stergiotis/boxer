@@ -37,6 +37,9 @@ const (
 	revSourceRevert
 	// revSourcePerson is the person removing a screenshot in the panel.
 	revSourcePerson
+	// revSourceResume is the head a resume read back from the journal
+	// (chat_artefact_journal.go).
+	revSourceResume
 )
 
 // artRevision is one state of the document. Revision 0 is the empty
@@ -310,6 +313,21 @@ func (inst *artefact) commit(base int, rev artRevision) (n int, err error) {
 	inst.revs = append(inst.revs, rev)
 	inst.gcLocked()
 	return rev.n, nil
+}
+
+// restore makes the journal's head the artefact's only revision, under its
+// number, for a resume: the revisions before it are not read back, so a
+// revert reaches none of them. Nothing is restored over an artefact that
+// moved.
+func (inst *artefact) restore(n int, text string) (ok bool) {
+	inst.mu.Lock()
+	defer inst.mu.Unlock()
+	if len(inst.revs) > 0 || inst.proposal != nil || n <= 0 {
+		return false
+	}
+	inst.revs = append(inst.revs, artRevision{n: n, text: text, source: revSourceResume, atMs: time.Now().UnixMilli(), ownImages: true})
+	inst.lastN = max(inst.lastN, n)
+	return true
 }
 
 // nextLocked is the next revision's number.

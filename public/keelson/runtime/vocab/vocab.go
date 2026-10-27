@@ -711,6 +711,15 @@ var (
 	MembAgentrunCopyRefused   = NkRegistry.MustBegin("agentrunCopyRefused", 445).End()
 	MembAgentrunCopyReason    = NkRegistry.MustBegin("agentrunCopyReason", 446).End()
 	MembAgentrunCopyBytes     = NkRegistry.MustBegin("agentrunCopyBytes", 447).End()
+	// A verdict (ledger; ADR-0340 (proposed) §SD4).
+	MembAgentrunVerdictForm     = NkRegistry.MustBegin("agentrunVerdictForm", 498).End()
+	MembAgentrunVerdictOutcome  = NkRegistry.MustBegin("agentrunVerdictOutcome", 499).End()
+	MembAgentrunVerdictRestsOn  = NkRegistry.MustBegin("agentrunVerdictRestsOn", 500).End()
+	MembAgentrunVerdictResult   = NkRegistry.MustBegin("agentrunVerdictResult", 501).End()
+	MembAgentrunVerdictDigest   = NkRegistry.MustBegin("agentrunVerdictDigest", 502).End()
+	MembAgentrunVerdictSource   = NkRegistry.MustBegin("agentrunVerdictSource", 503).End()
+	MembAgentrunVerdictEndpoint = NkRegistry.MustBegin("agentrunVerdictEndpoint", 504).End()
+	MembAgentrunVerdictReason   = NkRegistry.MustBegin("agentrunVerdictReason", 505).End()
 	// The evidence profile's components (ADR-0327 (proposed) §SD2): the
 	// chain with its mark and commitments, the written-by component, and
 	// the opening on a vault row. The shredded component binds verbatim
@@ -867,6 +876,8 @@ var AllMembs = []registry.RegisteredNaturalKey{
 	MembAgentrunCopyDigest, MembAgentrunCopyLevel, MembAgentrunCopyTier, MembAgentrunCopySource,
 	MembAgentrunCopyHandle, MembAgentrunCopyPlaintext, MembAgentrunCopyRecorded, MembAgentrunCopyApproval,
 	MembAgentrunCopyRaw, MembAgentrunCopyRefused, MembAgentrunCopyReason, MembAgentrunCopyBytes,
+	MembAgentrunVerdictForm, MembAgentrunVerdictOutcome, MembAgentrunVerdictRestsOn, MembAgentrunVerdictResult,
+	MembAgentrunVerdictDigest, MembAgentrunVerdictSource, MembAgentrunVerdictEndpoint, MembAgentrunVerdictReason,
 	MembEvidenceKindChain, MembEvidenceChainPrev, MembEvidenceChainDigest, MembEvidenceChainScheme,
 	MembEvidenceChainMark, MembEvidenceChainMarkTarget, MembEvidenceChainMarkComponent, MembEvidenceChainHeadDigest,
 	MembEvidenceChainCommitComponents, MembEvidenceChainCommitments, MembEvidenceKindWrittenBy, MembEvidenceWrittenByRun,

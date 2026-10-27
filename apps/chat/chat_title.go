@@ -150,7 +150,8 @@ func (inst *App) maybeTitle() {
 				if err != nil {
 					outcome.Body = "error: " + err.Error()
 				} else {
-					outcome.Reply = replyMeta(res.CallId, res.FinishReason, res.InputTokens, res.OutputTokens)
+					// The title itself, so a resume reads it back.
+					outcome.Body, outcome.Reply = modelTitle(res.Content), replyMeta(res.CallId, res.FinishReason, res.InputTokens, res.OutputTokens)
 				}
 				if _, jerr := coord.append(journalCtx(ctx), w, outcome); jerr != nil && err == nil {
 					err = jerr
@@ -162,6 +163,26 @@ func (inst *App) maybeTitle() {
 			// An empty title keeps the first line; drainTitle says so.
 			return &titled{conversation: id, title: modelTitle(res.Content)}, nil
 		})
+}
+
+// titleOfEntries is the model's title as the journal has it: the answer
+// to the title's call, and whether the call was made at all. An answer
+// that is an error, or a settled call with none, gives no title.
+func titleOfEntries(entries []agentrun.Entry) (title string, asked bool) {
+	keys := map[string]bool{}
+	for _, e := range entries {
+		if e.Kind == agentrun.KindIntent && e.Name == "title" {
+			keys[e.Key], asked = true, true
+		}
+	}
+	for _, e := range entries {
+		if e.Kind == agentrun.KindOutcome && keys[e.Key] && !strings.HasPrefix(e.Body, "error:") {
+			if t := cleanConvTitle(e.Body); t != "" {
+				title = t
+			}
+		}
+	}
+	return
 }
 
 // drainTitle lands a title on the conversation that asked for it, unless

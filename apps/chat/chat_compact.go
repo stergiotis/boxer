@@ -307,6 +307,7 @@ func (inst *coordinator) compact(s *requestState, plan projection.Plan, c projec
 	}
 	inst.mu.Lock()
 	inst.compacted = true
+	inst.cuts++
 	// The snapshots are news again: the cut took the notes that carried them.
 	inst.toldOnce, inst.artToldN = false, false
 	inst.mu.Unlock()

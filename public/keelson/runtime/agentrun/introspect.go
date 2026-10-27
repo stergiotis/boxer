@@ -10,17 +10,21 @@ import (
 )
 
 // RegisterIntrospect registers keelson('agent_runs') and
-// keelson('agent_run_entries') over store (ADR-0308 §SD10): the same rows
-// the service serves, for keelson readers granted them. A nil store
-// registers empty tables. Both tables are bounded to the DefaultListLimit
-// newest runs: a live snapshot of every body of every run would grow
-// without bound. The entries of those runs are read in one pass where the
-// store can (EntriesOfI), else run by run.
+// keelson('agent_run_entries') over store (ADR-0308 §SD10), and
+// keelson('agent_verdicts') (ADR-0340 (proposed) §SD4): the same rows the
+// service serves, for keelson readers granted them. A nil store registers
+// empty tables. The tables are bounded to the DefaultListLimit newest
+// runs: a live snapshot of every body of every run would grow without
+// bound. The entries of those runs are read in one pass where the store
+// can (EntriesOfI), else run by run.
 func RegisterIntrospect(reg *introspect.Registry, store StoreI) (err error) {
 	if err = reg.Register(runsProvider{store: store}); err != nil {
 		return
 	}
-	return reg.Register(entriesProvider{store: store})
+	if err = reg.Register(entriesProvider{store: store}); err != nil {
+		return
+	}
+	return reg.Register(verdictsProvider{store: store})
 }
 
 type runsProvider struct{ store StoreI }

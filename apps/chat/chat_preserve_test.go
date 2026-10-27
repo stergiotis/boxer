@@ -170,6 +170,22 @@ func preserveCorpus() []preserveScenario {
 				answer("done"),
 			}},
 		}},
+		{name: "cited-reply", apps: true, turns: []preserveTurn{
+			// Verify, then write (ADR-0340 §SD2): a result read, four
+			// assertions — held, failed, resting on no call, naming no
+			// table — and a reply referring to two of them.
+			{text: "how many words has my note?", replies: []openaichat.CompletionResponse{
+				tool("c1", "request_access", `{"plan":"count the words","open":[{"app":"notes"}]}`),
+				tool("c2", "open_window", `{"app":"notes"}`),
+				tool("c3", "call_operation", `{"window":100,"operation":"count_words","args":{}}`),
+				tool("k1", "cite", `{"assertions":[`+
+					`{"id":"a1","rests_on":["c3"],"says":"the note has one word","form":"value","statement":"SELECT words FROM note","expect":"1"},`+
+					`{"id":"a2","rests_on":["c3"],"says":"the note has two words","form":"holds","statement":"SELECT words = 2 FROM note"},`+
+					`{"id":"a3","rests_on":["c9"],"says":"something","form":"holds","statement":"SELECT words = 1 FROM note"},`+
+					`{"id":"a4","rests_on":["c3"],"says":"one is one","form":"holds","statement":"SELECT 1"}]}`),
+				answer("The note has 1 word [a1], not two [a2]."),
+			}},
+		}},
 		{name: "last-round-answer", apps: true, turns: []preserveTurn{
 			{text: "list forever", replies: append(listing(defaultRounds-1), answer("Here is what I found."))},
 			{text: "again", replies: []openaichat.CompletionResponse{answer("still here")}},
@@ -407,6 +423,7 @@ func (h *preserveHarness) checkL4() {
 		require.Empty(h.t, projection.CheckBound(entries, sectionOrder(), c, lastReported), "L24")
 	}
 	require.Empty(h.t, checkEndorsed(entries), "L15")
+	require.Empty(h.t, projection.CheckCitations(entries), "L36, L37")
 	runner := l4Runner(h.t)
 	if runner == nil {
 		return

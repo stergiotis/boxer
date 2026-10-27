@@ -113,6 +113,10 @@ type coordinator struct {
 	art      *artefact
 	artTold  int
 	artToldN bool
+	// artJournaled is the head last written to the journal, by revision
+	// and text (chat_artefact_journal.go); zero is revision 0, empty.
+	artJournaled     int
+	artJournaledText string
 	// curTitle is the running call's title, for the revision it makes.
 	curTitle string
 	// curTier is the run's current TLP tier, the label of the request
@@ -192,6 +196,9 @@ type coordinator struct {
 	anchors     headstore.StoreI
 	// lastUntrusted says the running call's result was untrusted text.
 	lastUntrusted bool
+	// cuts counts the compactions made in this process (chat_compact.go),
+	// for untell; guarded by mu.
+	cuts int
 	// compacted says the run's history was compacted (chat_compact.go);
 	// projected is the request's size as re-projected after the latest
 	// cut, shown by the meter until the next answer reports its own.
