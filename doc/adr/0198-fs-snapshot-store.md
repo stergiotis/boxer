@@ -1318,6 +1318,13 @@ history and diff surfaces depend on an operator remembering the CLI. The
 capability binding for `MountVisibilityI` and the `ref` fetcher stay where the
 earlier entries left them.
 
+### 2026-10-26 — a write-only capability proposed
+
+[ADR-0338](./0338-lading-publish-a-write-only-capability-with-the-placement-check-at-the-door.md)
+(proposed) takes up the capability the update of 2026-08-20 left as a
+decision, for writes only: a publish service under the caller's tag, with
+the placement check before any row is written. Reads stay as they are.
+
 ## References
 
 - [The snapshot-store note](../adr-background-work/iofs-clickhouse-snapshot-store.md)
