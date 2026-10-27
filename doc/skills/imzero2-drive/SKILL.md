@@ -176,7 +176,7 @@ scene:
   launch: play                 # the app alias
   size: 1600x1000
   env: {BOXER_PLAY_FOCUS_TABLE: "1", BOXER_PLAY_AUTORUN: "1"}
-  requires: [clickhouse, "table:default.some_table"]   # unmet → skipped, not failed
+  requires: [clickhouse, "table:default.some_table"]   # unmet → skipped, not failed; "exists:<table>" needs no rows
 ---
 
 # What the scene shows

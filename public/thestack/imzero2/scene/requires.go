@@ -22,6 +22,9 @@ const (
 	RequireClickHouse = "clickhouse"
 	// RequireTablePrefix + a table name holds when that table has rows.
 	RequireTablePrefix = "table:"
+	// RequireExistsPrefix + a table name holds when that table exists, rows
+	// or not: a store a scene writes into, provisioned but maybe empty.
+	RequireExistsPrefix = "exists:"
 	// RequireExePrefix + the name of a program declared in the extbin registry
 	// holds when that program resolves. Declared ones only: which programs a
 	// scene may depend on is the same auditable list as everything else boxer
@@ -69,6 +72,19 @@ func CheckRequire(name string) (unmet string, err error) {
 			return "table " + table + " is empty", nil
 		}
 		return "", nil
+	case strings.HasPrefix(name, RequireExistsPrefix):
+		table := strings.TrimPrefix(name, RequireExistsPrefix)
+		if table == "" || strings.ContainsAny(table, " ;'\"`()\n") {
+			return "", eb.Build().Str("require", name).Errorf("not a table name")
+		}
+		out, e := clickhouseQuery("EXISTS TABLE " + table)
+		if e != nil {
+			return "no ClickHouse at " + clickhouseenv.URL.Get(), nil
+		}
+		if out != "1" {
+			return "table " + table + " does not exist", nil
+		}
+		return "", nil
 	case strings.HasPrefix(name, RequireExePrefix):
 		exe := strings.TrimPrefix(name, RequireExePrefix)
 		for _, p := range extbin.Registry() {
@@ -82,6 +98,6 @@ func CheckRequire(name string) (unmet string, err error) {
 		return "", eb.Build().Str("require", name).Errorf("not a program the extbin registry declares")
 	default:
 		return "", eb.Build().Str("require", name).
-			Errorf("unknown scene precondition (known: " + RequireClickHouse + ", " + RequireTablePrefix + "<name>, " + RequireExePrefix + "<name>)")
+			Errorf("unknown scene precondition (known: " + RequireClickHouse + ", " + RequireTablePrefix + "<name>, " + RequireExistsPrefix + "<name>, " + RequireExePrefix + "<name>)")
 	}
 }
