@@ -223,8 +223,12 @@ without them is the text handover as before.
   snapshot or one the revision does not name; a parse that reads the store; a
   resume that does not restore the revision, or whose next revision takes a
   number the journal already names; a handover read that replaces edits.
-- **Gap.** The handover's launch into mdedit, and what the confirmation shows,
-  are not covered by a test; a headless scene would cover both.
+- **Scene.** [chat-artefact-export](../../apps/chat/scenes/chat-artefact-export.scene.md)
+  runs the gesture on the headless host against a scripted model and a
+  provisioned store: the confirmation's files, retention and endorsement
+  note, the export's status line, and the handover, with mdedit showing
+  the screenshot inline. It is skipped where the store's tables do not
+  exist.
 
 ## Status
 
