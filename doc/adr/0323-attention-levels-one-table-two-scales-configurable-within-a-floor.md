@@ -47,7 +47,7 @@ configured across scales.
 
 The waiting scale holds: a grant request and a widening (ADR-0269 §SD6), a
 confirmation of a consequential command (ADR-0269 §SD5), a moderator's
-question (ADR-0300 (proposed) §SD9), and a question an app asks on a
+question (ADR-0300 §SD9), and a question an app asks on a
 model's behalf — `ask_user` (ADR-0265 §SD7) and the exit approvals of
 ADR-0312. Everything else is on the attention scale, a watchbill job's
 events among it: a job owes the person no decision, so it never blocks a

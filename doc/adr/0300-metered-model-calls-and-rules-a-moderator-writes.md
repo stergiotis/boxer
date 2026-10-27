@@ -1,12 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-10-09
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to accepted
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-10-27
 ---
-
-> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
 
 # ADR-0300: Metered model calls, and rules a moderator writes
 
@@ -308,13 +306,13 @@ in ADR-0298 §SD3.
 
 ### Milestones
 
-- **M1 — Meter.** SD2, SD3 and `keelson('llm_usage')`; cached and reasoning
+- **M1 — Meter.** ✓ SD2, SD3 and `keelson('llm_usage')`; cached and reasoning
   tokens on the trail.
-- **M2 — Rules and admission.** SD4 and SD5, with the typed refusal and
+- **M2 — Rules and admission.** ✓ SD4 and SD5, with the typed refusal and
   what remains.
-- **M3 — Queue.** SD6.
-- **M4 — Moderator.** SD7 and SD8.
-- **M5 — Asking the person.** SD9.
+- **M3 — Queue.** ✓ SD6.
+- **M4 — Moderator.** ✓ SD7 and SD8.
+- **M5 — Asking the person.** ✓ SD9.
 
 ## Surfaces — Tier 1
 
@@ -404,7 +402,13 @@ in ADR-0298 §SD3.
 
 ## Status
 
-Proposed — awaiting review by the code owner.
+Accepted 2026-10-27. M1–M5 are built: the ledger and its two tables
+(`keelson('llm_usage')`, `keelson('llm_rations')`), the typed refusal with
+what remains, the queue ordered by window state, the moderator verbs on the
+agent dispatcher, and the question to the person through the host's queue
+([ADR-0324](./0324-the-persons-decisions-wait-in-a-host-queue-not-in-modals.md)).
+The built-in moderator of [ADR-0302](./0302-a-built-in-moderator-loop-signals-and-an-escalation-ladder.md)
+is the first writer of rules. SD10 stays deferred.
 
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers (Tier 1 in-place / Tier 2 dated `## Updates` entry / Tier 3 new superseding ADR).

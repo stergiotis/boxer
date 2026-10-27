@@ -12,7 +12,7 @@ reviewed-date: 2026-10-12
 
 The person owes decisions to several sources: an agent task's grant
 request, widening or confirmation (ADR-0269 §SD5, §SD6), a moderator's
-question (ADR-0300 (proposed) §SD9), and a model's question in a chat
+question (ADR-0300 §SD9), and a model's question in a chat
 (`ask_user`, ADR-0265 §SD7; exit approvals, ADR-0312). Each holds a turn
 until decided or expired (ADR-0265, update of 2026-10-08;
 `BOXER_AGENT_REQUEST_TIMEOUT`).
@@ -164,7 +164,7 @@ ten-minute window:
   EEMUA 191's alarm-flood figure.
 
 The count is kept by stream id, so it survives turns. Items decided by
-unattended mode (ADR-0298 (proposed) §SD2) never reach the queue and do not
+unattended mode (ADR-0298 §SD2) never reach the queue and do not
 count; a moderator's question is the host's own and is exempt. An item past
 either limit is refused at admission, with a remedy the model can act on:
 

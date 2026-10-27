@@ -284,6 +284,22 @@ the tools.
 
 ## Updates
 
+### 2026-10-27 — the artefact resumes with the conversation
+
+SD7 deferred keeping the artefact beyond the window to resume. With the run
+journal the conversation's record ([ADR-0308](./0308-the-run-journal-is-the-only-source-of-model-input.md)),
+the coordinator writes the artefact's head — revision number and text — as
+an entry the projection skips (`KindIgnorable`, named `artefact`) whenever
+the head moved: at a turn's end, and at a revert, a rewind or a restore
+between turns. A resume takes the last such entry as the artefact's one
+revision under its number; the revisions before it are not read back, so
+the panel's Revert reaches none of them. The screenshots do not come back:
+their bytes are sealed to the process by design
+([ADR-0284](./0284-chat-artefact-screenshots-sealed-under-a-budget.md)), and
+the resume line tells the person and the model so. The image set, a
+revert's history and a proposal waiting under Ask first at the host's end
+stay deferred.
+
 None.
 
 ## References

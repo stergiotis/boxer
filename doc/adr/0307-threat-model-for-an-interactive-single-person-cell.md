@@ -195,8 +195,8 @@ administrators; the pinned model weights.
 - planted or backdoored model weights;
 - resource exhaustion — a governance concern of
   [ADR-0300](./0300-metered-model-calls-and-rules-a-moderator-writes.md)
-  (proposed) and [ADR-0302](./0302-a-built-in-moderator-loop-signals-and-an-escalation-ladder.md)
-  (proposed), not a security harm;
+  and [ADR-0302](./0302-a-built-in-moderator-loop-signals-and-an-escalation-ladder.md),
+  not a security harm;
 - data-subject erasure — no erasure obligation applies to the harness's
   records, which is why per-run encryption of bodies is deferred and only a
   key-id column is reserved

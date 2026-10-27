@@ -174,7 +174,7 @@ Accepted 2026-10-09.
 - **M1 — The recorder and format 2 in the client.** (SD2, SD3, SD4) Built.
 - **M2 — `FormatTree` in the capture facility, and `RenderTree` in the window host.** (SD1, SD5) Built.
 - **M3 — The coordinator's `read_window_tree`.** (SD6) Built.
-- **M4 — ADR-0297's widget anchors.** (SD7) Open: built with ADR-0297, which is still proposed.
+- **M4 — ADR-0297's widget anchors.** (SD7) Built with ADR-0297.
 
 ## Updates
 
