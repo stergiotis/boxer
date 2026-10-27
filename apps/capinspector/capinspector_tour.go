@@ -30,9 +30,9 @@ var capTourScenes = []struct {
 	desc  string
 }{
 	{"capinspector-facts", CapFacts, icons.PhPlug + " capability inspector — facts",
-		"The cap-broker schematic on the layeredgraph widget (ADR-0069): App → capability → " +
-			"backend laid out left to right by Graphviz dot in-process. The selected facts cap is green; " +
-			"its effective backend (chstore) is amber and the alternative (InMem) dim. The strip below " +
+		"The cap-broker schematic on the layeredgraph widget (ADR-0069): the App over one card per " +
+			"capability, its backends as rows, in a grid as wide as the panel. The selected facts card is " +
+			"green; its effective backend (chstore) is amber and the alternative (InMem) on the card's fill. The strip below " +
 			"is the companion per-cap audit-activity sparkline (idle in the gallery; live in the carousel)."},
 	{"capinspector-task", CapTask, icons.PhPlug + " capability inspector — task",
 		"The same schematic with the task capability selected (task + supervisor backends), showing how " +

@@ -3,6 +3,7 @@ package capinspector
 import (
 	"testing"
 
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/layeredgraph"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -174,20 +175,12 @@ func TestShortAppName(t *testing.T) {
 func TestCapGraphModel_NodesUniqueAndComplete(t *testing.T) {
 	m := capGraphModel()
 
-	// Expected counts derived from the registry: one App root, one node per
-	// cap, one per backend; edges App→cap and cap→backend.
-	wantNodes := 1
-	wantEdges := 0
-	for _, capId := range allCapIdsOrdered() {
-		wantNodes += 1 + len(Registry[capId].Backends)
-		wantEdges += 1 + len(Registry[capId].Backends)
-	}
-	assert.Len(t, m.Nodes, wantNodes)
-	assert.Len(t, m.Edges, wantEdges)
+	// One App root and one card per cap, an edge App→cap each; a card's
+	// rows are its cap's backends.
+	caps := allCapIdsOrdered()
+	assert.Len(t, m.Nodes, 1+len(caps))
+	assert.Len(t, m.Edges, len(caps))
 
-	// Node ids must be globally unique — this guards the real collision the
-	// "cap/"/"be/" namespacing exists for: CapTask ships a backend whose Id is
-	// "task", which would otherwise alias the "task" cap id in the flat space.
 	seen := map[string]bool{}
 	for _, n := range m.Nodes {
 		assert.False(t, seen[n.ID], "duplicate node id %q", n.ID)
@@ -197,6 +190,16 @@ func TestCapGraphModel_NodesUniqueAndComplete(t *testing.T) {
 	for _, e := range m.Edges {
 		assert.True(t, seen[e.From], "edge from undeclared node %q", e.From)
 		assert.True(t, seen[e.To], "edge to undeclared node %q", e.To)
+	}
+	for i, capId := range caps {
+		n := m.Nodes[1+i]
+		require.Len(t, n.Rows, len(Registry[capId].Backends), "card %q lists every backend", n.ID)
+		rowSeen := map[string]bool{}
+		for j, b := range Registry[capId].Backends {
+			assert.Equal(t, b.Id, n.Rows[j].ID)
+			assert.False(t, rowSeen[b.Id], "duplicate row id %q in card %q", b.Id, n.ID)
+			rowSeen[b.Id] = true
+		}
 	}
 }
 
@@ -215,19 +218,74 @@ func TestBuildNodeMeta_ResolvesEveryNode(t *testing.T) {
 			assert.Equal(t, capNodeID(md.cap), n.ID)
 			_, isCap := Registry[md.cap]
 			assert.True(t, isCap, "cap node %q resolves to a real cap", n.ID)
-		case nodeBackend:
-			assert.Equal(t, backendNodeID(md.cap, md.backendID), n.ID)
-			found := false
-			for _, b := range Registry[md.cap].Backends {
-				if b.Id == md.backendID {
-					found = true
-				}
-			}
-			assert.True(t, found, "backend %q belongs to cap %q", md.backendID, md.cap)
 		default:
 			t.Fatalf("node %q has unknown kind %d", n.ID, md.kind)
 		}
 	}
+}
+
+// fakeSized stands in for the engine's sizing: an App box and n cards of
+// varying height, at arbitrary places, as dot would return them.
+func fakeSized(n int) *layeredgraph.Layout {
+	lay := &layeredgraph.Layout{FontSize: 14}
+	lay.Nodes = append(lay.Nodes, layeredgraph.NodeLayout{ID: appNodeID, Center: layeredgraph.Point{X: 500, Y: 20}, W: 50, H: 36})
+	for i := range n {
+		h := 40.0 + 20*float64(i%3)
+		cx := 100 + 150*float64(i)
+		node := layeredgraph.NodeLayout{
+			ID: capNodeID(CapId(string(rune('a' + i)))), Center: layeredgraph.Point{X: cx, Y: 80}, W: 100 + float64(i%4)*10, H: h,
+			Title: layeredgraph.Rect{Min: layeredgraph.Point{X: cx - 50, Y: 80 - h/2}, Max: layeredgraph.Point{X: cx + 50, Y: 80 - h/2 + 20}},
+		}
+		node.Rows = []layeredgraph.RowLayout{{ID: "r", Rect: layeredgraph.Rect{Min: layeredgraph.Point{X: cx - 50, Y: 80 - h/2 + 20}, Max: layeredgraph.Point{X: cx + 50, Y: 80 + h/2}}}}
+		lay.Nodes = append(lay.Nodes, node)
+	}
+	return lay
+}
+
+func TestPackArchGrid_CardsAlignAndStayInBounds(t *testing.T) {
+	sized := fakeSized(13)
+	for cols := 2; cols <= 13; cols++ {
+		g := packArchGrid(sized, cols)
+		require.Len(t, g.Nodes, 14)
+		require.Len(t, g.Edges, 13)
+		cardW := g.Nodes[1].W
+		for i, n := range g.Nodes {
+			assert.GreaterOrEqual(t, n.Center.X-n.W/2, 0.0, "cols=%d node %d left", cols, i)
+			assert.LessOrEqual(t, n.Center.X+n.W/2, g.Width, "cols=%d node %d right", cols, i)
+			assert.GreaterOrEqual(t, n.Center.Y-n.H/2, 0.0, "cols=%d node %d top", cols, i)
+			assert.LessOrEqual(t, n.Center.Y+n.H/2, g.Height, "cols=%d node %d bottom", cols, i)
+			if i == 0 {
+				continue
+			}
+			assert.Equal(t, cardW, n.W, "cols=%d: cards share one width", cols)
+			// Title and rows move with the card and stay inside it.
+			top := n.Center.Y - n.H/2
+			assert.Equal(t, top, n.Title.Min.Y, "cols=%d node %d title", cols, i)
+			assert.LessOrEqual(t, n.Rows[0].Rect.Max.Y, n.Center.Y+n.H/2+1e-9)
+		}
+		for _, e := range g.Edges {
+			require.Equal(t, 1, len(e.Points)%3, "cubic control points: 1+3k")
+			require.NotNil(t, e.ArrowHead)
+			to := g.Nodes[e.Index+1]
+			assert.Equal(t, to.ID, e.To)
+			assert.InDelta(t, to.Center.Y-to.H/2, e.ArrowHead.Y, 1e-9, "the arrow lands on the card's top")
+			// The trunk runs in a gutter: it never crosses a card.
+			x := e.Points[0].X
+			for _, n := range g.Nodes[1:] {
+				assert.False(t, x > n.Center.X-n.W/2 && x < n.Center.X+n.W/2, "cols=%d trunk crosses card %q", cols, n.ID)
+			}
+		}
+	}
+}
+
+func TestPickArchGrid_PrefersFewestRowsAtNaturalSize(t *testing.T) {
+	sized := fakeSized(13)
+	grids := map[int]*layeredgraph.Layout{}
+	wide := pickArchGrid(grids, sized, 1e6, 1e6)
+	assert.Equal(t, packArchGrid(sized, 13).Width, wide.Width, "room for everything: one row")
+	narrow := pickArchGrid(grids, sized, 500, 680)
+	assert.Less(t, narrow.Width, wide.Width)
+	assert.Greater(t, narrow.Height, wide.Height, "a narrow canvas wraps the cards")
 }
 
 // TestHelpCorpusDropsNothing is the ADR-0180 M2 zero-drops gate over the

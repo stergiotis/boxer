@@ -19,8 +19,7 @@ view per registered capability.
 The rows at the top are the capability picker; they wrap to the
 window's width. Each chip is a registered capability (`boxer.facts`,
 `runtime.bus`, `runtime.fs`, `runtime.task`, …). Click a chip — or a
-capability or backend node in the schematic — to switch the detail
-view; the active chip carries the accent fill. A click on a segment of
+capability's card in the schematic — to switch the detail view; the active chip carries the accent fill. A click on a segment of
 the status bar opens the inspector on that segment's capability.
 
 ## Detail view
@@ -30,9 +29,9 @@ For the selected capability:
 - **Active backend** — the implementation currently servicing the
   capability (e.g. `chstore` for `boxer.facts`, `inprocbus` for
   `runtime.bus`).
-- **Schematic** — a small canvas showing producers and consumers,
-  drawn with the IDS palette so callers stand out. The row beneath it
-  keys the colours.
+- **Schematic** — the App over one card per capability, each card
+  listing the capability's backends with the active one banded. The
+  cards wrap to the window's width; the row beneath keys the colours.
 - **Prose** — a short description of what the capability promises
   and what guarantees the active backend honours.
 - **Storage schema** — for a capability whose backend persists into a
