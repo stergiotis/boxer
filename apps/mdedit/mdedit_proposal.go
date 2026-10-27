@@ -143,7 +143,7 @@ func (inst *App) ensureProposalDoc() {
 	if x.resDoc != nil && x.resDocSrc == x.pending.content {
 		return
 	}
-	x.resDoc = markdown.Parse([]byte(x.pending.content))
+	x.resDoc = markdown.ParseWith([]byte(x.pending.content), inst.parseOptions())
 	x.resDocSrc = x.pending.content
 }
 

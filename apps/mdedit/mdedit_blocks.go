@@ -28,7 +28,7 @@ func (inst *App) ensureBlocks() {
 	if inst.blocks != nil {
 		return
 	}
-	inst.blocks = mdblocks.New(inst.ids, "blocks", mdblocks.Opts{HintText: hintEmpty})
+	inst.blocks = mdblocks.New(inst.ids, "blocks", mdblocks.Opts{HintText: hintEmpty, Parse: inst.parseOptions()})
 }
 
 // renderBlocks is the central region in Blocks mode. Owns its scroll area,

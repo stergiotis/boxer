@@ -465,6 +465,8 @@ func (inst *App) applyFileResult(res fileResult) {
 		inst.requestCaret(0, 0, false)
 		inst.readName = res.displayName
 		inst.readFromSnapshot = false
+		inst.cancelSnapshotLoad()
+		inst.setSnapshotImages(nil)
 		inst.followActive = res.followOk
 		if res.followErr != nil {
 			// The open stands; only the following half is missing. Worth a

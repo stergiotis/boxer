@@ -33,13 +33,19 @@ import (
 // --- Resolved membership ids from vdd. ---
 
 var (
-	kindMdeditLaunchText uint64
-	kindMdeditLaunchName uint64
+	kindMdeditLaunchText     uint64
+	kindMdeditLaunchName     uint64
+	kindMdeditLaunchMount    uint64
+	kindMdeditLaunchSnapshot uint64
+	kindMdeditLaunchPath     uint64
 )
 
 func init() {
 	kindMdeditLaunchText = vdd.MembMdeditLaunchText.GetId().Value()
 	kindMdeditLaunchName = vdd.MembMdeditLaunchName.GetId().Value()
+	kindMdeditLaunchMount = vdd.MembMdeditLaunchMount.GetId().Value()
+	kindMdeditLaunchSnapshot = vdd.MembMdeditLaunchSnapshot.GetId().Value()
+	kindMdeditLaunchPath = vdd.MembMdeditLaunchPath.GetId().Value()
 	buscodec.Register[MdeditLaunch](mdeditLaunchBusCodec)
 }
 
@@ -48,7 +54,7 @@ func init() {
 // MdeditLaunchActiveSections is the dml_cbor section-index subset this kind
 // populates. Passed to InEntityFacts.SetActiveSections so the
 // builder skips beginSection list-slot work for inactive sections.
-var MdeditLaunchActiveSections = []int{12}
+var MdeditLaunchActiveSections = []int{7, 9, 12, 18}
 
 // MdeditLaunchActiveFields is the column-index subset this kind populates
 // in the boxer.facts Arrow schema. Lazily computed once via
@@ -57,7 +63,7 @@ var MdeditLaunchActiveSections = []int{12}
 // plain prefixes (id:, ts:, lc:). Driven through RecordBuilder.
 // SetActiveFields to skip per-row emit walks for unused columns.
 var MdeditLaunchActiveFields = sync.OnceValue(func() []int {
-	active := map[string]bool{"textArray": true}
+	active := map[string]bool{"i64Array": true, "stringArray": true, "textArray": true, "u64Array": true}
 	schema := cbdml.CreateSchemaFacts()
 	out := make([]int, 0, 4+len(active)*8)
 	for i, f := range schema.Fields() {
@@ -103,8 +109,11 @@ type MdeditLaunchColumns struct {
 	NaturalKey [][]byte
 	At         []time.Time
 
-	Text []string
-	Name []string
+	Text      []string
+	Name      []string
+	Mount     []uint64
+	SnapNanos []int64
+	Path      []string
 }
 
 // Len returns the number of rows currently in the batch.
@@ -122,6 +131,9 @@ func (c *MdeditLaunchColumns) Append(row MdeditLaunch) {
 	c.At = append(c.At, row.At)
 	c.Text = append(c.Text, row.Text)
 	c.Name = append(c.Name, row.Name)
+	c.Mount = append(c.Mount, row.Mount)
+	c.SnapNanos = append(c.SnapNanos, row.SnapNanos)
+	c.Path = append(c.Path, row.Path)
 }
 
 // Row reconstructs entity i as an AoS MdeditLaunch record. Inverse of
@@ -133,6 +145,9 @@ func (c *MdeditLaunchColumns) Row(i int) (row MdeditLaunch) {
 	row.At = c.At[i]
 	row.Text = c.Text[i]
 	row.Name = c.Name[i]
+	row.Mount = c.Mount[i]
+	row.SnapNanos = c.SnapNanos[i]
+	row.Path = c.Path[i]
 	return
 }
 
@@ -164,6 +179,51 @@ type MdeditLaunchTextArraySecI[Attr any, Ent any] interface {
 	EndSection() Ent
 }
 
+// MdeditLaunchU64ArrayAttrI is the InAttr-side view of the u64Array section. P-variants only —
+// every method returns void so no F-bounded `[Self]` parameter is
+// needed.
+type MdeditLaunchU64ArrayAttrI interface {
+	dmlruntime.InAttributeMembershipLowCardRefPI
+	EndAttributeP()
+}
+
+// MdeditLaunchU64ArraySecI is the Section-side view: opens an attribute and closes
+// the section. Attr and Ent are bound at the call site by inference.
+type MdeditLaunchU64ArraySecI[Attr any, Ent any] interface {
+	BeginAttributeSingle(value uint64) Attr
+	EndSection() Ent
+}
+
+// MdeditLaunchI64ArrayAttrI is the InAttr-side view of the i64Array section. P-variants only —
+// every method returns void so no F-bounded `[Self]` parameter is
+// needed.
+type MdeditLaunchI64ArrayAttrI interface {
+	dmlruntime.InAttributeMembershipLowCardRefPI
+	EndAttributeP()
+}
+
+// MdeditLaunchI64ArraySecI is the Section-side view: opens an attribute and closes
+// the section. Attr and Ent are bound at the call site by inference.
+type MdeditLaunchI64ArraySecI[Attr any, Ent any] interface {
+	BeginAttributeSingle(value int64) Attr
+	EndSection() Ent
+}
+
+// MdeditLaunchStringArrayAttrI is the InAttr-side view of the stringArray section. P-variants only —
+// every method returns void so no F-bounded `[Self]` parameter is
+// needed.
+type MdeditLaunchStringArrayAttrI interface {
+	dmlruntime.InAttributeMembershipLowCardRefPI
+	EndAttributeP()
+}
+
+// MdeditLaunchStringArraySecI is the Section-side view: opens an attribute and closes
+// the section. Attr and Ent are bound at the call site by inference.
+type MdeditLaunchStringArraySecI[Attr any, Ent any] interface {
+	BeginAttributeSingle(value string) Attr
+	EndSection() Ent
+}
+
 // MdeditLaunchEntityI is the entity-builder surface MdeditLaunchAddSections drives.
 // It always lists the per-section getters; the entity-frame methods
 // (BeginEntity / plain setters / CommitEntity) are added only for the
@@ -174,12 +234,21 @@ type MdeditLaunchTextArraySecI[Attr any, Ent any] interface {
 type MdeditLaunchEntityI[
 	TextArrayAttr MdeditLaunchTextArrayAttrI,
 	TextArraySec MdeditLaunchTextArraySecI[TextArrayAttr, Ent],
+	U64ArrayAttr MdeditLaunchU64ArrayAttrI,
+	U64ArraySec MdeditLaunchU64ArraySecI[U64ArrayAttr, Ent],
+	I64ArrayAttr MdeditLaunchI64ArrayAttrI,
+	I64ArraySec MdeditLaunchI64ArraySecI[I64ArrayAttr, Ent],
+	StringArrayAttr MdeditLaunchStringArrayAttrI,
+	StringArraySec MdeditLaunchStringArraySecI[StringArrayAttr, Ent],
 	Ent any,
 ] interface {
 	BeginEntity() Ent
 	SetId(id uint64, naturalKey []byte) Ent
 	SetTimestamp(ts time.Time) Ent
 	GetSectionTextArray() TextArraySec
+	GetSectionU64Array() U64ArraySec
+	GetSectionI64Array() I64ArraySec
+	GetSectionStringArray() StringArraySec
 	CommitEntity() (err error)
 }
 
@@ -190,9 +259,18 @@ type MdeditLaunchEntityI[
 func MdeditLaunchBuildEntities[
 	TextArrayAttr MdeditLaunchTextArrayAttrI,
 	TextArraySec MdeditLaunchTextArraySecI[TextArrayAttr, Ent],
+	U64ArrayAttr MdeditLaunchU64ArrayAttrI,
+	U64ArraySec MdeditLaunchU64ArraySecI[U64ArrayAttr, Ent],
+	I64ArrayAttr MdeditLaunchI64ArrayAttrI,
+	I64ArraySec MdeditLaunchI64ArraySecI[I64ArrayAttr, Ent],
+	StringArrayAttr MdeditLaunchStringArrayAttrI,
+	StringArraySec MdeditLaunchStringArraySecI[StringArrayAttr, Ent],
 	Ent any,
 	DML MdeditLaunchEntityI[
 		TextArrayAttr, TextArraySec,
+		U64ArrayAttr, U64ArraySec,
+		I64ArrayAttr, I64ArraySec,
+		StringArrayAttr, StringArraySec,
 		Ent,
 	],
 ](dml DML, c *MdeditLaunchColumns) (err error) {
@@ -210,6 +288,24 @@ func MdeditLaunchBuildEntities[
 		textArraySecAttr_Name.AddMembershipLowCardRefP(kindMdeditLaunchName)
 		textArraySecAttr_Name.EndAttributeP()
 		textArraySec.EndSection()
+		// --- u64Array. ---
+		u64ArraySec := dml.GetSectionU64Array()
+		u64ArraySecAttr_Mount := u64ArraySec.BeginAttributeSingle(c.Mount[i])
+		u64ArraySecAttr_Mount.AddMembershipLowCardRefP(kindMdeditLaunchMount)
+		u64ArraySecAttr_Mount.EndAttributeP()
+		u64ArraySec.EndSection()
+		// --- i64Array. ---
+		i64ArraySec := dml.GetSectionI64Array()
+		i64ArraySecAttr_SnapNanos := i64ArraySec.BeginAttributeSingle(c.SnapNanos[i])
+		i64ArraySecAttr_SnapNanos.AddMembershipLowCardRefP(kindMdeditLaunchSnapshot)
+		i64ArraySecAttr_SnapNanos.EndAttributeP()
+		i64ArraySec.EndSection()
+		// --- stringArray. ---
+		stringArraySec := dml.GetSectionStringArray()
+		stringArraySecAttr_Path := stringArraySec.BeginAttributeSingle(c.Path[i])
+		stringArraySecAttr_Path.AddMembershipLowCardRefP(kindMdeditLaunchPath)
+		stringArraySecAttr_Path.EndAttributeP()
+		stringArraySec.EndSection()
 		err = dml.CommitEntity()
 		if err != nil {
 			err = eh.Errorf("commit row %d: %w", i, err)
@@ -237,15 +333,69 @@ func MdeditLaunchEmitSectionTextArray[
 	return
 }
 
+// MdeditLaunchEmitSectionU64Array writes this kind's u64Array attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func MdeditLaunchEmitSectionU64Array[
+	U64ArrayAttr MdeditLaunchU64ArrayAttrI,
+	U64ArraySec MdeditLaunchU64ArraySecI[U64ArrayAttr, Ent],
+	Ent any,
+](u64ArraySec U64ArraySec, row MdeditLaunch) (err error) {
+	u64ArraySecAttr_Mount := u64ArraySec.BeginAttributeSingle(row.Mount)
+	u64ArraySecAttr_Mount.AddMembershipLowCardRefP(kindMdeditLaunchMount)
+	u64ArraySecAttr_Mount.EndAttributeP()
+	return
+}
+
+// MdeditLaunchEmitSectionI64Array writes this kind's i64Array attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func MdeditLaunchEmitSectionI64Array[
+	I64ArrayAttr MdeditLaunchI64ArrayAttrI,
+	I64ArraySec MdeditLaunchI64ArraySecI[I64ArrayAttr, Ent],
+	Ent any,
+](i64ArraySec I64ArraySec, row MdeditLaunch) (err error) {
+	i64ArraySecAttr_SnapNanos := i64ArraySec.BeginAttributeSingle(row.SnapNanos)
+	i64ArraySecAttr_SnapNanos.AddMembershipLowCardRefP(kindMdeditLaunchSnapshot)
+	i64ArraySecAttr_SnapNanos.EndAttributeP()
+	return
+}
+
+// MdeditLaunchEmitSectionStringArray writes this kind's stringArray attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func MdeditLaunchEmitSectionStringArray[
+	StringArrayAttr MdeditLaunchStringArrayAttrI,
+	StringArraySec MdeditLaunchStringArraySecI[StringArrayAttr, Ent],
+	Ent any,
+](stringArraySec StringArraySec, row MdeditLaunch) (err error) {
+	stringArraySecAttr_Path := stringArraySec.BeginAttributeSingle(row.Path)
+	stringArraySecAttr_Path.AddMembershipLowCardRefP(kindMdeditLaunchPath)
+	stringArraySecAttr_Path.EndAttributeP()
+	return
+}
+
 // MdeditLaunchAddSections contributes this kind's tagged sections to the OPEN
 // entity on dml — the BuildEntities body without the entity frame.
 // The caller owns BeginEntity / plain setters / CommitEntity.
 func MdeditLaunchAddSections[
 	TextArrayAttr MdeditLaunchTextArrayAttrI,
 	TextArraySec MdeditLaunchTextArraySecI[TextArrayAttr, Ent],
+	U64ArrayAttr MdeditLaunchU64ArrayAttrI,
+	U64ArraySec MdeditLaunchU64ArraySecI[U64ArrayAttr, Ent],
+	I64ArrayAttr MdeditLaunchI64ArrayAttrI,
+	I64ArraySec MdeditLaunchI64ArraySecI[I64ArrayAttr, Ent],
+	StringArrayAttr MdeditLaunchStringArrayAttrI,
+	StringArraySec MdeditLaunchStringArraySecI[StringArrayAttr, Ent],
 	Ent any,
 	DML MdeditLaunchEntityI[
 		TextArrayAttr, TextArraySec,
+		U64ArrayAttr, U64ArraySec,
+		I64ArrayAttr, I64ArraySec,
+		StringArrayAttr, StringArraySec,
 		Ent,
 	],
 ](dml DML, row MdeditLaunch) (err error) {
@@ -256,6 +406,27 @@ func MdeditLaunchAddSections[
 		return
 	}
 	textArraySec.EndSection()
+	// --- u64Array. ---
+	u64ArraySec := dml.GetSectionU64Array()
+	err = MdeditLaunchEmitSectionU64Array(u64ArraySec, row)
+	if err != nil {
+		return
+	}
+	u64ArraySec.EndSection()
+	// --- i64Array. ---
+	i64ArraySec := dml.GetSectionI64Array()
+	err = MdeditLaunchEmitSectionI64Array(i64ArraySec, row)
+	if err != nil {
+		return
+	}
+	i64ArraySec.EndSection()
+	// --- stringArray. ---
+	stringArraySec := dml.GetSectionStringArray()
+	err = MdeditLaunchEmitSectionStringArray(stringArraySec, row)
+	if err != nil {
+		return
+	}
+	stringArraySec.EndSection()
 	return
 }
 
@@ -277,6 +448,39 @@ type MdeditLaunchTextArrayMembsReadI interface {
 	GetMembValueLowCardRef(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) iter.Seq[uint64]
 }
 
+// MdeditLaunchU64ArrayAttrsReadI is the Attributes-side view of the u64Array section.
+type MdeditLaunchU64ArrayAttrsReadI interface {
+	GetAttrValueSingle(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) (uint64, error)
+	GetNumberOfAttributes(entityIdx raruntime.EntityIdx) int64
+}
+
+// MdeditLaunchU64ArrayMembsReadI is the Memberships-side view of the u64Array section.
+type MdeditLaunchU64ArrayMembsReadI interface {
+	GetMembValueLowCardRef(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) iter.Seq[uint64]
+}
+
+// MdeditLaunchI64ArrayAttrsReadI is the Attributes-side view of the i64Array section.
+type MdeditLaunchI64ArrayAttrsReadI interface {
+	GetAttrValueSingle(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) (int64, error)
+	GetNumberOfAttributes(entityIdx raruntime.EntityIdx) int64
+}
+
+// MdeditLaunchI64ArrayMembsReadI is the Memberships-side view of the i64Array section.
+type MdeditLaunchI64ArrayMembsReadI interface {
+	GetMembValueLowCardRef(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) iter.Seq[uint64]
+}
+
+// MdeditLaunchStringArrayAttrsReadI is the Attributes-side view of the stringArray section.
+type MdeditLaunchStringArrayAttrsReadI interface {
+	GetAttrValueSingle(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) (string, error)
+	GetNumberOfAttributes(entityIdx raruntime.EntityIdx) int64
+}
+
+// MdeditLaunchStringArrayMembsReadI is the Memberships-side view of the stringArray section.
+type MdeditLaunchStringArrayMembsReadI interface {
+	GetMembValueLowCardRef(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) iter.Seq[uint64]
+}
+
 // MdeditLaunchFillFromArrow walks rec row-by-row and appends each entity's
 // plain + tagged-section values into c. Plain columns enter as
 // concrete Arrow accessors; per-section Attrs + Membs bind through
@@ -284,6 +488,12 @@ type MdeditLaunchTextArrayMembsReadI interface {
 func MdeditLaunchFillFromArrow[
 	TextArrayAttrs MdeditLaunchTextArrayAttrsReadI,
 	TextArrayMembs MdeditLaunchTextArrayMembsReadI,
+	U64ArrayAttrs MdeditLaunchU64ArrayAttrsReadI,
+	U64ArrayMembs MdeditLaunchU64ArrayMembsReadI,
+	I64ArrayAttrs MdeditLaunchI64ArrayAttrsReadI,
+	I64ArrayMembs MdeditLaunchI64ArrayMembsReadI,
+	StringArrayAttrs MdeditLaunchStringArrayAttrsReadI,
+	StringArrayMembs MdeditLaunchStringArrayMembsReadI,
 ](
 	c *MdeditLaunchColumns,
 	n int,
@@ -292,6 +502,12 @@ func MdeditLaunchFillFromArrow[
 	tsCol *array.Timestamp,
 	textArrayAttrs TextArrayAttrs,
 	textArrayMembs TextArrayMembs,
+	u64ArrayAttrs U64ArrayAttrs,
+	u64ArrayMembs U64ArrayMembs,
+	i64ArrayAttrs I64ArrayAttrs,
+	i64ArrayMembs I64ArrayMembs,
+	stringArrayAttrs StringArrayAttrs,
+	stringArrayMembs StringArrayMembs,
 ) (err error) {
 	for i := 0; i < n; i++ {
 		c.FactId = append(c.FactId, idCol.Value(i))
@@ -348,6 +564,87 @@ func MdeditLaunchFillFromArrow[
 			return
 		}
 		c.Name = append(c.Name, textArrayNameVal)
+		// --- u64Array. ---
+		var u64ArrayMountVal uint64
+		var u64ArrayMountCount int
+		var u64ArrayMountLastAttr int64
+		nu64Array := u64ArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
+		for attrJ := int64(0); attrJ < nu64Array; attrJ++ {
+			for membID := range u64ArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
+				switch membID {
+				case kindMdeditLaunchMount:
+					if u64ArrayMountLastAttr != attrJ+1 {
+						u64ArrayMountLastAttr = attrJ + 1
+						u64ArrayMountCount++
+					}
+					val, valErr := u64ArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+					if valErr != nil {
+						err = eb.Build().Int("row", i).Str("section", "u64Array").Str("membership", "mdeditLaunchMount").Str("field", "Mount").Errorf("slot u64Array@mdeditLaunchMount (field Mount) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+						return
+					}
+					u64ArrayMountVal = val
+				}
+			}
+		}
+		if u64ArrayMountCount != 1 {
+			err = eb.Build().Int("row", i).Str("section", "u64Array").Str("membership", "mdeditLaunchMount").Int("got", u64ArrayMountCount).Errorf("slot u64Array@mdeditLaunchMount (field Mount) carries %d attributes but the DTO admits exactly 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", u64ArrayMountCount)
+			return
+		}
+		c.Mount = append(c.Mount, u64ArrayMountVal)
+		// --- i64Array. ---
+		var i64ArraySnapNanosVal int64
+		var i64ArraySnapNanosCount int
+		var i64ArraySnapNanosLastAttr int64
+		ni64Array := i64ArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
+		for attrJ := int64(0); attrJ < ni64Array; attrJ++ {
+			for membID := range i64ArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
+				switch membID {
+				case kindMdeditLaunchSnapshot:
+					if i64ArraySnapNanosLastAttr != attrJ+1 {
+						i64ArraySnapNanosLastAttr = attrJ + 1
+						i64ArraySnapNanosCount++
+					}
+					val, valErr := i64ArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+					if valErr != nil {
+						err = eb.Build().Int("row", i).Str("section", "i64Array").Str("membership", "mdeditLaunchSnapshot").Str("field", "SnapNanos").Errorf("slot i64Array@mdeditLaunchSnapshot (field SnapNanos) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+						return
+					}
+					i64ArraySnapNanosVal = val
+				}
+			}
+		}
+		if i64ArraySnapNanosCount != 1 {
+			err = eb.Build().Int("row", i).Str("section", "i64Array").Str("membership", "mdeditLaunchSnapshot").Int("got", i64ArraySnapNanosCount).Errorf("slot i64Array@mdeditLaunchSnapshot (field SnapNanos) carries %d attributes but the DTO admits exactly 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", i64ArraySnapNanosCount)
+			return
+		}
+		c.SnapNanos = append(c.SnapNanos, i64ArraySnapNanosVal)
+		// --- stringArray. ---
+		var stringArrayPathVal string
+		var stringArrayPathCount int
+		var stringArrayPathLastAttr int64
+		nstringArray := stringArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
+		for attrJ := int64(0); attrJ < nstringArray; attrJ++ {
+			for membID := range stringArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
+				switch membID {
+				case kindMdeditLaunchPath:
+					if stringArrayPathLastAttr != attrJ+1 {
+						stringArrayPathLastAttr = attrJ + 1
+						stringArrayPathCount++
+					}
+					val, valErr := stringArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+					if valErr != nil {
+						err = eb.Build().Int("row", i).Str("section", "stringArray").Str("membership", "mdeditLaunchPath").Str("field", "Path").Errorf("slot stringArray@mdeditLaunchPath (field Path) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+						return
+					}
+					stringArrayPathVal = val
+				}
+			}
+		}
+		if stringArrayPathCount != 1 {
+			err = eb.Build().Int("row", i).Str("section", "stringArray").Str("membership", "mdeditLaunchPath").Int("got", stringArrayPathCount).Errorf("slot stringArray@mdeditLaunchPath (field Path) carries %d attributes but the DTO admits exactly 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", stringArrayPathCount)
+			return
+		}
+		c.Path = append(c.Path, stringArrayPathVal)
 	}
 	return
 }
@@ -363,10 +660,22 @@ func MdeditLaunchFillFromArrow[
 func MdeditLaunchReadRow[
 	TextArrayAttrs MdeditLaunchTextArrayAttrsReadI,
 	TextArrayMembs MdeditLaunchTextArrayMembsReadI,
+	U64ArrayAttrs MdeditLaunchU64ArrayAttrsReadI,
+	U64ArrayMembs MdeditLaunchU64ArrayMembsReadI,
+	I64ArrayAttrs MdeditLaunchI64ArrayAttrsReadI,
+	I64ArrayMembs MdeditLaunchI64ArrayMembsReadI,
+	StringArrayAttrs MdeditLaunchStringArrayAttrsReadI,
+	StringArrayMembs MdeditLaunchStringArrayMembsReadI,
 ](
 	i int,
 	textArrayAttrs TextArrayAttrs,
 	textArrayMembs TextArrayMembs,
+	u64ArrayAttrs U64ArrayAttrs,
+	u64ArrayMembs U64ArrayMembs,
+	i64ArrayAttrs I64ArrayAttrs,
+	i64ArrayMembs I64ArrayMembs,
+	stringArrayAttrs StringArrayAttrs,
+	stringArrayMembs StringArrayMembs,
 ) (row MdeditLaunch, present bool, err error) {
 	// --- textArray. ---
 	var textArrayTextVal string
@@ -420,6 +729,96 @@ func MdeditLaunchReadRow[
 		row.Name = textArrayNameVal
 		present = true
 	}
+	// --- u64Array. ---
+	var u64ArrayMountVal uint64
+	var u64ArrayMountCount int
+	var u64ArrayMountLastAttr int64
+	nu64Array := u64ArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
+	for attrJ := int64(0); attrJ < nu64Array; attrJ++ {
+		for membID := range u64ArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
+			switch membID {
+			case kindMdeditLaunchMount:
+				if u64ArrayMountLastAttr != attrJ+1 {
+					u64ArrayMountLastAttr = attrJ + 1
+					u64ArrayMountCount++
+				}
+				val, valErr := u64ArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				if valErr != nil {
+					err = eb.Build().Int("row", i).Str("section", "u64Array").Str("membership", "mdeditLaunchMount").Str("field", "Mount").Errorf("slot u64Array@mdeditLaunchMount (field Mount) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+					return
+				}
+				u64ArrayMountVal = val
+			}
+		}
+	}
+	if u64ArrayMountCount > 1 {
+		err = eb.Build().Int("row", i).Str("section", "u64Array").Str("membership", "mdeditLaunchMount").Int("got", u64ArrayMountCount).Errorf("slot u64Array@mdeditLaunchMount (field Mount) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", u64ArrayMountCount)
+		return
+	}
+	if u64ArrayMountCount == 1 {
+		row.Mount = u64ArrayMountVal
+		present = true
+	}
+	// --- i64Array. ---
+	var i64ArraySnapNanosVal int64
+	var i64ArraySnapNanosCount int
+	var i64ArraySnapNanosLastAttr int64
+	ni64Array := i64ArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
+	for attrJ := int64(0); attrJ < ni64Array; attrJ++ {
+		for membID := range i64ArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
+			switch membID {
+			case kindMdeditLaunchSnapshot:
+				if i64ArraySnapNanosLastAttr != attrJ+1 {
+					i64ArraySnapNanosLastAttr = attrJ + 1
+					i64ArraySnapNanosCount++
+				}
+				val, valErr := i64ArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				if valErr != nil {
+					err = eb.Build().Int("row", i).Str("section", "i64Array").Str("membership", "mdeditLaunchSnapshot").Str("field", "SnapNanos").Errorf("slot i64Array@mdeditLaunchSnapshot (field SnapNanos) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+					return
+				}
+				i64ArraySnapNanosVal = val
+			}
+		}
+	}
+	if i64ArraySnapNanosCount > 1 {
+		err = eb.Build().Int("row", i).Str("section", "i64Array").Str("membership", "mdeditLaunchSnapshot").Int("got", i64ArraySnapNanosCount).Errorf("slot i64Array@mdeditLaunchSnapshot (field SnapNanos) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", i64ArraySnapNanosCount)
+		return
+	}
+	if i64ArraySnapNanosCount == 1 {
+		row.SnapNanos = i64ArraySnapNanosVal
+		present = true
+	}
+	// --- stringArray. ---
+	var stringArrayPathVal string
+	var stringArrayPathCount int
+	var stringArrayPathLastAttr int64
+	nstringArray := stringArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
+	for attrJ := int64(0); attrJ < nstringArray; attrJ++ {
+		for membID := range stringArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
+			switch membID {
+			case kindMdeditLaunchPath:
+				if stringArrayPathLastAttr != attrJ+1 {
+					stringArrayPathLastAttr = attrJ + 1
+					stringArrayPathCount++
+				}
+				val, valErr := stringArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				if valErr != nil {
+					err = eb.Build().Int("row", i).Str("section", "stringArray").Str("membership", "mdeditLaunchPath").Str("field", "Path").Errorf("slot stringArray@mdeditLaunchPath (field Path) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+					return
+				}
+				stringArrayPathVal = val
+			}
+		}
+	}
+	if stringArrayPathCount > 1 {
+		err = eb.Build().Int("row", i).Str("section", "stringArray").Str("membership", "mdeditLaunchPath").Int("got", stringArrayPathCount).Errorf("slot stringArray@mdeditLaunchPath (field Path) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", stringArrayPathCount)
+		return
+	}
+	if stringArrayPathCount == 1 {
+		row.Path = stringArrayPathVal
+		present = true
+	}
 	return
 }
 
@@ -461,6 +860,9 @@ type mdeditLaunchReader struct {
 	EntityId        *ra.ReadAccessFactsPlainEntityIdAttributes
 	EntityTimestamp *ra.ReadAccessFactsPlainEntityTimestampAttributes
 	TextArray       *ra.ReadAccessFactsTaggedTextArray
+	U64Array        *ra.ReadAccessFactsTaggedU64Array
+	I64Array        *ra.ReadAccessFactsTaggedI64Array
+	StringArray     *ra.ReadAccessFactsTaggedStringArray
 }
 
 func newMdeditLaunchReader() *mdeditLaunchReader {
@@ -468,6 +870,9 @@ func newMdeditLaunchReader() *mdeditLaunchReader {
 		EntityId:        ra.NewReadAccessFactsPlainEntityIdAttributes(),
 		EntityTimestamp: ra.NewReadAccessFactsPlainEntityTimestampAttributes(),
 		TextArray:       ra.NewReadAccessFactsTaggedTextArray(),
+		U64Array:        ra.NewReadAccessFactsTaggedU64Array(),
+		I64Array:        ra.NewReadAccessFactsTaggedI64Array(),
+		StringArray:     ra.NewReadAccessFactsTaggedStringArray(),
 	}
 }
 
@@ -487,6 +892,21 @@ func (r *mdeditLaunchReader) loadFromRecord(rec arrow.Record) (err error) {
 		err = eh.Errorf("launchcfg: load TextArray: %w", err)
 		return
 	}
+	err = r.U64Array.LoadFromRecord(rec)
+	if err != nil {
+		err = eh.Errorf("launchcfg: load U64Array: %w", err)
+		return
+	}
+	err = r.I64Array.LoadFromRecord(rec)
+	if err != nil {
+		err = eh.Errorf("launchcfg: load I64Array: %w", err)
+		return
+	}
+	err = r.StringArray.LoadFromRecord(rec)
+	if err != nil {
+		err = eh.Errorf("launchcfg: load StringArray: %w", err)
+		return
+	}
 	return
 }
 
@@ -502,6 +922,15 @@ func (r *mdeditLaunchReader) release() {
 	}
 	if r.TextArray != nil {
 		r.TextArray.Release()
+	}
+	if r.U64Array != nil {
+		r.U64Array.Release()
+	}
+	if r.I64Array != nil {
+		r.I64Array.Release()
+	}
+	if r.StringArray != nil {
+		r.StringArray.Release()
 	}
 }
 
@@ -523,6 +952,9 @@ func (c *MdeditLaunchColumns) Unmarshal(rec arrow.Record) (err error) {
 		r.EntityId.ValueNaturalKey,
 		r.EntityTimestamp.ValueTs,
 		r.TextArray.Attributes, r.TextArray.Memberships,
+		r.U64Array.Attributes, r.U64Array.Memberships,
+		r.I64Array.Attributes, r.I64Array.Memberships,
+		r.StringArray.Attributes, r.StringArray.Memberships,
 	)
 	return
 }

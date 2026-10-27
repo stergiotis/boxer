@@ -112,3 +112,33 @@ func TestSnapshotLoad_EndsAnActiveFollow(t *testing.T) {
 	assert.False(t, inst.diskChanged)
 	assert.Equal(t, "# b\n", inst.src)
 }
+
+// A handover's read of its snapshot replaces the text the launch carried,
+// but not edits made while it ran, nor a document opened meanwhile.
+func TestAHandedSnapshotReplacesOnlyTheTextItCameWith(t *testing.T) {
+	fsys := fstest.MapFS{"artefact.md": {Data: []byte("# From the snapshot\n")}}
+	start := func() *App {
+		inst := &App{}
+		inst.adoptDocument("# handed\n", "handed")
+		inst.startHandedLoad(fsys, &handedSnapshot{name: "handed", path: "artefact.md", text: "# handed\n"})
+		return inst
+	}
+	inst := start()
+	drainLoadUntil(t, inst)
+	assert.Equal(t, "# From the snapshot\n", inst.src)
+	assert.NotNil(t, inst.snapImages)
+
+	inst = start()
+	inst.src = "# handed, and typed into\n"
+	drainLoadUntil(t, inst)
+	assert.Equal(t, "# handed, and typed into\n", inst.src)
+	assert.NotNil(t, inst.snapImages, "the images still come from the snapshot")
+	assert.Contains(t, inst.status, "kept your edits")
+
+	inst = start()
+	inst.adoptDocument("# another\n", "another")
+	assert.Empty(t, inst.files.loadKey, "the other document cancelled the read")
+	assert.Nil(t, inst.handedSnap)
+	inst.drainSnapshotLoad()
+	assert.Equal(t, "# another\n", inst.src)
+}

@@ -35,6 +35,7 @@ import (
 	"github.com/rs/zerolog/log"
 
 	"github.com/stergiotis/boxer/apps/mdedit/launchcfg"
+	"github.com/stergiotis/boxer/public/identity/identifier"
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
@@ -341,6 +342,11 @@ type App struct {
 	// readFromSnapshot marks readName as a lading-snapshot source rather than
 	// a Powerbox-named file — the badge tooltip says which contract applies.
 	readFromSnapshot bool
+	// snapImages are the images a snapshot document embeds
+	// (mdedit_images.go); nil for any other document. handedSnap is a
+	// handed-over document's snapshot, until the window has read it.
+	snapImages *snapshotImages
+	handedSnap *handedSnapshot
 
 	// showFiles is the files pane's toggle and files its state
 	// (mdedit_files.go).
@@ -514,6 +520,9 @@ func (inst *App) handOver(raw []byte) (handed bool) {
 		name = "a handed-over document"
 	}
 	inst.adoptDocument(l.Text, name)
+	if l.Mount != 0 {
+		inst.handedSnap = &handedSnapshot{mount: identifier.TaggedId(l.Mount), snap: time.Unix(0, l.SnapNanos), path: l.Path, name: name, text: l.Text}
+	}
 	return true
 }
 
@@ -523,6 +532,8 @@ func (inst *App) handOver(raw []byte) (handed bool) {
 func (inst *App) adoptDocument(text string, name string) {
 	inst.store = nil
 	inst.src = text
+	inst.cancelSnapshotLoad()
+	inst.setSnapshotImages(nil)
 	inst.status = "opened " + name + " — not autosaved: Save to keep it"
 }
 
@@ -577,6 +588,9 @@ func (inst *App) renderBody() {
 	inst.drainAsync()
 	inst.drainFollow()
 	inst.drainSnapshotLoad()
+	if inst.pollHandedSnapshot() || inst.pollSnapshotImages() {
+		c.RequestRepaint()
+	}
 	// The host repaints reactively; while a follow is live, a low-rate tick
 	// keeps frames — and so the drain above — coming for a disk change that
 	// arrives with no input to wake the window.
@@ -1192,7 +1206,7 @@ func (inst *App) syncDoc() {
 	if inst.docOk && inst.docSrc == inst.src {
 		return
 	}
-	inst.doc = markdown.Parse([]byte(inst.src))
+	inst.doc = markdown.ParseWith([]byte(inst.src), inst.parseOptions())
 	inst.docSrc = inst.src
 	inst.docOk = true
 }

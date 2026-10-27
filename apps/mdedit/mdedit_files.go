@@ -25,6 +25,7 @@ import (
 	"time"
 
 	"github.com/stergiotis/boxer/public/fs/lading/ladingview"
+	"github.com/stergiotis/boxer/public/identity/identifier"
 	"github.com/stergiotis/boxer/public/keelson/runtime/bgjob"
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
@@ -81,6 +82,15 @@ type filesState struct {
 	// document will be called once it lands.
 	loadKey   string
 	loadLabel string
+	// loadFS and loadPath are the snapshot and path of the load, which the
+	// landed document's images are read from.
+	loadFS   fs.FS
+	loadPath string
+	// loadHanded marks a handover's load: it replaces the buffer only while
+	// the buffer still holds loadHandedText, the text the launch carried, so
+	// edits made while it ran are kept.
+	loadHanded     bool
+	loadHandedText string
 }
 
 // filesVisible is the outlineVisible shape: the toggle AND a window wide
@@ -111,11 +121,7 @@ func (inst *App) renderFiles() {
 
 	// The lazy connect. The lane caches success forever (dispose closes it if
 	// superseded) and failure until retried.
-	sc, done, cerr, busy := f.conn.Demand("connect", func(ctx context.Context) (*storeConn, error) {
-		cctx, cancel := context.WithTimeout(ctx, filesConnectTimeout)
-		defer cancel()
-		return connectLading(cctx)
-	})
+	sc, done, cerr, busy := f.connect()
 	switch {
 	case busy:
 		c.RequestRepaint()
@@ -259,9 +265,30 @@ func (inst *App) requestSnapshotLoad(fsys fs.FS, label, cacheKey, path string) {
 	if !inst.confirmReplace("activate again to discard them") {
 		return
 	}
+	inst.handedSnap = nil
+	inst.startSnapshotLoad(fsys, label+":"+path+" @ latest", cacheKey, path)
+}
+
+// cancelSnapshotLoad drops a load in flight: another document replaced the
+// buffer, and the load would replace that one when it landed.
+func (inst *App) cancelSnapshotLoad() {
+	f := &inst.files
+	if f.loadKey != "" {
+		f.load.Invalidate()
+	}
+	f.loadKey, f.loadLabel, f.loadFS, f.loadPath = "", "", nil, ""
+	f.loadHanded, f.loadHandedText = false, ""
+	inst.handedSnap = nil
+}
+
+// startSnapshotLoad starts the read of path from fsys on the lane;
+// drainSnapshotLoad lands it as the document called label.
+func (inst *App) startSnapshotLoad(fsys fs.FS, label, cacheKey, path string) {
 	f := &inst.files
 	f.loadKey = cacheKey + ":" + path
-	f.loadLabel = label + ":" + path + " @ latest"
+	f.loadLabel = label
+	f.loadFS, f.loadPath = fsys, path
+	f.loadHanded, f.loadHandedText = false, ""
 	inst.status = "loading " + path + "…"
 	// Kick off the load now; the render path polls the result.
 	_, _, _, _ = f.load.Demand(f.loadKey, func(ctx context.Context) (string, error) {
@@ -294,12 +321,27 @@ func (inst *App) drainSnapshotLoad() {
 		return
 	}
 	f.load.Invalidate()
+	key := f.loadKey
 	f.loadKey = ""
 	label := f.loadLabel
 	f.loadLabel = ""
+	handed, handedText := f.loadHanded, f.loadHandedText
+	f.loadHanded, f.loadHandedText = false, ""
 	if err != nil {
-		inst.status = "load failed: " + err.Error()
+		if handed {
+			inst.status = "showing the handed-over text; its snapshot cannot be read: " + err.Error()
+		} else {
+			inst.status = "load failed: " + err.Error()
+		}
 		inst.logger.Warn().Err(err).Msg("mdedit: snapshot load failed")
+		return
+	}
+	if handed && inst.src != handedText {
+		// Typed into while the read ran: the edits stay, and the images
+		// still come from the snapshot the text was handed with.
+		inst.setSnapshotImages(newSnapshotImages(f.loadFS, f.loadPath, key))
+		f.loadFS = nil
+		inst.status = "kept your edits to the handed-over text; its images come from " + label
 		return
 	}
 	// The same trio an Open lands, plus ending any follow — the snapshot is
@@ -312,5 +354,60 @@ func (inst *App) drainSnapshotLoad() {
 	inst.requestCaret(0, 0, false)
 	inst.readName = label
 	inst.readFromSnapshot = true
+	inst.setSnapshotImages(newSnapshotImages(f.loadFS, f.loadPath, key))
+	f.loadFS = nil
 	inst.status = "loaded " + label
+}
+
+// connect demands the lazy connection. The lane caches success forever
+// (dispose closes it if superseded) and failure until retried.
+func (f *filesState) connect() (sc *storeConn, done bool, err error, busy bool) {
+	return f.conn.Demand("connect", func(ctx context.Context) (*storeConn, error) {
+		cctx, cancel := context.WithTimeout(ctx, filesConnectTimeout)
+		defer cancel()
+		return connectLading(cctx)
+	})
+}
+
+// handedSnapshot is the lading snapshot a handed-over document came with
+// (ADR-0339 §SD5, proposed), and the text the launch carried.
+type handedSnapshot struct {
+	mount identifier.TaggedId
+	snap  time.Time
+	path  string
+	name  string
+	text  string
+}
+
+// pollHandedSnapshot connects to the store and starts reading the handed-over
+// document from its snapshot, so its images come from there too. The text
+// the launch carried stays when the snapshot cannot be read. busy says the
+// connection is still being made.
+func (inst *App) pollHandedSnapshot() (busy bool) {
+	h := inst.handedSnap
+	if h == nil {
+		return
+	}
+	sc, done, err, busy := inst.files.connect()
+	if busy || !done {
+		return busy
+	}
+	inst.handedSnap = nil
+	if err != nil {
+		inst.status = "showing the handed-over text; its snapshot cannot be read: " + err.Error()
+		return
+	}
+	fsys, err := sc.view(h.mount, h.snap)
+	if err != nil {
+		inst.status = "showing the handed-over text; its snapshot cannot be read: " + err.Error()
+		return
+	}
+	inst.startHandedLoad(fsys, h)
+	return
+}
+
+// startHandedLoad reads the handed-over document from fsys, its snapshot.
+func (inst *App) startHandedLoad(fsys fs.FS, h *handedSnapshot) {
+	inst.startSnapshotLoad(fsys, h.name, fmt.Sprintf("%016x@%d", h.mount.Value(), h.snap.UnixNano()), h.path)
+	inst.files.loadHanded, inst.files.loadHandedText = true, h.text
 }

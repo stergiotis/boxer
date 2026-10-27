@@ -16,7 +16,10 @@ const AppId = "github.com/stergiotis/boxer/apps/mdedit"
 const Kind = "mdeditLaunch"
 
 // MdeditLaunch is a handed-over document: Text is its markdown, Name what
-// the window calls it and offers as the file name when it is saved.
+// the window calls it and offers as the file name when it is saved. Mount,
+// SnapNanos and Path, when Mount is set, name the same document in a lading
+// snapshot (ADR-0339 §SD5, proposed): the window reads it and the images it
+// embeds from there, and keeps Text if the snapshot cannot be read.
 type MdeditLaunch struct {
 	_ struct{} `kind:"mdeditLaunch"`
 
@@ -26,4 +29,8 @@ type MdeditLaunch struct {
 
 	Text string `lw:"mdeditLaunchText,textArray"`
 	Name string `lw:"mdeditLaunchName,textArray"`
+
+	Mount     uint64 `lw:"mdeditLaunchMount,u64Array"`
+	SnapNanos int64  `lw:"mdeditLaunchSnapshot,i64Array"`
+	Path      string `lw:"mdeditLaunchPath,stringArray"`
 }
