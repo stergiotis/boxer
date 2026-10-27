@@ -255,6 +255,12 @@ hash. A name that is not in the set, or whose bytes were purged, stays
 the glyph link it was. Still deferred: the linter's rule for such a name,
 and carrying the images along with Copy and Open in mdedit.
 
+### 2026-10-26 — export to lading proposed
+
+[ADR-0339](./0339-chat-artefact-export-to-lading-and-the-handover-to-mdedit-by-snapshot.md)
+(proposed) takes up the durable storage §SD6 deferred, as an export the person
+confirms. It ends §SD1's guarantee for what is exported, and only for that.
+
 ## References
 
 - [ADR-0282](./0282-chat-artefact-one-markdown-document-per-conversation.md) §SD1, §SD2, §SD3, §SD7 — the artefact, its tools, the ceiling, images deferred.

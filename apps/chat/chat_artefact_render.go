@@ -47,7 +47,7 @@ const (
 	tipAccept    = "Make this change the artefact's next revision; the model's call goes on."
 	tipReject    = "Turn the change down; the model is told, and asked not to repeat it."
 	tipRevert    = "Make this revision current again, as a new revision. A later turn's model is told the artefact moved."
-	tipArtMdedit = "Open the artefact as a new, unsaved document in mdedit, where you can type. Nothing comes back to the chat."
+	tipArtMdedit = "Open the artefact as a new, unsaved document in mdedit, where you can type. With screenshots, it is exported first, so mdedit shows them. Nothing comes back to the chat."
 )
 
 var (
@@ -79,6 +79,8 @@ type artefactView struct {
 	diff    []diffLine
 	// thumbs records which screenshot thumbnails the host holds.
 	thumbs *c.ImageVersionTracker[uint64]
+	// export is the export waiting for the person's confirmation.
+	export *exportPlan
 	// inline holds the screenshots the document embeds, decoded at the
 	// inline bound, by hash; a revision that keeps an image does not decode
 	// it again.
@@ -146,9 +148,18 @@ func (inst *App) renderArtefact() {
 				inst.copyText("the artefact", text)
 			}
 			inst.renderEndorse(n, text)
+			for range c.HoverText(tipArtExport).KeepIter() {
+				if c.Button(inst.ids.PrepareStr("art-export"), atomsArtExport).Small().SendResp().HasPrimaryClicked() {
+					inst.planExport(false)
+				}
+			}
 			for range c.HoverText(tipArtMdedit).KeepIter() {
 				if c.Button(inst.ids.PrepareStr("art-mdedit"), atomsArtMdedit).Small().SendResp().HasPrimaryClicked() {
-					inst.openArtefactInMdedit(text)
+					if hasLiveImages(set) {
+						inst.planExport(true)
+					} else {
+						inst.openArtefactInMdedit(text)
+					}
 				}
 			}
 		}
@@ -163,6 +174,11 @@ func (inst *App) renderArtefact() {
 	}
 	if p := art.pending(); p != nil {
 		inst.renderProposal(p, n, text)
+	}
+	if p := v.export; p != nil {
+		for range c.IdScope(inst.ids.PrepareStr("export-ask")) {
+			inst.renderExportAsk(p, n)
+		}
 	}
 	if a := inst.coord.pixelAskNow(); a != nil {
 		for range c.IdScope(inst.ids.PrepareStr("pixel-ask")) {
@@ -423,4 +439,14 @@ func (inst *App) renderEndorse(n int, text string) {
 			}, nil)
 		}
 	}
+}
+
+// hasLiveImages says the set names a screenshot whose bytes are held.
+func hasLiveImages(set []artImage) bool {
+	for _, e := range set {
+		if !e.purged {
+			return true
+		}
+	}
+	return false
 }

@@ -5,6 +5,7 @@ import (
 	"encoding/json/v2"
 	"slices"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -41,6 +42,9 @@ type resumed struct {
 	stranded bool
 	// lines are what resume settled, as the person reads them.
 	lines []string
+	// art is the artefact read back from its last export, nil when there
+	// is none or it could not be read.
+	art *artefact
 }
 
 // listRuns asks the host for this app's runs, off the frame.
@@ -137,6 +141,14 @@ func (inst *App) resumeRun(id string) {
 			}
 			if err = settleOpenTurn(ctx, w, r.fold.OpenTurn); err != nil {
 				return
+			}
+		}
+		if rec, ok := lastExport(w.Entries()); ok && !r.stranded {
+			if r.art, err = readExport(ctx, rec); err != nil {
+				r.lines = append(r.lines, "the artefact's export of revision "+strconv.Itoa(rec.Revision)+" could not be read back, so the artefact starts empty: "+err.Error())
+				err = nil
+			} else {
+				r.lines = append(r.lines, "the artefact was restored from its export of revision "+strconv.Itoa(rec.Revision)+", with "+plural(len(rec.Images), "screenshot"))
 			}
 		}
 		if len(r.lines) > 0 && !r.stranded {
@@ -416,11 +428,19 @@ func (inst *App) adopt(r *resumed) {
 	coord.mu.Unlock()
 	coord.offer(conv.apps, conv.questions)
 	if conv.artefact {
-		// deferred: the artefact's text is not rebuilt from the journal
-		// (its revisions live in the artefact store, not in entries), so a
-		// resumed conversation offers an empty artefact; the snapshot note
-		// re-told at the next turn says so to the model.
+		// The revisions live in the artefact store, not in entries: the
+		// last export, when there is one, brings the exported revision back
+		// (ADR-0339 §SD7, proposed); otherwise the artefact starts empty,
+		// and the snapshot note re-told at the next turn says so.
+		if r.art != nil {
+			conv.art.close()
+			conv.art, r.art = r.art, nil
+		}
+		conv.art.reserveThrough(revisionsNamed(r.entries))
 		coord.offerArtefact(conv.art)
+	}
+	if r.art != nil {
+		r.art.close()
 	}
 	inst.coord, conv.coord = coord, coord
 	inst.resumeNotes(r)

@@ -174,23 +174,31 @@ func revisionOf(e agentrun.Entry) int {
 }
 
 // endorsedHead says whether the artefact's head carries a standing
-// endorsement: the latest artefact endorsement names a revision, and no
-// model has written a revision since. A person's own edit, or a revert
-// they chose, is theirs (level 0 by source) and leaves the endorsement
-// standing (ADR-0311 §SD3).
+// endorsement: the latest artefact endorsement names a revision the
+// artefact holds with the text it endorsed, and no model has written a
+// revision since. A person's own edit, or a revert they chose, is theirs
+// (level 0 by source) and leaves the endorsement standing (ADR-0311 §SD3).
+// The text is compared, not only the number, since a resumed artefact
+// holds only what its export brought back.
 func (inst *coordinator) endorsedHead() (endorsed bool) {
 	w := inst.journalNow()
 	art := inst.artefactOf()
 	if w == nil || art == nil {
 		return false
 	}
-	endorsedRev := -1
+	endorsedRev, digest := -1, ""
 	for _, e := range w.Entries() {
 		if e.Kind == agentrun.KindEndorse && e.Key == endorseKeyArtefact {
 			endorsedRev = revisionOf(e)
+			if e.Endorse != nil {
+				digest = e.Endorse.Digest
+			}
 		}
 	}
 	if endorsedRev < 0 {
+		return false
+	}
+	if t, ok := art.text(endorsedRev); !ok || agentrun.ContentDigest(t) != digest {
 		return false
 	}
 	for _, r := range art.revisions() {

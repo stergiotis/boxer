@@ -312,6 +312,13 @@ func (inst *artefact) commit(base int, rev artRevision) (n int, err error) {
 	return rev.n, nil
 }
 
+// reserveThrough keeps the numbers up to n from being handed out.
+func (inst *artefact) reserveThrough(n int) {
+	inst.mu.Lock()
+	inst.lastN = max(inst.lastN, n)
+	inst.mu.Unlock()
+}
+
 // nextLocked is the next revision's number.
 func (inst *artefact) nextLocked() int {
 	inst.lastN++
