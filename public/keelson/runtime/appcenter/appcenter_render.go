@@ -8,6 +8,7 @@ import (
 	playlaunch "github.com/stergiotis/boxer/apps/play/launchcfg"
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
+	"github.com/stergiotis/boxer/public/keelson/runtime/widgethandle"
 	"github.com/stergiotis/boxer/public/observability/humanfmt"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/badge"
@@ -32,6 +33,9 @@ func (inst *App) render() {
 		inst.renderStatus(snap)
 	}
 	for range c.PanelLeftInside(inst.ids.PrepareStr("apps")).Resizable(true).DefaultSize(leftWidth).KeepIter() {
+		// Typing commits per keystroke inside the frame (ADR-0345 §SD3); the
+		// handle lets the filter resource say the person is typing.
+		inst.filterH = widgethandle.Make(inst.ids.PrepareStr("filter").Derive())
 		c.TextEdit(inst.ids.PrepareStr("filter"), inst.filter, false).
 			HintText("filter apps").
 			SendRespVal(&inst.filter)
@@ -85,7 +89,8 @@ func (inst *App) renderList(snap snapshot) {
 				clicked = c.SelectableLabel(inst.ids.PrepareStr("row"), inst.selected == id, label).SendResp().HasPrimaryClicked()
 			}
 			if clicked {
-				inst.selectApp(id)
+				// The person's selection, through the catalog (ADR-0345 §SD3).
+				inst.selectGesture(id)
 			}
 		}
 	}

@@ -31,6 +31,8 @@ var manifest = app.Manifest{
 		PreferredHeight: 800,
 	},
 	LaunchKind: launchcfg.Kind,
+	// The operations catalog (ADR-0345), in appcenter_ops.go.
+	Operations: ops.Catalog(),
 	Caps: append(keelsonquery.ClientCaps(readTables...), app.SubjectFilter{
 		Pattern:   windowhost.OpenSubject,
 		Direction: app.CapDirectionPub,

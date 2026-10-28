@@ -24,6 +24,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect/providers"
 	"github.com/stergiotis/boxer/public/keelson/runtime/llm"
 	"github.com/stergiotis/boxer/public/keelson/runtime/watchbill"
+	"github.com/stergiotis/boxer/public/keelson/runtime/widgethandle"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 )
 
@@ -94,6 +95,12 @@ type App struct {
 	selected string
 	filter   string
 
+	// Operations state (appcenter_ops.go, ADR-0345). frameCtx is the current
+	// frame's context, through which a row click routes as a gesture;
+	// filterH is the filter box, for telling the person is typing in it.
+	frameCtx app.FrameContextI
+	filterH  widgethandle.WidgetHandle
+
 	mu sync.Mutex
 	// want is the selection the poller reads for; the frame writes it.
 	want string
@@ -152,6 +159,7 @@ func (inst *App) Unmount(ctx app.MountContextI) (err error) {
 
 func (inst *App) Frame(ctx app.FrameContextI) (err error) {
 	inst.density = styletokens.ActiveDensity()
+	inst.frameCtx = ctx
 	inst.render()
 	return
 }
