@@ -356,7 +356,8 @@ func (inst *Inst) renderAppRow(ids *c.WidgetIdStack, et c.EndETableFluid, rowIdx
 		return
 	}
 	if flags.HasPrimaryClicked() {
-		inst.cursor = rowIdx
+		// The person's selection, through the catalog (ADR-0345 §SD3).
+		inst.selectGesture(m.Id, rowIdx)
 		// And the list takes focus, so the keyboard continues from where the
 		// pointer left off: ↑/↓ walk on from the clicked row, and Space or
 		// Enter open it — the Open button in the detail pane shows itself as

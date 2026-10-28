@@ -11,6 +11,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/help"
 	"github.com/stergiotis/boxer/public/keelson/runtime/help/search"
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
+	"github.com/stergiotis/boxer/public/keelson/runtime/widgethandle"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/regexedit"
 )
@@ -133,6 +134,17 @@ type Inst struct {
 	// rank is a per-app weight for ordering a set someone asked for, recents
 	// is an ordered short list nobody asked for.
 	recentFn func() (ids []app.AppIdT)
+
+	// Operations state (launcher_ops.go, ADR-0345). frameCtx is the
+	// controlling window's frame context while it draws, through which the
+	// person's controls route as gestures; nil while the empty-state pane or
+	// another window draws, which apply directly. queryH is the search box,
+	// for telling the person is typing in it. appliedKinds is the kind mask
+	// the toggles last committed, so a checkbox write that lands at Sync is
+	// noticed once and routed as a gesture.
+	frameCtx     app.FrameContextI
+	queryH       widgethandle.WidgetHandle
+	appliedKinds kindFilterT
 }
 
 // New constructs a launcher over registry. host may be nil — the component
@@ -223,10 +235,16 @@ func (inst *Inst) renderListPane(ids *c.WidgetIdStack) {
 	visible := inst.visibleManifests()
 	rows := inst.buildRows(visible)
 	queryBefore := inst.query()
+	cursorBefore := inst.cursor
 	openIdx := inst.applyKeys(rows, fieldId, inst.listKeyId)
 	if inst.query() != queryBefore {
 		visible = inst.visibleManifests()
 		rows = inst.buildRows(visible)
+	}
+	// A cursor the keys moved is the person's selection, through the catalog
+	// (ADR-0345 §SD3); the direct path is the move already made.
+	if c := inst.cursor; c != cursorBefore && c >= 0 && c < len(rows) && rows[c].heading == "" {
+		inst.selectGesture(rows[c].m.Id, c)
 	}
 	inst.syncCursorToFilter(rows)
 	inst.renderRows(ids, visible, rows)
@@ -275,11 +293,17 @@ func (inst *Inst) renderSearchBox(ids *c.WidgetIdStack) (fieldId uint64) {
 				inst.wantFocus = false
 			}
 			fieldId = edit.Id()
+			// Typing commits per keystroke inside the frame (ADR-0345 §SD3);
+			// the handle lets the filter resource say the person is typing.
+			// The clear button is a gesture.
+			inst.queryH = widgethandle.Make(fieldId)
 			edit.SendRespVal(&inst.searchText)
 			if inst.searchText != "" {
 				if c.Button(ids.PrepareStr("launcher-search-clear"), c.Atoms().Text(icons.PhX).Keep()).
 					SendResp().HasPrimaryClicked() {
-					inst.searchText = ""
+					f := inst.filterState()
+					f.query = ""
+					inst.setFilterGesture(f)
 				}
 			}
 		}
@@ -387,6 +411,7 @@ func (inst *Inst) ensureKindShown() {
 // scope keys the widget ids so several surfaces can draw the same toggles.
 func (inst *Inst) renderKindToggles(ids *c.WidgetIdStack, scope string) {
 	inst.ensureKindShown()
+	inst.noticeKindToggles()
 	for range c.Horizontal().KeepIter() {
 		c.Label("Show:").Send()
 		for i, k := range app.AllKinds {
@@ -420,13 +445,19 @@ func (inst *Inst) renderTopicChips(ids *c.WidgetIdStack) {
 			if c.SelectableLabel(ids.PrepareStr("topic-chip-"+t.String()),
 				inst.topicFilter.selectedAt(i), topicLabel(t)).
 				SendResp().HasPrimaryClicked() {
-				inst.topicFilter = inst.topicFilter.toggledAt(i)
+				// The click computes the next state, so the command sets and
+				// never toggles (ADR-0345 §SD2).
+				f := inst.filterState()
+				f.topics = f.topics.toggledAt(i)
+				inst.setFilterGesture(f)
 			}
 		}
 		if !inst.topicFilter.isInert() {
 			if c.Button(ids.PrepareStr("topic-chip-clear"), c.Atoms().Text(icons.PhX+" Clear").Keep()).
 				SendResp().HasPrimaryClicked() {
-				inst.topicFilter = 0
+				f := inst.filterState()
+				f.topics = 0
+				inst.setFilterGesture(f)
 			}
 		}
 	}
