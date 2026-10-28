@@ -230,6 +230,31 @@ rclone mount --read-only \
   /mnt/x
 ```
 
+Two things have to be on the machine first, and neither comes with a checkout:
+
+- **rclone 1.64 or later.** The `ssh` option is what makes rclone run a
+  command instead of dialing a server, and distro packages can predate it
+  (Ubuntu's 1.60 does).
+  [scripts/dev/install-rclone.sh](../../scripts/dev/install-rclone.sh)
+  installs a pinned release, checksum-verified, into `~/.local/bin` or the
+  directory it is given.
+- **`boxer` as an executable on `PATH`,** built from this tree or one recent
+  enough to have `fs sftp-stdio`. rclone starts the command itself, not
+  through a shell, so an alias or a shell function does not reach it. With
+  the build environment of
+  [ADR-0215](../adr/0215-retire-mimalloc-reproducible-builds.md) sourced:
+
+  ```sh
+  source scripts/dev/go-build-env.sh
+  go build $BOXER_GO_FLAGS -tags "$BOXER_GO_TAGS" -o ~/.local/bin/boxer ./public/app
+  ```
+
+  An absolute path in `ssh="…"` works as well. A copy on `PATH` does not
+  follow the checkout: rebuild it when the `fs` commands change.
+
+The head reads the store with the ClickHouse settings of the shell rclone is
+started from, as every `boxer` command does.
+
 `shell_type=unix` is worth setting: without it rclone runs the command a second
 time to probe the remote shell. The tree is:
 
@@ -255,24 +280,33 @@ it shows was read from, with `/mnt/x` to replace by a directory of yours
 ([ADR-0342](../adr/0342-chat-artefact-export-to-lading-and-the-handover-to-mdedit-by-snapshot.md)
 §SD5).
 
-When the head cannot start, rclone reports it as a broken SFTP handshake —
-`couldn't initialise SFTP: error receiving version packet from server` — and
-what follows names the symptom, not the cause:
+When the mount fails, the message says how far rclone got. In the order the
+steps happen:
 
-- **`unexpected EOF`** — the command exited without writing anything. A
-  `boxer` binary built before this subcommand existed answers `No help topic
-  for 'fs'` and exits; that is the usual cause, and it looks identical to a
-  store that is genuinely unreachable.
-- **`packet too long`** — the command wrote something that is not SFTP to
-  stdout. Anything on stdout corrupts the stream, a usage message included.
-
-An rclone whose sftp backend predates the `ssh` option ignores it and dials
-an ssh server instead, which fails before any of this with `couldn't connect
-to ssh-agent`. Version 1.60 is one such; `rclone help backend sftp` lists the
-option as `RCLONE_SFTP_SSH` where it exists.
+- **`couldn't connect to ssh-agent`**, or **`couldn't connect SSH: dial tcp
+  :22: connect: connection refused`** — the rclone that ran ignores the `ssh`
+  option and is dialing an ssh server; which of the two depends on whether an
+  agent is running. `rclone help backend sftp` lists the option as
+  `RCLONE_SFTP_SSH` where it exists. If a new rclone is installed and `which
+  rclone` names it, the shell may still run the old one from its hash table,
+  which `which` does not consult: `type rclone` shows what will run, and
+  `hash -r` clears the stale entry.
+- **`ssh external: start process: exec: "boxer": executable file not found in
+  $PATH`** — rclone is new enough, and there is no `boxer` executable for it
+  to start.
+- **`couldn't initialise SFTP: error receiving version packet from server`** —
+  `boxer` started and the SFTP handshake broke. What follows names the
+  symptom, not the cause:
+  - **`unexpected EOF`** — the command exited without writing anything. A
+    `boxer` built before this subcommand existed answers `No help topic for
+    'fs'` and exits; that is the usual cause, and it looks identical to a
+    store that is genuinely unreachable.
+  - **`packet too long`** — the command wrote something that is not SFTP to
+    stdout. Anything on stdout corrupts the stream, a usage message included.
 
 rclone discards the head's stderr, which is where the diagnosis goes, so run
-the `ssh=` command by hand to read it.
+the `ssh=` command by hand to read it. `rclone lsf` against the same remote
+string exercises the whole path without FUSE or a mount point.
 
 Everything else is rclone's: `rclone serve s3/webdav/nfs/docker` in front of
 the pipe with rclone's own users, keys and TLS; `hasher` for checksums in
