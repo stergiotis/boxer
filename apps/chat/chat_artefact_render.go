@@ -400,6 +400,14 @@ func (inst *App) openArtefactInMdedit(text string) {
 		name = inst.conv.title + " — artefact"
 	}
 	l := launchcfg.MdeditLaunch{Text: text, Name: name}
+	// Exported as it stands: mdedit gets the snapshot too, so it can say
+	// where the document lives (ADR-0339 §SD5, proposed).
+	if w := inst.coord.journalNow(); w != nil {
+		n, _ := inst.conv.art.head()
+		if rec, ok := exportOf(w.Entries(), n, text); ok {
+			l.Mount, l.SnapNanos, l.Path = rec.Mount, rec.SnapNanos, exportDocPath
+		}
+	}
 	bus := inst.bus
 	inst.runAction("chat-open-artefact", "open the artefact in mdedit", func(ctx context.Context) (note string, err error) {
 		cfg, err := buscodec.Encode(l)

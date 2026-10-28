@@ -8,7 +8,13 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/stergiotis/boxer/public/fs/lading/ladingsftp/sftptree"
+	"github.com/stergiotis/boxer/public/identity/identifier"
 )
+
+// testRef is the snapshot the tests' documents are read from.
+var testRef = snapshotRef{mount: identifier.TaggedId(0x84000003A3EC7AEA), snap: time.Unix(0, 1761574725307515194)}
 
 // drainLoadUntil pumps drainSnapshotLoad the way frames would, until the
 // pending load lands or the deadline passes.
@@ -41,7 +47,7 @@ func TestSnapshotLoad_ReplacesTheBufferLikeAnOpen(t *testing.T) {
 	inst := &App{}
 	fsys := fstest.MapFS{"notes/readme.md": {Data: []byte("# From the snapshot\n")}}
 
-	inst.requestSnapshotLoad(fsys, "docs", "m@1", "notes/readme.md")
+	inst.requestSnapshotLoad(fsys, "docs", testRef, "notes/readme.md")
 	require.NotEmpty(t, inst.files.loadKey, "a clean buffer loads on the first activation")
 	drainLoadUntil(t, inst)
 
@@ -58,13 +64,31 @@ func TestSnapshotLoad_ReplacesTheBufferLikeAnOpen(t *testing.T) {
 	assert.Equal(t, tipFileSnapshot, tip, "the badge states the snapshot contract, not the Powerbox one")
 }
 
+// A document read from a snapshot offers the command that mounts that
+// snapshot, and no other document does.
+func TestASnapshotDocumentOffersItsMountCommand(t *testing.T) {
+	inst := &App{}
+	_, ok := inst.mountCommand()
+	assert.False(t, ok)
+	inst.requestSnapshotLoad(fstest.MapFS{"a.md": {Data: []byte("# a\n")}}, "docs", testRef, "a.md")
+	drainLoadUntil(t, inst)
+	cmd, ok := inst.mountCommand()
+	require.True(t, ok)
+	assert.Equal(t, sftptree.RcloneMount(testRef.mount, testRef.snap, mountCommandDir), cmd)
+	assert.Contains(t, cmd, "/84000003a3ec7aea/"+sftptree.SnapshotName(testRef.snap), "the snapshot read, not latest")
+
+	inst.adoptDocument("# other\n", "other")
+	_, ok = inst.mountCommand()
+	assert.False(t, ok, "another document has no snapshot behind it")
+}
+
 // TestSnapshotLoad_SharesTheOpenGuard: a dirty buffer refuses the first
 // activation and arms; the second means it.
 func TestSnapshotLoad_SharesTheOpenGuard(t *testing.T) {
 	inst := &App{src: "typed, unsaved"}
 	fsys := fstest.MapFS{"a.md": {Data: []byte("# a\n")}}
 
-	inst.requestSnapshotLoad(fsys, "docs", "m@1", "a.md")
+	inst.requestSnapshotLoad(fsys, "docs", testRef, "a.md")
 	assert.Empty(t, inst.files.loadKey, "the first activation on a dirty buffer refuses")
 	assert.True(t, inst.confirmDiscard)
 	assert.Contains(t, inst.status, "unsaved changes")
@@ -75,9 +99,9 @@ func TestSnapshotLoad_SharesTheOpenGuard(t *testing.T) {
 	assert.False(t, inst.confirmDiscard)
 
 	// Armed and repeated straight after: proceed.
-	inst.requestSnapshotLoad(fsys, "docs", "m@1", "a.md")
+	inst.requestSnapshotLoad(fsys, "docs", testRef, "a.md")
 	require.True(t, inst.confirmDiscard)
-	inst.requestSnapshotLoad(fsys, "docs", "m@1", "a.md")
+	inst.requestSnapshotLoad(fsys, "docs", testRef, "a.md")
 	require.NotEmpty(t, inst.files.loadKey)
 	drainLoadUntil(t, inst)
 	assert.Equal(t, "# a\n", inst.src)
@@ -90,7 +114,7 @@ func TestSnapshotLoad_RefusesAnOversizeFile(t *testing.T) {
 	big := strings.Repeat("x", int(maxSnapshotDocBytes)+1)
 	fsys := fstest.MapFS{"big.md": {Data: []byte(big)}}
 
-	inst.requestSnapshotLoad(fsys, "docs", "m@1", "big.md")
+	inst.requestSnapshotLoad(fsys, "docs", testRef, "big.md")
 	require.NotEmpty(t, inst.files.loadKey)
 	drainLoadUntil(t, inst)
 
@@ -105,7 +129,7 @@ func TestSnapshotLoad_EndsAnActiveFollow(t *testing.T) {
 	inst.logger = inst.logger.Level(0)
 	fsys := fstest.MapFS{"b.md": {Data: []byte("# b\n")}}
 
-	inst.requestSnapshotLoad(fsys, "docs", "m@1", "b.md")
+	inst.requestSnapshotLoad(fsys, "docs", testRef, "b.md")
 	drainLoadUntil(t, inst)
 
 	assert.False(t, inst.followActive)
@@ -120,7 +144,7 @@ func TestAHandedSnapshotReplacesOnlyTheTextItCameWith(t *testing.T) {
 	start := func() *App {
 		inst := &App{}
 		inst.adoptDocument("# handed\n", "handed")
-		inst.startHandedLoad(fsys, &handedSnapshot{name: "handed", path: "artefact.md", text: "# handed\n"})
+		inst.startHandedLoad(fsys, &handedSnapshot{mount: testRef.mount, snap: testRef.snap, name: "handed", path: "artefact.md", text: "# handed\n"})
 		return inst
 	}
 	inst := start()
@@ -133,6 +157,8 @@ func TestAHandedSnapshotReplacesOnlyTheTextItCameWith(t *testing.T) {
 	drainLoadUntil(t, inst)
 	assert.Equal(t, "# handed, and typed into\n", inst.src)
 	assert.NotNil(t, inst.snapImages, "the images still come from the snapshot")
+	_, ok := inst.mountCommand()
+	assert.True(t, ok, "and the snapshot can still be mounted")
 	assert.Contains(t, inst.status, "kept your edits")
 
 	inst = start()

@@ -250,6 +250,11 @@ why a VFS cache of a snapshot path can be kept for a very long time
 that answered "permission denied" for one name and "no such file" for another
 would let a client enumerate what it cannot read.
 
+mdedit's **rclone** button copies this command for the snapshot the document
+it shows was read from, with `/mnt/x` to replace by a directory of yours
+([ADR-0339](../adr/0339-chat-artefact-export-to-lading-and-the-handover-to-mdedit-by-snapshot.md)
+§SD5).
+
 When the head cannot start, rclone reports it as a broken SFTP handshake —
 `couldn't initialise SFTP: error receiving version packet from server` — and
 what follows names the symptom, not the cause:
@@ -260,6 +265,11 @@ what follows names the symptom, not the cause:
   store that is genuinely unreachable.
 - **`packet too long`** — the command wrote something that is not SFTP to
   stdout. Anything on stdout corrupts the stream, a usage message included.
+
+An rclone whose sftp backend predates the `ssh` option ignores it and dials
+an ssh server instead, which fails before any of this with `couldn't connect
+to ssh-agent`. Version 1.60 is one such; `rclone help backend sftp` lists the
+option as `RCLONE_SFTP_SSH` where it exists.
 
 rclone discards the head's stderr, which is where the diagnosis goes, so run
 the `ssh=` command by hand to read it.

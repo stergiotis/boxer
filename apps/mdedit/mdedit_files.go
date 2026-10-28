@@ -83,9 +83,10 @@ type filesState struct {
 	loadKey   string
 	loadLabel string
 	// loadFS and loadPath are the snapshot and path of the load, which the
-	// landed document's images are read from.
+	// landed document's images are read from; loadRef names the snapshot.
 	loadFS   fs.FS
 	loadPath string
+	loadRef  snapshotRef
 	// loadHanded marks a handover's load: it replaces the buffer only while
 	// the buffer still holds loadHandedText, the text the launch carried, so
 	// edits made while it ran are kept.
@@ -219,7 +220,7 @@ func (inst *App) renderFiles() {
 	if res.Activated >= 0 && res.Activated < len(res.Rows) {
 		e := res.Rows[res.Activated]
 		if !e.IsDir {
-			inst.requestSnapshotLoad(fsys, row.label(), fmt.Sprintf("%x@%d", row.id.Value(), snap.Snap.UnixNano()), e.Path)
+			inst.requestSnapshotLoad(fsys, row.label(), snapshotRef{mount: row.id, snap: snap.Snap}, e.Path)
 		}
 	}
 }
@@ -261,12 +262,12 @@ func (inst *App) pickMount(rows []mountRow) (row mountRow) {
 // (the two-click arming Open uses — a snapshot load replaces the buffer the
 // same way) and starts the read on a lane. fsys is a Locked view, safe from
 // the lane's goroutine.
-func (inst *App) requestSnapshotLoad(fsys fs.FS, label, cacheKey, path string) {
+func (inst *App) requestSnapshotLoad(fsys fs.FS, label string, ref snapshotRef, path string) {
 	if !inst.confirmReplace("activate again to discard them") {
 		return
 	}
 	inst.handedSnap = nil
-	inst.startSnapshotLoad(fsys, label+":"+path+" @ latest", cacheKey, path)
+	inst.startSnapshotLoad(fsys, label+":"+path+" @ latest", ref, path)
 }
 
 // cancelSnapshotLoad drops a load in flight: another document replaced the
@@ -276,18 +277,18 @@ func (inst *App) cancelSnapshotLoad() {
 	if f.loadKey != "" {
 		f.load.Invalidate()
 	}
-	f.loadKey, f.loadLabel, f.loadFS, f.loadPath = "", "", nil, ""
+	f.loadKey, f.loadLabel, f.loadFS, f.loadPath, f.loadRef = "", "", nil, "", snapshotRef{}
 	f.loadHanded, f.loadHandedText = false, ""
 	inst.handedSnap = nil
 }
 
-// startSnapshotLoad starts the read of path from fsys on the lane;
-// drainSnapshotLoad lands it as the document called label.
-func (inst *App) startSnapshotLoad(fsys fs.FS, label, cacheKey, path string) {
+// startSnapshotLoad starts the read of path from fsys, the snapshot ref
+// names, on the lane; drainSnapshotLoad lands it as the document called label.
+func (inst *App) startSnapshotLoad(fsys fs.FS, label string, ref snapshotRef, path string) {
 	f := &inst.files
-	f.loadKey = cacheKey + ":" + path
+	f.loadKey = fmt.Sprintf("%016x@%d:%s", ref.mount.Value(), ref.snap.UnixNano(), path)
 	f.loadLabel = label
-	f.loadFS, f.loadPath = fsys, path
+	f.loadFS, f.loadPath, f.loadRef = fsys, path, ref
 	f.loadHanded, f.loadHandedText = false, ""
 	inst.status = "loading " + path + "…"
 	// Kick off the load now; the render path polls the result.
@@ -340,7 +341,9 @@ func (inst *App) drainSnapshotLoad() {
 		// Typed into while the read ran: the edits stay, and the images
 		// still come from the snapshot the text was handed with.
 		inst.setSnapshotImages(newSnapshotImages(f.loadFS, f.loadPath, key))
-		f.loadFS = nil
+		ref := f.loadRef
+		inst.snapRef = &ref
+		f.loadFS, f.loadRef = nil, snapshotRef{}
 		inst.status = "kept your edits to the handed-over text; its images come from " + label
 		return
 	}
@@ -355,7 +358,9 @@ func (inst *App) drainSnapshotLoad() {
 	inst.readName = label
 	inst.readFromSnapshot = true
 	inst.setSnapshotImages(newSnapshotImages(f.loadFS, f.loadPath, key))
-	f.loadFS = nil
+	ref := f.loadRef
+	inst.snapRef = &ref
+	f.loadFS, f.loadRef = nil, snapshotRef{}
 	inst.status = "loaded " + label
 }
 
@@ -367,6 +372,13 @@ func (f *filesState) connect() (sc *storeConn, done bool, err error, busy bool) 
 		defer cancel()
 		return connectLading(cctx)
 	})
+}
+
+// snapshotRef names the snapshot a document was read from: its mount and
+// instant, which are also its directory in the store's SFTP tree.
+type snapshotRef struct {
+	mount identifier.TaggedId
+	snap  time.Time
 }
 
 // handedSnapshot is the lading snapshot a handed-over document came with
@@ -408,6 +420,6 @@ func (inst *App) pollHandedSnapshot() (busy bool) {
 
 // startHandedLoad reads the handed-over document from fsys, its snapshot.
 func (inst *App) startHandedLoad(fsys fs.FS, h *handedSnapshot) {
-	inst.startSnapshotLoad(fsys, h.name, fmt.Sprintf("%016x@%d", h.mount.Value(), h.snap.UnixNano()), h.path)
+	inst.startSnapshotLoad(fsys, h.name, snapshotRef{mount: h.mount, snap: h.snap}, h.path)
 	inst.files.loadHanded, inst.files.loadHandedText = true, h.text
 }

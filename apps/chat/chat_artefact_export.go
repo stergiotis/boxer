@@ -158,6 +158,16 @@ func lastExport(entries []agentrun.Entry) (rec exportRecord, ok bool) {
 	return
 }
 
+// exportOf is the latest export of revision n, if it exported text as it
+// stands.
+func exportOf(entries []agentrun.Entry, n int, text string) (rec exportRecord, ok bool) {
+	rec, ok = lastExport(entries)
+	if !ok || rec.Revision != n || rec.TextDigest != agentrun.ContentDigest(text) {
+		return exportRecord{}, false
+	}
+	return rec, true
+}
+
 // journalExport records an export the store wrote.
 func (inst *coordinator) journalExport(ctx context.Context, rec exportRecord) (err error) {
 	inst.mu.Lock()

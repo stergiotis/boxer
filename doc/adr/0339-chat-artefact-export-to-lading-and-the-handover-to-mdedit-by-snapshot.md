@@ -103,14 +103,20 @@ The publish service makes the same refusal (ADR-0338 §SD3).
 When the artefact has screenshots, Open in mdedit exports first, through the
 same confirmation, and the launch config names the mount, the snapshot and
 `artefact.md`, beside the text. Without screenshots, it hands over the text as
-now, and no export is needed. mdedit shows the text at once, reads the
-document from the snapshot over its own connection, and replaces the text
-with the snapshot's when the read lands, the way its Files pane opens one, as
-a document not bound to a file. The replacement happens only while the buffer
-still holds the text the launch carried: edits made in the meantime stay, and
-the images still come from the snapshot. Opening another document cancels the
-read. When the snapshot cannot be read, the text stays and the status line
-says why.
+now, and no export is needed; when that text is already exported as the head,
+the handover names its snapshot too, without asking again. mdedit shows the
+text at once, reads the document from the snapshot over its own connection,
+and replaces the text with the snapshot's when the read lands, the way its
+Files pane opens one, as a document not bound to a file. The replacement
+happens only while the buffer still holds the text the launch carried: edits
+made in the meantime stay, and the images still come from the snapshot.
+Opening another document cancels the read. When the snapshot cannot be read,
+the text stays and the status line says why. A document read from a snapshot,
+by a handover or from the Files pane, offers the rclone command that mounts
+that snapshot read-only over the store's SFTP head (ADR-0198 §SD9), from the
+moment it is handed over. The window copies the command and runs nothing: a
+window that served the store, or started rclone, would need a capability
+mdedit does not hold.
 
 ### SD6 — mdedit shows a snapshot document's images
 

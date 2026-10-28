@@ -162,6 +162,24 @@ func TestAnEndorsementFromBeforeAResumeCoversOnlyItsText(t *testing.T) {
 	assert.False(t, inst.coord.endorsedHead())
 }
 
+// Open in mdedit hands over the export of the head only while the head is
+// the text exported.
+func TestTheHeadsExportIsFoundByItsText(t *testing.T) {
+	inst := exportRig(t, nil)
+	withScreenshot(t, inst.conv.art)
+	n, text := inst.conv.art.head()
+	rec := exportRecord{Revision: n, Mount: 7, SnapNanos: 9, TextDigest: agentrun.ContentDigest(text)}
+	require.NoError(t, inst.coord.journalExport(context.Background(), rec))
+	entries := inst.coord.journalNow().Entries()
+	got, ok := exportOf(entries, n, text)
+	require.True(t, ok)
+	assert.Equal(t, rec.Mount, got.Mount)
+	_, ok = exportOf(entries, n, text+"edited")
+	assert.False(t, ok, "the text moved under the same number")
+	_, ok = exportOf(entries, n+1, text)
+	assert.False(t, ok, "another revision")
+}
+
 func TestAnExportOfAMovedHeadIsRefused(t *testing.T) {
 	inst := exportRig(t, nil)
 	withScreenshot(t, inst.conv.art)

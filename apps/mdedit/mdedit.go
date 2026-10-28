@@ -35,6 +35,7 @@ import (
 	"github.com/rs/zerolog/log"
 
 	"github.com/stergiotis/boxer/apps/mdedit/launchcfg"
+	"github.com/stergiotis/boxer/public/fs/lading/ladingsftp/sftptree"
 	"github.com/stergiotis/boxer/public/identity/identifier"
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
@@ -129,8 +130,9 @@ const (
 // Hover help — stated at the widget that raises the question rather than in a
 // block of prose.
 const (
-	tipCopy  = "Copy the whole document to the clipboard. This is the only way text leaves the app — there is no file I/O in this cut."
-	tipDirty = "Whether the buffer differs from the last checkpoint: a completed copy to the clipboard, or the document restored when the window opened. With no file to be out of step with, that is the only thing the marker can honestly mean."
+	tipMountCommand = "Copy the command that mounts this document's snapshot read-only with rclone, the document and its images side by side. It runs `boxer fs sftp-stdio` with your shell's ClickHouse settings; change " + mountCommandDir + " to an empty directory of yours."
+	tipCopy         = "Copy the whole document to the clipboard. This is the only way text leaves the app — there is no file I/O in this cut."
+	tipDirty        = "Whether the buffer differs from the last checkpoint: a completed copy to the clipboard, or the document restored when the window opened. With no file to be out of step with, that is the only thing the marker can honestly mean."
 
 	tipOutline = "Show the heading outline beside the preview. Headings nest by level and a section folds away; clicking one scrolls the preview to it and takes the caret with it. The column needs a window wide enough to spare it, and hides itself below that rather than starving the two panes doing the work."
 
@@ -147,10 +149,11 @@ const (
 // Bar button labels, built once — identical retained bytes across frames
 // intern to one blob.
 var (
-	atomsCopy   = c.Atoms().Text("Copy to clipboard").Keep()
-	atomsOpen   = c.Atoms().Text(icons.PhFolderOpen + " Open").Keep()
-	atomsSave   = c.Atoms().Text(icons.PhFloppyDisk + " Save").Keep()
-	atomsSaveAs = c.Atoms().Text("Save as…").Keep()
+	atomsCopy         = c.Atoms().Text("Copy to clipboard").Keep()
+	atomsMountCommand = c.Atoms().Text(icons.PhTerminalWindow + " rclone").Keep()
+	atomsOpen         = c.Atoms().Text(icons.PhFolderOpen + " Open").Keep()
+	atomsSave         = c.Atoms().Text(icons.PhFloppyDisk + " Save").Keep()
+	atomsSaveAs       = c.Atoms().Text("Save as…").Keep()
 )
 
 // viewModeE selects which of the two panes render. A mode is a deliberate
@@ -342,6 +345,9 @@ type App struct {
 	// readFromSnapshot marks readName as a lading-snapshot source rather than
 	// a Powerbox-named file — the badge tooltip says which contract applies.
 	readFromSnapshot bool
+	// snapRef is the snapshot a document was read from, for the command that
+	// mounts it; nil for any other document.
+	snapRef *snapshotRef
 	// snapImages are the images a snapshot document embeds
 	// (mdedit_images.go); nil for any other document. handedSnap is a
 	// handed-over document's snapshot, until the window has read it.
@@ -522,6 +528,8 @@ func (inst *App) handOver(raw []byte) (handed bool) {
 	inst.adoptDocument(l.Text, name)
 	if l.Mount != 0 {
 		inst.handedSnap = &handedSnapshot{mount: identifier.TaggedId(l.Mount), snap: time.Unix(0, l.SnapNanos), path: l.Path, name: name, text: l.Text}
+		// The snapshot exists whether or not this window can read it.
+		inst.snapRef = &snapshotRef{mount: inst.handedSnap.mount, snap: inst.handedSnap.snap}
 	}
 	return true
 }
@@ -534,6 +542,7 @@ func (inst *App) adoptDocument(text string, name string) {
 	inst.src = text
 	inst.cancelSnapshotLoad()
 	inst.setSnapshotImages(nil)
+	inst.snapRef = nil
 	inst.status = "opened " + name + " — not autosaved: Save to keep it"
 }
 
@@ -760,6 +769,17 @@ func (inst *App) renderBar() {
 		}
 		if clicked && !inst.exportInFlight() {
 			inst.exportClipboard()
+		}
+		// A snapshot document can be mounted outside the app; the window
+		// copies the command and runs nothing (ADR-0339 §SD5, proposed).
+		if inst.snapRef != nil {
+			clicked = false
+			for range c.HoverText(tipMountCommand).KeepIter() {
+				clicked = c.Button(inst.ids.PrepareStr("mountcmd"), atomsMountCommand).SendResp().HasPrimaryClicked()
+			}
+			if clicked && !inst.exportInFlight() {
+				inst.copyMountCommand()
+			}
 		}
 
 		// The formatting bar edits through the editor, so it goes with it: a
@@ -1263,6 +1283,29 @@ func (inst *App) persistInFlight() (busy bool) {
 // document export, which checkpoints on success.
 func (inst *App) exportClipboard() {
 	inst.copyToClipboard(inst.src, true)
+}
+
+// mountCommandDir is the mount point the copied command names, for the
+// reader to replace.
+const mountCommandDir = "/mnt/x"
+
+// copyMountCommand copies the rclone command that mounts the document's
+// snapshot read-only: that snapshot, not `latest`, so the folder holds what
+// the window was given.
+func (inst *App) copyMountCommand() {
+	if cmd, ok := inst.mountCommand(); ok {
+		inst.copyToClipboard(cmd, false)
+	}
+}
+
+// mountCommand is that command; ok is false for a document not read from a
+// snapshot.
+func (inst *App) mountCommand() (cmd string, ok bool) {
+	r := inst.snapRef
+	if r == nil {
+		return "", false
+	}
+	return sftptree.RcloneMount(r.mount, r.snap, mountCommandDir), true
 }
 
 // copyToClipboard starts a clipboard write. The request runs off the render

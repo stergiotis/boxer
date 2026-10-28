@@ -31,7 +31,8 @@ embeds the capture.
 - Confirming exports; the status line names the retention.
 - **Open in mdedit** asks again, as the artefact has a screenshot.
   Confirming exports once more and opens mdedit, which reads the document
-  from that snapshot and shows the screenshot inline.
+  from that snapshot and shows the screenshot inline. Its bar offers
+  **rclone**, which copies the command that mounts that snapshot.
 
 The scene writes two snapshots into the configured lading store, under the
 chat's mount tag; they expire with their 30-day class.
@@ -54,5 +55,7 @@ chat's mount tag; they expire with their 30-day class.
 {"do":"click","contains":"Export and open","role":"button"}
 {"do":"wait","valueContains":"and opened it in mdedit","role":"label","settleMs":500}
 {"do":"wait","valueContains":"loaded ","role":"label","settleMs":1500,"comment":"mdedit read the document from the snapshot"}
+{"do":"click","contains":"rclone","role":"button","comment":"copy the command that mounts the snapshot"}
+{"do":"wait","valueContains":"copied to clipboard","role":"label"}
 {"do":"capture","text":"chat-artefact-export-mdedit","settleMs":1500}
 ```
