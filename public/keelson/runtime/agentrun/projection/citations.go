@@ -1,6 +1,6 @@
 package projection
 
-// The citation laws (ADR-0340 (proposed) §SD5) and the fan-out selection
+// The citation laws (ADR-0340 §SD5) and the fan-out selection
 // rule (§SD6), as checks over a run's entries: each returns the rows that
 // break it, in the shape CheckCompaction has.
 
@@ -23,21 +23,59 @@ var referencePattern = regexp.MustCompile(`\[([a-z]{1,4}[0-9]{1,4})\]`)
 var fencePattern = regexp.MustCompile("(?s)```.*?```|`[^`\n]*`")
 
 // References are the assertion ids a reply's text refers to, in order,
-// outside code fences, each once.
+// outside code, each once; a link's text `[a1](url)` is no reference.
 func References(text string) (ids []string) {
-	for _, m := range referencePattern.FindAllStringSubmatch(fencePattern.ReplaceAllString(text, ""), -1) {
-		if !slices.Contains(ids, m[1]) {
-			ids = append(ids, m[1])
+	MarkReferences(text, func(id string) string {
+		if !slices.Contains(ids, id) {
+			ids = append(ids, id)
 		}
-	}
+		return ""
+	})
 	return
 }
 
-// The verdict outcomes a check that ran reports (ADR-0340 §SD1).
+// MarkReferences is text with each reference outside code and links
+// replaced by mark(id), or kept where mark returns the empty string:
+// what the readers draw a verdict's sign with, over the same reading of
+// a reference References makes.
+func MarkReferences(text string, mark func(id string) string) string {
+	var b strings.Builder
+	at := 0
+	for _, code := range fencePattern.FindAllStringIndex(text, -1) {
+		b.WriteString(markOutsideCode(text[at:code[0]], mark))
+		b.WriteString(text[code[0]:code[1]])
+		at = code[1]
+	}
+	b.WriteString(markOutsideCode(text[at:], mark))
+	return b.String()
+}
+
+func markOutsideCode(text string, mark func(id string) string) string {
+	var b strings.Builder
+	at := 0
+	for _, m := range referencePattern.FindAllStringSubmatchIndex(text, -1) {
+		if m[1] < len(text) && text[m[1]] == '(' {
+			continue
+		}
+		replacement := mark(text[m[2]:m[3]])
+		if replacement == "" {
+			continue
+		}
+		b.WriteString(text[at:m[0]])
+		b.WriteString(replacement)
+		at = m[1]
+	}
+	b.WriteString(text[at:])
+	return b.String()
+}
+
+// The outcomes of a check (ADR-0340 §SD1): the first three from a check
+// that ran, the others from one that did not.
 const (
 	VerdictHeld      = "held"
 	VerdictFailed    = "failed"
 	VerdictMoved     = "moved"
+	VerdictRefused   = "refused"
 	VerdictUnchecked = "unchecked"
 )
 
@@ -135,8 +173,9 @@ func CheckCitations(entries []agentrun.Entry) (broken []string) {
 	return
 }
 
-// figurePattern is a figure as a reply states it.
-var figurePattern = regexp.MustCompile(`\d[\d,']*(?:\.\d+)?`)
+// FigurePattern is a figure as a reply states it: digits with optional
+// thousands separators and an optional fraction.
+var FigurePattern = regexp.MustCompile(`\d[\d,']*(?:\.\d+)?`)
 
 // listMarkerPattern is an ordered list's marker at a line's start, which
 // is no figure.
@@ -156,7 +195,7 @@ func Uncited(entries []agentrun.Entry) (lines []string) {
 			b = &strings.Builder{}
 			accounted[turn] = b
 		}
-		b.WriteString(normalizeFigures(text))
+		b.WriteString(NormalizeFigure(text))
 		b.WriteByte('\n')
 	}
 	for _, e := range es {
@@ -182,8 +221,8 @@ func Uncited(entries []agentrun.Entry) (lines []string) {
 		if b := accounted[e.Turn]; b != nil {
 			have = b.String()
 		}
-		for _, f := range figurePattern.FindAllString(text, -1) {
-			n := normalizeFigures(f)
+		for _, f := range FigurePattern.FindAllString(text, -1) {
+			n := NormalizeFigure(f)
 			if strings.Contains(have, n) {
 				continue
 			}
@@ -193,9 +232,9 @@ func Uncited(entries []agentrun.Entry) (lines []string) {
 	return
 }
 
-// normalizeFigures drops thousands separators so a figure matches however
+// NormalizeFigure drops thousands separators so a figure matches however
 // it was grouped.
-func normalizeFigures(s string) string {
+func NormalizeFigure(s string) string {
 	return strings.NewReplacer(",", "", "'", "").Replace(s)
 }
 

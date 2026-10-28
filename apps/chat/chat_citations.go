@@ -1,6 +1,6 @@
 package chat
 
-// What the chat shows of a cited reply (ADR-0340 (proposed) §SD6): each
+// What the chat shows of a cited reply (ADR-0340 §SD6): each
 // reference [a1] in a reply's text carries its verdict's mark, and a
 // cited reply ends with its citations — the claim, the outcome and what
 // was observed — in the transcript, the export and the artefact's
@@ -50,26 +50,20 @@ func (inst citationMark) sign() string {
 	return "?"
 }
 
-// markReferences is text with each reference to a known assertion marked
-// with its verdict, and each reference to none marked unknown.
+// markReferences is text with each reference outside code and links
+// marked with its verdict, and each reference to none marked unknown.
 func markReferences(text string, marks []citationMark) string {
-	refs := projection.References(text)
-	if len(refs) == 0 {
-		return text
-	}
 	byId := make(map[string]citationMark, len(marks))
 	for _, m := range marks {
 		byId[m.id] = m
 	}
-	r := make([]string, 0, 2*len(refs))
-	for _, id := range refs {
+	return projection.MarkReferences(text, func(id string) string {
 		sign := "?"
 		if m, ok := byId[id]; ok {
 			sign = m.sign()
 		}
-		r = append(r, "["+id+"]", "["+id+" "+sign+"]")
-	}
-	return strings.NewReplacer(r...).Replace(text)
+		return "[" + id + " " + sign + "]"
+	})
 }
 
 // citationLines are the citations a text's references name, one line
@@ -115,12 +109,23 @@ func citationFoot(text string, marks []citationMark) string {
 }
 
 // shown is the entry's text as the readers show it: a reply with its
-// references marked and its citations at the foot.
+// references marked and its citations at the foot. It is computed once
+// per text and set of verdicts, since the transcript reads it every
+// frame; setCites forgets it.
 func (inst *entry) shown() string {
-	if inst.speaker != speakerModel || len(projection.References(inst.text)) == 0 {
-		return inst.text
+	if inst.shownText != "" {
+		return inst.shownText
 	}
-	return markReferences(inst.text, inst.cites) + citationFoot(inst.text, inst.cites)
+	inst.shownText = inst.text
+	if inst.speaker == speakerModel && len(projection.References(inst.text)) > 0 {
+		inst.shownText = markReferences(inst.text, inst.cites) + citationFoot(inst.text, inst.cites)
+	}
+	return inst.shownText
+}
+
+// setCites sets a reply's verdicts and forgets what was shown.
+func (inst *entry) setCites(marks []citationMark) {
+	inst.cites, inst.shownText = marks, ""
 }
 
 // citationIndex is every verdict the conversation shows, by assertion id,

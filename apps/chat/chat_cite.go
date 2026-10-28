@@ -1,6 +1,6 @@
 package chat
 
-// The cite tool (ADR-0340 (proposed) §SD1, §SD2, §SD4): the model states
+// The cite tool (ADR-0340 §SD1, §SD2, §SD4): the model states
 // each claim it drew from a result as an assertion — a read-only statement
 // over the sources of a query it already made — and the window that holds
 // those sources checks it through its `check` operation; each check is a
@@ -38,11 +38,11 @@ const (
 	assertionValue = "value"
 	assertionHolds = "holds"
 
-	verdictHeld      = "held"
-	verdictFailed    = "failed"
-	verdictRefused   = "refused"
-	verdictUnchecked = "unchecked"
-	verdictMoved     = "moved"
+	verdictHeld      = projection.VerdictHeld
+	verdictFailed    = projection.VerdictFailed
+	verdictRefused   = projection.VerdictRefused
+	verdictUnchecked = projection.VerdictUnchecked
+	verdictMoved     = projection.VerdictMoved
 
 	verdictFormCheck   = "check"
 	verdictFormRecheck = "recheck"
@@ -83,7 +83,7 @@ type citeResult struct {
 const citeNote = "Refer to an assertion in your reply by its id in square brackets, e.g. [a1]; state a failed claim as observed, or drop it."
 
 // citeSchema is the cite tool's parameter schema.
-const citeSchema = `{"type":"object","properties":{"assertions":{"type":"array","minItems":1,"maxItems":` + "8" + `,"items":{"type":"object","properties":{` +
+var citeSchema = `{"type":"object","properties":{"assertions":{"type":"array","minItems":1,"maxItems":` + strconv.Itoa(maxCiteAssertions) + `,"items":{"type":"object","properties":{` +
 	`"id":{"type":"string","description":"letters then digits, unique in this turn: a1, a2"},` +
 	`"rests_on":{"type":"array","minItems":1,"items":{"type":"string"},"description":"the ids of the tool calls whose results the claim is drawn from: describe_result or sample_rows calls of one window"},` +
 	`"says":{"type":"string","description":"the claim as the reply will state it"},` +
@@ -242,8 +242,11 @@ func (inst *coordinator) citedSource(entries []agentrun.Entry, restsOn []string)
 		if len(src.keys) > 0 && window != src.window {
 			return src, "rests on calls of two windows; an assertion rests on one"
 		}
-		result := resultIdOf(outcome.Body)
-		if result == 0 {
+		result, confined := inst.resultIdFor(outcome.Key, outcome.Body)
+		switch {
+		case confined:
+			return src, "rests on " + id + " (" + op + "), whose result is confined and names no id you can cite"
+		case result == 0:
 			return src, "rests on " + id + " (" + op + "), whose result names no result id; cite describe_result or sample_rows"
 		}
 		if src.result != 0 && result != src.result {
@@ -277,9 +280,48 @@ func (inst *coordinator) windowOf(in agentrun.Entry) (window uint64, op string, 
 	return uint64(args.Window), args.Operation, true
 }
 
-// resultIdOf is the result id a query outcome named — describe_result's
-// id or sample_rows' result_id — read out of the outcome as the model saw
-// it, delimiters stripped; 0 when it named none.
+// resultIdFor is the result id a query outcome named — describe_result's
+// id or sample_rows' result_id: what the coordinator noted when it read
+// the result (noteResultId), or, for a call of an earlier process that
+// the journal alone remembers, read out of the outcome as the model saw
+// it. confined says the result was handed to the model as a data handle,
+// so its id is not readable.
+func (inst *coordinator) resultIdFor(key string, body string) (id uint64, confined bool) {
+	inst.mu.Lock()
+	id, noted := inst.resultIds[key]
+	inst.mu.Unlock()
+	if noted {
+		return id, id == 0
+	}
+	return resultIdOf(body), false
+}
+
+// noteResultId keeps the result id a window's query named, by the call's
+// key, for a citation of it; an empty text is a confined result, noted
+// as 0.
+func (inst *coordinator) noteResultId(key string, resultText string) {
+	var id uint64
+	if resultText != "" {
+		var r map[string]any
+		if json.Unmarshal([]byte(resultText), &r) == nil {
+			for _, k := range []string{"result_id", "id"} {
+				if f, ok := numberOf(r[k]); ok && f > 0 {
+					id = uint64(f)
+					break
+				}
+			}
+		}
+		if id == 0 {
+			return
+		}
+	}
+	inst.mu.Lock()
+	inst.resultIds[key] = id
+	inst.mu.Unlock()
+}
+
+// resultIdOf is the result id a query outcome named, read out of the
+// outcome as the model saw it, delimiters stripped; 0 when it named none.
 func resultIdOf(body string) (id uint64) {
 	text := body
 	if i := strings.Index(text, "\">>\n"); strings.HasPrefix(text, untrustedOpen) && i >= 0 {
@@ -404,28 +446,36 @@ func (inst *coordinator) check(ctx context.Context, o toolOrigin, toolCall strin
 	return ch, observed, confined, verdictFailed, "expected " + a.Expect + ", observed " + observed
 }
 
-// numeralPattern is a figure as a reply states it: an optional sign,
-// digits with optional thousands separators, an optional fraction.
-var numeralPattern = regexp.MustCompile(`[-+]?\d[\d,']*(?:\.\d+)?`)
+// figureExpectation is an expectation that is one figure: an optional
+// sign, the figure, and at most a short unit or a percent sign around it
+// — "12 %", "€ 1,234.50", "-3 items". A date, a version or a quarter is
+// not one, and is compared as text.
+var figureExpectation = regexp.MustCompile(`^[^\d\s+-]{0,3}\s*([-+]?` + projection.FigurePattern.String() + `)\s*[%‰]?\s*[A-Za-z]{0,12}$`)
+
+// figureObserved is an observed cell that is one figure, as ClickHouse
+// prints a number.
+var figureObserved = regexp.MustCompile(`^\s*([-+]?` + projection.FigurePattern.String() + `)\s*$`)
 
 // holdsAtPrecision says whether observed, rounded to the precision expect
 // shows, equals expect (ADR-0340 §SD1): "12 %" holds for 12.4 and not for
-// 12.6, "12.4 %" for 12.41 only. An expectation that is not a figure must
-// match the observed text, case and surrounding space aside.
+// 12.6, "12.4 %" for 12.41 only. An expectation that is not one figure
+// — a date, a name — must match the observed text, case and surrounding
+// space aside.
 func holdsAtPrecision(expect string, observed string) bool {
-	e := numeralPattern.FindString(expect)
-	if e == "" {
+	em := figureExpectation.FindStringSubmatch(strings.TrimSpace(expect))
+	if em == nil {
 		return strings.EqualFold(strings.TrimSpace(expect), strings.TrimSpace(observed))
 	}
-	ev, err := strconv.ParseFloat(strings.NewReplacer(",", "", "'", "").Replace(e), 64)
+	e := em[1]
+	ev, err := strconv.ParseFloat(projection.NormalizeFigure(e), 64)
 	if err != nil {
 		return false
 	}
-	o := numeralPattern.FindString(observed)
-	if o == "" {
+	om := figureObserved.FindStringSubmatch(observed)
+	if om == nil {
 		return false
 	}
-	ov, err := strconv.ParseFloat(strings.NewReplacer(",", "", "'", "").Replace(o), 64)
+	ov, err := strconv.ParseFloat(projection.NormalizeFigure(om[1]), 64)
 	if err != nil {
 		return false
 	}

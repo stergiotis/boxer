@@ -137,18 +137,28 @@ func TestValuesHoldAtTheirDisplayedPrecision(t *testing.T) {
 	assert.False(t, holdsAtPrecision("3", "three"))
 	assert.True(t, holdsAtPrecision("March", " march "))
 	assert.False(t, holdsAtPrecision("March", "April"))
+	assert.False(t, holdsAtPrecision("2024-03-01", "2024-12-31"), "a date is not one figure: its text must match")
+	assert.True(t, holdsAtPrecision("2024-03-01", "2024-03-01"))
+	assert.False(t, holdsAtPrecision("Q3 1,234", "3"), "a quarter is not one figure")
+	assert.True(t, holdsAtPrecision("€ 1,234.50", "1234.5"))
+	assert.True(t, holdsAtPrecision("-3 items", "-2.6"))
+	assert.False(t, holdsAtPrecision("3", "3 4"), "an observed cell that is not one figure does not hold")
 }
 
 // The readers (ADR-0340 §SD6): a reply's references carry their marks and
 // its citations follow it; a copy of text citing a failed claim is held
 // once.
 func TestACitedReplyShowsItsMarks(t *testing.T) {
-	e := entry{speaker: speakerModel, text: "One [a1], two [a2], three [a3].", cites: []citationMark{
+	e := entry{speaker: speakerModel, text: "One [a1], two [a2], three [a3]. See `[a1]` and [a1](url).", cites: []citationMark{
 		{id: "a1", outcome: verdictHeld, says: "one", observed: "1"},
 		{id: "a2", outcome: verdictFailed, says: "two", observed: "1", reason: "expected 2, observed 1"},
 	}}
 	shown := e.shown()
-	assert.True(t, strings.HasPrefix(shown, "One [a1 ✓], two [a2 ✗], three [a3 ?]."), shown)
+	assert.True(t, strings.HasPrefix(shown, "One [a1 ✓], two [a2 ✗], three [a3 ?]. See `[a1]` and [a1](url)."), shown)
+	marks := e.cites
+	e.setCites(nil)
+	assert.True(t, strings.HasPrefix(e.shown(), "One [a1 ?]"), "setCites forgets what was shown")
+	e.setCites(marks)
 	assert.Contains(t, shown, "- [a1] ✓ held · one · observed 1\n")
 	assert.Contains(t, shown, "- [a2] ✗ failed · two · observed 1 · expected 2, observed 1\n")
 	assert.Contains(t, shown, "- [a3] ? no verdict of this turn names it")

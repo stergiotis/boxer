@@ -28,7 +28,9 @@ func citedRun() []agentrun.Entry {
 
 func TestReferencesAreLettersThenDigits(t *testing.T) {
 	assert.Equal(t, []string{"a1", "a2"}, References(citedRun()[7].Body), "a fenced [x9], a checkbox [x] and a repeat are not references")
-	assert.Nil(t, References("[^1] [text](u) [12]"))
+	assert.Nil(t, References("[^1] [text](u) [12] [a1](url)"))
+	marked := MarkReferences("see [a1] and `[a1]` and [a1](u)\n```\n[a1]\n```\n[b2]", func(id string) string { return "[" + id + " ✓]" })
+	assert.Equal(t, "see [a1 ✓] and `[a1]` and [a1](u)\n```\n[a1]\n```\n[b2 ✓]", marked, "code and links are left alone")
 }
 
 func TestTheCitationLawsHoldOnACitedReply(t *testing.T) {

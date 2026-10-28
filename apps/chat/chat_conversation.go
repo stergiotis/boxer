@@ -49,8 +49,10 @@ type entry struct {
 	// asked for it, on a round's first tool, and the tool call itself.
 	steps []turnStep
 	// cites are a reply's verdicts (ADR-0340 §SD6), the latest per
-	// assertion of its turn.
-	cites []citationMark
+	// assertion of its turn; shownText is the text with them, built on
+	// first draw (entry.shown).
+	cites     []citationMark
+	shownText string
 }
 
 // failure is what a failed turn leaves to inspect: the error's whole text,
@@ -394,7 +396,7 @@ func (inst *conversation) landTurn(req llm.Request, res *turnResult, err error, 
 	if inst.coord != nil {
 		if w := inst.coord.journalNow(); w != nil && len(inst.entries) > 0 {
 			if last := &inst.entries[len(inst.entries)-1]; last.speaker == speakerModel {
-				last.cites = marksOf(w.Entries(), req.Turn)
+				last.setCites(marksOf(w.Entries(), req.Turn))
 			}
 		}
 	}

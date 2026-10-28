@@ -3,14 +3,14 @@ package agentrun
 import (
 	"context"
 	"encoding/json/v2"
-	"regexp"
+	"strings"
 
 	"github.com/apache/arrow-go/v18/arrow"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect"
 )
 
-// TableVerdicts is keelson('agent_verdicts') (ADR-0340 (proposed) §SD4):
+// TableVerdicts is keelson('agent_verdicts') (ADR-0340 §SD4):
 // one row per verdict entry of the newest runs, its record flattened
 // beside the assertion it judged, and the ordinal of the reply of its
 // turn that refers to it.
@@ -50,6 +50,17 @@ type VerdictRow struct {
 // VerdictRows flattens the verdict entries among entries, in order, each
 // with the reply of its turn that refers to it.
 func VerdictRows(entries []Entry) (rows []VerdictRow) {
+	type turnKey struct {
+		run  uint64
+		turn string
+	}
+	replies := map[turnKey][]*Entry{}
+	for i := range entries {
+		if r := &entries[i]; r.Kind == KindReply {
+			k := turnKey{r.Run, r.Turn}
+			replies[k] = append(replies[k], r)
+		}
+	}
 	for _, e := range entries {
 		if e.Kind != KindVerdict || e.Verdict == nil {
 			continue
@@ -63,9 +74,9 @@ func VerdictRows(entries []Entry) (rows []VerdictRow) {
 		if json.Unmarshal([]byte(e.Arguments), &a) == nil {
 			row.Says, row.Statement, row.Expect = a.Says, a.Statement, a.Expect
 		}
-		ref := regexp.MustCompile(`\[` + regexp.QuoteMeta(e.Name) + `\]`)
-		for _, r := range entries {
-			if r.Kind == KindReply && r.Run == e.Run && r.Turn == e.Turn && r.Ordinal > e.Ordinal && ref.MatchString(r.Body) {
+		ref := "[" + e.Name + "]"
+		for _, r := range replies[turnKey{e.Run, e.Turn}] {
+			if r.Ordinal > e.Ordinal && strings.Contains(r.Body, ref) {
 				row.Reply = r.Ordinal
 				break
 			}

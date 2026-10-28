@@ -1,7 +1,7 @@
 package play
 
 // play_ops_check.go: check, the query that runs an assertion over the
-// sources of a result the window holds (ADR-0340 (proposed) §SD3). An
+// sources of a result the window holds (ADR-0340 §SD3). An
 // assertion is a read-only statement a model wrote to decide one claim it
 // drew from a result; the window runs it, not the harness, because the
 // endpoint, the parameters and the agent limits are the window's. The
@@ -79,21 +79,21 @@ func statementDigest(stmt string) (digest string) {
 
 // checkScope refuses an assertion naming a table outside the tables the
 // source statement read: table references, and keelson() tables, the
-// assertion's own CTEs excepted. An assertion naming no table at all is
-// refused, so a tautology cannot be asserted (ADR-0340 §SD3).
+// assertion's own CTEs excepted; a table the source named unqualified the
+// assertion names unqualified too, so another database's table of the
+// same name does not pass. An assertion naming no table at all is
+// refused, so a tautology cannot be asserted (ADR-0340 §SD3). Both texts
+// are compared as authored, before the client-side rewrite, so a bound
+// dataset's alias meets itself and not its handle.
 func checkScope(assertion string, source string) (err error) {
 	apr, perr := nanopass.Parse(assertion)
 	if perr != nil {
 		return app.RefuseOperation("the assertion does not parse: " + perr.Error())
 	}
 	allowed := map[string]bool{}
-	allowedDb := map[string]string{}
 	if spr, serr := nanopass.Parse(source); serr == nil {
 		for _, t := range analysis.ExtractTables(spr) {
-			allowed[t.Table] = true
-			if t.Database != "" {
-				allowedDb[t.Table] = t.Database
-			}
+			allowed[t.Database+"."+t.Table] = true
 		}
 		for _, t := range keelsonsql.References(source) {
 			allowed["keelson('"+t+"')"] = true
@@ -113,11 +113,12 @@ func checkScope(assertion string, source string) (err error) {
 			continue
 		}
 		named++
-		if !allowed[t.Table] {
-			return app.RefuseOperation("the assertion names " + t.Table + ", which the result's statement did not read")
-		}
-		if db := allowedDb[t.Table]; db != "" && t.Database != "" && t.Database != db {
-			return app.RefuseOperation("the assertion names " + t.Database + "." + t.Table + ", which the result's statement did not read")
+		if !allowed[t.Database+"."+t.Table] {
+			name := t.Table
+			if t.Database != "" {
+				name = t.Database + "." + t.Table
+			}
+			return app.RefuseOperation("the assertion names " + name + ", which the result's statement did not read as such; name tables as that statement did")
 		}
 	}
 	for _, t := range keelsonsql.References(assertion) {
@@ -197,20 +198,21 @@ func runCheck(ctx context.Context, client *Client, cs checkSnap, obo *app.OnBeha
 			return out, app.RefuseOperation(lerr.Error())
 		}
 	}
-	if err = checkScope(residual, cs.source); err != nil {
+	if err = checkScope(in.Statement, cs.source); err != nil {
 		return
 	}
 	eng, err := client.engineFor(dec)
 	if err != nil {
 		return out, app.RefuseOperation("the check cannot be dispatched: " + err.Error())
 	}
-	q, ferr := passes.SetFormat("JSONCompact").Run(residual)
+	// The row bound is in the statement itself — a wrapper that keeps two
+	// rows, so a second row is seen and refused and no block of a wide
+	// result is read — with the server's own bound beside it; the byte
+	// bound is applied to the cells.
+	q, ferr := passes.SetFormat("JSONCompact").Run("SELECT * FROM (" + residual + ") AS assertion LIMIT " + strconv.Itoa(checkMaxRows+1))
 	if ferr != nil {
 		return out, app.RefuseOperation("the assertion takes no format clause: " + ferr.Error())
 	}
-	// The row and byte bounds are the server's: the statement is cut at
-	// two rows so a second row is seen and refused, and the cells cut at
-	// the byte bound.
 	req := queryengine.Request{
 		SQL:         q,
 		Format:      "JSONCompact",
