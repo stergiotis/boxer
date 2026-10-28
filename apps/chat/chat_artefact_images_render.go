@@ -186,6 +186,8 @@ func (inst *App) renderImageThumb(art *artefact, e artImage) {
 // imageOrigin says where an entry came from.
 func imageOrigin(e artImage) string {
 	switch e.source {
+	case imageSourceRestored:
+		return "restored from the artefact's export when the conversation resumed"
 	case imageSourceCopy:
 		return "a copy of " + e.from
 	case imageSourceCrop:

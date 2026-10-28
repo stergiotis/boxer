@@ -229,6 +229,11 @@ func (e *Editor) Redo() bool {
 	return true
 }
 
+// Reparse drops the parsed document, so the next Render parses the source
+// again: for a host whose resolver's answers changed, such as images that
+// arrived after the last parse.
+func (e *Editor) Reparse() { e.docOk = false }
+
 func (e *Editor) reparse() {
 	if e.docOk && e.docSrc == e.src {
 		return

@@ -156,6 +156,9 @@ type coordinator struct {
 	tasks    []string
 	tainted  bool
 	confined bool
+	// lastExportMount is the mount the artefact was last exported to
+	// (chat_artefact_export.go); the journal holds it too.
+	lastExportMount uint64
 	// confinedTier is the tier confined content is labelled with: the
 	// host's declaration's, fixed at construction.
 	confinedTier agentrun.TierE

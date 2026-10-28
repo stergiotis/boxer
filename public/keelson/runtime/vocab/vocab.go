@@ -712,14 +712,14 @@ var (
 	MembAgentrunCopyReason    = NkRegistry.MustBegin("agentrunCopyReason", 446).End()
 	MembAgentrunCopyBytes     = NkRegistry.MustBegin("agentrunCopyBytes", 447).End()
 	// A verdict (ledger; ADR-0340 §SD4).
-	MembAgentrunVerdictForm     = NkRegistry.MustBegin("agentrunVerdictForm", 498).End()
-	MembAgentrunVerdictOutcome  = NkRegistry.MustBegin("agentrunVerdictOutcome", 499).End()
-	MembAgentrunVerdictRestsOn  = NkRegistry.MustBegin("agentrunVerdictRestsOn", 500).End()
-	MembAgentrunVerdictResult   = NkRegistry.MustBegin("agentrunVerdictResult", 501).End()
-	MembAgentrunVerdictDigest   = NkRegistry.MustBegin("agentrunVerdictDigest", 502).End()
-	MembAgentrunVerdictSource   = NkRegistry.MustBegin("agentrunVerdictSource", 503).End()
-	MembAgentrunVerdictEndpoint = NkRegistry.MustBegin("agentrunVerdictEndpoint", 504).End()
-	MembAgentrunVerdictReason   = NkRegistry.MustBegin("agentrunVerdictReason", 505).End()
+	MembAgentrunVerdictForm     = NkRegistry.MustBegin("agentrunVerdictForm", 511).End()
+	MembAgentrunVerdictOutcome  = NkRegistry.MustBegin("agentrunVerdictOutcome", 512).End()
+	MembAgentrunVerdictRestsOn  = NkRegistry.MustBegin("agentrunVerdictRestsOn", 513).End()
+	MembAgentrunVerdictResult   = NkRegistry.MustBegin("agentrunVerdictResult", 514).End()
+	MembAgentrunVerdictDigest   = NkRegistry.MustBegin("agentrunVerdictDigest", 515).End()
+	MembAgentrunVerdictSource   = NkRegistry.MustBegin("agentrunVerdictSource", 516).End()
+	MembAgentrunVerdictEndpoint = NkRegistry.MustBegin("agentrunVerdictEndpoint", 517).End()
+	MembAgentrunVerdictReason   = NkRegistry.MustBegin("agentrunVerdictReason", 518).End()
 	// The evidence profile's components (ADR-0327 (proposed) §SD2): the
 	// chain with its mark and commitments, the written-by component, and
 	// the opening on a vault row. The shredded component binds verbatim
@@ -764,6 +764,21 @@ var (
 	// The tier the egress wall saw on a fetch (ADR-0312 §SD4), beside the
 	// fetch record's other attributes (217–227).
 	MembHttpFetchTier = NkRegistry.MustBegin("httpFetchTier", 497).End()
+	// The lading publish record (ADR-0338 §SD5, proposed): one row per
+	// publish into the lading store, written or refused, and why.
+	MembKindLadingPublish     = NkRegistry.MustBegin("runtimeKindLadingPublish", 498).End()
+	MembLadingPublishTag      = NkRegistry.MustBegin("ladingPublishTag", 499).End()
+	MembLadingPublishMount    = NkRegistry.MustBegin("ladingPublishMount", 500).End()
+	MembLadingPublishSnapshot = NkRegistry.MustBegin("ladingPublishSnapshot", 501).End()
+	MembLadingPublishName     = NkRegistry.MustBegin("ladingPublishName", 502).End()
+	MembLadingPublishTtlDays  = NkRegistry.MustBegin("ladingPublishTtlDays", 503).End()
+	MembLadingPublishTier     = NkRegistry.MustBegin("ladingPublishTier", 504).End()
+	MembLadingPublishConfined = NkRegistry.MustBegin("ladingPublishConfined", 505).End()
+	MembLadingPublishDecision = NkRegistry.MustBegin("ladingPublishDecision", 506).End()
+	MembLadingPublishReason   = NkRegistry.MustBegin("ladingPublishReason", 507).End()
+	MembLadingPublishPaths    = NkRegistry.MustBegin("ladingPublishPaths", 508).End()
+	MembLadingPublishDigests  = NkRegistry.MustBegin("ladingPublishDigests", 509).End()
+	MembLadingPublishBytes    = NkRegistry.MustBegin("ladingPublishBytes", 510).End()
 )
 
 // AllMembs is the enumerated set of registered runtime memberships. Tests
@@ -886,4 +901,7 @@ var AllMembs = []registry.RegisteredNaturalKey{
 	MembEvidenceKindOpening, MembEvidenceOpeningValue, MembAuditEventOriginBy, MembAuditEventPrincipalVia,
 	MembEvidenceKindSeal, MembEvidenceSealStream, MembEvidenceSealPrev, MembEvidenceSealDigest, MembEvidenceSealScheme, MembEvidenceSealRowIds, MembEvidenceSealRowDigests,
 	MembHttpFetchTier,
+	MembKindLadingPublish, MembLadingPublishTag, MembLadingPublishMount, MembLadingPublishSnapshot, MembLadingPublishName,
+	MembLadingPublishTtlDays, MembLadingPublishTier, MembLadingPublishConfined, MembLadingPublishDecision, MembLadingPublishReason,
+	MembLadingPublishPaths, MembLadingPublishDigests, MembLadingPublishBytes,
 }

@@ -1,0 +1,9 @@
+# The scripted model of chat-artefact-export.scene.md (ADR-0339): one reply
+# per line, picked by the conversation's position.
+# Turn 1: ask for the demo app, open it, capture its window into the
+# artefact's screenshots, write a document embedding the capture, answer.
+{"tool":"request_access","args":{"plan":"capture the demo app for the artefact","open":[{"app":"opsdemo"}]}}
+{"tool":"open_window","args":{"app":"opsdemo"}}
+{"tool":"artefact_capture","args":{"title":"Capturing the demo","base_revision":0,"windows":["$window"]}}
+{"tool":"artefact_write","args":{"title":"Writing it up","base_revision":"$revision","text":"# The demo\n\nThe operations demo, as captured:\n\n![[screenshot-1.png]]\n"}}
+{"content":"Wrote up the demo with its screenshot."}

@@ -13,14 +13,14 @@ import (
 // --- Caller-assigned membership ids (registry-stable target). ---
 
 const (
-	kindAgentrunVerdictForm     uint64 = 9223372049739678194
-	kindAgentrunVerdictOutcome  uint64 = 9223372049739678195
-	kindAgentrunVerdictRestsOn  uint64 = 9223372049739678196
-	kindAgentrunVerdictResult   uint64 = 9223372049739678197
-	kindAgentrunVerdictDigest   uint64 = 9223372049739678198
-	kindAgentrunVerdictSource   uint64 = 9223372049739678199
-	kindAgentrunVerdictEndpoint uint64 = 9223372049739678200
-	kindAgentrunVerdictReason   uint64 = 9223372049739678201
+	kindAgentrunVerdictForm     uint64 = 9223372049739678207
+	kindAgentrunVerdictOutcome  uint64 = 9223372049739678208
+	kindAgentrunVerdictRestsOn  uint64 = 9223372049739678209
+	kindAgentrunVerdictResult   uint64 = 9223372049739678210
+	kindAgentrunVerdictDigest   uint64 = 9223372049739678211
+	kindAgentrunVerdictSource   uint64 = 9223372049739678212
+	kindAgentrunVerdictEndpoint uint64 = 9223372049739678213
+	kindAgentrunVerdictReason   uint64 = 9223372049739678214
 )
 
 // verdictRecordSymbolAttrI is the InAttr-side view of the symbol section. P-variants only —

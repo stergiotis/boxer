@@ -45,6 +45,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/inprocbus"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect/introspecthost"
+	"github.com/stergiotis/boxer/public/keelson/runtime/ladingpublish"
 	"github.com/stergiotis/boxer/public/keelson/runtime/launcher"
 	"github.com/stergiotis/boxer/public/keelson/runtime/launchlimit"
 	"github.com/stergiotis/boxer/public/keelson/runtime/llm"
@@ -120,6 +121,11 @@ type Services struct {
 	// resolve, retract and the keelson('adhoc') catalog. Reading a dataset
 	// still needs ChLocal and Introspect, which fail visibly on their own.
 	AdhocData bool
+	// LadingPublish is lading.publish.<tag>: writes into the lading store
+	// under the caller's mount tag, after the placement check (ADR-0338,
+	// proposed). It connects from the CLICKHOUSE_* variables on the first
+	// publish; without a reachable store a publish fails with the reason.
+	LadingPublish bool
 	// Clipboard is clipboard.*: copies drained into egui copy ops each frame.
 	Clipboard bool
 	// Coverage samples Go coverage counters onto the bus when
@@ -158,7 +164,7 @@ type Services struct {
 // AllServices is every service on — the carousel's configuration.
 func AllServices() Services {
 	return Services{
-		Fs: true, Persist: true, Watchbill: true, ChLocal: true, AdhocData: true,
+		Fs: true, Persist: true, Watchbill: true, ChLocal: true, AdhocData: true, LadingPublish: true,
 		Clipboard: true, Coverage: true, Sysmetrics: true, Introspect: true,
 		AppState: true, LLM: true, HTTP: true, Agent: true, SQLSurface: true,
 	}
@@ -256,6 +262,7 @@ type Runtime struct {
 	Persist   *persist.Service
 	ChLocal   *chlocalbroker.Service
 	Adhoc     *adhocdata.Service
+	Lading    *ladingpublish.Service
 	Clipboard *clipboardbroker.Service
 	Tasks     *tasksupervisor.Supervisor
 	// persistStore is the backend behind runtime.persist, which host
@@ -672,6 +679,26 @@ func (rt *Runtime) bootServices(ctx context.Context, factsCfg chstore.Config) {
 				defer cancel()
 				_ = adhocSvc.Close(stopCtx)
 			})
+		}
+	}
+	if svc.LadingPublish {
+		reg := rt.opts.Registry
+		if reg == nil {
+			reg = app.DefaultRegistry
+		}
+		ladingSvc, ladingErr := ladingpublish.NewService(ladingpublish.Config{
+			Bus:      rt.Bus,
+			Registry: reg,
+			Connect:  connectLading,
+			Limits:   ladingpublish.LimitsFromEnv(),
+			Trail:    rt.Trail,
+			Log:      logger,
+		})
+		if ladingErr != nil {
+			logger.Warn().Err(ladingErr).Msg("ladingpublish: service start failed; lading.publish.* will be unbound")
+		} else {
+			rt.Lading = ladingSvc
+			rt.cleanups = append(rt.cleanups, ladingSvc.Close)
 		}
 	}
 	if svc.Clipboard {
@@ -1513,4 +1540,14 @@ func (inst jobNotices) JobEnded(at time.Time, job watchbillstore.Job, state stri
 		text += ", " + note
 	}
 	inst.n.NotifyJob(app.AppIdT(job.OwnerAppId), job.ID, kind, text, at)
+}
+
+// connectLading is the lading publish service's connection: the server the
+// CLICKHOUSE_* variables name, pinged before it is used.
+func connectLading(ctx context.Context) (exec recordstore.ExecutorI, err error) {
+	client := chclient.New(chclient.ConfigFromEnv(), nil)
+	if err = client.Ping(ctx); err != nil {
+		return nil, eh.Errorf("ClickHouse not reachable: %w", err)
+	}
+	return storeexec.New(client, nil)
 }

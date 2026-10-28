@@ -16,6 +16,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect/keelsonquery"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect/providersgui"
+	"github.com/stergiotis/boxer/public/keelson/runtime/ladingpublish"
 	"github.com/stergiotis/boxer/public/keelson/runtime/llm"
 	"github.com/stergiotis/boxer/public/keelson/runtime/task"
 	"github.com/stergiotis/boxer/public/keelson/runtime/windowhost"
@@ -77,6 +78,8 @@ var manifest = app.Manifest{
 				Reason: "chat: the roster's Raise brings the chat window that holds a conversation to the front"},
 			{Pattern: clipboardbroker.SubjectWrite, Direction: app.CapDirectionPub,
 				Reason: "chat: copy a message, a code block or a failure's details to the clipboard"},
+			{Pattern: ladingpublish.Subject(exportMountTag), Direction: app.CapDirectionPub,
+				Reason: "chat: export the artefact and its screenshots to the lading store, under the chat's mount tag (ADR-0339)"},
 		},
 	),
 }

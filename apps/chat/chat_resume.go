@@ -5,6 +5,7 @@ import (
 	"encoding/json/v2"
 	"slices"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -45,6 +46,9 @@ type resumed struct {
 	// the app's storage, where a rename lives (chat_roster.go); empty
 	// when there is none.
 	storedTitle string
+	// art is the artefact read back from its last export, nil when there
+	// is none or it could not be read.
+	art *artefact
 }
 
 // listRuns asks the host for this app's runs, off the frame.
@@ -148,6 +152,27 @@ func (inst *App) resumeRun(id string) {
 			if err = settleOpenTurn(ctx, w, r.fold.OpenTurn); err != nil {
 				return
 			}
+		}
+		// The artefact: its last export, then the journal's head when it
+		// is later (adopt).
+		journaled, _, inJournal := artefactOfEntries(w.Entries())
+		inJournal = inJournal && journaled > 0
+		exported := 0
+		if rec, ok := lastExport(w.Entries()); ok && !r.stranded {
+			if r.art, err = readExport(ctx, rec); err != nil {
+				line := "the artefact's export of revision " + strconv.Itoa(rec.Revision) + " could not be read back"
+				if !inJournal {
+					line += ", so the artefact starts empty"
+				}
+				r.lines = append(r.lines, line+": "+err.Error())
+				err = nil
+			} else {
+				exported = rec.Revision
+				r.lines = append(r.lines, "the artefact was restored from its export of revision "+strconv.Itoa(rec.Revision)+", with "+plural(len(rec.Images), "screenshot"))
+			}
+		}
+		if inJournal && journaled > exported {
+			r.lines = append(r.lines, artefactResumeLine(journaled))
 		}
 		if len(r.lines) > 0 && !r.stranded {
 			note := "This conversation resumed after the host stopped. Windows and grants did not survive: request_access starts a new task when you need one. What was left open:\n- " + strings.Join(r.lines, "\n- ")
@@ -313,9 +338,6 @@ func resumeLines(r *resumed) (lines []string) {
 	if r.fold.OpenTurn != "" {
 		lines = append(lines, "the turn "+r.fold.OpenTurn+" was cut short; its calls stand as listed")
 	}
-	if n, _, ok := artefactOfEntries(r.writer.Entries()); ok && n > 0 {
-		lines = append(lines, artefactResumeLine(n))
-	}
 	return
 }
 
@@ -422,15 +444,28 @@ func (inst *App) adopt(r *resumed) {
 	coord.mu.Unlock()
 	coord.offer(conv.apps, conv.questions)
 	if conv.artefact {
-		// The head the journal last wrote is the artefact again
-		// (chat_artefact_journal.go); the snapshot note re-told at the
-		// next turn tells the model where it stands.
-		if n, text, ok := artefactOfEntries(r.entries); ok && conv.art.restore(n, text) {
+		// The revisions live in the artefact store, not in entries: the
+		// last export, when there is one, brings the exported revision back
+		// with its screenshots (ADR-0339 §SD7, proposed), and the head the
+		// journal last wrote goes on top when it is later
+		// (chat_artefact_journal.go); otherwise the artefact starts empty.
+		// The snapshot note re-told at the next turn tells the model where
+		// it stands.
+		if r.art != nil {
+			conv.art.close()
+			conv.art, r.art = r.art, nil
+		}
+		conv.art.reserveThrough(revisionsNamed(r.entries))
+		if n, text, ok := artefactOfEntries(r.entries); ok {
+			conv.art.restore(n, text)
 			coord.mu.Lock()
 			coord.artJournaled, coord.artJournaledText = n, text
 			coord.mu.Unlock()
 		}
 		coord.offerArtefact(conv.art)
+	}
+	if r.art != nil {
+		r.art.close()
 	}
 	inst.coord, conv.coord = coord, coord
 	inst.resumeNotes(r)

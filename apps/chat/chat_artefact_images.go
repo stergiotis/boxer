@@ -75,6 +75,9 @@ const (
 	imageSourceCapture imageSourceE = iota
 	imageSourceCopy
 	imageSourceCrop
+	// imageSourceRestored is a screenshot read back from the artefact's
+	// export when the conversation resumed (ADR-0339 §SD7, proposed).
+	imageSourceRestored
 )
 
 func (inst imageSourceE) String() string {
@@ -83,6 +86,8 @@ func (inst imageSourceE) String() string {
 		return "copy"
 	case imageSourceCrop:
 		return "crop"
+	case imageSourceRestored:
+		return "restored"
 	}
 	return "capture"
 }
