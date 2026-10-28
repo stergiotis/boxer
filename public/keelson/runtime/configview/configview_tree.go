@@ -117,16 +117,20 @@ func (inst *App) syncTree() {
 	inst.navState.SelectOnly(sel)
 }
 
-// applyTree writes a frame's tree interaction back onto the App's own state.
-// Expansion needs nothing: the widget has already applied it to the state that
-// owns it.
+// applyTree writes a frame's tree interaction back onto the App's own state,
+// through the catalog where a command does the same (ADR-0345 §SD3). A
+// disclosure control the widget already toggled is re-set to the state it
+// reached, so the command log carries it as the person's.
 func (inst *App) applyTree(res tree.Result) {
+	if t := res.Toggled; t >= 0 && int(t) < len(inst.navNodes) && !inst.navNodes[t].isVar {
+		inst.expandCategoryGesture(inst.navNodes[t].key, inst.navState.IsExpanded(t))
+	}
 	n := res.Clicked
 	if n < 0 || int(n) >= len(inst.navNodes) {
 		return
 	}
 	if inst.navNodes[n].isVar {
-		inst.selected = inst.navNodes[n].key
+		inst.selectVarGesture(inst.navNodes[n].key)
 		return
 	}
 	// A category row names a grouping and has nothing to show on its own, so
@@ -135,6 +139,6 @@ func (inst *App) applyTree(res tree.Result) {
 	// toggled this row on the same frame, so a double-click nets two toggles
 	// rather than three.
 	if res.Toggled < 0 {
-		inst.navState.ToggleExpanded(n)
+		inst.expandCategoryGesture(inst.navNodes[n].key, !inst.navState.IsExpanded(n))
 	}
 }

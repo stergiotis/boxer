@@ -31,6 +31,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
+	"github.com/stergiotis/boxer/public/keelson/runtime/widgethandle"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/badge"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/color"
@@ -129,6 +130,17 @@ type App struct {
 	navParents []int32
 	navKeys    []string
 	navNodes   []varNode
+
+	// Operations state (configview_ops.go, ADR-0345). frameCtx is the
+	// current frame's context, through which the person's controls route
+	// as gestures; queryH is the search box, for telling the person is
+	// typing in it.
+	frameCtx app.FrameContextI
+	queryH   widgethandle.WidgetHandle
+	// onlySetDraft is what the Only set checkbox is bound to. A data
+	// binding lands at the frame's sync, after the body returned, so the
+	// click is noticed at the top of the next frame and routed as a gesture.
+	onlySetDraft bool
 }
 
 var _ app.AppI = (*App)(nil)
@@ -153,6 +165,8 @@ func (inst *App) Mount(ctx app.MountContextI) (err error) {
 func (inst *App) Frame(ctx app.FrameContextI) (err error) {
 	// Re-resolve: the density preset is runtime-switchable (Layout ▸ Density).
 	inst.density = styletokens.ActiveDensity()
+	inst.frameCtx = ctx
+	inst.noticeDrafts()
 	return inst.render()
 }
 
@@ -224,11 +238,19 @@ func (inst *App) renderEmptyState() {
 		Keep()).Send()
 }
 
+// renderFilterRow draws the search box and the two checkboxes. Only set
+// writes a draft that noticeDrafts routes through the catalog as the
+// person's gesture at the top of the next frame (ADR-0345 §SD3); the
+// search box commits on every keystroke and applies inside the frame,
+// attributed to the app, and its handle lets the filter resource report
+// that the person is typing. Reveal sensitive is the person's alone: it is
+// not a resource and no command sets it (§SD4).
 func (inst *App) renderFilterRow() {
 	c.AddSpace(styletokens.PaddingHair(inst.density))
 	for range c.Horizontal().KeepIter() {
 		c.Label("Search:").Send()
 		c.AddSpace(styletokens.GapInline(inst.density))
+		inst.queryH = widgethandle.Make(inst.ids.PrepareStr("q").Derive())
 		c.TextEdit(inst.ids.PrepareStr("q"), inst.filter.Query, false).
 			HintText("name or description…").
 			DesiredWidth(280).
@@ -236,7 +258,7 @@ func (inst *App) renderFilterRow() {
 
 		c.AddSpace(styletokens.GapPanels(inst.density))
 		c.Checkbox(inst.ids.PrepareStr("only-set"), inst.filter.OnlySet, "Only set").
-			SendRespVal(&inst.filter.OnlySet)
+			SendRespVal(&inst.onlySetDraft)
 		c.AddSpace(styletokens.GapInline(inst.density))
 		c.Checkbox(inst.ids.PrepareStr("reveal"), inst.filter.RevealSensitive, "Reveal sensitive").
 			SendRespVal(&inst.filter.RevealSensitive)

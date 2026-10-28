@@ -25,6 +25,8 @@ var manifest = app.Manifest{
 	Topics:   []app.TopicT{app.TopicRuntime},
 	Keywords: []string{"config", "env", "environment", "settings", "flags"},
 	Surface:  app.SurfaceWindowed,
+	// The operations catalog (ADR-0345 M2), in configview_ops.go.
+	Operations: ops.Catalog(),
 	SurfaceHints: app.SurfaceHints{
 		PreferredWidth:  styletokens.SurfaceTool.W,
 		PreferredHeight: styletokens.SurfaceTool.H,
