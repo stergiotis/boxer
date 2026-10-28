@@ -256,13 +256,21 @@ a lane row runs when an operator starts `watchbill run --job <id>` for it.
 
 ### SD4 — One child per job, from the running executable
 
-The host's watchbill service runs a lane coordinator: it polls the reserved
-queue (an enqueue it served is a wake), and for each queued row acquires a
-slot from a `procpool.Pool` whose spawner starts the running executable —
-`extbin.Local` program "watchbill job child", path `os.Executable()` — with
-the host's environment (the coverage opt-ins included), its own process
-group, and `watchbill run --job <id>`. The pool's `MaxConcurrent` bounds
-live children; close is SIGTERM, then SIGKILL after a grace.
+The host runs a lane coordinator (`keelson/runtime/watchbill/lane`) when
+the lane is on: it reads the reserved queue at the worker's poll interval
+and on every changed announcement (an enqueue the service served is one),
+and for each queued, due row with no child yet it takes a slot from a
+`procpool.Pool` and starts the running executable — `extbin.Local` program
+"watchbill job child", path `os.Executable()` — with the host's environment
+(the coverage opt-ins included), its own process group, and `watchbill run
+--job <id>`. The slot is what the pool counts, ready the moment it is made;
+the coordinator starts the process once it holds the slot, so
+`KEELSON_WATCHBILL_LANE_CHILDREN` bounds live children through their whole
+teardown. A read that finds the pool full stops and tries at the next
+read; it never blocks. The host binary must carry the watchbill CLI
+command for its children to run; the imzero2 host does from this ADR on.
+Close is SIGTERM to the group, then SIGKILL after
+`KEELSON_WATCHBILL_LANE_KILL_GRACE`.
 
 `watchbill run --job <id>` initialises `runinfo`, writes the runtime-start
 row and heartbeat, claims that one row by id, runs it with the binary's
@@ -270,12 +278,34 @@ registered handler under the `Agentic` frame, settles it, and exits. A lost
 claim exits at once. A child that dies leaves a running row whose heartbeat
 goes stale; any worker's sweep abandons or requeues it (ADR-0223 §SD4).
 
-The child's stdout and stderr are pipes the coordinator reads line by line
-into the host's log (F1). The orphan policy is: a child whose parent is gone
-dies at its next write to the broken pipe (Go's default for descriptors 1
-and 2), its lease goes stale, and at-least-once requeues the job. A cell
-that prefers orphans to finish sets the child to ignore SIGPIPE; the ADR
-records the default so the difference is known before a host crashes.
+The child's stdout and stderr are one pipe the coordinator reads line by
+line into the host's log (F1): a zerolog JSON line is re-emitted at its
+own level with its fields, so the child's run id travels through; any
+other line is text; a line past 64 KiB is cut and marked. The reader runs
+from before `Start` to the pipe's end of file. The orphan policy is: a
+child whose parent is gone dies at its next write to the broken pipe (Go's
+default for descriptors 1 and 2), its lease goes stale, and at-least-once
+requeues the job. A cell that prefers orphans to finish sets the child to
+ignore SIGPIPE; the ADR records the default so the difference is known
+before a host crashes.
+
+The host's side of a child (E1): the coordinator spawns the keelson task
+under the job's id on the host's bus — the child, with no bus, reports to
+no one — notes which child runs it, and ends it from the row the child
+left: `Done` on succeeded, `Error` with the row's state otherwise. A
+cancel of that task writes a cancel request on the row, which the child
+honours at its poll; the coordinator's own stop writes none, since its
+children are signalled and their rows are left running for the sweep. A
+failed or discarded row tells the attention notices, as the in-process
+worker does, and the changed subject is announced. Folding the child's
+own progress notes is not done: they go to a handle that reports to no
+one, and arrive when E2 does.
+
+A child that exits with its row still running died with the claim; the
+task ends in error, and the sweep requeues or abandons the row once the
+heartbeat is stale, after which the coordinator sees it queued again. A
+child that exits with the row still queued lost its claim or never made
+one; the next read starts another.
 
 Cancel: the host's cancel verb writes the row; the child honours it within
 its poll as any worker does; the pool's close is the backstop.
@@ -313,7 +343,10 @@ baseline to subtract.
 | `boxer.watchbill` job table | added three sections, last | DDL golden, job store regenerated; the migration recipe for an existing table |
 | hostboot | the worker gets the dispatcher as attester | none |
 | CLI `watchbill run` | gains `--job <id>` (SD4, M1) | the how-to |
-| Env-var registry | added: `KEELSON_WATCHBILL_ISOLATE_AGENT_JOBS` (SD3, M1); the pool's bound follows with M2 | `doc/env-vars.md` |
+| Env-var registry | added: `KEELSON_WATCHBILL_ISOLATE_AGENT_JOBS` (SD3, M1); `KEELSON_WATCHBILL_LANE_CHILDREN`, `KEELSON_WATCHBILL_LANE_KILL_GRACE` (SD4, M2) | `doc/env-vars.md` |
+| Exported Go API under `public/` (M2) | added: package `keelson/runtime/watchbill/lane` (`Coordinator`, `Config`, `LauncherI`, `ChildI`, `ExecLauncher`, `DefaultChildArgs`, `Caps`, `AppId`); `hostboot.Runtime.WatchbillLane` | hostboot starts it under the lane switch |
+| extbin registry (ADR-0118) | added: Local program "watchbill job child" | `keelson.extbin` |
+| `imzero2` binary (`public/thestack/cmd/imzero2`) | gains the `watchbill` CLI command | its children run `watchbill run --job` |
 | Exported Go API under `public/` (M1) | added: `watchbillstore.QueueLane`, `watchbill.Worker.RunJob`, `watchbill.Config.IsolateAgentJobs`, `watchbill.IsolateAgentJobs` | `QueueSQL` and `MemStore.Queue` exclude the lane |
 
 ## Alternatives
@@ -395,16 +428,18 @@ baseline to subtract.
   <id>`; the reserved queue the two queue reads never select; the enqueue
   service's routing under `KEELSON_WATCHBILL_ISOLATE_AGENT_JOBS`, and its
   refusal of a request that names the lane.
-- **M2 — The coordinator.** `procpool` spawner over the `extbin.Local`
-  program; environment, process group, pipes to the parent's log; the
-  host-side task and the changed announcement; cancel and the kill grace.
+- **M2 — The coordinator** (built): package `watchbill/lane` — the slot
+  pool over `procpool`, the `extbin.Local` program, environment, process
+  group, the pipe relay into the host's log; the host-side task, the
+  notices and the changed announcement; task cancel to the row; stop with
+  the kill grace; the imzero2 binary carries the watchbill verb.
 - **M3 — The stamp and the marts.** Driver stamp on the run row; the
   attribution mart over ADR-0343's samples; the baseline from a lost
   claim.
 
 ## Status
 
-Proposed — awaiting review by the code owner. M0 and M1 built alongside the proposal.
+Proposed — awaiting review by the code owner. M0, M1 and M2 built alongside the proposal.
 
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers (Tier 1 in-place / Tier 2 dated `## Updates` entry / Tier 3 new superseding ADR).

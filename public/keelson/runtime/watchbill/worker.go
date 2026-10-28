@@ -163,7 +163,7 @@ func (inst *Worker) Start(ctx context.Context) (err error) {
 		}
 	}
 	if inst.cfg.IsolateAgentJobs {
-		inst.log.Warn().Msg("watchbill: agent-caused jobs are routed into the reserved lane; until the lane coordinator lands (ADR-0344 M2) a row there runs only when `watchbill run --job <id>` is started for it")
+		inst.log.Info().Msg("watchbill: agent-caused jobs are routed into the reserved lane, for the lane coordinator's children (ADR-0344 §SD3)")
 	}
 	go inst.loop(ctx)
 	return

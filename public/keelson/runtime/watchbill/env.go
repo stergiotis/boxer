@@ -35,3 +35,22 @@ var IsolateAgentJobs = env.NewBool(env.Spec{
 	Category:    env.CategorySystem,
 	Default:     "false",
 })
+
+// LaneChildren bounds the job children the lane coordinator has alive at
+// once (ADR-0344 §SD4); the pool's MaxConcurrent. Declared here, beside
+// the worker's variables, so the registry's documentation sees it.
+var LaneChildren = env.NewInt(env.Spec{
+	Name:        "KEELSON_WATCHBILL_LANE_CHILDREN",
+	Description: "watchbill lane: how many agent-caused jobs run at once, each in a child process of its own (ADR-0344)",
+	Category:    env.CategorySystem,
+	Default:     "2",
+})
+
+// LaneKillGrace is how long a job child has after SIGTERM before SIGKILL
+// when the coordinator stops.
+var LaneKillGrace = env.NewDuration(env.Spec{
+	Name:        "KEELSON_WATCHBILL_LANE_KILL_GRACE",
+	Description: "watchbill lane: time a job child has to exit after SIGTERM before it is killed, when the host stops",
+	Category:    env.CategorySystem,
+	Default:     "5s",
+})
