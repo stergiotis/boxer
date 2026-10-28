@@ -1,0 +1,3 @@
+# The scripted model of chat-stream.scene.md: one answer, held back a second
+# and then written word by word over eight, as a streaming model would.
+{"content":"Streaming shows the answer as the model writes it: word by word, coalesced into a few messages a second, while the reply that lands stays the answer.","delayMs":1000,"streamMs":8000}

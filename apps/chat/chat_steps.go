@@ -7,6 +7,8 @@ import (
 	"sync"
 	"time"
 	"unicode/utf8"
+
+	"github.com/stergiotis/boxer/public/keelson/runtime/llm"
 )
 
 // The steps are what a turn with tools did, step by step, as it happens: each
@@ -52,10 +54,13 @@ type turnStep struct {
 	// activity is the transcript's line for a tool call.
 	activity string
 	// content and reasoning are what a model call wrote beside its tool
-	// calls, bounded; tools how many it asked for.
+	// calls, bounded; tools how many it asked for. While the call runs
+	// they are what its stream has written so far, whole, and asking the
+	// tools it began to call (ADR-0286 §SD4).
 	content   string
 	reasoning string
 	tools     int
+	asking    []string
 	inTokens  int32
 	outTokens int32
 	started   time.Time
@@ -82,6 +87,10 @@ type turnSteps struct {
 	mu    sync.Mutex
 	steps []turnStep
 	ver   uint64
+	// base is the handle of the turn's first step. Handles are not reused
+	// across turns, so a stopped turn's late finish or delta misses the
+	// next turn's steps.
+	base int
 }
 
 // reset starts a turn's steps.
@@ -90,12 +99,13 @@ func (inst *turnSteps) reset() {
 		return
 	}
 	inst.mu.Lock()
+	inst.base += len(inst.steps)
 	inst.steps = nil
 	inst.ver++
 	inst.mu.Unlock()
 }
 
-// begin appends a running step and returns its index.
+// begin appends a running step and returns its handle.
 func (inst *turnSteps) begin(s turnStep) (i int) {
 	if inst == nil {
 		return -1
@@ -105,7 +115,16 @@ func (inst *turnSteps) begin(s turnStep) (i int) {
 	defer inst.mu.Unlock()
 	inst.steps = append(inst.steps, s)
 	inst.ver++
-	return len(inst.steps) - 1
+	return inst.base + len(inst.steps) - 1
+}
+
+// stepLocked is the step a handle names in this turn, or nil.
+func (inst *turnSteps) stepLocked(i int) *turnStep {
+	i -= inst.base
+	if i < 0 || i >= len(inst.steps) {
+		return nil
+	}
+	return &inst.steps[i]
 }
 
 // finish completes step i through f.
@@ -115,16 +134,34 @@ func (inst *turnSteps) finish(i int, f func(s *turnStep)) {
 	}
 	inst.mu.Lock()
 	defer inst.mu.Unlock()
-	if i >= len(inst.steps) {
+	s := inst.stepLocked(i)
+	if s == nil {
 		return
 	}
-	s := &inst.steps[i]
 	f(s)
 	s.took, s.done = time.Since(s.started), true
 	if !s.waitSince.IsZero() {
 		s.waited += time.Since(s.waitSince)
 		s.waitSince = time.Time{}
 	}
+	inst.ver++
+}
+
+// grow adds what the model wrote to running step i (ADR-0286 §SD4). The
+// text is advisory: finish replaces it with the reply's.
+func (inst *turnSteps) grow(i int, d llm.Delta) {
+	if inst == nil || i < 0 {
+		return
+	}
+	inst.mu.Lock()
+	defer inst.mu.Unlock()
+	s := inst.stepLocked(i)
+	if s == nil || s.done {
+		return
+	}
+	s.content += d.Content
+	s.reasoning += d.Reasoning
+	s.asking = append(s.asking[:len(s.asking):len(s.asking)], d.Tools...)
 	inst.ver++
 }
 

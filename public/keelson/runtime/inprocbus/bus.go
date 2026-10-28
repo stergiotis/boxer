@@ -248,6 +248,19 @@ func (inst *Inst) subscribe(appId app.AppIdT, instanceKey uint64, pattern string
 	return
 }
 
+// heldBy says whether the app instance holds a subscription to exactly
+// subject.
+func (inst *Inst) heldBy(subject string, appId app.AppIdT, instanceKey uint64) bool {
+	inst.mu.RLock()
+	defer inst.mu.RUnlock()
+	for _, s := range inst.subs {
+		if s.pattern == subject && s.appId == appId && s.instanceKey == instanceKey {
+			return true
+		}
+	}
+	return false
+}
+
 func (inst *Inst) unsubscribe(id uint64) {
 	inst.mu.Lock()
 	defer inst.mu.Unlock()

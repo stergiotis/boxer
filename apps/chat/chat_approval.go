@@ -36,14 +36,21 @@ const (
 )
 
 // complete runs one model call, asking the person once when the route
-// wants their approval of the exit.
-func (inst *coordinator) complete(ctx context.Context, cli completerI, w *agentrun.Writer, req llm.Request) (res llm.Response, err error) {
+// wants their approval of the exit. onDelta, when set and the completer
+// streams, hears the answer as it is written (ADR-0286 §SD4).
+func (inst *coordinator) complete(ctx context.Context, cli completerI, w *agentrun.Writer, req llm.Request, onDelta func(llm.Delta)) (res llm.Response, err error) {
 	// The call names its journal run, the run an approval key must be of
 	// (ADR-0325 §SD5).
 	if w != nil {
 		req.Run = w.Run().Id
 	}
-	res, err = cli.Complete(ctx, req)
+	call := cli.Complete
+	if sc, ok := cli.(streamingCompleterI); ok && onDelta != nil {
+		call = func(ctx context.Context, req llm.Request) (llm.Response, error) {
+			return sc.CompleteStreaming(ctx, req, onDelta)
+		}
+	}
+	res, err = call(ctx, req)
 	var refused *llm.RefusedError
 	if err == nil || !errors.As(err, &refused) || !refused.NeedsApproval() || w == nil {
 		return
@@ -56,7 +63,7 @@ func (inst *coordinator) complete(ctx context.Context, cli completerI, w *agentr
 		return
 	}
 	req.Approval = key
-	return cli.Complete(ctx, req)
+	return call(ctx, req)
 }
 
 // approveExit journals the person's decision on the exit — asking them

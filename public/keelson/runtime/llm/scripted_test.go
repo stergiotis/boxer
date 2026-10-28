@@ -84,3 +84,28 @@ func TestAScriptedReplyWaitsItsDelay(t *testing.T) {
 	_, err = cli.Complete(ctx, openaichat.CompletionRequest{})
 	assert.ErrorIs(t, err, context.Canceled, "a cancelled request stops waiting")
 }
+
+// A StreamMs reply is written word by word to a caller that streams, and
+// whole to one that does not; a tool reply streams its name.
+func TestAScriptedReplyStreamsItsWords(t *testing.T) {
+	cli, err := NewScriptedClient([]byte("{\"content\":\"one two three\",\"streamMs\":30}\n{\"tool\":\"t\"}"))
+	require.NoError(t, err)
+	var words []string
+	resp, err := cli.CompleteStream(context.Background(), openaichat.CompletionRequest{}, func(d openaichat.Delta) { words = append(words, d.Content) })
+	require.NoError(t, err)
+	assert.Equal(t, []string{"one ", "two ", "three"}, words)
+	assert.Equal(t, "one two three", resp.Content)
+
+	resp, err = cli.Complete(context.Background(), openaichat.CompletionRequest{})
+	require.NoError(t, err)
+	assert.Equal(t, "one two three", resp.Content)
+
+	var tools []string
+	_, err = cli.CompleteStream(context.Background(), openaichat.CompletionRequest{Messages: []openaichat.Message{{Role: openaichat.ChatRoleAssistant}}},
+		func(d openaichat.Delta) { tools = append(tools, d.ToolCall) })
+	require.NoError(t, err)
+	assert.Equal(t, []string{"t"}, tools)
+
+	_, err = NewScriptedClient([]byte(`{"tool":"t","streamMs":10}`))
+	assert.Error(t, err)
+}

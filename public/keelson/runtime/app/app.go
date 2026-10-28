@@ -262,6 +262,18 @@ type BusInstanceI interface {
 	SetInstanceKey(key uint64)
 }
 
+// BusInboxI is the optional private-inbox capability of a bus client
+// (ADR-0286 §SD3): a subject unique to this client that the caller can name
+// in a request, so a service can publish more than the one reply to it — a
+// streamed answer's deltas. It is subscribed without a capability check,
+// as a request's reply inbox is: no other client can subscribe to it by
+// name. The subscription lives until unsubscribe or the client's Close.
+// Optional for the same reason as BusCloserI; a caller whose bus lacks it
+// asks for nothing that needs one.
+type BusInboxI interface {
+	SubscribeInbox(handler MsgHandlerFunc) (inbox string, unsubscribe func(), err error)
+}
+
 // MsgHandlerFunc is the per-message callback handed to Subscribe. The Msg
 // pointer is owned by the bus and must not be retained past the handler
 // return.

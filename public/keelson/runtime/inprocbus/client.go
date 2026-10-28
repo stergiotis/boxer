@@ -4,6 +4,7 @@ import (
 	"errors"
 	"math/rand/v2"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -49,6 +50,7 @@ type Client struct {
 var _ app.BusI = (*Client)(nil)
 var _ app.BusCloserI = (*Client)(nil)
 var _ app.BusInstanceI = (*Client)(nil)
+var _ app.BusInboxI = (*Client)(nil)
 
 // SetInstanceKey stamps the host-minted window/embed key on the client;
 // every subscription created afterwards carries it (ADR-0188 §SD1). Zero
@@ -255,6 +257,42 @@ func (inst *Client) Subscribe(subject string, handler app.MsgHandlerFunc) (unsub
 		inst.inst.unsubscribe(id)
 	}
 	return
+}
+
+// SubscribeInbox implements [app.BusInboxI]: a fresh inbox from the
+// allocator Request uses, subscribed through the same internal path that
+// bypasses the cap check, and tracked so Close releases it.
+func (inst *Client) SubscribeInbox(handler app.MsgHandlerFunc) (inbox string, unsubscribe func(), err error) {
+	if inst.closed.Load() {
+		err = eb.Build().Str("appId", string(inst.appId)).Errorf("bus inbox: %w", ErrClosed)
+		return
+	}
+	inbox = inst.allocateInbox()
+	var id uint64
+	id, err = inst.inst.subscribe(inst.appId, inst.instanceKey.Load(), inbox, handler)
+	if err != nil {
+		err = eh.Errorf("bus inbox: %w", err)
+		return
+	}
+	if !inst.trackSub(id) {
+		inst.inst.unsubscribe(id)
+		err = eb.Build().Str("appId", string(inst.appId)).Errorf("bus inbox: %w", ErrClosed)
+		return
+	}
+	unsubscribe = func() {
+		inst.untrackSub(id)
+		inst.inst.unsubscribe(id)
+	}
+	return
+}
+
+// InboxHeldBy says whether inbox is subscribed, by name, by that app
+// instance. A service checks it before publishing to an inbox a request
+// named (ADR-0286 §SD2): a client that learned another's reply inbox — any
+// subscriber to a request's subject sees it — must not have the service
+// write into it.
+func (inst *Client) InboxHeldBy(inbox string, appId app.AppIdT, instanceKey uint64) bool {
+	return strings.HasPrefix(inbox, InboxPrefix) && inst.inst.heldBy(inbox, appId, instanceKey)
 }
 
 func (inst *Client) Request(subject string, payload []byte) (reply []byte, err error) {

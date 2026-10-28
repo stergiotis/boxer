@@ -310,6 +310,21 @@ func (inst *Client) Describe(ctx context.Context) (d Description, err error) {
 // neither. Cancelling ctx returns at once with its error and asks the
 // service to stop the provider call (llm.cancel).
 func (inst *Client) Complete(ctx context.Context, r Request) (res Response, err error) {
+	return inst.complete(ctx, r, nil)
+}
+
+// CompleteStreaming is Complete with the answer's deltas handed to onDelta
+// as the provider writes it (ADR-0286 §SD4), on a goroutine of the
+// client's, in order and contiguous; onDelta is not called after it
+// returns. The response is the reply, as Complete's: the deltas only show
+// it coming. A bus without a private inbox ([app.BusInboxI]), a service
+// or provider that does not stream, or a gap in the deltas means onDelta
+// hears less or nothing, never something else.
+func (inst *Client) CompleteStreaming(ctx context.Context, r Request, onDelta func(Delta)) (res Response, err error) {
+	return inst.complete(ctx, r, onDelta)
+}
+
+func (inst *Client) complete(ctx context.Context, r Request, onDelta func(Delta)) (res Response, err error) {
 	if inst == nil || inst.bus == nil {
 		return res, eh.Errorf("llm: client without a bus")
 	}
@@ -338,6 +353,22 @@ func (inst *Client) Complete(ctx context.Context, r Request) (res Response, err 
 	}
 	if deadline, ok := ctx.Deadline(); ok {
 		req.DeadlineUnixNanos = deadline.UnixNano()
+	}
+	var receiver *deltaReceiver
+	if ib, ok := inst.bus.(app.BusInboxI); ok && onDelta != nil {
+		receiver = newDeltaReceiver(req.CancelKey, onDelta)
+		inbox, unsubscribe, ierr := ib.SubscribeInbox(receiver.handle)
+		if ierr != nil {
+			// No inbox, no stream: the call goes ahead plain.
+			receiver.finish(false)
+			receiver = nil
+		} else {
+			req.StreamInbox = inbox
+			defer func() {
+				unsubscribe()
+				receiver.finish(err == nil)
+			}()
+		}
 	}
 	payload, err := encode(req)
 	if err != nil {

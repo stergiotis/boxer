@@ -331,3 +331,41 @@ func TestRequestWithTimeout_HonoursTheCallerSTimeout(t *testing.T) {
 	_, err = caller.RequestWithTimeout("slow.op", nil, 0)
 	require.Error(t, err, "d <= 0 must fall back to the Inst default")
 }
+
+// TestClient_SubscribeInbox is ADR-0286 §SD3: an inbox receives what a
+// service publishes to it, though the requester holds no cap on _INBOX; no
+// other client can subscribe to it by name; Close releases it.
+func TestClient_SubscribeInbox(t *testing.T) {
+	inst := newInst(t)
+	requester := inst.NewClient("test.app", nil)
+	service := inst.NewClient("server", []app.SubjectFilter{
+		{Pattern: InboxPrefix + ">", Direction: app.CapDirectionPub},
+	})
+	other := inst.NewClient("other.app", []app.SubjectFilter{
+		{Pattern: "fs.>", Direction: app.CapDirectionBoth},
+	})
+	var got []string
+	inbox, unsub, err := requester.SubscribeInbox(func(msg *app.Msg) { got = append(got, string(msg.Payload)) })
+	require.NoError(t, err)
+	require.True(t, len(inbox) > len(InboxPrefix) && inbox[:len(InboxPrefix)] == InboxPrefix, "inbox %q", inbox)
+	assert.Equal(t, 1, requester.SubscriptionCount())
+
+	_, err = other.Subscribe(inbox, func(*app.Msg) { t.Fatal("another client read the inbox") })
+	assert.ErrorIs(t, err, ErrPermissionViolation)
+
+	require.NoError(t, service.Publish(inbox, []byte("a")))
+	require.NoError(t, service.Publish(inbox, []byte("b")))
+	assert.Equal(t, []string{"a", "b"}, got)
+
+	unsub()
+	require.NoError(t, service.Publish(inbox, []byte("c")))
+	assert.Equal(t, []string{"a", "b"}, got)
+	assert.Equal(t, 0, requester.SubscriptionCount())
+
+	_, _, err = requester.SubscribeInbox(func(*app.Msg) {})
+	require.NoError(t, err)
+	require.NoError(t, requester.Close())
+	assert.Equal(t, 0, requester.SubscriptionCount())
+	_, _, err = requester.SubscribeInbox(func(*app.Msg) {})
+	assert.ErrorIs(t, err, ErrClosed)
+}

@@ -1,8 +1,10 @@
 package chat
 
 import (
+	"context"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -10,7 +12,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/stergiotis/boxer/public/keelson/runtime/agentrun"
 	"github.com/stergiotis/boxer/public/keelson/runtime/inprocbus"
+	"github.com/stergiotis/boxer/public/keelson/runtime/llm"
 	"github.com/stergiotis/boxer/public/llm/openaichat"
 )
 
@@ -164,4 +168,116 @@ func TestATurnStepWaitsOnThePerson(t *testing.T) {
 func TestAStepWithoutDetailHasNone(t *testing.T) {
 	assert.False(t, (&turnStep{kind: stepModel, tools: 1}).hasDetail())
 	assert.True(t, (&turnStep{kind: stepModel, reasoning: "x"}).hasDetail())
+}
+
+// streamingRig is the rig's client with a stream in front of it: each
+// call hands on its pieces as deltas and, while it does, records the
+// running step as the window would see it.
+type streamingRig struct {
+	cli    *llm.Client
+	coord  *coordinator
+	pieces []llm.Delta
+	seen   []turnStep
+}
+
+func (inst *streamingRig) Complete(ctx context.Context, req llm.Request) (llm.Response, error) {
+	return inst.cli.Complete(ctx, req)
+}
+
+func (inst *streamingRig) CompleteStreaming(ctx context.Context, req llm.Request, onDelta func(llm.Delta)) (llm.Response, error) {
+	for _, d := range inst.pieces {
+		onDelta(d)
+		steps, _, _ := inst.coord.steps.snapshot(0)
+		inst.seen = append(inst.seen, steps[len(steps)-1])
+	}
+	return inst.cli.Complete(ctx, req)
+}
+
+// A streaming completer's deltas grow the running model step — its line
+// says what the model is doing, and the waiting bubble has the answer so
+// far — and the landed step is the reply's (ADR-0286 §SD4).
+func TestAStreamedAnswerGrowsTheRunningStep(t *testing.T) {
+	bus := inprocbus.NewInst(zerolog.Nop())
+	model := &scriptedModel{replies: []openaichat.CompletionResponse{{Content: "the reply", FinishReason: "stop"}}}
+	_, coord, cli, req, ctx := coordRig(t, bus, model, false)
+	rig := &streamingRig{cli: cli, coord: coord, pieces: []llm.Delta{{Reasoning: "hmm"}, {Content: "the "}, {Content: "rep"}}}
+	res, err := runTurn(ctx, rig, coord, req, nil)
+	require.NoError(t, err)
+
+	require.Len(t, rig.seen, 3)
+	assert.Contains(t, stepLine(&rig.seen[0]), "· reasoning")
+	assert.Empty(t, liveAnswer(rig.seen[:1]))
+	assert.Contains(t, stepLine(&rig.seen[2]), "· writing the answer")
+	assert.Equal(t, "the rep", liveAnswer(rig.seen[2:]))
+	assert.Equal(t, "hmm", rig.seen[2].reasoning)
+
+	require.Len(t, res.steps, 1)
+	assert.True(t, res.steps[0].done)
+	assert.Equal(t, "the reply", res.steps[0].content, "the landed step is the reply's")
+	assert.Empty(t, liveAnswer(res.steps))
+}
+
+// A tool call the model begins is named on the running step's line.
+func TestARunningStepNamesTheToolsItAsksFor(t *testing.T) {
+	var tr turnSteps
+	i := tr.begin(turnStep{kind: stepModel})
+	tr.grow(i, llm.Delta{Tools: []string{"open_window"}})
+	tr.grow(i, llm.Delta{Tools: []string{"call_operation"}})
+	steps, _, _ := tr.snapshot(0)
+	assert.Contains(t, stepLine(&steps[0]), "· asking for open_window, call_operation")
+	tr.finish(i, func(s *turnStep) { s.tools = 2 })
+	tr.grow(i, llm.Delta{Content: "late"})
+	steps, _, _ = tr.snapshot(0)
+	assert.Empty(t, steps[0].content, "nothing grows a finished step")
+}
+
+// A stopped turn's late delta or finish misses the next turn's steps.
+func TestAStaleStepHandleMissesTheNextTurn(t *testing.T) {
+	var tr turnSteps
+	old := tr.begin(turnStep{kind: stepModel})
+	tr.reset()
+	i := tr.begin(turnStep{kind: stepModel})
+	tr.grow(old, llm.Delta{Content: "stale"})
+	tr.finish(old, func(s *turnStep) { s.content = "stale" })
+	steps, _, _ := tr.snapshot(0)
+	require.Len(t, steps, 1)
+	assert.Empty(t, steps[0].content)
+	assert.False(t, steps[0].done)
+	tr.grow(i, llm.Delta{Content: "new"})
+	steps, _, _ = tr.snapshot(0)
+	assert.Equal(t, "new", steps[0].content)
+}
+
+// streamingFakeModel is fakeModel over the stream, counting the calls
+// that came streamed.
+type streamingFakeModel struct {
+	fakeModel
+	streamed atomic.Int32
+}
+
+func (f *streamingFakeModel) CompleteStream(ctx context.Context, req openaichat.CompletionRequest, onDelta func(openaichat.Delta)) (resp openaichat.CompletionResponse, err error) {
+	f.streamed.Add(1)
+	resp, err = f.Complete(ctx, req)
+	onDelta(openaichat.Delta{Content: resp.Content})
+	return
+}
+
+// Under Ask first the approved retry is streamed as the first call was
+// (ADR-0286 §SD4); the refused call never reached the model.
+func TestAnApprovedRetryIsStreamed(t *testing.T) {
+	model := &streamingFakeModel{}
+	inst, _ := appOverRemote(t, model, agentrun.NewMemStore())
+	amberNote(t, inst)
+	require.True(t, inst.startTurn("q1"))
+	var o *openAsk
+	require.Eventually(t, func() bool { inst.drain(); o = inst.coord.ask.current(); return o != nil }, 5*time.Second, 5*time.Millisecond)
+	o.form.single[0], o.form.chosen[0][0], o.form.notes[0][0] = 0, true, "the fact is the customer's own"
+	o.submit()
+	drainUntil(t, inst)
+	require.Len(t, inst.conv.entries, 2, "%+v", inst.conv.entries)
+	assert.Equal(t, "a1", inst.conv.entries[1].text)
+	assert.EqualValues(t, 1, model.streamed.Load(), "the retry came streamed")
+	model.mu.Lock()
+	defer model.mu.Unlock()
+	assert.Equal(t, 1, model.calls)
 }

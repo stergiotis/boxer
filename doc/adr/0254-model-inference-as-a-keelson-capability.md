@@ -533,6 +533,14 @@ on its content exposes operations the harness drives. mdedit, the first
 consumer this record names, no longer holds the grant. The rule is not
 enforced; the service still answers any app whose manifest declares it.
 
+### 2026-10-28 — streaming lands beside the reply
+
+The streaming verb SD1 and SD7 deferred is
+[ADR-0286](./0286-streamed-model-answers-over-a-private-inbox.md), with the
+chat as its first consumer. It rides neither the frame contract nor the
+task progress subjects SD1 named: a request may name a private inbox the
+service publishes advisory deltas to, and the one reply stays the answer.
+
 ## References
 
 - [ADR-0026](./0026-app-runtime-and-capability-subjects.md) — §SD3 the taxonomy this family joins, §SD7 the broker, §SD10 capslock.

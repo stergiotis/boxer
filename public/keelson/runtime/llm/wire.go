@@ -64,6 +64,10 @@ type wireRequest struct {
 	// CancelKey is the requester's handle for llm.cancel; empty is a
 	// request that cannot be stopped early.
 	CancelKey string `json:"cancel_key,omitempty"`
+	// StreamInbox, when set, is the requester's private inbox
+	// (app.BusInboxI) the service publishes the answer's deltas to while
+	// the provider writes it (ADR-0286 §SD2); the reply is unchanged.
+	StreamInbox string `json:"stream_inbox,omitempty"`
 	// OnBehalfTask, OnBehalfEpoch and OnBehalfCall name the agent task
 	// whose work this completion is, and the dispatcher's call that caused
 	// it (ADR-0269 §SD6); empty for the app's own.
@@ -96,6 +100,23 @@ type wireDescribe struct {
 	// TimeoutNs is the service's bound on one completion
 	// (BOXER_LLM_TIMEOUT), the wait a client takes when it names none.
 	TimeoutNs int64 `json:"timeout_ns,omitempty"`
+}
+
+// wireDelta is one coalesced advance of a streamed answer, published to
+// the request's StreamInbox (ADR-0286 §SD2). The offsets are where the new
+// text starts in the answer and the reasoning so far, in bytes, so a gap
+// is visible to the reader; Tools are the names of the tool calls that
+// began since the last delta. Advisory: the reply is the answer, and no
+// terminal delta exists.
+type wireDelta struct {
+	V               uint8    `json:"v"`
+	CallKey         string   `json:"call_key,omitempty"`
+	Seq             uint32   `json:"seq"`
+	ContentOffset   uint32   `json:"content_offset,omitempty"`
+	Content         string   `json:"content,omitempty"`
+	ReasoningOffset uint32   `json:"reasoning_offset,omitempty"`
+	Reasoning       string   `json:"reasoning,omitempty"`
+	Tools           []string `json:"tools,omitempty"`
 }
 
 // wireReply is the reply on llm.complete. Ok false carries the reason and

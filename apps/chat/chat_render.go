@@ -647,6 +647,11 @@ func (inst *App) renderWaiting() {
 		c.Label(line).Selectable(false).Send()
 	}
 	inst.renderSteps()
+	if text := liveAnswer(inst.stepsNow()); text != "" {
+		// The answer as the model writes it, its latest words; the landed
+		// turn is drawn from the reply.
+		c.LabelAtoms(c.Atoms().BeginRichText(clipTail(text, liveAnswerMax)).End().Keep()).Wrap().Selectable(false).Send()
+	}
 	c.RequestRepaint()
 }
 

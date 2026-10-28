@@ -9,6 +9,7 @@ import (
 	"os"
 	"regexp"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/stergiotis/boxer/public/config/env"
@@ -38,11 +39,15 @@ const ScriptedEndpoint = "http://127.0.0.1/scripted"
 //
 // DelayMs holds the reply back that long, as a slow model would, so a scene
 // can look at a turn while it runs; a cancelled request stops waiting.
+// StreamMs, after the delay, writes a content reply word by word over that
+// long to a caller that streams (ADR-0286), so a scene can see an answer
+// grow; a caller that does not stream waits it out and gets the whole.
 type ScriptReply struct {
-	Content string         `json:"content,omitempty"`
-	Tool    string         `json:"tool,omitempty"`
-	Args    jsontext.Value `json:"args,omitempty"`
-	DelayMs uint32         `json:"delayMs,omitempty"`
+	Content  string         `json:"content,omitempty"`
+	Tool     string         `json:"tool,omitempty"`
+	Args     jsontext.Value `json:"args,omitempty"`
+	DelayMs  uint32         `json:"delayMs,omitempty"`
+	StreamMs uint32         `json:"streamMs,omitempty"`
 }
 
 // ScriptedClient answers the n-th reply of its script to a request that
@@ -55,7 +60,7 @@ type ScriptedClient struct {
 	replies []ScriptReply
 }
 
-var _ openaichat.ClientI = (*ScriptedClient)(nil)
+var _ openaichat.StreamingClientI = (*ScriptedClient)(nil)
 
 // ScriptError is a script that does not parse.
 type ScriptError struct {
@@ -86,6 +91,9 @@ func NewScriptedClient(script []byte) (inst *ScriptedClient, err error) {
 		}
 		if (r.Content == "") == (r.Tool == "") {
 			return nil, &ScriptError{Line: n, Reason: "a reply has either content or a tool"}
+		}
+		if r.StreamMs > 0 && r.Tool != "" {
+			return nil, &ScriptError{Line: n, Reason: "streamMs writes content; a tool reply has none"}
 		}
 		inst.replies = append(inst.replies, r)
 	}
@@ -125,6 +133,31 @@ func lastValue(msgs []openaichat.Message, name string) (tok string, ok bool) {
 
 // Complete answers the reply at the request's position.
 func (inst *ScriptedClient) Complete(ctx context.Context, req openaichat.CompletionRequest) (resp openaichat.CompletionResponse, err error) {
+	return inst.answer(ctx, req, nil)
+}
+
+// CompleteStream implements [openaichat.StreamingClientI]: Complete, with
+// a StreamMs reply's words and a tool reply's name handed to onDelta.
+func (inst *ScriptedClient) CompleteStream(ctx context.Context, req openaichat.CompletionRequest, onDelta func(openaichat.Delta)) (resp openaichat.CompletionResponse, err error) {
+	return inst.answer(ctx, req, onDelta)
+}
+
+// sleep waits d or until ctx ends.
+func sleep(ctx context.Context, d time.Duration) (err error) {
+	if d <= 0 {
+		return
+	}
+	t := time.NewTimer(d)
+	defer t.Stop()
+	select {
+	case <-t.C:
+	case <-ctx.Done():
+		err = eh.Errorf("llm script: %w", ctx.Err())
+	}
+	return
+}
+
+func (inst *ScriptedClient) answer(ctx context.Context, req openaichat.CompletionRequest, onDelta func(openaichat.Delta)) (resp openaichat.CompletionResponse, err error) {
 	n := 0
 	for _, m := range req.Messages {
 		if m.Role == openaichat.ChatRoleAssistant {
@@ -137,19 +170,27 @@ func (inst *ScriptedClient) Complete(ctx context.Context, req openaichat.Complet
 		return
 	}
 	r := inst.replies[n]
-	if r.DelayMs > 0 {
-		t := time.NewTimer(time.Duration(r.DelayMs) * time.Millisecond)
-		select {
-		case <-t.C:
-		case <-ctx.Done():
-			t.Stop()
-			err = eh.Errorf("llm script: %w", ctx.Err())
-			return
-		}
+	if err = sleep(ctx, time.Duration(r.DelayMs)*time.Millisecond); err != nil {
+		return
 	}
 	if r.Tool == "" {
+		if r.StreamMs > 0 {
+			words := strings.SplitAfter(r.Content, " ")
+			step := time.Duration(r.StreamMs) * time.Millisecond / time.Duration(len(words))
+			for _, w := range words {
+				if err = sleep(ctx, step); err != nil {
+					return
+				}
+				if onDelta != nil {
+					onDelta(openaichat.Delta{Content: w})
+				}
+			}
+		}
 		resp.Content, resp.FinishReason = r.Content, "stop"
 		return
+	}
+	if onDelta != nil {
+		onDelta(openaichat.Delta{ToolCall: r.Tool})
 	}
 	args := string(r.Args)
 	if args == "" {

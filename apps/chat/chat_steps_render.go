@@ -19,6 +19,11 @@ const (
 	// stepsTextH bounds a step's arguments, result or reasoning; each
 	// scrolls on its own.
 	stepsTextH float32 = 160
+	// liveAnswerMax and liveReasoningMax bound the latest words of a
+	// streamed answer and reasoning shown while the model writes them
+	// (ADR-0286 §SD4): the tail, as the text grows downward.
+	liveAnswerMax    = 1536
+	liveReasoningMax = 512
 	// waitShown is the least wait on the person a finished step names: a
 	// shorter one was no decision of theirs, a grant issued without asking.
 	waitShown = time.Second
@@ -42,6 +47,15 @@ func (inst *App) stepsNow() (steps []turnStep) {
 		p.steps, p.stepsVer = got, ver
 	}
 	return p.steps
+}
+
+// liveAnswer is the answer the running model call has written so far,
+// empty when none runs or it has written none (ADR-0286 §SD4).
+func liveAnswer(steps []turnStep) string {
+	if n := len(steps); n > 0 && steps[n-1].kind == stepModel && !steps[n-1].done {
+		return steps[n-1].content
+	}
+	return ""
 }
 
 // renderSteps lists the running turn's steps under the waiting line: the
@@ -160,6 +174,11 @@ func (inst *App) renderStep(i int, s *turnStep) {
 				c.Spinner().Send()
 				c.LabelAtoms(c.Atoms().BeginRichText(inst.markedLine(s)).Small().End().Keep()).Selectable(false).Send()
 			}
+			if s.kind == stepModel && s.content == "" && s.reasoning != "" {
+				// The reasoning as it is written, its latest words: the
+				// answer, once it starts, shows under the trail.
+				c.LabelAtoms(c.Atoms().BeginRichText(clipTail(s.reasoning, liveReasoningMax)).Small().Weak().Italics().End().Keep()).Wrap().Selectable(false).Send()
+			}
 			c.RequestRepaint()
 			return
 		}
@@ -208,6 +227,12 @@ func stepLine(s *turnStep) (line string) {
 	case stepModel:
 		line = icons.PhRobot + " model, round " + strconv.Itoa(s.round+1) + " · " + duration(took)
 		switch {
+		case !s.done && len(s.asking) > 0:
+			line += " · asking for " + strings.Join(s.asking, ", ")
+		case !s.done && s.content != "":
+			line += " · writing the answer"
+		case !s.done && s.reasoning != "":
+			line += " · reasoning"
 		case !s.done:
 			line += " · waiting for the answer"
 		case s.failed:

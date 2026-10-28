@@ -606,7 +606,7 @@ func (inst *Service) handleComplete(msg *app.Msg, retained bool) {
 	t.notAhead = !ahead
 	left = true
 	started := time.Now()
-	resp, cerr := inst.client.Complete(ctx, creq)
+	resp, cerr := inst.completeMaybeStreamed(ctx, creq, req, msg)
 	rec.Elapsed = time.Since(started)
 	rec.InputTokens, rec.OutputTokens = resp.InputTokens, resp.OutputTokens
 	rec.CachedInputTokens, rec.ReasoningTokens = resp.CachedInputTokens, resp.ReasoningTokens
@@ -667,6 +667,29 @@ func (inst *Service) handleComplete(msg *app.Msg, retained bool) {
 	lg.Str("sender", string(msg.Sender)).Str("purpose", req.Purpose).Bool("ok", rep.Ok).Str("reason", rep.Reason).
 		Int32("in", resp.InputTokens).Int32("out", resp.OutputTokens).Dur("elapsed", rec.Elapsed).Msg("llm: complete")
 	inst.reply(msg.Reply, rep)
+}
+
+// completeMaybeStreamed is the provider call. A request naming an inbox
+// its sender holds, to a provider that streams, has the answer's deltas
+// published there as it is written (ADR-0286 §SD2); the stream is closed
+// before this returns, so the reply comes after the last delta. A
+// cancelled or expired call's waiting text is dropped. Anything else is
+// the plain call.
+func (inst *Service) completeMaybeStreamed(ctx context.Context, creq openaichat.CompletionRequest, req wireRequest, msg *app.Msg) (resp openaichat.CompletionResponse, err error) {
+	sc, ok := inst.client.(openaichat.StreamingClientI)
+	if !ok || req.StreamInbox == "" {
+		return inst.client.Complete(ctx, creq)
+	}
+	if !inst.busClient.InboxHeldBy(req.StreamInbox, msg.Sender, msg.SenderInstance) {
+		inst.log.Warn().Str("sender", string(msg.Sender)).Str("inbox", req.StreamInbox).Msg("llm: stream inbox not the sender's; answering without deltas")
+		return inst.client.Complete(ctx, creq)
+	}
+	st := newDeltaStream(req.CancelKey, func(payload []byte) error {
+		return inst.busClient.Publish(req.StreamInbox, payload)
+	})
+	resp, err = sc.CompleteStream(ctx, creq, st.add)
+	st.close(ctx.Err() == nil)
+	return
 }
 
 // refuse answers with the reason and records the refusal: a refused call

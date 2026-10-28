@@ -252,3 +252,44 @@ func TestHeadlessBridge_EndToEnd(t *testing.T) {
 		t.Fatal("no snapshot delivered scraper->NATS->bridge->inproc->consumer")
 	}
 }
+
+// TestClient_SubscribeInbox proves ADR-0286 §SD3 over NATS: a service
+// publishes to the inbox a request names, and the requester receives it
+// beside the reply.
+func TestClient_SubscribeInbox(t *testing.T) {
+	url := startNATS(t)
+
+	svc, err := natsbus.Connect(natsbus.Options{URL: url, AppId: "test.svc"})
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = svc.Close() })
+	c, err := natsbus.Connect(natsbus.Options{URL: url, AppId: "test.req"})
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = c.Close() })
+
+	unsub, err := svc.Subscribe("svc.stream", func(m *app.Msg) {
+		_ = svc.Publish(string(m.Payload), []byte("delta"))
+		_ = svc.Publish(m.Reply, []byte("done"))
+	})
+	require.NoError(t, err)
+	t.Cleanup(unsub)
+	require.NoError(t, svc.Flush())
+
+	got := make(chan []byte, 1)
+	inbox, unsubInbox, err := c.SubscribeInbox(func(m *app.Msg) {
+		select {
+		case got <- m.Payload:
+		default:
+		}
+	})
+	require.NoError(t, err)
+	t.Cleanup(unsubInbox)
+	reply, err := c.Request("svc.stream", []byte(inbox))
+	require.NoError(t, err)
+	require.Equal(t, []byte("done"), reply)
+	select {
+	case payload := <-got:
+		require.Equal(t, []byte("delta"), payload)
+	case <-time.After(2 * time.Second):
+		t.Fatal("the inbox received nothing")
+	}
+}

@@ -21,6 +21,7 @@ type Client struct {
 }
 
 var _ app.BusI = (*Client)(nil)
+var _ app.BusInboxI = (*Client)(nil)
 
 // Close is the ADR-0188 §SD1 per-instance release: a host closes the client
 // it minted for a window after that window's Unmount, and on this transport
@@ -86,6 +87,18 @@ func (inst *Client) Subscribe(subject string, handler app.MsgHandlerFunc) (unsub
 		return
 	}
 	unsubscribe = func() { _ = sub.Unsubscribe() }
+	return
+}
+
+// SubscribeInbox implements [app.BusInboxI] with a NATS inbox. The server
+// sees the subscription before any request this connection sends after it,
+// so a service answering that request finds it.
+func (inst *Client) SubscribeInbox(handler app.MsgHandlerFunc) (inbox string, unsubscribe func(), err error) {
+	inbox = inst.nc.NewInbox()
+	unsubscribe, err = inst.Subscribe(inbox, handler)
+	if err != nil {
+		inbox = ""
+	}
 	return
 }
 

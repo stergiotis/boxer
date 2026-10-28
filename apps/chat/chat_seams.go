@@ -124,6 +124,15 @@ type completerI interface {
 
 var _ completerI = (*llm.Client)(nil)
 
+// streamingCompleterI is a completer that hands on the answer as the model
+// writes it (ADR-0286 §SD4). Optional: a completer without it is called
+// plain, and the running step waits for the whole answer.
+type streamingCompleterI interface {
+	CompleteStreaming(ctx context.Context, req llm.Request, onDelta func(llm.Delta)) (res llm.Response, err error)
+}
+
+var _ streamingCompleterI = (*llm.Client)(nil)
+
 // requestState is one round's request as the configuration chain shapes
 // it: the projected messages under the Pixels setting, the tools, the
 // label, and what the next turn declares left out.
@@ -473,9 +482,9 @@ func runTurn(ctx context.Context, cli completerI, coord *coordinator, req llm.Re
 		coord.setStage(stageModel)
 		step := coord.steps.begin(turnStep{kind: stepModel, round: round})
 		var res llm.Response
-		res, err = coord.complete(ctx, cli, w, rs.req)
+		res, err = coord.complete(ctx, cli, w, rs.req, func(d llm.Delta) { coord.steps.grow(step, d) })
 		coord.steps.finish(step, func(s *turnStep) {
-			s.content, s.reasoning = clip(res.Content, stepContentMax), clipTail(res.Reasoning, stepReasoningMax)
+			s.content, s.reasoning, s.asking = clip(res.Content, stepContentMax), clipTail(res.Reasoning, stepReasoningMax), nil
 			s.tools, s.inTokens, s.outTokens, s.failed = len(res.ToolCalls), res.InputTokens, res.OutputTokens, err != nil
 		})
 		if rs.lastRound != 0 {
