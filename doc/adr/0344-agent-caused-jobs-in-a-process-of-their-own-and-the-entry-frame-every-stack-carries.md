@@ -312,16 +312,33 @@ its poll as any worker does; the pool's close is the backstop.
 
 ### SD5 — The driver stamp, and what the marts join
 
-The run row gains a driver stamp: driver kind (`watchbill-job` here;
-`scene`, `headless`, `person` are the same field's other values and land
-with their own ADRs), job id, attempt, job kind, and the delegation. The
-child writes it with its runtime-start row.
+The runtime-start row — the run row of ADR-0277 §SD8, on `boxer.facts` —
+gains a driver stamp: `driver` (`host` for the window host,
+`watchbill-worker` for a headless worker, `watchbill-job` for a job child;
+`scene` and others land with their own ADRs), and for a job child the job
+id, the attempt, the job's kind and the delegation that enqueued it. The
+delegation rides the trail's own memberships and sections, so the trail's
+context columns read it from the run row as from any trail row. The child
+writes the row after its claim, since the stamp names what the claim
+returned; `Worker.RunJob` tells the caller the claim's outcome for that. A
+child whose claim lost writes the stamp with the job id and no kind: it
+ran boot and shutdown only, and its coverage is the baseline to subtract.
 
-The coverage samples ADR-0343 writes under the child's run are the job's
-attribution; no new coverage kind. A mart joins a run's samples through
-the stamp to the job and, through the job's delegation, to the action
-record. A child whose claim lost ran boot and shutdown only: its set is the
-baseline to subtract.
+A job child is a coverage-writing run when the opt-ins of ADR-0343 ask: it
+starts the sampler and the trail writer the host starts for itself, over
+the executor the job store reached the server with. Two things make a
+short run's coverage complete: the producer takes one last sample on close,
+so what ran since the previous tick is not lost, and the child waits for
+the build rows before it flushes and closes the recorder.
+
+Two views carry the attribution. `dm_trail_runs` is the run row with its
+stamp, general. `dm_trail_llm_coverage_job_samples` is every coverage
+sample row with its run's stamp beside it, 1:1 with the samples and keyed
+by the sample's fact id: `job-child` says the run was a child's, `baseline`
+that its claim lost, and `job`, `attempt`, `job-kind`, `task`,
+`task-epoch`, `task-call` join it to the job row and to the action record
+on the same names the agent apply rows use. No new coverage kind, no
+bracket row for jobs.
 
 ### Deferred
 
@@ -346,6 +363,10 @@ baseline to subtract.
 | Env-var registry | added: `KEELSON_WATCHBILL_ISOLATE_AGENT_JOBS` (SD3, M1); `KEELSON_WATCHBILL_LANE_CHILDREN`, `KEELSON_WATCHBILL_LANE_KILL_GRACE` (SD4, M2) | `doc/env-vars.md` |
 | Exported Go API under `public/` (M2) | added: package `keelson/runtime/watchbill/lane` (`Coordinator`, `Config`, `LauncherI`, `ChildI`, `ExecLauncher`, `DefaultChildArgs`, `Caps`, `AppId`); `hostboot.Runtime.WatchbillLane` | hostboot starts it under the lane switch |
 | extbin registry (ADR-0118) | added: Local program "watchbill job child" | `keelson.extbin` |
+| Runtime vocabulary (`keelson/runtime/vocab`) (M3) | added: `runtimeRunDriver` 558, `runtimeRunDriverJob` 559, `runtimeRunDriverAttempt` 560, `runtimeRunDriverJobKind` 561 | `AllMembs`, the assignments golden |
+| `boxer.facts` runtime-run row (M3) | gains the driver stamp and the delegation; rows from before read as empty | `factsstore.RuntimeStartRow` and the `Driver*` constants, `chstore.WriteRuntimeStart`, `LookupRunStart` |
+| `trailviews` (M3) | added: `dm_trail_runs`, `dm_trail_llm_coverage_job_samples`; `ViewsVersion` 14 | the views golden; a derived data mart passes the facts backbone through |
+| Exported Go API under `public/` (M3) | `watchbill.Worker.RunJob` takes an optional claim hook; `covtrail.Service.Wait`; `coveragebus.Producer.Close` takes a last sample | the host's own close now samples once more |
 | `imzero2` binary (`public/thestack/cmd/imzero2`) | gains the `watchbill` CLI command | its children run `watchbill run --job` |
 | Exported Go API under `public/` (M1) | added: `watchbillstore.QueueLane`, `watchbill.Worker.RunJob`, `watchbill.Config.IsolateAgentJobs`, `watchbill.IsolateAgentJobs` | `QueueSQL` and `MemStore.Queue` exclude the lane |
 
@@ -433,13 +454,14 @@ baseline to subtract.
   group, the pipe relay into the host's log; the host-side task, the
   notices and the changed announcement; task cancel to the row; stop with
   the kill grace; the imzero2 binary carries the watchbill verb.
-- **M3 — The stamp and the marts.** Driver stamp on the run row; the
-  attribution mart over ADR-0343's samples; the baseline from a lost
-  claim.
+- **M3 — The stamp and the marts** (built): the driver stamp on the run
+  row and its reader; the child's run row after the claim, its sampler and
+  trail writer; the producer's last sample on close and the trail writer's
+  wait; `dm_trail_runs` and `dm_trail_llm_coverage_job_samples`.
 
 ## Status
 
-Proposed — awaiting review by the code owner. M0, M1 and M2 built alongside the proposal.
+Proposed — awaiting review by the code owner. M0 to M3 built alongside the proposal.
 
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers (Tier 1 in-place / Tier 2 dated `## Updates` entry / Tier 3 new superseding ADR).

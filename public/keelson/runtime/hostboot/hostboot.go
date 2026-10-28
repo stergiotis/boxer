@@ -407,6 +407,7 @@ func Boot(ctx context.Context, opts Options) (rt *Runtime, err error) {
 			VcsBuildInfo: runInst.VcsBuildInfo,
 			BuildId:      runInst.BuildId,
 			ModulePath:   runInst.ModulePath,
+			Driver:       factsstore.DriverHost,
 			Ts:           runInst.StartedAt,
 		})
 		if wErr != nil {

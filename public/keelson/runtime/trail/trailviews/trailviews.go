@@ -89,6 +89,7 @@ import (
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/passes"
 	"github.com/stergiotis/boxer/public/keelson/runtime/appops/opwire"
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsschema"
+	"github.com/stergiotis/boxer/public/keelson/runtime/factsstore"
 	"github.com/stergiotis/boxer/public/keelson/runtime/trail/internal/lowlevel"
 	"github.com/stergiotis/boxer/public/keelson/runtime/vocab"
 	"github.com/stergiotis/boxer/public/observability/eh"
@@ -104,7 +105,7 @@ import (
 // ViewsVersion is the revision of the views this package composes. Bump it
 // whenever a view's columns or meaning change, so the stamp a deployed view
 // carries tells an operator it predates the build.
-const ViewsVersion = 13
+const ViewsVersion = 14
 
 // agenticTag marks the views over what the agentic side of keelson writes —
 // model calls and their messages, and what agents did under a grant. The
@@ -140,20 +141,28 @@ const (
 	ViewCoverageFuncs        = prefixDataMart + "trail_coverage_funcs"
 	ViewCoverageSamples      = prefixDataMart + "trail_coverage_samples"
 	ViewCoverageAgentApplies = prefixDataMart + "trail_" + agenticTag + "_coverage_agent_applies"
-	ViewBusRequests          = prefixDataMart + "trail_bus_requests"
-	ViewTimeline             = prefixDataMart + "trail_timeline"
-	ViewActionOutcomes       = prefixAggregate + "trail_" + agenticTag + "_agent_action_outcomes"
-	ViewConversations        = prefixAggregate + "trail_" + agenticTag + "_conversations"
-	ViewTasks                = prefixAggregate + "trail_" + agenticTag + "_tasks"
+	// The run row (ADR-0277 §SD8) with its driver stamp (ADR-0344 §SD5):
+	// not a trail kind, but the row every trail row joins through its run,
+	// and the stamp is what names a run a job child's. General.
+	ViewRuns = prefixDataMart + "trail_runs"
+	// The coverage samples of job children, each joined to the job its
+	// run ran and the delegation that enqueued it (ADR-0344 §SD5): the
+	// attribution mart. Agentic.
+	ViewCoverageJobSamples = prefixDataMart + "trail_" + agenticTag + "_coverage_job_samples"
+	ViewBusRequests        = prefixDataMart + "trail_bus_requests"
+	ViewTimeline           = prefixDataMart + "trail_timeline"
+	ViewActionOutcomes     = prefixAggregate + "trail_" + agenticTag + "_agent_action_outcomes"
+	ViewConversations      = prefixAggregate + "trail_" + agenticTag + "_conversations"
+	ViewTasks              = prefixAggregate + "trail_" + agenticTag + "_tasks"
 )
 
 // AllViewNames lists the views in creation order, unqualified.
 func AllViewNames() (names []string) {
-	names = make([]string, 0, len(kindViews)+4)
+	names = make([]string, 0, len(kindViews)+5)
 	for _, kv := range kindViews {
 		names = append(names, kv.name)
 	}
-	return append(names, ViewTimeline, ViewActionOutcomes, ViewConversations, ViewTasks)
+	return append(names, ViewTimeline, ViewActionOutcomes, ViewConversations, ViewTasks, ViewCoverageJobSamples)
 }
 
 // Stamp is what every view records in its ClickHouse COMMENT: this
@@ -599,6 +608,24 @@ var kindViews = []kindView{
 		{"phase", "symbol", vocab.MembCoverageAgentApplyPhase, scalar},
 		{"cost-us", "u64Array", vocab.MembCoverageAgentApplyCostUs, first},
 	}},
+	// The run row is hand-written (chstore.WriteRuntimeStart); its
+	// attributes sit on the same sections and channel the trail's do, and
+	// its delegation on the trail's own memberships, which the context
+	// columns read.
+	{name: ViewRuns, kind: vocab.MembKindRuntimeRun, columns: []column{
+		{"hostname", "symbol", vocab.MembRunHostname, scalar},
+		{"pid", "u64Array", vocab.MembRunPid, first},
+		{"go-version", "symbol", vocab.MembRunGoVersion, scalar},
+		{"vcs-revision", "symbol", vocab.MembRunVcsRevision, scalar},
+		{"vcs-modified", "bool", vocab.MembRunVcsModified, scalar},
+		{"vcs-build-info", "stringArray", vocab.MembRunVcsBuildInfo, first},
+		{"module-path", "symbol", vocab.MembRunModulePath, scalar},
+		{"build-id", "symbol", vocab.MembRunBuildId, scalar},
+		{"driver", "symbol", vocab.MembRunDriver, scalar},
+		{"driver-job", "symbol", vocab.MembRunDriverJob, scalar},
+		{"driver-attempt", "u64Array", vocab.MembRunDriverAttempt, first},
+		{"driver-job-kind", "symbol", vocab.MembRunDriverJobKind, scalar},
+	}},
 }
 
 // withCause names the kinds whose rows may carry a Cause component.
@@ -655,17 +682,21 @@ func Compose(database string, table string) (views []View, err error) {
 		sources []string
 		outputs []output
 		body    string
+		// mart: the view's rows are its first source's facts rows, 1:1,
+		// and it passes the facts backbone through from the alias `s`.
+		mart bool
 	}{
-		{ViewTimeline, kindViewNames(), nil, ""},
-		{ViewActionOutcomes, []string{ViewAgentActions}, outcomesOutputs, outcomesBody},
-		{ViewConversations, []string{ViewTimeline, ViewActionOutcomes}, conversationsOutputs, conversationsBody},
-		{ViewTasks, []string{ViewTimeline, ViewActionOutcomes}, tasksOutputs, tasksBody},
+		{ViewTimeline, kindViewNames(), nil, "", false},
+		{ViewActionOutcomes, []string{ViewAgentActions}, outcomesOutputs, outcomesBody, false},
+		{ViewConversations, []string{ViewTimeline, ViewActionOutcomes}, conversationsOutputs, conversationsBody, false},
+		{ViewTasks, []string{ViewTimeline, ViewActionOutcomes}, tasksOutputs, tasksBody, false},
+		{ViewCoverageJobSamples, []string{ViewCoverageSamples, ViewRuns}, jobSamplesOutputs, jobSamplesBody, true},
 	} {
 		var v View
 		if d.name == ViewTimeline {
 			v, err = inst.timeline()
 		} else {
-			v, err = inst.derived(d.name, d.sources, d.outputs, d.body)
+			v, err = inst.derived(d.name, d.sources, d.outputs, d.body, d.mart)
 		}
 		if err != nil {
 			return nil, eb.Build().Str("view", d.name).Errorf("trailviews: %w", err)
@@ -897,10 +928,24 @@ func (inst *composer) projection(outputs []output) (items []string, schema []Col
 
 // derived composes an aggregate: body is a SELECT whose projection is the
 // `%[1]s` verb, reading its sources through placeholders.
-func (inst *composer) derived(name string, sources []string, outputs []output, body string) (v View, err error) {
+func (inst *composer) derived(name string, sources []string, outputs []output, body string, mart bool) (v View, err error) {
 	items, schema, err := inst.projection(outputs)
 	if err != nil {
 		return View{}, err
+	}
+	if mart {
+		// A data mart keeps the facts backbone under its physical names,
+		// as the per-kind views do; the body aliases its facts source `s`.
+		bb, berr := backboneColumns()
+		if berr != nil {
+			return View{}, berr
+		}
+		raw := make([]string, 0, len(bb))
+		for _, c := range bb {
+			raw = append(raw, `s."`+c.Physical+`"`)
+		}
+		items = append(raw, items...)
+		schema = append(bb, schema...)
 	}
 	sql := fmt.Sprintf(body, "  "+strings.Join(items, ",\n  "), inst.database)
 	sql, err = inst.resolve(sql, sources)
@@ -1276,3 +1321,44 @@ LEFT JOIN (
   WHERE {task} != ''
   GROUP BY {task}
 ) AS a ON a.task = t.task`
+
+// The job-samples mart (ADR-0344 §SD5): every coverage sample row, with
+// the run row's driver stamp beside it. A row whose driver is a job child
+// is attributed to the job and, through the job's delegation, to the agent
+// task and call that enqueued it; a child row with no job kind is a lost
+// claim — boot and shutdown only — the baseline to subtract. 1:1 with the
+// samples view, keyed by the sample's own fact id.
+var jobSamplesOutputs = []output{
+	{"s.{run}", "run", "s"},
+	{"s.{meta-hash}", "meta-hash", "s"},
+	{"s.{seq}", "seq", "u64"},
+	{"s.{units}", "units", "u32h"},
+	{"s.{covered-units}", "covered-units", "u64"},
+	{"s.{covered-stmts}", "covered-stmts", "u64"},
+	{"s.{covered-funcs}", "covered-funcs", "u64"},
+	{"r.driver", "driver", "s"},
+	{"r.driver_job", "job", "s"},
+	{"r.driver_attempt", "attempt", "u64"},
+	{"r.driver_job_kind", "job-kind", "s"},
+	{"r.task", "task", "s"},
+	{"r.task_epoch", "task-epoch", "u64"},
+	{"r.task_call", "task-call", "s"},
+	{"r.driver = '" + factsstore.DriverWatchbillJob + "'", "job-child", "b"},
+	{"r.driver = '" + factsstore.DriverWatchbillJob + "' AND r.driver_job_kind = ''", "baseline", "b"},
+}
+
+const jobSamplesBody = `SELECT
+%[1]s
+FROM %[2]s.` + ViewCoverageSamples + ` AS s
+LEFT JOIN (
+  SELECT
+    {run} AS run,
+    {driver} AS driver,
+    {driver-job} AS driver_job,
+    {driver-attempt} AS driver_attempt,
+    {driver-job-kind} AS driver_job_kind,
+    {task} AS task,
+    {task-epoch} AS task_epoch,
+    {task-call} AS task_call
+  FROM %[2]s.` + ViewRuns + `
+) AS r ON r.run = s.{run}`

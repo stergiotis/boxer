@@ -3,7 +3,9 @@ package watchbill
 import (
 	"context"
 	"errors"
+	"fmt"
 	"math"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -581,4 +583,25 @@ func TestRunJobHonoursACancel(t *testing.T) {
 	require.True(t, ok)
 	assert.True(t, <-done)
 	assert.Equal(t, watchbillstore.StateCancelled, f.job(t, id).State)
+}
+
+// RunJob tells its caller the claim's outcome before the job runs, with
+// the row as claimed, so a child stamps its run row with the job
+// (ADR-0344 §SD5); a lost claim is told too.
+func TestRunJobTellsTheClaim(t *testing.T) {
+	f := newFixture(t, "run-child", func(c *Config) { c.Poll = 10 * time.Millisecond })
+	id := f.enqueue(t, Request{Subject: "stamp", OnBehalfOf: &app.OnBehalfOf{Task: "task-1", Epoch: 2, Call: "c"}})
+	var told []string
+	hook := func(job watchbillstore.Job, won bool) {
+		told = append(told, fmt.Sprintf("%s:%v:%s:%d:%s", job.ID, won, job.Kind, job.Attempt, job.Task))
+	}
+	ran, err := f.w.RunJob(context.Background(), id, hook)
+	require.NoError(t, err)
+	assert.True(t, ran)
+	again, err := f.w.RunJob(context.Background(), id, hook)
+	require.NoError(t, err)
+	assert.False(t, again)
+	require.Len(t, told, 2)
+	assert.Equal(t, id+":true:test.kind:1:task-1", told[0])
+	assert.True(t, strings.HasPrefix(told[1], id+":false:"), told[1])
 }

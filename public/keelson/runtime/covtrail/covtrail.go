@@ -73,6 +73,9 @@ type Service struct {
 	meta    *covsnap.MetaProfile
 	hash    string
 	pending []*covsnap.Update
+	// building counts the build writer Attach started, so a short-lived
+	// run can wait for its rows before it closes the recorder.
+	building sync.WaitGroup
 
 	// buf is the bracket's read buffer, shared by every window's bracket:
 	// they all run on the one render goroutine (ADR-0261), and the lock
@@ -124,12 +127,22 @@ func (inst *Service) Attach(ctx context.Context, src MetaSourceI) (err error) {
 	pending := inst.pending
 	inst.pending = nil
 	inst.mu.Unlock()
-	go inst.writeBuild(ctx, meta)
+	inst.building.Add(1)
+	go func() {
+		defer inst.building.Done()
+		inst.writeBuild(ctx, meta)
+	}()
 	for _, upd := range pending {
 		inst.writeSample(upd)
 	}
 	return nil
 }
+
+// Wait blocks until the build row and function table Attach started
+// writing have been handed to the recorder; a process that exits soon
+// after it started — a job child — calls it before it flushes and closes
+// the recorder (ADR-0344 §SD5).
+func (inst *Service) Wait() { inst.building.Wait() }
 
 // Hash is the attached build's meta hash, hex; empty before Attach.
 func (inst *Service) Hash() (hash string) {

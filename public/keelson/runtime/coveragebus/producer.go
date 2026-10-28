@@ -145,14 +145,17 @@ func (inst *Producer) tick() {
 	}
 }
 
-// Close stops the tick loop and closes the underlying sampler (the
-// producer owns it once handed over via ProducerOptions).
+// Close stops the tick loop, takes one last sample so what ran since the
+// previous tick is not lost — a short run's whole coverage can sit there
+// (ADR-0344 §SD5) — and closes the underlying sampler (the producer owns
+// it once handed over via ProducerOptions).
 func (inst *Producer) Close() (err error) {
 	if inst.cancel != nil {
 		inst.cancel()
 	}
 	if inst.done != nil {
 		<-inst.done
+		inst.tick()
 	}
 	if inst.sampler != nil {
 		err = inst.sampler.Close()

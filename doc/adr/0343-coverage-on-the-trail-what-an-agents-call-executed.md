@@ -379,6 +379,21 @@ reason §SD5 gives. Independently of coverage, ADR-0344 §SD1 puts a named
 caller it serves; the bracket of §SD5 now encloses that frame, with `Begin`
 and `End` outside it and the handler inside.
 
+## Update (2026-10-28) — job children, a last sample on close, and two more views
+
+[ADR-0344](./0344-agent-caused-jobs-in-a-process-of-their-own-and-the-entry-frame-every-stack-carries.md)
+§SD5 (proposed) attributes an agent-caused job by running it in a process
+of its own whose run writes the rows of this ADR. Three things changed
+here for it. The coverage producer takes one last sample when it closes,
+so a short run's coverage since the previous tick is not lost; the host
+gains that sample at shutdown too. The trail writer exposes `Wait`, so a
+run that exits soon after it started can wait for the build row and the
+function table before it flushes and closes the recorder. And
+`trailviews` gains `dm_trail_runs`, the runtime-start row with its driver
+stamp, and `dm_trail_llm_coverage_job_samples`, every sample row of §SD4
+joined to its run's stamp — the first derived view of §SD6, which this ADR
+had deferred; `ViewsVersion` is 14.
+
 ## Status
 
 Proposed — awaiting review by the code owner. Built alongside the proposal.

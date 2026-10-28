@@ -76,6 +76,13 @@ profiler sample taken inside app code carries the answer as a frame
 ([ADR-0344](../adr/0344-agent-caused-jobs-in-a-process-of-their-own-and-the-entry-frame-every-stack-carries.md),
 proposed). Jobs an agent caused are attributed by running them in a process
 of their own, whose run's coverage samples are the job's; see that ADR.
+Those children inherit the two variables above from the host and write
+the same rows under their own run id. `dm_trail_runs` is every run with
+what drove it, and `dm_trail_llm_coverage_job_samples` is every sample
+row joined to its run's job, attempt and delegation, with `job-child` and
+`baseline` flags: subtract the baseline rows (a child whose claim lost,
+boot and shutdown only) from a child's rows to get what the job itself
+executed.
 
 ## 3. The applets
 

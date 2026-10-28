@@ -487,3 +487,7 @@
 555	coverage-agent-apply-operation	9223372049739678251
 556	coverage-agent-apply-phase	9223372049739678252
 557	coverage-agent-apply-cost-us	9223372049739678253
+558	runtime-run-driver	9223372049739678254
+559	runtime-run-driver-job	9223372049739678255
+560	runtime-run-driver-attempt	9223372049739678256
+561	runtime-run-driver-job-kind	9223372049739678257

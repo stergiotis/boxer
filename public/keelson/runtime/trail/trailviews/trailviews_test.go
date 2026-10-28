@@ -62,13 +62,13 @@ func TestComposeShape(t *testing.T) {
 	require.Equal(t, []string{
 		ViewModelCalls, ViewModelMessages, ViewAgentActions, ViewAgentGrants,
 		ViewAgentCaptures, ViewAgentDisclosures, ViewHttpFetches, ViewAdhocBundles, ViewAuditEvents, ViewBusRequests,
-		ViewCoverageBuilds, ViewCoverageFuncs, ViewCoverageSamples, ViewCoverageAgentApplies,
-		ViewTimeline, ViewActionOutcomes, ViewConversations, ViewTasks,
+		ViewCoverageBuilds, ViewCoverageFuncs, ViewCoverageSamples, ViewCoverageAgentApplies, ViewRuns,
+		ViewTimeline, ViewActionOutcomes, ViewConversations, ViewTasks, ViewCoverageJobSamples,
 	}, names, "creation order: each view only reads views created before it")
 	require.Equal(t, names, AllViewNames())
 
 	general := map[string]bool{ViewTimeline: true, ViewHttpFetches: true, ViewAdhocBundles: true, ViewAuditEvents: true, ViewBusRequests: true,
-		ViewCoverageBuilds: true, ViewCoverageFuncs: true, ViewCoverageSamples: true}
+		ViewCoverageBuilds: true, ViewCoverageFuncs: true, ViewCoverageSamples: true, ViewRuns: true}
 	for _, n := range names {
 		// The class prefix says what a reader may rely on (ADR-0051).
 		if aggregates[n] {

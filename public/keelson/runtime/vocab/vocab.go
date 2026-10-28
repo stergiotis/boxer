@@ -824,6 +824,15 @@ var (
 	MembCoverageAgentApplyOperation = NkRegistry.MustBegin("coverageAgentApplyOperation", 555).End()
 	MembCoverageAgentApplyPhase     = NkRegistry.MustBegin("coverageAgentApplyPhase", 556).End()
 	MembCoverageAgentApplyCostUs    = NkRegistry.MustBegin("coverageAgentApplyCostUs", 557).End()
+
+	// The driver stamp on the run row (ADR-0344 §SD5): what drove the run
+	// — `host`, `watchbill-worker`, `watchbill-job` — and, for a job child,
+	// the job it ran, its attempt and its kind. The job's delegation rides
+	// the trail's own memberships (trailTask, trailTaskEpoch, trailCall).
+	MembRunDriver        = NkRegistry.MustBegin("runtimeRunDriver", 558).End()
+	MembRunDriverJob     = NkRegistry.MustBegin("runtimeRunDriverJob", 559).End()
+	MembRunDriverAttempt = NkRegistry.MustBegin("runtimeRunDriverAttempt", 560).End()
+	MembRunDriverJobKind = NkRegistry.MustBegin("runtimeRunDriverJobKind", 561).End()
 )
 
 // AllMembs is the enumerated set of registered runtime memberships. Tests
@@ -960,4 +969,5 @@ var AllMembs = []registry.RegisteredNaturalKey{
 	MembKindCoverageAgentApply, MembCoverageAgentApplyMetaHash, MembCoverageAgentApplyFrame, MembCoverageAgentApplyUnits,
 	MembCoverageAgentApplyChanged, MembCoverageAgentApplyFuncs, MembCoverageAgentApplyOperation,
 	MembCoverageAgentApplyPhase, MembCoverageAgentApplyCostUs,
+	MembRunDriver, MembRunDriverJob, MembRunDriverAttempt, MembRunDriverJobKind,
 }

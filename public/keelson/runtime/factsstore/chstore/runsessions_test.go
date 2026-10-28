@@ -16,16 +16,23 @@ func TestStore_LookupRunStart_RoundTrip_LiveCH(t *testing.T) {
 	s, cleanup := newLiveStore(t)
 	defer cleanup()
 	want := factsstore.RuntimeStartRow{
-		RunId:        "abcdef1234567890",
-		Hostname:     "test-host",
-		Pid:          4242,
-		GoVersion:    "go1.24.0",
-		VcsRevision:  "abc123def4",
-		VcsModified:  true,
-		VcsBuildInfo: "vcs.time=2026-05-13T00:00:00Z",
-		BuildId:      "0123456789abcdef0123456789abcdef",
-		ModulePath:   "github.com/example/pebble2impl",
-		Ts:           time.Now().UTC().Truncate(time.Second),
+		RunId:         "abcdef1234567890",
+		Hostname:      "test-host",
+		Pid:           4242,
+		GoVersion:     "go1.24.0",
+		VcsRevision:   "abc123def4",
+		VcsModified:   true,
+		VcsBuildInfo:  "vcs.time=2026-05-13T00:00:00Z",
+		BuildId:       "0123456789abcdef0123456789abcdef",
+		ModulePath:    "github.com/example/pebble2impl",
+		Driver:        factsstore.DriverWatchbillJob,
+		DriverJob:     "job-77",
+		DriverAttempt: 2,
+		DriverJobKind: "tender.download",
+		Task:          "task-9",
+		TaskEpoch:     3,
+		Call:          "call-4",
+		Ts:            time.Now().UTC().Truncate(time.Second),
 	}
 	_, err := s.WriteRuntimeStart(want)
 	require.NoError(t, err)
@@ -41,6 +48,14 @@ func TestStore_LookupRunStart_RoundTrip_LiveCH(t *testing.T) {
 	assert.Equal(t, want.VcsBuildInfo, got.VcsBuildInfo)
 	assert.Equal(t, want.BuildId, got.BuildId, "the build a run executed reads back (ADR-0277 §SD8)")
 	assert.Equal(t, want.ModulePath, got.ModulePath)
+	// The driver stamp reads back (ADR-0344 §SD5).
+	assert.Equal(t, want.Driver, got.Driver)
+	assert.Equal(t, want.DriverJob, got.DriverJob)
+	assert.Equal(t, want.DriverAttempt, got.DriverAttempt)
+	assert.Equal(t, want.DriverJobKind, got.DriverJobKind)
+	assert.Equal(t, want.Task, got.Task)
+	assert.Equal(t, want.TaskEpoch, got.TaskEpoch)
+	assert.Equal(t, want.Call, got.Call)
 	assert.WithinDuration(t, want.Ts, got.Ts, time.Second)
 }
 
