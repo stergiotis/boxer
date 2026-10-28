@@ -711,7 +711,7 @@ var (
 	MembAgentrunCopyRefused   = NkRegistry.MustBegin("agentrunCopyRefused", 445).End()
 	MembAgentrunCopyReason    = NkRegistry.MustBegin("agentrunCopyReason", 446).End()
 	MembAgentrunCopyBytes     = NkRegistry.MustBegin("agentrunCopyBytes", 447).End()
-	// A verdict (ledger; ADR-0340 (proposed) §SD4).
+	// A verdict (ledger; ADR-0340 §SD4).
 	MembAgentrunVerdictForm     = NkRegistry.MustBegin("agentrunVerdictForm", 498).End()
 	MembAgentrunVerdictOutcome  = NkRegistry.MustBegin("agentrunVerdictOutcome", 499).End()
 	MembAgentrunVerdictRestsOn  = NkRegistry.MustBegin("agentrunVerdictRestsOn", 500).End()

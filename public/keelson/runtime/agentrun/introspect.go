@@ -11,7 +11,7 @@ import (
 
 // RegisterIntrospect registers keelson('agent_runs') and
 // keelson('agent_run_entries') over store (ADR-0308 §SD10), and
-// keelson('agent_verdicts') (ADR-0340 (proposed) §SD4): the same rows the
+// keelson('agent_verdicts') (ADR-0340 §SD4): the same rows the
 // service serves, for keelson readers granted them. A nil store registers
 // empty tables. The tables are bounded to the DefaultListLimit newest
 // runs: a live snapshot of every body of every run would grow without

@@ -1,12 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-10-27
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to accepted
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-10-28
 ---
-
-> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
 
 # ADR-0340: Cited replies — a claim about data is a read-only assertion the window checks, and a verdict is a journal row
 
@@ -467,10 +465,12 @@ The four forms are weighed in the QOC. Narrower choices:
 
 ## Status
 
-Proposed — awaiting review by the code owner. Built ahead of the review:
-M1–M4 landed and the verification plan's default lane runs. The Updates
-this record owes ADR-0270, ADR-0315 §SD9 and ADR-0325 §SD1 are written at
-acceptance, so no accepted record links a proposed one.
+Accepted 2026-10-28. M1–M4 are built and the verification plan's default
+lane runs; a review of the build before acceptance closed the scope
+gate's reading of rewritten text, the row bound at block granularity and
+the comparison of a date as a figure. ADR-0270, ADR-0315 §SD9 and
+ADR-0325 §SD1 carry dated Updates of this date naming what this record
+adds to them. SD9 stays deferred.
 
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers (Tier 1 in-place / Tier 2 dated `## Updates` entry / Tier 3 new superseding ADR).

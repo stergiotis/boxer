@@ -148,7 +148,7 @@ type CopyRecord struct {
 	Bytes     uint32 `json:"bytes"`
 }
 
-// Verdict is a verdict entry's record (ledger; ADR-0340 (proposed) §SD4):
+// Verdict is a verdict entry's record (ledger; ADR-0340 §SD4):
 // the assertion's form and outcome, the keys of the calls it rests on, the
 // result it was checked against, the digests of the assertion's statement
 // and of the statement that produced the result, the endpoint the check

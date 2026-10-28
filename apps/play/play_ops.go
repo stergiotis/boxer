@@ -155,7 +155,7 @@ type ResultDescription struct {
 	Leeway  bool   `json:",omitzero" desc:"true when the result's columns carry leeway's encoding; write their handles"`
 	Reading string `json:",omitzero" desc:"for a leeway result, how to read leeway columns in play"`
 	// StatementDigest names the statement that produced the result, for
-	// the main result (ADR-0340 (proposed) §SD3).
+	// the main result (ADR-0340 §SD3).
 	StatementDigest string `json:",omitzero" desc:"for the main result, a digest of the statement that produced it in its canonical form; check reports the same digest as its source"`
 	// GlossNote says when the columns' glosses could not be reported.
 	GlossNote string `json:",omitzero" desc:"why the columns carry no gloss state"`
