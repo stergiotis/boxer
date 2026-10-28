@@ -15,7 +15,7 @@ var (
 				MustAddRestriction("textArray", common.MembershipSpecLowCardRef, registry.CardinalityExactlyOne).End()
 )
 
-// A document handed over as a lading snapshot (ADR-0339 §SD5, proposed): the
+// A document handed over as a lading snapshot (ADR-0342 §SD5, proposed): the
 // mount, the snapshot instant and the document's path in it, so the window
 // reads the images the document embeds from the same snapshot. The ordinals
 // continue after the ad-hoc cohort's.

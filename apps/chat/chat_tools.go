@@ -304,6 +304,10 @@ var coordinatorTools = []toolSpec{
 		exec: func(ctx context.Context, inst *coordinator, spec *toolSpec, o toolOrigin, call openaichat.ToolCall, args map[string]any) (content string, activity string) {
 			return inst.call(ctx, o, call.Id, args)
 		}},
+	{name: "cite", group: toolGroupFixed,
+		description: "Check claims you drew from results before you state them: each assertion names the describe_result or sample_rows calls it rests on, says the claim, and gives a read-only SQL statement over the tables that result read which returns one row; the window runs it and you read back whether each held and what was observed. Refer to an assertion in your answer as [its id].",
+		schema:      citeSchema,
+		exec:        citeExec},
 	{name: "open_window", group: toolGroupFixed,
 		description: "Open a window of an app your task may open; it joins your task.",
 		schema:      `{"type":"object","properties":{"app":{"type":"string"}},"required":["app"],"additionalProperties":false}`,

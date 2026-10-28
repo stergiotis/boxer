@@ -42,6 +42,10 @@ type resumed struct {
 	stranded bool
 	// lines are what resume settled, as the person reads them.
 	lines []string
+	// storedTitle is the title the roster keeps for the conversation in
+	// the app's storage, where a rename lives (chat_roster.go); empty
+	// when there is none.
+	storedTitle string
 	// art is the artefact read back from its last export, nil when there
 	// is none or it could not be read.
 	art *artefact
@@ -92,6 +96,7 @@ func (inst *App) resumeRun(id string) {
 		return
 	}
 	fingerprint := runFingerprint(profileNow().Fingerprint(), inst.confinedTier)
+	storage := inst.storage
 	retiring := inst.retiring[id]
 	delete(inst.retiring, id)
 	inst.resumeJob.Start(nil, bgjob.Spec{Kind: "chat-resume", Title: "resume"}, func(ctx context.Context) (r *resumed, err error) {
@@ -124,6 +129,11 @@ func (inst *App) resumeRun(id string) {
 				return
 			}
 		}
+		if storage != nil {
+			if v, found, serr := storage.Get(titleStorePrefix + id); serr == nil && found {
+				r.storedTitle = cleanConvTitle(string(v))
+			}
+		}
 		// What the record left open, read before anything settles it.
 		r.fold = agentrun.Fold(w.Entries())
 		r.lines = resumeLines(r)
@@ -143,13 +153,26 @@ func (inst *App) resumeRun(id string) {
 				return
 			}
 		}
+		// The artefact: its last export, then the journal's head when it
+		// is later (adopt).
+		journaled, _, inJournal := artefactOfEntries(w.Entries())
+		inJournal = inJournal && journaled > 0
+		exported := 0
 		if rec, ok := lastExport(w.Entries()); ok && !r.stranded {
 			if r.art, err = readExport(ctx, rec); err != nil {
-				r.lines = append(r.lines, "the artefact's export of revision "+strconv.Itoa(rec.Revision)+" could not be read back, so the artefact starts empty: "+err.Error())
+				line := "the artefact's export of revision " + strconv.Itoa(rec.Revision) + " could not be read back"
+				if !inJournal {
+					line += ", so the artefact starts empty"
+				}
+				r.lines = append(r.lines, line+": "+err.Error())
 				err = nil
 			} else {
+				exported = rec.Revision
 				r.lines = append(r.lines, "the artefact was restored from its export of revision "+strconv.Itoa(rec.Revision)+", with "+plural(len(rec.Images), "screenshot"))
 			}
+		}
+		if inJournal && journaled > exported {
+			r.lines = append(r.lines, artefactResumeLine(journaled))
 		}
 		if len(r.lines) > 0 && !r.stranded {
 			note := "This conversation resumed after the host stopped. Windows and grants did not survive: request_access starts a new task when you need one. What was left open:\n- " + strings.Join(r.lines, "\n- ")
@@ -406,14 +429,7 @@ func (inst *App) adopt(r *resumed) {
 	conv.stranded = r.stranded || r.run.State == agentrun.StateDeleted || r.fold.Deleted
 	conv.entries = transcriptOf(r.entries)
 	conv.parent, conv.lastIn, conv.lastOut = lastReplyOf(r.entries)
-	if conv.titleSource == titleNone {
-		for _, e := range conv.entries {
-			if e.speaker == speakerUser {
-				conv.title, conv.titleSource = firstLineTitle(e.text), titleFirstLine
-				break
-			}
-		}
-	}
+	inst.adoptTitle(r)
 	coord := inst.newCoordinator(conv.id)
 	coord.mu.Lock()
 	// The coordinator's fingerprint is the profile's, which the call rows
@@ -430,13 +446,22 @@ func (inst *App) adopt(r *resumed) {
 	if conv.artefact {
 		// The revisions live in the artefact store, not in entries: the
 		// last export, when there is one, brings the exported revision back
-		// (ADR-0339 §SD7, proposed); otherwise the artefact starts empty,
-		// and the snapshot note re-told at the next turn says so.
+		// with its screenshots (ADR-0342 §SD7, proposed), and the head the
+		// journal last wrote goes on top when it is later
+		// (chat_artefact_journal.go); otherwise the artefact starts empty.
+		// The snapshot note re-told at the next turn tells the model where
+		// it stands.
 		if r.art != nil {
 			conv.art.close()
 			conv.art, r.art = r.art, nil
 		}
 		conv.art.reserveThrough(revisionsNamed(r.entries))
+		if n, text, ok := artefactOfEntries(r.entries); ok {
+			conv.art.restore(n, text)
+			coord.mu.Lock()
+			coord.artJournaled, coord.artJournaledText = n, text
+			coord.mu.Unlock()
+		}
 		coord.offerArtefact(conv.art)
 	}
 	if r.art != nil {
@@ -444,6 +469,31 @@ func (inst *App) adopt(r *resumed) {
 	}
 	inst.coord, conv.coord = coord, coord
 	inst.resumeNotes(r)
+}
+
+// adoptTitle gives a resumed conversation its title: the one the roster
+// kept, when the person renamed it; else the model's, read back from the
+// title call's outcome; else the first message's first line. A title the
+// model was asked for is not asked for again.
+func (inst *App) adoptTitle(r *resumed) {
+	conv := inst.conv
+	first := ""
+	for _, e := range conv.entries {
+		if e.speaker == speakerUser {
+			first = firstLineTitle(e.text)
+			break
+		}
+	}
+	model, asked := titleOfEntries(r.entries)
+	conv.titleAsked = asked
+	switch {
+	case r.storedTitle != "" && r.storedTitle != model && r.storedTitle != first:
+		conv.title, conv.titleSource = r.storedTitle, titleManual
+	case model != "":
+		conv.title, conv.titleSource = model, titleModel
+	case first != "":
+		conv.title, conv.titleSource = first, titleFirstLine
+	}
 }
 
 // lastReplyOf is the last live reply's call id and usage: the next turn's
@@ -504,7 +554,7 @@ func transcriptOf(entries []agentrun.Entry) (out []entry) {
 				continue
 			}
 			replies[e.Key] = true
-			out = append(out, entry{speaker: speakerModel, text: e.Body, atMs: at})
+			out = append(out, entry{speaker: speakerModel, text: e.Body, atMs: at, cites: marksOf(entries, e.Turn)})
 		case agentrun.KindOutcome:
 			if e.Role != projection.RoleTool {
 				continue

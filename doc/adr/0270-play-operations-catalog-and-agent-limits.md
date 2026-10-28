@@ -1223,6 +1223,21 @@ blank. The person's gestures pass as before. This is the fetch half of
 (ADR-0166 Update of this date). The reads carry the key beside the label path,
 so a caller can tell what a pin will publish before making it.
 
+### 2026-10-28 — `check` runs an assertion over the main result's tables; the result reads carry its statement digest
+
+[ADR-0340](./0340-cited-replies-assertions-the-window-checks-and-verdicts-in-the-journal.md)
+§SD3 gives the catalog `check`, an external read: it takes the main
+result's id and a read-only statement, refuses a statement naming a table
+the result's statement did not read, a tautology naming none, or a second
+row, runs it under §SD2's agent limits with the result's signal
+parameters bound again, and returns one row of cell text with the digests
+of both statements in their canonical form and the endpoint as the grant
+names it. It writes nothing and sets no mark (§SD3). `describe_result`
+and `sample_rows` carry the same digest of the main result's statement,
+so a citation can say what it rests on. A check against a result the
+window no longer holds is a conflict naming the one held, as `sample_rows`
+answers.
+
 ## References
 
 - [ADR-0269](./0269-app-operations-a-command-query-contract-agents-drive-under-a-task-grant.md) — the contract this catalog serves.

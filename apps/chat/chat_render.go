@@ -612,7 +612,7 @@ func (inst *App) renderTranscript() {
 			case k.entry >= 0:
 				e := &conv.entries[k.entry]
 				if e.doc == nil {
-					e.doc = markdown.Parse([]byte(e.text))
+					e.doc = markdown.Parse([]byte(e.shown()))
 				}
 				i := k.entry
 				// chatview draws the bubble inside its row's
@@ -834,7 +834,7 @@ func transcriptModel(conv *conversation, mark int, pending bool, nowMs int64) (m
 		if e.edited {
 			flags |= chatview.FlagEdited
 		}
-		add(e.atMs, sender, e.text, flags, status, ordinalKind{entry: i})
+		add(e.atMs, sender, e.shown(), flags, status, ordinalKind{entry: i})
 	}
 	if pending {
 		add(nowMs, 1, "…", 0, chatview.StatusNone, ordinalKind{entry: -1, pending: true})

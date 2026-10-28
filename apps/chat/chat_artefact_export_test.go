@@ -213,3 +213,32 @@ func TestAnExportRestoresAsTheRevisionItWas(t *testing.T) {
 	err = restoreFrom(v, exportRecord{Revision: 1, TextDigest: agentrun.ContentDigest("else"), Images: nil}, testArtefact(t))
 	assert.ErrorContains(t, err, "not the one exported")
 }
+
+// A resume takes the export's revision, with its screenshots, and puts the
+// journal's head on top only when the journal's is later.
+func TestTheJournalsHeadGoesOverAnEarlierExport(t *testing.T) {
+	exported := func() *artefact {
+		art := testArtefact(t)
+		art.lastN = 2
+		_, err := art.commit(0, artRevision{text: "exported\n", ownImages: true, source: revSourceModel})
+		require.NoError(t, err)
+		return art
+	}
+
+	art := exported()
+	require.True(t, art.restore(5, "later\n"))
+	n, text := art.head()
+	assert.Equal(t, 5, n)
+	assert.Equal(t, "later\n", text)
+	t3, ok := art.text(3)
+	require.True(t, ok, "the export's revision stays, for a revert")
+	assert.Equal(t, "exported\n", t3)
+
+	art = exported()
+	assert.False(t, art.restore(3, "same\n"), "the export is the journal's head or later")
+	n, text = art.head()
+	assert.Equal(t, 3, n)
+	assert.Equal(t, "exported\n", text)
+
+	assert.True(t, testArtefact(t).restore(4, "only\n"))
+}

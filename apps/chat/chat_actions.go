@@ -138,6 +138,9 @@ func (inst *App) cancelEdit() {
 // copyText puts text on the clipboard; what names it on the status line.
 func (inst *App) copyText(what string, text string) {
 	bus, coord := inst.bus, inst.coord
+	if inst.heldByCitations("copy "+what, text) {
+		return
+	}
 	// What a chat copies is model-touched unless it is the conversation's
 	// own id: the run's label with the model's integrity, so the broker
 	// can apply the clipboard policy and the journal records the copy

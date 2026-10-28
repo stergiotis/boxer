@@ -37,6 +37,9 @@ const (
 	revSourceRevert
 	// revSourcePerson is the person removing a screenshot in the panel.
 	revSourcePerson
+	// revSourceResume is the head a resume read back from the journal
+	// (chat_artefact_journal.go).
+	revSourceResume
 )
 
 // artRevision is one state of the document. Revision 0 is the empty
@@ -310,6 +313,26 @@ func (inst *artefact) commit(base int, rev artRevision) (n int, err error) {
 	inst.revs = append(inst.revs, rev)
 	inst.gcLocked()
 	return rev.n, nil
+}
+
+// restore puts the journal's head on the artefact, under its number, for a
+// resume: over nothing, or over the revision an export brought back
+// (ADR-0342 §SD7) when the journal's is later. The revisions between are
+// not read back, so a revert reaches the export's at most. The head comes
+// without screenshots: their bytes are sealed to the process (ADR-0284).
+// Nothing is restored over an artefact that moved.
+func (inst *artefact) restore(n int, text string) (ok bool) {
+	inst.mu.Lock()
+	defer inst.mu.Unlock()
+	if inst.proposal != nil || n <= 0 {
+		return false
+	}
+	if k := len(inst.revs); k > 0 && (k > 1 || inst.revs[0].n >= n) {
+		return false
+	}
+	inst.revs = append(inst.revs, artRevision{n: n, text: text, source: revSourceResume, atMs: time.Now().UnixMilli(), ownImages: true})
+	inst.lastN = max(inst.lastN, n)
+	return true
 }
 
 // reserveThrough keeps the numbers up to n from being handed out.

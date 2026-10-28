@@ -711,6 +711,15 @@ var (
 	MembAgentrunCopyRefused   = NkRegistry.MustBegin("agentrunCopyRefused", 445).End()
 	MembAgentrunCopyReason    = NkRegistry.MustBegin("agentrunCopyReason", 446).End()
 	MembAgentrunCopyBytes     = NkRegistry.MustBegin("agentrunCopyBytes", 447).End()
+	// A verdict (ledger; ADR-0340 §SD4).
+	MembAgentrunVerdictForm     = NkRegistry.MustBegin("agentrunVerdictForm", 511).End()
+	MembAgentrunVerdictOutcome  = NkRegistry.MustBegin("agentrunVerdictOutcome", 512).End()
+	MembAgentrunVerdictRestsOn  = NkRegistry.MustBegin("agentrunVerdictRestsOn", 513).End()
+	MembAgentrunVerdictResult   = NkRegistry.MustBegin("agentrunVerdictResult", 514).End()
+	MembAgentrunVerdictDigest   = NkRegistry.MustBegin("agentrunVerdictDigest", 515).End()
+	MembAgentrunVerdictSource   = NkRegistry.MustBegin("agentrunVerdictSource", 516).End()
+	MembAgentrunVerdictEndpoint = NkRegistry.MustBegin("agentrunVerdictEndpoint", 517).End()
+	MembAgentrunVerdictReason   = NkRegistry.MustBegin("agentrunVerdictReason", 518).End()
 	// The evidence profile's components (ADR-0327 (proposed) §SD2): the
 	// chain with its mark and commitments, the written-by component, and
 	// the opening on a vault row. The shredded component binds verbatim
@@ -755,7 +764,7 @@ var (
 	// The tier the egress wall saw on a fetch (ADR-0312 §SD4), beside the
 	// fetch record's other attributes (217–227).
 	MembHttpFetchTier = NkRegistry.MustBegin("httpFetchTier", 497).End()
-	// The lading publish record (ADR-0338 §SD5, proposed): one row per
+	// The lading publish record (ADR-0341 §SD5, proposed): one row per
 	// publish into the lading store, written or refused, and why.
 	MembKindLadingPublish     = NkRegistry.MustBegin("runtimeKindLadingPublish", 498).End()
 	MembLadingPublishTag      = NkRegistry.MustBegin("ladingPublishTag", 499).End()
@@ -882,6 +891,8 @@ var AllMembs = []registry.RegisteredNaturalKey{
 	MembAgentrunCopyDigest, MembAgentrunCopyLevel, MembAgentrunCopyTier, MembAgentrunCopySource,
 	MembAgentrunCopyHandle, MembAgentrunCopyPlaintext, MembAgentrunCopyRecorded, MembAgentrunCopyApproval,
 	MembAgentrunCopyRaw, MembAgentrunCopyRefused, MembAgentrunCopyReason, MembAgentrunCopyBytes,
+	MembAgentrunVerdictForm, MembAgentrunVerdictOutcome, MembAgentrunVerdictRestsOn, MembAgentrunVerdictResult,
+	MembAgentrunVerdictDigest, MembAgentrunVerdictSource, MembAgentrunVerdictEndpoint, MembAgentrunVerdictReason,
 	MembEvidenceKindChain, MembEvidenceChainPrev, MembEvidenceChainDigest, MembEvidenceChainScheme,
 	MembEvidenceChainMark, MembEvidenceChainMarkTarget, MembEvidenceChainMarkComponent, MembEvidenceChainHeadDigest,
 	MembEvidenceChainCommitComponents, MembEvidenceChainCommitments, MembEvidenceKindWrittenBy, MembEvidenceWrittenByRun,

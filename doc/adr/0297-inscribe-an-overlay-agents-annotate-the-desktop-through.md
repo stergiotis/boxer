@@ -1,12 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-10-09
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to accepted
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-10-27
 ---
-
-> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
 
 # ADR-0297: inscribe — an overlay agents point things out through, anchored to windows rather than coordinates
 
@@ -195,7 +193,7 @@ A model never computes the rect of the second kind; SD4 says where it comes from
 
 ## Status
 
-Proposed 2026-10-09.
+Accepted 2026-10-27.
 
 Milestones:
 

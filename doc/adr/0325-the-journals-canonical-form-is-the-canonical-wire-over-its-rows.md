@@ -331,6 +331,18 @@ named in the vault row's envelope; the digest name is
 `…/agentrun-chain/v4`. The trail's row digests (ADR-0277's Update of this
 date) are over the same item.
 
+### 2026-10-28 — SD1: the verdict record is the ledger's; its content is the entry's own
+
+[ADR-0340](./0340-cited-replies-assertions-the-window-checks-and-verdicts-in-the-journal.md)
+§SD4 gives the reserved `verdict` kind its first writer. Its record — the
+assertion's form and outcome, the keys of the calls it rests on, the
+result id, the two statement digests, the endpoint and the reason — is
+metadata and joins the ledger's components as `VerdictRecord`, with its
+own memberships in the runtime vocabulary. The assertion as the model
+wrote it is the entry's arguments, shredded on the verbatim channel like
+a tool call's, and the observed value is its body, so the vault gains no
+component and the commitments cover both.
+
 ## References
 
 - [ADR-0210](./0210-leeway-canonical-wire-generator.md) — the canonical wire and its generated encoder.

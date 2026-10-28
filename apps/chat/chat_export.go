@@ -74,7 +74,7 @@ func transcriptMarkdown(conv *conversation, meta transcriptMeta) (md string) {
 			head += " (edited)"
 		}
 		b.WriteString(head + "\n\n")
-		b.WriteString(strings.TrimRight(e.text, "\n") + "\n")
+		b.WriteString(strings.TrimRight(e.shown(), "\n") + "\n")
 		if e.failed {
 			b.WriteString("\n> [!failure] Not answered: " + oneLine(e.reason) + "\n")
 			for _, l := range failureLines(&e) {

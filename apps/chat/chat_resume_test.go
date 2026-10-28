@@ -382,3 +382,124 @@ func TestAResumeRestoresTheSettings(t *testing.T) {
 	assert.Equal(t, agent.PixelsAskOnce, second.perms.pixels)
 	assert.True(t, second.perms.pixelsLocal)
 }
+
+// mapStorage is an app storage over a map, for the roster's title.
+type mapStorage struct {
+	mu sync.Mutex
+	m  map[string][]byte
+}
+
+func (inst *mapStorage) Get(key string) (value []byte, found bool, err error) {
+	inst.mu.Lock()
+	defer inst.mu.Unlock()
+	value, found = inst.m[key]
+	return
+}
+
+func (inst *mapStorage) Set(key string, value []byte) (err error) {
+	inst.mu.Lock()
+	defer inst.mu.Unlock()
+	if inst.m == nil {
+		inst.m = map[string][]byte{}
+	}
+	inst.m[key] = value
+	return
+}
+
+func (inst *mapStorage) Delete(key string) (err error) {
+	inst.mu.Lock()
+	defer inst.mu.Unlock()
+	delete(inst.m, key)
+	return
+}
+
+// A resumed conversation keeps the title the model gave it, read back from
+// the title call's outcome, and is not titled again; a rename the roster
+// kept wins over it.
+func TestAResumeKeepsTheTitle(t *testing.T) {
+	store := agentrun.NewMemStore()
+	storage := &mapStorage{}
+	first := appOver(t, &fakeModel{}, store)
+	first.storage = storage
+	require.True(t, first.startTurn("what is the plan for the week"))
+	drainUntil(t, first)
+	settleTitle(t, first)
+	first.storeTitle()
+	require.Equal(t, titleModel, first.conv.titleSource)
+	id, title := first.conv.id, first.conv.title
+
+	second := appOver(t, &fakeModel{}, store)
+	second.storage = storage
+	second.resumeRun(id)
+	require.Eventually(t, func() bool { second.drain(); return second.conv.id == id }, 5*time.Second, 5*time.Millisecond)
+	assert.Equal(t, title, second.conv.title)
+	assert.Equal(t, titleModel, second.conv.titleSource)
+	assert.True(t, second.conv.titleAsked, "not asked again")
+
+	// Without the roster's copy the journal alone gives the model's title;
+	// with a rename in it, the rename.
+	third := appOver(t, &fakeModel{}, store)
+	third.resumeRun(id)
+	require.Eventually(t, func() bool { third.drain(); return third.conv.id == id }, 5*time.Second, 5*time.Millisecond)
+	assert.Equal(t, title, third.conv.title)
+	assert.Equal(t, titleModel, third.conv.titleSource)
+
+	second.conv.rename("Weekly plan")
+	second.storeTitle()
+	fourth := appOver(t, &fakeModel{}, store)
+	fourth.storage = storage
+	fourth.resumeRun(id)
+	require.Eventually(t, func() bool { fourth.drain(); return fourth.conv.id == id }, 5*time.Second, 5*time.Millisecond)
+	assert.Equal(t, "Weekly plan", fourth.conv.title)
+	assert.Equal(t, titleManual, fourth.conv.titleSource)
+}
+
+// A resumed conversation gets its artefact back as the journal last wrote
+// it: the head a turn left, or the head a revert or a rewind moved it to
+// between turns; the screenshots do not come back, and the person and the
+// model are told so.
+func TestAResumeRestoresTheArtefact(t *testing.T) {
+	store := agentrun.NewMemStore()
+	first := appOver(t, &fakeModel{}, store)
+	first.artefact = true
+	require.True(t, first.startTurn("draft it"))
+	drainUntil(t, first)
+	_, err := first.conv.art.commit(0, artRevision{text: "# v1\n"})
+	require.NoError(t, err)
+	require.True(t, first.startTurn("go on"))
+	drainUntil(t, first)
+	settleTitle(t, first)
+	id := first.conv.id
+
+	second := appOver(t, &fakeModel{}, store)
+	second.resumeRun(id)
+	require.Eventually(t, func() bool { second.drain(); return second.conv.id == id }, 5*time.Second, 5*time.Millisecond)
+	n, text := second.conv.art.head()
+	assert.Equal(t, 1, n)
+	assert.Equal(t, "# v1\n", text)
+	assert.Contains(t, second.conv.entries[len(second.conv.entries)-1].text, "restored from the journal")
+	assert.Contains(t, second.coord.artefactNote(), "revision 1", "the model is told where it stands")
+
+	// A revert between turns is written when it happens, so a resume
+	// before the next turn sees it.
+	_, err = first.conv.art.commit(1, artRevision{text: "# v2\n"})
+	require.NoError(t, err)
+	require.True(t, first.startTurn("more"))
+	drainUntil(t, first)
+	_, err = first.conv.art.revert(1)
+	require.NoError(t, err)
+	first.coord.syncArtefactJournal(context.Background(), first.coord.journalNow(), "", artefactFormRevert)
+	third := appOver(t, &fakeModel{}, store)
+	third.resumeRun(id)
+	require.Eventually(t, func() bool { third.drain(); return third.conv.id == id }, 5*time.Second, 5*time.Millisecond)
+	n, text = third.conv.art.head()
+	assert.Equal(t, 3, n, "the revert's revision number")
+	assert.Equal(t, "# v1\n", text)
+	var forms []string
+	for _, e := range third.coord.journalNow().Entries() {
+		if e.Kind == agentrun.KindIgnorable && e.Name == artefactEntryName {
+			forms = append(forms, e.Form)
+		}
+	}
+	assert.Equal(t, []string{artefactFormTurn, artefactFormTurn, artefactFormRevert}, forms, "one entry per move of the head, none for a turn that left it")
+}

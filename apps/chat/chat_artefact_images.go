@@ -76,7 +76,7 @@ const (
 	imageSourceCopy
 	imageSourceCrop
 	// imageSourceRestored is a screenshot read back from the artefact's
-	// export when the conversation resumed (ADR-0339 §SD7, proposed).
+	// export when the conversation resumed (ADR-0342 §SD7, proposed).
 	imageSourceRestored
 )
 

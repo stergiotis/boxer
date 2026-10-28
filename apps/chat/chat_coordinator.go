@@ -113,6 +113,10 @@ type coordinator struct {
 	art      *artefact
 	artTold  int
 	artToldN bool
+	// artJournaled is the head last written to the journal, by revision
+	// and text (chat_artefact_journal.go); zero is revision 0, empty.
+	artJournaled     int
+	artJournaledText string
 	// curTitle is the running call's title, for the revision it makes.
 	curTitle string
 	// curTier is the run's current TLP tier, the label of the request
@@ -170,6 +174,9 @@ type coordinator struct {
 	typed      map[string]typedOp
 	opCache    map[string][]agent.Operation
 	windowApps map[uint64]string
+	// resultIds are the result ids the windows' queries named, by call
+	// key, for the citations that rest on them (chat_cite.go).
+	resultIds map[string]uint64
 	// opEffects holds each app's operations' declared effect classes, from
 	// every describe_app answer and from opCache, for the effect of a call
 	// before it is made (chat_journal.go effectOf).
@@ -195,6 +202,9 @@ type coordinator struct {
 	anchors     headstore.StoreI
 	// lastUntrusted says the running call's result was untrusted text.
 	lastUntrusted bool
+	// cuts counts the compactions made in this process (chat_compact.go),
+	// for untell; guarded by mu.
+	cuts int
 	// compacted says the run's history was compacted (chat_compact.go);
 	// projected is the request's size as re-projected after the latest
 	// cut, shown by the meter until the next answer reports its own.
@@ -227,7 +237,7 @@ func newCoordinatorIn(parent *lifetime.Scope, cli *agent.Client, kq *keelsonquer
 	inst = &coordinator{cli: cli, kq: kq, conversation: conversation, opTools: OperationToolsSeed.Get(), ask: &asker{}, steps: &turnSteps{},
 		ceiling: defaultPermissions().ceiling(true), store: agentrun.NewMemStore(),
 		refused: make(map[string]string), typed: make(map[string]typedOp), opCache: make(map[string][]agent.Operation), windowApps: make(map[uint64]string),
-		opEffects: make(map[string]map[string]string), scope: lifetime.New(parent), confinedTier: fallbackConfinedTier()}
+		opEffects: make(map[string]map[string]string), resultIds: make(map[string]uint64), scope: lifetime.New(parent), confinedTier: fallbackConfinedTier()}
 	inst.scope.OnDrained(inst.closeJournal)
 	return
 }
@@ -1021,8 +1031,10 @@ func (inst *coordinator) call(ctx context.Context, o toolOrigin, toolCall string
 			co.Reason = strings.TrimSpace(co.Reason + "; the result could not be read: " + rerr.Error())
 		case res.DataHandle != "":
 			co.DataHandle = res.DataHandle
+			inst.noteResultId(key, "")
 		default:
 			co.Result = jsontext.Value(res.Text)
+			inst.noteResultId(key, res.Text)
 			if res.Confined {
 				inst.mu.Lock()
 				inst.confined = true

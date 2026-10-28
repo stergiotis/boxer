@@ -369,7 +369,7 @@ type snapshotRef struct {
 }
 
 // handedSnapshot is the lading snapshot a handed-over document came with
-// (ADR-0339 §SD5, proposed), and the text the launch carried.
+// (ADR-0342 §SD5, proposed), and the text the launch carried.
 type handedSnapshot struct {
 	mount identifier.TaggedId
 	snap  time.Time

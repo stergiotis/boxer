@@ -3,7 +3,9 @@ package chat
 import (
 	"context"
 	"encoding/json/v2"
+	"errors"
 	"github.com/stergiotis/boxer/public/keelson/runtime/inscribe"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -35,6 +37,61 @@ type noteSnap struct{ text string }
 type setNoteArgs struct{ Text string }
 type noteResult struct{ Text string }
 
+// wordCount is count_words' result: a result id, as describe_result and
+// sample_rows give one, and the count a cited claim is drawn from.
+type wordCount struct {
+	ResultId uint64
+	Words    int
+}
+
+// checkArgs and checkRow are the shape play's check takes and returns
+// (ADR-0340 §SD3), over a note: the statement is read as a tiny SQL —
+// `SELECT words FROM note` for the count, `SELECT words = n FROM note`
+// for a boolean; another table is outside the scope, no table is a
+// tautology.
+type checkArgs struct {
+	ResultId  uint64
+	Statement string
+}
+type checkRow struct {
+	ResultId        uint64
+	Columns         []string
+	Cells           []string
+	Rows            int64
+	StatementDigest string
+	SourceDigest    string
+	Endpoint        string
+}
+
+// noteResultId is the one result a note holds.
+const noteResultId = 7
+
+var checkStatement = regexp.MustCompile(`^\s*SELECT\s+words(?:\s*=\s*(\d+))?\s+FROM\s+(\w+)\s*$`)
+
+func noteCheck(sn noteSnap, in checkArgs) (out checkRow, err error) {
+	if in.ResultId != noteResultId {
+		return out, app.ConflictOperation("another result is held now: " + strconv.Itoa(noteResultId))
+	}
+	m := checkStatement.FindStringSubmatch(in.Statement)
+	switch {
+	case m == nil && !strings.Contains(strings.ToUpper(in.Statement), "FROM"):
+		return out, app.RefuseOperation("the assertion names no table of the result's statement, so it checks nothing")
+	case m == nil:
+		return out, app.RefuseOperation("the assertion does not parse")
+	case m[2] != "note":
+		return out, app.RefuseOperation("the assertion names " + m[2] + ", which the result's statement did not read")
+	}
+	words := len(strings.Fields(sn.text))
+	out = checkRow{ResultId: noteResultId, Columns: []string{"words"}, Rows: 1, StatementDigest: "stmt-" + m[0], SourceDigest: "src-note", Endpoint: "clickhouse:note:9000"}
+	if m[1] == "" {
+		out.Cells = []string{strconv.Itoa(words)}
+		return
+	}
+	n, _ := strconv.Atoi(m[1])
+	out.Cells = []string{strconv.FormatBool(words == n)}
+	return
+}
+
 // publishNoteArgs names where publish_note publishes: a consequential
 // command a grant destination publish:<prefix> consents to (ADR-0288
 // §SD4).
@@ -49,6 +106,11 @@ var noteOps = func() *appops.Set[*note, noteSnap] {
 	s.Resource("text", "the note", func(n *note) any { return n.text })
 	appops.Query(s, app.OperationSpec{Name: "get_note", Version: 1, Summary: "read the note", Reads: []string{"text"}, Agents: true, Untrusted: true},
 		func(sn noteSnap, in appops.None) (noteResult, error) { return noteResult{Text: sn.text}, nil })
+	appops.Query(s, app.OperationSpec{Name: "count_words", Version: 1, Summary: "count the note's words, as a result", Reads: []string{"text"}, Agents: true, Untrusted: true},
+		func(sn noteSnap, in appops.None) (wordCount, error) {
+			return wordCount{ResultId: noteResultId, Words: len(strings.Fields(sn.text))}, nil
+		})
+	appops.Query(s, app.OperationSpec{Name: "check", Version: 1, Summary: "run an assertion over the note's count", Reads: []string{"text"}, Agents: true, Untrusted: true}, noteCheck)
 	appops.Command(s, app.OperationSpec{Name: "set_note", Version: 1, Summary: "replace the note", Effect: app.OperationEffectDocument,
 		Writes: []string{"text"}, Agents: true},
 		func(n *note, call app.OperationCall, in setNoteArgs) (appops.None, error) {
@@ -781,4 +843,62 @@ func TestTheArgsHintFollowsOnlyAnOperationThatTakesArgs(t *testing.T) {
 	assert.True(t, inst.takesArgs(ctx, 7, "set_note", nil))
 	assert.False(t, inst.takesArgs(ctx, 8, "set_note", nil), "an operation it cannot look up takes none")
 	assert.True(t, inst.takesArgs(ctx, 8, "set_note", &agent.Remedy{ArgsSchema: `{}`}), "a refusal naming a schema answers it")
+}
+
+// A turn that ends without an answer leaves the projection with its notes,
+// so the snapshots it told are told again on the next turn; a compaction
+// in between clears every watermark instead of restoring it.
+func TestAnUnansweredTurnTellsTheSnapshotsAgain(t *testing.T) {
+	coord := newCoordinator(nil, nil, "c")
+	coord.offer(true, false)
+	coord.setOptions(defaultPermissions().ceiling(true), false)
+	coord.offerArtefact(newArtefact())
+	assert.Contains(t, coord.ceilingNote(), "at most: run")
+	assert.Contains(t, coord.artefactNote(), "revision 0")
+
+	marks := coord.toldNow()
+	assert.Empty(t, coord.ceilingNote(), "told")
+	assert.Empty(t, coord.artefactNote(), "told")
+	coord.untell(marks)
+	assert.Empty(t, coord.ceilingNote(), "the marks were taken after the notes were composed: nothing to put back")
+
+	marks = coord.toldNow()
+	coord.setOptions(permissions{allow: allowRead}.ceiling(true), false)
+	assert.Contains(t, coord.ceilingNote(), "at most: read")
+	_, _ = coord.artefactOf().commit(0, artRevision{text: "a\n"})
+	assert.Contains(t, coord.artefactNote(), "revision 1")
+	coord.untell(marks)
+	assert.Contains(t, coord.ceilingNote(), "at most: read", "the failed turn's note is composed again")
+	assert.Contains(t, coord.artefactNote(), "revision 1")
+
+	marks = coord.toldNow()
+	coord.mu.Lock()
+	coord.cuts++
+	coord.mu.Unlock()
+	coord.untell(marks)
+	assert.Contains(t, coord.ceilingNote(), "at most: read", "a cut in the turn makes every snapshot news")
+	assert.Contains(t, coord.artefactNote(), "revision 1")
+}
+
+// Through the turn: a provider failure before any activity drops the turn,
+// and the next turn's request carries the ceiling note again.
+func TestAFailedTurnsNotesReachTheNextTurn(t *testing.T) {
+	bus := inprocbus.NewInst(zerolog.Nop())
+	model := &scriptedModel{fail: errors.New("provider down")}
+	_, coord, cli, req, ctx := coordRig(t, bus, model, false)
+	_, err := runTurn(ctx, cli, coord, req, nil)
+	require.Error(t, err)
+	model.mu.Lock()
+	model.replies, model.fail = []openaichat.CompletionResponse{{Content: "hello", FinishReason: "stop"}}, nil
+	model.mu.Unlock()
+	req.Turn = newTurn()
+	res, err := runTurn(ctx, cli, coord, req, nil)
+	require.NoError(t, err)
+	var told int
+	for _, m := range res.messages {
+		if m.Role == openaichat.ChatRoleSystem && strings.Contains(m.Content, "settings let you at most") {
+			told++
+		}
+	}
+	assert.Equal(t, 1, told, "the failed turn's note left the projection; the next turn's carries it")
 }

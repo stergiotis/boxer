@@ -79,7 +79,7 @@ var manifest = app.Manifest{
 			{Pattern: clipboardbroker.SubjectWrite, Direction: app.CapDirectionPub,
 				Reason: "chat: copy a message, a code block or a failure's details to the clipboard"},
 			{Pattern: ladingpublish.Subject(exportMountTag), Direction: app.CapDirectionPub,
-				Reason: "chat: export the artefact and its screenshots to the lading store, under the chat's mount tag (ADR-0339)"},
+				Reason: "chat: export the artefact and its screenshots to the lading store, under the chat's mount tag (ADR-0342)"},
 		},
 	),
 }

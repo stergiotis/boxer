@@ -206,6 +206,9 @@ func (inst *App) renderArtefact() {
 				break
 			}
 			markdown.Render(markdown.Input{Ids: inst.ids, ScopeKey: "art-doc", Doc: v.doc, Frontmatter: true})
+			for _, line := range citationLines(text, inst.conv.citationIndex()) {
+				weak(line)
+			}
 		case artTabSource:
 			if !v.srcOk {
 				weak("Empty.")
@@ -299,6 +302,11 @@ func (inst *App) renderRevisions(art *artefact, head int) {
 						inst.setNote(err.Error(), true)
 					} else {
 						v.selected = 0
+						// The head moved between turns: written for a
+						// resume now, as a rewind's is.
+						if coord := inst.coord; coord != nil {
+							coord.syncArtefactJournal(journalCtx(context.Background()), coord.journalNow(), "", artefactFormRevert)
+						}
 					}
 				}
 			}
@@ -314,6 +322,8 @@ func revLabel(r artRevision) string {
 		return "reverted to r" + strconv.Itoa(r.revertedTo)
 	case revSourcePerson:
 		return "you · " + r.imageNote
+	case revSourceResume:
+		return "restored from the journal"
 	}
 	what := strings.TrimPrefix(r.tool, "artefact_")
 	if r.title != "" {
@@ -395,6 +405,10 @@ func renderDiff(d []diffLine) {
 // openArtefactInMdedit hands the artefact to a new mdedit window, as the
 // transcript is handed over (ADR-0265 §SD4).
 func (inst *App) openArtefactInMdedit(text string) {
+	if inst.heldByCitations("open the artefact in mdedit", text) {
+		return
+	}
+	text += citationFoot(text, inst.conv.citationIndex())
 	name := "Artefact"
 	if inst.conv.title != "" {
 		name = inst.conv.title + " — artefact"

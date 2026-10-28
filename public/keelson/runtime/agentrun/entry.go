@@ -90,6 +90,7 @@ type Entry struct {
 	Question *ExitQuestion
 	Answer   *ExitAnswer
 	Copy     *CopyRecord
+	Verdict  *Verdict
 	// Commitments are the commitments to the entry's content, one per
 	// vaulted component (ADR-0327 §SD4), under the Openings; the chain
 	// commits to them, not the content, so an erasure that destroys a vault

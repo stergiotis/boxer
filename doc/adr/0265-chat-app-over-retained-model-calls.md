@@ -582,6 +582,53 @@ what the model may do stays in the bar, and its line opens the Settings
 tab. The dock draws no close buttons, as no tab closes, so the column's
 four titles fit at the window's default width.
 
+### 2026-10-27 — what SD5 deferred, and which later records settled it
+
+SD5 stands as written at acceptance; most of its items have since been
+decided elsewhere, and [ADR-0308](./0308-the-run-journal-is-the-only-source-of-model-input.md)'s
+table of affected records asked this entry to say which. SD2's "the
+history the app resends each turn is its state" is superseded in substance
+by the same record: the conversation's only input is its run journal, and
+the app holds no message list.
+
+- **Resume and a conversation list** — ADR-0308 §SD4–§SD6, and the
+  Conversations tab as the roster of
+  [ADR-0324](./0324-the-persons-decisions-wait-in-a-host-queue-not-in-modals.md) background §3.1.
+  Not through `llmMessage` under a `keelson.query` grant, as SD5 expected,
+  but through the run journal's service.
+- **Keeping a title** — the model's title is one journaled call under the
+  first turn (SD4, revision of 2026-10-03); its outcome carries the title,
+  and a resumed run reads it back, under a rename the roster kept where
+  there is one (`adoptTitle`).
+- **A context window** — compaction as journal entries,
+  [ADR-0316](./0316-compaction-as-a-journal-entry-plan-act-apply.md).
+- **A system prompt** — the host's is a prompt book of sections,
+  [ADR-0310](./0310-harness-profile-and-registry-composition-declared-per-seam.md) §SD6,
+  written to the journal as `section` entries. A prompt of the person's own
+  stays deferred.
+- **Deleting a conversation** — a tombstone, ADR-0308 §SD8: bodies emptied,
+  chain and heads kept.
+- **A capture the model views as an image** — `artefact_capture`
+  ([ADR-0284](./0284-chat-artefact-screenshots-sealed-under-a-budget.md) §SD3)
+  and `artefact_view_image` under the Pixels setting
+  ([ADR-0287](./0287-chat-pixels-a-setting-for-showing-screenshots-to-the-model.md)).
+  The operations of apps that serve no catalog stay out of reach, by
+  [ADR-0318](./0318-model-inference-is-the-harnesss-apps-expose-operations.md)'s
+  rule that an app takes part by exposing operations.
+- **Sensitivity** — the labels of
+  [ADR-0311](./0311-labels-integrity-levels-tlp-tiers-marks-and-endorsement.md):
+  typed text is still level 0, and what an app returns or a route discloses
+  carries its level and tier beside it.
+
+Still deferred, as SD5 has them: **streaming**
+([ADR-0286](./0286-streamed-model-answers-over-a-private-inbox.md),
+proposed — the client's stream verb exists, the service and the chat's use
+of it do not); **edit and regenerate of an earlier turn** and **the
+branches side by side**, which wait on branch-aware projection over a
+`parent` ordinal ([ADR-0309](./0309-context-projection-as-sql-over-the-journal-in-a-local-worker.md) §SD8);
+**branching into a new conversation**; and **a system prompt of the
+person's**.
+
 ## References
 
 - [ADR-0264](./0264-retained-model-conversations-on-facts.md) — what the app sends and why it reads nothing back.
@@ -591,3 +638,6 @@ four titles fit at the window's default width.
 - [LLM chat app requirements survey](../adr-background-work/llm-chat-app-requirements-survey.md) — the requirements, and which touch the storage model.
 - [ADR-0253](./0253-introspection-table-reads-as-a-bus-capability.md) — the grant a resume would read under.
 - [ADR-0282](./0282-chat-artefact-one-markdown-document-per-conversation.md) — the artefact: a markdown document per conversation, a fourth option fixed at the first send.
+- [ADR-0308](./0308-the-run-journal-is-the-only-source-of-model-input.md) — the run journal as the conversation's only input; resume, deletion; what it settles of SD5 (update of 2026-10-27).
+- [ADR-0310](./0310-harness-profile-and-registry-composition-declared-per-seam.md) — the prompt book and the tool registry; the harness profile.
+- [ADR-0316](./0316-compaction-as-a-journal-entry-plan-act-apply.md) — compaction, the context window SD5 deferred.
