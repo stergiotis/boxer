@@ -23,9 +23,17 @@ change, and you are upgrading past it. Skip it if the table does not exist:
 `EnsureTable` creates the new shape from scratch, and it is `CREATE TABLE IF
 NOT EXISTS`, which leaves an existing table exactly as it is.
 
-The symptom of skipping it is an insert that names columns the table does
-not have: the worker's enqueue fails and the host logs it, every time, until
-the table matches the code.
+The symptom of skipping it is a statement that names columns the table does
+not have, failing every time until the table matches the code. An enqueue
+fails on the insert, and the worker's poll fails on the read of held jobs,
+logged as a warning on every tick whether or not anything is queued:
+
+```text
+WRN …/watchbill/worker.go > watchbill: poll
+  Error: read held jobs
+  └── cause: chclient post: non-200: Code: 47. DB::Exception: Unknown expression
+      or function identifier `tv:jobTask:lr:lr:u64:1247:::0::data`.
+```
 
 ## The shorter alternative
 
@@ -54,9 +62,16 @@ recipe relied on.
 
 Generated from the difference between the DDL golden before and after the
 change (`public/keelson/runtime/watchbill/watchbillstore/watchbill_ddl_clickhouse.out.sql`).
-`IF NOT EXISTS` makes the block idempotent.
+`IF NOT EXISTS` makes the block idempotent. The `SET` is required: six of
+the columns are `Array(LowCardinality(UInt64))`, which ClickHouse refuses to
+create without `allow_suspicious_low_cardinality_types` — the same setting
+the generated `CREATE TABLE` carries. Run the block as one session (for
+example `clickhouse-client --multiquery`), so the `SET` reaches every
+`ALTER`.
 
 ```sql
+SET allow_suspicious_low_cardinality_types = 1;
+
 ALTER TABLE boxer.watchbill ADD COLUMN IF NOT EXISTS "tv:jobTask:value:val:s:24:::0::data" Array(LowCardinality(String)) CODEC(ZSTD(3));
 ALTER TABLE boxer.watchbill ADD COLUMN IF NOT EXISTS "tv:jobTask:hr:hr:u64:47:::0::data" Array(UInt64) CODEC(Delta,ZSTD(3));
 ALTER TABLE boxer.watchbill ADD COLUMN IF NOT EXISTS "tv:jobTask:lr:lr:u64:1247:::0::data" Array(LowCardinality(UInt64)) CODEC(Delta,ZSTD(3));
