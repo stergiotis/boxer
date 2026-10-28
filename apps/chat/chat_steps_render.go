@@ -19,11 +19,6 @@ const (
 	// stepsTextH bounds a step's arguments, result or reasoning; each
 	// scrolls on its own.
 	stepsTextH float32 = 160
-	// liveAnswerMax and liveReasoningMax bound the latest words of a
-	// streamed answer and reasoning shown while the model writes them
-	// (ADR-0286 §SD4): the tail, as the text grows downward.
-	liveAnswerMax    = 1536
-	liveReasoningMax = 512
 	// waitShown is the least wait on the person a finished step names: a
 	// shorter one was no decision of theirs, a grant issued without asking.
 	waitShown = time.Second
@@ -175,9 +170,9 @@ func (inst *App) renderStep(i int, s *turnStep) {
 				c.LabelAtoms(c.Atoms().BeginRichText(inst.markedLine(s)).Small().End().Keep()).Selectable(false).Send()
 			}
 			if s.kind == stepModel && s.content == "" && s.reasoning != "" {
-				// The reasoning as it is written, its latest words: the
-				// answer, once it starts, shows under the trail.
-				c.LabelAtoms(c.Atoms().BeginRichText(clipTail(s.reasoning, liveReasoningMax)).Small().Weak().Italics().End().Keep()).Wrap().Selectable(false).Send()
+				// The reasoning as it is written: the answer, once it
+				// starts, shows under the trail.
+				inst.liveReasoning(i, s.reasoning)
 			}
 			c.RequestRepaint()
 			return

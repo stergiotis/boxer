@@ -241,6 +241,26 @@ redrawn from the reply either way.
 The receiver also checks `seq`, so a lost delta that carried only tool
 names is a gap too.
 
+### 2026-10-28 — the live view is paced, whole and markdown
+
+In use, the live answer read as jittery: it appeared in bursts as
+coalesced deltas arrived, its bounded tail slid and reflowed its top lines
+once the answer passed the bound, and on landing the view jumped back to
+the question and the plain text turned into markdown. SD4's live view
+changes, and SD5's markdown-and-scrolling item is done:
+
+- The shown text trails what arrived, revealed at a rate set from the
+  backlog each time more arrives (about a quarter second behind), so it
+  moves at the pace the model writes rather than in the bus's bursts.
+- The live answer is the whole answer, drawn as markdown as the landed
+  turn is; the transcript already follows its end, so no tail is cut.
+- The reasoning shows in a box of fixed height that keeps its latest line
+  in view, paced the same way.
+- A turn whose answer the person watched grow, still following, lands
+  where they were reading instead of at the question.
+
+The pacing and the parse are the view's; nothing on the wire changed.
+
 ## References
 
 - [ADR-0254](./0254-model-inference-as-a-keelson-capability.md) §SD1, §SD3, §SD7 — `llm.complete`, the wall, streaming deferred.

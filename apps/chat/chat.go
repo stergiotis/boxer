@@ -212,6 +212,8 @@ type pendingTurn struct {
 	// steps are the coordinator's steps as last copied, at stepsVer.
 	steps    []turnStep
 	stepsVer uint64
+	// live is the streamed answer and reasoning as drawn so far.
+	live liveView
 }
 
 var _ app.AppI = (*App)(nil)
@@ -340,13 +342,17 @@ func (inst *App) drain() {
 	now := time.Now().UnixMilli()
 	// A landed turn is read from its start: the question at the top of the
 	// view, then the answer — a long answer is not entered at its end.
+	// Unless the person read it as it was written, following it: then the
+	// view stays where they were reading.
 	asked := ordinalOf(inst.conv.lastUser(), inst.looked.mark)
 	if res, _, ok := inst.turn.TakeResult(); ok {
 		inst.stats.addTurn(inst.conv.id, p.req.Turn, p.started, now, res, nil)
 		inst.conv.landTurn(p.req, res, nil, now)
 		inst.pending = nil
 		inst.turnEnded("the turn ended")
-		inst.view.ScrollToStart(asked)
+		if !p.live.seen || !inst.view.Follow() {
+			inst.view.ScrollToStart(asked)
+		}
 		inst.maybeTitle()
 		return
 	}

@@ -647,10 +647,15 @@ func (inst *App) renderWaiting() {
 		c.Label(line).Selectable(false).Send()
 	}
 	inst.renderSteps()
-	if text := liveAnswer(inst.stepsNow()); text != "" {
-		// The answer as the model writes it, its latest words; the landed
-		// turn is drawn from the reply.
-		c.LabelAtoms(c.Atoms().BeginRichText(clipTail(text, liveAnswerMax)).End().Keep()).Wrap().Selectable(false).Send()
+	steps := inst.stepsNow()
+	if text := liveAnswer(steps); text != "" {
+		// The answer as the model writes it, paced, drawn as the landed
+		// turn will be; the landed turn is drawn from the reply.
+		now := time.Now()
+		if shown := p.live.answer.advance(len(steps)-1, text, now); shown != "" {
+			p.live.seen = true
+			markdown.Render(markdown.Input{Ids: inst.ids, ScopeKey: "live", Doc: p.live.answerDoc(shown, now)})
+		}
 	}
 	c.RequestRepaint()
 }
