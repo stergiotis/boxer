@@ -53,3 +53,15 @@ For the selected row:
 - The wrapped-error chain (when the row carries one) renders via the
   `errorview` widget so each `eh.Errorf` wrap appears with its
   stream-of-facts.
+
+## For an agent
+
+The viewer declares an operations catalog (ADR-0345). A task the window
+is shared with reads the tail with `list_rows`, filtered by its own
+level floor and substrings rather than by the filter row, and one row in
+full with `get_row`; `get_counters` returns the strip above and
+`get_view` the filter row, Follow and the selection. `set_filter`,
+`set_follow` and `select_row` change what the window shows and nothing
+else. Rows are text the process wrote and reach a model marked
+untrusted. A row's key is valid while the row is in the ring; a row that
+rolled out may still be in `boxer.facts` when `BOXER_LOG_FACTS` is set.

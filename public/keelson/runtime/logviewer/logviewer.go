@@ -33,6 +33,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsstore"
 	"github.com/stergiotis/boxer/public/keelson/runtime/logbridge"
+	"github.com/stergiotis/boxer/public/keelson/runtime/widgethandle"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/badge"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/color"
@@ -134,6 +135,18 @@ type LogViewerApp struct {
 	selected    factsstore.LogRow
 	hasSelected bool
 
+	// Operations state (logviewer_ops.go, ADR-0345). frameCtx is the
+	// current frame's context, through which the person's controls route
+	// as gestures; the two handles are the filter boxes, for telling the
+	// person is typing in one.
+	frameCtx   app.FrameContextI
+	appFilterH widgethandle.WidgetHandle
+	msgFilterH widgethandle.WidgetHandle
+	// followDraft is what the Follow checkbox is bound to. A data binding
+	// lands at the frame's sync, after the body returned, so the click is
+	// noticed at the top of the next frame and routed as a gesture.
+	followDraft bool
+
 	// fv renders the per-row Fields list in the detail pane via the
 	// reusable hierarchical-field viewer. Constructed once per
 	// instance so its idPrefix scopes the widget ids it allocates;
@@ -164,6 +177,7 @@ func newInstance(m app.Manifest) (out *LogViewerApp) {
 		density:     styletokens.ActiveDensity(),
 		filterLevel: zerolog.TraceLevel,
 		follow:      true,
+		followDraft: true,
 		maxRows:     256,
 	}
 	return
@@ -178,7 +192,21 @@ func (inst *LogViewerApp) Mount(ctx app.MountContextI) (err error) {
 	return
 }
 func (inst *LogViewerApp) Unmount(ctx app.MountContextI) (err error) { return }
-func (inst *LogViewerApp) Frame(ctx app.FrameContextI) (err error)   { return inst.render() }
+func (inst *LogViewerApp) Frame(ctx app.FrameContextI) (err error) {
+	inst.frameCtx = ctx
+	inst.noticeDrafts()
+	return inst.render()
+}
+
+// noticeDrafts routes the previous frame's checkbox write-back as the
+// person's gesture (ADR-0345 §SD3). The binding landed at that frame's
+// sync; a command that set follow in between also set the draft, so a
+// difference here is the person's click and nothing else.
+func (inst *LogViewerApp) noticeDrafts() {
+	if inst.followDraft != inst.follow {
+		inst.setFollowGesture(inst.followDraft)
+	}
+}
 
 // render draws the entire widget. The host (DockHost tile or
 // adaptToRenderer Window scope) supplies the surrounding ui scope and
@@ -326,6 +354,12 @@ func (inst *LogViewerApp) renderCounters(sink *logbridge.Sink) {
 // checkbox. Filters apply at render time — adjusting one does not
 // touch the Sink's tail buffer.
 //
+// The level combo routes through the catalog as the person's gesture
+// (ADR-0345 §SD3); the Follow checkbox writes a draft that noticeDrafts
+// routes at the top of the next frame. The two text boxes commit on
+// every keystroke and apply inside the frame, attributed to the app; the
+// handles let the filter resource report that the person is typing.
+//
 // Spacing budget: 6px between each label and its input (so "Level:"
 // doesn't kiss the dropdown), 24px between filter groups (so the
 // eye reads them as separate units rather than one long row).
@@ -345,8 +379,8 @@ func (inst *LogViewerApp) renderFilterRow() {
 					Selected(selected).
 					FrameWhenInactive(!selected).
 					Frame(true).
-					SendResp().HasPrimaryClicked() {
-					inst.filterLevel = lvl
+					SendResp().HasPrimaryClicked() && lvl != inst.filterLevel {
+					inst.setLevelGesture(lvl)
 				}
 			}
 		}
@@ -354,18 +388,20 @@ func (inst *LogViewerApp) renderFilterRow() {
 		c.AddSpace(styletokens.GapPanels(inst.density))
 		c.Label("App:").Send()
 		c.AddSpace(styletokens.GapInline(inst.density))
+		inst.appFilterH = widgethandle.Make(inst.ids.PrepareStr("app-filter").Derive())
 		c.TextEdit(inst.ids.PrepareStr("app-filter"), inst.filterAppId, false).
 			SendRespVal(&inst.filterAppId)
 
 		c.AddSpace(styletokens.GapPanels(inst.density))
 		c.Label("Message:").Send()
 		c.AddSpace(styletokens.GapInline(inst.density))
+		inst.msgFilterH = widgethandle.Make(inst.ids.PrepareStr("msg-filter").Derive())
 		c.TextEdit(inst.ids.PrepareStr("msg-filter"), inst.filterMessage, false).
 			SendRespVal(&inst.filterMessage)
 
 		c.AddSpace(styletokens.GapPanels(inst.density))
 		c.Checkbox(inst.ids.PrepareStr("follow"), inst.follow, "Follow").
-			SendRespVal(&inst.follow)
+			SendRespVal(&inst.followDraft)
 	}
 	c.AddSpace(styletokens.PaddingHair(inst.density))
 }
@@ -543,13 +579,9 @@ func (inst *LogViewerApp) renderTailTable(rows []factsstore.LogRow) {
 		et.EndCells()
 
 		if clicked {
-			if isSelected {
-				inst.hasSelected = false
-				inst.selected = factsstore.LogRow{}
-			} else {
-				inst.hasSelected = true
-				inst.selected = r
-			}
+			// A click on the selected row clears it; the gesture carries
+			// the next state, so the command sets and never toggles.
+			inst.selectGesture(r, !isSelected)
 		}
 	}
 	// No Striped(true): the etable's zebra is painted per cell, in cell_ui,
@@ -685,8 +717,7 @@ func (inst *LogViewerApp) renderDetailPane() {
 			if c.Button(inst.ids.PrepareStr("d-clear"),
 				c.Atoms().Text("Clear selection").Keep()).
 				SendResp().HasPrimaryClicked() {
-				inst.hasSelected = false
-				inst.selected = factsstore.LogRow{}
+				inst.selectGesture(factsstore.LogRow{}, false)
 			}
 		}
 	}
