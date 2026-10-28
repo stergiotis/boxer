@@ -8,7 +8,7 @@ date: 2026-10-26
 
 > **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
 
-# ADR-0339: The chat's artefact exported to lading, and handed to mdedit by snapshot
+# ADR-0342: The chat's artefact exported to lading, and handed to mdedit by snapshot
 
 ## Context
 
@@ -30,7 +30,7 @@ Two gaps follow from the sealing:
   ([ADR-0308](./0308-the-run-journal-is-the-only-source-of-model-input.md)
   §SD6) gets its text back from the journal, but its screenshots are gone.
 
-ADR-0338 (proposed) gives an app a way to publish a tree into the lading
+ADR-0341 (proposed) gives an app a way to publish a tree into the lading
 store, under its own mount tag, with a placement check before anything is
 written. This ADR is its first client.
 
@@ -56,7 +56,7 @@ publishing (law L15). An endorsement covers the head when the revision it
 names is in the artefact with the text it endorsed, and no model has written
 a revision since. When the export runs, the head is checked again, and a
 revision written in between refuses the export. Then the screenshots are
-read and the service is asked for a dry run (ADR-0338 §SD1), all before the
+read and the service is asked for a dry run (ADR-0341 §SD1), all before the
 endorsement, so a refusal, such as a tier above the store's ceiling, leaves
 no consent behind. The confirmation does not know the ceiling, which only the
 service holds. The button is drawn whether or not the host runs the publish
@@ -76,7 +76,7 @@ embed can address without escaping (ADR-0284 §SD1), so the document's
 
 The chat's mount tag is a value claimed through `tagmint`, so no other
 claimant in the link set takes it. The first export mints a mount under it
-(ADR-0338 §SD2), and every later export of the conversation writes another
+(ADR-0341 §SD2), and every later export of the conversation writes another
 snapshot of it. The chat journals each export as an extension-private entry
 (`KindIgnorable`, named `artefact`, form `exported`), which the projection
 skips: the revision, the mount, the snapshot instant, the digest of the text
@@ -96,7 +96,7 @@ their own: a capture's confinement is recorded on the conversation, not on the
 entry. The conversation's label covers both, and over-states each, because it
 is the join of everything the run read. A confined conversation therefore
 cannot export, and the confirmation says so before the person confirms.
-The publish service makes the same refusal (ADR-0338 §SD3).
+The publish service makes the same refusal (ADR-0341 §SD3).
 
 ### SD5 — The handover by snapshot
 
@@ -140,7 +140,7 @@ are numbered above every revision the journal names, by an endorsement or an
 export, so a number from before the resume is not handed out again. With or
 without an export, the text comparison of SD1 keeps an endorsement of an
 earlier revision from covering a new one. The chat reads the store
-over its own connection, as every lading reader does (ADR-0338). The journal
+over its own connection, as every lading reader does (ADR-0341). The journal
 also keeps the artefact's head as text (`syncArtefactJournal`, ADR-0282 §SD7);
 when that head is later than the export, it goes on top of the exported
 revision without screenshots, and a revert reaches the export's. Revisions
@@ -154,7 +154,7 @@ head, or an empty artefact, with the reason in the resume note.
   (ADR-0311 §SD8).
 - **Copy** carrying the images. The clipboard holds text.
 - **Withdrawing an export** before its class ends: a per-mount purge, which
-  ADR-0338 leaves to the operator.
+  ADR-0341 leaves to the operator.
 - **Export to a sealed store**, for a confined conversation.
 
 ## Surfaces — Tier 1
@@ -164,7 +164,7 @@ head, or an empty artefact, with the reason in the resume note.
 | `launchcfg.MdeditLaunch` | optional mount, snapshot and path | the generated `launchcfg.out.go` and its golden; mdedit's hand-over |
 | chat journal | an extension-private `exported` entry; no new kind | resume, which reads it |
 | identity | the tag value `chatArtefactMount`, claimed through `tagmint` | — |
-| chat manifest | declares `lading.publish` and the chat's mount tag | ADR-0338's registration check |
+| chat manifest | declares `lading.publish` and the chat's mount tag | ADR-0341's registration check |
 | artefact panel | Export, and its confirmation | the endorsement path of ADR-0311 §SD3 |
 
 ## Alternatives
@@ -235,14 +235,14 @@ without them is the text handover as before.
 
 ## Status
 
-Proposed — awaiting review by the code owner, after ADR-0338.
+Proposed — awaiting review by the code owner, after ADR-0341.
 
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers.
 
 ## References
 
-- [ADR-0338](./0338-lading-publish-a-write-only-capability-with-the-placement-check-at-the-door.md) (proposed) — the publish service.
+- [ADR-0341](./0341-lading-publish-a-write-only-capability-with-the-placement-check-at-the-door.md) (proposed) — the publish service.
 - [ADR-0284](./0284-chat-artefact-screenshots-sealed-under-a-budget.md) §SD1, §SD6, update of 2026-10-26 — the screenshots, sealed; durable storage deferred.
 - [ADR-0282](./0282-chat-artefact-one-markdown-document-per-conversation.md) — the artefact.
 - [ADR-0311](./0311-labels-integrity-levels-tlp-tiers-marks-and-endorsement.md) §SD2, §SD3, §SD5 — the run's label, endorsement, mixed documents.

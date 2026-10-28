@@ -37,7 +37,7 @@ const DefaultTtlDays = 30
 // mount, before the publishing app's id, as ladingadhoc's "adhoc:" does.
 const storeNamePrefix = "publish:"
 
-// Limits are the deployment's bounds on a publish (ADR-0338 §SD3, §SD4).
+// Limits are the deployment's bounds on a publish (ADR-0341 §SD3, §SD4).
 type Limits struct {
 	// Ceiling is the highest tier the store may hold.
 	Ceiling agentrun.TierE
@@ -72,7 +72,7 @@ type Config struct {
 	// default database.
 	Layout ladingschema.Layout
 	Limits Limits
-	// Trail receives one row per publish (ADR-0338 §SD5); nil records
+	// Trail receives one row per publish (ADR-0341 §SD5); nil records
 	// nothing beyond the log.
 	Trail *trail.Recorder
 	Log   zerolog.Logger
@@ -125,7 +125,7 @@ func NewService(cfg Config) (inst *Service, err error) {
 		return
 	}
 	inst.busClient = cfg.Bus.NewClient(ServiceAppId, []app.SubjectFilter{
-		{Pattern: subjectWildcard, Direction: app.CapDirectionBoth, Reason: "the lading publish service serves lading.publish.<tag> (ADR-0338)"},
+		{Pattern: subjectWildcard, Direction: app.CapDirectionBoth, Reason: "the lading publish service serves lading.publish.<tag> (ADR-0341)"},
 		{Pattern: inprocbus.InboxPrefix + ">", Direction: app.CapDirectionPub, Reason: "the lading publish service replies to inboxes"},
 	})
 	if inst.unsub, err = inst.busClient.Subscribe(subjectWildcard, inst.handle); err != nil {
@@ -180,7 +180,7 @@ func (inst *Service) handle(msg *app.Msg) {
 	req, derr := buscodec.Decode[Request](msg.Payload)
 	switch {
 	case derr != nil:
-		// Not a publish yet, but a refused one all the same (ADR-0338 §SD5).
+		// Not a publish yet, but a refused one all the same (ADR-0341 §SD5).
 		res := Result{Refused: true, Reason: "the request does not decode: " + derr.Error()}
 		inst.record(time.Now(), msg.Sender, msg.SenderInstance, trail.LadingPublish{Tag: uint64(tag)}, res)
 		inst.reply(msg, res)

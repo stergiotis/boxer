@@ -1,9 +1,9 @@
 package chat
 
-// Exporting the artefact to the lading store (ADR-0339, proposed): the
+// Exporting the artefact to the lading store (ADR-0342, proposed): the
 // person's gesture writes the head revision's text and the screenshots it
 // names as one snapshot of the conversation's mount, through the host's
-// publish service (ADR-0338, proposed), which checks the label before any
+// publish service (ADR-0341, proposed), which checks the label before any
 // row is written. Confirming endorses the head for publishing when no
 // endorsement covers it (ADR-0311 §SD3, law L15). Open in mdedit takes the
 // same path when the artefact has screenshots, and hands mdedit the snapshot.
@@ -128,7 +128,7 @@ func (inst *coordinator) exportMount() (mount uint64) {
 // revisionsNamed is the highest artefact revision the journal names, by an
 // endorsement or an export. A resumed artefact numbers its revisions above
 // it, so a number from before the resume is not handed out again and an
-// endorsement of it does not seem to name a new revision (ADR-0339 §SD7).
+// endorsement of it does not seem to name a new revision (ADR-0342 §SD7).
 func revisionsNamed(entries []agentrun.Entry) (n int) {
 	for _, e := range entries {
 		switch {
@@ -312,7 +312,7 @@ func (inst *App) exportNow(ctx context.Context, p *exportPlan, name string) (not
 // readExport reads an export back into a fresh artefact whose one revision
 // is the exported one, under its own number, so an endorsement of it still
 // names it. The store is read directly, as every lading reader reads it
-// (ADR-0338); the text and each screenshot are checked against the digests
+// (ADR-0341); the text and each screenshot are checked against the digests
 // the export recorded.
 func readExport(ctx context.Context, rec exportRecord) (art *artefact, err error) {
 	client := chclient.New(chclient.ConfigFromEnv(), nil)

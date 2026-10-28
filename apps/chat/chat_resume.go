@@ -446,7 +446,7 @@ func (inst *App) adopt(r *resumed) {
 	if conv.artefact {
 		// The revisions live in the artefact store, not in entries: the
 		// last export, when there is one, brings the exported revision back
-		// with its screenshots (ADR-0339 §SD7, proposed), and the head the
+		// with its screenshots (ADR-0342 §SD7, proposed), and the head the
 		// journal last wrote goes on top when it is later
 		// (chat_artefact_journal.go); otherwise the artefact starts empty.
 		// The snapshot note re-told at the next turn tells the model where

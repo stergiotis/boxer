@@ -1,5 +1,5 @@
 // Package ladingpublish is the host's write path into the lading store
-// (ADR-0338, proposed): an app sends a tree on a bus request under its own
+// (ADR-0341, proposed): an app sends a tree on a bus request under its own
 // mount tag, and the service checks the tree's label against what the store
 // may hold before it writes a snapshot. Reading the store is not this
 // package's: readers keep their own connection.

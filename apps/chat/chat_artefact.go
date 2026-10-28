@@ -317,7 +317,7 @@ func (inst *artefact) commit(base int, rev artRevision) (n int, err error) {
 
 // restore puts the journal's head on the artefact, under its number, for a
 // resume: over nothing, or over the revision an export brought back
-// (ADR-0339 §SD7) when the journal's is later. The revisions between are
+// (ADR-0342 §SD7) when the journal's is later. The revisions between are
 // not read back, so a revert reaches the export's at most. The head comes
 // without screenshots: their bytes are sealed to the process (ADR-0284).
 // Nothing is restored over an artefact that moved.

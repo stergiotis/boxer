@@ -764,7 +764,7 @@ var (
 	// The tier the egress wall saw on a fetch (ADR-0312 §SD4), beside the
 	// fetch record's other attributes (217–227).
 	MembHttpFetchTier = NkRegistry.MustBegin("httpFetchTier", 497).End()
-	// The lading publish record (ADR-0338 §SD5, proposed): one row per
+	// The lading publish record (ADR-0341 §SD5, proposed): one row per
 	// publish into the lading store, written or refused, and why.
 	MembKindLadingPublish     = NkRegistry.MustBegin("runtimeKindLadingPublish", 498).End()
 	MembLadingPublishTag      = NkRegistry.MustBegin("ladingPublishTag", 499).End()

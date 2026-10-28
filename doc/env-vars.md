@@ -71,9 +71,9 @@ generated-at: 2026-10-27T09:32:46Z
 
 | Name | Type | Default | CLI flag | Sensitive | Description |
 |------|------|---------|----------|-----------|-------------|
-| `BOXER_LADING_PUBLISH_BYTES` | int64 | `268435456` | — |  | the most bytes of files one publish into the lading store may carry (ADR-0338); a larger tree is refused, not split |
-| `BOXER_LADING_PUBLISH_MAX_DAYS` | int64 | `90` | — |  | the longest retention class, in days, a publish into the lading store may name (ADR-0338) |
-| `BOXER_LADING_PUBLISH_TIER` | categorial-string | `AMBER` | — |  | the highest TLP tier a tree published into the lading store may carry (ADR-0338); everyone who can read the store reads what is in it, and a confined tree is refused whatever this says<br>**Allowed:** `CLEAR` \| `GREEN` \| `AMBER` \| `AMBER+STRICT` \| `RED` |
+| `BOXER_LADING_PUBLISH_BYTES` | int64 | `268435456` | — |  | the most bytes of files one publish into the lading store may carry (ADR-0341); a larger tree is refused, not split |
+| `BOXER_LADING_PUBLISH_MAX_DAYS` | int64 | `90` | — |  | the longest retention class, in days, a publish into the lading store may name (ADR-0341) |
+| `BOXER_LADING_PUBLISH_TIER` | categorial-string | `AMBER` | — |  | the highest TLP tier a tree published into the lading store may carry (ADR-0341); everyone who can read the store reads what is in it, and a confined tree is refused whatever this says<br>**Allowed:** `CLEAR` \| `GREEN` \| `AMBER` \| `AMBER+STRICT` \| `RED` |
 
 ## boxer-map (6)
 

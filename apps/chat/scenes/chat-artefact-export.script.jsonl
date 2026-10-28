@@ -1,4 +1,4 @@
-# The scripted model of chat-artefact-export.scene.md (ADR-0339): one reply
+# The scripted model of chat-artefact-export.scene.md (ADR-0342): one reply
 # per line, picked by the conversation's position.
 # Turn 1: ask for the demo app, open it, capture its window into the
 # artefact's screenshots, write a document embedding the capture, answer.

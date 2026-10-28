@@ -1,6 +1,6 @@
 package mdedit
 
-// The images a snapshot document embeds (ADR-0339 §SD6, proposed). A parse
+// The images a snapshot document embeds (ADR-0342 §SD6, proposed). A parse
 // runs on the render goroutine and must not read the store, so the resolver
 // answers from what is already decoded and notes what it was asked for and
 // did not have. After the parse, a lane reads those from the same snapshot
