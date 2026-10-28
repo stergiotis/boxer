@@ -880,6 +880,24 @@ the preview scrolls), the numbering pair, which `Input.Controls` places
 beside the widget's expand and collapse buttons, and the pane's share of the
 window. The pure tests moved with the code; the app keeps the click tests.
 
+### 2026-10-28 — one side panel, and the summary on its own row
+
+The outline and the files column were two checkboxes in row two, each
+opening a column of its own. A checkbox read as a setting rather than as a
+place to go, and the two columns competed for the same width beside the
+preview. They are now one side panel behind a **Panel** toggle, with a tab
+strip for Outline and Files; one share of the window and one width floor
+serve both, so switching tabs does not move the panes beside it. A view with
+nothing to show says what is missing and how to get it: a document without
+headings, a host without a snapshot store, a store without snapshots.
+
+The badges, the readout and the status line left row two for a summary row
+of their own, the bar's last, directly over the content. Behind the
+controls they shifted the controls whenever the status changed, and at a
+narrow width they ran past the window's edge. Row one is still document
+gestures and formatting, row two view state, and the replace row appears
+between them and the summary when asked for.
+
 ## References
 
 - [ADR-0176](./0176-native-tree-widget.md) — the tree widget the outline

@@ -35,12 +35,6 @@ import (
 )
 
 const (
-	// filesSplitFrac / filesMinWindowPx are the outline's shape: a derived
-	// share of the window, hidden below a floor rather than starving the
-	// panes doing the work.
-	filesSplitFrac   = float32(0.20)
-	filesMinWindowPx = float32(900)
-
 	// filesFallbackPaneH stands in before the pane probe reports, for the
 	// same reason the outline's does: without SOME height the browser's
 	// etable takes the interpreter's auto-fit cap.
@@ -50,20 +44,22 @@ const (
 	// a blob; past this the pane refuses with the size in the status.
 	maxSnapshotDocBytes = int64(4 << 20)
 
+	// filesMountSlackPx is what the picker leaves of the panel's width for
+	// its own frame; filesMountMinPx is the least it takes in a narrow panel.
+	filesMountSlackPx = float32(8)
+	filesMountMinPx   = float32(80)
+
 	// filesConnectTimeout bounds the lazy connect and the mount listing.
 	filesConnectTimeout = 15 * time.Second
 )
 
 const (
-	tipFiles = "Browse the lading snapshot store (boxer fs snapshot) and load a file into the editor. Read-only: the source is a pinned snapshot, so a loaded document is not bound to any file — Save as gives it one. The column needs a window wide enough to spare it and hides itself below that."
+	tipFiles = "Browse the lading snapshot store (boxer fs snapshot) and load a file into the editor. Read-only: the source is a pinned snapshot, so a loaded document is not bound to any file — Save as gives it one."
 
 	tipFilesMount = "Which mount to browse, at its latest snapshot. Names come from the mount policy; unnamed mounts show their id."
 
 	tipFileSnapshot = "The snapshot entry this document was loaded from (mount:path). A snapshot is pinned and read-only — the document is not bound to any file, and the first Save asks where."
 )
-
-// filesToggleLabel is the pane's checkbox in the bar.
-const filesToggleLabel = icons.PhFolders + " Files"
 
 // filesState is the pane's own state, one field on App.
 type filesState struct {
@@ -94,27 +90,6 @@ type filesState struct {
 	loadHandedText string
 }
 
-// filesVisible is the outlineVisible shape: the toggle AND a window wide
-// enough to give the pane a share.
-func (inst *App) filesVisible() (yes bool) {
-	if !inst.showFiles {
-		return false
-	}
-	winW := inst.winW
-	if winW <= 0 {
-		winW = windowFallbackWidthPx
-	}
-	return winW >= filesMinWindowPx
-}
-
-func (inst *App) filesWidth() (px float32) {
-	winW := inst.winW
-	if winW <= 0 {
-		winW = windowFallbackWidthPx
-	}
-	return winW * filesSplitFrac
-}
-
 // renderFiles draws the pane: the mount picker, the browser, and whatever a
 // pending load has to say. Callers own the enclosing panel.
 func (inst *App) renderFiles() {
@@ -126,15 +101,16 @@ func (inst *App) renderFiles() {
 	switch {
 	case busy:
 		c.RequestRepaint()
-		c.Label("connecting…").Selectable(false).Send()
+		c.Label("Connecting to the snapshot store…").Selectable(false).Send()
 		return
 	case !done:
 		return
 	case cerr != nil:
 		// The hint, not a modal: the pane explains itself and the app is
 		// otherwise unaffected.
-		c.Label(cerr.Error()).Send()
-		c.Label("Take a snapshot with `boxer fs snapshot <dir> --mount …` and set CLICKHOUSE_ENDPOINT.").Send()
+		renderEmptyState(icons.PhFolderDashed, "No snapshot store",
+			"Set CLICKHOUSE_ENDPOINT to a server with a lading store, and take a snapshot with `boxer fs snapshot <dir> --mount …`.")
+		c.LabelAtoms(c.Atoms().BeginRichText(cerr.Error()).Small().Weak().End().Keep()).Send()
 		if c.Button(inst.ids.PrepareStr("files-retry"), c.Atoms().Text("Retry").Keep()).
 			Small().SendResp().HasPrimaryClicked() {
 			f.conn.Invalidate()
@@ -162,7 +138,7 @@ func (inst *App) renderFiles() {
 	case !done:
 		return
 	case merr != nil:
-		c.Label(merr.Error()).Send()
+		renderEmptyState(icons.PhFolderDashed, "The store did not list its mounts", merr.Error())
 		if c.Button(inst.ids.PrepareStr("files-mounts-retry"), c.Atoms().Text("Retry").Keep()).
 			Small().SendResp().HasPrimaryClicked() {
 			f.mounts.Invalidate()
@@ -170,15 +146,16 @@ func (inst *App) renderFiles() {
 		return
 	}
 	if len(rows) == 0 {
-		c.Label("No snapshots recorded yet.").Send()
-		c.Label("Take one with `boxer fs snapshot <dir> --mount …`.").Send()
+		renderEmptyState(icons.PhFolderDashed, "No snapshots yet",
+			"Take one with `boxer fs snapshot <dir> --mount …`, or export an artefact from chat.")
 		return
 	}
 
 	row := inst.pickMount(rows)
 	snap, ok := row.latest()
 	if !ok {
-		c.Label("The mount has no complete snapshot yet.").Send()
+		renderEmptyState(icons.PhFolderDashed, "No complete snapshot",
+			"The mount has no snapshot that finished writing; one still being written is not listed.")
 		return
 	}
 	fsys, verr := sc.view(row.id, snap.Snap)
@@ -204,15 +181,20 @@ func (inst *App) renderFiles() {
 	}
 
 	res := fsbrowser.Render(fsbrowser.Input{
-		Ids:       inst.ids,
-		ScopeKey:  "files",
-		FS:        fsys,
-		RootLabel: row.label() + " @ latest",
+		Ids:      inst.ids,
+		ScopeKey: "files",
+		FS:       fsys,
+		// The picker above names the mount; the breadcrumb starts at its
+		// root, so a long mount name is not drawn twice.
+		RootLabel: "latest",
 		CacheKey:  fmt.Sprintf("%x@%d", row.id.Value(), snap.Snap.UnixNano()),
 		State:     &f.st,
 		Mode:      fsbrowser.ModeList,
 		Striped:   true,
 		MaxHeight: paneH,
+		// Spanning the panel, the name column giving way: fixed columns
+		// wider than the panel would push it past the window's edge.
+		FillWidth: true,
 	})
 	if res.Err != nil {
 		inst.status = res.Err.Error()
@@ -239,9 +221,14 @@ func (inst *App) pickMount(rows []mountRow) (row mountRow) {
 	}
 	row = rows[sel]
 	for range c.HoverText(tipFilesMount).KeepIter() {
+		// Fitted to the panel and truncated, with no label beside it (the
+		// tooltip says what it picks): a mount is named by its policy, a chat
+		// export by its conversation's title, and content wider than the
+		// panel grows it under the preview.
 		for range c.ComboBox(inst.ids.PrepareStr("files-mount"),
-			c.WidgetText().Text("Mount").Keep(),
+			c.WidgetText().Text("").Keep(),
 			c.WidgetText().Text(row.label()).Keep()).
+			Width(max(inst.sideInnerWidth()-filesMountSlackPx, filesMountMinPx)).Truncate().
 			KeepIter() {
 			for i := range rows {
 				clicked := c.Button(inst.ids.PrepareStr("fm-"+fmt.Sprintf("%016x", rows[i].id.Value())),

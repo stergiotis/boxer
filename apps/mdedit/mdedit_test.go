@@ -595,20 +595,26 @@ func TestOutlineClickDoesNotFightTheCaret(t *testing.T) {
 	assert.False(t, ok, "the target is consumed once, not re-issued every frame")
 }
 
-func TestOutlineVisibility(t *testing.T) {
+func TestSideVisibility(t *testing.T) {
 	inst := &App{}
 	inst.winW = 1200
 
-	assert.False(t, inst.outlineVisible(), "off by default")
+	assert.False(t, inst.sideVisible(), "off by default")
 
-	inst.showOutline = true
-	assert.True(t, inst.outlineVisible(), "on, in a wide window")
+	inst.showSide = true
+	assert.True(t, inst.sideVisible(), "on, in a wide window")
 
-	inst.winW = outlineMinWindowPx - 1
-	assert.False(t, inst.outlineVisible(), "a narrow window hides it rather than starving the panes")
+	inst.winW = sidePanelMinWindowPx - 1
+	assert.False(t, inst.sideVisible(), "a narrow window hides it rather than starving the panes")
 
-	inst.winW = outlineMinWindowPx
-	assert.True(t, inst.outlineVisible(), "the threshold is inclusive")
+	inst.winW = sidePanelMinWindowPx
+	assert.True(t, inst.sideVisible(), "the threshold is inclusive")
+
+	inst.sideView = sideFiles
+	assert.True(t, inst.sideVisible(), "one panel, whichever tab it shows")
+	w := inst.sideWidth()
+	inst.sideView = sideOutline
+	assert.Equal(t, w, inst.sideWidth(), "switching tabs does not move the panes beside it")
 }
 
 func TestOutlineSummaryCountsNamedHeadings(t *testing.T) {

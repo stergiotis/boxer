@@ -134,7 +134,7 @@ const (
 	tipCopy         = "Copy the whole document to the clipboard. This is the only way text leaves the app — there is no file I/O in this cut."
 	tipDirty        = "Whether the buffer differs from the last checkpoint: a completed copy to the clipboard, or the document restored when the window opened. With no file to be out of step with, that is the only thing the marker can honestly mean."
 
-	tipOutline = "Show the heading outline beside the preview. Headings nest by level and a section folds away; clicking one scrolls the preview to it and takes the caret with it. The column needs a window wide enough to spare it, and hides itself below that rather than starving the two panes doing the work."
+	tipOutline = "The heading outline. Headings nest by level and a section folds away; clicking one scrolls the preview to it and takes the caret with it."
 
 	tipStats = "Words, characters and a reading estimate over the PROSE only — fenced code bodies, markers, URLs, table rules and frontmatter are excluded, since none of them are read at prose speed. The estimate divides by 200 words a minute, a round convention rather than a measurement of anyone."
 
@@ -235,9 +235,14 @@ type App struct {
 	// they cannot fight over the same frame.
 	pendingScroll string
 
-	// showOutline is the reader's toggle. The column also needs the window to
-	// be wide enough — see App.outlineVisible.
-	showOutline bool
+	// showSide is the reader's toggle for the side panel and sideView the
+	// tab it shows (mdedit_side.go). The panel also needs the window to be
+	// wide enough — see App.sideVisible.
+	showSide bool
+	sideView sideViewE
+	// sidePaneW is the panel's measured content width, which the views fit
+	// their widest controls to.
+	sidePaneW float32
 
 	// viewMode is which panes render — see viewModeE. Session-scoped: a fresh
 	// window opens in the split.
@@ -354,10 +359,8 @@ type App struct {
 	snapImages *snapshotImages
 	handedSnap *handedSnapshot
 
-	// showFiles is the files pane's toggle and files its state
-	// (mdedit_files.go).
-	showFiles bool
-	files     filesState
+	// files is the side panel's files view state (mdedit_files.go).
+	files filesState
 
 	// stats is the word / character / reading-time readout, recomputed with
 	// the spans.
@@ -663,21 +666,14 @@ func (inst *App) renderBody() {
 			inst.renderSource()
 		}
 	}
-	// The outline is declared before the central region too, so its click can
-	// still reach the preview in the same frame. It stays in every mode — in
-	// the source-only one it still navigates the caret.
-	if inst.outlineVisible() {
-		for range c.PanelRightInside(inst.ids.PrepareStr("outlinepane")).
-			ExactSize(inst.outlineWidth()).KeepIter() {
-			inst.renderOutline()
-		}
-	}
-	// The files pane sits inward of the outline (a later right panel lands
-	// left of an earlier one), beside the preview it feeds.
-	if inst.filesVisible() {
-		for range c.PanelRightInside(inst.ids.PrepareStr("filespane")).
-			ExactSize(inst.filesWidth()).KeepIter() {
-			inst.renderFiles()
+	// The side panel is declared before the central region too, so an
+	// outline click can still reach the preview in the same frame. It stays
+	// in every mode — in the source-only one the outline still navigates the
+	// caret.
+	if inst.sideVisible() {
+		for range c.PanelRightInside(inst.ids.PrepareStr("sidepane")).
+			ExactSize(inst.sideWidth()).KeepIter() {
+			inst.renderSide()
 		}
 	}
 	for range c.PanelCentralInside().KeepIter() {
@@ -707,8 +703,8 @@ func (inst *App) renderBody() {
 // ---------------------------------------------------------------------------
 
 // renderBar draws the action rows: document gestures and formatting on top,
-// view state and readouts below, and the replace row under those while its
-// toggle is on. Callers own the enclosing panel.
+// view state below, the replace row under those while its toggle is on, and
+// the summary row last. Callers own the enclosing panel.
 func (inst *App) renderBar() {
 	// Row one — document gestures, then formatting. A format click's snippet
 	// is stashed rather than applied: it has to reach the TextEdit as a
@@ -770,17 +766,6 @@ func (inst *App) renderBar() {
 		if clicked && !inst.exportInFlight() {
 			inst.exportClipboard()
 		}
-		// A snapshot document can be mounted outside the app; the window
-		// copies the command and runs nothing (ADR-0339 §SD5, proposed).
-		if inst.snapRef != nil {
-			clicked = false
-			for range c.HoverText(tipMountCommand).KeepIter() {
-				clicked = c.Button(inst.ids.PrepareStr("mountcmd"), atomsMountCommand).SendResp().HasPrimaryClicked()
-			}
-			if clicked && !inst.exportInFlight() {
-				inst.copyMountCommand()
-			}
-		}
 
 		// The formatting bar edits through the editor, so it goes with it: a
 		// mode that hides the pane hides the gestures aimed at it, and the
@@ -793,9 +778,8 @@ func (inst *App) renderBar() {
 		}
 	}
 
-	// Row two — view state on the left, readouts on the right: the mode
-	// segment, the outline toggle, the find group, then the badges, the prose
-	// readout and the status line.
+	// Row two — view state: the mode segment, the side panel toggle and the
+	// find group.
 	for range c.HorizontalTop().KeepIter() {
 		// The segmented mode control leads the row because it governs what
 		// everything to its right applies to.
@@ -807,26 +791,31 @@ func (inst *App) renderBar() {
 				}
 			}
 		}
-		// The outline toggle names its own count, so the button says what
-		// turning it on would show. It renders even when the window is too
-		// narrow to honour it — a control that disappears at some width is
-		// harder to understand than one that stays and has no effect — and
-		// the tooltip is where that is said.
-		var headings []markdown.HeadingInfo
-		if inst.doc != nil {
-			headings = inst.doc.Headings()
-		}
-		for range c.HoverText(tipOutline).KeepIter() {
-			c.Checkbox(inst.ids.PrepareStr("outline"), inst.showOutline, outlineSummary(headings)).
-				SendRespVal(&inst.showOutline)
-		}
-
-		for range c.HoverText(tipFiles).KeepIter() {
-			c.Checkbox(inst.ids.PrepareStr("files"), inst.showFiles, filesToggleLabel).
-				SendRespVal(&inst.showFiles)
-		}
+		// The panel toggle renders even when the window is too narrow to
+		// honour it — a control that disappears at some width is harder to
+		// understand than one that stays and has no effect — and the tooltip
+		// is where that is said.
+		inst.renderSideToggle()
 
 		inst.renderFindRow()
+	}
+
+	// Row three — replace, present only while its toggle in the find group is
+	// on AND the editor renders: rewriting text the reader cannot see is a
+	// trap, so read mode suppresses the row without disturbing its toggle.
+	// Unlike the side panel it has no width floor to meet: it is a row rather
+	// than a column, so a narrow window wraps it instead of starving a pane.
+	if inst.find.showReplace && inst.editorVisible() {
+		for range c.HorizontalTop().KeepIter() {
+			inst.renderReplaceRow()
+		}
+	}
+
+	// The summary row, last, directly over the content it describes: which
+	// document this is and where it came from, whether it is modified, the
+	// readout and the status line. A row of its own, so the controls above
+	// keep their place whatever the status says.
+	for range c.HorizontalTop().KeepIter() {
 
 		// Which file, never where — the broker names the basename in its
 		// dialog replies and keeps the path (ADR-0026 §SD7).
@@ -834,6 +823,17 @@ func (inst *App) renderBar() {
 			badge.New(inst.ids.PrepareStr("file"), label).
 				Tone(badge.ToneNeutral).Variant(badge.VariantSoft).Size(badge.SizeSm).
 				Tooltip(tip).Send()
+		}
+		// A snapshot document can be mounted outside the app; the window
+		// copies the command and runs nothing (ADR-0339 §SD5, proposed).
+		if inst.snapRef != nil {
+			clicked := false
+			for range c.HoverText(tipMountCommand).KeepIter() {
+				clicked = c.Button(inst.ids.PrepareStr("mountcmd"), atomsMountCommand).Small().SendResp().HasPrimaryClicked()
+			}
+			if clicked && !inst.exportInFlight() {
+				inst.copyMountCommand()
+			}
 		}
 
 		label, tone := "no changes", badge.ToneNeutral
@@ -863,17 +863,6 @@ func (inst *App) renderBar() {
 
 		if inst.status != "" {
 			c.Label(inst.status).Send()
-		}
-	}
-
-	// Row three — replace, present only while its toggle in the find group is
-	// on AND the editor renders: rewriting text the reader cannot see is a
-	// trap, so read mode suppresses the row without disturbing its toggle.
-	// Unlike the outline it has no width floor to meet: it is a row rather
-	// than a column, so a narrow window wraps it instead of starving a pane.
-	if inst.find.showReplace && inst.editorVisible() {
-		for range c.HorizontalTop().KeepIter() {
-			inst.renderReplaceRow()
 		}
 	}
 }

@@ -1,9 +1,9 @@
 package mdedit
 
 // mdedit_outline.go is the heading outline: the mdoutline widget (the
-// hierarchy, the fold, the selection that follows the caret) hosted in a
-// right panel, plus what a click means here, which is a caret move and a
-// preview scroll, and the numbering pair, which is this app's own.
+// hierarchy, the fold, the selection that follows the caret) hosted in the
+// side panel (mdedit_side.go), plus what a click means here, which is a caret
+// move and a preview scroll, and the numbering pair, which is this app's own.
 
 import (
 	"strings"
@@ -12,20 +12,6 @@ import (
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/markdown"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/mdoutline"
-)
-
-const (
-	// outlineSplitFrac is the outline's share of the window, taken from the
-	// preview rather than from the source — the source pane's width is what
-	// the writer is working in.
-	outlineSplitFrac = float32(0.18)
-
-	// outlineMinWindowPx is the width below which the outline hides itself. A
-	// fixed share of a narrow window is a column too thin to read a heading
-	// in, and it would take that width from the two panes that are doing the
-	// work. Hiding is not a failure mode here; it is the honest answer to
-	// "there is no room".
-	outlineMinWindowPx = float32(760)
 )
 
 // Hover help for the numbering pair, stated at the button rather than in a
@@ -42,35 +28,6 @@ var (
 	atomsOutlineRenumber     = c.Atoms().Text(icons.PhListNumbers).Keep()
 	atomsOutlineStripNumbers = c.Atoms().Text(icons.PhEraser).Keep()
 )
-
-// ---------------------------------------------------------------------------
-// Visibility and geometry
-// ---------------------------------------------------------------------------
-
-// outlineVisible reports whether the outline column renders this frame: the
-// reader has it switched on AND the window is wide enough to give it a share
-// without starving the panes beside it.
-func (inst *App) outlineVisible() (yes bool) {
-	if !inst.showOutline {
-		return false
-	}
-	winW := inst.winW
-	if winW <= 0 {
-		winW = windowFallbackWidthPx
-	}
-	return winW >= outlineMinWindowPx
-}
-
-// outlineWidth is the outline column's width for this frame, on the same
-// derive-every-frame basis as the source split and for the same reason: a
-// retained panel width clamps destructively and never recovers.
-func (inst *App) outlineWidth() (px float32) {
-	winW := inst.winW
-	if winW <= 0 {
-		winW = windowFallbackWidthPx
-	}
-	return winW * outlineSplitFrac
-}
 
 // ---------------------------------------------------------------------------
 // The frame

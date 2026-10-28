@@ -54,10 +54,15 @@ strikethrough, highlight, link — or insert a placeholder to type over when
 nothing is selected. The same wraps are on the keyboard as Ctrl+B, Ctrl+I,
 Ctrl+E and Ctrl+K in both the source pane and a block.
 
-The second row holds the mode control, the outline and files toggles, find,
-and the readouts: which file the document is bound to, whether it is
-modified, whether the file moved under it on disk, and a word count with a
-reading estimate over the prose alone.
+The second row holds the mode control, the **Panel** toggle and find. The
+last row, directly over the content, is the summary: which file the
+document is bound to or which snapshot it was read from, whether it is
+modified, whether the file moved under it on disk, a word count with a
+reading estimate over the prose alone, and the status line.
+
+The side panel shows one view at a time, chosen by its tabs: the outline or
+the files. It needs a window wide enough to spare it, and hides itself
+below that.
 
 ## The source pane
 
@@ -96,9 +101,11 @@ on screen.
 
 ## Files, proposals and the disk
 
-The **files** column browses the lading snapshot store, read-only: a
+The **files** view browses the lading snapshot store, read-only: a
 document loaded from a snapshot is bound to no file, and *Save as* gives it
-one.
+one. Such a document, and one handed over with its snapshot, offers
+**rclone** in the summary row, which copies the command that mounts that
+snapshot read-only.
 
 A **proposal** is a change another program suggests for a range of the
 document; it appears in a pane along the bottom with the proposed text

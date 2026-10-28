@@ -99,10 +99,11 @@ func mdTourInit(ids *c.WidgetIdStack) (state any) {
 	inst.ids = ids
 	inst.src = sampleDoc
 	inst.saved = sampleDoc
-	// The scene shows the outline column — the heading tree, its indents and
-	// its disclosure controls — and the gallery stage is wide enough to earn
-	// it. Left fully expanded, which is the state a reader first meets.
-	inst.showOutline = true
+	// The scene shows the side panel's outline — the heading tree, its
+	// indents and its disclosure controls — and the gallery stage is wide
+	// enough to earn it. Left fully expanded, which is the state a reader
+	// first meets.
+	inst.showSide, inst.sideView = true, sideOutline
 	// Pin the caret at the top of the document. Left alone, the TextEdit
 	// reports whatever cursor it starts with — the end of the buffer — and the
 	// caret-follows-preview sync then does its job and scrolls both panes past

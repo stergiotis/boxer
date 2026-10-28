@@ -31,16 +31,6 @@ func drainLoadUntil(t *testing.T, inst *App) {
 	t.Fatal("snapshot load did not land in time")
 }
 
-func TestFilesVisible_NeedsToggleAndWidth(t *testing.T) {
-	inst := &App{}
-	assert.False(t, inst.filesVisible(), "off by default")
-	inst.showFiles = true
-	inst.winW = filesMinWindowPx - 1
-	assert.False(t, inst.filesVisible(), "below the floor the pane hides rather than starving the others")
-	inst.winW = filesMinWindowPx
-	assert.True(t, inst.filesVisible())
-}
-
 // TestSnapshotLoad_ReplacesTheBufferLikeAnOpen: the loaded document lands the
 // Open trio (rebind, checkpoint, autosave carry) plus the snapshot identity.
 func TestSnapshotLoad_ReplacesTheBufferLikeAnOpen(t *testing.T) {
