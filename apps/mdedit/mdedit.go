@@ -130,7 +130,7 @@ const (
 // Hover help — stated at the widget that raises the question rather than in a
 // block of prose.
 const (
-	tipMountCommand = "Copy the command that mounts this document's snapshot read-only with rclone, the document and its images side by side. It runs `boxer fs sftp-stdio` with your shell's ClickHouse settings; change " + mountCommandDir + " to an empty directory of yours."
+	tipMountCommand = "Copy the command that mounts this document's snapshot read-only with rclone, the document and its images side by side. It runs `boxer fs sftp-stdio` with your shell's ClickHouse settings, so it needs rclone 1.64 or later and a `boxer` executable on PATH; change " + mountCommandDir + " to an empty directory of yours."
 	tipCopy         = "Copy the whole document to the clipboard. This is the only way text leaves the app — there is no file I/O in this cut."
 	tipDirty        = "Whether the buffer differs from the last checkpoint: a completed copy to the clipboard, or the document restored when the window opened. With no file to be out of step with, that is the only thing the marker can honestly mean."
 

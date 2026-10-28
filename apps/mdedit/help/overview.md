@@ -105,7 +105,9 @@ The **files** view browses the lading snapshot store, read-only: a
 document loaded from a snapshot is bound to no file, and *Save as* gives it
 one. Such a document, and one handed over with its snapshot, offers
 **rclone** in the summary row, which copies the command that mounts that
-snapshot read-only.
+snapshot read-only. The command needs rclone 1.64 or later and a `boxer`
+executable on `PATH`; the lading snapshot-store how-to (§6) sets both up and
+reads its failure messages.
 
 A **proposal** is a change another program suggests for a range of the
 document; it appears in a pane along the bottom with the proposed text
