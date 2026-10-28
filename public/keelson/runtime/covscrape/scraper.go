@@ -13,6 +13,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/coveragebus"
 	"github.com/stergiotis/boxer/public/keelson/runtime/sysmetricsbus"
 	"github.com/stergiotis/boxer/public/observability/coverage"
+	"github.com/stergiotis/boxer/public/observability/coverage/covsnap"
 )
 
 // DefaultHostToken is the coverage plane's host token — the metric plane's
@@ -29,10 +30,23 @@ func DefaultHostToken() (token string) {
 // The returned sampler is the constructor-injected source for the live
 // introspection tables (§SD5); it stays owned by the producer, and stop
 // closes both.
-func StartCoverageSampler(ctx context.Context, bus app.BusI, hostToken string, interval time.Duration, logg zerolog.Logger) (sampler *coverage.Sampler, stop func() error, err error) {
+//
+// sinks, when given, see every folded update on the producer's goroutine
+// before it is published (ADR-0343 §SD4).
+func StartCoverageSampler(ctx context.Context, bus app.BusI, hostToken string, interval time.Duration, logg zerolog.Logger, sinks ...func(upd *covsnap.Update)) (sampler *coverage.Sampler, stop func() error, err error) {
 	sampler, err = coverage.NewSampler(coverage.SamplerOptions{})
 	if err != nil {
 		return nil, nil, err
+	}
+	var sink func(upd *covsnap.Update)
+	if len(sinks) > 0 {
+		sink = func(upd *covsnap.Update) {
+			for _, s := range sinks {
+				if s != nil {
+					s(upd)
+				}
+			}
+		}
 	}
 	producer, err := coveragebus.NewProducer(coveragebus.ProducerOptions{
 		Sampler:  sampler,
@@ -40,6 +54,7 @@ func StartCoverageSampler(ctx context.Context, bus app.BusI, hostToken string, i
 		Subject:  coveragebus.SampleSubject(hostToken),
 		Codec:    coveragebus.NewCBORCodec(),
 		Interval: interval,
+		Sink:     sink,
 		Log:      logg,
 	})
 	if err != nil {

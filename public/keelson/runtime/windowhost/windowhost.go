@@ -322,6 +322,9 @@ type Inst struct {
 	// opsListener hears every change a window's engine logs (ADR-0269
 	// §SD8); nil hears nothing. Set before the first Frame.
 	opsListener func(key uint64, e opengine.LogEntry)
+	// opsBracket gives each window's engine its apply bracket (ADR-0343
+	// §SD5); nil gives none.
+	opsBracket OpsBracketFactory
 
 	// overlay draws the marks agents ask for (ADR-0297), after every
 	// window; dialogModal is whether the agent chrome drew a modal this
@@ -1291,7 +1294,7 @@ func (inst *Inst) Frame(ids *c.WidgetIdStack) (err error) {
 					inst.agentChrome.RenderWindowChrome(uint64(w.key), ids)
 				}
 			}
-			renderWindowBody(w, inst.closeRequested(w), inst.logger, &inst.frameTimes, inst.opsListener)
+			renderWindowBody(w, inst.closeRequested(w), inst.logger, &inst.frameTimes, inst.opsListener, inst.opsBracket)
 		}
 		// The rect is the last completed frame's, one frame before the one
 		// recorded.
@@ -1531,7 +1534,7 @@ func (inst *Inst) closeRequested(w *window) (closeReq bool) {
 // on their outermost panel cannot collide on the wire id — each derives
 // its id under a different salt. The IdScope wrapper pops the salt on
 // return so the stack is empty between frames.
-func renderWindowBody(w *window, closeReq bool, logger zerolog.Logger, ft *frameTimes, opsListener func(key uint64, e opengine.LogEntry)) {
+func renderWindowBody(w *window, closeReq bool, logger zerolog.Logger, ft *frameTimes, opsListener func(key uint64, e opengine.LogEntry), opsBracket OpsBracketFactory) {
 	if windowhostDebugRender {
 		logger.Info().
 			Uint64("windowKey", uint64(w.key)).
@@ -1567,7 +1570,7 @@ func renderWindowBody(w *window, closeReq bool, logger zerolog.Logger, ft *frame
 	// ADR-0269 §SD4: the previous frame's write-back has landed, so the
 	// person's changes are in Go state; queued commands apply now, and the
 	// app's Frame draws their effects.
-	w.startOps(logger, opsListener)
+	w.startOps(logger, opsListener, opsBracket)
 	if w.loaded.Load() == nil {
 		// Ready only once the engine exists, so a reader seeing ready
 		// also sees whether the window serves a catalog.

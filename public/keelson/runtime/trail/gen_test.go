@@ -35,6 +35,8 @@ func TestGenerateTrailStore(t *testing.T) {
 			"./llmcall_dto.go", "./llmmessage_dto.go", "./llmmessagebody_dto.go",
 			"./agentaction_dto.go", "./agentgrant_dto.go", "./httpfetch_dto.go", "./agentcapture_dto.go",
 			"./agentdisclosure_dto.go", "./adhocdataset_dto.go", "./ladingpublish_dto.go",
+			// Coverage on the trail (ADR-0343, proposed).
+			"./coveragebuild_dto.go", "./coveragefunc_dto.go", "./coveragesample_dto.go", "./coverageagentapply_dto.go",
 			// The audit event is the audit package's (ADR-0327 §SD8); the
 			// store binds it through the alias in auditevent.go.
 			"../../../storage/recordstore/evidence/audit/auditevent_dto.go",

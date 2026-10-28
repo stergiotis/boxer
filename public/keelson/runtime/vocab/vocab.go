@@ -770,6 +770,51 @@ var (
 	MembLadingPublishPaths    = NkRegistry.MustBegin("ladingPublishPaths", 508).End()
 	MembLadingPublishDigests  = NkRegistry.MustBegin("ladingPublishDigests", 509).End()
 	MembLadingPublishBytes    = NkRegistry.MustBegin("ladingPublishBytes", 510).End()
+	// Coverage on the trail (ADR-0343, proposed). The build row anchors a
+	// coverage meta hash to the binary and its commit (§SD2); the function
+	// table resolves a unit id to source (§SD3); a sample is what the
+	// sampler's tick found newly covered (§SD4); an agent apply is the set
+	// of units one agent command's handler executed (§SD5). Unit sets ride
+	// the u32Set section.
+	MembKindCoverageBuild           = NkRegistry.MustBegin("runtimeKindCoverageBuild", 511).End()
+	MembCoverageBuildMetaHash       = NkRegistry.MustBegin("coverageBuildMetaHash", 512).End()
+	MembCoverageBuildMode           = NkRegistry.MustBegin("coverageBuildMode", 513).End()
+	MembCoverageBuildGranularity    = NkRegistry.MustBegin("coverageBuildGranularity", 514).End()
+	MembCoverageBuildUnits          = NkRegistry.MustBegin("coverageBuildUnits", 515).End()
+	MembCoverageBuildStmts          = NkRegistry.MustBegin("coverageBuildStmts", 516).End()
+	MembCoverageBuildFuncs          = NkRegistry.MustBegin("coverageBuildFuncs", 517).End()
+	MembCoverageBuildPkgs           = NkRegistry.MustBegin("coverageBuildPkgs", 518).End()
+	MembCoverageBuildId             = NkRegistry.MustBegin("coverageBuildId", 519).End()
+	MembCoverageBuildVcsRevision    = NkRegistry.MustBegin("coverageBuildVcsRevision", 520).End()
+	MembCoverageBuildVcsModified    = NkRegistry.MustBegin("coverageBuildVcsModified", 521).End()
+	MembKindCoverageFunc            = NkRegistry.MustBegin("runtimeKindCoverageFunc", 522).End()
+	MembCoverageFuncMetaHash        = NkRegistry.MustBegin("coverageFuncMetaHash", 523).End()
+	MembCoverageFuncPkg             = NkRegistry.MustBegin("coverageFuncPkg", 524).End()
+	MembCoverageFuncName            = NkRegistry.MustBegin("coverageFuncName", 525).End()
+	MembCoverageFuncFile            = NkRegistry.MustBegin("coverageFuncFile", 526).End()
+	MembCoverageFuncLit             = NkRegistry.MustBegin("coverageFuncLit", 527).End()
+	MembCoverageFuncUnitBase        = NkRegistry.MustBegin("coverageFuncUnitBase", 528).End()
+	MembCoverageFuncUnits           = NkRegistry.MustBegin("coverageFuncUnits", 529).End()
+	MembCoverageFuncStmts           = NkRegistry.MustBegin("coverageFuncStmts", 530).End()
+	MembCoverageFuncUnitStLine      = NkRegistry.MustBegin("coverageFuncUnitStLine", 531).End()
+	MembCoverageFuncUnitEnLine      = NkRegistry.MustBegin("coverageFuncUnitEnLine", 532).End()
+	MembCoverageFuncUnitStmts       = NkRegistry.MustBegin("coverageFuncUnitStmts", 533).End()
+	MembKindCoverageSample          = NkRegistry.MustBegin("runtimeKindCoverageSample", 534).End()
+	MembCoverageSampleMetaHash      = NkRegistry.MustBegin("coverageSampleMetaHash", 535).End()
+	MembCoverageSampleSeq           = NkRegistry.MustBegin("coverageSampleSeq", 536).End()
+	MembCoverageSampleUnits         = NkRegistry.MustBegin("coverageSampleUnits", 537).End()
+	MembCoverageSampleCovUnits      = NkRegistry.MustBegin("coverageSampleCoveredUnits", 538).End()
+	MembCoverageSampleCovStmts      = NkRegistry.MustBegin("coverageSampleCoveredStmts", 539).End()
+	MembCoverageSampleCovFuncs      = NkRegistry.MustBegin("coverageSampleCoveredFuncs", 540).End()
+	MembKindCoverageAgentApply      = NkRegistry.MustBegin("runtimeKindCoverageAgentApply", 541).End()
+	MembCoverageAgentApplyMetaHash  = NkRegistry.MustBegin("coverageAgentApplyMetaHash", 542).End()
+	MembCoverageAgentApplyFrame     = NkRegistry.MustBegin("coverageAgentApplyFrame", 543).End()
+	MembCoverageAgentApplyUnits     = NkRegistry.MustBegin("coverageAgentApplyUnits", 544).End()
+	MembCoverageAgentApplyChanged   = NkRegistry.MustBegin("coverageAgentApplyChangedUnits", 545).End()
+	MembCoverageAgentApplyFuncs     = NkRegistry.MustBegin("coverageAgentApplyChangedFuncs", 546).End()
+	MembCoverageAgentApplyOperation = NkRegistry.MustBegin("coverageAgentApplyOperation", 547).End()
+	MembCoverageAgentApplyPhase     = NkRegistry.MustBegin("coverageAgentApplyPhase", 548).End()
+	MembCoverageAgentApplyCostUs    = NkRegistry.MustBegin("coverageAgentApplyCostUs", 549).End()
 )
 
 // AllMembs is the enumerated set of registered runtime memberships. Tests
@@ -893,4 +938,15 @@ var AllMembs = []registry.RegisteredNaturalKey{
 	MembKindLadingPublish, MembLadingPublishTag, MembLadingPublishMount, MembLadingPublishSnapshot, MembLadingPublishName,
 	MembLadingPublishTtlDays, MembLadingPublishTier, MembLadingPublishConfined, MembLadingPublishDecision, MembLadingPublishReason,
 	MembLadingPublishPaths, MembLadingPublishDigests, MembLadingPublishBytes,
+	MembKindCoverageBuild, MembCoverageBuildMetaHash, MembCoverageBuildMode, MembCoverageBuildGranularity,
+	MembCoverageBuildUnits, MembCoverageBuildStmts, MembCoverageBuildFuncs, MembCoverageBuildPkgs,
+	MembCoverageBuildId, MembCoverageBuildVcsRevision, MembCoverageBuildVcsModified,
+	MembKindCoverageFunc, MembCoverageFuncMetaHash, MembCoverageFuncPkg, MembCoverageFuncName, MembCoverageFuncFile,
+	MembCoverageFuncLit, MembCoverageFuncUnitBase, MembCoverageFuncUnits, MembCoverageFuncStmts,
+	MembCoverageFuncUnitStLine, MembCoverageFuncUnitEnLine, MembCoverageFuncUnitStmts,
+	MembKindCoverageSample, MembCoverageSampleMetaHash, MembCoverageSampleSeq, MembCoverageSampleUnits,
+	MembCoverageSampleCovUnits, MembCoverageSampleCovStmts, MembCoverageSampleCovFuncs,
+	MembKindCoverageAgentApply, MembCoverageAgentApplyMetaHash, MembCoverageAgentApplyFrame, MembCoverageAgentApplyUnits,
+	MembCoverageAgentApplyChanged, MembCoverageAgentApplyFuncs, MembCoverageAgentApplyOperation,
+	MembCoverageAgentApplyPhase, MembCoverageAgentApplyCostUs,
 }

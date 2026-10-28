@@ -41,6 +41,7 @@ type Producer struct {
 	subject  string
 	codec    Codec
 	interval time.Duration
+	sink     func(upd *covsnap.Update)
 	log      zerolog.Logger
 
 	cancel context.CancelFunc
@@ -55,7 +56,12 @@ type ProducerOptions struct {
 	Subject  string
 	Codec    Codec
 	Interval time.Duration
-	Log      zerolog.Logger
+	// Sink, when set, is handed every update the sampler folds, on the
+	// producer's goroutine, before it is published (ADR-0343 §SD4): the
+	// in-process consumer that must not depend on the fire-and-forget
+	// bus — the trail. It must not block for long; the tick waits on it.
+	Sink func(upd *covsnap.Update)
+	Log  zerolog.Logger
 }
 
 // NewProducer validates opts and returns a stopped Producer; call Start to
@@ -86,6 +92,7 @@ func NewProducer(opts ProducerOptions) (inst *Producer, err error) {
 		subject:  opts.Subject,
 		codec:    opts.Codec,
 		interval: clampInterval(opts.Interval),
+		sink:     opts.Sink,
 		log:      opts.Log,
 	}
 	return
@@ -123,6 +130,9 @@ func (inst *Producer) tick() {
 	if err != nil {
 		inst.log.Warn().Err(err).Msg("coveragebus: sample error")
 		return
+	}
+	if inst.sink != nil {
+		inst.sink(upd)
 	}
 	payload, err := inst.codec.Encode(upd)
 	if err != nil {

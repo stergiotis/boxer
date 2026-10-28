@@ -205,6 +205,36 @@ func CreateSchemaWatchbillTable() (schema *arrow.Schema) {
 		/* 179 */ arrow.Field{Name: "tv:jobLastError:lrcard:lrcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
 		/* 180 */ arrow.Field{Name: "tv:jobLastError:lvcard:lvcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
 		/* 181 */ arrow.Field{Name: "tv:jobLastError:lmrcard:lmrcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 182 */ arrow.Field{Name: "tv:jobTask:value:val:s:24:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.StringType{})},
+		/* 183 */ arrow.Field{Name: "tv:jobTask:hr:hr:u64:47:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 184 */ arrow.Field{Name: "tv:jobTask:lr:lr:u64:1247:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 185 */ arrow.Field{Name: "tv:jobTask:lv:lv:y:124:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
+		/* 186 */ arrow.Field{Name: "tv:jobTask:lmr:lmr:u64:1247:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 187 */ arrow.Field{Name: "tv:jobTask:mrhp:mrhp:y:4:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
+		/* 188 */ arrow.Field{Name: "tv:jobTask:hrcard:hrcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 189 */ arrow.Field{Name: "tv:jobTask:lrcard:lrcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 190 */ arrow.Field{Name: "tv:jobTask:lvcard:lvcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 191 */ arrow.Field{Name: "tv:jobTask:lmrcard:lmrcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 192 */ arrow.Field{Name: "tv:jobTaskEpoch:value:val:u64:4:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 193 */ arrow.Field{Name: "tv:jobTaskEpoch:hr:hr:u64:47:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 194 */ arrow.Field{Name: "tv:jobTaskEpoch:lr:lr:u64:1247:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 195 */ arrow.Field{Name: "tv:jobTaskEpoch:lv:lv:y:124:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
+		/* 196 */ arrow.Field{Name: "tv:jobTaskEpoch:lmr:lmr:u64:1247:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 197 */ arrow.Field{Name: "tv:jobTaskEpoch:mrhp:mrhp:y:4:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
+		/* 198 */ arrow.Field{Name: "tv:jobTaskEpoch:hrcard:hrcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 199 */ arrow.Field{Name: "tv:jobTaskEpoch:lrcard:lrcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 200 */ arrow.Field{Name: "tv:jobTaskEpoch:lvcard:lvcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 201 */ arrow.Field{Name: "tv:jobTaskEpoch:lmrcard:lmrcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 202 */ arrow.Field{Name: "tv:jobCall:value:val:s:24:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.StringType{})},
+		/* 203 */ arrow.Field{Name: "tv:jobCall:hr:hr:u64:47:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 204 */ arrow.Field{Name: "tv:jobCall:lr:lr:u64:1247:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 205 */ arrow.Field{Name: "tv:jobCall:lv:lv:y:124:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
+		/* 206 */ arrow.Field{Name: "tv:jobCall:lmr:lmr:u64:1247:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 207 */ arrow.Field{Name: "tv:jobCall:mrhp:mrhp:y:4:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
+		/* 208 */ arrow.Field{Name: "tv:jobCall:hrcard:hrcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 209 */ arrow.Field{Name: "tv:jobCall:lrcard:lrcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 210 */ arrow.Field{Name: "tv:jobCall:lvcard:lvcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 211 */ arrow.Field{Name: "tv:jobCall:lmrcard:lmrcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
 	}, nil)
 	return
 }
@@ -230,33 +260,39 @@ type InEntityWatchbillTable struct {
 	section03State     runtime.EntityStateE
 	section04Inst      *InEntityWatchbillTableSectionJobBackoffBaseMs
 	section04State     runtime.EntityStateE
-	section05Inst      *InEntityWatchbillTableSectionJobFinishedAt
+	section05Inst      *InEntityWatchbillTableSectionJobCall
 	section05State     runtime.EntityStateE
-	section06Inst      *InEntityWatchbillTableSectionJobKind
+	section06Inst      *InEntityWatchbillTableSectionJobFinishedAt
 	section06State     runtime.EntityStateE
-	section07Inst      *InEntityWatchbillTableSectionJobLastError
+	section07Inst      *InEntityWatchbillTableSectionJobKind
 	section07State     runtime.EntityStateE
-	section08Inst      *InEntityWatchbillTableSectionJobMaxAttempts
+	section08Inst      *InEntityWatchbillTableSectionJobLastError
 	section08State     runtime.EntityStateE
-	section09Inst      *InEntityWatchbillTableSectionJobOwnerApp
+	section09Inst      *InEntityWatchbillTableSectionJobMaxAttempts
 	section09State     runtime.EntityStateE
-	section10Inst      *InEntityWatchbillTableSectionJobPriority
+	section10Inst      *InEntityWatchbillTableSectionJobOwnerApp
 	section10State     runtime.EntityStateE
-	section11Inst      *InEntityWatchbillTableSectionJobQueue
+	section11Inst      *InEntityWatchbillTableSectionJobPriority
 	section11State     runtime.EntityStateE
-	section12Inst      *InEntityWatchbillTableSectionJobRequesterRun
+	section12Inst      *InEntityWatchbillTableSectionJobQueue
 	section12State     runtime.EntityStateE
-	section13Inst      *InEntityWatchbillTableSectionJobRunAfter
+	section13Inst      *InEntityWatchbillTableSectionJobRequesterRun
 	section13State     runtime.EntityStateE
-	section14Inst      *InEntityWatchbillTableSectionJobState
+	section14Inst      *InEntityWatchbillTableSectionJobRunAfter
 	section14State     runtime.EntityStateE
-	section15Inst      *InEntityWatchbillTableSectionJobSubject
+	section15Inst      *InEntityWatchbillTableSectionJobState
 	section15State     runtime.EntityStateE
-	section16Inst      *InEntityWatchbillTableSectionJobTimeoutMs
+	section16Inst      *InEntityWatchbillTableSectionJobSubject
 	section16State     runtime.EntityStateE
-	section17Inst      *InEntityWatchbillTableSectionJobWorkerRun
+	section17Inst      *InEntityWatchbillTableSectionJobTask
 	section17State     runtime.EntityStateE
-	activeSections     *[18]bool
+	section18Inst      *InEntityWatchbillTableSectionJobTaskEpoch
+	section18State     runtime.EntityStateE
+	section19Inst      *InEntityWatchbillTableSectionJobTimeoutMs
+	section19State     runtime.EntityStateE
+	section20Inst      *InEntityWatchbillTableSectionJobWorkerRun
+	section20State     runtime.EntityStateE
+	activeSections     *[21]bool
 	ambientHighCardRef []uint64
 	plainId0           string
 
@@ -294,7 +330,7 @@ func (inst *InEntityWatchbillTable) setActiveSections(idxs []int) {
 		inst.activeSections = nil
 		return
 	}
-	var mask [18]bool
+	var mask [21]bool
 	for _, i := range idxs {
 		if i >= 0 && i < len(mask) {
 			mask[i] = true
@@ -313,19 +349,22 @@ var InEntityWatchbillTableSectionIndices = map[string]int{
 	"jobAttempt":       2,
 	"jobBackoff":       3,
 	"jobBackoffBaseMs": 4,
-	"jobFinishedAt":    5,
-	"jobKind":          6,
-	"jobLastError":     7,
-	"jobMaxAttempts":   8,
-	"jobOwnerApp":      9,
-	"jobPriority":      10,
-	"jobQueue":         11,
-	"jobRequesterRun":  12,
-	"jobRunAfter":      13,
-	"jobState":         14,
-	"jobSubject":       15,
-	"jobTimeoutMs":     16,
-	"jobWorkerRun":     17,
+	"jobCall":          5,
+	"jobFinishedAt":    6,
+	"jobKind":          7,
+	"jobLastError":     8,
+	"jobMaxAttempts":   9,
+	"jobOwnerApp":      10,
+	"jobPriority":      11,
+	"jobQueue":         12,
+	"jobRequesterRun":  13,
+	"jobRunAfter":      14,
+	"jobState":         15,
+	"jobSubject":       16,
+	"jobTask":          17,
+	"jobTaskEpoch":     18,
+	"jobTimeoutMs":     19,
+	"jobWorkerRun":     20,
 }
 
 ///////////////////////////////////////////////////////////////////
@@ -403,19 +442,22 @@ func (inst *InEntityWatchbillTable) initSections(builder *array.RecordBuilder) {
 	inst.section02Inst = NewInEntityWatchbillTableSectionJobAttempt(builder, inst)
 	inst.section03Inst = NewInEntityWatchbillTableSectionJobBackoff(builder, inst)
 	inst.section04Inst = NewInEntityWatchbillTableSectionJobBackoffBaseMs(builder, inst)
-	inst.section05Inst = NewInEntityWatchbillTableSectionJobFinishedAt(builder, inst)
-	inst.section06Inst = NewInEntityWatchbillTableSectionJobKind(builder, inst)
-	inst.section07Inst = NewInEntityWatchbillTableSectionJobLastError(builder, inst)
-	inst.section08Inst = NewInEntityWatchbillTableSectionJobMaxAttempts(builder, inst)
-	inst.section09Inst = NewInEntityWatchbillTableSectionJobOwnerApp(builder, inst)
-	inst.section10Inst = NewInEntityWatchbillTableSectionJobPriority(builder, inst)
-	inst.section11Inst = NewInEntityWatchbillTableSectionJobQueue(builder, inst)
-	inst.section12Inst = NewInEntityWatchbillTableSectionJobRequesterRun(builder, inst)
-	inst.section13Inst = NewInEntityWatchbillTableSectionJobRunAfter(builder, inst)
-	inst.section14Inst = NewInEntityWatchbillTableSectionJobState(builder, inst)
-	inst.section15Inst = NewInEntityWatchbillTableSectionJobSubject(builder, inst)
-	inst.section16Inst = NewInEntityWatchbillTableSectionJobTimeoutMs(builder, inst)
-	inst.section17Inst = NewInEntityWatchbillTableSectionJobWorkerRun(builder, inst)
+	inst.section05Inst = NewInEntityWatchbillTableSectionJobCall(builder, inst)
+	inst.section06Inst = NewInEntityWatchbillTableSectionJobFinishedAt(builder, inst)
+	inst.section07Inst = NewInEntityWatchbillTableSectionJobKind(builder, inst)
+	inst.section08Inst = NewInEntityWatchbillTableSectionJobLastError(builder, inst)
+	inst.section09Inst = NewInEntityWatchbillTableSectionJobMaxAttempts(builder, inst)
+	inst.section10Inst = NewInEntityWatchbillTableSectionJobOwnerApp(builder, inst)
+	inst.section11Inst = NewInEntityWatchbillTableSectionJobPriority(builder, inst)
+	inst.section12Inst = NewInEntityWatchbillTableSectionJobQueue(builder, inst)
+	inst.section13Inst = NewInEntityWatchbillTableSectionJobRequesterRun(builder, inst)
+	inst.section14Inst = NewInEntityWatchbillTableSectionJobRunAfter(builder, inst)
+	inst.section15Inst = NewInEntityWatchbillTableSectionJobState(builder, inst)
+	inst.section16Inst = NewInEntityWatchbillTableSectionJobSubject(builder, inst)
+	inst.section17Inst = NewInEntityWatchbillTableSectionJobTask(builder, inst)
+	inst.section18Inst = NewInEntityWatchbillTableSectionJobTaskEpoch(builder, inst)
+	inst.section19Inst = NewInEntityWatchbillTableSectionJobTimeoutMs(builder, inst)
+	inst.section20Inst = NewInEntityWatchbillTableSectionJobWorkerRun(builder, inst)
 }
 func (inst *InEntityWatchbillTable) beginSections() {
 	inst.section00Inst.beginSection()
@@ -436,6 +478,9 @@ func (inst *InEntityWatchbillTable) beginSections() {
 	inst.section15Inst.beginSection()
 	inst.section16Inst.beginSection()
 	inst.section17Inst.beginSection()
+	inst.section18Inst.beginSection()
+	inst.section19Inst.beginSection()
+	inst.section20Inst.beginSection()
 }
 func (inst *InEntityWatchbillTable) resetSections() {
 	inst.section00Inst.resetSection()
@@ -456,6 +501,9 @@ func (inst *InEntityWatchbillTable) resetSections() {
 	inst.section15Inst.resetSection()
 	inst.section16Inst.resetSection()
 	inst.section17Inst.resetSection()
+	inst.section18Inst.resetSection()
+	inst.section19Inst.resetSection()
+	inst.section20Inst.resetSection()
 }
 func (inst *InEntityWatchbillTable) CheckErrors() (err error) {
 	err = eh.CheckErrors(inst.errs)
@@ -477,6 +525,9 @@ func (inst *InEntityWatchbillTable) CheckErrors() (err error) {
 	err = errors.Join(err, inst.section15Inst.CheckErrors())
 	err = errors.Join(err, inst.section16Inst.CheckErrors())
 	err = errors.Join(err, inst.section17Inst.CheckErrors())
+	err = errors.Join(err, inst.section18Inst.CheckErrors())
+	err = errors.Join(err, inst.section19Inst.CheckErrors())
+	err = errors.Join(err, inst.section20Inst.CheckErrors())
 
 	return
 }
@@ -495,44 +546,53 @@ func (inst *InEntityWatchbillTable) GetSectionJobBackoff() *InEntityWatchbillTab
 func (inst *InEntityWatchbillTable) GetSectionJobBackoffBaseMs() *InEntityWatchbillTableSectionJobBackoffBaseMs {
 	return inst.section04Inst
 }
-func (inst *InEntityWatchbillTable) GetSectionJobFinishedAt() *InEntityWatchbillTableSectionJobFinishedAt {
+func (inst *InEntityWatchbillTable) GetSectionJobCall() *InEntityWatchbillTableSectionJobCall {
 	return inst.section05Inst
 }
-func (inst *InEntityWatchbillTable) GetSectionJobKind() *InEntityWatchbillTableSectionJobKind {
+func (inst *InEntityWatchbillTable) GetSectionJobFinishedAt() *InEntityWatchbillTableSectionJobFinishedAt {
 	return inst.section06Inst
 }
-func (inst *InEntityWatchbillTable) GetSectionJobLastError() *InEntityWatchbillTableSectionJobLastError {
+func (inst *InEntityWatchbillTable) GetSectionJobKind() *InEntityWatchbillTableSectionJobKind {
 	return inst.section07Inst
 }
-func (inst *InEntityWatchbillTable) GetSectionJobMaxAttempts() *InEntityWatchbillTableSectionJobMaxAttempts {
+func (inst *InEntityWatchbillTable) GetSectionJobLastError() *InEntityWatchbillTableSectionJobLastError {
 	return inst.section08Inst
 }
-func (inst *InEntityWatchbillTable) GetSectionJobOwnerApp() *InEntityWatchbillTableSectionJobOwnerApp {
+func (inst *InEntityWatchbillTable) GetSectionJobMaxAttempts() *InEntityWatchbillTableSectionJobMaxAttempts {
 	return inst.section09Inst
 }
-func (inst *InEntityWatchbillTable) GetSectionJobPriority() *InEntityWatchbillTableSectionJobPriority {
+func (inst *InEntityWatchbillTable) GetSectionJobOwnerApp() *InEntityWatchbillTableSectionJobOwnerApp {
 	return inst.section10Inst
 }
-func (inst *InEntityWatchbillTable) GetSectionJobQueue() *InEntityWatchbillTableSectionJobQueue {
+func (inst *InEntityWatchbillTable) GetSectionJobPriority() *InEntityWatchbillTableSectionJobPriority {
 	return inst.section11Inst
 }
-func (inst *InEntityWatchbillTable) GetSectionJobRequesterRun() *InEntityWatchbillTableSectionJobRequesterRun {
+func (inst *InEntityWatchbillTable) GetSectionJobQueue() *InEntityWatchbillTableSectionJobQueue {
 	return inst.section12Inst
 }
-func (inst *InEntityWatchbillTable) GetSectionJobRunAfter() *InEntityWatchbillTableSectionJobRunAfter {
+func (inst *InEntityWatchbillTable) GetSectionJobRequesterRun() *InEntityWatchbillTableSectionJobRequesterRun {
 	return inst.section13Inst
 }
-func (inst *InEntityWatchbillTable) GetSectionJobState() *InEntityWatchbillTableSectionJobState {
+func (inst *InEntityWatchbillTable) GetSectionJobRunAfter() *InEntityWatchbillTableSectionJobRunAfter {
 	return inst.section14Inst
 }
-func (inst *InEntityWatchbillTable) GetSectionJobSubject() *InEntityWatchbillTableSectionJobSubject {
+func (inst *InEntityWatchbillTable) GetSectionJobState() *InEntityWatchbillTableSectionJobState {
 	return inst.section15Inst
 }
-func (inst *InEntityWatchbillTable) GetSectionJobTimeoutMs() *InEntityWatchbillTableSectionJobTimeoutMs {
+func (inst *InEntityWatchbillTable) GetSectionJobSubject() *InEntityWatchbillTableSectionJobSubject {
 	return inst.section16Inst
 }
-func (inst *InEntityWatchbillTable) GetSectionJobWorkerRun() *InEntityWatchbillTableSectionJobWorkerRun {
+func (inst *InEntityWatchbillTable) GetSectionJobTask() *InEntityWatchbillTableSectionJobTask {
 	return inst.section17Inst
+}
+func (inst *InEntityWatchbillTable) GetSectionJobTaskEpoch() *InEntityWatchbillTableSectionJobTaskEpoch {
+	return inst.section18Inst
+}
+func (inst *InEntityWatchbillTable) GetSectionJobTimeoutMs() *InEntityWatchbillTableSectionJobTimeoutMs {
+	return inst.section19Inst
+}
+func (inst *InEntityWatchbillTable) GetSectionJobWorkerRun() *InEntityWatchbillTableSectionJobWorkerRun {
+	return inst.section20Inst
 }
 func (inst *InEntityWatchbillTable) beginEntity() *InEntityWatchbillTable {
 	switch inst.state {
@@ -592,7 +652,7 @@ func (inst *InEntityWatchbillTable) validateEntity() {
 		state := inst.section05Inst.state
 		switch state {
 		case runtime.EntityStateInAttribute:
-			inst.AppendError(eb.Build().Str("section", "jobFinishedAt").Stringer("state", state).Errorf("wrong state: Check that .BeginAttribute() is followed by .EndAttribute()"))
+			inst.AppendError(eb.Build().Str("section", "jobCall").Stringer("state", state).Errorf("wrong state: Check that .BeginAttribute() is followed by .EndAttribute()"))
 			break
 		}
 	}
@@ -600,7 +660,7 @@ func (inst *InEntityWatchbillTable) validateEntity() {
 		state := inst.section06Inst.state
 		switch state {
 		case runtime.EntityStateInAttribute:
-			inst.AppendError(eb.Build().Str("section", "jobKind").Stringer("state", state).Errorf("wrong state: Check that .BeginAttribute() is followed by .EndAttribute()"))
+			inst.AppendError(eb.Build().Str("section", "jobFinishedAt").Stringer("state", state).Errorf("wrong state: Check that .BeginAttribute() is followed by .EndAttribute()"))
 			break
 		}
 	}
@@ -608,7 +668,7 @@ func (inst *InEntityWatchbillTable) validateEntity() {
 		state := inst.section07Inst.state
 		switch state {
 		case runtime.EntityStateInAttribute:
-			inst.AppendError(eb.Build().Str("section", "jobLastError").Stringer("state", state).Errorf("wrong state: Check that .BeginAttribute() is followed by .EndAttribute()"))
+			inst.AppendError(eb.Build().Str("section", "jobKind").Stringer("state", state).Errorf("wrong state: Check that .BeginAttribute() is followed by .EndAttribute()"))
 			break
 		}
 	}
@@ -616,7 +676,7 @@ func (inst *InEntityWatchbillTable) validateEntity() {
 		state := inst.section08Inst.state
 		switch state {
 		case runtime.EntityStateInAttribute:
-			inst.AppendError(eb.Build().Str("section", "jobMaxAttempts").Stringer("state", state).Errorf("wrong state: Check that .BeginAttribute() is followed by .EndAttribute()"))
+			inst.AppendError(eb.Build().Str("section", "jobLastError").Stringer("state", state).Errorf("wrong state: Check that .BeginAttribute() is followed by .EndAttribute()"))
 			break
 		}
 	}
@@ -624,7 +684,7 @@ func (inst *InEntityWatchbillTable) validateEntity() {
 		state := inst.section09Inst.state
 		switch state {
 		case runtime.EntityStateInAttribute:
-			inst.AppendError(eb.Build().Str("section", "jobOwnerApp").Stringer("state", state).Errorf("wrong state: Check that .BeginAttribute() is followed by .EndAttribute()"))
+			inst.AppendError(eb.Build().Str("section", "jobMaxAttempts").Stringer("state", state).Errorf("wrong state: Check that .BeginAttribute() is followed by .EndAttribute()"))
 			break
 		}
 	}
@@ -632,7 +692,7 @@ func (inst *InEntityWatchbillTable) validateEntity() {
 		state := inst.section10Inst.state
 		switch state {
 		case runtime.EntityStateInAttribute:
-			inst.AppendError(eb.Build().Str("section", "jobPriority").Stringer("state", state).Errorf("wrong state: Check that .BeginAttribute() is followed by .EndAttribute()"))
+			inst.AppendError(eb.Build().Str("section", "jobOwnerApp").Stringer("state", state).Errorf("wrong state: Check that .BeginAttribute() is followed by .EndAttribute()"))
 			break
 		}
 	}
@@ -640,7 +700,7 @@ func (inst *InEntityWatchbillTable) validateEntity() {
 		state := inst.section11Inst.state
 		switch state {
 		case runtime.EntityStateInAttribute:
-			inst.AppendError(eb.Build().Str("section", "jobQueue").Stringer("state", state).Errorf("wrong state: Check that .BeginAttribute() is followed by .EndAttribute()"))
+			inst.AppendError(eb.Build().Str("section", "jobPriority").Stringer("state", state).Errorf("wrong state: Check that .BeginAttribute() is followed by .EndAttribute()"))
 			break
 		}
 	}
@@ -648,7 +708,7 @@ func (inst *InEntityWatchbillTable) validateEntity() {
 		state := inst.section12Inst.state
 		switch state {
 		case runtime.EntityStateInAttribute:
-			inst.AppendError(eb.Build().Str("section", "jobRequesterRun").Stringer("state", state).Errorf("wrong state: Check that .BeginAttribute() is followed by .EndAttribute()"))
+			inst.AppendError(eb.Build().Str("section", "jobQueue").Stringer("state", state).Errorf("wrong state: Check that .BeginAttribute() is followed by .EndAttribute()"))
 			break
 		}
 	}
@@ -656,7 +716,7 @@ func (inst *InEntityWatchbillTable) validateEntity() {
 		state := inst.section13Inst.state
 		switch state {
 		case runtime.EntityStateInAttribute:
-			inst.AppendError(eb.Build().Str("section", "jobRunAfter").Stringer("state", state).Errorf("wrong state: Check that .BeginAttribute() is followed by .EndAttribute()"))
+			inst.AppendError(eb.Build().Str("section", "jobRequesterRun").Stringer("state", state).Errorf("wrong state: Check that .BeginAttribute() is followed by .EndAttribute()"))
 			break
 		}
 	}
@@ -664,7 +724,7 @@ func (inst *InEntityWatchbillTable) validateEntity() {
 		state := inst.section14Inst.state
 		switch state {
 		case runtime.EntityStateInAttribute:
-			inst.AppendError(eb.Build().Str("section", "jobState").Stringer("state", state).Errorf("wrong state: Check that .BeginAttribute() is followed by .EndAttribute()"))
+			inst.AppendError(eb.Build().Str("section", "jobRunAfter").Stringer("state", state).Errorf("wrong state: Check that .BeginAttribute() is followed by .EndAttribute()"))
 			break
 		}
 	}
@@ -672,7 +732,7 @@ func (inst *InEntityWatchbillTable) validateEntity() {
 		state := inst.section15Inst.state
 		switch state {
 		case runtime.EntityStateInAttribute:
-			inst.AppendError(eb.Build().Str("section", "jobSubject").Stringer("state", state).Errorf("wrong state: Check that .BeginAttribute() is followed by .EndAttribute()"))
+			inst.AppendError(eb.Build().Str("section", "jobState").Stringer("state", state).Errorf("wrong state: Check that .BeginAttribute() is followed by .EndAttribute()"))
 			break
 		}
 	}
@@ -680,12 +740,36 @@ func (inst *InEntityWatchbillTable) validateEntity() {
 		state := inst.section16Inst.state
 		switch state {
 		case runtime.EntityStateInAttribute:
-			inst.AppendError(eb.Build().Str("section", "jobTimeoutMs").Stringer("state", state).Errorf("wrong state: Check that .BeginAttribute() is followed by .EndAttribute()"))
+			inst.AppendError(eb.Build().Str("section", "jobSubject").Stringer("state", state).Errorf("wrong state: Check that .BeginAttribute() is followed by .EndAttribute()"))
 			break
 		}
 	}
 	{
 		state := inst.section17Inst.state
+		switch state {
+		case runtime.EntityStateInAttribute:
+			inst.AppendError(eb.Build().Str("section", "jobTask").Stringer("state", state).Errorf("wrong state: Check that .BeginAttribute() is followed by .EndAttribute()"))
+			break
+		}
+	}
+	{
+		state := inst.section18Inst.state
+		switch state {
+		case runtime.EntityStateInAttribute:
+			inst.AppendError(eb.Build().Str("section", "jobTaskEpoch").Stringer("state", state).Errorf("wrong state: Check that .BeginAttribute() is followed by .EndAttribute()"))
+			break
+		}
+	}
+	{
+		state := inst.section19Inst.state
+		switch state {
+		case runtime.EntityStateInAttribute:
+			inst.AppendError(eb.Build().Str("section", "jobTimeoutMs").Stringer("state", state).Errorf("wrong state: Check that .BeginAttribute() is followed by .EndAttribute()"))
+			break
+		}
+	}
+	{
+		state := inst.section20Inst.state
 		switch state {
 		case runtime.EntityStateInAttribute:
 			inst.AppendError(eb.Build().Str("section", "jobWorkerRun").Stringer("state", state).Errorf("wrong state: Check that .BeginAttribute() is followed by .EndAttribute()"))
@@ -2419,6 +2503,332 @@ func (inst *InEntityWatchbillTableSectionJobBackoffBaseMsInAttr) AppendError(err
 	inst.errs = eh.AppendError(inst.errs, err)
 }
 func (inst *InEntityWatchbillTableSectionJobBackoffBaseMsInAttr) clearErrors() {
+	inst.errs = eh.ClearErrors(inst.errs)
+}
+
+type InEntityWatchbillTableSectionJobCall struct {
+	errs                  []error
+	inAttr                *InEntityWatchbillTableSectionJobCallInAttr
+	state                 runtime.EntityStateE
+	attributeCount        int
+	parent                *InEntityWatchbillTable
+	scalarFieldBuilder202 *array.StringBuilder
+	scalarListBuilder202  *array.ListBuilder
+}
+
+func NewInEntityWatchbillTableSectionJobCall(builder *array.RecordBuilder, parent *InEntityWatchbillTable) (inst *InEntityWatchbillTableSectionJobCall) {
+	inst = &InEntityWatchbillTableSectionJobCall{}
+	inAttr := NewInEntityWatchbillTableSectionJobCallInAttr(builder, inst)
+	inst.errs = make([]error, 0, 8)
+	inst.state = runtime.EntityStateInitial
+	inst.inAttr = inAttr
+	inst.parent = parent
+	inst.scalarFieldBuilder202 = builder.Field(202).(*array.ListBuilder).ValueBuilder().(*array.StringBuilder)
+	inst.scalarListBuilder202 = builder.Field(202).(*array.ListBuilder)
+
+	return inst
+}
+func (inst *InEntityWatchbillTableSectionJobCall) endAttribute() {
+	switch inst.state {
+	case runtime.EntityStateInAttribute:
+		inst.state = runtime.EntityStateInSection
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+}
+func (inst *InEntityWatchbillTableSectionJobCall) BeginAttribute(value202 string) *InEntityWatchbillTableSectionJobCallInAttr {
+	switch inst.state {
+	case runtime.EntityStateInSection:
+		inst.state = runtime.EntityStateInAttribute
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst.inAttr
+	}
+	inst.scalarFieldBuilder202.Append(value202)
+	inst.attributeCount++
+
+	inst.inAttr.state = inst.state
+	return inst.inAttr
+}
+
+type InEntityWatchbillTableSectionJobCallAttr struct {
+	Value string
+}
+
+func (inst *InEntityWatchbillTableSectionJobCall) Add(attr InEntityWatchbillTableSectionJobCallAttr) *InEntityWatchbillTableSectionJobCallInAttr {
+	a := inst.BeginAttribute(attr.Value)
+	return a
+}
+func (inst *InEntityWatchbillTableSectionJobCall) CheckErrors() (err error) {
+	err = eh.CheckErrors(slices.Concat(inst.errs, inst.inAttr.errs))
+	return
+}
+func (inst *InEntityWatchbillTableSectionJobCall) EndSection() *InEntityWatchbillTable {
+	switch inst.state {
+	case runtime.EntityStateInSection:
+		inst.state = runtime.EntityStateInitial
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst.parent
+	}
+
+	return inst.parent
+}
+
+func (inst *InEntityWatchbillTableSectionJobCall) beginSection() {
+	inst.state = runtime.EntityStateInSection
+	inst.attributeCount = 0
+	inst.inAttr.beginAttribute()
+}
+
+func (inst *InEntityWatchbillTableSectionJobCall) resetSection() {
+	inst.clearErrors()
+	inst.inAttr.clearErrors()
+	inst.attributeCount = 0
+	inst.state = runtime.EntityStateInitial
+}
+
+func (inst *InEntityWatchbillTableSectionJobCall) AppendError(err error) {
+	inst.errs = eh.AppendError(inst.errs, err)
+}
+func (inst *InEntityWatchbillTableSectionJobCall) clearErrors() {
+	inst.errs = eh.ClearErrors(inst.errs)
+}
+
+type InEntityWatchbillTableSectionJobCallInAttr struct {
+	errs                             []error
+	state                            runtime.EntityStateE
+	parent                           *InEntityWatchbillTableSectionJobCall
+	scalarFieldBuilder202            *array.StringBuilder
+	scalarListBuilder202             *array.ListBuilder
+	membershipFieldBuilder203        *array.Uint64Builder
+	membershipListBuilder203         *array.ListBuilder
+	membershipFieldBuilder204        *array.Uint64Builder
+	membershipListBuilder204         *array.ListBuilder
+	membershipFieldBuilder205        *array.BinaryBuilder
+	membershipListBuilder205         *array.ListBuilder
+	membershipFieldBuilder206        *array.Uint64Builder
+	membershipListBuilder206         *array.ListBuilder
+	membershipFieldBuilder207        *array.BinaryBuilder
+	membershipListBuilder207         *array.ListBuilder
+	membershipSupportFieldBuilder208 *array.Uint64Builder
+	membershipSupportListBuilder208  *array.ListBuilder
+	membershipSupportFieldBuilder209 *array.Uint64Builder
+	membershipSupportListBuilder209  *array.ListBuilder
+	membershipSupportFieldBuilder210 *array.Uint64Builder
+	membershipSupportListBuilder210  *array.ListBuilder
+	membershipSupportFieldBuilder211 *array.Uint64Builder
+	membershipSupportListBuilder211  *array.ListBuilder
+
+	membershipContainerLength203 int
+
+	membershipContainerLength204 int
+
+	membershipContainerLength205 int
+
+	membershipContainerLength206 int
+
+	membershipContainerLength207 int
+}
+
+func NewInEntityWatchbillTableSectionJobCallInAttr(builder *array.RecordBuilder, parent *InEntityWatchbillTableSectionJobCall) (inst *InEntityWatchbillTableSectionJobCallInAttr) {
+	inst = &InEntityWatchbillTableSectionJobCallInAttr{}
+	inst.errs = make([]error, 0, 8)
+	inst.state = runtime.EntityStateInitial
+	inst.parent = parent
+	inst.scalarFieldBuilder202 = builder.Field(202).(*array.ListBuilder).ValueBuilder().(*array.StringBuilder)
+	inst.scalarListBuilder202 = builder.Field(202).(*array.ListBuilder)
+	inst.membershipFieldBuilder203 = builder.Field(203).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipListBuilder203 = builder.Field(203).(*array.ListBuilder)
+	inst.membershipFieldBuilder204 = builder.Field(204).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipListBuilder204 = builder.Field(204).(*array.ListBuilder)
+	inst.membershipFieldBuilder205 = builder.Field(205).(*array.ListBuilder).ValueBuilder().(*array.BinaryBuilder)
+	inst.membershipListBuilder205 = builder.Field(205).(*array.ListBuilder)
+	inst.membershipFieldBuilder206 = builder.Field(206).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipListBuilder206 = builder.Field(206).(*array.ListBuilder)
+	inst.membershipFieldBuilder207 = builder.Field(207).(*array.ListBuilder).ValueBuilder().(*array.BinaryBuilder)
+	inst.membershipListBuilder207 = builder.Field(207).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder208 = builder.Field(208).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder208 = builder.Field(208).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder209 = builder.Field(209).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder209 = builder.Field(209).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder210 = builder.Field(210).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder210 = builder.Field(210).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder211 = builder.Field(211).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder211 = builder.Field(211).(*array.ListBuilder)
+
+	return inst
+}
+func (inst *InEntityWatchbillTableSectionJobCallInAttr) beginAttribute() {
+	inst.membershipListBuilder203.Append(true)
+	inst.membershipListBuilder204.Append(true)
+	inst.membershipListBuilder205.Append(true)
+	inst.membershipListBuilder206.Append(true)
+	inst.membershipListBuilder207.Append(true)
+	inst.membershipContainerLength203 = 0
+	inst.membershipContainerLength204 = 0
+	inst.membershipContainerLength205 = 0
+	inst.membershipContainerLength206 = 0
+	inst.membershipContainerLength207 = 0
+	inst.scalarListBuilder202.Append(true)
+	inst.membershipSupportListBuilder208.Append(true)
+	inst.membershipSupportListBuilder209.Append(true)
+	inst.membershipSupportListBuilder210.Append(true)
+	inst.membershipSupportListBuilder211.Append(true)
+	inst.state = runtime.EntityStateInSection
+	inst.clearErrors()
+}
+func (inst *InEntityWatchbillTableSectionJobCallInAttr) AddMembershipHighCardRef(hr203 uint64) *InEntityWatchbillTableSectionJobCallInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.membershipFieldBuilder203.Append(hr203)
+	inst.membershipContainerLength203++
+	return inst
+}
+func (inst *InEntityWatchbillTableSectionJobCallInAttr) AddMembershipHighCardRefP(hr203 uint64) {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+	inst.membershipFieldBuilder203.Append(hr203)
+	inst.membershipContainerLength203++
+	return
+}
+func (inst *InEntityWatchbillTableSectionJobCallInAttr) AddMembershipLowCardRef(lr204 uint64) *InEntityWatchbillTableSectionJobCallInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.membershipFieldBuilder204.Append(lr204)
+	inst.membershipContainerLength204++
+	return inst
+}
+func (inst *InEntityWatchbillTableSectionJobCallInAttr) AddMembershipLowCardRefP(lr204 uint64) {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+	inst.membershipFieldBuilder204.Append(lr204)
+	inst.membershipContainerLength204++
+	return
+}
+func (inst *InEntityWatchbillTableSectionJobCallInAttr) AddMembershipLowCardVerbatim(lv205 []byte) *InEntityWatchbillTableSectionJobCallInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.membershipFieldBuilder205.Append(lv205)
+	inst.membershipContainerLength205++
+	return inst
+}
+func (inst *InEntityWatchbillTableSectionJobCallInAttr) AddMembershipLowCardVerbatimP(lv205 []byte) {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+	inst.membershipFieldBuilder205.Append(lv205)
+	inst.membershipContainerLength205++
+	return
+}
+func (inst *InEntityWatchbillTableSectionJobCallInAttr) AddMembershipMixedLowCardRef(lmr206 uint64, mrhp207 []byte) *InEntityWatchbillTableSectionJobCallInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.membershipFieldBuilder206.Append(lmr206)
+	inst.membershipFieldBuilder207.Append(mrhp207)
+	inst.membershipContainerLength206++
+	inst.membershipContainerLength207++
+	return inst
+}
+func (inst *InEntityWatchbillTableSectionJobCallInAttr) AddMembershipMixedLowCardRefP(lmr206 uint64, mrhp207 []byte) {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+	inst.membershipFieldBuilder206.Append(lmr206)
+	inst.membershipFieldBuilder207.Append(mrhp207)
+	inst.membershipContainerLength206++
+	inst.membershipContainerLength207++
+	return
+}
+func (inst *InEntityWatchbillTableSectionJobCallInAttr) handleMembershipSupportColumns() {
+	var l int
+	var _ = l
+	l = inst.membershipContainerLength203
+	inst.membershipContainerLength203 = 0
+	inst.membershipSupportFieldBuilder208.Append(uint64(l))
+	l = inst.membershipContainerLength204
+	inst.membershipContainerLength204 = 0
+	inst.membershipSupportFieldBuilder209.Append(uint64(l))
+	l = inst.membershipContainerLength205
+	inst.membershipContainerLength205 = 0
+	inst.membershipSupportFieldBuilder210.Append(uint64(l))
+	l = inst.membershipContainerLength206
+	inst.membershipContainerLength206 = 0
+	inst.membershipSupportFieldBuilder211.Append(uint64(l))
+}
+func (inst *InEntityWatchbillTableSectionJobCallInAttr) handleNonScalarSupportColumns() {
+	var l int
+	var _ = l
+}
+func (inst *InEntityWatchbillTableSectionJobCallInAttr) applyAmbientMemberships() {
+	if inst.state != runtime.EntityStateInAttribute {
+		return
+	}
+	for _, v := range inst.parent.parent.ambientHighCardRef {
+		inst.AddMembershipHighCardRefP(v)
+	}
+}
+func (inst *InEntityWatchbillTableSectionJobCallInAttr) completeAttribute() {
+	inst.handleMembershipSupportColumns()
+	inst.handleNonScalarSupportColumns()
+}
+func (inst *InEntityWatchbillTableSectionJobCallInAttr) EndSection() *InEntityWatchbillTable {
+	inst.applyAmbientMemberships()
+	switch inst.state {
+	case runtime.EntityStateInAttribute:
+		inst.state = runtime.EntityStateInitial
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst.parent.parent
+	}
+
+	inst.completeAttribute()
+	inst.parent.endAttribute()
+	inst.parent.EndSection()
+	return inst.parent.parent
+}
+func (inst *InEntityWatchbillTableSectionJobCallInAttr) EndAttribute() *InEntityWatchbillTableSectionJobCall {
+	inst.applyAmbientMemberships()
+	switch inst.state {
+	case runtime.EntityStateInAttribute:
+		inst.state = runtime.EntityStateInSection
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst.parent
+	}
+
+	inst.completeAttribute()
+	inst.parent.endAttribute()
+	return inst.parent
+}
+func (inst *InEntityWatchbillTableSectionJobCallInAttr) EndAttributeP() {
+	inst.EndAttribute()
+}
+
+func (inst *InEntityWatchbillTableSectionJobCallInAttr) AppendError(err error) {
+	inst.errs = eh.AppendError(inst.errs, err)
+}
+func (inst *InEntityWatchbillTableSectionJobCallInAttr) clearErrors() {
 	inst.errs = eh.ClearErrors(inst.errs)
 }
 
@@ -6005,6 +6415,658 @@ func (inst *InEntityWatchbillTableSectionJobSubjectInAttr) AppendError(err error
 	inst.errs = eh.AppendError(inst.errs, err)
 }
 func (inst *InEntityWatchbillTableSectionJobSubjectInAttr) clearErrors() {
+	inst.errs = eh.ClearErrors(inst.errs)
+}
+
+type InEntityWatchbillTableSectionJobTask struct {
+	errs                  []error
+	inAttr                *InEntityWatchbillTableSectionJobTaskInAttr
+	state                 runtime.EntityStateE
+	attributeCount        int
+	parent                *InEntityWatchbillTable
+	scalarFieldBuilder182 *array.StringBuilder
+	scalarListBuilder182  *array.ListBuilder
+}
+
+func NewInEntityWatchbillTableSectionJobTask(builder *array.RecordBuilder, parent *InEntityWatchbillTable) (inst *InEntityWatchbillTableSectionJobTask) {
+	inst = &InEntityWatchbillTableSectionJobTask{}
+	inAttr := NewInEntityWatchbillTableSectionJobTaskInAttr(builder, inst)
+	inst.errs = make([]error, 0, 8)
+	inst.state = runtime.EntityStateInitial
+	inst.inAttr = inAttr
+	inst.parent = parent
+	inst.scalarFieldBuilder182 = builder.Field(182).(*array.ListBuilder).ValueBuilder().(*array.StringBuilder)
+	inst.scalarListBuilder182 = builder.Field(182).(*array.ListBuilder)
+
+	return inst
+}
+func (inst *InEntityWatchbillTableSectionJobTask) endAttribute() {
+	switch inst.state {
+	case runtime.EntityStateInAttribute:
+		inst.state = runtime.EntityStateInSection
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+}
+func (inst *InEntityWatchbillTableSectionJobTask) BeginAttribute(value182 string) *InEntityWatchbillTableSectionJobTaskInAttr {
+	switch inst.state {
+	case runtime.EntityStateInSection:
+		inst.state = runtime.EntityStateInAttribute
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst.inAttr
+	}
+	inst.scalarFieldBuilder182.Append(value182)
+	inst.attributeCount++
+
+	inst.inAttr.state = inst.state
+	return inst.inAttr
+}
+
+type InEntityWatchbillTableSectionJobTaskAttr struct {
+	Value string
+}
+
+func (inst *InEntityWatchbillTableSectionJobTask) Add(attr InEntityWatchbillTableSectionJobTaskAttr) *InEntityWatchbillTableSectionJobTaskInAttr {
+	a := inst.BeginAttribute(attr.Value)
+	return a
+}
+func (inst *InEntityWatchbillTableSectionJobTask) CheckErrors() (err error) {
+	err = eh.CheckErrors(slices.Concat(inst.errs, inst.inAttr.errs))
+	return
+}
+func (inst *InEntityWatchbillTableSectionJobTask) EndSection() *InEntityWatchbillTable {
+	switch inst.state {
+	case runtime.EntityStateInSection:
+		inst.state = runtime.EntityStateInitial
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst.parent
+	}
+
+	return inst.parent
+}
+
+func (inst *InEntityWatchbillTableSectionJobTask) beginSection() {
+	inst.state = runtime.EntityStateInSection
+	inst.attributeCount = 0
+	inst.inAttr.beginAttribute()
+}
+
+func (inst *InEntityWatchbillTableSectionJobTask) resetSection() {
+	inst.clearErrors()
+	inst.inAttr.clearErrors()
+	inst.attributeCount = 0
+	inst.state = runtime.EntityStateInitial
+}
+
+func (inst *InEntityWatchbillTableSectionJobTask) AppendError(err error) {
+	inst.errs = eh.AppendError(inst.errs, err)
+}
+func (inst *InEntityWatchbillTableSectionJobTask) clearErrors() {
+	inst.errs = eh.ClearErrors(inst.errs)
+}
+
+type InEntityWatchbillTableSectionJobTaskInAttr struct {
+	errs                             []error
+	state                            runtime.EntityStateE
+	parent                           *InEntityWatchbillTableSectionJobTask
+	scalarFieldBuilder182            *array.StringBuilder
+	scalarListBuilder182             *array.ListBuilder
+	membershipFieldBuilder183        *array.Uint64Builder
+	membershipListBuilder183         *array.ListBuilder
+	membershipFieldBuilder184        *array.Uint64Builder
+	membershipListBuilder184         *array.ListBuilder
+	membershipFieldBuilder185        *array.BinaryBuilder
+	membershipListBuilder185         *array.ListBuilder
+	membershipFieldBuilder186        *array.Uint64Builder
+	membershipListBuilder186         *array.ListBuilder
+	membershipFieldBuilder187        *array.BinaryBuilder
+	membershipListBuilder187         *array.ListBuilder
+	membershipSupportFieldBuilder188 *array.Uint64Builder
+	membershipSupportListBuilder188  *array.ListBuilder
+	membershipSupportFieldBuilder189 *array.Uint64Builder
+	membershipSupportListBuilder189  *array.ListBuilder
+	membershipSupportFieldBuilder190 *array.Uint64Builder
+	membershipSupportListBuilder190  *array.ListBuilder
+	membershipSupportFieldBuilder191 *array.Uint64Builder
+	membershipSupportListBuilder191  *array.ListBuilder
+
+	membershipContainerLength183 int
+
+	membershipContainerLength184 int
+
+	membershipContainerLength185 int
+
+	membershipContainerLength186 int
+
+	membershipContainerLength187 int
+}
+
+func NewInEntityWatchbillTableSectionJobTaskInAttr(builder *array.RecordBuilder, parent *InEntityWatchbillTableSectionJobTask) (inst *InEntityWatchbillTableSectionJobTaskInAttr) {
+	inst = &InEntityWatchbillTableSectionJobTaskInAttr{}
+	inst.errs = make([]error, 0, 8)
+	inst.state = runtime.EntityStateInitial
+	inst.parent = parent
+	inst.scalarFieldBuilder182 = builder.Field(182).(*array.ListBuilder).ValueBuilder().(*array.StringBuilder)
+	inst.scalarListBuilder182 = builder.Field(182).(*array.ListBuilder)
+	inst.membershipFieldBuilder183 = builder.Field(183).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipListBuilder183 = builder.Field(183).(*array.ListBuilder)
+	inst.membershipFieldBuilder184 = builder.Field(184).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipListBuilder184 = builder.Field(184).(*array.ListBuilder)
+	inst.membershipFieldBuilder185 = builder.Field(185).(*array.ListBuilder).ValueBuilder().(*array.BinaryBuilder)
+	inst.membershipListBuilder185 = builder.Field(185).(*array.ListBuilder)
+	inst.membershipFieldBuilder186 = builder.Field(186).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipListBuilder186 = builder.Field(186).(*array.ListBuilder)
+	inst.membershipFieldBuilder187 = builder.Field(187).(*array.ListBuilder).ValueBuilder().(*array.BinaryBuilder)
+	inst.membershipListBuilder187 = builder.Field(187).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder188 = builder.Field(188).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder188 = builder.Field(188).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder189 = builder.Field(189).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder189 = builder.Field(189).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder190 = builder.Field(190).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder190 = builder.Field(190).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder191 = builder.Field(191).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder191 = builder.Field(191).(*array.ListBuilder)
+
+	return inst
+}
+func (inst *InEntityWatchbillTableSectionJobTaskInAttr) beginAttribute() {
+	inst.membershipListBuilder183.Append(true)
+	inst.membershipListBuilder184.Append(true)
+	inst.membershipListBuilder185.Append(true)
+	inst.membershipListBuilder186.Append(true)
+	inst.membershipListBuilder187.Append(true)
+	inst.membershipContainerLength183 = 0
+	inst.membershipContainerLength184 = 0
+	inst.membershipContainerLength185 = 0
+	inst.membershipContainerLength186 = 0
+	inst.membershipContainerLength187 = 0
+	inst.scalarListBuilder182.Append(true)
+	inst.membershipSupportListBuilder188.Append(true)
+	inst.membershipSupportListBuilder189.Append(true)
+	inst.membershipSupportListBuilder190.Append(true)
+	inst.membershipSupportListBuilder191.Append(true)
+	inst.state = runtime.EntityStateInSection
+	inst.clearErrors()
+}
+func (inst *InEntityWatchbillTableSectionJobTaskInAttr) AddMembershipHighCardRef(hr183 uint64) *InEntityWatchbillTableSectionJobTaskInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.membershipFieldBuilder183.Append(hr183)
+	inst.membershipContainerLength183++
+	return inst
+}
+func (inst *InEntityWatchbillTableSectionJobTaskInAttr) AddMembershipHighCardRefP(hr183 uint64) {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+	inst.membershipFieldBuilder183.Append(hr183)
+	inst.membershipContainerLength183++
+	return
+}
+func (inst *InEntityWatchbillTableSectionJobTaskInAttr) AddMembershipLowCardRef(lr184 uint64) *InEntityWatchbillTableSectionJobTaskInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.membershipFieldBuilder184.Append(lr184)
+	inst.membershipContainerLength184++
+	return inst
+}
+func (inst *InEntityWatchbillTableSectionJobTaskInAttr) AddMembershipLowCardRefP(lr184 uint64) {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+	inst.membershipFieldBuilder184.Append(lr184)
+	inst.membershipContainerLength184++
+	return
+}
+func (inst *InEntityWatchbillTableSectionJobTaskInAttr) AddMembershipLowCardVerbatim(lv185 []byte) *InEntityWatchbillTableSectionJobTaskInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.membershipFieldBuilder185.Append(lv185)
+	inst.membershipContainerLength185++
+	return inst
+}
+func (inst *InEntityWatchbillTableSectionJobTaskInAttr) AddMembershipLowCardVerbatimP(lv185 []byte) {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+	inst.membershipFieldBuilder185.Append(lv185)
+	inst.membershipContainerLength185++
+	return
+}
+func (inst *InEntityWatchbillTableSectionJobTaskInAttr) AddMembershipMixedLowCardRef(lmr186 uint64, mrhp187 []byte) *InEntityWatchbillTableSectionJobTaskInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.membershipFieldBuilder186.Append(lmr186)
+	inst.membershipFieldBuilder187.Append(mrhp187)
+	inst.membershipContainerLength186++
+	inst.membershipContainerLength187++
+	return inst
+}
+func (inst *InEntityWatchbillTableSectionJobTaskInAttr) AddMembershipMixedLowCardRefP(lmr186 uint64, mrhp187 []byte) {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+	inst.membershipFieldBuilder186.Append(lmr186)
+	inst.membershipFieldBuilder187.Append(mrhp187)
+	inst.membershipContainerLength186++
+	inst.membershipContainerLength187++
+	return
+}
+func (inst *InEntityWatchbillTableSectionJobTaskInAttr) handleMembershipSupportColumns() {
+	var l int
+	var _ = l
+	l = inst.membershipContainerLength183
+	inst.membershipContainerLength183 = 0
+	inst.membershipSupportFieldBuilder188.Append(uint64(l))
+	l = inst.membershipContainerLength184
+	inst.membershipContainerLength184 = 0
+	inst.membershipSupportFieldBuilder189.Append(uint64(l))
+	l = inst.membershipContainerLength185
+	inst.membershipContainerLength185 = 0
+	inst.membershipSupportFieldBuilder190.Append(uint64(l))
+	l = inst.membershipContainerLength186
+	inst.membershipContainerLength186 = 0
+	inst.membershipSupportFieldBuilder191.Append(uint64(l))
+}
+func (inst *InEntityWatchbillTableSectionJobTaskInAttr) handleNonScalarSupportColumns() {
+	var l int
+	var _ = l
+}
+func (inst *InEntityWatchbillTableSectionJobTaskInAttr) applyAmbientMemberships() {
+	if inst.state != runtime.EntityStateInAttribute {
+		return
+	}
+	for _, v := range inst.parent.parent.ambientHighCardRef {
+		inst.AddMembershipHighCardRefP(v)
+	}
+}
+func (inst *InEntityWatchbillTableSectionJobTaskInAttr) completeAttribute() {
+	inst.handleMembershipSupportColumns()
+	inst.handleNonScalarSupportColumns()
+}
+func (inst *InEntityWatchbillTableSectionJobTaskInAttr) EndSection() *InEntityWatchbillTable {
+	inst.applyAmbientMemberships()
+	switch inst.state {
+	case runtime.EntityStateInAttribute:
+		inst.state = runtime.EntityStateInitial
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst.parent.parent
+	}
+
+	inst.completeAttribute()
+	inst.parent.endAttribute()
+	inst.parent.EndSection()
+	return inst.parent.parent
+}
+func (inst *InEntityWatchbillTableSectionJobTaskInAttr) EndAttribute() *InEntityWatchbillTableSectionJobTask {
+	inst.applyAmbientMemberships()
+	switch inst.state {
+	case runtime.EntityStateInAttribute:
+		inst.state = runtime.EntityStateInSection
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst.parent
+	}
+
+	inst.completeAttribute()
+	inst.parent.endAttribute()
+	return inst.parent
+}
+func (inst *InEntityWatchbillTableSectionJobTaskInAttr) EndAttributeP() {
+	inst.EndAttribute()
+}
+
+func (inst *InEntityWatchbillTableSectionJobTaskInAttr) AppendError(err error) {
+	inst.errs = eh.AppendError(inst.errs, err)
+}
+func (inst *InEntityWatchbillTableSectionJobTaskInAttr) clearErrors() {
+	inst.errs = eh.ClearErrors(inst.errs)
+}
+
+type InEntityWatchbillTableSectionJobTaskEpoch struct {
+	errs                  []error
+	inAttr                *InEntityWatchbillTableSectionJobTaskEpochInAttr
+	state                 runtime.EntityStateE
+	attributeCount        int
+	parent                *InEntityWatchbillTable
+	scalarFieldBuilder192 *array.Uint64Builder
+	scalarListBuilder192  *array.ListBuilder
+}
+
+func NewInEntityWatchbillTableSectionJobTaskEpoch(builder *array.RecordBuilder, parent *InEntityWatchbillTable) (inst *InEntityWatchbillTableSectionJobTaskEpoch) {
+	inst = &InEntityWatchbillTableSectionJobTaskEpoch{}
+	inAttr := NewInEntityWatchbillTableSectionJobTaskEpochInAttr(builder, inst)
+	inst.errs = make([]error, 0, 8)
+	inst.state = runtime.EntityStateInitial
+	inst.inAttr = inAttr
+	inst.parent = parent
+	inst.scalarFieldBuilder192 = builder.Field(192).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.scalarListBuilder192 = builder.Field(192).(*array.ListBuilder)
+
+	return inst
+}
+func (inst *InEntityWatchbillTableSectionJobTaskEpoch) endAttribute() {
+	switch inst.state {
+	case runtime.EntityStateInAttribute:
+		inst.state = runtime.EntityStateInSection
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+}
+func (inst *InEntityWatchbillTableSectionJobTaskEpoch) BeginAttribute(value192 uint64) *InEntityWatchbillTableSectionJobTaskEpochInAttr {
+	switch inst.state {
+	case runtime.EntityStateInSection:
+		inst.state = runtime.EntityStateInAttribute
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst.inAttr
+	}
+	inst.scalarFieldBuilder192.Append(value192)
+	inst.attributeCount++
+
+	inst.inAttr.state = inst.state
+	return inst.inAttr
+}
+
+type InEntityWatchbillTableSectionJobTaskEpochAttr struct {
+	Value uint64
+}
+
+func (inst *InEntityWatchbillTableSectionJobTaskEpoch) Add(attr InEntityWatchbillTableSectionJobTaskEpochAttr) *InEntityWatchbillTableSectionJobTaskEpochInAttr {
+	a := inst.BeginAttribute(attr.Value)
+	return a
+}
+func (inst *InEntityWatchbillTableSectionJobTaskEpoch) CheckErrors() (err error) {
+	err = eh.CheckErrors(slices.Concat(inst.errs, inst.inAttr.errs))
+	return
+}
+func (inst *InEntityWatchbillTableSectionJobTaskEpoch) EndSection() *InEntityWatchbillTable {
+	switch inst.state {
+	case runtime.EntityStateInSection:
+		inst.state = runtime.EntityStateInitial
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst.parent
+	}
+
+	return inst.parent
+}
+
+func (inst *InEntityWatchbillTableSectionJobTaskEpoch) beginSection() {
+	inst.state = runtime.EntityStateInSection
+	inst.attributeCount = 0
+	inst.inAttr.beginAttribute()
+}
+
+func (inst *InEntityWatchbillTableSectionJobTaskEpoch) resetSection() {
+	inst.clearErrors()
+	inst.inAttr.clearErrors()
+	inst.attributeCount = 0
+	inst.state = runtime.EntityStateInitial
+}
+
+func (inst *InEntityWatchbillTableSectionJobTaskEpoch) AppendError(err error) {
+	inst.errs = eh.AppendError(inst.errs, err)
+}
+func (inst *InEntityWatchbillTableSectionJobTaskEpoch) clearErrors() {
+	inst.errs = eh.ClearErrors(inst.errs)
+}
+
+type InEntityWatchbillTableSectionJobTaskEpochInAttr struct {
+	errs                             []error
+	state                            runtime.EntityStateE
+	parent                           *InEntityWatchbillTableSectionJobTaskEpoch
+	scalarFieldBuilder192            *array.Uint64Builder
+	scalarListBuilder192             *array.ListBuilder
+	membershipFieldBuilder193        *array.Uint64Builder
+	membershipListBuilder193         *array.ListBuilder
+	membershipFieldBuilder194        *array.Uint64Builder
+	membershipListBuilder194         *array.ListBuilder
+	membershipFieldBuilder195        *array.BinaryBuilder
+	membershipListBuilder195         *array.ListBuilder
+	membershipFieldBuilder196        *array.Uint64Builder
+	membershipListBuilder196         *array.ListBuilder
+	membershipFieldBuilder197        *array.BinaryBuilder
+	membershipListBuilder197         *array.ListBuilder
+	membershipSupportFieldBuilder198 *array.Uint64Builder
+	membershipSupportListBuilder198  *array.ListBuilder
+	membershipSupportFieldBuilder199 *array.Uint64Builder
+	membershipSupportListBuilder199  *array.ListBuilder
+	membershipSupportFieldBuilder200 *array.Uint64Builder
+	membershipSupportListBuilder200  *array.ListBuilder
+	membershipSupportFieldBuilder201 *array.Uint64Builder
+	membershipSupportListBuilder201  *array.ListBuilder
+
+	membershipContainerLength193 int
+
+	membershipContainerLength194 int
+
+	membershipContainerLength195 int
+
+	membershipContainerLength196 int
+
+	membershipContainerLength197 int
+}
+
+func NewInEntityWatchbillTableSectionJobTaskEpochInAttr(builder *array.RecordBuilder, parent *InEntityWatchbillTableSectionJobTaskEpoch) (inst *InEntityWatchbillTableSectionJobTaskEpochInAttr) {
+	inst = &InEntityWatchbillTableSectionJobTaskEpochInAttr{}
+	inst.errs = make([]error, 0, 8)
+	inst.state = runtime.EntityStateInitial
+	inst.parent = parent
+	inst.scalarFieldBuilder192 = builder.Field(192).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.scalarListBuilder192 = builder.Field(192).(*array.ListBuilder)
+	inst.membershipFieldBuilder193 = builder.Field(193).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipListBuilder193 = builder.Field(193).(*array.ListBuilder)
+	inst.membershipFieldBuilder194 = builder.Field(194).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipListBuilder194 = builder.Field(194).(*array.ListBuilder)
+	inst.membershipFieldBuilder195 = builder.Field(195).(*array.ListBuilder).ValueBuilder().(*array.BinaryBuilder)
+	inst.membershipListBuilder195 = builder.Field(195).(*array.ListBuilder)
+	inst.membershipFieldBuilder196 = builder.Field(196).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipListBuilder196 = builder.Field(196).(*array.ListBuilder)
+	inst.membershipFieldBuilder197 = builder.Field(197).(*array.ListBuilder).ValueBuilder().(*array.BinaryBuilder)
+	inst.membershipListBuilder197 = builder.Field(197).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder198 = builder.Field(198).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder198 = builder.Field(198).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder199 = builder.Field(199).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder199 = builder.Field(199).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder200 = builder.Field(200).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder200 = builder.Field(200).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder201 = builder.Field(201).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder201 = builder.Field(201).(*array.ListBuilder)
+
+	return inst
+}
+func (inst *InEntityWatchbillTableSectionJobTaskEpochInAttr) beginAttribute() {
+	inst.membershipListBuilder193.Append(true)
+	inst.membershipListBuilder194.Append(true)
+	inst.membershipListBuilder195.Append(true)
+	inst.membershipListBuilder196.Append(true)
+	inst.membershipListBuilder197.Append(true)
+	inst.membershipContainerLength193 = 0
+	inst.membershipContainerLength194 = 0
+	inst.membershipContainerLength195 = 0
+	inst.membershipContainerLength196 = 0
+	inst.membershipContainerLength197 = 0
+	inst.scalarListBuilder192.Append(true)
+	inst.membershipSupportListBuilder198.Append(true)
+	inst.membershipSupportListBuilder199.Append(true)
+	inst.membershipSupportListBuilder200.Append(true)
+	inst.membershipSupportListBuilder201.Append(true)
+	inst.state = runtime.EntityStateInSection
+	inst.clearErrors()
+}
+func (inst *InEntityWatchbillTableSectionJobTaskEpochInAttr) AddMembershipHighCardRef(hr193 uint64) *InEntityWatchbillTableSectionJobTaskEpochInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.membershipFieldBuilder193.Append(hr193)
+	inst.membershipContainerLength193++
+	return inst
+}
+func (inst *InEntityWatchbillTableSectionJobTaskEpochInAttr) AddMembershipHighCardRefP(hr193 uint64) {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+	inst.membershipFieldBuilder193.Append(hr193)
+	inst.membershipContainerLength193++
+	return
+}
+func (inst *InEntityWatchbillTableSectionJobTaskEpochInAttr) AddMembershipLowCardRef(lr194 uint64) *InEntityWatchbillTableSectionJobTaskEpochInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.membershipFieldBuilder194.Append(lr194)
+	inst.membershipContainerLength194++
+	return inst
+}
+func (inst *InEntityWatchbillTableSectionJobTaskEpochInAttr) AddMembershipLowCardRefP(lr194 uint64) {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+	inst.membershipFieldBuilder194.Append(lr194)
+	inst.membershipContainerLength194++
+	return
+}
+func (inst *InEntityWatchbillTableSectionJobTaskEpochInAttr) AddMembershipLowCardVerbatim(lv195 []byte) *InEntityWatchbillTableSectionJobTaskEpochInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.membershipFieldBuilder195.Append(lv195)
+	inst.membershipContainerLength195++
+	return inst
+}
+func (inst *InEntityWatchbillTableSectionJobTaskEpochInAttr) AddMembershipLowCardVerbatimP(lv195 []byte) {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+	inst.membershipFieldBuilder195.Append(lv195)
+	inst.membershipContainerLength195++
+	return
+}
+func (inst *InEntityWatchbillTableSectionJobTaskEpochInAttr) AddMembershipMixedLowCardRef(lmr196 uint64, mrhp197 []byte) *InEntityWatchbillTableSectionJobTaskEpochInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.membershipFieldBuilder196.Append(lmr196)
+	inst.membershipFieldBuilder197.Append(mrhp197)
+	inst.membershipContainerLength196++
+	inst.membershipContainerLength197++
+	return inst
+}
+func (inst *InEntityWatchbillTableSectionJobTaskEpochInAttr) AddMembershipMixedLowCardRefP(lmr196 uint64, mrhp197 []byte) {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+	inst.membershipFieldBuilder196.Append(lmr196)
+	inst.membershipFieldBuilder197.Append(mrhp197)
+	inst.membershipContainerLength196++
+	inst.membershipContainerLength197++
+	return
+}
+func (inst *InEntityWatchbillTableSectionJobTaskEpochInAttr) handleMembershipSupportColumns() {
+	var l int
+	var _ = l
+	l = inst.membershipContainerLength193
+	inst.membershipContainerLength193 = 0
+	inst.membershipSupportFieldBuilder198.Append(uint64(l))
+	l = inst.membershipContainerLength194
+	inst.membershipContainerLength194 = 0
+	inst.membershipSupportFieldBuilder199.Append(uint64(l))
+	l = inst.membershipContainerLength195
+	inst.membershipContainerLength195 = 0
+	inst.membershipSupportFieldBuilder200.Append(uint64(l))
+	l = inst.membershipContainerLength196
+	inst.membershipContainerLength196 = 0
+	inst.membershipSupportFieldBuilder201.Append(uint64(l))
+}
+func (inst *InEntityWatchbillTableSectionJobTaskEpochInAttr) handleNonScalarSupportColumns() {
+	var l int
+	var _ = l
+}
+func (inst *InEntityWatchbillTableSectionJobTaskEpochInAttr) applyAmbientMemberships() {
+	if inst.state != runtime.EntityStateInAttribute {
+		return
+	}
+	for _, v := range inst.parent.parent.ambientHighCardRef {
+		inst.AddMembershipHighCardRefP(v)
+	}
+}
+func (inst *InEntityWatchbillTableSectionJobTaskEpochInAttr) completeAttribute() {
+	inst.handleMembershipSupportColumns()
+	inst.handleNonScalarSupportColumns()
+}
+func (inst *InEntityWatchbillTableSectionJobTaskEpochInAttr) EndSection() *InEntityWatchbillTable {
+	inst.applyAmbientMemberships()
+	switch inst.state {
+	case runtime.EntityStateInAttribute:
+		inst.state = runtime.EntityStateInitial
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst.parent.parent
+	}
+
+	inst.completeAttribute()
+	inst.parent.endAttribute()
+	inst.parent.EndSection()
+	return inst.parent.parent
+}
+func (inst *InEntityWatchbillTableSectionJobTaskEpochInAttr) EndAttribute() *InEntityWatchbillTableSectionJobTaskEpoch {
+	inst.applyAmbientMemberships()
+	switch inst.state {
+	case runtime.EntityStateInAttribute:
+		inst.state = runtime.EntityStateInSection
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst.parent
+	}
+
+	inst.completeAttribute()
+	inst.parent.endAttribute()
+	return inst.parent
+}
+func (inst *InEntityWatchbillTableSectionJobTaskEpochInAttr) EndAttributeP() {
+	inst.EndAttribute()
+}
+
+func (inst *InEntityWatchbillTableSectionJobTaskEpochInAttr) AppendError(err error) {
+	inst.errs = eh.AppendError(inst.errs, err)
+}
+func (inst *InEntityWatchbillTableSectionJobTaskEpochInAttr) clearErrors() {
 	inst.errs = eh.ClearErrors(inst.errs)
 }
 

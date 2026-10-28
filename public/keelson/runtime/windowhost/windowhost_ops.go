@@ -33,7 +33,7 @@ const captureTimeout = 5 * time.Second
 // startOps creates the window's engine after Mount, when the registered
 // manifest keeps a catalog and the instance serves it. listener, when set,
 // hears every change the engine logs.
-func (w *window) startOps(logger zerolog.Logger, listener func(key uint64, e opengine.LogEntry)) {
+func (w *window) startOps(logger zerolog.Logger, listener func(key uint64, e opengine.LogEntry), bracket OpsBracketFactory) {
 	if w.opsTried {
 		return
 	}
@@ -55,6 +55,11 @@ func (w *window) startOps(logger zerolog.Logger, listener func(key uint64, e ope
 	if listener != nil {
 		key := uint64(w.key)
 		eng.SetListener(func(e opengine.LogEntry) { listener(key, e) })
+	}
+	if bracket != nil {
+		if b := bracket(w.manifest.Id, uint64(w.key)); b != nil {
+			eng.SetApplyBracket(b)
+		}
 	}
 	w.ops.Store(eng)
 	w.frameCtx.SetOperationsGesture(eng.Gesture)
@@ -236,6 +241,15 @@ func (inst *Inst) OpsUndoStatus(key uint64, callId string) (status string, ok bo
 // engine logs, on the render goroutine; it must not block. Set it before
 // the first Frame.
 func (inst *Inst) SetOpsListener(fn func(key uint64, e opengine.LogEntry)) { inst.opsListener = fn }
+
+// OpsBracketFactory gives a window's engine its apply bracket (ADR-0343
+// §SD5) when the engine is created, from the window's app and key; nil
+// leaves the engine without one.
+type OpsBracketFactory func(appId app.AppIdT, key uint64) opengine.ApplyBracketI
+
+// SetOpsBracket installs the factory every window's engine is given its
+// bracket from. Set it before the first Frame.
+func (inst *Inst) SetOpsBracket(fn OpsBracketFactory) { inst.opsBracket = fn }
 
 // OpsLogSince returns a window's log entries after seq, and the latest seq.
 func (inst *Inst) OpsLogSince(key uint64, seq uint64) (entries []opengine.LogEntry, latest uint64, ok bool) {

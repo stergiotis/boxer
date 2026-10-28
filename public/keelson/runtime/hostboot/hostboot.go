@@ -34,6 +34,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/clipboardbroker"
 	"github.com/stergiotis/boxer/public/keelson/runtime/coveragebus"
 	"github.com/stergiotis/boxer/public/keelson/runtime/covscrape"
+	"github.com/stergiotis/boxer/public/keelson/runtime/covtrail"
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsstore"
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsstore/chstore"
 	"github.com/stergiotis/boxer/public/keelson/runtime/fsbroker"
@@ -64,6 +65,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/watchbill/watchbillstore"
 	"github.com/stergiotis/boxer/public/keelson/runtime/windowhost"
 	"github.com/stergiotis/boxer/public/observability/coverage"
+	"github.com/stergiotis/boxer/public/observability/coverage/covsnap"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/storage/recordstore"
@@ -129,7 +131,9 @@ type Services struct {
 	// Clipboard is clipboard.*: copies drained into egui copy ops each frame.
 	Clipboard bool
 	// Coverage samples Go coverage counters onto the bus when
-	// BOXER_COVERAGE_INTERVAL asks for it (ADR-0169).
+	// IMZERO2_COVERAGE_INTERVAL asks for it (ADR-0169), and, when
+	// IMZERO2_COVERAGE_TRAIL asks for it too, writes coverage to the trail
+	// (ADR-0343, proposed).
 	Coverage bool
 	// Sysmetrics publishes system metrics onto the host bus (ADR-0090): a
 	// co-located /proc scraper, or a bridge from NATS when
@@ -320,7 +324,10 @@ type Runtime struct {
 	// HostServices names the registered host services that started.
 	HostServices []string
 	Coverage     *coverage.Sampler
-	Status       *runtimestatus.Snapshot
+	// CoverageTrail writes coverage to the trail (ADR-0343, proposed);
+	// nil unless IMZERO2_COVERAGE_TRAIL asked for it on a sampling build.
+	CoverageTrail *covtrail.Service
+	Status        *runtimestatus.Snapshot
 	// Host is the window host; nil in screenshot mode.
 	Host *windowhost.Inst
 	// Renderers are the per-frame render functions in order.
@@ -719,11 +726,29 @@ func (rt *Runtime) bootServices(ctx context.Context, factsCfg chstore.Config) {
 			covPub := rt.Bus.NewClient(coveragebus.ServiceAppId, []app.SubjectFilter{
 				{Pattern: coveragebus.SubjectWildcard, Direction: app.CapDirectionPub},
 			})
-			if s, _, cerr := covscrape.StartCoverageSampler(context.Background(), covPub, covscrape.DefaultHostToken(), covInterval, logger); cerr != nil {
+			// The trail writer is built first so its sink rides the
+			// producer's ticks from the first one (ADR-0343 §SD4), and
+			// attached once the sampler has decoded the build.
+			var covTrail *covtrail.Service
+			var sinks []func(upd *covsnap.Update)
+			if covtrail.Enabled.Get() {
+				covTrail = covtrail.New(covtrail.Options{Trail: rt.Trail, Run: rt.RunInfo, Log: logger})
+				sinks = append(sinks, covTrail.OnUpdate)
+			}
+			if s, _, cerr := covscrape.StartCoverageSampler(context.Background(), covPub, covscrape.DefaultHostToken(), covInterval, logger, sinks...); cerr != nil {
 				logger.Info().Err(cerr).Msg("hostboot: coverage sampling unavailable; coverage tables will be empty")
 			} else {
 				rt.Coverage = s
+				if covTrail != nil {
+					if aerr := covTrail.Attach(ctx, s); aerr != nil {
+						logger.Warn().Err(aerr).Msg("hostboot: coverage trail unavailable")
+					} else {
+						rt.CoverageTrail = covTrail
+					}
+				}
 			}
+		} else if covtrail.Enabled.Get() {
+			logger.Info().Msg("hostboot: IMZERO2_COVERAGE_TRAIL is set but coverage sampling is off; nothing is written")
 		}
 	}
 }
@@ -814,6 +839,10 @@ func (rt *Runtime) bootWindowHost() (err error) {
 			return
 		}
 		logger.Info().Str("id", string(s.AppId)).Str("kind", s.Kind).Msg("windowhost seed: opened configured window")
+	}
+	if rt.CoverageTrail != nil {
+		// Every window's engine gets its apply bracket (ADR-0343 §SD5).
+		host.SetOpsBracket(rt.CoverageTrail.Bracket)
 	}
 	rt.Host = host
 	// The model service orders its queue by window state (ADR-0300 §SD6).
@@ -1022,6 +1051,11 @@ func (rt *Runtime) bootAgent() {
 	// task's grant (ADR-0269 §SD6).
 	if rt.HTTP != nil {
 		rt.HTTP.SetDelegation(svc)
+	}
+	if rt.Watchbill != nil {
+		// An agent-caused enqueue names its task; the worker records it
+		// only once the dispatcher confirms the call (ADR-0344 §SD2).
+		rt.Watchbill.SetDelegation(svc)
 	}
 	if rt.LLM != nil {
 		rt.LLM.SetDelegation(svc)

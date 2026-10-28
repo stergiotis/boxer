@@ -40,6 +40,13 @@ type Request struct {
 	RunAfter time.Time
 	// ID is the job id; empty mints one.
 	ID string
+	// OnBehalfOf is the agent's context when an agent's command handler
+	// enqueues (ADR-0344 §SD2): copy OperationCall.OnBehalfOf here. The
+	// job then runs under the agentic entry frame. nil is a job no agent
+	// caused. Through [Client.Enqueue] the worker attests it with the
+	// dispatcher before recording it; through [Enqueue] on a store handle
+	// the caller is the host and vouches for it.
+	OnBehalfOf *app.OnBehalfOf
 }
 
 // Enqueue writes req as a queued job row and returns its id. It does not
@@ -62,6 +69,9 @@ func Enqueue(ctx context.Context, store StoreI, req Request) (id string, err err
 		OwnerAppId: string(req.OwnerAppId), RequesterRun: req.RequesterRun,
 		ArgsKind: req.ArgsKind, Args: req.Args,
 		State: watchbillstore.StateQueued, RunAfter: req.RunAfter.UTC(),
+	}
+	if obo := req.OnBehalfOf; obo != nil && obo.Task != "" {
+		job.Task, job.TaskEpoch, job.Call = obo.Task, obo.Epoch, obo.Call
 	}
 	if job.Queue == "" {
 		job.Queue = "default"

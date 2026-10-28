@@ -7,10 +7,17 @@
 # on uninstrumented packages (ADR-0169 M0 Update); narrow the instrumented
 # set via BOXER_COVERLANE_COVERPKG (a -coverpkg pattern list) when watching
 # specific subsystems in long interactive sessions.
+#
+# The lane sources the one build environment every shipped binary uses
+# (ADR-0215), so an instrumented binary carries the VCS stamp that anchors
+# its coverage rows to a commit (ADR-0343 §SD1); without -buildvcs every
+# coverage build is unanchored by construction.
 set -eu
 here=$(dirname "$(readlink -f "$BASH_SOURCE")")
 cd "$here/../.."
-tags="$(cat ./tags)"
+# shellcheck source=scripts/dev/go-build-env.sh
+source ./scripts/dev/go-build-env.sh
+tags="$BOXER_GO_TAGS"
 out="${BOXER_COVERLANE_DIR:-${TMPDIR:-/tmp}/boxer-coverlane}"
 mkdir -p "$out"
 
@@ -23,7 +30,8 @@ build() {
   local name="$1" pkg="$2"
   shift 2
   local t0=$SECONDS
-  go build -tags "$tags" "$@" -o "$out/$name" "$pkg"
+  # shellcheck disable=SC2086 # deliberate word splitting of the flag list
+  go build $BOXER_GO_FLAGS -tags "$tags" "$@" -o "$out/$name" "$pkg"
   local dt=$((SECONDS - t0))
   local sz
   sz=$(stat -c %s "$out/$name")

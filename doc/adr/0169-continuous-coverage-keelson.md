@@ -457,6 +457,18 @@ brackets, the module-trimmed tree, landing on the Treemap tab — with the
 covers itself. Every ADR milestone M0–M4 is now built and live-verified;
 the deferrals (§SD6 tee first) are what remains.
 
+## Update (2026-10-28) — §SD6 lands under ADR-0343
+
+The deferred persistence is built by ADR-0343 (proposed) as a generated
+store on the trail rather than a bus tee: the function table once per meta
+hash, a sample row per tick with news, a build row anchoring the hash to
+the binary and its commit, and — the part this ADR did not foresee — a
+per-agent-command row of the units the command's handler executed, from
+counter deltas read around the handler call. The sampler's full
+re-statements are not persisted; in process nothing is lost between the
+sampler and the row. The tee shape in §SD6 stays the one for a consumer in
+another process.
+
 ## Status
 
 Accepted 2026-08-27.

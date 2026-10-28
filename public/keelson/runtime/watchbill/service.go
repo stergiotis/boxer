@@ -2,6 +2,7 @@ package watchbill
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"time"
 
@@ -11,7 +12,41 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/codec/watchbillrequest"
 	"github.com/stergiotis/boxer/public/keelson/runtime/watchbill/watchbillstore"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
+
+// ErrUnattested refuses an enqueue whose on-behalf-of context the
+// dispatcher did not confirm — or that no dispatcher could confirm
+// (ADR-0344 §SD2). The job is not written: a delegation on a row is a
+// claim about who caused the work, and the worker records only what was
+// attested, as the ad-hoc data and egress services do.
+var ErrUnattested = errors.New("watchbill: on-behalf-of context not attested by the dispatcher")
+
+// SetDelegation installs the dispatcher that attests an agent-caused
+// enqueue (ADR-0344 §SD2). Until it is set, a request carrying an
+// on-behalf-of context is refused: nothing could confirm what it claims.
+func (inst *Worker) SetDelegation(d app.CallContextI) { inst.delegation.Store(&delegationRef{d: d}) }
+
+type delegationRef struct{ d app.CallContextI }
+
+// attest confirms the request's on-behalf-of context, when it carries one,
+// with the dispatcher, against the envelope's sender; nil for a request
+// without one.
+func (inst *Worker) attest(msg *app.Msg, req watchbillrequest.WatchbillRequest) (obo *app.OnBehalfOf, err error) {
+	if req.OboTask == "" {
+		return nil, nil
+	}
+	ref := inst.delegation.Load()
+	if ref == nil || ref.d == nil {
+		return nil, eb.Build().Str("task", req.OboTask).Str("call", req.OboCall).Errorf("no dispatcher to attest the call: %w", ErrUnattested)
+	}
+	cc, ok, why := ref.d.CallContext(req.OboTask, req.OboEpoch, req.OboCall, msg.Sender, msg.SenderInstance)
+	if !ok {
+		return nil, eb.Build().Str("task", req.OboTask).Str("call", req.OboCall).Errorf("%w: %s", ErrUnattested, why) //boxer:lint disable=CS013 reason="the refusal crosses the bus as the reply's Reason; the dispatcher's reason is what the caller can act on"
+	}
+	obo = &app.OnBehalfOf{Task: cc.Task, Epoch: cc.Epoch, Call: cc.Call}
+	return
+}
 
 // The client protocol is served by the worker (ADR-0234 §SD1): the process
 // that holds the store answers `watchbill.job.<op>` on the bus, so an app
@@ -60,7 +95,7 @@ func (inst *Worker) handleRequest(msg *app.Msg) {
 	var reply watchbillreply.WatchbillReply
 	switch op {
 	case watchbillrequest.OpEnqueue:
-		reply, err = inst.opEnqueue(ctx, msg.Sender, req)
+		reply, err = inst.opEnqueue(ctx, msg, req)
 	case watchbillrequest.OpCancel:
 		reply, err = inst.opVerb(ctx, msg.Sender, req, RequestCancel)
 	case watchbillrequest.OpRetry:
@@ -84,14 +119,19 @@ func (inst *Worker) handleRequest(msg *app.Msg) {
 // opEnqueue writes the row, rings its own doorbell and announces the row,
 // so a bus client's enqueue is [Submit] with the announcement the worker
 // owes for every row it flushes.
-func (inst *Worker) opEnqueue(ctx context.Context, sender app.AppIdT, req watchbillrequest.WatchbillRequest) (reply watchbillreply.WatchbillReply, err error) {
+func (inst *Worker) opEnqueue(ctx context.Context, msg *app.Msg, req watchbillrequest.WatchbillRequest) (reply watchbillreply.WatchbillReply, err error) {
+	sender := msg.Sender
+	obo, err := inst.attest(msg, req)
+	if err != nil {
+		return
+	}
 	r := Request{
 		Kind: req.Kind, Subject: req.Subject, Queue: req.Queue, Priority: req.Priority,
 		MaxAttempts: req.MaxAttempts, Backoff: req.Backoff,
 		BackoffBase: time.Duration(req.BackoffBaseMs) * time.Millisecond,
 		Timeout:     time.Duration(req.TimeoutMs) * time.Millisecond,
 		OwnerAppId:  sender, RequesterRun: inst.cfg.RunId,
-		ArgsKind: req.ArgsKind, Args: req.Args, ID: req.Id,
+		ArgsKind: req.ArgsKind, Args: req.Args, ID: req.Id, OnBehalfOf: obo,
 	}
 	if req.RunAfterMs > 0 {
 		r.RunAfter = time.UnixMilli(req.RunAfterMs).UTC()

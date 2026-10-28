@@ -72,4 +72,13 @@ type WatchbillRequest struct {
 	// Note is recorded on the event a cancel or retry writes: why the
 	// caller asked.
 	Note string `lw:"wbReqNote,textArray"`
+
+	// OboTask, OboEpoch and OboCall are the on-behalf-of context an
+	// agent-caused enqueue carries (ADR-0344 §SD2): the handler copies
+	// them from its OperationCall, the worker attests them with the
+	// dispatcher before it records them on the job. Empty for the
+	// person's and the app's own requests.
+	OboTask  string `lw:"wbReqOboTask,stringArray"`
+	OboEpoch uint64 `lw:"wbReqOboEpoch,u64Array"`
+	OboCall  string `lw:"wbReqOboCall,stringArray"`
 }

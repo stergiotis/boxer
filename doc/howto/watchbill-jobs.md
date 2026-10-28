@@ -81,6 +81,17 @@ job, err := a.queue.Enqueue(watchbill.Request{
 })
 ```
 
+If the enqueue happens inside a command handler that an agent's call is
+running, copy the call's context onto the request so the job is attributed
+to the agent and runs under the agentic entry frame (section 5):
+
+```go
+job, err := a.queue.Enqueue(watchbill.Request{
+    Kind: "tender.download", Subject: downloadRowId,
+    OnBehalfOf: call.OnBehalfOf, // nil on the person's own path; the worker attests it
+})
+```
+
 The other verbs are `Cancel(id, note)`, `Retry(id, note)`, `Get(id)` and
 `List(states, kinds, limit)`. A running job is also a keelson task with the
 job's id, so the task monitor's cancel button and the client's `Cancel` are
@@ -128,6 +139,39 @@ only the queues you name, or every queue when you name none.
   task.
 - **From SQL** — the same three tables in play, on the introspection
   endpoint.
+
+## 5. Who caused a job: the delegation and the entry frame
+
+**Every handler runs under one of two named stack frames.** The worker calls
+`HandlerI.Run` through `entrypoint.Agentic` when the job row carries an
+attested delegation and through `entrypoint.Human` otherwise; the operations
+engine does the same for a command's `ApplyCommand`. The frame is on the
+stack for the whole call, so any stack trace taken inside your handler — a
+panic, `debug.Stack()`, a goroutine dump, a profiler sample — names who
+caused the work by one of these two lines:
+
+```text
+github.com/stergiotis/boxer/public/keelson/runtime/entrypoint.Agentic(...)
+github.com/stergiotis/boxer/public/keelson/runtime/entrypoint.Human(...)
+```
+
+Grep a trace for `entrypoint.Agentic`, or call `entrypoint.Current()` in
+code and `entrypoint.OfTrace(b)` on a captured trace. The frame marks the
+goroutine it is on: a goroutine your handler starts does not inherit it.
+
+**How a job earns the agentic frame.** A handler running an agent's call is
+handed `OperationCall.OnBehalfOf`; copying it onto the request (section 2)
+puts the task, its epoch and the call on the wire. The worker confirms the
+three with the host's dispatcher for the sending window before it writes the
+row, records them as `Task`, `TaskEpoch` and `Call`, and refuses a request
+it cannot confirm — including every delegated request reaching a headless
+worker, which has no dispatcher. A row with a `Task` is `AgentCaused()`.
+The rule, with its lane for running such jobs in a process of their own, is
+[ADR-0344](../adr/0344-agent-caused-jobs-in-a-process-of-their-own-and-the-entry-frame-every-stack-carries.md).
+
+A table created before the delegation columns needs
+[the migration recipe](../migration/2026-10-watchbill-delegation.md) once,
+or a drop where its rows are expendable.
 
 ## What is not here
 

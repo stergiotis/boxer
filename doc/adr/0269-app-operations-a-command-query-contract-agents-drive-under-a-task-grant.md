@@ -835,6 +835,18 @@ The QOC tables carry the main options. Further options weighed:
 - **M6 — The trial.** A stub model service for scenes, and the trial
   protocol with its first runs.
 
+## Update (2026-10-28) — the handler call runs under a named entry frame
+
+ADR-0344 §SD1 (proposed) changes nothing in this contract and one
+thing on the stack: the engine now calls `ApplyCommand` through
+`entrypoint.Agentic` for a task's queued command and through
+`entrypoint.Human` for a person's queued command or a gesture (§SD8 "One
+path"), so a stack captured in a handler names its cause. A handler that
+enqueues durable work while running an agent's call copies
+`OperationCall.OnBehalfOf` onto the watchbill request (ADR-0344 §SD2); the
+worker attests it with the dispatcher, the way §SD6's onward requests are
+attested elsewhere.
+
 ## Status
 
 Accepted 2026-10-02. Play's catalog is a separate decision built on this

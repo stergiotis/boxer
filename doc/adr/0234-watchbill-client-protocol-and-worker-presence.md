@@ -280,6 +280,20 @@ changes shape.
   facts store on a server, and the lane that has one is the integration
   lane, where a second process is what the test would have to stand.
 
+## Update (2026-10-28) — the request carries an attested delegation
+
+ADR-0344 §SD2 (proposed) adds three optional fields to the
+`watchbillRequest` wire — `OboTask`, `OboEpoch`, `OboCall` (vocabulary
+250–252) — the on-behalf-of context of an agent-caused enqueue. The worker
+attests them with the dispatcher for the envelope's sender before it
+records them on the job row (`Task`, `TaskEpoch`, `Call`, three sections
+appended to the table) and refuses an unattested request without writing.
+The attribution rule of §SD1 — the owner from `Msg.Sender` — is unchanged;
+the delegation is a second, attested attribution beside it. The job then
+runs under the entry frame its delegation earns (ADR-0344 §SD1). The
+headless worker of §SD6 has no dispatcher and so refuses a delegated
+enqueue; ADR-0344 §SD4 gives it `--job <id>` instead.
+
 ## Status
 
 Accepted 2026-09-14.

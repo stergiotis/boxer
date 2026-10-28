@@ -47,6 +47,9 @@ func (inst *Client) Enqueue(req Request) (job watchbillstore.Job, err error) {
 	if !req.RunAfter.IsZero() {
 		wire.RunAfterMs = req.RunAfter.UnixMilli()
 	}
+	if obo := req.OnBehalfOf; obo != nil {
+		wire.OboTask, wire.OboEpoch, wire.OboCall = obo.Task, obo.Epoch, obo.Call
+	}
 	r, err := inst.call(wire)
 	if err != nil {
 		return

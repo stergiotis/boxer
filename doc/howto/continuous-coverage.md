@@ -53,8 +53,29 @@ On an instrumented build the carousel starts the sampler itself
 `IMZERO2_COVERAGE_INTERVAL` (default `5s`; `0` disables) it snapshots the
 counters and folds them into the cumulative covered set. Coverage is
 monotone and process-scoped — it grows as you exercise features and resets
-at the next launch. There is no durable history yet (the ADR-0169 §SD6
-facts tee is deferred), so what you see is this run.
+at the next launch. The live tables are this run's.
+
+Set `IMZERO2_COVERAGE_TRAIL=true` as well and the same build writes
+coverage to the audit trail
+([ADR-0343](../adr/0343-coverage-on-the-trail-what-an-agents-call-executed.md),
+proposed): a build row that ties the coverage meta hash to the binary and
+its commit, the function table once per hash, a row per tick with the
+newly covered units, and — per agent command the dispatcher applied — the
+units the command's handler executed. The data marts are
+`dm_trail_coverage_builds`, `dm_trail_coverage_funcs`,
+`dm_trail_coverage_samples` and `dm_trail_llm_coverage_agent_applies`. For
+the build row to name a commit, build through `scripts/dev/cover-build.sh`
+or otherwise with `-buildvcs=auto` from a clean tree; a dirty tree is
+recorded as such and still resolves against its own function table.
+
+Coverage says what ran; a stack trace says who asked. Every handler call
+the runtime makes goes through a named entry frame —
+`entrypoint.Agentic` for an agent's command or an agent-caused job,
+`entrypoint.Human` for the person's — so a panic, a goroutine dump or a
+profiler sample taken inside app code carries the answer as a frame
+([ADR-0344](../adr/0344-agent-caused-jobs-in-a-process-of-their-own-and-the-entry-frame-every-stack-carries.md),
+proposed). Jobs an agent caused are attributed by running them in a process
+of their own, whose run's coverage samples are the job's; see that ADR.
 
 ## 3. The applets
 

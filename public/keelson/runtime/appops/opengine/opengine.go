@@ -33,6 +33,7 @@ import (
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/appops/opwire"
+	"github.com/stergiotis/boxer/public/keelson/runtime/entrypoint"
 )
 
 // DefaultKeepCalls bounds how many finished calls the engine remembers for
@@ -106,6 +107,9 @@ type Engine struct {
 	logHead  int
 	logSeq   uint64
 	listener func(e LogEntry)
+	// bracket, when set, surrounds each queued command's handler call
+	// (ADR-0343 §SD5). Render goroutine only.
+	bracket ApplyBracketI
 	// waiting counts queries waiting for a view; viewed is closed, and
 	// replaced, when a snapshot with one is taken.
 	waiting   int
@@ -147,6 +151,33 @@ func New(catalog *app.OperationsCatalog, h app.OperationsHandlerI) (inst *Engine
 // Catalog is the catalog the engine serves.
 func (inst *Engine) Catalog() (c *app.OperationsCatalog) { return inst.catalog }
 
+// ApplyBracketI surrounds one queued command's handler call on the render
+// goroutine (ADR-0343 §SD5): Begin runs just before the app's handler,
+// End just after it returns, with what the command was. Nothing is called
+// for a command whose apply ended before the handler ran — a conflict, an
+// unavailable operation — nor for the person's gestures and undos.
+type ApplyBracketI interface {
+	Begin(frame uint64)
+	End(a Applied)
+}
+
+// Applied is what ApplyBracketI.End learns about the command whose handler
+// just ran.
+type Applied struct {
+	Frame     uint64
+	CallId    string
+	Writer    string
+	Operation string
+	// Phase is the handler's outcome: applied, or the failure it returned.
+	Phase opwire.PhaseE
+	// OnBehalfOf is the task the dispatcher stamped on the command; nil when
+	// the command carried none.
+	OnBehalfOf *app.OnBehalfOf
+}
+
+// SetApplyBracket installs the bracket; set it before the first Frame.
+func (inst *Engine) SetApplyBracket(b ApplyBracketI) { inst.bracket = b }
+
 // Submit takes a call off the render goroutine. A command is queued and
 // answers accepted; a query or an external read is answered from the latest
 // snapshot.
@@ -173,6 +204,12 @@ func (inst *Engine) Submit(op string, req opwire.CallRequest) (out opwire.Outcom
 	inst.remember(c)
 	out = c.outcome
 	return
+}
+
+// agentCaused says whether a call is an agent's: the dispatcher stamped an
+// on-behalf-of context on it, or its writer is a task (ADR-0344 §SD1).
+func agentCaused(call app.OperationCall) (yes bool) {
+	return call.OnBehalfOf != nil || strings.HasPrefix(call.Writer, opwire.WriterTask(""))
 }
 
 // callOf is the call context req carries to a command or an external read.
@@ -481,8 +518,27 @@ func (inst *Engine) apply(c *call) (out opwire.Outcome) {
 	for _, r := range c.spec.Writes {
 		before[r] = inst.values[r]
 	}
-	result, err := inst.h.ApplyCommand(c.call, c.spec.Name, c.args)
+	br := inst.bracket
+	if br != nil {
+		br.Begin(inst.frame)
+	}
+	// The handler runs under the entry frame its writer earns (ADR-0344
+	// §SD1): a task's command is agentic, anything else is not. The
+	// bracket stays outside the frame so the two reads see the same code.
+	var result []byte
+	var err error
+	entrypoint.For(agentCaused(c.call))(func() {
+		result, err = inst.h.ApplyCommand(c.call, c.spec.Name, c.args)
+	})
 	out = outcomeOfError(err)
+	if br != nil {
+		phase := out.Phase
+		if phase == opwire.PhaseUnspecified {
+			phase = opwire.PhaseApplied
+		}
+		br.End(Applied{Frame: inst.frame, CallId: c.id, Writer: c.call.Writer, Operation: c.spec.Name,
+			Phase: phase, OnBehalfOf: c.call.OnBehalfOf})
+	}
 	if out.Phase != opwire.PhaseUnspecified {
 		if out.Phase == opwire.PhaseConflict {
 			out.Revisions = pick(inst.revs, c.spec.Writes)
@@ -605,7 +661,9 @@ func (inst *Engine) Gesture(op string, args []byte) (result []byte, err error) {
 		err = app.RefuseOperation("no such command")
 		return
 	}
-	result, err = inst.h.ApplyCommand(app.OperationCall{Writer: opwire.WriterPerson}, op, args)
+	entrypoint.Human(func() {
+		result, err = inst.h.ApplyCommand(app.OperationCall{Writer: opwire.WriterPerson}, op, args)
+	})
 	out := outcomeOfError(err)
 	if out.Phase == opwire.PhaseUnspecified {
 		inst.observe(opwire.WriterPerson, spec.Writes)

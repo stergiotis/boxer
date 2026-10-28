@@ -54,6 +54,16 @@ var (
 			MustAddRestriction("u32Array", common.MembershipSpecLowCardRef, registry.CardinalityExactlyOne).End()
 	MembWbReqNote = KeelsonHrNkRegistry.MustBegin("wbReqNote", 172).
 			MustAddRestriction("textArray", common.MembershipSpecLowCardRef, registry.CardinalityExactlyOne).End()
+	// The on-behalf-of context an agent-caused enqueue carries (ADR-0344
+	// §SD2), the shape the ad-hoc data request uses: empty for the
+	// person's and the app's own requests. Ordinals continue after the
+	// last cohort minted in this registry.
+	MembWbReqOboTask = KeelsonHrNkRegistry.MustBegin("wbReqOboTask", 250).
+				MustAddRestriction("stringArray", common.MembershipSpecLowCardRef, registry.CardinalityZeroToOne).End()
+	MembWbReqOboEpoch = KeelsonHrNkRegistry.MustBegin("wbReqOboEpoch", 251).
+				MustAddRestriction("u64Array", common.MembershipSpecLowCardRef, registry.CardinalityZeroToOne).End()
+	MembWbReqOboCall = KeelsonHrNkRegistry.MustBegin("wbReqOboCall", 252).
+				MustAddRestriction("stringArray", common.MembershipSpecLowCardRef, registry.CardinalityZeroToOne).End()
 
 	// The reply: one entry per job across parallel columns, the shape of
 	// the inflight snapshot. Ok says the verb applied; the shared `reason`

@@ -57,6 +57,11 @@ func GetJobSchemaInManipulator() (manip *common.TableManipulator, err error) {
 	sec("jobWorkerRun", ctabb.S, easp.AspectInterRecordLowCardinality, easp.AspectLightGeneralCompression)
 	sec("jobFinishedAt", ctabb.Z64, easp.AspectLightGeneralCompression)
 	sec("jobLastError", ctabb.S, easp.AspectLightGeneralCompression)
+	// The delegation (ADR-0344 §SD2), last: a table from before it gains
+	// these by ADD COLUMN, which appends.
+	sec("jobTask", ctabb.S, easp.AspectInterRecordLowCardinality, easp.AspectLightGeneralCompression)
+	sec("jobTaskEpoch", ctabb.U64, easp.AspectLightGeneralCompression)
+	sec("jobCall", ctabb.S, easp.AspectInterRecordLowCardinality, easp.AspectLightGeneralCompression)
 	return
 }
 

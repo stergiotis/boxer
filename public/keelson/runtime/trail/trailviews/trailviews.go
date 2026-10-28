@@ -104,7 +104,7 @@ import (
 // ViewsVersion is the revision of the views this package composes. Bump it
 // whenever a view's columns or meaning change, so the stamp a deployed view
 // carries tells an operator it predates the build.
-const ViewsVersion = 12
+const ViewsVersion = 13
 
 // agenticTag marks the views over what the agentic side of keelson writes —
 // model calls and their messages, and what agents did under a grant. The
@@ -133,11 +133,18 @@ const (
 	ViewHttpFetches      = prefixDataMart + "trail_http_fetches"
 	ViewAdhocBundles     = prefixDataMart + "trail_adhoc_bundles"
 	ViewAuditEvents      = prefixDataMart + "trail_audit_events"
-	ViewBusRequests      = prefixDataMart + "trail_bus_requests"
-	ViewTimeline         = prefixDataMart + "trail_timeline"
-	ViewActionOutcomes   = prefixAggregate + "trail_" + agenticTag + "_agent_action_outcomes"
-	ViewConversations    = prefixAggregate + "trail_" + agenticTag + "_conversations"
-	ViewTasks            = prefixAggregate + "trail_" + agenticTag + "_tasks"
+	// Coverage on the trail (ADR-0343, proposed): the build, its function
+	// table and the run's growth are general; what an agent command
+	// executed is agentic.
+	ViewCoverageBuilds       = prefixDataMart + "trail_coverage_builds"
+	ViewCoverageFuncs        = prefixDataMart + "trail_coverage_funcs"
+	ViewCoverageSamples      = prefixDataMart + "trail_coverage_samples"
+	ViewCoverageAgentApplies = prefixDataMart + "trail_" + agenticTag + "_coverage_agent_applies"
+	ViewBusRequests          = prefixDataMart + "trail_bus_requests"
+	ViewTimeline             = prefixDataMart + "trail_timeline"
+	ViewActionOutcomes       = prefixAggregate + "trail_" + agenticTag + "_agent_action_outcomes"
+	ViewConversations        = prefixAggregate + "trail_" + agenticTag + "_conversations"
+	ViewTasks                = prefixAggregate + "trail_" + agenticTag + "_tasks"
 )
 
 // AllViewNames lists the views in creation order, unqualified.
@@ -285,6 +292,7 @@ func (c column) canonicalType() (ctype string, err error) {
 	elem := map[string]string{
 		"symbol": "s", "bool": "b", "stringArray": "s", "textArray": "s", "symbolArray": "s",
 		"u32Array": "u32", "u64Array": "u64", "i64Array": "i64", "foreignKey": "u64",
+		"u32Set": "u32", "u64Set": "u64",
 	}[c.section]
 	if elem == "" {
 		return "", eb.Build().Str("section", c.section).Errorf("trailviews: no canonical type for section")
@@ -547,6 +555,49 @@ var kindViews = []kindView{
 		{"latency-ms", "u32Array", vocab.MembAuditLatencyMs, first},
 		{"request-bytes", "u32Array", vocab.MembAuditRequestSizeB, first},
 		{"response-bytes", "u32Array", vocab.MembAuditResponseSizeB, first},
+	}},
+	{name: ViewCoverageBuilds, kind: vocab.MembKindCoverageBuild, columns: []column{
+		{"meta-hash", "symbol", vocab.MembCoverageBuildMetaHash, scalar},
+		{"mode", "symbol", vocab.MembCoverageBuildMode, scalar},
+		{"granularity", "symbol", vocab.MembCoverageBuildGranularity, scalar},
+		{"units", "u64Array", vocab.MembCoverageBuildUnits, first},
+		{"stmts", "u64Array", vocab.MembCoverageBuildStmts, first},
+		{"funcs", "u64Array", vocab.MembCoverageBuildFuncs, first},
+		{"pkgs", "u64Array", vocab.MembCoverageBuildPkgs, first},
+		{"build-id", "symbol", vocab.MembCoverageBuildId, scalar},
+		{"vcs-revision", "symbol", vocab.MembCoverageBuildVcsRevision, scalar},
+		{"vcs-modified", "bool", vocab.MembCoverageBuildVcsModified, scalar},
+	}},
+	{name: ViewCoverageFuncs, kind: vocab.MembKindCoverageFunc, columns: []column{
+		{"meta-hash", "symbol", vocab.MembCoverageFuncMetaHash, scalar},
+		{"pkg", "symbol", vocab.MembCoverageFuncPkg, scalar},
+		{"name", "stringArray", vocab.MembCoverageFuncName, first},
+		{"file", "symbol", vocab.MembCoverageFuncFile, scalar},
+		{"lit", "bool", vocab.MembCoverageFuncLit, scalar},
+		{"unit-base", "u32Array", vocab.MembCoverageFuncUnitBase, first},
+		{"units", "u32Array", vocab.MembCoverageFuncUnits, first},
+		{"stmts", "u32Array", vocab.MembCoverageFuncStmts, first},
+		{"unit-st-line", "u32Array", vocab.MembCoverageFuncUnitStLine, list},
+		{"unit-en-line", "u32Array", vocab.MembCoverageFuncUnitEnLine, list},
+		{"unit-stmts", "u32Array", vocab.MembCoverageFuncUnitStmts, list},
+	}},
+	{name: ViewCoverageSamples, kind: vocab.MembKindCoverageSample, columns: []column{
+		{"meta-hash", "symbol", vocab.MembCoverageSampleMetaHash, scalar},
+		{"seq", "u64Array", vocab.MembCoverageSampleSeq, first},
+		{"units", "u32Set", vocab.MembCoverageSampleUnits, list},
+		{"covered-units", "u64Array", vocab.MembCoverageSampleCovUnits, first},
+		{"covered-stmts", "u64Array", vocab.MembCoverageSampleCovStmts, first},
+		{"covered-funcs", "u64Array", vocab.MembCoverageSampleCovFuncs, first},
+	}},
+	{name: ViewCoverageAgentApplies, kind: vocab.MembKindCoverageAgentApply, columns: []column{
+		{"meta-hash", "symbol", vocab.MembCoverageAgentApplyMetaHash, scalar},
+		{"frame", "u64Array", vocab.MembCoverageAgentApplyFrame, first},
+		{"units", "u32Set", vocab.MembCoverageAgentApplyUnits, list},
+		{"changed-units", "u64Array", vocab.MembCoverageAgentApplyChanged, first},
+		{"changed-funcs", "u64Array", vocab.MembCoverageAgentApplyFuncs, first},
+		{"operation", "symbol", vocab.MembCoverageAgentApplyOperation, scalar},
+		{"phase", "symbol", vocab.MembCoverageAgentApplyPhase, scalar},
+		{"cost-us", "u64Array", vocab.MembCoverageAgentApplyCostUs, first},
 	}},
 }
 

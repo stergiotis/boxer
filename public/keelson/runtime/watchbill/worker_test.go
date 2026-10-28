@@ -12,6 +12,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/stergiotis/boxer/public/keelson/runtime/app"
+	"github.com/stergiotis/boxer/public/keelson/runtime/entrypoint"
 	"github.com/stergiotis/boxer/public/keelson/runtime/task"
 	"github.com/stergiotis/boxer/public/keelson/runtime/watchbill/watchbillstore"
 )
@@ -46,6 +48,8 @@ type fixture struct {
 	// told is what the worker reported as terminal states (SetNotices).
 	told   []string
 	toldMu sync.Mutex
+	// entered is the entry frame each run saw, by job id (ADR-0344 §SD1).
+	entered map[string]entrypoint.KindE
 }
 
 func (f *fixture) JobEnded(_ time.Time, job watchbillstore.Job, state string, note string) {
@@ -61,6 +65,10 @@ func newFixture(t *testing.T, runId string, opts ...func(*Config)) (f *fixture) 
 	require.NoError(t, f.reg.Register(HandlerFunc{KindName: "test.kind", RunFunc: func(ctx context.Context, job watchbillstore.Job, h task.HandleI) error {
 		f.ranMu.Lock()
 		f.ran = append(f.ran, job.ID)
+		if f.entered == nil {
+			f.entered = map[string]entrypoint.KindE{}
+		}
+		f.entered[job.ID] = entrypoint.Current()
 		f.ranMu.Unlock()
 		f.running.Add(1)
 		defer f.running.Add(-1)
@@ -505,4 +513,24 @@ func TestHugeTimeoutDoesNotFireAtOnce(t *testing.T) {
 	}))
 	f.tick(t)
 	assert.Equal(t, watchbillstore.StateSucceeded, f.job(t, id).State)
+}
+
+// A job an agent's call enqueued runs its handler under the agentic entry
+// frame; one with no delegation under the human frame. The row carries the
+// delegation the request named (ADR-0344 §SD1, §SD2).
+func TestJobsRunUnderTheEntryFrameTheirDelegationEarns(t *testing.T) {
+	f := newFixture(t, "run-a")
+	agent := f.enqueue(t, Request{Subject: "agent", OnBehalfOf: &app.OnBehalfOf{Task: "task-1", Epoch: 3, Call: "call-9"}})
+	human := f.enqueue(t, Request{Subject: "human"})
+	f.tick(t)
+	f.ranMu.Lock()
+	defer f.ranMu.Unlock()
+	assert.Equal(t, entrypoint.KindAgentic, f.entered[agent])
+	assert.Equal(t, entrypoint.KindHuman, f.entered[human])
+	row := f.job(t, agent)
+	assert.True(t, row.AgentCaused())
+	assert.Equal(t, "task-1", row.Task)
+	assert.EqualValues(t, 3, row.TaskEpoch)
+	assert.Equal(t, "call-9", row.Call)
+	assert.False(t, f.job(t, human).AgentCaused())
 }

@@ -13,6 +13,7 @@ import (
 	"github.com/rs/zerolog"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
+	"github.com/stergiotis/boxer/public/keelson/runtime/entrypoint"
 	"github.com/stergiotis/boxer/public/keelson/runtime/task"
 	"github.com/stergiotis/boxer/public/keelson/runtime/watchbill/watchbillstore"
 	"github.com/stergiotis/boxer/public/observability/eh"
@@ -61,8 +62,11 @@ const DefaultMaxWorkers = 2
 type Worker struct {
 	cfg      Config
 	handlers *Registry
-	now      func() time.Time
-	log      zerolog.Logger
+	// delegation attests an agent-caused enqueue (SetDelegation); nil
+	// refuses one.
+	delegation atomic.Pointer[delegationRef]
+	now        func() time.Time
+	log        zerolog.Logger
 
 	wake   chan struct{}
 	unsub  func()
@@ -502,7 +506,13 @@ func (inst *Worker) execute(jobCtx context.Context, job watchbillstore.Job, clai
 		return
 	}
 	hctx := handle.Ctx()
-	runErr := inst.runHandler(hctx, h, job, handle)
+	// The handler runs under the entry frame the job's delegation earns
+	// (ADR-0344 §SD1): a job an attested agent call enqueued is agentic,
+	// every other job is not. Every stack captured inside says which.
+	var runErr error
+	entrypoint.For(job.AgentCaused())(func() {
+		runErr = inst.runHandler(hctx, h, job, handle)
+	})
 	// Read before the task is finished: Done and Error end the handle's
 	// context themselves, so afterwards every outcome would look like a
 	// cancel through the task.

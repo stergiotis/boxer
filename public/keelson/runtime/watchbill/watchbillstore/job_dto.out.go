@@ -32,6 +32,9 @@ const (
 	kindWatchbillWorkerRun     uint64 = 9223372049739677783
 	kindWatchbillFinishedAt    uint64 = 9223372049739677784
 	kindWatchbillLastError     uint64 = 9223372049739677785
+	kindTrailTask              uint64 = 9223372049739677886
+	kindTrailTaskEpoch         uint64 = 9223372049739677887
+	kindTrailCall              uint64 = 9223372049739677888
 )
 
 // jobJobKindAttrI is the InAttr-side view of the jobKind section. P-variants only —
@@ -304,6 +307,51 @@ type jobJobLastErrorSecI[Attr any, Ent any] interface {
 	EndSection() Ent
 }
 
+// jobJobTaskAttrI is the InAttr-side view of the jobTask section. P-variants only —
+// every method returns void so no F-bounded `[Self]` parameter is
+// needed.
+type jobJobTaskAttrI interface {
+	dmlruntime.InAttributeMembershipLowCardRefPI
+	EndAttributeP()
+}
+
+// jobJobTaskSecI is the Section-side view: opens an attribute and closes
+// the section. Attr and Ent are bound at the call site by inference.
+type jobJobTaskSecI[Attr any, Ent any] interface {
+	BeginAttribute(value string) Attr
+	EndSection() Ent
+}
+
+// jobJobTaskEpochAttrI is the InAttr-side view of the jobTaskEpoch section. P-variants only —
+// every method returns void so no F-bounded `[Self]` parameter is
+// needed.
+type jobJobTaskEpochAttrI interface {
+	dmlruntime.InAttributeMembershipLowCardRefPI
+	EndAttributeP()
+}
+
+// jobJobTaskEpochSecI is the Section-side view: opens an attribute and closes
+// the section. Attr and Ent are bound at the call site by inference.
+type jobJobTaskEpochSecI[Attr any, Ent any] interface {
+	BeginAttribute(value uint64) Attr
+	EndSection() Ent
+}
+
+// jobJobCallAttrI is the InAttr-side view of the jobCall section. P-variants only —
+// every method returns void so no F-bounded `[Self]` parameter is
+// needed.
+type jobJobCallAttrI interface {
+	dmlruntime.InAttributeMembershipLowCardRefPI
+	EndAttributeP()
+}
+
+// jobJobCallSecI is the Section-side view: opens an attribute and closes
+// the section. Attr and Ent are bound at the call site by inference.
+type jobJobCallSecI[Attr any, Ent any] interface {
+	BeginAttribute(value string) Attr
+	EndSection() Ent
+}
+
 // jobEntityI is the entity-builder surface jobAddSections drives.
 // It always lists the per-section getters; the entity-frame methods
 // (BeginEntity / plain setters / CommitEntity) are added only for the
@@ -348,6 +396,12 @@ type jobEntityI[
 	JobFinishedAtSec jobJobFinishedAtSecI[JobFinishedAtAttr, Ent],
 	JobLastErrorAttr jobJobLastErrorAttrI,
 	JobLastErrorSec jobJobLastErrorSecI[JobLastErrorAttr, Ent],
+	JobTaskAttr jobJobTaskAttrI,
+	JobTaskSec jobJobTaskSecI[JobTaskAttr, Ent],
+	JobTaskEpochAttr jobJobTaskEpochAttrI,
+	JobTaskEpochSec jobJobTaskEpochSecI[JobTaskEpochAttr, Ent],
+	JobCallAttr jobJobCallAttrI,
+	JobCallSec jobJobCallSecI[JobCallAttr, Ent],
 	Ent any,
 ] interface {
 	GetSectionJobKind() JobKindSec
@@ -368,6 +422,9 @@ type jobEntityI[
 	GetSectionJobWorkerRun() JobWorkerRunSec
 	GetSectionJobFinishedAt() JobFinishedAtSec
 	GetSectionJobLastError() JobLastErrorSec
+	GetSectionJobTask() JobTaskSec
+	GetSectionJobTaskEpoch() JobTaskEpochSec
+	GetSectionJobCall() JobCallSec
 }
 
 // jobEmitSectionJobKind writes this kind's jobKind attributes into an
@@ -640,6 +697,51 @@ func jobEmitSectionJobLastError[
 	return
 }
 
+// jobEmitSectionJobTask writes this kind's jobTask attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func jobEmitSectionJobTask[
+	JobTaskAttr jobJobTaskAttrI,
+	JobTaskSec jobJobTaskSecI[JobTaskAttr, Ent],
+	Ent any,
+](jobTaskSec JobTaskSec, row Job) (err error) {
+	jobTaskSecAttr_Task := jobTaskSec.BeginAttribute(row.Task)
+	jobTaskSecAttr_Task.AddMembershipLowCardRefP(kindTrailTask)
+	jobTaskSecAttr_Task.EndAttributeP()
+	return
+}
+
+// jobEmitSectionJobTaskEpoch writes this kind's jobTaskEpoch attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func jobEmitSectionJobTaskEpoch[
+	JobTaskEpochAttr jobJobTaskEpochAttrI,
+	JobTaskEpochSec jobJobTaskEpochSecI[JobTaskEpochAttr, Ent],
+	Ent any,
+](jobTaskEpochSec JobTaskEpochSec, row Job) (err error) {
+	jobTaskEpochSecAttr_TaskEpoch := jobTaskEpochSec.BeginAttribute(row.TaskEpoch)
+	jobTaskEpochSecAttr_TaskEpoch.AddMembershipLowCardRefP(kindTrailTaskEpoch)
+	jobTaskEpochSecAttr_TaskEpoch.EndAttributeP()
+	return
+}
+
+// jobEmitSectionJobCall writes this kind's jobCall attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func jobEmitSectionJobCall[
+	JobCallAttr jobJobCallAttrI,
+	JobCallSec jobJobCallSecI[JobCallAttr, Ent],
+	Ent any,
+](jobCallSec JobCallSec, row Job) (err error) {
+	jobCallSecAttr_Call := jobCallSec.BeginAttribute(row.Call)
+	jobCallSecAttr_Call.AddMembershipLowCardRefP(kindTrailCall)
+	jobCallSecAttr_Call.EndAttributeP()
+	return
+}
+
 // jobAddSections contributes this kind's tagged sections to the OPEN
 // entity on dml — the BuildEntities body without the entity frame.
 // The caller owns BeginEntity / plain setters / CommitEntity.
@@ -680,6 +782,12 @@ func jobAddSections[
 	JobFinishedAtSec jobJobFinishedAtSecI[JobFinishedAtAttr, Ent],
 	JobLastErrorAttr jobJobLastErrorAttrI,
 	JobLastErrorSec jobJobLastErrorSecI[JobLastErrorAttr, Ent],
+	JobTaskAttr jobJobTaskAttrI,
+	JobTaskSec jobJobTaskSecI[JobTaskAttr, Ent],
+	JobTaskEpochAttr jobJobTaskEpochAttrI,
+	JobTaskEpochSec jobJobTaskEpochSecI[JobTaskEpochAttr, Ent],
+	JobCallAttr jobJobCallAttrI,
+	JobCallSec jobJobCallSecI[JobCallAttr, Ent],
 	Ent any,
 	DML jobEntityI[
 		JobKindAttr, JobKindSec,
@@ -700,6 +808,9 @@ func jobAddSections[
 		JobWorkerRunAttr, JobWorkerRunSec,
 		JobFinishedAtAttr, JobFinishedAtSec,
 		JobLastErrorAttr, JobLastErrorSec,
+		JobTaskAttr, JobTaskSec,
+		JobTaskEpochAttr, JobTaskEpochSec,
+		JobCallAttr, JobCallSec,
 		Ent,
 	],
 ](dml DML, row Job) (err error) {
@@ -829,6 +940,27 @@ func jobAddSections[
 		return
 	}
 	jobLastErrorSec.EndSection()
+	// --- jobTask. ---
+	jobTaskSec := dml.GetSectionJobTask()
+	err = jobEmitSectionJobTask(jobTaskSec, row)
+	if err != nil {
+		return
+	}
+	jobTaskSec.EndSection()
+	// --- jobTaskEpoch. ---
+	jobTaskEpochSec := dml.GetSectionJobTaskEpoch()
+	err = jobEmitSectionJobTaskEpoch(jobTaskEpochSec, row)
+	if err != nil {
+		return
+	}
+	jobTaskEpochSec.EndSection()
+	// --- jobCall. ---
+	jobCallSec := dml.GetSectionJobCall()
+	err = jobEmitSectionJobCall(jobCallSec, row)
+	if err != nil {
+		return
+	}
+	jobCallSec.EndSection()
 	return
 }
 
@@ -1030,6 +1162,39 @@ type jobJobLastErrorMembsReadI interface {
 	GetMembValueLowCardRef(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) iter.Seq[uint64]
 }
 
+// jobJobTaskAttrsReadI is the Attributes-side view of the jobTask section.
+type jobJobTaskAttrsReadI interface {
+	GetAttrValueValue(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) string
+	GetNumberOfAttributes(entityIdx raruntime.EntityIdx) int64
+}
+
+// jobJobTaskMembsReadI is the Memberships-side view of the jobTask section.
+type jobJobTaskMembsReadI interface {
+	GetMembValueLowCardRef(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) iter.Seq[uint64]
+}
+
+// jobJobTaskEpochAttrsReadI is the Attributes-side view of the jobTaskEpoch section.
+type jobJobTaskEpochAttrsReadI interface {
+	GetAttrValueValue(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) uint64
+	GetNumberOfAttributes(entityIdx raruntime.EntityIdx) int64
+}
+
+// jobJobTaskEpochMembsReadI is the Memberships-side view of the jobTaskEpoch section.
+type jobJobTaskEpochMembsReadI interface {
+	GetMembValueLowCardRef(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) iter.Seq[uint64]
+}
+
+// jobJobCallAttrsReadI is the Attributes-side view of the jobCall section.
+type jobJobCallAttrsReadI interface {
+	GetAttrValueValue(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) string
+	GetNumberOfAttributes(entityIdx raruntime.EntityIdx) int64
+}
+
+// jobJobCallMembsReadI is the Memberships-side view of the jobCall section.
+type jobJobCallMembsReadI interface {
+	GetMembValueLowCardRef(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) iter.Seq[uint64]
+}
+
 // jobReadRow reads row i as one optional Job component: presence-
 // gated (a row carrying none of the kind's memberships yields
 // present=false), membership-matched. A slot carrying more
@@ -1075,6 +1240,12 @@ func jobReadRow[
 	JobFinishedAtMembs jobJobFinishedAtMembsReadI,
 	JobLastErrorAttrs jobJobLastErrorAttrsReadI,
 	JobLastErrorMembs jobJobLastErrorMembsReadI,
+	JobTaskAttrs jobJobTaskAttrsReadI,
+	JobTaskMembs jobJobTaskMembsReadI,
+	JobTaskEpochAttrs jobJobTaskEpochAttrsReadI,
+	JobTaskEpochMembs jobJobTaskEpochMembsReadI,
+	JobCallAttrs jobJobCallAttrsReadI,
+	JobCallMembs jobJobCallMembsReadI,
 ](
 	i int,
 	jobKindAttrs JobKindAttrs,
@@ -1113,6 +1284,12 @@ func jobReadRow[
 	jobFinishedAtMembs JobFinishedAtMembs,
 	jobLastErrorAttrs JobLastErrorAttrs,
 	jobLastErrorMembs JobLastErrorMembs,
+	jobTaskAttrs JobTaskAttrs,
+	jobTaskMembs JobTaskMembs,
+	jobTaskEpochAttrs JobTaskEpochAttrs,
+	jobTaskEpochMembs JobTaskEpochMembs,
+	jobCallAttrs JobCallAttrs,
+	jobCallMembs JobCallMembs,
 ) (row Job, present bool, err error) {
 	// --- jobKind. ---
 	var jobKindKindVal string
@@ -1582,6 +1759,84 @@ func jobReadRow[
 	}
 	if jobLastErrorLastErrorCount == 1 {
 		row.LastError = jobLastErrorLastErrorVal
+		present = true
+	}
+	// --- jobTask. ---
+	var jobTaskTaskVal string
+	var jobTaskTaskCount int
+	var jobTaskTaskLastAttr int64
+	njobTask := jobTaskAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
+	for attrJ := int64(0); attrJ < njobTask; attrJ++ {
+		for membID := range jobTaskMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
+			switch membID {
+			case kindTrailTask:
+				if jobTaskTaskLastAttr != attrJ+1 {
+					jobTaskTaskLastAttr = attrJ + 1
+					jobTaskTaskCount++
+				}
+				val := jobTaskAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				jobTaskTaskVal = val
+			}
+		}
+	}
+	if jobTaskTaskCount > 1 {
+		err = eb.Build().Int("row", i).Str("section", "jobTask").Str("membership", "trailTask").Int("got", jobTaskTaskCount).Errorf("slot jobTask@trailTask (field Task) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", jobTaskTaskCount)
+		return
+	}
+	if jobTaskTaskCount == 1 {
+		row.Task = jobTaskTaskVal
+		present = true
+	}
+	// --- jobTaskEpoch. ---
+	var jobTaskEpochTaskEpochVal uint64
+	var jobTaskEpochTaskEpochCount int
+	var jobTaskEpochTaskEpochLastAttr int64
+	njobTaskEpoch := jobTaskEpochAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
+	for attrJ := int64(0); attrJ < njobTaskEpoch; attrJ++ {
+		for membID := range jobTaskEpochMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
+			switch membID {
+			case kindTrailTaskEpoch:
+				if jobTaskEpochTaskEpochLastAttr != attrJ+1 {
+					jobTaskEpochTaskEpochLastAttr = attrJ + 1
+					jobTaskEpochTaskEpochCount++
+				}
+				val := jobTaskEpochAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				jobTaskEpochTaskEpochVal = val
+			}
+		}
+	}
+	if jobTaskEpochTaskEpochCount > 1 {
+		err = eb.Build().Int("row", i).Str("section", "jobTaskEpoch").Str("membership", "trailTaskEpoch").Int("got", jobTaskEpochTaskEpochCount).Errorf("slot jobTaskEpoch@trailTaskEpoch (field TaskEpoch) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", jobTaskEpochTaskEpochCount)
+		return
+	}
+	if jobTaskEpochTaskEpochCount == 1 {
+		row.TaskEpoch = jobTaskEpochTaskEpochVal
+		present = true
+	}
+	// --- jobCall. ---
+	var jobCallCallVal string
+	var jobCallCallCount int
+	var jobCallCallLastAttr int64
+	njobCall := jobCallAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
+	for attrJ := int64(0); attrJ < njobCall; attrJ++ {
+		for membID := range jobCallMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
+			switch membID {
+			case kindTrailCall:
+				if jobCallCallLastAttr != attrJ+1 {
+					jobCallCallLastAttr = attrJ + 1
+					jobCallCallCount++
+				}
+				val := jobCallAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				jobCallCallVal = val
+			}
+		}
+	}
+	if jobCallCallCount > 1 {
+		err = eb.Build().Int("row", i).Str("section", "jobCall").Str("membership", "trailCall").Int("got", jobCallCallCount).Errorf("slot jobCall@trailCall (field Call) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", jobCallCallCount)
+		return
+	}
+	if jobCallCallCount == 1 {
+		row.Call = jobCallCallVal
 		present = true
 	}
 	return

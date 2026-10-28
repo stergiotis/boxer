@@ -50,6 +50,9 @@ var (
 	kindWbReqKinds         uint64
 	kindWbReqLimit         uint64
 	kindWbReqNote          uint64
+	kindWbReqOboTask       uint64
+	kindWbReqOboEpoch      uint64
+	kindWbReqOboCall       uint64
 )
 
 func init() {
@@ -70,6 +73,9 @@ func init() {
 	kindWbReqKinds = vdd.MembWbReqKinds.GetId().Value()
 	kindWbReqLimit = vdd.MembWbReqLimit.GetId().Value()
 	kindWbReqNote = vdd.MembWbReqNote.GetId().Value()
+	kindWbReqOboTask = vdd.MembWbReqOboTask.GetId().Value()
+	kindWbReqOboEpoch = vdd.MembWbReqOboEpoch.GetId().Value()
+	kindWbReqOboCall = vdd.MembWbReqOboCall.GetId().Value()
 	buscodec.Register[WatchbillRequest](watchbillRequestBusCodec)
 }
 
@@ -150,6 +156,9 @@ type WatchbillRequestColumns struct {
 	Kinds         [][]string
 	Limit         []uint32
 	Note          []string
+	OboTask       []string
+	OboEpoch      []uint64
+	OboCall       []string
 }
 
 // Len returns the number of rows currently in the batch.
@@ -182,6 +191,9 @@ func (c *WatchbillRequestColumns) Append(row WatchbillRequest) {
 	c.Kinds = append(c.Kinds, row.Kinds)
 	c.Limit = append(c.Limit, row.Limit)
 	c.Note = append(c.Note, row.Note)
+	c.OboTask = append(c.OboTask, row.OboTask)
+	c.OboEpoch = append(c.OboEpoch, row.OboEpoch)
+	c.OboCall = append(c.OboCall, row.OboCall)
 }
 
 // Row reconstructs entity i as an AoS WatchbillRequest record. Inverse of
@@ -208,6 +220,9 @@ func (c *WatchbillRequestColumns) Row(i int) (row WatchbillRequest) {
 	row.Kinds = c.Kinds[i]
 	row.Limit = c.Limit[i]
 	row.Note = c.Note[i]
+	row.OboTask = c.OboTask[i]
+	row.OboEpoch = c.OboEpoch[i]
+	row.OboCall = c.OboCall[i]
 	return
 }
 
@@ -447,6 +462,12 @@ func WatchbillRequestBuildEntities[
 		stringArraySecAttr_Id := stringArraySec.BeginAttributeSingle(c.Id[i])
 		stringArraySecAttr_Id.AddMembershipLowCardRefP(kindWbReqId)
 		stringArraySecAttr_Id.EndAttributeP()
+		stringArraySecAttr_OboTask := stringArraySec.BeginAttributeSingle(c.OboTask[i])
+		stringArraySecAttr_OboTask.AddMembershipLowCardRefP(kindWbReqOboTask)
+		stringArraySecAttr_OboTask.EndAttributeP()
+		stringArraySecAttr_OboCall := stringArraySec.BeginAttributeSingle(c.OboCall[i])
+		stringArraySecAttr_OboCall.AddMembershipLowCardRefP(kindWbReqOboCall)
+		stringArraySecAttr_OboCall.EndAttributeP()
 		stringArraySec.EndSection()
 		// --- textArray. ---
 		textArraySec := dml.GetSectionTextArray()
@@ -477,6 +498,9 @@ func WatchbillRequestBuildEntities[
 		u64ArraySecAttr_TimeoutMs := u64ArraySec.BeginAttributeSingle(c.TimeoutMs[i])
 		u64ArraySecAttr_TimeoutMs.AddMembershipLowCardRefP(kindWbReqTimeoutMs)
 		u64ArraySecAttr_TimeoutMs.EndAttributeP()
+		u64ArraySecAttr_OboEpoch := u64ArraySec.BeginAttributeSingle(c.OboEpoch[i])
+		u64ArraySecAttr_OboEpoch.AddMembershipLowCardRefP(kindWbReqOboEpoch)
+		u64ArraySecAttr_OboEpoch.EndAttributeP()
 		u64ArraySec.EndSection()
 		// --- blobArray. ---
 		blobArraySec := dml.GetSectionBlobArray()
@@ -557,6 +581,12 @@ func WatchbillRequestEmitSectionStringArray[
 	stringArraySecAttr_Id := stringArraySec.BeginAttributeSingle(row.Id)
 	stringArraySecAttr_Id.AddMembershipLowCardRefP(kindWbReqId)
 	stringArraySecAttr_Id.EndAttributeP()
+	stringArraySecAttr_OboTask := stringArraySec.BeginAttributeSingle(row.OboTask)
+	stringArraySecAttr_OboTask.AddMembershipLowCardRefP(kindWbReqOboTask)
+	stringArraySecAttr_OboTask.EndAttributeP()
+	stringArraySecAttr_OboCall := stringArraySec.BeginAttributeSingle(row.OboCall)
+	stringArraySecAttr_OboCall.AddMembershipLowCardRefP(kindWbReqOboCall)
+	stringArraySecAttr_OboCall.EndAttributeP()
 	return
 }
 
@@ -614,6 +644,9 @@ func WatchbillRequestEmitSectionU64Array[
 	u64ArraySecAttr_TimeoutMs := u64ArraySec.BeginAttributeSingle(row.TimeoutMs)
 	u64ArraySecAttr_TimeoutMs.AddMembershipLowCardRefP(kindWbReqTimeoutMs)
 	u64ArraySecAttr_TimeoutMs.EndAttributeP()
+	u64ArraySecAttr_OboEpoch := u64ArraySec.BeginAttributeSingle(row.OboEpoch)
+	u64ArraySecAttr_OboEpoch.AddMembershipLowCardRefP(kindWbReqOboEpoch)
+	u64ArraySecAttr_OboEpoch.EndAttributeP()
 	return
 }
 
@@ -1002,6 +1035,12 @@ func WatchbillRequestFillFromArrow[
 		var stringArrayIdVal string
 		var stringArrayIdCount int
 		var stringArrayIdLastAttr int64
+		var stringArrayOboTaskVal string
+		var stringArrayOboTaskCount int
+		var stringArrayOboTaskLastAttr int64
+		var stringArrayOboCallVal string
+		var stringArrayOboCallCount int
+		var stringArrayOboCallLastAttr int64
 		nstringArray := stringArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 		for attrJ := int64(0); attrJ < nstringArray; attrJ++ {
 			for membID := range stringArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
@@ -1017,6 +1056,28 @@ func WatchbillRequestFillFromArrow[
 						return
 					}
 					stringArrayIdVal = val
+				case kindWbReqOboTask:
+					if stringArrayOboTaskLastAttr != attrJ+1 {
+						stringArrayOboTaskLastAttr = attrJ + 1
+						stringArrayOboTaskCount++
+					}
+					val, valErr := stringArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+					if valErr != nil {
+						err = eb.Build().Int("row", i).Str("section", "stringArray").Str("membership", "wbReqOboTask").Str("field", "OboTask").Errorf("slot stringArray@wbReqOboTask (field OboTask) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+						return
+					}
+					stringArrayOboTaskVal = val
+				case kindWbReqOboCall:
+					if stringArrayOboCallLastAttr != attrJ+1 {
+						stringArrayOboCallLastAttr = attrJ + 1
+						stringArrayOboCallCount++
+					}
+					val, valErr := stringArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+					if valErr != nil {
+						err = eb.Build().Int("row", i).Str("section", "stringArray").Str("membership", "wbReqOboCall").Str("field", "OboCall").Errorf("slot stringArray@wbReqOboCall (field OboCall) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+						return
+					}
+					stringArrayOboCallVal = val
 				}
 			}
 		}
@@ -1025,6 +1086,16 @@ func WatchbillRequestFillFromArrow[
 			return
 		}
 		c.Id = append(c.Id, stringArrayIdVal)
+		if stringArrayOboTaskCount != 1 {
+			err = eb.Build().Int("row", i).Str("section", "stringArray").Str("membership", "wbReqOboTask").Int("got", stringArrayOboTaskCount).Errorf("slot stringArray@wbReqOboTask (field OboTask) carries %d attributes but the DTO admits exactly 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", stringArrayOboTaskCount)
+			return
+		}
+		c.OboTask = append(c.OboTask, stringArrayOboTaskVal)
+		if stringArrayOboCallCount != 1 {
+			err = eb.Build().Int("row", i).Str("section", "stringArray").Str("membership", "wbReqOboCall").Int("got", stringArrayOboCallCount).Errorf("slot stringArray@wbReqOboCall (field OboCall) carries %d attributes but the DTO admits exactly 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", stringArrayOboCallCount)
+			return
+		}
+		c.OboCall = append(c.OboCall, stringArrayOboCallVal)
 		// --- textArray. ---
 		var textArraySubjectVal string
 		var textArraySubjectCount int
@@ -1143,6 +1214,9 @@ func WatchbillRequestFillFromArrow[
 		var u64ArrayTimeoutMsVal uint64
 		var u64ArrayTimeoutMsCount int
 		var u64ArrayTimeoutMsLastAttr int64
+		var u64ArrayOboEpochVal uint64
+		var u64ArrayOboEpochCount int
+		var u64ArrayOboEpochLastAttr int64
 		nu64Array := u64ArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 		for attrJ := int64(0); attrJ < nu64Array; attrJ++ {
 			for membID := range u64ArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
@@ -1169,6 +1243,17 @@ func WatchbillRequestFillFromArrow[
 						return
 					}
 					u64ArrayTimeoutMsVal = val
+				case kindWbReqOboEpoch:
+					if u64ArrayOboEpochLastAttr != attrJ+1 {
+						u64ArrayOboEpochLastAttr = attrJ + 1
+						u64ArrayOboEpochCount++
+					}
+					val, valErr := u64ArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+					if valErr != nil {
+						err = eb.Build().Int("row", i).Str("section", "u64Array").Str("membership", "wbReqOboEpoch").Str("field", "OboEpoch").Errorf("slot u64Array@wbReqOboEpoch (field OboEpoch) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+						return
+					}
+					u64ArrayOboEpochVal = val
 				}
 			}
 		}
@@ -1182,6 +1267,11 @@ func WatchbillRequestFillFromArrow[
 			return
 		}
 		c.TimeoutMs = append(c.TimeoutMs, u64ArrayTimeoutMsVal)
+		if u64ArrayOboEpochCount != 1 {
+			err = eb.Build().Int("row", i).Str("section", "u64Array").Str("membership", "wbReqOboEpoch").Int("got", u64ArrayOboEpochCount).Errorf("slot u64Array@wbReqOboEpoch (field OboEpoch) carries %d attributes but the DTO admits exactly 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", u64ArrayOboEpochCount)
+			return
+		}
+		c.OboEpoch = append(c.OboEpoch, u64ArrayOboEpochVal)
 		// --- blobArray. ---
 		var blobArrayArgsVal []byte
 		var blobArrayArgsCount int
@@ -1428,6 +1518,12 @@ func WatchbillRequestReadRow[
 	var stringArrayIdVal string
 	var stringArrayIdCount int
 	var stringArrayIdLastAttr int64
+	var stringArrayOboTaskVal string
+	var stringArrayOboTaskCount int
+	var stringArrayOboTaskLastAttr int64
+	var stringArrayOboCallVal string
+	var stringArrayOboCallCount int
+	var stringArrayOboCallLastAttr int64
 	nstringArray := stringArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 	for attrJ := int64(0); attrJ < nstringArray; attrJ++ {
 		for membID := range stringArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
@@ -1443,6 +1539,28 @@ func WatchbillRequestReadRow[
 					return
 				}
 				stringArrayIdVal = val
+			case kindWbReqOboTask:
+				if stringArrayOboTaskLastAttr != attrJ+1 {
+					stringArrayOboTaskLastAttr = attrJ + 1
+					stringArrayOboTaskCount++
+				}
+				val, valErr := stringArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				if valErr != nil {
+					err = eb.Build().Int("row", i).Str("section", "stringArray").Str("membership", "wbReqOboTask").Str("field", "OboTask").Errorf("slot stringArray@wbReqOboTask (field OboTask) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+					return
+				}
+				stringArrayOboTaskVal = val
+			case kindWbReqOboCall:
+				if stringArrayOboCallLastAttr != attrJ+1 {
+					stringArrayOboCallLastAttr = attrJ + 1
+					stringArrayOboCallCount++
+				}
+				val, valErr := stringArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				if valErr != nil {
+					err = eb.Build().Int("row", i).Str("section", "stringArray").Str("membership", "wbReqOboCall").Str("field", "OboCall").Errorf("slot stringArray@wbReqOboCall (field OboCall) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+					return
+				}
+				stringArrayOboCallVal = val
 			}
 		}
 	}
@@ -1452,6 +1570,22 @@ func WatchbillRequestReadRow[
 	}
 	if stringArrayIdCount == 1 {
 		row.Id = stringArrayIdVal
+		present = true
+	}
+	if stringArrayOboTaskCount > 1 {
+		err = eb.Build().Int("row", i).Str("section", "stringArray").Str("membership", "wbReqOboTask").Int("got", stringArrayOboTaskCount).Errorf("slot stringArray@wbReqOboTask (field OboTask) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", stringArrayOboTaskCount)
+		return
+	}
+	if stringArrayOboTaskCount == 1 {
+		row.OboTask = stringArrayOboTaskVal
+		present = true
+	}
+	if stringArrayOboCallCount > 1 {
+		err = eb.Build().Int("row", i).Str("section", "stringArray").Str("membership", "wbReqOboCall").Int("got", stringArrayOboCallCount).Errorf("slot stringArray@wbReqOboCall (field OboCall) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", stringArrayOboCallCount)
+		return
+	}
+	if stringArrayOboCallCount == 1 {
+		row.OboCall = stringArrayOboCallVal
 		present = true
 	}
 	// --- textArray. ---
@@ -1587,6 +1721,9 @@ func WatchbillRequestReadRow[
 	var u64ArrayTimeoutMsVal uint64
 	var u64ArrayTimeoutMsCount int
 	var u64ArrayTimeoutMsLastAttr int64
+	var u64ArrayOboEpochVal uint64
+	var u64ArrayOboEpochCount int
+	var u64ArrayOboEpochLastAttr int64
 	nu64Array := u64ArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 	for attrJ := int64(0); attrJ < nu64Array; attrJ++ {
 		for membID := range u64ArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
@@ -1613,6 +1750,17 @@ func WatchbillRequestReadRow[
 					return
 				}
 				u64ArrayTimeoutMsVal = val
+			case kindWbReqOboEpoch:
+				if u64ArrayOboEpochLastAttr != attrJ+1 {
+					u64ArrayOboEpochLastAttr = attrJ + 1
+					u64ArrayOboEpochCount++
+				}
+				val, valErr := u64ArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				if valErr != nil {
+					err = eb.Build().Int("row", i).Str("section", "u64Array").Str("membership", "wbReqOboEpoch").Str("field", "OboEpoch").Errorf("slot u64Array@wbReqOboEpoch (field OboEpoch) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+					return
+				}
+				u64ArrayOboEpochVal = val
 			}
 		}
 	}
@@ -1630,6 +1778,14 @@ func WatchbillRequestReadRow[
 	}
 	if u64ArrayTimeoutMsCount == 1 {
 		row.TimeoutMs = u64ArrayTimeoutMsVal
+		present = true
+	}
+	if u64ArrayOboEpochCount > 1 {
+		err = eb.Build().Int("row", i).Str("section", "u64Array").Str("membership", "wbReqOboEpoch").Int("got", u64ArrayOboEpochCount).Errorf("slot u64Array@wbReqOboEpoch (field OboEpoch) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", u64ArrayOboEpochCount)
+		return
+	}
+	if u64ArrayOboEpochCount == 1 {
+		row.OboEpoch = u64ArrayOboEpochVal
 		present = true
 	}
 	// --- blobArray. ---

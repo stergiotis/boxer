@@ -472,6 +472,66 @@ func NewMembershipPackWatchbillTableShared1JobLastError() (inst *MembershipPackW
 	return
 }
 
+func NewMembershipPackWatchbillTableShared1JobTask() (inst *MembershipPackWatchbillTableShared1) {
+	inst = &MembershipPackWatchbillTableShared1{}
+	inst.AccelHighCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipHighCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelLowCardVerbatim = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipLowCardVerbatimIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelMixedLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelMixedRefHighCardParameters = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedRefHighCardParametersIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.ColumnIndexHighCardRef = 183
+	inst.ColumnIndexHighCardRefAccel = 188
+	inst.ColumnIndexLowCardRef = 184
+	inst.ColumnIndexLowCardRefAccel = 189
+	inst.ColumnIndexLowCardVerbatim = 185
+	inst.ColumnIndexLowCardVerbatimAccel = 190
+	inst.ColumnIndexMixedLowCardRef = 186
+	inst.ColumnIndexMixedLowCardRefAccel = 191
+	inst.ColumnIndexMixedRefHighCardParameters = 187
+	inst.ColumnIndexMixedRefHighCardParametersAccel = 191
+	return
+}
+
+func NewMembershipPackWatchbillTableShared1JobTaskEpoch() (inst *MembershipPackWatchbillTableShared1) {
+	inst = &MembershipPackWatchbillTableShared1{}
+	inst.AccelHighCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipHighCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelLowCardVerbatim = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipLowCardVerbatimIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelMixedLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelMixedRefHighCardParameters = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedRefHighCardParametersIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.ColumnIndexHighCardRef = 193
+	inst.ColumnIndexHighCardRefAccel = 198
+	inst.ColumnIndexLowCardRef = 194
+	inst.ColumnIndexLowCardRefAccel = 199
+	inst.ColumnIndexLowCardVerbatim = 195
+	inst.ColumnIndexLowCardVerbatimAccel = 200
+	inst.ColumnIndexMixedLowCardRef = 196
+	inst.ColumnIndexMixedLowCardRefAccel = 201
+	inst.ColumnIndexMixedRefHighCardParameters = 197
+	inst.ColumnIndexMixedRefHighCardParametersAccel = 201
+	return
+}
+
+func NewMembershipPackWatchbillTableShared1JobCall() (inst *MembershipPackWatchbillTableShared1) {
+	inst = &MembershipPackWatchbillTableShared1{}
+	inst.AccelHighCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipHighCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelLowCardVerbatim = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipLowCardVerbatimIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelMixedLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelMixedRefHighCardParameters = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedRefHighCardParametersIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.ColumnIndexHighCardRef = 203
+	inst.ColumnIndexHighCardRefAccel = 208
+	inst.ColumnIndexLowCardRef = 204
+	inst.ColumnIndexLowCardRefAccel = 209
+	inst.ColumnIndexLowCardVerbatim = 205
+	inst.ColumnIndexLowCardVerbatimAccel = 210
+	inst.ColumnIndexMixedLowCardRef = 206
+	inst.ColumnIndexMixedLowCardRefAccel = 211
+	inst.ColumnIndexMixedRefHighCardParameters = 207
+	inst.ColumnIndexMixedRefHighCardParametersAccel = 211
+	return
+}
+
 func (inst *MembershipPackWatchbillTableShared1) Release() {
 	runtime.ReleaseIfNotNil(inst.ValueHighCardRef)
 	runtime.ReleaseIfNotNil(inst.ValueHighCardRefElements)
@@ -741,6 +801,12 @@ type ReadAccessWatchbillTableTaggedJobBackoffBaseMsAttributes struct {
 	ValueValueElements *array.Uint64
 }
 
+type ReadAccessWatchbillTableTaggedJobCallAttributes struct {
+	ValueValue         *array.List
+	ColumnIndexValue   uint32
+	ValueValueElements *array.String
+}
+
 type ReadAccessWatchbillTableTaggedJobFinishedAtAttributes struct {
 	ValueValue         *array.List
 	ColumnIndexValue   uint32
@@ -805,6 +871,18 @@ type ReadAccessWatchbillTableTaggedJobSubjectAttributes struct {
 	ValueValue         *array.List
 	ColumnIndexValue   uint32
 	ValueValueElements *array.String
+}
+
+type ReadAccessWatchbillTableTaggedJobTaskAttributes struct {
+	ValueValue         *array.List
+	ColumnIndexValue   uint32
+	ValueValueElements *array.String
+}
+
+type ReadAccessWatchbillTableTaggedJobTaskEpochAttributes struct {
+	ValueValue         *array.List
+	ColumnIndexValue   uint32
+	ValueValueElements *array.Uint64
 }
 
 type ReadAccessWatchbillTableTaggedJobTimeoutMsAttributes struct {
@@ -1021,6 +1099,35 @@ func (inst *ReadAccessWatchbillTableTaggedJobBackoffBaseMsAttributes) SetColumnI
 }
 
 var _ runtime.ColumnIndexHandlingI = (*ReadAccessWatchbillTableTaggedJobBackoffBaseMsAttributes)(nil)
+
+func NewReadAccessWatchbillTableTaggedJobCallAttributes() (inst *ReadAccessWatchbillTableTaggedJobCallAttributes) {
+	inst = &ReadAccessWatchbillTableTaggedJobCallAttributes{}
+	inst.ColumnIndexValue = 202
+	return
+}
+
+func (inst *ReadAccessWatchbillTableTaggedJobCallAttributes) GetColumnIndices() (columnIndices []uint32) {
+	columnIndices = []uint32{
+		inst.ColumnIndexValue,
+	}
+	return
+}
+
+func (inst *ReadAccessWatchbillTableTaggedJobCallAttributes) GetColumnIndexFieldNames() (fieldNames []string) {
+	fieldNames = []string{
+		"ReadAccessWatchbillTableTaggedJobCallAttributes.ColumnIndexValue",
+	}
+	return
+}
+
+func (inst *ReadAccessWatchbillTableTaggedJobCallAttributes) SetColumnIndices(indices []uint32) (rest []uint32) {
+	inst.ColumnIndexValue = indices[0]
+
+	rest = indices[1:]
+	return
+}
+
+var _ runtime.ColumnIndexHandlingI = (*ReadAccessWatchbillTableTaggedJobCallAttributes)(nil)
 
 func NewReadAccessWatchbillTableTaggedJobFinishedAtAttributes() (inst *ReadAccessWatchbillTableTaggedJobFinishedAtAttributes) {
 	inst = &ReadAccessWatchbillTableTaggedJobFinishedAtAttributes{}
@@ -1341,6 +1448,64 @@ func (inst *ReadAccessWatchbillTableTaggedJobSubjectAttributes) SetColumnIndices
 
 var _ runtime.ColumnIndexHandlingI = (*ReadAccessWatchbillTableTaggedJobSubjectAttributes)(nil)
 
+func NewReadAccessWatchbillTableTaggedJobTaskAttributes() (inst *ReadAccessWatchbillTableTaggedJobTaskAttributes) {
+	inst = &ReadAccessWatchbillTableTaggedJobTaskAttributes{}
+	inst.ColumnIndexValue = 182
+	return
+}
+
+func (inst *ReadAccessWatchbillTableTaggedJobTaskAttributes) GetColumnIndices() (columnIndices []uint32) {
+	columnIndices = []uint32{
+		inst.ColumnIndexValue,
+	}
+	return
+}
+
+func (inst *ReadAccessWatchbillTableTaggedJobTaskAttributes) GetColumnIndexFieldNames() (fieldNames []string) {
+	fieldNames = []string{
+		"ReadAccessWatchbillTableTaggedJobTaskAttributes.ColumnIndexValue",
+	}
+	return
+}
+
+func (inst *ReadAccessWatchbillTableTaggedJobTaskAttributes) SetColumnIndices(indices []uint32) (rest []uint32) {
+	inst.ColumnIndexValue = indices[0]
+
+	rest = indices[1:]
+	return
+}
+
+var _ runtime.ColumnIndexHandlingI = (*ReadAccessWatchbillTableTaggedJobTaskAttributes)(nil)
+
+func NewReadAccessWatchbillTableTaggedJobTaskEpochAttributes() (inst *ReadAccessWatchbillTableTaggedJobTaskEpochAttributes) {
+	inst = &ReadAccessWatchbillTableTaggedJobTaskEpochAttributes{}
+	inst.ColumnIndexValue = 192
+	return
+}
+
+func (inst *ReadAccessWatchbillTableTaggedJobTaskEpochAttributes) GetColumnIndices() (columnIndices []uint32) {
+	columnIndices = []uint32{
+		inst.ColumnIndexValue,
+	}
+	return
+}
+
+func (inst *ReadAccessWatchbillTableTaggedJobTaskEpochAttributes) GetColumnIndexFieldNames() (fieldNames []string) {
+	fieldNames = []string{
+		"ReadAccessWatchbillTableTaggedJobTaskEpochAttributes.ColumnIndexValue",
+	}
+	return
+}
+
+func (inst *ReadAccessWatchbillTableTaggedJobTaskEpochAttributes) SetColumnIndices(indices []uint32) (rest []uint32) {
+	inst.ColumnIndexValue = indices[0]
+
+	rest = indices[1:]
+	return
+}
+
+var _ runtime.ColumnIndexHandlingI = (*ReadAccessWatchbillTableTaggedJobTaskEpochAttributes)(nil)
+
 func NewReadAccessWatchbillTableTaggedJobTimeoutMsAttributes() (inst *ReadAccessWatchbillTableTaggedJobTimeoutMsAttributes) {
 	inst = &ReadAccessWatchbillTableTaggedJobTimeoutMsAttributes{}
 	inst.ColumnIndexValue = 72
@@ -1437,6 +1602,11 @@ func (inst *ReadAccessWatchbillTableTaggedJobBackoffBaseMsAttributes) Reset() {
 	inst.ValueValueElements = nil
 }
 
+func (inst *ReadAccessWatchbillTableTaggedJobCallAttributes) Reset() {
+	inst.ValueValue = nil
+	inst.ValueValueElements = nil
+}
+
 func (inst *ReadAccessWatchbillTableTaggedJobFinishedAtAttributes) Reset() {
 	inst.ValueValue = nil
 	inst.ValueValueElements = nil
@@ -1488,6 +1658,16 @@ func (inst *ReadAccessWatchbillTableTaggedJobStateAttributes) Reset() {
 }
 
 func (inst *ReadAccessWatchbillTableTaggedJobSubjectAttributes) Reset() {
+	inst.ValueValue = nil
+	inst.ValueValueElements = nil
+}
+
+func (inst *ReadAccessWatchbillTableTaggedJobTaskAttributes) Reset() {
+	inst.ValueValue = nil
+	inst.ValueValueElements = nil
+}
+
+func (inst *ReadAccessWatchbillTableTaggedJobTaskEpochAttributes) Reset() {
 	inst.ValueValue = nil
 	inst.ValueValueElements = nil
 }
@@ -1550,6 +1730,13 @@ func (inst *ReadAccessWatchbillTableTaggedJobBackoffAttributes) Release() {
 var _ runtime.ReleasableI = (*ReadAccessWatchbillTableTaggedJobBackoffBaseMsAttributes)(nil)
 
 func (inst *ReadAccessWatchbillTableTaggedJobBackoffBaseMsAttributes) Release() {
+	runtime.ReleaseIfNotNil(inst.ValueValue)
+	runtime.ReleaseIfNotNil(inst.ValueValueElements)
+}
+
+var _ runtime.ReleasableI = (*ReadAccessWatchbillTableTaggedJobCallAttributes)(nil)
+
+func (inst *ReadAccessWatchbillTableTaggedJobCallAttributes) Release() {
 	runtime.ReleaseIfNotNil(inst.ValueValue)
 	runtime.ReleaseIfNotNil(inst.ValueValueElements)
 }
@@ -1631,6 +1818,20 @@ func (inst *ReadAccessWatchbillTableTaggedJobSubjectAttributes) Release() {
 	runtime.ReleaseIfNotNil(inst.ValueValueElements)
 }
 
+var _ runtime.ReleasableI = (*ReadAccessWatchbillTableTaggedJobTaskAttributes)(nil)
+
+func (inst *ReadAccessWatchbillTableTaggedJobTaskAttributes) Release() {
+	runtime.ReleaseIfNotNil(inst.ValueValue)
+	runtime.ReleaseIfNotNil(inst.ValueValueElements)
+}
+
+var _ runtime.ReleasableI = (*ReadAccessWatchbillTableTaggedJobTaskEpochAttributes)(nil)
+
+func (inst *ReadAccessWatchbillTableTaggedJobTaskEpochAttributes) Release() {
+	runtime.ReleaseIfNotNil(inst.ValueValue)
+	runtime.ReleaseIfNotNil(inst.ValueValueElements)
+}
+
 var _ runtime.ReleasableI = (*ReadAccessWatchbillTableTaggedJobTimeoutMsAttributes)(nil)
 
 func (inst *ReadAccessWatchbillTableTaggedJobTimeoutMsAttributes) Release() {
@@ -1693,6 +1894,13 @@ func (inst *ReadAccessWatchbillTableTaggedJobBackoffAttributes) Len() (nEntities
 }
 
 func (inst *ReadAccessWatchbillTableTaggedJobBackoffBaseMsAttributes) Len() (nEntities int) {
+	if inst.ValueValue != nil {
+		nEntities = inst.ValueValue.Len()
+	}
+	return
+}
+
+func (inst *ReadAccessWatchbillTableTaggedJobCallAttributes) Len() (nEntities int) {
 	if inst.ValueValue != nil {
 		nEntities = inst.ValueValue.Len()
 	}
@@ -1776,6 +1984,20 @@ func (inst *ReadAccessWatchbillTableTaggedJobSubjectAttributes) Len() (nEntities
 	return
 }
 
+func (inst *ReadAccessWatchbillTableTaggedJobTaskAttributes) Len() (nEntities int) {
+	if inst.ValueValue != nil {
+		nEntities = inst.ValueValue.Len()
+	}
+	return
+}
+
+func (inst *ReadAccessWatchbillTableTaggedJobTaskEpochAttributes) Len() (nEntities int) {
+	if inst.ValueValue != nil {
+		nEntities = inst.ValueValue.Len()
+	}
+	return
+}
+
 func (inst *ReadAccessWatchbillTableTaggedJobTimeoutMsAttributes) Len() (nEntities int) {
 	if inst.ValueValue != nil {
 		nEntities = inst.ValueValue.Len()
@@ -1845,6 +2067,14 @@ func (inst *ReadAccessWatchbillTableTaggedJobBackoffAttributes) LoadFromRecord(r
 
 func (inst *ReadAccessWatchbillTableTaggedJobBackoffBaseMsAttributes) LoadFromRecord(rec runtime.RecordI) (err error) {
 	err = runtime.LoadNonScalarValueFieldFromRecord(inst.ColumnIndexValue, arrow.UINT64, rec, &inst.ValueValue, &inst.ValueValueElements, array.NewUint64Data)
+	if err != nil {
+		return
+	}
+	return
+}
+
+func (inst *ReadAccessWatchbillTableTaggedJobCallAttributes) LoadFromRecord(rec runtime.RecordI) (err error) {
+	err = runtime.LoadNonScalarValueFieldFromRecord(inst.ColumnIndexValue, arrow.STRING, rec, &inst.ValueValue, &inst.ValueValueElements, array.NewStringData)
 	if err != nil {
 		return
 	}
@@ -1933,6 +2163,22 @@ func (inst *ReadAccessWatchbillTableTaggedJobStateAttributes) LoadFromRecord(rec
 
 func (inst *ReadAccessWatchbillTableTaggedJobSubjectAttributes) LoadFromRecord(rec runtime.RecordI) (err error) {
 	err = runtime.LoadNonScalarValueFieldFromRecord(inst.ColumnIndexValue, arrow.STRING, rec, &inst.ValueValue, &inst.ValueValueElements, array.NewStringData)
+	if err != nil {
+		return
+	}
+	return
+}
+
+func (inst *ReadAccessWatchbillTableTaggedJobTaskAttributes) LoadFromRecord(rec runtime.RecordI) (err error) {
+	err = runtime.LoadNonScalarValueFieldFromRecord(inst.ColumnIndexValue, arrow.STRING, rec, &inst.ValueValue, &inst.ValueValueElements, array.NewStringData)
+	if err != nil {
+		return
+	}
+	return
+}
+
+func (inst *ReadAccessWatchbillTableTaggedJobTaskEpochAttributes) LoadFromRecord(rec runtime.RecordI) (err error) {
+	err = runtime.LoadNonScalarValueFieldFromRecord(inst.ColumnIndexValue, arrow.UINT64, rec, &inst.ValueValue, &inst.ValueValueElements, array.NewUint64Data)
 	if err != nil {
 		return
 	}
@@ -2099,6 +2345,30 @@ func (inst *ReadAccessWatchbillTableTaggedJobLastErrorAttributes) GetAttrValueVa
 	scalarAttrValue = inst.ValueValueElements.Value(int(b) + int(attrIdx))
 	return
 }
+func (inst *ReadAccessWatchbillTableTaggedJobTaskAttributes) GetAttrValueValue(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (scalarAttrValue string) {
+	b, e := inst.ValueValue.ValueOffsets(int(entityIdx))
+	if int64(attrIdx) >= (e - b) {
+		log.Panic().Str("attribute", "Value").Int("beginIncl", int(b)).Int("endExcl", int(e)).Int("attrIdx", int(attrIdx)).Msg("attribute index is out of range")
+	}
+	scalarAttrValue = inst.ValueValueElements.Value(int(b) + int(attrIdx))
+	return
+}
+func (inst *ReadAccessWatchbillTableTaggedJobTaskEpochAttributes) GetAttrValueValue(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (scalarAttrValue uint64) {
+	b, e := inst.ValueValue.ValueOffsets(int(entityIdx))
+	if int64(attrIdx) >= (e - b) {
+		log.Panic().Str("attribute", "Value").Int("beginIncl", int(b)).Int("endExcl", int(e)).Int("attrIdx", int(attrIdx)).Msg("attribute index is out of range")
+	}
+	scalarAttrValue = inst.ValueValueElements.Value(int(b) + int(attrIdx))
+	return
+}
+func (inst *ReadAccessWatchbillTableTaggedJobCallAttributes) GetAttrValueValue(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (scalarAttrValue string) {
+	b, e := inst.ValueValue.ValueOffsets(int(entityIdx))
+	if int64(attrIdx) >= (e - b) {
+		log.Panic().Str("attribute", "Value").Int("beginIncl", int(b)).Int("endExcl", int(e)).Int("attrIdx", int(attrIdx)).Msg("attribute index is out of range")
+	}
+	scalarAttrValue = inst.ValueValueElements.Value(int(b) + int(attrIdx))
+	return
+}
 func (inst *ReadAccessWatchbillTablePlainEntityIdAttributes) GetAttrValueId(entityIdx runtime.EntityIdx) (scalarAttrValue string) {
 	scalarAttrValue = inst.ValueId.Value(int(entityIdx))
 	return
@@ -2199,6 +2469,21 @@ func (inst *ReadAccessWatchbillTableTaggedJobFinishedAtAttributes) GetNumberOfAt
 	return
 }
 func (inst *ReadAccessWatchbillTableTaggedJobLastErrorAttributes) GetNumberOfAttributes(entityIdx runtime.EntityIdx) (nAttributes int64) {
+	b, e := inst.ValueValue.ValueOffsets(int(entityIdx))
+	nAttributes = e - b
+	return
+}
+func (inst *ReadAccessWatchbillTableTaggedJobTaskAttributes) GetNumberOfAttributes(entityIdx runtime.EntityIdx) (nAttributes int64) {
+	b, e := inst.ValueValue.ValueOffsets(int(entityIdx))
+	nAttributes = e - b
+	return
+}
+func (inst *ReadAccessWatchbillTableTaggedJobTaskEpochAttributes) GetNumberOfAttributes(entityIdx runtime.EntityIdx) (nAttributes int64) {
+	b, e := inst.ValueValue.ValueOffsets(int(entityIdx))
+	nAttributes = e - b
+	return
+}
+func (inst *ReadAccessWatchbillTableTaggedJobCallAttributes) GetNumberOfAttributes(entityIdx runtime.EntityIdx) (nAttributes int64) {
 	b, e := inst.ValueValue.ValueOffsets(int(entityIdx))
 	nAttributes = e - b
 	return
@@ -2335,6 +2620,27 @@ type ReadAccessWatchbillTableTaggedJobLastError struct {
 
 var _ runtime.ColumnIndexHandlingI = (*ReadAccessWatchbillTableTaggedJobLastError)(nil)
 
+type ReadAccessWatchbillTableTaggedJobTask struct {
+	Attributes  *ReadAccessWatchbillTableTaggedJobTaskAttributes
+	Memberships *MembershipPackWatchbillTableShared1
+}
+
+var _ runtime.ColumnIndexHandlingI = (*ReadAccessWatchbillTableTaggedJobTask)(nil)
+
+type ReadAccessWatchbillTableTaggedJobTaskEpoch struct {
+	Attributes  *ReadAccessWatchbillTableTaggedJobTaskEpochAttributes
+	Memberships *MembershipPackWatchbillTableShared1
+}
+
+var _ runtime.ColumnIndexHandlingI = (*ReadAccessWatchbillTableTaggedJobTaskEpoch)(nil)
+
+type ReadAccessWatchbillTableTaggedJobCall struct {
+	Attributes  *ReadAccessWatchbillTableTaggedJobCallAttributes
+	Memberships *MembershipPackWatchbillTableShared1
+}
+
+var _ runtime.ColumnIndexHandlingI = (*ReadAccessWatchbillTableTaggedJobCall)(nil)
+
 func NewReadAccessWatchbillTableTaggedJobKind() (inst *ReadAccessWatchbillTableTaggedJobKind) {
 	inst = &ReadAccessWatchbillTableTaggedJobKind{}
 	inst.Attributes = NewReadAccessWatchbillTableTaggedJobKindAttributes()
@@ -2458,6 +2764,27 @@ func NewReadAccessWatchbillTableTaggedJobLastError() (inst *ReadAccessWatchbillT
 	inst = &ReadAccessWatchbillTableTaggedJobLastError{}
 	inst.Attributes = NewReadAccessWatchbillTableTaggedJobLastErrorAttributes()
 	inst.Memberships = NewMembershipPackWatchbillTableShared1JobLastError()
+	return
+}
+
+func NewReadAccessWatchbillTableTaggedJobTask() (inst *ReadAccessWatchbillTableTaggedJobTask) {
+	inst = &ReadAccessWatchbillTableTaggedJobTask{}
+	inst.Attributes = NewReadAccessWatchbillTableTaggedJobTaskAttributes()
+	inst.Memberships = NewMembershipPackWatchbillTableShared1JobTask()
+	return
+}
+
+func NewReadAccessWatchbillTableTaggedJobTaskEpoch() (inst *ReadAccessWatchbillTableTaggedJobTaskEpoch) {
+	inst = &ReadAccessWatchbillTableTaggedJobTaskEpoch{}
+	inst.Attributes = NewReadAccessWatchbillTableTaggedJobTaskEpochAttributes()
+	inst.Memberships = NewMembershipPackWatchbillTableShared1JobTaskEpoch()
+	return
+}
+
+func NewReadAccessWatchbillTableTaggedJobCall() (inst *ReadAccessWatchbillTableTaggedJobCall) {
+	inst = &ReadAccessWatchbillTableTaggedJobCall{}
+	inst.Attributes = NewReadAccessWatchbillTableTaggedJobCallAttributes()
+	inst.Memberships = NewMembershipPackWatchbillTableShared1JobCall()
 	return
 }
 
@@ -2587,6 +2914,27 @@ func (inst *ReadAccessWatchbillTableTaggedJobLastError) SetColumnIndices(indices
 	return
 }
 
+func (inst *ReadAccessWatchbillTableTaggedJobTask) SetColumnIndices(indices []uint32) (restIndices []uint32) {
+	restIndices = indices
+	restIndices = inst.Attributes.SetColumnIndices(restIndices)
+	restIndices = inst.Memberships.SetColumnIndices(restIndices)
+	return
+}
+
+func (inst *ReadAccessWatchbillTableTaggedJobTaskEpoch) SetColumnIndices(indices []uint32) (restIndices []uint32) {
+	restIndices = indices
+	restIndices = inst.Attributes.SetColumnIndices(restIndices)
+	restIndices = inst.Memberships.SetColumnIndices(restIndices)
+	return
+}
+
+func (inst *ReadAccessWatchbillTableTaggedJobCall) SetColumnIndices(indices []uint32) (restIndices []uint32) {
+	restIndices = indices
+	restIndices = inst.Attributes.SetColumnIndices(restIndices)
+	restIndices = inst.Memberships.SetColumnIndices(restIndices)
+	return
+}
+
 func (inst *ReadAccessWatchbillTableTaggedJobKind) GetColumnIndices() (columnIndices []uint32) {
 	columnIndices = slices.Concat(columnIndices, inst.Attributes.GetColumnIndices())
 	columnIndices = slices.Concat(columnIndices, inst.Memberships.GetColumnIndices())
@@ -2690,6 +3038,24 @@ func (inst *ReadAccessWatchbillTableTaggedJobFinishedAt) GetColumnIndices() (col
 }
 
 func (inst *ReadAccessWatchbillTableTaggedJobLastError) GetColumnIndices() (columnIndices []uint32) {
+	columnIndices = slices.Concat(columnIndices, inst.Attributes.GetColumnIndices())
+	columnIndices = slices.Concat(columnIndices, inst.Memberships.GetColumnIndices())
+	return
+}
+
+func (inst *ReadAccessWatchbillTableTaggedJobTask) GetColumnIndices() (columnIndices []uint32) {
+	columnIndices = slices.Concat(columnIndices, inst.Attributes.GetColumnIndices())
+	columnIndices = slices.Concat(columnIndices, inst.Memberships.GetColumnIndices())
+	return
+}
+
+func (inst *ReadAccessWatchbillTableTaggedJobTaskEpoch) GetColumnIndices() (columnIndices []uint32) {
+	columnIndices = slices.Concat(columnIndices, inst.Attributes.GetColumnIndices())
+	columnIndices = slices.Concat(columnIndices, inst.Memberships.GetColumnIndices())
+	return
+}
+
+func (inst *ReadAccessWatchbillTableTaggedJobCall) GetColumnIndices() (columnIndices []uint32) {
 	columnIndices = slices.Concat(columnIndices, inst.Attributes.GetColumnIndices())
 	columnIndices = slices.Concat(columnIndices, inst.Memberships.GetColumnIndices())
 	return
@@ -2803,6 +3169,24 @@ func (inst *ReadAccessWatchbillTableTaggedJobLastError) GetColumnIndexFieldNames
 	return
 }
 
+func (inst *ReadAccessWatchbillTableTaggedJobTask) GetColumnIndexFieldNames() (fieldNames []string) {
+	fieldNames = slices.Concat(fieldNames, inst.Attributes.GetColumnIndexFieldNames())
+	fieldNames = slices.Concat(fieldNames, inst.Memberships.GetColumnIndexFieldNames())
+	return
+}
+
+func (inst *ReadAccessWatchbillTableTaggedJobTaskEpoch) GetColumnIndexFieldNames() (fieldNames []string) {
+	fieldNames = slices.Concat(fieldNames, inst.Attributes.GetColumnIndexFieldNames())
+	fieldNames = slices.Concat(fieldNames, inst.Memberships.GetColumnIndexFieldNames())
+	return
+}
+
+func (inst *ReadAccessWatchbillTableTaggedJobCall) GetColumnIndexFieldNames() (fieldNames []string) {
+	fieldNames = slices.Concat(fieldNames, inst.Attributes.GetColumnIndexFieldNames())
+	fieldNames = slices.Concat(fieldNames, inst.Memberships.GetColumnIndexFieldNames())
+	return
+}
+
 func (inst *ReadAccessWatchbillTableTaggedJobKind) Release() {
 	runtime.ReleaseIfNotNil(inst.Attributes)
 	runtime.ReleaseIfNotNil(inst.Memberships)
@@ -2889,6 +3273,21 @@ func (inst *ReadAccessWatchbillTableTaggedJobFinishedAt) Release() {
 }
 
 func (inst *ReadAccessWatchbillTableTaggedJobLastError) Release() {
+	runtime.ReleaseIfNotNil(inst.Attributes)
+	runtime.ReleaseIfNotNil(inst.Memberships)
+}
+
+func (inst *ReadAccessWatchbillTableTaggedJobTask) Release() {
+	runtime.ReleaseIfNotNil(inst.Attributes)
+	runtime.ReleaseIfNotNil(inst.Memberships)
+}
+
+func (inst *ReadAccessWatchbillTableTaggedJobTaskEpoch) Release() {
+	runtime.ReleaseIfNotNil(inst.Attributes)
+	runtime.ReleaseIfNotNil(inst.Memberships)
+}
+
+func (inst *ReadAccessWatchbillTableTaggedJobCall) Release() {
 	runtime.ReleaseIfNotNil(inst.Attributes)
 	runtime.ReleaseIfNotNil(inst.Memberships)
 }
@@ -3145,6 +3544,48 @@ func (inst *ReadAccessWatchbillTableTaggedJobLastError) LoadFromRecord(rec runti
 	return
 }
 
+func (inst *ReadAccessWatchbillTableTaggedJobTask) LoadFromRecord(rec runtime.RecordI) (err error) {
+	err = inst.Attributes.LoadFromRecord(rec)
+	if err != nil {
+		err = eb.Build().Errorf("unable to load from record: %w", err)
+		return
+	}
+	err = inst.Memberships.LoadFromRecord(rec)
+	if err != nil {
+		err = eb.Build().Errorf("unable to load from record: %w", err)
+		return
+	}
+	return
+}
+
+func (inst *ReadAccessWatchbillTableTaggedJobTaskEpoch) LoadFromRecord(rec runtime.RecordI) (err error) {
+	err = inst.Attributes.LoadFromRecord(rec)
+	if err != nil {
+		err = eb.Build().Errorf("unable to load from record: %w", err)
+		return
+	}
+	err = inst.Memberships.LoadFromRecord(rec)
+	if err != nil {
+		err = eb.Build().Errorf("unable to load from record: %w", err)
+		return
+	}
+	return
+}
+
+func (inst *ReadAccessWatchbillTableTaggedJobCall) LoadFromRecord(rec runtime.RecordI) (err error) {
+	err = inst.Attributes.LoadFromRecord(rec)
+	if err != nil {
+		err = eb.Build().Errorf("unable to load from record: %w", err)
+		return
+	}
+	err = inst.Memberships.LoadFromRecord(rec)
+	if err != nil {
+		err = eb.Build().Errorf("unable to load from record: %w", err)
+		return
+	}
+	return
+}
+
 func (inst *ReadAccessWatchbillTableTaggedJobKind) Len() (nEntities int) {
 	nEntities = inst.Memberships.Len()
 	return
@@ -3235,6 +3676,21 @@ func (inst *ReadAccessWatchbillTableTaggedJobLastError) Len() (nEntities int) {
 	return
 }
 
+func (inst *ReadAccessWatchbillTableTaggedJobTask) Len() (nEntities int) {
+	nEntities = inst.Memberships.Len()
+	return
+}
+
+func (inst *ReadAccessWatchbillTableTaggedJobTaskEpoch) Len() (nEntities int) {
+	nEntities = inst.Memberships.Len()
+	return
+}
+
+func (inst *ReadAccessWatchbillTableTaggedJobCall) Len() (nEntities int) {
+	nEntities = inst.Memberships.Len()
+	return
+}
+
 func (inst *ReadAccessWatchbillTableTaggedJobKind) GetAttributes() *ReadAccessWatchbillTableTaggedJobKindAttributes {
 	return inst.Attributes
 }
@@ -3307,6 +3763,18 @@ func (inst *ReadAccessWatchbillTableTaggedJobLastError) GetAttributes() *ReadAcc
 	return inst.Attributes
 }
 
+func (inst *ReadAccessWatchbillTableTaggedJobTask) GetAttributes() *ReadAccessWatchbillTableTaggedJobTaskAttributes {
+	return inst.Attributes
+}
+
+func (inst *ReadAccessWatchbillTableTaggedJobTaskEpoch) GetAttributes() *ReadAccessWatchbillTableTaggedJobTaskEpochAttributes {
+	return inst.Attributes
+}
+
+func (inst *ReadAccessWatchbillTableTaggedJobCall) GetAttributes() *ReadAccessWatchbillTableTaggedJobCallAttributes {
+	return inst.Attributes
+}
+
 func (inst *ReadAccessWatchbillTableTaggedJobKind) GetMemberships() *MembershipPackWatchbillTableShared1 {
 	return inst.Memberships
 }
@@ -3376,6 +3844,18 @@ func (inst *ReadAccessWatchbillTableTaggedJobFinishedAt) GetMemberships() *Membe
 }
 
 func (inst *ReadAccessWatchbillTableTaggedJobLastError) GetMemberships() *MembershipPackWatchbillTableShared1 {
+	return inst.Memberships
+}
+
+func (inst *ReadAccessWatchbillTableTaggedJobTask) GetMemberships() *MembershipPackWatchbillTableShared1 {
+	return inst.Memberships
+}
+
+func (inst *ReadAccessWatchbillTableTaggedJobTaskEpoch) GetMemberships() *MembershipPackWatchbillTableShared1 {
+	return inst.Memberships
+}
+
+func (inst *ReadAccessWatchbillTableTaggedJobCall) GetMemberships() *MembershipPackWatchbillTableShared1 {
 	return inst.Memberships
 }
 
@@ -3487,6 +3967,24 @@ func (inst *ReadAccessWatchbillTableTaggedJobLastError) GetSectionName() naming.
 
 var _ fatruntime.SectionIntrospectionI = (*ReadAccessWatchbillTableTaggedJobLastError)(nil)
 
+func (inst *ReadAccessWatchbillTableTaggedJobTask) GetSectionName() naming.StylableName {
+	return "job-task"
+}
+
+var _ fatruntime.SectionIntrospectionI = (*ReadAccessWatchbillTableTaggedJobTask)(nil)
+
+func (inst *ReadAccessWatchbillTableTaggedJobTaskEpoch) GetSectionName() naming.StylableName {
+	return "job-task-epoch"
+}
+
+var _ fatruntime.SectionIntrospectionI = (*ReadAccessWatchbillTableTaggedJobTaskEpoch)(nil)
+
+func (inst *ReadAccessWatchbillTableTaggedJobCall) GetSectionName() naming.StylableName {
+	return "job-call"
+}
+
+var _ fatruntime.SectionIntrospectionI = (*ReadAccessWatchbillTableTaggedJobCall)(nil)
+
 func (inst *ReadAccessWatchbillTableTaggedJobKind) GetSectionUseAspects() useaspects.AspectSet {
 	return ""
 }
@@ -3556,6 +4054,18 @@ func (inst *ReadAccessWatchbillTableTaggedJobFinishedAt) GetSectionUseAspects() 
 }
 
 func (inst *ReadAccessWatchbillTableTaggedJobLastError) GetSectionUseAspects() useaspects.AspectSet {
+	return ""
+}
+
+func (inst *ReadAccessWatchbillTableTaggedJobTask) GetSectionUseAspects() useaspects.AspectSet {
+	return ""
+}
+
+func (inst *ReadAccessWatchbillTableTaggedJobTaskEpoch) GetSectionUseAspects() useaspects.AspectSet {
+	return ""
+}
+
+func (inst *ReadAccessWatchbillTableTaggedJobCall) GetSectionUseAspects() useaspects.AspectSet {
 	return ""
 }
 
@@ -3631,6 +4141,18 @@ func (inst *ReadAccessWatchbillTableTaggedJobLastError) GetSectionStreamingGroup
 	return "data"
 }
 
+func (inst *ReadAccessWatchbillTableTaggedJobTask) GetSectionStreamingGroup() naming.Key {
+	return "data"
+}
+
+func (inst *ReadAccessWatchbillTableTaggedJobTaskEpoch) GetSectionStreamingGroup() naming.Key {
+	return "data"
+}
+
+func (inst *ReadAccessWatchbillTableTaggedJobCall) GetSectionStreamingGroup() naming.Key {
+	return "data"
+}
+
 func (inst *ReadAccessWatchbillTableTaggedJobKind) GetSectionCoSectionGroup() naming.Key {
 	return ""
 }
@@ -3700,6 +4222,18 @@ func (inst *ReadAccessWatchbillTableTaggedJobFinishedAt) GetSectionCoSectionGrou
 }
 
 func (inst *ReadAccessWatchbillTableTaggedJobLastError) GetSectionCoSectionGroup() naming.Key {
+	return ""
+}
+
+func (inst *ReadAccessWatchbillTableTaggedJobTask) GetSectionCoSectionGroup() naming.Key {
+	return ""
+}
+
+func (inst *ReadAccessWatchbillTableTaggedJobTaskEpoch) GetSectionCoSectionGroup() naming.Key {
+	return ""
+}
+
+func (inst *ReadAccessWatchbillTableTaggedJobCall) GetSectionCoSectionGroup() naming.Key {
 	return ""
 }
 
@@ -3775,6 +4309,18 @@ func (inst *ReadAccessWatchbillTableTaggedJobLastError) GetSectionMembershipSpec
 	return 0b111001
 }
 
+func (inst *ReadAccessWatchbillTableTaggedJobTask) GetSectionMembershipSpec() common.MembershipSpecE {
+	return 0b111001
+}
+
+func (inst *ReadAccessWatchbillTableTaggedJobTaskEpoch) GetSectionMembershipSpec() common.MembershipSpecE {
+	return 0b111001
+}
+
+func (inst *ReadAccessWatchbillTableTaggedJobCall) GetSectionMembershipSpec() common.MembershipSpecE {
+	return 0b111001
+}
+
 ///////////////////////////////////////////////////////////////////
 // code generator
 // readaccess.(*GoClassBuilder).composeEntityClasses
@@ -3801,6 +4347,9 @@ type ReadAccessWatchbillTable struct {
 	JobWorkerRun     *ReadAccessWatchbillTableTaggedJobWorkerRun
 	JobFinishedAt    *ReadAccessWatchbillTableTaggedJobFinishedAt
 	JobLastError     *ReadAccessWatchbillTableTaggedJobLastError
+	JobTask          *ReadAccessWatchbillTableTaggedJobTask
+	JobTaskEpoch     *ReadAccessWatchbillTableTaggedJobTaskEpoch
+	JobCall          *ReadAccessWatchbillTableTaggedJobCall
 }
 
 func NewReadAccessWatchbillTable() (inst *ReadAccessWatchbillTable) {
@@ -3825,6 +4374,9 @@ func NewReadAccessWatchbillTable() (inst *ReadAccessWatchbillTable) {
 	inst.JobWorkerRun = NewReadAccessWatchbillTableTaggedJobWorkerRun()
 	inst.JobFinishedAt = NewReadAccessWatchbillTableTaggedJobFinishedAt()
 	inst.JobLastError = NewReadAccessWatchbillTableTaggedJobLastError()
+	inst.JobTask = NewReadAccessWatchbillTableTaggedJobTask()
+	inst.JobTaskEpoch = NewReadAccessWatchbillTableTaggedJobTaskEpoch()
+	inst.JobCall = NewReadAccessWatchbillTableTaggedJobCall()
 	return
 }
 
@@ -3849,6 +4401,9 @@ func (inst *ReadAccessWatchbillTable) Release() {
 	runtime.ReleaseIfNotNil(inst.JobWorkerRun)
 	runtime.ReleaseIfNotNil(inst.JobFinishedAt)
 	runtime.ReleaseIfNotNil(inst.JobLastError)
+	runtime.ReleaseIfNotNil(inst.JobTask)
+	runtime.ReleaseIfNotNil(inst.JobTaskEpoch)
+	runtime.ReleaseIfNotNil(inst.JobCall)
 }
 
 func (inst *ReadAccessWatchbillTable) LoadFromRecord(rec runtime.RecordI) (err error) {
@@ -3992,6 +4547,27 @@ func (inst *ReadAccessWatchbillTable) LoadFromRecord(rec runtime.RecordI) (err e
 			return
 		}
 	}
+	if inst.JobTask != nil {
+		err = inst.JobTask.LoadFromRecord(rec)
+		if err != nil {
+			err = eb.Build().Str("tableName", "watchbill-table").Str("fieldName", "JobTask").Errorf("unable to load from record: %w", err)
+			return
+		}
+	}
+	if inst.JobTaskEpoch != nil {
+		err = inst.JobTaskEpoch.LoadFromRecord(rec)
+		if err != nil {
+			err = eb.Build().Str("tableName", "watchbill-table").Str("fieldName", "JobTaskEpoch").Errorf("unable to load from record: %w", err)
+			return
+		}
+	}
+	if inst.JobCall != nil {
+		err = inst.JobCall.LoadFromRecord(rec)
+		if err != nil {
+			err = eb.Build().Str("tableName", "watchbill-table").Str("fieldName", "JobCall").Errorf("unable to load from record: %w", err)
+			return
+		}
+	}
 	return
 }
 
@@ -4057,6 +4633,15 @@ func (inst *ReadAccessWatchbillTable) SetColumnIndices(indices []uint32) (rest [
 	if inst.JobLastError != nil {
 		rest = inst.JobLastError.SetColumnIndices(rest)
 	}
+	if inst.JobTask != nil {
+		rest = inst.JobTask.SetColumnIndices(rest)
+	}
+	if inst.JobTaskEpoch != nil {
+		rest = inst.JobTaskEpoch.SetColumnIndices(rest)
+	}
+	if inst.JobCall != nil {
+		rest = inst.JobCall.SetColumnIndices(rest)
+	}
 	return
 }
 
@@ -4121,6 +4706,15 @@ func (inst *ReadAccessWatchbillTable) GetColumnIndices() (columnIndices []uint32
 	if inst.JobLastError != nil {
 		columnIndices = slices.Concat(columnIndices, inst.JobLastError.GetColumnIndices())
 	}
+	if inst.JobTask != nil {
+		columnIndices = slices.Concat(columnIndices, inst.JobTask.GetColumnIndices())
+	}
+	if inst.JobTaskEpoch != nil {
+		columnIndices = slices.Concat(columnIndices, inst.JobTaskEpoch.GetColumnIndices())
+	}
+	if inst.JobCall != nil {
+		columnIndices = slices.Concat(columnIndices, inst.JobCall.GetColumnIndices())
+	}
 	return
 }
 
@@ -4184,6 +4778,15 @@ func (inst *ReadAccessWatchbillTable) GetColumnIndexFieldNames() (fieldNames []s
 	}
 	if inst.JobLastError != nil {
 		fieldNames = slices.Concat(fieldNames, inst.JobLastError.GetColumnIndexFieldNames())
+	}
+	if inst.JobTask != nil {
+		fieldNames = slices.Concat(fieldNames, inst.JobTask.GetColumnIndexFieldNames())
+	}
+	if inst.JobTaskEpoch != nil {
+		fieldNames = slices.Concat(fieldNames, inst.JobTaskEpoch.GetColumnIndexFieldNames())
+	}
+	if inst.JobCall != nil {
+		fieldNames = slices.Concat(fieldNames, inst.JobCall.GetColumnIndexFieldNames())
 	}
 	return
 }

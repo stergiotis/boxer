@@ -35,4 +35,17 @@ type Job struct {
 	WorkerRun     string    `lw:"watchbillWorkerRun,jobWorkerRun"`
 	FinishedAt    time.Time `lw:"watchbillFinishedAt,jobFinishedAt"`
 	LastError     string    `lw:"watchbillLastError,jobLastError"`
+	// The delegation: the agent's task, its epoch and the call whose
+	// handler enqueued the job, as the dispatcher attested them (ADR-0344
+	// §SD2). Empty is a job no agent caused. The memberships are the
+	// trail's, so the join to the action record is on the same names.
+	// Declared last, after every earlier section, so a table created
+	// before them is migrated by appending columns.
+	Task      string `lw:"trailTask,jobTask"`
+	TaskEpoch uint64 `lw:"trailTaskEpoch,jobTaskEpoch"`
+	Call      string `lw:"trailCall,jobCall"`
 }
+
+// AgentCaused says whether an attested delegation enqueued the job: the
+// bit that chooses the entry frame it runs under (ADR-0344 §SD1).
+func (inst Job) AgentCaused() (yes bool) { return inst.Task != "" }

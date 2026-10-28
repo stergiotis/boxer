@@ -257,3 +257,62 @@ func TestMemStoreList(t *testing.T) {
 }
 
 var _ app.BusI = (*inprocbus.Client)(nil)
+
+// attester is a dispatcher stand-in: it confirms one (task, epoch, call)
+// for one sender and refuses everything else.
+type attester struct {
+	task   string
+	epoch  uint64
+	call   string
+	sender app.AppIdT
+	asked  int
+}
+
+func (a *attester) CallContext(task string, epoch uint64, call string, sender app.AppIdT, _ uint64) (cc app.CallContext, ok bool, reason string) {
+	a.asked++
+	if task != a.task || epoch != a.epoch || call != a.call || sender != a.sender {
+		return cc, false, "no such call for this sender"
+	}
+	return app.CallContext{Task: task, Epoch: epoch, Call: call, App: sender}, true, ""
+}
+
+// An enqueue that names an on-behalf-of context is written only once the
+// dispatcher confirms the call for the sender; without a dispatcher, or
+// with a call the dispatcher does not know, it is refused and no row is
+// written (ADR-0344 §SD2).
+func TestClientEnqueueWithDelegationIsAttested(t *testing.T) {
+	f := newServiceFixture(t)
+	obo := &app.OnBehalfOf{Task: "task-7", Epoch: 2, Call: "call-3"}
+
+	_, err := f.client.Enqueue(Request{Kind: "svc.kind", Subject: "unattested", OnBehalfOf: obo})
+	require.Error(t, err, "no dispatcher is installed")
+	assert.Contains(t, err.Error(), "not attested")
+	rows, lerr := f.store.List(context.Background(), watchbillstore.ListFilter{}, 10)
+	require.NoError(t, lerr)
+	assert.Empty(t, rows, "a refused enqueue writes nothing")
+
+	a := &attester{task: "task-7", epoch: 2, call: "call-3", sender: "apps/consumer"}
+	f.w.SetDelegation(a)
+	_, err = f.client.Enqueue(Request{Kind: "svc.kind", Subject: "wrong call", OnBehalfOf: &app.OnBehalfOf{Task: "task-7", Epoch: 2, Call: "other"}})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "not attested")
+
+	job, err := f.client.Enqueue(Request{Kind: "svc.kind", Subject: "attested", OnBehalfOf: obo})
+	require.NoError(t, err)
+	assert.Equal(t, 2, a.asked)
+	row, found, err := f.store.Get(context.Background(), job.ID)
+	require.NoError(t, err)
+	require.True(t, found)
+	assert.Equal(t, "task-7", row.Task)
+	assert.EqualValues(t, 2, row.TaskEpoch)
+	assert.Equal(t, "call-3", row.Call)
+	assert.True(t, row.AgentCaused())
+
+	plain, err := f.client.Enqueue(Request{Kind: "svc.kind", Subject: "plain"})
+	require.NoError(t, err)
+	assert.Equal(t, 2, a.asked, "a request without a delegation asks nothing")
+	row, _, err = f.store.Get(context.Background(), plain.ID)
+	require.NoError(t, err)
+	assert.False(t, row.AgentCaused())
+	close(f.release)
+}
