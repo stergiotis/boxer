@@ -40,7 +40,6 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/trail"
 	"github.com/stergiotis/boxer/public/keelson/runtime/watchbill"
 	"github.com/stergiotis/boxer/public/keelson/runtime/watchbill/watchbillstore"
-	"github.com/stergiotis/boxer/public/observability/coverage/covsnap"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/storage/recordstore"
 	"github.com/stergiotis/boxer/public/storage/recordstore/evidence"
@@ -341,50 +340,41 @@ var _ recordstore.ExecutorI = (*storeexec.Executor)(nil)
 func startCoverageTrail(ctx context.Context, exec recordstore.ExecutorI, runInst *runinfo.Inst, isCh bool, logger zerolog.Logger) (stop func()) {
 	stop = func() {}
 	interval, enabled := coveragebus.IntervalFromEnv()
-	if !enabled {
+	if !enabled || !covtrail.Enabled.Get() || !isCh {
+		// A child's samples have one reader, the trail; without it there
+		// is nothing to sample for.
 		return
 	}
 	bus := inprocbus.NewInst(logger)
 	pub := bus.NewClient(coveragebus.ServiceAppId, []app.SubjectFilter{
 		{Pattern: coveragebus.SubjectWildcard, Direction: app.CapDirectionPub},
 	})
-	var rec *trail.Recorder
-	var covTrail *covtrail.Service
-	var sinks []func(upd *covsnap.Update)
-	if covtrail.Enabled.Get() && isCh {
-		rec = trail.NewRecorder(exec, runInst.RunId, logger, trail.WithOriginBy(evidence.OriginBySelf))
-		covTrail = covtrail.New(covtrail.Options{Trail: rec, Run: runInst, Log: logger})
-		sinks = append(sinks, covTrail.OnUpdate)
-	}
-	sampler, stopSampler, err := covscrape.StartCoverageSampler(ctx, pub, covscrape.DefaultHostToken(), interval, logger, sinks...)
+	rec := trail.NewRecorder(exec, runInst.RunId, logger, trail.WithOriginBy(evidence.OriginBySelf))
+	covTrail := covtrail.New(covtrail.Options{Trail: rec, Run: runInst, Log: logger})
+	sampler, stopSampler, err := covscrape.StartCoverageSampler(ctx, pub, covscrape.DefaultHostToken(), interval, logger, covTrail.OnUpdate)
 	if err != nil {
 		logger.Info().Err(err).Msg("watchbill: coverage sampling unavailable for this run")
-		if rec != nil {
-			rec.Close()
-		}
+		rec.Close()
 		return
 	}
-	if covTrail != nil {
-		if aerr := covTrail.Attach(ctx, sampler); aerr != nil {
-			logger.Warn().Err(aerr).Msg("watchbill: coverage trail unavailable for this run")
-			covTrail = nil
-		}
+	attached := true
+	if aerr := covTrail.Attach(ctx, sampler); aerr != nil {
+		logger.Warn().Err(aerr).Msg("watchbill: coverage trail unavailable for this run")
+		attached = false
 	}
 	stop = func() {
 		if serr := stopSampler(); serr != nil {
 			logger.Debug().Err(serr).Msg("watchbill: coverage sampler stop")
 		}
-		if covTrail != nil {
+		if attached {
 			covTrail.Wait()
 		}
-		if rec != nil {
-			fctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-			if ferr := rec.Flush(fctx); ferr != nil {
-				logger.Warn().Err(ferr).Msg("watchbill: coverage trail flush")
-			}
-			cancel()
-			rec.Close()
+		fctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		if ferr := rec.Flush(fctx); ferr != nil {
+			logger.Warn().Err(ferr).Msg("watchbill: coverage trail flush")
 		}
+		cancel()
+		rec.Close()
 	}
 	return
 }

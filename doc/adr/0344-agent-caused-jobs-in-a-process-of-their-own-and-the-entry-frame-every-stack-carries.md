@@ -243,9 +243,11 @@ The exclusion sits in the two queue reads themselves (the SQL and the
 memory store), not in a worker's configuration. The reserved queue is
 claimable only through `Claim(id)`: `Worker.RunJob(ctx, id)` is that
 claim, followed by the run on the calling process, and `watchbill run
---job <id>` is its verb. A request may not name the lane as its queue; a
-job parked where no poll looks is refused at the door. A person-caused job
-keeps its requested queue and runs in the host as today.
+--job <id>` is its verb. No request may name the lane as its queue —
+attested or not, switch on or off — since a job parked where no poll looks
+would never run; the service refuses it at the door and writes nothing.
+Only the service's own routing puts a row there. A person-caused job keeps
+its requested queue and runs in the host as today.
 
 The lane is on when `KEELSON_WATCHBILL_ISOLATE_AGENT_JOBS` is true on the
 host (`Config.IsolateAgentJobs`); off, the enqueue service records the
@@ -259,7 +261,10 @@ a lane row runs when an operator starts `watchbill run --job <id>` for it.
 The host runs a lane coordinator (`keelson/runtime/watchbill/lane`) when
 the lane is on: it reads the reserved queue at the worker's poll interval
 and on every changed announcement (an enqueue the service served is one),
-and for each queued, due row with no child yet it takes a slot from a
+through the store's one lane read (`StoreI.Lane`, `LaneSQL`), which is the
+worker's queue read restricted to the lane — queued, due, by priority then
+due time then insertion — so a burst runs in the order the worker would
+have run it. For each row with no child yet it takes a slot from a
 `procpool.Pool` and starts the running executable — `extbin.Local` program
 "watchbill job child", path `os.Executable()` — with the host's environment
 (the coverage opt-ins included), its own process group, and `watchbill run
@@ -304,8 +309,14 @@ one, and arrive when E2 does.
 A child that exits with its row still running died with the claim; the
 task ends in error, and the sweep requeues or abandons the row once the
 heartbeat is stale, after which the coordinator sees it queued again. A
-child that exits with the row still queued lost its claim or never made
-one; the next read starts another.
+child that exits with the row still queued at the same attempt never
+claimed — a host binary without the watchbill verb, a crash before the
+claim — and the next child for that row waits a backoff that doubles per
+such exit from the poll interval up to ten minutes, logged once at warn;
+a claim clears it. The coordinator's stop sets a flag before it cancels,
+and a cancel relay that wakes on its task's context ending reads the flag,
+so a stop writes no cancel on any row. A child that has already exited is
+not signalled again: its process group id may be another's by then.
 
 Cancel: the host's cancel verb writes the row; the child honours it within
 its poll as any worker does; the pool's close is the backstop.
@@ -366,7 +377,7 @@ bracket row for jobs.
 | Runtime vocabulary (`keelson/runtime/vocab`) (M3) | added: `runtimeRunDriver` 558, `runtimeRunDriverJob` 559, `runtimeRunDriverAttempt` 560, `runtimeRunDriverJobKind` 561 | `AllMembs`, the assignments golden |
 | `boxer.facts` runtime-run row (M3) | gains the driver stamp and the delegation; rows from before read as empty | `factsstore.RuntimeStartRow` and the `Driver*` constants, `chstore.WriteRuntimeStart`, `LookupRunStart` |
 | `trailviews` (M3) | added: `dm_trail_runs`, `dm_trail_llm_coverage_job_samples`; `ViewsVersion` 14 | the views golden; a derived data mart passes the facts backbone through |
-| Exported Go API under `public/` (M3) | `watchbill.Worker.RunJob` takes an optional claim hook; `covtrail.Service.Wait`; `coveragebus.Producer.Close` takes a last sample | the host's own close now samples once more |
+| Exported Go API under `public/` (M3) | `watchbill.Worker.RunJob` takes an optional claim hook; `covtrail.Service.Wait`; `coveragebus.Producer.Close` takes a last sample; `watchbill.StoreI.Lane` and `watchbillstore.LaneSQL` (the lane read) | the host's own close now stops the producer, waits for the trail writer, then closes the recorder |
 | `imzero2` binary (`public/thestack/cmd/imzero2`) | gains the `watchbill` CLI command | its children run `watchbill run --job` |
 | Exported Go API under `public/` (M1) | added: `watchbillstore.QueueLane`, `watchbill.Worker.RunJob`, `watchbill.Config.IsolateAgentJobs`, `watchbill.IsolateAgentJobs` | `QueueSQL` and `MemStore.Queue` exclude the lane |
 

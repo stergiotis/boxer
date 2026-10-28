@@ -49,6 +49,14 @@ func TestQueueSQL(t *testing.T) {
 
 // The list predicate starts without a conjunction — the generated scan
 // supplies it — and a zero filter is no predicate at all.
+// The lane read is the queue read restricted to the lane, same order, and
+// the only read that sees it (ADR-0344 §SD4).
+func TestLaneSQL(t *testing.T) {
+	sql := LaneSQL(testLayout, testNow, 3)
+	assert.Equal(t, `SELECT "id:id:s:4::0:" FROM wb.watchbill WHERE "tv:jobState:value:val:s:24:::0::data"[1] = 'queued' AND "tv:jobRunAfter:value:val:z64:4:::0::data"[1] <= fromUnixTimestamp64Nano(1788955200000000000) AND "tv:jobQueue:value:val:s:24:::0::data"[1] = 'agent-lane' ORDER BY "tv:jobPriority:value:val:u32:4:::0::data"[1] ASC, "tv:jobRunAfter:value:val:z64:4:::0::data"[1] ASC, "ts:ts:z64:47::0:" ASC LIMIT 3`, sql)
+	assert.NotContains(t, LaneSQL(testLayout, testNow, 0), "LIMIT")
+}
+
 func TestListPredicate(t *testing.T) {
 	assert.Equal(t, "", ListPredicate(ListFilter{}))
 	assert.Equal(t, `"tv:jobState:value:val:s:24:::0::data"[1] IN ('queued', 'running')`, ListPredicate(ListFilter{States: []string{StateQueued, StateRunning}}))

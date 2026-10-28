@@ -122,16 +122,30 @@ type fixture struct {
 	c        *Coordinator
 	bus      *inprocbus.Inst
 	notices  *notices
+	clockMu  sync.Mutex
+	clock    time.Time
+}
+
+func (f *fixture) now() time.Time {
+	f.clockMu.Lock()
+	defer f.clockMu.Unlock()
+	return f.clock
+}
+
+func (f *fixture) advance(d time.Duration) {
+	f.clockMu.Lock()
+	defer f.clockMu.Unlock()
+	f.clock = f.clock.Add(d)
 }
 
 func newFixture(t *testing.T, children uint8) (f *fixture) {
 	t.Helper()
-	f = &fixture{store: watchbill.NewMemStore(), bus: inprocbus.NewInst(zerolog.Nop()), notices: &notices{}}
+	f = &fixture{store: watchbill.NewMemStore(), bus: inprocbus.NewInst(zerolog.Nop()), notices: &notices{}, clock: time.Now().UTC()}
 	f.launcher = newFakeLauncher(t, f.store)
 	var err error
 	f.c, err = New(Config{
 		Store: f.store, Launcher: f.launcher, RunId: "run-host", Bus: f.bus.NewClient(AppId, Caps()),
-		Notices: f.notices, MaxChildren: children, Poll: time.Hour, KillGrace: 50 * time.Millisecond,
+		Notices: f.notices, MaxChildren: children, Poll: time.Hour, KillGrace: 50 * time.Millisecond, Now: f.now,
 	})
 	require.NoError(t, err)
 	return
@@ -144,6 +158,7 @@ func (f *fixture) enqueue(t *testing.T, subject string, lane bool) (id string) {
 		req.Queue = watchbillstore.QueueLane
 		req.OnBehalfOf = &app.OnBehalfOf{Task: "task-1", Epoch: 1, Call: "c-" + subject}
 	}
+	req.RunAfter = f.now()
 	id, err := watchbill.Enqueue(context.Background(), f.store, req)
 	require.NoError(t, err)
 	return
@@ -228,13 +243,47 @@ func TestFailuresAndCrashesSettleTheHostSide(t *testing.T) {
 	require.NoError(t, f.c.Tick(context.Background()))
 	require.Eventually(t, func() bool { return len(f.c.Running()) == 0 }, 3*time.Second, 5*time.Millisecond)
 	assert.Equal(t, watchbillstore.StateQueued, f.state(t, crashed), "a child that never claimed leaves the row queued")
+	// A child that never claimed is not restarted at once: the next
+	// child waits a backoff that doubles per such exit, so a binary that
+	// can never claim is not a hot loop.
+	require.NoError(t, f.c.Tick(context.Background()))
+	assert.Len(t, f.launcher.startedIds(), 2, "held by the backoff")
+	f.advance(2 * time.Hour)
 	f.launcher.mu.Lock()
 	f.launcher.crash = false
 	f.launcher.mu.Unlock()
 	require.NoError(t, f.c.Tick(context.Background()))
 	f.eventually(t, crashed, watchbillstore.StateSucceeded)
 	assert.Len(t, f.launcher.startedIds(), 3)
+	assert.Equal(t, time.Second, unclaimedBackoff(time.Second, 1))
+	assert.Equal(t, 4*time.Second, unclaimedBackoff(time.Second, 3))
+	assert.Equal(t, maxUnclaimedBackoff, unclaimedBackoff(time.Minute, 20))
 }
+
+// A child that has exited is not signalled again: its process group id
+// may belong to another process by then.
+func TestNoSignalToAReapedChild(t *testing.T) {
+	c := &countingChild{done: make(chan struct{})}
+	terminate(c)
+	kill(c)
+	assert.Equal(t, 2, c.signals)
+	close(c.done)
+	terminate(c)
+	kill(c)
+	waitOrKill(c, time.Millisecond)
+	assert.Equal(t, 2, c.signals, "nothing after exit")
+}
+
+type countingChild struct {
+	done    chan struct{}
+	signals int
+}
+
+func (c *countingChild) Done() <-chan struct{} { return c.done }
+func (c *countingChild) Err() error            { return nil }
+func (c *countingChild) Terminate()            { c.signals++ }
+func (c *countingChild) Kill()                 { c.signals++ }
+func (c *countingChild) Describe() string      { return "counting" }
 
 // Cancelling the host-side task writes a cancel on the row, which the
 // child honours at its poll.

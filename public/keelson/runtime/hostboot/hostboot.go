@@ -740,10 +740,22 @@ func (rt *Runtime) bootServices(ctx context.Context, factsCfg chstore.Config) {
 				covTrail = covtrail.New(covtrail.Options{Trail: rt.Trail, Run: rt.RunInfo, Log: logger})
 				sinks = append(sinks, covTrail.OnUpdate)
 			}
-			if s, _, cerr := covscrape.StartCoverageSampler(context.Background(), covPub, covscrape.DefaultHostToken(), covInterval, logger, sinks...); cerr != nil {
+			if s, stop, cerr := covscrape.StartCoverageSampler(context.Background(), covPub, covscrape.DefaultHostToken(), covInterval, logger, sinks...); cerr != nil {
 				logger.Info().Err(cerr).Msg("hostboot: coverage sampling unavailable; coverage tables will be empty")
 			} else {
 				rt.Coverage = s
+				// Cleanups run in reverse: the producer stops first and
+				// takes its last sample (ADR-0344 §SD5), the trail writer
+				// finishes its build rows, and the recorder, registered
+				// earlier, closes after.
+				rt.cleanups = append(rt.cleanups, func() {
+					if serr := stop(); serr != nil {
+						logger.Debug().Err(serr).Msg("hostboot: coverage sampler stop")
+					}
+					if covTrail != nil {
+						covTrail.Wait()
+					}
+				})
 				if covTrail != nil {
 					if aerr := covTrail.Attach(ctx, s); aerr != nil {
 						logger.Warn().Err(aerr).Msg("hostboot: coverage trail unavailable")

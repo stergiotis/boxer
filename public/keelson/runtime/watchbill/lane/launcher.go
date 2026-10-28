@@ -203,9 +203,11 @@ func emit(log zerolog.Logger, line []byte) {
 				}
 			}
 			msg, _ := m["message"].(string)
-			delete(m, "level")
-			delete(m, "message")
-			delete(m, "time")
+			// The logger's own context names the job and the pid; the
+			// child's time is the host's receive time now.
+			for _, k := range []string{"level", "message", "time", "job", "pid"} {
+				delete(m, k)
+			}
 			log.WithLevel(lvl).Fields(m).Msg(msg)
 			return
 		}
@@ -219,7 +221,7 @@ func waitOrKill(child ChildI, grace time.Duration) {
 	select {
 	case <-child.Done():
 	case <-time.After(grace):
-		child.Kill()
+		kill(child)
 		<-child.Done()
 	}
 }

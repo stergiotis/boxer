@@ -136,12 +136,13 @@ func (inst *Worker) opEnqueue(ctx context.Context, msg *app.Msg, req watchbillre
 	if req.RunAfterMs > 0 {
 		r.RunAfter = time.UnixMilli(req.RunAfterMs).UTC()
 	}
-	switch {
-	case r.Queue == watchbillstore.QueueLane && obo == nil:
-		// The lane is the host's to route into; a request cannot park a
-		// job where no poll will find it (ADR-0344 §SD3).
+	// The lane is the host's to route into, never a queue a request names:
+	// a job parked where no poll looks would never run (ADR-0344 §SD3).
+	// Only an attested delegation under the lane switch lands there.
+	if r.Queue == watchbillstore.QueueLane {
 		return reply, eh.Errorf("watchbill: the reserved lane is not a queue a request may name")
-	case obo != nil && inst.cfg.IsolateAgentJobs:
+	}
+	if obo != nil && inst.cfg.IsolateAgentJobs {
 		r.Queue = watchbillstore.QueueLane
 	}
 	if r.Backoff != "" && r.Backoff != watchbillstore.BackoffNone && r.Backoff != watchbillstore.BackoffLinear && r.Backoff != watchbillstore.BackoffExponential {
