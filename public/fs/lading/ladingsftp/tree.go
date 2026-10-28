@@ -33,68 +33,14 @@
 package ladingsftp
 
 import (
-	"fmt"
 	"io/fs"
 	"path"
-	"strconv"
 	"strings"
 	"time"
 
+	"github.com/stergiotis/boxer/public/fs/lading/ladingsftp/sftptree"
 	"github.com/stergiotis/boxer/public/identity/identifier"
 )
-
-// latestName is the mutable name a mount always carries, pointing at its
-// newest complete snapshot.
-const latestName = "latest"
-
-// snapshotLayout is how an instant is spelled as a directory name.
-//
-// Compact, sortable and safe in every filesystem rclone might sync into: no
-// colons, no spaces, and lexicographic order is chronological order. It keeps
-// nanoseconds because a snapshot is named by its instant and two walks of a
-// small mount can share a second.
-const snapshotLayout = "20060102T150405.000000000Z"
-
-// mountName is a mount's directory name: its id in lower-case hex, zero-padded
-// to the full width.
-//
-// Hex rather than decimal because these ids are read as tagged — the tag is the
-// high bits, and hex is where that is visible. Zero-padded so the names sort
-// the way the ids do. A human-readable alias would have to come from the mount
-// policy record, which is a lookup this head deliberately does not make: the
-// tree has to be listable without reading `boxer.facts`.
-func mountName(mount identifier.TaggedId) string {
-	return fmt.Sprintf("%016x", mount.Value())
-}
-
-// parseMountName is the inverse.
-func parseMountName(name string) (mount identifier.TaggedId, ok bool) {
-	if len(name) != 16 {
-		return 0, false
-	}
-	v, err := strconv.ParseUint(name, 16, 64)
-	if err != nil {
-		return 0, false
-	}
-	mount = identifier.TaggedId(v)
-	return mount, mount.IsValid()
-}
-
-// snapshotName spells an instant as a directory name.
-func snapshotName(snap time.Time) string {
-	return snap.UTC().Format(snapshotLayout)
-}
-
-// parseSnapshotName is the inverse. It is exact — the layout keeps every digit
-// of the instant — so a name that round-trips addresses the snapshot it came
-// from and nothing near it.
-func parseSnapshotName(name string) (snap time.Time, ok bool) {
-	t, err := time.ParseInLocation(snapshotLayout, name, time.UTC)
-	if err != nil {
-		return time.Time{}, false
-	}
-	return t.UTC(), true
-}
 
 // levelE is how deep into the tree a request reached.
 type levelE uint8
@@ -138,7 +84,7 @@ func resolvePath(p string) (l loc, err error) {
 	}
 	segs := strings.Split(strings.TrimPrefix(clean, "/"), "/")
 
-	mount, ok := parseMountName(segs[0])
+	mount, ok := sftptree.ParseMountName(segs[0])
 	if !ok {
 		err = fs.ErrNotExist
 		return
@@ -149,7 +95,7 @@ func resolvePath(p string) (l loc, err error) {
 		return
 	}
 
-	if segs[1] == latestName {
+	if segs[1] == sftptree.Latest {
 		if len(segs) == 2 {
 			// The link itself: Lstat and Readlink report it as one.
 			l.level = levelLatest
@@ -167,7 +113,7 @@ func resolvePath(p string) (l loc, err error) {
 		return
 	}
 
-	snap, ok := parseSnapshotName(segs[1])
+	snap, ok := sftptree.ParseSnapshotName(segs[1])
 	if !ok {
 		err = fs.ErrNotExist
 		return

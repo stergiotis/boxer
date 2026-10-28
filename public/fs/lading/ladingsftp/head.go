@@ -18,6 +18,7 @@ import (
 	"github.com/stergiotis/boxer/public/fs/lading"
 	"github.com/stergiotis/boxer/public/fs/lading/ladingadapter"
 	"github.com/stergiotis/boxer/public/fs/lading/ladingschema"
+	"github.com/stergiotis/boxer/public/fs/lading/ladingsftp/sftptree"
 	"github.com/stergiotis/boxer/public/fs/lading/ladingsql"
 	"github.com/stergiotis/boxer/public/identity/identifier"
 	"github.com/stergiotis/boxer/public/observability/eh"
@@ -274,7 +275,7 @@ func (inst *Head) Readlink(p string) (target string, err error) {
 			return "", fs.ErrNotExist
 		}
 		// Relative, so the link stays correct however the tree is mounted.
-		return snapshotName(snap), nil
+		return sftptree.SnapshotName(snap), nil
 	case levelSnapshot:
 		view, verr := inst.viewAt(loc)
 		if verr != nil {
@@ -369,7 +370,7 @@ func (inst *Head) stat(p string, follow bool) (sftp.ListerAt, error) {
 		if err = inst.checkMount(l.mount); err != nil {
 			return nil, err
 		}
-		return listerAt{dirInfo{name: mountName(l.mount)}}, nil
+		return listerAt{dirInfo{name: sftptree.MountName(l.mount)}}, nil
 	case levelLatest:
 		snap, found, lerr := inst.latest(l.mount)
 		if lerr != nil {
@@ -379,9 +380,9 @@ func (inst *Head) stat(p string, follow bool) (sftp.ListerAt, error) {
 			return nil, fs.ErrNotExist
 		}
 		if !follow {
-			return listerAt{linkInfo{name: latestName, mtime: snap, target: snapshotName(snap)}}, nil
+			return listerAt{linkInfo{name: sftptree.Latest, mtime: snap, target: sftptree.SnapshotName(snap)}}, nil
 		}
-		return listerAt{dirInfo{name: latestName, mtime: snap}}, nil
+		return listerAt{dirInfo{name: sftptree.Latest, mtime: snap}}, nil
 	}
 	view, err := inst.viewAt(l)
 	if err != nil {
@@ -415,7 +416,7 @@ func (inst *Head) listMounts() (sftp.ListerAt, error) {
 		if inst.checkMount(m) != nil {
 			continue
 		}
-		out = append(out, dirInfo{name: mountName(m)})
+		out = append(out, dirInfo{name: sftptree.MountName(m)})
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Name() < out[j].Name() })
 	return listerAt(out), nil
@@ -436,11 +437,11 @@ func (inst *Head) listSnapshots(mount identifier.TaggedId) (sftp.ListerAt, error
 	}
 	out := make([]os.FileInfo, 0, len(snaps)+1)
 	for _, s := range snaps {
-		out = append(out, dirInfo{name: snapshotName(s.Snap), mtime: s.Snap})
+		out = append(out, dirInfo{name: sftptree.SnapshotName(s.Snap), mtime: s.Snap})
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Name() < out[j].Name() })
 	newest := snaps[0].Snap // Snapshots is newest-first
-	out = append(out, linkInfo{name: latestName, mtime: newest, target: snapshotName(newest)})
+	out = append(out, linkInfo{name: sftptree.Latest, mtime: newest, target: sftptree.SnapshotName(newest)})
 	return listerAt(out), nil
 }
 
