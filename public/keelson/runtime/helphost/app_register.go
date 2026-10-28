@@ -43,6 +43,8 @@ var manifest = app.Manifest{
 		PreferredWidth:  styletokens.SurfaceApp.W,
 		PreferredHeight: styletokens.SurfaceApp.H,
 	},
+	// The operations catalog (ADR-0345), in helphost_ops.go.
+	Operations: ops.Catalog(),
 	// The reader's one capability: copy a rendered code/verbatim block to
 	// the clipboard via the per-block copy button (ADR-0026 Update
 	// 2026-05-30). Pub only — the broker subscribes to clipboard.write and

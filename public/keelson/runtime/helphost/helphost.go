@@ -26,6 +26,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/clipboardbroker"
 	"github.com/stergiotis/boxer/public/keelson/runtime/help"
 	"github.com/stergiotis/boxer/public/keelson/runtime/help/search"
+	"github.com/stergiotis/boxer/public/keelson/runtime/widgethandle"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/codeview"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/markdown"
@@ -135,6 +136,12 @@ type HelpHost struct {
 	searchIndex     *search.Index
 	searchHl        regexedit.Cache
 	searchThesaurus search.Thesaurus
+
+	// Operations state (helphost_ops.go, ADR-0345). frameCtx is the current
+	// frame's context, through which the nav's clicks route as gestures;
+	// searchH is the search box, for telling the person is typing in it.
+	frameCtx app.FrameContextI
+	searchH  widgethandle.WidgetHandle
 }
 
 var _ app.AppI = (*HelpHost)(nil)
@@ -243,6 +250,7 @@ func (inst *HelpHost) Unmount(ctx app.MountContextI) (err error) {
 // PanelLeftInside + PanelCentralInside without wrapping a Window of
 // our own.
 func (inst *HelpHost) Frame(ctx app.FrameContextI) (err error) {
+	inst.frameCtx = ctx
 	// A ref F1 pushed while this window was already open (PushRef): the
 	// raise half of the open-or-raise.
 	inst.OpenRef(popRef())
@@ -297,13 +305,17 @@ func (inst *HelpHost) renderSearchBox() {
 		// The regexedit widget attaches the token-mode syntax
 		// highlighting (one independent pattern per token — the
 		// battery shape) and the monospace font that goes with it.
+		// Typing commits per keystroke inside the frame (ADR-0345 §SD3); the
+		// handle lets the search resource say the person is typing. The clear
+		// button is a gesture.
+		inst.searchH = widgethandle.Make(inst.ids.PrepareStr("nav-search").Derive())
 		inst.searchHl.TextEdit(inst.ids.PrepareStr("nav-search"), inst.searchText, false, regexedit.ModeTokens).
 			HintText("Search (regex, space = AND)").
 			SendRespVal(&inst.searchText)
 		if inst.searchText != "" {
 			if c.Button(inst.ids.PrepareStr("nav-search-clear"), c.Atoms().Text("×").Keep()).
 				SendResp().HasPrimaryClicked() {
-				inst.searchText = ""
+				inst.setSearchGesture("")
 			}
 		}
 	}
@@ -400,7 +412,7 @@ func (inst *HelpHost) renderSearchResults() {
 		// needs — a silent duplicate would swallow the row's clicks.
 		if c.SelectableLabel(inst.ids.PrepareStr("hit-"+strconv.Itoa(i)), h.Ref == cur, label).
 			SendResp().HasPrimaryClicked() {
-			inst.OpenRef(h.Ref)
+			inst.showDocGesture(h.Ref)
 		}
 		detail := bookDisplay(h.Ref.AppId)
 		if h.Context != "" {
@@ -422,10 +434,9 @@ func (inst *HelpHost) renderNavBook(b help.BookI) {
 	}
 	if c.SelectableLabel(inst.ids.PrepareStr("nav-app-"+string(appId)), expanded, glyph+" "+display).
 		SendResp().HasPrimaryClicked() {
-		if inst.expandedApps == nil {
-			inst.expandedApps = make(map[app.AppIdT]bool, 4)
-		}
-		inst.expandedApps[appId] = !expanded
+		// The click computes the next state, so the command sets and never
+		// toggles (ADR-0345 §SD2).
+		inst.setExpandedGesture(appId, !expanded)
 	}
 	if !expanded {
 		return
@@ -438,9 +449,7 @@ func (inst *HelpHost) renderNavBook(b help.BookI) {
 		}
 		if c.SelectableLabel(inst.ids.PrepareStr("nav-doc-"+string(appId)+":"+info.Path), active, label).
 			SendResp().HasPrimaryClicked() {
-			inst.selectedAppId = appId
-			inst.selectedDoc = info.Path
-			inst.selectedSection = ""
+			inst.showDocGesture(help.RefT{AppId: appId, Doc: info.Path})
 		}
 		if active {
 			inst.renderNavSections(appId, info)
@@ -469,7 +478,7 @@ func (inst *HelpHost) renderNavSections(appId app.AppIdT, info help.DocInfo) {
 		label := indent + s.Text
 		if c.SelectableLabel(inst.ids.PrepareStr("nav-sec-"+string(appId)+":"+info.Path+"#"+s.Slug), active, label).
 			SendResp().HasPrimaryClicked() {
-			inst.selectedSection = s.Slug
+			inst.showDocGesture(help.RefT{AppId: appId, Doc: info.Path, Section: s.Slug})
 		}
 	}
 }
@@ -559,12 +568,18 @@ func (inst *HelpHost) consumeScrollTarget() (section string) {
 func (inst *HelpHost) renderViewToggle() {
 	for range c.Horizontal().KeepIter() {
 		c.Label("View:").Send()
-		selector.Segmented(inst.ids, "view-mode", &inst.viewMode).
+		// The selector commits inside the frame, so a changed copy is the
+		// person's click, routed as a gesture (ADR-0345 §SD3).
+		mode := inst.viewMode
+		selector.Segmented(inst.ids, "view-mode", &mode).
 			Style(selector.StyleSelectable).
 			Inline().
 			Option(ViewModeRendered, "Rendered").
 			Option(ViewModeSource, "Source").
 			SendResp()
+		if mode != inst.viewMode {
+			inst.setViewModeGesture(mode)
+		}
 	}
 }
 
