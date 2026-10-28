@@ -132,6 +132,10 @@ type App struct {
 	// (archSelectedLast); held here so the copy allocates once per window.
 	archDrawn layeredgraph.Layout
 	archEdges []layeredgraph.EdgeLayout
+
+	// frameCtx is the current frame's context, through which the picker
+	// routes as the person's gesture (capinspector_ops.go, ADR-0345).
+	frameCtx app.FrameContextI
 }
 
 var _ app.AppI = (*App)(nil)
@@ -164,6 +168,7 @@ func (inst *App) Unmount(ctx app.MountContextI) (err error) { return }
 func (inst *App) Frame(ctx app.FrameContextI) (err error) {
 	// Re-resolve: the density preset is runtime-switchable (Layout ▸ Density).
 	inst.density = styletokens.ActiveDensity()
+	inst.frameCtx = ctx
 	inst.consumePendingSelection()
 	inst.renderBody()
 	return
@@ -207,12 +212,14 @@ func (inst *App) renderBody() {
 // renderPicker draws a row of selectable buttons across the top of
 // the inspector body. Clicking one swaps selectedCap without opening
 // another window; the schematic and prose below update on the same
-// frame.
+// frame. The change goes through the catalog as the person's gesture
+// (ADR-0345 §SD3).
 //
 // The row wraps: thirteen caps do not fit one line at the window's
 // preferred width, and a clipped row hides the caps past the edge.
 func (inst *App) renderPicker() {
-	sel := selector.Segmented(inst.ids, "cap-picker", &inst.selectedCap).
+	picked := inst.selectedCap
+	sel := selector.Segmented(inst.ids, "cap-picker", &picked).
 		Style(selector.StyleSelectable).
 		Inline()
 	for _, capId := range allCapIdsOrdered() {
@@ -220,6 +227,9 @@ func (inst *App) renderPicker() {
 	}
 	for range c.HorizontalWrapped().KeepIter() {
 		sel.SendResp()
+	}
+	if picked != inst.selectedCap {
+		inst.selectCapGesture(picked)
 	}
 }
 
