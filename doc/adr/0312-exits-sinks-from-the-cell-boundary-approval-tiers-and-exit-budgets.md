@@ -177,7 +177,7 @@ shingles worth protecting.
 | `keelson('sinks')` | added, derived from the topology | the introspection registry; ADR-0126's topology (dated Update) |
 | the llm sensitivity wall (ADR-0254 §SD3) and `httpegress` (ADR-0262 §SD4) | read a TLP tier against a clearance; a fetch carries the harness's declared label; canaries on the body | both services' tests; dated Updates on both records |
 | ADR-0269 §SD6 budgets | restated as an exit budget in bytes plus read budgets in bytes and instances; rows dropped | the task struct; the grant dialog; a dated Update |
-| ADR-0300 §SD2 (proposed) | bytes sent and instances read join the quantities; a Tier 1 edit | the ledger |
+| ADR-0300 §SD2 | bytes sent and instances read join the quantities; a Tier 1 edit | the ledger |
 | ADR-0270 publish operations | an endorsement check, not a clearance; a dated Update | play's consequential operations |
 | ADR-0264 §SD5 and Status | the facts write path's locality is a sink clearance; the Status gap closes when built | the trail's write path; a dated Update |
 | trail rows ([ADR-0277](./0277-one-audit-trail-for-model-calls-and-agent-work.md)) | outbound model-call rows carry the tier the wall saw and the approval key, for L14 and L33; marks deferred | the generated views |

@@ -15,13 +15,13 @@ import (
 // --- Caller-assigned membership ids (registry-stable target). ---
 
 const (
-	kindRuntimeKindCoverageSample  uint64 = 9223372049739678230
-	kindCoverageSampleMetaHash     uint64 = 9223372049739678231
-	kindCoverageSampleSeq          uint64 = 9223372049739678232
-	kindCoverageSampleUnits        uint64 = 9223372049739678233
-	kindCoverageSampleCoveredUnits uint64 = 9223372049739678234
-	kindCoverageSampleCoveredStmts uint64 = 9223372049739678235
-	kindCoverageSampleCoveredFuncs uint64 = 9223372049739678236
+	kindRuntimeKindCoverageSample  uint64 = 9223372049739678238
+	kindCoverageSampleMetaHash     uint64 = 9223372049739678239
+	kindCoverageSampleSeq          uint64 = 9223372049739678240
+	kindCoverageSampleUnits        uint64 = 9223372049739678241
+	kindCoverageSampleCoveredUnits uint64 = 9223372049739678242
+	kindCoverageSampleCoveredStmts uint64 = 9223372049739678243
+	kindCoverageSampleCoveredFuncs uint64 = 9223372049739678244
 )
 
 // coverageSampleSymbolAttrI is the InAttr-side view of the symbol section. P-variants only —

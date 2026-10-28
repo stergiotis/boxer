@@ -15,15 +15,15 @@ import (
 // --- Caller-assigned membership ids (registry-stable target). ---
 
 const (
-	kindRuntimeKindCoverageAgentApply  uint64 = 9223372049739678237
-	kindCoverageAgentApplyMetaHash     uint64 = 9223372049739678238
-	kindCoverageAgentApplyFrame        uint64 = 9223372049739678239
-	kindCoverageAgentApplyUnits        uint64 = 9223372049739678240
-	kindCoverageAgentApplyChangedUnits uint64 = 9223372049739678241
-	kindCoverageAgentApplyChangedFuncs uint64 = 9223372049739678242
-	kindCoverageAgentApplyOperation    uint64 = 9223372049739678243
-	kindCoverageAgentApplyPhase        uint64 = 9223372049739678244
-	kindCoverageAgentApplyCostUs       uint64 = 9223372049739678245
+	kindRuntimeKindCoverageAgentApply  uint64 = 9223372049739678245
+	kindCoverageAgentApplyMetaHash     uint64 = 9223372049739678246
+	kindCoverageAgentApplyFrame        uint64 = 9223372049739678247
+	kindCoverageAgentApplyUnits        uint64 = 9223372049739678248
+	kindCoverageAgentApplyChangedUnits uint64 = 9223372049739678249
+	kindCoverageAgentApplyChangedFuncs uint64 = 9223372049739678250
+	kindCoverageAgentApplyOperation    uint64 = 9223372049739678251
+	kindCoverageAgentApplyPhase        uint64 = 9223372049739678252
+	kindCoverageAgentApplyCostUs       uint64 = 9223372049739678253
 )
 
 // coverageAgentApplySymbolAttrI is the InAttr-side view of the symbol section. P-variants only —

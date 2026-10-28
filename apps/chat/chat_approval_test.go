@@ -178,7 +178,16 @@ func TestAnApprovalStandsForTheTurn(t *testing.T) {
 	for range approvalAsks {
 		o.form.single[0], o.form.chosen[0][0] = 0, true
 		o.submit()
-		require.Eventually(t, func() bool { inst.drain(); o = inst.coord.ask.current(); return o == nil || !o.form.sent }, 5*time.Second, 5*time.Millisecond)
+		// The next ask, or the turn's end: between two asks there is a
+		// moment with no form open, which is neither.
+		require.Eventually(t, func() bool {
+			inst.drain()
+			o = inst.coord.ask.current()
+			return o != nil && !o.form.sent || inst.pending == nil
+		}, 5*time.Second, 5*time.Millisecond)
+		if o == nil {
+			break
+		}
 	}
 	drainUntil(t, inst)
 	assert.Contains(t, inst.conv.entries[len(inst.conv.entries)-1].fail.detail, "above the clearance", "three yeses without a reason are a no")

@@ -13,17 +13,17 @@ import (
 // --- Caller-assigned membership ids (registry-stable target). ---
 
 const (
-	kindRuntimeKindCoverageBuild uint64 = 9223372049739678207
-	kindCoverageBuildMetaHash    uint64 = 9223372049739678208
-	kindCoverageBuildMode        uint64 = 9223372049739678209
-	kindCoverageBuildGranularity uint64 = 9223372049739678210
-	kindCoverageBuildUnits       uint64 = 9223372049739678211
-	kindCoverageBuildStmts       uint64 = 9223372049739678212
-	kindCoverageBuildFuncs       uint64 = 9223372049739678213
-	kindCoverageBuildPkgs        uint64 = 9223372049739678214
-	kindCoverageBuildId          uint64 = 9223372049739678215
-	kindCoverageBuildVcsRevision uint64 = 9223372049739678216
-	kindCoverageBuildVcsModified uint64 = 9223372049739678217
+	kindRuntimeKindCoverageBuild uint64 = 9223372049739678215
+	kindCoverageBuildMetaHash    uint64 = 9223372049739678216
+	kindCoverageBuildMode        uint64 = 9223372049739678217
+	kindCoverageBuildGranularity uint64 = 9223372049739678218
+	kindCoverageBuildUnits       uint64 = 9223372049739678219
+	kindCoverageBuildStmts       uint64 = 9223372049739678220
+	kindCoverageBuildFuncs       uint64 = 9223372049739678221
+	kindCoverageBuildPkgs        uint64 = 9223372049739678222
+	kindCoverageBuildId          uint64 = 9223372049739678223
+	kindCoverageBuildVcsRevision uint64 = 9223372049739678224
+	kindCoverageBuildVcsModified uint64 = 9223372049739678225
 )
 
 // coverageBuildSymbolAttrI is the InAttr-side view of the symbol section. P-variants only —

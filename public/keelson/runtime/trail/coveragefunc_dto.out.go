@@ -13,18 +13,18 @@ import (
 // --- Caller-assigned membership ids (registry-stable target). ---
 
 const (
-	kindRuntimeKindCoverageFunc uint64 = 9223372049739678218
-	kindCoverageFuncMetaHash    uint64 = 9223372049739678219
-	kindCoverageFuncPkg         uint64 = 9223372049739678220
-	kindCoverageFuncName        uint64 = 9223372049739678221
-	kindCoverageFuncFile        uint64 = 9223372049739678222
-	kindCoverageFuncLit         uint64 = 9223372049739678223
-	kindCoverageFuncUnitBase    uint64 = 9223372049739678224
-	kindCoverageFuncUnits       uint64 = 9223372049739678225
-	kindCoverageFuncStmts       uint64 = 9223372049739678226
-	kindCoverageFuncUnitStLine  uint64 = 9223372049739678227
-	kindCoverageFuncUnitEnLine  uint64 = 9223372049739678228
-	kindCoverageFuncUnitStmts   uint64 = 9223372049739678229
+	kindRuntimeKindCoverageFunc uint64 = 9223372049739678226
+	kindCoverageFuncMetaHash    uint64 = 9223372049739678227
+	kindCoverageFuncPkg         uint64 = 9223372049739678228
+	kindCoverageFuncName        uint64 = 9223372049739678229
+	kindCoverageFuncFile        uint64 = 9223372049739678230
+	kindCoverageFuncLit         uint64 = 9223372049739678231
+	kindCoverageFuncUnitBase    uint64 = 9223372049739678232
+	kindCoverageFuncUnits       uint64 = 9223372049739678233
+	kindCoverageFuncStmts       uint64 = 9223372049739678234
+	kindCoverageFuncUnitStLine  uint64 = 9223372049739678235
+	kindCoverageFuncUnitEnLine  uint64 = 9223372049739678236
+	kindCoverageFuncUnitStmts   uint64 = 9223372049739678237
 )
 
 // coverageFuncSymbolAttrI is the InAttr-side view of the symbol section. P-variants only —

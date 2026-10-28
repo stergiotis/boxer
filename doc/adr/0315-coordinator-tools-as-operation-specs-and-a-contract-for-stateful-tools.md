@@ -239,6 +239,18 @@ it is parallel-safe. An owner publishes its set once through
 static. The per-window tools a coordinator mints from the apps' catalogs
 are not rows: they are `keelson('app_operations')` under another name.
 
+### 2026-10-28 — SD9: a verifier exists, and the selection rule is a fold
+
+[ADR-0340](./0340-cited-replies-assertions-the-window-checks-and-verdicts-in-the-journal.md)
+is the verifier SD9 waited for: a candidate's claims are assertions the
+window checks under its agent limits, each a `verdict` entry of the
+journal, and the selection rule — the candidate with no failed verdict
+and the most held, ties by the fewest unchecked, then the lowest ordinal —
+is a fold in the `projection` package over `candidate` and `verdict`
+entries, tested before any producer exists. `check` is read-only, so
+candidates' assertions run on one shared instance under the `read-shared`
+fork class (SD5). Fan-out's producer stays deferred.
+
 ## References
 
 - [ADR-0188](./0188-app-instance-effect-tracking.md) — the observed-changes record.

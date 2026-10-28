@@ -252,7 +252,7 @@ would let a client enumerate what it cannot read.
 
 mdedit's **rclone** button copies this command for the snapshot the document
 it shows was read from, with `/mnt/x` to replace by a directory of yours
-([ADR-0339](../adr/0339-chat-artefact-export-to-lading-and-the-handover-to-mdedit-by-snapshot.md)
+([ADR-0342](../adr/0342-chat-artefact-export-to-lading-and-the-handover-to-mdedit-by-snapshot.md)
 §SD5).
 
 When the head cannot start, rclone reports it as a broken SFTP handshake —

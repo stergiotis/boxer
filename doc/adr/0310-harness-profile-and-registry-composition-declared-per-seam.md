@@ -273,7 +273,7 @@ operation specs (ADR-0315 §SD1), play's effect declarations (ADR-0315
 | `llmCall` rows ([ADR-0277](./0277-one-audit-trail-for-model-calls-and-agent-work.md), Update of 2026-10-11) | gain `llmCallProfile`, `llmCallRoute`, `llmCallTier` and `llmCallApproval`; `keelson('llm_calls')` serves them as `profile`, `route`, `tier`, `approval` | the trail's generated views and goldens; [ADR-0283](./0283-chat-analytics-the-agent-surface-and-what-was-granted-and-used.md) reads them |
 | `keelson('harness_profiles')` | added; `harness_components` deferred (SD10) | the introspection registry |
 | `BOXER_CHAT_*` (ADR-0009) | retire as constants move; one selector variable added | registry entries |
-| ADR-0302 §SD2–§SD4 (proposed) | the moderator's context signal reads the meter of SD5; the note lives in `tokenmeter`'s package doc until that record is accepted; thresholds from the profile are still ahead | a Tier 1 edit while proposed |
+| ADR-0302 §SD2–§SD4 | the moderator's context signal reads the meter of SD5; thresholds from the profile are still ahead | ADR-0302's Update of 2026-10-27 |
 | `agent.Service.check` and the analytics `Classify*` | one decision table (SD11 step 8) | ADR-0283 §SD2, Update of 2026-10-11 |
 
 ## Alternatives

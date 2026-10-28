@@ -27,7 +27,7 @@ const (
 // entry and the records that are metadata (ADR-0325 §SD1). The evidence
 // profile adds the chain and the written-by component (ADR-0327 §SD2).
 var LedgerComponentPaths = []string{"./entry_dto.go", "./request_dto.go", "./reply_dto.go", "./compact_dto.go",
-	"./approvaldecision_dto.go", "./head_dto.go", "./profile_dto.go", "./turnstate_dto.go", "./tools_dto.go"}
+	"./approvaldecision_dto.go", "./head_dto.go", "./profile_dto.go", "./turnstate_dto.go", "./tools_dto.go", "./verdict_dto.go"}
 
 // VaultComponentPaths are the vault store's hand-written components: the
 // body row and the records that hold content (ADR-0325 §SD1). The evidence

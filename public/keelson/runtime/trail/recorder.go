@@ -446,7 +446,7 @@ func (inst *Recorder) AgentDisclosure(at time.Time, c Context, cause option.Opti
 	})
 }
 
-// LadingPublish buffers one publish's row (ADR-0338 §SD5, proposed).
+// LadingPublish buffers one publish's row (ADR-0341 §SD5, proposed).
 func (inst *Recorder) LadingPublish(at time.Time, c Context, row LadingPublish) (err error) {
 	key := "ladingpublish|" + inst.unique(at)
 	return inst.write(context.Background(), key, at, c, func(b *TrailEntityBuilder, id uint64) {

@@ -8,7 +8,7 @@ date: 2026-10-26
 
 > **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
 
-# ADR-0338: Lading publish — a write-only capability, with the placement check at the door
+# ADR-0341: Lading publish — a write-only capability, with the placement check at the door
 
 ## Context
 
@@ -22,7 +22,7 @@ broker as "a decision rather than an implementation gap".
 
 Two prospective writers do not fit the current posture:
 
-- **The chat's artefact export** ([ADR-0339](./0339-chat-artefact-export-to-lading-and-the-handover-to-mdedit-by-snapshot.md), proposed). The writer is a
+- **The chat's artefact export** ([ADR-0342](./0342-chat-artefact-export-to-lading-and-the-handover-to-mdedit-by-snapshot.md), proposed). The writer is a
   process that runs a model with tools behind an egress wall, and what it
   writes carries labels ([ADR-0311](./0311-labels-integrity-levels-tlp-tiers-marks-and-endorsement.md)):
   screenshots are captures (level 2), and the conversation may be confined.
@@ -224,4 +224,4 @@ See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-d
 - [ADR-0222](./0222-tally-composition-surface.md) §SD5 — `ladingadhoc`.
 - [ADR-0307](./0307-threat-model-for-an-interactive-single-person-cell.md) — the threat model.
 - [ADR-0009](./0009-environment-variable-registry.md) — environment variables.
-- [ADR-0339](./0339-chat-artefact-export-to-lading-and-the-handover-to-mdedit-by-snapshot.md) (proposed) — the chat's artefact export, the first client.
+- [ADR-0342](./0342-chat-artefact-export-to-lading-and-the-handover-to-mdedit-by-snapshot.md) (proposed) — the chat's artefact export, the first client.

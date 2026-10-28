@@ -61,7 +61,7 @@ and a status that changes what the system does on the person's behalf.
 | C4 | −− | ++ | +  | ++ |
 
 O3 makes a presence setting widen what the host does unasked, which is
-ADR-0298's (proposed) decision, with its own bounds. O4 sends a fact about
+ADR-0298's decision, with its own bounds. O4 sends a fact about
 the person to a model endpoint that may be remote.
 
 ## Decision
@@ -117,7 +117,7 @@ From the moment Away starts, the attention service records:
 - items that arrived in the queue;
 - items that left it without a decision in a host card: "expired" when
   their bound had passed, else "no longer waits" — withdrawn, answered in
-  the asking window, decided by unattended mode (ADR-0298 (proposed)); the
+  the asking window, decided by unattended mode (ADR-0298); the
   queue sees an item go, not why;
 - requests the flood limit refused (ADR-0324 §SD6);
 - highlights.

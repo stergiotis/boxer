@@ -1,12 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-10-09
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to accepted
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-10-27
 ---
-
-> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
 
 # ADR-0298: An unattended mode — the host decides within preset bounds
 
@@ -169,7 +167,11 @@ The options are weighed in the QOC above; no narrower choice was taken.
 
 ## Status
 
-Proposed — awaiting review by the code owner.
+Accepted 2026-10-27. SD1–SD4 are built: the tag and the variable, the
+dispatcher's decisions (`runtime/agent`, `unattended.go` and its test), the
+status bar's segment and the badge, and the chat's note to the model with
+the grant it passes on; the chat's `chat-afk-*` scenes run a task against
+them on the headless host. SD5 stays deferred.
 
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers (Tier 1 in-place / Tier 2 dated `## Updates` entry / Tier 3 new superseding ADR).

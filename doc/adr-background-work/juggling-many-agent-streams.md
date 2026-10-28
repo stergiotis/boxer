@@ -194,7 +194,7 @@ acknowledged, not answered.
 - **Decisions are modal.**
   [`Chrome.RenderDialogs`](../../public/keelson/runtime/agent/chrome.go)
   draws a moderator's question alone when one is open (`Service.AskPerson`,
-  the `llm.ration.ask` of ADR-0300 (proposed) §SD9, which any moderator may
+  the `llm.ration.ask` of ADR-0300 §SD9, which any moderator may
   use);
   otherwise the oldest consequential confirmation and the oldest pending
   grant request or widening, each as a modal over every window, both in the
@@ -236,9 +236,9 @@ acknowledged, not answered.
 - **The host already marks windows a task works in** with a badge in host
   chrome, which is the reverse edge of the roster's tree (§3.1).
 - **What runs without the person is decided elsewhere.** Unattended mode
-  (ADR-0298, proposed) decides within preset bounds; window-less runs are
+  (ADR-0298) decides within preset bounds; window-less runs are
   deferred (ADR-0308 §SD11, carrying ADR-0303 §SD9 forward). The built-in
-  moderator (ADR-0302, proposed) turns live events into
+  moderator (ADR-0302) turns live events into
   signals and tells the person rather than asking them (§SD4).
 
 ## 5 Options
@@ -389,7 +389,7 @@ as information about the person. Skip stays the person's act (ADR-0265
 applies to grants, widenings or confirmations.
 
 Not proposed: Away implying unattended mode. That would make a presence
-setting widen what agents may do, which is ADR-0298's (proposed) decision to take.
+setting widen what agents may do, which is ADR-0298's decision to take.
 
 ### 5.6 Flood limit — host and moderator
 

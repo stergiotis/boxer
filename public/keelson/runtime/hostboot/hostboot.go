@@ -124,7 +124,7 @@ type Services struct {
 	// still needs ChLocal and Introspect, which fail visibly on their own.
 	AdhocData bool
 	// LadingPublish is lading.publish.<tag>: writes into the lading store
-	// under the caller's mount tag, after the placement check (ADR-0338,
+	// under the caller's mount tag, after the placement check (ADR-0341,
 	// proposed). It connects from the CLICKHOUSE_* variables on the first
 	// publish; without a reachable store a publish fails with the reason.
 	LadingPublish bool

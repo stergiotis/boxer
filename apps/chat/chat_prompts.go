@@ -51,6 +51,7 @@ type promptSection struct {
 var (
 	promptSections = []promptSection{
 		{slug: "coordinator", when: func(apps bool, _ bool, _ bool) bool { return apps }},
+		{slug: "citations", when: func(apps bool, _ bool, _ bool) bool { return apps }},
 		{slug: "questions", when: func(_ bool, questions bool, _ bool) bool { return questions }},
 		{slug: "artefact", when: func(_ bool, _ bool, artefact bool) bool { return artefact }},
 	}

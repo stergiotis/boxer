@@ -1320,7 +1320,7 @@ earlier entries left them.
 
 ### 2026-10-26 — a write-only capability proposed
 
-[ADR-0338](./0338-lading-publish-a-write-only-capability-with-the-placement-check-at-the-door.md)
+[ADR-0341](./0341-lading-publish-a-write-only-capability-with-the-placement-check-at-the-door.md)
 (proposed) takes up the capability the update of 2026-08-20 left as a
 decision, for writes only: a publish service under the caller's tag, with
 the placement check before any row is written. Reads stay as they are.

@@ -573,7 +573,7 @@ profile of an unattended cell (§4.1).
 | S7 | Human interaction | producer | questions, approvals, widenings, confirmations, steering, durable waits, endorsements | `asker`, dispatcher chrome |
 | S8 | Authority | guard | grants, ceilings, consent, modes, the effect ladder | the dispatcher (ADR-0269, ADR-0280) |
 | S9 | Information flow | guard | labels (level, TLP tier, marks), sinks derived from the declared cell boundary with clearances, exit approval tiers, endorsement, re-entry marking, relay channels | `labels.go`, two walls on one bit |
-| S10 | Resource governance | guard | metering, admission, budgets, pacing, moderation | `ration`, `moderator` (ADR-0300, ADR-0302, proposed) |
+| S10 | Resource governance | guard | metering, admission, budgets, pacing, moderation | `ration`, `moderator` (ADR-0300, ADR-0302) |
 | S11 | Recovery | projection | resume fold, unknown outcomes, fingerprint and stranding | ADR-0303 §SD3, §SD6 |
 | S12 | Run memory | producer + projection | documents and knowledge that outlive a turn or run | the artefact (ADR-0282); nothing cross-run |
 | S13 | Delegation | producer | sub-runs, forks, handoffs | none |

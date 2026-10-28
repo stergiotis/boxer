@@ -257,7 +257,7 @@ and carrying the images along with Copy and Open in mdedit.
 
 ### 2026-10-26 — export to lading proposed
 
-[ADR-0339](./0339-chat-artefact-export-to-lading-and-the-handover-to-mdedit-by-snapshot.md)
+[ADR-0342](./0342-chat-artefact-export-to-lading-and-the-handover-to-mdedit-by-snapshot.md)
 (proposed) takes up the durable storage §SD6 deferred, as an export the person
 confirms. It ends §SD1's guarantee for what is exported, and only for that.
 

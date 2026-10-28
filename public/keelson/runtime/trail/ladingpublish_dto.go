@@ -1,7 +1,7 @@
 package trail
 
 // LadingPublish is one publish into the lading store through the publish
-// service (ADR-0338 §SD5, proposed): written or refused, and why. The
+// service (ADR-0341 §SD5, proposed): written or refused, and why. The
 // calling app and window are the row's [Origin].
 type LadingPublish struct {
 	_ struct{} `kind:"ladingPublish"`

@@ -19,9 +19,9 @@ scene:
 
 # chat — the artefact exported to lading, and opened in mdedit by snapshot
 
-ADR-0339 on the headless host, against the scripted model in
+ADR-0342 on the headless host, against the scripted model in
 [chat-artefact-export.script.jsonl](./chat-artefact-export.script.jsonl),
-and the host's publish service of ADR-0338. The model captures the
+and the host's publish service of ADR-0341. The model captures the
 operations demo into the artefact's screenshots and writes a document that
 embeds the capture.
 
@@ -38,7 +38,7 @@ The scene writes two snapshots into the configured lading store, under the
 chat's mount tag; they expire with their 30-day class.
 
 ```jsonl trace
-{"do":"note","text":"ADR-0339: the artefact exported to lading, and handed to mdedit by snapshot"}
+{"do":"note","text":"ADR-0342: the artefact exported to lading, and handed to mdedit by snapshot"}
 {"do":"wait","valueContains":"→ scripted","role":"label"}
 {"do":"click","contains":"Send","role":"button"}
 {"do":"wait","valueContains":"Wrote up the demo with its screenshot","role":"label","settleMs":500}

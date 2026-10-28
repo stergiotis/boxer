@@ -76,6 +76,7 @@ type wireEntry struct {
 	Question *ExitQuestion  `json:"question,omitempty"`
 	Answer   *ExitAnswer    `json:"answer,omitempty"`
 	Copy     *CopyRecord    `json:"copy,omitempty"`
+	Verdict  *Verdict       `json:"verdict,omitempty"`
 	// Commitments are the commitments to the content by component, and
 	// Openings the openings they open under, hex; the openings travel with
 	// the bodies and are held only by the vault (ADR-0320 §SD2, ADR-0327
@@ -116,7 +117,7 @@ func wireOfEntry(e Entry) wireEntry {
 	}
 	return wireEntry{Run: e.Run, Ordinal: e.Ordinal, At: e.At.UTC(), Kind: e.Kind.String(), Key: e.Key, Role: e.Role, Body: e.Body, Calls: e.Calls, Arguments: e.Arguments,
 		Request: e.Request, Reply: e.Reply, Compact: e.Compact, Approval: e.Approval, Head: e.Head, Profile: e.Profile, TurnEnd: e.TurnEnd, Tools: e.Tools,
-		Endorse: e.Endorse, Grant: e.Grant, Question: e.Question, Answer: e.Answer, Copy: e.Copy, Commitments: e.Commitments, Openings: openings, WrittenBy: e.WrittenBy, EntryId: e.EntryId,
+		Endorse: e.Endorse, Grant: e.Grant, Question: e.Question, Answer: e.Answer, Copy: e.Copy, Verdict: e.Verdict, Commitments: e.Commitments, Openings: openings, WrittenBy: e.WrittenBy, EntryId: e.EntryId,
 		Name: e.Name, Book: e.Book, Form: e.Form, Target: e.Target, From: e.From, Effect: e.Effect, Turn: e.Turn,
 		LabelLevel: uint8(e.Label.Level), LabelTier: uint8(e.Label.Tier), LabelExposure: e.Label.Exposure, LabelOrigin: e.Label.Origin,
 		WriterRun: e.WriterRun, WriterTurn: e.WriterTurn, WriterOrdinal: e.WriterOrdinal, Prev: e.Prev, Digest: e.Digest, KeyId: e.KeyId, Parent: e.Parent, Attachments: e.Attachments}
@@ -135,7 +136,7 @@ func entryOfWire(w wireEntry) Entry {
 	}
 	return Entry{Run: w.Run, Ordinal: w.Ordinal, At: zeroed(w.At), Kind: k, Key: w.Key, Role: w.Role, Body: w.Body, Calls: w.Calls, Arguments: w.Arguments,
 		Request: w.Request, Reply: w.Reply, Compact: w.Compact, Approval: w.Approval, Head: w.Head, Profile: w.Profile, TurnEnd: w.TurnEnd, Tools: w.Tools,
-		Endorse: w.Endorse, Grant: w.Grant, Question: w.Question, Answer: w.Answer, Copy: w.Copy, Commitments: w.Commitments, Openings: openings, WrittenBy: w.WrittenBy, EntryId: w.EntryId,
+		Endorse: w.Endorse, Grant: w.Grant, Question: w.Question, Answer: w.Answer, Copy: w.Copy, Verdict: w.Verdict, Commitments: w.Commitments, Openings: openings, WrittenBy: w.WrittenBy, EntryId: w.EntryId,
 		Name: w.Name, Book: w.Book, Form: w.Form, Target: w.Target, From: w.From, Effect: w.Effect, Turn: w.Turn,
 		Label:     Label{Level: LevelE(w.LabelLevel), Tier: TierE(w.LabelTier), Exposure: unionMarks(w.LabelExposure, nil), Origin: unionMarks(w.LabelOrigin, nil)},
 		WriterRun: w.WriterRun, WriterTurn: w.WriterTurn, WriterOrdinal: w.WriterOrdinal, Prev: w.Prev, Digest: w.Digest, KeyId: w.KeyId, Parent: w.Parent, Attachments: w.Attachments}

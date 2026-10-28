@@ -1,12 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-10-09
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to accepted
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-10-27
 ---
-
-> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
 
 # ADR-0302: A built-in moderator — loop signals and an escalation ladder
 
@@ -223,10 +221,27 @@ event with the signal that caused it.
 
 ## Status
 
-Proposed — awaiting review by the code owner.
+Accepted 2026-10-27. M1–M3 are built and the verification plan's default
+lane runs: the engine's signals and ladder, the service against the model
+service and the dispatcher on the in-process bus, the action event, and a
+rule that lapses. The plan's gap stands: the defaults are untested against
+real chats, and a stop reaches a real task through the dispatcher's tests,
+not end to end. SD6 stays deferred.
 
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers (Tier 1 in-place / Tier 2 dated `## Updates` entry / Tier 3 new superseding ADR).
+
+## Updates
+
+### 2026-10-27 — the context signal reads the shared token meter
+
+[ADR-0310](./0310-harness-profile-and-registry-composition-declared-per-seam.md)
+§SD5 made one estimate of a request's tokens, `tokenmeter`, which the
+chat's context bar, ration's admission estimate and this moderator's
+`context` signal read, so the three agree on one number for one history;
+each keeps its own threshold. The note lived in that package's doc while
+this record was proposed. Thresholds from the harness profile remain ahead
+(SD6).
 
 ## References
 

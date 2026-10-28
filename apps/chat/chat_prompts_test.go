@@ -34,10 +34,10 @@ func TestTheChatPromptBookParses(t *testing.T) {
 // The system prompt is the book's sections in declared order, joined by a
 // blank line, each only for the conversations that carry it.
 func TestTheSystemPromptIsTheBooksSections(t *testing.T) {
-	assert.Equal(t, coordinatorPrompt, systemPromptOf(true, false, false))
+	assert.Equal(t, coordinatorPrompt+"\n\n"+promptText("citations"), systemPromptOf(true, false, false), "with Apps on, the citations section follows the coordinator's")
 	assert.Equal(t, promptText("questions"), systemPrompt(false, true))
 	all := systemPromptOf(true, true, true)
-	assert.Equal(t, coordinatorPrompt+"\n\n"+promptText("questions")+"\n\n"+promptText("artefact"), all)
+	assert.Equal(t, coordinatorPrompt+"\n\n"+promptText("citations")+"\n\n"+promptText("questions")+"\n\n"+promptText("artefact"), all)
 	assert.True(t, strings.HasPrefix(lastRoundNote, "You have used every round"))
 	assert.True(t, strings.HasPrefix(unattendedNote, "The host runs unattended"))
 }

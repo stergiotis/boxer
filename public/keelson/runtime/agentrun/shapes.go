@@ -148,6 +148,24 @@ type CopyRecord struct {
 	Bytes     uint32 `json:"bytes"`
 }
 
+// Verdict is a verdict entry's record (ledger; ADR-0340 §SD4):
+// the assertion's form and outcome, the keys of the calls it rests on, the
+// result it was checked against, the digests of the assertion's statement
+// and of the statement that produced the result, the endpoint the check
+// ran on as the grant names it, and the reason when the check did not
+// hold or did not run. The assertion itself is the entry's arguments and
+// the observed value its body: content, held by the vault.
+type Verdict struct {
+	Form     string   `json:"form"`
+	Outcome  string   `json:"outcome"`
+	RestsOn  []string `json:"rests_on,omitempty"`
+	Result   uint64   `json:"result,omitempty"`
+	Digest   string   `json:"statement_digest,omitempty"`
+	Source   string   `json:"source_digest,omitempty"`
+	Endpoint string   `json:"endpoint,omitempty"`
+	Reason   string   `json:"reason,omitempty"`
+}
+
 // Attachment is one image a message carries: its media type and the
 // digest the artefact store keeps the bytes under, so the journal holds
 // no pixels (ledger: a reference, not content).
@@ -187,6 +205,8 @@ func (inst Entry) RecordBody() string {
 		v = inst.Answer
 	case inst.Copy != nil:
 		v = inst.Copy
+	case inst.Verdict != nil:
+		v = inst.Verdict
 	case inst.Kind == KindIntent && inst.Arguments != "":
 		return inst.Arguments
 	case inst.Kind == KindOutcome && inst.Reply != nil && inst.Body == "":
