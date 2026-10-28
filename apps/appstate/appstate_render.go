@@ -36,7 +36,7 @@ func (inst *App) render() {
 func (inst *App) renderStatus(snap snapshot, apps []appSummary) {
 	for range c.HorizontalTop().KeepIter() {
 		if c.Button(inst.ids.PrepareStr("refresh"), c.Atoms().Text("Refresh").Keep()).SendResp().HasPrimaryClicked() {
-			inst.markDirty()
+			inst.refreshGesture()
 		}
 		switch {
 		case !snap.reads && snap.lastError != "":
@@ -99,8 +99,8 @@ func (inst *App) renderApps(apps []appSummary) {
 				for range c.HoverText(s.appId).KeepIter() {
 					clicked = c.SelectableLabel(inst.ids.PrepareStr("name"), inst.selected == s.appId, shortApp(s.appId)).SendResp().HasPrimaryClicked()
 				}
-				if clicked {
-					inst.selected = s.appId
+				if clicked && inst.selected != s.appId {
+					inst.selectAppGesture(s.appId)
 				}
 				mono(fmt.Sprint(s.entries))
 				mono(humanfmt.Bytes(uint64(s.bytes)))
