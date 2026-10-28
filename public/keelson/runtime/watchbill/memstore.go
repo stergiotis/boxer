@@ -60,6 +60,11 @@ func (inst *MemStore) Queue(_ context.Context, kinds []string, queues []string, 
 		if len(queues) > 0 && !slices.Contains(queues, j.Queue) {
 			continue
 		}
+		if j.Queue == watchbillstore.QueueLane {
+			// The lane is taken by a claim that names the id, never by
+			// a poll (ADR-0344 §SD3).
+			continue
+		}
 		due = append(due, j)
 	}
 	sort.SliceStable(due, func(a, b int) bool {

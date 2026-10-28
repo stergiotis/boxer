@@ -125,6 +125,17 @@ only the queues you name, or every queue when you name none.
 ./boxer.sh watchbill run --queue bulk --max-workers 4
 ```
 
+With `--job <id>` the same verb claims that one job for this run, runs it,
+and exits — the body of the job child ADR-0344 describes, and the only way
+a row on the reserved `agent-lane` queue runs. No worker's poll reads that
+queue; a host with `KEELSON_WATCHBILL_ISOLATE_AGENT_JOBS=true` routes every
+attested agent-caused enqueue there. A lost claim exits at once, cancels
+are honoured at the poll interval while the job runs.
+
+```sh
+./boxer.sh watchbill run --job <id>
+```
+
 ## 4. Watch it
 
 - **Manage** — the Watchbill window (`apps/watchbill`): the queue across

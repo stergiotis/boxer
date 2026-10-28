@@ -316,3 +316,28 @@ func TestClientEnqueueWithDelegationIsAttested(t *testing.T) {
 	assert.False(t, row.AgentCaused())
 	close(f.release)
 }
+
+// With the lane on, an attested agent-caused enqueue lands on the reserved
+// lane whatever queue it asked for, a plain enqueue keeps its queue, and a
+// request may not name the lane itself (ADR-0344 §SD3).
+func TestLaneRoutingAtTheEnqueueDoor(t *testing.T) {
+	f := newServiceFixture(t)
+	f.w.cfg.IsolateAgentJobs = true
+	f.w.SetDelegation(&attester{task: "task-7", epoch: 2, call: "call-3", sender: "apps/consumer"})
+	obo := &app.OnBehalfOf{Task: "task-7", Epoch: 2, Call: "call-3"}
+
+	agent, err := f.client.Enqueue(Request{Kind: "svc.kind", Subject: "agent", Queue: "bulk", OnBehalfOf: obo})
+	require.NoError(t, err)
+	assert.Equal(t, watchbillstore.QueueLane, agent.Queue)
+	plain, err := f.client.Enqueue(Request{Kind: "svc.kind", Subject: "plain", Queue: "bulk"})
+	require.NoError(t, err)
+	assert.Equal(t, "bulk", plain.Queue)
+	_, err = f.client.Enqueue(Request{Kind: "svc.kind", Subject: "parked", Queue: watchbillstore.QueueLane})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "reserved lane")
+
+	// The worker's own poll runs the plain job and leaves the lane row.
+	f.eventually(t, plain.ID, watchbillstore.StateRunning)
+	assert.Equal(t, watchbillstore.StateQueued, f.state(t, agent.ID))
+	close(f.release)
+}

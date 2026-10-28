@@ -234,17 +234,25 @@ before them is migrated by appending columns:
 
 ### SD3 — The lane: a reserved queue only a claim by id drains
 
-A job the enqueue service records with a delegation lands in a reserved
-queue when the lane is on, and the worker's poll never selects that queue
-in any process — a host with the feature off included — so no worker runs
-an agent-caused job in-process by accident. The reserved queue is
-claimable only through `Claim(id)`. A person-caused job keeps its
-requested queue and runs in the host as today.
+A job the enqueue service records with a delegation lands in the reserved
+queue `watchbillstore.QueueLane` (`agent-lane`) when the lane is on, and
+the worker's poll never selects that queue in any process — a host with
+the feature off included, a worker that names the lane among its queues
+included — so no worker runs an agent-caused job in-process by accident.
+The exclusion sits in the two queue reads themselves (the SQL and the
+memory store), not in a worker's configuration. The reserved queue is
+claimable only through `Claim(id)`: `Worker.RunJob(ctx, id)` is that
+claim, followed by the run on the calling process, and `watchbill run
+--job <id>` is its verb. A request may not name the lane as its queue; a
+job parked where no poll looks is refused at the door. A person-caused job
+keeps its requested queue and runs in the host as today.
 
-The lane is on when the host is configured to isolate agent-caused jobs;
-off, the enqueue service records the delegation and routes nothing, and
-the job runs in the host under the `Agentic` frame. The frame does not
-depend on the lane.
+The lane is on when `KEELSON_WATCHBILL_ISOLATE_AGENT_JOBS` is true on the
+host (`Config.IsolateAgentJobs`); off, the enqueue service records the
+delegation and routes nothing, and the job runs in the host under the
+`Agentic` frame. The frame does not depend on the lane. Until the
+coordinator of §SD4 lands, a worker with the lane on says so at start, and
+a lane row runs when an operator starts `watchbill run --job <id>` for it.
 
 ### SD4 — One child per job, from the running executable
 
@@ -305,7 +313,8 @@ baseline to subtract.
 | `boxer.watchbill` job table | added three sections, last | DDL golden, job store regenerated; the migration recipe for an existing table |
 | hostboot | the worker gets the dispatcher as attester | none |
 | CLI `watchbill run` | gains `--job <id>` (SD4, M1) | the how-to |
-| Env-var registry | the lane's switch and the pool's bound (SD3, SD4, M2) | `doc/env-vars.md` |
+| Env-var registry | added: `KEELSON_WATCHBILL_ISOLATE_AGENT_JOBS` (SD3, M1); the pool's bound follows with M2 | `doc/env-vars.md` |
+| Exported Go API under `public/` (M1) | added: `watchbillstore.QueueLane`, `watchbill.Worker.RunJob`, `watchbill.Config.IsolateAgentJobs`, `watchbill.IsolateAgentJobs` | `QueueSQL` and `MemStore.Queue` exclude the lane |
 
 ## Alternatives
 
@@ -382,8 +391,10 @@ baseline to subtract.
   `entrypoint` package; the three sites call through it; the wire, the
   request, the row, the attestation, the hostboot wiring; tests; the
   migration recipe.
-- **M1 — Claim by id.** `watchbill run --job <id>`; the reserved queue the
-  poll never selects; the enqueue service's routing under the lane switch.
+- **M1 — Claim by id** (built): `Worker.RunJob` and `watchbill run --job
+  <id>`; the reserved queue the two queue reads never select; the enqueue
+  service's routing under `KEELSON_WATCHBILL_ISOLATE_AGENT_JOBS`, and its
+  refusal of a request that names the lane.
 - **M2 — The coordinator.** `procpool` spawner over the `extbin.Local`
   program; environment, process group, pipes to the parent's log; the
   host-side task and the changed announcement; cancel and the kill grace.
@@ -393,7 +404,7 @@ baseline to subtract.
 
 ## Status
 
-Proposed — awaiting review by the code owner. M0 built alongside the proposal.
+Proposed — awaiting review by the code owner. M0 and M1 built alongside the proposal.
 
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers (Tier 1 in-place / Tier 2 dated `## Updates` entry / Tier 3 new superseding ADR).

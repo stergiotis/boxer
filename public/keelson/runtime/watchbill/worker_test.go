@@ -534,3 +534,51 @@ func TestJobsRunUnderTheEntryFrameTheirDelegationEarns(t *testing.T) {
 	assert.Equal(t, "call-9", row.Call)
 	assert.False(t, f.job(t, human).AgentCaused())
 }
+
+// A row on the reserved lane is invisible to the poll, even to a worker
+// that names the lane among its queues, and is taken only by RunJob, which
+// claims it by id and runs it under the frame its delegation earns; a
+// claim RunJob loses runs nothing (ADR-0344 §SD3, §SD4).
+func TestTheLaneIsDrainedOnlyByAClaimById(t *testing.T) {
+	f := newFixture(t, "run-a", func(c *Config) { c.Queues = []string{watchbillstore.QueueLane, "default"} })
+	lane := f.enqueue(t, Request{Subject: "lane", Queue: watchbillstore.QueueLane, OnBehalfOf: &app.OnBehalfOf{Task: "task-1", Epoch: 1, Call: "c"}})
+	plain := f.enqueue(t, Request{Subject: "plain"})
+	f.tick(t)
+	assert.Equal(t, []string{plain}, f.ran, "the poll took the default queue and left the lane")
+	assert.Equal(t, watchbillstore.StateQueued, f.job(t, lane).State)
+
+	child := newFixture(t, "run-child", func(c *Config) { c.Poll = 10 * time.Millisecond; c.Store = f.store })
+	ran, err := child.w.RunJob(context.Background(), lane)
+	require.NoError(t, err)
+	assert.True(t, ran)
+	assert.Equal(t, []string{lane}, child.ran)
+	assert.Equal(t, entrypoint.KindAgentic, child.entered[lane])
+	row := f.job(t, lane)
+	assert.Equal(t, watchbillstore.StateSucceeded, row.State)
+	assert.Equal(t, "run-child", row.WorkerRun)
+
+	again, err := child.w.RunJob(context.Background(), lane)
+	require.NoError(t, err)
+	assert.False(t, again, "a settled row is not claimable")
+	_, err = child.w.RunJob(context.Background(), "no-such-job")
+	require.NoError(t, err)
+}
+
+// RunJob honours a cancel written while the job runs, at its poll.
+func TestRunJobHonoursACancel(t *testing.T) {
+	f := newFixture(t, "run-child", func(c *Config) { c.Poll = 10 * time.Millisecond })
+	f.blocking.Store(true)
+	id := f.enqueue(t, Request{Subject: "long"})
+	done := make(chan bool, 1)
+	go func() {
+		ran, err := f.w.RunJob(context.Background(), id)
+		assert.NoError(t, err)
+		done <- ran
+	}()
+	require.Eventually(t, func() bool { return f.running.Load() == 1 }, 2*time.Second, time.Millisecond)
+	ok, err := RequestCancel(context.Background(), f.store, id, "test", "enough", f.clk.now())
+	require.NoError(t, err)
+	require.True(t, ok)
+	assert.True(t, <-done)
+	assert.Equal(t, watchbillstore.StateCancelled, f.job(t, id).State)
+}

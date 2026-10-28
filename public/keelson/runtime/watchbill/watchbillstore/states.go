@@ -41,6 +41,12 @@ const (
 	BackoffExponential = "exponential"
 )
 
+// QueueLane is the reserved queue an agent-caused job is routed into when
+// the host isolates such jobs (ADR-0344 §SD3). No worker's poll selects
+// it, in any process: a row on it is taken only by a claim that names its
+// id — `watchbill run --job <id>`, the child the lane's coordinator starts.
+const QueueLane = "agent-lane"
+
 // FinalStates are the states a job leaves the queue in; rows in them are
 // what the sweep expires.
 var FinalStates = []string{StateSucceeded, StateDiscarded, StateCancelled, StateAbandoned}

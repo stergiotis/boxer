@@ -1354,7 +1354,8 @@ func (rt *Runtime) bootWatchbill(ctx context.Context) {
 	store := watchbill.NewSqlStore(rt.PersistExec, layout)
 	cfg := watchbill.Config{
 		Store: store, RunId: rt.RunInfo.RunId, Log: logger,
-		Bus: rt.Bus.NewClient(watchbill.WorkerAppId, watchbill.WorkerCaps()),
+		Bus:              rt.Bus.NewClient(watchbill.WorkerAppId, watchbill.WorkerCaps()),
+		IsolateAgentJobs: watchbill.IsolateAgentJobs.Get(),
 	}
 	if l := watchbill.NewRunEventLiveness(rt.Facts); l != nil {
 		cfg.Liveness = l

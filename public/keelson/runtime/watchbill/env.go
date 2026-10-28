@@ -26,3 +26,12 @@ var Keep = env.NewDuration(env.Spec{
 	Category:    env.CategorySystem,
 	Default:     "168h",
 })
+
+// IsolateAgentJobs routes an agent-caused enqueue into the reserved lane
+// (ADR-0344 §SD3), where only a claim by id — a job child — takes it.
+var IsolateAgentJobs = env.NewBool(env.Spec{
+	Name:        "KEELSON_WATCHBILL_ISOLATE_AGENT_JOBS",
+	Description: "watchbill worker: route a job an agent's call enqueued into the reserved lane that only `watchbill run --job <id>` drains, so it runs in a process of its own (ADR-0344)",
+	Category:    env.CategorySystem,
+	Default:     "false",
+})
