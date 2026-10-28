@@ -24,7 +24,13 @@ import (
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/layeredgraph"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/layeredgraph/goccyengine/internal/gvtmpdir"
 )
+
+// go-graphviz has initialized by now, with its cache in the per-user directory.
+func init() {
+	gvtmpdir.Restore()
+}
 
 // Engine lays out graphs with Graphviz. It owns one embedded-Graphviz (wazero)
 // instance; instantiating that runtime is the costly part, so reuse an Engine
