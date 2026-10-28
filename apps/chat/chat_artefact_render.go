@@ -415,7 +415,7 @@ func (inst *App) openArtefactInMdedit(text string) {
 	}
 	l := launchcfg.MdeditLaunch{Text: text, Name: name}
 	// Exported as it stands: mdedit gets the snapshot too, so it can say
-	// where the document lives (ADR-0339 §SD5, proposed).
+	// where the document lives (ADR-0342 §SD5, proposed).
 	if w := inst.coord.journalNow(); w != nil {
 		n, _ := inst.conv.art.head()
 		if rec, ok := exportOf(w.Entries(), n, text); ok {

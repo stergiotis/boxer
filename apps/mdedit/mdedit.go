@@ -825,7 +825,7 @@ func (inst *App) renderBar() {
 				Tooltip(tip).Send()
 		}
 		// A snapshot document can be mounted outside the app; the window
-		// copies the command and runs nothing (ADR-0339 §SD5, proposed).
+		// copies the command and runs nothing (ADR-0342 §SD5, proposed).
 		if inst.snapRef != nil {
 			clicked := false
 			for range c.HoverText(tipMountCommand).KeepIter() {
