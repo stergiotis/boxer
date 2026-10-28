@@ -177,6 +177,7 @@ scene:
   size: 1600x1000
   env: {BOXER_PLAY_FOCUS_TABLE: "1", BOXER_PLAY_AUTORUN: "1"}
   requires: [clickhouse, "table:default.some_table"]   # unmet → skipped, not failed
+  fallbackFont: Noto Naskh Arabic   # optional: replaces the CJK fallback face; not installed → skipped
 ---
 
 # What the scene shows
