@@ -23,6 +23,7 @@ the linked document wins.
 | Judge those premises against a quality model — what they buy, what they cost, dated | [doc/explanation/iso25010-assessment.md](./doc/explanation/iso25010-assessment.md) |
 | The same judgement with the figures removed, written to stay true as the tree moves | [doc/explanation/iso25010-temperament.md](./doc/explanation/iso25010-temperament.md) |
 | See how the pieces fit — operation modes, data architecture | [doc/ARCHITECTURE.md](./doc/ARCHITECTURE.md) |
+| Understand the agentic layer — the chat harness, grants, the journal, labels, attention | [doc/explanation/agentic-layer.md](./doc/explanation/agentic-layer.md) |
 | Write Go in the house style | [CODINGSTANDARDS.md](./CODINGSTANDARDS.md) |
 | Understand the toolchain (CI, lint, governance, supply-chain) | [doc/ENGINEERING_PRACTICES.md](./doc/ENGINEERING_PRACTICES.md) |
 | Write or edit a doc / ADR | [doc/DOCUMENTATION_STANDARD.md](./doc/DOCUMENTATION_STANDARD.md) |
