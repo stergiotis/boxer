@@ -128,7 +128,7 @@ func (inst *App) maybeTitle() {
 		// (ADR-0310 §SD7).
 		req.Profile, req.Route = coord.profileRef()
 	}
-	inst.titleJob.Start(nil, bgjob.Spec{Kind: "chat-title", Title: "title the conversation"},
+	inst.titleJob.Start(inst.tasks, bgjob.Spec{Kind: "chat-title", Title: "title the conversation"},
 		func(ctx context.Context) (out *titled, err error) {
 			// Journaled before it leaves (ADR-0308 §SD2): the intent names
 			// the call, the outcome its answer; neither is a message, and

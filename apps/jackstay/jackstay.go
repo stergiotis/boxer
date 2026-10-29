@@ -43,6 +43,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/bgjob"
 	"github.com/stergiotis/boxer/public/keelson/runtime/fsbroker"
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
+	"github.com/stergiotis/boxer/public/keelson/runtime/task"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/breadcrumbs"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/fsmview"
@@ -238,6 +239,9 @@ type App struct {
 	bus    app.BusI
 	// files is the window's data area, where plans and journals live.
 	files *fsbroker.AppDataClient
+	// tasks spawns every job below as a keelson task owned by this window,
+	// so keelson('tasks') lists it and closing the window cancels it.
+	tasks task.TaskApiI
 
 	step stepE
 	// The breadcrumb's model, refilled every frame, and its state, onto
@@ -377,6 +381,7 @@ func (inst *App) Mount(ctx app.MountContextI) (err error) {
 	inst.store = ctx.Storage()
 	inst.bus = ctx.Bus()
 	inst.files = fsbroker.NewAppDataClient(inst.bus)
+	inst.tasks = task.ForApp(ctx)
 	inst.loadRecent()
 	if name := PlanEnv.Get(); name != "" {
 		if !fsbroker.ValidAppDataName(name) {
@@ -740,7 +745,7 @@ var errPackPlan = errors.New("this plan's source is a pack; run it with `boxer j
 func (inst *App) startOpen(name string, seed bool) {
 	files := inst.files
 	inst.fileOp = fileOpOpen
-	inst.fileJob.Start(nil, bgjob.Spec{Kind: "jackstay.open", Title: "open the plan"},
+	inst.fileJob.Start(inst.tasks, bgjob.Spec{Kind: "jackstay.open", Title: "open the plan"},
 		func(ctx context.Context) (*fileResult, error) {
 			p, err := jk.LoadPlanIn(files, name)
 			r, err := openOutcome(name, seed, p, err)
@@ -778,7 +783,7 @@ func openOutcome(name string, seed bool, p jk.Plan, err error) (r *fileResult, r
 // window holds it.
 func (inst *App) startReload() {
 	files, name, epoch := inst.files, inst.planName, inst.planEpoch
-	inst.reloadJob.Start(nil, bgjob.Spec{Kind: "jackstay.reload", Title: "re-read the plan"},
+	inst.reloadJob.Start(inst.tasks, bgjob.Spec{Kind: "jackstay.reload", Title: "re-read the plan"},
 		func(ctx context.Context) (*fileResult, error) {
 			p, err := jk.LoadPlanIn(files, name)
 			if err != nil {
@@ -793,7 +798,7 @@ func (inst *App) startReload() {
 func (inst *App) startImport() {
 	bus, files := inst.bus, inst.files
 	inst.fileOp = fileOpImport
-	inst.fileJob.Start(nil, bgjob.Spec{Kind: "jackstay.import", Title: "import a plan"},
+	inst.fileJob.Start(inst.tasks, bgjob.Spec{Kind: "jackstay.import", Title: "import a plan"},
 		func(ctx context.Context) (*fileResult, error) {
 			reply, err := bus.RequestWithTimeout(fsbroker.SubjectDialogRead, nil, fsbroker.DialogTimeout)
 			if err != nil {
@@ -868,7 +873,7 @@ func (inst *App) startExport() {
 	}
 	bus := inst.bus
 	inst.fileOp = fileOpExport
-	inst.fileJob.Start(nil, bgjob.Spec{Kind: "jackstay.export", Title: "export the plan"},
+	inst.fileJob.Start(inst.tasks, bgjob.Spec{Kind: "jackstay.export", Title: "export the plan"},
 		func(ctx context.Context) (*fileResult, error) {
 			req, err := fsbroker.MarshalDialogRequest(fsbroker.DialogRequest{SuggestedName: suggested})
 			if err != nil {
@@ -1194,7 +1199,7 @@ func (inst *App) startDiscover() {
 		return
 	}
 	src, dst := clients(srcEp, dstEp, false)
-	inst.discoverJob.StartReporting(nil, bgjob.Spec{Kind: "jackstay.discover", Title: "discover servers"},
+	inst.discoverJob.StartReporting(inst.tasks, bgjob.Spec{Kind: "jackstay.discover", Title: "discover servers"},
 		func(ctx context.Context, report bgjob.Reporter) (*discovered, error) {
 			report(0, 0, "reading system tables on both servers")
 			s, d, err := jk.DiscoverBoth(ctx, jk.ServerSource(src), dst)
@@ -1272,7 +1277,7 @@ func (inst *App) startStructure() {
 	name, fresh := structurePlanName(inst.plan != nil, inst.planServes(srcEp, dstEp), inst.planName)
 	src, dst := clients(srcEp, dstEp, false)
 	inst.applyArmed = false
-	inst.structureJob.StartReporting(nil, bgjob.Spec{Kind: "jackstay.structure", Title: "plan the structure"},
+	inst.structureJob.StartReporting(inst.tasks, bgjob.Spec{Kind: "jackstay.structure", Title: "plan the structure"},
 		func(ctx context.Context, report bgjob.Reporter) (*stepResult, error) {
 			report(0, 0, "judging every selected table")
 			p, err := jk.PlanStructure(ctx, jk.ServerSource(src), dst, srcEp, dstEp, sel, old, time.Now())
@@ -1309,7 +1314,7 @@ func (inst *App) startApply() {
 	dstCfg := jk.TargetClientConfig(p.Target)
 	files, name, epoch := inst.files, inst.planName, inst.planEpoch
 	inst.applyArmed = false
-	inst.structureJob.StartReporting(nil, bgjob.Spec{Kind: "jackstay.apply", Title: "apply the DDL"},
+	inst.structureJob.StartReporting(inst.tasks, bgjob.Spec{Kind: "jackstay.apply", Title: "apply the DDL"},
 		func(ctx context.Context, report bgjob.Reporter) (*stepResult, error) {
 			report(0, 0, "rechecking, then running the DDL on the target")
 			guards, err := jk.DDLGuardSettings(ctx, dst)
@@ -1341,7 +1346,7 @@ func (inst *App) startDiff() {
 	scanS, scanD := clients(p.Source, p.Target, true)
 	final := inst.final
 	files, name, epoch := inst.files, inst.planName, inst.planEpoch
-	inst.diffJob.StartReporting(nil, bgjob.Spec{Kind: "jackstay.diff", Title: "compare content"},
+	inst.diffJob.StartReporting(inst.tasks, bgjob.Spec{Kind: "jackstay.diff", Title: "compare content"},
 		func(ctx context.Context, report bgjob.Reporter) (*stepResult, error) {
 			report(0, 0, "rechecking the plan")
 			opts := jk.DiffOptionsAll{Final: final, Chunking: jk.DefaultChunkingOptions(), Diff: jk.DefaultDiffOptions(),
@@ -1441,7 +1446,7 @@ func (inst *App) startPreview() {
 	}
 	inst.lastError = ""
 	src, dst := clients(p.Source, p.Target, false)
-	inst.previewJob.StartReporting(nil, bgjob.Spec{Kind: "jackstay.preflight", Title: "pre-flight", Tag: inst.settingsKey()},
+	inst.previewJob.StartReporting(inst.tasks, bgjob.Spec{Kind: "jackstay.preflight", Title: "pre-flight", Tag: inst.settingsKey()},
 		func(ctx context.Context, report bgjob.Reporter) (*preflightResult, error) {
 			report(0, 0, "rechecking the plan, reading the target's disks")
 			prep, err := jk.PrepareSyncStep(ctx, jk.ServerSource(src), dst, &p, req, time.Now())
@@ -1475,7 +1480,7 @@ func (inst *App) startSync() {
 	inst.resetSyncSession()
 	inst.syncArmed = false
 	inst.syncStarted, inst.syncEpoch = time.Now(), epoch
-	started := inst.syncJob.StartReporting(nil, bgjob.Spec{Kind: "jackstay.sync", Title: "sync"},
+	started := inst.syncJob.StartReporting(inst.tasks, bgjob.Spec{Kind: "jackstay.sync", Title: "sync"},
 		func(ctx context.Context, report bgjob.Reporter) (*stepResult, error) {
 			report(0, 0, "rechecking the plan")
 			prep, err := jk.PrepareSyncStep(ctx, jk.ServerSource(scanS), scanD, &p, req, time.Now())

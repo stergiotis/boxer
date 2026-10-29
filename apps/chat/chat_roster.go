@@ -193,6 +193,7 @@ const rosterRefresh = 3 * time.Second
 func (inst *App) listRoster() {
 	kq, storage, store, bus := inst.kq, inst.storage, inst.journalStore(), inst.bus
 	inst.rosterAt = time.Now()
+	// Not a task: it re-runs every rosterRefresh (see App.tasks).
 	inst.rosterJob.Start(nil, bgjob.Spec{Kind: "chat-roster", Title: "the roster"}, func(ctx context.Context) (out *rosterExtra, err error) {
 		var runs []agentrun.Run
 		if store != nil {

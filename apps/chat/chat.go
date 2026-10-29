@@ -153,8 +153,10 @@ type App struct {
 	// confinedTier is the tier the host's declaration maps confined
 	// content to (cell.OfMount), handed to every coordinator.
 	confinedTier agentrun.TierE
-	// tasks spawns the turn as a keelson task, which the task monitor shows
-	// and can cancel; nil without a host.
+	// tasks spawns the turn and the one-shot jobs as keelson tasks, which
+	// the task monitor shows and can cancel; nil without a host. The jobs
+	// that re-run on a timer (roster, agent surface, authority) are not
+	// tasks: each task writes audit rows to the facts.
 	tasks task.TaskApiI
 	// later holds the actions clicked while the transcript draws, run
 	// once it is drawn.
@@ -259,7 +261,7 @@ func (inst *App) Mount(ctx app.MountContextI) (err error) {
 	inst.journals = agentrun.NewClient(bus)
 	inst.anchors = headstore.NewClient(bus)
 	inst.coord = inst.newCoordinator(inst.conv.id)
-	inst.describe.Start(nil, bgjob.Spec{Kind: "chat-llm-describe", Title: "model"},
+	inst.describe.Start(inst.tasks, bgjob.Spec{Kind: "chat-llm-describe", Title: "model"},
 		func(ctx context.Context) (d *llm.Description, err error) {
 			got, err := cli.Describe(ctx)
 			if err != nil {

@@ -256,6 +256,7 @@ func (inst *App) syncAuthority() {
 		return
 	}
 	cli := inst.agentCli
+	// Not a task: during a turn it re-asks every second (see App.tasks).
 	if inst.authJob.Start(nil, bgjob.Spec{Kind: "chat-authority", Title: "what the model may do"},
 		func(ctx context.Context) (a *agent.Authority, err error) {
 			got, err := cli.Authority(ctx, ask.handle, &ask.ceiling)

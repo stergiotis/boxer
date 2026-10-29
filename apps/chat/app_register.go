@@ -60,8 +60,9 @@ var manifest = app.Manifest{
 		attention.ClientCaps("chat: put the model's questions in the person's queue"),
 		// Chain heads to the anchor store at each turn's end (ADR-0314).
 		headstore.ClientCaps("chat: anchor the journal's chain heads"),
-		// The turn is a keelson task (ADR-0322, proposed): the task monitor
-		// shows and cancels it, and the window's drain waits for it.
+		// The turn and the one-shot jobs are keelson tasks (ADR-0322,
+		// proposed): the task monitor shows and cancels them, and the
+		// window's drain waits for them.
 		task.ProducerCaps(),
 		// The desktop as data (ADR-0276 §SD2): every window's state and the
 		// work area, for the coordinator's query_windows.
