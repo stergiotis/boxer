@@ -13,6 +13,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/queryengine"
 	"github.com/stergiotis/boxer/public/keelson/runtime/runstream"
+	"github.com/stergiotis/boxer/public/keelson/runtime/task"
 )
 
 type HistoryEntry struct {
@@ -228,7 +229,6 @@ func (inst *QueryStore) Execute(sql string, signals map[string]string, sourceBuf
 	inst.cancelMu.Lock()
 	inst.cancel = cancel
 	inst.cancelMu.Unlock()
-
 	// Snapshot the caller's map: it must not mutate under the async run or
 	// the history entry.
 	var sigs map[string]string
@@ -246,72 +246,80 @@ func (inst *QueryStore) Execute(sql string, signals map[string]string, sourceBuf
 			inst.cancelMu.Unlock()
 		}()
 
-		// Per-run options copy carrying the live-progress sink (ADR-0115
-		// plane A): ticks land under mu while this run is loading; the
-		// isLoading gate above means no second run can be in flight, so
-		// no generation counter is needed here.
-		opts := *inst.opts
-		opts.Agent = agent
-		opts.OnProgress = func(p runstream.Progress) {
-			inst.mu.Lock()
-			if inst.loading && !inst.closed {
-				inst.progress = p
-				inst.progressFresh = true
+		// The run is a keelson task. It ends before cancel runs, which would
+		// otherwise be announced on it as a cancel.
+		_ = task.Run(inst.client.Tasks(), ctx, task.SpawnOpts{Kind: "play.query", Title: "run the query", Cancellable: true}, func(ctx context.Context) (runErr error) {
+			// Per-run options copy carrying the live-progress sink (ADR-0115
+			// plane A): ticks land under mu while this run is loading; the
+			// isLoading gate above means no second run can be in flight, so
+			// no generation counter is needed here.
+			opts := *inst.opts
+			opts.Agent = agent
+			opts.OnProgress = func(p runstream.Progress) {
+				inst.mu.Lock()
+				if inst.loading && !inst.closed {
+					inst.progress = p
+					inst.progressFresh = true
+				}
+				inst.mu.Unlock()
 			}
+
+			// One resolution per run (play_dispatch.go). Taken on this goroutine,
+			// not on the render thread, because it runs the client-side rewrites.
+			dec := inst.client.dispatchFor(agent, sql, "")
+			sec, _ := classifySecurity(sql, inst.client.ExprSubstituted)
+			inst.mu.Lock()
+			inst.runConfined = dec.sensitivity == queryengine.SensitivityConfined
+			inst.runDispatch = dec.describe()
+			inst.runSecurity = sec
 			inst.mu.Unlock()
-		}
 
-		// One resolution per run (play_dispatch.go). Taken on this goroutine,
-		// not on the render thread, because it runs the client-side rewrites.
-		dec := inst.client.dispatchFor(agent, sql, "")
-		sec, _ := classifySecurity(sql, inst.client.ExprSubstituted)
-		inst.mu.Lock()
-		inst.runConfined = dec.sensitivity == queryengine.SensitivityConfined
-		inst.runDispatch = dec.describe()
-		inst.runSecurity = sec
-		inst.mu.Unlock()
+			start := time.Now()
+			rdr, rs, summary, err := inst.client.ExecuteArrowStream(ctx, sql, inst.alloc, &opts, sigs, dec)
+			if err != nil {
+				runErr = err
+				inst.finish(sql, sigs, start, nil, nil, 0, summary, err, runstream.Failed(err))
+				return
+			}
+			defer func() {
+				rdr.Release()
+				_ = rs.Close()
+			}()
 
-		start := time.Now()
-		rdr, rs, summary, err := inst.client.ExecuteArrowStream(ctx, sql, inst.alloc, &opts, sigs, dec)
-		if err != nil {
-			inst.finish(sql, sigs, start, nil, nil, 0, summary, err, runstream.Failed(err))
+			// Consume all batches and concatenate into a single record batch so
+			// the renderer sees one continuous column per field. The drain runs
+			// through the runstream collector (play_runstream.go), so a stream
+			// that dies part-way is a failed terminal rather than a short
+			// result nobody flagged, and a run capped against its own declared
+			// row limit comes back marked.
+			batches, term, e := drainRun(rdr, rs)
+			if e != nil {
+				runErr = e
+				inst.finish(sql, sigs, start, nil, nil, 0, summary, e, runstream.Failed(e))
+				return
+			}
+
+			rec, schema, cErr := concatBatches(batches, inst.alloc)
+			for _, b := range batches {
+				b.Release()
+			}
+			if cErr != nil {
+				runErr = cErr
+				inst.finish(sql, sigs, start, nil, nil, 0, summary, cErr, runstream.Failed(cErr))
+				return
+			}
+			if schema == nil {
+				// Zero batches: keep the stream schema so an empty result still
+				// carries its column shape (review finding).
+				schema = rdr.Schema()
+			}
+			var rows int64
+			if rec != nil {
+				rows = rec.NumRows()
+			}
+			inst.finish(sql, sigs, start, rec, schema, rows, summary, nil, term)
 			return
-		}
-		defer func() {
-			rdr.Release()
-			_ = rs.Close()
-		}()
-
-		// Consume all batches and concatenate into a single record batch so
-		// the renderer sees one continuous column per field. The drain runs
-		// through the runstream collector (play_runstream.go), so a stream
-		// that dies part-way is a failed terminal rather than a short
-		// result nobody flagged, and a run capped against its own declared
-		// row limit comes back marked.
-		batches, term, e := drainRun(rdr, rs)
-		if e != nil {
-			inst.finish(sql, sigs, start, nil, nil, 0, summary, e, runstream.Failed(e))
-			return
-		}
-
-		rec, schema, cErr := concatBatches(batches, inst.alloc)
-		for _, b := range batches {
-			b.Release()
-		}
-		if cErr != nil {
-			inst.finish(sql, sigs, start, nil, nil, 0, summary, cErr, runstream.Failed(cErr))
-			return
-		}
-		if schema == nil {
-			// Zero batches: keep the stream schema so an empty result still
-			// carries its column shape (review finding).
-			schema = rdr.Schema()
-		}
-		var rows int64
-		if rec != nil {
-			rows = rec.NumRows()
-		}
-		inst.finish(sql, sigs, start, rec, schema, rows, summary, nil, term)
+		})
 	}()
 }
 

@@ -29,6 +29,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/queryengine/chserver"
 	"github.com/stergiotis/boxer/public/keelson/runtime/runid"
 	"github.com/stergiotis/boxer/public/keelson/runtime/runstream"
+	"github.com/stergiotis/boxer/public/keelson/runtime/task"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
@@ -128,6 +129,11 @@ type Client struct {
 	// stampInstance is the window (ADR-0191 §SD4): with two windows of one
 	// app open, run + app alone cannot say which one issued a query.
 	stampInstance uint64
+	// tasks is the window's task API (task.ForApp), set once via SetTasks
+	// at Mount: the work the window starts on its own goroutines runs as
+	// keelson tasks under it. nil outside the runtime, where that work runs
+	// untracked.
+	tasks task.TaskApiI
 	// authored remembers the texts behind the authored fingerprints this
 	// client stamped (play_stamp.go), so a captured run it issued can show
 	// its authored statement; the capture itself keeps only the fp.
@@ -176,6 +182,23 @@ func (inst *Client) PassRegistry() *passreg.Registry { return inst.passes }
 // the work is the person's (ADR-0270 §SD3). The Diagnostics probe is not
 // checked against it: `EXPLAIN AST` parses and resolves nothing.
 func (inst *Client) SetAgentMark(obo *app.OnBehalfOf) { inst.agentMark.Store(obo) }
+
+// SetTasks sets the window's task API; see Client.tasks.
+func (inst *Client) SetTasks(api task.TaskApiI) {
+	inst.mu.Lock()
+	inst.tasks = api
+	inst.mu.Unlock()
+}
+
+// Tasks is the window's task API, nil when none was set or on a nil client.
+func (inst *Client) Tasks() (api task.TaskApiI) {
+	if inst == nil {
+		return nil
+	}
+	inst.mu.RLock()
+	defer inst.mu.RUnlock()
+	return inst.tasks
+}
 
 // ExecOptions carries per-lane execution settings for ExecuteArrowStream.
 // QueryID is a stable per-lane ClickHouse query_id: combined with

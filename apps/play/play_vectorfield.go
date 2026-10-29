@@ -13,6 +13,7 @@ import (
 	"github.com/apache/arrow-go/v18/arrow/array"
 	"github.com/apache/arrow-go/v18/arrow/memory"
 	"github.com/stergiotis/boxer/public/keelson/runtime/runstream"
+	"github.com/stergiotis/boxer/public/keelson/runtime/task"
 	"github.com/stergiotis/boxer/public/science/geo/vectorfield"
 	"github.com/stergiotis/boxer/public/science/geo/vectorfield/sqlfield"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
@@ -355,7 +356,11 @@ func (inst *vectorFieldGuest) Ensure(rel sqlfield.Relation, params map[string]st
 	inst.building = b
 	queryer := newVectorFieldQueryer(inst.client, params, &inst.progress)
 	go func() {
-		src, err := sqlfield.NewSource(ctx, queryer, rel, sqlfield.Options{Shape: &shape})
+		var src *sqlfield.Source
+		err := task.Run(inst.client.Tasks(), ctx, task.SpawnOpts{Kind: "play.vectorfield", Title: "describe the vector field", Cancellable: true}, func(ctx context.Context) (err error) {
+			src, err = sqlfield.NewSource(ctx, queryer, rel, sqlfield.Options{Shape: &shape})
+			return
+		})
 		b.mu.Lock()
 		b.done, b.src, b.err = true, src, err
 		b.mu.Unlock()
@@ -421,6 +426,7 @@ func (inst *vectorFieldGuest) EnsureSummary(req vectorfield.Request) {
 	ctx, cancel := context.WithCancel(context.Background())
 	job := &vectorFieldSummaryJob{key: key, cancel: cancel}
 	inst.summaryJob = job
+	// Not a task: it re-runs each time the view settles, like the lanes.
 	go func() {
 		out, err := src.Summarize(ctx, req)
 		job.mu.Lock()

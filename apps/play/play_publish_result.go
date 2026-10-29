@@ -23,6 +23,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/adhocdata"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/appops"
+	"github.com/stergiotis/boxer/public/keelson/runtime/task"
 )
 
 const opPublishResult = "publish_result"
@@ -142,15 +143,24 @@ func (inst *PlayLauncher) publishResult(call app.OperationCall, in PublishResult
 
 	out = PublishResultOutcome{Bundle: in.Bundle, Dataset: adhocdata.DatasetAlias(in.Bundle, local), Rows: rec.NumRows(),
 		Columns: int32(rec.NumCols()), Following: "list_bundles"}
-	go inst.publishBundleOff(rec, in.Bundle, local, doc, adhocdata.BundleProvenance{SourceSql: source, InputHandles: inputs}, call.OnBehalfOf)
+	var api task.TaskApiI
+	if inst.inner != nil {
+		api = inst.inner.client.Tasks()
+	}
+	go func() {
+		_ = task.RunToCompletion(api, task.SpawnOpts{Kind: "play.publish", Title: "publish " + in.Bundle}, func() error {
+			return inst.publishBundleOff(rec, in.Bundle, local, doc, adhocdata.BundleProvenance{SourceSql: source, InputHandles: inputs}, call.OnBehalfOf)
+		})
+	}()
 	return
 }
 
 // publishBundleOff encodes and publishes off the render goroutine; it owns
 // rec and releases it.
-func (inst *PlayLauncher) publishBundleOff(rec arrow.RecordBatch, bundle string, local string, doc []byte, prov adhocdata.BundleProvenance, obo *app.OnBehalfOf) {
+func (inst *PlayLauncher) publishBundleOff(rec arrow.RecordBatch, bundle string, local string, doc []byte, prov adhocdata.BundleProvenance, obo *app.OnBehalfOf) (err error) {
 	rows := rec.NumRows()
-	stream, err := adhocdata.EncodeRecord(rec)
+	var stream []byte
+	stream, err = adhocdata.EncodeRecord(rec)
 	rec.Release()
 	last := LastPublish{Bundle: bundle, Rows: rows}
 	if err == nil {
@@ -167,6 +177,7 @@ func (inst *PlayLauncher) publishBundleOff(rec arrow.RecordBatch, bundle string,
 	inst.publish.busy = false
 	inst.publish.last = last
 	inst.publish.mu.Unlock()
+	return
 }
 
 // lastPublish is the window's last publish, for list_bundles.

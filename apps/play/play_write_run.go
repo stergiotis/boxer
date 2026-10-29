@@ -19,6 +19,7 @@ import (
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
 	"github.com/stergiotis/boxer/public/keelson/runtime/queryengine"
 	"github.com/stergiotis/boxer/public/keelson/runtime/runstream"
+	"github.com/stergiotis/boxer/public/keelson/runtime/task"
 	"github.com/stergiotis/boxer/public/observability/eh"
 )
 
@@ -86,7 +87,14 @@ func (inst *PlayApp) executeWriteRun(runSQL string, sigParams map[string]string)
 	state := &inst.writeRun
 	go func() {
 		start := time.Now()
-		summary, err := client.ExecuteWrite(context.Background(), runSQL, sigParams)
+		// A task for the record, not for control: neither the monitor nor
+		// the window's close stops the write, and the window's drain waits
+		// for it (ADR-0322).
+		var summary Summary
+		err := task.RunToCompletion(client.Tasks(), task.SpawnOpts{Kind: "play.write", Title: "run the write"}, func() (err error) {
+			summary, err = client.ExecuteWrite(context.Background(), runSQL, sigParams)
+			return
+		})
 		if err != nil {
 			log.Warn().Err(err).Msg("play: write run failed")
 			state.finish("write failed: " + firstErrorLine(err))

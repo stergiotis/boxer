@@ -13,6 +13,7 @@ import (
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/memory"
 	"github.com/stergiotis/boxer/public/analytics/timeseries/adscore"
+	"github.com/stergiotis/boxer/public/keelson/runtime/task"
 	"github.com/stergiotis/boxer/public/observability/eh"
 )
 
@@ -178,7 +179,11 @@ func (inst *tsLabelsWriter) write(row tsLabelRow) {
 		if inst.confined != nil {
 			label.confined = inst.confined()
 		}
-		err := inst.doWrite(ctx, row, label)
+		// Run to completion, like the write run: a verdict the person gave
+		// is written even when the window closes meanwhile.
+		err := task.RunToCompletion(inst.client.Tasks(), task.SpawnOpts{Kind: "play.series.label", Title: "write the verdict"}, func() error {
+			return inst.doWrite(ctx, row, label)
+		})
 		inst.mu.Lock()
 		inst.writing = false
 		inst.err = err

@@ -14,6 +14,7 @@ import (
 	"github.com/stergiotis/boxer/public/analytics/graph/algo"
 	"github.com/stergiotis/boxer/public/analytics/graph/knn"
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
+	"github.com/stergiotis/boxer/public/keelson/runtime/task"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/card"
@@ -224,6 +225,9 @@ type projectorSnapshot struct {
 type Projector struct {
 	ids   *c.WidgetIdStack
 	cards *CardDriver
+	// tasks is the window's task API (Client.Tasks); each run is a keelson
+	// task under it. nil, or a nil result, runs untracked.
+	tasks func() task.TaskApiI
 
 	mu        sync.Mutex
 	forSchema *arrow.Schema
@@ -400,7 +404,17 @@ func (inst *Projector) Start(rec arrow.RecordBatch) {
 	inst.mu.Unlock()
 
 	rec.Retain()
-	go inst.run(rec, cancel, params)
+	var api task.TaskApiI
+	if inst.tasks != nil {
+		api = inst.tasks()
+	}
+	// Run to completion: the run stops on its cancel channel, which Cancel,
+	// Invalidate and the window's Close close, not on the task's context.
+	go func() {
+		_ = task.RunToCompletion(api, task.SpawnOpts{Kind: "play.projection", Title: "project the result"}, func() error {
+			return inst.run(rec, cancel, params)
+		})
+	}()
 }
 
 // Cancel signals the in-flight run to stop. The goroutine sees the closed
@@ -484,10 +498,13 @@ func (inst *Projector) Snapshot() (snap projectorSnapshot) {
 // whose dataset was Invalidated out from under it cannot clobber the new
 // tab state. The inline writes additionally guard on `!isClosed(cancel)`
 // so a user Cancel between the prior isClosed check and the write doesn't
-// clobber the new Cancelling status.
-func (inst *Projector) run(rec arrow.RecordBatch, cancel chan struct{}, params projectionParams) {
+// clobber the new Cancelling status. failure is the run's error when it
+// ended Failed and still owns the status, for its task.
+func (inst *Projector) run(rec arrow.RecordBatch, cancel chan struct{}, params projectionParams) (failure error) {
 	defer rec.Release()
 	defer inst.releaseRunLocked(cancel)
+	// Read before the release, while the run still owns the status.
+	defer func() { failure = inst.runFailure(cancel) }()
 
 	driver := inst.cards.Driver()
 	if driver == nil {
@@ -721,6 +738,7 @@ func (inst *Projector) run(rec arrow.RecordBatch, cancel chan struct{}, params p
 		inst.status = projectorStatusDone
 	}
 	inst.mu.Unlock()
+	return
 }
 
 // buildFeatureColumns extracts each EntityFeatures field into its own
@@ -800,6 +818,17 @@ func (inst *Projector) markCancelled(cancel chan struct{}) {
 	}
 	inst.status = projectorStatusCancelled
 	inst.result = nil
+}
+
+// runFailure is the run's error when it ended Failed and still owns the
+// status; nil for a run that succeeded, was cancelled or was detached.
+func (inst *Projector) runFailure(cancel chan struct{}) (err error) {
+	inst.mu.Lock()
+	defer inst.mu.Unlock()
+	if inst.cancel == cancel && inst.status == projectorStatusFailed {
+		err = inst.err
+	}
+	return
 }
 
 func (inst *Projector) releaseRunLocked(cancel chan struct{}) {

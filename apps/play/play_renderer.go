@@ -1240,6 +1240,7 @@ func NewPlayApp(client *Client, graph *queryGraph, initialSQL string, rules *glo
 	inst.tsCollisions = newTsCollisionProbe(client)
 	inst.vocab = newVocabProbe(client)
 	inst.seriesLabels = newTsLabelsWriter(client)
+	inst.projector.tasks = client.Tasks
 	if graph != nil {
 		inst.seriesLabels.confined = graph.MainConfined
 	}
