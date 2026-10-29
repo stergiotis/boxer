@@ -115,6 +115,16 @@ var (
 		Category:    env.CategoryDev,
 	})
 
+	// DesktopLayout seeds the desktop's layout at launch (ADR-0346 §SD7):
+	// the floating desktop, or a tiled layout the window host keeps live.
+	// The set is windowhost.LayoutIdents, kept equal by a test there.
+	DesktopLayout = env.NewCategorialString(env.Spec{
+		Name:        "IMZERO2_DESKTOP_LAYOUT",
+		Default:     "floating",
+		Description: "the desktop's layout at launch (ADR-0346): floating, or a tiled layout the window host keeps live — main-stack, tile, columns, rows or monocle; switchable at runtime via Window > Desktop layout; for scenes and demos",
+		Category:    env.CategoryDev,
+	}, []string{"floating", "main-stack", "tile", "columns", "rows", "monocle"})
+
 	// Theme is the IDS colour theme (dark | fresh), read once at launch
 	// on both sides of the FFFI boundary (ADR-0258). Case-insensitive;
 	// anything other than "fresh" is the IDS dark palette. There is no

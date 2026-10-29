@@ -765,6 +765,11 @@ func (rt *Runtime) bootWindowHost() (err error) {
 	}
 	host := windowhost.NewInst(reg, logger)
 	host.SetBus(rt.Bus)
+	if l, ok := windowhost.ParseLayout(imzero2env.DesktopLayout.Get()); ok && l.Tiled() {
+		// The desktop's layout at launch (ADR-0346 §SD7); the Window menu
+		// switches it afterwards.
+		_ = host.SetLayout(l)
+	}
 	if rt.Cell != nil {
 		// The apps label by the host's declaration (cell.OfMount).
 		host.SetMountValue(cell.MountKey{}, rt.Cell)

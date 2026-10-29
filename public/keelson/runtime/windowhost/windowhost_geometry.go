@@ -23,6 +23,16 @@ type WindowGeom struct {
 	Maximized bool
 	// Active is the shell's active window (pickActiveWindow).
 	Active bool
+	// Tiled is whether the layout placed the window this frame (ADR-0346
+	// §SD2); false on a floating desktop and for a floating or maximized
+	// window.
+	Tiled bool
+	// Floating is whether the window is out of the layout by choice
+	// (FloatWindow, ADR-0346 §SD4).
+	Floating bool
+	// Order is the window's 1-based position in the layout's order, main
+	// first; 0 when it is not in the order.
+	Order int
 }
 
 // DesktopInfo is the desktop's state as the host last saw it.
@@ -37,6 +47,10 @@ type DesktopInfo struct {
 	ActiveKey WindowKeyT
 	// Arranging names the arrangement in progress, ArrangeNone when none.
 	Arranging ArrangeE
+	// Layout is the desktop's layout (ADR-0346 §SD1), and LayoutParams its
+	// parameters.
+	Layout       LayoutE
+	LayoutParams LayoutParams
 }
 
 // DesktopInfo returns the desktop's state as of the last completed frame.
@@ -55,9 +69,11 @@ func (inst *Inst) snapshotGeometry(snapshot []*window) {
 	sm := c.CurrentApplicationState.StateManager
 	geoms := make([]WindowGeom, len(snapshot))
 	for i, w := range snapshot {
+		_, tiled := inst.tileCells[w.key]
 		g := WindowGeom{
 			Maximized: w.maximized,
 			Active:    w.key == inst.activeKey,
+			Tiled:     tiled,
 		}
 		if v, ok := sm.GetWindowGeom(w.focusHandle); ok {
 			g.Shown = true
@@ -77,7 +93,11 @@ func (inst *Inst) snapshotGeometry(snapshot []*window) {
 		d.Arranging = inst.arranging.cmd
 	}
 	inst.mu.Lock()
+	d.Layout = inst.layout
+	d.LayoutParams = inst.layoutParams
 	for i, w := range snapshot {
+		geoms[i].Floating = inst.floating[w.key]
+		geoms[i].Order = inst.tileOrderOfLocked(w.key)
 		w.geom = geoms[i]
 	}
 	inst.desktop = d

@@ -260,6 +260,21 @@ type Inst struct {
 	// nil when none. Render-thread only.
 	arranging *arrangeRun
 
+	// The tiled desktop (ADR-0346). layout, layoutParams, tileOrder (main
+	// first) and floating (the windows out of the layout by choice) are
+	// written under mu by their setters and read by Frame; tileDirty marks
+	// an input change for the next Frame. tiling, tileCells, tileMins and
+	// tileWork are the live plan (stepTiling): render-thread only.
+	layout       LayoutE
+	layoutParams LayoutParams
+	tileOrder    []WindowKeyT
+	floating     map[WindowKeyT]bool
+	tileDirty    bool
+	tiling       *tileRun
+	tileCells    map[WindowKeyT]Rect
+	tileMins     map[WindowKeyT][2]float32
+	tileWork     Rect
+
 	// mountState shares Mount/Unmount lifecycle across windows that point at
 	// the same AppI instance (singleton-registered apps). Keyed by the AppI
 	// interface value; an entry is created on Open and removed when its last
@@ -373,11 +388,12 @@ func (inst *Inst) SetMountValue(key any, v any) {
 // that runId points at.
 func NewInst(registry *app.Registry, logger zerolog.Logger) (inst *Inst) {
 	inst = &Inst{
-		registry:   registry,
-		logger:     logger,
-		density:    styletokens.ActiveDensity(),
-		mountState: make(map[app.AppI]*instMount),
-		overlay:    inscribe.NewOverlay(inscribe.NewScene()),
+		registry:     registry,
+		logger:       logger,
+		density:      styletokens.ActiveDensity(),
+		layoutParams: DefaultLayoutParams,
+		mountState:   make(map[app.AppI]*instMount),
+		overlay:      inscribe.NewOverlay(inscribe.NewScene()),
 	}
 	return
 }
@@ -1192,6 +1208,7 @@ func (inst *Inst) Frame(ids *c.WidgetIdStack) (err error) {
 		inst.activeKey = 0
 		inst.noteInput(sm, time.Now())
 		inst.arranging = nil
+		inst.stepTiling(nil)
 		inst.snapshotGeometry(nil)
 		inst.reapClosed()
 		return
@@ -1218,6 +1235,7 @@ func (inst *Inst) Frame(ids *c.WidgetIdStack) (err error) {
 	inst.noteInput(sm, time.Now())
 	inst.stepArrange(arrangeCmd, arrangeKeys, snapshot)
 	inst.applyPlaces(places, snapshot)
+	inst.stepTiling(snapshot)
 	inst.snapshotGeometry(snapshot)
 	for _, w := range snapshot {
 		// A pixel capture replays a window's emission, from its placement to

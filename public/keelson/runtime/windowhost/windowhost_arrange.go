@@ -324,6 +324,12 @@ func (inst *Inst) ArrangeWindows(cmd ArrangeE, keys []WindowKeyT) (err error) {
 	}
 	inst.mu.Lock()
 	defer inst.mu.Unlock()
+	if inst.layout.Tiled() {
+		// A one-shot arrangement is a floating-desktop command; the layout
+		// would move the windows back on the next frame (ADR-0346 §SD6).
+		err = eb.Build().Str("layout", inst.layout.Ident()).Errorf("windowhost: the desktop is tiled; set the layout instead of arranging")
+		return
+	}
 	for _, k := range keys {
 		if inst.openWindowLocked(k) == nil {
 			err = eb.Build().Uint64("key", uint64(k)).Errorf("windowhost: no open window with this key")
@@ -352,8 +358,9 @@ func (inst *Inst) Raise(key WindowKeyT) (err error) {
 // a one-frame placement (ADR-0275 §SD3): the window is movable and
 // resizable again afterwards, and egui sizes it to its content on an axis
 // the content does not fill. Placing ends the window's maximization and
-// any arrangement in progress, whose next pass would move it again. Safe
-// off the render thread.
+// any arrangement in progress, whose next pass would move it again. On a
+// tiled desktop it also floats the window, as a drag would if the window
+// took one (ADR-0346 §SD6). Safe off the render thread.
 func (inst *Inst) Place(key WindowKeyT, r Rect) (err error) {
 	if !r.valid() {
 		err = eb.Build().Float32("w", r.W()).Float32("h", r.H()).Errorf("windowhost: a placement needs a positive size")
@@ -364,6 +371,9 @@ func (inst *Inst) Place(key WindowKeyT, r Rect) (err error) {
 	if inst.openWindowLocked(key) == nil {
 		err = eb.Build().Uint64("key", uint64(key)).Errorf("windowhost: no open window with this key")
 		return
+	}
+	if inst.layout.Tiled() {
+		inst.setFloatingLocked(key, true)
 	}
 	if inst.pendingPlaces == nil {
 		inst.pendingPlaces = make(map[WindowKeyT]Rect, 1)
