@@ -22,6 +22,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/appletstore"
 	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
 	"github.com/stergiotis/boxer/public/keelson/runtime/fsbroker"
+	"github.com/stergiotis/boxer/public/keelson/runtime/task"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/sqleditor"
@@ -36,6 +37,8 @@ type App struct {
 	ids *c.WidgetIdStack
 	bus app.BusI
 	log zerolog.Logger
+	// tasks runs Save and Export as keelson tasks owned by this window.
+	tasks task.TaskApiI
 
 	// editor is the shared SQL editing surface (ADR-0147), built at Mount on
 	// the app's ids; it holds the caret channel and the colour tiers across
@@ -68,6 +71,7 @@ func (inst *App) Mount(ctx app.MountContextI) (err error) {
 	inst.editor = sqleditor.New(inst.ids, "sql")
 	inst.bus = ctx.Bus()
 	inst.log = ctx.Log()
+	inst.tasks = task.ForApp(ctx)
 	if raw := ctx.LaunchConfig(); len(raw) > 0 {
 		cfg, dErr := buscodec.Decode[appletcreatecfg.AppletCreate](raw)
 		if dErr != nil {
@@ -238,21 +242,27 @@ func (inst *App) submit() {
 			inst.saveBusy = false
 			inst.mu.Unlock()
 		}()
-		replyBytes, reqErr := inst.bus.Request(appletstore.SubjectSave, payload)
-		if reqErr != nil {
-			inst.log.Warn().Err(reqErr).Str("slug", slug).Msg("sqlappletcreator: save request failed")
-			inst.setStatus("save failed: " + reqErr.Error())
+		_ = task.RunToCompletion(inst.tasks, task.SpawnOpts{Kind: "sqlappletcreator.save", Title: "save " + slug}, func() (failed error) {
+			replyBytes, reqErr := inst.bus.Request(appletstore.SubjectSave, payload)
+			if reqErr != nil {
+				inst.log.Warn().Err(reqErr).Str("slug", slug).Msg("sqlappletcreator: save request failed")
+				inst.setStatus("save failed: " + reqErr.Error())
+				failed = reqErr
+				return
+			}
+			rep, decErr := appletstore.DecodeSaveReply(replyBytes)
+			switch {
+			case decErr != nil:
+				inst.setStatus("save failed: " + decErr.Error())
+				failed = decErr
+			case !rep.OK:
+				inst.setStatus("refused: " + rep.Error)
+				failed = eh.Errorf("refused: %s", rep.Error)
+			default:
+				inst.setStatus("saved " + slug + " (class " + rep.Class + ") — see the Apps menu")
+			}
 			return
-		}
-		rep, decErr := appletstore.DecodeSaveReply(replyBytes)
-		switch {
-		case decErr != nil:
-			inst.setStatus("save failed: " + decErr.Error())
-		case !rep.OK:
-			inst.setStatus("refused: " + rep.Error)
-		default:
-			inst.setStatus("saved " + slug + " (class " + rep.Class + ") — see the Apps menu")
-		}
+		})
 	}()
 }
 
@@ -290,42 +300,50 @@ func (inst *App) export() {
 			inst.exportBusy = false
 			inst.mu.Unlock()
 		}()
-		rawReply, rerr := inst.bus.RequestWithTimeout(fsbroker.SubjectDialogWrite, reqBytes, fsbroker.DialogTimeout)
-		if rerr != nil {
-			inst.setStatus("file dialog: " + rerr.Error())
-			return
-		}
-		dr, jerr := fsbroker.UnmarshalDialogReply(rawReply)
-		if jerr != nil {
-			inst.setStatus("dialog reply: " + jerr.Error())
-			return
-		}
-		if !dr.Granted {
-			msg := "export cancelled"
-			if dr.Reason != "" {
-				msg += ": " + dr.Reason
+		_ = task.RunToCompletion(inst.tasks, task.SpawnOpts{Kind: "sqlappletcreator.export", Title: "export " + name + ".md"}, func() (failed error) {
+			rawReply, rerr := inst.bus.RequestWithTimeout(fsbroker.SubjectDialogWrite, reqBytes, fsbroker.DialogTimeout)
+			if rerr != nil {
+				inst.setStatus("file dialog: " + rerr.Error())
+				failed = rerr
+				return
 			}
-			inst.setStatus(msg)
+			dr, jerr := fsbroker.UnmarshalDialogReply(rawReply)
+			if jerr != nil {
+				inst.setStatus("dialog reply: " + jerr.Error())
+				failed = jerr
+				return
+			}
+			if !dr.Granted {
+				msg := "export cancelled"
+				if dr.Reason != "" {
+					msg += ": " + dr.Reason
+				}
+				inst.setStatus(msg)
+				return
+			}
+			// The write-handle op replies a DialogReply acking whether the bytes
+			// landed (unlike the read op, which replies the raw body).
+			writeReply, werr := inst.bus.RequestWithTimeout(dr.HandleSubjectPrefix+".write", doc, fsbroker.HandleOpTimeout)
+			if werr != nil {
+				inst.setStatus("write: " + werr.Error())
+				failed = werr
+				return
+			}
+			wr, perr := fsbroker.UnmarshalDialogReply(writeReply)
+			if perr != nil {
+				inst.setStatus("write reply: " + perr.Error())
+				failed = perr
+				return
+			}
+			if !wr.Granted {
+				inst.log.Warn().Str("reason", wr.Reason).Msg("sqlappletcreator: export write refused")
+				inst.setStatus("export failed: " + wr.Reason)
+				failed = eh.Errorf("export write refused: %s", wr.Reason)
+				return
+			}
+			inst.setStatus("exported " + name + ".md")
 			return
-		}
-		// The write-handle op replies a DialogReply acking whether the bytes
-		// landed (unlike the read op, which replies the raw body).
-		writeReply, werr := inst.bus.RequestWithTimeout(dr.HandleSubjectPrefix+".write", doc, fsbroker.HandleOpTimeout)
-		if werr != nil {
-			inst.setStatus("write: " + werr.Error())
-			return
-		}
-		wr, perr := fsbroker.UnmarshalDialogReply(writeReply)
-		if perr != nil {
-			inst.setStatus("write reply: " + perr.Error())
-			return
-		}
-		if !wr.Granted {
-			inst.log.Warn().Str("reason", wr.Reason).Msg("sqlappletcreator: export write refused")
-			inst.setStatus("export failed: " + wr.Reason)
-			return
-		}
-		inst.setStatus("exported " + name + ".md")
+		})
 	}()
 }
 

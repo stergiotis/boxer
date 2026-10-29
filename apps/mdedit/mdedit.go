@@ -42,6 +42,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
 	"github.com/stergiotis/boxer/public/keelson/runtime/clipboardbroker"
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
+	"github.com/stergiotis/boxer/public/keelson/runtime/task"
 	"github.com/stergiotis/boxer/public/thestack/fffi2/typed"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/keycodes"
@@ -199,6 +200,9 @@ type App struct {
 	logger zerolog.Logger
 	bus    app.BusI
 	store  app.StorageI
+	// tasks runs the restore, the file gestures and the send as keelson
+	// tasks owned by this window.
+	tasks task.TaskApiI
 
 	// src is the document. It is the FFI write-back target for the source
 	// TextEdit, so it has to be a field on a struct that outlives the frame:
@@ -496,6 +500,7 @@ func (inst *App) Mount(ctx app.MountContextI) (err error) {
 	inst.logger = ctx.Log()
 	inst.bus = ctx.Bus()
 	inst.store = ctx.Storage()
+	inst.tasks = task.ForApp(ctx)
 	if inst.handOver(ctx.LaunchConfig()) {
 		return
 	}
@@ -1356,7 +1361,12 @@ func (inst *App) autosave() {
 // restore reads the persisted document. Runs once, off the render thread, from
 // Mount.
 func (inst *App) restore() {
-	value, found, err := inst.store.Get(docKey)
+	var value []byte
+	var found bool
+	err := task.RunToCompletion(inst.tasks, task.SpawnOpts{Kind: "mdedit.restore", Title: "restore the document"}, func() (err error) {
+		value, found, err = inst.store.Get(docKey)
+		return
+	})
 	if err != nil {
 		inst.logger.Warn().Err(err).Msg("mdedit: restore failed")
 	}

@@ -7,6 +7,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/adhocdata"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
+	"github.com/stergiotis/boxer/public/keelson/runtime/task"
 )
 
 // ManifestId is this app's identity — its Go import path (ADR-0026 id rule).
@@ -34,6 +35,9 @@ var manifest = app.Manifest{
 			Direction: app.CapDirectionPub,
 			Reason:    "adhocdemo: publish and republish the computed series as an ad-hoc bundle (ADR-0288)",
 		},
+		// Regenerate and the tree publish run as keelson tasks owned by
+		// the window.
+		task.ProducerCaps()[0],
 	}, sqlapplet.BundleViewCaps...),
 	Operations: adhocOps.Catalog(),
 }

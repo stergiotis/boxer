@@ -21,6 +21,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/data/chclient"
 	"github.com/stergiotis/boxer/public/keelson/data/storeexec"
 	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
+	"github.com/stergiotis/boxer/public/keelson/runtime/task"
 	"github.com/stergiotis/boxer/public/keelson/runtime/windowhost"
 	"github.com/stergiotis/boxer/public/observability/eh"
 )
@@ -102,7 +103,11 @@ func (inst *App) publishTree() {
 	mount := inst.treeMount
 	inst.mu.Unlock()
 
-	res, err := inst.publishAndOpen(gen, mount)
+	var res ladingadhoc.PublishResult
+	err := task.Run(inst.tasks, context.Background(), task.SpawnOpts{Kind: "adhocdemo.tree", Title: "publish the tree and open tally", Cancellable: true}, func(ctx context.Context) (err error) {
+		res, err = inst.publishAndOpen(ctx, gen, mount)
+		return
+	})
 
 	inst.mu.Lock()
 	inst.treeBusy = false
@@ -116,12 +121,12 @@ func (inst *App) publishTree() {
 	inst.mu.Unlock()
 }
 
-func (inst *App) publishAndOpen(gen int, mount identifier.TaggedId) (res ladingadhoc.PublishResult, err error) {
+func (inst *App) publishAndOpen(ctx context.Context, gen int, mount identifier.TaggedId) (res ladingadhoc.PublishResult, err error) {
 	if inst.bus == nil {
 		err = eh.Errorf("no bus wired — opening tally needs the app runtime")
 		return
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), treeTimeout)
+	ctx, cancel := context.WithTimeout(ctx, treeTimeout)
 	defer cancel()
 
 	client := chclient.New(chclient.ConfigFromEnv(), nil)

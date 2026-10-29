@@ -12,6 +12,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/fsbroker"
 	"github.com/stergiotis/boxer/public/keelson/runtime/help"
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
+	"github.com/stergiotis/boxer/public/keelson/runtime/task"
 	"github.com/stergiotis/boxer/public/keelson/runtime/windowhost"
 )
 
@@ -89,6 +90,9 @@ var manifest = app.Manifest{
 			Direction: app.CapDirectionPub,
 			Reason:    "mdedit: Send to play — open the playground on the document persisted as a boxer.facts row",
 		},
+		// Restore, open, save and send run as keelson tasks owned by the
+		// window.
+		task.ProducerCaps()[0],
 	},
 	PersistedKeys: []string{docKey},
 }

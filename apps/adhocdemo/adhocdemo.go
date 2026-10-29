@@ -22,6 +22,7 @@ import (
 	"github.com/stergiotis/boxer/public/identity/identifier"
 	"github.com/stergiotis/boxer/public/keelson/runtime/adhocdata"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
+	"github.com/stergiotis/boxer/public/keelson/runtime/task"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 )
 
@@ -47,6 +48,9 @@ type App struct {
 	bus   app.BusI
 	runId string
 	log   zerolog.Logger
+	// tasks runs Regenerate and the tree publish as keelson tasks owned
+	// by this window.
+	tasks task.TaskApiI
 
 	bundle string
 	view   *sqlapplet.BundleView
@@ -75,6 +79,7 @@ func (inst *App) Mount(ctx app.MountContextI) (err error) {
 	inst.bus = ctx.Bus()
 	inst.runId = ctx.RunId()
 	inst.log = ctx.Log()
+	inst.tasks = task.ForApp(ctx)
 
 	// The window's own bundle alias (ADR-0288 §SD3): a second adhocdemo
 	// window publishes its own.
@@ -176,7 +181,11 @@ func (inst *App) regenerate() {
 	gen := inst.gen
 	inst.mu.Unlock()
 
-	if _, err := play.PublishBundle(inst.bus, inst.itemsSpec(gen)); err != nil {
+	err := task.RunToCompletion(inst.tasks, task.SpawnOpts{Kind: "adhocdemo.regenerate", Title: "regenerate the series"}, func() (err error) {
+		_, err = play.PublishBundle(inst.bus, inst.itemsSpec(gen))
+		return
+	})
+	if err != nil {
 		inst.log.Warn().Err(err).Msg("adhocdemo: regenerate failed")
 	}
 
