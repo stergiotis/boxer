@@ -21,10 +21,10 @@ var manifest = app.Manifest{
 	Version:  "0.1.0",
 	Display:  "App center",
 	Title:    "App center",
-	Summary:  "One page per app: what it did, may do, keeps, cites and covers",
+	Summary:  "One page per app: what it did, may do, keeps, cites and covers; and every open window, what it costs and what it runs",
 	Icon:     icons.PhSquaresFour,
 	Topics:   []app.TopicT{app.TopicRuntime},
-	Keywords: []string{"app", "inspect", "capability", "state", "coverage", "adr", "log", "run", "history"},
+	Keywords: []string{"app", "inspect", "capability", "state", "coverage", "adr", "log", "run", "history", "running", "window", "task", "frame time"},
 	Surface:  app.SurfaceWindowed,
 	SurfaceHints: app.SurfaceHints{
 		PreferredWidth:  1200,

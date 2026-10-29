@@ -42,7 +42,7 @@ var readTables = []string{
 	tableClientCaps, tableTasks, tableRunEvents, tableAppState,
 	llm.TableCalls, watchbill.TableJobs, adhocdata.CatalogTableName,
 	providers.TableAppRuns, providers.TableAppLogs, providers.TableAppAudit,
-	tableFrameTimes,
+	tableFrameTimes, tableWindows,
 }
 
 // appCols is keelson('apps'): the list and each page's head.

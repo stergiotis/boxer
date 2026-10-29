@@ -65,7 +65,7 @@ func TestOperationsCatalogRegisters(t *testing.T) {
 	m, ok := app.LookupManifest(manifest.Id)
 	require.True(t, ok)
 	require.NotNil(t, m.Operations, app.DefaultRegistry.OperationsDiagnostic(manifest.Id))
-	for _, name := range []string{opGetView, opShowApp, opSetFilter} {
+	for _, name := range []string{opGetView, opShowApp, opSetFilter, opListRunning} {
 		spec, found := m.Operations.Lookup(name)
 		require.True(t, found, name)
 		assert.True(t, spec.Agents, name)

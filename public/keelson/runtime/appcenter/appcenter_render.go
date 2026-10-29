@@ -33,6 +33,12 @@ func (inst *App) render() {
 		inst.renderStatus(snap)
 	}
 	for range c.PanelLeftInside(inst.ids.PrepareStr("apps")).Resizable(true).DefaultSize(leftWidth).KeepIter() {
+		// The Running page is what shows while no app is selected (ADR-0348
+		// §SD1).
+		if c.SelectableLabel(inst.ids.PrepareStr("running"), inst.selected == "", icons.PhPulse+" Running").SendResp().HasPrimaryClicked() {
+			inst.selectGesture("")
+		}
+		c.Separator().Send()
 		// Typing commits per keystroke inside the frame (ADR-0345 §SD3); the
 		// handle lets the filter resource say the person is typing.
 		inst.filterH = widgethandle.Make(inst.ids.PrepareStr("filter").Derive())
@@ -106,7 +112,7 @@ func displayOf(cols *appCols, i int) string {
 
 func (inst *App) renderPage(snap snapshot) {
 	if inst.selected == "" {
-		c.Label("Select an app to see what it did, what it may do, and what it keeps.").Send()
+		inst.renderRunning(snap)
 		return
 	}
 	apps := &snap.global.apps.cols

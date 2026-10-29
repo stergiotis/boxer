@@ -2,11 +2,14 @@
 // on the left, and one page per app on the right, assembled from the
 // introspection tables that name it — what its windows hold, what it keeps,
 // what it did this run, which jobs, datasets and model calls are its, how
-// much of its code ran, and which ADRs its code cites.
+// much of its code ran, and which ADRs its code cites. While no app is
+// selected, the right side is the Running page (ADR-0348): every open window,
+// what it costs the render loop, and the tasks it owns.
 //
 // Nothing here waits on the bus from the frame goroutine: a poller reads
-// the window-wide tables once and on Refresh, the selected app's tables on a
-// tick and on every selection change, and lands each as a snapshot.
+// the window-wide tables once and on Refresh, the selected app's tables (or
+// the Running page's) on a tick and on every selection change, and lands
+// each as a snapshot.
 package appcenter
 
 import (
@@ -66,8 +69,9 @@ type page struct {
 
 // snapshot is what one frame renders from.
 type snapshot struct {
-	global global
-	page   page
+	global  global
+	page    page
+	running running
 	// reads says the window has a reader; false only where the host minted
 	// no bus for it.
 	reads     bool
@@ -213,6 +217,7 @@ func (inst *App) refresh() {
 	inst.wantGlobal = false
 	g := inst.snap.global
 	p := inst.snap.page
+	rn := inst.snap.running
 	inst.mu.Unlock()
 
 	if inst.reader == nil {
@@ -235,7 +240,9 @@ func (inst *App) refresh() {
 		}
 		p = readPage(ctx, inst.reader, p)
 	} else {
+		// The Running page, read only while it is shown (ADR-0348 §SD6).
 		p = page{}
+		rn = readRunning(ctx, inst.reader, rn)
 	}
 	if inst.appCtx.Err() != nil {
 		return
@@ -249,6 +256,9 @@ func (inst *App) refresh() {
 	// page that is still wanted, and let the next pass read the new one.
 	if inst.want == p.appId {
 		inst.snap.page = p
+		if appId == "" {
+			inst.snap.running = rn
+		}
 	}
 }
 
