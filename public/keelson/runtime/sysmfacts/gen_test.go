@@ -23,6 +23,8 @@ import (
 func TestGenerateSysmetricsStore(t *testing.T) {
 	ids, err := storegen.MembershipIds(sysmvocab.NkRegistry)
 	require.NoError(t, err)
+	// The origin's memberships are the runtime vocabulary's (ADR-0330 §SD3).
+	require.NoError(t, storegen.AddOriginIds(ids))
 	require.NoError(t, storegen.Input{
 		PackageName:    "sysmfacts",
 		StoreName:      "Sysmetrics",

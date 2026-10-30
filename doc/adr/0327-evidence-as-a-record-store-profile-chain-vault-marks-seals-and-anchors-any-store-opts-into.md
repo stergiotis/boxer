@@ -594,6 +594,27 @@ batch no longer reports a fork (`evidence.OrderSeals` saw two seals with
 one predecessor). The §SD8 audit event below the runtime and the trail's
 are one writer's rows; `originBy` is set by the same `audit.Stamp`.
 
+### 2026-10-30 — §SD5: L34 names a store's sealed kinds, not every row of the run
+
+L34's "every durable row of a sealed store" is read as every row of the
+kinds the store writes and seals. On a table of its own the two are the
+same rows. On `boxer.facts` they are not: every writer of that table
+carries the shared `Origin` and with it the run
+([ADR-0277](./0277-one-audit-trail-for-model-calls-and-agent-work.md)'s
+Update of this date), so selecting a run's rows by the origin alone
+finds logs, metrics, app-lifecycle, launch and query-run rows that no
+recorder wrote and no seal could name, and the law would not hold on any
+host that writes them. The trail's binding narrows the rows its
+`VerifySeals` reads to those carrying one of the store's kind markers —
+the `runtimeKind*` memberships of its domain components and the seal's
+own — and a row of those kinds written past the recorder is still a gap.
+A row carrying only context components (`Origin`, `Conversation`,
+`Delegation`, `Cause`) is not the trail's. `auditrec` is unchanged: the
+narrowing is the binding's `ScanRows`, and a store whose every row is
+sealed needs none. `TestSealsHoldOverTheRowsAsTheyReadBack` pins both
+sides, and `keelson('evidence_checks')` holds L34 beside a metrics row of
+the same run (`TestEvidenceChecksL34HoldsBesideOtherWritersOfTheRun`).
+
 ## References
 
 - [ADR-0100](./0100-recordstore-generated-leeway-clickhouse-store.md) — generated record stores, roles, the state view.

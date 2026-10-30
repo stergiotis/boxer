@@ -106,15 +106,16 @@ func relationNaturalKey(rel capmapcorpus.Relation) (key []byte) {
 //
 // now stamps every row's observation timestamp. It is a parameter rather than
 // a call to time.Now so a test can assert on a fixed value and two ingests of
-// an unchanged vault differ only where the vault differs.
-func BuildRecords(corpus capmapcorpus.Corpus, now time.Time) (records []arrow.RecordBatch, stats Stats, err error) {
+// an unchanged vault differ only where the vault differs. origin is who
+// ingests (ADR-0330 §SD3); every row carries it under its own id.
+func BuildRecords(corpus capmapcorpus.Corpus, now time.Time, origin Origin) (records []arrow.RecordBatch, stats Stats, err error) {
 	total := len(corpus.Competences) + len(corpus.Relations)
 	if total == 0 {
 		return nil, stats, nil
 	}
 	ent := dml.NewInEntityFacts(memory.NewGoAllocator(), total)
 	for i := range corpus.Competences {
-		if eErr := encodeCompetence(ent, corpus.Competences[i], now); eErr != nil {
+		if eErr := encodeCompetence(ent, corpus.Competences[i], now, origin); eErr != nil {
 			return nil, stats, eb.Build().Str("slug", corpus.Competences[i].Slug).Errorf("unable to encode competence: %w", eErr)
 		}
 		if cErr := ent.CommitEntity(); cErr != nil {
@@ -123,7 +124,7 @@ func BuildRecords(corpus capmapcorpus.Corpus, now time.Time) (records []arrow.Re
 		stats.Competences++
 	}
 	for i := range corpus.Relations {
-		if eErr := encodeRelation(ent, corpus.Relations[i], now); eErr != nil {
+		if eErr := encodeRelation(ent, corpus.Relations[i], now, origin); eErr != nil {
 			return nil, stats, eb.Build().Str("sourceSlug", corpus.Relations[i].SourceSlug).Str("target", corpus.Relations[i].Target).
 				Errorf("unable to encode relation: %w", eErr)
 		}
@@ -144,7 +145,7 @@ func BuildRecords(corpus capmapcorpus.Corpus, now time.Time) (records []arrow.Re
 //
 // Records are released here whatever happens: they hold Arrow buffers, and a
 // failed insert is exactly when a caller is least likely to remember.
-func Ingest(ctx context.Context, corpus capmapcorpus.Corpus, sink RecordSinkI, table string, now time.Time) (stats Stats, err error) {
+func Ingest(ctx context.Context, corpus capmapcorpus.Corpus, sink RecordSinkI, table string, now time.Time, origin Origin) (stats Stats, err error) {
 	if sink == nil {
 		return stats, eh.Errorf("capmapfacts: nil sink")
 	}
@@ -152,7 +153,7 @@ func Ingest(ctx context.Context, corpus capmapcorpus.Corpus, sink RecordSinkI, t
 		table = QualifiedTable
 	}
 	var records []arrow.RecordBatch
-	if records, stats, err = BuildRecords(corpus, now); err != nil {
+	if records, stats, err = BuildRecords(corpus, now, origin); err != nil {
 		return stats, err
 	}
 	if len(records) == 0 {
@@ -172,15 +173,21 @@ func Ingest(ctx context.Context, corpus capmapcorpus.Corpus, sink RecordSinkI, t
 // encodeCompetence writes one competence row: BeginEntity through the last
 // section, with no commit — the caller commits, matching the runtime's own
 // encoders so the batched and single paths cannot drift. The row carries
-// five components (CompetenceRecord, CompetenceTags, CompetenceLifecycle,
-// CompetenceClaims, CompetenceClaimBases); the symbol section holds
-// attributes of all five, the string and time sections of two each.
-func encodeCompetence(ent *dml.InEntityFacts, competence capmapcorpus.Competence, now time.Time) (err error) {
+// six components (Origin, CompetenceRecord, CompetenceTags,
+// CompetenceLifecycle, CompetenceClaims, CompetenceClaimBases); the symbol
+// section holds attributes of all six, the string and time sections of two
+// each.
+func encodeCompetence(ent *dml.InEntityFacts, competence capmapcorpus.Competence, now time.Time, origin Origin) (err error) {
 	nk := competence.NaturalKey
-	ent.BeginEntity().SetId(DeriveId(nk), nk).SetTimestamp(now)
+	id := DeriveId(nk)
+	ent.BeginEntity().SetId(id, nk).SetTimestamp(now)
 	rec, tags, lifecycle, claims, bases := competenceComponents(competence)
+	origin.Id = id
 
 	sym := ent.GetSectionSymbol()
+	if err = OriginEmitSectionSymbol(sym, origin); err != nil {
+		return
+	}
 	if err = CompetenceRecordEmitSectionSymbol(sym, rec); err != nil {
 		return
 	}
@@ -230,6 +237,11 @@ func encodeCompetence(ent *dml.InEntityFacts, competence capmapcorpus.Competence
 		}
 		tm.EndSection()
 	}
+	u64 := ent.GetSectionU64Array()
+	if err = OriginEmitSectionU64Array(u64, origin); err != nil {
+		return
+	}
+	u64.EndSection()
 	return
 }
 
@@ -287,13 +299,18 @@ func competenceComponents(c capmapcorpus.Competence) (rec CompetenceRecord, tags
 	return
 }
 
-// encodeRelation writes one relation row.
-func encodeRelation(ent *dml.InEntityFacts, rel capmapcorpus.Relation, now time.Time) (err error) {
+// encodeRelation writes one relation row, carrying the origin.
+func encodeRelation(ent *dml.InEntityFacts, rel capmapcorpus.Relation, now time.Time, origin Origin) (err error) {
 	nk := relationNaturalKey(rel)
-	ent.BeginEntity().SetId(DeriveId(nk), nk).SetTimestamp(now)
+	id := DeriveId(nk)
+	ent.BeginEntity().SetId(id, nk).SetTimestamp(now)
 	rec := relationRecord(rel)
+	origin.Id = id
 
 	sym := ent.GetSectionSymbol()
+	if err = OriginEmitSectionSymbol(sym, origin); err != nil {
+		return
+	}
 	if err = RelationRecordEmitSectionSymbol(sym, rec); err != nil {
 		return
 	}
@@ -312,6 +329,11 @@ func encodeRelation(ent *dml.InEntityFacts, rel capmapcorpus.Relation, now time.
 		}
 		f64.EndSection()
 	}
+	u64 := ent.GetSectionU64Array()
+	if err = OriginEmitSectionU64Array(u64, origin); err != nil {
+		return
+	}
+	u64.EndSection()
 	return
 }
 

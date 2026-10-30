@@ -62,6 +62,25 @@ func TestDuplicateKindIsRefusedAndNamesBothStores(t *testing.T) {
 	assert.Equal(t, "Sysmetrics", b.Store, "the first registration stands; a refused one must not overwrite")
 }
 
+// A kind several stores bind — the same artefacts over the same table —
+// registers once and keeps its first publisher; it is the same component,
+// not a collision (ADR-0330 §SD3).
+func TestTheSameKindFromTwoStoresOverOneTableIsOneKind(t *testing.T) {
+	r := componentsql.NewRegistry()
+	require.NoError(t, r.Register(set("Sysmetrics", "boxer.facts", "Origin", "SysCpu")))
+	require.NoError(t, r.Register(set("Mddoc", "boxer.facts", "Origin", "MdDoc")))
+
+	b, ok := r.Lookup("Origin")
+	require.True(t, ok)
+	assert.Equal(t, "Sysmetrics", b.Store)
+	_, ok = r.Lookup("MdDoc")
+	assert.True(t, ok, "the set's other kinds register")
+
+	err := r.Register(set("Persist", "boxer.persiststate", "Origin"))
+	require.Error(t, err, "over another table it is another component")
+	assert.Contains(t, err.Error(), "same component kind")
+}
+
 // A set carrying one bad kind adds none of them. Half a registration is worse
 // than none: the caller sees an error and would reasonably assume nothing
 // landed.

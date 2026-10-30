@@ -26,6 +26,7 @@
 package mdedit
 
 import (
+	"github.com/stergiotis/boxer/public/semistructured/markdown/mddocfacts"
 	"github.com/stergiotis/boxer/public/semistructured/markdown/mdline"
 	"strings"
 	"sync"
@@ -204,6 +205,9 @@ type App struct {
 	// tasks runs the restore, the file gestures and the send as keelson
 	// tasks owned by this window.
 	tasks task.TaskApiI
+	// origin is this window as the rows it uploads name it (ADR-0330
+	// §SD3): the host's run, the app and the window's instance key.
+	origin mddocfacts.Origin
 
 	// src is the document. It is the FFI write-back target for the source
 	// TextEdit, so it has to be a field on a struct that outlives the frame:
@@ -512,6 +516,7 @@ func (inst *App) Mount(ctx app.MountContextI) (err error) {
 	inst.bus = ctx.Bus()
 	inst.store = ctx.Storage()
 	inst.tasks = task.ForApp(ctx)
+	inst.origin = mddocfacts.Origin{Run: ctx.RunId(), App: string(manifest.Id), Instance: ctx.InstanceKey()}
 	if inst.handOver(ctx.LaunchConfig()) {
 		return
 	}

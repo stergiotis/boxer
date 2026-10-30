@@ -47,6 +47,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/data/chclient"
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsschema"
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsstore/chstore"
+	"github.com/stergiotis/boxer/public/keelson/runtime/runinfo"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
@@ -323,8 +324,14 @@ func actionLoad(cliCtx context.Context, cmd *cli.Command) (err error) {
 		Password: cmd.String("password"),
 	}, nil)
 
+	// The rows carry this process's run as their origin (ADR-0330 §SD3); a
+	// CLI has no window.
+	runInst, err := runinfo.Init()
+	if err != nil {
+		return eh.Errorf("run info: %w", err)
+	}
 	var stats capmapfacts.Stats
-	if stats, err = capmapfacts.Ingest(ctx, corpus, sink, database+"."+table, time.Now().UTC()); err != nil {
+	if stats, err = capmapfacts.Ingest(ctx, corpus, sink, database+"."+table, time.Now().UTC(), capmapfacts.Origin{Run: runInst.RunId}); err != nil {
 		return err
 	}
 	fmt.Printf("loaded %d rows into %s.%s from %s (%d competences, %d relations)\n",

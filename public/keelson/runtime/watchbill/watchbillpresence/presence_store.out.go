@@ -91,6 +91,11 @@ func factsOrderBy(opts recordstore.ScanOpts) (clause string, err error) {
 // cannot see it. Compare this map against the writer's before pointing a
 // regenerated store at existing rows.
 var PresenceMembershipIds = map[string]map[string]uint64{
+	"Origin": {
+		"runtimeApp":              9223372049739677701,
+		"runtimeRun":              9223372049739677716,
+		"runtimeLifecycleTileKey": 9223372049739677728,
+	},
 	"WorkerPresence": {
 		"runtimeKindWatchbillWorker": 9223372049739677791,
 		"watchbillWorkerRunId":       9223372049739677792,
@@ -121,11 +126,15 @@ type PresenceEntity struct {
 	// PresenceEnvelope is embedded: its pass-through columns read as
 	// promoted entity fields.
 	PresenceEnvelope
+	Origin         option.Option[Origin]
 	WorkerPresence option.Option[WorkerPresence]
 }
 
 // Archetype reports which components the entity carries, in schema order.
 func (inst *PresenceEntity) Archetype() (a []string) {
+	if inst.Origin.Has {
+		a = append(a, "origin")
+	}
 	if inst.WorkerPresence.Has {
 		a = append(a, "workerPresence")
 	}
@@ -424,6 +433,8 @@ func (inst *PresenceEntityBuilder) endSection(section string) error {
 	switch section {
 	case "symbol":
 		inst.store.dml.GetSectionSymbol().EndSection()
+	case "u64Array":
+		inst.store.dml.GetSectionU64Array().EndSection()
 	case "symbolArray":
 		inst.store.dml.GetSectionSymbolArray().EndSection()
 	case "u32Array":
@@ -451,6 +462,32 @@ func (inst *PresenceStore) BeginCtx(ctx context.Context, id uint64, ts time.Time
 	b.ident, _ = callident.CallIdentityFrom(ctx)
 	b.pushed = inst.applyStampers(ctx)
 	return b
+}
+
+// AddOrigin contributes the Origin component to the open entity.
+//
+// The attributes are buffered, not written: a section frame closes for
+// good, so a component that closed its own sections would shut out the
+// next component sharing one. Commit writes them, one frame per section
+// in first-seen order.
+//
+// A second Add of this component, or an Add on an entity already using
+// Raw(), is refused: both used to mark the row un-mirrorable and carry
+// on, which made its read-back shape depend on a call the writer had
+// probably made by accident.
+func (inst *PresenceEntityBuilder) AddOrigin(row Origin) *PresenceEntityBuilder {
+	if err := inst.buf.StartKind("Origin"); err != nil {
+		inst.store.dml.AppendError(err)
+		return inst
+	}
+	inst.buf.Enqueue("symbol", "Origin", func() error {
+		return originEmitSectionSymbol(inst.store.dml.GetSectionSymbol(), row)
+	})
+	inst.buf.Enqueue("u64Array", "Origin", func() error {
+		return originEmitSectionU64Array(inst.store.dml.GetSectionU64Array(), row)
+	})
+	inst.ent.Origin = option.Some(row)
+	return inst
 }
 
 // AddWorkerPresence contributes the WorkerPresence component to the open entity.
@@ -540,6 +577,38 @@ func (inst *PresenceEntityBuilder) Rollback() (err error) {
 	inst.buf.Reset() // the buffered contributions are abandoned with the frame
 	inst.store.dml.PopMembershipsHighCardRef(inst.pushed)
 	return lowlevel.InEntityFactsTableRollbackEntity(inst.store.dml)
+}
+
+// IngestOrigin buffers one whole entity per row carrying only the
+// Origin component, all stamped with ts — rows ship on the next Flush,
+// like every write. The envelope carries the pass-through columns
+// the row binds; the others are written zero — use Begin with a
+// filled envelope to set them. Keys must be distinct within one call (rows
+// share ts, so duplicates would tie on Order): a duplicate returns
+// recordstore.ErrDuplicateIngestKey. On any error the rows buffered
+// so far remain buffered — Flush ships them, DiscardPending drops
+// them.
+func (inst *PresenceStore) IngestOrigin(ts time.Time, rows []Origin) (err error) {
+	return inst.IngestOriginCtx(context.Background(), ts, rows)
+}
+
+// IngestOriginCtx is IngestOrigin with the context BeginCtx hands the
+// configured stampers.
+func (inst *PresenceStore) IngestOriginCtx(ctx context.Context, ts time.Time, rows []Origin) (err error) {
+	seen := make(map[uint64]struct{}, len(rows))
+	for i := range rows {
+		if _, dup := seen[rows[i].Id]; dup {
+			err = eh.Errorf("ingest origin row %d: %w: key %v", i, recordstore.ErrDuplicateIngestKey, rows[i].Id)
+			return
+		}
+		seen[rows[i].Id] = struct{}{}
+		err = inst.BeginCtx(ctx, rows[i].Id, ts, PresenceEnvelope{}).AddOrigin(rows[i]).Commit()
+		if err != nil {
+			err = eh.Errorf("ingest origin row %d: %w", i, err)
+			return
+		}
+	}
+	return
 }
 
 // IngestWorkerPresence buffers one whole entity per row carrying only the
@@ -928,8 +997,47 @@ func (inst *factsFetcher) FetchItemSinglePartition(ctx context.Context, partitio
 // Baked component Filter artefacts: rows carrying a conforming
 // component. Generated from Plan ⋈ IR; membership ids are literals.
 const (
+	factsScanOriginFilter         = "hasAll(\"tv:symbol:lr:lr:u64:1247:::0::data\", [9223372049739677716, 9223372049739677701]) AND has(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 9223372049739677728) AND countEqual(\"tv:symbol:lr:lr:u64:1247:::0::data\", 9223372049739677716) = 1 AND countEqual(\"tv:symbol:lr:lr:u64:1247:::0::data\", 9223372049739677701) = 1 AND countEqual(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 9223372049739677728) = 1 AND if(has(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 9223372049739677728), \"tv:u64Array:len:len:u64:4D:::0::data\"[arrayFirstIndex(cum -> cum >= indexOf(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 9223372049739677728), arrayCumSum(\"tv:u64Array:lrcard:lrcard:u64:4E:::0::data\"))], 0) = 1"
 	factsScanWorkerPresenceFilter = "hasAll(\"tv:symbol:lr:lr:u64:1247:::0::data\", [9223372049739677791, 9223372049739677792, 9223372049739677793, 9223372049739677794]) AND has(\"tv:u32Array:lr:lr:u64:1247:::0::data\", 9223372049739677797) AND countEqual(\"tv:symbol:lr:lr:u64:1247:::0::data\", 9223372049739677791) = 1 AND countEqual(\"tv:symbol:lr:lr:u64:1247:::0::data\", 9223372049739677792) = 1 AND countEqual(\"tv:symbol:lr:lr:u64:1247:::0::data\", 9223372049739677793) = 1 AND countEqual(\"tv:symbol:lr:lr:u64:1247:::0::data\", 9223372049739677794) = 1 AND countEqual(\"tv:symbolArray:lr:lr:u64:1247:::0::data\", 9223372049739677795) <= 1 AND countEqual(\"tv:symbolArray:lr:lr:u64:1247:::0::data\", 9223372049739677796) <= 1 AND countEqual(\"tv:u32Array:lr:lr:u64:1247:::0::data\", 9223372049739677797) = 1 AND if(has(\"tv:u32Array:lr:lr:u64:1247:::0::data\", 9223372049739677797), \"tv:u32Array:len:len:u64:4D:::0::data\"[arrayFirstIndex(cum -> cum >= indexOf(\"tv:u32Array:lr:lr:u64:1247:::0::data\", 9223372049739677797), arrayCumSum(\"tv:u32Array:lrcard:lrcard:u64:4E:::0::data\"))], 0) = 1"
 )
+
+// ScanOrigin iterates the entities whose rows carry a conforming Origin
+// component, ordered by (Order, Key) — or by opts.OrderBy's envelope
+// column, opts.Descending reversing either — so entities sharing an Order
+// still come out in a fixed sequence. Rows that tie on BOTH (the same
+// key written twice at the same Order) are not ordered against each
+// other by this clause; the table keeps newest-per-key, so which of
+// them survives is the engine's choice, not the scan's.
+// opts.KeyPrefix is refused (recordstore.ErrKeyPrefixNumericKey):
+// this store's key is not a string.
+// opts.ExtraPredicate (trusted raw SQL over the physical columns —
+// never untrusted input) further restricts the scan; opts.Limit
+// caps the row count. The Filter artefact uses ClickHouse
+// built-ins only, so this is a single SELECT — no helper UDFs, no
+// multi-statement script (the ExecutorI contract). The sequence is
+// single-use; ctx must stay valid until iteration completes; an
+// error ends it as a final (nil, err) pair. Scans see only flushed
+// rows.
+func (inst *PresenceStore) ScanOrigin(ctx context.Context, opts recordstore.ScanOpts) iter.Seq2[*PresenceEntity, error] {
+	if opts.KeyPrefix != "" {
+		return recordstore.RefuseKeyPrefix[*PresenceEntity]()
+	}
+	order, err := factsOrderBy(opts)
+	if err != nil {
+		return recordstore.FailScan[*PresenceEntity](err)
+	}
+	where := factsScanOriginFilter
+	if opts.ExtraPredicate != "" {
+		where = "(" + where + ") AND (" + opts.ExtraPredicate + ")"
+	}
+	sql := "SELECT * FROM " + inst.readTable() +
+		" WHERE " + where + order
+	if opts.Limit > 0 {
+		sql += " LIMIT " + strconv.Itoa(opts.Limit)
+	}
+	sql += factsArrowOutputSettings
+	return inst.iterateEntities(ctx, sql)
+}
 
 // ScanWorkerPresence iterates the entities whose rows carry a conforming WorkerPresence
 // component, ordered by (Order, Key) — or by opts.OrderBy's envelope
@@ -1030,6 +1138,12 @@ var PresenceComponentSQL = componentsql.Set{
 	Store: "Presence",
 	Table: PresenceTableName,
 	Kinds: map[string]componentsql.Artefacts{
+		"Origin": {
+			Presence:   "hasAll(\"tv:symbol:lr:lr:u64:1247:::0::data\", [9223372049739677716, 9223372049739677701]) AND has(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 9223372049739677728)",
+			Validator:  "countEqual(\"tv:symbol:lr:lr:u64:1247:::0::data\", 9223372049739677716) = 1 AND countEqual(\"tv:symbol:lr:lr:u64:1247:::0::data\", 9223372049739677701) = 1 AND countEqual(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 9223372049739677728) = 1 AND if(has(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 9223372049739677728), \"tv:u64Array:len:len:u64:4D:::0::data\"[arrayFirstIndex(cum -> cum >= indexOf(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 9223372049739677728), arrayCumSum(\"tv:u64Array:lrcard:lrcard:u64:4E:::0::data\"))], 0) = 1",
+			Filter:     factsScanOriginFilter,
+			Projection: "CAST(tuple(\"id:id:u64:47::0:\", LW_VALUE_BY_TAG_EQUAL(\"tv:symbol:value:val:s:124::I:0::data\", \"tv:symbol:lr:lr:u64:1247:::0::data\", 9223372049739677716, LW_RAGGED_PARENT_IDS(\"tv:symbol:lrcard:lrcard:u64:4E:::0::data\")), LW_VALUE_BY_TAG_EQUAL(\"tv:symbol:value:val:s:124::I:0::data\", \"tv:symbol:lr:lr:u64:1247:::0::data\", 9223372049739677701, LW_RAGGED_PARENT_IDS(\"tv:symbol:lrcard:lrcard:u64:4E:::0::data\")), LW_LIST_BY_TAG_EQUAL(\"tv:u64Array:value:val:u64h:4:::0::data\", \"tv:u64Array:len:len:u64:4D:::0::data\", \"tv:u64Array:lr:lr:u64:1247:::0::data\", 9223372049739677728, LW_RAGGED_PARENT_IDS(\"tv:u64Array:lrcard:lrcard:u64:4E:::0::data\"))[1]), 'Tuple(Id UInt64, Run String, App String, Instance UInt64)')",
+		},
 		"WorkerPresence": {
 			Presence:   "hasAll(\"tv:symbol:lr:lr:u64:1247:::0::data\", [9223372049739677791, 9223372049739677792, 9223372049739677793, 9223372049739677794]) AND has(\"tv:u32Array:lr:lr:u64:1247:::0::data\", 9223372049739677797)",
 			Validator:  "countEqual(\"tv:symbol:lr:lr:u64:1247:::0::data\", 9223372049739677791) = 1 AND countEqual(\"tv:symbol:lr:lr:u64:1247:::0::data\", 9223372049739677792) = 1 AND countEqual(\"tv:symbol:lr:lr:u64:1247:::0::data\", 9223372049739677793) = 1 AND countEqual(\"tv:symbol:lr:lr:u64:1247:::0::data\", 9223372049739677794) = 1 AND countEqual(\"tv:symbolArray:lr:lr:u64:1247:::0::data\", 9223372049739677795) <= 1 AND countEqual(\"tv:symbolArray:lr:lr:u64:1247:::0::data\", 9223372049739677796) <= 1 AND countEqual(\"tv:u32Array:lr:lr:u64:1247:::0::data\", 9223372049739677797) = 1 AND if(has(\"tv:u32Array:lr:lr:u64:1247:::0::data\", 9223372049739677797), \"tv:u32Array:len:len:u64:4D:::0::data\"[arrayFirstIndex(cum -> cum >= indexOf(\"tv:u32Array:lr:lr:u64:1247:::0::data\", 9223372049739677797), arrayCumSum(\"tv:u32Array:lrcard:lrcard:u64:4E:::0::data\"))], 0) = 1",
@@ -1094,9 +1208,10 @@ func decodePresenceRecord(rec arrow.RecordBatch) (ents []*PresenceEntity, err er
 	tsR := ra.NewReadAccessFactsPlainEntityTimestampAttributes()
 	lcR := ra.NewReadAccessFactsPlainEntityLifecycleAttributes()
 	symbolR := ra.NewReadAccessFactsTaggedSymbol()
+	u64ArrayR := ra.NewReadAccessFactsTaggedU64Array()
 	symbolArrayR := ra.NewReadAccessFactsTaggedSymbolArray()
 	u32ArrayR := ra.NewReadAccessFactsTaggedU32Array()
-	readers := []factsSectionReaderI{idR, tsR, lcR, symbolR, symbolArrayR, u32ArrayR}
+	readers := []factsSectionReaderI{idR, tsR, lcR, symbolR, u64ArrayR, symbolArrayR, u32ArrayR}
 	for _, r := range readers {
 		err = r.LoadFromRecord(rec)
 		if err != nil {
@@ -1124,6 +1239,17 @@ func decodePresenceRecord(rec arrow.RecordBatch) (ents []*PresenceEntity, err er
 		}
 		ent.NaturalKey = idR.GetAttrValueNaturalKey(raruntime.EntityIdx(i))
 		ent.ExpiresAt = lcR.GetAttrValueExpiresAt(raruntime.EntityIdx(i))
+		{
+			row, ok, e := originReadRow(i, symbolR.GetAttributes(), symbolR.GetMemberships(), u64ArrayR.GetAttributes(), u64ArrayR.GetMemberships())
+			if e != nil {
+				err = eh.Errorf("read origin component: %w", e)
+				return
+			}
+			if ok {
+				row.Id = ent.ID
+				ent.Origin = option.Some(row)
+			}
+		}
 		{
 			row, ok, e := workerPresenceReadRow(i, symbolR.GetAttributes(), symbolR.GetMemberships(), symbolArrayR.GetAttributes(), symbolArrayR.GetMemberships(), u32ArrayR.GetAttributes(), u32ArrayR.GetMemberships())
 			if e != nil {

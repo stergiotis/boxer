@@ -35,7 +35,7 @@ func expandComponent(t *testing.T, sql string) (out string) {
 // componentKinds is every kind the store publishes, in the order the golden
 // lists them. A kind added to the store and not here is a kind the golden
 // cannot speak for — TestEveryKindIsInTheGolden says so.
-var componentKinds = []string{"MdDoc", "MdHeading", "MdCodeBlock", "MdLink", "MdEmphasis", "MdTag"}
+var componentKinds = []string{"Origin", "MdDoc", "MdHeading", "MdCodeBlock", "MdLink", "MdEmphasis", "MdTag"}
 
 func TestEveryKindIsInTheGolden(t *testing.T) {
 	var published []string

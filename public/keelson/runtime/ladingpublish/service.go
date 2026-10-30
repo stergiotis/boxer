@@ -25,6 +25,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
 	"github.com/stergiotis/boxer/public/keelson/runtime/inprocbus"
+	"github.com/stergiotis/boxer/public/keelson/runtime/runinfo"
 	"github.com/stergiotis/boxer/public/keelson/runtime/trail"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/storage/recordstore"
@@ -242,7 +243,7 @@ func (inst *Service) Publish(ctx context.Context, by app.AppIdT, instance uint64
 		}
 	}
 	row.Mount, row.TtlDays = uint64(mount), uint32(ttl)
-	out, err := inst.write(ctx, by, mount, ttl, req)
+	out, err := inst.write(ctx, by, instance, mount, ttl, req)
 	if err != nil {
 		return Result{Mount: uint64(mount), Failed: true, Reason: err.Error()}
 	}
@@ -305,7 +306,9 @@ func (inst *Service) check(by app.AppIdT, tag identifier.TagValue, req Request) 
 }
 
 // write records the mount's policy and writes one snapshot of req's files.
-func (inst *Service) write(ctx context.Context, by app.AppIdT, mount identifier.TaggedId, ttl uint16, req Request) (out ladingingest.Result, err error) {
+// The policy row's origin is the publishing window (ADR-0330 §SD3), as the
+// trail row names it: the host's run, the sender and its instance.
+func (inst *Service) write(ctx context.Context, by app.AppIdT, instance uint64, mount identifier.TaggedId, ttl uint16, req Request) (out ladingingest.Result, err error) {
 	select {
 	case inst.turn <- struct{}{}:
 	case <-ctx.Done():
@@ -339,7 +342,13 @@ func (inst *Service) write(ctx context.Context, by app.AppIdT, mount identifier.
 	if name == "" {
 		name = "published tree"
 	}
-	if err = ladingingest.RecordPolicy(ctx, policies, mount, policy, name, storeNamePrefix+string(by)); err != nil {
+	origin := inst.cfg.Trail.OriginOf(by, instance)
+	if origin.Run == "" {
+		if ri, riErr := runinfo.Get(); riErr == nil {
+			origin.Run = ri.RunId
+		}
+	}
+	if err = ladingingest.RecordPolicy(ctx, policies, mount, policy, name, storeNamePrefix+string(by), origin); err != nil {
 		err = eh.Errorf("record the mount's policy: %w", err)
 		return
 	}

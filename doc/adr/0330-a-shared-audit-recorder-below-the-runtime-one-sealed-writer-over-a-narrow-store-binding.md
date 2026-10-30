@@ -486,7 +486,9 @@ in the trail package (`auditStore`, `auditBatch`): the recorder's key is
 the row's natural key, the value columns come from the embedded facts DDL
 through `ColumnsFromDDL`, and seals go through the generated `SealOf`
 under `TrailSealScheme` and `trail.SealScope`. The trail's other kinds go
-through `Write`. The trail's own loop, its observer-fed prompt path and
+through `Write`. The binding's `ScanRows` reads only the rows of the trail's
+own kinds and its seals, since every writer of `boxer.facts` carries the
+run's `Origin` (ADR-0327's Update of this date). The trail's own loop, its observer-fed prompt path and
 its pending-entity map are deleted. No exported signature moved, so
 `covtrail` and the trail's other callers are unchanged; hostboot gains one
 option, `trail.WithFlushInterval` (below). M4's dated entries are on

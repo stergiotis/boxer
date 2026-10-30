@@ -30,7 +30,7 @@ func TestReadCorpusRoundTripsTheEncoding(t *testing.T) {
 
 	ctx := context.Background()
 	want := sampleCorpus()
-	_, err := capmapfacts.Ingest(ctx, want, cli, qualified, fixedNow)
+	_, err := capmapfacts.Ingest(ctx, want, cli, qualified, fixedNow, capmapfacts.Origin{Run: "run-capmap"})
 	require.NoError(t, err)
 
 	got, err := capmapfacts.ReadCorpus(ctx, cli, qualified)
@@ -50,7 +50,7 @@ func TestReadCorpusTakesTheNewestIngest(t *testing.T) {
 
 	ctx := context.Background()
 	first := sampleCorpus()
-	_, err := capmapfacts.Ingest(ctx, first, cli, qualified, fixedNow)
+	_, err := capmapfacts.Ingest(ctx, first, cli, qualified, fixedNow, capmapfacts.Origin{Run: "run-capmap"})
 	require.NoError(t, err)
 
 	second := sampleCorpus()
@@ -60,7 +60,7 @@ func TestReadCorpusTakesTheNewestIngest(t *testing.T) {
 			second.Competences[i].Tags = []string{"reviewed"}
 		}
 	}
-	_, err = capmapfacts.Ingest(ctx, second, cli, qualified, fixedNow.Add(time.Hour))
+	_, err = capmapfacts.Ingest(ctx, second, cli, qualified, fixedNow.Add(time.Hour), capmapfacts.Origin{Run: "run-capmap"})
 	require.NoError(t, err)
 
 	got, err := capmapfacts.ReadCorpus(ctx, cli, qualified)
@@ -91,7 +91,7 @@ func TestVaultSurvivesLoadAndDump(t *testing.T) {
 	require.Len(t, want.Competences, 3)
 
 	ctx := context.Background()
-	_, err = capmapfacts.Ingest(ctx, want, cli, qualified, fixedNow)
+	_, err = capmapfacts.Ingest(ctx, want, cli, qualified, fixedNow, capmapfacts.Origin{Run: "run-capmap"})
 	require.NoError(t, err)
 
 	stored, err := capmapfacts.ReadCorpus(ctx, cli, qualified)

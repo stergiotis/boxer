@@ -265,7 +265,7 @@ func (inst *Store) WriteGrant(row factsstore.GrantRow) (id uint64, err error) {
 	}
 	sym := ent.GetSectionSymbol()
 	sym.BeginAttribute("grant").AddMembershipLowCardRef(vocab.MembKindGrant.GetId().Value()).EndAttribute()
-	sym.BeginAttribute(string(row.AppId)).AddMembershipLowCardRef(vocab.MembRuntimeApp.GetId().Value()).EndAttribute()
+	stampApp(sym, row.AppId)
 	sym.BeginAttribute(row.Pattern).AddMembershipLowCardRef(vocab.MembGrantSubjectPattern.GetId().Value()).EndAttribute()
 	sym.BeginAttribute(row.Direction.String()).AddMembershipLowCardRef(vocab.MembGrantDirection.GetId().Value()).EndAttribute()
 	grantedVia := row.GrantedVia
@@ -344,9 +344,7 @@ func (inst *Store) encodeLogEntity(ent *dml.InEntityFacts, id uint64, row factss
 
 	sym := ent.GetSectionSymbol()
 	sym.BeginAttribute("log").AddMembershipLowCardRef(vocab.MembKindLog.GetId().Value()).EndAttribute()
-	if row.AppId != "" {
-		sym.BeginAttribute(string(row.AppId)).AddMembershipLowCardRef(vocab.MembRuntimeApp.GetId().Value()).EndAttribute()
-	}
+	stampApp(sym, row.AppId)
 	if row.Level != "" {
 		sym.BeginAttribute(row.Level).AddMembershipLowCardRef(vocab.MembLogLevel.GetId().Value()).EndAttribute()
 	}
@@ -402,13 +400,12 @@ func writeLogTypedFields(ent *dml.InEntityFacts, fields []factsstore.LogField, l
 	// The window this line came from (ADR-0191 §SD4) rides the same section as
 	// the uint fields and so must go through the same buffer: a section frame
 	// closes for good, and a second opener would be refused. It is enqueued
-	// first so it reads before the fields in the section's attribute order.
-	if instanceKey != 0 {
-		buf.Enqueue("u64Array", "instanceKey", func() error {
-			stampInstance(ent.GetSectionU64Array(), instanceKey)
-			return nil
-		})
-	}
+	// first so it reads before the fields in the section's attribute order,
+	// and always, zero included, as the origin's instance slot.
+	buf.Enqueue("u64Array", "instanceKey", func() error {
+		stampInstance(ent.GetSectionU64Array(), instanceKey)
+		return nil
+	})
 	for _, f := range fields {
 		switch f.Kind {
 		case factsstore.LogFieldKindInt:
@@ -465,6 +462,16 @@ func writeLogTypedFields(ent *dml.InEntityFacts, fields []factsstore.LogField, l
 	})
 }
 
+// Every kind this store writes carries the three slots of the shared
+// origin component (ADR-0330 §SD3, ADR-0277 §SD1) — run, app and instance,
+// once each, on the memberships audit.Origin spells them with — so a row
+// of any kind reads as that component by its slots (ADR-0146 §D5) and a
+// reader selects every writer's rows by one predicate. stampRun, stampApp
+// and stampInstance are the three; each writes its slot even when the
+// value is unattributed, "" or 0 (ADR-0191 §SD3), as the generated stores'
+// origin does. A reader treats those values as unknown, never as a run ""
+// or a window 0.
+
 // stampRun writes the MembRuntimeRun attribute onto an already-open symbol
 // section (ADR-0191 §SD3). It is the one place the run reaches a row, so
 // every kind carries it the same way and a reader has one membership to
@@ -472,47 +479,45 @@ func writeLogTypedFields(ent *dml.InEntityFacts, fields []factsstore.LogField, l
 //
 // rowRunId wins when the DTO carries one: for a live write it equals the
 // store's, and for a backfill or a test it is the authoritative value. The
-// store's configured run is the fallback, and both empty writes nothing —
-// which reads back as an unattributed row rather than as a row belonging to
-// run "".
+// store's configured run is the fallback; with neither the slot holds "",
+// unattributed.
 //
 // The run rides the plain channel as the attribute's value, as the app id
 // does (ADR-0277 §SD8): the mixed channel carried the same bytes a second
 // time as the membership's parameter, which added nothing and kept these
-// rows from reading as the trail's Origin component. A row written this way
-// satisfies that component by its slots.
+// rows from reading as the origin component.
 func (inst *Store) stampRun(sym *dml.InEntityFactsSectionSymbol, rowRunId string) {
 	runId := rowRunId
 	if runId == "" {
 		runId = inst.cfg.RunId
 	}
-	if runId == "" {
-		return
-	}
 	sym.BeginAttribute(runId).AddMembershipLowCardRef(vocab.MembRuntimeRun.GetId().Value()).EndAttribute()
+}
+
+// stampApp writes the MembRuntimeApp attribute onto an already-open symbol
+// section: the app a row is about, "" for the host's own work.
+func stampApp(sym *dml.InEntityFactsSectionSymbol, appId app.AppIdT) {
+	sym.BeginAttribute(string(appId)).AddMembershipLowCardRef(vocab.MembRuntimeApp.GetId().Value()).EndAttribute()
 }
 
 // stampInstance writes the window key onto an already-open u64 section
 // (ADR-0191 §SD3). Zero is unattributed — a host-written row, a CLI
-// bootstrap, or a producer that has no window — and writes nothing, so a
-// reader tells "no window" from "window 0" by absence rather than by value.
+// bootstrap, or a producer that has no window.
 //
 // The membership is spelled MembLifecycleTileKey for the reason §SD1 gives:
 // the launch and workingset kinds already reuse it, one column to join on
 // beats a per-kind spelling, and renaming it would renumber an id that rows
 // on disk carry.
 func stampInstance(u64 *dml.InEntityFactsSectionU64Array, instanceKey uint64) {
-	if instanceKey == 0 {
-		return
-	}
 	u64.BeginAttributeSingle(instanceKey).
 		AddMembershipLowCardRef(vocab.MembLifecycleTileKey.GetId().Value()).EndAttribute()
 }
 
 // WriteRuntimeStart lands one boxer.facts row tagged KindRuntimeRun.
-// The run_id is the natural key (entity-id) and rides as the high-card
-// parameter of MembRuntimeRun so child app-lifecycle rows can join by
-// equality on a single symbol membership.
+// The run_id is the natural key (entity-id) and rides as the value of
+// MembRuntimeRun so child app-lifecycle rows can join by equality on a
+// single symbol membership. The run is the host's own work: its origin
+// names no app and no window.
 func (inst *Store) WriteRuntimeStart(row factsstore.RuntimeStartRow) (id uint64, err error) {
 	id = inst.nextId.Add(1)
 	ts := defaultTs(row.Ts)
@@ -523,6 +528,7 @@ func (inst *Store) WriteRuntimeStart(row factsstore.RuntimeStartRow) (id uint64,
 	sym := ent.GetSectionSymbol()
 	sym.BeginAttribute("runtime-run").AddMembershipLowCardRef(vocab.MembKindRuntimeRun.GetId().Value()).EndAttribute()
 	inst.stampRun(sym, row.RunId)
+	stampApp(sym, "")
 	sym.BeginAttribute(row.Hostname).AddMembershipLowCardRef(vocab.MembRunHostname.GetId().Value()).EndAttribute()
 	if row.GoVersion != "" {
 		sym.BeginAttribute(row.GoVersion).AddMembershipLowCardRef(vocab.MembRunGoVersion.GetId().Value()).EndAttribute()
@@ -546,6 +552,7 @@ func (inst *Store) WriteRuntimeStart(row factsstore.RuntimeStartRow) (id uint64,
 
 	u64 := ent.GetSectionU64Array()
 	u64.BeginAttributeSingle(uint64(row.Pid)).AddMembershipLowCardRef(vocab.MembRunPid.GetId().Value()).EndAttribute()
+	stampInstance(u64, 0)
 	u64.EndSection()
 
 	bsec := ent.GetSectionBool()
@@ -557,11 +564,12 @@ func (inst *Store) WriteRuntimeStart(row factsstore.RuntimeStartRow) (id uint64,
 }
 
 // WriteRuntimeHeartbeat lands one boxer.facts row tagged
-// KindRuntimeHeartbeat. The row carries only the kind tag and the
-// MembRuntimeRun mixed-LCR(run_id) so the heartbeat joins back to its
-// runtime-start parent by the same predicate the lifecycle queries
-// use. RunId is required; the natural key includes the timestamp
-// nanoseconds so a hot heartbeat cadence doesn't dedup at insert.
+// KindRuntimeHeartbeat. The row carries the kind tag and the origin's
+// slots — the run on MembRuntimeRun, so the heartbeat joins back to its
+// runtime-start parent by the same predicate the lifecycle queries use,
+// and no app or window. RunId is required; the natural key includes the
+// timestamp nanoseconds so a hot heartbeat cadence doesn't dedup at
+// insert.
 func (inst *Store) WriteRuntimeHeartbeat(row factsstore.HeartbeatRow) (id uint64, err error) {
 	if row.RunId == "" {
 		err = eh.Errorf("chstore: WriteRuntimeHeartbeat requires a non-empty RunId")
@@ -576,7 +584,12 @@ func (inst *Store) WriteRuntimeHeartbeat(row factsstore.HeartbeatRow) (id uint64
 	sym := ent.GetSectionSymbol()
 	sym.BeginAttribute("runtime-heartbeat").AddMembershipLowCardRef(vocab.MembKindRuntimeHeartbeat.GetId().Value()).EndAttribute()
 	inst.stampRun(sym, row.RunId)
+	stampApp(sym, "")
 	sym.EndSection()
+
+	u64 := ent.GetSectionU64Array()
+	stampInstance(u64, 0)
+	u64.EndSection()
 
 	err = inst.commitAndShip(context.Background(), ent)
 	return
@@ -598,7 +611,7 @@ func (inst *Store) WriteAppLifecycle(row factsstore.AppLifecycleRow) (id uint64,
 
 	sym := ent.GetSectionSymbol()
 	sym.BeginAttribute("app-lifecycle").AddMembershipLowCardRef(vocab.MembKindAppLifecycle.GetId().Value()).EndAttribute()
-	sym.BeginAttribute(string(row.AppId)).AddMembershipLowCardRef(vocab.MembRuntimeApp.GetId().Value()).EndAttribute()
+	stampApp(sym, row.AppId)
 	inst.stampRun(sym, row.RunId)
 	sym.BeginAttribute(phase).AddMembershipLowCardRef(vocab.MembLifecyclePhase.GetId().Value()).EndAttribute()
 	sym.EndSection()
@@ -610,7 +623,7 @@ func (inst *Store) WriteAppLifecycle(row factsstore.AppLifecycleRow) (id uint64,
 	}
 
 	u64 := ent.GetSectionU64Array()
-	u64.BeginAttributeSingle(row.TileKey).AddMembershipLowCardRef(vocab.MembLifecycleTileKey.GetId().Value()).EndAttribute()
+	stampInstance(u64, row.TileKey)
 	u64.EndSection()
 
 	err = inst.commitAndShip(context.Background(), ent)
@@ -637,7 +650,7 @@ func (inst *Store) WriteLaunch(row factsstore.LaunchRow) (id uint64, err error) 
 
 	sym := ent.GetSectionSymbol()
 	sym.BeginAttribute("launch").AddMembershipLowCardRef(vocab.MembKindLaunch.GetId().Value()).EndAttribute()
-	sym.BeginAttribute(string(row.TargetAppId)).AddMembershipLowCardRef(vocab.MembRuntimeApp.GetId().Value()).EndAttribute()
+	stampApp(sym, row.TargetAppId)
 	sym.BeginAttribute(string(row.CallerAppId)).AddMembershipLowCardRef(vocab.MembLaunchCaller.GetId().Value()).EndAttribute()
 	inst.stampRun(sym, row.RunId)
 	if row.ConfigKind != "" {
@@ -646,7 +659,7 @@ func (inst *Store) WriteLaunch(row factsstore.LaunchRow) (id uint64, err error) 
 	sym.EndSection()
 
 	u64 := ent.GetSectionU64Array()
-	u64.BeginAttributeSingle(row.TileKey).AddMembershipLowCardRef(vocab.MembLifecycleTileKey.GetId().Value()).EndAttribute()
+	stampInstance(u64, row.TileKey)
 	u64.EndSection()
 
 	if len(row.Config) > 0 {

@@ -4,6 +4,10 @@ import (
 	"context"
 	_ "embed"
 	"iter"
+	"regexp"
+	"slices"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -30,6 +34,44 @@ var factsDDL string
 
 // auditColumns are the physical names the recorder's reads narrow on.
 var auditColumns, auditColumnsErr = auditrec.ColumnsFromDDL(TrailColOrder, factsDDL)
+
+// sealedKinds narrows a read of a run's rows to the kinds the recorder
+// writes and seals: a has-any over the symbol section's memberships of
+// every kind marker the store binds — the runtimeKind* of its domain
+// components and the seal's own. Every writer of boxer.facts carries the
+// origin (ADR-0277's Update of 2026-10-30), so the run alone selects logs,
+// metrics, lifecycle, launch and query-run rows no recorder wrote and no
+// seal names; law L34 is over the trail's kinds (ADR-0327's Update of
+// 2026-10-30). The context components carry no kind marker, so a row that
+// is only Origin, Conversation, Delegation or Cause is not the trail's.
+var sealedKinds, sealedKindsErr = sealedKindsPredicate()
+
+var symbolMembershipColumn = regexp.MustCompile(`"tv:symbol:lr:[^"]*"`)
+
+func sealedKindsPredicate() (pred string, err error) {
+	col := symbolMembershipColumn.FindString(factsDDL)
+	if col == "" {
+		return "", eh.Errorf("trail: the DDL lacks the symbol section's membership column")
+	}
+	var ids []uint64
+	for _, membs := range TrailMembershipIds {
+		for name, id := range membs {
+			if strings.HasPrefix(name, "runtimeKind") || strings.HasPrefix(name, "evidenceKind") {
+				ids = append(ids, id)
+			}
+		}
+	}
+	if len(ids) == 0 {
+		return "", eh.Errorf("trail: the store binds no kind marker")
+	}
+	slices.Sort(ids)
+	ids = slices.Compact(ids)
+	lits := make([]string, len(ids))
+	for i, id := range ids {
+		lits[i] = strconv.FormatUint(id, 10)
+	}
+	return "hasAny(" + col + ", [" + strings.Join(lits, ", ") + "])", nil
+}
 
 // rowContextKey carries an audit event's conversation and delegation from
 // Recorder.Event to the batch that builds its row: the shared writer's
@@ -58,6 +100,9 @@ type auditStore struct {
 func newAuditStore(exec recordstore.ExecutorI, readTable string) (inst *auditStore, err error) {
 	if auditColumnsErr != nil {
 		return nil, auditColumnsErr
+	}
+	if sealedKindsErr != nil {
+		return nil, sealedKindsErr
 	}
 	return &auditStore{exec: exec, read: NewTrailStore(exec, nil, TrailStoreConfig{ReadTable: readTable})}, nil
 }
@@ -108,9 +153,15 @@ func (inst *auditStore) ScanEvents(ctx context.Context, opts recordstore.ScanOpt
 	}
 }
 
-// ScanRows reads the rows carrying an origin under opts: a seal as the
-// seal law reads it, any other row with its canonical item.
+// ScanRows reads the rows of the trail's own kinds carrying an origin
+// under opts — sealedKinds narrows it — a seal as the seal law reads it,
+// any other row with its canonical item.
 func (inst *auditStore) ScanRows(ctx context.Context, opts recordstore.ScanOpts) iter.Seq2[auditrec.Row, error] {
+	if opts.ExtraPredicate == "" {
+		opts.ExtraPredicate = sealedKinds
+	} else {
+		opts.ExtraPredicate = "(" + opts.ExtraPredicate + ") AND " + sealedKinds
+	}
 	return func(yield func(auditrec.Row, error) bool) {
 		for ent, err := range inst.scan(func(st *TrailStore) iter.Seq2[*TrailEntity, error] { return st.ScanOrigin(ctx, opts) }) {
 			if err != nil {

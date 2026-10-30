@@ -94,7 +94,12 @@ func (inst *Presence) write(ctx context.Context, phase string, s Status) (err er
 	row := PresenceRow(phase, s, inst.host, time.Now())
 	inst.mu.Lock()
 	defer inst.mu.Unlock()
-	if err = inst.st.Begin(row.Id, row.Ts, watchbillpresence.PresenceEnvelope{NaturalKey: row.NaturalKey}).AddWorkerPresence(row).Commit(); err != nil {
+	// The row carries the shared origin (ADR-0330 §SD3): the worker's run,
+	// which is this process's; a worker has no window, so app and instance
+	// stay unattributed (ADR-0191 §SD3).
+	b := inst.st.Begin(row.Id, row.Ts, watchbillpresence.PresenceEnvelope{NaturalKey: row.NaturalKey}).
+		AddOrigin(watchbillpresence.Origin{Id: row.Id, Run: s.RunId})
+	if err = b.AddWorkerPresence(row).Commit(); err != nil {
 		return eb.Build().Str("runId", s.RunId).Str("phase", phase).Errorf("buffer presence: %w", err)
 	}
 	if _, err = inst.st.Flush(ctx); err != nil {

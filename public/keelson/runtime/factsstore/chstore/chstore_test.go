@@ -15,6 +15,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsstore"
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsstore/chstore"
+	"github.com/stergiotis/boxer/public/keelson/runtime/sysmfacts"
 	"github.com/stergiotis/boxer/public/keelson/runtime/vocab"
 )
 
@@ -395,6 +396,61 @@ func TestStore_StampsRunAndInstance_LiveCH(t *testing.T) {
 	}
 }
 
+// TestStore_EveryKindReadsAsOrigin_LiveCH: every kind this store writes
+// carries the shared origin's three slots once each (ADR-0330 §SD3), so the
+// component's published filter — the one every facts-bound store bakes —
+// selects all of them, unattributed rows included: a host log with no app or
+// window, the runtime-start and heartbeat rows.
+func TestStore_EveryKindReadsAsOrigin_LiveCH(t *testing.T) {
+	s, cleanup := newLiveStampedStore(t, "run-origin")
+	defer cleanup()
+	ts := time.Now().UTC()
+	writes := []func() error{
+		func() error {
+			_, err := s.WriteGrant(factsstore.GrantRow{AppId: "github.com/example/play", InstanceKey: 7, Pattern: "x.y", Direction: app.CapDirectionPub, Ts: ts})
+			return err
+		},
+		func() error {
+			_, err := s.WriteLog(factsstore.LogRow{AppId: "github.com/example/play", InstanceKey: 9, Level: "info", Message: "app", Ts: ts})
+			return err
+		},
+		func() error {
+			_, err := s.WriteLog(factsstore.LogRow{Level: "info", Message: "host", Ts: ts})
+			return err
+		},
+		func() error {
+			_, err := s.WriteRuntimeStart(factsstore.RuntimeStartRow{RunId: "run-origin", Hostname: "h", Pid: 1, Ts: ts})
+			return err
+		},
+		func() error {
+			_, err := s.WriteRuntimeHeartbeat(factsstore.HeartbeatRow{RunId: "run-origin", Ts: ts})
+			return err
+		},
+		func() error {
+			_, err := s.WriteAppLifecycle(factsstore.AppLifecycleRow{AppId: "github.com/example/play", TileKey: 5, Phase: factsstore.AppLifecyclePhaseStarted, Ts: ts})
+			return err
+		},
+		func() error {
+			_, err := s.WriteLaunch(factsstore.LaunchRow{CallerAppId: "github.com/example/chat", TargetAppId: "github.com/example/play", TileKey: 5, Ts: ts})
+			return err
+		},
+	}
+	for _, w := range writes {
+		require.NoError(t, w())
+	}
+
+	filter := sysmfacts.SysmetricsComponentSQL.Kinds["Origin"].Filter
+	require.NotEmpty(t, filter)
+	sql := "SELECT count(), countIf(" + filter + ") FROM runtime_chstore_test.facts FORMAT TabSeparated"
+	body, err := readClient().Query(context.Background(), sql)
+	require.NoError(t, err)
+	defer func() { _ = body.Close() }()
+	raw, err := io.ReadAll(body)
+	require.NoError(t, err)
+	assert.Equal(t, fmt.Sprintf("%d\t%d", len(writes), len(writes)), strings.TrimSpace(string(raw)),
+		"every row is written, and every row conforms to Origin")
+}
+
 // TestStore_RowRunIdWinsOverTheStores_LiveCH pins the precedence in §SD3: a
 // DTO that carries its own run keeps it. They are equal on a live write, so
 // the case that distinguishes them is a backfill — rows written on behalf of
@@ -413,10 +469,12 @@ func TestStore_RowRunIdWinsOverTheStores_LiveCH(t *testing.T) {
 	assert.Equal(t, "5", gotInstance)
 }
 
-// TestStore_UnstampedStoreWritesNoRun_LiveCH pins what absence means: a store
-// built without a run id writes rows carrying none, exactly as before
-// ADR-0191, rather than a row belonging to run "".
-func TestStore_UnstampedStoreWritesNoRun_LiveCH(t *testing.T) {
+// TestStore_UnstampedStoreWritesAnUnattributedRun_LiveCH pins what a store
+// built without a run id writes: the origin's run slot holding "", which a
+// reader takes as unattributed, as it does an instance of 0 (ADR-0191
+// §SD3; the slots are always written since ADR-0277's Update of
+// 2026-10-30).
+func TestStore_UnstampedStoreWritesAnUnattributedRun_LiveCH(t *testing.T) {
 	s, cleanup := newLiveStore(t)
 	defer cleanup()
 	_, err := s.WriteGrant(factsstore.GrantRow{
@@ -426,7 +484,7 @@ func TestStore_UnstampedStoreWritesNoRun_LiveCH(t *testing.T) {
 
 	gotRun, gotInstance := attributionOf(t)
 	assert.Empty(t, gotRun)
-	assert.Equal(t, "0", gotInstance, "an absent instance reads as the type default, not as window 0")
+	assert.Equal(t, "0", gotInstance, "an unattributed instance reads as 0, which no window is")
 }
 
 // --- ADR-0191 §SD7: the trail as rows -----------------------------------------

@@ -47,7 +47,10 @@ type App struct {
 	ids   *c.WidgetIdStack
 	bus   app.BusI
 	runId string
-	log   zerolog.Logger
+	// instance is this window's key, the published tree's origin with
+	// runId (ADR-0330 §SD3).
+	instance uint64
+	log      zerolog.Logger
 	// tasks runs Regenerate and the tree publish as keelson tasks owned
 	// by this window.
 	tasks task.TaskApiI
@@ -78,6 +81,7 @@ func (inst *App) Mount(ctx app.MountContextI) (err error) {
 	inst.ids = ctx.Ids()
 	inst.bus = ctx.Bus()
 	inst.runId = ctx.RunId()
+	inst.instance = ctx.InstanceKey()
 	inst.log = ctx.Log()
 	inst.tasks = task.ForApp(ctx)
 

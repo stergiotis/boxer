@@ -17,6 +17,7 @@ import (
 
 	"github.com/stergiotis/boxer/apps/tally/launchcfg"
 	"github.com/stergiotis/boxer/public/fs/lading/ladingadhoc"
+	"github.com/stergiotis/boxer/public/fs/lading/ladingpolicy"
 	"github.com/stergiotis/boxer/public/identity/identifier"
 	"github.com/stergiotis/boxer/public/keelson/data/chclient"
 	"github.com/stergiotis/boxer/public/keelson/data/storeexec"
@@ -144,6 +145,7 @@ func (inst *App) publishAndOpen(ctx context.Context, gen int, mount identifier.T
 		Name:      treeName,
 		Publisher: string(ManifestId),
 		Mount:     mount,
+		Origin:    ladingpolicy.Origin{Run: inst.runId, App: string(ManifestId), Instance: inst.instance},
 	})
 	if err != nil {
 		return

@@ -118,6 +118,7 @@ func (inst *App) sendDoc(openPlay bool) {
 		fileName = inst.readName
 	}
 	bus := inst.bus
+	origin := inst.origin
 
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), sendPlayTimeout)
@@ -126,7 +127,7 @@ func (inst *App) sendDoc(openPlay bool) {
 		// Run to completion: an upload the person asked for is not aborted
 		// by the window closing meanwhile.
 		err := task.RunToCompletion(inst.tasks, task.SpawnOpts{Kind: "mdedit.send", Title: gesture}, func() error {
-			id, err := uploadDoc(ctx, src, fileName)
+			id, err := uploadDoc(ctx, src, fileName, origin)
 			msg = "uploaded to boxer.facts · id " + utoa(id)
 			if err == nil && openPlay {
 				err = openInPlay(bus, id)
@@ -148,7 +149,7 @@ func (inst *App) sendDoc(openPlay bool) {
 // plus its extracted items, via the same IngestDocument the markdown
 // ingestor uses — and the document row's id out, the key a launch query (or
 // a hand-written one) selects it by. Pure with respect to App state.
-func uploadDoc(ctx context.Context, src, fileName string) (id uint64, err error) {
+func uploadDoc(ctx context.Context, src, fileName string, origin mddocfacts.Origin) (id uint64, err error) {
 	client := chclient.New(chclient.ConfigFromEnv(), nil)
 	if err = client.Ping(ctx); err != nil {
 		return
@@ -163,7 +164,7 @@ func uploadDoc(ctx context.Context, src, fileName string) (id uint64, err error)
 		return
 	}
 
-	rows, err := store.IngestDocument([]byte(src), fileName, time.Now().UTC())
+	rows, err := store.IngestDocument([]byte(src), fileName, time.Now().UTC(), origin)
 	if err != nil {
 		return
 	}

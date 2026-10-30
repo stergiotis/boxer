@@ -40,7 +40,7 @@ func TestFactsRowsReadBackAsTheirComponents(t *testing.T) {
 			{SourceSlug: "b", Target: "nowhere", Kind: capmapcorpus.RelationKindWikilink, Section: "S", Resolution: capmapcorpus.ResolutionUnresolved},
 		},
 	}
-	records, _, err := BuildRecords(corpus, now)
+	records, _, err := BuildRecords(corpus, now, Origin{Run: "run-capmap"})
 	require.NoError(t, err)
 	require.Len(t, records, 1)
 	defer records[0].Release()
