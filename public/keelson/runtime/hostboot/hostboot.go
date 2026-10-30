@@ -339,6 +339,9 @@ type Runtime struct {
 	cleanups  []func()
 	reapOnce  sync.Once
 	closeOnce sync.Once
+	// showRunning opens the app center on its Running page, for the Window
+	// menu (ADR-0348); nil where the app center cannot be launched.
+	showRunning func() (err error)
 }
 
 // Boot wires the runtime in the carousel's order (ADR-0211 §SD1): identity,
@@ -796,15 +799,19 @@ func (rt *Runtime) bootWindowHost() (err error) {
 	// the app the pane shows. Wired only where the registry holds it, so a
 	// host built over a narrower registry shows no dead action.
 	// Nor where the launch limit (ADR-0272) refuses the app center.
+	// The Window menu's Running windows opens it on no app, which is its
+	// Running page (ADR-0348 §SD1).
 	if _, ok := reg.LookupManifest(appcenter.AppId); ok && reg.Launchable(appcenter.AppId) {
-		lchr.SetInspect(func(target app.AppIdT) (err error) {
+		openAppCenter := func(target app.AppIdT) (err error) {
 			cfg, err := buscodec.Encode(appcenterlaunch.AppCenterLaunch{At: time.Now().UTC(), AppId: string(target)})
 			if err != nil {
 				return
 			}
 			_, err = host.OpenWithConfig(appcenter.AppId, appcenterlaunch.Kind, cfg)
 			return
-		})
+		}
+		lchr.SetInspect(openAppCenter)
+		rt.showRunning = func() error { return openAppCenter("") }
 	}
 	// Ranking, when the facts store can answer for it (ADR-0214 §SD7). A
 	// no-op against the in-memory fallback, which is the correct behaviour
@@ -1241,12 +1248,19 @@ func (rt *Runtime) bootIntrospect() {
 }
 
 func (rt *Runtime) chrome(extraMenus func(), host *windowhost.Inst) imzhost.ChromeConfig {
+	// Running windows opens through the window host, so a chrome without one
+	// does not offer it.
+	var showRunning func() (err error)
+	if host != nil {
+		showRunning = rt.showRunning
+	}
 	return imzhost.ChromeConfig{
 		ExtraMenus:  extraMenus,
 		Status:      rt.Status,
 		Host:        host,
 		VideoOutput: rt.opts.VideoOutput,
 		HelpHost:    rt.opts.HelpHost,
+		ShowRunning: showRunning,
 		// The launcher is bound wherever a window host exists — it is that
 		// host's own surface (ADR-0214 §SD1), not an optional service, and the
 		// only path that has no window host is the screenshot tour, which does

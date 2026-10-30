@@ -67,9 +67,10 @@ The Running page is what the right side shows while no app is selected,
 where the window used to ask for a selection; the left pane gains a
 **Running** entry above the app list, which clears the selection. A window
 opened with no launch config therefore opens on it. A row's app name opens
-that app's page, so the overview leads to the existing detail. Opening the
-app center on the Running page from elsewhere (a Window-menu entry) is
-deferred.
+that app's page, so the overview leads to the existing detail. The Window
+menu's **Running windows** opens a new app center window on the page, as the
+launcher's Inspect opens one on an app; host boot hands the chrome that
+action where the app center can be launched.
 
 ### SD2 — Rows, columns and order
 
@@ -136,6 +137,7 @@ grants; `windows` is added.
 | App center manifest (`appcenter`) | `keelson.query` grant for `windows` added | the manifest test that pins its tables |
 | App center exported API | a host interface and its setter added | host boot wires it beside the launcher's host |
 | App center operations catalog | `list_running` query added; `show_app` with an empty id shows the Running page | `appcenter_ops_test.go`; the catalog's help text |
+| Host chrome config (`imzero2/host.ChromeConfig`) | `ShowRunning` added | host boot sets it beside the launcher's Inspect |
 
 ## Alternatives
 
@@ -155,6 +157,11 @@ grants; `windows` is added.
 - **Memory and CPU columns per window.** Not measurable in one Go process
   short of goroutine labels, which would give sampled CPU for labelled work
   only; numbers shaped like a task manager's that are not would mislead.
+- **A stall column.** A stall is the host not drawing at all — the desktop
+  not showing it ([ADR-0332](./0332-a-hidden-desktop-host-keeps-running-passes.md))
+  — which stops every window's frame, the page's own included, so the column
+  would be blank whenever a person can read it; agents already read a
+  window's stall from the agent window list.
 - **Tracking timer- and keystroke-driven jobs as tasks without audit rows.**
   Deferred: frame time already shows such a window, and the option changes the
   task supervisor for every app.
@@ -173,9 +180,6 @@ grants; `windows` is added.
 
 - Three reads every tick while the page is shown, joined in Go.
 - The task count is only as complete as the apps' use of the task API.
-- A window's stall (time without a frame) is not shown: `keelson('windows')`
-  does not carry it, and ADR-0346 is changing that table's columns; adding it
-  is left to be coordinated with that work.
 - Close from the page is as final as the window's close button, at one
   remove from the window.
 
@@ -197,8 +201,9 @@ interface keep an app center without actions.
   `list_running` operation against a fixed read; every statement through the
   `keelson.query` gate and engine over a bus. A headless scene under the app
   center's scenes: play opened beside it with a query in flight shows a row
-  for play with its query run as the oldest task; with M2, Close on that row
-  removes play's window from the tree.
+  for play with its query run as the oldest task, and Close on that row
+  removes play's window from the tree. A second scene opens the page from the
+  Window menu with play alone and finds both windows listed.
 - **What would fail.** A row missing or misattributed, an unowned task
   dropped, or Close not reaching the window host.
 - **Gap.** Per-window memory and CPU, by SD3.
@@ -208,9 +213,9 @@ interface keep an app center without actions.
 - **M1 — The page, read-only.** SD1–SD3, SD6, `list_running`; unit tests
   and the headless scene's read half.
 - **M2 — Raise and close.** SD4 and the host wiring; the scene's close half.
+- **M3 — The Window menu.** Running windows (SD1); its own scene.
 
-Deferred: opening the app center on the Running page from elsewhere; a stall
-column, with ADR-0346's columns; other processes; tracking timer-driven jobs.
+Deferred: other processes; tracking timer-driven jobs.
 
 ## Status
 

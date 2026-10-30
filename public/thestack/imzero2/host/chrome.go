@@ -55,6 +55,11 @@ type ChromeConfig struct {
 	// what the screenshot-tour path and any host without a launcher want.
 	// Requires Host != nil.
 	Launcher app.AppIdT
+	// ShowRunning, when non-nil, puts "Running windows" at the top of the
+	// Window menu: it opens the app center on its Running page, every open
+	// window with what it costs (ADR-0348). Host boot sets it where the app
+	// center can be launched. May be nil.
+	ShowRunning func() (err error)
 }
 
 // DecorateRenderer wraps an inner renderer in the shared host chrome:
@@ -207,6 +212,14 @@ func DecorateRenderer(inner func() error, cc ChromeConfig) func() error {
 					}
 				}
 				for range c.MenuButton(c.Atoms().Text("Window").Keep()).KeepIter() {
+					if cc.ShowRunning != nil {
+						if c.Button(ids.PrepareStr("showRunning"), c.Atoms().Text("Running windows").Keep()).SendResp().HasPrimaryClicked() {
+							if err := cc.ShowRunning(); err != nil {
+								log.Warn().Err(err).Msg("Window menu: the app center did not open")
+							}
+						}
+						c.Separator().Horizontal().Send()
+					}
 					// Whole-desktop arrangements over the windowhost's windows,
 					// computed in Go from the geometry the host reports.
 					if cc.Host != nil {
