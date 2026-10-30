@@ -98,6 +98,12 @@ type App struct {
 	// The frame's own state.
 	selected string
 	filter   string
+	// The Running page's actions (appcenter_actions.go): the window whose
+	// Close waits for its confirmation, the windows closed and still listed,
+	// and the last action's refusal.
+	closeArmed uint64
+	closing    map[uint64]bool
+	actionNote string
 
 	// Operations state (appcenter_ops.go, ADR-0345). frameCtx is the current
 	// frame's context, through which a row click routes as a gesture;

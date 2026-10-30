@@ -788,6 +788,9 @@ func (rt *Runtime) bootWindowHost() (err error) {
 	// neither package imports the other's types.
 	lchr := launcher.Default
 	lchr.SetHost(host)
+	// The app center's Running page raises and closes windows through the
+	// host itself, not over the bus (ADR-0348 §SD4).
+	appcenter.SetHost(host)
 	lchr.SetHelpApp(helphost.ManifestId)
 	// The detail pane's Inspect (ADR-0260 §SD1): the app center, opened on
 	// the app the pane shows. Wired only where the registry holds it, so a

@@ -105,6 +105,9 @@ apps, and no manifest can ask for an authority to close windows. A host that
 wires none (a narrower registry, an embed) shows no actions. Close goes through
 the window's ordinary closing edge — workingset saved, Unmount, drain — and its
 reason, "closed from the app center", lands in the stopped lifecycle row.
+Close asks first, and the confirmation names the window: the rows re-sort on
+every read, so the confirmation is held by window key, not by row, and a
+press cannot land on the window that moved into the row's place.
 
 ### SD5 — Agents read, the person acts
 
@@ -204,7 +207,7 @@ interface keep an app center without actions.
 
 - **M1 — The page, read-only.** SD1–SD3, SD6, `list_running`; unit tests
   and the headless scene's read half.
-- **M2 — Raise and close.** SD4 and the host wiring; the scene.
+- **M2 — Raise and close.** SD4 and the host wiring; the scene's close half.
 
 Deferred: opening the app center on the Running page from elsewhere; a stall
 column, with ADR-0346's columns; other processes; tracking timer-driven jobs.

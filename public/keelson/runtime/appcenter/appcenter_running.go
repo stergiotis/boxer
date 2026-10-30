@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
+	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/badge"
 )
@@ -203,8 +204,18 @@ func (inst *App) renderRunning(snap snapshot) {
 		head += " The render loop's median period is " + fmtUs(v.loopP50Us) + "."
 	}
 	c.Label(head).Send()
+	if inst.actionNote != "" {
+		badge.New(inst.ids.PrepareStr("action-note"), inst.actionNote).Tone(badge.ToneError).Variant(badge.VariantSoft).Send()
+	}
+	inst.pruneClosing(v)
+	// A host that wires none shows no actions (ADR-0348 §SD4).
+	h := hostOf()
+	headers := []string{"app", "window", "p50", "p95", "of loop", "messages", "tasks", "oldest task", "agent tasks"}
+	if h != nil {
+		headers = append(headers, "")
+	}
 	now := time.Now()
-	inst.grid("running-grid", []string{"app", "window", "p50", "p95", "of loop", "messages", "tasks", "oldest task", "agent tasks"}, len(v.rows), func(j int) {
+	inst.grid("running-grid", headers, len(v.rows), func(j int) {
 		row := &v.rows[j]
 		for range c.HoverText(row.appId).KeepIter() {
 			if c.SelectableLabel(inst.ids.PrepareStr("app"), false, rowName(row)).SendResp().HasPrimaryClicked() {
@@ -247,8 +258,36 @@ func (inst *App) renderRunning(snap snapshot) {
 		} else {
 			weak("—")
 		}
+		if h != nil {
+			inst.renderActions(h, row)
+		}
 	})
 	inst.renderUnowned(v)
+}
+
+// renderActions is a row's Raise and Close. Close asks first, naming the
+// window, since it ends the window's work as its own close button does.
+func (inst *App) renderActions(h HostI, row *runningRow) {
+	for range c.HorizontalTop().KeepIter() {
+		switch {
+		case inst.closing[row.key]:
+			weak("closing…")
+		case inst.closeArmed == row.key:
+			if c.Button(inst.ids.PrepareStr("close-confirm"), c.Atoms().Text(icons.PhX+" Close "+row.title).Keep()).Small().SendResp().HasPrimaryClicked() {
+				inst.closeWindow(h, row.key)
+			}
+			if c.Button(inst.ids.PrepareStr("close-keep"), c.Atoms().Text("Keep").Keep()).Small().SendResp().HasPrimaryClicked() {
+				inst.closeArmed = 0
+			}
+		default:
+			if c.Button(inst.ids.PrepareStr("raise"), c.Atoms().Text(icons.PhArrowUp+" Raise").Keep()).Small().SendResp().HasPrimaryClicked() {
+				inst.raiseWindow(h, row.key)
+			}
+			if c.Button(inst.ids.PrepareStr("close"), c.Atoms().Text(icons.PhX+" Close").Keep()).Small().SendResp().HasPrimaryClicked() {
+				inst.armClose(row.key)
+			}
+		}
+	}
 }
 
 func (inst *App) renderUnowned(v *runningView) {
