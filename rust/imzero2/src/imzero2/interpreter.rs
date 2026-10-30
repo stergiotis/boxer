@@ -7327,9 +7327,18 @@ egui::Panel::bottom(i);
                 // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 
                 if u.is_some() {
-                    w.show(u.as_mut().unwrap(), |ui| {
+                    let ui = u.as_mut().unwrap();
+                    let kept = if ui.is_sizing_pass() {
+                        egui::containers::panel::PanelState::load(ui.ctx(), i)
+                    } else {
+                        None
+                    };
+                    w.show(ui, |ui| {
                         let _ = self.interpret_outer_logged(c, &mut Some(ui));
                     });
+                    if let Some(state) = kept {
+                        ui.ctx().data_mut(|d| d.insert_persisted(i, state));
+                    }
                 } else {
                     self.interpret_outer(c, &mut None)?;
                 }
@@ -7384,9 +7393,18 @@ egui::Panel::bottom(i);
                 // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 
                 if u.is_some() {
-                    w.show(u.as_mut().unwrap(), |ui| {
+                    let ui = u.as_mut().unwrap();
+                    let kept = if ui.is_sizing_pass() {
+                        egui::containers::panel::PanelState::load(ui.ctx(), i)
+                    } else {
+                        None
+                    };
+                    w.show(ui, |ui| {
                         let _ = self.interpret_outer_logged(c, &mut Some(ui));
                     });
+                    if let Some(state) = kept {
+                        ui.ctx().data_mut(|d| d.insert_persisted(i, state));
+                    }
                 } else {
                     self.interpret_outer(c, &mut None)?;
                 }
@@ -7476,9 +7494,18 @@ egui::Panel::left(i);
                 // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 
                 if u.is_some() {
-                    w.show(u.as_mut().unwrap(), |ui| {
+                    let ui = u.as_mut().unwrap();
+                    let kept = if ui.is_sizing_pass() {
+                        egui::containers::panel::PanelState::load(ui.ctx(), i)
+                    } else {
+                        None
+                    };
+                    w.show(ui, |ui| {
                         let _ = self.interpret_outer_logged(c, &mut Some(ui));
                     });
+                    if let Some(state) = kept {
+                        ui.ctx().data_mut(|d| d.insert_persisted(i, state));
+                    }
                 } else {
                     self.interpret_outer(c, &mut None)?;
                 }
@@ -7532,9 +7559,18 @@ egui::Panel::left(i);
                 // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 
                 if u.is_some() {
-                    w.show(u.as_mut().unwrap(), |ui| {
+                    let ui = u.as_mut().unwrap();
+                    let kept = if ui.is_sizing_pass() {
+                        egui::containers::panel::PanelState::load(ui.ctx(), i)
+                    } else {
+                        None
+                    };
+                    w.show(ui, |ui| {
                         let _ = self.interpret_outer_logged(c, &mut Some(ui));
                     });
+                    if let Some(state) = kept {
+                        ui.ctx().data_mut(|d| d.insert_persisted(i, state));
+                    }
                 } else {
                     self.interpret_outer(c, &mut None)?;
                 }
@@ -7582,9 +7618,18 @@ egui::Panel::right(i);
                 // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 
                 if u.is_some() {
-                    w.show(u.as_mut().unwrap(), |ui| {
+                    let ui = u.as_mut().unwrap();
+                    let kept = if ui.is_sizing_pass() {
+                        egui::containers::panel::PanelState::load(ui.ctx(), i)
+                    } else {
+                        None
+                    };
+                    w.show(ui, |ui| {
                         let _ = self.interpret_outer_logged(c, &mut Some(ui));
                     });
+                    if let Some(state) = kept {
+                        ui.ctx().data_mut(|d| d.insert_persisted(i, state));
+                    }
                 } else {
                     self.interpret_outer(c, &mut None)?;
                 }
@@ -7638,9 +7683,18 @@ egui::Panel::right(i);
                 // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 
                 if u.is_some() {
-                    w.show(u.as_mut().unwrap(), |ui| {
+                    let ui = u.as_mut().unwrap();
+                    let kept = if ui.is_sizing_pass() {
+                        egui::containers::panel::PanelState::load(ui.ctx(), i)
+                    } else {
+                        None
+                    };
+                    w.show(ui, |ui| {
                         let _ = self.interpret_outer_logged(c, &mut Some(ui));
                     });
+                    if let Some(state) = kept {
+                        ui.ctx().data_mut(|d| d.insert_persisted(i, state));
+                    }
                 } else {
                     self.interpret_outer(c, &mut None)?;
                 }
@@ -7688,9 +7742,18 @@ egui::Panel::top(i);
                 // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 
                 if u.is_some() {
-                    w.show(u.as_mut().unwrap(), |ui| {
+                    let ui = u.as_mut().unwrap();
+                    let kept = if ui.is_sizing_pass() {
+                        egui::containers::panel::PanelState::load(ui.ctx(), i)
+                    } else {
+                        None
+                    };
+                    w.show(ui, |ui| {
                         let _ = self.interpret_outer_logged(c, &mut Some(ui));
                     });
+                    if let Some(state) = kept {
+                        ui.ctx().data_mut(|d| d.insert_persisted(i, state));
+                    }
                 } else {
                     self.interpret_outer(c, &mut None)?;
                 }
@@ -7744,9 +7807,18 @@ egui::Panel::top(i);
                 // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 
                 if u.is_some() {
-                    w.show(u.as_mut().unwrap(), |ui| {
+                    let ui = u.as_mut().unwrap();
+                    let kept = if ui.is_sizing_pass() {
+                        egui::containers::panel::PanelState::load(ui.ctx(), i)
+                    } else {
+                        None
+                    };
+                    w.show(ui, |ui| {
                         let _ = self.interpret_outer_logged(c, &mut Some(ui));
                     });
+                    if let Some(state) = kept {
+                        ui.ctx().data_mut(|d| d.insert_persisted(i, state));
+                    }
                 } else {
                     self.interpret_outer(c, &mut None)?;
                 }
