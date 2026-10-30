@@ -13,10 +13,9 @@ import (
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/badge"
 )
 
-// The Running page (ADR-0348): every open window of this host, what its
+// The Running tab (ADR-0348): every open window of this host, what its
 // Frame costs the render loop, and the tasks it owns, with the tasks no open
-// window owns beneath. It is what the right side shows while no app is
-// selected, and its tables are read only then.
+// window owns beneath. Its tables are read only while it is shown.
 
 // tableWindows is keelson('windows'), served by providersgui beside
 // frame_times.
@@ -179,7 +178,6 @@ func rowName(row *runningRow) string {
 
 func (inst *App) renderRunning(snap snapshot) {
 	rn := &snap.running
-	c.LabelAtoms(c.Atoms().BeginRichText("Running").Heading().End().Keep()).Send()
 	weak("Every open window of this host, slowest first. Frame time is the window's Frame on the render goroutine, " +
 		"which every window shares; tasks are the ones the window registered with the task API, so the count is a lower bound. " +
 		"The apps share one process, so memory and CPU are not shown per window: imztop shows the process's.")
@@ -219,7 +217,8 @@ func (inst *App) renderRunning(snap snapshot) {
 		row := &v.rows[j]
 		for range c.HoverText(row.appId).KeepIter() {
 			if c.SelectableLabel(inst.ids.PrepareStr("app"), false, rowName(row)).SendResp().HasPrimaryClicked() {
-				// The app's own page, through the catalog (ADR-0345 §SD3).
+				// The app's own page under Apps, through the catalog (ADR-0345
+				// §SD3).
 				inst.selectGesture(row.appId)
 			}
 		}

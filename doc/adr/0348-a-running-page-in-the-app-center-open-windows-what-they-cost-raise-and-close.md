@@ -55,22 +55,27 @@ Constraints the design inherits:
 
 ## Decision
 
-We will add a **Running** page to the app center: one row per open window of
+We will add a **Running** tab to the app center: one row per open window of
 the host, assembled in the reader from `keelson('windows')`,
 `keelson('frame_times')` and `keelson('tasks')`, with Raise and Close actions
 the host hands the app center at boot. The first cut covers this host's
 windows only.
 
-### SD1 — A page of the app center, beside the per-app pages
+### SD1 — A tab of the app center, beside the app pages
 
-The Running page is what the right side shows while no app is selected,
-where the window used to ask for a selection; the left pane gains a
-**Running** entry above the app list, which clears the selection. A window
-opened with no launch config therefore opens on it. A row's app name opens
-that app's page, so the overview leads to the existing detail. The Window
-menu's **Running windows** opens a new app center window on the page, as the
-launcher's Inspect opens one on an app; host boot hands the chrome that
+The app center has two tabs in its top bar: **Running**, the table across the
+window's full width, and **Apps**, the app list and the selected app's page
+as before. Switching keeps the selection. A window opened with no launch
+config opens on Running; one opened on an app (the launcher's Inspect) opens
+on Apps. A row's app name opens that app's page under Apps, so the overview
+leads to the existing detail. The Window menu's **Running windows** opens a
+new app center window on the Running tab; host boot hands the chrome that
 action where the app center can be launched.
+
+A first cut showed Running whenever no app was selected, behind an entry
+above the app list. Reaching it meant pressing an entry that also cleared the
+selection, and its table sat beside a list it did not use; a tab says what it
+is and leaves the table the window's width.
 
 ### SD2 — Rows, columns and order
 
@@ -114,10 +119,10 @@ press cannot land on the window that moved into the row's place.
 
 The app center's catalog
 ([ADR-0345](./0345-system-apps-join-the-operations-contract-the-log-viewer-first.md))
-gains a query, `list_running`, which returns the rows of the page's last read,
-bounded. `show_app` with an empty id, which used to close a page, shows the
-Running page, so no further view command or resource is needed. Raise and
-Close are not operations. Closing a window ends its work and drains it, which is what
+gains a query, `list_running`, which returns the rows of the tab's last read,
+bounded; a `view` resource and a `set_view` command, which switch the tab the
+way the person's click does; and `show_app` now also switches to Apps.
+Raise and Close are not operations. Closing a window ends its work and drains it, which is what
 ADR-0345 SD4 keeps the person's; raising another app's window pulls the
 person's attention, which an agent already does on its own task's windows
 through the governed path of
@@ -136,7 +141,7 @@ grants; `windows` is added.
 | --- | --- | --- |
 | App center manifest (`appcenter`) | `keelson.query` grant for `windows` added | the manifest test that pins its tables |
 | App center exported API | a host interface and its setter added | host boot wires it beside the launcher's host |
-| App center operations catalog | `list_running` query added; `show_app` with an empty id shows the Running page | `appcenter_ops_test.go`; the catalog's help text |
+| App center operations catalog | `list_running` query, `view` resource and `set_view` command added; `show_app` also writes `view` | `appcenter_ops_test.go`; the catalog's help text |
 | Host chrome config (`imzero2/host.ChromeConfig`) | `ShowRunning` added | host boot sets it beside the launcher's Inspect |
 
 ## Alternatives

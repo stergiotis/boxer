@@ -13,7 +13,7 @@ scene:
 # appcenter — the Running page from the Window menu
 
 ADR-0348: the Window menu's Running windows opens the app center on its
-Running page. The scene starts with play alone, opens the page from the
+Running tab. The scene starts with play alone, opens the tab from the
 menu, and asserts that it lists both windows.
 
 ```jsonl trace

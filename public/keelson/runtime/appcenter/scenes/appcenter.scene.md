@@ -25,6 +25,7 @@ its Timeline tab from the introspection endpoint.
 {"do":"wait","contains":"Refresh","role":"button","settleMs":500}
 {"do":"read","valueContains":"apps registered","role":"label","pattern":"(?P<apps>\\d+) apps registered","settleMs":4000}
 {"do":"expect","of":"apps","min":2}
+{"do":"click","name":"\ue464 Apps","role":"button","comment":"the window opens on the Running tab (ADR-0348)"}
 {"do":"click","contains":"App state","role":"button","nth":0}
 {"do":"wait","name":"Capabilities","settleMs":2000}
 {"do":"wait","name":"ADRs its code cites"}

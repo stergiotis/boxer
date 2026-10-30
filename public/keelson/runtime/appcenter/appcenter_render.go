@@ -12,6 +12,7 @@ import (
 	"github.com/stergiotis/boxer/public/observability/humanfmt"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/badge"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/selector"
 )
 
 // leftWidth is the app list's first width; the panel is resizable.
@@ -32,13 +33,17 @@ func (inst *App) render() {
 	for range c.PanelTopInside(inst.ids.PrepareStr("top")).Resizable(false).KeepIter() {
 		inst.renderStatus(snap)
 	}
-	for range c.PanelLeftInside(inst.ids.PrepareStr("apps")).Resizable(true).DefaultSize(leftWidth).KeepIter() {
-		// The Running page is what shows while no app is selected (ADR-0348
-		// §SD1).
-		if c.SelectableLabel(inst.ids.PrepareStr("running"), inst.selected == "", icons.PhPulse+" Running").SendResp().HasPrimaryClicked() {
-			inst.selectGesture("")
+	if inst.view == viewRunning {
+		for range c.PanelCentralInside().KeepIter() {
+			// Both ways: the table is wider than a narrow window, and a tab
+			// that cannot scroll sideways makes its width the window's minimum.
+			for range c.ScrollArea().Vscroll(true).Hscroll(true).AutoShrink(false, false).KeepIter() {
+				inst.renderRunning(snap)
+			}
 		}
-		c.Separator().Send()
+		return
+	}
+	for range c.PanelLeftInside(inst.ids.PrepareStr("apps")).Resizable(true).DefaultSize(leftWidth).KeepIter() {
 		// Typing commits per keystroke inside the frame (ADR-0345 §SD3); the
 		// handle lets the filter resource say the person is typing.
 		inst.filterH = widgethandle.Make(inst.ids.PrepareStr("filter").Derive())
@@ -59,6 +64,18 @@ func (inst *App) render() {
 
 func (inst *App) renderStatus(snap snapshot) {
 	for range c.HorizontalTop().KeepIter() {
+		// The tabs (ADR-0348 §SD1). The selector commits inside the frame, so
+		// a changed copy is the person's click, routed as a gesture (ADR-0345
+		// §SD3).
+		view := inst.view
+		selector.Segmented(inst.ids, "view", &view).
+			Option(viewRunning, icons.PhPulse+" Running").
+			Option(viewApps, icons.PhSquaresFour+" Apps").
+			SendResp()
+		if view != inst.view {
+			inst.setViewGesture(view)
+		}
+		c.Separator().Vertical().Send()
 		if c.Button(inst.ids.PrepareStr("refresh"), c.Atoms().Text(icons.PhArrowClockwise+" Refresh").Keep()).SendResp().HasPrimaryClicked() {
 			inst.refreshAll()
 		}
@@ -112,7 +129,7 @@ func displayOf(cols *appCols, i int) string {
 
 func (inst *App) renderPage(snap snapshot) {
 	if inst.selected == "" {
-		inst.renderRunning(snap)
+		c.Label("Select an app to see what it did, what it may do, and what it keeps.").Send()
 		return
 	}
 	apps := &snap.global.apps.cols

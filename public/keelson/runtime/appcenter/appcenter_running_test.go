@@ -63,7 +63,7 @@ func TestAgeOf(t *testing.T) {
 	assert.Equal(t, "", ageOf("not a time", now))
 }
 
-// The Running page's tables are read while it is shown, and only then.
+// The running tab's tables are read while it is shown, and only then.
 func TestRefreshReadsRunningOnlyWhileShown(t *testing.T) {
 	w, f, tk := runningFixture()
 	fx := &fixtureReader{answers: map[string]func(dst any){
@@ -97,10 +97,12 @@ func TestRefreshReadsRunningOnlyWhileShown(t *testing.T) {
 	assert.False(t, slices.Contains(fx.tables, tableWindows), "an app's page does not read the open windows")
 	assert.Len(t, inst.snapshot().running.view.rows, 3, "the last Running read stays until the page reads again")
 
-	inst.selectApp("")
+	inst.setView(viewRunning)
 	fx.tables = nil
 	inst.refresh()
 	assert.True(t, slices.Contains(fx.tables, tableWindows))
+	assert.False(t, slices.Contains(fx.tables, tableAppState), "nor does the running tab read the app's page")
+	assert.Equal(t, "a/play", inst.selected, "the selection stays for the apps tab")
 }
 
 func TestListRunning(t *testing.T) {

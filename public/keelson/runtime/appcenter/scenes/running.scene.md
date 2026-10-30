@@ -14,9 +14,8 @@ scene:
 
 # appcenter — the Running page
 
-ADR-0348's Running page, what the app center shows while no app is
-selected: every open window of the host, its frame time against the render
-loop, and the tasks it owns. play opens beside it on a query that takes
+ADR-0348's Running tab, which the app center opens on: every open window
+of the host, its frame time against the render loop, and the tasks it owns. play opens beside it on a query that takes
 about twenty seconds, so the page reads play's window with its query run as
 its oldest task. The scene asserts that both windows are listed and that the
 task is attributed to play's row. Then it closes play from its row: Close

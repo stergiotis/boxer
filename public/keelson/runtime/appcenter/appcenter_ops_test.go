@@ -65,7 +65,7 @@ func TestOperationsCatalogRegisters(t *testing.T) {
 	m, ok := app.LookupManifest(manifest.Id)
 	require.True(t, ok)
 	require.NotNil(t, m.Operations, app.DefaultRegistry.OperationsDiagnostic(manifest.Id))
-	for _, name := range []string{opGetView, opShowApp, opSetFilter, opListRunning} {
+	for _, name := range []string{opGetView, opSetView, opShowApp, opSetFilter, opListRunning} {
 		spec, found := m.Operations.Lookup(name)
 		require.True(t, found, name)
 		assert.True(t, spec.Agents, name)
@@ -87,6 +87,32 @@ func TestShowAppOpensARegisteredAppsPage(t *testing.T) {
 	assert.Equal(t, string(AppId), inst.selected, "a refused command changes nothing")
 	require.NoError(t, command(t, inst, opShowApp, ShowAppArgs{}))
 	assert.Equal(t, "", inst.selected)
+	assert.Equal(t, viewApps, inst.view, "an empty id shows the list alone")
+}
+
+// The tabs switch without losing the selection, and show_app always lands on
+// the apps tab.
+func TestSetViewKeepsTheSelection(t *testing.T) {
+	inst := opsFixture(t)
+	assert.Equal(t, viewRunning, inst.view, "the window opens on the running tab")
+	require.NoError(t, command(t, inst, opShowApp, ShowAppArgs{AppId: string(AppId)}))
+	assert.Equal(t, viewApps, inst.view)
+	require.NoError(t, command(t, inst, opSetView, SetViewArgs{View: viewRunningName}))
+	assert.Equal(t, viewRunning, inst.view)
+	assert.Equal(t, string(AppId), inst.selected, "the selection stays")
+	assert.True(t, inst.wantRunning)
+	v, err := query[struct{}, View](t, inst, opGetView, struct{}{})
+	require.NoError(t, err)
+	assert.Equal(t, viewRunningName, v.View)
+	assert.True(t, v.PageReadAt.IsZero(), "no page is shown on the running tab")
+
+	require.NoError(t, command(t, inst, opSetView, SetViewArgs{View: viewAppsName}))
+	assert.Equal(t, viewApps, inst.view)
+	assert.False(t, inst.wantRunning)
+	assert.Equal(t, "view is running or apps", refusal(command(t, inst, opSetView, SetViewArgs{View: "windows"})).Reason)
+	require.NoError(t, command(t, inst, opSetView, SetViewArgs{View: viewRunningName}))
+	require.NoError(t, command(t, inst, opShowApp, ShowAppArgs{AppId: string(AppId)}))
+	assert.Equal(t, viewApps, inst.view, "show_app of the selected app still switches the tab")
 }
 
 func TestSetFilterAndTheView(t *testing.T) {
@@ -153,7 +179,7 @@ func (inst *engineWindow) submit(t *testing.T, id string, op string, in any) (ou
 	require.NoError(t, err)
 	revs := inst.eng.Revisions()
 	expects := map[string]uint64{}
-	for _, r := range []string{resFilter, resSelection} {
+	for _, r := range []string{resFilter, resSelection, resView} {
 		expects[r] = revs[r]
 	}
 	inst.eng.Submit(op, opwire.CallRequest{CallId: id, Args: args, Writer: "task:t", Expects: expects})
@@ -186,4 +212,10 @@ func TestTheEngineAttributesEachWriter(t *testing.T) {
 	assert.Equal(t, "", w.inst.selected)
 	log := w.eng.Log()
 	assert.Equal(t, opShowApp, log[len(log)-1].Op)
+
+	// So is a tab click.
+	w.frame(func() { w.inst.setViewGesture(viewRunning) })
+	assert.Equal(t, opwire.WriterPerson, w.eng.Writer(resView))
+	assert.Equal(t, viewRunning, w.inst.view)
+	assert.Empty(t, w.eng.UndeclaredWrites(0))
 }

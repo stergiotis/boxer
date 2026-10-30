@@ -9,21 +9,48 @@ import (
 
 // The operations catalog (ADR-0345 §SD1, §SD6 M3). Every row a page shows is
 // a `keelson()` table already, so the catalog carries the view alone: which
-// app's page is open, and the list's filter. Commands set them and never
-// toggle. The one exception is the Running page's join (ADR-0348 §SD5): its
+// tab is shown, which app's page is open, and the list's filter. Commands set
+// them and never toggle. The one exception is the Running page's join (ADR-0348 §SD5): its
 // rows are three tables composed in Go, which no single statement returns,
 // so list_running hands them out as the page last read them. Raising and
 // closing a window are not operations.
 
 const (
+	resView      = "view"
 	resSelection = "selection"
 	resFilter    = "filter"
 
 	opGetView     = "get_view"
+	opSetView     = "set_view"
 	opShowApp     = "show_app"
 	opSetFilter   = "set_filter"
 	opListRunning = "list_running"
 )
+
+// The tabs as the catalog names them.
+const (
+	viewRunningName = "running"
+	viewAppsName    = "apps"
+)
+
+func viewName(v viewE) (s string) {
+	if v == viewApps {
+		return viewAppsName
+	}
+	return viewRunningName
+}
+
+func parseView(s string) (v viewE, err error) {
+	switch s {
+	case viewRunningName:
+		v = viewRunning
+	case viewAppsName:
+		v = viewApps
+	default:
+		err = app.RefuseOperation("view is " + viewRunningName + " or " + viewAppsName)
+	}
+	return
+}
 
 // runningListed bounds what list_running returns of each list; Truncated
 // says when it cut.
@@ -33,6 +60,7 @@ const notRegisteredReason = "no app with that id is registered in this process; 
 
 // opsSnap is what queries read: the view as the frame drew it.
 type opsSnap struct {
+	view       viewE
 	selected   string
 	filter     string
 	registered int
@@ -45,7 +73,7 @@ type opsSnap struct {
 }
 
 func (inst *App) opsSnapshot() (sn opsSnap) {
-	sn.selected, sn.filter = inst.selected, inst.filter
+	sn.view, sn.selected, sn.filter = inst.view, inst.selected, inst.filter
 	snap := inst.snapshot()
 	sn.reads = snap.reads
 	sn.registered = len(snap.global.apps.cols.Id)
@@ -57,7 +85,8 @@ func (inst *App) opsSnapshot() (sn opsSnap) {
 
 // View is get_view's result.
 type View struct {
-	Selected   string    `desc:"the app whose page is open; empty shows the Running page, every open window"`
+	View       string    `desc:"the tab shown: running, every open window, or apps, the app list and an app's page"`
+	Selected   string    `desc:"the app whose page the apps tab shows; empty shows the list alone"`
 	Filter     string    `desc:"the list's filter: a case-insensitive substring of an app's id, name or summary"`
 	Listed     int       `desc:"apps the list shows under the filter"`
 	Registered int       `desc:"apps the window read from keelson('apps'); 0 before the first read"`
@@ -67,7 +96,12 @@ type View struct {
 
 // ShowAppArgs opens an app's page.
 type ShowAppArgs struct {
-	AppId string `desc:"a registered app id; empty shows the Running page, which reads the open windows"`
+	AppId string `desc:"a registered app id; empty shows the app list alone"`
+}
+
+// SetViewArgs switches the tab.
+type SetViewArgs struct {
+	View string `desc:"running or apps"`
 }
 
 // RunningWindow is one open window as the Running page last read it.
@@ -113,11 +147,24 @@ type SetFilterArgs struct {
 var ops = func() (s *appops.Set[*App, opsSnap]) {
 	s = appops.NewSet((*App).opsSnapshot)
 
+	s.Resource(resView, "the tab shown: the open windows, or the apps", func(inst *App) any { return inst.view })
+	s.Restorable(resView, func(inst *App, v any) bool {
+		view, ok := v.(viewE)
+		if ok {
+			inst.setView(view)
+		}
+		return ok
+	})
 	s.Resource(resSelection, "the app whose page is open", func(inst *App) any { return inst.selected })
 	s.Restorable(resSelection, func(inst *App, v any) bool {
 		id, ok := v.(string)
 		if ok {
-			inst.selectApp(id)
+			// The selection alone: the tab is its own resource.
+			inst.selected = id
+			inst.mu.Lock()
+			inst.want = id
+			inst.mu.Unlock()
+			inst.markDirty()
 		}
 		return ok
 	})
@@ -132,27 +179,42 @@ var ops = func() (s *appops.Set[*App, opsSnap]) {
 	s.Editing(resFilter, func(inst *App) bool { return appops.WidgetEditing(inst.filterH) })
 
 	appops.Query(s, app.OperationSpec{Name: opGetView, Version: 1,
-		Summary: "read which app's page is open and the list's filter; a page's rows are the keelson() tables it is assembled from",
+		Summary: "read the tab shown, which app's page is open and the list's filter; a page's rows are the keelson() tables it is assembled from",
 		Agents:  true, Untrusted: true, Fork: app.OperationForkReadShared},
 		func(sn opsSnap, _ appops.None) (out View, err error) {
-			out = View{Selected: sn.selected, Filter: sn.filter, Listed: sn.listed, Registered: sn.registered, Reads: sn.reads}
-			if sn.pageFor == sn.selected && sn.selected != "" {
+			out = View{View: viewName(sn.view), Selected: sn.selected, Filter: sn.filter, Listed: sn.listed, Registered: sn.registered, Reads: sn.reads}
+			if sn.view == viewApps && sn.pageFor == sn.selected && sn.selected != "" {
 				out.PageReadAt = sn.pageRead
 			}
 			return
 		})
 
 	appops.Query(s, app.OperationSpec{Name: opListRunning, Version: 1,
-		Summary: "read the Running page's rows as it last read them: every open window with its frame time and tasks, and the tasks no open window owns; show_app with an empty id shows the page, which reads them",
+		Summary: "read the running tab's rows as it last read them: every open window with its frame time and tasks, and the tasks no open window owns; set_view running shows the tab, which reads them",
 		Agents:  true, Untrusted: true, Fork: app.OperationForkReadShared},
 		func(sn opsSnap, _ appops.None) (out Running, err error) {
 			out = runningResult(sn.running, sn.runningAt)
 			return
 		})
 
+	appops.Command(s, app.OperationSpec{Name: opSetView, Version: 1,
+		Summary: "show the running tab, every open window, or the apps tab; the selection stays",
+		Effect:  app.OperationEffectView, Writes: []string{resView}, Agents: true,
+		Gesture: "the Running / Apps tabs", Rebuild: app.OperationRebuildVolatile},
+		func(inst *App, _ app.OperationCall, in SetViewArgs) (out appops.None, err error) {
+			v, err := parseView(in.View)
+			if err != nil {
+				return
+			}
+			if inst.view != v {
+				inst.setView(v)
+			}
+			return
+		})
+
 	appops.Command(s, app.OperationSpec{Name: opShowApp, Version: 1,
-		Summary: "open an app's page, which reads its tables; an empty id shows the Running page",
-		Effect:  app.OperationEffectView, Writes: []string{resSelection}, Agents: true,
+		Summary: "show the apps tab on an app's page, which reads its tables; an empty id shows the app list alone",
+		Effect:  app.OperationEffectView, Writes: []string{resSelection, resView}, Agents: true,
 		Gesture: "a row in the list", Rebuild: app.OperationRebuildVolatile},
 		func(inst *App, _ app.OperationCall, in ShowAppArgs) (out appops.None, err error) {
 			if in.AppId != "" {
@@ -161,7 +223,7 @@ var ops = func() (s *appops.Set[*App, opsSnap]) {
 					return
 				}
 			}
-			if inst.selected != in.AppId {
+			if inst.selected != in.AppId || inst.view != viewApps {
 				inst.selectApp(in.AppId)
 			}
 			return
@@ -196,6 +258,10 @@ func gestureOr[In any](inst *App, op string, in In, direct func()) {
 
 func (inst *App) selectGesture(id string) {
 	gestureOr(inst, opShowApp, ShowAppArgs{AppId: id}, func() { inst.selectApp(id) })
+}
+
+func (inst *App) setViewGesture(v viewE) {
+	gestureOr(inst, opSetView, SetViewArgs{View: viewName(v)}, func() { inst.setView(v) })
 }
 
 // runningResult is the page's view as list_running returns it, bounded.
