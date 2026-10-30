@@ -50,6 +50,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/launcher"
 	"github.com/stergiotis/boxer/public/keelson/runtime/launchlimit"
 	"github.com/stergiotis/boxer/public/keelson/runtime/llm"
+	"github.com/stergiotis/boxer/public/keelson/runtime/loghost"
 	"github.com/stergiotis/boxer/public/keelson/runtime/moderator"
 	"github.com/stergiotis/boxer/public/keelson/runtime/natsbus"
 	"github.com/stergiotis/boxer/public/keelson/runtime/persist"
@@ -371,6 +372,9 @@ func Boot(ctx context.Context, opts Options) (rt *Runtime, err error) {
 	if riErr != nil {
 		logger.Warn().Err(riErr).Msg("runinfo init failed; continuing without run identity")
 	} else {
+		// The log bridge was installed before the run existed; its rows
+		// carry this run from here on (ADR-0345, the update of 2026-10-30).
+		loghost.AdoptRun(runInst.RunId)
 		logger = runinfo.TagLogger(logger, runInst)
 		logger.Info().
 			Str("run_id", runInst.RunId).

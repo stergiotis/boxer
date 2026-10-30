@@ -9,14 +9,14 @@ import "github.com/stergiotis/boxer/public/config/env"
 // these specs invisible to `boxer env list` and `doc/env-vars.md`
 // (ADR-0058 §4) until the relocation.
 var (
-	// LogFactsEnabled gates whether the logbridge sink routes through
-	// this ClickHouse-backed store (non-empty and != "0") versus the
-	// in-memory fallback (empty or "0"). Consumed by upper-layer
-	// wiring; chstore.New itself ignores the env value and honours
-	// whatever Config it is handed.
+	// LogFactsEnabled gates whether the host installs a logbridge sink
+	// over this ClickHouse-backed store (non-empty and != "0") or
+	// persists no log lines at all (empty or "0"). Consumed by
+	// upper-layer wiring (loghost); chstore.New itself ignores the env
+	// value and honours whatever Config it is handed.
 	LogFactsEnabled = env.NewString(env.Spec{
 		Name:        "BOXER_LOG_FACTS",
-		Description: "non-empty (and not \"0\") enables the ClickHouse-backed facts store for the logbridge sink; empty/0 selects the in-memory fallback",
+		Description: "non-empty (and not \"0\") persists the host's log lines to boxer.facts through the ClickHouse store, which is where the log viewer reads them; empty/0 persists none, and the log viewer says so",
 		Category:    env.CategoryObservability,
 	})
 

@@ -186,3 +186,94 @@ func TestStore_AppAuditSummary_Folds_LiveCH(t *testing.T) {
 	assert.Equal(t, "timeout", got[2].Result, "a timeout keeps its own outcome")
 	assert.InDelta(t, 5.0, got[2].MeanLatencyMs, 1e-9)
 }
+
+// The log viewer's read returns whole rows newest first — envelope, run,
+// window and every typed field — and applies each filter in the query, so
+// the limit counts matching rows. It has its own database so it does not
+// race the other live tests' table resets.
+func TestStore_LogRows_RoundTripAndFilters_LiveCH(t *testing.T) {
+	cfg := chstore.ConfigFromEnv()
+	cfg.Database = "runtime_chstore_logrows_test"
+	cfg.RunId = "run-a"
+	ctx := context.Background()
+	s, err := chstore.New(cfg)
+	require.NoError(t, err)
+	if err := s.Ping(ctx); err != nil {
+		t.Skipf("ClickHouse not reachable at %s: %v", cfg.URL, err)
+	}
+	require.NoError(t, s.DropTable(ctx))
+	require.NoError(t, s.SetupTable(ctx, "MergeTree() ORDER BY tuple()"))
+	defer func() { _ = s.DropTable(context.Background()) }()
+
+	t0 := time.Date(2026, 10, 30, 9, 0, 0, 123456789, time.UTC)
+	at := time.Date(2026, 1, 2, 3, 4, 5, 6, time.UTC)
+	full := factsstore.LogRow{AppId: "github.com/example/play", InstanceKey: 7, Level: "error",
+		Message: `it's a \ "quoted" message`, Caller: "p.go:9", Service: "svc", Error: "boom", Stack: "a\nb",
+		Ts: t0.Add(3 * time.Second),
+		Fields: []factsstore.LogField{
+			{Name: "s", Kind: factsstore.LogFieldKindString, Str: "x"},
+			{Name: "i", Kind: factsstore.LogFieldKindInt, Int: -3},
+			{Name: "u", Kind: factsstore.LogFieldKindUint, Uint: 18446744073709551615},
+			{Name: "f", Kind: factsstore.LogFieldKindFloat, Float: 0.1},
+			{Name: "b", Kind: factsstore.LogFieldKindBool, Bool: true},
+			{Name: "y", Kind: factsstore.LogFieldKindBytes, Bytes: []byte{0, 1, 255}},
+			{Name: "t", Kind: factsstore.LogFieldKindTime, Time: at},
+		}}
+	_, err = s.WriteLogs([]factsstore.LogRow{
+		{AppId: "github.com/example/play", Level: "debug", Message: "starting", Ts: t0},
+		{AppId: "github.com/example/imztop", Level: "warn", Message: "high cpu", Ts: t0.Add(time.Second), InstanceKey: 3},
+		{Message: "level-less", Ts: t0.Add(2 * time.Second)},
+		full,
+	})
+	require.NoError(t, err)
+
+	rows, err := s.LogRows(ctx, chstore.LogRowsFilter{Limit: 10})
+	require.NoError(t, err)
+	require.Len(t, rows, 4)
+	assert.Equal(t, "level-less", rows[1].Row.Message, "newest first")
+	got := rows[0]
+	assert.Equal(t, "run-a", got.RunId)
+	assert.True(t, full.Ts.Equal(got.Row.Ts), "nanoseconds survive: %v", got.Row.Ts)
+	assert.Equal(t, full.AppId, got.Row.AppId)
+	assert.EqualValues(t, 7, got.Row.InstanceKey)
+	assert.Equal(t, full.Message, got.Row.Message)
+	assert.Equal(t, "p.go:9", got.Row.Caller)
+	assert.Equal(t, "svc", got.Row.Service)
+	assert.Equal(t, "boom", got.Row.Error)
+	assert.Equal(t, "a\nb", got.Row.Stack)
+	byName := map[string]factsstore.LogField{}
+	for _, f := range got.Row.Fields {
+		byName[f.Name] = f
+	}
+	require.Len(t, byName, 7)
+	assert.Equal(t, "x", byName["s"].Str)
+	assert.EqualValues(t, -3, byName["i"].Int)
+	assert.EqualValues(t, uint64(18446744073709551615), byName["u"].Uint)
+	assert.InDelta(t, 0.1, byName["f"].Float, 1e-12)
+	assert.True(t, byName["b"].Bool)
+	assert.Equal(t, []byte{0, 1, 255}, byName["y"].Bytes)
+	assert.True(t, at.Equal(byName["t"].Time))
+	assert.Equal(t, factsstore.LogFieldKindTime, byName["t"].Kind)
+
+	pick := func(f chstore.LogRowsFilter) (msgs []string) {
+		t.Helper()
+		rs, rErr := s.LogRows(ctx, f)
+		require.NoError(t, rErr)
+		for _, r := range rs {
+			msgs = append(msgs, r.Row.Message)
+		}
+		return
+	}
+	assert.Equal(t, []string{full.Message, "high cpu"}, pick(chstore.LogRowsFilter{Levels: []string{"warn", "error"}}),
+		"a level floor drops level-less rows")
+	assert.Equal(t, []string{"high cpu"}, pick(chstore.LogRowsFilter{AppContains: "IMZ"}))
+	assert.Equal(t, []string{full.Message}, pick(chstore.LogRowsFilter{MessageContains: `S A \ "QUOTED`}),
+		"quotes and backslashes in a needle stay inside the literal")
+	assert.Empty(t, pick(chstore.LogRowsFilter{MessageContains: `'; DROP TABLE x; --`}))
+	assert.Equal(t, []string{"high cpu"}, pick(chstore.LogRowsFilter{InstanceKey: 3}))
+	assert.Len(t, pick(chstore.LogRowsFilter{RunId: "run-a"}), 4)
+	assert.Empty(t, pick(chstore.LogRowsFilter{RunId: "run-b"}))
+	assert.Equal(t, []string{full.Message, "level-less"}, pick(chstore.LogRowsFilter{Since: t0.Add(2 * time.Second)}))
+	assert.Equal(t, []string{"high cpu", "starting"}, pick(chstore.LogRowsFilter{Until: t0.Add(2 * time.Second)}))
+	assert.Equal(t, []string{full.Message}, pick(chstore.LogRowsFilter{Limit: 1}))
+}

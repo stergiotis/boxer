@@ -13,7 +13,10 @@ package chstore
 // pass, so the LW_GET family is not available to it.
 
 import (
+	"bytes"
 	"context"
+	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"io"
 	"strconv"
@@ -398,5 +401,311 @@ func parseUnixOrZero(s string) (t time.Time, err error) {
 		return
 	}
 	t = time.Unix(v, 0).UTC()
+	return
+}
+
+// LogRowsFilter selects the log rows [Store.LogRows] returns. Every field
+// but Limit is optional; the zero value of each is "no constraint". The
+// read is bounded by Since and by Limit, as the other reads here are, so a
+// caller that sets neither still gets at most appTrailCap rows.
+type LogRowsFilter struct {
+	// Since and Until bound the row's timestamp: Since inclusive, Until
+	// exclusive.
+	Since time.Time
+	Until time.Time
+	// Levels keeps rows whose level is one of these; empty keeps every
+	// row, including level-less ones.
+	Levels []string
+	// AppContains and MessageContains are case-insensitive substrings of
+	// the app id and of the message.
+	AppContains     string
+	MessageContains string
+	// RunId keeps the rows stamped with this run (ADR-0191 §SD3).
+	RunId string
+	// InstanceKey keeps the rows of this window (ADR-0191 §SD4); 0 keeps
+	// every row.
+	InstanceKey uint64
+	Limit       uint32
+}
+
+// LogRowRead is one log row as [Store.LogRows] reads it back: the row the
+// writer was handed, less the structured error chain, which the writer does
+// not persist (only its flat summary in Error), plus the run the row was
+// stamped with.
+type LogRowRead struct {
+	Row   factsstore.LogRow
+	RunId string
+}
+
+// LogRows returns the log rows matching filter, newest first, with their
+// envelope, their attribution and their typed fields: what the log viewer
+// shows of a row. Every filter is applied in the query, so Limit counts
+// matching rows.
+func (inst *Store) LogRows(ctx context.Context, filter LogRowsFilter) (rows []LogRowRead, err error) {
+	raw, err := inst.queryAll(ctx, "log rows", composeLogRowsSql(inst.qualifiedTable(), filter))
+	if err != nil {
+		return
+	}
+	rows, err = parseLogRows(raw)
+	return
+}
+
+// Columns the log-row read draws on beyond the ones above. Each field kind
+// has its own section; the field's name rides the mixed channel (lmr, with
+// the name as the high-card parameter in mrhp), per encodeLogEntity.
+const (
+	lrTextValue  = "`tv:textArray:value:val:sh:5::7:0::data`"
+	lrTextLen    = "`tv:textArray:len:len:u64:4D:::0::data`"
+	lrTextLR     = "`tv:textArray:lr:lr:u64:1247:::0::data`"
+	lrTextLRCard = "`tv:textArray:lrcard:lrcard:u64:4E:::0::data`"
+	lrU64Len     = "`tv:u64Array:len:len:u64:4D:::0::data`"
+)
+
+// logFieldSection is one section a log field may land in: its value
+// column, its per-attribute len column (empty for a scalar section), and
+// how a value is rendered as text.
+type logFieldSection struct {
+	kind   string
+	name   string
+	value  string
+	scalar bool
+	render func(v string) string
+}
+
+var logFieldSections = []logFieldSection{
+	{kind: "string", name: "stringArray", value: "`tv:stringArray:value:val:sh:4::8:0::data`", render: func(v string) string { return v }},
+	{kind: "int", name: "i64Array", value: "`tv:i64Array:value:val:i64h:4:::0::data`", render: toStringExpr},
+	{kind: "uint", name: "u64Array", value: "`tv:u64Array:value:val:u64h:4:::0::data`", render: toStringExpr},
+	{kind: "float", name: "f64Array", value: "`tv:f64Array:value:val:f64h:4A:::0::data`", render: toStringExpr},
+	{kind: "bool", name: "bool", value: "`tv:bool:value:val:b:4:::0::data`", scalar: true, render: toStringExpr},
+	{kind: "bytes", name: "blobArray", value: "`tv:blobArray:value:val:yh:4:::0::data`", render: func(v string) string { return "base64Encode(" + v + ")" }},
+	{kind: "time", name: "timeArray", value: "`tv:timeArray:value:val:z64h:4:::0::data`", render: func(v string) string { return "toString(toUnixTimestamp64Nano(" + v + "))" }},
+}
+
+func toStringExpr(v string) string { return "toString(" + v + ")" }
+
+// ownerOf maps each position of a membership lane (lr or lmr) to the
+// 1-based attribute that carries it, by expanding the per-attribute card
+// column: the same arithmetic as LW_RAGGED_PARENT_IDS. Unlike the
+// cumulative-sum lookup in pickLcrString, it stays right when one
+// attribute carries more than one membership on the lane.
+func ownerOf(cardArr string) string {
+	return fmt.Sprintf("arrayFlatten(arrayMap((i, c) -> arrayWithConstant(c, i), arrayEnumerate(%[1]s), %[1]s))", cardArr)
+}
+
+// pickScalarAttr is the value of the attribute that carries membershipId on
+// the plain lane of a scalar section (one value per attribute); zero when
+// the row has none.
+func pickScalarAttr(valueArr, lrArr, lrCardArr string, membershipId uint64, zero string) string {
+	idx := fmt.Sprintf("indexOf(%s, %d)", lrArr, membershipId)
+	return fmt.Sprintf("if(%[1]s > 0, arrayElement(%[2]s, arrayElement(%[3]s, %[1]s)), %[4]s)",
+		idx, valueArr, ownerOf(lrCardArr), zero)
+}
+
+// logFieldsExpr is every MembLogField attribute of a row as [kind, name,
+// value-as-text] triples, section by section. Attributes carrying other
+// mixed memberships are left out, so slots a writer adds beside the fields
+// do not show up as fields.
+func logFieldsExpr() string {
+	membId := vocab.MembLogField.GetId().Value()
+	parts := make([]string, 0, len(logFieldSections))
+	for _, s := range logFieldSections {
+		lmr := fmt.Sprintf("`tv:%s:lmr:lmr:u64:1247:::0::data`", s.name)
+		mrhp := fmt.Sprintf("`tv:%s:mrhp:mrhp:y:4:::0::data`", s.name)
+		lmrCard := fmt.Sprintf("`tv:%s:lmrcard:lmrcard:u64:4E:::0::data`", s.name)
+		attr := fmt.Sprintf("arrayElement(%s, j)", ownerOf(lmrCard))
+		var pos string
+		if s.scalar {
+			pos = attr
+		} else {
+			lenArr := fmt.Sprintf("`tv:%s:len:len:u64:4D:::0::data`", s.name)
+			pos = fmt.Sprintf("arraySum(arraySlice(%[1]s, 1, %[2]s - 1)) + 1", lenArr, attr)
+		}
+		value := s.render(fmt.Sprintf("arrayElement(%s, %s)", s.value, pos))
+		parts = append(parts, fmt.Sprintf("arrayMap(j -> [%s, toString(arrayElement(%s, j)), %s], arrayFilter(j -> arrayElement(%s, j) = %d, arrayEnumerate(%s)))",
+			quoteSqlLiteral(s.kind), mrhp, value, lmr, membId, lmr))
+	}
+	return "arrayConcat(" + strings.Join(parts, ",\n    ") + ")"
+}
+
+// quoteSqlLiteral quotes s as a ClickHouse string literal. Backslash is
+// the server's escape character, so it is escaped before the quote; a
+// filter typed by a person or passed by an agent cannot close the literal.
+func quoteSqlLiteral(s string) string {
+	return "'" + strings.ReplaceAll(strings.ReplaceAll(s, `\`, `\\`), "'", `\'`) + "'"
+}
+
+// composeLogRowsSql reads whole log rows newest first. Filters reference
+// the projected aliases, so a filter on the level and the projection agree
+// on what the level is; the ORDER BY is the table's sorting key, so a
+// LIMIT reads in order rather than sorting the look-back.
+func composeLogRowsSql(table string, filter LogRowsFilter) string {
+	sym := func(m uint64) string { return pickScalarAttr(atSymValue, atSymLR, atSymLRCard, m, "''") }
+	str := func(m uint64) string {
+		return "arrayElement(" + pickLcrList(atStrValue, atStrLen, atStrLR, atStrLRCard, m) + ", 1)"
+	}
+	where := []string{fmt.Sprintf("has(%s, %d)", atSymLR, vocab.MembKindLog.GetId().Value())}
+	if !filter.Since.IsZero() {
+		where = append(where, fmt.Sprintf("%s >= fromUnixTimestamp64Nano(%d, 'UTC')", atTsCol, filter.Since.UnixNano()))
+	}
+	if !filter.Until.IsZero() {
+		where = append(where, fmt.Sprintf("%s < fromUnixTimestamp64Nano(%d, 'UTC')", atTsCol, filter.Until.UnixNano()))
+	}
+	if len(filter.Levels) > 0 {
+		q := make([]string, 0, len(filter.Levels))
+		for _, l := range filter.Levels {
+			q = append(q, quoteSqlLiteral(l))
+		}
+		where = append(where, "level IN ("+strings.Join(q, ", ")+")")
+	}
+	if filter.AppContains != "" {
+		where = append(where, "positionCaseInsensitiveUTF8(app_id, "+quoteSqlLiteral(filter.AppContains)+") > 0")
+	}
+	if filter.MessageContains != "" {
+		where = append(where, "positionCaseInsensitiveUTF8(message, "+quoteSqlLiteral(filter.MessageContains)+") > 0")
+	}
+	if filter.RunId != "" {
+		where = append(where, "run_id = "+quoteSqlLiteral(filter.RunId))
+	}
+	if filter.InstanceKey != 0 {
+		where = append(where, fmt.Sprintf("instance_key = %s", quoteSqlLiteral(strconv.FormatUint(filter.InstanceKey, 10))))
+	}
+	return fmt.Sprintf(`
+SELECT
+  toString(%s) AS id,
+  toString(toUnixTimestamp64Nano(%s)) AS ts_ns,
+  %s AS app_id,
+  %s AS run_id,
+  toString(arrayElement(%s, 1)) AS instance_key,
+  %s AS level,
+  %s AS caller,
+  %s AS service,
+  %s AS message,
+  %s AS err,
+  arrayElement(%s, 1) AS stack,
+  %s AS fields
+FROM %s
+WHERE %s
+ORDER BY %s DESC, %s DESC
+LIMIT %d
+FORMAT JSONEachRow`,
+		atIdCol, atTsCol,
+		sym(vocab.MembRuntimeApp.GetId().Value()),
+		sym(vocab.MembRuntimeRun.GetId().Value()),
+		pickLcrList(atU64Value, lrU64Len, atU64LR, atU64LRCard, vocab.MembLifecycleTileKey.GetId().Value()),
+		sym(vocab.MembLogLevel.GetId().Value()),
+		sym(vocab.MembLogCaller.GetId().Value()),
+		sym(vocab.MembLogService.GetId().Value()),
+		str(vocab.MembLogMessage.GetId().Value()),
+		str(vocab.MembLogError.GetId().Value()),
+		pickLcrList(lrTextValue, lrTextLen, lrTextLR, lrTextLRCard, vocab.MembLogStack.GetId().Value()),
+		logFieldsExpr(),
+		table,
+		strings.Join(where, " AND "),
+		atTsCol, atIdCol,
+		appTrailLimit(filter.Limit))
+}
+
+// logRowJson is one line of composeLogRowsSql's output. Integers arrive as
+// strings, which the query writes explicitly so the server's 64-bit
+// quoting setting does not decide the shape.
+type logRowJson struct {
+	Id          string     `json:"id"`
+	TsNs        string     `json:"ts_ns"`
+	AppId       string     `json:"app_id"`
+	RunId       string     `json:"run_id"`
+	InstanceKey string     `json:"instance_key"`
+	Level       string     `json:"level"`
+	Caller      string     `json:"caller"`
+	Service     string     `json:"service"`
+	Message     string     `json:"message"`
+	Err         string     `json:"err"`
+	Stack       string     `json:"stack"`
+	Fields      [][]string `json:"fields"`
+}
+
+func parseLogRows(raw []byte) (rows []LogRowRead, err error) {
+	rows = []LogRowRead{}
+	dec := json.NewDecoder(bytes.NewReader(raw))
+	for {
+		var j logRowJson
+		if err = dec.Decode(&j); err == io.EOF {
+			err = nil
+			return
+		} else if err != nil {
+			err = eh.Errorf("chstore: log rows: decode: %w", err)
+			return
+		}
+		var r LogRowRead
+		if r, err = j.row(); err != nil {
+			return
+		}
+		rows = append(rows, r)
+	}
+}
+
+func (inst logRowJson) row() (out LogRowRead, err error) {
+	ns, err := strconv.ParseInt(inst.TsNs, 10, 64)
+	if err != nil {
+		err = eb.Build().Str("ts", inst.TsNs).Errorf("chstore: log rows: parse ts: %w", err)
+		return
+	}
+	key, err := strconv.ParseUint(inst.InstanceKey, 10, 64)
+	if err != nil {
+		err = eb.Build().Str("instance", inst.InstanceKey).Errorf("chstore: log rows: parse instance key: %w", err)
+		return
+	}
+	out = LogRowRead{RunId: inst.RunId, Row: factsstore.LogRow{
+		Ts: time.Unix(0, ns).UTC(), AppId: app.AppIdT(inst.AppId), InstanceKey: key,
+		Level: inst.Level, Caller: inst.Caller, Service: inst.Service,
+		Message: inst.Message, Error: inst.Err, Stack: inst.Stack,
+	}}
+	for _, f := range inst.Fields {
+		if len(f) != 3 {
+			err = eb.Build().Int("got", len(f)).Errorf("chstore: log rows: a field is not a [kind, name, value] triple")
+			return
+		}
+		var lf factsstore.LogField
+		if lf, err = parseLogField(f[0], f[1], f[2]); err != nil {
+			return
+		}
+		out.Row.Fields = append(out.Row.Fields, lf)
+	}
+	return
+}
+
+// parseLogField turns one rendered field back into its typed form: the
+// inverse of the renderers in logFieldSections.
+func parseLogField(kind, name, v string) (f factsstore.LogField, err error) {
+	f.Name = name
+	switch kind {
+	case "string":
+		f.Kind, f.Str = factsstore.LogFieldKindString, v
+	case "int":
+		f.Kind = factsstore.LogFieldKindInt
+		f.Int, err = strconv.ParseInt(v, 10, 64)
+	case "uint":
+		f.Kind = factsstore.LogFieldKindUint
+		f.Uint, err = strconv.ParseUint(v, 10, 64)
+	case "float":
+		f.Kind = factsstore.LogFieldKindFloat
+		f.Float, err = strconv.ParseFloat(v, 64)
+	case "bool":
+		f.Kind = factsstore.LogFieldKindBool
+		f.Bool, err = strconv.ParseBool(v)
+	case "bytes":
+		f.Kind = factsstore.LogFieldKindBytes
+		f.Bytes, err = base64.StdEncoding.DecodeString(v)
+	case "time":
+		f.Kind = factsstore.LogFieldKindTime
+		var ns int64
+		ns, err = strconv.ParseInt(v, 10, 64)
+		f.Time = time.Unix(0, ns).UTC()
+	default:
+		err = eb.Build().Str("kind", kind).Errorf("chstore: log rows: unknown field kind")
+	}
+	if err != nil {
+		err = eb.Build().Str("field", name).Str("kind", kind).Errorf("chstore: log rows: parse field: %w", err)
+	}
 	return
 }

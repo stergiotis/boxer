@@ -321,19 +321,19 @@ func TestInstancesAreDistinct(t *testing.T) {
 	assert.False(t, lv2.hasSelected, "selection must not leak between instances")
 }
 
-// TestSelectionSurvivesSinkTrim is the load-bearing claim of the
-// detail pane: the selected row is stored by value, so trimming it
-// out of the Sink's tail does not blank the pane. We simulate this
+// TestSelectionSurvivesARefresh is the load-bearing claim of the
+// detail pane: the selected row is stored by value, so a refresh whose
+// read no longer holds it does not blank the pane. We simulate this
 // by snapshotting → selecting → discarding the slice.
-func TestSelectionSurvivesSinkTrim(t *testing.T) {
+func TestSelectionSurvivesARefresh(t *testing.T) {
 	rows := sampleRows()
 	app := &LogViewerApp{}
 	app.hasSelected = true
 	app.selected = rows[2] // the warn row
 	originalKey := rowKey(app.selected)
 
-	// Trim the snapshot — the Sink would do this when the ring rolls
-	// past the selected row.
+	// Drop the rows — a refresh does this when the next read no longer
+	// holds the selected row.
 	rows = nil
 	_ = rows
 
