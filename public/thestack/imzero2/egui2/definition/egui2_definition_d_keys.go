@@ -272,3 +272,41 @@ func definitionsKeys() (nodes []*ir.ProceduralNode) {
 		Build())
 	return
 }
+
+// ShellChordsRustPath is where [ShellChordsRustFile]'s content is committed.
+const ShellChordsRustPath = "rust/imzero2/src/imzero2/shellchords.rs"
+
+// ShellChordsRustFile builds the Rust half of the shell's chord table
+// (ADR-0346 §SD5) from [keycodes.ShellChords], the way [KeyCodesRustFile]
+// builds the key vocabulary: committed, and rebuilt and compared by a test
+// so the two sides cannot drift.
+func ShellChordsRustFile() string {
+	eguiKey := make(map[keycodes.Code]string, len(keycodes.Table))
+	for _, e := range keycodes.Table {
+		eguiKey[e.Code] = e.EguiKey
+	}
+	var b strings.Builder
+	b.WriteString("// The shell's chords, ADR-0346 §SD5.\n")
+	b.WriteString("//\n")
+	b.WriteString("// GENERATED from public/thestack/imzero2/egui2/keycodes/shellchords.go's ShellChords.\n")
+	b.WriteString("// Do not edit by hand: definition/egui2_definition_d_keys_test.go rebuilds this\n")
+	b.WriteString("// from the Go table and fails if the two disagree.\n\n")
+	b.WriteString("/// The bit a key pressed with Alt (and Shift as stated) sets in the shell's\n")
+	b.WriteString("/// per-frame chord set; 0 for a key that is no chord.\n")
+	b.WriteString("pub fn shell_chord_bit(k: egui::Key, shift: bool) -> u64 {\n    match (k, shift) {\n")
+	arms := make([]string, len(keycodes.ShellChords))
+	width := 0
+	for i, ch := range keycodes.ShellChords {
+		key, known := eguiKey[ch.Key]
+		if !known {
+			panic("shell chord " + ch.Name + " names a key outside keycodes.Table")
+		}
+		arms[i] = "(egui::Key::" + key + ", " + strconv.FormatBool(ch.Shift) + ") => 1u64 << " + strconv.Itoa(int(ch.Bit)) + ","
+		width = max(width, len(arms[i]))
+	}
+	for i, ch := range keycodes.ShellChords {
+		b.WriteString("        " + arms[i] + strings.Repeat(" ", width-len(arms[i])) + " // " + ch.Name + "\n")
+	}
+	b.WriteString("        _ => 0,\n    }\n}\n")
+	return b.String()
+}

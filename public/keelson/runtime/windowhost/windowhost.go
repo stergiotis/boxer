@@ -274,6 +274,14 @@ type Inst struct {
 	tileCells    map[WindowKeyT]Rect
 	tileMins     map[WindowKeyT][2]float32
 	tileWork     Rect
+	// The shell's chords (ADR-0346 §SD5, stepChords). prevActiveKey is the
+	// window that was active before the current one, for Alt+Tab;
+	// layoutBeforeMonocle is what Alt+F returns to; snap is the last snap,
+	// for the half-to-quarter step. All written on the render thread under
+	// mu.
+	prevActiveKey       WindowKeyT
+	layoutBeforeMonocle LayoutE
+	snap                snapState
 
 	// mountState shares Mount/Unmount lifecycle across windows that point at
 	// the same AppI instance (singleton-registered apps). Keyed by the AppI
@@ -1179,6 +1187,9 @@ func (inst *Inst) Frame(ids *c.WidgetIdStack) (err error) {
 	inst.renderGoroutine.Store(opwire.GoroutineId())
 	// Re-resolve: the density preset is runtime-switchable (Layout ▸ Density).
 	inst.density = styletokens.ActiveDensity()
+	// The shell's chords of the last frame act first, so a raise or a
+	// placement they queue is taken by this frame's snapshot below.
+	inst.stepChords(c.CurrentApplicationState.StateManager)
 	// Snapshot the slice under lock; the iteration runs without the
 	// lock held so AppI.Frame can re-enter (e.g., to call Open via the
 	// Apps menu, which would otherwise deadlock).
@@ -1230,7 +1241,12 @@ func (inst *Inst) Frame(ids *c.WidgetIdStack) (err error) {
 				topmost: sm.GetResponse(w.focusHandle).HasWindowTopmost(),
 			})
 		}
-		inst.activeKey = pickActiveWindow(inst.activeKey, facts)
+		if next := pickActiveWindow(inst.activeKey, facts); next != inst.activeKey {
+			inst.mu.Lock()
+			inst.prevActiveKey = inst.activeKey
+			inst.mu.Unlock()
+			inst.activeKey = next
+		}
 	}
 	inst.noteInput(sm, time.Now())
 	inst.stepArrange(arrangeCmd, arrangeKeys, snapshot)

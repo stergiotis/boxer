@@ -169,7 +169,8 @@ func tileRects(l LayoutE, work Rect, items []tileItem, lp LayoutParams, ap arran
 			return
 		}
 		inner := max(work.W()-3*ap.gap, 1)
-		minMain, minStack := min(minW(items[:m]), inner), min(minW(items[m:]), inner)
+		minMain := min(max(minW(items[:m]), minSpan), inner)
+		minStack := min(max(minW(items[m:]), minSpan), inner)
 		mainW := max(inner*lp.MainRatio, minMain)
 		stackW := max(inner-mainW, minStack)
 		if mainW+stackW > inner {
@@ -236,10 +237,7 @@ func (inst *Inst) SetLayout(l LayoutE) (err error) {
 		return
 	}
 	inst.mu.Lock()
-	if inst.layout != l {
-		inst.layout = l
-		inst.tileDirty = true
-	}
+	inst.setLayoutLocked(l)
 	inst.mu.Unlock()
 	return
 }
@@ -360,17 +358,18 @@ func (inst *Inst) takeTileInputs(snapshot []*window) (in tileInputs) {
 		inst.tileOrder = append(fresh, inst.tileOrder...)
 		inst.tileDirty = true
 	}
-	in = tileInputs{
-		layout:   inst.layout,
-		params:   inst.layoutParams,
-		order:    slices.Clone(inst.tileOrder),
-		floating: make(map[WindowKeyT]bool, len(inst.floating)),
-		dirty:    inst.tileDirty,
+	in = tileInputs{layout: inst.layout, params: inst.layoutParams, dirty: inst.tileDirty}
+	inst.tileDirty = false
+	if !in.layout.Tiled() {
+		// The order is kept in step on a floating desktop too, so a switch
+		// to tiled finds it; the copies are only needed to plan.
+		return
 	}
+	in.order = slices.Clone(inst.tileOrder)
+	in.floating = make(map[WindowKeyT]bool, len(inst.floating))
 	for k, v := range inst.floating {
 		in.floating[k] = v
 	}
-	inst.tileDirty = false
 	return
 }
 
@@ -399,15 +398,17 @@ func (inst *Inst) stepTiling(snapshot []*window) {
 	inst.arranging = nil
 	sm := c.CurrentApplicationState.StateManager
 	work, ok := sm.GetWindowWorkArea()
-	if !ok {
+	workRect := Rect{MinX: work.MinX, MinY: work.MinY, MaxX: work.MaxX, MaxY: work.MaxY}
+	if !ok || !workRect.valid() {
+		// No work area yet, or none left by the panels: nothing to place
+		// into, and what was learned keeps until there is.
 		return
 	}
-	workRect := Rect{MinX: work.MinX, MinY: work.MinY, MaxX: work.MaxX, MaxY: work.MaxY}
-	// The windows the layout places this frame, in order: open, not
-	// floating by choice or by being maximized, and rendered at least once
-	// — a placement is emitted with the window's handle, which its first
-	// frame has not produced yet, so a new window takes its cell a frame
-	// after it opens.
+	// The windows the layout places this frame, in order: open (the order
+	// was pruned of closing windows under the lock), not floating by choice
+	// or by being maximized, and rendered at least once — a placement is
+	// emitted with the window's handle, which its first frame has not
+	// produced yet, so a new window takes its cell a frame after it opens.
 	byKey := make(map[WindowKeyT]*window, len(snapshot))
 	for _, w := range snapshot {
 		byKey[w.key] = w
@@ -415,7 +416,7 @@ func (inst *Inst) stepTiling(snapshot []*window) {
 	tiled := make([]*window, 0, len(in.order))
 	for _, k := range in.order {
 		w := byKey[k]
-		if w == nil || w.closeReq || in.floating[k] || w.maximized || w.focusHandle == 0 {
+		if w == nil || in.floating[k] || w.maximized || w.focusHandle == 0 {
 			continue
 		}
 		tiled = append(tiled, w)
@@ -530,8 +531,8 @@ func (inst *Inst) planTiles(in tileInputs, work Rect, tiled []*window) {
 	inst.tileCells = cells
 }
 
-// tileOrderOf is the window's 1-based position in the order, main first, or
-// 0 when it is not in the order. inst.mu must be held.
+// tileOrderOfLocked is the window's 1-based position in the order, main
+// first, or 0 when it is not in the order. inst.mu must be held.
 func (inst *Inst) tileOrderOfLocked(key WindowKeyT) int {
 	if i := slices.Index(inst.tileOrder, key); i >= 0 {
 		return i + 1

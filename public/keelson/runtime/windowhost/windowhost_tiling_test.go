@@ -219,3 +219,26 @@ func TestTileOrderFollowsTheWindows(t *testing.T) {
 func TestDesktopLayoutEnvVarNamesTheLayouts(t *testing.T) {
 	assert.Equal(t, LayoutIdents(), imzero2env.DesktopLayout.Allowed())
 }
+
+// A window whose minimum is unknown keeps at least minSpan when its
+// neighbours' minimums take the whole line, so every cell stays a rect a
+// placement can apply.
+func TestTileCellsNeverCollapse(t *testing.T) {
+	items := tileFixture(3)
+	items[1].minW = arrangeWork.W() * 2 // wider than the work area
+	for _, l := range []LayoutE{LayoutMainStack, LayoutColumns, LayoutTile} {
+		out := tileRects(l, arrangeWork, items, DefaultLayoutParams, defaultArrangeParams)
+		for i, r := range out {
+			assert.True(t, r.valid(), "%s item %d: %+v", l, i, r)
+			assert.GreaterOrEqual(t, r.W(), minSpan-0.01, "%s item %d too narrow", l, i)
+			assert.True(t, inside(r, arrangeWork), "%s item %d inside", l, i)
+		}
+	}
+	items = tileFixture(3)
+	items[0].minH = arrangeWork.H() * 2
+	out := tileRects(LayoutRows, arrangeWork, items, DefaultLayoutParams, defaultArrangeParams)
+	for i, r := range out {
+		assert.True(t, r.valid(), "rows item %d: %+v", i, r)
+		assert.GreaterOrEqual(t, r.H(), minSpan-0.01, "rows item %d too short", i)
+	}
+}

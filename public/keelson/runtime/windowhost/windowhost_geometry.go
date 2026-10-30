@@ -31,7 +31,9 @@ type WindowGeom struct {
 	// (FloatWindow, ADR-0346 §SD4).
 	Floating bool
 	// Order is the window's 1-based position in the layout's order, main
-	// first; 0 when it is not in the order.
+	// first. Every open window is in the order, a floating one included (it
+	// is skipped when the layout is planned and keeps its place for the
+	// focus ring); 0 only before the window's first Frame.
 	Order int
 }
 

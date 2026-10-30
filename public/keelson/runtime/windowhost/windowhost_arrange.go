@@ -110,12 +110,18 @@ type arrangeItem struct {
 	minW, minH float32
 }
 
+// minSpan is the least extent a span or a column is laid out at, in logical
+// points: a window whose minimum is unknown still gets a title bar's worth
+// when its neighbours' minimums take the rest, rather than a zero rect that
+// no placement can apply.
+const minSpan float32 = 24
+
 // fitSpans lays n spans along a line of length total, separated from each
-// other and from both ends by gap, each at least its minimum. Space left
-// after the minimums is shared so that spans come out as equal as their
-// minimums allow. When the minimums do not fit, the spans keep them and
-// overlap their neighbours evenly, still ending inside the line; a minimum
-// longer than the whole line is cut to it.
+// other and from both ends by gap, each at least its minimum and at least
+// minSpan. Space left after the minimums is shared so that spans come out
+// as equal as their minimums allow. When the minimums do not fit, the spans
+// keep them and overlap their neighbours evenly, still ending inside the
+// line; a minimum longer than the whole line is cut to it.
 func fitSpans(total, gap float32, mins []float32) (offs, sizes []float32) {
 	n := len(mins)
 	offs = make([]float32, n)
@@ -127,7 +133,7 @@ func fitSpans(total, gap float32, mins []float32) (offs, sizes []float32) {
 	avail := max(inner-gap*float32(n-1), 1)
 	var sumMins float32
 	for i, m := range mins {
-		sizes[i] = min(max(m, 0), inner)
+		sizes[i] = min(max(m, minSpan), inner)
 		sumMins += sizes[i]
 	}
 	if sumMins <= avail {

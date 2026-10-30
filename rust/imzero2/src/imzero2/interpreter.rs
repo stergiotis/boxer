@@ -742,6 +742,10 @@ pub struct ImZeroFffi<'a, R: std::io::BufRead, W: std::io::Write> {
     // Scratch slot for the Window arm's `maximized` method, drained the
     // same way as scratch_open_binding_id.
     scratch_window_maximized: bool,
+    // The shell's chords pressed this frame (ADR-0346 §SD5), drained from
+    // egui's input queue at the start of the frame — before any widget
+    // runs — and taken by fetchShellChords at its end.
+    shell_chords: u64,
     // One-frame window placements queued by the windowPlace procedural op,
     // keyed by window id; the Window apply block consumes its entry (as a
     // fixed rect for that frame), and prepare_next_frame drops any left
@@ -1091,6 +1095,7 @@ impl<R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'_, R, W> {
             window_open_bindings: std::collections::HashMap::with_capacity(32),
             scratch_open_binding_id: 0,
             scratch_window_maximized: false,
+            shell_chords: 0,
             pending_window_place: std::collections::HashMap::with_capacity(8),
             r27_windows: Vec::with_capacity(16),
             r27_work_rect: egui::Rect::NAN,
@@ -1297,6 +1302,10 @@ impl<R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'_, R, W> {
         self.paint_vertices = 0;
         self.paint_skipped = 0;
         Self::handle_screenshot_event(ctx);
+        // The shell's chords leave the queue before any widget sees them, so
+        // a focused text edit neither types the letter nor moves on the
+        // arrow (ADR-0346 §SD5). fetchShellChords takes the set at frame end.
+        self.shell_chords |= crate::imzero2::keychord::drain_shell_chords(ctx);
         // Advance per-frame state for widgets that need it. Must run exactly
         // once per real frame; `interpret_outer` alone does not qualify
         // because it is re-entered from `replay_deferred_block`.
@@ -5041,6 +5050,21 @@ self.apply_widget(w,u,f,Some(i));
                     let len = self.r9_u64_ids.len();
                     self.io.write_plain_u64h(len, self.r9_u64_ids.drain(..))?;
                     self.io.write_plain_u64h(len, self.r9_u64_values.drain(..))?;
+                    self.io.flush()?;
+                }
+            }
+            FuncProcId::FetchShellChords => {
+                #[cfg(feature = "puffin")]
+                puffin::profile_scope!("match FuncProcId::FetchShellChords");
+                if d == 0 {
+                    self.end_consume_message()?;
+                }
+                // apply
+                if !self.capture_replay {
+                    // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+
+                    let chords = std::mem::take(&mut self.shell_chords);
+                    self.io.write_plain_u64(chords)?;
                     self.io.flush()?;
                 }
             }

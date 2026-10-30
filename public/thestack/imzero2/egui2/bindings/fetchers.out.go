@@ -462,6 +462,18 @@ func (inst *Fetcher) CollectFetchR9U64() (ids []uint64, values iter.Seq[uint64])
 	values = inst.iterateU64h()
 	return
 }
+func (inst *Fetcher) FetchShellChords() (chords uint64) {
+	inst.invoke(FuncProcIdFetchShellChords)
+	chords = inst.readU64()
+	return
+}
+func (inst *Fetcher) IssueFetchShellChords() {
+	inst.invoke(FuncProcIdFetchShellChords)
+}
+func (inst *Fetcher) CollectFetchShellChords() (chords uint64) {
+	chords = inst.readU64()
+	return
+}
 func (inst *Fetcher) FetchVideoCapabilities() (codecIds []uint64, flags iter.Seq[uint32]) {
 	inst.invoke(FuncProcIdFetchVideoCapabilities)
 	codecIds = inst.readU64h()

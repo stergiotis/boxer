@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/keycodes"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -27,4 +28,38 @@ func TestKeyCodesRustFileMatchesTheGoTable(t *testing.T) {
 		"%s has drifted from keycodes.Table.\n"+
 			"Rewrite it with the content of definition.KeyCodesRustFile() and rebuild the Rust client.",
 		KeyCodesRustPath)
+}
+
+// The shell's chord table (ADR-0346 §SD5) is kept the same way: the Rust arm
+// is rebuilt from keycodes.ShellChords and compared.
+func TestShellChordsRustFileMatchesTheGoTable(t *testing.T) {
+	root, err := filepath.Abs(filepath.Join("..", "..", "..", "..", ".."))
+	require.NoError(t, err)
+	path := filepath.Join(root, ShellChordsRustPath)
+	onDisk, err := os.ReadFile(path)
+	require.NoError(t, err, "%s is missing; regenerate it from ShellChordsRustFile", ShellChordsRustPath)
+	assert.Equal(t, ShellChordsRustFile(), string(onDisk),
+		"%s has drifted from keycodes.ShellChords.\n"+
+			"Rewrite it with the content of definition.ShellChordsRustFile() and rebuild the Rust client.",
+		ShellChordsRustPath)
+}
+
+// A (key, shift) pair names at most one chord, every bit fits the set, and
+// every key is in the vocabulary the Rust arm is built from.
+func TestShellChordsAreUnambiguous(t *testing.T) {
+	known := map[keycodes.Code]bool{}
+	for _, e := range keycodes.Table {
+		known[e.Code] = true
+	}
+	seen := map[[2]any]string{}
+	for _, ch := range keycodes.ShellChords {
+		assert.True(t, known[ch.Key], "%s names a key outside keycodes.Table", ch.Name)
+		k := [2]any{ch.Key, ch.Shift}
+		if prev, dup := seen[k]; dup {
+			t.Errorf("%s and %s share a key", prev, ch.Name)
+		}
+		seen[k] = ch.Name
+		assert.Less(t, int(ch.Bit), 64)
+		assert.Less(t, int(ch.Bit), keycodes.ShellChordCount)
+	}
 }

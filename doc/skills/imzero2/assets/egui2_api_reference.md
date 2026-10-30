@@ -80,6 +80,7 @@ status: draft
 | FetchR9I64 | Fetcher | No | 0 | 0 | - | - |
 | FetchR9S | Fetcher | No | 0 | 0 | - | - |
 | FetchR9U64 | Fetcher | No | 0 | 0 | - | - |
+| FetchShellChords | Fetcher | No | 0 | 0 | - | - |
 | FetchVideoCapabilities | Fetcher | No | 0 | 0 | - | - |
 | FetchVideoStreamInfo | Fetcher | No | 0 | 0 | - | - |
 | Frame | BuilderFactory | Yes | 0 | 0 | 25 | Immediate, Retained, BlockIterator |
@@ -3528,6 +3529,18 @@ Block
 |------|------|
 | ids | u64h |
 | values | u64h |
+
+---
+
+### FetchShellChords
+
+- **Type:** Fetcher
+
+#### Return Values
+
+| Name | Type |
+|------|------|
+| chords | u64 |
 
 ---
 
