@@ -25,7 +25,8 @@ const (
 	// LayoutMainStack gives the main windows a column at the main ratio and
 	// stacks the others in the remaining column.
 	LayoutMainStack
-	// LayoutTile is ArrangeTile kept live: a near-square grid, main first.
+	// LayoutTile is a near-square grid, main first (gridRects, the geometry
+	// of ADR-0275's retired Tile command kept live).
 	LayoutTile
 	// LayoutColumns is ArrangeColumns kept live: side by side, full height.
 	LayoutColumns
@@ -196,19 +197,19 @@ func tileRects(l LayoutE, work Rect, items []tileItem, lp LayoutParams, ap arran
 	case LayoutTile, LayoutColumns, LayoutRows:
 		// The arrangements order by stacking, front first; the order's
 		// front is the main, so the rank stands in for the stacking.
-		cmd := ArrangeTile
-		switch l {
-		case LayoutColumns:
-			cmd = ArrangeColumns
-		case LayoutRows:
-			cmd = ArrangeRows
-		default:
-		}
 		ai := make([]arrangeItem, n)
 		for i, it := range items {
 			ai[i] = arrangeItem{key: it.key, rect: work, z: n - i, minW: it.minW, minH: it.minH}
 		}
-		rects, _ := arrangeRects(cmd, work, ai, ap)
+		var rects []Rect
+		switch l {
+		case LayoutColumns:
+			rects, _ = arrangeRects(ArrangeColumns, work, ai, ap)
+		case LayoutRows:
+			rects, _ = arrangeRects(ArrangeRows, work, ai, ap)
+		default:
+			rects = gridRects(work, ai, ap)
+		}
 		copy(out, rects)
 	case LayoutMonocle:
 		cell := rectAt(work.MinX+ap.gap, work.MinY+ap.gap, max(work.W()-2*ap.gap, 1), max(work.H()-2*ap.gap, 1))

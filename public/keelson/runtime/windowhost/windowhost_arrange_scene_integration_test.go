@@ -180,22 +180,6 @@ func TestSceneWindowArrangements(t *testing.T) {
 		}
 	})
 
-	t.Run("tile leaves no window over another", func(t *testing.T) {
-		arrange(t, s, "Tile")
-		ws, menuBottom := windows(t, s)
-		assertInside(t, "Tile", ws, menuBottom)
-		for i := range ws {
-			for j := i + 1; j < len(ws); j++ {
-				assert.Zero(t, overlapArea(ws[i], ws[j]), "Tile: %s over %s", ws[i].title, ws[j].title)
-			}
-		}
-		minX, maxX := ws[0].minX, ws[0].maxX
-		for _, w := range ws {
-			minX, maxX = math.Min(minX, w.minX), math.Max(maxX, w.maxX)
-		}
-		assert.Greater(t, maxX-minX, 0.95*arrangeViewportW, "Tile does not span the work area")
-	})
-
 	t.Run("side by side spaces columns evenly", func(t *testing.T) {
 		arrange(t, s, "Side by side")
 		ws, menuBottom := windows(t, s)

@@ -172,7 +172,7 @@ func TestHostLayoutAPI(t *testing.T) {
 	assert.True(t, inst.tileDirty)
 
 	assert.Error(t, inst.FloatWindow(7, true), "no such window")
-	assert.Error(t, inst.ArrangeWindows(ArrangeTile, nil), "arrangements are refused on a tiled desktop")
+	assert.Error(t, inst.ArrangeWindows(ArrangeColumns, nil), "arrangements are refused on a tiled desktop")
 }
 
 // The order follows the open windows: a new window joins in front, a closed

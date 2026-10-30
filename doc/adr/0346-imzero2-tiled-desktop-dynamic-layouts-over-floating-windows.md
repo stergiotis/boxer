@@ -1,12 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-10-29
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to accepted
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-10-30
 ---
-
-> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
 
 # ADR-0346: A tiled desktop — dynamic layouts the host keeps live over floating windows
 
@@ -110,7 +108,10 @@ has one layout:
   the main ratio, the others stack in the remaining column; the main count
   and the ratio are the parameters.
 - **Tile**, **Columns**, **Rows** — ADR-0275's grid, side-by-side and
-  stacked arrangements, kept live.
+  stacked arrangements, kept live. The one-shot Tile command is retired
+  with this record (ADR-0275, update of 2026-10-30): the live grid is what
+  it was for. Cascade, Columns, Rows and Gather stay as one-shot commands
+  of the floating desktop.
 - **Monocle** — every tiled window fills the work area; the active one is
   in front.
 
@@ -342,7 +343,7 @@ deferral.
 
 ## Status
 
-Proposed — awaiting review by the code owner.
+Accepted 2026-10-30.
 
 - **M1 — Spike: pin three windows into a third of the work area.** ✓
   Recorded under *Updates* (2026-10-29); SD2 revised in place from it.

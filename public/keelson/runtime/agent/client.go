@@ -467,7 +467,7 @@ func (inst *Client) CaptureAs(ctx context.Context, handle string, instance uint6
 }
 
 // Arrange arranges windows with an ADR-0275 arrangement named by its ident
-// ("cascade", "tile", "columns", "rows", "gather"): instances, or every
+// ("cascade", "columns", "rows", "gather"): instances, or every
 // window when instances is empty. It needs the grant's desktop mode act.
 // asked.Key is the call's key, as for the other window verbs.
 func (inst *Client) Arrange(ctx context.Context, handle string, asked Asked, command string, instances []uint64) (out Outcome, err error) {

@@ -323,8 +323,8 @@ var coordinatorTools = []toolSpec{
 			return inst.queryWindows(ctx, argString(args, "table"), argString(args, "sql"), spec.budget)
 		}},
 	{name: "arrange_windows", group: toolGroupFixed,
-		description: "Lay windows out on the desktop: cascade, tile, columns (side by side), rows (stacked), or gather (bring windows back into view). Without windows it arranges every window; with them, only those, leaving the rest where they are. Needs the desktop granted (request_access with desktop true).",
-		schema:      `{"type":"object","properties":{"command":{"type":"string","enum":["cascade","tile","columns","rows","gather"]},"windows":{"type":"array","items":{"type":"integer"},"description":"window keys from query_windows; empty is every window"}},"required":["command"],"additionalProperties":false}`,
+		description: "Lay windows out on the desktop once: cascade, columns (side by side), rows (stacked), or gather (bring windows back into view). Without windows it arranges every window; with them, only those, leaving the rest where they are. For a layout that stays as windows open and close, set_layout. Needs the desktop granted (request_access with desktop true).",
+		schema:      `{"type":"object","properties":{"command":{"type":"string","enum":["cascade","columns","rows","gather"]},"windows":{"type":"array","items":{"type":"integer"},"description":"window keys from query_windows; empty is every window"}},"required":["command"],"additionalProperties":false}`,
 		exec: func(ctx context.Context, inst *coordinator, spec *toolSpec, o toolOrigin, call openaichat.ToolCall, args map[string]any) (content string, activity string) {
 			return inst.windowVerb(ctx, inst.asked(o, call.Id), call.Name, args)
 		}},

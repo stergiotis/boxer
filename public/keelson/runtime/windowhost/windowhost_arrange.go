@@ -20,9 +20,9 @@ const (
 	// top-left corner in stacking order, the front window last, each
 	// offset by one title-bar step so every title stays reachable.
 	ArrangeCascade
-	// ArrangeTile fills the work area with a near-square grid, front window
-	// first. A short last row stretches its windows across the full width.
-	ArrangeTile
+	// The one-shot Tile command was retired on 2026-10-30 (ADR-0275, update
+	// of that date): its grid lives on as the live Tile layout of ADR-0346
+	// (gridRects).
 	// ArrangeColumns places the windows side by side, full height.
 	ArrangeColumns
 	// ArrangeRows stacks the windows top to bottom, full width.
@@ -34,14 +34,12 @@ const (
 )
 
 // ArrangeCommands lists the commands in menu order.
-var ArrangeCommands = []ArrangeE{ArrangeCascade, ArrangeTile, ArrangeColumns, ArrangeRows, ArrangeGather}
+var ArrangeCommands = []ArrangeE{ArrangeCascade, ArrangeColumns, ArrangeRows, ArrangeGather}
 
 func (inst ArrangeE) String() (s string) {
 	switch inst {
 	case ArrangeCascade:
 		s = "Cascade"
-	case ArrangeTile:
-		s = "Tile"
 	case ArrangeColumns:
 		s = "Side by side"
 	case ArrangeRows:
@@ -60,8 +58,6 @@ func (inst ArrangeE) Ident() (s string) {
 	switch inst {
 	case ArrangeCascade:
 		s = "cascade"
-	case ArrangeTile:
-		s = "tile"
 	case ArrangeColumns:
 		s = "columns"
 	case ArrangeRows:
@@ -208,18 +204,7 @@ func arrangeRects(cmd ArrangeE, work Rect, items []arrangeItem, p arrangeParams)
 	if len(items) == 0 || !work.valid() {
 		return
 	}
-	// Stacking order, back to front; ties fall back to the window key, which
-	// is open order.
-	order := make([]int, len(items))
-	for i := range order {
-		order[i] = i
-	}
-	slices.SortStableFunc(order, func(a, b int) int {
-		if items[a].z != items[b].z {
-			return items[a].z - items[b].z
-		}
-		return int(items[a].key) - int(items[b].key)
-	})
+	order := stackingOrder(items)
 	n := len(items)
 	switch cmd {
 	case ArrangeCascade:
@@ -240,31 +225,6 @@ func arrangeRects(cmd ArrangeE, work Rect, items []arrangeItem, p arrangeParams)
 			y = max(min(y, work.MaxY-hi), work.MinY)
 			out[i] = rectAt(x, y, wi, hi)
 			ok[i] = true
-		}
-	case ArrangeTile:
-		cols := int(math.Ceil(math.Sqrt(float64(n))))
-		rows := (n + cols - 1) / cols
-		// Front window first: the one the user was working in lands
-		// top-left. A row is as tall as its tallest minimum asks.
-		rowMins := make([]float32, rows)
-		for rank := 0; rank < n; rank++ {
-			row := rank / cols
-			rowMins[row] = max(rowMins[row], items[order[n-1-rank]].minH)
-		}
-		rowOffs, rowHs := fitSpans(work.H(), p.gap, rowMins)
-		for row := 0; row < rows; row++ {
-			first := row * cols
-			inRow := min(cols, n-first)
-			colMins := make([]float32, inRow)
-			for col := range colMins {
-				colMins[col] = items[order[n-1-first-col]].minW
-			}
-			colOffs, colWs := fitSpans(work.W(), p.gap, colMins)
-			for col := range colMins {
-				i := order[n-1-first-col]
-				out[i] = rectAt(work.MinX+colOffs[col], work.MinY+rowOffs[row], colWs[col], rowHs[row])
-				ok[i] = true
-			}
 		}
 	case ArrangeColumns, ArrangeRows:
 		mins := make([]float32, n)
@@ -307,6 +267,59 @@ func arrangeRects(cmd ArrangeE, work Rect, items []arrangeItem, p arrangeParams)
 			ok[i] = true
 		}
 	default:
+	}
+	return
+}
+
+// stackingOrder is the items' indices back to front by stacking rank; ties
+// fall back to the window key, which is open order.
+func stackingOrder(items []arrangeItem) (order []int) {
+	order = make([]int, len(items))
+	for i := range order {
+		order[i] = i
+	}
+	slices.SortStableFunc(order, func(a, b int) int {
+		if items[a].z != items[b].z {
+			return items[a].z - items[b].z
+		}
+		return int(items[a].key) - int(items[b].key)
+	})
+	return
+}
+
+// gridRects fills the work area with a near-square grid, front window
+// first: the one the person was working in lands top-left. A row is as tall
+// as its tallest minimum asks, and a short last row stretches its windows
+// across the full width. The geometry of the Tile command ADR-0275 had, kept
+// for the live Tile layout of ADR-0346. out is indexed like items; an empty
+// or invalid work area places nothing.
+func gridRects(work Rect, items []arrangeItem, p arrangeParams) (out []Rect) {
+	n := len(items)
+	out = make([]Rect, n)
+	if n == 0 || !work.valid() {
+		return
+	}
+	order := stackingOrder(items)
+	cols := int(math.Ceil(math.Sqrt(float64(n))))
+	rows := (n + cols - 1) / cols
+	rowMins := make([]float32, rows)
+	for rank := 0; rank < n; rank++ {
+		row := rank / cols
+		rowMins[row] = max(rowMins[row], items[order[n-1-rank]].minH)
+	}
+	rowOffs, rowHs := fitSpans(work.H(), p.gap, rowMins)
+	for row := 0; row < rows; row++ {
+		first := row * cols
+		inRow := min(cols, n-first)
+		colMins := make([]float32, inRow)
+		for col := range colMins {
+			colMins[col] = items[order[n-1-first-col]].minW
+		}
+		colOffs, colWs := fitSpans(work.W(), p.gap, colMins)
+		for col := range colMins {
+			i := order[n-1-first-col]
+			out[i] = rectAt(work.MinX+colOffs[col], work.MinY+rowOffs[row], colWs[col], rowHs[row])
+		}
 	}
 	return
 }

@@ -149,7 +149,7 @@ func TestDesktopTable(t *testing.T) {
 		WorkShown:    true,
 		Work:         windowhost.Rect{MinX: 0, MinY: 22, MaxX: 1400, MaxY: 870},
 		ActiveKey:    3,
-		Arranging:    windowhost.ArrangeTile,
+		Arranging:    windowhost.ArrangeColumns,
 		Layout:       windowhost.LayoutMainStack,
 		LayoutParams: windowhost.LayoutParams{MainRatio: 0.6, MainCount: 1},
 	}}
@@ -159,7 +159,7 @@ func TestDesktopTable(t *testing.T) {
 	f := func(col string) float64 { return rec.Column(colIndex(t, rec, col)).(*array.Float64).Value(0) }
 	assert.Equal(t, []float64{0, 22, 1400, 848}, []float64{f("work_x"), f("work_y"), f("work_w"), f("work_h")})
 	assert.EqualValues(t, 3, rec.Column(colIndex(t, rec, "active_key")).(*array.Int64).Value(0))
-	assert.Equal(t, []string{"Tile"}, stringColumn(t, rec, "arranging"))
+	assert.Equal(t, []string{"Side by side"}, stringColumn(t, rec, "arranging"))
 	assert.Equal(t, []string{"main-stack"}, stringColumn(t, rec, "layout"))
 	assert.InDelta(t, 0.6, f("main_ratio"), 1e-6)
 	assert.EqualValues(t, 1, rec.Column(colIndex(t, rec, "main_count")).(*array.Int64).Value(0))

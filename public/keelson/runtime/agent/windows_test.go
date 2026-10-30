@@ -16,7 +16,7 @@ func TestWindowVerbsFollowTheGrant(t *testing.T) {
 	ctx := context.Background()
 
 	observer := r.grant(ModeObserve)
-	out, err := r.cli.Arrange(ctx, observer.Handle, Asked{Key: "a1"}, "tile", nil)
+	out, err := r.cli.Arrange(ctx, observer.Handle, Asked{Key: "a1"}, "cascade", nil)
 	require.NoError(t, err)
 	assert.Equal(t, "input_required", out.Phase)
 	assert.Contains(t, out.Reason, "desktop in act mode")
@@ -69,7 +69,7 @@ func TestAGrantMayNameOnlyTheDesktop(t *testing.T) {
 	r := newRig(t, true)
 	g, err := r.cli.Request(context.Background(), GrantRequest{Plan: "tile everything", Desktop: ModeAct})
 	require.NoError(t, err)
-	out, err := r.cli.Arrange(context.Background(), g.Handle, Asked{Key: "a"}, "tile", nil)
+	out, err := r.cli.Arrange(context.Background(), g.Handle, Asked{Key: "a"}, "cascade", nil)
 	require.NoError(t, err)
 	assert.Equal(t, "completed", out.Phase)
 }

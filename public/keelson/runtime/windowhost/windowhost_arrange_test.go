@@ -25,12 +25,24 @@ func overlap(a, b Rect) bool {
 	return a.MinX < b.MaxX && b.MinX < a.MaxX && a.MinY < b.MaxY && b.MinY < a.MaxY
 }
 
-// Tiling commands place every window inside the work area without overlap,
-// for every window count up to a crowded desktop.
+// Tiling commands, and the grid the live Tile layout uses, place every
+// window inside the work area without overlap, for every window count up to
+// a crowded desktop.
 func TestArrangeTilingCommandsPartitionTheWorkArea(t *testing.T) {
-	for _, cmd := range []ArrangeE{ArrangeTile, ArrangeColumns, ArrangeRows} {
+	for _, cmd := range []ArrangeE{ArrangeNone, ArrangeColumns, ArrangeRows} {
 		for n := 1; n <= 13; n++ {
-			out, ok := arrangeRects(cmd, arrangeWork, arrangeFixture(n), defaultArrangeParams)
+			var out []Rect
+			var ok []bool
+			if cmd == ArrangeNone {
+				// ArrangeNone stands for the grid here.
+				out = gridRects(arrangeWork, arrangeFixture(n), defaultArrangeParams)
+				ok = make([]bool, n)
+				for i := range ok {
+					ok[i] = true
+				}
+			} else {
+				out, ok = arrangeRects(cmd, arrangeWork, arrangeFixture(n), defaultArrangeParams)
+			}
 			for i := range out {
 				require.True(t, ok[i], "%s n=%d item %d placed", cmd, n, i)
 				assert.True(t, inside(out[i], arrangeWork), "%s n=%d item %d inside: %+v", cmd, n, i, out[i])
@@ -44,11 +56,11 @@ func TestArrangeTilingCommandsPartitionTheWorkArea(t *testing.T) {
 	}
 }
 
-// The front window lands top-left when tiling: it is the one being worked in.
-func TestArrangeTilePutsTheFrontWindowFirst(t *testing.T) {
+// The front window lands top-left in the grid: it is the one being worked in.
+func TestGridPutsTheFrontWindowFirst(t *testing.T) {
 	items := arrangeFixture(4)
 	items[1].z = 99
-	out, _ := arrangeRects(ArrangeTile, arrangeWork, items, defaultArrangeParams)
+	out := gridRects(arrangeWork, items, defaultArrangeParams)
 	for i := range out {
 		if i == 1 {
 			continue
@@ -97,7 +109,7 @@ func TestArrangeGatherMovesOnlyWhatSticksOut(t *testing.T) {
 }
 
 func TestArrangeWithoutAWorkAreaPlacesNothing(t *testing.T) {
-	_, ok := arrangeRects(ArrangeTile, Rect{}, arrangeFixture(3), defaultArrangeParams)
+	_, ok := arrangeRects(ArrangeColumns, Rect{}, arrangeFixture(3), defaultArrangeParams)
 	assert.Equal(t, []bool{false, false, false}, ok)
 }
 
@@ -128,7 +140,7 @@ func TestFitSpansOverlapsEvenlyWhenMinimumsDoNotFit(t *testing.T) {
 // A window with a wide minimum gets its width under side by side and tile;
 // the arrangement still partitions the work area when the minimums fit.
 func TestArrangeRespectsWindowMinimums(t *testing.T) {
-	for _, cmd := range []ArrangeE{ArrangeTile, ArrangeColumns, ArrangeRows, ArrangeCascade} {
+	for _, cmd := range []ArrangeE{ArrangeColumns, ArrangeRows, ArrangeCascade} {
 		items := arrangeFixture(3)
 		items[1].minW, items[1].minH = 700, 300
 		out, ok := arrangeRects(cmd, arrangeWork, items, defaultArrangeParams)
