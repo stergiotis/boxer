@@ -898,6 +898,17 @@ narrow width they ran past the window's edge. Row one is still document
 gestures and formatting, row two view state, and the replace row appears
 between them and the summary when asked for.
 
+### 2026-10-29 — links into the window: the mode and a location as launch options
+
+[ADR-0347](./0347-mdedit-links-a-url-scheme-a-location-grammar-and-launch-options.md)
+gives the launch config a view mode and a location, and names a
+snapshot document with an `mdedit://` link every markdown surface follows
+by opening a new window. The mode is no longer session-only: a launch picks
+it. A location is a heading slug, an Obsidian block id (`^id`, now parsed
+and hidden in the preview) or a line (`L<n>`); it scrolls the preview to
+the heading or the block and moves the caret in the modes that show one. A
+document read from a snapshot offers its own link at the caret's section.
+
 ## References
 
 - [ADR-0176](./0176-native-tree-widget.md) — the tree widget the outline

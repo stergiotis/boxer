@@ -19,6 +19,8 @@
 package helphost
 
 import (
+	"github.com/rs/zerolog/log"
+	"github.com/stergiotis/boxer/apps/mdedit/mdeditlink"
 	"strconv"
 	"strings"
 
@@ -610,6 +612,10 @@ func renderRendered(ids *c.WidgetIdStack, doc *markdown.Doc, scrollToSection str
 	in := markdown.Input{Ids: ids, ScopeKey: "doc-render-2", Doc: doc, ScrollToSection: scrollToSection}
 	if bus != nil {
 		in.ActionLabels = []string{"Copy"}
+		// An mdedit:// link in a help page opens a new mdedit window, as it
+		// does from every surface (ADR-0347 §SD5); without a bus it stays a
+		// hyperlink rather than a dead click.
+		in.LinkClaims = mdeditlink.Claimed
 	}
 	for range c.ScrollArea().Vscroll(true).AutoShrink(false, false).KeepIter() {
 		if scrollTop {
@@ -619,11 +625,15 @@ func renderRendered(ids *c.WidgetIdStack, doc *markdown.Doc, scrollToSection str
 		// the frame goroutine: Request blocks until the broker acks, and the
 		// frame thread must not block. Errors are swallowed — a failed copy
 		// isn't worth interrupting a reader.
-		for _, act := range markdown.Render(in).Actions {
+		res := markdown.Render(in)
+		for _, act := range res.Actions {
 			text := act.Text
 			go func() {
 				_, _ = bus.Request(clipboardbroker.SubjectWrite, []byte(text))
 			}()
+		}
+		for _, l := range res.Links {
+			mdeditlink.Follow(bus, log.Logger, l.URL)
 		}
 	}
 }

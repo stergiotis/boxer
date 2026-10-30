@@ -19,7 +19,16 @@ const Kind = "mdeditLaunch"
 // the window calls it and offers as the file name when it is saved. Mount,
 // SnapNanos and Path, when Mount is set, name the same document in a lading
 // snapshot (ADR-0342 §SD5, proposed): the window reads it and the images it
-// embeds from there, and keeps Text if the snapshot cannot be read.
+// embeds from there, and keeps Text if the snapshot cannot be read. Text may
+// be empty when the snapshot names the document: the window shows the
+// snapshot's text when the read lands.
+//
+// Mode and Location say how the document is shown (ADR-0347 §SD3): Mode is
+// one of the mdeditlink mode names (`split`, `source`, `read`, `blocks`;
+// empty is Split), Location a fragment in the mdeditlink
+// grammar — a heading slug, `^id` for a block id, `L<n>` for a line — or
+// empty for the top. A location that resolves to nothing opens at the top
+// and says so; it never refuses the open.
 type MdeditLaunch struct {
 	_ struct{} `kind:"mdeditLaunch"`
 
@@ -33,4 +42,7 @@ type MdeditLaunch struct {
 	Mount     uint64 `lw:"mdeditLaunchMount,u64Array"`
 	SnapNanos int64  `lw:"mdeditLaunchSnapshot,i64Array"`
 	Path      string `lw:"mdeditLaunchPath,stringArray"`
+
+	Mode     string `lw:"mdeditLaunchMode,stringArray"`
+	Location string `lw:"mdeditLaunchLocation,stringArray"`
 }

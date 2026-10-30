@@ -88,7 +88,7 @@ var manifest = app.Manifest{
 		{
 			Pattern:   windowhost.OpenSubject,
 			Direction: app.CapDirectionPub,
-			Reason:    "mdedit: Send to play — open the playground on the document persisted as a boxer.facts row",
+			Reason:    "mdedit: Send to play — open the playground on the document persisted as a boxer.facts row; and follow an mdedit:// link, which opens another mdedit window on a snapshot document (ADR-0347)",
 		},
 		// Restore, open, save and send run as keelson tasks owned by the
 		// window.

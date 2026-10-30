@@ -1,6 +1,7 @@
 package mdedit
 
 import (
+	"github.com/stergiotis/boxer/apps/mdedit/mdeditlink"
 	"github.com/stergiotis/boxer/public/semistructured/markdown/mdline"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/mdblocks"
@@ -28,7 +29,7 @@ func (inst *App) ensureBlocks() {
 	if inst.blocks != nil {
 		return
 	}
-	inst.blocks = mdblocks.New(inst.ids, "blocks", mdblocks.Opts{HintText: hintEmpty, Parse: inst.parseOptions()})
+	inst.blocks = mdblocks.New(inst.ids, "blocks", mdblocks.Opts{HintText: hintEmpty, Parse: inst.parseOptions(), LinkClaims: mdeditlink.Claimed})
 }
 
 // renderBlocks is the central region in Blocks mode. Owns its scroll area,
@@ -63,6 +64,9 @@ func (inst *App) renderBlocks() {
 	}
 	if ev.CopyRequest != "" {
 		inst.copyToClipboard(ev.CopyRequest, false)
+	}
+	for _, l := range ev.Links {
+		inst.followLink(l.URL)
 	}
 }
 

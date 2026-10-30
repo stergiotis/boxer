@@ -205,7 +205,7 @@ func (inst *App) renderArtefact() {
 				weak("Empty. The model writes here once it is asked to.")
 				break
 			}
-			markdown.Render(markdown.Input{Ids: inst.ids, ScopeKey: "art-doc", Doc: v.doc, Frontmatter: true})
+			inst.followMdeditLinks(markdown.Render(markdown.Input{Ids: inst.ids, ScopeKey: "art-doc", Doc: v.doc, Frontmatter: true, LinkClaims: inst.mdeditLinkClaims()}))
 			for _, line := range citationLines(text, inst.conv.citationIndex()) {
 				weak(line)
 			}

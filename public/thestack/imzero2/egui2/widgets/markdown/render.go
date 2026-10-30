@@ -49,6 +49,14 @@ func headingGap(level uint8) (v float32) {
 func (inst *segment) render(rc *renderCtx) {
 	atDocStart := !rc.emittedAny
 	rc.emittedAny = true
+	// A block id or an offset target ([renderCtx.armBlockScroll]) scrolls
+	// to whatever block is about to render. A heading emits its gap first
+	// (below), for the reason recorded there; every other kind has no gap
+	// of its own, so the op goes out here, before the first widget.
+	if rc.scrollNow && inst.kind != segKindHeading {
+		c.ScrollToCursor(0)
+		rc.scrollNow = false
+	}
 	switch inst.kind {
 	case segKindHeading:
 		// Air above the heading — but not above the first thing in the
@@ -72,12 +80,16 @@ func (inst *segment) render(rc *renderCtx) {
 		// silently — see [bindings.ScrollToCursor] doc.
 		if rc.scrollToSlug != "" && rc.headingIdx < len(rc.headings) {
 			if rc.headings[rc.headingIdx].Slug == rc.scrollToSlug {
-				c.ScrollToCursor(0)
+				rc.scrollNow = true
 				// Clear so a slug appearing twice in one doc only
 				// triggers on the first occurrence — matches the
 				// "scroll once per click" UX consumers expect.
 				rc.scrollToSlug = ""
 			}
+		}
+		if rc.scrollNow {
+			c.ScrollToCursor(0)
+			rc.scrollNow = false
 		}
 		rc.headingIdx++
 		renderRuns(inst.runs, rc)

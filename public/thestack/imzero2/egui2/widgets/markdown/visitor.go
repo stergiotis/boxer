@@ -124,6 +124,11 @@ func parseAndLower(src []byte, cfg *config) (segments []segment, frontmatter *co
 		seg, ok := lowerBlock(ctx, child)
 		if ok {
 			seg.srcStart, seg.srcStop = blockRange(child, src)
+			// A heading's `id` attribute is its anchor, already in the
+			// slug; a block id is every other block's.
+			if _, isHeading := child.(*ast.Heading); !isHeading {
+				seg.blockId, _ = obsidian.BlockId(child)
+			}
 			segments = append(segments, seg)
 		}
 	}

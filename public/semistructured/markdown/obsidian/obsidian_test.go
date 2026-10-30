@@ -81,7 +81,7 @@ func allFeatures() Options {
 // expecting it to render (C3 in the rendering review).
 func TestFeatureAll_ExcludesTheUnwiredMathBit(t *testing.T) {
 	require.Zero(t, FeatureAll&FeatureMath, "FeatureAll must not carry the unwired math bit")
-	require.Equal(t, FeatureE(((1<<11)-1)&^FeatureMath), FeatureAll)
+	require.Equal(t, FeatureE(((1<<12)-1)&^FeatureMath), FeatureAll)
 }
 
 // Every OTHER declared bit is in FeatureAll — the exclusion list is one
@@ -101,6 +101,7 @@ func TestFeatureAll_CoversEveryWiredFlag(t *testing.T) {
 		{"Frontmatter", FeatureFrontmatter},
 		{"HeadingAnchor", FeatureHeadingAnchor},
 		{"Footnote", FeatureFootnote},
+		{"BlockId", FeatureBlockId},
 	}
 	var union FeatureE
 	for _, f := range wired {

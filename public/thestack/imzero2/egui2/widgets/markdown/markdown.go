@@ -200,7 +200,21 @@ type Input struct {
 	// tooltip and popup contexts. Hosts gate it on their own
 	// selection-just-changed signal: passing the same slug every frame keeps
 	// re-scrolling and prevents the reader from scrolling away.
+	//
+	// A value starting with '^' names an Obsidian block id instead
+	// ([BlockInfo.Id], ADR-0347 §SD2): the top-level block carrying it is
+	// the target. A heading slug is lower-case, so the two cannot collide.
 	ScrollToSection string
+	// ScrollToOffset schedules the same one-shot scroll to the top-level
+	// block whose source range holds the byte offset ([BlockInfo.Start],
+	// [BlockInfo.Stop]); an offset in the gap before a block targets that
+	// block, one past the last block targets the last. ScrollToOffsetSet
+	// arms it, since offset 0 is the document's first byte. Hosts gate it as
+	// they gate ScrollToSection, on their own one-shot signal; when both are
+	// set the section wins and the offset is ignored. Under a SectionFilter
+	// the offset fires only when its block is admitted.
+	ScrollToOffset    int
+	ScrollToOffsetSet bool
 
 	// ActionLabels, when non-empty, places one small button per label above
 	// every code/verbatim block (left to right); a click is reported in
@@ -322,6 +336,10 @@ func (inst *Doc) render(in Input) (res Result) {
 		actionAccept:   in.CodeActionFilter,
 		actionMask:     in.CodeActionMask,
 	}
+	scrollIdx := -1
+	if in.ScrollToOffsetSet && in.ScrollToSection == "" {
+		scrollIdx = offsetBlockIndex(inst.segments, in.ScrollToOffset)
+	}
 	var visible []bool
 	if in.SectionFilter != nil {
 		visible = visibleSegments(inst.segments, inst.headings, in.SectionFilter)
@@ -336,6 +354,7 @@ func (inst *Doc) render(in Input) (res Result) {
 		if visible != nil && !visible[i] {
 			continue
 		}
+		rc.armBlockScroll(&inst.segments[i], i == scrollIdx)
 		inst.segments[i].render(&rc)
 	}
 	res.Actions = rc.codeActions
@@ -387,6 +406,11 @@ type renderCtx struct {
 	// as the start.
 	emittedAny bool
 
+	// scrollNow asks the top-level segment about to render to emit the
+	// scroll op first: set by [renderCtx.armBlockScroll] for a block id or
+	// an offset target, and by the heading dispatch, consumed by
+	// [segment.render].
+	scrollNow bool
 	// Scroll-to-section state. scrollToSlug is the caller-provided
 	// target ([Input.ScrollToSection]); empty disables the dispatch.
 	// headings mirrors [Doc.headings] for slug→ordinal lookup at
@@ -431,7 +455,9 @@ type ParseOptions struct {
 	// default. The default covers everything the renderer can lower:
 	// frontmatter, GFM (tables, strikethrough, task lists), wikilinks,
 	// embeds, callouts, ==highlight== and %%comment%% stripping, `#tag`
-	// spans, `{#anchor}` heading anchors ([obsidian.FeatureHeadingAnchor],
+	// spans, `^id` block ids ([obsidian.FeatureBlockId], ADR-0347: the
+	// marker is hidden and names the block, see [BlockInfo.Id]),
+	// `{#anchor}` heading anchors ([obsidian.FeatureHeadingAnchor],
 	// which feeds [HeadingInfo.Slug]), and footnotes
 	// ([obsidian.FeatureFootnote]: a superscript `[n]` whose hover tooltip
 	// is the definition, plus the definitions as a numbered list at the
@@ -495,7 +521,8 @@ func defaultConfig() (cfg config) {
 		obsidian.FeatureComment |
 		obsidian.FeatureTag |
 		obsidian.FeatureHeadingAnchor |
-		obsidian.FeatureFootnote
+		obsidian.FeatureFootnote |
+		obsidian.FeatureBlockId
 	cfg.resolver = resolver.NoopResolver{}
 	cfg.imageMaxW = imageMaxDefaultW
 	cfg.imageMaxH = imageMaxDefaultH
@@ -688,7 +715,10 @@ type segment struct {
 	// top-level segments only (ADR-0334 §SD2; see [Doc.Blocks]). A
 	// synthetic segment — the footnote definitions goldmark appends — has
 	// srcStop < srcStart.
-	srcStart, srcStop  int
+	srcStart, srcStop int
+	// blockId is the Obsidian block id the block carries, top-level only
+	// ([BlockInfo.Id]; obsidian.FeatureBlockId).
+	blockId            string
 	runs               []paragraphRun
 	code               typed.RetainedFffiHolderTyped[c.CodeViewJobS]
 	codeBuilt          bool // code holds the job built from codeText/codeLang

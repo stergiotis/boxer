@@ -35,6 +35,7 @@ import (
 	"github.com/rs/zerolog/log"
 
 	"github.com/stergiotis/boxer/apps/mdedit/launchcfg"
+	"github.com/stergiotis/boxer/apps/mdedit/mdeditlink"
 	"github.com/stergiotis/boxer/public/fs/lading/ladingsftp/sftptree"
 	"github.com/stergiotis/boxer/public/identity/identifier"
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
@@ -238,6 +239,16 @@ type App struct {
 	// click, and consumed by the render. One channel for both sources, so
 	// they cannot fight over the same frame.
 	pendingScroll string
+	// pendingScrollOff is a block-granular scroll target as a byte offset
+	// (markdown.Input.ScrollToOffset), set by a `L<n>` location
+	// (mdedit_link.go); pendingScrollOffOk arms it, since 0 is the first
+	// byte. Consumed by the render like pendingScroll.
+	pendingScrollOff   int
+	pendingScrollOffOk bool
+	// pendingLocation is a location a launch asked for, waiting for the
+	// parse of the document it names (mdedit_link.go).
+	pendingLocation   string
+	pendingLocationOk bool
 
 	// showSide is the reader's toggle for the side panel and sideView the
 	// tab it shows (mdedit_side.go). The panel also needs the window to be
@@ -535,10 +546,13 @@ func (inst *App) handOver(raw []byte) (handed bool) {
 	}
 	inst.adoptDocument(l.Text, name)
 	if l.Mount != 0 {
-		inst.handedSnap = &handedSnapshot{mount: identifier.TaggedId(l.Mount), snap: time.Unix(0, l.SnapNanos), path: l.Path, name: name, text: l.Text}
+		inst.handedSnap = &handedSnapshot{mount: identifier.TaggedId(l.Mount), snap: time.Unix(0, l.SnapNanos), path: l.Path, name: name, text: l.Text, location: l.Location}
 		// The snapshot exists whether or not this window can read it.
-		inst.snapRef = &snapshotRef{mount: inst.handedSnap.mount, snap: inst.handedSnap.snap}
+		inst.snapRef = &snapshotRef{mount: inst.handedSnap.mount, snap: inst.handedSnap.snap, path: l.Path}
 	}
+	// The mode now; the location once the text is parsed, and again when
+	// the snapshot's text replaces the handed one (ADR-0347 §SD3).
+	inst.applyLaunchOptions(l)
 	return true
 }
 
@@ -619,6 +633,9 @@ func (inst *App) renderBody() {
 	// Last frame's outline numbering gesture, applied while the parse above
 	// still describes the buffer and before any pane has read either.
 	inst.applyPendingNumbering()
+	// A launch's location, resolved against the parse above and before the
+	// caret tracking below, which it sets the baseline for (mdedit_link.go).
+	inst.applyPendingLocation()
 	// Before any pane reads pendingScroll, so a caret move and an outline
 	// click in the same frame resolve in that order — the click wins, which is
 	// the one the reader just made.
@@ -839,6 +856,9 @@ func (inst *App) renderBar() {
 			if clicked && !inst.exportInFlight() {
 				inst.copyMountCommand()
 			}
+			// And a link to it, for another app or an agent to open
+			// (ADR-0347 §SD6).
+			inst.renderCopyLink()
 		}
 
 		label, tone := "no changes", badge.ToneNeutral
@@ -1150,11 +1170,19 @@ func (inst *App) renderPreview() {
 	}
 	// markdown.Render opens its own scope under ScopeKey, so the preview and
 	// the proposal preview in the same window cannot collide.
-	in := markdown.Input{Ids: inst.ids, ScopeKey: "preview", Doc: inst.doc}
+	// mdedit:// links open a new window, as from every surface (ADR-0347
+	// §SD5); every other link stays a hyperlink.
+	in := markdown.Input{Ids: inst.ids, ScopeKey: "preview", Doc: inst.doc, LinkClaims: mdeditlink.Claimed}
 	if slug, changed := inst.takeScrollTarget(); changed {
 		in.ScrollToSection = slug
 	}
+	if off, ok := inst.takeScrollOffset(); ok {
+		in.ScrollToOffset, in.ScrollToOffsetSet = off, true
+	}
 	res := markdown.Render(in)
+	for _, l := range res.Links {
+		inst.followLink(l.URL)
+	}
 	// A task box clicked in the preview flips in the source: the character
 	// after its bracket, same length either way. A rebind from outside the
 	// editor, like a replace — not an edit its undo describes.
@@ -1243,6 +1271,16 @@ func (inst *App) trackCaretSection() {
 	}
 	inst.caretSlug = slug
 	inst.pendingScroll = slug
+}
+
+// takeScrollOffset consumes the queued offset target (mdedit_link.go).
+func (inst *App) takeScrollOffset() (off int, ok bool) {
+	if !inst.pendingScrollOffOk {
+		return 0, false
+	}
+	off = inst.pendingScrollOff
+	inst.pendingScrollOff, inst.pendingScrollOffOk = 0, false
+	return off, true
 }
 
 // takeScrollTarget consumes the queued scroll target, whichever source set it.

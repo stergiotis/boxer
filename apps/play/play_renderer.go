@@ -1249,6 +1249,7 @@ func NewPlayApp(client *Client, graph *queryGraph, initialSQL string, rules *glo
 	inst.projPublish = newProjectionPublishState()
 	inst.flow = newFlowDriver(mk(), client)
 	inst.richCells = newRichCellCache(mk())
+	inst.richCells.openLink = inst.openMdeditLink
 	inst.detailTimeline = NewDetailTimeline(mk())
 	inst.components = newComponentDetail(mk())
 	inst.projector.componentPresence = inst.components.presenceRows

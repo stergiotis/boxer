@@ -27,3 +27,14 @@ var (
 	MembMdeditLaunchPath = KeelsonHrNkRegistry.MustBegin("mdeditLaunchPath", 249).
 				MustAddRestriction("stringArray", common.MembershipSpecLowCardRef, registry.CardinalityZeroToOne).End()
 )
+
+// How the handed-over document is shown (ADR-0347 §SD3): the view
+// mode to open in, and the location to show — a heading slug, `^id` for a
+// block id or `L<n>` for a line, the fragment grammar of an `mdedit://` link.
+// The ordinals continue after watchbill's request cohort.
+var (
+	MembMdeditLaunchMode = KeelsonHrNkRegistry.MustBegin("mdeditLaunchMode", 253).
+				MustAddRestriction("stringArray", common.MembershipSpecLowCardRef, registry.CardinalityZeroToOne).End()
+	MembMdeditLaunchLocation = KeelsonHrNkRegistry.MustBegin("mdeditLaunchLocation", 254).
+					MustAddRestriction("stringArray", common.MembershipSpecLowCardRef, registry.CardinalityZeroToOne).End()
+)

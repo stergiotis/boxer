@@ -88,6 +88,9 @@ type filesState struct {
 	// edits made while it ran are kept.
 	loadHanded     bool
 	loadHandedText string
+	// loadLocation is a handover's location, queued again when its text
+	// lands (mdedit_link.go).
+	loadLocation string
 }
 
 // renderFiles draws the pane: the mount picker, the browser, and whatever a
@@ -265,7 +268,7 @@ func (inst *App) cancelSnapshotLoad() {
 		f.load.Invalidate()
 	}
 	f.loadKey, f.loadLabel, f.loadFS, f.loadPath, f.loadRef = "", "", nil, "", snapshotRef{}
-	f.loadHanded, f.loadHandedText = false, ""
+	f.loadHanded, f.loadHandedText, f.loadLocation = false, "", ""
 	inst.handedSnap = nil
 }
 
@@ -313,8 +316,8 @@ func (inst *App) drainSnapshotLoad() {
 	f.loadKey = ""
 	label := f.loadLabel
 	f.loadLabel = ""
-	handed, handedText := f.loadHanded, f.loadHandedText
-	f.loadHanded, f.loadHandedText = false, ""
+	handed, handedText, location := f.loadHanded, f.loadHandedText, f.loadLocation
+	f.loadHanded, f.loadHandedText, f.loadLocation = false, "", ""
 	if err != nil {
 		if handed {
 			inst.status = "showing the handed-over text; its snapshot cannot be read: " + err.Error()
@@ -329,6 +332,7 @@ func (inst *App) drainSnapshotLoad() {
 		// still come from the snapshot the text was handed with.
 		inst.setSnapshotImages(newSnapshotImages(f.loadFS, f.loadPath, key))
 		ref := f.loadRef
+		ref.path = f.loadPath
 		inst.snapRef = &ref
 		f.loadFS, f.loadRef = nil, snapshotRef{}
 		inst.status = "kept your edits to the handed-over text; its images come from " + label
@@ -346,9 +350,15 @@ func (inst *App) drainSnapshotLoad() {
 	inst.readFromSnapshot = true
 	inst.setSnapshotImages(newSnapshotImages(f.loadFS, f.loadPath, key))
 	ref := f.loadRef
+	ref.path = f.loadPath
 	inst.snapRef = &ref
 	f.loadFS, f.loadRef = nil, snapshotRef{}
 	inst.status = "loaded " + label
+	// The handed text may have differed from the snapshot's; the location
+	// refers to the latter, so it is resolved again over it.
+	if handed {
+		inst.queueLocation(location)
+	}
 }
 
 // connect demands the lazy connection. The lane caches success forever
@@ -366,6 +376,9 @@ func (f *filesState) connect() (sc *storeConn, done bool, err error, busy bool) 
 type snapshotRef struct {
 	mount identifier.TaggedId
 	snap  time.Time
+	// path is the document's path in the snapshot, what a link to it
+	// carries (mdedit_link.go); "" when the document is not one file of it.
+	path string
 }
 
 // handedSnapshot is the lading snapshot a handed-over document came with
@@ -376,6 +389,9 @@ type handedSnapshot struct {
 	path  string
 	name  string
 	text  string
+	// location is the launch's location, applied again once the snapshot's
+	// text is in the buffer (ADR-0347 §SD3).
+	location string
 }
 
 // pollHandedSnapshot connects to the store and starts reading the handed-over
@@ -408,5 +424,5 @@ func (inst *App) pollHandedSnapshot() (busy bool) {
 // startHandedLoad reads the handed-over document from fsys, its snapshot.
 func (inst *App) startHandedLoad(fsys fs.FS, h *handedSnapshot) {
 	inst.startSnapshotLoad(fsys, h.name, snapshotRef{mount: h.mount, snap: h.snap}, h.path)
-	inst.files.loadHanded, inst.files.loadHandedText = true, h.text
+	inst.files.loadHanded, inst.files.loadHandedText, inst.files.loadLocation = true, h.text, h.location
 }

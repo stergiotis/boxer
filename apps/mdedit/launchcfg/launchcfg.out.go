@@ -38,6 +38,8 @@ var (
 	kindMdeditLaunchMount    uint64
 	kindMdeditLaunchSnapshot uint64
 	kindMdeditLaunchPath     uint64
+	kindMdeditLaunchMode     uint64
+	kindMdeditLaunchLocation uint64
 )
 
 func init() {
@@ -46,6 +48,8 @@ func init() {
 	kindMdeditLaunchMount = vdd.MembMdeditLaunchMount.GetId().Value()
 	kindMdeditLaunchSnapshot = vdd.MembMdeditLaunchSnapshot.GetId().Value()
 	kindMdeditLaunchPath = vdd.MembMdeditLaunchPath.GetId().Value()
+	kindMdeditLaunchMode = vdd.MembMdeditLaunchMode.GetId().Value()
+	kindMdeditLaunchLocation = vdd.MembMdeditLaunchLocation.GetId().Value()
 	buscodec.Register[MdeditLaunch](mdeditLaunchBusCodec)
 }
 
@@ -114,6 +118,8 @@ type MdeditLaunchColumns struct {
 	Mount     []uint64
 	SnapNanos []int64
 	Path      []string
+	Mode      []string
+	Location  []string
 }
 
 // Len returns the number of rows currently in the batch.
@@ -134,6 +140,8 @@ func (c *MdeditLaunchColumns) Append(row MdeditLaunch) {
 	c.Mount = append(c.Mount, row.Mount)
 	c.SnapNanos = append(c.SnapNanos, row.SnapNanos)
 	c.Path = append(c.Path, row.Path)
+	c.Mode = append(c.Mode, row.Mode)
+	c.Location = append(c.Location, row.Location)
 }
 
 // Row reconstructs entity i as an AoS MdeditLaunch record. Inverse of
@@ -148,6 +156,8 @@ func (c *MdeditLaunchColumns) Row(i int) (row MdeditLaunch) {
 	row.Mount = c.Mount[i]
 	row.SnapNanos = c.SnapNanos[i]
 	row.Path = c.Path[i]
+	row.Mode = c.Mode[i]
+	row.Location = c.Location[i]
 	return
 }
 
@@ -305,6 +315,12 @@ func MdeditLaunchBuildEntities[
 		stringArraySecAttr_Path := stringArraySec.BeginAttributeSingle(c.Path[i])
 		stringArraySecAttr_Path.AddMembershipLowCardRefP(kindMdeditLaunchPath)
 		stringArraySecAttr_Path.EndAttributeP()
+		stringArraySecAttr_Mode := stringArraySec.BeginAttributeSingle(c.Mode[i])
+		stringArraySecAttr_Mode.AddMembershipLowCardRefP(kindMdeditLaunchMode)
+		stringArraySecAttr_Mode.EndAttributeP()
+		stringArraySecAttr_Location := stringArraySec.BeginAttributeSingle(c.Location[i])
+		stringArraySecAttr_Location.AddMembershipLowCardRefP(kindMdeditLaunchLocation)
+		stringArraySecAttr_Location.EndAttributeP()
 		stringArraySec.EndSection()
 		err = dml.CommitEntity()
 		if err != nil {
@@ -375,6 +391,12 @@ func MdeditLaunchEmitSectionStringArray[
 	stringArraySecAttr_Path := stringArraySec.BeginAttributeSingle(row.Path)
 	stringArraySecAttr_Path.AddMembershipLowCardRefP(kindMdeditLaunchPath)
 	stringArraySecAttr_Path.EndAttributeP()
+	stringArraySecAttr_Mode := stringArraySec.BeginAttributeSingle(row.Mode)
+	stringArraySecAttr_Mode.AddMembershipLowCardRefP(kindMdeditLaunchMode)
+	stringArraySecAttr_Mode.EndAttributeP()
+	stringArraySecAttr_Location := stringArraySec.BeginAttributeSingle(row.Location)
+	stringArraySecAttr_Location.AddMembershipLowCardRefP(kindMdeditLaunchLocation)
+	stringArraySecAttr_Location.EndAttributeP()
 	return
 }
 
@@ -622,6 +644,12 @@ func MdeditLaunchFillFromArrow[
 		var stringArrayPathVal string
 		var stringArrayPathCount int
 		var stringArrayPathLastAttr int64
+		var stringArrayModeVal string
+		var stringArrayModeCount int
+		var stringArrayModeLastAttr int64
+		var stringArrayLocationVal string
+		var stringArrayLocationCount int
+		var stringArrayLocationLastAttr int64
 		nstringArray := stringArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 		for attrJ := int64(0); attrJ < nstringArray; attrJ++ {
 			for membID := range stringArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
@@ -637,6 +665,28 @@ func MdeditLaunchFillFromArrow[
 						return
 					}
 					stringArrayPathVal = val
+				case kindMdeditLaunchMode:
+					if stringArrayModeLastAttr != attrJ+1 {
+						stringArrayModeLastAttr = attrJ + 1
+						stringArrayModeCount++
+					}
+					val, valErr := stringArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+					if valErr != nil {
+						err = eb.Build().Int("row", i).Str("section", "stringArray").Str("membership", "mdeditLaunchMode").Str("field", "Mode").Errorf("slot stringArray@mdeditLaunchMode (field Mode) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+						return
+					}
+					stringArrayModeVal = val
+				case kindMdeditLaunchLocation:
+					if stringArrayLocationLastAttr != attrJ+1 {
+						stringArrayLocationLastAttr = attrJ + 1
+						stringArrayLocationCount++
+					}
+					val, valErr := stringArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+					if valErr != nil {
+						err = eb.Build().Int("row", i).Str("section", "stringArray").Str("membership", "mdeditLaunchLocation").Str("field", "Location").Errorf("slot stringArray@mdeditLaunchLocation (field Location) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+						return
+					}
+					stringArrayLocationVal = val
 				}
 			}
 		}
@@ -645,6 +695,16 @@ func MdeditLaunchFillFromArrow[
 			return
 		}
 		c.Path = append(c.Path, stringArrayPathVal)
+		if stringArrayModeCount != 1 {
+			err = eb.Build().Int("row", i).Str("section", "stringArray").Str("membership", "mdeditLaunchMode").Int("got", stringArrayModeCount).Errorf("slot stringArray@mdeditLaunchMode (field Mode) carries %d attributes but the DTO admits exactly 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", stringArrayModeCount)
+			return
+		}
+		c.Mode = append(c.Mode, stringArrayModeVal)
+		if stringArrayLocationCount != 1 {
+			err = eb.Build().Int("row", i).Str("section", "stringArray").Str("membership", "mdeditLaunchLocation").Int("got", stringArrayLocationCount).Errorf("slot stringArray@mdeditLaunchLocation (field Location) carries %d attributes but the DTO admits exactly 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", stringArrayLocationCount)
+			return
+		}
+		c.Location = append(c.Location, stringArrayLocationVal)
 	}
 	return
 }
@@ -793,6 +853,12 @@ func MdeditLaunchReadRow[
 	var stringArrayPathVal string
 	var stringArrayPathCount int
 	var stringArrayPathLastAttr int64
+	var stringArrayModeVal string
+	var stringArrayModeCount int
+	var stringArrayModeLastAttr int64
+	var stringArrayLocationVal string
+	var stringArrayLocationCount int
+	var stringArrayLocationLastAttr int64
 	nstringArray := stringArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 	for attrJ := int64(0); attrJ < nstringArray; attrJ++ {
 		for membID := range stringArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
@@ -808,6 +874,28 @@ func MdeditLaunchReadRow[
 					return
 				}
 				stringArrayPathVal = val
+			case kindMdeditLaunchMode:
+				if stringArrayModeLastAttr != attrJ+1 {
+					stringArrayModeLastAttr = attrJ + 1
+					stringArrayModeCount++
+				}
+				val, valErr := stringArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				if valErr != nil {
+					err = eb.Build().Int("row", i).Str("section", "stringArray").Str("membership", "mdeditLaunchMode").Str("field", "Mode").Errorf("slot stringArray@mdeditLaunchMode (field Mode) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+					return
+				}
+				stringArrayModeVal = val
+			case kindMdeditLaunchLocation:
+				if stringArrayLocationLastAttr != attrJ+1 {
+					stringArrayLocationLastAttr = attrJ + 1
+					stringArrayLocationCount++
+				}
+				val, valErr := stringArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				if valErr != nil {
+					err = eb.Build().Int("row", i).Str("section", "stringArray").Str("membership", "mdeditLaunchLocation").Str("field", "Location").Errorf("slot stringArray@mdeditLaunchLocation (field Location) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+					return
+				}
+				stringArrayLocationVal = val
 			}
 		}
 	}
@@ -817,6 +905,22 @@ func MdeditLaunchReadRow[
 	}
 	if stringArrayPathCount == 1 {
 		row.Path = stringArrayPathVal
+		present = true
+	}
+	if stringArrayModeCount > 1 {
+		err = eb.Build().Int("row", i).Str("section", "stringArray").Str("membership", "mdeditLaunchMode").Int("got", stringArrayModeCount).Errorf("slot stringArray@mdeditLaunchMode (field Mode) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", stringArrayModeCount)
+		return
+	}
+	if stringArrayModeCount == 1 {
+		row.Mode = stringArrayModeVal
+		present = true
+	}
+	if stringArrayLocationCount > 1 {
+		err = eb.Build().Int("row", i).Str("section", "stringArray").Str("membership", "mdeditLaunchLocation").Int("got", stringArrayLocationCount).Errorf("slot stringArray@mdeditLaunchLocation (field Location) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", stringArrayLocationCount)
+		return
+	}
+	if stringArrayLocationCount == 1 {
+		row.Location = stringArrayLocationVal
 		present = true
 	}
 	return
