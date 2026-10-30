@@ -480,7 +480,7 @@ func (inst *coordinator) effectOf(ctx context.Context, name string, arguments st
 		return agentrun.EffectNone
 	}
 	switch name {
-	case "request_access", "open_window", "arrange_windows", "raise_window", "place_window", "point_out", "clear_marks", "stop_task":
+	case "request_access", "open_window", "arrange_windows", "raise_window", "place_window", "set_layout", "float_window", "point_out", "clear_marks", "stop_task":
 		return agentrun.EffectView
 	}
 	return agentrun.EffectNone

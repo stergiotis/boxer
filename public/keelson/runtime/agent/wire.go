@@ -336,9 +336,11 @@ type wireMark struct {
 	wireCause
 }
 
-// wireWindowAct is arrange, raise or place (ADR-0276 §SD3). Command and
-// Instances are arrange's; Instance is raise's and place's; X, Y, W, H is
-// place's outer rect in logical points.
+// wireWindowAct is arrange, raise, place or layout (ADR-0276 §SD3,
+// ADR-0346 §SD6). Command and Instances are arrange's; Instance is raise's
+// and place's; X, Y, W, H is place's outer rect in logical points. Layout,
+// Ratio and Count are layout's, each unchanged when empty or zero; Floating
+// with Instance floats or unfloats that window.
 type wireWindowAct struct {
 	V         uint8    `json:"v"`
 	Handle    string   `json:"handle"`
@@ -350,6 +352,10 @@ type wireWindowAct struct {
 	Y         float32  `json:"y,omitempty"`
 	W         float32  `json:"w,omitempty"`
 	H         float32  `json:"h,omitempty"`
+	Layout    string   `json:"layout,omitempty"`
+	Ratio     float32  `json:"ratio,omitempty"`
+	Count     int      `json:"count,omitempty"`
+	Floating  *bool    `json:"floating,omitempty"`
 	wireCause
 }
 

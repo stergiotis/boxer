@@ -324,10 +324,12 @@ deferral.
   the main first, and leaves floating windows out. Default `go test` for the
   chord table's generated Rust arm against the committed file. Unit tests in
   `agent` for the refusals: `layout` without desktop act, `arrange` under
-  tiled mode. An integration-lane scene beside the windowhost package, in the
-  shape of `TestSceneWindowArrangements`: three windows on a headless host,
-  tiled mode set, rects asserted from the accessibility tree; a fourth opened
-  and the re-tile asserted; one closed; one floated.
+  tiled mode. `TestSceneTiledDesktop` beside the windowhost package, in the
+  integration lane and the shape of `TestSceneWindowArrangements`: three
+  windows on a headless host under the seeded layout, the submenu switching
+  layouts, one window floated and tiled again, a chord cycling the layout,
+  one window closed and the rest re-tiled, rects asserted from the
+  accessibility tree.
 - **What would fail.** A layout that leaves a hole or stacks tiled windows
   while their minimums fit; a settled layout that moves without an input
   change; a chord the shell drops while a text edit has focus; a verb
@@ -347,9 +349,11 @@ Proposed — awaiting review by the code owner.
 - **M2 — Layouts and the live plan (SD1–SD4).** ✓ With the Desktop layout
   submenu and the env var (SD7), without chords. Recorded under *Updates*
   (2026-10-29).
-- **M3 — The shell-chord fetcher and the chord table (SD5).**
-- **M4 — The keelson columns and `runtime.agent.layout` (SD6).** With the
-  chat tool and the integration scene.
+- **M3 — The shell-chord fetcher and the chord table (SD5).** ✓ Recorded
+  under *Updates* (2026-10-29).
+- **M4 — The keelson columns and `runtime.agent.layout` (SD6).** ✓ With the
+  chat tools and the integration scene. Recorded under *Updates*
+  (2026-10-29).
 
 Deferred, from ADR-0275's list and this record: workspaces; a window list in
 the Window menu; minimise; persisting the mode, order and float set; dwindle
@@ -425,6 +429,55 @@ switch through the submenu, one window floated. The rects behave as SD2
 describes, including the even overlap where a window's minimum is set by a
 single long line of its content. The maintained lane for this is M4's
 integration scene.
+
+### 2026-10-29 — M3: the chords
+
+Built as SD5 says. The table lives beside the key vocabulary in `keycodes`,
+the Rust match arm is generated from it and compared by a test, and one
+fetcher drains the frame's Alt chords into a bit set that the window host
+reads at the start of its Frame. Three things the building settled:
+
+- **The chords leave egui's queue at the start of the frame**, before any
+  widget runs, not in the fetcher at its end: a fetcher drains after the
+  widgets, and by then a focused text edit had typed the letter (the
+  platform spells an Alt chord as a text event too, Option+J on macOS as a
+  character) and moved on the arrow. The interpreter takes the chord keys
+  and, when one fired, the frame's text events out first; the fetcher only
+  hands the set over. Each event's own modifiers are read, as
+  `captureKeyChords` does, so a plain letter in the same frame still types;
+  Alt with Ctrl or the command key is not the shell's. Found in review
+  (2026-10-29) and corrected the same day.
+- **Alt+Tab** is taken by the OS window manager on a desktop and by the
+  browser in the tab, so it serves the headless viewer mostly. egui's own
+  focus traversal takes Tab only without modifiers, so Alt+Tab does not also
+  move widget focus.
+- **Plus and Equals both count up.** Keyboards disagree on whether Shift+=
+  arrives as Plus or as Equals with Shift, so the table has rows for both,
+  and for a keypad's Plus without Shift.
+
+Checked in a headless scene driving the chords with the Alt modifier: a
+snap to the half and then the quarter, the switch to tiled, focus next and
+promote, the layout cycle, a float and monocle, each read back from the
+window rects. The lane that asserts it is M4's integration scene.
+
+### 2026-10-29 — M4: the keelson columns, the layout verb, the chat tools and the lane
+
+Built as SD6 says. `keelson('windows')` gains `tiled`, `floating` and
+`order`; `keelson('desktop')` gains `layout`, `main_ratio` and `main_count`.
+`runtime.agent.layout` rides the window-verb path of ADR-0276 with the
+desktop grant in act mode, as `arrange` does, and serves two chat tools:
+`set_layout` (the layout and the main-stack parameters, each kept when left
+out) and `float_window`. On a tiled desktop `arrange_windows` is refused
+with the remedy to set the layout, and `place_window` floats the window
+first, as SD6 says. The chat's preservation goldens were rewritten for the
+two tools in the request's tool list; nothing else in them moved.
+
+`TestSceneTiledDesktop` is the lane the plan names. Writing it showed one
+thing about the older `TestSceneWindowArrangements`: its Tile check asserts
+no overlap, which holds only while the windows' minimums fit a row, and the
+launcher's content has grown since that test was written (ADR-0275's update
+of 2026-10-04 measured it at 812 points; the tree now reports 993), so that
+check fails on the same desktop for a reason this record only makes visible.
 
 ## References
 

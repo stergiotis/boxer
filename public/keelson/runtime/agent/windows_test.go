@@ -95,3 +95,39 @@ func TestAWindowVerbNamesTheModelCallThatAsked(t *testing.T) {
 	}
 	assert.Positive(t, raised)
 }
+
+// Setting the layout and floating a window need the desktop in act, like
+// arranging; each accepted call reaches the host and is recorded with effect
+// view (ADR-0346 §SD6).
+func TestLayoutVerbNeedsTheDesktop(t *testing.T) {
+	r := newRig(t, true)
+	ctx := context.Background()
+	observer := r.grant(ModeAct)
+	out, err := r.cli.SetLayout(ctx, observer.Handle, Asked{Key: "l1"}, "main-stack", 0, 0)
+	require.NoError(t, err)
+	assert.Equal(t, "input_required", out.Phase)
+	assert.Contains(t, out.Reason, "desktop in act mode")
+	out, err = r.cli.FloatWindow(ctx, observer.Handle, Asked{Key: "f1"}, r.docKey, true)
+	require.NoError(t, err)
+	assert.Equal(t, "input_required", out.Phase, "act on the window alone does not float it")
+
+	actor, err := r.cli.Request(ctx, GrantRequest{Plan: "tile the desktop", Desktop: ModeAct})
+	require.NoError(t, err)
+	out, err = r.cli.SetLayout(ctx, actor.Handle, Asked{Key: "l2"}, "tile", 0.5, 2)
+	require.NoError(t, err)
+	assert.Equal(t, "completed", out.Phase)
+	out, err = r.cli.FloatWindow(ctx, actor.Handle, Asked{Key: "f2"}, r.docKey, true)
+	require.NoError(t, err)
+	assert.Equal(t, "completed", out.Phase)
+	r.host.mu.Lock()
+	assert.Equal(t, []string{"layout:tile", "float"}, r.host.windowActs)
+	r.host.mu.Unlock()
+
+	var verbs []string
+	for _, rec := range r.svc.Actions() {
+		if rec.Effect == "view" && rec.Operation == "layout" {
+			verbs = append(verbs, rec.Phase)
+		}
+	}
+	assert.ElementsMatch(t, []string{"input_required", "input_required", "completed", "completed"}, verbs)
+}

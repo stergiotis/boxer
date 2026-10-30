@@ -315,7 +315,7 @@ var coordinatorTools = []toolSpec{
 			return inst.openWindow(ctx, o, call.Id, argString(args, "app"))
 		}},
 	{name: "query_windows", group: toolGroupFixed,
-		description:  "Run a SELECT over keelson('windows') — every open window: key, app_id, display, title, x, y, w, h, need_w, need_h, stack, active, maximized, collapsed, shown, agent_tasks — or over keelson('desktop'), the work area (work_x, work_y, work_w, work_h), the active window's key and the arrangement in progress. Rows come back as JSON lines.",
+		description:  "Run a SELECT over keelson('windows') — every open window: key, app_id, display, title, x, y, w, h, need_w, need_h, stack, active, maximized, collapsed, shown, tiled, floating, order, agent_tasks — or over keelson('desktop'), the work area (work_x, work_y, work_w, work_h), the active window's key, the arrangement in progress, and the layout (floating, main-stack, tile, columns, rows, monocle) with main_ratio and main_count. Rows come back as JSON lines.",
 		schema:       `{"type":"object","properties":{"table":{"type":"string","enum":["windows","desktop"]},"sql":{"type":"string","description":"a SELECT naming keelson('<table>'), without FORMAT"}},"required":["table","sql"],"additionalProperties":false}`,
 		budget:       maxWindowRows,
 		parallelSafe: true,
@@ -325,6 +325,18 @@ var coordinatorTools = []toolSpec{
 	{name: "arrange_windows", group: toolGroupFixed,
 		description: "Lay windows out on the desktop: cascade, tile, columns (side by side), rows (stacked), or gather (bring windows back into view). Without windows it arranges every window; with them, only those, leaving the rest where they are. Needs the desktop granted (request_access with desktop true).",
 		schema:      `{"type":"object","properties":{"command":{"type":"string","enum":["cascade","tile","columns","rows","gather"]},"windows":{"type":"array","items":{"type":"integer"},"description":"window keys from query_windows; empty is every window"}},"required":["command"],"additionalProperties":false}`,
+		exec: func(ctx context.Context, inst *coordinator, spec *toolSpec, o toolOrigin, call openaichat.ToolCall, args map[string]any) (content string, activity string) {
+			return inst.windowVerb(ctx, inst.asked(o, call.Id), call.Name, args)
+		}},
+	{name: "set_layout", group: toolGroupFixed,
+		description: "Set the desktop's layout: floating (windows stay where they are), or a tiled layout the host keeps live as windows open and close — main-stack (one main column at main_ratio, the others stacked beside it), tile, columns, rows or monocle. main_ratio (0.2–0.8) and main_count (at least 1) tune main-stack; leave them out to keep them. On a tiled desktop arrange_windows is refused; set the layout instead. Needs the desktop granted (request_access with desktop true).",
+		schema:      `{"type":"object","properties":{"layout":{"type":"string","enum":["floating","main-stack","tile","columns","rows","monocle"]},"main_ratio":{"type":"number"},"main_count":{"type":"integer"}},"additionalProperties":false}`,
+		exec: func(ctx context.Context, inst *coordinator, spec *toolSpec, o toolOrigin, call openaichat.ToolCall, args map[string]any) (content string, activity string) {
+			return inst.windowVerb(ctx, inst.asked(o, call.Id), call.Name, args)
+		}},
+	{name: "float_window", group: toolGroupFixed,
+		description: "On a tiled desktop, take a window out of the layout (floating true: it keeps its place and can be placed freely) or put it back as the main (floating false). Needs the desktop granted.",
+		schema:      `{"type":"object","properties":{"window":{"type":"integer"},"floating":{"type":"boolean"}},"required":["window","floating"],"additionalProperties":false}`,
 		exec: func(ctx context.Context, inst *coordinator, spec *toolSpec, o toolOrigin, call openaichat.ToolCall, args map[string]any) (content string, activity string) {
 			return inst.windowVerb(ctx, inst.asked(o, call.Id), call.Name, args)
 		}},

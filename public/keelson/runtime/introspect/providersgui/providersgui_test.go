@@ -114,6 +114,7 @@ func TestWindowsTableRendersGeometry(t *testing.T) {
 			Shown: true,
 			Rect:  windowhost.Rect{MinX: 10, MinY: 30, MaxX: 410, MaxY: 330},
 			NeedW: 400, NeedH: 520, Stack: 7, Active: true,
+			Tiled: true, Order: 2,
 		}},
 		{Key: 2, AppId: "test.b"},
 	}
@@ -131,6 +132,11 @@ func TestWindowsTableRendersGeometry(t *testing.T) {
 	assert.EqualValues(t, 7, rec.Column(colIndex(t, rec, "stack")).(*array.Uint64).Value(0))
 	assert.True(t, b("active", 0))
 	assert.False(t, b("maximized", 0))
+	assert.True(t, b("tiled", 0))
+	assert.False(t, b("floating", 0))
+	assert.EqualValues(t, 2, rec.Column(colIndex(t, rec, "order")).(*array.Int64).Value(0))
+	assert.False(t, b("tiled", 1))
+	assert.Zero(t, rec.Column(colIndex(t, rec, "order")).(*array.Int64).Value(1))
 
 	assert.False(t, b("shown", 1))
 	assert.Zero(t, f("w", 1))
@@ -140,10 +146,12 @@ func TestWindowsTableRendersGeometry(t *testing.T) {
 // The desktop table is one row from a host and none without one.
 func TestDesktopTable(t *testing.T) {
 	rows := []windowhost.DesktopInfo{{
-		WorkShown: true,
-		Work:      windowhost.Rect{MinX: 0, MinY: 22, MaxX: 1400, MaxY: 870},
-		ActiveKey: 3,
-		Arranging: windowhost.ArrangeTile,
+		WorkShown:    true,
+		Work:         windowhost.Rect{MinX: 0, MinY: 22, MaxX: 1400, MaxY: 870},
+		ActiveKey:    3,
+		Arranging:    windowhost.ArrangeTile,
+		Layout:       windowhost.LayoutMainStack,
+		LayoutParams: windowhost.LayoutParams{MainRatio: 0.6, MainCount: 1},
 	}}
 	rec := desktopTable(rows).Build(introspect.AllColumns(), len(rows))
 	defer rec.Release()
@@ -152,6 +160,9 @@ func TestDesktopTable(t *testing.T) {
 	assert.Equal(t, []float64{0, 22, 1400, 848}, []float64{f("work_x"), f("work_y"), f("work_w"), f("work_h")})
 	assert.EqualValues(t, 3, rec.Column(colIndex(t, rec, "active_key")).(*array.Int64).Value(0))
 	assert.Equal(t, []string{"Tile"}, stringColumn(t, rec, "arranging"))
+	assert.Equal(t, []string{"main-stack"}, stringColumn(t, rec, "layout"))
+	assert.InDelta(t, 0.6, f("main_ratio"), 1e-6)
+	assert.EqualValues(t, 1, rec.Column(colIndex(t, rec, "main_count")).(*array.Int64).Value(0))
 
 	idle := desktopTable([]windowhost.DesktopInfo{{}}).Build(introspect.AllColumns(), 1)
 	defer idle.Release()

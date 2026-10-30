@@ -489,6 +489,22 @@ func (inst *Client) Place(ctx context.Context, handle string, asked Asked, insta
 		wireWindowAct{V: wireVersion, Handle: handle, Key: asked.Key, Instance: instance, X: x, Y: y, W: w, H: h, wireCause: asked.wire()}))
 }
 
+// SetLayout sets the desktop's layout by its ident (floating, main-stack,
+// tile, columns, rows, monocle) and the main ratio and count, each left as
+// it is when empty or zero (ADR-0346 §SD6). It needs the grant's desktop
+// mode act.
+func (inst *Client) SetLayout(ctx context.Context, handle string, asked Asked, layout string, ratio float32, count int) (out Outcome, err error) {
+	return callReply(roundTrip[wireWindowAct, wireCallReply](ctx, inst, SubjectLayout,
+		wireWindowAct{V: wireVersion, Handle: handle, Key: asked.Key, Layout: layout, Ratio: ratio, Count: count, wireCause: asked.wire()}))
+}
+
+// FloatWindow takes a window out of the layout or puts it back as the main
+// (ADR-0346 §SD4). It needs the grant's desktop mode act.
+func (inst *Client) FloatWindow(ctx context.Context, handle string, asked Asked, instance uint64, floating bool) (out Outcome, err error) {
+	return callReply(roundTrip[wireWindowAct, wireCallReply](ctx, inst, SubjectLayout,
+		wireWindowAct{V: wireVersion, Handle: handle, Key: asked.Key, Instance: instance, Floating: &floating, wireCause: asked.wire()}))
+}
+
 // Target is a mark's target (ADR-0297 §SD2): a window (Window
 // alone); a rect relative to a window's top-left corner (Window and Rect);
 // or a rect of the viewport (Viewport and Rect, Window zero). Rect is x, y,
