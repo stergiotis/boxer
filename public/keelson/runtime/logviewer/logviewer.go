@@ -479,8 +479,10 @@ func (inst *LogViewerApp) renderTailTable(rows []factsstore.LogRow) {
 	et := c.EndETable(inst.ids.PrepareStr("logviewer-table"),
 		uint64(len(rows)), rowHeight, stickyHeads, stickyCols).
 		FillPane(true)
+	scrollTo := -1
 	if inst.follow {
 		et = et.ScrollToRow(uint64(len(rows)-1), 1)
+		scrollTo = len(rows) - 1
 	}
 
 	// Headers as deferred blocks (instead of EtHeaderText) so each
@@ -508,17 +510,11 @@ func (inst *LogViewerApp) renderTailTable(rows []factsstore.LogRow) {
 	// Emit only the rows egui_table will draw this frame. Without this gate
 	// every one of the up-to-maxRows rows builds a deferred block (and cell
 	// ids) each frame, ~90% of which egui_table immediately culls — the
-	// dominant allocation source in this app. VisibleRange reports the
-	// previous frame's window (one-frame lag, self-correcting); ok is false
-	// on the first frame a table is shown, where we emit the full range.
-	rowBegin, rowEnd := 0, len(rows)
-	if rb, re, _, _, _, ok := et.VisibleRange(); ok {
-		rowBegin = int(rb)
-		if int(re) < rowEnd {
-			rowEnd = int(re)
-		}
-	}
-	for i := rowBegin; i < rowEnd; i++ {
+	// dominant allocation source in this app. The window is the previous
+	// frame's (one-frame lag, self-correcting); before the table has been on
+	// screen it is a screenful around the followed tail (VisibleRows).
+	lo, hi := et.VisibleRows(uint64(len(rows)), c.EtScreenfulRows(0, rowHeight), int64(scrollTo))
+	for i := int(lo); i < int(hi); i++ {
 		r := rows[i]
 		isSelected := selectedKey != "" && rowKey(r) == selectedKey
 		tint, hasTint := rowTint(r.Level)

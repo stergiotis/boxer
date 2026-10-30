@@ -924,6 +924,32 @@ same way: `scripts/dev/scene.sh --only 34_fsbrowser apps/play/scenes` and
 `public/thestack/imzero2/egui2/widgets/tree/scenes/tree-outline.scene.md`, whose capture is the four-sided-outline
 check.
 
+### 2026-10-30 — SD4's gate without a report emits a screenful, not the outline
+
+SD4 gates emission on `et.VisibleRange()`, and with no range reported the
+widget emitted every row, on the reading that "no report" meant "the first
+frame on screen". It also means "never on screen": the host drops an inactive
+dock tab's buffer uninterpreted, so a table in a tab that has not been raised
+since launch never runs egui_table's `prepare` and reports nothing on every
+frame. A sqleditor completion pane in such a tab built every candidate's row
+each frame for a buffer nobody drew, and was enough to drag a whole window's
+frame rate down. A report, once made, is never cleared from the state
+manager, so the case is confined to tables that have never been seen.
+
+The fallback is now a screenful: `EndETableFluid.VisibleRows` returns the
+reported window clamped to the row count, or `EtFallbackRows` — the first
+`EtScreenfulRows(MaxHeight, rowH)` rows, or a screenful either side of the row
+a `ScrollToRow` targets this frame, so a reveal on the first frame on screen
+still lands on drawn rows. A table with no `MaxHeight` assumes a tall
+display's height. The cost is bounded by the pane rather than by the data, and
+a first frame taller than that guess draws blank rows below it for one frame.
+
+The helper is in the bindings rather than the widget because the same gate,
+with the same all-rows fallback, was written out in `fsbrowser`, `fsmview`,
+`recordtable`, `logviewer` and the launcher's rows; all of them now call it.
+A tab that is merely expensive while hidden still wants `widgets/lazypane` —
+this bounds the outline, not the rest of a body.
+
 ## References
 
 - [ADR-0177](./0177-imzero2-focus-scoped-keyboard-capture.md) — the keyboard capture primitive SD8 defers to; SD2's cursor is its hook in this widget.
