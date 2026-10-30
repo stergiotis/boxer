@@ -242,3 +242,27 @@ func TestTileCellsNeverCollapse(t *testing.T) {
 		assert.GreaterOrEqual(t, r.H(), minSpan-0.01, "rows item %d too short", i)
 	}
 }
+
+// A minimum grows only to a need that exceeds the rect the window was
+// placed in and the minimum so far: a need the cell already fits says
+// nothing about how small the content could be, and a need the layout could
+// not grant does not count twice. Float noise within needSlack is ignored.
+func TestGrowMinFollowsANeedPastTheCell(t *testing.T) {
+	cell := rectAt(0, 0, 400, 300)
+	var m [2]float32
+	assert.False(t, growMin(&m, cell, 400, 300), "fits exactly")
+	assert.False(t, growMin(&m, cell, 400+needSlack/2, 300), "within the slack")
+	assert.Equal(t, [2]float32{0, 0}, m)
+
+	assert.True(t, growMin(&m, cell, 500, 300), "width grew")
+	assert.Equal(t, [2]float32{500, 0}, m)
+	assert.False(t, growMin(&m, cell, 500, 300), "the same need again is known")
+	assert.True(t, growMin(&m, cell, 500, 450), "height grew")
+	assert.Equal(t, [2]float32{500, 450}, m)
+
+	// The layout gave the window less than its minimum (the minimums did
+	// not fit): the need still exceeds the cell, but not the minimum.
+	assert.False(t, growMin(&m, rectAt(0, 0, 450, 300), 500, 450))
+	assert.True(t, growMin(&m, rectAt(0, 0, 450, 300), 520, 450), "and a further growth still counts")
+	assert.Equal(t, [2]float32{520, 450}, m)
+}

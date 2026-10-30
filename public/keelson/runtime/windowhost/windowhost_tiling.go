@@ -14,7 +14,10 @@ import (
 // changes. egui grows a pinned window around its content rather than holding
 // its cell (ADR-0346, update of 2026-10-29), so each re-plan is a settling
 // run: place, read back what each window needed, place again with the needs
-// as minimums, until nothing grows or the passes run out.
+// as minimums, until nothing grows or the passes run out. Between runs the
+// needs are still read: content that grows after a run settled (a note
+// typed, rows loaded) starts another, from the minimums kept, so the layout
+// follows the window rather than leaving it to spill over its neighbours.
 
 // LayoutE names the desktop's layout. LayoutFloating is the floating desktop
 // every host starts with; the others tile.
@@ -445,6 +448,11 @@ func (inst *Inst) stepTiling(snapshot []*window) {
 		inst.startTileRun(in, workRect, tiled)
 	case inst.tiling != nil:
 		inst.advanceTileRun(in, workRect, tiled)
+	case inst.needsGrew(tiled):
+		// A window's content grew past its cell after the last run
+		// settled: its minimum has grown with it, and the layout is
+		// planned again from the minimums kept.
+		inst.startTileRun(in, workRect, tiled)
 	default:
 	}
 	for _, w := range tiled {
@@ -488,15 +496,10 @@ func (inst *Inst) advanceTileRun(in tileInputs, work Rect, tiled []*window) {
 			continue
 		}
 		m := run.mins[w.key]
-		if g.NeedW > r.W()+needSlack && g.NeedW > m[0] {
-			m[0] = g.NeedW
+		if growMin(&m, r, g.NeedW, g.NeedH) {
+			run.mins[w.key] = m
 			grew = true
 		}
-		if g.NeedH > r.H()+needSlack && g.NeedH > m[1] {
-			m[1] = g.NeedH
-			grew = true
-		}
-		run.mins[w.key] = m
 	}
 	run.passes--
 	if !grew {
@@ -509,6 +512,51 @@ func (inst *Inst) advanceTileRun(in tileInputs, work Rect, tiled []*window) {
 		// reads back what it needs.
 		inst.tiling = nil
 	}
+}
+
+// growMin raises the minimum m to the outer size the window needed (needW,
+// needH, as reported) where that exceeds the rect it was placed in and the
+// minimum so far; true when it grew. The need is read against the placed
+// rect rather than the minimum alone because a need that fits the cell says
+// nothing about how small the content could be (ADR-0275 §SD4).
+func growMin(m *[2]float32, placed Rect, needW, needH float32) (grew bool) {
+	if needW > placed.W()+needSlack && needW > m[0] {
+		m[0] = needW
+		grew = true
+	}
+	if needH > placed.H()+needSlack && needH > m[1] {
+		m[1] = needH
+		grew = true
+	}
+	return
+}
+
+// needsGrew reads, between runs, what each tiled window needed last frame
+// against the cell it is pinned to and grows the kept minimums; true when
+// one grew. A need the layout cannot grant (the cell is smaller than the
+// minimum already kept) does not count again, so a window that overlaps
+// its neighbours by design does not start a run every frame.
+func (inst *Inst) needsGrew(tiled []*window) (grew bool) {
+	if inst.tileMins == nil {
+		return
+	}
+	sm := c.CurrentApplicationState.StateManager
+	for _, w := range tiled {
+		cell, has := inst.tileCells[w.key]
+		if !has {
+			continue
+		}
+		g, ok := sm.GetWindowGeom(w.focusHandle)
+		if !ok {
+			continue
+		}
+		m := inst.tileMins[w.key]
+		if growMin(&m, cell, g.NeedW, g.NeedH) {
+			inst.tileMins[w.key] = m
+			grew = true
+		}
+	}
+	return
 }
 
 // planTiles computes the layout over the tiled windows with the minimums

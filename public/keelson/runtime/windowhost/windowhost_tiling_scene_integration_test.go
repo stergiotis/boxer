@@ -169,6 +169,26 @@ func TestSceneTiledDesktop(t *testing.T) {
 		assertEvenLine(t, "Alt+Space", ws, false)
 	})
 
+	t.Run("a window whose content grows after launch gets a larger row", func(t *testing.T) {
+		// Still Rows. Typing into the operations demo's note grows that
+		// window's content well past its row; the layout follows (ADR-0346
+		// §SD2, update of 2026-10-30): the window's row grows to its new
+		// need and the rows stay an even line inside the work area.
+		before, _ := windows(t, s)
+		grown := byTitle(before, arrangeTitles[2])
+		words := make([]string, 60)
+		for i := range words {
+			words[i] = fmt.Sprintf("word%02d", i)
+		}
+		scenetest.Run(t, s, fmt.Sprintf(`{"do":"type","valueContains":"A note both","role":"multiline_text_input","text":%q,"settleMs":%d}`,
+			strings.Join(words, " "), tileSettleMs))
+		after, menuBottom := windows(t, s)
+		now := byTitle(after, arrangeTitles[2])
+		assert.Greater(t, now.maxY-now.minY, grown.maxY-grown.minY+100, "the note did not grow %s", grown.title)
+		assertInside(t, "grown row", after, menuBottom)
+		assertEvenLine(t, "grown row", after, false)
+	})
+
 	t.Run("closing a window re-tiles the rest", func(t *testing.T) {
 		layoutRadio(t, s, "Columns")
 		ws, _ := windows(t, s)

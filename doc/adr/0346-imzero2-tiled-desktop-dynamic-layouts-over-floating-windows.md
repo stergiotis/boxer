@@ -480,6 +480,29 @@ launcher's content has grown since that test was written (ADR-0275's update
 of 2026-10-04 measured it at 812 points; the tree now reports 993), so that
 check fails on the same desktop for a reason this record only makes visible.
 
+### 2026-10-30 — content that grows after a run settled re-plans the layout
+
+SD2 reads as if the needs were learned only during a settling run, and
+that is how it was built: a run ended, its rects held, and a window whose
+content grew afterwards — a note typed into, rows loaded, a pane opened —
+spilled over its neighbours with its title bar still the width of the old
+cell, since egui lays the title bar out at the width the body was given
+and grows the frame around the content (the measurement of 2026-10-29).
+The host now reads every tiled window's need between runs too, against the
+cell it is pinned to; a need past the cell and past the minimum kept grows
+that minimum and starts a run from the minimums kept, as a work-area change
+does. The layout then gives the window its new need, within the limits SD2
+names, and the title bar spans the new cell. A need the layout could not
+grant does not count again, so a window that overlaps by design does not
+start a run every frame.
+
+What is not learned is a shrink: egui reports a need only where the content
+overflowed, so content that shrinks back keeps the minimum it reached until
+the next change of the set, the order, the layout or its parameters, which
+learns the minimums afresh. Cycling the layout (Alt+Space twice) is the
+by-hand remedy. `TestSceneTiledDesktop` types into a window under Rows and
+asserts its row grew and the rows stayed an even line.
+
 ## References
 
 - [ADR-0026](./0026-app-runtime-and-capability-subjects.md) — one viewport; the docking revert of 2026-05-13.
