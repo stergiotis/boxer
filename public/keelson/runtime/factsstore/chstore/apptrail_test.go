@@ -2,15 +2,21 @@ package chstore_test
 
 import (
 	"context"
+	"strconv"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/stergiotis/boxer/public/keelson/data/chclient"
+	"github.com/stergiotis/boxer/public/keelson/data/storeexec"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
+	busaudit "github.com/stergiotis/boxer/public/keelson/runtime/audit"
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsstore"
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsstore/chstore"
+	"github.com/stergiotis/boxer/public/keelson/runtime/trail"
+	evaudit "github.com/stergiotis/boxer/public/storage/recordstore/evidence/audit"
 )
 
 // newLiveRunStore is newLiveStore with a run identity, so the rows it
@@ -116,30 +122,67 @@ func TestStore_AppLogTail_PerApp_LiveCH(t *testing.T) {
 	assert.Error(t, err)
 }
 
-// Audit rows fold per (app, subject, result); the mean skips requests that
-// recorded no latency.
+// writeTrailEvents lands audit events on the live store's table as the
+// trail's recorder writes them: an origin and the event, one row each.
+func writeTrailEvents(t *testing.T, rows []evaudit.Event) {
+	t.Helper()
+	exec, err := storeexec.New(chclient.New(chclient.ConfigFromEnv(), nil), nil)
+	require.NoError(t, err)
+	st := trail.NewTrailStore(exec, nil, trail.TrailStoreConfig{Table: "runtime_chstore_test.facts"})
+	defer st.Close()
+	for i, r := range rows {
+		id := uint64(i + 1)
+		b := st.Begin(id, r.At, trail.TrailEnvelope{NaturalKey: []byte("event-" + strconv.Itoa(i))})
+		o := r.Origin
+		o.Id = id
+		b.AddOrigin(o)
+		e := r.Row
+		e.Id, e.Kind = id, "auditEvent"
+		b.AddAuditEvent(e)
+		require.NoError(t, b.Commit())
+	}
+	_, err = st.Flush(context.Background())
+	require.NoError(t, err)
+}
+
+// The bus's requests, audit events of the bus domain, fold per (app,
+// subject, result), the result the event's outcome; the mean skips
+// requests that recorded no latency, and an audit event of another domain
+// is not a bus request.
 func TestStore_AppAuditSummary_Folds_LiveCH(t *testing.T) {
 	s, cleanup := newLiveStore(t)
 	defer cleanup()
 	t0 := time.Now().UTC().Truncate(time.Second).Add(-time.Hour)
+	origin := evaudit.Origin{Run: "run-bus", App: "reader", Instance: 3}
+	var rows []evaudit.Event
 	for i, lat := range []uint32{10, 20, 0} {
-		_, err := s.WriteAudit(factsstore.AuditRow{AppId: "reader", Subject: "keelson.query.apps", Result: "ok",
-			LatencyMs: lat, Ts: t0.Add(time.Duration(i) * time.Second)})
-		require.NoError(t, err)
+		rows = append(rows, evaudit.Event{At: t0.Add(time.Duration(i) * time.Second), Origin: origin, Row: busaudit.EventOf(busaudit.AuditRecord{
+			Subject: "keelson.query.apps", Result: busaudit.AuditResultOk, LatencyMs: lat, RequestSizeB: 9})})
 	}
-	_, err := s.WriteAudit(factsstore.AuditRow{AppId: "reader", Subject: "keelson.query.apps", Result: "denied", Ts: t0})
-	require.NoError(t, err)
+	rows = append(rows,
+		evaudit.Event{At: t0, Origin: origin, Row: busaudit.EventOf(busaudit.AuditRecord{Subject: "keelson.query.apps", Result: busaudit.AuditResultDenied})},
+		evaudit.Event{At: t0, Origin: origin, Row: busaudit.EventOf(busaudit.AuditRecord{Subject: "keelson.query.apps", Result: busaudit.AuditResultTimeout, LatencyMs: 5})},
+		evaudit.Event{At: t0, Origin: origin, Row: evaudit.AuditEvent{Domain: "dmdm", Action: "request", Outcome: evaudit.OutcomeOk,
+			PrincipalBy: evaudit.PrincipalByNone, OriginBy: "self", Retention: "disclosure",
+			RefTypes: []string{busaudit.BusRefSubject}, RefValues: []string{"keelson.query.apps"}}},
+	)
+	writeTrailEvents(t, rows)
 
-	rows, err := s.AppAuditSummary(context.Background(), factsstore.AppTrailFilter{})
+	got, err := s.AppAuditSummary(context.Background(), factsstore.AppTrailFilter{})
 	require.NoError(t, err)
-	require.Len(t, rows, 2)
-	ok := rows[0]
+	require.Len(t, got, 3, "the bus domain's requests only")
+	ok := got[0]
+	assert.Equal(t, "reader", string(ok.AppId))
+	assert.Equal(t, "keelson.query.apps", ok.Subject)
 	assert.Equal(t, "ok", ok.Result)
 	assert.EqualValues(t, 3, ok.Requests)
 	assert.InDelta(t, 15.0, ok.MeanLatencyMs, 1e-9)
 	assert.EqualValues(t, 20, ok.MaxLatencyMs)
 	assert.Equal(t, t0, ok.FirstAt)
 	assert.Equal(t, t0.Add(2*time.Second), ok.LastAt)
-	assert.Equal(t, "denied", rows[1].Result)
-	assert.Zero(t, rows[1].MeanLatencyMs)
+	assert.Equal(t, "denied", got[1].Result)
+	assert.Equal(t, "keelson.query.apps", got[1].Subject)
+	assert.Zero(t, got[1].MeanLatencyMs)
+	assert.Equal(t, "timeout", got[2].Result, "a timeout keeps its own outcome")
+	assert.InDelta(t, 5.0, got[2].MeanLatencyMs, 1e-9)
 }

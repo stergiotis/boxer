@@ -1,14 +1,14 @@
 // Package audit defines the bus audit infrastructure per ADR-0026 §SD12 M2.5.
 // Every Client.Request call on inprocbus is captured as an AuditRecord and
 // routed to a configured AuditSinkI. The records carry the per-request
-// fields ADR-0026 §SD6 maps onto boxer.facts KindAudit rows: subject,
-// result classification, latency, payload sizes.
+// fields: subject, result classification, latency, payload sizes. The host
+// records each as an audit event on the trail ([EventOf], ADR-0296's Update
+// of 2026-10-30).
 //
 // AuditSinkI implementations:
 //   - InMemoryAuditSink (this package): test/dev recording into a slice.
-//   - factsstore.AsAuditSink (runtime/factsstore): adapter routing records
-//     into the boxer.facts view; M2.5 buffers them in memory, the future
-//     CH-backed FactsStoreI persists them.
+//   - trail.AsAuditSink (runtime/trail): adapter recording each request as
+//     an audit event through the host's trail recorder.
 package audit
 
 import (
@@ -78,7 +78,7 @@ type AuditSinkI interface {
 
 // MultiSink fans a single Record call out to every contained sink in
 // order. Useful for the carousel pattern where the bus audit feed
-// needs to land in both the durable factsstore sink and a sidecar
+// needs to land in both the durable trail sink and a sidecar
 // counter sink for live UI. A nil entry is silently skipped; an
 // empty MultiSink is a valid no-op sink.
 type MultiSink []AuditSinkI
@@ -95,11 +95,10 @@ func (inst MultiSink) Record(rec AuditRecord) {
 }
 
 // AsyncSink decouples Record from a slow inner sink so the bus Request that
-// produced the record is never blocked on the sink's work. The motivating
-// case: factsstore.AsAuditSink over a ClickHouse-backed store issues one
-// synchronous HTTP insert per audit row, and the bus calls Record inside
-// Client.Request's deferred path on the caller's goroutine — so without this
-// every audited Request would pay a full CH round-trip. Record enqueues into
+// produced the record is never blocked on the sink's work: the bus calls
+// Record inside Client.Request's deferred path on the caller's goroutine, so
+// an inner sink that takes a lock or does I/O would otherwise be paid for by
+// every audited Request. Record enqueues into
 // a bounded buffer and returns immediately; a background goroutine forwards
 // to the inner sink. On overflow the record is dropped (the audit trail is
 // best-effort, matching logbridge) and Dropped() is bumped. Close drains the
@@ -203,7 +202,7 @@ func (inst AuditFunc) Record(rec AuditRecord) {
 }
 
 // InMemoryAuditSink buffers records in a slice. Production hosts use the
-// factsstore-backed sink; tests and dev environments use this directly.
+// trail-backed sink; tests and dev environments use this directly.
 type InMemoryAuditSink struct {
 	mu      sync.RWMutex
 	records []AuditRecord

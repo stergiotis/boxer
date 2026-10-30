@@ -11,6 +11,7 @@ import (
 	"github.com/stergiotis/boxer/public/functional/option"
 	"github.com/stergiotis/boxer/public/identity/callident"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
+	busaudit "github.com/stergiotis/boxer/public/keelson/runtime/audit"
 	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
 	"github.com/stergiotis/boxer/public/keelson/runtime/inprocbus"
 	"github.com/stergiotis/boxer/public/observability/eh"
@@ -22,7 +23,7 @@ import (
 // that names it, and the host records it with the envelope's sender as
 // its origin, which the host vouches for (OriginBy envelope). The
 // principal and the purpose stay the app's claims. A row sent to another
-// app's subject, or in the recorder's own domain, is refused.
+// app's subject, or in the recorder's own domain or the bus's, is refused.
 const (
 	AuditSubjectPrefix = "runtime.audit."
 	// AuditSubjectAll matches every app's subject: an app id carries dots
@@ -138,6 +139,9 @@ func (inst *AuditService) record(msg *app.Msg) (why string) {
 	}
 	if w.Domain == TrailDomain {
 		return "the trail domain is the recorder's own"
+	}
+	if w.Domain == busaudit.BusDomain {
+		return "the bus domain is the host's own"
 	}
 	row := AuditEvent{Domain: w.Domain, Action: w.Action, Outcome: w.Outcome, PrincipalBy: w.PrincipalBy, Subject: w.Subject, Retention: w.Retention,
 		RefTypes: w.RefTypes, RefValues: w.RefValues, AttrKeys: w.AttrKeys, AttrValues: w.AttrValues}

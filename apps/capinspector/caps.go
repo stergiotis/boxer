@@ -202,8 +202,8 @@ var Registry = map[CapId]CapSpec{
 		Description: "inprocbus.Inst routes Publish/Subscribe/Request between " +
 			"per-app inprocbus.Client instances minted from Manifest.Caps. M4 " +
 			"swaps the in-proc transport for NATS; the BusI surface is stable " +
-			"across the swap. Every allowed call lands an audit row via the " +
-			"factsstore.AsAuditSink sink the carousel attaches.",
+			"across the swap. Every request lands an audit event on the " +
+			"trail via the trail.AsAuditSink sink the host attaches.",
 		Backend: "runtime/inprocbus",
 		// Matches every app — bus is the universal substrate.
 		AppFilter: func(_ app.SubjectFilter) bool { return true },

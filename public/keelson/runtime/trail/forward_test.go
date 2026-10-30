@@ -115,8 +115,7 @@ func TestRefusedBatchIsCounted(t *testing.T) {
 func TestDiscardedRowsAreNotForwardedAndGapRowsAre(t *testing.T) {
 	exec := &gateExec{}
 	fwd := &collectForwarder{}
-	rec := NewRecorder(exec, "run-1", zerolog.Nop(), WithForwarder(fwd))
-	rec.maxBacklog = 1
+	rec := NewRecorder(exec, "run-1", zerolog.Nop(), WithForwarder(fwd), WithMaxBacklogForTest(1))
 	for range 3 {
 		require.NoError(t, rec.Event(context.Background(), time.Now(), Context{}, event()))
 		require.Error(t, rec.Flush(context.Background()))
@@ -132,19 +131,15 @@ func TestDiscardedRowsAreNotForwardedAndGapRowsAre(t *testing.T) {
 	assert.Equal(t, "vault-resolve", fwd.got[0].Row.Action)
 	assert.Equal(t, ActionAuditGap, fwd.got[1].Row.Action)
 	assert.Equal(t, "2", fwd.got[1].Row.AttrValues[0])
-	rec.mu.Lock()
-	assert.Empty(t, rec.fwd.pending, "nothing is kept for a row that will never be durable")
-	rec.mu.Unlock()
 }
 
-// Without a forwarder the recorder keeps no entities and the backstop is
-// a no-op.
+// Without a forwarder the backstop is a no-op.
 func TestNoForwarderKeepsNothing(t *testing.T) {
 	exec := &gateExec{open: true}
 	rec := NewRecorder(exec, "run-1", zerolog.Nop())
 	defer rec.Close()
 	require.NoError(t, rec.Event(context.Background(), time.Now(), Context{}, event()))
-	assert.Nil(t, rec.fwd)
+	require.NoError(t, rec.Flush(context.Background()))
 	n, err := rec.ForwardWindow(context.Background(), time.Time{}, time.Time{}, 0)
 	require.NoError(t, err)
 	assert.Equal(t, 0, n)

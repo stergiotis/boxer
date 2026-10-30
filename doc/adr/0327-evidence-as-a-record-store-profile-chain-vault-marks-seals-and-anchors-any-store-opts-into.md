@@ -582,6 +582,18 @@ L24, which need an app's own fold and constants; L10, whose payloads no
 store keeps; L9, a conformance tool; and the scoped SQL laws L11–L13 and
 L18, which run in the worker under their scopes.
 
+### 2026-10-30 — §SD5, §SD8: the trail's seals are the shared writer's
+
+The trail's seals are written by `auditrec`
+([ADR-0330](./0330-a-shared-audit-recorder-below-the-runtime-one-sealed-writer-over-a-narrow-store-binding.md) §SD5),
+through the trail store's generated `SealOf`, under `TrailSealScheme` and
+scoped by `trail.SealScope`, so a seal stream and its anchors read as
+before. `VerifySeals` is the writer's: a seal or a row read twice — a
+batch stored twice after a lost acknowledgement — counts once, so such a
+batch no longer reports a fork (`evidence.OrderSeals` saw two seals with
+one predecessor). The §SD8 audit event below the runtime and the trail's
+are one writer's rows; `originBy` is set by the same `audit.Stamp`.
+
 ## References
 
 - [ADR-0100](./0100-recordstore-generated-leeway-clickhouse-store.md) — generated record stores, roles, the state view.

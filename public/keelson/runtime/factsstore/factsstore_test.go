@@ -18,15 +18,6 @@ func TestInMemoryFactsStore_WriteGrant_AssignsId(t *testing.T) {
 	assert.Len(t, s.Grants(), 2)
 }
 
-func TestInMemoryFactsStore_WriteAudit(t *testing.T) {
-	s := NewInMemoryFactsStore()
-	_, err := s.WriteAudit(AuditRow{AppId: "a", Subject: "ch.query.boxer", Result: "ok", LatencyMs: 5})
-	require.NoError(t, err)
-	rows := s.AuditRows()
-	require.Len(t, rows, 1)
-	assert.Equal(t, "ch.query.boxer", rows[0].Subject)
-}
-
 // Workingset trail (ADR-0148 §SD6) — persist-state semantics: append-only,
 // reverse-scan latest, tombstone delete, isolated per (app, name).
 

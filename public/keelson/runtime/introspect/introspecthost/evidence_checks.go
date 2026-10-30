@@ -23,13 +23,22 @@ import (
 // served in-process (ADR-0327 §SD7) — one row per journal run for L31 and
 // for L32, one per trail run for L34 and for its anchors — each saying
 // whether the law holds over the host's stores as they are when the
-// relation is read, and where it breaks.
+// relation is read, and where it breaks. Beside them the trail has one
+// row of law LawTrailDurable: whether its rows land at all, and why not
+// (ADR-0330's Update of 2026-10-30).
 const TableEvidenceChecks = "evidence_checks"
 
 // SealVerifierI is the trail's recorder as the relation reads it.
 type SealVerifierI interface {
 	VerifySeals(ctx context.Context, run string) (broken evidence.SealBreak, unnamed []uint64, unanchored []uint64, err error)
+	// NotDurable says why the trail's rows do not land, "" when they do.
+	NotDurable() (why string)
 }
+
+// LawTrailDurable is the law of the trail's row that says whether its
+// rows land on boxer.facts: it does not hold on a host without
+// ClickHouse, or without a run id.
+const LawTrailDurable = "durable"
 
 // evidenceCheck is one row: the store, its scope, the law, and the
 // verdict.
@@ -126,15 +135,20 @@ func (inst evidenceChecksProvider) journalChecks(ctx context.Context) (rows []ev
 	return
 }
 
-// trailChecks is L34 over this run's trail, and L32 over its anchored
-// seals.
+// trailChecks is whether the trail's rows land and, when they do, L34
+// over this run's trail and L32 over its anchored seals.
 func (inst evidenceChecksProvider) trailChecks(ctx context.Context) (rows []evidenceCheck) {
-	if inst.trail == nil || inst.run == "" {
+	if inst.trail == nil {
+		return
+	}
+	why := inst.trail.NotDurable()
+	rows = append(rows, evidenceCheck{Store: "trail", Scope: inst.run, Law: LawTrailDurable, Holds: why == "", Why: why})
+	if why != "" || inst.run == "" {
 		return
 	}
 	broken, unnamed, unanchored, err := inst.trail.VerifySeals(ctx, inst.run)
 	if err != nil {
-		return []evidenceCheck{{Store: "trail", Scope: inst.run, Law: "L34", Why: err.Error()}}
+		return append(rows, evidenceCheck{Store: "trail", Scope: inst.run, Law: "L34", Why: err.Error()})
 	}
 	row := evidenceCheck{Store: "trail", Scope: inst.run, Law: "L34", Holds: broken.Why == evidence.SealBreakNone && len(unnamed) == 0, Broken: broken.Seal}
 	switch {

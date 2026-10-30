@@ -94,6 +94,10 @@ const (
 	// persistOpenTimeout bounds the persist store backend's DDL over HTTP: a
 	// server that answered the ping and then stalls must not hang boot.
 	persistOpenTimeout = 15 * time.Second
+	// trailFlushInterval is how often the host's trail lands rows nothing
+	// asked to land, such as bus requests; it bounds both their delay and
+	// the seals they add, one per flush that lands rows.
+	trailFlushInterval = time.Second
 	// serviceStopTimeout bounds each service's shutdown in Close.
 	serviceStopTimeout = 5 * time.Second
 	// sysmetricsInterval is the co-located scraper's sampling period.
@@ -213,7 +217,7 @@ type Options struct {
 	// DefaultFactsPingTimeout.
 	FactsPingTimeout time.Duration
 	// ExtraAuditSinks receive every audited bus request beside the durable
-	// facts sink (the carousel adds the capability inspector's counters).
+	// trail sink (the carousel adds the capability inspector's counters).
 	ExtraAuditSinks []audit.AuditSinkI
 	// VideoOutput and HelpHost enable the corresponding chrome menus
 	// (imzhost.ChromeConfig).
@@ -426,16 +430,9 @@ func Boot(ctx context.Context, opts Options) (rt *Runtime, err error) {
 	}
 
 	// In-proc subject router (ADR-0026 §SD3, §SD5), unconditional so apps
-	// with declared Caps have a real BusI. The durable facts sink is wrapped
-	// asynchronously so audited Requests do not pay a synchronous insert
-	// inline; Close drains it last.
+	// with declared Caps have a real BusI. Its audit sink is wired once the
+	// trail it records through exists (bootServices).
 	rt.Bus = inprocbus.NewInst(logger)
-	auditSink := audit.NewAsyncSink(factsstore.AsAuditSink(rt.Facts), 0)
-	rt.cleanups = append(rt.cleanups, auditSink.Close)
-	sinks := make(audit.MultiSink, 0, 1+len(opts.ExtraAuditSinks))
-	sinks = append(sinks, auditSink)
-	sinks = append(sinks, opts.ExtraAuditSinks...)
-	rt.Bus.SetAuditSink(sinks)
 
 	rt.bootServices(ctx, factsCfg)
 
@@ -556,8 +553,21 @@ func (rt *Runtime) bootServices(ctx context.Context, factsCfg chstore.Config) {
 	rt.Anchors = orgAnchorStore(ctx, runId, logger)
 	// The host's own recorder: an audit event it writes has its origin
 	// established by the host (ADR-0327 §SD6), and its seals anchor.
-	rt.Trail = trail.NewRecorder(rt.PersistExec, runId, logger, trail.WithOriginBy(evidence.OriginByHost), trail.WithAnchors(rt.Anchors))
+	// It flushes on an interval too: the bus requests it records are rows
+	// nothing asks to land.
+	rt.Trail = trail.NewRecorder(rt.PersistExec, runId, logger, trail.WithOriginBy(evidence.OriginByHost), trail.WithAnchors(rt.Anchors),
+		trail.WithFlushInterval(trailFlushInterval))
 	rt.cleanups = append(rt.cleanups, rt.Trail.Close)
+	// Every audited bus request becomes an audit event on the trail
+	// (ADR-0296's Update of 2026-10-30), recorded asynchronously so a
+	// Request never waits on the recorder's lock. The sink closes before the
+	// trail — cleanups run in reverse — so what it drains still lands.
+	auditSink := audit.NewAsyncSink(trail.AsAuditSink(rt.Trail), 0)
+	rt.cleanups = append(rt.cleanups, auditSink.Close)
+	sinks := make(audit.MultiSink, 0, 1+len(rt.opts.ExtraAuditSinks))
+	sinks = append(sinks, auditSink)
+	sinks = append(sinks, rt.opts.ExtraAuditSinks...)
+	rt.Bus.SetAuditSink(sinks)
 	if trail.RequiredEnv.Get() && !rt.Trail.Durable() {
 		logger.Warn().Msg("trail: BOXER_TRAIL_REQUIRED is set and this host has no durable backend; model calls and egress fetches will be refused")
 	}
@@ -1295,6 +1305,9 @@ func (rt *Runtime) statusSnapshot() (s *runtimestatus.Snapshot) {
 	if rt.Persist != nil {
 		s.PersistBackend = rt.PersistBackend
 	}
+	// A trail whose rows do not land — no ClickHouse, no run id — says so
+	// where the person looks (ADR-0330's Update of 2026-10-30).
+	s.TrailNotDurable = rt.Trail.NotDurable()
 	return
 }
 
@@ -1514,8 +1527,9 @@ func (rt *Runtime) Reap() {
 	})
 }
 
-// Close reaps, then stops the services in reverse start order and drains the
-// audit sink last. Idempotent.
+// Close reaps, then stops the services in reverse start order: the bus's
+// audit sink drains into the trail just before the trail's final flush.
+// Idempotent.
 func (rt *Runtime) Close() {
 	rt.closeOnce.Do(func() {
 		rt.Reap()

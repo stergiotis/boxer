@@ -13,6 +13,7 @@ import (
 
 	"github.com/stergiotis/boxer/public/extbin"
 	"github.com/stergiotis/boxer/public/functional/option"
+	busaudit "github.com/stergiotis/boxer/public/keelson/runtime/audit"
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsschema"
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsstore/chstore"
 	"github.com/stergiotis/boxer/public/keelson/runtime/trail"
@@ -27,69 +28,12 @@ import (
 // views are created and read back. The assertions are what a reader of
 // each view should be able to tell without decoding a single lane.
 func TestViewsReadBackAnEpisodeOverLocal(t *testing.T) {
-	dir := t.TempDir()
-	exec, err := chexec.NewLocalExecutor(dir, nil)
-	if err != nil {
-		t.Skipf("clickhouse unavailable: %v", err)
-	}
-	ctx := context.Background()
-	setup, err := chstore.ComposeSetupSQL(chstore.Config{Database: factsschema.DatabaseName, Table: factsschema.TableName}, "")
-	require.NoError(t, err)
-	// The whole surface, decode views included: leeway.columns is how the
-	// test asks the server whether the views are leeway tables.
-	stmts := append([]string{}, lwsqlsurface.AllStatements("")...)
-	for stmt := range strings.SplitSeq(setup, ";") {
-		stmts = append(stmts, stmt)
-	}
-	for _, stmt := range stmts {
-		if stmt = strings.TrimSpace(stmt); stmt != "" {
-			require.NoError(t, exec.Exec(ctx, stmt))
-		}
-	}
+	dir, exec, _ := localSurface(t)
 
 	writeEpisode(t, exec)
 
-	views, err := trailviews.Compose("", "")
-	require.NoError(t, err)
-	byName := map[string]trailviews.View{}
-	for _, v := range views {
-		require.NoError(t, exec.Exec(ctx, v.Sql), v.Name)
-		byName[v.Name] = v
-	}
-
-	query := func(sql string) (rows []map[string]any) {
-		cmd, cerr := extbin.ClickHouseLocal.Command(ctx, extbin.Opts{}, "--path", dir, "--output_format_json_quote_64bit_integers=0", "--query", sql+" FORMAT JSONEachRow")
-		require.NoError(t, cerr)
-		var out, stderr bytes.Buffer
-		cmd.Stdout, cmd.Stderr = &out, &stderr
-		require.NoError(t, cmd.Run(), stderr.String())
-		dec := json.NewDecoder(&out)
-		for dec.More() {
-			row := map[string]any{}
-			require.NoError(t, dec.Decode(&row))
-			rows = append(rows, row)
-		}
-		return rows
-	}
-	// read selects columns of a view by logical name — the physical name
-	// aliased back to it — and appends the rest of the statement.
-	read := func(view string, names []string, rest string) []map[string]any {
-		phys := map[string]string{}
-		for _, c := range byName[view].Columns {
-			phys[c.Name] = c.Physical
-		}
-		items := make([]string, 0, len(names))
-		for _, n := range names {
-			p, ok := phys[n]
-			require.True(t, ok, "%s has no column %s", view, n)
-			items = append(items, `"`+p+`" AS "`+n+`"`)
-		}
-		sql := "SELECT " + strings.Join(items, ", ") + " FROM boxer." + view
-		for _, n := range names {
-			rest = strings.ReplaceAll(rest, "{"+n+"}", `"`+phys[n]+`"`)
-		}
-		return query(sql + " " + rest)
-	}
+	views, byName := installViews(t, exec)
+	query, read := localReaders(t, dir, byName)
 
 	// The server's own decode agrees: every view column is a leeway plain
 	// column of the declared canonical type, holding values of the
@@ -258,4 +202,131 @@ func writeEpisode(t *testing.T, exec *chexec.LocalExecutor) {
 		Event: trail.GrantEventEnded, Plan: "write a note", PlanDigest: "pd-1", DecidedBy: "host",
 	}))
 	require.NoError(t, rec.Flush(context.Background()))
+}
+
+// localSurface is clickhouse-local with the read surface, decode views
+// included, and the facts table, or a skip.
+func localSurface(t *testing.T) (dir string, exec *chexec.LocalExecutor, ctx context.Context) {
+	t.Helper()
+	dir = t.TempDir()
+	exec, err := chexec.NewLocalExecutor(dir, nil)
+	if err != nil {
+		t.Skipf("clickhouse unavailable: %v", err)
+	}
+	ctx = context.Background()
+	setup, err := chstore.ComposeSetupSQL(chstore.Config{Database: factsschema.DatabaseName, Table: factsschema.TableName}, "")
+	require.NoError(t, err)
+	// The whole surface, decode views included: leeway.columns is how the
+	// test asks the server whether the views are leeway tables.
+	stmts := append([]string{}, lwsqlsurface.AllStatements("")...)
+	for stmt := range strings.SplitSeq(setup, ";") {
+		stmts = append(stmts, stmt)
+	}
+	for _, stmt := range stmts {
+		if stmt = strings.TrimSpace(stmt); stmt != "" {
+			require.NoError(t, exec.Exec(ctx, stmt))
+		}
+	}
+	return
+}
+
+// installViews creates every view.
+func installViews(t *testing.T, exec *chexec.LocalExecutor) (views []trailviews.View, byName map[string]trailviews.View) {
+	t.Helper()
+	views, err := trailviews.Compose("", "")
+	require.NoError(t, err)
+	byName = map[string]trailviews.View{}
+	for _, v := range views {
+		require.NoError(t, exec.Exec(context.Background(), v.Sql), v.Name)
+		byName[v.Name] = v
+	}
+	return
+}
+
+// localReaders are query, which runs a statement and decodes its rows,
+// and read, which selects columns of a view by logical name — the physical
+// name aliased back to it — and appends the rest of the statement.
+func localReaders(t *testing.T, dir string, byName map[string]trailviews.View) (query func(sql string) []map[string]any, read func(view string, names []string, rest string) []map[string]any) {
+	query = func(sql string) (rows []map[string]any) {
+		cmd, cerr := extbin.ClickHouseLocal.Command(context.Background(), extbin.Opts{}, "--path", dir, "--output_format_json_quote_64bit_integers=0", "--query", sql+" FORMAT JSONEachRow")
+		require.NoError(t, cerr)
+		var out, stderr bytes.Buffer
+		cmd.Stdout, cmd.Stderr = &out, &stderr
+		require.NoError(t, cmd.Run(), stderr.String())
+		dec := json.NewDecoder(&out)
+		for dec.More() {
+			row := map[string]any{}
+			require.NoError(t, dec.Decode(&row))
+			rows = append(rows, row)
+		}
+		return rows
+	}
+	read = func(view string, names []string, rest string) []map[string]any {
+		phys := map[string]string{}
+		for _, c := range byName[view].Columns {
+			phys[c.Name] = c.Physical
+		}
+		items := make([]string, 0, len(names))
+		for _, n := range names {
+			p, ok := phys[n]
+			require.True(t, ok, "%s has no column %s", view, n)
+			items = append(items, `"`+p+`" AS "`+n+`"`)
+		}
+		sql := "SELECT " + strings.Join(items, ", ") + " FROM boxer." + view
+		for _, n := range names {
+			rest = strings.ReplaceAll(rest, "{"+n+"}", `"`+phys[n]+`"`)
+		}
+		return query(sql + " " + rest)
+	}
+	return
+}
+
+// Over clickhouse-local: bus requests recorded through the trail's bus
+// sink read back from the one audit-event mart beside every other audit
+// event — the result as the outcome, the subject a reference, the
+// measurements attributes — and the timeline carries each as one
+// auditEvent row whose headline names domain, action and outcome.
+func TestBusRequestsReadBackOverLocal(t *testing.T) {
+	dir, exec, ctx := localSurface(t)
+	rec := trail.NewRecorder(exec, "run-1", zerolog.Nop())
+	at := time.Unix(1700000000, 0).UTC()
+	sink := trail.AsAuditSink(rec)
+	sink.Record(busaudit.AuditRecord{AppId: "apps/play", InstanceKey: 3, Subject: "runtime.persist.play.x.get", Result: busaudit.AuditResultOk,
+		LatencyMs: 12, RequestSizeB: 40, Ts: at})
+	sink.Record(busaudit.AuditRecord{AppId: "apps/play", InstanceKey: 3, Subject: "runtime.persist.play.x.set", Result: busaudit.AuditResultTimeout,
+		LatencyMs: 30000, RequestSizeB: 7, Ts: at.Add(time.Second)})
+	require.NoError(t, rec.Event(ctx, at.Add(2*time.Second), trail.Context{Origin: rec.OriginOf("apps/dmdm", 1)}, trail.AuditEvent{
+		Domain: "dmdm", Action: "vault-resolve", Outcome: trail.OutcomeOk, PrincipalBy: trail.PrincipalByNone, Subject: 7, Retention: "disclosure"}))
+	require.NoError(t, rec.Flush(ctx))
+	rec.Close()
+
+	_, byName := installViews(t, exec)
+	query, read := localReaders(t, dir, byName)
+
+	events := read(trailviews.ViewAuditEvents, []string{"app", "instance", "run", "domain", "action", "outcome", "ref-types", "ref-values", "attr-keys", "attr-values"}, "ORDER BY {domain}, {outcome}")
+	require.Len(t, events, 3, "the bus's requests are in the one audit-event mart")
+	bus := events[:2]
+	require.Equal(t, "apps/play", bus[0]["app"])
+	require.EqualValues(t, 3, bus[0]["instance"])
+	require.Equal(t, "run-1", bus[0]["run"])
+	require.Equal(t, busaudit.BusDomain, bus[0]["domain"])
+	require.Equal(t, busaudit.BusActionRequest, bus[0]["action"])
+	require.Equal(t, "ok", bus[0]["outcome"])
+	require.Equal(t, []any{busaudit.BusRefSubject}, bus[0]["ref-types"])
+	require.Equal(t, []any{"runtime.persist.play.x.get"}, bus[0]["ref-values"])
+	require.Equal(t, []any{busaudit.BusAttrLatencyMs, busaudit.BusAttrRequestBytes}, bus[0]["attr-keys"], "a measurement the writer left out is absent")
+	require.Equal(t, []any{"12", "40"}, bus[0]["attr-values"])
+	require.Equal(t, "timeout", bus[1]["outcome"], "the bus's result is the outcome")
+	require.Equal(t, "dmdm", events[2]["domain"])
+
+	timeline := read(trailviews.ViewTimeline, []string{"kind", "status", "headline", "ts"}, "ORDER BY {ts}")
+	require.Len(t, timeline, 3)
+	for _, r := range timeline {
+		require.Equal(t, "auditEvent", r["kind"])
+	}
+	require.Equal(t, "ok", timeline[0]["status"])
+	require.Equal(t, "bus request -> ok [subject:runtime.persist.play.x.get]", timeline[0]["headline"])
+	require.Equal(t, "bus request -> timeout [subject:runtime.persist.play.x.set]", timeline[1]["headline"])
+	ids := query(`SELECT uniqExact("` + byName[trailviews.ViewTimeline].Columns[0].Physical + `") AS u FROM boxer.` + trailviews.ViewTimeline)
+	require.EqualValues(t, 3, ids[0]["u"])
 }

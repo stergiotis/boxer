@@ -17,9 +17,11 @@ type AuditEvent = audit.AuditEvent
 type Origin = audit.Origin
 
 const (
-	OutcomeOk     = audit.OutcomeOk
-	OutcomeDenied = audit.OutcomeDenied
-	OutcomeFailed = audit.OutcomeFailed
+	OutcomeOk      = audit.OutcomeOk
+	OutcomeDenied  = audit.OutcomeDenied
+	OutcomeFailed  = audit.OutcomeFailed
+	OutcomeTimeout = audit.OutcomeTimeout
+	OutcomeError   = audit.OutcomeError
 
 	PrincipalBySystem = audit.PrincipalBySystem
 	PrincipalByEnv    = audit.PrincipalByEnv

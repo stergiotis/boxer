@@ -1,12 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-10-13
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to accepted
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-10-30
 ---
-
-> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
 
 # ADR-0330: A shared audit recorder below the runtime — one sealed writer over a narrow store binding, and the trail built on it
 
@@ -371,8 +369,8 @@ in the trail, is the drift this decision exists to stop.
 
 - **M1 — The rows shared: `Stamp`, `Invalid`, `Gap` and the run rule in `evidence/audit`; `audit.Origin` as the origin component; the trail on both, its store regenerated (SD2, SD3).** ✓
 - **M2 — `auditrec`: the writer, the event verb, write-ahead, reads, `VerifySeals`, forwarding; an in-tree example store generated under `Seals` over a table of its own; a conformance test a binding runs (SD1, SD4–SD7).** ✓
-- **M3 — The trail on the writer (SD8).**
-- **M4 — The dated Updates on ADR-0277, ADR-0296 and ADR-0327.**
+- **M3 — The trail on the writer (SD8).** ✓
+- **M4 — The dated Updates on ADR-0277, ADR-0296 and ADR-0327.** ✓
 
 ## Surfaces — Tier 1
 
@@ -473,8 +471,83 @@ through the alias with its digests unmoved, and `auditrec` passes its unit
 tests, the conformance test over the example store on clickhouse-local, and
 its dependency test. M3 and M4 are open.
 
+Accepted 2026-10-30 by the owner, with M3 and M4 open and delegated for
+implementation the same day.
+
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers (Tier 1 in-place / Tier 2 dated `## Updates` entry / Tier 3 new superseding ADR).
+
+## Updates
+
+### 2026-10-30 — M3 and M4: the trail on the writer
+
+`trail.Recorder` is `auditrec.Recorder` over a binding of the trail store
+in the trail package (`auditStore`, `auditBatch`): the recorder's key is
+the row's natural key, the value columns come from the embedded facts DDL
+through `ColumnsFromDDL`, and seals go through the generated `SealOf`
+under `TrailSealScheme` and `trail.SealScope`. The trail's other kinds go
+through `Write`. The trail's own loop, its observer-fed prompt path and
+its pending-entity map are deleted. No exported signature moved, so
+`covtrail` and the trail's other callers are unchanged; hostboot gains one
+option, `trail.WithFlushInterval` (below). M4's dated entries are on
+ADR-0277, ADR-0296 and ADR-0327.
+
+What holds: `TestTrailDigestsArePinned`, `TestEventRunIsTheRecorders`,
+the trail's seal tests and its other tests; `TestTrailConformance`, the
+conformance test run by the trail binding on clickhouse-local; a new
+`TestRetriedBatchIsNotAFork` on the trail; `auditrec`'s unit tests, with
+`TestEventFrom` added, and `TestLinksNoRuntime`.
+
+Where the code departs from SD4–SD8 as written, and why:
+
+- **`auditrec` gains `EventFrom`.** `Event` names the app and the instance
+  from `WithOrigin`, once per recorder; the trail's callers name them per
+  call, from the bus envelope's sender. `EventFrom` takes that default per
+  call and `Event` is `EventFrom` with `WithOrigin`'s.
+- **An audit event's conversation and delegation reach the batch on the
+  context.** `BatchI.Event` carries the origin and the event; the trail's
+  event row also carries the caller's `Conversation` and `Delegation`. The
+  trail puts them on the context under a key of its own and its batch
+  reads them, which keeps `BatchI` as SD4 states it.
+- **A required write-ahead's error wraps the cause** beside
+  `ErrNotDurable`, so the trail's refusal, sent across the bus as text,
+  still says why the rows did not land.
+- **A trail recorder flushes when asked and at `Close`**, as it did before,
+  unless built with `trail.WithFlushInterval`; SD5's one-second default is
+  not the trail's. The host's recorder passes one second, since it records
+  the bus's requests, rows nothing asks to land (ADR-0296's Update of this
+  date).
+- **The trail's reads by subject and principal return entities carrying
+  the origin and the audit event** — what `auditrec` reads — not the row's
+  conversation or delegation; no caller outside the trail's tests reads
+  them.
+- **Tests that read the old loop's fields** — the backlog, the gap, the
+  last seal, the pending map — now assert the same through `Counts`, the
+  anchor store, a write observer and a forwarder; the gap row's test
+  asserts it lands in the flush that found the gap, as SD5 decides.
+
+Accepted by the owner on 2026-10-30, with what follows from it:
+
+- **No run id, no trail.** `auditrec.New` refuses an empty run, so a host
+  whose `runinfo.Init` fails builds a trail that records nothing and is
+  not durable; so does a host without ClickHouse. Both are accepted and
+  shown rather than fixed. `trail.Recorder.NotDurable` says why the rows
+  do not land — no backend, no run id, a store that could not be built, a
+  closed recorder — and is the reason a `BOXER_TRAIL_REQUIRED` refusal
+  carries. The host shows it to the person at startup in the chrome's
+  status line (`runtimestatus.Snapshot.TrailNotDurable`), leading the row
+  in the warning tone as `audit trail not durable: <why>`, the surface
+  the unattended mode already uses for a host-level state; and to an
+  agent as the row of law `durable`, store `trail`, in
+  `keelson('evidence_checks')`, which holds when the rows land and
+  otherwise carries the reason. The attention queue
+  ([ADR-0323](./0323-attention-levels-one-table-two-scales-configurable-within-a-floor.md)) is not used: its
+  notices are keyed by a conversation or a job, and a host state is
+  neither.
+- **The interval flush is already tied to activity.** A flush swaps out
+  the current batch only when it holds rows and lands only held batches,
+  so an interval with nothing buffered writes no seal and no insert; the
+  one-second interval stays, and nothing changed.
 
 ## References
 

@@ -97,22 +97,18 @@ func TestHeldRowsLandOnRecovery(t *testing.T) {
 // A server that stays down does not grow the recorder without bound.
 func TestBacklogIsBounded(t *testing.T) {
 	exec := &gateExec{}
-	rec := NewRecorder(exec, "run-1", zerolog.Nop())
+	const maxBacklog, batch = 100, 10
+	rec := NewRecorder(exec, "run-1", zerolog.Nop(), WithMaxBacklogForTest(maxBacklog))
 	defer rec.Close()
-	rec.maxBacklog = 100
-	const batch = 10
-	for i := 0; i < 2*rec.maxBacklog/batch; i++ {
+	for i := 0; i < 2*maxBacklog/batch; i++ {
 		for j := 0; j < batch; j++ {
 			require.NoError(t, rec.HttpFetch(time.Now(), Context{}, HttpFetch{}))
 		}
 		require.Error(t, rec.Flush(context.Background()))
 	}
-	rec.flushMu.Lock()
-	var held int
-	for _, b := range rec.backlog {
-		held += b.rows
-	}
-	rec.flushMu.Unlock()
-	assert.LessOrEqual(t, held, rec.maxBacklog)
-	assert.Greater(t, held, rec.maxBacklog-batch)
+	c := rec.Counts()
+	require.Zero(t, c.Written)
+	held := int(c.Buffered - c.Dropped)
+	assert.LessOrEqual(t, held, maxBacklog)
+	assert.Greater(t, held, maxBacklog-batch)
 }

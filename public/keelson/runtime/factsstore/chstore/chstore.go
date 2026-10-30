@@ -38,7 +38,8 @@ import (
 // this store writes that does not carry one of its own. It lives here rather
 // than on each row DTO because it is process-wide: eight DTOs repeating one
 // constant is eight chances for them to disagree, and three of them
-// (GrantRow, AuditRow, LogRow) had no field for it at all — which is why
+// (GrantRow, LogRow and the bus-request row since retired) had no field for
+// it at all — which is why
 // "limit to this run" was a timestamp range for those kinds, and silently
 // admitted a concurrent boxer process. Empty leaves rows unstamped, which is
 // what a store built before its host knew the run id gets.
@@ -285,40 +286,6 @@ func (inst *Store) WriteGrant(row factsstore.GrantRow) (id uint64, err error) {
 	bsec := ent.GetSectionBool()
 	bsec.BeginAttribute(row.Sticky).AddMembershipLowCardRef(vocab.MembGrantSticky.GetId().Value()).EndAttribute()
 	bsec.EndSection()
-	err = inst.commitAndShip(context.Background(), ent)
-	return
-}
-
-// WriteAudit lands one boxer.facts row tagged KindAudit.
-func (inst *Store) WriteAudit(row factsstore.AuditRow) (id uint64, err error) {
-	id = inst.nextId.Add(1)
-	ts := defaultTs(row.Ts)
-	nk := naturalKeyFor("audit", row.AppId, []byte(row.Subject), []byte(row.Result))
-	ent := dml.NewInEntityFacts(inst.allocator, 1)
-	ent.BeginEntity().SetId(id, nk).SetTimestamp(ts)
-	sym := ent.GetSectionSymbol()
-	sym.BeginAttribute("audit").AddMembershipLowCardRef(vocab.MembKindAudit.GetId().Value()).EndAttribute()
-	sym.BeginAttribute(string(row.AppId)).AddMembershipLowCardRef(vocab.MembRuntimeApp.GetId().Value()).EndAttribute()
-	sym.BeginAttribute(row.Subject).AddMembershipLowCardRef(vocab.MembAuditRequestSubject.GetId().Value()).EndAttribute()
-	if row.Result != "" {
-		sym.BeginAttribute(row.Result).AddMembershipLowCardRef(vocab.MembAuditResult.GetId().Value()).EndAttribute()
-	}
-	inst.stampRun(sym, "")
-	sym.EndSection()
-	u64 := ent.GetSectionU64Array()
-	stampInstance(u64, row.InstanceKey)
-	u64.EndSection()
-	u32 := ent.GetSectionU32Array()
-	if row.LatencyMs > 0 {
-		u32.BeginAttributeSingle(row.LatencyMs).AddMembershipLowCardRef(vocab.MembAuditLatencyMs.GetId().Value()).EndAttribute()
-	}
-	if row.RequestSizeB > 0 {
-		u32.BeginAttributeSingle(row.RequestSizeB).AddMembershipLowCardRef(vocab.MembAuditRequestSizeB.GetId().Value()).EndAttribute()
-	}
-	if row.ResponseSizeB > 0 {
-		u32.BeginAttributeSingle(row.ResponseSizeB).AddMembershipLowCardRef(vocab.MembAuditResponseSizeB.GetId().Value()).EndAttribute()
-	}
-	u32.EndSection()
 	err = inst.commitAndShip(context.Background(), ent)
 	return
 }

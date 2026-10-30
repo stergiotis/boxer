@@ -77,25 +77,6 @@ func TestStore_WriteGrant_LiveCH(t *testing.T) {
 	assert.Equal(t, uint64(1), n)
 }
 
-func TestStore_WriteAudit_LiveCH(t *testing.T) {
-	s, cleanup := newLiveStore(t)
-	defer cleanup()
-	id, err := s.WriteAudit(factsstore.AuditRow{
-		AppId:         "github.com/example/play",
-		Subject:       "ch.query.boxer",
-		Result:        "ok",
-		LatencyMs:     7,
-		RequestSizeB:  120,
-		ResponseSizeB: 4096,
-		Ts:            time.Now().UTC(),
-	})
-	require.NoError(t, err)
-	assert.NotZero(t, id)
-	n, err := s.Count(context.Background())
-	require.NoError(t, err)
-	assert.Equal(t, uint64(1), n)
-}
-
 func TestStore_AllThreeKinds_OneTable_LiveCH(t *testing.T) {
 	s, cleanup := newLiveStore(t)
 	defer cleanup()
@@ -103,8 +84,8 @@ func TestStore_AllThreeKinds_OneTable_LiveCH(t *testing.T) {
 		AppId: "a", Pattern: "x.y", Direction: app.CapDirectionPub, Reason: "r", Sticky: false, GrantedVia: "auto", Ts: time.Now().UTC(),
 	})
 	require.NoError(t, err)
-	_, err = s.WriteAudit(factsstore.AuditRow{
-		AppId: "a", Subject: "x.y", Result: "ok", LatencyMs: 1, Ts: time.Now().UTC(),
+	_, err = s.WriteLog(factsstore.LogRow{
+		AppId: "a", Level: "info", Message: "m", Ts: time.Now().UTC(),
 	})
 	require.NoError(t, err)
 	_, err = s.WriteLaunch(factsstore.LaunchRow{
@@ -385,13 +366,6 @@ func TestStore_StampsRunAndInstance_LiveCH(t *testing.T) {
 		//nolint:revive // the writer under test, one per kind
 		write func(s *chstore.Store) error
 	}{
-		{kind: "audit", want: "42", write: func(s *chstore.Store) error {
-			_, err := s.WriteAudit(factsstore.AuditRow{
-				AppId: "github.com/example/play", InstanceKey: 42,
-				Subject: "ch.query.boxer", Result: "ok", Ts: ts,
-			})
-			return err
-		}},
 		{kind: "grant", want: "7", write: func(s *chstore.Store) error {
 			_, err := s.WriteGrant(factsstore.GrantRow{
 				AppId: "github.com/example/play", InstanceKey: 7,
@@ -445,8 +419,8 @@ func TestStore_RowRunIdWinsOverTheStores_LiveCH(t *testing.T) {
 func TestStore_UnstampedStoreWritesNoRun_LiveCH(t *testing.T) {
 	s, cleanup := newLiveStore(t)
 	defer cleanup()
-	_, err := s.WriteAudit(factsstore.AuditRow{
-		AppId: "github.com/example/play", Subject: "x.y", Result: "ok", Ts: time.Now().UTC(),
+	_, err := s.WriteGrant(factsstore.GrantRow{
+		AppId: "github.com/example/play", Pattern: "x.y", Direction: app.CapDirectionPub, Ts: time.Now().UTC(),
 	})
 	require.NoError(t, err)
 
@@ -479,9 +453,9 @@ func TestStore_ListRunEvents_LiveCH(t *testing.T) {
 		Phase: factsstore.AppLifecyclePhaseStarted, Ts: t0.Add(time.Second),
 	})
 	require.NoError(t, err)
-	_, err = s.WriteAudit(factsstore.AuditRow{
+	_, err = s.WriteGrant(factsstore.GrantRow{
 		AppId: "github.com/example/play", InstanceKey: 2,
-		Subject: "ch.query.boxer", Result: "ok", Ts: t0.Add(2 * time.Second),
+		Pattern: "ch.query.boxer", Direction: app.CapDirectionPub, Reason: "ok", Ts: t0.Add(2 * time.Second),
 	})
 	require.NoError(t, err)
 
@@ -503,9 +477,9 @@ func TestStore_ListRunEvents_LiveCH(t *testing.T) {
 	assert.NotContains(t, rows[1].Detail, "github.com/example/play",
 		"the app is its own column and must not be repeated into the detail")
 
-	assert.Equal(t, "audit", rows[2].Kind)
+	assert.Equal(t, "grant", rows[2].Kind)
 	assert.Equal(t, uint64(2), rows[2].InstanceKey,
-		"an audit row now lanes with the lifecycle row above it")
+		"a grant row lanes with the lifecycle row above it")
 	assert.Contains(t, rows[2].Detail, "ch.query.boxer")
 	assert.Contains(t, rows[2].Detail, "ok")
 }

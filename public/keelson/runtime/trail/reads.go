@@ -2,87 +2,29 @@ package trail
 
 import (
 	"context"
-	_ "embed"
-	"iter"
-	"regexp"
-	"strconv"
-	"strings"
 	"time"
 
-	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/marshalling"
+	"github.com/stergiotis/boxer/public/functional/option"
 	"github.com/stergiotis/boxer/public/observability/eh"
-	"github.com/stergiotis/boxer/public/storage/recordstore"
+	"github.com/stergiotis/boxer/public/storage/recordstore/evidence/audit"
+	"github.com/stergiotis/boxer/public/storage/recordstore/evidence/audit/auditrec"
 )
-
-// The facts DDL the store was generated against, embedded so the read
-// helpers take their physical column names from it rather than spelling
-// them: a change of encoding hints regenerates them (as the watchbill store
-// does for its claim SQL).
-//
-//go:embed facts_ddl_clickhouse.out.sql
-var factsDDL string
-
-// valueColumns maps a section name to the quoted physical name of its
-// value column.
-var valueColumns = valueColumnsOf(factsDDL)
-
-var valueColumnPattern = regexp.MustCompile(`"tv:([A-Za-z0-9]+):value:[^"]*"`)
-
-func valueColumnsOf(ddl string) (cols map[string]string) {
-	cols = make(map[string]string, 16)
-	for _, m := range valueColumnPattern.FindAllStringSubmatch(ddl, -1) {
-		cols[m[1]] = m[0]
-	}
-	return
-}
-
-// valueColumn is the quoted physical value column of a section; it panics
-// on an unknown section, which only a typo here can cause.
-func valueColumn(section string) (name string) {
-	name, ok := valueColumns[section]
-	if !ok {
-		panic("trail: no value column for section " + section)
-	}
-	return
-}
-
-func timeLit(t time.Time) (lit string) {
-	return "fromUnixTimestamp64Nano(" + strconv.FormatInt(t.UTC().UnixNano(), 10) + ")"
-}
-
-// windowPredicate narrows a scan to rows whose timestamp is in [from, to);
-// a zero bound is open.
-func windowPredicate(from, to time.Time) (pred string) {
-	var parts []string
-	if !from.IsZero() {
-		parts = append(parts, TrailColOrder+" >= "+timeLit(from))
-	}
-	if !to.IsZero() {
-		parts = append(parts, TrailColOrder+" < "+timeLit(to))
-	}
-	return strings.Join(parts, " AND ")
-}
-
-func andPredicates(preds ...string) (pred string) {
-	var parts []string
-	for _, p := range preds {
-		if p != "" {
-			parts = append(parts, "("+p+")")
-		}
-	}
-	return strings.Join(parts, " AND ")
-}
 
 // EventsByPrincipal reads the audit events of one principal with a
 // timestamp in [from, to) — a zero bound is open — oldest first, at most
-// limit of them (zero is no limit). The SQL narrows by the time column and
+// limit of them (zero is no limit), each row once. The reads are the
+// shared writer's (ADR-0330 §SD7): the SQL narrows by the time column and
 // a has() over the string section's values; the exact match on the
 // Principal slot is made after decoding, so a row that carries the same
-// string in another slot is read and discarded. Nil without a store;
-// buffered rows are not seen until a flush (ADR-0296 §SD5).
+// string in another slot is read and discarded. Each entity carries the
+// row's origin and audit event. Nil without a store; buffered rows are not
+// seen until a flush (ADR-0296 §SD5).
 func (inst *Recorder) EventsByPrincipal(ctx context.Context, principal string, from, to time.Time, limit int) (ents []*TrailEntity, err error) {
-	pred := andPredicates(windowPredicate(from, to), "has("+valueColumn("stringArray")+", "+marshalling.EscapeString(principal)+")")
-	return inst.events(ctx, pred, limit, func(e *AuditEvent) bool { return e.Principal.Has && e.Principal.Val == principal })
+	if inst == nil {
+		return nil, nil
+	}
+	events, err := inst.rec.EventsByPrincipal(ctx, principal, auditrec.Window{From: from, To: to, Limit: limit})
+	return entitiesOf(events), err
 }
 
 // EventsBySubject reads the audit events of one data subject with a
@@ -93,53 +35,38 @@ func (inst *Recorder) EventsBySubject(ctx context.Context, subject uint64, from,
 	if subject == 0 {
 		return nil, eh.Errorf("trail: subject 0 is no subject")
 	}
-	pred := andPredicates(windowPredicate(from, to), "has("+valueColumn("u64Array")+", "+strconv.FormatUint(subject, 10)+")")
-	return inst.events(ctx, pred, limit, func(e *AuditEvent) bool { return e.Subject == subject })
-}
-
-// events scans audit events under pred, keeps those keep accepts, and
-// stops at limit.
-func (inst *Recorder) events(ctx context.Context, pred string, limit int, keep func(*AuditEvent) bool) (ents []*TrailEntity, err error) {
 	if inst == nil {
 		return nil, nil
 	}
-	inst.readMu.Lock()
-	defer inst.readMu.Unlock()
-	if inst.read == nil {
-		return nil, nil
+	events, err := inst.rec.EventsBySubject(ctx, subject, auditrec.Window{From: from, To: to, Limit: limit})
+	return entitiesOf(events), err
+}
+
+// entitiesOf is the read events as trail entities: the origin and the
+// audit event each row carries.
+func entitiesOf(events []audit.Event) (ents []*TrailEntity) {
+	if len(events) == 0 {
+		return nil
 	}
-	seq := inst.read.ScanAuditEvent(ctx, recordstore.ScanOpts{ExtraPredicate: pred})
-	for ent, serr := range seq {
-		if serr != nil {
-			return nil, eh.Errorf("trail: read events: %w", serr)
-		}
-		if ent == nil || !ent.AuditEvent.Has || !keep(&ent.AuditEvent.Val) {
-			continue
-		}
-		ents = append(ents, ent)
-		if limit > 0 && len(ents) >= limit {
-			break
-		}
+	ents = make([]*TrailEntity, 0, len(events))
+	for _, e := range events {
+		ents = append(ents, &TrailEntity{ID: e.Id, Ts: e.At, Origin: option.Some(e.Origin), AuditEvent: option.Some(e.Row)})
 	}
 	return
 }
 
-// scanEvents is the iterator form over the read store under pred, for
-// the forwarder's backstop.
-func (inst *Recorder) scanEvents(ctx context.Context, pred string) (seq iter.Seq2[*TrailEntity, error]) {
-	return func(yield func(*TrailEntity, error) bool) {
-		if inst == nil {
-			return
-		}
-		inst.readMu.Lock()
-		defer inst.readMu.Unlock()
-		if inst.read == nil {
-			return
-		}
-		for ent, serr := range inst.read.ScanAuditEvent(ctx, recordstore.ScanOpts{ExtraPredicate: pred}) {
-			if !yield(ent, serr) {
-				return
-			}
-		}
+// ForwardWindow is the backstop (ADR-0296 §SD6), the shared writer's
+// (ADR-0330 §SD7): it reads the audit events with a timestamp in [from,
+// to), each row once, oldest first, and hands them to the forwarder in
+// batches of at most page rows, on the caller's goroutine, skipping ids
+// the prompt path forwarded lately. The caller chooses the windows: each
+// should reach back past the longest outage the recorder holds rows
+// through, because a batch held through one lands with its old
+// timestamps. n is what was handed over. Nothing without a forwarder or a
+// store.
+func (inst *Recorder) ForwardWindow(ctx context.Context, from, to time.Time, page int) (n int, err error) {
+	if inst == nil {
+		return 0, nil
 	}
+	return inst.rec.ForwardWindow(ctx, from, to, page)
 }

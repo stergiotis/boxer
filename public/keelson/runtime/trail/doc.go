@@ -12,9 +12,12 @@
 // [Cause] (the model call that asked for a tool call — stated by the
 // coordinator).
 //
-// [Recorder] is the one place rows are built: it stamps the run, composes
-// natural keys, and owns the buffer and its flushes. Services hold the
-// recorder and call its verbs; none of them touches the store.
+// [Recorder] is the one place rows are built: it stamps the run and
+// composes natural keys, and writes through the shared writer of audit
+// events (package auditrec, ADR-0330) over the trail store's binding,
+// which owns the buffer, its flushes, the seals, write-ahead, the reads of
+// audit events and forwarding. Services hold the recorder and call its
+// verbs; none of them touches the store.
 // [Recorder.Event] is the one verb that takes a context: the call identity
 // on it (ADR-0295) supplies the row's origin, principal and purpose.
 //

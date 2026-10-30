@@ -560,6 +560,24 @@ read surface and its dependents at boot, off the boot path
 wherever `boxer.facts` is. `keelsonddl` stays the way to place them over
 another table.
 
+### 2026-10-30 — the recorder writes through the shared audit writer
+
+`trail.Recorder` is built on `auditrec.Recorder` over a binding of the
+trail store ([ADR-0330](./0330-a-shared-audit-recorder-below-the-runtime-one-sealed-writer-over-a-narrow-store-binding.md) §SD8).
+Its verbs keep their signatures; the buffer, the backlog and its cap
+(`MaxBacklogRows`), the seals and their anchoring, `Flush`, `WriteAhead`
+and `Close` are the shared writer's, and the trail's own flush loop is
+gone. §SD3 reads as before: `BOXER_TRAIL_REQUIRED` stays the trail's,
+mapped onto `auditrec.WithRequired`, and `Admit` and the refusal's text,
+which names the variable, are unchanged. A recorder flushes when asked
+and at `Close`, as it did, and also on an interval when built
+`WithFlushInterval`, as the host's is (one second), since the bus's
+requests it records are rows nothing asks to land (ADR-0296's Update of
+this date). A verb after `Close` returns `auditrec.ErrClosed` where it
+used to record nothing silently. A row whose
+canonical item cannot be computed is no longer buffered unsealed: the
+verb fails and the row counts as dropped.
+
 ## References
 
 - [ADR-0191](./0191-runtime-instance-attribution.md) — the `(run id, instance key)` decision this extends to the generated kinds.

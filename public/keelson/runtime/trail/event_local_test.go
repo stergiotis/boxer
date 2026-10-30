@@ -156,10 +156,10 @@ func (inst *outageExec) InsertArrow(ctx context.Context, table string, records [
 func TestGapRowReadsBack(t *testing.T) {
 	local, ctx := localFacts(t)
 	exec := &outageExec{ExecutorI: local}
-	rec := trail.NewRecorder(exec, "run-9", zerolog.Nop())
+	// A cap of one row: three batches of 30_000 rows would be slow. Each
+	// failed flush past the first drops the oldest held batch.
+	rec := trail.NewRecorder(exec, "run-9", zerolog.Nop(), trail.WithMaxBacklogForTest(1))
 	defer rec.Close()
-	// The cap is internal; three batches of 30_000 rows would be slow, so
-	// the window is asserted on what the counters and the row agree on.
 	exec.down.Store(true)
 	at := time.Unix(1_700_000_000, 0).UTC()
 	for i := range 3 {
@@ -167,12 +167,9 @@ func TestGapRowReadsBack(t *testing.T) {
 			Domain: "dmdm", Action: "vault-resolve", Outcome: trail.OutcomeOk, PrincipalBy: trail.PrincipalByNone, Subject: uint64(i), Retention: "disclosure"}))
 		require.Error(t, rec.Flush(ctx))
 	}
-	// Force the cap: drop everything held but the newest batch.
-	dropped := rec.DropHeldForTest(1)
-	require.Equal(t, 2, dropped)
+	require.EqualValues(t, 2, rec.Counts().Dropped, "the cap kept the newest batch")
 	exec.down.Store(false)
-	require.NoError(t, rec.Flush(ctx))
-	require.NoError(t, rec.Flush(ctx))
+	require.NoError(t, rec.Flush(ctx), "the newest batch and the gap row land together")
 
 	ents := scanEvents(t, rec, ctx, recordstore.ScanOpts{})
 	var gapRow *trail.AuditEvent

@@ -64,25 +64,6 @@ type GrantRow struct {
 	ExpiresAt   time.Time // zero == no TTL
 }
 
-// AuditRow is one audited bus request. Maps to a boxer.facts row with
-// KindAudit + AppRefPrefix(appId) + AuditRequestSubject / AuditResult /
-// AuditLatencyMs / AuditRequestSize / AuditResponseSize.
-//
-// InstanceKey is the window that made the request (ADR-0191 §SD4), recorded
-// by the bus client that captured it. It is the field this kind most needed:
-// audit is the highest-volume app-attributed kind, and with two windows of
-// one app open the app id alone cannot say which one spoke.
-type AuditRow struct {
-	AppId         app.AppIdT
-	InstanceKey   uint64
-	Subject       string
-	Result        string // "ok" | "denied" | "timeout" | "error"
-	LatencyMs     uint32
-	RequestSizeB  uint32
-	ResponseSizeB uint32
-	Ts            time.Time
-}
-
 // RuntimeStartRow records one process boot: a "this run started" event
 // captured at runtime entry by the carousel. Maps to a boxer.facts row
 // with KindRuntimeRun + the run_id-bearing MembRuntimeRun mixed-low-card
@@ -504,7 +485,6 @@ type AppTrailReaderI interface {
 // and are no longer read.
 type FactsStoreI interface {
 	WriteGrant(row GrantRow) (id uint64, err error)
-	WriteAudit(row AuditRow) (id uint64, err error)
 	WriteLog(row LogRow) (id uint64, err error)
 	// WriteLogs persists a batch of log rows. Implementations should land
 	// the whole batch in one transport operation (e.g. a single Arrow
@@ -522,7 +502,6 @@ type FactsStoreI interface {
 type InMemoryFactsStore struct {
 	mu         sync.RWMutex
 	grants     []GrantRow
-	audit      []AuditRow
 	logs       []LogRow
 	runs       []RuntimeStartRow
 	heartbeats []HeartbeatRow
@@ -543,14 +522,6 @@ func (inst *InMemoryFactsStore) WriteGrant(row GrantRow) (id uint64, err error) 
 	id = inst.nextId.Add(1)
 	inst.mu.Lock()
 	inst.grants = append(inst.grants, row)
-	inst.mu.Unlock()
-	return
-}
-
-func (inst *InMemoryFactsStore) WriteAudit(row AuditRow) (id uint64, err error) {
-	id = inst.nextId.Add(1)
-	inst.mu.Lock()
-	inst.audit = append(inst.audit, row)
 	inst.mu.Unlock()
 	return
 }
@@ -661,15 +632,6 @@ func (inst *InMemoryFactsStore) Grants() (rows []GrantRow) {
 	defer inst.mu.RUnlock()
 	rows = make([]GrantRow, len(inst.grants))
 	copy(rows, inst.grants)
-	return
-}
-
-// AuditRows returns a snapshot of all audit rows ordered by insertion.
-func (inst *InMemoryFactsStore) AuditRows() (rows []AuditRow) {
-	inst.mu.RLock()
-	defer inst.mu.RUnlock()
-	rows = make([]AuditRow, len(inst.audit))
-	copy(rows, inst.audit)
 	return
 }
 

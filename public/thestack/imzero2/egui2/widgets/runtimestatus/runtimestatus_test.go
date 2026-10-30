@@ -28,3 +28,16 @@ func TestRenderOneFrameHeadless(t *testing.T) {
 		assert.Equal(t, "", res.Clicked, "nothing is clicked without input")
 	})
 }
+
+// A trail that is not durable leads the row with its reason, plain and
+// clickable alike, and the words carry the state without the tone.
+func TestRenderTrailNotDurable(t *testing.T) {
+	t.Cleanup(scenetest.Install())
+	s := &Snapshot{RunIdShort: "standalone", FactsBackend: "mem", TrailNotDurable: "this host has no durable backend for boxer.facts"}
+	assert.NotPanics(t, func() {
+		_ = Render(Input{Snapshot: s})
+		res := Render(Input{Ids: c.NewWidgetIdStack(), ScopeKey: "t", Snapshot: s, Clickable: true})
+		assert.Equal(t, "", res.Clicked)
+	})
+	assert.Contains(t, trailWarning(s.TrailNotDurable), "audit trail not durable: this host has no durable backend for boxer.facts")
+}

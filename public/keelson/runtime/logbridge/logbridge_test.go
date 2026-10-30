@@ -197,7 +197,6 @@ type blockingStore struct {
 var _ factsstore.FactsStoreI = (*blockingStore)(nil)
 
 func (s *blockingStore) WriteGrant(_ factsstore.GrantRow) (uint64, error) { return 0, nil }
-func (s *blockingStore) WriteAudit(_ factsstore.AuditRow) (uint64, error) { return 0, nil }
 func (s *blockingStore) WriteRuntimeStart(_ factsstore.RuntimeStartRow) (uint64, error) {
 	return 0, nil
 }

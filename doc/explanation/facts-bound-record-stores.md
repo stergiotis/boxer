@@ -20,8 +20,9 @@ alternative exists or that the generated one is the direction of travel.
 ## Two ways to write the table, and which one to pick
 
 **`factsstore.FactsStoreI` / `chstore`** is the older lane. It carries one
-hand-written verb per kind — `WriteGrant`, `WriteAudit`, `WriteLog`, and
-the run-lifecycle family — each hand-encoding the leeway DML, and
+hand-written verb per kind — `WriteGrant`, `WriteLog`, and the run-lifecycle
+family (the bus-request `WriteAudit` retired onto the trail's `AuditEvent`
+on 2026-10-30, ADR-0296 Updates) — each hand-encoding the leeway DML, and
 hand-composed SQL for the read-backs. It is production-wired (the imzero2 host
 app, `apps/capinspector`) and it is not going away on a schedule. (App state
 used to be verbs here too — persist values, workingsets and column widths. It

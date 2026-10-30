@@ -16,7 +16,7 @@
 // # Why not FactsStoreI
 //
 // The runtime's store interface is a closed per-kind surface — WriteGrant,
-// WriteAudit, WriteWorkingset — with no generic write. Adding WriteCompetence
+// WriteLog, WriteLaunch — with no generic write. Adding WriteCompetence
 // to it would put a corpus concern into the keelson runtime and oblige every
 // implementer to carry two methods for a tool they do not use, so this package
 // encodes rows itself and hands the finished Arrow batches to a [RecordSinkI].

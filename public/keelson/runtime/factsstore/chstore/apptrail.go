@@ -1,7 +1,7 @@
 package chstore
 
 // The app center's cross-run reads (ADR-0260 §SD5): window sessions, the
-// newest log rows per app, and audited requests folded per subject — over
+// newest log rows per app, and the bus's requests folded per subject — over
 // every process the trail holds. [Store.LifecyclesByRun] and
 // [Store.ListRunEvents] refuse to scan without a run anchor, which is right
 // for a per-run timeline; these are the across-runs aggregates, each bounded
@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
+	busaudit "github.com/stergiotis/boxer/public/keelson/runtime/audit"
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsstore"
 	"github.com/stergiotis/boxer/public/keelson/runtime/vocab"
 	"github.com/stergiotis/boxer/public/observability/eh"
@@ -43,9 +44,10 @@ const (
 	atU64Value  = "`tv:u64Array:value:val:u64h:4:::0::data`"
 	atU64LR     = "`tv:u64Array:lr:lr:u64:1247:::0::data`"
 	atU64LRCard = "`tv:u64Array:lrcard:lrcard:u64:4E:::0::data`"
-	atU32Value  = "`tv:u32Array:value:val:u32h:4:::0::data`"
-	atU32LR     = "`tv:u32Array:lr:lr:u64:1247:::0::data`"
-	atU32LRCard = "`tv:u32Array:lrcard:lrcard:u64:4E:::0::data`"
+	atStrValue  = "`tv:stringArray:value:val:sh:4::8:0::data`"
+	atStrLen    = "`tv:stringArray:len:len:u64:4D:::0::data`"
+	atStrLR     = "`tv:stringArray:lr:lr:u64:1247:::0::data`"
+	atStrLRCard = "`tv:stringArray:lrcard:lrcard:u64:4E:::0::data`"
 	atIdCol     = "`id:id:u64:47::0:`"
 	atTsCol     = "`ts:ts:z64:47::0:`"
 )
@@ -253,14 +255,21 @@ func (inst *Store) AppAuditSummary(ctx context.Context, filter factsstore.AppTra
 	return
 }
 
-// composeAppAuditSql folds audit rows per (app, subject, result). The
-// writer records a latency only when it is positive, so a zero here is an
-// absent value and the mean is taken over the requests that carry one.
+// composeAppAuditSql folds the bus's requests per (app, subject, result):
+// the audit events of the bus domain (ADR-0296's Update of 2026-10-30),
+// the subject read from the event's references, the result its outcome,
+// the latency from its attributes. The writer records a latency only when it is
+// positive, so an absent one reads as zero and the mean is taken over the
+// requests that carry one. Rows of the retired audit kind are not read.
 func composeAppAuditSql(table string, filter factsstore.AppTrailFilter) string {
 	e := buildAppTrailExprs()
-	subject := pickLcrString(atSymValue, atSymLR, atSymLRCard, vocab.MembAuditRequestSubject.GetId().Value())
-	result := pickLcrString(atSymValue, atSymLR, atSymLRCard, vocab.MembAuditResult.GetId().Value())
-	latency := pickLcrNumeric(atU32Value, atU32LR, atU32LRCard, vocab.MembAuditLatencyMs.GetId().Value(), "0")
+	list := func(m uint64) string { return pickLcrList(atStrValue, atStrLen, atStrLR, atStrLRCard, m) }
+	where := appTrailWhere(vocab.MembKindAuditEvent.GetId().Value(), filter.Since) +
+		" AND " + symbolEquals(vocab.MembAuditEventDomain.GetId().Value(), busaudit.BusDomain) +
+		" AND " + symbolEquals(vocab.MembAuditEventAction.GetId().Value(), busaudit.BusActionRequest)
+	attr := func(key string) string {
+		return fmt.Sprintf("arrayElement(attr_values, indexOf(attr_keys, %s))", quoteSqlString(key))
+	}
 	return fmt.Sprintf(`
 SELECT
   app_id,
@@ -272,19 +281,42 @@ SELECT
   if(countIf(latency > 0) = 0, 0, round(avgIf(latency, latency > 0), 3)) AS mean_latency,
   max(latency) AS max_latency
 FROM (
-  SELECT %s AS app_id, %s AS subject, %s AS result, %s AS latency, %s AS ts_sec
-  FROM %s
-  WHERE %s
+  SELECT
+    app_id,
+    ts_sec,
+    arrayElement(ref_values, indexOf(ref_types, %s)) AS subject,
+    result,
+    toUInt32OrZero(%s) AS latency
+  FROM (
+    SELECT %s AS app_id, %s AS ts_sec, %s AS result, %s AS ref_types, %s AS ref_values, %s AS attr_keys, %s AS attr_values
+    FROM %s
+    WHERE %s
+  )
 )
 WHERE app_id != ''
 GROUP BY app_id, subject, result
 ORDER BY requests DESC, app_id ASC, subject ASC, result ASC
 LIMIT %d
 FORMAT TabSeparated`,
-		e.appId, subject, result, latency, e.tsSec,
-		table,
-		appTrailWhere(vocab.MembKindAudit.GetId().Value(), filter.Since),
+		quoteSqlString(busaudit.BusRefSubject), attr(busaudit.BusAttrLatencyMs),
+		e.appId, e.tsSec, pickLcrString(atSymValue, atSymLR, atSymLRCard, vocab.MembAuditEventOutcome.GetId().Value()),
+		list(vocab.MembAuditEventRefTypes.GetId().Value()), list(vocab.MembAuditEventRefValues.GetId().Value()),
+		list(vocab.MembAuditEventAttrKeys.GetId().Value()), list(vocab.MembAuditEventAttrValues.GetId().Value()),
+		table, where,
 		appTrailLimit(filter.Limit))
+}
+
+// pickLcrList is the values of the attribute under membershipId on an
+// array-valued section, read on the plain channel: the attribute that owns
+// the membership's position in the lr lane (what LW_RAGGED_PARENT_IDS
+// computes over lrcard), then its run of the flattened value array, located
+// by the per-attribute len column (what LW_LIST_BY_TAG_EQUAL does); [] when
+// the row has no such attribute.
+func pickLcrList(valueArr, lenArr, lrArr, lrCardArr string, membershipId uint64) (expr string) {
+	attr := fmt.Sprintf("arrayElement(arrayFlatten(arrayMap((i, c) -> arrayWithConstant(c, i), arrayEnumerate(%[1]s), %[1]s)), indexOf(%[2]s, %[3]d))",
+		lrCardArr, lrArr, membershipId)
+	return fmt.Sprintf("if(%[1]s > 0, arraySlice(%[2]s, arraySum(arraySlice(%[3]s, 1, %[1]s - 1)) + 1, arrayElement(%[3]s, %[1]s)), [])",
+		attr, valueArr, lenArr)
 }
 
 func parseAppAudit(raw []byte) (rows []factsstore.AppAuditRow, err error) {

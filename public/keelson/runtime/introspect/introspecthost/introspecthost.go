@@ -121,9 +121,10 @@ type Deps struct {
 	// by scope since ADR-0327 §SD7); nil registers an empty table.
 	Anchors anchor.StoreI
 	// Trail is the trail's recorder and Run this run's id, backing the
-	// trail's rows of keelson.evidence_checks (ADR-0327 §SD7); nil, or an
-	// empty run, leaves those rows out. Same typed-nil trap: assign only
-	// a recorder.
+	// trail's rows of keelson.evidence_checks (ADR-0327 §SD7); nil leaves
+	// those rows out, and an empty run, or a trail that is not durable,
+	// leaves only the row saying whether it is. Same typed-nil trap: assign
+	// only a recorder.
 	Trail SealVerifierI
 	Run   string
 	// AgentRuns is the run journal's store, backing keelson.agent_runs and
