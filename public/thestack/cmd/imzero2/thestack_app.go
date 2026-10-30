@@ -6,6 +6,7 @@ import (
 	"slices"
 
 	"github.com/rs/zerolog/log"
+	watchbillcli "github.com/stergiotis/boxer/public/app/commands/watchbill"
 	"github.com/stergiotis/boxer/public/dev"
 	"github.com/stergiotis/boxer/public/keelson/runtime/logbridge"
 	"github.com/stergiotis/boxer/public/keelson/runtime/loghost"
@@ -66,6 +67,9 @@ func mainC() (exitCode int) {
 				},
 			},
 			observability.NewCliCommand(),
+			// The job child of ADR-0344 §SD4 is this binary running
+			// `watchbill run --job <id>`; the verb lives here for that.
+			watchbillcli.NewCliCommand(),
 		},
 		Before: logging.Apply,
 		After: func(ctx context.Context, cmd *cli.Command) error {

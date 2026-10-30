@@ -66,12 +66,14 @@ func timeLit(t time.Time) (lit string) {
 // QueueSQL reads the ids of the jobs a worker may take now, oldest-first
 // within priority (ADR-0223 §SD2): queued, due, of one of the kinds and on
 // one of the queues, at most limit. Kinds is the worker's handler set and
-// queues the set it drains (ADR-0234 §SD3); empty means every one.
+// queues the set it drains (ADR-0234 §SD3); empty means every one. The
+// reserved lane is never read (ADR-0344 §SD3), whatever queues names.
 func QueueSQL(layout Layout, kinds []string, queues []string, now time.Time, limit int) (sql string) {
 	var sb strings.Builder
 	sb.WriteString("SELECT " + JobColKey + " FROM " + layout.JobTable() +
 		" WHERE " + elem("jobState") + " = " + strLit(StateQueued) +
-		" AND " + elem("jobRunAfter") + " <= " + timeLit(now))
+		" AND " + elem("jobRunAfter") + " <= " + timeLit(now) +
+		" AND " + elem("jobQueue") + " != " + strLit(QueueLane))
 	sb.WriteString(inClause("jobKind", kinds))
 	sb.WriteString(inClause("jobQueue", queues))
 	sb.WriteString(" ORDER BY " + elem("jobPriority") + " ASC, " + elem("jobRunAfter") + " ASC, " + JobColOrder + " ASC")

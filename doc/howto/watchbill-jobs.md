@@ -125,6 +125,23 @@ only the queues you name, or every queue when you name none.
 ./boxer.sh watchbill run --queue bulk --max-workers 4
 ```
 
+With `--job <id>` the same verb claims that one job for this run, runs it,
+and exits — the body of the job child ADR-0344 describes, and the only way
+a row on the reserved `agent-lane` queue runs. No worker's poll reads that
+queue. A host with `KEELSON_WATCHBILL_ISOLATE_AGENT_JOBS=true` routes every
+attested agent-caused enqueue there and starts one child of its own
+executable per row, `watchbill run --job <id>`, at most
+`KEELSON_WATCHBILL_LANE_CHILDREN` at once; the child's log lines arrive in
+the host's log under the child's run id, the job stays a task in the task
+monitor, and its cancel button reaches the child. A lost claim exits at
+once, cancels are honoured at the poll interval while the job runs. The
+host binary must carry this `watchbill` command for its children to run
+it; the `imzero2` binary does.
+
+```sh
+./boxer.sh watchbill run --job <id>
+```
+
 ## 4. Watch it
 
 - **Manage** — the Watchbill window (`apps/watchbill`): the queue across

@@ -80,8 +80,9 @@ func open(ctx context.Context, cmd *cli.Command) (store *watchbill.SqlStore, err
 func newRunCommand() *cli.Command {
 	return &cli.Command{
 		Name:  "run",
-		Usage: "stand a watch: drain the queue with this binary's handlers until interrupted",
+		Usage: "stand a watch: drain the queue with this binary's handlers until interrupted; with --job, claim that one job, run it and exit",
 		Flags: []cli.Flag{
+			&cli.StringFlag{Name: "job", Usage: "claim this job id, run it, exit (ADR-0344); the only way a job on the reserved lane runs"},
 			&cli.IntFlag{Name: "max-workers", Value: watchbill.DefaultMaxWorkers, Usage: "runs in flight per kind"},
 			&cli.DurationFlag{Name: "poll", Usage: "queue read interval (default: $KEELSON_WATCHBILL_POLL)"},
 			&cli.StringSliceFlag{Name: "queue", Usage: "drain only these queues (repeatable; default: every queue)"},
@@ -142,6 +143,16 @@ func newRunCommand() *cli.Command {
 			worker, err := watchbill.New(cfg)
 			if err != nil {
 				return
+			}
+			if jobId := cmd.String("job"); jobId != "" {
+				// One job, this run: the child of ADR-0344 §SD4, or an
+				// operator running a lane row by hand.
+				ran, rerr := worker.RunJob(ctx, jobId)
+				if rerr != nil {
+					return rerr
+				}
+				logger.Info().Str("job", jobId).Bool("ran", ran).Bool("heartbeat", isCh).Msg("watchbill: single job run finished")
+				return nil
 			}
 			if err = worker.Start(ctx); err != nil {
 				return

@@ -41,7 +41,12 @@ type Config struct {
 	MaxWorkers int
 	// Queues is the set this worker drains (ADR-0234 §SD3); nil is every
 	// queue, which is what a worker drained before queues meant anything.
+	// The reserved lane (watchbillstore.QueueLane) is never among them.
 	Queues []string
+	// IsolateAgentJobs routes an attested agent-caused enqueue this
+	// worker's service receives into the reserved lane (ADR-0344 §SD3)
+	// instead of the queue the request named.
+	IsolateAgentJobs bool
 	// Poll, AbandonAfter and Keep default to the environment's.
 	Poll         time.Duration
 	AbandonAfter time.Duration
@@ -157,8 +162,69 @@ func (inst *Worker) Start(ctx context.Context) (err error) {
 			inst.log.Warn().Err(perr).Msg("watchbill: presence not declared")
 		}
 	}
+	if inst.cfg.IsolateAgentJobs {
+		inst.log.Info().Msg("watchbill: agent-caused jobs are routed into the reserved lane, for the lane coordinator's children (ADR-0344 §SD3)")
+	}
 	go inst.loop(ctx)
 	return
+}
+
+// RunJob claims the one job id names for this run and, when the claim is
+// won, runs it to its transition and returns; it is the body of
+// `watchbill run --job <id>` (ADR-0344 §SD4). It polls nothing else:
+// cancels are honoured at the poll interval while the job runs, nothing is
+// swept or expired, and the reserved lane is reachable here and nowhere
+// else. A lost claim — the row is not queued, not due, or another run took
+// it — returns ran false and no error. The worker must not be started.
+func (inst *Worker) RunJob(ctx context.Context, id string) (ran bool, err error) {
+	if inst.cancel != nil {
+		return false, eh.Errorf("watchbill: RunJob on a started worker")
+	}
+	now := inst.now().UTC()
+	job, won, err := inst.cfg.Store.Claim(ctx, id, inst.cfg.RunId, now)
+	if err != nil {
+		return false, eh.Errorf("claim %s: %w", id, err)
+	}
+	if !won {
+		inst.log.Info().Str("id", id).Msg("watchbill: claim lost; nothing to run")
+		return false, nil
+	}
+	if _, ok := inst.handlers.Lookup(job.Kind); !ok {
+		// start would settle it failed; say so before the row changes.
+		inst.log.Warn().Str("id", id).Str("kind", job.Kind).Msg("watchbill: no handler for the claimed kind in this binary")
+	}
+	if inst.cfg.Presence != nil {
+		if perr := inst.cfg.Presence.Started(ctx, inst.Status()); perr != nil {
+			inst.log.Warn().Err(perr).Msg("watchbill: presence not declared")
+		}
+		defer func() {
+			if perr := inst.cfg.Presence.Stopped(context.Background(), inst.Status()); perr != nil {
+				inst.log.Warn().Err(perr).Msg("watchbill: presence stop not declared")
+			}
+		}()
+	}
+	var wg sync.WaitGroup
+	inst.start(ctx, job, now, &wg)
+	finished := make(chan struct{})
+	go func() { wg.Wait(); close(finished) }()
+	ticker := time.NewTicker(inst.cfg.Poll)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-finished:
+			return true, nil
+		case <-ticker.C:
+			if herr := inst.honourCancels(ctx); herr != nil && ctx.Err() == nil {
+				inst.log.Warn().Err(herr).Msg("watchbill: cancel read")
+			}
+		case <-ctx.Done():
+			// The caller is stopping: the run sees its context end and
+			// leaves its row for the sweep, as a stopped worker's does.
+			inst.stopping.Store(true)
+			<-finished
+			return true, nil
+		}
+	}
 }
 
 // Stop ends the loop, cancels every run in flight and waits for them to

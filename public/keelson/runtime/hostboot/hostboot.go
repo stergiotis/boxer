@@ -62,6 +62,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/topo"
 	"github.com/stergiotis/boxer/public/keelson/runtime/trail"
 	"github.com/stergiotis/boxer/public/keelson/runtime/watchbill"
+	"github.com/stergiotis/boxer/public/keelson/runtime/watchbill/lane"
 	"github.com/stergiotis/boxer/public/keelson/runtime/watchbill/watchbillstore"
 	"github.com/stergiotis/boxer/public/keelson/runtime/windowhost"
 	"github.com/stergiotis/boxer/public/observability/coverage"
@@ -311,8 +312,11 @@ type Runtime struct {
 	// WatchbillPresence is the worker's declaration on the facts store
 	// (ADR-0237) and WatchbillLiveness the heartbeat reader behind the
 	// sweep; nil where the facts store reads no heartbeats.
-	Watchbill         *watchbill.Worker
-	WatchbillStore    *watchbill.SqlStore
+	Watchbill      *watchbill.Worker
+	WatchbillStore *watchbill.SqlStore
+	// WatchbillLane runs agent-caused jobs in children of this executable
+	// (ADR-0344 §SD4); nil unless KEELSON_WATCHBILL_ISOLATE_AGENT_JOBS.
+	WatchbillLane     *lane.Coordinator
 	WatchbillPresence *watchbill.Presence
 	WatchbillLiveness watchbill.LivenessI
 	// Introspect is the shared introspection registry (populated whether or
@@ -1044,6 +1048,9 @@ func (rt *Runtime) bootAgent() {
 	if rt.Watchbill != nil {
 		rt.Watchbill.SetNotices(jobNotices{n: cfg.Attention.Notices})
 	}
+	if rt.WatchbillLane != nil {
+		rt.WatchbillLane.SetNotices(jobNotices{n: cfg.Attention.Notices})
+	}
 	if qs, qerr := attention.NewBusService(rt.Bus, cfg.Attention, logger); qerr != nil {
 		logger.Warn().Err(qerr).Msg("attention: question service start failed; apps' questions stay in their windows")
 	} else {
@@ -1376,7 +1383,8 @@ func (rt *Runtime) bootWatchbill(ctx context.Context) {
 	store := watchbill.NewSqlStore(rt.PersistExec, layout)
 	cfg := watchbill.Config{
 		Store: store, RunId: rt.RunInfo.RunId, Log: logger,
-		Bus: rt.Bus.NewClient(watchbill.WorkerAppId, watchbill.WorkerCaps()),
+		Bus:              rt.Bus.NewClient(watchbill.WorkerAppId, watchbill.WorkerCaps()),
+		IsolateAgentJobs: watchbill.IsolateAgentJobs.Get(),
 	}
 	if l := watchbill.NewRunEventLiveness(rt.Facts); l != nil {
 		cfg.Liveness = l
@@ -1410,6 +1418,39 @@ func (rt *Runtime) bootWatchbill(ctx context.Context) {
 		worker.Stop()
 		store.Close()
 	})
+	if cfg.IsolateAgentJobs {
+		rt.bootWatchbillLane(store)
+	}
+}
+
+// bootWatchbillLane starts the lane coordinator (ADR-0344 §SD4): the
+// enqueue service routes attested agent-caused jobs onto the reserved
+// queue, and the coordinator runs each in a child of this executable,
+// `watchbill run --job <id>`, so the host binary must carry the watchbill
+// CLI command. Failure to start is logged; lane rows then wait for an
+// operator's `watchbill run --job`.
+func (rt *Runtime) bootWatchbillLane(store *watchbill.SqlStore) {
+	logger := rt.opts.Log
+	exe, err := os.Executable()
+	if err != nil {
+		logger.Warn().Err(err).Msg("watchbill lane: this executable's path is unknown; the coordinator is not started")
+		return
+	}
+	coord, err := lane.New(lane.Config{
+		Store: store, RunId: rt.RunInfo.RunId, Log: logger,
+		Launcher: lane.ExecLauncher{Path: exe, Log: logger},
+		Bus:      rt.Bus.NewClient(lane.AppId, lane.Caps()),
+	})
+	if err != nil {
+		logger.Warn().Err(err).Msg("watchbill lane: coordinator construction failed")
+		return
+	}
+	if err = coord.Start(context.Background()); err != nil {
+		logger.Warn().Err(err).Msg("watchbill lane: coordinator start failed")
+		return
+	}
+	rt.WatchbillLane = coord
+	rt.cleanups = append(rt.cleanups, coord.Stop)
 }
 
 // stateStoreFor is the workingset and column-width store over the persist

@@ -136,6 +136,14 @@ func (inst *Worker) opEnqueue(ctx context.Context, msg *app.Msg, req watchbillre
 	if req.RunAfterMs > 0 {
 		r.RunAfter = time.UnixMilli(req.RunAfterMs).UTC()
 	}
+	switch {
+	case r.Queue == watchbillstore.QueueLane && obo == nil:
+		// The lane is the host's to route into; a request cannot park a
+		// job where no poll will find it (ADR-0344 §SD3).
+		return reply, eh.Errorf("watchbill: the reserved lane is not a queue a request may name")
+	case obo != nil && inst.cfg.IsolateAgentJobs:
+		r.Queue = watchbillstore.QueueLane
+	}
 	if r.Backoff != "" && r.Backoff != watchbillstore.BackoffNone && r.Backoff != watchbillstore.BackoffLinear && r.Backoff != watchbillstore.BackoffExponential {
 		return reply, eh.Errorf("watchbill: unknown backoff class %q", r.Backoff) //boxer:lint disable=CS013 reason="an op handler's message becomes the reply's Reason string and is the only thing that crosses the bus; a CBOR field stays on the worker"
 	}

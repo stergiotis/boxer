@@ -34,13 +34,17 @@ func TestClaimSQL(t *testing.T) {
 
 func TestQueueSQL(t *testing.T) {
 	sql := QueueSQL(testLayout, []string{"a.b", "c"}, nil, testNow, 5)
-	assert.Equal(t, `SELECT "id:id:s:4::0:" FROM wb.watchbill WHERE "tv:jobState:value:val:s:24:::0::data"[1] = 'queued' AND "tv:jobRunAfter:value:val:z64:4:::0::data"[1] <= fromUnixTimestamp64Nano(1788955200000000000) AND "tv:jobKind:value:val:s:24:::0::data"[1] IN ('a.b', 'c') ORDER BY "tv:jobPriority:value:val:u32:4:::0::data"[1] ASC, "tv:jobRunAfter:value:val:z64:4:::0::data"[1] ASC, "ts:ts:z64:47::0:" ASC LIMIT 5`, sql)
+	assert.Equal(t, `SELECT "id:id:s:4::0:" FROM wb.watchbill WHERE "tv:jobState:value:val:s:24:::0::data"[1] = 'queued' AND "tv:jobRunAfter:value:val:z64:4:::0::data"[1] <= fromUnixTimestamp64Nano(1788955200000000000) AND "tv:jobQueue:value:val:s:24:::0::data"[1] != 'agent-lane' AND "tv:jobKind:value:val:s:24:::0::data"[1] IN ('a.b', 'c') ORDER BY "tv:jobPriority:value:val:u32:4:::0::data"[1] ASC, "tv:jobRunAfter:value:val:z64:4:::0::data"[1] ASC, "ts:ts:z64:47::0:" ASC LIMIT 5`, sql)
 	assert.NotContains(t, QueueSQL(testLayout, nil, nil, testNow, 0), "IN (")
 	assert.NotContains(t, QueueSQL(testLayout, nil, nil, testNow, 0), "LIMIT")
 	// A worker that drains named queues (ADR-0234 §SD3) filters on the
 	// queue column the same way it filters on its kinds.
 	assert.Contains(t, QueueSQL(testLayout, []string{"a"}, []string{"default", "bulk"}, testNow, 0),
 		`AND "tv:jobKind:value:val:s:24:::0::data"[1] IN ('a') AND "tv:jobQueue:value:val:s:24:::0::data"[1] IN ('default', 'bulk') ORDER BY`)
+	// The reserved lane is excluded before any queue filter, so naming it
+	// among the queues still reads nothing from it (ADR-0344 §SD3).
+	assert.Contains(t, QueueSQL(testLayout, nil, []string{QueueLane}, testNow, 0),
+		`"tv:jobQueue:value:val:s:24:::0::data"[1] != 'agent-lane' AND "tv:jobQueue:value:val:s:24:::0::data"[1] IN ('agent-lane')`)
 }
 
 // The list predicate starts without a conjunction — the generated scan
