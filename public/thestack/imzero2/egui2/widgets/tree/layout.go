@@ -37,8 +37,9 @@ type Row struct {
 // the extended slice.
 //
 // Pass dst as a retained slice's dst[:0] to reuse its backing array across
-// frames; the row count is bounded by the node count, so a host that flattens
-// every frame settles on one allocation.
+// frames; the row count is bounded by the node count. The working memory of
+// the walk lives on st, so a host that flattens every frame through the same
+// State stops allocating once it has seen its largest tree.
 //
 // Roots appear in input order, and so do siblings. No ordering of t itself is
 // required — a parent may appear after its child — because the child lists are
@@ -56,7 +57,11 @@ type Row struct {
 // that would otherwise produce a plausible-looking tree missing arbitrary
 // subtrees, or hang the walk.
 func Flatten(t Tree, st *State, dst []Row) ([]Row, error) {
-	if err := t.Validate(); err != nil {
+	sc := &flattenScratch{}
+	if st != nil {
+		sc = &st.scratch
+	}
+	if err := t.validate(sc); err != nil {
 		return dst, err
 	}
 	if st != nil {
@@ -74,7 +79,7 @@ func Flatten(t Tree, st *State, dst []Row) ([]Row, error) {
 	//
 	// Roots are counted under a virtual slot at index n, so the same three
 	// passes cover them and the root scan below is a run like any other.
-	starts := make([]int32, n+2)
+	starts := zeroedInt32(&sc.starts, n+2)
 	for i := range n {
 		p := t.Parents[i]
 		if p == -1 {
@@ -85,8 +90,8 @@ func Flatten(t Tree, st *State, dst []Row) ([]Row, error) {
 	for i := 1; i < len(starts); i++ {
 		starts[i] += starts[i-1]
 	}
-	kids := make([]int32, n)
-	fill := make([]int32, n+1)
+	kids := zeroedInt32(&sc.kids, n)
+	fill := zeroedInt32(&sc.fill, n+1)
 	copy(fill, starts[:n+1])
 	for i := range n {
 		p := t.Parents[i]
@@ -100,18 +105,13 @@ func Flatten(t Tree, st *State, dst []Row) ([]Row, error) {
 	// Explicit stack, not recursion: depth is bounded only by the node count,
 	// and a 20k-node degenerate chain — a recursive CTE that returned a list —
 	// would blow the goroutine stack on a widget doing nothing unusual.
-	type frame struct {
-		node  int32
-		depth int32
-		last  bool
-	}
-	stack := make([]frame, 0, 32)
+	stack := sc.stack[:0]
 
 	// Push the roots in reverse so the first root is popped first; same trick
 	// for children below.
 	rootBegin, rootEnd := starts[n], starts[n+1]
 	for i := rootEnd - 1; i >= rootBegin; i-- {
-		stack = append(stack, frame{node: kids[i], depth: 0, last: i == rootEnd-1})
+		stack = append(stack, flattenFrame{node: kids[i], depth: 0, last: i == rootEnd-1})
 	}
 
 	for len(stack) > 0 {
@@ -133,10 +133,41 @@ func Flatten(t Tree, st *State, dst []Row) ([]Row, error) {
 			continue
 		}
 		for i := end - 1; i >= begin; i-- {
-			stack = append(stack, frame{node: kids[i], depth: f.depth + 1, last: i == end-1})
+			stack = append(stack, flattenFrame{node: kids[i], depth: f.depth + 1, last: i == end-1})
 		}
 	}
+	sc.stack = stack[:0]
 	return dst, nil
+}
+
+// flattenFrame is one pending node of Flatten's depth-first walk.
+type flattenFrame struct {
+	node  int32
+	depth int32
+	last  bool
+}
+
+// flattenScratch is the working memory of one Flatten and of the validation
+// it runs first. A State carries one so that repeated flattens reuse it.
+type flattenScratch struct {
+	starts   []int32
+	kids     []int32
+	fill     []int32
+	stack    []flattenFrame
+	grounded []bool
+	path     []int32
+}
+
+// zeroedInt32 returns *buf resized to n and cleared, growing it only when its
+// capacity is short, and stores the result back in *buf.
+func zeroedInt32(buf *[]int32, n int) []int32 {
+	if cap(*buf) < n {
+		*buf = make([]int32, n)
+		return *buf
+	}
+	*buf = (*buf)[:n]
+	clear(*buf)
+	return *buf
 }
 
 // RowOf returns the index into rows of the row showing node, or -1 when that
