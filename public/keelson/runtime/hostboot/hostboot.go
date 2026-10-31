@@ -967,7 +967,8 @@ func (rt *Runtime) bootWindowHost() (err error) {
 // bootSysmetrics puts the system-metrics plane (ADR-0090) on the host bus:
 // bridged from NATS when IMZERO2_SYSMETRICS_NATS_URL is set (an external
 // sysmetricsd reads /proc in its own sandbox), otherwise a co-located
-// scraper. Process-lifetime; failures leave the metric panels empty.
+// scraper that samples only while a subscription wants its bundles.
+// Process-lifetime; failures leave the metric panels empty.
 func (rt *Runtime) bootSysmetrics() {
 	logger := rt.opts.Log
 	metricPub := rt.Bus.NewClient(sysmetricsbus.ServiceAppId, []app.SubjectFilter{
@@ -987,9 +988,18 @@ func (rt *Runtime) bootSysmetrics() {
 		logger.Info().Str("url", natsURL).Msg("hostboot: bridging system metrics from NATS onto the host bus")
 		return
 	}
-	if _, serr := sysmscrape.StartScraper(context.Background(), metricPub, sysmetricsbus.DefaultHostToken(), sysmetricsInterval, logger); serr != nil {
+	subject := sysmetricsbus.BundleSubject(sysmetricsbus.DefaultHostToken())
+	demand := func() bool { return rt.Bus.HasSubscriber(subject) }
+	if _, serr := sysmscrape.StartScraperWithDemand(context.Background(), metricPub, sysmetricsbus.DefaultHostToken(), sysmetricsInterval, demand, logger); serr != nil {
 		logger.Warn().Err(serr).Msg("hostboot: sysmetrics scraper unavailable; metric panels will be empty")
 	}
+}
+
+// observesTopology reports whether the deployment declares a topology for
+// this host to observe: the process carries a component mark, or a metric
+// plane is bridged from NATS. A run from a shell has neither.
+func observesTopology() bool {
+	return topo.Self() != "" || sysmetricsbus.NatsURL.Get() != ""
 }
 
 // bootAgent starts the app operations service (ADR-0269) once the window
@@ -1191,6 +1201,7 @@ func (rt *Runtime) bootIntrospect() {
 		WindowHost:       rt.Host,
 		Bus:              rt.Bus,
 		ChlocalAvailable: rt.ChLocal != nil,
+		ObserveTopology:  observesTopology(),
 		QueryStarted:     func() { rt.KeelsonQuery = true },
 		Registry:         rt.Introspect,
 		Facts:            rt.Facts,

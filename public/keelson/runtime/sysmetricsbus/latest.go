@@ -72,8 +72,12 @@ func StartLatestHolder(opts LatestHolderOptions) (inst *LatestHolder, err error)
 
 // Hosts returns every host's latest snapshot, sorted by host token —
 // the stable enumeration the table providers flatten. Empty (not nil
-// semantics — just zero rows downstream) until a first bundle arrives.
+// semantics — just zero rows downstream) until a first bundle arrives. A nil
+// holder has no hosts.
 func (inst *LatestHolder) Hosts() (out []HostSnapshot) {
+	if inst == nil {
+		return
+	}
 	entries := inst.inner.Entries()
 	out = make([]HostSnapshot, 0, len(entries))
 	for _, e := range entries {
@@ -82,8 +86,11 @@ func (inst *LatestHolder) Hosts() (out []HostSnapshot) {
 	return
 }
 
-// Close unsubscribes. Safe to call more than once.
+// Close unsubscribes. Safe to call more than once, and on a nil holder.
 func (inst *LatestHolder) Close() (err error) {
+	if inst == nil {
+		return
+	}
 	err = inst.inner.Close()
 	return
 }

@@ -34,14 +34,20 @@ type BundleSampler interface {
 // owns the metric source (a [BundleSampler]), ticks at its configured cadence,
 // encodes each BundleSnapshot, and publishes it. It is the sole sampler — the
 // dataflow is one way, so there is no path from a consumer back here, and the
-// cadence is fixed at construction.
+// cadence is fixed at construction. With a demand probe it skips the ticks on
+// which no one would receive the bundle.
 type Producer struct {
 	bundle   BundleSampler
 	bus      app.BusI
 	subject  string
 	codec    Codec
 	interval time.Duration
+	demand   func() bool
 	log      zerolog.Logger
+
+	// idle is true after a tick skipped for lack of demand: the next
+	// sample's rates would span the whole pause, so it only primes.
+	idle bool
 
 	cancel context.CancelFunc
 	done   chan struct{}
@@ -55,7 +61,11 @@ type ProducerOptions struct {
 	Subject  string
 	Codec    Codec
 	Interval time.Duration
-	Log      zerolog.Logger
+	// Demand, when set, is consulted before every tick; while it answers
+	// false the producer samples nothing. It must be cheap and safe to call
+	// from the producer's goroutine. nil samples on every tick.
+	Demand func() bool
+	Log    zerolog.Logger
 }
 
 // NewProducer validates opts and returns a stopped Producer; call Start to
@@ -86,6 +96,7 @@ func NewProducer(opts ProducerOptions) (inst *Producer, err error) {
 		subject:  opts.Subject,
 		codec:    opts.Codec,
 		interval: clampInterval(opts.Interval),
+		demand:   opts.Demand,
 		log:      opts.Log,
 	}
 	return
@@ -117,12 +128,28 @@ func (inst *Producer) loop(ctx context.Context) {
 	}
 }
 
+// tick samples and publishes one bundle. Under a demand probe it samples
+// nothing while there is no demand, and when demand returns after a pause it
+// samples once without publishing, so that published rates span one interval
+// rather than the pause.
 func (inst *Producer) tick(ctx context.Context) {
+	priming := false
+	if inst.demand != nil {
+		if !inst.demand() {
+			inst.idle = true
+			return
+		}
+		priming = inst.idle
+	}
 	snap, err := inst.bundle.Sample(ctx)
 	if err != nil {
 		if ctx.Err() == nil {
 			inst.log.Warn().Err(err).Msg("sysmetricsbus: bundle sample error")
 		}
+		return
+	}
+	inst.idle = false
+	if priming {
 		return
 	}
 	payload, err := inst.codec.Encode(&snap)

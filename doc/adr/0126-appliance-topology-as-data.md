@@ -388,6 +388,17 @@ Nothing in this ADR's own surface changes: the marking contract, the
 collectors and the `keelson.*` tables are untouched, and the tee reads the
 plane they already publish.
 
+### 2026-10-31 — SD5's host-level consumer runs only where the deployment declares a topology
+
+[ADR-0349](./0349-observed-topology-by-deployment-and-a-scraper-that-samples-on-demand.md)
+(proposed) narrows SD5. The tables stay registered on every host, but the
+process-lifetime consumer that feeds their observed rows starts only when the
+process carries a component mark or a metric plane is bridged from NATS. On
+a host with neither — a desktop or development run, a downstream host with no
+declared components, an appliance image — `procs` and `sockets` are empty and
+the graph projection carries declared rows only. The showcase box's units
+carry the mark (SD2), so it is unaffected.
+
 ## References
 
 - [ADR-0184](./0184-sysmetrics-persistence-tee.md) — the ADR-0090 P5 tee that

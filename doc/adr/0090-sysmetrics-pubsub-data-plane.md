@@ -224,6 +224,17 @@ What moved and what did not:
 §SD1's per-domain subjects remain deferred here; the downstream plane uses
 them from the start, which the generic Consumer supports unchanged.
 
+### 2026-10-31 — The co-located scraper samples on demand
+
+[ADR-0349](./0349-observed-topology-by-deployment-and-a-scraper-that-samples-on-demand.md)
+(proposed) gives the co-located producer a demand probe: the host's
+in-process bus reports whether any subscription matches the bundle subject,
+and while none does the producer samples nothing. The first sample after a
+pause primes the collectors and is not published, so published rates never
+span the pause. The probe reads the host's own subscription table and nothing
+flows from a consumer to the producer, so §SD2's one-way rule stands.
+`sysmetricsd` keeps its fixed cadence.
+
 ## References
 
 - [ADR-0019](./0019-observability-sysmetrics-linux-collector.md) sysmetrics collector · [ADR-0020](./0020-imzero2-imztop-resource-monitor.md) imztop · [ADR-0024](./0024-imzero2-remote-access-browser-viewer.md) remote access · [ADR-0082](./0082-imzero2-remote-session-auth-tls.md) auth/TLS

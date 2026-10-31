@@ -174,3 +174,37 @@ func TestTopologyProviders_PlaneFed(t *testing.T) {
 	}
 	assert.True(t, foundListens, "proc-listens edge for the attributed socket")
 }
+
+// TestTopologyProviders_NilHolder: a host that observes no topology still
+// serves every table; procs and sockets are empty and the graph projection
+// carries declared rows only.
+func TestTopologyProviders_NilHolder(t *testing.T) {
+	reg := introspect.NewRegistry()
+	require.NoError(t, RegisterTopology(reg, nil))
+
+	for _, name := range []string{"procs", "sockets"} {
+		p, ok := reg.Lookup(name)
+		require.True(t, ok, name)
+		rec, err := p.Snapshot(introspect.AllColumns())
+		require.NoError(t, err)
+		require.EqualValues(t, 0, rec.NumRows(), name)
+		rec.Release()
+	}
+
+	nodes, ok := reg.Lookup("topology_nodes")
+	require.True(t, ok)
+	nrec, err := nodes.Snapshot(introspect.AllColumns())
+	require.NoError(t, err)
+	defer nrec.Release()
+	require.Positive(t, nrec.NumRows(), "declared rows remain")
+	origins := col(t, nrec, "origin").(*array.String)
+	for i := 0; i < int(nrec.NumRows()); i++ {
+		assert.NotEqual(t, "observed", origins.Value(i), "row %d", i)
+	}
+
+	edges, ok := reg.Lookup("topology_edges")
+	require.True(t, ok)
+	erec, err := edges.Snapshot(introspect.AllColumns())
+	require.NoError(t, err)
+	erec.Release()
+}
