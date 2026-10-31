@@ -348,7 +348,7 @@ type Runtime struct {
 	cleanups  []func()
 	reapOnce  sync.Once
 	closeOnce sync.Once
-	// showRunning opens the app center on its Running page, for the Window
+	// showRunning opens the app center on its Running tab, for the Window
 	// menu (ADR-0348); nil where the app center cannot be launched.
 	showRunning func() (err error)
 }
@@ -809,8 +809,8 @@ func (rt *Runtime) bootWindowHost() (err error) {
 	// neither package imports the other's types.
 	lchr := launcher.Default
 	lchr.SetHost(host)
-	// The app center's Running page raises and closes windows through the
-	// host itself, not over the bus (ADR-0348 §SD4).
+	// The app center's Running tab closes windows through the host itself,
+	// not over the bus (ADR-0348 §SD4).
 	appcenter.SetHost(host)
 	lchr.SetHelpApp(helphost.ManifestId)
 	// The detail pane's Inspect (ADR-0260 §SD1): the app center, opened on
@@ -818,7 +818,7 @@ func (rt *Runtime) bootWindowHost() (err error) {
 	// host built over a narrower registry shows no dead action.
 	// Nor where the launch limit (ADR-0272) refuses the app center.
 	// The Window menu's Running windows opens it on no app, which is its
-	// Running page (ADR-0348 §SD1).
+	// Running tab (ADR-0348 §SD1).
 	if _, ok := reg.LookupManifest(appcenter.AppId); ok && reg.Launchable(appcenter.AppId) {
 		openAppCenter := func(target app.AppIdT) (err error) {
 			cfg, err := buscodec.Encode(appcenterlaunch.AppCenterLaunch{At: time.Now().UTC(), AppId: string(target)})

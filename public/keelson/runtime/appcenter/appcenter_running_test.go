@@ -8,6 +8,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/recordtable"
 )
 
 // runningFixture is two open windows (keys 1 and 2), the loop, and four
@@ -68,7 +70,7 @@ func TestRefreshReadsRunningOnlyWhileShown(t *testing.T) {
 	w, f, tk := runningFixture()
 	fx := &fixtureReader{answers: map[string]func(dst any){
 		tableWindows: func(dst any) { *dst.(*windowCols) = w },
-		// frame_times answers the page's read and the Running page's alike.
+		// frame_times answers the page's read and the Running tab's alike.
 		tableFrameTimes: func(dst any) { *dst.(*frameCols) = f },
 		tableTasks: func(dst any) {
 			switch d := dst.(type) {
@@ -131,4 +133,64 @@ func TestListRunning(t *testing.T) {
 	many := runningView{rows: make([]runningRow, runningListed+1)}
 	assert.True(t, runningResult(many, time.Now()).Truncated)
 	assert.Len(t, runningResult(many, time.Now()).Windows, runningListed)
+}
+
+func TestRunningFilterMatchesWindowsAndTheirTasks(t *testing.T) {
+	w, f, tk := runningFixture()
+	v := assembleRunning(&w, &f, &tk)
+	keys := func(filter string) (out []uint64) {
+		ff := filterFold(filter)
+		for i := range v.rows {
+			if windowMatches(&v.rows[i], ff) {
+				out = append(out, v.rows[i].key)
+			}
+		}
+		return
+	}
+	assert.Equal(t, []uint64{2, 1, 3}, keys("  "), "an empty filter keeps every window")
+	assert.Equal(t, []uint64{1}, keys("PLAY"), "the app id or name, case ignored")
+	assert.Equal(t, []uint64{2}, keys("chat"))
+	assert.Equal(t, []uint64{1}, keys("query"), "a task's title finds its window")
+	assert.Empty(t, keys("nothing"))
+
+	assert.True(t, unownedMatches(&v.unowned[1], filterFold("write")), "a task's title")
+	assert.True(t, unownedMatches(&v.unowned[0], filterFold("svc")), "a task's kind")
+	assert.False(t, unownedMatches(&v.unowned[0], filterFold("play")))
+}
+
+// The grid draws the sort's order, filtered; a filter that admits nothing
+// draws nothing, not every row.
+func TestShownOrderFiltersTheSortOrder(t *testing.T) {
+	even := func(i int64) bool { return i%2 == 0 }
+	assert.Equal(t, []int64{0, 2}, shownOrder(nil, 4, even, nil), "record order")
+	assert.Equal(t, []int64{2, 0}, shownOrder([]int64{3, 2, 1, 0}, 4, even, nil), "the sort's order")
+	none := shownOrder(nil, 4, func(int64) bool { return false }, nil)
+	assert.NotNil(t, none)
+	assert.Empty(t, none)
+}
+
+// The record carries each column's sort key, row i being the view's row i,
+// and a window with no frames sorts below every sampled one.
+func TestRunningRecords(t *testing.T) {
+	w, f, tk := runningFixture()
+	v := assembleRunning(&w, &f, &tk)
+	var g runningGrids
+	defer g.release()
+	g.records(&running{view: v, read: time.Unix(1, 0)})
+	require.EqualValues(t, 3, g.windows.NumRows())
+	require.EqualValues(t, len(windowColumns), g.windows.NumCols())
+	assert.EqualValues(t, 2, g.unowned.NumRows())
+	p95 := slices.IndexFunc(windowColumns, func(col gridColumn[runningRow]) bool { return col.header == "p95" })
+	assert.Equal(t, "[9000 1200 -1]", g.windows.Column(p95).String())
+
+	first := g.windows
+	g.records(&running{view: v, read: time.Unix(1, 0)})
+	assert.Same(t, first, g.windows, "the same read keeps its record")
+	g.records(&running{view: v, read: time.Unix(2, 0)})
+	assert.NotSame(t, first, g.windows, "a new read rebuilds it")
+
+	var sort recordtable.SortState
+	sort.ClickedFrom(p95, true)
+	order := sort.OrderFor(g.windows, g.windows.NumRows())
+	assert.Equal(t, []int64{0, 1, 2}, order, "descending: chat, play, then the window with no frames")
 }

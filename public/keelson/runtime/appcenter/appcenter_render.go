@@ -34,13 +34,8 @@ func (inst *App) render() {
 		inst.renderStatus(snap)
 	}
 	if inst.view == viewRunning {
-		for range c.PanelCentralInside().KeepIter() {
-			// Both ways: the table is wider than a narrow window, and a tab
-			// that cannot scroll sideways makes its width the window's minimum.
-			for range c.ScrollArea().Vscroll(true).Hscroll(true).AutoShrink(false, false).KeepIter() {
-				inst.renderRunning(snap)
-			}
-		}
+		// The grids scroll themselves, both ways.
+		inst.renderRunningTab(snap)
 		return
 	}
 	for range c.PanelLeftInside(inst.ids.PrepareStr("apps")).Resizable(true).DefaultSize(leftWidth).KeepIter() {

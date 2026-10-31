@@ -12,14 +12,17 @@ scene:
 
 > **Status: draft — pre-human-review.** Not verified; do not cite as authoritative.
 
-# appcenter — the Running page
+# appcenter — the Running tab
 
 ADR-0348's Running tab, which the app center opens on: every open window
-of the host, its frame time against the render loop, and the tasks it owns. play opens beside it on a query that takes
-about twenty seconds, so the page reads play's window with its query run as
-its oldest task. The scene asserts that both windows are listed and that the
-task is attributed to play's row. Then it closes play from its row: Close
-asks first, naming the window, and the page lists the app center alone.
+of the host, its frame time against the render loop, and the tasks it owns.
+play opens beside it on a query that takes about twenty seconds, so the tab
+lists play's window with its query run among its tasks. The scene filters by
+the task's title, which leaves play's window alone, so the task is
+attributed to play's row; the app column is read rather than the task's, so
+column widths a person stored cannot move the anchor off screen. Then it
+closes what the filter shows: Close all asks first, naming the window, and
+the tab lists the app center alone.
 
 ```sql
 SELECT number FROM numbers(40) WHERE sleepEachRow(0.5) = 0 SETTINGS max_block_size = 1
@@ -27,12 +30,15 @@ SELECT number FROM numbers(40) WHERE sleepEachRow(0.5) = 0 SETTINGS max_block_si
 
 ```jsonl trace
 {"do":"wait","contains":"Refresh","role":"button","settleMs":500}
-{"do":"read","valueContains":"window(s).","role":"label","pattern":"^(?P<windows>\\d+) window\\(s\\)\\.","settleMs":2000}
+{"do":"read","valueContains":"window(s).","role":"label","pattern":"^\\d+ of (?P<windows>\\d+) window\\(s\\)\\.","settleMs":2000}
 {"do":"expect","of":"windows","min":2}
-{"do":"read","valueContains":"run the query, ","role":"label","pattern":"^(?P<oldest>run the query), ","comment":"play's query run, as its window's oldest task"}
 {"do":"capture","text":"appcenter-running","settleMs":500}
-{"do":"click","name":"\ue4f6 Close","role":"button","nth":0,"comment":"play's row, the slowest; Close asks first"}
-{"do":"click","contains":"SQL Playground","role":"button","comment":"the confirmation names the window, so a wrong row cannot pass"}
-{"do":"read","valueContains":"window(s).","role":"label","pattern":"^(?P<left>1) window\\(s\\)\\.","comment":"play's window went through its closing edge"}
+{"do":"type","id":415954472043999163,"text":"run the query","comment":"the filter, by a task's title; play's window has a text box too, so by id"}
+{"do":"read","valueContains":"window(s).","role":"label","pattern":"^(?P<shown>1) of \\d+ window\\(s\\)\\.","comment":"one window owns the query run"}
+{"do":"wait","name":"SQL playground","role":"button","comment":"and it is play's: the app column"}
+{"do":"click","name":"\ue4f6 Close 1 shown","role":"button"}
+{"do":"read","valueContains":"SQL Playground?","role":"label","pattern":"^Close \\S* ?(?P<named>SQL Playground)\\?$","comment":"the confirmation names the window, so a wrong one cannot pass"}
+{"do":"click","name":"\ue4f6 Close 1 window","role":"button"}
+{"do":"read","valueContains":"window(s).","role":"label","pattern":"^(?P<left>0) of 1 window\\(s\\)\\.","comment":"play's window went through its closing edge"}
 {"do":"capture","text":"appcenter-running-closed","settleMs":500}
 ```

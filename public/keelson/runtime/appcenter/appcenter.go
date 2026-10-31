@@ -109,18 +109,25 @@ type App struct {
 	view     viewE
 	selected string
 	filter   string
-	// The Running page's actions (appcenter_actions.go): the window whose
-	// Close waits for its confirmation, the windows closed and still listed,
-	// and the last action's refusal.
-	closeArmed uint64
-	closing    map[uint64]bool
-	actionNote string
+	// The Running tab (appcenter_running.go): its filter, and its two
+	// grids' state and records, rebuilt once per read.
+	runFilter string
+	running   runningGrids
+	// Close all (appcenter_actions.go): the windows its confirmation holds
+	// and the filter they were shown under, the windows closed and still
+	// listed, and this window's own key, which Close all closes last.
+	closeArmed       []uint64
+	closeArmedFilter string
+	closing          map[uint64]bool
+	selfKey          uint64
 
 	// Operations state (appcenter_ops.go, ADR-0345). frameCtx is the current
 	// frame's context, through which a row click routes as a gesture;
-	// filterH is the filter box, for telling the person is typing in it.
-	frameCtx app.FrameContextI
-	filterH  widgethandle.WidgetHandle
+	// filterH and runFilterH are the filter boxes, for telling the person
+	// is typing in one.
+	frameCtx   app.FrameContextI
+	filterH    widgethandle.WidgetHandle
+	runFilterH widgethandle.WidgetHandle
 
 	mu sync.Mutex
 	// want is the selection the poller reads for, and wantRunning whether
@@ -148,6 +155,7 @@ func (inst *App) Mount(ctx app.MountContextI) (err error) {
 	inst.ids = ctx.Ids()
 	inst.logger = ctx.Log()
 	inst.bus = ctx.Bus()
+	inst.selfKey = ctx.InstanceKey()
 	if inst.reader == nil {
 		// A test sets its own reader before Mount.
 		if r := newBusReader(inst.bus); r != nil {
@@ -178,12 +186,14 @@ func (inst *App) Unmount(ctx app.MountContextI) (err error) {
 		inst.cancelApp()
 	}
 	inst.wg.Wait()
+	inst.running.release()
 	return
 }
 
 func (inst *App) Frame(ctx app.FrameContextI) (err error) {
 	inst.density = styletokens.ActiveDensity()
 	inst.frameCtx = ctx
+	inst.ensureWidths(ctx)
 	inst.render()
 	return
 }

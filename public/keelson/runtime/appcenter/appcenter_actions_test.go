@@ -1,7 +1,6 @@
 package appcenter
 
 import (
-	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -10,17 +9,10 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/windowhost"
 )
 
-// fakeHost records what the Running page asked of the window host.
+// fakeHost records what the Running tab asked of the window host.
 type fakeHost struct {
-	raised   []windowhost.WindowKeyT
-	closed   []windowhost.WindowKeyT
-	reasons  []string
-	raiseErr error
-}
-
-func (inst *fakeHost) Raise(key windowhost.WindowKeyT) error {
-	inst.raised = append(inst.raised, key)
-	return inst.raiseErr
+	closed  []windowhost.WindowKeyT
+	reasons []string
 }
 
 func (inst *fakeHost) Close(key windowhost.WindowKeyT, reason string) {
@@ -37,52 +29,71 @@ func TestSetHost(t *testing.T) {
 	SetHost(h)
 	assert.Same(t, h, hostOf())
 	SetHost(nil)
-	assert.Nil(t, hostOf(), "without a host the page shows no actions")
+	assert.Nil(t, hostOf(), "without a host the tab shows no Close all")
 }
 
-func TestRaiseSaysWhyItWasRefused(t *testing.T) {
+// Close all closes the windows shown when it was armed, this window last,
+// and the rows say "closing" until a read no longer lists them.
+func TestCloseAllClosesWhatWasShownWhenArmed(t *testing.T) {
 	inst := newApp()
-	h := &fakeHost{}
-	inst.raiseWindow(h, 4)
-	assert.Equal(t, []windowhost.WindowKeyT{4}, h.raised)
-	assert.Empty(t, inst.actionNote)
-	h.raiseErr = errors.New("windowhost: no open window with this key")
-	inst.raiseWindow(h, 9)
-	assert.Contains(t, inst.actionNote, "no open window")
-	h.raiseErr = nil
-	inst.raiseWindow(h, 4)
-	assert.Empty(t, inst.actionNote, "the next action clears the note")
-}
-
-// Close asks first, closes the window it was armed for, and the row says
-// "closing" until a read no longer lists the window.
-func TestCloseIsArmedByKeyAndClosesThatWindow(t *testing.T) {
-	inst := newApp()
+	inst.selfKey = 3
 	h := &fakeHost{}
 	w, f, tk := runningFixture()
 	v := assembleRunning(&w, &f, &tk)
+	all := []int64{0, 1, 2}
 
-	inst.armClose(1)
+	keys := inst.closable(&v, []int64{2, 0, 1})
+	assert.Equal(t, []uint64{2, 1, 3}, keys, "the shown windows in the order shown, this window last")
+	assert.Equal(t, []uint64{3}, inst.closable(&v, []int64{2}), "this window alone is closable too")
+	assert.Equal(t, []uint64{2, 1}, inst.closable(&v, []int64{0, 1}), "a filter that hides this window leaves it open")
+	inst.armCloseAll(keys)
 	assert.Empty(t, h.closed, "arming closes nothing")
-	// A re-read reorders the rows; the confirmation stays with window 1.
-	v.rows[0], v.rows[1] = v.rows[1], v.rows[0]
-	inst.pruneClosing(&v)
-	assert.EqualValues(t, 1, inst.closeArmed)
+	assert.Equal(t, "Chat, SQL, Idle", armedNames(&v, inst.closeArmed))
 
-	inst.closeWindow(h, inst.closeArmed)
-	require.Equal(t, []windowhost.WindowKeyT{1}, h.closed)
-	assert.Equal(t, []string{closeReason}, h.reasons)
-	assert.Zero(t, inst.closeArmed)
+	inst.closeAll(h)
+	require.Equal(t, []windowhost.WindowKeyT{2, 1, 3}, h.closed)
+	assert.Equal(t, []string{closeReason, closeReason, closeReason}, h.reasons)
+	assert.Nil(t, inst.closeArmed)
 	assert.True(t, inst.closing[1])
+	assert.Empty(t, inst.closable(&v, all), "a closing window is not closed twice")
 
 	inst.pruneClosing(&v)
 	assert.True(t, inst.closing[1], "still listed: still closing")
-	w.Key, w.AppId, w.Display, w.Title, w.Kind, w.Active, w.AgentTasks = w.Key[1:], w.AppId[1:], w.Display[1:], w.Title[1:], w.Kind[1:], w.Active[1:], w.AgentTasks[1:]
-	v = assembleRunning(&w, &f, &tk)
-	inst.pruneClosing(&v)
-	assert.False(t, inst.closing[1], "gone from the read: forgotten")
+	gone := assembleRunning(&windowCols{}, &f, &tk)
+	inst.pruneClosing(&gone)
+	assert.Empty(t, inst.closing, "gone from the read: forgotten")
+}
 
-	inst.armClose(1)
+// A confirmation narrows to the windows still listed, and is dropped once
+// the filter moves or nothing it named is left.
+func TestCloseAllConfirmationIsHeldByKeyAndFilter(t *testing.T) {
+	inst := newApp()
+	w, f, tk := runningFixture()
+	v := assembleRunning(&w, &f, &tk)
+
+	inst.runFilter = "play"
+	inst.armCloseAll([]uint64{1, 2})
 	inst.pruneClosing(&v)
-	assert.Zero(t, inst.closeArmed, "a confirmation for a window that closed meanwhile is dropped")
+	assert.Equal(t, []uint64{1, 2}, inst.closeArmed)
+
+	only1 := assembleRunning(&windowCols{Key: []int64{1}, AppId: []string{"a/play"}, Display: []string{"Play"},
+		Title: []string{"SQL"}, Kind: []string{"app"}, Active: []bool{false}, AgentTasks: [][]string{nil}}, &f, &tk)
+	inst.pruneClosing(&only1)
+	assert.Equal(t, []uint64{1}, inst.closeArmed, "a window that closed meanwhile is dropped from it")
+	assert.Equal(t, "SQL", armedNames(&only1, inst.closeArmed))
+
+	inst.runFilter = "pla"
+	inst.pruneClosing(&only1)
+	assert.Nil(t, inst.closeArmed, "typing in the filter drops the confirmation")
+
+	inst.armCloseAll([]uint64{2})
+	inst.pruneClosing(&only1)
+	assert.Nil(t, inst.closeArmed, "nothing it named is left")
+}
+
+func TestArmedNamesNamesTheFirstFew(t *testing.T) {
+	v := runningView{rows: []runningRow{{key: 1, title: "a"}, {key: 2, title: "b"}, {key: 3, title: "c"}, {key: 4, title: "d"}, {key: 5, title: "e"}}}
+	assert.Equal(t, "e, d, c and 2 more", armedNames(&v, []uint64{5, 4, 3, 2, 1}))
+	assert.Equal(t, "Close 1 window", closeCount(1))
+	assert.Equal(t, "Close 4 windows", closeCount(4))
 }

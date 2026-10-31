@@ -56,7 +56,7 @@ type ChromeConfig struct {
 	// Requires Host != nil.
 	Launcher app.AppIdT
 	// ShowRunning, when non-nil, puts "Running windows" at the top of the
-	// Window menu: it opens the app center on its Running page, every open
+	// Window menu: it opens the app center on its Running tab, every open
 	// window with what it costs (ADR-0348). Host boot sets it where the app
 	// center can be launched. May be nil.
 	ShowRunning func() (err error)

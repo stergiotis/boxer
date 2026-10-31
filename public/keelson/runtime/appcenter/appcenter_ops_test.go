@@ -65,7 +65,7 @@ func TestOperationsCatalogRegisters(t *testing.T) {
 	m, ok := app.LookupManifest(manifest.Id)
 	require.True(t, ok)
 	require.NotNil(t, m.Operations, app.DefaultRegistry.OperationsDiagnostic(manifest.Id))
-	for _, name := range []string{opGetView, opSetView, opShowApp, opSetFilter, opListRunning} {
+	for _, name := range []string{opGetView, opSetView, opShowApp, opSetFilter, opSetRunningFilter, opListRunning} {
 		spec, found := m.Operations.Lookup(name)
 		require.True(t, found, name)
 		assert.True(t, spec.Agents, name)
@@ -136,6 +136,13 @@ func TestSetFilterAndTheView(t *testing.T) {
 	v, err = query[struct{}, View](t, inst, opGetView, struct{}{})
 	require.NoError(t, err)
 	assert.True(t, v.PageReadAt.IsZero(), "no page is open")
+
+	require.NoError(t, command(t, inst, opSetRunningFilter, SetRunningFilterArgs{Text: "play"}))
+	assert.Equal(t, "play", inst.runFilter)
+	v, err = query[struct{}, View](t, inst, opGetView, struct{}{})
+	require.NoError(t, err)
+	assert.Equal(t, "play", v.RunningFilter)
+	assert.Equal(t, "other", v.Filter, "the two filters are apart")
 
 	h := inst.Operations()
 	assert.True(t, h.Restore(resFilter, ""))

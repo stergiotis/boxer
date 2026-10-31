@@ -3,19 +3,14 @@ package appcenter
 import (
 	"cmp"
 	"context"
-	"fmt"
 	"slices"
 	"time"
-
-	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
-	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
-	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
-	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/badge"
 )
 
 // The Running tab (ADR-0348): every open window of this host, what its
 // Frame costs the render loop, and the tasks it owns, with the tasks no open
-// window owns beneath. Its tables are read only while it is shown.
+// window owns beneath. Its tables are read only while it is shown; this file
+// reads and joins them, appcenter_running_grid.go draws them.
 
 // tableWindows is keelson('windows'), served by providersgui beside
 // frame_times.
@@ -76,6 +71,8 @@ type runningRow struct {
 	tasks          int
 	oldestTitle    string
 	oldestCreateAt string
+	// taskTitles are its tasks' titles, which the filter matches.
+	taskTitles []string
 }
 
 // unownedTask is a task whose owner_instance_key names no open window: a
@@ -142,6 +139,7 @@ func assembleRunning(w *windowCols, f *frameCols, t *runTaskCols) (v runningView
 			row.oldestTitle, row.oldestCreateAt = t.Title[j], t.CreatedAt[j]
 		}
 		row.tasks++
+		row.taskTitles = append(row.taskTitles, t.Title[j])
 	}
 	slices.SortStableFunc(v.rows, func(a, b runningRow) int {
 		if a.sampled != b.sampled {
@@ -174,138 +172,4 @@ func rowName(row *runningRow) string {
 		return row.display
 	}
 	return shortApp(row.appId)
-}
-
-func (inst *App) renderRunning(snap snapshot) {
-	rn := &snap.running
-	weak("Every open window of this host, slowest first. Frame time is the window's Frame on the render goroutine, " +
-		"which every window shares; tasks are the ones the window registered with the task API, so the count is a lower bound. " +
-		"The apps share one process, so memory and CPU are not shown per window: imztop shows the process's.")
-	c.AddSpace(styletokens.PaddingInner(inst.density))
-	if rn.read.IsZero() {
-		c.Label("Reading…").Send()
-		return
-	}
-	v := &rn.view
-	if !inst.lensReady("running-windows", rn.windows.state, rn.windows.note, len(v.rows), "No window is open.") {
-		inst.renderUnowned(v)
-		return
-	}
-	if rn.frames.state != lensStateOk {
-		inst.lensReady("running-frames", rn.frames.state, rn.frames.note, 1, "")
-	}
-	if rn.tasks.state != lensStateOk {
-		inst.lensReady("running-tasks", rn.tasks.state, rn.tasks.note, 1, "")
-	}
-	head := fmt.Sprintf("%d window(s).", len(v.rows))
-	if v.loopP50Us > 0 {
-		head += " The render loop's median period is " + fmtUs(v.loopP50Us) + "."
-	}
-	c.Label(head).Send()
-	if inst.actionNote != "" {
-		badge.New(inst.ids.PrepareStr("action-note"), inst.actionNote).Tone(badge.ToneError).Variant(badge.VariantSoft).Send()
-	}
-	inst.pruneClosing(v)
-	// A host that wires none shows no actions (ADR-0348 §SD4).
-	h := hostOf()
-	headers := []string{"app", "window", "p50", "p95", "of loop", "messages", "tasks", "oldest task", "agent tasks"}
-	if h != nil {
-		headers = append(headers, "")
-	}
-	now := time.Now()
-	inst.grid("running-grid", headers, len(v.rows), func(j int) {
-		row := &v.rows[j]
-		for range c.HoverText(row.appId).KeepIter() {
-			if c.SelectableLabel(inst.ids.PrepareStr("app"), false, rowName(row)).SendResp().HasPrimaryClicked() {
-				// The app's own page under Apps, through the catalog (ADR-0345
-				// §SD3).
-				inst.selectGesture(row.appId)
-			}
-		}
-		title := row.title
-		if row.active {
-			title += "  (active)"
-		}
-		c.Label(title).Send()
-		if !row.sampled {
-			weak("no frames")
-			weak("")
-			weak("")
-			weak("")
-		} else {
-			mono(fmtUs(row.p50Us))
-			if row.p95Us >= slowFrameUs {
-				badge.New(inst.ids.PrepareStr("slow"), fmtUs(row.p95Us)).Tone(badge.ToneWarning).Variant(badge.VariantSoft).Size(badge.SizeSm).Send()
-			} else {
-				mono(fmtUs(row.p95Us))
-			}
-			if v.loopP50Us > 0 {
-				mono(fmt.Sprintf("%.0f%%", 100*float64(row.p50Us)/float64(v.loopP50Us)))
-			} else {
-				mono("—")
-			}
-			mono(fmt.Sprintf("%.0f", row.messages))
-		}
-		mono(fmt.Sprint(row.tasks))
-		if row.tasks > 0 {
-			c.Label(row.oldestTitle + ", " + ageOf(row.oldestCreateAt, now)).Send()
-		} else {
-			weak("—")
-		}
-		if len(row.agentTasks) > 0 {
-			mono(fmt.Sprint(len(row.agentTasks)))
-		} else {
-			weak("—")
-		}
-		if h != nil {
-			inst.renderActions(h, row)
-		}
-	})
-	inst.renderUnowned(v)
-}
-
-// renderActions is a row's Raise and Close. Close asks first, naming the
-// window, since it ends the window's work as its own close button does.
-func (inst *App) renderActions(h HostI, row *runningRow) {
-	for range c.HorizontalTop().KeepIter() {
-		switch {
-		case inst.closing[row.key]:
-			weak("closing…")
-		case inst.closeArmed == row.key:
-			if c.Button(inst.ids.PrepareStr("close-confirm"), c.Atoms().Text(icons.PhX+" Close "+row.title).Keep()).Small().SendResp().HasPrimaryClicked() {
-				inst.closeWindow(h, row.key)
-			}
-			if c.Button(inst.ids.PrepareStr("close-keep"), c.Atoms().Text("Keep").Keep()).Small().SendResp().HasPrimaryClicked() {
-				inst.closeArmed = 0
-			}
-		default:
-			if c.Button(inst.ids.PrepareStr("raise"), c.Atoms().Text(icons.PhArrowUp+" Raise").Keep()).Small().SendResp().HasPrimaryClicked() {
-				inst.raiseWindow(h, row.key)
-			}
-			if c.Button(inst.ids.PrepareStr("close"), c.Atoms().Text(icons.PhX+" Close").Keep()).Small().SendResp().HasPrimaryClicked() {
-				inst.armClose(row.key)
-			}
-		}
-	}
-}
-
-func (inst *App) renderUnowned(v *runningView) {
-	if len(v.unowned) == 0 {
-		return
-	}
-	c.AddSpace(styletokens.GapItems(inst.density))
-	strong("Not owned by an open window")
-	weak("A closed window's work still finishing, which its window's drain waits for, and runtime services' tasks, which no window owns.")
-	now := time.Now()
-	inst.grid("unowned-grid", []string{"task", "kind", "state", "owner", "window", "age"}, len(v.unowned), func(j int) {
-		u := &v.unowned[j]
-		c.Label(u.title).Send()
-		mono(u.kind)
-		c.Label(u.state).Send()
-		for range c.HoverText(u.ownerAppId).KeepIter() {
-			c.Label(shortApp(u.ownerAppId)).Send()
-		}
-		mono(windowOf(u.ownerKey))
-		mono(ageOf(u.createdAt, now))
-	})
 }

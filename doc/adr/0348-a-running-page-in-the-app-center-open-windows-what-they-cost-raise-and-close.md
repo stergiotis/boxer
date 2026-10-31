@@ -8,7 +8,7 @@ date: 2026-10-29
 
 > **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
 
-# ADR-0348: A Running page in the app center — the open windows, what they cost, raise and close
+# ADR-0348: A Running page in the app center — the open windows, what they cost, and closing them
 
 ## Context
 
@@ -57,9 +57,9 @@ Constraints the design inherits:
 
 We will add a **Running** tab to the app center: one row per open window of
 the host, assembled in the reader from `keelson('windows')`,
-`keelson('frame_times')` and `keelson('tasks')`, with Raise and Close actions
-the host hands the app center at boot. The first cut covers this host's
-windows only.
+`keelson('frame_times')` and `keelson('tasks')`, filtered by a substring, with
+one action — Close all, over the windows the filter shows — that the host
+hands the app center at boot. The first cut covers this host's windows only.
 
 ### SD1 — A tab of the app center, beside the app pages
 
@@ -67,15 +67,31 @@ The app center has two tabs in its top bar: **Running**, the table across the
 window's full width, and **Apps**, the app list and the selected app's page
 as before. Switching keeps the selection. A window opened with no launch
 config opens on Running; one opened on an app (the launcher's Inspect) opens
-on Apps. A row's app name opens that app's page under Apps, so the overview
-leads to the existing detail. The Window menu's **Running windows** opens a
-new app center window on the Running tab; host boot hands the chrome that
-action where the app center can be launched.
+on Apps. A click on a row opens that window's app's page under Apps, so the
+overview leads to the existing detail. The Window menu's **Running windows**
+opens a new app center window on the Running tab; host boot hands the chrome
+that action where the app center can be launched.
+
+The windows, and the tasks no open window owns, are `recordtable` grids:
+sortable headers, column widths the person drags and keeps, and no per-row
+controls. Above them a filter box narrows both: a case-insensitive substring
+of a window's app id, app name, title or one of its tasks' titles, and of an
+unowned task's title, kind or owner — the app list's filter, extended to what
+the tab shows. The count above the table says how many of the open windows
+the filter shows.
 
 A first cut showed Running whenever no app was selected, behind an entry
 above the app list. Reaching it meant pressing an entry that also cleared the
 selection, and its table sat beside a list it did not use; a tab says what it
 is and leaves the table the window's width.
+
+A filter in SQL or as a regular expression was considered. SQL would see one
+table only — `keelson.query` admits one per statement, and the rows are three
+tables joined in Go — so it could not filter on frame time or task counts
+without publishing the joined rows as a dataset on every read; play already
+queries `keelson('windows')` for anyone who wants SQL. A regular expression
+adds an error state while the person types, and no other filter in the app
+center or imztop uses one.
 
 ### SD2 — Rows, columns and order
 
@@ -83,8 +99,9 @@ One row per row of `keelson('windows')`. Its columns: the app and the window
 title; the window's frame time at p50 and p95 against the loop's median period,
 as the per-app "Frame time" lens shows it; messages per frame; the number of
 tasks it owns, with the oldest one's title and age; its agent tasks; whether it
-is active. Rows sort by p95 frame time, slowest first: the question the page
-answers first is which window holds the loop up.
+is active. Rows start sorted by p95 frame time, slowest first: the question the page
+answers first is which window holds the loop up. A header click sorts by its
+column, numbers descending first.
 
 Tasks whose `owner_instance_key` names no open window are listed under the
 rows as **not owned by an open window**: a closed window's work still draining,
@@ -101,32 +118,46 @@ ADR-0322 records for its drain. Jobs that re-run on a timer or on typing are
 left untracked by their apps, because every task writes audit rows; frame time
 is what shows a window that is busy that way.
 
-### SD4 — Raise and close come from the host, not the bus
+### SD4 — Close all, from the host, not the bus
 
-Host boot hands the app center a small host interface with `Raise(key)` and
+The tab has one action: **Close all**, a button labelled with how many
+windows it closes — every window the filter shows that is not already
+closing, the app center's own among them when it is shown. Its own window
+closes last, after the others' closes are asked for. Narrowing the filter to
+one window closes that one; with no filter, Close all closes every window,
+the app center included. Host boot hands the app center a small host interface with
 `Close(key, reason)`, as it hands the launcher its host; `*windowhost.Inst`
 satisfies it structurally, and neither package imports the other's types. No
-bus subject is added: `windowhost.raise` keeps refusing another app's window to
-apps, and no manifest can ask for an authority to close windows. A host that
-wires none (a narrower registry, an embed) shows no actions. Close goes through
-the window's ordinary closing edge — workingset saved, Unmount, drain — and its
-reason, "closed from the app center", lands in the stopped lifecycle row.
-Close asks first, and the confirmation names the window: the rows re-sort on
-every read, so the confirmation is held by window key, not by row, and a
-press cannot land on the window that moved into the row's place.
+bus subject is added: no manifest can ask for an authority to close windows.
+A host that wires none (a narrower registry, an embed) shows no Close all.
+Each close goes through the window's ordinary closing edge — workingset saved,
+Unmount, drain — and its reason, "closed from the app center", lands in the
+stopped lifecycle row; the row reads "closing" until a read no longer lists
+the window.
+
+Close all asks first, and the confirmation names the windows by title, the
+first three and a count. It holds the window keys and the filter they were
+shown under: a read that adds a window does not add it to the confirmation,
+a window that closed meanwhile drops out of it, and typing in the filter
+drops the confirmation.
+
+A first cut had Raise and Close on every row. In a `recordtable` grid, whose
+cells are text, per-row controls would need the grid to draw host widgets in
+a cell; raising a window by title is the Window menu's to offer
+(Alternatives), and one button over a filter covers closing one window and
+closing many.
 
 ### SD5 — Agents read, the person acts
 
 The app center's catalog
 ([ADR-0345](./0345-system-apps-join-the-operations-contract-the-log-viewer-first.md))
 gains a query, `list_running`, which returns the rows of the tab's last read,
-bounded; a `view` resource and a `set_view` command, which switch the tab the
-way the person's click does; and `show_app` now also switches to Apps.
-Raise and Close are not operations. Closing a window ends its work and drains it, which is what
-ADR-0345 SD4 keeps the person's; raising another app's window pulls the
-person's attention, which an agent already does on its own task's windows
-through the governed path of
-[ADR-0269](./0269-app-operations-a-command-query-contract-agents-drive-under-a-task-grant.md).
+bounded and unfiltered; a `view` resource and a `set_view` command, which
+switch the tab the way the person's click does; a `running_filter` resource
+and a `set_running_filter` command, which set the filter as typing does; and
+`show_app` now also switches to Apps. Close all is not an operation: closing a
+window ends its work and drains it, which is what ADR-0345 SD4 keeps the
+person's.
 
 ### SD6 — Reads
 
@@ -141,7 +172,7 @@ grants; `windows` is added.
 | --- | --- | --- |
 | App center manifest (`appcenter`) | `keelson.query` grant for `windows` added | the manifest test that pins its tables |
 | App center exported API | a host interface and its setter added | host boot wires it beside the launcher's host |
-| App center operations catalog | `list_running` query, `view` resource and `set_view` command added; `show_app` also writes `view` | `appcenter_ops_test.go`; the catalog's help text |
+| App center operations catalog | `list_running` query, `view` and `running_filter` resources with `set_view` and `set_running_filter` commands added; `show_app` also writes `view` | `appcenter_ops_test.go`; the catalog's help text |
 | Host chrome config (`imzero2/host.ChromeConfig`) | `ShowRunning` added | host boot sets it beside the launcher's Inspect |
 
 ## Alternatives
@@ -179,14 +210,16 @@ grants; `windows` is added.
   working", and leads to the app's page for the rest.
 - Work that outlives its window — a draining close, a write run to completion
   — becomes visible as unowned tasks.
-- No new bus authority; the raise policy for apps stands.
+- No new bus authority.
 
 ### Negative
 
 - Three reads every tick while the page is shown, joined in Go.
 - The task count is only as complete as the apps' use of the task API.
-- Close from the page is as final as the window's close button, at one
-  remove from the window.
+- Close all is as final as each window's close button, at one remove from
+  the windows, and over as many as the filter shows, the app center's own
+  window included; the confirmation naming them is the only guard.
+- The tab offers no way to bring a window to the front.
 
 ### Neutral
 
@@ -206,8 +239,8 @@ interface keep an app center without actions.
   `list_running` operation against a fixed read; every statement through the
   `keelson.query` gate and engine over a bus. A headless scene under the app
   center's scenes: play opened beside it with a query in flight shows a row
-  for play with its query run as the oldest task, and Close on that row
-  removes play's window from the tree. A second scene opens the page from the
+  for play; the filter set to its query run's title shows play's window
+  alone, and Close all on it removes play's window from the tree. A second scene opens the page from the
   Window menu with play alone and finds both windows listed.
 - **What would fail.** A row missing or misattributed, an unowned task
   dropped, or Close not reaching the window host.
@@ -217,7 +250,8 @@ interface keep an app center without actions.
 
 - **M1 — The page, read-only.** SD1–SD3, SD6, `list_running`; unit tests
   and the headless scene's read half.
-- **M2 — Raise and close.** SD4 and the host wiring; the scene's close half.
+- **M2 — Close all.** SD4, the filter and the host wiring; the scene's close
+  half.
 - **M3 — The Window menu.** Running windows (SD1); its own scene.
 
 Deferred: other processes; tracking timer-driven jobs.
