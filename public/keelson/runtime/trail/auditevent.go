@@ -37,10 +37,20 @@ const (
 	TrailDomain        = audit.TrailDomain
 	ActionAuditGap     = audit.ActionAuditGap
 	ActionAuditInvalid = audit.ActionAuditInvalid
+	ActionAuditConfig  = audit.ActionAuditConfig
+	ActionAuditDitch   = audit.ActionAuditDitch
 	RetentionTrail     = audit.RetentionTrail
+
+	AttrFrom          = audit.AttrFrom
+	AttrFromBy        = audit.AttrFromBy
+	AttrFromByDefault = audit.AttrFromByDefault
 
 	MaxNameRunes  = audit.MaxNameRunes
 	MaxValueRunes = audit.MaxValueRunes
 	MaxRefs       = audit.MaxRefs
 	MaxAttrs      = audit.MaxAttrs
 )
+
+// Bounded is s as an audit value: valid UTF-8, non-empty, under
+// MaxValueRunes, a cut marked ([audit.Bounded]).
+func Bounded(s string) (out string) { return audit.Bounded(s) }

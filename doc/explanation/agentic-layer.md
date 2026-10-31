@@ -130,6 +130,12 @@ Model calls, kept messages, agent actions, grant events and fetches share
 the same identifying components on the trail, so the question "which calls
 made up this conversation, what did it read, who approved what" is a join
 that holds by key ([ADR-0277](../adr/0277-one-audit-trail-for-model-calls-and-agent-work.md)).
+A change of state the host makes on the person's or a moderator's word — a
+waiting level, a metering rule — is an audit event naming what changed and
+its state after, so the state before is the previous event for the same
+reference
+([ADR-0296](../adr/0296-audit-events-as-a-trail-component.md)'s Update of
+2026-10-31).
 Each journal entry carries a chain digest over its predecessor, and chain
 heads are anchored in a store the organisation holds, so a tampered record
 is detectable without trusting the person or the software

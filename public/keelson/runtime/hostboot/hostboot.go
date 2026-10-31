@@ -562,6 +562,9 @@ func (rt *Runtime) bootServices(ctx context.Context, factsCfg chstore.Config) {
 	rt.Trail = trail.NewRecorder(rt.PersistExec, runId, logger, trail.WithOriginBy(evidence.OriginByHost), trail.WithAnchors(rt.Anchors),
 		trail.WithFlushInterval(trailFlushInterval))
 	rt.cleanups = append(rt.cleanups, rt.Trail.Close)
+	// The settings the trail starts under, as its first row: the baseline
+	// its later rows are read against (ADR-0296, the Update of 2026-10-31).
+	recordTrailConfig(ctx, rt.Trail, trailSettingsOf(rt.Anchors, rt.RunInfo), logger)
 	// Every audited bus request becomes an audit event on the trail
 	// (ADR-0296's Update of 2026-10-30), recorded asynchronously so a
 	// Request never waits on the recorder's lock. The sink closes before the

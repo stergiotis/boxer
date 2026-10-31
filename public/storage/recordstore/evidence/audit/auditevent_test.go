@@ -87,5 +87,7 @@ func TestBounded(t *testing.T) {
 	assert.Equal(t, "-", audit.Bounded(""))
 	assert.Equal(t, "ok", audit.Bounded("ok"))
 	assert.Len(t, []rune(audit.Bounded(strings.Repeat("y", audit.MaxValueRunes+5))), audit.MaxValueRunes)
+	assert.True(t, strings.HasSuffix(audit.Bounded(strings.Repeat("y", audit.MaxValueRunes+5)), "…"), "a cut is marked")
+	assert.Equal(t, strings.Repeat("y", audit.MaxValueRunes), audit.Bounded(strings.Repeat("y", audit.MaxValueRunes)), "a value at the bound is not cut")
 	assert.NoError(t, audit.CheckValue("x", audit.Bounded("\xffbad")))
 }

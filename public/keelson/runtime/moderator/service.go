@@ -331,7 +331,7 @@ func (inst *Service) audit(action string, outcome string, s Signal, tasks []stri
 	row := trail.AuditEvent{Domain: auditDomain, Action: action, Outcome: outcome, Retention: trail.RetentionTrail}
 	ref := func(ty, v string) {
 		if v != "" && len(row.RefTypes) < trail.MaxRefs {
-			row.RefTypes, row.RefValues = append(row.RefTypes, ty), append(row.RefValues, bound(v))
+			row.RefTypes, row.RefValues = append(row.RefTypes, ty), append(row.RefValues, trail.Bounded(v))
 		}
 	}
 	ref(auditRefWindow, s.Window.String())
@@ -346,7 +346,7 @@ func (inst *Service) audit(action string, outcome string, s Signal, tasks []stri
 	}
 	for i := 0; i+1 < len(attrs) && len(row.AttrKeys) < trail.MaxAttrs; i += 2 {
 		if attrs[i+1] != "" {
-			row.AttrKeys, row.AttrValues = append(row.AttrKeys, attrs[i]), append(row.AttrValues, bound(attrs[i+1]))
+			row.AttrKeys, row.AttrValues = append(row.AttrKeys, attrs[i]), append(row.AttrValues, trail.Bounded(attrs[i+1]))
 		}
 	}
 	c := trail.Context{Origin: inst.cfg.Trail.OriginOf(AppId, 0)}
@@ -354,14 +354,6 @@ func (inst *Service) audit(action string, outcome string, s Signal, tasks []stri
 		inst.log.Warn().Err(err).Str("action", action).Msg("moderator: write the audit event")
 	}
 	inst.cfg.Trail.FlushSoon()
-}
-
-// bound cuts s to what an audit value may hold.
-func bound(s string) (b string) {
-	if r := []rune(s); len(r) > trail.MaxValueRunes {
-		return string(r[:trail.MaxValueRunes-1]) + "…"
-	}
-	return s
 }
 
 // States is the engine's windows, for the table.

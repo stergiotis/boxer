@@ -32,3 +32,10 @@ var (
 		Category:    env.CategoryObservability,
 	})
 )
+
+// LogFactsOn says BOXER_LOG_FACTS asks for the host's log lines on
+// boxer.facts: non-empty and not "0".
+func LogFactsOn() (on bool) {
+	v := LogFactsEnabled.Get()
+	return v != "" && v != "0"
+}
