@@ -41,6 +41,14 @@ const (
 	ActionAuditDitch   = audit.ActionAuditDitch
 	RetentionTrail     = audit.RetentionTrail
 
+	ReviewDomain          = audit.ReviewDomain
+	ReviewActionReviewed  = audit.ReviewActionReviewed
+	ReviewActionFlagged   = audit.ReviewActionFlagged
+	ReviewActionDismissed = audit.ReviewActionDismissed
+	ReviewRefTrailRow     = audit.ReviewRefTrailRow
+	ReviewAttrReason      = audit.ReviewAttrReason
+	ReviewAttrRule        = audit.ReviewAttrRule
+
 	AttrFrom          = audit.AttrFrom
 	AttrFromBy        = audit.AttrFromBy
 	AttrFromByDefault = audit.AttrFromByDefault

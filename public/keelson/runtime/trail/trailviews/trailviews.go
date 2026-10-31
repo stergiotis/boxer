@@ -1,8 +1,9 @@
 // Package trailviews composes read-only ClickHouse views over the audit
 // trail on `boxer.facts` (ADR-0277): one flat view per trail kind and a
-// unified timeline across all of them — data marts, row for row — and three
+// unified timeline across all of them — data marts, row for row — and four
 // aggregates over those: one row per agent action with its outcome, one per
-// conversation, one per agent task.
+// conversation, one per agent task, one per audited entity. A last data
+// mart lists the review marks (ADR-0350 §SD2, proposed).
 //
 // The trail is written for audit: every row is an entity of leeway
 // sections, and reading one attribute means locating it by membership.
@@ -52,6 +53,16 @@
 // minted (the same [lwsql.Composer] `LW_PLAIN` expands through, so the two
 // cannot disagree), and mint their own outputs with `LW_PLAIN` again.
 //
+// # The functions
+//
+// Four SQL UDFs come with the views and are created ahead of them in
+// [Statements]: TRAIL_ATTR and TRAIL_REF read one value out of an audit
+// event's parallel attribute or reference arrays, TRAIL_REFS every value
+// of one reference type, and TRAIL_VIEWS_VERSION reports [ViewsVersion].
+// A view may call them and so may a reader in play. They live outside the
+// read surface's `LW_` namespace, which is leeway's, so the surface's
+// reconcile neither lists nor reports them.
+//
 // # Names, and what a view is a snapshot of
 //
 // The audit trail is general to keelson, and so are the timeline, the
@@ -63,7 +74,8 @@
 // ClickHouse expands a SQL UDF into a view's stored query when the view is
 // created, so a view keeps the read-surface bodies it was created with.
 // Each view is stamped with [Stamp] in its COMMENT; re-posting [Compose]'s
-// statements after a surface install is what refreshes them.
+// statements after a surface install is what refreshes them. The same holds
+// for this package's own functions, whose bodies [ViewsVersion] covers.
 //
 // # What the views do not add
 //
@@ -87,24 +99,27 @@ import (
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/env"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/passes"
+	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/sqlvocab"
 	"github.com/stergiotis/boxer/public/keelson/runtime/appops/opwire"
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsschema"
 	"github.com/stergiotis/boxer/public/keelson/runtime/trail/internal/lowlevel"
 	"github.com/stergiotis/boxer/public/keelson/runtime/vocab"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/chpack"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/chviews"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/constructsql"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/lwsql"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/lwsqlsurface"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/namemint/registry"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/naming"
+	"github.com/stergiotis/boxer/public/storage/recordstore/evidence/audit"
 )
 
 // ViewsVersion is the revision of the views this package composes. Bump it
 // whenever a view's columns or meaning change, so the stamp a deployed view
 // carries tells an operator it predates the build.
-const ViewsVersion = 15
+const ViewsVersion = 16
 
 // agenticTag marks the views over what the agentic side of keelson writes —
 // model calls and their messages, and what agents did under a grant. The
@@ -144,15 +159,76 @@ const (
 	ViewActionOutcomes       = prefixAggregate + "trail_" + agenticTag + "_agent_action_outcomes"
 	ViewConversations        = prefixAggregate + "trail_" + agenticTag + "_conversations"
 	ViewTasks                = prefixAggregate + "trail_" + agenticTag + "_tasks"
+	// Audit events by entity, and the review marks (ADR-0350 §SD2,
+	// proposed): general, over the audit-event mart.
+	ViewAuditEntities = prefixAggregate + "trail_audit_entities"
+	ViewReviews       = prefixDataMart + "trail_reviews"
 )
 
 // AllViewNames lists the views in creation order, unqualified.
 func AllViewNames() (names []string) {
-	names = make([]string, 0, len(kindViews)+4)
+	names = make([]string, 0, len(kindViews)+6)
 	for _, kv := range kindViews {
 		names = append(names, kv.name)
 	}
-	return append(names, ViewTimeline, ViewActionOutcomes, ViewConversations, ViewTasks)
+	return append(names, ViewTimeline, ViewActionOutcomes, ViewConversations, ViewTasks, ViewAuditEntities, ViewReviews)
+}
+
+// The functions this package installs (ADR-0350 §SD2, proposed), outside
+// the read surface's `LW_` namespace.
+const (
+	FuncAttr         = "TRAIL_ATTR"
+	FuncRef          = "TRAIL_REF"
+	FuncRefs         = "TRAIL_REFS"
+	FuncViewsVersion = "TRAIL_VIEWS_VERSION"
+)
+
+// functions is the roster, in creation order. The bodies are plain array
+// expressions over an audit event's parallel columns; an absent key or
+// type reads as the empty string, or the empty array.
+func functions() (fns []chpack.Function) {
+	return []chpack.Function{
+		{
+			Name:   FuncAttr,
+			Params: sqlvocab.Exprs("attr_keys", "attr_values", "attr_key"),
+			Body:   "arrayElement(attr_values, indexOf(attr_keys, attr_key))",
+			Doc:    "the attribute value at attr_key; '' when the event carries none",
+		},
+		{
+			Name:   FuncRef,
+			Params: sqlvocab.Exprs("ref_types", "ref_values", "ref_type"),
+			Body:   "arrayElement(ref_values, indexOf(ref_types, ref_type))",
+			Doc:    "the first reference value of ref_type; '' when the event carries none",
+		},
+		{
+			Name:   FuncRefs,
+			Params: sqlvocab.Exprs("ref_types", "ref_values", "ref_type"),
+			Body:   "arrayFilter((v, t) -> t = ref_type, ref_values, ref_types)",
+			Doc:    "every reference value of ref_type, in order",
+		},
+		{
+			Name: FuncViewsVersion,
+			Body: strconv.Itoa(ViewsVersion),
+			Doc:  "the trail views revision, ViewsVersion",
+		},
+	}
+}
+
+// FunctionNames lists the functions [Statements] creates, in order.
+func FunctionNames() (names []string) {
+	for _, f := range functions() {
+		names = append(names, f.Name)
+	}
+	return names
+}
+
+// FunctionStatements is the CREATE OR REPLACE FUNCTION statements, in
+// order. They name no database: a SQL UDF is server-wide.
+func FunctionStatements() (stmts []string) {
+	for _, f := range functions() {
+		stmts = append(stmts, chpack.Statement(f))
+	}
+	return stmts
 }
 
 // Stamp is what every view records in its ClickHouse COMMENT: this
@@ -316,6 +392,9 @@ type kindView struct {
 	name    string
 	kind    registry.RegisteredNaturalKey
 	columns []column
+	// computed are outputs over the view's own columns, minted after
+	// them; a `{name}` in an expression is that column's read.
+	computed []output
 }
 
 // The handles the authored SQL names directly. Everything else is an LW_
@@ -542,6 +621,10 @@ var kindViews = []kindView{
 		{"ref-values", "stringArray", vocab.MembAuditEventRefValues, list},
 		{"attr-keys", "stringArray", vocab.MembAuditEventAttrKeys, list},
 		{"attr-values", "stringArray", vocab.MembAuditEventAttrValues, list},
+	}, computed: []output{
+		// The entity a state-changing event changed is its first
+		// reference (ADR-0296, the Update of 2026-10-31).
+		{"if(length({ref-types}) = 0, '', concat(arrayElement({ref-types}, 1), ':', arrayElement({ref-values}, 1)))", "entity", "s"},
 	}},
 	{name: ViewCoverageBuilds, kind: vocab.MembKindCoverageBuild, columns: []column{
 		{"meta-hash", "symbol", vocab.MembCoverageBuildMetaHash, scalar},
@@ -647,6 +730,7 @@ func Compose(database string, table string) (views []View, err error) {
 		{ViewActionOutcomes, []string{ViewAgentActions}, outcomesOutputs, outcomesBody},
 		{ViewConversations, []string{ViewTimeline, ViewActionOutcomes}, conversationsOutputs, conversationsBody},
 		{ViewTasks, []string{ViewTimeline, ViewActionOutcomes}, tasksOutputs, tasksBody},
+		{ViewAuditEntities, []string{ViewAuditEvents}, auditEntitiesOutputs, auditEntitiesBody},
 	} {
 		var v View
 		if d.name == ViewTimeline {
@@ -659,17 +743,25 @@ func Compose(database string, table string) (views []View, err error) {
 		}
 		views = append(views, v)
 	}
+	v, err := inst.mart(ViewReviews, ViewAuditEvents, reviewsPassThrough, reviewsOutputs, reviewsWhere)
+	if err != nil {
+		return nil, eb.Build().Str("view", ViewReviews).Errorf("trailviews: %w", err)
+	}
+	views = append(views, v)
 	return views, nil
 }
 
-// Statements is [Compose] as bare statements, for an executor that posts
-// one at a time.
+// Statements is the functions ([FunctionStatements]) and then [Compose],
+// as bare statements, for an executor that posts one at a time: a view may
+// call a function, and ClickHouse resolves it when the view is created.
 func Statements(database string, table string) (stmts []string, err error) {
 	views, err := Compose(database, table)
 	if err != nil {
 		return nil, err
 	}
-	stmts = make([]string, 0, len(views))
+	fns := FunctionStatements()
+	stmts = make([]string, 0, len(fns)+len(views))
+	stmts = append(stmts, fns...)
 	for _, v := range views {
 		stmts = append(stmts, v.Sql)
 	}
@@ -743,6 +835,24 @@ func (inst *composer) kindView(kv kindView) (v View, err error) {
 		}
 		schema = append(schema, col)
 	}
+	for _, o := range kv.computed {
+		var minted string
+		o.expr, err = ownReads(o.expr, cols)
+		if err != nil {
+			return View{}, eb.Build().Str("column", o.name).Errorf("%w", err)
+		}
+		minted, err = o.mint()
+		if err != nil {
+			return View{}, err
+		}
+		fmt.Fprintf(&b, ",\n  %s", minted)
+		var col Column
+		col, err = inst.mint.column(o.name, o.ctype)
+		if err != nil {
+			return View{}, err
+		}
+		schema = append(schema, col)
+	}
 	// The kind test stays an id: has() over the membership lane takes a
 	// literal, and it is the term the skip index prunes on.
 	fmt.Fprintf(&b, "\nFROM %s\nWHERE has(%s, %d)", inst.table, hSymLr, kv.kind.GetId().Value())
@@ -753,6 +863,24 @@ func (inst *composer) kindView(kv kindView) (v View, err error) {
 	}
 	inst.schemas[kv.name] = schema
 	return View{Name: kv.name, Sql: inst.createView(kv.name, sel), Columns: schema}, nil
+}
+
+// ownReads replaces each `{name}` in expr with the authored read of the
+// view's column of that name.
+func ownReads(expr string, cols []column) (out string, err error) {
+	out = placeholder.ReplaceAllStringFunc(expr, func(m string) string {
+		name := m[1 : len(m)-1]
+		for _, c := range cols {
+			if c.name == name {
+				return read(c)
+			}
+		}
+		if err == nil {
+			err = eb.Build().Str("column", name).Errorf("trailviews: the view has no such column")
+		}
+		return m
+	})
+	return out, err
 }
 
 // membName is the spelling a membership is named by in an LW_ call: the
@@ -891,6 +1019,45 @@ func (inst *composer) derived(name string, sources []string, outputs []output, b
 	}
 	sql := fmt.Sprintf(body, "  "+strings.Join(items, ",\n  "), inst.database)
 	sql, err = inst.resolve(sql, sources)
+	if err != nil {
+		return View{}, err
+	}
+	sql, err = applyPasses(sql, constructsql.ExpandPass)
+	if err != nil {
+		return View{}, err
+	}
+	inst.schemas[name] = schema
+	return View{Name: name, Sql: inst.createView(name, sql), Columns: schema}, nil
+}
+
+// mart composes a data mart over one source view: the named source
+// columns passed through unchanged — the backbone among them, so the rows
+// stay keyed by the facts id — then the minted outputs, over the source
+// rows the where clause selects.
+func (inst *composer) mart(name string, source string, passThrough []string, outputs []output, where string) (v View, err error) {
+	var schema []Column
+	refs := make([]string, 0, len(passThrough))
+	for _, n := range passThrough {
+		found := false
+		for _, c := range inst.schemas[source] {
+			if c.Name == n {
+				schema = append(schema, c)
+				found = true
+				break
+			}
+		}
+		if !found {
+			return View{}, eb.Build().Str("column", n).Str("view", source).Errorf("trailviews: the source view has no such column")
+		}
+		refs = append(refs, "{"+n+"}")
+	}
+	items, s, err := inst.projection(outputs)
+	if err != nil {
+		return View{}, err
+	}
+	schema = append(schema, s...)
+	sql := fmt.Sprintf("SELECT\n  %s,\n  %s\nFROM %s.%s\nWHERE %s", strings.Join(refs, ", "), strings.Join(items, ",\n  "), inst.database, source, where)
+	sql, err = inst.resolve(sql, []string{source})
 	if err != nil {
 		return View{}, err
 	}
@@ -1257,3 +1424,41 @@ LEFT JOIN (
   WHERE {task} != ''
   GROUP BY {task}
 ) AS a ON a.task = t.task`
+
+// The audit entities aggregate: one row per (domain, entity) — the first
+// reference of the events that carry one — with its span, its event count,
+// and the action, outcome and attributes of its latest event, which under
+// the convention of ADR-0296's Update of 2026-10-31 is the entity's state.
+// Latest is by (ts, id), so two events in one instant still order.
+var auditEntitiesOutputs = []output{
+	{"{domain}", "domain", "s"},
+	{"{entity}", "entity", "s"},
+	{"min({ts})", "first-ts", "z64"},
+	{"max({ts})", "last-ts", "z64"},
+	{"count()", "events", "u64"},
+	{"argMax({action}, ({ts}, {id}))", "last-action", "s"},
+	{"argMax({outcome}, ({ts}, {id}))", "last-outcome", "s"},
+	{"argMax({attr-keys}, ({ts}, {id}))", "last-attr-keys", "sh"},
+	{"argMax({attr-values}, ({ts}, {id}))", "last-attr-values", "sh"},
+	{"groupArray({id})", "facts-ids", "u64h"},
+}
+
+const auditEntitiesBody = `SELECT
+%[1]s
+FROM %[2]s.` + ViewAuditEvents + `
+WHERE {entity} != ''
+GROUP BY {domain}, {entity}`
+
+// The reviews data mart (ADR-0350 §SD7, proposed): the review domain's
+// audit events, one row per mark — the marked row's facts id, the mark,
+// why, the exception rule it clears, and who marked it.
+var reviewsPassThrough = []string{"id", "ts", "natural-key", "run", "app", "instance", "conversation", "turn", "round", "task", "task-epoch", "task-call", "principal", "principal-by"}
+
+var reviewsOutputs = []output{
+	{"toUInt64OrZero(" + FuncRef + "({ref-types}, {ref-values}, '" + audit.ReviewRefTrailRow + "'))", "trail-row", "u64"},
+	{"{action}", "mark", "s"},
+	{FuncAttr + "({attr-keys}, {attr-values}, '" + audit.ReviewAttrReason + "')", "reason", "s"},
+	{FuncAttr + "({attr-keys}, {attr-values}, '" + audit.ReviewAttrRule + "')", "rule", "s"},
+}
+
+const reviewsWhere = "{domain} = '" + audit.ReviewDomain + "'"

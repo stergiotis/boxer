@@ -13,6 +13,7 @@ import (
 
 	"github.com/stergiotis/boxer/public/extbin"
 	"github.com/stergiotis/boxer/public/functional/option"
+	"github.com/stergiotis/boxer/public/identity/callident"
 	busaudit "github.com/stergiotis/boxer/public/keelson/runtime/audit"
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsschema"
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsstore/chstore"
@@ -230,9 +231,12 @@ func localSurface(t *testing.T) (dir string, exec *chexec.LocalExecutor, ctx con
 	return
 }
 
-// installViews creates every view.
+// installViews creates the functions and then every view.
 func installViews(t *testing.T, exec *chexec.LocalExecutor) (views []trailviews.View, byName map[string]trailviews.View) {
 	t.Helper()
+	for _, stmt := range trailviews.FunctionStatements() {
+		require.NoError(t, exec.Exec(context.Background(), stmt))
+	}
 	views, err := trailviews.Compose("", "")
 	require.NoError(t, err)
 	byName = map[string]trailviews.View{}
@@ -329,4 +333,155 @@ func TestBusRequestsReadBackOverLocal(t *testing.T) {
 	require.Equal(t, "bus request -> timeout [subject:runtime.persist.play.x.set]", timeline[1]["headline"])
 	ids := query(`SELECT uniqExact("` + byName[trailviews.ViewTimeline].Columns[0].Physical + `") AS u FROM boxer.` + trailviews.ViewTimeline)
 	require.EqualValues(t, 3, ids[0]["u"])
+}
+
+// Over clickhouse-local: the functions on literal arrays — a key present
+// once and twice, a key absent, a reference type repeated — and the
+// version function reporting the package's revision.
+func TestFunctionsOverLocal(t *testing.T) {
+	dir, exec, _ := localSurface(t)
+	_, byName := installViews(t, exec)
+	query, _ := localReaders(t, dir, byName)
+
+	rows := query(`SELECT
+  TRAIL_ATTR(['state', 'from', 'state'], ['on', 'off', 'later'], 'from') AS attr,
+  TRAIL_ATTR(['state', 'from', 'state'], ['on', 'off', 'later'], 'state') AS attr_first,
+  TRAIL_ATTR(['state'], ['on'], 'reason') AS attr_absent,
+  TRAIL_ATTR(CAST([], 'Array(String)'), CAST([], 'Array(String)'), 'reason') AS attr_empty,
+  TRAIL_REF(['rule', 'subject', 'rule'], ['r1', 's9', 'r2'], 'rule') AS ref,
+  TRAIL_REF(['rule', 'subject', 'rule'], ['r1', 's9', 'r2'], 'subject') AS ref_one,
+  TRAIL_REF(['rule'], ['r1'], 'peer') AS ref_absent,
+  TRAIL_REFS(['rule', 'subject', 'rule'], ['r1', 's9', 'r2'], 'rule') AS refs,
+  TRAIL_REFS(['rule'], ['r1'], 'peer') AS refs_absent,
+  TRAIL_VIEWS_VERSION() AS version`)
+	require.Len(t, rows, 1)
+	r := rows[0]
+	require.Equal(t, "off", r["attr"])
+	require.Equal(t, "on", r["attr_first"], "a repeated key reads its first value")
+	require.Equal(t, "", r["attr_absent"])
+	require.Equal(t, "", r["attr_empty"])
+	require.Equal(t, "r1", r["ref"], "the first reference of the type")
+	require.Equal(t, "s9", r["ref_one"])
+	require.Equal(t, "", r["ref_absent"])
+	require.Equal(t, []any{"r1", "r2"}, r["refs"], "every reference of the type, in order")
+	require.Equal(t, []any{}, r["refs_absent"])
+	require.EqualValues(t, trailviews.ViewsVersion, r["version"])
+}
+
+// Over clickhouse-local: two entities with three state-changing events
+// each, beside an event with no reference, read back through the entity
+// column and the entities aggregate; and a review mark written through the
+// recorder under a person's principal reads back from the reviews mart,
+// naming the row it marks.
+func TestEntitiesAndReviewsOverLocal(t *testing.T) {
+	dir, exec, ctx := localSurface(t)
+	rec := trail.NewRecorder(exec, "run-1", zerolog.Nop())
+	at := time.Unix(1700000000, 0).UTC()
+	c := trail.Context{Origin: rec.OriginOf("apps/rules", 1)}
+	ev := func(action string, state string, refs ...string) trail.AuditEvent {
+		e := trail.AuditEvent{Domain: "rules", Action: action, Outcome: trail.OutcomeOk, PrincipalBy: trail.PrincipalByNone, Retention: "ops",
+			AttrKeys: []string{"state"}, AttrValues: []string{state}}
+		for i := 0; i+1 < len(refs); i += 2 {
+			e.RefTypes = append(e.RefTypes, refs[i])
+			e.RefValues = append(e.RefValues, refs[i+1])
+		}
+		return e
+	}
+	write := func(offset time.Duration, e trail.AuditEvent) {
+		require.NoError(t, rec.Event(ctx, at.Add(offset), c, e))
+	}
+	// Interleaved, and r2's later references are context, not its entity.
+	write(1*time.Second, ev("created", "draft", "rule", "r1"))
+	write(2*time.Second, ev("created", "draft", "rule", "r2", "subject", "s9"))
+	write(3*time.Second, ev("updated", "active", "rule", "r1"))
+	write(4*time.Second, ev("updated", "active", "rule", "r2", "subject", "s9"))
+	write(5*time.Second, ev("updated", "retired", "rule", "r1"))
+	write(6*time.Second, ev("deleted", "gone", "rule", "r2"))
+	write(7*time.Second, ev("swept", "idle"))
+	require.NoError(t, rec.Flush(ctx))
+
+	_, byName := installViews(t, exec)
+	query, read := localReaders(t, dir, byName)
+
+	events := read(trailviews.ViewAuditEvents, []string{"id", "ts", "action", "entity"}, "ORDER BY {ts}")
+	require.Len(t, events, 7)
+	entities := make([]string, 0, len(events))
+	for _, e := range events {
+		entities = append(entities, e["entity"].(string))
+	}
+	require.Equal(t, []string{"rule:r1", "rule:r2", "rule:r1", "rule:r2", "rule:r1", "rule:r2", ""}, entities,
+		"the first reference as type:value, empty when there is none")
+	// Ids exceed a float's mantissa, so they are compared as text.
+	asText := func(view string, column string, rest string) (out []string) {
+		phys := map[string]string{}
+		for _, c := range byName[view].Columns {
+			phys[c.Name] = c.Physical
+		}
+		for n, p := range phys {
+			rest = strings.ReplaceAll(rest, "{"+n+"}", `"`+p+`"`)
+		}
+		for _, r := range query(`SELECT toString("` + phys[column] + `") AS v FROM boxer.` + view + " " + rest) {
+			out = append(out, r["v"].(string))
+		}
+		return out
+	}
+	ids := asText(trailviews.ViewAuditEvents, "id", "ORDER BY {ts}")
+	require.Len(t, ids, 7)
+
+	aggs := read(trailviews.ViewAuditEntities, []string{"domain", "entity", "first-ts", "last-ts", "events", "last-action", "last-outcome", "last-attr-keys", "last-attr-values", "facts-ids"}, "ORDER BY {entity}")
+	require.Len(t, aggs, 2, "one row per entity; the event without one is in none")
+	r1, r2 := aggs[0], aggs[1]
+	require.Equal(t, "rules", r1["domain"])
+	require.Equal(t, "rule:r1", r1["entity"])
+	require.EqualValues(t, 3, r1["events"])
+	require.Equal(t, "updated", r1["last-action"])
+	require.Equal(t, "ok", r1["last-outcome"])
+	require.Equal(t, []any{"state"}, r1["last-attr-keys"])
+	require.Equal(t, []any{"retired"}, r1["last-attr-values"], "the state after the entity's latest event")
+	require.Less(t, r1["first-ts"].(string), r1["last-ts"].(string))
+	lineage := asText(trailviews.ViewAuditEntities, "facts-ids", "ORDER BY {entity}")
+	require.Len(t, lineage, 2)
+	require.ElementsMatch(t, []string{ids[0], ids[2], ids[4]}, strings.Split(strings.Trim(lineage[0], "[]"), ","), "the lineage names the entity's three rows")
+	require.Equal(t, "rule:r2", r2["entity"])
+	require.EqualValues(t, 3, r2["events"])
+	require.Equal(t, "deleted", r2["last-action"])
+	require.Equal(t, []any{"gone"}, r2["last-attr-values"])
+	require.ElementsMatch(t, []string{ids[1], ids[3], ids[5]}, strings.Split(strings.Trim(lineage[1], "[]"), ","))
+
+	// A person flags the swept event, clearing nothing; then marks it
+	// reviewed, clearing a rule.
+	marked := ids[6]
+	person := callident.WithClaims(ctx, callident.Claims{Principal: "person-1"})
+	mark := func(action string, attrs ...string) trail.AuditEvent {
+		e := trail.AuditEvent{Domain: trail.ReviewDomain, Action: action, Outcome: trail.OutcomeOk, PrincipalBy: trail.PrincipalByEnv, Retention: "trail",
+			RefTypes: []string{trail.ReviewRefTrailRow}, RefValues: []string{marked}}
+		for i := 0; i+1 < len(attrs); i += 2 {
+			e.AttrKeys = append(e.AttrKeys, attrs[i])
+			e.AttrValues = append(e.AttrValues, attrs[i+1])
+		}
+		return e
+	}
+	require.NoError(t, rec.Event(person, at.Add(8*time.Second), c, mark(trail.ReviewActionFlagged, trail.ReviewAttrReason, "unexpected sweep")))
+	require.NoError(t, rec.Event(person, at.Add(9*time.Second), c, mark(trail.ReviewActionReviewed, trail.ReviewAttrReason, "scheduled", trail.ReviewAttrRule, "new-action")))
+	require.NoError(t, rec.Flush(ctx))
+	rec.Close()
+
+	reviews := read(trailviews.ViewReviews, []string{"id", "ts", "app", "run", "trail-row", "mark", "reason", "rule", "principal", "principal-by"}, "ORDER BY {ts}")
+	require.Len(t, reviews, 2, "one row per mark: the other domains' rows are not marks")
+	require.Equal(t, []string{marked, marked}, asText(trailviews.ViewReviews, "trail-row", "ORDER BY {ts}"), "the marked row's facts id")
+	require.Equal(t, trail.ReviewActionFlagged, reviews[0]["mark"])
+	require.Equal(t, "unexpected sweep", reviews[0]["reason"])
+	require.Equal(t, "", reviews[0]["rule"], "a mark that clears no rule names none")
+	require.Equal(t, "person-1", reviews[0]["principal"])
+	require.Equal(t, trail.PrincipalByEnv, reviews[0]["principal-by"])
+	require.Equal(t, "apps/rules", reviews[0]["app"])
+	require.Equal(t, "run-1", reviews[0]["run"])
+	require.Equal(t, trail.ReviewActionReviewed, reviews[1]["mark"])
+	require.Equal(t, "new-action", reviews[1]["rule"])
+
+	// 1:1 with facts rows: each mark is one audit event, under its own id.
+	markIds := asText(trailviews.ViewReviews, "id", "ORDER BY {ts}")
+	allIds := asText(trailviews.ViewAuditEvents, "id", "ORDER BY {ts}")
+	require.Len(t, allIds, 9)
+	require.Equal(t, allIds[7:], markIds)
 }

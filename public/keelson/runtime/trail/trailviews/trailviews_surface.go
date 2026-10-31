@@ -26,8 +26,8 @@ func init() {
 	})
 }
 
-// surfaceStatements is the views over the facts table, or nothing when the
-// server being installed holds no facts table — most leeway endpoints are
+// surfaceStatements is the functions and the views over the facts table, or
+// nothing when the server being installed holds no facts table — most leeway endpoints are
 // not keelson's, and a family over a table that is absent does not belong
 // there.
 //

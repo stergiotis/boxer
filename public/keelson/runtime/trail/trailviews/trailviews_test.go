@@ -39,7 +39,7 @@ func TestGoldenIsCurrent(t *testing.T) {
 	require.Equal(t, goldenSql(t), string(have), "run go generate in this package")
 }
 
-var aggregates = map[string]bool{ViewActionOutcomes: true, ViewConversations: true, ViewTasks: true}
+var aggregates = map[string]bool{ViewActionOutcomes: true, ViewConversations: true, ViewTasks: true, ViewAuditEntities: true}
 
 func TestComposeShape(t *testing.T) {
 	views, err := Compose("", "")
@@ -63,12 +63,13 @@ func TestComposeShape(t *testing.T) {
 		ViewModelCalls, ViewModelMessages, ViewAgentActions, ViewAgentGrants,
 		ViewAgentCaptures, ViewAgentDisclosures, ViewHttpFetches, ViewAdhocBundles, ViewAuditEvents,
 		ViewCoverageBuilds, ViewCoverageFuncs, ViewCoverageSamples, ViewCoverageAgentApplies,
-		ViewTimeline, ViewActionOutcomes, ViewConversations, ViewTasks,
+		ViewTimeline, ViewActionOutcomes, ViewConversations, ViewTasks, ViewAuditEntities, ViewReviews,
 	}, names, "creation order: each view only reads views created before it")
 	require.Equal(t, names, AllViewNames())
 
 	general := map[string]bool{ViewTimeline: true, ViewHttpFetches: true, ViewAdhocBundles: true, ViewAuditEvents: true,
-		ViewCoverageBuilds: true, ViewCoverageFuncs: true, ViewCoverageSamples: true}
+		ViewCoverageBuilds: true, ViewCoverageFuncs: true, ViewCoverageSamples: true,
+		ViewAuditEntities: true, ViewReviews: true}
 	for _, n := range names {
 		// The class prefix says what a reader may rely on (ADR-0051).
 		if aggregates[n] {
@@ -153,4 +154,36 @@ func TestMembershipsResolve(t *testing.T) {
 	}
 	_, err := membershipIds{}.LookupMembership("agentActionTask")
 	require.Error(t, err, "a retired per-kind spelling is not in the vocabulary")
+}
+
+// The functions come first in Statements, so a view that calls one finds
+// it; each is one CREATE OR REPLACE FUNCTION outside the read surface's
+// namespace, and the version function reports ViewsVersion.
+func TestFunctionsPrecedeTheViews(t *testing.T) {
+	stmts, err := Statements("", "")
+	require.NoError(t, err)
+	names := FunctionNames()
+	require.Equal(t, []string{FuncAttr, FuncRef, FuncRefs, FuncViewsVersion}, names)
+	fns := FunctionStatements()
+	require.Len(t, fns, len(names))
+	require.Equal(t, fns, stmts[:len(fns)])
+	for i, f := range fns {
+		require.True(t, strings.HasPrefix(f, "CREATE OR REPLACE FUNCTION "+names[i]+" AS ("), f)
+		require.NotContains(t, f, ";", names[i])
+		require.False(t, lwsqlsurface.InNamespace(names[i]), "the LW_ namespace is leeway's: %s", names[i])
+	}
+	require.Equal(t, "CREATE OR REPLACE FUNCTION "+FuncViewsVersion+" AS () -> "+strconv.Itoa(ViewsVersion), fns[3])
+	require.Equal(t, 16, ViewsVersion, "the entity column, the audit entities and the reviews (ADR-0350 §SD2)")
+
+	views, err := Compose("", "")
+	require.NoError(t, err)
+	byName := map[string]View{}
+	for _, v := range views {
+		byName[v.Name] = v
+	}
+	require.Contains(t, byName[ViewReviews].Sql, FuncRef+"(", "the reviews read the marked row with the function")
+	require.Contains(t, byName[ViewReviews].Sql, FuncAttr+"(")
+	require.Contains(t, byName[ViewReviews].Sql, "= 'review'")
+	last := byName[ViewAuditEvents].Columns[len(byName[ViewAuditEvents].Columns)-1]
+	require.Equal(t, "entity", last.Name, "the entity column is appended")
 }

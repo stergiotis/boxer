@@ -117,10 +117,17 @@ same shape.
   `AuditEvent` stores, installed as SQL UDFs by `trailviews` ahead of the
   views in the same statement list, so a view may use them and a reader in
   play may too. `TRAIL_VIEWS_VERSION()` returns `ViewsVersion`, as
-  `LW_SURFACE_VERSION()` does for the read surface, so `leeway sqlsurface
-  status` reports a stale trail surface the same way. The names are
-  declared to the surface's reconcile as the dependent's own, so they are
-  never reported as undeclared.
+  `LW_SURFACE_VERSION()` does for the read surface, so one `SELECT` tells
+  a reader which trail revision a server carries. `leeway sqlsurface
+  status` does not report it: its reconcile lists only the `LW_`
+  namespace and the surface's own views, so the `TRAIL_` names are never
+  reported as undeclared, nor as missing, and need no declaration; a stale
+  trail view is found by its stamp, as before.
+  Play's vocabulary panel lists every non-system function an endpoint
+  carries, so it shows the `TRAIL_` names as undeclared on an endpoint
+  with the trail views; registering them as server-side names there is
+  M4's, since it must not report them missing where no facts table
+  exists.
 - **One column on `dm_trail_audit_events`.** `entity`: the first
   reference as `type:value`, or `''`. The convention of ADR-0296's
   2026-10-31 entry makes the first reference the entity a state-changing
