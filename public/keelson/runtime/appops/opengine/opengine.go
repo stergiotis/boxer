@@ -103,6 +103,9 @@ type Engine struct {
 	calls    map[string]*call
 	order    []string
 	attached int
+	// paused, when set, is why every command is refused: the person paused
+	// the window (ADR-0354 §SD3).
+	paused   string
 	log      []LogEntry
 	logHead  int
 	logSeq   uint64
@@ -196,6 +199,10 @@ func (inst *Engine) Submit(op string, req opwire.CallRequest) (out opwire.Outcom
 		outcome: opwire.Outcome{Phase: opwire.PhaseAccepted}}
 	inst.mu.Lock()
 	defer inst.mu.Unlock()
+	if inst.paused != "" {
+		out = opwire.Outcome{Phase: opwire.PhaseRefused, Reason: inst.paused}
+		return
+	}
 	if _, dup := inst.calls[c.id]; dup {
 		out = opwire.Outcome{Phase: opwire.PhaseRefused, Reason: "call id reused"}
 		return
@@ -401,6 +408,22 @@ func (inst *Engine) withdraw(id string, phase opwire.PhaseE, reason string) (out
 	}
 	out = c.outcome
 	return
+}
+
+// SetPaused refuses every command with reason while reason is set, those
+// already queued included; queries keep answering from the last snapshot
+// (ADR-0354 §SD3). An empty reason accepts commands again.
+func (inst *Engine) SetPaused(reason string) {
+	inst.mu.Lock()
+	inst.paused = reason
+	queued := slices.Clone(inst.queue)
+	inst.mu.Unlock()
+	if reason == "" {
+		return
+	}
+	for _, c := range queued {
+		inst.withdraw(c.id, opwire.PhaseRefused, reason)
+	}
 }
 
 // SetAttached counts the tasks attached to the instance; while any is, the

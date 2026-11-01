@@ -162,6 +162,14 @@ func windowsTable(ws []windowhost.WindowInfo, tasks map[uint64][]string) *intros
 		// (a singleton-registered app shown twice): such a window takes no
 		// config and saves no workingset.
 		Bool("shares_instance", func(i int) bool { return ws[i].SharesInstance }).
+		// Since when the person has paused the window (ADR-0354), RFC 3339;
+		// empty while it runs.
+		String("paused_since", func(i int) string {
+			if ws[i].PausedSince.IsZero() {
+				return ""
+			}
+			return ws[i].PausedSince.UTC().Format(time.RFC3339Nano)
+		}).
 		// The window's state as of the last completed frame (ADR-0276 §SD1).
 		// shown is false for a window that has not drawn yet; its geometry
 		// columns are zero then. Coordinates are logical points, viewport

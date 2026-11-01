@@ -81,6 +81,16 @@ func (inst *slowWatch) step(p95 time.Duration, frames uint64, now time.Time) (re
 	return false
 }
 
+// resetSlow forgets a window's watch: across a pause its quantiles are of
+// frames drawn before it.
+func (inst *frameTimes) resetSlow(key WindowKeyT) {
+	inst.mu.Lock()
+	if r := inst.windows[key]; r != nil {
+		r.slow = slowWatch{}
+	}
+	inst.mu.Unlock()
+}
+
 // slowReport is one window to tell the listener of.
 type slowReport struct {
 	key   WindowKeyT

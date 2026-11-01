@@ -15,6 +15,7 @@ package appcenter
 import (
 	"context"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/rs/zerolog"
@@ -105,6 +106,9 @@ type App struct {
 	cancelApp context.CancelFunc
 	dirty     chan struct{}
 	wg        sync.WaitGroup
+	// paused stops the poller's reads while the person has paused the
+	// window (ADR-0354 §SD2).
+	paused atomic.Bool
 
 	// The frame's own state.
 	view     viewE
@@ -145,6 +149,7 @@ type App struct {
 }
 
 var _ app.AppI = (*App)(nil)
+var _ app.PausableAppI = (*App)(nil)
 
 func newApp() (inst *App) {
 	inst = &App{ids: c.NewWidgetIdStack(), density: styletokens.ActiveDensity(), dirty: make(chan struct{}, 1),
@@ -211,6 +216,15 @@ func (inst *App) Frame(ctx app.FrameContextI) (err error) {
 	return
 }
 
+// SetPaused stops the poller's reads while the window is paused, and reads
+// at once on the resume (ADR-0354 §SD2).
+func (inst *App) SetPaused(paused bool) {
+	inst.paused.Store(paused)
+	if !paused {
+		inst.markDirty()
+	}
+}
+
 // selectApp shows the Apps tab on appId's page, or on the list alone for "",
 // and asks for its lenses now.
 func (inst *App) selectApp(appId string) {
@@ -253,7 +267,9 @@ func (inst *App) poll() {
 	ticker := time.NewTicker(refreshEvery)
 	defer ticker.Stop()
 	for {
-		inst.refresh()
+		if !inst.paused.Load() {
+			inst.refresh()
+		}
 		select {
 		case <-inst.appCtx.Done():
 			return

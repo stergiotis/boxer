@@ -101,7 +101,8 @@ type HeartbeatRow struct {
 }
 
 // AppLifecyclePhaseE distinguishes a tile-open ("started") from a
-// tile-close ("stopped"). The chstore writer encodes this as a low-card
+// tile-close ("stopped"), and the person's pause and resume of an open
+// window between them ("paused", "resumed"; ADR-0354 §SD5). The chstore writer encodes this as a low-card
 // symbol attribute under MembLifecyclePhase so simple queries on
 // "phase = 'started' AND app = X" require only one column scan.
 type AppLifecyclePhaseE uint8
@@ -110,6 +111,8 @@ const (
 	AppLifecyclePhaseUnspecified AppLifecyclePhaseE = 0
 	AppLifecyclePhaseStarted     AppLifecyclePhaseE = 1
 	AppLifecyclePhaseStopped     AppLifecyclePhaseE = 2
+	AppLifecyclePhasePaused      AppLifecyclePhaseE = 3
+	AppLifecyclePhaseResumed     AppLifecyclePhaseE = 4
 )
 
 // String returns the canonical wire value used by chstore + InMemoryFactsStore.
@@ -119,6 +122,10 @@ func (inst AppLifecyclePhaseE) String() (s string) {
 		s = "started"
 	case AppLifecyclePhaseStopped:
 		s = "stopped"
+	case AppLifecyclePhasePaused:
+		s = "paused"
+	case AppLifecyclePhaseResumed:
+		s = "resumed"
 	default:
 		s = "unspecified"
 	}
@@ -135,7 +142,8 @@ func (inst AppLifecyclePhaseE) String() (s string) {
 // StopReason is conventional, not enumerated — current values:
 // "user-close" (user clicked × Close), "mount-error" (Mount returned
 // error and the tile was reaped), "shutdown" (process exit reaped a
-// still-open tile). Empty for "started" rows.
+// still-open tile). On a "paused" or "resumed" row it names where the
+// person did it ("window", "running-tab", …). Empty for "started" rows.
 type AppLifecycleRow struct {
 	RunId      string
 	AppId      app.AppIdT

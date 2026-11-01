@@ -187,6 +187,31 @@ func TestCancelAndExpireOnlyTouchQueuedCommands(t *testing.T) {
 	assert.False(t, h.eng.Busy())
 }
 
+// A paused window refuses commands, those queued before the pause included,
+// and answers queries from its last snapshot (ADR-0354 §SD3).
+func TestAPausedEngineRefusesCommandsAndAnswersQueries(t *testing.T) {
+	h := newHarness(t)
+	_, rev := h.read()
+	h.call("set_text", setTextArgs{Text: "queued"}, map[string]uint64{"text": rev})
+	queued := string(rune('a' + h.n))
+	h.eng.SetPaused("the person paused this window")
+	st, _ := h.eng.Status(queued)
+	assert.Equal(t, opwire.PhaseRefused, st.Phase)
+	assert.Equal(t, "the person paused this window", st.Reason)
+	out := h.call("set_text", setTextArgs{Text: "while paused"}, map[string]uint64{"text": rev})
+	assert.Equal(t, opwire.PhaseRefused, out.Phase)
+	text, _ := h.read()
+	assert.Equal(t, "start", text, "a query answers")
+	h.frame(nil)
+	assert.Equal(t, "start", h.ed.text, "nothing was applied")
+
+	h.eng.SetPaused("")
+	out = h.call("set_text", setTextArgs{Text: "resumed"}, map[string]uint64{"text": rev})
+	assert.Equal(t, opwire.PhaseAccepted, out.Phase)
+	h.frame(nil)
+	assert.Equal(t, "resumed", h.ed.text)
+}
+
 func TestTheAppsOwnChangesAndGesturesAreAttributed(t *testing.T) {
 	h := newHarness(t)
 	h.frame(func() { h.ed.ticks++ })

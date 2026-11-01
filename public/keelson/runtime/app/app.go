@@ -62,6 +62,16 @@ type AppI interface {
 	Unmount(ctx MountContextI) (err error)
 }
 
+// PausableAppI is implemented by an app that stops its own background work
+// while the person has paused it (ADR-0354 §SD2): its pollers, timers,
+// subscriptions — what it stops is its choice. The host calls SetPaused on
+// the render goroutine, with true once every window over the instance is
+// paused and with false at the first resume. A paused window's Frame is not
+// called either way; an app without this only stops drawing.
+type PausableAppI interface {
+	SetPaused(paused bool)
+}
+
 // MountContextI is the per-lifetime context handed to Mount and Unmount.
 // Frame-scoped resources (the egui scope) live on FrameContextI.
 type MountContextI interface {

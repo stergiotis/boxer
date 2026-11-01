@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/signal"
 	"slices"
+	"strconv"
 	"sync"
 	"syscall"
 	"time"
@@ -1096,6 +1097,12 @@ func (rt *Runtime) bootAgent() {
 	// §SD6).
 	if rt.Host != nil {
 		rt.Host.SetSlowWindows(windowNotices{n: cfg.Attention.Notices})
+		// A pause or resume is the person's, on the trail (ADR-0354 §SD5);
+		// the window host writes the lifecycle row itself.
+		if rt.Trail != nil {
+			rec := rt.Trail
+			rt.Host.SetPauseAudit(func(ev windowhost.PauseEvent) { recordPause(rec, ev, logger) })
+		}
 	}
 	if qs, qerr := attention.NewBusService(rt.Bus, cfg.Attention, logger); qerr != nil {
 		logger.Warn().Err(qerr).Msg("attention: question service start failed; apps' questions stay in their windows")
@@ -1703,6 +1710,33 @@ func (inst windowNotices) WindowSlow(key windowhost.WindowKeyT, appId app.AppIdT
 }
 
 func (inst windowNotices) WindowGone(key windowhost.WindowKeyT) { inst.n.SeenWindow(uint64(key)) }
+
+// recordPause writes a window's pause or resume on the trail as the
+// person's, its origin the window.
+func recordPause(rec *trail.Recorder, ev windowhost.PauseEvent, log zerolog.Logger) {
+	if !rec.Durable() {
+		return
+	}
+	row := pauseRow(ev)
+	c := trail.Context{Origin: rec.OriginOf(ev.AppId, uint64(ev.Key))}
+	if err := rec.Event(context.Background(), ev.At.UTC(), c, row); err != nil {
+		log.Warn().Err(err).Str("action", row.Action).Msg("windowhost: write the pause's audit event")
+	}
+	rec.FlushSoon()
+}
+
+// pauseRow is a pause's or a resume's audit event: the window and its app,
+// that the person did it and from where, and on a resume for how long.
+func pauseRow(ev windowhost.PauseEvent) (row trail.AuditEvent) {
+	row = trail.AuditEvent{Domain: "window", Action: "pause", Outcome: trail.OutcomeOk, Retention: trail.RetentionTrail,
+		RefTypes: []string{"app", "window"}, RefValues: []string{trail.Bounded(string(ev.AppId)), strconv.FormatUint(uint64(ev.Key), 10)},
+		AttrKeys: []string{"by", "from"}, AttrValues: []string{"person", trail.Bounded(ev.From)}}
+	if !ev.Paused {
+		row.Action = "resume"
+		row.AttrKeys, row.AttrValues = append(row.AttrKeys, "paused-for"), append(row.AttrValues, ev.For.Round(time.Second).String())
+	}
+	return
+}
 
 // openRunningOrNil adapts open for the attention chrome; nil stays nil, so
 // the chrome offers no Open.

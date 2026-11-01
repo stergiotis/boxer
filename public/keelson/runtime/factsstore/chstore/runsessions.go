@@ -457,6 +457,10 @@ func phaseFromString(s string) (p factsstore.AppLifecyclePhaseE) {
 		p = factsstore.AppLifecyclePhaseStarted
 	case "stopped":
 		p = factsstore.AppLifecyclePhaseStopped
+	case "paused":
+		p = factsstore.AppLifecyclePhasePaused
+	case "resumed":
+		p = factsstore.AppLifecyclePhaseResumed
 	default:
 		p = factsstore.AppLifecyclePhaseUnspecified
 	}

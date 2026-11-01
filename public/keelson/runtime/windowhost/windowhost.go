@@ -89,6 +89,15 @@ type window struct {
 	// the goroutine that runs its Mount, Frame and Unmount, so goroutines
 	// those start inherit them.
 	labels context.Context
+	// The pause (windowhost_pause.go, ADR-0354): a request and where it
+	// came from, under inst.mu, and since when the window is paused, zero
+	// while it runs; written under inst.mu on the render goroutine.
+	pauseReq    int8
+	pauseFrom   string
+	pausedSince time.Time
+	// pauseH is the outer height the window had when paused, and pauseMinH
+	// the paused body's minimum height that keeps it; render goroutine.
+	pauseH, pauseMinH float32
 
 	// appIds is the per-window WidgetIdStack handed to the app via
 	// MountCtx.Ids(). The host pre-pushes an instance-unique salt
@@ -193,6 +202,9 @@ type instMount struct {
 	// release together with the final window's, not at their own reap
 	// (ADR-0188 §SD1/§SD2).
 	carried []*window
+	// toldPaused is what the instance last heard through app.PausableAppI:
+	// paused while every window over it is (ADR-0354 §SD2).
+	toldPaused bool
 }
 
 // Inst is the window host: the registry plus the list of open windows.
@@ -350,6 +362,8 @@ type Inst struct {
 	// opsListener hears every change a window's engine logs (ADR-0269
 	// §SD8); nil hears nothing. Set before the first Frame.
 	opsListener func(key uint64, e opengine.LogEntry)
+	// pauseAudit hears every pause and resume (ADR-0354 §SD5).
+	pauseAudit func(PauseEvent)
 	// opsBracket gives each window's engine its apply bracket (ADR-0343
 	// §SD5); nil gives none.
 	opsBracket OpsBracketFactory
@@ -874,6 +888,15 @@ func (inst *Inst) releaseMount(w *window) (unmountCtx *app.StaticMountContext, s
 	return
 }
 
+// setLabels gives the calling goroutine the window's profiler labels
+// (ADR-0351 §SD1); a window built without them, as tests build one, sets
+// none.
+func (w *window) setLabels() {
+	if w.labels != nil {
+		pprof.SetGoroutineLabels(w.labels)
+	}
+}
+
 // leave closes a window's stop channel and retires its lifetime scope — the
 // first step of the closing edge (ADR-0188 §SD2). Idempotent.
 func (w *window) leave() {
@@ -951,7 +974,7 @@ func (inst *Inst) reapWindow(w *window, reason string, unmountMsg string) (cl cl
 	}
 	w.leave()
 	// unmount, under the window's profiler labels
-	pprof.SetGoroutineLabels(w.labels)
+	w.setLabels()
 	inst.saveWorkingset(w, reason)
 	umErr := w.appInst.Unmount(uc)
 	pprof.SetGoroutineLabels(context.Background())
@@ -1048,6 +1071,9 @@ type WindowInfo struct {
 	// may carry a user's query text, and the audit trail already records
 	// them where that is intended (ADR-0135 §SD6).
 	ConfigBytes int
+	// PausedSince is since when the person has paused the window
+	// (ADR-0354); zero while it runs.
+	PausedSince time.Time
 	// SharesInstance reports that another open window points at the same
 	// AppI instance — only possible for a singleton-registered app shown
 	// more than once. Load-bearing rather than trivia: such a window can
@@ -1094,6 +1120,7 @@ func (inst *Inst) WindowInfos() (out []WindowInfo) {
 			ConfigBytes:    len(cfg),
 			SharesInstance: w.mount != nil && w.mount.refs > 1,
 			Geom:           w.geom,
+			PausedSince:    w.pausedSince,
 		})
 	}
 	return
@@ -1263,6 +1290,7 @@ func (inst *Inst) Frame(ids *c.WidgetIdStack) (err error) {
 	inst.applyPlaces(places, snapshot)
 	inst.stepTiling(snapshot)
 	inst.snapshotGeometry(snapshot)
+	inst.applyPauses(snapshot, now)
 	for _, w := range snapshot {
 		// A pixel capture replays a window's emission, from its placement to
 		// its body's end (ADR-0281 §SD4).
@@ -1334,11 +1362,16 @@ func (inst *Inst) Frame(ids *c.WidgetIdStack) (err error) {
 					inst.pendingExportKey = w.key
 					inst.saveDialog(ids).Show()
 				}
+				inst.renderPauseButton(w, ids)
 				if inst.agentChrome != nil {
 					inst.agentChrome.RenderWindowChrome(uint64(w.key), ids)
 				}
 			}
-			renderWindowBody(w, inst.closeRequested(w), inst.logger, &inst.frameTimes, inst.opsListener, inst.opsBracket)
+			if !w.pausedSince.IsZero() {
+				inst.renderPaused(w, ids, now)
+			} else {
+				renderWindowBody(w, inst.closeRequested(w), inst.logger, &inst.frameTimes, inst.opsListener, inst.opsBracket)
+			}
 		}
 		// The rect is the last completed frame's, one frame before the one
 		// recorded.
@@ -1593,7 +1626,7 @@ func renderWindowBody(w *window, closeReq bool, logger zerolog.Logger, ft *frame
 	}
 	// The window's profiler labels hold for everything below, which is the
 	// window's work: Mount, its queued commands, Frame (ADR-0351 §SD1).
-	pprof.SetGoroutineLabels(w.labels)
+	w.setLabels()
 	defer pprof.SetGoroutineLabels(context.Background())
 	// Mount runs once per AppI instance (shared via w.mount), capturing the
 	// first window's mountCtx so the eventual Unmount uses the same context.
