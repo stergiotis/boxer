@@ -845,3 +845,75 @@ count-sized points need no `Custom` closure. `paintMarkers` carries one
 radius per opcode, so doing it in Go means one opcode per distinct radius;
 doing it properly means a radius slice on the opcode, which is an IDL change
 and a decision of its own.
+
+## Update 2026-11-01 (2) — hit regions: hover, tooltip and an accessibility node per painted mark
+
+A mark painted on the painter lane — by a bare `PaintCanvas` or by a `Custom`
+item — had no hover of its own. A caller re-derived the canvas id, read last
+frame's cursor back, hit-tested every mark's geometry a second time in Go and
+painted the tooltip into the canvas, where the canvas clip cut it off; a
+`Custom` item needed a second `CustomUnclipped` closure that recomputed the
+pixel geometry. The marks had no accessibility nodes. An exploratory port of
+nine risk views (2026-11-01) found this the costliest gap: thirteen tooltip
+sites, each stating its geometry twice, and a tooltip taller than the 46 px
+canvas it was clamped into.
+
+**Decision.** Three opcodes — `paintHitRect`, `paintHitCircle`,
+`paintHitPolygon` — declare a mark's geometry under a widget id, beside the
+paint commands that draw it, with `label` (the accessible name and the
+tooltip's first line), `tooltip` (a plain-text body), a `tip` deferred block
+(a rich body, `TooltipUi` in Go) and `focusable`. The canvas collects them
+while draining and resolves them after its last paint command, in the host:
+
+- the hover winner is the last-declared region whose shape contains the
+  pointer, within the clip in effect where it was declared, on the topmost
+  layer; none while anything is being dragged;
+- the winner's tooltip goes through egui's tooltip layer at the pointer, so
+  it is drawn above the page and not clipped by the canvas; a focused region
+  shows its tooltip beside its bounds and a focus ring;
+- every region pushes response flags under its id (`HOVERED`,
+  `PRIMARY_CLICKED`/`SECONDARY_CLICKED`, Enter/Space while focused, the focus
+  bits), read back with `SendResp` like a widget;
+- a labelled or focusable region is registered as a hover-only egui widget
+  over its visible bounds, which is what gives it an AccessKit node (role
+  unknown, the label as name) and, when focusable, a Tab stop.
+
+`DrawCtx.Ids` hands a `Custom` closure the id stack scoped to that item, so
+its regions number from zero without colliding with another item's. The
+painter-side type and resolution are in
+[`hit_regions.rs`](../../rust/imzero2/src/imzero2/interpreter/hit_regions.rs);
+the Go surface is in
+[`egui2_hit_regions.go`](../../public/thestack/imzero2/egui2/bindings/egui2_hit_regions.go).
+
+**Alternatives, and why not.**
+
+- *A Go helper over the cursor readback* — what callers did by hand. It
+  cannot remove the frame of lag or the clip: the tooltip would still be
+  paint commands inside the canvas. It cannot produce an accessibility node
+  either.
+- *One egui widget per mark with `on_hover_ui_at_pointer`* — egui hit-tests
+  rectangles, so neighbouring dots and rotated or concave marks steal each
+  other's pointer through their bounding boxes, and a hover-only widget is
+  only `hovered()` above the topmost interactive one (the overlay rule in the
+  imzero2 skill §12). The region test runs against the shape instead; an egui
+  widget is created only where it buys a node or a Tab stop.
+- *Sense regions with a tooltip attached* — `paintSenseRegion` senses click
+  and drag, so a region per mark would take the plot area's pan and box-zoom
+  away; hit regions sense hover only and leave gestures where they were.
+- *The tooltip as an `Atoms` argument* — atoms lay out on one line; a title
+  over detail lines needs either plain text or a block of widgets, so it is
+  both.
+
+**Consequences.** A tooltip shows on the frame the pointer reaches the mark,
+with no tooltip delay; the read-back flags carry the usual one-frame lag.
+Regions declared inside a `paintAbsoluteOverlay` are dropped with a warning,
+like sense regions. Focus is opt-in because a dot plot would otherwise add
+dozens of Tab stops. A region costs its bytes on the wire, an r7 entry and,
+when labelled, an egui widget — sized for marks a reader points at, not for
+every point of a dense scatter.
+
+**Deferred, not killed:** hit regions emitted by the built-in items
+(`Scatter`, `Bars`) without a `Custom` closure; arrow-key movement between
+the marks of one canvas; an AccessKit Click action on a region (its node
+offers Focus only, since the region does not sense clicks); a role richer
+than unknown (AccessKit has `GraphicsSymbol`, egui's `WidgetType` does not).

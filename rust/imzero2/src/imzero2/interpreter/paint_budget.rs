@@ -130,7 +130,10 @@ impl PaintCmd {
             // epaint flattens a cubic to a tolerance; a long curve on a large
             // canvas stays well under this many points.
             Self::CubicBezier { .. } => (1, 4 * 64),
-            Self::SenseRegion { .. } | Self::ClipPush { .. } | Self::ClipPop => (0, 0),
+            Self::SenseRegion { .. }
+            | Self::HitRegion { .. }
+            | Self::ClipPush { .. }
+            | Self::ClipPop => (0, 0),
             Self::Markers {
                 xs,
                 ys,

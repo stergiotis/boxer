@@ -1007,6 +1007,66 @@ func PaintEllipseStroke(cx float32, cy float32, rx float32, ry float32, col colo
 	return
 }
 
+func PaintHitCircle(i WidgetIdCreatorI, cx float32, cy float32, radius float32) (inst PaintHitCircleFluid) {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteOpCode(uint32(FuncProcIdPaintHitCircle))
+	v := i.Derive()
+	r.WriteWidgetId(checkId(v))
+	r.WriteFloat32(cx)
+	r.WriteFloat32(cy)
+	r.WriteFloat32(radius)
+
+	inst = PaintHitCircleFluid{
+		r: r,
+	}
+
+	inst.id = v
+	inst.idGen = i
+	inst.deferredTip = runtime.NewDeferredBlockScopeHinted(typed.GetCurrentFffiCapture, binary.LittleEndian, runtime.RegisterScopeHint("Tip"))
+
+	return
+}
+
+func PaintHitPolygon(i WidgetIdCreatorI, xs []float32, ys []float32) (inst PaintHitPolygonFluid) {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteOpCode(uint32(FuncProcIdPaintHitPolygon))
+	v := i.Derive()
+	r.WriteWidgetId(checkId(v))
+	runtime.PutFloat32SliceArg(r, xs)
+	runtime.PutFloat32SliceArg(r, ys)
+
+	inst = PaintHitPolygonFluid{
+		r: r,
+	}
+
+	inst.id = v
+	inst.idGen = i
+	inst.deferredTip = runtime.NewDeferredBlockScopeHinted(typed.GetCurrentFffiCapture, binary.LittleEndian, runtime.RegisterScopeHint("Tip"))
+
+	return
+}
+
+func PaintHitRect(i WidgetIdCreatorI, minX float32, minY float32, maxX float32, maxY float32) (inst PaintHitRectFluid) {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteOpCode(uint32(FuncProcIdPaintHitRect))
+	v := i.Derive()
+	r.WriteWidgetId(checkId(v))
+	r.WriteFloat32(minX)
+	r.WriteFloat32(minY)
+	r.WriteFloat32(maxX)
+	r.WriteFloat32(maxY)
+
+	inst = PaintHitRectFluid{
+		r: r,
+	}
+
+	inst.id = v
+	inst.idGen = i
+	inst.deferredTip = runtime.NewDeferredBlockScopeHinted(typed.GetCurrentFffiCapture, binary.LittleEndian, runtime.RegisterScopeHint("Tip"))
+
+	return
+}
+
 func PaintImage(imageId uint64, minX float32, minY float32, maxX float32, maxY float32, widthPx uint32, heightPx uint32, contentVersion uint64, pixels []uint32) (inst PaintImageFluid) {
 	r := typed.NewRetainedFffiBuilder()
 	r.WriteOpCode(uint32(FuncProcIdPaintImage))

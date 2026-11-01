@@ -2287,6 +2287,126 @@ func (inst PaintEllipseStrokeFluid) Send() {
 
 	r.SendIntermediate()
 }
+func (inst PaintHitCircleFluid) Label(tx string) PaintHitCircleFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(PaintHitCircleMethodIdLabel))
+	r.WriteString(tx)
+
+	return inst
+}
+
+func (inst PaintHitCircleFluid) Tooltip(tx string) PaintHitCircleFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(PaintHitCircleMethodIdTooltip))
+	r.WriteString(tx)
+
+	return inst
+}
+
+func (inst PaintHitCircleFluid) Focusable() PaintHitCircleFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(PaintHitCircleMethodIdFocusable))
+
+	return inst
+}
+
+func (inst PaintHitCircleFluid) Send() {
+	r := inst.r
+	r.WriteOpCode(uint32(PaintHitCircleMethodIdBuild))
+	r.SpliceDeferredBlockMap(inst.deferredTip)
+	inst.deferredTip.ReleaseWithHint()
+	r.SendIntermediate()
+}
+func (inst PaintHitCircleFluid) BeginTip(key0 uint32) PaintHitCircleFluid {
+	inst.deferredTip.Begin(key0)
+	return inst
+}
+
+func (inst PaintHitCircleFluid) EndTip() PaintHitCircleFluid {
+	inst.deferredTip.End()
+	return inst
+}
+
+func (inst PaintHitPolygonFluid) Label(tx string) PaintHitPolygonFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(PaintHitPolygonMethodIdLabel))
+	r.WriteString(tx)
+
+	return inst
+}
+
+func (inst PaintHitPolygonFluid) Tooltip(tx string) PaintHitPolygonFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(PaintHitPolygonMethodIdTooltip))
+	r.WriteString(tx)
+
+	return inst
+}
+
+func (inst PaintHitPolygonFluid) Focusable() PaintHitPolygonFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(PaintHitPolygonMethodIdFocusable))
+
+	return inst
+}
+
+func (inst PaintHitPolygonFluid) Send() {
+	r := inst.r
+	r.WriteOpCode(uint32(PaintHitPolygonMethodIdBuild))
+	r.SpliceDeferredBlockMap(inst.deferredTip)
+	inst.deferredTip.ReleaseWithHint()
+	r.SendIntermediate()
+}
+func (inst PaintHitPolygonFluid) BeginTip(key0 uint32) PaintHitPolygonFluid {
+	inst.deferredTip.Begin(key0)
+	return inst
+}
+
+func (inst PaintHitPolygonFluid) EndTip() PaintHitPolygonFluid {
+	inst.deferredTip.End()
+	return inst
+}
+
+func (inst PaintHitRectFluid) Label(tx string) PaintHitRectFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(PaintHitRectMethodIdLabel))
+	r.WriteString(tx)
+
+	return inst
+}
+
+func (inst PaintHitRectFluid) Tooltip(tx string) PaintHitRectFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(PaintHitRectMethodIdTooltip))
+	r.WriteString(tx)
+
+	return inst
+}
+
+func (inst PaintHitRectFluid) Focusable() PaintHitRectFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(PaintHitRectMethodIdFocusable))
+
+	return inst
+}
+
+func (inst PaintHitRectFluid) Send() {
+	r := inst.r
+	r.WriteOpCode(uint32(PaintHitRectMethodIdBuild))
+	r.SpliceDeferredBlockMap(inst.deferredTip)
+	inst.deferredTip.ReleaseWithHint()
+	r.SendIntermediate()
+}
+func (inst PaintHitRectFluid) BeginTip(key0 uint32) PaintHitRectFluid {
+	inst.deferredTip.Begin(key0)
+	return inst
+}
+
+func (inst PaintHitRectFluid) EndTip() PaintHitRectFluid {
+	inst.deferredTip.End()
+	return inst
+}
+
 func (inst PaintImageFluid) Opacity(op float32) PaintImageFluid {
 	r := inst.r
 	r.WriteOpCode(uint32(PaintImageMethodIdOpacity))

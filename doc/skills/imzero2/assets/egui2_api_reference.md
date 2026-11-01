@@ -122,6 +122,9 @@ status: draft
 | PaintDashedLine | BuilderFactory | No | 8 | 0 | 0 | Immediate |
 | PaintEllipseFilled | BuilderFactory | No | 5 | 0 | 0 | Immediate |
 | PaintEllipseStroke | BuilderFactory | No | 6 | 0 | 0 | Immediate |
+| PaintHitCircle | BuilderFactory | Yes | 3 | 0 | 3 | Immediate |
+| PaintHitPolygon | BuilderFactory | Yes | 2 | 0 | 3 | Immediate |
+| PaintHitRect | BuilderFactory | Yes | 4 | 0 | 3 | Immediate |
 | PaintImage | BuilderFactory | No | 9 | 0 | 2 | Immediate |
 | PaintLine | BuilderFactory | No | 6 | 0 | 0 | Immediate |
 | PaintMarkers | BuilderFactory | No | 6 | 0 | 2 | Immediate |
@@ -1434,6 +1437,96 @@ PaintCmd
 | ry | plain | f32 |
 | col | plain | u32 |
 | strokeWidth | plain | f32 |
+
+#### Return Type
+
+PaintCmd
+
+---
+
+### PaintHitCircle
+
+- **Type:** BuilderFactory
+- **Identity:** Yes
+- **Features:** Immediate
+
+#### Constructor Arguments
+
+| Name | Kind | Type |
+|------|------|------|
+| cx | plain | f32 |
+| cy | plain | f32 |
+| radius | plain | f32 |
+
+#### Builder Methods
+
+- **Label**(tx: s)
+- **Tooltip**(tx: s)
+- **Focusable**()
+
+#### Deferred Block Maps
+
+- **Tip** — keys: (u32)
+
+#### Return Type
+
+PaintCmd
+
+---
+
+### PaintHitPolygon
+
+- **Type:** BuilderFactory
+- **Identity:** Yes
+- **Features:** Immediate
+
+#### Constructor Arguments
+
+| Name | Kind | Type |
+|------|------|------|
+| xs | plain | f32h |
+| ys | plain | f32h |
+
+#### Builder Methods
+
+- **Label**(tx: s)
+- **Tooltip**(tx: s)
+- **Focusable**()
+
+#### Deferred Block Maps
+
+- **Tip** — keys: (u32)
+
+#### Return Type
+
+PaintCmd
+
+---
+
+### PaintHitRect
+
+- **Type:** BuilderFactory
+- **Identity:** Yes
+- **Features:** Immediate
+
+#### Constructor Arguments
+
+| Name | Kind | Type |
+|------|------|------|
+| minX | plain | f32 |
+| minY | plain | f32 |
+| maxX | plain | f32 |
+| maxY | plain | f32 |
+
+#### Builder Methods
+
+- **Label**(tx: s)
+- **Tooltip**(tx: s)
+- **Focusable**()
+
+#### Deferred Block Maps
+
+- **Tip** — keys: (u32)
 
 #### Return Type
 

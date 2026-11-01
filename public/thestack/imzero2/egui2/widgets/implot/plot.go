@@ -161,6 +161,7 @@ type Plot struct {
 	// from inside a Custom closure are debug-logged no-ops (they would
 	// silently never render — the series loop is already underway).
 	emitting     bool
+	customSeq    uint64 // ordinal of the next Custom item emitted; scopes its hit-region ids
 	clickOk      bool
 	clickPos     [2]float32
 	xCustomTicks []tick

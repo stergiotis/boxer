@@ -591,15 +591,25 @@ func (p *Plot) emitSeries(s *seriesFrame, tr transform, areaX, areaY, areaW, are
 			Color:       colHex,
 			Weight:      weight,
 			Highlighted: s.label != "" && s.label == st.legendHover,
+			Ids:         p.ids,
 		}
-		if s.unclipped {
-			// Lift the plot-area clip for the call, restore it after — the
-			// M0 clip stack stays balanced either way.
-			c.PaintClipPop().Send()
-			s.custom(dc)
-			c.PaintClipPush(areaX, areaY, areaX+areaW, areaY+areaH).Send()
-		} else {
-			s.custom(dc)
+		// One id scope per item, keyed by its ordinal among the Custom
+		// items emitted, so two closures can each number their hit regions
+		// from zero.
+		seq := p.customSeq
+		p.customSeq++
+		for range c.IdScope(p.ids.PrepareStr("implot-custom")) {
+			for range c.IdScope(p.ids.PrepareSeq(seq)) {
+				if s.unclipped {
+					// Lift the plot-area clip for the call, restore it after — the
+					// M0 clip stack stays balanced either way.
+					c.PaintClipPop().Send()
+					s.custom(dc)
+					c.PaintClipPush(areaX, areaY, areaX+areaW, areaY+areaH).Send()
+				} else {
+					s.custom(dc)
+				}
+			}
 		}
 	}
 }
