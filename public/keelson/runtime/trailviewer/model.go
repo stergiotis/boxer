@@ -357,7 +357,8 @@ func (inst StripByE) String() string {
 // it, its comparison with a second row — under which the central area shows
 // the table, or one of the analytic views, which takes the central area's
 // place: the tree of the case's chain, the actor × object matrix, the
-// dotted chart. Under an analytic view the detail pane shows the fields.
+// dotted chart, the day × hour grid, the numeric series. Under an analytic
+// view the detail pane shows the fields.
 type TabE uint8
 
 const (
@@ -368,19 +369,21 @@ const (
 	TabTree
 	TabMatrix
 	TabDotted
+	TabDayHour
+	TabSeries
 )
 
 // AllTabs lists the tabs in the order their names are listed.
-var AllTabs = []TabE{TabFields, TabPrevious, TabContext, TabCompare, TabTree, TabMatrix, TabDotted}
+var AllTabs = []TabE{TabFields, TabPrevious, TabContext, TabCompare, TabTree, TabMatrix, TabDotted, TabDayHour, TabSeries}
 
 // DetailTabs are the detail pane's tabs, in the order it shows them.
 var DetailTabs = []TabE{TabFields, TabPrevious, TabContext, TabCompare}
 
 // ViewTabs are the central area's analytic views, in the order the bar
 // above it shows them after the table.
-var ViewTabs = []TabE{TabTree, TabMatrix, TabDotted}
+var ViewTabs = []TabE{TabTree, TabMatrix, TabDotted, TabDayHour, TabSeries}
 
-var tabNames = [...]string{"fields", "previous", "context", "compare", "tree", "matrix", "dotted"}
+var tabNames = [...]string{"fields", "previous", "context", "compare", "tree", "matrix", "dotted", "dayhour", "series"}
 
 func (inst TabE) String() string {
 	if int(inst) < len(tabNames) {
@@ -398,6 +401,10 @@ func (inst TabE) Label() string {
 		return "Actor × object"
 	case TabDotted:
 		return "Dotted chart"
+	case TabDayHour:
+		return "Day × hour"
+	case TabSeries:
+		return "Series"
 	}
 	return "Table"
 }

@@ -91,6 +91,15 @@ func probeSql(t *testing.T) string {
 	section("dotted by window", m.dottedSQL(q, DottedWindow, time.Minute))
 	section("dotted by conversation", m.dottedSQL(listQuery{Case: Case{Kind: CaseConversation, Value: "conv-1"}, From: from, To: to}, DottedConversation, time.Minute))
 	section("dotted by entity", m.dottedSQL(q, DottedEntity, time.Minute))
+	// M5: the day × hour grid in the picker's zone, and the numeric series
+	// under each statistic, at the strip's bucket size.
+	section("day × hour in Europe/Berlin", m.dayHourSQL(q, "Europe/Berlin"))
+	section("day × hour in UTC, no filter", m.dayHourSQL(listQuery{Case: Case{Kind: CaseAll}, From: from, To: to}, "UTC"))
+	section("series rows", m.seriesSQL(q, seriesPick{Measure: MeasureRows}, time.Minute))
+	section("series tokens-in sum", m.seriesSQL(q, seriesPick{Measure: MeasureTokensIn, Stat: StatSum}, time.Minute))
+	section("series tokens-out p50", m.seriesSQL(q, seriesPick{Measure: MeasureTokensOut, Stat: StatP50}, time.Minute))
+	section("series elapsed-ms p95", m.seriesSQL(q, seriesPick{Measure: MeasureElapsedMs, Stat: StatP95}, time.Minute))
+	section("series elapsed-ms max, no filter", m.seriesSQL(listQuery{Case: q.Case, From: from, To: to}, seriesPick{Measure: MeasureElapsedMs, Stat: StatMax}, 5*time.Minute))
 	return b.String()
 }
 

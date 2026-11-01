@@ -313,19 +313,24 @@ Queries, each with its own arguments and marked `Untrusted` where a row's
 text is returned: `list_rows` (case, window, filters, limit, cursor),
 `get_row`, `get_previous` (SD5's read for one row), `get_tree` (the chain
 under an agentic case), `get_verdict` (SD6's lines for a run),
-`get_exceptions` (SD7's list), `get_view`. Commands of effect `view`:
-`set_case`, `set_range`, `set_filter`, `select_row`, `set_tab`. One
-command of effect `consequential`, person-only: `mark_row`. Resources:
-`case`, `range`, `filter`, `selection`, `tab`. Queries answer from the
+`get_exceptions` (SD7's list), `get_view`, `get_dayhour` and `get_series`
+(SD11's aggregates, for the read the window made). Commands of effect
+`view`: `set_case`, `set_range`, `set_filter`, `select_row`, `set_tab`,
+`set_series` (the series' measure and statistic). One command of effect
+`consequential`, person-only: `mark_row`. Resources: `case`, `range`,
+`filter`, `selection`, `tab`, `series`. Queries answer from the
 cache the snapshot took and never wait on the store, as the log viewer's
 do. `tab` is the window's tab: one of the detail pane's — fields,
 previous, context, compare — under which the central area shows the
-table, or an analytic view of SD4 and SD11 — tree, matrix, dotted — which
-takes the table's place while the detail pane shows the fields; so the
-tree is a value of the one resource, not a second one. `get_previous`
-answers for the selected row, whose read the window has made; `get_tree`
-answers from the rows held, for a task or conversation case; `get_view`
-also lists the saved views' names.
+table, or an analytic view of SD4 and SD11 — tree, matrix, dotted,
+dayhour, series — which takes the table's place while the detail pane
+shows the fields; so the tree is a value of the one resource, not a
+second one. `get_previous` answers for the selected row, whose read the
+window has made; `get_tree` answers from the rows held, for a task or
+conversation case; `get_dayhour` and `get_series` answer from the view's
+last read, which is made while its tab is open, for arguments that name
+exactly the case, range and filter the window read, since the view
+aggregates that read whole; `get_view` also lists the saved views' names.
 
 ### SD9 — Labels, time, bodies, export, old rows
 
@@ -386,7 +391,7 @@ not.
 | actor × object matrix | who touched what: principal, app or window against subject, entity or operation, with counts and the last outcome | one `GROUP BY` pair over the case and window | `recordtable`, sortable both ways |
 | dotted chart | when each case was active: a row per run, window, conversation or entity, time on x, a mark per bucket with a count | `GROUP BY (case, bucket)` | `implot` scatter, size by count, binned at the display's resolution |
 | day × hour | off-hours activity | `GROUP BY (weekday, hour)` | a 7 × 24 `recordtable` with cell tint by count and the count as text |
-| numeric series | tokens, latency, elapsed, bytes over time | `GROUP BY bucket` with `quantileTDigest` and sums | `implot` lines, LTTB-reduced when buckets exceed pixels |
+| numeric series | tokens, latency, elapsed, bytes over time | `GROUP BY bucket` with `quantileTDigest` and sums | `implot` lines, one point per bucket of the strip's step |
 | saved views | return to a case, window, filter and tab by name | the persist store | the window's own list; a launch config names one |
 
 The matrix follows the survey's finding that matrices beat node-link
@@ -400,6 +405,14 @@ the timeline's subject, `domain.action` for an audit event. The dotted
 chart bins at the strip's bucket size rather than the display's, so the
 two read the same buckets, and sizes its marks in four steps by the
 square root of the count.
+The day × hour grid groups in the picker's zone (SD9) and tints each cell
+through `recordtable`'s cell fill from the design system's sequential
+palette, the count staying as text, so colour is never the only channel;
+its line states the share of rows outside Monday to Friday 08:00–18:00.
+The numeric series is not decimated: its buckets are chosen from the
+strip's width, so they never outnumber the pixels, and a selection-based
+reducer such as LTTB is the thing play's series panel rejects because it
+can drop the one narrow extreme a reader is looking for.
 
 ## Surfaces — Tier 1
 

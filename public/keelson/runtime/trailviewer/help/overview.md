@@ -161,7 +161,7 @@ list, and the mark shows in the table and the detail pane.
 `dm_trail_reviews` lists every mark for SQL. Each window shows a row's
 latest mark.
 
-## The tree, the matrix and the dotted chart
+## The analytic views
 
 The bar above the table switches the central area between **Table** and
 the analytic views; the detail pane's tabs return to the table. Each view
@@ -187,6 +187,19 @@ was cut.
   across, one mark per bucket of the strip's size, larger for more rows (in
   four sizes, the legend gives each size's counts). The forty busiest rows
   are drawn, the busiest on top.
+- **Day × hour** — rows per weekday and hour of the day, in the picker's
+  zone, as a grid of seven rows and twenty-four columns with the count in
+  each cell and a tint behind it that deepens with the count. The line
+  gives the rows, the busiest cell, the share of rows outside Monday to
+  Friday 08:00–18:00, and the zone; when the picker's zone has no IANA
+  name the hours are UTC and the line says so.
+- **Series** — pick a measure (rows, tokens-in, tokens-out, elapsed-ms)
+  and, for the three that are a number on a row, a statistic (sum, p50,
+  p95, max); the line chart has one point per bucket of the strip's size,
+  the statistic over the rows of the bucket that carry the measure. The
+  line gives the buckets, the rows, the peak bucket and, for a sum, the
+  total. The buckets come from the strip's width, so the chart is never
+  thinned.
 
 ## Saved views
 
@@ -222,9 +235,12 @@ window read; `get_row` reads one row, `get_previous` the selected row's
 previous state, `get_verdict` the evidence lines, `get_view` what the
 window shows and the saved views' names, `get_exceptions` the open
 exceptions of a case over a range with every rule's predicate, and
-`get_tree` a task's or conversation's tree in depth-first order.
-`set_case`, `set_range`, `set_filter`, `select_row` and `set_tab` (one of
-fields, previous, context, compare, tree, matrix, dotted) change what the
+`get_tree` a task's or conversation's tree in depth-first order,
+`get_dayhour` and `get_series` the two aggregate views as the window last
+read them, for the case, range and filter it read.
+`set_case`, `set_range`, `set_filter`, `select_row`, `set_tab` (one of
+fields, previous, context, compare, tree, matrix, dotted, dayhour, series)
+and `set_series` (the series' measure and statistic) change what the
 window shows and nothing else.
 `mark_row` writes to the trail and is not offered to agents: review is the
 person's act. Row text reaches a model marked untrusted.

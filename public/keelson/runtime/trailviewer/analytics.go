@@ -21,12 +21,13 @@ import (
 )
 
 // The analytic views of ADR-0350 §SD11 (proposed) that M4 builds: the
-// actor × object matrix and the dotted chart. Each is one GROUP BY over the
-// case, the window and the filter the table last read — the same scope,
-// never a wider one — drawn with a widget the tree has, under a text line
-// that states what it shows and whether it was cut. Each is read by a
-// bgjob worker while its tab is open, again when the table refills, and
-// never from a frame.
+// actor × object matrix and the dotted chart; M5's day × hour grid and
+// numeric series are in dayhour.go and series.go and share the machinery
+// here. Each is one GROUP BY over the case, the window and the filter the
+// table last read — the same scope, never a wider one — drawn with a widget
+// the tree has, under a text line that states what it shows and whether it
+// was cut. Each is read by a bgjob worker while its tab is open, again when
+// the table refills, and never from a frame.
 
 // ActorE is the matrix's row axis: who acted.
 type ActorE uint8
@@ -371,12 +372,13 @@ func (inst *dottedData) line() string {
 }
 
 // aggKey is what one aggregate read is keyed by: the table's fill, the
-// pick and the bucket size.
+// picks, the bucket size and the zone.
 type aggKey struct {
 	gen  uint64
 	pick uint8
 	pk2  uint8
 	step time.Duration
+	zone string
 }
 
 // aggCache is one analytic view's read, by a bgjob worker.
@@ -435,22 +437,36 @@ func (inst *aggCache[T]) current(key aggKey) (d *T, stale bool) {
 
 func (inst *aggCache[T]) close() { inst.runner.Invalidate() }
 
-// analytics is the two views' state: the picks, the reads, and the
-// matrix's grid.
+// analytics is the analytic views' state: the picks, the reads, and the
+// grids.
 type analytics struct {
-	actor  ActorE
-	object ObjectE
-	row    DottedRowE
-	matrix aggCache[matrixData]
-	dotted aggCache[dottedData]
-	grid   matrixGrid
-	plotW  float32
+	actor   ActorE
+	object  ObjectE
+	row     DottedRowE
+	matrix  aggCache[matrixData]
+	dotted  aggCache[dottedData]
+	dayhour aggCache[dayHourData]
+	series  struct {
+		pick seriesPick
+		data aggCache[seriesData]
+	}
+	grid        countGrid
+	dayHourGrid countGrid
+	plotW       float32
 }
 
 func (inst *analytics) close() {
 	inst.matrix.close()
 	inst.dotted.close()
+	inst.dayhour.close()
+	inst.series.data.close()
 	inst.grid.release()
+	inst.dayHourGrid.release()
+}
+
+// running reports whether any view's read is under way.
+func (inst *analytics) running() bool {
+	return inst.matrix.runner.Running() || inst.dotted.runner.Running() || inst.dayhour.runner.Running() || inst.series.data.runner.Running()
 }
 
 // aggQuery is the read the table last made: its case, window and filter.
@@ -495,6 +511,13 @@ func (inst *App) tickAnalytics(src *Source) {
 			}
 			return buildDotted(groups, row, step, dottedShown, len(groups) == dottedGroups), nil
 		}, inst.probeFunc(src))
+	case TabDayHour:
+		inst.an.dayhour.tick(src, inst.dayHourKey(), "dayhour", inst.readDayHour(q), inst.probeFunc(src))
+	case TabSeries:
+		if inst.cache.step <= 0 {
+			return
+		}
+		inst.an.series.data.tick(src, inst.seriesKey(), "series", inst.readSeries(q), inst.probeFunc(src))
 	}
 }
 
@@ -554,7 +577,7 @@ func (inst *App) renderMatrix() {
 		return
 	}
 	g := &an.grid
-	g.build(m, an.matrix.ver)
+	g.build(an.matrix.ver, m.actor.String(), m.actors, m.objects, func(i, j int) int64 { return int64(m.counts[i][j]) })
 	cols := make([]recordtable.Column, 0, len(m.objects)+1)
 	cols = append(cols, recordtable.Column{Arrow: 0, Header: m.actor.String(), Width: 220, WidthType: "text", Cell: func(row int64) recordtable.Cell {
 		return recordtable.Cell{Text: m.actors[row], LeftAlign: true, Hover: m.actors[row]}
@@ -576,9 +599,9 @@ func (inst *App) renderMatrix() {
 	g.sort.Apply(res)
 }
 
-// matrixGrid is the matrix as an Arrow record for the grid: the actor, then
-// one count column per object.
-type matrixGrid struct {
+// countGrid is a grid of counts as an Arrow record for recordtable: a
+// label column, then one Int64 column per column key.
+type countGrid struct {
 	rec   arrow.RecordBatch
 	ver   uint64
 	state recordtable.State
@@ -586,37 +609,39 @@ type matrixGrid struct {
 	order []int64
 }
 
-func (inst *matrixGrid) release() {
+func (inst *countGrid) release() {
 	if inst.rec != nil {
 		inst.rec.Release()
 		inst.rec = nil
 	}
 }
 
-func (inst *matrixGrid) build(m *matrixData, ver uint64) {
+// build makes the record once per ver: label names the row column, rows
+// are its values, cols the count columns, count the cell at (row, col).
+func (inst *countGrid) build(ver uint64, label string, rows []string, cols []string, count func(i, j int) int64) {
 	if inst.rec != nil && inst.ver == ver {
 		return
 	}
 	inst.release()
 	inst.ver = ver
 	mem := memory.DefaultAllocator
-	fields := make([]arrow.Field, 0, len(m.objects)+1)
-	arrs := make([]arrow.Array, 0, len(m.objects)+1)
+	fields := make([]arrow.Field, 0, len(cols)+1)
+	arrs := make([]arrow.Array, 0, len(cols)+1)
 	sb := array.NewStringBuilder(mem)
-	sb.AppendValues(m.actors, nil)
+	sb.AppendValues(rows, nil)
 	arrs = append(arrs, sb.NewArray())
 	sb.Release()
-	fields = append(fields, arrow.Field{Name: m.actor.String(), Type: arrow.BinaryTypes.String})
-	for j, o := range m.objects {
+	fields = append(fields, arrow.Field{Name: label, Type: arrow.BinaryTypes.String})
+	for j, o := range cols {
 		b := array.NewInt64Builder(mem)
-		for i := range m.actors {
-			b.Append(int64(m.counts[i][j]))
+		for i := range rows {
+			b.Append(count(i, j))
 		}
 		arrs = append(arrs, b.NewArray())
 		b.Release()
 		fields = append(fields, arrow.Field{Name: o, Type: arrow.PrimitiveTypes.Int64})
 	}
-	inst.rec = array.NewRecordBatch(arrow.NewSchema(fields, nil), arrs, int64(len(m.actors)))
+	inst.rec = array.NewRecordBatch(arrow.NewSchema(fields, nil), arrs, int64(len(rows)))
 	for _, a := range arrs {
 		a.Release()
 	}

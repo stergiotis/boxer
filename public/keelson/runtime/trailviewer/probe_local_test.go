@@ -183,6 +183,84 @@ func TestTheProbeReadsBackWrittenRowsOverLocal(t *testing.T) {
 	d = buildDotted(groups, DottedEntity, 2*time.Second, dottedShown, false)
 	assert.Equal(t, "rule:r1", d.keys[0])
 	assert.Equal(t, uint64(3), d.busiestN, "r1's three events")
+
+	// M5: the day × hour grid in a zone, and the series. The rows are at
+	// 2023-11-14 22:13 UTC, a Tuesday: 23:13 in Berlin, Wednesday 07:13 in
+	// Tokyo, all outside working hours either way.
+	cellsDH, err := queryRows[DayHourCell](ctx, p, p.marts.dayHourSQL(runQ, "Europe/Berlin"))
+	require.NoError(t, err)
+	assert.Equal(t, []DayHourCell{{Weekday: 2, Hour: 23, N: 6}}, cellsDH)
+	dh := buildDayHour(cellsDH, "Europe/Berlin", false)
+	assert.Equal(t, "6 rows; busiest Tue 23:00 with 6; 100% outside Mon–Fri 08:00–18:00 Europe/Berlin", dh.line())
+	cellsDH, err = queryRows[DayHourCell](ctx, p, p.marts.dayHourSQL(runQ, "Asia/Tokyo"))
+	require.NoError(t, err)
+	assert.Equal(t, []DayHourCell{{Weekday: 3, Hour: 7, N: 6}}, cellsDH)
+	cellsDH, err = queryRows[DayHourCell](ctx, p, p.marts.dayHourSQL(listQuery{Case: runQ.Case, From: from, To: to,
+		Filter: Filter{}.with(FacetDomainAction, "rules.created", true)}, "UTC"))
+	require.NoError(t, err)
+	assert.Equal(t, []DayHourCell{{Weekday: 2, Hour: 22, N: 4}}, cellsDH, "the filter removes the two created events")
+
+	points, err := queryRows[SeriesPoint](ctx, p, p.marts.seriesSQL(runQ, seriesPick{Measure: MeasureRows}, 2*time.Second))
+	require.NoError(t, err)
+	sd := buildSeries(points, seriesPick{Measure: MeasureRows}, 2*time.Second, false)
+	assert.Equal(t, "rows over 4 buckets of 2s from 6 rows; peak 2023-11-14 22:13:22 UTC with 2; total 6", sd.line())
+	// No audit event carries tokens or an elapsed time: the series over
+	// them is empty and says so, rather than a line of zeros.
+	for _, pick := range []seriesPick{{Measure: MeasureTokensIn, Stat: StatSum}, {Measure: MeasureElapsedMs, Stat: StatP95}} {
+		points, err = queryRows[SeriesPoint](ctx, p, p.marts.seriesSQL(runQ, pick, 2*time.Second))
+		require.NoError(t, err, pick.String())
+		assert.Empty(t, points, pick.String())
+	}
+}
+
+// Over clickhouse-local: the series' statistics over model calls that
+// carry tokens and an elapsed time — sum, the TDigest quantiles and max per
+// bucket — and the day × hour grid over the same rows.
+func TestTheSeriesStatisticsRunOverLocal(t *testing.T) {
+	exec, ctx := localTrail(t)
+	rec := trail.NewRecorder(exec, "run-1", zerolog.Nop())
+	defer rec.Close()
+	at := time.Unix(1_700_000_000, 0).UTC()
+	c := trail.Context{Origin: rec.OriginOf("apps/chat", 1)}
+	call := func(offset time.Duration, in, out uint32, elapsed uint64) {
+		require.NoError(t, rec.LlmCall(at.Add(offset), c, trail.LlmCall{CallId: "call-" + offset.String(), Purpose: "book/slug", Sensitivity: "open",
+			Model: "m", EndpointHost: "h", FinishReason: "stop", Retention: "ops", InputTokens: in, OutputTokens: out, ElapsedMs: elapsed}))
+	}
+	call(1*time.Second, 100, 10, 50)
+	call(2*time.Second, 300, 30, 150)
+	call(3*time.Second, 200, 20, 100)
+	call(10*time.Second, 1000, 1, 900)
+	require.NoError(t, rec.Flush(ctx))
+
+	src := &Source{Exec: exec, Run: func() string { return "run-1" }}
+	p, err := newProbe(src, string(manifest.Id), 1)
+	require.NoError(t, err)
+	q := listQuery{Case: Case{Kind: CaseRun, Value: "run-1"}, From: at, To: at.Add(time.Minute)}
+	read := func(pick seriesPick) seriesData {
+		points, err := queryRows[SeriesPoint](ctx, p, p.marts.seriesSQL(q, pick, 5*time.Second))
+		require.NoError(t, err, pick.String())
+		return buildSeries(points, pick, 5*time.Second, false)
+	}
+	sum := read(seriesPick{Measure: MeasureTokensIn, Stat: StatSum})
+	assert.Equal(t, []float64{600, 1000}, sum.ys)
+	assert.Equal(t, uint64(4), sum.rows)
+	assert.Equal(t, "tokens-in sum over 2 buckets of 5s from 4 rows; peak 2023-11-14 22:13:30 UTC with 1000; total 1600", sum.line())
+	mx := read(seriesPick{Measure: MeasureTokensOut, Stat: StatMax})
+	assert.Equal(t, []float64{30, 1}, mx.ys)
+	p50 := read(seriesPick{Measure: MeasureElapsedMs, Stat: StatP50})
+	require.Len(t, p50.ys, 2)
+	assert.InDelta(t, 100, p50.ys[0], 1, "the median of 50, 100, 150")
+	assert.InDelta(t, 900, p50.ys[1], 1e-6)
+	p95 := read(seriesPick{Measure: MeasureElapsedMs, Stat: StatP95})
+	require.Len(t, p95.ys, 2)
+	assert.Greater(t, p95.ys[0], p50.ys[0])
+	assert.LessOrEqual(t, p95.ys[0], 150.0)
+
+	cells, err := queryRows[DayHourCell](ctx, p, p.marts.dayHourSQL(q, "America/New_York"))
+	require.NoError(t, err)
+	assert.Equal(t, []DayHourCell{{Weekday: 2, Hour: 17, N: 4}}, cells, "Tuesday 17:13 in New York")
+	dh := buildDayHour(cells, "America/New_York", false)
+	assert.Equal(t, "4 rows; busiest Tue 17:00 with 4; 0% outside Mon–Fri 08:00–18:00 America/New_York", dh.line())
 }
 
 // Over clickhouse-local: the SQL exception rules each raise exactly their

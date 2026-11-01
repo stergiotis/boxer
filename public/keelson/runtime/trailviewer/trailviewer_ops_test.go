@@ -143,7 +143,8 @@ func refusal(err error) (r *app.OperationRefusal) {
 	return
 }
 
-var allOps = []string{opListRows, opGetRow, opGetPrevious, opGetVerdict, opGetView, opGetExc, opGetTree, opSetCase, opSetRange, opSetFilter, opSelectRow, opSetTab}
+var allOps = []string{opListRows, opGetRow, opGetPrevious, opGetVerdict, opGetView, opGetExc, opGetTree, opGetDayHour, opGetSeries,
+	opSetCase, opSetRange, opSetFilter, opSelectRow, opSetTab, opSetSeries}
 
 func TestOperationsCatalogRegisters(t *testing.T) {
 	require.NoError(t, manifest.Operations.Validate())

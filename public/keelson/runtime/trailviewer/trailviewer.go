@@ -357,6 +357,10 @@ func (inst *App) render() (err error) {
 			inst.renderMatrix()
 		case TabDotted:
 			inst.renderDotted()
+		case TabDayHour:
+			inst.renderDayHour()
+		case TabSeries:
+			inst.renderSeries()
 		default:
 			inst.renderTable()
 		}
@@ -396,7 +400,7 @@ func (inst *App) renderViewBar() {
 
 func (inst *App) requestRepaint() {
 	running := inst.cache.runner.Running() || inst.verdicts.runner.Running() || inst.detail.runner.Running() || inst.picker.runner.runner.Running() ||
-		inst.an.matrix.runner.Running() || inst.an.dotted.runner.Running() || inst.views.runner.Running() || inst.send.runner.Running()
+		inst.an.running() || inst.views.runner.Running() || inst.send.runner.Running()
 	switch {
 	case running:
 		c.RequestRepaintAfter(0.1)

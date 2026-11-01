@@ -170,6 +170,190 @@ func TestTheDottedChartSizesMarksByCount(t *testing.T) {
 	assert.Contains(t, few.line(), "the chart shows the 40 busiest")
 }
 
+// The day × hour grid is built from the cells the read returned, a missing
+// cell zero; the line states the busiest cell, the share outside Mon–Fri
+// working hours and the zone, and says when the zone fell back to UTC.
+func TestTheDayHourGridCountsOffHours(t *testing.T) {
+	cells := []DayHourCell{
+		{Weekday: 1, Hour: 9, N: 10},  // Mon 09, working hours
+		{Weekday: 3, Hour: 17, N: 20}, // Wed 17, working hours
+		{Weekday: 3, Hour: 18, N: 5},  // Wed 18, after hours
+		{Weekday: 5, Hour: 7, N: 5},   // Fri 07, before hours
+		{Weekday: 7, Hour: 12, N: 10}, // Sun 12, weekend
+		{Weekday: 9, Hour: 1, N: 99},  // not a weekday: dropped
+	}
+	d := buildDayHour(cells, "Europe/Berlin", false)
+	assert.Equal(t, uint64(50), d.rows)
+	assert.Equal(t, 5, d.cells)
+	assert.Equal(t, uint64(20), d.counts[2][17])
+	assert.Equal(t, uint64(0), d.counts[2][16], "a cell the read did not return is zero")
+	assert.Equal(t, uint64(20), d.maxN)
+	assert.Equal(t, 2, d.busiestD)
+	assert.Equal(t, 17, d.busiestH)
+	assert.Equal(t, uint64(20), d.off)
+	assert.Equal(t, 40, d.offShare())
+	assert.Equal(t, "50 rows; busiest Wed 17:00 with 20; 40% outside Mon–Fri 08:00–18:00 Europe/Berlin", d.line())
+	fb := buildDayHour(cells[:1], "UTC", true)
+	assert.Equal(t, "10 rows; busiest Mon 09:00 with 10; 0% outside Mon–Fri 08:00–18:00 UTC (the picker's zone has no IANA name)", fb.line())
+	empty := buildDayHour(nil, "UTC", false)
+	assert.Equal(t, "0 rows in the case and window; hours in UTC", empty.line())
+	// The tint follows the count, translucent, with the design system's
+	// palette; a zero count against zero is the palette's start.
+	assert.NotEqual(t, dayHourTint(1, 20), dayHourTint(20, 20))
+	assert.NotPanics(t, func() { dayHourTint(0, 0) })
+}
+
+// The series is built from the buckets the read returned, each point at
+// its bucket's middle; the line states the pick, the buckets, the peak,
+// the total for a sum, and what was cut.
+func TestTheSeriesStatesItsPeakAndTotal(t *testing.T) {
+	b0 := t0.Unix()
+	points := []SeriesPoint{{Bucket: b0, N: 2, V: 10}, {Bucket: b0 + 60, N: 5, V: 42.5}, {Bucket: b0 + 180, N: 1, V: 7}}
+	d := buildSeries(points, seriesPick{Measure: MeasureTokensIn, Stat: StatSum}, time.Minute, false)
+	assert.Equal(t, []float64{float64(b0) + 30, float64(b0+60) + 30, float64(b0+180) + 30}, d.xs)
+	assert.Equal(t, []float64{10, 42.5, 7}, d.ys)
+	assert.Equal(t, uint64(8), d.rows)
+	assert.Equal(t, b0+60, d.peakT)
+	assert.Equal(t, 42.5, d.peakV)
+	assert.Equal(t, 59.5, d.total)
+	assert.Equal(t, "tokens-in sum over 3 buckets of 1m0s from 8 rows; peak 2026-10-31 12:01:00 UTC with 42.5; total 59.5", d.line())
+	p95 := buildSeries(points, seriesPick{Measure: MeasureElapsedMs, Stat: StatP95}, time.Minute, true)
+	assert.Equal(t, "elapsed-ms p95 over 3 buckets of 1m0s from 8 rows; peak 2026-10-31 12:01:00 UTC with 42.5; the read stopped at 2000 buckets", p95.line())
+	rows := buildSeries(points[:1], seriesPick{Measure: MeasureRows}, time.Minute, false)
+	assert.Equal(t, "rows over 1 buckets of 1m0s from 2 rows; peak 2026-10-31 12:00:00 UTC with 10; total 10", rows.line())
+	noOut := buildSeries(nil, seriesPick{Measure: MeasureTokensOut, Stat: StatMax}, time.Minute, false)
+	assert.Equal(t, "0 rows in the case and window carry tokens-out", noOut.line())
+	none := buildSeries(nil, seriesPick{}, time.Minute, false)
+	assert.Equal(t, "0 rows in the case and window", none.line())
+	loc, err := time.LoadLocation("Europe/Berlin")
+	require.NoError(t, err)
+	assert.Contains(t, d.lineIn(loc), "peak 2026-10-31 13:01:00 CET")
+}
+
+// The two tabs are values of the tab resource, by name.
+func TestTheNewTabsParse(t *testing.T) {
+	for name, tab := range map[string]TabE{"dayhour": TabDayHour, "series": TabSeries, "Series ": TabSeries} {
+		got, ok := ParseTab(name)
+		assert.True(t, ok, name)
+		assert.Equal(t, tab, got, name)
+		assert.True(t, tab.availableFor(CaseRun))
+		assert.False(t, tab.detail())
+	}
+	assert.Equal(t, "Day × hour", TabDayHour.Label())
+	assert.Equal(t, "Series", TabSeries.Label())
+	assert.Contains(t, ViewTabs, TabDayHour)
+	assert.Contains(t, ViewTabs, TabSeries)
+}
+
+// set_series sets the measure and statistic and never toggles; a statistic
+// the measure has not is refused and changes nothing; the combos route
+// through the same handler.
+func TestSetSeriesSetsAndNeverToggles(t *testing.T) {
+	inst, _ := opsFixture(t)
+	assert.Equal(t, seriesPick{Measure: MeasureRows, Stat: StatSum}, inst.an.series.pick, "rows, the count, by default")
+	for range 2 {
+		require.NoError(t, command(t, inst, opSetSeries, SetSeriesArgs{Measure: "tokens-in", Statistic: "p95"}))
+		assert.Equal(t, seriesPick{Measure: MeasureTokensIn, Stat: StatP95}, inst.an.series.pick)
+	}
+	assert.Equal(t, seriesPick{Measure: MeasureTokensIn, Stat: StatP95}, inst.Operations().ResourceValue(resSeries))
+	assert.NotNil(t, refusal(command(t, inst, opSetSeries, SetSeriesArgs{Measure: "rows", Statistic: "p95"})))
+	assert.NotNil(t, refusal(command(t, inst, opSetSeries, SetSeriesArgs{Measure: "bytes", Statistic: "sum"})))
+	assert.NotNil(t, refusal(command(t, inst, opSetSeries, SetSeriesArgs{Measure: "elapsed-ms", Statistic: "mean"})))
+	assert.Equal(t, seriesPick{Measure: MeasureTokensIn, Stat: StatP95}, inst.an.series.pick, "a refused command changes nothing")
+	require.NoError(t, command(t, inst, opSetSeries, SetSeriesArgs{Measure: "rows"}))
+	assert.Equal(t, seriesPick{Measure: MeasureRows, Stat: StatSum}, inst.an.series.pick, "an empty statistic is sum")
+	inst.setSeriesGesture(seriesPick{Measure: MeasureElapsedMs, Stat: StatMax})
+	assert.Equal(t, seriesPick{Measure: MeasureElapsedMs, Stat: StatMax}, inst.an.series.pick)
+	v, err := query[struct{}, View](t, inst, opGetView, struct{}{})
+	require.NoError(t, err)
+	assert.Equal(t, "elapsed-ms max", v.Series)
+	for _, name := range []string{"dayhour", "series"} {
+		require.NoError(t, command(t, inst, opSetTab, SetTabArgs{Tab: name}))
+		assert.Equal(t, name, inst.tab.String())
+	}
+}
+
+// get_dayhour and get_series answer from the views' caches for the read
+// the window made, and say when the view is not read or the arguments
+// name another read.
+func TestGetDayHourAndGetSeriesAnswerFromTheCache(t *testing.T) {
+	inst, _ := opsFixture(t)
+	inst.cache.step = time.Minute
+	args := GetDayHourArgs{Case: "run", Value: fixtureRun, Range: RangeArgs{From: inst.window.From, To: inst.window.To}}
+	out, err := query[GetDayHourArgs, DayHourResult](t, inst, opGetDayHour, args)
+	require.NoError(t, err)
+	assert.Contains(t, out.Diagnostic, "set_tab dayhour")
+	assert.Equal(t, "Mon–Fri 08:00–18:00", out.WorkingHours)
+
+	hkey := inst.dayHourKey()
+	inst.an.dayhour.data = buildDayHour([]DayHourCell{{Weekday: 2, Hour: 9, N: 4}, {Weekday: 6, Hour: 23, N: 1}}, "UTC", false)
+	inst.an.dayhour.has, inst.an.dayhour.key, inst.an.dayhour.asked = true, hkey, hkey
+	out, err = query[GetDayHourArgs, DayHourResult](t, inst, opGetDayHour, args)
+	require.NoError(t, err)
+	assert.Empty(t, out.Diagnostic)
+	assert.Equal(t, uint64(5), out.Rows)
+	assert.Equal(t, []DayHourCellOut{{Weekday: "Tue", Hour: 9, Rows: 4}, {Weekday: "Sat", Hour: 23, Rows: 1}}, out.Cells)
+	assert.Equal(t, "Tue", out.BusiestWeekday)
+	assert.Equal(t, 9, out.BusiestHour)
+	assert.Equal(t, 20, out.OffHoursShare)
+	assert.Equal(t, "UTC", out.Zone)
+	assert.Equal(t, inst.an.dayhour.data.line(), out.Line)
+	// Another case, a narrower range or a wider filter is another read.
+	other, err := query[GetDayHourArgs, DayHourResult](t, inst, opGetDayHour, GetDayHourArgs{Case: "run", Value: "other", Range: args.Range})
+	require.NoError(t, err)
+	assert.Contains(t, other.Diagnostic, "set_case")
+	narrow, err := query[GetDayHourArgs, DayHourResult](t, inst, opGetDayHour,
+		GetDayHourArgs{Case: "run", Value: fixtureRun, Range: RangeArgs{From: inst.window.From, To: inst.window.To.Add(-time.Minute)}})
+	require.NoError(t, err)
+	assert.Contains(t, narrow.Diagnostic, "set_range")
+	filtered, err := query[GetDayHourArgs, DayHourResult](t, inst, opGetDayHour,
+		GetDayHourArgs{Case: "run", Value: fixtureRun, Range: args.Range, Filter: []TermArg{{Facet: "kind", Value: "llmCall"}}})
+	require.NoError(t, err)
+	assert.Contains(t, filtered.Diagnostic, "set_filter")
+	// A fill since the read makes the view stale: answered, and said.
+	inst.cache.gen++
+	stale, err := query[GetDayHourArgs, DayHourResult](t, inst, opGetDayHour, args)
+	require.NoError(t, err)
+	assert.Contains(t, stale.Diagnostic, "ask again shortly")
+	assert.Equal(t, uint64(5), stale.Rows)
+	inst.cache.gen--
+
+	sargs := GetSeriesArgs{Case: "run", Value: fixtureRun, Range: args.Range}
+	sout, err := query[GetSeriesArgs, SeriesResult](t, inst, opGetSeries, sargs)
+	require.NoError(t, err)
+	assert.Contains(t, sout.Diagnostic, "set_tab series")
+	assert.Equal(t, "rows", sout.Measure)
+	skey := inst.seriesKey()
+	inst.an.series.data.data = buildSeries([]SeriesPoint{{Bucket: t0.Unix(), N: 3, V: 3}, {Bucket: t0.Unix() + 60, N: 1, V: 1}}, seriesPick{}, time.Minute, false)
+	inst.an.series.data.has, inst.an.series.data.key, inst.an.series.data.asked = true, skey, skey
+	sout, err = query[GetSeriesArgs, SeriesResult](t, inst, opGetSeries, sargs)
+	require.NoError(t, err)
+	assert.Empty(t, sout.Diagnostic)
+	assert.Equal(t, "rows", sout.Measure)
+	assert.Equal(t, "sum", sout.Statistic)
+	assert.Equal(t, int64(60000), sout.StepMs)
+	assert.Equal(t, 2, sout.Buckets)
+	assert.Equal(t, uint64(4), sout.Rows)
+	assert.Equal(t, t0, sout.PeakAt)
+	assert.Equal(t, 3.0, sout.Peak)
+	assert.Equal(t, 4.0, sout.Total)
+	assert.Equal(t, []SeriesBucketOut{{Start: t0, Rows: 3, Value: 3}, {Start: t0.Add(time.Minute), Rows: 1, Value: 1}}, sout.Series)
+	sargs.Limit = 1
+	sout, err = query[GetSeriesArgs, SeriesResult](t, inst, opGetSeries, sargs)
+	require.NoError(t, err)
+	assert.Len(t, sout.Series, 1, "bounded")
+	assert.Equal(t, 2, sout.Buckets)
+	// Another pick is read by set_series, not here.
+	sargs.Measure, sargs.Statistic = "tokens-in", "p95"
+	sout, err = query[GetSeriesArgs, SeriesResult](t, inst, opGetSeries, sargs)
+	require.NoError(t, err)
+	assert.Contains(t, sout.Diagnostic, "set_series reads tokens-in p95")
+	assert.Empty(t, sout.Series)
+	sargs.Statistic = "mean"
+	_, err = query[GetSeriesArgs, SeriesResult](t, inst, opGetSeries, sargs)
+	assert.NotNil(t, refusal(err))
+}
+
 // fakeStorage is an in-memory persist store.
 type fakeStorage struct {
 	mu sync.Mutex
@@ -228,12 +412,12 @@ func TestASavedViewRoundTrips(t *testing.T) {
 	assert.Equal(t, "tree", stored[0].Tab)
 
 	// Saving under the same name replaces it.
-	inst.applyTab(TabMatrix)
+	inst.applyTab(TabSeries)
 	inst.saveView("my task")
 	settle(inst)
 	stored, _ = loadViews(st)
 	require.Len(t, stored, 1)
-	assert.Equal(t, "matrix", stored[0].Tab)
+	assert.Equal(t, "series", stored[0].Tab)
 
 	other := newInstance(manifest)
 	other.views.store = st
@@ -244,7 +428,7 @@ func TestASavedViewRoundTrips(t *testing.T) {
 	assert.Equal(t, Case{Kind: CaseTask, Value: "task-1"}, other.caseValue)
 	assert.Equal(t, Window{Last: 6 * time.Hour}, other.window)
 	assert.Equal(t, inst.filter.key(), other.filter.key())
-	assert.Equal(t, TabMatrix, other.tab)
+	assert.Equal(t, TabSeries, other.tab)
 	assert.Equal(t, "anchor_now - INTERVAL 6 HOUR", other.picker.fromExpr)
 
 	inst.writeViews(withoutView(inst.views.list, "my task"), "deleted")
@@ -323,6 +507,12 @@ func TestTheAnalyticViewsRender(t *testing.T) {
 	dkey := inst.dottedKey()
 	inst.an.dotted.data = buildDotted([]Bucket{{Bucket: t0.Unix(), Key: "run-a", N: 3}}, DottedRun, time.Minute, dottedShown, false)
 	inst.an.dotted.has, inst.an.dotted.key, inst.an.dotted.asked = true, dkey, dkey
+	hkey := inst.dayHourKey()
+	inst.an.dayhour.data = buildDayHour([]DayHourCell{{Weekday: 2, Hour: 9, N: 4}, {Weekday: 6, Hour: 23, N: 1}}, "UTC", false)
+	inst.an.dayhour.has, inst.an.dayhour.key, inst.an.dayhour.asked, inst.an.dayhour.ver = true, hkey, hkey, 1
+	skey := inst.seriesKey()
+	inst.an.series.data.data = buildSeries([]SeriesPoint{{Bucket: t0.Unix(), N: 3, V: 3}}, seriesPick{}, time.Minute, false)
+	inst.an.series.data.has, inst.an.series.data.key, inst.an.series.data.asked = true, skey, skey
 	require.True(t, inst.selectById(3))
 	frame := func(msg string) {
 		for range c.IdScope(inst.ids.PrepareStr("window")) {

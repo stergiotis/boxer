@@ -1,6 +1,7 @@
 package trailviewer
 
 import (
+	"fmt"
 	"slices"
 	"strconv"
 	"strings"
@@ -11,7 +12,8 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/trailviewer/verdict"
 )
 
-// The operations catalog (ADR-0350 §SD8, proposed; get_tree is M4's).
+// The operations catalog (ADR-0350 §SD8, proposed; get_tree is M4's,
+// get_dayhour, get_series and set_series M5's).
 // Queries read the window's caches as the snapshot took them with the
 // frame, never the store, so a query does not wait on ClickHouse; each
 // says when the cache was filled. They select by their own arguments,
@@ -27,6 +29,7 @@ const (
 	resFilter    = "filter"
 	resSelection = "selection"
 	resTab       = "tab"
+	resSeries    = "series"
 
 	opListRows    = "list_rows"
 	opGetRow      = "get_row"
@@ -35,12 +38,15 @@ const (
 	opGetView     = "get_view"
 	opGetExc      = "get_exceptions"
 	opGetTree     = "get_tree"
+	opGetDayHour  = "get_dayhour"
+	opGetSeries   = "get_series"
 
 	opSetCase   = "set_case"
 	opSetRange  = "set_range"
 	opSetFilter = "set_filter"
 	opSelectRow = "select_row"
 	opSetTab    = "set_tab"
+	opSetSeries = "set_series"
 	opMarkRow   = "mark_row"
 )
 
@@ -79,6 +85,13 @@ type opsSnap struct {
 	asOf        *AsOf
 	gen         uint64
 	views       []string
+	// The M5 views as read for the window's current key, each with
+	// whether the read predates it.
+	dayhour      *dayHourData
+	dayhourStale bool
+	series       *seriesData
+	seriesStale  bool
+	seriesPick   seriesPick
 
 	c        Case
 	window   Window
@@ -98,6 +111,9 @@ func (inst *App) opsSnapshot() (sn opsSnap) {
 	sn.taken = time.Now()
 	sn.gen, sn.views = ch.gen, inst.views.names()
 	sn.c, sn.window, sn.filter, sn.tab = inst.caseValue, inst.window, inst.filter, inst.tab
+	sn.dayhour, sn.dayhourStale = inst.an.dayhour.current(inst.dayHourKey())
+	sn.series, sn.seriesStale = inst.an.series.data.current(inst.seriesKey())
+	sn.seriesPick = inst.an.series.pick
 	if inst.hasSelected {
 		sn.selected = inst.selected.Id
 		sn.detail = inst.detail.current(inst.selected.Id)
@@ -312,6 +328,82 @@ type TreeResult struct {
 	Diagnostic  string     `desc:"why the result may be short or empty: nothing persisted, not read yet, a failed refresh, or a case or filter other than the one the window read; empty when none applies"`
 }
 
+// GetDayHourArgs names the read the view is over: the case, the range
+// and the filter, each exactly the one the window read, since the view
+// aggregates that read whole.
+type GetDayHourArgs struct {
+	Case   string    `desc:"the case's kind, as the window read it"`
+	Value  string    `desc:"the case's value"`
+	Range  RangeArgs `desc:"the window's range, as the window read it"`
+	Filter []TermArg `desc:"the filter the table is narrowed by, as the window read it; empty for none"`
+}
+
+// DayHourCellOut is one (weekday, hour) with rows.
+type DayHourCellOut struct {
+	Weekday string `desc:"Mon to Sun"`
+	Hour    int    `desc:"the hour of the day, 0 to 23, in the zone"`
+	Rows    uint64 `desc:"rows in that weekday and hour over the window"`
+}
+
+// DayHourResult is get_dayhour's result.
+type DayHourResult struct {
+	Zone           string           `desc:"the IANA zone the weekdays and hours are in: the picker's, or UTC when it has none"`
+	Rows           uint64           `desc:"rows counted"`
+	Cells          []DayHourCellOut `desc:"the cells with rows, weekday then hour; at most 168"`
+	BusiestWeekday string           `desc:"the weekday of the busiest cell"`
+	BusiestHour    int              `desc:"the hour of the busiest cell"`
+	BusiestRows    uint64           `desc:"the busiest cell's rows"`
+	OffHoursShare  int              `desc:"the share of rows outside working hours, in whole percent"`
+	WorkingHours   string           `desc:"the working hours the share is against"`
+	Line           string           `desc:"the grid in words, as the tab states it"`
+	Persisted      bool             `desc:"the trail reaches boxer.facts on this host"`
+	RefreshedAt    time.Time        `desc:"when the table was last filled; the view is read against that fill"`
+	Diagnostic     string           `desc:"why the result may be empty or behind: nothing persisted, the view not read yet, a read of an earlier fill, or a case, range or filter other than the one the window read; empty when none applies"`
+}
+
+// GetSeriesArgs names the read the series is over, as GetDayHourArgs
+// does, and the measure and statistic.
+type GetSeriesArgs struct {
+	Case      string    `desc:"the case's kind, as the window read it"`
+	Value     string    `desc:"the case's value"`
+	Range     RangeArgs `desc:"the window's range, as the window read it"`
+	Filter    []TermArg `desc:"the filter the table is narrowed by, as the window read it; empty for none"`
+	Measure   string    `desc:"rows, tokens-in, tokens-out or elapsed-ms; empty for the window's pick"`
+	Statistic string    `desc:"sum, p50, p95 or max; empty for the window's pick; rows has sum only, the count"`
+	Limit     int       `desc:"buckets to return, from the first; default and at most 200"`
+}
+
+// SeriesBucketOut is one bucket of the series.
+type SeriesBucketOut struct {
+	Start time.Time `desc:"the bucket's start"`
+	Rows  uint64    `desc:"rows in the bucket carrying the measure"`
+	Value float64   `desc:"the statistic over them"`
+}
+
+// SeriesResult is get_series' result.
+type SeriesResult struct {
+	Measure     string            `desc:"the measure read"`
+	Statistic   string            `desc:"the statistic read"`
+	StepMs      int64             `desc:"the bucket size, in milliseconds: the strip's"`
+	Buckets     int               `desc:"buckets with rows, before the limit"`
+	Series      []SeriesBucketOut `desc:"the first limit buckets, oldest first"`
+	Rows        uint64            `desc:"rows carrying the measure over the window"`
+	PeakAt      time.Time         `desc:"the start of the bucket with the largest value"`
+	Peak        float64           `desc:"the largest value"`
+	Total       float64           `desc:"the sum over buckets, for the sum statistic"`
+	Cut         bool              `desc:"the read stopped at its bucket bound, so later buckets are missing"`
+	Line        string            `desc:"the series in words, as the tab states it, times in UTC"`
+	Persisted   bool              `desc:"the trail reaches boxer.facts on this host"`
+	RefreshedAt time.Time         `desc:"when the table was last filled; the view is read against that fill"`
+	Diagnostic  string            `desc:"why the result may be empty or behind: nothing persisted, the view not read yet, a read of an earlier fill, a pick other than the window's, or a case, range or filter other than the one the window read; empty when none applies"`
+}
+
+// SetSeriesArgs sets the series' measure and statistic.
+type SetSeriesArgs struct {
+	Measure   string `desc:"rows, tokens-in, tokens-out or elapsed-ms"`
+	Statistic string `desc:"sum, p50, p95 or max; for rows, sum (the count)"`
+}
+
 // GetVerdictArgs names a run, or none for every run read.
 type GetVerdictArgs struct {
 	Run string `desc:"a writer run; empty returns every run the window has a line for"`
@@ -342,7 +434,8 @@ type View struct {
 	From        time.Time     `desc:"the window's start as last read"`
 	To          time.Time     `desc:"the window's end as last read"`
 	Filter      []TermArg     `desc:"the filter the table is narrowed by"`
-	Tab         string        `desc:"the window's tab: fields, previous, context, compare, tree, matrix or dotted"`
+	Tab         string        `desc:"the window's tab: fields, previous, context, compare, tree, matrix, dotted, dayhour or series"`
+	Series      string        `desc:"the series tab's measure and statistic"`
 	Selected    uint64        `desc:"the selected row's facts id; 0 for none"`
 	Held        int           `desc:"rows the window holds"`
 	MoreInStore bool          `desc:"older rows of the case and range are in boxer.facts beyond the cache"`
@@ -372,7 +465,7 @@ type SelectRowArgs struct {
 
 // SetTabArgs sets the detail pane's tab.
 type SetTabArgs struct {
-	Tab string `desc:"fields, previous, context or compare (the detail pane under the table); tree (task or conversation case only), matrix or dotted (an analytic view in the table's place)"`
+	Tab string `desc:"fields, previous, context or compare (the detail pane under the table); tree (task or conversation case only), matrix, dotted, dayhour or series (an analytic view in the table's place)"`
 }
 
 func parseCaseArgs(kind, value string) (c Case, err error) {
@@ -404,6 +497,26 @@ func parseRangeArgs(r RangeArgs) (w Window, err error) {
 	}
 	w = Window{From: r.From.UTC(), To: r.To.UTC()}
 	err = w.validate()
+	return
+}
+
+// parseSeriesArgs reads a measure's and a statistic's names; an empty
+// statistic is sum.
+func parseSeriesArgs(measure, statistic string) (pick seriesPick, err error) {
+	m, ok := ParseMeasure(measure)
+	if !ok {
+		err = app.RefuseOperation("measure is one of " + measureNameList())
+		return
+	}
+	st := StatSum
+	if statistic != "" {
+		if st, ok = ParseStat(statistic); !ok {
+			err = app.RefuseOperation("statistic is one of " + statNameList())
+			return
+		}
+	}
+	pick = seriesPick{Measure: m, Stat: st}
+	err = pick.validate()
 	return
 }
 
@@ -522,6 +635,37 @@ func (inst opsSnap) bounds(w Window) (from, to time.Time) {
 		return inst.from, inst.to
 	}
 	return w.Resolve(inst.resolvedAt)
+}
+
+// aggCovers says whether an aggregate view read for the window's scope is
+// the view over c, w and f: the view aggregates the read whole, so each
+// must be the one the window read.
+func (inst opsSnap) aggCovers(c Case, w Window, f Filter) (ok bool, why string) {
+	if c != inst.scope.Case {
+		return false, "the case differs from the one the window read (" + inst.scope.Case.String() + "); set_case reads it"
+	}
+	if w != inst.scope.Window {
+		from, to := inst.bounds(w)
+		if !from.Equal(inst.from) || !to.Equal(inst.to) {
+			return false, "the range differs from the one the window read; the view aggregates the whole range, so set_range reads it"
+		}
+	}
+	if f.key() != parseFilterKeyOrEmpty(inst.scope.Filter).key() {
+		return false, "the filter differs from the one the window read; the view aggregates the filtered rows, so set_filter reads it"
+	}
+	return true, ""
+}
+
+// parseAggArgs reads an aggregate view's case, range and filter.
+func parseAggArgs(kind, value string, r RangeArgs, terms []TermArg) (c Case, w Window, f Filter, err error) {
+	if c, err = parseCaseArgs(kind, value); err != nil {
+		return
+	}
+	if w, err = parseRangeArgs(r); err != nil {
+		return
+	}
+	f, err = parseTerms(terms)
+	return
 }
 
 // covers says whether the cache answers a list over c, w and f in full.
@@ -685,6 +829,15 @@ var ops = func() (s *appops.Set[*App, opsSnap]) {
 		return ok
 	})
 
+	s.Resource(resSeries, "the series tab's measure and statistic", func(inst *App) any { return inst.an.series.pick })
+	s.Restorable(resSeries, func(inst *App, v any) bool {
+		p, ok := v.(seriesPick)
+		if ok {
+			inst.applySeries(p)
+		}
+		return ok
+	})
+
 	s.Available(opGetRow, persistedOr)
 	s.Available(opGetPrevious, persistedOr)
 	s.Available(opSelectRow, persistedOr)
@@ -826,7 +979,7 @@ var ops = func() (s *appops.Set[*App, opsSnap]) {
 		Agents:  true, Untrusted: true, Fork: app.OperationForkReadShared},
 		func(sn opsSnap, _ appops.None) (out View, err error) {
 			out = View{Persisted: sn.src.persisted(), Case: sn.c.Kind.String(), Value: sn.c.Value, Range: sn.window.String(),
-				From: sn.from, To: sn.to, Filter: termArgs(sn.filter), Tab: sn.tab.String(), Selected: sn.selected,
+				From: sn.from, To: sn.to, Filter: termArgs(sn.filter), Tab: sn.tab.String(), Series: sn.seriesPick.String(), Selected: sn.selected,
 				Held: len(sn.rows), MoreInStore: sn.more, RefreshedAt: sn.refreshedAt}
 			if sn.filled {
 				out.Strip = stripLine(sn.buckets, sn.step)
@@ -884,6 +1037,103 @@ var ops = func() (s *appops.Set[*App, opsSnap]) {
 			}
 			out.Nodes, out.Roots, out.Line = len(nodes), tr.roots, tr.line()
 			out.Tree = nodes[:min(len(nodes), limit)]
+			return
+		})
+
+	appops.Query(s, app.OperationSpec{Name: opGetDayHour, Version: 1,
+		Summary: "read the day × hour view of a case over a range and filter — rows per weekday and hour in the picker's zone, the busiest cell and the share outside working hours — as the window last read it; the view is read while its tab is open",
+		Agents:  true, Fork: app.OperationForkReadShared},
+		func(sn opsSnap, in GetDayHourArgs) (out DayHourResult, err error) {
+			c, w, f, err := parseAggArgs(in.Case, in.Value, in.Range, in.Filter)
+			if err != nil {
+				return
+			}
+			out.Persisted, out.RefreshedAt = sn.src.persisted(), sn.refreshedAt
+			out.WorkingHours = fmt.Sprintf("Mon–Fri %02d:00–%02d:00", workStartHour, workEndHour)
+			out.Diagnostic = sn.cacheDiagnostic()
+			if out.Diagnostic != "" || !sn.filled {
+				return
+			}
+			if ok, why := sn.aggCovers(c, w, f); !ok {
+				out.Diagnostic = why
+				return
+			}
+			d := sn.dayhour
+			if d == nil {
+				out.Diagnostic = "the day × hour view has not been read; set_tab dayhour opens it, and it reads while open"
+				return
+			}
+			if sn.dayhourStale {
+				out.Diagnostic = "the view is of the fill or zone before the current one and is being re-read; ask again shortly"
+			}
+			out.Zone, out.Rows, out.Line, out.OffHoursShare = d.zone, d.rows, d.line(), d.offShare()
+			if d.rows > 0 {
+				out.BusiestWeekday, out.BusiestHour, out.BusiestRows = weekdayNames[d.busiestD], d.busiestH, d.maxN
+			}
+			for i := range d.counts {
+				for h, n := range d.counts[i] {
+					if n > 0 {
+						out.Cells = append(out.Cells, DayHourCellOut{Weekday: weekdayNames[i], Hour: h, Rows: n})
+					}
+				}
+			}
+			return
+		})
+
+	appops.Query(s, app.OperationSpec{Name: opGetSeries, Version: 1,
+		Summary: "read the numeric series of a case over a range and filter — a measure (rows, tokens-in, tokens-out, elapsed-ms) under a statistic (sum, p50, p95, max) per bucket of the strip's step — as the window last read it; the view is read while its tab is open, for the measure and statistic set_series sets",
+		Agents:  true, Fork: app.OperationForkReadShared},
+		func(sn opsSnap, in GetSeriesArgs) (out SeriesResult, err error) {
+			c, w, f, err := parseAggArgs(in.Case, in.Value, in.Range, in.Filter)
+			if err != nil {
+				return
+			}
+			pick := sn.seriesPick
+			if in.Measure != "" || in.Statistic != "" {
+				if pick, err = parseSeriesArgs(in.Measure, in.Statistic); err != nil {
+					return
+				}
+			}
+			limit := in.Limit
+			switch {
+			case limit < 0:
+				err = app.RefuseOperation("limit is not negative")
+				return
+			case limit == 0 || limit > opsMaxRows:
+				limit = opsMaxRows
+			}
+			out.Measure, out.Statistic = pick.Measure.String(), pick.Stat.String()
+			out.Persisted, out.RefreshedAt = sn.src.persisted(), sn.refreshedAt
+			out.Diagnostic = sn.cacheDiagnostic()
+			if out.Diagnostic != "" || !sn.filled {
+				return
+			}
+			if ok, why := sn.aggCovers(c, w, f); !ok {
+				out.Diagnostic = why
+				return
+			}
+			d := sn.series
+			if d == nil {
+				out.Diagnostic = "the series has not been read; set_tab series opens it, and it reads while open"
+				return
+			}
+			if d.pick != pick {
+				out.Diagnostic = "the window's series is " + d.pick.String() + "; set_series reads " + pick.String()
+				return
+			}
+			if sn.seriesStale {
+				out.Diagnostic = "the series is of the fill or pick before the current one and is being re-read; ask again shortly"
+			}
+			out.StepMs, out.Buckets, out.Rows, out.Cut, out.Line = d.step.Milliseconds(), len(d.points), d.rows, d.cut, d.line()
+			if d.hasPeak {
+				out.PeakAt, out.Peak = time.Unix(d.peakT, 0).UTC(), d.peakV
+			}
+			if pick.Stat == StatSum {
+				out.Total = d.total
+			}
+			for _, p := range d.points[:min(len(d.points), limit)] {
+				out.Series = append(out.Series, SeriesBucketOut{Start: time.Unix(p.Bucket, 0).UTC(), Rows: p.N, Value: p.V})
+			}
 			return
 		})
 
@@ -1016,7 +1266,7 @@ var ops = func() (s *appops.Set[*App, opsSnap]) {
 		})
 
 	appops.Command(s, app.OperationSpec{Name: opSetTab, Version: 1,
-		Summary: "set the window's tab: fields, previous, context or compare under the table; tree (for a task or conversation case), matrix or dotted in its place",
+		Summary: "set the window's tab: fields, previous, context or compare under the table; tree (for a task or conversation case), matrix, dotted, dayhour or series in its place",
 		Effect:  app.OperationEffectView, Writes: []string{resTab}, Agents: true,
 		Gesture: "the detail pane's tab buttons", Rebuild: app.OperationRebuildVolatile},
 		func(inst *App, _ app.OperationCall, in SetTabArgs) (out appops.None, err error) {
@@ -1030,6 +1280,19 @@ var ops = func() (s *appops.Set[*App, opsSnap]) {
 				return
 			}
 			inst.applyTab(t)
+			return
+		})
+
+	appops.Command(s, app.OperationSpec{Name: opSetSeries, Version: 1,
+		Summary: "set the series tab's measure (rows, tokens-in, tokens-out, elapsed-ms) and statistic (sum, p50, p95, max); the series is re-read for them while its tab is open",
+		Effect:  app.OperationEffectView, Writes: []string{resSeries}, Agents: true,
+		Gesture: "the series tab's measure and statistic combos", Rebuild: app.OperationRebuildVolatile},
+		func(inst *App, _ app.OperationCall, in SetSeriesArgs) (out appops.None, err error) {
+			pick, err := parseSeriesArgs(in.Measure, in.Statistic)
+			if err != nil {
+				return
+			}
+			inst.applySeries(pick)
 			return
 		})
 
