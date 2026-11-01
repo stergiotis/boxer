@@ -1,12 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-11-01
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to accepted
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-11-01
 ---
-
-> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
 
 # ADR-0351: What a window costs beyond Frame — CPU by window label, and a slow-window notice
 
@@ -30,12 +28,12 @@ unprompted and lead to the remedy. It found no in-process manager that
 reports memory per unit, except Erlang, whose processes have separate heaps;
 all boxer windows share one Go heap, and Go's heap profiles carry no labels.
 
-What the tree has: `pprofarrow` turns a pprof profile into an Arrow table,
-one row per stack, and drops sample labels. imzrt captures a CPU profile as
-a task, publishes it as an ad-hoc dataset (ADR-0134) and opens play on it.
-The attention service keeps host-side notices (ADR-0323 §SD7; the watchbill
-worker's `NotifyJob` is the precedent). Nothing in the tree sets pprof
-labels.
+What the tree had when this was decided: `pprofarrow` turned a pprof
+profile into an Arrow table, one row per stack, and dropped sample labels.
+imzrt captures a CPU profile as a task, publishes it as an ad-hoc dataset
+(ADR-0134) and opens play on it. The attention service keeps host-side
+notices (ADR-0323 §SD7; the watchbill worker's `NotifyJob` is the
+precedent). Nothing in the tree set pprof labels.
 
 ## Decision
 
@@ -243,7 +241,8 @@ raised it, which defeats a notice meant to arrive unasked.
 
 ## Status
 
-Proposed — awaiting review.
+Accepted 2026-11-01, with M1 to M3 implemented; ADR-0323 carries the
+Update for `window.slow`'s default.
 
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers (Tier 1 in-place / Tier 2 dated `## Updates` entry / Tier 3 new superseding ADR).

@@ -10,7 +10,9 @@ status: draft
 > Compiled 2026-10-31; nothing here is a decision. **[V]**: the primary page
 > was read that day. Everything else came from search snippets, press
 > coverage or memory, and these products change yearly — re-check before
-> relying on a row.
+> relying on a row. Led to
+> [ADR-0351](../adr/0351-what-a-window-costs-beyond-frame-cpu-by-window-label-and-a-slow-window-notice.md)
+> (O1 to O3 of §4).
 
 # Task managers — what they show and what they let a person do
 
