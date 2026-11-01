@@ -85,15 +85,21 @@ resuming are not operations: they are the person's, as closing is (ADR-0348
 ### SD4 — Where Pause is offered
 
 - **The window's own row**, beside "SVG" in the row the host draws above
-  every app's body.
-- **The Running tab**: Pause and Resume for the windows the filter shows,
-  beside Close all, with a "paused" state and its duration in the rows in
-  place of frame times that are no longer current. The app center's own
-  window is never among them.
+  every app's body; it reads Resume while the window is paused.
+- **The Running tab**: Pause *N* shown and Resume *N* shown, beside Close
+  all, for the windows the filter shows; the app center's own window is
+  never among them. Neither asks first, since Resume undoes Pause. A paused
+  window's row says so in its title and since when in the p50 column, its
+  other frame-time cells blank: its frames stopped, so they say nothing
+  about now. The row shows what the person asked until a read agrees. The
+  filter matches "paused", so Resume can act on every paused window at
+  once, and `list_running` gives each window's `paused_since`.
 - **The slow-window notice** (ADR-0351 §SD6) gains Pause beside Open and
-  Dismiss.
+  Dismiss; pausing drops the notice.
 
-Resume is on the empty state, and in the Running tab.
+Resume is on the empty state, in the window's row, and in the Running tab.
+Pausing from the Running tab or the notice is recorded with where it came
+from (SD5).
 
 ### SD5 — Audited, not restored
 
@@ -121,7 +127,7 @@ the host.
 | `factsstore` | lifecycle phases *paused*, *resumed* |
 | Host boot | the pause's audit event on the trail |
 | `keelson('windows')` | `paused_since` |
-| App center | Pause/Resume shown; "paused" in the rows |
+| App center | Pause/Resume shown; "paused" in the rows and the filter; `paused_since` in `list_running`; the first `PausableAppI` |
 | Attention chrome | Pause on a slow window's notice |
 
 ## Alternatives
@@ -171,15 +177,19 @@ the host.
 - A test runs the pause's and the resume's audit events through the
   trail's own bounds.
 - The window host's `pause` scene pauses play from the window's row, reads
-  the empty state, resumes from it, and finds play's body again; M2's
-  scene finds "paused" in the Running tab.
+  the empty state, resumes from it, and finds play's body again.
+- The app center's `slow-window` scene pauses the slow window from the
+  Running tab, finds its row paused and its window in the paused state,
+  and resumes it from the tab; `slow-window-pause` pauses it from the
+  notice and finds the notice gone.
 
 ## Milestones
 
 - **M1 — Pause.** SD1 to SD3, SD5, the Pause in the window's row; the app
   center as the first `PausableAppI`: its poller reads nothing while
   paused, and reads at once on the resume.
-- **M2 — Offered elsewhere.** SD4's Running tab and slow-window notice.
+- **M2 — Offered elsewhere.** SD4's Running tab, with the paused rows and
+  the filter's "paused", and the slow-window notice's Pause.
 
 ## Status
 

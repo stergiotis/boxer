@@ -125,6 +125,9 @@ type App struct {
 	closeArmedFilter string
 	closing          map[uint64]bool
 	selfKey          uint64
+	// pauseWant is what the person asked of windows' pause from the tab,
+	// until a read agrees (ADR-0354 §SD4).
+	pauseWant map[uint64]bool
 	// Measure CPU (appcenter_cpu.go, ADR-0351): the measurement in flight
 	// and the last one taken, as a task of this window.
 	cpu   cpuState

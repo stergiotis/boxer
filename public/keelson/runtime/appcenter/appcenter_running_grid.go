@@ -120,6 +120,21 @@ type cellCtx struct {
 	closing   map[uint64]bool
 	// cpu is the last CPU measurement, nil before one (ADR-0351 §SD3).
 	cpu *cpuMeasurement
+	// pauseWant is what the person asked of windows' pause, until a read
+	// agrees (ADR-0354 §SD4).
+	pauseWant map[uint64]bool
+}
+
+// paused says whether the row's window is paused as the tab shows it.
+func (inst *cellCtx) paused(r *runningRow) bool { return pausedAs(inst.pauseWant, r) }
+
+// pausedCell is a paused window's frame-time cell: its frames stopped, so
+// the times say nothing about now.
+func pausedCell(r *runningRow, cx *cellCtx) recordtable.Cell {
+	if r.pausedSince == "" {
+		return weakCell("paused")
+	}
+	return weakCell("paused " + ageOf(r.pausedSince, cx.now))
 }
 
 // gridColumn is one column of a list of T: its header, its sort key — a
@@ -165,6 +180,11 @@ var windowColumns = []gridColumn[runningRow]{
 				cl.Weak = true
 				return cl
 			}
+			if cx.paused(r) {
+				cl := textCell(r.title + "  (paused)")
+				cl.Weak = true
+				return cl
+			}
 			if r.active {
 				return textCell(r.title + "  (active)")
 			}
@@ -172,7 +192,10 @@ var windowColumns = []gridColumn[runningRow]{
 		}},
 	{header: "p50", width: 72, hover: "median wall time of the window's Frame on the render goroutine",
 		num: func(r *runningRow, _ *cellCtx) int64 { return sampledOr(r, r.p50Us) },
-		cell: func(r *runningRow, _ *cellCtx) recordtable.Cell {
+		cell: func(r *runningRow, cx *cellCtx) recordtable.Cell {
+			if cx.paused(r) {
+				return pausedCell(r, cx)
+			}
 			if !r.sampled {
 				return weakCell("no frames")
 			}
@@ -180,8 +203,8 @@ var windowColumns = []gridColumn[runningRow]{
 		}},
 	{header: "p95", width: 72, hover: "95th percentile of the same; slow ones are toned",
 		num: func(r *runningRow, _ *cellCtx) int64 { return sampledOr(r, r.p95Us) },
-		cell: func(r *runningRow, _ *cellCtx) recordtable.Cell {
-			if !r.sampled {
+		cell: func(r *runningRow, cx *cellCtx) recordtable.Cell {
+			if !r.sampled || cx.paused(r) {
 				return weakCell("")
 			}
 			cl := recordtable.Cell{Text: fmtUs(r.p95Us)}
@@ -193,7 +216,7 @@ var windowColumns = []gridColumn[runningRow]{
 	{header: "of loop", width: 64, hover: "p50 as a share of the render loop's median period",
 		num: func(r *runningRow, _ *cellCtx) int64 { return sampledOr(r, r.p50Us) },
 		cell: func(r *runningRow, cx *cellCtx) recordtable.Cell {
-			if !r.sampled || cx.loopP50Us <= 0 {
+			if !r.sampled || cx.loopP50Us <= 0 || cx.paused(r) {
 				return weakCell("—")
 			}
 			return recordtable.Cell{Text: fmt.Sprintf("%.0f%%", 100*float64(r.p50Us)/float64(cx.loopP50Us))}
@@ -215,8 +238,8 @@ var windowColumns = []gridColumn[runningRow]{
 		}},
 	{header: "messages", width: 72, hover: "FFFI messages per Frame, on average",
 		num: func(r *runningRow, _ *cellCtx) int64 { return sampledOr(r, int64(math.Round(r.messages))) },
-		cell: func(r *runningRow, _ *cellCtx) recordtable.Cell {
-			if !r.sampled {
+		cell: func(r *runningRow, cx *cellCtx) recordtable.Cell {
+			if !r.sampled || cx.paused(r) {
 				return weakCell("")
 			}
 			return recordtable.Cell{Text: fmt.Sprintf("%.0f", r.messages)}
@@ -324,9 +347,13 @@ func filterFold(filter string) string { return strings.ToLower(strings.TrimSpace
 func containsFold(s, f string) bool { return strings.Contains(strings.ToLower(s), f) }
 
 // windowMatches says whether the folded filter f is a substring of the
-// window's app id, app name, title or one of its tasks' titles.
+// window's app id, app name, title or one of its tasks' titles, or of
+// "paused" for a paused window.
 func windowMatches(r *runningRow, f string) bool {
 	if f == "" || containsFold(r.appId, f) || containsFold(r.display, f) || containsFold(r.title, f) {
+		return true
+	}
+	if r.pausedSince != "" && strings.Contains("paused", f) {
 		return true
 	}
 	for _, t := range r.taskTitles {
@@ -370,8 +397,11 @@ func (inst *App) renderRunningTab(snap snapshot) {
 	v := &rn.view
 	g := &inst.running
 	f := filterFold(inst.runFilter)
-	cx := &cellCtx{loopP50Us: v.loopP50Us, now: time.Now(), closing: inst.closing, cpu: inst.cpu.last}
 	read := !rn.read.IsZero()
+	if read {
+		inst.prunePauses(v)
+	}
+	cx := &cellCtx{loopP50Us: v.loopP50Us, now: time.Now(), closing: inst.closing, cpu: inst.cpu.last, pauseWant: inst.pauseWant}
 	if read {
 		g.records(rn, cx)
 		inst.pruneClosing(v)
@@ -410,6 +440,7 @@ func (inst *App) renderRunning(rn *running, cx *cellCtx) {
 		// A host that wires none shows no Close all (ADR-0348 §SD4).
 		if h != nil && !rn.read.IsZero() {
 			inst.renderCloseAll(h, v)
+			inst.renderPauseShown(h, v)
 		}
 		inst.renderMeasureCpu(v)
 	}
@@ -522,6 +553,26 @@ func (inst *App) renderCpuLine(v *runningView) {
 
 // fmtPct is a share of one core.
 func fmtPct(pct float64) string { return fmt.Sprintf("%.1f%%", pct) }
+
+// renderPauseShown is Pause for the shown windows that run, and Resume for
+// those paused, this window never among them (ADR-0354 §SD4). Pausing is
+// undone by Resume, so neither asks first.
+func (inst *App) renderPauseShown(h HostI, v *runningView) {
+	pause, resume := inst.pausable(v, inst.running.windowsShown)
+	for range c.EnabledUi(len(pause) > 0).KeepIter() {
+		for range c.HoverText("Pauses every window the filter shows but this one: the host stops drawing them and they refuse commands").KeepIter() {
+			if c.Button(inst.ids.PrepareStr("pause-shown"), c.Atoms().Text(fmt.Sprintf("%s Pause %d shown", icons.PhPause, len(pause))).Keep()).SendResp().HasPrimaryClicked() {
+				inst.setPaused(h, pause, true)
+			}
+		}
+	}
+	if len(resume) == 0 {
+		return
+	}
+	if c.Button(inst.ids.PrepareStr("resume-shown"), c.Atoms().Text(fmt.Sprintf("%s Resume %d shown", icons.PhPlay, len(resume))).Keep()).SendResp().HasPrimaryClicked() {
+		inst.setPaused(h, resume, false)
+	}
+}
 
 // closeCount is the confirm button's label.
 func closeCount(n int) string {

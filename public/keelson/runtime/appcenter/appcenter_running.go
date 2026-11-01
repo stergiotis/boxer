@@ -17,7 +17,7 @@ import (
 const tableWindows = "windows"
 
 const (
-	runWindowsSql = "SELECT key, app_id, display, title, kind, active, agent_tasks FROM keelson('windows') ORDER BY key"
+	runWindowsSql = "SELECT key, app_id, display, title, kind, active, agent_tasks, paused_since FROM keelson('windows') ORDER BY key"
 	runFramesSql  = "SELECT scope, instance_key, frames, samples, last_us, mean_us, p50_us, p95_us, max_us, messages_mean, mount_us FROM keelson('frame_times') " +
 		"ORDER BY scope, instance_key"
 	runTasksSql = "SELECT title, kind, state, owner_app_id, owner_instance_key, created_at FROM keelson('tasks') ORDER BY created_at, task_id"
@@ -32,6 +32,9 @@ type windowCols struct {
 	Kind       []string   `ch:"kind"`
 	Active     []bool     `ch:"active"`
 	AgentTasks [][]string `ch:"agent_tasks"`
+	// PausedSince is since when the person paused the window (ADR-0354),
+	// RFC 3339; empty while it runs.
+	PausedSince []string `ch:"paused_since"`
 }
 
 // runTaskCols is keelson('tasks'), every task in flight, oldest first.
@@ -73,6 +76,9 @@ type runningRow struct {
 	oldestCreateAt string
 	// taskTitles are its tasks' titles, which the filter matches.
 	taskTitles []string
+	// pausedSince is since when the person paused it, RFC 3339; empty while
+	// it runs (ADR-0354).
+	pausedSince string
 }
 
 // unownedTask is a task whose owner_instance_key names no open window: a
@@ -112,8 +118,12 @@ func assembleRunning(w *windowCols, f *frameCols, t *runTaskCols) (v runningView
 	for i, k := range w.Key {
 		key := uint64(k)
 		byKey[key] = len(v.rows)
-		v.rows = append(v.rows, runningRow{key: key, appId: w.AppId[i], display: w.Display[i], title: w.Title[i],
-			kind: w.Kind[i], active: w.Active[i], agentTasks: w.AgentTasks[i]})
+		row := runningRow{key: key, appId: w.AppId[i], display: w.Display[i], title: w.Title[i],
+			kind: w.Kind[i], active: w.Active[i], agentTasks: w.AgentTasks[i]}
+		if i < len(w.PausedSince) {
+			row.pausedSince = w.PausedSince[i]
+		}
+		v.rows = append(v.rows, row)
 	}
 	for j, scope := range f.Scope {
 		if scope == "loop" {

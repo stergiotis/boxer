@@ -2,10 +2,12 @@ package appcenter
 
 import (
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/stergiotis/boxer/public/keelson/runtime/bgjob"
 	"github.com/stergiotis/boxer/public/keelson/runtime/windowhost"
 )
 
@@ -13,11 +15,24 @@ import (
 type fakeHost struct {
 	closed  []windowhost.WindowKeyT
 	reasons []string
+	paused  []windowhost.WindowKeyT
+	resumed []windowhost.WindowKeyT
+	from    []string
 }
 
 func (inst *fakeHost) Close(key windowhost.WindowKeyT, reason string) {
 	inst.closed = append(inst.closed, key)
 	inst.reasons = append(inst.reasons, reason)
+}
+
+func (inst *fakeHost) Pause(key windowhost.WindowKeyT, from string) bool {
+	inst.paused, inst.from = append(inst.paused, key), append(inst.from, from)
+	return true
+}
+
+func (inst *fakeHost) Resume(key windowhost.WindowKeyT, from string) bool {
+	inst.resumed, inst.from = append(inst.resumed, key), append(inst.from, from)
+	return true
 }
 
 var _ HostI = (*windowhost.Inst)(nil)
@@ -96,4 +111,57 @@ func TestArmedNamesNamesTheFirstFew(t *testing.T) {
 	assert.Equal(t, "e, d, c and 2 more", armedNames(&v, []uint64{5, 4, 3, 2, 1}))
 	assert.Equal(t, "Close 1 window", closeCount(1))
 	assert.Equal(t, "Close 4 windows", closeCount(4))
+}
+
+// Pause and Resume act on the shown windows but this one; the rows show
+// what the person asked until a read agrees (ADR-0354 §SD4).
+func TestPauseShownLeavesThisWindowOut(t *testing.T) {
+	inst := newApp()
+	inst.selfKey = 3
+	h := &fakeHost{}
+	w, f, tk := runningFixture()
+	v := assembleRunning(&w, &f, &tk)
+	all := []int64{0, 1, 2}
+
+	pause, resume := inst.pausable(&v, all)
+	assert.Equal(t, []uint64{2, 1}, pause, "every shown window but this one")
+	assert.Empty(t, resume)
+
+	inst.setPaused(h, pause, true)
+	assert.Equal(t, []windowhost.WindowKeyT{2, 1}, h.paused)
+	assert.Equal(t, []string{windowhost.PauseFromRunningTab, windowhost.PauseFromRunningTab}, h.from)
+	pause, resume = inst.pausable(&v, all)
+	assert.Empty(t, pause, "shown paused before a read says so")
+	assert.Equal(t, []uint64{2, 1}, resume)
+
+	inst.prunePauses(&v)
+	assert.Len(t, inst.pauseWant, 2, "the read does not agree yet")
+	w.PausedSince = []string{"2026-11-01T10:00:00Z", "", ""}
+	read := assembleRunning(&w, &f, &tk)
+	inst.prunePauses(&read)
+	assert.Equal(t, map[uint64]bool{2: true}, inst.pauseWant, "window 1's read agrees; window 2's not yet")
+
+	inst.setPaused(h, []uint64{1}, false)
+	assert.Equal(t, []windowhost.WindowKeyT{1}, h.resumed)
+	_, resume = inst.pausable(&read, all)
+	assert.Equal(t, []uint64{2}, resume)
+}
+
+func TestTheFilterFindsPausedWindows(t *testing.T) {
+	w, f, tk := runningFixture()
+	w.PausedSince = []string{"", "2026-11-01T10:00:00Z", ""}
+	v := assembleRunning(&w, &f, &tk)
+	var keys []uint64
+	for i := range v.rows {
+		if windowMatches(&v.rows[i], filterFold("Paused")) {
+			keys = append(keys, v.rows[i].key)
+		}
+	}
+	assert.Equal(t, []uint64{2}, keys)
+	out := runningResult(v, time.Now(), nil, bgjob.Snapshot{})
+	for _, r := range out.Windows {
+		if r.Key == 2 {
+			assert.Equal(t, "2026-11-01T10:00:00Z", r.PausedSince)
+		}
+	}
 }

@@ -132,6 +132,7 @@ type RunningWindow struct {
 	OldestSince  string   `desc:"when the oldest started, RFC 3339; empty when none"`
 	AgentTasks   []string `desc:"the agent tasks whose grant holds the window"`
 	CpuPct       float64  `desc:"share of one core its goroutines, its tasks' included, used during the last measure_cpu, in percent; -1 when not measured: before any measurement, or opened since"`
+	PausedSince  string   `desc:"since when the person paused it, RFC 3339; empty while it runs. A paused window draws nothing and refuses commands"`
 }
 
 // RunningTask is a task in flight that no open window owns.
@@ -375,7 +376,7 @@ func runningResult(v runningView, at time.Time, cpu *cpuMeasurement, cpuState bg
 		out.Windows = append(out.Windows, RunningWindow{Key: r.key, AppId: r.appId, Title: r.title, Active: r.active,
 			Sampled: r.sampled, P50Us: r.p50Us, P95Us: r.p95Us, MessagesMean: r.messages,
 			Tasks: r.tasks, OldestTask: r.oldestTitle, OldestSince: r.oldestCreateAt, AgentTasks: r.agentTasks,
-			CpuPct: cpuPctOrNone(cpu, r.key)})
+			CpuPct: cpuPctOrNone(cpu, r.key), PausedSince: r.pausedSince})
 	}
 	out.Unowned = make([]RunningTask, 0, len(unowned))
 	for _, u := range unowned {

@@ -62,6 +62,7 @@ type Chrome struct {
 	activeW  func() uint64
 	openJobs func()
 	openRun  func(filter string)
+	pauseW   func(window uint64)
 	// urgencySeen are the urgency requests already considered for opening
 	// at once.
 	urgencySeen map[string]bool
@@ -80,12 +81,15 @@ type Options struct {
 	// a slow window's highlight points (ADR-0351 §SD6); nil offers no Open
 	// on one.
 	OpenRunning func(filter string)
+	// Pause pauses a window, for a slow window's highlight (ADR-0354
+	// §SD4); nil offers no Pause on one.
+	Pause func(window uint64)
 }
 
 // New is the chrome of svc; it draws the cards of the questions apps post
 // (ADR-0324 §SD5) itself.
 func New(svc *attention.Service, opts Options) (inst *Chrome) {
-	inst = &Chrome{svc: svc, display: opts.Display, raiseW: opts.Raise, activeW: opts.Active, openJobs: opts.OpenJobs, openRun: opts.OpenRunning}
+	inst = &Chrome{svc: svc, display: opts.Display, raiseW: opts.Raise, activeW: opts.Active, openJobs: opts.OpenJobs, openRun: opts.OpenRunning, pauseW: opts.Pause}
 	if svc.Questions != nil {
 		inst.sources = append(inst.sources, &questionCards{q: svc.Questions, display: opts.Display, raise: opts.Raise})
 	}
@@ -288,7 +292,7 @@ func (inst *Chrome) renderList(now time.Time, ids *c.WidgetIdStack) {
 // renderNotice draws a highlight: what happened in which conversation, to
 // which job or to which window, with Open, which raises the window that
 // reported it, opens the watchbill window for a job or the Running tab for
-// a slow window, and Dismiss. Either drops it.
+// a slow window, Pause for a slow window, and Dismiss. Each drops it.
 func (inst *Chrome) renderNotice(n attention.Notice, now time.Time, ids *c.WidgetIdStack) {
 	k := n.Conversation
 	switch {
@@ -322,6 +326,13 @@ func (inst *Chrome) renderNotice(n attention.Notice, now time.Time, ids *c.Widge
 			if c.Button(ids.PrepareStr("attention-notice-open-"+k), c.Atoms().Text("Open").Keep()).Small().SendResp().HasPrimaryClicked() {
 				inst.openNotice(n)
 				inst.listOpen = false
+				inst.read = time.Time{}
+			}
+		}
+		if n.Window != 0 && inst.pauseW != nil {
+			if c.Button(ids.PrepareStr("attention-notice-pause-"+k), c.Atoms().Text(icons.PhPause+" Pause").Keep()).Small().SendResp().HasPrimaryClicked() {
+				inst.pauseW(n.Window)
+				inst.seen(n)
 				inst.read = time.Time{}
 			}
 		}

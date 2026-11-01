@@ -1174,6 +1174,8 @@ func (rt *Runtime) bootAgent() {
 			// A slow window's, at the Running tab filtered to it (ADR-0351
 			// §SD6).
 			OpenRunning: openRunningOrNil(rt.openRunning),
+			// and Pause, beside it (ADR-0354 §SD4).
+			Pause: func(window uint64) { host.Pause(windowhost.WindowKeyT(window), windowhost.PauseFromSlowNotice) },
 		})
 		rt.Attention.AddSource(svc, svc.Chrome())
 		rt.Host.SetCardsChrome(rt.Attention)
