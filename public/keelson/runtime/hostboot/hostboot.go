@@ -62,6 +62,7 @@ import (
 	tasksupervisor "github.com/stergiotis/boxer/public/keelson/runtime/task/supervisor"
 	"github.com/stergiotis/boxer/public/keelson/runtime/topo"
 	"github.com/stergiotis/boxer/public/keelson/runtime/trail"
+	"github.com/stergiotis/boxer/public/keelson/runtime/trailviewer"
 	"github.com/stergiotis/boxer/public/keelson/runtime/watchbill"
 	"github.com/stergiotis/boxer/public/keelson/runtime/watchbill/lane"
 	"github.com/stergiotis/boxer/public/keelson/runtime/watchbill/watchbillstore"
@@ -694,6 +695,14 @@ func (rt *Runtime) bootServices(ctx context.Context, factsCfg chstore.Config) {
 		}
 	}
 	rt.Introspect = introspect.NewRegistry()
+	// The trail viewer reads the trail marts through the persist executor,
+	// verifies runs through the recorder, and reads the current run's
+	// verdict from keelson('evidence_checks') in this registry (ADR-0350
+	// §SD3, §SD6, proposed).
+	trailviewer.Register(&trailviewer.Source{
+		Exec: rt.PersistExec, Trail: rt.Trail, Run: func() string { return runId }, Registry: rt.Introspect,
+		NotPersisted: "the persist service is off, or its backend is not ClickHouse",
+	})
 	if svc.AdhocData {
 		adhocSvc, adhocErr := adhocdata.NewService(adhocdata.Config{
 			Bus:      rt.Bus,

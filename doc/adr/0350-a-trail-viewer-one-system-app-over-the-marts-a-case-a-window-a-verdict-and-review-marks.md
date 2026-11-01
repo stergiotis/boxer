@@ -173,7 +173,8 @@ The window is a case selector and the time range picker
 - **A strip** of counts per time bucket over the window, coloured by kind
   and switchable to outcome or status, fed by one `GROUP BY
   toStartOfInterval` over `dm_trail_timeline`. A click on a bucket narrows
-  the window to it. Beside the strip, one text line states what it shows —
+  the window to it. With more keys than the qualitative cycle's seven hues,
+  the strip draws the five busiest and sums the rest as *other*. Beside the strip, one text line states what it shows —
   rows, buckets, the busiest bucket — and is what a scene asserts on.
 - **The table**, a `recordtable` over the timeline's shape — time in the
   picker's zone, kind, headline, status, subject, origin, the agentic
@@ -183,8 +184,8 @@ The window is a case selector and the time range picker
   which gives the intent-level view the agent-trace tools call a
   trajectory. A leading column carries the row's verdict mark (SD6) and a
   second its exception marks (SD7), each as text with a tone.
-- **The detail pane**: the row's components through `componentview` and
-  `fieldview`, bodies only where kept and the app's grant admits them,
+- **The detail pane**: the row's columns through `fieldview` (the marts
+  already decode the components, so `componentview` is not needed), bodies only where kept and the app's grant admits them,
   the identity chain as one breadcrumb line — person › window › task ›
   model call › tool call — built from `Origin`, `Delegation` and `Cause`,
   and the previous-state diff (SD5) for audit events.
@@ -217,7 +218,11 @@ text and tone. Its verdict on the `from` claim is one of: *matches the
 previous event*; *differs from the previous event: …*; *no previous event
 within the look-back*, with `from-by` shown when the row carries it; *a
 gap row lies between*, when a `trail` domain `audit-gap` row of the same
-writer run falls between the two timestamps. For an `AgentGrant` the same
+writer run falls between the two timestamps. The claim matches when it
+equals the previous event's value of a field the row changed, or, for a
+claim that renders several fields as one line, contains each such value; a
+row with a previous event and no `from` states no claim and gets no
+verdict. For an `AgentGrant` the same
 pane diffs consecutive rows of the task. Nothing is computed from code
 defaults: where the baseline is a default the row says so, and the viewer
 repeats it.
@@ -239,9 +244,13 @@ event the state comes from and when.
 For each writer run the case touches, one line: **holds**; **broken at
 ordinal N: reason**, with the break reason's name spelled out; **gap: K
 rows no seal names**; **fork: two seals follow one**; **unanchored since
-ordinal N**. The current run's lines come from `keelson('evidence_checks')`
-and `keelson('anchors')`; another run's from the recorder's seal
-verification for that run, read once per refill. The vocabulary — state,
+ordinal N**. A run nothing could verify — the trail not durable, the
+verification failed — reads **unverified** with the reason, a sixth state
+the vocabulary carries. The current run's lines come from `keelson('evidence_checks')`
+and `keelson('anchors')` — the anchors as the relation's L32 row reads
+them, so the viewer does not read `keelson('anchors')` beside it; another
+run's from the recorder's seal verification for that run, read once per
+refill. The vocabulary — state,
 label text, tone, the law it comes from — is one small package the chat
 and the app center may adopt. An unverified state marks the rows it
 covers and does not hide them: blocking would hide evidence, and a passive
@@ -288,7 +297,9 @@ under an agentic case), `get_verdict` (SD6's lines for a run),
 command of effect `consequential`, person-only: `mark_row`. Resources:
 `case`, `range`, `filter`, `selection`, `tab`. Queries answer from the
 cache the snapshot took and never wait on the store, as the log viewer's
-do.
+do. Until the tree tab of M4, `tab` is the detail pane's tab — fields,
+previous, context — and `get_previous` answers for the selected row,
+whose read the window has made.
 
 ### SD9 — Labels, time, bodies, export, old rows
 

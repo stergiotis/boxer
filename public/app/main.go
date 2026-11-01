@@ -75,6 +75,9 @@ import (
 	// BOXER_LOGVIEWER_* (ADR-0345's update of 2026-10-30); read by the log
 	// viewer, which only the graphical host links.
 	_ "github.com/stergiotis/boxer/public/keelson/runtime/logviewer"
+	// BOXER_TRAILVIEWER_* (ADR-0350, proposed); read by the trail viewer,
+	// which only the graphical host links.
+	_ "github.com/stergiotis/boxer/public/keelson/runtime/trailviewer"
 	// KEELSON_LAUNCHABLE_APPS_WHERE (ADR-0272); read by hostboot, which this
 	// binary does not link.
 	_ "github.com/stergiotis/boxer/public/keelson/runtime/launchlimit"
