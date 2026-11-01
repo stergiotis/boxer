@@ -231,7 +231,8 @@ repeats it.
 diffed with the same field table over the timeline's columns and, where
 both are audit events, their attributes. The base is stated in words
 above the table — the older row on the left — as the surveyed compare
-pages do, never as a toggle.
+pages do, never as a toggle. The second row is the window's own state,
+not a catalog resource; `set_tab` reaches the compare tab.
 
 **As of.** For the entity case, the detail pane shows the entity's state
 as of the window's end: the last event at or before that instant, read
@@ -270,6 +271,11 @@ domain; a row a seal does not name or a run whose chain is broken; a
 viewer's, not laws and not moderator rules: they produce a reading list,
 not a verdict and not an action. Each rule is visible in the window with
 its predicate, since a highlight whose rule is hidden is distrusted.
+The rules run over the rows the window holds — its case, window and
+filter, under the row cap — not over every row of the window. A run whose
+line reads broken, fork or gap raises every held row of the run, since the
+verdict names no rows. The `from` claim rule makes the previous-state read
+for at most sixteen new rows per refill and remembers what it judged.
 
 **Review marks** are audit events in the `review` domain: actions
 `reviewed`, `flagged` and `dismissed`; one reference `trail-row:<id>`; a
@@ -277,7 +283,13 @@ its predicate, since a highlight whose rule is hidden is distrusted.
 viewer writes them through the host's recorder under the person's
 principal, so they sit on the same sealed trail as what they review and
 `dm_trail_reviews` lists them. A marked exception leaves the list and shows
-its mark in the table.
+its mark in the table. A mark clears every exception of its row, and its
+`rule` attribute names them all, comma-separated. The person's principal is
+a pseudonymous reference, a hash of the OS user and host names, with
+principal-by `os`.
+
+A dismissal requires a reason; reviewed and flagged do not, since the
+mark itself is the record.
 
 The mark is the one command of a system app whose effect is not `view`: it
 writes outside the window, to the trail, which is adjudication, so its
@@ -298,8 +310,8 @@ command of effect `consequential`, person-only: `mark_row`. Resources:
 `case`, `range`, `filter`, `selection`, `tab`. Queries answer from the
 cache the snapshot took and never wait on the store, as the log viewer's
 do. Until the tree tab of M4, `tab` is the detail pane's tab — fields,
-previous, context — and `get_previous` answers for the selected row,
-whose read the window has made.
+previous, context, compare — and `get_previous` answers for the selected
+row, whose read the window has made.
 
 ### SD9 — Labels, time, bodies, export, old rows
 
@@ -430,6 +442,9 @@ states its bucket size and whether a bucket is saturated.
   queries make that cost visible but do not remove it.
 - The previous-state read is bounded by a look-back and says so; an
   entity whose last change predates it shows no before-state.
+- The novelty rule scans the audit mart over the look-back on every
+  refill; its cost is unmeasured and is the first thing to bound if a
+  window on a busy host turns slow.
 - A `consequential` command in a system app is a precedent, held narrow
   by being person-only.
 - The strip is painted and a scene reads only its text line.

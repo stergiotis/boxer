@@ -349,16 +349,21 @@ func (inst StripByE) String() string {
 }
 
 // TabE is the detail pane's tab: the row's fields, its previous-state
-// diff, or the rows around it. M4's tree tab joins the same resource.
+// diff, the rows around it, or its comparison with a second row. M4's tree
+// tab joins the same resource.
 type TabE uint8
 
 const (
 	TabFields TabE = iota
 	TabPrevious
 	TabContext
+	TabCompare
 )
 
-var tabNames = [...]string{"fields", "previous", "context"}
+// AllTabs lists the tabs in the order the detail pane shows them.
+var AllTabs = []TabE{TabFields, TabPrevious, TabContext, TabCompare}
+
+var tabNames = [...]string{"fields", "previous", "context", "compare"}
 
 func (inst TabE) String() string {
 	if int(inst) < len(tabNames) {

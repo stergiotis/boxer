@@ -373,11 +373,7 @@ func (inst *marts) filterPred(f Filter, from, to time.Time) (preds []string) {
 // the filter, older than the cursor, newest first, at most Limit.
 func (inst *marts) listSQL(q listQuery) (sql string) {
 	tl := trailviews.ViewTimeline
-	where := []string{inst.windowPred(tl, q.From, q.To), inst.casePred(tl, q.Case, q.From, q.To)}
-	where = append(where, inst.filterPred(q.Filter, q.From, q.To)...)
-	if q.Cursor != nil {
-		where = append(where, "("+inst.col(tl, "ts")+", "+inst.col(tl, "id")+") < ("+sqlTime(time.Unix(0, q.Cursor.TsNs))+", toUInt64("+strconv.FormatUint(q.Cursor.Id, 10)+"))")
-	}
+	where := inst.rowsWhere(q, nil)
 	sql = "SELECT toUnixTimestamp64Nano(" + inst.col(tl, "ts") + ") AS ts_ns, " + inst.selectList(tl, timelineNames) +
 		" FROM " + inst.table(tl) + " WHERE " + strings.Join(where, " AND ") +
 		" ORDER BY " + inst.col(tl, "ts") + " DESC, " + inst.col(tl, "id") + " DESC LIMIT " + strconv.Itoa(q.Limit)

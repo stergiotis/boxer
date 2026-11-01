@@ -18,6 +18,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/appops/opengine"
 	"github.com/stergiotis/boxer/public/keelson/runtime/appops/opwire"
 	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
+	"github.com/stergiotis/boxer/public/keelson/runtime/trail"
 	"github.com/stergiotis/boxer/public/keelson/runtime/trailviewer/verdict"
 	"github.com/stergiotis/boxer/public/storage/recordstore"
 	"github.com/stergiotis/boxer/public/storage/recordstore/evidence"
@@ -54,13 +55,21 @@ func (inst *fakeExec) statements() (out []string) {
 
 var _ recordstore.ExecutorI = (*fakeExec)(nil)
 
-// fakeTrail verifies every run as holding.
+// fakeTrail verifies every run as holding and drops what it is asked to
+// write.
 type fakeTrail struct{}
 
 func (fakeTrail) VerifySeals(context.Context, string) (evidence.SealBreak, []uint64, []uint64, error) {
 	return evidence.SealBreak{}, nil, nil, nil
 }
 func (fakeTrail) NotDurable() string { return "" }
+func (fakeTrail) Event(context.Context, time.Time, trail.Context, trail.AuditEvent) error {
+	return nil
+}
+func (fakeTrail) OriginOf(appId app.AppIdT, instance uint64) trail.Origin {
+	return trail.Origin{Run: fixtureRun, App: string(appId), Instance: instance}
+}
+func (fakeTrail) FlushSoon() {}
 
 // fixtureRows are six rows of the current run, newest first: two audit
 // events, a model call and its action, an egress fetch and a grant.
@@ -130,7 +139,7 @@ func refusal(err error) (r *app.OperationRefusal) {
 	return
 }
 
-var allOps = []string{opListRows, opGetRow, opGetPrevious, opGetVerdict, opGetView, opSetCase, opSetRange, opSetFilter, opSelectRow, opSetTab}
+var allOps = []string{opListRows, opGetRow, opGetPrevious, opGetVerdict, opGetView, opGetExc, opSetCase, opSetRange, opSetFilter, opSelectRow, opSetTab}
 
 func TestOperationsCatalogRegisters(t *testing.T) {
 	require.NoError(t, manifest.Operations.Validate())
@@ -145,7 +154,7 @@ func TestOperationsCatalogRegisters(t *testing.T) {
 			assert.Equal(t, app.OperationEffectView, spec.Effect, name)
 		}
 	}
-	for _, name := range []string{opListRows, opGetRow, opGetPrevious, opGetView} {
+	for _, name := range []string{opListRows, opGetRow, opGetPrevious, opGetView, opGetExc} {
 		spec, _ := m.Operations.Lookup(name)
 		assert.True(t, spec.Untrusted, "%s returns row text", name)
 	}

@@ -85,7 +85,8 @@ never hides them.
 
 Click a row to open it. The line under the header is the identity chain:
 person › window › task › model call › tool call, with the links the row
-does not carry left out. Three tabs:
+does not carry left out. Under it, the row's exceptions, its mark and the
+mark buttons (below). The tabs:
 
 - **fields** — every column of the row; for an audit event its outcome,
   principal, entity, the `from` claim, its attributes and references.
@@ -95,6 +96,7 @@ does not carry left out. Three tabs:
   grant, the previous grant of the same task.
 - **context** — the rows just before and after this one in the same writer
   run, whatever the filter hides. A click selects one.
+- **compare** — this row against a second one (below).
 
 The previous tab's verdict is on the row's own `from` claim:
 
@@ -110,6 +112,55 @@ The previous tab's verdict is on the row's own `from` claim:
 A row with a previous event and no `from` attribute makes no claim, and the
 table is shown without a verdict.
 
+Beside the tabs, **Compare with…** picks a second row: press it and click a
+row, or Ctrl- or Cmd-click a row in the table. The **compare** tab then
+diffs the two over the timeline's columns and, when both are audit
+events, their own columns and attributes. The line above the table says
+which row is which; the older row is always on the left.
+
+For an **entity** case, the line above the table and the top of the
+**fields** tab give the entity's state as of the window's end: the last
+event of the entity at or before that instant, within the look-back, and
+when it was.
+
+## Exceptions and rules
+
+The pane beside the table switches between **Facets**, **Exceptions** and
+**Rules**. The rules are the viewer's, shipped as data; each raises rows
+worth a look, with a one-line reason:
+
+- **outcome** — a denied, failed, timeout or error outcome.
+- **model-refused** — a model call the provider refused.
+- **grant-widened** — a task's grant widened.
+- **trail-row** — the trail's own rows: a gap, an invalid row, the
+  recorder's configuration, a ditch.
+- **unsealed** — a row of a writer run whose evidence line reads broken,
+  fork or gap. The line names no rows, so every row of the run is listed.
+- **novel-action** — a domain.action the trail did not record in the
+  look-back before the window.
+- **claim-differs** — a `from` claim the previous-state read finds
+  differs. The read runs for at most sixteen new rows per refill.
+
+The rules run over the rows the window holds: its case, range and filter,
+up to `BOXER_TRAILVIEWER_ROWS`. **Rules** shows each rule's predicate,
+written over the marts' column names, and how many open exceptions it
+raised. **Exceptions** lists them newest first. Click one to select its
+row. The table's second column shows a row's rules, or its mark once it
+has one. The rules make a reading list. They decide nothing and do
+nothing.
+
+## Review marks
+
+The detail pane's **reviewed**, **flagged** and **dismissed** buttons mark
+the selected row, with the reason typed beside them. A dismissal needs a
+reason. The mark is written to the trail itself as an audit event in the
+`review` domain: one reference `trail-row:<id>`, the reason, and the
+rules it clears. Its principal is a pseudonymous reference derived from
+the OS user and the host, not a name. A marked row's exceptions leave the
+list, and the mark shows in the table and the detail pane.
+`dm_trail_reviews` lists every mark for SQL. Each window shows a row's
+latest mark.
+
 ## For an agent
 
 The viewer declares an operations catalog (ADR-0345). `list_rows` lists a
@@ -117,6 +168,8 @@ case's rows over a range and filter given as its own arguments, from the
 rows the window holds, and says when its arguments reach outside what the
 window read; `get_row` reads one row, `get_previous` the selected row's
 previous state, `get_verdict` the evidence lines and `get_view` what the
-window shows. `set_case`, `set_range`, `set_filter`, `select_row` and
-`set_tab` change what the window shows and nothing else. Row text reaches a
-model marked untrusted.
+window shows, `get_exceptions` the open exceptions of a case over a range
+with every rule's predicate. `set_case`, `set_range`, `set_filter`,
+`select_row` and `set_tab` change what the window shows and nothing else.
+`mark_row` writes to the trail and is not offered to agents: review is the
+person's act. Row text reaches a model marked untrusted.

@@ -11,14 +11,15 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/trailviewer/verdict"
 )
 
-// The operations catalog (ADR-0350 §SD8, proposed; the M2 subset —
-// mark_row and get_exceptions are M3's, get_tree M4's). Queries read the
-// window's caches as the snapshot took them with the frame, never the
-// store, so a query does not wait on ClickHouse; each says when the cache
-// was filled. They select by their own arguments, never by the window's
-// case, range or filter (ADR-0345 §SD2), and say when those arguments
-// reach outside what the window read. Commands set the view and never
-// toggle; nothing here writes the trail.
+// The operations catalog (ADR-0350 §SD8, proposed; get_tree is M4's).
+// Queries read the window's caches as the snapshot took them with the
+// frame, never the store, so a query does not wait on ClickHouse; each
+// says when the cache was filled. They select by their own arguments,
+// never by the window's case, range or filter (ADR-0345 §SD2), and say
+// when those arguments reach outside what the window read. The view
+// commands set the view and never toggle. One command writes the trail:
+// mark_row, consequential and person-only (ADR-0350 §SD7), which an agent
+// is not offered and whose handler refuses an agent's task.
 
 const (
 	resCase      = "case"
@@ -32,12 +33,14 @@ const (
 	opGetPrevious = "get_previous"
 	opGetVerdict  = "get_verdict"
 	opGetView     = "get_view"
+	opGetExc      = "get_exceptions"
 
 	opSetCase   = "set_case"
 	opSetRange  = "set_range"
 	opSetFilter = "set_filter"
 	opSelectRow = "select_row"
 	opSetTab    = "set_tab"
+	opMarkRow   = "mark_row"
 )
 
 // Result bounds: what one inline result may carry.
@@ -69,6 +72,9 @@ type opsSnap struct {
 	lines       []verdict.Line
 	linesAt     time.Time
 	detail      *detailFill
+	exc         exceptionSet
+	marks       map[uint64]Review
+	asOf        *AsOf
 
 	c        Case
 	window   Window
@@ -84,6 +90,7 @@ func (inst *App) opsSnapshot() (sn opsSnap) {
 	sn.buckets, sn.step, sn.facets = ch.buckets, ch.step, ch.facets
 	sn.filled, sn.refreshedAt, sn.lastErr = ch.filled, ch.refreshedAt, ch.lastErr
 	sn.lines, sn.linesAt = inst.verdicts.lines, inst.verdicts.at
+	sn.exc, sn.marks, sn.asOf = inst.exceptions(), inst.marks(), ch.asOf
 	sn.taken = time.Now()
 	sn.c, sn.window, sn.filter, sn.tab = inst.caseValue, inst.window, inst.filter, inst.tab
 	if inst.hasSelected {
@@ -216,6 +223,49 @@ type RowDetail struct {
 	FromBy      string `desc:"where the state before came from when no event, its from-by attribute"`
 	Attrs       []Attr `desc:"the event's attributes, at most 64"`
 	Refs        []Attr `desc:"the event's references, type and value"`
+	// The review: the rules that raised the row and its latest mark.
+	Exceptions []ExceptionRow `desc:"the exceptions the rules raised for the row, open or cleared by a mark"`
+	Mark       string         `desc:"the row's latest review mark: reviewed, flagged or dismissed; empty when unmarked"`
+	MarkReason string         `desc:"the mark's reason"`
+}
+
+// ExceptionRow is one exception: a row a rule raised.
+type ExceptionRow struct {
+	Id       uint64    `desc:"the raised row's facts id"`
+	Ts       time.Time `desc:"when the row's event happened"`
+	Kind     string    `desc:"the row's trail kind"`
+	Headline string    `desc:"the row's one-line summary, cut at 512 characters"`
+	Rule     string    `desc:"the rule that raised it; see rules"`
+	Reason   string    `desc:"why, in one line"`
+}
+
+// RuleRow is one exception rule as the window shows it.
+type RuleRow struct {
+	Name        string `desc:"the rule's name"`
+	Description string `desc:"what it raises"`
+	Predicate   string `desc:"its SQL predicate over dm_trail_timeline, or in words what it tests over what the window holds"`
+}
+
+// GetExceptionsArgs selects the exceptions of a case over a range.
+type GetExceptionsArgs struct {
+	Case  string    `desc:"run, window, app, conversation, task, subject, principal, entity, destination or all"`
+	Value string    `desc:"the case's value; run:instance for window, type:value for entity, none for all"`
+	Range RangeArgs `desc:"the time window; empty is the last hour"`
+	Rule  string    `desc:"one rule's name to keep only its exceptions; empty keeps every rule's"`
+	Limit int       `desc:"exceptions to return, newest row first; default 50, at most 200"`
+}
+
+// ExceptionsResult is get_exceptions's result.
+type ExceptionsResult struct {
+	Open        int            `desc:"open exceptions that match, before the limit"`
+	Exceptions  []ExceptionRow `desc:"the first limit open exceptions, newest row first; a row a review mark names has left the list"`
+	Cleared     int            `desc:"exceptions of the window's rows a review mark has cleared"`
+	Rules       []RuleRow      `desc:"every rule, with its predicate"`
+	Persisted   bool           `desc:"the trail reaches boxer.facts on this host"`
+	Held        int            `desc:"rows the window's cache holds; the rules ran over these"`
+	MoreInStore bool           `desc:"older rows of the case and range are in boxer.facts beyond the cache, and the rules have not run over them"`
+	RefreshedAt time.Time      `desc:"when the cache was last filled; zero before the first fill"`
+	Diagnostic  string         `desc:"why the result may be short or empty: nothing persisted, not read yet, a failed refresh, or arguments wider than what the window read; empty when none applies"`
 }
 
 // GetPreviousArgs names one row.
@@ -273,6 +323,8 @@ type View struct {
 	MoreInStore bool          `desc:"older rows of the case and range are in boxer.facts beyond the cache"`
 	Strip       string        `desc:"the strip's line: rows, buckets, the busiest bucket and its time"`
 	Verdicts    []VerdictLine `desc:"the verdict line per writer run"`
+	Exceptions  int           `desc:"open exceptions among the rows held"`
+	AsOf        string        `desc:"for the entity case, the entity's state as of the window's end and the event it comes from"`
 	RefreshedAt time.Time     `desc:"when the cache was last filled; zero before the first fill"`
 }
 
@@ -294,7 +346,7 @@ type SelectRowArgs struct {
 
 // SetTabArgs sets the detail pane's tab.
 type SetTabArgs struct {
-	Tab string `desc:"fields, previous or context"`
+	Tab string `desc:"fields, previous, context or compare"`
 }
 
 func parseCaseArgs(kind, value string) (c Case, err error) {
@@ -467,6 +519,17 @@ func verdictOf(lines []verdict.Line, run string) (l verdict.Line) {
 	return verdict.Line{Run: run, Reason: "not read yet"}
 }
 
+func exceptionRow(e Exception, r *Row) ExceptionRow {
+	return ExceptionRow{Id: e.Id, Ts: r.Ts(), Kind: r.Kind, Headline: cutText(r.Headline, opsMaxHeadline), Rule: e.Rule, Reason: e.Reason}
+}
+
+func ruleRows() (out []RuleRow) {
+	for _, r := range Rules {
+		out = append(out, RuleRow{Name: r.Name, Description: r.Description, Predicate: r.PredicateText()})
+	}
+	return
+}
+
 func detailOf(r *Row, lines []verdict.Line) (d RowDetail) {
 	d = RowDetail{Row: summarize(r, lines), Breadcrumb: breadcrumb(r), Conversation: r.Conversation, Turn: r.Turn, Round: r.Round,
 		Task: r.Task, TaskEpoch: r.TaskEpoch, TaskCall: r.TaskCall, Ref: r.Ref, ParentRef: r.ParentRef, Text: cutText(r.Text, opsMaxText),
@@ -588,6 +651,7 @@ var ops = func() (s *appops.Set[*App, opsSnap]) {
 	s.Available(opGetRow, persistedOr)
 	s.Available(opGetPrevious, persistedOr)
 	s.Available(opSelectRow, persistedOr)
+	s.Available(opMarkRow, persistedOr)
 
 	// --- queries ---
 
@@ -672,6 +736,12 @@ var ops = func() (s *appops.Set[*App, opsSnap]) {
 				return
 			}
 			out = detailOf(r, sn.lines)
+			for _, e := range sn.exc.byRow[r.Id] {
+				out.Exceptions = append(out.Exceptions, exceptionRow(e, r))
+			}
+			if m, ok := sn.marks[r.Id]; ok {
+				out.Mark, out.MarkReason = m.Mark, m.Reason
+			}
 			return
 		})
 
@@ -727,8 +797,79 @@ var ops = func() (s *appops.Set[*App, opsSnap]) {
 			if sn.filled {
 				out.Strip = stripLine(sn.buckets, sn.step)
 			}
+			out.Exceptions = len(sn.exc.open)
+			if sn.c.Kind == CaseEntity && sn.scope.Case == sn.c {
+				out.AsOf = asOfText(sn.asOf, func(t time.Time) string { return t.UTC().Format(time.RFC3339Nano) })
+			}
 			for _, l := range sn.lines {
 				out.Verdicts = append(out.Verdicts, verdictLine(l))
+			}
+			return
+		})
+
+	appops.Query(s, app.OperationSpec{Name: opGetExc, Version: 1,
+		Summary: "list the exceptions the window's named rules raise among the rows of a case over a time window, each with its rule and reason, from the window's cache; a row a review mark names has left the list",
+		Agents:  true, Untrusted: true, Fork: app.OperationForkReadShared},
+		func(sn opsSnap, in GetExceptionsArgs) (out ExceptionsResult, err error) {
+			c, err := parseCaseArgs(in.Case, in.Value)
+			if err != nil {
+				return
+			}
+			w, err := parseRangeArgs(in.Range)
+			if err != nil {
+				return
+			}
+			if in.Rule != "" {
+				if _, ok := LookupRule(in.Rule); !ok {
+					err = app.RefuseOperation("rule is one of the names get_exceptions lists under rules")
+					return
+				}
+			}
+			limit := in.Limit
+			switch {
+			case limit < 0:
+				err = app.RefuseOperation("limit is not negative")
+				return
+			case limit == 0:
+				limit = opsDefaultRows
+			case limit > opsMaxRows:
+				limit = opsMaxRows
+			}
+			out.Rules = ruleRows()
+			out.Persisted = sn.src.persisted()
+			out.Held, out.MoreInStore = len(sn.rows), sn.more
+			out.RefreshedAt = sn.refreshedAt
+			out.Diagnostic = sn.cacheDiagnostic()
+			if out.Diagnostic != "" || !sn.filled {
+				return
+			}
+			// The rules ran over the rows the window's filter kept, so a
+			// window with a filter covers no unfiltered question.
+			if ok, why := sn.covers(c, w, Filter{}); !ok {
+				out.Diagnostic = why
+				return
+			}
+			from, to := w.Resolve(sn.refreshedAt)
+			if w == sn.scope.Window {
+				from, to = sn.from, sn.to
+			}
+			byId := make(map[uint64]*Row, len(sn.rows))
+			for i := range sn.rows {
+				byId[sn.rows[i].Id] = &sn.rows[i]
+			}
+			out.Cleared = sn.exc.cleared
+			for _, e := range sn.exc.open {
+				r, ok := byId[e.Id]
+				if !ok || (in.Rule != "" && e.Rule != in.Rule) {
+					continue
+				}
+				if ts := r.Ts(); ts.Before(from) || !ts.Before(to) {
+					continue
+				}
+				out.Open++
+				if len(out.Exceptions) < limit {
+					out.Exceptions = append(out.Exceptions, exceptionRow(e, r))
+				}
 			}
 			return
 		})
@@ -804,11 +945,21 @@ var ops = func() (s *appops.Set[*App, opsSnap]) {
 		func(inst *App, _ app.OperationCall, in SetTabArgs) (out appops.None, err error) {
 			t, ok := ParseTab(in.Tab)
 			if !ok {
-				err = app.RefuseOperation("tab is one of fields, previous, context")
+				err = app.RefuseOperation("tab is one of fields, previous, context, compare")
 				return
 			}
 			inst.tab = t
 			return
+		})
+
+	// The one command that writes the trail (ADR-0350 §SD7): consequential,
+	// and not offered to agents, since review is the person's act.
+	appops.Command(s, app.OperationSpec{Name: opMarkRow, Version: 1,
+		Summary: "mark a trail row reviewed, flagged or dismissed with a reason, written to the trail as a review-domain audit event under the person's principal; a mark clears the row's exceptions",
+		Effect:  app.OperationEffectConsequential, Agents: false,
+		Gesture: "the detail pane's reviewed, flagged and dismissed buttons"},
+		func(inst *App, call app.OperationCall, in MarkRowArgs) (out MarkRowResult, err error) {
+			return inst.markRow(call, in)
 		})
 
 	return

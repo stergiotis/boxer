@@ -3,22 +3,34 @@ package trailviewer
 import (
 	"context"
 	"sync/atomic"
+	"time"
 
 	"github.com/stergiotis/boxer/public/db/clickhouse/chrows"
+	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsschema"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect"
+	"github.com/stergiotis/boxer/public/keelson/runtime/trail"
 	"github.com/stergiotis/boxer/public/keelson/runtime/trailviewer/verdict"
 	"github.com/stergiotis/boxer/public/storage/recordstore"
 	"github.com/stergiotis/boxer/public/storage/recordstore/evidence"
 )
 
-// RecorderI is the trail's recorder as the viewer reads it: whether its
-// rows land, and a run's seal verification.
+// RecorderI is the trail's recorder as the viewer uses it: whether its
+// rows land, a run's seal verification, and the write of a review mark
+// (ADR-0350 §SD7), as attention's auditor writes its events.
 type RecorderI interface {
 	VerifySeals(ctx context.Context, run string) (broken evidence.SealBreak, unnamed []uint64, unanchored []uint64, err error)
 	// NotDurable says why the trail's rows do not land, "" when they do.
 	NotDurable() (why string)
+	// Event buffers one audit event, stamped with the call identity on ctx.
+	Event(ctx context.Context, at time.Time, c trail.Context, row trail.AuditEvent) (err error)
+	// OriginOf is the origin of an app's window in this run.
+	OriginOf(appId app.AppIdT, instance uint64) (o trail.Origin)
+	// FlushSoon wakes the background flusher.
+	FlushSoon()
 }
+
+var _ RecorderI = (*trail.Recorder)(nil)
 
 // tableEvidenceChecks is keelson('evidence_checks'), the relation the
 // current run's verdict line is read from (ADR-0327 §SD7). Spelled here:

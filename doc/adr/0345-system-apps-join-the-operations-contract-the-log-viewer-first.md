@@ -265,6 +265,10 @@ The owner decided that the log viewer reads the host's log rows from `boxer.fact
 - **Without persisted logs** the window draws one line, saying logs are not persisted, why (`BOXER_LOG_FACTS` not set, or set with ClickHouse not answering), and what to set. Whether ClickHouse answers at all is the chrome status line's "audit trail not durable", which the line points to rather than repeats. `list_rows` then answers an empty set with that diagnostic; `get_row` and `select_row` are unavailable with the same reason.
 - **`log_tail` stays deferred.** With the rows in `boxer.facts`, a relation is close to `keelson('app_logs')` with a filter; it was not added.
 
+### 2026-11-01 — one system-app command is consequential and person-only: the trail viewer's `mark_row`
+
+SD6 says an app wanting a command with an effect other than `view` needs a record of its own. The trail viewer's `mark_row` is that command, and [ADR-0350](./0350-a-trail-viewer-one-system-app-over-the-marts-a-case-a-window-a-verdict-and-review-marks.md) §SD7 is its record: it writes a review mark to the trail as an audit event, which is outside the window, so its effect is `consequential`; it is not offered to agents, and its handler refuses a call an agent's task makes, since review is the person's act. The viewer's other commands stay `view`. ADR-0350 is proposed, and this choice is one of the two its Status section flags for the owner's review.
+
 ## References
 
 - [ADR-0269](./0269-app-operations-a-command-query-contract-agents-drive-under-a-task-grant.md) — the operations contract.

@@ -1,6 +1,7 @@
 package trailviewer
 
 import (
+	"fmt"
 	"testing"
 	"time"
 
@@ -25,15 +26,31 @@ func TestTheWindowRendersEveryRegion(t *testing.T) {
 	require.True(t, inst.selectById(6))
 	prev := judgeAudit(inst.selected.Audit, nil, nil, time.Hour)
 	inst.detail.fill, inst.detail.id, inst.detail.has = &detailFill{id: 6, before: fixtureRows()[1:3], previous: &prev}, 6, true
+	inst.cache.exceptions = []Exception{{Id: 6, Rule: RuleOutcome, Reason: "denied"}, {Id: 5, Rule: RuleTrailRow, Reason: "trail.config row"}}
+	inst.pending = map[uint64]Review{5: {Id: 5, TsNs: t0.UnixNano(), Mark: "reviewed", Principal: "os-x"}}
+	inst.compare, inst.hasCompare = fixtureRows()[3], true
+	frame := func(msg string) {
+		for range c.IdScope(inst.ids.PrepareStr("window")) {
+			assert.NotPanics(t, func() { require.NoError(t, inst.render()) }, msg)
+		}
+		c.CurrentApplicationState.StateManager.ScriptReset()
+	}
 	for _, grouped := range []bool{false, true} {
 		inst.setGrouped(grouped)
-		for _, tab := range []TabE{TabFields, TabPrevious, TabContext} {
+		for _, tab := range AllTabs {
 			inst.tab = tab
-			ids := inst.ids
-			for range c.IdScope(ids.PrepareStr("window")) {
-				assert.NotPanics(t, func() { require.NoError(t, inst.render()) }, "grouped=%v tab=%s", grouped, tab)
+			for _, side := range []sideE{sideFacets, sideExceptions, sideRules} {
+				inst.side = side
+				frame(fmt.Sprintf("grouped=%v tab=%s side=%d", grouped, tab, side))
 			}
-			c.CurrentApplicationState.StateManager.ScriptReset()
 		}
 	}
+	// The entity case's as-of line and section.
+	inst.tab = TabFields
+	inst.applyCase(Case{Kind: CaseEntity, Value: "attention-level:k"})
+	hold(inst, fixtureRows())
+	inst.cache.asOf = &AsOf{Entity: "attention-level:k", Bound: t0, Has: true, Event: *fixtureRows()[0].Audit}
+	frame("as of")
+	inst.cache.asOf = &AsOf{Entity: "attention-level:k", Bound: t0}
+	frame("as of, no event")
 }

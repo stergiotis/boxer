@@ -67,6 +67,19 @@ func probeSql(t *testing.T) string {
 	section("previous audit", m.previousAuditSQL(a, 30*24*time.Hour))
 	section("gaps", m.gapsSQL("run-1", from, to))
 	section("grant pair", m.grantPairSQL(r, 30*24*time.Hour))
+	// The exception rules (ADR-0350 §SD7): each SQL rule over the filtered
+	// read with a cursor and a lower bound, the statement that unions them,
+	// the reviews of the read's rows, and the entity's state as of a bound.
+	look := 30 * 24 * time.Hour
+	lower := &Cursor{TsNs: from.Add(5 * time.Minute).UnixNano(), Id: 11}
+	for _, rule := range Rules {
+		if !rule.FromHeld() {
+			section("rule "+rule.Name, m.ruleSQL(rule, q, lower, look))
+		}
+	}
+	section("exceptions", m.exceptionsSQL(q, lower, look))
+	section("reviews", m.reviewsSQL(q, lower))
+	section("as of", m.asOfSQL("rule:r-1", to, look))
 	return b.String()
 }
 

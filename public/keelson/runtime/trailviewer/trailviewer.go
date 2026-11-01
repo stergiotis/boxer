@@ -5,7 +5,10 @@
 // count strip, a windowed table, a facets pane and a detail pane with the
 // identity chain, the rows around the selected one, and for an audit event
 // or a grant the previous-state diff. Above the table one verdict line per
-// writer run says whether the run's sealed record holds.
+// writer run says whether the run's sealed record holds. Named exception
+// rules raise a reading list beside the table (rules.go), a person marks a
+// row reviewed, flagged or dismissed back onto the trail (marks.go), and
+// two rows can be compared field by field (compare.go).
 //
 // The window never queries the store from a frame: a bgjob worker reads
 // through the host's executor (cache.go, probe.go) and a later frame
@@ -26,8 +29,12 @@ import (
 
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
+	"github.com/stergiotis/boxer/public/keelson/runtime/appops"
+	"github.com/stergiotis/boxer/public/keelson/runtime/appops/opwire"
+	"github.com/stergiotis/boxer/public/keelson/runtime/trail"
 	"github.com/stergiotis/boxer/public/keelson/runtime/trailviewer/verdict"
 	"github.com/stergiotis/boxer/public/keelson/runtime/widgethandle"
+	"github.com/stergiotis/boxer/public/storage/recordstore/evidence/audit"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/badge"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/color"
@@ -92,8 +99,27 @@ type App struct {
 
 	valueH widgethandle.WidgetHandle
 
+	// side is what the pane beside the table shows.
+	side sideE
+	// The review marks written and not read back yet, the exceptions with
+	// the marks applied, and the detail pane's mark controls.
+	pending     map[uint64]Review
+	pendingVer  uint64
+	exc         exceptionSet
+	excKey      excKey
+	excBuilt    bool
+	excVer      uint64
+	markReason  string
+	markErr     error
+	markReached bool
+	// compare is the second row the detail pane compares the selected one
+	// with; picking says the next table click picks it.
+	compare    Row
+	hasCompare bool
+	picking    bool
+
 	// The grid's record and state; the record is rebuilt when the cache's
-	// generation moves.
+	// generation or the exceptions move.
 	grid      gridState
 	stripW    float32
 	fvState   fieldview.State
@@ -166,6 +192,7 @@ func (inst *App) tick(now time.Time) {
 	inst.cache.tick(now, src, inst.scopeValue(), readSpec{c: inst.caseValue, filter: inst.filter, buckets: stripBuckets(inst.stripW)},
 		inst.probeFunc(src))
 	inst.refreshSelected()
+	inst.settlePending()
 	inst.verdicts.tick(now, src, runsOf(inst.cache.rows))
 	var sel *Row
 	if inst.hasSelected {
@@ -175,10 +202,7 @@ func (inst *App) tick(now time.Time) {
 }
 
 func (inst *App) probeFunc(src *Source) func() (*probe, error) {
-	appId, instance := inst.appId, inst.instance
-	if appId == "" {
-		appId = string(inst.manifest.Id)
-	}
+	appId, instance := inst.appIdOr(), inst.instance
 	return func() (*probe, error) { return newProbe(src, appId, instance) }
 }
 
@@ -282,7 +306,7 @@ func (inst *App) render() (err error) {
 		}
 	}
 	for range c.PanelRightInside(inst.ids.PrepareStr("facets")).DefaultSize(facetsPanelWidth).Resizable(true).KeepIter() {
-		inst.renderFacets()
+		inst.renderSide()
 	}
 	for range c.PanelCentralInside().KeepIter() {
 		inst.renderTable()
@@ -648,13 +672,19 @@ type gridState struct {
 	rec    arrow.RecordBatch
 	rows   []Row
 	gen    uint64
+	excVer uint64
 	built  bool
 	state  recordtable.State
 	sort   recordtable.SortState
 	groups recordtable.GroupState
 	order  []int64
-	// lastPos is the display position of the last row drawn last frame.
+	// maxPos is the display position of the last row drawn this frame.
 	maxPos int64
+	// endGen and endFrames count the consecutive frames of one fill that
+	// drew the end row: a fill's first frame may draw every row while the
+	// grid fits itself, so the end is reached on the second.
+	endGen    uint64
+	endFrames int
 }
 
 func (inst *gridState) release() {
@@ -670,16 +700,20 @@ type gridCol struct {
 	header  string
 	width   float32
 	agentic bool
-	str     func(r *Row) string
-	num     func(r *Row) int64
+	// exc is the exceptions column, whose text the window computes.
+	exc bool
+	str func(r *Row) string
+	num func(r *Row) int64
 }
 
-// tableColumns are the table's columns: the verdict mark first, then time,
+// tableColumns are the table's columns: the verdict mark first, the
+// exceptions or the review mark second, then time,
 // kind, headline, status, subject, app, instance, and the conversation and
 // task columns when the case is agentic. The time is kept as nanoseconds
 // for the sort; its cell is drawn in the picker's zone.
 var tableColumns = []gridCol{
 	{header: "verdict", width: 80, str: func(r *Row) string { return r.Run }},
+	{header: "exceptions", width: 140, exc: true},
 	{header: "time", width: 150, num: func(r *Row) int64 { return r.TsNs }},
 	{header: "kind", width: 100, str: func(r *Row) string { return r.Kind }},
 	{header: "headline", width: 520, str: func(r *Row) string { return r.Headline }},
@@ -691,13 +725,13 @@ var tableColumns = []gridCol{
 	{header: "task", width: 140, agentic: true, str: func(r *Row) string { return r.Task }},
 }
 
-// build rebuilds the record from rows.
-func (inst *gridState) build(rows []Row, gen uint64) {
-	if inst.built && inst.gen == gen {
+// build rebuilds the record from rows; excText is the exceptions column.
+func (inst *gridState) build(rows []Row, gen uint64, excVer uint64, excText func(r *Row) string) {
+	if inst.built && inst.gen == gen && inst.excVer == excVer {
 		return
 	}
 	inst.release()
-	inst.rows, inst.gen, inst.built = rows, gen, true
+	inst.rows, inst.gen, inst.excVer, inst.built = rows, gen, excVer, true
 	mem := memory.DefaultAllocator
 	fields := make([]arrow.Field, 0, len(tableColumns))
 	arrs := make([]arrow.Array, 0, len(tableColumns))
@@ -712,9 +746,13 @@ func (inst *gridState) build(rows []Row, gen uint64) {
 			fields = append(fields, arrow.Field{Name: col.header, Type: arrow.PrimitiveTypes.Int64})
 			continue
 		}
+		str := col.str
+		if col.exc {
+			str = excText
+		}
 		b := array.NewStringBuilder(mem)
 		for i := range rows {
-			b.Append(col.str(&rows[i]))
+			b.Append(str(&rows[i]))
 		}
 		arrs = append(arrs, b.NewArray())
 		b.Release()
@@ -728,7 +766,12 @@ func (inst *gridState) build(rows []Row, gen uint64) {
 
 func (inst *App) renderTable() {
 	g := &inst.grid
-	g.build(inst.cache.rows, inst.cache.gen)
+	exc := inst.exceptions()
+	marks := inst.marks()
+	g.build(inst.cache.rows, inst.cache.gen, inst.excVer, func(r *Row) string {
+		text, _, _ := exceptionCell(exc.byRow[r.Id], marks, r.Id)
+		return text
+	})
 	for range c.Horizontal().KeepIter() {
 		groupLabel := "Group by parent: off"
 		if inst.grouped {
@@ -738,6 +781,12 @@ func (inst *App) renderTable() {
 			inst.setGrouped(!inst.grouped)
 		}
 		c.Label("Case: " + inst.caseValue.String() + " · " + inst.window.String()).Send()
+		if inst.picking {
+			c.LabelAtoms(c.Atoms().BeginRichTextColored(detailMutedFg, detailBgClear, "click a row to compare it with the selected one").Small().End().Keep()).Send()
+		}
+	}
+	if line := inst.asOfLine(); line != "" {
+		c.Label(line).Wrap().Send()
 	}
 	if len(g.rows) == 0 {
 		switch {
@@ -767,6 +816,11 @@ func (inst *App) renderTable() {
 				inst.noteDrawn(row)
 				l := inst.verdicts.line(rows[row].Run)
 				return recordtable.Cell{Text: l.Mark(), Hover: l.Label(), Tone: color.Hex(toneHex(l.Tone())), Toned: true}
+			}
+		case "exceptions":
+			cl.Cell = func(row int64) recordtable.Cell {
+				text, tone, hover := exceptionCell(exc.byRow[rows[row].Id], marks, rows[row].Id)
+				return recordtable.Cell{Text: text, Hover: hover, Tone: color.Hex(tone), Toned: text != "", LeftAlign: true}
 			}
 		case "time":
 			cl.Cell = func(row int64) recordtable.Cell {
@@ -804,16 +858,77 @@ func (inst *App) renderTable() {
 	}
 	if res.Clicked >= 0 && res.Clicked < int64(len(rows)) {
 		id := rows[res.Clicked].Id
-		if inst.hasSelected && inst.selected.Id == id {
-			id = 0
+		mods := c.CurrentApplicationState.StateManager.GetModifiers()
+		switch {
+		case inst.hasSelected && inst.selected.Id != id && (inst.picking || mods.Command || mods.Ctrl):
+			// A second selection: the detail pane compares the two.
+			inst.compare, inst.hasCompare, inst.picking = rows[res.Clicked], true, false
+			if inst.tab != TabCompare {
+				inst.setTabGesture(TabCompare)
+			}
+		case inst.hasSelected && inst.selected.Id == id:
+			inst.selectGesture(0)
+		default:
+			inst.selectGesture(id)
 		}
-		inst.selectGesture(id)
 	}
 	// The end of what is held is reached when the last row by display
-	// position was drawn; the cursor then reads the rows after it.
-	if !inst.grouped && g.maxPos >= int64(len(rows))-1 && inst.cache.more {
+	// position was drawn on two consecutive frames of one fill; the cursor
+	// then reads the rows after it.
+	if g.reachedEnd(!inst.grouped && g.maxPos >= int64(len(rows))-1, inst.cache.gen) && inst.cache.more && !inst.cache.runner.Running() {
 		inst.cache.extendNow = true
 	}
+}
+
+// reachedEnd records whether this frame drew the end row of fill gen and
+// reports whether the end is reached: drawn on this frame and the one
+// before it. The first frame after a fill can draw every row of a short
+// table before the grid has fitted itself, which is no scroll of the
+// person's.
+func (inst *gridState) reachedEnd(drawn bool, gen uint64) bool {
+	switch {
+	case !drawn:
+		inst.endFrames = 0
+	case inst.endGen != gen:
+		inst.endGen, inst.endFrames = gen, 1
+	default:
+		inst.endFrames++
+	}
+	return inst.endFrames >= 2
+}
+
+// exceptionCell is the exceptions column for a row: its mark when it has
+// one, else the rules its open exceptions name; the tone, and the reasons
+// for the hover.
+func exceptionCell(es []Exception, marks map[uint64]Review, id uint64) (text string, tone uint32, hover string) {
+	if m, ok := marks[id]; ok {
+		text, hover = m.Mark, "marked "+m.Mark
+		if m.Reason != "" {
+			hover += ": " + m.Reason
+		}
+		if len(es) > 0 {
+			hover += "; clears " + ruleNames(es)
+		}
+		switch m.Mark {
+		case trail.ReviewActionReviewed:
+			tone = styletokens.SuccessDefault.AsHex()
+		case trail.ReviewActionFlagged:
+			tone = styletokens.ErrorDefault.AsHex()
+		default:
+			tone = styletokens.NeutralTextSecondary.AsHex()
+		}
+		return
+	}
+	if len(es) == 0 {
+		return
+	}
+	text = strings.ReplaceAll(ruleNames(es), ",", ", ")
+	reasons := make([]string, 0, len(es))
+	for _, e := range es {
+		reasons = append(reasons, e.Rule+": "+e.Reason)
+	}
+	hover, tone = strings.Join(reasons, "\n"), styletokens.WarningDefault.AsHex()
+	return
 }
 
 // noteDrawn records the display position of a row the grid drew.
@@ -903,11 +1018,18 @@ func (inst *App) renderDetail() {
 		badge.New(inst.ids.PrepareStr("d-kind"), r.Kind).Tone(badge.TonePrimary).Variant(badge.VariantOutline).Size(badge.SizeSm).Send()
 		c.LabelAtoms(c.Atoms().BeginRichTextColored(detailMutedFg, detailBgClear,
 			inst.picker.format(r.Ts(), time.RFC3339Nano)+" · id "+strconv.FormatUint(r.Id, 10)).Small().Monospace().End().Keep()).Send()
-		for _, t := range []TabE{TabFields, TabPrevious, TabContext} {
+		for _, t := range AllTabs {
 			if c.Button(inst.ids.PrepareStr("d-tab-"+t.String()), c.Atoms().Text(t.String()).Keep()).Selected(inst.tab == t).
 				SendResp().HasPrimaryClicked() && inst.tab != t {
 				inst.setTabGesture(t)
 			}
+		}
+		pickLabel := "Compare with…"
+		if inst.picking {
+			pickLabel = "Picking: click a row"
+		}
+		if c.Button(inst.ids.PrepareStr("d-compare"), c.Atoms().Text(pickLabel).Keep()).Selected(inst.picking).SendResp().HasPrimaryClicked() {
+			inst.picking = !inst.picking
 		}
 		if c.Button(inst.ids.PrepareStr("d-clear"), c.Atoms().Text("Clear selection").Keep()).SendResp().HasPrimaryClicked() {
 			inst.selectGesture(0)
@@ -916,6 +1038,7 @@ func (inst *App) renderDetail() {
 	if bc := breadcrumb(r); bc != "" {
 		c.Label(bc).Wrap().Send()
 	}
+	inst.renderReview()
 	c.Separator().Horizontal().Send()
 	for range c.ScrollArea().Vscroll(true).Hscroll(false).AutoShrink(false, false).KeepIter() {
 		switch inst.tab {
@@ -923,6 +1046,8 @@ func (inst *App) renderDetail() {
 			inst.renderPrevious()
 		case TabContext:
 			inst.renderContext()
+		case TabCompare:
+			inst.renderCompare()
 		default:
 			inst.renderFields()
 		}
@@ -931,6 +1056,7 @@ func (inst *App) renderDetail() {
 
 func (inst *App) renderFields() {
 	r := &inst.selected
+	inst.renderAsOf()
 	c.Label(r.Headline).Wrap().Send()
 	if r.Text != "" {
 		c.AddSpace(styletokens.PaddingHair(inst.density))
@@ -1039,30 +1165,7 @@ func (inst *App) renderPrevious() {
 		tone = badge.ToneWarning
 	}
 	badge.New(inst.ids.PrepareStr("p-verdict"), "from: "+p.Verdict).Tone(tone).Variant(badge.VariantSoft).Size(badge.SizeSm).Send()
-	for range c.IdScope(inst.ids.PrepareStr("p-table")) {
-		for range c.Grid(inst.ids.PrepareStr("grid")).NumColumns(4).Striped(true).KeepIter() {
-			for _, h := range []string{"field", "before", "after", "change"} {
-				c.LabelAtoms(c.Atoms().BeginRichText(h).Strong().End().Keep()).Send()
-			}
-			c.EndRow()
-			for _, f := range p.Fields {
-				c.Label(f.Field).Send()
-				c.Label(f.Before).Send()
-				c.Label(f.After).Send()
-				fg := detailMutedFg
-				switch f.Change {
-				case ChangeAdded.String():
-					fg = color.Hex(styletokens.SuccessDefault.AsHex())
-				case ChangeRemoved.String():
-					fg = color.Hex(styletokens.ErrorDefault.AsHex())
-				case ChangeChanged.String():
-					fg = color.Hex(styletokens.WarningDefault.AsHex())
-				}
-				c.LabelAtoms(c.Atoms().BeginRichTextColored(fg, detailBgClear, f.Change).End().Keep()).Send()
-				c.EndRow()
-			}
-		}
-	}
+	inst.renderFieldTable("p-table", []string{"field", "before", "after", "change"}, p.Fields)
 }
 
 func (inst *App) renderContext() {
@@ -1201,4 +1304,263 @@ func relativeSpan(from, to string) (d time.Duration, ok bool) {
 		return
 	}
 	return time.Duration(n) * u, true
+}
+
+// --- review: exceptions, marks, compare, as of ---
+
+// sideE is what the pane beside the table shows.
+type sideE uint8
+
+const (
+	sideFacets sideE = iota
+	sideExceptions
+	sideRules
+)
+
+// exceptionsShown bounds the exception list's drawn lines.
+const exceptionsShown = 500
+
+// renderSide is the pane beside the table: the facets, the exception list
+// or the rules.
+func (inst *App) renderSide() {
+	exc := inst.exceptions()
+	for range c.HorizontalTop().KeepIter() {
+		for _, x := range []struct {
+			side  sideE
+			label string
+		}{{sideFacets, "Facets"}, {sideExceptions, fmt.Sprintf("Exceptions (%d)", len(exc.open))}, {sideRules, "Rules"}} {
+			if c.Button(inst.ids.PrepareStr(fmt.Sprintf("side-%d", x.side)), c.Atoms().Text(x.label).Keep()).Selected(inst.side == x.side).
+				SendResp().HasPrimaryClicked() {
+				inst.side = x.side
+			}
+		}
+	}
+	c.Separator().Horizontal().Send()
+	switch inst.side {
+	case sideExceptions:
+		inst.renderExceptions(exc)
+	case sideRules:
+		inst.renderRules(exc)
+	default:
+		inst.renderFacets()
+	}
+}
+
+// renderExceptions is the exception list: each open exception with its
+// rule and reason; a click selects the row in the table.
+func (inst *App) renderExceptions(exc exceptionSet) {
+	for range c.ScrollArea().Vscroll(true).Hscroll(false).AutoShrink(false, false).KeepIter() {
+		c.Label(fmt.Sprintf("%d open among the %d rows held; %d cleared by a review mark. A click selects the row.",
+			len(exc.open), len(inst.cache.rows), exc.cleared)).Wrap().Send()
+		byId := make(map[uint64]*Row, len(inst.cache.rows))
+		for i := range inst.cache.rows {
+			byId[inst.cache.rows[i].Id] = &inst.cache.rows[i]
+		}
+		for range c.IdScope(inst.ids.PrepareStr("exc")) {
+			for i, e := range exc.open {
+				if i == exceptionsShown {
+					c.Label(fmt.Sprintf("… and %d more", len(exc.open)-exceptionsShown)).Send()
+					break
+				}
+				when := ""
+				if r, ok := byId[e.Id]; ok {
+					when = inst.picker.format(r.Ts(), "15:04:05") + "  "
+				}
+				sel := inst.hasSelected && inst.selected.Id == e.Id
+				if c.Button(inst.ids.PrepareSeq(uint64(i)), c.Atoms().Text(when+e.Rule+": "+cutText(e.Reason, 120)).Keep()).
+					Frame(false).Selected(sel).SendResp().HasPrimaryClicked() && !sel {
+					inst.selectGesture(e.Id)
+				}
+			}
+		}
+	}
+}
+
+// renderRules is every rule with its description, its predicate and how
+// many open exceptions it raised: a highlight whose rule is hidden is
+// distrusted (ADR-0350 §SD7).
+func (inst *App) renderRules(exc exceptionSet) {
+	counts := map[string]int{}
+	for _, e := range exc.open {
+		counts[e.Rule]++
+	}
+	for range c.ScrollArea().Vscroll(true).Hscroll(false).AutoShrink(false, false).KeepIter() {
+		c.Label("The rules raise a reading list, not a verdict and not an action.").Wrap().Send()
+		for _, r := range Rules {
+			c.AddSpace(styletokens.PaddingHair(inst.density))
+			c.LabelAtoms(c.Atoms().BeginRichText(fmt.Sprintf("%s (%d open)", r.Name, counts[r.Name])).Strong().End().Keep()).Send()
+			c.Label(r.Description).Wrap().Send()
+			c.LabelAtoms(c.Atoms().BeginRichTextColored(detailMutedFg, detailBgClear, r.PredicateText()).Small().Monospace().End().Keep()).Wrap().Send()
+		}
+	}
+}
+
+// renderReview is the selected row's exceptions, its mark, and the mark
+// controls: a reason box and one button per mark, each routed through
+// mark_row as the person's gesture.
+func (inst *App) renderReview() {
+	r := &inst.selected
+	es := inst.exceptions().byRow[r.Id]
+	m, marked := inst.marks()[r.Id]
+	for range c.IdScope(inst.ids.PrepareStr("review")) {
+		if len(es) > 0 {
+			reasons := make([]string, 0, len(es))
+			for _, e := range es {
+				reasons = append(reasons, e.Rule+": "+e.Reason)
+			}
+			fg := color.Hex(styletokens.WarningDefault.AsHex())
+			if marked {
+				fg = detailMutedFg
+			}
+			c.LabelAtoms(c.Atoms().BeginRichTextColored(fg, detailBgClear, "Exceptions — "+strings.Join(reasons, "; ")).End().Keep()).Wrap().Send()
+		}
+		if marked {
+			line := "Marked " + m.Mark + " at " + inst.picker.format(m.Ts(), time.RFC3339) + " by " + m.Principal
+			if m.Reason != "" {
+				line += ": " + m.Reason
+			}
+			if m.Marks > 1 {
+				line += fmt.Sprintf(" (the latest of %d marks)", m.Marks)
+			}
+			c.Label(line).Wrap().Send()
+		}
+		for range c.HorizontalTop().KeepIter() {
+			c.Label("Mark:").Send()
+			c.TextEdit(inst.ids.PrepareStr("reason"), inst.markReason, false).HintText("reason (required to dismiss)").DesiredWidth(260).
+				SendRespVal(&inst.markReason)
+			for _, mk := range AllMarks {
+				if c.Button(inst.ids.PrepareStr("mark-"+mk.String()), c.Atoms().Text(mk.String()).Keep()).SendResp().HasPrimaryClicked() {
+					inst.markGesture(r.Id, mk)
+				}
+			}
+		}
+		if inst.markErr != nil {
+			c.LabelAtoms(c.Atoms().BeginRichTextColored(detailErrorFg, detailBgClear, inst.markErr.Error()).Small().End().Keep()).Wrap().Send()
+		}
+	}
+}
+
+// markGesture routes the person's mark through the catalog when the host
+// serves one, and to the handler directly when it does not reach it.
+func (inst *App) markGesture(id uint64, mk MarkE) {
+	in := MarkRowArgs{Id: id, Mark: mk.String(), Reason: inst.markReason}
+	inst.markReached = false
+	var err error
+	if inst.frameCtx != nil {
+		_, err = appops.Gesture[MarkRowArgs, MarkRowResult](inst.frameCtx, opMarkRow, in)
+	}
+	if !inst.markReached {
+		_, err = inst.markRow(app.OperationCall{Writer: opwire.WriterPerson}, in)
+	}
+	inst.markErr = err
+	if err == nil {
+		inst.markReason = ""
+		c.CurrentApplicationState.StateManager.OverrideDatabindingSPtr(&inst.markReason)
+	}
+}
+
+// renderCompare is the selected row against the second row the person
+// picked, older left, with the base in words above the table.
+func (inst *App) renderCompare() {
+	if !inst.hasCompare || inst.compare.Id == inst.selected.Id {
+		c.Label("Pick a second row: press Compare with… and click a row, or Ctrl/Cmd-click a row in the table.").Wrap().Send()
+		return
+	}
+	cmp := compareRows(inst.selected, inst.compare, func(t time.Time) string { return inst.picker.format(t, time.RFC3339Nano) })
+	for range c.HorizontalTop().KeepIter() {
+		c.Label(cmp.Base).Wrap().Send()
+	}
+	if c.Button(inst.ids.PrepareStr("cmp-clear"), c.Atoms().Text("Clear comparison").Keep()).SendResp().HasPrimaryClicked() {
+		inst.hasCompare, inst.compare = false, Row{}
+	}
+	inst.renderFieldTable("cmp-table", []string{"field", "older", "newer", "change"}, cmp.Fields)
+}
+
+// renderFieldTable is a field table: field, before, after, change.
+func (inst *App) renderFieldTable(key string, headers []string, fields []FieldDiff) {
+	for range c.IdScope(inst.ids.PrepareStr(key)) {
+		for range c.Grid(inst.ids.PrepareStr("grid")).NumColumns(4).Striped(true).KeepIter() {
+			for _, h := range headers {
+				c.LabelAtoms(c.Atoms().BeginRichText(h).Strong().End().Keep()).Send()
+			}
+			c.EndRow()
+			for _, f := range fields {
+				c.Label(f.Field).Send()
+				c.Label(cutText(f.Before, 400)).Send()
+				c.Label(cutText(f.After, 400)).Send()
+				fg := detailMutedFg
+				switch f.Change {
+				case ChangeAdded.String():
+					fg = color.Hex(styletokens.SuccessDefault.AsHex())
+				case ChangeRemoved.String():
+					fg = color.Hex(styletokens.ErrorDefault.AsHex())
+				case ChangeChanged.String():
+					fg = color.Hex(styletokens.WarningDefault.AsHex())
+				}
+				c.LabelAtoms(c.Atoms().BeginRichTextColored(fg, detailBgClear, f.Change).End().Keep()).Send()
+				c.EndRow()
+			}
+		}
+	}
+}
+
+// asOfText is the entity's state as of the window's end in one line, and
+// the event it comes from; "" outside the entity case.
+func asOfText(a *AsOf, format func(t time.Time) string) string {
+	if a == nil {
+		return ""
+	}
+	if !a.Has {
+		return "As of " + format(a.Bound) + ": no event of " + a.Entity + " at or before it within the look-back."
+	}
+	e := &a.Event
+	s := "As of " + format(a.Bound) + ", " + a.Entity + "'s state comes from event id " + strconv.FormatUint(e.Id, 10) +
+		" (" + e.Domain + "." + e.Action + ") at " + format(e.Ts())
+	var kv []string
+	for i, k := range e.AttrKeys {
+		if i < len(e.AttrValues) && k != audit.AttrFrom && k != audit.AttrFromBy {
+			kv = append(kv, k+"="+e.AttrValues[i])
+		}
+	}
+	if len(kv) > 0 {
+		s += ": " + strings.Join(kv, ", ")
+	}
+	return s
+}
+
+func (inst *App) asOfLine() string {
+	if inst.caseValue.Kind != CaseEntity || inst.cache.scope.Case != inst.caseValue {
+		return ""
+	}
+	return cutText(asOfText(inst.cache.asOf, func(t time.Time) string { return inst.picker.format(t, time.RFC3339) }), 400)
+}
+
+// renderAsOf is the as-of state in the detail pane for the entity case:
+// the event it comes from, when, and its attributes as a table.
+func (inst *App) renderAsOf() {
+	a := inst.cache.asOf
+	if inst.caseValue.Kind != CaseEntity || a == nil || inst.cache.scope.Case != inst.caseValue {
+		return
+	}
+	format := func(t time.Time) string { return inst.picker.format(t, time.RFC3339) }
+	if !a.Has {
+		c.Label(asOfText(a, format)).Wrap().Send()
+		c.Separator().Horizontal().Send()
+		return
+	}
+	e := &a.Event
+	c.Label("As of " + format(a.Bound) + ", " + a.Entity + "'s state comes from event id " + strconv.FormatUint(e.Id, 10) +
+		" (" + e.Domain + "." + e.Action + ") at " + format(e.Ts()) + ":").Wrap().Send()
+	for range c.IdScope(inst.ids.PrepareStr("asof")) {
+		for range c.Grid(inst.ids.PrepareStr("grid")).NumColumns(2).Striped(true).KeepIter() {
+			for i, k := range e.AttrKeys {
+				if i < len(e.AttrValues) {
+					c.Label(k).Send()
+					c.Label(cutText(e.AttrValues[i], 400)).Send()
+					c.EndRow()
+				}
+			}
+		}
+	}
+	c.Separator().Horizontal().Send()
 }

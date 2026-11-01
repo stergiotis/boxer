@@ -2,6 +2,7 @@ package trailviewer
 
 import (
 	"context"
+	"maps"
 	"slices"
 	"time"
 
@@ -15,7 +16,9 @@ import (
 //   - the table: the case's rows, the strip's buckets and the facets,
 //     refilled when the case, the window or the filter change and on the
 //     refresh interval, and extended by the cursor when the person reaches
-//     the end of what is held;
+//     the end of what is held; with the rows, the rows the SQL exception
+//     rules raise, the claim rule's judgments, the rows' review marks and,
+//     for the entity case, the state as of the window's end (rules.go);
 //   - the verdicts: one line per writer run among the rows, read once per
 //     refill at most and at most every verdictEvery;
 //   - the detail: the selected row's context, and its previous state.
@@ -43,6 +46,13 @@ type tableFill struct {
 	step    time.Duration
 	facets  [][]FacetValue
 	at      time.Time
+	// exceptions are the SQL rules' raised rows among rows, reviews their
+	// latest marks, claims the claim rule's new judgments, asOf the entity
+	// case's state as of the window's end.
+	exceptions []Exception
+	reviews    []Review
+	claims     map[uint64]claimJudgment
+	asOf       *AsOf
 }
 
 // tableCache is the rows a window holds. rows is replaced whole, never
@@ -61,6 +71,12 @@ type tableCache struct {
 	refreshedAt time.Time
 	gen         uint64
 	lastErr     error
+	exceptions  []Exception
+	reviews     map[uint64]Review
+	// claims is every judgment the claim rule made, kept across refills
+	// so a row is read once.
+	claims map[uint64]claimJudgment
+	asOf   *AsOf
 
 	inFlight   scope
 	started    time.Time
@@ -85,12 +101,27 @@ func (inst *tableCache) tick(now time.Time, src *Source, want scope, spec readSp
 			if inst.scope == want {
 				inst.rows = appendNew(inst.rows, res.rows)
 				inst.more = res.more
+				inst.exceptions = append(slices.Clip(inst.exceptions), res.exceptions...)
+				inst.reviews = maps.Clone(inst.reviews)
+				if inst.reviews == nil {
+					inst.reviews = map[uint64]Review{}
+				}
+				for _, r := range res.reviews {
+					inst.reviews[r.Id] = r
+				}
+				inst.mergeClaims(res.claims)
 				inst.gen++
 			}
 		} else {
 			inst.rows, inst.more, inst.scope, inst.from, inst.to = res.rows, res.more, res.scope, res.from, res.to
 			inst.buckets, inst.step, inst.facets = res.buckets, res.step, res.facets
 			inst.filled, inst.refreshedAt, inst.lastErr = true, res.at, nil
+			inst.exceptions, inst.asOf = res.exceptions, res.asOf
+			inst.reviews = make(map[uint64]Review, len(res.reviews))
+			for _, r := range res.reviews {
+				inst.reviews[r.Id] = r
+			}
+			inst.mergeClaims(res.claims)
 			inst.gen++
 		}
 	}
@@ -148,6 +179,11 @@ func (inst *tableCache) start(now time.Time, want scope, spec readSpec, extend b
 	q.From, q.To = from, to
 	inst.inFlight, inst.started, inst.refreshNow, inst.extendNow = want, now, false, false
 	buckets, by := spec.buckets, want.Strip
+	look := lookback()
+	judged := make(map[uint64]bool, len(inst.claims))
+	for id := range inst.claims {
+		judged[id] = true
+	}
 	inst.runner.Start(nil, bgjob.Spec{Kind: "trailviewer.read", Title: "Trail viewer read"},
 		func(ctx context.Context) (out *tableFill, err error) {
 			ctx, cancel := context.WithTimeout(ctx, readTimeout)
@@ -161,8 +197,30 @@ func (inst *tableCache) start(now time.Time, want scope, spec readSpec, extend b
 				return
 			}
 			out = &tableFill{scope: want, from: from, to: to, rows: rows, more: len(rows) == q.Limit, extend: extend, at: time.Now()}
+			if len(rows) > 0 {
+				// The rules and the marks cover the rows read: older than
+				// the cursor, and no older than the last row when more
+				// follow.
+				var lower *Cursor
+				if out.more {
+					last := rows[len(rows)-1]
+					lower = &Cursor{TsNs: last.TsNs, Id: last.Id}
+				}
+				if out.exceptions, err = queryRows[Exception](ctx, p, p.marts.exceptionsSQL(q, lower, look)); err != nil {
+					return nil, err
+				}
+				if out.reviews, err = queryRows[Review](ctx, p, p.marts.reviewsSQL(q, lower)); err != nil {
+					return nil, err
+				}
+				if out.claims, err = p.judgeClaims(ctx, rows, judged, look); err != nil {
+					return nil, err
+				}
+			}
 			if extend {
 				return
+			}
+			if out.asOf, err = p.readAsOf(ctx, q, rows, look); err != nil {
+				return nil, err
 			}
 			out.step = stepFor(to.Sub(from), buckets)
 			if out.buckets, err = p.strip(ctx, q, out.step, by); err != nil {
@@ -192,6 +250,20 @@ func appendNew(held []Row, more []Row) (out []Row) {
 		}
 	}
 	return
+}
+
+// mergeClaims adds a fill's judgments to the ones held, forgetting them
+// all past maxJudged.
+func (inst *tableCache) mergeClaims(add map[uint64]claimJudgment) {
+	if len(add) == 0 {
+		return
+	}
+	if inst.claims == nil || len(inst.claims)+len(add) > maxJudged {
+		inst.claims = make(map[uint64]claimJudgment, len(add))
+	} else {
+		inst.claims = maps.Clone(inst.claims)
+	}
+	maps.Copy(inst.claims, add)
 }
 
 func (inst *tableCache) close() { inst.runner.Invalidate() }
