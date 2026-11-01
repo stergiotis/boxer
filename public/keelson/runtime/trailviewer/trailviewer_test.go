@@ -131,6 +131,23 @@ func TestTheStripFoldsKeysAndStatesItsLine(t *testing.T) {
 	assert.Equal(t, float64(52), s.tops[stripKeys-1][0], "every row is in some series")
 }
 
+// A click on a strip bar narrows to the bucket ClickHouse counted, whose
+// start toStartOfInterval aligns to the Unix epoch, not to year 1 as
+// time.Truncate would.
+func TestAStripClickNarrowsToTheBucketClicked(t *testing.T) {
+	week := 7 * 24 * time.Hour
+	for _, step := range []time.Duration{time.Minute, 24 * time.Hour, week, 2 * week, 4 * week} {
+		s := int64(step / time.Second)
+		// A bucket as ClickHouse returns it, clicked at its bar's middle
+		// and near either edge.
+		bucket := t0.Unix() / s * s
+		for _, x := range []float64{float64(bucket) + float64(s)/2, float64(bucket) + 1, float64(bucket+s) - 1} {
+			assert.Equal(t, time.Unix(bucket, 0).UTC(), bucketStart(x, step), "step %s x %v", step, x)
+		}
+	}
+	assert.Equal(t, time.Unix(-week.Milliseconds()/1000, 0).UTC(), bucketStart(-1, week), "before the epoch it floors")
+}
+
 func TestARangeEndingNowIsReadAsASpan(t *testing.T) {
 	d, ok := relativeSpan("anchor_now - INTERVAL 15 MINUTE", "anchor_now")
 	assert.True(t, ok)
@@ -138,6 +155,14 @@ func TestARangeEndingNowIsReadAsASpan(t *testing.T) {
 	d, ok = relativeSpan("anchor_now - INTERVAL 2 DAY", " anchor_now ")
 	assert.True(t, ok)
 	assert.Equal(t, 48*time.Hour, d)
+	for _, unit := range []string{"days", "Days", "DAYS", "day", "Day"} {
+		d, ok = relativeSpan("anchor_now - INTERVAL 7 "+unit, "anchor_now")
+		assert.True(t, ok, unit)
+		assert.Equal(t, 7*24*time.Hour, d, unit)
+	}
+	d, ok = relativeSpan("anchor_now - interval 90 Minutes", "anchor_now")
+	assert.True(t, ok)
+	assert.Equal(t, 90*time.Minute, d)
 	_, ok = relativeSpan("toStartOfDay(anchor_now)", "anchor_now")
 	assert.False(t, ok)
 	_, ok = relativeSpan("anchor_now - INTERVAL 1 DAY", "toStartOfDay(anchor_now)")

@@ -12,6 +12,7 @@ import (
 	"github.com/apache/arrow-go/v18/arrow/array"
 	"github.com/apache/arrow-go/v18/arrow/memory"
 
+	"github.com/stergiotis/boxer/public/keelson/runtime/appops"
 	"github.com/stergiotis/boxer/public/keelson/runtime/bgjob"
 	"github.com/stergiotis/boxer/public/keelson/runtime/trail/trailviews"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
@@ -559,7 +560,7 @@ func (inst *App) renderMatrix() {
 		return recordtable.Cell{Text: m.actors[row], LeftAlign: true, Hover: m.actors[row]}
 	}})
 	for j, o := range m.objects {
-		cols = append(cols, recordtable.Column{Arrow: j + 1, Header: cutText(o, 40), Hover: o, Width: 90, WidthType: "number", DescFirst: true,
+		cols = append(cols, recordtable.Column{Arrow: j + 1, Header: appops.CutText(o, 40), Hover: o, Width: 90, WidthType: "number", DescFirst: true,
 			Cell: func(row int64) recordtable.Cell {
 				n := m.counts[row][j]
 				if n == 0 {
@@ -658,7 +659,7 @@ func (inst *App) renderDotted() {
 	ticks := make([]float64, len(d.keys))
 	labels := make([]string, len(d.keys))
 	for i, k := range d.keys {
-		ticks[i], labels[i] = float64(len(d.keys)-1-i), cutText(k, 28)
+		ticks[i], labels[i] = float64(len(d.keys)-1-i), appops.CutText(k, 28)
 	}
 	p.SetupAxisTicks(implot.AxisY1, ticks, labels)
 	for t := range d.tiers {

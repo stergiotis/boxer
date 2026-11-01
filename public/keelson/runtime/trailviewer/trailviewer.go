@@ -23,6 +23,7 @@ package trailviewer
 
 import (
 	"fmt"
+	"math"
 	"strconv"
 	"strings"
 	"time"
@@ -109,6 +110,9 @@ type App struct {
 	// the marks applied, and the detail pane's mark controls.
 	pending     map[uint64]Review
 	pendingVer  uint64
+	marksMerged map[uint64]Review
+	marksKey    marksKey
+	marksBuilt  bool
 	exc         exceptionSet
 	excKey      excKey
 	excBuilt    bool
@@ -220,7 +224,7 @@ func (inst *App) tick(now time.Time) {
 	if inst.hasSelected {
 		sel = &inst.selected
 	}
-	inst.detail.tick(src, sel, inst.probeFunc(src))
+	inst.detail.tick(now, src, sel, inst.probeFunc(src))
 	inst.tickAnalytics(src)
 	inst.tickViews()
 	inst.drainSend()
@@ -543,7 +547,7 @@ func (inst *App) renderStrip() {
 			p.SetupAxisLimits(implot.AxisX1, float64(from.Unix()), float64(to.Unix()), implot.CondAlways)
 		}
 		if x, _, ok := p.Clicked(); ok && inst.cache.step > 0 {
-			start := time.Unix(int64(x), 0).UTC().Truncate(inst.cache.step)
+			start := bucketStart(x, inst.cache.step)
 			inst.setWindowGesture(Window{From: start, To: start.Add(inst.cache.step)})
 		}
 		width := inst.cache.step.Seconds() * 0.9
@@ -569,6 +573,23 @@ func (inst *App) renderStrip() {
 			c.Label(stripLineIn(inst.cache.buckets, inst.cache.step, inst.picker.loc)).Send()
 		}
 	}
+}
+
+// bucketStart is the start of the strip bucket holding x, in Unix seconds.
+// The buckets are ClickHouse's toStartOfInterval over seconds, which
+// counts from the Unix epoch; time.Truncate counts from year 1, three days
+// off for a seven-day step.
+func bucketStart(x float64, step time.Duration) time.Time {
+	s := int64(step / time.Second)
+	if s <= 0 {
+		s = 1
+	}
+	u := int64(math.Floor(x))
+	b := u / s * s
+	if u < 0 && u%s != 0 {
+		b -= s
+	}
+	return time.Unix(b, 0).UTC()
 }
 
 // seriesColor is the design system's qualitative cycle; the legend names
@@ -1376,7 +1397,8 @@ func relativeSpan(from, to string) (d time.Duration, ok bool) {
 	}
 	units := map[string]time.Duration{"SECOND": time.Second, "MINUTE": time.Minute, "HOUR": time.Hour, "DAY": 24 * time.Hour,
 		"WEEK": 7 * 24 * time.Hour, "MONTH": 30 * 24 * time.Hour, "YEAR": 365 * 24 * time.Hour}
-	u, found := units[strings.ToUpper(strings.TrimSuffix(f[4], "S"))]
+	// Upper-cased before the plural is trimmed, so "days" is a DAY.
+	u, found := units[strings.TrimSuffix(strings.ToUpper(f[4]), "S")]
 	if !found {
 		return
 	}
@@ -1447,7 +1469,7 @@ func (inst *App) renderExceptions(exc exceptionSet) {
 					when = inst.picker.format(r.Ts(), "15:04:05") + "  "
 				}
 				sel := inst.hasSelected && inst.selected.Id == e.Id
-				if c.Button(inst.ids.PrepareSeq(uint64(i)), c.Atoms().Text(when+e.Rule+": "+cutText(e.Reason, 120)).Keep()).
+				if c.Button(inst.ids.PrepareSeq(uint64(i)), c.Atoms().Text(when+e.Rule+": "+appops.CutText(e.Reason, 120)).Keep()).
 					Frame(false).Selected(sel).SendResp().HasPrimaryClicked() && !sel {
 					inst.selectGesture(e.Id)
 				}
@@ -1566,8 +1588,8 @@ func (inst *App) renderFieldTable(key string, headers []string, fields []FieldDi
 			c.EndRow()
 			for _, f := range fields {
 				c.Label(f.Field).Send()
-				c.Label(cutText(f.Before, 400)).Send()
-				c.Label(cutText(f.After, 400)).Send()
+				c.Label(appops.CutText(f.Before, 400)).Send()
+				c.Label(appops.CutText(f.After, 400)).Send()
 				fg := detailMutedFg
 				switch f.Change {
 				case ChangeAdded.String():
@@ -1584,35 +1606,47 @@ func (inst *App) renderFieldTable(key string, headers []string, fields []FieldDi
 	}
 }
 
-// asOfText is the entity's state as of the window's end in one line, and
-// the event it comes from; "" outside the entity case.
+// asOfText is the entity's state as of the window's end in one line, per
+// domain, and the event each comes from; "" outside the entity case.
 func asOfText(a *AsOf, format func(t time.Time) string) string {
 	if a == nil {
 		return ""
 	}
-	if !a.Has {
+	if len(a.Events) == 0 {
 		return "As of " + format(a.Bound) + ": no event of " + a.Entity + " at or before it within the look-back."
 	}
-	e := &a.Event
-	s := "As of " + format(a.Bound) + ", " + a.Entity + "'s state comes from event id " + strconv.FormatUint(e.Id, 10) +
+	parts := make([]string, 0, len(a.Events))
+	for i := range a.Events {
+		s := asOfHead(&a.Events[i], format)
+		if kv := asOfAttrs(&a.Events[i]); len(kv) > 0 {
+			s += ": " + strings.Join(kv, ", ")
+		}
+		parts = append(parts, s)
+	}
+	return "As of " + format(a.Bound) + ", " + a.Entity + "'s state " + strings.Join(parts, "; ")
+}
+
+// asOfHead names the domain a state is in and the event it comes from.
+func asOfHead(e *AuditDetail, format func(t time.Time) string) string {
+	return "in domain " + e.Domain + " comes from event id " + strconv.FormatUint(e.Id, 10) +
 		" (" + e.Domain + "." + e.Action + ") at " + format(e.Ts())
-	var kv []string
+}
+
+// asOfAttrs is an event's attributes as key=value, the from claim left out.
+func asOfAttrs(e *AuditDetail) (kv []string) {
 	for i, k := range e.AttrKeys {
 		if i < len(e.AttrValues) && k != audit.AttrFrom && k != audit.AttrFromBy {
 			kv = append(kv, k+"="+e.AttrValues[i])
 		}
 	}
-	if len(kv) > 0 {
-		s += ": " + strings.Join(kv, ", ")
-	}
-	return s
+	return
 }
 
 func (inst *App) asOfLine() string {
 	if inst.caseValue.Kind != CaseEntity || inst.cache.scope.Case != inst.caseValue {
 		return ""
 	}
-	return cutText(asOfText(inst.cache.asOf, func(t time.Time) string { return inst.picker.format(t, time.RFC3339) }), 400)
+	return appops.CutText(asOfText(inst.cache.asOf, func(t time.Time) string { return inst.picker.format(t, time.RFC3339) }), 400)
 }
 
 // renderAsOf is the as-of state in the detail pane for the entity case:
@@ -1623,21 +1657,22 @@ func (inst *App) renderAsOf() {
 		return
 	}
 	format := func(t time.Time) string { return inst.picker.format(t, time.RFC3339) }
-	if !a.Has {
+	if len(a.Events) == 0 {
 		c.Label(asOfText(a, format)).Wrap().Send()
 		c.Separator().Horizontal().Send()
 		return
 	}
-	e := &a.Event
-	c.Label("As of " + format(a.Bound) + ", " + a.Entity + "'s state comes from event id " + strconv.FormatUint(e.Id, 10) +
-		" (" + e.Domain + "." + e.Action + ") at " + format(e.Ts()) + ":").Wrap().Send()
 	for range c.IdScope(inst.ids.PrepareStr("asof")) {
-		for range c.Grid(inst.ids.PrepareStr("grid")).NumColumns(2).Striped(true).KeepIter() {
-			for i, k := range e.AttrKeys {
-				if i < len(e.AttrValues) {
-					c.Label(k).Send()
-					c.Label(cutText(e.AttrValues[i], 400)).Send()
-					c.EndRow()
+		for i := range a.Events {
+			e := &a.Events[i]
+			c.Label("As of " + format(a.Bound) + ", " + a.Entity + "'s state " + asOfHead(e, format) + ":").Wrap().Send()
+			for range c.Grid(inst.ids.PrepareStr("grid-" + e.Domain)).NumColumns(2).Striped(true).KeepIter() {
+				for j, k := range e.AttrKeys {
+					if j < len(e.AttrValues) {
+						c.Label(k).Send()
+						c.Label(appops.CutText(e.AttrValues[j], 400)).Send()
+						c.EndRow()
+					}
 				}
 			}
 		}

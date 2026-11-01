@@ -49,7 +49,7 @@ func TestTheWindowRendersEveryRegion(t *testing.T) {
 	inst.tab = TabFields
 	inst.applyCase(Case{Kind: CaseEntity, Value: "attention-level:k"})
 	hold(inst, fixtureRows())
-	inst.cache.asOf = &AsOf{Entity: "attention-level:k", Bound: t0, Has: true, Event: *fixtureRows()[0].Audit}
+	inst.cache.asOf = &AsOf{Entity: "attention-level:k", Bound: t0, Events: []AuditDetail{*fixtureRows()[0].Audit, *fixtureRows()[1].Audit}}
 	frame("as of")
 	inst.cache.asOf = &AsOf{Entity: "attention-level:k", Bound: t0}
 	frame("as of, no event")

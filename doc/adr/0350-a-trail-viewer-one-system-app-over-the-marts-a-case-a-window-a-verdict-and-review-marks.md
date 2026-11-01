@@ -242,10 +242,12 @@ pages do, never as a toggle. The second row is the window's own state,
 not a catalog resource; `set_tab` reaches the compare tab.
 
 **As of.** For the entity case, the detail pane shows the entity's state
-as of the window's end: the last event at or before that instant, read
-from `dm_trail_audit_events` bounded by `ts`, which is what
-`agg_trail_audit_entities` folds without the bound. The pane says which
-event the state comes from and when.
+as of the window's end: in each domain the entity has events in, the last
+event at or before that instant, read from `dm_trail_audit_events` bounded
+by `ts`, which is what `agg_trail_audit_entities` folds per
+`(domain, entity)` without the bound. The case names no domain, and one
+entity string in two domains is two states. The pane says, per domain,
+which event the state comes from and when.
 
 ### SD6 — The verdict line
 

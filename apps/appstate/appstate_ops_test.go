@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
+	"github.com/stergiotis/boxer/public/keelson/runtime/appops"
 	"github.com/stergiotis/boxer/public/keelson/runtime/appops/opengine"
 	"github.com/stergiotis/boxer/public/keelson/runtime/appops/opwire"
 	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
@@ -119,7 +120,7 @@ func TestListEntriesIsBounded(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, opsMaxEntries+20, out.Matched)
 	assert.Len(t, out.Entries, opsMaxEntries)
-	assert.Len(t, cutText(string(make([]byte, opsMaxDetailLen+9)), opsMaxDetailLen), opsMaxDetailLen+len("…"))
+	assert.Len(t, appops.CutText(string(make([]byte, opsMaxDetailLen+9)), opsMaxDetailLen), opsMaxDetailLen+len("…"))
 }
 
 func TestViewReflectsTheReadAndItsErrors(t *testing.T) {

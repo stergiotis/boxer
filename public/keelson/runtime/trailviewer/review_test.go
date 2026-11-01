@@ -2,6 +2,7 @@ package trailviewer
 
 import (
 	"context"
+	"reflect"
 	"strings"
 	"sync"
 	"testing"
@@ -272,31 +273,51 @@ func TestCompareOrdersOlderLeftAndStatesItsBase(t *testing.T) {
 	}
 }
 
-// As of the window's end is the entity's newest event at or before it.
-func TestAsOfPicksTheLastEventAtOrBeforeTheBound(t *testing.T) {
-	ev := func(id uint64, at time.Time, entity string, level string) Row {
-		return Row{Id: id, TsNs: at.UnixNano(), Kind: kindAuditEvent,
-			Audit: &AuditDetail{Id: id, TsNs: at.UnixNano(), Domain: "attention", Action: "level", Entity: entity, AttrKeys: []string{"level"}, AttrValues: []string{level}}}
+// marks merges the cache's reviews with the pending marks once per fill
+// and pending change, not on every call of a frame.
+func TestTheMergedMarksAreBuiltOncePerChange(t *testing.T) {
+	inst, _ := reviewFixture(t)
+	assert.Nil(t, inst.marks(), "no reviews and nothing pending: the cache's own")
+	_, err := inst.markRow(app.OperationCall{Writer: opwire.WriterPerson}, MarkRowArgs{Id: 6, Mark: "reviewed"})
+	require.NoError(t, err)
+	first := inst.marks()
+	require.Contains(t, first, uint64(6))
+	assert.Equal(t, reflect.ValueOf(first).Pointer(), reflect.ValueOf(inst.marks()).Pointer(), "the same map while nothing moved")
+
+	inst.cache.reviews = map[uint64]Review{5: {Id: 5, TsNs: t0.UnixNano(), Mark: "flagged"}}
+	inst.cache.gen++
+	second := inst.marks()
+	assert.NotEqual(t, reflect.ValueOf(first).Pointer(), reflect.ValueOf(second).Pointer(), "a refill rebuilds it")
+	assert.Equal(t, "flagged", second[5].Mark)
+	assert.Equal(t, "reviewed", second[6].Mark)
+	assert.NotContains(t, first, uint64(5), "a map handed out is not written to")
+
+	_, err = inst.markRow(app.OperationCall{Writer: opwire.WriterPerson}, MarkRowArgs{Id: 5, Mark: "reviewed"})
+	require.NoError(t, err)
+	assert.Equal(t, "reviewed", inst.marks()[5].Mark, "a new pending mark rebuilds it")
+}
+
+// The as-of line names the domain each state is in: the entity case
+// names none, and one entity string in two domains is two states.
+func TestTheAsOfLineSaysWhichDomain(t *testing.T) {
+	ev := func(id uint64, at time.Time, domain, action string, kv ...string) AuditDetail {
+		a := AuditDetail{Id: id, TsNs: at.UnixNano(), Domain: domain, Action: action, Entity: "k:a"}
+		for i := 0; i+1 < len(kv); i += 2 {
+			a.AttrKeys, a.AttrValues = append(a.AttrKeys, kv[i]), append(a.AttrValues, kv[i+1])
+		}
+		return a
 	}
 	bound := t0.Add(time.Hour)
-	rows := []Row{
-		ev(5, bound.Add(time.Second), "k:a", "after the bound"),
-		ev(4, t0.Add(30*time.Minute), "k:b", "another entity"),
-		ev(3, bound, "k:a", "at the bound"),
-		ev(2, bound, "k:a", "same instant, lower id"),
-		ev(1, t0, "k:a", "older"),
-	}
-	a, ok := pickAsOf(rows, "k:a", bound)
-	require.True(t, ok)
-	assert.Equal(t, uint64(3), a.Id)
-	a, ok = pickAsOf(rows, "k:a", bound.Add(-time.Nanosecond))
-	require.True(t, ok)
-	assert.Equal(t, uint64(1), a.Id)
-	_, ok = pickAsOf(rows, "k:a", t0.Add(-time.Second))
-	assert.False(t, ok)
-
-	text := asOfText(&AsOf{Entity: "k:a", Bound: bound, Has: true, Event: *rows[2].Audit}, func(t time.Time) string { return t.Format(time.RFC3339) })
-	assert.Equal(t, "As of 2026-10-31T13:00:00Z, k:a's state comes from event id 3 (attention.level) at 2026-10-31T13:00:00Z: level=at the bound", text)
+	format := func(t time.Time) string { return t.Format(time.RFC3339) }
+	one := &AsOf{Entity: "k:a", Bound: bound, Events: []AuditDetail{ev(3, bound, "attention", "level", "level", "at the bound", "from", "x")}}
+	assert.Equal(t, "As of 2026-10-31T13:00:00Z, k:a's state in domain attention comes from event id 3 (attention.level) at 2026-10-31T13:00:00Z: level=at the bound",
+		asOfText(one, format), "the from claim is not state")
+	two := &AsOf{Entity: "k:a", Bound: bound, Events: []AuditDetail{
+		ev(3, bound, "attention", "level", "level", "deny"),
+		ev(1, t0, "archive", "stored", "shelf", "b"),
+	}}
+	assert.Equal(t, "As of 2026-10-31T13:00:00Z, k:a's state in domain attention comes from event id 3 (attention.level) at 2026-10-31T13:00:00Z: level=deny; "+
+		"in domain archive comes from event id 1 (archive.stored) at 2026-10-31T12:00:00Z: shelf=b", asOfText(two, format))
 	assert.Contains(t, asOfText(&AsOf{Entity: "k:a", Bound: bound}, time.Time.String), "no event of k:a at or before it")
 }
 

@@ -37,7 +37,10 @@ const (
 type tableFill struct {
 	scope    scope
 	from, to time.Time
-	rows     []Row
+	// resolvedAt is the instant the window was resolved at: to, for a last
+	// window. at, when the read finished, is later.
+	resolvedAt time.Time
+	rows       []Row
 	// more says the read was full, so older rows may follow.
 	more bool
 	// extend marks a cursor read whose rows follow the held ones.
@@ -60,10 +63,13 @@ type tableFill struct {
 type tableCache struct {
 	runner bgjob.Runner[tableFill]
 
-	rows        []Row
-	more        bool
-	scope       scope
-	from, to    time.Time
+	rows     []Row
+	more     bool
+	scope    scope
+	from, to time.Time
+	// resolvedAt is the instant from and to were resolved at, the anchor a
+	// question's last window resolves against to be compared with them.
+	resolvedAt  time.Time
 	buckets     []Bucket
 	step        time.Duration
 	facets      [][]FacetValue
@@ -114,6 +120,7 @@ func (inst *tableCache) tick(now time.Time, src *Source, want scope, spec readSp
 			}
 		} else {
 			inst.rows, inst.more, inst.scope, inst.from, inst.to = res.rows, res.more, res.scope, res.from, res.to
+			inst.resolvedAt = res.resolvedAt
 			inst.buckets, inst.step, inst.facets = res.buckets, res.step, res.facets
 			inst.filled, inst.refreshedAt, inst.lastErr = true, res.at, nil
 			inst.exceptions, inst.asOf = res.exceptions, res.asOf
@@ -162,15 +169,16 @@ func (inst *tableCache) start(now time.Time, want scope, spec readSpec, extend b
 	if inst.runner.Running() {
 		inst.runner.Invalidate()
 	}
-	var from, to time.Time
+	var from, to, resolvedAt time.Time
 	q := listQuery{Case: spec.c, Filter: spec.filter}
 	if extend {
-		from, to = inst.from, inst.to
+		from, to, resolvedAt = inst.from, inst.to, inst.resolvedAt
 		last := inst.rows[len(inst.rows)-1]
 		q.Cursor = &Cursor{TsNs: last.TsNs, Id: last.Id}
 		q.Limit = rowCap()
 	} else {
 		from, to = want.Window.Resolve(now)
+		resolvedAt = now
 		q.Limit = rowCap()
 		if inst.scope == want {
 			q.Limit = min(max(q.Limit, len(inst.rows)), maxRows)
@@ -196,7 +204,7 @@ func (inst *tableCache) start(now time.Time, want scope, spec readSpec, extend b
 			if err != nil {
 				return
 			}
-			out = &tableFill{scope: want, from: from, to: to, rows: rows, more: len(rows) == q.Limit, extend: extend, at: time.Now()}
+			out = &tableFill{scope: want, from: from, to: to, resolvedAt: resolvedAt, rows: rows, more: len(rows) == q.Limit, extend: extend, at: time.Now()}
 			if len(rows) > 0 {
 				// The rules and the marks cover the rows read: older than
 				// the cursor, and no older than the last row when more
@@ -219,7 +227,7 @@ func (inst *tableCache) start(now time.Time, want scope, spec readSpec, extend b
 			if extend {
 				return
 			}
-			if out.asOf, err = p.readAsOf(ctx, q, rows, look); err != nil {
+			if out.asOf, err = p.readAsOf(ctx, q, look); err != nil {
 				return nil, err
 			}
 			out.step = stepFor(to.Sub(from), buckets)
@@ -390,25 +398,38 @@ type detailCache struct {
 	id     uint64
 	fill   *detailFill
 	asked  uint64
-	has    bool
+	// retryAt is when a read of asked that failed is started again; zero
+	// while none failed. The runner reports a failed read as done, with
+	// the error in the fill, so nothing else would start it again while
+	// the row stays selected.
+	retryAt time.Time
+	has     bool
 }
 
-// tick adopts a finished read and starts one for the selected row.
-func (inst *detailCache) tick(src *Source, sel *Row, newProbe func() (*probe, error)) {
+// tick adopts a finished read and starts one for the selected row, and
+// again one refresh interval after a read of it failed.
+func (inst *detailCache) tick(now time.Time, src *Source, sel *Row, newProbe func() (*probe, error)) {
 	if res, _, ok := inst.runner.TakeResult(); ok && sel != nil && res.id == sel.Id {
 		inst.fill, inst.id, inst.has = res, res.id, true
+		inst.retryAt = time.Time{}
+		if res.err != nil {
+			inst.retryAt = now.Add(refreshInterval())
+		}
 	}
 	if sel == nil {
-		inst.has, inst.fill, inst.asked = false, nil, 0
+		inst.has, inst.fill, inst.asked, inst.retryAt = false, nil, 0, time.Time{}
 		return
 	}
-	if !src.persisted() || inst.asked == sel.Id {
+	if !src.persisted() {
+		return
+	}
+	if inst.asked == sel.Id && (inst.retryAt.IsZero() || now.Before(inst.retryAt)) {
 		return
 	}
 	if inst.runner.Running() {
 		inst.runner.Invalidate()
 	}
-	inst.asked = sel.Id
+	inst.asked, inst.retryAt = sel.Id, time.Time{}
 	row := *sel
 	look := lookback()
 	inst.runner.Start(nil, bgjob.Spec{Kind: "trailviewer.detail", Title: "Trail viewer row"},

@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/stergiotis/boxer/public/db/clickhouse/jackstay"
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsschema"
 	"github.com/stergiotis/boxer/public/keelson/runtime/trail/trailviews"
 )
@@ -129,9 +130,13 @@ func TestProbeReadsByThePhysicalNamesTheComposerMints(t *testing.T) {
 	assert.True(t, strings.HasSuffix(sql, "LIMIT 10"), "bounded by the cap")
 }
 
-// A literal cannot break out of its quotes.
+// A literal cannot break out of its quotes, and the local quoter agrees
+// with jackstay.QuoteString, which it copies.
 func TestSqlStringEscapes(t *testing.T) {
 	assert.Equal(t, `'a\'b\\c'`, sqlString(`a'b\c`))
+	for _, v := range []string{"", "plain", `a'b\c`, `\'`, "''", "ä'ö\\", "new\nline", "\x00"} {
+		assert.Equal(t, jackstay.QuoteString(v), sqlString(v), "%q", v)
+	}
 }
 
 func TestStepForKeepsTheBucketsUnderTheCount(t *testing.T) {

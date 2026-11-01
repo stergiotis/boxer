@@ -59,6 +59,43 @@ func TestTheTreeIsBuiltFromParentRefs(t *testing.T) {
 	assert.Equal(t, 1, ct.roots)
 }
 
+// A refill keeps the tree's selection by row id and does not reveal the
+// selected node again, which would take back the reader's scroll every
+// refresh; a new selection, or a selected row the refill first brings in,
+// is revealed.
+func TestARefillKeepsTheTreeSelectionWithoutRevealingIt(t *testing.T) {
+	var tv treeView
+	rows := chainRows()
+	tr := tv.ensure(rows, 1)
+	tv.project(3)
+	node := tr.byId[3]
+	require.Equal(t, node, tv.state.PendingReveal())
+	assert.True(t, tv.state.IsSelected(node))
+	tv.state.Reveal(-1) // the render consumed it
+
+	// The refill shifts every node index: a newer row arrives and the
+	// oldest leaves.
+	newer := Row{Id: 6, TsNs: t0.Add(5 * time.Minute).UnixNano(), Kind: "llmCall", Task: "task-1", Ref: "call-3", ParentRef: "act-2"}
+	rows2 := append([]Row{newer}, rows[:len(rows)-1]...)
+	tr = tv.ensure(rows2, 2)
+	tv.project(3)
+	assert.Equal(t, int32(-1), tv.state.PendingReveal(), "a refill does not reveal again")
+	assert.True(t, tv.state.IsSelected(tr.byId[3]), "the selection follows the row id")
+	assert.Equal(t, 1, tv.state.SelectionLen())
+
+	tv.project(5)
+	assert.Equal(t, tr.byId[5], tv.state.PendingReveal(), "a new selection is revealed")
+	tv.state.Reveal(-1)
+
+	// A selected row the tree did not hold is revealed when a refill brings it.
+	tv.project(9)
+	assert.Equal(t, int32(-1), tv.state.PendingReveal())
+	late := Row{Id: 9, TsNs: t0.Add(6 * time.Minute).UnixNano(), Kind: "agentAction", Task: "task-1", ParentRef: "call-3"}
+	tr = tv.ensure(append([]Row{late}, rows2...), 3)
+	tv.project(9)
+	assert.Equal(t, tr.byId[9], tv.state.PendingReveal())
+}
+
 func TestGetTreeAnswersFromTheCache(t *testing.T) {
 	inst, _ := opsFixture(t)
 	inst.applyCase(Case{Kind: CaseTask, Value: "task-1"})

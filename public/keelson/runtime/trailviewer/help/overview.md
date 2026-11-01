@@ -119,9 +119,9 @@ events, their own columns and attributes. The line above the table says
 which row is which; the older row is always on the left.
 
 For an **entity** case, the line above the table and the top of the
-**fields** tab give the entity's state as of the window's end: the last
-event of the entity at or before that instant, within the look-back, and
-when it was.
+**fields** tab give the entity's state as of the window's end: in each
+domain the entity has events in, the last event of the entity at or before
+that instant, within the look-back, and when it was.
 
 ## Exceptions and rules
 

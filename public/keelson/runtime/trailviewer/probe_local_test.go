@@ -216,6 +216,8 @@ func TestTheRulesAndAMarkRunOverLocal(t *testing.T) {
 	event(-29*time.Minute, "rules", "updated", trail.OutcomeOk, []string{"state", "x"}, "rule", "r9")
 	event(-28*time.Minute, keelsonaudit.BusDomain, keelsonaudit.BusActionRequest, trail.OutcomeOk, nil, keelsonaudit.BusRefSubject, "a.b")
 	gap(-27*time.Minute, -3*time.Hour, -179*time.Minute)
+	// The same entity string in another domain: a state of its own.
+	event(-25*time.Minute, "archive", "stored", trail.OutcomeOk, []string{"shelf", "b"}, "rule", "r1")
 	// The window.
 	event(1*time.Second, keelsonaudit.BusDomain, keelsonaudit.BusActionRequest, trail.OutcomeDenied, nil, keelsonaudit.BusRefSubject, "a.b")
 	grant := trail.Context{Origin: c.Origin, Delegation: option.Some(trail.Delegation{Task: "task-1", Epoch: 2})}
@@ -281,15 +283,26 @@ func TestTheRulesAndAMarkRunOverLocal(t *testing.T) {
 	assert.Equal(t, "auditEvent status denied", exc.byRow[denied][0].Reason)
 	assert.Equal(t, "rules.archived not seen in the look-back before the window", exc.byRow[novel][0].Reason)
 
-	// As of a bound: the entity's last event at or before it.
+	// As of a bound: the entity's last event at or before it, per domain,
+	// newest first — another domain's newer event is not this one's state.
 	asOf, err := queryRows[AuditDetail](ctx, p, p.marts.asOfSQL("rule:r1", at.Add(4*time.Second), look))
 	require.NoError(t, err)
-	require.Len(t, asOf, 1)
+	require.Len(t, asOf, 2)
 	assert.Equal(t, novel, asOf[0].Id)
+	assert.Equal(t, "archive", asOf[1].Domain)
+	assert.Equal(t, at.Add(-25*time.Minute), asOf[1].Ts())
 	asOf, err = queryRows[AuditDetail](ctx, p, p.marts.asOfSQL("rule:r1", at.Add(2*time.Second), look))
 	require.NoError(t, err)
-	require.Len(t, asOf, 1)
-	assert.Equal(t, at.Add(-30*time.Minute), asOf[0].Ts(), "before the window, within the look-back")
+	require.Len(t, asOf, 2)
+	assert.Equal(t, "archive", asOf[0].Domain, "the newer domain first")
+	assert.Equal(t, "rules", asOf[1].Domain)
+	assert.Equal(t, at.Add(-30*time.Minute), asOf[1].Ts(), "before the window, within the look-back")
+	a, err := p.readAsOf(ctx, listQuery{Case: Case{Kind: CaseEntity, Value: "rule:r1"}, From: at, To: at.Add(2 * time.Second)}, look)
+	require.NoError(t, err)
+	line := asOfText(a, func(t time.Time) string { return t.UTC().Format(time.RFC3339) })
+	assert.Contains(t, line, "rule:r1's state in domain archive comes from event id")
+	assert.Contains(t, line, "(archive.stored) at 2023-11-14T21:48:20Z: shelf=b; in domain rules comes from event id")
+	assert.Contains(t, line, "(rules.created) at 2023-11-14T21:43:20Z: state=draft")
 
 	// A mark written through the real recorder reads back and clears.
 	prev := sourceRef.Load()

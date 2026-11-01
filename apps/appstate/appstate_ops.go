@@ -111,17 +111,9 @@ type SelectAppArgs struct {
 	App string `desc:"an app id from list_entries; empty clears the selection"`
 }
 
-func cutText(s string, n int) (out string) {
-	out = s
-	if len(out) > n {
-		out = out[:n] + "…"
-	}
-	return
-}
-
 func entryOf(r entryRow) (e Entry) {
 	e = Entry{Kind: r.Kind, App: r.AppId, Key: r.Key, EntityId: r.EntityId, PayloadBytes: r.PayloadBytes,
-		Detail: cutText(r.Detail, opsMaxDetailLen), WrittenAt: r.WrittenAt, RunId: r.RunId, InstanceKey: r.InstanceKey}
+		Detail: appops.CutText(r.Detail, opsMaxDetailLen), WrittenAt: r.WrittenAt, RunId: r.RunId, InstanceKey: r.InstanceKey}
 	return
 }
 

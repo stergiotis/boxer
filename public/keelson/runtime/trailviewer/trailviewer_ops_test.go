@@ -6,6 +6,7 @@ import (
 	"iter"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -104,11 +105,14 @@ func opsFixture(t *testing.T) (inst *App, exec *fakeExec) {
 	return
 }
 
-// hold puts rows in the cache as the fill for the window's scope.
+// hold puts rows in the cache as the fill for the window's scope, in the
+// order a read has them: the window resolved when the read starts, the
+// read finishing a moment later.
 func hold(inst *App, rows []Row) {
 	ch := &inst.cache
-	ch.rows, ch.scope, ch.filled, ch.refreshedAt = rows, inst.scopeValue(), true, time.Now()
-	ch.from, ch.to = inst.window.Resolve(time.Now())
+	ch.resolvedAt = time.Now()
+	ch.from, ch.to = inst.window.Resolve(ch.resolvedAt)
+	ch.rows, ch.scope, ch.filled, ch.refreshedAt = rows, inst.scopeValue(), true, ch.resolvedAt.Add(250*time.Millisecond)
 	ch.gen++
 	inst.verdicts.lines = []verdict.Line{{Run: fixtureRun, State: verdict.StateHolds}}
 }
@@ -251,6 +255,67 @@ func TestACursorContinuesWithoutRepeatingARow(t *testing.T) {
 		in.Cursor = out.NextCursor
 	}
 	assert.Equal(t, []uint64{6, 5, 4, 3, 2, 1}, seen)
+}
+
+// A question's last window resolves at the instant the window's own did,
+// not at refreshedAt, which lies past the window's end: a shorter last
+// inside a last window is covered.
+func TestALastQueryInsideALastWindowIsCovered(t *testing.T) {
+	inst, _ := opsFixture(t)
+	inst.applyWindow(Window{Last: 2 * time.Hour})
+	now := time.Now()
+	hold(inst, []Row{
+		{Id: 2, TsNs: now.Add(-10 * time.Minute).UnixNano(), Kind: "httpFetch", Run: fixtureRun},
+		{Id: 1, TsNs: now.Add(-90 * time.Minute).UnixNano(), Kind: "httpFetch", Run: fixtureRun},
+	})
+	require.True(t, inst.cache.refreshedAt.After(inst.cache.to), "the fixture finishes its read after the window's end, as a read does")
+
+	out, err := query[ListRowsArgs, ListRowsResult](t, inst, opListRows, ListRowsArgs{Case: "run", Value: fixtureRun, Range: RangeArgs{Last: "1h"}})
+	require.NoError(t, err)
+	assert.Empty(t, out.Diagnostic)
+	require.Len(t, out.Rows, 1)
+	assert.Equal(t, uint64(2), out.Rows[0].Id)
+
+	ex, err := query[GetExceptionsArgs, ExceptionsResult](t, inst, opGetExc, GetExceptionsArgs{Case: "run", Value: fixtureRun, Range: RangeArgs{Last: "30m"}})
+	require.NoError(t, err)
+	assert.Empty(t, ex.Diagnostic)
+
+	out, err = query[ListRowsArgs, ListRowsResult](t, inst, opListRows, ListRowsArgs{Case: "run", Value: fixtureRun, Range: RangeArgs{Last: "3h"}})
+	require.NoError(t, err)
+	assert.Contains(t, out.Diagnostic, "set_range", "a longer last reaches outside the window")
+}
+
+// A per-row read that failed is read again one refresh interval later
+// while its row stays selected, not never.
+func TestAFailedRowReadIsRetried(t *testing.T) {
+	var dc detailCache
+	defer dc.close()
+	src := &Source{Exec: &fakeExec{}}
+	var calls atomic.Int32
+	failing := func() (*probe, error) {
+		calls.Add(1)
+		return nil, errors.New("the store is away")
+	}
+	sel := &fixtureRows()[0]
+	now := t0
+	settle := func() {
+		require.Eventually(t, func() bool { return !dc.runner.Running() }, 5*time.Second, time.Millisecond)
+	}
+	dc.tick(now, src, sel, failing)
+	settle()
+	dc.tick(now, src, sel, failing)
+	require.NotNil(t, dc.current(sel.Id))
+	require.Error(t, dc.current(sel.Id).err)
+	assert.Equal(t, int32(1), calls.Load())
+
+	dc.tick(now.Add(refreshInterval()/2), src, sel, failing)
+	assert.False(t, dc.runner.Running(), "not before the interval")
+	assert.Equal(t, int32(1), calls.Load())
+
+	dc.tick(now.Add(refreshInterval()), src, sel, failing)
+	settle()
+	assert.Equal(t, int32(2), calls.Load(), "read again")
+	require.Error(t, dc.current(sel.Id).err, "the error stays shown until a read succeeds")
 }
 
 func TestGetRowAndGetPrevious(t *testing.T) {

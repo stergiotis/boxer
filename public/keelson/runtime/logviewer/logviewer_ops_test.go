@@ -15,6 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
+	"github.com/stergiotis/boxer/public/keelson/runtime/appops"
 	"github.com/stergiotis/boxer/public/keelson/runtime/appops/opengine"
 	"github.com/stergiotis/boxer/public/keelson/runtime/appops/opwire"
 	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
@@ -338,7 +339,7 @@ func TestListRowsIsBounded(t *testing.T) {
 	for i := range long {
 		long[i] = 'x'
 	}
-	assert.Len(t, cutText(string(long), opsMaxMessageLen), opsMaxMessageLen+len("…"))
+	assert.Len(t, appops.CutText(string(long), opsMaxMessageLen), opsMaxMessageLen+len("…"))
 }
 
 func TestGetRowReturnsTheDetailAndRefusesAGoneKey(t *testing.T) {

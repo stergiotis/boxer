@@ -5,6 +5,7 @@ import (
 	"strconv"
 
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
+	"github.com/stergiotis/boxer/public/keelson/runtime/appops"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/tree"
 )
@@ -111,7 +112,7 @@ func (inst *trailTree) depthFirst() (nodes []TreeNode, err error) {
 	nodes = make([]TreeNode, 0, len(rows))
 	for _, fr := range rows {
 		r := inst.rows[fr.Node]
-		node := TreeNode{Id: r.Id, Depth: int(fr.Depth), Kind: r.Kind, Headline: cutText(r.Headline, opsMaxHeadline), Status: r.Status, ElapsedMs: r.ElapsedMs}
+		node := TreeNode{Id: r.Id, Depth: int(fr.Depth), Kind: r.Kind, Headline: appops.CutText(r.Headline, opsMaxHeadline), Status: r.Status, ElapsedMs: r.ElapsedMs}
 		if p := inst.t.Parents[fr.Node]; p >= 0 {
 			node.Parent = inst.rows[p].Id
 		}
@@ -133,17 +134,23 @@ func (inst *trailTree) line() string {
 // treeView is the tab's state: the tree built for one fill and the
 // widget's expansion and selection.
 type treeView struct {
-	built  bool
-	gen    uint64
-	tr     trailTree
-	state  tree.State
-	paneH  float32
-	selId  uint64
-	hasSel bool
+	built bool
+	gen   uint64
+	tr    trailTree
+	state tree.State
+	paneH float32
+	// selId is the selection last projected onto the tree, and selFound
+	// whether the tree then held its node.
+	selId    uint64
+	hasSel   bool
+	selFound bool
 }
 
 // ensure rebuilds the tree when the cache's fill moves; expansion and
-// selection survive by row id.
+// selection survive by row id, the State being keyed on it. A refill does
+// not project the selection again — that would reveal its node every
+// refresh and take back the reader's scroll — unless the selected row was
+// missing from the tree it was projected onto and this one holds it.
 func (inst *treeView) ensure(rows []Row, gen uint64) *trailTree {
 	if inst.built && inst.gen == gen {
 		return &inst.tr
@@ -153,8 +160,30 @@ func (inst *treeView) ensure(rows []Row, gen uint64) *trailTree {
 	if first {
 		inst.state.SetDefaultExpanded(len(rows) <= treeExpandAll)
 	}
-	inst.hasSel = false
+	// Node indexes written before the next render mean this build's nodes.
+	inst.state.Bind(inst.tr.t)
+	if inst.hasSel && !inst.selFound && inst.selId != 0 {
+		if _, ok := inst.tr.byId[inst.selId]; ok {
+			inst.hasSel = false
+		}
+	}
 	return &inst.tr
+}
+
+// project puts the window's selection on the tree once per change: the
+// node selected, its ancestors expanded and the node revealed.
+func (inst *treeView) project(selId uint64) {
+	if inst.hasSel && inst.selId == selId {
+		return
+	}
+	inst.selId, inst.hasSel, inst.selFound = selId, true, false
+	inst.state.ClearSelection()
+	if node, ok := inst.tr.byId[selId]; ok && selId != 0 {
+		inst.selFound = true
+		inst.state.SelectOnly(node)
+		inst.state.ExpandAncestors(inst.tr.t, node)
+		inst.state.Reveal(node)
+	}
 }
 
 // renderTree is the tree tab: its line, Expand all and Collapse all, and the
@@ -180,17 +209,7 @@ func (inst *App) renderTree() {
 			tv.state.CollapseAll()
 		}
 	}
-	// The window's selection, projected onto the tree once per change.
-	selId := inst.selectionId()
-	if !tv.hasSel || tv.selId != selId {
-		tv.selId, tv.hasSel = selId, true
-		tv.state.ClearSelection()
-		if node, ok := tr.byId[selId]; ok && selId != 0 {
-			tv.state.SelectOnly(node)
-			tv.state.ExpandAncestors(tr.t, node)
-			tv.state.Reveal(node)
-		}
-	}
+	tv.project(inst.selectionId())
 	if _, h, ok := c.CapturePaneSize(inst.ids.ProbeSeq("tree-pane")); ok && h > 80 {
 		tv.paneH = h
 	}
@@ -227,7 +246,7 @@ func (inst *App) renderTree() {
 		if inst.hasSelected && inst.selected.Id == id {
 			return
 		}
-		tv.selId = id
+		tv.selId, tv.hasSel, tv.selFound = id, true, true
 		inst.selectGesture(id)
 	}
 }

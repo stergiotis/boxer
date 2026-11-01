@@ -211,14 +211,20 @@ func (inst *marts) reviewsSQL(q listQuery, lower *Cursor) string {
 		strings.Join(inst.rowsWhere(q, lower), " AND ") + ") GROUP BY row_id"
 }
 
+// asOfDomains bounds the domains an as-of read reports.
+const asOfDomains = 16
+
 // asOfSQL is SD5's as-of read: the entity's last event at or before
-// bound, within the look-back.
+// bound, within the look-back, per domain. State is keyed by (domain,
+// entity), as the previous-state read and agg_trail_audit_entities key
+// it, and the entity case names no domain: one entity string in two
+// domains is two states.
 func (inst *marts) asOfSQL(entity string, bound time.Time, look time.Duration) string {
 	ae := trailviews.ViewAuditEvents
 	ts := inst.col(ae, "ts")
 	return "SELECT " + inst.auditSelect() + " FROM " + inst.table(ae) + " WHERE " + inst.col(ae, "entity") + " = " + sqlString(entity) +
 		" AND " + ts + " <= " + sqlTime(bound) + " AND " + ts + " >= " + sqlTime(bound.Add(-look)) +
-		" ORDER BY " + ts + " DESC, " + inst.col(ae, "id") + " DESC LIMIT 1"
+		" ORDER BY " + ts + " DESC, " + inst.col(ae, "id") + " DESC LIMIT 1 BY " + inst.col(ae, "domain") + " LIMIT " + strconv.Itoa(asOfDomains)
 }
 
 // Exception is one row a rule raised, with the rule and its reason.
@@ -286,51 +292,26 @@ func (inst *probe) judgeClaims(ctx context.Context, rows []Row, judged map[uint6
 	return
 }
 
-// AsOf is the entity case's state as of the window's end (ADR-0350 §SD5).
+// AsOf is the entity case's state as of the window's end (ADR-0350 §SD5),
+// one per domain the entity has an event in.
 type AsOf struct {
 	Entity string
 	Bound  time.Time
-	// Has says an event at or before Bound was found within the look-back.
-	Has   bool
-	Event AuditDetail
+	// Events are each domain's last event at or before Bound within the
+	// look-back, newest first; none were found when it is empty.
+	Events []AuditDetail
 }
 
-// pickAsOf is the newest of rows that is an event of entity at or before
-// bound.
-func pickAsOf(rows []Row, entity string, bound time.Time) (a AuditDetail, ok bool) {
-	for i := range rows {
-		r := &rows[i]
-		if r.Audit == nil || r.Audit.Entity != entity || r.TsNs > bound.UnixNano() {
-			continue
-		}
-		if !ok || r.TsNs > a.TsNs || (r.TsNs == a.TsNs && r.Id > a.Id) {
-			a, ok = *r.Audit, true
-			a.TsNs = r.TsNs
-		}
-	}
-	return
-}
-
-// readAsOf is the as-of state for the entity case: from the rows read when
-// they hold the entity's newest event (no filter can have hidden a newer
-// one), else read.
-func (inst *probe) readAsOf(ctx context.Context, q listQuery, rows []Row, look time.Duration) (a *AsOf, err error) {
+// readAsOf is the as-of state for the entity case. It is always read: the
+// held rows cover the window, and a domain whose last event is older than
+// the window's start has its state there too.
+func (inst *probe) readAsOf(ctx context.Context, q listQuery, look time.Duration) (a *AsOf, err error) {
 	if q.Case.Kind != CaseEntity {
 		return
 	}
 	entity := strings.TrimSpace(q.Case.Value)
 	a = &AsOf{Entity: entity, Bound: q.To}
-	if len(q.Filter.Terms) == 0 {
-		if ev, ok := pickAsOf(rows, entity, q.To); ok {
-			a.Has, a.Event = true, ev
-			return
-		}
-	}
-	evs, err := queryRows[AuditDetail](ctx, inst, inst.marts.asOfSQL(entity, q.To, look))
-	if err != nil || len(evs) == 0 {
-		return
-	}
-	a.Has, a.Event = true, evs[0]
+	a.Events, err = queryRows[AuditDetail](ctx, inst, inst.marts.asOfSQL(entity, q.To, look))
 	return
 }
 

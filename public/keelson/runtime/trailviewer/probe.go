@@ -2,7 +2,6 @@ package trailviewer
 
 import (
 	"context"
-	"fmt"
 	"slices"
 	"strconv"
 	"strings"
@@ -11,6 +10,7 @@ import (
 
 	"github.com/stergiotis/boxer/public/db/clickhouse/chrows"
 	"github.com/stergiotis/boxer/public/identity/callident"
+	"github.com/stergiotis/boxer/public/keelson/runtime/appops"
 	"github.com/stergiotis/boxer/public/keelson/runtime/trail/trailviews"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
@@ -112,7 +112,11 @@ func (inst *marts) selectList(view string, names []string) (s string) {
 
 func aliasOf(name string) string { return strings.ReplaceAll(name, "-", "_") }
 
-// sqlString renders s as a ClickHouse string literal.
+// sqlString renders s as a ClickHouse string literal. It is a copy of
+// jackstay.QuoteString (public/db/clickhouse/jackstay), kept local because
+// importing jackstay links its HTTP ClickHouse client, net/http and
+// crypto/tls — some seventy packages — into a package that reads through
+// recordstore.ExecutorI; the two escape the same two bytes and must agree.
 func sqlString(s string) string {
 	s = strings.ReplaceAll(s, `\`, `\\`)
 	s = strings.ReplaceAll(s, `'`, `\'`)
@@ -516,7 +520,7 @@ func queryRows[T any](ctx context.Context, p *probe, sql string) (rows []T, err 
 	ctx = callident.WithCallIdentity(ctx, p.ident)
 	for rec, rerr := range p.exec.QueryArrow(ctx, sql+arrowSettings) {
 		if rerr != nil {
-			return nil, eb.Build().Str("sql", cutText(sql, 400)).Errorf("trailviewer: read the marts: %w", rerr)
+			return nil, eb.Build().Str("sql", appops.CutText(sql, 400)).Errorf("trailviewer: read the marts: %w", rerr)
 		}
 		var batch []T
 		batch, err = chrows.DecodeRows[T](rec)
@@ -639,17 +643,4 @@ func stepFor(span time.Duration, n int) (step time.Duration) {
 // within 60..120.
 func stripBuckets(px float32) (n int) {
 	return min(max(int(px/8), 60), 120)
-}
-
-func cutText(s string, n int) (out string) {
-	out = s
-	if len([]rune(out)) > n {
-		out = string([]rune(out)[:n]) + "…"
-	}
-	return
-}
-
-// describeCase is the case and window in one line, for diagnostics.
-func describeCase(c Case, from, to time.Time) string {
-	return fmt.Sprintf("%s, %s – %s", c, from.UTC().Format(time.RFC3339), to.UTC().Format(time.RFC3339))
 }

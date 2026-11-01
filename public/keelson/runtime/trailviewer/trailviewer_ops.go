@@ -63,6 +63,7 @@ type opsSnap struct {
 	more        bool
 	scope       scope
 	from, to    time.Time
+	resolvedAt  time.Time
 	buckets     []Bucket
 	step        time.Duration
 	facets      [][]FacetValue
@@ -89,7 +90,7 @@ type opsSnap struct {
 func (inst *App) opsSnapshot() (sn opsSnap) {
 	sn.src = sourceRef.Load()
 	ch := &inst.cache
-	sn.rows, sn.more, sn.scope, sn.from, sn.to = ch.rows, ch.more, ch.scope, ch.from, ch.to
+	sn.rows, sn.more, sn.scope, sn.from, sn.to, sn.resolvedAt = ch.rows, ch.more, ch.scope, ch.from, ch.to, ch.resolvedAt
 	sn.buckets, sn.step, sn.facets = ch.buckets, ch.step, ch.facets
 	sn.filled, sn.refreshedAt, sn.lastErr = ch.filled, ch.refreshedAt, ch.lastErr
 	sn.lines, sn.linesAt = inst.verdicts.lines, inst.verdicts.at
@@ -348,7 +349,7 @@ type View struct {
 	Strip       string        `desc:"the strip's line: rows, buckets, the busiest bucket and its time"`
 	Verdicts    []VerdictLine `desc:"the verdict line per writer run"`
 	Exceptions  int           `desc:"open exceptions among the rows held"`
-	AsOf        string        `desc:"for the entity case, the entity's state as of the window's end and the event it comes from"`
+	AsOf        string        `desc:"for the entity case, the entity's state as of the window's end in each domain it has events in, and the event each comes from"`
 	RefreshedAt time.Time     `desc:"when the cache was last filled; zero before the first fill"`
 	SavedViews  []string      `desc:"the names of the saved views this window has read from the persist store"`
 }
@@ -512,13 +513,24 @@ func filterCovers(wide Filter, narrow Filter) bool {
 	return true
 }
 
+// bounds resolves a question's window as the cache's read did: the
+// window's own bounds when it is the cache's, otherwise w at the instant
+// the cache's window was resolved — not at refreshedAt, which is when the
+// read finished and lies past the cache's to.
+func (inst opsSnap) bounds(w Window) (from, to time.Time) {
+	if w == inst.scope.Window {
+		return inst.from, inst.to
+	}
+	return w.Resolve(inst.resolvedAt)
+}
+
 // covers says whether the cache answers a list over c, w and f in full.
 func (inst opsSnap) covers(c Case, w Window, f Filter) (ok bool, why string) {
 	if c != inst.scope.Case {
 		return false, "the case differs from the one the window read (" + inst.scope.Case.String() + "); set_case reads it"
 	}
 	if w != inst.scope.Window {
-		from, to := w.Resolve(inst.refreshedAt)
+		from, to := inst.bounds(w)
 		if from.Before(inst.from) || to.After(inst.to) {
 			return false, "the range reaches outside the one the window read; set_range reads it"
 		}
@@ -530,7 +542,7 @@ func (inst opsSnap) covers(c Case, w Window, f Filter) (ok bool, why string) {
 }
 
 func summarize(r *Row, lines []verdict.Line) (s RowSummary) {
-	s = RowSummary{Id: r.Id, Ts: r.Ts(), Kind: r.Kind, Headline: cutText(r.Headline, opsMaxHeadline), Status: r.Status,
+	s = RowSummary{Id: r.Id, Ts: r.Ts(), Kind: r.Kind, Headline: appops.CutText(r.Headline, opsMaxHeadline), Status: r.Status,
 		Subject: r.Subject, App: r.App, Instance: r.Instance, Run: r.Run, Verdict: verdictOf(lines, r.Run).State.String()}
 	return
 }
@@ -545,7 +557,7 @@ func verdictOf(lines []verdict.Line, run string) (l verdict.Line) {
 }
 
 func exceptionRow(e Exception, r *Row) ExceptionRow {
-	return ExceptionRow{Id: e.Id, Ts: r.Ts(), Kind: r.Kind, Headline: cutText(r.Headline, opsMaxHeadline), Rule: e.Rule, Reason: e.Reason}
+	return ExceptionRow{Id: e.Id, Ts: r.Ts(), Kind: r.Kind, Headline: appops.CutText(r.Headline, opsMaxHeadline), Rule: e.Rule, Reason: e.Reason}
 }
 
 func ruleRows() (out []RuleRow) {
@@ -557,7 +569,7 @@ func ruleRows() (out []RuleRow) {
 
 func detailOf(r *Row, lines []verdict.Line) (d RowDetail) {
 	d = RowDetail{Row: summarize(r, lines), Breadcrumb: breadcrumb(r), Conversation: r.Conversation, Turn: r.Turn, Round: r.Round,
-		Task: r.Task, TaskEpoch: r.TaskEpoch, TaskCall: r.TaskCall, Ref: r.Ref, ParentRef: r.ParentRef, Text: cutText(r.Text, opsMaxText),
+		Task: r.Task, TaskEpoch: r.TaskEpoch, TaskCall: r.TaskCall, Ref: r.Ref, ParentRef: r.ParentRef, Text: appops.CutText(r.Text, opsMaxText),
 		Confined: r.Confined, Tainted: r.Tainted, TokensIn: r.TokensIn, TokensOut: r.TokensOut, ElapsedMs: r.ElapsedMs}
 	if a := r.Audit; a != nil {
 		d.Domain, d.Action, d.Principal, d.PrincipalBy, d.Entity, d.From, d.FromBy = a.Domain, a.Action, a.Principal, a.PrincipalBy, a.Entity, a.From, a.FromBy
@@ -565,7 +577,7 @@ func detailOf(r *Row, lines []verdict.Line) (d RowDetail) {
 			if i == opsMaxAttrs || i >= len(a.AttrValues) {
 				break
 			}
-			d.Attrs = append(d.Attrs, Attr{Key: k, Value: cutText(a.AttrValues[i], opsMaxText)})
+			d.Attrs = append(d.Attrs, Attr{Key: k, Value: appops.CutText(a.AttrValues[i], opsMaxText)})
 		}
 		for i, k := range a.RefTypes {
 			if i < len(a.RefValues) {
@@ -726,10 +738,7 @@ var ops = func() (s *appops.Set[*App, opsSnap]) {
 				out.Diagnostic = why
 				return
 			}
-			from, to := w.Resolve(sn.refreshedAt)
-			if w == sn.scope.Window {
-				from, to = sn.from, sn.to
-			}
+			from, to := sn.bounds(w)
 			out.Rows = make([]RowSummary, 0, min(limit, len(sn.rows)))
 			for i := range sn.rows {
 				r := &sn.rows[i]
@@ -920,10 +929,7 @@ var ops = func() (s *appops.Set[*App, opsSnap]) {
 				out.Diagnostic = why
 				return
 			}
-			from, to := w.Resolve(sn.refreshedAt)
-			if w == sn.scope.Window {
-				from, to = sn.from, sn.to
-			}
+			from, to := sn.bounds(w)
 			byId := make(map[uint64]*Row, len(sn.rows))
 			for i := range sn.rows {
 				byId[sn.rows[i].Id] = &sn.rows[i]

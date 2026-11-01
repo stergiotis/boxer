@@ -188,10 +188,16 @@ func (inst *App) markRow(call app.OperationCall, in MarkRowArgs) (out MarkRowRes
 }
 
 // marks is the held rows' latest marks: the reviews a refill read, and
-// the marks written since that it has not read back yet.
+// the marks written since that it has not read back yet. The merge is
+// built once per fill and pending change, as exceptions is, since a frame
+// asks for it several times; the map returned is not written to after.
 func (inst *App) marks() (m map[uint64]Review) {
 	if len(inst.pending) == 0 {
 		return inst.cache.reviews
+	}
+	key := marksKey{gen: inst.cache.gen, pending: inst.pendingVer}
+	if inst.marksBuilt && inst.marksKey == key {
+		return inst.marksMerged
 	}
 	m = make(map[uint64]Review, len(inst.cache.reviews)+len(inst.pending))
 	for k, v := range inst.cache.reviews {
@@ -202,7 +208,13 @@ func (inst *App) marks() (m map[uint64]Review) {
 			m[k] = v
 		}
 	}
+	inst.marksMerged, inst.marksKey, inst.marksBuilt = m, key, true
 	return
+}
+
+type marksKey struct {
+	gen     uint64
+	pending uint64
 }
 
 // settlePending drops the pending marks a refill has read back.
