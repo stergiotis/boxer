@@ -8,6 +8,7 @@ import (
 
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/dustin/go-humanize"
+	"github.com/stergiotis/boxer/public/hmi/gloss"
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/impacttolerance"
@@ -23,19 +24,27 @@ import (
 // produces:
 //
 //	service          required, any type — the row; first-seen order is row order
-//	tolerance_hours  required, numeric — the service's impact tolerance, repeated
+//	tolerance        required, numeric — the service's impact tolerance, repeated
 //	                 on each of its rows
 //	scenario         required, any type — first-seen order is legend order
-//	recovery_hours   required, numeric — the estimated time to recover; NULL for
+//	recovery         required, numeric — the estimated time to recover; NULL for
 //	                 a pair with no estimate
 //
 // A service with no estimate yet is one row with a NULL scenario.
+//
+// `tolerance` and `recovery` carry their unit in a gloss/duration declaration,
+// each its own: spans in different units are the same quantity and are
+// converted, to hours, which is what the widget compares in. `tolerance_hours`
+// and `recovery_hours` are the shorthand for a column in hours. A bare number
+// named `tolerance` has no unit, and is refused rather than read as hours.
 
 const (
-	tolServiceCol  = "service"
-	tolHoursCol    = "tolerance_hours"
-	tolScenarioCol = "scenario"
-	tolRecoveryCol = "recovery_hours"
+	tolServiceCol   = "service"
+	tolToleranceCol = "tolerance"
+	tolScenarioCol  = "scenario"
+	tolRecoveryCol  = "recovery"
+	// tolHoursSuffix makes a time column's shorthand, whose name is its unit.
+	tolHoursSuffix = "_hours"
 	// tolMaxServices bounds the fold: a row per service, so past a few dozen
 	// the chart is a scroll, not a picture. The excess is counted.
 	tolMaxServices = 60
@@ -43,6 +52,8 @@ const (
 	tolMaxRows = 5000
 	// tolPaneProbeSalt keys the pane-size probe under the driver's stack.
 	tolPaneProbeSalt uint64 = 0x7015c0de0a710036
+	// tolNanosPerHour is the widget's internal unit in the gloss's.
+	tolNanosPerHour = 3600e9
 )
 
 // tolerancePaneFill sizes the chart's width; its height follows the rows.
@@ -53,8 +64,11 @@ var tolerancePaneFill = paneFill{
 
 // toleranceClaim is the panel's channel claim.
 type toleranceClaim struct {
-	serviceCol, hoursCol, scenarioCol, recoveryCol int
-	selRow                                         int64
+	serviceCol, toleranceCol, scenarioCol, recoveryCol int
+	// toleranceToHours and recoveryToHours convert each time column to the
+	// widget's hours.
+	toleranceToHours, recoveryToHours float64
+	selRow                            int64
 }
 
 // ToleranceDriver owns the Impact tolerance tab state: the widget's selection
@@ -129,30 +143,78 @@ func (inst tolerancePanel) Render(filled map[ChannelID]ChannelResult, emit Signa
 func resolveToleranceColumns(schema *arrow.Schema) (k toleranceClaim, reason string) {
 	k = toleranceClaim{
 		serviceCol:  fieldIndexByLabel(schema, tolServiceCol),
-		hoursCol:    fieldIndexByLabel(schema, tolHoursCol),
 		scenarioCol: fieldIndexByLabel(schema, tolScenarioCol),
-		recoveryCol: fieldIndexByLabel(schema, tolRecoveryCol),
 		selRow:      -1,
+	}
+	k.toleranceCol, k.toleranceToHours, reason = resolveToleranceTime(schema, tolToleranceCol)
+	if reason != "" {
+		return k, reason
+	}
+	k.recoveryCol, k.recoveryToHours, reason = resolveToleranceTime(schema, tolRecoveryCol)
+	if reason != "" {
+		return k, reason
 	}
 	var missing []string
 	for _, req := range []struct {
 		col  int
 		name string
-	}{{k.serviceCol, tolServiceCol}, {k.hoursCol, tolHoursCol}, {k.scenarioCol, tolScenarioCol}, {k.recoveryCol, tolRecoveryCol}} {
+	}{{k.serviceCol, tolServiceCol}, {k.toleranceCol, tolToleranceCol + tolHoursSuffix}, {k.scenarioCol, tolScenarioCol}, {k.recoveryCol, tolRecoveryCol + tolHoursSuffix}} {
 		if req.col < 0 {
 			missing = append(missing, "`"+req.name+"`")
 		}
 	}
 	if len(missing) > 0 {
 		return k, "Impact tolerance needs " + strings.Join(missing, ", ") + ". Name them in the query — one row per service and scenario: " +
-			"SELECT svc AS service, mtd_h AS tolerance_hours, exercise AS scenario, rto_h AS recovery_hours FROM estimates."
-	}
-	for _, ci := range []int{k.hoursCol, k.recoveryCol} {
-		if f := schema.Field(ci); !isRiskNumberType(f.Type) {
-			return k, fmt.Sprintf("Column `%s` must be a number of hours; it is %s.", f.Name, f.Type)
-		}
+			"SELECT svc AS service, mtd_h AS tolerance_hours, exercise AS scenario, rto_h AS recovery_hours FROM estimates — " +
+			"or say the unit with a gloss: rto_m AS `recovery@gloss/duration;unit=min`."
 	}
 	return k, ""
+}
+
+// resolveToleranceTime finds one time column of the contract, under its plain
+// name or its hours shorthand, and the factor from its stored unit to hours;
+// col is -1 when the result carries neither.
+func resolveToleranceTime(schema *arrow.Schema, name string) (col int, toHours float64, reason string) {
+	shorthand := name + tolHoursSuffix
+	plain, inHours := fieldIndexByLabel(schema, name), fieldIndexByLabel(schema, shorthand)
+	switch {
+	case plain >= 0 && inHours >= 0:
+		return -1, 0, "Both `" + name + "` and `" + shorthand + "` are present; keep one, since the pane cannot tell which to draw."
+	case plain < 0 && inHours < 0:
+		return -1, 0, ""
+	}
+	col = plain
+	if plain < 0 {
+		col = inHours
+	}
+	f := schema.Field(col)
+	if !isRiskNumberType(f.Type) {
+		if plain < 0 {
+			return col, 0, fmt.Sprintf("Column `%s` must be a number of hours; it is %s.", f.Name, f.Type)
+		}
+		return col, 0, fmt.Sprintf("Column `%s` must be numeric, a span of time; it is %s.", f.Name, f.Type)
+	}
+	u, why := columnUnitOf(f)
+	if why != "" {
+		return col, 0, why
+	}
+	if u.declared() && u.mediaType != gloss.MediaTypeDuration {
+		return col, 0, fmt.Sprintf("Column `%s` must be a span of time; it declares %s.", pathColumnLabel(f.Name), u)
+	}
+	if plain < 0 {
+		if u.declared() && u.unit != gloss.UnitHour {
+			return col, 0, fmt.Sprintf("Column `%s` says hours in its name and %s in its gloss. Name it `%s`, or declare unit=h.", shorthand, u, name)
+		}
+		return col, 1, ""
+	}
+	if !u.declared() {
+		return col, 0, fmt.Sprintf("Column `%[1]s` has no unit. Declare it, `%[1]s@gloss/duration;unit=h` — or ns, us, ms, s, min — or name it `%[2]s`.", name, shorthand)
+	}
+	ns, ok := gloss.TimeUnitNanos(u.unit)
+	if !ok {
+		return col, 0, fmt.Sprintf("Column `%s` declares %s, a unit this pane cannot convert.", name, u)
+	}
+	return col, ns / tolNanosPerHour, ""
 }
 
 // rebuild folds the long-form rows into the service × scenario matrix, keyed
@@ -189,7 +251,8 @@ func (inst *ToleranceDriver) rebuild(rec arrow.RecordBatch, schema *arrow.Schema
 			services = append(services, svc)
 			tol = append(tol, math.NaN())
 		}
-		if t, ok := numericCellValue(rec.Column(k.hoursCol), row); ok && t > 0 {
+		if t, ok := numericCellValue(rec.Column(k.toleranceCol), row); ok && t > 0 {
+			t *= k.toleranceToHours
 			switch {
 			case math.IsNaN(tol[s]):
 				tol[s] = t
@@ -221,7 +284,7 @@ func (inst *ToleranceDriver) rebuild(rec arrow.RecordBatch, schema *arrow.Schema
 			inst.duplicates++
 			continue
 		}
-		ests[p] = est{v: v, row: row}
+		ests[p] = est{v: v * k.recoveryToHours, row: row}
 	}
 	// A service with no usable tolerance cannot be drawn against one; it is
 	// dropped and counted rather than drawn at an invented line.
@@ -339,7 +402,7 @@ func (inst *PlayApp) renderToleranceTab(rec arrow.RecordBatch, schema *arrow.Sch
 		return
 	}
 	if rec == nil {
-		for rt := range c.RichTextLabel("Run a query naming `service`, `tolerance_hours`, `scenario` and `recovery_hours` columns to see impact tolerances.") {
+		for rt := range c.RichTextLabel("Run a query naming `service`, `tolerance_hours`, `scenario` and `recovery_hours` columns, or `tolerance` and `recovery` carrying gloss/duration, to see impact tolerances.") {
 			rt.Small().Weak()
 		}
 		return

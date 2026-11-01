@@ -455,7 +455,8 @@ it uses.
 
 - **Named columns of the active result.** Kanban needs `lane` and `title`,
   Bow-tie `top_event`, `side` and `path`, Risk matrix `id` and two ranges,
-  Impact tolerance `service`, `tolerance_hours`, `scenario` and `recovery_hours`,
+  Impact tolerance `service`, `tolerance`, `scenario` and `recovery` (or their
+  `_hours` shorthand),
   Chart reads `x` / `y` / `z` / `series`, Distribution reads `series`, `n`,
   `ps` and `qs`. Matching is on the column name, so alias your columns. A
   column that declares a gloss in its name matches on its label, so
@@ -956,28 +957,49 @@ one means that risk has none. Every value must be positive — the axes are
 logarithmic — and a row that is not is skipped and counted in the status line.
 
 **Banded** places each risk by the geometric midpoints of its ranges in a 5×5
-of numeric bands (1%, 3%, 10% and 30% a year; €100k in steps of five). Cells
-grow toward the high-risk corner and are shaded by the expected annual loss at
+of numeric bands (1%, 3%, 10% and 30% a year; steps of five around the
+register's magnitude). Cells grow toward the high-risk corner and are shaded by the expected annual loss at
 their centre, not by multiplying ranks. **Continuous with ranges** drops the
 bands and draws each range as a box, with diagonal lines of equal expected
 annual loss. **Show inherent → residual** draws an arrow from each risk's
 inherent position to its residual one. Hovering a risk or a cell shows its
 figures; clicking a risk writes `selection`. The pane reads at most 500 rows.
-The **Snippets** library has the worked example, "Risk matrix".
+
+An amount's unit is what its column declares, through a gloss on the alias or
+the `gloss(…)` macro: `gloss/money` or any quantity gloss with a `unit`, such as
+`gloss/duration;unit=h`. The labels, the tooltips and the axis then use it; with
+no gloss the amounts are plain numbers, since nothing in the data says they are
+euros. `impact_lo`, `impact_hi` and the two inherent impact columns must agree:
+the pane refuses a result where they name different units, or where only some
+name one, and names the columns. A `-- play: gloss` rule or a rule set shows in
+Table but does not reach this pane, whose contract already gives each column an
+alias to declare it on. Expected loss multiplies a likelihood by an impact, so
+the shading assumes one ratio-scale unit; it means little for a temperature in
+°C.
+
+The cell shades come from the IDS sequential palette when `IDS_ACCESSIBILITY` or
+`IDS_PALETTE_SEQUENTIAL` selects one, cut per theme so that each class is farther
+from the canvas than the last, and from the pane's own single-hue default
+otherwise. The **Snippets** library has the worked example, "Risk matrix".
 
 ### Impact tolerance
 
 Important services against their impact tolerances under named scenarios. One
-row is one service under one scenario: `service`, `tolerance_hours` (the
-longest disruption the service may suffer, repeated on each of its rows),
-`scenario` and `recovery_hours` (the estimated time to recover). A NULL
-`recovery_hours` is a pair with no estimate; a NULL `scenario` lists a service
-with none. Services and scenarios keep the order rows first name them. When a
+row is one service under one scenario: `service`, `tolerance` (the longest
+disruption the service may suffer, repeated on each of its rows), `scenario`
+and `recovery` (the estimated time to recover). `tolerance` and `recovery` carry
+`gloss/duration` in any of its units, each its own, and the pane converts them;
+`tolerance_hours` and `recovery_hours` are the shorthand for plain columns in
+hours. A bare number named `tolerance`, a gloss that is not a span, a shorthand
+whose gloss says something other than hours, and both spellings at once are
+refused with the reason. A NULL `recovery` is a pair with no estimate; a NULL
+`scenario` lists a service with none. Services and scenarios keep the order rows first name them. When a
 service's rows disagree on the tolerance, the first is drawn and the status
 line says so.
 
 Each row draws the tolerance as a line with the region past it shaded, and a
-point per scenario on a logarithmic hours axis; its label counts the scenarios
+point per scenario on a logarithmic time axis labelled in seconds, minutes, hours
+or days as each tick reads best; its label counts the scenarios
 that breach. Hovering a point shows the estimate against the tolerance;
 clicking one writes `selection` for its row. The **Snippets** library has the
 worked example, "Impact tolerance".
@@ -1597,8 +1619,8 @@ answer that has not arrived is left alone rather than accused.
 
 The result-side sibling of Vocabulary (ADR-0186). A **gloss** is a named way of
 showing a value — a temperature with its unit, a Unix epoch as a moment, a span
-as `1m 05s`, a card number masked with its Luhn verdict, a value masked to six
-bullets, a URL as a link, a byte count in KiB, a fibonacci-tagged id split into
+as `1m 05s`, an amount of a currency as `€12.5k`, a card number masked with its
+Luhn verdict, a value masked to six bullets, a URL as a link, a byte count in KiB, a fibonacci-tagged id split into
 its tag and counter, a CBOR item as diagnostic notation, a regular expression
 highlighted with the verdict its engine gives it, and the ADR-0123
 content types (markdown, code, images) as one family. Every gloss
@@ -1710,6 +1732,15 @@ the type and size, as an image cell does, and the full notation waits in
 Detail. There is no affinity — no aspect says "these bytes are CBOR", and
 being a `Binary` column does not make a column one — so bind it by alias,
 by `gloss(…)`, or by rule.
+
+`gloss/money` is an amount of a currency, `unit` being its ISO 4217 code: `` AS
+`cost@gloss/money;unit=EUR` ``. The code is required and upper case, and one
+that is not in the standard is refused with the reason like any other bad
+parameter. The face is compact, three significant figures with k, m, bn or tn.
+EUR, USD, GBP and JPY show their symbol, `€12.5k`, because each names one
+currency on its own; every other code shows as itself, `CHF 950`, including the
+ones that share a `$`, a `¥` or a `kr`. It formats and does not convert. It has
+no affinity: being a number does not make a column an amount, so declare it.
 
 `gloss/regexp` shows a stored pattern as a pattern. A rule table's match
 column, a router's dispatch column, a redaction policy: patterns nobody

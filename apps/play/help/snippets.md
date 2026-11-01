@@ -653,9 +653,9 @@ SELECT
 ## Glosses (units, check digits, masks, links)
 
 A **gloss** is a named way of showing a value (ADR-0186): a temperature with
-its unit, a Unix epoch as a moment, a span as `1m 05s`, a card number masked
-with its Luhn verdict, a value masked to six bullets, a URL as a link, a byte
-count in KiB, an IP address written out, a regular expression with the
+its unit, a Unix epoch as a moment, a span as `1m 05s`, an amount as `€12.5k`,
+a card number masked with its Luhn verdict, a value masked to six bullets, a
+URL as a link, a byte count in KiB, an IP address written out, a regular expression with the
 verdict its engine gives it. Glosses render in the **Table** grids
 (one line, sometimes toned) and in **Detail** (a block where the gloss has
 one). Three ways to reach one, in precedence order:
@@ -690,6 +690,7 @@ SELECT number AS n,
        'hunter2' AS `pw@gloss/masked`,
        toUnixTimestamp(now()) + number * 86400 AS `when@gloss/epoch`,
        number * 90500 AS `took@gloss/duration;unit=ms`,
+       12500 * number AS `cost@gloss/money;unit=EUR`,
        'https://example.com/' || toString(number) AS `link@gloss/url`,
        toIPv4('192.0.2.' || toString(number)) AS `host@gloss/ipaddr`,
        toIPv6('2001:db8::' || toString(number)) AS `peer@gloss/ipaddr`,
@@ -1027,13 +1028,21 @@ rating before controls, drawn as arrows when **Show inherent → residual** is
 ticked. The banded reading places each risk by the geometric midpoints of its
 ranges and shades a cell by the expected annual loss at its centre; the
 continuous reading drops the bands and draws each range as a box. The bands
-are 1%, 3%, 10% and 30% a year and steps of five from €100k — a binning of the
-ranges, not a property of the data. Hovering a risk shows its ranges; clicking
+are 1%, 3%, 10% and 30% a year and steps of five around the register's
+magnitude — a binning of the ranges, not a property of the data. The impact
+columns say their unit through a gloss, here `gloss/money` in EUR; without one
+the amounts are plain numbers, and impact columns that disagree are refused.
+Hovering a risk shows its ranges; clicking
 it selects its row, so Detail and Table follow. Table-free; the figures are
 illustrative.
 
 ```sql
-SELECT *
+SELECT id, name, p_lo, p_hi,
+       impact_lo AS `impact_lo@gloss/money;unit=EUR`,
+       impact_hi AS `impact_hi@gloss/money;unit=EUR`,
+       inherent_p_lo, inherent_p_hi,
+       inherent_impact_lo AS `inherent_impact_lo@gloss/money;unit=EUR`,
+       inherent_impact_hi AS `inherent_impact_hi@gloss/money;unit=EUR`
 FROM values('id String, name String, p_lo Float64, p_hi Float64, impact_lo Float64, impact_hi Float64,
              inherent_p_lo Float64, inherent_p_hi Float64, inherent_impact_lo Float64, inherent_impact_hi Float64',
   ('R1', 'Ransomware encrypts core ERP',   0.03,  0.15, 800e3,  12e6, 0.10,  0.35, 1.5e6, 25e6),
@@ -1048,13 +1057,16 @@ FROM values('id String, name String, p_lo Float64, p_hi Float64, impact_lo Float
 
 ## Impact tolerance (services under scenarios)
 
-A result naming `service`, `tolerance_hours`, `scenario` and `recovery_hours`
-renders in the **Impact tolerance** tab (ADR-0122's 2026-11-01 update): one row
-per service and scenario, the long form an exercise produces. Each service's
+A result naming `service`, `tolerance`, `scenario` and `recovery` renders in the
+**Impact tolerance** tab (ADR-0122's 2026-11-01 updates): one row per service
+and scenario, the long form an exercise produces. `tolerance` and `recovery`
+say their unit through `gloss/duration`, each its own — here hours and minutes —
+and a bare number under those names is refused; `tolerance_hours` and
+`recovery_hours` are the shorthand for a plain column in hours. Each service's
 tolerance — the longest disruption it may suffer — repeats on its rows; the
 first row's wins, and a disagreement is counted in the status line. Services
 and scenarios keep their first-seen order, so the query decides the rows and
-the legend. A NULL `recovery_hours` is a pair with no estimate yet, and a row
+the legend. A NULL `recovery` is a pair with no estimate yet, and a row
 with a NULL `scenario` lists a service with none at all. The region past each
 tolerance is shaded and each row says how many scenarios breach it. Hovering
 an estimate shows it against the tolerance; clicking it selects its row.
@@ -1065,13 +1077,14 @@ are illustrative.
 
 ```sql
 WITH ['Ransomware', 'Cloud region outage', 'Key supplier failure'] AS scenarios
-SELECT service, tolerance_hours, scenarios[k] AS scenario, estimates[k] AS recovery_hours
-FROM values('service String, tolerance_hours Float64, estimates Array(Float64)',
-  ('Order intake',       24, [72, 10,  4]),
-  ('Warehouse dispatch', 12, [48,  6, 30]),
-  ('Payroll',            72, [60,  8,  2]),
-  ('Customer support',   48, [30, 20,  1]))
-ARRAY JOIN arrayEnumerate(estimates) AS k
+SELECT service, tolerance_h AS `tolerance@gloss/duration;unit=h`, scenarios[k] AS scenario,
+       minutes[k] AS `recovery@gloss/duration;unit=min`
+FROM values('service String, tolerance_h Float64, minutes Array(Float64)',
+  ('Order intake',       24, [4320,  600,  240]),
+  ('Warehouse dispatch', 12, [2880,  360, 1800]),
+  ('Payroll',            72, [3600,  480,  120]),
+  ('Customer support',   48, [1800, 1200,   60]))
+ARRAY JOIN arrayEnumerate(minutes) AS k
 ```
 
 ## Chat transcript (messages, replies, reactions)

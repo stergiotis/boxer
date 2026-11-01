@@ -52,8 +52,12 @@ type Input struct {
 	// Bands bins the banded reading; the zero value is DefaultBands.
 	Bands Bands
 	// FormatImpact formats an amount — an impact, an expected loss — for
-	// labels and tooltips; nil is FormatEuro.
+	// labels and tooltips; nil is FormatCompact, a number with no unit. The
+	// widget assumes no unit of its own: the host that knows one says it here.
 	FormatImpact func(v float64) string
+	// ImpactUnit names the unit on the impact axis's title ("EUR", "h"); empty
+	// is a title without one.
+	ImpactUnit string
 
 	// Width and Height are the canvas in points; zero is 760 × 470. The
 	// control row, when shown, sits above the canvas and is not counted.
@@ -121,7 +125,7 @@ func Render(in Input) (res Result) {
 	}
 	var bands Bands
 	if res.Err == nil {
-		bands, res.Err = in.Bands.resolved()
+		bands, res.Err = in.Bands.forModel(in.Model).resolved()
 	}
 	if res.Err != nil {
 		for rt := range c.RichTextLabel(res.Err.Error()) {
@@ -184,19 +188,6 @@ func tok(t styletokens.RGBA8) color.Color { return color.Hex(t.AsHex()) }
 
 func tokA(t styletokens.RGBA8, a uint8) color.Color { return color.Hex(t.AsHex()&^0xff | uint32(a)) }
 
-// The shade ramp's ends on Oslo (black–blue–white), per theme. Magnitude
-// maps to contrast against the canvas: the lowest class sits nearest the
-// background and the highest-loss class farthest from it. Each theme has its
-// own steps rather than one ramp flipped, because Oslo's chroma peaks near
-// its middle and fades to grey toward white: on the dark canvas the ramp
-// climbs from near-black only to that peak, so the high-loss corner is the
-// lightest and most saturated cell, not the palest. On the light canvas it
-// descends from a tint just off the paper to the deep blue at the same peak.
-const (
-	rampDarkLo, rampDarkHi   float32 = 0.18, 0.48
-	rampLightLo, rampLightHi float32 = 0.90, 0.44
-)
-
 // newPalette resolves the colours for n shade classes.
 //
 // The risk dots are the theme's extreme ink — white on the dark canvas,
@@ -205,7 +196,11 @@ const (
 // every theme (ADR-0029 §SD4, measured as the colour generators' cross-palette
 // check does), and each Okabe-Ito entry comes within that check's advisory
 // distance of one theme's status colours or other. The extreme ink clears it
-// in both themes and stands apart from every step of the blue ramp.
+// in both themes, and selectRamp keeps every class 3:1 from it.
+//
+// The shade classes come from the IDS sequential palette rampSequential
+// resolves, cut to what selectRamp measures against the canvas: magnitude maps
+// to contrast against it, the lowest class nearest and the highest farthest.
 func newPalette(n int) (p palette) {
 	p.bg = tok(styletokens.NeutralBgFaint)
 	p.area = tok(styletokens.NeutralBgSurface)
@@ -214,19 +209,10 @@ func newPalette(n int) (p palette) {
 	p.border = tokA(styletokens.NeutralBorderDefault, 0x60)
 	p.ink = tok(styletokens.NeutralTextPrimary)
 	p.ink2 = tok(styletokens.NeutralTextSecondary)
-	lo, hi := rampDarkLo, rampDarkHi
-	if styletokens.ActiveTheme() == styletokens.ThemeFresh {
-		lo, hi = rampLightLo, rampLightHi
-	}
-	p.rawRamp = make([]styletokens.RGBA8, n)
+	p.rawRamp = rampFor(rampSequential(), n)
 	p.ramp = make([]color.Color, n)
-	for i := range n {
-		t := float32(0)
-		if n > 1 {
-			t = float32(i) / float32(n-1)
-		}
-		p.rawRamp[i] = styletokens.Sequential(styletokens.SequentialOslo, lo+(hi-lo)*t)
-		p.ramp[i] = tok(p.rawRamp[i])
+	for i, r := range p.rawRamp {
+		p.ramp[i] = tok(r)
 	}
 	p.rawMark = styletokens.NeutralTextExtreme
 	p.mark = tok(p.rawMark)
@@ -262,7 +248,7 @@ func newFrame(in Input, bands Bands) (f *frame) {
 	f = &frame{in: in, bands: bands, format: in.FormatImpact,
 		w: in.Width, h: in.Height}
 	if f.format == nil {
-		f.format = FormatEuro
+		f.format = FormatCompact
 	}
 	if f.w <= 0 {
 		f.w = defaultWidth
@@ -417,12 +403,20 @@ func (f *frame) paint(hovered int) {
 		f.paintBanded()
 	}
 	p := f.pal
-	text(f.ml+f.pw/2, f.h-8, anchorMiddle, anchorBottom, "Impact if it happens (range midpoint)", styletokens.CaptionPt, p.ink2)
+	text(f.ml+f.pw/2, f.h-8, anchorMiddle, anchorBottom, impactAxisTitle(f.in.ImpactUnit), styletokens.CaptionPt, p.ink2)
 	text(4, 4, anchorStart, anchorTop, "Likelihood per year", styletokens.CaptionPt, p.ink2)
 	f.paintRisks(hovered)
 	if f.key {
 		f.paintKey()
 	}
+}
+
+// impactAxisTitle is the impact axis's title, with the unit when one is known.
+func impactAxisTitle(unit string) string {
+	if unit == "" {
+		return "Impact if it happens (range midpoint)"
+	}
+	return "Impact if it happens (" + unit + ", range midpoint)"
 }
 
 func (f *frame) paintBanded() {
@@ -520,12 +514,27 @@ func (f *frame) paintRisks(hovered int) {
 			dx, dy := r[0]-a[0], r[1]-a[1]
 			d := float32(math.Hypot(float64(dx), float64(dy)))
 			c.PaintCircleFilled(a[0], a[1], 5, p.bg).Send()
-			c.PaintCircleStroke(a[0], a[1], 5, p.ink2, 1.5).Send()
+			// The mark's ink, which selectRamp keeps 3:1 from every class; the
+			// secondary ink has no such floor and sinks into the high classes.
+			c.PaintCircleStroke(a[0], a[1], 5, p.mark, 1.5).Send()
 			if d > 14 {
-				ox, oy := a[0]+dx/d*6, a[1]+dy/d*6
-				ex, ey := r[0]-dx/d*9, r[1]-dy/d*9
-				c.PaintArrow(ox, oy, ex-ox, ey-oy, p.ink2, 1.5).Send()
+				paintArrow(a[0], a[1], r[0], r[1], d, p.mark)
 			}
+		}
+	}
+	type place struct {
+		x, y   float32
+		ah, av uint8
+	}
+	labels := make([]place, m.Len())
+	for i := range m.Len() {
+		l := place{x: f.res[i][0] + dotR + 4, y: f.res[i][1], ah: anchorStart, av: anchorCenter}
+		if f.showInherent() && f.hasInh[i] {
+			l.x, l.y, l.ah, l.av = labelAwayFromArrow(f.inh[i], f.res[i])
+		}
+		labels[i] = l
+		if f.in.State.Mode != ModeContinuous {
+			f.paintLabelChip(l.x, l.y, l.ah, l.av, m.Ids[i])
 		}
 	}
 	sel := f.in.State.Selected()
@@ -538,8 +547,88 @@ func (f *frame) paintRisks(hovered int) {
 		}
 		c.PaintCircleFilled(x, y, dotR, p.mark).Send()
 		c.PaintCircleStroke(x, y, dotR, p.bg, 2).Send()
-		mono(x+dotR+4, y, anchorStart, anchorCenter, m.Ids[i], p.ink)
 	}
+	for i, l := range labels {
+		mono(l.x, l.y, l.ah, l.av, m.Ids[i], p.ink)
+	}
+}
+
+// paintLabelChip backs a risk's label with the canvas colour, as the dot's ring
+// does the dot. The label is small text on whichever cell the dot fell in, and
+// holding every class 4.5:1 from the ink would cost the ramp about a third of
+// its lightness room, so the label does not rest on the ramp at all.
+func (f *frame) paintLabelChip(x, y float32, ah, av uint8, s string) {
+	const padX, padY float32 = 2, 1
+	w := implot.EstimateTextWidth(s, styletokens.CaptionPt)
+	h := float32(styletokens.CaptionPt) + 2
+	x0, y0 := x, y
+	switch ah {
+	case anchorMiddle:
+		x0 -= w / 2
+	case anchorEnd:
+		x0 -= w
+	}
+	switch av {
+	case anchorCenter:
+		y0 -= h / 2
+	case anchorBottom:
+		y0 -= h
+	}
+	c.PaintRectFilled(x0-padX, y0-padY, x0+w+padX, y0+h+padY, 2, f.pal.bg).Send()
+}
+
+// Arrow-head size in points, fixed: egui's own arrow scales its head with
+// the arrow's length, so a risk that moved far got a head that covered
+// its neighbours.
+const (
+	arrowHeadLen   float32 = 7
+	arrowHeadHalfW float32 = 3.5
+)
+
+// paintArrow draws the inherent → residual arrow from the inherent ring at
+// a to the residual dot at r, d apart: a shaft and a small filled head,
+// both kept clear of the two marks.
+func paintArrow(ax, ay, rx, ry, d float32, col color.Color) {
+	ux, uy := (rx-ax)/d, (ry-ay)/d
+	ox, oy := ax+ux*6, ay+uy*6
+	tx, ty := rx-ux*(dotR+3), ry-uy*(dotR+3)
+	bx, by := tx-ux*arrowHeadLen, ty-uy*arrowHeadLen
+	c.PaintLine(ox, oy, bx, by, col, 1.5).Send()
+	c.PaintPolygonFilled(
+		[]float32{tx, bx - uy*arrowHeadHalfW, bx + uy*arrowHeadHalfW},
+		[]float32{ty, by + ux*arrowHeadHalfW, by - ux*arrowHeadHalfW},
+		col).Send()
+}
+
+// labelAwayFromArrow places a residual dot's label on the side facing away
+// from its inherent position, so the arrow arriving at the dot never runs
+// through the label: the label continues the arrow's direction past the
+// dot, anchored so the text grows away from it.
+func labelAwayFromArrow(inh, res [2]float32) (x, y float32, ah, av uint8) {
+	dx, dy := res[0]-inh[0], res[1]-inh[1]
+	d := float32(math.Hypot(float64(dx), float64(dy)))
+	if d < 1e-3 {
+		return res[0] + dotR + 4, res[1], anchorStart, anchorCenter
+	}
+	ux, uy := dx/d, dy/d
+	x, y = res[0]+ux*(dotR+4), res[1]+uy*(dotR+4)
+	switch {
+	case ux > 0.38:
+		ah = anchorStart
+	case ux < -0.38:
+		ah = anchorEnd
+	default:
+		ah = anchorMiddle
+	}
+	switch {
+	case uy > 0.38:
+		av = anchorTop
+	case uy < -0.38:
+		av = anchorBottom
+	default:
+		av = anchorCenter
+	}
+	return
 }
 
 // paintKey lists the risks and explains the encoding, at the right of the

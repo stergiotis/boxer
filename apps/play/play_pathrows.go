@@ -11,7 +11,6 @@ import (
 
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/stergiotis/boxer/public/db/clickhouse/chrows"
-	"github.com/stergiotis/boxer/public/hmi/gloss"
 )
 
 // play_pathrows.go is the PATH contract and the read-only file system a result
@@ -127,7 +126,7 @@ func pathColumnLabel(name string) string {
 	if !strings.ContainsRune(name, '@') {
 		return name
 	}
-	if d, declared := gloss.Default().ParseColumn(name); declared && d.Label != "" {
+	if d, declared := declaredColumnCatalog().ParseColumn(name); declared && d.Label != "" {
 		return d.Label
 	}
 	return name

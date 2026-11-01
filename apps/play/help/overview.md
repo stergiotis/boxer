@@ -79,7 +79,8 @@ query* on the Features page):
 - **Risk matrix** — a risk register as a likelihood × impact matrix, from
   `id`, `p_lo`, `p_hi`, `impact_lo` and `impact_hi` columns.
 - **Impact tolerance** — services against their impact tolerances under named
-  scenarios, from `service`, `tolerance_hours`, `scenario` and `recovery_hours`.
+  scenarios, from `service`, `tolerance_hours`, `scenario` and `recovery_hours`,
+  or `tolerance` and `recovery` carrying `gloss/duration`.
 - **Chat** — a message transcript, from `ts`, `sender` and `body`.
 - **Cards** — a paged grid of cards, from `card_*` columns.
 - **Network** — a node-link graph, ranked top-down or left-right, from a CTE

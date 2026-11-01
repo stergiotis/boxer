@@ -7,7 +7,8 @@
 // One row per service. Each carries a tolerance — the longest disruption it
 // may suffer, in hours — drawn as a line with the region beyond it shaded,
 // and one point per scenario at the estimated time to recover, on a
-// logarithmic hours axis. A row's label says how many of its scenarios breach
+// logarithmic time axis that FormatHours labels in the unit each tick reads
+// best in. A row's label says how many of its scenarios breach
 // ("2 of 3 breach"), so the reading does not rest on colour. Scenario k takes
 // qualitative slot k, named in a legend above the rows.
 //

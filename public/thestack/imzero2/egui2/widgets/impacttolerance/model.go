@@ -87,8 +87,9 @@ func (inst *Model) hourRange() (lo, hi float64) {
 
 func positive(v float64) bool { return v > 0 && !math.IsInf(v, 1) && !math.IsNaN(v) }
 
-// hourLadder is the axis's tick vocabulary: durations people plan in.
-var hourLadder = []float64{0.25, 1, 4, 12, 24, 72, 168, 336, 720, 2160, 8760}
+// hourLadder is the axis's tick vocabulary: durations people plan in, from a
+// second to a year.
+var hourLadder = []float64{1.0 / 3600, 10.0 / 3600, 1.0 / 60, 5.0 / 60, 0.25, 1, 4, 12, 24, 72, 168, 336, 720, 2160, 8760}
 
 // axisRange is the ladder span covering [lo, hi]: down to the rung at or
 // below lo, up to the rung at or above three times hi, so the region beyond
@@ -114,10 +115,12 @@ func axisRange(lo, hi float64) (from, to float64) {
 	return
 }
 
-// FormatHours is a duration in the unit it is planned in: "15 min", "4 h",
-// "3 d", "1.5 d".
+// FormatHours is a duration in the unit it is planned in: "30 s", "15 min",
+// "4 h", "3 d", "1.5 d".
 func FormatHours(h float64) string {
 	switch {
+	case h < 1.0/60:
+		return num(math.Round(h*3600*10)/10) + " s"
 	case h < 1:
 		return num(math.Round(h*60)) + " min"
 	case h < 24:

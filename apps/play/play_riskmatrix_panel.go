@@ -29,7 +29,10 @@ import (
 //	                        before controls; a NULL row has no inherent rating
 //
 // Two numeric ranges cannot be told apart from a schema, so the pane asks for
-// one `AS` per column instead of guessing which is likelihood.
+// one `AS` per column instead of guessing which is likelihood. The impact
+// columns' unit is what they declare through a gloss (play_column_unit.go),
+// money or any quantity with a `unit`; all of them must agree, and undeclared
+// they are plain numbers.
 
 const (
 	riskIdCol       = "id"
@@ -65,7 +68,9 @@ type riskMatrixClaim struct {
 	idCol, nameCol int
 	residual       [4]int
 	inherent       [4]int // all -1 when the result carries none
-	selRow         int64
+	// impact is the unit the impact columns declare.
+	impact columnUnit
+	selRow int64
 }
 
 // RiskMatrixDriver owns the Risk matrix tab state: the widget's state and the
@@ -80,6 +85,7 @@ type RiskMatrixDriver struct {
 	rowOf map[int64]int
 
 	skipped, truncated int64
+	impact             columnUnit
 
 	paneW, paneH float32
 
@@ -178,7 +184,36 @@ func resolveRiskMatrixColumns(schema *arrow.Schema) (k riskMatrixClaim, reason s
 			return k, fmt.Sprintf("Column `%s` must be numeric; it is %s.", f.Name, f.Type)
 		}
 	}
-	return k, ""
+	k.impact, reason = riskImpactUnit(schema, k, present > 0)
+	return k, reason
+}
+
+// riskImpactUnit is the one unit the impact columns share. A column without
+// one beside a column with one is a disagreement, not a default: a matrix that
+// labels the lot in euros because one column said so would be claiming what
+// the query did not.
+func riskImpactUnit(schema *arrow.Schema, k riskMatrixClaim, hasInherent bool) (u columnUnit, reason string) {
+	cols := []int{k.residual[2], k.residual[3]}
+	if hasInherent {
+		cols = append(cols, k.inherent[2], k.inherent[3])
+	}
+	first := ""
+	for i, ci := range cols {
+		f := schema.Field(ci)
+		cu, why := columnUnitOf(f)
+		if why != "" {
+			return columnUnit{}, why
+		}
+		label := pathColumnLabel(f.Name)
+		if i == 0 {
+			u, first = cu, label
+			continue
+		}
+		if !cu.same(u) {
+			return columnUnit{}, fmt.Sprintf("The impact columns must share one unit: `%s` has %s, `%s` has %s.", first, u, label, cu)
+		}
+	}
+	return u, ""
 }
 
 // isRiskNumberType reports the types a likelihood or an amount may carry.
@@ -257,6 +292,7 @@ func (inst *RiskMatrixDriver) rebuild(rec arrow.RecordBatch, schema *arrow.Schem
 // ways — the shared cursor in, a clicked risk out.
 func (inst *RiskMatrixDriver) render(rec arrow.RecordBatch, schema *arrow.Schema, k riskMatrixClaim, emit SignalEmitterI) {
 	inst.rebuild(rec, schema, k)
+	inst.impact = k.impact
 	c.Label(inst.statusLine()).Send()
 	if inst.model.Len() == 0 {
 		for rt := range c.RichTextLabel("No row carries a positive likelihood and impact range, so there is nothing to place.") {
@@ -279,6 +315,7 @@ func (inst *RiskMatrixDriver) render(rec arrow.RecordBatch, schema *arrow.Schema
 	res := riskmatrix.Render(riskmatrix.Input{
 		Ids: inst.ids, ScopeKey: "play-riskmatrix",
 		Model: &inst.model, State: &inst.state,
+		FormatImpact: k.impact.format(), ImpactUnit: k.impact.unit,
 		Width: w, Height: h,
 	})
 	if res.Clicked >= 0 && res.Clicked < len(inst.rows) {
@@ -293,6 +330,9 @@ func (inst *RiskMatrixDriver) statusLine() string {
 	fmt.Fprintf(&b, "%d risks", inst.model.Len())
 	if inst.model.HasInherent() {
 		b.WriteString(" · with inherent ratings")
+	}
+	if inst.impact.declared() {
+		b.WriteString(" · impact in " + inst.impact.unit)
 	}
 	if inst.skipped > 0 {
 		fmt.Fprintf(&b, " · %s rows skipped (a likelihood or impact that is not a positive number)", humanize.Comma(inst.skipped))

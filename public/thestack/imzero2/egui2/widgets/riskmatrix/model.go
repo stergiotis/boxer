@@ -9,7 +9,8 @@ import (
 
 // Model is a risk register, columnar: one entry per risk in every slice.
 //
-// Likelihood is a rate per year and impact an amount, both as an interval
+// Likelihood is a rate per year and impact an amount in whatever unit the
+// host formats it with (Input.FormatImpact), both as an interval
 // (lo, hi) — the register's 90% range, say. A point estimate is an interval
 // with lo == hi. The matrix places a risk at the geometric midpoint of its two
 // intervals, so every value must be positive; Validate says which is not.
@@ -111,7 +112,7 @@ type Bands struct {
 	ImpactEdges     []float64
 	// LikelihoodLabels and ImpactLabels name the bands; a slice whose length
 	// is not the band count is ignored and the labels are derived from the
-	// edges ("1 in 10–30 yr", "€500k–2.5m").
+	// edges ("1 in 10–30 yr", "500k–2.5m", "€500k–2.5m" under a euro formatter).
 	LikelihoodLabels []string
 	ImpactLabels     []string
 	// ShadeEdges are the expected-annual-loss boundaries of the cell shades,
@@ -123,13 +124,63 @@ type Bands struct {
 
 // DefaultBands is a 5×5 on geometric edges: likelihood at 1%, 3%, 10% and 30%
 // a year, impact in steps of five from 100k, five shades from 3k to 500k of
-// expected loss a year.
-func DefaultBands() Bands {
+// expected loss a year. It is scaledBands(100e3), the scale a register in the
+// millions lands on; a zero Input.Bands takes its scale from the register.
+func DefaultBands() Bands { return scaledBands(100e3) }
+
+// scaledBands is the default binning with its lowest inner impact edge at s.
+// Likelihood is a rate per year and does not scale; a shade's edge is an
+// impact times a likelihood, so it scales with s and the grid's shading is the
+// same at every scale.
+func scaledBands(s float64) Bands {
 	return Bands{
 		LikelihoodEdges: []float64{0.001, 0.01, 0.03, 0.1, 0.3, 1},
-		ImpactEdges:     []float64{10e3, 100e3, 500e3, 2.5e6, 12.5e6, 100e6},
-		ShadeEdges:      []float64{3e3, 20e3, 100e3, 500e3},
+		ImpactEdges:     []float64{s / 10, s, 5 * s, 25 * s, 125 * s, 1000 * s},
+		ShadeEdges:      []float64{0.03 * s, 0.2 * s, s, 5 * s},
 	}
+}
+
+// impactScale is the power of ten that centres the default impact bands on a
+// register: its middle band, [5s, 25s), is around the geometric mean of the
+// impact midpoints, residual and inherent. A power of ten so the edges stay
+// round in the register's own numbers, and a register with no positive impact
+// falls back to the default scale.
+func impactScale(m *Model) float64 {
+	sum, n := 0.0, 0
+	add := func(lo, hi float64) {
+		if positive(lo) && positive(hi) {
+			sum += math.Log10(gmean(lo, hi))
+			n++
+		}
+	}
+	for i := range m.Len() {
+		add(m.ImpactLo[i], m.ImpactHi[i])
+		if _, imp, ok := m.inherent(i); ok {
+			add(imp[0], imp[1])
+		}
+	}
+	if n == 0 {
+		return 100e3
+	}
+	middleBandCentre := math.Log10(math.Sqrt(5 * 25))
+	return math.Pow(10, math.Round(sum/float64(n)-middleBandCentre))
+}
+
+// forModel fills the impact and shade edges a host left empty from the
+// register's magnitude. Fixed edges would assume an amount in the millions, and
+// a register in hours would put every risk in the bottom band.
+func (inst Bands) forModel(m *Model) Bands {
+	if len(inst.ImpactEdges) > 0 && len(inst.ShadeEdges) > 0 {
+		return inst
+	}
+	d := scaledBands(impactScale(m))
+	if len(inst.ImpactEdges) == 0 {
+		inst.ImpactEdges = d.ImpactEdges
+	}
+	if len(inst.ShadeEdges) == 0 {
+		inst.ShadeEdges = d.ShadeEdges
+	}
+	return inst
 }
 
 // resolved returns the bands to draw with: the defaults for a zero value, and
@@ -295,12 +346,8 @@ func trimCommonSymbol(a, b string) string {
 	return b
 }
 
-// FormatEuro is the default impact formatter: a compact euro amount, "€12k",
-// "€2.5m", "€40m".
-func FormatEuro(v float64) string { return "€" + FormatCompact(v) }
-
-// FormatCompact is an amount to three significant figures with a k / m / bn
-// suffix: "950", "1.25k", "12.5m", "3bn".
+// FormatCompact is the default impact formatter, a number with no unit: three
+// significant figures with a k / m / bn suffix, "950", "1.25k", "12.5m", "3bn".
 func FormatCompact(v float64) string {
 	sign := ""
 	if v < 0 {

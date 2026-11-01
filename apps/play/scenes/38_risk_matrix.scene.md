@@ -17,10 +17,15 @@ scene:
 
 # risk matrix
 
-Risk matrix — a register of eight risks as likelihood and impact ranges (ADR-0122, 2026-11-01 update): the banded 5×5 first, then the continuous reading with the inherent → residual arrows. Table-free, so it needs a server but no dataset
+Risk matrix — a register of eight risks as likelihood and impact ranges (ADR-0122, 2026-11-01 update): the banded 5×5 first, then the continuous reading with the inherent → residual arrows. The impact columns declare EUR through `gloss/money`, and the tooltip's amounts come from it. Table-free, so it needs a server but no dataset
 
 ```sql
-SELECT *
+SELECT id, name, p_lo, p_hi,
+       impact_lo AS `impact_lo@gloss/money;unit=EUR`,
+       impact_hi AS `impact_hi@gloss/money;unit=EUR`,
+       inherent_p_lo, inherent_p_hi,
+       inherent_impact_lo AS `inherent_impact_lo@gloss/money;unit=EUR`,
+       inherent_impact_hi AS `inherent_impact_hi@gloss/money;unit=EUR`
 FROM values('id String, name String, p_lo Float64, p_hi Float64, impact_lo Float64, impact_hi Float64,
              inherent_p_lo Float64, inherent_p_hi Float64, inherent_impact_lo Float64, inherent_impact_hi Float64',
   ('R1', 'Ransomware encrypts core ERP',   0.03,  0.15, 800e3,  12e6, 0.10,  0.35, 1.5e6, 25e6),

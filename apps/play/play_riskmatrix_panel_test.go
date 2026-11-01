@@ -10,7 +10,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/stergiotis/boxer/public/hmi/gloss"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/impacttolerance"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/riskmatrix"
 )
 
 // The Risk matrix and Impact tolerance panes (ADR-0122's 2026-11-01 update):
@@ -89,6 +91,76 @@ func TestRiskMatrixAcceptContract(t *testing.T) {
 	assert.GreaterOrEqual(t, claim.(riskMatrixClaim).inherent[3], 0)
 }
 
+// The impact columns' unit is what their gloss declares: EUR through the face
+// and the axis, no unit with no gloss, and a refusal when they disagree.
+func TestRiskMatrixImpactUnit(t *testing.T) {
+	p := riskMatrixPanel{driver: NewRiskMatrixDriver(nil)}
+	accept := func(lo, hi string, inherent ...string) (riskMatrixClaim, string) {
+		fields := []arrow.Field{strField("id"), f64Field("p_lo"), f64Field("p_hi"), f64Field(lo), f64Field(hi)}
+		if len(inherent) > 0 {
+			fields = append(fields, f64Field("inherent_p_lo"), f64Field("inherent_p_hi"), f64Field(inherent[0]), f64Field(inherent[1]))
+		}
+		claim, reason := p.AcceptForChannel(chMain, kanbanSchema(fields...), sigNone())
+		if reason != "" {
+			return riskMatrixClaim{}, reason
+		}
+		return claim.(riskMatrixClaim), ""
+	}
+
+	k, reason := accept("impact_lo", "impact_hi")
+	require.Empty(t, reason)
+	assert.False(t, k.impact.declared())
+	assert.Nil(t, k.impact.format(), "no gloss: the widget's plain numbers, and no currency")
+
+	eur := "@gloss/money;unit=EUR"
+	k, reason = accept("impact_lo"+eur, "impact_hi"+eur, "inherent_impact_lo"+eur, "inherent_impact_hi"+eur)
+	require.Empty(t, reason)
+	assert.Equal(t, "EUR", k.impact.unit)
+	assert.Equal(t, "€2.5m", k.impact.format()(2.5e6))
+
+	k, reason = accept("impact_lo@gloss/duration;unit=h", "impact_hi@gloss/duration;unit=h")
+	require.Empty(t, reason, "any quantity with a unit")
+	assert.Equal(t, "1d 1h 00m", k.impact.format()(25))
+	k, reason = accept("impact_lo@gloss/length;unit=km", "impact_hi@gloss/length;unit=km;show=km")
+	require.Empty(t, reason, "show= is how it reads, not what it holds")
+	assert.Equal(t, "km", k.impact.unit)
+
+	_, reason = accept("impact_lo"+eur, "impact_hi@gloss/money;unit=USD")
+	assert.Contains(t, reason, "`impact_lo` has gloss/money;unit=EUR")
+	assert.Contains(t, reason, "`impact_hi` has gloss/money;unit=USD")
+	_, reason = accept("impact_lo"+eur, "impact_hi")
+	assert.Contains(t, reason, "`impact_hi` has no unit", "one column naming a unit does not name it for the rest")
+	_, reason = accept("impact_lo"+eur, "impact_hi"+eur, "inherent_impact_lo@gloss/money;unit=GBP", "inherent_impact_hi@gloss/money;unit=GBP")
+	assert.Contains(t, reason, "`inherent_impact_lo` has gloss/money;unit=GBP")
+
+	_, reason = accept("impact_lo@gloss/money;unit=eur", "impact_hi@gloss/money;unit=eur")
+	assert.Contains(t, reason, "does not bind")
+	assert.Contains(t, reason, "upper case: EUR", "the catalog's own reason comes through")
+	_, reason = accept("impact_lo@gloss/epoch", "impact_hi@gloss/epoch")
+	assert.Contains(t, reason, "a moment")
+
+	k, reason = accept("impact_lo@gloss/raw", "impact_hi@gloss/bytes")
+	require.Empty(t, reason, "a gloss with no unit parameter says nothing about a unit")
+	assert.False(t, k.impact.declared())
+}
+
+// The gloss's compact figure and the widget's are separate code, since neither
+// package may know the other; a pane showing one beside the other must not
+// disagree.
+func TestCompactFormattersAgree(t *testing.T) {
+	for _, v := range []float64{0, 0.1234, 1, 950, 1250, 999.6e3, 20e3, 2.5e6, 12.5e6, 3e9, -12e3} {
+		assert.Equal(t, riskmatrix.FormatCompact(v), gloss.FormatCompactAmount(v), "%v", v)
+	}
+}
+
+func TestRiskMatrixStatusNamesTheUnit(t *testing.T) {
+	d := NewRiskMatrixDriver(nil)
+	d.impact, _ = columnUnitOf(f64Field("impact_lo@gloss/money;unit=EUR"))
+	assert.Contains(t, d.statusLine(), "impact in EUR")
+	d.impact = columnUnit{}
+	assert.NotContains(t, d.statusLine(), "impact in")
+}
+
 func TestRiskMatrixFold(t *testing.T) {
 	nan := math.NaN()
 	rec := numRec(t,
@@ -129,6 +201,71 @@ func TestToleranceAcceptContract(t *testing.T) {
 	_, reason = p.AcceptForChannel(chMain, kanbanSchema(strField("service"), strField("tolerance_hours"),
 		strField("scenario"), f64Field("recovery_hours")), sigNone())
 	assert.Contains(t, reason, "number of hours")
+}
+
+// tolerance and recovery take any gloss/duration unit, each its own, and the
+// fold converts both to the widget's hours; what cannot be read as a span is
+// refused rather than read as hours.
+func TestToleranceTimeColumns(t *testing.T) {
+	p := tolerancePanel{driver: NewToleranceDriver(nil)}
+	accept := func(tol, rec string) (toleranceClaim, string) {
+		claim, reason := p.AcceptForChannel(chMain, kanbanSchema(strField("service"), f64Field(tol), strField("scenario"), f64Field(rec)), sigNone())
+		if reason != "" {
+			return toleranceClaim{}, reason
+		}
+		return claim.(toleranceClaim), ""
+	}
+	k, reason := accept("tolerance@gloss/duration;unit=h", "recovery@gloss/duration;unit=min")
+	require.Empty(t, reason, "two units of one quantity are converted")
+	assert.Equal(t, 1.0, k.toleranceToHours)
+	assert.InDelta(t, 1.0/60, k.recoveryToHours, 1e-12)
+	k, reason = accept("tolerance_hours", "recovery@gloss/duration;unit=s")
+	require.Empty(t, reason, "the shorthand beside the gloss form")
+	assert.Equal(t, 1.0, k.toleranceToHours)
+	assert.InDelta(t, 1.0/3600, k.recoveryToHours, 1e-12)
+	k, reason = accept("tolerance_hours@gloss/duration;unit=h", "recovery_hours")
+	require.Empty(t, reason, "a shorthand that also declares hours")
+	assert.Equal(t, 1.0, k.recoveryToHours)
+	_, reason = accept("tolerance_hours@gloss/raw", "recovery_hours")
+	assert.Empty(t, reason, "a gloss with no unit parameter does not contradict the name")
+
+	_, reason = accept("tolerance", "recovery@gloss/duration;unit=h")
+	assert.Contains(t, reason, "`tolerance` has no unit")
+	assert.Contains(t, reason, "`tolerance_hours`")
+	_, reason = accept("tolerance@gloss/duration;unit=h", "recovery")
+	assert.Contains(t, reason, "`recovery` has no unit")
+	_, reason = accept("tolerance@gloss/money;unit=EUR", "recovery@gloss/duration;unit=h")
+	assert.Contains(t, reason, "must be a span of time")
+	assert.Contains(t, reason, "gloss/money;unit=EUR")
+	_, reason = accept("tolerance@gloss/duration", "recovery@gloss/duration;unit=h")
+	assert.Contains(t, reason, "does not bind")
+	_, reason = accept("tolerance_hours@gloss/duration;unit=min", "recovery_hours")
+	assert.Contains(t, reason, "says hours in its name")
+
+	_, reason = p.AcceptForChannel(chMain, kanbanSchema(strField("service"), f64Field("tolerance_hours"),
+		f64Field("tolerance@gloss/duration;unit=h"), strField("scenario"), f64Field("recovery_hours")), sigNone())
+	assert.Contains(t, reason, "Both `tolerance` and `tolerance_hours`")
+}
+
+func TestToleranceFoldConvertsUnits(t *testing.T) {
+	rec := numRec(t,
+		map[string][]string{"service": {"Payroll", "Payroll"}, "scenario": {"Outage", "Fire"}}, []string{"service", "scenario"},
+		map[string][]float64{
+			"tolerance@gloss/duration;unit=h":  {24, 24},
+			"recovery@gloss/duration;unit=min": {90, 1800},
+		}, []string{"tolerance@gloss/duration;unit=h", "recovery@gloss/duration;unit=min"},
+		false)
+	defer rec.Release()
+	d := NewToleranceDriver(nil)
+	claim, reason := tolerancePanel{driver: d}.AcceptForChannel(chMain, rec.Schema(), sigNone())
+	require.Empty(t, reason)
+	d.rebuild(rec, rec.Schema(), claim.(toleranceClaim))
+	m := d.model
+	require.NoError(t, m.Validate())
+	assert.Equal(t, []float64{24}, m.ToleranceHours)
+	assert.Equal(t, 1.5, m.Recovery(0, 0))
+	assert.Equal(t, 30.0, m.Recovery(0, 1))
+	assert.Contains(t, d.statusLine(), "1 breach under at least one scenario", "30 h is past 24 h though 1800 is a large number and 24 a small one")
 }
 
 func TestToleranceFold(t *testing.T) {

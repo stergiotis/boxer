@@ -649,3 +649,84 @@ The worked examples are the Snippets library's "Risk matrix" and "Impact
 tolerance" sections, inline `values()` rows of eight risks and of four
 services under three scenarios. `apps/play/scenes/38_risk_matrix.scene.md`
 and `38_impact_tolerance.scene.md` run them and capture each pane.
+
+### 2026-11-01 — the panes read units from glosses, and the matrix's shades are IDS-native
+
+The entry above assumed a unit on each side: the matrix formatted every amount
+in euros, and the tolerance columns baked hours into their names. Neither could
+be said from the SQL. [ADR-0186](./0186-play-gloss-catalog.md)'s glosses are how
+a column says what its numbers are, and it gains `gloss/money` for this.
+
+**A pane reads the declaration in the column's name**, the alias or the
+`gloss(…)` macro that writes one (`play_column_unit.go`). The rule route is not
+read, so a `-- play: gloss` line shows in Table and not here. These contracts
+already ask for one `AS` per column, which gives the declaration a place to go,
+and acceptance runs per frame without the buffer's directives to hand.
+
+**Risk matrix.** `impact_lo`, `impact_hi` and the two inherent impact columns
+may declare `gloss/money` or any quantity gloss with a `unit`. The widget knows
+no glosses: play passes `riskmatrix.Input.FormatImpact`, built from the gloss's
+inline face, and `ImpactUnit` for the axis title. Undeclared, the amounts are
+plain numbers; `FormatEuro` is gone and nothing assumes a currency. A
+disagreement among the columns is a rejection naming them, and that includes
+one column with a unit beside one without, for the reason a partial inherent
+rating is: a query saying it for three columns of four has a typo. A declaration
+the catalog refuses is rejected with the catalog's reason. `gloss/epoch` is
+rejected as a moment, and a gloss with no `unit` (`gloss/raw`, `gloss/bytes`)
+says nothing about one. The expected-loss shading multiplies a rate by an amount
+and so assumes a ratio scale; it is not meaningful for a temperature in °C.
+
+**Default impact bands follow the register.** Steps of five from 100k assumed
+money in the millions, and a register in hours fell wholly into the first band.
+A zero `Bands` now anchors the same steps on a power of ten centred on the
+geometric mean of the register's impact midpoints, and scales the shade edges
+with it, so the shading is the same at every scale. The worked example still
+lands on 100k. `DefaultBands` remains that fixed scale.
+
+**Impact tolerance.** The contract is `tolerance` and `recovery` carrying
+`gloss/duration`, each in any of its units, converted to the widget's hours for
+comparison; the axis labels each tick in the unit it reads best in, as before.
+`tolerance_hours` and `recovery_hours` stay as the shorthand for plain columns
+in hours. Different units on the two columns are one quantity and are converted,
+unlike the matrix's, where no factor exists between currencies. Rejected: a bare
+`tolerance`, a gloss that is not a span, a shorthand whose gloss says other than
+hours, and both spellings at once.
+
+**The shade classes resolve through the IDS, and their range is computed.** The
+per-theme `t` constants on Oslo are replaced by `selectRamp`, which measures the
+active LUT against the theme's canvas and the dot's ink. A class must sit between
+the canvas and the ink in lightness, keep ΔE 8 from the canvas and 3:1 from the
+dot, and rise in lightness and in distance from the canvas; among such sequences
+it takes the one whose least step, over normal sight and simulated
+deuteranopia, protanopia and tritanopia, is largest, the canvas counting as a
+step below the lowest class. ΔE 8 is four times OKLab's just-noticeable
+difference of about 2. `IDS_ACCESSIBILITY` and `IDS_PALETTE_SEQUENTIAL` apply,
+and Oslo remains the default with neither set, which departs from the IDS default
+of Batlow.
+
+Five classes, least adjacent OKLab ΔE; "any" is the smallest across the four
+visions:
+
+| arm | theme | normal | deut | prot | trit | any |
+| --- | --- | --- | --- | --- | --- | --- |
+| Oslo, the earlier constants | dark | 6.8 | 6.6 | 7.1 | 6.8 | 6.6 |
+| Oslo, computed | dark | 9.6 | 9.4 | 9.5 | 9.2 | 9.2 |
+| Batlow, computed | dark | 10.9 | 10.3 | 9.8 | 9.8 | 9.8 |
+| Oslo, the earlier constants | fresh | 8.3 | 8.6 | 7.5 | 8.4 | 7.5 |
+| Oslo, computed | fresh | 9.3 | 9.4 | 8.6 | 8.5 | 8.5 |
+| Batlow, computed | fresh | 10.4 | 10.1 | 9.0 | 8.7 | 8.7 |
+
+Batlow separates slightly better, and that is not what decided it. Its hue
+wanders with loss: on the light theme a dark teal-green tops an olive, a mustard
+and a peach, ΔE 9.5 from the theme's success colour, so the highest loss on the
+chart reads closest to "good". Oslo stays blue throughout, nearer the info colour
+(ΔE 7.3 at the top on the light theme), which the matrix does not use. Under
+either, the order is carried by lightness and by distance from the canvas, both
+of which rise class by class and survive dichromacy and greyscale; saturation
+does not, so `selectRamp` does not constrain it. Batlow stays one setting away.
+
+The dot holds 3:1 or more on every class by construction, which the label ink
+does not (2.5:1 at the lowest), so an id's label now has a chip in the canvas
+colour, as the dot has its ring. The inherent ring and arrow take the dot's ink
+for the same floor: the secondary ink they used has none, and on the light
+theme's top class it sat near 1:1.
