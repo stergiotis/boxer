@@ -146,8 +146,11 @@ type App struct {
 	// it reads the open windows instead; the frame writes both.
 	want        string
 	wantRunning bool
-	// wantGlobal asks the poller to re-read the window-wide tables.
-	wantGlobal bool
+	// wantGlobal asks the poller to re-read the window-wide tables, and
+	// retryGlobal to re-read those whose last read failed: a timeout under
+	// load must not leave a section empty until the person presses Refresh.
+	wantGlobal  bool
+	retryGlobal bool
 	snap       snapshot
 }
 
@@ -286,8 +289,8 @@ func (inst *App) poll() {
 // first so a page never renders against a list it has not seen.
 func (inst *App) refresh() {
 	inst.mu.Lock()
-	appId, wantRunning, wantGlobal := inst.want, inst.wantRunning, inst.wantGlobal
-	inst.wantGlobal = false
+	appId, wantRunning, wantGlobal, retryGlobal := inst.want, inst.wantRunning, inst.wantGlobal, inst.retryGlobal
+	inst.wantGlobal, inst.retryGlobal = false, false
 	g := inst.snap.global
 	p := inst.snap.page
 	rn := inst.snap.running
@@ -302,8 +305,8 @@ func (inst *App) refresh() {
 	}
 	ctx, cancel := context.WithTimeout(inst.appCtx, readTimeout)
 	defer cancel()
-	if wantGlobal {
-		g = readGlobal(ctx, inst.reader, g)
+	if wantGlobal || retryGlobal {
+		g = readGlobal(ctx, inst.reader, g, !wantGlobal)
 	}
 	switch {
 	case wantRunning:
@@ -327,6 +330,7 @@ func (inst *App) refresh() {
 	inst.snap.reads = true
 	inst.snap.lastError = ""
 	inst.snap.global = g
+	inst.retryGlobal = inst.retryGlobal || g.failed()
 	// The tab or the selection may have moved while the tables were read;
 	// land only what is still wanted, and let the next pass read the rest.
 	switch {
@@ -339,14 +343,30 @@ func (inst *App) refresh() {
 	}
 }
 
-// readGlobal reads the window-wide tables.
-func readGlobal(ctx context.Context, r readerI, g global) global {
-	readInto(ctx, r, tableApps, appsSql, "", &g.apps)
-	readInto(ctx, r, tableAdr, adrSql, "", &g.adrs)
-	readInto(ctx, r, tableCoderef, coderefSql, "", &g.coderefs)
-	readInto(ctx, r, tableCoverageStatus, coverageStatusSql, "", &g.coverage)
+// readGlobal reads the window-wide tables, or with failedOnly those whose
+// last read failed.
+func readGlobal(ctx context.Context, r readerI, g global, failedOnly bool) global {
+	if !failedOnly || g.apps.state == lensStateFailed {
+		readInto(ctx, r, tableApps, appsSql, "", &g.apps)
+	}
+	if !failedOnly || g.adrs.state == lensStateFailed {
+		readInto(ctx, r, tableAdr, adrSql, "", &g.adrs)
+	}
+	if !failedOnly || g.coderefs.state == lensStateFailed {
+		readInto(ctx, r, tableCoderef, coderefSql, "", &g.coderefs)
+	}
+	if !failedOnly || g.coverage.state == lensStateFailed {
+		readInto(ctx, r, tableCoverageStatus, coverageStatusSql, "", &g.coverage)
+	}
 	g.read = time.Now()
 	return g
+}
+
+// failed says whether a window-wide table's last read failed, which the
+// next tick retries; a refusal is an answer and is not retried.
+func (inst *global) failed() bool {
+	return inst.apps.state == lensStateFailed || inst.adrs.state == lensStateFailed ||
+		inst.coderefs.state == lensStateFailed || inst.coverage.state == lensStateFailed
 }
 
 // readPage reads one app's lenses, each bound to its id.

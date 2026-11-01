@@ -3,7 +3,7 @@ type: reference
 audience: contributor
 status: draft
 scene:
-  launch: app-sessions
+  launch: "subject_alias = 'app-sessions'"
   size: 1400x900
   requires: [clickhouse]
 ---

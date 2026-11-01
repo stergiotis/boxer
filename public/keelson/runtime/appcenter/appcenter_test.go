@@ -153,7 +153,7 @@ func TestEveryLensReadsOverTheBus(t *testing.T) {
 	r := newBusReader(bus.NewClient(AppId, manifest.Caps))
 	r.cli.Timeout = busReadBudget()
 	ctx := context.Background()
-	g := readGlobal(ctx, r, global{})
+	g := readGlobal(ctx, r, global{}, false)
 	for name, st := range map[string]struct {
 		s    lensStateE
 		note string
@@ -440,4 +440,30 @@ func TestSummarizeFrames(t *testing.T) {
 	assert.Equal(t, "420 µs", fmtUs(420))
 	assert.Equal(t, "1.50 ms", fmtUs(1500))
 	assert.Equal(t, "2.00 s", fmtUs(2_000_000))
+}
+
+// A window-wide table whose read failed is read again on the next pass, it
+// alone, until it answers; a refusal is an answer and is not retried.
+func TestAFailedWindowWideReadIsRetried(t *testing.T) {
+	fx := &fixtureReader{failed: map[string]bool{tableAdr: true}, refused: map[string]bool{tableCoverageStatus: true}}
+	inst := newApp()
+	inst.reader = fx
+	inst.appCtx, inst.cancelApp = context.WithCancel(context.Background())
+	t.Cleanup(inst.cancelApp)
+	inst.wantGlobal = true
+	inst.refresh()
+	assert.Equal(t, lensStateFailed, inst.snapshot().global.adrs.state)
+	assert.True(t, inst.retryGlobal)
+
+	fx.tables, fx.failed = nil, nil
+	inst.refresh()
+	assert.Contains(t, fx.tables, tableAdr)
+	assert.NotContains(t, fx.tables, tableApps, "a table that answered is not read again")
+	assert.NotContains(t, fx.tables, tableCoverageStatus, "nor one refused")
+	assert.Equal(t, lensStateOk, inst.snapshot().global.adrs.state)
+	assert.False(t, inst.retryGlobal)
+
+	fx.tables = nil
+	inst.refresh()
+	assert.NotContains(t, fx.tables, tableAdr, "nothing left to retry")
 }
