@@ -1,12 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-11-01
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to accepted
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-11-01
 ---
-
-> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
 
 # ADR-0354: Pausing a window — the host stops drawing it and asks the app to stop its work
 
@@ -155,9 +153,15 @@ the host.
 - **Resume on an agent's command.** Killed: it undoes the person's pause
   without asking.
 - **Unload: close keeping the working set, reopen on demand** (Chrome's
-  discarded tab). Frees memory, which pause does not. Deferred: it can
-  reuse SD1's empty state, but restoring through ADR-0148 rebuilds only
-  what an app's working set holds.
+  discarded tab). Frees memory, which pause does not. Deferred, for three
+  reasons found when it was costed (2026-11-01): two apps keep a working
+  set (play and tally), so for every other app an unload loses what a
+  close loses; ADR-0148 keeps one record per app, under `default`, so two
+  unloaded windows of one app would overwrite each other; and memory is
+  not measurable per window (ADR-0351), so nothing could say what an
+  unload would free. For the two apps that keep one, closing and
+  reopening already restores the working set. Revisit when more apps keep
+  a working set and records are kept per window.
 
 ## Consequences
 
@@ -207,7 +211,7 @@ the host.
 
 ## Status
 
-Proposed — awaiting review.
+Accepted 2026-11-01, with M1 to M3 implemented.
 
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers (Tier 1 in-place / Tier 2 dated `## Updates` entry / Tier 3 new superseding ADR).
