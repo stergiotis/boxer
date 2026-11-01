@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/stergiotis/boxer/public/keelson/runtime/bgjob"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/recordtable"
 )
 
@@ -131,8 +132,8 @@ func TestListRunning(t *testing.T) {
 	assert.False(t, out.Truncated)
 
 	many := runningView{rows: make([]runningRow, runningListed+1)}
-	assert.True(t, runningResult(many, time.Now()).Truncated)
-	assert.Len(t, runningResult(many, time.Now()).Windows, runningListed)
+	assert.True(t, runningResult(many, time.Now(), nil, bgjob.Snapshot{}).Truncated)
+	assert.Len(t, runningResult(many, time.Now(), nil, bgjob.Snapshot{}).Windows, runningListed)
 }
 
 func TestRunningFilterMatchesWindowsAndTheirTasks(t *testing.T) {
@@ -176,7 +177,8 @@ func TestRunningRecords(t *testing.T) {
 	v := assembleRunning(&w, &f, &tk)
 	var g runningGrids
 	defer g.release()
-	g.records(&running{view: v, read: time.Unix(1, 0)})
+	cx := &cellCtx{}
+	g.records(&running{view: v, read: time.Unix(1, 0)}, cx)
 	require.EqualValues(t, 3, g.windows.NumRows())
 	require.EqualValues(t, len(windowColumns), g.windows.NumCols())
 	assert.EqualValues(t, 2, g.unowned.NumRows())
@@ -184,10 +186,18 @@ func TestRunningRecords(t *testing.T) {
 	assert.Equal(t, "[9000 1200 -1]", g.windows.Column(p95).String())
 
 	first := g.windows
-	g.records(&running{view: v, read: time.Unix(1, 0)})
+	g.records(&running{view: v, read: time.Unix(1, 0)}, cx)
 	assert.Same(t, first, g.windows, "the same read keeps its record")
-	g.records(&running{view: v, read: time.Unix(2, 0)})
+	g.records(&running{view: v, read: time.Unix(2, 0)}, cx)
 	assert.NotSame(t, first, g.windows, "a new read rebuilds it")
+
+	second := g.windows
+	cx.cpu = &cpuMeasurement{at: time.Unix(3, 0), length: time.Second, open: map[uint64]bool{1: true, 2: true},
+		byWindow: map[uint64]time.Duration{2: 300 * time.Millisecond}}
+	g.records(&running{view: v, read: time.Unix(2, 0)}, cx)
+	assert.NotSame(t, second, g.windows, "a new measurement rebuilds it")
+	cpu := slices.IndexFunc(windowColumns, func(col gridColumn[runningRow]) bool { return col.header == "CPU" })
+	assert.Equal(t, "[300 0 -1]", g.windows.Column(cpu).String(), "per mille of one core; window 3 was not measured")
 
 	var sort recordtable.SortState
 	sort.ClickedFrom(p95, true)

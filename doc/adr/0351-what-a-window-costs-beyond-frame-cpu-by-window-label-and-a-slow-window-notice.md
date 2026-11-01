@@ -70,8 +70,12 @@ Every goroutine doing a window's work carries the pprof labels
 Attribution follows which goroutine started which, not causality. Two
 consequences:
 
-- **Unattributed:** what the host starts at boot — services' own loops,
-  timers, scrapers — and tasks no window owns. Their CPU appears as *host*.
+- **Unattributed:** the garbage collector's background workers, the render
+  loop's own work outside the windows (the chrome, the pipe to the client),
+  what the host starts at boot — services' own loops, timers, scrapers —
+  and tasks no window owns. Their CPU appears as *host*, which is not
+  small: a quarter to a third of a core on an otherwise quiet host with two
+  windows (a headless scene, 2026-11-01).
 - **Misattributed:** a shared service that starts a long-lived goroutine
   lazily, inside a window's work, would carry that window's labels for the
   goroutine's whole life. Such a goroutine clears its labels where it
@@ -79,7 +83,10 @@ consequences:
   (reviewed 2026-11-01), one fit: `procpool`'s refill and watchdog loops,
   which `chlocalbroker` starts when a pool's first request arrives.
   Short-lived goroutines a service starts per request stay with the
-  requesting window, which is where their cost belongs.
+  requesting window, which is where their cost belongs. Not cleared: the
+  standard library's HTTP client starts a connection's read and write
+  loops under the labels of the request that dialled it, so a connection
+  reused by another window's request is charged to the first.
 
 ### SD2 — `pprofarrow` keeps labels
 
@@ -92,10 +99,11 @@ totals over more rows.
 The Running tab offers **Measure CPU**, which runs a CPU profile for five
 seconds as a task of the app center and fills a **CPU** column: each
 window's sampled CPU time over the measurement's length, as a share of one
-core. Samples without a window label are summed into a *host* line under the
-grid, and samples of windows that closed meanwhile into *closed windows*.
-The column header says when the measurement was taken; the values stay until
-the next one, so a stale figure looks stale rather than current.
+core. A line under the window count says when the measurement ended and how
+long it sampled, the whole process's share, and the *host*'s — samples
+without a window label — and, once a measured window has closed, the
+*closed windows*'. A window opened after the measurement started reads
+"—", not 0. The values stay until the next measurement.
 
 A process has one CPU profiler. If another profile runs — imzrt's Profiles
 tab, `--pprofCpuOutputFile` — the measurement fails and says so.
@@ -104,18 +112,21 @@ tab, `--pprofCpuOutputFile` — the measurement fails and says so.
 
 The measurement's profile is published as an ad-hoc dataset under its own
 alias, `pprof_running_cpu`, so it does not replace imzrt's `pprof_cpu`. An
-**Explore** button beside Measure CPU opens play on it, where
-`labels['boxer.window']` narrows the stacks to one window. That is the
-survey's "profile this unit" without a per-row button, which ADR-0348 §SD4
-rules out for the tab.
+**Explore** button beside Measure CPU opens play on it in the icicle panel;
+when the filter shows exactly one window, the statement is narrowed to it by
+`labels['boxer.window']`. That is the survey's "profile this unit" without a
+per-row button, which ADR-0348 §SD4 rules out for the tab.
 
 ### SD5 — Agents may measure
 
 The catalog (ADR-0348 §SD5) gains a command `measure_cpu` with a duration
 of one to thirty seconds, five by default, effect *view*, open to agents:
-it changes no state the person owns. `list_running` gains a CPU column and
-the measurement's time. One measurement runs at a time; a second request
-while one runs is refused.
+it changes no state the person owns. `list_running` gains each window's
+share, and what the last measurement covered: when it ended, how long it
+sampled, the whole process's, the host's and closed windows' shares, and
+the profile's alias. One measurement runs at a time per window; a second
+request while one runs is refused, and one in another window fails on the
+profiler.
 
 ### SD6 — A slow-window notice
 
@@ -145,11 +156,12 @@ raised it, which defeats a notice meant to arrive unasked.
 
 | Surface | Change |
 | --- | --- |
-| Window host | labels around `Mount` and `Frame`; the slow-window watcher; `slowFrameUs` moves here |
+| Window host | labels around `Mount`, `Frame` and `Unmount`; the slow-window watcher; `slowFrameUs` moves here |
 | `task`, `bgjob` | work runs under the owner's labels |
+| `procpool` | its shared loops clear inherited labels |
 | `pprofarrow` | `labels` column |
-| App center Running tab | Measure CPU, CPU column, host and closed-window lines, Explore |
-| App center catalog | `measure_cpu`; CPU in `list_running` |
+| App center Running tab | Measure CPU, CPU column, the measurement's line, Explore |
+| App center | `measure_cpu`; CPU in `list_running`; caps to spawn tasks and publish datasets |
 | `appcenter/launchcfg` | `AppCenterLaunch.Filter` (regenerated) |
 | Attention | kind `window.slow`; a host-side notify for a window source |
 

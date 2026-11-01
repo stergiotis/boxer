@@ -12,6 +12,7 @@ import (
 
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
+	"github.com/stergiotis/boxer/public/keelson/runtime/bgjob"
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
 	"github.com/stergiotis/boxer/public/keelson/runtime/widgethandle"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
@@ -40,8 +41,9 @@ const (
 type runningGrids struct {
 	widths     *colwidth.Resolver
 	widthsInit bool
-	// at is the read the records were built from.
+	// at is the read the records were built from, cpuAt the measurement.
 	at          time.Time
+	cpuAt       time.Time
 	windows     arrow.RecordBatch
 	unowned     arrow.RecordBatch
 	windowsGrid recordtable.State
@@ -53,15 +55,20 @@ type runningGrids struct {
 	unownedShown []int64
 }
 
-// records builds the grids' records from rn, once per read.
-func (inst *runningGrids) records(rn *running) {
-	if inst.windows != nil && inst.at.Equal(rn.read) {
+// records builds the grids' records from rn, once per read and per CPU
+// measurement.
+func (inst *runningGrids) records(rn *running, cx *cellCtx) {
+	var cpuAt time.Time
+	if cx.cpu != nil {
+		cpuAt = cx.cpu.at
+	}
+	if inst.windows != nil && inst.at.Equal(rn.read) && inst.cpuAt.Equal(cpuAt) {
 		return
 	}
 	inst.release()
-	inst.windows = gridRecord(windowColumns, rn.view.rows)
-	inst.unowned = gridRecord(unownedColumns, rn.view.unowned)
-	inst.at = rn.read
+	inst.windows = gridRecord(windowColumns, rn.view.rows, cx)
+	inst.unowned = gridRecord(unownedColumns, rn.view.unowned, cx)
+	inst.at, inst.cpuAt = rn.read, cpuAt
 }
 
 func (inst *runningGrids) release() {
@@ -111,16 +118,20 @@ type cellCtx struct {
 	loopP50Us int64
 	now       time.Time
 	closing   map[uint64]bool
+	// cpu is the last CPU measurement, nil before one (ADR-0351 §SD3).
+	cpu *cpuMeasurement
 }
 
 // gridColumn is one column of a list of T: its header, its sort key — a
-// string or a number, never both — and its cell.
+// string or a number, never both — and its cell. A sort key reads the cell
+// context only for what the record is rebuilt on: the read and the CPU
+// measurement.
 type gridColumn[T any] struct {
 	header string
 	hover  string
 	width  float32
-	str    func(r *T) string
-	num    func(r *T) int64
+	str    func(r *T, cx *cellCtx) string
+	num    func(r *T, cx *cellCtx) int64
 	cell   func(r *T, cx *cellCtx) recordtable.Cell
 }
 
@@ -140,14 +151,14 @@ func textCell(text string) recordtable.Cell { return recordtable.Cell{Text: text
 
 var windowColumns = []gridColumn[runningRow]{
 	{header: "app", width: 130, hover: "the app the window runs; a click opens its page under Apps",
-		str: rowName,
+		str: func(r *runningRow, _ *cellCtx) string { return rowName(r) },
 		cell: func(r *runningRow, _ *cellCtx) recordtable.Cell {
 			cl := textCell(rowName(r))
 			cl.Hover = r.appId
 			return cl
 		}},
 	{header: "window", width: 200, hover: "the window's title",
-		str: func(r *runningRow) string { return r.title },
+		str: func(r *runningRow, _ *cellCtx) string { return r.title },
 		cell: func(r *runningRow, cx *cellCtx) recordtable.Cell {
 			if cx.closing[r.key] {
 				cl := textCell(r.title + "  (closing)")
@@ -160,7 +171,7 @@ var windowColumns = []gridColumn[runningRow]{
 			return textCell(r.title)
 		}},
 	{header: "p50", width: 72, hover: "median wall time of the window's Frame on the render goroutine",
-		num: func(r *runningRow) int64 { return sampledOr(r, r.p50Us) },
+		num: func(r *runningRow, _ *cellCtx) int64 { return sampledOr(r, r.p50Us) },
 		cell: func(r *runningRow, _ *cellCtx) recordtable.Cell {
 			if !r.sampled {
 				return weakCell("no frames")
@@ -168,7 +179,7 @@ var windowColumns = []gridColumn[runningRow]{
 			return recordtable.Cell{Text: fmtUs(r.p50Us)}
 		}},
 	{header: "p95", width: 72, hover: "95th percentile of the same; slow ones are toned",
-		num: func(r *runningRow) int64 { return sampledOr(r, r.p95Us) },
+		num: func(r *runningRow, _ *cellCtx) int64 { return sampledOr(r, r.p95Us) },
 		cell: func(r *runningRow, _ *cellCtx) recordtable.Cell {
 			if !r.sampled {
 				return weakCell("")
@@ -180,15 +191,30 @@ var windowColumns = []gridColumn[runningRow]{
 			return cl
 		}},
 	{header: "of loop", width: 64, hover: "p50 as a share of the render loop's median period",
-		num: func(r *runningRow) int64 { return sampledOr(r, r.p50Us) },
+		num: func(r *runningRow, _ *cellCtx) int64 { return sampledOr(r, r.p50Us) },
 		cell: func(r *runningRow, cx *cellCtx) recordtable.Cell {
 			if !r.sampled || cx.loopP50Us <= 0 {
 				return weakCell("—")
 			}
 			return recordtable.Cell{Text: fmt.Sprintf("%.0f%%", 100*float64(r.p50Us)/float64(cx.loopP50Us))}
 		}},
+	{header: "CPU", width: 72, hover: "share of one core the window's goroutines used during the last Measure CPU, its tasks' included; — before one, or for a window opened since",
+		num: func(r *runningRow, cx *cellCtx) int64 {
+			pct, ok := cx.cpu.windowShare(r.key)
+			if !ok {
+				return unsampled
+			}
+			return int64(math.Round(pct * 10))
+		},
+		cell: func(r *runningRow, cx *cellCtx) recordtable.Cell {
+			pct, ok := cx.cpu.windowShare(r.key)
+			if !ok {
+				return weakCell("—")
+			}
+			return recordtable.Cell{Text: fmtPct(pct)}
+		}},
 	{header: "messages", width: 72, hover: "FFFI messages per Frame, on average",
-		num: func(r *runningRow) int64 { return sampledOr(r, int64(math.Round(r.messages))) },
+		num: func(r *runningRow, _ *cellCtx) int64 { return sampledOr(r, int64(math.Round(r.messages))) },
 		cell: func(r *runningRow, _ *cellCtx) recordtable.Cell {
 			if !r.sampled {
 				return weakCell("")
@@ -196,10 +222,10 @@ var windowColumns = []gridColumn[runningRow]{
 			return recordtable.Cell{Text: fmt.Sprintf("%.0f", r.messages)}
 		}},
 	{header: "tasks", width: 56, hover: "tasks in flight the window registered with the task API, a lower bound of its background work",
-		num:  func(r *runningRow) int64 { return int64(r.tasks) },
+		num:  func(r *runningRow, _ *cellCtx) int64 { return int64(r.tasks) },
 		cell: func(r *runningRow, _ *cellCtx) recordtable.Cell { return recordtable.Cell{Text: fmt.Sprint(r.tasks)} }},
 	{header: "oldest task", width: 220, hover: "the first of its tasks to start, and how long ago",
-		str: func(r *runningRow) string { return r.oldestCreateAt },
+		str: func(r *runningRow, _ *cellCtx) string { return r.oldestCreateAt },
 		cell: func(r *runningRow, cx *cellCtx) recordtable.Cell {
 			if r.tasks == 0 {
 				return weakCell("—")
@@ -207,7 +233,7 @@ var windowColumns = []gridColumn[runningRow]{
 			return textCell(r.oldestTitle + ", " + ageOf(r.oldestCreateAt, cx.now))
 		}},
 	{header: "agent tasks", width: 80, hover: "the agent tasks whose grant holds the window",
-		num: func(r *runningRow) int64 { return int64(len(r.agentTasks)) },
+		num: func(r *runningRow, _ *cellCtx) int64 { return int64(len(r.agentTasks)) },
 		cell: func(r *runningRow, _ *cellCtx) recordtable.Cell {
 			if len(r.agentTasks) == 0 {
 				return weakCell("—")
@@ -218,26 +244,26 @@ var windowColumns = []gridColumn[runningRow]{
 
 var unownedColumns = []gridColumn[unownedTask]{
 	{header: "task", width: 220, hover: "the task's title",
-		str:  func(u *unownedTask) string { return u.title },
+		str:  func(u *unownedTask, _ *cellCtx) string { return u.title },
 		cell: func(u *unownedTask, _ *cellCtx) recordtable.Cell { return textCell(u.title) }},
 	{header: "kind", width: 120, hover: "the task's kind",
-		str:  func(u *unownedTask) string { return u.kind },
+		str:  func(u *unownedTask, _ *cellCtx) string { return u.kind },
 		cell: func(u *unownedTask, _ *cellCtx) recordtable.Cell { return textCell(u.kind) }},
 	{header: "state", width: 90, hover: "running, cancelling or abandoned",
-		str:  func(u *unownedTask) string { return u.state },
+		str:  func(u *unownedTask, _ *cellCtx) string { return u.state },
 		cell: func(u *unownedTask, _ *cellCtx) recordtable.Cell { return textCell(u.state) }},
 	{header: "owner", width: 120, hover: "the app that started it; empty for a runtime service",
-		str: func(u *unownedTask) string { return u.ownerAppId },
+		str: func(u *unownedTask, _ *cellCtx) string { return u.ownerAppId },
 		cell: func(u *unownedTask, _ *cellCtx) recordtable.Cell {
 			cl := textCell(shortApp(u.ownerAppId))
 			cl.Hover = u.ownerAppId
 			return cl
 		}},
 	{header: "window", width: 80, hover: "the closed window that started it; — for none",
-		num:  func(u *unownedTask) int64 { return int64(u.ownerKey) },
+		num:  func(u *unownedTask, _ *cellCtx) int64 { return int64(u.ownerKey) },
 		cell: func(u *unownedTask, _ *cellCtx) recordtable.Cell { return recordtable.Cell{Text: windowOf(u.ownerKey)} }},
 	{header: "age", width: 80, hover: "how long ago it started",
-		str: func(u *unownedTask) string { return u.createdAt },
+		str: func(u *unownedTask, _ *cellCtx) string { return u.createdAt },
 		cell: func(u *unownedTask, cx *cellCtx) recordtable.Cell {
 			return recordtable.Cell{Text: ageOf(u.createdAt, cx.now)}
 		}},
@@ -245,7 +271,7 @@ var unownedColumns = []gridColumn[unownedTask]{
 
 // gridRecord holds rows' sort keys as a record, row i being rows[i]; one
 // field per column, named by its header.
-func gridRecord[T any](cols []gridColumn[T], rows []T) (rec arrow.RecordBatch) {
+func gridRecord[T any](cols []gridColumn[T], rows []T, cx *cellCtx) (rec arrow.RecordBatch) {
 	mem := memory.DefaultAllocator
 	fields := make([]arrow.Field, 0, len(cols))
 	arrs := make([]arrow.Array, 0, len(cols))
@@ -253,7 +279,7 @@ func gridRecord[T any](cols []gridColumn[T], rows []T) (rec arrow.RecordBatch) {
 		if col.num != nil {
 			b := array.NewInt64Builder(mem)
 			for i := range rows {
-				b.Append(col.num(&rows[i]))
+				b.Append(col.num(&rows[i], cx))
 			}
 			arrs = append(arrs, b.NewArray())
 			b.Release()
@@ -262,7 +288,7 @@ func gridRecord[T any](cols []gridColumn[T], rows []T) (rec arrow.RecordBatch) {
 		}
 		b := array.NewStringBuilder(mem)
 		for i := range rows {
-			b.Append(col.str(&rows[i]))
+			b.Append(col.str(&rows[i], cx))
 		}
 		arrs = append(arrs, b.NewArray())
 		b.Release()
@@ -344,10 +370,10 @@ func (inst *App) renderRunningTab(snap snapshot) {
 	v := &rn.view
 	g := &inst.running
 	f := filterFold(inst.runFilter)
-	cx := &cellCtx{loopP50Us: v.loopP50Us, now: time.Now(), closing: inst.closing}
+	cx := &cellCtx{loopP50Us: v.loopP50Us, now: time.Now(), closing: inst.closing, cpu: inst.cpu.last}
 	read := !rn.read.IsZero()
 	if read {
-		g.records(rn)
+		g.records(rn, cx)
 		inst.pruneClosing(v)
 		g.windowsShown = shownOrder(g.windowsSort.OrderFor(g.windows, g.windows.NumRows()), len(v.rows),
 			func(i int64) bool { return windowMatches(&v.rows[i], f) }, g.windowsShown)
@@ -369,7 +395,8 @@ func (inst *App) renderRunning(rn *running, cx *cellCtx) {
 	g := &inst.running
 	weak("Every open window of this host. Frame time is the window's Frame on the render goroutine, " +
 		"which every window shares; tasks are the ones the window registered with the task API, so the count is a lower bound. " +
-		"The apps share one process, so memory and CPU are not shown per window: imztop shows the process's.")
+		"Measure CPU samples the process for a few seconds and splits it by the window each goroutine works for. " +
+		"The apps share one heap, so memory is not shown per window: imztop shows the process's.")
 	c.AddSpace(styletokens.PaddingInner(inst.density))
 	h := hostOf()
 	for range c.HorizontalTop().KeepIter() {
@@ -384,6 +411,7 @@ func (inst *App) renderRunning(rn *running, cx *cellCtx) {
 		if h != nil && !rn.read.IsZero() {
 			inst.renderCloseAll(h, v)
 		}
+		inst.renderMeasureCpu(v)
 	}
 	if rn.read.IsZero() {
 		c.Label("Reading…").Send()
@@ -403,6 +431,7 @@ func (inst *App) renderRunning(rn *running, cx *cellCtx) {
 		head += " The render loop's median period is " + fmtUs(v.loopP50Us) + "."
 	}
 	c.Label(head).Send()
+	inst.renderCpuLine(v)
 	res := recordtable.RenderGrid(recordtable.Input{
 		Ids: inst.ids, ScopeKey: runningWindowsTag, TableTag: runningWindowsTag,
 		Record: g.windows, Columns: gridColumns(windowColumns, v.rows, cx),
@@ -439,6 +468,60 @@ func (inst *App) renderCloseAll(h HostI, v *runningView) {
 		}
 	}
 }
+
+// renderMeasureCpu is Measure CPU, and Explore once a measurement's profile
+// is published (ADR-0351 §SD3, §SD4).
+func (inst *App) renderMeasureCpu(v *runningView) {
+	measuring := inst.cpu.job.Snapshot().State == bgjob.StateRunning
+	text := icons.PhCpu + " Measure CPU"
+	if measuring {
+		text = icons.PhCpu + " Measuring CPU…"
+	}
+	for range c.EnabledUi(!measuring).KeepIter() {
+		for range c.HoverText(fmt.Sprintf("Samples the process for %d s and splits the CPU by the window each goroutine works for", cpuDefaultSeconds)).KeepIter() {
+			if c.Button(inst.ids.PrepareStr("cpu-measure"), c.Atoms().Text(text).Keep()).SendResp().HasPrimaryClicked() {
+				inst.measureCpuGesture()
+			}
+		}
+	}
+	if m := inst.cpu.last; m == nil || !m.published {
+		return
+	}
+	key, hover := uint64(0), "Opens the measurement's profile in play"
+	if g := inst.running.windowsShown; len(g) == 1 && g[0] < int64(len(v.rows)) {
+		key, hover = v.rows[g[0]].key, "Opens the measurement's profile in play, narrowed to the one window the filter shows"
+	}
+	for range c.HoverText(hover).KeepIter() {
+		if c.Button(inst.ids.PrepareStr("cpu-explore"), c.Atoms().Text(icons.PhFlame+" Explore").Keep()).SendResp().HasPrimaryClicked() {
+			inst.exploreCpu(key)
+		}
+	}
+}
+
+// renderCpuLine says what the CPU column was measured over, and what no open
+// window accounts for.
+func (inst *App) renderCpuLine(v *runningView) {
+	if s := inst.cpu.job.Snapshot(); s.State == bgjob.StateFailed && s.Err != nil {
+		c.Label("Measure CPU failed: " + s.Err.Error()).Send()
+	}
+	m := inst.cpu.last
+	if m == nil {
+		return
+	}
+	line := fmt.Sprintf("CPU over %.0f s, ended %s: all %s, host %s", m.length.Seconds(), m.at.Format("15:04:05"),
+		fmtPct(m.share(m.total)), fmtPct(m.share(m.host)))
+	if cl := m.closed(v); cl > 0 {
+		line += ", closed windows " + fmtPct(m.share(cl))
+	}
+	line += " of one core."
+	if m.publishErr != "" {
+		line += " Explore is unavailable: " + m.publishErr
+	}
+	weak(line)
+}
+
+// fmtPct is a share of one core.
+func fmtPct(pct float64) string { return fmt.Sprintf("%.1f%%", pct) }
 
 // closeCount is the confirm button's label.
 func closeCount(n int) string {

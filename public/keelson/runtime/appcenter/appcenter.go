@@ -26,6 +26,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect/providers"
 	"github.com/stergiotis/boxer/public/keelson/runtime/llm"
+	"github.com/stergiotis/boxer/public/keelson/runtime/task"
 	"github.com/stergiotis/boxer/public/keelson/runtime/watchbill"
 	"github.com/stergiotis/boxer/public/keelson/runtime/widgethandle"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
@@ -120,6 +121,10 @@ type App struct {
 	closeArmedFilter string
 	closing          map[uint64]bool
 	selfKey          uint64
+	// Measure CPU (appcenter_cpu.go, ADR-0351): the measurement in flight
+	// and the last one taken, as a task of this window.
+	cpu   cpuState
+	tasks task.TaskApiI
 
 	// Operations state (appcenter_ops.go, ADR-0345). frameCtx is the current
 	// frame's context, through which a row click routes as a gesture;
@@ -156,6 +161,7 @@ func (inst *App) Mount(ctx app.MountContextI) (err error) {
 	inst.logger = ctx.Log()
 	inst.bus = ctx.Bus()
 	inst.selfKey = ctx.InstanceKey()
+	inst.tasks = task.ForApp(ctx)
 	if inst.reader == nil {
 		// A test sets its own reader before Mount.
 		if r := newBusReader(inst.bus); r != nil {
@@ -185,6 +191,7 @@ func (inst *App) Unmount(ctx app.MountContextI) (err error) {
 	if inst.cancelApp != nil {
 		inst.cancelApp()
 	}
+	inst.cpu.job.Cancel()
 	inst.wg.Wait()
 	inst.running.release()
 	return
@@ -194,6 +201,7 @@ func (inst *App) Frame(ctx app.FrameContextI) (err error) {
 	inst.density = styletokens.ActiveDensity()
 	inst.frameCtx = ctx
 	inst.ensureWidths(ctx)
+	inst.syncCpu()
 	inst.render()
 	return
 }
