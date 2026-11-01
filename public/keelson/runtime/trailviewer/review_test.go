@@ -63,10 +63,21 @@ func TestMarkRowIsConsequentialAndPersonOnly(t *testing.T) {
 	assert.Equal(t, app.OperationEffectConsequential, spec.Effect)
 	assert.False(t, spec.Agents, "review is the person's act")
 	assert.NotEmpty(t, spec.Gesture)
+	// Every other command is view, but the saved views (authored state,
+	// document) and the export (outside the app, consequential and
+	// confirmed by the person; ADR-0350 §SD8).
+	effects := map[string]app.OperationEffectE{opMarkRow: app.OperationEffectConsequential, opSendToPlay: app.OperationEffectConsequential,
+		opSaveView: app.OperationEffectDocument, opDeleteView: app.OperationEffectDocument}
 	for _, o := range manifest.Operations.Operations {
-		if o.Class == app.OperationClassCommand && o.Name != opMarkRow {
-			assert.Equal(t, app.OperationEffectView, o.Effect, "%s: mark_row is the one command that is not view", o.Name)
+		if o.Class != app.OperationClassCommand {
+			continue
 		}
+		want, named := effects[o.Name]
+		if !named {
+			want = app.OperationEffectView
+		}
+		assert.Equal(t, want, o.Effect, o.Name)
+		assert.Equal(t, o.Name != opMarkRow, o.Agents, "%s: mark_row is the one command agents are not offered", o.Name)
 	}
 }
 

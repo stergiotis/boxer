@@ -139,6 +139,11 @@ type treeView struct {
 	tr    trailTree
 	state tree.State
 	paneH float32
+	// expanded is the tree resource's value: what the last Expand all,
+	// Collapse all or set_tree set, or how the tree opened. The widget's
+	// expansion is per node and a click moves one node, so this is the
+	// last command's value, not a reading of every node.
+	expanded bool
 	// selId is the selection last projected onto the tree, and selFound
 	// whether the tree then held its node.
 	selId    uint64
@@ -158,7 +163,8 @@ func (inst *treeView) ensure(rows []Row, gen uint64) *trailTree {
 	first := !inst.built
 	inst.tr, inst.gen, inst.built = buildTree(rows), gen, true
 	if first {
-		inst.state.SetDefaultExpanded(len(rows) <= treeExpandAll)
+		inst.expanded = len(rows) <= treeExpandAll
+		inst.state.SetDefaultExpanded(inst.expanded)
 	}
 	// Node indexes written before the next render mean this build's nodes.
 	inst.state.Bind(inst.tr.t)
@@ -186,6 +192,22 @@ func (inst *treeView) project(selId uint64) {
 	}
 }
 
+// applyTree expands or collapses every node; Expand all, Collapse all and
+// set_tree all land here.
+func (inst *App) applyTree(expanded bool) {
+	tv := &inst.treeV
+	tv.expanded = expanded
+	if expanded {
+		tv.state.ExpandAll()
+	} else {
+		tv.state.CollapseAll()
+	}
+}
+
+func (inst *App) setTreeGesture(expanded bool) {
+	gestureOr(inst, opSetTree, SetTreeArgs{Expanded: expanded}, func() { inst.applyTree(expanded) })
+}
+
 // renderTree is the tree tab: its line, Expand all and Collapse all, and the
 // outline with headline, elapsed-ms, status and kind.
 func (inst *App) renderTree() {
@@ -203,10 +225,10 @@ func (inst *App) renderTree() {
 		c.Label(tr.line()).Send()
 		c.AddSpace(styletokens.GapPanels(inst.density))
 		if c.Button(inst.ids.PrepareStr("tree-expand"), c.Atoms().Text("Expand all").Keep()).SendResp().HasPrimaryClicked() {
-			tv.state.ExpandAll()
+			inst.setTreeGesture(true)
 		}
 		if c.Button(inst.ids.PrepareStr("tree-collapse"), c.Atoms().Text("Collapse all").Keep()).SendResp().HasPrimaryClicked() {
-			tv.state.CollapseAll()
+			inst.setTreeGesture(false)
 		}
 	}
 	tv.project(inst.selectionId())

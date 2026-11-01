@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"iter"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -143,26 +144,45 @@ func refusal(err error) (r *app.OperationRefusal) {
 	return
 }
 
+// allOps is every operation agents are offered; mark_row is the one they
+// are not (review_test.go).
 var allOps = []string{opListRows, opGetRow, opGetPrevious, opGetVerdict, opGetView, opGetExc, opGetTree, opGetDayHour, opGetSeries,
-	opSetCase, opSetRange, opSetFilter, opSelectRow, opSetTab, opSetSeries}
+	opGetFacets, opGetStrip, opGetContext, opGetCompare, opGetMatrix, opGetDotted,
+	opSetCase, opSetRange, opSetFilter, opSelectRow, opSetTab, opSetSeries, opSetStrip, opSetGrouping, opSetCompare, opSetMatrix, opSetDotted,
+	opSetSide, opSetTree, opRefresh, opOpenView, opSaveView, opDeleteView, opSendToPlay}
 
 func TestOperationsCatalogRegisters(t *testing.T) {
 	require.NoError(t, manifest.Operations.Validate())
 	m, ok := app.LookupManifest(manifest.Id)
 	require.True(t, ok)
 	require.NotNil(t, m.Operations, app.DefaultRegistry.OperationsDiagnostic(manifest.Id))
+	names := make([]string, 0, len(m.Operations.Operations))
+	for _, o := range m.Operations.Operations {
+		names = append(names, o.Name)
+	}
+	assert.ElementsMatch(t, append(slices.Clone(allOps), opMarkRow), names, "allOps lists every operation")
 	for _, name := range allOps {
 		spec, found := m.Operations.Lookup(name)
 		require.True(t, found, name)
 		assert.True(t, spec.Agents, name)
 		if spec.Class == app.OperationClassCommand {
-			assert.Equal(t, app.OperationEffectView, spec.Effect, name)
+			switch name {
+			case opSaveView, opDeleteView:
+				assert.Equal(t, app.OperationEffectDocument, spec.Effect, name)
+			case opSendToPlay:
+				assert.Equal(t, app.OperationEffectConsequential, spec.Effect, name)
+			default:
+				assert.Equal(t, app.OperationEffectView, spec.Effect, name)
+			}
+			assert.NotEmpty(t, spec.Gesture, "%s: every command is a control's", name)
 		}
 	}
-	for _, name := range []string{opListRows, opGetRow, opGetPrevious, opGetView, opGetExc, opGetTree} {
+	for _, name := range []string{opListRows, opGetRow, opGetPrevious, opGetView, opGetExc, opGetTree, opGetFacets, opGetStrip, opGetContext, opGetCompare, opGetMatrix, opGetDotted} {
 		spec, _ := m.Operations.Lookup(name)
 		assert.True(t, spec.Untrusted, "%s returns row text", name)
 	}
+	assert.ElementsMatch(t, []string{resCase, resRange, resFilter, resSelection, resTab, resSeries, resStrip, resGrouping, resCompare, resMatrix, resDotted,
+		resSide, resTree, resRead, resViews}, ops.ResourceNames())
 }
 
 func listArgs(inst *App) ListRowsArgs {
@@ -474,7 +494,7 @@ func TestWithoutAPersistedTrailListRowsSaysWhy(t *testing.T) {
 	inst.tick(time.Now())
 	assert.False(t, inst.cache.runner.Running(), "nothing is read")
 	snap := inst.Operations().Snapshot()
-	for _, name := range []string{opGetRow, opGetPrevious, opSelectRow} {
+	for _, name := range []string{opGetRow, opGetPrevious, opSelectRow, opGetContext, opGetCompare, opSetCompare} {
 		ok, reason := snap.Available(name)
 		assert.False(t, ok, name)
 		assert.Equal(t, notPersistedReason(src), reason)

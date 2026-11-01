@@ -9,6 +9,7 @@ import (
 	playlaunch "github.com/stergiotis/boxer/apps/play/launchcfg"
 	"github.com/stergiotis/boxer/public/keelson/runtime/adhocdata"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
+	"github.com/stergiotis/boxer/public/keelson/runtime/appops"
 	"github.com/stergiotis/boxer/public/keelson/runtime/bgjob"
 	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
 	"github.com/stergiotis/boxer/public/keelson/runtime/windowhost"
@@ -35,21 +36,32 @@ type playSend struct {
 	note   string
 }
 
+// SendToPlayResult is send_to_play's result: what was handed to the
+// worker; the publish and the window open land later, and the line beside
+// the button says how they went.
+type SendToPlayResult struct {
+	Rows    int64  `desc:"the rows published: the rows the window holds"`
+	Dataset string `desc:"the name the play window reads the dataset under"`
+}
+
 // sendToPlay publishes the table's record and opens play on it, off the
-// frame. A send in flight drops the click.
-func (inst *App) sendToPlay() {
+// frame; the button and send_to_play both land here. A send in flight
+// refuses the next.
+func (inst *App) sendToPlay() (out SendToPlayResult, err error) {
 	ps := &inst.send
 	rec := inst.grid.rec
 	switch {
 	case inst.bus == nil:
-		ps.note = "no bus: Send to play needs the app runtime"
+		err = app.RefuseOperation("no bus: Send to play needs the app runtime")
 		return
 	case rec == nil || rec.NumRows() == 0:
-		ps.note = "no rows to send"
+		err = app.RefuseOperation("no rows to send: the table is empty or not read yet")
 		return
 	case ps.runner.Running():
+		err = app.RefuseOperation("a send to play is in flight; ask again shortly")
 		return
 	}
+	out = SendToPlayResult{Rows: rec.NumRows(), Dataset: datasetRows}
 	if ps.pub == nil {
 		ps.pub = adhocdata.NewWindowPublisher(datasetRows)
 	}
@@ -65,6 +77,17 @@ func (inst *App) sendToPlay() {
 			}
 			return &note, nil
 		})
+	return
+}
+
+// sendToPlayGesture routes the button through the catalog (ADR-0345
+// §SD3); a refusal from either path is shown beside the button.
+func (inst *App) sendToPlayGesture() {
+	gestureOr(inst, opSendToPlay, appops.None{}, func() {
+		if _, err := inst.sendToPlay(); err != nil {
+			inst.send.note = err.Error()
+		}
+	})
 }
 
 // publishToPlay publishes rec under the publisher's alias and asks the

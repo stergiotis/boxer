@@ -157,7 +157,7 @@ func newInstance(m app.Manifest) (out *App) {
 		stripW:   stripFallbackWidth,
 		picker:   newPickerState(),
 		// The matrix opens on the pair every row has.
-		an: analytics{actor: ActorApp, object: ObjectOperation},
+		an: analytics{pair: matrixPick{Actor: ActorApp, Object: ObjectOperation}},
 	}
 	return
 }
@@ -265,6 +265,44 @@ func (inst *App) applyFilter(f Filter) {
 	inst.filter = f.normalized()
 }
 
+// applyStrip sets what the strip's bars are coloured by; the Colour button
+// and set_strip both land here. The strip is read with the table, so the
+// cache refills under the new colouring.
+func (inst *App) applyStrip(by StripByE) {
+	inst.strip = by
+}
+
+// applySide sets the pane beside the table; its buttons and set_side both
+// land here.
+func (inst *App) applySide(side sideE) {
+	inst.side = side
+}
+
+// applyCompare sets the row the detail pane compares the selected one
+// with, which must be a held row; 0 clears it. A pick in the table, the
+// Clear comparison button and set_compare all land here.
+func (inst *App) applyCompare(id uint64) (err error) {
+	if id == 0 {
+		inst.compare, inst.hasCompare = Row{}, false
+		return
+	}
+	r, ok := inst.heldRow(id)
+	if !ok {
+		return app.RefuseOperation(rowGoneReason)
+	}
+	inst.compare, inst.hasCompare = r, true
+	return
+}
+
+// compareId is the compare resource's value: the compare row's facts id,
+// 0 for none.
+func (inst *App) compareId() (id uint64) {
+	if inst.hasCompare {
+		id = inst.compare.Id
+	}
+	return
+}
+
 func (inst *App) selectionId() (id uint64) {
 	if inst.hasSelected {
 		id = inst.selected.Id
@@ -282,25 +320,11 @@ func (inst *App) selectById(id uint64) (ok bool) {
 		inst.clearSelection()
 		return true
 	}
-	for i := range inst.cache.rows {
-		if inst.cache.rows[i].Id == id {
-			inst.selected, inst.hasSelected = inst.cache.rows[i], true
-			return true
-		}
+	r, ok := inst.heldRow(id)
+	if ok {
+		inst.selected, inst.hasSelected = r, true
 	}
-	if inst.hasSelected {
-		if d := inst.detail.current(inst.selected.Id); d != nil {
-			for _, rs := range [][]Row{d.before, d.after} {
-				for i := range rs {
-					if rs[i].Id == id {
-						inst.selected, inst.hasSelected = rs[i], true
-						return true
-					}
-				}
-			}
-		}
-	}
-	return false
+	return
 }
 
 // refreshSelected replaces the selected row's copy with the cache's when
@@ -387,7 +411,7 @@ func (inst *App) renderViewBar() {
 		}
 		c.AddSpace(styletokens.GapPanels(inst.density))
 		if c.Button(inst.ids.PrepareStr("send-play"), c.Atoms().Text("Send to play").Keep()).SendResp().HasPrimaryClicked() {
-			inst.sendToPlay()
+			inst.sendToPlayGesture()
 		}
 		switch {
 		case inst.send.runner.Running():
@@ -450,7 +474,7 @@ func (inst *App) renderControls() {
 		inst.picker.render(inst.ids, inst.window)
 		c.AddSpace(styletokens.GapPanels(inst.density))
 		if c.Button(inst.ids.PrepareStr("refresh"), c.Atoms().Text("Refresh").Keep()).SendResp().HasPrimaryClicked() {
-			inst.cache.refreshNow = true
+			inst.refreshGesture()
 		}
 		fresh, tone := inst.freshness(time.Now())
 		badge.New(inst.ids.PrepareStr("fresh"), fresh).Tone(tone).Variant(badge.VariantSoft).Size(badge.SizeSm).Monospace().
@@ -568,11 +592,11 @@ func (inst *App) renderStrip() {
 				label = "by status"
 			}
 			if c.Button(inst.ids.PrepareStr("strip-by"), c.Atoms().Text("Colour "+label).Keep()).SendResp().HasPrimaryClicked() {
+				next := StripByKind
 				if inst.strip == StripByKind {
-					inst.strip = StripByStatus
-				} else {
-					inst.strip = StripByKind
+					next = StripByStatus
 				}
+				inst.setStripGesture(next)
 			}
 			c.Label(stripLineIn(inst.cache.buckets, inst.cache.step, inst.picker.loc)).Send()
 		}
@@ -880,7 +904,7 @@ func (inst *App) renderTable() {
 			groupLabel = "Group by parent: on"
 		}
 		if c.Button(inst.ids.PrepareStr("group"), c.Atoms().Text(groupLabel).Keep()).Selected(inst.grouped).SendResp().HasPrimaryClicked() {
-			inst.setGrouped(!inst.grouped)
+			inst.setGroupedGesture(!inst.grouped)
 		}
 		c.Label("Case: " + inst.caseValue.String() + " · " + inst.window.String()).Send()
 		if inst.picking {
@@ -964,7 +988,8 @@ func (inst *App) renderTable() {
 		switch {
 		case inst.hasSelected && inst.selected.Id != id && (inst.picking || mods.Command || mods.Ctrl):
 			// A second selection: the detail pane compares the two.
-			inst.compare, inst.hasCompare, inst.picking = rows[res.Clicked], true, false
+			inst.picking = false
+			inst.setCompareGesture(id)
 			if inst.tab != TabCompare {
 				inst.setTabGesture(TabCompare)
 			}
@@ -1042,6 +1067,8 @@ func (inst *App) noteDrawn(row int64) {
 	}
 }
 
+// setGrouped folds the table's rows under their parent, or unfolds them;
+// the Group by parent button and set_grouping both land here.
 func (inst *App) setGrouped(on bool) {
 	inst.grouped = on
 	if !on {
@@ -1421,6 +1448,28 @@ const (
 	sideViews
 )
 
+var sideNames = [...]string{"facets", "exceptions", "rules", "views"}
+
+func (inst sideE) String() string {
+	if int(inst) < len(sideNames) {
+		return sideNames[inst]
+	}
+	return "unknown"
+}
+
+// parseSide reads a pane's name.
+func parseSide(s string) (side sideE, ok bool) {
+	s = strings.ToLower(strings.TrimSpace(s))
+	for i, n := range sideNames {
+		if n == s {
+			return sideE(i), true
+		}
+	}
+	return
+}
+
+func sideNameList() string { return strings.Join(sideNames[:], ", ") }
+
 // exceptionsShown bounds the exception list's drawn lines.
 const exceptionsShown = 500
 
@@ -1434,8 +1483,8 @@ func (inst *App) renderSide() {
 			label string
 		}{{sideFacets, "Facets"}, {sideExceptions, fmt.Sprintf("Exceptions (%d)", len(exc.open))}, {sideRules, "Rules"}, {sideViews, "Views"}} {
 			if c.Button(inst.ids.PrepareStr(fmt.Sprintf("side-%d", x.side)), c.Atoms().Text(x.label).Keep()).Selected(inst.side == x.side).
-				SendResp().HasPrimaryClicked() {
-				inst.side = x.side
+				SendResp().HasPrimaryClicked() && inst.side != x.side {
+				inst.setSideGesture(x.side)
 			}
 		}
 	}
@@ -1577,7 +1626,7 @@ func (inst *App) renderCompare() {
 		c.Label(cmp.Base).Wrap().Send()
 	}
 	if c.Button(inst.ids.PrepareStr("cmp-clear"), c.Atoms().Text("Clear comparison").Keep()).SendResp().HasPrimaryClicked() {
-		inst.hasCompare, inst.compare = false, Row{}
+		inst.setCompareGesture(0)
 	}
 	inst.renderFieldTable("cmp-table", []string{"field", "older", "newer", "change"}, cmp.Fields)
 }

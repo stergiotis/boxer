@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -157,16 +158,17 @@ func (inst SavedView) parsed() (cs Case, w Window, f Filter, t TabE, err error) 
 	return
 }
 
-// openView applies a saved view as the person's gestures.
+// openView applies a saved view: its case, window, filter and tab, and
+// the picker's expressions. The Open button and open_view both land here.
 func (inst *App) openView(v SavedView) (err error) {
 	cs, w, f, t, err := v.parsed()
 	if err != nil {
-		return eh.Errorf("the view %q does not open: %w", v.Name, err)
+		return app.RefuseOperation("the view " + strconv.Quote(v.Name) + " does not open: " + err.Error())
 	}
-	inst.setCaseGesture(cs)
-	inst.setWindowGesture(w)
-	inst.setFilterGesture(f)
-	inst.setTabGesture(t)
+	inst.applyCase(cs)
+	inst.applyWindow(w)
+	inst.applyFilter(f)
+	inst.applyTab(t)
 	if v.FromExpr != "" && v.ToExpr != "" {
 		inst.picker.fromExpr, inst.picker.toExpr = v.FromExpr, v.ToExpr
 		if v.Tz != "" {
@@ -191,16 +193,20 @@ type viewStore struct {
 	// read.
 	wantOpen string
 	name     string
+	// writing is the list a write in flight carries, so the views resource
+	// moves with the command that wrote it rather than with the frame the
+	// write lands in; nil when none is in flight.
+	writing []SavedView
 }
 
 // tick adopts a finished read or write, and starts the first read.
 func (inst *App) tickViews() {
 	vs := &inst.views
 	if res, _, ok := vs.runner.TakeResult(); ok {
-		vs.list, vs.loaded, vs.err = *res, true, nil
+		vs.list, vs.loaded, vs.err, vs.writing = *res, true, nil, nil
 	}
 	if snap := vs.runner.Snapshot(); snap.State == bgjob.StateFailed && snap.Err != nil {
-		vs.err, vs.loaded = snap.Err, true
+		vs.err, vs.loaded, vs.writing = snap.Err, true, nil
 		vs.runner.Invalidate()
 	}
 	if vs.store == nil {
@@ -222,27 +228,26 @@ func (inst *App) tickViews() {
 	if vs.loaded && vs.wantOpen != "" && !vs.runner.Running() {
 		name := vs.wantOpen
 		vs.wantOpen = ""
-		if v, ok := findView(vs.list, name); ok {
-			vs.err = inst.openView(v)
+		if _, ok := findView(vs.list, name); ok {
+			inst.openViewGesture(name)
 		} else {
 			vs.err = eh.Errorf("the launch config names the view %q, which is not saved", name)
 		}
 	}
 }
 
-// writeViews stores list off the frame; a write in flight drops the
-// gesture, as a click on a busy control does.
-func (inst *App) writeViews(list []SavedView, note string) {
+// writeViews stores list off the frame; a write in flight refuses the
+// next, as a click on a busy control is dropped.
+func (inst *App) writeViews(list []SavedView, note string) (err error) {
 	vs := &inst.views
-	if vs.store == nil {
-		vs.err = eh.Errorf("this window has no persist store, so a view cannot be saved")
-		return
-	}
-	if vs.runner.Running() {
-		return
+	switch {
+	case vs.store == nil:
+		return app.RefuseOperation("this window has no persist store, so a view cannot be saved or deleted")
+	case vs.runner.Running():
+		return app.RefuseOperation("the saved views are being written; ask again shortly")
 	}
 	st := vs.store
-	vs.err, vs.note = nil, note
+	vs.err, vs.note, vs.writing = nil, note, list
 	vs.runner.Start(nil, bgjob.Spec{Kind: "trailviewer.views", Title: "Trail viewer saved views"},
 		func(ctx context.Context) (out *[]SavedView, err error) {
 			if err = storeViews(st, list); err != nil {
@@ -250,25 +255,76 @@ func (inst *App) writeViews(list []SavedView, note string) {
 			}
 			return &list, nil
 		})
+	return
 }
 
-// saveView saves the current state under name.
-func (inst *App) saveView(name string) {
+// saveView saves the current state under name; the Save button and
+// save_view both land here.
+func (inst *App) saveView(name string) (err error) {
 	name = strings.TrimSpace(name)
 	switch {
 	case name == "":
-		inst.views.err = eh.Errorf("a saved view needs a name")
-		return
+		return app.RefuseOperation("a saved view needs a name")
 	case !inst.views.loaded:
-		inst.views.err = eh.Errorf("the saved views have not been read yet")
-		return
+		return app.RefuseOperation("the saved views have not been read yet; ask again shortly")
 	}
 	list := withView(inst.views.list, inst.currentView(name))
 	if len(list) > maxSavedViews {
-		inst.views.err = eh.Errorf("at most %d views are kept; delete one first", maxSavedViews)
-		return
+		return app.RefuseOperation(fmt.Sprintf("at most %d views are kept; delete one first", maxSavedViews))
 	}
-	inst.writeViews(list, "saved "+name)
+	return inst.writeViews(list, "saved "+name)
+}
+
+// deleteView removes the view named name; the Delete button and
+// delete_view both land here.
+func (inst *App) deleteView(name string) (err error) {
+	name = strings.TrimSpace(name)
+	if !inst.views.loaded {
+		return app.RefuseOperation("the saved views have not been read yet; ask again shortly")
+	}
+	if _, ok := findView(inst.views.list, name); !ok {
+		return app.RefuseOperation(noSuchViewReason)
+	}
+	return inst.writeViews(withoutView(inst.views.list, name), "deleted "+name)
+}
+
+// openViewNamed opens the saved view named name.
+func (inst *App) openViewNamed(name string) (err error) {
+	v, ok := findView(inst.views.list, strings.TrimSpace(name))
+	if !ok {
+		return app.RefuseOperation(noSuchViewReason)
+	}
+	return inst.openView(v)
+}
+
+const noSuchViewReason = "no saved view of that name; get_view lists them under saved_views"
+
+// The pane's buttons route through the catalog (ADR-0345 §SD3); a
+// refusal, from either path, is shown under the name box.
+func (inst *App) saveViewGesture(name string) {
+	gestureOr(inst, opSaveView, ViewNameArgs{Name: name}, func() { inst.views.err = inst.saveView(name) })
+}
+
+func (inst *App) deleteViewGesture(name string) {
+	gestureOr(inst, opDeleteView, ViewNameArgs{Name: name}, func() { inst.views.err = inst.deleteView(name) })
+}
+
+func (inst *App) openViewGesture(name string) {
+	gestureOr(inst, opOpenView, ViewNameArgs{Name: name}, func() { inst.views.err = inst.openViewNamed(name) })
+}
+
+// namesKey is the saved views' names as one comparable value, the views
+// resource's: the list a write in flight carries, else the list held.
+func (inst *viewStore) namesKey() string {
+	list := inst.list
+	if inst.writing != nil {
+		list = inst.writing
+	}
+	names := make([]string, 0, len(list))
+	for _, v := range list {
+		names = append(names, v.Name)
+	}
+	return strings.Join(names, "\x00")
 }
 
 // viewNames lists the saved views' names, for get_view.
@@ -288,7 +344,7 @@ func (inst *App) renderViews() {
 		for range c.HorizontalTop().KeepIter() {
 			c.TextEdit(inst.ids.PrepareStr("view-name"), vs.name, false).HintText("name").DesiredWidth(150).SendRespVal(&vs.name)
 			if c.Button(inst.ids.PrepareStr("view-save"), c.Atoms().Text("Save").Keep()).SendResp().HasPrimaryClicked() {
-				inst.saveView(vs.name)
+				inst.saveViewGesture(vs.name)
 			}
 		}
 		switch {
@@ -308,10 +364,10 @@ func (inst *App) renderViews() {
 				for range c.IdScope(inst.ids.PrepareSeq(uint64(i))) {
 					for range c.HorizontalTop().KeepIter() {
 						if c.Button(inst.ids.PrepareStr("open"), c.Atoms().Text("Open").Keep()).SendResp().HasPrimaryClicked() {
-							vs.err = inst.openView(v)
+							inst.openViewGesture(v.Name)
 						}
 						if c.Button(inst.ids.PrepareStr("delete"), c.Atoms().Text("Delete").Keep()).SendResp().HasPrimaryClicked() {
-							inst.writeViews(withoutView(vs.list, v.Name), "deleted "+v.Name)
+							inst.deleteViewGesture(v.Name)
 						}
 						c.Label(fmt.Sprintf("%s — %s %s, %s", v.Name, v.Case, v.Value, viewRange(v))).Truncate().Send()
 					}

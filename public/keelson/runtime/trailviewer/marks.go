@@ -103,15 +103,28 @@ type MarkRowResult struct {
 	At        time.Time `desc:"the mark's time"`
 }
 
-// heldRow is a row the window holds: the table's, or the selected row.
+// heldRow is a row the window holds: the table's, the selected row, or
+// one of the selected row's context rows.
 func (inst *App) heldRow(id uint64) (r Row, ok bool) {
 	for i := range inst.cache.rows {
 		if inst.cache.rows[i].Id == id {
 			return inst.cache.rows[i], true
 		}
 	}
-	if inst.hasSelected && inst.selected.Id == id {
+	if !inst.hasSelected {
+		return
+	}
+	if inst.selected.Id == id {
 		return inst.selected, true
+	}
+	if d := inst.detail.current(inst.selected.Id); d != nil {
+		for _, rs := range [][]Row{d.before, d.after} {
+			for i := range rs {
+				if rs[i].Id == id {
+					return rs[i], true
+				}
+			}
+		}
 	}
 	return
 }

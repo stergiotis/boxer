@@ -352,6 +352,17 @@ func (inst StripByE) String() string {
 	return "kind"
 }
 
+// ParseStripBy reads a colouring's name.
+func ParseStripBy(s string) (by StripByE, ok bool) {
+	switch strings.ToLower(strings.TrimSpace(s)) {
+	case "kind":
+		return StripByKind, true
+	case "status":
+		return StripByStatus, true
+	}
+	return
+}
+
 // TabE is the window's tab (ADR-0350 §SD4, §SD11): one of the detail
 // pane's tabs — the row's fields, its previous-state diff, the rows around
 // it, its comparison with a second row — under which the central area shows

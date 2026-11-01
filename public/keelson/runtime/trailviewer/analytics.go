@@ -50,6 +50,19 @@ func (inst ActorE) String() string {
 	return "unknown"
 }
 
+// ParseActor reads an actor's name.
+func ParseActor(s string) (a ActorE, ok bool) {
+	s = strings.ToLower(strings.TrimSpace(s))
+	for i, n := range actorNames {
+		if n == s {
+			return ActorE(i), true
+		}
+	}
+	return
+}
+
+func actorNameList() string { return strings.Join(actorNames[:], ", ") }
+
 // ObjectE is the matrix's column axis: what was touched.
 type ObjectE uint8
 
@@ -70,6 +83,27 @@ func (inst ObjectE) String() string {
 	}
 	return "unknown"
 }
+
+// ParseObject reads an object's name.
+func ParseObject(s string) (o ObjectE, ok bool) {
+	s = strings.ToLower(strings.TrimSpace(s))
+	for i, n := range objectNames {
+		if n == s {
+			return ObjectE(i), true
+		}
+	}
+	return
+}
+
+func objectNameList() string { return strings.Join(objectNames[:], ", ") }
+
+// matrixPick is the matrix's two picks, the matrix resource's value.
+type matrixPick struct {
+	Actor  ActorE
+	Object ObjectE
+}
+
+func (inst matrixPick) String() string { return inst.Actor.String() + " × " + inst.Object.String() }
 
 // DottedRowE is what one row of the dotted chart is.
 type DottedRowE uint8
@@ -92,6 +126,19 @@ func (inst DottedRowE) String() string {
 	}
 	return "unknown"
 }
+
+// ParseDottedRow reads a row kind's name.
+func ParseDottedRow(s string) (r DottedRowE, ok bool) {
+	s = strings.ToLower(strings.TrimSpace(s))
+	for i, n := range dottedRowNames {
+		if n == s {
+			return DottedRowE(i), true
+		}
+	}
+	return
+}
+
+func dottedRowNameList() string { return strings.Join(dottedRowNames[:], ", ") }
 
 const (
 	// matrixPairs bounds the (actor, object) pairs one read returns.
@@ -270,10 +317,13 @@ func (inst *matrixData) line() string {
 // dottedData is the chart: the busiest rows, a mark per (row, bucket) in
 // one of dottedTiers sizes, and what the line says.
 type dottedData struct {
-	row      DottedRowE
-	step     time.Duration
-	keys     []string
-	allKeys  int
+	row     DottedRowE
+	step    time.Duration
+	keys    []string
+	allKeys int
+	// marks are the (row, bucket) groups of the shown rows, as the read
+	// ordered them: by key, then bucket; what get_dotted lists.
+	marks    []Bucket
 	buckets  int
 	rows     uint64
 	busiestK string
@@ -330,8 +380,9 @@ func buildDotted(groups []Bucket, row DottedRowE, step time.Duration, shown int,
 		idx[k] = i
 	}
 	for _, g := range groups {
-		if _, ok := idx[g.Key]; ok && g.N > d.maxN {
-			d.maxN = g.N
+		if _, ok := idx[g.Key]; ok {
+			d.marks = append(d.marks, g)
+			d.maxN = max(d.maxN, g.N)
 		}
 	}
 	for t := range d.tiers {
@@ -440,8 +491,7 @@ func (inst *aggCache[T]) close() { inst.runner.Invalidate() }
 // analytics is the analytic views' state: the picks, the reads, and the
 // grids.
 type analytics struct {
-	actor   ActorE
-	object  ObjectE
+	pair    matrixPick
 	row     DottedRowE
 	matrix  aggCache[matrixData]
 	dotted  aggCache[dottedData]
@@ -476,7 +526,27 @@ func (inst *App) aggQuery() listQuery {
 }
 
 func (inst *App) matrixKey() aggKey {
-	return aggKey{gen: inst.cache.gen, pick: uint8(inst.an.actor), pk2: uint8(inst.an.object)}
+	return aggKey{gen: inst.cache.gen, pick: uint8(inst.an.pair.Actor), pk2: uint8(inst.an.pair.Object)}
+}
+
+// applyMatrix sets the matrix's picks; the tab's combos and set_matrix
+// both land here.
+func (inst *App) applyMatrix(p matrixPick) {
+	inst.an.pair = p
+}
+
+func (inst *App) setMatrixGesture(p matrixPick) {
+	gestureOr(inst, opSetMatrix, SetMatrixArgs{Actor: p.Actor.String(), Object: p.Object.String()}, func() { inst.applyMatrix(p) })
+}
+
+// applyDotted sets the dotted chart's row kind; the tab's combo and
+// set_dotted both land here.
+func (inst *App) applyDotted(r DottedRowE) {
+	inst.an.row = r
+}
+
+func (inst *App) setDottedGesture(r DottedRowE) {
+	gestureOr(inst, opSetDotted, SetDottedArgs{Row: r.String()}, func() { inst.applyDotted(r) })
 }
 
 func (inst *App) dottedKey() aggKey {
@@ -491,7 +561,7 @@ func (inst *App) tickAnalytics(src *Source) {
 	q := inst.aggQuery()
 	switch inst.tab {
 	case TabMatrix:
-		a, o := inst.an.actor, inst.an.object
+		a, o := inst.an.pair.Actor, inst.an.pair.Object
 		inst.an.matrix.tick(src, inst.matrixKey(), "matrix", func(ctx context.Context, p *probe) (m matrixData, err error) {
 			cells, err := queryRows[MatrixCell](ctx, p, p.marts.matrixSQL(q, a, o))
 			if err != nil {
@@ -560,11 +630,15 @@ func aggStatus[T any](ca *aggCache[T], key aggKey) (d *T, ok bool) {
 // grid with actors as rows and objects as columns.
 func (inst *App) renderMatrix() {
 	an := &inst.an
+	pick := an.pair
 	for range c.HorizontalTop().KeepIter() {
-		an.actor = ActorE(inst.pickCombo("mx-actor", "actor", actorNames[:], int(an.actor)))
-		an.object = ObjectE(inst.pickCombo("mx-object", "object", objectNames[:], int(an.object)))
+		a := ActorE(inst.pickCombo("mx-actor", "actor", actorNames[:], int(pick.Actor)))
+		o := ObjectE(inst.pickCombo("mx-object", "object", objectNames[:], int(pick.Object)))
+		if next := (matrixPick{Actor: a, Object: o}); next != pick {
+			inst.setMatrixGesture(next)
+		}
 	}
-	if matrixNeedsAudit(an.actor, an.object) {
+	if matrixNeedsAudit(pick.Actor, pick.Object) {
 		c.LabelAtoms(c.Atoms().BeginRichTextColored(detailMutedFg, detailBgClear,
 			"a principal, a data subject and an entity are an audit event's own: the matrix counts the case's audit events").Small().End().Keep()).Wrap().Send()
 	}
@@ -652,7 +726,9 @@ func (inst *countGrid) build(ver uint64, label string, rows []string, cols []str
 func (inst *App) renderDotted() {
 	an := &inst.an
 	for range c.HorizontalTop().KeepIter() {
-		an.row = DottedRowE(inst.pickCombo("dt-row", "a row per", dottedRowNames[:], int(an.row)))
+		if next := DottedRowE(inst.pickCombo("dt-row", "a row per", dottedRowNames[:], int(an.row))); next != an.row {
+			inst.setDottedGesture(next)
+		}
 	}
 	if inst.cache.step <= 0 {
 		c.Label("(waiting for the table's first read)").Send()

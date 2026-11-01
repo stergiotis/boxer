@@ -228,19 +228,24 @@ controls.
 
 ## For an agent
 
-The viewer declares an operations catalog (ADR-0345). `list_rows` lists a
-case's rows over a range and filter given as its own arguments, from the
-rows the window holds, and says when its arguments reach outside what the
-window read; `get_row` reads one row, `get_previous` the selected row's
-previous state, `get_verdict` the evidence lines, `get_view` what the
-window shows and the saved views' names, `get_exceptions` the open
-exceptions of a case over a range with every rule's predicate, and
-`get_tree` a task's or conversation's tree in depth-first order,
-`get_dayhour` and `get_series` the two aggregate views as the window last
-read them, for the case, range and filter it read.
-`set_case`, `set_range`, `set_filter`, `select_row`, `set_tab` (one of
-fields, previous, context, compare, tree, matrix, dotted, dayhour, series)
-and `set_series` (the series' measure and statistic) change what the
-window shows and nothing else.
+The viewer declares an operations catalog (ADR-0345): everything shown
+here is a query, every control a command. `list_rows` lists a case's rows
+over a range and filter given as its own arguments, from the rows the
+window holds, and says when its arguments reach outside what the window
+read; `get_row` reads one row, `get_previous` and `get_context` the
+selected row's previous state and the rows around it, `get_compare` two
+held rows field by field, `get_facets` and `get_strip` the facets pane
+and the strip, `get_verdict` the evidence lines, `get_exceptions` the
+open exceptions of a case over a range with every rule's predicate,
+`get_tree`, `get_matrix`, `get_dotted`, `get_dayhour` and `get_series`
+the analytic views as the window last read them, for the case, range and
+filter it read, and `get_view` every control's value and the saved views'
+names. Every control has a command that sets it and never toggles:
+`set_case`, `set_range`, `set_filter`, `select_row`, `set_tab`,
+`set_strip`, `set_grouping`, `set_compare`, `set_matrix`, `set_dotted`,
+`set_series`, `set_side`, `set_tree`, `refresh` and `open_view` change
+what the window shows and nothing else; `save_view` and `delete_view`
+write the saved views to the persist store; `send_to_play` publishes
+outside the window, so the person confirms each call an agent makes.
 `mark_row` writes to the trail and is not offered to agents: review is the
 person's act. Row text reaches a model marked untrusted.

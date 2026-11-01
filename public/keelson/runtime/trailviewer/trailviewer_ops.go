@@ -12,16 +12,21 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/trailviewer/verdict"
 )
 
-// The operations catalog (ADR-0350 §SD8, proposed; get_tree is M4's,
-// get_dayhour, get_series and set_series M5's).
+// The operations catalog (ADR-0350 §SD8, proposed): the table's queries
+// and the view's commands here, the panes' and the views' in
+// trailviewer_ops_controls.go.
 // Queries read the window's caches as the snapshot took them with the
 // frame, never the store, so a query does not wait on ClickHouse; each
 // says when the cache was filled. They select by their own arguments,
 // never by the window's case, range or filter (ADR-0345 §SD2), and say
 // when those arguments reach outside what the window read. The view
-// commands set the view and never toggle. One command writes the trail:
-// mark_row, consequential and person-only (ADR-0350 §SD7), which an agent
-// is not offered and whose handler refuses an agent's task.
+// commands set the view and never toggle; every control the person has
+// routes through one (gestureOr). The saved views are authored state, so
+// save_view and delete_view are document commands; send_to_play writes
+// outside the app and is consequential, confirmed by the person on an
+// agent's call. One command writes the trail: mark_row, consequential and
+// person-only (ADR-0350 §SD7), which an agent is not offered and whose
+// handler refuses an agent's task.
 
 const (
 	resCase      = "case"
@@ -30,6 +35,15 @@ const (
 	resSelection = "selection"
 	resTab       = "tab"
 	resSeries    = "series"
+	resStrip     = "strip"
+	resGrouping  = "grouping"
+	resCompare   = "compare"
+	resMatrix    = "matrix"
+	resDotted    = "dotted"
+	resSide      = "side"
+	resTree      = "tree"
+	resRead      = "read"
+	resViews     = "views"
 
 	opListRows    = "list_rows"
 	opGetRow      = "get_row"
@@ -40,14 +54,32 @@ const (
 	opGetTree     = "get_tree"
 	opGetDayHour  = "get_dayhour"
 	opGetSeries   = "get_series"
+	opGetFacets   = "get_facets"
+	opGetStrip    = "get_strip"
+	opGetContext  = "get_context"
+	opGetCompare  = "get_compare"
+	opGetMatrix   = "get_matrix"
+	opGetDotted   = "get_dotted"
 
-	opSetCase   = "set_case"
-	opSetRange  = "set_range"
-	opSetFilter = "set_filter"
-	opSelectRow = "select_row"
-	opSetTab    = "set_tab"
-	opSetSeries = "set_series"
-	opMarkRow   = "mark_row"
+	opSetCase     = "set_case"
+	opSetRange    = "set_range"
+	opSetFilter   = "set_filter"
+	opSelectRow   = "select_row"
+	opSetTab      = "set_tab"
+	opSetSeries   = "set_series"
+	opSetStrip    = "set_strip"
+	opSetGrouping = "set_grouping"
+	opSetCompare  = "set_compare"
+	opSetMatrix   = "set_matrix"
+	opSetDotted   = "set_dotted"
+	opSetSide     = "set_side"
+	opSetTree     = "set_tree"
+	opRefresh     = "refresh"
+	opSaveView    = "save_view"
+	opOpenView    = "open_view"
+	opDeleteView  = "delete_view"
+	opSendToPlay  = "send_to_play"
+	opMarkRow     = "mark_row"
 )
 
 // Result bounds: what one inline result may carry.
@@ -85,19 +117,33 @@ type opsSnap struct {
 	asOf        *AsOf
 	gen         uint64
 	views       []string
-	// The M5 views as read for the window's current key, each with
-	// whether the read predates it.
+	// The analytic views as read for the window's current key, each with
+	// whether the read predates it, and the window's picks.
 	dayhour      *dayHourData
 	dayhourStale bool
 	series       *seriesData
 	seriesStale  bool
 	seriesPick   seriesPick
+	matrix       *matrixData
+	matrixStale  bool
+	matrixPick   matrixPick
+	dotted       *dottedData
+	dottedStale  bool
+	dottedPick   DottedRowE
 
 	c        Case
 	window   Window
 	filter   Filter
 	tab      TabE
 	selected uint64
+	// The rest of the view: the strip's colouring, the grouping, the
+	// compare row, the side pane and the tree's expansion.
+	strip        StripByE
+	grouped      bool
+	compare      Row
+	hasCompare   bool
+	side         sideE
+	treeExpanded bool
 }
 
 func (inst *App) opsSnapshot() (sn opsSnap) {
@@ -114,6 +160,12 @@ func (inst *App) opsSnapshot() (sn opsSnap) {
 	sn.dayhour, sn.dayhourStale = inst.an.dayhour.current(inst.dayHourKey())
 	sn.series, sn.seriesStale = inst.an.series.data.current(inst.seriesKey())
 	sn.seriesPick = inst.an.series.pick
+	sn.matrix, sn.matrixStale = inst.an.matrix.current(inst.matrixKey())
+	sn.matrixPick = inst.an.pair
+	sn.dotted, sn.dottedStale = inst.an.dotted.current(inst.dottedKey())
+	sn.dottedPick = inst.an.row
+	sn.strip, sn.grouped, sn.compare, sn.hasCompare = inst.strip, inst.grouped, inst.compare, inst.hasCompare
+	sn.side, sn.treeExpanded = inst.side, inst.treeV.expanded
 	if inst.hasSelected {
 		sn.selected = inst.selected.Id
 		sn.detail = inst.detail.current(inst.selected.Id)
@@ -436,6 +488,13 @@ type View struct {
 	Filter      []TermArg     `desc:"the filter the table is narrowed by"`
 	Tab         string        `desc:"the window's tab: fields, previous, context, compare, tree, matrix, dotted, dayhour or series"`
 	Series      string        `desc:"the series tab's measure and statistic"`
+	Matrix      string        `desc:"the matrix tab's actor and object"`
+	Dotted      string        `desc:"the dotted chart's row kind: run, window, conversation or entity"`
+	StripBy     string        `desc:"what the strip's bars are coloured by: kind or status"`
+	Grouping    bool          `desc:"the table is grouped by parent"`
+	Compare     uint64        `desc:"the row the detail pane compares the selected one with, a facts id; 0 for none"`
+	Side        string        `desc:"the pane beside the table: facets, exceptions, rules or views"`
+	Tree        bool          `desc:"the tree tab's expansion as last set: every node open, or every node closed"`
 	Selected    uint64        `desc:"the selected row's facts id; 0 for none"`
 	Held        int           `desc:"rows the window holds"`
 	MoreInStore bool          `desc:"older rows of the case and range are in boxer.facts beyond the cache"`
@@ -641,6 +700,19 @@ func (inst opsSnap) bounds(w Window) (from, to time.Time) {
 // the view over c, w and f: the view aggregates the read whole, so each
 // must be the one the window read.
 func (inst opsSnap) aggCovers(c Case, w Window, f Filter) (ok bool, why string) {
+	if ok, why = inst.readCovers(c, w); !ok {
+		return
+	}
+	if f.key() != parseFilterKeyOrEmpty(inst.scope.Filter).key() {
+		return false, "the filter differs from the one the window read; the view aggregates the filtered rows, so set_filter reads it"
+	}
+	return true, ""
+}
+
+// readCovers says whether c and w name exactly the case and range the
+// window read; what a view over the read whole, whatever its filter, is
+// keyed by.
+func (inst opsSnap) readCovers(c Case, w Window) (ok bool, why string) {
 	if c != inst.scope.Case {
 		return false, "the case differs from the one the window read (" + inst.scope.Case.String() + "); set_case reads it"
 	}
@@ -649,9 +721,6 @@ func (inst opsSnap) aggCovers(c Case, w Window, f Filter) (ok bool, why string) 
 		if !from.Equal(inst.from) || !to.Equal(inst.to) {
 			return false, "the range differs from the one the window read; the view aggregates the whole range, so set_range reads it"
 		}
-	}
-	if f.key() != parseFilterKeyOrEmpty(inst.scope.Filter).key() {
-		return false, "the filter differs from the one the window read; the view aggregates the filtered rows, so set_filter reads it"
 	}
 	return true, ""
 }
@@ -975,12 +1044,16 @@ var ops = func() (s *appops.Set[*App, opsSnap]) {
 		})
 
 	appops.Query(s, app.OperationSpec{Name: opGetView, Version: 1,
-		Summary: "read the case, the range, the filter, the tab, the selection, the strip's line and the verdict lines as the person sees them",
+		Summary: "read the window as the person sees it: the case, the range, the filter, the tab and every other control's value, the selection, the strip's line, the verdict lines and the saved views' names",
 		Agents:  true, Untrusted: true, Fork: app.OperationForkReadShared},
 		func(sn opsSnap, _ appops.None) (out View, err error) {
 			out = View{Persisted: sn.src.persisted(), Case: sn.c.Kind.String(), Value: sn.c.Value, Range: sn.window.String(),
 				From: sn.from, To: sn.to, Filter: termArgs(sn.filter), Tab: sn.tab.String(), Series: sn.seriesPick.String(), Selected: sn.selected,
-				Held: len(sn.rows), MoreInStore: sn.more, RefreshedAt: sn.refreshedAt}
+				Matrix: sn.matrixPick.String(), Dotted: sn.dottedPick.String(), StripBy: sn.strip.String(), Grouping: sn.grouped,
+				Side: sn.side.String(), Tree: sn.treeExpanded, Held: len(sn.rows), MoreInStore: sn.more, RefreshedAt: sn.refreshedAt}
+			if sn.hasCompare {
+				out.Compare = sn.compare.Id
+			}
 			if sn.filled {
 				out.Strip = stripLine(sn.buckets, sn.step)
 			}
@@ -1295,6 +1368,8 @@ var ops = func() (s *appops.Set[*App, opsSnap]) {
 			inst.applySeries(pick)
 			return
 		})
+
+	addControlOps(s)
 
 	// The one command that writes the trail (ADR-0350 §SD7): consequential,
 	// and not offered to agents, since review is the person's act.

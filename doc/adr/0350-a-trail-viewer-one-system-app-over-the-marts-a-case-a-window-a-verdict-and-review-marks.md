@@ -238,8 +238,8 @@ repeats it.
 diffed with the same field table over the timeline's columns and, where
 both are audit events, their attributes. The base is stated in words
 above the table — the older row on the left — as the surveyed compare
-pages do, never as a toggle. The second row is the window's own state,
-not a catalog resource; `set_tab` reaches the compare tab.
+pages do, never as a toggle. The second row is the `compare` resource of
+SD8, a held row's id or none; `set_tab` reaches the compare tab.
 
 **As of.** For the entity case, the detail pane shows the entity's state
 as of the window's end: in each domain the entity has events in, the last
@@ -309,28 +309,51 @@ saying so.
 
 ### SD8 — The catalog
 
-Queries, each with its own arguments and marked `Untrusted` where a row's
-text is returned: `list_rows` (case, window, filters, limit, cursor),
-`get_row`, `get_previous` (SD5's read for one row), `get_tree` (the chain
-under an agentic case), `get_verdict` (SD6's lines for a run),
-`get_exceptions` (SD7's list), `get_view`, `get_dayhour` and `get_series`
-(SD11's aggregates, for the read the window made). Commands of effect
-`view`: `set_case`, `set_range`, `set_filter`, `select_row`, `set_tab`,
-`set_series` (the series' measure and statistic). One command of effect
-`consequential`, person-only: `mark_row`. Resources: `case`, `range`,
-`filter`, `selection`, `tab`, `series`. Queries answer from the
-cache the snapshot took and never wait on the store, as the log viewer's
-do. `tab` is the window's tab: one of the detail pane's — fields,
-previous, context, compare — under which the central area shows the
-table, or an analytic view of SD4 and SD11 — tree, matrix, dotted,
-dayhour, series — which takes the table's place while the detail pane
-shows the fields; so the tree is a value of the one resource, not a
-second one. `get_previous` answers for the selected row, whose read the
-window has made; `get_tree` answers from the rows held, for a task or
-conversation case; `get_dayhour` and `get_series` answer from the view's
-last read, which is made while its tab is open, for arguments that name
-exactly the case, range and filter the window read, since the view
-aggregates that read whole; `get_view` also lists the saved views' names.
+Everything the person can see is a query; everything the person can
+change is a command, and the control routes through it
+([ADR-0345](./0345-system-apps-join-the-operations-contract-the-log-viewer-first.md)
+§SD3). Two rules hold throughout. A **query selects by its own
+arguments** — the case, range and filter it is about — answers from the
+cache the snapshot took with the frame, never from the store or the
+window's state in the arguments' place, is bounded, and says when its
+arguments name a read the window did not make; it is `Untrusted` where
+row-derived text is returned. A **command sets and never toggles**.
+
+Queries: `list_rows`, `get_row`, `get_previous` (SD5's read for the
+selected row), `get_context` (the rows around the selected row, from the
+same read), `get_compare` (SD5's field table for two held rows),
+`get_facets` (one facet's values and counts, over the case and range
+whole as the pane counts them), `get_strip` (the buckets under the
+colouring set), `get_verdict` (SD6), `get_exceptions` (SD7), `get_tree`
+(SD4), `get_matrix`, `get_dotted`, `get_dayhour`, `get_series` (SD11's
+aggregates: each answers from the view's last read, made while its tab is
+open, for arguments naming exactly the case, range and filter the window
+read and the picks the window has, since the view aggregates that read
+whole), and `get_view`, which reports every resource's value and the
+saved views' names.
+
+Commands of effect `view`: `set_case`, `set_range`, `set_filter`,
+`select_row`, `set_tab`, `set_strip`, `set_grouping`, `set_compare` (a
+held row's id, 0 for none; the arming of the pick is the window's own),
+`set_matrix`, `set_dotted`, `set_series`, `set_side`, `set_tree`
+(expand or collapse every node; the resource is the value last set, since
+the widget's expansion is per node), `refresh` (writes `read`, which
+lands with a later frame) and `open_view` (writes case, range, filter and
+tab). Commands of effect `document`, since the saved views are authored
+state in the persist store: `save_view`, `delete_view`. Two commands of
+effect `consequential`: `send_to_play`, which publishes outside the app
+and is offered to agents under the person's confirmation on every call,
+as play's publish and watchbill's cancel are; and `mark_row`, person-only
+(SD7) — review is the person's act, which is a different reason from the
+effect. Resources: `case`, `range`, `filter`, `selection`, `tab`, `strip`,
+`grouping`, `compare`, `matrix`, `dotted`, `series`, `side`, `tree`,
+`read`, `views`.
+
+`tab` is the window's tab: one of the detail pane's — fields, previous,
+context, compare — under which the central area shows the table, or an
+analytic view of SD4 and SD11 — tree, matrix, dotted, dayhour, series —
+which takes the table's place while the detail pane shows the fields; so
+the tree is a value of the one resource, not a second one.
 
 ### SD9 — Labels, time, bodies, export, old rows
 
@@ -506,9 +529,10 @@ positional readers of the marts do not exist by design.
   `TRAIL_ATTR`/`TRAIL_REF`/`TRAIL_REFS` on fixture rows, `entity` and
   `agg_trail_audit_entities` over a fixture with two entities and three
   events each, `dm_trail_reviews` listing a written mark; the viewer's
-  package: the catalog validates with `Agents` on every query and
-  `view`-effect command and off on `mark_row`, `list_rows` reads its
-  arguments and is bounded, a cursor continues without repeating a row,
+  package: the catalog validates with `Agents` on every operation but
+  `mark_row`, every control routes through its command, each command sets
+  and never toggles, `list_rows` and the pane and view queries read their
+  arguments and are bounded, a cursor continues without repeating a row,
   the previous-state read returns the four verdicts of SD5 on fixtures
   including a gap row, each exception rule returns exactly its fixture's
   rows, a mark lands as an `AuditEvent` in the `review` domain under the
@@ -535,6 +559,8 @@ positional readers of the marts do not exist by design.
   and saved views.
 - **M5 — The remaining analytic views.** Day × hour and the numeric
   series.
+- **M6 — The catalog completed.** A query for every pane and view, a
+  command for every control, the saved views and the export (SD8).
 
 ## Status
 
