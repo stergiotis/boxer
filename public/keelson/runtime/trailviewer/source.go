@@ -76,9 +76,12 @@ func (inst *Source) database() (db string) {
 	return
 }
 
-// evidenceChecks reads the trail's rows of keelson('evidence_checks') in
-// process; ok is false when no registry serves the relation.
-func (inst *Source) evidenceChecks() (checks []verdict.Check, ok bool, err error) {
+// evidenceChecks reads the trail's rows of keelson('evidence_checks') for
+// run in process, asking the provider for those rows alone: the relation's
+// journal rows verify every run the journal store lists, which the viewer
+// does not read and which cost it most of a core before the filter. ok is
+// false when no registry serves the relation.
+func (inst *Source) evidenceChecks(run string) (checks []verdict.Check, ok bool, err error) {
 	if inst == nil || inst.Registry == nil {
 		return
 	}
@@ -86,7 +89,8 @@ func (inst *Source) evidenceChecks() (checks []verdict.Check, ok bool, err error
 	if !found {
 		return
 	}
-	rec, err := p.Snapshot(introspect.Columns("store", "scope", "law", "holds", "broken", "why"))
+	rec, err := introspect.SnapshotWhere(p, introspect.Columns("store", "scope", "law", "holds", "broken", "why"),
+		introspect.Where{"store": "trail", "scope": run})
 	if err != nil {
 		return nil, true, err
 	}

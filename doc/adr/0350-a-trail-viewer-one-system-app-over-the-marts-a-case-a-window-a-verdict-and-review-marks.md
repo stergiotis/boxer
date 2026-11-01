@@ -260,9 +260,11 @@ ordinal N**. A run nothing could verify — the trail not durable, the
 verification failed — reads **unverified** with the reason, a sixth state
 the vocabulary carries. The current run's lines come from `keelson('evidence_checks')`
 and `keelson('anchors')` — the anchors as the relation's L32 row reads
-them, so the viewer does not read `keelson('anchors')` beside it; another
-run's from the recorder's seal verification for that run, read once per
-refill. The vocabulary — state,
+them, so the viewer does not read `keelson('anchors')` beside it — asked
+for the trail's rows of that run alone (`introspect.Where`), so the
+journal's laws, which the viewer does not read, are not judged for it;
+another run's from the recorder's seal verification for that run, read
+once per refill. The vocabulary — state,
 label text, tone, the law it comes from — is one small package the chat
 and the app center may adopt. An unverified state marks the rows it
 covers and does not hide them: blocking would hide evidence, and a passive

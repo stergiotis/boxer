@@ -140,3 +140,37 @@ func (s *stubProvider) Freshness() FreshnessClass { return FreshnessStatic }
 func (s *stubProvider) Snapshot(proj Projection) (arrow.RecordBatch, error) {
 	return NewTable().String("x", func(int) string { return "" }).Build(proj, 0), nil
 }
+
+// A Where admits a row when every named column has the value given, and
+// names nothing when nil; a provider without a filter is snapshotted as
+// it is, the caller filtering after.
+func TestWhereAdmitsAndFallsBack(t *testing.T) {
+	var none Where
+	assert.True(t, none.Admits("store", "trail"))
+	w := Where{"store": "trail", "scope": "run-x"}
+	assert.True(t, w.Admits("store", "trail"))
+	assert.False(t, w.Admits("store", "journal"))
+	assert.True(t, w.Admits("law", "L34"), "a column the filter does not name admits every value")
+
+	rec, err := SnapshotWhere(&stubProvider{name: "x"}, AllColumns(), w)
+	require.NoError(t, err)
+	defer rec.Release()
+	assert.EqualValues(t, 0, rec.NumRows())
+
+	var filtered filteredStub
+	rec, err = SnapshotWhere(&filtered, AllColumns(), w)
+	require.NoError(t, err)
+	defer rec.Release()
+	assert.Equal(t, w, filtered.got, "a provider that takes the filter is handed it")
+}
+
+// filteredStub is a Provider that takes a Where.
+type filteredStub struct {
+	stubProvider
+	got Where
+}
+
+func (s *filteredStub) SnapshotWhere(proj Projection, where Where) (arrow.RecordBatch, error) {
+	s.got = where
+	return s.Snapshot(proj)
+}

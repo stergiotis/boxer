@@ -137,3 +137,43 @@ func TestEvidenceChecksSayTheTrailIsNotDurable(t *testing.T) {
 	require.Len(t, rows, 1)
 	assert.False(t, rows["trail/run-y/"+LawTrailDurable].holds)
 }
+
+// journalNotRead is a journal store a reader of the trail's rows must not
+// touch: listing its runs fails the test.
+type journalNotRead struct {
+	agentrun.StoreI
+	t *testing.T
+}
+
+func (inst journalNotRead) ListRuns(context.Context, string, int) ([]agentrun.Run, error) {
+	inst.t.Error("the journal was listed for a snapshot of the trail's rows")
+	return nil, nil
+}
+
+// A reader that wants the trail's rows of one run — the trail viewer's
+// verdict — gets them without the journal's laws being judged, which read
+// and canonicalise every run the store lists; the other columns filter
+// the rows after.
+func TestEvidenceChecksFilterSparesTheJournal(t *testing.T) {
+	Enabled.SetForTest(t, "true")
+	introspect.SetLocalQueryEndpoint("")
+	reg := introspect.NewRegistry()
+	stop, err := Start(Deps{Registry: reg, Log: zerolog.Nop(), AgentRuns: journalNotRead{StoreI: agentrun.NewMemStore(), t: t},
+		Anchors: anchor.NewMemStore(), Trail: sealVerdict{}, Run: "run-x"})
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = stop(context.Background()) })
+	p, ok := reg.Lookup(TableEvidenceChecks)
+	require.True(t, ok)
+	rec, err := introspect.SnapshotWhere(p, introspect.AllColumns(), introspect.Where{"store": "trail", "scope": "run-x"})
+	require.NoError(t, err)
+	defer rec.Release()
+	require.EqualValues(t, 3, rec.NumRows(), "the trail's durability, L34 and L32 rows")
+	for i := range int(rec.NumRows()) {
+		assert.Equal(t, "trail", rec.Column(0).(*array.String).Value(i))
+		assert.Equal(t, "run-x", rec.Column(1).(*array.String).Value(i))
+	}
+	other, err := introspect.SnapshotWhere(p, introspect.AllColumns(), introspect.Where{"store": "trail", "scope": "run-y"})
+	require.NoError(t, err)
+	defer other.Release()
+	assert.EqualValues(t, 0, other.NumRows(), "another run has no trail rows here")
+}

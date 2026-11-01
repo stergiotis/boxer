@@ -283,6 +283,12 @@ func Verify(runDigest string, entries []Entry) (broken uint32, err error) {
 	if err != nil {
 		return
 	}
+	return VerifyRows(runDigest, rows)
+}
+
+// VerifyRows is Verify over rows already read as the laws read them
+// (Rows), for a caller that judges several laws over one reading.
+func VerifyRows(runDigest string, rows []evidence.RowI) (broken uint32, err error) {
 	b, _, err := evidence.Verify(ChainScheme, runDigest, rows)
 	return uint32(b), err
 }
@@ -311,15 +317,30 @@ func Rows(entries []Entry) (rows []evidence.RowI, err error) {
 // VerifyRun is Verify from the run row: the row's digest must be the seed
 // its canonical fields reproduce, and the chain must hold from it.
 func VerifyRun(r Run, entries []Entry) (broken uint32, err error) {
+	if err = checkRunSeed(r); err != nil {
+		return
+	}
+	return Verify(r.Digest, entries)
+}
+
+// VerifyRunRows is VerifyRun over rows already read as the laws read them.
+func VerifyRunRows(r Run, rows []evidence.RowI) (broken uint32, err error) {
+	if err = checkRunSeed(r); err != nil {
+		return
+	}
+	return VerifyRows(r.Digest, rows)
+}
+
+// checkRunSeed is the run row's digest against its seed.
+func checkRunSeed(r Run) (err error) {
 	seed, err := RunDigestSeed(r)
 	if err != nil {
 		return
 	}
 	if r.Digest != seed {
 		err = eb.Build().Uint64("run", r.Id).Errorf("the run row's digest is not its seed")
-		return
 	}
-	return Verify(r.Digest, entries)
+	return
 }
 
 // DigestName names the hash construction every digest here uses; it is

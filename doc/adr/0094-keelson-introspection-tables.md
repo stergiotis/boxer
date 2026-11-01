@@ -475,3 +475,18 @@ kind; the durable write is ADR-0254's recorded deferral. Beside it,
 `keelson.llm_prompts`: every registered prompt document (the ADR-0216
 book mechanism, lifted to `llm/promptbook`), a failed one as a row with
 its error; `llm_calls.purpose` joins it on `book/slug`.
+
+## Update (2026-11-01) — a row filter a provider may honour before computing
+
+A `Snapshot` takes a `Projection`, a best-effort column filter. Beside it
+`introspect.Where` is a best-effort row filter of the same temperament:
+column equalities a provider MAY ignore, the caller filtering what comes
+back, so a superset is always safe. A provider that can leave out the
+rows a `Where` excludes before computing them implements
+`FilteredProvider`; `introspect.SnapshotWhere` hands the filter to one
+that does and falls back to `Snapshot` otherwise. The §SD4 engine does
+not push predicates down yet — the filter serves in-process readers that
+know their rows. The first is the trail viewer's verdict over
+`keelson('evidence_checks')`, whose journal rows verify every run the
+store lists and which the viewer never read (ADR-0327's Update of this
+date).

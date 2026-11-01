@@ -66,3 +66,18 @@ func TestCanonicalItemIsSafeForConcurrentUse(t *testing.T) {
 	}
 	wg.Wait()
 }
+
+// BenchmarkCanonicalItem is the cost of one item: a scratch re-entry and a
+// drain, which the evidence laws pay per row they read.
+func BenchmarkCanonicalItem(b *testing.B) {
+	st := NewRevStore(nil, nil, RevStoreConfig{})
+	defer st.Close()
+	ent := &RevEntity{ID: "r1", Ord: 1}
+	ent.RevNote.Has, ent.RevNote.Val = true, RevNote{Text: "a note of ordinary length, as a row carries"}
+	b.ReportAllocs()
+	for b.Loop() {
+		if _, err := st.CanonicalItem(ent); err != nil {
+			b.Fatal(err)
+		}
+	}
+}

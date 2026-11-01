@@ -615,6 +615,36 @@ sealed needs none. `TestSealsHoldOverTheRowsAsTheyReadBack` pins both
 sides, and `keelson('evidence_checks')` holds L34 beside a metrics row of
 the same run (`TestEvidenceChecksL34HoldsBesideOtherWritersOfTheRun`).
 
+### 2026-11-01 — the laws' cost: a filter, one reading, a kept table
+
+Profiling a host found two of its cores in `keelson('evidence_checks')`
+and the garbage it made: the trail viewer's verdict read the relation
+every half minute for the trail's rows of its own run, and the relation
+judged the journal's laws over every run the store lists to serve them.
+Three changes, none to a law:
+
+- The relation implements `introspect.FilteredProvider` (ADR-0094's
+  Update of this date): asked for the trail's rows, it does not list or
+  read the journal. The exits' rows need the journal's approvals, so a
+  filter admitting them still reads it.
+- One reading of a run's rows (`agentrun.Rows`) serves L31 and L32:
+  `agentrun.VerifyRunRows` and `headstore.VerifyHeadRows` take the rows
+  the caller read, wrapped by `evidence.Memoised` so each canonical
+  item, the ledger's and the vault's, is computed once for both laws. A
+  chain row itself stays a live view of its entity; the memo is the
+  caller's choice.
+- A store's `DrainCanonical` keeps the read access and the encoder it
+  drains through, made on first use and released by `Close`. The read
+  access allocates one lookup accelerator per membership type, which
+  per drain made a row's canonical item half a megabyte of garbage on
+  the journal's table.
+
+What remains is the drain itself: one Arrow record per item, over every
+column of the table, which is what ADR-0325 §SD2's re-entry costs. A
+reader that judges the journal's laws on a cadence, as the relation's
+SQL readers may, still pays it per run and per cycle; verifying from the
+last judged head is the next step if one does, and is not taken here.
+
 ## References
 
 - [ADR-0100](./0100-recordstore-generated-leeway-clickhouse-store.md) — generated record stores, roles, the state view.

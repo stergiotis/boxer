@@ -42,7 +42,7 @@ func compactionChecks(scope string, entries []agentrun.Entry) (rows []evidenceCh
 	}
 	for _, law := range compactionLaws {
 		lines := byLaw[law]
-		rows = append(rows, evidenceCheck{Store: "journal", Scope: scope, Law: law, Holds: len(lines) == 0,
+		rows = append(rows, evidenceCheck{Store: storeJournal, Scope: scope, Law: law, Holds: len(lines) == 0,
 			Broken: first[law], Why: strings.Join(lines, "; ")})
 	}
 	return
@@ -119,7 +119,7 @@ func exitLawRows(kind cell.SinkKindE, policy cell.ApprovalPolicy, sinks []cell.S
 		{"L14", cell.L14(sinks, exits, approvals)},
 		{"L33", cell.L33(policy, sinks, exits, approvals)},
 	} {
-		row := evidenceCheck{Store: "exits", Scope: kind.String(), Law: law.name, Holds: len(law.violations) == 0,
+		row := evidenceCheck{Store: storeExits, Scope: kind.String(), Law: law.name, Holds: len(law.violations) == 0,
 			Why: strconv.Itoa(len(exits)) + " exits in this process's ring"}
 		if len(law.violations) > 0 {
 			v := law.violations[0]
@@ -142,7 +142,7 @@ func (inst evidenceChecksProvider) copyChecks() (rows []evidenceCheck) {
 	free := clipboardbroker.PolicyOf(inst.cell()).FreeTier
 	records := inst.clipboard.Records()
 	broken := clipboardbroker.CheckL20(free, records, nil)
-	row := evidenceCheck{Store: "clipboard", Scope: "clipboard", Law: "L20", Holds: len(broken) == 0,
+	row := evidenceCheck{Store: storeClipboard, Scope: "clipboard", Law: "L20", Holds: len(broken) == 0,
 		Why: strconv.Itoa(len(records)) + " copies in the broker's ring; forwarded copies not judged"}
 	if len(broken) > 0 {
 		row.Why = strings.Join(broken, "; ")

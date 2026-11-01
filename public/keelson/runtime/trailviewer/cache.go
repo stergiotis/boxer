@@ -483,7 +483,7 @@ func readVerdicts(ctx context.Context, src *Source, runs []string) (lines []verd
 		}
 		if run == current {
 			if checks == nil && checksErr == nil {
-				checks, checksOk, checksErr = src.evidenceChecks()
+				checks, checksOk, checksErr = src.evidenceChecks(current)
 			}
 			if checksErr != nil {
 				lines = append(lines, verdict.Line{Run: run, Reason: "evidence_checks: " + checksErr.Error()})

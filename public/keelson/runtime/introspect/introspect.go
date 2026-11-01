@@ -68,6 +68,40 @@ type Provider interface {
 	Snapshot(proj Projection) (arrow.RecordBatch, error)
 }
 
+// Where is a best-effort row filter for a snapshot: the rows whose named
+// columns equal the strings given, every pair holding at once. Like a
+// Projection it is an optimisation — a provider MAY ignore it and emit
+// every row, and the caller filters what comes back — so a superset is
+// always safe. nil admits every row.
+type Where map[string]string
+
+// Admits says whether a row with value in column passes the filter: it
+// does when the column is not named, or named with that value.
+func (w Where) Admits(column, value string) bool {
+	want, named := w[column]
+	return !named || want == value
+}
+
+// FilteredProvider is a Provider that can leave out the rows a Where
+// excludes before computing them, for a table whose rows are costly to
+// compute and keyed by a column — the evidence laws by store and scope.
+// The in-process query path does not push predicates down yet; in-process
+// callers that know their rows use it through SnapshotWhere.
+type FilteredProvider interface {
+	Provider
+	// SnapshotWhere is Snapshot over the rows where admits, at least.
+	SnapshotWhere(proj Projection, where Where) (arrow.RecordBatch, error)
+}
+
+// SnapshotWhere snapshots p with the filter when p can take one, and
+// without it otherwise; the caller filters the rows either way.
+func SnapshotWhere(p Provider, proj Projection, where Where) (arrow.RecordBatch, error) {
+	if f, ok := p.(FilteredProvider); ok {
+		return f.SnapshotWhere(proj, where)
+	}
+	return p.Snapshot(proj)
+}
+
 // EncryptedDatasetI marks a Provider that is a sealed dataset (ADR-0240,
 // from ADR-0134): its bytes are never snapshotted in process but opened —
 // decrypted by the record that owns the key — and served by the loopback

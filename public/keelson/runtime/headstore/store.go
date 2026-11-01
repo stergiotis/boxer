@@ -128,6 +128,13 @@ func VerifyHeads(runDigest string, entries []agentrun.Entry, anchored []Anchored
 		slices.Sort(broken)
 		return
 	}
+	return VerifyHeadRows(runDigest, rows, anchored)
+}
+
+// VerifyHeadRows is VerifyHeads over rows already read as the laws read
+// them (agentrun.Rows), for a caller that judges L31 and L32 over one
+// reading.
+func VerifyHeadRows(runDigest string, rows []evidence.RowI, anchored []Anchored) (broken []uint32) {
 	heads := make([]evidence.AnchoredHead, 0, len(anchored))
 	for _, a := range anchored {
 		heads = append(heads, evidence.AnchoredHead{Ordinal: uint64(a.Ordinal), Digest: a.Digest, ReceiptAt: a.Receipt.At, ReceiptId: a.Receipt.Id})

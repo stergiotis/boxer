@@ -380,6 +380,13 @@ type EntryStore struct {
 	// goroutines.
 	scratchMu sync.Mutex
 	scratch   *EntryStore
+	// canonAcc and canonEnc are the read access and the encoder
+	// DrainCanonical loads each drained record into and encodes it
+	// with, made on first use and kept: the read access allocates one
+	// lookup accelerator per membership type, which per drain made the
+	// laws' canonicalisation of a row a half-megabyte of garbage.
+	canonAcc *lowlevel.ReadAccessAgentrunentryTable
+	canonEnc *lowlevel.CanonWireEncoderAgentrunentryTable
 }
 
 // NewEntryStore wires the store. A nil alloc selects the Go allocator.
@@ -1556,14 +1563,20 @@ func (inst *EntryStore) DrainCanonical(w io.Writer) (n int, err error) {
 			inst.cfg.WriteObserver.Discarded(inst.takeWritten())
 		}
 	}()
-	acc := lowlevel.NewReadAccessAgentrunentryTable()
-	enc, err := lowlevel.NewCanonWireEncoderAgentrunentryTable(acc, lowlevel.CanonWireOrdinalTaggerAgentrunentryTable{})
-	if err != nil {
-		err = eh.Errorf("canonical wire encoder: %w", err)
-		return
+	if inst.canonAcc == nil {
+		acc := lowlevel.NewReadAccessAgentrunentryTable()
+		enc, eerr := lowlevel.NewCanonWireEncoderAgentrunentryTable(acc, lowlevel.CanonWireOrdinalTaggerAgentrunentryTable{})
+		if eerr != nil {
+			acc.Release()
+			err = eh.Errorf("canonical wire encoder: %w", eerr)
+			return
+		}
+		inst.canonAcc, inst.canonEnc = acc, enc
 	}
+	acc, enc := inst.canonAcc, inst.canonEnc
 	for _, rec := range records {
 		if err = acc.LoadFromRecord(rec); err != nil {
+			acc.Release()
 			err = eh.Errorf("load the buffered rows: %w", err)
 			return
 		}
@@ -2408,6 +2421,10 @@ func (inst *EntryStore) DiscardPending() {
 func (inst *EntryStore) Close() {
 	inst.DiscardPending()
 	lowlevel.InEntityAgentrunentryTableReleaseBuilder(inst.dml)
+	if inst.canonAcc != nil {
+		inst.canonAcc.Release()
+		inst.canonAcc, inst.canonEnc = nil, nil
+	}
 	inst.scratchMu.Lock()
 	if inst.scratch != nil {
 		inst.scratch.Close()

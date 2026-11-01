@@ -2,6 +2,7 @@ package introspecthost
 
 import (
 	"context"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -54,6 +55,14 @@ type evidenceCheck struct {
 // checkTimeout bounds one read of the relation.
 const checkTimeout = 30 * time.Second
 
+// The stores the rows name, which a Where filters by before the laws run.
+const (
+	storeJournal   = "journal"
+	storeTrail     = "trail"
+	storeExits     = "exits"
+	storeClipboard = "clipboard"
+)
+
 type evidenceChecksProvider struct {
 	runs    agentrun.StoreI
 	anchors anchor.StoreI
@@ -77,12 +86,39 @@ func (evidenceChecksProvider) Freshness() introspect.FreshnessClass { return int
 func (evidenceChecksProvider) Schema() *arrow.Schema                { return evidenceChecksTable(nil).Schema() }
 
 func (inst evidenceChecksProvider) Snapshot(proj introspect.Projection) (rec arrow.RecordBatch, err error) {
+	return inst.SnapshotWhere(proj, nil)
+}
+
+var _ introspect.FilteredProvider = evidenceChecksProvider{}
+
+// SnapshotWhere judges only the stores where admits — the journal's laws
+// are a read and a canonicalisation of every run the store lists, which a
+// reader of the trail's rows alone should not pay for — and filters the
+// rows by the other columns after. The exits' rows need the journal's
+// approvals, so they read the journal even when its own rows are left out.
+func (inst evidenceChecksProvider) SnapshotWhere(proj introspect.Projection, where introspect.Where) (rec arrow.RecordBatch, err error) {
 	ctx, cancel := context.WithTimeout(context.Background(), checkTimeout)
 	defer cancel()
-	rows, approvals := inst.journalChecks(ctx)
-	rows = append(rows, inst.trailChecks(ctx)...)
-	rows = append(rows, inst.exitChecks(approvals)...)
-	rows = append(rows, inst.copyChecks()...)
+	var rows []evidenceCheck
+	journal, exits := where.Admits("store", storeJournal), where.Admits("store", storeExits)
+	if journal || exits {
+		jrows, approvals := inst.journalChecks(ctx)
+		if journal {
+			rows = append(rows, jrows...)
+		}
+		if exits {
+			rows = append(rows, inst.exitChecks(approvals)...)
+		}
+	}
+	if where.Admits("store", storeTrail) {
+		rows = append(rows, inst.trailChecks(ctx)...)
+	}
+	if where.Admits("store", storeClipboard) {
+		rows = append(rows, inst.copyChecks()...)
+	}
+	rows = slices.DeleteFunc(rows, func(r evidenceCheck) bool {
+		return !where.Admits("store", r.Store) || !where.Admits("scope", r.Scope) || !where.Admits("law", r.Law) || !where.Admits("why", r.Why)
+	})
 	rec = evidenceChecksTable(rows).Build(proj, len(rows))
 	return
 }
@@ -97,17 +133,26 @@ func (inst evidenceChecksProvider) journalChecks(ctx context.Context) (rows []ev
 	}
 	runs, err := inst.runs.ListRuns(ctx, "", 0)
 	if err != nil {
-		return []evidenceCheck{{Store: "journal", Law: "L31", Why: "list runs: " + err.Error()}}, nil
+		return []evidenceCheck{{Store: storeJournal, Law: "L31", Why: "list runs: " + err.Error()}}, nil
 	}
 	for _, r := range runs {
 		scope := strconv.FormatUint(r.Id, 10)
 		entries, eerr := inst.runs.Entries(ctx, r.Id, 0)
 		if eerr != nil {
-			rows = append(rows, evidenceCheck{Store: "journal", Scope: scope, Law: "L31", Why: "read entries: " + eerr.Error()})
+			rows = append(rows, evidenceCheck{Store: storeJournal, Scope: scope, Law: "L31", Why: "read entries: " + eerr.Error()})
 			continue
 		}
-		broken, verr := agentrun.VerifyRun(r, entries)
-		row := evidenceCheck{Store: "journal", Scope: scope, Law: "L31", Holds: verr == nil && broken == 0, Broken: uint64(broken)}
+		// One reading of the rows serves L31 and L32, each item computed
+		// once for both: a row's canonical item is a scratch re-entry and
+		// a drain.
+		chain, rerr := agentrun.Rows(entries)
+		var broken uint32
+		verr := rerr
+		if verr == nil {
+			chain = evidence.Memoised(chain)
+			broken, verr = agentrun.VerifyRunRows(r, chain)
+		}
+		row := evidenceCheck{Store: storeJournal, Scope: scope, Law: "L31", Holds: verr == nil && broken == 0, Broken: uint64(broken)}
 		if verr != nil {
 			row.Why = verr.Error()
 		} else if broken != 0 {
@@ -121,11 +166,16 @@ func (inst evidenceChecksProvider) journalChecks(ctx context.Context) (rows []ev
 		}
 		anchored, aerr := headstore.Over(inst.anchors).Read(ctx, r.Cell, r.Id)
 		if aerr != nil {
-			rows = append(rows, evidenceCheck{Store: "journal", Scope: scope, Law: "L32", Why: "read anchors: " + aerr.Error()})
+			rows = append(rows, evidenceCheck{Store: storeJournal, Scope: scope, Law: "L32", Why: "read anchors: " + aerr.Error()})
 			continue
 		}
-		bad := headstore.VerifyHeads(r.Digest, entries, anchored)
-		row = evidenceCheck{Store: "journal", Scope: scope, Law: "L32", Holds: len(bad) == 0}
+		var bad []uint32
+		if rerr != nil {
+			bad = headstore.VerifyHeads(r.Digest, entries, anchored)
+		} else {
+			bad = headstore.VerifyHeadRows(r.Digest, chain, anchored)
+		}
+		row = evidenceCheck{Store: storeJournal, Scope: scope, Law: "L32", Holds: len(bad) == 0}
 		if len(bad) > 0 {
 			row.Broken = uint64(bad[0])
 			row.Why = "heads break at " + ordinals32(bad)
@@ -142,15 +192,15 @@ func (inst evidenceChecksProvider) trailChecks(ctx context.Context) (rows []evid
 		return
 	}
 	why := inst.trail.NotDurable()
-	rows = append(rows, evidenceCheck{Store: "trail", Scope: inst.run, Law: LawTrailDurable, Holds: why == "", Why: why})
+	rows = append(rows, evidenceCheck{Store: storeTrail, Scope: inst.run, Law: LawTrailDurable, Holds: why == "", Why: why})
 	if why != "" || inst.run == "" {
 		return
 	}
 	broken, unnamed, unanchored, err := inst.trail.VerifySeals(ctx, inst.run)
 	if err != nil {
-		return append(rows, evidenceCheck{Store: "trail", Scope: inst.run, Law: "L34", Why: err.Error()})
+		return append(rows, evidenceCheck{Store: storeTrail, Scope: inst.run, Law: "L34", Why: err.Error()})
 	}
-	row := evidenceCheck{Store: "trail", Scope: inst.run, Law: "L34", Holds: broken.Why == evidence.SealBreakNone && len(unnamed) == 0, Broken: broken.Seal}
+	row := evidenceCheck{Store: storeTrail, Scope: inst.run, Law: "L34", Holds: broken.Why == evidence.SealBreakNone && len(unnamed) == 0, Broken: broken.Seal}
 	switch {
 	case broken.Why != evidence.SealBreakNone:
 		row.Why = "the stream breaks: " + broken.Why.String()
@@ -162,7 +212,7 @@ func (inst evidenceChecksProvider) trailChecks(ctx context.Context) (rows []evid
 		row.Why = strconv.Itoa(len(unnamed)) + " rows no seal names"
 	}
 	rows = append(rows, row)
-	anchors := evidenceCheck{Store: "trail", Scope: inst.run, Law: "L32", Holds: broken.Why == evidence.SealBreakNone && len(unanchored) == 0}
+	anchors := evidenceCheck{Store: storeTrail, Scope: inst.run, Law: "L32", Holds: broken.Why == evidence.SealBreakNone && len(unanchored) == 0}
 	switch {
 	case broken.Why != evidence.SealBreakNone:
 		anchors.Why = "the stream does not order"
