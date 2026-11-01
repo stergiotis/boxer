@@ -39,7 +39,7 @@ var chromeTabIDs = []string{"editor", "history", "preview", "snippets", "map", "
 // cannot prune it and it rides along on every applet. TestTabPolicyCoversEveryRegisteredTab
 // pins that, because the failure is silent: a new panel in play just quietly
 // appears in every applet window.
-var orderedResultTabIDs = []string{"table", "projection", "timeline", "vectorfield", "world", "kanban", "chat", "cards", "network", "graphview", "sankey", "dist", "icicle", "series", "treemap", "chart", "files", "schema", "detail"}
+var orderedResultTabIDs = []string{"table", "projection", "timeline", "vectorfield", "world", "kanban", "bowtie", "riskmatrix", "tolerance", "chat", "cards", "network", "graphview", "sankey", "dist", "icicle", "series", "treemap", "chart", "files", "schema", "detail"}
 
 // autoOffResultTabIDs are result panels `tabs: auto` does NOT show. They are
 // still listable — an applet that names one in `tabs:` gets it — so this is a
@@ -87,11 +87,15 @@ var orderedResultTabIDs = []string{"table", "projection", "timeline", "vectorfie
 // default. Which of the two readings an applet wants — ranked or live — is a
 // property of the question, so the applet names it. `bookleeway/lw-affinity.md`
 // is the one that does.
+// Bow-tie, Risk matrix and Impact tolerance are Sankey's case once more: their
+// contracts are risk-register columns (`top_event`, `p_lo`, `tolerance_hours`)
+// that no applet in the corpus carries, so under auto each would reject on
+// every window. An applet over a register names them in `tabs:`.
 //
 // This is a default, not a verdict on the panel: an owner who decides both
 // readings should appear together removes the entry, and only `tabs: auto`
 // applets change.
-var autoOffResultTabIDs = []string{"sankey", "dist", "chart", "graphview", "vectorfield"}
+var autoOffResultTabIDs = []string{"sankey", "dist", "chart", "graphview", "vectorfield", "bowtie", "riskmatrix", "tolerance"}
 
 // appletApp is the minted AppI: a fresh attenuated PlayApp per open window
 // (factory dispatch), built in Mount so env-configured connection details
