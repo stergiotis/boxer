@@ -518,6 +518,84 @@ Accepted by the owner on 2026-10-30:
   [ADR-0330](./0330-a-shared-audit-recorder-below-the-runtime-one-sealed-writer-over-a-narrow-store-binding.md)'s
   Update of this date sets out.
 
+### 2026-10-31 — §SD1, §SD4: state-changing events, the config row and the ditch
+
+A reader who must show the value before a change and the value after it
+finds the value before in the previous event for the same entity. That
+holds only where writers follow one convention, now stated on
+`AuditEvent`'s doc comment
+([`auditevent_dto.go`](../../public/storage/recordstore/evidence/audit/auditevent_dto.go)).
+An action that changes state carries one reference naming the entity it
+changed, and the entity's full state after the event as attributes. The
+entity reference is the first reference; references after it are context.
+The state before is the previous event for the same reference. A writer may
+also carry it as `from` (`audit.AttrFrom`), a bounded short code that is
+the writer's claim, checkable against that previous event. Where the state
+before came from no event, `from-by` (`audit.AttrFromBy`) says where:
+`default` for a code default. Keys and values are values, so no
+membership changes. On an `audit-gap` row `from` and `to` keep their
+meaning, a window of timestamps.
+
+The writers that change state:
+
+- **`attention level`** carries `from`, the level an event of exactly the
+  changed key had in the change's scope before it, and `from-by`, the
+  table that level came from: `default`, `person` or `conversation`. Its
+  first reference, `attention-level`, names the override by scope,
+  conversation, kind, effect and app. `from-by: default` is the baseline for a key
+  nobody overrode, so no separate row is written for the defaults.
+  `attention status` already carried `from` and `to` and is unchanged.
+- **`llm-ration rule-set`**, and `rule-ask` where it sets a rule, carry
+  `from`, a one-line rendering of the rule with the same id that it
+  replaces: kind, selector, quantity, limit, window, alignment, raise and
+  lapse. They carry it only when such a rule existed. `rule-remove`
+  carries the removed rule as its state, as before.
+- `AgentGrant` rows carry the state after by design and are unchanged.
+
+The attention, moderator and ration writers bound their values with
+`audit.Bounded`, which now marks a cut with a trailing ellipsis.
+
+The recorder's own domain gains two actions:
+
+- **`config`** is written by the host right after its recorder is built
+  ([`trailconfig.go`](../../public/keelson/runtime/hostboot/trailconfig.go)).
+  Its outcome is `ok`, its origin the recorder's own, established by the
+  host. Its attributes are the audit-relevant settings as short codes:
+  `trail-required`, `llm-retain`, `log-facts`, `anchor-url` (`set` or
+  `unset`, never the URL), `anchor-store` (`org`, or `memory` when the
+  URL is unset or the store could not be reached), `flush-interval`, and
+  `vcs-revision` with `vcs-modified` when the build carries them. It is
+  the baseline for the settings a run's later rows were recorded under. A
+  host whose trail is not durable writes none.
+- **`ditch`** is written by `trail.Recorder.DitchBodies`
+  ([`ditch.go`](../../public/keelson/runtime/trail/ditch.go)). It runs
+  ADR-0264 §SD6's statement over the table the recorder writes, through
+  the recorder's own executor, then records the outcome (`ok` or
+  `failed`), `app` when the ditch was scoped to one, and the bounded
+  `error` on failure. It names no reference, because the ditch clears a
+  section of many rows. A recorder that is not durable refuses to ditch,
+  so this path never mutates without its row. `DitchBodiesSQL` run by
+  hand, from a ClickHouse client, still leaves no row. No production code
+  ran the ditch before this entry; the one test that did now goes through
+  `DitchBodies`.
+
+Two mutations stay outside the event model:
+
+- **The journal's run row**
+  ([ADR-0308](./0308-the-run-journal-is-the-only-source-of-model-input.md)
+  §SD1, §SD9) is only partly a projection of the append-only ledger. Its
+  label is the join of its entries' labels, its head is the chain's, and
+  it reaches `deleted` only behind a `deleted` entry. Its moves between
+  `open` and `closed`, and from `open` to `stranded`, are compare-and-set
+  rewrites of the row with no entry or event of their own, so the trail
+  does not show them. Whether they become entries is ADR-0308's to decide.
+- **App persist state** is UI state and outside the audit model.
+
+Capability-grant rows (`chstore.WriteGrant`) set the lifecycle lane
+`lc:expiresAt` when the grant has an expiry. The default facts DDL
+(`chstore.defaultEngineClause`) has no TTL on that lane, so grant rows
+expire only where an operator adds a TTL in their own engine clause.
+
 ## References
 
 - [ADR-0277](./0277-one-audit-trail-for-model-calls-and-agent-work.md) — the trail: components, `Origin`, the backlog, the read store.

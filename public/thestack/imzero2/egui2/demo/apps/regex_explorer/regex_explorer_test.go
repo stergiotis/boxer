@@ -21,8 +21,11 @@ import (
 	"github.com/apache/arrow-go/v18/arrow/memory"
 	"github.com/rs/zerolog"
 
+	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
+	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens/data_encoding"
 	"github.com/stergiotis/boxer/public/keelson/runtime/inprocbus"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/implot"
 )
 
 // newTestApp returns a fresh [App]: no regex flags set, empty compile
@@ -729,5 +732,17 @@ func TestErrorTextsLeaveOutTheAddedFlags(t *testing.T) {
 	}
 	if got := rejectionText("Substitution '\\9' is invalid"); got != "Substitution '\\9' is invalid" {
 		t.Errorf("a message quoting no pattern changed: %q", got)
+	}
+}
+
+// TestGroupInkClearsBodyTextContrast: every capture-group fill in the
+// qualitative cycle gets an ink at or above WCAG's 4.5:1 for body text.
+func TestGroupInkClearsBodyTextContrast(t *testing.T) {
+	for i := range len(data_encoding.OkabeIto) {
+		fill := styletokens.QualitativeCycle(i).AsHex()
+		r := implot.ContrastRatio(groupInk(fill), fill)
+		if r < 4.5 {
+			t.Errorf("cycle slot %d (%08x): ink contrast %.2f:1, want >= 4.5:1", i, fill, r)
+		}
 	}
 }

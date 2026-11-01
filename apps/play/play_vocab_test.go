@@ -14,6 +14,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect/docsearchsql"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect/keelsonsql"
+	"github.com/stergiotis/boxer/public/keelson/runtime/trail/trailviews"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/constructsql"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/lwsqlsurface"
 )
@@ -93,12 +94,30 @@ func TestVocabIdentityIsBothPopulations(t *testing.T) {
 
 // TestVocabServerEntriesAreNamespaced pins the claim ADR-0162 §SD2 makes and
 // the panel relies on: every server function this build declares is under
-// LW_. A roster member outside it would still list, but the one-LIKE drift
-// question the namespace exists for would silently not cover it.
+// LW_, or under TRAIL_, the trail views' own namespace (ADR-0350 §SD2). A
+// roster member outside both would still list, but the one-LIKE drift
+// question a namespace exists for would silently not cover it.
 func TestVocabServerEntriesAreNamespaced(t *testing.T) {
 	for _, e := range vocabByWhere(testVocabDeclared(t), vocabServer) {
-		assert.Truef(t, strings.HasPrefix(e.Name, "LW_"), "%s is outside the LW_ namespace", e.Name)
+		assert.Truef(t, strings.HasPrefix(e.Name, "LW_") || strings.HasPrefix(e.Name, "TRAIL_"), "%s is outside the LW_ and TRAIL_ namespaces", e.Name)
 	}
+}
+
+// The trail views' four functions are declared as one server family, so an
+// endpoint carrying them does not list them as undeclared (ADR-0350 §SD2).
+func TestVocabDeclaresTheTrailFunctions(t *testing.T) {
+	r := sqlvocab.NewRegistry()
+	require.NoError(t, RegisterVocabulary(r))
+	var names []string
+	for _, f := range r.All() {
+		if f.Family == vocabFamilyTrail {
+			assert.Equal(t, sqlvocab.WhereServer, f.Where, f.Name)
+			assert.NotEmpty(t, f.Doc, f.Name)
+			names = append(names, f.Name)
+		}
+	}
+	assert.Equal(t, []string{trailviews.FuncAttr, trailviews.FuncRef, trailviews.FuncRefs, trailviews.FuncViewsVersion}, names)
+	assert.Equal(t, trailviews.FunctionNames(), names)
 }
 
 // TestVocabEntriesAreDescribed pins that nothing lists without a signature

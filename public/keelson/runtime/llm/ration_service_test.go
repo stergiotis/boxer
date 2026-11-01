@@ -403,3 +403,42 @@ func TestLedgerRebuildsFromTheTrail(t *testing.T) {
 	_, hasWindow := byAccount[ration.Account{Kind: ration.AccountKindInstance, Key: "0"}]
 	assert.False(t, hasWindow, "nor a window, whose key means another window now")
 }
+
+// Over clickhouse-local: a rule-set that replaces a rule carries the rule
+// it replaces as from; the first set of an id carries none (ADR-0296, the
+// Update of 2026-10-31).
+func TestRuleSetCarriesFrom(t *testing.T) {
+	exec := localFacts(t)
+	ctx := context.Background()
+	cfg := localCfg(&fakeProvider{resp: openaichat.CompletionResponse{Content: "ok"}})
+	cfg.Trail = trail.NewRecorder(exec, "run-from", zerolog.Nop())
+	t.Cleanup(cfg.Trail.Close)
+	h := serveRation(t, cfg)
+	first := ration.Rule{Id: "cap", Select: ration.Selector{Kind: ration.AccountKindApp, Key: string(appId)},
+		Kind: ration.RuleKindBudget, Quantity: ration.QuantityCalls, Limit: 10, Window: time.Hour}
+	require.NoError(t, h.mod.Set(ctx, first))
+	second := first
+	second.Limit = 20
+	require.NoError(t, h.mod.Set(ctx, second))
+
+	events, err := cfg.Trail.Scan(func(st *trail.TrailStore) iter.Seq2[*trail.TrailEntity, error] {
+		return st.ScanAuditEvent(ctx, recordstore.ScanOpts{})
+	})
+	require.NoError(t, err)
+	var froms []option.Option[string]
+	for _, e := range events {
+		if !e.AuditEvent.Has || e.AuditEvent.Val.Domain != auditDomain || e.AuditEvent.Val.Action != "rule-set" {
+			continue
+		}
+		from := option.None[string]()
+		for i, k := range e.AuditEvent.Val.AttrKeys {
+			if k == trail.AttrFrom {
+				from = option.Some(e.AuditEvent.Val.AttrValues[i])
+			}
+		}
+		froms = append(froms, from)
+	}
+	require.Len(t, froms, 2)
+	assert.Contains(t, froms, option.None[string](), "the first set of an id replaces nothing")
+	assert.Contains(t, froms, option.Some("budget app:"+string(appId)+" quantity=calls limit=10 window=1h0m0s"), "the second carries the first")
+}

@@ -74,7 +74,7 @@ var manifest = app.Manifest{
 			{Pattern: adhocdata.SubjectPublish, Direction: app.CapDirectionPub,
 				Reason: "chat: publish the window's token and answer statistics and its agent surface as ad-hoc datasets for Open in play (ADR-0240)"},
 			{Pattern: windowhost.OpenSubject, Direction: app.CapDirectionPub,
-				Reason: "chat: Open in play — a play window on the statistics, a reply's SQL or a failed call's record — and Open in mdedit on the conversation (ADR-0135)"},
+				Reason: "chat: Open in play — a play window on the statistics, a reply's SQL or a failed call's record — Open in mdedit on the conversation, and Open in trail viewer on the conversation (ADR-0135, ADR-0350)"},
 			{Pattern: windowhost.RaiseSubject, Direction: app.CapDirectionPub,
 				Reason: "chat: the roster's Raise brings the chat window that holds a conversation to the front"},
 			{Pattern: clipboardbroker.SubjectWrite, Direction: app.CapDirectionPub,

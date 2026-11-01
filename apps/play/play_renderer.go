@@ -127,6 +127,9 @@ const (
 	dockTabCards       uint64 = 32
 	dockTabVectorField uint64 = 33
 	// 34 was the Model tab, removed 2026-10-07 (ADR-0254 Updates).
+	dockTabRiskMatrix uint64 = 35
+	dockTabTolerance  uint64 = 36
+	dockTabBowtie     uint64 = 37
 )
 
 type PlayApp struct {
@@ -476,6 +479,14 @@ type PlayApp struct {
 	// kanbanDriver is the ADR-0122 board panel (Kanban dock tab): likewise a
 	// plain observer of the active result — no lane, nothing to Close.
 	kanbanDriver *KanbanDriver
+	// bowtieDriver is the Bow-tie panel (ADR-0122's 2026-11-01 update): a
+	// plain observer of the active result — no lane, nothing to Close.
+	bowtieDriver *BowtieDriver
+	// riskMatrixDriver and toleranceDriver are the Risk matrix and Impact
+	// tolerance panels (ADR-0122's 2026-11-01 update): plain observers of the
+	// active result — no lane, nothing to Close.
+	riskMatrixDriver *RiskMatrixDriver
+	toleranceDriver  *ToleranceDriver
 	// chatDriver is the ADR-0239 transcript panel (Chat dock tab): the same
 	// shape as the board — a PanelI observer of the active result with two
 	// optional CTE channels on their own lanes.
@@ -1212,6 +1223,9 @@ func NewPlayApp(client *Client, graph *queryGraph, initialSQL string, rules *glo
 	inst.mapDriver.tiles = inst.tiles
 	inst.worldDriver = NewWorldDriver(mk())
 	inst.kanbanDriver = NewKanbanDriver(mk(), client)
+	inst.bowtieDriver = NewBowtieDriver(mk())
+	inst.riskMatrixDriver = NewRiskMatrixDriver(mk())
+	inst.toleranceDriver = NewToleranceDriver(mk())
 	inst.chatDriver = NewChatDriver(mk(), client)
 	// The Cards pane has a pager of its own, and a pager derives the same ids
 	// from whatever stack it is given — so beside the Table's it needs a

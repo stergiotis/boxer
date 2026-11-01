@@ -110,6 +110,47 @@ Accepted (2026-06-06, reviewed by p@stergiotis). The decision is in force; the `
 
 ## Updates
 
+### 2026-11-01 — a node can carry a hit region
+
+`view.RenderOpts.NodeRegion` gives a node a hit region (ADR-0149's 2026-11-01
+hit regions) over its painted shape, with a label, a tooltip and optionally a
+Tab stop. The view keeps its Go pick (ADR-0228 §SD6) for Hovered, Clicked and
+the hover outline; the region adds what the pick cannot — a tooltip at the
+pointer, an accessible name, keyboard focus, whose Enter or Space the view
+reports as a click. Regions sense hover only, so pan keeps its drag. The view
+declares them rather than the caller because only the view knows each node's
+painted geometry after fit, pan and zoom. The first consumer is the bow-tie
+widget, whose barriers a scene now finds by name.
+
+### 2026-11-01 — a node can be pinned to a layer
+
+A caller can now fix a node's layer instead of leaving it to the engine:
+`layeredgraph.Node.Rank`, zero meaning unpinned. The first consumer is the
+bow-tie widget (`widgets/bowtie`), whose layers carry meaning — threats,
+barrier columns, the top event, the mirrored right half — and so cannot be
+whatever minimises edge length. Left to itself, `dot` ranks the threat of a
+short path one layer closer to the top event than the threat of a long one,
+which is the reverse of the diagram's convention.
+
+Graphviz has no absolute rank, so `goccyengine` expresses a pin in two parts.
+Nodes sharing a Rank go into one `rank=same` subgraph. An edge between two
+pinned nodes gets `minlen` equal to their Rank difference, or
+`constraint=false` when it runs from a higher Rank to a lower one, so it
+cannot pull against the pins. What that guarantees, and what the field's doc
+states: a connected graph whose nodes are all pinned is laid out on exactly
+its Ranks, up to a shift; an unpinned node on a path between two pinned ones
+can widen their gap; and two pinned parts no edge joins are placed relative
+to each other only through a Rank they share.
+
+The alternative was a chain of invisible anchor nodes, one per Rank, joined
+by invisible edges. That is the usual way to give `dot` absolute ranks, and
+it was rejected because each anchor takes room in its layer and in the
+bounding box, which the layout reports and the view fits to. The parser would
+then have had to drop the anchors and recompute the box without knowing the
+extent of the edge labels.
+
+A graph that sets no Rank emits the same DOT as before.
+
 ### 2026-10-24 — edge labels are measured as painted
 
 Two parallel edges' middle labels overlapped once painted. Graphviz sets an

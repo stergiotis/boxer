@@ -17,8 +17,8 @@
 //
 // Coverage (M1–M7 per the ADR, plus the SD7 migration batch):
 // linear/time/log10/symlog axes with the ported locators, grid,
-// line/scatter/bars/shaded (constant or two-curve)/stairs/stems/infinite
-// lines, error bars, heatmaps (rect and texture routes), histograms
+// line/scatter/bars (vertical and horizontal)/shaded (constant or
+// two-curve)/stairs/stems/infinite lines, error bars, heatmaps (rect and texture routes), histograms
 // (1D/2D), pie, digital channels, images, inlay text, a letter-value box
 // series, interactive legend, drag tools/annotations/tags, a native
 // context menu, subplots and linked axes, caller-supplied axis ticks,
@@ -45,7 +45,9 @@
 // a NoZoom axis.
 //
 // House extensions beyond the upstream surface, named as such in their
-// doc comments: Boxes, IncludeX/IncludeY, TimeTicksLocal,
+// doc comments: Boxes, BarsRef/BarsHRef (bars from a base value rather
+// than 0, so two series around one base draw diverging bars — a tornado),
+// IncludeX/IncludeY, TimeTicksLocal,
 // AxisFlagsFollow, Clicked/HoverPlotPos, NewDetached, the pixel-space
 // readbacks HoverPixelPos/ClickedPixelPos/PlotAreaPrev (hit-testing
 // pixel-pinned custom geometry), and the two process-wide palette

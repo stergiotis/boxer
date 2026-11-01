@@ -3,6 +3,7 @@ package windowhost
 import (
 	"context"
 	"github.com/stergiotis/boxer/public/keelson/runtime/inscribe"
+	"runtime/pprof"
 	"slices"
 	"strconv"
 	"sync"
@@ -84,6 +85,10 @@ type window struct {
 	// retired with stop, drained after Unmount and before the bus client
 	// closes (windowhost_drain.go).
 	lifetime *lifetime.Scope
+	// labels carries the window's profiler labels (ADR-0351 §SD1), set on
+	// the goroutine that runs its Mount, Frame and Unmount, so goroutines
+	// those start inherit them.
+	labels context.Context
 
 	// appIds is the per-window WidgetIdStack handed to the app via
 	// MountCtx.Ids(). The host pre-pushes an instance-unique salt
@@ -745,6 +750,7 @@ func (inst *Inst) OpenWithConfig(appId app.AppIdT, kind string, cfg []byte) (key
 		openFlag:    true,
 		stop:        stop,
 		lifetime:    scope,
+		labels:      task.LabelContext(m.Id, uint64(key)),
 		opened:      time.Now(),
 	})
 	runId := inst.runId
@@ -944,9 +950,11 @@ func (inst *Inst) reapWindow(w *window, reason string, unmountMsg string) (cl cl
 		cw.leave()
 	}
 	w.leave()
-	// unmount
+	// unmount, under the window's profiler labels
+	pprof.SetGoroutineLabels(w.labels)
 	inst.saveWorkingset(w, reason)
 	umErr := w.appInst.Unmount(uc)
+	pprof.SetGoroutineLabels(context.Background())
 	if umErr != nil {
 		inst.logger.Warn().Err(umErr).
 			Str("id", string(w.manifest.Id)).
@@ -1183,7 +1191,9 @@ func emitStopped(facts factsstore.FactsStoreI, logger zerolog.Logger, runId stri
 // "open" button per app and runs inside a c.PanelCentral so the user
 // can at least see something on the desktop after launch.
 func (inst *Inst) Frame(ids *c.WidgetIdStack) (err error) {
-	inst.frameTimes.beginLoop(time.Now())
+	now := time.Now()
+	inst.frameTimes.beginLoop(now)
+	inst.frameTimes.checkSlow(now)
 	inst.renderGoroutine.Store(opwire.GoroutineId())
 	// Re-resolve: the density preset is runtime-switchable (Layout ▸ Density).
 	inst.density = styletokens.ActiveDensity()
@@ -1581,6 +1591,10 @@ func renderWindowBody(w *window, closeReq bool, logger zerolog.Logger, ft *frame
 		// about to tear down anyway.
 		return
 	}
+	// The window's profiler labels hold for everything below, which is the
+	// window's work: Mount, its queued commands, Frame (ADR-0351 §SD1).
+	pprof.SetGoroutineLabels(w.labels)
+	defer pprof.SetGoroutineLabels(context.Background())
 	// Mount runs once per AppI instance (shared via w.mount), capturing the
 	// first window's mountCtx so the eventual Unmount uses the same context.
 	if !w.mount.mounted && w.mount.mountErr == nil {

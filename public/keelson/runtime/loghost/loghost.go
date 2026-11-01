@@ -257,8 +257,7 @@ func (w fullWriteAdapter) Write(p []byte) (n int, err error) {
 // for this store alone.
 func openFactsStore(ctx context.Context, runId string) (store *chstore.Store, cfg chstore.Config, target string, why string) {
 	name := chstore.LogFactsEnabled.Spec().Name
-	v := chstore.LogFactsEnabled.Get()
-	if v == "" || v == "0" {
+	if !chstore.LogFactsOn() {
 		why = name + " is not set"
 		return
 	}

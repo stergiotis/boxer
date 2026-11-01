@@ -104,6 +104,12 @@ func attachPaneStatus(inst *PlayApp, spec *TabSpec) {
 		spec.Status = func() (string, string) { return inst.worldDriver.drawnStatus, inst.worldDriver.drawnReject }
 	case "kanban":
 		spec.Status = func() (string, string) { return inst.kanbanDriver.statusLine(), "" }
+	case "bowtie":
+		spec.Status = func() (string, string) { return inst.bowtieDriver.paneStatus() }
+	case "riskmatrix":
+		spec.Status = func() (string, string) { return inst.riskMatrixDriver.paneStatus() }
+	case "tolerance":
+		spec.Status = func() (string, string) { return inst.toleranceDriver.paneStatus() }
 	case "chat":
 		spec.Status = func() (string, string) { return inst.chatDriver.statusLine(), "" }
 	case "files":

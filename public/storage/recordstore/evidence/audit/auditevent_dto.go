@@ -21,6 +21,14 @@ import (
 // No field carries a personal value: Principal is a pseudonymous reference,
 // references are ids or hashes, attributes are short codes. The row's
 // timestamp is when the recorded thing happened.
+//
+// An action that changes state carries one reference naming the entity it
+// changed, and the entity's full state after the event as attributes. The
+// entity reference is the first reference; references after it are
+// context. The state before is the previous event for the same reference;
+// a writer may also carry it as AttrFrom, its own claim, which a reader
+// checks against that event. Where the state before came from no event — a
+// code default — AttrFromBy says so (ADR-0296, the Update of 2026-10-31).
 type AuditEvent struct {
 	_ struct{} `kind:"auditEvent"`
 
@@ -112,11 +120,28 @@ const (
 
 // The recorder's own domain and its actions (ADR-0296 §SD4): rows a
 // recorder writes about itself, in the retention class RetentionTrail.
+// Config is the audit-relevant settings a host's recorder started under,
+// and ditch the removal of kept message text (ADR-0264 §SD6), both from
+// the Update of 2026-10-31.
 const (
 	TrailDomain        = "trail"
 	ActionAuditGap     = "audit-gap"
 	ActionAuditInvalid = "audit-invalid"
+	ActionAuditConfig  = "config"
+	ActionAuditDitch   = "ditch"
 	RetentionTrail     = "trail"
+)
+
+// The conventional attribute keys of an action that changes state
+// (ADR-0296, the Update of 2026-10-31). AttrFrom is the state before the
+// event as the writer saw it, a bounded short code, optional. AttrFromBy
+// says where that state came from when it was not an earlier event, e.g.
+// AttrFromByDefault for a code default. The audit-gap row's from and to
+// are a window of timestamps, not a state.
+const (
+	AttrFrom          = "from"
+	AttrFromBy        = "from-by"
+	AttrFromByDefault = "default"
 )
 
 // The bounds Validate applies.
@@ -255,8 +280,10 @@ func CheckValue(what string, s string) (err error) {
 	return nil
 }
 
-// Bounded is s as an attribute value: valid UTF-8, non-empty, under the
-// bound — what a recorder writes about a row it could not take as it was.
+// Bounded is s as an attribute or reference value: valid UTF-8,
+// non-empty, under the bound, a cut marked by a trailing ellipsis — what a
+// recorder writes about a row it could not take as it was, and what an
+// emitter writes for a value it does not bound itself.
 func Bounded(s string) (out string) {
 	out = toValidUTF8(s)
 	if out == "" {
@@ -264,7 +291,7 @@ func Bounded(s string) (out string) {
 	}
 	if utf8.RuneCountInString(out) > MaxValueRunes {
 		r := []rune(out)
-		out = string(r[:MaxValueRunes])
+		out = string(r[:MaxValueRunes-1]) + "…"
 	}
 	return
 }

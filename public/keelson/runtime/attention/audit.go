@@ -20,6 +20,7 @@ const (
 	auditRefItem      = "attention-item"
 	auditRefConv      = "conversation"
 	auditRefApp       = "app"
+	auditRefLevelKey  = "attention-level"
 	auditAttrKind     = "kind"
 	auditAttrLevel    = "level"
 	auditAttrScope    = "scope"
@@ -76,15 +77,17 @@ func actRow(act ActE, it Item) (row trail.AuditEvent) {
 
 func levelRow(ch Change) (row trail.AuditEvent) {
 	row = trail.AuditEvent{Domain: auditDomain, Action: auditActionLevel, Outcome: trail.OutcomeOk, Retention: trail.RetentionTrail}
+	scope := auditScopePerson
+	if ch.Conversation != "" {
+		scope = auditScopeConvers
+	}
+	// The override changed is the first reference; the others are context.
+	ref(&row, auditRefLevelKey, levelKeyRef(scope, ch))
 	ref(&row, auditRefConv, ch.Conversation)
 	ref(&row, auditRefApp, string(ch.Key.App))
 	attr(&row, auditAttrKind, ch.Key.Kind)
 	if ch.Key.Effect != 0 {
 		attr(&row, "effect", ch.Key.Effect.String())
-	}
-	scope := auditScopePerson
-	if ch.Conversation != "" {
-		scope = auditScopeConvers
 	}
 	attr(&row, auditAttrScope, scope)
 	lvl := "default"
@@ -92,7 +95,26 @@ func levelRow(ch Change) (row trail.AuditEvent) {
 		lvl = ch.Level.String()
 	}
 	attr(&row, auditAttrLevel, lvl)
+	if ch.Prev != LevelUnspecified {
+		attr(&row, trail.AttrFrom, ch.Prev.String())
+		attr(&row, trail.AttrFromBy, ch.PrevBy.String())
+	}
 	return
+}
+
+// levelKeyRef names the override a level row changes, one value per
+// (scope, conversation, kind, effect, app), "*" for the effect or app a
+// key leaves open: the reference the previous row for the same override
+// shares (ADR-0296, the Update of 2026-10-31).
+func levelKeyRef(scope string, ch Change) (s string) {
+	effect, a := "*", "*"
+	if ch.Key.Effect != 0 {
+		effect = ch.Key.Effect.String()
+	}
+	if ch.Key.App != "" {
+		a = string(ch.Key.App)
+	}
+	return scope + "|" + ch.Conversation + "|" + ch.Key.Kind + "|" + effect + "|" + a
 }
 
 func (inst *auditor) write(row trail.AuditEvent, at time.Time) {
@@ -108,12 +130,12 @@ func (inst *auditor) write(row trail.AuditEvent, at time.Time) {
 
 func ref(row *trail.AuditEvent, ty string, v string) {
 	if v != "" && len(row.RefTypes) < trail.MaxRefs {
-		row.RefTypes, row.RefValues = append(row.RefTypes, ty), append(row.RefValues, clip(v, trail.MaxValueRunes-1))
+		row.RefTypes, row.RefValues = append(row.RefTypes, ty), append(row.RefValues, trail.Bounded(v))
 	}
 }
 
 func attr(row *trail.AuditEvent, k string, v string) {
 	if v != "" && len(row.AttrKeys) < trail.MaxAttrs {
-		row.AttrKeys, row.AttrValues = append(row.AttrKeys, k), append(row.AttrValues, clip(v, trail.MaxValueRunes-1))
+		row.AttrKeys, row.AttrValues = append(row.AttrKeys, k), append(row.AttrValues, trail.Bounded(v))
 	}
 }

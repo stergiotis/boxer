@@ -256,3 +256,97 @@ Costed with measurements in
   here as an observation, not changed. Making it enforcing is a separate
   decision and would need its own numbers — the palette does not currently
   clear the floor it nominally has.
+
+## Updates
+
+### 2026-11-01 — The cycle's order is chosen, and slot 0 is gated against the semantic palette
+
+[ADR-0029](./0029-imzero2-design-system-and-policy-as-code.md) §SD4 makes
+the semantic palette and the data-encoding palette disjoint, so that a chart
+colour cannot be read as a status colour. Nothing compared the two, and the
+cycle shipped in Okabe & Ito's publication order, which opens on orange:
+measured 2026-11-01 (normal-vision OKLab ΔE × 100), slot 0 sat **ΔE 6.1**
+from the dark theme's `semantic.warning.default`. The light theme of
+[ADR-0258](./0258-imzero2-fresh-light-theme-chosen-at-launch.md) postdates
+this ADR and adds a second semantic palette to collide with.
+
+**§SD2 now permits re-ordering as well as subsetting.** The seven values
+still ship byte-for-byte as published; only their order is ours. The order
+is declared once, as `okabeItoCycleOrder` in the
+[vendor converter](../../public/keelson/designsystem/colors/vendor/vendor.go),
+and both generated tables (Go and Rust) follow it. The upstream `.txt` and
+its SHA pin are unchanged. §SD3's three floors are pairwise over the whole
+set, so they do not depend on order, and the re-ordered cycle passes them
+with the same margins.
+
+The order and the nearest semantic `*.default` token per theme, measured
+2026-11-01:
+
+| slot | entry | dark theme | fresh theme |
+|---|---|---|---|
+| 0 | reddish purple | error 14.0 | accent 11.7 |
+| 1 | blue | info 26.7 | info 3.1 |
+| 2 | vermillion | error 19.1 | error 7.9 |
+| 3 | bluish green | success 18.5 | success 6.9 |
+| 4 | yellow | warning 13.0 | warning 33.6 |
+| 5 | sky blue | info 6.4 | info 17.3 |
+| 6 | orange | warning 6.1 | warning 17.5 |
+
+Slot 0 is the first series of every chart, so it is chosen against every
+theme. Only reddish purple (worst 11.7) and yellow (worst 13.0) are more than
+ΔE 10 from every Default in both themes. Yellow was rejected for slot 0: it
+measures 1.28:1 on the fresh theme's surface and carries the conventional
+"caution" reading. **Blue was considered for slot 0 and rejected on
+measurement:** it is the strongest choice in the dark theme (26.7) but sits
+ΔE 3.1 from the fresh theme's info colour. Sky blue sits 6.4 from the dark
+theme's info colour. The remaining slots follow the dark theme, for which
+this cycle is specified and gated. The entries clearing ΔE 15 against every
+dark Default come first, alternating warm and cool. The two that sit on a dark
+status colour, sky blue and orange, come last.
+
+**A cross-palette check runs in both colour generators.** `gen.CrossPalette`
+([crosspalette.go](../../public/keelson/designsystem/colors/gen/crosspalette.go))
+measures every cycle entry against every semantic `*.default` token of every
+theme. `colors vendor` runs it on the cycle it is about to emit. `colors gen`
+runs it on the shipped cycle, because a semantic palette change can walk a
+status colour onto a series colour just as a cycle change can. Tests over
+the shipped table catch a hand-edit. The split:
+
+- **Gating:** slot 0 at ΔE ≤ 10 from any Default in any theme. The run fails
+  before anything is written, as §SD3's floors do. Ten is empirical in the
+  way §SD3's dichromacy floor is: nothing published gives the distance at
+  which a series colour stops reading as a status colour. It sits above the
+  6.1 collision this check was added for, and below the 11.7 that the shipped
+  slot 0 reaches.
+- **Advisory:** any slot at ΔE ≤ 15. These findings are printed and do not
+  fail the run. 15 is the level at which the semantic palette's own CVD check
+  reports.
+
+The split follows this ADR's precedent of gating what every chart shows. A
+gate on every slot could not be met: the fresh theme's info, success and error
+colours sit on the same blue, green and red families that Okabe-Ito spans.
+Measured 2026-11-01, five of the seven entries come within ΔE 10 of some
+Default in one theme or the other. The advisory list records those
+collisions, and a light-theme cycle (still deferred) is where they would be
+resolved.
+
+Consequences:
+
+- Every chart's first series changes from orange to reddish purple, and every
+  later slot changes hue. A consumer that picked a slot index for its hue
+  rather than its position has to re-pick.
+- On the fresh theme's surface, slots 1–3 now clear 3:1, and slot 0 measures
+  2.97:1. Under publication order the first two slots measured 2.18:1 and
+  2.24:1. The cycle remains specified for the dark spine.
+- Blue is the one entry below 4.5:1 against near-black text (4.03:1). It moves
+  from slot 4 to slot 1, so fill-style consumers that set dark text on cycle
+  colours meet it at their second category. The regex explorer's capture-group
+  cells were one; they now take whichever neutral extreme contrasts more with
+  each fill, under a test that every slot clears 4.5:1.
+- A consumer that takes a prefix of the cycle inherits its new adjacencies.
+  The regex editor's four bracket-depth colours were the cycle's first four;
+  the wrap from depth four back to depth one put bluish green beside reddish
+  purple, ΔE 7.5 under deuteranopia. They are now four slots chosen for
+  cyclic separation (`regexDepthSlots` in the codeview widget).
+- The check measures normal-vision distance only. It does not cover the
+  sequential and diverging ramps, which pass through status hues by design.

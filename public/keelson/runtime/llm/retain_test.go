@@ -386,12 +386,12 @@ func TestRetainedConversationLandsAndDitches(t *testing.T) {
 	}
 
 	// The ditch empties the text and leaves the audit: every message row
-	// stays, with its size, digest and place.
-	require.NoError(t, exec.Exec(ctx, trail.DitchBodiesSQL("", "test.llm.other")))
+	// stays, with its size, digest and place, and each ditch is a row.
+	require.NoError(t, cfg.Trail.DitchBodies(ctx, "test.llm.other"))
 	_, n, withText = messages()
 	assert.Equal(t, 16, n, "no row is removed")
 	assert.Equal(t, 14, withText, "the other app's text is gone, this app's stays")
-	require.NoError(t, exec.Exec(ctx, trail.DitchBodiesSQL("", "")))
+	require.NoError(t, cfg.Trail.DitchBodies(ctx, ""))
 	byCall, n, withText = messages()
 	assert.Equal(t, 16, n)
 	assert.Zero(t, withText, "no text is left")
@@ -400,6 +400,18 @@ func TestRetainedConversationLandsAndDitches(t *testing.T) {
 	calls, err = svc.ScanCalls(ctx, time.Now().Add(-time.Hour), 100)
 	require.NoError(t, err)
 	assert.Len(t, calls, 6, "the counts survive the ditch")
+	events, err := cfg.Trail.Scan(func(st *trail.TrailStore) iter.Seq2[*trail.TrailEntity, error] {
+		return st.ScanAuditEvent(ctx, recordstore.ScanOpts{})
+	})
+	require.NoError(t, err)
+	var ditches []string
+	for _, e := range events {
+		if e.AuditEvent.Has && e.AuditEvent.Val.Action == trail.ActionAuditDitch {
+			assert.Equal(t, trail.OutcomeOk, e.AuditEvent.Val.Outcome)
+			ditches = append(ditches, strings.Join(e.AuditEvent.Val.AttrKeys, ",")+"="+strings.Join(e.AuditEvent.Val.AttrValues, ","))
+		}
+	}
+	assert.ElementsMatch(t, []string{"app=test.llm.other", "="}, ditches, "one row per ditch, the app filter when given")
 }
 
 // localFacts is a clickhouse-local executor holding an empty boxer.facts;

@@ -33,11 +33,13 @@ import (
 // --- Resolved membership ids from vdd. ---
 
 var (
-	kindAcLaunchAppId uint64
+	kindAcLaunchAppId  uint64
+	kindAcLaunchFilter uint64
 )
 
 func init() {
 	kindAcLaunchAppId = vdd.MembAcLaunchAppId.GetId().Value()
+	kindAcLaunchFilter = vdd.MembAcLaunchFilter.GetId().Value()
 	buscodec.Register[AppCenterLaunch](appCenterLaunchBusCodec)
 }
 
@@ -101,7 +103,8 @@ type AppCenterLaunchColumns struct {
 	NaturalKey [][]byte
 	At         []time.Time
 
-	AppId []string
+	AppId  []string
+	Filter []string
 }
 
 // Len returns the number of rows currently in the batch.
@@ -118,6 +121,7 @@ func (c *AppCenterLaunchColumns) Append(row AppCenterLaunch) {
 	c.NaturalKey = append(c.NaturalKey, row.NaturalKey)
 	c.At = append(c.At, row.At)
 	c.AppId = append(c.AppId, row.AppId)
+	c.Filter = append(c.Filter, row.Filter)
 }
 
 // Row reconstructs entity i as an AoS AppCenterLaunch record. Inverse of
@@ -128,6 +132,7 @@ func (c *AppCenterLaunchColumns) Row(i int) (row AppCenterLaunch) {
 	row.NaturalKey = c.NaturalKey[i]
 	row.At = c.At[i]
 	row.AppId = c.AppId[i]
+	row.Filter = c.Filter[i]
 	return
 }
 
@@ -201,6 +206,9 @@ func AppCenterLaunchBuildEntities[
 		stringArraySecAttr_AppId := stringArraySec.BeginAttributeSingle(c.AppId[i])
 		stringArraySecAttr_AppId.AddMembershipLowCardRefP(kindAcLaunchAppId)
 		stringArraySecAttr_AppId.EndAttributeP()
+		stringArraySecAttr_Filter := stringArraySec.BeginAttributeSingle(c.Filter[i])
+		stringArraySecAttr_Filter.AddMembershipLowCardRefP(kindAcLaunchFilter)
+		stringArraySecAttr_Filter.EndAttributeP()
 		stringArraySec.EndSection()
 		err = dml.CommitEntity()
 		if err != nil {
@@ -223,6 +231,9 @@ func AppCenterLaunchEmitSectionStringArray[
 	stringArraySecAttr_AppId := stringArraySec.BeginAttributeSingle(row.AppId)
 	stringArraySecAttr_AppId.AddMembershipLowCardRefP(kindAcLaunchAppId)
 	stringArraySecAttr_AppId.EndAttributeP()
+	stringArraySecAttr_Filter := stringArraySec.BeginAttributeSingle(row.Filter)
+	stringArraySecAttr_Filter.AddMembershipLowCardRefP(kindAcLaunchFilter)
+	stringArraySecAttr_Filter.EndAttributeP()
 	return
 }
 
@@ -295,6 +306,9 @@ func AppCenterLaunchFillFromArrow[
 		var stringArrayAppIdVal string
 		var stringArrayAppIdCount int
 		var stringArrayAppIdLastAttr int64
+		var stringArrayFilterVal string
+		var stringArrayFilterCount int
+		var stringArrayFilterLastAttr int64
 		nstringArray := stringArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 		for attrJ := int64(0); attrJ < nstringArray; attrJ++ {
 			for membID := range stringArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
@@ -310,6 +324,17 @@ func AppCenterLaunchFillFromArrow[
 						return
 					}
 					stringArrayAppIdVal = val
+				case kindAcLaunchFilter:
+					if stringArrayFilterLastAttr != attrJ+1 {
+						stringArrayFilterLastAttr = attrJ + 1
+						stringArrayFilterCount++
+					}
+					val, valErr := stringArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+					if valErr != nil {
+						err = eb.Build().Int("row", i).Str("section", "stringArray").Str("membership", "acLaunchFilter").Str("field", "Filter").Errorf("slot stringArray@acLaunchFilter (field Filter) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+						return
+					}
+					stringArrayFilterVal = val
 				}
 			}
 		}
@@ -318,6 +343,11 @@ func AppCenterLaunchFillFromArrow[
 			return
 		}
 		c.AppId = append(c.AppId, stringArrayAppIdVal)
+		if stringArrayFilterCount != 1 {
+			err = eb.Build().Int("row", i).Str("section", "stringArray").Str("membership", "acLaunchFilter").Int("got", stringArrayFilterCount).Errorf("slot stringArray@acLaunchFilter (field Filter) carries %d attributes but the DTO admits exactly 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", stringArrayFilterCount)
+			return
+		}
+		c.Filter = append(c.Filter, stringArrayFilterVal)
 	}
 	return
 }
@@ -342,6 +372,9 @@ func AppCenterLaunchReadRow[
 	var stringArrayAppIdVal string
 	var stringArrayAppIdCount int
 	var stringArrayAppIdLastAttr int64
+	var stringArrayFilterVal string
+	var stringArrayFilterCount int
+	var stringArrayFilterLastAttr int64
 	nstringArray := stringArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 	for attrJ := int64(0); attrJ < nstringArray; attrJ++ {
 		for membID := range stringArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
@@ -357,6 +390,17 @@ func AppCenterLaunchReadRow[
 					return
 				}
 				stringArrayAppIdVal = val
+			case kindAcLaunchFilter:
+				if stringArrayFilterLastAttr != attrJ+1 {
+					stringArrayFilterLastAttr = attrJ + 1
+					stringArrayFilterCount++
+				}
+				val, valErr := stringArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				if valErr != nil {
+					err = eb.Build().Int("row", i).Str("section", "stringArray").Str("membership", "acLaunchFilter").Str("field", "Filter").Errorf("slot stringArray@acLaunchFilter (field Filter) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+					return
+				}
+				stringArrayFilterVal = val
 			}
 		}
 	}
@@ -366,6 +410,14 @@ func AppCenterLaunchReadRow[
 	}
 	if stringArrayAppIdCount == 1 {
 		row.AppId = stringArrayAppIdVal
+		present = true
+	}
+	if stringArrayFilterCount > 1 {
+		err = eb.Build().Int("row", i).Str("section", "stringArray").Str("membership", "acLaunchFilter").Int("got", stringArrayFilterCount).Errorf("slot stringArray@acLaunchFilter (field Filter) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", stringArrayFilterCount)
+		return
+	}
+	if stringArrayFilterCount == 1 {
+		row.Filter = stringArrayFilterVal
 		present = true
 	}
 	return

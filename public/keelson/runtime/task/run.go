@@ -25,8 +25,10 @@ import (
 // only after Run returned: a cancel before it is announced on the task.
 //
 // A nil api, or a spawn the bus or the lifetime refuses, runs work untracked
-// under parent.
+// under parent. Either way the calling goroutine takes the profiler labels
+// of api's owner (LabelGoroutine).
 func Run(api TaskApiI, parent context.Context, opts SpawnOpts, work func(ctx context.Context) error) (err error) {
+	LabelGoroutine(api)
 	h := spawnFor(api, parent, opts)
 	if h == nil {
 		return work(parent)
@@ -50,6 +52,7 @@ func Run(api TaskApiI, parent context.Context, opts SpawnOpts, work func(ctx con
 // announces a cancel on the task before its Done or Error, since the window
 // asked; the audit trail carries both.
 func RunToCompletion(api TaskApiI, opts SpawnOpts, work func() error) (err error) {
+	LabelGoroutine(api)
 	opts.Cancellable = false
 	h := spawnFor(api, context.Background(), opts)
 	if h == nil {

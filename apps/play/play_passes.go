@@ -15,6 +15,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect/docsearchsql"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect/keelsonsql"
 	"github.com/stergiotis/boxer/public/keelson/runtime/sysmfacts"
+	"github.com/stergiotis/boxer/public/keelson/runtime/trail/trailviews"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/constructsql"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/lwsqlsurface"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/marshall/clickhouse/componentsql"
@@ -110,6 +111,9 @@ func RegisterComponents(r *componentsql.Registry) (err error) {
 	return r.Register(mddocfacts.MddocComponentSQL)
 }
 
+// vocabFamilyTrail is the trail views' family in the Vocabulary tab.
+const vocabFamilyTrail = "trail views (ADR-0350)"
+
 // RegisterVocabulary publishes every SQL function this build declares into one
 // vocabulary registry (ADR-0190 §SD4).
 //
@@ -134,6 +138,21 @@ func RegisterVocabulary(r *sqlvocab.Registry) (err error) {
 		err = r.Register(sqlvocab.Function{
 			Name: f.Name, Params: f.Params, Doc: f.Doc,
 			Where: sqlvocab.WhereServer, Family: vocabFamilyLabel(f.Family), Available: true,
+		})
+		if err != nil {
+			return
+		}
+	}
+
+	// The trail views' functions (ADR-0350 §SD2, proposed): server UDFs the
+	// trailviews install creates beside the views, outside the read
+	// surface's LW_ namespace. Declared here so an endpoint carrying them
+	// lists them under their family rather than as undeclared; an endpoint
+	// without the trail views reports them missing, which it is.
+	for _, f := range trailviews.Functions() {
+		err = r.Register(sqlvocab.Function{
+			Name: f.Name, Params: f.Params, Doc: f.Doc,
+			Where: sqlvocab.WhereServer, Family: vocabFamilyTrail, Available: true,
 		})
 		if err != nil {
 			return

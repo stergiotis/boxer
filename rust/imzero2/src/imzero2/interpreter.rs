@@ -4,8 +4,10 @@ use crate::fffi::common::{FffiError, FffiResult};
 use crate::fffi::io::ImZeroFffiIo;
 
 pub mod capture_replay;
+pub mod hit_regions;
 pub mod optree;
 pub mod paint_budget;
+use hit_regions::HitShape;
 use paint_budget::{DEFAULT_MAX_BUFFER_SIZE, paint_vertex_budget_for};
 
 // Errors produced by the interpreter dispatch. Boundary between FFFI I/O
@@ -41,7 +43,8 @@ use crate::imzero2::enums_out::{
     EndETableBuilderMethodId, EtColumnBuilderMethodId, FrameBuilderMethodId, FuncProcId,
     GridBuilderMethodId, HyperlinkBuilderMethodId, HyperlinkToBuilderMethodId,
     LabelAtomsBuilderMethodId, LabelBuilderMethodId, NewTableBuilderMethodId,
-    NewTableColumnBuilderMethodId, PaintCanvasBuilderMethodId, PaintImageBuilderMethodId,
+    NewTableColumnBuilderMethodId, PaintCanvasBuilderMethodId, PaintHitCircleBuilderMethodId,
+    PaintHitPolygonBuilderMethodId, PaintHitRectBuilderMethodId, PaintImageBuilderMethodId,
     PaintMarkersBuilderMethodId, PaintPolygonFilledBuilderMethodId, PaintSegmentsBuilderMethodId,
     PaintTextBuilderMethodId, PanelBottomBuilderMethodId, PanelBottomInsideBuilderMethodId,
     PanelLeftBuilderMethodId, PanelLeftInsideBuilderMethodId, PanelRightBuilderMethodId,
@@ -297,6 +300,16 @@ pub enum PaintCmd {
         pixels: Vec<u32>,
         nearest: bool,
         opacity: f32,
+    },
+    /// A hover/tooltip/accessibility region over a painted mark; resolved
+    /// after the frame's paint commands (see `hit_regions`).
+    HitRegion {
+        id: egui::Id,
+        shape: HitShape,
+        label: String,
+        tip: String,
+        tip_body: Option<Vec<u8>>,
+        focusable: bool,
     },
 }
 
@@ -6872,6 +6885,192 @@ egui::Modal::new(i);
                     stroke: egui::Stroke::new(stroke_width, color32_from_rgba_u32(col)),
                 });
             }
+            FuncProcId::PaintHitCircle => {
+                #[cfg(feature = "puffin")]
+                puffin::profile_scope!("match FuncProcId::PaintHitCircle");
+                // arguments
+                let i = self.read_id()?;
+                let mut cx = self.io.read_plain_f32()?;
+                let mut cy = self.io.read_plain_f32()?;
+                let mut radius = self.io.read_plain_f32()?;
+                // construct
+
+                let mut w = 0u8;
+                let mut hit_label = String::new();
+                let mut hit_tip = String::new();
+                let mut hit_focusable = false;
+                // methods
+                loop {
+                    let (m, _) = self.read_from_repr(PaintHitCircleBuilderMethodId::from_repr)?;
+                    match m {
+                        PaintHitCircleBuilderMethodId::Build => {
+                            break;
+                        }
+                        PaintHitCircleBuilderMethodId::Label => {
+                            #[cfg(feature = "puffin")]
+                            puffin::profile_scope!("match PaintHitCircleBuilderMethodId::Label");
+                            let mut tx = self.io.read_plain_s()?;
+                            hit_label = tx;
+                        }
+                        PaintHitCircleBuilderMethodId::Tooltip => {
+                            #[cfg(feature = "puffin")]
+                            puffin::profile_scope!("match PaintHitCircleBuilderMethodId::Tooltip");
+                            let mut tx = self.io.read_plain_s()?;
+                            hit_tip = tx;
+                        }
+                        PaintHitCircleBuilderMethodId::Focusable => {
+                            #[cfg(feature = "puffin")]
+                            puffin::profile_scope!(
+                                "match PaintHitCircleBuilderMethodId::Focusable"
+                            );
+                            hit_focusable = true;
+                        }
+                    }
+                }
+                // apply
+                // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+                {
+                    let mut tip_blocks = self.io.read_deferred_block_map_u32()?;
+                    let tip_body =
+                        tip_blocks.drain().next().map(|(_, v)| v).filter(|v| !v.is_empty());
+                    self.paint_cmds.push(PaintCmd::HitRegion {
+                        id: i,
+                        shape: HitShape::Circle { cx, cy, radius },
+                        label: hit_label,
+                        tip: hit_tip,
+                        tip_body,
+                        focusable: hit_focusable,
+                    });
+                }
+                if d == 0 {
+                    self.end_consume_message()?;
+                }
+            }
+            FuncProcId::PaintHitPolygon => {
+                #[cfg(feature = "puffin")]
+                puffin::profile_scope!("match FuncProcId::PaintHitPolygon");
+                // arguments
+                let i = self.read_id()?;
+                let mut xs = self.io.read_plain_f32h()?;
+                let mut ys = self.io.read_plain_f32h()?;
+                // construct
+
+                let mut w = 0u8;
+                let mut hit_label = String::new();
+                let mut hit_tip = String::new();
+                let mut hit_focusable = false;
+                // methods
+                loop {
+                    let (m, _) = self.read_from_repr(PaintHitPolygonBuilderMethodId::from_repr)?;
+                    match m {
+                        PaintHitPolygonBuilderMethodId::Build => {
+                            break;
+                        }
+                        PaintHitPolygonBuilderMethodId::Label => {
+                            #[cfg(feature = "puffin")]
+                            puffin::profile_scope!("match PaintHitPolygonBuilderMethodId::Label");
+                            let mut tx = self.io.read_plain_s()?;
+                            hit_label = tx;
+                        }
+                        PaintHitPolygonBuilderMethodId::Tooltip => {
+                            #[cfg(feature = "puffin")]
+                            puffin::profile_scope!("match PaintHitPolygonBuilderMethodId::Tooltip");
+                            let mut tx = self.io.read_plain_s()?;
+                            hit_tip = tx;
+                        }
+                        PaintHitPolygonBuilderMethodId::Focusable => {
+                            #[cfg(feature = "puffin")]
+                            puffin::profile_scope!(
+                                "match PaintHitPolygonBuilderMethodId::Focusable"
+                            );
+                            hit_focusable = true;
+                        }
+                    }
+                }
+                // apply
+                // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+                {
+                    let mut tip_blocks = self.io.read_deferred_block_map_u32()?;
+                    let tip_body =
+                        tip_blocks.drain().next().map(|(_, v)| v).filter(|v| !v.is_empty());
+                    self.paint_cmds.push(PaintCmd::HitRegion {
+                        id: i,
+                        shape: HitShape::Polygon { xs, ys },
+                        label: hit_label,
+                        tip: hit_tip,
+                        tip_body,
+                        focusable: hit_focusable,
+                    });
+                }
+                if d == 0 {
+                    self.end_consume_message()?;
+                }
+            }
+            FuncProcId::PaintHitRect => {
+                #[cfg(feature = "puffin")]
+                puffin::profile_scope!("match FuncProcId::PaintHitRect");
+                // arguments
+                let i = self.read_id()?;
+                let mut min_x = self.io.read_plain_f32()?;
+                let mut min_y = self.io.read_plain_f32()?;
+                let mut max_x = self.io.read_plain_f32()?;
+                let mut max_y = self.io.read_plain_f32()?;
+                // construct
+
+                let mut w = 0u8;
+                let mut hit_label = String::new();
+                let mut hit_tip = String::new();
+                let mut hit_focusable = false;
+                // methods
+                loop {
+                    let (m, _) = self.read_from_repr(PaintHitRectBuilderMethodId::from_repr)?;
+                    match m {
+                        PaintHitRectBuilderMethodId::Build => {
+                            break;
+                        }
+                        PaintHitRectBuilderMethodId::Label => {
+                            #[cfg(feature = "puffin")]
+                            puffin::profile_scope!("match PaintHitRectBuilderMethodId::Label");
+                            let mut tx = self.io.read_plain_s()?;
+                            hit_label = tx;
+                        }
+                        PaintHitRectBuilderMethodId::Tooltip => {
+                            #[cfg(feature = "puffin")]
+                            puffin::profile_scope!("match PaintHitRectBuilderMethodId::Tooltip");
+                            let mut tx = self.io.read_plain_s()?;
+                            hit_tip = tx;
+                        }
+                        PaintHitRectBuilderMethodId::Focusable => {
+                            #[cfg(feature = "puffin")]
+                            puffin::profile_scope!("match PaintHitRectBuilderMethodId::Focusable");
+                            hit_focusable = true;
+                        }
+                    }
+                }
+                // apply
+                // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+                {
+                    let mut tip_blocks = self.io.read_deferred_block_map_u32()?;
+                    let tip_body =
+                        tip_blocks.drain().next().map(|(_, v)| v).filter(|v| !v.is_empty());
+                    self.paint_cmds.push(PaintCmd::HitRegion {
+                        id: i,
+                        shape: HitShape::Rect {
+                            min_x,
+                            min_y,
+                            max_x,
+                            max_y,
+                        },
+                        label: hit_label,
+                        tip: hit_tip,
+                        tip_body,
+                        focusable: hit_focusable,
+                    });
+                }
+                if d == 0 {
+                    self.end_consume_message()?;
+                }
+            }
             FuncProcId::PaintImage => {
                 #[cfg(feature = "puffin")]
                 puffin::profile_scope!("match FuncProcId::PaintImage");
@@ -11058,19 +11257,32 @@ impl<R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'_, R, W> {
         // restores the canvas painter.
         let mut cur = painter.clone();
         let mut clip_stack: Vec<egui::Painter> = Vec::new();
-        for cmd in &cmds {
+        let mut hits: Vec<hit_regions::PendingHit> = Vec::new();
+        for (cmd_idx, cmd) in cmds.iter().enumerate() {
             // The budget's cut (ADR-0338): a batch draws its first `limit`
             // items, anything else draws whole or not at all.
             let limit = self.admit_paint_cmd(cmd);
             if limit == 0
                 && !matches!(
                     cmd,
-                    PaintCmd::ClipPush { .. } | PaintCmd::ClipPop | PaintCmd::SenseRegion { .. }
+                    PaintCmd::ClipPush { .. }
+                        | PaintCmd::ClipPop
+                        | PaintCmd::SenseRegion { .. }
+                        | PaintCmd::HitRegion { .. }
                 )
             {
                 continue;
             }
             match cmd {
+                PaintCmd::HitRegion { .. } => {
+                    // Resolved after the loop, against the clip in effect here:
+                    // the winner is the topmost region, whatever was painted
+                    // after it.
+                    hits.push(hit_regions::PendingHit {
+                        idx: cmd_idx,
+                        clip: cur.clip_rect(),
+                    });
+                }
                 PaintCmd::CircleFilled {
                     cx,
                     cy,
@@ -11729,6 +11941,16 @@ impl<R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'_, R, W> {
                         }
                     }
                 }
+            }
+        }
+        if !hits.is_empty() {
+            if let Some(ui) = ui_for_sense {
+                self.resolve_hit_regions(painter, origin, ui, &cmds, &hits);
+            } else {
+                tracing::warn!(
+                    count = hits.len(),
+                    "PaintCmd::HitRegion drained without a Ui scope (paintAbsoluteOverlay?); skipped"
+                );
             }
         }
     }

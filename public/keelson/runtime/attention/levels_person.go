@@ -121,6 +121,9 @@ func GridRows() (rows []GridRow) {
 	for _, kind := range jobKinds {
 		add(Key{Kind: kind}, "")
 	}
+	for _, kind := range windowKinds {
+		add(Key{Kind: kind}, "a window's Frame slow for a while; the one highlight by default")
+	}
 	return
 }
 

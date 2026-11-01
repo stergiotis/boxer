@@ -298,14 +298,6 @@ type ExpandCategoryArgs struct {
 	Expanded bool   `desc:"open when true, closed when false"`
 }
 
-func cutText(s string, n int) (out string) {
-	out = s
-	if len(out) > n {
-		out = out[:n] + "…"
-	}
-	return
-}
-
 // summarize renders one row for a caller. The sensitive rule is the
 // catalog's, not the window's: the value and the default of a sensitive
 // variable are withheld whatever the reveal toggle says, and an unset
@@ -313,15 +305,15 @@ func cutText(s string, n int) (out string) {
 func summarize(r varRow) (s VarSummary) {
 	spec := r.spec
 	s = VarSummary{Name: spec.Name, Category: string(spec.Category), Type: string(spec.Type), Set: r.set,
-		Sensitive: spec.Sensitive, CliFlag: spec.CliFlagName, Description: cutText(spec.Description, opsMaxSummaryLen)}
+		Sensitive: spec.Sensitive, CliFlag: spec.CliFlagName, Description: appops.CutText(spec.Description, opsMaxSummaryLen)}
 	if spec.Sensitive {
 		s.Withheld = r.set || spec.Default != ""
 		return
 	}
 	if r.set {
-		s.Value = cutText(r.raw, opsMaxValueLen)
+		s.Value = appops.CutText(r.raw, opsMaxValueLen)
 	}
-	s.Default = cutText(spec.Default, opsMaxValueLen)
+	s.Default = appops.CutText(spec.Default, opsMaxValueLen)
 	return
 }
 

@@ -1,12 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-10-29
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to accepted
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-11-01
 ---
-
-> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
 
 # ADR-0348: A Running page in the app center — the open windows, what they cost, and closing them
 
@@ -110,8 +108,10 @@ person might otherwise believe ended with its window.
 
 ### SD3 — What the page does not measure, and says so
 
-The page shows no memory or CPU column per window and states why in its
-header: the apps share one process, and imztop shows that process's figures.
+The page shows no memory column per window and states why in its header:
+the apps share one heap, and imztop shows the process's figures. CPU per
+window is measured on request, from goroutine labels
+([ADR-0351](./0351-what-a-window-costs-beyond-frame-cpu-by-window-label-and-a-slow-window-notice.md)).
 The task count is a lower bound and is labelled as the tasks the window
 registered: a goroutine started without the task API is not counted, the gap
 ADR-0322 records for its drain. Jobs that re-run on a timer or on typing are
@@ -190,9 +190,9 @@ grants; `windows` is added.
 - **A bus subject to raise or close any window.** It would make closing
   another app's window an authority any manifest can request, for a single
   consumer that host boot already wires in process.
-- **Memory and CPU columns per window.** Not measurable in one Go process
-  short of goroutine labels, which would give sampled CPU for labelled work
-  only; numbers shaped like a task manager's that are not would mislead.
+- **A memory column per window.** Not measurable from one shared Go heap;
+  numbers shaped like a task manager's that are not would mislead. CPU per
+  window, sampled from goroutine labels, is ADR-0351's.
 - **A stall column.** A stall is the host not drawing at all — the desktop
   not showing it ([ADR-0332](./0332-a-hidden-desktop-host-keeps-running-passes.md))
   — which stops every window's frame, the page's own included, so the column
@@ -244,7 +244,7 @@ interface keep an app center without actions.
   Window menu with play alone and finds both windows listed.
 - **What would fail.** A row missing or misattributed, an unowned task
   dropped, or Close not reaching the window host.
-- **Gap.** Per-window memory and CPU, by SD3.
+- **Gap.** Per-window memory, by SD3; CPU is ADR-0351's.
 
 ## Milestones
 
@@ -258,7 +258,8 @@ Deferred: other processes; tracking timer-driven jobs.
 
 ## Status
 
-Proposed — awaiting review.
+Accepted 2026-11-01, with M1 to M3 implemented. CPU per window is
+[ADR-0351](./0351-what-a-window-costs-beyond-frame-cpu-by-window-label-and-a-slow-window-notice.md)'s.
 
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers (Tier 1 in-place / Tier 2 dated `## Updates` entry / Tier 3 new superseding ADR).

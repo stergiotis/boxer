@@ -46,6 +46,7 @@ func (inst *App) renderStatsTab(pane float32) {
 			inst.openStats()
 		}
 	}
+	inst.renderOpenTrailViewer(busy)
 	if busy {
 		c.Label("publishing…").Send()
 	} else if inst.handoverNote != "" {

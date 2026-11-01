@@ -2,7 +2,9 @@ package appcenter
 
 import (
 	"fmt"
+	"time"
 
+	"github.com/stergiotis/boxer/public/keelson/runtime/windowhost"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/badge"
 )
@@ -11,10 +13,9 @@ import (
 // statement: the table is this process's live state, not a trail.
 const secFrames = "frames"
 
-// slowFrameUs is where the lens starts warning: an app whose p95 Frame
-// takes half a 60 Hz frame leaves the other windows and the client's paint
-// the other half. A signpost, not a budget any app is held to.
-const slowFrameUs = 8000
+// slowFrameUs is where the lens starts warning: the window host's line for
+// a slow window, which its notice is reported at (ADR-0351 §SD6).
+const slowFrameUs = int64(windowhost.SlowFrame / time.Microsecond)
 
 // frameSummary folds one app's window rows against the loop row.
 type frameSummary struct {

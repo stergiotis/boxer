@@ -413,6 +413,32 @@ the demo build writes the repository's code volume and complexity as an
 applet document beside the page, and the demo binary opens it in place of an
 app. The demo still loads nothing from another site.
 
+### 2026-11-01 — the native host binary gets SD1's shape: `hostmain`
+
+The desktop and headless host binary had the problem SD1 solved for the tab:
+its `package main` held both the CLI every host needs — the logging,
+profiling and tracing flags, the `imzero2` group with `demo`, `drive` and
+`scene`, the exit hook that flushes them — and the choice of apps, which it
+took from the carousel's blank-import list. A binary that adds an app had to
+edit that list, which every app shares and a downstream repository cannot
+edit, or copy the main and let the copy drift.
+
+[`hostmain`](../../public/thestack/imzero2/hostmain/hostmain.go) holds the body, with SD1's split: a binary
+hands its root cli.Command to `hostmain.New(options, cliApp)` and calls the
+result's `Main`; the name, version and `logging.Apply` stay in the main
+package, where the entry-point audit looks for them. boxer's
+`cmd/imzero2` is such a binary. `hostmain.Options` has no fields; a choice a
+host binary gains is added there, as SD2 does for the tab's services. SD8's
+how-to gains a section for the host binary beside the tab's.
+
+The `demo` command lives in the carousel package, which also carries the
+import list, so every `hostmain` binary links boxer's carousel apps beside
+its own. Linking fewer means separating the list from the command; that is
+not part of this entry.
+
+A binary built this way, linking one app the carousel does not, ran that
+app's scene document through its own `imzero2 scene` (2026-11-01).
+
 ## References
 
 - [ADR-0263](./0263-imzero2-browser-both-modules-in-one-worker-mesh-to-the-painter.md) — the tab this makes reusable.

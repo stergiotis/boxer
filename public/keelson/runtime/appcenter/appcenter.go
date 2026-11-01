@@ -26,6 +26,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect/providers"
 	"github.com/stergiotis/boxer/public/keelson/runtime/llm"
+	"github.com/stergiotis/boxer/public/keelson/runtime/task"
 	"github.com/stergiotis/boxer/public/keelson/runtime/watchbill"
 	"github.com/stergiotis/boxer/public/keelson/runtime/widgethandle"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
@@ -120,6 +121,10 @@ type App struct {
 	closeArmedFilter string
 	closing          map[uint64]bool
 	selfKey          uint64
+	// Measure CPU (appcenter_cpu.go, ADR-0351): the measurement in flight
+	// and the last one taken, as a task of this window.
+	cpu   cpuState
+	tasks task.TaskApiI
 
 	// Operations state (appcenter_ops.go, ADR-0345). frameCtx is the current
 	// frame's context, through which a row click routes as a gesture;
@@ -150,12 +155,14 @@ func newApp() (inst *App) {
 func (inst *App) Manifest() (m app.Manifest) { m = manifest; return }
 
 // Mount takes the host's bus client, opens on the app a launch config
-// names (ADR-0260 §SD1) or else on the Running tab, and starts the poller.
+// names (ADR-0260 §SD1) or else on the Running tab, under the filter it
+// names, and starts the poller.
 func (inst *App) Mount(ctx app.MountContextI) (err error) {
 	inst.ids = ctx.Ids()
 	inst.logger = ctx.Log()
 	inst.bus = ctx.Bus()
 	inst.selfKey = ctx.InstanceKey()
+	inst.tasks = task.ForApp(ctx)
 	if inst.reader == nil {
 		// A test sets its own reader before Mount.
 		if r := newBusReader(inst.bus); r != nil {
@@ -164,10 +171,14 @@ func (inst *App) Mount(ctx app.MountContextI) (err error) {
 	}
 	if raw := ctx.LaunchConfig(); len(raw) > 0 {
 		cfg, dErr := buscodec.Decode[launchcfg.AppCenterLaunch](raw)
-		if dErr != nil {
+		switch {
+		case dErr != nil:
 			inst.logger.Warn().Err(dErr).Msg("appcenter: launch config does not decode; opening on the Running tab")
-		} else if cfg.AppId != "" {
+		case cfg.AppId != "":
 			inst.selectApp(cfg.AppId)
+		default:
+			// A slow window's notice opens the tab on it (ADR-0351 §SD6).
+			inst.runFilter = cfg.Filter
 		}
 	}
 	inst.mu.Lock()
@@ -185,6 +196,7 @@ func (inst *App) Unmount(ctx app.MountContextI) (err error) {
 	if inst.cancelApp != nil {
 		inst.cancelApp()
 	}
+	inst.cpu.job.Cancel()
 	inst.wg.Wait()
 	inst.running.release()
 	return
@@ -194,6 +206,7 @@ func (inst *App) Frame(ctx app.FrameContextI) (err error) {
 	inst.density = styletokens.ActiveDensity()
 	inst.frameCtx = ctx
 	inst.ensureWidths(ctx)
+	inst.syncCpu()
 	inst.render()
 	return
 }

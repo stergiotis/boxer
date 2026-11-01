@@ -808,3 +808,118 @@ keeps stacking inside the box it stacks into.
 A caller may of course floor higher for readability. It must not floor lower,
 and a round number chosen for comfort is not evidence that it does not — the
 Chart tab's original 80 cleared the real 76 by luck.
+
+## Update 2026-11-01 — horizontal bars, and bars from a base value
+
+`Bars` drew vertical bars from y=0 and nothing else, although the port
+already carried the horizontal counterparts of other items (`ErrorBarsH`,
+`InfLinesH`). A tornado chart — diverging horizontal bars around a baseline
+— therefore had to be painted on a bare canvas, re-implementing the scale,
+ticks and gestures the plot already provides.
+
+Four items now cover it, all emitted from Go as one `paintRectsFilled` per
+series like `Bars`, so no IDL, binding or host change:
+
+- `BarsH(label, xs, ys, height)` — bars centred on `ys`, running from x=0 to
+  `xs[i]`. The slices keep the `(xs, ys)` order of every other item, so the
+  values come first: upstream's `PlotBars` with `ImPlotBarsFlags_Horizontal`
+  orders them the same way, as does `ErrorBarsH`.
+- `BarsRef(..., yref)` and `BarsHRef(..., xref)` — the same bars drawn from a
+  reference value instead of 0, a house extension (upstream's bars always
+  start at 0). A value below the reference draws toward
+  lower values, so a tornado is two `BarsHRef` series around one baseline.
+  `Bars` and `BarsH` are the `Ref` forms at 0; `Bars` keeps its signature and
+  output.
+
+A separate `H` function was chosen over an orientation flag because that is
+how the port already spells orientation; a `Ref` twin over a base parameter
+on `BarsH` because it keeps the two orientations symmetric and `Bars`
+unchanged. Auto-fit covers each bar's body (position ± size/2) and the
+reference value, which every bar touches. Bars still contribute their body
+and reference to the fit while hidden from the legend, as `Bars` always did;
+`ErrorBars` and `ShadedBetween` do not. That inconsistency predates this
+entry and is left as it was.
+
+**Deferred, not killed:** a per-point radius for `Scatter`, so that
+count-sized points need no `Custom` closure. `paintMarkers` carries one
+radius per opcode, so doing it in Go means one opcode per distinct radius;
+doing it properly means a radius slice on the opcode, which is an IDL change
+and a decision of its own.
+
+## Update 2026-11-01 (2) — hit regions: hover, tooltip and an accessibility node per painted mark
+
+A mark painted on the painter lane — by a bare `PaintCanvas` or by a `Custom`
+item — had no hover of its own. A caller re-derived the canvas id, read last
+frame's cursor back, hit-tested every mark's geometry a second time in Go and
+painted the tooltip into the canvas, where the canvas clip cut it off; a
+`Custom` item needed a second `CustomUnclipped` closure that recomputed the
+pixel geometry. The marks had no accessibility nodes. An exploratory port of
+nine risk views (2026-11-01) found this the costliest gap: thirteen tooltip
+sites, each stating its geometry twice, and a tooltip taller than the 46 px
+canvas it was clamped into.
+
+**Decision.** Three opcodes — `paintHitRect`, `paintHitCircle`,
+`paintHitPolygon` — declare a mark's geometry under a widget id, beside the
+paint commands that draw it, with `label` (the accessible name and the
+tooltip's first line), `tooltip` (a plain-text body), a `tip` deferred block
+(a rich body, `TooltipUi` in Go) and `focusable`. The canvas collects them
+while draining and resolves them after its last paint command, in the host:
+
+- the hover winner is the last-declared region whose shape contains the
+  pointer, within the clip in effect where it was declared, on the topmost
+  layer; none while anything is being dragged;
+- the winner's tooltip goes through egui's tooltip layer at the pointer, so
+  it is drawn above the page and not clipped by the canvas; a focused region
+  shows its tooltip beside its bounds and a focus ring;
+- every region pushes response flags under its id (`HOVERED`,
+  `PRIMARY_CLICKED`/`SECONDARY_CLICKED`, Enter/Space while focused, the focus
+  bits), read back with `SendResp` like a widget;
+- a labelled or focusable region is registered as a hover-only egui widget
+  over its visible bounds, which is what gives it an AccessKit node (role
+  unknown, the label as name) and, when focusable, a Tab stop.
+
+`DrawCtx.Ids` hands a `Custom` closure the id stack scoped to that item, so
+its regions number from zero without colliding with another item's. The
+painter-side type and resolution are in
+[`hit_regions.rs`](../../rust/imzero2/src/imzero2/interpreter/hit_regions.rs);
+the Go surface is in
+[`egui2_hit_regions.go`](../../public/thestack/imzero2/egui2/bindings/egui2_hit_regions.go).
+
+**Alternatives, and why not.**
+
+- *A Go helper over the cursor readback* — what callers did by hand. It
+  cannot remove the frame of lag or the clip: the tooltip would still be
+  paint commands inside the canvas. It cannot produce an accessibility node
+  either.
+- *One egui widget per mark with `on_hover_ui_at_pointer`* — egui hit-tests
+  rectangles, so neighbouring dots and rotated or concave marks steal each
+  other's pointer through their bounding boxes, and a hover-only widget is
+  only `hovered()` above the topmost interactive one (the overlay rule in the
+  imzero2 skill §12). The region test runs against the shape instead; an egui
+  widget is created only where it buys a node or a Tab stop.
+- *Sense regions with a tooltip attached* — `paintSenseRegion` senses click
+  and drag, so a region per mark would take the plot area's pan and box-zoom
+  away; hit regions sense hover only and leave gestures where they were.
+- *The tooltip as an `Atoms` argument* — atoms lay out on one line; a title
+  over detail lines needs either plain text or a block of widgets, so it is
+  both.
+
+**Consequences.** A tooltip shows on the frame the pointer reaches the mark,
+with no tooltip delay; the read-back flags carry the usual one-frame lag.
+Regions declared inside a `paintAbsoluteOverlay` are dropped with a warning,
+like sense regions. Focus is opt-in because a dot plot would otherwise add
+dozens of Tab stops. A region costs its bytes on the wire, an r7 entry and,
+when labelled, an egui widget — sized for marks a reader points at, not for
+every point of a dense scatter.
+
+A widget that picks in Go for its own reasons keeps its pick and adds
+regions for the tooltip, the name and the focus: `layeredgraph/view` does so
+through `RenderOpts.NodeRegion` (ADR-0069's 2026-11-01 update). The risk
+matrix and impact-tolerance widgets, which picked only to show a tooltip,
+dropped their pick and read hover and click back from the regions.
+
+**Deferred, not killed:** hit regions emitted by the built-in items
+(`Scatter`, `Bars`) without a `Custom` closure; arrow-key movement between
+the marks of one canvas; an AccessKit Click action on a region (its node
+offers Focus only, since the region does not sense clicks); a role richer
+than unknown (AccessKit has `GraphicsSymbol`, egui's `WidgetType` does not).

@@ -5,6 +5,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -31,8 +32,9 @@ func TestDefaultIsFirstRunSetup(t *testing.T) {
 }
 
 // The views are appended, never interleaved: the facts DDL stays a
-// byte-identical prefix, the surface precedes the views, and every view
-// statement is present in creation order.
+// byte-identical prefix, the surface precedes the views, and every
+// statement of the trail views — their functions first — is present in
+// creation order.
 func TestTrailViewsAreAppended(t *testing.T) {
 	setup, err := chstore.ComposeSetupSQL(defaults(), "")
 	require.NoError(t, err)
@@ -44,10 +46,12 @@ func TestTrailViewsAreAppended(t *testing.T) {
 	require.Contains(t, have, marker)
 	views, err := trailviews.Statements("", "")
 	require.NoError(t, err)
+	require.Equal(t, trailviews.FunctionStatements(), views[:len(trailviews.FunctionNames())], "the functions precede the views")
 	at := strings.Index(have, marker)
 	for _, v := range views {
 		next := strings.Index(have, v)
-		require.Greater(t, next, at, "in creation order, after the surface: %s", v[:60])
+		head, _, _ := strings.Cut(v, "\n")
+		require.Greater(t, next, at, "in creation order, after the surface: %s", head)
 		at = next
 	}
 
@@ -91,6 +95,8 @@ func TestScriptAppliesToAFreshServer(t *testing.T) {
 			want := append([]string{}, trailviews.AllViewNames()...)
 			require.ElementsMatch(t, want, strings.Fields(names))
 			require.Equal(t, "0\n", run("--query", "SELECT count() FROM "+cfg.Database+"."+trailviews.ViewTimeline))
+			require.Equal(t, strconv.Itoa(trailviews.ViewsVersion)+"\n", run("--query", "SELECT "+trailviews.FuncViewsVersion+"()"),
+				"the script installs the trail functions with the views")
 		})
 	}
 }

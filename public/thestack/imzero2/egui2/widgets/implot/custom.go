@@ -1,5 +1,7 @@
 package implot
 
+import c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
+
 // Custom-item lane (ADR-0149 Update 2026-07-31): the re-expression of
 // upstream ImPlot's custom-rendering idiom — GetPlotDrawList +
 // PushPlotClipRect + PlotToPixels — under this port's deferred emission.
@@ -55,6 +57,14 @@ type DrawCtx struct {
 	// Highlighted reports that the item's legend row is hovered, so custom
 	// items can echo the built-in series hover emphasis.
 	Highlighted bool
+	// Ids is the id stack, scoped to this item for the call, for the ids of
+	// the hit regions it declares beside its marks — one
+	// c.PaintHitCircle(d.Ids.PrepareSeq(uint64(i)), …) per mark, numbered
+	// from zero in every item (see bindings' egui2_hit_regions.go). The
+	// regions give the marks a hover, a tooltip at the pointer and an
+	// accessibility node, with no second closure redoing the geometry. Do not
+	// open other widgets with it.
+	Ids *c.WidgetIdStack
 }
 
 // Custom records a caller-drawn item: fn runs during End, after auto-fit
@@ -70,10 +80,12 @@ type DrawCtx struct {
 // slot. SetNextColor / SetNextWeight apply and arrive as DrawCtx.Color /
 // DrawCtx.Weight.
 //
-// The closure must only paint (and read caller state): declaring items,
-// Setup* calls, or sense regions from inside it is unsupported — item
-// declarations during emission are debug-logged no-ops, and sense-region
-// emission order is the plot's hit-test priority contract. Custom items do
+// The closure must only paint, declare hit regions (DrawCtx.Ids) and read
+// caller state: declaring items, Setup* calls, or sense regions from inside
+// it is unsupported — item declarations during emission are debug-logged
+// no-ops, and sense-region emission order is the plot's hit-test priority
+// contract. Hit regions sense hover only and do not take a gesture from the
+// plot area. Custom items do
 // not contribute to auto-fit; declare their extent with IncludeX /
 // IncludeY. On a detached plot (NewDetached) the closure never runs.
 //

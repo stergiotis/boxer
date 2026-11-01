@@ -351,17 +351,9 @@ func parseLevelArg(s string) (lvl zerolog.Level, err error) {
 	return
 }
 
-func cutText(s string, n int) (out string) {
-	out = s
-	if len(out) > n {
-		out = out[:n] + "…"
-	}
-	return
-}
-
 func summarizeRow(r factsstore.LogRow) (s RowSummary) {
 	s = RowSummary{Key: opsRowKey(r), Ts: r.Ts, Level: r.Level, App: string(r.AppId), Caller: r.Caller,
-		Message: cutText(r.Message, opsMaxMessageLen), HasError: r.Error != "" || r.ErrorContext != nil, Fields: len(r.Fields)}
+		Message: appops.CutText(r.Message, opsMaxMessageLen), HasError: r.Error != "" || r.ErrorContext != nil, Fields: len(r.Fields)}
 	return
 }
 
@@ -385,15 +377,15 @@ func fieldText(f factsstore.LogField) (v FieldValue) {
 	default:
 		v.Kind, v.Value = "unknown", f.Str
 	}
-	v.Value = cutText(v.Value, opsMaxTextLen)
+	v.Value = appops.CutText(v.Value, opsMaxTextLen)
 	return
 }
 
 func detailRow(key string, e Entry) (d RowDetail) {
 	r := e.Row
 	d = RowDetail{Key: key, Ts: r.Ts, Level: r.Level, App: string(r.AppId), InstanceKey: r.InstanceKey, RunId: e.RunId,
-		Service: r.Service, Caller: r.Caller, Message: cutText(r.Message, opsMaxTextLen),
-		Error: cutText(r.Error, opsMaxTextLen), Stack: cutText(r.Stack, opsMaxTextLen), FieldsTotal: len(r.Fields)}
+		Service: r.Service, Caller: r.Caller, Message: appops.CutText(r.Message, opsMaxTextLen),
+		Error: appops.CutText(r.Error, opsMaxTextLen), Stack: appops.CutText(r.Stack, opsMaxTextLen), FieldsTotal: len(r.Fields)}
 	for i, f := range r.Fields {
 		if i == opsMaxFields {
 			break
@@ -410,7 +402,7 @@ func detailRow(key string, e Entry) (d RowDetail) {
 				break
 			}
 			es.Facts = append(es.Facts, ErrorFact{Msg: f.Msg, Source: f.Source, Line: f.Line, Function: f.Function,
-				Data: cutText(f.DataDiag, opsMaxTextLen)})
+				Data: appops.CutText(f.DataDiag, opsMaxTextLen)})
 		}
 		d.ErrorChain = append(d.ErrorChain, es)
 	}

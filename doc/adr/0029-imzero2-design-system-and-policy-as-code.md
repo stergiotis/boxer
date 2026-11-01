@@ -370,6 +370,26 @@ The §SD14 M5 backfill completed for the designlint surface and the step graduat
 2. **`lint.sh` flipped.** The designlint step now sets `rc=1` on any output (finding or compile error); warn status is retired for this step. The per-line ignore annotation is the only escape hatch.
 3. **Per-app graduation path retired unused.** The M2 bullet's `// designlint:strict` opt-in was never implemented or used; the fleet went to error in one flag-day. tier1-mechanical.md §Annotations and §Configuration record the strict annotations and the `designlint.yaml` reader as catalogued-but-unimplemented, deferred until a rule needs per-file severity again.
 
+### 2026-11-01 — §SD4 disjointness: a mechanical check for the qualitative cycle
+
+§SD4 left the disjointness of the semantic and data-encoding palettes to
+Tier 2 rule V2. V2 grades whether apps use colour consistently. It does not
+measure the distance between the two palettes, and no Tier 1 check did. The
+gap was visible in the tree (measured 2026-11-01): the first qualitative
+colour sat OKLab ΔE 6.1 from the dark theme's `semantic.warning.default`.
+
+`gen.CrossPalette` measures the qualitative cycle against every
+semantic `*.default` token of every theme. Both colour generators and their
+tests run it. Slot 0 at ΔE ≤ 10 fails the run, and any slot at ΔE ≤ 15 is
+reported as advisory. The threshold, the gating/advisory split, and the cycle
+re-order that made slot 0 pass are recorded in
+[ADR-0156](./0156-qualitative-palette-dark-surface.md#updates).
+
+The check covers distance only. The semantic half of the rule — red as
+"error" against red as "high temperature" — is still V2's. The sequential and
+diverging ramps are not checked, because they pass through status hues by
+design.
+
 ## References
 
 - [ADR-0013 — ImZero2 stateful widget contract](./0013-imzero2-stateful-widget-contract.md) — precedent for mechanical enforcement of a stylistic rule via a Go test; `TestStatefulWidgetsAreGated` is the model for SD8.

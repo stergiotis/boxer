@@ -5,6 +5,7 @@ import (
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/appops"
+	"github.com/stergiotis/boxer/public/keelson/runtime/bgjob"
 )
 
 // The operations catalog (ADR-0345 §SD1, §SD6 M3). Every row a page shows is
@@ -13,7 +14,8 @@ import (
 // them and never toggle. The one exception is the Running tab's join
 // (ADR-0348 §SD5): its rows are three tables composed in Go, which no single
 // statement returns, so list_running hands them out as the tab last read
-// them. Closing windows is not an operation.
+// them. Closing windows is not an operation; measuring their CPU is
+// (ADR-0351 §SD5), since it changes nothing the person owns.
 
 const (
 	resView      = "view"
@@ -21,6 +23,8 @@ const (
 	resFilter    = "filter"
 	// resRunningFilter is the Running tab's filter.
 	resRunningFilter = "running_filter"
+	// resCpu is the Running tab's last CPU measurement.
+	resCpu = "cpu_measurement"
 
 	opGetView          = "get_view"
 	opSetView          = "set_view"
@@ -28,6 +32,7 @@ const (
 	opSetFilter        = "set_filter"
 	opSetRunningFilter = "set_running_filter"
 	opListRunning      = "list_running"
+	opMeasureCpu       = "measure_cpu"
 )
 
 // The tabs as the catalog names them.
@@ -74,6 +79,8 @@ type opsSnap struct {
 	pageFor    string
 	running    runningView
 	runningAt  time.Time
+	cpu        *cpuMeasurement
+	cpuState   bgjob.Snapshot
 }
 
 func (inst *App) opsSnapshot() (sn opsSnap) {
@@ -84,6 +91,7 @@ func (inst *App) opsSnapshot() (sn opsSnap) {
 	sn.listed = len(matchingApps(&snap.global.apps.cols, inst.filter))
 	sn.pageRead, sn.pageFor = snap.page.read, snap.page.appId
 	sn.running, sn.runningAt = snap.running.view, snap.running.read
+	sn.cpu, sn.cpuState = inst.cpu.last, inst.cpu.job.Snapshot()
 	return
 }
 
@@ -123,6 +131,7 @@ type RunningWindow struct {
 	OldestTask   string   `desc:"the title of the oldest of them; empty when none"`
 	OldestSince  string   `desc:"when the oldest started, RFC 3339; empty when none"`
 	AgentTasks   []string `desc:"the agent tasks whose grant holds the window"`
+	CpuPct       float64  `desc:"share of one core its goroutines, its tasks' included, used during the last measure_cpu, in percent; -1 when not measured: before any measurement, or opened since"`
 }
 
 // RunningTask is a task in flight that no open window owns.
@@ -142,6 +151,24 @@ type Running struct {
 	LoopP50Us int64           `desc:"the render loop's median period, in microseconds; 0 when unread"`
 	ReadAt    time.Time       `desc:"when the tab last read its tables; zero when it has not, since it reads only while shown"`
 	Truncated bool            `desc:"a list was cut to 200 entries"`
+	Cpu       CpuMeasurement  `desc:"the last measure_cpu, which the windows' CpuPct come from"`
+}
+
+// CpuMeasurement is what the last measure_cpu covered.
+type CpuMeasurement struct {
+	Measuring    bool      `desc:"a measurement is running"`
+	Error        string    `desc:"why the last measurement failed; empty when it did not"`
+	EndedAt      time.Time `desc:"when the last measurement ended; zero before one"`
+	Seconds      float64   `desc:"how long it sampled"`
+	AllPct       float64   `desc:"the whole process, in percent of one core"`
+	HostPct      float64   `desc:"what no window's goroutines account for: the garbage collector, the render loop outside the windows' Frame, the host's own loops and tasks no window owns"`
+	ClosedPct    float64   `desc:"windows measured and since closed"`
+	ProfileAlias string    `desc:"the ad-hoc dataset holding the profile, keelson('<alias>'), split by labels['boxer.window']; empty when it was not published"`
+}
+
+// MeasureCpuArgs starts a measurement.
+type MeasureCpuArgs struct {
+	Seconds int `desc:"how long to sample, 1 to 30; 0 means 5"`
 }
 
 // SetRunningFilterArgs sets the running tab's filter.
@@ -196,6 +223,12 @@ var ops = func() (s *appops.Set[*App, opsSnap]) {
 		return ok
 	})
 	s.Editing(resRunningFilter, func(inst *App) bool { return appops.WidgetEditing(inst.runFilterH) })
+	s.Resource(resCpu, "the running tab's last CPU measurement", func(inst *App) any {
+		if inst.cpu.last == nil {
+			return time.Time{}
+		}
+		return inst.cpu.last.at
+	})
 
 	appops.Query(s, app.OperationSpec{Name: opGetView, Version: 1,
 		Summary: "read the tab shown, which app's page is open and the two filters; a page's rows are the keelson() tables it is assembled from",
@@ -213,7 +246,22 @@ var ops = func() (s *appops.Set[*App, opsSnap]) {
 		Summary: "read the running tab's rows as it last read them, whatever its filter: every open window with its frame time and tasks, and the tasks no open window owns; set_view running shows the tab, which reads them",
 		Agents:  true, Untrusted: true, Fork: app.OperationForkReadShared},
 		func(sn opsSnap, _ appops.None) (out Running, err error) {
-			out = runningResult(sn.running, sn.runningAt)
+			out = runningResult(sn.running, sn.runningAt, sn.cpu, sn.cpuState)
+			return
+		})
+
+	appops.Command(s, app.OperationSpec{Name: opMeasureCpu, Version: 1,
+		Summary: "sample the process's CPU for a few seconds and split it by window; list_running carries the result once it ends; refused while one runs",
+		Effect:  app.OperationEffectView, Writes: []string{resCpu}, Agents: true,
+		Gesture: "the running tab's Measure CPU", Rebuild: app.OperationRebuildVolatile},
+		func(inst *App, _ app.OperationCall, in MeasureCpuArgs) (out appops.None, err error) {
+			if in.Seconds < 0 || in.Seconds > cpuMaxSeconds {
+				err = app.RefuseOperation("seconds is 1 to 30, or 0 for 5")
+				return
+			}
+			if mErr := inst.measureCpu(in.Seconds); mErr != nil {
+				err = app.RefuseOperation(mErr.Error())
+			}
 			return
 		})
 
@@ -289,13 +337,32 @@ func (inst *App) selectGesture(id string) {
 	gestureOr(inst, opShowApp, ShowAppArgs{AppId: id}, func() { inst.selectApp(id) })
 }
 
+func (inst *App) measureCpuGesture() {
+	gestureOr(inst, opMeasureCpu, MeasureCpuArgs{}, func() {
+		if err := inst.measureCpu(0); err != nil {
+			inst.logger.Debug().Err(err).Msg("appcenter: measure CPU")
+		}
+	})
+}
+
 func (inst *App) setViewGesture(v viewE) {
 	gestureOr(inst, opSetView, SetViewArgs{View: viewName(v)}, func() { inst.setView(v) })
 }
 
 // runningResult is the tab's rows as list_running returns them, bounded.
-func runningResult(v runningView, at time.Time) (out Running) {
+func runningResult(v runningView, at time.Time, cpu *cpuMeasurement, cpuState bgjob.Snapshot) (out Running) {
 	out.LoopP50Us, out.ReadAt = v.loopP50Us, at
+	out.Cpu.Measuring = cpuState.State == bgjob.StateRunning
+	if cpuState.State == bgjob.StateFailed && cpuState.Err != nil {
+		out.Cpu.Error = cpuState.Err.Error()
+	}
+	if cpu != nil {
+		out.Cpu.EndedAt, out.Cpu.Seconds = cpu.at, cpu.length.Seconds()
+		out.Cpu.AllPct, out.Cpu.HostPct, out.Cpu.ClosedPct = cpu.share(cpu.total), cpu.share(cpu.host), cpu.share(cpu.closed(&v))
+		if cpu.published {
+			out.Cpu.ProfileAlias = cpuDatasetAlias
+		}
+	}
 	rows, unowned := v.rows, v.unowned
 	if len(rows) > runningListed {
 		rows, out.Truncated = rows[:runningListed], true
@@ -307,7 +374,8 @@ func runningResult(v runningView, at time.Time) (out Running) {
 	for _, r := range rows {
 		out.Windows = append(out.Windows, RunningWindow{Key: r.key, AppId: r.appId, Title: r.title, Active: r.active,
 			Sampled: r.sampled, P50Us: r.p50Us, P95Us: r.p95Us, MessagesMean: r.messages,
-			Tasks: r.tasks, OldestTask: r.oldestTitle, OldestSince: r.oldestCreateAt, AgentTasks: r.agentTasks})
+			Tasks: r.tasks, OldestTask: r.oldestTitle, OldestSince: r.oldestCreateAt, AgentTasks: r.agentTasks,
+			CpuPct: cpuPctOrNone(cpu, r.key)})
 	}
 	out.Unowned = make([]RunningTask, 0, len(unowned))
 	for _, u := range unowned {
@@ -315,4 +383,13 @@ func runningResult(v runningView, at time.Time) (out Running) {
 			OwnerAppId: u.ownerAppId, OwnerInstanceKey: u.ownerKey, CreatedAt: u.createdAt})
 	}
 	return
+}
+
+// cpuPctOrNone is the window's measured share, or -1.
+func cpuPctOrNone(cpu *cpuMeasurement, key uint64) float64 {
+	pct, ok := cpu.windowShare(key)
+	if !ok {
+		return -1
+	}
+	return pct
 }

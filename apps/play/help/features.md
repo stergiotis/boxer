@@ -19,8 +19,8 @@ into three groups: the **editor** (Editor, History), the **tool panes** beside
 it (Docs, Preview, Flow, Passes, Diagnostics, Snippets, Vocabulary,
 Completion, Glosses — each reads the buffer, or something derived
 from it, while you type), and the **result panes** below (Table, Projection,
-Timeline, Map, Vector field, World, Kanban, Chat, Cards, Network, Graphview,
-Sankey, Distribution, Icicle, Series, Treemap, Chart, Files, Graph, Schema, and
+Timeline, Map, Vector field, World, Kanban, Bow-tie, Risk matrix, Impact
+tolerance, Chat, Cards, Network, Graphview, Sankey, Distribution, Icicle, Series, Treemap, Chart, Files, Graph, Schema, and
 Detail alongside them). What each result pane needs from the SQL is under
 [How a pane reads the query](#how-a-pane-reads-the-query). Drag a tab to
 re-dock or split it; the layout holds for the session and starts fresh next
@@ -328,7 +328,7 @@ The names the panes write are reserved, with fixed types:
 
 | Name | Type | Written by |
 | --- | --- | --- |
-| `selection` | `Int64` | a click on a row: Table, Projection, Timeline, World, Kanban, Chat, Cards, Distribution, Series, Chart, Files |
+| `selection` | `Int64` | a click on a row: Table, Projection, Timeline, World, Kanban, Bow-tie, Risk matrix, Impact tolerance, Chat, Cards, Distribution, Series, Chart, Files |
 | `selection_node` | `String` | stamped with every `selection`: the query node the row belongs to |
 | `selection_id` | `UInt64` | stamped with `selection` when the result has a leeway id column |
 | `selection_key` | `String` | stamped with `selection` when the result has a column named `key`; written directly by Network, Graphview and Sankey (a vertex id), Icicle and Treemap (a frame or leaf: its `id` in a nodes-form result, its label in a folded one) and Files (a path) |
@@ -454,6 +454,8 @@ draw. The contracts come in three kinds, and a pane's section below says which
 it uses.
 
 - **Named columns of the active result.** Kanban needs `lane` and `title`,
+  Bow-tie `top_event`, `side` and `path`, Risk matrix `id` and two ranges,
+  Impact tolerance `service`, `tolerance_hours`, `scenario` and `recovery_hours`,
   Chart reads `x` / `y` / `z` / `series`, Distribution reads `series`, `n`,
   `ps` and `qs`. Matching is on the column name, so alias your columns. A
   column that declares a gloss in its name matches on its label, so
@@ -491,7 +493,8 @@ tool pane, when it has something to report). A pane is never marked merely
 because nothing has run.
 
 Clicks publish signals (see [Signals](#signals-live-parameters)). The panes
-whose marks are result rows (Table, Projection, Timeline, World, Kanban, Chat,
+whose marks are result rows (Table, Projection, Timeline, World, Kanban, Bow-tie,
+Risk matrix, Impact tolerance, Chat,
 Cards, Distribution, Series, Chart, and Files for a file a row names) write
 `selection`, the row cursor. Every
 `selection` write also stamps `selection_node` (the node that row belongs to),
@@ -918,6 +921,66 @@ added at the end rather than dropped. An empty lane value is titled `(none)`.
 The board is read-only and caps at 2000 cards. The status line counts what it
 left out. Clicking a card writes `selection`, driving Detail and Table. The
 **Snippets** library has two boards: "Kanban board" and "ADR board".
+
+### Bow-tie
+
+How a loss arises, as a bow-tie: threats on the left, the prevention barriers
+on each threat's path in series, one top event in the centre, the mitigation
+barriers in series after it, and the consequences on the right. One row is one
+element of a path. The pane needs `top_event` (one value across the result),
+`side` (`prevention` or `mitigation`) and `path` (the threat or consequence).
+A barrier row adds an integer `step`, its place along the path, a `barrier`
+name and a `status`: `effective`, `degraded`, `failed`, or `untested`, which an
+empty status also means. A row with a NULL `step` and `barrier` names a path
+with no barrier. `evidence`, optional, is shown when you hover a barrier.
+
+Barriers are ordered by `step` and paths by the order rows first name them. A
+path with fewer barriers than the longest on its side keeps them next to the
+top event, so each column of barriers is the same distance from it. A status is
+drawn as a colour, an icon and a label together, and the legend above the
+diagram repeats the four. The pane refuses a `barrier` column without `step`
+or `status`, two different top events, an unknown `side` or `status` word, and
+two barriers at one step of one path, naming the row. It reads at most 400
+rows. Drag pans, ctrl+scroll zooms. Clicking a barrier writes `selection` for
+its row, and clicking a threat or consequence writes it for the first row that
+names it. The **Snippets** library has the worked example, "Bow-tie".
+
+### Risk matrix
+
+A risk register as a likelihood × impact matrix. One row is one risk. The pane
+needs `id` (any type) and four numbers: `p_lo` and `p_hi`, the likelihood per
+year as a range, and `impact_lo` and `impact_hi`, the impact as a range. `name`
+is optional. `inherent_p_lo`, `inherent_p_hi`, `inherent_impact_lo` and
+`inherent_impact_hi`, all four or none, add the rating before controls; a NULL
+one means that risk has none. Every value must be positive — the axes are
+logarithmic — and a row that is not is skipped and counted in the status line.
+
+**Banded** places each risk by the geometric midpoints of its ranges in a 5×5
+of numeric bands (1%, 3%, 10% and 30% a year; €100k in steps of five). Cells
+grow toward the high-risk corner and are shaded by the expected annual loss at
+their centre, not by multiplying ranks. **Continuous with ranges** drops the
+bands and draws each range as a box, with diagonal lines of equal expected
+annual loss. **Show inherent → residual** draws an arrow from each risk's
+inherent position to its residual one. Hovering a risk or a cell shows its
+figures; clicking a risk writes `selection`. The pane reads at most 500 rows.
+The **Snippets** library has the worked example, "Risk matrix".
+
+### Impact tolerance
+
+Important services against their impact tolerances under named scenarios. One
+row is one service under one scenario: `service`, `tolerance_hours` (the
+longest disruption the service may suffer, repeated on each of its rows),
+`scenario` and `recovery_hours` (the estimated time to recover). A NULL
+`recovery_hours` is a pair with no estimate; a NULL `scenario` lists a service
+with none. Services and scenarios keep the order rows first name them. When a
+service's rows disagree on the tolerance, the first is drawn and the status
+line says so.
+
+Each row draws the tolerance as a line with the region past it shaded, and a
+point per scenario on a logarithmic hours axis; its label counts the scenarios
+that breach. Hovering a point shows the estimate against the tolerance;
+clicking one writes `selection` for its row. The **Snippets** library has the
+worked example, "Impact tolerance".
 
 ### Network
 

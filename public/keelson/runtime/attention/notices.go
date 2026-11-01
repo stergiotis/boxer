@@ -40,6 +40,9 @@ type Notice struct {
 	// Job is the job id when the source is a job rather than a
 	// conversation; App is then the app that owns the job.
 	Job string `json:"job,omitempty"`
+	// Window is the window key when the source is a window (ADR-0351
+	// §SD6); App is then the window's app.
+	Window uint64 `json:"window,omitempty"`
 	// Title is the conversation's title, as the app reports it.
 	Title string `json:"title,omitempty"`
 	// Kind and Effect are the event's, as ADR-0323 §SD3 keys it.
@@ -135,6 +138,49 @@ func (inst *Notices) NotifyJob(owner app.AppIdT, job string, kind string, text s
 	return
 }
 
+// NotifyWindow keeps a window's slow frames as its notice when the table
+// classes kind as a highlight under the window's app (ADR-0351 §SD6),
+// replacing the window's earlier notice; title is the window's, text the
+// host's line for it. It reports the level the table gave it.
+func (inst *Notices) NotifyWindow(appId app.AppIdT, window uint64, kind string, title string, text string, now time.Time) (level LevelE) {
+	if window == 0 {
+		return LevelUnspecified
+	}
+	if s, known := ScaleOf(kind); !known || s != ScaleAttention {
+		return LevelUnspecified
+	}
+	level = inst.levels.Classify(Event{Kind: kind, App: appId})
+	if level != LevelHighlight {
+		return
+	}
+	n := Notice{Window: window, App: appId, Kind: kind, Title: clip(title, MaxLabelRunes), Text: clip(text, MaxLabelRunes), Level: level, Created: now}
+	inst.mu.Lock()
+	inst.items = slices.DeleteFunc(inst.items, func(x Notice) bool { return x.Window == window })
+	inst.items = append(inst.items, n)
+	if len(inst.items) > MaxNotices {
+		inst.items = slices.Delete(inst.items, 0, len(inst.items)-MaxNotices)
+	}
+	inst.version++
+	hook := inst.onKept
+	inst.mu.Unlock()
+	if hook != nil {
+		hook(n)
+	}
+	return
+}
+
+// SeenWindow drops a window's notice: the person opened the Running tab
+// from it or dismissed it, or the window closed.
+func (inst *Notices) SeenWindow(window uint64) {
+	inst.mu.Lock()
+	defer inst.mu.Unlock()
+	n := len(inst.items)
+	inst.items = slices.DeleteFunc(inst.items, func(x Notice) bool { return x.Window == window && window != 0 })
+	if len(inst.items) != n {
+		inst.version++
+	}
+}
+
 // SeenJob drops a job's notice: the person opened the watchbill window
 // from it, or dismissed it.
 func (inst *Notices) SeenJob(owner app.AppIdT, job string) {
@@ -152,7 +198,9 @@ func (inst *Notices) Seen(conversation string) {
 	inst.mu.Lock()
 	defer inst.mu.Unlock()
 	n := len(inst.items)
-	inst.items = slices.DeleteFunc(inst.items, func(x Notice) bool { return x.Conversation == conversation && x.Job == "" })
+	inst.items = slices.DeleteFunc(inst.items, func(x Notice) bool {
+		return x.Conversation == conversation && x.Job == "" && x.Window == 0
+	})
 	if len(inst.items) != n {
 		inst.version++
 	}

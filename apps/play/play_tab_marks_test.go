@@ -199,7 +199,7 @@ func TestBuiltinTabMarkDeclarations(t *testing.T) {
 			writes[s.ID] = s.Writes
 		}
 	}
-	assert.Equal(t, map[string]bool{"timeline": true, "vectorfield": true, "world": true, "kanban": true, "chat": true, "cards": true, "network": true,
+	assert.Equal(t, map[string]bool{"timeline": true, "vectorfield": true, "world": true, "kanban": true, "bowtie": true, "riskmatrix": true, "tolerance": true, "chat": true, "cards": true, "network": true,
 		"graphview": true, "sankey": true, "dist": true, "icicle": true, "series": true, "treemap": true,
 		"chart": true, "files": true}, shape)
 

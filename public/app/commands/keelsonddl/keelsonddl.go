@@ -11,8 +11,9 @@
 // # The trail views, opt-in
 //
 // --trail-views appends the read-only views over the audit trail
-// (trailviews): one flat view per trail kind, a timeline, and the agentic
-// digests. They are not part of first-run setup — SetupTable never creates
+// (trailviews): the functions they and their readers call, then one flat
+// view per trail kind, a timeline, the agentic digests, the audit entities
+// and the review marks. They are not part of first-run setup — SetupTable never creates
 // them — so they are printed only when asked for, after the facts DDL, which
 // stays byte-identical as a prefix.
 //
@@ -119,7 +120,7 @@ func NewCliCommand() *cli.Command {
 			},
 			&cli.BoolFlag{
 				Name:  "trail-views",
-				Usage: "append the read-only audit-trail views over database.table (CREATE OR REPLACE, stamped); not part of first-run setup",
+				Usage: "append the audit-trail functions and the read-only views over database.table (CREATE OR REPLACE, stamped); not part of first-run setup",
 			},
 			&cli.BoolFlag{
 				Name:  "with-surface",

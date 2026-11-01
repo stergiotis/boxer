@@ -331,6 +331,30 @@ type PaintEllipseStrokeFluid struct {
 }
 type PaintEllipseStrokeMethodIdE uint32
 
+type PaintHitCircleFluid struct {
+	r           *typed.RetainedFffiBuilder
+	id          uint64
+	idGen       WidgetIdCreatorI
+	deferredTip *runtime.DeferredBlockScope
+}
+type PaintHitCircleMethodIdE uint32
+
+type PaintHitPolygonFluid struct {
+	r           *typed.RetainedFffiBuilder
+	id          uint64
+	idGen       WidgetIdCreatorI
+	deferredTip *runtime.DeferredBlockScope
+}
+type PaintHitPolygonMethodIdE uint32
+
+type PaintHitRectFluid struct {
+	r           *typed.RetainedFffiBuilder
+	id          uint64
+	idGen       WidgetIdCreatorI
+	deferredTip *runtime.DeferredBlockScope
+}
+type PaintHitRectMethodIdE uint32
+
 type PaintImageFluid struct {
 	r *typed.RetainedFffiBuilder
 }

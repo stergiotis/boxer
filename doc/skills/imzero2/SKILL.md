@@ -1306,6 +1306,26 @@ c.PaintCubicBezier(startX, startY, cp1x, cp1y, cp2x, cp2y, endX, endY, strokeRgb
 
 All coordinates are canvas-relative (translated to screen coords at render time by PaintCanvas). The bezier is rendered via `painter.add(CubicBezierShape)` for hardware-accelerated tessellation.
 
+### 14.4 Hover, tooltips and accessibility on painted marks — hit regions
+
+A mark drawn with `c.Paint*` gets its hover, its tooltip and its accessibility node from a **hit region** declared beside it, with the same geometry, before the `PaintCanvas` that drains it (ADR-0149, update of 2026-11-01):
+
+```go
+c.PaintCircleFilled(x, y, r, col).Send()
+c.PaintHitCircle(ids.PrepareSeq(uint64(i)), x, y, r+2).   // also PaintHitRect, PaintHitPolygon
+	Label("R4 · Payment fraud").                          // accessible name + the tooltip's strong first line
+	Tooltip("Likelihood 20%–60% / yr\nImpact €20k–€400k"). // plain-text body
+	Send()                                                 // or SendResp() for last frame's flags
+```
+
+- **The host hit-tests, Go does not.** Of the regions under the pointer, the one declared **last** wins; the winner's tooltip shows at the pointer in egui's tooltip layer — above the page, not clipped by the canvas, no tooltip delay. Do not read the canvas cursor back and re-test geometry in Go, and do not paint a tooltip into the canvas: that was the pattern this replaced, and it was a frame late and cut off at the canvas edge.
+- **Read-back is by the region's id**, like a widget: `SendResp()` returns last frame's `HasHovered` (the winner only), `HasPrimaryClicked` (a click on it, or Enter/Space while focused) and `HasFocus`. The id must be stable across frames — an ordinal under the view's own scope is fine.
+- **Rich body:** `.TooltipUi(func(){ … })` captures ordinary widgets (a `Grid`, `LabelAtoms`) as a deferred block, drawn under the label and text.
+- **Accessibility:** a labelled region is a node (role `unknown`, its label as name, bounds clipped to the canvas), so a scene can `{"do":"hover","name":…,"role":"unknown"}` a mark instead of aiming at pixels. `.Focusable()` makes it a Tab stop that shows its tooltip and a focus ring while focused; it is opt-in because a dot plot would otherwise add dozens of stops.
+- **Hover only.** A region never takes a click or a drag from the canvas or a `PaintSenseRegion` under it; no region wins while anything is being dragged. Inside a `paintAbsoluteOverlay` regions are dropped with a warning.
+- **ImPlot `Custom` items** declare regions from the closure with `d.Ids`, scoped per item: `c.PaintHitCircle(d.Ids.PrepareSeq(uint64(i)), d.T.PxX(x), d.T.PxY(y), r)`. No second `CustomUnclipped` closure redoing the geometry.
+- **When not to use it:** a widget that already picks in Go over its own registers for click and drag (graphview, `layeredgraph/view`, ADR-0228 §SD6) gains nothing for picking; a region still buys it a tooltip and an accessibility node — `layeredgraph/view` takes them per node through `RenderOpts.NodeRegion`, keeping its pick. Each region costs a few bytes on the wire, an r7 entry, and an egui widget when labelled — fine for hundreds of marks, not for a ten-thousand-point scatter.
+
 ## 15. Binding an External egui Widget Library
 
 Distilled from `egui_dock`, `egui_table`, `egui_plot` (whose bridge has since been retired in favor of the implot port, ADR-0149), and `egui_graphs` (whose `c.Graph` binding has since been removed in favor of the pure-Go `widgets/graphview`, ADR-0224 — the `egui_graphs` snippets below quote that former binding to show the shapes, and name nothing in the tree any more). When the widget you're wrapping isn't just a leaf painter but brings its own state (layout positions, selection, scroll, drag offsets) or its own callback-driven API, these patterns recur.

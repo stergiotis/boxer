@@ -104,6 +104,14 @@ const (
 
 var jobKinds = []string{KindJobFailed, KindJobDiscarded, KindJobAbandoned}
 
+// KindWindowSlow is a window whose Frame has been slow for a while,
+// reported by the window host (ADR-0351 §SD6). On the attention scale, and
+// a highlight by default: the one default that reaches host chrome
+// unasked, since a slow window slows every other.
+const KindWindowSlow = "window.slow"
+
+var windowKinds = []string{KindWindowSlow}
+
 // ScaleOf is the scale of kind, and whether kind belongs to the closed
 // vocabulary: the host's kinds and the run journal's entry kinds (ADR-0308
 // §SD2). Which scale a kind is on is code, never configuration (ADR-0323
@@ -115,6 +123,11 @@ func ScaleOf(kind string) (s ScaleE, known bool) {
 		}
 	}
 	for _, k := range jobKinds {
+		if k == kind {
+			return ScaleAttention, true
+		}
+	}
+	for _, k := range windowKinds {
 		if k == kind {
 			return ScaleAttention, true
 		}
@@ -172,13 +185,39 @@ func (inst AuthorE) String() (s string) {
 }
 
 // Change is one override set or cleared; Level is LevelUnspecified when
-// cleared.
+// cleared. Prev is the level an event of exactly Key had in the change's
+// scope just before it, and PrevBy the table that level came from: the
+// trail's from and from-by (ADR-0296, the Update of 2026-10-31).
 type Change struct {
 	Conversation string
 	Key          Key
 	Level        LevelE
 	Author       AuthorE
 	App          app.AppIdT
+	Prev         LevelE
+	PrevBy       LevelSourceE
+}
+
+// LevelSourceE is the table a level came from (ADR-0323 §SD4): the
+// defaults, the person's overrides or a conversation's.
+type LevelSourceE uint8
+
+const (
+	LevelSourceDefault LevelSourceE = iota
+	LevelSourcePerson
+	LevelSourceConversation
+)
+
+func (inst LevelSourceE) String() (s string) {
+	switch inst {
+	case LevelSourcePerson:
+		s = "person"
+	case LevelSourceConversation:
+		s = "conversation"
+	default:
+		s = "default"
+	}
+	return
 }
 
 // Levels is the table of ADR-0323: defaults, the person's overrides and
@@ -241,15 +280,25 @@ func (inst Snapshot) Classify(ev Event) (l LevelE) {
 }
 
 func classify(person map[Key]LevelE, conv map[Key]LevelE, ev Event) (l LevelE) {
+	l, _ = classifyBy(person, conv, ev)
+	return
+}
+
+// classifyBy is classify, and the table the level came from.
+func classifyBy(person map[Key]LevelE, conv map[Key]LevelE, ev Event) (l LevelE, by LevelSourceE) {
 	keys := [4]Key{{ev.Kind, ev.Effect, ev.App}, {ev.Kind, ev.Effect, ""}, {ev.Kind, 0, ev.App}, {ev.Kind, 0, ""}}
-	for _, m := range [2]map[Key]LevelE{conv, person} {
+	for i, m := range [2]map[Key]LevelE{conv, person} {
 		for _, k := range keys {
 			if l = m[k]; l != LevelUnspecified {
+				by = LevelSourceConversation
+				if i == 1 {
+					by = LevelSourcePerson
+				}
 				return
 			}
 		}
 	}
-	return DefaultLevel(ev)
+	return DefaultLevel(ev), LevelSourceDefault
 }
 
 // SetOnWaitingChange installs the hook told of every change on the waiting
@@ -291,6 +340,8 @@ func DefaultLevel(ev Event) (l LevelE) {
 		return LevelMessage
 	case KindJobFailed:
 		return LevelData
+	case KindWindowSlow:
+		return LevelHighlight
 	}
 	k, ok := agentrun.ParseKind(ev.Kind)
 	if !ok {
@@ -377,6 +428,13 @@ func (inst *Levels) ClearConversation(conversation string) {
 
 func (inst *Levels) store(ch Change, scale ScaleE) {
 	inst.mu.Lock()
+	// The level before the change, as an event of exactly the key saw it
+	// in the change's scope.
+	var before map[Key]LevelE
+	if ch.Conversation != "" {
+		before = inst.conv[ch.Conversation]
+	}
+	ch.Prev, ch.PrevBy = classifyBy(inst.person, before, Event{Kind: ch.Key.Kind, Effect: ch.Key.Effect, App: ch.Key.App, Conversation: ch.Conversation})
 	var m map[Key]LevelE
 	if ch.Conversation == "" {
 		if inst.person == nil {

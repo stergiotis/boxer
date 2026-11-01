@@ -263,11 +263,11 @@ func (inst *Service) rationSet(msg *app.Msg) (rep wireRationReply) {
 		}
 		if inst.affectsSelf(msg, old.Select) {
 			rep.Reason = "removing " + strconv.Quote(old.Id) + " loosens a rule on the moderator's own calls; ask the person (llm.ration.ask)"
-			inst.auditRule(msg, "rule-remove", old, trail.OutcomeDenied, rep.Reason)
+			inst.auditRule(msg, "rule-remove", old, option.None[ration.Rule](), trail.OutcomeDenied, rep.Reason)
 			return
 		}
 		inst.ledger.Remove(old.Id)
-		inst.auditRule(msg, "rule-remove", old, trail.OutcomeOk, "")
+		inst.auditRule(msg, "rule-remove", old, option.None[ration.Rule](), trail.OutcomeOk, "")
 		rep.Ok = true
 		return
 	}
@@ -280,16 +280,17 @@ func (inst *Service) rationSet(msg *app.Msg) (rep wireRationReply) {
 		rep.Reason = err.Error()
 		return
 	}
-	if old, ok := inst.ledger.Rule(r.Id); ok && inst.affectsSelf(msg, old.Select) && loosens(old, r) {
+	prev := previousRule(inst.ledger, r.Id)
+	if prev.Has && inst.affectsSelf(msg, prev.Val.Select) && loosens(prev.Val, r) {
 		rep.Reason = "the change to " + strconv.Quote(r.Id) + " loosens a rule on the moderator's own calls; ask the person (llm.ration.ask)"
-		inst.auditRule(msg, "rule-set", r, trail.OutcomeDenied, rep.Reason)
+		inst.auditRule(msg, "rule-set", r, prev, trail.OutcomeDenied, rep.Reason)
 		return
 	}
 	if err = inst.ledger.Set(r); err != nil {
 		rep.Reason = err.Error()
 		return
 	}
-	inst.auditRule(msg, "rule-set", r, trail.OutcomeOk, "")
+	inst.auditRule(msg, "rule-set", r, prev, trail.OutcomeOk, "")
 	rep.Ok = true
 	return
 }
@@ -433,6 +434,7 @@ func (inst *Service) rationAsk(msg *app.Msg) (rep wireRationReply) {
 	}
 	rep.Ok, rep.Decided, rep.Granted = true, decided, granted
 	outcome := trail.OutcomeDenied
+	prev := previousRule(inst.ledger, r.Id)
 	if granted {
 		r.SetAt = time.Now().UTC()
 		if err = inst.ledger.Set(r); err != nil {
@@ -445,7 +447,7 @@ func (inst *Service) rationAsk(msg *app.Msg) (rep wireRationReply) {
 	if decided {
 		decidedBy = "person"
 	}
-	inst.auditRule(msg, "rule-ask", r, outcome, "decided by "+decidedBy)
+	inst.auditRule(msg, "rule-ask", r, prev, outcome, "decided by "+decidedBy)
 	return
 }
 
@@ -456,8 +458,10 @@ const (
 	auditRetention = trail.RetentionTrail
 )
 
-// auditRule records a change to a rule: who, what, and the rule in full.
-func (inst *Service) auditRule(msg *app.Msg, action string, r ration.Rule, outcome string, why string) {
+// auditRule records a change to a rule: who, what, the rule in full, and
+// as from the rule it replaces when prev holds one (ADR-0296, the Update
+// of 2026-10-31).
+func (inst *Service) auditRule(msg *app.Msg, action string, r ration.Rule, prev option.Option[ration.Rule], outcome string, why string) {
 	attrs := []string{"select", r.Select.String(), "kind", r.Kind.String()}
 	if r.Quantity != "" {
 		attrs = append(attrs, "quantity", string(r.Quantity))
@@ -475,6 +479,9 @@ func (inst *Service) auditRule(msg *app.Msg, action string, r ration.Rule, outco
 	if !r.Until.IsZero() {
 		attrs = append(attrs, "until", r.Until.UTC().Format(time.RFC3339))
 	}
+	if prev.Has {
+		attrs = append(attrs, trail.AttrFrom, ruleLine(prev.Val))
+	}
 	if r.Author != "" {
 		attrs = append(attrs, "author", r.Author)
 	}
@@ -491,11 +498,11 @@ func (inst *Service) auditRule(msg *app.Msg, action string, r ration.Rule, outco
 func (inst *Service) audit(msg *app.Msg, action string, outcome string, ref []string, attrs []string) {
 	row := trail.AuditEvent{Domain: auditDomain, Action: action, Outcome: outcome, Retention: auditRetention}
 	for i := 0; i+1 < len(ref); i += 2 {
-		row.RefTypes, row.RefValues = append(row.RefTypes, ref[i]), append(row.RefValues, bound(ref[i+1]))
+		row.RefTypes, row.RefValues = append(row.RefTypes, ref[i]), append(row.RefValues, trail.Bounded(ref[i+1]))
 	}
 	for i := 0; i+1 < len(attrs) && len(row.AttrKeys) < trail.MaxAttrs; i += 2 {
 		if attrs[i+1] != "" {
-			row.AttrKeys, row.AttrValues = append(row.AttrKeys, attrs[i]), append(row.AttrValues, bound(attrs[i+1]))
+			row.AttrKeys, row.AttrValues = append(row.AttrKeys, attrs[i]), append(row.AttrValues, trail.Bounded(attrs[i+1]))
 		}
 	}
 	c := trail.Context{Origin: inst.cfg.Trail.OriginOf(msg.Sender, msg.SenderInstance)}
@@ -507,10 +514,45 @@ func (inst *Service) audit(msg *app.Msg, action string, outcome string, ref []st
 	}
 }
 
-// bound cuts s to what an audit value may hold.
-func bound(s string) (b string) {
-	if r := []rune(s); len(r) > trail.MaxValueRunes {
-		return string(r[:trail.MaxValueRunes-1]) + "…"
+// previousRule is the ledger's rule with id, if it has one.
+func previousRule(l *ration.Ledger, id string) (prev option.Option[ration.Rule]) {
+	if old, ok := l.Rule(id); ok {
+		prev = option.Some(old)
 	}
-	return s
+	return
+}
+
+// ruleLine is a rule's enforced terms on one line, in a fixed order — kind,
+// select, quantity, limit, window, aligned, raise, until — for a rule
+// event's from. Author and reason are left out: the rule's own event
+// carries them.
+func ruleLine(r ration.Rule) (s string) {
+	var b strings.Builder
+	b.WriteString(r.Kind.String())
+	b.WriteString(" ")
+	b.WriteString(r.Select.String())
+	if r.Quantity != "" {
+		b.WriteString(" quantity=")
+		b.WriteString(string(r.Quantity))
+	}
+	b.WriteString(" limit=")
+	b.WriteString(strconv.FormatInt(r.Limit, 10))
+	if r.Window > 0 {
+		b.WriteString(" window=")
+		b.WriteString(r.Window.String())
+	}
+	if r.Aligned {
+		b.WriteString(" aligned")
+	}
+	if r.Raise > 0 {
+		b.WriteString(" raise=")
+		b.WriteString(strconv.FormatInt(r.Raise, 10))
+		b.WriteString(" raise-until=")
+		b.WriteString(r.RaiseUntil.UTC().Format(time.RFC3339))
+	}
+	if !r.Until.IsZero() {
+		b.WriteString(" until=")
+		b.WriteString(r.Until.UTC().Format(time.RFC3339))
+	}
+	return b.String()
 }

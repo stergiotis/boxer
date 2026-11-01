@@ -235,6 +235,9 @@ type parentWatchingHandle struct {
 	once   sync.Once
 }
 
+// InstanceKey is zero: no owner, so the run's goroutine is not labelled.
+func (a *parentWatchingApi) InstanceKey() uint64 { return 0 }
+
 func (a *parentWatchingApi) Spawn(ctx context.Context, _ task.SpawnOpts) (task.HandleI, error) {
 	return &parentWatchingHandle{api: a, parent: ctx, ctx: ctx}, nil
 }

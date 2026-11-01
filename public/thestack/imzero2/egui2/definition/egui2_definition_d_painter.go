@@ -486,7 +486,103 @@ let mut nearest: bool = false;
 		WithReturnType(structPaintCmd()).
 		Build())
 
+	registered = append(registered, definitionsPainterHitRegions()...)
+
 	return registered
+}
+
+// --- Hit regions: hover, tooltip and an accessibility node per painted mark ---
+//
+// paintHitRect / paintHitCircle / paintHitPolygon declare the geometry of a
+// mark the caller has just painted, under an id. The canvas drains them after
+// its paint commands and hit-tests them against the pointer itself, so the
+// caller states the geometry once. Of the regions under the pointer the one
+// declared last wins (paint order: the mark drawn on top). The winner gets a
+// tooltip from egui's tooltip layer, positioned at the pointer, above other
+// content and not clipped by the canvas.
+//
+// A region reads back like a widget: its id carries response flags in r7 —
+// HOVERED and CONTAINS_POINTER for the winner, PRIMARY_/SECONDARY_CLICKED for
+// a click on it (or Enter/Space while it has keyboard focus), HAS_FOCUS and
+// GAINED_/LOST_FOCUS when focusable. Hover-only: a region never takes a click
+// or drag from the canvas or from a sense region under it.
+//
+// label(tx) is the region's accessible name and the tooltip's first, strong
+// line; a labelled region gets an accessibility node (role "unknown", the
+// region's bounding box clipped to the canvas). tooltip(tx) adds a plain-text
+// body, and the "tip" deferred block a rich one. focusable() makes the region
+// a Tab stop; a focused region shows its tooltip beside its bounds and a focus
+// ring. Inside a paintAbsoluteOverlay there is no ui to hit-test in, and the
+// regions are dropped with a warning, like sense regions.
+func definitionsPainterHitRegions() []*ir.BuilderFactoryNode {
+	methods := func() []ir.Method {
+		return idl.NewMethodBuilder().
+			BeginMethod("label").Arg("tx", ctabb.S).
+			CodeClientRust(rustClientCode("hit_label = tx;\n")).EndMethod().
+			BeginMethod("tooltip").Arg("tx", ctabb.S).
+			CodeClientRust(rustClientCode("hit_tip = tx;\n")).EndMethod().
+			BeginMethod("focusable").
+			CodeClientRust(rustClientCode("hit_focusable = true;\n")).EndMethod().
+			Build()
+	}
+	const construction = `0u8;
+let mut hit_label = String::new();
+let mut hit_tip = String::new();
+let mut hit_focusable = false;
+`
+	apply := func(shape string) *templatedRustClientCode {
+		return rustClientCode(`{
+let mut tip_blocks = self.io.read_deferred_block_map_u32()?;
+let tip_body = tip_blocks.drain().next().map(|(_, v)| v).filter(|v| !v.is_empty());
+self.paint_cmds.push(PaintCmd::HitRegion { id: {{Id}}, shape: ` + shape + `, label: hit_label, tip: hit_tip, tip_body, focusable: hit_focusable });
+}
+`)
+	}
+	return []*ir.BuilderFactoryNode{
+		idl.NewBuilderFactoryNode("paintHitRect").
+			WithIdentityId(true).
+			AddArguments(idl.NewArgumentsBuilder().
+				PlainArg("minX", ctabb.F32).
+				PlainArg("minY", ctabb.F32).
+				PlainArg("maxX", ctabb.F32).
+				PlainArg("maxY", ctabb.F32).
+				Build()).
+			AddMethods(methods()...).
+			WithDeferredBlockMap("tip", ctabb.U32).
+			WithConstructionCodeClientRust(rustClientCode(construction)).
+			WithApplyCodeClientRust(apply("HitShape::Rect { min_x, min_y, max_x, max_y }")).
+			WithSettingImmediate(true).
+			WithReturnType(structPaintCmd()).
+			Build(),
+		idl.NewBuilderFactoryNode("paintHitCircle").
+			WithIdentityId(true).
+			AddArguments(idl.NewArgumentsBuilder().
+				PlainArg("cx", ctabb.F32).
+				PlainArg("cy", ctabb.F32).
+				PlainArg("radius", ctabb.F32).
+				Build()).
+			AddMethods(methods()...).
+			WithDeferredBlockMap("tip", ctabb.U32).
+			WithConstructionCodeClientRust(rustClientCode(construction)).
+			WithApplyCodeClientRust(apply("HitShape::Circle { cx, cy, radius }")).
+			WithSettingImmediate(true).
+			WithReturnType(structPaintCmd()).
+			Build(),
+		// paintHitPolygon — any simple polygon, convex or not (even-odd test).
+		idl.NewBuilderFactoryNode("paintHitPolygon").
+			WithIdentityId(true).
+			AddArguments(idl.NewArgumentsBuilder().
+				PlainArg("xs", ctabb.F32h).
+				PlainArg("ys", ctabb.F32h).
+				Build()).
+			AddMethods(methods()...).
+			WithDeferredBlockMap("tip", ctabb.U32).
+			WithConstructionCodeClientRust(rustClientCode(construction)).
+			WithApplyCodeClientRust(apply("HitShape::Polygon { xs, ys }")).
+			WithSettingImmediate(true).
+			WithReturnType(structPaintCmd()).
+			Build(),
+	}
 }
 
 // --- Canvas drain node ---

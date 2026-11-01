@@ -127,6 +127,55 @@ $(scripts/boxer-path.sh)/scripts/dev/adr-accept.sh 1
 Record anything you do differently in the **Repository-local supplement**
 section of `AGENTS.md`, not by editing a generated file.
 
+## Run your apps in the desktop or headless host
+
+Optional. The imzero2 host binary — the desktop window, and the headless host
+that `imzero2 drive` and `imzero2 scene` run against — needs the Rust client
+from boxer's `rust/imzero2`; the Go side is boxer's
+[`hostmain`](../../public/thestack/imzero2/hostmain/hostmain.go)
+([ADR-0278](../adr/0278-tab-mode-for-downstream-apps.md), Updates
+2026-11-01). Your repository carries one `package main`.
+
+1. **Write the host binary.** It names the apps it adds and hands its root
+   `cli.Command` to `hostmain`, which adds the rest — the logging, profiling
+   and tracing flags, `imzero2 demo`, `drive` and `scene`, the exit hook. The
+   `demo` command brings boxer's own carousel apps with it, so yours appear
+   beside them.
+
+   ```go
+   // cmd/<name>/main.go
+   package main
+
+   import (
+   	"github.com/urfave/cli/v3"
+
+   	"github.com/stergiotis/boxer/public/observability/logging"
+   	"github.com/stergiotis/boxer/public/observability/vcs"
+   	"github.com/stergiotis/boxer/public/thestack/imzero2/hostmain"
+
+   	_ "example.com/<module>/apps/<app>"
+   )
+
+   var host = hostmain.New(hostmain.Options{},
+   	&cli.Command{Name: "<name>", Version: vcs.BuildVersionInfo(), Before: logging.Apply})
+
+   func main() { host.Main() }
+   ```
+
+2. **Launch an app, or run a scene.**
+
+   ```sh
+   go run ./cmd/<name> imzero2 demo --list
+   go run ./cmd/<name> imzero2 demo --launch <alias>
+   go run ./cmd/<name> imzero2 scene --repoRoot <boxer checkout> --out tmp/scenes ./scenes
+   ```
+
+   `--list` shows every registered app with its alias; an app missing from it
+   was not imported. `scene` finds the headless client and the fonts under
+   `--repoRoot`, a checkout holding a built `rust/imzero2`; `--clientBinary`
+   names a client directly. A scene document's format and step vocabulary are
+   in the [imzero2-drive skill](../skills/imzero2-drive/SKILL.md).
+
 ## Run your apps in a browser tab
 
 Optional. A keelson app can run in a browser tab as a WebAssembly module beside

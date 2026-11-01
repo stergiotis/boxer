@@ -22,6 +22,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/color"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/implot"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/regexedit"
 )
 
@@ -287,9 +288,13 @@ func (inst *App) renderCaptureGroups() {
 					// keeps one colour down the whole haystack and
 					// adjacent groups stay distinguishable. QualitativeCycle
 					// is the IDS categorical palette (ADR-0031), which
-					// wraps on its own past the last entry.
-					fg := color.Hex(styletokens.NeutralBgExtreme.AsHex()).Keep()
-					bg := color.Hex(styletokens.QualitativeCycle(k - 1).AsHex()).Keep()
+					// wraps on its own past the last entry. The ink is
+					// whichever neutral extreme contrasts more with that
+					// slot: no one ink clears 4.5:1 on every cycle entry
+					// (dark text on Okabe-Ito blue measures 4.0:1).
+					q := styletokens.QualitativeCycle(k - 1).AsHex()
+					fg := color.Hex(groupInk(q)).Keep()
+					bg := color.Hex(q).Keep()
 					atoms := c.Atoms().Text(label + "=")
 					for range atoms.StyledTextColored(fg, bg, haystack[start:end]) {
 					}
@@ -300,6 +305,18 @@ func (inst *App) renderCaptureGroups() {
 		}
 	}
 	renderTruncationNote(min(maxMatchRows, len(matches)), len(matches))
+}
+
+// groupInk returns the text colour for a capture-group cell filled with
+// fill (0xRRGGBBAA): the neutral extreme with the higher WCAG contrast
+// against it.
+func groupInk(fill uint32) (ink uint32) {
+	dark, light := styletokens.NeutralBgExtreme.AsHex(), styletokens.NeutralTextExtreme.AsHex()
+	ink = dark
+	if implot.ContrastRatio(light, fill) > implot.ContrastRatio(dark, fill) {
+		ink = light
+	}
+	return
 }
 
 // groupLabel names capture group k for display: its (?P<name>…) name when

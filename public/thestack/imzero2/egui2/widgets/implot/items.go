@@ -24,6 +24,7 @@ const (
 	kindBoxes
 	kindText
 	kindCustom
+	kindBarsH
 )
 
 // MarkerE selects a scatter glyph; the numbering is the paintMarkers wire
@@ -52,20 +53,60 @@ func (p *Plot) Scatter(label string, xs []float64, ys []float64, marker MarkerE,
 
 // Bars declares vertical bars centered on xs with heights ys and the given
 // bar width in plot units (one paintRectsFilled opcode per series). Bars
-// are drawn from y=0 to ys[i], like ImPlot's default.
+// are drawn from y=0 to ys[i], like ImPlot's default; BarsRef draws them
+// from another reference value.
 func (p *Plot) Bars(label string, xs []float64, ys []float64, width float64) *Plot {
-	s := seriesFrame{kind: kindBars, label: label, xs: xs, ys: ys, width: width}
+	return p.BarsRef(label, xs, ys, width, 0)
+}
+
+// BarsRef declares vertical bars like Bars, drawn from yref to ys[i]
+// instead of from 0: a bar whose value is below yref runs downward from
+// it. Two series sharing one yref make diverging bars. House extension —
+// upstream's bars always start at 0.
+func (p *Plot) BarsRef(label string, xs []float64, ys []float64, width float64, yref float64) *Plot {
+	p.addBars(seriesFrame{kind: kindBars, label: label, xs: xs, ys: ys, width: width, yref: yref})
+	return p
+}
+
+// BarsH declares horizontal bars centered on ys with lengths xs and the
+// given bar height in plot units (one paintRectsFilled opcode per series),
+// drawn from x=0 to xs[i]. The slices keep the (xs, ys) order of the other
+// items, so xs carries the values and ys the positions — upstream's
+// PlotBars with ImPlotBarsFlags_Horizontal, and the same order ErrorBarsH
+// takes.
+func (p *Plot) BarsH(label string, xs []float64, ys []float64, height float64) *Plot {
+	return p.BarsHRef(label, xs, ys, height, 0)
+}
+
+// BarsHRef declares horizontal bars like BarsH, drawn from xref to xs[i]
+// instead of from 0: a bar whose value is below xref runs leftward from
+// it. A tornado chart is two BarsHRef series around one baseline — the
+// downside values in one, the upside values in the other. House
+// extension, as BarsRef.
+func (p *Plot) BarsHRef(label string, xs []float64, ys []float64, height float64, xref float64) *Plot {
+	p.addBars(seriesFrame{kind: kindBarsH, label: label, xs: xs, ys: ys, width: height, yref: xref})
+	return p
+}
+
+// addBars records a bars series of either orientation and widens auto-fit
+// to the bar bodies: each position ± half the bar size on the position
+// axis, and the reference value on the value axis, which the bars always
+// touch. The values themselves fit through addSeries.
+func (p *Plot) addBars(s seriesFrame) {
 	p.addSeries(s, true, true)
-	// The bar body spans x±width/2 and always includes the y=0 baseline.
-	n := min(len(xs), len(ys))
+	pos, fitPos, fitRef := s.xs, p.fitX, p.fitY
+	if s.kind == kindBarsH {
+		pos, fitPos, fitRef = s.ys, p.fitY, p.fitX
+	}
+	half := s.width / 2
+	n := min(len(s.xs), len(s.ys))
 	for i := range n {
-		if !math.IsNaN(xs[i]) {
-			p.fitX(xs[i] - width/2)
-			p.fitX(xs[i] + width/2)
+		if !math.IsNaN(pos[i]) {
+			fitPos(pos[i] - half)
+			fitPos(pos[i] + half)
 		}
 	}
-	p.fitY(0)
-	return p
+	fitRef(s.yref)
 }
 
 // Shaded declares a filled region between the curve and yref (per-segment
