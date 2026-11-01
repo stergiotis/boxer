@@ -23,7 +23,10 @@ import (
 //     refill at most and at most every verdictEvery;
 //   - the detail: the selected row's context, and its previous state.
 //
-// Everything here but the workers' reads runs on the render goroutine.
+// Everything here but the workers' reads runs on the render goroutine. The
+// table read reports each statement as a step, so the progress row above
+// the table is determinate; its lifecycle is projected onto one state
+// machine in readstate.go, which never drives it.
 
 const (
 	readTimeout = 20 * time.Second
@@ -84,13 +87,22 @@ type tableCache struct {
 	claims map[uint64]claimJudgment
 	asOf   *AsOf
 
-	inFlight   scope
-	started    time.Time
+	inFlight scope
+	started  time.Time
+	// ended is when the last read finished, whatever its outcome; the
+	// refresh interval counts from it, not from started, so a store slower
+	// than the interval does not keep the window refreshing (ADR-0350
+	// §SD12).
+	ended      time.Time
 	want       scope
 	wantSince  time.Time
 	refreshNow bool
 	// extendNow asks for the rows after the held ones.
 	extendNow bool
+	// hold is a stop (ADR-0350 §SD12): tick starts nothing — no refill, no
+	// interval refresh, no extension — until refresh or a scope change
+	// clears it. A stop is not a failure, so lastErr is untouched.
+	hold bool
 }
 
 // readSpec is what the worker needs besides the scope.
@@ -135,11 +147,17 @@ func (inst *tableCache) tick(now time.Time, src *Source, want scope, spec readSp
 	if snap := inst.runner.Snapshot(); snap.State == bgjob.StateFailed {
 		inst.lastErr = snap.Err
 	}
+	if !inst.runner.Running() && inst.ended.Before(inst.started) {
+		inst.ended = now
+	}
 	if !src.persisted() {
 		return
 	}
 	if want != inst.want {
-		inst.want, inst.wantSince = want, now
+		inst.want, inst.wantSince, inst.hold = want, now, false
+	}
+	if inst.hold {
+		return
 	}
 	running := inst.runner.Running()
 	switch {
@@ -157,9 +175,120 @@ func (inst *tableCache) tick(now time.Time, src *Source, want scope, spec readSp
 	case running:
 	case inst.extendNow && inst.more:
 		inst.start(now, want, spec, true, newProbe)
-	case inst.refreshNow || now.Sub(inst.started) >= refreshInterval():
+	case inst.refreshNow || now.Sub(inst.ended) >= refreshInterval():
 		inst.start(now, want, spec, false, newProbe)
 	}
+}
+
+// stop cancels the read in flight and holds the cache: nothing starts
+// until refresh or a scope change. It sets and never toggles. The runner
+// finishes a cancelled compute as idle, not failed (bgjob's
+// finishCancelled), so lastErr stays as it was and the state reads
+// stopped.
+func (inst *tableCache) stop() {
+	inst.hold, inst.refreshNow, inst.extendNow = true, false, false
+	inst.runner.Cancel()
+}
+
+// refresh asks for the next read at once and clears a hold.
+func (inst *tableCache) refresh() {
+	inst.refreshNow, inst.hold = true, false
+}
+
+// readPlan is one read's parameters, fixed when it starts: what the worker
+// needs besides the probe.
+type readPlan struct {
+	want                 scope
+	q                    listQuery
+	from, to, resolvedAt time.Time
+	extend               bool
+	buckets              int
+	by                   StripByE
+	look                 time.Duration
+	judged               map[uint64]bool
+}
+
+// The notes the read reports its steps under, one per statement.
+const (
+	stepRows       = "rows"
+	stepExceptions = "exceptions"
+	stepReviews    = "reviews"
+	stepClaims     = "claims"
+	stepAsOf       = "as-of"
+	stepStrip      = "strip"
+	stepFacet      = "facet: "
+)
+
+// steps is how many statements the read runs at most: an extension reads
+// the rows and what the rules say of them, a refill the strip, the as-of
+// state and the facets too.
+func (inst readPlan) steps() (n uint64) {
+	n = 4
+	if !inst.extend {
+		n += 2 + uint64(len(AllFacets))
+	}
+	return
+}
+
+// run is the read: each statement a step reported before it runs, so the
+// progress bar is determinate by step and the ETA follows. Steps a read
+// has nothing for — the rules over no rows — count as done without a
+// report.
+func (inst readPlan) run(ctx context.Context, report bgjob.Reporter, p *probe) (out *tableFill, err error) {
+	q, total, done := inst.q, inst.steps(), uint64(0)
+	step := func(note string) {
+		report(done, total, note)
+		done++
+	}
+	step(stepRows)
+	rows, err := p.listRows(ctx, q)
+	if err != nil {
+		return
+	}
+	out = &tableFill{scope: inst.want, from: inst.from, to: inst.to, resolvedAt: inst.resolvedAt, rows: rows, more: len(rows) == q.Limit, extend: inst.extend, at: time.Now()}
+	if len(rows) > 0 {
+		// The rules and the marks cover the rows read: older than the
+		// cursor, and no older than the last row when more follow.
+		var lower *Cursor
+		if out.more {
+			last := rows[len(rows)-1]
+			lower = &Cursor{TsNs: last.TsNs, Id: last.Id}
+		}
+		step(stepExceptions)
+		if out.exceptions, err = queryRows[Exception](ctx, p, p.marts.exceptionsSQL(q, lower, inst.look)); err != nil {
+			return nil, err
+		}
+		step(stepReviews)
+		if out.reviews, err = queryRows[Review](ctx, p, p.marts.reviewsSQL(q, lower)); err != nil {
+			return nil, err
+		}
+		step(stepClaims)
+		if out.claims, err = p.judgeClaims(ctx, rows, inst.judged, inst.look); err != nil {
+			return nil, err
+		}
+	} else {
+		done += 3
+	}
+	if !inst.extend {
+		step(stepAsOf)
+		if out.asOf, err = p.readAsOf(ctx, q, inst.look); err != nil {
+			return nil, err
+		}
+		out.step = stepFor(inst.to.Sub(inst.from), inst.buckets)
+		step(stepStrip)
+		if out.buckets, err = p.strip(ctx, q, out.step, inst.by); err != nil {
+			return nil, err
+		}
+		out.facets = make([][]FacetValue, len(AllFacets))
+		for i, f := range AllFacets {
+			step(stepFacet + f.String())
+			if out.facets[i], err = p.facet(ctx, f, q.Case, inst.from, inst.to); err != nil {
+				return nil, err
+			}
+		}
+	}
+	report(total, total, "")
+	return
 }
 
 // start supersedes any read in flight. A refill reads at least as many
@@ -169,78 +298,36 @@ func (inst *tableCache) start(now time.Time, want scope, spec readSpec, extend b
 	if inst.runner.Running() {
 		inst.runner.Invalidate()
 	}
-	var from, to, resolvedAt time.Time
-	q := listQuery{Case: spec.c, Filter: spec.filter}
+	pl := readPlan{want: want, extend: extend, buckets: spec.buckets, by: want.Strip, look: lookback()}
+	pl.q = listQuery{Case: spec.c, Filter: spec.filter}
 	if extend {
-		from, to, resolvedAt = inst.from, inst.to, inst.resolvedAt
+		pl.from, pl.to, pl.resolvedAt = inst.from, inst.to, inst.resolvedAt
 		last := inst.rows[len(inst.rows)-1]
-		q.Cursor = &Cursor{TsNs: last.TsNs, Id: last.Id}
-		q.Limit = rowCap()
+		pl.q.Cursor = &Cursor{TsNs: last.TsNs, Id: last.Id}
+		pl.q.Limit = rowCap()
 	} else {
-		from, to = want.Window.Resolve(now)
-		resolvedAt = now
-		q.Limit = rowCap()
+		pl.from, pl.to = want.Window.Resolve(now)
+		pl.resolvedAt = now
+		pl.q.Limit = rowCap()
 		if inst.scope == want {
-			q.Limit = min(max(q.Limit, len(inst.rows)), maxRows)
+			pl.q.Limit = min(max(pl.q.Limit, len(inst.rows)), maxRows)
 		}
 	}
-	q.From, q.To = from, to
+	pl.q.From, pl.q.To = pl.from, pl.to
 	inst.inFlight, inst.started, inst.refreshNow, inst.extendNow = want, now, false, false
-	buckets, by := spec.buckets, want.Strip
-	look := lookback()
-	judged := make(map[uint64]bool, len(inst.claims))
+	pl.judged = make(map[uint64]bool, len(inst.claims))
 	for id := range inst.claims {
-		judged[id] = true
+		pl.judged[id] = true
 	}
-	inst.runner.Start(nil, bgjob.Spec{Kind: "trailviewer.read", Title: "Trail viewer read"},
-		func(ctx context.Context) (out *tableFill, err error) {
+	inst.runner.StartReporting(nil, bgjob.Spec{Kind: "trailviewer.read", Title: "Trail viewer read"},
+		func(ctx context.Context, report bgjob.Reporter) (out *tableFill, err error) {
 			ctx, cancel := context.WithTimeout(ctx, readTimeout)
 			defer cancel()
 			p, err := newProbe()
 			if err != nil {
 				return
 			}
-			rows, err := p.listRows(ctx, q)
-			if err != nil {
-				return
-			}
-			out = &tableFill{scope: want, from: from, to: to, resolvedAt: resolvedAt, rows: rows, more: len(rows) == q.Limit, extend: extend, at: time.Now()}
-			if len(rows) > 0 {
-				// The rules and the marks cover the rows read: older than
-				// the cursor, and no older than the last row when more
-				// follow.
-				var lower *Cursor
-				if out.more {
-					last := rows[len(rows)-1]
-					lower = &Cursor{TsNs: last.TsNs, Id: last.Id}
-				}
-				if out.exceptions, err = queryRows[Exception](ctx, p, p.marts.exceptionsSQL(q, lower, look)); err != nil {
-					return nil, err
-				}
-				if out.reviews, err = queryRows[Review](ctx, p, p.marts.reviewsSQL(q, lower)); err != nil {
-					return nil, err
-				}
-				if out.claims, err = p.judgeClaims(ctx, rows, judged, look); err != nil {
-					return nil, err
-				}
-			}
-			if extend {
-				return
-			}
-			if out.asOf, err = p.readAsOf(ctx, q, look); err != nil {
-				return nil, err
-			}
-			out.step = stepFor(to.Sub(from), buckets)
-			if out.buckets, err = p.strip(ctx, q, out.step, by); err != nil {
-				return nil, err
-			}
-			out.facets = make([][]FacetValue, len(AllFacets))
-			for i, f := range AllFacets {
-				if out.facets[i], err = p.facet(ctx, f, q.Case, from, to); err != nil {
-					return nil, err
-				}
-			}
-			return
+			return pl.run(ctx, report, p)
 		})
 }
 

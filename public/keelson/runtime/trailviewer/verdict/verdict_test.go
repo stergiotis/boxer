@@ -2,6 +2,7 @@ package verdict
 
 import (
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -43,6 +44,28 @@ func TestTheVocabularyMapsEveryState(t *testing.T) {
 		assert.NotEmpty(t, l.Mark())
 	}
 	assert.Equal(t, "✓", Line{State: StateHolds}.Mark())
+}
+
+// Short names the state without the Reason, so a badge's width is bounded
+// whatever a read put in the line (ADR-0350 §SD12); Label keeps it.
+func TestShortCarriesNoReason(t *testing.T) {
+	reason := strings.Repeat("r", 300)
+	want := map[StateE]string{
+		StateUnverified: "unverified",
+		StateHolds:      "holds",
+		StateBroken:     "broken at ordinal 7",
+		StateGap:        "gap: 3 rows no seal names",
+		StateFork:       "fork",
+		StateUnanchored: "unanchored since ordinal 7",
+	}
+	for _, st := range AllStates {
+		l := Line{Run: "r", State: st, Ordinal: 7, Count: 3, Reason: reason}
+		assert.Equal(t, want[st], l.Short(), st.String())
+		assert.NotContains(t, l.Short(), reason, st.String())
+		assert.Less(t, len([]rune(l.Short())), 40, st.String())
+	}
+	assert.Equal(t, "unverified: "+reason, Line{State: StateUnverified, Reason: reason}.Label(), "Label keeps the reason")
+	assert.Equal(t, "broken at ordinal 7: "+reason, Line{State: StateBroken, Ordinal: 7, Reason: reason}.Label())
 }
 
 func TestFromSealsOrdersTheStates(t *testing.T) {

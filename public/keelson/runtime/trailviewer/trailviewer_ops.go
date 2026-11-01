@@ -9,6 +9,8 @@ import (
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/appops"
+	"github.com/stergiotis/boxer/public/keelson/runtime/appops/fsmops"
+	"github.com/stergiotis/boxer/public/keelson/runtime/appops/opfsm"
 	"github.com/stergiotis/boxer/public/keelson/runtime/trailviewer/verdict"
 )
 
@@ -44,6 +46,10 @@ const (
 	resTree      = "tree"
 	resRead      = "read"
 	resViews     = "views"
+	// resReadState is the read lifecycle's state, declared by fsmops.Mount
+	// under mountRead with the read_state and read_machine queries.
+	mountRead    = "read"
+	resReadState = mountRead + "_state"
 
 	opListRows    = "list_rows"
 	opGetRow      = "get_row"
@@ -75,6 +81,7 @@ const (
 	opSetSide     = "set_side"
 	opSetTree     = "set_tree"
 	opRefresh     = "refresh"
+	opStopRead    = "stop_read"
 	opSaveView    = "save_view"
 	opOpenView    = "open_view"
 	opDeleteView  = "delete_view"
@@ -108,6 +115,7 @@ type opsSnap struct {
 	filled      bool
 	refreshedAt time.Time
 	lastErr     error
+	readState   string
 	taken       time.Time
 	lines       []verdict.Line
 	linesAt     time.Time
@@ -152,6 +160,7 @@ func (inst *App) opsSnapshot() (sn opsSnap) {
 	sn.rows, sn.more, sn.scope, sn.from, sn.to, sn.resolvedAt = ch.rows, ch.more, ch.scope, ch.from, ch.to, ch.resolvedAt
 	sn.buckets, sn.step, sn.facets = ch.buckets, ch.step, ch.facets
 	sn.filled, sn.refreshedAt, sn.lastErr = ch.filled, ch.refreshedAt, ch.lastErr
+	sn.readState = inst.readFSM.Current().String()
 	sn.lines, sn.linesAt = inst.verdicts.lines, inst.verdicts.at
 	sn.exc, sn.marks, sn.asOf = inst.exceptions(), inst.marks(), ch.asOf
 	sn.taken = time.Now()
@@ -498,6 +507,7 @@ type View struct {
 	Selected    uint64        `desc:"the selected row's facts id; 0 for none"`
 	Held        int           `desc:"rows the window holds"`
 	MoreInStore bool          `desc:"older rows of the case and range are in boxer.facts beyond the cache"`
+	ReadState   string        `desc:"where the read of the trail marts stands: idle, reading, rows, empty, failed, refreshing or stopped; read_state has the transitions"`
 	Strip       string        `desc:"the strip's line: rows, buckets, the busiest bucket and its time"`
 	Verdicts    []VerdictLine `desc:"the verdict line per writer run"`
 	Exceptions  int           `desc:"open exceptions among the rows held"`
@@ -907,6 +917,15 @@ var ops = func() (s *appops.Set[*App, opsSnap]) {
 		return ok
 	})
 
+	// The read lifecycle (ADR-0350 §SD12): the read_state resource and the
+	// read_state and read_machine queries over the mirrored machine.
+	fsmops.Mount(s, mountRead, "the window's read of the trail marts", func(inst *App) opfsm.SourceI {
+		if inst.readFSM == nil {
+			return nil
+		}
+		return inst.readFSM
+	}, fsmops.Options{History: 16})
+
 	s.Available(opGetRow, persistedOr)
 	s.Available(opGetPrevious, persistedOr)
 	s.Available(opSelectRow, persistedOr)
@@ -1050,7 +1069,7 @@ var ops = func() (s *appops.Set[*App, opsSnap]) {
 			out = View{Persisted: sn.src.persisted(), Case: sn.c.Kind.String(), Value: sn.c.Value, Range: sn.window.String(),
 				From: sn.from, To: sn.to, Filter: termArgs(sn.filter), Tab: sn.tab.String(), Series: sn.seriesPick.String(), Selected: sn.selected,
 				Matrix: sn.matrixPick.String(), Dotted: sn.dottedPick.String(), StripBy: sn.strip.String(), Grouping: sn.grouped,
-				Side: sn.side.String(), Tree: sn.treeExpanded, Held: len(sn.rows), MoreInStore: sn.more, RefreshedAt: sn.refreshedAt}
+				Side: sn.side.String(), Tree: sn.treeExpanded, Held: len(sn.rows), MoreInStore: sn.more, ReadState: sn.readState, RefreshedAt: sn.refreshedAt}
 			if sn.hasCompare {
 				out.Compare = sn.compare.Id
 			}

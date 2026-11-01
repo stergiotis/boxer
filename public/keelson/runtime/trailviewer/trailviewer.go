@@ -44,7 +44,9 @@ import (
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/badge"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/color"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/fieldview"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/fsmview"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/implot"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/jobprogress"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/recordtable"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/timerangepicker"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/timerangepicker/presets"
@@ -101,6 +103,11 @@ type App struct {
 	verdicts verdictCache
 	detail   detailCache
 	picker   pickerState
+	// readFSM mirrors the table read's lifecycle (readstate.go); readView
+	// is its chip, built at the first render since it needs the mounted
+	// id stack.
+	readFSM  *fsmview.Machine[readStateE]
+	readView *fsmview.View[readStateE]
 
 	valueH widgethandle.WidgetHandle
 
@@ -156,6 +163,7 @@ func newInstance(m app.Manifest) (out *App) {
 		window:   defaultWindow,
 		stripW:   stripFallbackWidth,
 		picker:   newPickerState(),
+		readFSM:  newReadFSM(),
 		// The matrix opens on the pair every row has.
 		an: analytics{pair: matrixPick{Actor: ActorApp, Object: ObjectOperation}},
 	}
@@ -217,6 +225,7 @@ func (inst *App) tick(now time.Time) {
 	}
 	inst.cache.tick(now, src, inst.scopeValue(), readSpec{c: inst.caseValue, filter: inst.filter, buckets: stripBuckets(inst.stripW)},
 		inst.probeFunc(src))
+	inst.syncReadFSM(src.persisted())
 	inst.refreshSelected()
 	inst.settlePending()
 	inst.verdicts.tick(now, src, runsOf(inst.cache.rows))
@@ -439,8 +448,10 @@ func (inst *App) requestRepaint() {
 	}
 }
 
-// renderControls is the case selector, the time range picker, Refresh and
-// the cache's freshness.
+// renderControls is the case selector, the time range picker, Refresh, the
+// read's state chip with its summary and, while a read runs, its progress
+// row — the last thing in the row, so its coming and going moves nothing
+// else (ADR-0350 §SD12).
 func (inst *App) renderControls() {
 	c.AddSpace(styletokens.PaddingHair(inst.density))
 	for range c.Horizontal().KeepIter() {
@@ -476,9 +487,7 @@ func (inst *App) renderControls() {
 		if c.Button(inst.ids.PrepareStr("refresh"), c.Atoms().Text("Refresh").Keep()).SendResp().HasPrimaryClicked() {
 			inst.refreshGesture()
 		}
-		fresh, tone := inst.freshness(time.Now())
-		badge.New(inst.ids.PrepareStr("fresh"), fresh).Tone(tone).Variant(badge.VariantSoft).Size(badge.SizeSm).Monospace().
-			Tooltip("when the window last read its case from the trail marts (BOXER_TRAILVIEWER_REFRESH)").Send()
+		inst.renderReadState()
 	}
 	for _, e := range []error{inst.cache.lastErr, inst.picker.err, inst.launchErr} {
 		if e != nil {
@@ -487,30 +496,55 @@ func (inst *App) renderControls() {
 	}
 }
 
-func (inst *App) freshness(now time.Time) (label string, tone badge.ToneE) {
-	tone = badge.ToneNeutral
-	switch {
-	case !inst.cache.filled && inst.cache.runner.Running():
-		label = "Reading…"
-	case !inst.cache.filled:
-		label = "Not read yet"
-	default:
-		label = fmt.Sprintf("%d rows · read %s", len(inst.cache.rows), inst.picker.format(inst.cache.refreshedAt, "15:04:05"))
-		if inst.cache.more {
-			label += " · older rows follow"
-		}
-		if inst.cache.runner.Running() {
-			label += " · reading…"
+// renderReadState is the read's state chip (readstate.go) — a tethered
+// fsmview summary whose popup draws the graph and the history — and, while
+// a read runs, the progress row: a determinate bar by statement, the ETA,
+// the step's note and the Cancel button, which routes through stop_read.
+func (inst *App) renderReadState() {
+	if inst.readView == nil {
+		inst.readView = fsmview.New(inst.ids, "read-fsm", inst.readFSM, fsmview.Options[readStateE]{
+			Title: "the window's read of the trail marts", Tethered: true, BadgeTone: readStateTone, AutoAnchor: true})
+	}
+	inst.readView.Opts.Summary = func() {
+		if s := inst.freshness(); s != "" {
+			c.LabelAtoms(c.Atoms().BeginRichTextColored(detailMutedFg, detailBgClear, s).Small().End().Keep()).Send()
 		}
 	}
-	if inst.cache.lastErr != nil {
-		tone = badge.ToneWarning
+	inst.readView.Render()
+	switch inst.readFSM.Current() {
+	case readReading, readRefreshing:
+		snap := inst.cache.runner.Snapshot()
+		res := jobprogress.Render(jobprogress.Input{Ids: inst.ids, ScopeKey: "read-progress", Inline: true, BarWidth: 160, Cancel: true,
+			Fraction: snap.Fraction, EtaMs: snap.EtaMs, Note: snap.Note})
+		if res.CancelClicked {
+			inst.stopReadGesture()
+		}
+	}
+}
+
+// freshness is the chip's summary: what is held and when it was read, or
+// that the previous read is still showing while a new scope is read; ""
+// before the first fill, when the chip's state says it all.
+func (inst *App) freshness() (label string) {
+	if !inst.cache.filled {
+		return
+	}
+	if inst.cache.scope != inst.scopeValue() {
+		return "showing the previous read"
+	}
+	label = fmt.Sprintf("%d rows · read %s", len(inst.cache.rows), inst.picker.format(inst.cache.refreshedAt, "15:04:05"))
+	if inst.cache.more {
+		label += " · older rows follow"
 	}
 	return
 }
 
 // renderVerdicts is the verdict line per writer run (SD6), above the
-// table: a run's state never hides its rows.
+// table: a run's state never hides its rows. The badge shows the state in
+// bounded words and the full line as its tooltip: the row wraps, and a
+// badge whose label wraps inside a wrapped row of the top panel makes the
+// panel claim the window (ADR-0350 §SD12) — nothing a read puts on screen
+// may move the layout outside its own row.
 func (inst *App) renderVerdicts() {
 	runs := runsOf(inst.cache.rows)
 	if len(runs) == 0 {
@@ -521,9 +555,9 @@ func (inst *App) renderVerdicts() {
 			c.Label("Evidence:").Send()
 			for i, run := range runs {
 				l := inst.verdicts.line(run)
-				badge.New(inst.ids.PrepareSeq(uint64(i)), shortRun(run)+": "+l.Label()).
+				badge.New(inst.ids.PrepareSeq(uint64(i)), shortRun(run)+": "+l.Short()).
 					Tone(toneOf(l.Tone())).Variant(badge.VariantSoft).Size(badge.SizeSm).
-					Tooltip("writer run " + run + "; law " + lawText(l)).Send()
+					Tooltip(l.Label() + "\nwriter run " + run + "; law " + lawText(l)).Send()
 			}
 		}
 	}
@@ -1144,7 +1178,7 @@ func (inst *App) renderDetail() {
 	for range c.Horizontal().KeepIter() {
 		badge.New(inst.ids.PrepareStr("d-verdict"), l.Mark()).Tone(toneOf(l.Tone())).Variant(badge.VariantSolid).Size(badge.SizeSm).
 			Tooltip(l.Label()).Send()
-		badge.New(inst.ids.PrepareStr("d-kind"), r.Kind).Tone(badge.TonePrimary).Variant(badge.VariantOutline).Size(badge.SizeSm).Send()
+		badge.New(inst.ids.PrepareStr("d-kind"), appops.CutText(r.Kind, 40)).Tone(badge.TonePrimary).Variant(badge.VariantOutline).Size(badge.SizeSm).Send()
 		c.LabelAtoms(c.Atoms().BeginRichTextColored(detailMutedFg, detailBgClear,
 			inst.picker.format(r.Ts(), time.RFC3339Nano)+" · id "+strconv.FormatUint(r.Id, 10)).Small().Monospace().End().Keep()).Send()
 		for _, t := range DetailTabs {
@@ -1293,7 +1327,8 @@ func (inst *App) renderPrevious() {
 	case ClaimGapBetween, ClaimNoPrevious:
 		tone = badge.ToneWarning
 	}
-	badge.New(inst.ids.PrepareStr("p-verdict"), "from: "+p.Verdict).Tone(tone).Variant(badge.VariantSoft).Size(badge.SizeSm).Send()
+	badge.New(inst.ids.PrepareStr("p-verdict"), "from: "+appops.CutText(p.Verdict, 120)).Tone(tone).Variant(badge.VariantSoft).Size(badge.SizeSm).
+		Tooltip(p.Verdict).Send()
 	inst.renderFieldTable("p-table", []string{"field", "before", "after", "change"}, p.Fields)
 }
 

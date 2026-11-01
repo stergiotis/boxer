@@ -265,7 +265,8 @@ label text, tone, the law it comes from — is one small package the chat
 and the app center may adopt. An unverified state marks the rows it
 covers and does not hide them: blocking would hide evidence, and a passive
 badge is unseen, so the mark is the table's first column and the line sits
-above the table.
+above the table. The badge shows the state in bounded words — the reason,
+an unbounded string from a read, is its tooltip (SD12).
 
 ### SD7 — Exceptions and review marks
 
@@ -337,8 +338,9 @@ Commands of effect `view`: `set_case`, `set_range`, `set_filter`,
 held row's id, 0 for none; the arming of the pick is the window's own),
 `set_matrix`, `set_dotted`, `set_series`, `set_side`, `set_tree`
 (expand or collapse every node; the resource is the value last set, since
-the widget's expansion is per node), `refresh` (writes `read`, which
-lands with a later frame) and `open_view` (writes case, range, filter and
+the widget's expansion is per node), `refresh` (writes `read` and
+`read_state`; the read lands with a later frame), `stop_read` (SD12's
+hold, writing the same two) and `open_view` (writes case, range, filter and
 tab). Commands of effect `document`, since the saved views are authored
 state in the persist store: `save_view`, `delete_view`. Two commands of
 effect `consequential`: `send_to_play`, which publishes outside the app
@@ -347,7 +349,9 @@ as play's publish and watchbill's cancel are; and `mark_row`, person-only
 (SD7) — review is the person's act, which is a different reason from the
 effect. Resources: `case`, `range`, `filter`, `selection`, `tab`, `strip`,
 `grouping`, `compare`, `matrix`, `dotted`, `series`, `side`, `tree`,
-`read`, `views`.
+`read`, `views`, and `read_state` with the `read_state` and `read_machine`
+queries, mounted from the read lifecycle's machine (SD12) the way every app
+that holds one mounts it.
 
 `tab` is the window's tab: one of the detail pane's — fields, previous,
 context, compare — under which the central area shows the table, or an
@@ -436,6 +440,45 @@ The numeric series is not decimated: its buckets are chosen from the
 strip's width, so they never outnumber the pixels, and a selection-based
 reducer such as LTTB is the thing play's series panel rejects because it
 can drop the one narrow extreme a reader is looking for.
+
+### SD12 — The read lifecycle
+
+The table read has one state machine, mirrored from the cache once per
+frame and never driving it: `idle` (the source is not persisted, or nothing
+asked yet), `reading` (a read is in flight or pending and nothing held is
+the wanted scope's — the first fill, or a changed case, window, filter or
+colouring), the settled `rows`, `empty` and `failed` (what is held is the
+wanted scope's; `failed` when the last read erred, the held rows staying on
+screen), `refreshing` (the wanted scope's rows are held and a refill or an
+extension is in flight) and `stopped`. The refresh interval counts from a
+read's end, not its start, so a store slower than the interval leaves the
+window settled between reads rather than refreshing without pause. A frame
+samples an asynchronous lifecycle, so an edge the graph does not declare is followed and graded:
+states no frame sampled at debug, a target the graph cannot reach at warn.
+The chip above the table is this machine; its popup is the graph and the
+history, and the catalog mounts it as `read_state` and `read_machine`
+(SD8).
+
+The read reports progress **by statement**: rows, the rules' exceptions,
+reviews and claims, and for a refill the as-of state, the strip and one
+step per facet, so the bar is determinate by step and the ETA follows from
+the steps done. An extension has fewer steps than a refill.
+
+A **stop** is a hold, not a failure: `stop_read` cancels the read in
+flight and the window starts nothing — no refill, no interval refresh, no
+extension at the table's end — until `refresh` or a scope change lifts it.
+It sets and never toggles; the rows held stay on screen, no error is
+recorded, and the state reads `stopped`.
+
+One layout rule follows from a defect this milestone reproduced: **nothing
+a read puts on screen moves the layout outside its own row, and a wrapped
+row holds only widgets of bounded width** — a badge whose label wraps
+inside a wrapped row of the top panel makes the panel claim the window, and
+everything under the evidence line vanishes. The verdict badge therefore
+shows the state in bounded words (SD6) with the full line as its tooltip,
+the side pane's buttons carry counts and fixed names, and the progress row
+is the last thing in the controls row, so its coming and going moves
+nothing else.
 
 ## Surfaces — Tier 1
 
@@ -536,13 +579,19 @@ positional readers of the marts do not exist by design.
   the previous-state read returns the four verdicts of SD5 on fixtures
   including a gap row, each exception rule returns exactly its fixture's
   rows, a mark lands as an `AuditEvent` in the `review` domain under the
-  person's principal.
+  person's principal; the read lifecycle: the observer over the cache's
+  field combinations, every state it produces reachable in the declared
+  graph, a stop that starts nothing and records no error until `refresh`
+  or a scope change, a second stop the same as the first, the read's steps
+  reported one per statement, and a badge's text bounded whatever a read
+  puts in the line.
 - **Scene.** A headless scene launches the viewer on a fixture run,
   asserts the table, the detail pane, the verdict line, an exception and
   its clearing by a mark, and the strip's text line.
 - **What would fail.** A query reading the window's filter instead of its
   arguments; an agent able to call `mark_row`; a `from` mismatch not
-  reported; a view whose functions are missing on install.
+  reported; a view whose functions are missing on install; a read's state
+  moving the layout outside its row; a stop recorded as a failure.
 - **Gap.** The strip's drawing is not asserted; the correlation-read cost
   is not bounded by a test.
 
@@ -561,6 +610,9 @@ positional readers of the marts do not exist by design.
   series.
 - **M6 — The catalog completed.** A query for every pane and view, a
   command for every control, the saved views and the export (SD8).
+- **M7 — The read lifecycle.** The mirrored machine and its chip, progress
+  by statement, `stop_read` as a hold, the mount, and the layout rule
+  (SD12).
 
 ## Status
 

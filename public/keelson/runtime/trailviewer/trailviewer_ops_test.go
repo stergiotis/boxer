@@ -144,12 +144,18 @@ func refusal(err error) (r *app.OperationRefusal) {
 	return
 }
 
+// The read lifecycle's queries, as fsmops.Mount names them.
+const (
+	opReadState   = mountRead + "_state"
+	opReadMachine = mountRead + "_machine"
+)
+
 // allOps is every operation agents are offered; mark_row is the one they
 // are not (review_test.go).
 var allOps = []string{opListRows, opGetRow, opGetPrevious, opGetVerdict, opGetView, opGetExc, opGetTree, opGetDayHour, opGetSeries,
 	opGetFacets, opGetStrip, opGetContext, opGetCompare, opGetMatrix, opGetDotted,
 	opSetCase, opSetRange, opSetFilter, opSelectRow, opSetTab, opSetSeries, opSetStrip, opSetGrouping, opSetCompare, opSetMatrix, opSetDotted,
-	opSetSide, opSetTree, opRefresh, opOpenView, opSaveView, opDeleteView, opSendToPlay}
+	opSetSide, opSetTree, opRefresh, opStopRead, opOpenView, opSaveView, opDeleteView, opSendToPlay, opReadState, opReadMachine}
 
 func TestOperationsCatalogRegisters(t *testing.T) {
 	require.NoError(t, manifest.Operations.Validate())
@@ -182,7 +188,7 @@ func TestOperationsCatalogRegisters(t *testing.T) {
 		assert.True(t, spec.Untrusted, "%s returns row text", name)
 	}
 	assert.ElementsMatch(t, []string{resCase, resRange, resFilter, resSelection, resTab, resSeries, resStrip, resGrouping, resCompare, resMatrix, resDotted,
-		resSide, resTree, resRead, resViews}, ops.ResourceNames())
+		resSide, resTree, resRead, resReadState, resViews}, ops.ResourceNames())
 }
 
 func listArgs(inst *App) ListRowsArgs {

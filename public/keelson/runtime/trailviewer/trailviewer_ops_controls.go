@@ -698,11 +698,22 @@ func addControlOps(s *appops.Set[*App, opsSnap]) {
 		})
 
 	appops.Command(s, app.OperationSpec{Name: opRefresh, Version: 1,
-		Summary: "ask the window to read its case from the trail marts again; the read lands in a later frame, and get_view's refreshed_at says when",
-		Effect:  app.OperationEffectView, Writes: []string{resRead}, Agents: true,
+		Summary: "ask the window to read its case from the trail marts again, and lift a stop; the read lands in a later frame, and get_view's refreshed_at says when",
+		Effect:  app.OperationEffectView, Writes: []string{resRead, resReadState}, Agents: true,
 		Gesture: "the Refresh button", Rebuild: app.OperationRebuildVolatile},
 		func(inst *App, _ app.OperationCall, _ appops.None) (out appops.None, err error) {
-			inst.cache.refreshNow = true
+			inst.cache.refresh()
+			return
+		})
+
+	// A stop is a hold, not a failure (ADR-0350 §SD12): it sets and never
+	// toggles; refresh or a scope change lifts it.
+	appops.Command(s, app.OperationSpec{Name: opStopRead, Version: 1,
+		Summary: "stop the window's reads of the trail marts: cancel the read in flight and start none — no refill, no interval refresh, no extension at the table's end — until refresh or a change of the case, range, filter or colouring; the rows held stay on screen",
+		Effect:  app.OperationEffectView, Writes: []string{resRead, resReadState}, Agents: true,
+		Gesture: "the Cancel button beside the progress bar", Rebuild: app.OperationRebuildVolatile},
+		func(inst *App, _ app.OperationCall, _ appops.None) (out appops.None, err error) {
+			inst.cache.stop()
 			return
 		})
 
@@ -752,7 +763,11 @@ func addControlOps(s *appops.Set[*App, opsSnap]) {
 // the saved views' and the export's are beside their apply functions.
 
 func (inst *App) refreshGesture() {
-	gestureOr(inst, opRefresh, appops.None{}, func() { inst.cache.refreshNow = true })
+	gestureOr(inst, opRefresh, appops.None{}, func() { inst.cache.refresh() })
+}
+
+func (inst *App) stopReadGesture() {
+	gestureOr(inst, opStopRead, appops.None{}, func() { inst.cache.stop() })
 }
 
 func (inst *App) setStripGesture(by StripByE) {

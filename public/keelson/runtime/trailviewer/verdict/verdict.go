@@ -3,7 +3,8 @@
 // of text that names it, the tone it is drawn in and the law it comes from.
 // It holds no reads; a caller builds a [Line] from the recorder's seal
 // verification ([FromSeals]) or from the rows of keelson('evidence_checks')
-// ([FromChecks]), and renders [Line.Label] and [Line.Tone] however it draws.
+// ([FromChecks]), and renders [Line.Label], [Line.Short] and [Line.Tone]
+// however it draws.
 //
 // Chat and the app center may adopt it, so it imports no widget package:
 // [ToneE] is its own, and a renderer maps it to a badge tone.
@@ -138,6 +139,29 @@ func (inst Line) Label() (s string) {
 		if inst.Reason != "" {
 			s += ": " + inst.Reason
 		}
+	}
+	return
+}
+
+// Short is the state in bounded words — holds; broken at ordinal N; gap: K
+// rows no seal names; fork; unanchored since ordinal N; unverified — with no
+// Reason in it. It is what a badge shows (ADR-0350 §SD6, §SD12): the Reason
+// is an unbounded string from a read, which a wrapped row of the top panel
+// cannot hold without moving the layout; Label carries it for the tooltip.
+func (inst Line) Short() (s string) {
+	switch inst.State {
+	case StateHolds:
+		s = "holds"
+	case StateBroken:
+		s = "broken at ordinal " + strconv.FormatUint(inst.Ordinal, 10)
+	case StateGap:
+		s = "gap: " + strconv.Itoa(inst.Count) + " rows no seal names"
+	case StateFork:
+		s = "fork"
+	case StateUnanchored:
+		s = "unanchored since ordinal " + strconv.FormatUint(inst.Ordinal, 10)
+	default:
+		s = "unverified"
 	}
 	return
 }

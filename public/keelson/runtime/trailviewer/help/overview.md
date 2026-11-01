@@ -22,6 +22,16 @@ range or the filter. Drawing the window never queries ClickHouse. Its own
 reads are stamped with the viewer's identity, so they appear in the trail
 as query runs too.
 
+The chip beside **Refresh** says where the read stands — *idle*, *reading*,
+*rows*, *empty*, *failed*, *refreshing* or *stopped* — with how many rows
+are held and when they were read; while a read runs, a progress bar beside
+it advances one step per statement, with the step's name and the time
+left, and its **Cancel** button cancels the read and holds the window: no
+refill, no interval refresh and no read at the table's end until you press
+**Refresh** or change the case, range or filter. A stop is not a failure;
+the rows held stay. A click on the chip opens the read's state graph and
+its history.
+
 ## A case
 
 A case is one key and one value, read over one time window. The kinds:
@@ -243,8 +253,10 @@ filter it read, and `get_view` every control's value and the saved views'
 names. Every control has a command that sets it and never toggles:
 `set_case`, `set_range`, `set_filter`, `select_row`, `set_tab`,
 `set_strip`, `set_grouping`, `set_compare`, `set_matrix`, `set_dotted`,
-`set_series`, `set_side`, `set_tree`, `refresh` and `open_view` change
-what the window shows and nothing else; `save_view` and `delete_view`
+`set_series`, `set_side`, `set_tree`, `refresh`, `stop_read` and
+`open_view` change what the window shows and nothing else; `read_state`
+and `read_machine` read the read's lifecycle — its current state, the
+transitions allowed from it and the latest ones, and the whole graph; `save_view` and `delete_view`
 write the saved views to the persist store; `send_to_play` publishes
 outside the window, so the person confirms each call an agent makes.
 `mark_row` writes to the trail and is not offered to agents: review is the

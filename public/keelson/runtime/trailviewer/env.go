@@ -12,7 +12,7 @@ import (
 var RefreshEnv = env.NewDuration(env.Spec{
 	Name:        "BOXER_TRAILVIEWER_REFRESH",
 	Default:     "5s",
-	Description: "how often an open trail viewer window re-reads its case from the trail marts on boxer.facts in the background; the Refresh button reads at once; under 1s reads every second",
+	Description: "how long an open trail viewer window waits after a read of its case from the trail marts on boxer.facts before the next, in the background; the Refresh button reads at once; under 1s waits a second",
 	Category:    env.CategoryObservability,
 })
 

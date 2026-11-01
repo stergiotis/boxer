@@ -35,6 +35,7 @@ honest outcome.
 {"do":"wait","name":"Refresh","role":"button","settleMs":500}
 {"do":"read","valueContains":"buckets of","role":"label","pattern":"(?P<rows>\\d+) rows in","settleMs":6000}
 {"do":"expect","of":"rows","min":1}
+{"do":"wait","value":"rows","role":"label","comment":"the read's state chip rests on rows between reads"}
 {"do":"wait","valueContains":"Evidence:","role":"label"}
 {"do":"wait","contains":"trail config","role":"button","comment":"the recorder's own configuration row"}
 {"do":"click","contains":"trail config","role":"button"}
