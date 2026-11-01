@@ -1,12 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-10-29
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to accepted
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-11-01
 ---
-
-> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
 
 # ADR-0348: A Running page in the app center — the open windows, what they cost, and closing them
 
@@ -260,7 +258,8 @@ Deferred: other processes; tracking timer-driven jobs.
 
 ## Status
 
-Proposed — awaiting review.
+Accepted 2026-11-01, with M1 to M3 implemented. CPU per window is
+[ADR-0351](./0351-what-a-window-costs-beyond-frame-cpu-by-window-label-and-a-slow-window-notice.md)'s.
 
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers (Tier 1 in-place / Tier 2 dated `## Updates` entry / Tier 3 new superseding ADR).
