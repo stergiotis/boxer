@@ -12,7 +12,10 @@ import (
 //go:generate sh -c "go test -tags=\"$(cat ../../../tags)\" -run TestGenerateMddocStore ."
 
 // componentPaths is the DTO set the store is generated over.
+// The origin leads: it is the audit package's (ADR-0330 §SD3), bound
+// through the alias in origin.go, and every row an ingest writes carries it.
 var componentPaths = []string{
+	"../../../storage/recordstore/evidence/audit/origin_dto.go",
 	"./mddoc_dto.go",
 	"./mdheading_dto.go",
 	"./mdcode_dto.go",
@@ -31,6 +34,8 @@ var componentPaths = []string{
 func TestGenerateMddocStore(t *testing.T) {
 	ids, err := storegen.MembershipIds(mddocvocab.NkRegistry)
 	require.NoError(t, err)
+	// The origin's memberships are the runtime vocabulary's (ADR-0330 §SD3).
+	require.NoError(t, storegen.AddOriginIds(ids))
 	require.NoError(t, storegen.Input{
 		PackageName:    "mddocfacts",
 		StoreName:      "Mddoc",

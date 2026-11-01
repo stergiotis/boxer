@@ -91,6 +91,10 @@ type PublishInput struct {
 	// database. A publisher in a repository that keeps its store elsewhere
 	// (ADR-0198 Updates 2026-09-04) hands the same layout its readers use.
 	Layout ladingschema.Layout
+	// Origin is who publishes (ADR-0330 §SD3): the run, and the app and
+	// window when an app publishes. The policy row carries it; the zero
+	// value is unattributed.
+	Origin ladingpolicy.Origin
 }
 
 // PublishResult names the published tree. Mount and Snap together are the
@@ -159,7 +163,7 @@ func Publish(ctx context.Context, exec recordstore.ExecutorI, in PublishInput) (
 	// republish under a changed name or class is a new declaration and the
 	// previous one stays readable — which is the behaviour a scratch mount
 	// wants: the mount list shows what it is called now.
-	if err = ladingingest.RecordPolicy(ctx, policies, mount, policy, name, StoreNamePrefix+in.Publisher); err != nil {
+	if err = ladingingest.RecordPolicy(ctx, policies, mount, policy, name, StoreNamePrefix+in.Publisher, in.Origin); err != nil {
 		err = eh.Errorf("ladingadhoc: record policy: %w", err)
 		return
 	}

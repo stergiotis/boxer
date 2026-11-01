@@ -818,17 +818,11 @@ func (inst *View[T]) renderHistory() {
 		}
 	}
 
-	// Emit only the rows egui_table will draw. VisibleRange reports the
-	// previous frame's window (one-frame lag, self-correcting) and is absent
-	// on the first frame a table is shown, where the full range is emitted.
-	rowLo, rowHi := uint64(0), uint64(len(rows))
-	if rb, re, _, _, _, ok := et.VisibleRange(); ok {
-		// Clamped both ways: the reported window describes the PREVIOUS
-		// frame's table, so after the log shrinks (a shorter history bound to
-		// the same widget) it can name rows this frame no longer has.
-		rowHi = min(re, rowHi)
-		rowLo = min(rb, rowHi)
-	}
+	// Emit only the rows egui_table will draw: the previous frame's window
+	// (one-frame lag, self-correcting), clamped because the log can shrink
+	// under the same widget, or a screenful before the table has been on
+	// screen (VisibleRows).
+	rowLo, rowHi := et.VisibleRows(uint64(len(rows)), c.EtScreenfulRows(fsmHistoryMaxH, fsmHistoryRowH), -1)
 	for i := rowLo; i < rowHi; i++ {
 		// rows is oldest-first (dwell reads off the predecessor); the table
 		// shows newest-first, so row index i maps to the tail.

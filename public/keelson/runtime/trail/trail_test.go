@@ -112,6 +112,39 @@ func TestRecorderWithoutABackend(t *testing.T) {
 	assert.Contains(t, refuse.Error(), "BOXER_TRAIL_REQUIRED")
 }
 
+// NotDurable names why the rows do not land — no backend, no run, both,
+// a closed recorder — and is empty while they do; a refusal under
+// BOXER_TRAIL_REQUIRED carries the same reason.
+func TestRecorderSaysWhyItIsNotDurable(t *testing.T) {
+	var none *Recorder
+	assert.Equal(t, notDurableNil, none.NotDurable())
+
+	noBackend := NewRecorder(nil, "run-1", zerolog.Nop())
+	defer noBackend.Close()
+	assert.Equal(t, notDurableNoBackend, noBackend.NotDurable())
+
+	noRun := NewRecorder(&gateExec{open: true}, "", zerolog.Nop())
+	defer noRun.Close()
+	assert.False(t, noRun.Durable())
+	assert.Equal(t, notDurableNoRun, noRun.NotDurable())
+
+	neither := NewRecorder(nil, "", zerolog.Nop())
+	assert.Equal(t, notDurableNoBackend+"; "+notDurableNoRun, neither.NotDurable())
+
+	durable := NewRecorder(&gateExec{open: true}, "run-1", zerolog.Nop())
+	assert.True(t, durable.Durable())
+	assert.Empty(t, durable.NotDurable())
+	durable.Close()
+	assert.Equal(t, notDurableClosed, durable.NotDurable())
+
+	RequiredEnv.SetForTest(t, "true")
+	refused := NewRecorder(&gateExec{open: true}, "", zerolog.Nop())
+	defer refused.Close()
+	_, refuse := refused.WriteAhead(context.Background())
+	require.Error(t, refuse)
+	assert.Contains(t, refuse.Error(), notDurableNoRun)
+}
+
 func TestToolKeyAndDigest(t *testing.T) {
 	assert.Equal(t, "llm-1#2", ToolKey("llm-1", 2))
 	assert.Len(t, ContentDigest("x"), 32)

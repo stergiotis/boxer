@@ -2,11 +2,14 @@
 // on the left, and one page per app on the right, assembled from the
 // introspection tables that name it — what its windows hold, what it keeps,
 // what it did this run, which jobs, datasets and model calls are its, how
-// much of its code ran, and which ADRs its code cites.
+// much of its code ran, and which ADRs its code cites. Its other tab, Running
+// (ADR-0348), lists every open window, what it costs the render loop, and the
+// tasks it owns.
 //
 // Nothing here waits on the bus from the frame goroutine: a poller reads
-// the window-wide tables once and on Refresh, the selected app's tables on a
-// tick and on every selection change, and lands each as a snapshot.
+// the window-wide tables once and on Refresh, the shown tab's tables — the
+// open windows, or the selected app's — on a tick and on every change, and
+// lands each as a snapshot.
 package appcenter
 
 import (
@@ -24,6 +27,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect/providers"
 	"github.com/stergiotis/boxer/public/keelson/runtime/llm"
 	"github.com/stergiotis/boxer/public/keelson/runtime/watchbill"
+	"github.com/stergiotis/boxer/public/keelson/runtime/widgethandle"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 )
 
@@ -65,8 +69,9 @@ type page struct {
 
 // snapshot is what one frame renders from.
 type snapshot struct {
-	global global
-	page   page
+	global  global
+	page    page
+	running running
 	// reads says the window has a reader; false only where the host minted
 	// no bus for it.
 	reads     bool
@@ -75,6 +80,16 @@ type snapshot struct {
 	// open, since the poller's pass says nothing about it.
 	openNote string
 }
+
+// viewE is the window's tab.
+type viewE uint8
+
+const (
+	// viewRunning lists the open windows (ADR-0348); the window opens on it.
+	viewRunning viewE = iota
+	// viewApps is the app list and the selected app's page.
+	viewApps
+)
 
 // App is the per-window instance.
 type App struct {
@@ -91,12 +106,34 @@ type App struct {
 	wg        sync.WaitGroup
 
 	// The frame's own state.
+	view     viewE
 	selected string
 	filter   string
+	// The Running tab (appcenter_running.go): its filter, and its two
+	// grids' state and records, rebuilt once per read.
+	runFilter string
+	running   runningGrids
+	// Close all (appcenter_actions.go): the windows its confirmation holds
+	// and the filter they were shown under, the windows closed and still
+	// listed, and this window's own key, which Close all closes last.
+	closeArmed       []uint64
+	closeArmedFilter string
+	closing          map[uint64]bool
+	selfKey          uint64
+
+	// Operations state (appcenter_ops.go, ADR-0345). frameCtx is the current
+	// frame's context, through which a row click routes as a gesture;
+	// filterH and runFilterH are the filter boxes, for telling the person
+	// is typing in one.
+	frameCtx   app.FrameContextI
+	filterH    widgethandle.WidgetHandle
+	runFilterH widgethandle.WidgetHandle
 
 	mu sync.Mutex
-	// want is the selection the poller reads for; the frame writes it.
-	want string
+	// want is the selection the poller reads for, and wantRunning whether
+	// it reads the open windows instead; the frame writes both.
+	want        string
+	wantRunning bool
 	// wantGlobal asks the poller to re-read the window-wide tables.
 	wantGlobal bool
 	snap       snapshot
@@ -105,18 +142,20 @@ type App struct {
 var _ app.AppI = (*App)(nil)
 
 func newApp() (inst *App) {
-	inst = &App{ids: c.NewWidgetIdStack(), density: styletokens.ActiveDensity(), dirty: make(chan struct{}, 1)}
+	inst = &App{ids: c.NewWidgetIdStack(), density: styletokens.ActiveDensity(), dirty: make(chan struct{}, 1),
+		view: viewRunning, wantRunning: true}
 	return
 }
 
 func (inst *App) Manifest() (m app.Manifest) { m = manifest; return }
 
 // Mount takes the host's bus client, opens on the app a launch config
-// names (ADR-0260 §SD1), and starts the poller.
+// names (ADR-0260 §SD1) or else on the Running tab, and starts the poller.
 func (inst *App) Mount(ctx app.MountContextI) (err error) {
 	inst.ids = ctx.Ids()
 	inst.logger = ctx.Log()
 	inst.bus = ctx.Bus()
+	inst.selfKey = ctx.InstanceKey()
 	if inst.reader == nil {
 		// A test sets its own reader before Mount.
 		if r := newBusReader(inst.bus); r != nil {
@@ -126,8 +165,8 @@ func (inst *App) Mount(ctx app.MountContextI) (err error) {
 	if raw := ctx.LaunchConfig(); len(raw) > 0 {
 		cfg, dErr := buscodec.Decode[launchcfg.AppCenterLaunch](raw)
 		if dErr != nil {
-			inst.logger.Warn().Err(dErr).Msg("appcenter: launch config does not decode; opening on the list")
-		} else {
+			inst.logger.Warn().Err(dErr).Msg("appcenter: launch config does not decode; opening on the Running tab")
+		} else if cfg.AppId != "" {
 			inst.selectApp(cfg.AppId)
 		}
 	}
@@ -147,20 +186,34 @@ func (inst *App) Unmount(ctx app.MountContextI) (err error) {
 		inst.cancelApp()
 	}
 	inst.wg.Wait()
+	inst.running.release()
 	return
 }
 
 func (inst *App) Frame(ctx app.FrameContextI) (err error) {
 	inst.density = styletokens.ActiveDensity()
+	inst.frameCtx = ctx
+	inst.ensureWidths(ctx)
 	inst.render()
 	return
 }
 
-// selectApp changes the page and asks for its lenses now.
+// selectApp shows the Apps tab on appId's page, or on the list alone for "",
+// and asks for its lenses now.
 func (inst *App) selectApp(appId string) {
-	inst.selected = appId
+	inst.selected, inst.view = appId, viewApps
 	inst.mu.Lock()
-	inst.want = appId
+	inst.want, inst.wantRunning = appId, false
+	inst.mu.Unlock()
+	inst.markDirty()
+}
+
+// setView switches the tab, keeping the selection, and asks for its tables
+// now.
+func (inst *App) setView(v viewE) {
+	inst.view = v
+	inst.mu.Lock()
+	inst.wantRunning = v == viewRunning
 	inst.mu.Unlock()
 	inst.markDirty()
 }
@@ -201,10 +254,11 @@ func (inst *App) poll() {
 // first so a page never renders against a list it has not seen.
 func (inst *App) refresh() {
 	inst.mu.Lock()
-	appId, wantGlobal := inst.want, inst.wantGlobal
+	appId, wantRunning, wantGlobal := inst.want, inst.wantRunning, inst.wantGlobal
 	inst.wantGlobal = false
 	g := inst.snap.global
 	p := inst.snap.page
+	rn := inst.snap.running
 	inst.mu.Unlock()
 
 	if inst.reader == nil {
@@ -219,14 +273,18 @@ func (inst *App) refresh() {
 	if wantGlobal {
 		g = readGlobal(ctx, inst.reader, g)
 	}
-	if appId != "" {
+	switch {
+	case wantRunning:
+		// The open windows, read only while the tab is shown (ADR-0348 §SD6).
+		rn = readRunning(ctx, inst.reader, rn)
+	case appId != "":
 		if p.appId != appId {
 			// A new page starts unread rather than showing the last app's rows
 			// under this app's name.
 			p = page{appId: appId}
 		}
 		p = readPage(ctx, inst.reader, p)
-	} else {
+	default:
 		p = page{}
 	}
 	if inst.appCtx.Err() != nil {
@@ -237,9 +295,14 @@ func (inst *App) refresh() {
 	inst.snap.reads = true
 	inst.snap.lastError = ""
 	inst.snap.global = g
-	// The selection may have moved while the page was read; land only a
-	// page that is still wanted, and let the next pass read the new one.
-	if inst.want == p.appId {
+	// The tab or the selection may have moved while the tables were read;
+	// land only what is still wanted, and let the next pass read the rest.
+	switch {
+	case wantRunning:
+		if inst.wantRunning {
+			inst.snap.running = rn
+		}
+	case !inst.wantRunning && inst.want == p.appId:
 		inst.snap.page = p
 	}
 }

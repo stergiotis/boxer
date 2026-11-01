@@ -64,6 +64,12 @@ func TestAuditEventValidation(t *testing.T) {
 			assert.Error(t, e.Validate())
 		})
 	}
+	// Every outcome of the vocabulary is accepted.
+	for _, o := range []string{audit.OutcomeOk, audit.OutcomeDenied, audit.OutcomeFailed, audit.OutcomeTimeout, audit.OutcomeError} {
+		e := validEvent()
+		e.Outcome = o
+		assert.NoError(t, e.Validate(), o)
+	}
 	// An emitter may name its own mechanism.
 	e := validEvent()
 	e.PrincipalVia = option.Some("oidc")

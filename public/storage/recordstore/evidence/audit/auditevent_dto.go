@@ -69,11 +69,15 @@ type AuditEvent struct {
 	AttrValues []string `lw:"auditEventAttrValues,stringArray"`
 }
 
-// The outcomes, the values of AuditEvent.Outcome.
+// The outcomes, the values of AuditEvent.Outcome. Timeout and error are
+// failures of a known shape — waited past a deadline, failed otherwise —
+// for an emitter that tells them apart; failed is any failure else.
 const (
-	OutcomeOk     = "ok"
-	OutcomeDenied = "denied"
-	OutcomeFailed = "failed"
+	OutcomeOk      = "ok"
+	OutcomeDenied  = "denied"
+	OutcomeFailed  = "failed"
+	OutcomeTimeout = "timeout"
+	OutcomeError   = "error"
 )
 
 // Who vouched for a principal, the values of AuditEvent.PrincipalBy.
@@ -144,9 +148,9 @@ func (inst AuditEvent) Validate() (err error) {
 		return
 	}
 	switch inst.Outcome {
-	case OutcomeOk, OutcomeDenied, OutcomeFailed:
+	case OutcomeOk, OutcomeDenied, OutcomeFailed, OutcomeTimeout, OutcomeError:
 	default:
-		return eh.Errorf("outcome %q is not ok, denied or failed", inst.Outcome)
+		return eh.Errorf("outcome %q is not ok, denied, failed, timeout or error", inst.Outcome)
 	}
 	switch inst.PrincipalBy {
 	case PrincipalBySystem, PrincipalByEnv, PrincipalByOs:

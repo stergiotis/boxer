@@ -46,6 +46,26 @@ func TestInst_PublishSubscribe_Delivers(t *testing.T) {
 	assert.Equal(t, []byte("hello"), m.Payload)
 }
 
+func TestInst_HasSubscriberFollowsSubscriptions(t *testing.T) {
+	inst := newInst(t)
+	bus := inst.NewClient("test.app", fullCaps())
+	const subject = "sysmetrics.host-a.bundle"
+	assert.False(t, inst.HasSubscriber(subject))
+
+	unsubLit, err := bus.Subscribe(subject, func(*app.Msg) {})
+	require.NoError(t, err)
+	assert.True(t, inst.HasSubscriber(subject))
+	unsubLit()
+	assert.False(t, inst.HasSubscriber(subject))
+
+	unsubWild, err := bus.Subscribe("sysmetrics.>", func(*app.Msg) {})
+	require.NoError(t, err)
+	assert.True(t, inst.HasSubscriber(subject))
+	assert.False(t, inst.HasSubscriber("coverage.host-a.bundle"))
+	unsubWild()
+	assert.False(t, inst.HasSubscriber(subject))
+}
+
 func TestInst_PublishMatchesWildcards(t *testing.T) {
 	inst := newInst(t)
 	bus := inst.NewClient("test.app", fullCaps())

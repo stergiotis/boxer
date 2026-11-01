@@ -260,6 +260,29 @@ type Inst struct {
 	// nil when none. Render-thread only.
 	arranging *arrangeRun
 
+	// The tiled desktop (ADR-0346). layout, layoutParams, tileOrder (main
+	// first) and floating (the windows out of the layout by choice) are
+	// written under mu by their setters and read by Frame; tileDirty marks
+	// an input change for the next Frame. tiling, tileCells, tileMins and
+	// tileWork are the live plan (stepTiling): render-thread only.
+	layout       LayoutE
+	layoutParams LayoutParams
+	tileOrder    []WindowKeyT
+	floating     map[WindowKeyT]bool
+	tileDirty    bool
+	tiling       *tileRun
+	tileCells    map[WindowKeyT]Rect
+	tileMins     map[WindowKeyT][2]float32
+	tileWork     Rect
+	// The shell's chords (ADR-0346 §SD5, stepChords). prevActiveKey is the
+	// window that was active before the current one, for Alt+Tab;
+	// layoutBeforeMonocle is what Alt+F returns to; snap is the last snap,
+	// for the half-to-quarter step. All written on the render thread under
+	// mu.
+	prevActiveKey       WindowKeyT
+	layoutBeforeMonocle LayoutE
+	snap                snapState
+
 	// mountState shares Mount/Unmount lifecycle across windows that point at
 	// the same AppI instance (singleton-registered apps). Keyed by the AppI
 	// interface value; an entry is created on Open and removed when its last
@@ -373,11 +396,12 @@ func (inst *Inst) SetMountValue(key any, v any) {
 // that runId points at.
 func NewInst(registry *app.Registry, logger zerolog.Logger) (inst *Inst) {
 	inst = &Inst{
-		registry:   registry,
-		logger:     logger,
-		density:    styletokens.ActiveDensity(),
-		mountState: make(map[app.AppI]*instMount),
-		overlay:    inscribe.NewOverlay(inscribe.NewScene()),
+		registry:     registry,
+		logger:       logger,
+		density:      styletokens.ActiveDensity(),
+		layoutParams: DefaultLayoutParams,
+		mountState:   make(map[app.AppI]*instMount),
+		overlay:      inscribe.NewOverlay(inscribe.NewScene()),
 	}
 	return
 }
@@ -1163,6 +1187,9 @@ func (inst *Inst) Frame(ids *c.WidgetIdStack) (err error) {
 	inst.renderGoroutine.Store(opwire.GoroutineId())
 	// Re-resolve: the density preset is runtime-switchable (Layout ▸ Density).
 	inst.density = styletokens.ActiveDensity()
+	// The shell's chords of the last frame act first, so a raise or a
+	// placement they queue is taken by this frame's snapshot below.
+	inst.stepChords(c.CurrentApplicationState.StateManager)
 	// Snapshot the slice under lock; the iteration runs without the
 	// lock held so AppI.Frame can re-enter (e.g., to call Open via the
 	// Apps menu, which would otherwise deadlock).
@@ -1192,6 +1219,7 @@ func (inst *Inst) Frame(ids *c.WidgetIdStack) (err error) {
 		inst.activeKey = 0
 		inst.noteInput(sm, time.Now())
 		inst.arranging = nil
+		inst.stepTiling(nil)
 		inst.snapshotGeometry(nil)
 		inst.reapClosed()
 		return
@@ -1213,11 +1241,17 @@ func (inst *Inst) Frame(ids *c.WidgetIdStack) (err error) {
 				topmost: sm.GetResponse(w.focusHandle).HasWindowTopmost(),
 			})
 		}
-		inst.activeKey = pickActiveWindow(inst.activeKey, facts)
+		if next := pickActiveWindow(inst.activeKey, facts); next != inst.activeKey {
+			inst.mu.Lock()
+			inst.prevActiveKey = inst.activeKey
+			inst.mu.Unlock()
+			inst.activeKey = next
+		}
 	}
 	inst.noteInput(sm, time.Now())
 	inst.stepArrange(arrangeCmd, arrangeKeys, snapshot)
 	inst.applyPlaces(places, snapshot)
+	inst.stepTiling(snapshot)
 	inst.snapshotGeometry(snapshot)
 	for _, w := range snapshot {
 		// A pixel capture replays a window's emission, from its placement to

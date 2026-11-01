@@ -50,6 +50,11 @@ type HostI interface {
 	OpsArrange(command string, keys []uint64) (err error)
 	OpsRaise(key uint64) (err error)
 	OpsPlace(key uint64, x, y, w, h float32) (err error)
+	// OpsLayout sets the desktop's layout by its ident and its parameters,
+	// each unchanged when empty or zero; OpsFloat takes a window out of the
+	// layout or puts it back (ADR-0346 §SD6).
+	OpsLayout(layout string, ratio float32, count int) (err error)
+	OpsFloat(key uint64, floating bool) (err error)
 	// Marks is the overlay's scene (ADR-0297).
 	Marks() *inscribe.Scene
 }

@@ -101,6 +101,8 @@ func TestBoot_MinimalHostSeedsConfiguredWindow(t *testing.T) {
 	assert.Equal(t, "mem", rt.Status.FactsBackend)
 	assert.True(t, rt.Status.BusActive)
 	assert.False(t, rt.Status.FsBrokerActive, "fs service is off in the minimal boot")
+	assert.NotEmpty(t, rt.Status.TrailNotDurable, "a host without ClickHouse shows that its audit trail is not durable")
+	assert.Equal(t, rt.Trail.NotDurable(), rt.Status.TrailNotDurable)
 	assert.Nil(t, rt.Fs)
 	assert.Nil(t, rt.Persist)
 	assert.Nil(t, rt.ChLocal)

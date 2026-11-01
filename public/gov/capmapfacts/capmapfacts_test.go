@@ -91,7 +91,7 @@ func totalRows(records []arrow.RecordBatch) (n int64) {
 
 func TestBuildRecordsEncodesEveryRow(t *testing.T) {
 	corpus := sampleCorpus()
-	records, stats, err := capmapfacts.BuildRecords(corpus, fixedNow)
+	records, stats, err := capmapfacts.BuildRecords(corpus, fixedNow, capmapfacts.Origin{Run: "run-capmap"})
 	require.NoError(t, err)
 	defer func() {
 		for _, r := range records {
@@ -111,7 +111,7 @@ func TestBuildRecordsEncodesEveryRow(t *testing.T) {
 }
 
 func TestBuildRecordsEmptyCorpusWritesNothing(t *testing.T) {
-	records, stats, err := capmapfacts.BuildRecords(capmapcorpus.Corpus{}, fixedNow)
+	records, stats, err := capmapfacts.BuildRecords(capmapcorpus.Corpus{}, fixedNow, capmapfacts.Origin{Run: "run-capmap"})
 	require.NoError(t, err)
 	assert.Empty(t, records)
 	assert.Zero(t, stats.Rows)
@@ -132,14 +132,14 @@ func TestDeriveIdIsStableAndFollowsTheSlug(t *testing.T) {
 // build of the same input has to be byte-identical, or a re-ingest would
 // double the corpus instead of replacing it.
 func TestBuildRecordsIsDeterministic(t *testing.T) {
-	first, _, err := capmapfacts.BuildRecords(sampleCorpus(), fixedNow)
+	first, _, err := capmapfacts.BuildRecords(sampleCorpus(), fixedNow, capmapfacts.Origin{Run: "run-capmap"})
 	require.NoError(t, err)
 	defer func() {
 		for _, r := range first {
 			r.Release()
 		}
 	}()
-	second, _, err := capmapfacts.BuildRecords(sampleCorpus(), fixedNow)
+	second, _, err := capmapfacts.BuildRecords(sampleCorpus(), fixedNow, capmapfacts.Origin{Run: "run-capmap"})
 	require.NoError(t, err)
 	defer func() {
 		for _, r := range second {
@@ -157,7 +157,7 @@ func TestBuildRecordsIsDeterministic(t *testing.T) {
 func TestIngestWritesToTheSinkOnce(t *testing.T) {
 	sink := &captureSink{}
 	defer sink.release()
-	stats, err := capmapfacts.Ingest(context.Background(), sampleCorpus(), sink, "", fixedNow)
+	stats, err := capmapfacts.Ingest(context.Background(), sampleCorpus(), sink, "", fixedNow, capmapfacts.Origin{Run: "run-capmap"})
 	require.NoError(t, err)
 	assert.Equal(t, 6, stats.Rows)
 	assert.Equal(t, 1, sink.calls, "the whole corpus lands in one insert, not one per row")
@@ -168,14 +168,14 @@ func TestIngestWritesToTheSinkOnce(t *testing.T) {
 func TestIngestEmptyCorpusDoesNotCallTheSink(t *testing.T) {
 	sink := &captureSink{}
 	defer sink.release()
-	stats, err := capmapfacts.Ingest(context.Background(), capmapcorpus.Corpus{}, sink, "", fixedNow)
+	stats, err := capmapfacts.Ingest(context.Background(), capmapcorpus.Corpus{}, sink, "", fixedNow, capmapfacts.Origin{Run: "run-capmap"})
 	require.NoError(t, err)
 	assert.Zero(t, stats.Rows)
 	assert.Zero(t, sink.calls, "an empty corpus must not issue an empty insert")
 }
 
 func TestIngestRefusesNilSink(t *testing.T) {
-	_, err := capmapfacts.Ingest(context.Background(), sampleCorpus(), nil, "", fixedNow)
+	_, err := capmapfacts.Ingest(context.Background(), sampleCorpus(), nil, "", fixedNow, capmapfacts.Origin{Run: "run-capmap"})
 	require.Error(t, err)
 }
 
@@ -183,7 +183,7 @@ func TestIngestRefusesNilSink(t *testing.T) {
 // leak the Arrow buffers it was holding.
 func TestIngestSurfacesSinkErrors(t *testing.T) {
 	sink := &captureSink{err: assert.AnError}
-	_, err := capmapfacts.Ingest(context.Background(), sampleCorpus(), sink, "custom.table", fixedNow)
+	_, err := capmapfacts.Ingest(context.Background(), sampleCorpus(), sink, "custom.table", fixedNow, capmapfacts.Origin{Run: "run-capmap"})
 	require.Error(t, err)
 	assert.Equal(t, "custom.table", ebtest.Fields(t, err)["table"], "the error names the table it tried to write")
 }

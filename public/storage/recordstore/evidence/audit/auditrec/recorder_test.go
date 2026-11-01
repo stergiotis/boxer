@@ -79,6 +79,7 @@ func TestWriteAhead(t *testing.T) {
 	durable, err := rec.EventWriteAhead(context.Background(), time.Now(), auditrectest.FullEvent(1))
 	assert.False(t, durable)
 	require.ErrorIs(t, err, auditrec.ErrNotDurable)
+	assert.Contains(t, err.Error(), "server down", "the refusal says why the rows did not land")
 	exec.set(true)
 	durable, err = rec.EventWriteAhead(context.Background(), time.Now(), auditrectest.FullEvent(2))
 	require.NoError(t, err)
@@ -161,4 +162,21 @@ func TestWrite(t *testing.T) {
 	assert.EqualValues(t, 1, c.Written)
 	assert.EqualValues(t, 1, c.Dropped)
 	assert.EqualValues(t, 1, c.Seals)
+}
+
+// EventFrom takes the app and the instance per call when the context names
+// none; the call identity's still win, and the run is always the
+// recorder's.
+func TestEventFrom(t *testing.T) {
+	fwd := &auditrectest.Collector{}
+	rec := newRecorder(t, &gateExec{open: true}, auditrec.WithForwarder(fwd), auditrec.WithOrigin("apps/default", 1))
+	def := audit.Origin{Run: "another-run", App: "apps/caller", Instance: 7}
+	require.NoError(t, rec.EventFrom(context.Background(), time.Now(), def, auditrectest.FullEvent(1)))
+	require.NoError(t, rec.EventFrom(auditrectest.FullContext(), time.Now(), def, auditrectest.FullEvent(2)))
+	require.NoError(t, rec.Flush(context.Background()))
+	rec.Close()
+	events := fwd.Events()
+	require.Len(t, events, 2)
+	assert.Equal(t, audit.Origin{Id: events[0].Id, Run: "run-1", App: "apps/caller", Instance: 7}, events[0].Origin)
+	assert.Equal(t, audit.Origin{Id: events[1].Id, Run: "run-1", App: "apps/conformance", Instance: 4}, events[1].Origin)
 }

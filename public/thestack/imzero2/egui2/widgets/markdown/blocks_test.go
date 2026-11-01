@@ -183,3 +183,71 @@ func TestFrontmatterSpanFollowsTheFeature(t *testing.T) {
 		t.Fatalf("the delimiter lines are ordinary blocks without the feature: %+v", blocks)
 	}
 }
+
+// A block id names its block (ADR-0347 §SD2): a trailing marker on a
+// paragraph, a lone marker under a list. The marker stays inside the block's
+// source range, so the blocks still cover the source.
+func TestBlocksCarryTheirIds(t *testing.T) {
+	src := "para ^p1\n\n- a\n- b\n\n^l1\n\n## H ^not-an-id\n"
+	blocks := Parse([]byte(src)).Blocks()
+	if len(blocks) != 3 {
+		t.Fatalf("got %+v", blocks)
+	}
+	if blocks[0].Id != "p1" || src[blocks[0].Start:blocks[0].Stop] != "para ^p1" {
+		t.Errorf("paragraph: %+v", blocks[0])
+	}
+	if blocks[1].Id != "l1" || src[blocks[1].Start:blocks[1].Stop] != "- a\n- b" {
+		t.Errorf("list: %+v", blocks[1])
+	}
+	if blocks[2].Id != "" {
+		t.Errorf("a heading's id attribute is its anchor, not a block id: %+v", blocks[2])
+	}
+}
+
+// The offset target resolves to the block holding the offset, the block
+// after a gap, and the last block past the end; a synthetic block is never
+// the target.
+func TestOffsetBlockIndex(t *testing.T) {
+	src := "one\n\ntwo\n\nthree\n"
+	doc := Parse([]byte(src))
+	cases := map[int]int{0: 0, 2: 0, 3: 0, 4: 1, 5: 1, 8: 1, 10: 2, 15: 2, 40: 2}
+	for off, want := range cases {
+		if got := offsetBlockIndex(doc.segments, off); got != want {
+			t.Errorf("offset %d: got block %d want %d", off, got, want)
+		}
+	}
+	if got := offsetBlockIndex(nil, 3); got != -1 {
+		t.Errorf("no blocks: got %d", got)
+	}
+}
+
+// A `^id` through the section slot arms the block carrying it and consumes
+// the slug, so a second block with the same id does not fire; an offset
+// target arms its block; a heading slug leaves blocks alone.
+func TestArmBlockScroll(t *testing.T) {
+	rc := renderCtx{scrollToSlug: "^one"}
+	other := segment{blockId: "two"}
+	rc.armBlockScroll(&other, false)
+	if rc.scrollNow || rc.scrollToSlug != "^one" {
+		t.Fatalf("another id armed: %+v", rc)
+	}
+	one := segment{blockId: "one"}
+	rc.armBlockScroll(&one, false)
+	if !rc.scrollNow || rc.scrollToSlug != "" {
+		t.Fatalf("the id did not arm and consume: %+v", rc)
+	}
+	rc.scrollNow = false
+	rc.armBlockScroll(&one, false)
+	if rc.scrollNow {
+		t.Fatal("a consumed slug armed a second block")
+	}
+	rc = renderCtx{scrollToSlug: "one"}
+	rc.armBlockScroll(&one, false)
+	if rc.scrollNow {
+		t.Fatal("a heading slug is not a block id")
+	}
+	rc.armBlockScroll(&one, true)
+	if !rc.scrollNow {
+		t.Fatal("the offset target did not arm")
+	}
+}

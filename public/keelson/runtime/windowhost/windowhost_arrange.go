@@ -20,9 +20,9 @@ const (
 	// top-left corner in stacking order, the front window last, each
 	// offset by one title-bar step so every title stays reachable.
 	ArrangeCascade
-	// ArrangeTile fills the work area with a near-square grid, front window
-	// first. A short last row stretches its windows across the full width.
-	ArrangeTile
+	// The one-shot Tile command was retired on 2026-10-30 (ADR-0275, update
+	// of that date): its grid lives on as the live Tile layout of ADR-0346
+	// (gridRects).
 	// ArrangeColumns places the windows side by side, full height.
 	ArrangeColumns
 	// ArrangeRows stacks the windows top to bottom, full width.
@@ -34,14 +34,12 @@ const (
 )
 
 // ArrangeCommands lists the commands in menu order.
-var ArrangeCommands = []ArrangeE{ArrangeCascade, ArrangeTile, ArrangeColumns, ArrangeRows, ArrangeGather}
+var ArrangeCommands = []ArrangeE{ArrangeCascade, ArrangeColumns, ArrangeRows, ArrangeGather}
 
 func (inst ArrangeE) String() (s string) {
 	switch inst {
 	case ArrangeCascade:
 		s = "Cascade"
-	case ArrangeTile:
-		s = "Tile"
 	case ArrangeColumns:
 		s = "Side by side"
 	case ArrangeRows:
@@ -60,8 +58,6 @@ func (inst ArrangeE) Ident() (s string) {
 	switch inst {
 	case ArrangeCascade:
 		s = "cascade"
-	case ArrangeTile:
-		s = "tile"
 	case ArrangeColumns:
 		s = "columns"
 	case ArrangeRows:
@@ -110,12 +106,18 @@ type arrangeItem struct {
 	minW, minH float32
 }
 
+// minSpan is the least extent a span or a column is laid out at, in logical
+// points: a window whose minimum is unknown still gets a title bar's worth
+// when its neighbours' minimums take the rest, rather than a zero rect that
+// no placement can apply.
+const minSpan float32 = 24
+
 // fitSpans lays n spans along a line of length total, separated from each
-// other and from both ends by gap, each at least its minimum. Space left
-// after the minimums is shared so that spans come out as equal as their
-// minimums allow. When the minimums do not fit, the spans keep them and
-// overlap their neighbours evenly, still ending inside the line; a minimum
-// longer than the whole line is cut to it.
+// other and from both ends by gap, each at least its minimum and at least
+// minSpan. Space left after the minimums is shared so that spans come out
+// as equal as their minimums allow. When the minimums do not fit, the spans
+// keep them and overlap their neighbours evenly, still ending inside the
+// line; a minimum longer than the whole line is cut to it.
 func fitSpans(total, gap float32, mins []float32) (offs, sizes []float32) {
 	n := len(mins)
 	offs = make([]float32, n)
@@ -127,7 +129,7 @@ func fitSpans(total, gap float32, mins []float32) (offs, sizes []float32) {
 	avail := max(inner-gap*float32(n-1), 1)
 	var sumMins float32
 	for i, m := range mins {
-		sizes[i] = min(max(m, 0), inner)
+		sizes[i] = min(max(m, minSpan), inner)
 		sumMins += sizes[i]
 	}
 	if sumMins <= avail {
@@ -202,18 +204,7 @@ func arrangeRects(cmd ArrangeE, work Rect, items []arrangeItem, p arrangeParams)
 	if len(items) == 0 || !work.valid() {
 		return
 	}
-	// Stacking order, back to front; ties fall back to the window key, which
-	// is open order.
-	order := make([]int, len(items))
-	for i := range order {
-		order[i] = i
-	}
-	slices.SortStableFunc(order, func(a, b int) int {
-		if items[a].z != items[b].z {
-			return items[a].z - items[b].z
-		}
-		return int(items[a].key) - int(items[b].key)
-	})
+	order := stackingOrder(items)
 	n := len(items)
 	switch cmd {
 	case ArrangeCascade:
@@ -234,31 +225,6 @@ func arrangeRects(cmd ArrangeE, work Rect, items []arrangeItem, p arrangeParams)
 			y = max(min(y, work.MaxY-hi), work.MinY)
 			out[i] = rectAt(x, y, wi, hi)
 			ok[i] = true
-		}
-	case ArrangeTile:
-		cols := int(math.Ceil(math.Sqrt(float64(n))))
-		rows := (n + cols - 1) / cols
-		// Front window first: the one the user was working in lands
-		// top-left. A row is as tall as its tallest minimum asks.
-		rowMins := make([]float32, rows)
-		for rank := 0; rank < n; rank++ {
-			row := rank / cols
-			rowMins[row] = max(rowMins[row], items[order[n-1-rank]].minH)
-		}
-		rowOffs, rowHs := fitSpans(work.H(), p.gap, rowMins)
-		for row := 0; row < rows; row++ {
-			first := row * cols
-			inRow := min(cols, n-first)
-			colMins := make([]float32, inRow)
-			for col := range colMins {
-				colMins[col] = items[order[n-1-first-col]].minW
-			}
-			colOffs, colWs := fitSpans(work.W(), p.gap, colMins)
-			for col := range colMins {
-				i := order[n-1-first-col]
-				out[i] = rectAt(work.MinX+colOffs[col], work.MinY+rowOffs[row], colWs[col], rowHs[row])
-				ok[i] = true
-			}
 		}
 	case ArrangeColumns, ArrangeRows:
 		mins := make([]float32, n)
@@ -305,6 +271,59 @@ func arrangeRects(cmd ArrangeE, work Rect, items []arrangeItem, p arrangeParams)
 	return
 }
 
+// stackingOrder is the items' indices back to front by stacking rank; ties
+// fall back to the window key, which is open order.
+func stackingOrder(items []arrangeItem) (order []int) {
+	order = make([]int, len(items))
+	for i := range order {
+		order[i] = i
+	}
+	slices.SortStableFunc(order, func(a, b int) int {
+		if items[a].z != items[b].z {
+			return items[a].z - items[b].z
+		}
+		return int(items[a].key) - int(items[b].key)
+	})
+	return
+}
+
+// gridRects fills the work area with a near-square grid, front window
+// first: the one the person was working in lands top-left. A row is as tall
+// as its tallest minimum asks, and a short last row stretches its windows
+// across the full width. The geometry of the Tile command ADR-0275 had, kept
+// for the live Tile layout of ADR-0346. out is indexed like items; an empty
+// or invalid work area places nothing.
+func gridRects(work Rect, items []arrangeItem, p arrangeParams) (out []Rect) {
+	n := len(items)
+	out = make([]Rect, n)
+	if n == 0 || !work.valid() {
+		return
+	}
+	order := stackingOrder(items)
+	cols := int(math.Ceil(math.Sqrt(float64(n))))
+	rows := (n + cols - 1) / cols
+	rowMins := make([]float32, rows)
+	for rank := 0; rank < n; rank++ {
+		row := rank / cols
+		rowMins[row] = max(rowMins[row], items[order[n-1-rank]].minH)
+	}
+	rowOffs, rowHs := fitSpans(work.H(), p.gap, rowMins)
+	for row := 0; row < rows; row++ {
+		first := row * cols
+		inRow := min(cols, n-first)
+		colMins := make([]float32, inRow)
+		for col := range colMins {
+			colMins[col] = items[order[n-1-first-col]].minW
+		}
+		colOffs, colWs := fitSpans(work.W(), p.gap, colMins)
+		for col := range colMins {
+			i := order[n-1-first-col]
+			out[i] = rectAt(work.MinX+colOffs[col], work.MinY+rowOffs[row], colWs[col], rowHs[row])
+		}
+	}
+	return
+}
+
 // Arrange queues a whole-desktop arrangement for the next Frame. Safe off
 // the render thread; a second call before that Frame replaces the first.
 func (inst *Inst) Arrange(cmd ArrangeE) {
@@ -324,6 +343,12 @@ func (inst *Inst) ArrangeWindows(cmd ArrangeE, keys []WindowKeyT) (err error) {
 	}
 	inst.mu.Lock()
 	defer inst.mu.Unlock()
+	if inst.layout.Tiled() {
+		// A one-shot arrangement is a floating-desktop command; the layout
+		// would move the windows back on the next frame (ADR-0346 §SD6).
+		err = eb.Build().Str("layout", inst.layout.Ident()).Errorf("windowhost: the desktop is tiled; set the layout instead of arranging")
+		return
+	}
 	for _, k := range keys {
 		if inst.openWindowLocked(k) == nil {
 			err = eb.Build().Uint64("key", uint64(k)).Errorf("windowhost: no open window with this key")
@@ -352,8 +377,9 @@ func (inst *Inst) Raise(key WindowKeyT) (err error) {
 // a one-frame placement (ADR-0275 §SD3): the window is movable and
 // resizable again afterwards, and egui sizes it to its content on an axis
 // the content does not fill. Placing ends the window's maximization and
-// any arrangement in progress, whose next pass would move it again. Safe
-// off the render thread.
+// any arrangement in progress, whose next pass would move it again. On a
+// tiled desktop it also floats the window, as a drag would if the window
+// took one (ADR-0346 §SD6). Safe off the render thread.
 func (inst *Inst) Place(key WindowKeyT, r Rect) (err error) {
 	if !r.valid() {
 		err = eb.Build().Float32("w", r.W()).Float32("h", r.H()).Errorf("windowhost: a placement needs a positive size")
@@ -364,6 +390,9 @@ func (inst *Inst) Place(key WindowKeyT, r Rect) (err error) {
 	if inst.openWindowLocked(key) == nil {
 		err = eb.Build().Uint64("key", uint64(key)).Errorf("windowhost: no open window with this key")
 		return
+	}
+	if inst.layout.Tiled() {
+		inst.setFloatingLocked(key, true)
 	}
 	if inst.pendingPlaces == nil {
 		inst.pendingPlaces = make(map[WindowKeyT]Rect, 1)

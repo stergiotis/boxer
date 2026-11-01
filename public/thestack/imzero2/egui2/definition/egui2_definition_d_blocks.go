@@ -868,6 +868,30 @@ let mut layout = egui::Layout::default();`)).
 						self.interpret_outer({{EguiContext}}, &mut None)?;
 					}
 `)).Build())
+	// sizedPanelApplyCode shows a side, top or bottom panel, and keeps the
+	// size it stored across a sizing pass. egui runs one when a window's
+	// resize drag starts: it lays the content out at the window's minimum
+	// width and discards the frame, but a panel stores the size it got there,
+	// so a resizable panel inside a window collapsed to its minimum on every
+	// window resize. The size stored before the pass is put back after it.
+	sizedPanelApplyCode := `
+					if {{EguiUiOptionalOuter}}.is_some() {
+						let ui = {{EguiUiOptionalOuter}}.as_mut().unwrap();
+						let kept = if ui.is_sizing_pass() {
+							egui::containers::panel::PanelState::load(ui.ctx(), {{Id}})
+						} else {
+							None
+						};
+						{{Instance}}.show(ui, |ui| {
+							let _ = self.interpret_outer_logged({{EguiContext}}, &mut Some(ui));
+						});
+						if let Some(state) = kept {
+							ui.ctx().data_mut(|d| d.insert_persisted({{Id}}, state));
+						}
+					} else {
+						self.interpret_outer({{EguiContext}}, &mut None)?;
+					}
+`
 	for _, item := range []struct {
 		suffix    string
 		applyCode string
@@ -914,14 +938,14 @@ let mut layout = egui::Layout::default();`)).
 				WithSettingImmediate(true).
 				WithSettingBlockIterator(true).
 				WithConstructionCodeClientRust(rustClientCode("egui::Panel::top({{Id}});\n")).
-				WithApplyCodeClientRust(rustClientCode(item.applyCode)).Build())
+				WithApplyCodeClientRust(rustClientCode(sizedPanelApplyCode)).Build())
 			blocks = append(blocks, idl.NewBuilderFactoryNode(naming.MustBeValidStylableName("panelBottom"+item.suffix)).
 				AddMethods(methods...).
 				WithIdentityId(true).
 				WithSettingImmediate(true).
 				WithSettingBlockIterator(true).
 				WithConstructionCodeClientRust(rustClientCode("egui::Panel::bottom({{Id}});\n")).
-				WithApplyCodeClientRust(rustClientCode(item.applyCode)).Build())
+				WithApplyCodeClientRust(rustClientCode(sizedPanelApplyCode)).Build())
 		}
 		{
 			methods := idl.NewMethodBuilder().
@@ -935,14 +959,14 @@ let mut layout = egui::Layout::default();`)).
 				WithSettingImmediate(true).
 				WithSettingBlockIterator(true).
 				WithConstructionCodeClientRust(rustClientCode("egui::Panel::left({{Id}});\n")).
-				WithApplyCodeClientRust(rustClientCode(item.applyCode)).Build())
+				WithApplyCodeClientRust(rustClientCode(sizedPanelApplyCode)).Build())
 			blocks = append(blocks, idl.NewBuilderFactoryNode(naming.MustBeValidStylableName("panelRight"+item.suffix)).
 				AddMethods(methods...).
 				WithIdentityId(true).
 				WithSettingImmediate(true).
 				WithSettingBlockIterator(true).
 				WithConstructionCodeClientRust(rustClientCode("egui::Panel::right({{Id}});\n")).
-				WithApplyCodeClientRust(rustClientCode(item.applyCode)).Build())
+				WithApplyCodeClientRust(rustClientCode(sizedPanelApplyCode)).Build())
 		}
 		// egui::CentralPanel has no id and no size methods — it fills the
 		// remaining area. egui 0.35 unified panel showing: CentralPanel::show

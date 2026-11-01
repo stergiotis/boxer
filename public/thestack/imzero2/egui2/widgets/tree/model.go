@@ -75,6 +75,11 @@ func (t Tree) Len() int { return len(t.Labels) }
 // and making the host special-case it would put an `if len(...) == 0` in front
 // of every call site.
 func (t Tree) Validate() error {
+	return t.validate(&flattenScratch{})
+}
+
+// validate is [Tree.Validate] with its working memory taken from sc.
+func (t Tree) validate(sc *flattenScratch) error {
 	n := len(t.Labels)
 	if len(t.Parents) != n {
 		return eb.Build().Int("labels", n).Int("parents", len(t.Parents)).Errorf("column lengths disagree")
@@ -91,7 +96,7 @@ func (t Tree) Validate() error {
 			return eb.Build().Int("node", i).Int32("parent", p).Int("nodes", n).Errorf("node parent is out of range")
 		}
 	}
-	return t.checkAcyclic()
+	return t.checkAcyclic(sc)
 }
 
 // checkAcyclic walks every node to a root, memoizing the nodes already known
@@ -102,10 +107,15 @@ func (t Tree) Validate() error {
 // Lifted from [icicle.Tree] deliberately rather than shared: the two packages
 // agree on the column shape by convention, not by a common type, and a shared
 // helper would couple a flamegraph's release to an outline's.
-func (t Tree) checkAcyclic() error {
+func (t Tree) checkAcyclic(sc *flattenScratch) error {
 	n := len(t.Parents)
-	grounded := make([]bool, n)
-	path := make([]int32, 0, 16)
+	if cap(sc.grounded) < n {
+		sc.grounded = make([]bool, n)
+	}
+	grounded := sc.grounded[:n]
+	clear(grounded)
+	path := sc.path[:0]
+	defer func() { sc.path = path[:0] }()
 	for i := range n {
 		if grounded[i] {
 			continue
@@ -218,6 +228,8 @@ type State struct {
 	// widget that exists to virtualise cannot justify. Nothing outside the
 	// package reads it — the renderer hands back the same slice, borrowed.
 	rows []Row
+	// scratch is Flatten's working memory, kept for the same reason as rows.
+	scratch flattenScratch
 }
 
 // nodeRef remembers one node — a cursor, a pending reveal — under whichever

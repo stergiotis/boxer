@@ -57,7 +57,7 @@ func (inst *App) listRuns() {
 	if store == nil {
 		return
 	}
-	inst.runsJob.Start(nil, bgjob.Spec{Kind: "chat-runs", Title: "conversations"}, func(ctx context.Context) (runs *[]agentrun.Run, err error) {
+	inst.runsJob.Start(inst.tasks, bgjob.Spec{Kind: "chat-runs", Title: "conversations"}, func(ctx context.Context) (runs *[]agentrun.Run, err error) {
 		got, err := store.ListRuns(ctx, string(ManifestId), runsListLimit)
 		if err != nil {
 			return
@@ -99,7 +99,7 @@ func (inst *App) resumeRun(id string) {
 	storage := inst.storage
 	retiring := inst.retiring[id]
 	delete(inst.retiring, id)
-	inst.resumeJob.Start(nil, bgjob.Spec{Kind: "chat-resume", Title: "resume"}, func(ctx context.Context) (r *resumed, err error) {
+	inst.resumeJob.Start(inst.tasks, bgjob.Spec{Kind: "chat-resume", Title: "resume"}, func(ctx context.Context) (r *resumed, err error) {
 		if retiring != nil {
 			wctx, cancel := context.WithTimeout(ctx, agentrun.DefaultTimeout)
 			closed := retiring.awaitClosed(wctx)

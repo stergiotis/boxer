@@ -36,6 +36,7 @@ import (
 	"iter"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsschema"
+	"github.com/stergiotis/boxer/public/keelson/runtime/vocab"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/ddl/clickhouse"
@@ -118,6 +119,31 @@ func MembershipIds(src NaturalKeySourceI) (ids map[string]uint64, err error) {
 		}
 		ids[camel] = id
 		from[camel] = nk
+	}
+	return
+}
+
+// AddOriginIds adds the memberships of the shared origin component —
+// `audit.Origin`, run, app and instance (ADR-0330 §SD3, ADR-0277 §SD1) — to
+// ids, from the runtime vocabulary that owns them. A store whose own
+// vocabulary is not the runtime one binds the component through this, so
+// its rows carry the slots under the ids every other writer of
+// `boxer.facts` uses. A name already in ids under another id is an error:
+// it would bake an origin no reader selects.
+func AddOriginIds(ids map[string]uint64) (err error) {
+	if ids == nil {
+		err = eh.Errorf("storegen: nil membership-id map")
+		return
+	}
+	for _, m := range []registry.RegisteredNaturalKey{vocab.MembRuntimeRun, vocab.MembRuntimeApp, vocab.MembLifecycleTileKey} {
+		name := string(naming.ConvertNameStyle(m.GetNaturalKey(), naming.LowerCamelCase))
+		id := m.GetId().Value()
+		if prev, has := ids[name]; has && prev != id {
+			err = eb.Build().Str("membership", name).Uint64("id", id).Uint64("already", prev).
+				Errorf("storegen: the origin's membership is already in the map under another id")
+			return
+		}
+		ids[name] = id
 	}
 	return
 }

@@ -72,6 +72,9 @@ import (
 	// this its BOXER_LAUNCHER_* spec would be invisible to `boxer env list`
 	// and absent from doc/env-vars.md.
 	_ "github.com/stergiotis/boxer/public/keelson/runtime/launcher"
+	// BOXER_LOGVIEWER_* (ADR-0345's update of 2026-10-30); read by the log
+	// viewer, which only the graphical host links.
+	_ "github.com/stergiotis/boxer/public/keelson/runtime/logviewer"
 	// KEELSON_LAUNCHABLE_APPS_WHERE (ADR-0272); read by hostboot, which this
 	// binary does not link.
 	_ "github.com/stergiotis/boxer/public/keelson/runtime/launchlimit"

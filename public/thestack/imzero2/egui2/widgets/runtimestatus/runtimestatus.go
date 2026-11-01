@@ -5,7 +5,7 @@
 //
 // Layout (monospace, fixed-ish column widths):
 //
-//	run:XXXXXXXX  facts:ch  bus ✓  fs ✓  persist:mem  [unattended]
+//	[trail warning]  run:XXXXXXXX  facts:ch  bus ✓  fs ✓  persist:mem  [unattended]
 //
 // Green ✓ = active, red ✗ = unavailable. The "facts" segment shows
 // "ch" when the chstore live connection succeeded and "mem" when the
@@ -92,6 +92,16 @@ type Snapshot struct {
 	// (ADR-0298). It is the one segment that is not process-static: the
 	// host sets it once the service has started.
 	Unattended UnattendedE
+	// TrailNotDurable is why the audit trail's rows do not land on
+	// boxer.facts — no ClickHouse, no run id — and "" when they do
+	// (ADR-0330's Update of 2026-10-30). Set, it leads the row in the
+	// warning tone.
+	TrailNotDurable string
+}
+
+// trailWarning is the segment a non-durable trail shows.
+func trailWarning(why string) (text string) {
+	return icons.PhWarning + " audit trail not durable: " + why
 }
 
 // UnattendedE is the unattended mode as the bar shows it.
@@ -129,6 +139,12 @@ func Render(in Input) (res Result) {
 
 func (in Input) render(ids *c.WidgetIdStack, res *Result) {
 	s := in.Snapshot
+	if s.TrailNotDurable != "" {
+		// Plain text in the warning tone, as UNATTENDED below: a state the
+		// person should not miss, not a capability to inspect.
+		warningLabel(trailWarning(s.TrailNotDurable))
+		monoSpacer()
+	}
 	renderSegment(ids, "run:"+s.RunIdShort, CapRun, res)
 	monoSpacer()
 	renderSegment(ids, "facts:"+s.FactsBackend, CapFacts, res)
@@ -154,11 +170,16 @@ func (in Input) render(ids *c.WidgetIdStack, res *Result) {
 		// a clickable row. The words carry the state without the tone
 		// (ADR-0031 §SD5).
 		monoSpacer()
-		col := color.Hex(styletokens.WarningDefault.AsHex())
-		c.LabelAtoms(c.Atoms().
-			BeginRichTextColored(col, color.Transparent, icons.PhWarning+" UNATTENDED — agents act without asking").Monospace().Strong().End().
-			Keep()).Send()
+		warningLabel(icons.PhWarning + " UNATTENDED — agents act without asking")
 	}
+}
+
+// warningLabel emits text in the warning tone, monospace and strong.
+func warningLabel(text string) {
+	col := color.Hex(styletokens.WarningDefault.AsHex())
+	c.LabelAtoms(c.Atoms().
+		BeginRichTextColored(col, color.Transparent, text).Monospace().Strong().End().
+		Keep()).Send()
 }
 
 // renderSegment emits one label-shaped segment. With nil ids a monoLabel

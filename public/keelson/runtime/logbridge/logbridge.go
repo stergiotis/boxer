@@ -97,15 +97,6 @@ type Config struct {
 	// Layout supplements TimeFieldFormat when TimeFieldFormat is
 	// TimeFormatString. Defaults to time.RFC3339 to match zerolog.
 	Layout string
-
-	// TailCapacity bounds the in-memory tail buffer the Sink retains for
-	// readers like the imzero2 log-viewer widget. Independent of
-	// Capacity (which sizes the flush ring). Defaults to 1024 rows;
-	// setting it to 0 disables tail retention. The tail buffer holds
-	// the most recently decoded rows even after they have been flushed
-	// to the FactsStoreI, so a tail UI sees a stable view rather than
-	// the near-empty flush ring.
-	TailCapacity int
 }
 
 // TimeFormatE selects how the decoder interprets the zerolog "time" field.
@@ -132,15 +123,6 @@ type Sink struct {
 	count     int
 	notFull   *sync.Cond
 	wakeFlush chan struct{}
-
-	// Tail buffer — a SEPARATE fixed-size ring that retains the most
-	// recently decoded rows for UI consumers (logviewer widget,
-	// debugger). Independent of the flush ring; never drained by the
-	// flusher. Drop-oldest on overflow.
-	tailMu   sync.Mutex
-	tailRing []factsstore.LogRow
-	tailHead int
-	tailLen  int
 
 	dropped   atomic.Uint64
 	decoded   atomic.Uint64
@@ -180,11 +162,6 @@ func NewSink(store factsstore.FactsStoreI, cfg Config) (inst *Sink, err error) {
 	if cfg.Layout == "" {
 		cfg.Layout = time.RFC3339
 	}
-	if cfg.TailCapacity < 0 {
-		cfg.TailCapacity = 0
-	} else if cfg.TailCapacity == 0 {
-		cfg.TailCapacity = 1024
-	}
 	inst = &Sink{
 		store:     store,
 		cfg:       cfg,
@@ -192,9 +169,6 @@ func NewSink(store factsstore.FactsStoreI, cfg Config) (inst *Sink, err error) {
 		wakeFlush: make(chan struct{}, 1),
 		stopCh:    make(chan struct{}),
 		doneCh:    make(chan struct{}),
-	}
-	if cfg.TailCapacity > 0 {
-		inst.tailRing = make([]factsstore.LogRow, cfg.TailCapacity)
 	}
 	inst.notFull = sync.NewCond(&inst.mu)
 	go inst.flushLoop()
@@ -239,7 +213,6 @@ func (inst *Sink) ingest(level zerolog.Level, p []byte) {
 }
 
 func (inst *Sink) enqueue(row factsstore.LogRow) {
-	inst.appendTail(row)
 	inst.mu.Lock()
 	if inst.count == inst.cfg.Capacity {
 		// Drop-oldest: advance head, count stays at capacity.
@@ -260,74 +233,6 @@ func (inst *Sink) enqueue(row factsstore.LogRow) {
 		default:
 		}
 	}
-}
-
-// appendTail writes the decoded row to the retain-N tail buffer used by
-// UI consumers. Independent of the flush ring; never drained.
-func (inst *Sink) appendTail(row factsstore.LogRow) {
-	if inst.tailRing == nil {
-		return
-	}
-	capN := len(inst.tailRing)
-	inst.tailMu.Lock()
-	defer inst.tailMu.Unlock()
-	if inst.tailLen == capN {
-		// Drop-oldest.
-		inst.tailHead = (inst.tailHead + 1) % capN
-		inst.tailLen--
-	}
-	pos := (inst.tailHead + inst.tailLen) % capN
-	inst.tailRing[pos] = row
-	inst.tailLen++
-}
-
-// Tail returns a snapshot of the most recent rows in the tail buffer,
-// newest LAST (consumers can range-over them in chronological order).
-// If max > 0 the returned slice is capped at max rows; max == 0 means
-// "everything currently retained". The returned slice is a copy — the
-// caller may retain it past further enqueues.
-func (inst *Sink) Tail(max int) (rows []factsstore.LogRow) {
-	if inst.tailRing == nil {
-		return
-	}
-	inst.tailMu.Lock()
-	defer inst.tailMu.Unlock()
-	n := inst.tailLen
-	if max > 0 && n > max {
-		n = max
-	}
-	if n == 0 {
-		return
-	}
-	rows = make([]factsstore.LogRow, n)
-	capN := len(inst.tailRing)
-	// When max < tailLen, we want the LAST n rows — start that far
-	// before the logical tail.
-	start := inst.tailHead + (inst.tailLen - n)
-	for i := 0; i < n; i++ {
-		rows[i] = inst.tailRing[(start+i)%capN]
-	}
-	return
-}
-
-// TailLen returns the current number of rows in the tail buffer. Cheap
-// to call; useful for UIs that want a row-count badge without
-// allocating a snapshot.
-func (inst *Sink) TailLen() (n int) {
-	if inst.tailRing == nil {
-		return
-	}
-	inst.tailMu.Lock()
-	n = inst.tailLen
-	inst.tailMu.Unlock()
-	return
-}
-
-// TailCapacity returns the configured tail-buffer size. UIs use it to
-// compute a "X / Y rows retained" indicator alongside TailLen.
-func (inst *Sink) TailCapacity() (n int) {
-	n = len(inst.tailRing)
-	return
 }
 
 func (inst *Sink) flushLoop() {

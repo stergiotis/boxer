@@ -20,16 +20,16 @@ import (
 // emit is decoded back through CBOR into a LogRow with typed Fields,
 // which is what the logviewer's detail pane reads.
 //
-// Returns a fresh *App and the Sink it writes through. Caller owns
-// closing the sink; FlushN=1 means every emit drains synchronously
-// to the tail buffer the assertions read.
-func scenarioHarness(t *testing.T) (inst *App, sink *logbridge.Sink) {
+// Returns a fresh *App and logs, which closes the Sink — draining it
+// synchronously into the store — and returns the rows the store holds:
+// what a host with BOXER_LOG_FACTS writes to boxer.facts, and the viewer
+// reads back.
+func scenarioHarness(t *testing.T) (inst *App, logs func() []factsstore.LogRow) {
 	t.Helper()
 	store := factsstore.NewInMemoryFactsStore()
 	s, err := logbridge.NewSink(store, logbridge.Config{
-		Capacity:     32,
-		FlushN:       1,
-		TailCapacity: 32,
+		Capacity: 32,
+		FlushN:   1,
 	})
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = s.Close() })
@@ -40,7 +40,11 @@ func scenarioHarness(t *testing.T) (inst *App, sink *logbridge.Sink) {
 
 	a := newApp()
 	require.NoError(t, a.Mount(mountCtx))
-	return a, s
+	logs = func() []factsstore.LogRow {
+		_ = s.Close()
+		return store.Logs()
+	}
+	return a, logs
 }
 
 // fieldsByName indexes a LogRow's Fields by name so per-field type +
@@ -64,11 +68,11 @@ func fieldsByName(t *testing.T, row factsstore.LogRow) (m map[string]factsstore.
 // CBOR with the expected Kind. Catches regressions where a fixture
 // switched type (Int → Uint, etc.) or where the level rule drifts.
 func TestEmitScenarioHTTP_TypedFields(t *testing.T) {
-	a, sink := scenarioHarness(t)
+	a, logs := scenarioHarness(t)
 	for range httpFixtures {
 		a.emitScenarioHTTP()
 	}
-	rows := sink.Tail(0)
+	rows := logs()
 	require.Len(t, rows, len(httpFixtures))
 
 	for i, row := range rows {
@@ -109,12 +113,12 @@ func TestEmitScenarioHTTP_TypedFields(t *testing.T) {
 // fixtures emit warn; bool / uint / int / float / time all
 // round-trip with the expected Kind.
 func TestEmitScenarioDB_TypedFields(t *testing.T) {
-	a, sink := scenarioHarness(t)
+	a, logs := scenarioHarness(t)
 	const n = 4 // exercise the wantErr arm at least once
 	for range n {
 		a.emitScenarioDB()
 	}
-	rows := sink.Tail(0)
+	rows := logs()
 	require.Len(t, rows, n)
 
 	sawErr := false
@@ -143,11 +147,11 @@ func TestEmitScenarioDB_TypedFields(t *testing.T) {
 // bytes / uint / time all round-trip with the expected Kind, and
 // denied requests emit warn while granted requests emit info.
 func TestEmitScenarioAuth_TypedFields(t *testing.T) {
-	a, sink := scenarioHarness(t)
+	a, logs := scenarioHarness(t)
 	for range authFixtures {
 		a.emitScenarioAuth()
 	}
-	rows := sink.Tail(0)
+	rows := logs()
 	require.Len(t, rows, len(authFixtures))
 
 	for i, row := range rows {
@@ -184,11 +188,11 @@ func TestEmitScenarioAuth_TypedFields(t *testing.T) {
 // the detail pane has something to show. Also confirms the level
 // is "error" (the scenario's only emit level).
 func TestEmitScenarioBoxerErr_ChainSurvives(t *testing.T) {
-	a, sink := scenarioHarness(t)
+	a, logs := scenarioHarness(t)
 	for range boxerErrFixtures {
 		a.emitScenarioBoxerErr()
 	}
-	rows := sink.Tail(0)
+	rows := logs()
 	require.Len(t, rows, len(boxerErrFixtures))
 
 	for i, row := range rows {

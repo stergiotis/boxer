@@ -26,6 +26,14 @@ import (
 // GPU note: DefaultBundleOptions wires the vendor-build-tag GPU collector, so
 // GPU rides here too on a tagged build.
 func StartScraper(ctx context.Context, bus app.BusI, hostToken string, interval time.Duration, logg zerolog.Logger) (stop func() (err error), err error) {
+	return StartScraperWithDemand(ctx, bus, hostToken, interval, nil, logg)
+}
+
+// StartScraperWithDemand is StartScraper with a demand probe: while demand
+// answers false the scraper reads nothing, and the first sample after a pause
+// is taken without being published (see sysmetricsbus.ProducerOptions.Demand).
+// A nil demand samples on every tick.
+func StartScraperWithDemand(ctx context.Context, bus app.BusI, hostToken string, interval time.Duration, demand func() bool, logg zerolog.Logger) (stop func() (err error), err error) {
 	if bus == nil {
 		err = eh.Errorf("sysmscrape: scraper needs a bus")
 		return
@@ -46,6 +54,7 @@ func StartScraper(ctx context.Context, bus app.BusI, hostToken string, interval 
 		Subject:  sysmetricsbus.BundleSubject(hostToken),
 		Codec:    sysmetricsbus.NewCBORCodec(),
 		Interval: interval,
+		Demand:   demand,
 		Log:      logg,
 	})
 	if pErr != nil {

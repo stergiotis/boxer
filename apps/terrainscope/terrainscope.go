@@ -36,6 +36,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
+	"github.com/stergiotis/boxer/public/keelson/runtime/task"
 	"github.com/stergiotis/boxer/public/science/geo/swisstopo"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/basemap"
@@ -177,6 +178,8 @@ type App struct {
 	ids *c.WidgetIdStack
 
 	logger zerolog.Logger
+	// tasks runs each sweep as a keelson task owned by this window.
+	tasks task.TaskApiI
 
 	stage  selectionStageE
 	pt1Lat float64
@@ -250,6 +253,7 @@ func (inst *App) Mount(ctx app.MountContextI) (err error) {
 	inst.ids = ctx.Ids()
 	inst.logger = ctx.Log()
 	inst.tiles = basemap.NewTiles(ctx.Bus(), "terrainscope: basemap")
+	inst.tasks = task.ForApp(ctx)
 	return
 }
 
@@ -770,10 +774,16 @@ func (inst *App) launchSweepWorker(p sweepParams) {
 	if prev != nil {
 		prev()
 	}
-	go inst.runSweepWorker(ctx, myEpoch, p)
+	// Run to completion: the ensemble takes no context, so the monitor and
+	// the window's close could stop it only before it starts.
+	go func() {
+		_ = task.RunToCompletion(inst.tasks, task.SpawnOpts{Kind: "terrainscope.sweep", Title: "line-of-sight sweep"}, func() error {
+			return inst.runSweepWorker(ctx, myEpoch, p)
+		})
+	}()
 }
 
-func (inst *App) runSweepWorker(ctx context.Context, myEpoch uint64, p sweepParams) {
+func (inst *App) runSweepWorker(ctx context.Context, myEpoch uint64, p sweepParams) (err error) {
 	s, err := ensureSampler()
 	if err != nil {
 		inst.finishWorker(myEpoch, nil)
@@ -809,6 +819,7 @@ func (inst *App) runSweepWorker(ctx context.Context, myEpoch uint64, p sweepPara
 		return
 	}
 	inst.finishWorker(myEpoch, &sweepResult{ens: ens, fromLV: fromLV, toLV: toLV, computeDur: computeDur})
+	return
 }
 
 // fmtDur renders a simulation wall-clock as milliseconds (microsecond

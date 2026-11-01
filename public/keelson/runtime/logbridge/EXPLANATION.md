@@ -63,8 +63,8 @@ The Sink is a producer/consumer pair separated by a fixed-size ring:
 3. **Drain.** A single background goroutine selects on `wakeFlush`, a
    `time.Ticker` set to `FlushInterval`, and `stopCh`. On any signal it
    copies up to `FlushN` rows out under the lock, drops the lock, and
-   calls `FactsStoreI.WriteLog` once per row. Calling unlocked keeps a
-   slow CH round-trip from stalling producers.
+   hands them to `FactsStoreI.WriteLogs` as one batch. Calling unlocked
+   keeps a slow CH round-trip from stalling producers.
 4. **Close.** Closing the Sink trips `stopCh`, drains the ring
    synchronously, and waits for the flusher to exit before returning —
    so a process tearing down can rely on all already-accepted events
@@ -74,6 +74,21 @@ The ring deliberately holds fully-decoded `LogRow`s, not raw CBOR. The
 CPU spent on decode is paid on the producer thread, which is the same
 thread that already paid the CBOR encode cost — there's no aggregate
 overhead shift, but the flusher gets to do its work without re-parsing.
+
+## What the Sink does not keep
+
+The ring is a write queue, emptied by every drain; nothing in the process
+keeps a copy of log lines for reading. Readers — the log viewer, the app
+center's `keelson('app_logs')` — read them back from `boxer.facts`, so a
+line is readable once its batch has landed, and only on a host that
+persists them (`BOXER_LOG_FACTS` set and ClickHouse answering; without
+that, `loghost` installs no Sink at all). An earlier retain-N tail ring
+fed the viewer from memory; it was removed when the viewer moved to
+`boxer.facts` (ADR-0345, the update of 2026-10-30).
+
+What survives the round trip is the row less its structured error chain:
+`LogRow.ErrorContext` is decoded for in-process consumers, but the writer
+persists only its flat summary in `Error`.
 
 ## Invariants
 
@@ -95,12 +110,11 @@ overhead shift, but the flusher gets to do its work without re-parsing.
 
 ## Trade-offs
 
-- **One row per event, not batched at CH level.** The flusher calls
-  `WriteLog` once per row; each call ships one Arrow `RecordBatch`. The
-  decoupling buys producer non-blocking and orderly shutdown, but does
-  not yet amortise the CH-side round-trip. A future `WriteLogBatch` on
-  `FactsStoreI` would cut that overhead — left to a later sub-phase
-  because the current call-site count is too low to justify the change.
+- **One insert per drain.** The flusher hands each drained batch to
+  `WriteLogs`, which ships it as one insert, so a burst costs one
+  ClickHouse part per `FlushN` rows rather than one per row. The price is
+  latency: a line is readable from `boxer.facts` only after its batch
+  drains, up to `FlushInterval` after it was written.
 - **Decoded shape over raw CBOR.** Holding `LogRow`s in the ring costs
   more memory per entry than holding raw bytes; the win is that the
   flusher does no per-row parse. For 4 096 rows at ~200 bytes apiece

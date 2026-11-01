@@ -20,8 +20,9 @@ alternative exists or that the generated one is the direction of travel.
 ## Two ways to write the table, and which one to pick
 
 **`factsstore.FactsStoreI` / `chstore`** is the older lane. It carries one
-hand-written verb per kind — `WriteGrant`, `WriteAudit`, `WriteLog`, and
-the run-lifecycle family — each hand-encoding the leeway DML, and
+hand-written verb per kind — `WriteGrant`, `WriteLog`, and the run-lifecycle
+family (the bus-request `WriteAudit` retired onto the trail's `AuditEvent`
+on 2026-10-30, ADR-0296 Updates) — each hand-encoding the leeway DML, and
 hand-composed SQL for the read-backs. It is production-wired (the imzero2 host
 app, `apps/capinspector`) and it is not going away on a schedule. (App state
 used to be verbs here too — persist values, workingsets and column widths. It
@@ -234,6 +235,14 @@ the worked example to copy — the same lane drives `watchbill/watchbillpresence
 `stevedore/stevedorefacts`: a DTO file per kind, a membership vocabulary
 beside it, a `gen_test.go` calling `storegen.Input{...}.Generate()`, and a test
 file asserting the ids landed.
+
+Every row on the table says who wrote it through one shared component,
+`audit.Origin` — run, app and instance on the runtime vocabulary's
+memberships ([ADR-0277](../adr/0277-one-audit-trail-for-model-calls-and-agent-work.md),
+Update of 2026-10-30). A store binds it beside its own DTOs through an
+alias, as those packages do, adding its ids with `storegen.AddOriginIds`
+when its vocabulary is not the runtime one; a hand-written lane writes the
+same three slots, `""` and `0` when unattributed.
 
 The one seam worth understanding before you start is
 `factsschema/storegen.MembershipIds`. A store bakes membership ids into its

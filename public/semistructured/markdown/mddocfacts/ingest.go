@@ -99,6 +99,10 @@ type Rows struct {
 	// Frontmatter is nil when the document has no YAML block. A block that
 	// failed to parse is still present, with no leaves.
 	Frontmatter *mdextract.Frontmatter
+	// Origin is who ingested the document (ADR-0330 §SD3); every row
+	// carries it, under its own row id. BuildRows leaves it zero —
+	// unattributed — and IngestDocument sets it.
+	Origin Origin
 }
 
 // Count is the number of rows Ingest will write.
@@ -220,55 +224,64 @@ func BuildRows(src []byte, fileName string, ts time.Time, ex *mdextract.Document
 	return
 }
 
-// IngestDocument extracts src and buffers every row for it. Rows ship on the
-// store's next Flush, like every write. The returned Rows are what was
-// buffered — the document Id is the key a reader filters on.
-func (inst *MddocStore) IngestDocument(src []byte, fileName string, ts time.Time) (rows Rows, err error) {
+// IngestDocument extracts src and buffers every row for it, each carrying
+// origin. Rows ship on the store's next Flush, like every write. The
+// returned Rows are what was buffered — the document Id is the key a reader
+// filters on.
+func (inst *MddocStore) IngestDocument(src []byte, fileName string, ts time.Time, origin Origin) (rows Rows, err error) {
 	rows = BuildRows(src, fileName, ts, mdextract.Extract(src))
+	rows.Origin = origin
 	err = inst.IngestRows(rows)
 	return
 }
 
+// begin opens one row carrying the ingest's origin under the row's id.
+func (inst *MddocStore) begin(id uint64, ts time.Time, naturalKey []byte, origin Origin) *MddocEntityBuilder {
+	origin.Id = id
+	return inst.Begin(id, ts, MddocEnvelope{NaturalKey: naturalKey}).AddOrigin(origin)
+}
+
 // IngestRows buffers one document's rows: the document, its items, and the
 // frontmatter row. Each row is its own entity; every one carries its natural
-// key in the envelope, which the generated Ingest<Kind> verbs do not set.
+// key in the envelope, which the generated Ingest<Kind> verbs do not set, and
+// rows.Origin.
 func (inst *MddocStore) IngestRows(rows Rows) (err error) {
 	ts := rows.Doc.Ts
-	if err = inst.Begin(rows.Doc.Id, ts, MddocEnvelope{NaturalKey: rows.Doc.NaturalKey}).AddMdDoc(rows.Doc).Commit(); err != nil {
+	if err = inst.begin(rows.Doc.Id, ts, rows.Doc.NaturalKey, rows.Origin).AddMdDoc(rows.Doc).Commit(); err != nil {
 		return eh.Errorf("ingest document row: %w", err)
 	}
 	for i := range rows.Headings {
 		r := &rows.Headings[i]
-		if err = inst.Begin(r.Id, ts, MddocEnvelope{NaturalKey: r.NaturalKey}).AddMdHeading(*r).Commit(); err != nil {
+		if err = inst.begin(r.Id, ts, r.NaturalKey, rows.Origin).AddMdHeading(*r).Commit(); err != nil {
 			return eb.Build().Uint64("ordinal", r.Ordinal).Errorf("ingest heading: %w", err)
 		}
 	}
 	for i := range rows.CodeBlocks {
 		r := &rows.CodeBlocks[i]
-		if err = inst.Begin(r.Id, ts, MddocEnvelope{NaturalKey: r.NaturalKey}).AddMdCodeBlock(*r).Commit(); err != nil {
+		if err = inst.begin(r.Id, ts, r.NaturalKey, rows.Origin).AddMdCodeBlock(*r).Commit(); err != nil {
 			return eb.Build().Uint64("ordinal", r.Ordinal).Errorf("ingest code block: %w", err)
 		}
 	}
 	for i := range rows.Links {
 		r := &rows.Links[i]
-		if err = inst.Begin(r.Id, ts, MddocEnvelope{NaturalKey: r.NaturalKey}).AddMdLink(*r).Commit(); err != nil {
+		if err = inst.begin(r.Id, ts, r.NaturalKey, rows.Origin).AddMdLink(*r).Commit(); err != nil {
 			return eb.Build().Uint64("ordinal", r.Ordinal).Errorf("ingest link: %w", err)
 		}
 	}
 	for i := range rows.Emphases {
 		r := &rows.Emphases[i]
-		if err = inst.Begin(r.Id, ts, MddocEnvelope{NaturalKey: r.NaturalKey}).AddMdEmphasis(*r).Commit(); err != nil {
+		if err = inst.begin(r.Id, ts, r.NaturalKey, rows.Origin).AddMdEmphasis(*r).Commit(); err != nil {
 			return eb.Build().Uint64("ordinal", r.Ordinal).Errorf("ingest emphasis: %w", err)
 		}
 	}
 	for i := range rows.Tags {
 		r := &rows.Tags[i]
-		if err = inst.Begin(r.Id, ts, MddocEnvelope{NaturalKey: r.NaturalKey}).AddMdTag(*r).Commit(); err != nil {
+		if err = inst.begin(r.Id, ts, r.NaturalKey, rows.Origin).AddMdTag(*r).Commit(); err != nil {
 			return eb.Build().Uint64("ordinal", r.Ordinal).Errorf("ingest tag: %w", err)
 		}
 	}
 	if rows.Frontmatter != nil {
-		if err = inst.ingestFrontmatter(rows.Doc, rows.Frontmatter); err != nil {
+		if err = inst.ingestFrontmatter(rows.Doc, rows.Frontmatter, rows.Origin); err != nil {
 			return eh.Errorf("ingest frontmatter: %w", err)
 		}
 	}
@@ -286,16 +299,31 @@ func (inst *MddocStore) IngestRows(rows Rows) (err error) {
 // ride the mixed channel on the typed sections — stringArray, i64Array,
 // f64Array, bool, timeArray — and on symbolArray for the value-less markers.
 // Nothing here mixes channels within a section.
-func (inst *MddocStore) ingestFrontmatter(doc MdDoc, fm *mdextract.Frontmatter) (err error) {
+func (inst *MddocStore) ingestFrontmatter(doc MdDoc, fm *mdextract.Frontmatter, origin Origin) (err error) {
 	id := itemId(doc.Id, KindMdFrontmatter, 0)
 	b := inst.Begin(id, doc.Ts, MddocEnvelope{NaturalKey: itemNaturalKey(doc.NaturalKey, KindMdFrontmatter, 0)})
 	raw := b.Raw()
+	origin.Id = id
 
+	// The origin's slots are written by its own codec into the raw frame,
+	// so the row reads as Origin by its slots (ADR-0146 §D5) though Raw()
+	// shuts out AddOrigin.
 	sym := raw.GetSectionSymbol()
 	sym.BeginAttribute(KindMdFrontmatter).
 		AddMembershipLowCardRef(mddocvocab.MembKindFrontmatter.GetId().Value()).
 		EndAttributeP()
+	if err = originEmitSectionSymbol(sym, origin); err != nil {
+		_ = b.Rollback()
+		return
+	}
 	sym.EndSection()
+
+	u64 := raw.GetSectionU64Array()
+	if err = originEmitSectionU64Array(u64, origin); err != nil {
+		_ = b.Rollback()
+		return
+	}
+	u64.EndSection()
 
 	fk := raw.GetSectionForeignKey()
 	fk.BeginAttribute(doc.Id).

@@ -1,9 +1,11 @@
 // Package loghost is the in-process start hook that wires boxer's
 // facts-based logging stack into a running CLI host. One call to Install
-// builds a logbridge.Sink over a FactsStoreI, fans zerolog's global
-// log.Logger out to both the operator-facing writer and the Sink, and
-// hands the Sink to the logviewer AppI so the in-process log viewer has a
-// live tail to read from.
+// decides whether log lines are persisted: with BOXER_LOG_FACTS set and
+// ClickHouse answering, it builds a logbridge.Sink over chstore, fans
+// zerolog's global log.Logger out to both the operator-facing writer and
+// the Sink, and hands the log viewer a source that reads the rows back
+// from boxer.facts. Otherwise no Sink is built and the viewer is told why
+// nothing is persisted (ADR-0345, the update of 2026-10-30).
 //
 // It exists as its own package (rather than living in logbridge) because
 // it depends on logviewer, and logviewer already depends on logbridge —
@@ -26,6 +28,8 @@ import (
 	"context"
 	"io"
 	"os"
+	"sync"
+	"sync/atomic"
 
 	"github.com/rs/zerolog/log"
 
@@ -37,33 +41,36 @@ import (
 	"github.com/stergiotis/boxer/public/observability/logging"
 )
 
-// Install builds a logbridge.Sink and rewires log.Logger to fan every
-// event out to both the operator writer and the Sink. The Sink is ALWAYS
-// installed so the in-process logviewer (and the logdemo companion app)
-// have a live tail to read from out of the box — no env var required.
+// Install rewires log.Logger onto the operator writer and, when log lines
+// can be persisted, onto a logbridge.Sink beside it.
 //
-// Storage backend selection:
-//   - BOXER_LOG_FACTS=1 (or any non-"0" non-empty value) → chstore,
-//     persisting every event to boxer.facts. BOXER_LOG_FACTS_URL
-//     overrides the default localhost CH URL. If the CH endpoint is
-//     unreachable, we log a warning and fall back to in-memory.
-//   - default (BOXER_LOG_FACTS unset or "0") → InMemoryFactsStore.
-//     Events still land in the Sink's tail ring (which the viewer
-//     reads); the flush ring drains into RAM that the process drops
-//     on exit. No external dependency.
+// Storage selection:
+//   - BOXER_LOG_FACTS=1 (or any non-"0" non-empty value) and ClickHouse
+//     reachable → a Sink over chstore persists every event to
+//     boxer.facts, and the log viewer reads them back from there.
+//     BOXER_LOG_FACTS_URL overrides the endpoint.
+//   - otherwise → no Sink. The operator writer is installed the same way
+//     (so --logFormat/--logFile/--logColor and the structured error
+//     marshaler behave identically), and the log viewer says log lines
+//     are not persisted and why. Nothing keeps log lines in memory for
+//     it: an in-process copy was retired with the viewer's move to
+//     boxer.facts.
 //
 // ctx scopes the store's setup round-trips (chstore.Ping / SetupTable);
 // hosts typically pass the context their Action received.
 //
-// Returns a closer the caller invokes at shutdown. Always safe to
-// call (closes the Sink either way).
+// Returns a closer the caller invokes at shutdown, which drains the Sink
+// when there is one and restores the previous logger. Always safe to
+// call.
 func Install(ctx context.Context) (closer func() error) {
-	closer = logbridge.NopCloser()
-	store, storeKind := selectFactsStore(ctx)
-	sink, serr := logbridge.NewSink(store, logbridge.Config{})
-	if serr != nil {
-		log.Warn().Err(serr).Msg("logbridge: NewSink failed — continuing without facts capture")
-		return
+	// The run is whatever has been initialised by now, and "" otherwise:
+	// Install does not mint one, since it runs in every imzero2 subcommand
+	// and a minted run would reach the processes they launch through the
+	// environment. The host adopts its run when it has one (AdoptRun).
+	runId := currentRun()
+	if inst, rErr := runinfo.Get(); rErr == nil {
+		runId = inst.RunId
+		AdoptRun(runId)
 	}
 	// Reuse the writer logging.Apply already built (OperatorWriter) as the
 	// operator-facing passthrough, so --logFormat/--logFile/--logColor are
@@ -75,15 +82,123 @@ func Install(ctx context.Context) (closer func() error) {
 	// OperatorWriter available, and avoids the v2 ordering hazard that put
 	// a stale writer on top of the bridge before.
 	passthrough := buildPassthroughWriter()
+	store, cfg, target, why := openFactsStore(ctx, runId)
+	if store == nil {
+		closer = logbridge.InstallGlobal(passthrough, nil)
+		logviewer.Register(&logviewer.Source{Run: currentRun, NotPersisted: why})
+		log.Info().Str("reason", why).Msg("logbridge: log lines are not persisted")
+		return
+	}
+	rs := newRunStore(store, cfg)
+	logStore.Store(rs)
+	sink, serr := logbridge.NewSink(rs, logbridge.Config{})
+	if serr != nil {
+		closer = logbridge.InstallGlobal(passthrough, nil)
+		why = "the log bridge could not start: " + serr.Error()
+		logviewer.Register(&logviewer.Source{Run: currentRun, NotPersisted: why})
+		log.Warn().Err(serr).Msg("logbridge: NewSink failed — log lines are not persisted")
+		return
+	}
 	closer = logbridge.InstallGlobal(passthrough, sink)
-	// Hand the same Sink to the logviewer AppI so the operator can
-	// tail the live log stream from inside the running process. The
-	// AppI is already registered via side-effect import (init()) when
-	// `logviewer` is in the import graph; RegisterSink wires the data
-	// source it reads from on each frame.
-	logviewer.RegisterSink(sink)
-	log.Info().Str("store", storeKind).Msg("logbridge: log bridge installed")
+	logviewer.Register(&logviewer.Source{Sink: sink, Read: readerOf(store), Run: currentRun})
+	log.Info().Str("store", target).Msg("logbridge: log bridge installed")
 	return
+}
+
+// adoptedRun is the run the host adopted; logStore is the store Install
+// built, when it built one.
+var (
+	adoptedRun atomic.Pointer[string]
+	logStore   atomic.Pointer[runStore]
+)
+
+// AdoptRun sets the run this process's log rows are stamped with from now
+// on (ADR-0191 §SD3) and the run the log viewer's This run scope reads.
+// The host calls it once its run identity exists — hostboot, right after
+// runinfo.Init. Rows the bridge wrote before carry the unknown run "".
+// Safe to call before or without Install, and more than once.
+func AdoptRun(runId string) {
+	adoptedRun.Store(&runId)
+	if rs := logStore.Load(); rs != nil {
+		rs.adopt(runId)
+	}
+}
+
+// currentRun is the adopted run, read by the viewer at query time.
+func currentRun() (runId string) {
+	if p := adoptedRun.Load(); p != nil {
+		runId = *p
+	}
+	return
+}
+
+// runStore is the store the log bridge writes through. A chstore.Store
+// stamps the run it was configured with, so adopting a run swaps in a
+// store built from the same configuration with that run; the bridge keeps
+// one writer, and every other method goes to the store Install built.
+type runStore struct {
+	factsstore.FactsStoreI
+	cfg chstore.Config
+
+	mu  sync.Mutex
+	run string
+	cur atomic.Pointer[chstore.Store]
+}
+
+// newRunStore wraps base, which was built from cfg.
+func newRunStore(base *chstore.Store, cfg chstore.Config) (inst *runStore) {
+	inst = &runStore{FactsStoreI: base, cfg: cfg, run: cfg.RunId}
+	inst.cur.Store(base)
+	return
+}
+
+func (inst *runStore) adopt(runId string) {
+	inst.mu.Lock()
+	defer inst.mu.Unlock()
+	if inst.run == runId {
+		return
+	}
+	cfg := inst.cfg
+	cfg.RunId = runId
+	next, err := chstore.New(cfg)
+	if err != nil {
+		log.Warn().Err(err).Msg("logbridge: adopting the run failed — log rows keep the previous run")
+		return
+	}
+	inst.run = runId
+	inst.cur.Store(next)
+}
+
+func (inst *runStore) WriteLog(row factsstore.LogRow) (id uint64, err error) {
+	id, err = inst.cur.Load().WriteLog(row)
+	return
+}
+
+func (inst *runStore) WriteLogs(rows []factsstore.LogRow) (ids []uint64, err error) {
+	ids, err = inst.cur.Load().WriteLogs(rows)
+	return
+}
+
+// readerOf adapts the store's log-row read to the viewer's query.
+func readerOf(store *chstore.Store) logviewer.ReadFunc {
+	return func(ctx context.Context, q logviewer.Query) (rows []logviewer.Entry, err error) {
+		limit := uint32(0)
+		if q.Limit > 0 {
+			limit = uint32(q.Limit)
+		}
+		read, err := store.LogRows(ctx, chstore.LogRowsFilter{
+			Since: q.Since, Levels: q.Levels, AppContains: q.App, MessageContains: q.Message,
+			RunId: q.RunId, InstanceKey: q.InstanceKey, Limit: limit,
+		})
+		if err != nil {
+			return
+		}
+		rows = make([]logviewer.Entry, len(read))
+		for i, r := range read {
+			rows[i] = logviewer.Entry{Row: r.Row, RunId: r.RunId}
+		}
+		return
+	}
 }
 
 // buildPassthroughWriter returns the operator-facing writer the bridge
@@ -120,7 +235,7 @@ func buildPassthroughWriter() (w io.Writer) {
 // and, critically, SHORT-CIRCUITS subsequent writers in the chain
 // (writer.go:84-92 — `if err == nil` guard). Without this adapter, a
 // ConsoleWriter sitting upstream of the bridge Sink would silently
-// drop every event from the Sink, leaving the logviewer's tail empty
+// drop every event from the Sink, leaving boxer.facts without them
 // even though the operator sees pretty logs on stderr — exactly the
 // "logs on stderr, blank viewer" symptom that motivated the fix.
 type fullWriteAdapter struct {
@@ -133,54 +248,45 @@ func (w fullWriteAdapter) Write(p []byte) (n int, err error) {
 	return
 }
 
-// selectFactsStore picks the FactsStoreI backing the log bridge. When
-// BOXER_LOG_FACTS is enabled and the ClickHouse endpoint reachable we
-// route through chstore so events persist. Otherwise we fall back to
-// an in-memory store — the Sink and its tail ring still work, which
-// is all the logviewer / logdemo demo needs.
+// openFactsStore returns the ClickHouse store log lines are persisted
+// to, or nil and why not: BOXER_LOG_FACTS unset, or set with ClickHouse
+// not answering. target names the endpoint for the start-up line.
 //
 // The server and its credentials come from chstore.ConfigFromEnv (the
 // CLICKHOUSE_* entries), with BOXER_LOG_FACTS_URL overriding the endpoint
 // for this store alone.
-func selectFactsStore(ctx context.Context) (store factsstore.FactsStoreI, kind string) {
+func openFactsStore(ctx context.Context, runId string) (store *chstore.Store, cfg chstore.Config, target string, why string) {
+	name := chstore.LogFactsEnabled.Spec().Name
 	v := chstore.LogFactsEnabled.Get()
 	if v == "" || v == "0" {
-		store = factsstore.NewInMemoryFactsStore()
-		kind = "memory"
+		why = name + " is not set"
 		return
 	}
-	cfg := chstore.ConfigFromEnv()
+	cfg = chstore.ConfigFromEnv()
 	if url := chstore.LogFactsURL.Get(); url != "" {
 		cfg.URL = url
 	}
-	// Stamp the run on every row this store writes (ADR-0191 §SD3). A log
-	// line already carries the run as a zerolog field; the membership is
-	// what lets a reader filter on it without unpacking the field lane.
-	// runinfo.Get errors before Init has run — a host that never called it
-	// writes unstamped rows, as it did before.
-	if inst, rErr := runinfo.Get(); rErr == nil {
-		cfg.RunId = inst.RunId
-	}
+	// Stamp the run on every row this store writes (ADR-0191 §SD3); the
+	// membership is what lets a reader filter on it without unpacking the
+	// field lane. "" until the host adopts its run.
+	cfg.RunId = runId
 	chStore, err := chstore.New(cfg)
 	if err != nil {
-		log.Warn().Err(err).Msg("logbridge: chstore.New failed — falling back to in-memory facts store")
-		store = factsstore.NewInMemoryFactsStore()
-		kind = "memory"
+		log.Warn().Err(err).Msg("logbridge: chstore.New failed — log lines are not persisted")
+		why = name + " is set but the ClickHouse store could not be configured"
 		return
 	}
 	if perr := chStore.Ping(ctx); perr != nil {
-		log.Warn().Err(perr).Str("url", cfg.URL).Msg("logbridge: ClickHouse unreachable — falling back to in-memory facts store")
-		store = factsstore.NewInMemoryFactsStore()
-		kind = "memory"
+		log.Warn().Err(perr).Str("url", cfg.URL).Msg("logbridge: ClickHouse unreachable — log lines are not persisted")
+		why = name + " is set but ClickHouse at " + cfg.URL + " did not answer; the status line says whether the audit trail is durable"
 		return
 	}
 	if serr := chStore.SetupTable(ctx, ""); serr != nil {
-		log.Warn().Err(serr).Msg("logbridge: SetupTable failed — falling back to in-memory facts store")
-		store = factsstore.NewInMemoryFactsStore()
-		kind = "memory"
+		log.Warn().Err(serr).Msg("logbridge: SetupTable failed — log lines are not persisted")
+		why = name + " is set but boxer.facts could not be set up on " + cfg.URL
 		return
 	}
 	store = chStore
-	kind = "clickhouse@" + cfg.URL
+	target = "clickhouse@" + cfg.URL
 	return
 }

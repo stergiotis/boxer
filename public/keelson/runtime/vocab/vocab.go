@@ -55,6 +55,10 @@ var (
 	// string (e.g. "grant") for readability; the membership id identifies
 	// which kind the row belongs to.
 	MembKindGrant = NkRegistry.MustBegin("runtimeKindGrant", 0).End()
+	// MembKindAudit tagged the bus's per-request rows. Nothing writes it
+	// since a bus request became an audit event on the trail (ADR-0296's
+	// Update of 2026-10-30), and nothing reads it; the ordinal stays, as
+	// every ordinal does.
 	MembKindAudit = NkRegistry.MustBegin("runtimeKindAudit", 1).End()
 	MembKindState = NkRegistry.MustBegin("runtimeKindState", 2).End()
 	MembKindEvent = NkRegistry.MustBegin("runtimeKindEvent", 3).End()
@@ -71,7 +75,7 @@ var (
 	MembGrantSticky         = NkRegistry.MustBegin("runtimeSubjectFilterSticky", 9).End()
 	MembGrantedVia          = NkRegistry.MustBegin("runtimeSubjectFilterGrantedVia", 10).End()
 
-	// Audit fields
+	// Audit fields: the retired bus-request kind's (see MembKindAudit).
 	MembAuditRequestSubject = NkRegistry.MustBegin("runtimeAuditRequestSubject", 11).End()
 	MembAuditResult         = NkRegistry.MustBegin("runtimeAuditResult", 12).End()
 	MembAuditLatencyMs      = NkRegistry.MustBegin("runtimeAuditLatencyMs", 13).End()

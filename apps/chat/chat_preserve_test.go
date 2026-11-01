@@ -157,7 +157,7 @@ func preserveCorpus() []preserveScenario {
 		{name: "desktop-and-marks", apps: true, turns: []preserveTurn{
 			{text: "tidy the desktop", replies: []openaichat.CompletionResponse{
 				tool("r1", "request_access", `{"plan":"tidy the desktop","open":["notes"]}`),
-				tool("a1", "arrange_windows", `{"command":"tile"}`),
+				tool("a1", "arrange_windows", `{"command":"cascade"}`),
 				tool("r2", "request_access", `{"plan":"tidy the desktop","desktop":true}`),
 				tool("a2", "arrange_windows", `{"command":"columns","windows":[100]}`),
 				tool("x1", "raise_window", `{"window":7}`),

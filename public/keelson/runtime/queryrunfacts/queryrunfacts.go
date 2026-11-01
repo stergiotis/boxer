@@ -122,6 +122,9 @@ func EncodeEntity(ent *dml.InEntityFacts, row Row) {
 	ent.BeginEntity().SetId(id, []byte(row.QueryId)).SetTimestamp(row.Ts())
 
 	st, hasStamp := ParseStamp(row.LogComment)
+	if !hasStamp {
+		st = logcomment.Stamp{}
+	}
 
 	sym := ent.GetSectionSymbol()
 	sym.BeginAttribute(KindLabel).AddMembershipLowCardRef(vocab.MembKindQueryRun.GetId().Value()).EndAttribute()
@@ -131,13 +134,14 @@ func EncodeEntity(ent *dml.InEntityFacts, row Row) {
 	if row.QueryKind != "" {
 		sym.BeginAttribute(row.QueryKind).AddMembershipLowCardRef(vocab.MembQueryRunQueryKind.GetId().Value()).EndAttribute()
 	}
+	// The origin's slots (ADR-0330 §SD3), hand-written as the rest of the
+	// row is: the stamp's run, app and window, written always — "" and 0
+	// when the query carried no stamp, unattributed (ADR-0191 §SD3) — so
+	// every query run reads as audit.Origin by one predicate. The stamp is
+	// the issuing process's claim, not the capture's.
+	sym.BeginAttribute(st.App).AddMembershipLowCardRef(vocab.MembRuntimeApp.GetId().Value()).EndAttribute()
+	sym.BeginAttribute(st.RunId).AddMembershipLowCardRef(vocab.MembRuntimeRun.GetId().Value()).EndAttribute()
 	if hasStamp {
-		if st.App != "" {
-			sym.BeginAttribute(st.App).AddMembershipLowCardRef(vocab.MembRuntimeApp.GetId().Value()).EndAttribute()
-		}
-		if st.RunId != "" {
-			sym.BeginAttribute(st.RunId).AddMembershipLowCardRef(vocab.MembRuntimeRun.GetId().Value()).EndAttribute()
-		}
 		if st.Lane != "" {
 			sym.BeginAttribute(st.Lane).AddMembershipLowCardRef(vocab.MembQueryRunLane.GetId().Value()).EndAttribute()
 		}
@@ -184,11 +188,9 @@ func EncodeEntity(ent *dml.InEntityFacts, row Row) {
 	u64.BeginAttributeSingle(row.NormalizedHash).AddMembershipLowCardRef(vocab.MembQueryRunNormalizedHash.GetId().Value()).EndAttribute()
 	// The window (ADR-0191 §SD4), spelled with the lifecycle cohort's
 	// membership so this row joins its app-lifecycle row on one column.
-	// Absent when zero, matching the counters below.
-	if hasStamp && st.Instance != 0 {
-		u64.BeginAttributeSingle(st.Instance).
-			AddMembershipLowCardRef(vocab.MembLifecycleTileKey.GetId().Value()).EndAttribute()
-	}
+	// Written zero included: it is the origin's instance slot.
+	u64.BeginAttributeSingle(st.Instance).
+		AddMembershipLowCardRef(vocab.MembLifecycleTileKey.GetId().Value()).EndAttribute()
 	if hasStamp && st.Task != "" {
 		u64.BeginAttributeSingle(st.TaskEpoch).
 			AddMembershipLowCardRef(vocab.MembTrailTaskEpoch.GetId().Value()).EndAttribute()

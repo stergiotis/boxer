@@ -151,12 +151,8 @@ func (inst *Inst) renderRows(ids *c.WidgetIdStack, visible []app.Manifest, rows 
 		et := c.EndETable(ids.PrepareStr("launcher-rows"), uint64(len(rows)), inst.rowHeight(), 0, 0).
 			FillPane(true).
 			AutoSizeMode(etAutoSizeAlways)
-		rowBegin, rowEnd := 0, len(rows)
-		if rb, re, _, _, _, ok := et.VisibleRange(); ok {
-			rowBegin = min(int(rb), len(rows))
-			rowEnd = min(int(re), rowEnd)
-		}
-		for i := rowBegin; i < rowEnd; i++ {
+		lo, hi := et.VisibleRows(uint64(len(rows)), c.EtScreenfulRows(0, inst.rowHeight()), -1)
+		for i := int(lo); i < int(hi); i++ {
 			r := rows[i]
 			if r.heading != "" {
 				inst.renderHeadingRow(ids, et, i, r.heading)
@@ -356,7 +352,8 @@ func (inst *Inst) renderAppRow(ids *c.WidgetIdStack, et c.EndETableFluid, rowIdx
 		return
 	}
 	if flags.HasPrimaryClicked() {
-		inst.cursor = rowIdx
+		// The person's selection, through the catalog (ADR-0345 §SD3).
+		inst.selectGesture(m.Id, rowIdx)
 		// And the list takes focus, so the keyboard continues from where the
 		// pointer left off: ↑/↓ walk on from the clicked row, and Space or
 		// Enter open it — the Open button in the detail pane shows itself as

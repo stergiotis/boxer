@@ -72,7 +72,7 @@ func (inst *App) syncLevels() {
 		return
 	}
 	bus := inst.bus
-	l.job.Start(nil, bgjob.Spec{Kind: "chat-levels", Title: "read the levels"}, func(context.Context) (out *fetchedLevels, err error) {
+	l.job.Start(inst.tasks, bgjob.Spec{Kind: "chat-levels", Title: "read the levels"}, func(context.Context) (out *fetchedLevels, err error) {
 		s, err := attention.FetchLevels(bus, conv)
 		if err != nil {
 			return

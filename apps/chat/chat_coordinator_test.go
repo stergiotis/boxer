@@ -222,6 +222,8 @@ func (inst *noteHost) RenderTree(k []uint64, recheck func() bool) (string, error
 func (inst *noteHost) OpsArrange(string, []uint64) error                         { return nil }
 func (inst *noteHost) OpsRaise(uint64) error                                     { return nil }
 func (inst *noteHost) OpsPlace(uint64, float32, float32, float32, float32) error { return nil }
+func (inst *noteHost) OpsLayout(string, float32, int) error                      { return nil }
+func (inst *noteHost) OpsFloat(uint64, bool) error                               { return nil }
 func (inst *noteHost) SourceStatus(string) (capture.SourceResult, bool) {
 	return capture.SourceResult{}, false
 }
@@ -696,10 +698,12 @@ func TestArrangeWindowsAsksForTheDesktop(t *testing.T) {
 	bus := inprocbus.NewInst(zerolog.Nop())
 	model := &scriptedModel{replies: []openaichat.CompletionResponse{
 		toolCall("r1", "request_access", `{"plan":"tidy the desktop","open":["notes"]}`),
-		toolCall("a1", "arrange_windows", `{"command":"tile"}`),
+		toolCall("a1", "arrange_windows", `{"command":"cascade"}`),
 		toolCall("r2", "request_access", `{"plan":"tidy the desktop","desktop":true}`),
 		toolCall("a2", "arrange_windows", `{"command":"columns","windows":[100]}`),
 		toolCall("x1", "raise_window", `{"window":7}`),
+		toolCall("l1", "set_layout", `{"layout":"main-stack","main_ratio":0.5}`),
+		toolCall("f1", "float_window", `{"window":100,"floating":true}`),
 		{Content: "done", FinishReason: "stop"},
 	}}
 	_, coord, cli, req, ctx := coordRig(t, bus, model, false)
@@ -711,6 +715,8 @@ func TestArrangeWindowsAsksForTheDesktop(t *testing.T) {
 	assert.Contains(t, replies["r2"], "access granted")
 	assert.Contains(t, replies["a2"], "completed")
 	assert.Contains(t, replies["x1"], "does not cover", "a window outside the task is not raised")
+	assert.Contains(t, replies["l1"], "completed", "the layout rides on the desktop grant (ADR-0346 §SD6)")
+	assert.Contains(t, replies["f1"], "completed")
 }
 
 // The settings are a ceiling the host enforces (ADR-0280): a model asking

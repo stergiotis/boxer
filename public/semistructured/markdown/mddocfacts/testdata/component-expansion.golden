@@ -5,6 +5,12 @@
 #
 # Regenerate with BOXER_MDDOCFACTS_COMPONENT_REGEN=1 go test ./public/semistructured/markdown/mddocfacts/...
 
+## Origin
+-- authored
+SELECT LW_COMPONENT('Origin') AS c FROM boxer.facts
+-- expanded
+SELECT CAST(tuple("id:id:u64:47::0:", LW_VALUE_BY_TAG_EQUAL("tv:symbol:value:val:s:124::I:0::data", "tv:symbol:lr:lr:u64:1247:::0::data", 9223372049739677716, LW_RAGGED_PARENT_IDS("tv:symbol:lrcard:lrcard:u64:4E:::0::data")), LW_VALUE_BY_TAG_EQUAL("tv:symbol:value:val:s:124::I:0::data", "tv:symbol:lr:lr:u64:1247:::0::data", 9223372049739677701, LW_RAGGED_PARENT_IDS("tv:symbol:lrcard:lrcard:u64:4E:::0::data")), LW_LIST_BY_TAG_EQUAL("tv:u64Array:value:val:u64h:4:::0::data", "tv:u64Array:len:len:u64:4D:::0::data", "tv:u64Array:lr:lr:u64:1247:::0::data", 9223372049739677728, LW_RAGGED_PARENT_IDS("tv:u64Array:lrcard:lrcard:u64:4E:::0::data"))[1]), 'Tuple(Id UInt64, Run String, App String, Instance UInt64)') AS c FROM boxer.facts WHERE (hasAll("tv:symbol:lr:lr:u64:1247:::0::data", [9223372049739677716, 9223372049739677701]) AND has("tv:u64Array:lr:lr:u64:1247:::0::data", 9223372049739677728) AND countEqual("tv:symbol:lr:lr:u64:1247:::0::data", 9223372049739677716) = 1 AND countEqual("tv:symbol:lr:lr:u64:1247:::0::data", 9223372049739677701) = 1 AND countEqual("tv:u64Array:lr:lr:u64:1247:::0::data", 9223372049739677728) = 1 AND if(has("tv:u64Array:lr:lr:u64:1247:::0::data", 9223372049739677728), "tv:u64Array:len:len:u64:4D:::0::data"[arrayFirstIndex(cum -> cum >= indexOf("tv:u64Array:lr:lr:u64:1247:::0::data", 9223372049739677728), arrayCumSum("tv:u64Array:lrcard:lrcard:u64:4E:::0::data"))], 0) = 1)
+
 ## MdDoc
 -- authored
 SELECT LW_COMPONENT('MdDoc') AS c FROM boxer.facts

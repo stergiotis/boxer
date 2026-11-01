@@ -17,7 +17,10 @@ import (
 
 // componentPaths is the DTO set the store is generated over. Adding a domain
 // (ADR-0184 M4/M5) adds a line here and to the vocabulary, in that order.
+// The origin leads: it is the audit package's (ADR-0330 §SD3), bound through
+// the alias in origin.go, and every row the tee writes carries it.
 var componentPaths = []string{
+	"../../../storage/recordstore/evidence/audit/origin_dto.go",
 	"./syscpu_dto.go",
 	"./syscpuinfo_dto.go",
 	"./sysmem_dto.go",
@@ -51,6 +54,7 @@ func vocabIds(t *testing.T) map[string]uint64 {
 	t.Helper()
 	ids, err := storegen.MembershipIds(sysmvocab.NkRegistry)
 	require.NoError(t, err)
+	require.NoError(t, storegen.AddOriginIds(ids))
 	return ids
 }
 
@@ -166,7 +170,7 @@ func TestComponentSQLRegistersAndResolves(t *testing.T) {
 	r := componentsql.NewRegistry()
 	require.NoError(t, r.Register(sysmfacts.SysmetricsComponentSQL))
 
-	assert.Len(t, r.Kinds(), 13, "every kind the store carries should be published")
+	assert.Len(t, r.Kinds(), 14, "every kind the store carries should be published: thirteen domains and the origin")
 
 	b, ok := r.Lookup("SysMem")
 	require.True(t, ok)

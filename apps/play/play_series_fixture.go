@@ -12,6 +12,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/adhocdata"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
+	"github.com/stergiotis/boxer/public/keelson/runtime/task"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
@@ -260,7 +261,11 @@ func (inst *PlayApp) publishFixture(spec fixtureSpec) {
 	st.mu.Unlock()
 
 	go func() {
-		summary, err := doPublishFixture(inst.bus, spec, st)
+		var summary string
+		err := task.RunToCompletion(inst.client.Tasks(), task.SpawnOpts{Kind: "play.fixture.series", Title: "publish the series fixture"}, func() (err error) {
+			summary, err = doPublishFixture(inst.bus, spec, st)
+			return
+		})
 		st.mu.Lock()
 		st.publishing = false
 		st.err = err

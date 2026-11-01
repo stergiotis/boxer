@@ -112,6 +112,12 @@ type App struct {
 	// The frame's own state.
 	selected string
 	armed    *armedForget
+	// frameCtx is the current frame's context, through which the app list
+	// and Refresh route as the person's gestures (appstate_ops.go,
+	// ADR-0345).
+	frameCtx app.FrameContextI
+	// latchedRead is the read resource as this frame sees it (latchRead).
+	latchedRead readValue
 
 	mu   sync.Mutex
 	snap snapshot
@@ -158,6 +164,8 @@ func (inst *App) Unmount(ctx app.MountContextI) (err error) {
 
 func (inst *App) Frame(ctx app.FrameContextI) (err error) {
 	inst.density = styletokens.ActiveDensity()
+	inst.frameCtx = ctx
+	inst.latchRead()
 	inst.render()
 	return
 }

@@ -1,6 +1,7 @@
 package obsidian
 
 import (
+	"github.com/stergiotis/boxer/public/semistructured/markdown/obsidian/ext/blockid"
 	"github.com/stergiotis/boxer/public/semistructured/markdown/obsidian/ext/callout"
 	"github.com/stergiotis/boxer/public/semistructured/markdown/obsidian/ext/comment"
 	"github.com/stergiotis/boxer/public/semistructured/markdown/obsidian/ext/embed"
@@ -100,6 +101,15 @@ func HeadingAnchor(h *ast.Heading) (anchor string, ok bool) {
 	return
 }
 
+// BlockId returns the Obsidian block id recorded on a block parsed with
+// [FeatureBlockId], and whether it carries one. The accessor for what that
+// feature parses, as [HeadingAnchor] is for its own: both land in the node's
+// `id` attribute, so a heading's explicit anchor answers here too, and a
+// caller that wants block ids alone skips headings.
+func BlockId(n ast.Node) (id string, ok bool) {
+	return blockid.Of(n)
+}
+
 func collectExtensions(opts Options) (exts []goldmark.Extender) {
 	r := opts.Resolver
 	if r == nil {
@@ -122,6 +132,9 @@ func collectExtensions(opts Options) (exts []goldmark.Extender) {
 	}
 	if opts.Features&FeatureEmbed != 0 {
 		exts = append(exts, &embed.Extender{Resolver: r})
+	}
+	if opts.Features&FeatureBlockId != 0 {
+		exts = append(exts, &blockid.Extender{})
 	}
 	if opts.Features&FeatureCallout != 0 {
 		exts = append(exts, &callout.Extender{})

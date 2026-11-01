@@ -26,6 +26,8 @@ var manifest = app.Manifest{
 	Topics:   []app.TopicT{app.TopicRuntime},
 	Keywords: []string{"app state", "persist", "workingset", "column width", "forget", "clear", "storage"},
 	Surface:  app.SurfaceWindowed,
+	// The operations catalog (ADR-0345), in appstate_ops.go.
+	Operations: ops.Catalog(),
 	SurfaceHints: app.SurfaceHints{
 		PreferredWidth:  1100,
 		PreferredHeight: 700,

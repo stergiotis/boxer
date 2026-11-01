@@ -100,6 +100,19 @@ Deferred:
 
 ## Updates
 
+### 2026-10-30 — the Tile command is retired; its grid is ADR-0346's live Tile layout
+
+The one-shot Tile arrangement is gone from the Window menu, from `ArrangeE`
+and from the agent verb's commands (`arrange_windows` takes cascade,
+columns, rows and gather). [ADR-0346](./0346-imzero2-tiled-desktop-dynamic-layouts-over-floating-windows.md)
+keeps the same grid live as a layout, which is what a person reaching for
+Tile wanted: a grid that holds as windows open and close rather than one
+that the next window breaks. The geometry stays in `windowhost` for that
+layout. The integration scene's Tile check went with the command; it had
+begun to fail for a reason outside the arrangement, the launcher's content
+having grown past what a grid row fits, which the live layout's scene
+asserts without a width.
+
 ### 2026-10-04 — the arrangements have an integration lane, and placement fixes extent only where content fills it
 
 `TestSceneWindowArrangements`

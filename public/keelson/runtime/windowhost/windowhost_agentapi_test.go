@@ -41,7 +41,7 @@ func TestWindowVerbsQueueAndRefuseUnknownKeys(t *testing.T) {
 
 	// A list with one wrong key queues nothing.
 	h.pendingArrange, h.pendingArrangeKeys = ArrangeNone, nil
-	assert.Error(t, h.ArrangeWindows(ArrangeTile, []WindowKeyT{a, 99}))
+	assert.Error(t, h.ArrangeWindows(ArrangeColumns, []WindowKeyT{a, 99}))
 	assert.Equal(t, ArrangeNone, h.pendingArrange)
 	assert.Error(t, h.ArrangeWindows(ArrangeNone, nil))
 	assert.Error(t, h.ArrangeWindows(ArrangeE(200), nil))
@@ -55,7 +55,7 @@ func TestWindowVerbsQueueAndRefuseUnknownKeys(t *testing.T) {
 // next pass would move the window again.
 func TestApplyPlacesEndsAnArrangement(t *testing.T) {
 	h, a, b := twoWindows(t)
-	h.arranging = &arrangeRun{cmd: ArrangeTile}
+	h.arranging = &arrangeRun{cmd: ArrangeColumns}
 	h.windows[0].maximized = true
 	r := rectAt(10, 40, 300, 200)
 	h.applyPlaces(map[WindowKeyT]Rect{a: r}, h.windows)

@@ -50,6 +50,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/launcher"
 	"github.com/stergiotis/boxer/public/keelson/runtime/launchlimit"
 	"github.com/stergiotis/boxer/public/keelson/runtime/llm"
+	"github.com/stergiotis/boxer/public/keelson/runtime/loghost"
 	"github.com/stergiotis/boxer/public/keelson/runtime/moderator"
 	"github.com/stergiotis/boxer/public/keelson/runtime/natsbus"
 	"github.com/stergiotis/boxer/public/keelson/runtime/persist"
@@ -94,6 +95,10 @@ const (
 	// persistOpenTimeout bounds the persist store backend's DDL over HTTP: a
 	// server that answered the ping and then stalls must not hang boot.
 	persistOpenTimeout = 15 * time.Second
+	// trailFlushInterval is how often the host's trail lands rows nothing
+	// asked to land, such as bus requests; it bounds both their delay and
+	// the seals they add, one per flush that lands rows.
+	trailFlushInterval = time.Second
 	// serviceStopTimeout bounds each service's shutdown in Close.
 	serviceStopTimeout = 5 * time.Second
 	// sysmetricsInterval is the co-located scraper's sampling period.
@@ -213,7 +218,7 @@ type Options struct {
 	// DefaultFactsPingTimeout.
 	FactsPingTimeout time.Duration
 	// ExtraAuditSinks receive every audited bus request beside the durable
-	// facts sink (the carousel adds the capability inspector's counters).
+	// trail sink (the carousel adds the capability inspector's counters).
 	ExtraAuditSinks []audit.AuditSinkI
 	// VideoOutput and HelpHost enable the corresponding chrome menus
 	// (imzhost.ChromeConfig).
@@ -343,6 +348,9 @@ type Runtime struct {
 	cleanups  []func()
 	reapOnce  sync.Once
 	closeOnce sync.Once
+	// showRunning opens the app center on its Running tab, for the Window
+	// menu (ADR-0348); nil where the app center cannot be launched.
+	showRunning func() (err error)
 }
 
 // Boot wires the runtime in the carousel's order (ADR-0211 §SD1): identity,
@@ -364,6 +372,9 @@ func Boot(ctx context.Context, opts Options) (rt *Runtime, err error) {
 	if riErr != nil {
 		logger.Warn().Err(riErr).Msg("runinfo init failed; continuing without run identity")
 	} else {
+		// The log bridge was installed before the run existed; its rows
+		// carry this run from here on (ADR-0345, the update of 2026-10-30).
+		loghost.AdoptRun(runInst.RunId)
 		logger = runinfo.TagLogger(logger, runInst)
 		logger.Info().
 			Str("run_id", runInst.RunId).
@@ -424,16 +435,9 @@ func Boot(ctx context.Context, opts Options) (rt *Runtime, err error) {
 	}
 
 	// In-proc subject router (ADR-0026 §SD3, §SD5), unconditional so apps
-	// with declared Caps have a real BusI. The durable facts sink is wrapped
-	// asynchronously so audited Requests do not pay a synchronous insert
-	// inline; Close drains it last.
+	// with declared Caps have a real BusI. Its audit sink is wired once the
+	// trail it records through exists (bootServices).
 	rt.Bus = inprocbus.NewInst(logger)
-	auditSink := audit.NewAsyncSink(factsstore.AsAuditSink(rt.Facts), 0)
-	rt.cleanups = append(rt.cleanups, auditSink.Close)
-	sinks := make(audit.MultiSink, 0, 1+len(opts.ExtraAuditSinks))
-	sinks = append(sinks, auditSink)
-	sinks = append(sinks, opts.ExtraAuditSinks...)
-	rt.Bus.SetAuditSink(sinks)
 
 	rt.bootServices(ctx, factsCfg)
 
@@ -554,8 +558,21 @@ func (rt *Runtime) bootServices(ctx context.Context, factsCfg chstore.Config) {
 	rt.Anchors = orgAnchorStore(ctx, runId, logger)
 	// The host's own recorder: an audit event it writes has its origin
 	// established by the host (ADR-0327 §SD6), and its seals anchor.
-	rt.Trail = trail.NewRecorder(rt.PersistExec, runId, logger, trail.WithOriginBy(evidence.OriginByHost), trail.WithAnchors(rt.Anchors))
+	// It flushes on an interval too: the bus requests it records are rows
+	// nothing asks to land.
+	rt.Trail = trail.NewRecorder(rt.PersistExec, runId, logger, trail.WithOriginBy(evidence.OriginByHost), trail.WithAnchors(rt.Anchors),
+		trail.WithFlushInterval(trailFlushInterval))
 	rt.cleanups = append(rt.cleanups, rt.Trail.Close)
+	// Every audited bus request becomes an audit event on the trail
+	// (ADR-0296's Update of 2026-10-30), recorded asynchronously so a
+	// Request never waits on the recorder's lock. The sink closes before the
+	// trail — cleanups run in reverse — so what it drains still lands.
+	auditSink := audit.NewAsyncSink(trail.AsAuditSink(rt.Trail), 0)
+	rt.cleanups = append(rt.cleanups, auditSink.Close)
+	sinks := make(audit.MultiSink, 0, 1+len(rt.opts.ExtraAuditSinks))
+	sinks = append(sinks, auditSink)
+	sinks = append(sinks, rt.opts.ExtraAuditSinks...)
+	rt.Bus.SetAuditSink(sinks)
 	if trail.RequiredEnv.Get() && !rt.Trail.Durable() {
 		logger.Warn().Msg("trail: BOXER_TRAIL_REQUIRED is set and this host has no durable backend; model calls and egress fetches will be refused")
 	}
@@ -782,6 +799,11 @@ func (rt *Runtime) bootWindowHost() (err error) {
 	}
 	host := windowhost.NewInst(reg, logger)
 	host.SetBus(rt.Bus)
+	if l, ok := windowhost.ParseLayout(imzero2env.DesktopLayout.Get()); ok && l.Tiled() {
+		// The desktop's layout at launch (ADR-0346 §SD7); the Window menu
+		// switches it afterwards.
+		_ = host.SetLayout(l)
+	}
 	if rt.Cell != nil {
 		// The apps label by the host's declaration (cell.OfMount).
 		host.SetMountValue(cell.MountKey{}, rt.Cell)
@@ -800,20 +822,27 @@ func (rt *Runtime) bootWindowHost() (err error) {
 	// neither package imports the other's types.
 	lchr := launcher.Default
 	lchr.SetHost(host)
+	// The app center's Running tab closes windows through the host itself,
+	// not over the bus (ADR-0348 §SD4).
+	appcenter.SetHost(host)
 	lchr.SetHelpApp(helphost.ManifestId)
 	// The detail pane's Inspect (ADR-0260 §SD1): the app center, opened on
 	// the app the pane shows. Wired only where the registry holds it, so a
 	// host built over a narrower registry shows no dead action.
 	// Nor where the launch limit (ADR-0272) refuses the app center.
+	// The Window menu's Running windows opens it on no app, which is its
+	// Running tab (ADR-0348 §SD1).
 	if _, ok := reg.LookupManifest(appcenter.AppId); ok && reg.Launchable(appcenter.AppId) {
-		lchr.SetInspect(func(target app.AppIdT) (err error) {
+		openAppCenter := func(target app.AppIdT) (err error) {
 			cfg, err := buscodec.Encode(appcenterlaunch.AppCenterLaunch{At: time.Now().UTC(), AppId: string(target)})
 			if err != nil {
 				return
 			}
 			_, err = host.OpenWithConfig(appcenter.AppId, appcenterlaunch.Kind, cfg)
 			return
-		})
+		}
+		lchr.SetInspect(openAppCenter)
+		rt.showRunning = func() error { return openAppCenter("") }
 	}
 	// Ranking, when the facts store can answer for it (ADR-0214 §SD7). A
 	// no-op against the in-memory fallback, which is the correct behaviour
@@ -951,7 +980,8 @@ func (rt *Runtime) bootWindowHost() (err error) {
 // bootSysmetrics puts the system-metrics plane (ADR-0090) on the host bus:
 // bridged from NATS when IMZERO2_SYSMETRICS_NATS_URL is set (an external
 // sysmetricsd reads /proc in its own sandbox), otherwise a co-located
-// scraper. Process-lifetime; failures leave the metric panels empty.
+// scraper that samples only while a subscription wants its bundles.
+// Process-lifetime; failures leave the metric panels empty.
 func (rt *Runtime) bootSysmetrics() {
 	logger := rt.opts.Log
 	metricPub := rt.Bus.NewClient(sysmetricsbus.ServiceAppId, []app.SubjectFilter{
@@ -971,9 +1001,18 @@ func (rt *Runtime) bootSysmetrics() {
 		logger.Info().Str("url", natsURL).Msg("hostboot: bridging system metrics from NATS onto the host bus")
 		return
 	}
-	if _, serr := sysmscrape.StartScraper(context.Background(), metricPub, sysmetricsbus.DefaultHostToken(), sysmetricsInterval, logger); serr != nil {
+	subject := sysmetricsbus.BundleSubject(sysmetricsbus.DefaultHostToken())
+	demand := func() bool { return rt.Bus.HasSubscriber(subject) }
+	if _, serr := sysmscrape.StartScraperWithDemand(context.Background(), metricPub, sysmetricsbus.DefaultHostToken(), sysmetricsInterval, demand, logger); serr != nil {
 		logger.Warn().Err(serr).Msg("hostboot: sysmetrics scraper unavailable; metric panels will be empty")
 	}
+}
+
+// observesTopology reports whether the deployment declares a topology for
+// this host to observe: the process carries a component mark, or a metric
+// plane is bridged from NATS. A run from a shell has neither.
+func observesTopology() bool {
+	return topo.Self() != "" || sysmetricsbus.NatsURL.Get() != ""
 }
 
 // bootAgent starts the app operations service (ADR-0269) once the window
@@ -1175,6 +1214,7 @@ func (rt *Runtime) bootIntrospect() {
 		WindowHost:       rt.Host,
 		Bus:              rt.Bus,
 		ChlocalAvailable: rt.ChLocal != nil,
+		ObserveTopology:  observesTopology(),
 		QueryStarted:     func() { rt.KeelsonQuery = true },
 		Registry:         rt.Introspect,
 		Facts:            rt.Facts,
@@ -1253,12 +1293,19 @@ func (rt *Runtime) bootIntrospect() {
 }
 
 func (rt *Runtime) chrome(extraMenus func(), host *windowhost.Inst) imzhost.ChromeConfig {
+	// Running windows opens through the window host, so a chrome without one
+	// does not offer it.
+	var showRunning func() (err error)
+	if host != nil {
+		showRunning = rt.showRunning
+	}
 	return imzhost.ChromeConfig{
 		ExtraMenus:  extraMenus,
 		Status:      rt.Status,
 		Host:        host,
 		VideoOutput: rt.opts.VideoOutput,
 		HelpHost:    rt.opts.HelpHost,
+		ShowRunning: showRunning,
 		// The launcher is bound wherever a window host exists — it is that
 		// host's own surface (ADR-0214 §SD1), not an optional service, and the
 		// only path that has no window host is the screenshot tour, which does
@@ -1286,6 +1333,9 @@ func (rt *Runtime) statusSnapshot() (s *runtimestatus.Snapshot) {
 	if rt.Persist != nil {
 		s.PersistBackend = rt.PersistBackend
 	}
+	// A trail whose rows do not land — no ClickHouse, no run id — says so
+	// where the person looks (ADR-0330's Update of 2026-10-30).
+	s.TrailNotDurable = rt.Trail.NotDurable()
 	return
 }
 
@@ -1505,8 +1555,9 @@ func (rt *Runtime) Reap() {
 	})
 }
 
-// Close reaps, then stops the services in reverse start order and drains the
-// audit sink last. Idempotent.
+// Close reaps, then stops the services in reverse start order: the bus's
+// audit sink drains into the trail just before the trail's final flush.
+// Idempotent.
 func (rt *Runtime) Close() {
 	rt.closeOnce.Do(func() {
 		rt.Reap()

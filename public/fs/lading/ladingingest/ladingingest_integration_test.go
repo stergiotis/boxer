@@ -176,7 +176,7 @@ func TestRecordPolicyIsSeparateFromASnapshot(t *testing.T) {
 	}
 	assert.Equal(t, "0", countPolicy(), "a snapshot must not touch the mount registry")
 
-	require.NoError(t, ladingingest.RecordPolicy(ctx, ps, testMount, testPolicy(), "the-fixture", "corpus"))
+	require.NoError(t, ladingingest.RecordPolicy(ctx, ps, testMount, testPolicy(), "the-fixture", "corpus", ladingpolicy.Origin{Run: "run-fixture"}))
 	assert.Equal(t, "1", countPolicy())
 
 	found := 0

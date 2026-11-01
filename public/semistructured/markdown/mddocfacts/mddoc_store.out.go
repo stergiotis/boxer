@@ -91,6 +91,11 @@ func factsOrderBy(opts recordstore.ScanOpts) (clause string, err error) {
 // cannot see it. Compare this map against the writer's before pointing a
 // regenerated store at existing rows.
 var MddocMembershipIds = map[string]map[string]uint64{
+	"Origin": {
+		"runtimeApp":              9223372049739677701,
+		"runtimeRun":              9223372049739677716,
+		"runtimeLifecycleTileKey": 9223372049739677728,
+	},
 	"MdDoc": {
 		"mddocKind":        5764607535919136768,
 		"mddocTitle":       5764607535919136769,
@@ -178,6 +183,7 @@ type MddocEntity struct {
 	// MddocEnvelope is embedded: its pass-through columns read as
 	// promoted entity fields.
 	MddocEnvelope
+	Origin      option.Option[Origin]
 	MdDoc       option.Option[MdDoc]
 	MdHeading   option.Option[MdHeading]
 	MdCodeBlock option.Option[MdCodeBlock]
@@ -188,6 +194,9 @@ type MddocEntity struct {
 
 // Archetype reports which components the entity carries, in schema order.
 func (inst *MddocEntity) Archetype() (a []string) {
+	if inst.Origin.Has {
+		a = append(a, "origin")
+	}
 	if inst.MdDoc.Has {
 		a = append(a, "mdDoc")
 	}
@@ -501,12 +510,12 @@ func (inst *MddocEntityBuilder) endSection(section string) error {
 	switch section {
 	case "symbol":
 		inst.store.dml.GetSectionSymbol().EndSection()
+	case "u64Array":
+		inst.store.dml.GetSectionU64Array().EndSection()
 	case "stringArray":
 		inst.store.dml.GetSectionStringArray().EndSection()
 	case "textArray":
 		inst.store.dml.GetSectionTextArray().EndSection()
-	case "u64Array":
-		inst.store.dml.GetSectionU64Array().EndSection()
 	case "foreignKey":
 		inst.store.dml.GetSectionForeignKey().EndSection()
 	case "blobArray":
@@ -538,6 +547,32 @@ func (inst *MddocStore) BeginCtx(ctx context.Context, id uint64, ts time.Time, e
 	b.ident, _ = callident.CallIdentityFrom(ctx)
 	b.pushed = inst.applyStampers(ctx)
 	return b
+}
+
+// AddOrigin contributes the Origin component to the open entity.
+//
+// The attributes are buffered, not written: a section frame closes for
+// good, so a component that closed its own sections would shut out the
+// next component sharing one. Commit writes them, one frame per section
+// in first-seen order.
+//
+// A second Add of this component, or an Add on an entity already using
+// Raw(), is refused: both used to mark the row un-mirrorable and carry
+// on, which made its read-back shape depend on a call the writer had
+// probably made by accident.
+func (inst *MddocEntityBuilder) AddOrigin(row Origin) *MddocEntityBuilder {
+	if err := inst.buf.StartKind("Origin"); err != nil {
+		inst.store.dml.AppendError(err)
+		return inst
+	}
+	inst.buf.Enqueue("symbol", "Origin", func() error {
+		return originEmitSectionSymbol(inst.store.dml.GetSectionSymbol(), row)
+	})
+	inst.buf.Enqueue("u64Array", "Origin", func() error {
+		return originEmitSectionU64Array(inst.store.dml.GetSectionU64Array(), row)
+	})
+	inst.ent.Origin = option.Some(row)
+	return inst
 }
 
 // AddMdDoc contributes the MdDoc component to the open entity.
@@ -811,6 +846,38 @@ func (inst *MddocEntityBuilder) Rollback() (err error) {
 	inst.buf.Reset() // the buffered contributions are abandoned with the frame
 	inst.store.dml.PopMembershipsHighCardRef(inst.pushed)
 	return lowlevel.InEntityFactsTableRollbackEntity(inst.store.dml)
+}
+
+// IngestOrigin buffers one whole entity per row carrying only the
+// Origin component, all stamped with ts — rows ship on the next Flush,
+// like every write. The envelope carries the pass-through columns
+// the row binds; the others are written zero — use Begin with a
+// filled envelope to set them. Keys must be distinct within one call (rows
+// share ts, so duplicates would tie on Order): a duplicate returns
+// recordstore.ErrDuplicateIngestKey. On any error the rows buffered
+// so far remain buffered — Flush ships them, DiscardPending drops
+// them.
+func (inst *MddocStore) IngestOrigin(ts time.Time, rows []Origin) (err error) {
+	return inst.IngestOriginCtx(context.Background(), ts, rows)
+}
+
+// IngestOriginCtx is IngestOrigin with the context BeginCtx hands the
+// configured stampers.
+func (inst *MddocStore) IngestOriginCtx(ctx context.Context, ts time.Time, rows []Origin) (err error) {
+	seen := make(map[uint64]struct{}, len(rows))
+	for i := range rows {
+		if _, dup := seen[rows[i].Id]; dup {
+			err = eh.Errorf("ingest origin row %d: %w: key %v", i, recordstore.ErrDuplicateIngestKey, rows[i].Id)
+			return
+		}
+		seen[rows[i].Id] = struct{}{}
+		err = inst.BeginCtx(ctx, rows[i].Id, ts, MddocEnvelope{}).AddOrigin(rows[i]).Commit()
+		if err != nil {
+			err = eh.Errorf("ingest origin row %d: %w", i, err)
+			return
+		}
+	}
+	return
 }
 
 // IngestMdDoc buffers one whole entity per row carrying only the
@@ -1359,6 +1426,7 @@ func (inst *factsFetcher) FetchItemSinglePartition(ctx context.Context, partitio
 // Baked component Filter artefacts: rows carrying a conforming
 // component. Generated from Plan ⋈ IR; membership ids are literals.
 const (
+	factsScanOriginFilter      = "hasAll(\"tv:symbol:lr:lr:u64:1247:::0::data\", [9223372049739677716, 9223372049739677701]) AND has(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 9223372049739677728) AND countEqual(\"tv:symbol:lr:lr:u64:1247:::0::data\", 9223372049739677716) = 1 AND countEqual(\"tv:symbol:lr:lr:u64:1247:::0::data\", 9223372049739677701) = 1 AND countEqual(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 9223372049739677728) = 1 AND if(has(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 9223372049739677728), \"tv:u64Array:len:len:u64:4D:::0::data\"[arrayFirstIndex(cum -> cum >= indexOf(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 9223372049739677728), arrayCumSum(\"tv:u64Array:lrcard:lrcard:u64:4E:::0::data\"))], 0) = 1"
 	factsScanMdDocFilter       = "has(\"tv:symbol:lr:lr:u64:1247:::0::data\", 5764607535919136768) AND hasAll(\"tv:stringArray:lr:lr:u64:1247:::0::data\", [5764607535919136769, 5764607535919136770, 5764607535919136772]) AND has(\"tv:textArray:lr:lr:u64:1247:::0::data\", 5764607535919136771) AND has(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 5764607535919136773) AND countEqual(\"tv:symbol:lr:lr:u64:1247:::0::data\", 5764607535919136768) = 1 AND countEqual(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 5764607535919136769) = 1 AND if(has(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 5764607535919136769), \"tv:stringArray:len:len:u64:4D:::0::data\"[arrayFirstIndex(cum -> cum >= indexOf(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 5764607535919136769), arrayCumSum(\"tv:stringArray:lrcard:lrcard:u64:4E:::0::data\"))], 0) = 1 AND countEqual(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 5764607535919136770) = 1 AND if(has(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 5764607535919136770), \"tv:stringArray:len:len:u64:4D:::0::data\"[arrayFirstIndex(cum -> cum >= indexOf(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 5764607535919136770), arrayCumSum(\"tv:stringArray:lrcard:lrcard:u64:4E:::0::data\"))], 0) = 1 AND countEqual(\"tv:textArray:lr:lr:u64:1247:::0::data\", 5764607535919136771) = 1 AND if(has(\"tv:textArray:lr:lr:u64:1247:::0::data\", 5764607535919136771), \"tv:textArray:len:len:u64:4D:::0::data\"[arrayFirstIndex(cum -> cum >= indexOf(\"tv:textArray:lr:lr:u64:1247:::0::data\", 5764607535919136771), arrayCumSum(\"tv:textArray:lrcard:lrcard:u64:4E:::0::data\"))], 0) = 1 AND countEqual(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 5764607535919136772) = 1 AND if(has(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 5764607535919136772), \"tv:stringArray:len:len:u64:4D:::0::data\"[arrayFirstIndex(cum -> cum >= indexOf(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 5764607535919136772), arrayCumSum(\"tv:stringArray:lrcard:lrcard:u64:4E:::0::data\"))], 0) = 1 AND countEqual(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 5764607535919136773) = 1 AND if(has(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 5764607535919136773), \"tv:u64Array:len:len:u64:4D:::0::data\"[arrayFirstIndex(cum -> cum >= indexOf(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 5764607535919136773), arrayCumSum(\"tv:u64Array:lrcard:lrcard:u64:4E:::0::data\"))], 0) = 1"
 	factsScanMdHeadingFilter   = "has(\"tv:symbol:lr:lr:u64:1247:::0::data\", 5764607535919136774) AND has(\"tv:foreignKey:lr:lr:u64:1247:M::0::foreignKey\", 5764607535919136775) AND has(\"tv:blobArray:lr:lr:u64:1247:::0::data\", 5764607535919136776) AND hasAll(\"tv:u64Array:lr:lr:u64:1247:::0::data\", [5764607535919136777, 5764607535919136778]) AND has(\"tv:u8Array:lr:lr:u64:1247:::0::data\", 5764607535919136779) AND hasAll(\"tv:stringArray:lr:lr:u64:1247:::0::data\", [5764607535919136780, 5764607535919136781]) AND countEqual(\"tv:symbol:lr:lr:u64:1247:::0::data\", 5764607535919136774) = 1 AND countEqual(\"tv:foreignKey:lr:lr:u64:1247:M::0::foreignKey\", 5764607535919136775) = 1 AND countEqual(\"tv:blobArray:lr:lr:u64:1247:::0::data\", 5764607535919136776) = 1 AND if(has(\"tv:blobArray:lr:lr:u64:1247:::0::data\", 5764607535919136776), \"tv:blobArray:len:len:u64:4D:::0::data\"[arrayFirstIndex(cum -> cum >= indexOf(\"tv:blobArray:lr:lr:u64:1247:::0::data\", 5764607535919136776), arrayCumSum(\"tv:blobArray:lrcard:lrcard:u64:4E:::0::data\"))], 0) = 1 AND countEqual(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 5764607535919136777) = 1 AND if(has(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 5764607535919136777), \"tv:u64Array:len:len:u64:4D:::0::data\"[arrayFirstIndex(cum -> cum >= indexOf(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 5764607535919136777), arrayCumSum(\"tv:u64Array:lrcard:lrcard:u64:4E:::0::data\"))], 0) = 1 AND countEqual(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 5764607535919136778) = 1 AND if(has(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 5764607535919136778), \"tv:u64Array:len:len:u64:4D:::0::data\"[arrayFirstIndex(cum -> cum >= indexOf(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 5764607535919136778), arrayCumSum(\"tv:u64Array:lrcard:lrcard:u64:4E:::0::data\"))], 0) = 1 AND countEqual(\"tv:u8Array:lr:lr:u64:1247:::0::data\", 5764607535919136779) = 1 AND if(has(\"tv:u8Array:lr:lr:u64:1247:::0::data\", 5764607535919136779), \"tv:u8Array:len:len:u64:4D:::0::data\"[arrayFirstIndex(cum -> cum >= indexOf(\"tv:u8Array:lr:lr:u64:1247:::0::data\", 5764607535919136779), arrayCumSum(\"tv:u8Array:lrcard:lrcard:u64:4E:::0::data\"))], 0) = 1 AND countEqual(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 5764607535919136780) = 1 AND if(has(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 5764607535919136780), \"tv:stringArray:len:len:u64:4D:::0::data\"[arrayFirstIndex(cum -> cum >= indexOf(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 5764607535919136780), arrayCumSum(\"tv:stringArray:lrcard:lrcard:u64:4E:::0::data\"))], 0) = 1 AND countEqual(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 5764607535919136781) = 1 AND if(has(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 5764607535919136781), \"tv:stringArray:len:len:u64:4D:::0::data\"[arrayFirstIndex(cum -> cum >= indexOf(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 5764607535919136781), arrayCumSum(\"tv:stringArray:lrcard:lrcard:u64:4E:::0::data\"))], 0) = 1 AND countEqual(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 5764607535919136782) <= 1 AND if(has(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 5764607535919136782), \"tv:stringArray:len:len:u64:4D:::0::data\"[arrayFirstIndex(cum -> cum >= indexOf(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 5764607535919136782), arrayCumSum(\"tv:stringArray:lrcard:lrcard:u64:4E:::0::data\"))], 0) <= 1 AND countEqual(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 5764607535919136783) <= 1 AND if(has(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 5764607535919136783), \"tv:u64Array:len:len:u64:4D:::0::data\"[arrayFirstIndex(cum -> cum >= indexOf(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 5764607535919136783), arrayCumSum(\"tv:u64Array:lrcard:lrcard:u64:4E:::0::data\"))], 0) <= 1 AND countEqual(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 5764607535919136784) <= 1"
 	factsScanMdCodeBlockFilter = "hasAll(\"tv:symbol:lr:lr:u64:1247:::0::data\", [5764607535919136785, 5764607535919136791]) AND has(\"tv:foreignKey:lr:lr:u64:1247:M::0::foreignKey\", 5764607535919136786) AND has(\"tv:blobArray:lr:lr:u64:1247:::0::data\", 5764607535919136787) AND hasAll(\"tv:u64Array:lr:lr:u64:1247:::0::data\", [5764607535919136788, 5764607535919136789, 5764607535919136794]) AND has(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 5764607535919136792) AND has(\"tv:textArray:lr:lr:u64:1247:::0::data\", 5764607535919136793) AND countEqual(\"tv:symbol:lr:lr:u64:1247:::0::data\", 5764607535919136785) = 1 AND countEqual(\"tv:foreignKey:lr:lr:u64:1247:M::0::foreignKey\", 5764607535919136786) = 1 AND countEqual(\"tv:blobArray:lr:lr:u64:1247:::0::data\", 5764607535919136787) = 1 AND if(has(\"tv:blobArray:lr:lr:u64:1247:::0::data\", 5764607535919136787), \"tv:blobArray:len:len:u64:4D:::0::data\"[arrayFirstIndex(cum -> cum >= indexOf(\"tv:blobArray:lr:lr:u64:1247:::0::data\", 5764607535919136787), arrayCumSum(\"tv:blobArray:lrcard:lrcard:u64:4E:::0::data\"))], 0) = 1 AND countEqual(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 5764607535919136788) = 1 AND if(has(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 5764607535919136788), \"tv:u64Array:len:len:u64:4D:::0::data\"[arrayFirstIndex(cum -> cum >= indexOf(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 5764607535919136788), arrayCumSum(\"tv:u64Array:lrcard:lrcard:u64:4E:::0::data\"))], 0) = 1 AND countEqual(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 5764607535919136789) = 1 AND if(has(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 5764607535919136789), \"tv:u64Array:len:len:u64:4D:::0::data\"[arrayFirstIndex(cum -> cum >= indexOf(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 5764607535919136789), arrayCumSum(\"tv:u64Array:lrcard:lrcard:u64:4E:::0::data\"))], 0) = 1 AND countEqual(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 5764607535919136790) <= 1 AND if(has(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 5764607535919136790), \"tv:u64Array:len:len:u64:4D:::0::data\"[arrayFirstIndex(cum -> cum >= indexOf(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 5764607535919136790), arrayCumSum(\"tv:u64Array:lrcard:lrcard:u64:4E:::0::data\"))], 0) <= 1 AND countEqual(\"tv:symbol:lr:lr:u64:1247:::0::data\", 5764607535919136791) = 1 AND countEqual(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 5764607535919136792) = 1 AND if(has(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 5764607535919136792), \"tv:stringArray:len:len:u64:4D:::0::data\"[arrayFirstIndex(cum -> cum >= indexOf(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 5764607535919136792), arrayCumSum(\"tv:stringArray:lrcard:lrcard:u64:4E:::0::data\"))], 0) = 1 AND countEqual(\"tv:textArray:lr:lr:u64:1247:::0::data\", 5764607535919136793) = 1 AND if(has(\"tv:textArray:lr:lr:u64:1247:::0::data\", 5764607535919136793), \"tv:textArray:len:len:u64:4D:::0::data\"[arrayFirstIndex(cum -> cum >= indexOf(\"tv:textArray:lr:lr:u64:1247:::0::data\", 5764607535919136793), arrayCumSum(\"tv:textArray:lrcard:lrcard:u64:4E:::0::data\"))], 0) = 1 AND countEqual(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 5764607535919136794) = 1 AND if(has(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 5764607535919136794), \"tv:u64Array:len:len:u64:4D:::0::data\"[arrayFirstIndex(cum -> cum >= indexOf(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 5764607535919136794), arrayCumSum(\"tv:u64Array:lrcard:lrcard:u64:4E:::0::data\"))], 0) = 1"
@@ -1366,6 +1434,44 @@ const (
 	factsScanMdEmphasisFilter  = "hasAll(\"tv:symbol:lr:lr:u64:1247:::0::data\", [5764607535919136806, 5764607535919136812]) AND has(\"tv:foreignKey:lr:lr:u64:1247:M::0::foreignKey\", 5764607535919136807) AND has(\"tv:blobArray:lr:lr:u64:1247:::0::data\", 5764607535919136808) AND hasAll(\"tv:u64Array:lr:lr:u64:1247:::0::data\", [5764607535919136809, 5764607535919136810]) AND has(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 5764607535919136813) AND countEqual(\"tv:symbol:lr:lr:u64:1247:::0::data\", 5764607535919136806) = 1 AND countEqual(\"tv:foreignKey:lr:lr:u64:1247:M::0::foreignKey\", 5764607535919136807) = 1 AND countEqual(\"tv:blobArray:lr:lr:u64:1247:::0::data\", 5764607535919136808) = 1 AND if(has(\"tv:blobArray:lr:lr:u64:1247:::0::data\", 5764607535919136808), \"tv:blobArray:len:len:u64:4D:::0::data\"[arrayFirstIndex(cum -> cum >= indexOf(\"tv:blobArray:lr:lr:u64:1247:::0::data\", 5764607535919136808), arrayCumSum(\"tv:blobArray:lrcard:lrcard:u64:4E:::0::data\"))], 0) = 1 AND countEqual(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 5764607535919136809) = 1 AND if(has(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 5764607535919136809), \"tv:u64Array:len:len:u64:4D:::0::data\"[arrayFirstIndex(cum -> cum >= indexOf(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 5764607535919136809), arrayCumSum(\"tv:u64Array:lrcard:lrcard:u64:4E:::0::data\"))], 0) = 1 AND countEqual(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 5764607535919136810) = 1 AND if(has(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 5764607535919136810), \"tv:u64Array:len:len:u64:4D:::0::data\"[arrayFirstIndex(cum -> cum >= indexOf(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 5764607535919136810), arrayCumSum(\"tv:u64Array:lrcard:lrcard:u64:4E:::0::data\"))], 0) = 1 AND countEqual(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 5764607535919136811) <= 1 AND if(has(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 5764607535919136811), \"tv:u64Array:len:len:u64:4D:::0::data\"[arrayFirstIndex(cum -> cum >= indexOf(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 5764607535919136811), arrayCumSum(\"tv:u64Array:lrcard:lrcard:u64:4E:::0::data\"))], 0) <= 1 AND countEqual(\"tv:symbol:lr:lr:u64:1247:::0::data\", 5764607535919136812) = 1 AND countEqual(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 5764607535919136813) = 1 AND if(has(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 5764607535919136813), \"tv:stringArray:len:len:u64:4D:::0::data\"[arrayFirstIndex(cum -> cum >= indexOf(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 5764607535919136813), arrayCumSum(\"tv:stringArray:lrcard:lrcard:u64:4E:::0::data\"))], 0) = 1"
 	factsScanMdTagFilter       = "hasAll(\"tv:symbol:lr:lr:u64:1247:::0::data\", [5764607535919136814, 5764607535919136820, 5764607535919136821]) AND has(\"tv:foreignKey:lr:lr:u64:1247:M::0::foreignKey\", 5764607535919136815) AND has(\"tv:blobArray:lr:lr:u64:1247:::0::data\", 5764607535919136816) AND hasAll(\"tv:u64Array:lr:lr:u64:1247:::0::data\", [5764607535919136817, 5764607535919136818]) AND countEqual(\"tv:symbol:lr:lr:u64:1247:::0::data\", 5764607535919136814) = 1 AND countEqual(\"tv:foreignKey:lr:lr:u64:1247:M::0::foreignKey\", 5764607535919136815) = 1 AND countEqual(\"tv:blobArray:lr:lr:u64:1247:::0::data\", 5764607535919136816) = 1 AND if(has(\"tv:blobArray:lr:lr:u64:1247:::0::data\", 5764607535919136816), \"tv:blobArray:len:len:u64:4D:::0::data\"[arrayFirstIndex(cum -> cum >= indexOf(\"tv:blobArray:lr:lr:u64:1247:::0::data\", 5764607535919136816), arrayCumSum(\"tv:blobArray:lrcard:lrcard:u64:4E:::0::data\"))], 0) = 1 AND countEqual(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 5764607535919136817) = 1 AND if(has(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 5764607535919136817), \"tv:u64Array:len:len:u64:4D:::0::data\"[arrayFirstIndex(cum -> cum >= indexOf(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 5764607535919136817), arrayCumSum(\"tv:u64Array:lrcard:lrcard:u64:4E:::0::data\"))], 0) = 1 AND countEqual(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 5764607535919136818) = 1 AND if(has(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 5764607535919136818), \"tv:u64Array:len:len:u64:4D:::0::data\"[arrayFirstIndex(cum -> cum >= indexOf(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 5764607535919136818), arrayCumSum(\"tv:u64Array:lrcard:lrcard:u64:4E:::0::data\"))], 0) = 1 AND countEqual(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 5764607535919136819) <= 1 AND if(has(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 5764607535919136819), \"tv:u64Array:len:len:u64:4D:::0::data\"[arrayFirstIndex(cum -> cum >= indexOf(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 5764607535919136819), arrayCumSum(\"tv:u64Array:lrcard:lrcard:u64:4E:::0::data\"))], 0) <= 1 AND countEqual(\"tv:symbol:lr:lr:u64:1247:::0::data\", 5764607535919136820) = 1 AND countEqual(\"tv:symbol:lr:lr:u64:1247:::0::data\", 5764607535919136821) = 1"
 )
+
+// ScanOrigin iterates the entities whose rows carry a conforming Origin
+// component, ordered by (Order, Key) — or by opts.OrderBy's envelope
+// column, opts.Descending reversing either — so entities sharing an Order
+// still come out in a fixed sequence. Rows that tie on BOTH (the same
+// key written twice at the same Order) are not ordered against each
+// other by this clause; the table keeps newest-per-key, so which of
+// them survives is the engine's choice, not the scan's.
+// opts.KeyPrefix is refused (recordstore.ErrKeyPrefixNumericKey):
+// this store's key is not a string.
+// opts.ExtraPredicate (trusted raw SQL over the physical columns —
+// never untrusted input) further restricts the scan; opts.Limit
+// caps the row count. The Filter artefact uses ClickHouse
+// built-ins only, so this is a single SELECT — no helper UDFs, no
+// multi-statement script (the ExecutorI contract). The sequence is
+// single-use; ctx must stay valid until iteration completes; an
+// error ends it as a final (nil, err) pair. Scans see only flushed
+// rows.
+func (inst *MddocStore) ScanOrigin(ctx context.Context, opts recordstore.ScanOpts) iter.Seq2[*MddocEntity, error] {
+	if opts.KeyPrefix != "" {
+		return recordstore.RefuseKeyPrefix[*MddocEntity]()
+	}
+	order, err := factsOrderBy(opts)
+	if err != nil {
+		return recordstore.FailScan[*MddocEntity](err)
+	}
+	where := factsScanOriginFilter
+	if opts.ExtraPredicate != "" {
+		where = "(" + where + ") AND (" + opts.ExtraPredicate + ")"
+	}
+	sql := "SELECT * FROM " + inst.readTable() +
+		" WHERE " + where + order
+	if opts.Limit > 0 {
+		sql += " LIMIT " + strconv.Itoa(opts.Limit)
+	}
+	sql += factsArrowOutputSettings
+	return inst.iterateEntities(ctx, sql)
+}
 
 // ScanMdDoc iterates the entities whose rows carry a conforming MdDoc
 // component, ordered by (Order, Key) — or by opts.OrderBy's envelope
@@ -1656,6 +1762,12 @@ var MddocComponentSQL = componentsql.Set{
 	Store: "Mddoc",
 	Table: MddocTableName,
 	Kinds: map[string]componentsql.Artefacts{
+		"Origin": {
+			Presence:   "hasAll(\"tv:symbol:lr:lr:u64:1247:::0::data\", [9223372049739677716, 9223372049739677701]) AND has(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 9223372049739677728)",
+			Validator:  "countEqual(\"tv:symbol:lr:lr:u64:1247:::0::data\", 9223372049739677716) = 1 AND countEqual(\"tv:symbol:lr:lr:u64:1247:::0::data\", 9223372049739677701) = 1 AND countEqual(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 9223372049739677728) = 1 AND if(has(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 9223372049739677728), \"tv:u64Array:len:len:u64:4D:::0::data\"[arrayFirstIndex(cum -> cum >= indexOf(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 9223372049739677728), arrayCumSum(\"tv:u64Array:lrcard:lrcard:u64:4E:::0::data\"))], 0) = 1",
+			Filter:     factsScanOriginFilter,
+			Projection: "CAST(tuple(\"id:id:u64:47::0:\", LW_VALUE_BY_TAG_EQUAL(\"tv:symbol:value:val:s:124::I:0::data\", \"tv:symbol:lr:lr:u64:1247:::0::data\", 9223372049739677716, LW_RAGGED_PARENT_IDS(\"tv:symbol:lrcard:lrcard:u64:4E:::0::data\")), LW_VALUE_BY_TAG_EQUAL(\"tv:symbol:value:val:s:124::I:0::data\", \"tv:symbol:lr:lr:u64:1247:::0::data\", 9223372049739677701, LW_RAGGED_PARENT_IDS(\"tv:symbol:lrcard:lrcard:u64:4E:::0::data\")), LW_LIST_BY_TAG_EQUAL(\"tv:u64Array:value:val:u64h:4:::0::data\", \"tv:u64Array:len:len:u64:4D:::0::data\", \"tv:u64Array:lr:lr:u64:1247:::0::data\", 9223372049739677728, LW_RAGGED_PARENT_IDS(\"tv:u64Array:lrcard:lrcard:u64:4E:::0::data\"))[1]), 'Tuple(Id UInt64, Run String, App String, Instance UInt64)')",
+		},
 		"MdDoc": {
 			Presence:   "has(\"tv:symbol:lr:lr:u64:1247:::0::data\", 5764607535919136768) AND hasAll(\"tv:stringArray:lr:lr:u64:1247:::0::data\", [5764607535919136769, 5764607535919136770, 5764607535919136772]) AND has(\"tv:textArray:lr:lr:u64:1247:::0::data\", 5764607535919136771) AND has(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 5764607535919136773)",
 			Validator:  "countEqual(\"tv:symbol:lr:lr:u64:1247:::0::data\", 5764607535919136768) = 1 AND countEqual(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 5764607535919136769) = 1 AND if(has(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 5764607535919136769), \"tv:stringArray:len:len:u64:4D:::0::data\"[arrayFirstIndex(cum -> cum >= indexOf(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 5764607535919136769), arrayCumSum(\"tv:stringArray:lrcard:lrcard:u64:4E:::0::data\"))], 0) = 1 AND countEqual(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 5764607535919136770) = 1 AND if(has(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 5764607535919136770), \"tv:stringArray:len:len:u64:4D:::0::data\"[arrayFirstIndex(cum -> cum >= indexOf(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 5764607535919136770), arrayCumSum(\"tv:stringArray:lrcard:lrcard:u64:4E:::0::data\"))], 0) = 1 AND countEqual(\"tv:textArray:lr:lr:u64:1247:::0::data\", 5764607535919136771) = 1 AND if(has(\"tv:textArray:lr:lr:u64:1247:::0::data\", 5764607535919136771), \"tv:textArray:len:len:u64:4D:::0::data\"[arrayFirstIndex(cum -> cum >= indexOf(\"tv:textArray:lr:lr:u64:1247:::0::data\", 5764607535919136771), arrayCumSum(\"tv:textArray:lrcard:lrcard:u64:4E:::0::data\"))], 0) = 1 AND countEqual(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 5764607535919136772) = 1 AND if(has(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 5764607535919136772), \"tv:stringArray:len:len:u64:4D:::0::data\"[arrayFirstIndex(cum -> cum >= indexOf(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 5764607535919136772), arrayCumSum(\"tv:stringArray:lrcard:lrcard:u64:4E:::0::data\"))], 0) = 1 AND countEqual(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 5764607535919136773) = 1 AND if(has(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 5764607535919136773), \"tv:u64Array:len:len:u64:4D:::0::data\"[arrayFirstIndex(cum -> cum >= indexOf(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 5764607535919136773), arrayCumSum(\"tv:u64Array:lrcard:lrcard:u64:4E:::0::data\"))], 0) = 1",
@@ -1750,14 +1862,14 @@ func decodeMddocRecord(rec arrow.RecordBatch) (ents []*MddocEntity, err error) {
 	tsR := ra.NewReadAccessFactsPlainEntityTimestampAttributes()
 	lcR := ra.NewReadAccessFactsPlainEntityLifecycleAttributes()
 	symbolR := ra.NewReadAccessFactsTaggedSymbol()
+	u64ArrayR := ra.NewReadAccessFactsTaggedU64Array()
 	stringArrayR := ra.NewReadAccessFactsTaggedStringArray()
 	textArrayR := ra.NewReadAccessFactsTaggedTextArray()
-	u64ArrayR := ra.NewReadAccessFactsTaggedU64Array()
 	foreignKeyR := ra.NewReadAccessFactsTaggedForeignKey()
 	blobArrayR := ra.NewReadAccessFactsTaggedBlobArray()
 	u8ArrayR := ra.NewReadAccessFactsTaggedU8Array()
 	boolR := ra.NewReadAccessFactsTaggedBool()
-	readers := []factsSectionReaderI{idR, tsR, lcR, symbolR, stringArrayR, textArrayR, u64ArrayR, foreignKeyR, blobArrayR, u8ArrayR, boolR}
+	readers := []factsSectionReaderI{idR, tsR, lcR, symbolR, u64ArrayR, stringArrayR, textArrayR, foreignKeyR, blobArrayR, u8ArrayR, boolR}
 	for _, r := range readers {
 		err = r.LoadFromRecord(rec)
 		if err != nil {
@@ -1785,6 +1897,17 @@ func decodeMddocRecord(rec arrow.RecordBatch) (ents []*MddocEntity, err error) {
 		}
 		ent.NaturalKey = idR.GetAttrValueNaturalKey(raruntime.EntityIdx(i))
 		ent.ExpiresAt = lcR.GetAttrValueExpiresAt(raruntime.EntityIdx(i))
+		{
+			row, ok, e := originReadRow(i, symbolR.GetAttributes(), symbolR.GetMemberships(), u64ArrayR.GetAttributes(), u64ArrayR.GetMemberships())
+			if e != nil {
+				err = eh.Errorf("read origin component: %w", e)
+				return
+			}
+			if ok {
+				row.Id = ent.ID
+				ent.Origin = option.Some(row)
+			}
+		}
 		{
 			row, ok, e := mdDocReadRow(i, symbolR.GetAttributes(), symbolR.GetMemberships(), stringArrayR.GetAttributes(), stringArrayR.GetMemberships(), textArrayR.GetAttributes(), textArrayR.GetMemberships(), u64ArrayR.GetAttributes(), u64ArrayR.GetMemberships())
 			if e != nil {

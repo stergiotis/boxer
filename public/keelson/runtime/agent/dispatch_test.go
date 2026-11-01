@@ -181,6 +181,18 @@ func (inst *fakeHost) OpsPlace(k uint64, x, y, w, h float32) error {
 	inst.windowActs = append(inst.windowActs, "place")
 	return nil
 }
+func (inst *fakeHost) OpsLayout(layout string, ratio float32, count int) error {
+	inst.mu.Lock()
+	defer inst.mu.Unlock()
+	inst.windowActs = append(inst.windowActs, "layout:"+layout)
+	return nil
+}
+func (inst *fakeHost) OpsFloat(k uint64, floating bool) error {
+	inst.mu.Lock()
+	defer inst.mu.Unlock()
+	inst.windowActs = append(inst.windowActs, "float")
+	return nil
+}
 func (inst *fakeHost) OpsRevisions(k uint64) (map[string]uint64, bool) {
 	revs, _ := inst.eng(k).SnapshotRevisions()
 	return revs, true

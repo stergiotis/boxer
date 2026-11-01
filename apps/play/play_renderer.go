@@ -1240,6 +1240,7 @@ func NewPlayApp(client *Client, graph *queryGraph, initialSQL string, rules *glo
 	inst.tsCollisions = newTsCollisionProbe(client)
 	inst.vocab = newVocabProbe(client)
 	inst.seriesLabels = newTsLabelsWriter(client)
+	inst.projector.tasks = client.Tasks
 	if graph != nil {
 		inst.seriesLabels.confined = graph.MainConfined
 	}
@@ -1248,6 +1249,7 @@ func NewPlayApp(client *Client, graph *queryGraph, initialSQL string, rules *glo
 	inst.projPublish = newProjectionPublishState()
 	inst.flow = newFlowDriver(mk(), client)
 	inst.richCells = newRichCellCache(mk())
+	inst.richCells.openLink = inst.openMdeditLink
 	inst.detailTimeline = NewDetailTimeline(mk())
 	inst.components = newComponentDetail(mk())
 	inst.projector.componentPresence = inst.components.presenceRows

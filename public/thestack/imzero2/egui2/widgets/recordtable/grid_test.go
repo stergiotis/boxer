@@ -209,16 +209,20 @@ func TestRenderGridCellsCache(t *testing.T) {
 }
 
 // The cells emitted are the rows on screen, on a fit frame too: a fit
-// measures what the reader sees. Only with nothing on screen last frame does
-// a fit fall back to the window's first rows.
+// measures what the reader sees. With no range reported — a grid that has
+// never been on screen — a screenful, never the whole window. Only with
+// nothing on screen last frame does a fit fall back to the window's first rows.
 func TestCellRows(t *testing.T) {
+	const screenful = 30
 	type rows struct{ lo, hi int64 }
 	at := func(lo, hi int64) rows { return rows{lo, hi} }
 	got := func(n int64, rb, re uint64, ok, refit bool) rows {
-		lo, hi := cellRows(n, rb, re, ok, refit)
+		lo, hi := cellRows(n, rb, re, ok, refit, screenful, -1)
 		return rows{lo, hi}
 	}
-	assert.Equal(t, at(0, 1000), got(1000, 0, 0, false, false), "no range yet: every row")
+	assert.Equal(t, at(0, screenful), got(1000, 0, 0, false, false), "no range yet: a screenful")
+	lo, hi := cellRows(1000, 0, 0, false, false, screenful, 500)
+	assert.Equal(t, at(471, 530), at(lo, hi), "no range yet, scrolling to a row: a screenful either side of it")
 	assert.Equal(t, at(600, 630), got(1000, 600, 630, true, false), "the visible rows")
 	assert.Equal(t, at(600, 630), got(1000, 600, 630, true, true), "a fit keeps the visible rows")
 	assert.Equal(t, at(0, fitMaxRows), got(1000, 0, 0, false, true), "a first-frame fit takes the first rows")

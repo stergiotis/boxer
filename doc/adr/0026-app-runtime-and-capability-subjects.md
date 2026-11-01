@@ -1191,6 +1191,18 @@ so its capability is declared and not sticky — the broker asks on every
 Mount — and its verbs are requests, which the bus audits, refusals
 included.
 
+### 2026-10-30 — §SD6, §SD12: the bus's audit lands as audit events on the trail
+
+The per-request audit §SD12's M2 introduced — one `AuditRecord` per
+`Request`, written as a hand-encoded row of kind `runtime.kind.audit` —
+now lands as an `AuditEvent` row of domain `bus` through the host's trail
+recorder ([ADR-0296](./0296-audit-events-as-a-trail-component.md)'s
+Update of this date, which carries the mapping). The bus still records
+one `AuditRecord` per `Request` and none per `Publish`, and an
+`AuditSinkI` beside the trail's still sees every record. The hand-written
+kind is retired: `FactsStoreI` has no `WriteAudit`, rows of the kind are
+no longer read, and its vocabulary ordinals stay.
+
 ## References
 
 - [ADR-0057](0057-demo-registry-and-drivers.md) — Demo registry pattern that `app.Registry` generalises.

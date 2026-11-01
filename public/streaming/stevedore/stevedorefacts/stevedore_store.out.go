@@ -91,6 +91,11 @@ func factsOrderBy(opts recordstore.ScanOpts) (clause string, err error) {
 // cannot see it. Compare this map against the writer's before pointing a
 // regenerated store at existing rows.
 var StevedoreMembershipIds = map[string]map[string]uint64{
+	"Origin": {
+		"runtimeApp":              9223372049739677701,
+		"runtimeRun":              9223372049739677716,
+		"runtimeLifecycleTileKey": 9223372049739677728,
+	},
 	"DeadLetter": {
 		"stevedoreKindDeadLetter": 576460765188325408,
 		"stevedoreDeadRef":        576460765188325409,
@@ -124,11 +129,15 @@ type StevedoreEntity struct {
 	// StevedoreEnvelope is embedded: its pass-through columns read as
 	// promoted entity fields.
 	StevedoreEnvelope
+	Origin     option.Option[Origin]
 	DeadLetter option.Option[DeadLetter]
 }
 
 // Archetype reports which components the entity carries, in schema order.
 func (inst *StevedoreEntity) Archetype() (a []string) {
+	if inst.Origin.Has {
+		a = append(a, "origin")
+	}
 	if inst.DeadLetter.Has {
 		a = append(a, "deadLetter")
 	}
@@ -462,6 +471,32 @@ func (inst *StevedoreStore) BeginCtx(ctx context.Context, id uint64, ts time.Tim
 	return b
 }
 
+// AddOrigin contributes the Origin component to the open entity.
+//
+// The attributes are buffered, not written: a section frame closes for
+// good, so a component that closed its own sections would shut out the
+// next component sharing one. Commit writes them, one frame per section
+// in first-seen order.
+//
+// A second Add of this component, or an Add on an entity already using
+// Raw(), is refused: both used to mark the row un-mirrorable and carry
+// on, which made its read-back shape depend on a call the writer had
+// probably made by accident.
+func (inst *StevedoreEntityBuilder) AddOrigin(row Origin) *StevedoreEntityBuilder {
+	if err := inst.buf.StartKind("Origin"); err != nil {
+		inst.store.dml.AppendError(err)
+		return inst
+	}
+	inst.buf.Enqueue("symbol", "Origin", func() error {
+		return originEmitSectionSymbol(inst.store.dml.GetSectionSymbol(), row)
+	})
+	inst.buf.Enqueue("u64Array", "Origin", func() error {
+		return originEmitSectionU64Array(inst.store.dml.GetSectionU64Array(), row)
+	})
+	inst.ent.Origin = option.Some(row)
+	return inst
+}
+
 // AddDeadLetter contributes the DeadLetter component to the open entity.
 //
 // The attributes are buffered, not written: a section frame closes for
@@ -558,6 +593,38 @@ func (inst *StevedoreEntityBuilder) Rollback() (err error) {
 	inst.buf.Reset() // the buffered contributions are abandoned with the frame
 	inst.store.dml.PopMembershipsHighCardRef(inst.pushed)
 	return lowlevel.InEntityFactsTableRollbackEntity(inst.store.dml)
+}
+
+// IngestOrigin buffers one whole entity per row carrying only the
+// Origin component, all stamped with ts — rows ship on the next Flush,
+// like every write. The envelope carries the pass-through columns
+// the row binds; the others are written zero — use Begin with a
+// filled envelope to set them. Keys must be distinct within one call (rows
+// share ts, so duplicates would tie on Order): a duplicate returns
+// recordstore.ErrDuplicateIngestKey. On any error the rows buffered
+// so far remain buffered — Flush ships them, DiscardPending drops
+// them.
+func (inst *StevedoreStore) IngestOrigin(ts time.Time, rows []Origin) (err error) {
+	return inst.IngestOriginCtx(context.Background(), ts, rows)
+}
+
+// IngestOriginCtx is IngestOrigin with the context BeginCtx hands the
+// configured stampers.
+func (inst *StevedoreStore) IngestOriginCtx(ctx context.Context, ts time.Time, rows []Origin) (err error) {
+	seen := make(map[uint64]struct{}, len(rows))
+	for i := range rows {
+		if _, dup := seen[rows[i].Id]; dup {
+			err = eh.Errorf("ingest origin row %d: %w: key %v", i, recordstore.ErrDuplicateIngestKey, rows[i].Id)
+			return
+		}
+		seen[rows[i].Id] = struct{}{}
+		err = inst.BeginCtx(ctx, rows[i].Id, ts, StevedoreEnvelope{}).AddOrigin(rows[i]).Commit()
+		if err != nil {
+			err = eh.Errorf("ingest origin row %d: %w", i, err)
+			return
+		}
+	}
+	return
 }
 
 // IngestDeadLetter buffers one whole entity per row carrying only the
@@ -946,8 +1013,47 @@ func (inst *factsFetcher) FetchItemSinglePartition(ctx context.Context, partitio
 // Baked component Filter artefacts: rows carrying a conforming
 // component. Generated from Plan ⋈ IR; membership ids are literals.
 const (
+	factsScanOriginFilter     = "hasAll(\"tv:symbol:lr:lr:u64:1247:::0::data\", [9223372049739677716, 9223372049739677701]) AND has(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 9223372049739677728) AND countEqual(\"tv:symbol:lr:lr:u64:1247:::0::data\", 9223372049739677716) = 1 AND countEqual(\"tv:symbol:lr:lr:u64:1247:::0::data\", 9223372049739677701) = 1 AND countEqual(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 9223372049739677728) = 1 AND if(has(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 9223372049739677728), \"tv:u64Array:len:len:u64:4D:::0::data\"[arrayFirstIndex(cum -> cum >= indexOf(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 9223372049739677728), arrayCumSum(\"tv:u64Array:lrcard:lrcard:u64:4E:::0::data\"))], 0) = 1"
 	factsScanDeadLetterFilter = "hasAll(\"tv:symbol:lr:lr:u64:1247:::0::data\", [576460765188325408, 576460765188325412, 576460765188325414]) AND hasAll(\"tv:u64Array:lr:lr:u64:1247:::0::data\", [576460765188325409, 576460765188325411]) AND hasAll(\"tv:stringArray:lr:lr:u64:1247:::0::data\", [576460765188325410, 576460765188325413]) AND has(\"tv:i32Array:lr:lr:u64:1247:::0::data\", 576460765188325415) AND has(\"tv:i64Array:lr:lr:u64:1247:::0::data\", 576460765188325416) AND has(\"tv:blobArray:lr:lr:u64:1247:::0::data\", 576460765188325417) AND countEqual(\"tv:symbol:lr:lr:u64:1247:::0::data\", 576460765188325408) = 1 AND countEqual(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 576460765188325409) = 1 AND if(has(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 576460765188325409), \"tv:u64Array:len:len:u64:4D:::0::data\"[arrayFirstIndex(cum -> cum >= indexOf(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 576460765188325409), arrayCumSum(\"tv:u64Array:lrcard:lrcard:u64:4E:::0::data\"))], 0) = 1 AND countEqual(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 576460765188325410) = 1 AND if(has(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 576460765188325410), \"tv:stringArray:len:len:u64:4D:::0::data\"[arrayFirstIndex(cum -> cum >= indexOf(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 576460765188325410), arrayCumSum(\"tv:stringArray:lrcard:lrcard:u64:4E:::0::data\"))], 0) = 1 AND countEqual(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 576460765188325411) = 1 AND if(has(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 576460765188325411), \"tv:u64Array:len:len:u64:4D:::0::data\"[arrayFirstIndex(cum -> cum >= indexOf(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 576460765188325411), arrayCumSum(\"tv:u64Array:lrcard:lrcard:u64:4E:::0::data\"))], 0) = 1 AND countEqual(\"tv:symbol:lr:lr:u64:1247:::0::data\", 576460765188325412) = 1 AND countEqual(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 576460765188325413) = 1 AND if(has(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 576460765188325413), \"tv:stringArray:len:len:u64:4D:::0::data\"[arrayFirstIndex(cum -> cum >= indexOf(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 576460765188325413), arrayCumSum(\"tv:stringArray:lrcard:lrcard:u64:4E:::0::data\"))], 0) = 1 AND countEqual(\"tv:symbol:lr:lr:u64:1247:::0::data\", 576460765188325414) = 1 AND countEqual(\"tv:i32Array:lr:lr:u64:1247:::0::data\", 576460765188325415) = 1 AND if(has(\"tv:i32Array:lr:lr:u64:1247:::0::data\", 576460765188325415), \"tv:i32Array:len:len:u64:4D:::0::data\"[arrayFirstIndex(cum -> cum >= indexOf(\"tv:i32Array:lr:lr:u64:1247:::0::data\", 576460765188325415), arrayCumSum(\"tv:i32Array:lrcard:lrcard:u64:4E:::0::data\"))], 0) = 1 AND countEqual(\"tv:i64Array:lr:lr:u64:1247:::0::data\", 576460765188325416) = 1 AND if(has(\"tv:i64Array:lr:lr:u64:1247:::0::data\", 576460765188325416), \"tv:i64Array:len:len:u64:4D:::0::data\"[arrayFirstIndex(cum -> cum >= indexOf(\"tv:i64Array:lr:lr:u64:1247:::0::data\", 576460765188325416), arrayCumSum(\"tv:i64Array:lrcard:lrcard:u64:4E:::0::data\"))], 0) = 1 AND countEqual(\"tv:blobArray:lr:lr:u64:1247:::0::data\", 576460765188325417) = 1 AND if(has(\"tv:blobArray:lr:lr:u64:1247:::0::data\", 576460765188325417), \"tv:blobArray:len:len:u64:4D:::0::data\"[arrayFirstIndex(cum -> cum >= indexOf(\"tv:blobArray:lr:lr:u64:1247:::0::data\", 576460765188325417), arrayCumSum(\"tv:blobArray:lrcard:lrcard:u64:4E:::0::data\"))], 0) = 1"
 )
+
+// ScanOrigin iterates the entities whose rows carry a conforming Origin
+// component, ordered by (Order, Key) — or by opts.OrderBy's envelope
+// column, opts.Descending reversing either — so entities sharing an Order
+// still come out in a fixed sequence. Rows that tie on BOTH (the same
+// key written twice at the same Order) are not ordered against each
+// other by this clause; the table keeps newest-per-key, so which of
+// them survives is the engine's choice, not the scan's.
+// opts.KeyPrefix is refused (recordstore.ErrKeyPrefixNumericKey):
+// this store's key is not a string.
+// opts.ExtraPredicate (trusted raw SQL over the physical columns —
+// never untrusted input) further restricts the scan; opts.Limit
+// caps the row count. The Filter artefact uses ClickHouse
+// built-ins only, so this is a single SELECT — no helper UDFs, no
+// multi-statement script (the ExecutorI contract). The sequence is
+// single-use; ctx must stay valid until iteration completes; an
+// error ends it as a final (nil, err) pair. Scans see only flushed
+// rows.
+func (inst *StevedoreStore) ScanOrigin(ctx context.Context, opts recordstore.ScanOpts) iter.Seq2[*StevedoreEntity, error] {
+	if opts.KeyPrefix != "" {
+		return recordstore.RefuseKeyPrefix[*StevedoreEntity]()
+	}
+	order, err := factsOrderBy(opts)
+	if err != nil {
+		return recordstore.FailScan[*StevedoreEntity](err)
+	}
+	where := factsScanOriginFilter
+	if opts.ExtraPredicate != "" {
+		where = "(" + where + ") AND (" + opts.ExtraPredicate + ")"
+	}
+	sql := "SELECT * FROM " + inst.readTable() +
+		" WHERE " + where + order
+	if opts.Limit > 0 {
+		sql += " LIMIT " + strconv.Itoa(opts.Limit)
+	}
+	sql += factsArrowOutputSettings
+	return inst.iterateEntities(ctx, sql)
+}
 
 // ScanDeadLetter iterates the entities whose rows carry a conforming DeadLetter
 // component, ordered by (Order, Key) — or by opts.OrderBy's envelope
@@ -1048,6 +1154,12 @@ var StevedoreComponentSQL = componentsql.Set{
 	Store: "Stevedore",
 	Table: StevedoreTableName,
 	Kinds: map[string]componentsql.Artefacts{
+		"Origin": {
+			Presence:   "hasAll(\"tv:symbol:lr:lr:u64:1247:::0::data\", [9223372049739677716, 9223372049739677701]) AND has(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 9223372049739677728)",
+			Validator:  "countEqual(\"tv:symbol:lr:lr:u64:1247:::0::data\", 9223372049739677716) = 1 AND countEqual(\"tv:symbol:lr:lr:u64:1247:::0::data\", 9223372049739677701) = 1 AND countEqual(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 9223372049739677728) = 1 AND if(has(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 9223372049739677728), \"tv:u64Array:len:len:u64:4D:::0::data\"[arrayFirstIndex(cum -> cum >= indexOf(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 9223372049739677728), arrayCumSum(\"tv:u64Array:lrcard:lrcard:u64:4E:::0::data\"))], 0) = 1",
+			Filter:     factsScanOriginFilter,
+			Projection: "CAST(tuple(\"id:id:u64:47::0:\", LW_VALUE_BY_TAG_EQUAL(\"tv:symbol:value:val:s:124::I:0::data\", \"tv:symbol:lr:lr:u64:1247:::0::data\", 9223372049739677716, LW_RAGGED_PARENT_IDS(\"tv:symbol:lrcard:lrcard:u64:4E:::0::data\")), LW_VALUE_BY_TAG_EQUAL(\"tv:symbol:value:val:s:124::I:0::data\", \"tv:symbol:lr:lr:u64:1247:::0::data\", 9223372049739677701, LW_RAGGED_PARENT_IDS(\"tv:symbol:lrcard:lrcard:u64:4E:::0::data\")), LW_LIST_BY_TAG_EQUAL(\"tv:u64Array:value:val:u64h:4:::0::data\", \"tv:u64Array:len:len:u64:4D:::0::data\", \"tv:u64Array:lr:lr:u64:1247:::0::data\", 9223372049739677728, LW_RAGGED_PARENT_IDS(\"tv:u64Array:lrcard:lrcard:u64:4E:::0::data\"))[1]), 'Tuple(Id UInt64, Run String, App String, Instance UInt64)')",
+		},
 		"DeadLetter": {
 			Presence:   "hasAll(\"tv:symbol:lr:lr:u64:1247:::0::data\", [576460765188325408, 576460765188325412, 576460765188325414]) AND hasAll(\"tv:u64Array:lr:lr:u64:1247:::0::data\", [576460765188325409, 576460765188325411]) AND hasAll(\"tv:stringArray:lr:lr:u64:1247:::0::data\", [576460765188325410, 576460765188325413]) AND has(\"tv:i32Array:lr:lr:u64:1247:::0::data\", 576460765188325415) AND has(\"tv:i64Array:lr:lr:u64:1247:::0::data\", 576460765188325416) AND has(\"tv:blobArray:lr:lr:u64:1247:::0::data\", 576460765188325417)",
 			Validator:  "countEqual(\"tv:symbol:lr:lr:u64:1247:::0::data\", 576460765188325408) = 1 AND countEqual(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 576460765188325409) = 1 AND if(has(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 576460765188325409), \"tv:u64Array:len:len:u64:4D:::0::data\"[arrayFirstIndex(cum -> cum >= indexOf(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 576460765188325409), arrayCumSum(\"tv:u64Array:lrcard:lrcard:u64:4E:::0::data\"))], 0) = 1 AND countEqual(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 576460765188325410) = 1 AND if(has(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 576460765188325410), \"tv:stringArray:len:len:u64:4D:::0::data\"[arrayFirstIndex(cum -> cum >= indexOf(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 576460765188325410), arrayCumSum(\"tv:stringArray:lrcard:lrcard:u64:4E:::0::data\"))], 0) = 1 AND countEqual(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 576460765188325411) = 1 AND if(has(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 576460765188325411), \"tv:u64Array:len:len:u64:4D:::0::data\"[arrayFirstIndex(cum -> cum >= indexOf(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 576460765188325411), arrayCumSum(\"tv:u64Array:lrcard:lrcard:u64:4E:::0::data\"))], 0) = 1 AND countEqual(\"tv:symbol:lr:lr:u64:1247:::0::data\", 576460765188325412) = 1 AND countEqual(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 576460765188325413) = 1 AND if(has(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 576460765188325413), \"tv:stringArray:len:len:u64:4D:::0::data\"[arrayFirstIndex(cum -> cum >= indexOf(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 576460765188325413), arrayCumSum(\"tv:stringArray:lrcard:lrcard:u64:4E:::0::data\"))], 0) = 1 AND countEqual(\"tv:symbol:lr:lr:u64:1247:::0::data\", 576460765188325414) = 1 AND countEqual(\"tv:i32Array:lr:lr:u64:1247:::0::data\", 576460765188325415) = 1 AND if(has(\"tv:i32Array:lr:lr:u64:1247:::0::data\", 576460765188325415), \"tv:i32Array:len:len:u64:4D:::0::data\"[arrayFirstIndex(cum -> cum >= indexOf(\"tv:i32Array:lr:lr:u64:1247:::0::data\", 576460765188325415), arrayCumSum(\"tv:i32Array:lrcard:lrcard:u64:4E:::0::data\"))], 0) = 1 AND countEqual(\"tv:i64Array:lr:lr:u64:1247:::0::data\", 576460765188325416) = 1 AND if(has(\"tv:i64Array:lr:lr:u64:1247:::0::data\", 576460765188325416), \"tv:i64Array:len:len:u64:4D:::0::data\"[arrayFirstIndex(cum -> cum >= indexOf(\"tv:i64Array:lr:lr:u64:1247:::0::data\", 576460765188325416), arrayCumSum(\"tv:i64Array:lrcard:lrcard:u64:4E:::0::data\"))], 0) = 1 AND countEqual(\"tv:blobArray:lr:lr:u64:1247:::0::data\", 576460765188325417) = 1 AND if(has(\"tv:blobArray:lr:lr:u64:1247:::0::data\", 576460765188325417), \"tv:blobArray:len:len:u64:4D:::0::data\"[arrayFirstIndex(cum -> cum >= indexOf(\"tv:blobArray:lr:lr:u64:1247:::0::data\", 576460765188325417), arrayCumSum(\"tv:blobArray:lrcard:lrcard:u64:4E:::0::data\"))], 0) = 1",
@@ -1145,6 +1257,17 @@ func decodeStevedoreRecord(rec arrow.RecordBatch) (ents []*StevedoreEntity, err 
 		}
 		ent.NaturalKey = idR.GetAttrValueNaturalKey(raruntime.EntityIdx(i))
 		ent.ExpiresAt = lcR.GetAttrValueExpiresAt(raruntime.EntityIdx(i))
+		{
+			row, ok, e := originReadRow(i, symbolR.GetAttributes(), symbolR.GetMemberships(), u64ArrayR.GetAttributes(), u64ArrayR.GetMemberships())
+			if e != nil {
+				err = eh.Errorf("read origin component: %w", e)
+				return
+			}
+			if ok {
+				row.Id = ent.ID
+				ent.Origin = option.Some(row)
+			}
+		}
 		{
 			row, ok, e := deadLetterReadRow(i, symbolR.GetAttributes(), symbolR.GetMemberships(), u64ArrayR.GetAttributes(), u64ArrayR.GetMemberships(), stringArrayR.GetAttributes(), stringArrayR.GetMemberships(), i32ArrayR.GetAttributes(), i32ArrayR.GetMemberships(), i64ArrayR.GetAttributes(), i64ArrayR.GetMemberships(), blobArrayR.GetAttributes(), blobArrayR.GetMemberships())
 			if e != nil {

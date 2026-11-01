@@ -906,7 +906,7 @@ func (inst *App) renderPreview(sc *storeConn) {
 		for range c.IdScope(inst.ids.PrepareStr("preview-body")) {
 			switch content.kind {
 			case previewKindMarkdown:
-				content.renderDoc(inst.ids)
+				inst.renderPreviewDoc(content)
 			case previewKindImage:
 				inst.renderImage(laneKey, content)
 			case previewKindNone, previewKindError:

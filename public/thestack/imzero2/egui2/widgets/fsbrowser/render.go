@@ -326,11 +326,8 @@ func (in Input) renderList(st *State, density styletokens.DensityE, res *Result)
 			}
 		}
 		in.renderHeaders(et, st, density, plan)
-		rowBegin, rowEnd := 0, len(rows)
-		if rb, re, _, _, _, ok := et.VisibleRange(); ok {
-			rowBegin = min(int(rb), len(rows))
-			rowEnd = min(int(re), rowEnd)
-		}
+		lo, hi := et.VisibleRows(uint64(len(rows)), c.EtScreenfulRows(ceiling, rowH), -1)
+		rowBegin, rowEnd := int(lo), int(hi)
 		st.lastVisibleRows = rowEnd - rowBegin
 		for i := rowBegin; i < rowEnd; i++ {
 			e := rows[i]

@@ -133,6 +133,7 @@ func (inst *App) refreshSurface(force bool) {
 	}
 	sv.conv, sv.turns = inst.conv.id, len(inst.stats.turns)
 	cli, kq, ceiling, conv, tasks := inst.agentCli, inst.kq, inst.coord.ceilingNow(), inst.conv.id, inst.coord.heldTasks()
+	// Not a task: it re-runs every surfaceLiveEvery (see App.tasks).
 	sv.job.Start(nil, bgjob.Spec{Kind: "chat-surface", Title: "the agent surface"},
 		func(ctx context.Context) (m *surfaceModel, err error) {
 			return fetchSurface(ctx, cli, kq, ceiling, conv, tasks)

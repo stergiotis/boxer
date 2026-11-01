@@ -1,6 +1,7 @@
 package imzhost
 
 import (
+	"fmt"
 	"github.com/rs/zerolog/log"
 	"github.com/stergiotis/boxer/apps/capinspector"
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
@@ -54,6 +55,11 @@ type ChromeConfig struct {
 	// what the screenshot-tour path and any host without a launcher want.
 	// Requires Host != nil.
 	Launcher app.AppIdT
+	// ShowRunning, when non-nil, puts "Running windows" at the top of the
+	// Window menu: it opens the app center on its Running tab, every open
+	// window with what it costs (ADR-0348). Host boot sets it where the app
+	// center can be launched. May be nil.
+	ShowRunning func() (err error)
 }
 
 // DecorateRenderer wraps an inner renderer in the shared host chrome:
@@ -206,15 +212,79 @@ func DecorateRenderer(inner func() error, cc ChromeConfig) func() error {
 					}
 				}
 				for range c.MenuButton(c.Atoms().Text("Window").Keep()).KeepIter() {
-					// Whole-desktop arrangements over the windowhost's windows,
-					// computed in Go from the geometry the host reports.
-					if cc.Host != nil {
-						for _, cmd := range windowhost.ArrangeCommands {
-							if c.Button(ids.PrepareStr("arrange-"+cmd.String()), c.Atoms().Text(cmd.String()).Keep()).SendResp().HasPrimaryClicked() {
-								cc.Host.Arrange(cmd)
+					if cc.ShowRunning != nil {
+						if c.Button(ids.PrepareStr("showRunning"), c.Atoms().Text("Running windows").Keep()).SendResp().HasPrimaryClicked() {
+							if err := cc.ShowRunning(); err != nil {
+								log.Warn().Err(err).Msg("Window menu: the app center did not open")
 							}
 						}
 						c.Separator().Horizontal().Send()
+					}
+					// Whole-desktop arrangements over the windowhost's windows,
+					// computed in Go from the geometry the host reports.
+					if cc.Host != nil {
+						// The desktop's layout (ADR-0346 §SD1, §SD7): the
+						// floating desktop, or a layout the host keeps live.
+						// Read back each frame so a switch from elsewhere (the
+						// env var at launch, an agent) shows here.
+						layout := cc.Host.Layout()
+						for range c.MenuButton(c.Atoms().Text("Desktop layout").Keep()).KeepIter() {
+							selected := layout
+							sel := selector.Segmented(ids, "desktopLayout", &selected).Style(selector.StyleRadio).Vertical()
+							for _, l := range windowhost.Layouts {
+								sel = sel.Option(l, l.String())
+							}
+							if sel.SendResp() {
+								_ = cc.Host.SetLayout(selected)
+							}
+							if layout == windowhost.LayoutMainStack {
+								c.Separator().Horizontal().Send()
+								p := cc.Host.LayoutParams()
+								c.Label(fmt.Sprintf("Main ratio %d%%, main windows %d", int(p.MainRatio*100+0.5), p.MainCount)).Send()
+								for range c.HorizontalTop().KeepIter() {
+									if c.Button(ids.PrepareStr("mainRatioDown"), c.Atoms().Text("Ratio -").Keep()).SendResp().HasPrimaryClicked() {
+										p.MainRatio -= windowhost.MainRatioStep
+										cc.Host.SetLayoutParams(p)
+									}
+									if c.Button(ids.PrepareStr("mainRatioUp"), c.Atoms().Text("Ratio +").Keep()).SendResp().HasPrimaryClicked() {
+										p.MainRatio += windowhost.MainRatioStep
+										cc.Host.SetLayoutParams(p)
+									}
+									if c.Button(ids.PrepareStr("mainCountDown"), c.Atoms().Text("Main -").Keep()).SendResp().HasPrimaryClicked() {
+										p.MainCount--
+										cc.Host.SetLayoutParams(p)
+									}
+									if c.Button(ids.PrepareStr("mainCountUp"), c.Atoms().Text("Main +").Keep()).SendResp().HasPrimaryClicked() {
+										p.MainCount++
+										cc.Host.SetLayoutParams(p)
+									}
+								}
+							}
+							// Per-window float (ADR-0346 §SD4), on the active
+							// window until the chords of §SD5 land.
+							if active := windowhost.WindowKeyT(cc.Host.ActiveWindow()); layout.Tiled() && active != 0 {
+								c.Separator().Horizontal().Send()
+								floating := cc.Host.WindowFloating(active)
+								label := "Float active window"
+								if floating {
+									label = "Tile active window"
+								}
+								if c.Button(ids.PrepareStr("floatActive"), c.Atoms().Text(label).Keep()).SendResp().HasPrimaryClicked() {
+									_ = cc.Host.FloatWindow(active, !floating)
+								}
+							}
+						}
+						c.Separator().Horizontal().Send()
+						// One-shot arrangements are floating-desktop commands;
+						// on a tiled desktop the layout is what moves windows.
+						if !layout.Tiled() {
+							for _, cmd := range windowhost.ArrangeCommands {
+								if c.Button(ids.PrepareStr("arrange-"+cmd.String()), c.Atoms().Text(cmd.String()).Keep()).SendResp().HasPrimaryClicked() {
+									cc.Host.Arrange(cmd)
+								}
+							}
+							c.Separator().Horizontal().Send()
+						}
 					}
 					// Forgets every window's position and size; egui then
 					// re-places each one from its defaults.

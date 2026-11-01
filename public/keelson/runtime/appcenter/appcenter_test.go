@@ -44,6 +44,9 @@ var statements = []struct{ table, sql string }{
 	{providers.TableAppLogs, logsSql},
 	{providers.TableAppAudit, auditSql},
 	{tableFrameTimes, framesSql},
+	{tableWindows, runWindowsSql},
+	{tableFrameTimes, runFramesSql},
+	{tableTasks, runTasksSql},
 }
 
 // adhocStub stands in for keelson('adhoc'), which only a running dataset
@@ -82,6 +85,7 @@ func hostRegistry(t *testing.T) *introspect.Registry {
 	require.NoError(t, providers.RegisterAppTrail(r, nil))
 	require.NoError(t, r.Register(adhocStub{}))
 	require.NoError(t, providersgui.RegisterFrameTimes(r, nil))
+	require.NoError(t, providersgui.RegisterWindows(r, nil, nil))
 	return r
 }
 
@@ -90,10 +94,12 @@ func TestManifestDeclaresEveryRead(t *testing.T) {
 	for _, cp := range manifest.Caps {
 		declared[cp.Pattern] = true
 	}
-	require.Len(t, readTables, len(statements))
+	tables := make(map[string]bool)
 	for _, s := range statements {
+		tables[s.table] = true
 		assert.True(t, declared[keelsonquery.Subject(s.table)], s.table)
 	}
+	require.Len(t, readTables, len(tables), "every declared table is read")
 	assert.True(t, declared[windowhost.OpenSubject])
 	assert.Equal(t, AppId, manifest.Id)
 }
@@ -173,6 +179,16 @@ func TestEveryLensReadsOverTheBus(t *testing.T) {
 	} {
 		assert.Equal(t, lensStateOk, st.s, "%s: %s", name, st.note)
 	}
+
+	rn := readRunning(ctx, r, running{})
+	for name, st := range map[string]struct {
+		s    lensStateE
+		note string
+	}{
+		"windows": {rn.windows.state, rn.windows.note}, "frames": {rn.frames.state, rn.frames.note}, "tasks": {rn.tasks.state, rn.tasks.note},
+	} {
+		assert.Equal(t, lensStateOk, st.s, "running %s: %s", name, st.note)
+	}
 }
 
 // fixtureReader answers each table from a function, or refuses it.
@@ -181,9 +197,11 @@ type fixtureReader struct {
 	refused map[string]bool
 	failed  map[string]bool
 	appIds  []string
+	tables  []string
 }
 
 func (inst *fixtureReader) read(ctx context.Context, table string, sql string, appId string, dst any) error {
+	inst.tables = append(inst.tables, table)
 	if appId != "" {
 		inst.appIds = append(inst.appIds, appId)
 	}

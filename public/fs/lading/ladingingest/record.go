@@ -28,7 +28,11 @@ import (
 // (ladingschema.Layout.DatabaseName), a published tree writes
 // `adhoc:<publisher>` (ladingadhoc.StoreNamePrefix). It is not read by any
 // code path and does not select tables — the layout does that.
-func RecordPolicy(ctx context.Context, st *ladingpolicy.PolicyStore, mount identifier.TaggedId, policy Policy, name string, storeName string) (err error) {
+//
+// origin is who declares it (ADR-0330 §SD3): the recording process's run,
+// and the app and window a published tree came from, zero where there is
+// none. The row carries it under the mount's id.
+func RecordPolicy(ctx context.Context, st *ladingpolicy.PolicyStore, mount identifier.TaggedId, policy Policy, name string, storeName string, origin ladingpolicy.Origin) (err error) {
 	err = policy.check()
 	if err != nil {
 		return
@@ -39,9 +43,10 @@ func RecordPolicy(ctx context.Context, st *ladingpolicy.PolicyStore, mount ident
 	if !mount.IsValid() {
 		return eh.Errorf("mount id is not a valid tagged id")
 	}
+	origin.Id = mount.Value()
 	err = st.Begin(mount.Value(), time.Now().UTC(), ladingpolicy.PolicyEnvelope{
 		NaturalKey: []byte(name),
-	}).AddLadingMount(ladingpolicy.LadingMount{
+	}).AddOrigin(origin).AddLadingMount(ladingpolicy.LadingMount{
 		Kind:      "mount",
 		Name:      name,
 		Store:     storeName,

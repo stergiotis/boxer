@@ -40,9 +40,11 @@ import (
 const runEventsCap = uint32(20000)
 
 // runEventKind pairs a kind's membership with the label the trail shows.
-// The writers' own labels are not usable: they spell the twelve kinds three
-// ways ("runtime-run", "columnWidth", "audit"), which is a wire detail rather
-// than a vocabulary anyone chose.
+// The writers' own labels are not usable: they spell the kinds three ways
+// ("runtime-run", "columnWidth", "grant"), which is a wire detail rather
+// than a vocabulary anyone chose. The bus-request kind is not among them: a
+// bus request is an audit event on the trail (ADR-0296's Update of
+// 2026-10-30), and rows of the retired kind are no longer read.
 type runEventKind struct {
 	memb  uint64
 	label string
@@ -55,7 +57,6 @@ type runEventKind struct {
 func runEventKinds() (out []runEventKind) {
 	out = []runEventKind{
 		{vocab.MembKindGrant.GetId().Value(), "grant"},
-		{vocab.MembKindAudit.GetId().Value(), "audit"},
 		{vocab.MembKindState.GetId().Value(), "persist"},
 		{vocab.MembKindEvent.GetId().Value(), "event"},
 		{vocab.MembKindLog.GetId().Value(), "log"},
@@ -77,7 +78,7 @@ var _ factsstore.RunEventReaderI = (*Store)(nil)
 // landed after it started.
 //
 // The second half is the compromise ADR-0191 leaves behind rather than
-// hides. Grant, audit, log and column-width rows written before that decision
+// hides. Grant, log and column-width rows written before that decision
 // carry no run id, so the only thing that can place them is their timestamp,
 // and a second boxer process overlapping this one lands its rows here too.
 // Rows written since carry the run and are selected by name.
@@ -136,7 +137,7 @@ func composeRunEventsSql(table string, filter factsstore.RunEventFilter, limit u
 	instanceExpr := pickLcrNumeric(u64Value, u64LR, u64LRCard,
 		vocab.MembLifecycleTileKey.GetId().Value(), "0")
 	// A row carries exactly one kind, so intersecting the kind lane with the
-	// twelve ids yields one id and transform() names it.
+	// kind ids yields one id and transform() names it.
 	kindExpr := fmt.Sprintf("transform(arrayElement(arrayIntersect(%s, %s), 1), %s, %s, '?')",
 		symLR, idArray, idArray, labelArray)
 	// What the row says, in written order. Every writer opens the symbol

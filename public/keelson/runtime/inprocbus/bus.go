@@ -146,6 +146,21 @@ func (inst *Inst) Subscriptions() (rows []SubscriptionInfo) {
 	return
 }
 
+// HasSubscriber reports whether a message published on subject would reach
+// at least one subscription. A publisher uses it to skip producing a value
+// no one would receive.
+func (inst *Inst) HasSubscriber(subject string) (ok bool) {
+	inst.mu.RLock()
+	defer inst.mu.RUnlock()
+	for _, s := range inst.subs {
+		if Match(s.pattern, subject) {
+			ok = true
+			return
+		}
+	}
+	return
+}
+
 var _ app.BusProvider = (*Inst)(nil)
 
 // NewBusClient satisfies app.BusProvider, minting a per-app client as

@@ -29,10 +29,14 @@ import (
 func TestGenerateLadingPolicyStore(t *testing.T) {
 	ids, err := storegen.MembershipIds(ladingvocab.NkRegistry)
 	require.NoError(t, err)
+	// The origin's memberships are the runtime vocabulary's (ADR-0330 §SD3).
+	require.NoError(t, storegen.AddOriginIds(ids))
 	require.NoError(t, storegen.Input{
-		PackageName:    "ladingpolicy",
-		StoreName:      "Policy",
-		ComponentPaths: []string{"./ladingmount_dto.go"},
+		PackageName: "ladingpolicy",
+		StoreName:   "Policy",
+		// The origin leads: it is the audit package's (ADR-0330 §SD3),
+		// bound through the alias in origin.go.
+		ComponentPaths: []string{"../../../storage/recordstore/evidence/audit/origin_dto.go", "./ladingmount_dto.go"},
 		OutDir:         ".",
 		ImportPath:     "github.com/stergiotis/boxer/public/fs/lading/ladingpolicy",
 		Ids:            ids,

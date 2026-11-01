@@ -440,6 +440,84 @@ row says that a request crossed the bus, has no principal, data subject
 or retention class, and is written once per request. The writer is
 unchanged, and the migration stays deferred.
 
+### 2026-10-30 — §SD4–§SD6: the trail's audit events go through the shared writer
+
+The trail's audit-event path, its loss accounting, its reads and its
+forwarder are `auditrec`'s
+([ADR-0330](./0330-a-shared-audit-recorder-below-the-runtime-one-sealed-writer-over-a-narrow-store-binding.md) §SD5–§SD8):
+`Event` and `EventWriteAhead` are its event verb with the caller's
+`Origin` as the default, `EventsBySubject`, `EventsByPrincipal` and
+`ForwardWindow` its reads, each with the trail's signature. A reader of
+§SD4 should now expect the gap row to land in the flush that found the
+gap rather than the next one, so `Flush` returning nil means the gap is
+on the server too. §SD5's reads return each row once when a batch was
+stored twice after a lost acknowledgement, and the entities they return
+carry the row's origin and audit event, not its conversation or
+delegation. §SD6's prompt path no longer runs through a write observer:
+the writer hands a batch's events to the forwarder once that batch landed,
+and `WithWriteObserver` attaches a caller's observer only. §SD2's rule,
+§SD1's row and the stored digests are unchanged
+(`TestTrailDigestsArePinned`).
+
+### 2026-10-30 — Deferred: the bus-request kind becomes an audit event
+
+The Deferred item "migrating the bus-request `audit` kind onto
+`AuditEvent`" is done. Each audited bus request
+(`keelson/runtime/audit.AuditRecord`) is recorded by `trail.AsAuditSink`
+through the host's recorder as one audit event, mapped by
+`audit.EventOf`:
+
+| `AuditEvent` | from the request |
+|---|---|
+| `Domain`, `Action` | `bus`, `request` |
+| `Outcome` | `ok`, `denied`, `timeout` and `error` as they are; `unspecified` as `failed` |
+| `RefTypes` / `RefValues` | `subject` / the bus subject |
+| `AttrKeys` / `AttrValues` | `latency-ms`, `request-bytes`, `response-bytes`, each when positive |
+| `Subject` | 0 |
+| `Retention` | `trail`, the class of the recorder's own rows |
+| principal | none: no call identity, so `PrincipalBy` is `none` |
+| `OriginBy` | `host`, by an attestation on the context |
+| origin | the requester's app and window under the recorder's run |
+
+§SD1's outcome vocabulary gains `timeout` and `error` beside `ok`,
+`denied` and `failed` (owner's decision of 2026-10-30): failures of a
+known shape, for an emitter that tells them apart, with `failed` for any
+other. `Validate` accepts the five; a reader that knew three sees two
+more values and no change of meaning. The bus's result is the outcome,
+so no attribute repeats it. The id rule needs nothing new: an event's
+natural key carries the run's unique part, so repeated requests of one
+subject are separate rows. The rows ride the recorder's buffer, seals and
+backlog like every other row; the host's recorder flushes once a second.
+The audit subject refuses an app's row in the `bus` domain, as it
+refuses the trail's own.
+
+The kind lives in the one audit-event mart: `dm_trail_audit_events`
+lists every `AuditEvent` row, the bus domain's included, and the timeline
+carries each as one row of kind `auditEvent`, whose headline names
+domain, action and outcome (`ViewsVersion` 15). The 2026-10-13 entry's
+reasoning for a separate mart is withdrawn by the owner's decision of
+2026-10-30; `dm_trail_bus_requests` and the timeline kind `busRequest`
+are removed. The app center's fold (`keelson('app_audit')`) reads
+`boxer.facts` directly and stays. Rows of the retired `audit` kind are
+left on the table and ignored; its vocabulary entries stay, unwritten.
+`factsstore.AuditRow`, `WriteAudit` and `AsAuditSink` are removed.
+
+Accepted by the owner on 2026-10-30:
+
+- **Boot and shutdown edges.** The bus's audit sink attaches after the
+  trail is built and closes before it, so requests at the earliest boot
+  steps and the last shutdown steps are not audited. At boot the window
+  opens with `inprocbus.NewInst` in `hostboot.Boot` and closes at
+  `Bus.SetAuditSink` in `Runtime.bootServices`; at shutdown it opens when
+  `Runtime.Close` runs the async sink's `Close` — registered in
+  `bootServices` after the trail's own cleanup, so it runs just before
+  the trail's — and lasts to the end of `Close`, the persist service's
+  and the persist backend's teardown among it.
+- **No ClickHouse, no bus rows.** A host without ClickHouse records
+  nothing for the bus; its trail is not durable and says so, as
+  [ADR-0330](./0330-a-shared-audit-recorder-below-the-runtime-one-sealed-writer-over-a-narrow-store-binding.md)'s
+  Update of this date sets out.
+
 ## References
 
 - [ADR-0277](./0277-one-audit-trail-for-model-calls-and-agent-work.md) — the trail: components, `Origin`, the backlog, the read store.

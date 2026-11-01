@@ -16,6 +16,7 @@ import (
 	"github.com/stergiotis/boxer/public/fs/lading/ladingpolicy"
 	"github.com/stergiotis/boxer/public/fs/lading/ladingremote"
 	"github.com/stergiotis/boxer/public/fs/lading/ladingschema"
+	"github.com/stergiotis/boxer/public/keelson/runtime/runinfo"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
@@ -154,7 +155,14 @@ func runSnapshot(ctx context.Context, cmd *cli.Command) (err error) {
 		if store == "" {
 			store = layout.DatabaseName()
 		}
-		err = ladingingest.RecordPolicy(ctx, policies, mount, pol, name, store)
+		// The row carries this process's run as its origin (ADR-0330
+		// §SD3); a CLI has no window.
+		var runInst *runinfo.Inst
+		runInst, err = runinfo.Init()
+		if err != nil {
+			return eh.Errorf("run info: %w", err)
+		}
+		err = ladingingest.RecordPolicy(ctx, policies, mount, pol, name, store, ladingpolicy.Origin{Run: runInst.RunId})
 		if err != nil {
 			return eh.Errorf("record policy: %w", err)
 		}

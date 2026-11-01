@@ -41,6 +41,10 @@ func playComponentStores() []componentStore {
 			ids:  sysmfacts.SysmetricsMembershipIds,
 			bind: func(b *componentview.Binder) error {
 				return firstErr(
+					// The origin every writer of boxer.facts carries
+					// (ADR-0330 §SD3) is bound once, here: the stores
+					// that bind it publish one kind over one table.
+					bindKind[sysmfacts.Origin](b, "Origin"),
 					bindKind[sysmfacts.SysBattery](b, "SysBattery"),
 					bindKind[sysmfacts.SysCpu](b, "SysCpu"),
 					bindKind[sysmfacts.SysCpuInfo](b, "SysCpuInfo"),

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"github.com/stergiotis/boxer/apps/mdedit/mdeditlink"
 	"strconv"
 	"strings"
 	"time"
@@ -197,6 +198,10 @@ type richEntry struct {
 type richCellCache struct {
 	ids     *c.WidgetIdStack
 	tracker *c.ImageVersionTracker[string]
+	// openLink follows an mdedit:// link clicked in a markdown cell
+	// (ADR-0347 §SD5); nil leaves every link a hyperlink, for a cache whose
+	// owner cannot open a window.
+	openLink func(url string)
 
 	forExecuted time.Time
 	forRow      int64
@@ -616,7 +621,13 @@ func (inst *richCellCache) renderBody(key richKey, d gloss.Declaration, e *richE
 		}
 		// One scope per cell, so two cells' documents cannot collide.
 		for range c.IdScope(inst.ids.PrepareStr(key.String())) {
-			markdown.Render(markdown.Input{Ids: inst.ids, ScopeKey: "play-detail-md", Doc: e.doc})
+			in := markdown.Input{Ids: inst.ids, ScopeKey: "play-detail-md", Doc: e.doc}
+			if inst.openLink != nil {
+				in.LinkClaims = mdeditlink.Claimed
+			}
+			for _, l := range markdown.Render(in).Links {
+				inst.openLink(l.URL)
+			}
 		}
 	case gloss.MediaTypePlain:
 		c.Label(e.text).Wrap().Send()

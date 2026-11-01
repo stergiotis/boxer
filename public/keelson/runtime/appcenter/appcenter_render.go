@@ -8,9 +8,11 @@ import (
 	playlaunch "github.com/stergiotis/boxer/apps/play/launchcfg"
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
+	"github.com/stergiotis/boxer/public/keelson/runtime/widgethandle"
 	"github.com/stergiotis/boxer/public/observability/humanfmt"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/badge"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/selector"
 )
 
 // leftWidth is the app list's first width; the panel is resizable.
@@ -31,7 +33,15 @@ func (inst *App) render() {
 	for range c.PanelTopInside(inst.ids.PrepareStr("top")).Resizable(false).KeepIter() {
 		inst.renderStatus(snap)
 	}
+	if inst.view == viewRunning {
+		// The grids scroll themselves, both ways.
+		inst.renderRunningTab(snap)
+		return
+	}
 	for range c.PanelLeftInside(inst.ids.PrepareStr("apps")).Resizable(true).DefaultSize(leftWidth).KeepIter() {
+		// Typing commits per keystroke inside the frame (ADR-0345 §SD3); the
+		// handle lets the filter resource say the person is typing.
+		inst.filterH = widgethandle.Make(inst.ids.PrepareStr("filter").Derive())
 		c.TextEdit(inst.ids.PrepareStr("filter"), inst.filter, false).
 			HintText("filter apps").
 			SendRespVal(&inst.filter)
@@ -49,6 +59,18 @@ func (inst *App) render() {
 
 func (inst *App) renderStatus(snap snapshot) {
 	for range c.HorizontalTop().KeepIter() {
+		// The tabs (ADR-0348 §SD1). The selector commits inside the frame, so
+		// a changed copy is the person's click, routed as a gesture (ADR-0345
+		// §SD3).
+		view := inst.view
+		selector.Segmented(inst.ids, "view", &view).
+			Option(viewRunning, icons.PhPulse+" Running").
+			Option(viewApps, icons.PhSquaresFour+" Apps").
+			SendResp()
+		if view != inst.view {
+			inst.setViewGesture(view)
+		}
+		c.Separator().Vertical().Send()
 		if c.Button(inst.ids.PrepareStr("refresh"), c.Atoms().Text(icons.PhArrowClockwise+" Refresh").Keep()).SendResp().HasPrimaryClicked() {
 			inst.refreshAll()
 		}
@@ -85,7 +107,8 @@ func (inst *App) renderList(snap snapshot) {
 				clicked = c.SelectableLabel(inst.ids.PrepareStr("row"), inst.selected == id, label).SendResp().HasPrimaryClicked()
 			}
 			if clicked {
-				inst.selectApp(id)
+				// The person's selection, through the catalog (ADR-0345 §SD3).
+				inst.selectGesture(id)
 			}
 		}
 	}

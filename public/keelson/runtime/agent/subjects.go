@@ -57,6 +57,9 @@ const (
 	SubjectRaise = SubjectPrefix + "raise"
 	// SubjectPlace sets the outer rect of one of the task's windows.
 	SubjectPlace = SubjectPrefix + "place"
+	// SubjectLayout sets the desktop's layout and its parameters, or floats
+	// a window out of it (ADR-0346 §SD6).
+	SubjectLayout = SubjectPrefix + "layout"
 	// SubjectMark puts a mark on the overlay (ADR-0297 §SD8).
 	SubjectMark = SubjectPrefix + "mark"
 	// SubjectUnmark removes the task's marks, one or all.

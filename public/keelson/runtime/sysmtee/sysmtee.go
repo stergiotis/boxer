@@ -43,6 +43,7 @@ import (
 
 	"github.com/rs/zerolog"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
+	"github.com/stergiotis/boxer/public/keelson/runtime/runinfo"
 	"github.com/stergiotis/boxer/public/keelson/runtime/sysmetricsbus"
 	"github.com/stergiotis/boxer/public/keelson/runtime/sysmfacts"
 	"github.com/stergiotis/boxer/public/observability/eh"
@@ -68,6 +69,10 @@ type Options struct {
 	// the handler, which is a sysmetricsbus change deferred until such a sink
 	// exists (ADR-0184 §SD8).
 	Host string
+	// Run is the run id every row's origin carries (ADR-0330 §SD3). Empty
+	// takes the process's run when runinfo was initialised, else the rows
+	// are unattributed.
+	Run string
 	// Subject defaults to this host's bundle subject. Set it to the wildcard
 	// only when every publisher on it is the host named above.
 	Subject string
@@ -163,6 +168,11 @@ func Start(opts Options) (inst *Tee, err error) {
 	if opts.Subject == "" {
 		opts.Subject = sysmetricsbus.BundleSubject(opts.Host)
 	}
+	if opts.Run == "" {
+		if ri, riErr := runinfo.Get(); riErr == nil {
+			opts.Run = ri.RunId
+		}
+	}
 	if opts.QueueDepth <= 0 {
 		opts.QueueDepth = DefaultQueueDepth
 	}
@@ -256,7 +266,6 @@ func (inst *Tee) run() {
 func (inst *Tee) ingest(snap *sysmsnap.BundleSnapshot) {
 	ts := sampleTime(snap)
 	host := inst.opts.Host
-	store := inst.opts.Store
 
 	// The topology is static — the collector reads it once from sysfs and
 	// stamps the same value onto every snapshot — so it is written on first
@@ -264,71 +273,81 @@ func (inst *Tee) ingest(snap *sysmsnap.BundleSnapshot) {
 	// independently of whether the cpu collector was wired, and gating it on
 	// the descriptor's would drop it whenever cpu was absent.
 	if snap.Topology != nil && !inst.seenTopology {
-		if ingestKind(inst, "topology", ts,
+		if ingestKind(inst, "topology",
 			func() (sysmfacts.SysTopology, error) { return topologyRow(host, snap.Topology, ts) },
-			store.IngestSysTopology) {
+			func(r sysmfacts.SysTopology) error {
+				return inst.begin(r.Id, ts, r.NaturalKey).AddSysTopology(r).Commit()
+			}) {
 			inst.seenTopology = true
 		}
 	}
 	if snap.CPU != nil {
 		// Static CPU facts once per host, not per tick.
 		if _, seen := inst.seenHosts[host]; !seen {
-			if ingestKind(inst, "cpuInfo", ts,
+			if ingestKind(inst, "cpuInfo",
 				func() (sysmfacts.SysCpuInfo, error) { return cpuInfoRow(host, snap.CPU, ts) },
-				store.IngestSysCpuInfo) {
+				func(r sysmfacts.SysCpuInfo) error {
+					return inst.begin(r.Id, ts, r.NaturalKey).AddSysCpuInfo(r).Commit()
+				}) {
 				inst.seenHosts[host] = struct{}{}
 			}
 		}
-		ingestKind(inst, "cpu", ts,
+		ingestKind(inst, "cpu",
 			func() (sysmfacts.SysCpu, error) { return cpuRow(host, snap.CPU, ts) },
-			store.IngestSysCpu)
+			func(r sysmfacts.SysCpu) error { return inst.begin(r.Id, ts, r.NaturalKey).AddSysCpu(r).Commit() })
 	}
 	if snap.Mem != nil {
-		ingestKind(inst, "mem", ts,
+		ingestKind(inst, "mem",
 			func() (sysmfacts.SysMem, error) { return memRow(host, snap.Mem, ts) },
-			store.IngestSysMem)
+			func(r sysmfacts.SysMem) error { return inst.begin(r.Id, ts, r.NaturalKey).AddSysMem(r).Commit() })
 	}
 	if snap.PSI != nil {
-		ingestKind(inst, "psi", ts,
+		ingestKind(inst, "psi",
 			func() (sysmfacts.SysPsi, error) { return psiRow(host, snap.PSI, ts) },
-			store.IngestSysPsi)
+			func(r sysmfacts.SysPsi) error { return inst.begin(r.Id, ts, r.NaturalKey).AddSysPsi(r).Commit() })
 	}
 	if snap.Net != nil {
-		ingestKind(inst, "net", ts,
+		ingestKind(inst, "net",
 			func() (sysmfacts.SysNet, error) { return netRow(host, snap.Net, ts) },
-			store.IngestSysNet)
+			func(r sysmfacts.SysNet) error { return inst.begin(r.Id, ts, r.NaturalKey).AddSysNet(r).Commit() })
 	}
 	if snap.Disk != nil {
 		// Two kinds from one snapshot: the mount table and the device list have
 		// independent lengths, so they cannot share an entity's arrays.
-		ingestKind(inst, "diskMount", ts,
+		ingestKind(inst, "diskMount",
 			func() (sysmfacts.SysDiskMount, error) { return diskMountRow(host, snap.Disk, ts) },
-			store.IngestSysDiskMount)
-		ingestKind(inst, "diskIo", ts,
+			func(r sysmfacts.SysDiskMount) error {
+				return inst.begin(r.Id, ts, r.NaturalKey).AddSysDiskMount(r).Commit()
+			})
+		ingestKind(inst, "diskIo",
 			func() (sysmfacts.SysDiskIo, error) { return diskIoRow(host, snap.Disk, ts) },
-			store.IngestSysDiskIo)
+			func(r sysmfacts.SysDiskIo) error { return inst.begin(r.Id, ts, r.NaturalKey).AddSysDiskIo(r).Commit() })
 	}
 	if snap.Battery != nil {
-		ingestKind(inst, "battery", ts,
+		ingestKind(inst, "battery",
 			func() (sysmfacts.SysBattery, error) { return batteryRow(host, snap.Battery, ts) },
-			store.IngestSysBattery)
+			func(r sysmfacts.SysBattery) error {
+				return inst.begin(r.Id, ts, r.NaturalKey).AddSysBattery(r).Commit()
+			})
 	}
 	if snap.GPU != nil {
-		ingestKind(inst, "gpu", ts,
+		ingestKind(inst, "gpu",
 			func() (sysmfacts.SysGpu, error) { return gpuRow(host, snap.GPU, ts) },
-			store.IngestSysGpu)
+			func(r sysmfacts.SysGpu) error { return inst.begin(r.Id, ts, r.NaturalKey).AddSysGpu(r).Commit() })
 	}
 	if len(snap.Procs) > 0 {
-		ingestKind(inst, "proc", ts,
+		ingestKind(inst, "proc",
 			func() (sysmfacts.SysProc, error) { return procRow(host, snap.Procs, ts) },
-			store.IngestSysProc)
+			func(r sysmfacts.SysProc) error { return inst.begin(r.Id, ts, r.NaturalKey).AddSysProc(r).Commit() })
 		// Command lines, user names and ids only when a deployment asked for
 		// them (ADR-0090 §SD8; see SysProcCmd for why this is a kind and not a
 		// tag).
 		if inst.opts.PersistProcCmd {
-			ingestKind(inst, "procCmd", ts,
+			ingestKind(inst, "procCmd",
 				func() (sysmfacts.SysProcCmd, error) { return procCmdRow(host, snap.Procs, ts) },
-				store.IngestSysProcCmd)
+				func(r sysmfacts.SysProcCmd) error {
+					return inst.begin(r.Id, ts, r.NaturalKey).AddSysProcCmd(r).Commit()
+				})
 		}
 	}
 	// The sockets collector runs on its own slower cadence, so consecutive
@@ -336,28 +355,35 @@ func (inst *Tee) ingest(snap *sysmsnap.BundleSnapshot) {
 	// the same observation many times over and put a rising Order on rows that
 	// never changed; the stamp is what tells one observation from a re-send.
 	if snap.Sockets != nil && snap.Sockets.CollectedAtUnixMs != inst.lastSocketsStamp {
-		if ingestKind(inst, "sockets", ts,
+		if ingestKind(inst, "sockets",
 			func() (sysmfacts.SysSocket, error) { return socketRow(host, snap.Sockets) },
-			store.IngestSysSocket) {
+			func(r sysmfacts.SysSocket) error { return inst.begin(r.Id, ts, r.NaturalKey).AddSysSocket(r).Commit() }) {
 			inst.lastSocketsStamp = snap.Sockets.CollectedAtUnixMs
 		}
 	}
 }
 
+// begin opens one row at ts carrying the origin (ADR-0330 §SD3): the
+// writing process's run, and no window — the tee is the host's own work, so
+// app and instance are unattributed (ADR-0191 §SD3).
+func (inst *Tee) begin(id uint64, ts time.Time, naturalKey []byte) *sysmfacts.SysmetricsEntityBuilder {
+	return inst.opts.Store.Begin(id, ts, sysmfacts.SysmetricsEnvelope{NaturalKey: naturalKey}).
+		AddOrigin(sysmfacts.Origin{Id: id, Run: inst.opts.Run})
+}
+
 // ingestKind builds one row and hands it to the store, reporting whether it
-// landed. Generic because the nine kinds differ only in their row type and
-// their Ingest verb, and spelling each out invited the copy-paste error of
-// pairing one domain's builder with another's verb.
+// landed. Generic because the kinds differ only in their row type and their
+// Add verb; write is typed by the row, so pairing one domain's builder with
+// another's verb does not compile.
 func ingestKind[T any](
 	inst *Tee,
 	domain string,
-	ts time.Time,
 	build func() (T, error),
-	ingest func(time.Time, []T) error,
+	write func(T) error,
 ) (ok bool) {
 	row, err := build()
 	if err == nil {
-		err = ingest(ts, []T{row})
+		err = write(row)
 	}
 	if err != nil {
 		inst.opts.Log.Warn().Err(err).Str("domain", domain).

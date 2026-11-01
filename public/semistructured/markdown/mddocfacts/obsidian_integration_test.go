@@ -178,7 +178,7 @@ func provision(t *testing.T) (conn *localConn, ingested int) {
 		require.NoError(t, rerr)
 		rel, rerr := filepath.Rel(vaultDir, path)
 		require.NoError(t, rerr)
-		rows, ierr := store.IngestDocument(src, filepath.ToSlash(rel), ts)
+		rows, ierr := store.IngestDocument(src, filepath.ToSlash(rel), ts, mddocfacts.Origin{Run: "run-obsidian"})
 		require.NoError(t, ierr)
 		ingested += rows.Count()
 		return nil

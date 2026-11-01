@@ -389,9 +389,11 @@ func Render(in Input) (res Result) {
 			if ws, ok := et.ColumnWidths(); ok {
 				res.Widths = ws
 			}
+			scrollTo := -1
 			if reveal >= 0 {
 				if ri := RowOf(rows, reveal); ri >= 0 {
 					et = et.ScrollToRow(uint64(ri), scrollAlignCenter)
+					scrollTo = ri
 				}
 			}
 			in.renderHeaders(et, density)
@@ -399,15 +401,12 @@ func Render(in Input) (res Result) {
 			// Emit only the rows egui_table will draw. Without this gate every row
 			// of the whole outline builds deferred blocks and widget ids each
 			// frame, most of which are culled on arrival — the allocation
-			// pathology this widget chose an etable to avoid. VisibleRange reports
-			// the PREVIOUS frame's window, so it needs clamping here in a way a
-			// fixed-length table does not: a collapse can shorten the outline
-			// between the two frames.
-			rowBegin, rowEnd := 0, len(rows)
-			if rb, re, _, _, _, ok := et.VisibleRange(); ok {
-				rowBegin = min(int(rb), len(rows))
-				rowEnd = min(int(re), rowEnd)
-			}
+			// pathology this widget chose an etable to avoid. The window is the
+			// PREVIOUS frame's, clamped because a collapse can shorten the outline
+			// between the two frames; a table that has never been on screen gets
+			// a screenful (VisibleRows).
+			lo, hi := et.VisibleRows(uint64(len(rows)), c.EtScreenfulRows(in.MaxHeight, rowH), int64(scrollTo))
+			rowBegin, rowEnd := int(lo), int(hi)
 			// What PageUp / PageDown mean, kept for the next frame's key pass.
 			st.lastVisibleRows = rowEnd - rowBegin
 			for i := rowBegin; i < rowEnd; i++ {

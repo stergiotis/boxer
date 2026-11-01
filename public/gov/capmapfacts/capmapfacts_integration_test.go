@@ -78,7 +78,7 @@ func TestIngestRoundTripsThroughClickHouse(t *testing.T) {
 
 	corpus := sampleCorpus()
 	ctx := context.Background()
-	stats, err := capmapfacts.Ingest(ctx, corpus, cli, qualified, fixedNow)
+	stats, err := capmapfacts.Ingest(ctx, corpus, cli, qualified, fixedNow, capmapfacts.Origin{Run: "run-capmap"})
 	require.NoError(t, err)
 	require.Equal(t, 6, stats.Rows)
 
@@ -145,9 +145,9 @@ func TestReIngestReusesIds(t *testing.T) {
 	defer cleanup()
 
 	ctx := context.Background()
-	_, err := capmapfacts.Ingest(ctx, sampleCorpus(), cli, qualified, fixedNow)
+	_, err := capmapfacts.Ingest(ctx, sampleCorpus(), cli, qualified, fixedNow, capmapfacts.Origin{Run: "run-capmap"})
 	require.NoError(t, err)
-	_, err = capmapfacts.Ingest(ctx, sampleCorpus(), cli, qualified, fixedNow.Add(time.Hour))
+	_, err = capmapfacts.Ingest(ctx, sampleCorpus(), cli, qualified, fixedNow.Add(time.Hour), capmapfacts.Origin{Run: "run-capmap"})
 	require.NoError(t, err)
 
 	got := queryText(t, cli, ctx, fmt.Sprintf("SELECT count(), uniqExact(%s) FROM %s", colId, qualified))

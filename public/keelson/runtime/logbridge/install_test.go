@@ -140,9 +140,8 @@ func TestInstallGlobal_SwapsAndRestoresErrorMarshaler(t *testing.T) {
 func TestInstallGlobal_BoxerErrorPopulatesErrorContext(t *testing.T) {
 	store := factsstore.NewInMemoryFactsStore()
 	sink, err := logbridge.NewSink(store, logbridge.Config{
-		Capacity:     8,
-		FlushN:       1,
-		TailCapacity: 8,
+		Capacity: 8,
+		FlushN:   1,
 	})
 	require.NoError(t, err)
 	defer sink.Close()
@@ -162,7 +161,7 @@ func TestInstallGlobal_BoxerErrorPopulatesErrorContext(t *testing.T) {
 	log.Error().Err(wrapped).Msg("test boxer error")
 
 	waitFor(t, func() bool { return len(store.Logs()) >= 1 }, time.Second)
-	rows := sink.Tail(0)
+	rows := store.Logs()
 	require.Len(t, rows, 1)
 	got := rows[0]
 

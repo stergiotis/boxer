@@ -415,6 +415,27 @@ being read as a component. Rows written before the move are not found by the
 moved readers; ADR-0277's Migration says what a deployment does about them.
 The runtime-start row gains a build id.
 
+### 2026-10-30 — every runtime-written row carries `(run, app, instance)` as `Origin`
+
+Under [ADR-0277](./0277-one-audit-trail-for-model-calls-and-agent-work.md)'s
+Update of this date every writer of `boxer.facts` writes the shared
+origin component, `audit.Origin`
+([ADR-0330](./0330-a-shared-audit-recorder-below-the-runtime-one-sealed-writer-over-a-narrow-store-binding.md)
+§SD3): §SD1's pair and the app, on the memberships §SD1 names. The
+facts-bound stores that carried none — system metrics, watchbill
+presence, dead letters, markdown documents, lading mount policies — carry
+it, as do capmap's rows.
+
+§SD3 changes in one respect. The store's lanes write the run and the
+instance when they are unattributed too, as `""` and `0`, where they used
+to leave them out; the heartbeat and runtime-start rows gain an app slot
+of `""` and an instance of `0`. "No window" is told from a window by the
+value 0, which no window is, and no longer by absence. The readers in
+`chstore` already took `""` and `0` as unknown — `AppRuns` and
+`AppLogTail` drop rows whose run or app is `""`, `ListRunEvents` reads
+an empty run as unattributed — so their answers do not change. Natural
+keys, and the ids derived from them, are unchanged.
+
 ## References
 
 - [ADR-0026 — app runtime and capability subjects](0026-app-runtime-and-capability-subjects.md) — §SD6 defines the facts vocabulary this extends, §SD4 the NATS swap the deferral waits on.

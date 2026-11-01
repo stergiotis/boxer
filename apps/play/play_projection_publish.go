@@ -10,6 +10,7 @@ import (
 	"github.com/apache/arrow-go/v18/arrow/memory"
 	"github.com/stergiotis/boxer/public/analytics/explain"
 	"github.com/stergiotis/boxer/public/keelson/runtime/adhocdata"
+	"github.com/stergiotis/boxer/public/keelson/runtime/task"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/card"
@@ -137,7 +138,11 @@ func (inst *PlayApp) publishProjection(in projectionPublishInput) {
 	in.rec.Retain()
 	go func() {
 		defer in.rec.Release()
-		summary, err := doPublishProjection(inst.bus, in, pubs)
+		var summary string
+		err := task.RunToCompletion(inst.client.Tasks(), task.SpawnOpts{Kind: "play.projection.publish", Title: "publish the projection"}, func() (err error) {
+			summary, err = doPublishProjection(inst.bus, in, pubs)
+			return
+		})
 		st.mu.Lock()
 		st.publishing = false
 		st.err = err

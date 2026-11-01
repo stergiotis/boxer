@@ -40,6 +40,7 @@ import (
 	"unicode"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/fsbroker"
+	"github.com/stergiotis/boxer/public/keelson/runtime/task"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/markdown"
 )
 
@@ -286,51 +287,54 @@ func (inst *App) openFile() {
 	go func() {
 		res := fileResult{op: fileOpOpen}
 		defer func() { inst.finishFile(res) }()
+		// Run to completion: the broker requests take no context.
+		_ = task.RunToCompletion(inst.tasks, task.SpawnOpts{Kind: "mdedit.open", Title: "open a file"}, func() error {
+			teardownFollow(bus, prevFollow.handle, prevFollow.unsub)
 
-		teardownFollow(bus, prevFollow.handle, prevFollow.unsub)
+			reply, err := bus.RequestWithTimeout(fsbroker.SubjectDialogRead, nil, dialogTimeout)
+			if err != nil {
+				res.err = err
+				return res.err
+			}
+			dr, derr := fsbroker.UnmarshalDialogReply(reply)
+			if derr != nil {
+				res.err = derr
+				return res.err
+			}
+			if !dr.Granted {
+				res.cancelled = true
+				return res.err
+			}
+			res.displayName = dr.DisplayName
 
-		reply, err := bus.RequestWithTimeout(fsbroker.SubjectDialogRead, nil, dialogTimeout)
-		if err != nil {
-			res.err = err
-			return
-		}
-		dr, derr := fsbroker.UnmarshalDialogReply(reply)
-		if derr != nil {
-			res.err = derr
-			return
-		}
-		if !dr.Granted {
-			res.cancelled = true
-			return
-		}
-		res.displayName = dr.DisplayName
+			body, rerr := bus.RequestWithTimeout(dr.HandleSubjectPrefix+opRead, nil, transferTimeout)
+			if rerr != nil {
+				res.err = rerr
+				// The read failed but the grant stands; close it rather than
+				// leaving standing authority behind a failed gesture.
+				_, _ = bus.RequestWithTimeout(dr.HandleSubjectPrefix+opClose, nil, transferTimeout)
+				return res.err
+			}
+			if reason, isErr := readReplyError(body); isErr {
+				res.err = errFile(reason)
+				_, _ = bus.RequestWithTimeout(dr.HandleSubjectPrefix+opClose, nil, transferTimeout)
+				return res.err
+			}
+			res.text = string(body)
 
-		body, rerr := bus.RequestWithTimeout(dr.HandleSubjectPrefix+opRead, nil, transferTimeout)
-		if rerr != nil {
-			res.err = rerr
-			// The read failed but the grant stands; close it rather than
-			// leaving standing authority behind a failed gesture.
-			_, _ = bus.RequestWithTimeout(dr.HandleSubjectPrefix+opClose, nil, transferTimeout)
-			return
-		}
-		if reason, isErr := readReplyError(body); isErr {
-			res.err = errFile(reason)
-			_, _ = bus.RequestWithTimeout(dr.HandleSubjectPrefix+opClose, nil, transferTimeout)
-			return
-		}
-		res.text = string(body)
-
-		// The handle is KEPT — the departure from M4's close-after-read —
-		// because it is what the file is followed through: the broker
-		// watches the file for this handle and re-reads ride it. If the
-		// follow cannot start, the old economy returns: nothing will read
-		// twice, so the handle goes back.
-		if ferr := inst.startFollow(dr.HandleSubjectPrefix); ferr != nil {
-			res.followErr = ferr
-			_, _ = bus.RequestWithTimeout(dr.HandleSubjectPrefix+opClose, nil, transferTimeout)
-			return
-		}
-		res.followOk = true
+			// The handle is KEPT — the departure from M4's close-after-read —
+			// because it is what the file is followed through: the broker
+			// watches the file for this handle and re-reads ride it. If the
+			// follow cannot start, the old economy returns: nothing will read
+			// twice, so the handle goes back.
+			if ferr := inst.startFollow(dr.HandleSubjectPrefix); ferr != nil {
+				res.followErr = ferr
+				_, _ = bus.RequestWithTimeout(dr.HandleSubjectPrefix+opClose, nil, transferTimeout)
+				return res.err
+			}
+			res.followOk = true
+			return res.err
+		})
 	}()
 }
 
@@ -358,51 +362,54 @@ func (inst *App) saveFile(chooseFile bool) {
 	go func() {
 		res := fileResult{op: fileOpSave, handle: handle}
 		defer func() { inst.finishFile(res) }()
+		// Run to completion, like the open.
+		_ = task.RunToCompletion(inst.tasks, task.SpawnOpts{Kind: "mdedit.save", Title: "save to a file"}, func() error {
+			if res.handle == "" {
+				reqBytes, merr := fsbroker.MarshalDialogRequest(fsbroker.DialogRequest{SuggestedName: suggested})
+				if merr != nil {
+					res.err = merr
+					return res.err
+				}
+				reply, err := bus.RequestWithTimeout(fsbroker.SubjectDialogWrite, reqBytes, dialogTimeout)
+				if err != nil {
+					res.err = err
+					return res.err
+				}
+				dr, derr := fsbroker.UnmarshalDialogReply(reply)
+				if derr != nil {
+					res.err = derr
+					return res.err
+				}
+				if !dr.Granted {
+					res.cancelled = true
+					return res.err
+				}
+				res.handle = dr.HandleSubjectPrefix
+				res.displayName = dr.DisplayName
+			}
 
-		if res.handle == "" {
-			reqBytes, merr := fsbroker.MarshalDialogRequest(fsbroker.DialogRequest{SuggestedName: suggested})
-			if merr != nil {
-				res.err = merr
-				return
+			ack, werr := bus.RequestWithTimeout(res.handle+opWrite, []byte(snapshot), transferTimeout)
+			if werr != nil {
+				res.err = werr
+				return res.err
 			}
-			reply, err := bus.RequestWithTimeout(fsbroker.SubjectDialogWrite, reqBytes, dialogTimeout)
-			if err != nil {
-				res.err = err
-				return
+			wr, perr := fsbroker.UnmarshalDialogReply(ack)
+			if perr != nil {
+				res.err = perr
+				return res.err
 			}
-			dr, derr := fsbroker.UnmarshalDialogReply(reply)
-			if derr != nil {
-				res.err = derr
-				return
+			if !wr.Granted {
+				// A refused write invalidates the handle as a place to save: it
+				// may have been closed or revoked under us. Dropping it sends the
+				// next Save back through the dialog rather than retrying against
+				// something the broker has already declined.
+				res.dropHandle = true
+				res.err = errFile(wr.Reason)
+				return res.err
 			}
-			if !dr.Granted {
-				res.cancelled = true
-				return
-			}
-			res.handle = dr.HandleSubjectPrefix
-			res.displayName = dr.DisplayName
-		}
-
-		ack, werr := bus.RequestWithTimeout(res.handle+opWrite, []byte(snapshot), transferTimeout)
-		if werr != nil {
-			res.err = werr
-			return
-		}
-		wr, perr := fsbroker.UnmarshalDialogReply(ack)
-		if perr != nil {
-			res.err = perr
-			return
-		}
-		if !wr.Granted {
-			// A refused write invalidates the handle as a place to save: it
-			// may have been closed or revoked under us. Dropping it sends the
-			// next Save back through the dialog rather than retrying against
-			// something the broker has already declined.
-			res.dropHandle = true
-			res.err = errFile(wr.Reason)
-			return
-		}
-		res.saved = snapshot
+			res.saved = snapshot
+			return res.err
+		})
 	}()
 }
 

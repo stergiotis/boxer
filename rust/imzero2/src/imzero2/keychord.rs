@@ -35,6 +35,45 @@ pub fn mods_byte(m: &egui::Modifiers) -> u8 {
     (m.shift as u8) | ((m.ctrl as u8) << 1) | ((m.alt as u8) << 2) | ((m.command as u8) << 3)
 }
 
+/// Drains the shell's chords (ADR-0346 §SD5) from the frame's input: every
+/// key press whose own modifiers are Alt — with Shift as the chord table
+/// states, and neither Ctrl nor the command key — that names a chord leaves
+/// the queue, and so does every `Text` event of a frame in which a chord
+/// fired, since that text is the chord's letter as the platform spells it
+/// (Option+J on macOS types a character; X11 and Windows type the plain
+/// letter). Returns the bit set over the table's bits; 0 when nothing fired,
+/// and then the queue is untouched.
+pub fn drain_shell_chords(ctx: &egui::Context) -> u64 {
+    let mut chords: u64 = 0;
+    ctx.input_mut(|inp| {
+        inp.events.retain(|ev| {
+            if let egui::Event::Key {
+                key,
+                pressed: true,
+                modifiers,
+                ..
+            } = ev
+            {
+                if modifiers.alt && !modifiers.ctrl && !modifiers.command && !modifiers.mac_cmd {
+                    let bit = crate::imzero2::shellchords::shell_chord_bit(*key, modifiers.shift);
+                    if bit != 0 {
+                        chords |= bit;
+                        return false;
+                    }
+                }
+            }
+            true
+        });
+        if chords != 0 {
+            inp.events.retain(|ev| !matches!(ev, egui::Event::Text(_)));
+        }
+    });
+    if chords != 0 {
+        ctx.request_repaint();
+    }
+    chords
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -83,5 +122,64 @@ mod tests {
     fn the_byte_round_trips() {
         let m = mods(true, false, true, true);
         assert_eq!(mods_byte(&m), MOD_SHIFT | (1 << 2) | MOD_COMMAND);
+    }
+
+    fn key(k: egui::Key, modifiers: egui::Modifiers) -> egui::Event {
+        egui::Event::Key {
+            key: k,
+            physical_key: None,
+            pressed: true,
+            repeat: false,
+            modifiers,
+        }
+    }
+
+    #[test]
+    fn a_chord_leaves_the_queue_with_its_text_and_the_rest_stays() {
+        let ctx = egui::Context::default();
+        let alt = mods(false, false, true, false);
+        let mut raw = egui::RawInput::default();
+        raw.events = vec![
+            key(egui::Key::J, alt),
+            egui::Event::Text("j".to_owned()),
+            key(egui::Key::A, egui::Modifiers::NONE),
+            key(egui::Key::J, mods(false, true, false, true)),
+        ];
+        ctx.begin_pass(raw);
+        let set = drain_shell_chords(&ctx);
+        assert_eq!(
+            set,
+            crate::imzero2::shellchords::shell_chord_bit(egui::Key::J, false)
+        );
+        let left: Vec<egui::Event> = ctx.input(|i| i.events.clone());
+        assert_eq!(
+            left.len(),
+            2,
+            "the plain letter and the Ctrl chord stay: {left:?}"
+        );
+        assert!(matches!(
+            left[0],
+            egui::Event::Key {
+                key: egui::Key::A,
+                ..
+            }
+        ));
+        let mut out = ctx.end_pass();
+        out.textures_delta.clear();
+    }
+
+    #[test]
+    fn without_a_chord_nothing_is_touched() {
+        let ctx = egui::Context::default();
+        let mut raw = egui::RawInput::default();
+        raw.events = vec![
+            key(egui::Key::A, mods(false, false, true, false)),
+            egui::Event::Text("a".to_owned()),
+        ];
+        ctx.begin_pass(raw);
+        assert_eq!(drain_shell_chords(&ctx), 0);
+        assert_eq!(ctx.input(|i| i.events.len()), 2);
+        let mut out = ctx.end_pass();
+        out.textures_delta.clear();
     }
 }

@@ -20,9 +20,11 @@ func TestGeneratePresenceStore(t *testing.T) {
 	ids, err := storegen.MembershipIds(vocab.NkRegistry)
 	require.NoError(t, err)
 	require.NoError(t, storegen.Input{
-		PackageName:    "watchbillpresence",
-		StoreName:      "Presence",
-		ComponentPaths: []string{"./worker_dto.go"},
+		PackageName: "watchbillpresence",
+		StoreName:   "Presence",
+		// The origin is the audit package's (ADR-0330 §SD3), bound through
+		// the alias in origin.go as the trail binds it.
+		ComponentPaths: []string{"../../../../storage/recordstore/evidence/audit/origin_dto.go", "./worker_dto.go"},
 		OutDir:         ".",
 		ImportPath:     "github.com/stergiotis/boxer/public/keelson/runtime/watchbill/watchbillpresence",
 		Ids:            ids,

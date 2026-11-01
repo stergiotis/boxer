@@ -11,10 +11,10 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect/providersgui"
 )
 
-// The coordinator's window tools (ADR-0276): query_windows reads the
-// desktop as keelson data under the chat's own per-table grant, which needs
-// no task; arrange_windows, raise_window and place_window change it under
-// the task's grant.
+// The coordinator's window tools (ADR-0276, ADR-0346): query_windows reads
+// the desktop as keelson data under the chat's own per-table grant, which
+// needs no task; arrange_windows, raise_window, place_window, set_layout and
+// float_window change it under the task's grant.
 
 // queryWindows runs query_windows; the rows the model reads are cut at
 // limit bytes of JSON lines, the registry's budget for the tool.
@@ -47,7 +47,8 @@ func (inst *coordinator) queryWindows(ctx context.Context, table string, sql str
 	return body, activity
 }
 
-// windowVerb runs arrange_windows, raise_window or place_window.
+// windowVerb runs arrange_windows, raise_window, place_window, set_layout or
+// float_window.
 func (inst *coordinator) windowVerb(ctx context.Context, asked agent.Asked, name string, args map[string]any) (content string, activity string) {
 	h := inst.handle()
 	if h == "" {
@@ -76,6 +77,17 @@ func (inst *coordinator) windowVerb(ctx context.Context, asked agent.Asked, name
 	case "place_window":
 		out, err = inst.cli.Place(ctx, h, asked, window, float32(num("x")), float32(num("y")), float32(num("w")), float32(num("h")))
 		activity = "place window " + strconv.FormatUint(window, 10)
+	case "set_layout":
+		layout, _ := args["layout"].(string)
+		out, err = inst.cli.SetLayout(ctx, h, asked, layout, float32(num("main_ratio")), int(num("main_count")))
+		activity = "set layout " + layout
+	case "float_window":
+		floating, _ := args["floating"].(bool)
+		out, err = inst.cli.FloatWindow(ctx, h, asked, window, floating)
+		activity = "float window " + strconv.FormatUint(window, 10)
+		if !floating {
+			activity = "tile window " + strconv.FormatUint(window, 10)
+		}
 	}
 	if err != nil {
 		inst.refuse(err.Error())
@@ -85,9 +97,9 @@ func (inst *coordinator) windowVerb(ctx context.Context, asked agent.Asked, name
 	content = string(b)
 	if out.Phase != "completed" {
 		inst.refuse(out.Reason)
-		if name == "arrange_windows" && strings.Contains(out.Reason, "desktop") {
+		if (name == "arrange_windows" || name == "set_layout" || name == "float_window") && strings.Contains(out.Reason, "desktop") {
 			n, _ := json.Marshal(nextStep{Tool: "request_access", Args: map[string]any{"plan": "arrange the windows", "desktop": true},
-				Then: "call arrange_windows again once the person granted the desktop"})
+				Then: "call " + name + " again once the person granted the desktop"})
 			content += "\nnext: " + string(n)
 		}
 		return content, activity + ": " + out.Phase

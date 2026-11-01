@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
+	"github.com/stergiotis/boxer/apps/mdedit/mdeditlink"
 	"io/fs"
 	"path"
 	"strings"
@@ -67,9 +68,17 @@ type previewContent struct {
 	imgH   uint32
 }
 
-// renderDoc draws the markdown preview under ids; a nil doc draws nothing.
-func (inst previewContent) renderDoc(ids *c.WidgetIdStack) {
-	markdown.Render(markdown.Input{Ids: ids, ScopeKey: "doc", Doc: inst.doc})
+// renderPreviewDoc draws a markdown preview; a nil doc draws nothing. An
+// mdedit:// link in it opens a new mdedit window, as from every surface
+// (ADR-0347 §SD5); without a bus it stays a hyperlink.
+func (inst *App) renderPreviewDoc(content previewContent) {
+	in := markdown.Input{Ids: inst.ids, ScopeKey: "doc", Doc: content.doc}
+	if inst.bus != nil {
+		in.LinkClaims = mdeditlink.Claimed
+	}
+	for _, l := range markdown.Render(in).Links {
+		mdeditlink.Follow(inst.bus, inst.log, l.URL)
+	}
 }
 
 // loadPreview reads one file through the view and classifies it. Off the

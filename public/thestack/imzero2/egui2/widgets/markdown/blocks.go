@@ -48,6 +48,10 @@ type BlockInfo struct {
 	HeadingLevel uint8
 	// CodeLang is the normalised fence language of a BlockCodeBlock.
 	CodeLang string
+	// Id is the Obsidian block id the block ends with (`text ^id`, or a
+	// `^id` line under it), "" when none; the fragment `^id` names it
+	// (ADR-0347 §SD2). Parsed under obsidian.FeatureBlockId.
+	Id string
 }
 
 // Blocks lists the document's top-level blocks in order, one per segment
@@ -66,6 +70,7 @@ func (inst *Doc) Blocks() (out []BlockInfo) {
 			Synthetic:    seg.srcStop < seg.srcStart,
 			HeadingLevel: seg.headingLevel,
 			CodeLang:     seg.codeLang,
+			Id:           seg.blockId,
 		}
 		// The footnote definitions goldmark gathers at the end carry the
 		// positions of the lines they were read from, so a definitions
@@ -130,6 +135,8 @@ func RenderBlock(in Input, index int) (res Result) {
 			}
 			rc.codeBlockIdx += countCodeBlocks(&doc.segments[i])
 		}
+		rc.armBlockScroll(&doc.segments[index],
+			in.ScrollToOffsetSet && in.ScrollToSection == "" && offsetBlockIndex(doc.segments, in.ScrollToOffset) == index)
 		doc.segments[index].render(&rc)
 		res.Actions = rc.codeActions
 		res.Links = rc.links
@@ -344,4 +351,38 @@ func frontmatterSpan(src []byte) (start, stop int, ok bool) {
 		pos = le
 	}
 	return 0, 0, false
+}
+
+// offsetBlockIndex is the index of the top-level block a byte offset
+// targets ([Input.ScrollToOffset]): the first block whose range ends at or
+// after it, so an offset in the gap before a block lands on that block; an
+// offset past every block lands on the last one. Synthetic blocks have no
+// range and are never the target. -1 when no block has a range.
+func offsetBlockIndex(segs []segment, off int) (idx int) {
+	idx = -1
+	for i := range segs {
+		if segs[i].srcStop < segs[i].srcStart {
+			continue
+		}
+		idx = i
+		if segs[i].srcStop >= off {
+			return
+		}
+	}
+	return
+}
+
+// armBlockScroll sets the one-shot scroll for the top-level segment about
+// to render when it is the offset target, or carries the block id the slug
+// names. A matched block id consumes the slug, so a document naming the
+// same id twice scrolls to the first, as a repeated heading slug does.
+func (rc *renderCtx) armBlockScroll(seg *segment, atOffset bool) {
+	if atOffset {
+		rc.scrollNow = true
+	}
+	if seg.blockId != "" && len(rc.scrollToSlug) > 1 &&
+		rc.scrollToSlug[0] == '^' && rc.scrollToSlug[1:] == seg.blockId {
+		rc.scrollNow = true
+		rc.scrollToSlug = ""
+	}
 }

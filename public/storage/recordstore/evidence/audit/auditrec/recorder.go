@@ -28,6 +28,10 @@ var ErrClosed = errors.New("auditrec: the recorder is closed")
 // act.
 var ErrNotDurable = errors.New("auditrec: the audit rows are not durable")
 
+// errNoStore is the cause of a write-ahead on a recorder built without a
+// store.
+var errNoStore = errors.New("auditrec: the recorder has no store")
+
 // Defaults of the options.
 const (
 	DefaultMaxBacklogRows = 50_000
@@ -292,7 +296,18 @@ func (inst *Recorder[B]) Event(ctx context.Context, at time.Time, row audit.Audi
 	if inst == nil {
 		return nil
 	}
-	o := audit.OriginOf(ctx, inst.run, inst.cfg.origin)
+	return inst.EventFrom(ctx, at, inst.cfg.origin, row)
+}
+
+// EventFrom is Event with def, in place of WithOrigin's, as the app and
+// the instance the origin names when the call identity on ctx names none:
+// for a store whose callers know the origin per call, as the trail's do
+// from a bus envelope.
+func (inst *Recorder[B]) EventFrom(ctx context.Context, at time.Time, def audit.Origin, row audit.AuditEvent) (err error) {
+	if inst == nil {
+		return nil
+	}
+	o := audit.OriginOf(ctx, inst.run, def)
 	row = audit.Stamp(ctx, row, inst.cfg.originBy)
 	if inst.cfg.node.Has && !row.Node.Has {
 		row.Node = inst.cfg.node
@@ -319,9 +334,9 @@ func (inst *Recorder[B]) EventWriteAhead(ctx context.Context, at time.Time, row 
 }
 
 // WriteAhead makes what is buffered durable before the caller acts.
-// durable says it landed. When it did not, err wraps ErrNotDurable if the
-// recorder was built WithRequired, and is nil otherwise, the failure
-// logged; after Close it is ErrClosed.
+// durable says it landed. When it did not, err wraps ErrNotDurable and
+// the cause if the recorder was built WithRequired, and is nil otherwise,
+// the failure logged; after Close it is ErrClosed.
 func (inst *Recorder[B]) WriteAhead(ctx context.Context) (durable bool, err error) {
 	if inst == nil {
 		return false, nil
@@ -329,23 +344,21 @@ func (inst *Recorder[B]) WriteAhead(ctx context.Context) (durable bool, err erro
 	inst.mu.Lock()
 	open, closed := inst.open, inst.closed
 	inst.mu.Unlock()
-	var why string
+	var cause error
 	switch {
 	case closed:
 		return false, ErrClosed
 	case !open:
-		why = "the recorder has no store"
+		cause = errNoStore
 	default:
-		if ferr := inst.Flush(ctx); ferr != nil {
-			why = ferr.Error()
-		} else {
+		if cause = inst.Flush(ctx); cause == nil {
 			return true, nil
 		}
 	}
 	if inst.cfg.required {
-		return false, eb.Build().Str("why", why).Errorf("auditrec: write-ahead: %w", ErrNotDurable)
+		return false, eh.Errorf("auditrec: write-ahead: %w: %w", ErrNotDurable, cause)
 	}
-	inst.log.Warn().Str("reason", why).Msg("auditrec: write-ahead failed; the caller proceeds without a durable row")
+	inst.log.Warn().Err(cause).Msg("auditrec: write-ahead failed; the caller proceeds without a durable row")
 	return false, nil
 }
 

@@ -467,7 +467,7 @@ func (inst *Client) CaptureAs(ctx context.Context, handle string, instance uint6
 }
 
 // Arrange arranges windows with an ADR-0275 arrangement named by its ident
-// ("cascade", "tile", "columns", "rows", "gather"): instances, or every
+// ("cascade", "columns", "rows", "gather"): instances, or every
 // window when instances is empty. It needs the grant's desktop mode act.
 // asked.Key is the call's key, as for the other window verbs.
 func (inst *Client) Arrange(ctx context.Context, handle string, asked Asked, command string, instances []uint64) (out Outcome, err error) {
@@ -487,6 +487,22 @@ func (inst *Client) Raise(ctx context.Context, handle string, asked Asked, insta
 func (inst *Client) Place(ctx context.Context, handle string, asked Asked, instance uint64, x, y, w, h float32) (out Outcome, err error) {
 	return callReply(roundTrip[wireWindowAct, wireCallReply](ctx, inst, SubjectPlace,
 		wireWindowAct{V: wireVersion, Handle: handle, Key: asked.Key, Instance: instance, X: x, Y: y, W: w, H: h, wireCause: asked.wire()}))
+}
+
+// SetLayout sets the desktop's layout by its ident (floating, main-stack,
+// tile, columns, rows, monocle) and the main ratio and count, each left as
+// it is when empty or zero (ADR-0346 §SD6). It needs the grant's desktop
+// mode act.
+func (inst *Client) SetLayout(ctx context.Context, handle string, asked Asked, layout string, ratio float32, count int) (out Outcome, err error) {
+	return callReply(roundTrip[wireWindowAct, wireCallReply](ctx, inst, SubjectLayout,
+		wireWindowAct{V: wireVersion, Handle: handle, Key: asked.Key, Layout: layout, Ratio: ratio, Count: count, wireCause: asked.wire()}))
+}
+
+// FloatWindow takes a window out of the layout or puts it back as the main
+// (ADR-0346 §SD4). It needs the grant's desktop mode act.
+func (inst *Client) FloatWindow(ctx context.Context, handle string, asked Asked, instance uint64, floating bool) (out Outcome, err error) {
+	return callReply(roundTrip[wireWindowAct, wireCallReply](ctx, inst, SubjectLayout,
+		wireWindowAct{V: wireVersion, Handle: handle, Key: asked.Key, Instance: instance, Floating: &floating, wireCause: asked.wire()}))
 }
 
 // Target is a mark's target (ADR-0297 §SD2): a window (Window

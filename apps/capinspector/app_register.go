@@ -30,6 +30,8 @@ var manifest = app.Manifest{
 	Topics:   []app.TopicT{app.TopicRuntime},
 	Keywords: []string{"capability", "permission", "subject", "audit"},
 	Surface:  app.SurfaceWindowed,
+	// The operations catalog (ADR-0345), in capinspector_ops.go.
+	Operations: ops.Catalog(),
 	SurfaceHints: app.SurfaceHints{
 		PreferredWidth:  860,
 		PreferredHeight: 640,

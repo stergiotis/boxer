@@ -23,6 +23,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/data/storeexec"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/natsbus"
+	"github.com/stergiotis/boxer/public/keelson/runtime/runinfo"
 	"github.com/stergiotis/boxer/public/keelson/runtime/sysmetricsbus"
 	"github.com/stergiotis/boxer/public/keelson/runtime/sysmfacts"
 	"github.com/stergiotis/boxer/public/keelson/runtime/sysmscrape"
@@ -99,10 +100,19 @@ func startTee(ctx context.Context, bus app.BusI, host string, flushInterval time
 		err = eh.Errorf("sysmetricsd: tee schema check against "+sysmfacts.SysmetricsTableName+": %w", err)
 		return
 	}
+	// The rows carry this process's run as their origin (ADR-0330 §SD3):
+	// the run a parent handed down in the environment, or a fresh one.
+	runInst, err := runinfo.Init()
+	if err != nil {
+		store.Close()
+		err = eh.Errorf("sysmetricsd: run info: %w", err)
+		return
+	}
 	tee, err := sysmtee.Start(sysmtee.Options{
 		Bus:            bus,
 		Store:          store,
 		Host:           host,
+		Run:            runInst.RunId,
 		FlushInterval:  flushInterval,
 		PersistProcCmd: persistProcCmd,
 		Log:            log.Logger,

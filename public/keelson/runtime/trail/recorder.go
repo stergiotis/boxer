@@ -5,7 +5,6 @@ import (
 	"encoding/hex"
 	"iter"
 	"strconv"
-	"sync"
 	"sync/atomic"
 	"time"
 
@@ -22,6 +21,7 @@ import (
 	"github.com/stergiotis/boxer/public/storage/recordstore/evidence"
 	"github.com/stergiotis/boxer/public/storage/recordstore/evidence/anchor"
 	"github.com/stergiotis/boxer/public/storage/recordstore/evidence/audit"
+	"github.com/stergiotis/boxer/public/storage/recordstore/evidence/audit/auditrec"
 )
 
 // RequiredEnv decides what happens to work that leaves the machine — a
@@ -42,110 +42,52 @@ type Context struct {
 	Delegation   option.Option[Delegation]
 }
 
-// flushTimeout bounds one flush: the work it records is already decided by
-// then, so the bound is what keeps a slow server from stalling the next.
-const flushTimeout = 5 * time.Second
-
 // MaxBacklogRows bounds the rows the recorder holds for a server that does
 // not take them. Past it the oldest held batches are dropped, and logged:
 // a host whose trail is down for hours must not grow without bound, and
 // what is dropped is what BOXER_TRAIL_REQUIRED exists to refuse.
-const MaxBacklogRows = 50_000
+const MaxBacklogRows = auditrec.DefaultMaxBacklogRows
 
-// Recorder is the one writer of the trail: it stamps the run, composes
-// each row's natural key and components, and owns the buffer and its
-// flushes. App and window come from the caller: every writer takes them
-// from the bus envelope's sender ([Recorder.Origin], or [Recorder.OriginOf]
-// over the sender it kept), never from a payload. It is safe for concurrent use. A nil Recorder, and one built
-// without an executor, record nothing and report not durable.
+// Recorder is the one writer of the trail: it stamps the run and composes
+// each row's natural key and components, and writes them through the
+// shared writer of audit events, auditrec, over the trail store's binding
+// (ADR-0330 §SD8), which owns the buffer, its flushes, the backlog and the
+// gap row, the seals and their anchoring, write-ahead, the reads of audit
+// events and forwarding. App and window come from the caller: every writer
+// takes them from the bus envelope's sender ([Recorder.Origin], or
+// [Recorder.OriginOf] over the sender it kept), never from a payload. It
+// is safe for concurrent use. A nil Recorder, and one built without an
+// executor, record nothing and report not durable.
 //
-// Rows are built into the current store under mu. A flush swaps in a fresh
-// one and inserts the batch outside mu, so a slow or absent server stalls
-// other flushes but never the writers; a batch the server did not take is
-// held, oldest first, until a later flush lands it or MaxBacklogRows drops
-// it. Reads go through a store of their own.
+// The recorder flushes when asked — Flush, FlushSoon, a write-ahead — and
+// at Close, and on an interval only WithFlushInterval. After Close a verb
+// returns auditrec.ErrClosed.
 type Recorder struct {
 	run      string
 	required bool
 	log      zerolog.Logger
-	exec     recordstore.ExecutorI
+	cfg      recorderConfig
+	// notDurable is why the recorder was built without a durable store,
+	// "" when it has one.
+	notDurable string
 
-	mu  sync.Mutex
-	cur *TrailStore
-	seq uint64
-	// curFirst and curLast are the earliest and latest row timestamps in
-	// cur, for the gap window should its batch be dropped; curRows the
-	// rows in cur with their row digests, for its seal (ADR-0327 §SD5).
-	// Under mu.
-	curFirst, curLast time.Time
-	curRows           []evidence.SealedRow
-	// canon is an executor-less store rows are re-entered into for their
-	// canonical items, by the writers and by VerifySeals.
-	canon *TrailStore
-
-	// flushMu serialises flushes; backlog is the batches a flush did not
-	// land, oldest first, with their row counts. Both under flushMu.
-	flushMu    sync.Mutex
-	backlog    []heldBatch
-	maxBacklog int
-	// gap is what the cap dropped since the last gap row: rows, and the
-	// earliest and latest row timestamps among them. lastSeal is the
-	// stream's last durable seal, zero before the first. Both under flushMu.
-	gap      gap
-	lastSeal evidence.SealedRow
-
-	// The counters of ADR-0296 §SD4 and §SD6 and the seals, read through
-	// Counts.
-	buffered, written, dropped, invalid, forwarded, forwardDropped, seals atomic.Uint64
-
-	readMu sync.Mutex
-	read   *TrailStore
-
-	// observer, readTable and forwarder are the options: an observer on
-	// every store rows are built into, the table the read store scans, and
-	// the forwarder the prompt path feeds (fwd is its state).
-	observer  recordstore.WriteObserverI[uint64, time.Time]
-	readTable string
-	forwarder audit.ForwarderI
-	fwd       *forwardState
-	// originBy is how an audit event's origin was established when the
-	// context says nothing (ADR-0327 §SD6): the host's recorder writes as
-	// host, any other as self.
-	originBy evidence.OriginByE
-	// anchors is the store each durable seal ships to; nil ships none.
-	anchors anchor.StoreI
-
-	wake chan struct{}
-	stop chan struct{}
-	done chan struct{}
+	// rec is the shared writer, nil when it could not be built; st the
+	// binding it writes through, nil without an executor.
+	rec *auditrec.Recorder[*auditBatch]
+	st  *auditStore
+	// seq makes the unique part of a natural key.
+	seq atomic.Uint64
 }
 
-// heldBatch is one swapped-out store, the rows it holds, the earliest and
-// latest row timestamps among them, the rows with their digests for its
-// seal, and the seal once it is in the store (sealId zero until then).
-type heldBatch struct {
-	store       *TrailStore
-	rows        int
-	first, last time.Time
-	sealed      []evidence.SealedRow
-	sealId      uint64
-	sealDigest  string
-}
-
-// gap is loss not yet written back as a row.
-type gap struct {
-	rows        int
-	first, last time.Time
-}
-
-func (inst *gap) add(b heldBatch) {
-	inst.rows += b.rows
-	if inst.first.IsZero() || b.first.Before(inst.first) {
-		inst.first = b.first
-	}
-	if b.last.After(inst.last) {
-		inst.last = b.last
-	}
+// recorderConfig is what the options set before the writer is built.
+type recorderConfig struct {
+	flushInterval time.Duration
+	observer      recordstore.WriteObserverI[uint64, time.Time]
+	readTable     string
+	forwarder     audit.ForwarderI
+	originBy      evidence.OriginByE
+	anchors       anchor.StoreI
+	maxBacklog    int
 }
 
 // Counts are the recorder's counters (ADR-0296 §SD4), over every verb:
@@ -171,8 +113,9 @@ func (inst *Recorder) Counts() (c Counts) {
 	if inst == nil {
 		return
 	}
-	return Counts{Buffered: inst.buffered.Load(), Written: inst.written.Load(), Dropped: inst.dropped.Load(), Invalid: inst.invalid.Load(),
-		Forwarded: inst.forwarded.Load(), ForwardDropped: inst.forwardDropped.Load(), Seals: inst.seals.Load()}
+	a := inst.rec.Counts()
+	return Counts{Buffered: a.Buffered, Written: a.Written, Dropped: a.Dropped, Invalid: a.Invalid,
+		Forwarded: a.Forwarded, ForwardDropped: a.ForwardDropped, Seals: a.Seals}
 }
 
 // RecorderOption configures NewRecorder.
@@ -185,14 +128,22 @@ type RecorderOption func(*Recorder)
 // the recorder's goroutines — a writer's under the buffer lock, a flush's
 // outside it — and must not call back into the recorder.
 func WithWriteObserver(o recordstore.WriteObserverI[uint64, time.Time]) RecorderOption {
-	return func(inst *Recorder) { inst.observer = o }
+	return func(inst *Recorder) { inst.cfg.observer = o }
+}
+
+// WithFlushInterval makes the recorder also flush on its own every d,
+// beside Flush, FlushSoon, a write-ahead and Close: for rows nothing asks
+// to land, such as the bus requests AsAuditSink records. Zero, the
+// default, flushes only when asked.
+func WithFlushInterval(d time.Duration) RecorderOption {
+	return func(inst *Recorder) { inst.cfg.flushInterval = d }
 }
 
 // WithReadTable names the table the recorder's reads scan (ADR-0296
 // §SD9 d): a storage table, or a Merge over several, while writes still go
 // to the facts table. Empty reads the table written to.
 func WithReadTable(table string) RecorderOption {
-	return func(inst *Recorder) { inst.readTable = table }
+	return func(inst *Recorder) { inst.cfg.readTable = table }
 }
 
 // WithOriginBy says how an audit event's origin is established when the
@@ -201,87 +152,131 @@ func WithReadTable(table string) RecorderOption {
 // A context attested through evidence.WithAttestation overrides it, as the
 // audit subject's handler does for an app's row.
 func WithOriginBy(o evidence.OriginByE) RecorderOption {
-	return func(inst *Recorder) { inst.originBy = o }
+	return func(inst *Recorder) { inst.cfg.originBy = o }
 }
+
+// WithForwarder attaches f (ADR-0296 §SD6). The prompt path hands f each
+// durable batch's audit events, on a goroutine of the recorder's own,
+// behind a queue of DefaultForwardQueue batches. The backstop is
+// [Recorder.ForwardWindow], which the caller schedules.
+func WithForwarder(f audit.ForwarderI) RecorderOption {
+	return func(inst *Recorder) { inst.cfg.forwarder = f }
+}
+
+// WithAnchors ships each durable seal to the anchor store as the head of
+// the run's seal stream (ADR-0327 §SD5, §SD7), best effort: a refused or
+// failed append is logged and the seal stays unanchored. The cell is the
+// host's own.
+func WithAnchors(st anchor.StoreI) RecorderOption {
+	return func(inst *Recorder) { inst.cfg.anchors = st }
+}
+
+// DefaultForwardQueue bounds the batches the prompt path holds for a
+// forwarder that has not taken them yet; past it a batch is dropped from
+// the prompt path, counted, and left to the backstop.
+const DefaultForwardQueue = auditrec.DefaultForwardQueue
+
+// TrailSealScheme is the scheme the recorder's seals and row digests are
+// under.
+var TrailSealScheme = evidence.NewScheme("trail-seal/v1")
+
+// SealScope is the anchor scope of a run's seal stream (ADR-0327 §SD7):
+// the n-th durable seal is the scope's head at ordinal n.
+func SealScope(run string) uint64 { return xxh3.HashString("trail-seal|" + run) }
 
 // NewRecorder builds the recorder of the run named run. exec reaches the
 // server holding boxer.facts; nil is a host without a durable backend.
 func NewRecorder(exec recordstore.ExecutorI, run string, log zerolog.Logger, opts ...RecorderOption) (inst *Recorder) {
-	inst = &Recorder{run: run, required: RequiredEnv.Get(), log: log, exec: exec, maxBacklog: MaxBacklogRows,
-		wake: make(chan struct{}, 1), stop: make(chan struct{}), done: make(chan struct{})}
+	inst = &Recorder{run: run, required: RequiredEnv.Get(), log: log, cfg: recorderConfig{maxBacklog: MaxBacklogRows}}
 	for _, o := range opts {
 		o(inst)
 	}
-	if inst.forwarder != nil && exec != nil {
-		inst.fwd = newForwardState()
+	ropts := []auditrec.Option{
+		auditrec.WithFlushInterval(inst.cfg.flushInterval),
+		auditrec.WithMaxBacklog(inst.cfg.maxBacklog),
+		auditrec.WithOriginBy(inst.cfg.originBy),
+		auditrec.WithRequired(inst.required),
+		auditrec.WithSealScope(SealScope),
 	}
-	if exec != nil {
-		inst.cur = inst.newStore()
-		inst.read = NewTrailStore(inst.exec, nil, TrailStoreConfig{ReadTable: inst.readTable})
-		inst.canon = NewTrailStore(nil, nil, TrailStoreConfig{})
+	if inst.cfg.observer != nil {
+		ropts = append(ropts, auditrec.WithWriteObserver(inst.cfg.observer))
 	}
-	go inst.flusher()
-	if inst.fwd != nil {
-		go inst.forwardLoop()
+	if inst.cfg.forwarder != nil {
+		ropts = append(ropts, auditrec.WithForwarder(inst.cfg.forwarder), auditrec.WithForwardQueue(DefaultForwardQueue))
 	}
+	if inst.cfg.anchors != nil {
+		ropts = append(ropts, auditrec.WithAnchors(inst.cfg.anchors, ""))
+	}
+	// A nil interface, not a nil *auditStore, is a recorder without a store.
+	var st auditrec.StoreI[*auditBatch]
+	if exec == nil {
+		inst.notDurable = notDurableNoBackend
+	} else {
+		var err error
+		if inst.st, err = newAuditStore(exec, inst.cfg.readTable); err != nil {
+			log.Error().Err(err).Msg("trail: the store binding could not be built; the trail records nothing")
+			inst.notDurable = "the store binding could not be built: " + err.Error()
+			return
+		}
+		st = inst.st
+	}
+	rec, err := auditrec.New(st, run, TrailSealScheme, log, ropts...)
+	if err != nil {
+		log.Error().Err(err).Msg("trail: the recorder could not be built; the trail records nothing")
+		if inst.st != nil {
+			inst.st.Close()
+			inst.st = nil
+		}
+		why := "the recorder could not be built: " + err.Error()
+		if run == "" {
+			why = notDurableNoRun
+		}
+		if inst.notDurable == "" {
+			inst.notDurable = why
+		} else {
+			inst.notDurable += "; " + why
+		}
+		return
+	}
+	inst.rec = rec
 	return
 }
 
-// newStore is a store rows are built into: the current one, and each
-// batch a flush swaps out.
-func (inst *Recorder) newStore() (st *TrailStore) {
-	return NewTrailStore(inst.exec, nil, TrailStoreConfig{WriteObserver: inst.storeObserver()})
+// Why a trail is not durable, as NotDurable says it.
+const (
+	notDurableNoBackend = "this host has no durable backend for boxer.facts"
+	notDurableNoRun     = "the host has no run id, so the trail has no seal stream"
+	notDurableClosed    = "the recorder is closed"
+	notDurableNil       = "the host has no audit trail"
+)
+
+// NotDurable says why rows written through the recorder do not land on
+// boxer.facts, "" when they do: no backend (a host without ClickHouse), no
+// run id (a host whose run identity did not start), a store that could not
+// be built, or a closed recorder. It is the state Durable reports false
+// for, with its reason, for a host to show the person and an agent.
+func (inst *Recorder) NotDurable() (why string) {
+	if inst == nil {
+		return notDurableNil
+	}
+	if inst.notDurable != "" {
+		return inst.notDurable
+	}
+	if !inst.rec.Durable() {
+		return notDurableClosed
+	}
+	return ""
 }
 
 // Close flushes what is buffered, within the flush's bound, and releases
 // the stores. What the server did not take by then is lost: counted as
 // dropped and logged (ADR-0296 §SD4), with no gap row, since nothing runs
-// afterwards.
+// afterwards. It is idempotent.
 func (inst *Recorder) Close() {
 	if inst == nil {
 		return
 	}
-	close(inst.stop)
-	<-inst.done
-	if inst.fwd != nil {
-		close(inst.fwd.queue)
-		<-inst.fwd.done
-	}
-	inst.mu.Lock()
-	cur := inst.cur
-	inst.cur = nil
-	lost := 0
-	if cur != nil {
-		lost += cur.Buffered()
-	}
-	inst.mu.Unlock()
-	inst.flushMu.Lock()
-	for _, b := range inst.backlog {
-		b.store.Close()
-		lost += b.rows
-	}
-	inst.backlog = nil
-	if inst.gap.rows > 0 {
-		inst.log.Error().Int("rows", inst.gap.rows).Msg("trail: closed with a gap no row records")
-		inst.gap = gap{}
-	}
-	inst.flushMu.Unlock()
-	if lost > 0 {
-		inst.dropped.Add(uint64(lost))
-		inst.log.Error().Int("lost", lost).Msg("trail: closed with rows the server had not taken; they are lost")
-	}
-	if cur != nil {
-		cur.Close()
-	}
-	inst.readMu.Lock()
-	if inst.read != nil {
-		inst.read.Close()
-		inst.read = nil
-	}
-	inst.readMu.Unlock()
-	if inst.canon != nil {
-		inst.canon.Close()
-	}
+	inst.rec.Close()
 }
 
 // Durable says rows land on boxer.facts.
@@ -289,9 +284,7 @@ func (inst *Recorder) Durable() (durable bool) {
 	if inst == nil {
 		return false
 	}
-	inst.mu.Lock()
-	defer inst.mu.Unlock()
-	return inst.cur != nil
+	return inst.rec.Durable()
 }
 
 // Origin is the origin of a bus message: this run, and the app and window
@@ -309,56 +302,23 @@ func (inst *Recorder) OriginOf(appId app.AppIdT, instance uint64) (o Origin) {
 	return
 }
 
-// begin opens the row keyed key with its context components, under ctx —
-// the store's write observer reads the call identity off it. The caller
-// holds mu and has checked the store.
-func (inst *Recorder) begin(ctx context.Context, key string, at time.Time, c Context) (b *TrailEntityBuilder, id uint64) {
-	id = xxh3.HashString(key)
-	b = inst.cur.BeginCtx(ctx, id, at.UTC(), TrailEnvelope{NaturalKey: []byte(key)})
-	o := c.Origin
-	o.Id = id
-	if o.Run == "" {
-		o.Run = inst.run
-	}
-	b.AddOrigin(o)
-	if c.Conversation.Has {
-		v := c.Conversation.Val
-		v.Id = id
-		b.AddConversation(v)
-	}
-	if c.Delegation.Has {
-		v := c.Delegation.Val
-		v.Id = id
-		b.AddDelegation(v)
-	}
-	return
-}
-
-// write runs add under the lock; without a store it does nothing. The
-// verbs whose identity is a bus envelope pass context.Background().
+// write buffers one row keyed key with c's components through the shared
+// writer, add contributing the row's own; without a store it does
+// nothing. The verbs whose identity is a bus envelope pass
+// context.Background().
 func (inst *Recorder) write(ctx context.Context, key string, at time.Time, c Context, add func(b *TrailEntityBuilder, id uint64)) (err error) {
 	if inst == nil {
 		return nil
 	}
-	inst.mu.Lock()
-	defer inst.mu.Unlock()
-	if inst.cur == nil {
-		return nil
+	o := c.Origin
+	if o.Run == "" {
+		o.Run = inst.run
 	}
-	b, id := inst.begin(ctx, key, at, c)
-	add(b, id)
-	if err = b.Commit(); err != nil {
+	_, err = inst.rec.Write(ctx, key, at, func(b *auditBatch, id uint64) ([]byte, error) {
+		return b.row(ctx, id, at, key, o, c, func(bld *TrailEntityBuilder) { add(bld, id) })
+	})
+	if err != nil {
 		err = eb.Build().Str("key", key).Errorf("trail: buffer row: %w", err)
-		return
-	}
-	inst.buffered.Add(1)
-	inst.digestLocked(b, key)
-	at = at.UTC()
-	if inst.curFirst.IsZero() || at.Before(inst.curFirst) {
-		inst.curFirst = at
-	}
-	if at.After(inst.curLast) {
-		inst.curLast = at
 	}
 	return
 }
@@ -480,28 +440,22 @@ func (inst *Recorder) AdhocDataset(at time.Time, c Context, cause option.Option[
 	})
 }
 
-// Event buffers one audit event (ADR-0296 §SD2), the one verb whose row
-// carries the call identity on ctx, by [audit.Stamp] and [audit.OriginOf]:
-// the run is always this recorder's; the app and the instance the call
-// identity's origin when it names them, else c's; the principal and the
-// purpose from its claims, replacing whatever row carried. With no
-// principal the row's PrincipalBy becomes none and its PrincipalVia
-// absent. A row outside the bounds
-// of [AuditEvent.Validate] is replaced by an audit-invalid row naming the
+// Event buffers one audit event (ADR-0296 §SD2) through the shared
+// writer's event verb, the one verb whose row carries the call identity on
+// ctx, by [audit.Stamp] and [audit.OriginOf]: the run is always this
+// recorder's; the app and the instance the call identity's origin when it
+// names them, else c's; the principal and the purpose from its claims,
+// replacing whatever row carried. With no principal the row's PrincipalBy
+// becomes none and its PrincipalVia absent. A row outside the bounds of
+// [AuditEvent.Validate] is replaced by an audit-invalid row naming the
 // attempted domain and action, and logged; the call does not fail for it.
-// The row's natural key names the domain, the action and the subject.
+// The row's natural key names the domain, the action and the subject, and
+// carries c's conversation and delegation.
 func (inst *Recorder) Event(ctx context.Context, at time.Time, c Context, row AuditEvent) (err error) {
 	if inst == nil {
 		return nil
 	}
-	c.Origin = audit.OriginOf(ctx, inst.run, c.Origin)
-	row = audit.Stamp(ctx, row, inst.originBy)
-	if verr := row.Validate(); verr != nil {
-		inst.log.Error().Err(verr).Str("domain", audit.Bounded(row.Domain)).Str("action", audit.Bounded(row.Action)).Msg("trail: an audit event is outside its bounds; an audit-invalid row is written in its place")
-		row = audit.Invalid(row, verr, inst.originBy)
-		inst.invalid.Add(1)
-	}
-	return inst.writeEvent(ctx, at, c, row)
+	return inst.rec.EventFrom(withRowContext(ctx, c), at, c.Origin, row)
 }
 
 // EventWriteAhead is Event, then the row made durable before the caller
@@ -518,135 +472,24 @@ func (inst *Recorder) EventWriteAhead(ctx context.Context, at time.Time, c Conte
 	return inst.WriteAhead(ctx)
 }
 
-// writeEvent buffers an audit event row and, when a forwarder is
-// attached, keeps its entity until the row is durable.
-func (inst *Recorder) writeEvent(ctx context.Context, at time.Time, c Context, row AuditEvent) (err error) {
-	key := "event|" + row.Domain + "|" + row.Action + "|" + strconv.FormatUint(row.Subject, 10) + "|" + inst.unique(at)
-	return inst.write(ctx, key, at, c, func(b *TrailEntityBuilder, id uint64) {
-		row.Id, row.Kind = id, "auditEvent"
-		b.AddAuditEvent(row)
-		if inst.fwd != nil {
-			ent := &TrailEntity{ID: id, Ts: at.UTC(), TrailEnvelope: TrailEnvelope{NaturalKey: []byte(key)}, AuditEvent: option.Some(row)}
-			o := c.Origin
-			o.Id = id
-			if o.Run == "" {
-				o.Run = inst.run
-			}
-			ent.Origin = option.Some(o)
-			if c.Conversation.Has {
-				v := c.Conversation.Val
-				v.Id = id
-				ent.Conversation = option.Some(v)
-			}
-			if c.Delegation.Has {
-				v := c.Delegation.Val
-				v.Id = id
-				ent.Delegation = option.Some(v)
-			}
-			inst.keepForForward(ent)
-		}
-	})
-}
-
 // unique is a key part no other row of this run shares.
 func (inst *Recorder) unique(at time.Time) (s string) {
 	if inst == nil {
 		return ""
 	}
-	inst.mu.Lock()
-	inst.seq++
-	n := inst.seq
-	inst.mu.Unlock()
+	n := inst.seq.Add(1)
 	return inst.run + "|" + strconv.FormatInt(at.UnixNano(), 36) + "|" + strconv.FormatUint(n, 36)
 }
 
-// Flush lands what is buffered, and what earlier flushes could not. It
-// returns nil only when every row buffered before the call is on the
-// server; on failure the rows are held for the next flush.
+// Flush lands what is buffered, and what earlier flushes could not, each
+// batch sealed; after a loss it writes the audit-gap row and lands it in
+// the same call. It returns nil only when every row buffered before the
+// call is on the server; on failure the rows are held for the next flush.
 func (inst *Recorder) Flush(ctx context.Context) (err error) {
 	if inst == nil {
 		return nil
 	}
-	inst.flushMu.Lock()
-	defer inst.flushMu.Unlock()
-	inst.mu.Lock()
-	if inst.cur == nil {
-		inst.mu.Unlock()
-		return nil
-	}
-	inst.swapLocked()
-	inst.mu.Unlock()
-	ctx, cancel := context.WithTimeout(ctx, flushTimeout)
-	defer cancel()
-	for len(inst.backlog) > 0 {
-		b := &inst.backlog[0]
-		if err = inst.seal(b); err != nil {
-			break
-		}
-		if _, ferr := b.store.Flush(ctx); ferr != nil {
-			err = eh.Errorf("trail: flush: %w", ferr)
-			break
-		}
-		b.store.Close()
-		inst.written.Add(uint64(b.rows))
-		n := inst.seals.Add(1)
-		inst.lastSeal = evidence.SealedRow{Id: b.sealId, Digest: b.sealDigest}
-		inst.backlog = inst.backlog[1:]
-		inst.anchorSeal(ctx, n, b.sealDigest)
-	}
-	inst.capBacklog()
-	if err == nil && inst.gap.rows > 0 {
-		inst.writeGap()
-	}
-	return
-}
-
-// swapLocked moves a non-empty current store onto the backlog and opens a
-// fresh one. The caller holds mu.
-func (inst *Recorder) swapLocked() {
-	if n := inst.cur.Buffered(); n > 0 {
-		inst.backlog = append(inst.backlog, heldBatch{store: inst.cur, rows: n, first: inst.curFirst, last: inst.curLast, sealed: inst.curRows})
-		inst.cur = inst.newStore()
-		inst.curFirst, inst.curLast = time.Time{}, time.Time{}
-		inst.curRows = nil
-	}
-}
-
-// writeGap writes the audit-gap row for what the cap dropped (ADR-0296
-// §SD4), now that the server takes rows again: the count and the window
-// of the lost rows' timestamps, in the recorder's own domain. It rides the
-// next flush. The caller holds flushMu.
-func (inst *Recorder) writeGap() {
-	g := inst.gap
-	inst.gap = gap{}
-	row := audit.Gap(g.rows, g.first, g.last, inst.originBy, option.None[string]())
-	if err := inst.writeEvent(context.Background(), time.Now(), Context{}, row); err != nil {
-		inst.log.Error().Err(err).Int("rows", g.rows).Msg("trail: the audit-gap row could not be buffered")
-		return
-	}
-	inst.FlushSoon()
-}
-
-// capBacklog drops the oldest held batches past maxBacklog rows. The caller
-// holds flushMu.
-func (inst *Recorder) capBacklog() {
-	var held int
-	for _, b := range inst.backlog {
-		held += b.rows
-	}
-	var dropped int
-	for held > inst.maxBacklog && len(inst.backlog) > 1 {
-		b := inst.backlog[0]
-		b.store.Close()
-		inst.backlog = inst.backlog[1:]
-		held -= b.rows
-		dropped += b.rows
-		inst.gap.add(b)
-	}
-	if dropped > 0 {
-		inst.dropped.Add(uint64(dropped))
-		inst.log.Error().Int("dropped", dropped).Int("held", held).Msg("trail: the server has not taken the trail's rows; the oldest are dropped")
-	}
+	return inst.rec.Flush(ctx)
 }
 
 // WriteAhead makes what is buffered durable before work leaves the machine
@@ -654,24 +497,18 @@ func (inst *Recorder) capBacklog() {
 // and BOXER_TRAIL_REQUIRED says such work must not proceed; otherwise the
 // gap is logged and the work goes ahead.
 func (inst *Recorder) WriteAhead(ctx context.Context) (durable bool, refuse error) {
-	var why string
-	switch {
-	case !inst.Durable():
-		why = "this host has no durable backend for boxer.facts"
-	default:
-		if err := inst.Flush(ctx); err != nil {
-			why = err.Error()
-		} else {
-			return true, nil
+	if !inst.Durable() {
+		if inst != nil && inst.required {
+			why := inst.NotDurable()
+			return false, eb.Build().Str("env", RequiredEnv.Spec().Name).Str("why", why).Errorf("the audit trail could not be written and %s is set: %s", RequiredEnv.Spec().Name, why) //boxer:lint disable=CS013 reason="shape 1 and 3: the services send this refusal across the bus as text, and the variable's name is what the reader changes"
 		}
+		return false, nil
 	}
-	if inst != nil && inst.required {
-		return false, eb.Build().Str("env", RequiredEnv.Spec().Name).Str("why", why).Errorf("the audit trail could not be written and %s is set: %s", RequiredEnv.Spec().Name, why) //boxer:lint disable=CS013 reason="shape 1 and 3: the services send this refusal across the bus as text, and the variable's name is what the reader changes"
+	durable, err := inst.rec.WriteAhead(ctx)
+	if err != nil {
+		return false, eb.Build().Str("env", RequiredEnv.Spec().Name).Errorf("the audit trail could not be written and %s is set: %w", RequiredEnv.Spec().Name, err) //boxer:lint disable=CS013 reason="shape 1 and 3: the services send this refusal across the bus as text, and the variable's name is what the reader changes"
 	}
-	if inst != nil && inst.Durable() {
-		inst.log.Warn().Str("reason", why).Msg("trail: write-ahead failed; the work proceeds without a durable row")
-	}
-	return false, nil
+	return durable, nil
 }
 
 // Admit says whether work that leaves the machine without a write-ahead —
@@ -689,45 +526,18 @@ func (inst *Recorder) FlushSoon() {
 	if inst == nil {
 		return
 	}
-	select {
-	case inst.wake <- struct{}{}:
-	default:
-	}
-}
-
-// flusher lands buffered rows once per wake-up and at Close.
-func (inst *Recorder) flusher() {
-	defer close(inst.done)
-	flush := func() {
-		if err := inst.Flush(context.Background()); err != nil {
-			inst.log.Warn().Err(err).Msg("trail: flush (rows stay buffered for the next flush)")
-		}
-	}
-	for {
-		select {
-		case <-inst.wake:
-			flush()
-		case <-inst.stop:
-			flush()
-			return
-		}
-	}
+	inst.rec.FlushSoon()
 }
 
 // Scan reads rows through one of the store's scans — pick it in scan, e.g.
 // st.ScanLlmMessage(ctx, opts) — and returns the entities, each with every
-// component its row carries. Nil without a store. Buffered rows are not
-// seen until a flush; a scan does not hold up writers.
+// component its row carries. Nil without a store or after Close. Buffered
+// rows are not seen until a flush; a scan does not hold up writers.
 func (inst *Recorder) Scan(scan func(st *TrailStore) iter.Seq2[*TrailEntity, error]) (ents []*TrailEntity, err error) {
-	if inst == nil {
+	if inst == nil || inst.st == nil {
 		return nil, nil
 	}
-	inst.readMu.Lock()
-	defer inst.readMu.Unlock()
-	if inst.read == nil {
-		return nil, nil
-	}
-	for ent, serr := range scan(inst.read) {
+	for ent, serr := range inst.st.scan(scan) {
 		if serr != nil {
 			return nil, eh.Errorf("trail: scan: %w", serr)
 		}

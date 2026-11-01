@@ -10,6 +10,7 @@ import (
 
 	"github.com/stergiotis/boxer/public/keelson/data/chclient"
 	"github.com/stergiotis/boxer/public/keelson/data/storeexec"
+	"github.com/stergiotis/boxer/public/keelson/runtime/runinfo"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/semistructured/markdown/mddocfacts"
@@ -81,6 +82,16 @@ func runIngest(cliCtx context.Context, cmd *cli.Command) (err error) {
 	}
 
 	ts := time.Now().UTC()
+	// The rows carry this process's run as their origin (ADR-0330 §SD3); a
+	// CLI has no window, so app and instance stay unattributed.
+	var origin mddocfacts.Origin
+	if store != nil {
+		runInst, rerr := runinfo.Init()
+		if rerr != nil {
+			return eh.Errorf("run info: %w", rerr)
+		}
+		origin.Run = runInst.RunId
+	}
 	var docs, rows, pending int
 	for _, s := range sources {
 		var src []byte
@@ -92,7 +103,7 @@ func runIngest(cliCtx context.Context, cmd *cli.Command) (err error) {
 		if store == nil {
 			r = mddocfacts.BuildRows(src, s.name, ts, mdextract.Extract(src))
 		} else {
-			r, err = store.IngestDocument(src, s.name, ts)
+			r, err = store.IngestDocument(src, s.name, ts, origin)
 			if err != nil {
 				return eb.Build().Str("path", s.path).Errorf("ingest: %w", err)
 			}

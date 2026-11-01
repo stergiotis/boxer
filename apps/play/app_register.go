@@ -23,6 +23,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/help"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect/keelsonquery"
+	"github.com/stergiotis/boxer/public/keelson/runtime/task"
 	"github.com/stergiotis/boxer/public/keelson/runtime/windowhost"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/basemap"
@@ -319,6 +320,10 @@ func (inst *PlayLauncher) Manifest() (m app.Manifest) {
 			// The Map, Graph and Vector field panes' basemap tiles, fetched
 			// through the host's egress service (ADR-0262 §SD6).
 			basemap.ClientCaps("play: basemap tiles under the Map, Graph and Vector field panes")[0],
+			// Query runs, write runs, the projector, the vector-field
+			// builds and the publishes run as keelson tasks owned by the
+			// window.
+			task.ProducerCaps()[0],
 		},
 		// PersistedKeys → host auto-injects the runtime.persist.play.>
 		// cap. Kept for the read-only bridge only (ADR-0148 §SD8, added
@@ -435,6 +440,7 @@ func (inst *PlayLauncher) Mount(ctx app.MountContextI) (err error) {
 	// on. The standalone CLI path never sets these — its runs stamp lane
 	// and fingerprints only.
 	client.SetStampIdentity(ctx.RunId(), string(inst.Manifest().Id), ctx.InstanceKey())
+	client.SetTasks(task.ForApp(ctx))
 	// NewLivePlayApp installs the pre-execute SQL pipeline on the client
 	// (standard passes + schema-aware leeway name resolver, ADR-0108/0116) and
 	// wires the resolver into the Diagnostics pane. The carousel-embedded play

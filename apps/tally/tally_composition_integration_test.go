@@ -151,7 +151,7 @@ func TestPathSetOverAnotherLayout_LiveServer(t *testing.T) {
 	require.NoError(t, err)
 	defer sc.close()
 	named := ladingpolicy.NewPolicyStore(exec, nil, ladingpolicy.PolicyStoreConfig{Table: layout.PolicyTable()})
-	require.NoError(t, ladingingest.RecordPolicy(ctx, named, mount, ladingingest.DefaultPolicy(), "layout test mount", "tally-layout-test"))
+	require.NoError(t, ladingingest.RecordPolicy(ctx, named, mount, ladingingest.DefaultPolicy(), "layout test mount", "tally-layout-test", ladingpolicy.Origin{}))
 	named.Close()
 
 	rows, err := sc.listMounts(ctx)

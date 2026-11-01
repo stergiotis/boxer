@@ -22,6 +22,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	"github.com/stergiotis/boxer/public/keelson/runtime/adhocdata"
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
+	"github.com/stergiotis/boxer/public/keelson/runtime/task"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/science/audio/pcm"
@@ -388,7 +389,11 @@ func (inst *PlayApp) publishCardgridFixture() {
 
 	bus := inst.bus
 	go func() {
-		summary, err := doPublishCardgridFixture(bus, st)
+		var summary string
+		err := task.RunToCompletion(inst.client.Tasks(), task.SpawnOpts{Kind: "play.fixture.cards", Title: "publish the cards fixture"}, func() (err error) {
+			summary, err = doPublishCardgridFixture(bus, st)
+			return
+		})
 		st.mu.Lock()
 		st.publishing, st.err = false, err
 		if err == nil {

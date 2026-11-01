@@ -364,14 +364,16 @@ var builtinTabDefs = []builtinTabDef{
 	// the same table substrate and the same declared-function registry, showing
 	// what may stand at the caret instead of everything this build declares.
 	//
-	// NOT lazy, unlike its siblings: the engine runs from the editor's Bind
-	// whether the tab is open or not, because the editor's own resolved-token
-	// tint reads the same answer. What the tab costs when nobody looks at it is
-	// the body render, which is what the dock already skips.
+	// Lazy like its siblings. The engine runs from the editor's Bind whether
+	// the tab is open or not, because the editor's own resolved-token tint
+	// reads the same answer, so the gate skips only the body. The host drops a
+	// hidden tab's buffer but Go still builds it, and the candidate table is
+	// a frame's worth of rows, cells and hover text even when bounded to a
+	// screenful (ADR-0176 Update 2026-10-30).
 	//
 	// NoScroll for the Vocabulary tab's reason: the body's table brings its own
 	// scroll and culls the rows outside it.
-	{id: "completion", dockID: dockTabCompletion, title: "Completion", zone: TabZoneTools, noScroll: true},
+	{id: "completion", dockID: dockTabCompletion, title: "Completion", zone: TabZoneTools, lazy: true, noScroll: true},
 	// Glosses is the result-side sibling of Vocabulary (ADR-0186 §SD6): the
 	// catalog of value renderings, the buffer's effective rules, and how each
 	// column of the current result resolved. Lazy — its body walks the

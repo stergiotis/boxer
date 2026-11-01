@@ -15,6 +15,7 @@ import (
 
 	"github.com/stergiotis/boxer/public/keelson/data/chclient"
 	"github.com/stergiotis/boxer/public/keelson/data/storeexec"
+	"github.com/stergiotis/boxer/public/keelson/runtime/runinfo"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	pkafka "github.com/stergiotis/boxer/public/streaming/persisted/kafka"
 	"github.com/stergiotis/boxer/public/streaming/stevedore"
@@ -101,7 +102,13 @@ func openDeadLetters(ctx context.Context, cmd *cli.Command) (dead deadletter.Sto
 			return nil, closeFn, eh.Errorf("open dead-letter store: %w", oerr)
 		}
 		closeFn = store.Close
-		dead = &deadletter.Store{Store: store}
+		// The rows carry this process's run as their origin (ADR-0330 §SD3).
+		runInst, rerr := runinfo.Init()
+		if rerr != nil {
+			store.Close()
+			return nil, func() {}, eh.Errorf("run info: %w", rerr)
+		}
+		dead = &deadletter.Store{Store: store, Run: runInst.RunId}
 	default:
 		return nil, closeFn, eh.Errorf("--dead-letters is log or clickhouse")
 	}

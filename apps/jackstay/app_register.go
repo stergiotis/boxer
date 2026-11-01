@@ -6,6 +6,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/fsbroker"
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
+	"github.com/stergiotis/boxer/public/keelson/runtime/task"
 )
 
 // AppId is the window's durable identity.
@@ -30,7 +31,9 @@ var manifest = app.Manifest{
 		PreferredWidth:  1280,
 		PreferredHeight: 820,
 	},
-	Caps: []app.SubjectFilter{
+	// The jobs are keelson tasks: keelson('tasks') lists them by window and
+	// the task monitor can cancel them.
+	Caps: append([]app.SubjectFilter{
 		{
 			Pattern:   fsbroker.SubjectAppDataPrefix + ">",
 			Direction: app.CapDirectionPub,
@@ -46,7 +49,7 @@ var manifest = app.Manifest{
 			Direction: app.CapDirectionPub,
 			Reason:    "jackstay: Export — raise the save picker to write a copy of the plan",
 		},
-	},
+	}, task.ProducerCaps()...),
 	// The plans this window used, for the first page's resume list.
 	PersistedKeys: []string{recentKey},
 	Operations:    ops.Catalog(),

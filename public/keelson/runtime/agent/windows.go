@@ -7,17 +7,19 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/appops/opwire"
 )
 
-// The window verbs (ADR-0276 §SD3): arrange, raise and place change the
-// desktop's geometry, not an app's state, so they go to the host rather than
-// to a window's operations. Each is a call of its own — keyed, budgeted and
-// recorded with effect view — that completes once the host has queued it;
-// where the windows ended up is keelson('windows') a frame or more later.
+// The window verbs (ADR-0276 §SD3, ADR-0346 §SD6): arrange, raise, place
+// and layout change the desktop's geometry, not an app's state, so they go
+// to the host rather than to a window's operations. Each is a call of its
+// own — keyed, budgeted and recorded with effect view — that completes once
+// the host has queued it; where the windows ended up is keelson('windows')
+// a frame or more later.
 
 // Verb names, as the record's operation and the subject's last segment.
 const (
 	verbArrange = "arrange"
 	verbRaise   = "raise"
 	verbPlace   = "place"
+	verbLayout  = "layout"
 )
 
 // reasonQueued is what a completed window verb says: the reply comes before
@@ -71,6 +73,12 @@ func (inst *Service) windowAct(msg *app.Msg) (rep wireCallReply) {
 			err = inst.cfg.Host.OpsRaise(req.Instance)
 		case verbPlace:
 			err = inst.cfg.Host.OpsPlace(req.Instance, req.X, req.Y, req.W, req.H)
+		case verbLayout:
+			if req.Floating != nil {
+				err = inst.cfg.Host.OpsFloat(req.Instance, *req.Floating)
+			} else {
+				err = inst.cfg.Host.OpsLayout(req.Layout, req.Ratio, req.Count)
+			}
 		}
 		if err != nil {
 			out = phaseOutcome(opwire.PhaseRefused, err.Error())
@@ -84,19 +92,24 @@ func (inst *Service) windowAct(msg *app.Msg) (rep wireCallReply) {
 	return
 }
 
-// windowCheck is what the grant allows of a window verb (ADR-0276 §SD4):
-// arrange needs the desktop in act, raise and place act on the window. An
-// unspecified phase lets the call through. The caller holds mu.
+// windowCheck is what the grant allows of a window verb (ADR-0276 §SD4,
+// ADR-0346 §SD6): arrange and layout need the desktop in act, raise and
+// place act on the window. An unspecified phase lets the call through. The
+// caller holds mu.
 func windowCheck(t *task, verb string, req wireWindowAct) (out opwire.Outcome) {
 	switch {
 	case t.callsUsed >= t.callsBudget:
 		out = phaseOutcome(opwire.PhaseInputRequired, "the task's call budget is spent; request more")
-	case verb == verbArrange:
+	case verb == verbArrange || verb == verbLayout:
 		switch decideArrange(t.ceiling, t.desktop) {
 		case decisionAboveCeiling:
 			out = phaseOutcome(opwire.PhaseRefused, t.ceiling.refuseDesktop())
 		case decisionNotGranted, decisionObserveOnly:
-			out = phaseOutcome(opwire.PhaseInputRequired, "arranging windows needs the desktop in act mode; request it with desktop act")
+			what := "arranging windows"
+			if verb == verbLayout {
+				what = "setting the layout"
+			}
+			out = phaseOutcome(opwire.PhaseInputRequired, what+" needs the desktop in act mode; request it with desktop act")
 		}
 	case verb == verbRaise || verb == verbPlace:
 		e := t.entries[req.Instance]

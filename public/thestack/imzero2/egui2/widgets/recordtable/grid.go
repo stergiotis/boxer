@@ -310,17 +310,21 @@ func (in *Input) selection() (row int64, ok bool) {
 
 // cellRows is the display rows [lo, hi) of an n-row window whose cells are
 // emitted: the rows egui_table reported visible last frame (rb, re, ok).
+// A table that has reported no range — the first frame on screen, or every
+// frame of one that has never been, in a dock tab never raised — gets a
+// screenful, around anchor when the grid scrolls to one (c.EtFallbackRows).
 // A fit frame measures the cells it is given, so it gets the visible rows
 // too — the fit belongs to what the reader sees — capped at fitMaxRows; only
 // when last frame showed nothing (the first frame, or one with no rows) does
 // it fall back to the window's first rows.
-func cellRows(n int64, rb, re uint64, ok, refit bool) (lo, hi int64) {
+func cellRows(n int64, rb, re uint64, ok, refit bool, screenful uint64, anchor int64) (lo, hi int64) {
 	if ok {
 		lo, hi = min(int64(rb), n), min(int64(re), n)
 	}
 	if !refit {
 		if !ok {
-			return 0, n
+			flo, fhi := c.EtFallbackRows(uint64(n), screenful, anchor)
+			return int64(flo), int64(fhi)
 		}
 		return
 	}
@@ -532,15 +536,17 @@ func (in *Input) render(res *Result, scopeKey string) {
 	// A reveal is served once: the layout that opened the row's ancestors
 	// names its line, and the grid scrolls there. A line outside the page
 	// window is the host's to turn to.
+	scrollTo := int64(-1)
 	if lay != nil && lay.Revealed >= start && lay.Revealed < start+n {
 		et = et.ScrollToRow(uint64(lay.Revealed-start), scrollAlignCenter)
+		scrollTo = lay.Revealed - start
 	}
 
 	in.renderHeaders(res, et, cols, tag, pad, refit)
 
 	// Only the rows egui_table will draw (cellRows).
 	rb, re, _, _, _, ok := et.VisibleRange()
-	rowLo, rowHi := cellRows(n, rb, re, ok, refit)
+	rowLo, rowHi := cellRows(n, rb, re, ok, refit, c.EtScreenfulRows(in.MaxHeight, rowHeight), scrollTo)
 
 	// Nothing on a page changes between most frames, so with a CellsKey the
 	// cells are captured once and replayed until one of their inputs moves

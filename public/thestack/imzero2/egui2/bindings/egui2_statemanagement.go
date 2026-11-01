@@ -309,6 +309,11 @@ type StateManager struct {
 	// contract.
 	commandEnter      bool
 	commandEnterShift bool
+	// shellChords mirrors the per-frame fetchShellChords drain (ADR-0346
+	// §SD5): the bit set of the shell's Alt chords pressed since the last
+	// Sync, over keycodes.ShellChords' bits. The window host is its one
+	// poller, as the chrome is for F1; apps must not poll it.
+	shellChords uint64
 }
 
 func NewStateManager() *StateManager {
@@ -439,6 +444,17 @@ func (inst *StateManager) GetF8KeyPressed() (pressed bool) {
 // through its return_key, which requires no modifiers.
 func (inst *StateManager) GetCommandEnterPressed() (pressed bool, shiftPressed bool) {
 	return inst.commandEnter, inst.commandEnterShift
+}
+
+// GetShellChords reports the shell's chords pressed between this frame's
+// Sync and the previous one (ADR-0346 §SD5), as a bit set over
+// keycodes.ShellChords' bits; keycodes.ShellChordBit.Has reads one. egui's
+// queue no longer holds the events, so as with [StateManager.GetF1KeyPressed]
+// this is the single opportunity to react, and the consumer shape is F1's:
+// one process-singleton poller, the window host.
+func (inst *StateManager) GetShellChords() (chords uint64) {
+	chords = inst.shellChords
+	return
 }
 
 // GetWindowGeom returns last frame's R27 geometry for the egui::Window
@@ -791,6 +807,7 @@ func (inst *StateManager) Sync() {
 	fetcher.IssueFetchF2KeyPressed()
 	fetcher.IssueFetchF8KeyPressed()
 	fetcher.IssueFetchCommandEnterPressed()
+	fetcher.IssueFetchShellChords()
 	fetcher.IssueFetchR21UiRects()
 	fetcher.IssueFetchR27Windows()
 	fetcher.IssueFetchR23CanvasWheel()
@@ -907,6 +924,10 @@ func (inst *StateManager) Sync() {
 		// carries no modifiers, so the widgets have already declined
 		// these two by the time Sync runs.
 		inst.commandEnter, inst.commandEnterShift = fetcher.CollectFetchCommandEnterPressed()
+	}
+	{
+		// The shell's Alt chords (ADR-0346 §SD5), one bit set for the frame.
+		inst.shellChords = fetcher.CollectFetchShellChords()
 	}
 	{
 		seqs, minX, minY, maxX, maxYSeq := fetcher.CollectFetchR21UiRects()

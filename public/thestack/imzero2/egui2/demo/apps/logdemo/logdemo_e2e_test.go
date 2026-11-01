@@ -17,16 +17,16 @@ import (
 // TestE2E_LogdemoEmitsIntoSink wires the actual host chain that the
 // running carousel uses:
 //
-//	host logger ──► logbridge.Sink ──► tail buffer (+ factsstore)
+//	host logger ──► logbridge.Sink ──► factsstore
 //	     │
 //	     └─► app.AppLogger(host logger, manifest.Id) ──► mountCtx.Log()
 //	                                                     │
 //	                                                     └─► inst.logger
 //	                                                         (via Mount)
 //
-// emit() through inst.logger must land a decoded LogRow in the
-// Sink's tail buffer — that's exactly what the logviewer widget
-// reads each frame.
+// emit() through inst.logger must land a decoded LogRow in the store —
+// on a host with BOXER_LOG_FACTS that is boxer.facts, which the logviewer
+// reads back.
 //
 // Reproduces the issue the operator hit ("ringbuffer empty after
 // clicking emit") in a hermetic test: if the path is broken we
@@ -34,12 +34,11 @@ import (
 func TestE2E_LogdemoEmitsIntoSink(t *testing.T) {
 	store := factsstore.NewInMemoryFactsStore()
 	sink, err := logbridge.NewSink(store, logbridge.Config{
-		Capacity:     8,
-		FlushN:       1,
-		TailCapacity: 8,
+		Capacity: 8,
+		FlushN:   1,
 	})
 	require.NoError(t, err)
-	defer sink.Close()
+	defer func() { _ = sink.Close() }()
 
 	// Build a host logger over the sink (multi-writer with no
 	// passthrough, mirroring InstallGlobal(nil, sink)).
@@ -54,10 +53,12 @@ func TestE2E_LogdemoEmitsIntoSink(t *testing.T) {
 	require.NoError(t, a.Mount(mountCtx))
 	a.emit(zerolog.InfoLevel, "ringbuffer-smoke")
 
-	// Drain triggered by FlushN=1; assert the tail buffer (what the
-	// logviewer reads) has the event.
-	rows := sink.Tail(0)
-	require.Len(t, rows, 1, "sink tail must contain the emitted event — the logviewer reads from this buffer")
+	// Close drains the sink synchronously; assert the store (boxer.facts
+	// on a host with BOXER_LOG_FACTS, which the logviewer reads) has the
+	// event.
+	require.NoError(t, sink.Close())
+	rows := store.Logs()
+	require.Len(t, rows, 1, "the store must hold the emitted event — the logviewer reads it back from boxer.facts")
 	got := rows[0]
 	assert.Equal(t, "info", got.Level)
 	assert.Equal(t, "ringbuffer-smoke", got.Message)

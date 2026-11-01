@@ -1,8 +1,8 @@
 // topology — components, procs, sockets (ADR-0126 §SD5): the typed
 // observed-topology tables. keelson.components is the compiled-in
 // declared inventory; keelson.procs and keelson.sockets flatten the
-// latest metric-plane bundle per host, so they register only where a
-// plane consumer exists (RegisterTopology), unlike the static set.
+// latest metric-plane bundle per host, so their rows exist only where a
+// plane consumer feeds them (RegisterTopology), unlike the static set.
 
 package providers
 
@@ -18,9 +18,9 @@ import (
 
 // RegisterTopology registers the plane-fed observed-topology providers
 // (procs, sockets) and the graph projection (topology_nodes,
-// topology_edges) reading holder's latest snapshots. Call from a host
-// that stands up a metric-plane consumer (ADR-0126 §SD5); observed rows
-// are empty until a scraper publishes, declared rows are always there.
+// topology_edges) reading holder's latest snapshots. A nil holder
+// registers the same tables with no observed rows; otherwise observed rows
+// are empty until a scraper publishes. Declared rows are always there.
 func RegisterTopology(r *introspect.Registry, holder *sysmetricsbus.LatestHolder) (err error) {
 	for _, p := range []introspect.Provider{
 		procsProvider{holder: holder}, socketsProvider{holder: holder},

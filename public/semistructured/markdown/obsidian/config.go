@@ -47,6 +47,13 @@ const (
 	// `[^x]` without one stays literal text. Definitions nothing references
 	// are removed by goldmark before any consumer sees the tree.
 	FeatureFootnote FeatureE = 1 << 10
+	// FeatureBlockId enables Obsidian block identifiers (ADR-0347 §SD4): a
+	// trailing ` ^id` on a block's last line, or a line holding only `^id`
+	// under a block, names that block. The marker is stripped from the
+	// rendered text and recorded as the block's `id` attribute, which the
+	// HTML renderer emits and [BlockId] reads. The id alphabet is letters,
+	// digits and hyphens; a marker that does not end its line is text.
+	FeatureBlockId FeatureE = 1 << 11
 
 	// FeatureAll is every WIRED feature — the whole declared space MINUS
 	// the reserved-and-unwired bits. Only [FeatureMath] is subtracted
@@ -54,7 +61,7 @@ const (
 	// an OR of the wired flags so a newly declared bit is opted IN by
 	// default and has to be excluded on purpose, which is the direction
 	// that fails loudly.
-	FeatureAll FeatureE = ((1 << 11) - 1) &^ FeatureMath
+	FeatureAll FeatureE = ((1 << 12) - 1) &^ FeatureMath
 )
 
 // TagRenderE controls how tags are rendered in HTML.

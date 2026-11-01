@@ -105,6 +105,12 @@ func NewRegistry() (inst *Registry) {
 // otherwise make a query's meaning depend on wiring order. The refusal is the
 // same posture ADR-0121's condition pass takes on a name collision.
 //
+// One exception: a kind already registered over the same table with the same
+// artefacts is taken as registered. That is a component several stores bind
+// — the shared origin every writer of `boxer.facts` carries (ADR-0330 §SD3)
+// — and a query naming it means the same thing whichever store published
+// it, so there is no wiring order to depend on.
+//
 // Registration is all-or-nothing: a set carrying one bad kind adds none of
 // them, so a failed Register leaves the registry as it was.
 func (inst *Registry) Register(set Set) (err error) {
@@ -129,6 +135,9 @@ func (inst *Registry) Register(set Set) (err error) {
 		inst.mu.RLock()
 		prev, dup := inst.kinds[kind]
 		inst.mu.RUnlock()
+		if dup && sameBinding(prev, set.Table, a) {
+			continue
+		}
 		if dup {
 			err = eb.Build().Str("kind", kind).Str("store", set.Store).
 				Str("alreadyRegisteredBy", prev.Store).Str("table", prev.Table).
@@ -142,8 +151,8 @@ func (inst *Registry) Register(set Set) (err error) {
 	defer inst.mu.Unlock()
 	// Re-check under the write lock: the staging pass read with RLock, so a
 	// concurrent Register could have claimed a kind in between.
-	for kind := range staged {
-		if prev, dup := inst.kinds[kind]; dup {
+	for kind, b := range staged {
+		if prev, dup := inst.kinds[kind]; dup && !sameBinding(prev, b.Table, b.Artefacts) {
 			err = eb.Build().Str("kind", kind).Str("store", set.Store).
 				Str("alreadyRegisteredBy", prev.Store).
 				Errorf("componentsql: two stores publish the same component kind")
@@ -152,6 +161,12 @@ func (inst *Registry) Register(set Set) (err error) {
 	}
 	maps.Copy(inst.kinds, staged)
 	return
+}
+
+// sameBinding reports whether prev reads table with artefacts a: the same
+// component published twice rather than two components under one name.
+func sameBinding(prev Binding, table string, a Artefacts) bool {
+	return prev.Table == table && prev.Artefacts == a
 }
 
 // MustRegister is Register for a wiring site that cannot proceed without it.

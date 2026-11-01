@@ -181,6 +181,14 @@ func windowsTable(ws []windowhost.WindowInfo, tasks map[uint64][]string) *intros
 		Bool("maximized", func(i int) bool { return ws[i].Geom.Maximized }).
 		// The shell's active window: the one process-global input goes to.
 		Bool("active", func(i int) bool { return ws[i].Geom.Active }).
+		// The tiled desktop (ADR-0346 §SD6): tiled is whether the layout
+		// placed the window last frame; floating whether it is out of the
+		// layout by choice; order its 1-based place in the layout's order,
+		// main first — every open window has one, floating ones included,
+		// 0 only before the window's first frame.
+		Bool("tiled", func(i int) bool { return ws[i].Geom.Tiled }).
+		Bool("floating", func(i int) bool { return ws[i].Geom.Floating }).
+		Int64("order", func(i int) int64 { return int64(ws[i].Geom.Order) }).
 		// The agent tasks whose grant holds the window (ADR-0269), the
 		// task column of keelson('agent_grants'); empty when none.
 		StringList("agent_tasks", func(i int) []string { return tasks[uint64(ws[i].Key)] })
@@ -225,7 +233,12 @@ func desktopTable(rows []windowhost.DesktopInfo) *introspect.Table {
 				return ""
 			}
 			return rows[i].Arranging.String()
-		})
+		}).
+		// The desktop's layout by its ident (ADR-0346 §SD6) — "floating", or
+		// a tiled layout — and the parameters of main-stack.
+		String("layout", func(i int) string { return rows[i].Layout.Ident() }).
+		Float64("main_ratio", func(i int) float64 { return float64(rows[i].LayoutParams.MainRatio) }).
+		Int64("main_count", func(i int) int64 { return int64(rows[i].LayoutParams.MainCount) })
 }
 
 // --- frame times (ADR-0261) --------------------------------------------------

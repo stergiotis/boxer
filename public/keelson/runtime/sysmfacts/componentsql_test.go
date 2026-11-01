@@ -95,7 +95,7 @@ func TestEveryPublishedKindExpands(t *testing.T) {
 		kinds = append(kinds, kind)
 	}
 	sort.Strings(kinds)
-	require.Len(t, kinds, 13)
+	require.Len(t, kinds, 14, "thirteen domains and the origin")
 
 	for _, kind := range kinds {
 		out := expandComponent(t, "SELECT LW_COMPONENT('"+kind+"') AS c FROM boxer.facts")
@@ -125,9 +125,10 @@ func TestInjectedFilterIsTheStoresOwnFilter(t *testing.T) {
 // the field names and types a component read addresses are recoverable from
 // the Projection alone, for every kind this store publishes.
 //
-// The three plain columns every kind carries — Id, NaturalKey, Ts — are the
-// assertion's floor; a kind whose slot list came back empty or truncated would
-// miss them.
+// The three plain columns every domain kind carries — Id, NaturalKey, Ts —
+// are the assertion's floor; a kind whose slot list came back empty or
+// truncated would miss them. The origin is the audit package's component
+// (ADR-0330 §SD3), with slots of its own.
 func TestEveryKindPublishesItsSlots(t *testing.T) {
 	r := componentsql.NewRegistry()
 	require.NoError(t, r.Register(sysmfacts.SysmetricsComponentSQL))
@@ -147,6 +148,10 @@ func TestEveryKindPublishesItsSlots(t *testing.T) {
 			for i := range elems {
 				names[i] = elems[i].Name
 				assert.NotNilf(t, elems[i].Type, "slot %s has no type", elems[i].Name)
+			}
+			if kind == "Origin" {
+				assert.Equal(t, []string{"Id", "Run", "App", "Instance"}, names)
+				return
 			}
 			assert.Equal(t, []string{"Id", "NaturalKey", "Ts"}, names[:3])
 

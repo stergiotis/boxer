@@ -55,7 +55,7 @@
 // # Names, and what a view is a snapshot of
 //
 // The audit trail is general to keelson, and so are the timeline, the
-// egress view and the bus-request view. Every view over what the agentic side writes — model calls,
+// egress view and the audit-event view. Every view over what the agentic side writes — model calls,
 // messages, agent actions, grants, captures, disclosures and the action,
 // conversation and task aggregates — carries the agentic tag in its name
 // (`…_trail_llm_…`).
@@ -105,7 +105,7 @@ import (
 // ViewsVersion is the revision of the views this package composes. Bump it
 // whenever a view's columns or meaning change, so the stamp a deployed view
 // carries tells an operator it predates the build.
-const ViewsVersion = 14
+const ViewsVersion = 16
 
 // agenticTag marks the views over what the agentic side of keelson writes —
 // model calls and their messages, and what agents did under a grant. The
@@ -149,7 +149,6 @@ const (
 	// run ran and the delegation that enqueued it (ADR-0344 §SD5): the
 	// attribution mart. Agentic.
 	ViewCoverageJobSamples = prefixDataMart + "trail_" + agenticTag + "_coverage_job_samples"
-	ViewBusRequests        = prefixDataMart + "trail_bus_requests"
 	ViewTimeline           = prefixDataMart + "trail_timeline"
 	ViewActionOutcomes     = prefixAggregate + "trail_" + agenticTag + "_agent_action_outcomes"
 	ViewConversations      = prefixAggregate + "trail_" + agenticTag + "_conversations"
@@ -552,18 +551,6 @@ var kindViews = []kindView{
 		{"ref-values", "stringArray", vocab.MembAuditEventRefValues, list},
 		{"attr-keys", "stringArray", vocab.MembAuditEventAttrKeys, list},
 		{"attr-values", "stringArray", vocab.MembAuditEventAttrValues, list},
-	}},
-	// The bus's own record of each request it served (ADR-0026's `audit`
-	// kind): written by chstore's hand-written lane, not by the trail's
-	// recorder, and a different thing from an audit event — it says that a
-	// request crossed the bus, not what was done to whose data. The name
-	// keeps the two apart. Rows written before ADR-0191 carry no run.
-	{name: ViewBusRequests, kind: vocab.MembKindAudit, columns: []column{
-		{"bus-subject", "symbol", vocab.MembAuditRequestSubject, scalar},
-		{"result", "symbol", vocab.MembAuditResult, scalar},
-		{"latency-ms", "u32Array", vocab.MembAuditLatencyMs, first},
-		{"request-bytes", "u32Array", vocab.MembAuditRequestSizeB, first},
-		{"response-bytes", "u32Array", vocab.MembAuditResponseSizeB, first},
 	}},
 	{name: ViewCoverageBuilds, kind: vocab.MembKindCoverageBuild, columns: []column{
 		{"meta-hash", "symbol", vocab.MembCoverageBuildMetaHash, scalar},
@@ -1062,12 +1049,6 @@ var timelineBranches = []timelineBranch{
 			"if({principal} != '', concat(' by ', {principal}, ' (', {principal-by}, ')'), ''), " +
 			"if(length({ref-types}) > 0, concat(' [', arrayStringConcat(arrayMap((rt, rv) -> concat(rt, ':', rv), {ref-types}, {ref-values}), ', '), ']'), ''))",
 		"arrayStringConcat(arrayMap((k, v) -> concat(k, '=', v), {attr-keys}, {attr-values}), ' | ')", "false", "false", "0", "0", "0",
-	}},
-	{ViewBusRequests, "busRequest", [12]string{
-		"''", "0", "''", "{result}", "{bus-subject}",
-		"concat('bus request ', {bus-subject}, ' -> ', {result}, " +
-			"' (', toString({latency-ms}), ' ms, ', toString({request-bytes}), ' B in, ', toString({response-bytes}), ' B out)')",
-		"''", "false", "false", "0", "0", "{latency-ms}",
 	}},
 }
 

@@ -9,6 +9,7 @@ import (
 	"github.com/rs/zerolog"
 	"lukechampine.com/blake3"
 
+	"github.com/stergiotis/boxer/public/keelson/runtime/runinfo"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/streaming/stevedore/stevedorefacts"
 )
@@ -27,13 +28,25 @@ type StoreI interface {
 // Store writes dead letters through the facts-bound generated store.
 type Store struct {
 	Store *stevedorefacts.StevedoreStore
+	// Run is the run id every row's origin carries (ADR-0330 §SD3). Empty
+	// takes the process's run when runinfo was initialised, else the rows
+	// are unattributed. A lander has no window, so the origin names no app
+	// and no instance.
+	Run string
 }
 
 var _ StoreI = (*Store)(nil)
 
 // Add buffers one row; Flush makes it durable.
 func (inst *Store) Add(_ context.Context, row stevedorefacts.DeadLetter) (err error) {
+	run := inst.Run
+	if run == "" {
+		if ri, riErr := runinfo.Get(); riErr == nil {
+			run = ri.RunId
+		}
+	}
 	err = inst.Store.Begin(row.Id, row.Ts, stevedorefacts.StevedoreEnvelope{NaturalKey: row.NaturalKey}).
+		AddOrigin(stevedorefacts.Origin{Id: row.Id, Run: run}).
 		AddDeadLetter(row).Commit()
 	if err != nil {
 		err = eh.Errorf("buffer dead letter: %w", err)

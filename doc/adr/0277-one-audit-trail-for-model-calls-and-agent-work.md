@@ -569,6 +569,77 @@ read surface and its dependents at boot, off the boot path
 wherever `boxer.facts` is. `keelsonddl` stays the way to place them over
 another table.
 
+### 2026-10-30 — the recorder writes through the shared audit writer
+
+`trail.Recorder` is built on `auditrec.Recorder` over a binding of the
+trail store ([ADR-0330](./0330-a-shared-audit-recorder-below-the-runtime-one-sealed-writer-over-a-narrow-store-binding.md) §SD8).
+Its verbs keep their signatures; the buffer, the backlog and its cap
+(`MaxBacklogRows`), the seals and their anchoring, `Flush`, `WriteAhead`
+and `Close` are the shared writer's, and the trail's own flush loop is
+gone. §SD3 reads as before: `BOXER_TRAIL_REQUIRED` stays the trail's,
+mapped onto `auditrec.WithRequired`, and `Admit` and the refusal's text,
+which names the variable, are unchanged. A recorder flushes when asked
+and at `Close`, as it did, and also on an interval when built
+`WithFlushInterval`, as the host's is (one second), since the bus's
+requests it records are rows nothing asks to land (ADR-0296's Update of
+this date). A verb after `Close` returns `auditrec.ErrClosed` where it
+used to record nothing silently. A row whose
+canonical item cannot be computed is no longer buffered unsealed: the
+verb fails and the row counts as dropped.
+
+### 2026-10-30 — §SD10: every writer of `boxer.facts` carries `Origin`
+
+§SD10's "the other facts-bound stores adopting `Origin`" is taken, by the
+owner's decision of this date, and widened from the generated stores to
+every writer of the table. `Origin` is `audit.Origin`
+([ADR-0330](./0330-a-shared-audit-recorder-below-the-runtime-one-sealed-writer-over-a-narrow-store-binding.md)
+§SD3); its three slots go on every row once each, so one predicate over
+the run's membership selects the rows of every kind, and a row reads as
+the component by its slots
+([ADR-0146](./0146-leeway-marshall-component-read-contract.md) §D5).
+
+- **Generated stores** bind it beside their own components through an
+  alias, as the trail does: `sysmfacts` (the rows `sysmtee` writes),
+  `watchbillpresence`, `stevedorefacts`, `mddocfacts` and `ladingpolicy`.
+  `storegen.AddOriginIds` adds the three memberships to a store whose
+  vocabulary is not the runtime one. `mddocfacts`' frontmatter row, written
+  through `Raw()`, writes the slots with the component's codec, as does
+  `capmapfacts`, which composes its rows from generated codecs by hand.
+- **Hand-written lanes** — `chstore`'s grant, log, runtime-start,
+  heartbeat, app-lifecycle and launch rows, and `queryrunfacts`' query
+  runs — write all three slots on every row. An unattributed slot is
+  written as `""` or `0` instead of being left out (ADR-0191's Update of
+  this date). Their other memberships, natural keys and ids are unchanged.
+- **What fills the slots.** The run is the writing process's: `runinfo`,
+  or the run of the host's trail recorder. App and instance are the window
+  the row is about where there is one: an app's grant, log, lifecycle and
+  launch rows, a stamped query run, mdedit's upload, the policy row of a
+  tree adhocdemo or the publish service writes. Unattributed by design,
+  having no window: system metrics, watchbill presence, dead letters,
+  runtime start and heartbeat, and the CLI ingests (`markdown`, `capmap`,
+  `ladingfs`). The run is `""` where the process never initialised
+  `runinfo` and no run is passed in: a caller of `sysmtee`,
+  `deadletter.Store` or `chstore` built without one, and query runs whose
+  query carried no stamp.
+- **Not migrated.** `factsschema/meshdemo` is a worked example whose rows
+  only its tests write. `boxer.persiststate`, the watchbill job and event
+  tables, the agent-run tables and lading's data and metadata tables are
+  other tables.
+- **Private spellings stay.** `watchbillWorkerRunId` keeps the worker's
+  run beside `runtimeRun`; a later cleanup may retire it.
+- **Several stores publish one component kind.** `componentsql.Registry`
+  takes a kind registered again over the same table with the same
+  artefacts as one registration, so play's registry holds `Origin` once.
+- **Law L34 is over the trail's kinds.** `VerifySeals` selected a run's
+  rows by the origin alone and reported each row no seal names as
+  unnamed. With every writer carrying the run, logs, metrics, lifecycle,
+  launch and query-run rows would have been reported and L34 would not
+  hold on any host that writes them. The trail's binding reads only rows
+  carrying one of its kind markers and its seals
+  ([ADR-0327](./0327-evidence-as-a-record-store-profile-chain-vault-marks-seals-and-anchors-any-store-opts-into.md)'s
+  Update of this date); a row of the trail's kinds written past the
+  recorder is still a gap.
+
 ## References
 
 - [ADR-0191](./0191-runtime-instance-attribution.md) — the `(run id, instance key)` decision this extends to the generated kinds.

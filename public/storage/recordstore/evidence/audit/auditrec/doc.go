@@ -1,5 +1,5 @@
 // Package auditrec is the recorder of audit events below the keelson
-// runtime (ADR-0330 (proposed)): a sealed, buffered writer over a store a
+// runtime (ADR-0330): a sealed, buffered writer over a store a
 // consumer generates with recordstore/gen, reached through a thin adapter
 // ([StoreI], [BatchI]). It owns what every recorder of audit events must
 // do the same way — the identity on the context and originBy, the

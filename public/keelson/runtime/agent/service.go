@@ -247,7 +247,7 @@ func (inst *Service) handleRequest(msg *app.Msg) {
 		inst.reply(msg.Reply, inst.authority(msg))
 	case SubjectDisclose:
 		inst.reply(msg.Reply, inst.disclose(msg))
-	case SubjectArrange, SubjectRaise, SubjectPlace:
+	case SubjectArrange, SubjectRaise, SubjectPlace, SubjectLayout:
 		inst.reply(msg.Reply, inst.windowAct(msg))
 	case SubjectMark, SubjectUnmark:
 		inst.reply(msg.Reply, inst.mark(msg))

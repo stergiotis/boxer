@@ -238,7 +238,7 @@ func (inst *App) runAction(kind string, title string, f func(ctx context.Context
 		inst.setNote(title+": this host gives the app no bus", true)
 		return false
 	}
-	ok := inst.action.Start(nil, bgjob.Spec{Kind: kind, Title: title}, func(ctx context.Context) (note *string, err error) {
+	ok := inst.action.Start(inst.tasks, bgjob.Spec{Kind: kind, Title: title}, func(ctx context.Context) (note *string, err error) {
 		n, err := f(ctx)
 		if err != nil {
 			return

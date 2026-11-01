@@ -8,6 +8,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/appletstore"
 	"github.com/stergiotis/boxer/public/keelson/runtime/fsbroker"
+	"github.com/stergiotis/boxer/public/keelson/runtime/task"
 )
 
 // manifest is the creator's identity and attenuation. Windowed, factory-backed
@@ -38,6 +39,8 @@ var manifest = app.Manifest{
 			Direction: app.CapDirectionPub,
 			Reason:    "Export as .md via the Powerbox save dialog (ADR-0132 O4 'B')",
 		},
+		// Save and Export run as keelson tasks owned by the window.
+		task.ProducerCaps()[0],
 	},
 	LaunchKind: appletcreatecfg.Kind,
 }

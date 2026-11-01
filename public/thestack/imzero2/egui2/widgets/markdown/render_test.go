@@ -40,6 +40,20 @@ func TestRenderHeadless(t *testing.T) {
 	}
 	RenderFrontmatter(doc)
 	RenderFrontmatter(nil)
+
+	// The block-granular targets (ADR-0347 §SD4): an offset, and a block id
+	// through the section slot. The harness records no ops, so this only
+	// shows both paths render without fault and leave the result quiet;
+	// the arming itself is TestArmBlockScroll.
+	ided := Parse([]byte("first ^one\n\nsecond\n"))
+	if r := Render(Input{Ids: ids, ScopeKey: "t-off", Doc: ided, ScrollToOffset: 12, ScrollToOffsetSet: true}); len(r.Links) != 0 {
+		t.Fatalf("offset frame reported %+v", r)
+	}
+	if r := Render(Input{Ids: ids, ScopeKey: "t-id", Doc: ided, ScrollToSection: "^one"}); len(r.Links) != 0 {
+		t.Fatalf("block-id frame reported %+v", r)
+	}
+	RenderBlock(Input{Ids: ids, ScopeKey: "t-blk", Doc: ided, ScrollToSection: "^one"}, 0)
+	RenderBlock(Input{Ids: ids, ScopeKey: "t-blk2", Doc: ided, ScrollToOffset: 0, ScrollToOffsetSet: true}, 0)
 }
 
 // codeKeys lists the code blocks' id keys in document order.

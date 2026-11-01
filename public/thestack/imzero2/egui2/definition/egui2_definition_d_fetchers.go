@@ -544,6 +544,27 @@ self.io.write_plain_b(shift)?;
 		AddReturnValue("shiftPressed", ctabb.B).
 		Build())
 
+	// fetchShellChords — the shell's chords of the frame (ADR-0346 §SD5):
+	// every key press whose own modifiers are Alt, with Shift as the chord
+	// table states and neither Ctrl nor the command key, that names a chord
+	// in keycodes.ShellChords. Unlike the F-key fetchers the drain is not
+	// here: the interpreter takes the chords out of egui's queue at the
+	// START of the frame (keychord::drain_shell_chords, before any widget
+	// runs), with the Text events the same presses produced, so a focused
+	// text edit neither types the letter nor moves on the arrow; this
+	// fetcher only hands the set over at frame end. One bit set over the
+	// table's bits, so the window host — the one poller, as for F1 — reads
+	// every chord of the frame in one register rather than one fetcher per
+	// binding.
+	fetchers = append(fetchers, idl.NewFetcherNode("fetchShellChords").
+		WithApplyCodeClientRust(rustClientCode(`
+let chords = std::mem::take(&mut self.shell_chords);
+self.io.write_plain_u64(chords)?;
+{{SendMessage}}
+`)).
+		AddReturnValue("chords", ctabb.U64).
+		Build())
+
 	// The display's physical pixels per logical point this frame — what a
 	// widget that draws its own raster multiplies its logical size by to
 	// match the screen (play's Map, ADR-0096 SD7's device resolution).

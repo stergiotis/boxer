@@ -432,6 +432,38 @@ func (inst *Inst) OpsRaise(key uint64) (err error) {
 	return inst.Raise(WindowKeyT(key))
 }
 
+// OpsLayout is SetLayout and SetLayoutParams for the agent service
+// (ADR-0346 §SD6): the layout by its ident, the ratio and the count, each
+// unchanged when empty or zero.
+func (inst *Inst) OpsLayout(layout string, ratio float32, count int) (err error) {
+	if layout != "" {
+		l, ok := ParseLayout(layout)
+		if !ok {
+			err = eb.Build().Str("layout", layout).Errorf("windowhost: unknown layout; one of %v", LayoutIdents())
+			return
+		}
+		if err = inst.SetLayout(l); err != nil {
+			return
+		}
+	}
+	if ratio != 0 || count != 0 {
+		p := inst.LayoutParams()
+		if ratio != 0 {
+			p.MainRatio = ratio
+		}
+		if count != 0 {
+			p.MainCount = count
+		}
+		inst.SetLayoutParams(p)
+	}
+	return
+}
+
+// OpsFloat is FloatWindow for the agent service.
+func (inst *Inst) OpsFloat(key uint64, floating bool) (err error) {
+	return inst.FloatWindow(WindowKeyT(key), floating)
+}
+
 // OpsPlace is Place for the agent service: an outer rect by its top-left
 // corner and size, in logical points.
 func (inst *Inst) OpsPlace(key uint64, x, y, w, h float32) (err error) {

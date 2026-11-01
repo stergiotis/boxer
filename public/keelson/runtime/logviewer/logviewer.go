@@ -1,30 +1,32 @@
-// Package logviewer is the imzero2 AppI that visualises the logbridge
-// Sink: counters at the top (capacity / dropped / decoded / written /
-// parse errors), a filter row below (level / app id substring /
-// message substring), a virtualised tail table below that, and a
-// collapsible detail pane that opens when the operator clicks a row.
+// Package logviewer is the imzero2 AppI that shows the host's log rows as
+// boxer.facts holds them: counters and the cache's freshness at the top,
+// a filter row below (level / app id substring / message substring / this
+// run or every run), a virtualised table below that, and a collapsible
+// detail pane that opens when the operator clicks a row.
 //
-// The widget reads the Sink's retain-N tail buffer once per frame; no
-// subscription channel is involved, so the widget pays no cost when
-// it's not on screen.
+// Log rows reach boxer.facts only when the host sets BOXER_LOG_FACTS and
+// ClickHouse answers; without that the window says so in one line and
+// shows nothing else (ADR-0345, the update of 2026-10-30). Each window
+// keeps a bounded cache of the newest matching rows, filled by a
+// background read on an interval, on Refresh and when the filter changes
+// (cache.go); a frame never queries the store.
 //
 // Instances are factory-allocated so the dock host can open more than
 // one tile of the same logviewer without Go-side widget ID collisions:
-// each instance owns its own filter state, selection state, and
+// each instance owns its own filter state, selection state, cache and
 // per-instance WidgetIdStack. The host (windowhost / DockHost) supplies
 // the stack via MountCtx.Ids() and pre-pushes a window-unique salt
 // onto it before every Frame() call via c.IdScope, so two tiles
 // produce disjoint ID sets in the same frame even when they emit the
 // same label string.
 //
-// The Sink reference is shared (one bridge per process); RegisterSink
-// is the host bootstrap entry point.
+// The source is shared (one bridge per process); Register is the host
+// bootstrap entry point.
 package logviewer
 
 import (
 	"fmt"
 	"strings"
-	"sync/atomic"
 	"time"
 
 	"github.com/rs/zerolog"
@@ -32,27 +34,13 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsstore"
-	"github.com/stergiotis/boxer/public/keelson/runtime/logbridge"
+	"github.com/stergiotis/boxer/public/keelson/runtime/widgethandle"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/badge"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/color"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/errorview"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/fieldview"
 )
-
-// sinkRef holds the host-registered Sink. An atomic.Pointer keeps the
-// access lock-free on the render-loop hot path; the host writes it
-// exactly once during App.Before, and every Frame call reads it.
-var sinkRef atomic.Pointer[logbridge.Sink]
-
-// RegisterSink lets the host hand the logbridge.Sink to every
-// logviewer instance. Must be called before the first Frame of any
-// logviewer tile (typically in App.Before, alongside
-// logbridge.InstallGlobal). Subsequent calls replace the previous
-// Sink; nil disables every instance simultaneously.
-func RegisterSink(s *logbridge.Sink) {
-	sinkRef.Store(s)
-}
 
 // levelOptions is the dropdown vocabulary; trace at index 0 means "no
 // floor", error at the high end is the practical operator default.
@@ -121,18 +109,44 @@ type LogViewerApp struct {
 	// token consumed by the render path (IDS L3 — ADR-0032 §SD2).
 	density styletokens.DensityE
 
-	filterLevel   zerolog.Level
-	filterAppId   string
-	filterMessage string
-	follow        bool
-	maxRows       int
+	filterLevel    zerolog.Level
+	filterAppId    string
+	filterMessage  string
+	filterAllRuns  bool
+	filterInstance uint64
+	follow         bool
+
+	// cache is the rows read from boxer.facts (cache.go); shown is the
+	// cache narrowed by the filter row, recomputed only when the cache
+	// or the filter changed.
+	cache     logCache
+	shown     []Entry
+	shownGen  uint64
+	shownFor  filterState
+	shownInit bool
+	// drawnGen is the cache generation the window last drew, and
+	// settleFrames the frames it still asks for after a new one.
+	drawnGen     uint64
+	settleFrames int
 
 	// selected is a value copy of the row the operator last clicked.
-	// Stored by value (not by pointer into the Sink's tail) so it
-	// survives Sink-trim — the detail pane keeps showing the chosen
-	// event even if the ring rolls past it.
+	// Stored by value (not by pointer into the cache) so it survives a
+	// refresh — the detail pane keeps showing the chosen event even if
+	// the next read no longer holds it.
 	selected    factsstore.LogRow
 	hasSelected bool
+
+	// Operations state (logviewer_ops.go, ADR-0345). frameCtx is the
+	// current frame's context, through which the person's controls route
+	// as gestures; the two handles are the filter boxes, for telling the
+	// person is typing in one.
+	frameCtx   app.FrameContextI
+	appFilterH widgethandle.WidgetHandle
+	msgFilterH widgethandle.WidgetHandle
+	// followDraft is what the Follow checkbox is bound to. A data binding
+	// lands at the frame's sync, after the body returned, so the click is
+	// noticed at the top of the next frame and routed as a gesture.
+	followDraft bool
 
 	// fv renders the per-row Fields list in the detail pane via the
 	// reusable hierarchical-field viewer. Constructed once per
@@ -164,7 +178,7 @@ func newInstance(m app.Manifest) (out *LogViewerApp) {
 		density:     styletokens.ActiveDensity(),
 		filterLevel: zerolog.TraceLevel,
 		follow:      true,
-		maxRows:     256,
+		followDraft: true,
 	}
 	return
 }
@@ -177,8 +191,41 @@ func (inst *LogViewerApp) Mount(ctx app.MountContextI) (err error) {
 	inst.ids = ctx.Ids()
 	return
 }
-func (inst *LogViewerApp) Unmount(ctx app.MountContextI) (err error) { return }
-func (inst *LogViewerApp) Frame(ctx app.FrameContextI) (err error)   { return inst.render() }
+func (inst *LogViewerApp) Unmount(ctx app.MountContextI) (err error) {
+	inst.cache.close()
+	return
+}
+func (inst *LogViewerApp) Frame(ctx app.FrameContextI) (err error) {
+	inst.frameCtx = ctx
+	inst.noticeDrafts()
+	inst.cache.tick(time.Now(), sourceRef.Load(), inst.filterValue())
+	return inst.render()
+}
+
+// shownRows is the cache narrowed by the filter row, newest first. The
+// cache was read under the filter, so this changes the rows only while a
+// changed filter waits for its read: a narrower filter shows at once, a
+// wider one when the read lands.
+func (inst *LogViewerApp) shownRows() (rows []Entry) {
+	f := inst.filterValue()
+	if !inst.shownInit || inst.shownGen != inst.cache.gen || inst.shownFor != f {
+		inst.shown = filterEntries(inst.cache.rows, f.Level, f.AppId, f.Message)
+		inst.shown = narrowScope(inst.shown, f, inst.cache.scope)
+		inst.shownGen, inst.shownFor, inst.shownInit = inst.cache.gen, f, true
+	}
+	rows = inst.shown
+	return
+}
+
+// noticeDrafts routes the previous frame's checkbox write-back as the
+// person's gesture (ADR-0345 §SD3). The binding landed at that frame's
+// sync; a command that set follow in between also set the draft, so a
+// difference here is the person's click and nothing else.
+func (inst *LogViewerApp) noticeDrafts() {
+	if inst.followDraft != inst.follow {
+		inst.setFollowGesture(inst.followDraft)
+	}
+}
 
 // render draws the entire widget. The host (DockHost tile or
 // adaptToRenderer Window scope) supplies the surrounding ui scope and
@@ -198,10 +245,28 @@ func (inst *LogViewerApp) Frame(ctx app.FrameContextI) (err error)   { return in
 func (inst *LogViewerApp) render() (err error) {
 	// Re-resolve: the density preset is runtime-switchable (Layout ▸ Density).
 	inst.density = styletokens.ActiveDensity()
-	sink := sinkRef.Load()
-	if sink == nil {
-		c.Label("Logbridge not installed — host did not call logviewer.RegisterSink()").Send()
+	src := sourceRef.Load()
+	if !src.persisted() {
+		// One line, and nothing else to draw: there are no rows. Whether
+		// ClickHouse answers at all is the status line's to say.
+		reason := notPersistedReason(src)
+		c.Label(strings.ToUpper(reason[:1]) + reason[1:] + ".").Wrap().Send()
 		return
+	}
+	// The interval refresh needs a frame to start it; a read in flight
+	// needs one to land; new rows need a few more for the table's scroll
+	// (Follow) to settle on them.
+	switch {
+	case inst.cache.runner.Running():
+		c.RequestRepaintAfter(0.1)
+	case inst.drawnGen != inst.cache.gen:
+		inst.drawnGen, inst.settleFrames = inst.cache.gen, 3
+		c.RequestRepaint()
+	case inst.settleFrames > 0:
+		inst.settleFrames--
+		c.RequestRepaint()
+	default:
+		c.RequestRepaintAfter(refreshInterval().Seconds())
 	}
 	// Top panel: counters + filter row. Compact, never scrolls.
 	// DefaultSize is the initial height; the panel auto-sizes to
@@ -211,7 +276,7 @@ func (inst *LogViewerApp) render() (err error) {
 		DefaultSize(78).
 		Resizable(false).
 		KeepIter() {
-		inst.renderCounters(sink)
+		inst.renderCounters(src)
 		c.Separator().Horizontal().Send()
 		inst.renderFilterRow()
 	}
@@ -242,41 +307,45 @@ func (inst *LogViewerApp) render() (err error) {
 	// inside this rect. PanelCentralInside guarantees an owned
 	// layout scope so EndETable's height claim is well-defined.
 	for range c.PanelCentralInside().KeepIter() {
-		rows := sink.Tail(0)
-		rows = applyFilters(rows, inst.filterLevel, inst.filterAppId, inst.filterMessage)
-		inst.renderTailTable(rows)
+		inst.renderTailTable(inst.shownRows())
 	}
 	return
 }
 
-// renderCounters draws the top-of-widget metrics strip. Each value is
-// rendered as a soft-tone badge; zero-valued attention counters
-// (Dropped / ParseErrs) render Neutral so a clean stream stays calm,
-// non-zero values flip to Warning / Error tones to draw the eye. The
-// hover tooltips spell out what each metric means since the chip
-// itself is intentionally terse.
-func (inst *LogViewerApp) renderCounters(sink *logbridge.Sink) {
-	dropped := sink.Dropped()
-	decoded := sink.Decoded()
-	written := sink.Written()
-	parseErrs := sink.ParseErrors()
-	tailLen := sink.TailLen()
-	tailCap := sink.TailCapacity()
+// renderCounters draws the top-of-widget strip: the cache's freshness and
+// a Refresh button first, then the bridge's counters. Each value is a
+// soft-tone badge; zero-valued attention counters (Dropped / ParseErrs)
+// render Neutral so a clean stream stays calm, non-zero values flip to
+// Warning / Error tones to draw the eye. The hover tooltips spell out
+// what each metric means since the chip itself is intentionally terse.
+func (inst *LogViewerApp) renderCounters(src *Source) {
+	var dropped, decoded, written, parseErrs uint64
+	if sink := src.Sink; sink != nil {
+		dropped, decoded, written, parseErrs = sink.Dropped(), sink.Decoded(), sink.Written(), sink.ParseErrors()
+	}
 
 	// Vertical breathing room above and below the strip. The host scope
 	// is Vertical (DockHost tile / Window body), so an AddSpace outside
 	// the inner Horizontal renders as a vertical gap.
 	c.AddSpace(styletokens.PaddingInner(inst.density))
 	for range c.Horizontal().KeepIter() {
-		// SizeSm chips (the smallest the badge package exposes) with
-		// 8px between them — close enough to read as a single
-		// dashboard strip, far enough that adjacent badges don't
-		// visually merge.
+		fresh, freshTone := inst.freshness(time.Now())
+		badge.New(inst.ids.PrepareStr("c-fresh"), fresh).
+			Tone(freshTone).Variant(badge.VariantSoft).
+			Size(badge.SizeSm).Monospace().
+			Tooltip("when the window last read its rows from boxer.facts; rows reach the table in the log bridge's batches, so the newest lines can lag by a flush").
+			Send()
+		c.AddSpace(styletokens.GapItems(inst.density))
+		if c.Button(inst.ids.PrepareStr("c-refresh"), c.Atoms().Text("Refresh").Keep()).
+			SendResp().HasPrimaryClicked() {
+			inst.cache.refreshNow = true
+		}
+		c.AddSpace(styletokens.GapItems(inst.density))
 		badge.New(inst.ids.PrepareStr("c-tail"),
-			fmt.Sprintf("Tail %d / %d", tailLen, tailCap)).
+			fmt.Sprintf("Rows %d / %d", len(inst.cache.rows), cacheCap())).
 			Tone(badge.ToneNeutral).Variant(badge.VariantSoft).
 			Size(badge.SizeSm).Monospace().
-			Tooltip("rows currently retained in the in-memory tail ring (used by this widget) vs ring capacity").
+			Tooltip("rows the window holds, the newest matching its filter, vs the cap (BOXER_LOGVIEWER_ROWS)").
 			Send()
 		c.AddSpace(styletokens.GapItems(inst.density))
 		badge.New(inst.ids.PrepareStr("c-decoded"),
@@ -290,7 +359,7 @@ func (inst *LogViewerApp) renderCounters(sink *logbridge.Sink) {
 			fmt.Sprintf("Written %d", written)).
 			Tone(badge.ToneSuccess).Variant(badge.VariantSoft).
 			Size(badge.SizeSm).Monospace().
-			Tooltip("LogRows successfully flushed to the FactsStore").
+			Tooltip("LogRows successfully flushed to boxer.facts").
 			Send()
 		c.AddSpace(styletokens.GapItems(inst.density))
 		droppedTone := badge.ToneNeutral
@@ -319,12 +388,44 @@ func (inst *LogViewerApp) renderCounters(sink *logbridge.Sink) {
 			Tooltip("zerolog events that failed CBOR decoding — usually a writer schema mismatch").
 			Send()
 	}
+	if err := inst.cache.lastErr; err != nil {
+		errAtoms := c.Atoms().BeginRichTextColored(detailErrorFg, detailBgClear, "refresh failed: "+err.Error()).
+			Small().End().Keep()
+		c.LabelAtoms(errAtoms).Wrap().Send()
+	}
 	c.AddSpace(styletokens.PaddingInner(inst.density))
 }
 
-// renderFilterRow draws the three filter inputs plus the follow
-// checkbox. Filters apply at render time — adjusting one does not
-// touch the Sink's tail buffer.
+// freshness is the strip's first badge: how old the cache is, or that the
+// first read has not landed.
+func (inst *LogViewerApp) freshness(now time.Time) (label string, tone badge.ToneE) {
+	tone = badge.ToneNeutral
+	switch {
+	case !inst.cache.filled && inst.cache.runner.Running():
+		label = "Reading…"
+	case !inst.cache.filled:
+		label = "Not read yet"
+	default:
+		label = "Read " + inst.cache.refreshedAt.Local().Format("15:04:05") + " (" + humanAge(now.Sub(inst.cache.refreshedAt)) + ")"
+		if inst.cache.runner.Running() {
+			label += " · reading…"
+		}
+	}
+	if inst.cache.lastErr != nil {
+		tone = badge.ToneWarning
+	}
+	return
+}
+
+// renderFilterRow draws the filter inputs, the run toggle and the follow
+// checkbox. A changed filter narrows the rows already held at once and is
+// read from boxer.facts once it has stood for a moment (cache.go).
+//
+// The level combo routes through the catalog as the person's gesture
+// (ADR-0345 §SD3); the Follow checkbox writes a draft that noticeDrafts
+// routes at the top of the next frame. The two text boxes commit on
+// every keystroke and apply inside the frame, attributed to the app; the
+// handles let the filter resource report that the person is typing.
 //
 // Spacing budget: 6px between each label and its input (so "Level:"
 // doesn't kiss the dropdown), 24px between filter groups (so the
@@ -345,8 +446,8 @@ func (inst *LogViewerApp) renderFilterRow() {
 					Selected(selected).
 					FrameWhenInactive(!selected).
 					Frame(true).
-					SendResp().HasPrimaryClicked() {
-					inst.filterLevel = lvl
+					SendResp().HasPrimaryClicked() && lvl != inst.filterLevel {
+					inst.setLevelGesture(lvl)
 				}
 			}
 		}
@@ -354,18 +455,32 @@ func (inst *LogViewerApp) renderFilterRow() {
 		c.AddSpace(styletokens.GapPanels(inst.density))
 		c.Label("App:").Send()
 		c.AddSpace(styletokens.GapInline(inst.density))
+		inst.appFilterH = widgethandle.Make(inst.ids.PrepareStr("app-filter").Derive())
 		c.TextEdit(inst.ids.PrepareStr("app-filter"), inst.filterAppId, false).
 			SendRespVal(&inst.filterAppId)
 
 		c.AddSpace(styletokens.GapPanels(inst.density))
 		c.Label("Message:").Send()
 		c.AddSpace(styletokens.GapInline(inst.density))
+		inst.msgFilterH = widgethandle.Make(inst.ids.PrepareStr("msg-filter").Derive())
 		c.TextEdit(inst.ids.PrepareStr("msg-filter"), inst.filterMessage, false).
 			SendRespVal(&inst.filterMessage)
 
 		c.AddSpace(styletokens.GapPanels(inst.density))
+		// This process's run, or every run in the look-back.
+		allRunsLabel := "This run"
+		if inst.filterAllRuns {
+			allRunsLabel = "All runs"
+		}
+		if c.Button(inst.ids.PrepareStr("all-runs"), c.Atoms().Text(allRunsLabel).Keep()).
+			Selected(inst.filterAllRuns).
+			SendResp().HasPrimaryClicked() {
+			inst.setAllRunsGesture(!inst.filterAllRuns)
+		}
+
+		c.AddSpace(styletokens.GapPanels(inst.density))
 		c.Checkbox(inst.ids.PrepareStr("follow"), inst.follow, "Follow").
-			SendRespVal(&inst.follow)
+			SendRespVal(&inst.followDraft)
 	}
 	c.AddSpace(styletokens.PaddingHair(inst.density))
 }
@@ -374,7 +489,8 @@ func (inst *LogViewerApp) renderFilterRow() {
 // cellTint mint ids with PrepareSeq (allocation-free) rather than
 // fmt.Sprintf; the disjoint bases keep cell, badge and header ids from
 // colliding within the app's id scope. Bases sit far above
-// maxRows*lvNumCols so raising maxRows cannot overlap them.
+// maxRows*lvNumCols (the cache's clamp, env.go) so raising the row cap
+// cannot overlap them.
 const (
 	lvNumCols     = 5           // time, level, app, caller, message
 	lvIdCellBase  = 0x1000_0000 // per-cell padding-frame ids: base + row*lvNumCols + col
@@ -412,19 +528,24 @@ const (
 // background tint (rowTintWarn / rowTintError) behind every cell, so
 // severe events stand out at a glance without needing to scan the
 // Level column.
-func (inst *LogViewerApp) renderTailTable(rows []factsstore.LogRow) {
+//
+// newest holds the rows newest first, as the cache does; the table draws
+// them oldest first, so row i is newest[len-1-i].
+func (inst *LogViewerApp) renderTailTable(newest []Entry) {
 	const (
 		rowHeight   = lvRowHeight
 		stickyHeads = 1
 		stickyCols  = 0
 	)
-	if len(rows) == 0 {
-		c.Label("(no rows match the current filters)").Send()
+	if len(newest) == 0 {
+		if inst.cache.filled {
+			c.Label("(no rows match the current filters)").Send()
+		} else {
+			c.Label("(reading boxer.facts…)").Send()
+		}
 		return
 	}
-	if len(rows) > inst.maxRows {
-		rows = rows[len(rows)-inst.maxRows:]
-	}
+	rows := chronological{newest: newest}
 
 	// Column widths account for the cellTint inner margin (PaddingInner
 	// each side). Time fits "15:04:05.000" + padding; Level fits the
@@ -440,11 +561,14 @@ func (inst *LogViewerApp) renderTailTable(rows []factsstore.LogRow) {
 	// the panel: bounded above by the filter strip, below by the detail
 	// pane when a row is selected. Without this it falls to the auto-fit
 	// cap (400 px) and leaves the bottom of the panel empty.
+	n := rows.len()
 	et := c.EndETable(inst.ids.PrepareStr("logviewer-table"),
-		uint64(len(rows)), rowHeight, stickyHeads, stickyCols).
+		uint64(n), rowHeight, stickyHeads, stickyCols).
 		FillPane(true)
+	scrollTo := -1
 	if inst.follow {
-		et = et.ScrollToRow(uint64(len(rows)-1), 1)
+		et = et.ScrollToRow(uint64(n-1), 1)
+		scrollTo = n - 1
 	}
 
 	// Headers as deferred blocks (instead of EtHeaderText) so each
@@ -470,20 +594,14 @@ func (inst *LogViewerApp) renderTailTable(rows []factsstore.LogRow) {
 	}
 
 	// Emit only the rows egui_table will draw this frame. Without this gate
-	// every one of the up-to-maxRows rows builds a deferred block (and cell
+	// every one of the cached rows builds a deferred block (and cell
 	// ids) each frame, ~90% of which egui_table immediately culls — the
-	// dominant allocation source in this app. VisibleRange reports the
-	// previous frame's window (one-frame lag, self-correcting); ok is false
-	// on the first frame a table is shown, where we emit the full range.
-	rowBegin, rowEnd := 0, len(rows)
-	if rb, re, _, _, _, ok := et.VisibleRange(); ok {
-		rowBegin = int(rb)
-		if int(re) < rowEnd {
-			rowEnd = int(re)
-		}
-	}
-	for i := rowBegin; i < rowEnd; i++ {
-		r := rows[i]
+	// dominant allocation source in this app. The window is the previous
+	// frame's (one-frame lag, self-correcting); before the table has been on
+	// screen it is a screenful around the followed tail (VisibleRows).
+	lo, hi := et.VisibleRows(uint64(n), c.EtScreenfulRows(0, rowHeight), int64(scrollTo))
+	for i := int(lo); i < int(hi); i++ {
+		r := rows.at(i)
 		isSelected := selectedKey != "" && rowKey(r) == selectedKey
 		tint, hasTint := rowTint(r.Level)
 
@@ -543,13 +661,9 @@ func (inst *LogViewerApp) renderTailTable(rows []factsstore.LogRow) {
 		et.EndCells()
 
 		if clicked {
-			if isSelected {
-				inst.hasSelected = false
-				inst.selected = factsstore.LogRow{}
-			} else {
-				inst.hasSelected = true
-				inst.selected = r
-			}
+			// A click on the selected row clears it; the gesture carries
+			// the next state, so the command sets and never toggles.
+			inst.selectGesture(r, !isSelected)
 		}
 	}
 	// No Striped(true): the etable's zebra is painted per cell, in cell_ui,
@@ -685,8 +799,7 @@ func (inst *LogViewerApp) renderDetailPane() {
 			if c.Button(inst.ids.PrepareStr("d-clear"),
 				c.Atoms().Text("Clear selection").Keep()).
 				SendResp().HasPrimaryClicked() {
-				inst.hasSelected = false
-				inst.selected = factsstore.LogRow{}
+				inst.selectGesture(factsstore.LogRow{}, false)
 			}
 		}
 	}
@@ -928,8 +1041,8 @@ func rowTint(level string) (tint color.Color, ok bool) {
 // rowKey is the stable composite identifier used to compare a row in
 // the current snapshot against the operator's selected row. The
 // selected row is stored by value (not by pointer or slice index) so
-// it survives Sink-trim; we still need a way to highlight the same
-// row in the next snapshot, hence the key.
+// it survives a refresh; we still need a way to highlight the same
+// row in the next read, hence the key.
 //
 // Ts.UnixNano gives nanosecond resolution which is unique in practice
 // for events emitted from the same process; Caller and Message are
@@ -976,33 +1089,100 @@ func shortAppId(id string) (s string) {
 // Level rejects rows whose Level string maps to a lower zerolog
 // severity than the threshold. AppId and Message use case-insensitive
 // substring matching; empty filters are no-ops. Returned slice shares
-// no storage with the input — callers may retain it past the next
-// Tail() snapshot.
+// no storage with the input.
 func applyFilters(rows []factsstore.LogRow, threshold zerolog.Level, appNeedle, msgNeedle string) (out []factsstore.LogRow) {
 	out = make([]factsstore.LogRow, 0, len(rows))
-	appLower := strings.ToLower(appNeedle)
-	msgLower := strings.ToLower(msgNeedle)
+	m := newMatcher(threshold, appNeedle, msgNeedle)
 	for _, r := range rows {
-		if threshold > zerolog.TraceLevel {
-			// Empty / unparseable Level signals "structured but level-less"
-			// — zerolog's Log() shape, rare in practice. Drop these when
-			// the operator tightened the threshold; otherwise warn / error
-			// filters would still surface them as noise.
-			if r.Level == "" {
-				continue
-			}
-			lvl, perr := zerolog.ParseLevel(r.Level)
-			if perr != nil || lvl < threshold {
-				continue
-			}
+		if m.matches(r) {
+			out = append(out, r)
 		}
-		if appLower != "" && !strings.Contains(strings.ToLower(string(r.AppId)), appLower) {
-			continue
-		}
-		if msgLower != "" && !strings.Contains(strings.ToLower(r.Message), msgLower) {
-			continue
-		}
-		out = append(out, r)
 	}
 	return
 }
+
+// filterEntries is applyFilters over cache entries, keeping their order.
+func filterEntries(rows []Entry, threshold zerolog.Level, appNeedle, msgNeedle string) (out []Entry) {
+	m := newMatcher(threshold, appNeedle, msgNeedle)
+	if m.all() {
+		out = rows
+		return
+	}
+	out = make([]Entry, 0, len(rows))
+	for _, e := range rows {
+		if m.matches(e.Row) {
+			out = append(out, e)
+		}
+	}
+	return
+}
+
+// matcher is one filter, lower-cased once.
+type matcher struct {
+	threshold zerolog.Level
+	appLower  string
+	msgLower  string
+}
+
+func newMatcher(threshold zerolog.Level, appNeedle, msgNeedle string) (m matcher) {
+	m = matcher{threshold: threshold, appLower: strings.ToLower(appNeedle), msgLower: strings.ToLower(msgNeedle)}
+	return
+}
+
+func (inst matcher) all() bool {
+	return inst.threshold <= zerolog.TraceLevel && inst.appLower == "" && inst.msgLower == ""
+}
+
+func (inst matcher) matches(r factsstore.LogRow) bool {
+	if inst.threshold > zerolog.TraceLevel {
+		// Empty / unparseable Level signals "structured but level-less"
+		// — zerolog's Log() shape, rare in practice. Drop these when
+		// the operator tightened the threshold; otherwise warn / error
+		// filters would still surface them as noise. The store's read
+		// drops them the same way (buildQuery lists the levels kept).
+		if r.Level == "" {
+			return false
+		}
+		lvl, perr := zerolog.ParseLevel(r.Level)
+		if perr != nil || lvl < inst.threshold {
+			return false
+		}
+	}
+	if inst.appLower != "" && !strings.Contains(strings.ToLower(string(r.AppId)), inst.appLower) {
+		return false
+	}
+	if inst.msgLower != "" && !strings.Contains(strings.ToLower(r.Message), inst.msgLower) {
+		return false
+	}
+	return true
+}
+
+// narrowScope keeps the entries of f's run and window when the cache was
+// read under a wider scope, so switching to This run or to one window does
+// not show other runs' rows while the read under it is pending.
+func narrowScope(rows []Entry, f filterState, scope filterState) (out []Entry) {
+	runId := sourceRef.Load().run()
+	byRun := !f.AllRuns && scope.AllRuns && runId != ""
+	byWindow := f.Instance != 0 && scope.Instance != f.Instance
+	if !byRun && !byWindow {
+		out = rows
+		return
+	}
+	out = make([]Entry, 0, len(rows))
+	for _, e := range rows {
+		if (byRun && e.RunId != runId) || (byWindow && e.Row.InstanceKey != f.Instance) {
+			continue
+		}
+		out = append(out, e)
+	}
+	return
+}
+
+// chronological reads newest-first entries oldest first.
+type chronological struct {
+	newest []Entry
+}
+
+func (inst chronological) len() int { return len(inst.newest) }
+
+func (inst chronological) at(i int) factsstore.LogRow { return inst.newest[len(inst.newest)-1-i].Row }

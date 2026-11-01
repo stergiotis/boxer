@@ -13,6 +13,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/clipboardbroker"
 	"github.com/stergiotis/boxer/public/keelson/runtime/fsbroker"
+	"github.com/stergiotis/boxer/public/keelson/runtime/task"
 	"github.com/stergiotis/boxer/public/keelson/runtime/windowhost"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/markdown"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/markdownhighlight"
@@ -647,23 +648,30 @@ func TestManifestRegisters(t *testing.T) {
 	assert.Equal(t, app.SurfaceWindowed, got.Surface)
 }
 
-// TestManifestDeclaresExactlyTheFourSubjects pins the app's standing
-// authority. One subject through M3, three from M4, four with send-to-play —
+// TestManifestDeclaresExactlyTheFiveSubjects pins the app's standing
+// authority. One subject through M3, three from M4, four with send-to-play,
+// five with the task subjects its restore, file gestures and send run under —
 // and the list is asserted exactly rather than by presence: a cap the app
 // never exercises is the §SD10 gate's other failure mode, so growth has to be
 // deliberate enough to edit a test for. No llm.* subject: mdedit reaches a
 // model only through the harness, over its operations (ADR-0318).
-func TestManifestDeclaresExactlyTheFourSubjects(t *testing.T) {
+func TestManifestDeclaresExactlyTheFiveSubjects(t *testing.T) {
 	want := []string{
 		clipboardbroker.SubjectWrite,
 		fsbroker.SubjectDialogRead,
 		fsbroker.SubjectDialogWrite,
 		windowhost.OpenSubject,
+		task.PatternAll,
 	}
 	got := make([]string, 0, len(manifest.Caps))
 	for _, c := range manifest.Caps {
 		got = append(got, c.Pattern)
-		assert.Equal(t, app.CapDirectionPub, c.Direction, "cap %q", c.Pattern)
+		direction := app.CapDirectionPub
+		if c.Pattern == task.PatternAll {
+			// A producer publishes the lifecycle and hears its cancels.
+			direction = app.CapDirectionBoth
+		}
+		assert.Equal(t, direction, c.Direction, "cap %q", c.Pattern)
 		assert.NotEmpty(t, c.Reason, "a cap needs a reason: %q", c.Pattern)
 	}
 	assert.ElementsMatch(t, want, got)

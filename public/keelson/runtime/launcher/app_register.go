@@ -55,6 +55,8 @@ var manifest = app.Manifest{
 		PreferredWidth:  styletokens.SurfaceApp.W,
 		PreferredHeight: styletokens.SurfaceApp.H,
 	},
+	// The operations catalog (ADR-0345), in launcher_ops.go.
+	Operations: ops.Catalog(),
 	// No declared caps. The launcher opens apps through the host interface it
 	// is handed (§SD3), not by publishing to windowhost.open — a host-mediated
 	// capability in the ADR-0155 §SD1 sense rather than a subject the cap
@@ -93,6 +95,7 @@ func (inst *launcherApp) Mount(ctx app.MountContextI) (err error) {
 }
 
 func (inst *launcherApp) Unmount(ctx app.MountContextI) (err error) {
+	inst.releaseController()
 	return
 }
 
@@ -101,7 +104,16 @@ func (inst *launcherApp) Unmount(ctx app.MountContextI) (err error) {
 // launcher windows drawing the same component cannot collide on the wire.
 func (inst *launcherApp) Frame(ctx app.FrameContextI) (err error) {
 	inst.ids.Reset()
+	// The component's state is process-wide; the controlling window's frame
+	// is where its gestures route and its resources move (launcher_ops.go,
+	// ADR-0329 §SD3). Any other window, and the empty-state pane, apply
+	// directly.
+	inst.claimController()
+	if inst.isController() {
+		inst.inst.frameCtx = ctx
+	}
 	inst.inst.Render(inst.ids)
+	inst.inst.frameCtx = nil
 	return
 }
 

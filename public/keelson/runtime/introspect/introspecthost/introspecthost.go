@@ -82,6 +82,11 @@ type Deps struct {
 	// ChlocalAvailable reports whether the chlocalbroker service is running.
 	// When false, /query is left disabled even if Bus is set.
 	ChlocalAvailable bool
+	// ObserveTopology starts a process-lifetime metric-plane consumer that
+	// feeds the observed rows of keelson.procs, keelson.sockets and the
+	// topology graph. When false those tables are still registered and carry
+	// only declared rows. It needs Bus.
+	ObserveTopology bool
 	// QueryStarted, when set, is called once the keelson.query bus service
 	// (ADR-0253) is up, so the host can report that it runs. It is not
 	// called when the service is off or failed to start.
@@ -121,9 +126,10 @@ type Deps struct {
 	// by scope since ADR-0327 §SD7); nil registers an empty table.
 	Anchors anchor.StoreI
 	// Trail is the trail's recorder and Run this run's id, backing the
-	// trail's rows of keelson.evidence_checks (ADR-0327 §SD7); nil, or an
-	// empty run, leaves those rows out. Same typed-nil trap: assign only
-	// a recorder.
+	// trail's rows of keelson.evidence_checks (ADR-0327 §SD7); nil leaves
+	// those rows out, and an empty run, or a trail that is not durable,
+	// leaves only the row saying whether it is. Same typed-nil trap: assign
+	// only a recorder.
 	Trail SealVerifierI
 	Run   string
 	// AgentRuns is the run journal's store, backing keelson.agent_runs and
@@ -270,24 +276,25 @@ func Start(deps Deps) (stop func(context.Context) error, err error) {
 	if e := introspectproviders.RegisterEffects(reg, deps.Bus, deps.Tasks); e != nil {
 		deps.Log.Warn().Err(e).Msg("introspecthost: effects provider registration failed")
 	}
-	// ADR-0126 §SD5: a process-lifetime metric-plane consumer feeds the
-	// observed-topology tables (keelson.procs, keelson.sockets). imztop's
-	// consumer is mount-gated, so the host holds its own. Best-effort: no
-	// bus, no tables — the rest of the source still stands.
+	// ADR-0126 §SD5, narrowed by ADR-0349 (proposed): the topology tables
+	// are registered on every host; a process-lifetime metric-plane consumer
+	// feeds their observed rows only where the deployment declares a
+	// topology. imztop's consumer is mount-gated, so the host holds its own.
+	// Best-effort: a failed consumer leaves the observed rows empty.
 	var topoHolder *sysmetricsbus.LatestHolder
-	if deps.Bus != nil {
+	if deps.ObserveTopology && deps.Bus != nil {
 		topoBus := deps.Bus.NewClient(topoBusAppId, []runtimeapp.SubjectFilter{
 			{Pattern: sysmetricsbus.SubjectWildcard, Direction: runtimeapp.CapDirectionSub, Reason: "keelson.procs/keelson.sockets serve the latest metric-plane snapshot (ADR-0126)"},
 		})
 		holder, herr := sysmetricsbus.StartLatestHolder(sysmetricsbus.LatestHolderOptions{Bus: topoBus, Log: deps.Log})
 		if herr != nil {
-			deps.Log.Warn().Err(herr).Msg("introspecthost: metric-plane consumer failed; keelson.procs/sockets unavailable")
+			deps.Log.Warn().Err(herr).Msg("introspecthost: metric-plane consumer failed; keelson.procs/sockets stay empty")
 		} else {
 			topoHolder = holder
-			if e := introspectproviders.RegisterTopology(reg, holder); e != nil {
-				deps.Log.Warn().Err(e).Msg("introspecthost: topology provider registration failed")
-			}
 		}
+	}
+	if e := introspectproviders.RegisterTopology(reg, topoHolder); e != nil {
+		deps.Log.Warn().Err(e).Msg("introspecthost: topology provider registration failed")
 	}
 	// ADR-0254 §SD4: the completions this process answered. Registered
 	// unconditionally — a host with no llm service answers with an empty

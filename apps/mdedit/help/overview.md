@@ -109,6 +109,16 @@ snapshot read-only. The command needs rclone 1.64 or later and a `boxer`
 executable on `PATH`; the lading snapshot-store how-to (§6) sets both up and
 reads its failure messages.
 
+A snapshot document also offers **Link** beside it: an `mdedit://` link to
+the document at the section the caret is in, in the current mode. Any app
+that renders markdown opens such a link in a new mdedit window — the chat,
+play, the help center, this one — and so does an agent through the host's
+launch. The link's fragment names the place: a heading's slug, `^id` for a
+block that ends with an Obsidian block id (`text ^id`), or `L<n>` for a
+line; `?mode=read` and the other mode names pick the layout. A block id in
+the document is hidden in the preview, as Obsidian hides it, and the Source
+pane shows the bytes.
+
 A **proposal** is a change another program suggests for a range of the
 document; it appears in a pane along the bottom with the proposed text
 rendered. *Apply* replaces the range, and is refused if the buffer changed
