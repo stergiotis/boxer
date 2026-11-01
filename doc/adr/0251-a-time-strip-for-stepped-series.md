@@ -247,6 +247,15 @@ rate of a hidden control are what the host left in the `Transport`. A row
 with no part left is not drawn. `Compact` is the other cut, a single line,
 and honours the same bits.
 
+`Options.NoIndices` keeps step and range numbers out of the readout. A
+forecast's steps are counted and "step 28 of 40" names one; a trail's
+buckets are not, and the number says nothing a reader uses. The time, the
+step's value, the offset from now and the step's length stay, a range is
+worded by its times, and a series without times keeps its numbers, which
+are all it has. The readout words the range only while the range controls
+are shown: a host that hides them has given the range a meaning of its own
+and words it itself.
+
 ### Milestones
 
 - **M1 — the widget.** ✓ Axis mapping, transport, strip, transport row, keys.

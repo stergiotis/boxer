@@ -3,6 +3,7 @@ package timescrubber
 import (
 	"fmt"
 	"math"
+	"strings"
 	"time"
 	"unicode"
 	"unicode/utf8"
@@ -272,51 +273,65 @@ func (inst *Scrubber) readout(steps []Step) string {
 	axis := newAxis(steps, 0, 1, false)
 	lab := newLabels(axis.ms, inst.location())
 	k := int(math.Round(t.Pos))
-	s := ""
+	// Numbers name a step where its time cannot (§SD10).
+	indices := !inst.Opts.NoIndices || !axis.ordered()
+	var parts []string
 	if axis.ordered() {
 		// The time in words, zone and all: the field beside it is for typing
 		// into, and a scripted driver or a screen reader finds this by role.
-		s = lab.full(axis.timeAt(t.Pos, inst.location())) + " · "
+		parts = append(parts, lab.full(axis.timeAt(t.Pos, inst.location())))
 	}
 	switch {
-	case inst.drag == dragPlayhead && !inst.Opts.NoSnap:
+	case inst.drag == dragPlayhead && !inst.Opts.NoSnap && indices:
 		// The step a release would select, and what it holds.
-		s += fmt.Sprintf("lets go on step %d of %d%s", k+1, n, inst.valueWords(steps, k))
+		parts = append(parts, fmt.Sprintf("lets go on step %d of %d%s", k+1, n, inst.valueWords(steps, k)))
+	case inst.drag == dragPlayhead && !inst.Opts.NoSnap:
+		parts = append(parts, "lets go on "+lab.short(steps[k].At)+inst.valueWords(steps, k))
+	case !indices:
+		if v := inst.valueWords(steps, k); v != "" {
+			parts = append(parts, v[len(" · "):])
+		}
 	case math.Abs(t.Pos-float64(k)) < entrance:
-		s += fmt.Sprintf("step %d of %d", k+1, n)
+		parts = append(parts, fmt.Sprintf("step %d of %d", k+1, n))
 	default:
-		s += fmt.Sprintf("between steps %d and %d", int(t.Pos)+1, int(t.Pos)+2)
+		parts = append(parts, fmt.Sprintf("between steps %d and %d", int(t.Pos)+1, int(t.Pos)+2))
 	}
 	if axis.ordered() {
 		if now := inst.wall(); !now.Before(steps[0].At.Add(-72*time.Hour)) && !now.After(steps[n-1].At.Add(72*time.Hour)) {
-			s += " · " + formatOffset(time.UnixMilli(int64(axis.posToMS(t.Pos))).Sub(now))
+			parts = append(parts, formatOffset(time.UnixMilli(int64(axis.posToMS(t.Pos))).Sub(now)))
 		}
 		a := min(int(t.Pos), n-2)
 		if a >= 0 {
 			if span := formatSpan(time.Duration(axis.ms[a+1]-axis.ms[a]) * time.Millisecond); span != "" {
-				s += " · " + span + " step"
+				parts = append(parts, span+" step")
 			}
 		}
 	}
-	if t.RangeOn {
+	// The range is worded while its controls are: a host that hides them
+	// has given the range a meaning of its own, and words it itself.
+	if t.RangeOn && inst.shows(PartRange) {
 		lo, hi := t.Bounds(n)
-		s += fmt.Sprintf(" · range %d–%d", lo+1, hi+1)
+		if indices {
+			parts = append(parts, fmt.Sprintf("range %d–%d", lo+1, hi+1))
+		} else {
+			parts = append(parts, fmt.Sprintf("range %s to %s", lab.short(steps[lo].At), lab.short(steps[hi].At)))
+		}
 	}
 	if t.Buffering && t.BufferingFor >= waitingAfter && t.BufferingStep >= 0 && t.BufferingStep < n {
 		what := fmt.Sprintf("step %d", t.BufferingStep+1)
 		if axis.ordered() {
 			what = lab.short(steps[t.BufferingStep].At)
 		}
-		s += fmt.Sprintf(" · waiting for %s (%.0f s)", what, t.BufferingFor)
+		parts = append(parts, fmt.Sprintf("waiting for %s (%.0f s)", what, t.BufferingFor))
 	}
 	if t.Playing && t.WaitShare > 0.15 {
 		rate := t.Rate
 		if !(rate > 0) {
 			rate = defaultRate
 		}
-		s += fmt.Sprintf(" · playing at %.2g of %g steps/s", rate*(1-t.WaitShare), rate)
+		parts = append(parts, fmt.Sprintf("playing at %.2g of %g steps/s", rate*(1-t.WaitShare), rate))
 	}
-	return sentence(s)
+	return sentence(strings.Join(parts, " · "))
 }
 
 // sentence starts s with a capital, as a label that is read alone does

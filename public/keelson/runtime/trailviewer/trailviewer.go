@@ -747,7 +747,9 @@ func (inst *App) renderBand(now time.Time) {
 		// fixed, and Now is Last for a window that ends now.
 		inst.band = timescrubber.New(inst.ids, "trail-band", timescrubber.Options{Height: bandHeight, Location: inst.picker.loc, ValueName: "rows", Now: time.Now,
 			EmptyText: "The band shows the window's surroundings once the first read lands",
-			Hide:      timescrubber.PartRate | timescrubber.PartMode | timescrubber.PartRange | timescrubber.PartNow})
+			Hide:      timescrubber.PartRate | timescrubber.PartMode | timescrubber.PartRange | timescrubber.PartNow,
+			// A bucket has a time and a count, not a number worth reading.
+			NoIndices: true})
 		// A trail is replayed once; it does not loop.
 		inst.band.Transport.Mode = timescrubber.ModeOnce
 	}

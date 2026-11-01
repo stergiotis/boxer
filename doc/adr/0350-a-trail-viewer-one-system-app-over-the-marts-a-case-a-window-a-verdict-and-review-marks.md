@@ -523,7 +523,9 @@ window, which is the zoom out to context. The scrubber's range buttons and
 Delete, its rate, its mode and its Now button are hidden
 (`timescrubber.Options.Hide`): the range is the window and has the
 picker, the band and the navigation row already, and Now is Last whenever
-the window ends now. Playback runs once and stops. The window is mirrored onto the band
+the window ends now, and the readout counts no buckets
+(`Options.NoIndices`): a bucket is its time and its rows. Playback runs
+once and stops. The window is mirrored onto the band
 only when the window or the steps changed since the last mirror, and never
 while a gesture is in progress, so the host cannot clobber one; the
 scrubber's keys land through the same comparison. Its playhead is the

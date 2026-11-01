@@ -73,6 +73,13 @@ type Options struct {
 	// headline the strip shows in their place: "Pick a layer to load its
 	// forecast". Empty takes a generic sentence.
 	EmptyText string
+	// NoIndices keeps step and range numbers out of the readout (ADR-0251
+	// §SD10): a forecast's steps are counted and a count names one, a
+	// trail's buckets are not. The time, the step's value, the offset from
+	// now and the step's length stay, and a range is worded by its times.
+	// Steps without increasing times keep their numbers, which are all they
+	// have.
+	NoIndices bool
 	// Hide leaves these parts of the controls out (ADR-0251 §SD10); zero
 	// shows every part. A hidden part takes its keys with it: a key is a
 	// control's second entry (§SD7), so a host that hides Clear range to
