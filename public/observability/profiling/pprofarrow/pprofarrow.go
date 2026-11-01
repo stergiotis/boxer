@@ -14,14 +14,17 @@
 //	value  Int64          the profile's default sample type
 //	<one Int64 column per remaining sample type, named after it>
 //	kind, captured_at_unix_us, period, duration_ns   profile constants
+//	labels Map(String, String)   the samples' string labels, "" absent
 //
 // The default sample type is the profile's own DefaultSampleType when
 // set, else the last sample type (the pprof tool's rule) — so `value`
 // is cpu/nanoseconds for CPU profiles and inuse_space for heap
 // profiles. Frames without symbols fall back to the location's hex
 // address. Deep stacks arrive already truncated by the runtime;
-// truncation is preserved, not repaired. Sample labels are dropped in
-// this version.
+// truncation is preserved, not repaired. Samples merge only when their
+// stacks and their string labels both match, so a profile labelled by
+// window (ADR-0351 §SD1) splits by `labels['boxer.window']`; a key with
+// several values joins them with ",". Numeric labels are dropped.
 package pprofarrow
 
 import (
@@ -47,6 +50,7 @@ import (
 var fixedColumns = map[string]struct{}{
 	"stack": {}, "leaf": {}, "pkg": {}, "value": {},
 	"kind": {}, "captured_at_unix_us": {}, "period": {}, "duration_ns": {},
+	"labels": {},
 }
 
 // Result carries the converted table and the metadata a publisher
@@ -143,11 +147,15 @@ func Convert(r io.Reader, opts ...Option) (res Result, err error) {
 	return
 }
 
-// row is one output row: a unique root-first stack and the summed
-// values across all samples that carried it, one per sample type.
+// row is one output row: a unique root-first stack under one label set,
+// and the summed values across all samples that carried both, one per
+// sample type.
 type row struct {
-	stack  []string
-	values []int64
+	stack []string
+	// labelKeys and labelValues are the label set, sorted by key.
+	labelKeys   []string
+	labelValues []string
+	values      []int64
 }
 
 // aggregate folds the profile's samples into unique-stack rows,
@@ -162,12 +170,18 @@ func aggregate(p *profile.Profile) (rows []*row, err error) {
 			return
 		}
 		frames = appendFramesRootFirst(frames[:0], s)
+		labelKeys, labelValues := sortedLabels(s.Label)
 		key := strings.Join(frames, "\x00")
+		for j, k := range labelKeys {
+			key += "\x01" + k + "\x02" + labelValues[j]
+		}
 		agg := index[key]
 		if agg == nil {
 			agg = &row{
-				stack:  append([]string(nil), frames...),
-				values: make([]int64, nTypes),
+				stack:       append([]string(nil), frames...),
+				labelKeys:   labelKeys,
+				labelValues: labelValues,
+				values:      make([]int64, nTypes),
 			}
 			index[key] = agg
 			rows = append(rows, agg)
@@ -175,6 +189,24 @@ func aggregate(p *profile.Profile) (rows []*row, err error) {
 		for t, v := range s.Value {
 			agg.values[t] += v
 		}
+	}
+	return
+}
+
+// sortedLabels flattens a sample's string labels into keys sorted, each
+// with its values joined by ",".
+func sortedLabels(m map[string][]string) (keys []string, values []string) {
+	if len(m) == 0 {
+		return
+	}
+	keys = make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	slices.Sort(keys)
+	values = make([]string, len(keys))
+	for i, k := range keys {
+		values[i] = strings.Join(m[k], ",")
 	}
 	return
 }
@@ -296,7 +328,7 @@ func sanitizeColumn(name string) string {
 // emit materializes the rows as one Arrow record and serializes it as
 // an ArrowStream payload.
 func emit(p *profile.Profile, rows []*row, defaultIdx int, res Result) (stream []byte, err error) {
-	fields := make([]arrow.Field, 0, 8+len(res.ExtraColumns))
+	fields := make([]arrow.Field, 0, 9+len(res.ExtraColumns))
 	fields = append(fields,
 		arrow.Field{Name: "stack", Type: arrow.ListOfNonNullable(arrow.BinaryTypes.String)},
 		arrow.Field{Name: "leaf", Type: arrow.BinaryTypes.String},
@@ -311,6 +343,10 @@ func emit(p *profile.Profile, rows []*row, defaultIdx int, res Result) (stream [
 		arrow.Field{Name: "captured_at_unix_us", Type: arrow.PrimitiveTypes.Int64},
 		arrow.Field{Name: "period", Type: arrow.PrimitiveTypes.Int64},
 		arrow.Field{Name: "duration_ns", Type: arrow.PrimitiveTypes.Int64},
+		arrow.Field{Name: "labels", Type: arrow.MapOfFields(
+			arrow.Field{Type: arrow.BinaryTypes.String},
+			arrow.Field{Type: arrow.BinaryTypes.String},
+		)},
 	)
 	schema := arrow.NewSchema(fields, nil)
 
@@ -341,6 +377,9 @@ func emit(p *profile.Profile, rows []*row, defaultIdx int, res Result) (stream [
 	capturedB := rb.Field(base + 1).(*array.Int64Builder)
 	periodB := rb.Field(base + 2).(*array.Int64Builder)
 	durationB := rb.Field(base + 3).(*array.Int64Builder)
+	labelsB := rb.Field(base + 4).(*array.MapBuilder)
+	labelKeyB := labelsB.KeyBuilder().(*array.StringBuilder)
+	labelValueB := labelsB.ItemBuilder().(*array.StringBuilder)
 
 	capturedAtUnixUs := p.TimeNanos / 1000
 	for _, r := range rows {
@@ -359,6 +398,11 @@ func emit(p *profile.Profile, rows []*row, defaultIdx int, res Result) (stream [
 		capturedB.Append(capturedAtUnixUs)
 		periodB.Append(p.Period)
 		durationB.Append(p.DurationNanos)
+		labelsB.Append(true)
+		for j, k := range r.labelKeys {
+			labelKeyB.Append(k)
+			labelValueB.Append(r.labelValues[j])
+		}
 	}
 
 	rec := rb.NewRecordBatch()

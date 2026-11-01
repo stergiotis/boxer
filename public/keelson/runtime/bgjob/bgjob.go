@@ -102,6 +102,8 @@ type Runner[T any] struct {
 // Start launches a run unless one is already in flight (returns false in
 // that case). tasks may be nil; compute must be pure with respect to UI
 // state — it receives the run's context and should honor cancellation.
+// The run's goroutine takes the profiler labels of tasks' owner
+// (task.LabelGoroutine), as StartReporting's and Keyed's do.
 func (r *Runner[T]) Start(tasks task.TaskApiI, spec Spec, compute func(ctx context.Context) (*T, error)) bool {
 	token, ctx, ok := r.begin(0, int64(len(spec.StageNotes))*spec.StageDelay.Milliseconds())
 	if !ok {
@@ -209,6 +211,7 @@ func (r *Runner[T]) TakeResult() (result *T, tag string, ok bool) {
 // run is the worker goroutine. It touches only the mutex-guarded fields
 // and the (concurrent-safe) keelson task handle — never imzero2 state.
 func (r *Runner[T]) run(ctx context.Context, tasks task.TaskApiI, token uint64, spec Spec, compute func(ctx context.Context) (*T, error)) {
+	task.LabelGoroutine(tasks)
 	var h task.HandleI
 	if tasks != nil {
 		h, _ = tasks.Spawn(ctx, task.SpawnOpts{
@@ -267,6 +270,7 @@ func (r *Runner[T]) run(ctx context.Context, tasks task.TaskApiI, token uint64, 
 // stages — the compute callback owns the progress signal through the
 // Reporter it receives.
 func (r *Runner[T]) runReporting(ctx context.Context, tasks task.TaskApiI, token uint64, spec Spec, compute func(ctx context.Context, report Reporter) (*T, error)) {
+	task.LabelGoroutine(tasks)
 	ctx, h := spawnTask(ctx, tasks, spec)
 	if h != nil {
 		defer func() { _ = h.Done(nil) }() // idempotent if Error() ran first

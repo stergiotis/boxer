@@ -187,6 +187,7 @@ func (k *Keyed[T]) start(key string, run func(ctx context.Context, report Report
 	k.key, k.running = key, true
 	tasks, spec := k.tasks, Spec{Kind: k.kind, Title: k.title}
 	go func() {
+		task.LabelGoroutine(tasks)
 		ctx, h := spawnTask(ctx, tasks, spec)
 		report := newReporter(h, func(fraction float32, etaMs int64, rate float64, note string) {
 			k.mu.Lock()

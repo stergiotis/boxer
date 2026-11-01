@@ -98,6 +98,17 @@ func decode(t *testing.T, stream []byte) (schema *arrow.Schema, stacks [][]strin
 				for i := range col.Len() {
 					cols[name] = append(cols[name], col.Value(i))
 				}
+			case *array.Map:
+				keys := col.Keys().(*array.String)
+				items := col.Items().(*array.String)
+				for i := range col.Len() {
+					s, e := col.ValueOffsets(i)
+					m := map[string]string{}
+					for j := s; j < e; j++ {
+						m[keys.Value(int(j))] = items.Value(int(j))
+					}
+					cols[name] = append(cols[name], m)
+				}
 			case *array.List:
 				vals := col.ListValues().(*array.String)
 				for i := range col.Len() {
@@ -190,7 +201,7 @@ func TestConvertCPUMergesAndOrdersStacks(t *testing.T) {
 	}
 
 	schema, stacks, cols := decode(t, res.IPCStream)
-	wantCols := []string{"stack", "leaf", "pkg", "value", "samples", "kind", "captured_at_unix_us", "period", "duration_ns"}
+	wantCols := []string{"stack", "leaf", "pkg", "value", "samples", "kind", "captured_at_unix_us", "period", "duration_ns", "labels"}
 	if len(schema.Fields()) != len(wantCols) {
 		t.Fatalf("schema has %d fields, want %d", len(schema.Fields()), len(wantCols))
 	}
@@ -405,6 +416,48 @@ func TestUnsymbolizedFallback(t *testing.T) {
 	}
 }
 
+// Samples of one stack under different labels stay apart, and the labels
+// land in the map column; a sample without labels gets an empty map.
+func TestLabelsSplitRows(t *testing.T) {
+	fns, byId := buildFunctions(fnSpec{1, "main.main"})
+	lMain := loc(1, byId, 1)
+	p := &profile.Profile{
+		SampleType: cpuValueTypes(),
+		Function:   fns,
+		Location:   []*profile.Location{lMain},
+		Sample: []*profile.Sample{
+			{Location: []*profile.Location{lMain}, Value: []int64{1, 10}, Label: map[string][]string{"boxer.window": {"7"}, "boxer.app": {"a"}}},
+			{Location: []*profile.Location{lMain}, Value: []int64{2, 20}, Label: map[string][]string{"boxer.app": {"a"}, "boxer.window": {"7"}}},
+			{Location: []*profile.Location{lMain}, Value: []int64{4, 40}, Label: map[string][]string{"boxer.window": {"9"}, "boxer.app": {"b"}}},
+			{Location: []*profile.Location{lMain}, Value: []int64{8, 80}},
+		},
+	}
+	res, err := Convert(bytes.NewReader(serialize(t, p)))
+	if err != nil {
+		t.Fatalf("convert: %v", err)
+	}
+	if res.Rows != 3 {
+		t.Fatalf("rows = %d, want 3: one per label set", res.Rows)
+	}
+	_, _, cols := decode(t, res.IPCStream)
+	if got := int64s(t, cols, "value"); got[0] != 30 || got[1] != 40 || got[2] != 80 {
+		t.Fatalf("value = %v", got)
+	}
+	labels := cols["labels"]
+	want := []map[string]string{{"boxer.window": "7", "boxer.app": "a"}, {"boxer.window": "9", "boxer.app": "b"}, {}}
+	for i, w := range want {
+		m := labels[i].(map[string]string)
+		if len(m) != len(w) {
+			t.Fatalf("labels[%d] = %v, want %v", i, m, w)
+		}
+		for k, v := range w {
+			if m[k] != v {
+				t.Fatalf("labels[%d] = %v, want %v", i, m, w)
+			}
+		}
+	}
+}
+
 func TestPkgOf(t *testing.T) {
 	cases := []struct{ name, want string }{
 		{"runtime.mallocgc", "runtime"},
@@ -472,7 +525,7 @@ func TestEmptyProfile(t *testing.T) {
 		t.Fatalf("rows/total = %d/%d", res.Rows, res.TotalValue)
 	}
 	schema, stacks, _ := decode(t, res.IPCStream)
-	if len(stacks) != 0 || len(schema.Fields()) != 9 {
+	if len(stacks) != 0 || len(schema.Fields()) != 10 {
 		t.Fatalf("empty stream decodes to %d stacks, %d fields", len(stacks), len(schema.Fields()))
 	}
 }

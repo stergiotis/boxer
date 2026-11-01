@@ -2,6 +2,7 @@ package procpool
 
 import (
 	"context"
+	"runtime/pprof"
 	"slices"
 	"sync"
 	"time"
@@ -119,11 +120,14 @@ func New[W WorkerI](cfg Config, spawner SpawnerI[W], logger zerolog.Logger) (p *
 		tracked:       make(map[*slot[W]]struct{}, cfg.MaxConcurrent),
 		acquired:      make(map[*slot[W]]time.Time, cfg.MaxConcurrent),
 	}
+	// A pool is often built on first use, inside a window's work; its loops
+	// serve every caller, so they drop the profiler labels they would
+	// inherit from that window (ADR-0351 §SD1).
 	p.bg.Add(1)
-	go p.refillLoop()
+	go unlabelled(p.refillLoop)
 	if cfg.WatchdogMaxLifetime > 0 {
 		p.bg.Add(1)
-		go p.watchdogLoop()
+		go unlabelled(p.watchdogLoop)
 	}
 	p.signalRefill()
 	return
@@ -425,4 +429,10 @@ func (inst *Pool[W]) watchdogSweep() {
 			Msg("watchdog reaping forgotten worker")
 		_ = c.s.w.Close()
 	}
+}
+
+// unlabelled runs f with no profiler labels on its goroutine.
+func unlabelled(f func()) {
+	pprof.SetGoroutineLabels(context.Background())
+	f()
 }
