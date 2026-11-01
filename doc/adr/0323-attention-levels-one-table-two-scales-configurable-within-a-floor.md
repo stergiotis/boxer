@@ -248,6 +248,19 @@ watchbill window, and goes when opened or dismissed. The person's grid
 offers the three kinds. Succeeded and cancelled are not reported, since
 SD6 names no row for them.
 
+### 2026-11-01 — SD6 and SD7: a slow window, the first default at highlight
+
+[ADR-0351](./0351-what-a-window-costs-beyond-frame-cpu-by-window-label-and-a-slow-window-notice.md)
+§SD6 adds the kind `window.slow`, on the attention scale: the window host
+reports a window whose p95 `Frame` has stayed at 8 ms or above for ten
+seconds. Its default is *highlight*, the first kind SD6 starts there rather
+than reaching it by override: a slow window slows every other, and a notice
+the person has to raise in the grid before seeing it would not arrive
+unasked. The person can lower it in the grid, which offers the kind. A
+notice's source can now be a window: one is kept per window, the latest;
+its Open opens the app center's Running tab filtered to the window, and it
+goes when opened, dismissed, or when the window closes.
+
 ## References
 
 - [Juggling — one operator, many streams](../adr-background-work/juggling-many-agent-streams.md)

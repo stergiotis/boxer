@@ -1191,7 +1191,9 @@ func emitStopped(facts factsstore.FactsStoreI, logger zerolog.Logger, runId stri
 // "open" button per app and runs inside a c.PanelCentral so the user
 // can at least see something on the desktop after launch.
 func (inst *Inst) Frame(ids *c.WidgetIdStack) (err error) {
-	inst.frameTimes.beginLoop(time.Now())
+	now := time.Now()
+	inst.frameTimes.beginLoop(now)
+	inst.frameTimes.checkSlow(now)
 	inst.renderGoroutine.Store(opwire.GoroutineId())
 	// Re-resolve: the density preset is runtime-switchable (Layout ▸ Density).
 	inst.density = styletokens.ActiveDensity()

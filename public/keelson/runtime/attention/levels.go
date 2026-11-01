@@ -104,6 +104,14 @@ const (
 
 var jobKinds = []string{KindJobFailed, KindJobDiscarded, KindJobAbandoned}
 
+// KindWindowSlow is a window whose Frame has been slow for a while,
+// reported by the window host (ADR-0351 §SD6). On the attention scale, and
+// a highlight by default: the one default that reaches host chrome
+// unasked, since a slow window slows every other.
+const KindWindowSlow = "window.slow"
+
+var windowKinds = []string{KindWindowSlow}
+
 // ScaleOf is the scale of kind, and whether kind belongs to the closed
 // vocabulary: the host's kinds and the run journal's entry kinds (ADR-0308
 // §SD2). Which scale a kind is on is code, never configuration (ADR-0323
@@ -115,6 +123,11 @@ func ScaleOf(kind string) (s ScaleE, known bool) {
 		}
 	}
 	for _, k := range jobKinds {
+		if k == kind {
+			return ScaleAttention, true
+		}
+	}
+	for _, k := range windowKinds {
 		if k == kind {
 			return ScaleAttention, true
 		}
@@ -327,6 +340,8 @@ func DefaultLevel(ev Event) (l LevelE) {
 		return LevelMessage
 	case KindJobFailed:
 		return LevelData
+	case KindWindowSlow:
+		return LevelHighlight
 	}
 	k, ok := agentrun.ParseKind(ev.Kind)
 	if !ok {

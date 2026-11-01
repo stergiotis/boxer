@@ -6,9 +6,13 @@ import (
 	"time"
 
 	"github.com/google/pprof/profile"
+	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/stergiotis/boxer/public/keelson/runtime/app"
+	"github.com/stergiotis/boxer/public/keelson/runtime/appcenter/launchcfg"
+	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
 	"github.com/stergiotis/boxer/public/keelson/runtime/task"
 )
 
@@ -109,4 +113,27 @@ func TestCpuSeedSqlNarrowsToOneWindow(t *testing.T) {
 	sql := cpuSeedSql(12)
 	assert.True(t, strings.Contains(sql, "WHERE labels['boxer.window'] = '12'"), sql)
 	assert.Contains(t, sql, "keelson('"+cpuDatasetAlias+"')")
+}
+
+// A launch config naming a filter, the slow-window notice's (ADR-0351
+// §SD6), opens the Running tab under it; one naming an app opens its page.
+func TestLaunchConfigFilterOpensTheRunningTab(t *testing.T) {
+	mount := func(launch launchcfg.AppCenterLaunch) (inst *App) {
+		raw, err := buscodec.Encode(launch)
+		require.NoError(t, err)
+		ctx := app.NewStaticMountContext(AppId, zerolog.Nop(), nil, nil, nil)
+		ctx.SetLaunchConfig(raw)
+		inst = newApp()
+		inst.reader = &fixtureReader{}
+		require.NoError(t, inst.Mount(ctx))
+		t.Cleanup(func() { _ = inst.Unmount(ctx) })
+		return
+	}
+	inst := mount(launchcfg.AppCenterLaunch{At: time.Now(), Filter: "SQL Playground"})
+	assert.Equal(t, viewRunning, inst.view)
+	assert.Equal(t, "SQL Playground", inst.runFilter)
+
+	inst = mount(launchcfg.AppCenterLaunch{At: time.Now(), AppId: "a/play"})
+	assert.Equal(t, viewApps, inst.view)
+	assert.Empty(t, inst.runFilter)
 }

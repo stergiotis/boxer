@@ -155,7 +155,8 @@ func newApp() (inst *App) {
 func (inst *App) Manifest() (m app.Manifest) { m = manifest; return }
 
 // Mount takes the host's bus client, opens on the app a launch config
-// names (ADR-0260 §SD1) or else on the Running tab, and starts the poller.
+// names (ADR-0260 §SD1) or else on the Running tab, under the filter it
+// names, and starts the poller.
 func (inst *App) Mount(ctx app.MountContextI) (err error) {
 	inst.ids = ctx.Ids()
 	inst.logger = ctx.Log()
@@ -170,10 +171,14 @@ func (inst *App) Mount(ctx app.MountContextI) (err error) {
 	}
 	if raw := ctx.LaunchConfig(); len(raw) > 0 {
 		cfg, dErr := buscodec.Decode[launchcfg.AppCenterLaunch](raw)
-		if dErr != nil {
+		switch {
+		case dErr != nil:
 			inst.logger.Warn().Err(dErr).Msg("appcenter: launch config does not decode; opening on the Running tab")
-		} else if cfg.AppId != "" {
+		case cfg.AppId != "":
 			inst.selectApp(cfg.AppId)
+		default:
+			// A slow window's notice opens the tab on it (ADR-0351 §SD6).
+			inst.runFilter = cfg.Filter
 		}
 	}
 	inst.mu.Lock()

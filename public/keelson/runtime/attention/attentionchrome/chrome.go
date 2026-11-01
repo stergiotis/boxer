@@ -61,6 +61,7 @@ type Chrome struct {
 	raiseW   func(instance uint64)
 	activeW  func() uint64
 	openJobs func()
+	openRun  func(filter string)
 	// urgencySeen are the urgency requests already considered for opening
 	// at once.
 	urgencySeen map[string]bool
@@ -75,12 +76,16 @@ type Options struct {
 	// OpenJobs opens or raises the watchbill window, where a job's
 	// highlight points (ADR-0323 §SD7); nil offers no Open on one.
 	OpenJobs func()
+	// OpenRunning opens the app center's Running tab under a filter, where
+	// a slow window's highlight points (ADR-0351 §SD6); nil offers no Open
+	// on one.
+	OpenRunning func(filter string)
 }
 
 // New is the chrome of svc; it draws the cards of the questions apps post
 // (ADR-0324 §SD5) itself.
 func New(svc *attention.Service, opts Options) (inst *Chrome) {
-	inst = &Chrome{svc: svc, display: opts.Display, raiseW: opts.Raise, activeW: opts.Active, openJobs: opts.OpenJobs}
+	inst = &Chrome{svc: svc, display: opts.Display, raiseW: opts.Raise, activeW: opts.Active, openJobs: opts.OpenJobs, openRun: opts.OpenRunning}
 	if svc.Questions != nil {
 		inst.sources = append(inst.sources, &questionCards{q: svc.Questions, display: opts.Display, raise: opts.Raise})
 	}
@@ -280,13 +285,17 @@ func (inst *Chrome) renderList(now time.Time, ids *c.WidgetIdStack) {
 	}
 }
 
-// renderNotice draws a highlight: what happened in which conversation, or
-// to which job, with Open, which raises the window that reported it or
-// the watchbill window for a job, and Dismiss. Either drops it.
+// renderNotice draws a highlight: what happened in which conversation, to
+// which job or to which window, with Open, which raises the window that
+// reported it, opens the watchbill window for a job or the Running tab for
+// a slow window, and Dismiss. Either drops it.
 func (inst *Chrome) renderNotice(n attention.Notice, now time.Time, ids *c.WidgetIdStack) {
 	k := n.Conversation
-	if n.Job != "" {
+	switch {
+	case n.Job != "":
 		k = "job:" + string(n.App) + "/" + n.Job
+	case n.Window != 0:
+		k = "window:" + strconv.FormatUint(n.Window, 10)
 	}
 	name := n.Title
 	if name == "" {
@@ -324,19 +333,26 @@ func (inst *Chrome) renderNotice(n attention.Notice, now time.Time, ids *c.Widge
 }
 
 // canOpen says the notice has somewhere to go: the window that reported
-// it, or the watchbill window for a job.
+// it, the watchbill window for a job, or the Running tab for a slow window.
 func (inst *Chrome) canOpen(n attention.Notice) bool {
-	if n.Job != "" {
+	switch {
+	case n.Job != "":
 		return inst.openJobs != nil
+	case n.Window != 0:
+		return inst.openRun != nil
 	}
 	return inst.raiseW != nil && n.Instance != 0
 }
 
-// openNotice goes where the notice points and drops it.
+// openNotice goes where the notice points and drops it. A slow window's
+// Running tab is filtered by the window's title.
 func (inst *Chrome) openNotice(n attention.Notice) {
-	if n.Job != "" {
+	switch {
+	case n.Job != "":
 		inst.openJobs()
-	} else {
+	case n.Window != 0:
+		inst.openRun(n.Title)
+	default:
 		inst.raiseW(n.Instance)
 	}
 	inst.seen(n)
@@ -344,11 +360,14 @@ func (inst *Chrome) openNotice(n attention.Notice) {
 
 // seen drops the notice, by its source.
 func (inst *Chrome) seen(n attention.Notice) {
-	if n.Job != "" {
+	switch {
+	case n.Job != "":
 		inst.svc.Notices.SeenJob(n.App, n.Job)
-		return
+	case n.Window != 0:
+		inst.svc.Notices.SeenWindow(n.Window)
+	default:
+		inst.svc.Notices.Seen(n.Conversation)
 	}
-	inst.svc.Notices.Seen(n.Conversation)
 }
 
 // Where the list first opens: under the menu bar's control.

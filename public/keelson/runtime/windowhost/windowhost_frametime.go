@@ -83,6 +83,8 @@ type frameSample struct {
 // frameRing holds one row's recent samples and running totals.
 type frameRing struct {
 	appId  app.AppIdT
+	title  string
+	slow   slowWatch
 	buf    [frameRingLen]frameSample
 	n      int
 	next   int
@@ -137,6 +139,10 @@ type frameTimes struct {
 	mu      sync.Mutex
 	windows map[WindowKeyT]*frameRing
 	loop    frameRing
+	// slow is told of slow windows (windowhost_slow.go), checked no more
+	// often than slowCheckEvery.
+	slow        SlowWindowsI
+	slowChecked time.Time
 
 	// The render goroutine's own fields: no lock.
 	loopStart time.Time
@@ -170,7 +176,7 @@ func (inst *frameTimes) ring(w *window) (r *frameRing) {
 	}
 	r = inst.windows[w.key]
 	if r == nil {
-		r = &frameRing{appId: w.manifest.Id}
+		r = &frameRing{appId: w.manifest.Id, title: w.manifest.WindowTitle()}
 		inst.windows[w.key] = r
 	}
 	return
@@ -188,11 +194,16 @@ func (inst *frameTimes) recordFrame(w *window, d time.Duration, msgs uint64) {
 	inst.mu.Unlock()
 }
 
-// forget drops a reaped window's row: the table is about open windows.
+// forget drops a reaped window's row: the table is about open windows. A
+// listener of slow windows hears it is gone.
 func (inst *frameTimes) forget(key WindowKeyT) {
 	inst.mu.Lock()
 	delete(inst.windows, key)
+	l := inst.slow
 	inst.mu.Unlock()
+	if l != nil {
+		l.WindowGone(key)
+	}
 }
 
 // FrameTimes snapshots the recorder: the loop row first, then one row per

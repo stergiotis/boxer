@@ -109,3 +109,38 @@ func TestAJobsEndIsKeptBySource(t *testing.T) {
 	}
 	assert.Subset(t, kinds, []string{KindJobFailed, KindJobDiscarded, KindJobAbandoned}, "the person's grid offers the job kinds")
 }
+
+// A slow window is a highlight by default (ADR-0351 §SD6), kept one per
+// window, and goes when the window is seen or closes.
+func TestASlowWindowIsAHighlightByDefault(t *testing.T) {
+	levels := &Levels{}
+	n := NewNotices(levels)
+	now := time.Now()
+	assert.Equal(t, LevelHighlight, n.NotifyWindow("play", 4, KindWindowSlow, "SQL Playground", "Frame p95 12 ms for 10 s", now))
+	assert.Equal(t, LevelHighlight, n.NotifyWindow("play", 4, KindWindowSlow, "SQL Playground", "Frame p95 14 ms for 10 s", now.Add(time.Second)))
+	assert.Equal(t, LevelHighlight, n.NotifyWindow("chat", 5, KindWindowSlow, "Chat", "Frame p95 9 ms for 10 s", now))
+	assert.Equal(t, LevelUnspecified, n.NotifyWindow("play", 0, KindWindowSlow, "", "", now), "a window notice names its window")
+	got := n.List()
+	require.Len(t, got, 2, "one per window")
+	assert.EqualValues(t, 5, got[0].Window, "newest first")
+	assert.Equal(t, "Frame p95 14 ms for 10 s", got[1].Text)
+	assert.Equal(t, "SQL Playground", got[1].Title)
+
+	n.Seen("")
+	assert.Len(t, n.List(), 2, "a conversation seen drops no window's notice")
+	n.SeenJob("play", "")
+	assert.Len(t, n.List(), 2, "nor a job seen")
+	n.SeenWindow(4)
+	require.Len(t, n.List(), 1)
+	assert.EqualValues(t, 5, n.List()[0].Window)
+
+	require.NoError(t, levels.Set(AuthorPerson, "", "", Key{Kind: KindWindowSlow}, LevelMessage), "the person may lower it")
+	assert.Equal(t, LevelMessage, n.NotifyWindow("play", 4, KindWindowSlow, "SQL Playground", "", now))
+	assert.Len(t, n.List(), 1, "not kept below highlight")
+
+	var kinds []string
+	for _, r := range GridRows() {
+		kinds = append(kinds, r.Key.Kind)
+	}
+	assert.Contains(t, kinds, KindWindowSlow, "the person's grid offers it")
+}

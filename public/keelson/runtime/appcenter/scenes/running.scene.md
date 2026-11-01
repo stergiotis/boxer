@@ -16,7 +16,7 @@ scene:
 
 ADR-0348's Running tab, which the app center opens on: every open window
 of the host, its frame time against the render loop, and the tasks it owns.
-play opens beside it on a query that takes about twenty seconds, so the tab
+play opens beside it on a query that takes about forty seconds, so the tab
 lists play's window with its query run among its tasks. The scene filters by
 the task's title, which leaves play's window alone, so the task is
 attributed to play's row; the app column is read rather than the task's, so
@@ -29,7 +29,7 @@ on the measurement's profile, which the closed window's samples are still
 part of.
 
 ```sql
-SELECT number FROM numbers(40) WHERE sleepEachRow(0.5) = 0 SETTINGS max_block_size = 1
+SELECT number FROM numbers(80) WHERE sleepEachRow(0.5) = 0 SETTINGS max_block_size = 1
 ```
 
 ```jsonl trace

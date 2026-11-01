@@ -86,7 +86,13 @@ type App struct {
 	// simulateError gates whether the next spawned task aborts at
 	// ~80% with a synthesised error.
 	simulateError bool
+	// slowFrame makes every Frame take slowFrameDelay, for the window
+	// host's slow-window notice (ADR-0351 §SD6) to report.
+	slowFrame bool
 }
+
+// slowFrameDelay is above the window host's line for a slow Frame.
+const slowFrameDelay = 12 * time.Millisecond
 
 var _ app.AppI = (*App)(nil)
 
@@ -158,6 +164,9 @@ func (inst *App) Frame(ctx app.FrameContextI) (err error) {
 	// Re-resolve: the density preset is runtime-switchable (Layout ▸ Density).
 	inst.density = styletokens.ActiveDensity()
 	inst.renderApp()
+	if inst.slowFrame {
+		time.Sleep(slowFrameDelay)
+	}
 	return
 }
 
@@ -277,6 +286,8 @@ func (inst *App) renderControls() {
 
 		_ = c.Checkbox(inst.ids.PrepareStr("simerr"), inst.simulateError, "Simulate error at 80%").
 			SendRespVal(&inst.simulateError)
+		_ = c.Checkbox(inst.ids.PrepareStr("slowframe"), inst.slowFrame, "Slow Frame (12 ms), which every window waits for").
+			SendRespVal(&inst.slowFrame)
 
 		for range c.Horizontal().KeepIter() {
 			if c.Button(inst.ids.PrepareStr("start-items"),

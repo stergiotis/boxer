@@ -352,6 +352,9 @@ type Runtime struct {
 	// showRunning opens the app center on its Running tab, for the Window
 	// menu (ADR-0348); nil where the app center cannot be launched.
 	showRunning func() (err error)
+	// openRunning opens it on the Running tab under a filter, for a slow
+	// window's notice (ADR-0351 §SD6); nil where showRunning is.
+	openRunning func(filter string) (err error)
 }
 
 // Boot wires the runtime in the carousel's order (ADR-0211 §SD1): identity,
@@ -832,16 +835,18 @@ func (rt *Runtime) bootWindowHost() (err error) {
 	// The Window menu's Running windows opens it on no app, which is its
 	// Running tab (ADR-0348 §SD1).
 	if _, ok := reg.LookupManifest(appcenter.AppId); ok && reg.Launchable(appcenter.AppId) {
-		openAppCenter := func(target app.AppIdT) (err error) {
-			cfg, err := buscodec.Encode(appcenterlaunch.AppCenterLaunch{At: time.Now().UTC(), AppId: string(target)})
+		openWith := func(launch appcenterlaunch.AppCenterLaunch) (err error) {
+			launch.At = time.Now().UTC()
+			cfg, err := buscodec.Encode(launch)
 			if err != nil {
 				return
 			}
 			_, err = host.OpenWithConfig(appcenter.AppId, appcenterlaunch.Kind, cfg)
 			return
 		}
-		lchr.SetInspect(openAppCenter)
-		rt.showRunning = func() error { return openAppCenter("") }
+		lchr.SetInspect(func(target app.AppIdT) error { return openWith(appcenterlaunch.AppCenterLaunch{AppId: string(target)}) })
+		rt.showRunning = func() error { return openWith(appcenterlaunch.AppCenterLaunch{}) }
+		rt.openRunning = func(filter string) error { return openWith(appcenterlaunch.AppCenterLaunch{Filter: filter}) }
 	}
 	// Ranking, when the facts store can answer for it (ADR-0214 §SD7). A
 	// no-op against the in-memory fallback, which is the correct behaviour
@@ -1087,6 +1092,11 @@ func (rt *Runtime) bootAgent() {
 	if rt.WatchbillLane != nil {
 		rt.WatchbillLane.SetNotices(jobNotices{n: cfg.Attention.Notices})
 	}
+	// The window host reports a window whose Frame stays slow (ADR-0351
+	// §SD6).
+	if rt.Host != nil {
+		rt.Host.SetSlowWindows(windowNotices{n: cfg.Attention.Notices})
+	}
 	if qs, qerr := attention.NewBusService(rt.Bus, cfg.Attention, logger); qerr != nil {
 		logger.Warn().Err(qerr).Msg("attention: question service start failed; apps' questions stay in their windows")
 	} else {
@@ -1154,6 +1164,9 @@ func (rt *Runtime) bootAgent() {
 			// A job's highlight points at the watchbill window (ADR-0323
 			// §SD7).
 			OpenJobs: func() { _, _, _ = host.OpenOrRaise(watchbilllaunch.AppId) },
+			// A slow window's, at the Running tab filtered to it (ADR-0351
+			// §SD6).
+			OpenRunning: openRunningOrNil(rt.openRunning),
 		})
 		rt.Attention.AddSource(svc, svc.Chrome())
 		rt.Host.SetCardsChrome(rt.Attention)
@@ -1678,6 +1691,26 @@ func (inst jobNotices) JobEnded(at time.Time, job watchbillstore.Job, state stri
 		text += ", " + note
 	}
 	inst.n.NotifyJob(app.AppIdT(job.OwnerAppId), job.ID, kind, text, at)
+}
+
+// windowNotices hands the window host's slow windows to the attention
+// service (ADR-0351 §SD6): a window's notice goes when it closes.
+type windowNotices struct{ n *attention.Notices }
+
+func (inst windowNotices) WindowSlow(key windowhost.WindowKeyT, appId app.AppIdT, title string, p95 time.Duration) {
+	inst.n.NotifyWindow(appId, uint64(key), attention.KindWindowSlow, title,
+		"Frame slow: p95 "+p95.Round(100*time.Microsecond).String()+", which every window waits for", time.Now())
+}
+
+func (inst windowNotices) WindowGone(key windowhost.WindowKeyT) { inst.n.SeenWindow(uint64(key)) }
+
+// openRunningOrNil adapts open for the attention chrome; nil stays nil, so
+// the chrome offers no Open.
+func openRunningOrNil(open func(filter string) error) func(filter string) {
+	if open == nil {
+		return nil
+	}
+	return func(filter string) { _ = open(filter) }
 }
 
 // connectLading is the lading publish service's connection: the server the

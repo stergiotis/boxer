@@ -130,19 +130,22 @@ profiler.
 
 ### SD6 — A slow-window notice
 
-The window host watches the frame-time ring it already keeps. A window whose
-p95 `Frame` stays at or above 8 ms — the threshold the Running tab already
-warns at, moved to the window host as the one constant — for ten seconds is
-reported to the attention service as kind `window.slow`, host-side as the
-watchbill worker reports a job. The notice's source is the window; one is
-kept per window, the latest. It goes when the window closes or the person
-dismisses it. It is not reported again until the window has stayed below the
-threshold for ten seconds, so a window hovering at the line does not repeat
-itself.
+The window host reads the frame-time ring it already keeps, once a second.
+A window whose p95 `Frame` stays at or above `windowhost.SlowFrame`, 8 ms —
+the threshold the Running tab already warned at, now the one constant — for
+ten seconds, drawing at least 32 frames meanwhile, is reported to the
+attention service as kind `window.slow`, host-side as the watchbill worker
+reports a job. The frame count keeps a window that stopped drawing from
+being reported on the quantiles of its last frames. The notice's source is
+the window; one is kept per window, the latest, with its p95 in the line.
+It goes when the person opens or dismisses it, or the window closes. It is
+not reported again until the window has stayed below the threshold for ten
+seconds, so a window hovering at the line does not repeat itself.
 
 The notice's **Open** opens the app center's Running tab filtered to that
 window's title: `AppCenterLaunch` gains a `Filter` field, set into the
-filter the tab already has.
+filter the tab already has. Windows of one app share a title, so the filter
+shows them together.
 
 **Default level: highlight.** Only a *highlight* reaches host chrome
 (ADR-0323 §SD7), so `window.slow` defaults to it, and the person can lower
@@ -160,10 +163,11 @@ raised it, which defeats a notice meant to arrive unasked.
 | `task`, `bgjob` | work runs under the owner's labels |
 | `procpool` | its shared loops clear inherited labels |
 | `pprofarrow` | `labels` column |
-| App center Running tab | Measure CPU, CPU column, the measurement's line, Explore |
+| App center Running tab | Measure CPU, CPU column, the measurement's line, Explore; opens under a launch config's filter |
 | App center | `measure_cpu`; CPU in `list_running`; caps to spawn tasks and publish datasets |
 | `appcenter/launchcfg` | `AppCenterLaunch.Filter` (regenerated) |
-| Attention | kind `window.slow`; a host-side notify for a window source |
+| Attention | kind `window.slow`; a notice whose source is a window; the chrome's Open for it |
+| `taskdemo` | a Slow Frame toggle, for the notice's scene |
 
 ## Alternatives
 
@@ -218,10 +222,15 @@ raised it, which defeats a notice meant to arrive unasked.
   under `boxer.window` and the second's under none.
 - `pprofarrow`'s tests: a labelled profile yields the `labels` column, and
   two samples of one stack under different labels stay two rows.
-- A scene presses Measure CPU, waits for the measurement, and reads the CPU
-  column's header and the host line.
+- The app center's `running` scene presses Measure CPU, reads the
+  measurement's line, and at its end opens Explore and finds play's window
+  listed; the capture shows the icicle over the published profile.
 - The slow-window watcher is tested on a fake clock: reported after ten
-  seconds above the threshold, not again until ten seconds below.
+  seconds above the threshold with frames drawn, not again until ten
+  seconds below.
+- The `slow-window` scene turns on the task demo's Slow Frame, reads one
+  highlight on the host's attention control, opens it, and finds the
+  Running tab showing the task demo's window alone.
 
 ## Milestones
 
