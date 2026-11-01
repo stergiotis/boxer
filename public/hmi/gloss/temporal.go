@@ -36,6 +36,14 @@ var timeUnitNs = map[string]float64{
 	UnitHour:        3600e9,
 }
 
+// TimeUnitNanos is the factor from a time-unit spelling to nanoseconds; ok is
+// false for a spelling the catalog does not know. It is for a host that does
+// arithmetic on a gloss/duration column rather than only showing it.
+func TimeUnitNanos(unit string) (ns float64, ok bool) {
+	ns, ok = timeUnitNs[unit]
+	return
+}
+
 // --- epoch ---
 
 // epochGloss shows a Unix epoch as an RFC 3339 UTC moment. `unit` is the

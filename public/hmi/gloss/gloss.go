@@ -142,11 +142,16 @@ type Inline struct {
 
 // ParamSpec declares one media-type parameter a gloss accepts. Values, when
 // non-nil, is the closed set of accepted values (compared case-sensitively —
-// `unit=K` and `unit=k` are different things); nil means any value.
+// `unit=K` and `unit=k` are different things); nil means the catalog lets any
+// value through to the gloss's Bind, which may still refuse it. Sample is the
+// value a spelling writes for a parameter without a Values list, where the
+// first of Values would otherwise be used; a required one needs it, or the
+// catalog listing has no token that binds.
 type ParamSpec struct {
 	Name   string
 	Doc    string
 	Values []string
+	Sample string
 }
 
 // GlossI is one catalog entry: a media type, its documentation, the

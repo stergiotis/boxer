@@ -25,6 +25,7 @@ func presentationFamily() []GlossI {
 		coordinateGloss{},
 		epochGloss{},
 		durationGloss{},
+		moneyGloss{},
 		bytesGloss(),
 		taggedIdGloss(),
 		luhnGloss(),

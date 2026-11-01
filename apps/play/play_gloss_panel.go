@@ -135,17 +135,22 @@ func (inst *PlayApp) renderGlossCatalogRow(g gloss.GlossI) {
 }
 
 // glossSampleToken is the token the Insert buttons write: the media type,
-// with the first allowed value of every closed-set parameter — so a required
-// `unit=` lands spelled rather than missing. params is that choice on its
-// own, for the call spelling.
+// with the first allowed value of every closed-set parameter and the Sample of
+// every other — so a required `unit=` lands spelled rather than missing. params
+// is that choice on its own, for the call spelling.
 func glossSampleToken(g gloss.GlossI) (token string, params map[string]string) {
 	for _, p := range g.Params() {
+		value := p.Sample
 		if len(p.Values) > 0 {
-			if params == nil {
-				params = make(map[string]string, 2)
-			}
-			params[p.Name] = p.Values[0]
+			value = p.Values[0]
 		}
+		if value == "" {
+			continue
+		}
+		if params == nil {
+			params = make(map[string]string, 2)
+		}
+		params[p.Name] = value
 	}
 	return gloss.CompactMediaType(g.MediaType(), params), params
 }

@@ -439,6 +439,37 @@ See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-d
 
 ## Updates
 
+### 2026-11-01 — `gloss/money`, whose unit is a currency
+
+A presentation gloss placed after `gloss/duration`: an amount with
+`unit` set to the ISO 4217 alphabetic code of the stored currency, required.
+
+| media type | accepts | params | inline face | block face | affinity |
+| --- | --- | --- | --- | --- | --- |
+| `gloss/money` | numeric | `unit`, an ISO 4217 code, required | three significant figures with k, m, bn or tn: `€12.5k`, `CHF 950` | — | — |
+
+**The code is a closed set checked in `Bind`, not in `ParamSpec.Values`.** It is
+ISO 4217 List One as published 2026-09-17 and the six codes withdrawn most
+recently, which amounts on record still carry (ANG, BGN, CUC, HRK, SLL, ZWL).
+Some 180 values would spell themselves out in every refusal and on the Glosses
+tab's row. `ParamSpec` gains `Sample`, the value a spelling writes for a
+parameter with no `Values`, which `gloss/money` needs because a catalog listing
+must have a token that binds. `unit=eur` is refused and told the code is upper
+case, as every closed value in the catalog is compared as written.
+
+**A symbol only where it names one currency on its own.** EUR, USD, GBP and JPY
+show `€`, `$`, `£` and `¥`, tight against the figure. Every other code shows as
+itself followed by a space, which covers those sharing a sign (CAD, AUD and HKD
+with `$`, CNY with `¥`, SEK, NOK and DKK with `kr`) and those whose sign would
+make a cell depend on the font carrying it. The rule is a table of four, so a
+symbol is never derived from a code.
+
+No conversion and no `show=`: a velocity's factors are exact and a rate is data.
+No affinity, because being a number does not make a column an amount. The face
+trades precision for width, so **Raw cells** is how a cent is read. Its compact
+formatter duplicates `riskmatrix.FormatCompact` rather than sharing it, because
+this package is free of UI dependencies and the widget knows no glosses.
+
 ### 2026-10-24 — `gloss/uuid`, keyed on the Arrow extension tag
 
 A twelfth presentation gloss: `gloss/uuid` writes 16 packed bytes out as

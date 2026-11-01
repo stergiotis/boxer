@@ -138,6 +138,55 @@ func TestDurationFace(t *testing.T) {
 	assert.Contains(t, d.Reason, "requires unit=")
 }
 
+// gloss/money: the code is required and validated, a symbol appears for the
+// four currencies that have an unambiguous one and the code for all others.
+func TestMoneyFace(t *testing.T) {
+	for token, tc := range map[string]struct{ in, want string }{
+		"EUR": {"12500", "€12.5k"},
+		"USD": {"3000000", "$3m"},
+		"GBP": {"950", "£950"},
+		"JPY": {"1250000000", "¥1.25bn"},
+		"CHF": {"950", "CHF 950"},
+		"CAD": {"20000", "CAD 20k"},
+		"CNY": {"20000", "CNY 20k"},
+		"SEK": {"2e12", "SEK 2tn"},
+		"XAU": {"0.1234", "XAU 0.123"},
+	} {
+		assert.Equal(t, Inline{Text: tc.want}, instFor(t, "a@gloss/money;unit="+token).Inline(num(tc.in)), token)
+	}
+	eur := instFor(t, "a@gloss/money;unit=EUR")
+	assert.Equal(t, "-€12k", eur.Inline(num("-12000")).Text, "the sign goes in front of the symbol")
+	assert.Equal(t, "-CHF 12k", instFor(t, "a@gloss/money;unit=CHF").Inline(num("-12000")).Text)
+	assert.Equal(t, "€0", eur.Inline(num("0")).Text)
+	assert.Equal(t, "€1m", eur.Inline(num("999600")).Text, "rounded before the suffix is picked")
+	assert.Equal(t, "NaN", eur.Inline(num("NaN")).Text, "not an amount: the plain rendering, no currency")
+
+	d, declared := Default().ParseColumn("a@gloss/money")
+	require.True(t, declared)
+	assert.Nil(t, d.Instance)
+	assert.Contains(t, d.Reason, "requires unit=")
+	d, _ = Default().ParseColumn("a@gloss/money;unit=eur")
+	assert.Nil(t, d.Instance)
+	assert.Contains(t, d.Reason, `unit="eur" is not an ISO 4217 code`)
+	assert.Contains(t, d.Reason, "upper case: EUR")
+	d, _ = Default().ParseColumn("a@gloss/money;unit=EUD")
+	assert.Nil(t, d.Instance)
+	assert.Contains(t, d.Reason, `unit="EUD" is not an ISO 4217 code`)
+	assert.NotContains(t, d.Reason, "upper case")
+	d, _ = Default().ParseColumn("a@gloss/money;unit=EUR;show=USD")
+	assert.Contains(t, d.Reason, "unknown parameter", "it formats, it does not convert")
+
+	ok, reason := eur.Accepts(ValueKindText)
+	assert.False(t, ok)
+	assert.Contains(t, reason, "expects numeric")
+	assert.True(t, IsCurrencyCode("HRK"), "a withdrawn code still binds for the amounts on record")
+	assert.False(t, IsCurrencyCode("EURO"))
+
+	g, ok := Default().Lookup(MediaTypeMoney)
+	require.True(t, ok)
+	assert.Equal(t, "EUR", g.Params()[0].Sample, "the catalog listing has a token that binds")
+}
+
 func TestURLFace(t *testing.T) {
 	u := instFor(t, "link@gloss/url")
 	assert.Equal(t, Inline{Text: "https://example.com/a", Tone: ToneAccent}, u.Inline(txt("https://example.com/a\nsecond line dropped")))
@@ -156,7 +205,7 @@ func TestDefaultOrderPresentation(t *testing.T) {
 	}
 	assert.Equal(t, []string{
 		MediaTypeTemperature, MediaTypeLength, MediaTypeVelocity, MediaTypePlaneAngle, MediaTypeCoordinate,
-		MediaTypeEpoch, MediaTypeDuration,
+		MediaTypeEpoch, MediaTypeDuration, MediaTypeMoney,
 		MediaTypeBytes, MediaTypeTaggedId, MediaTypeLuhn, MediaTypeMasked, MediaTypeURL, MediaTypeIPAddr, MediaTypeUUID, MediaTypeRegexp, MediaTypeRaw,
 	}, order[13:]) // past the content family: ADR-0123's eight, application/cbor, the four WAVE spellings
 }
