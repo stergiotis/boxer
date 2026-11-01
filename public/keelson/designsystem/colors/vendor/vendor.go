@@ -36,6 +36,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"image/color"
+	"io"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -47,6 +48,7 @@ import (
 
 	"github.com/stergiotis/boxer/public/keelson/designsystem/colors/contrast"
 	"github.com/stergiotis/boxer/public/keelson/designsystem/colors/cvd"
+	"github.com/stergiotis/boxer/public/keelson/designsystem/colors/gen"
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
@@ -56,12 +58,19 @@ import (
 type Config struct {
 	// RepoRoot overrides the runtime.Caller-based repo-root discovery.
 	RepoRoot string
+
+	// Stderr is where advisory diagnostics are written. Defaults to
+	// os.Stderr when nil.
+	Stderr io.Writer
 }
 
 // Result summarises a vendor run.
 type Result struct {
 	Total int
 	Names []string // ordered names that were emitted
+	// CrossPaletteWarnings are qualitative slots within
+	// gen.CrossPaletteAdvisoryLevel of a semantic Default token (advisory).
+	CrossPaletteWarnings []string
 }
 
 type lut struct {
@@ -85,6 +94,9 @@ type lut struct {
 
 // Run executes the vendor pipeline.
 func Run(ctx context.Context, cfg Config) (res Result, err error) {
+	if cfg.Stderr == nil {
+		cfg.Stderr = os.Stderr
+	}
 	repoRoot := cfg.RepoRoot
 	if repoRoot == "" {
 		repoRoot, err = findRepoRoot()
@@ -131,11 +143,31 @@ func Run(ctx context.Context, cfg Config) (res Result, err error) {
 			continue
 		}
 		gateFindings = append(gateFindings, gateQualitative(l)...)
+		// Against the semantic palette of every theme (ADR-0029 §SD4):
+		// slot 0 gates, every other slot is advisory.
+		var crossGating, crossAdvisory []string
+		crossGating, crossAdvisory, err = gen.CrossPalette(repoRoot, l.RGB)
+		if err != nil {
+			return
+		}
+		for _, f := range crossGating {
+			gateFindings = append(gateFindings, l.Name+" "+f)
+		}
+		for _, f := range crossAdvisory {
+			res.CrossPaletteWarnings = append(res.CrossPaletteWarnings, l.Name+" "+f)
+		}
 	}
 	if len(gateFindings) > 0 {
 		err = eb.Build().Strs("findings", gateFindings).
-			Errorf("qualitative palette gate reported findings (ADR-0156 §SD3)")
+			Errorf("qualitative palette gate reported findings (ADR-0156)")
 		return
+	}
+	if len(res.CrossPaletteWarnings) > 0 {
+		fmt.Fprintf(cfg.Stderr, "WARN: %d qualitative-vs-semantic ΔE ≤ %.0f findings (advisory; slot 0 is gated at ΔE > %.0f):\n",
+			len(res.CrossPaletteWarnings), gen.CrossPaletteAdvisoryLevel, gen.CrossPaletteGateFloor)
+		for _, f := range res.CrossPaletteWarnings {
+			fmt.Fprintln(cfg.Stderr, "  "+f)
+		}
 	}
 
 	for _, l := range luts {
@@ -228,24 +260,29 @@ func assemble(upstreamDir string) (out []lut, err error) {
 		"(Zenodo DOI 10.5281/zenodo.1243862); first-10 subset per ADR-0033 §SD4."
 	out = append(out, bS)
 
-	// ---- Okabe-Ito qualitative — 8 entries upstream; drop the black anchor ----
+	// ---- Okabe-Ito qualitative — 8 entries upstream; drop black, re-order ----
 	// The published set opens with black, which the source assumes will sit on
 	// a white figure background. On the IDS dark spine it reaches 1.28:1
 	// against NeutralBgSurface, so the converter subsets it away and keeps the
 	// remaining seven verbatim (ADR-0156 §SD2). Subsetting, not perturbation:
 	// the values that ship are unmodified, as with batlowS's first-10 rule.
+	// The seven ship in okabeItoCycleOrder, not publication order.
 	var oi lut
 	oi, err = readHexPalette(filepath.Join(upstreamDir, "okabe_ito.txt"), "okabe_ito", 8)
 	if err != nil {
 		return
 	}
-	oi.Cardinality = 7
-	oi.RGB = oi.RGB[1:]
+	oi.RGB, err = permute(oi.RGB, okabeItoCycleOrder[:])
+	if err != nil {
+		return
+	}
+	oi.Cardinality = len(oi.RGB)
 	oi.Qualitative = true
 	oi.Family = "okabe-ito"
 	oi.License = "public (no formal license; values published as a standard)"
 	oi.Provenance = "Okabe & Ito, Color Universal Design (2002, rev. 2008), " +
-		"https://jfly.uni-koeln.de/color/; black anchor dropped per ADR-0156 §SD2."
+		"https://jfly.uni-koeln.de/color/; black anchor dropped and the seven " +
+		"re-ordered per ADR-0156 §SD2 and its 2026-11-01 update."
 	out = append(out, oi)
 
 	// ---- matplotlib viridis family (256 entries) via dim13/colormap ----
@@ -275,6 +312,45 @@ func assemble(upstreamDir string) (out []lut, err error) {
 			l.RGB[i] = [3]uint8{uint8(r >> 8), uint8(g >> 8), uint8(b >> 8)}
 		}
 		out = append(out, l)
+	}
+	return
+}
+
+// okabeItoCycleOrder is the order the qualitative cycle ships in, as
+// publication indices into okabe_ito.txt (0 black — omitted, which is the
+// subsetting — 1 orange, 2 sky blue, 3 bluish green, 4 yellow, 5 blue,
+// 6 vermillion, 7 reddish purple). Values are untouched; only the order is
+// ours (ADR-0156, Updates 2026-11-01).
+//
+// Slot 0 is the colour of every chart's first series, so it must sit away
+// from every semantic Default in every theme; gen.CrossPalette gates that.
+// Measured 2026-11-01, only reddish purple (nearest: ΔE 11.7, the light
+// theme's accent) and yellow (13.0, the dark theme's warning) clear the
+// gate's floor; yellow is held back because it reads 1.28:1 on the light
+// theme's surface and carries the conventional "caution" reading. Publication
+// order put orange first, ΔE 6.1 from the dark theme's warning.
+//
+// The rest follow the default (dark) theme, for which the cycle is
+// specified and gated: the entries clearing ΔE 15 against every dark
+// Default (blue, vermillion, bluish green) first, warm and cool alternating
+// so neighbours stay apart; then yellow; then the two entries sitting on a
+// dark-theme status colour, sky blue (info, ΔE 6.4) and orange (warning,
+// ΔE 6.1), last.
+var okabeItoCycleOrder = [...]int{7, 5, 6, 3, 4, 2, 1}
+
+// permute returns the entries of rgb at the given indices, in that order.
+// Every index must be in range and appear at most once; indices left out
+// are dropped.
+func permute(rgb [][3]uint8, order []int) (out [][3]uint8, err error) {
+	seen := make(map[int]bool, len(order))
+	out = make([][3]uint8, 0, len(order))
+	for _, i := range order {
+		if i < 0 || i >= len(rgb) || seen[i] {
+			err = eb.Build().Int("index", i).Int("len", len(rgb)).Errorf("cycle order index out of range or repeated")
+			return
+		}
+		seen[i] = true
+		out = append(out, rgb[i])
 	}
 	return
 }

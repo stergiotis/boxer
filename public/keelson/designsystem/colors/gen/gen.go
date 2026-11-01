@@ -2,7 +2,9 @@
 //
 // Reads palette.toml + pairs.toml; performs OKLCh → sRGB gamut clipping;
 // runs APCA + WCAG 2.1 contrast verification; runs CVD ΔE > 15 verification;
-// runs IP-boundary verbatim search; emits, for the IDS palette:
+// runs IP-boundary verbatim search; gates the shipped qualitative cycle's
+// first slot against every theme's semantic Default tokens (CrossPalette);
+// emits, for the IDS palette:
 //
 //   - rust/imzero2/imzero2_egui/src/style/tokens/palette_generated.rs
 //   - public/keelson/designsystem/styletokens/palette.out.go
@@ -39,6 +41,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/designsystem/colors/emit"
 	"github.com/stergiotis/boxer/public/keelson/designsystem/colors/ipboundary"
 	"github.com/stergiotis/boxer/public/keelson/designsystem/colors/palette"
+	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens/data_encoding"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
@@ -67,8 +70,12 @@ type Result struct {
 	APCAFailures []string // gate failures — caller should exit non-zero if non-empty
 	WCAGWarnings []string // advisory
 	CVDWarnings  []string // advisory
-	Collisions   int
-	Wrote        []string // absolute paths written
+	// CrossPaletteWarnings are qualitative-cycle slots within
+	// CrossPaletteAdvisoryLevel of a semantic Default token (advisory). The
+	// gating slot-0 findings fail Run instead (ADR-0156, Updates 2026-11-01).
+	CrossPaletteWarnings []string
+	Collisions           int
+	Wrote                []string // absolute paths written
 }
 
 // pairsFile mirrors the pairs.toml schema.
@@ -187,6 +194,8 @@ func Run(ctx context.Context, cfg Config) (res Result, err error) {
 		apcaFailures     []string
 		contrastWarnings []string
 		cvdFailures      []string
+		crossGating      []string
+		crossAdvisory    []string
 		collisions       []ipboundary.Collision
 		writes           []artefact
 	)
@@ -212,6 +221,12 @@ func Run(ctx context.Context, cfg Config) (res Result, err error) {
 		apcaFailures = append(apcaFailures, th.prefixed(failures)...)
 		contrastWarnings = append(contrastWarnings, th.prefixed(warnings)...)
 		cvdFailures = append(cvdFailures, th.prefixed(runCVD(tokens))...)
+		// The shipped cycle, not a candidate: this run changes the semantic
+		// side, so it is the side that can walk a status colour onto a series
+		// colour. The vendor converter runs the same check from the other.
+		g, a := crossPaletteTheme(th.label(), tokens, data_encoding.OkabeIto[:])
+		crossGating = append(crossGating, g...)
+		crossAdvisory = append(crossAdvisory, a...)
 
 		idsHexes := make(map[string]string, len(tokens))
 		for _, t := range tokens {
@@ -234,6 +249,14 @@ func Run(ctx context.Context, cfg Config) (res Result, err error) {
 		writes = append(writes, artefact{th.md, emit.ColorMdFor(th.source, th.title, tokens, apcaResults, contrastResults), false})
 	}
 	writes = append(writes, artefact{"doc/design-system/foundations/ip-boundary-check.md", emit.IPBoundaryMd(collisions, sources), false})
+
+	// Enforcing, before anything is written: a palette whose status colour
+	// lands on the first series colour is not emitted (ADR-0029 §SD4).
+	if len(crossGating) > 0 {
+		err = eb.Build().Strs("findings", crossGating).
+			Errorf("cross-palette gate: a semantic Default is within ΔE %.0f of the qualitative cycle's slot 0 (ADR-0029 §SD4, ADR-0156)", CrossPaletteGateFloor)
+		return
+	}
 
 	// ---- Emit ----
 	for _, w := range writes {
@@ -276,9 +299,18 @@ func Run(ctx context.Context, cfg Config) (res Result, err error) {
 		}
 	}
 
+	if len(crossAdvisory) > 0 {
+		fmt.Fprintf(cfg.Stderr, "WARN: %d qualitative-vs-semantic ΔE ≤ %.0f findings (advisory; slot 0 is gated at ΔE > %.0f):\n",
+			len(crossAdvisory), CrossPaletteAdvisoryLevel, CrossPaletteGateFloor)
+		for _, f := range crossAdvisory {
+			fmt.Fprintln(cfg.Stderr, "  "+f)
+		}
+	}
+
 	res.APCAFailures = apcaFailures
 	res.WCAGWarnings = contrastWarnings
 	res.CVDWarnings = cvdFailures
+	res.CrossPaletteWarnings = crossAdvisory
 	res.Collisions = len(collisions)
 	return
 }

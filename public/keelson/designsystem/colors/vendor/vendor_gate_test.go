@@ -5,6 +5,8 @@ package vendor
 import (
 	"strings"
 	"testing"
+
+	"github.com/stergiotis/boxer/public/keelson/designsystem/colors/gen"
 )
 
 // batlowSFirst10 is the palette that shipped as the IDS qualitative cycle
@@ -60,6 +62,13 @@ func TestGateQualitativeAcceptsShippedPalette(t *testing.T) {
 		if len(findings) > 0 {
 			t.Errorf("%s fails its own gate:\n  %s", l.Name, strings.Join(findings, "\n  "))
 		}
+		gating, _, err := gen.CrossPalette("", l.RGB)
+		if err != nil {
+			t.Fatalf("CrossPalette: %v", err)
+		}
+		if len(gating) > 0 {
+			t.Errorf("%s fails the cross-palette gate:\n  %s", l.Name, strings.Join(gating, "\n  "))
+		}
 	}
 	if seen == 0 {
 		t.Fatal("no palette is marked Qualitative — the gate would be vacuous")
@@ -74,4 +83,34 @@ func upstreamDirForTest(t *testing.T) (dir string) {
 	}
 	dir = root + "/rust/imzero2/assets/colors/scientific/upstream"
 	return
+}
+
+// TestOkabeItoCycleOrderIsASubsetPermutation holds the vendor rule of
+// ADR-0156 §SD2: the shipped cycle is the publication's values, subset and
+// re-ordered, never altered. Every published entry but black appears once.
+func TestOkabeItoCycleOrderIsASubsetPermutation(t *testing.T) {
+	seen := map[int]bool{}
+	for _, i := range okabeItoCycleOrder {
+		if i < 1 || i > 7 || seen[i] {
+			t.Fatalf("okabeItoCycleOrder %v: index %d out of 1..7 or repeated", okabeItoCycleOrder, i)
+		}
+		seen[i] = true
+	}
+	if len(seen) != 7 {
+		t.Fatalf("okabeItoCycleOrder %v drops a non-black entry", okabeItoCycleOrder)
+	}
+}
+
+func TestPermuteRejectsBadOrder(t *testing.T) {
+	rgb := [][3]uint8{{1, 1, 1}, {2, 2, 2}}
+	for _, order := range [][]int{{0, 0}, {2}, {-1}} {
+		_, err := permute(rgb, order)
+		if err == nil {
+			t.Errorf("permute accepted %v", order)
+		}
+	}
+	out, err := permute(rgb, []int{1, 0})
+	if err != nil || out[0] != rgb[1] || out[1] != rgb[0] {
+		t.Errorf("permute([1 0]) = %v, %v", out, err)
+	}
 }

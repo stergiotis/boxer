@@ -132,12 +132,18 @@ const QualitativeCycleLen = len(data_encoding.OkabeIto)
 // Under the dark theme every entry clears WCAG 1.4.11's 3:1 against
 // NeutralBgSurface — the lightest, and therefore hardest, dark surface — so
 // the cycle is usable as a stroke, marker or glyph colour, not only as a
-// fill. Under the light theme (ADR-0258) it does not: entries 0, 1, 3 and 6
-// fall below 3:1 against that theme's surface, and only 2, 4 and 5 clear it
+// fill. Under the light theme (ADR-0258) it does not: entries 0, 4, 5 and 6
+// fall below 3:1 against that theme's surface, and only 1, 2 and 3 clear it
 // in both themes. deferred: a cycle for the light theme. That is the
 // property the previous palette (Crameri batlowS) lacked: four of its ten
 // entries sat below 3:1 and one was at the background's own luminance.
 // ADR-0156 records the change and the numbers behind it.
+//
+// The order is not Okabe & Ito's publication order. Slot 0 — the first
+// series of every chart — is the entry farthest from every semantic Default
+// in every theme (ADR-0029 §SD4's disjointness, gated by the colour
+// generators; ADR-0156, Updates 2026-11-01). Publication order opened on
+// orange, which sat on the dark theme's warning colour.
 //
 // Seven is the honest count, not a rounding of ten: no published CVD-safe
 // qualitative set reaches ten entries that all clear 3:1 on a dark spine.

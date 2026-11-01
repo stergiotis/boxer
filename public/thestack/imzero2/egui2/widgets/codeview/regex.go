@@ -23,8 +23,7 @@ var regexColors [regexhighlight.CategoryError + 1]color.Color
 // eye (ADR-0015 §SD2).
 //
 // Taken from styletokens.QualitativeCycle, the same source the Preview
-// tab's per-capture-group cells use, so the two cycle in step by ordinal
-// rather than merely resembling each other.
+// tab's per-capture-group cells use.
 //
 // This diverged into a hand-picked set until ADR-0156. The reason given
 // was sound at the time — the then-current palette (batlowS) was chosen
@@ -33,11 +32,20 @@ var regexColors [regexhighlight.CategoryError + 1]color.Color
 // cycle entry clears 3:1 as a foreground. Rejoining also fixes something
 // the hand-picked set got wrong: its gold and orchid were ΔE 1.2 apart
 // under deuteranopia, so consecutive bracket depths were nearly
-// indistinguishable to a deuteranope. The cycle's first four measure 14.6.
+// indistinguishable to a deuteranope.
 //
 // Four entries: what matters is that *consecutive* depths differ
-// strongly, which they do; a pattern nested more than four deep repeats
-// the cycle, exactly as bracket-pair colourisation does elsewhere.
+// strongly, including the wrap from the fourth back to the first; a
+// pattern nested more than four deep repeats the cycle, exactly as
+// bracket-pair colourisation does elsewhere. regexDepthSlots picks the
+// four by that measure rather than taking the cycle's first four: since
+// the cycle's re-order (ADR-0156, Updates 2026-11-01) the first four put
+// bluish green next to reddish purple on the wrap, ΔE 7.5 under
+// deuteranopia. The order below keeps slot 0 first and its worst
+// consecutive pair, over normal vision and the three simulated CVD types,
+// measures 10.8 (OKLab ×100, 2026-11-01).
+var regexDepthSlots = [4]int{0, 2, 1, 4}
+
 var regexDepthColors [4]color.Color
 
 var regexSpec highlighterSpec
@@ -70,8 +78,8 @@ func init() {
 	regexColors[regexhighlight.CategoryFlags] = yellow
 	regexColors[regexhighlight.CategoryError] = red
 
-	for i := range regexDepthColors {
-		q := styletokens.QualitativeCycle(i)
+	for i, slot := range regexDepthSlots {
+		q := styletokens.QualitativeCycle(slot)
 		regexDepthColors[i] = internRgb(q.R, q.G, q.B)
 	}
 
