@@ -161,15 +161,70 @@ list, and the mark shows in the table and the detail pane.
 `dm_trail_reviews` lists every mark for SQL. Each window shows a row's
 latest mark.
 
+## The tree, the matrix and the dotted chart
+
+The bar above the table switches the central area between **Table** and
+the analytic views; the detail pane's tabs return to the table. Each view
+reads the case, the range and the filter the table last read, again on
+every refresh, and states in one line what it shows and whether anything
+was cut.
+
+- **Tree** — for a **task** or **conversation** case only: the rows as an
+  outline, each hanging off the row its `parent-ref` names (a model call
+  under the action that asked for it, an action under its model call),
+  oldest first, with elapsed-ms, status and kind beside the headline. A row
+  whose parent is not among the rows held is a root, and the line says how
+  many. A tree of up to 200 nodes opens fully expanded. A click on a node
+  selects its row, and selecting a row elsewhere selects its node.
+- **Actor × object** — pick the actor (principal, app or window) and the
+  object (subject, entity or operation); the grid has one row per actor,
+  one column per object, and the number of rows of each pair in the cell,
+  with the pair's last outcome on hover. A principal, a data subject and an
+  entity are an audit event's own columns, so a matrix over one of them
+  counts the case's audit events only, and says so. The grid shows the
+  fifty busiest actors and objects; the line says when there were more.
+- **Dotted chart** — one row per run, window, conversation or entity, time
+  across, one mark per bucket of the strip's size, larger for more rows (in
+  four sizes, the legend gives each size's counts). The forty busiest rows
+  are drawn, the busiest on top.
+
+## Saved views
+
+The **Views** pane beside the table keeps the case, the range (as the
+picker shows it), the filter and the tab under a name: type it and press
+**Save**; saving under a name already there replaces it. **Open** brings a
+view back and **Delete** removes it. The list lives in the host's persist
+store under the viewer's app id, shared by every viewer window; it is read
+when the window opens.
+
+## Send to play
+
+**Send to play** publishes the table as it stands — the rows held, in the
+columns shown — as an ad-hoc dataset named `trail_rows`, and opens a play
+window reading it, where it can be sorted, searched and queried. There is
+no file export. The publish is itself recorded on the trail.
+
+## Opening the viewer on a case
+
+Another app can open the viewer on a case through a launch config: the
+case and its value, optionally a range, a tab and a saved view's name.
+Chat's Analytics tab has **Open in trail viewer**, which opens it on the
+window's conversation over the last week. A config the viewer cannot read
+is ignored: the window opens on its defaults and says why under the
+controls.
+
 ## For an agent
 
 The viewer declares an operations catalog (ADR-0345). `list_rows` lists a
 case's rows over a range and filter given as its own arguments, from the
 rows the window holds, and says when its arguments reach outside what the
 window read; `get_row` reads one row, `get_previous` the selected row's
-previous state, `get_verdict` the evidence lines and `get_view` what the
-window shows, `get_exceptions` the open exceptions of a case over a range
-with every rule's predicate. `set_case`, `set_range`, `set_filter`,
-`select_row` and `set_tab` change what the window shows and nothing else.
+previous state, `get_verdict` the evidence lines, `get_view` what the
+window shows and the saved views' names, `get_exceptions` the open
+exceptions of a case over a range with every rule's predicate, and
+`get_tree` a task's or conversation's tree in depth-first order.
+`set_case`, `set_range`, `set_filter`, `select_row` and `set_tab` (one of
+fields, previous, context, compare, tree, matrix, dotted) change what the
+window shows and nothing else.
 `mark_row` writes to the trail and is not offered to agents: review is the
 person's act. Row text reaches a model marked untrusted.

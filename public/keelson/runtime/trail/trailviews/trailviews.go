@@ -214,6 +214,11 @@ func functions() (fns []chpack.Function) {
 	}
 }
 
+// Functions is the roster [Statements] installs, in order: each function's
+// name, parameters, body and one-line doc. Play's vocabulary registers it
+// as a server family (ADR-0350 §SD2).
+func Functions() (fns []chpack.Function) { return functions() }
+
 // FunctionNames lists the functions [Statements] creates, in order.
 func FunctionNames() (names []string) {
 	for _, f := range functions() {

@@ -66,6 +66,10 @@ func (inst CaseKindE) Hint() (s string) {
 // columns worth showing.
 func (inst CaseKindE) agentic() bool { return inst == CaseConversation || inst == CaseTask }
 
+// chained reports whether rows of the case hang off one another by
+// parent-ref, so the tree tab exists for it.
+func (inst CaseKindE) chained() bool { return inst == CaseConversation || inst == CaseTask }
+
 func caseKindNameList() (s string) {
 	return strings.Join(caseKindNames[:], ", ")
 }
@@ -348,9 +352,12 @@ func (inst StripByE) String() string {
 	return "kind"
 }
 
-// TabE is the detail pane's tab: the row's fields, its previous-state
-// diff, the rows around it, or its comparison with a second row. M4's tree
-// tab joins the same resource.
+// TabE is the window's tab (ADR-0350 §SD4, §SD11): one of the detail
+// pane's tabs — the row's fields, its previous-state diff, the rows around
+// it, its comparison with a second row — under which the central area shows
+// the table, or one of the analytic views, which takes the central area's
+// place: the tree of the case's chain, the actor × object matrix, the
+// dotted chart. Under an analytic view the detail pane shows the fields.
 type TabE uint8
 
 const (
@@ -358,12 +365,22 @@ const (
 	TabPrevious
 	TabContext
 	TabCompare
+	TabTree
+	TabMatrix
+	TabDotted
 )
 
-// AllTabs lists the tabs in the order the detail pane shows them.
-var AllTabs = []TabE{TabFields, TabPrevious, TabContext, TabCompare}
+// AllTabs lists the tabs in the order their names are listed.
+var AllTabs = []TabE{TabFields, TabPrevious, TabContext, TabCompare, TabTree, TabMatrix, TabDotted}
 
-var tabNames = [...]string{"fields", "previous", "context", "compare"}
+// DetailTabs are the detail pane's tabs, in the order it shows them.
+var DetailTabs = []TabE{TabFields, TabPrevious, TabContext, TabCompare}
+
+// ViewTabs are the central area's analytic views, in the order the bar
+// above it shows them after the table.
+var ViewTabs = []TabE{TabTree, TabMatrix, TabDotted}
+
+var tabNames = [...]string{"fields", "previous", "context", "compare", "tree", "matrix", "dotted"}
 
 func (inst TabE) String() string {
 	if int(inst) < len(tabNames) {
@@ -371,6 +388,31 @@ func (inst TabE) String() string {
 	}
 	return "unknown"
 }
+
+// Label is how the bar above the central area names a view tab.
+func (inst TabE) Label() string {
+	switch inst {
+	case TabTree:
+		return "Tree"
+	case TabMatrix:
+		return "Actor × object"
+	case TabDotted:
+		return "Dotted chart"
+	}
+	return "Table"
+}
+
+// detail reports whether the tab is one of the detail pane's, under which
+// the central area shows the table.
+func (inst TabE) detail() bool { return inst <= TabCompare }
+
+// availableFor reports whether the tab exists for a case kind: the tree
+// only where the case carries a chain (ADR-0350 §SD4).
+func (inst TabE) availableFor(k CaseKindE) bool {
+	return inst != TabTree || k.chained()
+}
+
+func tabNameList() string { return strings.Join(tabNames[:], ", ") }
 
 // ParseTab reads a tab's name.
 func ParseTab(s string) (t TabE, ok bool) {

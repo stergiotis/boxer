@@ -150,6 +150,39 @@ func TestTheProbeReadsBackWrittenRowsOverLocal(t *testing.T) {
 	first, err := p.previousOf(ctx, &rows[5], time.Hour)
 	require.NoError(t, err)
 	assert.Equal(t, ClaimNoPrevious, first.Claim)
+
+	// The analytic views over the same rows (ADR-0350 §SD11): the matrix
+	// from the timeline and from the audit-event mart, and the dotted chart
+	// by window and by entity at a 2s bucket.
+	runQ := listQuery{Case: Case{Kind: CaseRun, Value: "run-1"}, From: from, To: to}
+	cells, err := queryRows[MatrixCell](ctx, p, p.marts.matrixSQL(runQ, ActorApp, ObjectOperation))
+	require.NoError(t, err)
+	assert.Equal(t, []MatrixCell{
+		{Actor: "apps/rules", Object: "rules.updated", N: 3, Last: trail.OutcomeOk},
+		{Actor: "apps/rules", Object: "rules.created", N: 2, Last: trail.OutcomeOk},
+		{Actor: "apps/rules", Object: "trail.audit-gap", N: 1, Last: cells[2].Last},
+	}, cells)
+	m := pivotMatrix(cells, ActorApp, ObjectOperation, matrixShown, false)
+	assert.Equal(t, "1 actors × 3 objects, 6 rows in 3 pairs; busiest app apps/rules → operation rules.updated with 3", m.line())
+	pairs := map[string]MatrixCell{}
+	cells, err = queryRows[MatrixCell](ctx, p, p.marts.matrixSQL(listQuery{Case: runQ.Case, From: from, To: to,
+		Filter: Filter{}.with(FacetDomainAction, "rules.created", true)}, ActorWindow, ObjectEntity))
+	require.NoError(t, err)
+	for _, x := range cells {
+		pairs[x.Object] = x
+	}
+	assert.Equal(t, MatrixCell{Actor: "run-1:3", Object: "rule:r1", N: 2, Last: trail.OutcomeOk}, pairs["rule:r1"], "the filter removes r1's created")
+	assert.Equal(t, uint64(1), pairs["rule:r2"].N)
+
+	groups, err := queryRows[Bucket](ctx, p, p.marts.dottedSQL(runQ, DottedWindow, 2*time.Second))
+	require.NoError(t, err)
+	d := buildDotted(groups, DottedWindow, 2*time.Second, dottedShown, false)
+	assert.Equal(t, "1 rows over 4 buckets of 2s; busiest window run-1:3 with 6; the largest mark is 2 in one bucket", d.line())
+	groups, err = queryRows[Bucket](ctx, p, p.marts.dottedSQL(runQ, DottedEntity, 2*time.Second))
+	require.NoError(t, err)
+	d = buildDotted(groups, DottedEntity, 2*time.Second, dottedShown, false)
+	assert.Equal(t, "rule:r1", d.keys[0])
+	assert.Equal(t, uint64(3), d.busiestN, "r1's three events")
 }
 
 // Over clickhouse-local: the SQL exception rules each raise exactly their

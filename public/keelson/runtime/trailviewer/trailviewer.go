@@ -8,7 +8,11 @@
 // writer run says whether the run's sealed record holds. Named exception
 // rules raise a reading list beside the table (rules.go), a person marks a
 // row reviewed, flagged or dismissed back onto the trail (marks.go), and
-// two rows can be compared field by field (compare.go).
+// two rows can be compared field by field (compare.go). In the table's
+// place the window draws a task's or conversation's tree (tree.go), the
+// actor × object matrix or the dotted chart (analytics.go); it keeps saved
+// views in the persist store (views.go), sends the table to play
+// (sendplay.go), and opens on a case a launch config names (launch.go).
 //
 // The window never queries the store from a frame: a bgjob worker reads
 // through the host's executor (cache.go, probe.go) and a later frame
@@ -120,11 +124,22 @@ type App struct {
 
 	// The grid's record and state; the record is rebuilt when the cache's
 	// generation or the exceptions move.
-	grid      gridState
-	stripW    float32
-	fvState   fieldview.State
-	drawnGen  uint64
-	settleRem int
+	grid   gridState
+	stripW float32
+
+	// The analytic views (analytics.go, tree.go), the saved views
+	// (views.go), the export to play (sendplay.go), and why a launch
+	// config was ignored (launch.go).
+	treeV     treeView
+	an        analytics
+	views     viewStore
+	send      playSend
+	launchErr error
+	// lastDetail is the detail tab the bar's Table button returns to.
+	lastDetail TabE
+	fvState    fieldview.State
+	drawnGen   uint64
+	settleRem  int
 }
 
 var _ app.AppI = (*App)(nil)
@@ -137,6 +152,8 @@ func newInstance(m app.Manifest) (out *App) {
 		window:   defaultWindow,
 		stripW:   stripFallbackWidth,
 		picker:   newPickerState(),
+		// The matrix opens on the pair every row has.
+		an: analytics{actor: ActorApp, object: ObjectOperation},
 	}
 	return
 }
@@ -149,6 +166,8 @@ func (inst *App) Mount(ctx app.MountContextI) (err error) {
 	inst.appId = string(ctx.AppId())
 	inst.instance = ctx.InstanceKey()
 	inst.picker.runner.bus = inst.bus
+	inst.views.store = ctx.Storage()
+	inst.mountLaunch(ctx)
 	return
 }
 
@@ -158,6 +177,9 @@ func (inst *App) Unmount(ctx app.MountContextI) (err error) {
 	inst.detail.close()
 	inst.picker.close()
 	inst.grid.release()
+	inst.an.close()
+	inst.views.runner.Invalidate()
+	inst.send.runner.Invalidate()
 	return
 }
 
@@ -199,6 +221,9 @@ func (inst *App) tick(now time.Time) {
 		sel = &inst.selected
 	}
 	inst.detail.tick(src, sel, inst.probeFunc(src))
+	inst.tickAnalytics(src)
+	inst.tickViews()
+	inst.drainSend()
 }
 
 func (inst *App) probeFunc(src *Source) func() (*probe, error) {
@@ -215,6 +240,17 @@ func (inst *App) scopeValue() scope {
 func (inst *App) applyCase(cs Case) {
 	inst.caseValue = cs
 	inst.draftKind, inst.draftValue, inst.draftStale = cs.Kind, cs.Value, true
+	if !inst.tab.availableFor(cs.Kind) {
+		inst.applyTab(TabFields)
+	}
+}
+
+// applyTab sets the tab, remembering a detail tab for the bar's Table.
+func (inst *App) applyTab(t TabE) {
+	inst.tab = t
+	if t.detail() {
+		inst.lastDetail = t
+	}
 }
 
 func (inst *App) applyWindow(w Window) {
@@ -309,13 +345,54 @@ func (inst *App) render() (err error) {
 		inst.renderSide()
 	}
 	for range c.PanelCentralInside().KeepIter() {
-		inst.renderTable()
+		inst.renderViewBar()
+		switch inst.tab {
+		case TabTree:
+			inst.renderTree()
+		case TabMatrix:
+			inst.renderMatrix()
+		case TabDotted:
+			inst.renderDotted()
+		default:
+			inst.renderTable()
+		}
 	}
 	return
 }
 
+// renderViewBar is the bar above the central area: the table and the
+// analytic views, Send to play, and the export's outcome.
+func (inst *App) renderViewBar() {
+	for range c.HorizontalTop().KeepIter() {
+		if c.Button(inst.ids.PrepareStr("view-table"), c.Atoms().Text(TabFields.Label()).Keep()).Selected(inst.tab.detail()).
+			SendResp().HasPrimaryClicked() && !inst.tab.detail() {
+			inst.setTabGesture(inst.lastDetail)
+		}
+		for _, t := range ViewTabs {
+			if !t.availableFor(inst.caseValue.Kind) {
+				continue
+			}
+			if c.Button(inst.ids.PrepareStr("view-"+t.String()), c.Atoms().Text(t.Label()).Keep()).Selected(inst.tab == t).
+				SendResp().HasPrimaryClicked() && inst.tab != t {
+				inst.setTabGesture(t)
+			}
+		}
+		c.AddSpace(styletokens.GapPanels(inst.density))
+		if c.Button(inst.ids.PrepareStr("send-play"), c.Atoms().Text("Send to play").Keep()).SendResp().HasPrimaryClicked() {
+			inst.sendToPlay()
+		}
+		switch {
+		case inst.send.runner.Running():
+			c.Label("sending…").Send()
+		case inst.send.note != "":
+			c.LabelAtoms(c.Atoms().BeginRichTextColored(detailMutedFg, detailBgClear, inst.send.note).Small().End().Keep()).Send()
+		}
+	}
+}
+
 func (inst *App) requestRepaint() {
-	running := inst.cache.runner.Running() || inst.verdicts.runner.Running() || inst.detail.runner.Running() || inst.picker.runner.runner.Running()
+	running := inst.cache.runner.Running() || inst.verdicts.runner.Running() || inst.detail.runner.Running() || inst.picker.runner.runner.Running() ||
+		inst.an.matrix.runner.Running() || inst.an.dotted.runner.Running() || inst.views.runner.Running() || inst.send.runner.Running()
 	switch {
 	case running:
 		c.RequestRepaintAfter(0.1)
@@ -371,7 +448,7 @@ func (inst *App) renderControls() {
 		badge.New(inst.ids.PrepareStr("fresh"), fresh).Tone(tone).Variant(badge.VariantSoft).Size(badge.SizeSm).Monospace().
 			Tooltip("when the window last read its case from the trail marts (BOXER_TRAILVIEWER_REFRESH)").Send()
 	}
-	for _, e := range []error{inst.cache.lastErr, inst.picker.err} {
+	for _, e := range []error{inst.cache.lastErr, inst.picker.err, inst.launchErr} {
 		if e != nil {
 			c.LabelAtoms(c.Atoms().BeginRichTextColored(detailErrorFg, detailBgClear, e.Error()).Small().End().Keep()).Wrap().Send()
 		}
@@ -1018,7 +1095,7 @@ func (inst *App) renderDetail() {
 		badge.New(inst.ids.PrepareStr("d-kind"), r.Kind).Tone(badge.TonePrimary).Variant(badge.VariantOutline).Size(badge.SizeSm).Send()
 		c.LabelAtoms(c.Atoms().BeginRichTextColored(detailMutedFg, detailBgClear,
 			inst.picker.format(r.Ts(), time.RFC3339Nano)+" · id "+strconv.FormatUint(r.Id, 10)).Small().Monospace().End().Keep()).Send()
-		for _, t := range AllTabs {
+		for _, t := range DetailTabs {
 			if c.Button(inst.ids.PrepareStr("d-tab-"+t.String()), c.Atoms().Text(t.String()).Keep()).Selected(inst.tab == t).
 				SendResp().HasPrimaryClicked() && inst.tab != t {
 				inst.setTabGesture(t)
@@ -1315,6 +1392,7 @@ const (
 	sideFacets sideE = iota
 	sideExceptions
 	sideRules
+	sideViews
 )
 
 // exceptionsShown bounds the exception list's drawn lines.
@@ -1324,11 +1402,11 @@ const exceptionsShown = 500
 // or the rules.
 func (inst *App) renderSide() {
 	exc := inst.exceptions()
-	for range c.HorizontalTop().KeepIter() {
+	for range c.HorizontalWrapped().KeepIter() {
 		for _, x := range []struct {
 			side  sideE
 			label string
-		}{{sideFacets, "Facets"}, {sideExceptions, fmt.Sprintf("Exceptions (%d)", len(exc.open))}, {sideRules, "Rules"}} {
+		}{{sideFacets, "Facets"}, {sideExceptions, fmt.Sprintf("Exceptions (%d)", len(exc.open))}, {sideRules, "Rules"}, {sideViews, "Views"}} {
 			if c.Button(inst.ids.PrepareStr(fmt.Sprintf("side-%d", x.side)), c.Atoms().Text(x.label).Keep()).Selected(inst.side == x.side).
 				SendResp().HasPrimaryClicked() {
 				inst.side = x.side
@@ -1341,6 +1419,8 @@ func (inst *App) renderSide() {
 		inst.renderExceptions(exc)
 	case sideRules:
 		inst.renderRules(exc)
+	case sideViews:
+		inst.renderViews()
 	default:
 		inst.renderFacets()
 	}

@@ -34,6 +34,7 @@ const (
 	opGetVerdict  = "get_verdict"
 	opGetView     = "get_view"
 	opGetExc      = "get_exceptions"
+	opGetTree     = "get_tree"
 
 	opSetCase   = "set_case"
 	opSetRange  = "set_range"
@@ -75,6 +76,8 @@ type opsSnap struct {
 	exc         exceptionSet
 	marks       map[uint64]Review
 	asOf        *AsOf
+	gen         uint64
+	views       []string
 
 	c        Case
 	window   Window
@@ -92,6 +95,7 @@ func (inst *App) opsSnapshot() (sn opsSnap) {
 	sn.lines, sn.linesAt = inst.verdicts.lines, inst.verdicts.at
 	sn.exc, sn.marks, sn.asOf = inst.exceptions(), inst.marks(), ch.asOf
 	sn.taken = time.Now()
+	sn.gen, sn.views = ch.gen, inst.views.names()
 	sn.c, sn.window, sn.filter, sn.tab = inst.caseValue, inst.window, inst.filter, inst.tab
 	if inst.hasSelected {
 		sn.selected = inst.selected.Id
@@ -287,6 +291,26 @@ type PreviousResult struct {
 	LookbackMs int64       `desc:"how far back the read looked, in milliseconds"`
 }
 
+// GetTreeArgs names a task or conversation case.
+type GetTreeArgs struct {
+	Case  string `desc:"task or conversation"`
+	Value string `desc:"the task's or the conversation's id"`
+	Limit int    `desc:"nodes to return in depth-first order; default and at most 200"`
+}
+
+// TreeResult is get_tree's result.
+type TreeResult struct {
+	Nodes       int        `desc:"nodes in the tree, before the limit"`
+	Roots       int        `desc:"nodes with no parent among the rows held"`
+	Line        string     `desc:"the tree in words, as the tab states it"`
+	Tree        []TreeNode `desc:"the first limit nodes in depth-first order, a parent before its children, siblings oldest first"`
+	Persisted   bool       `desc:"the trail reaches boxer.facts on this host"`
+	Held        int        `desc:"rows the window's cache holds; the tree is built over these"`
+	MoreInStore bool       `desc:"older rows of the case are in boxer.facts beyond the cache, and the tree does not hold them"`
+	RefreshedAt time.Time  `desc:"when the cache was last filled; zero before the first fill"`
+	Diagnostic  string     `desc:"why the result may be short or empty: nothing persisted, not read yet, a failed refresh, or a case or filter other than the one the window read; empty when none applies"`
+}
+
 // GetVerdictArgs names a run, or none for every run read.
 type GetVerdictArgs struct {
 	Run string `desc:"a writer run; empty returns every run the window has a line for"`
@@ -317,7 +341,7 @@ type View struct {
 	From        time.Time     `desc:"the window's start as last read"`
 	To          time.Time     `desc:"the window's end as last read"`
 	Filter      []TermArg     `desc:"the filter the table is narrowed by"`
-	Tab         string        `desc:"the detail pane's tab: fields, previous or context"`
+	Tab         string        `desc:"the window's tab: fields, previous, context, compare, tree, matrix or dotted"`
 	Selected    uint64        `desc:"the selected row's facts id; 0 for none"`
 	Held        int           `desc:"rows the window holds"`
 	MoreInStore bool          `desc:"older rows of the case and range are in boxer.facts beyond the cache"`
@@ -326,6 +350,7 @@ type View struct {
 	Exceptions  int           `desc:"open exceptions among the rows held"`
 	AsOf        string        `desc:"for the entity case, the entity's state as of the window's end and the event it comes from"`
 	RefreshedAt time.Time     `desc:"when the cache was last filled; zero before the first fill"`
+	SavedViews  []string      `desc:"the names of the saved views this window has read from the persist store"`
 }
 
 // SetCaseArgs sets the case whole.
@@ -346,7 +371,7 @@ type SelectRowArgs struct {
 
 // SetTabArgs sets the detail pane's tab.
 type SetTabArgs struct {
-	Tab string `desc:"fields, previous, context or compare"`
+	Tab string `desc:"fields, previous, context or compare (the detail pane under the table); tree (task or conversation case only), matrix or dotted (an analytic view in the table's place)"`
 }
 
 func parseCaseArgs(kind, value string) (c Case, err error) {
@@ -639,11 +664,11 @@ var ops = func() (s *appops.Set[*App, opsSnap]) {
 		}
 		return inst.selectById(id)
 	})
-	s.Resource(resTab, "the detail pane's tab", func(inst *App) any { return inst.tab })
+	s.Resource(resTab, "the window's tab: a detail pane's tab under the table, or an analytic view in its place", func(inst *App) any { return inst.tab })
 	s.Restorable(resTab, func(inst *App, v any) bool {
 		t, ok := v.(TabE)
 		if ok {
-			inst.tab = t
+			inst.applyTab(t)
 		}
 		return ok
 	})
@@ -804,6 +829,52 @@ var ops = func() (s *appops.Set[*App, opsSnap]) {
 			for _, l := range sn.lines {
 				out.Verdicts = append(out.Verdicts, verdictLine(l))
 			}
+			out.SavedViews = sn.views
+			return
+		})
+
+	appops.Query(s, app.OperationSpec{Name: opGetTree, Version: 1,
+		Summary: "read the chain of a task or conversation case as a tree over parent-ref, in depth-first order: each node's row id, depth, parent, kind, headline, status and elapsed time, from the window's cache",
+		Agents:  true, Untrusted: true, Fork: app.OperationForkReadShared},
+		func(sn opsSnap, in GetTreeArgs) (out TreeResult, err error) {
+			c, err := parseCaseArgs(in.Case, in.Value)
+			if err != nil {
+				return
+			}
+			if !c.Kind.chained() {
+				err = app.RefuseOperation("the tree is read for a task or a conversation case")
+				return
+			}
+			limit := in.Limit
+			switch {
+			case limit < 0:
+				err = app.RefuseOperation("limit is not negative")
+				return
+			case limit == 0:
+				limit = opsMaxRows
+			case limit > opsMaxRows:
+				limit = opsMaxRows
+			}
+			out.Persisted, out.Held, out.MoreInStore, out.RefreshedAt = sn.src.persisted(), len(sn.rows), sn.more, sn.refreshedAt
+			out.Diagnostic = sn.cacheDiagnostic()
+			if out.Diagnostic != "" || !sn.filled {
+				return
+			}
+			// The tree is built over every row the window read for the
+			// case, whatever its filter kept, so the window's filter must
+			// be empty for the answer to be the case's chain.
+			if ok, why := sn.covers(c, sn.scope.Window, Filter{}); !ok {
+				out.Diagnostic = why
+				return
+			}
+			tr := buildTree(sn.rows)
+			nodes, terr := tr.depthFirst()
+			if terr != nil {
+				err = app.RefuseOperation("the tree does not build: " + terr.Error())
+				return
+			}
+			out.Nodes, out.Roots, out.Line = len(nodes), tr.roots, tr.line()
+			out.Tree = nodes[:min(len(nodes), limit)]
 			return
 		})
 
@@ -939,16 +1010,20 @@ var ops = func() (s *appops.Set[*App, opsSnap]) {
 		})
 
 	appops.Command(s, app.OperationSpec{Name: opSetTab, Version: 1,
-		Summary: "set the detail pane's tab: fields, previous or context",
+		Summary: "set the window's tab: fields, previous, context or compare under the table; tree (for a task or conversation case), matrix or dotted in its place",
 		Effect:  app.OperationEffectView, Writes: []string{resTab}, Agents: true,
 		Gesture: "the detail pane's tab buttons", Rebuild: app.OperationRebuildVolatile},
 		func(inst *App, _ app.OperationCall, in SetTabArgs) (out appops.None, err error) {
 			t, ok := ParseTab(in.Tab)
 			if !ok {
-				err = app.RefuseOperation("tab is one of fields, previous, context, compare")
+				err = app.RefuseOperation("tab is one of " + tabNameList())
 				return
 			}
-			inst.tab = t
+			if !t.availableFor(inst.caseValue.Kind) {
+				err = app.RefuseOperation("the tree tab is drawn for a task or a conversation case only; set_case one first")
+				return
+			}
+			inst.applyTab(t)
 			return
 		})
 
@@ -1006,5 +1081,5 @@ func (inst *App) selectGesture(id uint64) {
 }
 
 func (inst *App) setTabGesture(t TabE) {
-	gestureOr(inst, opSetTab, SetTabArgs{Tab: t.String()}, func() { inst.tab = t })
+	gestureOr(inst, opSetTab, SetTabArgs{Tab: t.String()}, func() { inst.applyTab(t) })
 }

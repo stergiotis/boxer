@@ -139,7 +139,7 @@ func refusal(err error) (r *app.OperationRefusal) {
 	return
 }
 
-var allOps = []string{opListRows, opGetRow, opGetPrevious, opGetVerdict, opGetView, opGetExc, opSetCase, opSetRange, opSetFilter, opSelectRow, opSetTab}
+var allOps = []string{opListRows, opGetRow, opGetPrevious, opGetVerdict, opGetView, opGetExc, opGetTree, opSetCase, opSetRange, opSetFilter, opSelectRow, opSetTab}
 
 func TestOperationsCatalogRegisters(t *testing.T) {
 	require.NoError(t, manifest.Operations.Validate())
@@ -154,7 +154,7 @@ func TestOperationsCatalogRegisters(t *testing.T) {
 			assert.Equal(t, app.OperationEffectView, spec.Effect, name)
 		}
 	}
-	for _, name := range []string{opListRows, opGetRow, opGetPrevious, opGetView, opGetExc} {
+	for _, name := range []string{opListRows, opGetRow, opGetPrevious, opGetView, opGetExc, opGetTree} {
 		spec, _ := m.Operations.Lookup(name)
 		assert.True(t, spec.Untrusted, "%s returns row text", name)
 	}
@@ -325,7 +325,11 @@ func TestViewCommandsSetAndNeverToggle(t *testing.T) {
 		require.NoError(t, command(t, inst, opSetTab, SetTabArgs{Tab: "previous"}))
 		assert.Equal(t, TabPrevious, inst.tab)
 	}
-	assert.NotNil(t, refusal(command(t, inst, opSetTab, SetTabArgs{Tab: "tree"})))
+	assert.NotNil(t, refusal(command(t, inst, opSetTab, SetTabArgs{Tab: "sideways"})))
+	// The tree tab exists for a chained case, the task here.
+	require.NoError(t, command(t, inst, opSetTab, SetTabArgs{Tab: "tree"}))
+	assert.Equal(t, TabTree, inst.tab)
+	require.NoError(t, command(t, inst, opSetTab, SetTabArgs{Tab: "previous"}))
 
 	v, err := query[struct{}, View](t, inst, opGetView, struct{}{})
 	require.NoError(t, err)

@@ -80,6 +80,16 @@ func probeSql(t *testing.T) string {
 	section("exceptions", m.exceptionsSQL(q, lower, look))
 	section("reviews", m.reviewsSQL(q, lower))
 	section("as of", m.asOfSQL("rule:r-1", to, look))
+	// The analytic views (ADR-0350 §SD11): the matrix over the timeline and
+	// over the audit-event mart, each under the filter; the dotted chart by
+	// a timeline row and by entity, at the strip's bucket size.
+	section("matrix app × operation", m.matrixSQL(q, ActorApp, ObjectOperation))
+	section("matrix window × operation, no filter", m.matrixSQL(listQuery{Case: q.Case, From: from, To: to}, ActorWindow, ObjectOperation))
+	section("matrix principal × entity", m.matrixSQL(q, ActorPrincipal, ObjectEntity))
+	section("matrix app × subject, no filter", m.matrixSQL(listQuery{Case: q.Case, From: from, To: to}, ActorApp, ObjectSubject))
+	section("dotted by window", m.dottedSQL(q, DottedWindow, time.Minute))
+	section("dotted by conversation", m.dottedSQL(listQuery{Case: Case{Kind: CaseConversation, Value: "conv-1"}, From: from, To: to}, DottedConversation, time.Minute))
+	section("dotted by entity", m.dottedSQL(q, DottedEntity, time.Minute))
 	return b.String()
 }
 

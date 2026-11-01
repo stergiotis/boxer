@@ -77,7 +77,10 @@ convention above, a **verdict line** per writer run, a named **exception
 list**, and **review marks** written back to the trail as audit events in a
 `review` domain. Chat opens it on a conversation; play's marts stay the SQL
 route. The widgets it needs that do not exist are built as text first and
-painted later.
+painted later. A launch config names the case, and optionally a window, a
+tab and a saved view; one the viewer cannot read is ignored with a
+diagnostic in the window rather than failing the mount, as the app
+center's is.
 
 ### SD1 — A case is a correlation key, and the set is fixed here
 
@@ -124,10 +127,12 @@ same shape.
   reported as undeclared, nor as missing, and need no declaration; a stale
   trail view is found by its stamp, as before.
   Play's vocabulary panel lists every non-system function an endpoint
-  carries, so it shows the `TRAIL_` names as undeclared on an endpoint
-  with the trail views; registering them as server-side names there is
-  M4's, since it must not report them missing where no facts table
-  exists.
+  carries, so play registers the four `TRAIL_` names as a server family,
+  *trail views*, from the roster `trailviews.Functions` exports, and an
+  endpoint with the trail views lists them under it rather than as
+  undeclared. `sqlvocab.Function` cannot mark a family optional per
+  endpoint, so an endpoint without the trail views reports them missing,
+  because that is a true statement about the endpoint.
 - **One column on `dm_trail_audit_events`.** `entity`: the first
   reference as `type:value`, or `''`. The convention of ADR-0296's
   2026-10-31 entry makes the first reference the entity a state-changing
@@ -202,7 +207,9 @@ The window is a case selector and the time range picker
   for the case where the filter hid what explains a row.
 - **A tree tab**, present only when the case carries a chain (task,
   conversation): the `tree` widget over `parent-ref`, each node its
-  headline, elapsed and status as text. It is assertable by a scene. A
+  headline, elapsed and status as text. It is assertable by a scene. A row
+  whose parent is not among the rows held is a root, and the selection is
+  the table's. A
   painted span tree with lanes and connectors is deferred (SD10).
 
 What the survey found about overviews is followed: a dense table with
@@ -309,9 +316,14 @@ under an agentic case), `get_verdict` (SD6's lines for a run),
 command of effect `consequential`, person-only: `mark_row`. Resources:
 `case`, `range`, `filter`, `selection`, `tab`. Queries answer from the
 cache the snapshot took and never wait on the store, as the log viewer's
-do. Until the tree tab of M4, `tab` is the detail pane's tab — fields,
-previous, context, compare — and `get_previous` answers for the selected
-row, whose read the window has made.
+do. `tab` is the window's tab: one of the detail pane's — fields,
+previous, context, compare — under which the central area shows the
+table, or an analytic view of SD4 and SD11 — tree, matrix, dotted — which
+takes the table's place while the detail pane shows the fields; so the
+tree is a value of the one resource, not a second one. `get_previous`
+answers for the selected row, whose read the window has made; `get_tree`
+answers from the rows held, for a task or conversation case; `get_view`
+also lists the saved views' names.
 
 ### SD9 — Labels, time, bodies, export, old rows
 
@@ -328,7 +340,9 @@ row, whose read the window has made.
   one is in range; *erased*, from the journal's mark.
 - **Export.** The table publishes to play as an ad-hoc dataset
   ([ADR-0134](./0134-adhoc-datasets.md)), which keeps sort and search and
-  is itself a trail row. No file export.
+  is itself a trail row; *Send to play* publishes the table's record under
+  the window's own alias and opens a play window reading it, as chat's
+  Analytics does. No file export.
 - **Rows of the retired `audit` kind**, written before 2026-10-30, are
   not read.
 
@@ -377,6 +391,13 @@ The matrix follows the survey's finding that matrices beat node-link
 diagrams past about twenty nodes; the dotted chart is the one per-event
 form that needs no cause chain and degrades to a density. Each view
 states its bucket size and whether a bucket is saturated.
+A principal, a data subject and an entity are an audit event's own
+columns, so a matrix with one of them on an axis reads the audit-event
+mart and counts the case's audit events only, and says so; *operation* is
+the timeline's subject, `domain.action` for an audit event. The dotted
+chart bins at the strip's bucket size rather than the display's, so the
+two read the same buckets, and sizes its marks in four steps by the
+square root of the count.
 
 ## Surfaces — Tier 1
 
@@ -386,9 +407,10 @@ states its bucket size and whether a bucket is saturated.
 | `audit` package constants | added: `ReviewDomain`, its three actions, the `trail-row` reference type, the `reason` and `rule` attribute keys | nothing; values, not memberships |
 | Exported Go API under `public/`: `keelson/runtime/trailviewer` | added: the app, its launch config codec, its catalog argument and result types, the verdict vocabulary package | `keelson('app_operations')` gains its rows |
 | ADR-0345 | a dated entry: one system-app command with effect `consequential`, person-only | — |
-| chat | an *Open trail* on a conversation, launching the viewer with a case | — |
+| chat | an *Open in trail viewer* on a conversation in the Analytics tab, launching the viewer with a case (the header's *Open trail*, which opens play on the timeline, predates it and stays) | — |
+| keelson vocabulary (`vdd`) | added: the `tvLaunch` cohort, the launch config's seven memberships | the assignments golden |
 | env-var registry (ADR-0009) | added: `BOXER_TRAILVIEWER_REFRESH`, `BOXER_TRAILVIEWER_ROWS`, `BOXER_TRAILVIEWER_LOOKBACK` | `doc/env-vars.md` regenerates |
-| persist store | added: the viewer's saved views, under its app id | nothing; app-owned entries |
+| persist store | added: the viewer's saved views, one JSON document under its app id; two windows saving at once keep the later write | nothing; app-owned entries |
 
 ## Alternatives
 
