@@ -986,6 +986,94 @@ FROM values(
 )
 ```
 
+## Bow-tie (threats, barriers, consequences)
+
+A result naming `top_event`, `side` and `path` renders as a bow-tie in the
+**Bow-tie** tab (ADR-0122's 2026-11-01 update): threats on the left, the
+prevention barriers each passes in series, the top event in the centre, the
+mitigation barriers in series after it, and the consequences on the right. One
+row is one element of a path: `side` is `prevention` for a threat's path and
+`mitigation` for a consequence's, `step` orders the barriers along the path
+(1 nearest the threat, or nearest the top event on the right), and a row with
+a NULL `step` and `barrier` names a path with no barrier yet. `status` is
+`effective`, `degraded`, `failed` or `untested`, drawn as a colour, an icon and
+a label together; `evidence` is shown when you hover a barrier. A path with
+fewer barriers keeps them next to the top event, so a column of barriers is
+the same distance from it on every path. Clicking a barrier selects its row,
+so Detail and Table follow. Table-free; the figures are illustrative.
+
+```sql
+WITH 'Ransomware encrypts core ERP' AS top_event
+SELECT top_event, side, path, step, barrier, status, evidence
+FROM values('side String, path String, step UInt8, barrier String, status String, evidence String',
+  ('prevention', 'Phishing steals credentials',   1, 'MFA on all remote access',                'effective', 'Tested 12 Sep · 0 bypasses in 40 attempts'),
+  ('prevention', 'Phishing steals credentials',   2, 'Mail filtering and sandbox',              'degraded',  'Tested 3 Aug · 6 of 50 test payloads delivered'),
+  ('prevention', 'Unpatched VPN appliance',       1, 'Known-exploited patches within 14 days',  'degraded',  '6 critical patches overdue'),
+  ('prevention', 'Supplier remote access abused', 1, 'Supplier access through PAM only',        'untested',  'No test recorded since Jul last year'),
+  ('prevention', 'Supplier remote access abused', 2, 'Session recording and review',            'failed',    'Tested 20 Sep · 3 of 10 sessions unrecorded'),
+  ('mitigation', 'Production halt over 48 h',     1, 'Offline backups, restore drill',          'degraded',  'Restore tests 92% passed, appetite 95%'),
+  ('mitigation', 'Production halt over 48 h',     2, 'Manual order fallback',                   'effective', 'Exercised 14 Jun · 6 h to switch'),
+  ('mitigation', 'Notification deadline missed',  1, 'Incident playbook with 24 h report step', 'effective', 'Tabletop 2 Oct · report drafted in 9 h'),
+  ('mitigation', 'Data leaked for extortion',     1, 'Egress monitoring and EDR containment',   'failed',    'Red team 18 Sep · exfiltration undetected for 11 h'))
+```
+
+## Risk matrix (likelihood and impact as ranges)
+
+A result naming `id`, `p_lo`, `p_hi`, `impact_lo` and `impact_hi` renders as a
+risk matrix in the **Risk matrix** tab (ADR-0122's 2026-11-01 update): one row
+per risk, likelihood per year and impact as ranges, all numeric and positive.
+`name` is optional, and the four `inherent_*` columns — all or none — add the
+rating before controls, drawn as arrows when **Show inherent → residual** is
+ticked. The banded reading places each risk by the geometric midpoints of its
+ranges and shades a cell by the expected annual loss at its centre; the
+continuous reading drops the bands and draws each range as a box. The bands
+are 1%, 3%, 10% and 30% a year and steps of five from €100k — a binning of the
+ranges, not a property of the data. Hovering a risk shows its ranges; clicking
+it selects its row, so Detail and Table follow. Table-free; the figures are
+illustrative.
+
+```sql
+SELECT *
+FROM values('id String, name String, p_lo Float64, p_hi Float64, impact_lo Float64, impact_hi Float64,
+             inherent_p_lo Float64, inherent_p_hi Float64, inherent_impact_lo Float64, inherent_impact_hi Float64',
+  ('R1', 'Ransomware encrypts core ERP',   0.03,  0.15, 800e3,  12e6, 0.10,  0.35, 1.5e6, 25e6),
+  ('R2', 'Cloud region outage over 24 h',  0.02,  0.08, 200e3,   3e6, 0.02,  0.08, 600e3,  6e6),
+  ('R3', 'Key supplier insolvency',        0.05,  0.20, 300e3,   4e6, 0.05,  0.20,   1e6, 10e6),
+  ('R4', 'Payment fraud via fake invoice', 0.20,  0.60,  20e3, 400e3, 0.40,  0.90,  50e3, 900e3),
+  ('R5', 'Customer data breach',           0.02,  0.10, 500e3,  20e6, 0.05,  0.20,   1e6, 30e6),
+  ('R6', 'Late incident reporting fine',   0.01,  0.05, 100e3,   5e6, 0.04,  0.15, 100e3,  5e6),
+  ('R7', 'Loss of platform lead',          0.10,  0.30,  50e3, 600e3, 0.15,  0.40,  80e3, 900e3),
+  ('R8', 'Warehouse fire',                 0.002, 0.01,   2e6,  40e6, 0.004, 0.02,   3e6, 60e6))
+```
+
+## Impact tolerance (services under scenarios)
+
+A result naming `service`, `tolerance_hours`, `scenario` and `recovery_hours`
+renders in the **Impact tolerance** tab (ADR-0122's 2026-11-01 update): one row
+per service and scenario, the long form an exercise produces. Each service's
+tolerance — the longest disruption it may suffer — repeats on its rows; the
+first row's wins, and a disagreement is counted in the status line. Services
+and scenarios keep their first-seen order, so the query decides the rows and
+the legend. A NULL `recovery_hours` is a pair with no estimate yet, and a row
+with a NULL `scenario` lists a service with none at all. The region past each
+tolerance is shaded and each row says how many scenarios breach it. Hovering
+an estimate shows it against the tolerance; clicking it selects its row.
+
+The block keeps one array of estimates per service and unfolds it with `ARRAY
+JOIN`, which is the shape of a table filled in by hand. Table-free; the figures
+are illustrative.
+
+```sql
+WITH ['Ransomware', 'Cloud region outage', 'Key supplier failure'] AS scenarios
+SELECT service, tolerance_hours, scenarios[k] AS scenario, estimates[k] AS recovery_hours
+FROM values('service String, tolerance_hours Float64, estimates Array(Float64)',
+  ('Order intake',       24, [72, 10,  4]),
+  ('Warehouse dispatch', 12, [48,  6, 30]),
+  ('Payroll',            72, [60,  8,  2]),
+  ('Customer support',   48, [30, 20,  1]))
+ARRAY JOIN arrayEnumerate(estimates) AS k
+```
+
 ## Chat transcript (messages, replies, reactions)
 
 A result naming a `ts`, a `sender` and a `body` column renders as a message

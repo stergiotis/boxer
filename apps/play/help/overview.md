@@ -74,6 +74,12 @@ query* on the Features page):
 - **World** — a schematic world choropleth when the result names countries
   (ISO codes or names) alongside a numeric column.
 - **Kanban** — the result as cards in lanes, from `lane` and `title` columns.
+- **Bow-tie** — threats, barriers in series, a top event and its consequences,
+  from `top_event`, `side`, `path`, `step`, `barrier` and `status` columns.
+- **Risk matrix** — a risk register as a likelihood × impact matrix, from
+  `id`, `p_lo`, `p_hi`, `impact_lo` and `impact_hi` columns.
+- **Impact tolerance** — services against their impact tolerances under named
+  scenarios, from `service`, `tolerance_hours`, `scenario` and `recovery_hours`.
 - **Chat** — a message transcript, from `ts`, `sender` and `body`.
 - **Cards** — a paged grid of cards, from `card_*` columns.
 - **Network** — a node-link graph, ranked top-down or left-right, from a CTE

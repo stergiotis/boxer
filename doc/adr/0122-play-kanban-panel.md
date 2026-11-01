@@ -526,3 +526,126 @@ carries it, and `SELECT *` propagates it to the Detail pane with no alias
 written at all. The convention needed no change to work in that position — it
 is a column name that requires backticks either way, and clickhouse-local
 rejects it unquoted rather than reading `@` as anything plausible.
+
+### 2026-11-01 — a Bow-tie pane on the same contract
+
+A second pane renders the active result through §SD1's contract, as a bow-tie
+diagram: threats, prevention barriers in series, one top event, mitigation
+barriers in series, consequences (`play_bowtie_panel.go`, over
+`widgets/bowtie`). The decision this records is the column contract, which a
+reader of this ADR should find beside the board's.
+
+One row per element of a path, columns by name:
+
+| column | type | required | meaning |
+| --- | --- | --- | --- |
+| `top_event` | any | yes | the loss the diagram is about; one value across the result |
+| `side` | any | yes | `prevention` (a threat's path) or `mitigation` (a consequence's) |
+| `path` | any | yes | the threat or consequence |
+| `step` | integer | with `barrier` | the barrier's place along its path; NULL on a row naming a path with no barrier |
+| `barrier` | any | no | the barrier's name; NULL with the step |
+| `status` | any | with `barrier` | `effective`, `degraded`, `failed` or `untested`; empty is untested |
+| `evidence` | any | no | the test behind the status, shown on hover |
+
+Barriers are ordered by `step`, which need only be distinct on its path, and
+paths by first-seen row, so `ORDER BY` decides the vertical order of each side
+as it decides the board's lanes. `step` alone is typed, for §SD1's dot reason:
+it is an order, and a fractional one has no meaning.
+
+**One row per element, not the Network's `edges`/`vertices` pair.** A
+bow-tie's edges are implied by `side` and `step`, and its layers by the same
+two columns, so a nodes-and-edges contract would ask the query to spell
+twice what it already says once, and give it two places to disagree. The
+Network contract also leaves the layering to Graphviz, which ranks the threat
+of a short path closer to the top event than the threat of a long one. The
+widget pins the layers instead, with the `Node.Rank` that
+[ADR-0069](./0069-imzero2-layeredgraph-widget.md)'s 2026-11-01 update adds.
+
+**Refusals, not guesses.** A `barrier` column without `step` or `status` is a
+schema rejection. `status` is required because the alternative is to draw
+every barrier as untested, which asserts something the query did not say.
+Two different `top_event` values, an unknown `side` or `status` word, and two
+barriers at one step of one path are data rejections that name the row. The
+pane reads at most 400 rows and counts the rest in its status line.
+
+A click on a barrier writes `selection` for that barrier's row, and a click on
+a threat or consequence writes it for the first row naming the path. The top
+event is not one row and publishes nothing. Like the World pane, the diagram
+does not paint a selection, so it does not follow the signal (§SD3's reasoning
+applies only to a pane that paints one).
+
+`path` is also the Files pane's one required column (ADR-0200), so a bow-tie
+result is offered there too, as a tree of paths. That is a property of
+named-column contracts sharing a vocabulary, which §Consequences anticipated.
+
+The worked example is the Snippets library's "Bow-tie" section: three
+threats, three consequences and nine barriers from inline `values()` rows.
+`apps/play/scenes/38_bowtie.scene.md` runs it and captures the pane.
+
+### 2026-11-01 — Risk matrix and Impact tolerance: two more panes on §SD1
+
+Two further panes read the active result through §SD1's contract, each over a
+widget of its own: **Risk matrix** (`play_riskmatrix_panel.go`, over
+`widgets/riskmatrix`) and **Impact tolerance** (`play_tolerance_panel.go`,
+over `widgets/impacttolerance`). Both write `selection` for the clicked row
+and, since both paint a selection, follow it (§SD3). As with the Bow-tie
+entry above, the decision recorded here is the column contracts.
+
+Risk matrix, one row per risk:
+
+| column | type | required | meaning |
+| --- | --- | --- | --- |
+| `id` | any | yes | the mark's label |
+| `name` | any | no | the key and the tooltip; `id` stands in |
+| `p_lo`, `p_hi` | numeric | yes | likelihood per year, as a range |
+| `impact_lo`, `impact_hi` | numeric | yes | impact if it happens, as a range |
+| `inherent_p_lo`, `inherent_p_hi`, `inherent_impact_lo`, `inherent_impact_hi` | numeric | all four or none | the same before controls; NULL on a row with no inherent rating |
+
+Impact tolerance, one row per service and scenario:
+
+| column | type | required | meaning |
+| --- | --- | --- | --- |
+| `service` | any | yes | the row; first-seen order is row order |
+| `tolerance_hours` | numeric | yes | the longest disruption the service may suffer, repeated on each of its rows |
+| `scenario` | any | yes | first-seen order is legend order; NULL lists a service with no estimate |
+| `recovery_hours` | numeric | yes | the estimated time to recover; NULL is no estimate |
+
+**Numbers are typed and must be positive.** The ranges are drawn on log axes,
+so §SD2's reasoning for typed tallies applies: a textual likelihood is not a
+weaker matrix but a meaningless one. A row whose residual range is not
+positive is skipped and counted in the status line rather than drawn at an
+invented place. A range written high to low is read as a range.
+
+**A partial inherent rating is a rejection**, for the reason `dot_done@` is: a
+query that names two of the four columns has a typo, not a half-rating.
+
+**The tolerance contract is long form**, one row per estimate, because that is
+what an exercise records and what a join produces. The wide form — one column
+per scenario — was rejected on §SD1's grounds: scenario names would become
+column names, and the pane would have to tell estimate columns from the rest
+by position or by a prefix grammar. The tolerance repeats on each of a
+service's rows; the first row's is drawn and a disagreement is counted.
+
+**Bands are the widget's, not the contract's.** The matrix's banding — the
+edges, their labels and the shade boundaries — is a rendering choice over the
+stored ranges (`riskmatrix.Bands`), and the pane draws the defaults. A cell's
+shade is the expected annual loss at the cell's geometric centre, never a
+product of ordinal scores. deferred: declaring band edges from the query, in
+the manner of §SD6's `lanes` CTE.
+
+**Every mark the three panes draw is a hit region** (ADR-0149's 2026-11-01
+hit regions): a risk dot, a banded cell, an estimate, a tolerance line, a
+bow-tie node. The host shows the tooltip at the mark and gives the mark an
+accessibility node named for what it stands for — `R8 · Warehouse fire`, a
+barrier's name, `Warehouse dispatch · Key supplier failure` — so the scenes
+hover by name rather than at a point read off a capture, which went stale
+whenever the layout moved. The data marks are Tab stops, and Enter on one is
+a click, so the selection these panes write can be made from the keyboard. A
+canvas-wide `c.HoverUi` (and, for the bow-tie, `c.HoverText`) was the stopgap
+before hit regions existed; it put the tooltip under the canvas's corner and
+named no mark.
+
+The worked examples are the Snippets library's "Risk matrix" and "Impact
+tolerance" sections, inline `values()` rows of eight risks and of four
+services under three scenarios. `apps/play/scenes/38_risk_matrix.scene.md`
+and `38_impact_tolerance.scene.md` run them and capture each pane.

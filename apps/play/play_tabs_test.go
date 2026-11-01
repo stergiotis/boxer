@@ -24,13 +24,13 @@ func tabsTestApp() *PlayApp {
 func TestDefaultTabsEnumeration(t *testing.T) {
 	reg := tabsTestApp().Tabs()
 	specs := reg.all()
-	require.Len(t, specs, 32)
+	require.Len(t, specs, 35)
 
 	wantDockID := map[string]uint64{
 		"editor": dockTabEditor, "history": dockTabHistory, "preview": dockTabPreview,
 		"table": dockTabTable, "projection": dockTabProjection, "timeline": dockTabTimeline,
 		"snippets": dockTabSnippets, "map": dockTabMap, "vectorfield": dockTabVectorField, "world": dockTabWorld,
-		"kanban": dockTabKanban, "chat": dockTabChat, "cards": dockTabCards, "network": dockTabNetwork, "graphview": dockTabGraphview,
+		"kanban": dockTabKanban, "bowtie": dockTabBowtie, "riskmatrix": dockTabRiskMatrix, "tolerance": dockTabTolerance, "chat": dockTabChat, "cards": dockTabCards, "network": dockTabNetwork, "graphview": dockTabGraphview,
 		"sankey": dockTabSankey,
 		"dist":   dockTabDist, "icicle": dockTabIcicle, "series": dockTabSeries,
 		"treemap": dockTabTreemap, "chart": dockTabChart, "files": dockTabFiles,
@@ -84,14 +84,14 @@ func TestDefaultTabsEnumeration(t *testing.T) {
 			panelIDs = append(panelIDs, s.ID)
 		}
 	}
-	assert.ElementsMatch(t, []string{"table", "projection", "timeline", "vectorfield", "world", "kanban", "chat", "cards", "network", "graphview",
+	assert.ElementsMatch(t, []string{"table", "projection", "timeline", "vectorfield", "world", "kanban", "bowtie", "riskmatrix", "tolerance", "chat", "cards", "network", "graphview",
 		"sankey", "dist", "icicle", "series", "treemap", "chart", "files", "schema", "detail"},
 		panelIDs, "chrome registers with a nil PanelI (SD7)")
 
 	// Presentation order per zone. Docs stays first among the tools so a
 	// fresh layout opens on it.
 	assert.Equal(t, []uint64{dockTabTable, dockTabProjection, dockTabTimeline,
-		dockTabMap, dockTabVectorField, dockTabWorld, dockTabKanban, dockTabChat, dockTabCards, dockTabNetwork, dockTabGraphview, dockTabSankey, dockTabDist, dockTabIcicle,
+		dockTabMap, dockTabVectorField, dockTabWorld, dockTabKanban, dockTabBowtie, dockTabRiskMatrix, dockTabTolerance, dockTabChat, dockTabCards, dockTabNetwork, dockTabGraphview, dockTabSankey, dockTabDist, dockTabIcicle,
 		dockTabSeries, dockTabTreemap, dockTabChart, dockTabFiles, dockTabGraph, dockTabSchema},
 		dockIDsOf(reg.byZone(TabZoneBody)))
 	assert.Equal(t, []uint64{dockTabDocs, dockTabPreview, dockTabFlow, dockTabPasses,
@@ -111,19 +111,20 @@ func TestTabRegistryMutationAndFreeze(t *testing.T) {
 	require.Error(t, reg.Add(TabSpec{ID: "table", DockID: 64, Render: noop}), "duplicate ID")
 	require.Error(t, reg.Add(TabSpec{ID: "x", DockID: dockTabTable, Render: noop}), "duplicate DockID")
 
+	builtins := len(reg.all())
 	require.NoError(t, reg.Add(TabSpec{ID: "x", DockID: 64, Title: "X", Render: noop}))
-	require.Len(t, reg.all(), 33)
-	assert.Equal(t, TabZoneBody, reg.all()[32].Zone, "embedder tabs default to the body zone")
+	require.Len(t, reg.all(), builtins+1)
+	assert.Equal(t, TabZoneBody, reg.all()[builtins].Zone, "embedder tabs default to the body zone")
 
 	// Replace keeps the position and re-validates against the others.
 	require.Error(t, reg.Replace("x", TabSpec{ID: "table", DockID: 64, Render: noop}),
 		"replacement must not collide with another tab")
 	require.NoError(t, reg.Replace("x", TabSpec{ID: "y", DockID: 65, Title: "Y", Render: noop}))
-	assert.Equal(t, "y", reg.all()[32].ID)
+	assert.Equal(t, "y", reg.all()[builtins].ID)
 	require.Error(t, reg.Replace("x", TabSpec{ID: "z", DockID: 66, Render: noop}), "x is gone")
 
 	require.NoError(t, reg.Remove("y"))
-	require.Len(t, reg.all(), 32)
+	require.Len(t, reg.all(), builtins)
 	require.Error(t, reg.Remove("y"), "already removed")
 
 	reg.freeze()

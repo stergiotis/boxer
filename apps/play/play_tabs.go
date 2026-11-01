@@ -408,6 +408,20 @@ var builtinTabDefs = []builtinTabDef{
 		writes: []SignalID{signalSelection, signalSelectionCountry}},
 	{id: "kanban", dockID: dockTabKanban, title: "Kanban", lazy: true, shapeContract: true,
 		writes: []SignalID{signalSelection}},
+	// The Bow-tie tab draws the result as threats, barriers, a top event and
+	// consequences (ADR-0122's 2026-11-01 update): named columns, one row per
+	// element of a path. Barrier and path rows ARE result rows, so a click
+	// writes the ordinary row cursor.
+	{id: "bowtie", dockID: dockTabBowtie, title: "Bow-tie", lazy: true, shapeContract: true,
+		writes: []SignalID{signalSelection}},
+	// The Risk matrix and Impact tolerance tabs draw a risk register and a
+	// services-under-scenarios table (ADR-0122's 2026-11-01 update): named
+	// columns, a risk or an estimate per row, so a click writes the ordinary
+	// row cursor.
+	{id: "riskmatrix", dockID: dockTabRiskMatrix, title: "Risk matrix", lazy: true, shapeContract: true,
+		writes: []SignalID{signalSelection}},
+	{id: "tolerance", dockID: dockTabTolerance, title: "Impact tolerance", lazy: true, shapeContract: true,
+		writes: []SignalID{signalSelection}},
 	// The Chat tab draws the result as a message transcript (ADR-0239): a
 	// named-column contract like the board's, with two optional CTEs.
 	{id: "chat", dockID: dockTabChat, title: "Chat", lazy: true, shapeContract: true,
@@ -727,6 +741,27 @@ func defaultTabs(inst *PlayApp) (reg *TabRegistry) {
 		case "kanban":
 			spec.Panel = kanbanPanel{driver: inst.kanbanDriver}
 			spec.Render = func(f *TabFrame) { inst.renderKanbanTab(f.Rec, f.Schema, f.Loading, f.Err, f.Executed) }
+		case "bowtie":
+			// Scrolled, for the Network tab's reason: the canvas is sized from
+			// the pane probe, and a pane shorter than the drawing's floor
+			// scrolls rather than clips.
+			spec.Panel = bowtiePanel{driver: inst.bowtieDriver}
+			spec.Render = func(f *TabFrame) {
+				scrollTab(func() { inst.renderBowtieTab(f.Rec, f.Schema, f.Loading, f.Err, f.Executed) })
+			}
+		case "riskmatrix":
+			// Scrolled: the canvas is sized from the pane probe with a floor,
+			// and a pane shorter than the floor scrolls rather than clips.
+			spec.Panel = riskMatrixPanel{driver: inst.riskMatrixDriver}
+			spec.Render = func(f *TabFrame) {
+				scrollTab(func() { inst.renderRiskMatrixTab(f.Rec, f.Schema, f.Loading, f.Err, f.Executed) })
+			}
+		case "tolerance":
+			// Scrolled: the chart's height follows its rows, not the pane.
+			spec.Panel = tolerancePanel{driver: inst.toleranceDriver}
+			spec.Render = func(f *TabFrame) {
+				scrollTab(func() { inst.renderToleranceTab(f.Rec, f.Schema, f.Loading, f.Err, f.Executed) })
+			}
 		case "chat":
 			spec.Panel = chatPanel{app: inst}
 			spec.Render = func(f *TabFrame) { inst.renderChatTab(f.Rec, f.Schema, f.Loading, f.Err, f.Result) }
