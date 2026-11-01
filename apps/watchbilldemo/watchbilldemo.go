@@ -17,6 +17,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/rs/zerolog"
@@ -65,6 +66,8 @@ type App struct {
 	// dirty asks the poller for a refresh now; one pending is enough.
 	dirty chan struct{}
 	wg    sync.WaitGroup
+	// paused stops the poller's reads while the window is paused (ADR-0354).
+	paused atomic.Bool
 
 	// The controls, bound to stable fields.
 	durationSec  float64
@@ -82,6 +85,7 @@ type App struct {
 }
 
 var _ app.AppI = (*App)(nil)
+var _ app.PausableAppI = (*App)(nil)
 
 var backoffChoices = []string{watchbillstore.BackoffNone, watchbillstore.BackoffLinear, watchbillstore.BackoffExponential}
 
@@ -148,6 +152,15 @@ func (inst *App) Frame(ctx app.FrameContextI) (err error) {
 
 // --- the bus side, off the frame goroutine --------------------------
 
+// SetPaused stops the poller's reads while the person has paused the window,
+// and reads at once on the resume (ADR-0354 §SD2).
+func (inst *App) SetPaused(paused bool) {
+	inst.paused.Store(paused)
+	if !paused {
+		inst.markDirty()
+	}
+}
+
 func (inst *App) markDirty() {
 	select {
 	case inst.dirty <- struct{}{}:
@@ -166,6 +179,9 @@ func (inst *App) poll() {
 			return
 		case <-ticker.C:
 		case <-inst.dirty:
+		}
+		if inst.paused.Load() {
+			continue
 		}
 		inst.refresh()
 	}

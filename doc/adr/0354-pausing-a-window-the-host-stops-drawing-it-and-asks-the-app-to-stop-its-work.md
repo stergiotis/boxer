@@ -74,6 +74,18 @@ is its choice. An app that does not implement it only stops drawing; the
 empty state says its background work continues. Tasks are not cancelled:
 that is closing, not pausing.
 
+Which apps implement it follows from where their background work runs:
+
+- **A poller per window** stops reading while paused and reads at once on
+  the resume: the app center, the app-state manager, the watchbill window
+  and its demo.
+- **Work driven from `Frame`** stops with it and needs nothing: the log
+  viewer and the trail viewer refresh from their `Frame`.
+- **A process-wide sampler** keeps running: imztop's and imzrt's are shared
+  by every window of the app, and imzrt's records while every window is
+  hidden so its history has no gap. One window's pause does not stop what
+  every window reads.
+
 ### SD3 — Commands are refused, queries answered
 
 While a window is paused its operations engine refuses every command with
@@ -190,6 +202,8 @@ the host.
   paused, and reads at once on the resume.
 - **M2 — Offered elsewhere.** SD4's Running tab, with the paused rows and
   the filter's "paused", and the slow-window notice's Pause.
+- **M3 — The pollers.** SD2's per-window pollers: the app-state manager,
+  the watchbill window and its demo.
 
 ## Status
 

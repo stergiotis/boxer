@@ -13,6 +13,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/rs/zerolog"
@@ -108,6 +109,8 @@ type App struct {
 	cancelApp context.CancelFunc
 	dirty     chan struct{}
 	wg        sync.WaitGroup
+	// paused stops the poller's reads while the window is paused (ADR-0354).
+	paused atomic.Bool
 
 	// The frame's own state.
 	selected string
@@ -124,6 +127,7 @@ type App struct {
 }
 
 var _ app.AppI = (*App)(nil)
+var _ app.PausableAppI = (*App)(nil)
 
 func newApp() (inst *App) {
 	inst = &App{ids: c.NewWidgetIdStack(), density: styletokens.ActiveDensity(), dirty: make(chan struct{}, 1)}
@@ -172,6 +176,15 @@ func (inst *App) Frame(ctx app.FrameContextI) (err error) {
 
 // --- the bus side, off the frame goroutine --------------------------------
 
+// SetPaused stops the poller's reads while the person has paused the window,
+// and reads at once on the resume (ADR-0354 §SD2).
+func (inst *App) SetPaused(paused bool) {
+	inst.paused.Store(paused)
+	if !paused {
+		inst.markDirty()
+	}
+}
+
 func (inst *App) markDirty() {
 	select {
 	case inst.dirty <- struct{}{}:
@@ -189,6 +202,9 @@ func (inst *App) poll() {
 			return
 		case <-ticker.C:
 		case <-inst.dirty:
+		}
+		if inst.paused.Load() {
+			continue
 		}
 		inst.refresh()
 	}

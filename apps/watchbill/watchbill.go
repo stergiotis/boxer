@@ -13,6 +13,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/apache/arrow-go/v18/arrow"
@@ -100,6 +101,8 @@ type App struct {
 	unsub     func()
 	dirty     chan struct{}
 	wg        sync.WaitGroup
+	// paused stops the poller's reads while the window is paused (ADR-0354).
+	paused atomic.Bool
 
 	// The frame's own state: the filters, the selection, the text field
 	// binding, which event's error is unfolded, and whether the poller
@@ -140,6 +143,7 @@ type App struct {
 }
 
 var _ app.AppI = (*App)(nil)
+var _ app.PausableAppI = (*App)(nil)
 
 func newApp() (inst *App) {
 	inst = &App{
@@ -274,6 +278,15 @@ func (inst *App) ensureWidths(ctx app.FrameContextI) {
 
 // --- the bus side, off the frame goroutine --------------------------------
 
+// SetPaused stops the poller's reads while the person has paused the window,
+// and reads at once on the resume (ADR-0354 §SD2).
+func (inst *App) SetPaused(paused bool) {
+	inst.paused.Store(paused)
+	if !paused {
+		inst.markDirty()
+	}
+}
+
 func (inst *App) markDirty() {
 	select {
 	case inst.dirty <- struct{}{}:
@@ -296,6 +309,9 @@ func (inst *App) poll() {
 				continue
 			}
 		case <-inst.dirty:
+		}
+		if inst.paused.Load() {
+			continue
 		}
 		inst.refresh()
 	}
