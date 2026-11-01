@@ -99,8 +99,9 @@ var pool = make(map[uint64]*plotState, 8)
 
 // seriesFrame is one item call, held until End so auto-fit sees the whole
 // frame's data before the ranges freeze. Fields beyond xs/ys apply per
-// kind: marker+radius for scatter, width for bars, yref for shaded/stems,
-// neg/pos for error bars. slot is the palette slot assigned per label in
+// kind: marker+radius for scatter, width for bars (the bar height of
+// horizontal ones), yref for shaded/stems/bars (on the x axis for
+// horizontal bars), neg/pos for error bars. slot is the palette slot assigned per label in
 // first-declaration order.
 type seriesFrame struct {
 	kind     seriesKind

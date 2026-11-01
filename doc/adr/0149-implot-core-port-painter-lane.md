@@ -808,3 +808,40 @@ keeps stacking inside the box it stacks into.
 A caller may of course floor higher for readability. It must not floor lower,
 and a round number chosen for comfort is not evidence that it does not — the
 Chart tab's original 80 cleared the real 76 by luck.
+
+## Update 2026-11-01 — horizontal bars, and bars from a base value
+
+`Bars` drew vertical bars from y=0 and nothing else, although the port
+already carried the horizontal counterparts of other items (`ErrorBarsH`,
+`InfLinesH`). A tornado chart — diverging horizontal bars around a baseline
+— therefore had to be painted on a bare canvas, re-implementing the scale,
+ticks and gestures the plot already provides.
+
+Four items now cover it, all emitted from Go as one `paintRectsFilled` per
+series like `Bars`, so no IDL, binding or host change:
+
+- `BarsH(label, xs, ys, height)` — bars centred on `ys`, running from x=0 to
+  `xs[i]`. The slices keep the `(xs, ys)` order of every other item, so the
+  values come first: upstream's `PlotBars` with `ImPlotBarsFlags_Horizontal`
+  orders them the same way, as does `ErrorBarsH`.
+- `BarsRef(..., yref)` and `BarsHRef(..., xref)` — the same bars drawn from a
+  reference value instead of 0, a house extension (upstream's bars always
+  start at 0). A value below the reference draws toward
+  lower values, so a tornado is two `BarsHRef` series around one baseline.
+  `Bars` and `BarsH` are the `Ref` forms at 0; `Bars` keeps its signature and
+  output.
+
+A separate `H` function was chosen over an orientation flag because that is
+how the port already spells orientation; a `Ref` twin over a base parameter
+on `BarsH` because it keeps the two orientations symmetric and `Bars`
+unchanged. Auto-fit covers each bar's body (position ± size/2) and the
+reference value, which every bar touches. Bars still contribute their body
+and reference to the fit while hidden from the legend, as `Bars` always did;
+`ErrorBars` and `ShadedBetween` do not. That inconsistency predates this
+entry and is left as it was.
+
+**Deferred, not killed:** a per-point radius for `Scatter`, so that
+count-sized points need no `Custom` closure. `paintMarkers` carries one
+radius per opcode, so doing it in Go means one opcode per distinct radius;
+doing it properly means a radius slice on the opcode, which is an IDL change
+and a decision of its own.

@@ -422,32 +422,8 @@ func (p *Plot) emitSeries(s *seriesFrame, tr transform, areaX, areaY, areaW, are
 			ra = 3.5
 		}
 		c.PaintMarkers(st.scratchX, st.scratchY, uint8(s.marker), ra, color.Hex(colHex), weight).Send()
-	case kindBars:
-		n := min(len(s.xs), len(s.ys))
-		minXs := make([]float32, 0, n)
-		minYs := make([]float32, 0, n)
-		maxXs := make([]float32, 0, n)
-		maxYs := make([]float32, 0, n)
-		cols := make([]uint32, 0, n)
-		hw := s.width / 2
-		y0px := tr.pxY(0)
-		for i := range n {
-			if math.IsNaN(s.xs[i]) || math.IsNaN(s.ys[i]) {
-				continue
-			}
-			x0 := tr.pxX(s.xs[i] - hw)
-			x1 := tr.pxX(s.xs[i] + hw)
-			y1 := tr.pxY(s.ys[i])
-			top, bot := y1, y0px
-			if top > bot {
-				top, bot = bot, top
-			}
-			minXs = append(minXs, x0)
-			minYs = append(minYs, top)
-			maxXs = append(maxXs, x1)
-			maxYs = append(maxYs, bot)
-			cols = append(cols, colHex)
-		}
+	case kindBars, kindBarsH:
+		minXs, minYs, maxXs, maxYs, cols := barRects(s, tr, colHex)
 		c.PaintRectsFilled(minXs, minYs, maxXs, maxYs, color.ColorsFromU32(cols)).Send()
 	case kindShaded:
 		// Per-segment convex quads: curve segment + its baseline mirror.
@@ -626,6 +602,49 @@ func (p *Plot) emitSeries(s *seriesFrame, tr transform, areaX, areaY, areaW, are
 			s.custom(dc)
 		}
 	}
+}
+
+// barRects projects a bars series (kindBars or kindBarsH) to pixel
+// rectangles, one per drawable bar: the bar spans its position ± width/2 on
+// the position axis and the reference value (yref) to its value on the
+// value axis — x and y for vertical bars, y and x for horizontal ones. A
+// NaN position or value drops the bar. Each rectangle is ordered min/max in
+// pixels, so a bar whose value lies on the far side of the reference draws
+// toward lower values.
+func barRects(s *seriesFrame, tr transform, colHex uint32) (minXs, minYs, maxXs, maxYs []float32, cols []uint32) {
+	n := min(len(s.xs), len(s.ys))
+	minXs = make([]float32, 0, n)
+	minYs = make([]float32, 0, n)
+	maxXs = make([]float32, 0, n)
+	maxYs = make([]float32, 0, n)
+	cols = make([]uint32, 0, n)
+	half := s.width / 2
+	horizontal := s.kind == kindBarsH
+	for i := range n {
+		if math.IsNaN(s.xs[i]) || math.IsNaN(s.ys[i]) {
+			continue
+		}
+		var x0, x1, y0, y1 float32
+		if horizontal {
+			x0, x1 = tr.pxX(s.yref), tr.pxX(s.xs[i])
+			y0, y1 = tr.pxY(s.ys[i]-half), tr.pxY(s.ys[i]+half)
+		} else {
+			x0, x1 = tr.pxX(s.xs[i]-half), tr.pxX(s.xs[i]+half)
+			y0, y1 = tr.pxY(s.yref), tr.pxY(s.ys[i])
+		}
+		if x1 < x0 {
+			x0, x1 = x1, x0
+		}
+		if y1 < y0 {
+			y0, y1 = y1, y0
+		}
+		minXs = append(minXs, x0)
+		minYs = append(minYs, y0)
+		maxXs = append(maxXs, x1)
+		maxYs = append(maxYs, y1)
+		cols = append(cols, colHex)
+	}
+	return minXs, minYs, maxXs, maxYs, cols
 }
 
 // Digital-channel geometry: bit height scaled by the sample value, and the
