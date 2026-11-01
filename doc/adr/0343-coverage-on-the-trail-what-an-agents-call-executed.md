@@ -1,12 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-10-28
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to accepted
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-10-29
 ---
-
-> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
 
 # ADR-0343: Coverage on the trail — the code an agent's call executed, as unit sets over the build, opt-in
 
@@ -368,7 +366,7 @@ unanchored.
 
 ## Update (2026-10-28) — the driver stamp and the jobs gap move to ADR-0344
 
-[ADR-0344](./0344-agent-caused-jobs-in-a-process-of-their-own-and-the-entry-frame-every-stack-carries.md) (proposed) takes two items from this ADR's Deferred list
+[ADR-0344](./0344-agent-caused-jobs-in-a-process-of-their-own-and-the-entry-frame-every-stack-carries.md) takes two items from this ADR's Deferred list
 and the gap §SD5 names. The **driver stamp on the run row** lands there as
 §SD5, first used for a job child. **Jobs** are attributed by running an
 agent-caused job in a process of its own, so the samples this ADR writes
@@ -379,9 +377,37 @@ reason §SD5 gives. Independently of coverage, ADR-0344 §SD1 puts a named
 caller it serves; the bracket of §SD5 now encloses that frame, with `Begin`
 and `End` outside it and the handler inside.
 
+## Update (2026-10-28) — job children, a last sample on close, and two more views
+
+[ADR-0344](./0344-agent-caused-jobs-in-a-process-of-their-own-and-the-entry-frame-every-stack-carries.md)
+§SD5 (proposed) attributes an agent-caused job by running it in a process
+of its own whose run writes the rows of this ADR. Three things changed
+here for it. The coverage producer takes one last sample when it closes,
+so a short run's coverage since the previous tick is not lost; the host
+gains that sample at shutdown too. The trail writer exposes `Wait`, so a
+run that exits soon after it started can wait for the build row and the
+function table before it flushes and closes the recorder. And
+`trailviews` gains `dm_trail_runs`, the runtime-start row with its driver
+stamp, and `dm_trail_llm_coverage_job_samples`, every sample row of §SD4
+joined to its run's stamp — the first derived view of §SD6, which this ADR
+had deferred; `ViewsVersion` is 14.
+
+## Update (2026-10-29) — the M0 figure needs a cover-built program, not a test binary
+
+`BenchmarkReadCounters` skips under `go test -cover -covermode=atomic`:
+Go's test coverage does not initialise the runtime counter mode that
+`runtime/coverage.WriteCounters` reads, so the probe reports an invalid
+mode in any test binary. The figure of §SD7 therefore comes from a
+cover-built program: the `cost-us` field of
+`dm_trail_llm_coverage_agent_applies` after a host session with the trail
+on, which no session here has produced yet. What a live run did show
+(ADR-0344's Update of the same day): a child's first sample of a 41,856-
+function build lands within its first second, and the function table's
+first write takes about fourteen seconds, once per meta hash.
+
 ## Status
 
-Proposed — awaiting review by the code owner. Built alongside the proposal.
+Accepted 2026-10-29. Built alongside the proposal.
 
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers (Tier 1 in-place / Tier 2 dated `## Updates` entry / Tier 3 new superseding ADR).

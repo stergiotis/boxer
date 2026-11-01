@@ -27,6 +27,10 @@ type StoreI interface {
 	// kinds and on one of queues (empty: any), oldest-first within
 	// priority, at most limit.
 	Queue(ctx context.Context, kinds []string, queues []string, now time.Time, limit int) (ids []string, err error)
+	// Lane reads the ids of the reserved lane's queued, due jobs in the
+	// queue's order, at most limit (ADR-0344 §SD4); the one read that
+	// sees the lane.
+	Lane(ctx context.Context, now time.Time, limit int) (ids []string, err error)
 	// Claim takes a queued, due job for workerRun. won is true exactly
 	// when the row read back names workerRun.
 	Claim(ctx context.Context, id string, workerRun string, now time.Time) (job watchbillstore.Job, won bool, err error)
@@ -139,6 +143,21 @@ func (inst *SqlStore) Queue(ctx context.Context, kinds []string, queues []string
 	for rec, qerr := range inst.exec.QueryArrow(ctx, watchbillstore.QueueSQL(inst.layout, kinds, queues, now, limit)) {
 		if qerr != nil {
 			return nil, eh.Errorf("queue read: %w", qerr)
+		}
+		col := rec.Column(0)
+		for i := 0; i < int(rec.NumRows()); i++ {
+			ids = append(ids, col.ValueStr(i))
+		}
+	}
+	return
+}
+
+func (inst *SqlStore) Lane(ctx context.Context, now time.Time, limit int) (ids []string, err error) {
+	inst.mu.Lock()
+	defer inst.mu.Unlock()
+	for rec, qerr := range inst.exec.QueryArrow(ctx, watchbillstore.LaneSQL(inst.layout, now, limit)) {
+		if qerr != nil {
+			return nil, eh.Errorf("lane read: %w", qerr)
 		}
 		col := rec.Column(0)
 		for i := 0; i < int(rec.NumRows()); i++ {

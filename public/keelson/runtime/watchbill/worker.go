@@ -176,7 +176,10 @@ func (inst *Worker) Start(ctx context.Context) (err error) {
 // swept or expired, and the reserved lane is reachable here and nowhere
 // else. A lost claim — the row is not queued, not due, or another run took
 // it — returns ran false and no error. The worker must not be started.
-func (inst *Worker) RunJob(ctx context.Context, id string) (ran bool, err error) {
+// onClaim, when given, is told the claim's outcome before the job runs —
+// the row as claimed and whether this run won it — so a caller can stamp
+// its own run row with the job (ADR-0344 §SD5).
+func (inst *Worker) RunJob(ctx context.Context, id string, onClaim ...func(job watchbillstore.Job, won bool)) (ran bool, err error) {
 	if inst.cancel != nil {
 		return false, eh.Errorf("watchbill: RunJob on a started worker")
 	}
@@ -184,6 +187,11 @@ func (inst *Worker) RunJob(ctx context.Context, id string) (ran bool, err error)
 	job, won, err := inst.cfg.Store.Claim(ctx, id, inst.cfg.RunId, now)
 	if err != nil {
 		return false, eh.Errorf("claim %s: %w", id, err)
+	}
+	for _, f := range onClaim {
+		if f != nil {
+			f(job, won)
+		}
 	}
 	if !won {
 		inst.log.Info().Str("id", id).Msg("watchbill: claim lost; nothing to run")

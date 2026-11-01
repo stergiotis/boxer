@@ -459,7 +459,7 @@ the deferrals (§SD6 tee first) are what remains.
 
 ## Update (2026-10-28) — §SD6 lands under ADR-0343
 
-The deferred persistence is built by ADR-0343 (proposed) as a generated
+The deferred persistence is built by ADR-0343 as a generated
 store on the trail rather than a bus tee: the function table once per meta
 hash, a sample row per tick with news, a build row anchoring the hash to
 the binary and its commit, and — the part this ADR did not foresee — a

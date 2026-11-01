@@ -57,8 +57,7 @@ at the next launch. The live tables are this run's.
 
 Set `IMZERO2_COVERAGE_TRAIL=true` as well and the same build writes
 coverage to the audit trail
-([ADR-0343](../adr/0343-coverage-on-the-trail-what-an-agents-call-executed.md),
-proposed): a build row that ties the coverage meta hash to the binary and
+([ADR-0343](../adr/0343-coverage-on-the-trail-what-an-agents-call-executed.md)): a build row that ties the coverage meta hash to the binary and
 its commit, the function table once per hash, a row per tick with the
 newly covered units, and — per agent command the dispatcher applied — the
 units the command's handler executed. The data marts are
@@ -73,9 +72,15 @@ the runtime makes goes through a named entry frame —
 `entrypoint.Agentic` for an agent's command or an agent-caused job,
 `entrypoint.Human` for the person's — so a panic, a goroutine dump or a
 profiler sample taken inside app code carries the answer as a frame
-([ADR-0344](../adr/0344-agent-caused-jobs-in-a-process-of-their-own-and-the-entry-frame-every-stack-carries.md),
-proposed). Jobs an agent caused are attributed by running them in a process
+([ADR-0344](../adr/0344-agent-caused-jobs-in-a-process-of-their-own-and-the-entry-frame-every-stack-carries.md)). Jobs an agent caused are attributed by running them in a process
 of their own, whose run's coverage samples are the job's; see that ADR.
+Those children inherit the two variables above from the host and write
+the same rows under their own run id. `dm_trail_runs` is every run with
+what drove it, and `dm_trail_llm_coverage_job_samples` is every sample
+row joined to its run's job, attempt and delegation, with `job-child` and
+`baseline` flags: subtract the baseline rows (a child whose claim lost,
+boot and shutdown only) from a child's rows to get what the job itself
+executed.
 
 ## 3. The applets
 

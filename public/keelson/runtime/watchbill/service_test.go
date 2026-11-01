@@ -335,6 +335,19 @@ func TestLaneRoutingAtTheEnqueueDoor(t *testing.T) {
 	_, err = f.client.Enqueue(Request{Kind: "svc.kind", Subject: "parked", Queue: watchbillstore.QueueLane})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "reserved lane")
+	// An attested delegation may not name the lane either, with the
+	// switch on or off: the lane is routed into, never asked for.
+	_, err = f.client.Enqueue(Request{Kind: "svc.kind", Subject: "parked-agent", Queue: watchbillstore.QueueLane, OnBehalfOf: obo})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "reserved lane")
+	f.w.cfg.IsolateAgentJobs = false
+	_, err = f.client.Enqueue(Request{Kind: "svc.kind", Subject: "parked-agent-off", Queue: watchbillstore.QueueLane, OnBehalfOf: obo})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "reserved lane")
+	rows, err := f.store.List(context.Background(), watchbillstore.ListFilter{Queues: []string{watchbillstore.QueueLane}}, 10)
+	require.NoError(t, err)
+	assert.Len(t, rows, 1, "only the routed job is on the lane; nothing parked itself there")
+	f.w.cfg.IsolateAgentJobs = true
 
 	// The worker's own poll runs the plain job and leaves the lane row.
 	f.eventually(t, plain.ID, watchbillstore.StateRunning)

@@ -49,20 +49,35 @@ func (inst *MemStore) Enqueue(_ context.Context, job watchbillstore.Job) (err er
 func (inst *MemStore) Queue(_ context.Context, kinds []string, queues []string, now time.Time, limit int) (ids []string, err error) {
 	inst.mu.Lock()
 	defer inst.mu.Unlock()
+	return inst.dueLocked(now, limit, func(j watchbillstore.Job) bool {
+		if len(kinds) > 0 && !slices.Contains(kinds, j.Kind) {
+			return false
+		}
+		if len(queues) > 0 && !slices.Contains(queues, j.Queue) {
+			return false
+		}
+		// The lane is taken by a claim that names the id, never by a
+		// poll (ADR-0344 §SD3).
+		return j.Queue != watchbillstore.QueueLane
+	}), nil
+}
+
+// Lane is the lane's queued, due ids in the queue's order (ADR-0344 §SD4).
+func (inst *MemStore) Lane(_ context.Context, now time.Time, limit int) (ids []string, err error) {
+	inst.mu.Lock()
+	defer inst.mu.Unlock()
+	return inst.dueLocked(now, limit, func(j watchbillstore.Job) bool { return j.Queue == watchbillstore.QueueLane }), nil
+}
+
+// dueLocked is the queue read's order over the queued, due rows keep
+// admits: priority, then due time, then insertion.
+func (inst *MemStore) dueLocked(now time.Time, limit int, keep func(watchbillstore.Job) bool) (ids []string) {
 	var due []watchbillstore.Job
 	for _, j := range inst.jobs {
 		if j.State != watchbillstore.StateQueued || j.RunAfter.After(now) {
 			continue
 		}
-		if len(kinds) > 0 && !slices.Contains(kinds, j.Kind) {
-			continue
-		}
-		if len(queues) > 0 && !slices.Contains(queues, j.Queue) {
-			continue
-		}
-		if j.Queue == watchbillstore.QueueLane {
-			// The lane is taken by a claim that names the id, never by
-			// a poll (ADR-0344 §SD3).
+		if !keep(j) {
 			continue
 		}
 		due = append(due, j)

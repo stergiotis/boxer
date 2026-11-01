@@ -783,7 +783,7 @@ var (
 	MembLadingPublishPaths    = NkRegistry.MustBegin("ladingPublishPaths", 508).End()
 	MembLadingPublishDigests  = NkRegistry.MustBegin("ladingPublishDigests", 509).End()
 	MembLadingPublishBytes    = NkRegistry.MustBegin("ladingPublishBytes", 510).End()
-	// Coverage on the trail (ADR-0343, proposed). The build row anchors a
+	// Coverage on the trail (ADR-0343). The build row anchors a
 	// coverage meta hash to the binary and its commit (§SD2); the function
 	// table resolves a unit id to source (§SD3); a sample is what the
 	// sampler's tick found newly covered (§SD4); an agent apply is the set
@@ -828,6 +828,15 @@ var (
 	MembCoverageAgentApplyOperation = NkRegistry.MustBegin("coverageAgentApplyOperation", 555).End()
 	MembCoverageAgentApplyPhase     = NkRegistry.MustBegin("coverageAgentApplyPhase", 556).End()
 	MembCoverageAgentApplyCostUs    = NkRegistry.MustBegin("coverageAgentApplyCostUs", 557).End()
+
+	// The driver stamp on the run row (ADR-0344 §SD5): what drove the run
+	// — `host`, `watchbill-worker`, `watchbill-job` — and, for a job child,
+	// the job it ran, its attempt and its kind. The job's delegation rides
+	// the trail's own memberships (trailTask, trailTaskEpoch, trailCall).
+	MembRunDriver        = NkRegistry.MustBegin("runtimeRunDriver", 558).End()
+	MembRunDriverJob     = NkRegistry.MustBegin("runtimeRunDriverJob", 559).End()
+	MembRunDriverAttempt = NkRegistry.MustBegin("runtimeRunDriverAttempt", 560).End()
+	MembRunDriverJobKind = NkRegistry.MustBegin("runtimeRunDriverJobKind", 561).End()
 )
 
 // AllMembs is the enumerated set of registered runtime memberships. Tests
@@ -964,4 +973,5 @@ var AllMembs = []registry.RegisteredNaturalKey{
 	MembKindCoverageAgentApply, MembCoverageAgentApplyMetaHash, MembCoverageAgentApplyFrame, MembCoverageAgentApplyUnits,
 	MembCoverageAgentApplyChanged, MembCoverageAgentApplyFuncs, MembCoverageAgentApplyOperation,
 	MembCoverageAgentApplyPhase, MembCoverageAgentApplyCostUs,
+	MembRunDriver, MembRunDriverJob, MembRunDriverAttempt, MembRunDriverJobKind,
 }

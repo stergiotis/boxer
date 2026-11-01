@@ -542,16 +542,42 @@ func (inst *Store) WriteRuntimeStart(row factsstore.RuntimeStartRow) (id uint64,
 	if row.BuildId != "" {
 		sym.BeginAttribute(row.BuildId).AddMembershipLowCardRef(vocab.MembRunBuildId.GetId().Value()).EndAttribute()
 	}
+	// The driver stamp (ADR-0344 §SD5).
+	if row.Driver != "" {
+		sym.BeginAttribute(row.Driver).AddMembershipLowCardRef(vocab.MembRunDriver.GetId().Value()).EndAttribute()
+	}
+	if row.DriverJob != "" {
+		sym.BeginAttribute(row.DriverJob).AddMembershipLowCardRef(vocab.MembRunDriverJob.GetId().Value()).EndAttribute()
+	}
+	if row.DriverJobKind != "" {
+		sym.BeginAttribute(row.DriverJobKind).AddMembershipLowCardRef(vocab.MembRunDriverJobKind.GetId().Value()).EndAttribute()
+	}
 	sym.EndSection()
 
-	if row.VcsBuildInfo != "" {
+	if row.VcsBuildInfo != "" || row.Task != "" || row.Call != "" {
 		str := ent.GetSectionStringArray()
-		str.BeginAttributeSingle(row.VcsBuildInfo).AddMembershipLowCardRef(vocab.MembRunVcsBuildInfo.GetId().Value()).EndAttribute()
+		if row.VcsBuildInfo != "" {
+			str.BeginAttributeSingle(row.VcsBuildInfo).AddMembershipLowCardRef(vocab.MembRunVcsBuildInfo.GetId().Value()).EndAttribute()
+		}
+		// The delegation, on the trail's memberships and sections, so the
+		// trail's context columns read it (ADR-0344 §SD5).
+		if row.Task != "" {
+			str.BeginAttributeSingle(row.Task).AddMembershipLowCardRef(vocab.MembTrailTask.GetId().Value()).EndAttribute()
+		}
+		if row.Call != "" {
+			str.BeginAttributeSingle(row.Call).AddMembershipLowCardRef(vocab.MembTrailCall.GetId().Value()).EndAttribute()
+		}
 		str.EndSection()
 	}
 
 	u64 := ent.GetSectionU64Array()
 	u64.BeginAttributeSingle(uint64(row.Pid)).AddMembershipLowCardRef(vocab.MembRunPid.GetId().Value()).EndAttribute()
+	if row.Driver != "" {
+		u64.BeginAttributeSingle(uint64(row.DriverAttempt)).AddMembershipLowCardRef(vocab.MembRunDriverAttempt.GetId().Value()).EndAttribute()
+	}
+	if row.Task != "" {
+		u64.BeginAttributeSingle(row.TaskEpoch).AddMembershipLowCardRef(vocab.MembTrailTaskEpoch.GetId().Value()).EndAttribute()
+	}
 	stampInstance(u64, 0)
 	u64.EndSection()
 

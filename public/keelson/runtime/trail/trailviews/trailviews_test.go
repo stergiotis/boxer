@@ -62,13 +62,13 @@ func TestComposeShape(t *testing.T) {
 	require.Equal(t, []string{
 		ViewModelCalls, ViewModelMessages, ViewAgentActions, ViewAgentGrants,
 		ViewAgentCaptures, ViewAgentDisclosures, ViewHttpFetches, ViewAdhocBundles, ViewAuditEvents,
-		ViewCoverageBuilds, ViewCoverageFuncs, ViewCoverageSamples, ViewCoverageAgentApplies,
-		ViewTimeline, ViewActionOutcomes, ViewConversations, ViewTasks, ViewAuditEntities, ViewReviews,
+		ViewCoverageBuilds, ViewCoverageFuncs, ViewCoverageSamples, ViewCoverageAgentApplies, ViewRuns,
+		ViewTimeline, ViewActionOutcomes, ViewConversations, ViewTasks, ViewCoverageJobSamples, ViewAuditEntities, ViewReviews,
 	}, names, "creation order: each view only reads views created before it")
 	require.Equal(t, names, AllViewNames())
 
 	general := map[string]bool{ViewTimeline: true, ViewHttpFetches: true, ViewAdhocBundles: true, ViewAuditEvents: true,
-		ViewCoverageBuilds: true, ViewCoverageFuncs: true, ViewCoverageSamples: true,
+		ViewCoverageBuilds: true, ViewCoverageFuncs: true, ViewCoverageSamples: true, ViewRuns: true,
 		ViewAuditEntities: true, ViewReviews: true}
 	for _, n := range names {
 		// The class prefix says what a reader may rely on (ADR-0051).
@@ -173,7 +173,7 @@ func TestFunctionsPrecedeTheViews(t *testing.T) {
 		require.False(t, lwsqlsurface.InNamespace(names[i]), "the LW_ namespace is leeway's: %s", names[i])
 	}
 	require.Equal(t, "CREATE OR REPLACE FUNCTION "+FuncViewsVersion+" AS () -> "+strconv.Itoa(ViewsVersion), fns[3])
-	require.Equal(t, 16, ViewsVersion, "the entity column, the audit entities and the reviews (ADR-0350 §SD2)")
+	require.Equal(t, 17, ViewsVersion, "the entity column, the audit entities and the reviews (ADR-0350 §SD2)")
 
 	views, err := Compose("", "")
 	require.NoError(t, err)

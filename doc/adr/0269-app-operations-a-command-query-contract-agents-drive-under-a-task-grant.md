@@ -837,7 +837,7 @@ The QOC tables carry the main options. Further options weighed:
 
 ## Update (2026-10-28) — the handler call runs under a named entry frame
 
-ADR-0344 §SD1 (proposed) changes nothing in this contract and one
+ADR-0344 §SD1 changes nothing in this contract and one
 thing on the stack: the engine now calls `ApplyCommand` through
 `entrypoint.Agentic` for a task's queued command and through
 `entrypoint.Human` for a person's queued command or a gesture (§SD8 "One

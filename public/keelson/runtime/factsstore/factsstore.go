@@ -85,8 +85,31 @@ type RuntimeStartRow struct {
 	// BuildId is the digest of the executable the run executes (ADR-0277
 	// §SD8); empty when it could not be read, and on rows written before it.
 	BuildId string
-	Ts      time.Time
+	// The driver stamp (ADR-0344 §SD5): what drove the run — one of the
+	// Driver constants — and, for a job child, the job it ran, the attempt
+	// it was, the job's kind and the delegation that enqueued it. Empty on
+	// rows written before the stamp.
+	Driver        string
+	DriverJob     string
+	DriverAttempt uint32
+	DriverJobKind string
+	Task          string
+	TaskEpoch     uint64
+	Call          string
+	Ts            time.Time
 }
+
+// The drivers a run row names (ADR-0344 §SD5).
+const (
+	// DriverHost is the window host: the person's and the apps' run.
+	DriverHost = "host"
+	// DriverWatchbillWorker is a headless worker draining queues.
+	DriverWatchbillWorker = "watchbill-worker"
+	// DriverWatchbillJob is a child that claimed one job by id and ran it;
+	// DriverJob names the job, and a row with no DriverJobKind is a child
+	// whose claim lost — boot and shutdown only, the coverage baseline.
+	DriverWatchbillJob = "watchbill-job"
+)
 
 // HeartbeatRow records one runtime liveness tick. Maps to a
 // boxer.facts row with KindRuntimeHeartbeat + MembRuntimeRun

@@ -24,17 +24,25 @@ import (
 	"github.com/rs/zerolog/log"
 	"github.com/urfave/cli/v3"
 
+	"github.com/rs/zerolog"
 	"github.com/stergiotis/boxer/public/keelson/data/chclient"
 	"github.com/stergiotis/boxer/public/keelson/data/storeexec"
+	"github.com/stergiotis/boxer/public/keelson/runtime/app"
+	"github.com/stergiotis/boxer/public/keelson/runtime/coveragebus"
+	"github.com/stergiotis/boxer/public/keelson/runtime/covscrape"
+	"github.com/stergiotis/boxer/public/keelson/runtime/covtrail"
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsstore"
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsstore/chstore"
 	"github.com/stergiotis/boxer/public/keelson/runtime/heartbeat"
+	"github.com/stergiotis/boxer/public/keelson/runtime/inprocbus"
 	"github.com/stergiotis/boxer/public/keelson/runtime/runid"
 	"github.com/stergiotis/boxer/public/keelson/runtime/runinfo"
+	"github.com/stergiotis/boxer/public/keelson/runtime/trail"
 	"github.com/stergiotis/boxer/public/keelson/runtime/watchbill"
 	"github.com/stergiotis/boxer/public/keelson/runtime/watchbill/watchbillstore"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/storage/recordstore"
+	"github.com/stergiotis/boxer/public/storage/recordstore/evidence"
 )
 
 // factsPingTimeout is how long `run` waits for the facts store before it
@@ -115,14 +123,28 @@ func newRunCommand() *cli.Command {
 				Store: store, RunId: runInst.RunId, Log: logger,
 				MaxWorkers: cmd.Int("max-workers"), Poll: cmd.Duration("poll"), Queues: cmd.StringSlice("queue"),
 			}
-			if isCh {
-				if _, werr := facts.WriteRuntimeStart(factsstore.RuntimeStartRow{
-					RunId: runInst.RunId, Hostname: runInst.Hostname, Pid: runInst.Pid, GoVersion: runInst.GoVersion,
-					VcsRevision: runInst.VcsRevision, VcsModified: runInst.VcsModified, VcsBuildInfo: runInst.VcsBuildInfo,
-					ModulePath: runInst.ModulePath, Ts: runInst.StartedAt,
-				}); werr != nil {
+			jobId := cmd.String("job")
+			runRow := factsstore.RuntimeStartRow{
+				RunId: runInst.RunId, Hostname: runInst.Hostname, Pid: runInst.Pid, GoVersion: runInst.GoVersion,
+				VcsRevision: runInst.VcsRevision, VcsModified: runInst.VcsModified, VcsBuildInfo: runInst.VcsBuildInfo,
+				ModulePath: runInst.ModulePath, BuildId: runInst.BuildId, Ts: runInst.StartedAt,
+				Driver: factsstore.DriverWatchbillWorker,
+			}
+			writeRunRow := func(row factsstore.RuntimeStartRow) {
+				if !isCh {
+					return
+				}
+				if _, werr := facts.WriteRuntimeStart(row); werr != nil {
 					logger.Warn().Err(werr).Msg("watchbill: runtime-start row not written")
 				}
+			}
+			if isCh {
+				if jobId == "" {
+					writeRunRow(runRow)
+				}
+				// A job child's run row carries the job it claimed — the
+				// driver stamp of ADR-0344 §SD5 — so it is written after
+				// the claim, below.
 				hb, herr := heartbeat.Start(context.Background(), facts, runInst.RunId, heartbeat.DefaultInterval, logger)
 				if herr != nil {
 					return eh.Errorf("heartbeat: %w", herr)
@@ -144,10 +166,22 @@ func newRunCommand() *cli.Command {
 			if err != nil {
 				return
 			}
-			if jobId := cmd.String("job"); jobId != "" {
+			if jobId != "" {
 				// One job, this run: the child of ADR-0344 §SD4, or an
-				// operator running a lane row by hand.
-				ran, rerr := worker.RunJob(ctx, jobId)
+				// operator running a lane row by hand. Its coverage lands
+				// on the trail under this run when the opt-ins ask
+				// (ADR-0343, ADR-0344 §SD5), and its run row names the job.
+				stopCoverage := startCoverageTrail(ctx, store.Executor(), runInst, isCh, logger)
+				ran, rerr := worker.RunJob(ctx, jobId, func(job watchbillstore.Job, won bool) {
+					row := runRow
+					row.Driver, row.DriverJob = factsstore.DriverWatchbillJob, jobId
+					if won {
+						row.DriverAttempt, row.DriverJobKind = job.Attempt, job.Kind
+						row.Task, row.TaskEpoch, row.Call = job.Task, job.TaskEpoch, job.Call
+					}
+					writeRunRow(row)
+				})
+				stopCoverage()
 				if rerr != nil {
 					return rerr
 				}
@@ -295,3 +329,52 @@ func verb(name string, fn func(context.Context, watchbill.StoreI, string, string
 }
 
 var _ recordstore.ExecutorI = (*storeexec.Executor)(nil)
+
+// startCoverageTrail starts, for a job child, what the host starts for
+// itself (ADR-0343): the coverage sampler when IMZERO2_COVERAGE_INTERVAL
+// asks, publishing to a bus of its own that nobody reads, and the trail
+// writer when IMZERO2_COVERAGE_TRAIL asks too, over the executor the job
+// store reached the server with. The returned stop takes the last sample,
+// waits for the build rows, flushes and closes the recorder; it is a no-op
+// when nothing was started. Without a facts store nothing is written.
+func startCoverageTrail(ctx context.Context, exec recordstore.ExecutorI, runInst *runinfo.Inst, isCh bool, logger zerolog.Logger) (stop func()) {
+	stop = func() {}
+	interval, enabled := coveragebus.IntervalFromEnv()
+	if !enabled || !covtrail.Enabled.Get() || !isCh {
+		// A child's samples have one reader, the trail; without it there
+		// is nothing to sample for.
+		return
+	}
+	bus := inprocbus.NewInst(logger)
+	pub := bus.NewClient(coveragebus.ServiceAppId, []app.SubjectFilter{
+		{Pattern: coveragebus.SubjectWildcard, Direction: app.CapDirectionPub},
+	})
+	rec := trail.NewRecorder(exec, runInst.RunId, logger, trail.WithOriginBy(evidence.OriginBySelf))
+	covTrail := covtrail.New(covtrail.Options{Trail: rec, Run: runInst, Log: logger})
+	sampler, stopSampler, err := covscrape.StartCoverageSampler(ctx, pub, covscrape.DefaultHostToken(), interval, logger, covTrail.OnUpdate)
+	if err != nil {
+		logger.Info().Err(err).Msg("watchbill: coverage sampling unavailable for this run")
+		rec.Close()
+		return
+	}
+	attached := true
+	if aerr := covTrail.Attach(ctx, sampler); aerr != nil {
+		logger.Warn().Err(aerr).Msg("watchbill: coverage trail unavailable for this run")
+		attached = false
+	}
+	stop = func() {
+		if serr := stopSampler(); serr != nil {
+			logger.Debug().Err(serr).Msg("watchbill: coverage sampler stop")
+		}
+		if attached {
+			covTrail.Wait()
+		}
+		fctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		if ferr := rec.Flush(fctx); ferr != nil {
+			logger.Warn().Err(ferr).Msg("watchbill: coverage trail flush")
+		}
+		cancel()
+		rec.Close()
+	}
+	return
+}

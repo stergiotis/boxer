@@ -172,16 +172,23 @@ func (inst *Store) LookupRunStart(ctx context.Context, runId string) (row factss
 // columnExprsRun gathers the projections for LookupRunStart. Order
 // MUST match parseLookupRunStartRow.
 type columnExprsRun struct {
-	id           string
-	tsSec        string
-	hostname     string
-	goVersion    string
-	vcsRevision  string
-	modulePath   string
-	vcsBuildInfo string
-	pid          string
-	vcsModified  string
-	buildId      string
+	id            string
+	tsSec         string
+	hostname      string
+	goVersion     string
+	vcsRevision   string
+	modulePath    string
+	vcsBuildInfo  string
+	pid           string
+	vcsModified   string
+	buildId       string
+	driver        string
+	driverJob     string
+	driverAttempt string
+	driverJobKind string
+	task          string
+	taskEpoch     string
+	call          string
 }
 
 func buildRunColumnExprs() (e columnExprsRun) {
@@ -211,6 +218,14 @@ func buildRunColumnExprs() (e columnExprsRun) {
 	e.vcsBuildInfo = pickLcrString(strValue, strLR, strLRCard, vocab.MembRunVcsBuildInfo.GetId().Value())
 	e.pid = pickLcrNumeric(u64Value, u64LR, u64LRCard, vocab.MembRunPid.GetId().Value(), "0")
 	e.vcsModified = pickLcrNumeric(boolValue, boolLR, boolLRCard, vocab.MembRunVcsModified.GetId().Value(), "false")
+	// The driver stamp (ADR-0344 §SD5); empty on rows from before it.
+	e.driver = pickLcrString(symValue, symLR, symLRCard, vocab.MembRunDriver.GetId().Value())
+	e.driverJob = pickLcrString(symValue, symLR, symLRCard, vocab.MembRunDriverJob.GetId().Value())
+	e.driverJobKind = pickLcrString(symValue, symLR, symLRCard, vocab.MembRunDriverJobKind.GetId().Value())
+	e.driverAttempt = pickLcrNumeric(u64Value, u64LR, u64LRCard, vocab.MembRunDriverAttempt.GetId().Value(), "0")
+	e.task = pickLcrString(strValue, strLR, strLRCard, vocab.MembTrailTask.GetId().Value())
+	e.taskEpoch = pickLcrNumeric(u64Value, u64LR, u64LRCard, vocab.MembTrailTaskEpoch.GetId().Value(), "0")
+	e.call = pickLcrString(strValue, strLR, strLRCard, vocab.MembTrailCall.GetId().Value())
 	return
 }
 
@@ -306,7 +321,14 @@ SELECT
   %s AS vcs_build_info,
   %s AS pid,
   %s AS vcs_modified,
-  %s AS build_id
+  %s AS build_id,
+  %s AS driver,
+  %s AS driver_job,
+  %s AS driver_attempt,
+  %s AS driver_job_kind,
+  %s AS task,
+  %s AS task_epoch,
+  %s AS task_call
 FROM %s
 WHERE %s
 ORDER BY %s ASC
@@ -314,6 +336,7 @@ LIMIT 1
 FORMAT TabSeparated`,
 		e.id, e.tsSec, e.hostname, e.goVersion, e.vcsRevision,
 		e.modulePath, e.vcsBuildInfo, e.pid, e.vcsModified, e.buildId,
+		e.driver, e.driverJob, e.driverAttempt, e.driverJobKind, e.task, e.taskEpoch, e.call,
 		table,
 		strings.Join(whereParts, " AND "),
 		e.id)
@@ -373,8 +396,8 @@ func parseLookupRunStartRow(raw []byte) (row factsstore.RuntimeStartRow, found b
 		line = line[:newlineIdx]
 	}
 	parts := strings.Split(line, "\t")
-	if len(parts) != 10 {
-		err = eb.Build().Int("got", len(parts)).Str("line", line).Errorf("chstore: lookup run start: expected 10 columns")
+	if len(parts) != 17 {
+		err = eb.Build().Int("got", len(parts)).Str("line", line).Errorf("chstore: lookup run start: expected 17 columns")
 		return
 	}
 	_, perr := strconv.ParseUint(parts[0], 10, 64)
@@ -402,6 +425,18 @@ func parseLookupRunStartRow(raw []byte) (row factsstore.RuntimeStartRow, found b
 		Pid:          int(pid),
 		VcsModified:  parts[8] == "true" || parts[8] == "1",
 		BuildId:      unescapeTabSeparated(parts[9]),
+		// The driver stamp (ADR-0344 §SD5).
+		Driver:        unescapeTabSeparated(parts[10]),
+		DriverJob:     unescapeTabSeparated(parts[11]),
+		DriverJobKind: unescapeTabSeparated(parts[13]),
+		Task:          unescapeTabSeparated(parts[14]),
+		Call:          unescapeTabSeparated(parts[16]),
+	}
+	if attempt, aerr := strconv.ParseUint(parts[12], 10, 32); aerr == nil {
+		row.DriverAttempt = uint32(attempt)
+	}
+	if epoch, eerr := strconv.ParseUint(parts[15], 10, 64); eerr == nil {
+		row.TaskEpoch = epoch
 	}
 	found = true
 	return

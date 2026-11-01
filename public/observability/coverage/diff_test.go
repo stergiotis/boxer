@@ -62,7 +62,10 @@ func TestReadCountersErrsInTestBinaries(t *testing.T) {
 //	go test -cover -covermode=atomic -run XXX -bench ReadCounters ./public/observability/coverage/
 func BenchmarkReadCounters(b *testing.B) {
 	if err := ProbeRuntimeSupport(); err != nil {
-		b.Skip("needs -cover -covermode=atomic:", err)
+		// Under `go test -cover` the runtime counter mode is not set, so
+		// this skips in every test binary; the figure comes from a
+		// cover-built program (ADR-0343 Update 2026-10-29).
+		b.Skip("needs a program built with -cover -covermode=atomic, not a test binary:", err)
 	}
 	var buf bytes.Buffer
 	b.ReportAllocs()

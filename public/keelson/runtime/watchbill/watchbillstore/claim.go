@@ -83,6 +83,23 @@ func QueueSQL(layout Layout, kinds []string, queues []string, now time.Time, lim
 	return sb.String()
 }
 
+// LaneSQL reads the ids of the lane's jobs a coordinator may start now
+// (ADR-0344 §SD3, §SD4): queued, due, on the reserved queue, in the order
+// the worker's poll would take them, at most limit. It is the one read
+// that sees the lane; [QueueSQL] never does.
+func LaneSQL(layout Layout, now time.Time, limit int) (sql string) {
+	var sb strings.Builder
+	sb.WriteString("SELECT " + JobColKey + " FROM " + layout.JobTable() +
+		" WHERE " + elem("jobState") + " = " + strLit(StateQueued) +
+		" AND " + elem("jobRunAfter") + " <= " + timeLit(now) +
+		" AND " + elem("jobQueue") + " = " + strLit(QueueLane))
+	sb.WriteString(" ORDER BY " + elem("jobPriority") + " ASC, " + elem("jobRunAfter") + " ASC, " + JobColOrder + " ASC")
+	if limit > 0 {
+		sb.WriteString(" LIMIT " + strconv.Itoa(limit))
+	}
+	return sb.String()
+}
+
 // ClaimSQL is the claim (ADR-0223 §SD3): one conditional update that takes
 // a queued, due job for workerRun and counts the attempt. The server
 // serialises competing updates of one row, so of N claimants one changes

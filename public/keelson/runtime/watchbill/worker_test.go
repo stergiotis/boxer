@@ -3,7 +3,9 @@ package watchbill
 import (
 	"context"
 	"errors"
+	"fmt"
 	"math"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -581,4 +583,47 @@ func TestRunJobHonoursACancel(t *testing.T) {
 	require.True(t, ok)
 	assert.True(t, <-done)
 	assert.Equal(t, watchbillstore.StateCancelled, f.job(t, id).State)
+}
+
+// RunJob tells its caller the claim's outcome before the job runs, with
+// the row as claimed, so a child stamps its run row with the job
+// (ADR-0344 §SD5); a lost claim is told too.
+func TestRunJobTellsTheClaim(t *testing.T) {
+	f := newFixture(t, "run-child", func(c *Config) { c.Poll = 10 * time.Millisecond })
+	id := f.enqueue(t, Request{Subject: "stamp", OnBehalfOf: &app.OnBehalfOf{Task: "task-1", Epoch: 2, Call: "c"}})
+	var told []string
+	hook := func(job watchbillstore.Job, won bool) {
+		told = append(told, fmt.Sprintf("%s:%v:%s:%d:%s", job.ID, won, job.Kind, job.Attempt, job.Task))
+	}
+	ran, err := f.w.RunJob(context.Background(), id, hook)
+	require.NoError(t, err)
+	assert.True(t, ran)
+	again, err := f.w.RunJob(context.Background(), id, hook)
+	require.NoError(t, err)
+	assert.False(t, again)
+	require.Len(t, told, 2)
+	assert.Equal(t, id+":true:test.kind:1:task-1", told[0])
+	assert.True(t, strings.HasPrefix(told[1], id+":false:"), told[1])
+}
+
+// The in-memory lane read is the queue read's order over the lane: lower
+// priority first, then the earlier due time, undue rows left out, the
+// limit honoured (ADR-0344 §SD4).
+func TestMemStoreLaneReadOrder(t *testing.T) {
+	f := newFixture(t, "run-a")
+	now := f.clk.now()
+	late := f.enqueue(t, Request{Subject: "late", Queue: watchbillstore.QueueLane, Priority: 5, RunAfter: now.Add(-time.Minute)})
+	early := f.enqueue(t, Request{Subject: "early", Queue: watchbillstore.QueueLane, Priority: 5, RunAfter: now.Add(-time.Hour)})
+	urgent := f.enqueue(t, Request{Subject: "urgent", Queue: watchbillstore.QueueLane, Priority: 1, RunAfter: now})
+	f.enqueue(t, Request{Subject: "future", Queue: watchbillstore.QueueLane, Priority: 0, RunAfter: now.Add(time.Hour)})
+	f.enqueue(t, Request{Subject: "elsewhere", Queue: "default"})
+	ids, err := f.store.Lane(context.Background(), now, 0)
+	require.NoError(t, err)
+	assert.Equal(t, []string{urgent, early, late}, ids)
+	ids, err = f.store.Lane(context.Background(), now, 2)
+	require.NoError(t, err)
+	assert.Equal(t, []string{urgent, early}, ids)
+	polled, err := f.store.Queue(context.Background(), nil, nil, now, 0)
+	require.NoError(t, err)
+	assert.Len(t, polled, 1, "the poll sees the default queue only")
 }

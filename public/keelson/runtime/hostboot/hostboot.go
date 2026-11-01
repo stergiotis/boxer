@@ -142,7 +142,7 @@ type Services struct {
 	// Coverage samples Go coverage counters onto the bus when
 	// IMZERO2_COVERAGE_INTERVAL asks for it (ADR-0169), and, when
 	// IMZERO2_COVERAGE_TRAIL asks for it too, writes coverage to the trail
-	// (ADR-0343, proposed).
+	// (ADR-0343).
 	Coverage bool
 	// Sysmetrics publishes system metrics onto the host bus (ADR-0090): a
 	// co-located /proc scraper, or a bridge from NATS when
@@ -353,7 +353,7 @@ type Runtime struct {
 	// HostServices names the registered host services that started.
 	HostServices []string
 	Coverage     *coverage.Sampler
-	// CoverageTrail writes coverage to the trail (ADR-0343, proposed);
+	// CoverageTrail writes coverage to the trail (ADR-0343);
 	// nil unless IMZERO2_COVERAGE_TRAIL asked for it on a sampling build.
 	CoverageTrail *covtrail.Service
 	Status        *runtimestatus.Snapshot
@@ -446,6 +446,7 @@ func Boot(ctx context.Context, opts Options) (rt *Runtime, err error) {
 			VcsBuildInfo: runInst.VcsBuildInfo,
 			BuildId:      runInst.BuildId,
 			ModulePath:   runInst.ModulePath,
+			Driver:       factsstore.DriverHost,
 			Ts:           runInst.StartedAt,
 		})
 		if wErr != nil {
@@ -802,10 +803,22 @@ func (rt *Runtime) bootServices(ctx context.Context, factsCfg chstore.Config) {
 				covTrail = covtrail.New(covtrail.Options{Trail: rt.Trail, Run: rt.RunInfo, Log: logger})
 				sinks = append(sinks, covTrail.OnUpdate)
 			}
-			if s, _, cerr := covscrape.StartCoverageSampler(context.Background(), covPub, covscrape.DefaultHostToken(), covInterval, logger, sinks...); cerr != nil {
+			if s, stop, cerr := covscrape.StartCoverageSampler(context.Background(), covPub, covscrape.DefaultHostToken(), covInterval, logger, sinks...); cerr != nil {
 				logger.Info().Err(cerr).Msg("hostboot: coverage sampling unavailable; coverage tables will be empty")
 			} else {
 				rt.Coverage = s
+				// Cleanups run in reverse: the producer stops first and
+				// takes its last sample (ADR-0344 §SD5), the trail writer
+				// finishes its build rows, and the recorder, registered
+				// earlier, closes after.
+				rt.cleanups = append(rt.cleanups, func() {
+					if serr := stop(); serr != nil {
+						logger.Debug().Err(serr).Msg("hostboot: coverage sampler stop")
+					}
+					if covTrail != nil {
+						covTrail.Wait()
+					}
+				})
 				if covTrail != nil {
 					if aerr := covTrail.Attach(ctx, s); aerr != nil {
 						logger.Warn().Err(aerr).Msg("hostboot: coverage trail unavailable")

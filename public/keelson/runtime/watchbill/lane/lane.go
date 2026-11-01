@@ -122,14 +122,59 @@ type Coordinator struct {
 
 	mu      sync.Mutex
 	running map[string]*run
+	// backoff holds, per job id, when a child may be started again after
+	// one exited without claiming the row, and how many times that
+	// happened: a binary without the verb, a crash before the claim.
+	backoff map[string]*unclaimed
 	wake    chan struct{}
 	unsub   func()
 	cancel  context.CancelFunc
 	done    chan struct{}
 	wg      sync.WaitGroup
 	// Spawned counts children started, for tests and the status line.
-	spawned uint64
-	notices atomic.Pointer[noticesRef]
+	spawned  uint64
+	notices  atomic.Pointer[noticesRef]
+	stopping atomic.Bool
+}
+
+// unclaimed is the backoff record of a job whose children exit without
+// claiming it.
+type unclaimed struct {
+	until time.Time
+	times int
+}
+
+// unclaimedBackoff is the wait after n children of one job exited without
+// claiming it: the poll doubled per exit, capped, so a child that can
+// never claim — a host binary without the watchbill verb — is retried,
+// logged and not a hot loop.
+func unclaimedBackoff(poll time.Duration, n int) (d time.Duration) {
+	d = poll
+	for i := 1; i < n && d < maxUnclaimedBackoff; i++ {
+		d *= 2
+	}
+	return min(d, maxUnclaimedBackoff)
+}
+
+const maxUnclaimedBackoff = 10 * time.Minute
+
+// terminate asks a child to stop unless it has already exited: a reaped
+// child's process group id may belong to another process by now.
+func terminate(c ChildI) {
+	select {
+	case <-c.Done():
+	default:
+		c.Terminate()
+	}
+}
+
+// kill ends a child unless it has already exited (see terminate).
+func kill(c ChildI) {
+	select {
+	case <-c.Done():
+	default:
+		c.Kill()
+	}
 }
 
 type noticesRef struct{ n watchbill.NoticesI }
@@ -175,7 +220,7 @@ func New(cfg Config) (inst *Coordinator, err error) {
 	if err != nil {
 		return nil, eh.Errorf("lane: pool: %w", err)
 	}
-	inst = &Coordinator{cfg: cfg, now: cfg.Now, log: cfg.Log, pool: pool, running: map[string]*run{}, wake: make(chan struct{}, 1)}
+	inst = &Coordinator{cfg: cfg, now: cfg.Now, log: cfg.Log, pool: pool, running: map[string]*run{}, backoff: map[string]*unclaimed{}, wake: make(chan struct{}, 1)}
 	inst.SetNotices(cfg.Notices)
 	return
 }
@@ -213,6 +258,9 @@ func (inst *Coordinator) Stop() {
 	if inst.unsub != nil {
 		inst.unsub()
 	}
+	// Before the cancel: a relay woken by its task's context ending reads
+	// this and writes no cancel on the row (ADR-0344 §SD4).
+	inst.stopping.Store(true)
 	inst.cancel()
 	<-inst.done
 	inst.mu.Lock()
@@ -222,11 +270,14 @@ func (inst *Coordinator) Stop() {
 	}
 	inst.mu.Unlock()
 	for _, r := range children {
-		r.child.Terminate()
+		terminate(r.child)
 	}
 	for _, r := range children {
 		waitOrKill(r.child, inst.cfg.KillGrace)
 	}
+	inst.mu.Lock()
+	inst.backoff = map[string]*unclaimed{}
+	inst.mu.Unlock()
 	inst.wg.Wait()
 	sctx, cancel := context.WithTimeout(context.Background(), inst.cfg.KillGrace+time.Second)
 	defer cancel()
@@ -272,28 +323,34 @@ func (inst *Coordinator) loop(ctx context.Context) {
 // it without a clock.
 func (inst *Coordinator) Tick(ctx context.Context) (err error) {
 	now := inst.now().UTC()
-	jobs, err := inst.cfg.Store.List(ctx, watchbillstore.ListFilter{
-		States: []string{watchbillstore.StateQueued}, Queues: []string{watchbillstore.QueueLane},
-	}, inst.cfg.ReadLimit)
+	// The lane read is the queue read's own order — priority, due time,
+	// insertion — restricted to the lane, so a burst runs in the order the
+	// worker would have run it and no due row waits behind newer ones.
+	ids, err := inst.cfg.Store.Lane(ctx, now, inst.cfg.ReadLimit)
 	if err != nil {
 		return eh.Errorf("lane read: %w", err)
 	}
-	for _, job := range jobs {
-		if job.RunAfter.After(now) {
-			continue
-		}
+	for _, id := range ids {
 		inst.mu.Lock()
-		_, busy := inst.running[job.ID]
+		_, busy := inst.running[id]
+		held := inst.backoff[id]
 		inst.mu.Unlock()
-		if busy {
+		if busy || (held != nil && now.Before(held.until)) {
 			continue
 		}
 		st := inst.pool.Stats()
 		if st.Stopped || st.Live+st.PendingSpawns >= int(inst.cfg.MaxChildren) {
 			return
 		}
+		job, found, gerr := inst.cfg.Store.Get(ctx, id)
+		if gerr != nil {
+			return eh.Errorf("lane row %s: %w", id, gerr)
+		}
+		if !found || job.State != watchbillstore.StateQueued {
+			continue
+		}
 		if serr := inst.spawn(ctx, job); serr != nil {
-			inst.log.Warn().Err(serr).Str("job", job.ID).Msg("watchbill lane: child not started; the row stays queued for the next read")
+			inst.log.Warn().Err(serr).Str("job", id).Msg("watchbill lane: child not started; the row stays queued for the next read")
 		}
 	}
 	return
@@ -359,8 +416,10 @@ func (inst *Coordinator) relayCancel(ctx context.Context, r *run) {
 	}
 	// The task's context also ends when the coordinator stops, since the
 	// task was spawned under its context; a stop writes no cancel — the
-	// child is signalled and its row is left running for the sweep.
-	if ctx.Err() != nil {
+	// child is signalled and its row is left running for the sweep. The
+	// flag, not the context: both contexts end in the same cancel, in no
+	// fixed order.
+	if inst.stopping.Load() || ctx.Err() != nil {
 		return
 	}
 	select {
@@ -401,6 +460,7 @@ func (inst *Coordinator) await(r *run) {
 	default:
 		ev.Str("job", r.job.ID).Str("state", row.State).Str("child", r.child.Describe()).Msg("watchbill lane: child exited")
 		inst.settleTask(r.handle, row, exitErr)
+		inst.noteClaim(r.job.ID, row.State == watchbillstore.StateQueued && row.Attempt == r.job.Attempt)
 		if row.State == watchbillstore.StateFailed || row.State == watchbillstore.StateDiscarded {
 			if ref := inst.notices.Load(); ref != nil && ref.n != nil {
 				ref.n.JobEnded(inst.now(), row, row.State, row.LastError)
@@ -416,6 +476,32 @@ func (inst *Coordinator) await(r *run) {
 	delete(inst.running, r.job.ID)
 	inst.mu.Unlock()
 	_ = r.slot.Close()
+}
+
+// noteClaim records whether the child claimed its row: one that exited
+// with the row still queued at the same attempt never claimed, and the
+// next child for that id waits a backoff that doubles per such exit; a
+// claim clears the record.
+func (inst *Coordinator) noteClaim(id string, unclaimedExit bool) {
+	inst.mu.Lock()
+	defer inst.mu.Unlock()
+	if !unclaimedExit {
+		delete(inst.backoff, id)
+		return
+	}
+	u := inst.backoff[id]
+	if u == nil {
+		u = &unclaimed{}
+		inst.backoff[id] = u
+	}
+	u.times++
+	wait := unclaimedBackoff(inst.cfg.Poll, u.times)
+	u.until = inst.now().Add(wait)
+	ev := inst.log.Warn()
+	if u.times > 1 {
+		ev = inst.log.Debug()
+	}
+	ev.Str("job", id).Int("times", u.times).Dur("retryIn", wait).Msg("watchbill lane: a child exited without claiming its row; is this binary carrying the watchbill verb?")
 }
 
 // settleTask ends the host-side task from the row the child left.

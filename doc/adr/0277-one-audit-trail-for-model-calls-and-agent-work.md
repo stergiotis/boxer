@@ -341,6 +341,15 @@ is accepted.
 - Component reads over a hand-written row (launch, query run) return
   `Origin`.
 
+## Update (2026-10-28) — the run row carries a driver stamp
+
+ADR-0344 §SD5 adds to the runtime-start row of §SD8 a driver
+stamp — what drove the run (`host`, `watchbill-worker`, `watchbill-job`)
+and, for a job child, the job, its attempt, its kind and the delegation
+that enqueued it, the delegation on the trail's own memberships so the
+context columns read it. Rows written before it read as empty. The row is
+now also a view, `dm_trail_runs`, beside the per-kind marts.
+
 ## Status
 
 Accepted 2026-10-04, with all five migration steps built. What the
