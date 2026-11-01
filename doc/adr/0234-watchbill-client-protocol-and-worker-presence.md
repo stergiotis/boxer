@@ -282,7 +282,7 @@ changes shape.
 
 ## Update (2026-10-28) — the request carries an attested delegation
 
-ADR-0344 §SD2 (proposed) adds three optional fields to the
+ADR-0344 §SD2 adds three optional fields to the
 `watchbillRequest` wire — `OboTask`, `OboEpoch`, `OboCall` (vocabulary
 250–252) — the on-behalf-of context of an agent-caused enqueue. The worker
 attests them with the dispatcher for the envelope's sender before it

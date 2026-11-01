@@ -134,7 +134,7 @@ const (
 	ViewHttpFetches      = prefixDataMart + "trail_http_fetches"
 	ViewAdhocBundles     = prefixDataMart + "trail_adhoc_bundles"
 	ViewAuditEvents      = prefixDataMart + "trail_audit_events"
-	// Coverage on the trail (ADR-0343, proposed): the build, its function
+	// Coverage on the trail (ADR-0343): the build, its function
 	// table and the run's growth are general; what an agent command
 	// executed is agentic.
 	ViewCoverageBuilds       = prefixDataMart + "trail_coverage_builds"

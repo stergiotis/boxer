@@ -134,7 +134,7 @@ type Services struct {
 	// Coverage samples Go coverage counters onto the bus when
 	// IMZERO2_COVERAGE_INTERVAL asks for it (ADR-0169), and, when
 	// IMZERO2_COVERAGE_TRAIL asks for it too, writes coverage to the trail
-	// (ADR-0343, proposed).
+	// (ADR-0343).
 	Coverage bool
 	// Sysmetrics publishes system metrics onto the host bus (ADR-0090): a
 	// co-located /proc scraper, or a bridge from NATS when
@@ -328,7 +328,7 @@ type Runtime struct {
 	// HostServices names the registered host services that started.
 	HostServices []string
 	Coverage     *coverage.Sampler
-	// CoverageTrail writes coverage to the trail (ADR-0343, proposed);
+	// CoverageTrail writes coverage to the trail (ADR-0343);
 	// nil unless IMZERO2_COVERAGE_TRAIL asked for it on a sampling build.
 	CoverageTrail *covtrail.Service
 	Status        *runtimestatus.Snapshot

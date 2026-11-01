@@ -1,19 +1,16 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-10-28
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to accepted
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-10-29
 ---
-
-> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
 
 # ADR-0344: Agent-caused jobs in a process of their own, and the entry frame every stack carries
 
 ## Context
 
-[ADR-0343](./0343-coverage-on-the-trail-what-an-agents-call-executed.md)
-(proposed) attributes Go coverage to an agent's command by reading the
+[ADR-0343](./0343-coverage-on-the-trail-what-an-agents-call-executed.md) attributes Go coverage to an agent's command by reading the
 process-wide counters before and after the command's handler call. That
 works because the call is short, runs alone on the render goroutine, and is
 the only app code a command runs. It stated in its §SD5 what it does not
@@ -470,9 +467,39 @@ bracket row for jobs.
   trail writer; the producer's last sample on close and the trail writer's
   wait; `dm_trail_runs` and `dm_trail_llm_coverage_job_samples`.
 
+## Update (2026-10-29) — verified end to end against a live server
+
+Accepted the same day after an independent review and its fixes (commit
+`2d8e9a3bd`). Verified on a local ClickHouse 26.x with the cover lane's
+`imzero2-cover` binary as the child and the `boxer` binary enqueueing:
+
+- A `demo.sleep` job enqueued onto `agent-lane` stayed queued for the
+  poll (no worker took it) and was claimed, run and settled `succeeded` by
+  `imzero2-cover watchbill run --job <id>` under
+  `IMZERO2_COVERAGE_INTERVAL=1s IMZERO2_COVERAGE_TRAIL=true`.
+- `dm_trail_runs` showed the child's row with driver `watchbill-job`, the
+  job id, attempt 1, kind `demo.sleep` and the build id; a second child on
+  the settled id lost its claim and left a row with the job id and no
+  kind — the baseline.
+- `dm_trail_llm_coverage_job_samples` held four rows for the job run
+  (`job-child` true, `baseline` false) and two for the baseline run
+  (`baseline` true). Subtracting the baseline's units from the job run's
+  left 768 units the job alone executed, out of 9,230 the run covered.
+- The job table's live tests passed on the new schema (the twenty-worker
+  claim race, the sweep, presence), and the run row round-tripped with its
+  stamp.
+
+Two figures worth knowing. The function table for this build is 41,856
+functions and took about fourteen seconds to write on the first run of a
+meta hash; a child whose hash is known writes the build row only and
+starts in well under a second. And the lane coordinator (§SD4) was not
+driven here — the child was started by hand, which exercises the same verb
+the coordinator runs; its own behaviour is covered by the package tests
+with a fake launcher and a real `/bin/sh` child.
+
 ## Status
 
-Proposed — awaiting review by the code owner. M0 to M3 built alongside the proposal.
+Accepted 2026-10-29. M0 to M3 built alongside the proposal.
 
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers (Tier 1 in-place / Tier 2 dated `## Updates` entry / Tier 3 new superseding ADR).

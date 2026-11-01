@@ -343,7 +343,7 @@ is accepted.
 
 ## Update (2026-10-28) — the run row carries a driver stamp
 
-ADR-0344 §SD5 (proposed) adds to the runtime-start row of §SD8 a driver
+ADR-0344 §SD5 adds to the runtime-start row of §SD8 a driver
 stamp — what drove the run (`host`, `watchbill-worker`, `watchbill-job`)
 and, for a job child, the job, its attempt, its kind and the delegation
 that enqueued it, the delegation on the trail's own memberships so the

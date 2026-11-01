@@ -779,7 +779,7 @@ var (
 	MembLadingPublishPaths    = NkRegistry.MustBegin("ladingPublishPaths", 508).End()
 	MembLadingPublishDigests  = NkRegistry.MustBegin("ladingPublishDigests", 509).End()
 	MembLadingPublishBytes    = NkRegistry.MustBegin("ladingPublishBytes", 510).End()
-	// Coverage on the trail (ADR-0343, proposed). The build row anchors a
+	// Coverage on the trail (ADR-0343). The build row anchors a
 	// coverage meta hash to the binary and its commit (§SD2); the function
 	// table resolves a unit id to source (§SD3); a sample is what the
 	// sampler's tick found newly covered (§SD4); an agent apply is the set
