@@ -912,6 +912,12 @@ dozens of Tab stops. A region costs its bytes on the wire, an r7 entry and,
 when labelled, an egui widget — sized for marks a reader points at, not for
 every point of a dense scatter.
 
+A widget that picks in Go for its own reasons keeps its pick and adds
+regions for the tooltip, the name and the focus: `layeredgraph/view` does so
+through `RenderOpts.NodeRegion` (ADR-0069's 2026-11-01 update). The risk
+matrix and impact-tolerance widgets, which picked only to show a tooltip,
+dropped their pick and read hover and click back from the regions.
+
 **Deferred, not killed:** hit regions emitted by the built-in items
 (`Scatter`, `Bars`) without a `Custom` closure; arrow-key movement between
 the marks of one canvas; an AccessKit Click action on a region (its node
