@@ -742,8 +742,14 @@ func (inst *App) renderNavigation(now time.Time) {
 // through set_range once and the host never clobbers one in progress.
 func (inst *App) renderBand(now time.Time) {
 	if inst.band == nil {
+		// The range is the window, so the range buttons and Delete would
+		// be a second, misnamed way to set it; the rate and the mode are
+		// fixed, and Now is Last for a window that ends now.
 		inst.band = timescrubber.New(inst.ids, "trail-band", timescrubber.Options{Height: bandHeight, Location: inst.picker.loc, ValueName: "rows", Now: time.Now,
-			EmptyText: "The band shows the window's surroundings once the first read lands"})
+			EmptyText: "The band shows the window's surroundings once the first read lands",
+			Hide:      timescrubber.PartRate | timescrubber.PartMode | timescrubber.PartRange | timescrubber.PartNow})
+		// A trail is replayed once; it does not loop.
+		inst.band.Transport.Mode = timescrubber.ModeOnce
 	}
 	inst.band.Opts.Location = inst.picker.loc
 	ch := &inst.cache

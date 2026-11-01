@@ -73,7 +73,49 @@ type Options struct {
 	// headline the strip shows in their place: "Pick a layer to load its
 	// forecast". Empty takes a generic sentence.
 	EmptyText string
+	// Hide leaves these parts of the controls out (ADR-0251 §SD10); zero
+	// shows every part. A hidden part takes its keys with it: a key is a
+	// control's second entry (§SD7), so a host that hides Clear range to
+	// give the range a meaning of its own is not undone by Delete. The
+	// strip's own gestures, and Escape while one is in progress, stay. A
+	// row with no part left is not drawn.
+	Hide PartE
 }
+
+// PartE names the controls around the strip, one bit each, for
+// [Options.Hide]. What a hidden part leaves to the host: the mode and the
+// rate are read from the [Transport] as the host set them.
+type PartE uint16
+
+const (
+	// PartStepping is First, Prev, Next and Last, with Home, End, the arrows,
+	// PageUp and PageDown.
+	PartStepping PartE = 1 << iota
+	// PartPlay is Play and Pause, with Space.
+	PartPlay
+	// PartRate is the playback rate.
+	PartRate
+	// PartMode is what playback does at the end.
+	PartMode
+	// PartRange is In, Out and Clear range, with Shift+Home, Shift+End and
+	// Delete.
+	PartRange
+	// PartNow is the Now button.
+	PartNow
+	// PartTimeField is the time a person types into.
+	PartTimeField
+	// PartReadout is the sentence beside it.
+	PartReadout
+
+	// AllParts hides every control, leaving the strip alone.
+	AllParts = PartStepping | PartPlay | PartRate | PartMode | PartRange | PartNow | PartTimeField | PartReadout
+	// transportParts are the parts of the transport row; the readout row
+	// holds the other two.
+	transportParts = PartStepping | PartPlay | PartRate | PartMode | PartRange | PartNow
+)
+
+// shows says whether any of parts is drawn.
+func (inst *Scrubber) shows(parts PartE) bool { return inst.Opts.Hide&parts != parts }
 
 // Events is what a frame did to the position.
 type Events struct {
@@ -119,8 +161,23 @@ const (
 	compactReserve = 300
 )
 
-var keyMask = keycodes.MaskOf(keycodes.Space, keycodes.ArrowLeft, keycodes.ArrowRight,
-	keycodes.Home, keycodes.End, keycodes.PageUp, keycodes.PageDown, keycodes.Delete)
+// keyMask is the keys the strip captures: each part's, for the parts shown
+// (ADR-0251 §SD7). Home and End serve the stepping and, shifted, the range.
+func (inst *Scrubber) keyMask() (mask keycodes.Mask) {
+	if inst.shows(PartStepping) {
+		mask |= keycodes.MaskOf(keycodes.ArrowLeft, keycodes.ArrowRight, keycodes.PageUp, keycodes.PageDown)
+	}
+	if inst.shows(PartStepping) || inst.shows(PartRange) {
+		mask |= keycodes.MaskOf(keycodes.Home, keycodes.End)
+	}
+	if inst.shows(PartPlay) {
+		mask |= keycodes.MaskOf(keycodes.Space)
+	}
+	if inst.shows(PartRange) {
+		mask |= keycodes.MaskOf(keycodes.Delete)
+	}
+	return
+}
 
 // rates are the playback speeds offered, in steps per second.
 var rates = []float64{0.25, 0.5, 1, 2, 4}
@@ -253,9 +310,14 @@ func (inst *Scrubber) Render(w float32, steps []Step) (ev Events) {
 		if inst.Opts.Compact {
 			ev = inst.renderCompact(w, steps)
 		} else {
-			moved := inst.renderTransportRow(steps)
+			var moved, typed bool
+			if inst.shows(transportParts) {
+				moved = inst.renderTransportRow(steps)
+			}
 			ev = inst.keyed(func() Events { return inst.strip(w, inst.height(), steps, false) })
-			typed := inst.renderReadoutRow(steps)
+			if inst.shows(PartTimeField | PartReadout) {
+				typed = inst.renderReadoutRow(steps)
+			}
 			ev.Moved = ev.Moved || moved || typed
 		}
 	}
@@ -289,11 +351,15 @@ func (inst *Scrubber) keyed(body func() Events) (ev Events) {
 		inst.keyFrameID = 0
 		return body()
 	}
-	mask := keyMask
+	mask := inst.keyMask()
 	if inst.drag != dragNone {
 		// Escape is the enclosing window's except while there is a gesture
 		// of ours to cancel.
 		mask |= keycodes.MaskOf(keycodes.Escape)
+	}
+	if mask == 0 {
+		inst.keyFrameID = 0
+		return body()
 	}
 	kf := c.Frame(inst.ids.PrepareStr(keysKey)).CaptureKeys(uint64(mask))
 	inst.keyFrameID = kf.Id()
@@ -583,16 +649,18 @@ func (inst *Scrubber) handleKeys(sm *c.StateManager, axis timeAxis, steps []Step
 			t.StepBy(-stride(n), n)
 			moved = true
 		case keycodes.Home:
-			if k.Shift() {
+			switch {
+			case k.Shift() && inst.shows(PartRange):
 				t.SetIn(at, n)
-			} else {
+			case !k.Shift() && inst.shows(PartStepping):
 				t.First(n)
 				moved = true
 			}
 		case keycodes.End:
-			if k.Shift() {
+			switch {
+			case k.Shift() && inst.shows(PartRange):
 				t.SetOut(at, n)
-			} else {
+			case !k.Shift() && inst.shows(PartStepping):
 				t.Last(n)
 				moved = true
 			}

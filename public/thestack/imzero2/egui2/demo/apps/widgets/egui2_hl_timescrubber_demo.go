@@ -124,8 +124,8 @@ func demoTimeScrubber(_ *c.WidgetIdStack, st *timeScrubberDemoState) {
 // --- the other forms ---
 
 type timeScrubberFormsState struct {
-	compact, byIndex, crowd, empty *timescrubber.Scrubber
-	forecast, dense                []timescrubber.Step
+	compact, byIndex, crowd, trimmed, empty *timescrubber.Scrubber
+	forecast, dense                         []timescrubber.Step
 }
 
 func newTimeScrubberFormsState(ids *c.WidgetIdStack) (st *timeScrubberFormsState) {
@@ -169,6 +169,12 @@ func newTimeScrubberFormsState(ids *c.WidgetIdStack) (st *timeScrubberFormsState
 	st.crowd.Transport.Pos = 900
 
 	o = timeScrubberDemoOptions()
+	o.Hide = timescrubber.PartRate | timescrubber.PartMode | timescrubber.PartRange | timescrubber.PartNow
+	st.trimmed = newTimeScrubberDemo(ids, "ts-forms-trimmed", o)
+	st.trimmed.Transport.Pos = 5
+	st.trimmed.Transport.Mode = timescrubber.ModeOnce
+
+	o = timeScrubberDemoOptions()
 	o.EmptyText = "Pick a layer to load its forecast."
 	st.empty = newTimeScrubberDemo(ids, "ts-forms-empty", o)
 	return
@@ -183,6 +189,9 @@ func demoTimeScrubberForms(_ *c.WidgetIdStack, st *timeScrubberFormsState) {
 	c.Separator().Send()
 	c.Label("Two thousand steps, ten minutes apart: a pixel column draws the largest value among its steps and the worst of their states, so the one strong step and the one missing step are both still there. Nothing is subsampled.").Wrap().Send()
 	st.crowd.Render(timeScrubberDemoW, st.dense)
+	c.Separator().Send()
+	c.Label("The controls a host picks (Options.Hide): the stepping and play alone, no rate, mode, range buttons or Now, and the keys of the hidden parts gone with them — the host's own row has the rest, and here playback stops at the end.").Wrap().Send()
+	st.trimmed.Render(timeScrubberDemoW, st.forecast)
 	c.Separator().Send()
 	c.Label("With no steps: the strip keeps its height and says so, with the reason the host gives (Options.EmptyText), and the transport is disabled.").Wrap().Send()
 	st.empty.Render(timeScrubberDemoW, nil)
@@ -207,11 +216,11 @@ func init() {
 	registry.Register(registry.Demo{
 		Name:        "timescrubberforms",
 		Category:    "Layout & widgets",
-		Title:       "time scrubber forms (compact, by index, crowded, empty)",
+		Title:       "time scrubber forms (compact, by index, crowded, trimmed, empty)",
 		Stage:       [2]float32{1120, 1000},
 		Flags:       registry.DemoFlagNeedsLargeArea,
 		Kind:        registry.DemoKindUX,
-		Description: "The same widget in the forms a host picks when the strip is not the page's subject: one line, an index axis for a series whose dense block would otherwise be squeezed, and two thousand steps drawn as a min–max envelope per pixel column with the worst state of each column on the state lane, and the strip with no steps at all.",
+		Description: "The same widget in the forms a host picks when the strip is not the page's subject: one line, an index axis for a series whose dense block would otherwise be squeezed, and two thousand steps drawn as a min–max envelope per pixel column with the worst state of each column on the state lane, the controls trimmed to the ones the host wants (Options.Hide), and the strip with no steps at all.",
 		Init: func(ids *c.WidgetIdStack) (state any) {
 			return newTimeScrubberFormsState(ids)
 		},

@@ -36,74 +36,99 @@ func (inst *Scrubber) renderTransportRow(steps []Step) (moved bool) {
 	lo, hi := t.Bounds(n)
 	some := n > 1
 	for range c.HorizontalWrapped().KeepIter() {
-		if inst.button("first", icons.PhSkipBack+" First", "To the first step of the range · Home", some && at != lo, false) {
-			t.First(n)
-			moved = true
-		}
-		if inst.button("prev", icons.PhCaretLeft+" Prev", fmt.Sprintf("One step back · Left · Shift or PageDown %d steps · Ctrl a day · Alt a mark", stride(n)), some && at > 0, false) {
-			t.StepBy(-1, n)
-			moved = true
-		}
-		play := icons.PhPlay + " Play"
-		if t.Playing {
-			play = icons.PhPause + " Pause"
-		}
-		if inst.button("play", play, "Play or pause · Space · playback waits for steps that are loading", some, false) {
-			t.Toggle(n)
-			inst.focusKeys()
-		}
-		if inst.button("next", "Next "+icons.PhCaretRight, fmt.Sprintf("One step on · Right · Shift or PageUp %d steps · Ctrl a day · Alt a mark", stride(n)), some && at < n-1, false) {
-			t.StepBy(1, n)
-			moved = true
-		}
-		if inst.button("last", "Last "+icons.PhSkipForward, "To the last step of the range · End", some && at != hi, false) {
-			t.Last(n)
-			moved = true
-		}
-		c.Separator().Vertical().Send()
-
-		rate := t.Rate
-		if !(rate > 0) {
-			rate = defaultRate
-		}
-		for range c.Scope().KeepIter() {
-			if !some {
-				c.UiDisable()
+		// A separator stands between two groups that are both drawn, never
+		// at an end of the row.
+		drawn := false
+		group := func(part PartE, body func()) {
+			if !inst.shows(part) {
+				return
 			}
-			for range c.ComboBox(inst.ids.PrepareStr("rate"),
-				c.WidgetText().Text("").Keep(),
-				c.WidgetText().Text(formatRate(rate)).Keep()).KeepIter() {
-				for range c.IdScope(inst.ids.PrepareStr("rates")) {
-					for i, r := range rates {
-						if c.Button(inst.ids.PrepareSeq(uint64(i)), c.Atoms().Text(formatRate(r)).Keep()).
-							Frame(false).Selected(r == rate).SendResp().HasPrimaryClicked() {
-							t.Rate = r
+			if drawn {
+				c.Separator().Vertical().Send()
+			}
+			drawn = true
+			body()
+		}
+		group(PartStepping|PartPlay, func() {
+			if inst.shows(PartStepping) {
+				if inst.button("first", icons.PhSkipBack+" First", "To the first step of the range · Home", some && at != lo, false) {
+					t.First(n)
+					moved = true
+				}
+				if inst.button("prev", icons.PhCaretLeft+" Prev", fmt.Sprintf("One step back · Left · Shift or PageDown %d steps · Ctrl a day · Alt a mark", stride(n)), some && at > 0, false) {
+					t.StepBy(-1, n)
+					moved = true
+				}
+			}
+			if inst.shows(PartPlay) {
+				play := icons.PhPlay + " Play"
+				if t.Playing {
+					play = icons.PhPause + " Pause"
+				}
+				if inst.button("play", play, "Play or pause · Space · playback waits for steps that are loading", some, false) {
+					t.Toggle(n)
+					inst.focusKeys()
+				}
+			}
+			if inst.shows(PartStepping) {
+				if inst.button("next", "Next "+icons.PhCaretRight, fmt.Sprintf("One step on · Right · Shift or PageUp %d steps · Ctrl a day · Alt a mark", stride(n)), some && at < n-1, false) {
+					t.StepBy(1, n)
+					moved = true
+				}
+				if inst.button("last", "Last "+icons.PhSkipForward, "To the last step of the range · End", some && at != hi, false) {
+					t.Last(n)
+					moved = true
+				}
+			}
+		})
+		group(PartRate|PartMode, func() {
+			if inst.shows(PartRate) {
+				rate := t.Rate
+				if !(rate > 0) {
+					rate = defaultRate
+				}
+				for range c.Scope().KeepIter() {
+					if !some {
+						c.UiDisable()
+					}
+					for range c.ComboBox(inst.ids.PrepareStr("rate"),
+						c.WidgetText().Text("").Keep(),
+						c.WidgetText().Text(formatRate(rate)).Keep()).KeepIter() {
+						for range c.IdScope(inst.ids.PrepareStr("rates")) {
+							for i, r := range rates {
+								if c.Button(inst.ids.PrepareSeq(uint64(i)), c.Atoms().Text(formatRate(r)).Keep()).
+									Frame(false).Selected(r == rate).SendResp().HasPrimaryClicked() {
+									t.Rate = r
+								}
+							}
 						}
 					}
 				}
 			}
-		}
-		if inst.button("mode", modeIcon(t.Mode)+" "+t.Mode.label(), "What playback does at the end: loop, bounce, or stop", some, false) {
-			t.Mode = AllModes[(int(t.Mode)+1)%len(AllModes)]
-		}
-		c.Separator().Vertical().Send()
-
-		if inst.button("range-in", icons.PhBracketsSquare+" In", "Start the range at the playhead · Shift+Home", some && at < n-1, false) {
-			t.SetIn(at, n)
-		}
-		if inst.button("range-out", "Out", "End the range at the playhead · Shift+End", some && at > 0, false) {
-			t.SetOut(at, n)
-		}
-		if inst.button("clear-range", "Clear range", "Play every step again · Delete, or a double click on the band", some && t.RangeOn, false) {
-			t.ClearRange()
-		}
-		c.Separator().Vertical().Send()
-
-		nowStep, spans := inst.nowStep(steps)
-		if inst.button("now", icons.PhClock+" Now", "To the step nearest the wall clock", spans, spans && nowStep == at) {
-			t.Seek(float64(nowStep), n)
-			moved = true
-		}
+			if inst.shows(PartMode) {
+				if inst.button("mode", modeIcon(t.Mode)+" "+t.Mode.label(), "What playback does at the end: loop, bounce, or stop", some, false) {
+					t.Mode = AllModes[(int(t.Mode)+1)%len(AllModes)]
+				}
+			}
+		})
+		group(PartRange, func() {
+			if inst.button("range-in", icons.PhBracketsSquare+" In", "Start the range at the playhead · Shift+Home", some && at < n-1, false) {
+				t.SetIn(at, n)
+			}
+			if inst.button("range-out", "Out", "End the range at the playhead · Shift+End", some && at > 0, false) {
+				t.SetOut(at, n)
+			}
+			if inst.button("clear-range", "Clear range", "Play every step again · Delete, or a double click on the band", some && t.RangeOn, false) {
+				t.ClearRange()
+			}
+		})
+		group(PartNow, func() {
+			nowStep, spans := inst.nowStep(steps)
+			if inst.button("now", icons.PhClock+" Now", "To the step nearest the wall clock", spans, spans && nowStep == at) {
+				t.Seek(float64(nowStep), n)
+				moved = true
+			}
+		})
 	}
 	return
 }
@@ -114,8 +139,12 @@ func (inst *Scrubber) renderTransportRow(steps []Step) (moved bool) {
 // the words grow.
 func (inst *Scrubber) renderReadoutRow(steps []Step) (moved bool) {
 	for range c.Horizontal().KeepIter() {
-		moved = inst.timeField(steps)
-		c.Label(inst.readout(steps)).Send()
+		if inst.shows(PartTimeField) {
+			moved = inst.timeField(steps)
+		}
+		if inst.shows(PartReadout) {
+			c.Label(inst.readout(steps)).Send()
+		}
 	}
 	return
 }
@@ -126,16 +155,20 @@ func (inst *Scrubber) renderCompact(w float32, steps []Step) (ev Events) {
 	t := &inst.Transport
 	n := len(steps)
 	for range c.Horizontal().KeepIter() {
-		play := icons.PhPlay + " Play"
-		if t.Playing {
-			play = icons.PhPause + " Pause"
-		}
-		if inst.button("play", play, "Play or pause · Space", n > 1, false) {
-			t.Toggle(n)
-			inst.focusKeys()
+		if inst.shows(PartPlay) {
+			play := icons.PhPlay + " Play"
+			if t.Playing {
+				play = icons.PhPause + " Pause"
+			}
+			if inst.button("play", play, "Play or pause · Space", n > 1, false) {
+				t.Toggle(n)
+				inst.focusKeys()
+			}
 		}
 		ev = inst.keyed(func() Events { return inst.strip(max(w-compactReserve, 2*sidePad()+40), compactHeight, steps, true) })
-		c.Label(inst.compactReadout(steps)).Send()
+		if inst.shows(PartReadout) {
+			c.Label(inst.compactReadout(steps)).Send()
+		}
 	}
 	return
 }

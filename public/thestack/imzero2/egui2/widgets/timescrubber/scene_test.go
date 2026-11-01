@@ -186,9 +186,11 @@ func TestDrawnTwiceItAdvancesOnce(t *testing.T) {
 	assert.InDelta(t, 0.016, once, 1e-6)
 }
 
-// Nothing, one step, the compact form, the index axis: every form draws.
+// Nothing, one step, the compact form, the index axis, the parts hidden:
+// every form draws.
 func TestEveryFormDraws(t *testing.T) {
-	for _, opts := range []Options{{}, {Compact: true}, {ByIndex: true}, {NoSnap: true, ValueName: "speed", ValueUnit: "m/s"}} {
+	for _, opts := range []Options{{}, {Compact: true}, {ByIndex: true}, {NoSnap: true, ValueName: "speed", ValueUnit: "m/s"},
+		{Hide: PartRate | PartMode | PartRange | PartNow}, {Hide: AllParts}, {Compact: true, Hide: AllParts}} {
 		for _, steps := range [][]Step{nil, stepsAt(3), stepsAt(0, 1), stepsAt(0, 0, 0), stepsAt(0, 1, 2, 3, 6, 9)} {
 			s := newScene(t, steps, opts)
 			s.sc.Marks = []Mark{{At: time.Date(2026, 3, 1, 2, 0, 0, 0, time.UTC), Label: "run"}}

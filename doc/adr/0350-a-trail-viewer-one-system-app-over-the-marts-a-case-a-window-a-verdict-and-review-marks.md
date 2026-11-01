@@ -518,8 +518,12 @@ bar, and the steps inside the wanted window drawn loading while a read is
 in flight — the widget's own way of showing what a move costs. Its range
 band *is* the window: a range the person sets, resizes or slides commits
 once as a fixed window snapped to the enclosing buckets; a range the person
-clears (a double click, Delete) commits the context extent as the window,
-which is the zoom out to context. The window is mirrored onto the band
+clears (a double click on the band) commits the context extent as the
+window, which is the zoom out to context. The scrubber's range buttons and
+Delete, its rate, its mode and its Now button are hidden
+(`timescrubber.Options.Hide`): the range is the window and has the
+picker, the band and the navigation row already, and Now is Last whenever
+the window ends now. Playback runs once and stops. The window is mirrored onto the band
 only when the window or the steps changed since the last mirror, and never
 while a gesture is in progress, so the host cannot clobber one; the
 scrubber's keys land through the same comparison. Its playhead is the

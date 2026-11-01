@@ -236,6 +236,17 @@ the axis type had the mode for steps without increasing times.
 playhead and the range on it, and the time. It keeps the mode indicators
 (row 63).
 
+`Options.Hide` leaves named parts of the controls out — the stepping
+buttons, play, the rate, the mode, the range buttons, Now, the time field,
+the readout — for a host whose own row already has some of them, or whose
+range means something other than a playback span. A hidden part takes its
+keys with it, since a key is a control's second entry (SD7) and a host that
+hides *Clear range* to give the range a meaning of its own would otherwise
+be undone by Delete; the strip's gestures and Escape stay. The mode and the
+rate of a hidden control are what the host left in the `Transport`. A row
+with no part left is not drawn. `Compact` is the other cut, a single line,
+and honours the same bits.
+
 ### Milestones
 
 - **M1 — the widget.** ✓ Axis mapping, transport, strip, transport row, keys.

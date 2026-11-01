@@ -12,7 +12,7 @@ scene:
 
 # time scrubber forms
 
-The same widget as [time scrubber](./time-scrubber.scene.md) in the forms a host picks when the strip is not the page's subject (ADR-0251 §SD10): one line, an index axis, two thousand steps, and none. The scene reads each strip's own readout — the three are at different positions on purpose, so each one's words are its own — and captures the page.
+The same widget as [time scrubber](./time-scrubber.scene.md) in the forms a host picks when the strip is not the page's subject (ADR-0251 §SD10): one line, an index axis, two thousand steps, the controls trimmed, and none. The scene reads each strip's own readout — the three are at different positions on purpose, so each one's words are its own — and captures the page.
 
 ```jsonl trace
 {"do":"wait","role":"text_input","comment":"the gallery has mounted"}
@@ -26,6 +26,7 @@ The same widget as [time scrubber](./time-scrubber.scene.md) in the forms a host
 {"do":"wait","valueContains":"· 3 h step","role":"label"}
 {"do":"wait","valueContains":"step 901 of 2000","role":"label","comment":"the crowded strip"}
 {"do":"wait","valueContains":"· 10 min step","role":"label"}
+{"do":"wait","valueContains":"step 6 of 40","role":"label","comment":"the trimmed form keeps its readout"}
 {"do":"capture","text":"time-scrubber-forms","comment":"the one-line form and the index axis"}
 {"do":"scroll_into_view","valueContains":"Two thousand steps","role":"label"}
 {"do":"capture","text":"time-scrubber-crowded","settleMs":600,"comment":"two thousand steps as an envelope, the held run as a band on the state lane"}
