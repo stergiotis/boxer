@@ -81,6 +81,20 @@ type Node struct {
 	// laid out at the node's one font size.
 	Subtitle string
 	Rows     []Row
+	// Rank, when non-zero, pins the node to a layer instead of leaving the
+	// layer to the engine. Nodes sharing a Rank share one layer, and an edge
+	// from a pinned node to one with a higher Rank spans at least the
+	// difference of the two — exactly that, unless an unpinned node on
+	// another path between them needs more room. A connected graph whose
+	// nodes are all pinned is therefore laid out on exactly its Ranks, up
+	// to a shift: Ranks are relative, so only their differences count, and
+	// two pinned parts of the graph that no edge joins are not placed
+	// relative to each other unless they share a Rank. An edge from a higher
+	// Rank to a lower one constrains nothing and is drawn running backwards.
+	//
+	// 0, the zero value, is the engine's own choice, so a graph that sets no
+	// Rank lays out exactly as before.
+	Rank int
 }
 
 // Row is one line of a row node: an ID the caller can correlate (unique

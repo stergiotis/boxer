@@ -12,7 +12,9 @@
 // shapes in Go over the widget's one canvas, so hover and click on nodes and
 // edges are reported back without a sense region per element (ADR-0228 §SD6).
 // The reported interaction is from the previous frame (immediate-mode
-// one-frame lag).
+// one-frame lag). What the Go pick cannot give a node — a tooltip at the
+// pointer, an accessible name, keyboard focus — a host asks for through
+// RenderOpts.NodeRegion, which declares a hit region per node (ADR-0149).
 package view
 
 import (
@@ -136,6 +138,22 @@ type RenderOpts struct {
 	// canvas and updates it in place. The caller holds one ViewState per graph
 	// across frames and passes its address. Nil keeps the static fit-to-view.
 	State *ViewState
+	// NodeRegion, when set, gives each node it answers for a hit region over
+	// the node's painted shape (ADR-0149's hit regions): the region's Label
+	// is the node's accessible name and its tooltip's first line, Tooltip
+	// the tooltip's body, and Focusable makes the node a Tab stop. The host
+	// shows the tooltip at the pointer, above the page. Regions sense hover
+	// only, so the pick above still reports Hovered and Clicked, and a drag
+	// still pans; Enter or Space on a focused node is reported as a click on
+	// it. Returning ok=false declares none for that node. Optional.
+	NodeRegion func(id string) (r NodeRegion, ok bool)
+}
+
+// NodeRegion is what RenderOpts.NodeRegion declares for one node.
+type NodeRegion struct {
+	Label     string
+	Tooltip   string
+	Focusable bool
 }
 
 // ViewState carries interactive pan/zoom across frames for one graph. The
@@ -448,6 +466,24 @@ func Render(idBase uint64, lay *layeredgraph.Layout, opts RenderOpts) RenderResu
 			}
 		}
 
+		// Hit regions, keyed on the node id so focus survives a re-layout
+		// that reorders the nodes. They are resolved after the last paint
+		// command, so declaring them here, after the paint, changes no
+		// z-order.
+		if opts.NodeRegion != nil {
+			for range c.IdScope(wis.PrepareStr("regions")) {
+				for i, n := range lay.Nodes {
+					r, ok := opts.NodeRegion(n.ID)
+					if !ok {
+						continue
+					}
+					if declareRegion(wis.PrepareStr(n.ID), boxes[i], r).HasPrimaryClicked() && res.Clicked == "" {
+						res.Clicked = n.ID
+					}
+				}
+			}
+		}
+
 		// Drain into the canvas, which senses in every case: it carries the
 		// hover and the click the per-node regions used to, and the drag and
 		// the wheel when pan/zoom is on.
@@ -551,6 +587,54 @@ func (b nodeBox) contains(x, y float32) bool {
 		return x >= b.cx-b.w/2 && x <= b.cx+b.w/2 &&
 			y >= b.cy-b.h/2 && y <= b.cy+b.h/2
 	}
+}
+
+// declareRegion emits a hit region over the shape b paints and returns its
+// response flags from the previous frame. A circle is declared as a circle,
+// a diamond and an ellipse as polygons, anything else as its box.
+func declareRegion(id *c.WidgetIdStack, b nodeBox, r NodeRegion) c.ResponseFlagsE {
+	switch b.shape {
+	case layeredgraph.NodeShapeCircle:
+		h := c.PaintHitCircle(id, b.cx, b.cy, min(b.w, b.h)/2).Label(r.Label).Tooltip(r.Tooltip)
+		if r.Focusable {
+			h = h.Focusable()
+		}
+		return h.SendResp()
+	case layeredgraph.NodeShapeDiamond, layeredgraph.NodeShapeEllipse:
+		var xs, ys []float32
+		if b.shape == layeredgraph.NodeShapeDiamond {
+			xs, ys = diamondOutline(b.cx, b.cy, b.w/2, b.h/2, 0)
+			xs, ys = xs[:4], ys[:4]
+		} else {
+			xs, ys = ellipseOutline(b.cx, b.cy, b.w/2, b.h/2)
+		}
+		h := c.PaintHitPolygon(id, xs, ys).Label(r.Label).Tooltip(r.Tooltip)
+		if r.Focusable {
+			h = h.Focusable()
+		}
+		return h.SendResp()
+	}
+	h := c.PaintHitRect(id, b.cx-b.w/2, b.cy-b.h/2, b.cx+b.w/2, b.cy+b.h/2).Label(r.Label).Tooltip(r.Tooltip)
+	if r.Focusable {
+		h = h.Focusable()
+	}
+	return h.SendResp()
+}
+
+// ellipseSegments is how many sides the polygon a hit region uses for an
+// ellipse has; at 24 the polygon strays under 1% of a radius from the curve.
+const ellipseSegments = 24
+
+// ellipseOutline is the ellipse with centre (cx, cy) and radii rx, ry as an
+// open polygon of ellipseSegments points.
+func ellipseOutline(cx, cy, rx, ry float32) (xs, ys []float32) {
+	xs, ys = make([]float32, ellipseSegments), make([]float32, ellipseSegments)
+	for k := range ellipseSegments {
+		a := 2 * math.Pi * float64(k) / ellipseSegments
+		xs[k] = cx + rx*float32(math.Cos(a))
+		ys[k] = cy + ry*float32(math.Sin(a))
+	}
+	return
 }
 
 // pickNode returns the index of the topmost node under the point, or -1.

@@ -249,6 +249,10 @@ func (e *Engine) renderLaidOutDot(ctx context.Context, m layeredgraph.GraphModel
 		gn.SetFontSize(nodePt)
 		gnodes[n.ID] = gn
 	}
+	rankOf, err := pinRanks(graph, m)
+	if err != nil {
+		return nil, err
+	}
 
 	for i, ed := range m.Edges {
 		tail, ok := gnodes[ed.From]
@@ -281,6 +285,7 @@ func (e *Engine) renderLaidOutDot(ctx context.Context, m layeredgraph.GraphModel
 		if ed.Dashed {
 			ge.SetStyle(cgraph.DashedEdgeStyle)
 		}
+		pinEdge(ge, rankOf, ed)
 		if ed.HeadLabel != "" {
 			ge.SetHeadLabel(ed.HeadLabel)
 		}
