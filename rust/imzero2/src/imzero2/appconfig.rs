@@ -35,6 +35,13 @@ pub struct AppConfig {
     /// fullscreen
     pub fullscreen: bool,
 
+    /// Monitor to open borderless fullscreen on (`-monitor`), an index into
+    /// the windowing system's monitor list. `None` leaves the choice to the
+    /// window manager. Implies fullscreen: egui can only place a window on a
+    /// chosen monitor by making it fullscreen there, which is also the one
+    /// placement Wayland honours from a client.
+    pub monitor: Option<usize>,
+
     /// vsync
     pub vsync: bool,
 
@@ -92,6 +99,7 @@ impl Default for AppConfig {
             window_title: "imzero2".to_owned(),
             app_title: "imzero2".to_owned(),
             fullscreen: false,
+            monitor: None,
             vsync: true,
             background_color_rgba: None,
             fffi_interpreter: true,
@@ -123,7 +131,14 @@ impl AppConfig {
             self.initial_main_window_height,
         );
         self.fullscreen =
-            flags::find_flag_value_default_bool(args, used, "-fullscrreen", self.fullscreen);
+            flags::find_flag_value_default_bool(args, used, "-fullscreen", self.fullscreen);
+        self.monitor = parse_monitor(&flags::find_flag_default(
+            args,
+            used,
+            "-monitor",
+            String::new(),
+        ))
+        .or(self.monitor);
         self.vsync = flags::find_flag_value_default_bool(args, used, "-vsync", self.vsync);
 
         self.window_title =
@@ -382,6 +397,37 @@ fn parse_background_color(s: &str) -> Option<egui::Color32> {
     } else {
         egui::Color32::from_rgb(r, g, b)
     })
+}
+
+/// Parses `-monitor`. Empty is "not given"; a malformed index is logged and
+/// treated the same, so a typo opens a window rather than failing the launch.
+fn parse_monitor(s: &str) -> Option<usize> {
+    if s.is_empty() {
+        return None;
+    }
+    let parsed = s.parse::<usize>().ok();
+    if parsed.is_none() {
+        tracing::warn!(value = s, "ignoring -monitor: not a monitor index");
+    }
+    parsed
+}
+
+#[cfg(test)]
+mod monitor_tests {
+    use super::parse_monitor as parse;
+
+    #[test]
+    fn an_index_selects_a_monitor() {
+        assert_eq!(parse("0"), Some(0));
+        assert_eq!(parse("2"), Some(2));
+    }
+
+    #[test]
+    fn absent_and_malformed_leave_the_choice_to_the_window_manager() {
+        for s in ["", "-1", "DP-3", "1.5"] {
+            assert_eq!(parse(s), None, "input {s:?}");
+        }
+    }
 }
 
 #[cfg(test)]

@@ -15,6 +15,7 @@ import (
 type ImZeroClientConfig struct {
 	AppTitle                string `json:"appTitle"`
 	Fullscreen              string `json:"fullscreen"`
+	Monitor                 string `json:"monitor"`
 	InitialMainWindowWidth  string `json:"initialMainWindowWidth"`
 	InitialMainWindowHeight string `json:"initialMainWindowHeight"`
 	AllowMainWindowResize   string `json:"allowMainWindowResize"`
@@ -36,7 +37,11 @@ func (inst *ImZeroClientConfig) PassthroughArgs(args []string) (argsOut []string
 	}
 	// general
 	add("appTitle", inst.AppTitle)
-	//add("fullscreen", inst.Fullscreen)
+	// "on" or "off"; the client reads anything but "on" as off.
+	add("fullscreen", inst.Fullscreen)
+	// An index into the windowing system's monitor list. It opens borderless
+	// fullscreen on that monitor whatever fullscreen says.
+	add("monitor", inst.Monitor)
 	add("initialMainWindowWidth", inst.InitialMainWindowWidth)
 	add("initialMainWindowHeight", inst.InitialMainWindowHeight)
 	//add("allowMainWindowResize", inst.AllowMainWindowResize)
@@ -65,6 +70,13 @@ func (inst *ImZeroClientConfig) ToCliFlags(nameTransf config.NameTransformFunc, 
 			Category: "general",
 			Name:     nameTransf("fullscreen"),
 			Value:    inst.Fullscreen,
+			Usage:    "open fullscreen: on or off",
+		},
+		&cli.StringFlag{
+			Category: "general",
+			Name:     nameTransf("monitor"),
+			Value:    inst.Monitor,
+			Usage:    "open fullscreen on this monitor, an index into the windowing system's list",
 		},
 		&cli.StringFlag{
 			Category: "general",
@@ -107,6 +119,7 @@ func (inst *ImZeroClientConfig) ToCliFlags(nameTransf config.NameTransformFunc, 
 func (inst *ImZeroClientConfig) FromContext(ctx context.Context, nameTransf config.NameTransformFunc, cmd *cli.Command) (nMessages int) {
 	inst.AppTitle = cmd.String(nameTransf("appTitle"))
 	inst.Fullscreen = cmd.String(nameTransf("fullscreen"))
+	inst.Monitor = cmd.String(nameTransf("monitor"))
 	inst.InitialMainWindowWidth = cmd.String(nameTransf("initialMainWindowWidth"))
 	inst.InitialMainWindowHeight = cmd.String(nameTransf("initialMainWindowHeight"))
 	inst.AllowMainWindowResize = cmd.String(nameTransf("allowMainWindowResize"))

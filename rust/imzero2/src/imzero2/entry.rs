@@ -27,6 +27,9 @@ pub fn run_main_loop(config: appconfig::AppConfig) -> eframe::Result {
             .with_resizable(true),
         ..Default::default()
     };
+    if let Some(monitor) = config.monitor {
+        native_options.viewport = native_options.viewport.with_monitor(monitor);
+    }
     // eframe 0.35 removed `NativeOptions::vsync`; on the wgpu backend vsync is
     // the swapchain present mode (default `AutoVsync`). Map the `-vsync` flag
     // onto it so the config option keeps its effect.
