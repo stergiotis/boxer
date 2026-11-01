@@ -450,6 +450,18 @@ func (inst *Inst) saveDialog(ids *c.WidgetIdStack) *filepicker.Dialog {
 // nil clears the wiring (subsequent Opens hand out NoopBus). Calling SetBus
 // after windows have been opened only affects subsequent Opens — already-
 // mounted windows keep the bus they were given.
+// AllocateInstanceKey mints an instance key from the allocator windows draw
+// from, for a host-side instance that is not a window — a service the
+// service host mounts (ADR-0352 (proposed) §SD2) — so no two instances of
+// this host, window or not, share a key.
+func (inst *Inst) AllocateInstanceKey() (key uint64) {
+	inst.mu.Lock()
+	inst.nextKey++
+	key = inst.nextKey
+	inst.mu.Unlock()
+	return
+}
+
 func (inst *Inst) SetBus(provider app.BusProvider) {
 	inst.mu.Lock()
 	defer inst.mu.Unlock()

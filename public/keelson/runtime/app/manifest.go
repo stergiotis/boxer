@@ -379,11 +379,13 @@ func (inst Manifest) Validate() (err error) {
 	}
 	// ADR-0158 §SD1/§SD2: topics are the launcher's only subject axis, so a
 	// windowed app that declares none cannot be sectioned or filtered — it
-	// would exist in the registry and be reachable from nowhere. Headless
-	// apps have no launcher presence and are exempt.
-	if inst.Surface == SurfaceWindowed && len(inst.Topics) == 0 {
-		err = eb.Build().Str("id", string(inst.Id)).
-			Errorf("manifest: windowed app declares no Topics")
+	// would exist in the registry and be reachable from nowhere. A headless
+	// app (ADR-0352 (proposed) §SD1) is selected to run by a predicate over
+	// keelson.apps and shown in the app center on the same terms, so it
+	// declares them too.
+	if len(inst.Topics) == 0 {
+		err = eb.Build().Str("id", string(inst.Id)).Str("surface", inst.Surface.String()).
+			Errorf("manifest: app declares no Topics")
 		return
 	}
 	for _, t := range inst.Topics {
@@ -396,15 +398,16 @@ func (inst Manifest) Validate() (err error) {
 	// ADR-0214 §SD4: the launcher row is icon + Display + Summary, and a
 	// windowed app without the third is an entry a reader cannot tell from
 	// its siblings. Required for the same reason and on the same terms as
-	// Topics; headless apps have no launcher presence and are exempt.
+	// Topics; a headless app's row in keelson('services') and its app
+	// center page read it the same way (ADR-0352 (proposed) §SD1).
 	//
 	// Non-empty only. The style budget (length, not repeating Display) is a
 	// tree-wide test, not a Validate check: RegisterFactory answers a
 	// rejection by dropping the app with a Warn (ADR-0158 §SD9), so a length
 	// rule here would silently cost an app its place in the launcher.
-	if inst.Surface == SurfaceWindowed && inst.Summary == "" {
-		err = eb.Build().Str("id", string(inst.Id)).
-			Errorf("manifest: windowed app declares no Summary")
+	if inst.Summary == "" {
+		err = eb.Build().Str("id", string(inst.Id)).Str("surface", inst.Surface.String()).
+			Errorf("manifest: app declares no Summary")
 		return
 	}
 	if !inst.Kind.IsValid() {
@@ -420,6 +423,13 @@ func (inst Manifest) Validate() (err error) {
 	if inst.Workingset && inst.LaunchKind == "" {
 		err = eb.Build().Str("id", string(inst.Id)).
 			Errorf("manifest: Workingset requires a non-empty LaunchKind")
+		return
+	}
+	// ADR-0352 (proposed) §SD1: a workingset is composed at a closing edge a
+	// person caused, and a headless app has no window to close.
+	if inst.Workingset && inst.Surface == SurfaceHeadless {
+		err = eb.Build().Str("id", string(inst.Id)).
+			Errorf("manifest: a headless app cannot declare Workingset")
 		return
 	}
 	return

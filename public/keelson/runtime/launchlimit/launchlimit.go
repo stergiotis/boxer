@@ -64,13 +64,23 @@ func Apply(ctx context.Context, bus *inprocbus.Inst, reg *app.Registry, chlocalA
 
 // Evaluate returns the ids of the apps in reg that where selects.
 func Evaluate(ctx context.Context, bus *inprocbus.Inst, reg *app.Registry, where string, log zerolog.Logger) (ids []app.AppIdT, err error) {
+	ids, err = EvaluateAs(ctx, bus, reg, AppId, "launchlimit", where, log)
+	return
+}
+
+// EvaluateAs is Evaluate for another predicate over keelson.apps, evaluated
+// the same way — once, on clickhouse-local, over a registry's current rows —
+// under the caller's bus identity and name: the service host's selection
+// (ADR-0352 (proposed) §SD3) composes with the launch limit by reading the
+// `launchable` column this package's Apply has already set.
+func EvaluateAs(ctx context.Context, bus *inprocbus.Inst, reg *app.Registry, as app.AppIdT, name string, where string, log zerolog.Logger) (ids []app.AppIdT, err error) {
 	tables := introspect.NewRegistry()
 	if err = tables.Register(providers.NewAppsProvider(reg)); err != nil {
 		return
 	}
 	pool := introspectengine.DefaultPoolName
-	client := bus.NewClient(AppId, []app.SubjectFilter{
-		{Pattern: chlocalbroker.SubjectExecPrefix + pool, Direction: app.CapDirectionPub, Reason: "launchlimit: evaluate the launch predicate on clickhouse-local"},
+	client := bus.NewClient(as, []app.SubjectFilter{
+		{Pattern: chlocalbroker.SubjectExecPrefix + pool, Direction: app.CapDirectionPub, Reason: name + ": evaluate the predicate on clickhouse-local"},
 	})
 	defer func() { _ = client.Close() }()
 	eng, err := introspectengine.New(introspectengine.Config{Registry: tables, Bus: client, PoolName: pool}, log)
@@ -81,7 +91,7 @@ func Evaluate(ctx context.Context, bus *inprocbus.Inst, reg *app.Registry, where
 	defer cancel()
 	body, _, err := eng.Query(ctx, "SELECT id FROM apps WHERE ("+where+") ORDER BY id", "TSVRaw")
 	if err != nil {
-		err = eb.Build().Str("where", where).Errorf("launchlimit: evaluate the predicate: %w", err)
+		err = eb.Build().Str("where", where).Errorf("%s: evaluate the predicate: %w", name, err)
 		return
 	}
 	sc := bufio.NewScanner(bytes.NewReader(body))

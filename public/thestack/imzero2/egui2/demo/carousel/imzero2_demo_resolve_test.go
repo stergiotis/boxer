@@ -191,6 +191,8 @@ func TestAdaptToRenderer_MultipleInstancesShareUnderlying(t *testing.T) {
 		Id:      "carousel.test.shared",
 		Version: "0.1.0",
 		Display: "carousel test (shared)",
+		Summary: "fixture summary",
+		Topics:  []app.TopicT{app.TopicRuntime},
 		Surface: app.SurfaceHeadless,
 	}
 	a, err := app.NewLegacyFuncApp(m, func() (err error) {

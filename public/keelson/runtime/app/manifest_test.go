@@ -25,10 +25,29 @@ func TestManifest_Validate_Headless_OK(t *testing.T) {
 	m := Manifest{
 		Id:      "org.test.headless",
 		Display: "Headless tool",
+		Summary: "Run a fixture in the background",
+		Topics:  []TopicT{TopicRuntime},
 		Surface: SurfaceHeadless,
 	}
 	err := m.Validate()
 	require.NoError(t, err)
+}
+
+// ADR-0352 (proposed) §SD1: a headless app declares Summary and Topics on
+// the same terms as a windowed one, and never a Workingset.
+func TestManifest_Validate_Headless_NeedsSummaryAndTopics(t *testing.T) {
+	noSummary := Manifest{Id: "org.test.headless", Display: "Headless tool", Topics: []TopicT{TopicRuntime}, Surface: SurfaceHeadless}
+	require.ErrorContains(t, noSummary.Validate(), "Summary")
+	noTopics := Manifest{Id: "org.test.headless", Display: "Headless tool", Summary: "fixture", Surface: SurfaceHeadless}
+	require.ErrorContains(t, noTopics.Validate(), "Topics")
+}
+
+func TestManifest_Validate_Headless_WorkingsetRefused(t *testing.T) {
+	m := Manifest{
+		Id: "org.test.headless", Display: "Headless tool", Summary: "fixture", Topics: []TopicT{TopicRuntime},
+		Surface: SurfaceHeadless, LaunchKind: "fixtureKind", Workingset: true,
+	}
+	require.ErrorContains(t, m.Validate(), "headless")
 }
 
 func TestManifest_Validate_EmptyId(t *testing.T) {
@@ -211,15 +230,20 @@ func TestManifest_Validate_WindowedNeedsTopics(t *testing.T) {
 	assert.Equal(t, "org.test.x", ebtest.Fields(t, err)["id"])
 }
 
-func TestManifest_Validate_HeadlessNeedsNoTopics(t *testing.T) {
-	// A headless app has no launcher presence, so it has nothing to be
-	// sectioned into (ADR-0158 §SD2).
+func TestManifest_Validate_HeadlessNeedsTopicsToo(t *testing.T) {
+	// A headless app is selected to run by a predicate over keelson.apps and
+	// shown in the app center, so it declares topics as a windowed app does
+	// (ADR-0352 (proposed) §SD1; before it, ADR-0158 §SD2 exempted it).
 	m := Manifest{
 		Id:      "org.test.x",
 		Display: "X",
+		Summary: "fixture",
 		Surface: SurfaceHeadless,
 	}
-	require.NoError(t, m.Validate())
+	err := m.Validate()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "declares no Topics")
+	assert.Equal(t, "headless", ebtest.Fields(t, err)["surface"])
 }
 
 func TestManifest_Validate_UnregisteredTopicRefused(t *testing.T) {

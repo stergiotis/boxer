@@ -56,6 +56,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/natsbus"
 	"github.com/stergiotis/boxer/public/keelson/runtime/persist"
 	"github.com/stergiotis/boxer/public/keelson/runtime/runinfo"
+	"github.com/stergiotis/boxer/public/keelson/runtime/servicehost"
 	"github.com/stergiotis/boxer/public/keelson/runtime/statestore"
 	"github.com/stergiotis/boxer/public/keelson/runtime/sysmetricsbus"
 	"github.com/stergiotis/boxer/public/keelson/runtime/sysmscrape"
@@ -194,6 +195,11 @@ type SeedWindow struct {
 	Config []byte
 }
 
+// SeedService is one launch config delivered to a service at boot
+// (ADR-0352 (proposed) §SD1): servicehost.Seed, named here beside
+// SeedWindow.
+type SeedService = servicehost.Seed
+
 // Options configures Boot. The zero value is a usable minimal host over
 // app.DefaultRegistry with no optional services and no seeded windows.
 type Options struct {
@@ -212,6 +218,18 @@ type Options struct {
 	// SeedWindows are windows opened with a launch config; see SeedWindow.
 	// Ignored in screenshot mode.
 	SeedWindows []SeedWindow
+	// SeedServices are launch configs delivered to services at their Mount
+	// (ADR-0352 (proposed) §SD1), the service form of SeedWindow: a seed
+	// that does not fit its app is a boot error; one naming a service the
+	// predicate did not select is logged and skipped. Ignored in screenshot
+	// mode.
+	SeedServices []SeedService
+	// NoWindowHost boots a process without a window host and without the
+	// imzero2 client (ADR-0352 (proposed) §SD6): identity, facts, bus,
+	// services and the service host, nothing drawn. Such a process hosts
+	// headless apps only; Wait, not Run, holds it until a signal. Ignored in
+	// screenshot mode.
+	NoWindowHost bool
 	// Facts, when non-nil, replaces the ClickHouse-or-memory facts store
 	// chosen from the CLICKHOUSE_* environment. Tests and adopters that
 	// never persist pass factsstore.NewInMemoryFactsStore().
@@ -339,8 +357,13 @@ type Runtime struct {
 	// nil unless IMZERO2_COVERAGE_TRAIL asked for it on a sampling build.
 	CoverageTrail *covtrail.Service
 	Status        *runtimestatus.Snapshot
-	// Host is the window host; nil in screenshot mode.
+	// Host is the window host; nil in screenshot mode and under
+	// NoWindowHost.
 	Host *windowhost.Inst
+	// Services is the service host (ADR-0352 (proposed) §SD2): the headless
+	// apps KEELSON_SERVICES_WHERE selected, mounted at boot. nil in
+	// screenshot mode.
+	Services *servicehost.Inst
 	// Renderers are the per-frame render functions in order.
 	Renderers      []func() error
 	ScreenshotMode bool
@@ -487,6 +510,13 @@ func Boot(ctx context.Context, opts Options) (rt *Runtime, err error) {
 		for _, a := range opts.LaunchApps {
 			logger.Info().Str("id", string(a.Manifest().Id)).Msg("screenshot mode: adding tour renderer")
 			rt.Renderers = append(rt.Renderers, imzhost.DecorateRenderer(imzhost.AdaptToRenderer(a), rt.chrome(nil, nil)))
+		}
+	} else if opts.NoWindowHost {
+		// A process without a window hosts headless apps only (ADR-0352
+		// (proposed) §SD6); the service host mints its own instance keys,
+		// since no window shares the space.
+		if err = rt.bootServiceHost(ctx, reg, nil); err != nil {
+			return
 		}
 	} else {
 		err = rt.bootWindowHost()
@@ -819,6 +849,12 @@ func (rt *Runtime) bootWindowHost() (err error) {
 		grace = DefaultShutdownGrace
 	}
 	host.SetDrainDeadlines(0, grace/2)
+	// The services (ADR-0352 (proposed) §SD2) start before the first window
+	// opens, with instance keys from the window host's allocator so no
+	// window and service share one.
+	if err = rt.bootServiceHost(context.Background(), reg, host.AllocateInstanceKey); err != nil {
+		return
+	}
 	// The launcher (ADR-0214 §SD1/§SD3). Registered at init like every other
 	// app; what it cannot know until now is the host it opens through, so the
 	// two halves meet here. *Inst satisfies launcher.HostI structurally —
@@ -1572,8 +1608,116 @@ func (rt *Runtime) Reap() {
 		if rt.Host != nil {
 			rt.Host.ReapAll("shutdown")
 		}
+		// Windows first, services after: a window may still be talking to a
+		// service while it unmounts, the reverse never (ADR-0352
+		// (proposed) §SD2).
+		if rt.Services != nil {
+			rt.Services.ReapAll(servicehost.StopReasonShutdown)
+		}
 		rt.heartbeat.Stop()
 	})
+}
+
+// bootServiceHost selects the services (ADR-0352 (proposed) §SD3) after the
+// launch limit has been applied to reg, mounts them, records the selection
+// on the trail, and registers keelson('services'). A set predicate that
+// cannot be evaluated is a boot error, as the launch limit's is; unset, no
+// service runs and the host still answers for every headless app.
+func (rt *Runtime) bootServiceHost(ctx context.Context, reg *app.Registry, allocateKey func() uint64) (err error) {
+	logger := rt.opts.Log
+	ids, set, err := servicehost.Select(ctx, rt.Bus, reg, rt.ChLocal != nil, logger)
+	if err != nil {
+		err = eh.Errorf("hostboot: %w", err)
+		return
+	}
+	grace := rt.opts.ShutdownGrace
+	if grace <= 0 {
+		grace = DefaultShutdownGrace
+	}
+	runId := ""
+	if rt.RunInfo != nil {
+		runId = rt.RunInfo.RunId
+	}
+	cfg := servicehost.Config{
+		Registry: reg, Bus: rt.Bus, Facts: rt.Facts, RunId: runId, Log: logger,
+		AllocateKey: allocateKey, Subscriptions: rt.Bus.Subscriptions, ShutdownDrain: grace / 2,
+	}
+	if rt.Cell != nil {
+		cfg.MountValues = map[any]any{cell.MountKey{}: rt.Cell}
+	}
+	svcs := servicehost.New(cfg)
+	if err = svcs.Start(ctx, ids, rt.opts.SeedServices); err != nil {
+		err = eh.Errorf("hostboot: services: %w", err)
+		return
+	}
+	rt.Services = svcs
+	if set {
+		where := servicehost.Where.Get()
+		logger.Info().Str("where", where).Int("selected", len(ids)).Msg("servicehost: services selected")
+		recordServicesSelected(rt.Trail, where, ids, logger)
+	}
+	if rt.Introspect != nil {
+		if iErr := servicehost.RegisterIntrospect(rt.Introspect, svcs); iErr != nil {
+			logger.Warn().Err(iErr).Msg("servicehost: keelson('services') registration failed")
+		}
+	}
+	return
+}
+
+// recordServicesSelected writes the selection as one audit event (ADR-0352
+// (proposed) §SD5): the predicate, the count, and the selected ids as refs
+// up to the row's cap.
+func recordServicesSelected(rec *trail.Recorder, where string, ids []app.AppIdT, log zerolog.Logger) {
+	if !rec.Durable() {
+		return
+	}
+	row := trail.AuditEvent{Domain: "services", Action: "selected", Outcome: trail.OutcomeOk, Retention: trail.RetentionTrail,
+		AttrKeys: []string{"where", "count"}, AttrValues: []string{trail.Bounded(where), strconv.Itoa(len(ids))}}
+	for i, id := range ids {
+		if i >= trail.MaxRefs {
+			break
+		}
+		row.RefTypes = append(row.RefTypes, "app")
+		row.RefValues = append(row.RefValues, trail.Bounded(string(id)))
+	}
+	c := trail.Context{Origin: rec.OriginOf(servicehost.AppId, 0)}
+	if err := rec.Event(context.Background(), time.Now().UTC(), c, row); err != nil {
+		log.Warn().Err(err).Msg("servicehost: write the selection's audit event")
+	}
+	rec.FlushSoon()
+}
+
+// Wait holds a process booted with NoWindowHost until SIGINT, SIGTERM or
+// ctx ends, then Closes the runtime, which reaps the services through their
+// closing edge. A shutdown that does not finish within the grace is forced.
+// It is Run's counterpart for a host with nothing to draw; calling it on a
+// host that has a window host is an error.
+func (rt *Runtime) Wait(ctx context.Context) (err error) {
+	if rt.Host != nil || rt.ScreenshotMode {
+		err = eh.Errorf("hostboot: Wait is for a host booted with NoWindowHost; a host with windows runs through Run")
+		return
+	}
+	logger := rt.opts.Log
+	grace := rt.opts.ShutdownGrace
+	if grace <= 0 {
+		grace = DefaultShutdownGrace
+	}
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
+	defer signal.Stop(sigCh)
+	select {
+	case sig := <-sigCh:
+		logger.Info().Str("signal", sig.String()).Msg("hostboot: caught signal, shutting down")
+	case <-ctx.Done():
+		logger.Info().Msg("hostboot: context ended, shutting down")
+	}
+	forced := time.AfterFunc(grace, func() {
+		logger.Warn().Dur("grace", grace).Msg("hostboot: shutdown did not complete within the grace period, forcing exit")
+		os.Exit(1)
+	})
+	rt.Close()
+	forced.Stop()
+	return
 }
 
 // Close reaps, then stops the services in reverse start order: the bus's
