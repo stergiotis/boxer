@@ -67,8 +67,14 @@ its top edge. Drag on the top edge for a new window, drag an edge or the
 body to resize or pan it, double-click the edge to zoom out to the whole
 band, press Escape during a drag to put the range back. Buckets drawn
 hollow are being read. The playhead is the selected row: click or drag it
-to select the newest row of a bucket, and Space replays the trail through
-the selection, step by step.
+to select the newest row of a bucket.
+
+**Prev row**, **Play** and **Next row** above the band step the selection
+through the rows the table holds, oldest to newest. Play shows each row
+for a moment and moves on, stopping at the newest; pressed at the newest,
+or with nothing selected, it starts from the oldest. Left, Right and Space
+do the same while the row has focus, which Play gives it. The label beside
+them is the selected row's place among the held rows.
 
 The **detail strip** below it is the window exactly: one lane per kind (or
 status, with **Colour**), the five busiest and *other*, each cell deeper

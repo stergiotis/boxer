@@ -20,7 +20,8 @@ navigation row and reads the line again, finds the `trail.config` row in the tab
 verdict line above it, selects the row and finds its `trail-required`
 attribute in the detail pane, lists the rules and the exception the
 `trail-row` rule raises for that row, marks the row reviewed with a reason
-through the detail pane's button and sees the exception leave the list.
+through the detail pane's button and sees the exception leave the list,
+then steps the selection to the next row in time with the replay row.
 It then reads the line of the actor × object matrix, of the dotted chart,
 of the day × hour grid and of the series.
 
@@ -61,6 +62,10 @@ honest outcome.
 {"do":"expect","of":"cleared2","min":1}
 {"do":"expect","of":"open","minus":"open2","min":1}
 {"do":"capture","text":"trailviewer"}
+{"do":"read","valueContains":"oldest first","role":"label","pattern":"row (?P<place>\\d+) of (?P<held>\\d+), oldest first","comment":"ADR-0350 M8: the selected row's place among the held rows, in time order"}
+{"do":"click","contains":"Next row","role":"button","comment":"replay steps the selection to the row after, in time"}
+{"do":"read","valueContains":"oldest first","role":"label","pattern":"row (?P<place2>\\d+) of \\d+, oldest first","settleMs":800}
+{"do":"expect","of":"place2","minus":"place","eq":1}
 {"do":"click","name":"Actor × object","role":"button"}
 {"do":"read","valueContains":"actors ×","role":"label","pattern":"(?P<actors>\\d+) actors × (?P<objects>\\d+) objects","settleMs":4000}
 {"do":"expect","of":"actors","min":1}

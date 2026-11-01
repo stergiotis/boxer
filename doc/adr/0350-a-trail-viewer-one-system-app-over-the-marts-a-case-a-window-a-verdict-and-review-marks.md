@@ -519,20 +519,32 @@ in flight — the widget's own way of showing what a move costs. Its range
 band *is* the window: a range the person sets, resizes or slides commits
 once as a fixed window snapped to the enclosing buckets; a range the person
 clears (a double click on the band) commits the context extent as the
-window, which is the zoom out to context. The scrubber's range buttons and
-Delete, its rate, its mode and its Now button are hidden
-(`timescrubber.Options.Hide`): the range is the window and has the
-picker, the band and the navigation row already, and Now is Last whenever
-the window ends now, and the readout counts no buckets
-(`Options.NoIndices`): a bucket is its time and its rows. Playback runs
-once and stops. The window is mirrored onto the band
+window, which is the zoom out to context. The scrubber's transport row is
+hidden whole (`timescrubber.Options.Hide`), its time field and readout
+kept, and the readout counts no buckets (`Options.NoIndices`): a bucket is
+its time and its rows. The range buttons and Delete would be a second,
+misnamed way to set the window, which has the picker, the band and the
+navigation row already; the stepping and play buttons step buckets, and
+a bucket of three rows would play as one, so replay is the viewer's own
+(below). The window is mirrored onto the band
 only when the window or the steps changed since the last mirror, and never
 while a gesture is in progress, so the host cannot clobber one; the
 scrubber's keys land through the same comparison. Its playhead is the
 selected row: selecting a row seeks the playhead to the row's bucket, and
-a settled position — a click, a key, each step of playback — selects the
-newest held row of its bucket through `select_row`, or nothing when no held
-row lies in it. Playback therefore replays the trail through the selection.
+a settled position — a click, a drag let go — selects the newest held row
+of its bucket through `select_row`, or nothing when no held row lies in it.
+
+**Replay** is a row of the viewer's above the band: *Prev row*, *Play* and
+*Next row* step the selection through the rows the table holds, in time
+order, each through `select_row`, so the band's playhead follows and the
+trail logs the replay as the person's. Play shows each row for a fixed
+dwell and moves on, once, stopping at the newest row; pressed at the newest
+or with nothing selected it starts from the oldest. Space, Left and Right
+do the same while the row has focus. No read is made for it: the rows the
+table holds are the rows replay visits, and a row the window does not hold
+is not replayed. The unit is the row because the trail is read row by row;
+the scrubber's unit is the bucket, which is right for a forecast whose
+steps are its frames and wrong here.
 
 **The detail strip** is a `timeline` locked to the window the table read
 (`LockedView`, `SetRangeUnits` every frame): one lane per series of the

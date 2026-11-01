@@ -156,6 +156,7 @@ type App struct {
 	bandWindow    Window
 	bandGen       uint64
 	bandSeekId    uint64
+	replay        replay
 	detailTl      *timeline.Timeline
 	detailVis     timeline.Visuals
 	detailGen     uint64
@@ -253,6 +254,7 @@ func (inst *App) tick(now time.Time) {
 		ctxFrom: inst.ctx.from, ctxTo: inst.ctx.to}, inst.probeFunc(src))
 	inst.syncReadFSM(src.persisted())
 	inst.refreshSelected()
+	inst.tickReplay(now)
 	inst.settlePending()
 	inst.verdicts.tick(now, src, runsOf(inst.cache.rows))
 	var sel *Row
@@ -420,6 +422,7 @@ func (inst *App) render() (err error) {
 		inst.measureTopPanel()
 		inst.renderControls()
 		inst.renderNavigation(now)
+		inst.renderReplay(now)
 		inst.renderBand(now)
 		inst.renderDetailStrip()
 		inst.renderVerdicts()
@@ -499,7 +502,7 @@ func (inst *App) renderViewBar() {
 
 func (inst *App) requestRepaint() {
 	running := inst.cache.runner.Running() || inst.verdicts.runner.Running() || inst.detail.runner.Running() || inst.picker.runner.runner.Running() ||
-		inst.an.running() || inst.views.runner.Running() || inst.send.runner.Running()
+		inst.an.running() || inst.views.runner.Running() || inst.send.runner.Running() || inst.replay.playing
 	switch {
 	case running:
 		c.RequestRepaintAfter(0.1)
@@ -742,16 +745,15 @@ func (inst *App) renderNavigation(now time.Time) {
 // through set_range once and the host never clobbers one in progress.
 func (inst *App) renderBand(now time.Time) {
 	if inst.band == nil {
-		// The range is the window, so the range buttons and Delete would
-		// be a second, misnamed way to set it; the rate and the mode are
-		// fixed, and Now is Last for a window that ends now.
+		// The scrubber's transport is hidden whole: its steps are buckets,
+		// and replay.go steps rows; the range is the window, so the range
+		// buttons and Delete would be a second, misnamed way to set it.
+		// The time field and the readout stay.
 		inst.band = timescrubber.New(inst.ids, "trail-band", timescrubber.Options{Height: bandHeight, Location: inst.picker.loc, ValueName: "rows", Now: time.Now,
 			EmptyText: "The band shows the window's surroundings once the first read lands",
-			Hide:      timescrubber.PartRate | timescrubber.PartMode | timescrubber.PartRange | timescrubber.PartNow,
+			Hide:      timescrubber.AllParts &^ (timescrubber.PartTimeField | timescrubber.PartReadout),
 			// A bucket has a time and a count, not a number worth reading.
 			NoIndices: true})
-		// A trail is replayed once; it does not loop.
-		inst.band.Transport.Mode = timescrubber.ModeOnce
 	}
 	inst.band.Opts.Location = inst.picker.loc
 	ch := &inst.cache
