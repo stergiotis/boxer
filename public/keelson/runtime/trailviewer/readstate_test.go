@@ -232,12 +232,14 @@ func TestTheReadReportsAStepPerStatement(t *testing.T) {
 	out, err := pl.run(context.Background(), report, p)
 	require.NoError(t, err)
 	require.NotNil(t, out)
-	want := []string{stepRows, stepAsOf, stepStrip}
+	want := []string{stepRows, stepAsOf, stepStrip, stepContext}
 	for _, f := range AllFacets {
 		want = append(want, stepFacet+f.String())
 	}
 	assert.Equal(t, append(want, ""), notes, "the rules run over no rows, so their steps report nothing")
-	assert.Len(t, exec.statements(), 2+len(AllFacets), "rows, strip, one per facet; the as-of read runs no SQL outside the entity case")
+	assert.Len(t, exec.statements(), 3+len(AllFacets), "rows, strip, the context band's buckets, one per facet; the as-of read runs no SQL outside the entity case")
+	assert.Equal(t, contextFactor*time.Hour, out.ctxTo.Sub(out.ctxFrom), "the plan named no extent, so the context is placed around the window")
+	assert.False(t, out.ctxTo.After(to.Add(out.ctxStep)), "clamped at the read's now plus one step")
 	assert.Equal(t, pl.steps(), totals[0])
 	assert.Equal(t, pl.steps(), dones[len(dones)-1], "finishes at its step count")
 	for i := 1; i < len(dones); i++ {

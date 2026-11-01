@@ -50,8 +50,13 @@ type tableFill struct {
 	extend  bool
 	buckets []Bucket
 	step    time.Duration
-	facets  [][]FacetValue
-	at      time.Time
+	// The context band's buckets (ADR-0350 §SD13): one count per bucket of
+	// ctxStep over [ctxFrom, ctxTo), the keys summed.
+	ctxBuckets     []Bucket
+	ctxStep        time.Duration
+	ctxFrom, ctxTo time.Time
+	facets         [][]FacetValue
+	at             time.Time
 	// exceptions are the SQL rules' raised rows among rows, reviews their
 	// latest marks, claims the claim rule's new judgments, asOf the entity
 	// case's state as of the window's end.
@@ -72,16 +77,19 @@ type tableCache struct {
 	from, to time.Time
 	// resolvedAt is the instant from and to were resolved at, the anchor a
 	// question's last window resolves against to be compared with them.
-	resolvedAt  time.Time
-	buckets     []Bucket
-	step        time.Duration
-	facets      [][]FacetValue
-	filled      bool
-	refreshedAt time.Time
-	gen         uint64
-	lastErr     error
-	exceptions  []Exception
-	reviews     map[uint64]Review
+	resolvedAt     time.Time
+	buckets        []Bucket
+	step           time.Duration
+	ctxBuckets     []Bucket
+	ctxStep        time.Duration
+	ctxFrom, ctxTo time.Time
+	facets         [][]FacetValue
+	filled         bool
+	refreshedAt    time.Time
+	gen            uint64
+	lastErr        error
+	exceptions     []Exception
+	reviews        map[uint64]Review
 	// claims is every judgment the claim rule made, kept across refills
 	// so a row is read once.
 	claims map[uint64]claimJudgment
@@ -110,6 +118,9 @@ type readSpec struct {
 	c       Case
 	filter  Filter
 	buckets int
+	// ctxFrom and ctxTo are the context extent the band's buckets are read
+	// over; zero takes the extent placed around the resolved window.
+	ctxFrom, ctxTo time.Time
 }
 
 // tick adopts a finished read and starts the next one.
@@ -134,6 +145,7 @@ func (inst *tableCache) tick(now time.Time, src *Source, want scope, spec readSp
 			inst.rows, inst.more, inst.scope, inst.from, inst.to = res.rows, res.more, res.scope, res.from, res.to
 			inst.resolvedAt = res.resolvedAt
 			inst.buckets, inst.step, inst.facets = res.buckets, res.step, res.facets
+			inst.ctxBuckets, inst.ctxStep, inst.ctxFrom, inst.ctxTo = res.ctxBuckets, res.ctxStep, res.ctxFrom, res.ctxTo
 			inst.filled, inst.refreshedAt, inst.lastErr = true, res.at, nil
 			inst.exceptions, inst.asOf = res.exceptions, res.asOf
 			inst.reviews = make(map[uint64]Review, len(res.reviews))
@@ -201,11 +213,14 @@ type readPlan struct {
 	want                 scope
 	q                    listQuery
 	from, to, resolvedAt time.Time
-	extend               bool
-	buckets              int
-	by                   StripByE
-	look                 time.Duration
-	judged               map[uint64]bool
+	// ctxFrom and ctxTo bound the context statement; zero takes the extent
+	// placed around the window.
+	ctxFrom, ctxTo time.Time
+	extend         bool
+	buckets        int
+	by             StripByE
+	look           time.Duration
+	judged         map[uint64]bool
 }
 
 // The notes the read reports its steps under, one per statement.
@@ -216,17 +231,31 @@ const (
 	stepClaims     = "claims"
 	stepAsOf       = "as-of"
 	stepStrip      = "strip"
+	stepContext    = "context"
 	stepFacet      = "facet: "
 )
 
 // steps is how many statements the read runs at most: an extension reads
-// the rows and what the rules say of them, a refill the strip, the as-of
-// state and the facets too.
+// the rows and what the rules say of them, a refill the strip, the context
+// band's buckets, the as-of state and the facets too.
 func (inst readPlan) steps() (n uint64) {
 	n = 4
 	if !inst.extend {
-		n += 2 + uint64(len(AllFacets))
+		n += 3 + uint64(len(AllFacets))
 	}
+	return
+}
+
+// context is the extent the band's buckets are read over and their step:
+// the plan's, or the extent placed around the window when none was given.
+func (inst readPlan) context() (from, to time.Time, step time.Duration) {
+	from, to = inst.ctxFrom, inst.ctxTo
+	if from.IsZero() || !to.After(from) {
+		step = stepFor(contextFactor*inst.to.Sub(inst.from), inst.buckets)
+		from, to, _ = contextExtent(inst.from, inst.to, inst.resolvedAt, step)
+		return
+	}
+	step = stepFor(to.Sub(from), inst.buckets)
 	return
 }
 
@@ -279,6 +308,16 @@ func (inst readPlan) run(ctx context.Context, report bgjob.Reporter, p *probe) (
 		if out.buckets, err = p.strip(ctx, q, out.step, inst.by); err != nil {
 			return nil, err
 		}
+		// The context band's buckets: one GROUP BY over the context extent,
+		// contextFactor times the window, summed to a count per bucket.
+		out.ctxFrom, out.ctxTo, out.ctxStep = inst.context()
+		qCtx := listQuery{Case: q.Case, Filter: q.Filter, From: out.ctxFrom, To: out.ctxTo}
+		step(stepContext)
+		var ctxBuckets []Bucket
+		if ctxBuckets, err = p.strip(ctx, qCtx, out.ctxStep, inst.by); err != nil {
+			return nil, err
+		}
+		out.ctxBuckets = sumBuckets(ctxBuckets)
 		out.facets = make([][]FacetValue, len(AllFacets))
 		for i, f := range AllFacets {
 			step(stepFacet + f.String())
@@ -298,7 +337,7 @@ func (inst *tableCache) start(now time.Time, want scope, spec readSpec, extend b
 	if inst.runner.Running() {
 		inst.runner.Invalidate()
 	}
-	pl := readPlan{want: want, extend: extend, buckets: spec.buckets, by: want.Strip, look: lookback()}
+	pl := readPlan{want: want, extend: extend, buckets: spec.buckets, by: want.Strip, look: lookback(), ctxFrom: spec.ctxFrom, ctxTo: spec.ctxTo}
 	pl.q = listQuery{Case: spec.c, Filter: spec.filter}
 	if extend {
 		pl.from, pl.to, pl.resolvedAt = inst.from, inst.to, inst.resolvedAt

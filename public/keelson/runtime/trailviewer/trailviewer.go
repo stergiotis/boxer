@@ -2,7 +2,8 @@
 // system app that reads the trail marts on boxer.facts by case — a run, a
 // window, an app, a conversation, a task, a data subject, a principal, an
 // entity, an egress destination, or every row — and time window, into a
-// count strip, a windowed table, a facets pane and a detail pane with the
+// context band and a detail strip over the window (navigation.go), a
+// windowed table, a facets pane and a detail pane with the
 // identity chain, the rows around the selected one, and for an audit event
 // or a grant the previous-state diff. Above the table one verdict line per
 // writer run says whether the run's sealed record holds. Named exception
@@ -45,19 +46,23 @@ import (
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/color"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/fieldview"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/fsmview"
-	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/implot"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/jobprogress"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/recordtable"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/timeline"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/timerangepicker"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/timerangepicker/presets"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/timescrubber"
 )
 
 const (
 	detailPanelHeight = 260.0
 	facetsPanelWidth  = 260.0
-	stripHeight       = 120.0
-	// stripFallbackWidth sizes the strip before the pane probe answers.
+	// stripFallbackWidth sizes the band and the detail strip before the
+	// pane probe answers.
 	stripFallbackWidth = 720.0
+	// minTopPanelWidth is the narrowest width the top panel's probe is
+	// trusted to report (measureTopPanel).
+	minTopPanelWidth = 200.0
 	// stripKeys bounds the strip's series; the rest are summed as other,
 	// since the qualitative cycle has seven hues.
 	stripKeys = 6
@@ -137,6 +142,26 @@ type App struct {
 	// generation or the exceptions move.
 	grid   gridState
 	stripW float32
+
+	// Time navigation (navigation.go): the context extent the reads use,
+	// the windows Back returns to and the one it is returning to, the
+	// context band with what it last mirrored, and the detail strip.
+	ctx           contextState
+	history       windowHistory
+	backTarget    Window
+	hasBackTarget bool
+	band          *timescrubber.Scrubber
+	bandSteps     []timescrubber.Step
+	bandMirror    bandRange
+	bandWindow    Window
+	bandGen       uint64
+	bandSeekId    uint64
+	detailTl      *timeline.Timeline
+	detailVis     timeline.Visuals
+	detailGen     uint64
+	// paneSeq keys the top panel's width probe (measureTopPanel), derived
+	// at the window's scope once per frame.
+	paneSeq struct{ top uint64 }
 
 	// The analytic views (analytics.go, tree.go), the saved views
 	// (views.go), the export to play (sendplay.go), and why a launch
@@ -223,8 +248,9 @@ func (inst *App) tick(now time.Time) {
 	if w, ok := inst.picker.take(); ok {
 		inst.setWindowGesture(w)
 	}
-	inst.cache.tick(now, src, inst.scopeValue(), readSpec{c: inst.caseValue, filter: inst.filter, buckets: stripBuckets(inst.stripW)},
-		inst.probeFunc(src))
+	inst.updateContext(now)
+	inst.cache.tick(now, src, inst.scopeValue(), readSpec{c: inst.caseValue, filter: inst.filter, buckets: stripBuckets(inst.stripW),
+		ctxFrom: inst.ctx.from, ctxTo: inst.ctx.to}, inst.probeFunc(src))
 	inst.syncReadFSM(src.persisted())
 	inst.refreshSelected()
 	inst.settlePending()
@@ -266,8 +292,28 @@ func (inst *App) applyTab(t TabE) {
 	}
 }
 
+// applyWindow sets the window; every face of it — the picker, the band,
+// the detail strip's brush, the navigation row, set_range — lands here. The
+// window it replaces goes on the history Back pops, unless this apply is
+// the Back itself (ADR-0350 §SD13).
 func (inst *App) applyWindow(w Window) {
+	switch {
+	case inst.hasBackTarget && sameWindow(w, inst.backTarget):
+		inst.hasBackTarget = false
+	case !sameWindow(w, inst.window):
+		inst.history.push(inst.window)
+	}
 	inst.window = w
+}
+
+// backGesture returns to the previous window through set_range.
+func (inst *App) backGesture() {
+	w, ok := inst.history.pop()
+	if !ok {
+		return
+	}
+	inst.backTarget, inst.hasBackTarget = w, true
+	inst.setWindowGesture(w)
 }
 
 func (inst *App) applyFilter(f Filter) {
@@ -368,10 +414,15 @@ func (inst *App) render() (err error) {
 		c.CurrentApplicationState.StateManager.OverrideDatabindingSPtr(&inst.draftValue)
 	}
 	inst.requestRepaint()
+	now := time.Now()
+	inst.paneSeq.top = inst.ids.ProbeSeq("pane-top")
 	for range c.PanelTopInside(inst.ids.PrepareStr("top")).Resizable(false).KeepIter() {
+		inst.measureTopPanel()
 		inst.renderControls()
+		inst.renderNavigation(now)
+		inst.renderBand(now)
+		inst.renderDetailStrip()
 		inst.renderVerdicts()
-		inst.renderStrip()
 	}
 	if inst.hasSelected {
 		for range c.PanelBottomInside(inst.ids.PrepareStr("btm")).DefaultSize(detailPanelHeight).Resizable(true).KeepIter() {
@@ -399,6 +450,21 @@ func (inst *App) render() (err error) {
 		}
 	}
 	return
+}
+
+// measureTopPanel reads the top panel's width where it is still the
+// window's: at the panel's start, before anything is placed in it. egui
+// widens a Ui's max rect to include a child that overflows it, so a probe
+// placed after a row that overflows the window — the controls row on a
+// narrow window — reads the row's width, and a canvas sized from that
+// probe overflows in turn and widens the next frame's reading. The band
+// and the detail strip are therefore sized from this one measurement,
+// kept in stripW, with the fallback until the probe reports.
+func (inst *App) measureTopPanel() {
+	c.CaptureUiAvailableRect(inst.paneSeq.top)
+	if r, ok := c.CurrentApplicationState.StateManager.GetUiRect(inst.paneSeq.top); ok && r.MaxX-r.MinX >= minTopPanelWidth {
+		inst.stripW = r.MaxX - r.MinX
+	}
 }
 
 // renderViewBar is the bar above the central area: the table and the
@@ -483,6 +549,11 @@ func (inst *App) renderControls() {
 		}
 		c.AddSpace(styletokens.GapPanels(inst.density))
 		inst.picker.render(inst.ids, inst.window)
+		mode := "fixed"
+		if inst.window.Last > 0 {
+			mode = "live"
+		}
+		c.LabelAtoms(c.Atoms().BeginRichTextColored(detailMutedFg, detailBgClear, mode).Small().End().Keep()).Send()
 		c.AddSpace(styletokens.GapPanels(inst.density))
 		if c.Button(inst.ids.PrepareStr("refresh"), c.Atoms().Text("Refresh").Keep()).SendResp().HasPrimaryClicked() {
 			inst.refreshGesture()
@@ -592,48 +663,184 @@ func shortRun(run string) string {
 	return run
 }
 
-// renderStrip draws the counts per bucket, coloured by kind or status, and
-// the one text line a scene asserts on. A click on a bar narrows the
-// window to its bucket.
-func (inst *App) renderStrip() {
-	for range c.IdScope(inst.ids.PrepareStr("strip")) {
-		if w, _, ok := c.CapturePaneSize(inst.ids.ProbeSeq("strip-pane")); ok && w > 100 {
-			inst.stripW = w
-		}
-		series := stripSeries(inst.cache.buckets, inst.cache.step)
-		p := implot.Begin(inst.ids, "##trail-strip", inst.stripW, stripHeight)
-		p.SetupAxes("", "rows", implot.AxisFlagsNone, implot.AxisFlagsAutoFit)
-		p.SetupAxisScale(implot.AxisX1, implot.ScaleTime)
-		from, to := inst.cache.from, inst.cache.to
-		if !from.IsZero() {
-			p.SetupAxisLimits(implot.AxisX1, float64(from.Unix()), float64(to.Unix()), implot.CondAlways)
-		}
-		if x, _, ok := p.Clicked(); ok && inst.cache.step > 0 {
-			start := bucketStart(x, inst.cache.step)
-			inst.setWindowGesture(Window{From: start, To: start.Add(inst.cache.step)})
-		}
-		width := inst.cache.step.Seconds() * 0.9
-		// Stacked by painting the cumulative tops largest first: each
-		// series covers the ones below it.
-		for i := len(series.keys) - 1; i >= 0; i-- {
-			p.SetNextColor(seriesColor(i))
-			p.Bars(series.keys[i], series.xs, series.tops[i], width)
-		}
-		p.End()
-		for range c.Horizontal().KeepIter() {
-			label := "by kind"
-			if inst.strip == StripByStatus {
-				label = "by status"
+// navButtons are the navigation row's buttons, in order, with the key each
+// derives its id from.
+var navButtons = []struct{ key, label string }{
+	{"nav-back", "Back"}, {"nav-earlier", "Earlier"}, {"nav-later", "Later"}, {"nav-zoom-out", "Zoom out"},
+	{"nav-zoom-in", "Zoom in"}, {"nav-fit", "Fit"}, {"nav-live", "Live"},
+}
+
+// renderNavigation is the navigation row (ADR-0350 §SD13): Back, Earlier,
+// Later, Zoom out, Zoom in, Fit and Live, each a face of the window through
+// set_range; the strip's colouring toggle; and the one text line a scene
+// asserts on. A button that would do nothing is disabled.
+func (inst *App) renderNavigation(now time.Time) {
+	from, to := inst.window.Resolve(now)
+	var anchor time.Time
+	if inst.hasSelected {
+		anchor = inst.selected.Ts()
+	}
+	_, canBack := inst.history.top()
+	later, canLater := shiftWindow(from, to, now, 1)
+	zoomIn, canZoomIn := zoomWindow(from, to, now, anchor, inst.hasSelected, false)
+	fit, canFit := fitWindow(inst.cache.ctxBuckets, inst.cache.ctxStep)
+	for range c.Horizontal().KeepIter() {
+		for _, b := range navButtons {
+			var target Window
+			enabled := true
+			switch b.label {
+			case "Back":
+				enabled = canBack
+			case "Earlier":
+				target, enabled = shiftWindow(from, to, now, -1)
+			case "Later":
+				target, enabled = later, canLater
+			case "Zoom out":
+				target, enabled = zoomWindow(from, to, now, anchor, inst.hasSelected, true)
+			case "Zoom in":
+				target, enabled = zoomIn, canZoomIn
+			case "Fit":
+				target, enabled = fit, canFit
+			case "Live":
+				target, enabled = Window{Last: roundLive(to.Sub(from))}, inst.window.Last == 0
 			}
-			if c.Button(inst.ids.PrepareStr("strip-by"), c.Atoms().Text("Colour "+label).Keep()).SendResp().HasPrimaryClicked() {
-				next := StripByKind
-				if inst.strip == StripByKind {
-					next = StripByStatus
-				}
-				inst.setStripGesture(next)
+			var clicked bool
+			for range c.EnabledUi(enabled).KeepIter() {
+				clicked = c.Button(inst.ids.PrepareStr(b.key), c.Atoms().Text(b.label).Keep()).SendResp().HasPrimaryClicked()
 			}
-			c.Label(stripLineIn(inst.cache.buckets, inst.cache.step, inst.picker.loc)).Send()
+			if !clicked || !enabled {
+				continue
+			}
+			if b.label == "Back" {
+				inst.backGesture()
+			} else {
+				inst.setWindowGesture(target)
+			}
 		}
+		c.AddSpace(styletokens.GapPanels(inst.density))
+		label := "by kind"
+		if inst.strip == StripByStatus {
+			label = "by status"
+		}
+		if c.Button(inst.ids.PrepareStr("strip-by"), c.Atoms().Text("Colour "+label).Keep()).SendResp().HasPrimaryClicked() {
+			next := StripByKind
+			if inst.strip == StripByKind {
+				next = StripByStatus
+			}
+			inst.setStripGesture(next)
+		}
+		c.Label(stripLineIn(inst.cache.buckets, inst.cache.step, inst.picker.loc)).Send()
+	}
+}
+
+// renderBand is the context band (ADR-0350 §SD13): a timescrubber over the
+// context extent the table read, one step per bucket with its count, the
+// steps inside the wanted window loading while a read is in flight, drawn
+// at the width measureTopPanel read rather than its own probe's. Its
+// range band is the window and its playhead the selected row; both are
+// kept one value by the commit rule in navigation.go, so a gesture lands
+// through set_range once and the host never clobbers one in progress.
+func (inst *App) renderBand(now time.Time) {
+	if inst.band == nil {
+		inst.band = timescrubber.New(inst.ids, "trail-band", timescrubber.Options{Height: bandHeight, Location: inst.picker.loc, ValueName: "rows", Now: time.Now,
+			EmptyText: "The band shows the window's surroundings once the first read lands"})
+	}
+	inst.band.Opts.Location = inst.picker.loc
+	ch := &inst.cache
+	wantFrom, wantTo := inst.window.Resolve(now)
+	inst.bandSteps = contextSteps(ch.ctxFrom, ch.ctxTo, ch.ctxStep, ch.ctxBuckets, ch.runner.Running(), wantFrom, wantTo, inst.bandSteps)
+	steps := inst.bandSteps
+	n := len(steps)
+	t := &inst.band.Transport
+	// The playhead follows the selection.
+	switch {
+	case !inst.hasSelected:
+		inst.bandSeekId = 0
+	case inst.selected.Id != inst.bandSeekId && n > 0:
+		inst.bandSeekId = inst.selected.Id
+		t.Seek(float64(stepIndexOf(steps, inst.selected.Ts())), n)
+	}
+	ev := inst.band.Render(inst.stripW, steps)
+	stepsChanged := ch.gen != inst.bandGen
+	// A settled position selects the newest held row of its bucket — a
+	// click, a key, each step of playback — unless the steps were just
+	// rebuilt, when the scrubber's own re-placement settles too.
+	if ev.Settled && !stepsChanged && ev.Step >= 0 && ev.Step < n {
+		at := steps[ev.Step].At
+		if !inst.hasSelected || !inBucket(inst.selected.Ts(), at, ch.ctxStep) {
+			if id, ok := newestRowIn(ch.rows, at, at.Add(ch.ctxStep)); ok {
+				inst.bandSeekId = id
+				inst.selectGesture(id)
+			}
+		}
+	}
+	cur := rangeOf(t, n)
+	changed := stepsChanged || !sameWindow(inst.window, inst.bandWindow)
+	switch decideBand(ev.Dragging, cur, inst.bandMirror, changed) {
+	case bandMirror:
+		t.ClearRange()
+		if n > 1 {
+			if lo, hi := windowToRange(steps, wantFrom, wantTo); lo < hi {
+				t.SetRange(lo, hi)
+			}
+		}
+		inst.bandMirror, inst.bandWindow, inst.bandGen = rangeOf(t, n), inst.window, ch.gen
+	case bandCommitRange:
+		inst.bandMirror = cur
+		inst.setWindowGesture(rangeToWindow(steps, cur.lo, cur.hi, ch.ctxStep))
+	case bandCommitContext:
+		inst.bandMirror = cur
+		to := ch.ctxTo
+		if to.After(now) {
+			to = now
+		}
+		if to.After(ch.ctxFrom) {
+			inst.setWindowGesture(Window{From: ch.ctxFrom, To: to})
+		}
+	}
+}
+
+// renderDetailStrip is the detail strip (ADR-0350 §SD13): a timeline
+// locked to the window the table read, one lane per series of the strip's
+// buckets with the count as intensity, the out-of-hours bands behind. Its
+// brush narrows the window through set_range and is then taken back, as
+// play does; a click on a cell selects the newest held row of its bucket.
+func (inst *App) renderDetailStrip() {
+	ch := &inst.cache
+	if inst.detailTl == nil {
+		inst.detailVis = timeline.DefaultVisuals()
+		inst.detailVis.LaneHeight = detailLaneHeight
+		inst.detailTl = timeline.New(inst.ids, "trail-detail", nil, timeline.Options{TimeZone: inst.picker.loc, LockedView: true, Brush: true, NowLine: true,
+			IntervalColors: detailColors(), BackgroundBands: outOfHoursBands(func() *time.Location { return inst.picker.loc }), Visuals: &inst.detailVis,
+			ContainerWidth: stripFallbackWidth})
+	}
+	tl := inst.detailTl
+	tl.Opts.TimeZone = inst.picker.loc
+	if ch.gen != inst.detailGen {
+		inst.detailGen = ch.gen
+		ivs, _ := detailIntervals(ch.buckets, ch.step)
+		tl.SetIntervals(ivs)
+	}
+	if !ch.from.IsZero() && ch.to.After(ch.from) {
+		tl.SetRangeUnits(ch.from.UnixMilli(), ch.to.UnixMilli())
+	}
+	// A child Ui bounded to the measured width, so the strip's own width
+	// probe reads it rather than a max rect widened by a row above.
+	var ev timeline.Events
+	for range c.Vertical().KeepIter() {
+		c.UiSetMaxWidth(inst.stripW)
+		ev = tl.Render()
+	}
+	if ev.BrushChanged && ev.BrushOk {
+		tl.ClearBrush()
+		inst.setWindowGesture(Window{From: time.UnixMilli(ev.Brush.FromMS).UTC(), To: time.UnixMilli(ev.Brush.ToMS).UTC()})
+	}
+	if ev.SelectionChanged && ev.Selection.Kind == timeline.SelectionInterval && ev.Selection.Interval != nil {
+		iv := ev.Selection.Interval
+		if id, ok := newestRowIn(ch.rows, time.UnixMilli(iv.FromMS), time.UnixMilli(iv.ToMS)); ok {
+			inst.selectGesture(id)
+		}
+		tl.ClearSelection()
 	}
 }
 
@@ -659,73 +866,6 @@ func bucketStart(x float64, step time.Duration) time.Time {
 func seriesColor(i int) uint32 {
 	rgba := styletokens.QualitativeCycle(i)
 	return uint32(rgba.R)<<24 | uint32(rgba.G)<<16 | uint32(rgba.B)<<8 | uint32(rgba.A)
-}
-
-// stripData is the strip's bars: one x per bucket, and per key the
-// cumulative top of its stack.
-type stripData struct {
-	keys []string
-	xs   []float64
-	tops [][]float64
-}
-
-// stripSeries folds buckets into at most stripKeys series — the busiest
-// keys, the rest summed as other — with cumulative tops.
-func stripSeries(buckets []Bucket, step time.Duration) (out stripData) {
-	if len(buckets) == 0 || step <= 0 {
-		return
-	}
-	totals := map[string]uint64{}
-	var order []string
-	for _, b := range buckets {
-		if _, ok := totals[b.Key]; !ok {
-			order = append(order, b.Key)
-		}
-		totals[b.Key] += b.N
-	}
-	sortKeys(order, totals)
-	keys := order
-	other := false
-	if len(keys) > stripKeys {
-		keys, other = order[:stripKeys-1], true
-	}
-	index := map[string]int{}
-	for i, k := range keys {
-		index[k] = i
-	}
-	out.keys = append([]string(nil), keys...)
-	if other {
-		out.keys = append(out.keys, "other")
-	}
-	xi := map[int64]int{}
-	for _, b := range buckets {
-		if _, ok := xi[b.Bucket]; !ok {
-			xi[b.Bucket] = len(out.xs)
-			out.xs = append(out.xs, float64(b.Bucket)+step.Seconds()/2)
-		}
-	}
-	counts := make([][]float64, len(out.keys))
-	for i := range counts {
-		counts[i] = make([]float64, len(out.xs))
-	}
-	for _, b := range buckets {
-		k, ok := index[b.Key]
-		if !ok {
-			k = len(out.keys) - 1
-		}
-		counts[k][xi[b.Bucket]] += float64(b.N)
-	}
-	out.tops = make([][]float64, len(out.keys))
-	for i := range out.keys {
-		out.tops[i] = make([]float64, len(out.xs))
-		for x := range out.xs {
-			out.tops[i][x] = counts[i][x]
-			if i > 0 {
-				out.tops[i][x] += out.tops[i-1][x]
-			}
-		}
-	}
-	return
 }
 
 func sortKeys(keys []string, totals map[string]uint64) {

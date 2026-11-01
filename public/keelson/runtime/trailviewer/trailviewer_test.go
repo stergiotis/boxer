@@ -114,21 +114,20 @@ func TestTheBreadcrumbOmitsAbsentLinks(t *testing.T) {
 
 func TestTheStripFoldsKeysAndStatesItsLine(t *testing.T) {
 	b := []Bucket{{Bucket: 60, Key: "llmCall", N: 3}, {Bucket: 60, Key: "auditEvent", N: 1}, {Bucket: 120, Key: "auditEvent", N: 5}}
-	s := stripSeries(b, time.Minute)
-	require.Equal(t, []string{"auditEvent", "llmCall"}, s.keys, "busiest first")
-	assert.Equal(t, []float64{90, 150}, s.xs, "bars at the bucket's middle")
-	assert.Equal(t, []float64{1, 5}, s.tops[0])
-	assert.Equal(t, []float64{4, 5}, s.tops[1], "cumulative")
+	keys, index := foldKeys(b)
+	require.Equal(t, []string{"auditEvent", "llmCall"}, keys, "busiest first")
+	assert.Equal(t, 1, index("llmCall"))
 	assert.Equal(t, "9 rows in 2 buckets of 1m0s; busiest 1970-01-01 00:02:00 UTC with 5", stripLine(b, time.Minute))
 	assert.Equal(t, "0 rows in the window", stripLine(nil, time.Minute))
 	var many []Bucket
 	for i, k := range []string{"a", "b", "c", "d", "e", "f", "g", "h"} {
 		many = append(many, Bucket{Bucket: 0, Key: k, N: uint64(10 - i)})
 	}
-	s = stripSeries(many, time.Minute)
-	assert.Len(t, s.keys, stripKeys)
-	assert.Equal(t, "other", s.keys[stripKeys-1])
-	assert.Equal(t, float64(52), s.tops[stripKeys-1][0], "every row is in some series")
+	keys, index = foldKeys(many)
+	assert.Len(t, keys, stripKeys)
+	assert.Equal(t, "other", keys[stripKeys-1])
+	assert.Equal(t, stripKeys-1, index("h"), "a key past the busiest is other")
+	assert.Equal(t, stripKeys-1, index("g"))
 }
 
 // A click on a strip bar narrows to the bucket ClickHouse counted, whose

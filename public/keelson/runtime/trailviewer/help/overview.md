@@ -54,12 +54,37 @@ by the time window. Ranges of the form "last N units" move with the clock
 on every refresh; a range such as "Yesterday" is evaluated once into fixed
 times. Times are shown in the picker's zone.
 
-## The strip
+## Time navigation
 
-Bars count rows per time bucket, stacked by kind or by status; the legend
-names every series. The line beside the button says how many rows, how
-many buckets of what size, and which bucket was busiest. A click on a bar
-narrows the window to that bucket.
+The window is one value with several faces, and every face changes it the
+same way: the picker, the band, the detail strip and the buttons all set
+the range, so **Back** can return to the one before. Nothing reads while
+you are moving; a read follows once the window has settled.
+
+The **band** under the buttons shows five times the window: one bar per
+bucket, counting the case's rows, with the window as the shaded range on
+its top edge. Drag on the top edge for a new window, drag an edge or the
+body to resize or pan it, double-click the edge to zoom out to the whole
+band, press Escape during a drag to put the range back. Buckets drawn
+hollow are being read. The playhead is the selected row: click or drag it
+to select the newest row of a bucket, and Space replays the trail through
+the selection, step by step.
+
+The **detail strip** below it is the window exactly: one lane per kind (or
+status, with **Colour**), the five busiest and *other*, each cell deeper
+with more rows, the hours outside Mon–Fri 08:00–18:00 shaded. Drag on the
+thin strip under its axis to narrow the window to the brushed span; click
+a cell to select the newest row in it.
+
+The buttons: **Earlier** and **Later** shift the window by half its span,
+never past now; **Zoom out** and **Zoom in** double or halve it about the
+selected row, or the centre; **Fit** trims it to the first and last
+non-empty bucket of the band; **Live** turns a fixed window into a span
+ending now, rounded to a common one; **Back** returns to the previous
+window. The word beside the picker says which kind the window is: *live*
+moves with the clock on every refresh, *fixed* stays. Every gesture but
+Live gives a fixed window. The line at the end of the row says how many
+rows, how many buckets of what size, and which bucket was busiest.
 
 ## Table and facets
 

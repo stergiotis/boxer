@@ -15,7 +15,8 @@ scene:
 ADR-0350 on the headless host. The viewer opens on the host's own writer
 run, which is never empty: the recorder writes a `config` row at start, and
 the host's own bus requests are audit events of the same run. The scene
-reads the strip's line, finds the `trail.config` row in the table and the
+reads the strip's line, zooms the window out and back through the
+navigation row and reads the line again, finds the `trail.config` row in the table and the
 verdict line above it, selects the row and finds its `trail-required`
 attribute in the detail pane, lists the rules and the exception the
 `trail-row` rule raises for that row, marks the row reviewed with a reason
@@ -36,6 +37,12 @@ honest outcome.
 {"do":"read","valueContains":"buckets of","role":"label","pattern":"(?P<rows>\\d+) rows in","settleMs":6000}
 {"do":"expect","of":"rows","min":1}
 {"do":"wait","value":"rows","role":"label","comment":"the read's state chip rests on rows between reads"}
+{"do":"click","name":"Zoom out","role":"button","comment":"ADR-0350 M8: the window doubles through set_range, the read follows the settled window"}
+{"do":"wait","value":"rows","role":"label","settleMs":1500}
+{"do":"read","valueContains":"buckets of","role":"label","pattern":"(?P<rows2>\\d+) rows in","settleMs":500}
+{"do":"expect","of":"rows2","min":1}
+{"do":"click","name":"Back","role":"button","comment":"the previous window from the history"}
+{"do":"wait","value":"rows","role":"label","settleMs":1500}
 {"do":"wait","valueContains":"Evidence:","role":"label"}
 {"do":"wait","contains":"trail config","role":"button","comment":"the recorder's own configuration row"}
 {"do":"click","contains":"trail config","role":"button"}
@@ -47,7 +54,7 @@ honest outcome.
 {"do":"read","valueContains":"open among the","role":"label","pattern":"(?P<open>\\d+) open among the \\d+ rows held; (?P<cleared>\\d+) cleared"}
 {"do":"expect","of":"open","min":1}
 {"do":"wait","contains":"trail-row: trail.config row","role":"button"}
-{"do":"type","role":"text_input","nth":1,"text":"the host's own configuration, seen in a scene"}
+{"do":"type","role":"text_input","nth":2,"text":"the host's own configuration, seen in a scene","comment":"the mark reason box: text inputs carry no name, and the case value and the band's time field come before it"}
 {"do":"click","name":"reviewed","role":"button"}
 {"do":"read","valueContains":"Marked reviewed","role":"label","pattern":"Marked (?P<mark>reviewed)"}
 {"do":"read","valueContains":"open among the","role":"label","pattern":"(?P<open2>\\d+) open among the \\d+ rows held; (?P<cleared2>\\d+) cleared"}

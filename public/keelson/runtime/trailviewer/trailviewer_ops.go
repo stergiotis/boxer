@@ -144,6 +144,10 @@ type opsSnap struct {
 	filter   Filter
 	tab      TabE
 	selected uint64
+	// The history's top and the context extent as last read.
+	previous       Window
+	hasPrevious    bool
+	ctxFrom, ctxTo time.Time
 	// The rest of the view: the strip's colouring, the grouping, the
 	// compare row, the side pane and the tree's expansion.
 	strip        StripByE
@@ -166,6 +170,8 @@ func (inst *App) opsSnapshot() (sn opsSnap) {
 	sn.taken = time.Now()
 	sn.gen, sn.views = ch.gen, inst.views.names()
 	sn.c, sn.window, sn.filter, sn.tab = inst.caseValue, inst.window, inst.filter, inst.tab
+	sn.previous, sn.hasPrevious = inst.history.top()
+	sn.ctxFrom, sn.ctxTo = ch.ctxFrom, ch.ctxTo
 	sn.dayhour, sn.dayhourStale = inst.an.dayhour.current(inst.dayHourKey())
 	sn.series, sn.seriesStale = inst.an.series.data.current(inst.seriesKey())
 	sn.seriesPick = inst.an.series.pick
@@ -488,32 +494,36 @@ type VerdictResult struct {
 
 // View is get_view's result.
 type View struct {
-	Persisted   bool          `desc:"the trail reaches boxer.facts on this host"`
-	Case        string        `desc:"the case's kind"`
-	Value       string        `desc:"the case's value"`
-	Range       string        `desc:"the window: last <span>, or from – to"`
-	From        time.Time     `desc:"the window's start as last read"`
-	To          time.Time     `desc:"the window's end as last read"`
-	Filter      []TermArg     `desc:"the filter the table is narrowed by"`
-	Tab         string        `desc:"the window's tab: fields, previous, context, compare, tree, matrix, dotted, dayhour or series"`
-	Series      string        `desc:"the series tab's measure and statistic"`
-	Matrix      string        `desc:"the matrix tab's actor and object"`
-	Dotted      string        `desc:"the dotted chart's row kind: run, window, conversation or entity"`
-	StripBy     string        `desc:"what the strip's bars are coloured by: kind or status"`
-	Grouping    bool          `desc:"the table is grouped by parent"`
-	Compare     uint64        `desc:"the row the detail pane compares the selected one with, a facts id; 0 for none"`
-	Side        string        `desc:"the pane beside the table: facets, exceptions, rules or views"`
-	Tree        bool          `desc:"the tree tab's expansion as last set: every node open, or every node closed"`
-	Selected    uint64        `desc:"the selected row's facts id; 0 for none"`
-	Held        int           `desc:"rows the window holds"`
-	MoreInStore bool          `desc:"older rows of the case and range are in boxer.facts beyond the cache"`
-	ReadState   string        `desc:"where the read of the trail marts stands: idle, reading, rows, empty, failed, refreshing or stopped; read_state has the transitions"`
-	Strip       string        `desc:"the strip's line: rows, buckets, the busiest bucket and its time"`
-	Verdicts    []VerdictLine `desc:"the verdict line per writer run"`
-	Exceptions  int           `desc:"open exceptions among the rows held"`
-	AsOf        string        `desc:"for the entity case, the entity's state as of the window's end in each domain it has events in, and the event each comes from"`
-	RefreshedAt time.Time     `desc:"when the cache was last filled; zero before the first fill"`
-	SavedViews  []string      `desc:"the names of the saved views this window has read from the persist store"`
+	Persisted     bool          `desc:"the trail reaches boxer.facts on this host"`
+	Case          string        `desc:"the case's kind"`
+	Value         string        `desc:"the case's value"`
+	Range         string        `desc:"the window: last <span>, or from – to"`
+	From          time.Time     `desc:"the window's start as last read"`
+	To            time.Time     `desc:"the window's end as last read"`
+	Live          bool          `desc:"the window is a span ending now, re-resolved on every read; false for a fixed window"`
+	PreviousRange string        `desc:"the window Back returns to, as range reads it; empty when the history is empty"`
+	ContextFrom   time.Time     `desc:"the context band's extent as last read: five times the window, clamped at now"`
+	ContextTo     time.Time     `desc:"the context band's extent's end as last read"`
+	Filter        []TermArg     `desc:"the filter the table is narrowed by"`
+	Tab           string        `desc:"the window's tab: fields, previous, context, compare, tree, matrix, dotted, dayhour or series"`
+	Series        string        `desc:"the series tab's measure and statistic"`
+	Matrix        string        `desc:"the matrix tab's actor and object"`
+	Dotted        string        `desc:"the dotted chart's row kind: run, window, conversation or entity"`
+	StripBy       string        `desc:"what the strip's bars are coloured by: kind or status"`
+	Grouping      bool          `desc:"the table is grouped by parent"`
+	Compare       uint64        `desc:"the row the detail pane compares the selected one with, a facts id; 0 for none"`
+	Side          string        `desc:"the pane beside the table: facets, exceptions, rules or views"`
+	Tree          bool          `desc:"the tree tab's expansion as last set: every node open, or every node closed"`
+	Selected      uint64        `desc:"the selected row's facts id; 0 for none"`
+	Held          int           `desc:"rows the window holds"`
+	MoreInStore   bool          `desc:"older rows of the case and range are in boxer.facts beyond the cache"`
+	ReadState     string        `desc:"where the read of the trail marts stands: idle, reading, rows, empty, failed, refreshing or stopped; read_state has the transitions"`
+	Strip         string        `desc:"the strip's line: rows, buckets, the busiest bucket and its time"`
+	Verdicts      []VerdictLine `desc:"the verdict line per writer run"`
+	Exceptions    int           `desc:"open exceptions among the rows held"`
+	AsOf          string        `desc:"for the entity case, the entity's state as of the window's end in each domain it has events in, and the event each comes from"`
+	RefreshedAt   time.Time     `desc:"when the cache was last filled; zero before the first fill"`
+	SavedViews    []string      `desc:"the names of the saved views this window has read from the persist store"`
 }
 
 // SetCaseArgs sets the case whole.
@@ -1069,7 +1079,11 @@ var ops = func() (s *appops.Set[*App, opsSnap]) {
 			out = View{Persisted: sn.src.persisted(), Case: sn.c.Kind.String(), Value: sn.c.Value, Range: sn.window.String(),
 				From: sn.from, To: sn.to, Filter: termArgs(sn.filter), Tab: sn.tab.String(), Series: sn.seriesPick.String(), Selected: sn.selected,
 				Matrix: sn.matrixPick.String(), Dotted: sn.dottedPick.String(), StripBy: sn.strip.String(), Grouping: sn.grouped,
-				Side: sn.side.String(), Tree: sn.treeExpanded, Held: len(sn.rows), MoreInStore: sn.more, ReadState: sn.readState, RefreshedAt: sn.refreshedAt}
+				Side: sn.side.String(), Tree: sn.treeExpanded, Held: len(sn.rows), MoreInStore: sn.more, ReadState: sn.readState, RefreshedAt: sn.refreshedAt,
+				Live: sn.window.Last > 0, ContextFrom: sn.ctxFrom, ContextTo: sn.ctxTo}
+			if sn.hasPrevious {
+				out.PreviousRange = sn.previous.String()
+			}
 			if sn.hasCompare {
 				out.Compare = sn.compare.Id
 			}
@@ -1309,9 +1323,9 @@ var ops = func() (s *appops.Set[*App, opsSnap]) {
 		})
 
 	appops.Command(s, app.OperationSpec{Name: opSetRange, Version: 1,
-		Summary: "set the time window: a span ending now, or from and to; the window re-reads the trail marts under it",
+		Summary: "set the time window: a span ending now, or from and to; the window re-reads the trail marts under it, and the window it replaces goes on the history Back returns to",
 		Effect:  app.OperationEffectView, Writes: []string{resRange}, Agents: true,
-		Gesture: "the time range picker, a click on a strip bar", Rebuild: app.OperationRebuildVolatile},
+		Gesture: "the time range picker, the context band's range, the detail strip's brush, the navigation row's Back, Earlier, Later, Zoom out, Zoom in, Fit and Live", Rebuild: app.OperationRebuildVolatile},
 		func(inst *App, _ app.OperationCall, in RangeArgs) (out appops.None, err error) {
 			if in.Last == "" && in.From.IsZero() && in.To.IsZero() {
 				err = app.RefuseOperation("a range is last, or from and to")
@@ -1341,7 +1355,7 @@ var ops = func() (s *appops.Set[*App, opsSnap]) {
 	appops.Command(s, app.OperationSpec{Name: opSelectRow, Version: 1,
 		Summary: "select a row by facts id, which opens its detail pane and reads its context and previous state; 0 clears the selection",
 		Effect:  app.OperationEffectView, Writes: []string{resSelection}, Agents: true,
-		Gesture: "a row click, a context row click, the Clear selection button", Rebuild: app.OperationRebuildVolatile},
+		Gesture: "a row click, a context row click, the Clear selection button, a settled position on the context band, a click on a detail strip cell", Rebuild: app.OperationRebuildVolatile},
 		func(inst *App, _ app.OperationCall, in SelectRowArgs) (out appops.None, err error) {
 			if in.Id == 0 {
 				inst.clearSelection()

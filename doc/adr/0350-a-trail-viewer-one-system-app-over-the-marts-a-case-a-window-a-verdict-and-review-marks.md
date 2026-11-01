@@ -175,12 +175,14 @@ to a shared package when a second host asks for it, not before.
 The window is a case selector and the time range picker
 ([ADR-0016](./0016-imzero2-time-range-picker.md)) over four regions:
 
-- **A strip** of counts per time bucket over the window, coloured by kind
-  and switchable to outcome or status, fed by one `GROUP BY
-  toStartOfInterval` over `dm_trail_timeline`. A click on a bucket narrows
-  the window to it. With more keys than the qualitative cycle's seven hues,
-  the strip draws the five busiest and sums the rest as *other*. Beside the strip, one text line states what it shows —
-  rows, buckets, the busiest bucket — and is what a scene asserts on.
+- **A context band and a detail strip** over the window (SD13): the band,
+  a `timescrubber` over five times the window, shows where the case's rows
+  lie around it and carries the window as its range; the strip, a
+  `timeline` locked to the window, shows the window's counts per bucket in
+  one lane per kind or status — the five busiest, the rest as *other* —
+  each fed by one `GROUP BY toStartOfInterval` over `dm_trail_timeline`.
+  Beside them, one text line states what the window holds — rows, buckets,
+  the busiest bucket — and is what a scene asserts on.
 - **The table**, a `recordtable` over the timeline's shape — time in the
   picker's zone, kind, headline, status, subject, origin, the agentic
   columns when the case is agentic — with sort, full-row select and
@@ -382,12 +384,20 @@ the tree is a value of the one resource, not a second one.
 
 ### SD10 — Deferred, with triggers
 
+- **Wheel zoom and drag pan on the detail strip**, the `timeline` unlocked
+  and the view committed as `set_range` once it has rested for the cache's
+  settle time; its trigger is the locked form of SD13 proving stiff — a
+  reader reaching for the wheel over the strip and finding it does nothing.
+- **Marks on the context band** for chain breaks, from the verdict line's
+  broken and forked runs, bounded in count; its trigger is a reviewer
+  asking where in time a run's record stops holding.
 - A **painted span tree** with caller-fixed lanes and parent→child
   connectors, on `timeline`'s axis and brush or as a sibling widget; its
   trigger is the text tree of SD4 proving too slow to read on a task of
   hundreds of rows, measured by a scene.
 - An **accessibility projection** for painted canvases, so a scene reads
-  the strip; until then the strip's text line is the assertion target.
+  the band and the detail strip; until then their text line is the
+  assertion target.
 - A **description registry** for downstream domains' action names; until
   a consumer asks, names are shown as written beside outcome and subject.
 - **Agents marking rows.** Reopened only with a reason the person cannot
@@ -480,6 +490,72 @@ the side pane's buttons carry counts and fixed names, and the progress row
 is the last thing in the controls row, so its coming and going moves
 nothing else.
 
+### SD13 — Time navigation
+
+The window is **one value with several faces** — the picker, the context
+band, the detail strip, the navigation row's buttons, the history, an
+agent's `set_range` — and every face changes it through the one `set_range`
+command, so a window change is logged as the person's whatever face made
+it. The faces never read: a gesture changes the window, the cache's settle
+window follows it (SD3), and one read lands later. A gesture in progress
+reads nothing; a settled window reads once.
+
+**The context extent** is five times the window's span, centred on the
+window, then shifted left so its end is at most now plus one bucket step —
+an audit trail has no future, so a window that ends now sits in the
+extent's right fifth. It is recomputed only when the window's bounds leave
+the extent's middle three fifths or the span ratio leaves [3, 8], so
+panning by the band is continuous and a relative window re-anchors once
+per step as now passes the extent's end. The read plan reads its buckets
+as one more statement — one `GROUP BY` over five times the window, summed
+host-side to a count per bucket — reported as a step of its own (SD12).
+
+**The band** is a `timescrubber` over the extent: one step per bucket,
+empty buckets included so the axis is regular, each step's count as its
+bar, and the steps inside the wanted window drawn loading while a read is
+in flight — the widget's own way of showing what a move costs. Its range
+band *is* the window: a range the person sets, resizes or slides commits
+once as a fixed window snapped to the enclosing buckets; a range the person
+clears (a double click, Delete) commits the context extent as the window,
+which is the zoom out to context. The window is mirrored onto the band
+only when the window or the steps changed since the last mirror, and never
+while a gesture is in progress, so the host cannot clobber one; the
+scrubber's keys land through the same comparison. Its playhead is the
+selected row: selecting a row seeks the playhead to the row's bucket, and
+a settled position — a click, a key, each step of playback — selects the
+newest held row of its bucket through `select_row`, or nothing when no held
+row lies in it. Playback therefore replays the trail through the selection.
+
+**The detail strip** is a `timeline` locked to the window the table read
+(`LockedView`, `SetRangeUnits` every frame): one lane per series of the
+strip's buckets with the count as intensity, floored so a bucket of one
+row is visible, the out-of-hours spans and weekend days as background
+bands in the picker's zone. Its brush narrows the window through
+`set_range` and is then taken back, as play's timeline does; a click on a
+cell selects the newest held row of its bucket and the widget's own
+highlight is cleared, so it does not compete with the table's.
+
+**The navigation row** holds Back, Earlier, Later, Zoom out, Zoom in, Fit
+and Live, each through `set_range`: Earlier and Later shift the resolved
+window by half its span, Later never past now; Zoom out and Zoom in double
+or halve the span about the selected row's instant or the centre, To at
+most now, Zoom in never under ten of the smallest step; Fit trims the
+window to the first and last non-empty context bucket without a query;
+Live arms a relative window of the span rounded to a ladder of common
+spans. Back returns to the previous window from a history of depth sixteen
+that every apply pushes onto, except the Back itself. `get_view` reports
+whether the window is live or fixed, the window Back returns to, and the
+context extent; no operation is added.
+
+Why two widgets, and these: the band needs the gestures of a range — a new
+range, an edge, the body, clear, restore on Escape — the keys, a position
+that settles rather than moves, and a per-step load state, which the
+scrubber has and the timeline's brush (a new range only, no settle, no load
+state) has not; the detail needs lanes, intensity, hover and background
+bands, which the timeline has and the scrubber (one value per step) has
+not. The implot bars they replace had one gesture, a click that narrowed to
+a bucket, no range, no pan, no zoom out and no way back but the picker.
+
 ## Surfaces — Tier 1
 
 | Surface | Change | Moves with it |
@@ -550,7 +626,8 @@ nothing else.
   window on a busy host turns slow.
 - A `consequential` command in a system app is a precedent, held narrow
   by being person-only.
-- The strip is painted and a scene reads only its text line.
+- The band and the detail strip are painted and a scene reads only their
+  text line.
 
 ### Neutral
 
@@ -584,21 +661,29 @@ positional readers of the marts do not exist by design.
   graph, a stop that starts nothing and records no error until `refresh`
   or a scope change, a second stop the same as the first, the read's steps
   reported one per statement, and a badge's text bounded whatever a read
-  puts in the line.
+  puts in the line; time navigation (SD13): the context extent's placement,
+  clamp and hysteresis, the steps-to-window mapping both ways, the band's
+  commit rule — a changed range commits once, never while dragging, a
+  cleared range commits the context, a mirror never commits — the
+  navigation row's arithmetic, Back popping without pushing, the detail's
+  intervals from the buckets, the context statement counted as a step, and
+  `get_view` carrying the window's faces.
 - **Scene.** A headless scene launches the viewer on a fixture run,
   asserts the table, the detail pane, the verdict line, an exception and
   its clearing by a mark, and the strip's text line.
 - **What would fail.** A query reading the window's filter instead of its
   arguments; an agent able to call `mark_row`; a `from` mismatch not
   reported; a view whose functions are missing on install; a read's state
-  moving the layout outside its row; a stop recorded as a failure.
-- **Gap.** The strip's drawing is not asserted; the correlation-read cost
-  is not bounded by a test.
+  moving the layout outside its row; a stop recorded as a failure; a
+  gesture in progress starting a read; a window change not logged as
+  `set_range`.
+- **Gap.** The band's and the detail strip's drawing is not asserted; the
+  correlation-read cost is not bounded by a test.
 
 ## Milestones
 
 - **M1 — The SQL surface.** SD2 in `trailviews`, goldens, `keelsonddl`.
-- **M2 — The app.** Case, window, strip with its text line, windowed
+- **M2 — The app.** Case, window, a count strip with its text line, windowed
   table, facets, context, detail pane, previous-state diff, verdict line;
   the `view`-effect catalog.
 - **M3 — Review.** Exception rules, review marks, `dm_trail_reviews`,
@@ -613,6 +698,8 @@ positional readers of the marts do not exist by design.
 - **M7 — The read lifecycle.** The mirrored machine and its chip, progress
   by statement, `stop_read` as a hold, the mount, and the layout rule
   (SD12).
+- **M8 — Time navigation.** The context band, the detail strip, the
+  navigation row and the history, every face through `set_range` (SD13).
 
 ## Status
 
