@@ -122,6 +122,7 @@ func (inst *Client) ExecuteWrite(ctx context.Context, sql string, signals map[st
 		return
 	}
 	dec := inst.Dispatch(sql, "")
+	inst.noteRun(dec)
 	eng, err := inst.engineFor(dec)
 	if err != nil {
 		return

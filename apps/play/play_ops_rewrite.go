@@ -172,7 +172,7 @@ func traceRewrite(client *Client, obo *app.OnBehalfOf, stmt string, costs bool) 
 		// the placeholder's own name.
 		out.Params = append(out.Params, TraceParam{Name: strings.TrimPrefix(k, "param_"), Value: params[k]})
 	}
-	dec := client.previewDispatch(residual, "")
+	dec := client.dispatchResidual(residual, "")
 	switch dec.class {
 	case dispatchClassIntrospection:
 		out.Target = "introspection"

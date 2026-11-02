@@ -117,7 +117,8 @@ type Client struct {
 	// the manual base, which is what play did before the seam existed.
 	resolver endpointResolverI
 
-	// lastDecision is the most recent resolution, for the toolbar to report.
+	// lastDecision is the decision of the person's latest run, for the toolbar
+	// to report.
 	// Written on lane goroutines, read on the render thread, so it lives
 	// outside mu rather than widening that lock's reach for a display value.
 	lastDecision atomic.Pointer[dispatchDecision]

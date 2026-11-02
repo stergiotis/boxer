@@ -84,6 +84,17 @@ func TestAppStatementGate(t *testing.T) {
 	assert.Equal(t, 1, ep.count())
 }
 
+func TestExecuteWriteIsThePersonsRun(t *testing.T) {
+	var ep recordingEndpoint
+	srv := ep.serve(t)
+	cli := NewClient(ClientConfig{URL: srv.URL + "/", AllowWrites: true}, nil)
+	_, err := cli.ExecuteWrite(context.Background(), "INSERT INTO t SELECT 1", nil)
+	require.NoError(t, err)
+	dec, ok := cli.LastDecision()
+	require.True(t, ok, "the toolbar reports a write the person ran")
+	assert.Equal(t, srv.URL+"/", dec.targetURL)
+}
+
 func TestExecuteWriteHoldsItsOwnGate(t *testing.T) {
 	var ep recordingEndpoint
 	srv := ep.serve(t)

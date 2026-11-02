@@ -155,7 +155,7 @@ func listDatasets(client *Client, obo *app.OnBehalfOf, only string, waiting map[
 		}
 		stmt := "SELECT * FROM keelson('" + alias + "') LIMIT 0"
 		residual, _ := client.buildResidualOffline(stmt, nil)
-		dec := client.previewDispatch(residual, "")
+		dec := client.dispatchResidual(residual, "")
 		d.Confined = dec.sensitivity == queryengine.SensitivityConfined
 		if d.Granted && (!d.Confined || only != "") {
 			d.Columns, d.Error = datasetColumns(client, stmt, dec, obo)

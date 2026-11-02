@@ -275,7 +275,7 @@ func validateStatement(client *Client, obo *app.OnBehalfOf, stmt string) (out Va
 	default:
 		out.Valid = true
 	}
-	dec := client.previewDispatch(residual, "")
+	dec := client.dispatchResidual(residual, "")
 	out.Confined = dec.sensitivity == queryengine.SensitivityConfined
 	if !catalog && dec.class != dispatchClassIntrospection {
 		out.Needs = []string{endpointDestination(client)}

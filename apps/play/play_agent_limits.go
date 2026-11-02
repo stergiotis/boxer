@@ -114,7 +114,7 @@ func refuseAgentStatement(client *Client, obo *app.OnBehalfOf, sql string) (err 
 		return
 	}
 	residual, _, _ := client.rewriteFor(obo, sql, nil)
-	lerr := checkAgentLimits(residual, client.previewDispatch(residual, ""), obo, client.datasetAliasOf())
+	lerr := checkAgentLimits(residual, client.dispatchResidual(residual, ""), obo, client.datasetAliasOf())
 	if limit, ok := lerr.(*AgentLimitError); ok {
 		if limit.Destination != "" {
 			return app.RefuseForDestinations(lerr.Error(), limit.Destination)

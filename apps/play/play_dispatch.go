@@ -193,6 +193,9 @@ func (inst staticResolver) resolve(_ string, base string, _ string) (dec dispatc
 // the decision is a function of the authored buffer alone, two issuers that
 // start from the same buffer — a run and the diagnostic probe describing it
 // — cannot reach different endpoints.
+//
+// Resolving records nothing: the toolbar reports the person's runs, which say
+// so through noteRun.
 func (inst *Client) Dispatch(sql string, affinity string) (dec dispatchDecision) {
 	residual, _ := inst.buildResidual(sql)
 	dec = inst.dispatchResidual(residual, affinity)
@@ -203,14 +206,6 @@ func (inst *Client) Dispatch(sql string, affinity string) (dec dispatchDecision)
 // and must not pay for a second rewrite — or, as with the diagnostics probe,
 // must not resolve from the statement it is about to wrap.
 func (inst *Client) dispatchResidual(residual string, affinity string) (dec dispatchDecision) {
-	dec = inst.previewDispatch(residual, affinity)
-	inst.lastDecision.Store(&dec)
-	return
-}
-
-// previewDispatch is dispatchResidual without recording the decision for the
-// toolbar: for a caller asking where a statement would go without running it.
-func (inst *Client) previewDispatch(residual string, affinity string) (dec dispatchDecision) {
 	inst.mu.RLock()
 	r := inst.resolver
 	base := inst.targetURL
@@ -283,12 +278,18 @@ func describeTarget(targetURL string) (text string) {
 	return
 }
 
-// LastDecision returns the most recently resolved decision, and whether
-// anything has been resolved yet. It is what the toolbar reports: where the
-// last query actually went and why — a fact about a run that happened, not
-// a prediction about the buffer currently being typed. Predicting would
-// mean running the client-side rewrites on the render thread every frame,
-// and those can reach the network.
+// noteRun records dec as the decision of the person's latest run, for the
+// toolbar. A panel's query, a completion or documentation lookup, a diagnostic
+// probe and a classification resolve without calling it.
+func (inst *Client) noteRun(dec dispatchDecision) {
+	inst.lastDecision.Store(&dec)
+}
+
+// LastDecision returns the decision of the person's latest run, and whether
+// there has been one. It is what the toolbar reports: where that run went and
+// why — a fact about a run that happened, not a prediction about the buffer
+// currently being typed. Predicting would mean running the client-side
+// rewrites on the render thread every frame, and those can reach the network.
 func (inst *Client) LastDecision() (dec dispatchDecision, ok bool) {
 	p := inst.lastDecision.Load()
 	if p == nil {

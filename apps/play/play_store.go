@@ -267,6 +267,7 @@ func (inst *QueryStore) Execute(sql string, signals map[string]string, sourceBuf
 			// One resolution per run (play_dispatch.go). Taken on this goroutine,
 			// not on the render thread, because it runs the client-side rewrites.
 			dec := inst.client.dispatchFor(agent, sql, "")
+			inst.client.noteRun(dec)
 			sec, _ := classifySecurity(sql, inst.client.ExprSubstituted)
 			inst.mu.Lock()
 			inst.runConfined = dec.sensitivity == queryengine.SensitivityConfined

@@ -201,6 +201,18 @@ pinning was removed from play the same day (ADR-0115, Update
 2026-10-02). The `system.columns` probe and the run-history readback stay
 on the manual base.
 
+### 2026-11-02 — the toolbar reports the person's runs
+
+Every resolution used to record itself as the toolbar's last decision, so a
+Docs lookup or a completion probe landing after a run replaced that run's
+label, its `confined` mark or its refusal, and the hover still said "last run
+went to". Resolving now records nothing. `QueryStore`'s run and `ExecuteWrite`
+record through `noteRun`; panels, lookups, diagnostic probes, the classification
+behind Save applet and play's own Series writes do not, so the toolbar says
+nothing of where those went. Each run's own decision in History was never
+affected. `previewDispatch` is gone: with recording moved out, it and
+`dispatchResidual` were the same function.
+
 ## References
 
 - [doc/explanation/query-system-requirements.md](../explanation/query-system-requirements.md) — the requirements and the E-point catalog.

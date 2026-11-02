@@ -30,12 +30,12 @@ func TestAgentLimitsReadABoundDatasetByItsAlias(t *testing.T) {
 	residual, _ := c.buildResidual(sql)
 	require.Contains(t, residual, "ds_7f3a")
 
-	err := checkAgentLimits(residual, c.previewDispatch(residual, ""), &app.OnBehalfOf{}, c.datasetAliasOf())
+	err := checkAgentLimits(residual, c.dispatchResidual(residual, ""), &app.OnBehalfOf{}, c.datasetAliasOf())
 	var limit *AgentLimitError
 	require.ErrorAs(t, err, &limit)
 	assert.Equal(t, "keelson:chat_turns", limit.Destination)
 
-	require.NoError(t, checkAgentLimits(residual, c.previewDispatch(residual, ""),
+	require.NoError(t, checkAgentLimits(residual, c.dispatchResidual(residual, ""),
 		&app.OnBehalfOf{Destinations: []string{"keelson:chat_turns", "clickhouse:ch.example:8123"}}, c.datasetAliasOf()))
 }
 

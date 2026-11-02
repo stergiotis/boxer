@@ -149,19 +149,66 @@ func TestDispatchRefusalStopsTheRun(t *testing.T) {
 }
 
 // TestDispatchLastDecisionFeedsTheToolbar covers what the Auto label reads:
-// nothing before the first resolution, then the decision that actually
-// carried the last run.
+// nothing before the first run, then the decision that carried the last one.
+// Resolving alone is not a run.
 func TestDispatchLastDecisionFeedsTheToolbar(t *testing.T) {
 	c := NewClient(ClientConfig{URL: "http://base.invalid"}, nil)
-	_, ok := c.LastDecision()
-	assert.False(t, ok, "no decision before anything ran")
-
 	want := c.Dispatch("SELECT 1", "")
+	_, ok := c.LastDecision()
+	assert.False(t, ok, "resolving a statement is not running it")
+
+	c.noteRun(want)
 	got, ok := c.LastDecision()
 	require.True(t, ok)
 	assert.Equal(t, want, got)
 	assert.Contains(t, got.describe(), "http://base.invalid")
 	assert.Contains(t, got.describe(), got.reason)
+}
+
+// TestToolbarKeepsThePersonsRunOverBackgroundQueries is a run of sealed data on
+// the plane, followed by the queries a window issues on its own. None of them
+// may take the run's label, its confined mark or a refusal away.
+func TestToolbarKeepsThePersonsRunOverBackgroundQueries(t *testing.T) {
+	plane, _ := arrowServer(t, []int64{1})
+	defer plane.Close()
+	base, _ := arrowServer(t, []int64{1})
+	defer base.Close()
+	withSealedPlane(t, plane.URL, "adhoc_secret")
+	c := NewClient(ClientConfig{URL: base.URL}, base.Client())
+	c.SetResolver(autoResolver)
+	background := func() {
+		t.Helper()
+		rec, _, _, err := clientExecutor{client: c}.execute(context.Background(),
+			compiledNode{SQL: "SELECT name FROM system.documentation"}, memory.NewGoAllocator())
+		require.NoError(t, err)
+		rec.Release()
+		_, _, _, err = probeExecutor{client: c}.execute(context.Background(),
+			compiledNode{SQL: diagProbePrefix + "SELECT 1"}, memory.NewGoAllocator())
+		require.NoError(t, err)
+	}
+
+	background()
+	_, ok := c.LastDecision()
+	assert.False(t, ok, "a window that has only looked things up has run nothing")
+
+	store := NewQueryStore(c, memory.NewGoAllocator(), 10, "test")
+	defer store.Close()
+	store.Execute("SELECT * FROM keelson('adhoc_secret')", nil, "")
+	waitNotLoading(t, store)
+	background()
+	got, ok := c.LastDecision()
+	require.True(t, ok)
+	assert.Equal(t, dispatchClassIntrospection, got.class)
+	assert.Equal(t, plane.URL, got.targetURL)
+	assert.Contains(t, got.describe(), "confined")
+	assert.Contains(t, got.describe(), "names only keelson tables")
+
+	store.Execute("SELECT * FROM keelson('env') JOIN db.events ON 1", nil, "")
+	waitNotLoading(t, store)
+	background()
+	got, ok = c.LastDecision()
+	require.True(t, ok)
+	assert.Contains(t, got.describe(), "refused")
 }
 
 func TestDispatchDescribeNamesRefusal(t *testing.T) {

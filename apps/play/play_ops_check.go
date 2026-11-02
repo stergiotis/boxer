@@ -189,7 +189,7 @@ func runCheck(ctx context.Context, client *Client, cs checkSnap, obo *app.OnBeha
 		return out, app.ConflictOperation("another result is held now: " + strconv.FormatUint(cs.resultId, 10))
 	}
 	residual, params, _ := client.rewriteFor(obo, in.Statement, nil)
-	dec := client.previewDispatch(residual, "")
+	dec := client.dispatchResidual(residual, "")
 	if obo != nil {
 		if lerr := checkAgentLimits(residual, dec, obo, client.datasetAliasOf()); lerr != nil {
 			if limit, ok := lerr.(*AgentLimitError); ok && limit.Destination != "" {
