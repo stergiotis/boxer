@@ -497,6 +497,34 @@ driven here — the child was started by hand, which exercises the same verb
 the coordinator runs; its own behaviour is covered by the package tests
 with a fake launcher and a real `/bin/sh` child.
 
+## Update (2026-11-02) — a window host started for a benchmark take stamps it
+
+§SD5 left other drivers to their own ADRs; this one is small enough to land
+here. A window host started for a benchmark take writes driver `bench` on
+its run row, the take as the job (suite/task/take), its attempt, and the
+suite's version as the job kind, so a recorded take is scored by joining its
+run row rather than by a list kept beside the recordings. Three variables in
+the registry ([ADR-0009](./0009-environment-variable-registry.md)) carry
+them, `BOXER_RUN_DRIVER_JOB`, `BOXER_RUN_DRIVER_ATTEMPT` and
+`BOXER_RUN_DRIVER_JOB_KIND`, declared with the run's identity in `runinfo`
+and inherited by a child process as the run id is. With the job unset the
+row names `host` and nothing else, as before.
+
+A value the row cannot carry refuses the boot: an attempt or a kind without
+a job, an attempt that is not a uint32, and a job or kind that is too long,
+not UTF-8 or holds a character that does not print. A take recorded without
+its stamp is lost to scoring, and one with a wrong stamp passes for another.
+
+- **`bench`, not `host` with the job fields.** Not taken: a query for the
+  person's runs, `driver = 'host'`, would count the takes, and the job
+  fields would mean one thing under `watchbill-job` and another under
+  `host`.
+- **One structured setting.** Not taken: three settings map one to one onto
+  the columns of `dm_trail_runs` and the attempt stays typed.
+
+No vocabulary, schema or view changes: `dm_trail_runs` reads the four
+columns as it does for a job child.
+
 ## Status
 
 Accepted 2026-10-29. M0 to M3 built alongside the proposal.

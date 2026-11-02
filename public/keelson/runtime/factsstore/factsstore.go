@@ -109,6 +109,10 @@ const (
 	// DriverJob names the job, and a row with no DriverJobKind is a child
 	// whose claim lost — boot and shutdown only, the coverage baseline.
 	DriverWatchbillJob = "watchbill-job"
+	// DriverBench is a window host started for a benchmark take; DriverJob
+	// names the take, DriverAttempt its attempt and DriverJobKind the
+	// suite's version.
+	DriverBench = "bench"
 )
 
 // HeartbeatRow records one runtime liveness tick. Maps to a

@@ -386,9 +386,15 @@ type Runtime struct {
 // services, task supervisor, status snapshot, window host or screenshot
 // renderers, AfterHost, introspection. It does not create the imzero2
 // application; Run does. Every failure of an optional service is logged and
-// leaves that service nil; only a seeded window that cannot open or an
-// AfterHost error abort.
+// leaves that service nil; only a benchmark take the run row cannot carry,
+// a seeded window that cannot open or an AfterHost error abort.
 func Boot(ctx context.Context, opts Options) (rt *Runtime, err error) {
+	// A run row that cannot carry the take it was started for would pass
+	// for another run's (ADR-0344 §SD5).
+	take, err := runinfo.BenchTakeFromEnv()
+	if err != nil {
+		return nil, eh.Errorf("the run's driver stamp: %w", err)
+	}
 	rt = &Runtime{opts: opts}
 	logger := opts.Log
 	if !opts.KeepCoreDumps {
@@ -436,7 +442,7 @@ func Boot(ctx context.Context, opts Options) (rt *Runtime, err error) {
 		rt.Facts, rt.IsChStore = chstore.NewWithFallback(factsCfg, logger, pingTimeout)
 	}
 	if runInst != nil {
-		_, wErr := rt.Facts.WriteRuntimeStart(factsstore.RuntimeStartRow{
+		row := factsstore.RuntimeStartRow{
 			RunId:        runInst.RunId,
 			Hostname:     runInst.Hostname,
 			Pid:          runInst.Pid,
@@ -446,9 +452,10 @@ func Boot(ctx context.Context, opts Options) (rt *Runtime, err error) {
 			VcsBuildInfo: runInst.VcsBuildInfo,
 			BuildId:      runInst.BuildId,
 			ModulePath:   runInst.ModulePath,
-			Driver:       factsstore.DriverHost,
 			Ts:           runInst.StartedAt,
-		})
+		}
+		stampDriver(&row, take)
+		_, wErr := rt.Facts.WriteRuntimeStart(row)
 		if wErr != nil {
 			logger.Warn().Err(wErr).Msg("runtime-start audit write failed")
 		}
@@ -1915,4 +1922,14 @@ func connectLading(ctx context.Context) (exec recordstore.ExecutorI, err error) 
 		return nil, eh.Errorf("ClickHouse not reachable: %w", err)
 	}
 	return storeexec.New(client, nil)
+}
+
+// stampDriver writes the driver stamp of a window host's run row (ADR-0344
+// §SD5): the host, or the benchmark take the run was started for.
+func stampDriver(row *factsstore.RuntimeStartRow, take runinfo.BenchTake) {
+	if take.IsZero() {
+		row.Driver = factsstore.DriverHost
+		return
+	}
+	row.Driver, row.DriverJob, row.DriverAttempt, row.DriverJobKind = factsstore.DriverBench, take.Job, take.Attempt, take.Kind
 }
