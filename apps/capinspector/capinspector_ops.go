@@ -69,7 +69,7 @@ type View struct {
 
 // GetActivityArgs narrows the activity read to one cap.
 type GetActivityArgs struct {
-	Cap string `desc:"a capability id; empty returns every cap"`
+	Cap string `json:",omitzero" desc:"a capability id; empty returns every cap"`
 }
 
 // CapActivity is one cap's audit activity as the strip draws it.
@@ -89,7 +89,7 @@ type GetActivityResult struct {
 
 // SelectCapArgs selects the cap the page shows.
 type SelectCapArgs struct {
-	Cap string `desc:"a capability id from get_view's caps; empty shows the picker alone"`
+	Cap string `json:",omitzero" desc:"a capability id from get_view's caps; empty shows the picker alone"`
 }
 
 func capIdList() (s string) {

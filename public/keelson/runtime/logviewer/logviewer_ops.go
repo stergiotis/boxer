@@ -202,10 +202,10 @@ type Counters struct {
 
 // ListRowsArgs filters the cache; every field is optional.
 type ListRowsArgs struct {
-	MinLevel string `desc:"the lowest level to return: trace, debug, info, warn, error, fatal or panic; empty keeps every row"`
-	App      string `desc:"case-insensitive substring of the app id"`
-	Message  string `desc:"case-insensitive substring of the message"`
-	Limit    int    `desc:"rows to return, the newest; default 50, at most 200"`
+	MinLevel string `json:",omitzero" desc:"the lowest level to return: trace, debug, info, warn, error, fatal or panic; empty keeps every row"`
+	App      string `json:",omitzero" desc:"case-insensitive substring of the app id"`
+	Message  string `json:",omitzero" desc:"case-insensitive substring of the message"`
+	Limit    int    `json:",omitzero" desc:"rows to return, the newest; default 50, at most 200"`
 }
 
 // RowSummary is one row as the table shows it.
@@ -307,9 +307,9 @@ type View struct {
 
 // SetFilterArgs sets the filter row whole.
 type SetFilterArgs struct {
-	MinLevel string `desc:"trace, debug, info, warn, error, fatal or panic; empty means trace"`
-	App      string `desc:"case-insensitive substring of the app id; empty matches every row"`
-	Message  string `desc:"case-insensitive substring of the message; empty matches every row"`
+	MinLevel string `json:",omitzero" desc:"trace, debug, info, warn, error, fatal or panic; empty means trace"`
+	App      string `json:",omitzero" desc:"case-insensitive substring of the app id; empty matches every row"`
+	Message  string `json:",omitzero" desc:"case-insensitive substring of the message; empty matches every row"`
 	AllRuns  bool   `desc:"read every run in the look-back instead of this process's run"`
 	Instance uint64 `desc:"read one window's rows by its instance key; 0 reads every window's"`
 }
@@ -321,7 +321,7 @@ type SetFollowArgs struct {
 
 // SelectRowArgs selects a row, which opens the detail pane.
 type SelectRowArgs struct {
-	Key string `desc:"a key from list_rows; empty clears the selection"`
+	Key string `json:",omitzero" desc:"a key from list_rows; empty clears the selection"`
 }
 
 func levelNameList() (s string) {

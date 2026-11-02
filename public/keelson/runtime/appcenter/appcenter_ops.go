@@ -109,7 +109,7 @@ type View struct {
 
 // ShowAppArgs opens an app's page.
 type ShowAppArgs struct {
-	AppId string `desc:"a registered app id; empty shows the app list alone"`
+	AppId string `json:",omitzero" desc:"a registered app id; empty shows the app list alone"`
 }
 
 // SetViewArgs switches the tab.
@@ -174,12 +174,12 @@ type MeasureCpuArgs struct {
 
 // SetRunningFilterArgs sets the running tab's filter.
 type SetRunningFilterArgs struct {
-	Text string `desc:"a case-insensitive substring of a window's app id, app name, title or one of its tasks' titles; a task no open window owns matches on its title, kind or owner; empty shows every window"`
+	Text string `json:",omitzero" desc:"a case-insensitive substring of a window's app id, app name, title or one of its tasks' titles; a task no open window owns matches on its title, kind or owner; empty shows every window"`
 }
 
 // SetFilterArgs sets the list's filter.
 type SetFilterArgs struct {
-	Text string `desc:"a case-insensitive substring of an app's id, name or summary; empty lists every app"`
+	Text string `json:",omitzero" desc:"a case-insensitive substring of an app's id, name or summary; empty lists every app"`
 }
 
 var ops = func() (s *appops.Set[*App, opsSnap]) {

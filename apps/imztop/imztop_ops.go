@@ -350,9 +350,9 @@ type Battery struct {
 }
 
 type ListProcessesArgs struct {
-	SortBy string `desc:"cpu (smoothed, default), cpu_raw, mem, pid, user, name, io_read, io_write"`
-	Order  string `desc:"asc or desc; empty takes the key's own direction"`
-	Filter string `desc:"case-insensitive substring of the name or command line; empty keeps all"`
+	SortBy string `json:",omitzero" desc:"cpu (smoothed, default), cpu_raw, mem, pid, user, name, io_read, io_write"`
+	Order  string `json:",omitzero" desc:"asc or desc; empty takes the key's own direction"`
+	Filter string `json:",omitzero" desc:"case-insensitive substring of the name or command line; empty keeps all"`
 	Limit  int    `desc:"rows to return, 1 to 50; 0 means 20"`
 }
 
@@ -476,9 +476,9 @@ type CoverageRun struct {
 }
 
 type SetProcViewArgs struct {
-	SortBy string `desc:"cpu, cpu_raw, mem, pid, user, name, io_read, io_write; empty is cpu"`
-	Order  string `desc:"asc or desc; empty takes the key's own direction"`
-	Filter string `desc:"case-insensitive substring of name or command line; empty shows all"`
+	SortBy string `json:",omitzero" desc:"cpu, cpu_raw, mem, pid, user, name, io_read, io_write; empty is cpu"`
+	Order  string `json:",omitzero" desc:"asc or desc; empty takes the key's own direction"`
+	Filter string `json:",omitzero" desc:"case-insensitive substring of name or command line; empty shows all"`
 	Tree   bool   `desc:"nest children under parents"`
 }
 

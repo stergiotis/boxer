@@ -212,10 +212,10 @@ func (inst opsSnap) filterRows(f Filter, category string) (out []varRow) {
 
 // ListVarsArgs narrows the registry; every field is optional.
 type ListVarsArgs struct {
-	Query    string `desc:"case-insensitive substring of the name or the description"`
+	Query    string `json:",omitzero" desc:"case-insensitive substring of the name or the description"`
 	OnlySet  bool   `desc:"only variables set in the environment"`
-	Category string `desc:"one category, as get_view or list_vars names it; empty keeps every category"`
-	Limit    int    `desc:"rows to return, in category then name order; default 100, at most 200"`
+	Category string `json:",omitzero" desc:"one category, as get_view or list_vars names it; empty keeps every category"`
+	Limit    int    `json:",omitzero" desc:"rows to return, in category then name order; default 100, at most 200"`
 }
 
 // VarSummary is one variable as a row of the inspector.
@@ -283,13 +283,13 @@ type View struct {
 
 // SetFilterArgs sets the filter row whole.
 type SetFilterArgs struct {
-	Query   string `desc:"case-insensitive substring of the name or the description; empty matches every variable"`
+	Query   string `json:",omitzero" desc:"case-insensitive substring of the name or the description; empty matches every variable"`
 	OnlySet bool   `desc:"only variables set in the environment"`
 }
 
 // SelectVarArgs highlights a variable's row.
 type SelectVarArgs struct {
-	Name string `desc:"a registered variable's name; empty clears the selection"`
+	Name string `json:",omitzero" desc:"a registered variable's name; empty clears the selection"`
 }
 
 // ExpandCategoryArgs opens or closes one section.

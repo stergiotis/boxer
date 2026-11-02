@@ -64,8 +64,8 @@ type JobList struct {
 
 // SetFiltersArgs is set_filters' argument.
 type SetFiltersArgs struct {
-	States []string `desc:"states to show; empty shows every state"`
-	Kind   string   `desc:"a substring of the job kind; empty matches every kind"`
+	States []string `json:",omitzero" desc:"states to show; empty shows every state"`
+	Kind   string   `json:",omitzero" desc:"a substring of the job kind; empty matches every kind"`
 }
 
 // JobArgs names one job.

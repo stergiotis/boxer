@@ -130,9 +130,9 @@ type View struct {
 
 // ShowDocArgs opens a document, or the overview.
 type ShowDocArgs struct {
-	AppId   string `desc:"the app whose book to open; empty shows the library overview"`
-	Doc     string `desc:"the document's path within the book; empty opens the book with no document"`
-	Section string `desc:"a section slug to scroll to; empty for the top"`
+	AppId   string `json:",omitzero" desc:"the app whose book to open; empty shows the library overview"`
+	Doc     string `json:",omitzero" desc:"the document's path within the book; empty opens the book with no document"`
+	Section string `json:",omitzero" desc:"a section slug to scroll to; empty for the top"`
 }
 
 // SetExpandedArgs expands or collapses one book in the nav.
@@ -148,7 +148,7 @@ type SetViewModeArgs struct {
 
 // SetSearchArgs sets the nav's search box.
 type SetSearchArgs struct {
-	Query string `desc:"space-separated regular expressions, ANDed; empty restores the book tree"`
+	Query string `json:",omitzero" desc:"space-separated regular expressions, ANDed; empty restores the book tree"`
 }
 
 const (

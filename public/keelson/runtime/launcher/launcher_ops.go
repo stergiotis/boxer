@@ -195,9 +195,9 @@ type View struct {
 
 // SetFilterArgs sets the filter whole.
 type SetFilterArgs struct {
-	Query  string   `desc:"space-separated regular expressions, ANDed; empty browses by topic"`
-	Kinds  []string `desc:"the kinds to show, among app, applet, demo; empty shows all"`
-	Topics []string `desc:"the topics to restrict to; empty means no restriction"`
+	Query  string   `json:",omitzero" desc:"space-separated regular expressions, ANDed; empty browses by topic"`
+	Kinds  []string `json:",omitzero" desc:"the kinds to show, among app, applet, demo; empty shows all"`
+	Topics []string `json:",omitzero" desc:"the topics to restrict to; empty means no restriction"`
 }
 
 // ShowAppArgs selects an app's row, which the detail pane describes.

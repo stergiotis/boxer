@@ -69,8 +69,8 @@ func (inst *App) opsSnapshot() (sn opsSnap) {
 // ListEntriesArgs filters the last read; every field is optional.
 type ListEntriesArgs struct {
 	App   string `desc:"case-insensitive substring of the app id"`
-	Kind  string `desc:"the entry kind, exactly: persist, workingset or column_width; empty keeps every kind"`
-	Limit int    `desc:"entries to return, in table order; default 50, at most 200"`
+	Kind  string `json:",omitzero" desc:"the entry kind, exactly: persist, workingset or column_width; empty keeps every kind"`
+	Limit int    `json:",omitzero" desc:"entries to return, in table order; default 50, at most 200"`
 }
 
 // Entry is one row of keelson('app_state') as the window shows it.
@@ -108,7 +108,7 @@ type View struct {
 
 // SelectAppArgs selects the app whose entries the right pane lists.
 type SelectAppArgs struct {
-	App string `desc:"an app id from list_entries; empty clears the selection"`
+	App string `json:",omitzero" desc:"an app id from list_entries; empty clears the selection"`
 }
 
 func entryOf(r entryRow) (e Entry) {
