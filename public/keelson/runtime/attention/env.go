@@ -13,6 +13,15 @@ var EscalateEnv = env.NewDuration(env.Spec{
 	Category:    env.CategoryDev,
 })
 
+// OpenOwnEnv opens a window's own request at once when the person is working
+// in that window.
+var OpenOwnEnv = env.NewBool(env.Spec{
+	Name:        "BOXER_ATTENTION_OPEN_OWN",
+	Default:     "true",
+	Description: "open the card of a grant request, widening or confirmation at once when the window asking is the active one or the one the person last gave input to; off, it waits in the queue like any item until BOXER_ATTENTION_ESCALATE",
+	Category:    env.CategoryDev,
+})
+
 // FloodStreamEnv and FloodPersonEnv bound how many waiting items a stream,
 // and all streams together, may add to the queue in ten minutes (ADR-0324
 // §SD6).

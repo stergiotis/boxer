@@ -7,6 +7,7 @@ scene:
   size: 1600x1000
   tags: [slow]
   env:
+    BOXER_ATTENTION_OPEN_OWN: "false"
     BOXER_AGENT_COORDINATORS: "chat"
     BOXER_AGENT_DEADLINE: "10s"
     BOXER_LLM_SCRIPT: "apps/chat/scenes/chat-afk-late-call.script.jsonl"

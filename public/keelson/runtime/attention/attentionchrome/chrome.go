@@ -60,6 +60,8 @@ type Chrome struct {
 	display  func(app.AppIdT) string
 	raiseW   func(instance uint64)
 	activeW  func() uint64
+	lastInW  func() uint64
+	ownSeen  map[string]bool
 	openJobs func()
 	openRun  func(filter string)
 	pauseW   func(window uint64)
@@ -77,6 +79,9 @@ type Options struct {
 	// OpenJobs opens or raises the watchbill window, where a job's
 	// highlight points (ADR-0323 §SD7); nil offers no Open on one.
 	OpenJobs func()
+	// LastInput is the window the person last gave input to, zero for none;
+	// nil leaves only Active to go by.
+	LastInput func() uint64
 	// OpenRunning opens the app center's Running tab under a filter, where
 	// a slow window's highlight points (ADR-0351 §SD6); nil offers no Open
 	// on one.
@@ -89,7 +94,7 @@ type Options struct {
 // New is the chrome of svc; it draws the cards of the questions apps post
 // (ADR-0324 §SD5) itself.
 func New(svc *attention.Service, opts Options) (inst *Chrome) {
-	inst = &Chrome{svc: svc, display: opts.Display, raiseW: opts.Raise, activeW: opts.Active, openJobs: opts.OpenJobs, openRun: opts.OpenRunning, pauseW: opts.Pause}
+	inst = &Chrome{svc: svc, display: opts.Display, raiseW: opts.Raise, activeW: opts.Active, lastInW: opts.LastInput, openJobs: opts.OpenJobs, openRun: opts.OpenRunning, pauseW: opts.Pause}
 	if svc.Questions != nil {
 		inst.sources = append(inst.sources, &questionCards{q: svc.Questions, display: opts.Display, raise: opts.Raise})
 	}
@@ -123,6 +128,59 @@ func (inst *Chrome) refresh(now time.Time) {
 		inst.openCard(k)
 	}
 	inst.openUrgencies()
+	inst.openOwnRequests()
+}
+
+// openOwnRequests opens, once, the card of a request from the window the
+// person is working in: the active one, or the one they last gave input to,
+// since a window the task just opened takes the focus without them moving.
+// A request from another window waits in the queue, so an app cannot pop a
+// card from behind, and the person's status holds it back as it does an
+// escalation.
+func (inst *Chrome) openOwnRequests() {
+	if !attention.OpenOwnEnv.Get() {
+		return
+	}
+	if inst.ownSeen == nil {
+		inst.ownSeen = make(map[string]bool, 2)
+	}
+	status := attention.StatusHere
+	if inst.svc.Presence != nil {
+		status, _ = inst.svc.Presence.Status()
+	}
+	waiting := make(map[string]bool, 2)
+	for _, e := range inst.entries {
+		if !ownRequestKind(e.Kind) {
+			continue
+		}
+		waiting[e.Key] = true
+		if inst.ownSeen[e.Key] {
+			continue
+		}
+		inst.ownSeen[e.Key] = true
+		if status.Opens(false, true) && inst.personIn(e.Instance) {
+			inst.openCard(e.Key)
+		}
+	}
+	for k := range inst.ownSeen {
+		if !waiting[k] {
+			delete(inst.ownSeen, k)
+		}
+	}
+}
+
+// ownRequestKind says whether a kind of item is a window asking for the
+// person's decision about its own task.
+func ownRequestKind(k string) bool {
+	return k == attention.KindGrantRequest || k == attention.KindWidening || k == attention.KindConfirmation
+}
+
+// personIn says whether the person is working in window.
+func (inst *Chrome) personIn(window uint64) bool {
+	if window == 0 {
+		return false
+	}
+	return (inst.activeW != nil && inst.activeW() == window) || (inst.lastInW != nil && inst.lastInW() == window)
 }
 
 // openUrgencies opens, once, the card of an urgency request that came from

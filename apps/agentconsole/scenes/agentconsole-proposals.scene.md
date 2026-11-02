@@ -6,6 +6,7 @@ scene:
   launch: agentconsole
   size: 1400x900
   env:
+    BOXER_ATTENTION_OPEN_OWN: "false"
     BOXER_AGENT_COORDINATORS: agentconsole
 ---
 

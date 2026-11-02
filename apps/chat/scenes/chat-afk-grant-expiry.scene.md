@@ -7,6 +7,7 @@ scene:
   size: 1400x900
   tags: [slow]
   env:
+    BOXER_ATTENTION_OPEN_OWN: "false"
     BOXER_AGENT_COORDINATORS: "chat"
     BOXER_AGENT_REQUEST_TIMEOUT: "12s"
     BOXER_LLM_SCRIPT: "apps/chat/scenes/chat-afk-grant-expiry.script.jsonl"

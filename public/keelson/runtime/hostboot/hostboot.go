@@ -1215,8 +1215,9 @@ func (rt *Runtime) bootAgent() {
 				}
 				return string(id)
 			},
-			Raise:  func(instance uint64) { _ = host.OpsRaise(instance) },
-			Active: host.ActiveWindow,
+			Raise:     func(instance uint64) { _ = host.OpsRaise(instance) },
+			Active:    host.ActiveWindow,
+			LastInput: host.LastInputWindow,
 			// A job's highlight points at the watchbill window (ADR-0323
 			// §SD7).
 			OpenJobs: func() { _, _, _ = host.OpenOrRaise(watchbilllaunch.AppId) },
