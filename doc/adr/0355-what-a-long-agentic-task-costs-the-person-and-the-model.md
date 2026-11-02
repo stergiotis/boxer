@@ -1,13 +1,11 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-11-02
 reversibility: local-edit
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to accepted
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-11-02
 ---
-
-> **Status: proposed — pre-human-review.** Decision under consideration; implemented, not yet reviewed.
 
 # ADR-0355: What a long agentic task costs the person and the model — reads that warn, requests that open, a history that sheds
 
@@ -175,7 +173,7 @@ in batches. The reads and the batch size are profile data (ADR-0310 §SD7).
 
 ## Status
 
-Proposed.
+Accepted 2026-11-02, with every decision implemented. The scene in the verification plan is not in the tree yet.
 
 ## References
 
