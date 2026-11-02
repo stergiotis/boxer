@@ -464,6 +464,22 @@ func (inst *Inst) OpsFloat(key uint64, floating bool) (err error) {
 	return inst.FloatWindow(WindowKeyT(key), floating)
 }
 
+// OpsPinTiled holds a coordinator's window in view under a tiled layout
+// while its task runs.
+func (inst *Inst) OpsPinTiled(key uint64, pinned bool) { inst.PinTiled(WindowKeyT(key), pinned) }
+
+// OpsClose asks a window to close, as its title bar's button does.
+func (inst *Inst) OpsClose(key uint64) (err error) {
+	inst.mu.Lock()
+	open := inst.openWindowLocked(WindowKeyT(key)) != nil
+	inst.mu.Unlock()
+	if !open {
+		return eb.Build().Uint64("window", key).Errorf("no such window")
+	}
+	inst.Close(WindowKeyT(key), "closed by the task that opened it")
+	return
+}
+
 // OpsPlace is Place for the agent service: an outer rect by its top-left
 // corner and size, in logical points.
 func (inst *Inst) OpsPlace(key uint64, x, y, w, h float32) (err error) {

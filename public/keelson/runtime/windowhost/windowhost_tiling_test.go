@@ -175,6 +175,26 @@ func TestHostLayoutAPI(t *testing.T) {
 	assert.Error(t, inst.ArrangeWindows(ArrangeColumns, nil), "arrangements are refused on a tiled desktop")
 }
 
+// A pinned window holds the slot behind the main one as windows open, so it
+// stays at the top of the stack instead of being pushed down it.
+func TestAPinnedWindowHoldsItsSlotBehindTheMain(t *testing.T) {
+	inst := NewInst(nil, zerolog.Nop())
+	require.NoError(t, inst.SetLayout(LayoutMainStack))
+	chat, a := &window{key: 1}, &window{key: 2}
+	inst.windows = []*window{chat, a}
+	assert.Equal(t, []WindowKeyT{2, 1}, inst.takeTileInputs(inst.windows).order)
+	inst.PinTiled(1, true)
+	for _, k := range []WindowKeyT{3, 4, 5} {
+		inst.windows = append(inst.windows, &window{key: k})
+		in := inst.takeTileInputs(inst.windows)
+		assert.Equal(t, k, in.order[0], "the new window is the main one")
+		assert.Equal(t, WindowKeyT(1), in.order[1], "the pinned one is behind it")
+	}
+	inst.PinTiled(1, false)
+	inst.windows = append(inst.windows, &window{key: 6})
+	assert.Equal(t, []WindowKeyT{6, 5, 1, 4, 3, 2}, inst.takeTileInputs(inst.windows).order)
+}
+
 // The order follows the open windows: a new window joins in front, a closed
 // one leaves, unfloating puts a window back in front.
 func TestTileOrderFollowsTheWindows(t *testing.T) {

@@ -360,6 +360,7 @@ func (inst *Inst) takeTileInputs(snapshot []*window) (in tileInputs) {
 	if len(fresh) > 0 {
 		slices.SortFunc(fresh, func(a, b WindowKeyT) int { return int(b) - int(a) })
 		inst.tileOrder = append(fresh, inst.tileOrder...)
+		inst.holdPinnedLocked()
 		inst.tileDirty = true
 	}
 	in = tileInputs{layout: inst.layout, params: inst.layoutParams, dirty: inst.tileDirty}
@@ -578,6 +579,39 @@ func (inst *Inst) planTiles(in tileInputs, work Rect, tiled []*window) {
 		run.placed[w.key] = rects[i]
 	}
 	inst.tileCells = cells
+}
+
+// holdPinnedLocked moves each pinned window right behind the main one.
+// inst.mu must be held.
+func (inst *Inst) holdPinnedLocked() {
+	keys := make([]WindowKeyT, 0, len(inst.tilePinned))
+	for k := range inst.tilePinned {
+		keys = append(keys, k)
+	}
+	slices.Sort(keys)
+	for _, k := range keys {
+		if i := slices.Index(inst.tileOrder, k); i > 1 {
+			inst.tileOrder = slices.Insert(slices.Delete(inst.tileOrder, i, i+1), 1, k)
+		}
+	}
+}
+
+// PinTiled holds a window right behind the main one under a tiled layout, or
+// lets it go. The person's own reordering still applies until the next
+// window opens.
+func (inst *Inst) PinTiled(key WindowKeyT, pinned bool) {
+	inst.mu.Lock()
+	defer inst.mu.Unlock()
+	if !pinned {
+		delete(inst.tilePinned, key)
+		return
+	}
+	if inst.tilePinned == nil {
+		inst.tilePinned = make(map[WindowKeyT]bool, 1)
+	}
+	inst.tilePinned[key] = true
+	inst.holdPinnedLocked()
+	inst.tileDirty = true
 }
 
 // tileOrderOfLocked is the window's 1-based position in the order, main

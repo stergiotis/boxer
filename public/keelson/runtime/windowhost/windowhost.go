@@ -285,12 +285,15 @@ type Inst struct {
 	layout       LayoutE
 	layoutParams LayoutParams
 	tileOrder    []WindowKeyT
-	floating     map[WindowKeyT]bool
-	tileDirty    bool
-	tiling       *tileRun
-	tileCells    map[WindowKeyT]Rect
-	tileMins     map[WindowKeyT][2]float32
-	tileWork     Rect
+	// tilePinned are windows held right behind the main one, so a window
+	// that opens does not push them out of the stack's visible part.
+	tilePinned map[WindowKeyT]bool
+	floating   map[WindowKeyT]bool
+	tileDirty  bool
+	tiling     *tileRun
+	tileCells  map[WindowKeyT]Rect
+	tileMins   map[WindowKeyT][2]float32
+	tileWork   Rect
 	// The shell's chords (ADR-0346 §SD5, stepChords). prevActiveKey is the
 	// window that was active before the current one, for Alt+Tab;
 	// layoutBeforeMonocle is what Alt+F returns to; snap is the last snap,
@@ -384,6 +387,8 @@ type Inst struct {
 	// (windowhost_input.go).
 	onInput   func(now time.Time)
 	lastInput inputSeen
+	// lastInputKey is the window that was active at the person's last input.
+	lastInputKey atomic.Uint64
 
 	// drains bounds and counts the drain step of the closing edge
 	// (windowhost_drain.go).

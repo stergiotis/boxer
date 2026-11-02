@@ -37,12 +37,21 @@ func (inst *Inst) noteInput(sm *c.StateManager, now time.Time) {
 		cur.pointer = c.PointerValue{}
 	}
 	moved := cur != inst.lastInput
+	if cur.pointer != inst.lastInput.pointer || cur.modifiers != inst.lastInput.modifiers || scroll.X != 0 || scroll.Y != 0 || cmdEnter {
+		// The active window alone moving is the host's doing, such as a new
+		// window taking the focus, not the person's input.
+		inst.lastInputKey.Store(uint64(cur.active))
+	}
 	inst.lastInput = cur
 	if moved || scroll.X != 0 || scroll.Y != 0 || (zoom.Zoom != 0 && zoom.Zoom != 1) ||
 		sm.GetF1KeyPressed() || sm.GetF2KeyPressed() || sm.GetF8KeyPressed() || cmdEnter {
 		inst.onInput(now)
 	}
 }
+
+// LastInputWindow is the window that was active when the person last gave
+// input, zero for none.
+func (inst *Inst) LastInputWindow() uint64 { return inst.lastInputKey.Load() }
 
 // ActiveWindow is the shell's active window, zero for none; render
 // goroutine only, as host chrome is.
