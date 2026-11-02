@@ -255,8 +255,11 @@ when the window opens.
 
 **Send to play** publishes the table as it stands — the rows held, in the
 columns shown — as an ad-hoc dataset named `trail_rows`, and opens a play
-window reading it, where it can be sorted, searched and queried. There is
-no file export. The publish is itself recorded on the trail.
+window reading it, where it can be sorted, searched and queried. That window
+also reaches the server the marts are on: a statement naming
+`keelson('trail_rows')` runs on the host and one naming `boxer.dm_trail_*` on the
+server, though no one statement can name both. There is no file export. The
+publish is itself recorded on the trail.
 
 ## Opening the viewer on a case
 

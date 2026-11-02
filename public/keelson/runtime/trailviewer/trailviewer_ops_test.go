@@ -2,8 +2,10 @@ package trailviewer
 
 import (
 	"context"
+	"encoding/json/v2"
 	"errors"
 	"iter"
+	"reflect"
 	"slices"
 	"strings"
 	"sync"
@@ -18,6 +20,7 @@ import (
 	"github.com/stergiotis/boxer/public/identity/callident"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/appops/opengine"
+	"github.com/stergiotis/boxer/public/keelson/runtime/appops/opjson"
 	"github.com/stergiotis/boxer/public/keelson/runtime/appops/opwire"
 	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
 	"github.com/stergiotis/boxer/public/keelson/runtime/trail"
@@ -586,4 +589,61 @@ func TestTheEngineAttributesEachWriter(t *testing.T) {
 	log := w.eng.Log()
 	assert.Equal(t, opSetTab, log[len(log)-1].Op)
 	assert.Empty(t, w.eng.UndeclaredWrites(0))
+}
+
+// A query's scope left out is the window's, so a query with no arguments
+// reads what the window shows.
+func TestQueriesDefaultToTheWindowsScope(t *testing.T) {
+	inst, _ := opsFixture(t)
+
+	out, err := query[ListRowsArgs, ListRowsResult](t, inst, opListRows, ListRowsArgs{})
+	require.NoError(t, err)
+	assert.Empty(t, out.Diagnostic)
+	assert.Equal(t, 6, out.Matched)
+
+	inst.filter = Filter{}.with(FacetKind, kindAuditEvent, false)
+	narrowed, err := query[ListRowsArgs, ListRowsResult](t, inst, opListRows, ListRowsArgs{})
+	require.NoError(t, err)
+	assert.Less(t, narrowed.Matched, 6, "the window's filter applies when the case is the window's too")
+
+	_, err = query[ListRowsArgs, ListRowsResult](t, inst, opListRows, ListRowsArgs{Value: fixtureRun})
+	require.Error(t, err, "a value without its case is refused")
+}
+
+// Every view control's resource is reported by a query, so a task that
+// read the window has a base revision for its next write.
+func TestEveryWrittenResourceIsReportedByAQuery(t *testing.T) {
+	m := manifest
+	reported := map[string]bool{}
+	for _, spec := range m.Operations.Operations {
+		if spec.Agents && spec.Class != app.OperationClassCommand {
+			for _, r := range spec.Reads {
+				reported[r] = true
+			}
+		}
+	}
+	for _, spec := range m.Operations.Operations {
+		if spec.Agents && spec.Class == app.OperationClassCommand {
+			for _, r := range spec.Writes {
+				assert.True(t, reported[r], "%s writes %s, which no query reports", spec.Name, r)
+			}
+		}
+	}
+}
+
+// The schema an agent sees requires only what a query cannot default.
+func TestQueryArgumentsAreOptional(t *testing.T) {
+	for name, v := range map[string]any{"get_verdict": GetVerdictArgs{}, "list_rows": ListRowsArgs{}, "get_matrix": GetMatrixArgs{}, "get_strip": GetStripArgs{}} {
+		schema, err := opjson.Schema(reflect.TypeOf(v))
+		require.NoError(t, err, name)
+		var root struct {
+			Required   []string `json:"required"`
+			Properties map[string]struct {
+				Required []string `json:"required"`
+			} `json:"properties"`
+		}
+		require.NoError(t, json.Unmarshal(schema, &root), name)
+		assert.Empty(t, root.Required, name)
+		assert.Empty(t, root.Properties["range"].Required, "%s: a range is last, or from and to", name)
+	}
 }

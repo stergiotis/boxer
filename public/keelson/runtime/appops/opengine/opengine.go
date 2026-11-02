@@ -337,6 +337,17 @@ func outcomeOfError(err error) (out opwire.Outcome) {
 	return
 }
 
+// readerOf names a query agents may call that reports resource r's revision,
+// empty when none does.
+func (inst *Engine) readerOf(r string) (query string) {
+	for _, spec := range inst.catalog.Operations {
+		if spec.Class != app.OperationClassCommand && spec.Agents && slices.Contains(spec.Reads, r) {
+			return spec.Name
+		}
+	}
+	return ""
+}
+
 func pick(revs map[string]uint64, names []string) (out map[string]uint64) {
 	if len(names) == 0 {
 		return
@@ -513,15 +524,23 @@ func (inst *Engine) ApplyQueued() {
 }
 
 func (inst *Engine) apply(c *call) (out opwire.Outcome) {
-	for _, r := range c.spec.Writes {
-		exp, ok := c.expects[r]
-		if !ok {
-			return opwire.Outcome{Phase: opwire.PhaseConflict, Reason: "read first: no revision of " + r + " is known",
-				Revisions: pick(inst.revs, c.spec.Writes)}
-		}
-		if inst.revs[r] != exp {
-			return opwire.Outcome{Phase: opwire.PhaseConflict, Reason: r + " moved since it was read",
-				Revisions: pick(inst.revs, c.spec.Writes)}
+	if !c.spec.AnyRevision {
+		for _, r := range c.spec.Writes {
+			exp, ok := c.expects[r]
+			if !ok {
+				reader := inst.readerOf(r)
+				if reader == "" {
+					// No query reports it, so no caller could ever have read
+					// it: a conflict here would never clear.
+					continue
+				}
+				return opwire.Outcome{Phase: opwire.PhaseConflict, Reason: "read first: no revision of " + r + " is known; " + reader + " reports it",
+					Revisions: pick(inst.revs, c.spec.Writes)}
+			}
+			if inst.revs[r] != exp {
+				return opwire.Outcome{Phase: opwire.PhaseConflict, Reason: r + " moved since it was read",
+					Revisions: pick(inst.revs, c.spec.Writes)}
+			}
 		}
 	}
 	for _, r := range c.spec.Writes {

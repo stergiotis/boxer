@@ -42,11 +42,11 @@ func (inst *App) readValueOf() (v readValue) {
 // the case and range whole, whatever filter the table is narrowed by, as
 // the pane shows them.
 type GetFacetsArgs struct {
-	Case  string    `desc:"the case's kind, as the window read it"`
-	Value string    `desc:"the case's value"`
-	Range RangeArgs `desc:"the window's range, as the window read it"`
+	Case  string    `json:",omitzero" desc:"the case's kind, as the window read it; the window's case when omitted"`
+	Value string    `json:",omitzero" desc:"the case's value"`
+	Range RangeArgs `json:",omitzero" desc:"the window's range, as the window read it; the window's range when omitted"`
 	Facet string    `desc:"kind, status, app, domain.action or principal"`
-	Limit int       `desc:"values to return, most rows first; default and at most 200"`
+	Limit int       `json:",omitzero" desc:"values to return, most rows first; default and at most 200"`
 }
 
 // FacetValueOut is one value of a facet with its count.
@@ -69,12 +69,12 @@ type FacetsResult struct {
 // GetStripArgs names the read the strip is over, as GetDayHourArgs does,
 // and the colouring.
 type GetStripArgs struct {
-	Case   string    `desc:"the case's kind, as the window read it"`
-	Value  string    `desc:"the case's value"`
-	Range  RangeArgs `desc:"the window's range, as the window read it"`
-	Filter []TermArg `desc:"the filter the table is narrowed by, as the window read it; empty for none"`
-	By     string    `desc:"kind or status: what the bars are stacked by; empty for the window's colouring"`
-	Limit  int       `desc:"bars to return, oldest bucket first; default and at most 200"`
+	Case   string    `json:",omitzero" desc:"the case's kind, as the window read it; the window's case when omitted"`
+	Value  string    `json:",omitzero" desc:"the case's value"`
+	Range  RangeArgs `json:",omitzero" desc:"the window's range, as the window read it; the window's range when omitted"`
+	Filter []TermArg `json:",omitzero" desc:"the filter the table is narrowed by, as the window read it; the window's filter when case is omitted too, else none"`
+	By     string    `json:",omitzero" desc:"kind or status: what the bars are stacked by; empty for the window's colouring"`
+	Limit  int       `json:",omitzero" desc:"bars to return, oldest bucket first; default and at most 200"`
 }
 
 // StripBar is one (bucket, key) of the strip.
@@ -101,7 +101,7 @@ type StripResult struct {
 // GetContextArgs names the selected row.
 type GetContextArgs struct {
 	Id uint64 `desc:"the selected row's facts id"`
-	N  int    `desc:"rows to return on each side, nearest first read; default and at most 20, and never more than the window read"`
+	N  int    `json:",omitzero" desc:"rows to return on each side, nearest first read; default and at most 20, and never more than the window read"`
 }
 
 // ContextResult is get_context's result: the rows around the selected one
@@ -135,13 +135,13 @@ type CompareResult struct {
 // GetMatrixArgs names the read the matrix is over, as GetDayHourArgs does,
 // and the two axes.
 type GetMatrixArgs struct {
-	Case   string    `desc:"the case's kind, as the window read it"`
-	Value  string    `desc:"the case's value"`
-	Range  RangeArgs `desc:"the window's range, as the window read it"`
-	Filter []TermArg `desc:"the filter the table is narrowed by, as the window read it; empty for none"`
-	Actor  string    `desc:"principal, app or window; empty for the window's pick"`
-	Object string    `desc:"subject, entity or operation; empty for the window's pick"`
-	Limit  int       `desc:"cells to return, actors in order of their rows then objects; default and at most 200"`
+	Case   string    `json:",omitzero" desc:"the case's kind, as the window read it; the window's case when omitted"`
+	Value  string    `json:",omitzero" desc:"the case's value"`
+	Range  RangeArgs `json:",omitzero" desc:"the window's range, as the window read it; the window's range when omitted"`
+	Filter []TermArg `json:",omitzero" desc:"the filter the table is narrowed by, as the window read it; the window's filter when case is omitted too, else none"`
+	Actor  string    `json:",omitzero" desc:"principal, app or window; empty for the window's pick"`
+	Object string    `json:",omitzero" desc:"subject, entity or operation; empty for the window's pick"`
+	Limit  int       `json:",omitzero" desc:"cells to return, actors in order of their rows then objects; default and at most 200"`
 }
 
 // MatrixCellOut is one (actor, object) pair with rows.
@@ -174,12 +174,12 @@ type MatrixResult struct {
 // GetDottedArgs names the read the dotted chart is over, as GetDayHourArgs
 // does, and the row kind.
 type GetDottedArgs struct {
-	Case   string    `desc:"the case's kind, as the window read it"`
-	Value  string    `desc:"the case's value"`
-	Range  RangeArgs `desc:"the window's range, as the window read it"`
-	Filter []TermArg `desc:"the filter the table is narrowed by, as the window read it; empty for none"`
-	Row    string    `desc:"run, window, conversation or entity: what one row of the chart is; empty for the window's pick"`
-	Limit  int       `desc:"marks to return, by row then bucket; default and at most 200"`
+	Case   string    `json:",omitzero" desc:"the case's kind, as the window read it; the window's case when omitted"`
+	Value  string    `json:",omitzero" desc:"the case's value"`
+	Range  RangeArgs `json:",omitzero" desc:"the window's range, as the window read it; the window's range when omitted"`
+	Filter []TermArg `json:",omitzero" desc:"the filter the table is narrowed by, as the window read it; the window's filter when case is omitted too, else none"`
+	Row    string    `json:",omitzero" desc:"run, window, conversation or entity: what one row of the chart is; empty for the window's pick"`
+	Limit  int       `json:",omitzero" desc:"marks to return, by row then bucket; default and at most 200"`
 }
 
 // DottedMark is one (row, bucket) with rows.
@@ -328,13 +328,9 @@ func addControlOps(s *appops.Set[*App, opsSnap]) {
 
 	appops.Query(s, app.OperationSpec{Name: opGetFacets, Version: 1,
 		Summary: "list one facet's values with their counts over a case and range — the kinds, statuses, apps, domain.actions or principals the facets pane shows, which set_filter may name — as the window last read them; the counts are over the case and range whole, whatever filter the table is narrowed by",
-		Agents:  true, Untrusted: true, Fork: app.OperationForkReadShared},
+		Reads:   readsScope, Agents: true, Untrusted: true, Fork: app.OperationForkReadShared},
 		func(sn opsSnap, in GetFacetsArgs) (out FacetsResult, err error) {
-			c, err := parseCaseArgs(in.Case, in.Value)
-			if err != nil {
-				return
-			}
-			w, err := parseRangeArgs(in.Range)
+			c, w, _, err := sn.scopeArgs(in.Case, in.Value, in.Range, nil)
 			if err != nil {
 				return
 			}
@@ -371,9 +367,9 @@ func addControlOps(s *appops.Set[*App, opsSnap]) {
 
 	appops.Query(s, app.OperationSpec{Name: opGetStrip, Version: 1,
 		Summary: "read the strip of a case over a range and filter — rows per time bucket, stacked by kind or by status, with the bucket size and the strip's line — as the window last read it, for the colouring set_strip sets",
-		Agents:  true, Untrusted: true, Fork: app.OperationForkReadShared},
+		Reads:   readsStrip, Agents: true, Untrusted: true, Fork: app.OperationForkReadShared},
 		func(sn opsSnap, in GetStripArgs) (out StripResult, err error) {
-			c, w, f, err := parseAggArgs(in.Case, in.Value, in.Range, in.Filter)
+			c, w, f, err := sn.scopeArgs(in.Case, in.Value, in.Range, in.Filter)
 			if err != nil {
 				return
 			}
@@ -419,7 +415,7 @@ func addControlOps(s *appops.Set[*App, opsSnap]) {
 
 	appops.Query(s, app.OperationSpec{Name: opGetContext, Version: 1,
 		Summary: "read the rows before and after the selected row in the same writer run, whatever the filter hides, as the context tab shows them; the read is made for the selected row, so select_row it first",
-		Agents:  true, Untrusted: true, Fork: app.OperationForkReadShared},
+		Reads:   readsRows, Agents: true, Untrusted: true, Fork: app.OperationForkReadShared},
 		func(sn opsSnap, in GetContextArgs) (out ContextResult, err error) {
 			n := in.N
 			switch {
@@ -468,7 +464,7 @@ func addControlOps(s *appops.Set[*App, opsSnap]) {
 
 	appops.Query(s, app.OperationSpec{Name: opGetCompare, Version: 1,
 		Summary: "compare two held rows field by field — the timeline's columns and, when both are audit events, their own columns and attributes — the older row as before, as the compare tab shows them",
-		Agents:  true, Untrusted: true, Fork: app.OperationForkReadShared},
+		Reads:   readsCompare, Agents: true, Untrusted: true, Fork: app.OperationForkReadShared},
 		func(sn opsSnap, in GetCompareArgs) (out CompareResult, err error) {
 			if in.A == 0 || in.B == 0 || in.A == in.B {
 				err = app.RefuseOperation("a and b are two different held rows' facts ids")
@@ -491,9 +487,9 @@ func addControlOps(s *appops.Set[*App, opsSnap]) {
 
 	appops.Query(s, app.OperationSpec{Name: opGetMatrix, Version: 1,
 		Summary: "read the actor × object matrix of a case over a range and filter — rows per (principal, app or window) × (subject, entity or operation) with each pair's last outcome — as the window last read it; the view is read while its tab is open, for the axes set_matrix sets",
-		Agents:  true, Untrusted: true, Fork: app.OperationForkReadShared},
+		Reads:   readsMatrix, Agents: true, Untrusted: true, Fork: app.OperationForkReadShared},
 		func(sn opsSnap, in GetMatrixArgs) (out MatrixResult, err error) {
-			c, w, f, err := parseAggArgs(in.Case, in.Value, in.Range, in.Filter)
+			c, w, f, err := sn.scopeArgs(in.Case, in.Value, in.Range, in.Filter)
 			if err != nil {
 				return
 			}
@@ -558,9 +554,9 @@ func addControlOps(s *appops.Set[*App, opsSnap]) {
 
 	appops.Query(s, app.OperationSpec{Name: opGetDotted, Version: 1,
 		Summary: "read the dotted chart of a case over a range and filter — rows per (run, window, conversation or entity) per bucket of the strip's step — as the window last read it; the view is read while its tab is open, for the row kind set_dotted sets",
-		Agents:  true, Untrusted: true, Fork: app.OperationForkReadShared},
+		Reads:   readsDotted, Agents: true, Untrusted: true, Fork: app.OperationForkReadShared},
 		func(sn opsSnap, in GetDottedArgs) (out DottedResult, err error) {
-			c, w, f, err := parseAggArgs(in.Case, in.Value, in.Range, in.Filter)
+			c, w, f, err := sn.scopeArgs(in.Case, in.Value, in.Range, in.Filter)
 			if err != nil {
 				return
 			}
@@ -699,7 +695,7 @@ func addControlOps(s *appops.Set[*App, opsSnap]) {
 
 	appops.Command(s, app.OperationSpec{Name: opRefresh, Version: 1,
 		Summary: "ask the window to read its case from the trail marts again, and lift a stop; the read lands in a later frame, and get_view's refreshed_at says when",
-		Effect:  app.OperationEffectView, Writes: []string{resRead, resReadState}, Agents: true,
+		Effect:  app.OperationEffectView, Writes: []string{resRead, resReadState}, AnyRevision: true, Agents: true,
 		Gesture: "the Refresh button", Rebuild: app.OperationRebuildVolatile},
 		func(inst *App, _ app.OperationCall, _ appops.None) (out appops.None, err error) {
 			inst.cache.refresh()
@@ -710,7 +706,7 @@ func addControlOps(s *appops.Set[*App, opsSnap]) {
 	// toggles; refresh or a scope change lifts it.
 	appops.Command(s, app.OperationSpec{Name: opStopRead, Version: 1,
 		Summary: "stop the window's reads of the trail marts: cancel the read in flight and start none — no refill, no interval refresh, no extension at the table's end — until refresh or a change of the case, range, filter or colouring; the rows held stay on screen",
-		Effect:  app.OperationEffectView, Writes: []string{resRead, resReadState}, Agents: true,
+		Effect:  app.OperationEffectView, Writes: []string{resRead, resReadState}, AnyRevision: true, Agents: true,
 		Gesture: "the Cancel button beside the progress bar", Rebuild: app.OperationRebuildVolatile},
 		func(inst *App, _ app.OperationCall, _ appops.None) (out appops.None, err error) {
 			inst.cache.stop()
@@ -753,7 +749,8 @@ func addControlOps(s *appops.Set[*App, opsSnap]) {
 		Effect:  app.OperationEffectConsequential, Agents: true,
 		Gesture: "the Send to play button above the table",
 		Follows: []string{"the publish and the window open run off the frame; the line beside the button says how they went",
-			"the dataset lives as long as this window, and sending again replaces it"}},
+			"the dataset lives as long as this window, and sending again replaces it",
+			"the play window reads the rows as keelson('trail_rows') on the host and boxer.dm_trail_* on the server; one statement names one or the other, not both"}},
 		func(inst *App, _ app.OperationCall, _ appops.None) (out SendToPlayResult, err error) {
 			return inst.sendToPlay()
 		})

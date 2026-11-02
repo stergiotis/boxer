@@ -19,10 +19,11 @@ import (
 // trailviewer_ops_controls.go.
 // Queries read the window's caches as the snapshot took them with the
 // frame, never the store, so a query does not wait on ClickHouse; each
-// says when the cache was filled. They select by their own arguments,
-// never by the window's case, range or filter (ADR-0345 §SD2), and say
-// when those arguments reach outside what the window read. The view
-// commands set the view and never toggle; every control the person has
+// says when the cache was filled. They select by their own arguments and
+// say when those reach outside what the window read; what they leave out
+// is the window's own (scopeArgs). Each reports the revisions of
+// the resources the commands beside it write, so an agent's read admits
+// its next write. The view commands set the view and never toggle; every control the person has
 // routes through one (gestureOr). The saved views are authored state, so
 // save_view and delete_view are document commands; send_to_play writes
 // outside the app and is consequential, confirmed by the person on an
@@ -99,6 +100,22 @@ const (
 )
 
 const rowGoneReason = "no row with that id is in the window's cache; it may be outside the window's case, range or filter, or past the rows read so far, and is still in boxer.facts"
+
+// What the queries read, as their answers report it: the resources whose
+// revisions a following command is checked against.
+var (
+	readsRead    = []string{resRead}
+	readsScope   = []string{resCase, resRange, resFilter, resRead}
+	readsRows    = []string{resCase, resRange, resFilter, resSelection, resCompare, resRead}
+	readsTree    = []string{resCase, resTree, resRead}
+	readsSeries  = []string{resCase, resRange, resFilter, resSeries, resRead}
+	readsStrip   = []string{resCase, resRange, resFilter, resStrip, resRead}
+	readsCompare = []string{resSelection, resCompare, resRead}
+	readsMatrix  = []string{resCase, resRange, resFilter, resMatrix, resRead}
+	readsDotted  = []string{resCase, resRange, resFilter, resDotted, resRead}
+	readsView    = []string{resCase, resRange, resFilter, resSelection, resTab, resSeries, resStrip, resGrouping,
+		resCompare, resMatrix, resDotted, resSide, resTree, resRead, resViews}
+)
 
 // opsSnap is what queries read: the caches and the view as the frame left
 // them. The slices are the caches' own, which a fill replaces whole.
@@ -224,25 +241,25 @@ func (inst opsSnap) find(id uint64) (r *Row, ok bool) {
 type TermArg struct {
 	Facet   string `desc:"kind, status, app, domain.action or principal"`
 	Value   string `desc:"the value, as the facets list it"`
-	Exclude bool   `desc:"remove rows with the value instead of keeping only them"`
+	Exclude bool   `json:",omitzero" desc:"remove rows with the value instead of keeping only them"`
 }
 
 // RangeArgs is a time window: last, or both from and to.
 type RangeArgs struct {
-	Last string    `desc:"a span ending now, as a Go duration (90s, 15m, 1h, 72h); empty when from and to are given"`
-	From time.Time `desc:"the window's start, inclusive, when last is empty"`
-	To   time.Time `desc:"the window's end, exclusive, when last is empty"`
+	Last string    `json:",omitzero" desc:"a span ending now, as a Go duration (90s, 15m, 1h, 72h); empty when from and to are given"`
+	From time.Time `json:",omitzero" desc:"the window's start, inclusive, when last is empty"`
+	To   time.Time `json:",omitzero" desc:"the window's end, exclusive, when last is empty"`
 }
 
 // ListRowsArgs selects rows; the case and the window are required, as
 // they are for the window itself.
 type ListRowsArgs struct {
-	Case   string    `desc:"run, window, app, conversation, task, subject, principal, entity, destination or all"`
-	Value  string    `desc:"the case's value; run:instance for window, type:value for entity, none for all"`
-	Range  RangeArgs `desc:"the time window; empty is the last hour"`
-	Filter []TermArg `desc:"facet values to keep or remove; within a facet kept values are ORed, facets are ANDed"`
-	Limit  int       `desc:"rows to return, newest first; default 50, at most 200"`
-	Cursor string    `desc:"next_cursor from a previous call, to continue after its last row; empty starts at the newest"`
+	Case   string    `json:",omitzero" desc:"run, window, app, conversation, task, subject, principal, entity, destination or all; the window's case when omitted"`
+	Value  string    `json:",omitzero" desc:"the case's value; run:instance for window, type:value for entity, none for all"`
+	Range  RangeArgs `json:",omitzero" desc:"the time window; the window's range when omitted"`
+	Filter []TermArg `json:",omitzero" desc:"facet values to keep or remove; within a facet kept values are ORed, facets are ANDed; the window's filter when case is omitted too, else none"`
+	Limit  int       `json:",omitzero" desc:"rows to return, newest first; default 50, at most 200"`
+	Cursor string    `json:",omitzero" desc:"next_cursor from a previous call, to continue after its last row; empty starts at the newest"`
 }
 
 // RowSummary is one row as the table shows it.
@@ -336,11 +353,11 @@ type RuleRow struct {
 
 // GetExceptionsArgs selects the exceptions of a case over a range.
 type GetExceptionsArgs struct {
-	Case  string    `desc:"run, window, app, conversation, task, subject, principal, entity, destination or all"`
-	Value string    `desc:"the case's value; run:instance for window, type:value for entity, none for all"`
-	Range RangeArgs `desc:"the time window; empty is the last hour"`
-	Rule  string    `desc:"one rule's name to keep only its exceptions; empty keeps every rule's"`
-	Limit int       `desc:"exceptions to return, newest row first; default 50, at most 200"`
+	Case  string    `json:",omitzero" desc:"run, window, app, conversation, task, subject, principal, entity, destination or all; the window's case when omitted"`
+	Value string    `json:",omitzero" desc:"the case's value; run:instance for window, type:value for entity, none for all"`
+	Range RangeArgs `json:",omitzero" desc:"the time window; the window's range when omitted"`
+	Rule  string    `json:",omitzero" desc:"one rule's name to keep only its exceptions; empty keeps every rule's"`
+	Limit int       `json:",omitzero" desc:"exceptions to return, newest row first; default 50, at most 200"`
 }
 
 // ExceptionsResult is get_exceptions's result.
@@ -377,9 +394,9 @@ type PreviousResult struct {
 
 // GetTreeArgs names a task or conversation case.
 type GetTreeArgs struct {
-	Case  string `desc:"task or conversation"`
-	Value string `desc:"the task's or the conversation's id"`
-	Limit int    `desc:"nodes to return in depth-first order; default and at most 200"`
+	Case  string `json:",omitzero" desc:"task or conversation; the window's case when omitted"`
+	Value string `json:",omitzero" desc:"the task's or the conversation's id"`
+	Limit int    `json:",omitzero" desc:"nodes to return in depth-first order; default and at most 200"`
 }
 
 // TreeResult is get_tree's result.
@@ -399,10 +416,10 @@ type TreeResult struct {
 // and the filter, each exactly the one the window read, since the view
 // aggregates that read whole.
 type GetDayHourArgs struct {
-	Case   string    `desc:"the case's kind, as the window read it"`
-	Value  string    `desc:"the case's value"`
-	Range  RangeArgs `desc:"the window's range, as the window read it"`
-	Filter []TermArg `desc:"the filter the table is narrowed by, as the window read it; empty for none"`
+	Case   string    `json:",omitzero" desc:"the case's kind, as the window read it; the window's case when omitted"`
+	Value  string    `json:",omitzero" desc:"the case's value"`
+	Range  RangeArgs `json:",omitzero" desc:"the window's range, as the window read it; the window's range when omitted"`
+	Filter []TermArg `json:",omitzero" desc:"the filter the table is narrowed by, as the window read it; the window's filter when case is omitted too, else none"`
 }
 
 // DayHourCellOut is one (weekday, hour) with rows.
@@ -431,13 +448,13 @@ type DayHourResult struct {
 // GetSeriesArgs names the read the series is over, as GetDayHourArgs
 // does, and the measure and statistic.
 type GetSeriesArgs struct {
-	Case      string    `desc:"the case's kind, as the window read it"`
-	Value     string    `desc:"the case's value"`
-	Range     RangeArgs `desc:"the window's range, as the window read it"`
-	Filter    []TermArg `desc:"the filter the table is narrowed by, as the window read it; empty for none"`
-	Measure   string    `desc:"rows, tokens-in, tokens-out or elapsed-ms; empty for the window's pick"`
-	Statistic string    `desc:"sum, p50, p95 or max; empty for the window's pick; rows has sum only, the count"`
-	Limit     int       `desc:"buckets to return, from the first; default and at most 200"`
+	Case      string    `json:",omitzero" desc:"the case's kind, as the window read it; the window's case when omitted"`
+	Value     string    `json:",omitzero" desc:"the case's value"`
+	Range     RangeArgs `json:",omitzero" desc:"the window's range, as the window read it; the window's range when omitted"`
+	Filter    []TermArg `json:",omitzero" desc:"the filter the table is narrowed by, as the window read it; the window's filter when case is omitted too, else none"`
+	Measure   string    `json:",omitzero" desc:"rows, tokens-in, tokens-out or elapsed-ms; empty for the window's pick"`
+	Statistic string    `json:",omitzero" desc:"sum, p50, p95 or max; empty for the window's pick; rows has sum only, the count"`
+	Limit     int       `json:",omitzero" desc:"buckets to return, from the first; default and at most 200"`
 }
 
 // SeriesBucketOut is one bucket of the series.
@@ -473,7 +490,7 @@ type SetSeriesArgs struct {
 
 // GetVerdictArgs names a run, or none for every run read.
 type GetVerdictArgs struct {
-	Run string `desc:"a writer run; empty returns every run the window has a line for"`
+	Run string `json:",omitzero" desc:"a writer run; empty returns every run the window has a line for"`
 }
 
 // VerdictLine is one run's verdict.
@@ -745,12 +762,34 @@ func (inst opsSnap) readCovers(c Case, w Window) (ok bool, why string) {
 	return true, ""
 }
 
-// parseAggArgs reads an aggregate view's case, range and filter.
-func parseAggArgs(kind, value string, r RangeArgs, terms []TermArg) (c Case, w Window, f Filter, err error) {
-	if c, err = parseCaseArgs(kind, value); err != nil {
+// caseOr is the case kind and value name, the window's when they name none.
+func (inst opsSnap) caseOr(kind, value string) (c Case, err error) {
+	if kind == "" {
+		if value != "" {
+			err = app.RefuseOperation("value belongs to a case: pass case with it, or leave both out for the window's")
+			return
+		}
+		return inst.c, nil
+	}
+	return parseCaseArgs(kind, value)
+}
+
+// scopeArgs reads a query's case, range and filter. A case or range left
+// out is the window's, and so is the filter when the case is left out too:
+// a query with no arguments reads what the window shows, and one that names
+// its case filters by its own terms alone.
+func (inst opsSnap) scopeArgs(kind, value string, r RangeArgs, terms []TermArg) (c Case, w Window, f Filter, err error) {
+	if c, err = inst.caseOr(kind, value); err != nil {
 		return
 	}
-	if w, err = parseRangeArgs(r); err != nil {
+	w = inst.window
+	if r.Last != "" || !r.From.IsZero() || !r.To.IsZero() {
+		if w, err = parseRangeArgs(r); err != nil {
+			return
+		}
+	}
+	if len(terms) == 0 && kind == "" {
+		f = inst.filter
 		return
 	}
 	f, err = parseTerms(terms)
@@ -945,17 +984,9 @@ var ops = func() (s *appops.Set[*App, opsSnap]) {
 
 	appops.Query(s, app.OperationSpec{Name: opListRows, Version: 1,
 		Summary: "list the trail rows of a case — a run, window, app, conversation, task, subject, principal, entity or destination — over a time window, filtered by facet values, newest first, at most 200, from the window's cache of the trail marts",
-		Agents:  true, Untrusted: true, Fork: app.OperationForkReadShared},
+		Reads:   readsRows, Agents: true, Untrusted: true, Fork: app.OperationForkReadShared},
 		func(sn opsSnap, in ListRowsArgs) (out ListRowsResult, err error) {
-			c, err := parseCaseArgs(in.Case, in.Value)
-			if err != nil {
-				return
-			}
-			w, err := parseRangeArgs(in.Range)
-			if err != nil {
-				return
-			}
-			f, err := parseTerms(in.Filter)
+			c, w, f, err := sn.scopeArgs(in.Case, in.Value, in.Range, in.Filter)
 			if err != nil {
 				return
 			}
@@ -1013,7 +1044,7 @@ var ops = func() (s *appops.Set[*App, opsSnap]) {
 
 	appops.Query(s, app.OperationSpec{Name: opGetRow, Version: 1,
 		Summary: "read one trail row in full: its context columns, the identity chain, its text, and for an audit event its attributes, references and from claim",
-		Agents:  true, Untrusted: true, Fork: app.OperationForkReadShared},
+		Reads:   readsRows, Agents: true, Untrusted: true, Fork: app.OperationForkReadShared},
 		func(sn opsSnap, in GetRowArgs) (out RowDetail, err error) {
 			r, ok := sn.find(in.Id)
 			if !ok {
@@ -1032,7 +1063,7 @@ var ops = func() (s *appops.Set[*App, opsSnap]) {
 
 	appops.Query(s, app.OperationSpec{Name: opGetPrevious, Version: 1,
 		Summary: "read the selected row's previous state: the previous event of the same entity (or grant of the same task) within the look-back, the field table, and the verdict on the row's from claim",
-		Agents:  true, Untrusted: true, Fork: app.OperationForkReadShared},
+		Reads:   readsRows, Agents: true, Untrusted: true, Fork: app.OperationForkReadShared},
 		func(sn opsSnap, in GetPreviousArgs) (out PreviousResult, err error) {
 			if in.Id == 0 || in.Id != sn.selected {
 				err = app.RefuseOperation("the previous-state read runs for the selected row; select_row it first")
@@ -1058,7 +1089,7 @@ var ops = func() (s *appops.Set[*App, opsSnap]) {
 
 	appops.Query(s, app.OperationSpec{Name: opGetVerdict, Version: 1,
 		Summary: "read the evidence verdict per writer run among the window's rows: holds, broken at an ordinal, a gap, a fork, or unanchored",
-		Agents:  true, Fork: app.OperationForkReadShared},
+		Reads:   readsRead, Agents: true, Fork: app.OperationForkReadShared},
 		func(sn opsSnap, in GetVerdictArgs) (out VerdictResult, err error) {
 			out.ReadAt = sn.linesAt
 			for _, l := range sn.lines {
@@ -1074,7 +1105,7 @@ var ops = func() (s *appops.Set[*App, opsSnap]) {
 
 	appops.Query(s, app.OperationSpec{Name: opGetView, Version: 1,
 		Summary: "read the window as the person sees it: the case, the range, the filter, the tab and every other control's value, the selection, the strip's line, the verdict lines and the saved views' names",
-		Agents:  true, Untrusted: true, Fork: app.OperationForkReadShared},
+		Reads:   readsView, Agents: true, Untrusted: true, Fork: app.OperationForkReadShared},
 		func(sn opsSnap, _ appops.None) (out View, err error) {
 			out = View{Persisted: sn.src.persisted(), Case: sn.c.Kind.String(), Value: sn.c.Value, Range: sn.window.String(),
 				From: sn.from, To: sn.to, Filter: termArgs(sn.filter), Tab: sn.tab.String(), Series: sn.seriesPick.String(), Selected: sn.selected,
@@ -1103,9 +1134,9 @@ var ops = func() (s *appops.Set[*App, opsSnap]) {
 
 	appops.Query(s, app.OperationSpec{Name: opGetTree, Version: 1,
 		Summary: "read the chain of a task or conversation case as a tree over parent-ref, in depth-first order: each node's row id, depth, parent, kind, headline, status and elapsed time, from the window's cache",
-		Agents:  true, Untrusted: true, Fork: app.OperationForkReadShared},
+		Reads:   readsTree, Agents: true, Untrusted: true, Fork: app.OperationForkReadShared},
 		func(sn opsSnap, in GetTreeArgs) (out TreeResult, err error) {
-			c, err := parseCaseArgs(in.Case, in.Value)
+			c, err := sn.caseOr(in.Case, in.Value)
 			if err != nil {
 				return
 			}
@@ -1148,9 +1179,9 @@ var ops = func() (s *appops.Set[*App, opsSnap]) {
 
 	appops.Query(s, app.OperationSpec{Name: opGetDayHour, Version: 1,
 		Summary: "read the day × hour view of a case over a range and filter — rows per weekday and hour in the picker's zone, the busiest cell and the share outside working hours — as the window last read it; the view is read while its tab is open",
-		Agents:  true, Fork: app.OperationForkReadShared},
+		Reads:   readsScope, Agents: true, Fork: app.OperationForkReadShared},
 		func(sn opsSnap, in GetDayHourArgs) (out DayHourResult, err error) {
-			c, w, f, err := parseAggArgs(in.Case, in.Value, in.Range, in.Filter)
+			c, w, f, err := sn.scopeArgs(in.Case, in.Value, in.Range, in.Filter)
 			if err != nil {
 				return
 			}
@@ -1188,9 +1219,9 @@ var ops = func() (s *appops.Set[*App, opsSnap]) {
 
 	appops.Query(s, app.OperationSpec{Name: opGetSeries, Version: 1,
 		Summary: "read the numeric series of a case over a range and filter — a measure (rows, tokens-in, tokens-out, elapsed-ms) under a statistic (sum, p50, p95, max) per bucket of the strip's step — as the window last read it; the view is read while its tab is open, for the measure and statistic set_series sets",
-		Agents:  true, Fork: app.OperationForkReadShared},
+		Reads:   readsSeries, Agents: true, Fork: app.OperationForkReadShared},
 		func(sn opsSnap, in GetSeriesArgs) (out SeriesResult, err error) {
-			c, w, f, err := parseAggArgs(in.Case, in.Value, in.Range, in.Filter)
+			c, w, f, err := sn.scopeArgs(in.Case, in.Value, in.Range, in.Filter)
 			if err != nil {
 				return
 			}
@@ -1245,13 +1276,9 @@ var ops = func() (s *appops.Set[*App, opsSnap]) {
 
 	appops.Query(s, app.OperationSpec{Name: opGetExc, Version: 1,
 		Summary: "list the exceptions the window's named rules raise among the rows of a case over a time window, each with its rule and reason, from the window's cache; a row a review mark names has left the list",
-		Agents:  true, Untrusted: true, Fork: app.OperationForkReadShared},
+		Reads:   readsRows, Agents: true, Untrusted: true, Fork: app.OperationForkReadShared},
 		func(sn opsSnap, in GetExceptionsArgs) (out ExceptionsResult, err error) {
-			c, err := parseCaseArgs(in.Case, in.Value)
-			if err != nil {
-				return
-			}
-			w, err := parseRangeArgs(in.Range)
+			c, w, _, err := sn.scopeArgs(in.Case, in.Value, in.Range, nil)
 			if err != nil {
 				return
 			}

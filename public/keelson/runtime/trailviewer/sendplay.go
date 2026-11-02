@@ -96,7 +96,10 @@ func publishToPlay(bus app.BusI, pub *adhocdata.Publisher, rec arrow.RecordBatch
 	if _, err = pub.PublishRecord(bus, rec); err != nil {
 		return "", eh.Errorf("publish %s: %w", datasetRows, err)
 	}
-	cfg, err := buscodec.Encode(playlaunch.PlayLaunch{Sql: playSql, AutoRun: true, Endpoint: playlaunch.EndpointIntrospection,
+	// The default endpoint, not the introspection one: play routes a statement
+	// naming only keelson tables to the host and one naming plain tables to
+	// the server, so the same window reads the rows and the marts.
+	cfg, err := buscodec.Encode(playlaunch.PlayLaunch{Sql: playSql, AutoRun: true,
 		Datasets: []string{pub.Alias()}, DatasetNames: []string{datasetRows}})
 	if err != nil {
 		return "", eh.Errorf("encode the play launch config: %w", err)

@@ -181,6 +181,10 @@ type OperationSpec struct {
 	// Reads and Writes name resources of the catalog. Only a command writes.
 	Reads  []string
 	Writes []string
+	// AnyRevision is a command whose effect does not depend on what it
+	// writes having stayed as it was read, such as asking for a refill: it
+	// names no base revision and no write of another moves it to a conflict.
+	AnyRevision bool
 	// Args and Result are the Go types of the arguments and the result,
 	// both structs; nil means none. The model's JSON and the bus's CBOR are
 	// both derived from them (opjson, buscodec).

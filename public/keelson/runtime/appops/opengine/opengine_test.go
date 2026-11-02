@@ -156,6 +156,47 @@ func TestCommandWithoutAnExpectationAsksToReadFirst(t *testing.T) {
 	assert.Contains(t, st.Reason, "read first")
 }
 
+// A command that does not depend on what it writes staying as it was read
+// needs no base revision, and the read-first conflict of one that does names
+// the query that reports it.
+func TestReadFirstNamesAQueryAndAnyRevisionSkipsTheCheck(t *testing.T) {
+	h := newHarness(t)
+	h.call("set_text", setTextArgs{Text: "agent"}, nil)
+	h.frame(nil)
+	st, _ := h.eng.Status(string(rune('a' + h.n)))
+	assert.Contains(t, st.Reason, "get_text reports it")
+
+	setAnyRevision(h, "set_text")
+	h.call("set_text", setTextArgs{Text: "any"}, nil)
+	h.frame(nil)
+	assert.Equal(t, "any", h.ed.text)
+}
+
+// setAnyRevision marks an operation of the harness's catalog.
+func setAnyRevision(h *harness, name string) {
+	ops := h.eng.Catalog().Operations
+	for i := range ops {
+		if ops[i].Name == name {
+			ops[i].AnyRevision = true
+		}
+	}
+}
+
+// A resource no query reports could never be read first, so a write to it is
+// not held to a revision the caller has no way to learn.
+func TestAWriteToAResourceNoQueryReportsGoesThrough(t *testing.T) {
+	h := newHarness(t)
+	ops := h.eng.Catalog().Operations
+	for i := range ops {
+		if ops[i].Name == "get_text" {
+			ops[i].Reads = nil
+		}
+	}
+	h.call("set_text", setTextArgs{Text: "agent"}, nil)
+	h.frame(nil)
+	assert.Equal(t, "agent", h.ed.text)
+}
+
 func TestUnavailableCommandIsRefused(t *testing.T) {
 	h := newHarness(t)
 	_, rev := h.read()
