@@ -64,7 +64,11 @@ func checkAgentLimits(residual string, dec dispatchDecision, obo *app.OnBehalfOf
 		// another window — and a refusal asks for the bundle first.
 		n, bound := aliasOf[t]
 		if !bound {
+			// A dataset not bound here is still named by its bundle.
 			n = datasetName{local: t, alias: t}
+			if bundle, _, ok := strings.Cut(t, adhocdata.BundleAliasSeparator); ok {
+				n.bundle = bundle
+			}
 		}
 		dests := n.destinations()
 		// A task runs on what it published without a grant entry (ADR-0288

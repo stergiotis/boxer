@@ -168,8 +168,12 @@ func listDatasets(client *Client, obo *app.OnBehalfOf, only string, waiting map[
 
 // waitingDataset is a followed alias not bound yet.
 func waitingDataset(alias string, why string, obo *app.OnBehalfOf) (d DatasetInfo) {
-	d = DatasetInfo{Alias: alias, Destination: DestinationKeelson(alias), Waiting: why}
-	d.Granted = obo == nil || slices.Contains(obo.Destinations, d.Destination)
+	dests := adhocdata.ReadDestinations(alias)
+	d = DatasetInfo{Alias: alias, Destination: dests[0], Waiting: why}
+	d.Granted = obo == nil
+	for _, dest := range dests {
+		d.Granted = d.Granted || slices.Contains(obo.Destinations, dest)
+	}
 	return
 }
 

@@ -70,6 +70,29 @@ func TestReadAllEReturnsTheSealedStream(t *testing.T) {
 	assert.ErrorIs(t, err, ErrNoLiveDataset)
 }
 
+// A bundle's name reads its one dataset; one of several names them.
+func TestABundleNameReadsItsOneDataset(t *testing.T) {
+	_, bus := readService(t)
+	caps := []app.SubjectFilter{{Pattern: "adhoc.>", Direction: app.CapDirectionBoth, Reason: "test"}}
+	producer := bus.NewClient("test.play", caps)
+	producer.SetInstanceKey(1)
+	reader := bus.NewClient("test.notebook", caps)
+	reader.SetInstanceKey(2)
+	_, err := PublishBundleRequest(producer, BundlePublishInput{Alias: "one", Document: []byte(testDoc),
+		Datasets: []BundleDatasetInput{{LocalName: "result", ArrowIPCStream: int64Stream(t, false, 1, 2)}}})
+	require.NoError(t, err)
+	got, err := ReadAll(reader, "one", nil)
+	require.NoError(t, err)
+	assert.Equal(t, []int64{1, 2}, int64Values(t, got.ArrowIPCStream))
+	assert.Equal(t, "one", got.Bundle)
+
+	_, err = PublishBundleRequest(producer, BundlePublishInput{Alias: "sales", Document: []byte(testDoc), Datasets: twoDatasets(t)})
+	require.NoError(t, err)
+	_, err = ReadAll(reader, "sales", nil)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "sales__orders")
+}
+
 func TestReadAllECatchesADigestMismatch(t *testing.T) {
 	svc, bus := readService(t)
 	c := bus.NewClient("test.app", []app.SubjectFilter{{Pattern: "adhoc.>", Direction: app.CapDirectionBoth, Reason: "test"}})

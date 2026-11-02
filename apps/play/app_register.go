@@ -450,6 +450,11 @@ func (inst *PlayLauncher) Mount(ctx app.MountContextI) (err error) {
 	// Restore the pre-retarget meaning of "External": NewPlayApp read it off
 	// the client, which by now may be pointed at the introspection plane.
 	inner.externalURL = externalURL
+	// The toolbar installs the resolver when it first draws; a launch whose
+	// statement runs before that frame routes the same way.
+	if inner.autoEndpoint {
+		client.SetResolver(autoResolver)
+	}
 	inner.AutoRun = AutoRun.Get() != ""
 	inner.ScreenshotPath = ScreenshotPath.Get()
 	inner.ExitOnShot = ExitOnShot.Get() != ""

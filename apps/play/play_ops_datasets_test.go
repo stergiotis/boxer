@@ -39,6 +39,18 @@ func TestAgentLimitsReadABoundDatasetByItsAlias(t *testing.T) {
 		&app.OnBehalfOf{Destinations: []string{"keelson:chat_turns", "clickhouse:ch.example:8123"}}, c.datasetAliasOf()))
 }
 
+// A grant of a bundle covers a dataset of it the window has not bound, and a
+// refusal asks for the bundle first.
+func TestABundleGrantCoversAnUnboundDatasetOfIt(t *testing.T) {
+	residual := "SELECT * FROM keelson('wolfram_x__result')"
+	dec := dispatchDecision{class: dispatchClassIntrospection}
+	err := checkAgentLimits(residual, dec, &app.OnBehalfOf{}, nil)
+	var limit *AgentLimitError
+	require.ErrorAs(t, err, &limit)
+	assert.Equal(t, "keelson-bundle:wolfram_x", limit.Destination)
+	require.NoError(t, checkAgentLimits(residual, dec, &app.OnBehalfOf{Destinations: []string{"keelson-bundle:wolfram_x"}}, nil))
+}
+
 // offlineClient carries the standard pass set and the leeway resolver, so
 // its late-bound steps are the ones a grant without the endpoint leaves out.
 func offlineClient(t *testing.T) (c *Client) {

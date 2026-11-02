@@ -128,8 +128,38 @@ func (inst *Service) newest(alias string) (best *record, err error) {
 	return
 }
 
+// soleDataset is the alias of the one dataset a live bundle named alias
+// holds. A bundle of several says which there are, so the caller can name
+// one; several is empty when alias names no bundle.
+func (inst *Service) soleDataset(alias string) (sole string, several []string) {
+	inst.mu.RLock()
+	defer inst.mu.RUnlock()
+	b := inst.bundles[alias]
+	if b == nil {
+		return
+	}
+	if len(b.localNames) == 1 {
+		return DatasetAlias(alias, b.localNames[0]), nil
+	}
+	for _, local := range b.localNames {
+		several = append(several, DatasetAlias(alias, local))
+	}
+	return
+}
+
+// read reads the dataset under alias, or the one dataset of the bundle
+// named alias.
 func (inst *Service) read(alias string) (res ReadResult, err error) {
 	best, err := inst.newest(alias)
+	if errors.Is(err, ErrNoLiveDataset) {
+		switch sole, several := inst.soleDataset(alias); {
+		case sole != "":
+			alias = sole
+			best, err = inst.newest(alias)
+		case len(several) > 0:
+			return res, eb.Build().Str("bundle", alias).Errorf("the bundle holds several datasets; name one of %s", strings.Join(several, ", "))
+		}
+	}
 	if err != nil {
 		return
 	}
