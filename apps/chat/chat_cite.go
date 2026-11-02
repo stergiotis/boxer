@@ -85,7 +85,7 @@ const citeNote = "Refer to an assertion in your reply by its id in square bracke
 // citeSchema is the cite tool's parameter schema.
 var citeSchema = `{"type":"object","properties":{"assertions":{"type":"array","minItems":1,"maxItems":` + strconv.Itoa(maxCiteAssertions) + `,"items":{"type":"object","properties":{` +
 	`"id":{"type":"string","description":"letters then digits, unique in this turn: a1, a2"},` +
-	`"rests_on":{"type":"array","minItems":1,"items":{"type":"string"},"description":"the ids of the tool calls whose results the claim is drawn from: describe_result or sample_rows calls of one window"},` +
+	`"rests_on":{"type":"array","minItems":1,"items":{"type":"string"},"description":"what the claim is drawn from, in one window: the result_id a describe_result or sample_rows answered with (its result's id), as text, e.g. \"12\""},` +
 	`"says":{"type":"string","description":"the claim as the reply will state it"},` +
 	`"form":{"type":"string","enum":["value","holds"],"description":"value: the statement returns one cell, compared with expect at the precision expect shows; holds: it returns one boolean"},` +
 	`"statement":{"type":"string","description":"a read-only SQL statement over the tables the cited result's statement read, in the handles that result used, returning one row"},` +
@@ -218,15 +218,9 @@ func (inst *coordinator) citedSource(entries []agentrun.Entry, restsOn []string)
 		}
 	}
 	for _, id := range restsOn {
-		var outcome *agentrun.Entry
-		for i := len(entries) - 1; i >= 0; i-- {
-			if e := &entries[i]; e.Kind == agentrun.KindOutcome && e.Role == projection.RoleTool && e.Name == id {
-				outcome = e
-				break
-			}
-		}
+		outcome := inst.citedOutcome(entries, id)
 		if outcome == nil {
-			return src, "rests on " + id + ", which is not a tool call of this conversation"
+			return src, "rests on " + id + ", which is neither a result id nor a tool call of this conversation; " + inst.citable(entries, intents)
 		}
 		in, ok := intents[outcome.Key]
 		if !ok {
@@ -256,6 +250,56 @@ func (inst *coordinator) citedSource(entries []agentrun.Entry, restsOn []string)
 		src.keys = append(src.keys, outcome.Key)
 	}
 	return
+}
+
+// citedOutcome is the tool outcome a rests_on handle names: the latest one
+// whose query named that result id, or the one of that tool-call id.
+func (inst *coordinator) citedOutcome(entries []agentrun.Entry, handle string) *agentrun.Entry {
+	want, numErr := strconv.ParseUint(strings.TrimPrefix(strings.TrimSpace(handle), "result:"), 10, 64)
+	for i := len(entries) - 1; i >= 0; i-- {
+		e := &entries[i]
+		if e.Kind != agentrun.KindOutcome || e.Role != projection.RoleTool {
+			continue
+		}
+		if e.Name == handle {
+			return e
+		}
+		if numErr == nil && want != 0 {
+			if id, _ := inst.resultIdFor(e.Key, e.Body); id == want {
+				return e
+			}
+		}
+	}
+	return nil
+}
+
+// maxCitableListed bounds the handles a refused citation lists.
+const maxCitableListed = 8
+
+// citable says what this conversation can cite, newest first, for a
+// rests_on that named nothing.
+func (inst *coordinator) citable(entries []agentrun.Entry, intents map[string]agentrun.Entry) string {
+	seen := make(map[uint64]bool, maxCitableListed)
+	var listed []string
+	for i := len(entries) - 1; i >= 0 && len(listed) < maxCitableListed; i-- {
+		e := &entries[i]
+		if e.Kind != agentrun.KindOutcome || e.Role != projection.RoleTool {
+			continue
+		}
+		id, _ := inst.resultIdFor(e.Key, e.Body)
+		in, recorded := intents[e.Key]
+		if id == 0 || seen[id] || !recorded {
+			continue
+		}
+		if window, op, isOp := inst.windowOf(in); isOp {
+			seen[id] = true
+			listed = append(listed, strconv.FormatUint(id, 10)+" ("+op+" in window "+strconv.FormatUint(window, 10)+")")
+		}
+	}
+	if len(listed) == 0 {
+		return "nothing is citable yet: call describe_result or sample_rows in a window, then rest on the result_id it answers with"
+	}
+	return "you can cite: " + strings.Join(listed, ", ")
 }
 
 // windowOf is the window and operation an intent called, when it called

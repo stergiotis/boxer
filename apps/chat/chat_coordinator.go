@@ -77,6 +77,26 @@ func clampRounds(n int) int {
 	return min(max(n, lo), hi)
 }
 
+// grantRounds adds rounds the person approved to the running turn's limit,
+// within the host's most, and says what the model now has.
+func (inst *coordinator) grantRounds(n int) (line string) {
+	inst.mu.Lock()
+	inst.moreRounds += n
+	inst.mu.Unlock()
+	return "the running turn may take " + strconv.Itoa(n) + " more rounds, as far as the host's limit allows"
+}
+
+// extendRounds is the turn's limit with the rounds the person granted since
+// it was last read, within the host's most.
+func (inst *coordinator) extendRounds(limit int) (extended int) {
+	inst.mu.Lock()
+	more := inst.moreRounds
+	inst.moreRounds = 0
+	inst.mu.Unlock()
+	_, hi := roundRange()
+	return min(limit+more, max(limit, hi))
+}
+
 // callWait bounds how long a tool call waits for its call to settle while
 // the call does not wait on the person.
 const callWait = 10 * time.Second
@@ -134,6 +154,9 @@ type coordinator struct {
 	// rounds is the person's limit on a turn's rounds, read when a turn
 	// starts; zero is RoundsEnv. Guarded by mu.
 	rounds int
+	// moreRounds are rounds the person granted the running turn and the
+	// loop has not added to its limit yet. Guarded by mu.
+	moreRounds int
 	// answered are the running turn's answered model calls, kept as they
 	// answer so a turn that fails or is stopped later still counts them.
 	// Guarded by mu.
@@ -159,6 +182,9 @@ type coordinator struct {
 	// lastExportMount is the mount the artefact was last exported to
 	// (chat_artefact_export.go); the journal holds it too.
 	lastExportMount uint64
+	// sealedWarned are the windows the model was told hold sealed data, so a
+	// repeated read goes through (chat_confine.go).
+	sealedWarned map[uint64]bool
 	// confinedTier is the tier confined content is labelled with: the
 	// host's declaration's, fixed at construction.
 	confinedTier agentrun.TierE
@@ -325,6 +351,11 @@ func (inst *coordinator) ceilingNote() (note string) {
 		note += " Within that: " + strings.Join(s.Factors, "; ") + "."
 	}
 	note += " The host refuses anything above it; do not ask for more than this in request_access."
+	rounds := inst.rounds
+	if rounds == 0 {
+		rounds = int(RoundsEnv.Get())
+	}
+	note += " A turn takes at most " + strconv.Itoa(rounds) + " rounds of tool calls; request_access with rounds asks the person for more."
 	if !inst.ceiling.Unpaced && s.Level >= agent.LevelView {
 		note += " The host spaces your changes so the person can follow them: a call that changes a window may take a moment to return."
 	}
@@ -830,6 +861,9 @@ func (inst *coordinator) requestAccess(ctx context.Context, asked agent.Asked, p
 	if desktop, _ := args["desktop"].(bool); desktop {
 		req.Desktop = agent.ModeAct
 	}
+	if rounds, _ := args["rounds"].(float64); rounds >= 1 {
+		req.Rounds = uint32(rounds)
+	}
 	if dests, ok := args["destinations"].([]any); ok {
 		for _, d := range dests {
 			if s, isStr := d.(string); isStr && s != "" {
@@ -869,6 +903,9 @@ func (inst *coordinator) requestAccess(ctx context.Context, asked agent.Asked, p
 	// Part of the request's answer, not a call the model made: no row of its own.
 	listing, _ := inst.listWindows(ctx, agent.Asked{})
 	content = "access granted.\n" + grantTermsLine(g.Terms, time.Now())
+	if req.Rounds > 0 {
+		content += inst.grantRounds(int(req.Rounds)) + "\n"
+	}
 	if g.Unattended {
 		content += unattendedNote + "\n"
 	}
@@ -1000,6 +1037,11 @@ func (inst *coordinator) call(ctx context.Context, o toolOrigin, toolCall string
 	}
 	key := o.key()
 	instance := uint64(window)
+	if inst.operationEffect(ctx, instance, op) == agentrun.EffectNone {
+		if held := inst.sealedReadHold(ctx, h, []uint64{instance}); held != "" {
+			return held, op + " in window " + strconv.FormatUint(instance, 10) + " · held: reading it confines this conversation"
+		}
+	}
 	inst.mu.Lock()
 	title, tier := inst.curTitle, inst.curTier
 	inst.mu.Unlock()

@@ -255,14 +255,14 @@ var coordinatorTools = []toolSpec{
 		schema:      `{"type":"object","properties":{"name":{"type":"string","description":"the screenshot's name, as artefact_images lists it"}},"required":["name"],"additionalProperties":false}`,
 		exec:        imageExec},
 	{name: "recall", group: toolGroupRecall, parallelSafe: true, budget: recallBudget,
-		description: "Read back a tool result that was elided from this conversation's compacted history, by the ordinal its stub names.",
+		description: "Read back a tool result that was elided from this conversation's history, by the ordinal its stub names.",
 		schema:      `{"type":"object","properties":{"ordinal":{"type":"integer","minimum":1,"description":"the ordinal the stub names"}},"required":["ordinal"],"additionalProperties":false}`,
 		exec: func(ctx context.Context, inst *coordinator, spec *toolSpec, o toolOrigin, call openaichat.ToolCall, args map[string]any) (content string, activity string) {
 			return inst.recall(spec, args)
 		}},
 	{name: "request_access", group: toolGroupFixed,
-		description: "Ask the person to share windows with you for a task, and optionally to let you open windows of apps. Waits for the person's decision.",
-		schema:      `{"type":"object","properties":{"plan":{"type":"string","description":"one line: what you intend to do"},"open":{"type":"array","description":"apps you want to open windows of","items":{"type":"object","properties":{"app":{"type":"string"},"count":{"type":"integer","minimum":1,"maximum":4}},"required":["app"],"additionalProperties":false}},"destinations":{"type":"array","description":"what your runs may reach, e.g. keelson:apps, keelson-bundle:<bundle> or clickhouse:host:port; publish:<prefix> lets publish_result and publish_projection publish under names with that prefix without asking each time","items":{"type":"string"}},"desktop":{"type":"boolean","description":"ask to arrange every window on the desktop, the person's own included"}},"required":["plan"],"additionalProperties":false}`,
+		description: "Ask the person to share windows with you for a task, and optionally to let you open windows of apps, reach destinations or take more rounds. Waits for the person's decision, so ask once for all your plan needs.",
+		schema:      `{"type":"object","properties":{"plan":{"type":"string","description":"one line: what you intend to do"},"open":{"type":"array","description":"apps you want to open windows of","items":{"type":"object","properties":{"app":{"type":"string"},"count":{"type":"integer","minimum":1,"maximum":4}},"required":["app"],"additionalProperties":false}},"destinations":{"type":"array","description":"everything your plan will reach, asked for at once: the person answers one dialog per request. E.g. keelson:apps, keelson-bundle:<bundle> (every dataset of it) or clickhouse:host:port, as get_state and validate_sql's needs name them; publish:<prefix> lets a publish under a name with that prefix go through without asking each time","items":{"type":"string"}},"desktop":{"type":"boolean","description":"ask to arrange every window on the desktop, the person's own included"},"rounds":{"type":"integer","minimum":1,"description":"ask for this many more rounds of model calls in the running turn, when your plan will not fit"}},"required":["plan"],"additionalProperties":false}`,
 		exec: func(ctx context.Context, inst *coordinator, spec *toolSpec, o toolOrigin, call openaichat.ToolCall, args map[string]any) (content string, activity string) {
 			content, activity = inst.requestAccess(ctx, inst.asked(o, call.Id), argString(args, "plan"), args)
 			if strings.HasPrefix(content, "access granted") {
@@ -349,6 +349,12 @@ var coordinatorTools = []toolSpec{
 	{name: "place_window", group: toolGroupFixed,
 		description: "Move and size a window of your task, shared in act mode: x, y is the top-left corner and w, h the outer size, in the coordinates query_windows reports. A window whose content does not fill the height or width keeps its content's size there.",
 		schema:      `{"type":"object","properties":{"window":{"type":"integer"},"x":{"type":"number"},"y":{"type":"number"},"w":{"type":"number"},"h":{"type":"number"}},"required":["window","x","y","w","h"],"additionalProperties":false}`,
+		exec: func(ctx context.Context, inst *coordinator, spec *toolSpec, o toolOrigin, call openaichat.ToolCall, args map[string]any) (content string, activity string) {
+			return inst.windowVerb(ctx, inst.asked(o, call.Id), call.Name, args)
+		}},
+	{name: "close_window", group: toolGroupFixed,
+		description: "Close a window your task opened, once your plan no longer needs it. A window the person opened stays theirs.",
+		schema:      `{"type":"object","properties":{"window":{"type":"integer"}},"required":["window"],"additionalProperties":false}`,
 		exec: func(ctx context.Context, inst *coordinator, spec *toolSpec, o toolOrigin, call openaichat.ToolCall, args map[string]any) (content string, activity string) {
 			return inst.windowVerb(ctx, inst.asked(o, call.Id), call.Name, args)
 		}},

@@ -92,7 +92,10 @@ type exportPlan struct {
 	// confined says the conversation holds sealed data, which the store
 	// may not hold; endorse that confirming also endorses the head.
 	confined bool
-	endorse  bool
+	// confinedBy names the call that confined the conversation, when the
+	// journal holds it.
+	confinedBy string
+	endorse    bool
 	// thenMdedit opens the export in mdedit once it is written.
 	thenMdedit bool
 }
@@ -199,6 +202,9 @@ func (inst *App) planExport(thenMdedit bool) {
 	}
 	if coord := inst.coord; coord != nil {
 		p.label, p.confined = coord.exportLabel()
+		if p.confined {
+			p.confinedBy = coord.confinedBy()
+		}
 		p.endorse = coord.journalNow() != nil && !coord.endorsedHead()
 	}
 	inst.artView.export = p
@@ -222,7 +228,7 @@ func (inst *App) renderExportAsk(p *exportPlan, head int) {
 		weak("The artefact moved since you asked; close this and export again.")
 	}
 	if p.confined {
-		weak("This conversation holds sealed data, which the lading store may not hold: it cannot be exported.")
+		weak(exportRefusal(p.confinedBy))
 	}
 	for range c.HorizontalTop().KeepIter() {
 		if !p.confined && p.rev == head {

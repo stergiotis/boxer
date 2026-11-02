@@ -448,8 +448,8 @@ func stripPixelEntries(ctx context.Context, w *agentrun.Writer) (stripped bool, 
 // window's app's catalog; for the coordinator's own tools, document for
 // the artefact's and its images' writes and captures, none for the
 // questions and the views, view for request_access, open_window,
-// arrange_windows, raise_window, place_window, point_out, clear_marks and
-// stop_task, none for the rest. A call into a window whose app or
+// arrange_windows, raise_window, place_window, close_window, point_out,
+// clear_marks and stop_task, none for the rest. A call into a window whose app or
 // operation is unknown is consequential: the conservative reading, since
 // an unknown act is the one to list to the person on resume.
 func (inst *coordinator) effectOf(ctx context.Context, name string, arguments string) (effect string) {
@@ -480,7 +480,7 @@ func (inst *coordinator) effectOf(ctx context.Context, name string, arguments st
 		return agentrun.EffectNone
 	}
 	switch name {
-	case "request_access", "open_window", "arrange_windows", "raise_window", "place_window", "set_layout", "float_window", "point_out", "clear_marks", "stop_task":
+	case "request_access", "open_window", "arrange_windows", "raise_window", "place_window", "set_layout", "float_window", "close_window", "point_out", "clear_marks", "stop_task":
 		return agentrun.EffectView
 	}
 	return agentrun.EffectNone

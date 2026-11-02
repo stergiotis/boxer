@@ -437,7 +437,9 @@ func (inst *App) adopt(r *resumed) {
 	coord.journal, coord.profile, coord.fingerprint = r.writer, profileNow(), profileNow().Fingerprint()
 	coord.tainted = r.fold.Label.Level >= agentrun.LevelExternal
 	coord.confined = r.fold.Label.Tier >= coord.confinedTier
-	coord.compacted = slices.ContainsFunc(r.entries, func(e agentrun.Entry) bool { return e.Kind == agentrun.KindCompact })
+	coord.compacted = slices.ContainsFunc(r.entries, func(e agentrun.Entry) bool {
+		return e.Kind == agentrun.KindCompact || (e.Kind == agentrun.KindEdit && e.Form == formSupersede)
+	})
 	if settings.CeilingSpec != nil {
 		coord.ceiling = *settings.CeilingSpec
 	}

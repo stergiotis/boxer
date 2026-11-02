@@ -21,7 +21,7 @@ func TestTheDefaultProfileValidatesAndFingerprints(t *testing.T) {
 	assert.Equal(t, defaultRoundsHi, p.RoundsMax)
 	assert.Len(t, p.Tools, len(coordinatorTools))
 	assert.Equal(t, []string{"context"}, p.Inject)
-	assert.Equal(t, []string{"round", "compact", "last-round"}, p.Configure)
+	assert.Equal(t, []string{"round", "supersede", "compact", "last-round"}, p.Configure)
 	assert.Equal(t, "sequential", p.ToolMode)
 
 	twin := p

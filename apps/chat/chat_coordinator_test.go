@@ -131,7 +131,9 @@ type noteHost struct {
 	mu      sync.Mutex
 	engines map[uint64]*opengine.Engine
 	notes   map[uint64]*note
-	scene   *inscribe.Scene
+	// sealed are the windows the host reports as holding sealed data.
+	sealed map[uint64]bool
+	scene  *inscribe.Scene
 	// frameMu holds the frame goroutine still while the person changes a
 	// note between frames.
 	frameMu sync.Mutex
@@ -195,7 +197,7 @@ func (inst *noteHost) OpsInstances() (out []opwire.InstanceInfo) {
 	inst.mu.Lock()
 	defer inst.mu.Unlock()
 	for k := range inst.engines {
-		out = append(out, opwire.InstanceInfo{App: notesId, Alias: notesId.SubjectAlias(), Key: k, Title: "Notes", Ops: true})
+		out = append(out, opwire.InstanceInfo{App: notesId, Alias: notesId.SubjectAlias(), Key: k, Title: "Notes", Ops: true, Confined: inst.sealed[k]})
 	}
 	return
 }
@@ -224,6 +226,7 @@ func (inst *noteHost) OpsRaise(uint64) error                                    
 func (inst *noteHost) OpsPlace(uint64, float32, float32, float32, float32) error { return nil }
 func (inst *noteHost) OpsLayout(string, float32, int) error                      { return nil }
 func (inst *noteHost) OpsFloat(uint64, bool) error                               { return nil }
+func (inst *noteHost) OpsClose(uint64) error                                     { return nil }
 func (inst *noteHost) SourceStatus(string) (capture.SourceResult, bool) {
 	return capture.SourceResult{}, false
 }

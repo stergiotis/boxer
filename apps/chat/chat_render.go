@@ -52,7 +52,7 @@ const (
 	tipApps     = "The model may ask you to share windows with it and work in them through their operations. Fixed at the first send. The host answers only a chat listed in BOXER_AGENT_COORDINATORS."
 	tipNoApps   = "This conversation was started without Apps: its model has no tools and cannot open, read or drive windows, and will say so if asked. Apps is chosen before the first message — New conversation, turn Apps on in Settings, and ask again."
 	tipTainted  = "Text from outside your messages — a window's title, an app's content or error — reached the model, and may have steered what it wrote since. Grant dialogs say so, and every action records it, for as long as the conversation lasts."
-	tipConfined = "A result derived from sealed data. Every later model call of this conversation is labelled confined, and the host sends it only to a loopback or trusted endpoint; elsewhere the call is refused."
+	tipConfined = "A result derived from sealed data. Every later model call of this conversation is labelled confined, and the host sends it only to a loopback or trusted endpoint; elsewhere the call is refused. Its artefact cannot be exported to the lading store."
 	hintDraft   = "Message the model — Ctrl+Enter sends"
 
 	tipQuestions = "The model may ask you questions with options, drawn as a form in the conversation; the turn waits for your answer. Needs a model that calls tools. Fixed at the first send."

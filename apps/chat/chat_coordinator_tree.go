@@ -31,6 +31,9 @@ func (inst *coordinator) readWindowTree(ctx context.Context, o toolOrigin, windo
 	if h == "" {
 		return "error: no task yet; call request_access for the windows first", "window tree: no task"
 	}
+	if held := inst.sealedReadHold(ctx, h, windows); held != "" {
+		return held, "window tree · held: reading it confines this conversation"
+	}
 	key := o.key()
 	out, err := inst.cli.CaptureWith(ctx, agent.CaptureRequest{Handle: h, Instances: windows, Format: agent.CaptureFormatTree, Key: key})
 	if err == nil {

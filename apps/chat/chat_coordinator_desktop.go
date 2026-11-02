@@ -47,8 +47,8 @@ func (inst *coordinator) queryWindows(ctx context.Context, table string, sql str
 	return body, activity
 }
 
-// windowVerb runs arrange_windows, raise_window, place_window, set_layout or
-// float_window.
+// windowVerb runs arrange_windows, raise_window, place_window, set_layout,
+// float_window or close_window.
 func (inst *coordinator) windowVerb(ctx context.Context, asked agent.Asked, name string, args map[string]any) (content string, activity string) {
 	h := inst.handle()
 	if h == "" {
@@ -77,6 +77,9 @@ func (inst *coordinator) windowVerb(ctx context.Context, asked agent.Asked, name
 	case "place_window":
 		out, err = inst.cli.Place(ctx, h, asked, window, float32(num("x")), float32(num("y")), float32(num("w")), float32(num("h")))
 		activity = "place window " + strconv.FormatUint(window, 10)
+	case "close_window":
+		out, err = inst.cli.CloseWindow(ctx, h, asked, window)
+		activity = "close window " + strconv.FormatUint(window, 10)
 	case "set_layout":
 		layout, _ := args["layout"].(string)
 		out, err = inst.cli.SetLayout(ctx, h, asked, layout, float32(num("main_ratio")), int(num("main_count")))

@@ -76,6 +76,13 @@ type ProfileT struct {
 	Compact               projection.Constants
 	CompactTriggerPercent int
 	CompactContextFloor   int64
+	// SupersededReads are the reads of current state, by operation or tool
+	// name, whose earlier answers a later identical call replaces in the
+	// projection; SupersedeBatchBytes is how much a batch of those edits
+	// must free before it is written, since each costs a provider's cached
+	// prefix. Zero writes none.
+	SupersededReads     []string
+	SupersedeBatchBytes int
 	// AnchorCadence is when the run's chain heads are shipped to the
 	// anchor store (ADR-0314 §SD3). It shapes the record, not what the
 	// model reads, so it is outside the fingerprint.
@@ -178,6 +185,7 @@ func (inst ProfileT) Fingerprint() string {
 	c := inst.Compact
 	w("compact", strconv.Itoa(inst.CompactTriggerPercent), strconv.FormatInt(inst.CompactContextFloor, 10), strconv.Itoa(c.KeepTurns), strconv.Itoa(c.PinBytes), strconv.Itoa(c.ElideMinBytes),
 		strconv.FormatInt(c.SummaryTokens, 10), strconv.FormatInt(c.TailTokens, 10), strconv.FormatInt(c.RoundMarginTokens, 10))
+	w(append([]string{"supersede", strconv.Itoa(inst.SupersedeBatchBytes)}, inst.SupersededReads...)...)
 	return hex.EncodeToString(h.Sum(nil))
 }
 
@@ -194,7 +202,9 @@ func defaultProfile() (p ProfileT) {
 		PixelsMax: PixelsMaxEnv.Get(), PixelsLocalRequired: PixelsLocalRequiredEnv.Get(),
 		ImageBudgetBytes: ImageBudgetBytes.Get(), ImageBudgetCount: ImageBudgetCount.Get(), ImageMaxPixels: ImageMaxPixels.Get(),
 		Compact:               projection.Constants{KeepTurns: 2, PinBytes: 4096, ElideMinBytes: 512, SummaryTokens: 1024, TailTokens: 2048, RoundMarginTokens: 1024},
-		CompactTriggerPercent: 70, CompactContextFloor: 16384, AnchorCadence: headstore.DefaultCadence()}
+		CompactTriggerPercent: 70, CompactContextFloor: 16384, AnchorCadence: headstore.DefaultCadence(),
+		SupersededReads:     []string{"get_state", "get_view", "get_kernel", "list_panes", "list_windows", "query_windows", "describe_app", "artefact_read", "artefact_outline", "artefact_lint", "artefact_images"},
+		SupersedeBatchBytes: 16 << 10}
 	// One round would be the last, with no tools at all.
 	p.RoundsMin = max(int(RoundsMinEnv.Get()), 2)
 	p.RoundsMax = max(int(RoundsMaxEnv.Get()), p.RoundsMin)

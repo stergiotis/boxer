@@ -15,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/stergiotis/boxer/public/config/env"
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	"github.com/stergiotis/boxer/public/keelson/runtime/agent"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
@@ -61,12 +62,36 @@ type permissions struct {
 	pixelsLocal bool
 }
 
+// AllowSeed is where the ceiling of a new chat window starts on a host that
+// runs tasks which publish or export.
+var AllowSeed = env.NewCategorialString(env.Spec{
+	Name:        "BOXER_CHAT_ALLOW",
+	Default:     "run",
+	Description: "the highest action a new chat window's settings start at: read, view, edit, run or outside (publishes and exports, each still confirmed unless the grant lists its destination); the person can move it in the chat's Settings",
+	Category:    env.CategoryE("boxer-chat"),
+}, []string{"read", "view", "edit", "run", "outside"})
+
+// allowOf is the setting an AllowSeed value names.
+func allowOf(name string) (a allowE) {
+	switch name {
+	case "read":
+		return allowRead
+	case "view":
+		return allowView
+	case "edit":
+		return allowEdit
+	case "outside":
+		return allowOutside
+	}
+	return allowRun
+}
+
 // defaultPermissions let the model do what a conversation with Apps on could
-// do before there was a ceiling, short of acting outside the app: read, edit
-// and run, open windows and arrange them, and reach the data endpoints — at
-// a pace the person can follow.
+// do before there was a ceiling, short of acting outside the app unless
+// AllowSeed says otherwise: read, edit and run, open windows and arrange
+// them, and reach the data endpoints — at a pace the person can follow.
 func defaultPermissions() (p permissions) {
-	return permissions{allow: allowRun, changes: changesApply, launch: true, desktop: true, reach: agent.ReachData}
+	return permissions{allow: allowOf(AllowSeed.Get()), changes: changesApply, launch: true, desktop: true, reach: agent.ReachData}
 }
 
 // ceiling is the settings as the host takes them; without Apps the model

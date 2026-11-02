@@ -41,7 +41,7 @@ func (inst *coordinator) nextFor(window uint64, op string, r *agent.Remedy) (n *
 	switch {
 	case len(r.Destinations) > 0:
 		n = &nextStep{Tool: "request_access", Args: map[string]any{"plan": "let " + op + " reach what it needs", "destinations": r.Destinations},
-			Then: "call " + op + " in window " + strconv.FormatUint(window, 10) + " again"}
+			Then: "add anything else your plan still needs to the same request, then call " + op + " in window " + strconv.FormatUint(window, 10) + " again"}
 	case r.ArgsSchema != "":
 		n = &nextStep{Tool: inst.toolFor(window, op), ArgsSchema: schemaValue(r.ArgsSchema)}
 		if n.Tool == "call_operation" {

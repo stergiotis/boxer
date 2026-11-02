@@ -411,6 +411,7 @@ var turnSeamsNow = sync.OnceValue(func() (s turnSeams) {
 	}
 	if s.configure, err = harness.NewChain(
 		harness.Element[func(*requestState)]{Name: "round", Order: 10, Fn: configureRound},
+		harness.Element[func(*requestState)]{Name: "supersede", Order: 12, Fn: configureSupersede},
 		harness.Element[func(*requestState)]{Name: "compact", Order: 15, Fn: configureCompaction},
 		harness.Element[func(*requestState)]{Name: "last-round", Order: 20, Fn: configureLastRound}); err != nil {
 		panic(err)
@@ -578,6 +579,7 @@ func runTurn(ctx context.Context, cli completerI, coord *coordinator, req llm.Re
 		if err = rs2.err; err != nil {
 			return
 		}
+		limit = coord.extendRounds(limit)
 	}
 	return
 }
