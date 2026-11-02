@@ -57,6 +57,8 @@ const (
 	SubjectRaise = SubjectPrefix + "raise"
 	// SubjectPlace sets the outer rect of one of the task's windows.
 	SubjectPlace = SubjectPrefix + "place"
+	// SubjectClose closes a window the task opened.
+	SubjectClose = SubjectPrefix + "close"
 	// SubjectLayout sets the desktop's layout and its parameters, or floats
 	// a window out of it (ADR-0346 §SD6).
 	SubjectLayout = SubjectPrefix + "layout"

@@ -20,6 +20,7 @@ const (
 	verbRaise   = "raise"
 	verbPlace   = "place"
 	verbLayout  = "layout"
+	verbClose   = "close"
 )
 
 // reasonQueued is what a completed window verb says: the reply comes before
@@ -73,6 +74,8 @@ func (inst *Service) windowAct(msg *app.Msg) (rep wireCallReply) {
 			err = inst.cfg.Host.OpsRaise(req.Instance)
 		case verbPlace:
 			err = inst.cfg.Host.OpsPlace(req.Instance, req.X, req.Y, req.W, req.H)
+		case verbClose:
+			err = inst.cfg.Host.OpsClose(req.Instance)
 		case verbLayout:
 			if req.Floating != nil {
 				err = inst.cfg.Host.OpsFloat(req.Instance, *req.Floating)
@@ -111,7 +114,9 @@ func windowCheck(t *task, verb string, req wireWindowAct) (out opwire.Outcome) {
 			}
 			out = phaseOutcome(opwire.PhaseInputRequired, what+" needs the desktop in act mode; request it with desktop act")
 		}
-	case verb == verbRaise || verb == verbPlace:
+	case verb == verbClose && !t.launched[req.Instance]:
+		out = phaseOutcome(opwire.PhaseRefused, "a task closes only windows it opened; this one stays the person's")
+	case verb == verbRaise || verb == verbPlace || verb == verbClose:
 		e := t.entries[req.Instance]
 		mode := ModeUnspecified
 		if e != nil {

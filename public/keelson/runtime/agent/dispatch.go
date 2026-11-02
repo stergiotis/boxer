@@ -55,8 +55,16 @@ type HostI interface {
 	// layout or puts it back (ADR-0346 §SD6).
 	OpsLayout(layout string, ratio float32, count int) (err error)
 	OpsFloat(key uint64, floating bool) (err error)
+	// OpsClose asks a window to close.
+	OpsClose(key uint64) (err error)
 	// Marks is the overlay's scene (ADR-0297).
 	Marks() *inscribe.Scene
+}
+
+// tilePinnerI is the part of a host that keeps a coordinator's window in view
+// under a tiled layout while its task runs; a host may not offer it.
+type tilePinnerI interface {
+	OpsPinTiled(key uint64, pinned bool)
 }
 
 // ModeE is how far a task may act in one instance (ADR-0269 §SD5).
@@ -160,7 +168,8 @@ type callRec struct {
 	actor         app.AppIdT
 	actorInstance uint64
 	spec          app.OperationSpec
-	// consent is the grant destination that admitted a consequential call
+	// consent is what admitted the call: ConsentDialogPerson once the person
+	// confirmed it, or the grant destination that admitted a consequential call
 	// without the person's confirmation.
 	consent string
 	// routed is true once the call reached the instance; until then, or
@@ -411,6 +420,9 @@ func (inst *Service) newTask(actor app.AppIdT, actorInstance uint64, conversatio
 		keys: make(map[string]*callRec), lastRead: make(map[uint64]map[string]uint64), refs: make(map[string]*resultRef),
 		turnSeq: make(map[uint64]uint64), readSinceTurn: make(map[uint64]map[string]uint64),
 		launches: make(map[app.AppIdT]*launchEntry), launched: make(map[uint64]bool),
+	}
+	if p, ok := inst.cfg.Host.(tilePinnerI); ok && actorInstance != 0 {
+		p.OpsPinTiled(actorInstance, true)
 	}
 	t.callsBudget = inst.clampCalls(calls)
 	if deadline > 0 {

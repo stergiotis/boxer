@@ -189,6 +189,9 @@ type GrantRequest struct {
 	Calls uint32
 	// Deadline is how long the task may run; zero is DefaultDeadline.
 	Deadline time.Duration
+	// Rounds asks for that many more rounds of the running turn. The host
+	// shows it in the dialog; the coordinator keeps the count and its bound.
+	Rounds uint32
 	// Launches are the apps the task may open windows of.
 	Launches []GrantLaunch
 	// Desktop asks for a mode over the desktop as a whole; act lets the
@@ -270,7 +273,7 @@ func (inst *Client) Request(ctx context.Context, r GrantRequest) (g Grant, err e
 // grant comes back at once as g.
 func (inst *Client) RequestKey(ctx context.Context, r GrantRequest) (key string, g Grant, err error) {
 	req := wireGrantRequest{V: wireVersion, Handle: r.Handle, Conversation: r.Conversation, Plan: r.Plan, Destinations: r.Destinations, Calls: r.Calls,
-		DeadlineSecs: uint32(r.Deadline / time.Second), wireCause: r.Asked.wire()}
+		DeadlineSecs: uint32(r.Deadline / time.Second), Rounds: r.Rounds, wireCause: r.Asked.wire()}
 	if r.Ceiling != nil {
 		w := wireOfCeiling(*r.Ceiling)
 		req.Ceiling = &w
@@ -487,6 +490,13 @@ func (inst *Client) Raise(ctx context.Context, handle string, asked Asked, insta
 func (inst *Client) Place(ctx context.Context, handle string, asked Asked, instance uint64, x, y, w, h float32) (out Outcome, err error) {
 	return callReply(roundTrip[wireWindowAct, wireCallReply](ctx, inst, SubjectPlace,
 		wireWindowAct{V: wireVersion, Handle: handle, Key: asked.Key, Instance: instance, X: x, Y: y, W: w, H: h, wireCause: asked.wire()}))
+}
+
+// CloseWindow closes a window the task opened. It needs act mode on the
+// window; a window the person opened stays theirs.
+func (inst *Client) CloseWindow(ctx context.Context, handle string, asked Asked, instance uint64) (out Outcome, err error) {
+	return callReply(roundTrip[wireWindowAct, wireCallReply](ctx, inst, SubjectClose,
+		wireWindowAct{V: wireVersion, Handle: handle, Key: asked.Key, Instance: instance, wireCause: asked.wire()}))
 }
 
 // SetLayout sets the desktop's layout by its ident (floating, main-stack,

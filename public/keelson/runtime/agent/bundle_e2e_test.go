@@ -203,7 +203,7 @@ func TestABundleCrossesWindowsWithItsProvenance(t *testing.T) {
 	assert.Equal(t, "SELECT number AS n FROM numbers(5)", pub.AdhocDataset.Val.SourceSql, "where the rows came from, as data")
 	assert.Equal(t, []string{"n"}, pub.AdhocDataset.Val.ColumnNames)
 	assert.Equal(t, []uint64{5}, pub.AdhocDataset.Val.ColumnDistinct, "and what they hold, summarised without their values")
-	assert.Empty(t, consentOf["pub"], "the first publish was confirmed")
+	assert.Equal(t, []string{ConsentDialogPerson}, consentOf["pub"], "the first publish was confirmed")
 	assert.Contains(t, pub.AdhocDataset.Val.Document, "keelson('result')", "the document is on the trail")
 	assert.True(t, pub.AdhocDataset.Val.Attested)
 	assert.Equal(t, callOf["pub"], pub.Delegation.Val.Call.Val, "it joins the publish_result action on (task, call)")

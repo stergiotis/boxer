@@ -187,6 +187,13 @@ func (inst *fakeHost) OpsLayout(layout string, ratio float32, count int) error {
 	inst.windowActs = append(inst.windowActs, "layout:"+layout)
 	return nil
 }
+func (inst *fakeHost) OpsClose(k uint64) error {
+	inst.mu.Lock()
+	defer inst.mu.Unlock()
+	inst.windowActs = append(inst.windowActs, "close")
+	return nil
+}
+
 func (inst *fakeHost) OpsFloat(k uint64, floating bool) error {
 	inst.mu.Lock()
 	defer inst.mu.Unlock()

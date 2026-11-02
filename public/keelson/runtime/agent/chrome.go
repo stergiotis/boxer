@@ -454,6 +454,9 @@ func (inst *Chrome) renderRequest(r *request, windows []windowRow, waiting int, 
 			}
 		})
 	}
+	if r.rounds > 0 {
+		c.Label("The running turn may take " + strconv.FormatUint(uint64(r.rounds), 10) + " more rounds of model calls.").Wrap().Send()
+	}
 	if r.desktop == ModeAct {
 		// The desktop as a whole (ADR-0276 §SD4): arranging moves every
 		// window, the person's own included.

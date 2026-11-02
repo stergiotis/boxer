@@ -91,8 +91,10 @@ type request struct {
 	actorInstance uint64
 	conversation  string
 	// task is the task being widened; nil for a new grant.
-	task         *task
-	plan         string
+	task *task
+	plan string
+	// rounds is how many more rounds of its turn the coordinator asks for.
+	rounds       uint32
 	wanted       map[uint64]ModeE
 	wantedOps    map[uint64][]string
 	destinations []string
@@ -205,7 +207,7 @@ func (inst *Service) requestGrant(msg *app.Msg) (rep wireGrantReply) {
 	r := &request{key: "req-" + randomHex(8), actor: msg.Sender, actorInstance: msg.SenderInstance, conversation: req.Conversation, task: t,
 		plan: req.Plan, wanted: make(map[uint64]ModeE), wantedOps: make(map[uint64][]string),
 		destinations: req.Destinations, calls: req.Calls, deadline: time.Duration(req.DeadlineSecs) * time.Second,
-		launches: req.Launches, ceiling: ceiling,
+		rounds: req.Rounds, launches: req.Launches, ceiling: ceiling,
 		created: time.Now(), share: make(map[uint64]bool), shareFlag: make(map[uint64]*bool), mode: make(map[uint64]ModeE),
 		desktop: ParseMode(req.Desktop), asked: req.wireCause}
 	r.desktopShare = r.desktop != ModeUnspecified
@@ -278,6 +280,21 @@ func (inst *Service) requestStatus(key string, msg *app.Msg) (w wireOutcome) {
 		}
 	}
 	return
+}
+
+// unpinCoordinator lets t's coordinator window go once no other task of it
+// runs. The caller holds mu.
+func (inst *Service) unpinCoordinator(t *task) {
+	p, ok := inst.cfg.Host.(tilePinnerI)
+	if !ok || t.actorInstance == 0 {
+		return
+	}
+	for _, other := range inst.tasks {
+		if other != t && other.actorInstance == t.actorInstance && other.revoked == "" {
+			return
+		}
+	}
+	p.OpsPinTiled(t.actorInstance, false)
 }
 
 // termsOf is t's bounds for the answer to its grant. The caller holds mu.
@@ -588,6 +605,7 @@ func (inst *Service) endTaskAsked(t *task, why string, by string, asked wireCaus
 	}
 	t.revoked = why
 	inst.grantEventAsked(trail.GrantEventEnded, by, why, t, nil, asked)
+	inst.unpinCoordinator(t)
 	// The task's captures go with it: each sealed artifact's key is dropped
 	// once its last reader leaves (ADR-0281 §SD6).
 	if inst.captures != nil {

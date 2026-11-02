@@ -57,8 +57,10 @@ type ActionRecord struct {
 	// Confined that the call's outcome carried confined content.
 	Tainted  bool
 	Confined bool
-	// Consent is the grant destination that admitted a consequential call
-	// without the person's confirmation; empty when none did.
+	// Consent is what admitted the call: the grant destination a
+	// consequential call ran under, or ConsentDialogPerson once the person
+	// confirmed it; empty when neither did. An auditor's rule reads this one
+	// field.
 	Consent string
 }
 

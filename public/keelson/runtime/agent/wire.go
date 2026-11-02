@@ -106,13 +106,15 @@ type wireGrantRequest struct {
 	Handle string `json:"handle,omitempty"`
 	// Conversation names the coordinator's conversation; taint belongs to
 	// it (ADR-0269 §SD7).
-	Conversation string            `json:"conversation,omitempty"`
-	Plan         string            `json:"plan"`
-	Entries      []wireGrantEntry  `json:"entries"`
-	Destinations []string          `json:"destinations,omitempty"`
-	Calls        uint32            `json:"calls,omitempty"`
-	DeadlineSecs uint32            `json:"deadline_secs,omitempty"`
-	Launches     []wireLaunchEntry `json:"launches,omitempty"`
+	Conversation string           `json:"conversation,omitempty"`
+	Plan         string           `json:"plan"`
+	Entries      []wireGrantEntry `json:"entries"`
+	Destinations []string         `json:"destinations,omitempty"`
+	Calls        uint32           `json:"calls,omitempty"`
+	DeadlineSecs uint32           `json:"deadline_secs,omitempty"`
+	// Rounds asks the person for that many more rounds of the running turn.
+	Rounds   uint32            `json:"rounds,omitempty"`
+	Launches []wireLaunchEntry `json:"launches,omitempty"`
 	// Desktop asks for a mode over the desktop as a whole: "act" lets the
 	// task arrange every window (ADR-0276 §SD4).
 	Desktop string `json:"desktop,omitempty"`

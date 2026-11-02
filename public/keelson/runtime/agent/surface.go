@@ -156,6 +156,8 @@ const (
 	ActionRaise = verbRaise
 	// ActionPlace is placing one window.
 	ActionPlace = verbPlace
+	// ActionClose is closing a window the task opened.
+	ActionClose = verbClose
 	// ActionMark is putting a mark on the overlay, ActionUnmark
 	// removing the task's (ADR-0297).
 	ActionMark   = verbMark

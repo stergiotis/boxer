@@ -13,6 +13,10 @@ import (
 // confirmation in every mode that allows it. A proposal becomes stale when a
 // revision it expects moves before it is accepted.
 
+// ConsentDialogPerson is the consent of a call the person confirmed in the
+// host's dialog, as the action row records it beside a grant destination's.
+const ConsentDialogPerson = "dialog:person"
+
 // proposalRef names one pending proposal for the chrome.
 type proposalRef struct {
 	t   *task
@@ -72,6 +76,7 @@ func (inst *Service) accept(p proposalRef) {
 	req := rec.req
 	req.Expects = rec.proposal.expects
 	rec.proposal.taken = true
+	rec.consent = ConsentDialogPerson
 	e := rec.entry
 	inst.grantEventAsked(trail.GrantEventConfirmed, "person", proposalReason(rec), p.t, nil, rec.asked())
 	inst.mu.Unlock()

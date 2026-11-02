@@ -131,3 +131,25 @@ func TestLayoutVerbNeedsTheDesktop(t *testing.T) {
 	}
 	assert.ElementsMatch(t, []string{"input_required", "input_required", "completed", "completed"}, verbs)
 }
+
+// A task closes a window it opened; a window the person opened stays theirs.
+func TestATaskClosesOnlyWindowsItOpened(t *testing.T) {
+	r := newRig(t, true)
+	ctx := context.Background()
+	g, err := r.cli.Request(ctx, GrantRequest{Plan: "open and close", Launches: []GrantLaunch{{App: "doc", Mode: ModeAct, Count: 1}},
+		Entries: []GrantEntry{{Instance: r.docKey, Mode: ModeAct}}})
+	require.NoError(t, err)
+	out, err := r.cli.CloseWindow(ctx, g.Handle, Asked{Key: "c1"}, r.docKey)
+	require.NoError(t, err)
+	assert.Equal(t, "refused", out.Phase)
+	assert.Contains(t, out.Reason, "only windows it opened")
+
+	got, err := r.cli.Launch(ctx, g.Handle, "l1", "doc", "", nil)
+	require.NoError(t, err)
+	out, err = r.cli.CloseWindow(ctx, g.Handle, Asked{Key: "c2"}, got.Instance)
+	require.NoError(t, err)
+	assert.Equal(t, "completed", out.Phase, out.Reason)
+	r.host.mu.Lock()
+	assert.Contains(t, r.host.windowActs, "close")
+	r.host.mu.Unlock()
+}
