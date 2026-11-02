@@ -98,6 +98,22 @@ is the join of everything the run read. A confined conversation therefore
 cannot export, and the confirmation says so before the person confirms.
 The publish service makes the same refusal (ADR-0341 §SD3).
 
+A refused export leaves a journal entry of its own, so that "refused because
+the conversation holds sealed data" is told apart from "never exported": an
+extension-private entry named `export-refused`, never `artefact`, so neither
+a resume nor a query over exports or the artefact's snapshots takes it for
+one of theirs. Its form says why — `sealed` when the conversation is
+confined, `service` when the service refused for another reason — its key is
+the key of the tool call that confined the conversation, which that call's
+intent and outcome share, and its target the revision asked for. The body
+holds the stage that refused (the confirmation, the service's dry run, the
+publish), the reason as it was given, and the confining call as the refusal
+names it. Opening the confirmation of a confined conversation is the refusal
+and writes the entry. The entry endorses nothing. A store the service cannot
+reach is a failure, not a refusal, and leaves nothing. The service's trail
+row records a refused publish but not a refused dry run, and does not name
+the conversation; the journal entry does both.
+
 ### SD5 — The handover by snapshot
 
 When the artefact has screenshots, Open in mdedit exports first, through the
@@ -168,7 +184,7 @@ head, or an empty artefact, with the reason in the resume note.
 | Surface | Change | Moves with it |
 | --- | --- | --- |
 | `launchcfg.MdeditLaunch` | optional mount, snapshot and path | the generated `launchcfg.out.go` and its golden; mdedit's hand-over |
-| chat journal | an extension-private `exported` entry; no new kind | resume, which reads it |
+| chat journal | extension-private `exported` and `export-refused` entries; no new kind | resume, which reads the first and reads the artefact's snapshots by their forms |
 | identity | the tag value `chatArtefactMount`, claimed through `tagmint` | — |
 | chat manifest | declares `lading.publish` and the chat's mount tag | ADR-0341's registration check |
 | artefact panel | Export, and its confirmation | the endorsement path of ADR-0311 §SD3 |
@@ -223,12 +239,15 @@ without them is the text handover as before.
 - **Lane.** The default `go test` lane, against the publish service with no
   store behind it: the plan's files and endorsement, the endorsement written
   before the publish, the refusal of a confined conversation and of a head
-  that moved, and a restore from an `fstest.MapFS`. mdedit's resolver over an
+  that moved, the refusal's entry with the confining call and that no reader
+  of exports or snapshots takes it for one, and a restore from an
+  `fstest.MapFS`. mdedit's resolver over an
   `fstest.MapFS`. The integration lane against a provisioned store: an export
   read back through the adapter, its journal entry, a second export into the
   same mount, and a resume in another window that gets the revision back.
 - **What would fail.** An export without the `endorse` entry before it; an
-  `endorse` entry for an export the service refused; a file missing from the
+  `endorse` entry for an export the service refused; a refusal with no entry,
+  or one a resume reads as an export; a file missing from the
   snapshot or one the revision does not name; a parse that reads the store; a
   resume that does not restore the revision, or whose next revision takes a
   number the journal already names; a handover read that replaces edits.

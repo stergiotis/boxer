@@ -2,6 +2,7 @@ package chat
 
 import (
 	"context"
+	"encoding/json/v2"
 	"strconv"
 	"testing"
 	"testing/fstest"
@@ -12,6 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/agentrun"
+	"github.com/stergiotis/boxer/public/keelson/runtime/agentrun/projection"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/inprocbus"
 	"github.com/stergiotis/boxer/public/keelson/runtime/ladingpublish"
@@ -66,6 +68,40 @@ func withScreenshot(t *testing.T, art *artefact) string {
 	return shot.name
 }
 
+// confineBy writes a tool call whose result carries the confined tier, as a
+// read of a sealed window leaves it, marks the conversation confined, and
+// returns the call's key.
+func confineBy(t *testing.T, inst *App) (key string) {
+	t.Helper()
+	coord := inst.coord
+	key = "llm-confine#0"
+	_, err := coord.append(context.Background(), coord.journalNow(),
+		agentrun.Entry{Kind: agentrun.KindIntent, Key: key, Name: "sample_rows", Label: harnessLabel()},
+		agentrun.Entry{Kind: agentrun.KindOutcome, Role: projection.RoleTool, Key: key, Name: "c9", Body: "rows",
+			Label: agentrun.Label{Level: agentrun.LevelExternal, Tier: coord.confinedTier}})
+	require.NoError(t, err)
+	coord.mu.Lock()
+	coord.confined = true
+	coord.mu.Unlock()
+	return
+}
+
+// exportRefusals are the journal's refused-export entries, in order.
+func exportRefusals(entries []agentrun.Entry) (out []agentrun.Entry) {
+	for _, e := range entries {
+		if e.Kind == agentrun.KindIgnorable && e.Name == exportRefusedName {
+			out = append(out, e)
+		}
+	}
+	return
+}
+
+func refusalOf(t *testing.T, e agentrun.Entry) (rec exportRefusalRecord) {
+	t.Helper()
+	require.NoError(t, json.Unmarshal([]byte(e.Body), &rec))
+	return
+}
+
 func TestTheExportPlanNamesWhatGoesAndWhetherItEndorses(t *testing.T) {
 	inst := exportRig(t, nil)
 	name := withScreenshot(t, inst.conv.art)
@@ -81,6 +117,8 @@ func TestTheExportPlanNamesWhatGoesAndWhetherItEndorses(t *testing.T) {
 	assert.True(t, p.thenMdedit)
 }
 
+// A store the service cannot reach is a failure, not a refusal: it leaves
+// neither an export nor a refusal.
 func TestAnExportTheServiceCannotWriteLeavesNoRecord(t *testing.T) {
 	inst := exportRig(t, nil)
 	withScreenshot(t, inst.conv.art)
@@ -89,28 +127,99 @@ func TestAnExportTheServiceCannotWriteLeavesNoRecord(t *testing.T) {
 	var re *ladingpublish.RefusedError
 	require.ErrorAs(t, err, &re)
 	assert.Contains(t, re.Result.Reason, "no lading store")
-	_, ok := lastExport(inst.coord.journalNow().Entries())
+	assert.True(t, re.Result.Failed)
+	entries := inst.coord.journalNow().Entries()
+	_, ok := lastExport(entries)
 	assert.False(t, ok)
+	assert.Empty(t, exportRefusals(entries))
 	assert.True(t, inst.coord.endorsedHead(), "the endorsement came first, as law L15 asks")
 }
 
 func TestAConfinedConversationCannotExport(t *testing.T) {
 	inst := exportRig(t, nil)
 	withScreenshot(t, inst.conv.art)
-	inst.coord.mu.Lock()
-	inst.coord.confined = true
-	inst.coord.mu.Unlock()
+	key := confineBy(t, inst)
+	w := inst.coord.journalNow()
+	n, _ := inst.conv.art.head()
+	named := revisionsNamed(w.Entries())
+	artN, artText, artOk := artefactOfEntries(w.Entries())
 	inst.planExport(false)
 	p := inst.artView.export
 	require.True(t, p.confined)
+	assert.Equal(t, key, p.confinedKey)
+
+	// The confirmation refuses, and the refusal is on record with the call
+	// that confined the conversation.
+	require.Eventually(t, func() bool { return len(exportRefusals(w.Entries())) == 1 }, 5*time.Second, 5*time.Millisecond)
+	first := exportRefusals(w.Entries())[0]
+	assert.Equal(t, exportRefusedSealed, first.Form)
+	assert.Equal(t, key, first.Key)
+	assert.Equal(t, uint32(n), first.Target)
+	assert.Equal(t, harnessLabel(), first.Label)
+	rec := refusalOf(t, first)
+	assert.Equal(t, exportStageConfirmation, rec.Stage)
+	assert.Equal(t, n, rec.Revision)
+	assert.Equal(t, "sample_rows (tool call c9)", rec.ConfinedBy)
+	assert.Equal(t, exportRefusal(rec.ConfinedBy), rec.Reason)
+
 	// The confirmation offers no Export; were it sent anyway, the service
-	// refuses it before anything is written.
+	// refuses it before anything is written, and that is on record too.
 	_, err := inst.exportNow(context.Background(), p, "x")
 	var re *ladingpublish.RefusedError
 	require.ErrorAs(t, err, &re)
 	assert.True(t, re.Result.Refused)
 	assert.Contains(t, re.Result.Reason, "sealed data")
 	assert.False(t, inst.coord.endorsedHead(), "a refused export leaves no endorsement")
+	refusals := exportRefusals(w.Entries())
+	require.Len(t, refusals, 2)
+	assert.Equal(t, exportRefusedSealed, refusals[1].Form)
+	assert.Equal(t, key, refusals[1].Key)
+	rec = refusalOf(t, refusals[1])
+	assert.Equal(t, exportStageCheck, rec.Stage)
+	assert.Contains(t, rec.Reason, "sealed data")
+
+	// Nothing that reads exports or the artefact's snapshots takes a
+	// refusal for one of theirs.
+	entries := w.Entries()
+	_, ok := lastExport(entries)
+	assert.False(t, ok)
+	assert.Equal(t, named, revisionsNamed(entries))
+	gotN, gotText, gotOk := artefactOfEntries(entries)
+	assert.Equal(t, artN, gotN)
+	assert.Equal(t, artText, gotText)
+	assert.Equal(t, artOk, gotOk)
+	for _, e := range entries {
+		assert.NotEqual(t, agentrun.KindEndorse, e.Kind, "a refused export endorses nothing")
+	}
+}
+
+// A resumed conversation finds its export, its numbering and its artefact
+// as if the refusals after them were not there.
+func TestARefusalIsNotAnExportOnResume(t *testing.T) {
+	inst := exportRig(t, nil)
+	coord := inst.coord
+	ctx := context.Background()
+	_, err := coord.append(ctx, coord.journalNow(), agentrun.Entry{Kind: agentrun.KindIgnorable, Name: artefactEntryName, Form: artefactFormTurn,
+		Target: 3, Body: "three\n", Label: harnessLabel()})
+	require.NoError(t, err)
+	exported := exportRecord{Revision: 3, Mount: 7, SnapNanos: 9, TextDigest: agentrun.ContentDigest("three\n")}
+	require.NoError(t, coord.journalExport(ctx, exported))
+	require.NoError(t, coord.journalExportRefusal(ctx, exportRefusedSealed, "llm-x#0", exportRefusalRecord{Revision: 9, Stage: exportStageConfirmation, Reason: "sealed"}))
+	require.NoError(t, coord.journalExportRefusal(ctx, exportRefusedService, "", exportRefusalRecord{Revision: 11, Stage: exportStageCheck, Reason: "too large"}))
+
+	entries := coord.journalNow().Entries()
+	rec, ok := lastExport(entries)
+	require.True(t, ok)
+	assert.Equal(t, exported, rec)
+	assert.Equal(t, 3, revisionsNamed(entries), "a refusal names no revision a resume must skip")
+	coord.mu.Lock()
+	coord.lastExportMount = 0
+	coord.mu.Unlock()
+	assert.Equal(t, uint64(7), coord.exportMount())
+	n, text, ok := artefactOfEntries(entries)
+	require.True(t, ok)
+	assert.Equal(t, 3, n)
+	assert.Equal(t, "three\n", text)
 }
 
 // What the service would refuse is refused before the endorsement: the
@@ -125,8 +234,13 @@ func TestARefusedExportIsNotEndorsed(t *testing.T) {
 	require.ErrorAs(t, err, &re)
 	assert.Contains(t, re.Result.Reason, "more than the 16")
 	assert.False(t, inst.coord.endorsedHead())
-	_, ok := lastExport(inst.coord.journalNow().Entries())
+	entries := inst.coord.journalNow().Entries()
+	_, ok := lastExport(entries)
 	assert.False(t, ok)
+	refusals := exportRefusals(entries)
+	require.Len(t, refusals, 1)
+	assert.Equal(t, exportRefusedService, refusals[0].Form)
+	assert.Equal(t, exportStageCheck, refusalOf(t, refusals[0]).Stage)
 }
 
 // An endorsement from before a resume covers the text it endorsed, not a

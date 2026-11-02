@@ -58,14 +58,25 @@ func (inst *coordinator) syncArtefactJournal(ctx context.Context, w *agentrun.Wr
 }
 
 // artefactOfEntries is the artefact's head as the journal last wrote it:
-// the revision and the text, and whether any was written.
+// the revision and the text, and whether any was written. Only the forms
+// syncArtefactJournal writes count; an export's entry shares the name and
+// holds a record, not the text.
 func artefactOfEntries(entries []agentrun.Entry) (n int, text string, ok bool) {
 	for _, e := range entries {
-		if e.Kind == agentrun.KindIgnorable && e.Name == artefactEntryName {
+		if e.Kind == agentrun.KindIgnorable && e.Name == artefactEntryName && isArtefactSnapshotForm(e.Form) {
 			n, text, ok = int(e.Target), e.Body, true
 		}
 	}
 	return
+}
+
+// isArtefactSnapshotForm says form is one syncArtefactJournal writes.
+func isArtefactSnapshotForm(form string) bool {
+	switch form {
+	case artefactFormTurn, artefactFormRevert, artefactFormRewind, artefactFormRestore:
+		return true
+	}
+	return false
 }
 
 // artefactResumeLine says what a resume made of the artefact, for the

@@ -58,11 +58,12 @@ func (inst *coordinator) sealedReadHold(ctx context.Context, h string, windows [
 }
 
 // confinedBy names the first tool call whose result carried the confined
-// tier, as the journal has it; empty when the journal names none.
-func (inst *coordinator) confinedBy() (what string) {
+// tier, as the journal has it, and gives that call's key, which its intent
+// and outcome entries share; both empty when the journal names none.
+func (inst *coordinator) confinedBy() (what string, key string) {
 	w := inst.journalNow()
 	if w == nil {
-		return ""
+		return "", ""
 	}
 	entries := w.Entries()
 	intents := make(map[string]agentrun.Entry, 8)
@@ -78,14 +79,14 @@ func (inst *coordinator) confinedBy() (what string) {
 		}
 		in, ok := intents[e.Key]
 		if !ok {
-			return "tool call " + e.Name
+			return "tool call " + e.Name, e.Key
 		}
 		if window, op, isOp := inst.windowOf(in); isOp {
-			return op + " in window " + strconv.FormatUint(window, 10) + " (tool call " + e.Name + ")"
+			return op + " in window " + strconv.FormatUint(window, 10) + " (tool call " + e.Name + ")", e.Key
 		}
-		return in.Name + " (tool call " + e.Name + ")"
+		return in.Name + " (tool call " + e.Name + ")", e.Key
 	}
-	return ""
+	return "", ""
 }
 
 // exportRefusal is what the export panel says of a confined conversation.

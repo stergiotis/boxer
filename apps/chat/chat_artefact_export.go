@@ -7,13 +7,19 @@ package chat
 // row is written. Confirming endorses the head for publishing when no
 // endorsement covers it (ADR-0311 §SD3, law L15). Open in mdedit takes the
 // same path when the artefact has screenshots, and hands mdedit the snapshot.
+// A refused export endorses nothing and leaves an entry of its own, which
+// names why and, for a confined conversation, the call that confined it
+// (ADR-0342 §SD4, ADR-0355 §SD1).
 
 import (
 	"context"
 	"encoding/json/v2"
+	"errors"
 	"io/fs"
 	"strconv"
 	"time"
+
+	"github.com/rs/zerolog/log"
 
 	"github.com/stergiotis/boxer/apps/mdedit/launchcfg"
 	"github.com/stergiotis/boxer/public/fs/lading"
@@ -50,6 +56,19 @@ const (
 	// leaves: extension-private, skipped by the projection.
 	exportEntryName = "artefact"
 	exportEntryForm = "exported"
+	// exportRefusedName marks the journal entry a refused export leaves,
+	// under a name of its own so that nothing reading exports or the
+	// artefact's snapshots takes it for one of theirs. The form says why:
+	// the conversation holds sealed data, or the publish service refused.
+	exportRefusedName    = "export-refused"
+	exportRefusedSealed  = "sealed"
+	exportRefusedService = "service"
+	// The stages an export is refused at: the confirmation, which offers no
+	// Export for a confined conversation, the service's check before the
+	// endorsement, and the publish itself.
+	exportStageConfirmation = "confirmation"
+	exportStageCheck        = "check"
+	exportStagePublish      = "publish"
 
 	tipArtExport  = "Write this revision and its screenshots to the lading store, where anyone who can read the store can read them until the retention ends. You confirm first."
 	tipExportDo   = "Export now. If no endorsement covers this revision, confirming also endorses it for publishing."
@@ -77,6 +96,17 @@ type exportImage struct {
 	Hash string `json:"hash"`
 }
 
+// exportRefusalRecord is the body of a refused export's journal entry: the
+// revision asked for, the stage that refused it, the reason as the person
+// or the service gave it, and the call that confined the conversation when
+// that is the reason.
+type exportRefusalRecord struct {
+	Revision   int    `json:"revision"`
+	Stage      string `json:"stage"`
+	Reason     string `json:"reason"`
+	ConfinedBy string `json:"confinedBy,omitempty"`
+}
+
 // exportPlan is what an export would write and under which label, computed
 // when the person asks so the confirmation shows what Confirm does. It holds
 // the conversation it was asked in, taken on the frame goroutine, so the
@@ -93,9 +123,10 @@ type exportPlan struct {
 	// may not hold; endorse that confirming also endorses the head.
 	confined bool
 	// confinedBy names the call that confined the conversation, when the
-	// journal holds it.
-	confinedBy string
-	endorse    bool
+	// journal holds it, and confinedKey is that call's key.
+	confinedBy  string
+	confinedKey string
+	endorse     bool
 	// thenMdedit opens the export in mdedit once it is written.
 	thenMdedit bool
 }
@@ -189,6 +220,43 @@ func (inst *coordinator) journalExport(ctx context.Context, rec exportRecord) (e
 	return
 }
 
+// journalExportRefusal records a refused export: form is why, key the
+// confining call's key or empty, and the target the revision asked for.
+// It endorses nothing and names no mount.
+func (inst *coordinator) journalExportRefusal(ctx context.Context, form string, key string, rec exportRefusalRecord) (err error) {
+	w := inst.journalNow()
+	if w == nil {
+		return
+	}
+	body, err := json.Marshal(rec)
+	if err != nil {
+		return eh.Errorf("encode the export refusal: %w", err)
+	}
+	_, err = inst.append(journalCtx(ctx), w, agentrun.Entry{Kind: agentrun.KindIgnorable, Name: exportRefusedName, Form: form,
+		Key: key, Target: uint32(max(rec.Revision, 0)), Body: string(body), Label: harnessLabel()})
+	return
+}
+
+// refused records err as the export's refusal at stage when the publish
+// service refused it, and returns err. Any other failure is not a refusal
+// and leaves nothing; a refusal the journal does not take is logged.
+func (inst *exportPlan) refused(ctx context.Context, stage string, confined bool, err error) error {
+	var re *ladingpublish.RefusedError
+	if inst.coord == nil || !errors.As(err, &re) || !re.Result.Refused {
+		return err
+	}
+	rec := exportRefusalRecord{Revision: inst.rev, Stage: stage, Reason: re.Result.Reason}
+	form, key := exportRefusedService, ""
+	if confined {
+		form = exportRefusedSealed
+		rec.ConfinedBy, key = inst.coord.confinedBy()
+	}
+	if jerr := inst.coord.journalExportRefusal(ctx, form, key, rec); jerr != nil {
+		log.Warn().Err(jerr).Str("conversation", inst.coord.conversation).Int("revision", inst.rev).Msg("chat: the export's refusal was not written to the journal")
+	}
+	return err
+}
+
 // planExport opens the confirmation for the head revision.
 func (inst *App) planExport(thenMdedit bool) {
 	art := inst.conv.art
@@ -203,7 +271,16 @@ func (inst *App) planExport(thenMdedit bool) {
 	if coord := inst.coord; coord != nil {
 		p.label, p.confined = coord.exportLabel()
 		if p.confined {
-			p.confinedBy = coord.confinedBy()
+			p.confinedBy, p.confinedKey = coord.confinedBy()
+			// The confirmation refuses here: the record is written off the
+			// frame goroutine.
+			rec := exportRefusalRecord{Revision: n, Stage: exportStageConfirmation, Reason: exportRefusal(p.confinedBy), ConfinedBy: p.confinedBy}
+			key := p.confinedKey
+			go func() {
+				if err := coord.journalExportRefusal(context.Background(), exportRefusedSealed, key, rec); err != nil {
+					log.Warn().Err(err).Str("conversation", coord.conversation).Int("revision", rec.Revision).Msg("chat: the export's refusal was not written to the journal")
+				}
+			}()
 		}
 		p.endorse = coord.journalNow() != nil && !coord.endorsedHead()
 	}
@@ -293,7 +370,7 @@ func (inst *App) exportNow(ctx context.Context, p *exportPlan, name string) (not
 		req.Mount = coord.exportMount()
 	}
 	if err = ladingpublish.Check(bus, exportMountTag, req); err != nil {
-		return "", err
+		return "", p.refused(ctx, exportStageCheck, confined, err)
 	}
 	if p.endorse && coord != nil {
 		if err = coord.endorseArtefact(ctx, p.rev, p.text); err != nil {
@@ -302,7 +379,7 @@ func (inst *App) exportNow(ctx context.Context, p *exportPlan, name string) (not
 	}
 	res, err := ladingpublish.Publish(bus, exportMountTag, req)
 	if err != nil {
-		return "", err
+		return "", p.refused(ctx, exportStagePublish, confined, err)
 	}
 	rec.Mount, rec.SnapNanos = res.Mount, res.SnapNanos
 	if coord != nil {
