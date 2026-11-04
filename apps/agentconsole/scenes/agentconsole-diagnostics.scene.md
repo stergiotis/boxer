@@ -66,7 +66,7 @@ reports the run's full error.
 {"do":"key","text":"A","modifiers":16}
 {"do":"type","id":7028873545952381604,"text":"{}"}
 {"do":"click","name":"Call","role":"button","comment":"k5"}
-{"do":"wait","valueContains":"k5 · run · rendered","role":"label","settleMs":2000}
+{"do":"wait","valueContains":"k5 · run · completed","role":"label","settleMs":2000}
 {"do":"focus","id":17222585601186924707}
 {"do":"key","text":"A","modifiers":16}
 {"do":"type","id":17222585601186924707,"text":"get_diagnostics"}
@@ -93,7 +93,7 @@ reports the run's full error.
 {"do":"key","text":"A","modifiers":16}
 {"do":"type","id":7028873545952381604,"text":"{}"}
 {"do":"click","name":"Call","role":"button","comment":"k8"}
-{"do":"wait","valueContains":"k8 · run · rendered","role":"label","settleMs":2000}
+{"do":"wait","valueContains":"k8 · run · completed","role":"label","settleMs":2000}
 {"do":"focus","id":17222585601186924707}
 {"do":"key","text":"A","modifiers":16}
 {"do":"type","id":17222585601186924707,"text":"get_diagnostics"}

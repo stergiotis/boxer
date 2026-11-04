@@ -60,7 +60,13 @@ chat is meant to be its only app-side holder
 
 *Why:* the loop, the approvals, the journal, the ceilings and the labels
 live in one place. A second caller would run beside them, not under them.
-The rule is a review convention, not an enforced one; the ADR says so.
+That there is one harness is a review convention, not an enforced one; the
+ADR says so. That a harness journals is enforced: the model service refuses a
+call that does not name the request entry written before it, recording the
+same content ([ADR-0357](../adr/0357-a-model-call-names-the-journal-entry-written-before-it.md),
+proposed), and the dispatcher refuses a call a model asked for that does not
+name its intent. This shows what was recorded before it left, not that the
+journal was the only source of what was sent.
 
 ### 2. Apps expose operations; agents drive them under a grant
 
@@ -105,8 +111,10 @@ every time ([ADR-0309](../adr/0309-context-projection-as-sql-over-the-journal-in
 A conversation therefore outlives its process: the Conversations tab lists
 runs, and **resume** folds one back, settles each unfinished act by its
 effect class, and asks for a grant again as a new task. A run is pinned to
-the fingerprint of the code it started with; a mismatch leaves it readable
-and not continuing. The chat's **Keep** setting governs only whether the
+the fingerprint of its prompts, tool schemas, limits and seam element names; a
+mismatch leaves it readable and not continuing. The fingerprint does not cover
+the code behind a seam element, so changing one without renaming it does not
+strand a run. The chat's **Keep** setting governs only whether the
 message bodies also reach the audit trail; the journal is always written.
 
 *Why:* a model reply is a nondeterministic event to record, never to
@@ -255,7 +263,22 @@ and past conversations are read in play over SQL
 ([ADR-0239](../adr/0239-play-chat-panel-and-chatview-widget.md),
 [ADR-0264](../adr/0264-retained-model-conversations-on-facts.md)).
 
-### 12. Windows, instances and lifetimes
+### 12. Long work does not hold a turn open
+
+A command declared asynchronous stays `running` after it applies, until the app
+says its work settled. A turn's tool call waits for it for a bounded time; past
+that the call is **pending**, the turn goes on or ends, and a watcher follows the
+work. When it settles, a `completed` entry records it at once, under its label,
+and the model reads it in a note at the next round. If no turn is running the
+window starts one, within a limit, and not after the person pressed Stop
+([ADR-0358](../adr/0358-asynchronous-operations-a-pending-outcome-and-a-turn-a-completion-wakes.md),
+proposed).
+
+*Why not let the work outlive the window:* a grant dies with its window instance,
+so a turn with no window would need another answer about whose authority it
+acts under. Everything here stays inside the window that holds the grant.
+
+### 13. Windows, instances and lifetimes
 
 The chat app is multi-instance: each window is one conversation, one run
 and at most one turn at a time, and the person opens as many as they like.
@@ -280,6 +303,7 @@ record before code
   chosen by a rule.
 - **Parallel tool calls** within one turn. The tool-mode seam has one
   element, sequential; tools already declare whether they are parallel-safe.
+  Pending calls (§12) overlap, but each round still starts them one at a time.
 - **Cross-run memory**: a model reading another conversation's journal.
 - **Window-less or scheduled runs**: a conversation with no window to show
   it (ADR-0308 §SD11).

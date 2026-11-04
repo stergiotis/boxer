@@ -46,7 +46,8 @@ func TestTheFoldSettlesByEffectClass(t *testing.T) {
 	assert.Equal(t, 1, closed.Turns)
 	assert.Empty(t, closed.OpenTurn)
 	assert.True(t, closed.Deleted)
-	assert.Empty(t, closed.Unsettled, "a turn entry settles its turn's acts for good")
+	require.Len(t, closed.Unsettled, 1, "a turn entry settles its turn's acts for good, but for work meant to outlive it (ADR-0358 §SD6)")
+	assert.Equal(t, ResolutionPending, closed.Unsettled[0].Resolution)
 	assert.Empty(t, Fold(nil).Unsettled)
 }
 
@@ -81,4 +82,21 @@ func TestAnOutcomeSettlesARequest(t *testing.T) {
 	open := Fold([]Entry{{Kind: KindRequest, Key: "t#0"}})
 	require.Len(t, open.Unsettled, 1)
 	assert.Equal(t, ResolutionRemake, open.Unsettled[0].Resolution)
+}
+
+// Work meant to outlive its turn stays open across the turn entry until a
+// completed entry settles it, and a later turn's entry does not forget it
+// (ADR-0358 §SD6).
+func TestPendingWorkOutlivesItsTurn(t *testing.T) {
+	entries := []Entry{
+		{Ordinal: 1, Kind: KindIntent, Key: "k", Effect: EffectRun, Turn: "t1"},
+		{Ordinal: 2, Kind: KindOutcome, Key: "k", Form: FormPending, Turn: "t1"},
+		{Ordinal: 3, Kind: KindTurn, Turn: "t1"},
+		{Ordinal: 4, Kind: KindUser, Turn: "t2"},
+		{Ordinal: 5, Kind: KindTurn, Turn: "t2"},
+	}
+	open := Fold(entries)
+	require.Len(t, open.Unsettled, 1)
+	assert.Equal(t, ResolutionPending, open.Unsettled[0].Resolution)
+	assert.Empty(t, Fold(append(entries, Entry{Ordinal: 6, Kind: KindCompleted, Key: "k"})).Unsettled)
 }

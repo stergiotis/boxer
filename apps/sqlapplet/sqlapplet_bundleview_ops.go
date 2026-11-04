@@ -161,6 +161,26 @@ func BundleViewOps[A any, S any](set *appops.Set[A, S], views func(inst A) map[s
 			}
 			return
 		})
+		if spec.Async {
+			// The view's own play settles it (ADR-0358 §SD2); a view that
+			// went away ends the call rather than leaving it running.
+			appops.SettlesRaw(set, spec.Name, func(inst A, call app.OperationCall, args []byte) (settled bool, result []byte, err error) {
+				vs := operable(inst)
+				name, err := viewNameOf(args, slices.Collect(maps.Keys(vs)))
+				if err != nil {
+					return true, nil, err
+				}
+				p := vs[name].Inner()
+				if p == nil {
+					return true, nil, app.RefuseOperation("the view " + name + " went away while the work ran")
+				}
+				h, ok := p.ServedOperations().(app.OperationsAsyncI)
+				if !ok {
+					return true, nil, app.RefuseOperation("the view " + name + " cannot settle " + target)
+				}
+				return h.SettleAsync(call, target, args)
+			})
+		}
 	}
 }
 

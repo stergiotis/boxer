@@ -827,23 +827,22 @@ func (inst *PlayApp) takeAgentForRun(auto bool) (obo *app.OnBehalfOf) {
 // addRunOps declares run and set_param; playOps' initializer calls it, so
 // they are in the catalog before play registers its manifest.
 func addRunOps(playOps *appops.Set[*PlayLauncher, opsSnap]) {
-	appops.Command(playOps, app.OperationSpec{Name: opRun, Version: 2, Summary: "run the buffer, or one statement of it, under the agent limits",
+	appops.Command(playOps, app.OperationSpec{Name: opRun, Version: 3, Summary: "run the buffer, or one statement of it, under the agent limits",
 		Effect: app.OperationEffectRun, Reads: []string{opsResSql, opsResParams, opsResSignals}, Writes: []string{opsResResult},
 		Agents: true, Gesture: "the Run button",
-		// deferred: run records queuing as its outcome and returns no
-		// handle, and nothing journals a completed entry when the result
-		// lands (ADR-0315 §SD6, §SD8), so it does not declare Async until
-		// it does.
+		// The call stays running until the result lands or the run fails,
+		// and answers with the main result's state (ADR-0358 §SD2).
+		Async:   true,
 		Rebuild: app.OperationRebuildVolatile, Fork: app.OperationForkPerInstance,
-		Follows: []string{"the result replaces the main result; describe_result reads it",
+		Follows: []string{"the result replaces the main result; the call answers with its state when it lands, and describe_result reads it",
 			"a new result drops the Projection pane's run over the old one; publish_projection keeps a run past it",
 			"a run the grant does not cover is refused, naming the destination the grant would have to list",
 			"a run the window's class ceiling would block is refused at the call, with the parameter that raised the class",
 			"statement n ships the SET prelude and that statement, and the checks judge that text; cancel_run stops the run while it is in flight"}},
-		func(inst *PlayLauncher, call app.OperationCall, in RunArgs) (appops.None, error) {
+		func(inst *PlayLauncher, call app.OperationCall, in RunArgs) (out ResultState, err error) {
 			p := inst.inner
 			if p == nil {
-				return appops.None{}, app.RefuseOperation("the window has not mounted")
+				return out, app.RefuseOperation("the window has not mounted")
 			}
 			if call.Writer == opwire.WriterPerson {
 				// The person's Run (ADR-0270 §SD6): no agent limits, and the
@@ -851,16 +850,16 @@ func addRunOps(playOps *appops.Set[*PlayLauncher, opsSnap]) {
 				// the status line, as it always has.
 				p.applyRunShortcut(true, in.Subquery)
 				p.requestStatement = int(in.Statement)
-				return appops.None{}, nil
+				return out, nil
 			}
 			if call.OnBehalfOf == nil {
-				return appops.None{}, app.RefuseOperation("a run through the catalog is an agent's, and carries its context")
+				return out, app.RefuseOperation("a run through the catalog is an agent's, and carries its context")
 			}
 			if strings.TrimSpace(p.sql) == "" {
-				return appops.None{}, app.RefuseOperation("the buffer is empty")
+				return out, app.RefuseOperation("the buffer is empty")
 			}
 			if in.Statement != 0 && in.Subquery {
-				return appops.None{}, app.RefuseOperation("subquery narrows at the person's caret; statement picks a statement without it: pass one of them")
+				return out, app.RefuseOperation("subquery narrows at the person's caret; statement picks a statement without it: pass one of them")
 			}
 			names := p.unfilledInputs()
 			if in.Statement != 0 {
@@ -868,23 +867,33 @@ func addRunOps(playOps *appops.Set[*PlayLauncher, opsSnap]) {
 				// path judges it.
 				stmt, err := p.statementBuffer(int(in.Statement))
 				if err != nil {
-					return appops.None{}, app.RefuseOperation(err.Error())
+					return out, app.RefuseOperation(err.Error())
 				}
 				_, _, names = p.resolveRunSignals(stmt)
 			}
 			if len(names) > 0 {
-				return appops.None{}, app.RefuseOperation("parameters need a value first: " + strings.Join(names, ", "))
+				return out, app.RefuseOperation("parameters need a value first: " + strings.Join(names, ", "))
 			}
-			if err := p.refuseAgentRunCall(call.OnBehalfOf, in.Subquery, int(in.Statement)); err != nil {
-				return appops.None{}, err
+			if err = p.refuseAgentRunCall(call.OnBehalfOf, in.Subquery, int(in.Statement)); err != nil {
+				return out, err
 			}
 			p.markAgent(call.OnBehalfOf)
 			p.agentRunRequested = true
 			p.requestSubquery = in.Subquery
 			p.requestStatement = int(in.Statement)
 			p.RequestRun()
-			return appops.None{}, nil
+			return out, nil
 		})
+	appops.Settles(playOps, opRun, func(inst *PlayLauncher, _ app.OperationCall) (out ResultState, settled bool, err error) {
+		p := inst.inner
+		if p == nil {
+			return out, true, app.RefuseOperation("the window has not mounted")
+		}
+		if p.requestRun || p.graph.MainLoading() {
+			return out, false, nil
+		}
+		return snapshotState(p).Result, true, nil
+	})
 	playOps.Available(opRun, func(sn opsSnap) (bool, string) {
 		if sn.mounted && sn.state.Result.Phase == "running" {
 			return false, "a run is in flight"

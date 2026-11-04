@@ -500,6 +500,15 @@ func (inst *Service) call(msg *app.Msg) (rep wireCallReply) {
 		rep.Outcome = wireOutcomeOf(phaseOutcome(opwire.PhaseRefused, "every call carries a key"), "", "")
 		return
 	}
+	// Outside the lock: the check reads the journal's store.
+	if why := inst.verifyIntent(string(msg.Sender), req); why != "" {
+		refused := phaseOutcome(opwire.PhaseRefused, why)
+		inst.record(nil, &callRec{key: req.Key, instance: req.Instance, turn: req.Turn, cause: causeOf(req),
+			title: boundLabel(req.Title, maxCallTitleRunes), why: boundLabel(req.Reason, maxCallReasonRunes),
+			actor: msg.Sender, actorInstance: msg.SenderInstance}, "dispatch", refused)
+		rep.Outcome = wireOutcomeOf(refused, "", "")
+		return
+	}
 	inst.mu.Lock()
 	t, out, ok, late := inst.resolveLate(req.Handle, msg, true)
 	if !ok {
@@ -835,7 +844,7 @@ func (inst *Service) absorb(t *task, rec *callRec, out opwire.Outcome) {
 			since[r] = out.Seq
 		}
 	}
-	if rec.spec.Class == app.OperationClassCommand && (out.Phase == opwire.PhaseApplied || out.Phase == opwire.PhaseRendered) {
+	if rec.spec.Class == app.OperationClassCommand && (out.Phase == opwire.PhaseApplied || out.Phase == opwire.PhaseRendered || out.Phase == opwire.PhaseRunning || out.Phase == opwire.PhaseCompleted) {
 		// A command's own writes are what the task last saw of them.
 		read := t.lastRead[rec.instance]
 		if read == nil {
@@ -874,6 +883,10 @@ func (inst *Service) outcomeOf(t *task, rec *callRec, wait time.Duration) (w wir
 			if out, ok := inst.cfg.Host.OpsStatus(rec.instance, rec.callId); ok {
 				rec.outcome = out
 				inst.absorb(t, rec, out)
+			} else if rec.outcome.Phase == opwire.PhaseRunning {
+				// No frame of a window that went away will settle it
+				// (ADR-0358 §SD1).
+				rec.outcome = phaseOutcome(opwire.PhaseExpired, "the window went away while the work ran")
 			}
 		}
 		final := rec.outcome.Phase.Final() || (rec.outcome.Phase == opwire.PhaseInputRequired && rec.heldBy == nil)

@@ -152,6 +152,11 @@ func (inst *App) resumeRun(id string) {
 			if err = settleOpenTurn(ctx, w, r.fold.OpenTurn); err != nil {
 				return
 			}
+			// Work a call started outlived it; the process following it
+			// did not (ADR-0358 §SD6).
+			if _, err = settlePending(ctx, w); err != nil {
+				return
+			}
 		}
 		// The artefact: its last export, then the journal's head when it
 		// is later (adopt).
@@ -323,7 +328,7 @@ func resumeLines(r *resumed) (lines []string) {
 		case agentrun.ResolutionNotCompleted:
 			line = "the call " + u.Entry.Name + " did not complete; read again if you need it"
 		case agentrun.ResolutionPending:
-			line = "the command " + u.Entry.Name + " was applied and its completion was not recorded"
+			line = "the command " + u.Entry.Name + " was still running when the host stopped, and its end was not seen; read its state before relying on it"
 		case agentrun.ResolutionAskAgain:
 			line = "a question to the person was not answered; ask it again if it still matters"
 		case agentrun.ResolutionLapsed:
@@ -564,6 +569,9 @@ func transcriptOf(entries []agentrun.Entry) (out []entry) {
 			line := e.Form
 			if line == "" {
 				line = e.Key
+			}
+			if line == agentrun.FormPending {
+				line = e.Key + " · still running when its round ended"
 			}
 			out = append(out, entry{speaker: speakerTool, text: line, atMs: at})
 		}

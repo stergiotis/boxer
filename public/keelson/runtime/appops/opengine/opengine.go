@@ -125,6 +125,10 @@ type Engine struct {
 	drawnAt atomic.Int64
 	clock   func() time.Time
 
+	// running are the Async commands applied and not settled (ADR-0358
+	// §SD1). Render goroutine only.
+	running []*call
+
 	// Render goroutine only.
 	frame       uint64
 	started     bool
@@ -510,12 +514,22 @@ func (inst *Engine) ApplyQueued() {
 	}
 	for _, c := range queue {
 		out := inst.apply(c)
+		held := out
+		async := out.Phase == opwire.PhaseApplied && c.spec.Async
+		if async {
+			// The command applied; its work has not settled. The result
+			// is the settlement's.
+			held.Phase, held.Result = opwire.PhaseRunning, nil
+		}
 		inst.mu.Lock()
 		if c.outcome.Phase == opwire.PhaseAccepted {
-			c.outcome = out
+			c.outcome = held
 		}
 		inst.mu.Unlock()
-		if out.Phase == opwire.PhaseApplied {
+		switch {
+		case async:
+			inst.running = append(inst.running, c)
+		case out.Phase == opwire.PhaseApplied:
 			inst.toBeDrawn = append(inst.toBeDrawn, c)
 		}
 		inst.appendLog(LogEntry{Frame: inst.frame, Writer: c.call.Writer, Op: c.spec.Name, CallId: c.id,
@@ -719,10 +733,48 @@ func (inst *Engine) Gesture(op string, args []byte) (result []byte, err error) {
 // EndFrame runs after the app's Frame: what changed since the command
 // stage, other than through a gesture, is the app's own doing.
 func (inst *Engine) EndFrame() {
+	inst.settleRunning()
 	if changed := inst.observe(opwire.WriterApp, inst.resourceSet); len(changed) > 0 {
 		inst.appendLog(LogEntry{Frame: inst.frame, Writer: opwire.WriterApp, Phase: opwire.PhaseApplied,
 			Resources: changed, Revisions: pick(inst.revs, changed)})
 	}
+}
+
+// errNoSettler fails an Async command whose handler cannot say it settled.
+var errNoSettler = errors.New("the handler cannot settle an asynchronous command")
+
+// settleRunning asks the handler about each Async command still running,
+// after the app's Frame: a run the frame started is in flight by then.
+func (inst *Engine) settleRunning() {
+	if len(inst.running) == 0 {
+		return
+	}
+	h, ok := inst.h.(app.OperationsAsyncI)
+	still := inst.running[:0]
+	for _, c := range inst.running {
+		var settled bool
+		var result []byte
+		var err error
+		if ok {
+			settled, result, err = h.SettleAsync(c.call, c.spec.Name, c.args)
+		} else {
+			err = errNoSettler
+		}
+		if err == nil && !settled {
+			still = append(still, c)
+			continue
+		}
+		out := outcomeOfError(err)
+		if out.Phase == opwire.PhaseUnspecified {
+			out = opwire.Outcome{Phase: opwire.PhaseCompleted, AsOf: inst.frame, Revisions: pick(inst.revs, c.spec.Writes), Result: result, Confined: inst.h.Confined()}
+		}
+		inst.mu.Lock()
+		c.outcome = out
+		inst.mu.Unlock()
+		inst.appendLog(LogEntry{Frame: inst.frame, Writer: c.call.Writer, Op: c.spec.Name, CallId: c.id, Phase: out.Phase, Reason: out.Reason})
+	}
+	clear(inst.running[len(still):])
+	inst.running = still
 }
 
 // Revisions returns the current revisions; render goroutine only.

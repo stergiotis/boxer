@@ -211,9 +211,10 @@ type OperationSpec struct {
 	// The stateful-tool contract (ADR-0315): Rebuild is how what the
 	// command writes comes back after the process is gone (§SD4), Fork how
 	// the operation behaves under fan-out (§SD5), Async that the command
-	// returns a handle and the work settles later as a completed entry
-	// (§SD6), and DryRun names the catalog's query that runs the command's
-	// pure core without committing (§SD7). Each is declared, not enforced:
+	// stays running after it applies until its handler says the work
+	// settled (ADR-0358 §SD1, [OperationsAsyncI]), and DryRun names the
+	// catalog's query that runs the command's pure core without committing
+	// (§SD7). Rebuild, Fork and DryRun are declared, not enforced:
 	// unspecified is allowed and shown as such.
 	Rebuild OperationRebuildE
 	Fork    OperationForkE
@@ -494,6 +495,16 @@ type OperationsHandlerI interface {
 	// one after each command stage and answers queries from the latest
 	// snapshot off the render goroutine.
 	Snapshot() (s OperationsSnapshotI)
+}
+
+// OperationsAsyncI is implemented by a handler whose catalog declares an
+// Async command (ADR-0358 §SD1). The host asks once per frame, after the
+// app's Frame, for each such call still running; it runs on the render
+// goroutine, where a frame-driven app already looks at its own state. A
+// call settles with result, CBOR of the declared result type, or with err
+// as a refusal or a failure. args are the call's, as the command took them.
+type OperationsAsyncI interface {
+	SettleAsync(call OperationCall, name string, args []byte) (settled bool, result []byte, err error)
 }
 
 // OperationsSnapshotI is an immutable view of an instance; safe for use

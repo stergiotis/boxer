@@ -367,6 +367,9 @@ type CallRequest struct {
 	ModelCall string
 	ToolCall  string
 	ToolIndex uint32
+	// Journal is the key of the intent entry written before the call, which
+	// a call stating a ModelCall must name (ADR-0358 §SD7).
+	Journal string
 	// Tier is the run's current TLP tier (agentrun.TierE), which the
 	// coordinator declares on every call so that the work the call causes
 	// carries it to the walls that read one (ADR-0312 §SD4).
@@ -399,7 +402,7 @@ func callReply(rep wireCallReply, err error) (out Outcome, rerr error) {
 func (inst *Client) Call(ctx context.Context, r CallRequest) (out Outcome, err error) {
 	return callReply(roundTrip[wireCall, wireCallReply](ctx, inst, SubjectCall, wireCall{V: wireVersion, Handle: r.Handle,
 		Instance: r.Instance, Operation: r.Operation, Args: r.Args, Expects: r.Expects, Key: r.Key, Reason: r.Reason, Title: r.Title,
-		Turn: r.Turn, ModelCall: r.ModelCall, ToolCall: r.ToolCall, ToolIndex: r.ToolIndex, Tier: r.Tier}))
+		Turn: r.Turn, ModelCall: r.ModelCall, ToolCall: r.ToolCall, ToolIndex: r.ToolIndex, Tier: r.Tier, Journal: r.Journal}))
 }
 
 // Status reads a call's or a capture's phase by key, waiting up to wait

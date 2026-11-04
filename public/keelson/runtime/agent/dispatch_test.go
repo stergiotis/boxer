@@ -334,6 +334,9 @@ func newRigWith(t *testing.T, configure func(cfg *Config)) *rig {
 	require.NoError(t, err)
 	cfg := Config{Registry: reg, Host: host}
 	configure(&cfg)
+	if cfg.Journal == nil {
+		cfg.Journal = AcceptAnyIntent{}
+	}
 	svc, err := NewService(bus, zerolog.Nop(), cfg)
 	require.NoError(t, err)
 	t.Cleanup(svc.Close)

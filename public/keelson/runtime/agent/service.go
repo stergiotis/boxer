@@ -31,6 +31,10 @@ type Config struct {
 	// Host is the window host whose instances calls reach; nil leaves every
 	// service past describe refusing.
 	Host HostI
+	// Journal verifies the intent entry a call a model asked for names
+	// (ADR-0358 §SD7). Nil refuses every such call; a test of what lies
+	// behind the check names AcceptAnyIntent.
+	Journal IntentCheckerI
 	// TestGrants lets request issue a grant without the person's approval
 	// (ADR-0269 §SD6 "Test grants"). The host sets it only on the headless
 	// host and only when TestGrantsEnv asks for it.

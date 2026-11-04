@@ -46,6 +46,9 @@ func undeclaredWrites(entries []LogEntry) (out []UndeclaredWrite) {
 	for i := range entries {
 		e := &entries[i]
 		switch {
+		case e.Op != "" && e.Phase == opwire.PhaseCompleted:
+			// An asynchronous command's settlement is not a new command:
+			// what follows is still that command's work (ADR-0358 §SD1).
 		case e.Op != "":
 			cmd = nil
 			if e.Phase == opwire.PhaseApplied {

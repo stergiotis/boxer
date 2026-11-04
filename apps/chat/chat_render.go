@@ -470,6 +470,17 @@ func (inst *App) renderComposer() {
 			c.LabelAtoms(c.Atoms().BeginRichText(line).Small().End().Keep()).Wrap().Selectable(true).Send()
 		}
 	}
+	if inst.coord != nil {
+		if running, waiting := inst.coord.pendingNow(); running > 0 || waiting > 0 {
+			line := plural(running, "operation") + " running in the background"
+			if waiting > 0 {
+				line = plural(waiting, "result") + " waiting for your next message, " + line
+			}
+			for rt := range c.RichTextLabel(line) {
+				rt.Small().Weak()
+			}
+		}
+	}
 	if inst.editing != nil {
 		for range c.HorizontalTop().KeepIter() {
 			for rt := range c.RichTextLabel(icons.PhPencilSimple + " Editing your last message: sending replaces its answer.") {
@@ -543,6 +554,9 @@ func (inst *App) renderComposer() {
 	}
 	if cancel {
 		inst.turn.Cancel()
+		if inst.coord != nil {
+			inst.coord.holdWakes()
+		}
 	}
 	// The chord is read for the whole process; only the focused window acts
 	// on it, so two open chats do not both send (play's claimRunChord).
@@ -697,7 +711,7 @@ func (inst *App) renderActions(i int, e *entry) {
 			inst.copyText("the message", e.text)
 		}
 		switch {
-		case e.speaker == speakerUser && i == last && e.failed:
+		case e.speaker == speakerUser && i == last && e.failed && !e.woken:
 			if action("retry", atomsRetry, tipRetry) {
 				inst.later = append(inst.later, inst.retry)
 			}
@@ -823,8 +837,9 @@ func transcriptModel(conv *conversation, mark int, pending bool, nowMs int64) (m
 		if i == mark {
 			add(e.atMs, -1, "new since you looked", chatview.FlagSystem|chatview.FlagMarker, chatview.StatusNone, ordinalKind{entry: -1, mark: true})
 		}
-		if e.speaker == speakerTool {
-			// The coordinator's activity: a tool call and how it ended.
+		if e.speaker == speakerTool || e.woken {
+			// The coordinator's activity: a tool call and how it ended, or
+			// why a turn started with nobody asking.
 			add(e.atMs, -1, "⚙ "+e.text, chatview.FlagSystem, chatview.StatusNone, ordinalKind{entry: i})
 			continue
 		}

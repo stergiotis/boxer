@@ -31,7 +31,7 @@ used, with one call each.
 {"do":"wait","valueContains":"→ scripted","role":"label"}
 {"do":"click","contains":"Send","role":"button","comment":"turn 1, the seeded draft"}
 {"do":"wait","valueContains":"Play runs the query","role":"label","settleMs":1500}
-{"do":"wait","valueContains":"⚙ run in window 2 · rendered","role":"label"}
+{"do":"wait","valueContains":"⚙ run in window 2 · completed","role":"label"}
 {"do":"click","name":"Window","comment":"play opened over the chat: lay the two side by side"}
 {"do":"click","contains":"Side by side"}
 {"do":"key","text":"Escape","comment":"close the menu"}

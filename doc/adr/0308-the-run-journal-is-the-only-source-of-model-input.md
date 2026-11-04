@@ -350,6 +350,22 @@ See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-d
 
 ## Updates
 
+### 2026-11-04 — SD2 has a guard, for what leaves through the host
+
+SD2 held because the chat wrote its entries in order; nothing checked. The model
+service now refuses a call that does not name its request entry, and the
+dispatcher a model-asked call that does not name its intent
+([ADR-0357](./0357-a-model-call-names-the-journal-entry-written-before-it.md),
+[ADR-0358](./0358-asynchronous-operations-a-pending-outcome-and-a-turn-a-completion-wakes.md)
+§SD7, both proposed). The package comment's claim that an unknown act "cannot
+happen" overstated SD2 and is corrected there. That the journal is the *only*
+source of a request (SD3) remains the coordinator's to hold: `Resume.LastRequest`
+was added for a resume to compare digests, and no caller compares them.
+
+A turn entry no longer settles an act that form `pending` marks, since such work
+is meant to outlive its turn (ADR-0358 §SD6); §SD4's "settled for good" holds for
+the rest.
+
 ### 2026-10-11 — SD8: a tombstone is the entry at its next revision
 
 The entry table binds the record store's Revision role (ADR-0100's Update of

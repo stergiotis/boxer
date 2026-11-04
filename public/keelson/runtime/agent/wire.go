@@ -210,6 +210,9 @@ type wireCall struct {
 	ModelCall string `json:"model_call,omitempty"`
 	ToolCall  string `json:"tool_call,omitempty"`
 	ToolIndex uint32 `json:"tool_index,omitempty"`
+	// Journal is the key of the intent entry written before the call
+	// (ADR-0358 §SD7).
+	Journal string `json:"journal,omitempty"`
 	// Tier is the run's current TLP tier as the coordinator declares it
 	// (ADR-0312 §SD4); recorded, stamped on the on-behalf-of context and
 	// attested back to a wall that asks.

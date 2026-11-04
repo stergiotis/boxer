@@ -434,7 +434,7 @@ func (inst *coordinator) check(ctx context.Context, o toolOrigin, toolCall strin
 	title, tier := inst.curTitle, inst.curTier
 	inst.mu.Unlock()
 	out, err := inst.cli.Call(ctx, agent.CallRequest{Handle: h, Instance: src.window, Operation: opCheck, Args: string(argsJSON), Key: key,
-		Reason: "check: " + a.Says, Title: title, Turn: o.turn, ModelCall: o.modelCall, ToolCall: toolCall, ToolIndex: uint32(max(o.index, 0)), Tier: uint8(tier)})
+		Reason: "check: " + a.Says, Title: title, Turn: o.turn, ModelCall: o.modelCall, ToolCall: toolCall, ToolIndex: uint32(max(o.index, 0)), Journal: o.journal, Tier: uint8(tier)})
 	if err == nil {
 		out, err = inst.settle(ctx, h, key, out)
 	}

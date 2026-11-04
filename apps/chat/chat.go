@@ -337,6 +337,7 @@ func (inst *App) drain() {
 		}
 		inst.model, inst.answered = llm.Description{Reason: reason}, true
 	}
+	inst.syncWake()
 	p := inst.pending
 	if p == nil {
 		return
@@ -422,12 +423,44 @@ func (inst *App) startTurn(text string) (started bool) {
 	if !conv.started {
 		conv.keep, conv.apps, conv.questions, conv.artefact = inst.keep, inst.apps, inst.questions, inst.artefact
 	}
-	req := conv.request(text)
-	cli := inst.cli
 	coord := inst.coord
 	if coord == nil {
 		return false
 	}
+	req := conv.request(text)
+	if !inst.launchTurn(req, coord) {
+		return false
+	}
+	coord.personSpoke()
+	conv.begin(text, time.Now().UnixMilli(), inst.editedNext)
+	inst.pending = &pendingTurn{req: req, started: time.Now()}
+	inst.editing, inst.editedNext = nil, false
+	// The waiting bubble is at the end: follow it.
+	inst.view.SetFollow(true)
+	return true
+}
+
+// syncWake starts a turn when finished work waits for the model and nothing
+// else is going on (ADR-0358 §SD5).
+func (inst *App) syncWake() {
+	coord := inst.coord
+	// Not while the person edits a message they took back: the turn they
+	// are about to send takes the completion with it.
+	if inst.cli == nil || coord == nil || inst.pending != nil || inst.editing != nil || inst.conv.stranded || inst.deleting == inst.conv.id || !coord.wakeDue() {
+		return
+	}
+	req := inst.conv.requestWake()
+	if !inst.launchTurn(req, coord) {
+		return
+	}
+	inst.conv.beginWake(coord.noteWake(), time.Now().UnixMilli())
+	inst.pending = &pendingTurn{req: req, started: time.Now()}
+}
+
+// launchTurn starts req's turn on the coordinator.
+func (inst *App) launchTurn(req llm.Request, coord *coordinator) (started bool) {
+	conv := inst.conv
+	cli := inst.cli
 	conv.coord = coord
 	// The last turn's steps are not this one's.
 	coord.steps.reset()
@@ -450,15 +483,7 @@ func (inst *App) startTurn(text string) (started bool) {
 				report(uint64(round+1), uint64(limit), note)
 			})
 		})
-	if !ok {
-		return false
-	}
-	conv.begin(text, time.Now().UnixMilli(), inst.editedNext)
-	inst.pending = &pendingTurn{req: req, started: time.Now()}
-	inst.editing, inst.editedNext = nil, false
-	// The waiting bubble is at the end: follow it.
-	inst.view.SetFollow(true)
-	return true
+	return ok
 }
 
 // newCoordinator is a coordinator for a conversation, writing its journal

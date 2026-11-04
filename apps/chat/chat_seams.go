@@ -29,7 +29,8 @@ import (
 //     person's message; the context injector is its one element, and what
 //     it composes is written to the journal as note entries.
 //   - request configuration, a chain: how one round's request is shaped
-//     from the projection; the round's tools and label, then compaction
+//     from the projection; what settled since the last round (chat_async.go),
+//     the round's tools and label, then compaction
 //     (chat_compact.go), then the last round.
 //   - request-error recovery, a first claim: what a failed model call
 //     means for the turn; one claimant maps an error after tool activity
@@ -207,6 +208,9 @@ type requestState struct {
 // tools, projects the journal and gives the request the round's messages,
 // label, parent and round.
 func configureRound(s *requestState) {
+	if s.err != nil {
+		return
+	}
 	if s.confine, s.err = s.coord.bindPixelsJournal(s.jctx, s.w); s.err != nil {
 		return
 	}
@@ -353,12 +357,19 @@ func (sequentialTools) run(s *roundState) {
 		effect := coord.effectOf(s.ctx, tc.Name, tc.Arguments)
 		// The intent names the task the call runs under, so law L15 can
 		// match a grant to the calls it admitted.
-		if _, s.err = s.coord.append(s.jctx, s.w, agentrun.Entry{Kind: agentrun.KindIntent, Key: o.key(), Name: tc.Name, Arguments: tc.Arguments,
+		var intent []agentrun.Entry
+		if intent, s.err = s.coord.append(s.jctx, s.w, agentrun.Entry{Kind: agentrun.KindIntent, Key: o.key(), Name: tc.Name, Arguments: tc.Arguments,
 			Effect: effect, Form: coord.handle(), Turn: s.turn, Label: harnessLabel()}); s.err != nil {
 			return
 		}
+		o.journal = llm.JournalKey(s.w.Run().Id, intent[0].Ordinal)
 		step := coord.steps.begin(turnStep{kind: stepTool, round: s.round, name: tc.Name, title: coord.peekTitle(tc), args: indentArgs(tc.Arguments), effect: effect})
 		content, activity := coord.exec(s.ctx, o, tc)
+		pending := coord.takePending()
+		form := activity
+		if pending != nil {
+			form = agentrun.FormPending
+		}
 		coord.steps.finish(step, func(st *turnStep) {
 			st.result, st.activity, st.refused = clip(content, stepResultMax), activity, strings.HasPrefix(content, "error:")
 		})
@@ -380,8 +391,11 @@ func (sequentialTools) run(s *roundState) {
 			}
 		}
 		if _, s.err = s.coord.append(s.jctx, s.w, agentrun.Entry{Kind: agentrun.KindOutcome, Key: o.key(), Name: tc.Id, Role: projection.RoleTool, Body: content,
-			Form: activity, Turn: s.turn, Label: outcomeLabel(untrusted, confined, coord.confinedTier).Join(writer.label), WriterRun: writer.run, WriterTurn: writer.turn, WriterOrdinal: writer.ordinal}); s.err != nil {
+			Form: form, Turn: s.turn, Label: outcomeLabel(untrusted, confined, coord.confinedTier).Join(writer.label), WriterRun: writer.run, WriterTurn: writer.turn, WriterOrdinal: writer.ordinal}); s.err != nil {
 			return
+		}
+		if pending != nil {
+			coord.watch(s.w, *pending)
 		}
 	}
 	if e, ok := coord.takeShownEntry(s.turn); ok {
@@ -410,6 +424,7 @@ var turnSeamsNow = sync.OnceValue(func() (s turnSeams) {
 		panic(err)
 	}
 	if s.configure, err = harness.NewChain(
+		harness.Element[func(*requestState)]{Name: "completions", Order: 5, Fn: configureCompletions},
 		harness.Element[func(*requestState)]{Name: "round", Order: 10, Fn: configureRound},
 		harness.Element[func(*requestState)]{Name: "supersede", Order: 12, Fn: configureSupersede},
 		harness.Element[func(*requestState)]{Name: "compact", Order: 15, Fn: configureCompaction},
@@ -473,7 +488,12 @@ func runTurn(ctx context.Context, cli completerI, coord *coordinator, req llm.Re
 	if n := len(req.Messages); n > 0 && req.Messages[n-1].Role == openaichat.ChatRoleUser {
 		text = req.Messages[n-1].Content
 	}
-	entries := append(in.notes, agentrun.Entry{Kind: agentrun.KindUser, Role: projection.RoleUser, Body: text, Turn: req.Turn, Label: harnessLabel()})
+	entries := in.notes
+	if len(req.Messages) > 0 {
+		// A turn a completion started has no message of the person's
+		// (ADR-0358 §SD5): the note the first round writes is its input.
+		entries = append(entries, agentrun.Entry{Kind: agentrun.KindUser, Role: projection.RoleUser, Body: text, Turn: req.Turn, Label: harnessLabel()})
+	}
 	if _, err = coord.append(jctx, w, entries...); err != nil {
 		return
 	}

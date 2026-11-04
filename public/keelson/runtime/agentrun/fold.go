@@ -1,5 +1,7 @@
 package agentrun
 
+import "slices"
+
 // The resume fold (ADR-0308 §SD4; ADR-0303 §SD3, superseded by ADR-0308):
 // what a run's journal
 // says about acts begun and not settled, read in order and settled each by
@@ -129,7 +131,9 @@ func Fold(entries []Entry) (r Resume) {
 		case KindTurn:
 			r.Turns++
 			turnOpen = ""
-			r.Unsettled = nil
+			// A turn settles what it left open, except work meant to outlive
+			// it (ADR-0358 §SD6).
+			r.Unsettled = slices.DeleteFunc(r.Unsettled, func(u Unsettled) bool { return u.Resolution != ResolutionPending })
 		case KindRequest:
 			r.LastRequest = &entries[i]
 			if !replies[e.Key] {

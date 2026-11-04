@@ -4,8 +4,11 @@
 // a row of its own (the run row) and an ordered, typed, labelled, chained
 // sequence of entries; the coordinator is the run's single writer (§SD9),
 // assigns ordinals, computes each entry's chain digest (ADR-0314 §SD1)
-// before the append and flushes before the act leaves (§SD2), so an act
-// the journal does not know of cannot happen.
+// before the append and flushes before the act leaves (§SD2). The host holds
+// a coordinator to that for what leaves through it: a model call names its
+// request entry (ADR-0357), and an operation call a model asked for its
+// intent (ADR-0358 §SD7). What the package cannot see, it cannot refuse: the
+// entries' truth is the coordinator's.
 //
 // The package holds the entry kinds (a closed enum with a golden, §SD2),
 // the label every entry carries (ADR-0311 §SD1), the chain digest, the

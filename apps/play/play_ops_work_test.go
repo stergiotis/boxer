@@ -40,7 +40,7 @@ func TestWorkOpsCatalogEntries(t *testing.T) {
 		assert.Equal(t, c.gesture, spec.Gesture != "", c.name)
 	}
 	run, _ := m.Operations.Lookup(opRun)
-	assert.EqualValues(t, 2, run.Version, "run gained Statement")
+	assert.EqualValues(t, 3, run.Version, "run answers when its result lands (ADR-0358 §SD2)")
 	proj, _ := m.Operations.Lookup(opGetProjection)
 	assert.EqualValues(t, 3, proj.Version, "get_projection returns points only on request")
 	pub, _ := m.Operations.Lookup(opPublishProjection)

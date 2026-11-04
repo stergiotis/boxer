@@ -7,6 +7,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/rs/zerolog/log"
 	"lukechampine.com/blake3"
@@ -83,6 +84,14 @@ type ProfileT struct {
 	// prefix. Zero writes none.
 	SupersededReads     []string
 	SupersedeBatchBytes int
+	// CallWait bounds how long a tool call waits for its call to settle
+	// when it does not wait on the person; an Async call still running then
+	// is pending (ADR-0358 §SD3). PendingMax bounds how long a pending call
+	// is followed, and WakesMax how many turns completions may start since
+	// the person last spoke (§SD4, §SD5).
+	CallWait   time.Duration
+	PendingMax time.Duration
+	WakesMax   int
 	// AnchorCadence is when the run's chain heads are shipped to the
 	// anchor store (ADR-0314 §SD3). It shapes the record, not what the
 	// model reads, so it is outside the fingerprint.
@@ -131,6 +140,9 @@ func (inst ProfileT) Validate() (err error) {
 	case "none", "ask", "ask-once", "captures":
 	default:
 		return eb.Build().Str("pixels", inst.PixelsMax).Errorf("no such Pixels level")
+	}
+	if inst.CallWait <= 0 || inst.PendingMax <= 0 || inst.WakesMax < 0 {
+		return eb.Build().Str("call_wait", inst.CallWait.String()).Str("pending_max", inst.PendingMax.String()).Int("wakes_max", inst.WakesMax).Errorf("the call limits are out of range")
 	}
 	if inst.CompactTriggerPercent < 1 || inst.CompactTriggerPercent > 100 || inst.CompactContextFloor <= 0 {
 		return eb.Build().Int("percent", inst.CompactTriggerPercent).Int64("floor", inst.CompactContextFloor).Errorf("the compaction trigger is not a share of a context")
@@ -182,6 +194,7 @@ func (inst ProfileT) Fingerprint() string {
 	w("rounds", strconv.Itoa(inst.RoundsMin), strconv.Itoa(inst.RoundsMax))
 	w("pixels", inst.PixelsMax, strconv.FormatBool(inst.PixelsLocalRequired))
 	w("images", strconv.FormatInt(inst.ImageBudgetBytes, 10), strconv.FormatInt(inst.ImageBudgetCount, 10), strconv.FormatInt(inst.ImageMaxPixels, 10))
+	w("async", inst.CallWait.String(), inst.PendingMax.String(), strconv.Itoa(inst.WakesMax))
 	c := inst.Compact
 	w("compact", strconv.Itoa(inst.CompactTriggerPercent), strconv.FormatInt(inst.CompactContextFloor, 10), strconv.Itoa(c.KeepTurns), strconv.Itoa(c.PinBytes), strconv.Itoa(c.ElideMinBytes),
 		strconv.FormatInt(c.SummaryTokens, 10), strconv.FormatInt(c.TailTokens, 10), strconv.FormatInt(c.RoundMarginTokens, 10))
@@ -200,6 +213,7 @@ func defaultProfile() (p ProfileT) {
 	p = ProfileT{Id: defaultProfileId, PromptBook: promptBookId,
 		Inject: s.inject.Names(), Configure: s.configure.Names(), Recover: s.recover.Names(), ToolMode: mode, Stop: s.stop.Names(),
 		PixelsMax: PixelsMaxEnv.Get(), PixelsLocalRequired: PixelsLocalRequiredEnv.Get(),
+		CallWait: CallWaitEnv.Get(), PendingMax: PendingMaxEnv.Get(), WakesMax: int(WakesMaxEnv.Get()),
 		ImageBudgetBytes: ImageBudgetBytes.Get(), ImageBudgetCount: ImageBudgetCount.Get(), ImageMaxPixels: ImageMaxPixels.Get(),
 		Compact:               projection.Constants{KeepTurns: 2, PinBytes: 4096, ElideMinBytes: 512, SummaryTokens: 1024, TailTokens: 2048, RoundMarginTokens: 1024},
 		CompactTriggerPercent: 70, CompactContextFloor: 16384, AnchorCadence: headstore.DefaultCadence(),
@@ -213,6 +227,30 @@ func defaultProfile() (p ProfileT) {
 	}
 	return
 }
+
+// The limits on calls and on what outlives them (ADR-0358). Each is a limit
+// of the profile, so changing one changes the fingerprint, and a run started
+// under another value resumes read-only.
+var (
+	CallWaitEnv = env.NewDuration(env.Spec{
+		Name:        "BOXER_CHAT_CALL_WAIT",
+		Default:     "10s",
+		Description: "how long a chat's tool call waits for its operation to settle, when it does not wait on the person; after that an asynchronous operation is followed in the background and any other reports the phase it reached (ADR-0358)",
+		Category:    env.CategoryE("boxer-chat"),
+	})
+	PendingMaxEnv = env.NewDuration(env.Spec{
+		Name:        "BOXER_CHAT_PENDING_MAX",
+		Default:     "1h",
+		Description: "how long a chat follows an asynchronous operation in the background before it records that no end was seen (ADR-0358)",
+		Category:    env.CategoryE("boxer-chat"),
+	})
+	WakesMaxEnv = env.NewInt(env.Spec{
+		Name:        "BOXER_CHAT_WAKES_MAX",
+		Default:     "4",
+		Description: "how many turns finished background work may start in a chat since the person last spoke; past it, results wait for their next message, and 0 means they always do (ADR-0358)",
+		Category:    env.CategoryE("boxer-chat"),
+	})
+)
 
 // ProfileEnv selects the harness profile a chat runs under (ADR-0009: a
 // variable selects, it does not toggle); one profile is registered.
@@ -267,6 +305,7 @@ func (inst ProfileT) fields() map[string]string {
 		"compact_keep_turns": strconv.Itoa(c.KeepTurns), "compact_pin_bytes": strconv.Itoa(c.PinBytes), "compact_elide_min_bytes": strconv.Itoa(c.ElideMinBytes),
 		"compact_summary_tokens": strconv.FormatInt(c.SummaryTokens, 10), "compact_tail_tokens": strconv.FormatInt(c.TailTokens, 10), "compact_round_margin_tokens": strconv.FormatInt(c.RoundMarginTokens, 10),
 		"anchor_cadence": inst.AnchorCadence.String(),
+		"call_wait":      inst.CallWait.String(), "pending_max": inst.PendingMax.String(), "wakes_max": strconv.Itoa(inst.WakesMax),
 	}
 }
 

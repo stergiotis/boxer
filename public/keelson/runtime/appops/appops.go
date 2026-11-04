@@ -35,6 +35,7 @@ type None struct{}
 var typeNone = reflect.TypeFor[None]()
 
 type commandFn[A any] func(inst A, call app.OperationCall, args []byte) (result []byte, err error)
+type settleFn[A any] func(inst A, call app.OperationCall, args []byte) (settled bool, result []byte, err error)
 type queryFn[S any] func(snap S, mounted map[string]any, args []byte) (result []byte, err error)
 type readFn[S any] func(snap S, call app.OperationCall, args []byte) (result []byte, confined bool, err error)
 
@@ -47,6 +48,7 @@ type Set[A any, S any] struct {
 	restore   map[string]func(inst A, v any) bool
 	ops       []app.OperationSpec
 	commands  map[string]commandFn[A]
+	settles   map[string]settleFn[A]
 	queries   map[string]queryFn[S]
 	reads     map[string]readFn[S]
 	avail     map[string]func(snap S) (ok bool, reason string)
@@ -147,6 +149,30 @@ func Command[A any, S any, In any, Out any](set *Set[A, S], spec app.OperationSp
 		result, err = encodeResult(spec.Name, out)
 		return
 	}
+}
+
+// Settles says when the work of the Async command name has settled, and
+// with what result (ADR-0358 §SD1). A command declaring Async must have one;
+// [Set.Bind] panics otherwise, since the call could never end. fn runs once
+// per frame on the render goroutine while the call runs.
+func Settles[A any, S any, Out any](set *Set[A, S], name string, fn func(inst A, call app.OperationCall) (out Out, settled bool, err error)) {
+	SettlesRaw(set, name, func(inst A, call app.OperationCall, _ []byte) (settled bool, result []byte, err error) {
+		var out Out
+		if out, settled, err = fn(inst, call); !settled || err != nil {
+			return
+		}
+		result, err = encodeResult(name, out)
+		return
+	})
+}
+
+// SettlesRaw is [Settles] for a [MountedCommandRaw]: fn takes the call's
+// encoded arguments and returns the encoded result.
+func SettlesRaw[A any, S any](set *Set[A, S], name string, fn func(inst A, call app.OperationCall, args []byte) (settled bool, result []byte, err error)) {
+	if set.settles == nil {
+		set.settles = make(map[string]settleFn[A])
+	}
+	set.settles[name] = fn
 }
 
 // Query declares a query and its handler. Class is always query, since the
@@ -325,6 +351,11 @@ func (inst *Set[A, S]) Names() (names []string) {
 // Bind serves the catalog for one instance; the instance returns it from
 // its Operations method.
 func (inst *Set[A, S]) Bind(a A) (h app.OperationsHandlerI) {
+	for _, spec := range inst.ops {
+		if _, ok := inst.settles[spec.Name]; spec.Async && !ok {
+			panic("appops: the Async command " + spec.Name + " has no Settles")
+		}
+	}
 	h = &bound[A, S]{set: inst, inst: a}
 	return
 }
@@ -370,6 +401,14 @@ func (inst *bound[A, S]) ApplyCommand(call app.OperationCall, name string, args 
 	}
 	result, err = fn(inst.inst, call, args)
 	return
+}
+
+func (inst *bound[A, S]) SettleAsync(call app.OperationCall, name string, args []byte) (settled bool, result []byte, err error) {
+	fn, ok := inst.set.settles[name]
+	if !ok {
+		return true, nil, eb.Build().Str("operation", name).Errorf("appops: no such asynchronous command")
+	}
+	return fn(inst.inst, call, args)
 }
 
 func (inst *bound[A, S]) Snapshot() (s app.OperationsSnapshotI) {

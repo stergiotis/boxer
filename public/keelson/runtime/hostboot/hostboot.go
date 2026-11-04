@@ -1092,6 +1092,10 @@ func (rt *Runtime) bootAgent() {
 		Trail: rt.Trail, Coordinators: agent.ParseCoordinators(agent.CoordinatorsEnv.Get()), Deadline: agent.DeadlineEnv.Get(),
 		RequestTimeout: agent.RequestTimeoutEnv.Get(),
 		Pace:           agent.PaceEnv.Get(), CallsMin: int(agent.CallsMinEnv.Get()), CallsMax: int(agent.CallsMaxEnv.Get())}
+	// A call a model asked for names its intent (ADR-0358 §SD7). The
+	// dispatcher boots before the journal, so the store is read per call;
+	// without it every such call is refused.
+	cfg.Journal = runIntents{rt: rt}
 	// The unattended mode (ADR-0298) exists only in a binary built for it;
 	// elsewhere the variable is refused, loudly.
 	cfg.Unattended = agent.Unattended && agent.UnattendedEnv.Get()
@@ -1418,6 +1422,17 @@ func (rt *Runtime) statusSnapshot() (s *runtimestatus.Snapshot) {
 	// where the person looks (ADR-0330's Update of 2026-10-30).
 	s.TrailNotDurable = rt.Trail.NotDurable()
 	return
+}
+
+// runIntents checks a call's intent against the runtime's journal store,
+// which is set after the dispatcher starts and before any call reaches it.
+type runIntents struct{ rt *Runtime }
+
+func (inst runIntents) CheckIntent(ctx context.Context, sender string, key string, callKey string) (err error) {
+	if inst.rt.AgentRuns == nil {
+		return eh.Errorf("no run journal is wired to the dispatcher")
+	}
+	return agent.StoreIntents(inst.rt.AgentRuns).CheckIntent(ctx, sender, key, callKey)
 }
 
 // bootAgentRun starts the run journal service (ADR-0308 §SD1, §SD10): its

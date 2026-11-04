@@ -40,6 +40,10 @@ type entry struct {
 	// edited marks a message sent again after Edit, in place of the turn it
 	// replaced.
 	edited bool
+	// woken marks the place of a user message in a turn finished work
+	// started: nobody said it (ADR-0358 §SD5). It reads as a line of the
+	// host's, and cannot be edited or sent again.
+	woken bool
 	// stopped marks a user message whose turn called tools and then ended
 	// without an answer: its calls happened, unlike a failed turn's.
 	stopped bool
@@ -228,6 +232,20 @@ func (inst *conversation) request(text string) (r llm.Request) {
 	return
 }
 
+// requestWake is the call for a turn finished work starts: no message, since
+// the note the first round writes is its input.
+func (inst *conversation) requestWake() (r llm.Request) {
+	r = inst.request("")
+	r.Messages = nil
+	return
+}
+
+// beginWake shows that a turn started with nobody asking, and why.
+func (inst *conversation) beginWake(line string, atMs int64) {
+	inst.artBefore, _ = inst.art.head()
+	inst.entries = append(inst.entries, entry{speaker: speakerUser, text: line, atMs: atMs, woken: true})
+}
+
 // begin shows the user's message as sent; edited marks it as an edit of
 // a turn taken back.
 func (inst *conversation) begin(text string, atMs int64, edited bool) {
@@ -260,7 +278,7 @@ func (inst *conversation) lastUser() (i int) {
 
 // canRewind says the last turn was answered and can be taken back.
 func (inst *conversation) canRewind() bool {
-	return inst.mark != nil && inst.mark.user == inst.lastUser()
+	return inst.mark != nil && inst.mark.user == inst.lastUser() && !inst.entries[inst.mark.user].woken
 }
 
 // rewind takes the last answered turn back: the transcript and the parent

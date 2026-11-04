@@ -129,16 +129,16 @@ func TestAnAgentDrivesAnOperableBundleView(t *testing.T) {
 	}()
 	r.person(true, nil)
 	<-widened
+	// A run stays running until its result lands (ADR-0358 §SD2). This rig
+	// never draws the view's play, so the run is requested and goes no
+	// further: running is where it stays.
 	out = call("run2", "bundle_run", `{"bundle_view":"items"}`)
-	if out.Phase == "accepted" {
-		require.Eventually(t, func() bool {
-			r.host.frameWith(key, rcv.view.Sync)
-			st, _ := r.cli.Status(ctx, g.Handle, "run2", 0)
-			return st.Final()
-		}, 5*time.Second, 5*time.Millisecond)
+	require.Eventually(t, func() bool {
+		r.host.frameWith(key, rcv.view.Sync)
 		out, _ = r.cli.Status(ctx, g.Handle, "run2", 0)
-	}
-	assert.Contains(t, []string{"applied", "rendered"}, out.Phase, out.Reason)
+		return out.Phase != "accepted"
+	}, 5*time.Second, 5*time.Millisecond)
+	assert.Equal(t, "running", out.Phase, out.Reason)
 }
 
 func e2eStream(t *testing.T, vals ...int64) []byte {

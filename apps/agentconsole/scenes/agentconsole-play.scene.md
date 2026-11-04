@@ -56,7 +56,7 @@ turn does not refresh what the task read, so it reads again before writing.
 {"do":"key","text":"A","modifiers":16}
 {"do":"type","id":7028873545952381604,"text":"{}"}
 {"do":"click","name":"Call","role":"button","comment":"k3: the run, under the agent limits"}
-{"do":"wait","valueContains":"k3 · run · rendered","role":"label","settleMs":2000}
+{"do":"wait","valueContains":"k3 · run · completed","role":"label","settleMs":2000}
 {"do":"focus","id":17222585601186924707}
 {"do":"key","text":"A","modifiers":16}
 {"do":"type","id":17222585601186924707,"text":"describe_result"}

@@ -97,10 +97,6 @@ func (inst *coordinator) extendRounds(limit int) (extended int) {
 	return min(limit+more, max(limit, hi))
 }
 
-// callWait bounds how long a tool call waits for its call to settle while
-// the call does not wait on the person.
-const callWait = 10 * time.Second
-
 const (
 	untrustedOpen  = "<<untrusted source=\""
 	untrustedClose = "<<end untrusted>>"
@@ -239,8 +235,19 @@ type coordinator struct {
 	// lastWriter is who wrote the running call's result when a model did,
 	// and lastDecided who decided the call when the person was asked
 	// (chat_endorse.go).
-	lastWriter  writerRef
-	lastDecided string
+	lastWriter writerRef
+	// lastPending is the running call's pending work, for the round to
+	// follow once its outcome is written (ADR-0358 §SD3).
+	lastPending *pendingCall
+	// pendingCalls are the calls a watcher follows, by key; inbox the
+	// settled ones the model has not been told of; wakes the turns they
+	// started since the person last spoke, and wakesHeld that their Stop
+	// withholds more (ADR-0358 §SD4, §SD5).
+	pendingCalls map[string]pendingCall
+	inbox        []completion
+	wakes        int
+	wakesHeld    bool
+	lastDecided  string
 	// scope is the conversation's lifetime (ADR-0322, proposed): a turn
 	// counts itself in, retire retires it, and the run closes once the last
 	// turn has written its tail (chat_journal.go retire). A child of the
@@ -262,7 +269,7 @@ func newCoordinator(cli *agent.Client, kq *keelsonquery.Client, conversation str
 func newCoordinatorIn(parent *lifetime.Scope, cli *agent.Client, kq *keelsonquery.Client, conversation string) (inst *coordinator) {
 	inst = &coordinator{cli: cli, kq: kq, conversation: conversation, opTools: OperationToolsSeed.Get(), ask: &asker{}, steps: &turnSteps{},
 		ceiling: defaultPermissions().ceiling(true), store: agentrun.NewMemStore(),
-		refused: make(map[string]string), typed: make(map[string]typedOp), opCache: make(map[string][]agent.Operation), windowApps: make(map[uint64]string),
+		pendingCalls: make(map[string]pendingCall), refused: make(map[string]string), typed: make(map[string]typedOp), opCache: make(map[string][]agent.Operation), windowApps: make(map[uint64]string),
 		opEffects: make(map[string]map[string]string), resultIds: make(map[string]uint64), scope: lifetime.New(parent), confinedTier: fallbackConfinedTier()}
 	inst.scope.OnDrained(inst.closeJournal)
 	return
@@ -578,6 +585,8 @@ type toolOrigin struct {
 	turn      string
 	modelCall string
 	index     int
+	// journal is the key of the call's intent entry (ADR-0358 §SD7).
+	journal string
 }
 
 // key is the call's key at the dispatcher: the model call and the index,
@@ -616,7 +625,7 @@ func (inst *coordinator) exec(ctx context.Context, o toolOrigin, call openaichat
 	prev, repeated := inst.refused[sig]
 	inst.refusal = ""
 	inst.curTitle = title
-	inst.lastUntrusted, inst.lastWriter, inst.lastDecided = false, writerRef{}, ""
+	inst.lastUntrusted, inst.lastWriter, inst.lastDecided, inst.lastPending = false, writerRef{}, "", nil
 	inst.mu.Unlock()
 	if repeated {
 		return "error: this is the same call that was just refused, and nothing has changed since; change it as the refusal says. The refusal was: " + prev,
@@ -656,12 +665,13 @@ func waitsOnPerson(out agent.Outcome) bool {
 // settle polls the call key until it is final. While the call waits on the
 // person it waits as long as the turn runs, as ask_user does: the host
 // expires an undecided widening, and the person can stop the turn.
-// Otherwise it waits at most callWait, counted from when the person last
+// Otherwise it waits at most the profile's CallWait, counted from when the person last
 // decided. A call still waiting on the person when the wait ends — the turn
 // stopped, the host did not answer — is withdrawn, so nobody can approve
 // later a call whose outcome no turn reads.
 func (inst *coordinator) settle(ctx context.Context, h string, key string, out agent.Outcome) (last agent.Outcome, err error) {
 	last = out
+	callWait, _, _ := inst.callLimits()
 	deadline := time.Now().Add(callWait)
 	personDone := func() {}
 	waiting := false
@@ -689,7 +699,12 @@ func (inst *coordinator) settle(ctx context.Context, h string, key string, out a
 		if !waiting && !time.Now().Before(deadline) {
 			break
 		}
-		next, serr := inst.cli.Status(ctx, h, key, agent.MaxStatusWait)
+		// A poll does not outlast the wait, or the limit would not bind.
+		poll := agent.MaxStatusWait
+		if !waiting {
+			poll = min(poll, time.Until(deadline))
+		}
+		next, serr := inst.cli.Status(ctx, h, key, poll)
 		if serr != nil {
 			// last stays what the host said, for the withdrawal.
 			err = serr
@@ -1046,7 +1061,7 @@ func (inst *coordinator) call(ctx context.Context, o toolOrigin, toolCall string
 	title, tier := inst.curTitle, inst.curTier
 	inst.mu.Unlock()
 	out, err := inst.cli.Call(ctx, agent.CallRequest{Handle: h, Instance: instance, Operation: op, Args: opArgs, Key: key, Reason: reason,
-		Title: title, Turn: o.turn, ModelCall: o.modelCall, ToolCall: toolCall, ToolIndex: uint32(max(o.index, 0)), Tier: uint8(tier)})
+		Title: title, Turn: o.turn, ModelCall: o.modelCall, ToolCall: toolCall, ToolIndex: uint32(max(o.index, 0)), Tier: uint8(tier), Journal: o.journal})
 	where := op + " in window " + strconv.FormatUint(instance, 10)
 	if err != nil {
 		return "error: " + err.Error(), where + ": " + err.Error()
@@ -1065,29 +1080,13 @@ func (inst *coordinator) call(ctx context.Context, o toolOrigin, toolCall string
 	if out.Phase == "accepted" && out.Reason == "" {
 		co.Reason = "still queued when the wait ended: it applies at the window's next frame, so read its effect later"
 	}
-	untrustedSource := ""
-	if out.ResultRef != "" {
-		res, rerr := inst.cli.Read(ctx, h, out.ResultRef)
-		switch {
-		case rerr != nil:
-			co.Reason = strings.TrimSpace(co.Reason + "; the result could not be read: " + rerr.Error())
-		case res.DataHandle != "":
-			co.DataHandle = res.DataHandle
-			inst.noteResultId(key, "")
-		default:
-			co.Result = jsontext.Value(res.Text)
-			inst.noteResultId(key, res.Text)
-			if res.Confined {
-				inst.mu.Lock()
-				inst.confined = true
-				inst.mu.Unlock()
-			}
-			if res.Untrusted {
-				untrustedSource = res.Source
-				inst.markTainted()
-			}
-		}
+	if out.Phase == "running" {
+		// The work outlives the wait: the model is told when it settles
+		// (ADR-0358 §SD3).
+		co.Reason = runningReason
+		inst.notePending(pendingCall{handle: h, key: key, turn: o.turn, op: op, where: where})
 	}
+	untrustedSource, _ := inst.readResult(ctx, h, key, out, &co)
 	b, err := json.Marshal(co)
 	if err != nil {
 		return "error: " + err.Error(), where + ": " + err.Error()
@@ -1099,6 +1098,39 @@ func (inst *coordinator) call(ctx context.Context, o toolOrigin, toolCall string
 	activity = where + " · " + out.Phase
 	if out.Reason != "" && out.Phase != "completed" && out.Phase != "rendered" {
 		activity += " · " + out.Reason
+	}
+	return
+}
+
+// readResult reads a settled call's result into what the model reads of it,
+// and says what it carries: untrustedSource names where untrusted content
+// came from, empty for none. It marks the conversation as such content and
+// confined content do. A watcher calls it off the turn, so a turn's call
+// running then may read as untrusted too: the label errs upward.
+func (inst *coordinator) readResult(ctx context.Context, h string, key string, out agent.Outcome, co *callOutcome) (untrustedSource string, confined bool) {
+	if out.ResultRef == "" {
+		return
+	}
+	res, rerr := inst.cli.Read(ctx, h, out.ResultRef)
+	switch {
+	case rerr != nil:
+		co.Reason = strings.TrimSpace(co.Reason + "; the result could not be read: " + rerr.Error())
+	case res.DataHandle != "":
+		co.DataHandle = res.DataHandle
+		inst.noteResultId(key, "")
+	default:
+		co.Result = jsontext.Value(res.Text)
+		inst.noteResultId(key, res.Text)
+		if res.Confined {
+			confined = true
+			inst.mu.Lock()
+			inst.confined = true
+			inst.mu.Unlock()
+		}
+		if res.Untrusted {
+			untrustedSource = res.Source
+			inst.markTainted()
+		}
 	}
 	return
 }

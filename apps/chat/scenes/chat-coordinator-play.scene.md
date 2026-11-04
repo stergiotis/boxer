@@ -45,7 +45,7 @@ the second, and an id is a function of the window and the widget's path.
 {"do":"wait","valueContains":"⚙ opened play as window 2","role":"label"}
 {"do":"wait","valueContains":"⚙ Reading play's buffer · get_state in window 2 · completed","role":"label","comment":"the call's title, before its own line"}
 {"do":"wait","valueContains":"⚙ set_sql in window 2 · rendered","role":"label"}
-{"do":"wait","valueContains":"⚙ run in window 2 · rendered","role":"label"}
+{"do":"wait","valueContains":"⚙ run in window 2 · completed","role":"label"}
 {"do":"wait","valueContains":"3 rows ·","role":"label","comment":"play's own summary of the agent's run"}
 {"do":"wait","name":" agent · act","role":"button","comment":"the badge: the task works here and is not paused"}
 {"do":"capture","text":"chat-coordinator-play"}

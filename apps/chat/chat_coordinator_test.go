@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"testing/fstest"
 	"time"
@@ -18,6 +19,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/agent"
+	"github.com/stergiotis/boxer/public/keelson/runtime/agentrun"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/appops"
 	"github.com/stergiotis/boxer/public/keelson/runtime/appops/opengine"
@@ -30,7 +32,11 @@ import (
 )
 
 // A tiny participant: one note.
-type note struct{ text string }
+type note struct {
+	text string
+	// jobDone ends slow_job's work (asyncNoteOps).
+	jobDone atomic.Bool
+}
 
 type noteSnap struct{ text string }
 
@@ -101,7 +107,9 @@ type publishNoteArgs struct {
 
 const notesId app.AppIdT = "github.com/x/apps/notes"
 
-var noteOps = func() *appops.Set[*note, noteSnap] {
+var noteOps = noteOpsSet()
+
+func noteOpsSet() *appops.Set[*note, noteSnap] {
 	s := appops.NewSet(func(n *note) noteSnap { return noteSnap{text: n.text} })
 	s.Resource("text", "the note", func(n *note) any { return n.text })
 	appops.Query(s, app.OperationSpec{Name: "get_note", Version: 1, Summary: "read the note", Reads: []string{"text"}, Agents: true, Untrusted: true},
@@ -123,11 +131,13 @@ var noteOps = func() *appops.Set[*note, noteSnap] {
 			return appops.None{}, nil
 		})
 	return s
-}()
+}
 
 // noteHost is a window host with note windows; a goroutine of its own
 // stands in for the render goroutine and runs their frames.
 type noteHost struct {
+	// ops are the windows' operations; nil is noteOps.
+	ops     *appops.Set[*note, noteSnap]
 	mu      sync.Mutex
 	engines map[uint64]*opengine.Engine
 	notes   map[uint64]*note
@@ -247,7 +257,11 @@ func (inst *noteHost) OpsOpen(appId app.AppIdT, kind string, cfg []byte) (uint64
 	defer inst.mu.Unlock()
 	key := uint64(100 + len(inst.engines))
 	n := &note{text: "first"}
-	inst.engines[key], inst.notes[key] = opengine.New(noteOps.Catalog(), noteOps.Bind(n)), n
+	ops := inst.ops
+	if ops == nil {
+		ops = noteOps
+	}
+	inst.engines[key], inst.notes[key] = opengine.New(ops.Catalog(), ops.Bind(n)), n
 	return key, nil
 }
 
@@ -370,16 +384,29 @@ func TestAStoppedTurnKeepsItsCallsShown(t *testing.T) {
 // test grants, with model answering; opTools turns operation tools on.
 func coordRig(t *testing.T, bus *inprocbus.Inst, model *scriptedModel, opTools bool) (host *noteHost, coord *coordinator, cli *llm.Client, req llm.Request, ctx context.Context) {
 	t.Helper()
-	svc, err := llm.NewService(bus, zerolog.Nop(), llm.Config{Journal: llm.AcceptAnyJournal{}, Endpoint: "http://127.0.0.1:1234/v1", Model: "m", Client: model})
+	return coordRigWith(t, bus, model, opTools, noteOps, nil)
+}
+
+// coordRigWith is coordRig over the given operations. With store, the host's
+// services check the journal over it as a real host's do (ADR-0357, ADR-0358
+// §SD7), and the coordinator journals there.
+func coordRigWith(t *testing.T, bus *inprocbus.Inst, model *scriptedModel, opTools bool, ops *appops.Set[*note, noteSnap], store agentrun.StoreI) (host *noteHost, coord *coordinator, cli *llm.Client, req llm.Request, ctx context.Context) {
+	t.Helper()
+	var llmJournal llm.JournalCheckerI = llm.AcceptAnyJournal{}
+	var intents agent.IntentCheckerI = agent.AcceptAnyIntent{}
+	if store != nil {
+		llmJournal, intents = llm.StoreJournal(store), agent.StoreIntents(store)
+	}
+	svc, err := llm.NewService(bus, zerolog.Nop(), llm.Config{Journal: llmJournal, Endpoint: "http://127.0.0.1:1234/v1", Model: "m", Client: model})
 	require.NoError(t, err)
 	t.Cleanup(svc.Close)
 
 	reg := app.NewRegistry()
 	require.NoError(t, reg.RegisterFactory(app.Manifest{Id: notesId, Display: "Notes", Summary: "keep a note",
-		Surface: app.SurfaceWindowed, Topics: []app.TopicT{app.AllTopics[0]}, Operations: noteOps.Catalog(),
+		Surface: app.SurfaceWindowed, Topics: []app.TopicT{app.AllTopics[0]}, Operations: ops.Catalog(),
 		Help: fstest.MapFS{"overview.md": {Data: []byte("# Notes\n\nA note holds one text.\n\n## Tidying\n\nTidy a note by replacing its text with set_note.\n")}}},
 		func() (app.AppI, error) { return nil, nil }))
-	host = &noteHost{engines: map[uint64]*opengine.Engine{}, notes: map[uint64]*note{}}
+	host = &noteHost{ops: ops, engines: map[uint64]*opengine.Engine{}, notes: map[uint64]*note{}}
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 	go host.frames(ctx)
@@ -393,7 +420,7 @@ func coordRig(t *testing.T, bus *inprocbus.Inst, model *scriptedModel, opTools b
 		_ = buscodec.Reply(hostClient.Publish, msg.Reply, opwire.CallReply{V: opwire.WireVersion, Outcome: host.submit(key, op, req)})
 	})
 	require.NoError(t, err)
-	asvc, err := agent.NewService(bus, zerolog.Nop(), agent.Config{Registry: reg, Host: host, TestGrants: true, Pace: time.Millisecond})
+	asvc, err := agent.NewService(bus, zerolog.Nop(), agent.Config{Journal: intents, Registry: reg, Host: host, TestGrants: true, Pace: time.Millisecond})
 	require.NoError(t, err)
 	t.Cleanup(asvc.Close)
 
@@ -402,6 +429,9 @@ func coordRig(t *testing.T, bus *inprocbus.Inst, model *scriptedModel, opTools b
 	cli.Timeout = 10 * time.Second
 	conv := newConversation()
 	coord = newCoordinator(agent.NewClient(chatBus), nil, conv.id)
+	if store != nil {
+		coord.store = store
+	}
 	req = conv.request("please tidy my note")
 	req.Messages = append([]openaichat.Message{{Role: openaichat.ChatRoleSystem, Content: coordinatorPrompt}}, req.Messages...)
 	coord.opTools = opTools
