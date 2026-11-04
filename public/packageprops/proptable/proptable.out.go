@@ -383,6 +383,7 @@ var Table = packageprops.Table{
 	{ImportPath: "github.com/stergiotis/boxer/public/science/audio/sink/pulsesink", Props: packageprops.Props{WASMWASI: packageprops.WASMUnknown, WASMJS: packageprops.WASMUnknown, WASMFreestanding: packageprops.WASMUnknown}},
 	{ImportPath: "github.com/stergiotis/boxer/public/science/audio/track", Props: packageprops.Props{WASMWASI: packageprops.WASMUnknown, WASMJS: packageprops.WASMUnknown, WASMFreestanding: packageprops.WASMUnknown}},
 	{ImportPath: "github.com/stergiotis/boxer/public/science/audio/wavfile", Props: packageprops.Props{WASMWASI: packageprops.WASMUnknown, WASMJS: packageprops.WASMUnknown, WASMFreestanding: packageprops.WASMUnknown}},
+	{ImportPath: "github.com/stergiotis/boxer/public/science/geo/geodesy", Props: packageprops.Props{WASMWASI: packageprops.WASMCompiles, WASMJS: packageprops.WASMCompiles, WASMFreestanding: packageprops.WASMCompiles}},
 	{ImportPath: "github.com/stergiotis/boxer/public/science/geo/grib", Props: packageprops.Props{WASMWASI: packageprops.WASMCompiles, WASMJS: packageprops.WASMCompiles, WASMFreestanding: packageprops.WASMUnknown}},
 	{ImportPath: "github.com/stergiotis/boxer/public/science/geo/grib/aec", Props: packageprops.Props{WASMWASI: packageprops.WASMCompiles, WASMJS: packageprops.WASMCompiles, WASMFreestanding: packageprops.WASMUnknown}},
 	{ImportPath: "github.com/stergiotis/boxer/public/science/geo/grib/jpeg2000", Props: packageprops.Props{WASMWASI: packageprops.WASMCompiles, WASMJS: packageprops.WASMCompiles, WASMFreestanding: packageprops.WASMUnknown}},
