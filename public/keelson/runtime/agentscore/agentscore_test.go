@@ -69,10 +69,11 @@ func TestTheScorecardReadsOnlyComposedColumns(t *testing.T) {
 	require.Greater(t, names, 20)
 }
 
-// The query takes the conversation as a typed parameter and leaves the
-// output format to the caller.
+// The query takes the conversation and the prompts to score as typed
+// parameters and leaves the output format to the caller.
 func TestTheScorecardIsParameterisedAndUnformatted(t *testing.T) {
 	sql := agentscore.Scorecard()
 	require.Contains(t, sql, "{"+agentscore.ParamConversation+":String}")
+	require.Contains(t, sql, "{"+agentscore.ParamPrompts+":UInt32}")
 	require.NotRegexp(t, `(?im)^\s*FORMAT\s`, sql)
 }

@@ -1,5 +1,8 @@
 -- Scorecard of one chat conversation, from the trail and the journal.
--- Parameter: {conv:String}, the conversation id (an artefact's chat_conversation).
+-- Parameters: {conv:String}, the conversation id (an artefact's
+-- chat_conversation); {prompts:UInt32}, the number of the person's prompts
+-- to score: what happened from the next prompt on is left out (0 scores the
+-- whole conversation).
 -- One row; columns grouped as identity, time, model, tools, operations,
 -- dialogs, labels, outcome.
 WITH
@@ -9,13 +12,21 @@ WITH
     WHERE `oq:conversation:s:::0:` = {conv:String}
     ORDER BY `oq:version:u32:::0:` DESC LIMIT 1 BY jid
   ),
-  je AS (
+  je_all AS (
     SELECT `oq:kind:s:::0:` AS kind, `oq:role:s:::0:` AS role, `oq:name:s:::0:` AS name,
            `oq:form:s:::0:` AS form, `oq:key:s:::0:` AS key, `oq:at:z64:::0:` AS at,
            `oq:label-tier:u8:::0:` AS tier, `id:ordinal:u64:47::0:` AS ord
     FROM boxer.dm_journal_entries
     WHERE `id:id:u64:4::0:` IN (SELECT jid FROM jr)
   ),
+  -- The cut: when the prompt after the last one scored was sent, if it was.
+  cut AS (
+    SELECT if({prompts:UInt32} = 0 OR length(ats) <= {prompts:UInt32},
+              toDateTime64('2200-01-01 00:00:00', 9, 'UTC'), ats[{prompts:UInt32} + 1]) AS until,
+           if({prompts:UInt32} = 0 OR length(ats) <= {prompts:UInt32}, NULL, ats[{prompts:UInt32} + 1]) AS cut_at
+    FROM (SELECT arraySort(groupUniqArray(at)) AS ats FROM je_all WHERE kind = 'user')
+  ),
+  je AS (SELECT * FROM je_all WHERE at < (SELECT until FROM cut)),
   -- A tool call: its intent (the tool's name) and its outcome (a headline).
   tc AS (
     SELECT i.key AS key, i.name AS tool, o.form AS headline
@@ -31,7 +42,7 @@ WITH
            `oq:incomplete:b:::0:` AS incomplete, length(`oq:error:sh:::0:`) > 0 AS errored,
            `oq:retention:s:::0:` AS retention
     FROM boxer.dm_trail_llm_model_calls
-    WHERE `oq:conversation:s:::0:` = {conv:String}
+    WHERE `oq:conversation:s:::0:` = {conv:String} AND `ts:ts:z64:47::0:` < (SELECT until FROM cut)
   ),
   -- An operation call's last word, by its key.
   op AS (
@@ -41,13 +52,13 @@ WITH
            argMax(arrayStringConcat(`oq:reason:sh:::0:`, ' '), `ts:ts:z64:47::0:`) AS reason,
            max(`oq:confined:b:::0:`) AS confined, max(`oq:tainted:b:::0:`) AS tainted
     FROM boxer.dm_trail_llm_agent_actions
-    WHERE `oq:conversation:s:::0:` = {conv:String}
+    WHERE `oq:conversation:s:::0:` = {conv:String} AND `ts:ts:z64:47::0:` < (SELECT until FROM cut)
     GROUP BY key
   ),
   gr AS (
     SELECT `oq:event:s:::0:` AS event, `oq:decided-by:s:::0:` AS decided_by
     FROM boxer.dm_trail_llm_agent_grants
-    WHERE `oq:conversation:s:::0:` = {conv:String}
+    WHERE `oq:conversation:s:::0:` = {conv:String} AND `ts:ts:z64:47::0:` < (SELECT until FROM cut)
   ),
   run_id AS (SELECT anyIf(run, run != '') AS run_value FROM mc),
   rr AS (
@@ -71,6 +82,7 @@ SELECT
   (SELECT anyIf(model, purpose = 'chat/turn') FROM mc) AS model,
   (SELECT anyIf(endpoint, purpose = 'chat/turn') FROM mc) AS endpoint,
   (SELECT any(jstate) FROM jr) AS journal_state,
+  (SELECT cut_at FROM cut) AS cut_at,
   -- time
   (SELECT min(ts) FROM mc) AS started,
   (SELECT max(ts) FROM mc) AS ended,

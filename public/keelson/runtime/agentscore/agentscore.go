@@ -24,9 +24,16 @@ var scorecard string
 // as `param_conv`.
 const ParamConversation = "conv"
 
+// ParamPrompts is the query parameter naming how many of the person's
+// prompts to score; what the conversation did from the next prompt on is
+// left out, so takes that went on past a task's last prompt compare with
+// takes that stopped there. Zero scores the whole conversation. Over HTTP it
+// is sent as `param_prompts`.
+const ParamPrompts = "prompts"
+
 // Scorecard returns the scorecard query. It reads the views in the `boxer`
-// database, takes the conversation as {conv:String} and has no FORMAT
-// clause, so the caller chooses one.
+// database, takes the conversation as {conv:String} and the prompts to score
+// as {prompts:UInt32}, and has no FORMAT clause, so the caller chooses one.
 func Scorecard() (sql string) {
 	return scorecard
 }
