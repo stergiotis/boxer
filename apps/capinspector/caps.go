@@ -436,6 +436,8 @@ var Registry = map[CapId]CapSpec{
 			"llm.ClientCaps(reason), not sticky; the read is a request, so " +
 			"every call lands an audit row, and keelson('llm_calls') keeps " +
 			"the record of what was asked, at what cost, and how it ended. " +
+			"A completion names the journal's request entry written before " +
+			"it, or the service refuses it (ADR-0357). " +
 			"An app that asks the host to keep its conversations also " +
 			"declares llm.RetainCaps(reason) (ADR-0264); the text lands on " +
 			"boxer.facts as llmMessage rows only where BOXER_LLM_RETAIN is " +

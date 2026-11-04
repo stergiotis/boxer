@@ -21,11 +21,12 @@ import (
 )
 
 // appOver is appOn over a journal store of the caller's, so two apps can
-// share one record.
+// share one record. Its model service checks the journal as a host's does
+// (ADR-0357), so every call path these tests exercise is held to it.
 func appOver(t *testing.T, model openaichat.ClientI, store agentrun.StoreI) (inst *App) {
 	t.Helper()
 	bus := inprocbus.NewInst(zerolog.Nop())
-	svc, err := llm.NewService(bus, zerolog.Nop(), llm.Config{Endpoint: "http://127.0.0.1:1234/v1", Model: "m", Client: model, Retain: llm.RetainRing})
+	svc, err := llm.NewService(bus, zerolog.Nop(), llm.Config{Journal: llm.StoreJournal(store), Endpoint: "http://127.0.0.1:1234/v1", Model: "m", Client: model, Retain: llm.RetainRing})
 	require.NoError(t, err)
 	t.Cleanup(svc.Close)
 	inst = newApp()

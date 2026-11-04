@@ -108,6 +108,7 @@ func (inst evidenceChecksProvider) SnapshotWhere(proj introspect.Projection, whe
 		}
 		if exits {
 			rows = append(rows, inst.exitChecks(approvals)...)
+			rows = append(rows, inst.requestChecks()...)
 		}
 	}
 	if where.Admits("store", storeTrail) {

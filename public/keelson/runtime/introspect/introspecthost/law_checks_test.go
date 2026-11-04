@@ -88,3 +88,21 @@ func TestLawChecksOverLiveRows(t *testing.T) {
 		assert.True(t, present, "%s has a row per run", law)
 	}
 }
+
+// L39: each model call that left names its request entry, and no entry is
+// named by two (ADR-0357 §SD6). A refused call never left and is not judged.
+func TestRequestChecksJudgeTheCallsThatLeft(t *testing.T) {
+	row := func(calls ...llm.CallRecord) evidenceCheck {
+		rows := evidenceChecksProvider{calls: callsOf(calls)}.requestChecks()
+		require.Len(t, rows, 1)
+		assert.Equal(t, "L39", rows[0].Law)
+		return rows[0]
+	}
+	assert.True(t, row(llm.CallRecord{CallId: "a", RequestEntry: 1}, llm.CallRecord{CallId: "b", RequestEntry: 2}, llm.CallRecord{CallId: "c", Refused: true}).Holds)
+	unnamed := row(llm.CallRecord{CallId: "a"})
+	assert.False(t, unnamed.Holds)
+	assert.Contains(t, unnamed.Why, "naming no request entry")
+	twice := row(llm.CallRecord{CallId: "a", RequestEntry: 1}, llm.CallRecord{CallId: "b", RequestEntry: 1})
+	assert.False(t, twice.Holds)
+	assert.Contains(t, twice.Why, "both left under one request entry")
+}

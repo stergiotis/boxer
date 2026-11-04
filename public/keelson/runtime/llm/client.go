@@ -2,7 +2,6 @@ package llm
 
 import (
 	"context"
-	"encoding/json/v2"
 	"errors"
 	"math/rand/v2"
 	"strconv"
@@ -141,8 +140,12 @@ type Request struct {
 	Round        uint32
 	ParentCallId string
 	// Run is the journal run the call belongs to (ADR-0325 §SD5), the run
-	// an approval key must name; zero for a caller without a journal.
+	// an approval key must name.
 	Run uint64
+	// Journal is the key of the request entry written before this call
+	// (JournalKey); the service refuses a call whose key does not name one
+	// that records this content (ADR-0357).
+	Journal string
 	// OmitFrom and OmitTo declare that the request leaves out messages
 	// [OmitFrom, OmitTo) of the conversation — positions in the whole
 	// conversation, not in Messages — to fit the model's context. Messages
@@ -337,15 +340,13 @@ func (inst *Client) complete(ctx context.Context, r Request, onDelta func(Delta)
 		EnableThinking: r.EnableThinking, Tools: r.Tools, ToolChoice: r.ToolChoice, ResponseFormat: r.ResponseFormat,
 		CancelKey: strconv.FormatUint(rand.Uint64(), 36),
 	}
-	if len(r.Extra) > 0 {
-		if req.Extra, err = json.Marshal(r.Extra); err != nil {
-			return res, eh.Errorf("llm: encode extra: %w", err)
-		}
+	if req.Extra, err = encodeExtra(r.Extra); err != nil {
+		return res, err
 	}
 	if r.OnBehalfOf != nil {
 		req.OnBehalfTask, req.OnBehalfEpoch, req.OnBehalfCall = r.OnBehalfOf.Task, r.OnBehalfOf.Epoch, r.OnBehalfOf.Call
 	}
-	req.Conversation, req.Turn, req.Round, req.ParentCallId, req.Run = r.Conversation, r.Turn, r.Round, r.ParentCallId, r.Run
+	req.Conversation, req.Turn, req.Round, req.ParentCallId, req.Run, req.Journal = r.Conversation, r.Turn, r.Round, r.ParentCallId, r.Run, r.Journal
 	req.OmitFrom, req.OmitTo = uint32(max(r.OmitFrom, 0)), uint32(max(r.OmitTo, 0))
 	subject := SubjectComplete
 	if r.Retain {

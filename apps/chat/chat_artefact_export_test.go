@@ -31,7 +31,7 @@ func exportRig(t *testing.T, connect func(ctx context.Context) (recordstore.Exec
 func exportRigWith(t *testing.T, connect func(ctx context.Context) (recordstore.ExecutorI, error), limits ladingpublish.Limits) (inst *App) {
 	t.Helper()
 	bus := inprocbus.NewInst(zerolog.Nop())
-	svc, err := llm.NewService(bus, zerolog.Nop(), llm.Config{Endpoint: "http://127.0.0.1:1234/v1", Model: "m", Client: &fakeModel{}, Retain: llm.RetainRing})
+	svc, err := llm.NewService(bus, zerolog.Nop(), llm.Config{Journal: llm.AcceptAnyJournal{}, Endpoint: "http://127.0.0.1:1234/v1", Model: "m", Client: &fakeModel{}, Retain: llm.RetainRing})
 	require.NoError(t, err)
 	t.Cleanup(svc.Close)
 	pub, err := ladingpublish.NewService(ladingpublish.Config{Bus: bus, Registry: app.DefaultRegistry, Connect: connect,

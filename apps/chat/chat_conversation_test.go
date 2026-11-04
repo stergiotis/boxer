@@ -50,6 +50,7 @@ func host(t *testing.T, cfg llm.Config) (cli *llm.Client, svc *llm.Service, fm *
 	cfg.Endpoint, cfg.Model, cfg.Client = "http://127.0.0.1:1234/v1", "m", fm
 	bus := inprocbus.NewInst(zerolog.Nop())
 	var err error
+	cfg.Journal = llm.AcceptAnyJournal{}
 	svc, err = llm.NewService(bus, zerolog.Nop(), cfg)
 	require.NoError(t, err)
 	t.Cleanup(svc.Close)
@@ -164,6 +165,7 @@ func hostWith(t *testing.T, cfg llm.Config, model openaichat.ClientI) (cli *llm.
 	cfg.Endpoint, cfg.Model, cfg.Client = "http://127.0.0.1:1234/v1", "m", model
 	bus := inprocbus.NewInst(zerolog.Nop())
 	var err error
+	cfg.Journal = llm.AcceptAnyJournal{}
 	svc, err = llm.NewService(bus, zerolog.Nop(), cfg)
 	require.NoError(t, err)
 	t.Cleanup(svc.Close)
@@ -401,7 +403,7 @@ func TestTheLastRoundNoteIsDeclaredLeftOut(t *testing.T) {
 func appOn(t *testing.T, fm openaichat.ClientI) (inst *App) {
 	t.Helper()
 	bus := inprocbus.NewInst(zerolog.Nop())
-	svc, err := llm.NewService(bus, zerolog.Nop(), llm.Config{Endpoint: "http://127.0.0.1:1234/v1", Model: "m", Client: fm, Retain: llm.RetainRing})
+	svc, err := llm.NewService(bus, zerolog.Nop(), llm.Config{Journal: llm.AcceptAnyJournal{}, Endpoint: "http://127.0.0.1:1234/v1", Model: "m", Client: fm, Retain: llm.RetainRing})
 	require.NoError(t, err)
 	t.Cleanup(svc.Close)
 	inst = newApp()

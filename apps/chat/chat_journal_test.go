@@ -76,3 +76,28 @@ func TestATurnShipsItsChainHead(t *testing.T) {
 	anchored, _ = anchors.Read(context.Background(), w.Run().Cell, w.Run().Id)
 	assert.Len(t, anchored, 3)
 }
+
+// Every model call of a conversation names a request entry that records it
+// (ADR-0357): the turn's and the title's here, the summariser's in the
+// compaction tests, all against the host's checker through appOver. The
+// title is what the conversation shows only if its call was let through.
+func TestTheChatsModelCallsPassTheJournalCheck(t *testing.T) {
+	store := agentrun.NewMemStore()
+	inst := appOver(t, &fakeModel{}, store)
+	require.True(t, inst.startTurn("q1"))
+	drainUntil(t, inst)
+	settleTitle(t, inst)
+	assert.Equal(t, titleModel, inst.conv.titleSource, inst.conv.titleNote)
+	w := inst.coord.journalNow()
+	require.NotNil(t, w)
+	var keys []string
+	for _, e := range w.Entries() {
+		if e.Kind == agentrun.KindRequest {
+			keys = append(keys, e.Key)
+			assert.NotEmpty(t, e.Name, "the entry records the call's content digest")
+		}
+	}
+	require.Len(t, keys, 2, "the turn's and the title's")
+	assert.Equal(t, titlePurpose+"#"+inst.conv.firstTurn, keys[1])
+	assert.Empty(t, agentrun.Fold(w.Entries()).Unsettled, "an outcome settles the title's request")
+}

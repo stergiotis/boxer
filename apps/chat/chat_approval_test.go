@@ -24,7 +24,7 @@ func appOverRemote(t *testing.T, model openaichat.ClientI, store agentrun.StoreI
 	bus := inprocbus.NewInst(zerolog.Nop())
 	decl := cell.Defaults()
 	var err error
-	svc, err = llm.NewService(bus, zerolog.Nop(), llm.Config{Endpoint: "https://api.example.net/v1", Model: "m", Client: model, Retain: llm.RetainRing, Cell: &decl, Approvals: llm.StoreApprovals(store)})
+	svc, err = llm.NewService(bus, zerolog.Nop(), llm.Config{Journal: llm.AcceptAnyJournal{}, Endpoint: "https://api.example.net/v1", Model: "m", Client: model, Retain: llm.RetainRing, Cell: &decl, Approvals: llm.StoreApprovals(store)})
 	require.NoError(t, err)
 	t.Cleanup(svc.Close)
 	inst = newApp()

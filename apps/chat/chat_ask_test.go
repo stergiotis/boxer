@@ -77,7 +77,7 @@ func TestTheFormAnswersOnlyWhenComplete(t *testing.T) {
 func questionsRig(t *testing.T, model *scriptedModel) (coord *coordinator, cli *llm.Client, req llm.Request) {
 	t.Helper()
 	bus := inprocbus.NewInst(zerolog.Nop())
-	svc, err := llm.NewService(bus, zerolog.Nop(), llm.Config{Endpoint: "http://127.0.0.1:1234/v1", Model: "m", Client: model})
+	svc, err := llm.NewService(bus, zerolog.Nop(), llm.Config{Journal: llm.AcceptAnyJournal{}, Endpoint: "http://127.0.0.1:1234/v1", Model: "m", Client: model})
 	require.NoError(t, err)
 	t.Cleanup(svc.Close)
 	chatBus := bus.NewClient(ManifestId, manifest.Caps)

@@ -149,7 +149,9 @@ func TestAStreamInboxMustBeTheSenders(t *testing.T) {
 	p := &streamingProvider{fakeProvider: fakeProvider{resp: openaichat.CompletionResponse{Content: "steered", FinishReason: "stop"}},
 		deltas: []openaichat.Delta{{Content: "steered"}}}
 	bus := inprocbus.NewInst(zerolog.Nop())
-	svc, err := NewService(bus, zerolog.Nop(), streamCfg(p))
+	cfg := streamCfg(p)
+	cfg.Journal = AcceptAnyJournal{}
+	svc, err := NewService(bus, zerolog.Nop(), cfg)
 	require.NoError(t, err)
 	t.Cleanup(svc.Close)
 	var hits atomic.Int32

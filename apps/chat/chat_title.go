@@ -12,6 +12,7 @@ import (
 	"unicode"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/agentrun"
+	"github.com/stergiotis/boxer/public/keelson/runtime/agentrun/projection"
 	"github.com/stergiotis/boxer/public/keelson/runtime/bgjob"
 	"github.com/stergiotis/boxer/public/keelson/runtime/llm"
 	"github.com/stergiotis/boxer/public/keelson/runtime/queryengine"
@@ -131,31 +132,36 @@ func (inst *App) maybeTitle() {
 	inst.titleJob.Start(inst.tasks, bgjob.Spec{Kind: "chat-title", Title: "title the conversation"},
 		func(ctx context.Context) (out *titled, err error) {
 			// Journaled before it leaves (ADR-0308 §SD2): the intent names
-			// the call, the outcome its answer; neither is a message, and
-			// neither belongs to a turn, so the call reopens none.
+			// the call, the request records it (ADR-0357), the outcome its
+			// answer; none is a message, and none belongs to a turn, so the
+			// call reopens none. A conversation with no journal yet has no
+			// title call: the first line stands, and the service would
+			// refuse one.
 			var w *agentrun.Writer
 			if coord != nil {
 				w = coord.journalNow()
 			}
+			if w == nil {
+				return &titled{conversation: id}, nil
+			}
 			key := titlePurpose + "#" + req.Turn
-			if w != nil {
-				if _, err = coord.append(journalCtx(ctx), w, agentrun.Entry{Kind: agentrun.KindIntent, Key: key, Name: "title", Effect: agentrun.EffectNone,
+			rl := coord.requestLabel(projection.Fold(w.Entries(), sectionOrder()))
+			if _, err = coord.journalRequest(journalCtx(ctx), w, &req,
+				agentrun.Entry{Key: key, Request: &agentrun.RequestMeta{Messages: uint32(len(req.Messages)), Label: rl.String()}, Label: rl},
+				agentrun.Entry{Kind: agentrun.KindIntent, Key: key, Name: "title", Effect: agentrun.EffectNone,
 					Body: "ask the model for the conversation's title", Label: harnessLabel()}); err != nil {
-					return
-				}
+				return
 			}
 			res, err := cli.Complete(ctx, req)
-			if w != nil {
-				outcome := agentrun.Entry{Kind: agentrun.KindOutcome, Key: key, Name: res.CallId, Label: coord.replyLabel(), WriterRun: w.Run().Id, WriterTurn: req.Turn}
-				if err != nil {
-					outcome.Body = "error: " + err.Error()
-				} else {
-					// The title itself, so a resume reads it back.
-					outcome.Body, outcome.Reply = modelTitle(res.Content), replyMeta(res.CallId, res.FinishReason, res.InputTokens, res.OutputTokens)
-				}
-				if _, jerr := coord.append(journalCtx(ctx), w, outcome); jerr != nil && err == nil {
-					err = jerr
-				}
+			outcome := agentrun.Entry{Kind: agentrun.KindOutcome, Key: key, Name: res.CallId, Label: coord.replyLabel(rl), WriterRun: w.Run().Id, WriterTurn: req.Turn}
+			if err != nil {
+				outcome.Body = "error: " + err.Error()
+			} else {
+				// The title itself, so a resume reads it back.
+				outcome.Body, outcome.Reply = modelTitle(res.Content), replyMeta(res.CallId, res.FinishReason, res.InputTokens, res.OutputTokens)
+			}
+			if _, jerr := coord.append(journalCtx(ctx), w, outcome); jerr != nil && err == nil {
+				err = jerr
 			}
 			if err != nil {
 				return

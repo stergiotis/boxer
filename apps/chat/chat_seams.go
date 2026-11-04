@@ -525,7 +525,7 @@ func runTurn(ctx context.Context, cli completerI, coord *coordinator, req llm.Re
 		key := requestKey(req.Turn, round)
 		reqLabel := coord.requestLabel(rs.batch)
 		meta := &agentrun.RequestMeta{Digest: rs.digest, Messages: uint32(len(rs.msgs)), Tools: uint32(len(rs.req.Tools)), Round: uint32(round), Label: reqLabel.String()}
-		if _, err = coord.append(jctx, w, agentrun.Entry{Kind: agentrun.KindRequest, Key: key, Request: meta, Turn: req.Turn, Label: reqLabel}); err != nil {
+		if _, err = coord.journalRequest(jctx, w, &rs.req, agentrun.Entry{Key: key, Request: meta, Turn: req.Turn, Label: reqLabel}); err != nil {
 			return
 		}
 		out.digest = rs.digest

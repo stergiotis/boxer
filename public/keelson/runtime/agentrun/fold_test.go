@@ -68,3 +68,17 @@ func TestAClosedTurnLeavesNothingUnsettled(t *testing.T) {
 	assert.Equal(t, "t2", r.OpenTurn)
 	assert.Empty(t, Fold(entries[:3]).Unsettled, "the failed request of the closed turn is not reported")
 }
+
+// A host call ends in an outcome, not a reply, and that settles its request
+// (ADR-0357 §SD5); a request with neither is still a call to remake.
+func TestAnOutcomeSettlesARequest(t *testing.T) {
+	settled := Fold([]Entry{
+		{Kind: KindIntent, Key: "title#t", Effect: EffectNone},
+		{Kind: KindRequest, Key: "title#t"},
+		{Kind: KindOutcome, Key: "title#t", Body: "a title"},
+	})
+	assert.Empty(t, settled.Unsettled)
+	open := Fold([]Entry{{Kind: KindRequest, Key: "t#0"}})
+	require.Len(t, open.Unsettled, 1)
+	assert.Equal(t, ResolutionRemake, open.Unsettled[0].Resolution)
+}

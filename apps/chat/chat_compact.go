@@ -267,9 +267,8 @@ func (inst *coordinator) compact(s *requestState, plan projection.Plan, c projec
 		sreq.Purpose, sreq.Tools, sreq.ToolChoice, sreq.MaxTokens = compactPurpose, nil, "", int32(c.SummaryTokens)
 		sreq.Messages = append(slices.Clip(msgs), openaichat.Message{Role: openaichat.ChatRoleUser, Content: summariserNote + "\n\nSummarise everything before the person's message that begins: " + strconv.Quote(clip(plan.CutText, 120))})
 		request := &agentrun.RequestMeta{Digest: s.digest, Messages: uint32(len(sreq.Messages)), Round: uint32(s.round), Label: rl.String()}
-		if _, err = inst.append(jctx, w,
-			agentrun.Entry{Kind: agentrun.KindIntent, Key: key, Name: "summarise", Effect: agentrun.EffectNone, Compact: intent, Turn: req.Turn, Label: rl},
-			agentrun.Entry{Kind: agentrun.KindRequest, Key: key, Request: request, Turn: req.Turn, Label: rl}); err != nil {
+		if _, err = inst.journalRequest(jctx, w, &sreq, agentrun.Entry{Key: key, Request: request, Turn: req.Turn, Label: rl},
+			agentrun.Entry{Kind: agentrun.KindIntent, Key: key, Name: "summarise", Effect: agentrun.EffectNone, Compact: intent, Turn: req.Turn, Label: rl}); err != nil {
 			return
 		}
 		step := inst.steps.begin(turnStep{kind: stepCompact, round: s.round, name: "summarising"})

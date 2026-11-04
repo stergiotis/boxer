@@ -13,7 +13,8 @@ import (
 // The laws beyond the evidence laws that the host can judge over what it
 // holds (ADR-0327 §SD7, update of 2026-10-13): the compaction laws per
 // journal run (ADR-0316 §SD4), the exits' clearance and approval laws over
-// the model calls this process answered (ADR-0312 §SD2, §SD3), and the
+// the model calls this process answered (ADR-0312 §SD2, §SD3), that each
+// of them names its request entry (L39, ADR-0357 §SD6), and the
 // copy law over the clipboard broker's records (ADR-0317 §SD4). Each is
 // the Go check the integration lane runs, over live rows instead of a
 // fixture; the laws that need an app's own fold (L4, L24) or a store the
@@ -129,6 +130,48 @@ func exitLawRows(kind cell.SinkKindE, policy cell.ApprovalPolicy, sinks []cell.S
 		rows = append(rows, row)
 	}
 	return
+}
+
+// requestChecks is L39 over the model calls this process answered: each
+// that left names the request entry written before it, and no entry is
+// named by two (ADR-0357 §SD6). The ring is bounded, so the row judges the
+// calls it still holds. A call refused never left, and may present its
+// entry again.
+func (inst evidenceChecksProvider) requestChecks() (rows []evidenceCheck) {
+	if inst.calls == nil {
+		return
+	}
+	calls := inst.calls.Calls()
+	seen := make(map[uint64]string, len(calls))
+	var broken []string
+	var first uint64
+	note := func(id uint64, why string) {
+		if first == 0 {
+			first = id
+		}
+		broken = append(broken, why)
+	}
+	judged := 0
+	for _, c := range calls {
+		if c.Refused {
+			continue
+		}
+		judged++
+		switch prev, named := seen[c.RequestEntry]; {
+		case c.RequestEntry == 0:
+			note(uint64(c.Id), "call "+c.CallId+" left naming no request entry")
+		case named:
+			note(uint64(c.Id), "calls "+prev+" and "+c.CallId+" both left under one request entry")
+		default:
+			seen[c.RequestEntry] = c.CallId
+		}
+	}
+	row := evidenceCheck{Store: storeExits, Scope: cell.SinkKindModelRoute.String(), Law: "L39", Holds: len(broken) == 0, Broken: first,
+		Why: strconv.Itoa(judged) + " answered calls in the service's ring"}
+	if len(broken) > 0 {
+		row.Why = strings.Join(broken, "; ")
+	}
+	return append(rows, row)
 }
 
 // copyChecks is L20 over the broker's records: labelled text above the

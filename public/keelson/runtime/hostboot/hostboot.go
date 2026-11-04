@@ -677,6 +677,9 @@ func (rt *Runtime) bootServices(ctx context.Context, factsCfg chstore.Config) {
 			// The route verifies an approved exit against the journal
 			// (ADR-0312 §SD3); without the store every approval is refused.
 			llmCfg.Approvals = llm.StoreApprovals(rt.AgentRuns)
+			// A call names the entry written before it (ADR-0357); without
+			// the store every completion is refused.
+			llmCfg.Journal = llm.StoreJournal(rt.AgentRuns)
 		}
 		llmCfg = withModerator(llmCfg)
 		if path := llm.ScriptEnv.Get(); path != "" {

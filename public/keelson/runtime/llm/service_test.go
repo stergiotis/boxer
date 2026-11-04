@@ -60,6 +60,11 @@ func serve(t *testing.T, cfg Config) (cli *Client, svc *Service, sink *audit.InM
 	bus := inprocbus.NewInst(zerolog.Nop())
 	sink = audit.NewInMemoryAuditSink()
 	bus.SetAuditSink(sink)
+	if cfg.Journal == nil {
+		// What these tests are about lies behind the journal check;
+		// journalcheck_test.go is about the check.
+		cfg.Journal = AcceptAnyJournal{}
+	}
 	var err error
 	svc, err = NewService(bus, zerolog.Nop(), cfg)
 	require.NoError(t, err)
@@ -70,7 +75,7 @@ func serve(t *testing.T, cfg Config) (cli *Client, svc *Service, sink *audit.InM
 }
 
 func localCfg(p *fakeProvider) Config {
-	return Config{Endpoint: "http://127.0.0.1:1234/v1", Model: "m", MaxTokens: 64, Client: p}
+	return Config{Endpoint: "http://127.0.0.1:1234/v1", Model: "m", MaxTokens: 64, Client: p, Journal: AcceptAnyJournal{}}
 }
 
 // An unconfigured host says so on describe and refuses complete with the
@@ -434,7 +439,7 @@ func userMessage() []openaichat.Message {
 // provider call on the service side; the call table records it.
 func TestCancelStopsTheProviderCall(t *testing.T) {
 	p := newBlockingProvider()
-	cli, svc, _ := serve(t, Config{Endpoint: "http://127.0.0.1:1234/v1", Model: "m", Client: p})
+	cli, svc, _ := serve(t, Config{Journal: AcceptAnyJournal{}, Endpoint: "http://127.0.0.1:1234/v1", Model: "m", Client: p})
 	ctx, cancel := context.WithCancel(context.Background())
 	errc := make(chan error, 1)
 	go func() {
@@ -465,7 +470,7 @@ func TestCancelStopsTheProviderCall(t *testing.T) {
 // the requester's goroutine, so a slow provider no longer holds it.
 func TestClientTimeoutHoldsInProcess(t *testing.T) {
 	p := newBlockingProvider()
-	cli, _, _ := serve(t, Config{Endpoint: "http://127.0.0.1:1234/v1", Model: "m", Client: p})
+	cli, _, _ := serve(t, Config{Journal: AcceptAnyJournal{}, Endpoint: "http://127.0.0.1:1234/v1", Model: "m", Client: p})
 	cli.Timeout = 50 * time.Millisecond
 	t0 := time.Now()
 	_, err := cli.Complete(context.Background(), Request{Messages: userMessage()})
@@ -479,7 +484,7 @@ func TestClientTimeoutHoldsInProcess(t *testing.T) {
 // service's timeout, with its call id, not a bus timeout of its own.
 func TestClientWaitFollowsTheServiceTimeout(t *testing.T) {
 	p := newBlockingProvider()
-	cli, _, _ := serve(t, Config{Endpoint: "http://127.0.0.1:1234/v1", Model: "m", Client: p, Timeout: 50 * time.Millisecond})
+	cli, _, _ := serve(t, Config{Journal: AcceptAnyJournal{}, Endpoint: "http://127.0.0.1:1234/v1", Model: "m", Client: p, Timeout: 50 * time.Millisecond})
 	cli.Timeout = 0
 	d, err := cli.Describe(context.Background())
 	require.NoError(t, err)
@@ -495,7 +500,7 @@ func TestClientWaitFollowsTheServiceTimeout(t *testing.T) {
 // provider does not run on for an answer no one will read.
 func TestAnExpiredWaitCancelsTheCall(t *testing.T) {
 	p := newBlockingProvider()
-	cli, _, _ := serve(t, Config{Endpoint: "http://127.0.0.1:1234/v1", Model: "m", Client: p, Timeout: time.Minute})
+	cli, _, _ := serve(t, Config{Journal: AcceptAnyJournal{}, Endpoint: "http://127.0.0.1:1234/v1", Model: "m", Client: p, Timeout: time.Minute})
 	cli.Timeout = 50 * time.Millisecond
 	_, err := cli.Complete(context.Background(), Request{Messages: userMessage()})
 	require.ErrorIs(t, err, inprocbus.ErrTimeout)
@@ -512,7 +517,7 @@ func TestAnExpiredWaitCancelsTheCall(t *testing.T) {
 func TestCancelIsScopedToTheSender(t *testing.T) {
 	p := newBlockingProvider()
 	bus := inprocbus.NewInst(zerolog.Nop())
-	svc, err := NewService(bus, zerolog.Nop(), Config{Endpoint: "http://127.0.0.1:1234/v1", Model: "m", Client: p})
+	svc, err := NewService(bus, zerolog.Nop(), Config{Journal: AcceptAnyJournal{}, Endpoint: "http://127.0.0.1:1234/v1", Model: "m", Client: p})
 	require.NoError(t, err)
 	t.Cleanup(svc.Close)
 	owner := bus.NewClient(appId, ClientCaps("test: ask"))

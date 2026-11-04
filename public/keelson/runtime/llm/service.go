@@ -85,6 +85,10 @@ type Config struct {
 	// Approvals verifies the approval key of a resent exit against the
 	// run journal (ADR-0312 §SD3). Nil refuses every approved exit.
 	Approvals ApprovalCheckerI
+	// Journal verifies the request entry a call names (ADR-0357). Nil
+	// refuses every completion; a test of what lies behind the check names
+	// AcceptAnyJournal.
+	Journal JournalCheckerI
 }
 
 // ConfigFromEnv resolves the config from the ADR-0009 registry.
@@ -194,6 +198,7 @@ type Service struct {
 	// id, for ApprovalTTL (approval.go).
 	pending          *pendingExits
 	approvalsUnwired sync.Once
+	journalUnwired   sync.Once
 }
 
 // NewService constructs and subscribes a Service. The caller MUST invoke
@@ -446,6 +451,12 @@ func (inst *Service) handleComplete(msg *app.Msg, retained bool) {
 	}
 	if len(req.Messages) == 0 {
 		inst.refuse(msg, "the request carries no messages", rec, t)
+		return
+	}
+	// Before any wall or admission: a call the journal does not know of goes
+	// no further, and its refusal is on the trail (ADR-0357 §SD1).
+	if rec.RequestEntry, err = inst.verifyJournal(req, msg.Sender); err != nil {
+		inst.refuse(msg, "the journal does not cover the call: "+err.Error(), rec, t)
 		return
 	}
 	if req.OnBehalfTask != "" {

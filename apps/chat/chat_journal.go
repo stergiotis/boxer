@@ -17,6 +17,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/cell"
 	"github.com/stergiotis/boxer/public/keelson/runtime/clipboardbroker"
 	"github.com/stergiotis/boxer/public/keelson/runtime/headstore"
+	"github.com/stergiotis/boxer/public/keelson/runtime/llm"
 	"github.com/stergiotis/boxer/public/llm/openaichat"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
@@ -175,6 +176,28 @@ func (inst *coordinator) append(ctx context.Context, w *agentrun.Writer, entries
 	if written, err = w.Append(ctx, entries...); err != nil {
 		inst.noteJournalFailed()
 	}
+	return
+}
+
+// journalRequest writes a model call's request entry, after any entries
+// that lead it, and names it on the call: the entry records the call's
+// content, so the request must be as it will be sent (ADR-0357). written
+// are the entries in the order given, the request's last.
+func (inst *coordinator) journalRequest(ctx context.Context, w *agentrun.Writer, req *llm.Request, request agentrun.Entry, leading ...agentrun.Entry) (written []agentrun.Entry, err error) {
+	digest, err := req.ContentDigest()
+	if err != nil {
+		return
+	}
+	request.Kind, request.Name = agentrun.KindRequest, digest
+	if request.Request != nil && request.Request.Digest == "" {
+		// A call that is no projection, the title's, is identified by what
+		// it asks.
+		request.Request.Digest = digest
+	}
+	if written, err = inst.append(ctx, w, append(slices.Clip(leading), request)...); err != nil {
+		return
+	}
+	req.Run, req.Journal = w.Run().Id, llm.JournalKey(w.Run().Id, written[len(written)-1].Ordinal)
 	return
 }
 

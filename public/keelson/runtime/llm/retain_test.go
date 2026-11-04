@@ -30,6 +30,7 @@ import (
 func serveRetaining(t *testing.T, bus *inprocbus.Inst, cfg Config, id app.AppIdT) (cli *Client, svc *Service) {
 	t.Helper()
 	var err error
+	cfg.Journal = AcceptAnyJournal{}
 	svc, err = NewService(bus, zerolog.Nop(), cfg)
 	require.NoError(t, err)
 	t.Cleanup(svc.Close)

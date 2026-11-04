@@ -102,6 +102,16 @@ bodies change from system prompts to requests, and `temperature` /
 
 Accepted (2026-10-11). Implemented in `be7098fde`.
 
+## Updates
+
+### 2026-11-04 — a second holder would still journal
+
+SD1's single holder stays a review convention.
+[ADR-0357](./0357-a-model-call-names-the-journal-entry-written-before-it.md)
+(proposed) narrows what a second holder could do unnoticed: its calls would have
+to name a journal entry too, so the Context's "beside the journal" no longer
+holds for model calls. The approvals, ceilings and labels remain the harness's.
+
 ## References
 
 - [ADR-0216](./0216-mdedit-llm-transformations.md) — superseded by this record.

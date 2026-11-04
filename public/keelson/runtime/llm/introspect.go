@@ -94,7 +94,10 @@ type CallRecord struct {
 	Route         string
 	Tier          uint8
 	ApprovalEntry uint64
-	Queued        time.Duration
+	// RequestEntry is the tagged id of the request entry the call named
+	// (ADR-0357 §SD6), zero for a call refused before its entry verified.
+	RequestEntry uint64
+	Queued       time.Duration
 }
 
 // contextOf is the trail context of a call: its origin, and the
@@ -393,7 +396,8 @@ func callsTable(rows []CallRecord) *introspect.Table {
 		String("profile", func(i int) string { return rows[i].Profile }).
 		String("route", func(i int) string { return rows[i].Route }).
 		Uint64("tier", func(i int) uint64 { return uint64(rows[i].Tier) }).
-		Uint64("approval_entry", func(i int) uint64 { return rows[i].ApprovalEntry })
+		Uint64("approval_entry", func(i int) uint64 { return rows[i].ApprovalEntry }).
+		Uint64("request_entry", func(i int) uint64 { return rows[i].RequestEntry })
 }
 
 // optionalCount is a count a provider may not report, -1 when it did not.

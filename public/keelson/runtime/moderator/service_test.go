@@ -47,7 +47,7 @@ type actionPayload struct {
 // — denied; its model calls are refused and the table shows it stopped.
 func TestTheLadderActsThroughTheServices(t *testing.T) {
 	bus := inprocbus.NewInst(zerolog.Nop())
-	llmSvc, err := llm.NewService(bus, zerolog.Nop(), llm.Config{Endpoint: "http://127.0.0.1:1/v1", Model: "m", MaxTokens: 64,
+	llmSvc, err := llm.NewService(bus, zerolog.Nop(), llm.Config{Journal: llm.AcceptAnyJournal{}, Endpoint: "http://127.0.0.1:1/v1", Model: "m", MaxTokens: 64,
 		Client: answer{}, Moderators: []string{string(AppId)}})
 	require.NoError(t, err)
 	t.Cleanup(llmSvc.Close)

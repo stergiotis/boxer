@@ -370,7 +370,7 @@ func TestAStoppedTurnKeepsItsCallsShown(t *testing.T) {
 // test grants, with model answering; opTools turns operation tools on.
 func coordRig(t *testing.T, bus *inprocbus.Inst, model *scriptedModel, opTools bool) (host *noteHost, coord *coordinator, cli *llm.Client, req llm.Request, ctx context.Context) {
 	t.Helper()
-	svc, err := llm.NewService(bus, zerolog.Nop(), llm.Config{Endpoint: "http://127.0.0.1:1234/v1", Model: "m", Client: model})
+	svc, err := llm.NewService(bus, zerolog.Nop(), llm.Config{Journal: llm.AcceptAnyJournal{}, Endpoint: "http://127.0.0.1:1234/v1", Model: "m", Client: model})
 	require.NoError(t, err)
 	t.Cleanup(svc.Close)
 

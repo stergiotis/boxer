@@ -104,6 +104,9 @@ func Fold(entries []Entry) (r Resume) {
 			replies[e.Key] = true
 		case KindOutcome:
 			outcomes[e.Key] = e
+			// A host call, the title's or the summariser's, ends in an
+			// outcome, not a reply (ADR-0357 §SD5).
+			replies[e.Key] = true
 		case KindCompleted:
 			completed[e.Key] = true
 		case KindAnswered:

@@ -40,6 +40,7 @@ func serveRation(t *testing.T, cfg Config) (h rationHost) {
 	h.bus = bus
 	cfg.Moderators = []string{string(moderatorId)}
 	var err error
+	cfg.Journal = AcceptAnyJournal{}
 	h.svc, err = NewService(bus, zerolog.Nop(), cfg)
 	require.NoError(t, err)
 	t.Cleanup(h.svc.Close)

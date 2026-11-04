@@ -335,7 +335,7 @@ func TestTheHostRefusesConfinedPixelsToARemoteModel(t *testing.T) {
 		{Content: "never", FinishReason: "stop"},
 	}}
 	bus := inprocbus.NewInst(zerolog.Nop())
-	svc, err := llm.NewService(bus, zerolog.Nop(), llm.Config{Endpoint: "http://192.0.2.10:1234/v1", Model: "m", Client: model})
+	svc, err := llm.NewService(bus, zerolog.Nop(), llm.Config{Journal: llm.AcceptAnyJournal{}, Endpoint: "http://192.0.2.10:1234/v1", Model: "m", Client: model})
 	require.NoError(t, err)
 	t.Cleanup(svc.Close)
 	chatBus := bus.NewClient(ManifestId, manifest.Caps)
