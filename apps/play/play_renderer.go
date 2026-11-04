@@ -225,6 +225,10 @@ type PlayApp struct {
 	lastRunBound      map[string]bool
 	wireSignals       map[string]string
 	wireSigRev        uint64
+	// checkHistory is the provenance of the last main results the ops
+	// snapshot saw, newest last: what a check against a result the window
+	// no longer holds reads (play_ops_check.go).
+	checkHistory []checkSource
 	// Slice-5e state. liveMain is the `main` node's opt-in liveness bit
 	// (D2): with it on, a referenced-signal move re-runs the unchanged
 	// buffer (buffer edits stay Run-gated). runIsAuto marks the pending

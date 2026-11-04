@@ -337,7 +337,8 @@ citations for every figure is deferred (SD9).
 - **Write-then-verify** as a profile option: assertions in the final reply,
   the turn ending on all held; rejected for the first cut in Alternatives.
 - **Dispatching a recheck** (SD4), and with it the `moved` outcome; a
-  check against a result the window no longer holds, from the history.
+  check against a result the window no longer holds, from the history
+  (the window's in-memory history landed, see *Updates*).
 - **Verdicts at the dispatcher's sinks**: a publish or a fetch of text
   citing a failed claim as `Ask` in the dispatcher's algebra, where the
   chat's own copy and hand-off are held in this cut (SD6).
@@ -474,6 +475,37 @@ adds to them. SD9 stays deferred.
 
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers (Tier 1 in-place / Tier 2 dated `## Updates` entry / Tier 3 new superseding ADR).
+
+## Updates
+
+### 2026-11-04 — A check rests on a result the window has run past
+
+SD9 deferred "a check against a result the window no longer holds, from
+the history". Benchmark takes of the SECO data-quality report (the
+hackathon_2026 repository's agent benchmark plan, milestone M3) made it the
+largest friction left: a model cites in one `cite` call the figures of
+several queries it ran one after another, and every assertion resting on
+an earlier query's result came back from SD3's conflict, "another result
+is held now". Each of three attempts met it five to six times, then set
+the earlier statement again, ran it and cited again: three or more calls
+per restore.
+
+A check needs of its result only the statement that produced it (for the
+scope rule), the signal parameters that run shipped and whether it was
+confined; the rows are not read, since the assertion runs its own
+statement over the source tables as they are now, as it does for the
+result the window holds. Play therefore keeps that provenance for its last
+16 main results, recorded as the ops snapshot sees each one (on the render
+goroutine; a model learns a result's id only from `describe_result` or
+`sample_rows`, both of which read that snapshot). SD3 changes in one
+place: a check against an id the window neither holds nor remembers is
+the conflict, naming the result held and saying the cited one is not
+among those remembered. The check's result gains `Superseded`, true when
+the window has run another result since, so a reader of the verdict can
+tell the claim was checked against a result the window no longer shows.
+The gate's order and every bound are unchanged. The history is in memory
+and per window, so a check after the window closed stays `unchecked`
+(SD1) and a recheck from the journal stays deferred.
 
 ## References
 

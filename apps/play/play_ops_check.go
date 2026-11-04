@@ -8,7 +8,12 @@ package play
 // check writes nothing — no buffer, no result, no pane, no mark — and
 // returns at most one row of cell text, with the digests of the two
 // statements, so a reader can tell which result the claim was drawn from
-// and whether the window still shows it.
+// and whether the window still shows it. A result the window has run past
+// is checked from its provenance, which the window keeps for its last
+// checkHistoryMax main results: the statement that produced it and the
+// signal parameters it shipped. The rows are not kept and not needed: the
+// assertion runs over the tables that statement read, as they are now, as
+// it does for the result the window holds.
 
 import (
 	"context"
@@ -40,9 +45,13 @@ const (
 	checkTimeout  = 30 * time.Second
 )
 
+// checkHistoryMax is how many main results a check can rest on: the one
+// the window holds and the ones before it.
+const checkHistoryMax = 16
+
 // CheckArgs is check's argument.
 type CheckArgs struct {
-	ResultId  uint64 `desc:"the result the assertion rests on, as describe_result and sample_rows report it; refused when the window holds another"`
+	ResultId  uint64 `desc:"the result the assertion rests on, as describe_result and sample_rows report it: the one the window holds or one of the last results before it"`
 	Statement string `desc:"a read-only statement over the tables the result's statement read, returning one row: one cell for a value, one boolean for a claim that holds"`
 }
 
@@ -59,6 +68,7 @@ type CheckResult struct {
 	SourceDigest    string `desc:"a digest of the result's statement in its canonical form, as describe_result reports it"`
 	Endpoint        string `desc:"the endpoint the check ran on, as a grant names it"`
 	Confined        bool   `json:",omitzero" desc:"true when the check read confined data"`
+	Superseded      bool   `json:",omitzero" desc:"true when the window has run another result since the one checked against; the assertion ran over that result's tables as they are now"`
 }
 
 // statementDigest is the digest of a statement in its canonical form with
@@ -133,16 +143,39 @@ func checkScope(assertion string, source string) (err error) {
 	return
 }
 
-// checkSnap is what a check reads of the window: the main result's id and
-// label, the statement that produced it and the signal parameters it
-// shipped.
-type checkSnap struct {
+// checkSource is what a check needs of a result: its id and label, the
+// statement that produced it and the signal parameters it shipped. It is
+// not changed once made, so snapshots share it.
+type checkSource struct {
 	resultId  uint64
 	confined  bool
 	source    string
 	sigParams map[string]string
 }
 
+// checkSnap is what a check reads of the window: the main result, and the
+// main results before it, oldest first.
+type checkSnap struct {
+	checkSource
+	earlier []checkSource
+}
+
+// lookup is the source of the result id names, and whether the window has
+// run past it; ok is false when the window neither holds nor remembers it.
+func (inst checkSnap) lookup(id uint64) (src checkSource, superseded bool, ok bool) {
+	if id != 0 && id == inst.resultId {
+		return inst.checkSource, false, true
+	}
+	for _, e := range inst.earlier {
+		if e.resultId == id {
+			return e, true, true
+		}
+	}
+	return
+}
+
+// snapshotCheck reads the main result and keeps it in the window's
+// history, so a check can rest on it after the window has run past it.
 func snapshotCheck(p *PlayApp) (s checkSnap) {
 	if p.graph == nil {
 		return
@@ -158,7 +191,32 @@ func snapshotCheck(p *PlayApp) (s checkSnap) {
 			s.sigParams[strings.TrimPrefix(k, "param_")] = v
 		}
 	}
+	p.checkHistory = rememberCheckSource(p.checkHistory, s.checkSource)
+	for _, e := range p.checkHistory {
+		if e.resultId != s.resultId {
+			s.earlier = append(s.earlier, e)
+		}
+	}
 	return
+}
+
+// rememberCheckSource adds a result to the history, newest last, unless it
+// is there already or holds no statement, and keeps the last
+// checkHistoryMax.
+func rememberCheckSource(history []checkSource, src checkSource) []checkSource {
+	if src.resultId == 0 || src.source == "" {
+		return history
+	}
+	for _, e := range history {
+		if e.resultId == src.resultId {
+			return history
+		}
+	}
+	history = append(history, src)
+	if len(history) > checkHistoryMax {
+		history = append([]checkSource(nil), history[len(history)-checkHistoryMax:]...)
+	}
+	return history
 }
 
 func addCheckOp(s *appops.Set[*PlayLauncher, opsSnap]) {
@@ -182,11 +240,13 @@ func runCheck(ctx context.Context, client *Client, cs checkSnap, obo *app.OnBeha
 	if err = statementBounds(in.Statement); err != nil {
 		return
 	}
-	if cs.resultId == 0 || cs.source == "" {
-		return out, app.RefuseOperation("the window holds no result to check against; run first")
-	}
-	if in.ResultId != cs.resultId {
-		return out, app.ConflictOperation("another result is held now: " + strconv.FormatUint(cs.resultId, 10))
+	src, superseded, found := cs.lookup(in.ResultId)
+	if !found {
+		if cs.resultId == 0 || cs.source == "" {
+			return out, app.RefuseOperation("the window holds no result to check against; run first")
+		}
+		return out, app.ConflictOperation("another result is held now: " + strconv.FormatUint(cs.resultId, 10) +
+			"; result " + strconv.FormatUint(in.ResultId, 10) + " is not among the last " + strconv.Itoa(checkHistoryMax) + " the window remembers")
 	}
 	residual, params, _ := client.rewriteFor(obo, in.Statement, nil)
 	dec := client.dispatchResidual(residual, "")
@@ -198,7 +258,7 @@ func runCheck(ctx context.Context, client *Client, cs checkSnap, obo *app.OnBeha
 			return out, app.RefuseOperation(lerr.Error())
 		}
 	}
-	if err = checkScope(in.Statement, cs.source); err != nil {
+	if err = checkScope(in.Statement, src.source); err != nil {
 		return
 	}
 	eng, err := client.engineFor(dec)
@@ -216,7 +276,7 @@ func runCheck(ctx context.Context, client *Client, cs checkSnap, obo *app.OnBeha
 	req := queryengine.Request{
 		SQL:         q,
 		Format:      "JSONCompact",
-		Params:      bareParams(q, cs.sigParams, params),
+		Params:      bareParams(q, src.sigParams, params),
 		Settings:    map[string]string{"readonly": "2", "max_result_rows": strconv.Itoa(checkMaxRows + 1), "result_overflow_mode": "break", "max_execution_time": strconv.Itoa(int(checkTimeout / time.Second))},
 		Sensitivity: dec.sensitivity,
 	}
@@ -241,8 +301,9 @@ func runCheck(ctx context.Context, client *Client, cs checkSnap, obo *app.OnBeha
 	if jerr := json.Unmarshal(body, &parsed); jerr != nil {
 		return out, app.RefuseOperation("the check's result does not parse: " + jerr.Error())
 	}
-	out.ResultId, out.StatementDigest, out.SourceDigest = cs.resultId, statementDigest(in.Statement), statementDigest(cs.source)
-	out.Endpoint, out.Confined = DestinationClickHouse(endpointHost(target)), cs.confined || dec.sensitivity == queryengine.SensitivityConfined
+	out.ResultId, out.StatementDigest, out.SourceDigest = src.resultId, statementDigest(in.Statement), statementDigest(src.source)
+	out.Endpoint, out.Confined = DestinationClickHouse(endpointHost(target)), src.confined || dec.sensitivity == queryengine.SensitivityConfined
+	out.Superseded = superseded
 	out.Rows = max(parsed.Rows, int64(len(parsed.Data)))
 	for _, m := range parsed.Meta {
 		out.Columns = append(out.Columns, m.Name)
