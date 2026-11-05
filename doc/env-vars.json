@@ -706,6 +706,17 @@
       }
     },
     {
+      "name": "BOXER_CLICKHOUSE_LOCAL",
+      "type": "path",
+      "description": "explicit path to the clickhouse binary `clickhouse local` runs; empty uses the PATH lookup",
+      "category": "system",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/extbin"
+      }
+    },
+    {
       "name": "BOXER_COMPONENT",
       "type": "string",
       "description": "component identity mark, injected by the supervisor (unit Environment= line, launcher script) and inherited by children; read by the topology layer (ADR-0126); empty = unmarked",
@@ -714,6 +725,17 @@
       "origin": {
         "module": "github.com/stergiotis/boxer",
         "package": "github.com/stergiotis/boxer/public/keelson/runtime/topo"
+      }
+    },
+    {
+      "name": "BOXER_FFPROBE_BIN",
+      "type": "path",
+      "description": "explicit path to the ffprobe binary the audio decoder spawns; empty uses the PATH lookup",
+      "category": "system",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/extbin"
       }
     },
     {
@@ -841,6 +863,141 @@
       "origin": {
         "module": "github.com/stergiotis/boxer",
         "package": "github.com/stergiotis/boxer/public/db/clickhouse/jackstay"
+      }
+    },
+    {
+      "name": "BOXER_KAFKA_BROKERS",
+      "type": "string",
+      "description": "comma-separated list of broker addresses (host1:9092,host2:9092)",
+      "category": "streaming",
+      "sensitive": false,
+      "cliFlagName": "brokers",
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/streaming/persisted/kafka/cli"
+      }
+    },
+    {
+      "name": "BOXER_KAFKA_CLIENT_ID",
+      "type": "string",
+      "default": "boxer",
+      "description": "kafka client.id",
+      "category": "streaming",
+      "sensitive": false,
+      "cliFlagName": "client-id",
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/streaming/persisted/kafka/cli"
+      }
+    },
+    {
+      "name": "BOXER_KAFKA_SASL_MECHANISM",
+      "type": "string",
+      "description": "SASL mechanism: none, PLAIN, SCRAM-SHA-256, SCRAM-SHA-512 or OAUTHBEARER (case-insensitive); unset means none",
+      "category": "streaming",
+      "sensitive": false,
+      "cliFlagName": "sasl-mechanism",
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/streaming/persisted/kafka/cli"
+      }
+    },
+    {
+      "name": "BOXER_KAFKA_SASL_PASSWORD",
+      "type": "string",
+      "description": "SASL password (PLAIN, SCRAM-SHA-256, SCRAM-SHA-512); prefer the variable to the flag, which lands in shell history",
+      "category": "streaming",
+      "sensitive": true,
+      "cliFlagName": "sasl-password",
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/streaming/persisted/kafka/cli"
+      }
+    },
+    {
+      "name": "BOXER_KAFKA_SASL_TOKEN",
+      "type": "string",
+      "description": "static OAUTHBEARER token (only for --sasl-mechanism=OAUTHBEARER)",
+      "category": "streaming",
+      "sensitive": true,
+      "cliFlagName": "sasl-token",
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/streaming/persisted/kafka/cli"
+      }
+    },
+    {
+      "name": "BOXER_KAFKA_SASL_USERNAME",
+      "type": "string",
+      "description": "SASL username (PLAIN, SCRAM-SHA-256, SCRAM-SHA-512)",
+      "category": "streaming",
+      "sensitive": false,
+      "cliFlagName": "sasl-username",
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/streaming/persisted/kafka/cli"
+      }
+    },
+    {
+      "name": "BOXER_KAFKA_TLS",
+      "type": "bool",
+      "default": "false",
+      "description": "enable TLS (implicit if any --tls-* file flag is set)",
+      "category": "streaming",
+      "sensitive": false,
+      "cliFlagName": "tls",
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/streaming/persisted/kafka/cli"
+      }
+    },
+    {
+      "name": "BOXER_KAFKA_TLS_CA_FILE",
+      "type": "path",
+      "description": "path to a PEM-encoded CA bundle for verifying the broker certificate",
+      "category": "streaming",
+      "sensitive": false,
+      "cliFlagName": "tls-ca-file",
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/streaming/persisted/kafka/cli"
+      }
+    },
+    {
+      "name": "BOXER_KAFKA_TLS_CERT_FILE",
+      "type": "path",
+      "description": "path to a PEM-encoded client certificate (for mTLS); requires --tls-key-file",
+      "category": "streaming",
+      "sensitive": false,
+      "cliFlagName": "tls-cert-file",
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/streaming/persisted/kafka/cli"
+      }
+    },
+    {
+      "name": "BOXER_KAFKA_TLS_KEY_FILE",
+      "type": "path",
+      "description": "path to a PEM-encoded client key (for mTLS); requires --tls-cert-file",
+      "category": "streaming",
+      "sensitive": false,
+      "cliFlagName": "tls-key-file",
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/streaming/persisted/kafka/cli"
+      }
+    },
+    {
+      "name": "BOXER_KAFKA_TLS_SKIP_VERIFY",
+      "type": "bool",
+      "default": "false",
+      "description": "skip broker certificate verification (insecure; useful for self-signed dev clusters)",
+      "category": "streaming",
+      "sensitive": false,
+      "cliFlagName": "tls-skip-verify",
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/streaming/persisted/kafka/cli"
       }
     },
     {
@@ -1910,6 +2067,17 @@
       }
     },
     {
+      "name": "BOXER_RCLONE",
+      "type": "path",
+      "description": "explicit path to the rclone binary the lading store's SFTP seam spawns; empty uses the PATH lookup",
+      "category": "system",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/extbin"
+      }
+    },
+    {
       "name": "BOXER_RUN_DRIVER_ATTEMPT",
       "type": "int64",
       "description": "the attempt of the benchmark take BOXER_RUN_DRIVER_JOB names, a uint32, written as the run row's driver attempt",
@@ -2014,6 +2182,17 @@
       "origin": {
         "module": "github.com/stergiotis/boxer",
         "package": "github.com/stergiotis/boxer/public/thestack/imzero2/browserhost/tabhost"
+      }
+    },
+    {
+      "name": "BOXER_TINYGO",
+      "type": "path",
+      "description": "explicit path to the tinygo binary the WASM survey probes are compiled with; the airgap bundle points it at its pinned distribution; empty uses the PATH lookup",
+      "category": "system",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/extbin"
       }
     },
     {
@@ -2503,12 +2682,12 @@
     {
       "name": "IMZERO2_FFMPEG_BIN",
       "type": "path",
-      "description": "explicit path to the ffmpeg binary the headless encoder and lane probe spawn; empty uses the PATH lookup",
-      "category": "dev",
+      "description": "explicit path to the ffmpeg binary the headless encoder, the lane probe and the audio decoder spawn; empty uses the PATH lookup",
+      "category": "system",
       "sensitive": false,
       "origin": {
         "module": "github.com/stergiotis/boxer",
-        "package": "github.com/stergiotis/boxer/public/thestack/imzero2/imzero2env"
+        "package": "github.com/stergiotis/boxer/public/extbin"
       }
     },
     {
@@ -2979,6 +3158,18 @@
       "origin": {
         "module": "github.com/stergiotis/boxer",
         "package": "github.com/stergiotis/boxer/public/keelson/runtime/watchbill"
+      }
+    },
+    {
+      "name": "LLM_API_KEY",
+      "type": "string",
+      "description": "API key for non-Gemini LLM providers (LM Studio, generic OpenAI-compatible); prefer the variable to --llm-apikey, which exposes the secret in process argv",
+      "category": "dev",
+      "sensitive": true,
+      "cliFlagName": "llm-apikey",
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/gov/commitdigest"
       }
     },
     {

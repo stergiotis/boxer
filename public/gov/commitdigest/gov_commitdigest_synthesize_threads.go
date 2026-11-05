@@ -73,11 +73,7 @@ func newSynthesizeThreadsCommand() *cli.Command {
 				Name:  "llm-model",
 				Usage: "Model name for the LLM (required unless --dry-run)",
 			},
-			&cli.StringFlag{
-				Name:    "llm-apikey",
-				Sources: cli.EnvVars("LLM_API_KEY"),
-				Usage:   "API key for non-Gemini LLM providers (LM Studio, generic OpenAI-compat). Prefer LLM_API_KEY env to avoid exposing the secret in process argv.",
-			},
+			LLMAPIKey.AsCliFlag(),
 			&cli.StringFlag{
 				Name:  "gemini-api-key",
 				Usage: "Gemini API key. When set, overrides --llm-apikey; when set empty, walks GEMINI_API_KEY → ~/.config/gemini/api_key. Auto-engaged when --llm-endpoint points at generativelanguage.googleapis.com.",

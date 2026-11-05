@@ -8,7 +8,41 @@ package extbin
 //
 // OverrideEnv is populated only where a path override is already a real need;
 // the field is the airgap/hermetic hook and can be added per program later
-// without touching call sites.
+// without touching call sites. Each override variable is declared here
+// through the env registry (ADR-0009), beside the program that honours it.
+
+import "github.com/stergiotis/boxer/public/config/env"
+
+// The path overrides of the programs below: empty keeps the PATH lookup.
+var (
+	ClickHouseLocalBin = env.NewPath(env.Spec{
+		Name:        "BOXER_CLICKHOUSE_LOCAL",
+		Description: "explicit path to the clickhouse binary `clickhouse local` runs; empty uses the PATH lookup",
+		Category:    env.CategorySystem,
+	})
+	// FfmpegBin is also read by the Rust client's headless encoder and lane
+	// probe, so one airgap setting points every ffmpeg spawn at one build.
+	FfmpegBin = env.NewPath(env.Spec{
+		Name:        "IMZERO2_FFMPEG_BIN",
+		Description: "explicit path to the ffmpeg binary the headless encoder, the lane probe and the audio decoder spawn; empty uses the PATH lookup",
+		Category:    env.CategorySystem,
+	})
+	FfprobeBin = env.NewPath(env.Spec{
+		Name:        "BOXER_FFPROBE_BIN",
+		Description: "explicit path to the ffprobe binary the audio decoder spawns; empty uses the PATH lookup",
+		Category:    env.CategorySystem,
+	})
+	RcloneBin = env.NewPath(env.Spec{
+		Name:        "BOXER_RCLONE",
+		Description: "explicit path to the rclone binary the lading store's SFTP seam spawns; empty uses the PATH lookup",
+		Category:    env.CategorySystem,
+	})
+	TinyGoBin = env.NewPath(env.Spec{
+		Name:        "BOXER_TINYGO",
+		Description: "explicit path to the tinygo binary the WASM survey probes are compiled with; the airgap bundle points it at its pinned distribution; empty uses the PATH lookup",
+		Category:    env.CategorySystem,
+	})
+)
 
 // Go toolchain.
 var (
@@ -64,7 +98,7 @@ var (
 		Name:        "clickhouse local",
 		Argv:        []string{"clickhouse", "local"},
 		Kind:        Host,
-		OverrideEnv: "BOXER_CLICKHOUSE_LOCAL",
+		OverrideEnv: ClickHouseLocalBin.Spec().Name,
 		InstallHint: "https://clickhouse.com/docs/en/install",
 	})
 
@@ -90,7 +124,7 @@ var (
 	Ffmpeg = Declare(Program{
 		Name:        "ffmpeg",
 		Kind:        Host,
-		OverrideEnv: "IMZERO2_FFMPEG_BIN",
+		OverrideEnv: FfmpegBin.Spec().Name,
 		InstallHint: "install ffmpeg (https://ffmpeg.org) or point IMZERO2_FFMPEG_BIN at a static build",
 	})
 
@@ -102,7 +136,7 @@ var (
 	Ffprobe = Declare(Program{
 		Name:        "ffprobe",
 		Kind:        Host,
-		OverrideEnv: "BOXER_FFPROBE_BIN",
+		OverrideEnv: FfprobeBin.Spec().Name,
 		InstallHint: "install ffmpeg's ffprobe (https://ffmpeg.org) or point BOXER_FFPROBE_BIN at it",
 	})
 )
@@ -118,7 +152,7 @@ var (
 	Rclone = Declare(Program{
 		Name:        "rclone",
 		Kind:        Host,
-		OverrideEnv: "BOXER_RCLONE",
+		OverrideEnv: RcloneBin.Spec().Name,
 		InstallHint: "https://rclone.org/install/",
 	})
 )
@@ -132,7 +166,7 @@ var (
 	TinyGo = Declare(Program{
 		Name:        "tinygo",
 		Kind:        Host,
-		OverrideEnv: "BOXER_TINYGO",
+		OverrideEnv: TinyGoBin.Spec().Name,
 		InstallHint: "https://tinygo.org/getting-started/install/",
 	})
 

@@ -69,71 +69,20 @@ func NewCliCommand() *cli.Command {
 
 // commonFlags returns the flags every subcommand shares: connection
 // (brokers, client-id), SASL (mechanism + credentials), and TLS
-// (enable + cert/key/ca paths).
+// (enable + cert/key/ca paths), each derived from its variable (env.go).
 func commonFlags() []cli.Flag {
 	return []cli.Flag{
-		&cli.StringFlag{
-			Name:     "brokers",
-			Aliases:  []string{"b"},
-			Required: true,
-			Usage:    "comma-separated list of broker addresses (host1:9092,host2:9092)",
-			Sources:  cli.EnvVars("BOXER_KAFKA_BROKERS"),
-		},
-		&cli.StringFlag{
-			Name:    "client-id",
-			Value:   "boxer",
-			Usage:   "kafka client.id",
-			Sources: cli.EnvVars("BOXER_KAFKA_CLIENT_ID"),
-		},
-
-		// SASL
-		&cli.StringFlag{
-			Name:    "sasl-mechanism",
-			Usage:   "SASL mechanism: none (default), PLAIN, SCRAM-SHA-256, SCRAM-SHA-512, OAUTHBEARER",
-			Sources: cli.EnvVars("BOXER_KAFKA_SASL_MECHANISM"),
-		},
-		&cli.StringFlag{
-			Name:    "sasl-username",
-			Usage:   "SASL username (PLAIN, SCRAM-SHA-256, SCRAM-SHA-512)",
-			Sources: cli.EnvVars("BOXER_KAFKA_SASL_USERNAME"),
-		},
-		&cli.StringFlag{
-			Name:    "sasl-password",
-			Usage:   "SASL password (PLAIN, SCRAM-SHA-256, SCRAM-SHA-512); prefer the env var to avoid shell history",
-			Sources: cli.EnvVars("BOXER_KAFKA_SASL_PASSWORD"),
-		},
-		&cli.StringFlag{
-			Name:    "sasl-token",
-			Usage:   "static OAUTHBEARER token (only for --sasl-mechanism=OAUTHBEARER)",
-			Sources: cli.EnvVars("BOXER_KAFKA_SASL_TOKEN"),
-		},
-
-		// TLS
-		&cli.BoolFlag{
-			Name:    "tls",
-			Usage:   "enable TLS (implicit if any --tls-* file flag is set)",
-			Sources: cli.EnvVars("BOXER_KAFKA_TLS"),
-		},
-		&cli.StringFlag{
-			Name:    "tls-ca-file",
-			Usage:   "path to a PEM-encoded CA bundle for verifying the broker certificate",
-			Sources: cli.EnvVars("BOXER_KAFKA_TLS_CA_FILE"),
-		},
-		&cli.StringFlag{
-			Name:    "tls-cert-file",
-			Usage:   "path to a PEM-encoded client certificate (for mTLS); requires --tls-key-file",
-			Sources: cli.EnvVars("BOXER_KAFKA_TLS_CERT_FILE"),
-		},
-		&cli.StringFlag{
-			Name:    "tls-key-file",
-			Usage:   "path to a PEM-encoded client key (for mTLS); requires --tls-cert-file",
-			Sources: cli.EnvVars("BOXER_KAFKA_TLS_KEY_FILE"),
-		},
-		&cli.BoolFlag{
-			Name:    "tls-skip-verify",
-			Usage:   "skip broker certificate verification (insecure; useful for self-signed dev clusters)",
-			Sources: cli.EnvVars("BOXER_KAFKA_TLS_SKIP_VERIFY"),
-		},
+		brokersFlag(),
+		ClientID.AsCliFlag(),
+		SASLMechanism.AsCliFlag(),
+		SASLUsername.AsCliFlag(),
+		SASLPassword.AsCliFlag(),
+		SASLToken.AsCliFlag(),
+		TLS.AsCliFlag(),
+		TLSCAFile.AsCliFlag(),
+		TLSCertFile.AsCliFlag(),
+		TLSKeyFile.AsCliFlag(),
+		TLSSkipVerify.AsCliFlag(),
 	}
 }
 

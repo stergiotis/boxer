@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/stergiotis/boxer/public/config/env"
+	"github.com/stergiotis/boxer/public/extbin"
 )
 
 // Render cadence values for [RenderCadence].
@@ -269,12 +270,10 @@ var (
 	// replacing the bare PATH lookup. Set it when the host must use one
 	// specific build — an airgapped target pointing at a bundled static
 	// ffmpeg — without shadowing the system ffmpeg for other tools. Empty
-	// keeps the PATH lookup. Read by the Rust client, not by Go.
-	FfmpegBin = env.NewPath(env.Spec{
-		Name:        "IMZERO2_FFMPEG_BIN",
-		Description: "explicit path to the ffmpeg binary the headless encoder and lane probe spawn; empty uses the PATH lookup",
-		Category:    env.CategoryDev,
-	})
+	// keeps the PATH lookup. Declared beside extbin's ffmpeg program, which
+	// honours the same variable, so the toolkit's Go spawns and the Rust
+	// client agree on one build.
+	FfmpegBin = extbin.FfmpegBin
 
 	// HeadlessCodec picks the startup video codec lane (ADR-0088 SD4): the host
 	// muxes through NUT and the viewer decodes via WebCodecs. h264 (default)

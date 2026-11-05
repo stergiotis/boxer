@@ -2,13 +2,30 @@ package extbin
 
 import (
 	"context"
-	"github.com/stergiotis/boxer/public/observability/eh/eb/ebtest"
 	"os"
 	"path/filepath"
 	"runtime"
 	"slices"
 	"strings"
 	"testing"
+
+	"github.com/stergiotis/boxer/public/config/env"
+	"github.com/stergiotis/boxer/public/observability/eh/eb/ebtest"
+)
+
+// The override variables the fixtures below honour, declared as every
+// program's override is; resolution reads them through the registry.
+var (
+	fakeOverride = env.NewPath(env.Spec{
+		Name:        "BOXER_FAKE_OV",
+		Description: "test fixture: path override of the boxer-fake-ov program",
+		Category:    env.CategoryTestIntegration,
+	})
+	resolveOverride = env.NewPath(env.Spec{
+		Name:        "BOXER_RESOLVE_OV",
+		Description: "test fixture: path override of the boxer-resolve-absent-xyz program",
+		Category:    env.CategoryTestIntegration,
+	})
 )
 
 // fakeBin writes an executable named name into dir that prints marker to stdout
@@ -65,9 +82,9 @@ func TestHost_OverrideEnv_WinsOverPath(t *testing.T) {
 
 	ovDir := t.TempDir()
 	fakeBin(t, ovDir, "override-bin", "from-override")
-	t.Setenv("BOXER_FAKE_OV", filepath.Join(ovDir, "override-bin"))
+	fakeOverride.SetForTest(t, filepath.Join(ovDir, "override-bin"))
 
-	p := &Program{Name: "boxer-fake-ov", Kind: Host, OverrideEnv: "BOXER_FAKE_OV"}
+	p := &Program{Name: "boxer-fake-ov", Kind: Host, OverrideEnv: fakeOverride.Spec().Name}
 	out, err := p.Output(context.Background(), Opts{})
 	if err != nil {
 		t.Fatalf("Output: %v", err)
@@ -234,8 +251,8 @@ func TestResolve_HostAndLocal(t *testing.T) {
 	}
 
 	// OverrideEnv wins.
-	t.Setenv("BOXER_RESOLVE_OV", "/opt/custom/tool")
-	ov := &Program{Name: "boxer-resolve-absent-xyz", Kind: Host, OverrideEnv: "BOXER_RESOLVE_OV"}
+	resolveOverride.SetForTest(t, "/opt/custom/tool")
+	ov := &Program{Name: "boxer-resolve-absent-xyz", Kind: Host, OverrideEnv: resolveOverride.Spec().Name}
 	if path, ok := ov.Resolve(); !ok || path != "/opt/custom/tool" {
 		t.Errorf("override resolve = (%q, %v), want ('/opt/custom/tool', true)", path, ok)
 	}

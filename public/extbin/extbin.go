@@ -20,12 +20,12 @@ package extbin
 import (
 	"bytes"
 	"context"
-	"os"
 	"os/exec"
 	"sort"
 	"strings"
 	"sync"
 
+	"github.com/stergiotis/boxer/public/config/env"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
@@ -94,7 +94,10 @@ type Program struct {
 	// OverrideEnv, when non-empty, names an environment variable whose value —
 	// an absolute path — takes precedence over PATH lookup. Host and
 	// GoToolchain only. It is the hook a future hermetic/airgap mode can
-	// require so no external binary is resolved from an ambient PATH.
+	// require so no external binary is resolved from an ambient PATH. The
+	// variable is declared through the env registry (ADR-0009) by the
+	// package that declares the program, so the registry documents it;
+	// resolution reads it by name, and a name no package declared panics.
 	OverrideEnv string
 	// InstallHint is appended to the not-found error, telling an operator how
 	// to satisfy the dependency.
@@ -320,15 +323,31 @@ func (p *Program) prefixArgs() (pre []string) {
 	return append([]string(nil), p.Argv[1:]...)
 }
 
+// override reads the program's OverrideEnv through the env registry: the
+// Path or String var declared under that name, with its override and flag
+// tiers honoured; any other typed var by its raw value.
 func (p *Program) override() (path string, ok bool) {
 	if p.OverrideEnv == "" {
 		return
 	}
-	v := strings.TrimSpace(os.Getenv(p.OverrideEnv)) //boxer:lint disable=CS011 reason="OverrideEnv names the variable at runtime; the static env registry keys on compile-time handles and cannot express this name-indirected lookup"
-	if v == "" {
+	v, declared := env.LookupVar(p.OverrideEnv)
+	if !declared {
+		panic("extbin: program " + p.Name + " names the override variable " + p.OverrideEnv + ", which no package declared through the env registry")
+	}
+	var raw string
+	switch t := v.(type) {
+	case *env.PathVar:
+		raw = t.Get()
+	case *env.StringVar:
+		raw = t.Get()
+	default:
+		raw, _ = v.Lookup()
+	}
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
 		return
 	}
-	return v, true
+	return raw, true
 }
 
 func (p *Program) goToolFallback(ctx context.Context, o Opts, args []string) (cmd *exec.Cmd, ok bool) {
