@@ -357,7 +357,7 @@ service now refuses a call that does not name its request entry, and the
 dispatcher a model-asked call that does not name its intent
 ([ADR-0357](./0357-a-model-call-names-the-journal-entry-written-before-it.md),
 [ADR-0358](./0358-asynchronous-operations-a-pending-outcome-and-a-turn-a-completion-wakes.md)
-§SD7, both proposed). The package comment's claim that an unknown act "cannot
+§SD7). The package comment's claim that an unknown act "cannot
 happen" overstated SD2 and is corrected there. That the journal is the *only*
 source of a request (SD3) remains the coordinator's to hold: `Resume.LastRequest`
 was added for a resume to compare digests, and no caller compares them.

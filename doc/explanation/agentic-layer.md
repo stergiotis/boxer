@@ -63,8 +63,8 @@ live in one place. A second caller would run beside them, not under them.
 That there is one harness is a review convention, not an enforced one; the
 ADR says so. That a harness journals is enforced: the model service refuses a
 call that does not name the request entry written before it, recording the
-same content ([ADR-0357](../adr/0357-a-model-call-names-the-journal-entry-written-before-it.md),
-proposed), and the dispatcher refuses a call a model asked for that does not
+same content ([ADR-0357](../adr/0357-a-model-call-names-the-journal-entry-written-before-it.md)),
+and the dispatcher refuses a call a model asked for that does not
 name its intent. This shows what was recorded before it left, not that the
 journal was the only source of what was sent.
 
@@ -271,8 +271,7 @@ that the call is **pending**, the turn goes on or ends, and a watcher follows th
 work. When it settles, a `completed` entry records it at once, under its label,
 and the model reads it in a note at the next round. If no turn is running the
 window starts one, within a limit, and not after the person pressed Stop
-([ADR-0358](../adr/0358-asynchronous-operations-a-pending-outcome-and-a-turn-a-completion-wakes.md),
-proposed).
+([ADR-0358](../adr/0358-asynchronous-operations-a-pending-outcome-and-a-turn-a-completion-wakes.md)).
 
 *Why not let the work outlive the window:* a grant dies with its window instance,
 so a turn with no window would need another answer about whose authority it

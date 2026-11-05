@@ -230,7 +230,7 @@ See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-d
 ### 2026-11-04 — SD6 is implemented, without a separate handle
 
 [ADR-0358](./0358-asynchronous-operations-a-pending-outcome-and-a-turn-a-completion-wakes.md)
-(proposed) implements SD6, and play's `run` declares `Async`, closing that gap of
+implements SD6, and play's `run` declares `Async`, closing that gap of
 SD8. The call's key serves as the handle, since it already identifies the call to
 `Status`, `Cancel` and the journal, so `Async` no longer means "returns a handle":
 it means the command stays `running` until its handler says the work settled, and

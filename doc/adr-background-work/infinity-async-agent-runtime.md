@@ -12,8 +12,7 @@ status: draft
 > code or repository was read, and the prose is paraphrase, so this page records
 > concepts and stated behaviour, not an implementation. The pages state no
 > version, licence or stability label. Nothing here is a decision; the decision
-> this fed is [ADR-0358](../adr/0358-asynchronous-operations-a-pending-outcome-and-a-turn-a-completion-wakes.md)
-> (proposed).
+> this fed is [ADR-0358](../adr/0358-asynchronous-operations-a-pending-outcome-and-a-turn-a-completion-wakes.md).
 
 # Infinity: an agent runtime whose turns are not processes
 
@@ -112,7 +111,7 @@ benefit says little about boxer's own case.
 **The two designs meet at one rule.** Infinity flushes before a call leaves;
 ADR-0308 §SD2 writes the journal before an act leaves. A runtime that reloads
 from a record on every slice needs that record to be complete, which is why
-requiring it (ADR-0357, proposed) comes before asynchronous work.
+requiring it (ADR-0357) comes before asynchronous work.
 
 **The hard conflict is authority, not scheduling.** A grant dies with its window
 instance. A turn that outlives its window needs a new answer about who is

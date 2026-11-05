@@ -1,11 +1,11 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-11-04
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-11-05
 reversibility: local-edit
 ---
-
-> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
 
 # ADR-0357: A model call names the journal entry written before it
 
@@ -161,7 +161,8 @@ request it built some other way. Nor does it ensure a reply is written.
 
 ## Status
 
-Proposed 2026-11-04.
+Accepted 2026-11-05, with every decision implemented. The durable trail row stays
+deferred, as SD6 records.
 
 ## References
 
@@ -169,4 +170,4 @@ Proposed 2026-11-04.
 - [ADR-0309](./0309-context-projection-as-sql-over-the-journal-in-a-local-worker.md) — the canonical request digest, law L4.
 - [ADR-0312](./0312-exits-sinks-from-the-cell-boundary-approval-tiers-and-exit-budgets.md) — approval keys, the resend.
 - [ADR-0318](./0318-model-inference-is-the-harnesss-apps-expose-operations.md) — one harness, by convention.
-- [ADR-0358](./0358-asynchronous-operations-a-pending-outcome-and-a-turn-a-completion-wakes.md) (proposed) — the same check on a tool call's intent.
+- [ADR-0358](./0358-asynchronous-operations-a-pending-outcome-and-a-turn-a-completion-wakes.md) — the same check on a tool call's intent.

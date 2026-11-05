@@ -1,11 +1,11 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-11-04
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-11-05
 reversibility: local-edit
 ---
-
-> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
 
 # ADR-0358: Asynchronous operations — a pending outcome, and a turn a completion wakes
 
@@ -198,7 +198,8 @@ a window, and ADR-0308 §SD11 keeps them out until they have one.
 
 ## Status
 
-Proposed 2026-11-04.
+Accepted 2026-11-05, with every decision implemented. Wakes are covered by the
+default lane and by no scene, and the gap in the verification plan stands.
 
 ## References
 
@@ -206,4 +207,4 @@ Proposed 2026-11-04.
 - [ADR-0308](./0308-the-run-journal-is-the-only-source-of-model-input.md) — the journal; §SD11 keeps window-less runs out.
 - [ADR-0315](./0315-coordinator-tools-as-operation-specs-and-a-contract-for-stateful-tools.md) — §SD6, the contract this implements.
 - [ADR-0322](./0322-app-instances-drain-a-lifetime-scope-between-unmount-and-unload.md) — a grant's lifetime.
-- [ADR-0357](./0357-a-model-call-names-the-journal-entry-written-before-it.md) (proposed) — the check §SD7 repeats.
+- [ADR-0357](./0357-a-model-call-names-the-journal-entry-written-before-it.md) — the check §SD7 repeats.
