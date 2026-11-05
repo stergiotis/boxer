@@ -81,6 +81,9 @@ import (
 	// KEELSON_LAUNCHABLE_APPS_WHERE (ADR-0272); read by hostboot, which this
 	// binary does not link.
 	_ "github.com/stergiotis/boxer/public/keelson/runtime/launchlimit"
+	// KEELSON_SERVICES_WHERE (ADR-0352); read by the service host, which only
+	// the graphical host links.
+	_ "github.com/stergiotis/boxer/public/keelson/runtime/servicehost"
 	_ "github.com/stergiotis/boxer/public/llm/openaichat"
 	_ "github.com/stergiotis/boxer/public/semistructured/leeway/ddl/clickhouse"
 	// IMZERO2_BROWSER_TARGET_DIR (ADR-0278, proposed); read by a tab binary's

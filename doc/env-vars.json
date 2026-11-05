@@ -2899,6 +2899,17 @@
       }
     },
     {
+      "name": "KEELSON_SERVICES_WHERE",
+      "type": "string",
+      "description": "ClickHouse boolean expression over keelson.apps columns; the headless apps it selects at boot, among those the launch limit admits, run as services (ADR-0352). Unset means no service runs",
+      "category": "system",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/keelson/runtime/servicehost"
+      }
+    },
+    {
       "name": "KEELSON_WATCHBILL_ABANDON_AFTER",
       "type": "duration",
       "default": "90s",

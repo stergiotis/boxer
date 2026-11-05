@@ -26,6 +26,16 @@ func NewGenDocsCommand() (cmd *cli.Command) {
 				Name:  "json",
 				Usage: "also write the machine-readable snapshot (RenderJSON) to this file ('-' for stdout)",
 			},
+			&cli.StringFlag{
+				Name:  "generator",
+				Usage: "how the markdown names the command that rendered it; a downstream host names its own",
+				Value: "public/app env gen-docs",
+			},
+			&cli.StringFlag{
+				Name:  "regenerate-hint",
+				Usage: "the command the markdown tells a reader to re-run after a spec changes",
+				Value: "go generate ./public/config/env/...",
+			},
 		},
 		Action: runGenDocs,
 	}
@@ -35,8 +45,8 @@ func NewGenDocsCommand() (cmd *cli.Command) {
 func runGenDocs(ctx context.Context, cmd *cli.Command) (err error) {
 	outPath := cmd.String("out")
 	body := Render(Options{
-		GeneratorPath:  "public/app env gen-docs",
-		RegenerateHint: "go generate ./public/config/env/...",
+		GeneratorPath:  cmd.String("generator"),
+		RegenerateHint: cmd.String("regenerate-hint"),
 	})
 	err = writeOutput(outPath, []byte(body))
 	if err != nil {
