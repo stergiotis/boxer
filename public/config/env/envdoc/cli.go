@@ -22,6 +22,10 @@ func NewGenDocsCommand() (cmd *cli.Command) {
 				Usage:    "output markdown file ('-' for stdout)",
 				Required: true,
 			},
+			&cli.StringFlag{
+				Name:  "json",
+				Usage: "also write the machine-readable snapshot (RenderJSON) to this file ('-' for stdout)",
+			},
 		},
 		Action: runGenDocs,
 	}
@@ -34,16 +38,34 @@ func runGenDocs(ctx context.Context, cmd *cli.Command) (err error) {
 		GeneratorPath:  "public/app env gen-docs",
 		RegenerateHint: "go generate ./public/config/env/...",
 	})
-	if outPath == "-" {
-		_, err = os.Stdout.WriteString(body)
+	err = writeOutput(outPath, []byte(body))
+	if err != nil {
+		return
+	}
+	jsonPath := cmd.String("json")
+	if jsonPath == "" {
+		return
+	}
+	var snapshot []byte
+	snapshot, err = RenderJSON()
+	if err != nil {
+		return
+	}
+	err = writeOutput(jsonPath, snapshot)
+	return
+}
+
+func writeOutput(path string, body []byte) (err error) {
+	if path == "-" {
+		_, err = os.Stdout.Write(body)
 		if err != nil {
-			err = eb.Build().Errorf("envgen: write stdout: %w", err)
+			err = eb.Build().Errorf("write stdout: %w", err)
 		}
 		return
 	}
-	err = os.WriteFile(outPath, []byte(body), 0o644)
+	err = os.WriteFile(path, body, 0o644)
 	if err != nil {
-		err = eb.Build().Str("outPath", outPath).Errorf("envgen: write: %w", err)
+		err = eb.Build().Str("path", path).Errorf("write: %w", err)
 	}
 	return
 }

@@ -417,6 +417,8 @@ ADRs are append-only; supersession is recorded, not deleted.
 
 - **2026-09-25 — A downstream project no longer named.** Mentions of a downstream repository were replaced with a generic description. That repository is private, and this one is public. The decision is unchanged.
 
+- **2026-11-05 — §4 gains a machine-readable snapshot: `doc/env-vars.json`.** `boxer env gen-docs --json` renders `env.Snapshot()` as JSON beside the markdown reference, and the `//go:generate` directive in `doc_gen.go` writes both. The document carries a `schema` marker (`boxer.env-vars/1`) and, per variable, the `Spec` fields — `name`, `type`, `default`, `description`, `category`, `sensitive`, `cliFlagName`, `allowed`, `origin` — with an empty `Default` omitted, since the registry reads empty as unset (update of 2026-08-28). Unlike the markdown it has no timestamp and is sorted by name, so two renders of one registry are byte-identical; that is what lets a test in the CLI binary's package (`public/app`, the one import graph that registers every spec) pin the committed file to the linked registry, so a spec added or changed without `go generate ./public/config/env/...` fails the default test lane. The markdown stays the human reference and keeps its `generated-at` header. Motivation: downstream modules that derive their own typed configuration catalogues from boxer's registry had to parse the Go declarations to reach fields the registry already holds. The core decision is unchanged.
+
 
 ## References
 

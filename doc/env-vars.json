@@ -1,0 +1,3045 @@
+{
+  "schema": "boxer.env-vars/1",
+  "variables": [
+    {
+      "name": "BOXER_ADHOC_DIR",
+      "type": "string",
+      "description": "directory whose filesystem holds the unnamed sealed files of ad-hoc datasets, staged recordings and window captures (ADR-0240 §SD1, ADR-0281); empty resolves to <user cache dir>/boxer/adhoc; must support O_TMPFILE (ext4, tmpfs)",
+      "category": "system",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/keelson/runtime/sealed"
+      }
+    },
+    {
+      "name": "BOXER_ADR_DIR",
+      "type": "path",
+      "description": "ADR markdown directory to read as the corpus; empty finds the nearest doc/adr at or above the working directory",
+      "category": "dev",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/gov/adrcorpus"
+      }
+    },
+    {
+      "name": "BOXER_ADR_ROOT",
+      "type": "path",
+      "description": "source tree to scan for ADR code citations; empty derives the checkout containing the ADR directory, and an unresolvable root just omits the code evidence",
+      "category": "dev",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/gov/adrcorpus"
+      }
+    },
+    {
+      "name": "BOXER_AGENTCONSOLE_DESTINATIONS",
+      "type": "string",
+      "description": "comma-separated grant destinations in the agent console's field when a window opens; for scenes and demos",
+      "category": "boxer-agentconsole",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/apps/agentconsole"
+      }
+    },
+    {
+      "name": "BOXER_AGENT_ACTIONS_FILE",
+      "type": "string",
+      "description": "file the headless host appends every runtime.agent action record to, as JSON lines, for trials (ADR-0269); honoured only on the headless host",
+      "category": "dev",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/keelson/runtime/agent"
+      }
+    },
+    {
+      "name": "BOXER_AGENT_CALLS_MAX",
+      "type": "int64",
+      "default": "1000",
+      "description": "the largest call budget the person can give a new runtime.agent task in the host's approval dialog; a budget a coordinator asks for above it is lowered to it",
+      "category": "dev",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/keelson/runtime/agent"
+      }
+    },
+    {
+      "name": "BOXER_AGENT_CALLS_MIN",
+      "type": "int64",
+      "default": "20",
+      "description": "the least call budget the person can give a new runtime.agent task in the host's approval dialog; a budget a coordinator asks for below it is raised to it",
+      "category": "dev",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/keelson/runtime/agent"
+      }
+    },
+    {
+      "name": "BOXER_AGENT_COORDINATORS",
+      "type": "string",
+      "description": "comma-separated app ids or subject aliases allowed to ask the person for an agent task grant (ADR-0269), e.g. chat,agentconsole; empty allows none",
+      "category": "system",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/keelson/runtime/agent"
+      }
+    },
+    {
+      "name": "BOXER_AGENT_DEADLINE",
+      "type": "duration",
+      "default": "30m",
+      "description": "how long a runtime.agent task runs before its calls wait for the person to give it more time, and how much more an approval gives",
+      "category": "dev",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/keelson/runtime/agent"
+      }
+    },
+    {
+      "name": "BOXER_AGENT_PACE",
+      "type": "duration",
+      "default": "750ms",
+      "description": "the least time between two visible changes — a change to a window, a window opened, an arrangement — of a runtime.agent task whose coordinator's ceiling does not let the model work unpaced",
+      "category": "dev",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/keelson/runtime/agent"
+      }
+    },
+    {
+      "name": "BOXER_AGENT_REQUEST_TIMEOUT",
+      "type": "duration",
+      "default": "30m",
+      "description": "how long a runtime.agent grant request or widening waits in the person's dialog before it expires; the coordinator's call waits as long",
+      "category": "dev",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/keelson/runtime/agent"
+      }
+    },
+    {
+      "name": "BOXER_AGENT_TEST_GRANTS",
+      "type": "bool",
+      "default": "false",
+      "description": "issue runtime.agent task grants without the person's approval, for scenes and tests (ADR-0269); honoured only on the headless host",
+      "category": "dev",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/keelson/runtime/agent"
+      }
+    },
+    {
+      "name": "BOXER_AGENT_UNATTENDED",
+      "type": "bool",
+      "default": "false",
+      "description": "turn on the unattended mode (ADR-0298): the host approves runtime.agent grant requests and widenings and accepts suggest-mode proposals in the person's place, within the coordinator's ceiling, BOXER_AGENT_CALLS_MAX and BOXER_AGENT_DEADLINE; a spent budget, a passed deadline and a consequential command still wait for the person; honoured only by a binary built with the boxer_unattended tag",
+      "category": "dev",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/keelson/runtime/agent"
+      }
+    },
+    {
+      "name": "BOXER_ANCHOR_STORE_PASSWORD",
+      "type": "string",
+      "description": "password for BOXER_ANCHOR_STORE_URL",
+      "category": "database",
+      "sensitive": true,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/keelson/runtime/headstore"
+      }
+    },
+    {
+      "name": "BOXER_ANCHOR_STORE_TABLE",
+      "type": "string",
+      "default": "boxer.anchorhead",
+      "description": "database-qualified table the anchor store holds the heads in; created where absent",
+      "category": "database",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/keelson/runtime/headstore"
+      }
+    },
+    {
+      "name": "BOXER_ANCHOR_STORE_URL",
+      "type": "string",
+      "description": "HTTP endpoint of the organisation's ClickHouse anchor store (ADR-0314 §SD2); unset anchors heads in memory, not durably",
+      "category": "database",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/keelson/runtime/headstore"
+      }
+    },
+    {
+      "name": "BOXER_ANCHOR_STORE_USER",
+      "type": "string",
+      "default": "default",
+      "description": "user for BOXER_ANCHOR_STORE_URL",
+      "category": "database",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/keelson/runtime/headstore"
+      }
+    },
+    {
+      "name": "BOXER_ATTENTION_AWAY_IDLE",
+      "type": "duration",
+      "default": "10m",
+      "description": "how long the host waits without the person's input before it sets them Away: cards stop opening on their own and an away log is kept, shown when Away ends — at the next input; 0 never",
+      "category": "dev",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/keelson/runtime/attention"
+      }
+    },
+    {
+      "name": "BOXER_ATTENTION_ESCALATE",
+      "type": "duration",
+      "default": "5m",
+      "description": "how long a decision waits in the person's queue unacknowledged before its card opens on its own; an item this close to its expiry is marked; 0 never escalates",
+      "category": "dev",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/keelson/runtime/attention"
+      }
+    },
+    {
+      "name": "BOXER_ATTENTION_FLOOD_PERSON",
+      "type": "int64",
+      "default": "10",
+      "description": "how many decisions all conversations together may ask of the person in ten minutes; the next is refused with a reason the model can act on; 0 does not bound",
+      "category": "dev",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/keelson/runtime/attention"
+      }
+    },
+    {
+      "name": "BOXER_ATTENTION_FLOOD_STREAM",
+      "type": "int64",
+      "default": "5",
+      "description": "how many decisions one conversation may ask of the person in ten minutes; the next is refused with a reason the model can act on; 0 does not bound",
+      "category": "dev",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/keelson/runtime/attention"
+      }
+    },
+    {
+      "name": "BOXER_ATTENTION_OPEN_OWN",
+      "type": "bool",
+      "default": "true",
+      "description": "open the card of a grant request, widening or confirmation at once when the window asking is the active one or the one the person last gave input to; off, it waits in the queue like any item until BOXER_ATTENTION_ESCALATE",
+      "category": "dev",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/keelson/runtime/attention"
+      }
+    },
+    {
+      "name": "BOXER_AUDIO_PEAKS_CACHE_DIR",
+      "type": "path",
+      "description": "directory holding cached audio peaks pyramids (ADR-0208 §SD4); empty uses <user cache dir>/boxer/audio-peaks",
+      "category": "system",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/science/audio/track"
+      }
+    },
+    {
+      "name": "BOXER_CAPMAP_VAULT",
+      "type": "path",
+      "description": "business-capability vault directory to read as the corpus; empty finds the nearest doc/competences at or above the working directory",
+      "category": "dev",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/gov/capmapcorpus"
+      }
+    },
+    {
+      "name": "BOXER_CELL_APPROVALS",
+      "type": "string",
+      "default": "CLEAR=free,GREEN=free,AMBER=person,AMBER+STRICT=organisation,RED=never",
+      "description": "the approval path for an exit above a sink's clearance, per TLP tier, as TIER=path pairs separated by commas; a path is free, person (a recorded justification), organisation (an approver) or never (ADR-0312 §SD3)",
+      "category": "boxer-cell",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/keelson/runtime/cell"
+      }
+    },
+    {
+      "name": "BOXER_CELL_CANARIES",
+      "type": "string",
+      "description": "planted canary tokens (ADR-0312 §SD6) as scope=token@TIER triples separated by commas: an outbound payload that contains a token of a tier above the sink's clearance is refused; a triple without a tier is RED",
+      "category": "boxer-cell",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/keelson/runtime/cell"
+      }
+    },
+    {
+      "name": "BOXER_CELL_CLIPBOARD_CLEARANCE",
+      "type": "categorial-string",
+      "default": "GREEN",
+      "description": "the TLP clearance of the clipboard out of boxer (ADR-0312 §SD1, ADR-0317): the highest tier that copies as plaintext without an approval",
+      "category": "boxer-cell",
+      "sensitive": false,
+      "allowed": [
+        "CLEAR",
+        "GREEN",
+        "AMBER",
+        "AMBER+STRICT",
+        "RED"
+      ],
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/keelson/runtime/cell"
+      }
+    },
+    {
+      "name": "BOXER_CELL_CONFINED_TIER",
+      "type": "categorial-string",
+      "default": "AMBER",
+      "description": "the TLP tier content labelled confined (derived from sealed data) carries at the sinks (ADR-0311 §SD1): a deployment default, not fixed by boxer; a value that names no tier fails closed to RED, where a clearance that names none fails to CLEAR",
+      "category": "boxer-cell",
+      "sensitive": false,
+      "allowed": [
+        "CLEAR",
+        "GREEN",
+        "AMBER",
+        "AMBER+STRICT",
+        "RED"
+      ],
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/keelson/runtime/cell"
+      }
+    },
+    {
+      "name": "BOXER_CELL_EGRESS_CLEARANCE",
+      "type": "categorial-string",
+      "default": "GREEN",
+      "description": "the TLP clearance of an HTTP egress destination outside the cell (ADR-0312 §SD1): the highest tier the outbound half of a fetch may carry",
+      "category": "boxer-cell",
+      "sensitive": false,
+      "allowed": [
+        "CLEAR",
+        "GREEN",
+        "AMBER",
+        "AMBER+STRICT",
+        "RED"
+      ],
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/keelson/runtime/cell"
+      }
+    },
+    {
+      "name": "BOXER_CELL_EXPORT_CLEARANCE",
+      "type": "categorial-string",
+      "default": "GREEN",
+      "description": "the TLP clearance of file export and printing (ADR-0312 §SD1): the highest tier that leaves as a file without an approval",
+      "category": "boxer-cell",
+      "sensitive": false,
+      "allowed": [
+        "CLEAR",
+        "GREEN",
+        "AMBER",
+        "AMBER+STRICT",
+        "RED"
+      ],
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/keelson/runtime/cell"
+      }
+    },
+    {
+      "name": "BOXER_CELL_MANAGED",
+      "type": "bool",
+      "default": "false",
+      "description": "the host is managed by the organisation (ADR-0307 §SD6): exits above the policy on relay channels are prevented, where on a host the person administers they are recorded and not prevented",
+      "category": "boxer-cell",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/keelson/runtime/cell"
+      }
+    },
+    {
+      "name": "BOXER_CELL_PEERS",
+      "type": "string",
+      "description": "peer cells of the same organisation and the TLP clearance of what is sent to each, as name=TIER pairs separated by commas (ADR-0307 §SD2, ADR-0312 §SD1)",
+      "category": "boxer-cell",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/keelson/runtime/cell"
+      }
+    },
+    {
+      "name": "BOXER_CELL_ROUTE_CLEARANCE",
+      "type": "categorial-string",
+      "default": "GREEN",
+      "description": "the TLP clearance of a remote model route (ADR-0312 §SD1): the highest tier a request may carry to a model host outside the cell; a loopback or trusted host is inside the cell and has none",
+      "category": "boxer-cell",
+      "sensitive": false,
+      "allowed": [
+        "CLEAR",
+        "GREEN",
+        "AMBER",
+        "AMBER+STRICT",
+        "RED"
+      ],
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/keelson/runtime/cell"
+      }
+    },
+    {
+      "name": "BOXER_CHAT_ADVANCED",
+      "type": "bool",
+      "default": "true",
+      "description": "fill the chat app's Analytics tab — token and answer statistics of the window's conversations, the conversation's agent surface, and Open in play on them as ad-hoc datasets; false leaves the tab saying how to turn it on",
+      "category": "boxer-chat",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/apps/chat"
+      }
+    },
+    {
+      "name": "BOXER_CHAT_ALLOW",
+      "type": "categorial-string",
+      "default": "run",
+      "description": "the highest action a new chat window's settings start at: read, view, edit, run or outside (publishes and exports, each still confirmed unless the grant lists its destination); the person can move it in the chat's Settings",
+      "category": "boxer-chat",
+      "sensitive": false,
+      "allowed": [
+        "read",
+        "view",
+        "edit",
+        "run",
+        "outside"
+      ],
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/apps/chat"
+      }
+    },
+    {
+      "name": "BOXER_CHAT_APPS",
+      "type": "bool",
+      "default": "false",
+      "description": "turn on Apps in a new chat window: the model may ask the person for windows to work in (ADR-0269); a chat listed in BOXER_AGENT_COORDINATORS starts with Apps on anyway",
+      "category": "boxer-chat",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/apps/chat"
+      }
+    },
+    {
+      "name": "BOXER_CHAT_ARTEFACT",
+      "type": "bool",
+      "default": "false",
+      "description": "turn on the Artefact in a new chat window: one markdown document per conversation that the model edits through tools (ADR-0282); for scenes and demos",
+      "category": "boxer-chat",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/apps/chat"
+      }
+    },
+    {
+      "name": "BOXER_CHAT_CALL_WAIT",
+      "type": "duration",
+      "default": "10s",
+      "description": "how long a chat's tool call waits for its operation to settle, when it does not wait on the person; after that an asynchronous operation is followed in the background and any other reports the phase it reached (ADR-0358)",
+      "category": "boxer-chat",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/apps/chat"
+      }
+    },
+    {
+      "name": "BOXER_CHAT_DRAFT",
+      "type": "string",
+      "description": "text in the chat app's composer when a window opens; for scenes and demos",
+      "category": "boxer-chat",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/apps/chat"
+      }
+    },
+    {
+      "name": "BOXER_CHAT_IMAGE_BYTES",
+      "type": "int64",
+      "default": "268435456",
+      "description": "the most a chat conversation's screenshots may hold on disk, in bytes of their sealed files (ADR-0284); a capture, copy or crop past it is refused",
+      "category": "boxer-chat",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/apps/chat"
+      }
+    },
+    {
+      "name": "BOXER_CHAT_IMAGE_COUNT",
+      "type": "int64",
+      "default": "64",
+      "description": "the most screenshots a chat conversation's artefact may name (ADR-0284)",
+      "category": "boxer-chat",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/apps/chat"
+      }
+    },
+    {
+      "name": "BOXER_CHAT_IMAGE_PIXELS",
+      "type": "int64",
+      "default": "16000000",
+      "description": "the most pixels a chat screenshot may have; a PNG past it is refused from its header, before it is decoded (ADR-0284)",
+      "category": "boxer-chat",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/apps/chat"
+      }
+    },
+    {
+      "name": "BOXER_CHAT_OPERATION_TOOLS",
+      "type": "bool",
+      "default": "false",
+      "description": "offer each operation of a window in the chat's task as its own typed tool, w<window>_<operation>, beside call_operation; for trials",
+      "category": "boxer-chat",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/apps/chat"
+      }
+    },
+    {
+      "name": "BOXER_CHAT_PENDING_MAX",
+      "type": "duration",
+      "default": "1h",
+      "description": "how long a chat follows an asynchronous operation in the background before it records that no end was seen (ADR-0358)",
+      "category": "boxer-chat",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/apps/chat"
+      }
+    },
+    {
+      "name": "BOXER_CHAT_PIXELS",
+      "type": "categorial-string",
+      "default": "none",
+      "description": "the Pixels level of a new chat window — which of the artefact's screenshots the model may see, and with whose consent (ADR-0287): none, ask, ask-once or captures; for scenes and demos",
+      "category": "boxer-chat",
+      "sensitive": false,
+      "allowed": [
+        "none",
+        "ask",
+        "ask-once",
+        "captures"
+      ],
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/apps/chat"
+      }
+    },
+    {
+      "name": "BOXER_CHAT_PIXELS_LOCAL",
+      "type": "bool",
+      "default": "false",
+      "description": "turn on Only to a local model in a new chat window: screenshots are sent only to a model on this machine or one the host trusts with sealed data (ADR-0287); for scenes and demos",
+      "category": "boxer-chat",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/apps/chat"
+      }
+    },
+    {
+      "name": "BOXER_CHAT_PIXELS_LOCAL_REQUIRED",
+      "type": "bool",
+      "default": "false",
+      "description": "require Only to a local model in every chat on this host (ADR-0287): screenshots reach only a model on this machine or one the host trusts with sealed data, and the person cannot turn it off",
+      "category": "boxer-chat",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/apps/chat"
+      }
+    },
+    {
+      "name": "BOXER_CHAT_PIXELS_MAX",
+      "type": "categorial-string",
+      "default": "captures",
+      "description": "the highest Pixels level a chat on this host may use (ADR-0287): none, ask, ask-once or captures; the person cannot set a chat above it",
+      "category": "boxer-chat",
+      "sensitive": false,
+      "allowed": [
+        "none",
+        "ask",
+        "ask-once",
+        "captures"
+      ],
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/apps/chat"
+      }
+    },
+    {
+      "name": "BOXER_CHAT_PROFILE",
+      "type": "categorial-string",
+      "default": "default",
+      "description": "the harness profile a chat runs under — the tool set, prompt book, seam elements, route and constants as one named, fingerprinted value (ADR-0310); default is the only profile registered",
+      "category": "boxer-chat",
+      "sensitive": false,
+      "allowed": [
+        "default"
+      ],
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/apps/chat"
+      }
+    },
+    {
+      "name": "BOXER_CHAT_QUESTIONS",
+      "type": "bool",
+      "default": "false",
+      "description": "turn on Questions in a new chat window: the model may ask the person structured questions as an inline form (ask_user); for scenes and demos",
+      "category": "boxer-chat",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/apps/chat"
+      }
+    },
+    {
+      "name": "BOXER_CHAT_ROUNDS",
+      "type": "int64",
+      "default": "24",
+      "description": "the rounds of model calls a chat turn with tools starts with in a new chat window, within BOXER_CHAT_ROUNDS_MIN and BOXER_CHAT_ROUNDS_MAX; the person can move it in the chat's Settings",
+      "category": "boxer-chat",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/apps/chat"
+      }
+    },
+    {
+      "name": "BOXER_CHAT_ROUNDS_MAX",
+      "type": "int64",
+      "default": "96",
+      "description": "the most rounds of model calls a chat turn with tools may be given in the chat's Settings",
+      "category": "boxer-chat",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/apps/chat"
+      }
+    },
+    {
+      "name": "BOXER_CHAT_ROUNDS_MIN",
+      "type": "int64",
+      "default": "4",
+      "description": "the fewest rounds of model calls a chat turn with tools may be given in the chat's Settings; the last round of a turn offers no tools, so it ends with an answer",
+      "category": "boxer-chat",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/apps/chat"
+      }
+    },
+    {
+      "name": "BOXER_CHAT_WAKES_MAX",
+      "type": "int64",
+      "default": "4",
+      "description": "how many turns finished background work may start in a chat since the person last spoke; past it, results wait for their next message, and 0 means they always do (ADR-0358)",
+      "category": "boxer-chat",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/apps/chat"
+      }
+    },
+    {
+      "name": "BOXER_CLICKHOUSE_BINARY_PATH",
+      "type": "path",
+      "default": "~/opt/clickhouse/clickhouse",
+      "description": "path to the clickhouse binary used by leeway DDL test utilities",
+      "category": "test-integration",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/semistructured/leeway/ddl/clickhouse"
+      }
+    },
+    {
+      "name": "BOXER_COMPONENT",
+      "type": "string",
+      "description": "component identity mark, injected by the supervisor (unit Environment= line, launcher script) and inherited by children; read by the topology layer (ADR-0126); empty = unmarked",
+      "category": "system",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/keelson/runtime/topo"
+      }
+    },
+    {
+      "name": "BOXER_FLIGHT_RECORDER",
+      "type": "bool",
+      "description": "enable the Go runtime flight recorder",
+      "category": "observability",
+      "sensitive": false,
+      "cliFlagName": "flightRecorder",
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/observability/tracing"
+      }
+    },
+    {
+      "name": "BOXER_FLIGHT_RECORDER_OUTPUT_FILE",
+      "type": "path",
+      "default": "flightRecorder.trace",
+      "description": "destination path for the flight recorder trace dump",
+      "category": "observability",
+      "sensitive": false,
+      "cliFlagName": "flightRecorderOutputFile",
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/observability/tracing"
+      }
+    },
+    {
+      "name": "BOXER_FS_APPDATA_DIR",
+      "type": "path",
+      "description": "fs broker: root of the per-app data areas (fs.appdata.*); empty uses <user config dir>/boxer/appdata",
+      "category": "system",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/keelson/runtime/fsbroker"
+      }
+    },
+    {
+      "name": "BOXER_GODEP_ROOT",
+      "type": "path",
+      "description": "module directory the keelson go_packages/go_imports tables collect from; empty resolves the nearest go.mod above the working directory",
+      "category": "dev",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/keelson/runtime/introspect/providersgodep"
+      }
+    },
+    {
+      "name": "BOXER_GODEP_TAGS",
+      "type": "string",
+      "description": "comma-separated build tags for the keelson go_packages/go_imports collection; empty falls back to <root>/tags then inherited GOFLAGS",
+      "category": "dev",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/keelson/runtime/introspect/providersgodep"
+      }
+    },
+    {
+      "name": "BOXER_GRIB_CORPUS",
+      "type": "string",
+      "description": "directory of GRIB survey corpora with oracle dumps, and the WMO table checkouts, for the integration lane and the table generator",
+      "category": "test-integration",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/science/geo/grib/tables"
+      }
+    },
+    {
+      "name": "BOXER_IMZERO_DEBUG_MODE",
+      "type": "string",
+      "description": "imzero2 debug profile: memcheck|massif|flamegraph|heaptrack; empty uses the default launcher",
+      "category": "dev",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/thestack/imzero2/imzero2env"
+      }
+    },
+    {
+      "name": "BOXER_JACKSTAY_PLAN",
+      "type": "string",
+      "description": "jackstay window: plan, by file name in the window's data area (fs.appdata), opened at start and saved to (created on first save when missing)",
+      "category": "database",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/apps/jackstay"
+      }
+    },
+    {
+      "name": "BOXER_JACKSTAY_TARGET_ENDPOINT",
+      "type": "string",
+      "description": "jackstay target server: HTTP URL or host:port (e.g. http://replica:8123/); empty means no target",
+      "category": "database",
+      "sensitive": false,
+      "cliFlagName": "target",
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/db/clickhouse/jackstay"
+      }
+    },
+    {
+      "name": "BOXER_JACKSTAY_TARGET_PASSWORD",
+      "type": "string",
+      "description": "jackstay target server password; read from the environment only, never stored in a plan",
+      "category": "database",
+      "sensitive": true,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/db/clickhouse/jackstay"
+      }
+    },
+    {
+      "name": "BOXER_JACKSTAY_TARGET_USER",
+      "type": "string",
+      "default": "default",
+      "description": "jackstay target server user",
+      "category": "database",
+      "sensitive": false,
+      "cliFlagName": "target-user",
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/db/clickhouse/jackstay"
+      }
+    },
+    {
+      "name": "BOXER_LADING_PUBLISH_BYTES",
+      "type": "int64",
+      "default": "268435456",
+      "description": "the most bytes of files one publish into the lading store may carry (ADR-0341); a larger tree is refused, not split",
+      "category": "boxer-lading",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/keelson/runtime/ladingpublish"
+      }
+    },
+    {
+      "name": "BOXER_LADING_PUBLISH_MAX_DAYS",
+      "type": "int64",
+      "default": "90",
+      "description": "the longest retention class, in days, a publish into the lading store may name (ADR-0341)",
+      "category": "boxer-lading",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/keelson/runtime/ladingpublish"
+      }
+    },
+    {
+      "name": "BOXER_LADING_PUBLISH_TIER",
+      "type": "categorial-string",
+      "default": "AMBER",
+      "description": "the highest TLP tier a tree published into the lading store may carry (ADR-0341); everyone who can read the store reads what is in it, and a confined tree is refused whatever this says",
+      "category": "boxer-lading",
+      "sensitive": false,
+      "allowed": [
+        "CLEAR",
+        "GREEN",
+        "AMBER",
+        "AMBER+STRICT",
+        "RED"
+      ],
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/keelson/runtime/ladingpublish"
+      }
+    },
+    {
+      "name": "BOXER_LAUNCHER_FRECENCY_HALFLIFE",
+      "type": "duration",
+      "default": "336h",
+      "description": "launcher ranking decay: a launch this old counts half as much as one just now",
+      "category": "system",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/keelson/runtime/launcher"
+      }
+    },
+    {
+      "name": "BOXER_LLM_APIKEY",
+      "type": "string",
+      "description": "API key the host's llm service sends to the endpoint; empty for local endpoints that take none",
+      "category": "llm",
+      "sensitive": true,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/keelson/runtime/llm"
+      }
+    },
+    {
+      "name": "BOXER_LLM_CONTEXT_TOKENS",
+      "type": "int64",
+      "default": "0",
+      "description": "the model's context size in tokens, reported by llm.describe so a chat can say how full its conversation is; 0 asks the endpoint's model list once at start (context_length, max_model_len and the like), and a server that reports none leaves it unknown",
+      "category": "llm",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/keelson/runtime/llm"
+      }
+    },
+    {
+      "name": "BOXER_LLM_ENDPOINT",
+      "type": "string",
+      "description": "OpenAI-compatible chat-completions base URL the host's llm service talks to (e.g. http://localhost:1234/v1); unset means no model is offered to apps",
+      "category": "llm",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/keelson/runtime/llm"
+      }
+    },
+    {
+      "name": "BOXER_LLM_MAXTOKENS",
+      "type": "int64",
+      "default": "4096",
+      "description": "completion token ceiling per llm.complete when the request names none",
+      "category": "llm",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/keelson/runtime/llm"
+      }
+    },
+    {
+      "name": "BOXER_LLM_MODEL",
+      "type": "string",
+      "description": "model id the host's llm service completes with; unset means no model is offered even with the endpoint set",
+      "category": "llm",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/keelson/runtime/llm"
+      }
+    },
+    {
+      "name": "BOXER_LLM_MODERATORS",
+      "type": "string",
+      "description": "comma-separated app ids that may set, list and cancel through llm.ration.* (ADR-0300): the moderators that throttle and refuse model calls; empty means no app may",
+      "category": "llm",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/keelson/runtime/llm"
+      }
+    },
+    {
+      "name": "BOXER_LLM_RATION_UNRULED",
+      "type": "categorial-string",
+      "default": "allow",
+      "description": "what the llm service does when its usage ledger could not be rebuilt from boxer.facts at start: allow (serve, counting from zero) or refuse (refuse every model call until restart)",
+      "category": "llm",
+      "sensitive": false,
+      "allowed": [
+        "allow",
+        "refuse"
+      ],
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/keelson/runtime/llm"
+      }
+    },
+    {
+      "name": "BOXER_LLM_RETAIN",
+      "type": "categorial-string",
+      "default": "off",
+      "description": "ceiling on keeping model message text: off (sizes and counts only), ring (text on this process's keelson('llm_calls') rows), durable (ring, plus the messages of llm.retain.* requests on boxer.facts, kept until removed by hand)",
+      "category": "llm",
+      "sensitive": false,
+      "allowed": [
+        "off",
+        "ring",
+        "durable"
+      ],
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/keelson/runtime/llm"
+      }
+    },
+    {
+      "name": "BOXER_LLM_SCRIPT",
+      "type": "string",
+      "description": "path to a scripted model (JSON lines, one reply each; \"$name\" in an argument takes the last value a tool result gave name) the llm service answers from instead of an endpoint; honoured only on the headless host, for scenes",
+      "category": "llm",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/keelson/runtime/llm"
+      }
+    },
+    {
+      "name": "BOXER_LLM_TIMEOUT",
+      "type": "duration",
+      "default": "120s",
+      "description": "wall-clock bound on one llm.complete; the service cancels the provider call at it, and app clients that name no timeout of their own wait that long plus a few seconds for the reply",
+      "category": "llm",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/keelson/runtime/llm"
+      }
+    },
+    {
+      "name": "BOXER_LLM_TRUSTED_HOSTS",
+      "type": "string",
+      "description": "comma-separated endpoint host names or IPs, without port, that the llm service treats like loopback: confined (sealed) content may be sent to them; list only machines under your own control, and prefer an https endpoint",
+      "category": "llm",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/keelson/runtime/llm"
+      }
+    },
+    {
+      "name": "BOXER_LOGVIEWER_REFRESH",
+      "type": "duration",
+      "default": "5s",
+      "description": "how often an open log viewer window re-reads its rows from boxer.facts in the background; the Refresh button reads at once; under 1s reads every second",
+      "category": "observability",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/keelson/runtime/logviewer"
+      }
+    },
+    {
+      "name": "BOXER_LOGVIEWER_ROWS",
+      "type": "int64",
+      "default": "2000",
+      "description": "how many of the newest matching log rows a log viewer window keeps in memory and shows; bounds each read from boxer.facts; clamped to 100..100000",
+      "category": "observability",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/keelson/runtime/logviewer"
+      }
+    },
+    {
+      "name": "BOXER_LOG_CALLER",
+      "type": "bool",
+      "description": "include caller file:line in log records",
+      "category": "observability",
+      "sensitive": false,
+      "cliFlagName": "logCaller",
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/observability/logging"
+      }
+    },
+    {
+      "name": "BOXER_LOG_COLOR",
+      "type": "bool",
+      "default": "true",
+      "description": "colorize console log output (auto-detects TTY when unset; off for file destinations)",
+      "category": "observability",
+      "sensitive": false,
+      "cliFlagName": "logColor",
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/observability/logging"
+      }
+    },
+    {
+      "name": "BOXER_LOG_CORRELATION_ID",
+      "type": "string",
+      "description": "correlation id for log records; empty seeds a nanoid(21)",
+      "category": "observability",
+      "sensitive": false,
+      "cliFlagName": "logCorrelationId",
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/observability/logging"
+      }
+    },
+    {
+      "name": "BOXER_LOG_FACTS",
+      "type": "string",
+      "description": "non-empty (and not \"0\") persists the host's log lines to boxer.facts through the ClickHouse store, which is where the log viewer reads them; empty/0 persists none, and the log viewer says so",
+      "category": "observability",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/keelson/runtime/factsstore/chstore"
+      }
+    },
+    {
+      "name": "BOXER_LOG_FACTS_URL",
+      "type": "string",
+      "description": "overrides the chstore default ClickHouse URL when BOXER_LOG_FACTS is enabled",
+      "category": "observability",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/keelson/runtime/factsstore/chstore"
+      }
+    },
+    {
+      "name": "BOXER_LOG_FILE",
+      "type": "string",
+      "description": "path to the log file; empty or \"-\" routes to stderr",
+      "category": "observability",
+      "sensitive": false,
+      "cliFlagName": "logFile",
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/observability/logging"
+      }
+    },
+    {
+      "name": "BOXER_LOG_FORMAT",
+      "type": "categorial-string",
+      "default": "json",
+      "description": "log output format",
+      "category": "observability",
+      "sensitive": false,
+      "cliFlagName": "logFormat",
+      "allowed": [
+        "default",
+        "console",
+        "diag",
+        "godump",
+        "json",
+        "json-indent",
+        "cbor"
+      ],
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/observability/logging"
+      }
+    },
+    {
+      "name": "BOXER_LOG_LEVEL",
+      "type": "categorial-string",
+      "default": "info",
+      "description": "zerolog level",
+      "category": "observability",
+      "sensitive": false,
+      "cliFlagName": "logLevel",
+      "allowed": [
+        "trace",
+        "debug",
+        "info",
+        "warn",
+        "error",
+        "fatal",
+        "panic"
+      ],
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/observability/logging"
+      }
+    },
+    {
+      "name": "BOXER_LOG_MODULE_INFO_ON_START",
+      "type": "bool",
+      "description": "log the Go module info on application startup",
+      "category": "observability",
+      "sensitive": false,
+      "cliFlagName": "logModuleInfoOnStart",
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/observability/logging"
+      }
+    },
+    {
+      "name": "BOXER_LOG_OS_ARGS_ON_START",
+      "type": "bool",
+      "description": "log os.Args on application startup",
+      "category": "observability",
+      "sensitive": false,
+      "cliFlagName": "logOsArgsOnStart",
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/observability/logging"
+      }
+    },
+    {
+      "name": "BOXER_LOG_OS_HOST_ON_START",
+      "type": "bool",
+      "description": "log the host name on application startup",
+      "category": "observability",
+      "sensitive": false,
+      "cliFlagName": "logOsHostOnStart",
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/observability/logging"
+      }
+    },
+    {
+      "name": "BOXER_LOG_OS_PID_ON_START",
+      "type": "bool",
+      "description": "log the OS process id on application startup",
+      "category": "observability",
+      "sensitive": false,
+      "cliFlagName": "logOsPidOnStart",
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/observability/logging"
+      }
+    },
+    {
+      "name": "BOXER_LOG_VCS_REVISION_ON_START",
+      "type": "bool",
+      "description": "log the VCS revision on application startup",
+      "category": "observability",
+      "sensitive": false,
+      "cliFlagName": "logVcsRevisionOnStart",
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/observability/logging"
+      }
+    },
+    {
+      "name": "BOXER_MAP_TILE_ATTRIBUTION",
+      "type": "string",
+      "default": "OpenStreetMap contributors",
+      "description": "attribution/credit line rendered over the basemap; empty shows none. Defaults to OpenStreetMap's required credit, which stays correct for a mirror of OSM tiles — a different tile source needs whatever credit line its terms of use require.",
+      "category": "boxer-map",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/basemap"
+      }
+    },
+    {
+      "name": "BOXER_MAP_TILE_ATTRIBUTION_URL",
+      "type": "string",
+      "default": "https://www.openstreetmap.org/copyright",
+      "description": "link target behind BOXER_MAP_TILE_ATTRIBUTION; empty renders the credit as plain text. Defaults to the OpenStreetMap copyright page.",
+      "category": "boxer-map",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/basemap"
+      }
+    },
+    {
+      "name": "BOXER_MAP_TILE_CA_FILE",
+      "type": "path",
+      "description": "path to a PEM certificate bundle added to the trust roots when fetching from BOXER_MAP_TILE_URL, for a tile server behind an internal CA; certificate verification stays on. Must hold the issuing CA — a bare self-signed server certificate is not accepted as its own trust anchor, and needs BOXER_MAP_TILE_INSECURE_TLS instead. Ignored unless BOXER_MAP_TILE_URL is set explicitly, and superseded by BOXER_MAP_TILE_INSECURE_TLS.",
+      "category": "boxer-map",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/basemap"
+      }
+    },
+    {
+      "name": "BOXER_MAP_TILE_INSECURE_TLS",
+      "type": "bool",
+      "description": "disable TLS certificate verification for BOXER_MAP_TILE_URL tile requests. Accepts any certificate, so it also accepts an interceptor's: use it only against a tile server you control on a trusted network, and prefer BOXER_MAP_TILE_CA_FILE. Also drops the protocol floor to TLS 1.0 and admits the legacy cipher suites (static-RSA key exchange, 3DES, RC4), so an old server is reachable rather than failing on version or cipher negotiation — once the peer is unauthenticated neither one protects anything. Ignored unless BOXER_MAP_TILE_URL is set explicitly — it never applies to the default OpenStreetMap server.",
+      "category": "boxer-map",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/basemap"
+      }
+    },
+    {
+      "name": "BOXER_MAP_TILE_MAX_ZOOM",
+      "type": "int64",
+      "default": "19",
+      "description": "highest zoom level served by BOXER_MAP_TILE_URL (1..255); 0 keeps the widget default. Defaults to 19, which is what OpenStreetMap serves.",
+      "category": "boxer-map",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/basemap"
+      }
+    },
+    {
+      "name": "BOXER_MAP_TILE_URL",
+      "type": "string",
+      "default": "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+      "description": "XYZ tile-server URL template for slippy-map basemaps, e.g. \"http://mygis/{z}/{x}/{y}.png\"; must contain the {z}/{x}/{y} placeholders. Defaults to OpenStreetMap, which fetches tiles from tile.openstreetmap.org over the public internet — set this to a self-hosted GIS to keep basemap traffic inside the deployment. Setting it is also what enables the BOXER_MAP_TILE_*_TLS / _CA_FILE knobs.",
+      "category": "boxer-map",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/basemap"
+      }
+    },
+    {
+      "name": "BOXER_MARKDOWN_ECHO",
+      "type": "bool",
+      "description": "echo os.Args as a markdown shell code block on startup (experimental)",
+      "category": "docgen",
+      "sensitive": false,
+      "cliFlagName": "markdownEcho",
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/docgen"
+      }
+    },
+    {
+      "name": "BOXER_MDEDIT_DOC",
+      "type": "string",
+      "description": "markdown for a new mdedit window to open as an unsaved document of its own, neither restored nor autosaved; for scenes and demos",
+      "category": "boxer-mdedit",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/apps/mdedit"
+      }
+    },
+    {
+      "name": "BOXER_MODERATOR",
+      "type": "bool",
+      "default": "false",
+      "description": "run the host's built-in moderator (ADR-0302): it watches model calls and agent actions for loops and slows, then stops, the windows that loop; true also lists it in BOXER_LLM_MODERATORS",
+      "category": "llm",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/keelson/runtime/moderator"
+      }
+    },
+    {
+      "name": "BOXER_PLAY_ALLOW_WRITES",
+      "type": "string",
+      "description": "non-empty lets Run execute an INSERT … SELECT wrapper (ADR-0181 §SD8) and DDL; unset, Run refuses the write with a copy-out hint and every Arrow run is sent readonly=2. Governs every play-engined host, sqlapplet included",
+      "category": "boxer-play",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/apps/play"
+      }
+    },
+    {
+      "name": "BOXER_PLAY_APP_WRITES",
+      "type": "string",
+      "description": "\"off\" stops play writing its own tables — the Series verdicts in boxer.tslabels; unset or anything else lets it (ADR-0270 §SD7). BOXER_PLAY_ALLOW_WRITES does not govern them",
+      "category": "boxer-play",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/apps/play"
+      }
+    },
+    {
+      "name": "BOXER_PLAY_AUTORUN",
+      "type": "string",
+      "description": "non-empty enables auto-run of the initial SQL on mount",
+      "category": "boxer-play",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/apps/play"
+      }
+    },
+    {
+      "name": "BOXER_PLAY_DOCK_SPLITS",
+      "type": "string",
+      "description": "initial dock split fractions, as comma-separated zone=fraction pairs (zones: editor, tools, side, bottom; fraction in (0,1), the share the leaf split from keeps — editor=0.3 gives the editor row 30% of the height); unnamed zones keep their default; a malformed pair fails the mount",
+      "category": "boxer-play",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/apps/play"
+      }
+    },
+    {
+      "name": "BOXER_PLAY_EXIT_ON_SHOT",
+      "type": "string",
+      "description": "non-empty exits the play HMI after writing BOXER_PLAY_SCREENSHOT",
+      "category": "boxer-play",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/apps/play"
+      }
+    },
+    {
+      "name": "BOXER_PLAY_FOCUS_BOWTIE",
+      "type": "string",
+      "description": "non-empty makes Bow-tie the default-active tab in its dock leaf (scripted screenshots)",
+      "category": "boxer-play",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/apps/play"
+      }
+    },
+    {
+      "name": "BOXER_PLAY_FOCUS_CARDS",
+      "type": "string",
+      "description": "non-empty makes Cards the default-active tab in its dock leaf (scripted screenshots)",
+      "category": "boxer-play",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/apps/play"
+      }
+    },
+    {
+      "name": "BOXER_PLAY_FOCUS_CHART",
+      "type": "string",
+      "description": "non-empty makes Chart the default-active tab in its dock leaf (scripted screenshots)",
+      "category": "boxer-play",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/apps/play"
+      }
+    },
+    {
+      "name": "BOXER_PLAY_FOCUS_CHAT",
+      "type": "string",
+      "description": "non-empty makes Chat the default-active tab in its dock leaf (scripted screenshots)",
+      "category": "boxer-play",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/apps/play"
+      }
+    },
+    {
+      "name": "BOXER_PLAY_FOCUS_COMPLETION",
+      "type": "string",
+      "description": "non-empty makes Completion the default-active tab in its dock leaf (scripted screenshots)",
+      "category": "boxer-play",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/apps/play"
+      }
+    },
+    {
+      "name": "BOXER_PLAY_FOCUS_DETAIL",
+      "type": "string",
+      "description": "non-empty makes Detail the default-active tab in its dock leaf (scripted screenshots)",
+      "category": "boxer-play",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/apps/play"
+      }
+    },
+    {
+      "name": "BOXER_PLAY_FOCUS_DIAGNOSTICS",
+      "type": "string",
+      "description": "non-empty makes Diagnostics the default-active tab in its dock leaf (scripted screenshots)",
+      "category": "boxer-play",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/apps/play"
+      }
+    },
+    {
+      "name": "BOXER_PLAY_FOCUS_DIST",
+      "type": "string",
+      "description": "non-empty makes Distribution the default-active tab in its dock leaf (scripted screenshots)",
+      "category": "boxer-play",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/apps/play"
+      }
+    },
+    {
+      "name": "BOXER_PLAY_FOCUS_DOCS",
+      "type": "string",
+      "description": "non-empty makes Docs the default-active tab in its dock leaf (scripted screenshots)",
+      "category": "boxer-play",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/apps/play"
+      }
+    },
+    {
+      "name": "BOXER_PLAY_FOCUS_EDITOR",
+      "type": "string",
+      "description": "non-empty makes Editor the default-active tab in its dock leaf (scripted screenshots)",
+      "category": "boxer-play",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/apps/play"
+      }
+    },
+    {
+      "name": "BOXER_PLAY_FOCUS_FILES",
+      "type": "string",
+      "description": "non-empty makes Files the default-active tab in its dock leaf (scripted screenshots)",
+      "category": "boxer-play",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/apps/play"
+      }
+    },
+    {
+      "name": "BOXER_PLAY_FOCUS_FLOW",
+      "type": "string",
+      "description": "non-empty makes Flow the default-active tab in its dock leaf (scripted screenshots)",
+      "category": "boxer-play",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/apps/play"
+      }
+    },
+    {
+      "name": "BOXER_PLAY_FOCUS_GLOSSES",
+      "type": "string",
+      "description": "non-empty makes Glosses the default-active tab in its dock leaf (scripted screenshots)",
+      "category": "boxer-play",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/apps/play"
+      }
+    },
+    {
+      "name": "BOXER_PLAY_FOCUS_GRAPH",
+      "type": "string",
+      "description": "non-empty makes Graph the default-active tab in its dock leaf (scripted screenshots)",
+      "category": "boxer-play",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/apps/play"
+      }
+    },
+    {
+      "name": "BOXER_PLAY_FOCUS_GRAPHVIEW",
+      "type": "string",
+      "description": "non-empty makes Graphview the default-active tab in its dock leaf (scripted screenshots)",
+      "category": "boxer-play",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/apps/play"
+      }
+    },
+    {
+      "name": "BOXER_PLAY_FOCUS_HISTORY",
+      "type": "string",
+      "description": "non-empty makes History the default-active tab in its dock leaf (scripted screenshots)",
+      "category": "boxer-play",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/apps/play"
+      }
+    },
+    {
+      "name": "BOXER_PLAY_FOCUS_ICICLE",
+      "type": "string",
+      "description": "non-empty makes Icicle the default-active tab in its dock leaf (scripted screenshots)",
+      "category": "boxer-play",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/apps/play"
+      }
+    },
+    {
+      "name": "BOXER_PLAY_FOCUS_KANBAN",
+      "type": "string",
+      "description": "non-empty makes Kanban the default-active tab in its dock leaf (scripted screenshots)",
+      "category": "boxer-play",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/apps/play"
+      }
+    },
+    {
+      "name": "BOXER_PLAY_FOCUS_MAP",
+      "type": "string",
+      "description": "non-empty makes Map the default-active tab in its dock leaf (scripted screenshots)",
+      "category": "boxer-play",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/apps/play"
+      }
+    },
+    {
+      "name": "BOXER_PLAY_FOCUS_NETWORK",
+      "type": "string",
+      "description": "non-empty makes Network the default-active tab in its dock leaf (scripted screenshots)",
+      "category": "boxer-play",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/apps/play"
+      }
+    },
+    {
+      "name": "BOXER_PLAY_FOCUS_PASSES",
+      "type": "string",
+      "description": "non-empty makes Passes the default-active tab in its dock leaf (scripted screenshots)",
+      "category": "boxer-play",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/apps/play"
+      }
+    },
+    {
+      "name": "BOXER_PLAY_FOCUS_PREVIEW",
+      "type": "string",
+      "description": "non-empty makes Preview the default-active tab in its dock leaf (scripted screenshots)",
+      "category": "boxer-play",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/apps/play"
+      }
+    },
+    {
+      "name": "BOXER_PLAY_FOCUS_PROJECTION",
+      "type": "string",
+      "description": "non-empty makes Projection the default-active tab in its dock leaf (scripted screenshots)",
+      "category": "boxer-play",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/apps/play"
+      }
+    },
+    {
+      "name": "BOXER_PLAY_FOCUS_RISKMATRIX",
+      "type": "string",
+      "description": "non-empty makes Risk matrix the default-active tab in its dock leaf (scripted screenshots)",
+      "category": "boxer-play",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/apps/play"
+      }
+    },
+    {
+      "name": "BOXER_PLAY_FOCUS_SANKEY",
+      "type": "string",
+      "description": "non-empty makes Sankey the default-active tab in its dock leaf (scripted screenshots)",
+      "category": "boxer-play",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/apps/play"
+      }
+    },
+    {
+      "name": "BOXER_PLAY_FOCUS_SCHEMA",
+      "type": "string",
+      "description": "non-empty makes Schema the default-active tab in its dock leaf (scripted screenshots)",
+      "category": "boxer-play",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/apps/play"
+      }
+    },
+    {
+      "name": "BOXER_PLAY_FOCUS_SERIES",
+      "type": "string",
+      "description": "non-empty makes Series the default-active tab in its dock leaf (scripted screenshots)",
+      "category": "boxer-play",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/apps/play"
+      }
+    },
+    {
+      "name": "BOXER_PLAY_FOCUS_SNIPPETS",
+      "type": "string",
+      "description": "non-empty makes Snippets the default-active tab in its dock leaf (scripted screenshots)",
+      "category": "boxer-play",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/apps/play"
+      }
+    },
+    {
+      "name": "BOXER_PLAY_FOCUS_TABLE",
+      "type": "string",
+      "description": "non-empty makes Table the default-active tab in its dock leaf (scripted screenshots)",
+      "category": "boxer-play",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/apps/play"
+      }
+    },
+    {
+      "name": "BOXER_PLAY_FOCUS_TIMELINE",
+      "type": "string",
+      "description": "non-empty makes Timeline the default-active tab in its dock leaf (scripted screenshots)",
+      "category": "boxer-play",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/apps/play"
+      }
+    },
+    {
+      "name": "BOXER_PLAY_FOCUS_TOLERANCE",
+      "type": "string",
+      "description": "non-empty makes Impact tolerance the default-active tab in its dock leaf (scripted screenshots)",
+      "category": "boxer-play",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/apps/play"
+      }
+    },
+    {
+      "name": "BOXER_PLAY_FOCUS_TREEMAP",
+      "type": "string",
+      "description": "non-empty makes Treemap the default-active tab in its dock leaf (scripted screenshots)",
+      "category": "boxer-play",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/apps/play"
+      }
+    },
+    {
+      "name": "BOXER_PLAY_FOCUS_VECTORFIELD",
+      "type": "string",
+      "description": "non-empty makes Vector field the default-active tab in its dock leaf (scripted screenshots)",
+      "category": "boxer-play",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/apps/play"
+      }
+    },
+    {
+      "name": "BOXER_PLAY_FOCUS_VOCABULARY",
+      "type": "string",
+      "description": "non-empty makes Vocabulary the default-active tab in its dock leaf (scripted screenshots)",
+      "category": "boxer-play",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/apps/play"
+      }
+    },
+    {
+      "name": "BOXER_PLAY_FOCUS_WORLD",
+      "type": "string",
+      "description": "non-empty makes World the default-active tab in its dock leaf (scripted screenshots)",
+      "category": "boxer-play",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/apps/play"
+      }
+    },
+    {
+      "name": "BOXER_PLAY_MAP_CENTER",
+      "type": "string",
+      "description": "initial Map center as \"lat,lon\" (WGS84); empty or unparseable keeps the default (40,0)",
+      "category": "boxer-play",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/apps/play"
+      }
+    },
+    {
+      "name": "BOXER_PLAY_MAP_SIZE",
+      "type": "string",
+      "description": "pin a fixed Map widget size as \"WxH\" logical points (deterministic scripted screenshots); empty or unparseable keeps the default (the map fills the Map tab)",
+      "category": "boxer-play",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/apps/play"
+      }
+    },
+    {
+      "name": "BOXER_PLAY_MAP_TABLE",
+      "type": "string",
+      "description": "initial table for the Map panel; empty keeps the default (planes_mercator_sample100)",
+      "category": "boxer-play",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/apps/play"
+      }
+    },
+    {
+      "name": "BOXER_PLAY_MAP_ZOOM",
+      "type": "float64",
+      "description": "initial Map zoom level; a positive value overrides the default (4)",
+      "category": "boxer-play",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/apps/play"
+      }
+    },
+    {
+      "name": "BOXER_PLAY_OBSERVE",
+      "type": "string",
+      "description": "graph node id to observe in the result panels after a Run (scripted screenshots); silently ignored when the node is absent from the split",
+      "category": "boxer-play",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/apps/play"
+      }
+    },
+    {
+      "name": "BOXER_PLAY_PREVIEW_AS_SENT",
+      "type": "string",
+      "description": "non-empty starts the Preview tab in 'as sent to server' mode (post-pass wire SQL) for scripted screenshots",
+      "category": "boxer-play",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/apps/play"
+      }
+    },
+    {
+      "name": "BOXER_PLAY_SCREENSHOT",
+      "type": "path",
+      "description": "if set, the play HMI captures a screenshot to this path after the first frame",
+      "category": "boxer-play",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/apps/play"
+      }
+    },
+    {
+      "name": "BOXER_PLAY_SHOT_SETTLE",
+      "type": "int64",
+      "description": "settle frames before BOXER_PLAY_SCREENSHOT fires; a positive value overrides the default (5), e.g. to wait out an async panel fetch",
+      "category": "boxer-play",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/apps/play"
+      }
+    },
+    {
+      "name": "BOXER_PLAY_SQL",
+      "type": "string",
+      "description": "initial SQL buffer for the play HMI; non-empty wins over the persisted-session restore",
+      "category": "boxer-play",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/apps/play"
+      }
+    },
+    {
+      "name": "BOXER_PLAY_TAB_ZONES",
+      "type": "string",
+      "description": "re-zone tabs at launch, as comma-separated id=zone pairs (zones: body, editor, tools, side, bottom; id * names every tab; later pairs win), e.g. \"*=body\" for one full-panel leaf; a pair naming an unknown tab or zone fails the mount",
+      "category": "boxer-play",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/apps/play"
+      }
+    },
+    {
+      "name": "BOXER_PLAY_TIMELINE_BANDS_SQL",
+      "type": "string",
+      "description": "panel-local bands SQL for the Timeline tab; non-empty wins over the persisted-session restore",
+      "category": "boxer-play",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/apps/play"
+      }
+    },
+    {
+      "name": "BOXER_PLAY_WINDOW_SIZE",
+      "type": "string",
+      "description": "open the play window at \"WxH\" logical points (scripted screenshots); empty or unparseable keeps the host's archetype default",
+      "category": "boxer-play",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/apps/play"
+      }
+    },
+    {
+      "name": "BOXER_RUN_DRIVER_ATTEMPT",
+      "type": "int64",
+      "description": "the attempt of the benchmark take BOXER_RUN_DRIVER_JOB names, a uint32, written as the run row's driver attempt",
+      "category": "runinfo",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/keelson/runtime/runinfo"
+      }
+    },
+    {
+      "name": "BOXER_RUN_DRIVER_JOB",
+      "type": "string",
+      "description": "the benchmark take a window host runs, named suite/task/take; set, the host's run row names driver bench and this job",
+      "category": "runinfo",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/keelson/runtime/runinfo"
+      }
+    },
+    {
+      "name": "BOXER_RUN_DRIVER_JOB_KIND",
+      "type": "string",
+      "description": "the suite version of the benchmark take BOXER_RUN_DRIVER_JOB names, written as the run row's driver job kind",
+      "category": "runinfo",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/keelson/runtime/runinfo"
+      }
+    },
+    {
+      "name": "BOXER_SQLAPPLET_DATASET_EVENTS",
+      "type": "categorial-string",
+      "default": "on",
+      "description": "dataset binder event path (ADR-0188 §SD3): on = subscribe and act; drop = subscribe but discard, reconcile alone binds (fault injection); off = do not subscribe, poll",
+      "category": "boxer-sqlapplet",
+      "sensitive": false,
+      "allowed": [
+        "on",
+        "drop",
+        "off"
+      ],
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/apps/sqlapplet"
+      }
+    },
+    {
+      "name": "BOXER_SQLAPPLET_DATASET_RECONCILE",
+      "type": "duration",
+      "default": "30s",
+      "description": "dataset binder reconcile interval with events subscribed (ADR-0188 §SD3); a Go duration such as 30s or 5s",
+      "category": "boxer-sqlapplet",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/apps/sqlapplet"
+      }
+    },
+    {
+      "name": "BOXER_SQLAPPLET_TAB_DOC",
+      "type": "string",
+      "description": "a browser tab fetches this applet document from its page's origin and mounts it (ADR-0299): a path relative to the page, such as applets/x.md, or absolute on its origin, such as /applets/x.md; its base name is the slug, and only a read-class buffer is admitted",
+      "category": "boxer-sqlapplet",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/apps/sqlapplet"
+      }
+    },
+    {
+      "name": "BOXER_SQLAPPLET_WINDOW_SIZE",
+      "type": "string",
+      "description": "open an applet window at \"WxH\" logical points (scripted screenshots); empty or unparseable keeps the host's archetype default",
+      "category": "boxer-sqlapplet",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/apps/sqlapplet"
+      }
+    },
+    {
+      "name": "BOXER_TAB_BASE",
+      "type": "string",
+      "description": "the URL of the directory a browser tab's page is served from, set by the tab's worker (ADR-0299); a tab binary's prepare step resolves paths against it, and Services.NoEgress lets its origin through",
+      "category": "dev",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/thestack/imzero2/browserhost/tabhost"
+      }
+    },
+    {
+      "name": "BOXER_TAB_HOST_URL",
+      "type": "string",
+      "default": "https://stergiotis.github.io/boxer/tabhost/",
+      "description": "base URL a tab binary's `bundle` fetches the Rust browser host from, as <base><sha256>.wasm checked against the digest in browserhost.sum; point it at a mirror or a local directory server for an offline build",
+      "category": "dev",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/thestack/imzero2/browserhost/tabhost"
+      }
+    },
+    {
+      "name": "BOXER_TRAILVIEWER_LOOKBACK",
+      "type": "duration",
+      "default": "720h",
+      "description": "how far before an audit event the trail viewer looks for the previous event of the same entity, which its previous-state diff compares against; an entity whose last change is older shows no before-state; at least 1m",
+      "category": "observability",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/keelson/runtime/trailviewer"
+      }
+    },
+    {
+      "name": "BOXER_TRAILVIEWER_REFRESH",
+      "type": "duration",
+      "default": "5s",
+      "description": "how long an open trail viewer window waits after a read of its case from the trail marts on boxer.facts before the next, in the background; the Refresh button reads at once; under 1s waits a second",
+      "category": "observability",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/keelson/runtime/trailviewer"
+      }
+    },
+    {
+      "name": "BOXER_TRAILVIEWER_ROWS",
+      "type": "int64",
+      "default": "2000",
+      "description": "how many of the newest rows of its case and window a trail viewer window reads at once; reaching the end of the table reads the next as many; clamped to 100..100000",
+      "category": "observability",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/keelson/runtime/trailviewer"
+      }
+    },
+    {
+      "name": "BOXER_TRAIL_REQUIRED",
+      "type": "bool",
+      "default": "false",
+      "description": "refuse a model call whose audit trail rows cannot be written to boxer.facts before the request leaves the machine, and an egress fetch on a host with no durable trail; false lets the work proceed, logged and marked as not durable",
+      "category": "boxer-trail",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/keelson/runtime/trail"
+      }
+    },
+    {
+      "name": "BOXER_WAIT_FOR_DEBUGGER",
+      "type": "bool",
+      "description": "execution of program waits until an attached debugger is detected (linux only)",
+      "category": "dev",
+      "sensitive": false,
+      "cliFlagName": "waitForDebugger",
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/dev"
+      }
+    },
+    {
+      "name": "BOXER_WAVEFORM_DEMO_FILE",
+      "type": "path",
+      "description": "recording the waveform gallery demo opens at mount, for scripted scenes; empty opens the synthetic track",
+      "category": "dev",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/demo/apps/widgets"
+      }
+    },
+    {
+      "name": "CLICKHOUSE_DATABASE",
+      "type": "string",
+      "description": "ClickHouse database; consumers omit the X-ClickHouse-Database header when empty",
+      "category": "database",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/db/clickhouse/clickhouseenv"
+      }
+    },
+    {
+      "name": "CLICKHOUSE_ENDPOINT",
+      "type": "string",
+      "description": "ClickHouse HTTP endpoint (e.g. http://localhost:8123); tests skip when empty",
+      "category": "database",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/db/clickhouse/clickhouseenv"
+      }
+    },
+    {
+      "name": "CLICKHOUSE_PASSWORD",
+      "type": "string",
+      "description": "ClickHouse password; consumers typically omit the auth header when empty",
+      "category": "database",
+      "sensitive": true,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/db/clickhouse/clickhouseenv"
+      }
+    },
+    {
+      "name": "CLICKHOUSE_URL",
+      "type": "string",
+      "default": "http://localhost:8123/",
+      "description": "ClickHouse HTTP URL used by the play HMI; defaults to localhost",
+      "category": "database",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/db/clickhouse/clickhouseenv"
+      }
+    },
+    {
+      "name": "CLICKHOUSE_USER",
+      "type": "string",
+      "default": "default",
+      "description": "ClickHouse user; defaults to the unauthenticated \"default\" account",
+      "category": "database",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/db/clickhouse/clickhouseenv"
+      }
+    },
+    {
+      "name": "GEMINI_API_KEY",
+      "type": "string",
+      "description": "Google AI Studio / Gemini API key",
+      "category": "llm",
+      "sensitive": true,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/llm/openaichat"
+      }
+    },
+    {
+      "name": "GOPATH",
+      "type": "path",
+      "description": "Go workspace root; empty means $HOME/go applied by the Go toolchain",
+      "category": "system",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/config/env"
+      }
+    },
+    {
+      "name": "GOROOT",
+      "type": "path",
+      "description": "Go installation root; empty means consult `go env GOROOT`",
+      "category": "system",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/config/env"
+      }
+    },
+    {
+      "name": "GOWORK",
+      "type": "string",
+      "description": "Go workspace file path; \"off\" disables workspace mode",
+      "category": "system",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/config/env"
+      }
+    },
+    {
+      "name": "HOME",
+      "type": "path",
+      "description": "user home directory; supplied by the OS or shell",
+      "category": "system",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/config/env"
+      }
+    },
+    {
+      "name": "IDS_ACCESSIBILITY",
+      "type": "categorial-string",
+      "default": "default",
+      "description": "accessibility preset overriding Tier-1 palettes: default (honour IDS_PALETTE_*), high-contrast (batlowK + alpha/range boost), monochrome (grayC for sequential, vik fallback for diverging).",
+      "category": "dev",
+      "sensitive": false,
+      "allowed": [
+        "default",
+        "high-contrast",
+        "monochrome"
+      ],
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
+      }
+    },
+    {
+      "name": "IDS_PALETTE_DIVERGING",
+      "type": "categorial-string",
+      "default": "vik",
+      "description": "user-default diverging palette for signed-deviation charts (delta heatmaps, residual plots). Overridden by IDS_ACCESSIBILITY.",
+      "category": "dev",
+      "sensitive": false,
+      "allowed": [
+        "vik",
+        "roma",
+        "broc",
+        "cork"
+      ],
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
+      }
+    },
+    {
+      "name": "IDS_PALETTE_SEQUENTIAL",
+      "type": "categorial-string",
+      "default": "batlow",
+      "description": "user-default sequential palette for ordered-data charts (boxenplot, treemap, heatmap). All values in the IDS catalogue are perceptually uniform and CVD-safe; the choice is aesthetic. Overridden by IDS_ACCESSIBILITY when that is non-default.",
+      "category": "dev",
+      "sensitive": false,
+      "allowed": [
+        "batlow",
+        "lapaz",
+        "oslo",
+        "lajolla",
+        "viridis",
+        "magma",
+        "plasma",
+        "inferno",
+        "batlow_k",
+        "gray_c"
+      ],
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
+      }
+    },
+    {
+      "name": "IMZERO2_ALLOW_NETWORK",
+      "type": "string",
+      "description": "set to \"1\" to allow demo widgets to fetch external resources",
+      "category": "dev",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/thestack/imzero2/imzero2env"
+      }
+    },
+    {
+      "name": "IMZERO2_BROWSER_TARGET_DIR",
+      "type": "path",
+      "description": "cargo target directory for building the Rust browser host (rust/imzero2/build_rust_browser.sh, `bundle` of a tab binary); unset is rust/imzero2/target/browser inside boxer, and the user cache directory when bundling from another module, where boxer's sources are read-only",
+      "category": "dev",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/thestack/imzero2/browserhost/tabhost"
+      }
+    },
+    {
+      "name": "IMZERO2_CLIENT_BINARY",
+      "type": "path",
+      "description": "path to the imzero2 GUI client the host launches; empty speaks the command protocol on stdin/stdout instead of opening a window",
+      "category": "dev",
+      "sensitive": false,
+      "cliFlagName": "clientBinary",
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/thestack/imzero2/imzero2env"
+      }
+    },
+    {
+      "name": "IMZERO2_COVERAGE_INTERVAL",
+      "type": "string",
+      "default": "5s",
+      "description": "coverage sample interval on -cover -covermode=atomic builds (ADR-0169); a zero or negative duration disables sampling",
+      "category": "system",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/keelson/runtime/coveragebus"
+      }
+    },
+    {
+      "name": "IMZERO2_COVERAGE_TRAIL",
+      "type": "bool",
+      "default": "false",
+      "description": "write Go coverage to the audit trail on -cover -covermode=atomic builds (ADR-0343): the build's function table, the run's covered-set growth, and per agent command the units its handler executed",
+      "category": "system",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/keelson/runtime/covtrail"
+      }
+    },
+    {
+      "name": "IMZERO2_DENSITY",
+      "type": "string",
+      "description": "IDS density preset (tight|standard|roomy) at launch, switchable at runtime via the Layout > Density menu; empty defaults to standard",
+      "category": "dev",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/thestack/imzero2/imzero2env"
+      }
+    },
+    {
+      "name": "IMZERO2_DEPLOY_CURRENT",
+      "type": "path",
+      "description": "the `current` symlink the demo unit runs through; empty derives <root>/current",
+      "category": "system",
+      "sensitive": false,
+      "cliFlagName": "current",
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/thestack/imzero2/imzero2env"
+      }
+    },
+    {
+      "name": "IMZERO2_DEPLOY_GATE_AUS",
+      "type": "int64",
+      "default": "30",
+      "description": "access units ws_probe must decode for the gate and post-restart health check to pass",
+      "category": "system",
+      "sensitive": false,
+      "cliFlagName": "gate-aus",
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/thestack/imzero2/imzero2env"
+      }
+    },
+    {
+      "name": "IMZERO2_DEPLOY_GATE_TIMEOUT",
+      "type": "duration",
+      "default": "120s",
+      "description": "overall budget for the gate and the post-restart health probe",
+      "category": "system",
+      "sensitive": false,
+      "cliFlagName": "gate-timeout",
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/thestack/imzero2/imzero2env"
+      }
+    },
+    {
+      "name": "IMZERO2_DEPLOY_KEEP",
+      "type": "int64",
+      "default": "5",
+      "description": "release dirs to retain for rollback history",
+      "category": "system",
+      "sensitive": false,
+      "cliFlagName": "keep",
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/thestack/imzero2/imzero2env"
+      }
+    },
+    {
+      "name": "IMZERO2_DEPLOY_LIVE_PORT",
+      "type": "int64",
+      "default": "8089",
+      "description": "the demo service's listen port (post-restart health-probe target)",
+      "category": "system",
+      "sensitive": false,
+      "cliFlagName": "live-port",
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/thestack/imzero2/imzero2env"
+      }
+    },
+    {
+      "name": "IMZERO2_DEPLOY_RELEASES_DIR",
+      "type": "path",
+      "description": "immutable release snapshots releases/<tag>/; empty derives <root>/releases",
+      "category": "system",
+      "sensitive": false,
+      "cliFlagName": "releases-dir",
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/thestack/imzero2/imzero2env"
+      }
+    },
+    {
+      "name": "IMZERO2_DEPLOY_REMOTE",
+      "type": "string",
+      "default": "origin",
+      "description": "git remote name in the workspace clone (read-only)",
+      "category": "system",
+      "sensitive": false,
+      "cliFlagName": "remote",
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/thestack/imzero2/imzero2env"
+      }
+    },
+    {
+      "name": "IMZERO2_DEPLOY_REQUIRE_SIGNED_TAGS",
+      "type": "bool",
+      "default": "true",
+      "description": "verify a tag's GPG/SSH signature (git verify-tag) before building; disable only on a trusted/loopback box",
+      "category": "system",
+      "sensitive": false,
+      "cliFlagName": "require-signed-tags",
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/thestack/imzero2/imzero2env"
+      }
+    },
+    {
+      "name": "IMZERO2_DEPLOY_ROOT",
+      "type": "path",
+      "default": "/opt/imzero2",
+      "description": "on-box deploy root (ADR-0085); workspace/releases/current derive from it unless overridden",
+      "category": "system",
+      "sensitive": false,
+      "cliFlagName": "root",
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/thestack/imzero2/imzero2env"
+      }
+    },
+    {
+      "name": "IMZERO2_DEPLOY_SCRATCH_PORT",
+      "type": "int64",
+      "default": "18089",
+      "description": "loopback port the pre-swap gate binds the candidate carrier on",
+      "category": "system",
+      "sensitive": false,
+      "cliFlagName": "scratch-port",
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/thestack/imzero2/imzero2env"
+      }
+    },
+    {
+      "name": "IMZERO2_DEPLOY_SERVICE",
+      "type": "string",
+      "default": "imzero2-demo.service",
+      "description": "systemd unit restarted on an atomic swap",
+      "category": "system",
+      "sensitive": false,
+      "cliFlagName": "service",
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/thestack/imzero2/imzero2env"
+      }
+    },
+    {
+      "name": "IMZERO2_DEPLOY_WORKSPACE",
+      "type": "path",
+      "description": "persistent git clone + build caches; empty derives <root>/workspace",
+      "category": "system",
+      "sensitive": false,
+      "cliFlagName": "workspace",
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/thestack/imzero2/imzero2env"
+      }
+    },
+    {
+      "name": "IMZERO2_DESKTOP_LAYOUT",
+      "type": "categorial-string",
+      "default": "floating",
+      "description": "the desktop's layout at launch (ADR-0346): floating, or a tiled layout the window host keeps live — main-stack, tile, columns, rows or monocle; switchable at runtime via Window > Desktop layout; for scenes and demos",
+      "category": "dev",
+      "sensitive": false,
+      "allowed": [
+        "floating",
+        "main-stack",
+        "tile",
+        "columns",
+        "rows",
+        "monocle"
+      ],
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/thestack/imzero2/imzero2env"
+      }
+    },
+    {
+      "name": "IMZERO2_FFMPEG_BIN",
+      "type": "path",
+      "description": "explicit path to the ffmpeg binary the headless encoder and lane probe spawn; empty uses the PATH lookup",
+      "category": "dev",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/thestack/imzero2/imzero2env"
+      }
+    },
+    {
+      "name": "IMZERO2_HEADLESS",
+      "type": "string",
+      "description": "dual-feature builds only: 1 or on selects the headless host at runtime; ignored in single-host builds",
+      "category": "dev",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/thestack/imzero2/imzero2env"
+      }
+    },
+    {
+      "name": "IMZERO2_HEADLESS_CODEC",
+      "type": "categorial-string",
+      "default": "h264",
+      "description": "startup stream lane: h264 (default; honours ENCODER_ARGS) | vp9 | av1 | av1-444 (AV1 4:4:4) | mesh (ADR-0128 draw-stream, WebGL2 viewer); runtime-switchable from the Go control",
+      "category": "dev",
+      "sensitive": false,
+      "allowed": [
+        "h264",
+        "vp9",
+        "av1",
+        "av1-444",
+        "mesh"
+      ],
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/thestack/imzero2/imzero2env"
+      }
+    },
+    {
+      "name": "IMZERO2_HEADLESS_DUMP_DIR",
+      "type": "path",
+      "description": "directory for per-frame PNG dumps (verification) and for client-requested captures (ADR-0154 CaptureRequest); empty disables both",
+      "category": "dev",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/thestack/imzero2/imzero2env"
+      }
+    },
+    {
+      "name": "IMZERO2_HEADLESS_DUMP_EVERY",
+      "type": "int64",
+      "default": "60",
+      "description": "with IMZERO2_HEADLESS_DUMP_DIR, dump every Nth frame",
+      "category": "dev",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/thestack/imzero2/imzero2env"
+      }
+    },
+    {
+      "name": "IMZERO2_HEADLESS_ENCODER_ARGS",
+      "type": "string",
+      "description": "override ffmpeg encode args between rawvideo input and -f h264 output; empty uses the VAAPI default",
+      "category": "dev",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/thestack/imzero2/imzero2env"
+      }
+    },
+    {
+      "name": "IMZERO2_HEADLESS_FPS",
+      "type": "float64",
+      "default": "60",
+      "description": "headless render tick in Hz, 1-240; Rust clamps to that range",
+      "category": "dev",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/thestack/imzero2/imzero2env"
+      }
+    },
+    {
+      "name": "IMZERO2_HEADLESS_H264_OUT",
+      "type": "path",
+      "description": "append the raw Annex-B H.264 stream to this file (verification); empty disables",
+      "category": "dev",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/thestack/imzero2/imzero2env"
+      }
+    },
+    {
+      "name": "IMZERO2_HEADLESS_IGNORE_CLOSE",
+      "type": "bool",
+      "description": "truthy makes a UI viewport-close (e.g. a File→Quit item) a no-op instead of a host shutdown; set for a long-lived served deployment so one viewer can't take the host down for everyone",
+      "category": "dev",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/thestack/imzero2/imzero2env"
+      }
+    },
+    {
+      "name": "IMZERO2_HEADLESS_LISTEN",
+      "type": "string",
+      "description": "headless carrier bind address host:port (port and port+1 both serve page + WebSocket); empty disables remote access",
+      "category": "dev",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/thestack/imzero2/imzero2env"
+      }
+    },
+    {
+      "name": "IMZERO2_HEADLESS_MAX_CONNECTIONS",
+      "type": "int64",
+      "default": "8",
+      "description": "max simultaneous viewers on the carrier (ADR-0086 active/passive roster): 1 active + the rest passive; a surplus connection is refused",
+      "category": "dev",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/thestack/imzero2/imzero2env"
+      }
+    },
+    {
+      "name": "IMZERO2_HEADLESS_MAX_FRAMES",
+      "type": "int64",
+      "default": "0",
+      "description": "stop after N rendered frames (0 = unbounded); smoke-test hook",
+      "category": "dev",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/thestack/imzero2/imzero2env"
+      }
+    },
+    {
+      "name": "IMZERO2_HEADLESS_PIXELS_PER_POINT",
+      "type": "float64",
+      "default": "1.0",
+      "description": "initial offscreen HiDPI scale, 0.25-4.0; a connected viewer's devicePixelRatio takes over",
+      "category": "dev",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/thestack/imzero2/imzero2env"
+      }
+    },
+    {
+      "name": "IMZERO2_HEADLESS_RASTER_STATS",
+      "type": "bool",
+      "description": "log a per-frame raster-cost percentile summary (tessellate + frame into host memory) when the headless host exits; comparable across the wgpu and CPU pixel hosts",
+      "category": "dev",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/thestack/imzero2/imzero2env"
+      }
+    },
+    {
+      "name": "IMZERO2_HEADLESS_RASTER_THREADS",
+      "type": "int64",
+      "default": "0",
+      "description": "CPU rasterizer worker threads in the headless_soft build; 0 = half the hardware threads (where the measured curve peaks)",
+      "category": "dev",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/thestack/imzero2/imzero2env"
+      }
+    },
+    {
+      "name": "IMZERO2_MARKDOWN_DEMO_PATH",
+      "type": "path",
+      "description": "markdown file the widget gallery's markdown demo loads when its window opens; empty starts with nothing loaded",
+      "category": "dev",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/demo/apps/widgets"
+      }
+    },
+    {
+      "name": "IMZERO2_PUFFIN",
+      "type": "bool",
+      "description": "truthy enables the Rust client's puffin scope collection and its loopback profiler server on 127.0.0.1:8585; unset leaves the compiled-in scopes off and the port closed",
+      "category": "dev",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/thestack/imzero2/imzero2env"
+      }
+    },
+    {
+      "name": "IMZERO2_QUERYRUNS_BACKFILL",
+      "type": "string",
+      "default": "all",
+      "description": "how far a FIRST-BOOT backfill reaches: all (the source's whole retention), none (start at service start), or a duration such as 24h; ignored once the destination holds facts, so downtime catch-up is unaffected (ADR-0115)",
+      "category": "observability",
+      "sensitive": false,
+      "cliFlagName": "backfill",
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/keelson/runtime/queryrunsvc"
+      }
+    },
+    {
+      "name": "IMZERO2_QUERYRUNS_CADENCE",
+      "type": "duration",
+      "default": "5s",
+      "description": "refresh cadence of the capture materialized view (whole seconds, minimum 1s); ClickHouse owns the schedule (ADR-0115 SD2)",
+      "category": "observability",
+      "sensitive": false,
+      "cliFlagName": "cadence",
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/keelson/runtime/queryrunsvc"
+      }
+    },
+    {
+      "name": "IMZERO2_QUERYRUNS_LISTEN",
+      "type": "string",
+      "default": "127.0.0.1:8127",
+      "description": "bind address for the queryrunsd /pull endpoint (ADR-0115); must be a loopback host — the refreshable MV reads it via url()",
+      "category": "observability",
+      "sensitive": false,
+      "cliFlagName": "listen",
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/keelson/runtime/queryrunsvc"
+      }
+    },
+    {
+      "name": "IMZERO2_QUERYRUNS_SCOPE",
+      "type": "categorial-string",
+      "default": "all",
+      "description": "capture scope: every terminal query_log event, only boxer-stamped ones, or off (the endpoint serves empty batches)",
+      "category": "observability",
+      "sensitive": false,
+      "cliFlagName": "scope",
+      "allowed": [
+        "all",
+        "stamped",
+        "off"
+      ],
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/keelson/runtime/queryrunsvc"
+      }
+    },
+    {
+      "name": "IMZERO2_RENDER_CADENCE",
+      "type": "categorial-string",
+      "default": "continuous",
+      "description": "frame-loop repaint cadence when idle: continuous (vsync rate) | reactive (idle heartbeat)",
+      "category": "dev",
+      "sensitive": false,
+      "allowed": [
+        "continuous",
+        "reactive"
+      ],
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/thestack/imzero2/imzero2env"
+      }
+    },
+    {
+      "name": "IMZERO2_RENDER_GOROUTINE_CHECK",
+      "type": "bool",
+      "description": "true: panic when an imzero2 call reaches the FFFI channel off the render loop's goroutine (ADR-0261); costs about a nanosecond per message on amd64 and arm64, microseconds elsewhere",
+      "category": "dev",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/thestack/imzero2/imzero2env"
+      }
+    },
+    {
+      "name": "IMZERO2_SCREENSHOT_DETERMINISTIC",
+      "type": "string",
+      "description": "non-empty: skip non-deterministic demos / tours so captures are byte-stable across runs",
+      "category": "dev",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/thestack/imzero2/imzero2env"
+      }
+    },
+    {
+      "name": "IMZERO2_SCREENSHOT_DIR",
+      "type": "path",
+      "description": "destination directory for per-window PNG captures; empty disables capture",
+      "category": "dev",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/thestack/imzero2/imzero2env"
+      }
+    },
+    {
+      "name": "IMZERO2_SCREENSHOT_SIZE",
+      "type": "string",
+      "description": "tour capture size as WxH (e.g. 1600x900); empty uses per-demo defaults",
+      "category": "dev",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/thestack/imzero2/imzero2env"
+      }
+    },
+    {
+      "name": "IMZERO2_SYSMETRICS_NATS_URL",
+      "type": "string",
+      "description": "NATS core URL for the system-metrics plane; when set, consumers subscribe to a standalone sysmetricsd scraper instead of sampling in-process (ADR-0090)",
+      "category": "system",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/keelson/runtime/sysmetricsbus"
+      }
+    },
+    {
+      "name": "IMZERO2_THEME",
+      "type": "string",
+      "description": "IDS colour theme at launch: dark (the IDS palette, default) | fresh (the light theme of ADR-0258); chosen once per process, not switchable at runtime",
+      "category": "dev",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/thestack/imzero2/imzero2env"
+      }
+    },
+    {
+      "name": "KEELSON_EASTEREGG",
+      "type": "bool",
+      "default": "false",
+      "description": "enable whimsical easter-egg UI flourishes in keelson apps (e.g. the splashscreen colourises its artwork with the viridis palette)",
+      "category": "keelson",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/keelson/runtime/app"
+      }
+    },
+    {
+      "name": "KEELSON_INTROSPECT_ENABLE",
+      "type": "bool",
+      "default": "true",
+      "description": "start the keelson introspection HTTP table source in-process (ADR-0094 §SD3); set falsey to disable",
+      "category": "system",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/keelson/runtime/introspect/introspecthost"
+      }
+    },
+    {
+      "name": "KEELSON_INTROSPECT_HTTP_LISTEN",
+      "type": "string",
+      "default": "127.0.0.1:0",
+      "description": "bind address for the keelson introspection HTTP table source (url() endpoint); must be a loopback host in v1",
+      "category": "system",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/keelson/runtime/introspect/introspecthttp"
+      }
+    },
+    {
+      "name": "KEELSON_INTROSPECT_SBOM_PATH",
+      "type": "string",
+      "description": "path to a CycloneDX SBOM JSON exposed as the keelson.sbom introspection table; empty disables the table",
+      "category": "system",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/keelson/runtime/introspect/providers"
+      }
+    },
+    {
+      "name": "KEELSON_LAUNCHABLE_APPS_WHERE",
+      "type": "string",
+      "description": "ClickHouse boolean expression over keelson.apps columns; only apps it selects at boot can be opened, by a person or an agent (ADR-0272). Apps registered later stay launchable. Unset means no limit",
+      "category": "system",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/keelson/runtime/launchlimit"
+      }
+    },
+    {
+      "name": "KEELSON_WATCHBILL_ABANDON_AFTER",
+      "type": "duration",
+      "default": "90s",
+      "description": "watchbill worker: a running job whose worker run has no heartbeat this recent is abandoned and re-queued",
+      "category": "system",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/keelson/runtime/watchbill"
+      }
+    },
+    {
+      "name": "KEELSON_WATCHBILL_ISOLATE_AGENT_JOBS",
+      "type": "bool",
+      "default": "false",
+      "description": "watchbill worker: route a job an agent's call enqueued into the reserved lane that only `watchbill run --job <id>` drains, so it runs in a process of its own (ADR-0344)",
+      "category": "system",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/keelson/runtime/watchbill"
+      }
+    },
+    {
+      "name": "KEELSON_WATCHBILL_KEEP",
+      "type": "duration",
+      "default": "168h",
+      "description": "watchbill worker: finished job rows older than this are deleted; the event rows stay",
+      "category": "system",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/keelson/runtime/watchbill"
+      }
+    },
+    {
+      "name": "KEELSON_WATCHBILL_LANE_CHILDREN",
+      "type": "int64",
+      "default": "2",
+      "description": "watchbill lane: how many agent-caused jobs run at once, each in a child process of its own (ADR-0344)",
+      "category": "system",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/keelson/runtime/watchbill"
+      }
+    },
+    {
+      "name": "KEELSON_WATCHBILL_LANE_KILL_GRACE",
+      "type": "duration",
+      "default": "5s",
+      "description": "watchbill lane: time a job child has to exit after SIGTERM before it is killed, when the host stops",
+      "category": "system",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/keelson/runtime/watchbill"
+      }
+    },
+    {
+      "name": "KEELSON_WATCHBILL_POLL",
+      "type": "duration",
+      "default": "5s",
+      "description": "watchbill worker: interval between queue reads when no wake arrives",
+      "category": "system",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/keelson/runtime/watchbill"
+      }
+    },
+    {
+      "name": "PEBBLE2_RUN_ID",
+      "type": "string",
+      "description": "per-process run id; inherited from a parent process when set, otherwise generated by Init()",
+      "category": "runinfo",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/keelson/runtime/runinfo"
+      }
+    },
+    {
+      "name": "PEBBLE_MAX_HAMMING_DIST_PER_BYTE_INCL",
+      "type": "int64",
+      "default": "3",
+      "description": "max Hamming distance per byte (inclusive) for anchor matching",
+      "category": "anchor",
+      "sensitive": false,
+      "cliFlagName": "maxHammingDistPerByteIncl",
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/app/commands/findAnchor"
+      }
+    },
+    {
+      "name": "PEBBLE_N_ANCHOR_BYTES",
+      "type": "int64",
+      "default": "3",
+      "description": "anchor length in bytes for the SkipPastAnchor* fec routines",
+      "category": "anchor",
+      "sensitive": false,
+      "cliFlagName": "nAnchorBytes",
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/app/commands/findAnchor"
+      }
+    },
+    {
+      "name": "SCCMAP_REPO",
+      "type": "path",
+      "description": "initial repository path explored by the Repo code exploration app; empty scans the host's worktree",
+      "category": "dev",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/demo/apps/sccmap"
+      }
+    },
+    {
+      "name": "SWISSTOPO_TILES_DIR",
+      "type": "path",
+      "default": "~/data/swisstopo",
+      "description": "directory containing swissALTI3D 2m COG tiles for the terrainscope app",
+      "category": "swisstopo",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/apps/terrainscope"
+      }
+    },
+    {
+      "name": "WINDOWHOST_DEBUG_RENDER",
+      "type": "string",
+      "description": "non-empty enables per-window-body render logging in the windowhost",
+      "category": "dev",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/keelson/runtime/windowhost"
+      }
+    }
+  ]
+}
