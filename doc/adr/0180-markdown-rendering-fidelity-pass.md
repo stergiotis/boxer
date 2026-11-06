@@ -502,6 +502,21 @@ underneath — a mark tint as a token in its own right, beside the three
 tiers — is left to the design system; the pen composes what the palette
 has.
 
+The sixteenth run sets typographic punctuation. The typst arms the
+trial added in its fifteenth run set straight quotes and apostrophes
+curly, `--` and `---` as dashes and `...` as an ellipsis, as any
+typesetter does, and the native arm and the HTML arms showed the
+characters as typed. goldmark's Typographer does the same substitution
+at parse time; the obsidian package wires it as `FeatureTypographer`,
+with the characters themselves rather than entities so an AST walker
+draws what the HTML shows, and without the angle quotes, which are
+operators in this stack's prose. The feature is wired but kept out of
+`FeatureAll`, since it rewrites text and a consumer mapping text to
+source bytes (mdspan) or indexing it (mdextract) must not take it
+unasked; the widget's default set and the trial's HTML arm opt in. A
+`--flag` in prose outside a code span becomes an en dash, which is the
+convention's cost and the reason flags are written in code spans.
+
 ## References
 
 - [Markdown rendering review](../adr-background-work/markdown-rendering-review.md) — the background work this decides on.

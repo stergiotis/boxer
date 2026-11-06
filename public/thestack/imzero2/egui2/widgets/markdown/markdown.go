@@ -172,11 +172,14 @@ func (inst *Doc) Headings() (headings []HeadingInfo) {
 }
 
 // SlugHeading returns the URL-fragment slug for a heading text, matching
-// boxer's [resolver.NoopResolver] sanitiser: lower-cased, ' ' replaced
-// by '-'. Exported so help/TOC consumers compose link targets that
-// resolve against the same fragment keys [Doc.Headings] populates.
+// boxer's [resolver.NoopResolver] sanitiser: typographic punctuation
+// folded back to what an author types ([resolver.FoldTypography], so a
+// heading the typographer set and a link written from the source meet),
+// lower-cased, ' ' replaced by '-'. Exported so help/TOC consumers compose
+// link targets that resolve against the same fragment keys [Doc.Headings]
+// populates.
 func SlugHeading(text string) (slug string) {
-	slug = strings.ToLower(text)
+	slug = strings.ToLower(resolver.FoldTypography(text))
 	slug = strings.ReplaceAll(slug, " ", "-")
 	return
 }
@@ -521,6 +524,12 @@ type ParseOptions struct {
 	// is the definition, plus the definitions as a numbered list at the
 	// end — ADR-0255).
 	//
+	// The default set includes [obsidian.FeatureTypographer] — curly
+	// quotes, en and em dashes, an ellipsis, as a typesetter sets them —
+	// which is wired but kept out of [obsidian.FeatureAll] because it
+	// rewrites text; a reading surface is where it belongs. A caller that
+	// maps the rendered text back to source bytes passes its own set.
+	//
 	// The default set does NOT include math: [obsidian.FeatureMath] is
 	// declared and reserved but wired to nothing, and is deliberately not
 	// part of [obsidian.FeatureAll]; setting it changes neither parse nor
@@ -571,6 +580,7 @@ const (
 
 func defaultConfig() (cfg config) {
 	cfg.features = obsidian.FeatureFrontmatter |
+		obsidian.FeatureTypographer |
 		obsidian.FeatureGFM |
 		obsidian.FeatureWikilink |
 		obsidian.FeatureEmbed |

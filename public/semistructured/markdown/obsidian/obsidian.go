@@ -127,6 +127,9 @@ func collectExtensions(opts Options) (exts []goldmark.Extender) {
 	if opts.Features&FeatureFootnote != 0 {
 		exts = append(exts, extension.Footnote)
 	}
+	if opts.Features&FeatureTypographer != 0 {
+		exts = append(exts, extension.NewTypographer(extension.WithTypographicSubstitutions(typographicSubstitutions)))
+	}
 	if opts.Features&FeatureWikilink != 0 {
 		exts = append(exts, &wikilink.Extender{Resolver: r})
 	}
@@ -154,4 +157,21 @@ func collectExtensions(opts Options) (exts []goldmark.Extender) {
 	}
 
 	return
+}
+
+// typographicSubstitutions is [FeatureTypographer]'s table: the characters
+// themselves rather than goldmark's default entities, which an AST walker
+// would otherwise carry into its text, and no angle quotes (nil switches a
+// substitution off).
+var typographicSubstitutions = map[extension.TypographicPunctuation][]byte{
+	extension.LeftSingleQuote:  []byte("\u2018"),
+	extension.RightSingleQuote: []byte("\u2019"),
+	extension.LeftDoubleQuote:  []byte("\u201c"),
+	extension.RightDoubleQuote: []byte("\u201d"),
+	extension.EnDash:           []byte("\u2013"),
+	extension.EmDash:           []byte("\u2014"),
+	extension.Ellipsis:         []byte("\u2026"),
+	extension.Apostrophe:       []byte("\u2019"),
+	extension.LeftAngleQuote:   nil,
+	extension.RightAngleQuote:  nil,
 }

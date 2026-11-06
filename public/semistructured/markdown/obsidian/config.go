@@ -54,14 +54,29 @@ const (
 	// HTML renderer emits and [BlockId] reads. The id alphabet is letters,
 	// digits and hyphens; a marker that does not end its line is text.
 	FeatureBlockId FeatureE = 1 << 11
+	// FeatureTypographer sets the typographic punctuation a typesetter
+	// sets: straight quotes and apostrophes become curly, `--` and `---`
+	// an en and an em dash, `...` an ellipsis; `<<` and `>>` stay, since
+	// they are operators far more often than quotation marks in the
+	// documents this stack renders. Code spans and blocks are untouched.
+	// The substitutions are the characters themselves, not HTML entities,
+	// so a consumer that walks the AST sees the glyph it will draw.
+	//
+	// Wired, and deliberately NOT part of [FeatureAll]: it rewrites text,
+	// so a consumer that maps text back to source bytes (mdspan) or
+	// indexes it (mdextract) would see characters the source does not
+	// hold. A rendering surface opts in — the markdown widget does, and
+	// so does the trial's HTML arm. A `--flag` in prose outside a code
+	// span becomes an en dash: write flags in code spans.
+	FeatureTypographer FeatureE = 1 << 12
 
-	// FeatureAll is every WIRED feature — the whole declared space MINUS
-	// the reserved-and-unwired bits. Only [FeatureMath] is subtracted
-	// today. Written as the full mask minus the exclusions rather than as
-	// an OR of the wired flags so a newly declared bit is opted IN by
-	// default and has to be excluded on purpose, which is the direction
-	// that fails loudly.
-	FeatureAll FeatureE = ((1 << 12) - 1) &^ FeatureMath
+	// FeatureAll is every WIRED feature meant for every consumer — the
+	// whole declared space MINUS the reserved-and-unwired [FeatureMath]
+	// and the text-rewriting [FeatureTypographer]. Written as the full
+	// mask minus the exclusions rather than as an OR of the wired flags
+	// so a newly declared bit is opted IN by default and has to be
+	// excluded on purpose, which is the direction that fails loudly.
+	FeatureAll FeatureE = ((1 << 13) - 1) &^ FeatureMath &^ FeatureTypographer
 )
 
 // TagRenderE controls how tags are rendered in HTML.

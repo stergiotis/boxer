@@ -26,7 +26,9 @@ Sub-packages:
 
 ```go
 md := obsidian.New(obsidian.Options{
-    Features: obsidian.FeatureAll,
+    // FeatureTypographer (curly quotes, dashes, ellipsis) is wired but not
+    // in FeatureAll: it rewrites text, so a rendering surface opts in.
+    Features: obsidian.FeatureAll | obsidian.FeatureTypographer,
     Resolver: obsidian.resolver.NoopResolver{},
 })
 

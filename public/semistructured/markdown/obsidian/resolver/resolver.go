@@ -81,9 +81,29 @@ func sanitizePath(s string) string {
 }
 
 func sanitizeFragment(s string) string {
-	r := strings.ToLower(s)
+	r := strings.ToLower(FoldTypography(s))
 	r = strings.ReplaceAll(r, " ", "-")
 	return r
+}
+
+// typographyFolds maps the typographic punctuation the obsidian package's
+// FeatureTypographer sets back to what an author types, so a fragment
+// written either way names the same heading. It mirrors the package's
+// substitution table, which a test there holds to it.
+var typographyFolds = strings.NewReplacer(
+	"\u2018", "'", "\u2019", "'",
+	"\u201c", "\"", "\u201d", "\"",
+	"\u2014", "---", "\u2013", "--",
+	"\u2026", "...",
+)
+
+// FoldTypography returns s with typographic quotes, dashes and the
+// ellipsis replaced by the characters an author types for them; a heading
+// set by the typographer and a link naming it by its source text meet in
+// one fragment. Exported so the markdown widget's [SlugHeading] applies
+// the same fold the resolver does.
+func FoldTypography(s string) string {
+	return typographyFolds.Replace(s)
 }
 
 func IsImageFile(target string) bool {

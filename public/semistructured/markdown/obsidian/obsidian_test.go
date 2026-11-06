@@ -14,6 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/yuin/goldmark"
 	"github.com/yuin/goldmark/ast"
+	"github.com/yuin/goldmark/extension"
 	"github.com/yuin/goldmark/parser"
 	"github.com/yuin/goldmark/text"
 )
@@ -81,7 +82,26 @@ func allFeatures() Options {
 // expecting it to render (C3 in the rendering review).
 func TestFeatureAll_ExcludesTheUnwiredMathBit(t *testing.T) {
 	require.Zero(t, FeatureAll&FeatureMath, "FeatureAll must not carry the unwired math bit")
-	require.Equal(t, FeatureE(((1<<12)-1)&^FeatureMath), FeatureAll)
+	require.Equal(t, FeatureE(((1<<13)-1)&^FeatureMath&^FeatureTypographer), FeatureAll)
+}
+
+// The typographer rewrites text, so it is wired but opted into, never
+// part of FeatureAll: a consumer that maps text to source bytes must not
+// get it by default.
+func TestFeatureAll_ExcludesTheTextRewritingTypographer(t *testing.T) {
+	require.Zero(t, FeatureAll&FeatureTypographer)
+}
+
+func TestFeatureTypographer_SetsTypographicPunctuation(t *testing.T) {
+	src := "It's \"quoted\" -- dashed --- and more... but `it's --x` and a << b stay.\n"
+	opts := allFeatures()
+	opts.Features |= FeatureTypographer
+	got := render(t, opts, src)
+	for _, want := range []string{"It\u2019s", "\u201cquoted\u201d", "\u2013 dashed \u2014", "more\u2026", "<code>it's --x</code>", "a &lt;&lt; b"} {
+		require.Contains(t, got, want)
+	}
+	plain := render(t, allFeatures(), src)
+	require.Contains(t, plain, "It's", "FeatureAll leaves the punctuation as written")
 }
 
 // Every OTHER declared bit is in FeatureAll — the exclusion list is one
@@ -1037,4 +1057,22 @@ func TestShowcase(t *testing.T) {
 	require.Contains(t, html, `class="footnotes"`)
 	require.NotContains(t, html, "but this is hidden")
 	require.NotContains(t, html, "a secret note")
+}
+
+// The resolver's fold is the typographer's table run backwards: every
+// character the typographer sets folds to what the author typed, so a
+// fragment written either way names one heading.
+func TestFeatureTypographer_ResolverFoldsItsTableBack(t *testing.T) {
+	typed := map[extension.TypographicPunctuation]string{
+		extension.LeftSingleQuote: "'", extension.RightSingleQuote: "'", extension.Apostrophe: "'",
+		extension.LeftDoubleQuote: "\"", extension.RightDoubleQuote: "\"",
+		extension.EnDash: "--", extension.EmDash: "---", extension.Ellipsis: "...",
+	}
+	for k, v := range typographicSubstitutions {
+		if v == nil {
+			continue
+		}
+		require.Equal(t, typed[k], resolver.FoldTypography(string(v)), "substitution %d", k)
+	}
+	require.Equal(t, "it's \"here\" -- now", resolver.FoldTypography("it\u2019s \u201chere\u201d \u2013 now"))
 }

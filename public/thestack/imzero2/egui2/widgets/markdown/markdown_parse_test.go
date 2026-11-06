@@ -2160,3 +2160,22 @@ func TestMarkPen_StandsOffThePageAndUnderTheText(t *testing.T) {
 		t.Errorf("pen against the page: %.1f, want a visible band", c)
 	}
 }
+
+func TestParse_Typographer_SetsCurlyQuotesByDefault(t *testing.T) {
+	doc := Parse([]byte("# It's \"here\" -- now\n"))
+	if len(doc.headings) != 1 {
+		t.Fatalf("headings: %+v", doc.headings)
+	}
+	if got, want := doc.headings[0].Text, "It\u2019s \u201chere\u201d \u2013 now"; got != want {
+		t.Errorf("heading text: %q, want %q", got, want)
+	}
+	plain := ParseWith([]byte("# It's\n"), ParseOptions{Features: obsidian.FeatureAll})
+	if got := plain.headings[0].Text; got != "It's" {
+		t.Errorf("FeatureAll alone leaves the apostrophe: %q", got)
+	}
+	// A wikilink names a section by the source's text; its slug must meet
+	// the slug of the typeset heading.
+	if a, b := SlugHeading("It's \"here\" -- now"), doc.headings[0].Slug; a != b {
+		t.Errorf("slug of the source text %q differs from the heading's %q", a, b)
+	}
+}

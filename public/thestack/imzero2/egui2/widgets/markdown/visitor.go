@@ -156,8 +156,14 @@ func headingPlainText(h *ast.Heading, src []byte) (out string) {
 		if !entering {
 			return ast.WalkContinue, nil
 		}
-		if t, ok := n.(*ast.Text); ok {
-			sb.Write(t.Segment.Value(src))
+		switch v := n.(type) {
+		case *ast.Text:
+			sb.Write(v.Segment.Value(src))
+			return ast.WalkContinue, nil
+		case *ast.String:
+			// The typographer's substitutions (FeatureTypographer) and
+			// any other inline that carries its text as a value.
+			sb.Write(v.Value)
 			return ast.WalkContinue, nil
 		}
 		if s, ok := fieldCarriedText(n, src); ok {
