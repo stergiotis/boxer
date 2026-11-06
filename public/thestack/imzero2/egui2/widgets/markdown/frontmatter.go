@@ -5,8 +5,23 @@ import (
 	"strings"
 
 	"github.com/stergiotis/boxer/public/containers"
+	"github.com/stergiotis/boxer/public/semistructured/markdown/obsidian"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 )
+
+// ParseFrontmatter returns what [Parse] would put in [Doc.Frontmatter] for
+// src, without parsing or lowering the markdown: for a caller that reads a
+// document's metadata and never renders it. fm is nil when src has no
+// frontmatter or an empty one. A malformed block is an error here, where
+// [Parse] records no frontmatter and carries on.
+func ParseFrontmatter(src []byte) (fm *containers.BinarySearchGrowingKV[string, any], err error) {
+	m, _, err := obsidian.ParseFrontmatter(src)
+	if err != nil {
+		return
+	}
+	fm = containers.NewBinarySearchGrowingKVFromAnyMap(m)
+	return
+}
 
 // RenderFrontmatter emits the parsed YAML frontmatter as a labeled
 // list in the current Ui scope: a Separator, a "Frontmatter (parsed):"

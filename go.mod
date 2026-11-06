@@ -60,6 +60,7 @@ require (
 	golang.org/x/tools v0.49.0
 	gonum.org/v1/gonum v0.17.0
 	google.golang.org/protobuf v1.36.12
+	gopkg.in/yaml.v2 v2.4.0
 	gopkg.in/yaml.v3 v3.0.1
 	lukechampine.com/blake3 v1.4.1
 	pgregory.net/rapid v1.2.0
@@ -227,7 +228,6 @@ require (
 	golang.org/x/vuln v1.3.0 // indirect
 	gopkg.in/neurosnap/sentences.v1 v1.0.6 // indirect
 	gopkg.in/warnings.v0 v0.1.2 // indirect
-	gopkg.in/yaml.v2 v2.4.0 // indirect
 	honnef.co/go/tools v0.8.0 // indirect
 )
 

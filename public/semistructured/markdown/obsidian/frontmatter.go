@@ -1,12 +1,16 @@
 package obsidian
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"sort"
 
+	"github.com/stergiotis/boxer/public/observability/eh"
 	meta "github.com/yuin/goldmark-meta"
 	"github.com/yuin/goldmark/parser"
+	"github.com/yuin/goldmark/util"
+	"gopkg.in/yaml.v2"
 )
 
 // GetFrontmatter extracts YAML frontmatter metadata from a parser.Context
@@ -20,6 +24,58 @@ func GetFrontmatter(pc parser.Context) map[string]any {
 func TryGetFrontmatter(pc parser.Context) (metadata map[string]any, err error) {
 	metadata, err = meta.TryGet(pc)
 	return
+}
+
+// ParseFrontmatter reads the YAML frontmatter of src without parsing the
+// markdown around it: what [TryGetFrontmatter] returns after a full parse
+// with [FeatureFrontmatter], for a caller that wants nothing else. found
+// reports whether src opens a frontmatter block at all; metadata is nil when
+// it does not, and when the YAML is malformed, in which case err says why.
+//
+// The block rules are goldmark-meta's, reproduced: the first line of src
+// consists of dashes only (at least one, indented less than four columns),
+// and the block ends at the next non-blank line of dashes only, or at the end
+// of src if there is none. The lines between are decoded with the YAML
+// package goldmark-meta uses, so the values have the same Go types. A test
+// holds the two to agreement.
+func ParseFrontmatter(src []byte) (metadata map[string]any, found bool, err error) {
+	first, rest, _ := bytes.Cut(src, []byte{'\n'})
+	if indent, _ := util.IndentWidth(first, 0); util.IsBlank(first) || indent >= 4 || !isMetaSeparator(first) {
+		return
+	}
+	found = true
+	body := rest
+	for off := 0; off < len(rest); {
+		end := bytes.IndexByte(rest[off:], '\n')
+		next := len(rest)
+		if end >= 0 {
+			next = off + end + 1
+		}
+		line := rest[off:next]
+		if isMetaSeparator(line) && !util.IsBlank(line) {
+			body = rest[:off]
+			break
+		}
+		off = next
+	}
+	metadata = map[string]any{}
+	if err = yaml.Unmarshal(body, &metadata); err != nil {
+		metadata = nil
+		err = eh.Errorf("frontmatter is not valid YAML: %w", err)
+	}
+	return
+}
+
+// isMetaSeparator is goldmark-meta's separator test: after trimming spaces,
+// nothing but dashes (an all-space line passes; callers rule that out).
+func isMetaSeparator(line []byte) (ok bool) {
+	line = util.TrimRightSpace(util.TrimLeftSpace(line))
+	for _, c := range line {
+		if c != '-' {
+			return false
+		}
+	}
+	return true
 }
 
 // RenderFrontmatterHTML writes the frontmatter metadata as a collapsible
