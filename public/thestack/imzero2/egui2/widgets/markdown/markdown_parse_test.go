@@ -2,6 +2,7 @@ package markdown
 
 import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
+	"math"
 	"reflect"
 	"strings"
 	"testing"
@@ -1663,14 +1664,14 @@ func TestParse_HeadingFontSize_TableCovers1Through6AndFallback(t *testing.T) {
 		level uint8
 		base  float32
 	}{
-		{1, 26},
-		{2, 22},
-		{3, 18},
-		{4, 16},
-		{5, 14},
-		{6, 12.5},
-		{7, 14}, // out-of-range falls back to 14
-		{0, 14}, // out-of-range falls back to 14
+		{1, 22},
+		{2, 19},
+		{3, 16},
+		{4, 14},
+		{5, 13},
+		{6, 11},
+		{7, 13}, // out-of-range falls back to body
+		{0, 13}, // out-of-range falls back to body
 	}
 	for _, tc := range cases {
 		want := styletokens.ScaledPt(tc.base, d)
@@ -1703,22 +1704,21 @@ func TestHeadingFontSize_LadderDescendsAndStraddlesBody(t *testing.T) {
 				level, headingFontSize(level), level+1, headingFontSize(level+1))
 		}
 	}
-	// H1..H5 sit above body text; H6 sits just BELOW it. That is not an
-	// accident of this change — the ladder was tuned against egui's
-	// default 12 pt body while the IDS body step is 13 pt, so the
-	// smallest heading came out under it. Pinned rather than corrected:
-	// retuning the ladder moves every markdown-bearing capture again and
-	// is a typographic decision of its own, not part of the density fix.
+	// H1..H4 sit above body text, H5 at it and H6 below it: the
+	// stylesheet's ladder, where h5 is body size in the heading weight
+	// and h6 the caption step.
 	d := styletokens.ActiveDensity()
 	body := styletokens.ScaledPt(styletokens.BodyPt, d)
-	for level := uint8(1); level <= 5; level++ {
+	for level := uint8(1); level <= 4; level++ {
 		if got := headingFontSize(level); got <= body {
 			t.Errorf("headingFontSize(%d) = %v, want > body %v", level, got, body)
 		}
 	}
+	if got := headingFontSize(5); got != body {
+		t.Errorf("headingFontSize(5) = %v, want body %v", got, body)
+	}
 	if got := headingFontSize(6); got >= body {
-		t.Errorf("headingFontSize(6) = %v: it now sits at or above body %v — "+
-			"the ladder was retuned, so update this expectation deliberately", got, body)
+		t.Errorf("headingFontSize(6) = %v, want < body %v", got, body)
 	}
 }
 
@@ -2060,5 +2060,103 @@ func TestParse_TaskBoxIsARunWithItsSourceOffset(t *testing.T) {
 		if runs[0].taskOffset != want.off || runs[0].taskChecked != want.checked || src[runs[0].taskOffset] != '[' {
 			t.Fatalf("item %d: offset %d checked %v", i, runs[0].taskOffset, runs[0].taskChecked)
 		}
+	}
+}
+
+func TestInkFor_StruckAndQuotedProse(t *testing.T) {
+	if _, ok := inkFor(styleNone, false); ok {
+		t.Error("plain prose keeps the body colour")
+	}
+	if ink, ok := inkFor(styleStrikethrough, false); !ok || ink != delFg {
+		t.Errorf("struck text takes the disabled ink: got %v ok=%v", ink, ok)
+	}
+	if ink, ok := inkFor(styleNone, true); !ok || ink != quoteFg {
+		t.Errorf("quoted prose takes the secondary ink: got %v ok=%v", ink, ok)
+	}
+	if ink, _ := inkFor(styleStrikethrough, true); ink != delFg {
+		t.Errorf("a struck run in a quote is struck first: got %v", ink)
+	}
+}
+
+func TestParse_Blockquote_ProseIsQuoted(t *testing.T) {
+	doc := Parse([]byte("> quoted words\n\nplain words\n"))
+	if len(doc.segments) != 2 || doc.segments[0].kind != segKindBlockquote {
+		t.Fatalf("segments: %+v", doc.segments)
+	}
+	// The quote's prose was lowered with quoteDepth set; after the
+	// quote, the depth is back at zero, so the paragraph is plain.
+	// Both are observable only on the wire; the depth is asserted
+	// through the lowering context directly.
+	src := []byte("> a\n")
+	ctx := &lowerCtx{src: src}
+	root := parser.NewParser(parser.WithBlockParsers(parser.DefaultBlockParsers()...),
+		parser.WithInlineParsers(parser.DefaultInlineParsers()...)).Parse(text.NewReader(src))
+	bq, ok := root.FirstChild().(*ast.Blockquote)
+	if !ok {
+		t.Fatalf("first child: %T", root.FirstChild())
+	}
+	lowerBlockquote(ctx, bq)
+	if ctx.quoteDepth != 0 {
+		t.Errorf("quoteDepth after the quote: %d", ctx.quoteDepth)
+	}
+}
+
+func TestParse_NestedList_StepsDepthAndBullet(t *testing.T) {
+	doc := Parse([]byte("- a\n  - b\n    - c\n"))
+	if len(doc.segments) != 1 || doc.segments[0].kind != segKindList {
+		t.Fatalf("segments: %+v", doc.segments)
+	}
+	outer := &doc.segments[0]
+	if outer.listDepth != 0 {
+		t.Errorf("outer depth: %d", outer.listDepth)
+	}
+	var inner *segment
+	for i := range outer.children[0].children {
+		if outer.children[0].children[i].kind == segKindList {
+			inner = &outer.children[0].children[i]
+		}
+	}
+	if inner == nil {
+		t.Fatal("no nested list under the first item")
+	}
+	if inner.listDepth != 1 {
+		t.Errorf("inner depth: %d", inner.listDepth)
+	}
+	// The glyph steps disc, circle, square and stays a square below; the
+	// circle and square come from the mono face.
+	for depth, want := range []struct {
+		glyph string
+		mono  bool
+	}{{"•", false}, {"◦", true}, {"▪", true}, {"▪", true}} {
+		if g, m := bulletGlyph(uint8(depth)); g != want.glyph || m != want.mono {
+			t.Errorf("bulletGlyph(%d) = %q mono=%v, want %q mono=%v", depth, g, m, want.glyph, want.mono)
+		}
+	}
+}
+
+func TestMarkPen_StandsOffThePageAndUnderTheText(t *testing.T) {
+	lum := func(c styletokens.RGBA8) float64 {
+		ch := func(v uint8) float64 {
+			f := float64(v) / 255
+			if f <= 0.03928 {
+				return f / 12.92
+			}
+			return math.Pow((f+0.055)/1.055, 2.4)
+		}
+		return 0.2126*ch(c.R) + 0.7152*ch(c.G) + 0.0722*ch(c.B)
+	}
+	contrast := func(a, b styletokens.RGBA8) float64 {
+		la, lb := lum(a), lum(b)
+		if la < lb {
+			la, lb = lb, la
+		}
+		return (la + 0.05) / (lb + 0.05)
+	}
+	pen := over(styletokens.WarningDefault, styletokens.NeutralBgPanel, markPenAlpha)
+	if c := contrast(styletokens.NeutralTextPrimary, pen); c < 4.5 {
+		t.Errorf("text over the pen: %.1f, want at least 4.5", c)
+	}
+	if c := contrast(pen, styletokens.NeutralBgPanel); c < 1.5 {
+		t.Errorf("pen against the page: %.1f, want a visible band", c)
 	}
 }

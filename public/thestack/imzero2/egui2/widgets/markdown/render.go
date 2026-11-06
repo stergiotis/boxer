@@ -39,6 +39,22 @@ func headingGap(level uint8) (v float32) {
 	return
 }
 
+// headingGapBelow is the air set under a heading beyond the item gap
+// every block pair gets. The stylesheet gives a heading 0.6 em below
+// against 1.4 em above; the item gap alone left the native heading
+// closer to its paragraph than to the section before it, which the
+// trial's `gap H↓` column read as 1.4 line heights against the IDS arm's
+// 1.6. The same two tiers as [headingGap], one step down the scale.
+func headingGapBelow(level uint8) (v float32) {
+	d := styletokens.ActiveDensity()
+	if level <= 2 {
+		v = styletokens.PaddingInner(d)
+		return
+	}
+	v = styletokens.PaddingHair(d)
+	return
+}
+
 // render emits a single segment into the current egui Ui scope.
 //
 // rc threads the monotonic per-Render-invocation id sequence counter,
@@ -93,6 +109,7 @@ func (inst *segment) render(rc *renderCtx) {
 		}
 		rc.headingIdx++
 		renderRuns(inst.runs, rc)
+		c.AddSpace(headingGapBelow(inst.headingLevel))
 	case segKindParagraph:
 		renderRuns(inst.runs, rc)
 	case segKindCodeBlock:
@@ -399,16 +416,21 @@ func renderTableGrid(s *segment, rc *renderCtx, seq uint64, cols, rows int) {
 		}
 		return
 	}
+	// Cells carry their own side padding in a frame, with no column gap
+	// between them, so the header's band is one surface across the row
+	// as `th` is in the stylesheets; the row gap stays, and the stripes
+	// span it.
+	c.UiSetItemSpacing(0, styletokens.GapInline(styletokens.ActiveDensity()))
 	for range c.Grid(rc.ids.PrepareSeq(seq)).NumColumns(uint32(cols)).Striped(true).KeepIter() {
 		if len(s.tableHeader) > 0 {
 			for i, h := range s.tableHeader {
-				renderTableCell(h, widths[i%cols], align(i%cols), true)
+				renderTableCell(h, widths[i%cols], align(i%cols), true, rc)
 			}
 			c.EndRow()
 		}
 		for r := 0; r < rows; r++ {
 			for i := 0; i < cols; i++ {
-				renderTableCell(s.tableCells[r*cols+i], widths[i], align(i), false)
+				renderTableCell(s.tableCells[r*cols+i], widths[i], align(i), false, rc)
 			}
 			c.EndRow()
 		}
@@ -419,7 +441,23 @@ func renderTableGrid(s *segment, rc *renderCtx, seq uint64, cols, rows int) {
 // delimiter row, bounded to the column's width so the label inside wraps
 // there. Bounding the scope shrinks only its maximum, so a short cell
 // stays as narrow as its text and the column does not grow to the bound.
-func renderTableCell(text string, width float32, a east.Alignment, header bool) {
+func renderTableCell(text string, width float32, a east.Alignment, header bool, rc *renderCtx) {
+	d := styletokens.ActiveDensity()
+	frame := c.Frame(rc.ids.PrepareSeq(rc.idSeq)).
+		InnerMarginSides(styletokens.PaddingDefault(d), styletokens.PaddingDefault(d),
+			styletokens.PaddingInner(d), styletokens.PaddingInner(d))
+	rc.idSeq++
+	if header {
+		frame = frame.Fill(tableHeaderBg)
+	}
+	for range frame.KeepIter() {
+		renderTableCellText(text, width, a, header)
+	}
+}
+
+// renderTableCellText lays the cell's text out at the column's width and
+// alignment, a header in the bold face.
+func renderTableCellText(text string, width float32, a east.Alignment, header bool) {
 	layout := c.UiWithLayout().MainDirTopDown()
 	switch a {
 	case east.AlignCenter:
@@ -430,9 +468,12 @@ func renderTableCell(text string, width float32, a east.Alignment, header bool) 
 		layout = layout.CrossAlignMin()
 	}
 	for range layout.KeepIter() {
+		// Min and max at the column's width, so a cell's frame — and the
+		// header's band — spans the column rather than the text in it.
+		c.UiSetMinWidth(width)
 		c.UiSetMaxWidth(width)
 		if header {
-			c.LabelAtoms(c.Atoms().BeginRichText(text).Strong().End().Keep()).Wrap().Send()
+			c.LabelAtoms(c.Atoms().BeginRichText(text).Strong().Bold().End().Keep()).Wrap().Send()
 		} else {
 			c.Label(text).Wrap().Send()
 		}
@@ -555,7 +596,7 @@ func renderCallout(s *segment, rc *renderCtx) {
 		for range c.Vertical().KeepIter() {
 			titleAtoms := c.Atoms()
 			for rt := range titleAtoms.StyledText(titleText) {
-				rt.Strong()
+				rt.Strong().Bold()
 			}
 			c.LabelAtoms(titleAtoms.Keep()).Wrap().Send()
 			for i := range s.children {
@@ -756,7 +797,11 @@ func renderList(s *segment, rc *renderCtx) {
 	rc.idSeq++
 	for range c.Vertical().KeepIter() {
 		c.UiSetItemSpacing(styletokens.GapItems(d), styletokens.GapInline(d))
-		for range c.Grid(rc.ids.PrepareSeq(seq)).NumColumns(2).KeepIter() {
+		// The marker column is at least the outer padding wide, so a
+		// nested list's text starts about 1.5 em in from its parent's, as
+		// the stylesheets indent a list; egui's default minimum is the
+		// interact size, which set a nested item nearly twice as far in.
+		for range c.Grid(rc.ids.PrepareSeq(seq)).NumColumns(2).MinColWidth(styletokens.PaddingOuter(d)).KeepIter() {
 			for i := range s.children {
 				item := &s.children[i]
 				for range c.UiWithLayout().MainDirTopDown().CrossAlignMax().KeepIter() {
@@ -779,11 +824,43 @@ func renderList(s *segment, rc *renderCtx) {
 // segment tree is the renderer's own, but a nil holder is not worth a
 // crash in a reading surface.
 func renderItemMarker(s *segment, i uint32) {
-	if !s.listOrdered || int(i) >= len(s.listMarkers) {
-		c.Label(itemMarker(s, i)).Send()
+	// A marker never wraps: the marker column is only as wide as its
+	// widest marker, and a wrapping label would report its wrapped width
+	// back to the grid and stay wrapped.
+	if s.listOrdered && int(i) < len(s.listMarkers) {
+		c.LabelAtoms(s.listMarkers[i]).Extend().Send()
 		return
 	}
-	c.LabelAtoms(s.listMarkers[i]).Send()
+	// A bullet carries the body's line height so it shares the item's
+	// baseline; the nested glyphs come from the mono face, which carries
+	// the geometric shapes the proportional face lacks.
+	glyph, mono := bulletGlyph(s.listDepth)
+	atoms := c.Atoms()
+	for rt := range atoms.StyledText(glyph) {
+		rt = rt.LineHeight(bodyLineHeight())
+		if mono {
+			rt = rt.Monospace()
+		}
+		_ = rt
+	}
+	c.LabelAtoms(atoms.Keep()).Extend().Send()
+}
+
+// bulletGlyph is the marker of an unordered item at the given nesting
+// depth: a disc, a circle, then a square, as browsers step `ul` markers,
+// and `mono` says whether the glyph is to be set in the mono face. The
+// proportional face (Noto Sans on a scene launch) has no white bullet or
+// small square; the mono faces do.
+func bulletGlyph(depth uint8) (glyph string, mono bool) {
+	switch depth {
+	case 0:
+		glyph = "•"
+	case 1:
+		glyph, mono = "◦", true
+	default:
+		glyph, mono = "▪", true
+	}
+	return
 }
 
 // itemMarker returns the bullet glyph or the number-and-period marker

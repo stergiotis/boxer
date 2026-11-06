@@ -22,6 +22,7 @@ import (
 	"github.com/stergiotis/boxer/public/thestack/fffi2/typed"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/codeview"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/color"
 	"github.com/yuin/goldmark/ast"
 	east "github.com/yuin/goldmark/extension/ast"
 	"github.com/yuin/goldmark/parser"
@@ -45,6 +46,13 @@ type lowerCtx struct {
 	// definitions sit at the END of the tree and the references before them.
 	footnotesOn  bool
 	footnoteTips map[int]string
+
+	// quoteDepth counts the blockquotes the block being lowered sits in;
+	// prose inside one is set in the quote ink (theme.go, quoteFg).
+	quoteDepth int
+	// listDepth counts the lists the block being lowered sits in; a
+	// list's bullet glyph steps with it (itemMarker).
+	listDepth int
 }
 
 // countDropped records that one AST node of n's kind reached a skip
@@ -341,6 +349,7 @@ func lowerTableRow(ctx *lowerCtx, row ast.Node, cols int) (out []string) {
 // Strong styling to every text fragment.
 func lowerParagraphLike(ctx *lowerCtx, parent ast.Node, headingLevel uint8) (seg segment) {
 	b := newInlineBuilder(headingLevel, ctx.resolver)
+	b.quoted = ctx.quoteDepth > 0 && headingLevel == 0
 	for child := parent.FirstChild(); child != nil; child = child.NextSibling() {
 		emitInline(ctx, child, &b, styleNone)
 	}
@@ -576,6 +585,9 @@ func (inst *segment) codeJob() typed.RetainedFffiHolderTyped[c.CodeViewJobS] {
 func lowerList(ctx *lowerCtx, list *ast.List) (seg segment) {
 	seg.kind = segKindList
 	seg.listOrdered = list.IsOrdered()
+	seg.listDepth = uint8(min(ctx.listDepth, 255))
+	ctx.listDepth++
+	defer func() { ctx.listDepth-- }()
 	if seg.listOrdered {
 		seg.listStart = uint32(list.Start)
 		if seg.listStart == 0 {
@@ -630,6 +642,8 @@ func lowerListItem(ctx *lowerCtx, item *ast.ListItem) (seg segment) {
 
 func lowerBlockquote(ctx *lowerCtx, bq *ast.Blockquote) (seg segment) {
 	seg.kind = segKindBlockquote
+	ctx.quoteDepth++
+	defer func() { ctx.quoteDepth-- }()
 	for child := bq.FirstChild(); child != nil; child = child.NextSibling() {
 		inner, ok := lowerBlock(ctx, child)
 		if ok {
@@ -878,8 +892,10 @@ func walkInlineChildren(ctx *lowerCtx, parent ast.Node, b *inlineBuilder, parent
 // changes, a hyperlink interrupts the flow, or the paragraph ends.
 type inlineBuilder struct {
 	headingLevel uint8
-	cur          c.AtomsFluid
-	curOpen      bool
+	// quoted: the prose sits in a blockquote and takes the quote ink.
+	quoted  bool
+	cur     c.AtomsFluid
+	curOpen bool
 	// atomCount is how many atoms cur holds, so a link knows its index;
 	// curLinks the links cur carries. Both reset with cur.
 	atomCount uint32
@@ -924,7 +940,7 @@ func (inst *inlineBuilder) emitLink(label, url string) {
 	inst.curLinks = append(inst.curLinks, linkSpan{atom: inst.atomCount, label: label, url: url})
 	for rt := range inst.cur.StyledTextColored(linkFg, linkBg, label) {
 		if inst.headingLevel > 0 {
-			rt = rt.Size(headingFontSize(inst.headingLevel)).Strong()
+			rt = rt.Size(headingFontSize(inst.headingLevel)).Strong().Bold()
 		} else {
 			rt = rt.LineHeight(bodyLineHeight())
 		}
@@ -1073,7 +1089,8 @@ func (inst *inlineBuilder) applyStyledText(s string, style styleE) {
 		lineHeight = bodyLineHeight()
 	}
 
-	plain := style == styleNone && fontSize == 0 && !headingStrong
+	ink, inked := inkFor(style, inst.quoted)
+	plain := style == styleNone && fontSize == 0 && !headingStrong && !inked
 	if plain {
 		if lineHeight == 0 {
 			inst.cur = inst.cur.Text(s)
@@ -1085,70 +1102,20 @@ func (inst *inlineBuilder) applyStyledText(s string, style styleE) {
 		return
 	}
 
-	// A tag is checked before the highlight pen so that `==#tag==` reads as a
-	// highlighted region rather than losing the pen to the tag's own tint —
-	// the outer mark is the author's emphasis, the inner tint is filing.
-	if style&styleHighlight == 0 && style&styleTag != 0 {
-		for rt := range inst.cur.StyledTextColored(tagFg, tagBg, s) {
-			if fontSize > 0 {
-				rt = rt.Size(fontSize)
-			}
-			if lineHeight > 0 {
-				rt = rt.LineHeight(lineHeight)
-			}
-			if headingStrong || style&styleStrong != 0 {
-				rt = rt.Strong()
-			}
-			if style&styleEmphasis != 0 {
-				rt = rt.Italics()
-			}
-			if style&styleStrikethrough != 0 {
-				rt = rt.Strikethrough()
-			}
-			_ = rt
-		}
-		return
-	}
-
-	if style&styleHighlight != 0 {
-		for rt := range inst.cur.StyledTextColored(highlightFg, highlightBg, s) {
-			if fontSize > 0 {
-				rt = rt.Size(fontSize)
-			}
-			if lineHeight > 0 {
-				rt = rt.LineHeight(lineHeight)
-			}
-			if headingStrong || style&styleStrong != 0 {
-				rt = rt.Strong()
-			}
-			if style&styleEmphasis != 0 {
-				rt = rt.Italics()
-			}
-			if style&styleCode != 0 {
-				rt = rt.Code()
-			}
-			if style&styleStrikethrough != 0 {
-				rt = rt.Strikethrough()
-			}
-			_ = rt
-		}
-		return
-	}
-
-	for rt := range inst.cur.StyledText(s) {
+	run := func(rt c.RichTextScope) {
 		if fontSize > 0 {
 			rt = rt.Size(fontSize)
 		}
 		if lineHeight > 0 {
 			rt = rt.LineHeight(lineHeight)
 		}
-		if headingStrong || style&styleStrong != 0 {
-			rt = rt.Strong()
-		}
+		rt = applyWeight(rt, style, headingStrong)
 		if style&styleEmphasis != 0 {
 			rt = rt.Italics()
 		}
-		if style&styleCode != 0 {
+		// A tag's own tint is its box; a code span inside one keeps the
+		// tag's reading.
+		if style&styleCode != 0 && style&styleTag == 0 {
 			rt = rt.Code()
 		}
 		if style&styleStrikethrough != 0 {
@@ -1156,6 +1123,66 @@ func (inst *inlineBuilder) applyStyledText(s string, style styleE) {
 		}
 		_ = rt
 	}
+
+	switch {
+	// A tag is checked before the highlight pen so that `==#tag==` reads
+	// as a highlighted region rather than losing the pen to the tag's own
+	// tint — the outer mark is the author's emphasis, the inner tint is
+	// filing.
+	case style&styleHighlight == 0 && style&styleTag != 0:
+		for rt := range inst.cur.StyledTextColored(tagFg, tagBg, s) {
+			run(rt)
+		}
+	case style&styleHighlight != 0:
+		for rt := range inst.cur.StyledTextColored(highlightFg, highlightBg, s) {
+			run(rt)
+		}
+	case inked:
+		for rt := range inst.cur.StyledTextColored(ink, clearBg, s) {
+			run(rt)
+		}
+	default:
+		for rt := range inst.cur.StyledText(s) {
+			run(rt)
+		}
+	}
+}
+
+// inkFor is the colour a run takes for what it is rather than for a
+// pen over it: struck text is set in the disabled ink, as the reference
+// stylesheets set `del`, and prose inside a blockquote in the secondary
+// ink, as they set `blockquote`; a struck run in a quote is struck first.
+// Anything else keeps the body colour, and a highlight or a tag keeps its
+// own pair.
+func inkFor(style styleE, quoted bool) (ink color.Color, ok bool) {
+	switch {
+	case style&styleStrikethrough != 0:
+		ink, ok = delFg, true
+	case quoted:
+		ink, ok = quoteFg, true
+	}
+	return
+}
+
+// applyWeight gives a run its weight: a heading takes egui's strong colour
+// and the host's bold face, an inline strong run the bold face alone, as
+// the reference stylesheets set `strong` at weight 700 in the body colour.
+// A code span keeps the mono face, which the host carries in one weight,
+// so inside one only the colour changes. Before the trial's eleventh run a
+// strong run was a colour and nothing else: the host embeds one weight per
+// family, egui carries none on a text format, and the eye read every
+// heading as light.
+func applyWeight(rt c.RichTextScope, style styleE, heading bool) c.RichTextScope {
+	if !heading && style&styleStrong == 0 {
+		return rt
+	}
+	if heading {
+		rt = rt.Strong()
+	}
+	if style&styleCode == 0 {
+		rt = rt.Bold()
+	}
+	return rt
 }
 
 // codeSpanScale is the size of an inline code span over the run it sits
@@ -1190,9 +1217,8 @@ func bodyLineHeight() (lh float32) {
 }
 
 // headingFontSize returns the font size for an H1..H6 at the active
-// density. The tuned table is a ladder over the body size — H1/H2
-// dominate, H6 stays close to body to mirror Obsidian's reading view —
-// and [styletokens.ScaledPt] then moves the whole ladder the same ±1 pt
+// density: the stylesheet's ladder ([headingFontSizeBase]), which
+// [styletokens.ScaledPt] then moves the same ±1 pt
 // the type scale moves body text and table rows by. Without that, a
 // Tight or Roomy density shifted everything on the page EXCEPT the
 // headings, and the hierarchy read differently at each density (L6 in
@@ -1202,25 +1228,31 @@ func headingFontSize(level uint8) (sz float32) {
 	return
 }
 
-// headingFontSizeBase is the tuned ladder before the density
-// adjustment — split out so the scaling can be asserted independently of
-// the numbers it scales.
+// headingFontSizeBase is the ladder before the density adjustment —
+// split out so the scaling can be asserted independently of the numbers
+// it scales. It is the design system's stylesheet's (`ids.css`, the
+// markdown headings over the IDS type scale): H1 at the display step, H3
+// at the heading step, H5 at body, H6 at caption, H2 and H4 at 1.2 and
+// 0.9 of the heading step rounded to a whole point. Before the trial's
+// twelfth run the ladder started at 26 and compensated with size for a
+// weight the host could not set; with a bold face it reads as the
+// stylesheet's.
 func headingFontSizeBase(level uint8) (sz float32) {
 	switch level {
 	case 1:
-		sz = 26
+		sz = styletokens.DisplayPt
 	case 2:
-		sz = 22
+		sz = 19
 	case 3:
-		sz = 18
+		sz = styletokens.HeadingPt
 	case 4:
-		sz = 16
+		sz = 14
 	case 5:
-		sz = 14
+		sz = styletokens.BodyPt
 	case 6:
-		sz = 12.5
+		sz = styletokens.CaptionPt
 	default:
-		sz = 14
+		sz = styletokens.BodyPt
 	}
 	return
 }

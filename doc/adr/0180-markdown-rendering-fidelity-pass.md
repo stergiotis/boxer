@@ -420,6 +420,88 @@ the link-bearing documents; the zero item spacing that item 2 set for the
 row stays for the flows that remain — images, task boxes, footnote
 marks.
 
+The eleventh run gives bold text a weight. egui carries no weight on a
+text format and epaint synthesises none, so `Strong()` had been a colour
+— egui's strong text colour — and every heading, every `**strong**` run,
+every table header and callout title was set in the regular face; the
+trial's comparison of the tenth run's captures against the IDS arm found
+it the one difference a reader sees without looking. Bold is a family: a
+host registers its bold face under `FontFamily::Name("bold")`
+(`typography::FAMILY_BOLD`, the `--boldFontTTF` slot, which takes the
+main face's tweak so the two weights share a baseline), the IDS font
+install aliases that family to the proportional chain so a `FontId`
+naming it resolves on a host without a bold face, and the atoms
+protocol gains `bold()`, which selects it. The widget sets a heading in
+strong colour and bold face, an inline strong run in the bold face
+alone, as the stylesheets set `strong` at weight 700 in the body colour,
+and a code span in its mono face whatever surrounds it (`applyWeight`).
+The SVG exporter declares the bold family's embedded subset at weight
+700 and marks its runs `font-weight="bold"`, so a sidecar shows the
+glyphs the screen showed. The IDS bundle still embeds no bold face
+(ADR-0030 §SD7's size budget); the browser tab's four font slots are
+unchanged, so the tab shows regular weight until a fifth slot is added.
+
+The twelfth run takes the heading ladder down to the stylesheet's and
+gives two inks their role. The ladder in decision item 3 — 26, 22, 18,
+16, 14, 12.5 — was tuned when a heading could be no heavier than its
+prose and had to be larger instead; with a bold face it set a native
+heading at 2.00 and 1.69 of body where the IDS arm's sit at 1.69 and
+1.46. `headingFontSizeBase` is now the stylesheet's: H1 at the display
+step, H3 at the heading step, H5 at body, H6 at caption, H2 and H4 at
+1.2 and 0.9 of the heading step rounded to whole points. A heading also
+gets air below it beyond the item gap (`headingGapBelow`, the same two
+tiers as the gap above, one step down the scale), as the stylesheet
+gives it 0.6 em under against 1.4 em over. Struck text is set in the
+disabled ink and prose inside a blockquote in the secondary ink
+(`inkFor`), as `ids.css` sets `del` and `blockquote`; before, both were
+body colour, and the seventh run's quote rule had left the quote's words
+indistinguishable from the page's.
+
+The thirteenth run finishes the table and the list. A table cell is a
+frame with the stylesheet's padding and no column gap, so the header
+row's cells, filled with the surface tint, make one band across the
+row as `th` does (`renderTableCell`, `tableHeaderBg`); the stripes and
+the row gap stay. A bullet steps disc, circle, square with the list's
+nesting depth as browsers step `ul` markers (`bulletGlyph`, the depth
+counted by the lowering), the circle and the square from the mono face
+since the proportional face has neither, and the marker column's
+minimum width is the outer padding rather than egui's interact size, so
+a nested item starts about 1.5 em in from its parent's text as the
+stylesheets indent a list, not twice that.
+
+The fourteenth run puts a row's runs on one baseline. epaint places a
+glyph from the row's top by its own font's ascent, and `valign` moves a
+section only by the difference between the row's height and the
+section's line height, so prose and the inline code span set at 0.9 of
+it, both at the design system's leading, shared a top and the span sat
+two to three pixels high — logged after the ninth run, named by the
+owner after the thirteenth. `imzero2_egui::style::baseline::align`
+takes the job before layout: the section with the tallest line height
+is the reference, every other section is bottom-aligned with a line
+height short of the reference's by the difference of the ascents, and
+the shorter box lands its baseline on the reference's. Both labels the
+widget uses run it, so it holds for paragraphs with pills and with
+links; a job in one font is untouched. A wrapped row made only of
+shorter runs is as tall as their line height, a few pixels short — the
+one row that pays for the baseline on the others.
+
+The fifteenth run gives the highlight pen a tint that stands off the
+page. The ninth run's pen — the warning family's subtle tint, which
+`ids.css` gave `mark` — is a tinted row's colour at ADR-0031 §SD2's
+L ≈ 0.20, at 1.2 against the dark page: text over it read at 14.8, the
+mark itself did not read at all, in the widget and in the stylesheet
+alike, which is why the trial's controlled pair could not catch it and
+the owner did after the fourteenth vote. A highlighter is the marker's
+ink through the page: the pen is now the warning default at 40% over
+the page, composited once from the two tokens (`over`, `markPenAlpha`
+in `theme.go`) and mixed the same way by the stylesheet's `mark`
+(`color-mix`), so the two renderings still share it. On the dark theme
+that keeps primary text at 6 over the pen and the pen at 2.5 over the
+page; on the light theme it is a cream band. The palette question
+underneath — a mark tint as a token in its own right, beside the three
+tiers — is left to the design system; the pen composes what the palette
+has.
+
 ## References
 
 - [Markdown rendering review](../adr-background-work/markdown-rendering-review.md) — the background work this decides on.

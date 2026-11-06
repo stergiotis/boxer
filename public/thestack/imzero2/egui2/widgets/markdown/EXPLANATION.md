@@ -88,7 +88,22 @@ block children once. Each block produces a `segment` value:
 Inline nodes that cannot become atoms (links, wikilinks, embeds) are
 extracted as separate runs at paragraph build time. Strong, Em, Code,
 Strikethrough and Highlight nest as flag bits in a `styleE` bitmask,
-applied to the RichText scope at text-emit time. Highlight uses a
+applied to the RichText scope at text-emit time. Weight is a font
+family, not a style flag on the host: egui carries no weight, so
+`applyWeight` sets a heading in the strong colour and the host's bold
+face (`Bold()` on the scope), an inline strong run in the bold face
+alone, and leaves a code span in its mono face. A host launched without
+`--boldFontTTF` shows all of it at regular weight. Two inks are the
+run's own rather than a pen's: struck text takes the disabled ink and
+prose inside a blockquote the secondary ink (`inkFor`, through the
+lowering context's `quoteDepth`), as the design system's stylesheet
+sets `del` and `blockquote`. A table cell is a frame with the
+stylesheet's padding, the header's on the surface tint; a bullet steps
+disc, circle, square with the nesting depth the lowering counts
+(`bulletGlyph`), the last two in the mono face. A run smaller than its
+row — a code span, a footnote mark — sits on the row's baseline because
+the host aligns the job's sections before layout
+(`imzero2_egui::style::baseline`); epaint on its own aligns their tops. Highlight uses a
 distinct code path: it routes through `StyledTextColored(fg, bg)`
 with the "highlighter pen" palette (`theme.go`, the warning tint the
 design system's stylesheet gives `mark`) since plain `RichText` has no

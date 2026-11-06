@@ -142,7 +142,10 @@ hr {
 }
 
 mark {
-  background: var(--ids-warning-subtle);
+  /* The highlighter's ink through the page: the warning default let
+     through at 40%, as the markdown widget's pen mixes it. The subtle
+     tint is a tinted row's colour and sat at 1.2 against the dark page. */
+  background: color-mix(in srgb, var(--ids-warning) 40%, var(--ids-bg-panel));
   color: var(--ids-text-primary);
   padding: 0.05em 0.2em;
   border-radius: var(--ids-radius-sm);

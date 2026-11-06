@@ -799,6 +799,7 @@ type segment struct {
 	headingLevel       uint8
 	listOrdered        bool
 	listStart          uint32
+	listDepth          uint8 // 0 for a top-level list; the bullet glyph steps with it
 	listMarkers        []typed.RetainedFffiHolderTyped[c.AtomsS]
 	calloutType        string
 	calloutTitle       string

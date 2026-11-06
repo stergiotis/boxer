@@ -8,18 +8,25 @@ import (
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/color"
 )
 
-// Inline highlight palette — the "highlighter pen" of `==text==`, the
-// warning family's subtle tint under primary text, which is what the
-// design system's own stylesheet gives `mark` (`ids.css`): the same
-// document in mdedit and in a browser carry the same pen. The accent fill
-// it had before (ADR-0031 §SD2 reserves accent for "branded highlights,
-// selection, focus rings") read as a selection, and a bright block in a
-// line of prose was the loudest thing on the page. Promoted to
-// package-level vars so the bridge (token → uint32 hex → color.Color)
-// runs once per process rather than per markdown render.
+// Inline highlight palette — the "highlighter pen" of `==text==`: the
+// warning family's default at [markPenAlpha] over the page, under primary
+// text, which is what the design system's own stylesheet gives `mark`
+// (`ids.css`, a `color-mix` of the same two tokens): the same document in
+// mdedit and in a browser carry the same pen. The accent fill it had first
+// (ADR-0031 §SD2 reserves accent for "branded highlights, selection, focus
+// rings") read as a selection, and a bright block in a line of prose was
+// the loudest thing on the page; the warning family's subtle tint it took
+// next is a tinted row's colour, at 1.2 against the dark page, so the pen
+// did not read as a mark at all — the owner named it after the trial's
+// fourteenth vote. A highlighter is the marker's ink through the page:
+// the default tone, let through at the alpha a highlighter has, keeps the
+// prose at 6 over the pen on the dark theme and reads as a cream band on
+// the light one. Promoted to package-level vars so the bridge (token →
+// uint32 hex → color.Color) runs once per process rather than per
+// markdown render.
 var (
 	highlightFg = color.Hex(styletokens.NeutralTextPrimary.AsHex())
-	highlightBg = color.Hex(styletokens.WarningSubtle.AsHex())
+	highlightBg = color.Hex(over(styletokens.WarningDefault, styletokens.NeutralBgPanel, markPenAlpha).AsHex())
 	// A host-claimed link ([Input.LinkClaims]) is drawn by us rather than by
 	// egui's Hyperlink, so it needs its own tone. Info, which is what the
 	// design system uses for "this points elsewhere", over a transparent
@@ -29,7 +36,19 @@ var (
 	// BeginRichTextColored requires one. The annotation must sit on the line
 	// immediately above the call — ignoreann covers only lines N and N+1.
 	// designlint:ignore=L2 (transparent; the palette has no absence-of-fill token)
-	linkBg = color.RGBA(0, 0, 0, 0)
+	clearBg = color.RGBA(0, 0, 0, 0)
+	linkBg  = clearBg
+	// Struck text is set in the disabled ink, as the design system's
+	// stylesheet sets `del`, and prose in a blockquote in the secondary
+	// ink, as it sets `blockquote`: a quote is someone else's words, a
+	// deletion is text that is no longer said, and both read a step
+	// behind the page's own prose.
+	delFg   = color.Hex(styletokens.NeutralTextDisabled.AsHex())
+	quoteFg = color.Hex(styletokens.NeutralTextSecondary.AsHex())
+	// A table's header row sits on the surface tint, as `th` does in the
+	// design system's stylesheet, so the header reads as a band and not
+	// as a first row that happens to be bold.
+	tableHeaderBg = color.Hex(styletokens.NeutralBgSurface.AsHex())
 	// An Obsidian `#tag` names a place in a vault rather than styling the
 	// prose it sits in, so it takes the same Info role a link does — "this
 	// points elsewhere" — over the Subtle tint of the same family. A tint
@@ -158,5 +177,20 @@ func calloutTitleText(typ, title, glyph string) (s string) {
 		}
 	}
 	s = glyph + " " + body
+	return
+}
+
+// markPenAlpha is the share of the warning default in the highlight pen,
+// the rest being the page; the stylesheet's `mark` mixes the same share.
+const markPenAlpha = 0.4
+
+// over composites `top` over `under` at `alpha`, opaque: a token pair
+// resolved to one colour at package init, so the pen is a value the lint
+// can trace to its tokens rather than a raw colour.
+func over(top, under styletokens.RGBA8, alpha float32) (out styletokens.RGBA8) {
+	mix := func(a, b uint8) uint8 {
+		return uint8(float32(a)*alpha + float32(b)*(1-alpha) + 0.5)
+	}
+	out = styletokens.RGBA8{R: mix(top.R, under.R), G: mix(top.G, under.G), B: mix(top.B, under.B), A: 255}
 	return
 }
