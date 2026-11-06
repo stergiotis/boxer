@@ -276,6 +276,10 @@ type StateManager struct {
 	// reportCursorRects), keyed by textEdit id. Rebuilt each Sync; read via
 	// GetTextRects.
 	r28TextRects map[uint64]TextRectsValue
+	// r29Console holds LAST frame's console rows (ADR-0359 SD3), grouped by
+	// console widget id, each widget's rows in the order it produced them.
+	// Rebuilt each Sync; read via GetConsoleRows.
+	r29Console map[uint64][]ConsoleRow
 	// r22StarvedTextures holds LAST frame's starved-texture report: ids the
 	// host interpreted with no pixels and no usable cache entry (a send-once
 	// upload lost to a discarded hidden-tab buffer, or an idle-LRU eviction).
@@ -333,6 +337,7 @@ func NewStateManager() *StateManager {
 		r24CanvasPointers:    make(map[uint64]CanvasCursorValue, 8),
 		r26KeyCaptures:       make(map[uint64][]CapturedKey, 4),
 		r28TextRects:         make(map[uint64]TextRectsValue, 8),
+		r29Console:           make(map[uint64][]ConsoleRow, 2),
 		r22StarvedTextures:   make(map[uint64]struct{}, 8),
 	}
 }
@@ -814,6 +819,7 @@ func (inst *StateManager) Sync() {
 	fetcher.IssueFetchR24CanvasPointers()
 	fetcher.IssueFetchR26KeyCaptures()
 	fetcher.IssueFetchR28TextRects()
+	fetcher.IssueFetchR29Console()
 	fetcher.IssueFetchR22StarvedTextures()
 	fetcher.IssueFetchFrameMetrics()
 	fetcher.IssueFetchPaintBudget()
@@ -1049,6 +1055,7 @@ func (inst *StateManager) Sync() {
 			i++
 		}
 	}
+	inst.collectConsoleRows(fetcher.CollectFetchR29Console())
 	{
 		ids := fetcher.CollectFetchR22StarvedTextures()
 		clear(inst.r22StarvedTextures)

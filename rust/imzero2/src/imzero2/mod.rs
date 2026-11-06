@@ -10,6 +10,7 @@ pub mod clock;
 pub mod code_view;
 #[cfg(feature = "headless")]
 pub mod codeclane;
+pub mod console;
 #[cfg(feature = "headless_soft")]
 pub mod cputopo;
 pub mod ctable_widths;

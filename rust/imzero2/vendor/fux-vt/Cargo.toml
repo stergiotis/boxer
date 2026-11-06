@@ -1,0 +1,30 @@
+[package]
+name = "fux-vt"
+version = "0.16.0"
+edition = "2024"
+rust-version = "1.95"
+license = "MIT"
+description = "Bounded terminal emulation with key, mouse, focus and paste encoders (vendored and trimmed for imzero2)"
+repository = "https://github.com/gold-silver-copper/fux"
+readme = "README.md"
+keywords = ["terminal", "vt100", "ansi", "emulator", "parser"]
+categories = ["command-line-interface", "parser-implementations"]
+publish = false
+
+[features]
+# The work counters and the invariant checker (THREATS.md 4.1): for the
+# bounds tests and the fuzz targets, never for a release.
+checks = []
+
+[dev-dependencies]
+# The references the generated tables are tested against: grapheme
+# segmentation, and widths (fux-vt's width rule is unicode-width 0.2.2's,
+# U+17D8 aside).
+unicode-segmentation = "=1.13.3"
+unicode-width = "=0.2.2"
+
+# Upstream's workspace lints, which this crate inherited there.
+[lints.rust]
+unused_must_use = "forbid"
+unconditional_recursion = "forbid"
+unsafe_code = "forbid"

@@ -714,6 +714,41 @@ func (inst ComboBoxFluid) KeepIter() iter.Seq[functional.NilIteratorValueType] {
 
 	}
 }
+func (inst ConsoleFluid) HistoryBytes(hb uint32) ConsoleFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(ConsoleMethodIdHistoryBytes))
+	r.WriteUint32(hb)
+
+	return inst
+}
+
+func (inst ConsoleFluid) Size(wd float32, ht float32) ConsoleFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(ConsoleMethodIdSize))
+	r.WriteFloat32(wd)
+	r.WriteFloat32(ht)
+
+	return inst
+}
+
+func (inst ConsoleFluid) FontSize(fs float32) ConsoleFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(ConsoleMethodIdFontSize))
+	r.WriteFloat32(fs)
+
+	return inst
+}
+
+func (inst ConsoleFluid) Send() {
+	r := inst.r
+	r.WriteOpCode(uint32(ConsoleMethodIdBuild))
+	r.SendIntermediate()
+}
+func (inst ConsoleReleaseFluid) Send() {
+	r := inst.r
+
+	r.SendIntermediate()
+}
 func (inst ContextMenuFluid) Send() {
 	r := inst.r
 

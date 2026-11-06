@@ -34,28 +34,29 @@ pub enum InterpretError {
 pub type InterpretResult<T> = Result<T, InterpretError>;
 
 use crate::imzero2::code_view;
+use crate::imzero2::console::{ConsoleArgs, ConsoleCache, ConsoleRow};
 use crate::imzero2::debugtools::DebugTools;
 use crate::imzero2::enums_out::{
     AtomsBuilderMethodId, ButtonBuilderMethodId, CheckboxBuilderMethodId, CodeViewBuilderMethodId,
     CodeViewJobBuilderMethodId, CollapsingHeaderBuilderMethodId, ColorBuilderMethodId,
-    ComboBoxBuilderMethodId, DatePickerButtonBuilderMethodId, DateTimePickerButtonBuilderMethodId,
-    DragValueF64BuilderMethodId, DragValueI64BuilderMethodId, DragValueU64BuilderMethodId,
-    EndETableBuilderMethodId, EtColumnBuilderMethodId, FrameBuilderMethodId, FuncProcId,
-    GridBuilderMethodId, HyperlinkBuilderMethodId, HyperlinkToBuilderMethodId,
-    LabelAtomsBuilderMethodId, LabelBuilderMethodId, NewTableBuilderMethodId,
-    NewTableColumnBuilderMethodId, PaintCanvasBuilderMethodId, PaintHitCircleBuilderMethodId,
-    PaintHitPolygonBuilderMethodId, PaintHitRectBuilderMethodId, PaintImageBuilderMethodId,
-    PaintMarkersBuilderMethodId, PaintPolygonFilledBuilderMethodId, PaintSegmentsBuilderMethodId,
-    PaintTextBuilderMethodId, PanelBottomBuilderMethodId, PanelBottomInsideBuilderMethodId,
-    PanelLeftBuilderMethodId, PanelLeftInsideBuilderMethodId, PanelRightBuilderMethodId,
-    PanelRightInsideBuilderMethodId, PanelTopBuilderMethodId, PanelTopInsideBuilderMethodId,
-    ProgressBarBuilderMethodId, ScalarSizeBuilderMethodId, ScrollAreaBuilderMethodId,
-    ScrollingTextureBuilderMethodId, SeparatorBuilderMethodId, SliderF64BuilderMethodId,
-    SliderI64BuilderMethodId, SliderU64BuilderMethodId, SpinnerBuilderMethodId,
-    StyledSectionsBuilderMethodId, TableBuilderMethodId, TableColumnBuilderMethodId,
-    TextEditBuilderMethodId, TimeRangePickerBuilderMethodId, TintedScopeBuilderMethodId,
-    UiWithLayoutBuilderMethodId, VectorSizeBuilderMethodId, WidgetTextBuilderMethodId,
-    WindowBuilderMethodId,
+    ComboBoxBuilderMethodId, ConsoleBuilderMethodId, DatePickerButtonBuilderMethodId,
+    DateTimePickerButtonBuilderMethodId, DragValueF64BuilderMethodId, DragValueI64BuilderMethodId,
+    DragValueU64BuilderMethodId, EndETableBuilderMethodId, EtColumnBuilderMethodId,
+    FrameBuilderMethodId, FuncProcId, GridBuilderMethodId, HyperlinkBuilderMethodId,
+    HyperlinkToBuilderMethodId, LabelAtomsBuilderMethodId, LabelBuilderMethodId,
+    NewTableBuilderMethodId, NewTableColumnBuilderMethodId, PaintCanvasBuilderMethodId,
+    PaintHitCircleBuilderMethodId, PaintHitPolygonBuilderMethodId, PaintHitRectBuilderMethodId,
+    PaintImageBuilderMethodId, PaintMarkersBuilderMethodId, PaintPolygonFilledBuilderMethodId,
+    PaintSegmentsBuilderMethodId, PaintTextBuilderMethodId, PanelBottomBuilderMethodId,
+    PanelBottomInsideBuilderMethodId, PanelLeftBuilderMethodId, PanelLeftInsideBuilderMethodId,
+    PanelRightBuilderMethodId, PanelRightInsideBuilderMethodId, PanelTopBuilderMethodId,
+    PanelTopInsideBuilderMethodId, ProgressBarBuilderMethodId, ScalarSizeBuilderMethodId,
+    ScrollAreaBuilderMethodId, ScrollingTextureBuilderMethodId, SeparatorBuilderMethodId,
+    SliderF64BuilderMethodId, SliderI64BuilderMethodId, SliderU64BuilderMethodId,
+    SpinnerBuilderMethodId, StyledSectionsBuilderMethodId, TableBuilderMethodId,
+    TableColumnBuilderMethodId, TextEditBuilderMethodId, TimeRangePickerBuilderMethodId,
+    TintedScopeBuilderMethodId, UiWithLayoutBuilderMethodId, VectorSizeBuilderMethodId,
+    WidgetTextBuilderMethodId, WindowBuilderMethodId,
 };
 use crate::imzero2::fenums::ResponseFlags;
 use crate::imzero2::image::ImageCache;
@@ -870,6 +871,15 @@ pub struct ImZeroFffi<'a, R: std::io::BufRead, W: std::io::Write> {
     r28_text_rect_rows: Vec<u32>,
     r28_text_rect_row_counts: Vec<u32>,
 
+    // Console rows (ADR-0359 SD3), in the order the consoles produced them:
+    // the widget id, the row's kind (console::kind), and its payload, the
+    // payloads concatenated with their lengths beside. Drained by
+    // FetchR29Console; cleared in prepare_next_frame.
+    r29_console_ids: Vec<u64>,
+    r29_console_kinds: Vec<u8>,
+    r29_console_lens: Vec<u32>,
+    r29_console_data: Vec<u8>,
+
     // ADR-0177 SD6 key captures, per id: one row per captured key EVENT, so a
     // widget that sees two presses in a frame contributes two rows — unlike
     // r24, where each canvas contributes exactly one. Parallel arrays keyed by
@@ -933,6 +943,9 @@ pub struct ImZeroFffi<'a, R: std::io::BufRead, W: std::io::Write> {
     // scrollingTexture (ADR-0009) — ring-buffer pixel widget; texture cache
     // keyed by widget id, caller-owned scroll head. Module: scrolling_texture.
     pub scrolling_texture: ScrollingTextureCache,
+    // Console widgets (ADR-0359): the VT core and its screen per widget id,
+    // kept across frames, evicted when long undrawn. Module: console.
+    pub consoles: ConsoleCache,
 
     // image — RGBA pixel widget; texture cache keyed by widget id, upload
     // gated by Go-supplied content_version. Module: image.
@@ -1154,6 +1167,10 @@ impl<R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'_, R, W> {
             r28_text_rect_vals: Vec::with_capacity(8 * 16),
             r28_text_rect_rows: Vec::with_capacity(8),
             r28_text_rect_row_counts: Vec::with_capacity(8),
+            r29_console_ids: Vec::with_capacity(8),
+            r29_console_kinds: Vec::with_capacity(8),
+            r29_console_lens: Vec::with_capacity(8),
+            r29_console_data: Vec::with_capacity(256),
             r26_key_capture_ids: Vec::with_capacity(8),
             r26_key_capture_codes: Vec::with_capacity(8),
             r26_key_capture_mods: Vec::with_capacity(8),
@@ -1175,6 +1192,7 @@ impl<R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'_, R, W> {
             video_cap_flags: Vec::new(),
             video_stream_info: Vec::new(),
             scrolling_texture: ScrollingTextureCache::new(),
+            consoles: ConsoleCache::default(),
             image_cache: ImageCache::new(),
             paint_image_cache: ImageCache::new(),
             last_interpret_us: 0,
@@ -1250,6 +1268,20 @@ impl<R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'_, R, W> {
             self.r28_text_rect_row_counts.clear();
         }
 
+        if !self.r29_console_ids.is_empty() {
+            // Unlike r24 and r28 these rows are not re-stamped: a key typed
+            // into a console is in them once. A frame whose rows went unfetched
+            // lost input, which is worth a line.
+            tracing::debug!(
+                rows = self.r29_console_ids.len(),
+                "r29 console rows were not fetched"
+            );
+            self.r29_console_ids.clear();
+            self.r29_console_kinds.clear();
+            self.r29_console_lens.clear();
+            self.r29_console_data.clear();
+        }
+
         {
             // r25 is re-stamped every frame by every opted-in etable, so an
             // unfetched frame is normal (a table using applyWidths without a
@@ -1323,6 +1355,7 @@ impl<R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'_, R, W> {
         // once per real frame; `interpret_outer` alone does not qualify
         // because it is re-entered from `replay_deferred_block`.
         self.scrolling_texture.tick();
+        self.consoles.tick();
         self.image_cache.tick();
         self.paint_image_cache.tick();
         // egui 0.35: root panels (`Panel::{top,bottom,left,right}`, `CentralPanel`)
@@ -3150,6 +3183,83 @@ egui::ComboBox::new(i,label).selected_text(selected_text);
                     self.interpret_outer(c, &mut None)?;
                 }
             }
+            FuncProcId::Console => {
+                #[cfg(feature = "puffin")]
+                puffin::profile_scope!("match FuncProcId::Console");
+                // arguments
+                let i = self.read_id()?;
+                let mut offset = self.io.read_plain_u64()?;
+                let mut feed = self.io.read_plain_u8h()?;
+                // construct
+
+                let mut w = 0u8;
+                let mut history_bytes = 0u32;
+                let mut font_size = 0f32;
+                let mut size_w = 0f32;
+                let mut size_h = 0f32;
+                // methods
+                loop {
+                    let (m, _) = self.read_from_repr(ConsoleBuilderMethodId::from_repr)?;
+                    match m {
+                        ConsoleBuilderMethodId::Build => {
+                            break;
+                        }
+                        ConsoleBuilderMethodId::HistoryBytes => {
+                            #[cfg(feature = "puffin")]
+                            puffin::profile_scope!("match ConsoleBuilderMethodId::HistoryBytes");
+                            let mut hb = self.io.read_plain_u32()?;
+                            history_bytes = hb;
+                        }
+                        ConsoleBuilderMethodId::Size => {
+                            #[cfg(feature = "puffin")]
+                            puffin::profile_scope!("match ConsoleBuilderMethodId::Size");
+                            let mut wd = self.io.read_plain_f32()?;
+                            let mut ht = self.io.read_plain_f32()?;
+                            size_w = wd;
+                            size_h = ht;
+                        }
+                        ConsoleBuilderMethodId::FontSize => {
+                            #[cfg(feature = "puffin")]
+                            puffin::profile_scope!("match ConsoleBuilderMethodId::FontSize");
+                            let mut fs = self.io.read_plain_f32()?;
+                            font_size = fs;
+                        }
+                    }
+                }
+                if d == 0 {
+                    self.end_consume_message()?;
+                }
+                // apply
+                // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+
+                if u.is_some() {
+                    let ui = u.as_mut().unwrap();
+                    self.console_show(
+                        ui,
+                        crate::imzero2::console::ConsoleArgs {
+                            id: i.value(),
+                            offset,
+                            feed: &feed,
+                            history_bytes,
+                            font_size,
+                            size: egui::vec2(size_w, size_h),
+                        },
+                    );
+                }
+            }
+            FuncProcId::ConsoleRelease => {
+                #[cfg(feature = "puffin")]
+                puffin::profile_scope!("match FuncProcId::ConsoleRelease");
+                // arguments
+                let i = self.read_id()?;
+                // construct
+                if d == 0 {
+                    self.end_consume_message()?;
+                }
+                // apply
+                // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+                self.consoles.release(i.value());
+            }
             FuncProcId::ContextInspectionUi => {
                 #[cfg(feature = "puffin")]
                 puffin::profile_scope!("match FuncProcId::ContextInspectionUi");
@@ -4967,6 +5077,27 @@ self.apply_widget(w,u,f,Some(i));
                     self.io.write_plain_f32h(len * 16, self.r28_text_rect_vals.drain(..))?;
                     self.io.write_plain_u32h(len, self.r28_text_rect_rows.drain(..))?;
                     self.io.write_plain_u32h(len, self.r28_text_rect_row_counts.drain(..))?;
+                    self.io.flush()?;
+                }
+            }
+            FuncProcId::FetchR29Console => {
+                #[cfg(feature = "puffin")]
+                puffin::profile_scope!("match FuncProcId::FetchR29Console");
+                if d == 0 {
+                    self.end_consume_message()?;
+                }
+                // apply
+                if !self.capture_replay {
+                    // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+
+                    let len = self.r29_console_ids.len();
+                    debug_assert_eq!(len, self.r29_console_kinds.len());
+                    debug_assert_eq!(len, self.r29_console_lens.len());
+                    self.io.write_plain_u64h(len, self.r29_console_ids.drain(..))?;
+                    self.io.write_plain_u8h(len, self.r29_console_kinds.drain(..))?;
+                    self.io.write_plain_u32h(len, self.r29_console_lens.drain(..))?;
+                    self.io.write_plain_u8_slice(&self.r29_console_data)?;
+                    self.r29_console_data.clear();
                     self.io.flush()?;
                 }
             }
@@ -11057,6 +11188,17 @@ egui::Window::new(label).id(i);
         self.r23_canvas_wheel_zoom.push(zoom);
         self.r23_canvas_wheel_hover_x.push(hx);
         self.r23_canvas_wheel_hover_y.push(hy);
+    }
+    /// Feeds, draws and reads one console widget, appending its rows to r29.
+    pub fn console_show(&mut self, ui: &mut egui::Ui, args: ConsoleArgs<'_>) {
+        let mut rows: Vec<ConsoleRow> = Vec::new();
+        self.consoles.show(ui, args, &mut rows);
+        for row in rows {
+            self.r29_console_ids.push(row.id);
+            self.r29_console_kinds.push(row.kind);
+            self.r29_console_lens.push(u32::try_from(row.payload.len()).unwrap_or(u32::MAX));
+            self.r29_console_data.extend_from_slice(&row.payload);
+        }
     }
     /// One captured key event for a widget (ADR-0177 SD6). Called from the
     /// capturing widget's own apply code, so `i` is that widget's id.

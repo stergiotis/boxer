@@ -33,6 +33,8 @@ status: draft
 | CollapsingHeader | BuilderFactory | Yes | 0 | 1 | 3 | Immediate, Retained, BlockIterator |
 | Color | BuilderFactory | No | 0 | 0 | 34 | Retained |
 | ComboBox | BuilderFactory | Yes | 0 | 2 | 4 | Immediate, Retained, BlockIterator |
+| Console | BuilderFactory | Yes | 2 | 0 | 3 | Immediate |
+| ConsoleRelease | BuilderFactory | Yes | 0 | 0 | 0 | Immediate |
 | ContextInspectionUi | Procedural | No | 0 | 0 | - | - |
 | ContextMenu | BuilderFactory | No | 0 | 0 | 0 | Immediate |
 | ContextSendViewPortCommandClose | Procedural | No | 0 | 0 | - | - |
@@ -74,6 +76,7 @@ status: draft
 | FetchR26KeyCaptures | Fetcher | No | 0 | 0 | - | - |
 | FetchR27Windows | Fetcher | No | 0 | 0 | - | - |
 | FetchR28TextRects | Fetcher | No | 0 | 0 | - | - |
+| FetchR29Console | Fetcher | No | 0 | 0 | - | - |
 | FetchR7 | Fetcher | No | 0 | 0 | - | - |
 | FetchR9EtPrefetch | Fetcher | No | 0 | 0 | - | - |
 | FetchR9F64 | Fetcher | No | 0 | 0 | - | - |
@@ -478,6 +481,43 @@ Color32
 #### Return Type
 
 Block
+
+---
+
+### Console
+
+- **Type:** BuilderFactory
+- **Identity:** Yes
+- **Features:** Immediate
+
+#### Constructor Arguments
+
+| Name | Kind | Type |
+|------|------|------|
+| offset | plain | u64 |
+| feed | plain | u8h |
+
+#### Builder Methods
+
+- **HistoryBytes**(hb: u32)
+- **Size**(wd: f32, ht: f32)
+- **FontSize**(fs: f32)
+
+#### Return Type
+
+Console
+
+---
+
+### ConsoleRelease
+
+- **Type:** BuilderFactory
+- **Identity:** Yes
+- **Features:** Immediate
+
+#### Return Type
+
+Console
 
 ---
 
@@ -3544,6 +3584,21 @@ Block
 | rects | f32h |
 | rows | u32h |
 | rowCounts | u32h |
+
+---
+
+### FetchR29Console
+
+- **Type:** Fetcher
+
+#### Return Values
+
+| Name | Type |
+|------|------|
+| ids | u64h |
+| kinds | u8h |
+| lens | u32h |
+| data | u8h |
 
 ---
 

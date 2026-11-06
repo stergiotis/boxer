@@ -229,6 +229,40 @@ func ComboBox(i WidgetIdCreatorI, label typed.RetainedFffiHolderTyped[WidgetText
 	return
 }
 
+func Console(i WidgetIdCreatorI, offset uint64, feed []uint8) (inst ConsoleFluid) {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteOpCode(uint32(FuncProcIdConsole))
+	v := i.Derive()
+	r.WriteWidgetId(checkId(v))
+	r.WriteUint64(offset)
+	runtime.PutUint8SliceArg(r, feed)
+
+	inst = ConsoleFluid{
+		r: r,
+	}
+
+	inst.id = v
+	inst.idGen = i
+
+	return
+}
+
+func ConsoleRelease(i WidgetIdCreatorI) (inst ConsoleReleaseFluid) {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteOpCode(uint32(FuncProcIdConsoleRelease))
+	v := i.Derive()
+	r.WriteWidgetId(checkId(v))
+
+	inst = ConsoleReleaseFluid{
+		r: r,
+	}
+
+	inst.id = v
+	inst.idGen = i
+
+	return
+}
+
 func ContextInspectionUi() {
 	r := typed.NewRetainedFffiBuilder()
 	r.WriteUint32(uint32(FuncProcIdContextInspectionUi))

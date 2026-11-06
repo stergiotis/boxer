@@ -3,11 +3,11 @@ members = [".", "imzero2_egui", "browser"]
 # The browser module is a wasm32 cdylib built by build_rust_browser.sh; a
 # plain `cargo build` here does not link it natively.
 default-members = [".", "imzero2_egui"]
-# Vendored third-party source (vendor/egui_software_backend and vendor/winit,
-# see each VENDORING.md) is a path dependency but NOT a member: `check.sh` runs
+# Vendored third-party source (vendor/egui_software_backend, vendor/winit and
+# vendor/fux-vt, see each VENDORING.md) is a path dependency but NOT a member: `check.sh` runs
 # `cargo fmt --all` and `cargo clippy --workspace -- -D warnings`, and neither
 # should reformat or gate on code we did not write.
-exclude = ["vendor/egui_software_backend", "vendor/egui_software_backend/constify", "vendor/winit"]
+exclude = ["vendor/egui_software_backend", "vendor/egui_software_backend/constify", "vendor/winit", "vendor/fux-vt"]
 resolver = "2"
 
 [package]
@@ -26,8 +26,9 @@ include = ["**/*.rs", "Cargo.toml"]
 # the graph needs 1.94 any more; the pin is kept at 1.94 regardless, because
 # lowering it is its own decision (the airgap bundle's compile among the
 # things to check first — see ./rust-toolchain), not a side effect of dropping
-# a dependency.
-rust-version = "1.94"
+# a dependency. Raised to 1.95 for the vendored fux-vt (ADR-0359 SD8), which
+# declares it.
+rust-version = "1.95"
 
 [package.metadata.docs.rs]
 all-features = true
@@ -260,6 +261,9 @@ imzero2_egui = { path = "imzero2_egui" }
 # the one this host uses and the reason it is ~4.5x faster than the uncached
 # single-threaded path it started on — see softraster.rs and
 # doc/adr-background-work/egui-software-backend-survey.md section 12.3.
+# The VT core of the console widget (ADR-0359), vendored from a pinned commit
+# and trimmed; see vendor/fux-vt/VENDORING.md.
+fux-vt = { path = "vendor/fux-vt" }
 egui_software_backend = { path = "vendor/egui_software_backend", optional = true, default-features = false, features = [
     "std",
     "log",

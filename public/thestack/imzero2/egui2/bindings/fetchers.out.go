@@ -378,6 +378,24 @@ func (inst *Fetcher) CollectFetchR28TextRects() (ids []uint64, rects []float32, 
 	rowCounts = inst.iterateU32h()
 	return
 }
+func (inst *Fetcher) FetchR29Console() (ids []uint64, kinds []uint8, lens []uint32, data iter.Seq[uint8]) {
+	inst.invoke(FuncProcIdFetchR29Console)
+	ids = inst.readU64h()
+	kinds = inst.readU8h()
+	lens = inst.readU32h()
+	data = inst.iterateU8h()
+	return
+}
+func (inst *Fetcher) IssueFetchR29Console() {
+	inst.invoke(FuncProcIdFetchR29Console)
+}
+func (inst *Fetcher) CollectFetchR29Console() (ids []uint64, kinds []uint8, lens []uint32, data iter.Seq[uint8]) {
+	ids = inst.readU64h()
+	kinds = inst.readU8h()
+	lens = inst.readU32h()
+	data = inst.iterateU8h()
+	return
+}
 func (inst *Fetcher) FetchR7() (ids []uint64, responses iter.Seq[uint32]) {
 	inst.invoke(FuncProcIdFetchR7)
 	ids = inst.readU64h()

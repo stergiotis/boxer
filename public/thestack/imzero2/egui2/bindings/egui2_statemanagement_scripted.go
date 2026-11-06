@@ -52,6 +52,7 @@ func (inst *StateManager) ScriptReset() {
 	inst.responseFlags.Reset()
 	clear(inst.r24CanvasPointers)
 	clear(inst.r28TextRects)
+	clear(inst.r29Console)
 	clear(inst.r23CanvasWheel)
 	inst.r20Pointer = PointerValue{}
 	inst.r17Modifiers = ModifiersValue{}

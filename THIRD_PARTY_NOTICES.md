@@ -486,6 +486,19 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
   which is also the re-sync procedure. Upstream ships no NOTICE file.
 - Not covered by `scripts/ci/license_gate.sh`, for the reason given in 1.8.
 
+### 1.12 The fux contributors -- fux-vt (MIT)
+
+- Directory: `rust/imzero2/vendor/fux-vt/`, a path dependency of the
+  imzero2 client.
+- Origin: <https://github.com/gold-silver-copper/fux>, the `fux-vt` crate at
+  commit `03f8d6ce5f8e9617a949def80729d1c09cf9491c` (past release `0.16.0`).
+- Use: the VT core of the console widget (ADR-0359).
+- Licence: MIT; the text travels with the directory (`LICENSE`). The
+  deletions made to it are listed in
+  [`.../vendor/fux-vt/VENDORING.md`](rust/imzero2/vendor/fux-vt/VENDORING.md),
+  which is also the re-sync procedure.
+- Not covered by `scripts/ci/license_gate.sh`, for the reason given in 1.8.
+
 ## 2. Vendored binary artifacts
 
 ### 2.1 h3.wasm -- H3 hierarchical geospatial index (Apache-2.0)

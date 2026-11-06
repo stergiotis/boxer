@@ -66,6 +66,20 @@ type ComboBoxFluid struct {
 }
 type ComboBoxMethodIdE uint32
 
+type ConsoleFluid struct {
+	r     *typed.RetainedFffiBuilder
+	id    uint64
+	idGen WidgetIdCreatorI
+}
+type ConsoleMethodIdE uint32
+
+type ConsoleReleaseFluid struct {
+	r     *typed.RetainedFffiBuilder
+	id    uint64
+	idGen WidgetIdCreatorI
+}
+type ConsoleReleaseMethodIdE uint32
+
 type ContextMenuFluid struct {
 	r              *typed.RetainedFffiBuilder
 	deferredMenu   *runtime.DeferredBlockScope
@@ -682,6 +696,8 @@ func (inst CodeViewS) DummyInterfaceImplementationMethodWidgetI() {}
 var _ WidgetI = CodeViewS{}
 
 type Color32S struct{}
+
+type ConsoleS struct{}
 
 type ContextMenuDummyS struct{}
 

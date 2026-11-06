@@ -77,6 +77,10 @@ struct SavedLiveState<'a> {
     r28_text_rect_vals: Vec<f32>,
     r28_text_rect_rows: Vec<u32>,
     r28_text_rect_row_counts: Vec<u32>,
+    r29_console_ids: Vec<u64>,
+    r29_console_kinds: Vec<u8>,
+    r29_console_lens: Vec<u32>,
+    r29_console_data: Vec<u8>,
     r26_key_capture_ids: Vec<u64>,
     r26_key_capture_codes: Vec<u8>,
     r26_key_capture_mods: Vec<u8>,
@@ -203,6 +207,10 @@ impl<'a, R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'a, R, W> {
             r28_text_rect_vals: std::mem::take(&mut self.r28_text_rect_vals),
             r28_text_rect_rows: std::mem::take(&mut self.r28_text_rect_rows),
             r28_text_rect_row_counts: std::mem::take(&mut self.r28_text_rect_row_counts),
+            r29_console_ids: std::mem::take(&mut self.r29_console_ids),
+            r29_console_kinds: std::mem::take(&mut self.r29_console_kinds),
+            r29_console_lens: std::mem::take(&mut self.r29_console_lens),
+            r29_console_data: std::mem::take(&mut self.r29_console_data),
             r26_key_capture_ids: std::mem::take(&mut self.r26_key_capture_ids),
             r26_key_capture_codes: std::mem::take(&mut self.r26_key_capture_codes),
             r26_key_capture_mods: std::mem::take(&mut self.r26_key_capture_mods),
@@ -305,6 +313,10 @@ impl<'a, R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'a, R, W> {
         self.r28_text_rect_vals = s.r28_text_rect_vals;
         self.r28_text_rect_rows = s.r28_text_rect_rows;
         self.r28_text_rect_row_counts = s.r28_text_rect_row_counts;
+        self.r29_console_ids = s.r29_console_ids;
+        self.r29_console_kinds = s.r29_console_kinds;
+        self.r29_console_lens = s.r29_console_lens;
+        self.r29_console_data = s.r29_console_data;
         self.r26_key_capture_ids = s.r26_key_capture_ids;
         self.r26_key_capture_codes = s.r26_key_capture_codes;
         self.r26_key_capture_mods = s.r26_key_capture_mods;
@@ -368,6 +380,7 @@ impl<'a, R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'a, R, W> {
         self.image_cache.read_only = true;
         self.paint_image_cache.read_only = true;
         self.scrolling_texture.read_only = true;
+        self.consoles.read_only = true;
 
         let mut root_ui = egui::Ui::new(
             ctx.clone(),
@@ -400,6 +413,7 @@ impl<'a, R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'a, R, W> {
         self.image_cache.read_only = false;
         self.paint_image_cache.read_only = false;
         self.scrolling_texture.read_only = false;
+        self.consoles.read_only = false;
         let refused_after = self.image_cache.refused_uploads
             + self.paint_image_cache.refused_uploads
             + self.scrolling_texture.refused_uploads;

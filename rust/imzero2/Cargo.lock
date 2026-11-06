@@ -1526,6 +1526,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "fux-vt"
+version = "0.16.0"
+dependencies = [
+ "unicode-segmentation",
+ "unicode-width 0.2.2",
+]
+
+[[package]]
 name = "gethostname"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1823,6 +1831,7 @@ dependencies = [
  "egui_software_backend",
  "egui_table",
  "futures-util",
+ "fux-vt",
  "imzero2_egui",
  "jiff",
  "log",
