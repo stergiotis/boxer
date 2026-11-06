@@ -252,6 +252,13 @@ type LabelAtomsFluid struct {
 }
 type LabelAtomsMethodIdE uint32
 
+type LabelAtomsLinkedFluid struct {
+	r     *typed.RetainedFffiBuilder
+	id    uint64
+	idGen WidgetIdCreatorI
+}
+type LabelAtomsLinkedMethodIdE uint32
+
 type LabelWidgetTextFluid struct {
 	r *typed.RetainedFffiBuilder
 }
@@ -740,6 +747,12 @@ type ImageS struct{}
 func (inst ImageS) DummyInterfaceImplementationMethodWidgetI() {}
 
 var _ WidgetI = ImageS{}
+
+type LabelLinkedS struct{}
+
+func (inst LabelLinkedS) DummyInterfaceImplementationMethodWidgetI() {}
+
+var _ WidgetI = LabelLinkedS{}
 
 type LabelS struct{}
 

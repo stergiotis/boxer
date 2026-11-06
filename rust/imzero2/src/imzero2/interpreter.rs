@@ -43,20 +43,20 @@ use crate::imzero2::enums_out::{
     DateTimePickerButtonBuilderMethodId, DragValueF64BuilderMethodId, DragValueI64BuilderMethodId,
     DragValueU64BuilderMethodId, EndETableBuilderMethodId, EtColumnBuilderMethodId,
     FrameBuilderMethodId, FuncProcId, GridBuilderMethodId, HyperlinkBuilderMethodId,
-    HyperlinkToBuilderMethodId, LabelAtomsBuilderMethodId, LabelBuilderMethodId,
-    NewTableBuilderMethodId, NewTableColumnBuilderMethodId, PaintCanvasBuilderMethodId,
-    PaintHitCircleBuilderMethodId, PaintHitPolygonBuilderMethodId, PaintHitRectBuilderMethodId,
-    PaintImageBuilderMethodId, PaintMarkersBuilderMethodId, PaintPolygonFilledBuilderMethodId,
-    PaintSegmentsBuilderMethodId, PaintTextBuilderMethodId, PanelBottomBuilderMethodId,
-    PanelBottomInsideBuilderMethodId, PanelLeftBuilderMethodId, PanelLeftInsideBuilderMethodId,
-    PanelRightBuilderMethodId, PanelRightInsideBuilderMethodId, PanelTopBuilderMethodId,
-    PanelTopInsideBuilderMethodId, ProgressBarBuilderMethodId, ScalarSizeBuilderMethodId,
-    ScrollAreaBuilderMethodId, ScrollingTextureBuilderMethodId, SeparatorBuilderMethodId,
-    SliderF64BuilderMethodId, SliderI64BuilderMethodId, SliderU64BuilderMethodId,
-    SpinnerBuilderMethodId, StyledSectionsBuilderMethodId, TableBuilderMethodId,
-    TableColumnBuilderMethodId, TextEditBuilderMethodId, TimeRangePickerBuilderMethodId,
-    TintedScopeBuilderMethodId, UiWithLayoutBuilderMethodId, VectorSizeBuilderMethodId,
-    WidgetTextBuilderMethodId, WindowBuilderMethodId,
+    HyperlinkToBuilderMethodId, LabelAtomsBuilderMethodId, LabelAtomsLinkedBuilderMethodId,
+    LabelBuilderMethodId, NewTableBuilderMethodId, NewTableColumnBuilderMethodId,
+    PaintCanvasBuilderMethodId, PaintHitCircleBuilderMethodId, PaintHitPolygonBuilderMethodId,
+    PaintHitRectBuilderMethodId, PaintImageBuilderMethodId, PaintMarkersBuilderMethodId,
+    PaintPolygonFilledBuilderMethodId, PaintSegmentsBuilderMethodId, PaintTextBuilderMethodId,
+    PanelBottomBuilderMethodId, PanelBottomInsideBuilderMethodId, PanelLeftBuilderMethodId,
+    PanelLeftInsideBuilderMethodId, PanelRightBuilderMethodId, PanelRightInsideBuilderMethodId,
+    PanelTopBuilderMethodId, PanelTopInsideBuilderMethodId, ProgressBarBuilderMethodId,
+    ScalarSizeBuilderMethodId, ScrollAreaBuilderMethodId, ScrollingTextureBuilderMethodId,
+    SeparatorBuilderMethodId, SliderF64BuilderMethodId, SliderI64BuilderMethodId,
+    SliderU64BuilderMethodId, SpinnerBuilderMethodId, StyledSectionsBuilderMethodId,
+    TableBuilderMethodId, TableColumnBuilderMethodId, TextEditBuilderMethodId,
+    TimeRangePickerBuilderMethodId, TintedScopeBuilderMethodId, UiWithLayoutBuilderMethodId,
+    VectorSizeBuilderMethodId, WidgetTextBuilderMethodId, WindowBuilderMethodId,
 };
 use crate::imzero2::fenums::ResponseFlags;
 use crate::imzero2::image::ImageCache;
@@ -5259,6 +5259,7 @@ self.apply_widget(w,u,f,Some(i));
                 let mut capture_chord_mask: u64 = 0;
                 let mut capture_chord_mods: u8 = 0;
                 let mut capture_key_edges = false;
+                let mut edge_bar_left: Option<(f32, egui::Color32)> = None;
                 // methods
                 loop {
                     let (m, _) = self.read_from_repr(FrameBuilderMethodId::from_repr)?;
@@ -5437,6 +5438,24 @@ self.apply_widget(w,u,f,Some(i));
                             );
                             hover_cursor_pointer = true;
                         }
+                        FrameBuilderMethodId::EdgeBarLeft => {
+                            #[cfg(feature = "puffin")]
+                            puffin::profile_scope!("match FrameBuilderMethodId::EdgeBarLeft");
+                            let mut width = self.io.read_plain_f32()?;
+
+                            let col = {
+                                let (f2, _) = self.read_from_repr(FuncProcId::from_repr)?;
+                                let u2: &mut Option<&mut egui::Ui> = &mut None;
+                                if u2.is_some() {
+                                    self.interpret_inner(c, u2, &f2, d + 1)?;
+                                } else {
+                                    self.interpret_inner(c, u, &f2, d + 1)?;
+                                }
+
+                                self.r11_color32
+                            };
+                            edge_bar_left = Some((width, col));
+                        }
                         FrameBuilderMethodId::PresetGroup => {
                             #[cfg(feature = "puffin")]
                             puffin::profile_scope!("match FrameBuilderMethodId::PresetGroup");
@@ -5499,9 +5518,27 @@ self.apply_widget(w,u,f,Some(i));
 
                 if u.is_some() {
                     let ui = u.as_mut().unwrap();
+                    let frame_outer_margin = w.outer_margin;
+                    let frame_corner_radius = w.corner_radius;
                     let r2 = w.show(ui, |ui| {
                         let _ = self.interpret_outer_logged(c, &mut Some(ui));
                     });
+                    if let Some((bar_width, bar_col)) = edge_bar_left {
+                        // The response rect carries the outer margin; the bar
+                        // goes where the stroke would, inside it.
+                        let r = r2.response.rect - frame_outer_margin;
+                        let bar = egui::Rect::from_min_max(
+                            r.min,
+                            egui::pos2(r.min.x + bar_width, r.max.y),
+                        );
+                        let cr = egui::CornerRadius {
+                            nw: frame_corner_radius.nw,
+                            sw: frame_corner_radius.sw,
+                            ne: 0,
+                            se: 0,
+                        };
+                        ui.painter().rect_filled(bar, cr, bar_col);
+                    }
                     let mut resp2 = ResponseFlags::empty();
                     if sense_click || sense_drag {
                         let mut sense = egui::Sense::hover();
@@ -6215,7 +6252,10 @@ egui::Grid::new(i);
                             }
                         }
                     }
-                    egui::Label::new(lj)
+                    // A Label whose inline backgrounds (code spans, highlights, tags) are
+                    // painted as pills at the design system's chip radius; a job without
+                    // one is the plain Label (imzero2_egui::style::pill).
+                    imzero2_egui::style::pill::PillLabel::new(lj)
                 };
                 // methods
                 loop {
@@ -6257,6 +6297,130 @@ egui::Grid::new(i);
                 // apply
                 // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
                 self.apply_widget(w, u, f, None);
+            }
+            FuncProcId::LabelAtomsLinked => {
+                #[cfg(feature = "puffin")]
+                puffin::profile_scope!("match FuncProcId::LabelAtomsLinked");
+                // arguments
+                let i = self.read_id()?;
+                let mut link_atoms = self.io.read_plain_u32h()?;
+                let mut link_urls = self.io.read_plain_sh()?;
+                let mut link_open = self.io.read_plain_u8h()?;
+
+                let atoms = {
+                    let (f2, _) = self.read_from_repr(FuncProcId::from_repr)?;
+                    let u2: &mut Option<&mut egui::Ui> = &mut None;
+                    if u2.is_some() {
+                        self.interpret_inner(c, u2, &f2, d + 1)?;
+                    } else {
+                        self.interpret_inner(c, u, &f2, d + 1)?;
+                    }
+
+                    std::mem::take(&mut self.r0_atoms)
+                };
+                // construct
+
+                let mut w = {
+                    // One LayoutJob for the whole paragraph, as labelAtoms builds it; the
+                    // sections an atom contributes are mapped to the link it is, if any.
+                    let style = c.style_of(c.theme());
+                    let mut lj = egui::text::LayoutJob::default();
+                    let mut link_of_section: Vec<Option<usize>> = Vec::new();
+                    let mut atom_index: u32 = 0;
+                    for atom in atoms.into_iter() {
+                        let link = link_atoms.iter().position(|&a| a == atom_index);
+                        let before = lj.sections.len();
+                        if let egui::AtomKind::Text(wt) = atom.kind {
+                            match wt {
+                                egui::WidgetText::RichText(rt) => {
+                                    std::sync::Arc::unwrap_or_clone(rt).append_to(
+                                        &mut lj,
+                                        &style,
+                                        egui::FontSelection::Default,
+                                        egui::Align::Center,
+                                    );
+                                }
+                                egui::WidgetText::Text(s) => {
+                                    let format = egui::TextFormat {
+                                        font_id: egui::FontSelection::Default.resolve(&style),
+                                        color: style.visuals.text_color(),
+                                        ..Default::default()
+                                    };
+                                    lj.append(&s, 0.0, format);
+                                }
+                                egui::WidgetText::LayoutJob(j) => {
+                                    let mut j = std::sync::Arc::unwrap_or_clone(j);
+                                    let base = lj.text.len();
+                                    lj.text.push_str(&j.text);
+                                    for mut sec in j.sections.drain(..) {
+                                        sec.byte_range.start += base;
+                                        sec.byte_range.end += base;
+                                        lj.sections.push(sec);
+                                    }
+                                }
+                                egui::WidgetText::Galley(_) => {}
+                            }
+                        }
+                        for _ in before..lj.sections.len() {
+                            link_of_section.push(link);
+                        }
+                        atom_index += 1;
+                    }
+                    imzero2_egui::style::linked::LinkedLabel::new(lj, link_of_section)
+                };
+                // methods
+                loop {
+                    let (m, _) = self.read_from_repr(LabelAtomsLinkedBuilderMethodId::from_repr)?;
+                    match m {
+                        LabelAtomsLinkedBuilderMethodId::Build => {
+                            break;
+                        }
+                        LabelAtomsLinkedBuilderMethodId::Selectable => {
+                            #[cfg(feature = "puffin")]
+                            puffin::profile_scope!(
+                                "match LabelAtomsLinkedBuilderMethodId::Selectable"
+                            );
+                            let mut val = self.io.read_plain_b()?;
+                            // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+                            w = w.selectable(val);
+                        }
+                        LabelAtomsLinkedBuilderMethodId::Wrap => {
+                            #[cfg(feature = "puffin")]
+                            puffin::profile_scope!("match LabelAtomsLinkedBuilderMethodId::Wrap");
+                            // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+                            w = w.wrap_mode(egui::TextWrapMode::Wrap);
+                        }
+                    }
+                }
+                if d == 0 {
+                    self.end_consume_message()?;
+                }
+                // apply
+                // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+
+                if u.is_some() {
+                    let ui = u.as_mut().unwrap();
+                    let out = w.show(ui);
+                    let clicked = out.clicked.map(|k| k as u64).unwrap_or(u64::MAX);
+                    if let Some(k) = out.clicked {
+                        if link_open.get(k).copied().unwrap_or(0) != 0 {
+                            if let Some(url) = link_urls.get(k) {
+                                ui.ctx().open_url(egui::OpenUrl::new_tab(url));
+                            }
+                        }
+                    }
+                    self.r9_u64_push(i.value(), clicked);
+                    if let Ok(mut zones) = self.link_zones.lock() {
+                        for (k, rect) in out.zones {
+                            if let Some(url) = link_urls.get(k) {
+                                zones.push(crate::imzero2::svgexport::LinkZone {
+                                    rect,
+                                    url: url.clone(),
+                                });
+                            }
+                        }
+                    }
+                }
             }
             FuncProcId::LabelWidgetText => {
                 #[cfg(feature = "puffin")]

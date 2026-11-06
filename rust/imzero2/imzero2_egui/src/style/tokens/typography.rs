@@ -27,6 +27,10 @@ pub const BODY_PT: f32 = 13.0;
 pub const CAPTION_PT: f32 = 11.0;
 /// Fine print, status-bar metrics, watermark.
 pub const MICRO_PT: f32 = 9.0;
+/// Line height of reading prose as a multiple of the body size (the IDS web
+/// stylesheet's `--ids-line`). Mirrored in Go as `styletokens.BodyLeading`;
+/// the Go markdown widget applies it, the host only keeps the two in step.
+pub const BODY_LEADING: f32 = 1.6;
 
 /// Density scaling per ADR-0030 §SD3: Tight subtracts 1 pt (floored at
 /// 9), Roomy adds 1 pt.

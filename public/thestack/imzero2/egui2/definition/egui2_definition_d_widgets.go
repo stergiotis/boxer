@@ -298,10 +298,111 @@ func definitionsWidget() (widgets []*ir.BuilderFactoryNode) {
 			}
 		}
 	}
-	egui::Label::new(lj)
+	// A Label whose inline backgrounds (code spans, highlights, tags) are
+	// painted as pills at the design system's chip radius; a job without
+	// one is the plain Label (imzero2_egui::style::pill).
+	imzero2_egui::style::pill::PillLabel::new(lj)
 };
 `)).
 			WithReturnType(structLabel()).
+			Build())
+	widgets = append(widgets,
+		// A paragraph whose text carries links, as one galley: the link
+		// atoms are sections of the paragraph's own layout job, so the
+		// shaper wraps the paragraph as a paragraph and not as a row of
+		// widgets (imzero2_egui::style::linked). `linkAtoms` names the
+		// atoms that are links, in link order; `linkUrls` their targets;
+		// `linkOpen[k]` nonzero asks the host to open link k's url in a new
+		// tab when it is clicked. Every click on a link is reported through
+		// r9_u64 as the link's index (u64::MAX when none), so the caller
+		// can act on the links it claims. Link zones go to the SVG exporter
+		// as a hyperlink's do.
+		idl.NewBuilderFactoryNode("labelAtomsLinked").
+			WithIdentityId(true).
+			AddArguments(idl.NewArgumentsBuilder().
+				EvaluatedArg("atoms", structAtoms()).
+				PlainArg("linkAtoms", ctabb.U32h).
+				PlainArg("linkUrls", ctabb.Sh).
+				PlainArg("linkOpen", ctabb.U8h).
+				Build()).
+			AddMethods(idl.NewMethodBuilder().
+				BeginMethod("selectable").Arg("val", ctabb.B).CodeClientRust(rustClientCode("{{Instance}} = {{Instance}}.selectable(val);\n")).EndMethod().
+				BeginMethod("wrap").CodeClientRust(rustClientCode("{{Instance}} = {{Instance}}.wrap_mode(egui::TextWrapMode::Wrap);")).EndMethod().
+				Build()...).
+			WithSettingImmediate(true).
+			WithSettingRetained(true).
+			WithConstructionCodeClientRust(rustClientCode(`{
+	// One LayoutJob for the whole paragraph, as labelAtoms builds it; the
+	// sections an atom contributes are mapped to the link it is, if any.
+	let style = c.style_of(c.theme());
+	let mut lj = egui::text::LayoutJob::default();
+	let mut link_of_section: Vec<Option<usize>> = Vec::new();
+	let mut atom_index: u32 = 0;
+	for atom in atoms.into_iter() {
+		let link = link_atoms.iter().position(|&a| a == atom_index);
+		let before = lj.sections.len();
+		if let egui::AtomKind::Text(wt) = atom.kind {
+			match wt {
+				egui::WidgetText::RichText(rt) => {
+					std::sync::Arc::unwrap_or_clone(rt).append_to(
+						&mut lj,
+						&style,
+						egui::FontSelection::Default,
+						egui::Align::Center,
+					);
+				}
+				egui::WidgetText::Text(s) => {
+					let format = egui::TextFormat {
+						font_id: egui::FontSelection::Default.resolve(&style),
+						color: style.visuals.text_color(),
+						..Default::default()
+					};
+					lj.append(&s, 0.0, format);
+				}
+				egui::WidgetText::LayoutJob(j) => {
+					let mut j = std::sync::Arc::unwrap_or_clone(j);
+					let base = lj.text.len();
+					lj.text.push_str(&j.text);
+					for mut sec in j.sections.drain(..) {
+						sec.byte_range.start += base;
+						sec.byte_range.end += base;
+						lj.sections.push(sec);
+					}
+				}
+				egui::WidgetText::Galley(_) => {}
+			}
+		}
+		for _ in before..lj.sections.len() {
+			link_of_section.push(link);
+		}
+		atom_index += 1;
+	}
+	imzero2_egui::style::linked::LinkedLabel::new(lj, link_of_section)
+};
+`)).
+			WithApplyCodeClientRust(rustClientCode(`
+if {{EguiUiOptionalOuter}}.is_some() {
+	let ui = {{EguiUiOptionalOuter}}.as_mut().unwrap();
+	let out = {{Instance}}.show(ui);
+	let clicked = out.clicked.map(|k| k as u64).unwrap_or(u64::MAX);
+	if let Some(k) = out.clicked {
+		if link_open.get(k).copied().unwrap_or(0) != 0 {
+			if let Some(url) = link_urls.get(k) {
+				ui.ctx().open_url(egui::OpenUrl::new_tab(url));
+			}
+		}
+	}
+	self.r9_u64_push({{Id}}.value(), clicked);
+	if let Ok(mut zones) = self.link_zones.lock() {
+		for (k, rect) in out.zones {
+			if let Some(url) = link_urls.get(k) {
+				zones.push(crate::imzero2::svgexport::LinkZone { rect, url: url.clone() });
+			}
+		}
+	}
+}
+`)).
+			WithReturnType(structLabelLinked()).
 			Build())
 	widgets = append(widgets,
 		idl.NewBuilderFactoryNode("button").

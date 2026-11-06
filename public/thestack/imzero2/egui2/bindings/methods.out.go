@@ -1553,6 +1553,15 @@ func (inst FrameFluid) HoverCursorPointer() FrameFluid {
 	return inst
 }
 
+func (inst FrameFluid) EdgeBarLeft(width float32, col color.Color) FrameFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(FrameMethodIdEdgeBarLeft))
+	r.WriteFloat32(width)
+	PutColorAsRetainedColor32(r, col)
+
+	return inst
+}
+
 func (inst FrameFluid) PresetGroup() FrameFluid {
 	r := inst.r
 	r.WriteOpCode(uint32(FrameMethodIdPresetGroup))
@@ -1991,6 +2000,31 @@ func (inst LabelAtomsFluid) Keep() typed.RetainedFffiHolderTyped[LabelS] {
 	r := inst.r
 	r.WriteOpCode(uint32(LabelAtomsMethodIdBuild))
 	return typed.NewRetainedFffiHolderTyped[LabelS](r.BuildRetained())
+}
+func (inst LabelAtomsLinkedFluid) Selectable(val bool) LabelAtomsLinkedFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(LabelAtomsLinkedMethodIdSelectable))
+	r.WriteBool(val)
+
+	return inst
+}
+
+func (inst LabelAtomsLinkedFluid) Wrap() LabelAtomsLinkedFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(LabelAtomsLinkedMethodIdWrap))
+
+	return inst
+}
+
+func (inst LabelAtomsLinkedFluid) Send() {
+	r := inst.r
+	r.WriteOpCode(uint32(LabelAtomsLinkedMethodIdBuild))
+	r.SendIntermediate()
+}
+func (inst LabelAtomsLinkedFluid) Keep() typed.RetainedFffiHolderTyped[LabelLinkedS] {
+	r := inst.r
+	r.WriteOpCode(uint32(LabelAtomsLinkedMethodIdBuild))
+	return typed.NewRetainedFffiHolderTyped[LabelLinkedS](r.BuildRetained())
 }
 func (inst LabelWidgetTextFluid) Send() {
 	r := inst.r

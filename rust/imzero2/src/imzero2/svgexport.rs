@@ -638,12 +638,11 @@ pub type TexturePixelCacheHandle = Arc<Mutex<TexturePixelCache>>;
 /// so a future opcode (e.g. a "rewrite URLs for SVG export") can swap it
 /// in cheaply without going through the widget rebuild.
 ///
-/// Inline markdown links are also covered by this path: the markdown
-/// widget (`thestack/imzero2/egui2/widgets/markdown/render.go`) emits
-/// each inline `[text](url)` run as a separate `c.HyperlinkTo(...)` call
-/// in flow order, which goes through the same IDL apply and produces a
-/// `LinkZone` per inline link. egui's `TextFormat` carries no URL field,
-/// so there is no other "rich text with inline URL" path to plug in.
+/// Inline markdown links are also covered by this path: a paragraph whose
+/// text carries links is one `labelAtomsLinked`, whose IDL apply pushes a
+/// `LinkZone` per row-run of each link (the run's logical box, so it
+/// contains the row's text element). egui's `TextFormat` carries no URL
+/// field, so there is no other "rich text with inline URL" path to plug in.
 #[derive(Debug, Clone)]
 pub struct LinkZone {
     pub rect: Rect,
@@ -1758,7 +1757,11 @@ impl SvgBuilder {
                         run = Some(TextRun::new(baseline.clone(), style));
                     }
                     if let Some(r) = run.as_mut() {
-                        r.push(bx, glyph.chr);
+                        let glyph_box = Rect::from_min_size(
+                            egui::pos2(bx, by - glyph.font_ascent),
+                            egui::vec2(advance, glyph.line_height),
+                        );
+                        r.push(bx, glyph.chr, Some(glyph_box));
                     }
                     self.counts.glyphs_emitted += 1;
                     // A ligature glyph draws the chars folded into it too:
@@ -1785,7 +1788,15 @@ impl SvgBuilder {
                     ligature.as_mut(),
                     run.as_mut(),
                 ) {
-                    r.push(*x0 + *share * *k as f32, glyph.chr);
+                    let x = *x0 + *share * *k as f32;
+                    r.push(
+                        x,
+                        glyph.chr,
+                        Some(Rect::from_min_size(
+                            egui::pos2(x, by - glyph.font_ascent),
+                            egui::vec2(*share, glyph.line_height),
+                        )),
+                    );
                     *k += 1;
                     self.counts.glyphs_emitted += 1;
                 } else if glyph.chr.is_whitespace() && advance > 0.0 {
@@ -1793,7 +1804,7 @@ impl SvgBuilder {
                     // run's trailing whitespace is dropped when it is
                     // written. Before any ink there is no run to join.
                     if let Some(r) = run.as_mut().filter(|r| r.baseline == baseline) {
-                        r.push(bx, glyph.chr);
+                        r.push(bx, glyph.chr, None);
                     }
                     ligature = None;
                     self.counts.glyphs_skipped += 1;
@@ -1895,12 +1906,28 @@ impl SvgBuilder {
         if !run.chars.is_empty() {
             let xs = run.xs.iter().map(|x| format!("{x:.2}")).collect::<Vec<_>>().join(" ");
             let text: String = run.chars.iter().map(|c| xml_escape_char(*c)).collect();
-            let _ = writeln!(
+            // A run inside a link zone of its own — an inline link in a
+            // paragraph — is wrapped on its own when the whole shape is not.
+            let href = if self.open_link.is_none() {
+                run.bbox.and_then(|b| self.link_for_bbox(b).map(str::to_owned))
+            } else {
+                None
+            };
+            if let Some(url) = href.as_deref() {
+                let _ = write!(
+                    self.body,
+                    "  <a href=\"{}\" target=\"_blank\" rel=\"noopener\">",
+                    xml_escape_attr(url)
+                );
+            }
+            let _ = write!(
                 self.body,
-                "  <text y=\"{y}\" x=\"{xs}\" {style} xml:space=\"preserve\">{text}</text>",
+                "{indent}<text y=\"{y}\" x=\"{xs}\" {style} xml:space=\"preserve\">{text}</text>",
+                indent = if href.is_some() { "" } else { "  " },
                 y = run.baseline,
                 style = run.style,
             );
+            let _ = writeln!(self.body, "{}", if href.is_some() { "</a>" } else { "" });
         }
         self.body.push_str(&run.after);
     }
@@ -2391,6 +2418,10 @@ struct TextRun {
     xs: Vec<f32>,
     chars: Vec<char>,
     after: String,
+    /// The union of the run's glyph boxes on screen, for the inline link
+    /// zones: a link inside a paragraph is a run of that paragraph's text,
+    /// not a text shape of its own.
+    bbox: Option<Rect>,
 }
 
 impl TextRun {
@@ -2401,12 +2432,20 @@ impl TextRun {
             xs: Vec::new(),
             chars: Vec::new(),
             after: String::new(),
+            bbox: None,
         }
     }
 
-    fn push(&mut self, x: f32, c: char) {
+    /// A glyph with ink carries its box; whitespace carries none, so a
+    /// space that joins a run from the section after it (a link's last
+    /// word, then the prose's leading space) does not widen the run past
+    /// its zone.
+    fn push(&mut self, x: f32, c: char, glyph_box: Option<Rect>) {
         self.xs.push(x);
         self.chars.push(c);
+        if let Some(g) = glyph_box {
+            self.bbox = Some(self.bbox.map_or(g, |b| b.union(g)));
+        }
     }
 }
 

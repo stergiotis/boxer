@@ -12,6 +12,8 @@
 pub mod button;
 pub mod data_encoding;
 pub mod fresh;
+pub mod linked;
+pub mod pill;
 pub mod progress;
 pub mod slider;
 pub mod tokens;

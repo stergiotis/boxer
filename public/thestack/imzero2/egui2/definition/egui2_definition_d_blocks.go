@@ -379,6 +379,16 @@ func definitionsBlock() (blocks []*ir.BuilderFactoryNode) {
 			// for non-hovering eyes.
 			BeginMethod("hoverCursorPointer").
 			CodeClientRust(rustClientCode("hover_cursor_pointer = true;\n")).EndMethod().
+			// edgeBarLeft — a bar of width `width` in `col` along the
+			// Frame's left edge, painted after the body over the Frame's
+			// own fill and stroke, with the Frame's left corner radii. The
+			// quote and aside shape — a left rule, no box — which
+			// egui::Frame cannot draw, its stroke being all four sides.
+			// Painted inside the outer margin, so the bar sits where the
+			// stroke would; the caller keeps the body clear of it with an
+			// inner margin at least as wide.
+			BeginMethod("edgeBarLeft").Arg("width", ctabb.F32).EvaluatedArg("col", structColor32()).AsColor().
+			CodeClientRust(rustClientCode("edge_bar_left = Some((width, col));\n")).EndMethod().
 			// Preset constructors (reset to themed defaults)
 			BeginMethod("presetGroup").
 			CodeClientRust(rustClientCode("{{Instance}} = egui::Frame::group({{EguiContext}}.style_of({{EguiContext}}.theme()).as_ref());\n")).EndMethod().
@@ -400,13 +410,23 @@ func definitionsBlock() (blocks []*ir.BuilderFactoryNode) {
 		WithSettingBlockIterator(true).
 		WithSettingImmediate(true).
 		WithSettingRetained(true).
-		WithConstructionCodeClientRust(rustClientCode("egui::Frame::new();\nlet mut sense_click = false;\nlet mut sense_drag = false;\nlet mut hover_cursor_pointer = false;\nlet mut focusable = false;\nlet mut capture_keys_mask: u64 = 0;\nlet mut capture_chord_mask: u64 = 0;\nlet mut capture_chord_mods: u8 = 0;\nlet mut capture_key_edges = false;\n")).
+		WithConstructionCodeClientRust(rustClientCode("egui::Frame::new();\nlet mut sense_click = false;\nlet mut sense_drag = false;\nlet mut hover_cursor_pointer = false;\nlet mut focusable = false;\nlet mut capture_keys_mask: u64 = 0;\nlet mut capture_chord_mask: u64 = 0;\nlet mut capture_chord_mods: u8 = 0;\nlet mut capture_key_edges = false;\nlet mut edge_bar_left: Option<(f32, egui::Color32)> = None;\n")).
 		WithApplyCodeClientRust(rustClientCode(`
 					if {{EguiUiOptionalOuter}}.is_some() {
 						let ui = {{EguiUiOptionalOuter}}.as_mut().unwrap();
+						let frame_outer_margin = {{Instance}}.outer_margin;
+						let frame_corner_radius = {{Instance}}.corner_radius;
 						let r2 = {{Instance}}.show(ui, |ui| {
 							let _ = self.interpret_outer_logged({{EguiContext}}, &mut Some(ui));
 						});
+						if let Some((bar_width, bar_col)) = edge_bar_left {
+							// The response rect carries the outer margin; the bar
+							// goes where the stroke would, inside it.
+							let r = r2.response.rect - frame_outer_margin;
+							let bar = egui::Rect::from_min_max(r.min, egui::pos2(r.min.x + bar_width, r.max.y));
+							let cr = egui::CornerRadius { nw: frame_corner_radius.nw, sw: frame_corner_radius.sw, ne: 0, se: 0 };
+							ui.painter().rect_filled(bar, cr, bar_col);
+						}
 						let mut resp2 = ResponseFlags::empty();
 						if sense_click || sense_drag {
 							let mut sense = egui::Sense::hover();

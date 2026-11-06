@@ -159,6 +159,7 @@ func TestTypographyConstsMatchRust(t *testing.T) {
 	checkConst(t, src, "BODY_PT", float64(styletokens.BodyPt))
 	checkConst(t, src, "CAPTION_PT", float64(styletokens.CaptionPt))
 	checkConst(t, src, "MICRO_PT", float64(styletokens.MicroPt))
+	checkConst(t, src, "BODY_LEADING", float64(styletokens.BodyLeading))
 }
 
 // checkConst extracts a `pub const <NAME>: <type> = <value>;` declaration
@@ -176,7 +177,9 @@ func checkConst(t *testing.T, src, name string, want float64) {
 	if err != nil {
 		t.Fatalf("const %s: parse %q: %v", name, m[1], err)
 	}
-	if got != want {
+	// Both sides are f32; compare at that width, or 1.6 read from the Rust
+	// source differs from the Go constant widened to float64.
+	if float32(got) != float32(want) {
 		t.Errorf("const %s drift: rust=%v go=%v", name, got, want)
 	}
 }

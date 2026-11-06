@@ -22,6 +22,9 @@ func typeDefScalarSize() ir.ConcreteType {
 func structLabel() ir.ConcreteType {
 	return ir.NewConcreteType("label", traitWidget())
 }
+func structLabelLinked() ir.ConcreteType {
+	return ir.NewConcreteType("labelLinked", traitWidget())
+}
 func structButton() ir.ConcreteType {
 	return ir.NewConcreteType("button", traitWidget())
 }

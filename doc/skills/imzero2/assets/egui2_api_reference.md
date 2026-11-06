@@ -86,7 +86,7 @@ status: draft
 | FetchShellChords | Fetcher | No | 0 | 0 | - | - |
 | FetchVideoCapabilities | Fetcher | No | 0 | 0 | - | - |
 | FetchVideoStreamInfo | Fetcher | No | 0 | 0 | - | - |
-| Frame | BuilderFactory | Yes | 0 | 0 | 25 | Immediate, Retained, BlockIterator |
+| Frame | BuilderFactory | Yes | 0 | 0 | 26 | Immediate, Retained, BlockIterator |
 | Grid | BuilderFactory | Yes | 0 | 0 | 6 | Immediate, BlockIterator |
 | Group | BuilderFactory | No | 0 | 0 | 0 | Immediate, BlockIterator |
 | GuiZoomZoomMenuButtons | Procedural | No | 0 | 0 | - | - |
@@ -103,6 +103,7 @@ status: draft
 | Indent | BuilderFactory | Yes | 0 | 0 | 0 | Immediate, BlockIterator |
 | Label | BuilderFactory | No | 1 | 0 | 4 | Immediate, Retained |
 | LabelAtoms | BuilderFactory | No | 0 | 1 | 4 | Immediate, Retained |
+| LabelAtomsLinked | BuilderFactory | Yes | 3 | 1 | 2 | Immediate, Retained |
 | LabelWidgetText | BuilderFactory | No | 0 | 1 | 0 | Immediate, Retained |
 | MeasureText | Procedural | No | 4 | 0 | - | - |
 | MeasureTextSize | Procedural | No | 5 | 0 | - | - |
@@ -856,6 +857,7 @@ EtHeaderText
 - **CaptureKeyChords**(mask: u64, mods: u8)
 - **CaptureKeyEdges**()
 - **HoverCursorPointer**()
+- **EdgeBarLeft**(width: f32)
 - **PresetGroup**()
 - **PresetWindow**()
 - **PresetPopup**()
@@ -1129,6 +1131,32 @@ Label
 #### Return Type
 
 Label
+
+---
+
+### LabelAtomsLinked
+
+- **Type:** BuilderFactory
+- **Identity:** Yes
+- **Features:** Immediate, Retained
+
+#### Constructor Arguments
+
+| Name | Kind | Type |
+|------|------|------|
+| linkAtoms | plain | u32h |
+| linkUrls | plain | sh |
+| linkOpen | plain | u8h |
+| atoms | evaluated | Atoms (concrete) |
+
+#### Builder Methods
+
+- **Selectable**(val: b)
+- **Wrap**()
+
+#### Return Type
+
+LabelLinked
 
 ---
 

@@ -739,6 +739,26 @@ func LabelAtoms(atoms typed.RetainedFffiHolderTyped[AtomsS]) (inst LabelAtomsFlu
 	return
 }
 
+func LabelAtomsLinked(i WidgetIdCreatorI, atoms typed.RetainedFffiHolderTyped[AtomsS], linkAtoms []uint32, linkUrls []string, linkOpen []uint8) (inst LabelAtomsLinkedFluid) {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteOpCode(uint32(FuncProcIdLabelAtomsLinked))
+	v := i.Derive()
+	r.WriteWidgetId(checkId(v))
+	runtime.PutUint32SliceArg(r, linkAtoms)
+	runtime.PutStringSliceArg(r, linkUrls)
+	runtime.PutUint8SliceArg(r, linkOpen)
+	r.SpliceRetained(atoms.Untype())
+
+	inst = LabelAtomsLinkedFluid{
+		r: r,
+	}
+
+	inst.id = v
+	inst.idGen = i
+
+	return
+}
+
 func LabelWidgetText(widgetText typed.RetainedFffiHolderTyped[WidgetTextS]) (inst LabelWidgetTextFluid) {
 	r := typed.NewRetainedFffiBuilder()
 	r.WriteOpCode(uint32(FuncProcIdLabelWidgetText))
