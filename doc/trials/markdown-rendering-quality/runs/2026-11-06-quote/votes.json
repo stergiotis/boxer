@@ -1,0 +1,170 @@
+[
+  {
+    "p": 1,
+    "doc": "stress",
+    "armA": "native",
+    "armB": "ids-chromium",
+    "winner": "ids-chromium"
+  },
+  {
+    "p": 2,
+    "doc": "adr-0334",
+    "armA": "native",
+    "armB": "github-chromium",
+    "winner": "github-chromium"
+  },
+  {
+    "p": 3,
+    "doc": "adr-0334",
+    "armA": "ids-chromium",
+    "armB": "native",
+    "winner": "ids-chromium"
+  },
+  {
+    "p": 4,
+    "doc": "mdedit-blocks",
+    "armA": "ids-chromium",
+    "armB": "native",
+    "winner": "ids-chromium"
+  },
+  {
+    "p": 5,
+    "doc": "play-overview",
+    "armA": "obsidian-chromium",
+    "armB": "native",
+    "winner": "obsidian-chromium"
+  },
+  {
+    "p": 6,
+    "doc": "stress",
+    "armA": "native",
+    "armB": "obsidian-chromium",
+    "winner": "obsidian-chromium"
+  },
+  {
+    "p": 7,
+    "doc": "why-boxer",
+    "armA": "ids-chromium",
+    "armB": "native",
+    "winner": "tie"
+  },
+  {
+    "p": 8,
+    "doc": "keelson-positioning",
+    "armA": "ids-chromium",
+    "armB": "native",
+    "winner": "ids-chromium"
+  },
+  {
+    "p": 9,
+    "doc": "keelson-positioning",
+    "armA": "obsidian-chromium",
+    "armB": "native",
+    "winner": "obsidian-chromium"
+  },
+  {
+    "p": 10,
+    "doc": "play-overview",
+    "armA": "ids-chromium",
+    "armB": "github-chromium",
+    "winner": "github-chromium"
+  },
+  {
+    "p": 11,
+    "doc": "stress",
+    "armA": "github-chromium",
+    "armB": "ids-chromium",
+    "winner": "github-chromium"
+  },
+  {
+    "p": 12,
+    "doc": "keelson-positioning",
+    "armA": "github-chromium",
+    "armB": "native",
+    "winner": "tie"
+  },
+  {
+    "p": 13,
+    "doc": "adr-0334",
+    "armA": "obsidian-chromium",
+    "armB": "native",
+    "winner": "obsidian-chromium"
+  },
+  {
+    "p": 14,
+    "doc": "why-boxer",
+    "armA": "github-chromium",
+    "armB": "native",
+    "winner": "tie"
+  },
+  {
+    "p": 15,
+    "doc": "stress",
+    "armA": "native",
+    "armB": "github-chromium",
+    "winner": "github-chromium"
+  },
+  {
+    "p": 16,
+    "doc": "adr-0334",
+    "armA": "github-chromium",
+    "armB": "ids-chromium",
+    "winner": "tie"
+  },
+  {
+    "p": 17,
+    "doc": "mdedit-blocks",
+    "armA": "native",
+    "armB": "github-chromium",
+    "winner": "github-chromium"
+  },
+  {
+    "p": 18,
+    "doc": "mdedit-blocks",
+    "armA": "obsidian-chromium",
+    "armB": "native",
+    "winner": "tie"
+  },
+  {
+    "p": 19,
+    "doc": "play-overview",
+    "armA": "github-chromium",
+    "armB": "native",
+    "winner": "tie"
+  },
+  {
+    "p": 20,
+    "doc": "play-overview",
+    "armA": "ids-chromium",
+    "armB": "native",
+    "winner": "ids-chromium"
+  },
+  {
+    "p": 21,
+    "doc": "why-boxer",
+    "armA": "github-chromium",
+    "armB": "ids-chromium",
+    "winner": "github-chromium"
+  },
+  {
+    "p": 22,
+    "doc": "why-boxer",
+    "armA": "native",
+    "armB": "obsidian-chromium",
+    "winner": "tie"
+  },
+  {
+    "p": 23,
+    "doc": "keelson-positioning",
+    "armA": "github-chromium",
+    "armB": "ids-chromium",
+    "winner": "tie"
+  },
+  {
+    "p": 24,
+    "doc": "mdedit-blocks",
+    "armA": "github-chromium",
+    "armB": "ids-chromium",
+    "winner": "tie"
+  }
+]
