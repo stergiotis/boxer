@@ -42,7 +42,16 @@ pub mod kind {
     /// A shell command ended (OSC 133 `D`): its status as a little-endian i32,
     /// or nothing when the shell gave none.
     pub const COMMAND_ENDED: u8 = 24;
+    /// The screen changed: the stream offset it shows (a little-endian u64),
+    /// columns, rows, the cursor's column and row (each a little-endian u16),
+    /// a flags byte (bit 0: the cursor is shown), then the screen's text as
+    /// the accessibility node carries it. Sent at most every
+    /// [`super::SCREEN_EVERY_S`] seconds, and only after a change.
+    pub const SCREEN: u8 = 25;
 }
+
+/// The shortest time between two screen reports of one console, in seconds.
+pub const SCREEN_EVERY_S: f64 = 0.1;
 
 /// One row for Go: the widget it belongs to, what it is, its bytes.
 pub struct ConsoleRow {
@@ -452,6 +461,9 @@ struct Term {
     focused: bool,
     last_touched: u64,
     history_bytes: u32,
+    /// The screen changed since it was last reported, and when that was.
+    screen_dirty: bool,
+    screen_at: f64,
 }
 
 /// The most columns or rows a console takes, whatever room it is given: an
@@ -556,6 +568,8 @@ impl ConsoleCache {
                     focused: false,
                     last_touched: frame,
                     history_bytes: history,
+                    screen_dirty: true,
+                    screen_at: f64::NEG_INFINITY,
                 })
             }
         };
@@ -566,6 +580,7 @@ impl ConsoleCache {
         // drawn on.
         if (term.core.cols(), term.core.rows()) != (cols, rows) {
             term.core.resize(cols, rows);
+            term.screen_dirty = true;
         }
         let size = (term.core.cols(), term.core.rows());
         if term.reported != Some(size) {
@@ -592,16 +607,33 @@ impl ConsoleCache {
             });
             term.core.feed(args.feed, &mut core_out);
             term.fed = end;
+            term.screen_dirty = true;
         } else if end > term.fed {
             let skip = (term.fed - args.offset) as usize;
             term.core.feed(&args.feed[skip..], &mut core_out);
             term.fed = end;
+            term.screen_dirty = true;
         }
         out.push(ConsoleRow {
             id,
             kind: kind::ACK,
             payload: term.fed.to_le_bytes().to_vec(),
         });
+        if term.screen_dirty {
+            let now = ui.input(|i| i.time);
+            let wait = term.screen_at + SCREEN_EVERY_S - now;
+            if wait <= 0.0 {
+                term.screen_dirty = false;
+                term.screen_at = now;
+                out.push(ConsoleRow {
+                    id,
+                    kind: kind::SCREEN,
+                    payload: screen_report(term.core.as_ref(), term.fed),
+                });
+            } else {
+                ui.ctx().request_repaint_after(std::time::Duration::from_secs_f64(wait));
+            }
+        }
 
         let theme = Theme {
             fg: ui.visuals().text_color(),
@@ -834,6 +866,24 @@ impl ConsoleCache {
     }
 }
 
+/// The payload of a [`kind::SCREEN`] row.
+fn screen_report(core: &dyn Core, fed: u64) -> Vec<u8> {
+    let (cursor_row, cursor_col, shown) = match core.cursor() {
+        Some((row, col, _)) => (row, col, true),
+        None => (0, 0, false),
+    };
+    let text = screen_text(core);
+    let mut payload = Vec::with_capacity(17 + text.len());
+    payload.extend_from_slice(&fed.to_le_bytes());
+    payload.extend_from_slice(&core.cols().to_le_bytes());
+    payload.extend_from_slice(&core.rows().to_le_bytes());
+    payload.extend_from_slice(&cursor_col.to_le_bytes());
+    payload.extend_from_slice(&cursor_row.to_le_bytes());
+    payload.push(u8::from(shown));
+    payload.extend_from_slice(text.as_bytes());
+    payload
+}
+
 /// The visible screen as text: rows trimmed on the right, a newline between.
 fn screen_text(core: &dyn Core) -> String {
     let mut out = String::new();
@@ -867,6 +917,20 @@ mod tests {
 
     fn text(core: &dyn Core, row: u16) -> String {
         screen_text(core).lines().nth(usize::from(row)).unwrap_or_default().to_owned()
+    }
+
+    #[test]
+    fn a_screen_report_carries_the_offset_size_cursor_and_text() {
+        let mut core = fux(20, 4);
+        core.feed(b"hi\r\nthere", &mut CoreOut::default());
+        let p = screen_report(&core, 9);
+        assert_eq!(u64::from_le_bytes(p[0..8].try_into().unwrap()), 9);
+        assert_eq!(u16::from_le_bytes([p[8], p[9]]), 20, "columns");
+        assert_eq!(u16::from_le_bytes([p[10], p[11]]), 4, "rows");
+        assert_eq!(u16::from_le_bytes([p[12], p[13]]), 5, "cursor column");
+        assert_eq!(u16::from_le_bytes([p[14], p[15]]), 1, "cursor row");
+        assert_eq!(p[16], 1, "the cursor is shown");
+        assert_eq!(&p[17..], b"hi\nthere");
     }
 
     #[test]

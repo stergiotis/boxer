@@ -136,3 +136,34 @@ func TestRowAccessorsDecodeTheirPayloads(t *testing.T) {
 	_, ok = c.ConsoleRow{Kind: c.ConsoleRowCommandEnded}.Status()
 	require.False(t, ok, "a shell may give no status")
 }
+
+func TestTheLastReportedScreenIsKept(t *testing.T) {
+	t.Cleanup(scenetest.Install())
+	sm := c.CurrentApplicationState.StateManager
+	ids := c.NewWidgetIdStack()
+	con := New(ids, "shell", Options{})
+	id := screenId(ids, "shell")
+	sm.ScriptReset()
+	_, ok := con.Screen()
+	require.False(t, ok, "no screen before the first report")
+
+	p := binary.LittleEndian.AppendUint64(nil, 12)
+	for _, v := range []uint16{80, 24, 2, 1} {
+		p = binary.LittleEndian.AppendUint16(p, v)
+	}
+	p = append(append(p, 1), "$ ls\n$"...)
+	sm.ScriptConsoleRows(id, []c.ConsoleRow{size(80, 24), {Kind: c.ConsoleRowScreen, Payload: p}})
+	ev := con.Render(400, 300)
+	require.True(t, ev.ScreenChanged)
+	sc, ok := con.Screen()
+	require.True(t, ok)
+	require.Equal(t, c.ConsoleScreen{Offset: 12, Cols: 80, Rows: 24, CursorCol: 2, CursorRow: 1, CursorShown: true, Text: "$ ls\n$"}, sc)
+
+	sm.ScriptReset()
+	sm.ScriptConsoleRows(id, []c.ConsoleRow{ack(12)})
+	ev = con.Render(400, 300)
+	require.False(t, ev.ScreenChanged)
+	sc, ok = con.Screen()
+	require.True(t, ok)
+	require.Equal(t, "$ ls\n$", sc.Text, "the screen stands until the next report")
+}

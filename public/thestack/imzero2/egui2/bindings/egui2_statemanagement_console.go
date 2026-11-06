@@ -43,7 +43,23 @@ const (
 	// ConsoleRowCommandEnded says a shell command ended (OSC 133 D); see
 	// ConsoleRow.Status.
 	ConsoleRowCommandEnded ConsoleRowKindE = 24
+	// ConsoleRowScreen holds the screen after a change, at most ten times a
+	// second; see ConsoleRow.Screen.
+	ConsoleRowScreen ConsoleRowKindE = 25
 )
+
+// ConsoleScreen is the screen a ConsoleRowScreen row reports.
+type ConsoleScreen struct {
+	// Offset is how many bytes of the stream the screen shows.
+	Offset     uint64
+	Cols, Rows uint16
+	// CursorCol and CursorRow are the cursor's cell, from zero; meaningful
+	// when CursorShown.
+	CursorCol, CursorRow uint16
+	CursorShown          bool
+	// Text is the visible rows, trimmed on the right, a newline between.
+	Text string
+}
 
 // ConsoleRow is one row a console widget produced last frame.
 type ConsoleRow struct {
@@ -80,6 +96,25 @@ func (inst ConsoleRow) Offsets() (from uint64, to uint64, ok bool) {
 	case inst.Kind == ConsoleRowGap && len(inst.Payload) == 16:
 		return binary.LittleEndian.Uint64(inst.Payload), binary.LittleEndian.Uint64(inst.Payload[8:]), true
 	}
+	return
+}
+
+// Screen returns the screen of a ConsoleRowScreen row; the text is copied.
+func (inst ConsoleRow) Screen() (s ConsoleScreen, ok bool) {
+	p := inst.Payload
+	if inst.Kind != ConsoleRowScreen || len(p) < 17 {
+		return
+	}
+	s = ConsoleScreen{
+		Offset:      binary.LittleEndian.Uint64(p),
+		Cols:        binary.LittleEndian.Uint16(p[8:]),
+		Rows:        binary.LittleEndian.Uint16(p[10:]),
+		CursorCol:   binary.LittleEndian.Uint16(p[12:]),
+		CursorRow:   binary.LittleEndian.Uint16(p[14:]),
+		CursorShown: p[16]&1 != 0,
+		Text:        string(p[17:]),
+	}
+	ok = true
 	return
 }
 

@@ -168,3 +168,19 @@ commit under `rust/imzero2/vendor/fux-vt`.
 
 - The screen state lives in the client, so Go reads it only through a
   fetch, one frame late (deferred, SD9).
+
+## Updates
+
+### 2026-11-06 — §SD9, §SD3: the screen comes back as a row
+
+Go reads the screen, which SD9 deferred, through SD3's register rather
+than a fetcher of its own. After the screen changes (bytes fed, a resize),
+a console adds a row of kind 25 (`screen`): the stream offset it shows,
+the grid's size, the cursor and the screen's text, as the accessibility
+node carries it. It sends at most one every 100 ms; while a change waits,
+it asks egui for a repaint when the interval ends. `ConsoleRow.Screen`
+decodes the row, and `Console.Screen` keeps the last one for a reader
+that is not a person, such as an agent's operation or a test. Because
+there is no request, nothing in the IDL changes, and a console that no one
+reads still pays for one text copy per change, ten a second at most.
+Selection, the mouse, scrollback, links and rows as nodes stay deferred.

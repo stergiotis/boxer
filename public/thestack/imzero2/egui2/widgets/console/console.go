@@ -77,6 +77,8 @@ type Events struct {
 	Gap bool
 	// Acked is how many bytes of the stream the client has read.
 	Acked uint64
+	// ScreenChanged reports a new screen; Console.Screen returns it.
+	ScreenChanged bool
 }
 
 // Console is one terminal screen. Write may be called from any goroutine;
@@ -96,6 +98,8 @@ type Console struct {
 	cols, rows uint16
 	title      string
 	toProgram  []byte
+	screen     c.ConsoleScreen
+	hasScreen  bool
 }
 
 // New makes a console under scopeKey in ids.
@@ -222,6 +226,11 @@ func (inst *Console) absorb(rows []c.ConsoleRow) (ev Events) {
 			ev.Bell = true
 		case row.Kind == c.ConsoleRowGap:
 			ev.Gap = true
+		case row.Kind == c.ConsoleRowScreen:
+			if sc, ok := row.Screen(); ok {
+				inst.screen, inst.hasScreen = sc, true
+				ev.ScreenChanged = true
+			}
 		}
 	}
 	ev.Records = rows
@@ -229,6 +238,13 @@ func (inst *Console) absorb(rows []c.ConsoleRow) (ev Events) {
 	ev.Cols, ev.Rows = inst.cols, inst.rows
 	ev.Title = inst.title
 	return
+}
+
+// Screen returns the screen the client reported last: what a reader that is
+// not a person (an agent, a test) sees. It lags the drawn screen by up to a
+// tenth of a second; ok is false before the first report.
+func (inst *Console) Screen() (s c.ConsoleScreen, ok bool) {
+	return inst.screen, inst.hasScreen
 }
 
 // Pending returns how many bytes of output wait for the client.
