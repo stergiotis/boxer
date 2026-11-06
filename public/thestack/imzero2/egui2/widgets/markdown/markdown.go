@@ -7,6 +7,7 @@ import (
 	"sync/atomic"
 
 	"github.com/stergiotis/boxer/public/containers"
+	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	"github.com/stergiotis/boxer/public/semistructured/markdown/obsidian"
 	"github.com/stergiotis/boxer/public/semistructured/markdown/obsidian/resolver"
 	"github.com/stergiotis/boxer/public/thestack/fffi2/typed"
@@ -253,6 +254,31 @@ type Input struct {
 	// Frontmatter appends the parsed YAML frontmatter as a labeled list
 	// after the body; see [RenderFrontmatter] for the layout.
 	Frontmatter bool
+
+	// Measure bounds the document to a reading column of this width in
+	// logical points, centred in the available width; zero renders across
+	// the whole width, as every consumer did before the option existed.
+	// [ReadingMeasure] is the design system's column. Prose then wraps at
+	// the column; a table or a code line wider than it still extends past
+	// it, as it extended past the pane before. The host must pass a measure
+	// no wider than the pane: egui centres an oversized column by letting it
+	// overflow both edges, so a narrow pane would hide the column's left
+	// edge. A reading mode that owns the whole window is the consumer this
+	// is for; a clamp to the available width is a Rust-side change
+	// (// deferred: a second consumer in a narrow pane).
+	Measure float32
+}
+
+// readingMeasureEm is the design system's reading column in em: the
+// `max-width: 50em` of the IDS lean stylesheet (ADR-0076), which the
+// markdown-rendering-quality trial's references share within a few em.
+const readingMeasureEm = 50
+
+// ReadingMeasure is the design system's reading column at the active
+// density, in logical points: [readingMeasureEm] body sizes.
+func ReadingMeasure() (points float32) {
+	points = readingMeasureEm * styletokens.ScaledPt(styletokens.BodyPt, styletokens.ActiveDensity())
+	return
 }
 
 // CodeBlockAction is one code/verbatim block whose action button was
@@ -268,6 +294,17 @@ type CodeBlockAction struct {
 	Index  int
 	Button int
 }
+
+// linkSpan is one link inside a runKindAtoms run: the index of the atom
+// that carries its label, the label, and the target.
+type linkSpan struct {
+	atom  uint32
+	label string
+	url   string
+}
+
+// noLink is the linked label's readout when no link was clicked.
+const noLink = ^uint64(0)
 
 // LinkClick is one claimed link clicked this frame.
 type LinkClick struct {
@@ -312,10 +349,31 @@ func Render(in Input) (res Result) {
 		scopeKey = "markdown"
 	}
 	for range c.IdScope(in.Ids.PrepareStr(scopeKey)) {
-		res = doc.render(in)
-		if in.Frontmatter {
-			doc.renderFrontmatter()
+		if in.Measure > 0 {
+			// A centred layout places the bounded column in the middle of
+			// the available width (egui's set_max_width honours the cross
+			// alignment); the inner Vertical restores left alignment for the
+			// blocks inside it, so a short heading sits at the column's left
+			// edge rather than its centre. Neither scope takes a widget id.
+			for range c.VerticalCentered().KeepIter() {
+				c.UiSetMaxWidth(in.Measure)
+				for range c.Vertical().KeepIter() {
+					res = doc.renderBody(in)
+				}
+			}
+		} else {
+			res = doc.renderBody(in)
 		}
+	}
+	return
+}
+
+// renderBody is the document and, when asked, its frontmatter, inside
+// whatever column Render chose.
+func (inst *Doc) renderBody(in Input) (res Result) {
+	res = inst.render(in)
+	if in.Frontmatter {
+		inst.renderFrontmatter()
 	}
 	return
 }
@@ -619,8 +677,11 @@ const (
 type runKindE uint8
 
 const (
+	// runKindAtoms is text, with any links the text carries in links:
+	// a link is an atom of the run, styled in the link tone, named by
+	// its index so the renderer can hand the whole run to one galley
+	// and still hear which link was clicked.
 	runKindAtoms runKindE = iota
-	runKindLink
 	// runKindImage carries pre-decoded RGBA8 pixels plus native
 	// dimensions, sourced from resolver.LoadImage at parse time. Rendered
 	// inline inside the paragraph's HorizontalWrapped flow via c.Image
@@ -638,16 +699,26 @@ const (
 	runKindTask
 )
 
-// paragraphRun is one slice of a paragraph or heading. A paragraph with
-// no embedded hyperlinks has exactly one runKindAtoms run; one with
-// hyperlinks (or images) has alternating atoms / link / image runs in
-// flow order.
+// paragraphRun is one slice of a paragraph or heading. A paragraph of
+// text and links is exactly one runKindAtoms run; one with images, task
+// boxes or footnote marks has alternating runs in flow order.
 type paragraphRun struct {
 	kind  runKindE
 	atoms typed.RetainedFffiHolderTyped[c.AtomsS]
 	label string
 	url   string
 	tip   string
+
+	// runKindAtoms fields: the links the run carries, in text order, and
+	// the same as the wire wants them — the atom index of each link and
+	// its url — built once at lowering. clicked is the host's readout for
+	// the run's label: the index of the link clicked in the frame before,
+	// or noLink. It is the run's and not a frame's because the readout
+	// lands after the frame that registered it.
+	links     []linkSpan
+	linkAtoms []uint32
+	linkURLs  []string
+	clicked   uint64
 
 	// runKindTask fields.
 	taskOffset  int
@@ -678,14 +749,13 @@ type paragraphRun struct {
 //   - segKindList:                       children is a slice of segKindListItem
 //     segments; listOrdered + listStart
 //     drive the bullet glyph. For an
-//     ordered list, listMarkerDigits is
-//     the width every marker is padded
-//     to so item bodies line up across a
-//     digit boundary, and listMarkers
-//     holds one pre-built monospace
-//     Atoms blob per item (empty for a
-//     bullet list, which needs no
-//     holder).
+//     ordered list, listMarkers holds one
+//     pre-built Atoms blob per item, the
+//     number at the body's line height
+//     (empty for a bullet list, which
+//     needs no holder); the grid the
+//     list renders as lines the numbers
+//     up on their right edge.
 //   - segKindListItem:                   children is the item's nested blocks.
 //   - segKindBlockquote:                 children is the quoted blocks.
 //   - segKindHorizontalRule:             no payload.
@@ -729,7 +799,6 @@ type segment struct {
 	headingLevel       uint8
 	listOrdered        bool
 	listStart          uint32
-	listMarkerDigits   uint8
 	listMarkers        []typed.RetainedFffiHolderTyped[c.AtomsS]
 	calloutType        string
 	calloutTitle       string

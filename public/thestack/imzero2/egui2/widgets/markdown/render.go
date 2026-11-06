@@ -2,10 +2,10 @@ package markdown
 
 import (
 	"strconv"
-	"strings"
 
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/color"
 	east "github.com/yuin/goldmark/extension/ast"
 )
 
@@ -120,15 +120,7 @@ func (inst *segment) render(rc *renderCtx) {
 			inst.children[i].render(rc)
 		}
 	case segKindBlockquote:
-		seq := rc.idSeq
-		rc.idSeq++
-		for range c.Frame(rc.ids.PrepareSeq(seq)).PresetGroup().KeepIter() {
-			for range c.Vertical().KeepIter() {
-				for i := range inst.children {
-					inst.children[i].render(rc)
-				}
-			}
-		}
+		renderBlockquote(inst, rc)
 	case segKindHorizontalRule:
 		c.Separator().Send()
 	case segKindCallout:
@@ -333,6 +325,20 @@ func renderTable(s *segment, rc *renderCtx) {
 		return
 	}
 	rows := len(s.tableCells) / cols
+	hasHeader := len(s.tableHeader) > 0
+	seq := rc.idSeq
+	rc.idSeq++
+
+	// A table that flows with the document is a grid of wrapping cells
+	// (renderTableGrid); one too long to lay out every frame keeps the
+	// table op, whose rows are fixed-height and scroll inside a bound.
+	// Either way the table takes one id, so the id-derivation order the
+	// EXPLANATION invariant pins is the same on both paths.
+	flows, maxScroll := tableFlows(rows, hasHeader)
+	if flows {
+		renderTableGrid(s, rc, seq, cols, rows)
+		return
+	}
 
 	// Every column but the last starts at roughly its content width and
 	// can be dragged; the last takes whatever width is left so the table
@@ -361,17 +367,76 @@ func renderTable(s *segment, rc *renderCtx) {
 		c.TableCellText(cell).Send()
 	}
 
-	seq := rc.idSeq
-	rc.idSeq++
-	hasHeader := len(s.tableHeader) > 0
-	tbl := c.Table(rc.ids.PrepareSeq(seq), tableRowHeight(hasHeader), uint64(rows)).
-		Striped(true)
-	if flows, maxScroll := tableFlows(rows, hasHeader); flows {
-		tbl = tbl.Vscroll(false)
-	} else {
-		tbl = tbl.MaxScrollHeight(maxScroll)
+	c.Table(rc.ids.PrepareSeq(seq), tableRowHeight(hasHeader), uint64(rows)).
+		Striped(true).
+		MaxScrollHeight(maxScroll).
+		Send()
+}
+
+// renderTableGrid draws a table as an egui Grid: one wrapping label per
+// cell, bounded to its column's width estimate, so a long cell wraps onto
+// more lines instead of clipping to one with an ellipsis, and the row
+// grows to hold it; header cells are strong at body size rather than the
+// table op's heading step. The column bound is the same estimate the
+// table op seeds its resizable columns with (tableColumnWidth), so the
+// two paths agree on where a column stops; a column's actual width is the
+// widest wrapped cell in it, which the grid measures. A delimiter-row
+// alignment becomes the cell's cross alignment. The grid lays out every
+// row each frame, which is why tableFlows bounds the rows this path takes.
+func renderTableGrid(s *segment, rc *renderCtx, seq uint64, cols, rows int) {
+	colCap := tableColumnCap(cols)
+	widths := make([]float32, cols)
+	for i := range widths {
+		var runes uint32
+		if i < len(s.tableColRunes) {
+			runes = s.tableColRunes[i]
+		}
+		widths[i] = tableColumnWidth(runes, colCap)
 	}
-	tbl.Send()
+	align := func(i int) (a east.Alignment) {
+		if i < len(s.tableAligns) {
+			a = s.tableAligns[i]
+		}
+		return
+	}
+	for range c.Grid(rc.ids.PrepareSeq(seq)).NumColumns(uint32(cols)).Striped(true).KeepIter() {
+		if len(s.tableHeader) > 0 {
+			for i, h := range s.tableHeader {
+				renderTableCell(h, widths[i%cols], align(i%cols), true)
+			}
+			c.EndRow()
+		}
+		for r := 0; r < rows; r++ {
+			for i := 0; i < cols; i++ {
+				renderTableCell(s.tableCells[r*cols+i], widths[i], align(i), false)
+			}
+			c.EndRow()
+		}
+	}
+}
+
+// renderTableCell is one grid cell: a top-down scope aligned per the
+// delimiter row, bounded to the column's width so the label inside wraps
+// there. Bounding the scope shrinks only its maximum, so a short cell
+// stays as narrow as its text and the column does not grow to the bound.
+func renderTableCell(text string, width float32, a east.Alignment, header bool) {
+	layout := c.UiWithLayout().MainDirTopDown()
+	switch a {
+	case east.AlignCenter:
+		layout = layout.CrossAlignCenter()
+	case east.AlignRight:
+		layout = layout.CrossAlignMax()
+	default:
+		layout = layout.CrossAlignMin()
+	}
+	for range layout.KeepIter() {
+		c.UiSetMaxWidth(width)
+		if header {
+			c.LabelAtoms(c.Atoms().BeginRichText(text).Strong().End().Keep()).Wrap().Send()
+		} else {
+			c.Label(text).Wrap().Send()
+		}
+	}
 }
 
 // tableColumnAligned gives column i the delimiter row's alignment; a
@@ -412,6 +477,32 @@ func renderCodeActionButtons(rc *renderCtx, text, lang string, idx int) {
 				Small().SendResp().HasPrimaryClicked() {
 				rc.codeActions = append(rc.codeActions,
 					CodeBlockAction{Text: text, Lang: lang, Index: idx, Button: btn})
+			}
+		}
+	}
+}
+
+// renderBlockquote draws a quote as the reference stylesheets do: a
+// rule along the left edge and the body set in from it, no box. The
+// Frame has no stroke and no fill; the rule is its left edge bar at the
+// strong stroke width in the neutral border colour (ids.css: a
+// `border-left` of `--ids-border-strong` in `--ids-border-default`), and
+// the inner margin clears it by the default padding on the left with a
+// hairline of vertical padding, since the quote's own line height
+// carries the rest. The group frame the quote wore before is withdrawn
+// in ADR-0180's Updates: a boxed quote read as a callout without a
+// title, where every reference stylesheet draws a rule.
+func renderBlockquote(s *segment, rc *renderCtx) {
+	seq := rc.idSeq
+	rc.idSeq++
+	bar := styletokens.StrokeStrong
+	for range c.Frame(rc.ids.PrepareSeq(seq)).
+		EdgeBarLeft(bar, color.Hex(styletokens.NeutralBorderDefault.AsHex())).
+		InnerMarginSides(bar+padDefault(), 0, styletokens.StrokeHair, styletokens.StrokeHair).
+		KeepIter() {
+		for range c.Vertical().KeepIter() {
+			for i := range s.children {
+				s.children[i].render(rc)
 			}
 		}
 	}
@@ -475,9 +566,10 @@ func renderCallout(s *segment, rc *renderCtx) {
 }
 
 // renderRuns emits a paragraph or heading. A run sequence containing
-// only a single Atoms run becomes one wrapping LabelAtoms (so egui's
-// text shaper can do glyph-level wrapping). A mixed sequence becomes a
-// HorizontalWrapped flow so links and images can sit inline with text.
+// only a single Atoms run becomes one wrapping label (so egui's text
+// shaper can do glyph-level wrapping — through the run's links too, which
+// are atoms of it). A mixed sequence becomes a HorizontalWrapped flow so
+// images, task boxes and footnote marks can sit inline with text.
 //
 // The mixed path zeroes the row's horizontal item spacing. Each run
 // boundary otherwise inserts item_spacing.x IN ADDITION to whatever
@@ -486,8 +578,11 @@ func renderCallout(s *segment, rc *renderCtx) {
 // ("…even a link ." — L3 in the rendering review). With the style gap at
 // zero the text's own spaces carry the word gap, which is what the
 // author wrote and what the single-run path already does. The vertical
-// component keeps a real gap: it is what separates the rows a wrapped
-// paragraph breaks into.
+// component is zero as well: the rows a wrapped paragraph breaks into
+// are spaced by the text's own line height, which carries the leading
+// ([bodyLineHeight]), so a mixed paragraph's rows step like a
+// single-run paragraph's lines (L7 in the review). A row holding only a
+// link or an image is as tall as that widget.
 //
 // [c.UiSetItemSpacing] applies to the Ui it lands in and to children
 // opened after it, never to siblings — so this affects one paragraph's
@@ -497,18 +592,16 @@ func renderRuns(runs []paragraphRun, rc *renderCtx) {
 		return
 	}
 	if len(runs) == 1 && runs[0].kind == runKindAtoms {
-		c.LabelAtoms(runs[0].atoms).Wrap().Send()
+		renderAtomsRun(&runs[0], rc)
 		return
 	}
 	for range c.HorizontalWrapped().KeepIter() {
-		c.UiSetItemSpacing(0, styletokens.GapItems(styletokens.ActiveDensity()))
+		c.UiSetItemSpacing(0, 0)
 		for i := range runs {
 			r := &runs[i]
 			switch r.kind {
 			case runKindAtoms:
-				c.LabelAtoms(r.atoms).Wrap().Send()
-			case runKindLink:
-				renderLinkRun(r, rc)
+				renderAtomsRun(r, rc)
 			case runKindImage:
 				renderImageRun(r, rc)
 			case runKindFootnote:
@@ -520,30 +613,34 @@ func renderRuns(runs []paragraphRun, rc *renderCtx) {
 	}
 }
 
-// renderLinkRun emits one link: a browser hyperlink by default, or — when
-// the host claimed it via [Input.LinkClaims] — a frameless button that reads
-// as a link and reports its click instead of navigating away.
-//
-// A frameless Button rather than a Hyperlink because the two things a link
-// needs here are a click the host hears and text it does not own: Hyperlink
-// consumes the click itself (it opens a URL), and Label has no click sense at
-// all. Frame(false) plus the link tone leaves it looking like the hyperlink
-// beside it, which matters — a reader should not have to learn which links
-// stay in the app.
-func renderLinkRun(r *paragraphRun, rc *renderCtx) {
-	if rc.linkClaims == nil || !rc.linkClaims(r.url) {
-		c.HyperlinkTo(r.label, r.url).OpenInNewTab(true).Send()
+// renderAtomsRun emits one text run: a plain wrapping label when it
+// carries no link, else the linked label — one galley with the links as
+// sections, which reports a click as the link's index. The host opens a
+// link's url itself unless the caller claimed it ([Input.LinkClaims]);
+// a claimed link's click is reported as a [LinkClick] instead. The
+// readout is the run's, written when the frame that registered it
+// completes, so the click is heard one frame on and cleared once heard.
+func renderAtomsRun(r *paragraphRun, rc *renderCtx) {
+	if len(r.links) == 0 {
+		c.LabelAtoms(r.atoms).Wrap().Send()
 		return
 	}
 	seq := rc.idSeq
 	rc.idSeq++
-	// Id prepared before the atoms, both inside the one call expression —
-	// the form every other call site in the tree uses.
-	if c.Button(rc.ids.PrepareSeq(seq),
-		c.Atoms().BeginRichTextColored(linkFg, linkBg, r.label).End().Keep()).
-		Frame(false).
-		SendResp().HasPrimaryClicked() {
-		rc.links = append(rc.links, LinkClick{Label: r.label, URL: r.url})
+	open := make([]uint8, len(r.links))
+	for i := range r.links {
+		if rc.linkClaims == nil || !rc.linkClaims(r.links[i].url) {
+			open[i] = 1
+		}
+	}
+	c.LabelAtomsLinked(rc.ids.PrepareSeq(seq), r.atoms, r.linkAtoms, r.linkURLs, open).
+		Wrap().
+		SendRespVal(&r.clicked)
+	if k := r.clicked; k != noLink {
+		r.clicked = noLink
+		if k < uint64(len(r.links)) && open[k] == 0 {
+			rc.links = append(rc.links, LinkClick{Label: r.links[k].label, URL: r.links[k].url})
+		}
 	}
 }
 
@@ -627,44 +724,60 @@ func imageFitAxis(capPx uint32, native uint32) (box uint32) {
 	return
 }
 
-// renderList emits a Vertical of list items. Each item is a
-// Horizontal{ marker , Vertical{ children } } so multi-line item
-// content stays aligned to the marker's right edge.
+// renderList emits a list as a two-column egui Grid: the marker cell,
+// then the item's children in a Vertical, one row per item. The grid
+// measures the marker column at the widest marker and the marker cell
+// is right-aligned inside it, so the periods of `9.` and `10.` sit on
+// one vertical line and every body starts at the same x, with the
+// numerals in the body face (L2 in the rendering review: left-aligned
+// markers put the bodies a digit apart across the ten boundary). The
+// body cell is the grid's last column, which egui widens to the
+// available width, so a wrapped item wraps at the reading column and
+// its rows stay under the first one, clear of the marker. Nested lists
+// are grids inside the body cell.
+//
+// The list's vertical step is the inline gap, not the item gap the host
+// style sets for every Ui: items of one list are lines of one block, and
+// the reference stylesheets space them at a fraction of a line (0.2 em
+// in ids.css) where the item gap is nearly half of one. The horizontal
+// component stays the item gap, which is the whole space between a
+// marker and its body — the marker carries no trailing space of its own
+// ([itemMarker]), so the gap is the same for a bullet and for a number.
+// The grid takes its spacing from the Ui it opens in, which is why the
+// spacing is set on an enclosing Vertical; both components reach the
+// items' own Verticals, so paragraphs inside one item and nested lists
+// step the same way as the list around them.
+//
+// The grid id is the renderer's monotonic sequence, like a blockquote's
+// frame; its per-frame state is the column width and the row heights.
 func renderList(s *segment, rc *renderCtx) {
+	d := styletokens.ActiveDensity()
+	seq := rc.idSeq
+	rc.idSeq++
 	for range c.Vertical().KeepIter() {
-		for i := range s.children {
-			item := &s.children[i]
-			for range c.Horizontal().KeepIter() {
-				renderItemMarker(s, uint32(i))
+		c.UiSetItemSpacing(styletokens.GapItems(d), styletokens.GapInline(d))
+		for range c.Grid(rc.ids.PrepareSeq(seq)).NumColumns(2).KeepIter() {
+			for i := range s.children {
+				item := &s.children[i]
+				for range c.UiWithLayout().MainDirTopDown().CrossAlignMax().KeepIter() {
+					renderItemMarker(s, uint32(i))
+				}
 				for range c.Vertical().KeepIter() {
 					item.render(rc)
 				}
+				c.EndRow()
 			}
 		}
 	}
 }
 
 // renderItemMarker draws the bullet or the number for list item i
-// (0-based).
-//
-// A bullet is a plain label. A number is a MONOSPACE label, padded on the
-// left to the list's widest marker: proportional digits are not
-// equal-width, so `9.` and `10.` put their item bodies at different x
-// (measured at 7.4 pt apart — L2 in the rendering review) and a numbered
-// list crossing ten items develops a visible step. Monospace plus
-// padding lines the periods up exactly at every digit width.
-//
-// The trade is deliberate: the numerals sit in a different face from the
-// prose beside them. Exact alignment reads better than matched faces in
-// a column of items, and the marker is chrome rather than content.
-//
-// The numbered markers are retained holders built once at lowering time,
-// not Atoms rebuilt per frame — monospace needs the RichText scope, and
-// interning a fresh blob per item per frame would put an allocation back
-// into the steady state the package is built to keep empty. A missing
-// holder falls back to a plain label rather than panicking: the segment
-// tree is the renderer's own, but a nil holder is not worth a crash in a
-// reading surface.
+// (0-based). A bullet is a plain label; a number is the retained holder
+// built at lowering time ([buildListMarkers]), which carries the body's
+// line height so the marker row is as tall as the body's first row. A
+// missing holder falls back to a plain label rather than panicking: the
+// segment tree is the renderer's own, but a nil holder is not worth a
+// crash in a reading surface.
 func renderItemMarker(s *segment, i uint32) {
 	if !s.listOrdered || int(i) >= len(s.listMarkers) {
 		c.Label(itemMarker(s, i)).Send()
@@ -673,19 +786,15 @@ func renderItemMarker(s *segment, i uint32) {
 	c.LabelAtoms(s.listMarkers[i]).Send()
 }
 
-// itemMarker returns the bullet glyph or a numbered marker for list
-// item index i (0-based). Ordered markers are left-padded with spaces to
-// s.listMarkerDigits, the digit count of the list's LAST number, settled
-// once at lowering time.
+// itemMarker returns the bullet glyph or the number-and-period marker
+// for list item index i (0-based). Neither kind carries padding or a
+// trailing space: the grid in [renderList] right-aligns the markers and
+// the row's item spacing is the whole gap to the body.
 func itemMarker(s *segment, i uint32) (m string) {
 	if !s.listOrdered {
-		m = "• "
+		m = "•"
 		return
 	}
-	n := strconv.FormatUint(uint64(s.listStart+i), 10)
-	if pad := int(s.listMarkerDigits) - len(n); pad > 0 {
-		m = strings.Repeat(" ", pad)
-	}
-	m += n + ". "
+	m = strconv.FormatUint(uint64(s.listStart+i), 10) + "."
 	return
 }

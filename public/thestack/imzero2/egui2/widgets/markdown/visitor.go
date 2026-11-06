@@ -3,6 +3,7 @@ package markdown
 import (
 	"bytes"
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
+	"math"
 	"regexp"
 	"strconv"
 	"strings"
@@ -502,7 +503,6 @@ func lowerFootnotes(ctx *lowerCtx, list *east.FootnoteList) (seg segment, ok boo
 	if len(inner.children) == 0 {
 		return
 	}
-	inner.listMarkerDigits = markerDigits(inner.listStart, len(inner.children))
 	inner.listMarkers = buildListMarkers(&inner)
 	seg = segment{kind: segKindFootnotes, children: []segment{inner}}
 	ok = true
@@ -590,43 +590,29 @@ func lowerList(ctx *lowerCtx, list *ast.List) (seg segment) {
 		seg.children = append(seg.children, lowerListItem(ctx, li))
 	}
 	if seg.listOrdered {
-		seg.listMarkerDigits = markerDigits(seg.listStart, len(seg.children))
 		seg.listMarkers = buildListMarkers(&seg)
 	}
 	return
 }
 
-// buildListMarkers pre-builds one monospace Atoms holder per ordered item.
-// Built here rather than per frame for the reason every other retained
-// holder in this package is: the render path walks a tree and splices
-// bytes, and an Atoms builder + intern per item per frame would put an
-// allocation back into the steady state. The holders live on the segment,
-// per the retained-holder lifetime invariant in EXPLANATION.md.
+// buildListMarkers pre-builds one Atoms holder per ordered item: the
+// number in the body face at the body's line height ([bodyLineHeight]),
+// so the marker's row is as tall as the body's first row and the two
+// share a baseline. Built here rather than per frame for the reason
+// every other retained holder in this package is: the render path walks
+// a tree and splices bytes, and an Atoms builder + intern per item per
+// frame would put an allocation back into the steady state. The holders
+// live on the segment, per the retained-holder lifetime invariant in
+// EXPLANATION.md.
 func buildListMarkers(seg *segment) (markers []typed.RetainedFffiHolderTyped[c.AtomsS]) {
 	markers = make([]typed.RetainedFffiHolderTyped[c.AtomsS], len(seg.children))
+	lh := bodyLineHeight()
 	for i := range seg.children {
 		a := c.Atoms()
 		for rt := range a.StyledText(itemMarker(seg, uint32(i))) {
-			rt.Monospace()
+			rt.LineHeight(lh)
 		}
 		markers[i] = a.Keep()
-	}
-	return
-}
-
-// markerDigits returns the digit count of the widest marker a list of n
-// items numbered from start will print — i.e. the digits of its last
-// number, since the sequence only grows. n == 0 yields 1 so a degenerate
-// empty list still has a sane column.
-func markerDigits(start uint32, n int) (digits uint8) {
-	last := start
-	if n > 1 {
-		last = start + uint32(n) - 1
-	}
-	digits = 1
-	for last >= 10 {
-		last /= 10
-		digits++
 	}
 	return
 }
@@ -894,8 +880,12 @@ type inlineBuilder struct {
 	headingLevel uint8
 	cur          c.AtomsFluid
 	curOpen      bool
-	runs         []paragraphRun
-	resolver     resolver.ResolverI
+	// atomCount is how many atoms cur holds, so a link knows its index;
+	// curLinks the links cur carries. Both reset with cur.
+	atomCount uint32
+	curLinks  []linkSpan
+	runs      []paragraphRun
+	resolver  resolver.ResolverI
 
 	pendingText   strings.Builder
 	pendingStyle  styleE
@@ -923,13 +913,25 @@ func (inst *inlineBuilder) emitText(s string, style styleE) {
 	inst.pendingActive = true
 }
 
+// emitLink appends a link to the current atoms run as one atom in the
+// link tone, and records which atom it is: the run renders as one galley
+// (`LabelAtomsLinked`), so the paragraph wraps through the link as it
+// wraps through prose, and the renderer hears a click by the link's
+// index. In a heading the link carries the heading's size and weight;
+// in prose, the body's line height.
 func (inst *inlineBuilder) emitLink(label, url string) {
-	inst.flushAtoms()
-	inst.runs = append(inst.runs, paragraphRun{
-		kind:  runKindLink,
-		label: label,
-		url:   url,
-	})
+	inst.flushPending()
+	inst.curLinks = append(inst.curLinks, linkSpan{atom: inst.atomCount, label: label, url: url})
+	for rt := range inst.cur.StyledTextColored(linkFg, linkBg, label) {
+		if inst.headingLevel > 0 {
+			rt = rt.Size(headingFontSize(inst.headingLevel)).Strong()
+		} else {
+			rt = rt.LineHeight(bodyLineHeight())
+		}
+		_ = rt
+	}
+	inst.atomCount++
+	inst.curOpen = true
 }
 
 // emitTask appends a task box as its own run: the glyph, the state it
@@ -937,8 +939,10 @@ func (inst *inlineBuilder) emitLink(label, url string) {
 func (inst *inlineBuilder) emitTask(glyph string, checked bool, offset int) {
 	inst.flushAtoms()
 	inst.runs = append(inst.runs, paragraphRun{
-		kind:        runKindTask,
-		atoms:       c.Atoms().Text(glyph).Keep(),
+		kind: runKindTask,
+		// The parser ate the space after the box with the marker, and the
+		// mixed-run row carries no style gap, so the glyph brings its own.
+		atoms:       c.Atoms().Text(glyph + " ").Keep(),
 		label:       glyph,
 		taskOffset:  offset,
 		taskChecked: checked,
@@ -1017,12 +1021,25 @@ func (inst *inlineBuilder) flushAtoms() {
 		return
 	}
 	held := inst.cur.Keep()
-	inst.runs = append(inst.runs, paragraphRun{
-		kind:  runKindAtoms,
-		atoms: held,
-	})
+	run := paragraphRun{
+		kind:    runKindAtoms,
+		atoms:   held,
+		links:   inst.curLinks,
+		clicked: noLink,
+	}
+	if n := len(inst.curLinks); n > 0 {
+		run.linkAtoms = make([]uint32, n)
+		run.linkURLs = make([]string, n)
+		for i, l := range inst.curLinks {
+			run.linkAtoms[i] = l.atom
+			run.linkURLs[i] = l.url
+		}
+	}
+	inst.runs = append(inst.runs, run)
 	inst.cur = c.Atoms()
 	inst.curOpen = false
+	inst.atomCount = 0
+	inst.curLinks = nil
 }
 
 func (inst *inlineBuilder) finish() (runs []paragraphRun) {
@@ -1037,16 +1054,34 @@ func (inst *inlineBuilder) finish() (runs []paragraphRun) {
 // with the package-level highlight palette so the run renders against
 // a yellow "highlighter pen" background.
 func (inst *inlineBuilder) applyStyledText(s string, style styleE) {
+	// Every path below emits exactly one atom.
+	inst.atomCount++
 	var fontSize float32
 	var headingStrong bool
 	if inst.headingLevel > 0 {
 		fontSize = headingFontSize(inst.headingLevel)
 		headingStrong = true
 	}
+	if style&styleCode != 0 {
+		fontSize = codeSpanFontSize(inst.headingLevel)
+	}
+
+	// Prose carries the design system's leading; a heading keeps its
+	// font's own line height, as the type scale sizes it.
+	var lineHeight float32
+	if inst.headingLevel == 0 {
+		lineHeight = bodyLineHeight()
+	}
 
 	plain := style == styleNone && fontSize == 0 && !headingStrong
 	if plain {
-		inst.cur = inst.cur.Text(s)
+		if lineHeight == 0 {
+			inst.cur = inst.cur.Text(s)
+			return
+		}
+		for rt := range inst.cur.StyledText(s) {
+			rt.LineHeight(lineHeight)
+		}
 		return
 	}
 
@@ -1057,6 +1092,9 @@ func (inst *inlineBuilder) applyStyledText(s string, style styleE) {
 		for rt := range inst.cur.StyledTextColored(tagFg, tagBg, s) {
 			if fontSize > 0 {
 				rt = rt.Size(fontSize)
+			}
+			if lineHeight > 0 {
+				rt = rt.LineHeight(lineHeight)
 			}
 			if headingStrong || style&styleStrong != 0 {
 				rt = rt.Strong()
@@ -1076,6 +1114,9 @@ func (inst *inlineBuilder) applyStyledText(s string, style styleE) {
 		for rt := range inst.cur.StyledTextColored(highlightFg, highlightBg, s) {
 			if fontSize > 0 {
 				rt = rt.Size(fontSize)
+			}
+			if lineHeight > 0 {
+				rt = rt.LineHeight(lineHeight)
 			}
 			if headingStrong || style&styleStrong != 0 {
 				rt = rt.Strong()
@@ -1098,6 +1139,9 @@ func (inst *inlineBuilder) applyStyledText(s string, style styleE) {
 		if fontSize > 0 {
 			rt = rt.Size(fontSize)
 		}
+		if lineHeight > 0 {
+			rt = rt.LineHeight(lineHeight)
+		}
 		if headingStrong || style&styleStrong != 0 {
 			rt = rt.Strong()
 		}
@@ -1112,6 +1156,37 @@ func (inst *inlineBuilder) applyStyledText(s string, style styleE) {
 		}
 		_ = rt
 	}
+}
+
+// codeSpanScale is the size of an inline code span over the run it sits
+// in. The reference stylesheets set it at 0.9 em (`ids.css`,
+// `code { font-size: 0.9em }`, GitHub's 85%): the mono face's x-height is
+// taller than the body's, so at one size the span reads larger than the
+// prose around it, which the trial's eighth-run crop showed.
+const codeSpanScale float32 = 0.9
+
+// codeSpanFontSize is the size of an inline code span in a heading of the
+// given level, or in prose at level 0: [codeSpanScale] of the run's own
+// size, the heading's from [headingFontSize] and the body's from the type
+// scale at the active density.
+func codeSpanFontSize(headingLevel uint8) (sz float32) {
+	base := styletokens.ScaledPt(styletokens.BodyPt, styletokens.ActiveDensity())
+	if headingLevel > 0 {
+		base = headingFontSize(headingLevel)
+	}
+	sz = codeSpanScale * base
+	return
+}
+
+// bodyLineHeight is the line height of prose runs at the active density:
+// [styletokens.BodyLeading] body sizes, rounded to an even number of
+// points as egui's TextFormat asks, so rows land on whole pixels at the
+// common scales. Computed at lowering time, where the atoms are built,
+// beside headingFontSize.
+func bodyLineHeight() (lh float32) {
+	pt := styletokens.ScaledPt(styletokens.BodyPt, styletokens.ActiveDensity())
+	lh = 2 * float32(math.Round(float64(styletokens.BodyLeading*pt)/2))
+	return
 }
 
 // headingFontSize returns the font size for an H1..H6 at the active

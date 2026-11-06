@@ -429,8 +429,8 @@ func TestParse_Footnote_ReferenceRunAndTrailingDefinitions(t *testing.T) {
 		t.Fatalf("bus definition: want one paragraph, got %+v", bus.children)
 	}
 	var sawLink bool
-	for _, r := range bus.children[0].runs {
-		if r.kind == runKindLink && r.url == "https://example.com" {
+	for _, l := range linksOf(bus.children[0].runs) {
+		if l.url == "https://example.com" {
 			sawLink = true
 		}
 	}
@@ -694,88 +694,34 @@ func TestParse_TaskList_MarkerOnlyCountsAtItemStart(t *testing.T) {
 
 // ---------------- Ordered-list marker alignment ---------------------------
 
-func TestMarkerDigits_WidestIsTheLastNumber(t *testing.T) {
-	cases := []struct {
-		start uint32
-		n     int
-		want  uint8
-	}{
-		{1, 0, 1},   // degenerate empty list still has a column
-		{1, 1, 1},   // "1."
-		{1, 9, 1},   // "1." … "9."
-		{1, 10, 2},  // "1." … "10."
-		{1, 100, 3}, // "1." … "100."
-		{9, 2, 2},   // starts at 9, so the second item is "10."
-		{95, 10, 3}, // 95 … 104
-		{100, 1, 3}, // a single three-digit item
+func TestItemMarker_NumbersAreBare(t *testing.T) {
+	// L2 in the rendering review: left-aligned markers put the body of
+	// item 10 a digit right of the body of item 9. The grid the list
+	// renders as right-aligns the markers, so the text carries no padding
+	// and no trailing space — the row spacing is the gap to the body.
+	s := &segment{kind: segKindList, listOrdered: true, listStart: 1}
+	if got, want := itemMarker(s, 0), "1."; got != want {
+		t.Errorf("first: got %q want %q", got, want)
 	}
-	for _, tc := range cases {
-		if got := markerDigits(tc.start, tc.n); got != tc.want {
-			t.Errorf("markerDigits(start=%d, n=%d): got %d want %d", tc.start, tc.n, got, tc.want)
-		}
+	if got, want := itemMarker(s, 9), "10."; got != want {
+		t.Errorf("tenth: got %q want %q", got, want)
 	}
-}
-
-func TestItemMarker_PadsToTheWidestMarker(t *testing.T) {
-	// L2 in the rendering review: markers were left-aligned labels, so
-	// the body of item 10 started 7.4 px right of the body of item 9.
-	// Padding to a common width (rendered monospace) puts every period in
-	// the same column.
-	s := &segment{kind: segKindList, listOrdered: true, listStart: 1, listMarkerDigits: 2}
-	if got, want := itemMarker(s, 0), " 1. "; got != want {
-		t.Errorf("first of ten: got %q want %q", got, want)
-	}
-	if got, want := itemMarker(s, 9), "10. "; got != want {
-		t.Errorf("tenth of ten: got %q want %q", got, want)
-	}
-	// Every marker in one list is the same width, whatever the digits.
-	for i := range uint32(10) {
-		if got := itemMarker(s, i); len(got) != 4 {
-			t.Errorf("item %d: marker %q is %d bytes, want a uniform 4", i, got, len(got))
-		}
-	}
-}
-
-func TestItemMarker_SingleDigitListIsUnpadded(t *testing.T) {
-	// A list that never crosses a digit boundary must not gain leading
-	// space it does not need.
-	s := &segment{kind: segKindList, listOrdered: true, listStart: 1, listMarkerDigits: 1}
-	if got, want := itemMarker(s, 0), "1. "; got != want {
-		t.Errorf("got %q want %q", got, want)
+	s.listStart = 7
+	if got, want := itemMarker(s, 2), "9."; got != want {
+		t.Errorf("start 7, third: got %q want %q", got, want)
 	}
 }
 
 func TestItemMarker_BulletsAreUnchanged(t *testing.T) {
 	s := &segment{kind: segKindList}
-	if got, want := itemMarker(s, 3), "• "; got != want {
+	if got, want := itemMarker(s, 3), "•"; got != want {
 		t.Errorf("bullet: got %q want %q", got, want)
 	}
 }
 
-func TestParse_OrderedList_MarkerWidthSettledAtLoweringTime(t *testing.T) {
-	var src strings.Builder
-	for range 12 {
-		src.WriteString("1. item\n")
-	}
-	doc := Parse([]byte(src.String()))
-	if len(doc.segments) != 1 || doc.segments[0].kind != segKindList {
-		t.Fatalf("expected one list segment, got %v", kindsOf(doc.segments))
-	}
-	seg := doc.segments[0]
-	if len(seg.children) != 12 {
-		t.Fatalf("items: got %d want 12", len(seg.children))
-	}
-	if seg.listMarkerDigits != 2 {
-		t.Errorf("listMarkerDigits: got %d want 2 (the list reaches item 12)", seg.listMarkerDigits)
-	}
-}
-
-func TestParse_UnorderedList_HasNoMarkerWidth(t *testing.T) {
+func TestParse_UnorderedList_HasNoMarkerHolders(t *testing.T) {
 	doc := Parse([]byte("- one\n- two\n"))
 	seg := doc.segments[0]
-	if got := seg.listMarkerDigits; got != 0 {
-		t.Errorf("bullet list carries a marker width %d; it should stay unset", got)
-	}
 	if len(seg.listMarkers) != 0 {
 		t.Errorf("bullet list built %d marker holders; bullets render as a plain label",
 			len(seg.listMarkers))
@@ -783,10 +729,11 @@ func TestParse_UnorderedList_HasNoMarkerWidth(t *testing.T) {
 }
 
 func TestParse_OrderedList_MarkersArePrebuilt(t *testing.T) {
-	// The retained-holder invariant: a monospace marker needs the RichText
-	// scope, and building one per item per frame would put an intern back
-	// into the steady state the package keeps allocation-free. One holder
-	// per item, built during Parse and owned by the segment.
+	// The retained-holder invariant: a marker at the body's line height
+	// needs the RichText scope, and building one per item per frame would
+	// put an intern back into the steady state the package keeps
+	// allocation-free. One holder per item, built during Parse and owned
+	// by the segment.
 	//
 	// One holder per item is all this can check: the holder's bytes are not
 	// readable back, so the marker TEXT is asserted through [itemMarker]
@@ -1241,63 +1188,91 @@ func TestTableRowHeight_TracksTypeScale(t *testing.T) {
 
 // ---------------- Hyperlinks (markdown, wikilink, autolink) ---------------
 
-func TestParse_MarkdownLink_BecomesLinkRun(t *testing.T) {
+// linksOf collects the links of every atoms run, in flow order.
+func linksOf(runs []paragraphRun) (out []linkSpan) {
+	for i := range runs {
+		out = append(out, runs[i].links...)
+	}
+	return
+}
+
+// TestParse_MarkdownLink_IsAnAtomOfItsRun pins the link's place: a
+// paragraph of text and one link is one atoms run, the link its second
+// atom (after the text before it), with the wire-shaped copies beside it
+// and the readout idle.
+func TestParse_MarkdownLink_IsAnAtomOfItsRun(t *testing.T) {
 	src := "see [docs](https://example.com/docs) for details\n"
 	doc := Parse([]byte(src))
 	if len(doc.segments) != 1 {
 		t.Fatalf("segments: got %d want 1", len(doc.segments))
 	}
-	var found *paragraphRun
-	for i, r := range doc.segments[0].runs {
-		if r.kind == runKindLink {
-			found = &doc.segments[0].runs[i]
-			break
-		}
+	runs := doc.segments[0].runs
+	if len(runs) != 1 || runs[0].kind != runKindAtoms {
+		t.Fatalf("a paragraph of text and a link is one atoms run, got %d runs", len(runs))
 	}
-	if found == nil {
-		t.Fatal("expected a runKindLink in the paragraph")
+	r := &runs[0]
+	if len(r.links) != 1 {
+		t.Fatalf("links: got %d want 1", len(r.links))
 	}
-	if found.label != "docs" {
-		t.Errorf("link label: got %q want %q", found.label, "docs")
+	l := r.links[0]
+	if l.label != "docs" {
+		t.Errorf("link label: got %q want %q", l.label, "docs")
 	}
-	if found.url != "https://example.com/docs" {
-		t.Errorf("link url: got %q want %q", found.url, "https://example.com/docs")
+	if l.url != "https://example.com/docs" {
+		t.Errorf("link url: got %q want %q", l.url, "https://example.com/docs")
+	}
+	if l.atom != 1 {
+		t.Errorf("link atom: got %d want 1 (the text before it is atom 0)", l.atom)
+	}
+	if !reflect.DeepEqual(r.linkAtoms, []uint32{1}) || !reflect.DeepEqual(r.linkURLs, []string{l.url}) {
+		t.Errorf("wire copies: atoms %v urls %v", r.linkAtoms, r.linkURLs)
+	}
+	if r.clicked != noLink {
+		t.Errorf("clicked: got %d want noLink", r.clicked)
+	}
+}
+
+// TestParse_TwoLinks_CountAtomsBetween pins the atom indices of two links
+// with styled text between them: the count follows every emitted atom,
+// styled or plain.
+func TestParse_TwoLinks_CountAtomsBetween(t *testing.T) {
+	src := "[a](https://a.example) and **bold** then [b](https://b.example).\n"
+	doc := Parse([]byte(src))
+	runs := doc.segments[0].runs
+	if len(runs) != 1 {
+		t.Fatalf("runs: got %d want 1", len(runs))
+	}
+	got := runs[0].linkAtoms
+	// a | " and " | "bold" | " then " | b | "."
+	if want := []uint32{0, 4}; !reflect.DeepEqual(got, want) {
+		t.Errorf("link atoms: got %v want %v", got, want)
+	}
+	if runs[0].kind != runKindAtoms || !strings.HasPrefix(runs[0].linkURLs[1], "https://b.") {
+		t.Errorf("second link url: %v", runs[0].linkURLs)
 	}
 }
 
 func TestParse_AutoLink_BecomesLinkRun(t *testing.T) {
 	src := "visit <https://example.com> today\n"
 	doc := Parse([]byte(src))
-	var found *paragraphRun
-	for i, r := range doc.segments[0].runs {
-		if r.kind == runKindLink {
-			found = &doc.segments[0].runs[i]
-			break
-		}
+	links := linksOf(doc.segments[0].runs)
+	if len(links) == 0 {
+		t.Fatal("expected a link for autolink")
 	}
-	if found == nil {
-		t.Fatal("expected a runKindLink for autolink")
-	}
-	if found.url != "https://example.com" {
-		t.Errorf("autolink url: got %q want %q", found.url, "https://example.com")
+	if links[0].url != "https://example.com" {
+		t.Errorf("autolink url: got %q want %q", links[0].url, "https://example.com")
 	}
 }
 
 func TestParse_EmailAutoLink_GetsMailtoPrefix(t *testing.T) {
 	src := "mail <foo@example.com>\n"
 	doc := Parse([]byte(src))
-	var found *paragraphRun
-	for i, r := range doc.segments[0].runs {
-		if r.kind == runKindLink {
-			found = &doc.segments[0].runs[i]
-			break
-		}
+	links := linksOf(doc.segments[0].runs)
+	if len(links) == 0 {
+		t.Fatal("expected a link for email autolink")
 	}
-	if found == nil {
-		t.Fatal("expected a runKindLink for email autolink")
-	}
-	if found.url != "mailto:foo@example.com" {
-		t.Errorf("email autolink url: got %q want %q", found.url, "mailto:foo@example.com")
+	if links[0].url != "mailto:foo@example.com" {
+		t.Errorf("email autolink url: got %q want %q", links[0].url, "mailto:foo@example.com")
 	}
 }
 
@@ -1376,11 +1351,8 @@ func TestParse_Resolver_WikilinkUsesResolverURL(t *testing.T) {
 	}
 	// Confirm the resolved URL is what the paragraph run carries.
 	var url string
-	for _, run := range doc.segments[0].runs {
-		if run.kind == runKindLink {
-			url = run.url
-			break
-		}
+	if links := linksOf(doc.segments[0].runs); len(links) > 0 {
+		url = links[0].url
 	}
 	if url != "STUB://SomePage" {
 		t.Errorf("wikilink URL: got %q want %q", url, "STUB://SomePage")
@@ -1394,8 +1366,8 @@ func TestParse_Resolver_NilArgIsIgnored(t *testing.T) {
 		t.Fatal("Parse failed under a nil Resolver")
 	}
 	// Default resolver (NoopResolver) yields a non-empty URL like "/Page".
-	for _, run := range doc.segments[0].runs {
-		if run.kind == runKindLink && run.url == "" {
+	for _, l := range linksOf(doc.segments[0].runs) {
+		if l.url == "" {
 			t.Error("URL should be non-empty under the default NoopResolver")
 		}
 	}
@@ -1459,19 +1431,14 @@ func TestParse_CommonMarkImage_WithoutLoader_FallsBackToHyperlink(t *testing.T) 
 	doc := ParseWith([]byte("see ![cap](pic.png) now\n"), ParseOptions{Resolver: r})
 	for _, run := range doc.segments[0].runs {
 		if run.kind == runKindImage {
-			t.Fatal("expected fallback runKindLink, not runKindImage")
+			t.Fatal("expected a fallback link, not runKindImage")
 		}
 	}
-	var found *paragraphRun
-	for i, run := range doc.segments[0].runs {
-		if run.kind == runKindLink {
-			found = &doc.segments[0].runs[i]
-			break
-		}
+	links := linksOf(doc.segments[0].runs)
+	if len(links) == 0 {
+		t.Fatal("expected a fallback link")
 	}
-	if found == nil {
-		t.Fatal("expected runKindLink fallback")
-	}
+	found := &links[0]
 	if !strings.HasPrefix(found.label, icons.PhImage+" ") {
 		t.Errorf("fallback label glyph: got %q want the PhImage prefix", found.label)
 	}
@@ -1657,16 +1624,11 @@ func TestParse_OversizedImage_RejectedAtVisitor(t *testing.T) {
 func TestParse_CommonMarkImage_EmptyAlt_FallsBackToURLLabel(t *testing.T) {
 	r := &stubResolver{} // imagePayload empty → LoadImage returns ok=false
 	doc := ParseWith([]byte("![](pic.png)\n"), ParseOptions{Resolver: r})
-	var found *paragraphRun
-	for i, run := range doc.segments[0].runs {
-		if run.kind == runKindLink {
-			found = &doc.segments[0].runs[i]
-			break
-		}
+	links := linksOf(doc.segments[0].runs)
+	if len(links) == 0 {
+		t.Fatal("expected a fallback link for the empty-alt CommonMark image")
 	}
-	if found == nil {
-		t.Fatal("expected runKindLink fallback for empty-alt CommonMark image")
-	}
+	found := &links[0]
 	if found.label != icons.PhImage+" pic.png" {
 		t.Errorf("fallback label: got %q want %q", found.label, icons.PhImage+" pic.png")
 	}
@@ -1757,6 +1719,29 @@ func TestHeadingFontSize_LadderDescendsAndStraddlesBody(t *testing.T) {
 	if got := headingFontSize(6); got >= body {
 		t.Errorf("headingFontSize(6) = %v: it now sits at or above body %v — "+
 			"the ladder was retuned, so update this expectation deliberately", got, body)
+	}
+}
+
+// TestCodeSpanFontSize_IsSmallerThanItsRun pins the inline code span at
+// codeSpanScale of the run it sits in — the body in prose, the heading's
+// size in a heading — as the reference stylesheets set `code` at 0.9 em.
+func TestCodeSpanFontSize_IsSmallerThanItsRun(t *testing.T) {
+	d := styletokens.ActiveDensity()
+	body := styletokens.ScaledPt(styletokens.BodyPt, d)
+	if got, want := codeSpanFontSize(0), codeSpanScale*body; got != want {
+		t.Errorf("codeSpanFontSize(0) = %v, want %v (%v of body %v)", got, want, codeSpanScale, body)
+	}
+	for level := uint8(1); level <= 6; level++ {
+		got, want := codeSpanFontSize(level), codeSpanScale*headingFontSize(level)
+		if got != want {
+			t.Errorf("codeSpanFontSize(%d) = %v, want %v", level, got, want)
+		}
+		if got >= headingFontSize(level) {
+			t.Errorf("codeSpanFontSize(%d) = %v is not under the heading's %v", level, got, headingFontSize(level))
+		}
+	}
+	if codeSpanScale <= 0.8 || codeSpanScale >= 1 {
+		t.Errorf("codeSpanScale = %v: the stylesheets set code at 0.85 to 0.9 em", codeSpanScale)
 	}
 }
 

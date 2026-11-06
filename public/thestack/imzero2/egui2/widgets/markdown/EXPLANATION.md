@@ -28,7 +28,7 @@ and GFM. Boxer ships a goldmark extender stack covering all of those at
 egui) has no markdown widget — only primitives: `Atoms` for inline rich
 text, `LabelAtoms` / `Label` for paragraphs, `CodeView` for syntax-coloured
 code blocks, `Frame` for bordered groups, `Vertical` / `HorizontalWrapped`
-for flow, `Hyperlink` for links. A markdown view is therefore a
+for flow, `LabelAtomsLinked` for a paragraph whose text carries links. A markdown view is therefore a
 *composition* of those primitives, not a new widget op. This package owns
 the AST→primitive lowering on the Go side.
 
@@ -50,9 +50,13 @@ block children once. Each block produces a `segment` value:
 - `paragraph` / `heading`  — built by walking inline children into one
   `Atoms` builder (`Strong`, `Italics`, `Code`, `Strikethrough`,
   `Highlight` styles via the RichText sub-protocol) and `.Keep()`-ing
-  the result. Hyperlinks (regular, autolinks, wikilinks, embeds) break
-  the flow into a sequence of *runs* (atoms blob OR hyperlink) so the
-  segment can render as `HorizontalWrapped` only when needed.
+  the result. A hyperlink (regular, autolink, wikilink, embed) is an
+  atom of that blob in the link tone, and the blob records which atoms
+  are links; the renderer hands the blob to `LabelAtomsLinked`, one
+  galley that wraps through the link as through prose and reports a
+  click as the link's index. Images, task boxes and footnote marks are
+  widgets of their own, so they break the flow into a sequence of
+  *runs* and the segment renders as `HorizontalWrapped` only then.
 - `code block`              — the source bytes wrap a `CodeViewJob` retained
   holder. Fenced blocks whose info-string token matches `go`/`golang`,
   `sql`, or `json` are highlighted via the corresponding
@@ -61,10 +65,10 @@ block children once. Each block produces a `segment` value:
   `c.CodeViewJob(text).Keep()`. Adding a new language is a one-case
   extension of `lowerCodeBlock`'s dispatch switch.
 - `list` / `list item`      — recursive segments. The list segment carries
-  `ordered` and `start` flags; rendering emits one `Horizontal` per item
-  with a glyph (`•`) or counter, then a nested `Vertical` for the item's
-  children.
-- `blockquote`              — a recursive `Frame.PresetGroup()` wrapper
+  `ordered` and `start` flags; rendering emits a two-column `Grid`, one
+  row per item: the glyph (`•`) or number, right-aligned, then a nested
+  `Vertical` for the item's children.
+- `blockquote`              — a recursive `Frame` with a left edge bar
   around child segments.
 - `thematic break`          — a `Separator()` opcode.
 - `callout`                 — themed `Frame` (border + tinted fill chosen
@@ -86,8 +90,10 @@ extracted as separate runs at paragraph build time. Strong, Em, Code,
 Strikethrough and Highlight nest as flag bits in a `styleE` bitmask,
 applied to the RichText scope at text-emit time. Highlight uses a
 distinct code path: it routes through `StyledTextColored(fg, bg)`
-with a yellow "highlighter pen" palette since plain `RichText` has no
-background-color knob.
+with the "highlighter pen" palette (`theme.go`, the warning tint the
+design system's stylesheet gives `mark`) since plain `RichText` has no
+background-color knob. A code span is set at `codeSpanScale` of the
+run it sits in, as the stylesheets set `code` at 0.9 em.
 
 Wikilinks and embeds resolve their URLs through a
 `resolver.ResolverI` (defaults to `resolver.NoopResolver`, which
@@ -110,8 +116,9 @@ hyperlink, since `isImage` from `ResolveEmbed` is false.
 segments it splices the retained `Atoms` blob into the current scope via
 `LabelAtoms(holder).Wrap().Send()` — one opcode, content-addressed
 de-duplicated. Code blocks emit `CodeView(ids.PrepareSeq(seq), holder)`.
-List and blockquote segments open block iterators (`Horizontal`,
-`Vertical`, `Frame`) and recurse.
+List and blockquote segments open block iterators (`Grid`, `Vertical`,
+`Frame`) and recurse; a list's grid and a blockquote's frame each take
+one id from the sequence below.
 
 Because list and blockquote IDs are derived from a monotonic
 per-`Render`-invocation sequence (`PrepareSeq(0)`, `PrepareSeq(1)`, …),
@@ -119,6 +126,21 @@ the caller MUST wrap `Render` in a `c.IdScope` whenever multiple
 instances of any markdown doc may coexist under the same parent scope.
 The package does not push its own outer scope: that decision is the
 caller's, exactly like `components.CodeView`.
+
+### The reading column
+
+With `Input.Measure` set, `Render` wraps the body in a centred layout whose
+max width is the measure and a left-aligned `Vertical` inside it, so the
+column is centred and its blocks are not. `ReadingMeasure` is the design
+system's 50 em (ADR-0076's stylesheet), at the active density. Zero keeps the
+pre-option behaviour; the first consumer is mdedit's reading mode, because
+it owns the whole window — a centred column wider than its pane overflows
+both edges, which is why the option's doc puts the clamp on the host.
+
+Prose runs carry `styletokens.BodyLeading` as their line height
+(`bodyLineHeight`, rounded to an even point); headings keep their font's
+own. The mixed-run row's vertical item spacing is zero for the same reason,
+so a paragraph with a link in it steps like one without.
 
 ### Frontmatter
 
@@ -168,12 +190,19 @@ should iterate `Frontmatter().IteratePairs()` directly.
   `renderTable` emits nothing else between them, and GFM has no nested
   tables, so this holds by construction today — a future caller that
   wanted to interleave would silently merge two tables into one.
-- **Inline run boundaries.** A paragraph either contains zero
-  hyperlinks (one atoms run, rendered as a single `LabelAtoms`) or one
-  or more (rendered as a `HorizontalWrapped` over a run sequence).
-  Rendering must keep these two paths distinct: wrapping an unbroken
-  paragraph in `HorizontalWrapped` defeats text wrapping at glyph
-  granularity.
+- **Inline run boundaries.** A paragraph of text and links is one
+  atoms run, rendered as a single label (`LabelAtoms`, or
+  `LabelAtomsLinked` when it carries a link); one with an image, a task
+  box or a footnote mark is a run sequence rendered as a
+  `HorizontalWrapped`. Rendering must keep these two paths distinct:
+  wrapping an unbroken paragraph in `HorizontalWrapped` defeats text
+  wrapping at glyph granularity, and a widget in the flow breaks a row
+  where the text would not have.
+- **A link's click arrives a frame late.** The linked label's readout
+  (`paragraphRun.clicked`) is written when the frame that registered it
+  completes, so the renderer reads it on the next frame and clears it.
+  The field is the run's, not a frame's: a local would be gone when the
+  readout lands.
 - **Caller-provided IdScope.** `Render` does not open an `IdScope`.
   Two coexisting instances of the same doc under one scope WILL collide
   on code-block / blockquote ids unless the caller wraps each in its
@@ -216,10 +245,14 @@ should iterate `Frontmatter().IteratePairs()` directly.
   What does still wrap at run boundaries is the `HorizontalWrapped`
   path — links and inline images are separate widgets, not atoms, so a
   paragraph containing them breaks between runs.
-- **Lists are hand-rolled.** egui has no list primitive. Bullet/numbered
-  lists are `Horizontal{glyph, Vertical{children}}` per item. This
-  reproduces Obsidian's visual layout closely enough for a viewer; an
-  editor with cursor placement would need a richer model.
+- **Lists are hand-rolled.** egui has no list primitive. A list is a
+  two-column `Grid` — the marker, right-aligned in a column the grid
+  sizes to the widest marker, then `Vertical{children}` — one row per
+  item, so numbers line up on their periods in the body face and a
+  wrapped item wraps under its own first line. The items step at the
+  inline gap, not the item gap, which is what the reference stylesheets
+  do. This reproduces Obsidian's visual layout closely enough for a
+  viewer; an editor with cursor placement would need a richer model.
 - **Code blocks are dispatched per language.** Fenced blocks tagged
   `go`/`golang`, `sql`, or `json` route through
   `codeview.Prepare{Go,Sql,Json}`; every other tag and every indented
@@ -276,24 +309,28 @@ should iterate `Frontmatter().IteratePairs()` directly.
   buffers before they reach the segment tree. Cap covers up to 8K
   source textures while staying inside what egui can plausibly
   upload.
-- **Table rows are a fixed height, so cells do not wrap.** The table op
-  takes a single `rowHeight` and applies it to the header row and every
-  body row; the interpreter draws each cell as a `ui.label` inside
-  `row.col`, and content taller than `rowHeight` is clipped. There is no
-  wrapping or multi-line cell to be had without a different op. `v1`
-  therefore accepts single-line cells and sizes the row from the IDS
-  type scale (`tableRowHeight`), taking the larger heading step when a
-  header is present because the interpreter draws header cells with
-  `ui.heading()`. The factor is a heuristic, not a measurement: egui's
-  real text metrics are only reachable through Fetcher opcodes, which
-  may only run from `StateManager.Sync()` at frame end, never from a
-  widget's render path. It errs generous — a too-tall row wastes a few
-  pixels, a too-short one eats the descenders.
+- **A table that flows is a grid of wrapping cells; a long one keeps the
+  table op and its fixed rows.** The table op takes a single `rowHeight`
+  for the header row and every body row, draws each cell as a `ui.label`
+  inside `row.col`, clips what is taller, and draws header cells with
+  `ui.heading()`; a different op would be needed for a wrapping cell
+  there. Up to `tableFlowMaxRows` rows (ADR-0180's threshold, updated
+  2026-11-05) `renderTableGrid` draws an egui `Grid` instead: one
+  wrapping label per cell inside a scope bounded to the column's width
+  estimate, so a long cell takes more lines and the row grows, and the
+  header is strong at body size. The grid lays every row out each frame,
+  which is what the threshold bounds; above it the op's bounded scroll
+  and fixed rows (`tableRowHeight`, the heading step when a header is
+  present) remain. The row factor there is a heuristic, not a
+  measurement: egui's real text metrics are only reachable through
+  Fetcher opcodes, which may only run from `StateManager.Sync()` at
+  frame end, never from a widget's render path.
 - **Column widths are estimated from rune counts, not measured or
-  auto-sized.** Long cells are handled on the width axis: each column
-  but the last starts at roughly its widest cell's width and is
-  resizable, the last is `remainder()`, and all of them clip (which egui
-  draws as an ellipsis where it can). The estimate is
+  auto-sized.** On the op path long cells are handled on the width axis:
+  each column but the last starts at roughly its widest cell's width and
+  is resizable, the last is `remainder()`, and all of them clip (which
+  egui draws as an ellipsis where it can); on the grid path the same
+  estimate is the bound a cell wraps at. The estimate is
   `runes × BodyPt × tableGlyphAdvance`, capped, with the per-column
   rune maximum cached on the segment at lowering time. Two rejected
   alternatives explain the shape. `Column::auto()` looks like the right

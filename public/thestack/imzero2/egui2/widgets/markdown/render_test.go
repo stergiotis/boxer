@@ -27,6 +27,7 @@ func TestRenderHeadless(t *testing.T) {
 		CodeActionFilter: func(_, lang string) bool { return lang == "sql" },
 		LinkClaims:       func(url string) bool { return url == "/in-doc" },
 		Frontmatter:      true,
+		Measure:          ReadingMeasure(),
 	})
 	if len(res.Actions) != 0 || len(res.Links) != 0 {
 		t.Fatalf("quiet frame reported %+v", res)

@@ -328,6 +328,98 @@ See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-d
   an exact set. The lex tier's four declared non-goals get their own test:
   they must stay plain.
 
+## Updates
+
+### 2026-11-05 — Flowing tables are grids of wrapping cells; prose carries the design system's leading; inline backgrounds are pills
+
+Three changes from the
+[markdown-rendering-quality trial](../trials/markdown-rendering-quality/README.md),
+whose first run put mdedit's reading mode beside browser renderings of the
+same markdown and whose blind votes went against it. Each keeps this ADR's
+decisions and moves what they left:
+
+- **Decision item 9's threshold now chooses the renderer, not only the
+  scroll.** A table of up to `tableFlowMaxRows` rows is an egui `Grid` of
+  wrapping labels, each bounded to the column estimate of item 9, with a
+  strong body-size header (`renderTableGrid`); the review's "fixed one-line
+  cells, a different op is the real fix" (§4, deliberate) is answered for
+  flowing tables without a new op. A longer table keeps the table op and
+  its bounded scroll.
+- **Prose runs carry `styletokens.BodyLeading`** (1.6, the IDS stylesheet's
+  `--ids-line`) as their line height, rounded to an even point; headings
+  keep their font's. The mixed-run row's vertical item spacing is zero, which
+  closes the review's L7 inconsistency item 10 left open. A task box brings
+  its own trailing space, since the parser ate the source's.
+- **Inline backgrounds — code spans, the highlight pen, tag pills — are
+  rounded at the chip radius** by `imzero2_egui::style::pill::PillLabel`,
+  which every `labelAtoms` label goes through; epaint's own background is
+  a flat rectangle.
+
+A reading column, `Input.Measure`, landed beside these for mdedit's reading
+mode (the widget's EXPLANATION records it). The trial's runs carry the
+measurements and the votes.
+
+### 2026-11-06 — Lists are two-column grids; the number marker is in the body face; a blockquote is a left rule
+
+The same trial, sixth run. Decision item 4's monospace, space-padded
+number marker — chosen so `9.` and `10.` line up — is withdrawn: a list
+is an egui `Grid` of marker and body columns (`renderList`), the grid
+sizes the marker column to the widest marker and right-aligns the cell,
+so the periods line up in the body face and the body starts at one x
+across the ten boundary (L2 of the review, closed without a second
+face). The marker carries the body's line height, so marker and body
+share a baseline; the marker text carries neither padding nor a trailing
+space, and the items of one list step at the inline gap rather than the
+item gap, which is what the reference stylesheets do (`ids.css` gives a
+list item 0.2 em). Item 4's retained holders stay: one per numbered
+item, built at lowering time, for the same allocation reason.
+
+The seventh run withdraws the blockquote's group frame, which this ADR
+inherited rather than decided: a boxed quote read as a callout without a
+title, where every reference stylesheet draws a rule. A quote is a
+`Frame` with neither stroke nor fill and a bar along its left edge at the
+strong stroke width in the neutral border colour (`renderBlockquote`),
+the body set in from it by the default padding. The bar is a new Frame
+method on the wire, `edgeBarLeft`, painted by the host after the body
+with the Frame's left corner radii — egui's own frame stroke is all four
+sides or none.
+
+The eighth run sizes an inline pill to the glyphs. epaint's
+`Glyph::logical_rect`, which the pill took over from `add_row_backgrounds`,
+is the row's line height tall, so once prose carried the design system's
+leading a code span's background ran from its cap line nearly to the next
+line's, with no padding at its sides; the owner named it after the
+seventh run's blind vote, where the native arm lost 12 of 24. A pill is
+now the font's own box — ascent and row height, not the line's — padded
+by `0.12em 0.35em` of the section's size as the IDS stylesheet pads an
+inline code span, and the side padding takes room in the line through the
+section's `leading_space` and the next section's, so the glyph after a
+pill starts past its edge. The ADR's item that gave the pills their
+radius stands; the box is the part it did not decide.
+
+The ninth run sets an inline code span at 0.9 of the run it sits in
+(`codeSpanFontSize`), as the design system's stylesheet and GitHub's set
+`code`, and moves the highlight pen from the accent fill to the warning
+family's subtle tint under primary text — the tint `ids.css` gives `mark`
+— so the same document carries the same pen in mdedit and in a browser.
+The accent reading of ADR-0031 §SD2 that the pen had followed stays the
+rule for selection and focus; a highlighter in prose is a mark, not a
+selection.
+
+The tenth run closes L3 of the review the other way round from item 2's
+reading: a hyperlink is no longer a widget in a wrapping row but an atom
+of the paragraph's own text, and the paragraph is one galley
+(`labelAtomsLinked` on the wire, `imzero2_egui::style::linked`). The
+host matches a hover or a click against the link sections' glyph boxes
+row by row, underlines the hovered link, opens the url of a link the
+caller did not claim, and reports every click as the link's index
+through the r9 readout; the widget's `LinkClick` for a claimed link
+comes from that index. A row of widgets broke where the link did not fit
+the rest of the row, which is what the trial's raggedness measured on
+the link-bearing documents; the zero item spacing that item 2 set for the
+row stays for the flows that remain — images, task boxes, footnote
+marks.
+
 ## References
 
 - [Markdown rendering review](../adr-background-work/markdown-rendering-review.md) — the background work this decides on.

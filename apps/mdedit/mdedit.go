@@ -1178,6 +1178,12 @@ func (inst *App) renderPreview() {
 	// mdedit:// links open a new window, as from every surface (ADR-0347
 	// §SD5); every other link stays a hyperlink.
 	in := markdown.Input{Ids: inst.ids, ScopeKey: "preview", Doc: inst.doc, LinkClaims: mdeditlink.Claimed}
+	if inst.viewMode == viewRead {
+		// The reading mode owns the whole window, so the design system's
+		// column fits; Split's preview pane may be narrower than it, and an
+		// oversized centred column would overflow the pane's left edge.
+		in.Measure = markdown.ReadingMeasure()
+	}
 	if slug, changed := inst.takeScrollTarget(); changed {
 		in.ScrollToSection = slug
 	}

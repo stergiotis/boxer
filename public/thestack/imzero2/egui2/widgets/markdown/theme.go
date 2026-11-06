@@ -8,15 +8,18 @@ import (
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/color"
 )
 
-// Inline highlight palette — "highlighter pen" effect using the IDS accent
-// role (ADR-0031 §SD2 reserves accent for "branded highlights, selection,
-// focus rings"). AccentDefault is the bright L≈0.80 highlight area;
-// NeutralBgExtreme is the high-contrast dark text. Promoted to package-level
-// vars so the bridge (token → uint32 hex → color.Color) runs once per
-// process rather than per markdown render.
+// Inline highlight palette — the "highlighter pen" of `==text==`, the
+// warning family's subtle tint under primary text, which is what the
+// design system's own stylesheet gives `mark` (`ids.css`): the same
+// document in mdedit and in a browser carry the same pen. The accent fill
+// it had before (ADR-0031 §SD2 reserves accent for "branded highlights,
+// selection, focus rings") read as a selection, and a bright block in a
+// line of prose was the loudest thing on the page. Promoted to
+// package-level vars so the bridge (token → uint32 hex → color.Color)
+// runs once per process rather than per markdown render.
 var (
-	highlightFg = color.Hex(styletokens.NeutralBgExtreme.AsHex())
-	highlightBg = color.Hex(styletokens.AccentDefault.AsHex())
+	highlightFg = color.Hex(styletokens.NeutralTextPrimary.AsHex())
+	highlightBg = color.Hex(styletokens.WarningSubtle.AsHex())
 	// A host-claimed link ([Input.LinkClaims]) is drawn by us rather than by
 	// egui's Hyperlink, so it needs its own tone. Info, which is what the
 	// design system uses for "this points elsewhere", over a transparent
