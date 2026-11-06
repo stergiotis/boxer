@@ -141,7 +141,7 @@ func prepare(root, work string) (err error) {
 // do: every wired feature on, frontmatter parsed and left out of the body,
 // which is what mdedit's reading mode shows too.
 func toHTML(src []byte) (body []byte, err error) {
-	md := obsidian.New(obsidian.Options{Features: obsidian.FeatureAll})
+	md := obsidian.New(obsidian.Options{Features: obsidian.FeatureAll | obsidian.FeatureTypographer})
 	pc := obsidian.NewParserContext()
 	var buf bytes.Buffer
 	if err = md.Convert(src, &buf, parser.WithContext(pc)); err != nil {

@@ -122,7 +122,11 @@ sampled from the captures, the pen is now 2.5 over the page where it
 was 1.2, with primary text at 6.2 over the pen; the line metrics repeat
 the fourteenth run's. The same run is the first to carry the two typst
 arms (§3), pictures only: the native spec set by typst's breaker, and
-typst's book typography; neither is voted yet.
+typst's book typography; neither is voted yet. A sixteenth run,
+`2026-11-06-typographer`, sets typographic punctuation in the native
+arm and the HTML arms alike, the one thing the typst arms did by
+default that the others did not; the native metrics repeat the
+fifteenth run's.
 
 **In the first run, at a 1000-point viewport, standard density and the fonts the headless
 host draws with, mdedit's reading mode sets prose across the whole window —
@@ -378,6 +382,9 @@ logbook's 2026-11-05 entry; the two on the tree rather than the harness:
 - **M1o — the pen's tint.** Done 2026-11-06 as run `2026-11-06-mark`:
   the highlight pen composed from the warning default and the page, the
   same in the widget and the stylesheet. Closed by measurement.
+- **M1p — typographic punctuation.** Done 2026-11-06 as run
+  `2026-11-06-typographer` (`obsidian.FeatureTypographer`). Closed by
+  the captures.
 - **M2 — the second width and the typst arm.** A narrow viewport (the
   help pane's) and a wide one; the corpus through a markdown-to-typst
   path as a typographic ceiling, with the research notes on its line

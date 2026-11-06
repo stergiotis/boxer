@@ -820,3 +820,42 @@ evidence lives in its own `./runs/<YYYY-MM-DD-slug>/` directory.
   typst arms as pixels-only rows), the two crops. Votes: not taken; the
   pen is a tint the captures measure.
 - **Run dir:** `./runs/2026-11-06-mark/`.
+
+## 2026-11-06 — sixteenth run, `2026-11-06-typographer` — typographic punctuation
+
+- **Build under test:** the fifteenth run's tree with goldmark's
+  Typographer wired into the obsidian package as `FeatureTypographer`
+  (curly quotes and apostrophes, en and em dashes, an ellipsis; no angle
+  quotes; the characters themselves rather than entities), opted into by
+  the widget's default feature set and the trial's HTML arms, and kept
+  out of `FeatureAll`. The resolver folds the typographic characters
+  back before sanitising a fragment, and `SlugHeading` folds the same
+  way, so a wikilink written from the source meets a typeset heading.
+- **Attempted:** the whole protocol, with the typst arms.
+- **Findings:**
+  - **Result, not a toolbelt finding:** the native arm sets the
+    corpus's apostrophes and quotes as the typst arms do; the crop
+    (`why-boxer-apostrophe.run15-vs-run16-vs-typst-book.png`) shows one
+    passage in the fifteenth run, this run and the book arm. The native
+    line metrics repeat the fifteenth run's; the IDS arm's move by a
+    character here and there, since it renders the same substituted
+    text and a curly quote is not a straight one's width.
+  - **[pain boxer/toolbelt/markdown / functional-suitability.appropriateness / S3]**
+    The typographer replaces text with `String` nodes that carry no
+    source segment. Two things read source bytes through the AST and
+    had to be looked at: the widget's heading text collector took only
+    `Text` nodes and dropped the substitutions (the outline read "Its
+    here" for "It's \"here\""), and a heading's slug, computed from the
+    typeset text, no longer met the fragment a wikilink carries from
+    the source. The first is a case in the collector; the second is the
+    fold in the resolver and the slug, held to the typographer's table
+    by a test. It is also why the feature stays out of `FeatureAll`: a
+    consumer mapping text to source bytes (mdspan) or indexing it
+    (mdextract) would see characters the source does not hold.
+- **Solution size:** `obsidian` +40 (the feature, the table, tests),
+  `resolver.go` +20, `visitor.go` +6, `markdown.go` +4, the harness +1,
+  ADR-0180 update.
+- **Results:** `runs/2026-11-06-typographer/metrics.json`,
+  `metrics.md`, the crop. Votes: not taken; a substitution the captures
+  show.
+- **Run dir:** `./runs/2026-11-06-typographer/`.
