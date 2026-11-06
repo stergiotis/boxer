@@ -288,6 +288,18 @@ person's control is the deployment's statement, made by configuring it,
 and a client cannot check it. A store whose receipts name their sender
 implements `anchor.SenderI`, which the anchor service appends through.
 
+### 2026-11-06 — §SD2: an app anchors scopes in a cell of its own
+
+`runtime.anchor.*` scoped every head to an agent run once the host set the
+journal as the owner resolver, so a chain that is no run — a recorded
+terminal session — could not be anchored. A head whose cell is
+`app/<sender>` (`headstore.AppCell`) is now the sender's, whatever its
+scope: the service lets the sender append and read it and refuses every
+other sender, and a head in another app's `app/…` cell is refused outright.
+Runs keep their cells, so an app cannot pre-anchor a future run's id, and
+no resolver is consulted for an app's own cell. The store, the wire and
+L32 do not change.
+
 ## References
 
 - [ADR-0201](./0201-leeway-canonical-record-form.md) — the canonical form the digest is over.

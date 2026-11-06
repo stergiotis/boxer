@@ -2,6 +2,7 @@ package headstore
 
 import (
 	"context"
+	"strings"
 	"sync"
 	"time"
 
@@ -20,9 +21,10 @@ import (
 const ServiceAppId app.AppIdT = "runtime.anchor"
 
 // The family (ADR-0314, a dated Update on ADR-0026 §SD3): append a head,
-// read a scope's heads. Both are scoped to the scope's owner: the app the
-// journal store names as the run's owner when the service has one
-// (Owners), else the sender that anchored the scope first; another sender
+// read a scope's heads. Both are scoped to the scope's owner: in an app's
+// own cell (AppCell) that app; elsewhere the app the journal store names
+// as the run's owner when the service has one (Owners), else the sender
+// that anchored the scope first; another sender
 // is refused, so no app pre-anchors or reads another's run. The receipt
 // names the sender. A head already held for an ordinal under its scheme
 // is answered with its first receipt, and another digest there is
@@ -33,6 +35,15 @@ const (
 	SubjectAppend = SubjectPrefix + "append"
 	SubjectRead   = SubjectPrefix + "read"
 )
+
+// AppCellPrefix begins an app's own cell: AppCell(id). A scope in an app's
+// cell is that app's alone, whatever the scope's number, so an app anchors
+// chains of its own (a recorded session, a ledger) without a run behind them
+// and without meeting another domain's scopes (ADR-0314, Update 2026-11-06).
+const AppCellPrefix = "app/"
+
+// AppCell is the cell whose scopes belong to the app id.
+func AppCell(id app.AppIdT) string { return AppCellPrefix + string(id) }
 
 // DefaultTimeout bounds one request.
 const DefaultTimeout = 30 * time.Second
@@ -130,11 +141,18 @@ func (inst runOwners) OwnerOf(ctx context.Context, run uint64) (owner string, fo
 	return r.OwnerApp, true, nil
 }
 
-// allowed says the sender may touch the scope's heads: it is the scope's
+// allowed says the sender may touch the scope's heads: the cell is the
+// sender's own (AppCell), or, in any other cell, it is the scope's
 // owner as the resolver names it, or, without a resolver, the sender the
 // scope's first head came from (a scope no one anchored is anyone's to
 // anchor first).
 func (inst *Service) allowed(ctx context.Context, cell string, scope uint64, sender string) (ok bool, why string, err error) {
+	if strings.HasPrefix(cell, AppCellPrefix) {
+		if cell == AppCellPrefix+sender {
+			return true, "", nil
+		}
+		return false, "another app's cell", nil
+	}
 	if inst.Owners != nil {
 		owner, found, oerr := inst.Owners.OwnerOf(ctx, scope)
 		if oerr != nil {

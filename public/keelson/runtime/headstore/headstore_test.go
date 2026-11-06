@@ -210,3 +210,33 @@ func TestTheServiceScopesHeadsToTheRunsOwner(t *testing.T) {
 	require.NoError(t, err)
 	assert.Len(t, heads, 1)
 }
+
+// An app's own cell holds scopes of its own: it anchors and reads them with
+// the journal's resolver in place, another app may do neither, and no app
+// writes into another's cell.
+func TestAnAppAnchorsScopesInItsOwnCell(t *testing.T) {
+	ctx := context.Background()
+	bus := inprocbus.NewInst(zerolog.Nop())
+	svc, err := NewService(bus, zerolog.Nop(), anchor.NewMemStore())
+	require.NoError(t, err)
+	t.Cleanup(svc.Close)
+	svc.Owners = RunOwners(agentrun.NewMemStore())
+	term := NewClient(bus.NewClient("elle/terminal", ClientCaps("test")))
+	other := NewClient(bus.NewClient("app.other", ClientCaps("test")))
+	cell := AppCell("elle/terminal")
+	h := anchor.Head{Cell: cell, Scope: 77, Ordinal: 5, Scheme: "terminal-session/v1", Digest: "d5"}
+
+	_, err = term.AppendHead(ctx, h)
+	require.NoError(t, err, "the app's own cell needs no run")
+	_, err = term.AppendHead(ctx, anchor.Head{Cell: "c", Scope: 77, Ordinal: 5, Scheme: "terminal-session/v1", Digest: "d5"})
+	assert.Error(t, err, "outside its cell the journal still decides, and holds no such run")
+	_, err = other.AppendHead(ctx, anchor.Head{Cell: cell, Scope: 78, Ordinal: 1, Scheme: "x/v1", Digest: "d"})
+	assert.Error(t, err, "another app does not write into the app's cell")
+	_, err = other.ReadScope(ctx, cell, 77)
+	assert.Error(t, err, "nor reads it")
+	heads, err := term.ReadScope(ctx, cell, 77)
+	require.NoError(t, err)
+	require.Len(t, heads, 1)
+	assert.Equal(t, h, heads[0].Head)
+	assert.Equal(t, "elle/terminal", heads[0].Receipt.By)
+}
