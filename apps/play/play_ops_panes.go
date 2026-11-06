@@ -203,7 +203,7 @@ func (inst *SankeyDriver) paneStatus() (line string, reject string) {
 // them. A pane with none of its own is read through the result reads
 // (describe_result, sample_rows) and driven by set_sql and set_signal.
 var paneOperations = map[string][]string{
-	"editor":          {opGetState, opSetSql, opSetParam, opRun, opCancelRun, opSetRunOptions},
+	"editor":          {opGetState, opQuery, opSetSql, opSetParam, opRun, opCancelRun, opSetRunOptions},
 	"history":         {opListHistory},
 	"docs":            {opLookupDocs},
 	"preview":         {opValidateSql},

@@ -105,7 +105,7 @@ The steps above as calls, after a grant that covers the endpoint `get_state`
 names:
 
 1. `describe_table` for the table, or `get_schema` once a result is in.
-2. `set_sql` with a `SELECT *`, `run`, then `list_panes` to see which panes draw it.
+2. `query` with a `SELECT *` (or `set_sql` and `run`), then `list_panes` to see which panes draw it.
 3. `get_detail` on a row.
 4. `compute_projection`, `get_projection` until done, `explain_clusters`,
    `get_archetypes`; `publish_projection` with a `name` before the next run if

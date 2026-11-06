@@ -1238,6 +1238,32 @@ so a citation can say what it rests on. A check against a result the
 window no longer holds is a conflict naming the one held, as `sample_rows`
 answers.
 
+### 2026-11-05 — `query`: set the buffer, run it and read the first rows in one call
+
+A model reads data through three calls: `set_sql`, `run`, then
+`sample_rows`. In benchmark takes of the SECO data-quality tasks (the
+hackathon_2026 repository's agent benchmark plan, milestone M5) those
+three made up most of a turn: 37 of 48 calls in one attempt, 89 of 112 in
+another, and a turn that ran out of rounds before it wrote anything.
+
+The catalog gains `query`, an asynchronous command of effect `run`: it
+takes SQL, an optional statement number, and the rows and columns to
+answer with as `sample_rows` takes them, and answers once the run ends with
+the result's id, the result's state as `run` answers it, and its first
+rows as `sample_rows` reads them, with the statement digest. The buffer,
+the agent mark and the result are what `set_sql` and `run` leave. Its
+checks are `run`'s, judged on the SQL before the buffer changes, so a
+refused query leaves the buffer as it was; the parameters are judged from
+a parse of that SQL, since the slots follow a new buffer only after a
+debounce. SQL of several statements needs a statement number, as the
+person's caret says nothing about text the agent wrote. A run that did not
+happen answers with no result id and no rows of the result held before.
+`query` is marked untrusted, since it answers with cells; `run` stays
+trusted, and stays the command for running the buffer as it is. Play
+records the result's provenance for `check` when it answers, because the
+model learns the id then, before a snapshot may have seen the result. An
+operable view does not offer `query`, as it does not offer `set_sql`.
+
 ## References
 
 - [ADR-0269](./0269-app-operations-a-command-query-contract-agents-drive-under-a-task-grant.md) — the contract this catalog serves.

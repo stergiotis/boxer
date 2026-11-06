@@ -859,6 +859,11 @@ type PlayApp struct {
 	agentFresh        bool
 	agentRunRequested bool
 	runAgent          *app.OnBehalfOf
+	// queryRuns are the query calls in flight, by call key (play_ops_query.go).
+	queryRuns map[string]queryRun
+	// runDoneFrames counts the frames a finished run has waited for the
+	// frame to draw its result (runLanded).
+	runDoneFrames int
 	// gestureCtx is the frame context the person's gestures route through
 	// (ADR-0270 §SD6); only PlayLauncher sets it, since an embedder's
 	// context serves the embedder's catalog. gestureSignalWriter is the

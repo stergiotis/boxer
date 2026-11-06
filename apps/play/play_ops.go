@@ -492,6 +492,7 @@ var playOps = func() (s *appops.Set[*PlayLauncher, opsSnap]) {
 			return appops.None{}, p.bindPane(in.Pane, NodeID(in.Node))
 		})
 	addRunOps(s)
+	addQueryOp(s)
 	addReferenceOps(s)
 	addSchemaOps(s)
 	addCheckOp(s)
@@ -889,7 +890,7 @@ func addRunOps(playOps *appops.Set[*PlayLauncher, opsSnap]) {
 		if p == nil {
 			return out, true, app.RefuseOperation("the window has not mounted")
 		}
-		if p.requestRun || p.graph.MainLoading() {
+		if !p.runLanded() {
 			return out, false, nil
 		}
 		return snapshotState(p).Result, true, nil
@@ -924,6 +925,32 @@ func addRunOps(playOps *appops.Set[*PlayLauncher, opsSnap]) {
 			return appops.None{}, nil
 		})
 }
+
+// runLanded reports that no run is pending or in flight and that the frame
+// drew the result the panels show: the result resource then holds the
+// run's result, so a settled run carries the revision its result left. A
+// window whose frame draws no panels never moves the resource, so after a
+// few frames the run settles all the same.
+func (inst *PlayApp) runLanded() bool {
+	if inst.requestRun || inst.graph.MainLoading() {
+		inst.runDoneFrames = 0
+		return false
+	}
+	rec, _, _, _, _, _, _, _, id := inst.activeSnapshot()
+	if rec != nil {
+		rec.Release()
+	}
+	if inst.frameResult == id || inst.runDoneFrames >= runLandedFrames {
+		inst.runDoneFrames = 0
+		return true
+	}
+	inst.runDoneFrames++
+	return false
+}
+
+// runLandedFrames is how many frames a finished run waits for the frame to
+// draw its result before it settles without.
+const runLandedFrames = 3
 
 // refuseAgentRunCall is run's checks at the call, on the text the run will
 // ship: the window's class ceiling, then the agent limits (on the whole
