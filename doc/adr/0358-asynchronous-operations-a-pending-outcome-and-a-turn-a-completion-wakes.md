@@ -201,6 +201,23 @@ a window, and ADR-0308 §SD11 keeps them out until they have one.
 Accepted 2026-11-05, with every decision implemented. Wakes are covered by the
 default lane and by no scene, and the gap in the verification plan stands.
 
+## Updates
+
+### 2026-11-05 — A settled call carries the revisions its work left
+
+The engine asked the running calls whether they settled before it observed
+what the app's frame changed. A run whose result landed in that frame
+therefore completed with the `result` revision of the result before it, the
+frame's end then moved the revision, and the caller's next command writing
+`result` was a conflict, "result moved since it was read". A read between
+two runs hid it; play's `query` (ADR-0270, update of 2026-11-05), which
+writes `result` call after call, met it at once. The frame's end now
+observes the app's changes first and settles after, so a completed outcome
+carries the revisions its work left. Play's `run` and `query` also wait to
+settle until the frame drew the result the panels show, which is what the
+`result` resource holds, or until three frames passed for a window whose
+frame draws no panels.
+
 ## References
 
 - [ADR-0269](./0269-app-operations-a-command-query-contract-agents-drive-under-a-task-grant.md) — operations and phases.

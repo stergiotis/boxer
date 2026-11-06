@@ -731,13 +731,16 @@ func (inst *Engine) Gesture(op string, args []byte) (result []byte, err error) {
 }
 
 // EndFrame runs after the app's Frame: what changed since the command
-// stage, other than through a gesture, is the app's own doing.
+// stage, other than through a gesture, is the app's own doing. It is
+// observed before the running commands settle, so a command that completes
+// carries the revisions its work left, and the caller's next write is not
+// a conflict with that work.
 func (inst *Engine) EndFrame() {
-	inst.settleRunning()
 	if changed := inst.observe(opwire.WriterApp, inst.resourceSet); len(changed) > 0 {
 		inst.appendLog(LogEntry{Frame: inst.frame, Writer: opwire.WriterApp, Phase: opwire.PhaseApplied,
 			Resources: changed, Revisions: pick(inst.revs, changed)})
 	}
+	inst.settleRunning()
 }
 
 // errNoSettler fails an Async command whose handler cannot say it settled.

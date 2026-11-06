@@ -122,3 +122,23 @@ func TestAnAsyncCommandWithoutSettlesDoesNotBind(t *testing.T) {
 		func(*work, app.OperationCall, appops.None) (appops.None, error) { return appops.None{}, nil })
 	assert.Panics(t, func() { s.Bind(&work{}) })
 }
+
+// Work that lands in the frame its command settles moves what the command
+// writes; the completed outcome carries that revision, so the caller's next
+// write expects the state the work left rather than a conflict with it.
+func TestASettledCommandCarriesTheRevisionItsWorkLeft(t *testing.T) {
+	w, eng, frame := workEngine(t)
+	eng.Submit("start", opwire.CallRequest{CallId: "c1"})
+	frame()
+	// The work lands during the app's frame, between the command stage and
+	// the frame's end.
+	eng.BeginFrame()
+	eng.ApplyQueued()
+	w.runs++
+	w.done = true
+	eng.EndFrame()
+	eng.TakeSnapshot()
+	st, _ := eng.Status("c1")
+	require.Equal(t, opwire.PhaseCompleted, st.Phase)
+	assert.Equal(t, eng.Revisions()["runs"], st.Revisions["runs"])
+}
