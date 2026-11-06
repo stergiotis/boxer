@@ -41,6 +41,9 @@ func TestTheAuditSubjectIsTheSenders(t *testing.T) {
 	assert.Contains(t, refused.Reason, "recorder's own")
 
 	assert.Equal(t, "runtime.audit.app.chat", AuditSubjectOf("app.chat"))
+	assert.Equal(t, "runtime.audit.elle.terminal", AuditSubjectOf("elle/terminal"), "a slash is a token boundary")
+	term := NewAuditClient(bus.NewClient("elle/terminal", AuditClientCaps("test")), "elle/terminal")
+	require.NoError(t, term.Event(ctx, time.Time{}, "", "", row), "an app id with a slash writes to its own subject")
 	_, err = NewAuditService(nil, zerolog.Nop(), rec)
 	assert.Error(t, err)
 }

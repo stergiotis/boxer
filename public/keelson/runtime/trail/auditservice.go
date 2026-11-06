@@ -35,8 +35,12 @@ const (
 // bus.
 const AuditServiceAppId app.AppIdT = "runtime.audit"
 
-// AuditSubjectOf is the subject an app writes its audit events to.
-func AuditSubjectOf(appId app.AppIdT) string { return AuditSubjectPrefix + string(appId) }
+// AuditSubjectOf is the subject an app writes its audit events to. A slash
+// in the app id ("elle/terminal") is not a subject character and becomes a
+// token boundary; the row's origin is the envelope's sender either way.
+func AuditSubjectOf(appId app.AppIdT) string {
+	return AuditSubjectPrefix + strings.ReplaceAll(string(appId), "/", ".")
+}
 
 const auditWireVersion = 1
 
@@ -129,8 +133,7 @@ func (inst *AuditService) handle(msg *app.Msg) {
 
 // record takes one message's event, or says why not.
 func (inst *AuditService) record(msg *app.Msg) (why string) {
-	sender := string(msg.Sender)
-	if !strings.HasPrefix(msg.Subject, AuditSubjectPrefix) || strings.TrimPrefix(msg.Subject, AuditSubjectPrefix) != sender {
+	if msg.Subject != AuditSubjectOf(msg.Sender) {
 		return "an app writes audit events to its own subject"
 	}
 	w, err := buscodec.Decode[wireAuditEvent](msg.Payload)
