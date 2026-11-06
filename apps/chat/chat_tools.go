@@ -305,7 +305,7 @@ var coordinatorTools = []toolSpec{
 			return inst.call(ctx, o, call.Id, args)
 		}},
 	{name: "cite", group: toolGroupFixed,
-		description: "Check claims you drew from results before you state them: each assertion names the describe_result or sample_rows calls it rests on, says the claim, and gives a read-only SQL statement over the tables that result read which returns one row; the window runs it and you read back whether each held and what was observed. Refer to an assertion in your answer as [its id].",
+		description: "Check claims you drew from results before you state them: each assertion names the query, describe_result or sample_rows calls it rests on, says the claim, and gives a read-only SQL statement over the tables that result read which returns one row; the window runs it and you read back whether each held and what was observed. Refer to an assertion in your answer as [its id].",
 		schema:      citeSchema,
 		exec:        citeExec},
 	{name: "open_window", group: toolGroupFixed,

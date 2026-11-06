@@ -12,6 +12,8 @@ import (
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/agentrun"
 	"github.com/stergiotis/boxer/public/keelson/runtime/agentrun/projection"
+	"github.com/stergiotis/boxer/public/keelson/runtime/app"
+	"github.com/stergiotis/boxer/public/keelson/runtime/appops"
 	"github.com/stergiotis/boxer/public/keelson/runtime/inprocbus"
 	"github.com/stergiotis/boxer/public/llm/openaichat"
 )
@@ -148,4 +150,36 @@ func TestAllowOfNamesTheSetting(t *testing.T) {
 	assert.Equal(t, allowRead, allowOf("read"))
 	assert.Equal(t, allowRun, allowOf("run"))
 	assert.Equal(t, allowRun, allowOf("nonsense"), "the seed's own default")
+}
+
+// A run answers with the result it produced, so a claim may rest on it as on
+// a read of that result; a command that only changes the window may not.
+func TestCiteRestsOnARunsResultButNotOnAWrite(t *testing.T) {
+	bus := inprocbus.NewInst(zerolog.Nop())
+	id := strconv.Itoa(noteResultId)
+	model := &scriptedModel{replies: []openaichat.CompletionResponse{
+		toolCall("c1", "request_access", `{"plan":"count","open":[{"app":"notes"}]}`),
+		toolCall("c2", "open_window", `{"app":"notes"}`),
+		toolCall("c3", "call_operation", `{"window":100,"operation":"recount","args":{}}`),
+		toolCall("c4", "call_operation", `{"window":100,"operation":"set_note","args":{"Text":"one"}}`),
+		toolCall("k1", "cite", `{"assertions":[
+			{"id":"a1","rests_on":["`+id+`"],"says":"one word","form":"holds","statement":"SELECT words = 1 FROM note"},
+			{"id":"a2","rests_on":["c4"],"says":"one word","form":"holds","statement":"SELECT words = 1 FROM note"}]}`),
+		{Content: "One word [a1].", FinishReason: "stop"},
+	}}
+	ops := noteOpsSet()
+	appops.Command(ops, app.OperationSpec{Name: "recount", Version: 1, Summary: "count the note's words again, as a new result",
+		Effect: app.OperationEffectRun, Reads: []string{"text"}, Agents: true, Untrusted: true},
+		func(n *note, call app.OperationCall, in appops.None) (wordCount, error) {
+			return wordCount{ResultId: noteResultId, Words: len(strings.Fields(n.text))}, nil
+		})
+	_, coord, cli, req, ctx := coordRigWith(t, bus, model, false, ops, nil)
+	res, err := runTurn(ctx, cli, coord, req, nil)
+	require.NoError(t, err)
+	var out citeResult
+	require.NoError(t, json.Unmarshal([]byte(toolReplies(res.messages)["k1"]), &out))
+	require.Len(t, out.Assertions, 2)
+	assert.Equal(t, verdictHeld, out.Assertions[0].Outcome, out.Assertions[0].Reason)
+	assert.Equal(t, verdictUnchecked, out.Assertions[1].Outcome)
+	assert.Contains(t, out.Assertions[1].Reason, "not a read of a result")
 }

@@ -85,7 +85,7 @@ const citeNote = "Refer to an assertion in your reply by its id in square bracke
 // citeSchema is the cite tool's parameter schema.
 var citeSchema = `{"type":"object","properties":{"assertions":{"type":"array","minItems":1,"maxItems":` + strconv.Itoa(maxCiteAssertions) + `,"items":{"type":"object","properties":{` +
 	`"id":{"type":"string","description":"letters then digits, unique in this turn: a1, a2"},` +
-	`"rests_on":{"type":"array","minItems":1,"items":{"type":"string"},"description":"what the claim is drawn from, in one window: the result_id a describe_result or sample_rows answered with (its result's id), as text, e.g. \"12\""},` +
+	`"rests_on":{"type":"array","minItems":1,"items":{"type":"string"},"description":"what the claim is drawn from, in one window: the result_id a query, describe_result or sample_rows answered with (its result's id), as text, e.g. \"12\""},` +
 	`"says":{"type":"string","description":"the claim as the reply will state it"},` +
 	`"form":{"type":"string","enum":["value","holds"],"description":"value: the statement returns one cell, compared with expect at the precision expect shows; holds: it returns one boolean"},` +
 	`"statement":{"type":"string","description":"a read-only SQL statement over the tables the cited result's statement read, in the handles that result used, returning one row"},` +
@@ -230,8 +230,10 @@ func (inst *coordinator) citedSource(entries []agentrun.Entry, restsOn []string)
 		if !isOp {
 			return src, "rests on " + id + " (" + in.Name + "), which is not a window operation"
 		}
-		if in.Effect != agentrun.EffectNone && in.Effect != agentrun.EffectView {
-			return src, "rests on " + id + " (" + op + "), which is a command, not a query"
+		// A run's answer names the result it produced, which is what a
+		// query's answer names too; other commands change the window.
+		if in.Effect != agentrun.EffectNone && in.Effect != agentrun.EffectView && in.Effect != agentrun.EffectRun {
+			return src, "rests on " + id + " (" + op + "), which is a command, not a read of a result"
 		}
 		if len(src.keys) > 0 && window != src.window {
 			return src, "rests on calls of two windows; an assertion rests on one"
@@ -241,7 +243,7 @@ func (inst *coordinator) citedSource(entries []agentrun.Entry, restsOn []string)
 		case confined:
 			return src, "rests on " + id + " (" + op + "), whose result is confined and names no id you can cite"
 		case result == 0:
-			return src, "rests on " + id + " (" + op + "), whose result names no result id; cite describe_result or sample_rows"
+			return src, "rests on " + id + " (" + op + "), whose result names no result id; cite query, describe_result or sample_rows"
 		}
 		if src.result != 0 && result != src.result {
 			return src, "rests on two results of the window; an assertion rests on one"
@@ -297,7 +299,7 @@ func (inst *coordinator) citable(entries []agentrun.Entry, intents map[string]ag
 		}
 	}
 	if len(listed) == 0 {
-		return "nothing is citable yet: call describe_result or sample_rows in a window, then rest on the result_id it answers with"
+		return "nothing is citable yet: call query, describe_result or sample_rows in a window, then rest on the result_id it answers with"
 	}
 	return "you can cite: " + strings.Join(listed, ", ")
 }

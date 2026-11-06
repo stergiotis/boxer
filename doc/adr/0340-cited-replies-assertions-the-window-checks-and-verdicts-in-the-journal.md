@@ -478,6 +478,18 @@ See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-d
 
 ## Updates
 
+### 2026-11-05 — A citation may rest on a run's answer
+
+SD2's gate took only query-class calls, and the result reads were the only
+calls that named a result id. Play's `query` (ADR-0270, update of
+2026-11-05) runs SQL and answers with the result's id and its first rows,
+so a figure is often read from its answer alone. The gate now also takes a
+call of effect `run` whose answer names a result id: such an answer
+describes the result the run produced, as `describe_result` would. Other
+commands stay refused, with the reason that they are not a read of a
+result. The cite tool's description, its schema and the citations prompt
+name `query` beside `describe_result` and `sample_rows`.
+
 ### 2026-11-04 — A check rests on a result the window has run past
 
 SD9 deferred "a check against a result the window no longer holds, from
