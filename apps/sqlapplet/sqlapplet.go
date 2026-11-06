@@ -18,12 +18,12 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"sync"
 
 	"github.com/stergiotis/boxer/apps/play"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/analysis"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
-	"github.com/stergiotis/boxer/public/keelson/runtime/help"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/markdown"
 )
@@ -89,9 +89,15 @@ type AppletDef struct {
 	// [scanFences] does not nest, so a preamble cannot itself contain a
 	// fenced block.
 	Preamble string
-	// Class is the ADR-0132 §SD5 security class of SQL, computed at parse
-	// time. It gates AutoRun at mount: only QuerySecurityRead applets run on
-	// open.
+	// Class is the ADR-0132 §SD5 security class of SQL. It gates AutoRun at
+	// mount: only QuerySecurityRead applets run on open.
+	//
+	// [ParseDocSource] computes it (and HasUnboundSlots) before returning. A
+	// def minted from a committed book does not: it carries both pending
+	// until [NewEmbedded] first opens it, because classifying means parsing
+	// the buffer, and doing that for every applet of every book at startup
+	// was most of the shell's boot allocation. Until then Class holds its
+	// zero value, QuerySecurityMutating, which is the conservative reading.
 	Class analysis.QuerySecurityClassE
 	// HasUnboundSlots notes whether the buffer carries `{name:Type}`
 	// placeholders its SET prelude does not bind — signals, in ADR-0097
@@ -138,6 +144,59 @@ type AppletDef struct {
 	// Keywords are the document's optional frontmatter `keywords:` list,
 	// passed through to the manifest as free retrieval text (ADR-0158 §SD4).
 	Keywords []string
+
+	// pending is non-nil while Class and HasUnboundSlots are still to be
+	// computed (see Class). A pointer so the def stays copyable; nil on every
+	// def that is classified or built by hand, whose fields are then final.
+	pending *pendingClass
+}
+
+// pendingClass defers one def's classification to its first use. The def is
+// shared by every window of its applet, so the once is what keeps two opens
+// from classifying it twice or racing on the fields.
+type pendingClass struct {
+	once sync.Once
+	err  error
+}
+
+// ensureClassified computes Class and HasUnboundSlots if they are pending,
+// and returns the classification error, which is the same on every call. A
+// def that is not pending returns nil without parsing anything.
+func (def *AppletDef) ensureClassified() (err error) {
+	p := def.pending
+	if p == nil {
+		return
+	}
+	p.once.Do(func() {
+		p.err = def.classify()
+	})
+	err = p.err
+	return
+}
+
+// classify parses SQL and sets Class and HasUnboundSlots from the result.
+func (def *AppletDef) classify() (err error) {
+	// The §SD5 class. An unclassifiable buffer is a definition error (§SD6),
+	// never a runtime surprise — the conservative direction with the corpus
+	// test as the gate, which runs every committed applet through here.
+	pr, perr := nanopass.Parse(def.SQL)
+	if perr != nil {
+		err = eb.Build().Str("bookID", def.BookID).Str("slug", def.Slug).Errorf("sqlapplet: buffer does not parse (cannot classify, ADR-0132 §SD5/§SD6): %w", perr)
+		return
+	}
+	class, _, cerr := analysis.ClassifyQuerySecurity(pr)
+	if cerr != nil {
+		err = eb.Build().Str("bookID", def.BookID).Str("slug", def.Slug).Errorf("sqlapplet: classify: %w", cerr)
+		return
+	}
+	def.Class = class
+	// Unbound slots = placeholders minus the prelude-bound names (the
+	// ADR-0097 signal definition). Extraction failures leave the flag
+	// false — the Live preset is a convenience, never a correctness gate.
+	if unbound, uerr := play.UnboundSlotsFromParse(pr); uerr == nil {
+		def.HasUnboundSlots = unbound
+	}
+	return
 }
 
 // slugPattern is the accepted applet-slug shape. The slug becomes the minted
@@ -242,37 +301,66 @@ func scanFences(src []byte) (fences []fence) {
 // page and yields no definition (a book may carry an overview page); every
 // violation of the ADR-0132 §SD1/§SD6 rules yields one error naming the
 // document. defs come back sorted by slug.
+//
+// Every def comes back classified, which is what makes ParseBook the corpus
+// gate (§SD6). Minting uses [parseBookLazy] instead.
 func ParseBook(bookID string, fsys fs.FS) (defs []*AppletDef, errs []error) {
-	book, err := help.NewBook(app.AppIdT(appletIdPrefix+"book/"+bookID), fsys)
-	if err != nil {
-		errs = append(errs, eb.Build().Str("bookID", bookID).Errorf("sqlapplet: book: %w", err))
-		return
-	}
-	docs := book.Docs()
-	sort.Slice(docs, func(i, j int) bool { return docs[i].Path < docs[j].Path })
-	for _, info := range docs {
-		def, derr := parseDoc(bookID, book, info)
-		if derr != nil {
-			errs = append(errs, derr)
+	defs, errs = parseBookLazy(bookID, fsys)
+	kept := defs[:0]
+	for _, def := range defs {
+		if err := def.ensureClassified(); err != nil {
+			errs = append(errs, err)
 			continue
 		}
-		if def != nil {
-			defs = append(defs, def)
-		}
+		kept = append(kept, def)
 	}
-	sort.Slice(defs, func(i, j int) bool { return defs[i].Slug < defs[j].Slug })
+	defs = kept
 	return
 }
 
-// parseDoc parses one book document. A nil def with a nil error is a prose
-// page.
-func parseDoc(bookID string, book help.BookI, info help.DocInfo) (def *AppletDef, err error) {
-	src, ok := book.Source(info.Path)
-	if !ok {
-		err = eb.Build().Str("bookID", bookID).Str("path", info.Path).Errorf("sqlapplet: source unavailable")
+// parseBookLazy is [ParseBook] without classification: every def comes back
+// with Class and HasUnboundSlots pending, so no buffer is parsed. Nor is any
+// markdown: a document is read for its fences and its frontmatter only. The
+// help page each document also is gets parsed when someone opens it.
+func parseBookLazy(bookID string, fsys fs.FS) (defs []*AppletDef, errs []error) {
+	if fsys == nil {
+		errs = append(errs, eb.Build().Str("bookID", bookID).Errorf("sqlapplet: book has a nil fs.FS"))
 		return
 	}
-	def, err = ParseDocSource(bookID, info.Path, src)
+	// The documents a help book over fsys indexes, and under the same
+	// paths: every .md file at any depth, named without its suffix.
+	walkErr := fs.WalkDir(fsys, ".", func(p string, d fs.DirEntry, err error) error {
+		if err != nil {
+			errs = append(errs, eb.Build().Str("bookID", bookID).Str("path", p).Errorf("sqlapplet: walk book: %w", err))
+			if d != nil && d.IsDir() {
+				return fs.SkipDir
+			}
+			return nil
+		}
+		if d.IsDir() || !strings.HasSuffix(p, ".md") {
+			return nil
+		}
+		docPath := strings.TrimSuffix(p, ".md")
+		src, rerr := fs.ReadFile(fsys, p)
+		if rerr != nil {
+			errs = append(errs, eb.Build().Str("bookID", bookID).Str("path", docPath).Errorf("sqlapplet: source unavailable: %w", rerr))
+			return nil
+		}
+		def, derr := parseDocShape(bookID, docPath, src)
+		if derr != nil {
+			errs = append(errs, derr)
+			return nil
+		}
+		if def != nil {
+			def.pending = &pendingClass{}
+			defs = append(defs, def)
+		}
+		return nil
+	})
+	if walkErr != nil {
+		errs = append(errs, eb.Build().Str("bookID", bookID).Errorf("sqlapplet: walk book: %w", walkErr))
+	}
+	sort.Slice(defs, func(i, j int) bool { return defs[i].Slug < defs[j].Slug })
 	return
 }
 
@@ -280,8 +368,20 @@ func parseDoc(bookID string, book help.BookI, info help.DocInfo) (def *AppletDef
 // core behind the committed-book path and the runtime store's save gate
 // (ADR-0132 Update "O4"): both submit the identical document shape and are
 // judged by the identical rules. A nil def with a nil error is a prose
-// page.
+// page. The def comes back classified.
 func ParseDocSource(bookID string, path string, src []byte) (def *AppletDef, err error) {
+	def, err = parseDocShape(bookID, path, src)
+	if err != nil || def == nil {
+		return
+	}
+	err = def.classify()
+	return
+}
+
+// parseDocShape is [ParseDocSource] up to, and not including, classifying
+// the buffer: fences, frontmatter and the rules on both. It parses no
+// markdown beyond the frontmatter block.
+func parseDocShape(bookID string, path string, src []byte) (def *AppletDef, err error) {
 	fences := scanFences(src)
 	var primary, bands, preamble *fence
 	for i := range fences {
@@ -339,9 +439,13 @@ func ParseDocSource(bookID string, path string, src []byte) (def *AppletDef, err
 		err = eb.Build().Str("bookID", bookID).Str("path", path).Str("slug", slug).Str("pattern", slugPattern.String()).Errorf("sqlapplet: slug must match the required pattern")
 		return
 	}
-	doc := markdown.Parse(src)
+	kv, fmErr := markdown.ParseFrontmatter(src)
+	if fmErr != nil {
+		err = eb.Build().Str("bookID", bookID).Str("path", path).Errorf("sqlapplet: %w", fmErr)
+		return
+	}
 	fm := map[string]any{}
-	if kv := doc.Frontmatter(); kv != nil {
+	if kv != nil {
 		maps.Insert(fm, kv.IteratePairs())
 	}
 	// The frontmatter key, deliberately not DocInfo.Title — the latter falls
@@ -398,26 +502,6 @@ func ParseDocSource(bookID string, path string, src []byte) (def *AppletDef, err
 	}
 	if def.Keywords, err = parseKeywords(bookID, path, fm["keywords"]); err != nil {
 		return
-	}
-	// The §SD5 class, computed once per corpus at parse time. An
-	// unclassifiable buffer is a definition error (§SD6), never a runtime
-	// surprise — the conservative direction with the corpus as the gate.
-	pr, perr := nanopass.Parse(sql)
-	if perr != nil {
-		err = eb.Build().Str("bookID", bookID).Str("path", path).Errorf("sqlapplet: buffer does not parse (cannot classify, ADR-0132 §SD5/§SD6): %w", perr)
-		return
-	}
-	class, _, cerr := analysis.ClassifyQuerySecurity(pr)
-	if cerr != nil {
-		err = eb.Build().Str("bookID", bookID).Str("path", path).Errorf("sqlapplet: classify: %w", cerr)
-		return
-	}
-	def.Class = class
-	// Unbound slots = placeholders minus the prelude-bound names (the
-	// ADR-0097 signal definition). Extraction failures leave the flag
-	// false — the Live preset is a convenience, never a correctness gate.
-	if unbound, uerr := play.UnboundSlotsFromParse(pr); uerr == nil {
-		def.HasUnboundSlots = unbound
 	}
 	return
 }

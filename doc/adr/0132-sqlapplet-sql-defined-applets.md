@@ -753,6 +753,33 @@ in O4-D3. What it does not pass is review, so the stance of §SD5 — the
 committed corpus is the gate, `readonly` defence in depth — cannot hold for
 it, and the tab admits only a buffer §SD5 classifies **read**.
 
+## Update (2026-11-06) — minting reads fences and frontmatter; a buffer is classified when its applet first opens
+
+Minting used to parse and classify (§SD5) the buffer of every committed
+applet, and to parse each document's markdown twice — for the help index and
+again for its frontmatter — before the shell opened a window. Parsing the
+buffers was most of what minting allocated, and the markdown most of the
+rest. A minted manifest carries neither result; only an open window reads
+the class.
+
+Minting now reads a committed document's fences and frontmatter and nothing
+else. The frontmatter is read without parsing the markdown around it, by a
+reader that reproduces goldmark-meta's block rules and YAML decoder; a test
+holds it to a full parse, over edge cases and over the committed corpus. The
+buffer is parsed and classified when its applet is first opened, once per
+minted applet. Until then its class reads **mutating**, the conservative
+value, so nothing runs on open that has not been classified read.
+
+What a reader sees differently: a committed applet whose buffer does not
+parse now mints, and fails on open with the parse error, where before it was
+left out at boot. §SD6 is unchanged — the corpus test still parses and
+classifies every committed applet, and is what keeps such a document off
+`main`. A frontmatter block that is not valid YAML is reported as that,
+rather than as a missing `title`. The paths that admit a document no one
+reviewed — the O4 store, an ad-hoc bundle, a document a tab fetches from its
+origin (ADR-0299) — still classify before accepting, because there the
+classifier's verdict is the gate.
+
 ## References
 
 Internal:

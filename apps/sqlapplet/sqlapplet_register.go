@@ -284,6 +284,11 @@ func RegisterBook(id string, fsys fs.FS, topics []app.TopicT) (err error) {
 // Minting is best-effort per document — an invalid doc yields an error and
 // mints nothing, valid siblings still mint — because the corpus test (§SD6)
 // is the hard gate; at boot, a partially minted set beats no shell.
+//
+// Minting reads frontmatter and fences only. It does not parse any applet's
+// SQL: a buffer is classified when its applet first opens, so a committed
+// applet whose SQL does not parse mints, and fails on open with the parse
+// error. The corpus test is what keeps such a document off main.
 func MintManifests(logger zerolog.Logger) (minted int, errs []error) {
 	booksMu.Lock()
 	snapshot := make([]registeredBook, len(books))
@@ -306,7 +311,10 @@ func mintBooks(reg *app.Registry, logger zerolog.Logger, snapshot []registeredBo
 			errs = append(errs, eb.Build().Str("id", b.id).Errorf("sqlapplet: book has no default topics (ADR-0158 §SD7)"))
 			continue
 		}
-		defs, perrs := ParseBook(b.id, b.fsys)
+		// Lazy: no buffer is parsed here. Classification waits for the
+		// applet's first open (AppletDef.Class); the corpus test, which
+		// goes through ParseBook, still classifies every committed applet.
+		defs, perrs := parseBookLazy(b.id, b.fsys)
 		errs = append(errs, perrs...)
 		for _, def := range defs {
 			if prior, dup := seen[def.Slug]; dup {
@@ -335,7 +343,7 @@ func mintBooks(reg *app.Registry, logger zerolog.Logger, snapshot []registeredBo
 				continue
 			}
 			minted++
-			logger.Debug().Str("id", string(m.Id)).Str("class", defCopy.Class.String()).Msg("sqlapplet: minted")
+			logger.Debug().Str("id", string(m.Id)).Msg("sqlapplet: minted")
 		}
 	}
 	return

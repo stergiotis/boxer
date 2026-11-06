@@ -57,6 +57,12 @@ type EmbedConfig struct {
 // ADR-0134 §SD7). Instance-id salting is per-PlayApp automatically
 // (NewPlayApp), so embedded instances do not collide.
 func NewEmbedded(def *AppletDef, cfg EmbedConfig) (inner *play.PlayApp, err error) {
+	// A def minted from a committed book is classified here, on its first
+	// open, rather than at startup (see AppletDef.Class). Everything below
+	// reads the class, so this comes first.
+	if err = def.ensureClassified(); err != nil {
+		return nil, err
+	}
 	clientCfg, err := resolveClientConfig(def, cfg.EndpointURL)
 	if err != nil {
 		return nil, err
@@ -70,7 +76,7 @@ func NewEmbedded(def *AppletDef, cfg EmbedConfig) (inner *play.PlayApp, err erro
 	// flows into the engine and widens no egress, so a dataset applet stays
 	// read-class (ADR-0134 §SD4).
 	inner.AutoRun = def.Class == analysis.QuerySecurityRead
-	// The mint-time class is also a CEILING on what a SQL-valued knob may turn
+	// The class is also a CEILING on what a SQL-valued knob may turn
 	// this query into (ADR-0187 §SD5). Without it an `{c:Expr}` knob
 	// would let a reader of a frozen read-class applet splice in a `url(…)` and
 	// reach outside the endpoint the document promised — the applet's whole
