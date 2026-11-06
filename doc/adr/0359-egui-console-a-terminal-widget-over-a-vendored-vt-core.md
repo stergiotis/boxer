@@ -184,3 +184,14 @@ that is not a person, such as an agent's operation or a test. Because
 there is no request, nothing in the IDL changes, and a console that no one
 reads still pays for one text copy per change, ten a second at most.
 Selection, the mouse, scrollback, links and rows as nodes stay deferred.
+
+### 2026-11-06 — §SD5: a fixed grid
+
+SD5 has the grid follow the rect. A replay of a recorded session needs the
+grid the session had, whatever the pane holds. `console` gains a `grid(cols,
+rows)` method, and `console.Options` gains `Cols` and `Rows`. A fixed axis
+keeps its count, capped at 1000 like any other, and the widget takes the
+grid's size in points on that axis, so a pane that is too small clips it
+or scrolls it. An axis left at zero follows the room as before. The size
+row still reports the grid, so a program under a fixed grid sees no
+resize while the pane changes. The IDL fingerprint moves.

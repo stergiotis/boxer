@@ -48,12 +48,19 @@ func definitionsConsole() (nodes []ir.NodeI) {
 			// The monospace font size in points; zero takes the style's.
 			BeginMethod("fontSize").Arg("fs", ctabb.F32).
 			CodeClientRust(rustClientCode("font_size = fs;\n")).EndMethod().
+			// A fixed grid of cols by rows, whatever room the widget is
+			// given: a replay at a recorded size. The widget takes the grid's
+			// size in points; zero on an axis follows the room.
+			BeginMethod("grid").Arg("cols", ctabb.U16).Arg("rows", ctabb.U16).
+			CodeClientRust(rustClientCode("grid_cols = cols;\ngrid_rows = rows;\n")).EndMethod().
 			Build()...).
 		WithConstructionCodeClientRust(rustClientCode(`0u8;
 let mut history_bytes = 0u32;
 let mut font_size = 0f32;
 let mut size_w = 0f32;
 let mut size_h = 0f32;
+let mut grid_cols = 0u16;
+let mut grid_rows = 0u16;
 `)).
 		WithApplyCodeClientRust(rustClientCode(`
 if {{EguiUiOptionalOuter}}.is_some() {
@@ -67,6 +74,7 @@ if {{EguiUiOptionalOuter}}.is_some() {
             history_bytes,
             font_size,
             size: egui::vec2(size_w, size_h),
+            grid: (grid_cols, grid_rows),
         },
     );
 }

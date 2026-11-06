@@ -3197,6 +3197,8 @@ egui::ComboBox::new(i,label).selected_text(selected_text);
                 let mut font_size = 0f32;
                 let mut size_w = 0f32;
                 let mut size_h = 0f32;
+                let mut grid_cols = 0u16;
+                let mut grid_rows = 0u16;
                 // methods
                 loop {
                     let (m, _) = self.read_from_repr(ConsoleBuilderMethodId::from_repr)?;
@@ -3224,6 +3226,14 @@ egui::ComboBox::new(i,label).selected_text(selected_text);
                             let mut fs = self.io.read_plain_f32()?;
                             font_size = fs;
                         }
+                        ConsoleBuilderMethodId::Grid => {
+                            #[cfg(feature = "puffin")]
+                            puffin::profile_scope!("match ConsoleBuilderMethodId::Grid");
+                            let mut cols = self.io.read_plain_u16()?;
+                            let mut rows = self.io.read_plain_u16()?;
+                            grid_cols = cols;
+                            grid_rows = rows;
+                        }
                     }
                 }
                 if d == 0 {
@@ -3243,6 +3253,7 @@ egui::ComboBox::new(i,label).selected_text(selected_text);
                             history_bytes,
                             font_size,
                             size: egui::vec2(size_w, size_h),
+                            grid: (grid_cols, grid_rows),
                         },
                     );
                 }

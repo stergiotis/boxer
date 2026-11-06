@@ -44,6 +44,10 @@ type Options struct {
 	// MaxPending bounds the bytes Write holds before it blocks; zero takes
 	// 16 MiB.
 	MaxPending int
+	// Cols and Rows fix the grid, whatever room the console is given: a
+	// replay at a recorded size. The console then takes the grid's size in
+	// points; zero on an axis follows the room.
+	Cols, Rows uint16
 }
 
 // ErrClosed is what Write returns once the console is closed.
@@ -198,6 +202,9 @@ func (inst *Console) render(w, h float32) (ev Events) {
 	}
 	if inst.Opts.FontSize > 0 {
 		f = f.FontSize(inst.Opts.FontSize)
+	}
+	if inst.Opts.Cols > 0 || inst.Opts.Rows > 0 {
+		f = f.Grid(inst.Opts.Cols, inst.Opts.Rows)
 	}
 	f.Send()
 	return

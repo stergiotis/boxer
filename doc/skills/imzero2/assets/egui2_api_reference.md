@@ -33,7 +33,7 @@ status: draft
 | CollapsingHeader | BuilderFactory | Yes | 0 | 1 | 3 | Immediate, Retained, BlockIterator |
 | Color | BuilderFactory | No | 0 | 0 | 34 | Retained |
 | ComboBox | BuilderFactory | Yes | 0 | 2 | 4 | Immediate, Retained, BlockIterator |
-| Console | BuilderFactory | Yes | 2 | 0 | 3 | Immediate |
+| Console | BuilderFactory | Yes | 2 | 0 | 4 | Immediate |
 | ConsoleRelease | BuilderFactory | Yes | 0 | 0 | 0 | Immediate |
 | ContextInspectionUi | Procedural | No | 0 | 0 | - | - |
 | ContextMenu | BuilderFactory | No | 0 | 0 | 0 | Immediate |
@@ -503,6 +503,7 @@ Block
 - **HistoryBytes**(hb: u32)
 - **Size**(wd: f32, ht: f32)
 - **FontSize**(fs: f32)
+- **Grid**(cols: u16, rows: u16)
 
 #### Return Type
 

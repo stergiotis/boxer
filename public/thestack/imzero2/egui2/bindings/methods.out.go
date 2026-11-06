@@ -739,6 +739,15 @@ func (inst ConsoleFluid) FontSize(fs float32) ConsoleFluid {
 	return inst
 }
 
+func (inst ConsoleFluid) Grid(cols uint16, rows uint16) ConsoleFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(ConsoleMethodIdGrid))
+	r.WriteUint16(cols)
+	r.WriteUint16(rows)
+
+	return inst
+}
+
 func (inst ConsoleFluid) Send() {
 	r := inst.r
 	r.WriteOpCode(uint32(ConsoleMethodIdBuild))

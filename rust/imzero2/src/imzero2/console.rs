@@ -69,6 +69,8 @@ pub struct ConsoleArgs<'a> {
     pub font_size: f32,
     /// The widget's size in points; zero on an axis takes what is left.
     pub size: Vec2,
+    /// A fixed grid, columns then rows; zero on an axis follows the room.
+    pub grid: (u16, u16),
 }
 
 // ---------------------------------------------------------------- the core seam
@@ -519,14 +521,26 @@ impl ConsoleCache {
                 left.y
             },
         );
-        let cols = ((avail.x / cell.x).floor() as i64).clamp(1, MAX_CELLS) as u16;
-        let rows = ((avail.y / cell.y).floor() as i64).clamp(1, MAX_CELLS) as u16;
+        let fit = |given: u16, room: f32, cell: f32| -> u16 {
+            if given > 0 {
+                (i64::from(given)).clamp(1, MAX_CELLS) as u16
+            } else {
+                ((room / cell).floor() as i64).clamp(1, MAX_CELLS) as u16
+            }
+        };
+        let cols = fit(args.grid.0, avail.x, cell.x);
+        let rows = fit(args.grid.1, avail.y, cell.y);
         // The rect: the room given, up to a cell past the grid, so the
-        // remainder of a pixel-sized pane is the console's background.
-        let area = Vec2::new(
-            avail.x.min(f32::from(cols + 1) * cell.x).max(cell.x),
-            avail.y.min(f32::from(rows + 1) * cell.y).max(cell.y),
-        );
+        // remainder of a pixel-sized pane is the console's background; a
+        // fixed axis takes the grid's size, room or not.
+        let side = |given: u16, room: f32, n: u16, cell: f32| -> f32 {
+            if given > 0 {
+                f32::from(n) * cell
+            } else {
+                room.min(f32::from(n + 1) * cell).max(cell)
+            }
+        };
+        let area = Vec2::new(side(args.grid.0, avail.x, cols, cell.x), side(args.grid.1, avail.y, rows, cell.y));
         let history = if args.history_bytes > 0 {
             args.history_bytes
         } else {
