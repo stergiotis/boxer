@@ -21,7 +21,7 @@ status: draft
 | AnimateBoolResponsive | Procedural | No | 2 | 0 | - | - |
 | AnimateBoolWithTime | Procedural | No | 3 | 0 | - | - |
 | AnimateValueWithTime | Procedural | No | 3 | 0 | - | - |
-| Atoms | BuilderFactory | No | 0 | 0 | 20 | Retained |
+| Atoms | BuilderFactory | No | 0 | 0 | 21 | Retained |
 | Button | BuilderFactory | Yes | 0 | 1 | 9 | Immediate, Retained |
 | CaptureAvailableSize | Procedural | No | 0 | 0 | - | - |
 | CaptureReplay | Procedural | No | 3 | 0 | - | - |
@@ -271,6 +271,7 @@ Block
 - **Monospace**()
 - **Code**()
 - **Strong**()
+- **Bold**()
 - **Weak**()
 - **Underline**()
 - **Strikethrough**()

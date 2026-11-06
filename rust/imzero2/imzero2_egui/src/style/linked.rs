@@ -15,7 +15,7 @@
 
 use std::sync::Arc;
 
-use egui::emath::GuiRounding;
+use egui::emath::GuiRounding as _;
 use egui::text::LayoutJob;
 use egui::{
     Color32, CursorIcon, Label, Pos2, Rect, Response, Sense, Shape, Stroke, TextWrapMode, Ui, pos2,
@@ -25,7 +25,8 @@ use super::pill::{Pill, section_runs, take_pills};
 use super::tokens;
 
 pub struct LinkedLabel {
-    label: Label,
+    job: LayoutJob,
+    wrap_mode: Option<TextWrapMode>,
     selectable: Option<bool>,
     /// One entry per job section; `None` where the section has no background.
     pills: Vec<Option<Pill>>,
@@ -52,7 +53,8 @@ impl LinkedLabel {
     pub fn new(mut job: LayoutJob, link_of_section: Vec<Option<usize>>) -> Self {
         let pills = take_pills(&mut job);
         Self {
-            label: Label::new(job).sense(Sense::click()),
+            job,
+            wrap_mode: None,
             selectable: None,
             pills,
             link_of_section,
@@ -62,23 +64,33 @@ impl LinkedLabel {
     /// Mirrors `Label::selectable`.
     pub fn selectable(mut self, selectable: bool) -> Self {
         self.selectable = Some(selectable);
-        self.label = self.label.selectable(selectable);
         self
     }
 
     /// Mirrors `Label::wrap_mode`.
     pub fn wrap_mode(mut self, mode: TextWrapMode) -> Self {
-        self.label = self.label.wrap_mode(mode);
+        self.wrap_mode = Some(mode);
         self
     }
 
     pub fn show(self, ui: &mut Ui) -> LinkedOut {
         let Self {
-            label,
+            mut job,
+            wrap_mode,
             selectable,
             pills,
             link_of_section,
         } = self;
+        // The job's baselines are aligned here rather than in `new`, since
+        // the fonts are the `Ui`'s (`style::baseline`).
+        super::baseline::align(ui, &mut job);
+        let mut label = Label::new(job).sense(Sense::click());
+        if let Some(mode) = wrap_mode {
+            label = label.wrap_mode(mode);
+        }
+        if let Some(selectable) = selectable {
+            label = label.selectable(selectable);
+        }
         let selectable = selectable.unwrap_or_else(|| ui.style().interaction.selectable_labels);
         // Reserve a slot below the text for the pills and underlines: shapes
         // added after the label would paint over its glyphs.

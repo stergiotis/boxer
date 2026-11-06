@@ -2131,6 +2131,9 @@ impl<R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'_, R, W> {
                                         AtomsBuilderMethodId::Strong => {
                                             rt = rt.strong();
                                         }
+                                        AtomsBuilderMethodId::Bold => {
+                                            rt = rt.family(imzero2_egui::style::tokens::typography::bold_family());
+                                        }
                                         AtomsBuilderMethodId::Weak => {
                                             rt = rt.weak();
                                         }
@@ -2258,6 +2261,9 @@ impl<R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'_, R, W> {
                                         AtomsBuilderMethodId::Strong => {
                                             rt = rt.strong();
                                         }
+                                        AtomsBuilderMethodId::Bold => {
+                                            rt = rt.family(imzero2_egui::style::tokens::typography::bold_family());
+                                        }
                                         AtomsBuilderMethodId::Weak => {
                                             rt = rt.weak();
                                         }
@@ -2376,6 +2382,13 @@ impl<R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'_, R, W> {
                         AtomsBuilderMethodId::Strong => {
                             #[cfg(feature = "puffin")]
                             puffin::profile_scope!("match AtomsBuilderMethodId::Strong");
+                            tracing::warn!(
+                                "rich text style method called outside richText/endRichText scope, ignoring"
+                            );
+                        }
+                        AtomsBuilderMethodId::Bold => {
+                            #[cfg(feature = "puffin")]
+                            puffin::profile_scope!("match AtomsBuilderMethodId::Bold");
                             tracing::warn!(
                                 "rich text style method called outside richText/endRichText scope, ignoring"
                             );

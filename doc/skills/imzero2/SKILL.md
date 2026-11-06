@@ -441,6 +441,7 @@ Only `Text(...)` and `Keep()` stay exported on `AtomsFluid`.
 | Expression | Compiles? | Why |
 |:---|:---|:---|
 | `Atoms().BeginRichText("x").Strong().End()` | Yes | `Strong()` is on `RichTextScope` |
+| `Atoms().BeginRichText("x").Bold().End()` | Yes | `Bold()` selects the host's bold face; `Strong()` is only the strong colour, so a heading takes both |
 | `Atoms().Text("x")` | Yes | `Text` (plain atom) stays exported on `AtomsFluid` |
 | `Atoms().Strong()` | No | style methods are unexported on `AtomsFluid` — use `BeginRichText(…).Strong()` |
 | `Atoms().RichTextColored(v, fg, bg).Text(y)` | No | `RichTextColored` is unexported — the old runtime-desync footgun, now caught at compile time |

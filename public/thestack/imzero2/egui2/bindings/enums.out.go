@@ -203,7 +203,7 @@ const (
 // IdlFingerprint is the IDL these bindings were generated from, as
 // ir.Fingerprint digests it; the Rust client's generated enums carry the same
 // value from the same generation (ADR-0278 SD6, proposed).
-const IdlFingerprint uint64 = 0x2132de4f2e5cd63a
+const IdlFingerprint uint64 = 0x348ff35a1bf10b14
 const (
 	AtomsMethodIdBuild AtomsMethodIdE = 0
 
@@ -219,14 +219,15 @@ const (
 	AtomsMethodIdMonospace          AtomsMethodIdE = 10
 	AtomsMethodIdCode               AtomsMethodIdE = 11
 	AtomsMethodIdStrong             AtomsMethodIdE = 12
-	AtomsMethodIdWeak               AtomsMethodIdE = 13
-	AtomsMethodIdUnderline          AtomsMethodIdE = 14
-	AtomsMethodIdStrikethrough      AtomsMethodIdE = 15
-	AtomsMethodIdItalics            AtomsMethodIdE = 16
-	AtomsMethodIdSmall              AtomsMethodIdE = 17
-	AtomsMethodIdSmallRaised        AtomsMethodIdE = 18
-	AtomsMethodIdRaised             AtomsMethodIdE = 19
-	AtomsMethodIdTextStyleName      AtomsMethodIdE = 20
+	AtomsMethodIdBold               AtomsMethodIdE = 13
+	AtomsMethodIdWeak               AtomsMethodIdE = 14
+	AtomsMethodIdUnderline          AtomsMethodIdE = 15
+	AtomsMethodIdStrikethrough      AtomsMethodIdE = 16
+	AtomsMethodIdItalics            AtomsMethodIdE = 17
+	AtomsMethodIdSmall              AtomsMethodIdE = 18
+	AtomsMethodIdSmallRaised        AtomsMethodIdE = 19
+	AtomsMethodIdRaised             AtomsMethodIdE = 20
+	AtomsMethodIdTextStyleName      AtomsMethodIdE = 21
 )
 
 const (

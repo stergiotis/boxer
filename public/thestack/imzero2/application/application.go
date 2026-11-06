@@ -117,6 +117,9 @@ func (inst *Application[U]) Launch() (err error) {
 		if cfg.FallbackFontTTF != "" {
 			args = append(args, "-fallbackFontTTF", cfg.FallbackFontTTF)
 		}
+		if cfg.BoldFontTTF != "" {
+			args = append(args, "-boldFontTTF", cfg.BoldFontTTF)
+		}
 		if cfg.MainFontSizeInPixels > 0 {
 			args = append(args, "-mainFontSizeInPixels", fmt.Sprintf("%g", cfg.MainFontSizeInPixels))
 		}

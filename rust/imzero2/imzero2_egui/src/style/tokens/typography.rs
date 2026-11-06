@@ -56,6 +56,24 @@ pub const FAMILY_MONO: &str = "ids-mono";
 /// Phosphor brand-mark subset (Linux, GitHub, Apple, Google, …).
 pub const FAMILY_ICONS_PHOSPHOR: &str = "phosphor";
 
+/// The bold proportional family, as a name for `FontFamily::Name`.
+///
+/// egui carries no weight on a text format and epaint synthesises none,
+/// so bold text is text set in another face. A host registers its bold
+/// face under this family (`--boldFontTTF`, the `bold` slot in
+/// `apphost::load_custom_fonts`); [`install_fonts`] registers the family
+/// too, as an alias of the proportional chain, so a `FontId` naming it
+/// resolves on every host — a host without a bold face shows regular
+/// weight, not a panic. The IDS bundle ships no bold face yet (the size
+/// budget above); the markdown widget's `Bold()` atoms selects it.
+pub const FAMILY_BOLD: &str = "bold";
+
+/// `FontFamily::Name(FAMILY_BOLD)`.
+#[inline]
+pub fn bold_family() -> FontFamily {
+    FontFamily::Name(FAMILY_BOLD.into())
+}
+
 // ---- Embedded font bytes ----
 
 /// Iosevka Aile Regular — proportional default.
@@ -121,6 +139,10 @@ pub fn install_fonts(defs: &mut FontDefinitions) {
     // through as the icon-codepoint fallback per ADR-0044 §SD5.
     defs.families.entry(FontFamily::Monospace).or_default().insert(0, FAMILY_MONO.to_owned());
     defs.families.entry(FontFamily::Monospace).or_default().push(FAMILY_ICONS_PHOSPHOR.to_owned());
+    // The bold family resolves to the proportional chain until a bold
+    // face is embedded (see `FAMILY_BOLD`).
+    let proportional = defs.families.get(&FontFamily::Proportional).cloned().unwrap_or_default();
+    defs.families.insert(bold_family(), proportional);
 }
 
 /// One-shot startup helper. Calls `install_fonts` against a fresh
@@ -208,6 +230,14 @@ mod tests {
     fn density_scaling_roomy_adds_one() {
         assert_eq!(scaled(BODY_PT, Density::Roomy), 14.0);
         assert_eq!(scaled(MICRO_PT, Density::Roomy), 10.0);
+    }
+
+    #[test]
+    fn bold_family_resolves_without_a_bold_face() {
+        let mut defs = FontDefinitions::default();
+        install_fonts(&mut defs);
+        let bold = defs.families.get(&bold_family()).expect("the bold family is registered");
+        assert_eq!(bold, &defs.families[&FontFamily::Proportional]);
     }
 
     #[test]

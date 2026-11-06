@@ -150,10 +150,13 @@ type FontTweakConfig struct {
 type Config struct {
 	ImZeroSkiaClientConfig *ImZeroClientConfig
 
-	MainFontTTF       string
-	MonoFontTTF       string
-	PhosphorFontTTF   string
-	FallbackFontTTF   string
+	MainFontTTF     string
+	MonoFontTTF     string
+	PhosphorFontTTF string
+	FallbackFontTTF string
+	// BoldFontTTF is the bold face of the main family; empty shows bold
+	// text at regular weight. It takes MainFontTweak.
+	BoldFontTTF       string
 	MainFontTweak     FontTweakConfig
 	MonoFontTweak     FontTweakConfig
 	PhosphorFontTweak FontTweakConfig
@@ -187,6 +190,12 @@ func (inst *Config) ToCliFlags(nameTransf config.NameTransformFunc, envVarNameTr
 		&cli.StringFlag{
 			Name:     nameTransf("fallbackFontTTF"),
 			Value:    inst.FallbackFontTTF,
+			Category: "fonts",
+		},
+		&cli.StringFlag{
+			Name:     nameTransf("boldFontTTF"),
+			Value:    inst.BoldFontTTF,
+			Usage:    "bold proportional face; empty shows bold text at regular weight",
 			Category: "fonts",
 		},
 		&cli.Float64Flag{
@@ -244,6 +253,7 @@ func (inst *Config) FromContext(ctx context.Context, nameTransf config.NameTrans
 	inst.MonoFontTTF = cmd.String(nameTransf("monoFontTTF"))
 	inst.PhosphorFontTTF = cmd.String(nameTransf("phosphorFontTTF"))
 	inst.FallbackFontTTF = cmd.String(nameTransf("fallbackFontTTF"))
+	inst.BoldFontTTF = cmd.String(nameTransf("boldFontTTF"))
 	inst.MainFontSizeInPixels = float32(cmd.Float64(nameTransf("mainFontSizeInPixels")))
 	inst.MainFontTweak = FontTweakConfig{
 		Scale:         float32(cmd.Float64(nameTransf("mainFontScale"))),

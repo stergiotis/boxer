@@ -80,6 +80,11 @@ pub struct AppConfig {
     /// path to fallback font TTF file (CJK/international coverage;
     /// fallback in both families)
     pub fallback_font_ttf: String,
+    /// path to the bold proportional face (`FontFamily::Name("bold")`,
+    /// `imzero2_egui::style::tokens::typography::FAMILY_BOLD`). Empty
+    /// leaves the bold family an alias of the proportional chain, so
+    /// bold text shows at regular weight. Takes the main font's tweak.
+    pub bold_font_ttf: String,
     /// main font size in pixels
     pub main_font_size: f32,
 
@@ -107,6 +112,7 @@ impl Default for AppConfig {
             mono_font_ttf: String::new(),
             phosphor_font_ttf: String::new(),
             fallback_font_ttf: String::new(),
+            bold_font_ttf: String::new(),
             main_font_size: 14.0,
             main_font_tweak: FontTweakConfig::default(),
             mono_font_tweak: FontTweakConfig::default(),
@@ -177,6 +183,8 @@ impl AppConfig {
             "-fallbackFontTTF",
             self.fallback_font_ttf.clone(),
         );
+        self.bold_font_ttf =
+            flags::find_flag_default(args, used, "-boldFontTTF", self.bold_font_ttf.clone());
         self.main_font_size = flags::find_flag_value_default_parsable(
             args,
             used,
@@ -307,6 +315,7 @@ impl AppConfig {
         writeln!(w, "\t-monoFontTTF [string:{}]", self.mono_font_ttf)?;
         writeln!(w, "\t-phosphorFontTTF [string:{}]", self.phosphor_font_ttf)?;
         writeln!(w, "\t-fallbackFontTTF [string:{}]", self.fallback_font_ttf)?;
+        writeln!(w, "\t-boldFontTTF [string:{}]", self.bold_font_ttf)?;
         writeln!(w, "\t-mainFontSizeInPixels [f32:{}]", self.main_font_size)?;
 
         writeln!(w, "font tweak flags:")?;

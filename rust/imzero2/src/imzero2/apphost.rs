@@ -46,6 +46,7 @@ pub fn load_custom_fonts_with(
     let mut mono_bytes: Option<(Vec<u8>, u32)> = None;
     let mut phosphor_bytes: Option<(Vec<u8>, u32)> = None;
     let mut fallback_bytes: Option<(Vec<u8>, u32)> = None;
+    let mut bold_bytes: Option<(Vec<u8>, u32)> = None;
 
     let mut load_font = |path: &str,
                          name: &str,
@@ -113,8 +114,16 @@ pub fn load_custom_fonts_with(
         &config.fallback_font_tweak,
         Some(&mut fallback_bytes),
     );
+    // The bold face shares the main face's tweak so the two weights sit on
+    // one baseline at one scale; see `AppConfig::bold_font_ttf`.
+    let has_bold = load_font(
+        &config.bold_font_ttf,
+        "bold",
+        &config.main_font_tweak,
+        Some(&mut bold_bytes),
+    );
 
-    if !has_main && !has_mono && !has_phosphor && !has_fallback {
+    if !has_main && !has_mono && !has_phosphor && !has_fallback && !has_bold {
         return resolver; // no custom fonts, keep egui defaults; empty resolver
     }
 
@@ -154,6 +163,16 @@ pub fn load_custom_fonts_with(
         chain.extend(defaults);
         fonts.families.insert(family, chain);
     }
+    // The bold family: the bold face ahead of the proportional chain, so a
+    // glyph the bold face lacks falls through to the same faces regular
+    // text uses; without a bold face, the proportional chain itself.
+    let bold_family = imzero2_egui::style::tokens::typography::bold_family();
+    let mut bold_chain = Vec::new();
+    if has_bold {
+        bold_chain.push("bold".to_owned());
+    }
+    bold_chain.extend(fonts.families[&egui::FontFamily::Proportional].iter().cloned());
+    fonts.families.insert(bold_family.clone(), bold_chain);
 
     // Register per-family chains with the SVG resolver so Tier 1 emits the
     // right CSS family value and Tier 2 routes each glyph to the first
@@ -194,12 +213,18 @@ pub fn load_custom_fonts_with(
             out
         };
     let prop_chain = build_svg(main_arc);
+    let prop_chain_for_bold = prop_chain.clone();
     if !prop_chain.is_empty() {
         resolver.register_chain(egui::FontFamily::Proportional, prop_chain);
     }
     let mono_chain = build_svg(mono_arc);
     if !mono_chain.is_empty() {
         resolver.register_chain(egui::FontFamily::Monospace, mono_chain);
+    }
+    if let Some((bytes, index)) = bold_bytes.take() {
+        let mut chain = vec![(std::sync::Arc::new(bytes), index)];
+        chain.extend(prop_chain_for_bold);
+        resolver.register_chain(bold_family, chain);
     }
 
     ctx.set_fonts(fonts);

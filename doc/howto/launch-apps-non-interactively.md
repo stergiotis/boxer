@@ -114,7 +114,9 @@ echo $! > "$S/host.pid"
 ```
 
 Fonts: resolve `$MAIN_FONT` / `$MONO_FONT` with `fc-match` (`Noto Sans`,
-`DejaVu Sans Mono`). If what you want is a repeatable scenario rather than a
+`DejaVu Sans Mono`); add `--boldFontTTF` with the main family's bold face
+(`fc-match 'Noto Sans:bold'`), or headings and strong text render at
+regular weight. If what you want is a repeatable scenario rather than a
 process to poke at, skip this launch line altogether: a scene document run by
 `scripts/dev/scene.sh` does the launch, the ports, the fonts and the teardown
 itself ([ADR-0248](../adr/0248-imzero2-scenes-one-runner-and-assertions-in-the-trace.md);

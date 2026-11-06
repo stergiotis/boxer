@@ -943,9 +943,10 @@ pub fn render_svg_from_context(
                 continue;
             }
             let mut synth_names: Vec<String> = Vec::with_capacity(subsets.len());
+            let bold = *family == imzero2_egui::style::tokens::typography::bold_family();
             for sub in &subsets {
                 let synth = format!("svg-embed-{}", b.next_embed_id());
-                b.add_embedded_font(&synth, &sub.bytes);
+                b.add_embedded_font(&synth, &sub.bytes, bold);
                 synth_names.push(format!("'{synth}'"));
             }
             // Append the generic so out-of-coverage chars (e.g. control
@@ -1067,9 +1068,10 @@ pub fn render_svg_window(
                 continue;
             }
             let mut synth_names: Vec<String> = Vec::with_capacity(subsets.len());
+            let bold = *family == imzero2_egui::style::tokens::typography::bold_family();
             for sub in &subsets {
                 let synth = format!("svg-embed-{}", b.next_embed_id());
-                b.add_embedded_font(&synth, &sub.bytes);
+                b.add_embedded_font(&synth, &sub.bytes, bold);
                 synth_names.push(format!("'{synth}'"));
             }
             synth_names.push(generic_for(family).to_owned());
@@ -1139,9 +1141,10 @@ where
                 continue;
             }
             let mut synth_names: Vec<String> = Vec::with_capacity(subsets.len());
+            let bold = *family == imzero2_egui::style::tokens::typography::bold_family();
             for sub in &subsets {
                 let synth = format!("svg-embed-{}", b.next_embed_id());
-                b.add_embedded_font(&synth, &sub.bytes);
+                b.add_embedded_font(&synth, &sub.bytes, bold);
                 synth_names.push(format!("'{synth}'"));
             }
             synth_names.push(generic_for(family).to_owned());
@@ -1421,12 +1424,16 @@ impl SvgBuilder {
         }
     }
 
-    fn add_embedded_font(&mut self, synth_name: &str, subset_bytes: &[u8]) {
+    /// `bold` declares the face at weight 700, so text in it at
+    /// `font-weight: bold` takes the embedded glyphs instead of a
+    /// synthetic emboldening of a face declared at the default weight.
+    fn add_embedded_font(&mut self, synth_name: &str, subset_bytes: &[u8], bold: bool) {
         use base64::Engine as _;
         let b64 = base64::engine::general_purpose::STANDARD.encode(subset_bytes);
+        let weight = if bold { " font-weight: bold;" } else { "" };
         let _ = writeln!(
             self.style_block,
-            "      @font-face {{ font-family: '{synth_name}'; src: url(data:font/ttf;base64,{b64}) format('truetype'); }}"
+            "      @font-face {{ font-family: '{synth_name}';{weight} src: url(data:font/ttf;base64,{b64}) format('truetype'); }}"
         );
     }
 
@@ -1740,7 +1747,14 @@ impl SvgBuilder {
                     // export start and emit `font-weight` so browsers
                     // synth-bold (or thin) when the embedded subset is
                     // single-weight.
-                    let weight_attr = if self.weights.strong == Some(glyph_color) {
+                    // A run in the bold family is bold whatever its colour:
+                    // the embedded subset of the bold face carries the
+                    // weight in its own @font-face, and a viewer without
+                    // the embed synth-bolds the regular face.
+                    let in_bold_family = format.font_id.family
+                        == imzero2_egui::style::tokens::typography::bold_family();
+                    let weight_attr = if in_bold_family || self.weights.strong == Some(glyph_color)
+                    {
                         " font-weight=\"bold\""
                     } else if self.weights.weak == Some(glyph_color) {
                         " font-weight=\"lighter\""

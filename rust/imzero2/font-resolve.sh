@@ -96,6 +96,9 @@ imzero2_resolve_fonts() {
 	# resort for a box without fontconfig.
 	MAIN_FONT="${MAIN_FONT:-$(imzero2_resolve_family 'Noto Sans' 'Noto Sans')}"
 	MAIN_FONT="${MAIN_FONT:-/usr/share/fonts/google-noto-vf/NotoSans[wght].ttf}"
+	# The bold face of the same family; headings and strong text fall back
+	# to regular weight without it.
+	BOLD_FONT="${BOLD_FONT:-$(imzero2_resolve_family 'Noto Sans:bold' 'Noto Sans')}"
 
 	# Preference order: DejaVu Sans Mono is the widest-installed face that
 	# covers the box-drawing block; Liberation Mono and Adwaita Mono are the
@@ -145,5 +148,6 @@ imzero2_resolve_fonts() {
 	if [ -n "${MONO_FONT:-}" ]; then IMZERO2_FONT_ARGS+=(--monoFontTTF "$MONO_FONT"); fi
 	if [ -n "${PHOSPHOR_FONT:-}" ]; then IMZERO2_FONT_ARGS+=(--phosphorFontTTF "$PHOSPHOR_FONT"); fi
 	if [ -n "${FALLBACK_FONT:-}" ]; then IMZERO2_FONT_ARGS+=(--fallbackFontTTF "$FALLBACK_FONT"); fi
+	if [ -n "${BOLD_FONT:-}" ]; then IMZERO2_FONT_ARGS+=(--boldFontTTF "$BOLD_FONT"); fi
 	return 0
 }

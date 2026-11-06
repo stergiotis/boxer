@@ -225,6 +225,9 @@ func Launch(spec Spec, opts Options) (s *Session, err error) {
 		// Without a fallback a codepoint the main font lacks renders as a
 		// different glyph than on a desktop launch, at a different size.
 		{"--fallbackFontTTF", resolveFont("Noto Sans Mono CJK JP", "CJK")},
+		// The bold face of the main family; without it headings and strong
+		// runs render at regular weight.
+		{"--boldFontTTF", resolveFont("Noto Sans:bold", "Noto Sans")},
 	} {
 		if _, e := os.Stat(f.path); f.path != "" && e == nil {
 			args = append(args, f.flag, f.path)

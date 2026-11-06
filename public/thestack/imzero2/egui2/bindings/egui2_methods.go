@@ -524,7 +524,12 @@ func (inst AtomsFluid) BeginRichTextColored(cl, bk color.Color, text string) Ric
 // Strong applies bold styling to the rich-text segment. Strong, Weak, Italics,
 // Underline, Strikethrough, Code, Monospace, Small, Heading, Raised, Lowered,
 // and the *Color variants each return RichTextScope for chaining.
-func (inst RichTextScope) Strong() RichTextScope    { return RichTextScope{a: inst.a.strong()} }
+func (inst RichTextScope) Strong() RichTextScope { return RichTextScope{a: inst.a.strong()} }
+
+// Bold sets the segment in the host's bold face. Strong is a colour (egui's
+// strong text colour); Bold is a weight, and a host without a bold face
+// shows it at regular weight.
+func (inst RichTextScope) Bold() RichTextScope      { return RichTextScope{a: inst.a.bold()} }
 func (inst RichTextScope) Weak() RichTextScope      { return RichTextScope{a: inst.a.weak()} }
 func (inst RichTextScope) Italics() RichTextScope   { return RichTextScope{a: inst.a.italics()} }
 func (inst RichTextScope) Underline() RichTextScope { return RichTextScope{a: inst.a.underline()} }

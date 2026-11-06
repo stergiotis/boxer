@@ -21,7 +21,7 @@
 
 use std::sync::Arc;
 
-use egui::emath::GuiRounding;
+use egui::emath::GuiRounding as _;
 use egui::text::LayoutJob;
 use egui::{Color32, Label, Rect, Response, Shape, Stroke, TextWrapMode, Ui, Vec2, Widget, vec2};
 
@@ -114,7 +114,8 @@ fn pad_of(font_size: f32) -> Vec2 {
 }
 
 pub struct PillLabel {
-    label: Label,
+    job: LayoutJob,
+    wrap_mode: Option<TextWrapMode>,
     selectable: Option<bool>,
     /// One entry per job section; `None` where the section has no background.
     /// Empty when no section has one.
@@ -125,22 +126,42 @@ impl PillLabel {
     pub fn new(mut job: LayoutJob) -> Self {
         let pills = take_pills(&mut job);
         Self {
-            label: Label::new(job),
+            job,
+            wrap_mode: None,
             selectable: None,
             pills,
         }
     }
 
+    /// The `Label`, with the job's baselines aligned (`style::baseline`),
+    /// which needs the `Ui`'s fonts and so waits for `ui`.
+    fn label(
+        job: LayoutJob,
+        wrap_mode: Option<TextWrapMode>,
+        selectable: Option<bool>,
+        ui: &Ui,
+    ) -> Label {
+        let mut job = job;
+        super::baseline::align(ui, &mut job);
+        let mut label = Label::new(job);
+        if let Some(mode) = wrap_mode {
+            label = label.wrap_mode(mode);
+        }
+        if let Some(selectable) = selectable {
+            label = label.selectable(selectable);
+        }
+        label
+    }
+
     /// Mirrors `Label::selectable`.
     pub fn selectable(mut self, selectable: bool) -> Self {
         self.selectable = Some(selectable);
-        self.label = self.label.selectable(selectable);
         self
     }
 
     /// Mirrors `Label::wrap_mode`.
     pub fn wrap_mode(mut self, mode: TextWrapMode) -> Self {
-        self.label = self.label.wrap_mode(mode);
+        self.wrap_mode = Some(mode);
         self
     }
 }
@@ -178,10 +199,12 @@ pub(crate) fn take_pills(job: &mut LayoutJob) -> Vec<Option<Pill>> {
 impl Widget for PillLabel {
     fn ui(self, ui: &mut Ui) -> Response {
         let Self {
-            label,
+            job,
+            wrap_mode,
             selectable,
             pills,
         } = self;
+        let label = Self::label(job, wrap_mode, selectable, ui);
         if pills.is_empty() {
             return ui.add(label);
         }

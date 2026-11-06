@@ -141,6 +141,13 @@ func (inst AtomsFluid) strong() AtomsFluid {
 	return inst
 }
 
+func (inst AtomsFluid) bold() AtomsFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(AtomsMethodIdBold))
+
+	return inst
+}
+
 func (inst AtomsFluid) weak() AtomsFluid {
 	r := inst.r
 	r.WriteOpCode(uint32(AtomsMethodIdWeak))

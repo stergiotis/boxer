@@ -37,6 +37,7 @@ loop {
         AtomsBuilderMethodId::Monospace => { rt = rt.monospace(); }
         AtomsBuilderMethodId::Code => { rt = rt.code(); }
         AtomsBuilderMethodId::Strong => { rt = rt.strong(); }
+        AtomsBuilderMethodId::Bold => { rt = rt.family(imzero2_egui::style::tokens::typography::bold_family()); }
         AtomsBuilderMethodId::Weak => { rt = rt.weak(); }
         AtomsBuilderMethodId::Underline => { rt = rt.underline(); }
         AtomsBuilderMethodId::Strikethrough => { rt = rt.strikethrough(); }
@@ -108,6 +109,7 @@ loop {
         AtomsBuilderMethodId::Monospace => { rt = rt.monospace(); }
         AtomsBuilderMethodId::Code => { rt = rt.code(); }
         AtomsBuilderMethodId::Strong => { rt = rt.strong(); }
+        AtomsBuilderMethodId::Bold => { rt = rt.family(imzero2_egui::style::tokens::typography::bold_family()); }
         AtomsBuilderMethodId::Weak => { rt = rt.weak(); }
         AtomsBuilderMethodId::Underline => { rt = rt.underline(); }
         AtomsBuilderMethodId::Strikethrough => { rt = rt.strikethrough(); }
@@ -175,6 +177,11 @@ loop {
 			BeginMethod("monospace").Unexported().CodeClientRust(richTextStyleWarn).EndMethod().
 			BeginMethod("code").Unexported().CodeClientRust(richTextStyleWarn).EndMethod().
 			BeginMethod("strong").Unexported().CodeClientRust(richTextStyleWarn).EndMethod().
+			// Sets the segment in the host's bold face (typography::FAMILY_BOLD):
+			// egui has no weight, so bold is a family. Independent of strong,
+			// which is the colour; a heading takes both, an inline strong run
+			// the weight alone.
+			BeginMethod("bold").Unexported().CodeClientRust(richTextStyleWarn).EndMethod().
 			BeginMethod("weak").Unexported().CodeClientRust(richTextStyleWarn).EndMethod().
 			BeginMethod("underline").Unexported().CodeClientRust(richTextStyleWarn).EndMethod().
 			BeginMethod("strikethrough").Unexported().CodeClientRust(richTextStyleWarn).EndMethod().
