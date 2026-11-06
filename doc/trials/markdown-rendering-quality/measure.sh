@@ -9,7 +9,7 @@
 # Usage:
 #   doc/trials/markdown-rendering-quality/measure.sh <run-slug> [step...]
 #
-# Steps, in order, all by default: prepare scenes browsers metrics vote tally.
+# Steps, in order, all by default: prepare scenes browsers typst metrics vote tally.
 # `tally` needs votes.json exported from the vote page into <work>/vote/.
 #
 # Environment:
@@ -24,7 +24,7 @@ here=$(cd "$(dirname "$0")" && pwd)
 root=$(cd "$here/../../.." && pwd)
 slug=${1:?usage: measure.sh <run-slug> [step...]}
 shift
-steps=${*:-prepare scenes browsers metrics vote tally}
+steps=${*:-prepare scenes browsers typst metrics vote tally}
 run="$here/runs/$slug"
 work="$root/tmp/trials/markdown-rendering-quality/$slug"
 mkdir -p "$run" "$work"
@@ -53,6 +53,8 @@ if has prepare; then
 		echo "- Rust client: ${client:-the runner default (headless-soft when fresh)} $(ls -t "$root"/rust/imzero2/target/headless*/release/imzero2 2>/dev/null | head -1 | xargs -r stat -c "(newest build %y)" | cut -d. -f1)"
 		echo "- Chromium: $("$chromium" --version 2>/dev/null | head -1)"
 		echo "- Firefox: $("$firefox" --version 2>/dev/null | head -1)"
+		echo "- typst: $(typst --version 2>/dev/null || echo "not installed — no typst arms")"
+		echo "- pandoc: $(pandoc --version 2>/dev/null | head -1 || echo "not installed — no typst arms")"
 		echo "- Viewport: ${W}x${H}, device scale 1, standard density"
 		echo "- CPU: $(lscpu | sed -n 's/^Model name: *//p'), $(nproc) threads"
 		echo "- Memory: $(free -h | awk '/^Mem:/ {print $2 " total, " $7 " available"}')"
@@ -82,6 +84,29 @@ if has browsers; then
 		"$firefox" --headless --no-remote --new-instance --profile "$work/ffprofile" \
 			--window-size=$W,$H --screenshot "$work/captures/$base-firefox.png" "$url" >/dev/null 2>&1 || echo "firefox screenshot failed: $base" >&2
 	done
+fi
+
+if has typst; then
+	# The typst arms (README §3): pandoc turns the document into typst
+	# markup, a template per arm sets the page, and typst renders page one
+	# at the viewport's size. Without the tools the arms are skipped and
+	# the metrics, the vote and the tally carry on without them.
+	if command -v typst >/dev/null 2>&1 && command -v pandoc >/dev/null 2>&1; then
+		mkdir -p "$work/typst"
+		for arm in ids book; do
+			for md in "$work"/typst-src/*.md; do
+				base=$(basename "$md" .md)
+				pandoc -f markdown+mark+wikilinks_title_after_pipe+task_lists+pipe_tables+strikeout+footnotes -t typst \
+					--template "$here/harness/typst/$arm.typst" "$md" -o "$work/typst/$base-typst-$arm.typ" \
+					|| { echo "pandoc failed: $base ($arm)" >&2; continue; }
+				typst compile --root "$work" --font-path "$work/fonts" --format png --ppi 96 --pages 1 \
+					"$work/typst/$base-typst-$arm.typ" "$work/captures/$base-typst-$arm.png" \
+					|| echo "typst failed: $base ($arm)" >&2
+			done
+		done
+	else
+		echo "typst: typst or pandoc is not on PATH — the typst arms are skipped" >&2
+	fi
 fi
 
 if has metrics; then

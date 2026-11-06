@@ -26,6 +26,10 @@ var votePairs = [][2]string{
 	{"native", "obsidian-chromium"},
 	{"native", "github-chromium"},
 	{"ids-chromium", "github-chromium"},
+	// The typst arms, when the run made them: the native arm against the
+	// same type spec set by typst, and against typst's book typography.
+	{"native", "typst-ids"},
+	{"native", "typst-book"},
 }
 
 // voteKey is what vote/key.json holds: the salt, and which picture is which
@@ -71,6 +75,9 @@ func vote(work string) (err error) {
 	var pairs []votePair
 	for _, e := range corpus {
 		for _, p := range votePairs {
+			if _, statErr := os.Stat(filepath.Join(work, "captures", e.Slug+"-"+p[1]+".crop.png")); statErr != nil {
+				continue // an arm this run did not capture
+			}
 			a, b := id(e.Slug, p[0]), id(e.Slug, p[1])
 			if flip, _ := rand.Int(rand.Reader, big.NewInt(2)); flip.Int64() == 1 {
 				a, b = b, a

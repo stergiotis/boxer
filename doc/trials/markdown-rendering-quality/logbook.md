@@ -477,7 +477,7 @@ evidence lives in its own `./runs/<YYYY-MM-DD-slug>/` directory.
 - **Solution size:** `pill.rs` +40 −12; the host rebuilt,
   `browserhost.sum` refreshed; ADR-0180's update extended.
 - **Results:** `runs/2026-11-06-pillbox/metrics.json`, `metrics.md`,
-  the crop. Votes: pending.
+  the crop. Votes: not taken — the owner votes the latest run, the sum of the eighth run onward, as the seventh was voted for the sum of the third to the seventh.
 - **Run dir:** `./runs/2026-11-06-pillbox/`.
 
 ## 2026-11-06 — ninth run, `2026-11-06-codespan` — a code span at 0.9 of its run; the pen in the stylesheet's tint
@@ -509,7 +509,7 @@ evidence lives in its own `./runs/<YYYY-MM-DD-slug>/` directory.
 - **Solution size:** `visitor.go` +22, `theme.go` ±10, EXPLANATION ±4,
   one test.
 - **Results:** `runs/2026-11-06-codespan/metrics.json`, `metrics.md`, the
-  crop. Votes: pending.
+  crop. Votes: not taken — the owner votes the latest run, the sum of the eighth run onward, as the seventh was voted for the sum of the third to the seventh.
 - **Run dir:** `./runs/2026-11-06-codespan/`.
 
 ## 2026-11-06 — tenth run, `2026-11-06-links` — a paragraph with links is one galley; the line model learns blocks
@@ -568,5 +568,255 @@ evidence lives in its own `./runs/<YYYY-MM-DD-slug>/` directory.
   row walk shared), the IDL +110, `svgexport.rs` ±40, `render.go` ±40,
   `visitor.go` ±40, `markdown.go` +30, the harness +40, one scene.
 - **Results:** `runs/2026-11-06-links/metrics.json`, `metrics.md`, the
-  crop. Votes: pending.
+  crop. Votes: not taken — the owner votes the latest run, the sum of the eighth run onward, as the seventh was voted for the sum of the third to the seventh.
 - **Run dir:** `./runs/2026-11-06-links/`.
+
+## 2026-11-06 — eleventh run, `2026-11-06-bold` — bold text has a weight
+
+- **Build under test:** the tenth run's tree plus a bold face on the
+  host: `--boldFontTTF` registers it as `FontFamily::Name("bold")`
+  (`typography::FAMILY_BOLD`) ahead of the proportional chain, the IDS
+  font install aliases the family to the proportional chain so it
+  resolves everywhere, the atoms protocol gains `bold()`, and the widget
+  sets a heading in strong colour and bold face, an inline strong run,
+  a table header and a callout title in the bold face (`applyWeight`).
+  The scene runner passes the system Noto Sans Bold beside Regular. The
+  SVG exporter marks the bold family's runs `font-weight="bold"` and
+  declares an embedded subset of it at weight 700.
+- **Attempted:** the whole protocol.
+- **Findings:**
+  - **[pain boxer/toolbelt/imzero2/hosts / functional-suitability.appropriateness / S1]**
+    The native arm had no bold. egui carries no weight on a text format
+    and epaint synthesises none (a TODO in its font module), and the host
+    embeds one weight per family, so `Strong()` was egui's strong text
+    colour and nothing else: every heading was a larger regular face,
+    `**strong**` was the prose around it, and the IDS arm's weight-600
+    headings and weight-700 lead-ins had no counterpart. A reading of
+    the tenth run's captures found it before the vote did — it is the one
+    difference a reader sees without looking for it, on every document.
+    The SVG sidecar had been writing `font-weight="bold"` for strong runs
+    all along (from the colour match), so a browser showed the sidecar
+    bolder than the host showed the screen.
+  - **Result, not a toolbelt finding:** the line metrics repeat the
+    tenth run's to within two characters (play-overview native `cpl`
+    100/102 for 102/104: a bold run is wider). The crop
+    (`adr-0334-leadin.run10-vs-run11-vs-ids.png`) shows the change: the
+    bullet lead-ins of ADR-0334 in regular weight, in the bold face, and
+    in the IDS arm. What the capture also shows, now that the headings
+    carry weight: the native ladder was tuned to compensate for its
+    absence (H1/H2 at 2.00/1.69 of body against the IDS arm's
+    1.69/1.46, the `headings` column), so a bold native heading is
+    heavier than the reference's; the twelfth run takes the ladder down.
+  - **[maturity boxer/toolbelt/imzero2/hosts / portability.adaptability / S3]**
+    A bold face is a fifth font path on every launch surface
+    (`font-resolve.sh`, the scene runner, the Go launcher). The browser
+    tab's slot table has four entries and was left alone, so the tab
+    shows regular weight until a fifth slot is added; the IDS bundle
+    still embeds Regular only under ADR-0030's size budget.
+- **Solution size:** `typography.rs` +25, `apphost.rs` +25,
+  `appconfig.rs` +10, `svgexport.rs` ±15, the IDL +6, `visitor.go` ±25,
+  `render.go` ±2, launchers +12, ADR-0030 and ADR-0180 updates.
+- **Results:** `runs/2026-11-06-bold/metrics.json`, `metrics.md`, the
+  crop. Votes: not taken — the owner votes the latest run, the sum of the eighth run onward, as the seventh was voted for the sum of the third to the seventh.
+- **Run dir:** `./runs/2026-11-06-bold/`.
+
+## 2026-11-06 — twelfth run, `2026-11-06-ladder` — the heading ladder comes down; two inks take their role
+
+- **Build under test:** the eleventh run's tree with the heading ladder
+  at the stylesheet's steps (`headingFontSizeBase`: display, 19, heading,
+  14, body, caption for H1–H6), air under a heading beyond the item gap
+  (`headingGapBelow`, the two tiers of the gap above one step down),
+  struck text in the disabled ink and prose in a blockquote in the
+  secondary ink (`inkFor`, `quoteDepth` on the lowering context).
+- **Attempted:** the whole protocol.
+- **Findings:**
+  - **Result, not a toolbelt finding:** the `headings` column now reads
+    1.69 and 1.46 of body on the native arm as on the IDS arm, where the
+    eleventh run read 2.00 and 1.69 (why-boxer's H3 1.23 on both), and
+    `gap H↓` reads 1.6 line heights on both where the native arm read
+    1.4; `gap ↑H` is 2.3 to 2.5 against the IDS arm's 2.5 (3.4 on
+    play-overview, whose first heading follows a quote). The line
+    metrics otherwise repeat the eleventh run's. The crop
+    (`why-boxer-head.run11-vs-run12-vs-ids.png`) shows the quote's
+    words in the secondary ink and the title at the display step in
+    the bold face, beside the IDS arm.
+  - **[pain boxer/toolbelt/imzero2/widgets / functional-suitability.appropriateness / S3]**
+    The ladder had been tuned to do a weight's work: with no bold face
+    a heading could only be larger, and 26 points of regular Noto Sans
+    read as a title where 22 points of the bold face do. A size that
+    compensates for a missing face is a constant that goes wrong the day
+    the face arrives; the ladder is now the stylesheet's by token, not by
+    number, where the token exists.
+  - **[maturity boxer/toolbelt/imzero2/widgets / functional-suitability.completeness]**
+    A quote's ink needed the lowering to know it was inside a quote — the
+    widget colours runs at lowering time and the render path has no
+    scoped text-colour op on the wire. A `quoteDepth` on the lowering
+    context does it without a new op; a scoped `override_text_color`
+    would be the general tool, and is not needed yet.
+- **Solution size:** `visitor.go` ±80 (the emitter folded to one style
+  pass over four ink cases), `render.go` +18, `theme.go` +8, tests ±40.
+- **Results:** `runs/2026-11-06-ladder/metrics.json`, `metrics.md`, the
+  crop. Votes: not taken — the owner votes the latest run, the sum of the eighth run onward, as the seventh was voted for the sum of the third to the seventh.
+- **Run dir:** `./runs/2026-11-06-ladder/`.
+
+## 2026-11-06 — thirteenth run, `2026-11-06-tables-lists` — the table's header band; bullets step with depth; the nested indent
+
+- **Build under test:** the twelfth run's tree with a table cell as a
+  frame carrying the stylesheet's padding and no column gap, the header
+  cells filled with the surface tint (`renderTableCell`,
+  `tableHeaderBg`); a bullet that steps disc, circle, square with the
+  nesting depth the lowering counts (`bulletGlyph`, `listDepth`), the
+  circle and square in the mono face; and the list grid's marker column
+  at the outer padding's minimum width rather than egui's interact size.
+- **Attempted:** the whole protocol, then the native scenes again after
+  two fixes the first capture showed.
+- **Findings:**
+  - **[pain boxer/toolbelt/imzero2/widgets / functional-suitability.appropriateness / S3]**
+    The first capture showed the header band broken into two boxes the
+    width of their words, and the ordered markers `10.` and `11.`
+    wrapped onto two rows. A frame is as wide as its content, so the
+    band needed the cell to claim the column's width (`UiSetMinWidth`
+    beside the max); and a wrapping label in a grid column reports its
+    wrapped width back to the grid and stays wrapped, so once the
+    column's minimum came down the two-digit markers folded — a marker
+    now extends (`Extend()`). Both are the kind of thing a capture
+    shows and a test of the lowering cannot.
+  - **Result, not a toolbelt finding:** the crops
+    (`mdedit-blocks-table.run12-vs-run13-vs-ids.png`,
+    `stress-lists.run12-vs-run13-vs-ids.png`) show the header band and
+    the stepped bullets beside the IDS arm, and a nested item starting
+    about 1.5 em in from its parent's text where it started at twice
+    that. The line metrics repeat the twelfth run's; the list rows of
+    the stress document read 18 on the native arm for 22 on the IDS
+    arm, which is the marker column's width moving a row's split.
+- **Solution size:** `render.go` ±60, `visitor.go` +8, `markdown.go`
+  +1, `theme.go` +4, one test.
+- **Results:** `runs/2026-11-06-tables-lists/metrics.json`,
+  `metrics.md`, the crops. Votes: not taken — the owner votes the latest run, the sum of the eighth run onward, as the seventh was voted for the sum of the third to the seventh.
+- **Run dir:** `./runs/2026-11-06-tables-lists/`.
+
+## 2026-11-06 — fourteenth run, `2026-11-06-baseline` — a row's runs share a baseline
+
+- **Build under test:** the thirteenth run's tree plus
+  `imzero2_egui::style::baseline::align`, run by the pill label and the
+  linked label on their job before layout: the section with the tallest
+  line height is the reference, every other section is bottom-aligned
+  with a line height short of the reference's by the difference of the
+  ascents, so its baseline lands on the reference's.
+- **Attempted:** the whole protocol.
+- **Findings:**
+  - **[pain boxer/toolbelt/imzero2/hosts / functional-suitability.appropriateness / S2]**
+    epaint has no baseline alignment: a glyph's `y` is its own font's
+    ascent from the row's top, and `valign` moves a section only by the
+    difference between the row's height and the section's line height.
+    Prose and the inline code span at 0.9 of it, both at the design
+    system's leading, shared a top, and the span sat two to three pixels
+    high — logged after the ninth run, named by the owner after the
+    thirteenth as a bug. The fix makes `valign` do the work by giving the
+    shorter section a line height computed from the two ascents; it is
+    the host's, so every job the widget lays out gets it, including a
+    paragraph with links. A row made only of shorter runs is a few
+    pixels short; none of the corpus documents has one in the first
+    viewport.
+  - **Result, not a toolbelt finding:** the crop
+    (`stress-inline-code.run13-vs-run14-vs-ids.png`) shows the span on
+    the baseline, with the pill following it; the line metrics repeat
+    the thirteenth run's to the cell, since the row heights are unchanged.
+- **Solution size:** `baseline.rs` +150 (with tests), `pill.rs` ±30,
+  `linked.rs` ±25, ADR-0180 update.
+- **Results:** `runs/2026-11-06-baseline/metrics.json`, `metrics.md`,
+  the crop. Votes: the owner votes the latest run; see the thirteenth.
+- **Run dir:** `./runs/2026-11-06-baseline/`.
+
+## 2026-11-06 — the fourteenth run's vote: 24 ties
+
+- **What was done:** the owner voted the fourteenth run, `2026-11-06-baseline`,
+  blind, the same 24 pairs as the second and seventh runs, and reported
+  every pair a tie; no `votes.json` was exported, so the run directory
+  carries the report and not a tally. Against the seventh run's vote
+  (0 wins, 6 ties, 12 losses) the seven changes between them — the pill
+  box, the code span's size and the pen's tint, links in one galley,
+  the bold face, the ladder and the inks, the table band and list
+  markers, one baseline per row — move the native arm from losing
+  twelve of twenty-four to losing none.
+- **Findings:**
+  - **[maturity boxer/toolbelt/imzero2/widgets / functional-suitability.appropriateness]**
+    Positive: a blind vote no longer tells the native reading mode from
+    a browser rendering of the same document under the design system's
+    own stylesheet, GitHub's or an Obsidian-like one, in the first
+    viewport at one width. What the vote cannot say is which of the
+    seven changes did it; the crops and metrics of runs eight to
+    fourteen are the record of each.
+  - **[pain boxer/keelson/designsystem / functional-suitability.appropriateness / S3]**
+    The one thing the owner named: the highlight pen's colours read as
+    low in contrast. Measured in the captures, the pen is the same in
+    the native and the IDS arm — the warning family's subtle tint
+    (29, 20, 6) under primary text (229, 232, 235), text over tint at
+    14.8 — but the tint against the page (11, 14, 15) is at 1.2, so on
+    the dark theme the pen is barely a mark at all; the vote could not
+    catch it because both arms share the token. ADR-0031 gives a subtle
+    tint L ≈ 0.20 for a tinted row, not for a highlighter, and the
+    stylesheet's `mark` and the widget's pen both took it. Open: a
+    mark needs a tint that stands off the page in both themes, which
+    is a palette question before it is a widget one.
+
+## 2026-11-06 — fifteenth run, `2026-11-06-mark` — the highlight pen stands off the page; the typst arms join the harness
+
+- **Build under test:** the fourteenth run's tree with the highlight pen
+  at the warning default over the page at 40% in the widget
+  (`theme.go`, `over`, `markPenAlpha`) and in the stylesheet's `mark`
+  (`color-mix` of the same tokens), where both had the warning family's
+  subtle tint. The harness gained the two typst arms (README §3): a
+  `typst` step in `measure.sh`, pandoc templates under `harness/typst/`,
+  pixels-only rows and two vote pairs per document that exist only when
+  the run captured them.
+- **Attempted:** the whole protocol; the browser arms again after the
+  first capture showed the stylesheet's mark unchanged; the typst step
+  once the owner had installed typst 0.15.1 and pandoc 3.13, then again
+  after the first typst capture showed the pinned arm's lines
+  overlapping.
+- **Findings:**
+  - **Result, not a toolbelt finding:** the pen is now (99, 81, 46) in
+    both arms, sampled from the captures: primary text over it at 6.2,
+    the pen over the page at 2.5, where the fourteenth run's pen sat at
+    1.2 over the page. The crop
+    (`stress-mark.run14-vs-run15-vs-ids.png`) shows the fourteenth run's
+    pen, this run's, and the IDS arm's. The line metrics repeat the
+    fourteenth run's to the cell; a tint moves no glyph.
+  - **[pain boxer/keelson/designsystem / functional-suitability.appropriateness / S3]**
+    The first browser capture carried no mark at all: the stylesheet's
+    `mark` had been written against `--ids-warning-default`, and the
+    generated palette names a role's default tone by the bare role,
+    `--ids-warning`. An unknown custom property makes `color-mix`
+    invalid and the declaration is dropped without a word. The harness's
+    controlled pair caught it in one run; a CSS variable the palette does
+    not emit is the kind of drift `css_drift_test.go` could check for
+    the stylesheet's own references, and does not yet.
+  - **[maturity boxer/practice/measuring/trials / functional-suitability.completeness]**
+    Positive: the typst arms render on the first pass through pandoc
+    3.13's typst writer and typst 0.15.1, every corpus document, both
+    templates, page one at the viewport. The crop
+    (`why-boxer-para.native-vs-typst-ids-vs-typst-book.png`) sets the
+    same paragraphs three ways: the native arm; the native spec set by
+    typst, justified and hyphenated; and typst's book typography. The
+    pinned arm is the comparison M2 asked for — the one variable is the
+    paragraph setter — and it shows what a Knuth–Plass breaker buys at
+    this measure: an even right edge, no detached punctuation, and the
+    same number of lines. The book arm is the ceiling, in a serif at a
+    66-character measure; it is not a target for a reading mode set in
+    the design system's sans, it is where the eye can go. The vote page
+    carries 36 pairs with the two new ones; no vote was taken on them.
+  - **Friction:** typst measures a line box from cap height to baseline
+    by default (`top-edge`, `bottom-edge`), not ascender to descender
+    as CSS and egui do, so a leading computed from the face's span set
+    the pinned arm's lines on top of one another; the template sets the
+    edges to the face's. The binaries could not be fetched from this
+    session (the tool-use policy declined the download) and were
+    installed by the owner.
+- **Solution size:** `theme.go` ±25, `ids.css` ±4, one test; the harness
+  +60 (`measure.sh`, `prepare.go`, `metrics.go`, `vote.go`) and two
+  templates.
+- **Results:** `runs/2026-11-06-mark/metrics.json`, `metrics.md` (the
+  typst arms as pixels-only rows), the two crops. Votes: not taken; the
+  pen is a tint the captures measure.
+- **Run dir:** `./runs/2026-11-06-mark/`.

@@ -124,6 +124,10 @@ type armMetrics struct {
 // browserArms are the HTML arms in capture-file order: <slug>-<style>-<engine>.
 var browserEngines = []string{"chromium", "firefox"}
 
+// typstArms are the typst renderings (README §3), pictures only: a capture
+// a run did not make (the tools absent) leaves the arm out of that run.
+var typstArms = []string{"typst-ids", "typst-book"}
+
 // metrics reads every capture under work/captures, writes the cropped
 // comparison pictures beside them, and writes metrics.json and metrics.md
 // to runDir.
@@ -164,6 +168,16 @@ func metrics(work, runDir string) (err error) {
 				}
 				all = append(all, m)
 			}
+		}
+		for _, arm := range typstArms {
+			p := filepath.Join(caps, e.Slug+"-"+arm+".png")
+			if _, statErr := os.Stat(p); statErr != nil {
+				continue
+			}
+			if err = cropPNG(p, 0); err != nil {
+				return err
+			}
+			all = append(all, armMetrics{Doc: e.Slug, Arm: arm, PixelsOnly: true})
 		}
 	}
 	if err = os.MkdirAll(runDir, 0o755); err != nil {

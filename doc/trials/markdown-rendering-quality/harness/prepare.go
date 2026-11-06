@@ -85,7 +85,7 @@ var pinnedFonts = []string{
 // document and style, scenes/<slug>.scene.md for the native arm, and
 // fonts/ with the pinned faces.
 func prepare(root, work string) (err error) {
-	for _, d := range []string{"html", "scenes", "fonts", "captures"} {
+	for _, d := range []string{"html", "scenes", "fonts", "captures", "typst-src"} {
 		if err = os.MkdirAll(filepath.Join(work, d), 0o755); err != nil {
 			return eb.Build().Str("dir", d).Errorf("unable to create the work directory: %w", err)
 		}
@@ -118,7 +118,14 @@ func prepare(root, work string) (err error) {
 				return eb.Build().Str("path", p).Errorf("unable to write an HTML arm: %w", err)
 			}
 		}
-		p := filepath.Join(work, "scenes", e.Slug+".scene.md")
+		// The typst arms' input: the document's body without its
+		// frontmatter, as the HTML arms and mdedit's reading mode take it,
+		// under the slug the capture names use (measure.sh, the typst step).
+		p := filepath.Join(work, "typst-src", e.Slug+".md")
+		if err = os.WriteFile(p, stripFrontmatter(src), 0o644); err != nil {
+			return eb.Build().Str("path", p).Errorf("unable to write a typst source: %w", err)
+		}
+		p = filepath.Join(work, "scenes", e.Slug+".scene.md")
 		var sc string
 		if sc, err = sceneDoc(e.Slug, src); err != nil {
 			return err
@@ -245,5 +252,21 @@ func scrollTopStep(src []byte) (step string) {
 			return
 		}
 	}
+	return
+}
+
+// stripFrontmatter drops a leading YAML block, which pandoc would otherwise
+// render as a title block; the HTML arms parse it out the same way.
+func stripFrontmatter(src []byte) (body []byte) {
+	body = src
+	if !bytes.HasPrefix(src, []byte("---\n")) {
+		return
+	}
+	rest := src[4:]
+	i := bytes.Index(rest, []byte("\n---\n"))
+	if i < 0 {
+		return
+	}
+	body = rest[i+5:]
 	return
 }

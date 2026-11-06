@@ -75,12 +75,12 @@ which the fourth run's leading made taller, where a browser's box hugs
 the glyphs. An eighth run, `2026-11-06-pillbox`, sizes the pill to the
 font's box and pads it as the IDS stylesheet pads a code span; its line
 metrics repeat the seventh run's to within a character, since the side
-padding is the only glyph that moved, and its vote is pending. A ninth
+padding is the only glyph that moved. A ninth
 run, `2026-11-06-codespan`, sets an inline code span at 0.9 of its run
 and gives the highlight pen the warning tint the design system's own
 stylesheet gives `mark`; the crop of the same span now differs from the
 IDS arm's in the baseline of the smaller run alone (about a pixel), and
-the line metrics repeat the eighth run's. Its vote is pending. **A tenth
+the line metrics repeat the eighth run's. **A tenth
 run, `2026-11-06-links`, sets a paragraph whose text carries links as one
 galley — the link's words are sections of the paragraph's own layout,
 clicked where they are — and gives the line model blocks and a native
@@ -89,8 +89,40 @@ on every document against the IDS arm's 0.02 to 0.03, in the ninth run's
 captures as in the tenth's.** The link change moves no number the model
 reads in the first viewport; the crop in the run directory shows what it
 moves — a bare URL that ended a row with its comma orphaned at the start
-of the next now breaks as text does, the comma with it. Its vote is
-pending.
+of the next now breaks as text does, the comma with it. An eleventh run, `2026-11-06-bold`, gives the native arm a bold
+face — egui carries no weight and the host embedded one face per family,
+so every heading and every strong run had been regular weight, the one
+difference a reader of the tenth run's captures saw without looking; its
+line metrics repeat the tenth run's to within two characters. A twelfth run, `2026-11-06-ladder`, takes the heading
+ladder down to the stylesheet's steps and gives a heading air below it,
+struck text the disabled ink and a quote's prose the secondary ink: the
+native arm's heading sizes now read 1.69 and 1.46 of body and its gap
+under a heading 1.6 line heights, the IDS arm's own values, where the
+eleventh run read 2.00, 1.69 and 1.4. A thirteenth
+run, `2026-11-06-tables-lists`, gives a table's header row one band on
+the surface tint, steps a bullet disc, circle, square with its depth and
+narrows the nested indent to the stylesheets' 1.5 em; its line metrics
+repeat the twelfth run's. A fourteenth run, `2026-11-06-baseline`, puts
+a row's runs on one baseline — epaint aligns their tops, and a code span
+sat two to three pixels high since the ninth run — with the metrics
+unchanged to the cell. The owner votes the fourteenth run alone, as the
+seventh was voted alone: the eighth to the thirteenth are told apart by
+their crops and metrics, not by votes, and the fourteenth run's vote
+against the seventh's is the measure of the seven changes together.
+**In the fourteenth run's vote, blind, the same 24 pairs, the owner
+called every pair a tie — 0 wins, 24 ties, 0 losses, where the seventh
+run's vote read 0, 6 and 12 — against all three references alike.** The
+owner reported the vote rather than exporting it, so the run directory
+holds no tally. The one difference named after voting is the highlight
+pen's contrast, which the captures show to be the same token pair in the
+native and the IDS arm: a design-system question (logbook), not a
+difference between the arms. A fifteenth run, `2026-11-06-mark`, sets
+the pen to the warning default at 40% over the page in both renderings:
+sampled from the captures, the pen is now 2.5 over the page where it
+was 1.2, with primary text at 6.2 over the pen; the line metrics repeat
+the fourteenth run's. The same run is the first to carry the two typst
+arms (§3), pictures only: the native spec set by typst's breaker, and
+typst's book typography; neither is voted yet.
 
 **In the first run, at a 1000-point viewport, standard density and the fonts the headless
 host draws with, mdedit's reading mode sets prose across the whole window —
@@ -182,10 +214,16 @@ which is what mdedit's reading mode does.
 | `ids-chromium`, `ids-firefox` | obsidian package HTML, `idsweb.Stylesheet()` | IDS lean classless CSS (ADR-0076), dark, 50 em column | **pinned** to the native faces by `@font-face`, 13 px body (a decision of the design dialogue: isolate layout from font choice) | Chromium: injected script, one rect per glyph; Firefox: pixels only |
 | `obsidian-chromium`, `obsidian-firefox` | obsidian package HTML, `DefaultStylesheet()` | the package's light theme, plus a 700 px centred column the stylesheet leaves to its host (Obsidian's readable-line-width default) | the stylesheet's own | as above |
 | `github-chromium`, `github-firefox` | obsidian package HTML, `harness/vendor/github-markdown-light.css` 5.8.1 | GitHub's README look, light, 980 px container | the stylesheet's own | as above |
+| `typst-ids` | pandoc's typst writer, typst, page one at 96 ppi (`harness/typst/ids.typst`) | the native arm's type spec — dark page, 50 em column, 13 px body at the design system's step, the ladder, the inks — set by typst's line breaker, justified and hyphenated | pinned to the native faces (`--font-path`) | pixels only |
+| `typst-book` | the same, `harness/typst/book.typst` | typst's own book typography: Libertinus Serif 11 pt, a 66-character measure, justified and hyphenated — the typographic ceiling, nothing of the native spec kept but the page size | typst's bundled faces | pixels only |
 
 The HTML body is the same bytes in every browser arm; only the page shell
-differs. Obsidian the application and typst are not arms of this run
-(§6, §7).
+differs. The typst arms take the same document through pandoc's typst
+writer, which carries headings, lists, tables, code, links, footnotes,
+strikethrough and the highlight pen but not wikilinks' resolution or
+Obsidian callouts (a callout is a quote). They exist in a run only when
+`typst` and `pandoc` are on the path; a run without them has no typst
+rows and no typst pairs. Obsidian the application is not an arm (§6).
 
 Standing hypotheses, from the 2026 review and ADR-0180: the native arm's
 measure and leading are where it differs most from the references; its
@@ -317,19 +355,36 @@ logbook's 2026-11-05 entry; the two on the tree rather than the harness:
   seventh run's vote standing for runs three to seven (logbook).
 - **M1h — the pill box.** Done 2026-11-06 as run `2026-11-06-pillbox`:
   an inline background is the font's box with the stylesheet's padding,
-  not the row's line height; the vote closes it.
+  not the row's line height; the thirteenth run's vote closes it with the runs after it.
 - **M1i — the code span's size and the pen's tint.** Done 2026-11-06 as
   run `2026-11-06-codespan`: a code span at 0.9 of its run, the highlight
-  pen in the stylesheet's warning tint; the vote closes it.
+  pen in the stylesheet's warning tint; the thirteenth run's vote closes it with the runs after it.
 - **M1j — links in the paragraph's galley.** Done 2026-11-06 as run
   `2026-11-06-links`: a paragraph with links is one label, clicked where
   the link's words are (`labelAtomsLinked`); the line model gained blocks
-  and a native table rule in the same run. The vote closes it.
+  and a native table rule in the same run. Closed by the fourteenth run's vote (24 ties).
+- **M1k — a weight for bold.** Done 2026-11-06 as run `2026-11-06-bold`:
+  a bold face on the host (`--boldFontTTF`, `FontFamily::Name("bold")`,
+  `bold()` on the atoms protocol), headings and strong runs set in it.
+  Closed by the fourteenth run's vote (24 ties).
+- **M1l — the ladder and the inks.** Done 2026-11-06 as run
+  `2026-11-06-ladder`: the stylesheet's heading steps, air under a
+  heading, `del` and `blockquote` in their inks. Closed by the fourteenth run's vote (24 ties).
+- **M1m — the table band and the list markers.** Done 2026-11-06 as run
+  `2026-11-06-tables-lists`. The fourteenth run's vote closes it.
+- **M1n — one baseline per row.** Done 2026-11-06 as run
+  `2026-11-06-baseline` (`imzero2_egui::style::baseline`). Closed by the
+  vote (24 ties).
+- **M1o — the pen's tint.** Done 2026-11-06 as run `2026-11-06-mark`:
+  the highlight pen composed from the warning default and the page, the
+  same in the widget and the stylesheet. Closed by measurement.
 - **M2 — the second width and the typst arm.** A narrow viewport (the
   help pane's) and a wide one; the corpus through a markdown-to-typst
   path as a typographic ceiling, with the research notes on its line
   breaker, hyphenation, shaping and spacing model, and what of it could
-  reach the host's text layout. Gate: a logbook entry with the typst
+  reach the host's text layout. The typst arms were added to the harness
+  on 2026-11-06 (§3), pictures only, and first captured in run
+  `2026-11-06-mark`; their geometry and their vote are open. Gate: a logbook entry with the typst
   arm's metrics beside the others.
 - **M3 — a tool, if the trial keeps being run.** Promote the harness into
   a subcommand under the one entry point (CODINGSTANDARDS § Entry Points)
