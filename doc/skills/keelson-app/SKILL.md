@@ -133,9 +133,8 @@ The leaf exists so another app can open this one without importing its
 registering `init()`. Precedence is launch config over environment variable
 over persisted state ([ADR-0135](../../adr/0135-app-launch-requests.md) §SD7).
 `Mount` decodes the config and returns the error; it does not fall back
-silently, and an app that opens a plain window instead (mdedit, observed
-2026-11-07, with a test pinning it) is the deviation, not a second shape
-(decided 2026-11-07). With a launch kind the workingset comes for free
+silently; opening a plain window instead is a deviation, not a second
+shape (decided 2026-11-07). With a launch kind the workingset comes for free
 ([ADR-0148](../../adr/0148-app-workingsets.md) §SD2). Copy
 `apps/watchbill/launchcfg`.
 
@@ -190,10 +189,9 @@ one file of the app ([ADR-0135](../../adr/0135-app-launch-requests.md)). The
 request blocks and refuses with a reason; the button says *Opening…* while
 busy, reports the refusal, and says what opened ("opened in play — N rows
 as <the alias or handle the publisher gave>"). A window with no bus says
-so instead of hiding the button. Copy the reporting in
-`apps/writingstylescope/writingstylescope_handover.go` (its
-`go requestHandover()` is a W5 debt; run the request on `task.ForApp`), or
-the operations-backed `sendToPlay` in `public/keelson/runtime/trailviewer`.
+so instead of hiding the button. Copy
+`apps/writingstylescope/writingstylescope_handover.go`, or the
+operations-backed `sendToPlay` in `public/keelson/runtime/trailviewer`.
 An app that uploads to facts first and opens play on the row is the mdedit
 variant ([ADR-0217](../../adr/0217-mdedit-send-to-play-mddoc-facts.md)).
 There is no file export under the app's own name: plaintext leaving the
@@ -259,8 +257,7 @@ person reads at a glance and opens the graph, table and history on click.
 Give it provenance (`app.<id>.<thing>.phase`) so the inspector says where
 the value came from ([ADR-0046](../../adr/0046-imzero2-value-inspector-infrastructure.md)).
 Build the chip in `Mount`, draw it in the status row, not in a panel of
-its own. Play, chat and jackstay do this; watchbill's chip is untethered
-and drawn in a detail header, and is not the shape to copy.
+its own. Play, chat, jackstay and watchbill do this.
 
 **T3 — Mount the machine for agents.** `fsmops.Mount(set, name, summary,
 source, Options{History})` adds the `name_state` and `name_machine`
@@ -328,11 +325,10 @@ rate, ETA from the one estimator of
 [ADR-0247](../../adr/0247-one-progress-estimator.md), cancel), with
 `widgets/bgjobrow` over a `Runner` or `Keyed` snapshot, or with
 `widgets/taskmonitor` when the window shows every task of the app. A raw
-`c.ProgressBar` is a gauge for a quantity, not a job. Copy the monitor
-from `apps/taskdemo` and `apps/watchbilldemo`, not their goroutine shape
-(W5); mdedit, tally and jackstay use `bgjobrow`. A query run is a job
-too: its row is `jobprogress.Render`, as play's pane strips do and its
-top bar does not.
+`c.ProgressBar` is a gauge for a quantity, not a job. `apps/taskdemo`
+and `apps/watchbilldemo` show the monitor; mdedit, tally and jackstay use
+`bgjobrow`. A query run is a job too: its row is `jobprogress.Render`, as
+play draws it.
 
 **W5 — Goroutines are counted into the instance's lifetime scope.** The
 host closes the stop channel, retires the scope, unmounts, drains off the
@@ -512,8 +508,7 @@ row filters are ([ADR-0271](../../adr/0271-jackstay-row-filters-and-packs.md)).
 Recompute the match set when the query changes, not per frame. Copy
 `apps/play/play_snippets.go`'s filter row. `strings.Contains` over a
 lower-cased name is the shape to replace, and so is an editor's literal
-find-in-document, however honest its tooltip (mdedit, observed
-2026-11-07).
+find-in-document; mdedit's find is a battery.
 
 **F2 — Highlight the pattern; name the gap on hits.** `regexedit` colours
 the pattern text; painting the hits inside result rows exists only in
@@ -780,23 +775,24 @@ row says before copying.
 
 | For | Copy | Not |
 | --- | --- | --- |
-| manifest, launch config, poller with pause | `apps/watchbill` | its chip (untethered, T2); its kind box (F1) |
+| manifest, launch config, poller with pause | `apps/watchbill` | |
 | state machine mirrored, tethered chip, runners, bgjobrow | `apps/jackstay` | `apps/appstate` as a machine example (it has none) |
-| Mount that refuses a bad launch config | `apps/sqlappletcreator`, `apps/play` | mdedit's silent fallback |
-| goroutines in the lifetime scope | `apps/servicedemo`, chat's coordinator scopes | the demos' hand-built cancel-and-WaitGroup |
-| handover to play with an honest button | `apps/writingstylescope` (the reporting; its goroutine is a W5 debt), `trailviewer.sendToPlay` | tally's and imzrt's fire-and-forget open; play's missing success line |
-| method caveats as tooltips, no false threshold | `apps/writingstylescope` | imztop's pressure panel (method only in a doc comment) |
+| Mount that refuses a bad launch config | `apps/sqlappletcreator`, `apps/play`, `apps/mdedit` | |
+| goroutines in the lifetime scope | `apps/servicedemo`, chat's coordinator scopes | a hand-built cancel-and-WaitGroup |
+| handover to play with an honest button | `apps/writingstylescope`, `apps/imzrt`, `trailviewer.sendToPlay` | a fire-and-forget `go RequestOpen` |
+| method caveats as tooltips, no false threshold | `apps/writingstylescope`, `apps/terrainscope` | a method named only in a doc comment |
 | evidence grading per view, hit labels on painted marks | `apps/riskviews` (a `KindDemo` with no catalog, help or tour; copy those two things only) | |
 | small catalog with revision conflicts | `apps/mdedit/mdedit_ops.go` | |
+| an agent-caused job that carries its delegation | `apps/watchbilldemo/watchbilldemo_ops.go` | |
 | async command, agent limits | `apps/play/play_ops.go`, `play_agent_limits.go` | |
-| regex battery filter row | `apps/play/play_snippets.go` | imztop's process filter, watchbill's kind box, mdedit's literal find |
+| regex battery filter row | `apps/play/play_snippets.go`, `apps/imztop/imztop_panel_proc.go` | `strings.Contains` over a lower-cased name |
 | regex and SQL filters over a store | `apps/tally/tally_find.go`, jackstay's row filter | |
-| tasks and the monitor | `apps/taskdemo`, `apps/watchbilldemo` (the monitor, not their goroutine shape) | play's raw progress bar in the top bar |
+| tasks and the monitor | `apps/taskdemo`, `apps/watchbilldemo` | a raw `c.ProgressBar` for a job |
 | lazypane and keyed memo | `apps/imztop`, `apps/play` | |
-| token-derived theme | `apps/imztop/imztop_theme.go` | terrainscope, fibscope, svgserver hex literals |
+| token-derived theme | `apps/imztop/imztop_theme.go` | a `color.Hex(0x…)` literal (L16) |
 | scene that ends on F1 | `apps/capinspector/scenes` (its one coordinate click is a recorded deferral in `archgraph.go`) | scenes with coordinate clicks |
 | attention question | `apps/chat/chat_attention.go` | |
-| labelled clipboard copy | `apps/chat/chat_actions.go` | raw `SubjectWrite` requests in mdedit, tally, play, capdemo, opsdemo |
+| labelled clipboard copy | `apps/chat/chat_actions.go` | a raw `SubjectWrite` request (CS015) |
 
 ## 12. What this skill does not decide
 
