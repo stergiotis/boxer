@@ -236,13 +236,15 @@ func (s *server) handleIndex(w http.ResponseWriter, r *http.Request) {
 
 // parseBg maps the ?bg query value to a packed 0xRRGGBBAA. An alpha byte of 0
 // tells the exporter to omit the background rect (transparent — the host page
-// shows through). Default is an opaque dark background so a standalone view is
-// legible. "transparent"/"none" selects transparency; otherwise an 8-hex-digit
-// RRGGBBAA value is accepted.
+// shows through). The default is the IDS neutral surface the theme chosen at
+// launch resolves to (L1), opaque, so a standalone view is legible.
+// "transparent"/"none" selects transparency; otherwise an 8-hex-digit
+// RRGGBBAA value is accepted, and an unparsable one falls back to the
+// default.
 func parseBg(v string) uint32 {
 	switch strings.ToLower(strings.TrimSpace(v)) {
 	case "":
-		return 0x1e1e1eff
+		return defaultBgRGBA()
 	case "transparent", "none":
 		return 0x00000000
 	default:
@@ -250,8 +252,13 @@ func parseBg(v string) uint32 {
 		if n, err := strconv.ParseUint(v, 16, 32); err == nil {
 			return uint32(n)
 		}
-		return 0x1e1e1eff
+		return defaultBgRGBA()
 	}
+}
+
+// defaultBgRGBA is the surface token as the packed form the exporter takes.
+func defaultBgRGBA() uint32 {
+	return styletokens.NeutralBgSurface.AsHex()
 }
 
 const defaultBody = `dataset: demo.events

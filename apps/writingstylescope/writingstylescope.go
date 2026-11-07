@@ -23,16 +23,20 @@
 // ECDF that calibrates them). The pairs table hands the whole cross-matrix to
 // the SQL playground as an ephemeral dataset — see writingstylescope_handover.go.
 //
-// Lifecycle: Mount captures the id stack, logger and bus; Frame renders inside
-// the host-owned window and runs the sweep when the user asks for one; Unmount
-// cancels any confidence-band warm-up still in flight and retracts the
-// published dataset.
+// Lifecycle: Mount captures the id stack, logger, bus, task api and storage
+// and restores the persisted drafts; Frame takes the sweep runner's outcome
+// and renders inside the host-owned window, launching a sweep when the user
+// asks for one; Unmount cancels a sweep or confidence-band warm-up still in
+// flight and persists the drafts. The published dataset is retracted by the
+// runtime.
 package writingstylescope
 
 import (
+	"context"
 	"fmt"
 	"math"
 	"sort"
+	"strconv"
 	"sync"
 
 	"github.com/rs/zerolog"
@@ -40,11 +44,33 @@ import (
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/adhocdata"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
+	"github.com/stergiotis/boxer/public/keelson/runtime/bgjob"
+	"github.com/stergiotis/boxer/public/keelson/runtime/lifetime"
+	"github.com/stergiotis/boxer/public/keelson/runtime/task"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/badge"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/colormap"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/colorscale"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/ecdf"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/implot"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/jobprogress"
+)
+
+// Names of the keelson tasks the window runs: the sweep, and the handover.
+const (
+	sweepKind     = "writingstylescope.sweep"
+	sweepTitle    = "section-pair sweep"
+	handoverKind  = "writingstylescope.handover"
+	handoverTitle = "open the pairs in play"
+)
+
+// Persisted keys (D6, drafts in): the two pasted documents and the length
+// floor, declared in the manifest and restored at Mount. The result is a
+// recomputable cache and stays out.
+const (
+	keyDocA  = "docA"
+	keyDocB  = "docB"
+	keyFloor = "floor"
 )
 
 const (
@@ -116,6 +142,7 @@ const (
 	tipFloor = "Sections shorter than this are left out of the sweep. Compression distance between very short texts measures framing overhead more than content, and an empty nesting heading is mostly framing."
 	tipRun   = "Run the sweep. Cost grows with the product of the two section counts, so it runs when you ask rather than as you type."
 	tipStale = "The text has changed since this result was computed. Press Analyze to refresh it."
+	tipSweep = "The sweep in progress: section pairs measured so far, the rate, and the time left. Cancel keeps the previous result."
 
 	tipSections = "Sections that cleared the length floor, and how many did not. A section is one heading's own text — the span up to the next heading, whatever its level — so a nesting heading owns only its lead-in and nothing is counted twice."
 	tipElapsed  = "Wall-clock time of the sweep, and how many pairs it measured."
@@ -172,16 +199,35 @@ type App struct {
 	res *Analysis
 	err error
 
-	// ranA / ranB / ranFloor are the inputs res was computed from, so an
-	// edit since the sweep can be labelled stale rather than silently shown
-	// against the new text.
-	ranA     string
-	ranB     string
-	ranFloor float64
+	// ran is what res (or err) was computed from, so an edit since the
+	// sweep can be labelled stale rather than silently shown against the
+	// new text.
+	ran sweepInputs
 
 	// pending defers the first sweep to the first frame, keeping construction
-	// (and therefore opening a window) free of compression work.
+	// (and therefore opening a window) free of compression work; it is set
+	// again by an Analyze that lands while a sweep runs, so the edited text
+	// is swept on the next idle frame rather than dropped.
 	pending bool
+
+	// tasks, scope and storage come from the mount context. All three are
+	// nil on hosts without a runtime (the tour stage, the tests), where the
+	// sweep runs inline and nothing is persisted.
+	tasks   task.TaskApiI
+	scope   *lifetime.Scope
+	storage app.StorageI
+
+	// sweep is the runner the analysis computes on (W2): a task with a row
+	// and a cancel, its outcome taken once at the top of Frame. launched is
+	// what the in-flight sweep measures, applied with that outcome.
+	sweep    bgjob.Runner[Analysis]
+	launched sweepInputs
+
+	// persisted mirrors what the store holds for the drafts (D6), so a sweep
+	// or Unmount writes only what changed. Guarded: the sweep persists from
+	// its own goroutine.
+	persistMu sync.Mutex
+	persisted sweepInputs
 
 	// cmap and scale are retained across frames: ColorScale caches a tick
 	// layout keyed on the range, and rebuilding it every frame would throw
@@ -221,6 +267,14 @@ type App struct {
 
 var _ app.AppI = (*App)(nil)
 
+// sweepInputs is what one sweep is computed from: the two drafts and the
+// floor, as the slider holds it. Comparable, so an edit since is one test.
+type sweepInputs struct {
+	a     string
+	b     string
+	floor float64
+}
+
 func newApp() (inst *App) {
 	inst = &App{
 		ids:             c.NewWidgetIdStack(),
@@ -240,7 +294,73 @@ func (inst *App) Mount(ctx app.MountContextI) (err error) {
 	inst.ids = ctx.Ids()
 	inst.logger = ctx.Log()
 	inst.bus = ctx.Bus()
+	inst.tasks = task.ForApp(ctx)
+	inst.scope = app.LifetimeOf(ctx)
+	inst.storage = ctx.Storage()
+	inst.restoreDrafts()
 	return
+}
+
+// restoreDrafts loads the persisted drafts over the example pair. A key
+// that is absent or unreadable leaves the default; the first sweep then
+// runs over whatever was restored.
+func (inst *App) restoreDrafts() {
+	if inst.storage == nil {
+		return
+	}
+	if raw, found, err := inst.storage.Get(keyDocA); err == nil && found {
+		inst.docA = string(raw)
+	}
+	if raw, found, err := inst.storage.Get(keyDocB); err == nil && found {
+		inst.docB = string(raw)
+	}
+	if raw, found, err := inst.storage.Get(keyFloor); err == nil && found {
+		if f, perr := strconv.ParseFloat(string(raw), 64); perr == nil {
+			inst.minSectionBytes = float64(clampFloor(f))
+		}
+	}
+	inst.persistMu.Lock()
+	inst.persisted = inst.inputs()
+	inst.persistMu.Unlock()
+}
+
+// persistDrafts writes in to the store when it differs from what the store
+// holds. Storage.Set is a bus round-trip, so the sweep calls this from its
+// own goroutine; Unmount is the one caller on the render goroutine, for the
+// edits made after the last sweep (bounded: three small writes at close).
+func (inst *App) persistDrafts(in sweepInputs) {
+	if inst.storage == nil {
+		return
+	}
+	inst.persistMu.Lock()
+	defer inst.persistMu.Unlock()
+	if in == inst.persisted {
+		return
+	}
+	writes := []struct {
+		key   string
+		value string
+		same  bool
+	}{
+		{keyDocA, in.a, in.a == inst.persisted.a},
+		{keyDocB, in.b, in.b == inst.persisted.b},
+		{keyFloor, strconv.FormatFloat(in.floor, 'f', -1, 64), in.floor == inst.persisted.floor},
+	}
+	for _, w := range writes {
+		if w.same {
+			continue
+		}
+		if err := inst.storage.Set(w.key, []byte(w.value)); err != nil {
+			inst.logger.Debug().Err(err).Str("key", w.key).Msg("writingstylescope: draft not stored")
+			return
+		}
+	}
+	inst.persisted = in
+}
+
+// inputs snapshots the drafts and the floor as the sweep takes them.
+func (inst *App) inputs() (in sweepInputs) {
+	return sweepInputs{a: inst.docA, b: inst.docB, floor: inst.minSectionBytes}
 }
 
 // bandJobKey derives this instance's band warm-up key from the id stack on
@@ -254,13 +374,16 @@ func (inst *App) bandJobKey() ecdf.BandJobKey {
 	return inst.bandKey
 }
 
-// Unmount cancels a confidence-band solve still running for this window. A
-// band that already finished stays in the shared ecdfbands cache, so a
-// reopen still renders instantly. The published pairs dataset is not
-// retracted here: the runtime retracts what this window published when the
-// host closes its bus client (ADR-0240 §SD5).
+// Unmount cancels a sweep or a confidence-band solve still running for this
+// window and persists the drafts edited since the last sweep. A band that
+// already finished stays in the shared ecdfbands cache, so a reopen still
+// renders instantly. The published pairs dataset is not retracted here: the
+// runtime retracts what this window published when the host closes its bus
+// client (ADR-0240 §SD5).
 func (inst *App) Unmount(ctx app.MountContextI) (err error) {
+	inst.sweep.Invalidate()
 	ecdf.CancelBandJob(inst.bandKey)
+	inst.persistDrafts(inst.inputs())
 	return
 }
 
@@ -268,8 +391,23 @@ func (inst *App) Unmount(ctx app.MountContextI) (err error) {
 // salt onto inst.ids (ADR-0026 §SD9), so the app must not Reset() the stack or
 // wrap the body in its own instance salt.
 func (inst *App) Frame(ctx app.FrameContextI) (err error) {
+	inst.takeResults()
 	inst.renderBody()
 	return
+}
+
+// takeResults moves the runner's outcome onto the instance once, at the top
+// of the frame, so every tab below reads one stable value. A refusal is
+// copied out with its reason and the runner reset to idle (W8).
+func (inst *App) takeResults() {
+	if res, _, ok := inst.sweep.TakeResult(); ok {
+		inst.applySweep(inst.launched, res, nil)
+		return
+	}
+	if snap := inst.sweep.Snapshot(); snap.State == bgjob.StateFailed {
+		inst.applySweep(inst.launched, nil, snap.Err)
+		inst.sweep.Invalidate()
+	}
 }
 
 func (inst *App) renderBody() {
@@ -296,23 +434,59 @@ func (inst *App) renderBody() {
 	}
 }
 
-// runPending performs the deferred first sweep. Construction seeds the example
-// pair but does no compression, so opening a window is free; the first frame
-// pays for it.
+// runPending performs the deferred sweep: the first one, which construction
+// left for the first frame so opening a window is free of compression work,
+// and a rerun queued behind a sweep that was still in flight.
 func (inst *App) runPending() {
-	if !inst.pending {
+	if !inst.pending || inst.sweep.Running() {
 		return
 	}
 	inst.pending = false
 	inst.run()
 }
 
-// run sweeps the current panes and records what it was computed from.
+// run sweeps the current panes. On a host with a runtime the sweep is a
+// task on the runner (W1, W2) and its outcome lands through takeResults on
+// a later frame; the compute callback persists the drafts it measures (D6)
+// and never touches imzero2. A second Analyze while one runs is queued, not
+// dropped.
+//
+// Without a task api — the tour stage and the tests — no frame loop would
+// take a runner's result, so the sweep runs inline over the example pair,
+// which is small. A pasted document on a real host never comes this way.
 func (inst *App) run() {
-	inst.res, inst.err = analyze(inst.docA, inst.docB, clampFloor(inst.minSectionBytes))
-	inst.ranA, inst.ranB, inst.ranFloor = inst.docA, inst.docB, inst.minSectionBytes
-	if inst.err != nil {
-		inst.logger.Warn().Err(inst.err).Msg("writingstylescope: sweep failed")
+	in := inst.inputs()
+	if inst.tasks == nil {
+		res, err := analyze(in.a, in.b, clampFloor(in.floor))
+		inst.applySweep(in, res, err)
+		return
+	}
+	if inst.sweep.Running() {
+		inst.pending = true
+		return
+	}
+	inst.launched = in
+	started := inst.sweep.StartReporting(inst.tasks, bgjob.Spec{Kind: sweepKind, Title: sweepTitle},
+		func(ctx context.Context, report bgjob.Reporter) (res *Analysis, err error) {
+			inst.persistDrafts(in)
+			return analyzeWith(ctx, in.a, in.b, clampFloor(in.floor), func(done uint64, total uint64) {
+				report(done, total, "section pairs")
+			})
+		})
+	if !started {
+		inst.logger.Debug().Msg("writingstylescope: sweep already running")
+	}
+}
+
+// applySweep records one sweep's outcome and what it was computed from.
+// Exactly one of res and err is meaningful; a refusal leaves no previous
+// matrix behind.
+func (inst *App) applySweep(in sweepInputs, res *Analysis, err error) {
+	inst.res, inst.err = res, err
+	inst.ran = in
+	if err != nil {
+		inst.res = nil
+		inst.logger.Warn().Err(err).Msg("writingstylescope: sweep failed")
 		return
 	}
 	if inst.cmap != nil {
@@ -323,7 +497,39 @@ func (inst *App) run() {
 
 // stale reports whether the panes have moved on since the cached sweep.
 func (inst *App) stale() (yes bool) {
-	return inst.docA != inst.ranA || inst.docB != inst.ranB || inst.minSectionBytes != inst.ranFloor
+	return inst.inputs() != inst.ran
+}
+
+// renderSweepRow draws the running sweep's standard row (W4) and keeps the
+// window repainting while it runs (W7). scopeKey distinguishes the rows of
+// tabs that are docked side by side. Nothing is drawn when no sweep runs.
+func (inst *App) renderSweepRow(scopeKey string) {
+	snap := inst.sweep.Snapshot()
+	if snap.State != bgjob.StateRunning {
+		return
+	}
+	for range c.HoverText(tipSweep).KeepIter() {
+		if jobprogress.Render(jobprogress.Input{
+			Ids:      inst.ids,
+			ScopeKey: scopeKey,
+			Fraction: snap.Fraction,
+			EtaMs:    snap.EtaMs,
+			Rate:     snap.Rate,
+			RateUnit: "pairs",
+			Note:     snap.Note,
+			Cancel:   true,
+		}).CancelClicked {
+			inst.sweep.Cancel()
+		}
+	}
+	c.RequestRepaint()
+}
+
+// renderStaleBadge is the stale state as a toned badge (L2). idStr keeps
+// the badges of side-by-side tabs apart.
+func (inst *App) renderStaleBadge(idStr string, text string) {
+	badge.New(inst.ids.PrepareStr(idStr), text).
+		Tone(badge.ToneWarning).Variant(badge.VariantSoft).Tooltip(tipStale).Send()
 }
 
 // colorRange is the matrix extent the heatmap and the colour bar span. A
@@ -390,8 +596,9 @@ func (inst *App) renderPane(idStr string, draft *string, hint string) {
 func (inst *App) renderControls() {
 	for range c.Horizontal().KeepIter() {
 		for range c.HoverText(tipRun).KeepIter() {
+			// The one action this view exists for (L2).
 			if c.Button(inst.ids.PrepareStr("run"), c.Atoms().Text("Analyze").Keep()).
-				SendResp().HasPrimaryClicked() {
+				Kind(c.ButtonKindPrimary).SendResp().HasPrimaryClicked() {
 				inst.run()
 			}
 		}
@@ -412,8 +619,9 @@ func (inst *App) renderControls() {
 			Text("section-length floor (bytes)").FixedDecimals(0).
 			SendRespVal(&inst.minSectionBytes)
 	}
+	inst.renderSweepRow("sweep-docs")
 	if inst.stale() {
-		metric("⚠ stale — the text or the floor changed since this result was computed.", tipStale)
+		inst.renderStaleBadge("stale-docs", "stale — the text or the floor changed since this result was computed")
 	}
 }
 
@@ -424,7 +632,11 @@ func (inst *App) renderStatus() {
 	}
 	r := inst.res
 	if r == nil {
-		metric("No result yet — press Analyze.", tipRun)
+		if inst.sweep.Running() {
+			metric("Sweeping — the result lands when the row above completes.", tipSweep)
+		} else {
+			metric("No result yet — press Analyze.", tipRun)
+		}
 		return
 	}
 	for range c.Horizontal().KeepIter() {
@@ -452,13 +664,14 @@ func (inst *App) renderStatus() {
 func (inst *App) renderMatrix() {
 	r := inst.res
 	if r == nil {
-		metric("No result yet — paste two documents on the Documents tab and press Analyze.", tipRun)
+		inst.renderNoResult("sweep-matrix")
 		return
 	}
 	metric("Every A section against every B section. Bright is close.", tipHeat)
 	if inst.stale() {
-		metric("⚠ showing the previous sweep — the text has changed since.", tipStale)
+		inst.renderStaleBadge("stale-matrix", "showing the previous sweep — the text has changed since")
 	}
+	inst.renderSweepRow("sweep-matrix")
 
 	inst.ensureColormap()
 	// Probe HERE — after the chrome above the plot and before the plot itself.
@@ -558,9 +771,9 @@ func (inst *App) renderTopPairs() {
 }
 
 // renderHandover draws the "Open in play" control under the ranked table. The
-// button starts a bus round-trip on its own goroutine — bus.Request is
-// synchronous and would stall the frame — and the outcome is read back from
-// the handover fields on a later frame.
+// button starts a bus round-trip off the frame — bus.Request is synchronous
+// and would stall it — and the outcome is read back from the handover fields
+// on a later frame.
 func (inst *App) renderHandover() {
 	busy, note, errText := inst.handoverState()
 	for range c.Horizontal().KeepIter() {
@@ -571,7 +784,7 @@ func (inst *App) renderHandover() {
 		for range c.HoverText(tipHandover).KeepIter() {
 			if c.Button(inst.ids.PrepareStr("handover"), c.Atoms().Text(label).Keep()).
 				SendResp().HasPrimaryClicked() && !busy && inst.bus != nil {
-				go inst.requestHandover()
+				inst.startHandover()
 			}
 		}
 		if inst.bus == nil {
@@ -591,13 +804,32 @@ func (inst *App) renderHandover() {
 // Distribution tab
 // ---------------------------------------------------------------------------
 
+// renderNoResult is a result tab without a result: a sweep in flight says so
+// and shows its row; otherwise the remedy is on the Documents tab (L4).
+func (inst *App) renderNoResult(scopeKey string) {
+	if inst.sweep.Running() {
+		metric("Sweeping the two documents — the result lands when the row completes.", tipSweep)
+		inst.renderSweepRow(scopeKey)
+		return
+	}
+	if inst.err != nil {
+		metric("cannot sweep: "+inst.err.Error(), tipRun)
+		return
+	}
+	metric("No result yet — paste two documents on the Documents tab and press Analyze.", tipRun)
+}
+
 func (inst *App) renderDistribution() {
 	r := inst.res
 	if r == nil {
-		metric("No result yet — paste two documents on the Documents tab and press Analyze.", tipRun)
+		inst.renderNoResult("sweep-dist")
 		return
 	}
 	metric("Where each pair sits among all the others. There is no threshold here on purpose: NCD has no absolute scale that survives a change of subject, language, or section length, so the only honest reference is the pair's own background.", tipEcdf)
+	if inst.stale() {
+		inst.renderStaleBadge("stale-dist", "showing the previous sweep — the text has changed since")
+	}
+	inst.renderSweepRow("sweep-dist")
 
 	n := len(r.Sorted)
 	if n < 2 || !(r.Min() < r.Max()) {
@@ -614,7 +846,7 @@ func (inst *App) renderDistribution() {
 	}
 	var snap ecdf.BandJobSnapshot
 	if !exact {
-		snap = ecdf.EnsureBandJob(inst.bandKey, nil, n, in.Style)
+		snap = ecdf.EnsureBandJob(inst.bandKey, inst.tasks, n, in.Style)
 	}
 
 	// Probe after the chrome above the plot, before the plot — see renderMatrix.

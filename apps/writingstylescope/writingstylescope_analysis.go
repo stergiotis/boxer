@@ -1,6 +1,7 @@
 package writingstylescope
 
 import (
+	"context"
 	"iter"
 	"math"
 	"slices"
@@ -134,6 +135,14 @@ func (inst *Analysis) Quantile(ncd float64) (q float64) {
 // measurement failure aborts the sweep rather than leaving a hole in the
 // matrix, because a hole would be indistinguishable from a low score.
 func analyze(srcA string, srcB string, minSectionBytes int) (res *Analysis, err error) {
+	return analyzeWith(context.Background(), srcA, srcB, minSectionBytes, nil)
+}
+
+// analyzeWith is analyze under a context and with a progress report: report,
+// when given, is called after each row of the cross-matrix with the pairs
+// measured so far and the total, and a cancelled ctx stops the sweep between
+// rows with ctx.Err().
+func analyzeWith(ctx context.Context, srcA string, srcB string, minSectionBytes int, report func(done uint64, total uint64)) (res *Analysis, err error) {
 	if len(srcA) > maxPaneBytes || len(srcB) > maxPaneBytes {
 		err = eb.Build().Int("bytesA", len(srcA)).Int("bytesB", len(srcB)).Int("limit", maxPaneBytes).
 			Errorf("document too large")
@@ -168,7 +177,7 @@ func analyze(srcA string, srcB string, minSectionBytes int) (res *Analysis, err 
 		DroppedB:        dropB,
 		MinSectionBytes: minSectionBytes,
 	}
-	err = res.sweep(enc)
+	err = res.sweep(ctx, enc, report)
 	if err != nil {
 		res = nil
 		return
@@ -185,7 +194,7 @@ func analyze(srcA string, srcB string, minSectionBytes int) (res *Analysis, err 
 // sweep fills the cross-matrix on the exact path (§SD5): one Similarity for
 // the whole grid, C(a‖b) measured directly, C(b) cached once per column
 // because it does not depend on the row.
-func (inst *Analysis) sweep(enc compression.CompressorI) (err error) {
+func (inst *Analysis) sweep(ctx context.Context, enc compression.CompressorI, report func(done uint64, total uint64)) (err error) {
 	// The reference text is irrelevant to MeasureCompressedLength, which is
 	// the only method this sweep calls — the Similarity is used here purely as
 	// the package's compressor harness. An empty reference keeps the
@@ -208,7 +217,14 @@ func (inst *Analysis) sweep(enc compression.CompressorI) (err error) {
 	}
 
 	inst.Ncd = make([]float64, rows*cols)
+	total := uint64(rows * cols)
+	if report != nil {
+		report(0, total)
+	}
 	for i, sa := range inst.SecA {
+		if err = ctx.Err(); err != nil {
+			return
+		}
 		var x uint64
 		x, err = sim.MeasureCompressedLength(sa.Text, "")
 		if err != nil {
@@ -223,6 +239,9 @@ func (inst *Analysis) sweep(enc compression.CompressorI) (err error) {
 				return
 			}
 			inst.Ncd[i*cols+j] = compression.CalculateNormalizedCompressionDistance(xy, x, colLen[j])
+		}
+		if report != nil {
+			report(uint64((i+1)*cols), total)
 		}
 	}
 

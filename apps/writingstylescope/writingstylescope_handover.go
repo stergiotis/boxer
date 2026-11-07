@@ -8,6 +8,7 @@ package writingstylescope
 // what opens matches what was clicked from.
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/apache/arrow-go/v18/arrow"
@@ -17,6 +18,7 @@ import (
 	"github.com/stergiotis/boxer/apps/play/launchcfg"
 	"github.com/stergiotis/boxer/public/keelson/runtime/adhocdata"
 	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
+	"github.com/stergiotis/boxer/public/keelson/runtime/task"
 	"github.com/stergiotis/boxer/public/keelson/runtime/windowhost"
 	"github.com/stergiotis/boxer/public/observability/eh"
 )
@@ -113,11 +115,26 @@ ORDER BY ncd ASC
 LIMIT %d`, alias, handoverLimit)
 }
 
+// startHandover runs requestHandover off the frame: counted into the
+// window's lifetime scope, so the host's drain sees it (W5), and as a
+// keelson task, so it has a row. A host that provides no scope gets a plain
+// goroutine — there is nothing to drain it into.
+func (inst *App) startHandover() {
+	run := func(context.Context) {
+		_ = task.RunToCompletion(inst.tasks, task.SpawnOpts{Kind: handoverKind, Title: handoverTitle}, inst.requestHandover)
+	}
+	if inst.scope != nil && inst.scope.Go(run) {
+		return
+	}
+	go run(context.Background())
+}
+
 // requestHandover publishes the current sweep and opens a play window on it.
 // Both halves are synchronous bus round-trips, so this must run off the render
-// thread; the outcome lands in the handover fields for the button to surface.
-// A re-click while a request is in flight is dropped.
-func (inst *App) requestHandover() {
+// thread; the outcome lands in the handover fields for the button to surface,
+// and is returned so the task row carries it too. A re-click while a request
+// is in flight is dropped.
+func (inst *App) requestHandover() (err error) {
 	inst.handoverMu.Lock()
 	if inst.handoverBusy {
 		inst.handoverMu.Unlock()
@@ -139,6 +156,7 @@ func (inst *App) requestHandover() {
 		inst.handoverNote = note
 	}
 	inst.handoverMu.Unlock()
+	return
 }
 
 // handover is the blocking body: publish (the publisher republishes onto

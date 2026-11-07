@@ -6,16 +6,19 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/adhocdata"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
+	"github.com/stergiotis/boxer/public/keelson/runtime/task"
 	"github.com/stergiotis/boxer/public/keelson/runtime/windowhost"
 )
 
 // manifest is the per-process AppI descriptor. Static; every newApp() returns
 // the same Manifest value.
 //
-// The measurement half touches nothing: no bus, no store, no filesystem. The
-// three declared caps are the "Open in play" handover and nothing else
-// (ADR-0175 §SD7) — publish the cross-matrix as an ephemeral dataset, retract
-// it when the window closes, ask the window host for a play window on it.
+// The measurement touches no filesystem. The caps are the "Open in play"
+// handover (ADR-0175 §SD7) — publish the cross-matrix as an ephemeral
+// dataset, ask the window host for a play window on it; the retract is the
+// runtime's — and the task subjects the sweep and the handover run under.
+// The two drafts and the length floor persist under the declared keys
+// (ADR-0185), which the host routes without a cap of their own.
 var manifest = app.Manifest{
 	Id:      "github.com/stergiotis/boxer/apps/writingstylescope",
 	Version: "0.1.0",
@@ -34,7 +37,8 @@ var manifest = app.Manifest{
 		PreferredWidth:  980,
 		PreferredHeight: 900,
 	},
-	Caps: []app.SubjectFilter{
+	PersistedKeys: []string{keyDocA, keyDocB, keyFloor},
+	Caps: append([]app.SubjectFilter{
 		{
 			Pattern:   adhocdata.SubjectPublish,
 			Direction: app.CapDirectionPub,
@@ -45,7 +49,7 @@ var manifest = app.Manifest{
 			Direction: app.CapDirectionPub,
 			Reason:    "writingstylescope: Open in play — a play window seeded with the query behind the pairs table (ADR-0135 §SD7)",
 		},
-	},
+	}, task.ProducerCaps()...),
 }
 
 // init registers the app into app.DefaultRegistry. Factory ctor so two open

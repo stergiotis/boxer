@@ -17,8 +17,9 @@
 // the ADR-0090-style headless elevation service (which would make this app a
 // zero-fs-cap bus client) is deferred to Phase 4.
 //
-// Lifecycle: Mount captures the logger; Frame renders inside the host-owned
-// window; Unmount cancels any in-flight sweep worker.
+// Lifecycle: Mount captures the logger and the task api; Frame takes the
+// sweep runner's result and renders inside the host-owned window; Unmount
+// cancels any in-flight sweep.
 package terrainscope
 
 import (
@@ -35,13 +36,17 @@ import (
 	"github.com/stergiotis/boxer/public/config/env"
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
+	"github.com/stergiotis/boxer/public/keelson/runtime/bgjob"
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
 	"github.com/stergiotis/boxer/public/keelson/runtime/task"
+	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/science/geo/swisstopo"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/badge"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/basemap"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/color"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/implot"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/jobprogress"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/portolan"
 )
 
@@ -137,6 +142,14 @@ const (
 	tipSigTgtH   = "1σ Gaussian uncertainty of the target height (metres). 0 pins the height."
 	tipSamples   = "Number of Monte-Carlo ensemble members drawn from the input distributions (0 = nominal sweep only)."
 	tipSimTime   = "Wall-clock time of the last ensemble simulation (nominal sweep + all Monte-Carlo members)."
+	tipRetry     = "Run the sweep again with the same parameters. Changing any parameter also relaunches it."
+	tipAdvanced  = "Target height, the angular spacing of the fan, and the 1σ uncertainty of each input. The defaults are a standing observer, a ground-level target and metre-scale position noise."
+)
+
+// sweepKind and sweepTitle name the keelson task each sweep runs as.
+const (
+	sweepKind  = "terrainscope.sweep"
+	sweepTitle = "line-of-sight sweep"
 )
 
 // sepStr separates inline metric chips in a summary row.
@@ -160,7 +173,7 @@ type sweepParams struct {
 	samples     int64
 }
 
-// sweepResult is the worker's output, published atomically under App.mu.
+// sweepResult is the sweep runner's output; the frame takes it once.
 type sweepResult struct {
 	ens        swisstopo.LOSEnsembleResult
 	fromLV     swisstopo.LV95Coord
@@ -178,7 +191,10 @@ type App struct {
 	ids *c.WidgetIdStack
 
 	logger zerolog.Logger
-	// tasks runs each sweep as a keelson task owned by this window.
+	// tasks runs each sweep as a keelson task owned by this window, so it
+	// has a row and a cancel on the bus; nil on hosts without a runtime
+	// (the tour stage), where the runner still works and only the row is
+	// missing.
 	tasks task.TaskApiI
 
 	stage  selectionStageE
@@ -218,14 +234,16 @@ type App struct {
 	// dominate the next selection's auto-bounds fit.
 	plotEpoch uint64
 
-	// Worker state. mu serialises {epoch, cancelFn, inFlight, result} writes
-	// against render-goroutine reads; epoch drops late results from a
-	// superseded/cancelled compute.
-	mu       sync.Mutex
-	epoch    uint64
-	cancelFn context.CancelFunc
-	inFlight bool
-	result   *sweepResult
+	// sweep is the one-shot runner the ensemble computes on (W2): at most
+	// one sweep in flight, a stale result dropped by token, cancel through
+	// the row. result and sweepErr are the render goroutine's copies, taken
+	// from the runner at the top of Frame; exactly one of them is meaningful
+	// once a sweep has finished. sweepNote is the last outcome that was not
+	// a result — a cancel — shown in the status row until the next launch.
+	sweep     bgjob.Runner[sweepResult]
+	result    *sweepResult
+	sweepErr  error
+	sweepNote string
 }
 
 var _ app.AppI = (*App)(nil)
@@ -257,17 +275,12 @@ func (inst *App) Mount(ctx app.MountContextI) (err error) {
 	return
 }
 
-// Unmount cancels any in-flight worker so a closed window does not leave a
-// goroutine sampling tiles into a result nobody reads.
+// Unmount cancels any in-flight sweep so a closed window does not leave a
+// goroutine sampling tiles into a result nobody reads. The ensemble itself
+// takes no context, so the cancel lands between the sampler's init and the
+// sweep, or the goroutine runs the sweep out and drops the result.
 func (inst *App) Unmount(ctx app.MountContextI) (err error) {
-	inst.mu.Lock()
-	cancel := inst.cancelFn
-	inst.cancelFn = nil
-	inst.inFlight = false
-	inst.mu.Unlock()
-	if cancel != nil {
-		cancel()
-	}
+	inst.sweep.Invalidate()
 	return
 }
 
@@ -278,8 +291,27 @@ func (inst *App) Unmount(ctx app.MountContextI) (err error) {
 // body in its own instance salt (doing so discards the host salt and collides
 // with sibling apps that share a label string).
 func (inst *App) Frame(ctx app.FrameContextI) (err error) {
+	inst.takeResults()
 	inst.renderBody()
 	return
+}
+
+// takeResults moves the runner's outcome onto the instance once, at the top
+// of the frame, so every pane below reads one stable value (jackstay's
+// shape). A failure is copied out and the runner reset to idle, so the
+// error stays on the instance until a parameter change or Retry relaunches
+// (F4: a sweep that failed says so; it never shows as computing forever).
+func (inst *App) takeResults() {
+	if res, _, ok := inst.sweep.TakeResult(); ok {
+		inst.result = res
+		inst.sweepErr = nil
+		return
+	}
+	if snap := inst.sweep.Snapshot(); snap.State == bgjob.StateFailed {
+		inst.sweepErr = snap.Err
+		inst.result = nil
+		inst.sweep.Invalidate()
+	}
 }
 
 func (inst *App) renderBody() {
@@ -312,49 +344,106 @@ func (inst *App) renderBody() {
 }
 
 func (inst *App) renderControls() {
-	inst.mu.Lock()
-	inFlight := inst.inFlight
-	var dur time.Duration
-	var samples int
-	if inst.result != nil {
-		dur = inst.result.computeDur
-		samples = inst.result.ens.Samples
-	}
-	inst.mu.Unlock()
+	inst.renderStatusRow()
 
-	for range c.Horizontal().KeepIter() {
-		c.Label(statusLabel(inst.stage, inFlight)).Send()
-		if dur > 0 {
-			c.AddSpace(plotMargin)
-			metric(fmt.Sprintf("simulation: %s (%d samples)", fmtDur(dur), samples), tipSimTime)
-		}
-	}
-	if samplerErr != nil {
-		c.Label(fmt.Sprintf("tiles not available (%s=%q): %v", swissTilesDirEnv, tilesDir(), samplerErr)).Send()
-	}
-
+	// The window opens on what the method needs (L5): eye height, the fan's
+	// half-range and the ensemble size. The rest sits under one fold.
 	for range c.Horizontal().KeepIter() {
 		for range c.HoverText(tipObserverH).KeepIter() {
 			_ = c.SliderF64(inst.ids.PrepareStr("obsH"), inst.observerH, 0, 100).
 				Text("observer").Suffix(" m").FixedDecimals(1).SendRespVal(&inst.observerH)
 		}
-		for range c.HoverText(tipTargetH).KeepIter() {
-			_ = c.SliderF64(inst.ids.PrepareStr("tgtH"), inst.targetH, 0, 100).
-				Text("target").Suffix(" m").FixedDecimals(1).SendRespVal(&inst.targetH)
-		}
-	}
-	for range c.Horizontal().KeepIter() {
 		for range c.HoverText(tipSweepHalf).KeepIter() {
 			_ = c.SliderF64(inst.ids.PrepareStr("half"), inst.sweepHalfDeg, 0, 30).
 				Text("sweep ±").Suffix("°").FixedDecimals(1).SendRespVal(&inst.sweepHalfDeg)
+		}
+		for range c.HoverText(tipSamples).KeepIter() {
+			_ = c.SliderF64(inst.ids.PrepareStr("samples"), inst.samples, 0, 64).
+				Text("samples").FixedDecimals(0).SendRespVal(&inst.samples)
+		}
+	}
+	for range c.HoverText(tipAdvanced).KeepIter() {
+		for range c.CollapsingHeader(inst.ids.PrepareStr("advanced"),
+			c.WidgetText().Text("Advanced — target height, ray spacing, input uncertainties").Keep()).KeepIter() {
+			inst.renderAdvancedControls()
+		}
+	}
+	// Reset clears the two picked points; it is not the view's lead action
+	// (the sweep runs on its own as the parameters move), so it carries no
+	// kind.
+	if c.Button(inst.ids.PrepareStr("reset"), c.Atoms().Text(icons.IconClose+" Reset").Keep()).
+		SendResp().HasPrimaryClicked() {
+		inst.resetSelection()
+	}
+}
+
+// renderStatusRow is the window's instrument panel (L7): the selection
+// phase, the running sweep's row with its cancel, the last outcome — a
+// failure as a toned badge with its reason and a Retry, a cancel as a note —
+// and the simulation time once there is a result.
+func (inst *App) renderStatusRow() {
+	snap := inst.sweep.Snapshot()
+	running := snap.State == bgjob.StateRunning
+	for range c.Horizontal().KeepIter() {
+		c.Label(statusLabel(inst.stage, running)).Send()
+		if running {
+			if jobprogress.Render(jobprogress.Input{
+				Ids:      inst.ids,
+				ScopeKey: "sweep-row",
+				Fraction: snap.Fraction,
+				EtaMs:    snap.EtaMs,
+				Note:     snap.Note,
+				Cancel:   true,
+				Inline:   true,
+			}).CancelClicked {
+				inst.sweep.Cancel()
+				inst.sweepNote = "sweep cancelled"
+			}
+		}
+		if inst.result != nil && inst.result.computeDur > 0 {
+			c.AddSpace(plotMargin)
+			metric(fmt.Sprintf("simulation: %s (%d samples)", fmtDur(inst.result.computeDur), inst.result.ens.Samples), tipSimTime)
+		}
+	}
+	if samplerErr != nil {
+		c.Label(fmt.Sprintf("tiles not available (%s=%q): %v", swissTilesDirEnv, tilesDir(), samplerErr)).Send()
+	}
+	// A sweep that ended without a result — failed or cancelled — leaves a
+	// toned badge with the reason and a Retry. Retry is the one action that
+	// state leads with (L2), and the only primary the window ever shows,
+	// since the sweep otherwise runs on its own.
+	if running || (inst.sweepErr == nil && inst.sweepNote == "") {
+		return
+	}
+	for range c.Horizontal().KeepIter() {
+		if c.Button(inst.ids.PrepareStr("retry"), c.Atoms().Text("Retry").Keep()).
+			Kind(c.ButtonKindPrimary).SendResp().HasPrimaryClicked() {
+			inst.haveLaunched = false
+		}
+		if inst.sweepErr != nil {
+			badge.New(inst.ids.PrepareStr("sweep-err"), "sweep failed: "+inst.sweepErr.Error()).
+				Tone(badge.ToneError).Variant(badge.VariantSoft).Tooltip(tipRetry).Send()
+		} else {
+			badge.New(inst.ids.PrepareStr("sweep-note"), inst.sweepNote).
+				Tone(badge.ToneNeutral).Variant(badge.VariantSoft).Tooltip(tipRetry).Send()
+		}
+	}
+}
+
+// renderAdvancedControls is the fold's body: the parameters a first sweep
+// does not need. Per-input uncertainty is 1σ Gaussian; 0 pins that input.
+// The bearing fan stays deterministic.
+func (inst *App) renderAdvancedControls() {
+	for range c.Horizontal().KeepIter() {
+		for range c.HoverText(tipTargetH).KeepIter() {
+			_ = c.SliderF64(inst.ids.PrepareStr("tgtH"), inst.targetH, 0, 100).
+				Text("target").Suffix(" m").FixedDecimals(1).SendRespVal(&inst.targetH)
 		}
 		for range c.HoverText(tipSweepStep).KeepIter() {
 			_ = c.SliderF64(inst.ids.PrepareStr("step"), inst.sweepStepDeg, 0.1, 5).
 				Text("step").Suffix("°").FixedDecimals(2).SendRespVal(&inst.sweepStepDeg)
 		}
 	}
-	// Per-input uncertainty (1σ Gaussian); 0 pins that input. The bearing
-	// fan stays deterministic.
 	for range c.Horizontal().KeepIter() {
 		for range c.HoverText(tipSigObsPos).KeepIter() {
 			_ = c.SliderF64(inst.ids.PrepareStr("sigObsPos"), inst.sigmaObsPos, 0, 50).
@@ -375,37 +464,25 @@ func (inst *App) renderControls() {
 				Text("σ tgt ht").Suffix(" m").FixedDecimals(1).SendRespVal(&inst.sigmaTgtH)
 		}
 	}
-	for range c.Horizontal().KeepIter() {
-		for range c.HoverText(tipSamples).KeepIter() {
-			_ = c.SliderF64(inst.ids.PrepareStr("samples"), inst.samples, 0, 64).
-				Text("samples").FixedDecimals(0).SendRespVal(&inst.samples)
-		}
-	}
-	if c.Button(inst.ids.PrepareStr("reset"), c.Atoms().Text(icons.IconClose+" Reset").Keep()).
-		SendResp().HasPrimaryClicked() {
-		inst.resetSelection()
-	}
 }
 
-// maybeRecompute is the reactive, coalesced launch. While a worker is in
-// flight it keeps frames flowing (so the result paints when ready) and never
-// starts a second; once idle it (re)launches if the live params have diverged
-// from the last launch — leading + trailing coalescing, at most one worker.
+// maybeRecompute is the reactive, coalesced launch. While a sweep is in
+// flight it keeps frames flowing (so the row advances and the result paints
+// when ready, W7) and never starts a second; once idle it (re)launches if the
+// live params have diverged from the last launch — leading + trailing
+// coalescing, at most one sweep. Retry clears haveLaunched, which is the
+// same relaunch with the same params.
 func (inst *App) maybeRecompute() {
 	if inst.stage != selectionStagePt2 {
 		return
 	}
-	inst.mu.Lock()
-	inFlight := inst.inFlight
-	inst.mu.Unlock()
-
-	if inFlight {
+	if inst.sweep.Running() {
 		c.RequestRepaint()
 		return
 	}
 	cur := inst.currentParams()
 	if !inst.haveLaunched || cur != inst.lastLaunched {
-		inst.launchSweepWorker(cur)
+		inst.launchSweep(cur)
 		inst.lastLaunched = cur
 		inst.haveLaunched = true
 		c.RequestRepaint()
@@ -431,9 +508,7 @@ func (inst *App) currentParams() (p sweepParams) {
 }
 
 func (inst *App) renderMap() {
-	inst.mu.Lock()
 	res := inst.result
-	inst.mu.Unlock()
 
 	// The map is created on first render; it owns its view Go-side
 	// (ADR-0204). Zoom 8 shows the whole country to pick the points on.
@@ -465,13 +540,13 @@ func (inst *App) renderMap() {
 		}
 		if inst.stage >= selectionStagePt1 {
 			pt := portolan.LL(inst.pt1Lat, inst.pt1Lon)
-			p.Marker(pt, 8, color.Hex(0x44ff44ff))
-			p.Label(pt, 11, -2, 0, 2, fmt.Sprintf("observer (%.5f, %.5f)", inst.pt1Lat, inst.pt1Lon), 12, color.Hex(0xffffffff))
+			p.Marker(pt, 8, colorObserver)
+			p.Label(pt, 11, -2, 0, 2, fmt.Sprintf("observer (%.5f, %.5f)", inst.pt1Lat, inst.pt1Lon), 12, colorMapLabel)
 		}
 		if inst.stage >= selectionStagePt2 {
 			pt := portolan.LL(inst.pt2Lat, inst.pt2Lon)
-			p.Marker(pt, 8, color.Hex(0xff4444ff))
-			p.Label(pt, 11, -2, 0, 2, fmt.Sprintf("target (%.5f, %.5f)", inst.pt2Lat, inst.pt2Lon), 12, color.Hex(0xffffffff))
+			p.Marker(pt, 8, colorTarget)
+			p.Label(pt, 11, -2, 0, 2, fmt.Sprintf("target (%.5f, %.5f)", inst.pt2Lat, inst.pt2Lon), 12, colorMapLabel)
 		}
 	})
 }
@@ -498,10 +573,7 @@ func (inst *App) renderFanOverlay(p portolan.Projector, res *sweepResult) {
 }
 
 func (inst *App) renderSweepTab() {
-	inst.mu.Lock()
-	res := inst.result
-	inst.mu.Unlock()
-	if res != nil && len(res.ens.Nominal.Rays) > 0 {
+	if res := inst.result; res != nil && len(res.ens.Nominal.Rays) > 0 {
 		inst.renderSweepPanel(res)
 		return
 	}
@@ -509,25 +581,30 @@ func (inst *App) renderSweepTab() {
 }
 
 func (inst *App) renderDistTab() {
-	inst.mu.Lock()
-	res := inst.result
-	inst.mu.Unlock()
-	if res != nil && len(res.ens.Nominal.Rays) > 0 {
+	if res := inst.result; res != nil && len(res.ens.Nominal.Rays) > 0 {
 		inst.renderDistPane(res)
 		return
 	}
 	inst.renderPending()
 }
 
-// renderPending is the placeholder the plot tabs show before a sweep exists.
+// renderPending is the placeholder the plot tabs show when there is no sweep
+// to draw: which of the states that is — no points yet, one point, a sweep
+// running, a sweep that failed, or one that was cancelled — is a different
+// sentence with a different remedy (L4). The running row, the reason and
+// Retry live in the status row above the tabs.
 func (inst *App) renderPending() {
-	switch inst.stage {
-	case selectionStageNone:
+	switch {
+	case inst.stage == selectionStageNone:
 		c.Label("Click the observer point on the Map tab.").Send()
-	case selectionStagePt1:
+	case inst.stage == selectionStagePt1:
 		c.Label("Click the target point on the Map tab to run the sweep.").Send()
+	case inst.sweep.Running():
+		c.Label("Computing the line-of-sight sweep ensemble — the status row above shows its progress.").Send()
+	case inst.sweepErr != nil:
+		c.Label("The sweep failed; the reason and Retry are in the status row above.").Send()
 	default:
-		c.Label("Computing line-of-sight sweep ensemble…").Send()
+		c.Label("No sweep to show — change a parameter or press Retry in the status row above.").Send()
 	}
 }
 
@@ -624,7 +701,7 @@ func (inst *App) renderSweepPanel(res *sweepResult) {
 		col := rayColorAt(i, len(rays))
 		width := float32(1.0)
 		if isCenter {
-			col = color.Hex(0xffee44ff)
+			col = colorCenterRay
 			width = 2.5
 		}
 		name := fmt.Sprintf("%+.1f°", ens.AngleDeg[i])
@@ -634,7 +711,7 @@ func (inst *App) renderSweepPanel(res *sweepResult) {
 		p.SetNextColor(col.Literal()).SetNextWeight(width)
 		p.Line(name, ray.ProfileDist, f32sToF64(ray.ProfileElev))
 	}
-	p.SetNextColor(0xff8800ff).SetNextWeight(1.5)
+	p.SetNextColor(colorSightLine.Literal()).SetNextWeight(1.5)
 	p.Line("sight line", center.ProfileDist, f32sToF64(center.LOSElev))
 
 	var obsX []float64
@@ -646,7 +723,7 @@ func (inst *App) renderSweepPanel(res *sweepResult) {
 		}
 	}
 	if len(obsX) > 0 {
-		p.SetNextColor(0xff2222ff)
+		p.SetNextColor(colorObstruction.Literal())
 		p.Scatter("obstructions", obsX, obsY, implot.MarkerSquare, 4.0)
 	}
 	p.End()
@@ -711,10 +788,34 @@ func metric(text string, tip string) {
 	}
 }
 
-// distColorAt is a small categorical palette for the per-variable ECDF lines.
+// distColorAt colours the i-th per-variable ECDF line. The variables are
+// categories with no order, so the encoding is the IDS qualitative cycle
+// (ADR-0156); at most four inputs are ever randomised, well inside the
+// cycle's seven entries.
 func distColorAt(i int) (col color.Color) {
-	palette := []uint32{0x4488ffff, 0xff8844ff, 0x44cc66ff, 0xcc55ccff, 0xddcc44ff}
-	return color.Hex(palette[i%len(palette)])
+	return roleColor(styletokens.QualitativeCycle(i))
+}
+
+// Colours of the marks that are not data encodings: the two picked points,
+// their labels, the centre ray, the sight line and the obstruction markers.
+// Every one is a styletokens role or ramp sample (L1), so the theme chosen
+// at launch reaches them; the fan and the ray profiles stay on Batlow
+// (rayTone, visProbColor). The observer and the target are two unordered
+// categories, so they take the first two entries of the qualitative cycle
+// rather than a status tone they do not carry.
+var (
+	colorObserver    = roleColor(styletokens.QualitativeCycle(0))
+	colorTarget      = roleColor(styletokens.QualitativeCycle(1))
+	colorMapLabel    = roleColor(styletokens.NeutralTextExtreme)
+	colorCenterRay   = roleColor(styletokens.NeutralTextExtreme) // the highlighted one, legible over any Batlow sample
+	colorSightLine   = roleColor(styletokens.AccentDefault)      // the reference line the profiles are read against
+	colorObstruction = roleColor(styletokens.ErrorDefault)       // a blocked sight line is the defect the method reports
+)
+
+// roleColor is a styletokens role or ramp sample as a widget colour.
+// RGBA8.AsHex packs 0xRRGGBBAA, which is what color.Hex consumes.
+func roleColor(t styletokens.RGBA8) (col color.Color) {
+	return color.Hex(t.AsHex())
 }
 
 func statusLabel(stage selectionStageE, computing bool) (label string) {
@@ -746,51 +847,49 @@ func (inst *App) handleClick(lat float64, lon float64) {
 }
 
 func (inst *App) resetSelection() {
-	inst.mu.Lock()
-	inst.epoch++ // late worker writes from before the bump are dropped
-	prev := inst.cancelFn
-	inst.cancelFn = nil
-	inst.inFlight = false
+	inst.sweep.Invalidate() // an in-flight sweep's result would describe the old points
 	inst.result = nil
-	inst.mu.Unlock()
-	if prev != nil {
-		prev()
-	}
+	inst.sweepErr = nil
+	inst.sweepNote = ""
 	inst.stage = selectionStageNone
 	inst.haveLaunched = false
 	inst.plotEpoch++ // fresh egui_plot widget state next render
 }
 
-func (inst *App) launchSweepWorker(p sweepParams) {
-	ctx, cancel := context.WithCancel(context.Background())
-	inst.mu.Lock()
-	inst.epoch++
-	myEpoch := inst.epoch
-	prev := inst.cancelFn
-	inst.cancelFn = cancel
-	inst.inFlight = true
+// launchSweep starts one sweep on the runner as a cancellable keelson task
+// (W2, W5). The previous result is dropped at once: it described other
+// parameters, and the plot tabs say the sweep is running until the new one
+// lands. The compute callback never touches imzero2.
+//
+// Progress is indeterminate with a phase note. The ensemble is one call that
+// runs its Monte-Carlo members internally and takes neither a context nor a
+// progress hook, so a fraction from the samples done would need one in
+// swisstopo. deferred: a per-sample report from LineOfSightSweepEnsemble.
+func (inst *App) launchSweep(p sweepParams) {
 	inst.result = nil
-	inst.mu.Unlock()
-	if prev != nil {
-		prev()
-	}
-	// Run to completion: the ensemble takes no context, so the monitor and
-	// the window's close could stop it only before it starts.
-	go func() {
-		_ = task.RunToCompletion(inst.tasks, task.SpawnOpts{Kind: "terrainscope.sweep", Title: "line-of-sight sweep"}, func() error {
-			return inst.runSweepWorker(ctx, myEpoch, p)
+	inst.sweepErr = nil
+	inst.sweepNote = ""
+	started := inst.sweep.StartReporting(inst.tasks, bgjob.Spec{Kind: sweepKind, Title: sweepTitle},
+		func(ctx context.Context, report bgjob.Reporter) (res *sweepResult, err error) {
+			return runSweep(ctx, inst.logger, report, p)
 		})
-	}()
+	if !started {
+		inst.logger.Debug().Msg("terrainscope: sweep already running")
+	}
 }
 
-func (inst *App) runSweepWorker(ctx context.Context, myEpoch uint64, p sweepParams) (err error) {
+// runSweep is the worker body. The error it returns is the one the window
+// shows (W8), so it says what failed in the reader's terms; the structured
+// context goes to the log.
+func runSweep(ctx context.Context, logger zerolog.Logger, report bgjob.Reporter, p sweepParams) (res *sweepResult, err error) {
+	report(0, 0, "opening the elevation tiles")
 	s, err := ensureSampler()
 	if err != nil {
-		inst.finishWorker(myEpoch, nil)
+		err = eh.Errorf("elevation tiles not available: %w", err)
 		return
 	}
 	if ctx.Err() != nil {
-		inst.finishWorker(myEpoch, nil)
+		err = ctx.Err()
 		return
 	}
 	fromLV := swisstopo.WGS84ToLV95(swisstopo.WGS84Coord{Lat: p.fromLat, Lon: p.fromLon})
@@ -806,19 +905,20 @@ func (inst *App) runSweepWorker(ctx context.Context, myEpoch uint64, p sweepPara
 		SigmaObsHeightM: p.sigmaObsH,
 		SigmaTgtHeightM: p.sigmaTgtH,
 	}
+	report(0, 0, fmt.Sprintf("nominal sweep and %d ensemble members", spec.Samples))
 	t0 := time.Now()
 	ens, err := s.LineOfSightSweepEnsemble(fromLV, p.observer, toLV, p.target, spec)
 	computeDur := time.Since(t0)
 	if err != nil {
-		inst.logger.Error().Err(err).
+		logger.Error().Err(err).
 			Float64("fromLat", p.fromLat).Float64("fromLon", p.fromLon).
 			Float64("toLat", p.toLat).Float64("toLon", p.toLon).
 			Int64("samples", p.samples).
 			Msg("terrainscope: line-of-sight sweep ensemble failed")
-		inst.finishWorker(myEpoch, nil)
+		err = eh.Errorf("line-of-sight sweep ensemble: %w", err)
 		return
 	}
-	inst.finishWorker(myEpoch, &sweepResult{ens: ens, fromLV: fromLV, toLV: toLV, computeDur: computeDur})
+	res = &sweepResult{ens: ens, fromLV: fromLV, toLV: toLV, computeDur: computeDur}
 	return
 }
 
@@ -829,20 +929,6 @@ func fmtDur(d time.Duration) (s string) {
 		return "—"
 	}
 	return fmt.Sprintf("%.1f ms", float64(d.Microseconds())/1000.0)
-}
-
-// finishWorker publishes the result and clears the in-flight flag, but only
-// when this worker is still the current one (epoch match) — a superseded or
-// reset worker drops its result and leaves the live worker's flag alone.
-func (inst *App) finishWorker(myEpoch uint64, res *sweepResult) {
-	inst.mu.Lock()
-	if inst.epoch == myEpoch {
-		inst.inFlight = false
-		if res != nil {
-			inst.result = res
-		}
-	}
-	inst.mu.Unlock()
 }
 
 func (inst *App) armRecenter() {

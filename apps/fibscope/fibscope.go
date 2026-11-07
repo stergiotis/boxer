@@ -33,6 +33,7 @@ import (
 	"github.com/stergiotis/boxer/public/identity/fibonaccicode"
 	"github.com/stergiotis/boxer/public/identity/identifier"
 	"github.com/stergiotis/boxer/public/identity/identsql"
+	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
@@ -66,20 +67,22 @@ const (
 	sep = "  ·  " // separates inline metric chips in a row
 )
 
-// Region colours for the 64-bit strip. Distinct in both hue and lightness so
-// the three regions read apart at a glance and the comma pops. The raw hex
-// values also feed the trade-off plot's series (implot styles by u32).
-const (
-	colTagCodeHex = uint32(0x5b9dffff) // fibonacci code bits (blue)
-	colCommaHex   = uint32(0xffb454ff) // the trailing 11 comma (amber)
-	colBodyHex    = uint32(0x5fd39bff) // body bits (green)
-)
-
+// Region colours for the 64-bit strip. The three regions are unordered
+// categories, so they come from the IDS qualitative cycle (ADR-0156, L1):
+// entries 1, 2 and 3 are the ones that clear 3:1 against the surface under
+// both themes, and they differ in lightness as well as hue, so the regions
+// read apart at a glance and the comma pops. A word with no comma takes the
+// disabled-text role. The packed forms also feed the trade-off plot's series
+// (implot styles by u32); RGBA8.AsHex packs the 0xRRGGBBAA color.Hex takes.
 var (
+	colTagCodeHex = styletokens.QualitativeCycle(1).AsHex() // fibonacci code bits
+	colCommaHex   = styletokens.QualitativeCycle(2).AsHex() // the trailing 11 comma
+	colBodyHex    = styletokens.QualitativeCycle(3).AsHex() // body bits
+
 	colTagCode = color.Hex(colTagCodeHex)
 	colComma   = color.Hex(colCommaHex)
 	colBody    = color.Hex(colBodyHex)
-	colInvalid = color.Hex(0x9aa0a6ff) // a word with no comma (neutral grey)
+	colInvalid = color.Hex(styletokens.NeutralTextDisabled.AsHex())
 )
 
 // Hover-help — each concept is explained at the widget that shows it, via
@@ -335,11 +338,13 @@ func (inst *App) renderControls() {
 				DesiredWidth(320).HintText("id — decimal or 0x-hex").
 				SendRespVal(&inst.id)
 		}
-		if c.Button(inst.ids.PrepareStr("preset-ex"), c.Atoms().Text("example").Keep()).
-			SendResp().HasPrimaryClicked() {
+		// The worked example is the one action the tab leads with (L2);
+		// the invalid word is the teaching case beside it.
+		if c.Button(inst.ids.PrepareStr("preset-ex"), c.Atoms().Text("Example").Keep()).
+			Kind(c.ButtonKindPrimary).SendResp().HasPrimaryClicked() {
 			inst.id = defaultId
 		}
-		if c.Button(inst.ids.PrepareStr("preset-inv"), c.Atoms().Text("invalid").Keep()).
+		if c.Button(inst.ids.PrepareStr("preset-inv"), c.Atoms().Text("Invalid").Keep()).
 			SendResp().HasPrimaryClicked() {
 			inst.id = invalidId
 		}

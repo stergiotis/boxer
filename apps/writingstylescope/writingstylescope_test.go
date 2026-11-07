@@ -16,6 +16,7 @@ import (
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/adhocdata"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
+	"github.com/stergiotis/boxer/public/keelson/runtime/task"
 	"github.com/stergiotis/boxer/public/keelson/runtime/windowhost"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/colormap"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/ecdf"
@@ -665,21 +666,34 @@ func TestHandoverWithoutABusFailsCleanly(t *testing.T) {
 }
 
 func TestManifestDeclaresTheHandoverCaps(t *testing.T) {
-	// The two caps the handover actually exercises, and no others — an app
-	// that declares a cap it never uses is the §SD10 gate's other failure
-	// mode. Retract is the runtime's since ADR-0240 §SD5.
-	want := map[string]bool{
-		adhocdata.SubjectPublish: false,
-		windowhost.OpenSubject:   false,
+	// The two caps the handover actually exercises plus the task subjects
+	// the sweep and the handover run under, and no others — an app that
+	// declares a cap it never uses is the §SD10 gate's other failure mode.
+	// Retract is the runtime's since ADR-0240 §SD5.
+	want := map[string]app.CapDirectionE{
+		adhocdata.SubjectPublish: app.CapDirectionPub,
+		windowhost.OpenSubject:   app.CapDirectionPub,
+		task.PatternAll:          app.CapDirectionBoth,
 	}
+	seen := map[string]bool{}
 	for _, cap := range manifest.Caps {
-		_, known := want[cap.Pattern]
+		dir, known := want[cap.Pattern]
 		require.Truef(t, known, "undeclared-in-test cap %q", cap.Pattern)
-		want[cap.Pattern] = true
-		assert.Equal(t, app.CapDirectionPub, cap.Direction, "cap %q", cap.Pattern)
+		seen[cap.Pattern] = true
+		assert.Equal(t, dir, cap.Direction, "cap %q", cap.Pattern)
 		assert.NotEmpty(t, cap.Reason, "cap %q needs a reason", cap.Pattern)
 	}
-	for pattern, seen := range want {
-		assert.Truef(t, seen, "manifest is missing cap %q", pattern)
+	for pattern := range want {
+		assert.Truef(t, seen[pattern], "manifest is missing cap %q", pattern)
 	}
+}
+
+func TestDraftsPersistUnderTheDeclaredKeys(t *testing.T) {
+	// D6: the drafts and the floor are the declared keys, and a key that was
+	// never stored leaves the example pair in place.
+	assert.ElementsMatch(t, []string{keyDocA, keyDocB, keyFloor}, manifest.PersistedKeys)
+	inst := newApp()
+	inst.restoreDrafts()
+	assert.Equal(t, sampleDocA, inst.docA)
+	assert.Equal(t, float64(defaultMinSectionBytes), inst.minSectionBytes)
 }
