@@ -1,0 +1,12 @@
+# The scripted model of chat-wake.scene.md (ADR-0358): one reply per line,
+# picked by the conversation's position.
+# Turn 1: ask for play, open it, read it, write a query slower than the wait,
+# run it.
+{"tool":"request_access","args":{"plan":"run a slow query in play","open":[{"app":"play"}],"destinations":["keelson:apps"]}}
+{"tool":"open_window","args":{"app":"play"}}
+{"tool":"call_operation","args":{"window":"$window","operation":"get_state","args":{}}}
+{"tool":"call_operation","args":{"window":"$window","operation":"set_sql","args":{"sql":"SELECT sleep(3) AS slept, id FROM keelson('apps') ORDER BY id LIMIT 1"},"reason":"a query slower than the wait"}}
+{"tool":"call_operation","args":{"window":"$window","operation":"run","args":{}}}
+{"content":"The query is still running; I will tell you when it lands."}
+# The woken turn: the note says the run settled.
+{"content":"The slow query has landed: one row."}

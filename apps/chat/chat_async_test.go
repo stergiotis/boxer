@@ -420,3 +420,12 @@ func TestAResumeSettlesPendingWork(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, again, "settling is idempotent")
 }
+
+// The status line says a result waits for the person only when no turn will
+// read it first.
+func TestTheBackgroundLineSaysWhoReadsAResult(t *testing.T) {
+	assert.Equal(t, "1 operation running in the background", backgroundLine(1, 0, false))
+	assert.Equal(t, "1 result waiting for your next message", backgroundLine(0, 1, false))
+	assert.Equal(t, "2 results on their way to the model, 1 operation running in the background", backgroundLine(1, 2, true))
+	assert.Equal(t, "1 result on its way to the model", backgroundLine(0, 1, true))
+}

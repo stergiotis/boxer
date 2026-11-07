@@ -472,10 +472,9 @@ func (inst *App) renderComposer() {
 	}
 	if inst.coord != nil {
 		if running, waiting := inst.coord.pendingNow(); running > 0 || waiting > 0 {
-			line := plural(running, "operation") + " running in the background"
-			if waiting > 0 {
-				line = plural(waiting, "result") + " waiting for your next message, " + line
-			}
+			// A result goes to the model in the turn that is running or about
+			// to start for it, unless a wake is withheld.
+			line := backgroundLine(running, waiting, inst.pending != nil || inst.wakeReady())
 			for rt := range c.RichTextLabel(line) {
 				rt.Small().Weak()
 			}
@@ -620,7 +619,9 @@ func (inst *App) renderTranscript() {
 					return chatview.Block{Render: func() { inst.renderAsk(o) }}, true
 				}
 				return chatview.Block{Render: inst.renderWaiting}, true
-			case k.entry >= 0 && conv.entries[k.entry].speaker == speakerTool:
+			case k.entry >= 0 && (conv.entries[k.entry].speaker == speakerTool || conv.entries[k.entry].woken):
+				// A woken turn's line is the host's, as a tool call's is: it
+				// says why a turn started, and nobody wrote it (ADR-0358 §SD5).
 				e := &conv.entries[k.entry]
 				return chatview.Block{Render: func() { inst.renderToolEntry(e) }}, true
 			case k.entry >= 0:

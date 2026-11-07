@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json/v2"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/rs/zerolog/log"
@@ -258,6 +259,27 @@ func (inst *coordinator) holdWakes() {
 	inst.mu.Lock()
 	inst.wakesHeld = true
 	inst.mu.Unlock()
+}
+
+// backgroundLine is the status line for work going on in the background:
+// running calls, and settled ones the model has not read, which either
+// reach it now or wait for the person's next message.
+func backgroundLine(running int, waiting int, reading bool) (line string) {
+	var parts []string
+	if waiting > 0 {
+		switch {
+		case reading && waiting == 1:
+			parts = append(parts, "1 result on its way to the model")
+		case reading:
+			parts = append(parts, plural(waiting, "result")+" on their way to the model")
+		default:
+			parts = append(parts, plural(waiting, "result")+" waiting for your next message")
+		}
+	}
+	if running > 0 {
+		parts = append(parts, plural(running, "operation")+" running in the background")
+	}
+	return strings.Join(parts, ", ")
 }
 
 // pendingNow is how many calls are running, and how many settled calls wait

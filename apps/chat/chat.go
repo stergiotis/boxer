@@ -443,18 +443,24 @@ func (inst *App) startTurn(text string) (started bool) {
 // syncWake starts a turn when finished work waits for the model and nothing
 // else is going on (ADR-0358 §SD5).
 func (inst *App) syncWake() {
-	coord := inst.coord
-	// Not while the person edits a message they took back: the turn they
-	// are about to send takes the completion with it.
-	if inst.cli == nil || coord == nil || inst.pending != nil || inst.editing != nil || inst.conv.stranded || inst.deleting == inst.conv.id || !coord.wakeDue() {
+	if !inst.wakeReady() {
 		return
 	}
+	coord := inst.coord
 	req := inst.conv.requestWake()
 	if !inst.launchTurn(req, coord) {
 		return
 	}
 	inst.conv.beginWake(coord.noteWake(), time.Now().UnixMilli())
 	inst.pending = &pendingTurn{req: req, started: time.Now()}
+}
+
+// wakeReady is whether syncWake would start a turn now. Not while the person
+// edits a message they took back: the turn they are about to send takes the
+// completion with it.
+func (inst *App) wakeReady() bool {
+	coord := inst.coord
+	return inst.cli != nil && coord != nil && inst.pending == nil && inst.editing == nil && !inst.conv.stranded && inst.deleting != inst.conv.id && coord.wakeDue()
 }
 
 // launchTurn starts req's turn on the coordinator.

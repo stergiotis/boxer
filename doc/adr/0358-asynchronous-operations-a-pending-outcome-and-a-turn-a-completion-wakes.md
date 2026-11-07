@@ -199,7 +199,8 @@ a window, and ADR-0308 §SD11 keeps them out until they have one.
 ## Status
 
 Accepted 2026-11-05, with every decision implemented. Wakes are covered by the
-default lane and by no scene, and the gap in the verification plan stands.
+default lane and, since the update of 2026-11-07, by one scene on a scripted
+model; the gap in the verification plan stands.
 
 ## Updates
 
@@ -217,6 +218,19 @@ carries the revisions its work left. Play's `run` and `query` also wait to
 settle until the frame drew the result the panels show, which is what the
 `result` resource holds, or until three frames passed for a window whose
 frame draws no panels.
+
+### 2026-11-07 — A scene for a wake, and the woken line is the host's
+
+The chat's `chat-wake` scene runs play's `run` on a query that outlasts a
+one-second wait, against a scripted model, and checks the pending outcome, the
+completion, the woken turn's line and the model's answer on a real host. A
+scripted model reads nothing, so the gap above is unchanged.
+
+Writing it showed two faults in how §SD5 was drawn. The woken turn's line was
+drawn as a message, which read as part of the model's reply; it is now drawn as
+the host's line, as a tool call's is. The status line said a settled result
+waited for the person's next message while a wake was about to read it; it now
+says that only while a wake is withheld, by the same test that starts one.
 
 ## References
 
