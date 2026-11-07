@@ -306,8 +306,14 @@ since been retired in favour of trailer-based attribution.
 
 ## 6. Supply-chain and license gates
 
-- `govulncheck` runs against `./public/...` on every push via the
-  [vuln workflow](../.github/workflows/vuln.yaml).
+- `govulncheck` runs against `./public/...` on `v*` tags and manual dispatch
+  via the [vuln workflow](../.github/workflows/vuln.yaml), and as a gate of
+  every dependency update.
+- Dependency updates are local, gated commits made by
+  [scripts/dev/updatedeps.sh](../scripts/dev/updatedeps.sh), one target per
+  run (`go` or a `rust/<crate>` lockfile), with a publish-age cooldown.
+  Dependabot only raises alerts for Go and Cargo, and opens PRs only for
+  GitHub Actions ([ADR-0362](./adr/0362-dependency-updates-land-as-gated-local-commits.md)).
 - The license gate
   ([scripts/ci/license_gate.sh](../scripts/ci/license_gate.sh)) generates a
   CycloneDX 1.6 SBOM via

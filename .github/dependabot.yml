@@ -1,4 +1,8 @@
 version: 2
+# ADR-0362: Go and Cargo updates land as gated local commits made by
+# scripts/dev/updatedeps.sh. Here those ecosystems only raise alerts
+# (open-pull-requests-limit: 0 stops version-update PRs; security alerts are
+# unaffected). GitHub Actions updates still come as PRs.
 updates:
   - package-ecosystem: "github-actions"
     directory: "/"
@@ -17,7 +21,7 @@ updates:
     cooldown:
       default-days: 5
       semver-major-days: 14
-    open-pull-requests-limit: 10
+    open-pull-requests-limit: 0
 
   # The rust/ crates are three independent lockfiles, not a workspace, so each
   # is listed separately. imzero2 gets its own entry below: it is the only one
@@ -32,7 +36,7 @@ updates:
     cooldown:
       default-days: 5
       semver-major-days: 14
-    open-pull-requests-limit: 10
+    open-pull-requests-limit: 0
 
   - package-ecosystem: "cargo"
     directory: "/rust/imzero2"
@@ -42,7 +46,7 @@ updates:
     cooldown:
       default-days: 5
       semver-major-days: 14
-    open-pull-requests-limit: 10
+    open-pull-requests-limit: 0
     # The egui ring moves as one commit or not at all: every crate here links
     # egui itself, so a single crate stepping to the next egui line puts two
     # copies of egui/emath/epaint/ecolor in the graph and the seam between them
