@@ -739,6 +739,17 @@
       }
     },
     {
+      "name": "BOXER_FIBSCOPE_ID",
+      "type": "string",
+      "description": "the 64-bit word a new fibscope window opens on, decimal or 0x-prefixed hexadecimal; a word that is not a tagged id is accepted; for scenes and demos",
+      "category": "boxer-fibscope",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/apps/fibscope"
+      }
+    },
+    {
       "name": "BOXER_FLIGHT_RECORDER",
       "type": "bool",
       "description": "enable the Go runtime flight recorder",
@@ -2111,6 +2122,17 @@
       }
     },
     {
+      "name": "BOXER_SQLAPPLETCREATOR_DRAFT",
+      "type": "string",
+      "description": "a draft for a new SQL applet creator window, as JSON with Sql and Endpoint (as the launch config carries them) and Slug, Title, Summary and Icon; a caller's launch config wins over it; for scenes and demos",
+      "category": "boxer-sqlappletcreator",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/apps/sqlappletcreator"
+      }
+    },
+    {
       "name": "BOXER_SQLAPPLET_DATASET_EVENTS",
       "type": "categorial-string",
       "default": "on",
@@ -2182,6 +2204,17 @@
       "origin": {
         "module": "github.com/stergiotis/boxer",
         "package": "github.com/stergiotis/boxer/public/thestack/imzero2/browserhost/tabhost"
+      }
+    },
+    {
+      "name": "BOXER_TERRAINSCOPE_POINTS",
+      "type": "string",
+      "description": "observer and target for a new terrainscope window as four WGS84 decimal degrees, observer latitude, longitude, target latitude, longitude, separated by commas; the sweep starts at once; for scenes and demos",
+      "category": "boxer-terrainscope",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/apps/terrainscope"
       }
     },
     {
@@ -2264,6 +2297,17 @@
       "origin": {
         "module": "github.com/stergiotis/boxer",
         "package": "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/demo/apps/widgets"
+      }
+    },
+    {
+      "name": "BOXER_WRITINGSTYLESCOPE_DOCS",
+      "type": "string",
+      "description": "two markdown files for a new writingstylescope window to compare, document A then document B, separated by the path-list separator as in PATH; the window neither restores nor persists the drafts; for scenes and demos",
+      "category": "boxer-writingstylescope",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/apps/writingstylescope"
       }
     },
     {
