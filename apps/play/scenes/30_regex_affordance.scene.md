@@ -34,7 +34,7 @@ LIMIT 20
 {"do":"wait","name":"Run","comment":"the app has mounted"}
 {"do":"sleep","settleMs":1800}
 {"do":"wait","value":"test input","role":"label","comment":"the affordance block is drawn"}
-{"do":"type","id":5703926214490371308,"role":"text_input","text":"UNITED AIRLINES INC / DELTA AIR LINES INC TRUSTEE","comment":"the shared test input: a TextEdit carries no accessible name, so it is anchored by its id, which derives from play's affordanceTestInput widget path and is the same across runs"}
+{"do":"type","name":"Regex test input","role":"text_input","text":"UNITED AIRLINES INC / DELTA AIR LINES INC TRUSTEE","comment":"the shared test input every regex affordance reads"}
 {"do":"read","valueContains":"match(es)","role":"label","nth":0,"pattern":"→ (?P<matches>\\d+) match","comment":"the first pattern, AIR ?LINES, against the input"}
 {"do":"expect","of":"matches","eq":2}
 {"do":"hover","value":"AFFORDANCES","role":"label","comment":"park the pointer over the affordance block; a wheel step goes to whatever is under it"}

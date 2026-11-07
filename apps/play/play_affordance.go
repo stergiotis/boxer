@@ -361,6 +361,7 @@ func (inst *PlayApp) renderAffordances() {
 			inst.affordanceTestInput, false).
 			DesiredWidth(float32(math.Inf(1))).
 			HintText("type a string to test regex matches…").
+			AccessibleName("Regex test input").
 			SendRespVal(&inst.affordanceTestInput)
 	}
 

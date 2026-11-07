@@ -632,6 +632,16 @@ if {{EguiUiOptionalOuter}}.is_some() {
 				BeginMethod("codeEditor").EndMethod().
 				BeginMethod("frame").Arg("frame", ctabb.B).CodeClientRust(rustClientCode("if !frame { {{Instance}} = {{Instance}}.frame(egui::Frame::NONE); }\n")).EndMethod().
 				BeginMethod("hintText").Arg("hint", ctabb.S).EndMethod().
+				// accessibleName: the name the accessibility tree gives this
+				// input. egui hands hintText to AccessKit as the node's
+				// placeholder, not its label, and a TextEdit has no label of
+				// its own, so without this every text input reads unnamed and
+				// a driver can only find it by id. The apply block sets the
+				// node's label after the widget has filled the node, so the
+				// hint stays the placeholder. Nothing is drawn.
+				BeginMethod("accessibleName").Arg("name", ctabb.S).
+				CodeClientRust(rustClientCode("self.text_edit_pending_accessible_name = Some(name);\n")).
+				EndMethod().
 				BeginMethod("password").Arg("password", ctabb.B).EndMethod().
 				BeginMethod("interactive").Arg("interactive", ctabb.B).EndMethod().
 				BeginMethod("desired_width").Arg("width", ctabb.F32).EndMethod().
@@ -906,6 +916,16 @@ if self.text_edit_pending_capture_chords.0 != 0 {
     self.text_edit_pending_capture_chords = (0, 0);
 }
 let out = self.apply_text_edit({{Instance}}, {{EguiUiOptionalOuter}}, {{FuncProcIdOuter}}, Some({{Id}}));
+// accessibleName: TextEdit::show filled the node from its WidgetInfo, which
+// carries the hint as placeholder and no label. Setting the label afterwards
+// on the same node names the input without touching the placeholder. Taken
+// unconditionally so a name never leaks onto the next TextEdit; does nothing
+// while AccessKit is off.
+if let Some(name) = self.text_edit_pending_accessible_name.take() {
+    if let Some(o) = out.as_ref() {
+        o.response.ctx.accesskit_node_builder(o.response.id, |b| b.set_label(name));
+    }
+}
 let mut changed = out.as_ref().map(|o| o.response.changed()).unwrap_or(false);
 // A builder method stashed the snippet on self.text_edit_pending_insert.
 // Splice it at the editor's persisted caret (replacing any selection) and

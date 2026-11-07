@@ -166,12 +166,12 @@ func (inst *App) Frame(ctx app.FrameContextI) (err error) {
 		if c.Button(inst.ids.PrepareStr("open-demo"), c.Atoms().Text("Open operations demo").Keep()).SendResp().HasPrimaryClicked() {
 			inst.openDemo(string(opsdemo.AppId))
 		}
-		c.TextEdit(inst.ids.PrepareStr("open-app"), inst.openApp, false).DesiredWidth(90).HintText("app").SendRespVal(&inst.openApp)
+		c.TextEdit(inst.ids.PrepareStr("open-app"), inst.openApp, false).DesiredWidth(90).HintText("app").AccessibleName("App").SendRespVal(&inst.openApp)
 		if c.Button(inst.ids.PrepareStr("open-app-button"), c.Atoms().Text("Open").Keep()).SendResp().HasPrimaryClicked() {
 			inst.openDemo(strings.TrimSpace(inst.openApp))
 		}
 		c.Label("Window").Send()
-		c.TextEdit(inst.ids.PrepareStr("window-key"), inst.windowKey, false).DesiredWidth(80).HintText("window key").SendRespVal(&inst.windowKey)
+		c.TextEdit(inst.ids.PrepareStr("window-key"), inst.windowKey, false).DesiredWidth(80).HintText("window key").AccessibleName("Window key").SendRespVal(&inst.windowKey)
 		if c.Button(inst.ids.PrepareStr("grant"), c.Atoms().Text("Request grant").Keep()).SendResp().HasPrimaryClicked() {
 			inst.requestGrant()
 		}
@@ -182,7 +182,7 @@ func (inst *App) Frame(ctx app.FrameContextI) (err error) {
 	for range c.HorizontalTop().KeepIter() {
 		c.Label("Destinations").Send()
 		c.TextEdit(inst.ids.PrepareStr("destinations"), inst.destinations, false).DesiredWidth(320).
-			HintText("e.g. keelson:apps, clickhouse:localhost:8123").SendRespVal(&inst.destinations)
+			HintText("e.g. keelson:apps, clickhouse:localhost:8123").AccessibleName("Destinations").SendRespVal(&inst.destinations)
 	}
 	grantLine := "no grant"
 	if grant.Handle != "" {
@@ -191,7 +191,7 @@ func (inst *App) Frame(ctx app.FrameContextI) (err error) {
 	c.Label(grantLine).Send()
 	for range c.HorizontalTop().KeepIter() {
 		c.Label("Operation").Send()
-		c.TextEdit(inst.ids.PrepareStr("op"), inst.op, false).DesiredWidth(140).HintText("operation").SendRespVal(&inst.op)
+		c.TextEdit(inst.ids.PrepareStr("op"), inst.op, false).DesiredWidth(140).HintText("operation").AccessibleName("Operation").SendRespVal(&inst.op)
 		if c.Button(inst.ids.PrepareStr("describe"), c.Atoms().Text("Describe").Keep()).SendResp().HasPrimaryClicked() {
 			inst.describe()
 		}
@@ -205,7 +205,7 @@ func (inst *App) Frame(ctx app.FrameContextI) (err error) {
 			inst.turn()
 		}
 	}
-	c.TextEdit(inst.ids.PrepareStr("args"), inst.args, true).DesiredRows(3).HintText("arguments").SendRespVal(&inst.args)
+	c.TextEdit(inst.ids.PrepareStr("args"), inst.args, true).DesiredRows(3).HintText("arguments").AccessibleName("Arguments").SendRespVal(&inst.args)
 	if c.Button(inst.ids.PrepareStr("call"), c.Atoms().Text("Call").Keep()).Kind(c.ButtonKindPrimary).SendResp().HasPrimaryClicked() {
 		inst.call()
 	}

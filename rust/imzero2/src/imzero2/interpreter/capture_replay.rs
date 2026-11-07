@@ -39,6 +39,7 @@ struct SavedLiveState<'a> {
     text_edit_pending_highlight: Option<code_view::CodeViewJobData>,
     text_edit_pending_styled: Option<Vec<text_edit_highlight::StyledSection>>,
     text_edit_pending_set_cursor: Option<(u64, bool)>,
+    text_edit_pending_accessible_name: Option<String>,
     video_pipeline_request: Option<u8>,
     video_cap_ids: Vec<u64>,
     video_cap_flags: Vec<u32>,
@@ -169,6 +170,9 @@ impl<'a, R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'a, R, W> {
             text_edit_pending_highlight: std::mem::take(&mut self.text_edit_pending_highlight),
             text_edit_pending_styled: std::mem::take(&mut self.text_edit_pending_styled),
             text_edit_pending_set_cursor: std::mem::take(&mut self.text_edit_pending_set_cursor),
+            text_edit_pending_accessible_name: std::mem::take(
+                &mut self.text_edit_pending_accessible_name,
+            ),
             video_pipeline_request: std::mem::take(&mut self.video_pipeline_request),
             video_cap_ids: std::mem::take(&mut self.video_cap_ids),
             video_cap_flags: std::mem::take(&mut self.video_cap_flags),
@@ -275,6 +279,7 @@ impl<'a, R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'a, R, W> {
         self.text_edit_pending_highlight = s.text_edit_pending_highlight;
         self.text_edit_pending_styled = s.text_edit_pending_styled;
         self.text_edit_pending_set_cursor = s.text_edit_pending_set_cursor;
+        self.text_edit_pending_accessible_name = s.text_edit_pending_accessible_name;
         self.video_pipeline_request = s.video_pipeline_request;
         self.video_cap_ids = s.video_cap_ids;
         self.video_cap_flags = s.video_cap_flags;

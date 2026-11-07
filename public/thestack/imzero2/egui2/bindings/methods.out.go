@@ -4002,6 +4002,14 @@ func (inst TextEditFluid) HintText(hint string) TextEditFluid {
 	return inst
 }
 
+func (inst TextEditFluid) AccessibleName(name string) TextEditFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(TextEditMethodIdAccessibleName))
+	r.WriteString(name)
+
+	return inst
+}
+
 func (inst TextEditFluid) Password(password bool) TextEditFluid {
 	r := inst.r
 	r.WriteOpCode(uint32(TextEditMethodIdPassword))

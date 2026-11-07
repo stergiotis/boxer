@@ -39,12 +39,12 @@ goes ahead once the person approves it.
 {"do":"click","name":"observe","settleMs":500,"comment":"the person lowers the task to observe in this window"}
 {"do":"key","text":"Escape","settleMs":300}
 {"do":"wait","contains":"agent · observe","role":"button"}
-{"do":"focus","id":17222585601186924707,"comment":"the console's operation field"}
+{"do":"focus","name":"Operation","role":"text_input","comment":"the console's operation field"}
 {"do":"key","text":"A","modifiers":16}
-{"do":"type","id":17222585601186924707,"text":"set_note"}
-{"do":"focus","id":7028873545952381604,"comment":"the console's arguments field"}
+{"do":"type","name":"Operation","role":"text_input","text":"set_note"}
+{"do":"focus","name":"Arguments","role":"multiline_text_input","comment":"the console's arguments field"}
 {"do":"key","text":"A","modifiers":16}
-{"do":"type","id":7028873545952381604,"text":"{\"text\":\"from the agent\"}"}
+{"do":"type","name":"Arguments","role":"multiline_text_input","text":"{\"text\":\"from the agent\"}"}
 {"do":"click","name":"Call","role":"button","comment":"k2: a write in observe mode waits as a widening"}
 {"do":"wait","contains":"your turn","role":"button","comment":"the request waits in the person's queue (ADR-0324)"}
 {"do":"key","text":"F8","comment":"next by weight: the head of the queue opens its card, from the keyboard"}

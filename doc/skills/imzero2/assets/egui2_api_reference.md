@@ -185,7 +185,7 @@ status: draft
 | TableCellText | BuilderFactory | No | 1 | 0 | 0 | Immediate, Retained |
 | TableColumn | BuilderFactory | No | 0 | 0 | 10 | Immediate, Retained |
 | TableHeaderText | BuilderFactory | No | 1 | 0 | 0 | Immediate, Retained |
-| TextEdit | BuilderFactory | Yes | 2 | 0 | 21 | Immediate |
+| TextEdit | BuilderFactory | Yes | 2 | 0 | 22 | Immediate |
 | TimeRangePicker | BuilderFactory | Yes | 2 | 0 | 4 | Immediate, Retained |
 | TintedScope | BuilderFactory | Yes | 1 | 0 | 4 | Immediate, Retained, BlockIterator |
 | UiClipToMaxRect | Procedural | No | 0 | 0 | - | - |
@@ -2539,6 +2539,7 @@ TableHeaderText
 - **CodeEditor**()
 - **Frame**(frame: b)
 - **HintText**(hint: s)
+- **AccessibleName**(name: s)
 - **Password**(password: b)
 - **Interactive**(interactive: b)
 - **DesiredWidth**(width: f32)

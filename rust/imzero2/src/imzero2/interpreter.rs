@@ -716,6 +716,11 @@ pub struct ImZeroFffi<'a, R: std::io::BufRead, W: std::io::Write> {
     // widget runs, so a masked key never reaches the editor as text.
     text_edit_pending_capture_keys: u64,
     text_edit_pending_capture_chords: (u64, u8),
+    // Scratch slot for TextEditFluid.AccessibleName: the name the textEdit
+    // apply block sets as the AccessKit node's label once the widget has
+    // filled the node. One-shot like insertAtCursor, taken by the next
+    // TextEdit's apply.
+    text_edit_pending_accessible_name: Option<String>,
     // ADR-0088 runtime codec pipeline: `setVideoPipeline` stashes the
     // requested codec here (0=H.264, 1=VP9, 2=AV1); the headless host drains
     // it after dispatch and re-points the encoder. `video_cap_*` are pushed
@@ -1114,6 +1119,7 @@ impl<R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'_, R, W> {
             text_edit_pending_capture_tab: false,
             text_edit_pending_capture_keys: 0,
             text_edit_pending_capture_chords: (0, 0),
+            text_edit_pending_accessible_name: None,
             r9_et_prefetch_ids: Vec::with_capacity(8),
             r9_et_prefetch_values: Vec::with_capacity(32),
             r10_true_ids: Vec::with_capacity(1024),
@@ -9967,6 +9973,12 @@ if multiline { egui::TextEdit::multiline(&mut text).id(i) } else { egui::TextEdi
                             let mut hint = self.io.read_plain_s()?;
                             w = w.hint_text(hint);
                         }
+                        TextEditBuilderMethodId::AccessibleName => {
+                            #[cfg(feature = "puffin")]
+                            puffin::profile_scope!("match TextEditBuilderMethodId::AccessibleName");
+                            let mut name = self.io.read_plain_s()?;
+                            self.text_edit_pending_accessible_name = Some(name);
+                        }
                         TextEditBuilderMethodId::Password => {
                             #[cfg(feature = "puffin")]
                             puffin::profile_scope!("match TextEditBuilderMethodId::Password");
@@ -10280,6 +10292,16 @@ if multiline { egui::TextEdit::multiline(&mut text).id(i) } else { egui::TextEdi
                     self.text_edit_pending_capture_chords = (0, 0);
                 }
                 let out = self.apply_text_edit(w, u, f, Some(i));
+                // accessibleName: TextEdit::show filled the node from its WidgetInfo, which
+                // carries the hint as placeholder and no label. Setting the label afterwards
+                // on the same node names the input without touching the placeholder. Taken
+                // unconditionally so a name never leaks onto the next TextEdit; does nothing
+                // while AccessKit is off.
+                if let Some(name) = self.text_edit_pending_accessible_name.take() {
+                    if let Some(o) = out.as_ref() {
+                        o.response.ctx.accesskit_node_builder(o.response.id, |b| b.set_label(name));
+                    }
+                }
                 let mut changed = out.as_ref().map(|o| o.response.changed()).unwrap_or(false);
                 // A builder method stashed the snippet on self.text_edit_pending_insert.
                 // Splice it at the editor's persisted caret (replacing any selection) and

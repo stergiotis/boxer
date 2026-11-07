@@ -203,7 +203,7 @@ const (
 // IdlFingerprint is the IDL these bindings were generated from, as
 // ir.Fingerprint digests it; the Rust client's generated enums carry the same
 // value from the same generation (ADR-0278 SD6, proposed).
-const IdlFingerprint uint64 = 0x348ff35a1bf10b14
+const IdlFingerprint uint64 = 0x4d33c2b8f7a33203
 const (
 	AtomsMethodIdBuild AtomsMethodIdE = 0
 
@@ -821,24 +821,25 @@ const (
 	TextEditMethodIdCodeEditor        TextEditMethodIdE = 1
 	TextEditMethodIdFrame             TextEditMethodIdE = 2
 	TextEditMethodIdHintText          TextEditMethodIdE = 3
-	TextEditMethodIdPassword          TextEditMethodIdE = 4
-	TextEditMethodIdInteractive       TextEditMethodIdE = 5
-	TextEditMethodIdDesiredWidth      TextEditMethodIdE = 6
-	TextEditMethodIdDesiredRows       TextEditMethodIdE = 7
-	TextEditMethodIdLockFocus         TextEditMethodIdE = 8
-	TextEditMethodIdCursorAtEnd       TextEditMethodIdE = 9
-	TextEditMethodIdClipText          TextEditMethodIdE = 10
-	TextEditMethodIdCharLimit         TextEditMethodIdE = 11
-	TextEditMethodIdInsertAtCursor    TextEditMethodIdE = 12
-	TextEditMethodIdHighlightJob      TextEditMethodIdE = 13
-	TextEditMethodIdSectionStyled     TextEditMethodIdE = 14
-	TextEditMethodIdNoWrapLayout      TextEditMethodIdE = 15
-	TextEditMethodIdReportCursor      TextEditMethodIdE = 16
-	TextEditMethodIdReportCursorRects TextEditMethodIdE = 17
-	TextEditMethodIdSetCursor         TextEditMethodIdE = 18
-	TextEditMethodIdCaptureTab        TextEditMethodIdE = 19
-	TextEditMethodIdCaptureKeys       TextEditMethodIdE = 20
-	TextEditMethodIdCaptureKeyChords  TextEditMethodIdE = 21
+	TextEditMethodIdAccessibleName    TextEditMethodIdE = 4
+	TextEditMethodIdPassword          TextEditMethodIdE = 5
+	TextEditMethodIdInteractive       TextEditMethodIdE = 6
+	TextEditMethodIdDesiredWidth      TextEditMethodIdE = 7
+	TextEditMethodIdDesiredRows       TextEditMethodIdE = 8
+	TextEditMethodIdLockFocus         TextEditMethodIdE = 9
+	TextEditMethodIdCursorAtEnd       TextEditMethodIdE = 10
+	TextEditMethodIdClipText          TextEditMethodIdE = 11
+	TextEditMethodIdCharLimit         TextEditMethodIdE = 12
+	TextEditMethodIdInsertAtCursor    TextEditMethodIdE = 13
+	TextEditMethodIdHighlightJob      TextEditMethodIdE = 14
+	TextEditMethodIdSectionStyled     TextEditMethodIdE = 15
+	TextEditMethodIdNoWrapLayout      TextEditMethodIdE = 16
+	TextEditMethodIdReportCursor      TextEditMethodIdE = 17
+	TextEditMethodIdReportCursorRects TextEditMethodIdE = 18
+	TextEditMethodIdSetCursor         TextEditMethodIdE = 19
+	TextEditMethodIdCaptureTab        TextEditMethodIdE = 20
+	TextEditMethodIdCaptureKeys       TextEditMethodIdE = 21
+	TextEditMethodIdCaptureKeyChords  TextEditMethodIdE = 22
 )
 
 const (

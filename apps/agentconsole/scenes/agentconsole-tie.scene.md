@@ -40,12 +40,12 @@ the second, and an id is a function of the window and the widget's path.
 {"do":"wait","valueContains":"grant task-","role":"label"}
 {"do":"click","name":"Call","role":"button","comment":"k1: get_state with {}, the read the writes below start from"}
 {"do":"wait","valueContains":"k1 · get_state · completed","role":"label"}
-{"do":"focus","id":17222585601186924707,"comment":"the console's operation field"}
+{"do":"focus","name":"Operation","role":"text_input","comment":"the console's operation field"}
 {"do":"key","text":"A","modifiers":16}
-{"do":"type","id":17222585601186924707,"text":"set_note"}
-{"do":"focus","id":7028873545952381604,"comment":"the console's arguments field"}
+{"do":"type","name":"Operation","role":"text_input","text":"set_note"}
+{"do":"focus","name":"Arguments","role":"multiline_text_input","comment":"the console's arguments field"}
 {"do":"key","text":"A","modifiers":16}
-{"do":"type","id":7028873545952381604,"text":"{\"text\":\"from the agent\"}"}
+{"do":"type","name":"Arguments","role":"multiline_text_input","text":"{\"text\":\"from the agent\"}"}
 {"do":"click","name":"Call","role":"button","comment":"k2: no expectation given, so the dispatcher uses the revision k1 read"}
 {"do":"wait","valueContains":"k2 · set_note · rendered","role":"label","settleMs":500}
 {"do":"read","id":12013363430533946716,"pattern":"^(?P<agentValue>from the agent)$","comment":"the demo's note took the command's value"}
@@ -62,20 +62,20 @@ the second, and an id is a function of the window and the widget's path.
 {"do":"wait","valueContains":"moved since it was read","role":"label"}
 {"do":"read","id":12013363430533946716,"pattern":"(?P<kept>and the person)","comment":"the person's text stands"}
 {"do":"capture","text":"agentconsole-tie"}
-{"do":"focus","id":17222585601186924707}
+{"do":"focus","name":"Operation","role":"text_input"}
 {"do":"key","text":"A","modifiers":16}
-{"do":"type","id":17222585601186924707,"text":"get_state"}
-{"do":"focus","id":7028873545952381604}
+{"do":"type","name":"Operation","role":"text_input","text":"get_state"}
+{"do":"focus","name":"Arguments","role":"multiline_text_input"}
 {"do":"key","text":"A","modifiers":16}
-{"do":"type","id":7028873545952381604,"text":"{}"}
+{"do":"type","name":"Arguments","role":"multiline_text_input","text":"{}"}
 {"do":"click","name":"Call","role":"button","comment":"k5: read again"}
 {"do":"wait","valueContains":"k5 · get_state · completed","role":"label"}
-{"do":"focus","id":17222585601186924707}
+{"do":"focus","name":"Operation","role":"text_input"}
 {"do":"key","text":"A","modifiers":16}
-{"do":"type","id":17222585601186924707,"text":"set_level"}
-{"do":"focus","id":7028873545952381604}
+{"do":"type","name":"Operation","role":"text_input","text":"set_level"}
+{"do":"focus","name":"Arguments","role":"multiline_text_input"}
 {"do":"key","text":"A","modifiers":16}
-{"do":"type","id":7028873545952381604,"text":"{\"level\":80}"}
+{"do":"type","name":"Arguments","role":"multiline_text_input","text":"{\"level\":80}"}
 {"do":"click","name":"Call","role":"button","comment":"k6: a write after a fresh read applies"}
 {"do":"wait","valueContains":"k6 · set_level · rendered","role":"label"}
 {"do":"read","valueContains":"level 80.0","role":"label","pattern":"level (?P<level>[\\d.]+)"}

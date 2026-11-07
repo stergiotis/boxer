@@ -204,7 +204,7 @@ pub enum FuncProcId {
 /// The IDL this client was generated from, as ir.Fingerprint digests it; the
 /// Go server's generated enums carry the same value from the same generation
 /// (ADR-0278 SD6, proposed).
-pub const IDL_FINGERPRINT: u64 = 0x348ff35a1bf10b14;
+pub const IDL_FINGERPRINT: u64 = 0x4d33c2b8f7a33203;
 #[derive(strum::FromRepr, Debug, PartialEq, Eq)]
 #[repr(u32)]
 pub enum AccessibleRegionBuilderMethodId {
@@ -1171,24 +1171,25 @@ pub enum TextEditBuilderMethodId {
     CodeEditor = 1,
     Frame = 2,
     HintText = 3,
-    Password = 4,
-    Interactive = 5,
-    DesiredWidth = 6,
-    DesiredRows = 7,
-    LockFocus = 8,
-    CursorAtEnd = 9,
-    ClipText = 10,
-    CharLimit = 11,
-    InsertAtCursor = 12,
-    HighlightJob = 13,
-    SectionStyled = 14,
-    NoWrapLayout = 15,
-    ReportCursor = 16,
-    ReportCursorRects = 17,
-    SetCursor = 18,
-    CaptureTab = 19,
-    CaptureKeys = 20,
-    CaptureKeyChords = 21,
+    AccessibleName = 4,
+    Password = 5,
+    Interactive = 6,
+    DesiredWidth = 7,
+    DesiredRows = 8,
+    LockFocus = 9,
+    CursorAtEnd = 10,
+    ClipText = 11,
+    CharLimit = 12,
+    InsertAtCursor = 13,
+    HighlightJob = 14,
+    SectionStyled = 15,
+    NoWrapLayout = 16,
+    ReportCursor = 17,
+    ReportCursorRects = 18,
+    SetCursor = 19,
+    CaptureTab = 20,
+    CaptureKeys = 21,
+    CaptureKeyChords = 22,
 }
 
 #[derive(strum::FromRepr, Debug, PartialEq, Eq)]
