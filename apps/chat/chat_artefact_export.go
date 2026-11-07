@@ -273,14 +273,16 @@ func (inst *App) planExport(thenMdedit bool) {
 		if p.confined {
 			p.confinedBy, p.confinedKey = coord.confinedBy()
 			// The confirmation refuses here: the record is written off the
-			// frame goroutine.
+			// frame goroutine, as work of the conversation's scope under its
+			// tail, so the run closes after it. A conversation that ended
+			// already has no journal to write it to.
 			rec := exportRefusalRecord{Revision: n, Stage: exportStageConfirmation, Reason: exportRefusal(p.confinedBy), ConfinedBy: p.confinedBy}
 			key := p.confinedKey
-			go func() {
-				if err := coord.journalExportRefusal(context.Background(), exportRefusedSealed, key, rec); err != nil {
+			coord.scope.Go(func(ctx context.Context) {
+				if err := coord.journalExportRefusal(coord.scope.Tail(ctx), exportRefusedSealed, key, rec); err != nil {
 					log.Warn().Err(err).Str("conversation", coord.conversation).Int("revision", rec.Revision).Msg("chat: the export's refusal was not written to the journal")
 				}
-			}()
+			})
 		}
 		p.endorse = coord.journalNow() != nil && !coord.endorsedHead()
 	}

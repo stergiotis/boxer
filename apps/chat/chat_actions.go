@@ -13,6 +13,7 @@ import (
 	"github.com/stergiotis/boxer/apps/play/launchcfg"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/marshalling"
 	"github.com/stergiotis/boxer/public/keelson/runtime/agentrun"
+	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/bgjob"
 	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
 	"github.com/stergiotis/boxer/public/keelson/runtime/clipboardbroker"
@@ -216,17 +217,34 @@ func trailSql(convId string) (sql string) {
 func (inst *App) openPlay(what string, l launchcfg.PlayLaunch) {
 	bus := inst.bus
 	inst.runAction("chat-open-play", "open "+what+" in play", func(ctx context.Context) (note string, err error) {
-		cfg, err := buscodec.Encode(l)
-		if err != nil {
-			err = eh.Errorf("encode the play launch config: %w", err)
-			return
-		}
-		if _, err = windowhost.RequestOpen(bus, launchcfg.AppId, launchcfg.Kind, cfg); err != nil {
-			err = eh.Errorf("open play: %w", err)
+		if err = requestPlay(bus, l); err != nil {
 			return
 		}
 		return "opened " + what + " in play", nil
 	}, nil)
+}
+
+// requestPlay asks the host for a play window on l and waits for its reply.
+// It blocks on the bus: call it off the frame.
+func requestPlay(bus app.BusI, l launchcfg.PlayLaunch) (err error) {
+	cfg, err := buscodec.Encode(l)
+	if err != nil {
+		err = eh.Errorf("encode the play launch config: %w", err)
+		return
+	}
+	if _, err = windowhost.RequestOpen(bus, launchcfg.AppId, launchcfg.Kind, cfg); err != nil {
+		err = eh.Errorf("open play: %w", err)
+	}
+	return
+}
+
+// requestPlayOnDatasets is a play window that runs sql on the host's
+// introspection endpoint over the ad-hoc datasets scoped, shown under names
+// (ADR-0240): the Analytics handover's shape. This file is the one that
+// names play's launch config.
+func requestPlayOnDatasets(bus app.BusI, sql string, scoped []string, names []string) (err error) {
+	return requestPlay(bus, launchcfg.PlayLaunch{Sql: sql, AutoRun: true, Endpoint: launchcfg.EndpointIntrospection,
+		Datasets: scoped, DatasetNames: names})
 }
 
 // runAction runs one copy, open or delete off the render thread;

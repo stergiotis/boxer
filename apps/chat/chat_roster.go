@@ -158,13 +158,19 @@ func buildRoster(runs []agentrun.Run, extra rosterExtra, chatApp string, here st
 }
 
 // The titles the roster names conversations by: each window keeps its
-// conversation's title in the app's storage, which every chat window of the
-// host reads.
-const titleStorePrefix = "title/"
+// conversation's title in the app's storage, under the prefix and the
+// conversation's id, which every chat window of the host reads. The
+// manifest declares the prefix in PersistedKeys, which is what makes the
+// host hand the window a store it may write. A key is one token of the
+// persist subject, so it holds letters, digits, '-' and '_' and nothing
+// else: a slash in it is refused at the bus.
+const titleStorePrefix = "title-"
 
 // storeTitle keeps the conversation's title once it changed, and hands it
 // to the coordinator for the questions it posts. The render goroutine calls
-// it once per frame; a write happens only on a change.
+// it once per frame; a write happens only on a change, and it goes to the
+// store off the frame: a Set is a bus round trip, which the host's persist
+// service answers.
 func (inst *App) storeTitle() {
 	conv := inst.conv
 	if conv.title == "" {
@@ -181,9 +187,12 @@ func (inst *App) storeTitle() {
 		inst.storedTitle = make(map[string]string, 4)
 	}
 	inst.storedTitle[conv.id] = conv.title
-	if err := inst.storage.Set(titleStorePrefix+conv.id, []byte(conv.title)); err != nil {
-		inst.log.Debug().Err(err).Msg("chat: keep the conversation's title for the roster")
-	}
+	storage, key, title := inst.storage, titleStorePrefix+conv.id, conv.title
+	inst.offFrame(func(context.Context) {
+		if err := storage.Set(key, []byte(title)); err != nil {
+			inst.log.Debug().Err(err).Msg("chat: keep the conversation's title for the roster")
+		}
+	})
 }
 
 // rosterRefresh is how often an open roster reads the windows again.
@@ -277,7 +286,7 @@ func (inst *App) renderRoster() {
 		}
 	}
 	if len(live)+len(resumable)+len(stranded)+len(closed) == 0 {
-		c.Label("no conversations kept yet").Send()
+		c.Label("No conversations kept yet").Send()
 	}
 }
 

@@ -16,14 +16,12 @@ import (
 	"github.com/apache/arrow-go/v18/arrow/array"
 	"github.com/apache/arrow-go/v18/arrow/memory"
 
-	"github.com/stergiotis/boxer/apps/play/launchcfg"
 	"github.com/stergiotis/boxer/public/config/env"
 	"github.com/stergiotis/boxer/public/keelson/runtime/adhocdata"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
-	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
 	"github.com/stergiotis/boxer/public/keelson/runtime/llm"
-	"github.com/stergiotis/boxer/public/keelson/runtime/windowhost"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 // AdvancedSeed shows the Analytics panel: token and answer statistics of
@@ -296,7 +294,7 @@ func openStatsInPlay(bus app.BusI, pubs statsPublishers, s chatStats, cells []su
 			return
 		}
 		if _, err = pubs.surface.Publish(bus, surface); err != nil {
-			err = eh.Errorf("publish %s: %w", aliasSurface, err)
+			err = eb.Build().Str("dataset", aliasSurface).Errorf("publish: %w", err)
 			return
 		}
 		datasets = append(datasets, aliasSurface)
@@ -310,11 +308,11 @@ func openStatsInPlay(bus app.BusI, pubs statsPublishers, s chatStats, cells []su
 		return
 	}
 	if _, err = pubs.calls.Publish(bus, calls); err != nil {
-		err = eh.Errorf("publish %s: %w", aliasCalls, err)
+		err = eb.Build().Str("dataset", aliasCalls).Errorf("publish: %w", err)
 		return
 	}
 	if _, err = pubs.turns.Publish(bus, turns); err != nil {
-		err = eh.Errorf("publish %s: %w", aliasTurns, err)
+		err = eb.Build().Str("dataset", aliasTurns).Errorf("publish: %w", err)
 		return
 	}
 	scoped := make([]string, 0, len(datasets))
@@ -328,14 +326,7 @@ func openStatsInPlay(bus app.BusI, pubs statsPublishers, s chatStats, cells []su
 			scoped = append(scoped, pubs.surface.Alias())
 		}
 	}
-	cfg, err := buscodec.Encode(launchcfg.PlayLaunch{Sql: statsSql, AutoRun: true, Endpoint: launchcfg.EndpointIntrospection,
-		Datasets: scoped, DatasetNames: datasets})
-	if err != nil {
-		err = eh.Errorf("encode the play launch config: %w", err)
-		return
-	}
-	if _, err = windowhost.RequestOpen(bus, launchcfg.AppId, launchcfg.Kind, cfg); err != nil {
-		err = eh.Errorf("open play: %w", err)
+	if err = requestPlayOnDatasets(bus, statsSql, scoped, datasets); err != nil {
 		return
 	}
 	note = fmt.Sprintf("opened in play: %d turns as %s, %d calls as %s", len(s.turns), aliasTurns, len(s.calls), aliasCalls)

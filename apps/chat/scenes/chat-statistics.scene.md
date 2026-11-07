@@ -36,7 +36,7 @@ opens a play window that reads the turns.
 {"do":"wait","valueContains":"1 turns · 1 answered · 2 model calls","role":"label"}
 {"do":"wait","valueContains":"needs two values to draw, has 1","role":"label","comment":"one answer time: no curve yet"}
 {"do":"wait","valueContains":"all 2 values are 1: no spread to draw","role":"label","comment":"both calls answered with one token"}
-{"do":"wait","valueContains":"no task yet: nothing is granted","role":"label","comment":"the surface was read"}
+{"do":"wait","valueContains":"No task yet: nothing is granted","role":"label","comment":"the surface was read"}
 {"do":"wait","valueContains":"open a window","role":"label","comment":"the launches"}
 {"do":"wait","valueContains":"0 of 0 granted used","role":"label"}
 {"do":"wait","valueContains":"1 turns · 1 answered","role":"label","settleMs":1000}

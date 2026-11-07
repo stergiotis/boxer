@@ -185,7 +185,7 @@ func (inst *App) renderArtefact() {
 			inst.renderPixelAsk(a)
 		}
 	}
-	c.AddSpace(4)
+	c.AddSpace(styletokens.PaddingInner(styletokens.ActiveDensity()))
 	lintLabel := "Lint"
 	if len(v.findings) > 0 {
 		lintLabel += " (" + strconv.Itoa(len(v.findings)) + ")"

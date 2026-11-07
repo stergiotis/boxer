@@ -1,6 +1,8 @@
 package chat
 
 import (
+	"context"
+
 	"github.com/stergiotis/boxer/public/keelson/runtime/attention"
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
@@ -83,11 +85,11 @@ func (inst *App) firstUnseen(i int) int {
 // seen tells the host the person looked at conversation, off the frame.
 func (inst *App) seen(conversation string) {
 	if bus := inst.bus; bus != nil {
-		go func() {
+		inst.offFrame(func(context.Context) {
 			if err := attention.Seen(bus, conversation); err != nil {
 				inst.log.Debug().Err(err).Msg("chat: tell the host the conversation was seen")
 			}
-		}()
+		})
 	}
 }
 
@@ -134,11 +136,11 @@ func (inst *App) setWatch(on bool) {
 	} else {
 		delete(l.snap.Conversation, watchKey)
 	}
-	go func() {
+	inst.offFrame(func(context.Context) {
 		if err := attention.SetLevel(bus, conv, watchKey, level); err != nil {
 			inst.log.Warn().Err(err).Msg("chat: the host did not take the watch")
 		}
-	}()
+	})
 }
 
 func cloneLevels(m map[attention.Key]attention.LevelE) (out map[attention.Key]attention.LevelE) {
@@ -186,11 +188,11 @@ func (inst *App) turnEnded(text string) {
 	}
 	bus, n := inst.bus, attention.Notice{Conversation: inst.conv.id, Title: inst.conv.title, Kind: ev.Kind, Text: text}
 	inst.looked.noticed = n.Conversation
-	go func() {
+	inst.offFrame(func(context.Context) {
 		if _, err := attention.Notify(bus, n); err != nil {
 			inst.log.Debug().Err(err).Msg("chat: report the turn's end to the host")
 		}
-	}()
+	})
 }
 
 const tipUrgent = "Urgent: what this conversation asks of you opens at once, as critical — also while you are Busy (ADR-0328). " +
@@ -228,10 +230,10 @@ func (inst *App) urgent() bool {
 // once the person confirms, and the window reads the table again.
 func (inst *App) askUrgent(on bool) {
 	bus, conv, title := inst.bus, inst.conv.id, inst.conv.title
-	go func() {
+	inst.offFrame(func(context.Context) {
 		refused, err := attention.RequestUrgent(bus, conv, title, on)
 		if err != nil || refused != "" {
 			inst.log.Warn().Err(err).Str("refused", refused).Msg("chat: the host did not take the urgency request")
 		}
-	}()
+	})
 }

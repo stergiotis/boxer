@@ -10,22 +10,29 @@ import (
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/inprocbus"
+	"github.com/stergiotis/boxer/public/keelson/runtime/lifetime"
 	"github.com/stergiotis/boxer/public/keelson/runtime/task"
 )
 
 // setupApp wires an in-proc bus + a per-app client with the manifest
-// caps, then runs Mount so the taskmonitor widget is live.
-func setupApp(t *testing.T) (a *App, busC *inprocbus.Client, cleanup func()) {
+// caps and a lifetime scope the way the host does, then runs Mount so the
+// taskmonitor widget is live. cleanup is the host's close: retire the
+// scope, unmount, wait for the drain.
+func setupApp(t *testing.T) (a *App, scope *lifetime.Scope, cleanup func()) {
 	t.Helper()
 	bus := inprocbus.NewInst(zerolog.Nop())
 	bus.SetRequestTimeout(2 * time.Second)
 	id := app.AppIdT(manifest.Id)
-	busC = bus.NewClient(id, manifest.Caps)
+	busC := bus.NewClient(id, manifest.Caps)
 	a = newApp()
 	mc := app.NewStaticMountContext(id, zerolog.Nop(), nil, busC, nil)
+	scope = lifetime.New(nil)
+	mc.SetLifetime(scope)
 	require.NoError(t, a.Mount(mc))
 	cleanup = func() {
+		scope.Retire()
 		_ = a.Unmount(mc)
+		<-scope.Done()
 	}
 	return
 }
@@ -76,22 +83,29 @@ func TestApp_SimulateErrorReachesErrorTerminal(t *testing.T) {
 	}), "errored task should reach history within 2s")
 }
 
+// The host's close (ADR-0322): the scope is retired, which cancels the
+// worker's task, Unmount returns without waiting, and the drain ends once
+// the worker has left.
 func TestApp_UnmountCancelsInFlight(t *testing.T) {
-	a, _, _ := setupApp(t)
+	a, scope, _ := setupApp(t)
 
-	a.durationSec = 10.0 // long enough that Unmount is the only way out
+	a.durationSec = 10.0 // long enough that the close is the only way out
 	a.startTask(task.UnitItems)
 
 	require.True(t, waitFor(func() bool { return a.monitor.InflightCount() > 0 }),
-		"task should be in-flight before Unmount")
+		"task should be in-flight before the close")
 
+	scope.Retire()
 	require.NoError(t, a.Unmount(nil))
-	// After Unmount, no further publishes happen and the widget has
-	// stopped — InflightCount is whatever it last observed before
-	// Stop. The contract is "no leaked goroutines + monitor torn
-	// down", which the next assertion catches indirectly via a
-	// subsequent startTask being a no-op (no monitor to observe).
+	select {
+	case <-scope.Done():
+	case <-time.After(2 * time.Second):
+		t.Fatal("the worker did not leave the scope after the retire")
+	}
 	assert.NoError(t, a.Unmount(nil), "Unmount is idempotent")
+	// Nothing starts once the scope retired: the drain stays done.
+	a.startTask(task.UnitItems)
+	<-scope.Done()
 }
 
 func TestApp_NoBusGracefulNoop(t *testing.T) {

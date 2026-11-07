@@ -188,7 +188,7 @@ func (inst *App) renderSurfaceSummary(m *surfaceModel) {
 	case m.ended > 0:
 		c.Label("no running task; " + strconv.Itoa(m.ended) + " ended").Selectable(false).Send()
 	default:
-		c.Label("no task yet: nothing is granted").Selectable(false).Send()
+		c.Label("No task yet: nothing is granted").Selectable(false).Send()
 	}
 	n, used, calls := m.statusCounts()
 	// Two rows of two: a wrapped row breaks a trailing label letter by
@@ -213,7 +213,7 @@ func (inst *App) renderSurfaceList(m *surfaceModel) {
 		cell := &m.cells[i]
 		if h := cellHeading(cell); h != head {
 			head = h
-			c.AddSpace(4)
+			c.AddSpace(styletokens.PaddingInner(styletokens.ActiveDensity()))
 			for rt := range c.RichTextLabel(h) {
 				rt.Strong()
 			}
@@ -369,7 +369,7 @@ func surfaceLegend() (groups []legendGroup) {
 // renderSurfaceLegend is the key under the graph: each encoding by name,
 // its entries in their colours, and on hover what an entry means.
 func (inst *App) renderSurfaceLegend() {
-	c.AddSpace(4)
+	c.AddSpace(styletokens.PaddingInner(styletokens.ActiveDensity()))
 	for gi, g := range surfaceLegend() {
 		for range c.IdScope(inst.ids.PrepareStr("surface-legend-" + strconv.Itoa(gi))) {
 			for start := 0; start < len(g.keys); start += g.perRow {

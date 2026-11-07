@@ -45,6 +45,10 @@ var manifest = app.Manifest{
 	SurfaceHints: app.SurfaceHints{PreferredWidth: 760, PreferredHeight: 720},
 	// The turn's state, for an agent that shares this window (ADR-0269).
 	Operations: ops.Catalog(),
+	// The roster's titles, one key per conversation under the prefix
+	// (chat_roster.go). Declared here so the host injects the persist cap;
+	// without it every write the window makes is refused at the bus.
+	PersistedKeys: []string{titleStorePrefix},
 	Caps: slices.Concat(
 		llm.ClientCaps("chat: send the conversation to the host's model"),
 		llm.RetainCaps("chat: keep the conversation on boxer.facts where the host's BOXER_LLM_RETAIN allows (ADR-0264)"),

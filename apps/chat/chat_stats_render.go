@@ -48,7 +48,7 @@ func (inst *App) renderStatsTab(pane float32) {
 	}
 	inst.renderOpenTrailViewer(busy)
 	if busy {
-		c.Label("publishing…").Send()
+		c.Label("Publishing…").Send()
 	} else if inst.handoverNote != "" {
 		for rt := range c.RichTextLabel(inst.handoverNote) {
 			rt.Small().Weak()

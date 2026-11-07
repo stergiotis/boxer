@@ -13,6 +13,7 @@ import (
 	"github.com/stergiotis/boxer/apps/opsdemo"
 	"github.com/stergiotis/boxer/public/keelson/runtime/agent"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
+	"github.com/stergiotis/boxer/public/keelson/runtime/lifetime"
 	"github.com/stergiotis/boxer/public/keelson/runtime/windowhost"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 )
@@ -23,6 +24,9 @@ const keepRows = 50
 // statusWait is how long one status poll waits for a final phase.
 const statusWait = 2 * time.Second
 
+// stopWait bounds the grant's stop at close.
+const stopWait = time.Second
+
 // row is one call in the log.
 type row struct {
 	key    string
@@ -32,16 +36,18 @@ type row struct {
 	result string
 }
 
-// App is one console window. Calls run on goroutines of the console's own;
-// what they learn lands under mu and is drawn by the next Frame.
+// App is one console window. Calls run on goroutines in the window's
+// lifetime scope, which the host drains at close (ADR-0322); what they learn
+// lands under mu and is drawn by the next Frame.
 type App struct {
-	ids    *c.WidgetIdStack
-	log    zerolog.Logger
-	bus    app.BusI
-	cli    *agent.Client
-	appCtx context.Context
-	cancel context.CancelFunc
-	wg     sync.WaitGroup
+	ids *c.WidgetIdStack
+	log zerolog.Logger
+	bus app.BusI
+	cli *agent.Client
+	// scope is the window's lifetime; ownScope says the host gave none and
+	// the console made its own, which Unmount then retires.
+	scope    *lifetime.Scope
+	ownScope bool
 
 	// Bound to widgets; render goroutine only.
 	openApp      string
@@ -74,43 +80,63 @@ func (inst *App) Mount(ctx app.MountContextI) (err error) {
 	inst.log = ctx.Log()
 	inst.bus = ctx.Bus()
 	inst.cli = agent.NewClient(inst.bus)
-	inst.appCtx, inst.cancel = context.WithCancel(context.Background())
+	if inst.scope = app.LifetimeOf(ctx); inst.scope == nil {
+		// A host without a lifetime scope (a bare test context).
+		inst.scope, inst.ownScope = lifetime.New(nil), true
+	}
+	// A grant ends with its coordinator (ADR-0269 §SD6): the stop runs once
+	// the calls have left, off the render goroutine, before the host closes
+	// the bus.
+	inst.scope.OnDrained(inst.stopGrant)
 	return
 }
 
+// Unmount has nothing to wait for: the host retired the scope before it and
+// drains it after (ADR-0322), and a scope of the console's own retires here.
 func (inst *App) Unmount(ctx app.MountContextI) (err error) {
-	if inst.cancel != nil {
-		inst.cancel()
+	if inst.ownScope {
+		inst.scope.Retire()
 	}
+	return
+}
+
+// stopGrant ends the grant the console still holds, under the drain's tail.
+func (inst *App) stopGrant(tail context.Context) {
 	inst.mu.Lock()
 	handle := inst.grant.Handle
+	inst.grant = agent.Grant{}
 	inst.mu.Unlock()
-	if handle != "" {
-		// A grant ends with its coordinator (ADR-0269 §SD6).
-		stopCtx, cancel := context.WithTimeout(context.Background(), time.Second)
-		_ = inst.cli.Stop(stopCtx, handle)
-		cancel()
+	if handle == "" {
+		return
 	}
-	inst.wg.Wait()
-	return
+	stopCtx, cancel := context.WithTimeout(tail, stopWait)
+	defer cancel()
+	if err := inst.cli.Stop(stopCtx, handle); err != nil {
+		inst.log.Debug().Err(err).Msg("agentconsole: the grant was not stopped at close")
+	}
 }
 
-// spawn runs fn off the render goroutine: the host refuses runtime.agent
-// requests made on it.
+// spawn runs fn off the render goroutine, as work of the window's scope: the
+// host refuses runtime.agent requests made on the render goroutine, and
+// waits for the scope's work at close. Once the scope retired nothing
+// starts.
 func (inst *App) spawn(fn func(ctx context.Context)) {
 	inst.mu.Lock()
 	inst.inflight++
 	inst.mu.Unlock()
-	inst.wg.Add(1)
-	go func() {
-		defer inst.wg.Done()
+	started := inst.scope.Go(func(ctx context.Context) {
 		defer func() {
 			inst.mu.Lock()
 			inst.inflight--
 			inst.mu.Unlock()
 		}()
-		fn(inst.appCtx)
-	}()
+		fn(ctx)
+	})
+	if !started {
+		inst.mu.Lock()
+		inst.inflight--
+		inst.mu.Unlock()
+	}
 }
 
 func (inst *App) setNote(s string) {
@@ -144,7 +170,7 @@ func (inst *App) Frame(ctx app.FrameContextI) (err error) {
 		if c.Button(inst.ids.PrepareStr("open-app-button"), c.Atoms().Text("Open").Keep()).SendResp().HasPrimaryClicked() {
 			inst.openDemo(strings.TrimSpace(inst.openApp))
 		}
-		c.Label("window").Send()
+		c.Label("Window").Send()
 		c.TextEdit(inst.ids.PrepareStr("window-key"), inst.windowKey, false).DesiredWidth(80).HintText("window key").SendRespVal(&inst.windowKey)
 		if c.Button(inst.ids.PrepareStr("grant"), c.Atoms().Text("Request grant").Keep()).SendResp().HasPrimaryClicked() {
 			inst.requestGrant()
@@ -154,7 +180,7 @@ func (inst *App) Frame(ctx app.FrameContextI) (err error) {
 		}
 	}
 	for range c.HorizontalTop().KeepIter() {
-		c.Label("destinations").Send()
+		c.Label("Destinations").Send()
 		c.TextEdit(inst.ids.PrepareStr("destinations"), inst.destinations, false).DesiredWidth(320).
 			HintText("e.g. keelson:apps, clickhouse:localhost:8123").SendRespVal(&inst.destinations)
 	}
@@ -164,7 +190,7 @@ func (inst *App) Frame(ctx app.FrameContextI) (err error) {
 	}
 	c.Label(grantLine).Send()
 	for range c.HorizontalTop().KeepIter() {
-		c.Label("operation").Send()
+		c.Label("Operation").Send()
 		c.TextEdit(inst.ids.PrepareStr("op"), inst.op, false).DesiredWidth(140).HintText("operation").SendRespVal(&inst.op)
 		if c.Button(inst.ids.PrepareStr("describe"), c.Atoms().Text("Describe").Keep()).SendResp().HasPrimaryClicked() {
 			inst.describe()
@@ -180,7 +206,7 @@ func (inst *App) Frame(ctx app.FrameContextI) (err error) {
 		}
 	}
 	c.TextEdit(inst.ids.PrepareStr("args"), inst.args, true).DesiredRows(3).HintText("arguments").SendRespVal(&inst.args)
-	if c.Button(inst.ids.PrepareStr("call"), c.Atoms().Text("Call").Keep()).SendResp().HasPrimaryClicked() {
+	if c.Button(inst.ids.PrepareStr("call"), c.Atoms().Text("Call").Keep()).Kind(c.ButtonKindPrimary).SendResp().HasPrimaryClicked() {
 		inst.call()
 	}
 	if note != "" {

@@ -1,13 +1,19 @@
 package chat
 
 import (
+	"slices"
 	"testing"
 	"time"
 
+	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/agentrun"
+	"github.com/stergiotis/boxer/public/keelson/runtime/app"
+	"github.com/stergiotis/boxer/public/keelson/runtime/inprocbus"
+	"github.com/stergiotis/boxer/public/keelson/runtime/lifetime"
+	"github.com/stergiotis/boxer/public/keelson/runtime/persist"
 )
 
 func TestTheRosterGroupsConversations(t *testing.T) {
@@ -58,4 +64,51 @@ func TestTheRosterGroupsConversations(t *testing.T) {
 	assert.ElementsMatch(t, []string{"done"}, cl, "deleted runs are left out")
 	require.Len(t, stranded, 1)
 	assert.Equal(t, "pinned", stranded[0].run.Conversation, "a stranded run has its own group")
+}
+
+// The roster's title reaches the host's store: the manifest declares the
+// prefix, the host injects the persist cap for it, and the write storeTitle
+// hands off the frame lands under the window's scope. Without the
+// declaration the bus refuses the write, which is what a manifest with no
+// PersistedKeys did.
+func TestTheRostersTitleReachesTheStore(t *testing.T) {
+	assert.Equal(t, []string{titleStorePrefix}, manifest.PersistedKeys)
+	bus := inprocbus.NewInst(zerolog.Nop())
+	bus.SetRequestTimeout(2 * time.Second)
+	backend := persist.NewMemoryBackend()
+	svc, err := persist.NewService(bus, zerolog.Nop(), backend)
+	require.NoError(t, err)
+	t.Cleanup(svc.Close)
+	alias := ManifestId.SubjectAlias()
+	clientOver := func(caps []app.SubjectFilter) (storage app.StorageI) {
+		storage, cErr := persist.NewClient(bus.NewClient(ManifestId, caps), ManifestId)
+		require.NoError(t, cErr)
+		return
+	}
+	titled := func(scope *lifetime.Scope, storage app.StorageI) (inst *App) {
+		inst = newApp()
+		inst.scope, inst.storage = scope, storage
+		inst.conv.started, inst.conv.title = true, "Wind field over the Aegean"
+		return
+	}
+
+	// The cap the window host injects for a manifest with PersistedKeys.
+	injected := append(slices.Clone(manifest.Caps), app.SubjectFilter{Pattern: persist.SubjectPrefix + alias + ".>", Direction: app.CapDirectionPub})
+	scope := lifetime.New(nil)
+	inst := titled(scope, clientOver(injected))
+	inst.storeTitle()
+	require.Eventually(t, func() bool {
+		v, found, _ := backend.Get(persist.StorageRef{Alias: alias}, titleStorePrefix+inst.conv.id)
+		return found && string(v) == inst.conv.title
+	}, 5*time.Second, 5*time.Millisecond)
+	scope.Retire()
+	<-scope.Done()
+
+	// The manifest's own caps alone: the write is refused at the bus.
+	refused := titled(lifetime.New(nil), clientOver(manifest.Caps))
+	refused.storeTitle()
+	refused.scope.Retire()
+	<-refused.scope.Done()
+	_, found, _ := backend.Get(persist.StorageRef{Alias: alias}, titleStorePrefix+refused.conv.id)
+	assert.False(t, found, "without the injected cap nothing reaches the store")
 }

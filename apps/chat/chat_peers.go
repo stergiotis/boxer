@@ -1,6 +1,7 @@
 package chat
 
 import (
+	"context"
 	"strconv"
 	"sync"
 
@@ -93,9 +94,9 @@ func (inst *App) raiseWindow(key string) {
 	if bus == nil || err != nil {
 		return
 	}
-	go func() {
+	inst.offFrame(func(context.Context) {
 		if rerr := windowhost.RequestRaise(bus, k); rerr != nil {
 			inst.log.Debug().Err(rerr).Str("window", key).Msg("chat: raise the conversation's window")
 		}
-	}()
+	})
 }

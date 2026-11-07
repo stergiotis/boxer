@@ -15,6 +15,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/agent"
 	"github.com/stergiotis/boxer/public/keelson/runtime/agentrun"
 	"github.com/stergiotis/boxer/public/keelson/runtime/agentrun/projection"
+	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/inprocbus"
 	"github.com/stergiotis/boxer/public/keelson/runtime/llm"
 	"github.com/stergiotis/boxer/public/llm/openaichat"
@@ -384,6 +385,16 @@ func TestAResumeRestoresTheSettings(t *testing.T) {
 	assert.True(t, second.perms.pixelsLocal)
 }
 
+// waitForStoredTitle waits for the title storeTitle hands to the store off
+// the frame.
+func waitForStoredTitle(t *testing.T, storage app.StorageI, conversation string, title string) {
+	t.Helper()
+	require.Eventually(t, func() bool {
+		v, found, _ := storage.Get(titleStorePrefix + conversation)
+		return found && string(v) == title
+	}, 5*time.Second, 5*time.Millisecond)
+}
+
 // mapStorage is an app storage over a map, for the roster's title.
 type mapStorage struct {
 	mu sync.Mutex
@@ -428,6 +439,7 @@ func TestAResumeKeepsTheTitle(t *testing.T) {
 	first.storeTitle()
 	require.Equal(t, titleModel, first.conv.titleSource)
 	id, title := first.conv.id, first.conv.title
+	waitForStoredTitle(t, storage, id, title)
 
 	second := appOver(t, &fakeModel{}, store)
 	second.storage = storage
@@ -447,6 +459,7 @@ func TestAResumeKeepsTheTitle(t *testing.T) {
 
 	second.conv.rename("Weekly plan")
 	second.storeTitle()
+	waitForStoredTitle(t, storage, id, "Weekly plan")
 	fourth := appOver(t, &fakeModel{}, store)
 	fourth.storage = storage
 	fourth.resumeRun(id)

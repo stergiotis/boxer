@@ -596,7 +596,7 @@ func (inst *App) renderRunsTab() {
 		inst.runs = *runs
 	}
 	if inst.runsJob.Snapshot().State == bgjob.StateRunning {
-		c.Label("listing…").Selectable(false).Send()
+		c.Label("Listing…").Selectable(false).Send()
 	}
 	inst.renderRoster()
 }

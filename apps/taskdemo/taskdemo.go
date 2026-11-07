@@ -4,11 +4,12 @@
 // taskmonitor widget that renders the in-flight + history panes with
 // per-row cancel button and error-text details.
 //
-// The fake worker is a single goroutine per spawned task that loops
-// for the configured duration, calling Report at fixed wall-clock
-// intervals. Report's humanized-change gate is what produces the
-// pleasantly throttled progress bar; the gate is not visible to the
-// producer code — it just calls Report as fast as it wants.
+// The fake worker is a single goroutine per spawned task, in the window's
+// lifetime scope (ADR-0322), that loops for the configured duration,
+// calling Report at fixed wall-clock intervals. Report's humanized-change
+// gate is what produces the pleasantly throttled progress bar; the gate is
+// not visible to the producer code — it just calls Report as fast as it
+// wants.
 package taskdemo
 
 import (
@@ -21,6 +22,7 @@ import (
 
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
+	"github.com/stergiotis/boxer/public/keelson/runtime/lifetime"
 	"github.com/stergiotis/boxer/public/keelson/runtime/task"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/taskmonitor"
@@ -75,10 +77,12 @@ type App struct {
 	// (ADR-0032 §SD2); cached once at newApp.
 	density styletokens.DensityE
 
-	// appCtx is cancelled on Unmount. Workers derive their per-task
-	// context from this so window close cascades into cancellation.
-	appCtx    context.Context
-	cancelApp context.CancelFunc
+	// scope is the window's lifetime: the workers run in it, so the
+	// host's retire at close cancels their tasks and its drain waits for
+	// them. ownScope says the host gave none and the window made its own,
+	// which Unmount retires.
+	scope    *lifetime.Scope
+	ownScope bool
 
 	// durationSec is the slider-bound float (egui binds via float64).
 	durationSec float64
@@ -107,15 +111,16 @@ func newApp() (inst *App) {
 
 func (inst *App) Manifest() (m app.Manifest) { m = manifest; return }
 
-// Mount captures the host-supplied TaskApiI, constructs + starts the
-// taskmonitor widget, and prepares an app-scoped context so Unmount
-// can cancel in-flight tasks immediately rather than waiting on the
-// host's reapClosed path.
+// Mount captures the host-supplied TaskApiI, the window's lifetime scope
+// the workers run in, and constructs + starts the taskmonitor widget.
 func (inst *App) Mount(ctx app.MountContextI) (err error) {
 	inst.ids = ctx.Ids()
 	inst.logger = ctx.Log()
 	inst.tasks = task.ForApp(ctx)
-	inst.appCtx, inst.cancelApp = context.WithCancel(context.Background())
+	if inst.scope = app.LifetimeOf(ctx); inst.scope == nil {
+		// A host without a lifetime scope (a bare test context).
+		inst.scope, inst.ownScope = lifetime.New(nil), true
+	}
 
 	inst.monitor = taskmonitor.New(inst.ids, "tm", inst.tasks, taskmonitor.Options{
 		DefaultOpen: true,
@@ -126,26 +131,14 @@ func (inst *App) Mount(ctx app.MountContextI) (err error) {
 	return
 }
 
-// unmountDrainCapMs bounds how long Unmount waits for cancelled workers
-// to publish their terminals before tearing the monitor down. Workers
-// see appCtx.Done() within one reportTickMs (20ms) and then publish
-// Done immediately; 500ms is generous slack and never blocks the real
-// UI close-window path long enough to feel laggy.
-const unmountDrainCapMs = 500
-
-// Unmount cancels in-flight tasks via appCtx, briefly waits for the
-// resulting terminal publications so OnDone drains the monitor's
-// in-flight map, then stops the monitor (unsubscribes the observer).
+// Unmount stops the monitor (unsubscribes the observer) and returns. The
+// workers' tasks were cancelled when the host retired the scope before
+// Unmount, and the host drains the scope after it, off the render
+// goroutine (ADR-0322); a scope of the window's own retires here. The
+// terminals the workers publish after this land in no window.
 func (inst *App) Unmount(ctx app.MountContextI) (err error) {
-	if inst.cancelApp != nil {
-		inst.cancelApp()
-	}
-	deadline := time.Now().Add(unmountDrainCapMs * time.Millisecond)
-	for time.Now().Before(deadline) {
-		if inst.monitor == nil || inst.monitor.InflightCount() == 0 {
-			break
-		}
-		time.Sleep(5 * time.Millisecond)
+	if inst.ownScope {
+		inst.scope.Retire()
 	}
 	if inst.monitor != nil {
 		_ = inst.monitor.Close()
@@ -172,25 +165,29 @@ func (inst *App) Frame(ctx app.FrameContextI) (err error) {
 
 // --- producer side ---------------------------------------------------
 
-// startTask kicks off a goroutine that spawns a task of the chosen
-// unit + duration and runs the fake-work loop.
+// startTask starts a worker in the window's scope that spawns a task of
+// the chosen unit + duration and runs the fake-work loop. Nothing starts
+// once the scope retired.
 func (inst *App) startTask(unit task.UnitE) {
 	if inst.tasks == nil {
 		return
 	}
 	durationMs := int64(inst.durationSec * 1000.0)
 	simulateErr := inst.simulateError
-	go inst.runFakeTask(unit, durationMs, simulateErr)
+	inst.scope.Go(func(ctx context.Context) {
+		inst.runFakeTask(ctx, unit, durationMs, simulateErr)
+	})
 }
 
-// runFakeTask is the worker goroutine. Spawns a task, ticks every
-// reportTickMs until duration elapses (or until cancelled), and
-// publishes Done or Error.
-func (inst *App) runFakeTask(unit task.UnitE, durationMs int64, simulateErr bool) {
+// runFakeTask is the worker. Spawns a task under ctx, the scope's work
+// context, so the handle is cancelled with the scope; ticks every
+// reportTickMs until duration elapses (or until cancelled), and publishes
+// Done or Error.
+func (inst *App) runFakeTask(ctx context.Context, unit task.UnitE, durationMs int64, simulateErr bool) {
 	total := totalForUnit(unit)
 	title := titleForUnit(unit, durationMs)
 
-	h, err := inst.tasks.Spawn(inst.appCtx, task.SpawnOpts{
+	h, err := inst.tasks.Spawn(ctx, task.SpawnOpts{
 		Kind:        "demo." + unit.String(),
 		Title:       title,
 		Cancellable: true,
@@ -256,6 +253,11 @@ func titleForUnit(u task.UnitE, durationMs int64) (s string) {
 
 // --- render ----------------------------------------------------------
 
+// noTaskApiLine is the empty state when the host gives the window no task
+// API: nothing can be spawned here, and the remedy is a host with a bus.
+const noTaskApiLine = "This host gives the window no task API, so nothing can be spawned here. " +
+	"Open the demo from a host with a bus — the desktop or the headless host — to see tasks run."
+
 func (inst *App) renderApp() {
 	for range c.PanelTopInside(inst.ids.PrepareStr("topbar")).Resizable(false).KeepIter() {
 		c.Label("Background task demo — spawn fake tasks; watch the humanized-change emission gate at work").Send()
@@ -292,6 +294,7 @@ func (inst *App) renderControls() {
 		for range c.Horizontal().KeepIter() {
 			if c.Button(inst.ids.PrepareStr("start-items"),
 				c.Atoms().Text("Start items task").Keep()).
+				Kind(c.ButtonKindPrimary).
 				SendResp().HasPrimaryClicked() {
 				inst.startTask(task.UnitItems)
 			}
@@ -308,7 +311,7 @@ func (inst *App) renderControls() {
 		}
 
 		if inst.tasks == nil {
-			c.Label("Task API unavailable (M1 host?) — start the demo via a Phase-A+ carousel").Send()
+			c.Label(noTaskApiLine).Wrap().Send()
 		}
 	}
 }

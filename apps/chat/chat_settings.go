@@ -365,7 +365,7 @@ func heading(text string) {
 }
 
 func section(text string) {
-	c.AddSpace(10)
+	c.AddSpace(styletokens.PaddingOuter(styletokens.ActiveDensity()))
 	for rt := range c.RichTextLabel(text) {
 		rt.Strong()
 	}
@@ -413,7 +413,7 @@ func (inst *App) renderMaySection() {
 	if inst.coord == nil {
 		return
 	}
-	c.AddSpace(6)
+	c.AddSpace(styletokens.PaddingTight(styletokens.ActiveDensity()))
 	if inst.conv.started {
 		state := "off"
 		if inst.conv.apps {
@@ -427,7 +427,7 @@ func (inst *App) renderMaySection() {
 			c.Checkbox(inst.ids.PrepareStr("apps"), inst.apps, "Apps — let the model work in app windows").SendRespVal(&inst.apps)
 		}
 	}
-	c.AddSpace(4)
+	c.AddSpace(styletokens.PaddingInner(styletokens.ActiveDensity()))
 	for range c.HoverText(tipAllow).KeepIter() {
 		c.Label("At most").Selectable(false).Send()
 	}
@@ -449,7 +449,7 @@ func (inst *App) renderMaySection() {
 	}
 	selector.Segmented(inst.ids, "pace", &inst.perms.unpaced).Style(selector.StyleRadio).Vertical().
 		Option(false, "At a pace I can follow").Option(true, "As fast as it can").Send()
-	c.AddSpace(4)
+	c.AddSpace(styletokens.PaddingInner(styletokens.ActiveDensity()))
 	for range c.HoverText(tipLaunch).KeepIter() {
 		c.Checkbox(inst.ids.PrepareStr("launch"), inst.perms.launch, "Open windows").SendRespVal(&inst.perms.launch)
 	}
@@ -459,7 +459,7 @@ func (inst *App) renderMaySection() {
 	for range c.HoverText(tipTyped).KeepIter() {
 		c.Checkbox(inst.ids.PrepareStr("typed"), inst.opTools, "A tool per operation").SendRespVal(&inst.opTools)
 	}
-	c.AddSpace(4)
+	c.AddSpace(styletokens.PaddingInner(styletokens.ActiveDensity()))
 	for range c.HoverText(tipPixels).KeepIter() {
 		c.Label("Pixels").Selectable(false).Send()
 	}
@@ -492,7 +492,7 @@ func (inst *App) renderMaySection() {
 	case !p.reaches():
 		weak("This conversation's model is off this machine and not trusted with sealed data: it sees no pixels.")
 	}
-	c.AddSpace(4)
+	c.AddSpace(styletokens.PaddingInner(styletokens.ActiveDensity()))
 	lo, hi := roundRange()
 	for range c.HorizontalTop().KeepIter() {
 		for range c.HoverText(tipRounds).KeepIter() {
