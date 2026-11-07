@@ -26,6 +26,7 @@ package mdedit
 // no FFI sink exists to accept a repaint request.
 
 import (
+	"context"
 	"time"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
@@ -177,12 +178,18 @@ func (inst *App) drainFollow() {
 		return
 	}
 	if due && handle != "" {
-		go inst.rereadFollowed(handle)
+		started := inst.spawn(func(context.Context) { inst.rereadFollowed(handle) })
+		if !started {
+			// The scope retired: the window is leaving, and nothing re-reads.
+			inst.mu.Lock()
+			inst.follow.rereading = false
+			inst.mu.Unlock()
+		}
 	}
 }
 
 // rereadFollowed fetches the file's current bytes through the kept read
-// handle, on its own goroutine.
+// handle, as work of the instance's lifetime scope.
 func (inst *App) rereadFollowed(handle string) {
 	body, err := inst.bus.RequestWithTimeout(handle+opRead, nil, transferTimeout)
 	text := ""
@@ -234,8 +241,13 @@ func (inst *App) applyReload(text string, err error) {
 }
 
 // stopFollow ends the follow from the render thread: the local state drops
-// NOW (no more badges, no more repaint ticks), the bus half runs on its own
-// goroutine. NOT the teardown openFile uses — a re-open of the same file
+// NOW (no more badges, no more repaint ticks), the bus half runs as work of
+// the instance's lifetime scope. The host drains the scope before it closes
+// the bus client (ADR-0322 §SD2), so the handle's close — which stops the
+// broker-side pump — lands on a live client rather than racing that close.
+// Should the scope have retired already, the bus half runs inline: bounded
+// by followTeardownTimeout, as Unmount's own teardown is. NOT the teardown
+// openFile uses — a re-open of the same file
 // must sequence the close BEFORE its dialog (see the file header), so
 // openFile snapshots the state itself and calls teardownFollow inline.
 func (inst *App) stopFollow() {
@@ -250,7 +262,9 @@ func (inst *App) stopFollow() {
 		return
 	}
 	bus := inst.bus
-	go teardownFollow(bus, f.handle, f.unsub)
+	if !inst.spawn(func(context.Context) { teardownFollow(bus, f.handle, f.unsub) }) {
+		teardownFollow(bus, f.handle, f.unsub)
+	}
 }
 
 // teardownFollow is the bus half of ending a follow: unwatch, unsubscribe,

@@ -195,7 +195,7 @@ func (inst *App) followLink(link string) {
 		inst.status = "the link does not parse: " + err.Error()
 		return
 	}
-	mdeditlink.Follow(inst.bus, inst.logger, link)
+	mdeditlink.Follow(inst.bus, inst.logger, link, inst.spawn)
 	inst.status = "opening " + path.Base(r.Path) + " in a new window"
 }
 

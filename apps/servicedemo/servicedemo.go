@@ -83,7 +83,13 @@ func (inst *App) Mount(ctx app.MountContextI) (err error) {
 			}
 		}
 	}
-	if scope := app.LifetimeOf(ctx); scope != nil && scope.Go(run) {
+	scope := app.LifetimeOf(ctx)
+	if scope != nil {
+		// A refused start means the scope already retired: the window is
+		// leaving, and the ticker has nothing left to count.
+		if !scope.Go(run) {
+			close(inst.stopped)
+		}
 		return
 	}
 	// A host without a lifetime scope (a bare test context): plain goroutine.

@@ -113,6 +113,7 @@ func (inst *App) Frame(ctx app.FrameContextI) (err error) {
 	c.TextEdit(inst.ids.PrepareStr("note"), inst.note, true).
 		DesiredRows(4).
 		HintText(hintNote).
+		AccessibleName("Note").
 		SendRespVal(&inst.note)
 	inst.levelH = widgethandle.Make(inst.ids.PrepareStr("level").Derive())
 	c.SliderF64(inst.ids.PrepareStr("level"), inst.level, 0, 100).Text("level").SendRespVal(&inst.level)

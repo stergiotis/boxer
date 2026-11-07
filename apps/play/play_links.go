@@ -33,7 +33,7 @@ func (inst *PlayApp) openMdeditLink(link string) {
 	if inst.bus == nil {
 		return
 	}
-	mdeditlink.Follow(inst.bus, inst.logger, link)
+	mdeditlink.Follow(inst.bus, inst.logger, link, inst.client.Go)
 }
 
 // docsLinkClaimed is the docs panel's claim: the corpus's own links, which

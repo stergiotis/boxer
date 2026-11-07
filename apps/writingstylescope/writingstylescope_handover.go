@@ -118,12 +118,14 @@ LIMIT %d`, alias, handoverLimit)
 // startHandover runs requestHandover off the frame: counted into the
 // window's lifetime scope, so the host's drain sees it (W5), and as a
 // keelson task, so it has a row. A host that provides no scope gets a plain
-// goroutine — there is nothing to drain it into.
+// goroutine — there is nothing to drain it into. Once the scope retired the
+// handover does not start: the window is leaving.
 func (inst *App) startHandover() {
 	run := func(context.Context) {
 		_ = task.RunToCompletion(inst.tasks, task.SpawnOpts{Kind: handoverKind, Title: handoverTitle}, inst.requestHandover)
 	}
-	if inst.scope != nil && inst.scope.Go(run) {
+	if inst.scope != nil {
+		inst.scope.Go(run)
 		return
 	}
 	go run(context.Background())

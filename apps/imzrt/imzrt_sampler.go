@@ -198,6 +198,11 @@ func NewSampler(opts SamplerOptions) (inst *Sampler, err error) {
 	return
 }
 
+// Start launches the sampling goroutine.
+//
+// lifetime: the sampler is process-wide — it is built and started once per
+// process and every imzrt window reads it — so its goroutine belongs to the
+// process, not to a window's scope.
 func (inst *Sampler) Start(ctx context.Context) {
 	runCtx, cancel := context.WithCancel(ctx)
 	inst.cancel = cancel

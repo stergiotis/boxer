@@ -77,7 +77,7 @@ func (inst *App) renderPreviewDoc(content previewContent) {
 		in.LinkClaims = mdeditlink.Claimed
 	}
 	for _, l := range markdown.Render(in).Links {
-		mdeditlink.Follow(inst.bus, inst.log, l.URL)
+		mdeditlink.Follow(inst.bus, inst.log, l.URL, inst.spawn)
 	}
 }
 

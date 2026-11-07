@@ -178,9 +178,16 @@ func (inst *PlayLauncher) syncBundle() {
 	waiting, withdrawn := st.waiting, st.withdrawn
 	st.mu.Unlock()
 	if start {
+		// The resolve is a bus round trip: counted into the window's
+		// lifetime scope, so the host's drain waits for it before it
+		// closes the bus client (ADR-0322 §SD2).
 		obo := st.obo
 		st.obo = nil
-		go st.resolve(obo)
+		if !inst.inner.client.Go(func(context.Context) { st.resolve(obo) }) {
+			st.mu.Lock()
+			st.inflight = false
+			st.mu.Unlock()
+		}
 	}
 	if arrived != nil {
 		inst.applyBundle(st, *arrived)

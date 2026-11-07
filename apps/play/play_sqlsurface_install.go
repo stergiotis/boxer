@@ -50,6 +50,10 @@ const surfaceInstallTimeout = 2 * time.Minute
 // this runs unattended at startup against whatever endpoint is configured,
 // which is the last place that should delete a function nobody asked it to.
 // The Vocabulary panel reports the same drift where a human can see it.
+//
+// lifetime: the install runs once per process under a sync.Once, for every
+// play window that will open, so it belongs to the process rather than to
+// the window whose mount happened to trigger it.
 func installSQLSurface(url, user, password string, logger zerolog.Logger) {
 	surfaceInstallOnce.Do(func() {
 		go func() {

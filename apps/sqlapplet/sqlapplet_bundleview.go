@@ -11,6 +11,7 @@ package sqlapplet
 // only off the render goroutine; answers wait in a mailbox.
 
 import (
+	"context"
 	"strconv"
 	"sync"
 	"time"
@@ -23,6 +24,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/adhocdata"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/clipboardbroker"
+	"github.com/stergiotis/boxer/public/keelson/runtime/lifetime"
 	"github.com/stergiotis/boxer/public/keelson/runtime/windowhost"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 )
@@ -62,6 +64,11 @@ type BundleViewConfig struct {
 	// receiver's catalog (ADR-0288 §SD8, BundleViewOps); a plain
 	// view is drawn for the person only.
 	Operable bool
+	// Lifetime is the receiver window's lifetime scope (app.LifetimeOf,
+	// ADR-0322): the view's resolves count into it, so the host's drain
+	// waits for them before it closes the bus client. Nil, for a host that
+	// does not drain, runs them on a goroutine of their own.
+	Lifetime *lifetime.Scope
 }
 
 // BundleView shows one bundle. Build it with NewBundleView, call Frame
@@ -198,7 +205,7 @@ func (inst *BundleView) Sync() {
 	inst.arrived = nil
 	inst.mu.Unlock()
 	if start {
-		go inst.resolve()
+		inst.startResolve()
 	}
 	if arrived != nil {
 		inst.apply(*arrived)
@@ -245,6 +252,23 @@ func (inst *BundleView) Frame(ctx app.FrameContextI) (err error) {
 		return inst.inner.FrameServed(ctx)
 	}
 	return inst.inner.Frame(ctx)
+}
+
+// startResolve runs resolve off the render goroutine, as work of the
+// receiver's lifetime scope. A refused start — the scope retired, the window
+// is leaving — resolves nothing.
+func (inst *BundleView) startResolve() {
+	run := func(context.Context) { inst.resolve() }
+	s := inst.cfg.Lifetime
+	if s != nil {
+		if !s.Go(run) {
+			inst.mu.Lock()
+			inst.inflight = false
+			inst.mu.Unlock()
+		}
+		return
+	}
+	go run(context.Background())
 }
 
 func (inst *BundleView) resolve() {

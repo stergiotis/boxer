@@ -19,6 +19,7 @@
 package mdeditlink
 
 import (
+	"context"
 	"io/fs"
 	"net/url"
 	"path"
@@ -277,12 +278,25 @@ func Open(bus app.BusI, link string) (windowKey uint64, err error) {
 	return windowhost.RequestOpen(bus, launchcfg.AppId, launchcfg.Kind, cfg)
 }
 
-// Follow is [Open] on a goroutine of its own, logging a failure. For a
+// Follow is [Open] off the caller's goroutine, logging a failure. For a
 // surface with no status line of its own to report to.
-func Follow(bus app.BusI, logger zerolog.Logger, link string) {
-	go func() {
+//
+// spawn starts the open: an app passes the Go of its window's lifetime
+// scope, or its own wrapper over it (ADR-0322), so the host's drain counts
+// the bus round trip. A refused start — the scope retired, the window is
+// leaving — opens nothing. A caller outside the apps tree with no scope
+// passes a spawn of its own. A nil spawn opens nothing and says so.
+func Follow(bus app.BusI, logger zerolog.Logger, link string, spawn func(f func(ctx context.Context)) (started bool)) {
+	if spawn == nil {
+		logger.Warn().Str("link", link).Msg("mdeditlink: no spawn given, the link was not opened")
+		return
+	}
+	started := spawn(func(context.Context) {
 		if _, err := Open(bus, link); err != nil {
 			logger.Warn().Err(err).Str("link", link).Msg("mdeditlink: the link did not open")
 		}
-	}()
+	})
+	if !started {
+		logger.Debug().Str("link", link).Msg("mdeditlink: the window is closing, the link was not opened")
+	}
 }

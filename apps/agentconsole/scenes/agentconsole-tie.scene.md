@@ -28,8 +28,8 @@ dispatcher while the scene types into the same note.
   reaches the queue and ends as a conflict; the person's text stands. A
   write after a fresh read applies.
 
-Node ids anchor the text fields: the console is the first window and the demo
-the second, and an id is a function of the window and the widget's path.
+The text fields are anchored by their accessible names, the demo's note by
+"Note".
 
 ```jsonl trace
 {"do":"note","text":"ADR-0269 M2: a command applies after the frame's write-back; the person wins a tie"}
@@ -48,10 +48,10 @@ the second, and an id is a function of the window and the widget's path.
 {"do":"type","name":"Arguments","role":"multiline_text_input","text":"{\"text\":\"from the agent\"}"}
 {"do":"click","name":"Call","role":"button","comment":"k2: no expectation given, so the dispatcher uses the revision k1 read"}
 {"do":"wait","valueContains":"k2 · set_note · rendered","role":"label","settleMs":500}
-{"do":"read","id":12013363430533946716,"pattern":"^(?P<agentValue>from the agent)$","comment":"the demo's note took the command's value"}
-{"do":"focus","id":12013363430533946716,"comment":"the demo's note"}
-{"do":"type","id":12013363430533946716,"text":" and the person","comment":"the person's edit lands in the write-back and moves the note's revision"}
-{"do":"read","id":12013363430533946716,"pattern":"(?P<merged>from the agent.*and the person|and the person.*from the agent)","comment":"the edit builds on the command's value"}
+{"do":"read","name":"Note","role":"multiline_text_input","pattern":"^(?P<agentValue>from the agent)$","comment":"the demo's note took the command's value"}
+{"do":"focus","name":"Note","role":"multiline_text_input","comment":"the demo's note"}
+{"do":"type","name":"Note","role":"multiline_text_input","text":" and the person","comment":"the person's edit lands in the write-back and moves the note's revision"}
+{"do":"read","name":"Note","role":"multiline_text_input","pattern":"(?P<merged>from the agent.*and the person|and the person.*from the agent)","comment":"the edit builds on the command's value"}
 {"do":"click","name":"Call","role":"button","comment":"k3: set_note again; the person changed what the task read"}
 {"do":"wait","valueContains":"k3 · set_note · refused · paused","role":"label","comment":"the dispatcher pauses the task here until its next turn"}
 {"do":"wait","contains":"agent · act · paused","role":"button","comment":"the badge says so"}
@@ -60,7 +60,7 @@ the second, and an id is a function of the window and the widget's path.
 {"do":"click","name":"Call","role":"button","comment":"k4: set_note without reading again, still expecting the revision k2 left"}
 {"do":"wait","valueContains":"k4 · set_note · conflict","role":"label","comment":"the queue's re-check: the person's write-back moved the note"}
 {"do":"wait","valueContains":"moved since it was read","role":"label"}
-{"do":"read","id":12013363430533946716,"pattern":"(?P<kept>and the person)","comment":"the person's text stands"}
+{"do":"read","name":"Note","role":"multiline_text_input","pattern":"(?P<kept>and the person)","comment":"the person's text stands"}
 {"do":"capture","text":"agentconsole-tie"}
 {"do":"focus","name":"Operation","role":"text_input"}
 {"do":"key","text":"A","modifiers":16}

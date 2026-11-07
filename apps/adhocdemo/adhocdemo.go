@@ -29,6 +29,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/adhocdata"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/bgjob"
+	"github.com/stergiotis/boxer/public/keelson/runtime/lifetime"
 	"github.com/stergiotis/boxer/public/keelson/runtime/task"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/badge"
@@ -63,6 +64,9 @@ type App struct {
 	log      zerolog.Logger
 	// tasks runs the publishes as keelson tasks owned by this window.
 	tasks task.TaskApiI
+	// scope is the window's lifetime scope (ADR-0322); the bundle view's
+	// resolves count into it.
+	scope *lifetime.Scope
 
 	bundle string
 	view   *sqlapplet.BundleView
@@ -121,6 +125,7 @@ func (inst *App) Mount(ctx app.MountContextI) (err error) {
 	inst.instance = ctx.InstanceKey()
 	inst.log = ctx.Log()
 	inst.tasks = task.ForApp(ctx)
+	inst.scope = app.LifetimeOf(ctx)
 
 	// The window's own bundle alias (ADR-0288 §SD3): a second adhocdemo
 	// window publishes its own. The first publish is a task like every
@@ -160,7 +165,7 @@ func (inst *App) takeResults() {
 		// one (a test landing a publish through the seam) has no view.
 		if inst.view == nil && inst.bus != nil {
 			inst.view = sqlapplet.NewBundleView(inst.bundle, sqlapplet.BundleViewConfig{Bus: inst.bus, Log: inst.log,
-				RunId: inst.runId, StampAppId: string(ManifestId) + "#items", InstanceKey: inst.instance, Operable: true})
+				RunId: inst.runId, StampAppId: string(ManifestId) + "#items", InstanceKey: inst.instance, Operable: true, Lifetime: inst.scope})
 		}
 	}
 	if r, _, ok := inst.treeJob.TakeResult(); ok {

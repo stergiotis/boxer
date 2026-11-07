@@ -136,6 +136,10 @@ func NewReplaySampler(opts ReplayOptions) (inst *ReplaySampler, err error) {
 
 // Start launches the transport goroutine. Calling it twice is a no-op after
 // the first.
+//
+// lifetime: the replay session is process-wide (ADR-0197 §SD5) — one session
+// that every imztop window reads — so its transport belongs to the process,
+// not to the window that started it.
 func (inst *ReplaySampler) Start(ctx context.Context) {
 	if inst.done != nil {
 		return

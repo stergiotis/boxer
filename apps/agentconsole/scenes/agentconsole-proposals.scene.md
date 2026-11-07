@@ -44,10 +44,10 @@ confirmation in its own dialog, in act mode as well.
 {"do":"type","name":"Arguments","role":"multiline_text_input","text":"{\"text\":\"from the agent\"}"}
 {"do":"click","name":"Call","role":"button","comment":"k2: set_note in act mode"}
 {"do":"wait","valueContains":"k2 · set_note · rendered","role":"label"}
-{"do":"read","id":12013363430533946716,"pattern":"^(?P<changed>from the agent)$"}
+{"do":"read","name":"Note","role":"multiline_text_input","pattern":"^(?P<changed>from the agent)$"}
 {"do":"click","contains":"agent · act","role":"button","settleMs":500,"comment":"open the badge's menu"}
 {"do":"click","name":"Undo","role":"button","settleMs":800,"comment":"undo k2 from its card"}
-{"do":"read","id":12013363430533946716,"pattern":"^(?P<restored>A note both of you can edit\\.)$","comment":"nothing changed the note since, so undo restores it"}
+{"do":"read","name":"Note","role":"multiline_text_input","pattern":"^(?P<restored>A note both of you can edit\\.)$","comment":"nothing changed the note since, so undo restores it"}
 {"do":"click","name":"suggest","settleMs":500,"comment":"the person lowers the task to suggest"}
 {"do":"key","text":"Escape","settleMs":300}
 {"do":"wait","contains":"agent · suggest · paused","role":"button","comment":"the person's undo changed what the task read, so the task is paused"}
@@ -82,7 +82,7 @@ confirmation in its own dialog, in act mode as well.
 {"do":"click","name":"Accept","role":"button","settleMs":500}
 {"do":"key","text":"Escape","settleMs":300}
 {"do":"wait","valueContains":"k5 · set_note · rendered","role":"label"}
-{"do":"read","id":12013363430533946716,"pattern":"^(?P<accepted>suggested)$"}
+{"do":"read","name":"Note","role":"multiline_text_input","pattern":"^(?P<accepted>suggested)$"}
 {"do":"focus","name":"Operation","role":"text_input"}
 {"do":"key","text":"A","modifiers":16}
 {"do":"type","name":"Operation","role":"text_input","text":"copy_note"}

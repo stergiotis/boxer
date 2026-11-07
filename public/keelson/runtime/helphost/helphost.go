@@ -19,6 +19,8 @@
 package helphost
 
 import (
+	"context"
+
 	"github.com/rs/zerolog/log"
 	"github.com/stergiotis/boxer/apps/mdedit/mdeditlink"
 	"strconv"
@@ -608,6 +610,13 @@ func (inst *HelpHost) renderViewToggle() {
 // abandons that state wholesale instead — see the "ID derivation order"
 // invariant in the markdown package's EXPLANATION.md. Generation 2 is
 // the addition of table rendering.
+// spawnBare runs f on a goroutine of its own. The help host is a runtime
+// surface with no instance scope to count a followed link's open into.
+func spawnBare(f func(ctx context.Context)) (started bool) {
+	go f(context.Background())
+	return true
+}
+
 func renderRendered(ids *c.WidgetIdStack, doc *markdown.Doc, scrollToSection string, scrollTop bool, bus app.BusI) {
 	in := markdown.Input{Ids: ids, ScopeKey: "doc-render-2", Doc: doc, ScrollToSection: scrollToSection}
 	if bus != nil {
@@ -633,7 +642,7 @@ func renderRendered(ids *c.WidgetIdStack, doc *markdown.Doc, scrollToSection str
 			}()
 		}
 		for _, l := range res.Links {
-			mdeditlink.Follow(bus, log.Logger, l.URL)
+			mdeditlink.Follow(bus, log.Logger, l.URL, spawnBare)
 		}
 	}
 }

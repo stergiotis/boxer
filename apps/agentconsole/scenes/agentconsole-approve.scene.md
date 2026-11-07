@@ -53,5 +53,5 @@ goes ahead once the person approves it.
 {"do":"click","name":"Approve","role":"button"}
 {"do":"wait","valueContains":"k2 · set_note · rendered","role":"label"}
 {"do":"wait","contains":"agent · act","role":"button","comment":"the widening raised the mode"}
-{"do":"read","id":12013363430533946716,"pattern":"^(?P<note>from the agent)$"}
+{"do":"read","name":"Note","role":"multiline_text_input","pattern":"^(?P<note>from the agent)$"}
 ```
