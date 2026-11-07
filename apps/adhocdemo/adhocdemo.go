@@ -228,9 +228,21 @@ func (inst *App) regenerate() {
 }
 
 // series renders generation gen of the computed series as an Arrow IPC
-// stream: x = 0..N-1 (Int64), y = a phase-shifted sine (Float64), so each
-// Regenerate visibly changes the values.
+// stream, the form a bundle dataset travels in.
 func (inst *App) series(gen int) []byte {
+	rec := seriesRecord(gen)
+	defer rec.Release()
+	stream, err := adhocdata.EncodeRecord(rec)
+	if err != nil {
+		inst.log.Warn().Err(err).Msg("adhocdemo: encode series")
+	}
+	return stream
+}
+
+// seriesRecord is generation gen of the computed series: x = 0..N-1
+// (Int64), y = a phase-shifted sine (Float64), so each Regenerate visibly
+// changes the values. The caller releases the record.
+func seriesRecord(gen int) (rec arrow.RecordBatch) {
 	const n = 24
 	schema := arrow.NewSchema([]arrow.Field{
 		{Name: "x", Type: arrow.PrimitiveTypes.Int64},
@@ -244,11 +256,5 @@ func (inst *App) series(gen int) []byte {
 		xb.Append(int64(x))
 		yb.Append(math.Sin(float64(x)*0.4 + float64(gen)*0.6))
 	}
-	rec := rb.NewRecordBatch()
-	defer rec.Release()
-	stream, err := adhocdata.EncodeRecord(rec)
-	if err != nil {
-		inst.log.Warn().Err(err).Msg("adhocdemo: encode series")
-	}
-	return stream
+	return rb.NewRecordBatch()
 }

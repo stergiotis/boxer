@@ -1,13 +1,23 @@
 package capdemo
 
 import (
+	"embed"
+
 	"github.com/rs/zerolog/log"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/clipboardbroker"
 	"github.com/stergiotis/boxer/public/keelson/runtime/fsbroker"
+	"github.com/stergiotis/boxer/public/keelson/runtime/help"
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
 )
+
+// helpFS embeds the help book (apps/capdemo/help/*.md): F1 opens it for
+// the person, and the help service serves the same page to a model
+// (ADR-0047, keelson-app A4).
+//
+//go:embed help/*.md
+var helpFS embed.FS
 
 // manifest is the per-process AppI descriptor. Static; every newApp()
 // returns the same Manifest value. The Caps declarations are the
@@ -66,6 +76,7 @@ var manifest = app.Manifest{
 		},
 	},
 	PersistedKeys: []string{scratchpadKey},
+	Help:          help.MustSub(helpFS, "help"),
 }
 
 // init registers the demo into app.DefaultRegistry. Factory ctor so

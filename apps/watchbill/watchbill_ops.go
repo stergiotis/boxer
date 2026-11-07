@@ -11,6 +11,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/appops/opfsm"
 	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
 	"github.com/stergiotis/boxer/public/keelson/runtime/help/search"
+	wb "github.com/stergiotis/boxer/public/keelson/runtime/watchbill"
 	"github.com/stergiotis/boxer/public/keelson/runtime/watchbill/watchbillstore"
 )
 
@@ -125,7 +126,7 @@ var ops = func() (s *appops.Set[*App, opsSnap]) {
 	}, fsmops.Options{})
 
 	appops.Query(s, app.OperationSpec{Name: opListJobs, Version: 1,
-		Summary: "list jobs among the rows the window holds, by state and a kind battery; keelson('watchbill_job') is the full view",
+		Summary: "list jobs among the rows the window holds, by state and a kind battery; keelson('" + wb.TableJobs + "') is the full view",
 		Agents:  true, Untrusted: true},
 		func(sn opsSnap, in ListJobsArgs) (out JobList, err error) {
 			for _, st := range in.States {

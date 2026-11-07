@@ -1,15 +1,25 @@
 package watchbill
 
 import (
+	"embed"
+
 	"github.com/rs/zerolog/log"
 
 	"github.com/stergiotis/boxer/apps/watchbill/launchcfg"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
+	"github.com/stergiotis/boxer/public/keelson/runtime/help"
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect/keelsonquery"
 	"github.com/stergiotis/boxer/public/keelson/runtime/task"
 	wb "github.com/stergiotis/boxer/public/keelson/runtime/watchbill"
 )
+
+// helpFS embeds the help book (apps/watchbill/help/*.md): F1 opens it for
+// the person, and the help service serves the same pages to a model
+// (ADR-0047, keelson-app A4).
+//
+//go:embed help/*.md
+var helpFS embed.FS
 
 // manifest declares the management window (ADR-0236): the watchbill client
 // verbs, the task observer's and canceller's sets so the embedded task
@@ -32,6 +42,7 @@ var manifest = app.Manifest{
 	},
 	LaunchKind: launchcfg.Kind,
 	Operations: ops.Catalog(),
+	Help:       help.MustSub(helpFS, "help"),
 	// The split between the list and the detail, kept across the process
 	// (watchbill_split.go); the host injects the persist cap for it.
 	PersistedKeys: []string{splitKey},

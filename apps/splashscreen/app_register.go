@@ -22,6 +22,12 @@ import (
 //go:embed assets
 var assetsFS embed.FS
 
+// helpFS embeds the help book's static page (help/overview.md); the About
+// content is appended on open (splashscreen_help.go).
+//
+//go:embed help/*.md
+var helpFS embed.FS
+
 // ManifestId is the stable AppI identity (ADR-0026: the Go import path).
 const ManifestId app.AppIdT = "github.com/stergiotis/boxer/apps/splashscreen"
 
@@ -40,6 +46,7 @@ var manifest = app.Manifest{
 		PreferredWidth:  620,
 		PreferredHeight: 820,
 	},
+	Help: newHelpFS(),
 }
 
 func init() {

@@ -1,14 +1,24 @@
 package adhocdemo
 
 import (
+	"embed"
+
 	"github.com/rs/zerolog/log"
 
 	"github.com/stergiotis/boxer/apps/sqlapplet"
 	"github.com/stergiotis/boxer/public/keelson/runtime/adhocdata"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
+	"github.com/stergiotis/boxer/public/keelson/runtime/help"
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
 	"github.com/stergiotis/boxer/public/keelson/runtime/task"
 )
+
+// helpFS embeds the help book (apps/adhocdemo/help/*.md): F1 opens it for
+// the person, and the help service serves the same page to a model
+// (ADR-0047, keelson-app A4).
+//
+//go:embed help/*.md
+var helpFS embed.FS
 
 // ManifestId is this app's identity — its Go import path (ADR-0026 id rule).
 const ManifestId app.AppIdT = "github.com/stergiotis/boxer/apps/adhocdemo"
@@ -31,6 +41,7 @@ var manifest = app.Manifest{
 	// opens tally on the published tree (ADR-0222 §SD7).
 	Caps:       adhocCaps(),
 	Operations: adhocOps.Catalog(),
+	Help:       help.MustSub(helpFS, "help"),
 }
 
 func init() {

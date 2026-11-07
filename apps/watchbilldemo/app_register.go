@@ -1,13 +1,23 @@
 package watchbilldemo
 
 import (
+	"embed"
+
 	"github.com/rs/zerolog/log"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
+	"github.com/stergiotis/boxer/public/keelson/runtime/help"
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
 	"github.com/stergiotis/boxer/public/keelson/runtime/task"
 	"github.com/stergiotis/boxer/public/keelson/runtime/watchbill"
 )
+
+// helpFS embeds the help book (apps/watchbilldemo/help/*.md): F1 opens it
+// for the person, and the help service serves the same page to a model
+// (ADR-0047, keelson-app A4).
+//
+//go:embed help/*.md
+var helpFS embed.FS
 
 // manifest declares the demo and the two capability sets it holds: the
 // watchbill client verbs (ADR-0234 §SD1) and the task producer's set, which
@@ -29,6 +39,7 @@ var manifest = app.Manifest{
 		PreferredHeight: 620,
 	},
 	Caps: append(watchbill.ClientCaps(), task.ProducerCaps()...),
+	Help: help.MustSub(helpFS, "help"),
 }
 
 // init registers the app and the handler for its kind. The handler is
