@@ -16,26 +16,33 @@
 // ADR-0106; the end-to-end recipe (mint, split, query) is
 // doc/howto/fibonacci-tagged-ids.md. This app re-argues neither.
 //
-// Lifecycle: Mount captures the logger; Frame renders inside the host-owned
-// window; Unmount has nothing to release.
+// Lifecycle: Mount captures the logger and opens the window on a launch
+// config's id (launchcfg) or the seed variable's; Frame renders inside the
+// host-owned window; Unmount has nothing to release. The operations catalog
+// is fibscope_ops.go.
 package fibscope
 
 import (
 	"fmt"
 	"math"
+	"strconv"
 	"strings"
 
 	"github.com/dustin/go-humanize"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 
+	"github.com/stergiotis/boxer/apps/fibscope/launchcfg"
 	"github.com/stergiotis/boxer/public/identity/fibonacci"
 	"github.com/stergiotis/boxer/public/identity/fibonaccicode"
 	"github.com/stergiotis/boxer/public/identity/identifier"
 	"github.com/stergiotis/boxer/public/identity/identsql"
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
+	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
+	"github.com/stergiotis/boxer/public/keelson/runtime/widgethandle"
+	"github.com/stergiotis/boxer/public/observability/eh"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/color"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/implot"
@@ -162,6 +169,20 @@ type App struct {
 	// scrolled to; re-scrolling only when it changes lets the user scroll the
 	// table freely otherwise.
 	statsScrolledWidth int
+
+	// seedErr is why BOXER_FIBSCOPE_ID was not applied, shown on the Explore
+	// tab; empty when it was, or was not set.
+	seedErr string
+
+	// frameCtx is the current frame's context, through which the buttons
+	// route their commands as the person (ADR-0269 §SD8); nil outside a
+	// frame.
+	frameCtx app.FrameContextI
+	// idHandles (tag scrubber, body scrubber, raw field) and maxExpHandle are
+	// this frame's input handles, so an agent's write while the person drags
+	// or types is a conflict.
+	idHandles    [3]widgethandle.WidgetHandle
+	maxExpHandle widgethandle.WidgetHandle
 }
 
 var _ app.AppI = (*App)(nil)
@@ -179,9 +200,42 @@ func newApp() (inst *App) {
 
 func (inst *App) Manifest() (m app.Manifest) { m = manifest; return }
 
+// Mount wires the window and decides which word it opens on: a launch
+// config's wins over the seed variable's, which wins over the worked example
+// (ADR-0135 §SD7). A config that does not decode fails the mount rather than
+// opening plainly (keelson-app S4); any decoded word is accepted, since a
+// word that is not a tagged id is one the window is for.
 func (inst *App) Mount(ctx app.MountContextI) (err error) {
 	inst.ids = ctx.Ids()
 	inst.logger = ctx.Log()
+	if raw := ctx.LaunchConfig(); len(raw) > 0 {
+		var cfg launchcfg.FibscopeLaunch
+		cfg, err = buscodec.Decode[launchcfg.FibscopeLaunch](raw)
+		if err != nil {
+			err = eh.Errorf("fibscope: decode launch config: %w", err)
+			return
+		}
+		if cfg.Id != 0 {
+			inst.id = cfg.Id
+		}
+		return
+	}
+	if seed := IdSeed.Get(); seed != "" {
+		id, perr := parseIdSeed(seed)
+		if perr != nil {
+			inst.seedErr = idSeedName + " is not a 64-bit decimal or 0x-hex number; the window opened on the worked example"
+			inst.logger.Warn().Str("value", seed).Err(perr).Msg("fibscope: seed not applied")
+			return
+		}
+		inst.id = id
+	}
+	return
+}
+
+// parseIdSeed reads the seed variable: a decimal or 0x-prefixed hexadecimal
+// 64-bit word, as the raw id field takes it.
+func parseIdSeed(s string) (id uint64, err error) {
+	id, err = strconv.ParseUint(strings.TrimSpace(s), 0, 64)
 	return
 }
 
@@ -194,7 +248,9 @@ func (inst *App) Unmount(ctx app.MountContextI) (err error) { return }
 // body in its own instance salt (doing so would discard the host salt and
 // collide with sibling apps that share a label string).
 func (inst *App) Frame(ctx app.FrameContextI) (err error) {
+	inst.frameCtx = ctx
 	inst.renderBody()
+	inst.frameCtx = nil
 	return
 }
 
@@ -248,6 +304,9 @@ func decode(id uint64) (d decoded) {
 
 func (inst *App) renderExplore() {
 	metric("A tagged id packs a category and a per-category counter into one 64-bit UInt64.", tipIntro)
+	if inst.seedErr != "" {
+		metric(inst.seedErr, tipRaw)
+	}
 	c.Separator().Send()
 	inst.renderControls()
 
@@ -312,6 +371,7 @@ func (inst *App) renderControls() {
 	d := decode(inst.id)
 	for range c.Horizontal().KeepIter() {
 		tv := inst.tagScrub.sync(uint64(d.tagValue))
+		inst.idHandles[0] = widgethandle.Make(inst.ids.PrepareStr("tagval").Derive())
 		for range c.HoverText(tipTagValue).KeepIter() {
 			if c.DragValueU64(inst.ids.PrepareStr("tagval"), tv).Speed(1).Prefix("tag ").
 				SendRespVal(&inst.tagScrub.draft).HasChanged() {
@@ -320,6 +380,7 @@ func (inst *App) renderControls() {
 			}
 		}
 		b := inst.bodyScrub.sync(uint64(d.body))
+		inst.idHandles[1] = widgethandle.Make(inst.ids.PrepareStr("body").Derive())
 		for range c.HoverText(tipBody).KeepIter() {
 			if c.DragValueU64(inst.ids.PrepareStr("body"), b).Speed(1).Prefix("body ").
 				SendRespVal(&inst.bodyScrub.draft).HasChanged() {
@@ -329,6 +390,7 @@ func (inst *App) renderControls() {
 		}
 	}
 	for range c.Horizontal().KeepIter() {
+		inst.idHandles[2] = widgethandle.Make(inst.ids.PrepareStr("raw").Derive())
 		for range c.HoverText(tipRaw).KeepIter() {
 			// c.U64Edit is exact across the whole uint64 range (a tagged id is
 			// always > 2^53) and manages its own text draft — including
@@ -342,11 +404,11 @@ func (inst *App) renderControls() {
 		// the invalid word is the teaching case beside it.
 		if c.Button(inst.ids.PrepareStr("preset-ex"), c.Atoms().Text("Example").Keep()).
 			Kind(c.ButtonKindPrimary).SendResp().HasPrimaryClicked() {
-			inst.id = defaultId
+			gestureOr(inst, opSetId, SetIdArgs{Id: defaultId}, func() { inst.id = defaultId })
 		}
 		if c.Button(inst.ids.PrepareStr("preset-inv"), c.Atoms().Text("Invalid").Keep()).
 			SendResp().HasPrimaryClicked() {
-			inst.id = invalidId
+			gestureOr(inst, opSetId, SetIdArgs{Id: invalidId}, func() { inst.id = invalidId })
 		}
 	}
 }
@@ -504,6 +566,7 @@ func (inst *App) renderTradeoff() {
 	metric("Pick tag values by the id space each category needs: a narrow tag leaves a huge body but few categories; a wide tag is the reverse.", tipStats)
 	c.Separator().Send()
 
+	inst.maxExpHandle = widgethandle.Make(inst.ids.PrepareStr("maxexp").Derive())
 	for range c.HoverText(tipMaxExp).KeepIter() {
 		_ = c.SliderF64(inst.ids.PrepareStr("maxexp"), inst.maxExp, 1, advisorMaxExpCeil).
 			Logarithmic(true).Text("max ids / category").FixedDecimals(0).

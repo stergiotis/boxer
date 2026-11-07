@@ -5,6 +5,8 @@ import (
 
 	"github.com/rs/zerolog/log"
 
+	"github.com/stergiotis/boxer/apps/terrainscope/launchcfg"
+	"github.com/stergiotis/boxer/public/config/env"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/help"
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
@@ -26,19 +28,22 @@ var helpFS embed.FS
 // swissALTI3D tiles directly from the filesystem (ADR-0099) and touches
 // no persist store; the ADR-0090-style headless elevation service (which
 // would replace the direct read with a bus capability) is deferred to
-// Phase 4.
+// Phase 4. LaunchKind declares the config another app opens a window with
+// (launchcfg, ADR-0135); Operations is the catalog of terrainscope_ops.go.
 var manifest = app.Manifest{
-	Id:       "github.com/stergiotis/boxer/apps/terrainscope",
-	Version:  "0.1.0",
-	Display:  "Terrain scope",
-	Title:    "Terrain scope — swissALTI3D line-of-sight",
-	Summary:  "Compute swissALTI3D line-of-sight between two points",
-	Icon:     icons.PhMountains,
-	Topics:   []app.TopicT{app.TopicGeo},
-	Keywords: []string{"terrain", "elevation", "line of sight", "viewshed", "swisstopo"},
-	Surface:  app.SurfaceWindowed,
-	Help:     help.MustSub(helpFS, "help"),
-	Caps:     append(basemap.ClientCaps("terrainscope: basemap tiles under the picked points"), task.ProducerCaps()...),
+	Id:         launchcfg.AppId,
+	Version:    "0.1.0",
+	Display:    "Terrain scope",
+	Title:      "Terrain scope — swissALTI3D line-of-sight",
+	Summary:    "Compute swissALTI3D line-of-sight between two points",
+	Icon:       icons.PhMountains,
+	Topics:     []app.TopicT{app.TopicGeo},
+	Keywords:   []string{"terrain", "elevation", "line of sight", "viewshed", "swisstopo"},
+	Surface:    app.SurfaceWindowed,
+	Help:       help.MustSub(helpFS, "help"),
+	Caps:       append(basemap.ClientCaps("terrainscope: basemap tiles under the picked points"), task.ProducerCaps()...),
+	LaunchKind: launchcfg.Kind,
+	Operations: ops.Catalog(),
 	SurfaceHints: app.SurfaceHints{
 		// Sized to fit the slippy map plus the sweep plot (and its legend)
 		// below it without clipping the window body.
@@ -46,6 +51,18 @@ var manifest = app.Manifest{
 		PreferredHeight: 1000,
 	},
 }
+
+// pointsSeedName is the seed variable's name, quoted where it is refused.
+const pointsSeedName = "BOXER_TERRAINSCOPE_POINTS"
+
+// PointsSeed places both points in a new window (ADR-0009 seed variable,
+// the BOXER_MDEDIT_DOC shape): a scene or a headless run reaches a computed
+// state without clicking the map. A caller's launch config wins over it.
+var PointsSeed = env.NewString(env.Spec{
+	Name:        pointsSeedName,
+	Description: "observer and target for a new terrainscope window as four WGS84 decimal degrees, observer latitude, longitude, target latitude, longitude, separated by commas; the sweep starts at once; for scenes and demos",
+	Category:    env.CategoryE("boxer-terrainscope"),
+})
 
 // init registers the app into app.DefaultRegistry. Factory ctor so two
 // open windows get independent App state.

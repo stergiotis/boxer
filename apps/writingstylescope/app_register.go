@@ -5,6 +5,8 @@ import (
 
 	"github.com/rs/zerolog/log"
 
+	"github.com/stergiotis/boxer/apps/writingstylescope/launchcfg"
+	"github.com/stergiotis/boxer/public/config/env"
 	"github.com/stergiotis/boxer/public/keelson/runtime/adhocdata"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/help"
@@ -27,9 +29,11 @@ var helpFS embed.FS
 // dataset, ask the window host for a play window on it; the retract is the
 // runtime's — and the task subjects the sweep and the handover run under.
 // The two drafts and the length floor persist under the declared keys
-// (ADR-0185), which the host routes without a cap of their own.
+// (ADR-0185), which the host routes without a cap of their own. LaunchKind
+// declares the config another app opens a window with (launchcfg,
+// ADR-0135); Operations is the catalog of writingstylescope_ops.go.
 var manifest = app.Manifest{
-	Id:      "github.com/stergiotis/boxer/apps/writingstylescope",
+	Id:      launchcfg.AppId,
 	Version: "0.1.0",
 	Display: "Writing style scope",
 	Title:   "Writing style scope — shared writing between two documents",
@@ -38,8 +42,10 @@ var manifest = app.Manifest{
 	Topics:  []app.TopicT{app.TopicData},
 	Keywords: []string{"stylometry", "plagiarism", "compression", "similarity",
 		"ncd", "markdown", "documents", "authorship"},
-	Surface: app.SurfaceWindowed,
-	Help:    help.MustSub(helpFS, "help"),
+	Surface:    app.SurfaceWindowed,
+	Help:       help.MustSub(helpFS, "help"),
+	LaunchKind: launchcfg.Kind,
+	Operations: ops.Catalog(),
 	SurfaceHints: app.SurfaceHints{
 		// Sized for the two side-by-side paste panes on the Documents tab and
 		// the full-width heatmap plus its colour bar and pair table on the
@@ -61,6 +67,19 @@ var manifest = app.Manifest{
 		},
 	}, task.ProducerCaps()...),
 }
+
+// docsSeedName is the seed variable's name, quoted where it is refused.
+const docsSeedName = "BOXER_WRITINGSTYLESCOPE_DOCS"
+
+// DocsSeed opens a new window on two files (ADR-0009 seed variable, the
+// BOXER_MDEDIT_DOC shape): a scene needs documents of its own to compare,
+// and the drafts the window keeps belong to the person. A seeded window
+// neither restores nor persists them. A caller's launch config wins over it.
+var DocsSeed = env.NewString(env.Spec{
+	Name:        docsSeedName,
+	Description: "two markdown files for a new writingstylescope window to compare, document A then document B, separated by the path-list separator as in PATH; the window neither restores nor persists the drafts; for scenes and demos",
+	Category:    env.CategoryE("boxer-writingstylescope"),
+})
 
 // init registers the app into app.DefaultRegistry. Factory ctor so two open
 // windows get independent App state — including independent confidence-band

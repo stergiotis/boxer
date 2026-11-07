@@ -1,6 +1,7 @@
 package fibscope
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/help"
@@ -16,7 +17,7 @@ func TestHelpCorpusIndexes(t *testing.T) {
 	require.True(t, ok, "fibscope help book must be indexed from Manifest.Help")
 	require.Empty(t, b.Validate(), "help front-matter must conform")
 
-	want := map[string]bool{"overview": false, "method": false}
+	want := map[string]bool{"overview": false, "method": false, "operations": false}
 	for _, d := range b.Docs() {
 		if _, expected := want[d.Path]; !expected {
 			continue
@@ -46,5 +47,28 @@ func TestHelpCorpusDropsNothing(t *testing.T) {
 		doc, _, parsed := b.Doc(info.Path)
 		require.Truef(t, parsed, "doc %q must parse", info.Path)
 		require.Emptyf(t, doc.Dropped(), "doc %q loses content in the lowering: %+v", info.Path, doc.Dropped())
+	}
+}
+
+// TestHelpBookNamesEveryOperation keeps the operations topic in step with
+// the catalog (keelson-app A4): an operation added to fibscope_ops.go
+// without a line in the book is one a model has to guess at.
+func TestHelpBookNamesEveryOperation(t *testing.T) {
+	help.SyncFromRegistry()
+	b, ok := help.Book(manifest.Id)
+	require.True(t, ok)
+	var corpus strings.Builder
+	for _, d := range b.Docs() {
+		src, found := b.Source(d.Path)
+		require.True(t, found, d.Path)
+		corpus.Write(src)
+	}
+	catalog := ops.Catalog()
+	require.NotEmpty(t, catalog.Operations)
+	for _, spec := range catalog.Operations {
+		require.Containsf(t, corpus.String(), spec.Name, "operation %q is not named in the help book", spec.Name)
+	}
+	for _, r := range catalog.Resources {
+		require.Containsf(t, corpus.String(), "`"+r.Name+"`", "resource %q is not named in the help book", r.Name)
 	}
 }

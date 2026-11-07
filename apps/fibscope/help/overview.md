@@ -18,10 +18,11 @@ operation over one `uint64`, recomputed every frame. The scheme, the
 packages that define it and what each readout means are on the **How a
 tagged id is built** page.
 
-The window has no operations catalog, no launch config and no scene yet,
-and it persists nothing: an agent cannot set the id under inspection or read
-it back, and every window opens on the worked example. What an agent can
-read is this book.
+An agent sets the id under inspection and reads how it splits through the
+window's operations catalog, and another app opens a window on an id of its
+own through the launch config; both are on the **Operating fibscope as an
+agent** page. The window persists nothing: a plainly opened window starts on
+the worked example.
 
 ## Explore tab
 

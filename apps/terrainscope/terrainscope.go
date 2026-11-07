@@ -17,9 +17,12 @@
 // the ADR-0090-style headless elevation service (which would make this app a
 // zero-fs-cap bus client) is deferred to Phase 4.
 //
-// Lifecycle: Mount captures the logger and the task api; Frame takes the
-// sweep runner's result and renders inside the host-owned window; Unmount
-// cancels any in-flight sweep.
+// Lifecycle: Mount captures the logger and the task api and applies a launch
+// config (launchcfg) or the seed variable, either of which places both points
+// so the first frame launches the sweep; Frame takes the sweep runner's
+// result, mirrors the phase machine and renders inside the host-owned
+// window; Unmount cancels any in-flight sweep. The operations catalog is
+// terrainscope_ops.go, the machine terrainscope_machine.go.
 package terrainscope
 
 import (
@@ -27,24 +30,32 @@ import (
 	"fmt"
 	"math"
 	"sort"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 
+	"github.com/stergiotis/boxer/apps/terrainscope/launchcfg"
 	"github.com/stergiotis/boxer/public/config/env"
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
+	"github.com/stergiotis/boxer/public/keelson/runtime/appops"
 	"github.com/stergiotis/boxer/public/keelson/runtime/bgjob"
+	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
 	"github.com/stergiotis/boxer/public/keelson/runtime/task"
+	"github.com/stergiotis/boxer/public/keelson/runtime/widgethandle"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/science/geo/swisstopo"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/badge"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/basemap"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/color"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/fsmview"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/implot"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/jobprogress"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/portolan"
@@ -244,6 +255,31 @@ type App struct {
 	result    *sweepResult
 	sweepErr  error
 	sweepNote string
+
+	// launchGen counts sweeps launched and landedGen the last generation
+	// that ended — landed, failed or cancelled — so set_points can settle on
+	// the sweep it caused (pointsCallGen is the generation at the call).
+	launchGen     uint64
+	landedGen     uint64
+	pointsCallGen uint64
+
+	// seedErr is why BOXER_TERRAINSCOPE_POINTS was not applied, shown in
+	// the status row; empty when it was, or was not set.
+	seedErr string
+
+	// The sweep's phase, mirrored each frame from the selection and the
+	// runner, and the state chip that draws it (built in Mount; nil on the
+	// tour stage).
+	phaseMachine *fsmview.Machine[phaseE]
+	phaseChip    *fsmview.View[phaseE]
+
+	// frameCtx is the current frame's context, through which the buttons
+	// route their commands as the person (ADR-0269 §SD8); nil outside a
+	// frame.
+	frameCtx app.FrameContextI
+	// paramHandles are this frame's slider handles, so an agent's write to
+	// a parameter while the person drags one is a conflict.
+	paramHandles []widgethandle.WidgetHandle
 }
 
 var _ app.AppI = (*App)(nil)
@@ -262,16 +298,90 @@ func newApp() (inst *App) {
 		sigmaTgtH:    defaultSigmaTgtH,
 		samples:      defaultSamples,
 	}
+	inst.phaseMachine = newPhaseMachine()
 	return
 }
 
 func (inst *App) Manifest() (m app.Manifest) { m = manifest; return }
 
+// Mount wires the window and seeds its points: a launch config wins over
+// the seed variable (ADR-0135 §SD7), and a config that does not decode or
+// names a point or parameter the window refuses fails the mount rather
+// than opening plainly (keelson-app S4).
 func (inst *App) Mount(ctx app.MountContextI) (err error) {
 	inst.ids = ctx.Ids()
 	inst.logger = ctx.Log()
 	inst.tiles = basemap.NewTiles(ctx.Bus(), "terrainscope: basemap")
 	inst.tasks = task.ForApp(ctx)
+	inst.phaseChip = fsmview.New(inst.ids, "sweep-phase", inst.phaseMachine, fsmview.Options[phaseE]{
+		Title:      "Sweep phase",
+		Tethered:   true,
+		BadgeTone:  phaseTone,
+		AutoAnchor: true,
+	})
+	if raw := ctx.LaunchConfig(); len(raw) > 0 {
+		err = inst.applyLaunch(raw)
+		return
+	}
+	if seed := PointsSeed.Get(); seed != "" {
+		in, perr := parsePointsSeed(seed)
+		if perr != nil {
+			inst.seedErr = pointsSeedName + " is not four numbers (observer lat, lon, target lat, lon): " + perr.Error()
+			inst.logger.Warn().Str("value", seed).Msg("terrainscope: " + inst.seedErr)
+			return
+		}
+		inst.setPoints(in)
+	}
+	return
+}
+
+// applyLaunch opens the window on a launch config's points and parameters.
+func (inst *App) applyLaunch(raw []byte) (err error) {
+	cfg, err := buscodec.Decode[launchcfg.TerrainscopeLaunch](raw)
+	if err != nil {
+		err = eh.Errorf("terrainscope: decode launch config: %w", err)
+		return
+	}
+	in := SetPointsArgs{ObserverLat: cfg.ObserverLat, ObserverLon: cfg.ObserverLon, TargetLat: cfg.TargetLat, TargetLon: cfg.TargetLon}
+	if err = checkPoints(in); err != nil {
+		err = eh.Errorf("terrainscope: launch config: %w", err)
+		return
+	}
+	for _, p := range []struct {
+		name  string
+		value float64
+	}{{paramObserverHeight, cfg.ObserverHeight}, {paramTargetHeight, cfg.TargetHeight}, {paramSamples, float64(cfg.Samples)}} {
+		if p.value == 0 {
+			continue
+		}
+		if err = inst.setParameter(SetParameterArgs{Name: p.name, Value: p.value}); err != nil {
+			err = eh.Errorf("terrainscope: launch config: %w", err)
+			return
+		}
+	}
+	inst.setPoints(in)
+	return
+}
+
+// parsePointsSeed reads the seed variable: four decimal numbers separated
+// by commas or spaces, observer first, each as latitude then longitude. Its
+// errors are refusals, whose reason the status row quotes as it stands.
+func parsePointsSeed(s string) (in SetPointsArgs, err error) {
+	fields := strings.FieldsFunc(s, func(r rune) bool { return r == ',' || r == ' ' || r == ';' })
+	if len(fields) != 4 {
+		err = app.RefuseOperation(fmt.Sprintf("%d numbers", len(fields)))
+		return
+	}
+	vals := make([]float64, 4)
+	for i, f := range fields {
+		vals[i], err = strconv.ParseFloat(f, 64)
+		if err != nil {
+			err = app.RefuseOperation(fmt.Sprintf("%q is not a number", f))
+			return
+		}
+	}
+	in = SetPointsArgs{ObserverLat: vals[0], ObserverLon: vals[1], TargetLat: vals[2], TargetLon: vals[3]}
+	err = checkPoints(in)
 	return
 }
 
@@ -291,8 +401,11 @@ func (inst *App) Unmount(ctx app.MountContextI) (err error) {
 // body in its own instance salt (doing so discards the host salt and collides
 // with sibling apps that share a label string).
 func (inst *App) Frame(ctx app.FrameContextI) (err error) {
+	inst.frameCtx = ctx
 	inst.takeResults()
+	inst.mirrorPhase()
 	inst.renderBody()
+	inst.frameCtx = nil
 	return
 }
 
@@ -305,11 +418,13 @@ func (inst *App) takeResults() {
 	if res, _, ok := inst.sweep.TakeResult(); ok {
 		inst.result = res
 		inst.sweepErr = nil
+		inst.landedGen = inst.launchGen
 		return
 	}
 	if snap := inst.sweep.Snapshot(); snap.State == bgjob.StateFailed {
 		inst.sweepErr = snap.Err
 		inst.result = nil
+		inst.landedGen = inst.launchGen
 		inst.sweep.Invalidate()
 	}
 }
@@ -348,17 +463,18 @@ func (inst *App) renderControls() {
 
 	// The window opens on what the method needs (L5): eye height, the fan's
 	// half-range and the ensemble size. The rest sits under one fold.
+	inst.paramHandles = inst.paramHandles[:0]
 	for range c.Horizontal().KeepIter() {
 		for range c.HoverText(tipObserverH).KeepIter() {
-			_ = c.SliderF64(inst.ids.PrepareStr("obsH"), inst.observerH, 0, 100).
+			_ = c.SliderF64(inst.sliderId("obsH"), inst.observerH, 0, 100).
 				Text("observer").Suffix(" m").FixedDecimals(1).SendRespVal(&inst.observerH)
 		}
 		for range c.HoverText(tipSweepHalf).KeepIter() {
-			_ = c.SliderF64(inst.ids.PrepareStr("half"), inst.sweepHalfDeg, 0, 30).
+			_ = c.SliderF64(inst.sliderId("half"), inst.sweepHalfDeg, 0, 30).
 				Text("sweep ±").Suffix("°").FixedDecimals(1).SendRespVal(&inst.sweepHalfDeg)
 		}
 		for range c.HoverText(tipSamples).KeepIter() {
-			_ = c.SliderF64(inst.ids.PrepareStr("samples"), inst.samples, 0, 64).
+			_ = c.SliderF64(inst.sliderId("samples"), inst.samples, 0, 64).
 				Text("samples").FixedDecimals(0).SendRespVal(&inst.samples)
 		}
 	}
@@ -373,8 +489,16 @@ func (inst *App) renderControls() {
 	// kind.
 	if c.Button(inst.ids.PrepareStr("reset"), c.Atoms().Text(icons.IconClose+" Reset").Keep()).
 		SendResp().HasPrimaryClicked() {
-		inst.resetSelection()
+		gestureOr(inst, opClearPoints, appops.None{}, inst.resetSelection)
 	}
+}
+
+// sliderId prepares a parameter slider's id and records its handle, so the
+// parameters resource reads as being edited while the person drags it.
+func (inst *App) sliderId(name string) (id *c.WidgetIdStack) {
+	inst.paramHandles = append(inst.paramHandles, widgethandle.Make(inst.ids.PrepareStr(name).Derive()))
+	id = inst.ids.PrepareStr(name)
+	return
 }
 
 // renderStatusRow is the window's instrument panel (L7): the selection
@@ -385,7 +509,14 @@ func (inst *App) renderStatusRow() {
 	snap := inst.sweep.Snapshot()
 	running := snap.State == bgjob.StateRunning
 	for range c.Horizontal().KeepIter() {
-		c.Label(statusLabel(inst.stage, running)).Send()
+		// The phase chip leads the row (T2); its summary is the selection
+		// sentence the row used to carry as a plain label, and on the tour
+		// stage, which never mounts, that label stands in for it.
+		if inst.phaseChip != nil {
+			inst.renderPhase()
+		} else {
+			c.Label(statusLabel(inst.stage, running)).Send()
+		}
 		if running {
 			if jobprogress.Render(jobprogress.Input{
 				Ids:      inst.ids,
@@ -396,8 +527,7 @@ func (inst *App) renderStatusRow() {
 				Cancel:   true,
 				Inline:   true,
 			}).CancelClicked {
-				inst.sweep.Cancel()
-				inst.sweepNote = "sweep cancelled"
+				gestureOr(inst, opCancel, appops.None{}, inst.cancelSweep)
 			}
 		}
 		if inst.result != nil && inst.result.computeDur > 0 {
@@ -407,6 +537,9 @@ func (inst *App) renderStatusRow() {
 	}
 	if samplerErr != nil {
 		c.Label(fmt.Sprintf("tiles not available (%s=%q): %v", swissTilesDirEnv, tilesDir(), samplerErr)).Send()
+	}
+	if inst.seedErr != "" {
+		c.Label(inst.seedErr).Send()
 	}
 	// A sweep that ended without a result — failed or cancelled — leaves a
 	// toned badge with the reason and a Retry. Retry is the one action that
@@ -418,7 +551,7 @@ func (inst *App) renderStatusRow() {
 	for range c.Horizontal().KeepIter() {
 		if c.Button(inst.ids.PrepareStr("retry"), c.Atoms().Text("Retry").Keep()).
 			Kind(c.ButtonKindPrimary).SendResp().HasPrimaryClicked() {
-			inst.haveLaunched = false
+			gestureOr(inst, opRetry, appops.None{}, inst.retry)
 		}
 		if inst.sweepErr != nil {
 			badge.New(inst.ids.PrepareStr("sweep-err"), "sweep failed: "+inst.sweepErr.Error()).
@@ -436,31 +569,31 @@ func (inst *App) renderStatusRow() {
 func (inst *App) renderAdvancedControls() {
 	for range c.Horizontal().KeepIter() {
 		for range c.HoverText(tipTargetH).KeepIter() {
-			_ = c.SliderF64(inst.ids.PrepareStr("tgtH"), inst.targetH, 0, 100).
+			_ = c.SliderF64(inst.sliderId("tgtH"), inst.targetH, 0, 100).
 				Text("target").Suffix(" m").FixedDecimals(1).SendRespVal(&inst.targetH)
 		}
 		for range c.HoverText(tipSweepStep).KeepIter() {
-			_ = c.SliderF64(inst.ids.PrepareStr("step"), inst.sweepStepDeg, 0.1, 5).
+			_ = c.SliderF64(inst.sliderId("step"), inst.sweepStepDeg, 0.1, 5).
 				Text("step").Suffix("°").FixedDecimals(2).SendRespVal(&inst.sweepStepDeg)
 		}
 	}
 	for range c.Horizontal().KeepIter() {
 		for range c.HoverText(tipSigObsPos).KeepIter() {
-			_ = c.SliderF64(inst.ids.PrepareStr("sigObsPos"), inst.sigmaObsPos, 0, 50).
+			_ = c.SliderF64(inst.sliderId("sigObsPos"), inst.sigmaObsPos, 0, 50).
 				Text("σ obs pos").Suffix(" m").FixedDecimals(1).SendRespVal(&inst.sigmaObsPos)
 		}
 		for range c.HoverText(tipSigTgtPos).KeepIter() {
-			_ = c.SliderF64(inst.ids.PrepareStr("sigTgtPos"), inst.sigmaTgtPos, 0, 50).
+			_ = c.SliderF64(inst.sliderId("sigTgtPos"), inst.sigmaTgtPos, 0, 50).
 				Text("σ tgt pos").Suffix(" m").FixedDecimals(1).SendRespVal(&inst.sigmaTgtPos)
 		}
 	}
 	for range c.Horizontal().KeepIter() {
 		for range c.HoverText(tipSigObsH).KeepIter() {
-			_ = c.SliderF64(inst.ids.PrepareStr("sigObsH"), inst.sigmaObsH, 0, 30).
+			_ = c.SliderF64(inst.sliderId("sigObsH"), inst.sigmaObsH, 0, 30).
 				Text("σ obs ht").Suffix(" m").FixedDecimals(1).SendRespVal(&inst.sigmaObsH)
 		}
 		for range c.HoverText(tipSigTgtH).KeepIter() {
-			_ = c.SliderF64(inst.ids.PrepareStr("sigTgtH"), inst.sigmaTgtH, 0, 30).
+			_ = c.SliderF64(inst.sliderId("sigTgtH"), inst.sigmaTgtH, 0, 30).
 				Text("σ tgt ht").Suffix(" m").FixedDecimals(1).SendRespVal(&inst.sigmaTgtH)
 		}
 	}
@@ -832,17 +965,18 @@ func statusLabel(stage selectionStageE, computing bool) (label string) {
 	return
 }
 
+// handleClick places the observer, then the target. The second click is
+// the set_points gesture (ADR-0269 §SD8): both points go through the same
+// handler an agent's call does, and the reactive loop (maybeRecompute)
+// launches the sweep this frame now that the stage is Pt2.
 func (inst *App) handleClick(lat float64, lon float64) {
 	switch inst.stage {
 	case selectionStageNone:
 		inst.pt1Lat, inst.pt1Lon = lat, lon
 		inst.stage = selectionStagePt1
 	case selectionStagePt1:
-		inst.pt2Lat, inst.pt2Lon = lat, lon
-		inst.stage = selectionStagePt2
-		inst.armRecenter()
-		// The reactive loop (maybeRecompute) launches the first sweep this
-		// frame now that the stage is Pt2.
+		in := SetPointsArgs{ObserverLat: inst.pt1Lat, ObserverLon: inst.pt1Lon, TargetLat: lat, TargetLon: lon}
+		gestureOr(inst, opSetPoints, in, func() { inst.setPoints(in) })
 	}
 }
 
@@ -869,6 +1003,7 @@ func (inst *App) launchSweep(p sweepParams) {
 	inst.result = nil
 	inst.sweepErr = nil
 	inst.sweepNote = ""
+	inst.launchGen++
 	started := inst.sweep.StartReporting(inst.tasks, bgjob.Spec{Kind: sweepKind, Title: sweepTitle},
 		func(ctx context.Context, report bgjob.Reporter) (res *sweepResult, err error) {
 			return runSweep(ctx, inst.logger, report, p)
@@ -894,6 +1029,19 @@ func runSweep(ctx context.Context, logger zerolog.Logger, report bgjob.Reporter,
 	}
 	fromLV := swisstopo.WGS84ToLV95(swisstopo.WGS84Coord{Lat: p.fromLat, Lon: p.fromLon})
 	toLV := swisstopo.WGS84ToLV95(swisstopo.WGS84Coord{Lat: p.toLat, Lon: p.toLon})
+	// The tile index is built from whatever the directory holds, so a
+	// missing directory and a point outside the tiles it has both surface
+	// here, at the endpoints, as the one sentence the person can act on
+	// rather than as the sampler's chain from deep inside the fan.
+	for _, pt := range [...]struct {
+		name string
+		lv   swisstopo.LV95Coord
+	}{{"observer", fromLV}, {"target", toLV}} {
+		if _, serr := s.Sample(pt.lv); serr != nil {
+			err = eb.Build().Str("point", pt.name).Str("tilesDir", tilesDir()).Errorf("elevation tiles not available under the points: %w", serr)
+			return
+		}
+	}
 
 	spec := swisstopo.EnsembleSpec{
 		HalfRangeDeg:    p.halfDeg,

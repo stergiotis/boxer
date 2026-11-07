@@ -17,19 +17,22 @@ from a directory on the machine, so the app covers Switzerland and nowhere
 else. The method, its assumptions and what every number means are on the
 **Line of sight under uncertainty** page; this page is the window.
 
-The window has no operations catalog, no launch config and no scene yet: an
-agent cannot drive it or seed it, and nothing it computes is published for
-SQL. What an agent can do is read this book. The parameters are not
-persisted either; every window opens on the defaults.
+An agent drives the window through its operations catalog, and another app
+opens it on two points through its launch config; both, with the phases of
+the sweep machine, are on the **Operating terrain scope as an agent** page.
+Nothing the window computes is published for SQL. The parameters are not
+persisted; a plainly opened window starts on the defaults.
 
 ## Picking the points
 
 The Map tab is a slippy map over Switzerland. The first click places the
 observer, the second the target, and the sweep starts on its own. The status
-row counts the selection — *Selection: 0/2 — click the observer point on the
-map*, *Selection: 1/2 — click the target point on the map*, *Selection: 2/2
-— drag the sliders to re-run live* — and reads *Computing line-of-sight
-sweep ensemble…* while a sweep runs. After the second click the map zooms in
+row leads with the sweep's phase chip — *idle*, *one point*, *two points*,
+*sweeping*, *result*, *failed* or *cancelled*; a click opens its graph and
+history — beside the selection sentence: *Selection: 0/2 — click the
+observer point on the map*, *Selection: 1/2 — click the target point on the
+map*, *Selection: 2/2 — drag the sliders to re-run live*, and *Computing
+line-of-sight sweep ensemble…* while a sweep runs. After the second click the map zooms in
 on the pair. **Reset** clears both points and any result; a sweep still in
 flight is discarded, since its result would describe the old points.
 

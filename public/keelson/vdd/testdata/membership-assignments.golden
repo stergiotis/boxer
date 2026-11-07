@@ -265,3 +265,14 @@
 260	tv-launch-tab	12884902148
 261	tv-launch-view	12884902149
 262	ac-launch-filter	12884902150
+263	terrainscope-launch-observer-lat	12884902151
+264	terrainscope-launch-observer-lon	12884902152
+265	terrainscope-launch-target-lat	12884902153
+266	terrainscope-launch-target-lon	12884902154
+267	terrainscope-launch-observer-height	12884902155
+268	terrainscope-launch-target-height	12884902156
+269	terrainscope-launch-samples	12884902157
+270	writingstylescope-launch-doc-a	12884902158
+271	writingstylescope-launch-doc-b	12884902159
+272	writingstylescope-launch-floor	12884902160
+273	fibscope-launch-id	12884902161

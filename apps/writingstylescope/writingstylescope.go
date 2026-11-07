@@ -24,17 +24,21 @@
 // the SQL playground as an ephemeral dataset — see writingstylescope_handover.go.
 //
 // Lifecycle: Mount captures the id stack, logger, bus, task api and storage
-// and restores the persisted drafts; Frame takes the sweep runner's outcome
-// and renders inside the host-owned window, launching a sweep when the user
-// asks for one; Unmount cancels a sweep or confidence-band warm-up still in
-// flight and persists the drafts. The published dataset is retracted by the
-// runtime.
+// and opens the window on a launch config (launchcfg) or the seed variable,
+// or else restores the persisted drafts; Frame takes the sweep runner's
+// outcome, mirrors the phase machine and renders inside the host-owned
+// window, launching a sweep when the user asks for one; Unmount cancels a
+// sweep or confidence-band warm-up still in flight and persists the drafts.
+// The published dataset is retracted by the runtime. The operations catalog
+// is writingstylescope_ops.go, the machine writingstylescope_machine.go.
 package writingstylescope
 
 import (
 	"context"
 	"fmt"
 	"math"
+	"os"
+	"path/filepath"
 	"sort"
 	"strconv"
 	"sync"
@@ -42,16 +46,23 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 
+	"github.com/stergiotis/boxer/apps/writingstylescope/launchcfg"
 	"github.com/stergiotis/boxer/public/keelson/runtime/adhocdata"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
+	"github.com/stergiotis/boxer/public/keelson/runtime/appops"
 	"github.com/stergiotis/boxer/public/keelson/runtime/bgjob"
+	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
 	"github.com/stergiotis/boxer/public/keelson/runtime/lifetime"
 	"github.com/stergiotis/boxer/public/keelson/runtime/task"
+	"github.com/stergiotis/boxer/public/keelson/runtime/widgethandle"
+	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/badge"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/colormap"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/colorscale"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/ecdf"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/fsmview"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/implot"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/jobprogress"
 )
@@ -153,7 +164,7 @@ const (
 
 	tipHeat     = "Every A section (rows) against every B section (columns). Bright is a low distance — the pair compressed well together. The colour range spans this matrix's own minimum and maximum, so brightness is relative to these two documents and not to any fixed scale."
 	tipCell     = "The pair under the cursor, its distance, and where that distance falls among all the pairs in this matrix."
-	tipTop      = "The closest pairs, and the fraction of all pairs each one beats. A pair at 0.0% is closer than every other pair measured — worth opening both sections side by side."
+	tipTop      = "The closest pairs, and the fraction of all pairs each one beats. The closest pair measured reads near 100% — worth opening both sections side by side."
 	tipHandover = "Publish the whole cross-matrix — every pair, not just the ranked ones — as an ephemeral dataset and open it in the SQL playground, seeded with the query behind this table. The dataset lives as long as this window does."
 
 	tipEcdf = "The distribution of all the pairwise distances. The bulk of the curve is this document pair's own background: what 'unrelated' looks like for this subject matter, in this language, at these section lengths. A shared section is a point detached from the bulk on the left."
@@ -263,6 +274,32 @@ type App struct {
 	handoverNote string
 	// pub holds the pairs dataset: one alias, one handle across presses.
 	pub *adhocdata.Publisher
+
+	// sweepSeq counts sweeps launched and landedSeq the last one that ended
+	// — landed, refused or cancelled; analyzeWant is the sweep an analyze
+	// call waits for, and cancelled says the last one ended by Cancel.
+	sweepSeq    uint64
+	landedSeq   uint64
+	analyzeWant uint64
+	cancelled   bool
+
+	// seedErr is why BOXER_WRITINGSTYLESCOPE_DOCS was not applied, shown on
+	// the Documents tab; empty when it was, or was not set.
+	seedErr string
+
+	// The analysis's phase, mirrored each frame, and the state chip that
+	// draws it (built in Mount; nil on the tour stage).
+	phaseMachine *fsmview.Machine[phaseE]
+	phaseChip    *fsmview.View[phaseE]
+
+	// frameCtx is the current frame's context, through which the buttons
+	// route their commands as the person (ADR-0269 §SD8); nil outside a
+	// frame.
+	frameCtx app.FrameContextI
+	// paneHandles and floorHandle are this frame's input handles, so an
+	// agent's write while the person types or drags is a conflict.
+	paneHandles [2]widgethandle.WidgetHandle
+	floorHandle widgethandle.WidgetHandle
 }
 
 var _ app.AppI = (*App)(nil)
@@ -285,11 +322,19 @@ func newApp() (inst *App) {
 		pending:         true,
 		pub:             adhocdata.NewWindowPublisher(datasetAlias),
 	}
+	inst.phaseMachine = newPhaseMachine()
 	return
 }
 
 func (inst *App) Manifest() (m app.Manifest) { m = manifest; return }
 
+// Mount wires the window and decides what it opens on: a launch config
+// wins over the seed variable, which wins over the persisted drafts
+// (ADR-0135 §SD7). A window opened on either is a handed-over one, as
+// mdedit's is: it neither restores nor persists, so the person's drafts are
+// never touched. A config that does not decode, or carries a document or a
+// floor the window refuses, fails the mount rather than opening plainly
+// (keelson-app S4).
 func (inst *App) Mount(ctx app.MountContextI) (err error) {
 	inst.ids = ctx.Ids()
 	inst.logger = ctx.Log()
@@ -297,7 +342,82 @@ func (inst *App) Mount(ctx app.MountContextI) (err error) {
 	inst.tasks = task.ForApp(ctx)
 	inst.scope = app.LifetimeOf(ctx)
 	inst.storage = ctx.Storage()
+	inst.phaseChip = fsmview.New(inst.ids, "analysis-phase", inst.phaseMachine, fsmview.Options[phaseE]{
+		Title:      "Analysis phase",
+		Tethered:   true,
+		BadgeTone:  phaseTone,
+		AutoAnchor: true,
+	})
+	if raw := ctx.LaunchConfig(); len(raw) > 0 {
+		err = inst.applyLaunch(raw)
+		return
+	}
+	if seed := DocsSeed.Get(); seed != "" {
+		a, b, serr := readDocsSeed(seed)
+		if serr == nil {
+			inst.adoptDocuments(a, b)
+			return
+		}
+		inst.seedErr = docsSeedName + " was not applied: " + serr.Error()
+		inst.logger.Warn().Str("value", seed).Msg("writingstylescope: " + inst.seedErr)
+	}
 	inst.restoreDrafts()
+	return
+}
+
+// applyLaunch opens the window on a launch config's documents and floor.
+func (inst *App) applyLaunch(raw []byte) (err error) {
+	cfg, err := buscodec.Decode[launchcfg.WritingstylescopeLaunch](raw)
+	if err != nil {
+		err = eh.Errorf("writingstylescope: decode launch config: %w", err)
+		return
+	}
+	if len(cfg.DocA) > maxPaneBytes || len(cfg.DocB) > maxPaneBytes {
+		err = eb.Build().Int("bytesA", len(cfg.DocA)).Int("bytesB", len(cfg.DocB)).Int("limit", maxPaneBytes).
+			Errorf("writingstylescope: launch config: a document is over the pane's cap of 1 MiB")
+		return
+	}
+	if cfg.Floor != 0 {
+		if err = inst.setFloor(float64(cfg.Floor)); err != nil {
+			err = eh.Errorf("writingstylescope: launch config: %w", err)
+			return
+		}
+	}
+	inst.adoptDocuments(cfg.DocA, cfg.DocB)
+	return
+}
+
+// adoptDocuments makes a and b the panes' text without a store behind
+// them: no restore, no persist. Shared by a launch config and the seed.
+func (inst *App) adoptDocuments(a string, b string) {
+	inst.storage = nil
+	inst.docA, inst.docB = a, b
+	inst.pending = true
+}
+
+// readDocsSeed reads the two files the seed variable names, separated by
+// the system's path-list separator as PATH is. Its errors are refusals,
+// whose reason the Documents tab quotes as it stands.
+func readDocsSeed(seed string) (a string, b string, err error) {
+	paths := filepath.SplitList(seed)
+	if len(paths) != 2 {
+		err = app.RefuseOperation(fmt.Sprintf("it names %d files, not two separated by %q", len(paths), string(os.PathListSeparator)))
+		return
+	}
+	var texts [2]string
+	for i, p := range paths {
+		raw, rerr := os.ReadFile(p)
+		if rerr != nil {
+			err = app.RefuseOperation(rerr.Error())
+			return
+		}
+		if len(raw) > maxPaneBytes {
+			err = app.RefuseOperation(p + " is over the pane's cap of 1 MiB")
+			return
+		}
+		texts[i] = string(raw)
+	}
+	a, b = texts[0], texts[1]
 	return
 }
 
@@ -391,8 +511,11 @@ func (inst *App) Unmount(ctx app.MountContextI) (err error) {
 // salt onto inst.ids (ADR-0026 §SD9), so the app must not Reset() the stack or
 // wrap the body in its own instance salt.
 func (inst *App) Frame(ctx app.FrameContextI) (err error) {
+	inst.frameCtx = ctx
 	inst.takeResults()
+	inst.mirrorPhase()
 	inst.renderBody()
+	inst.frameCtx = nil
 	return
 }
 
@@ -402,16 +525,19 @@ func (inst *App) Frame(ctx app.FrameContextI) (err error) {
 func (inst *App) takeResults() {
 	if res, _, ok := inst.sweep.TakeResult(); ok {
 		inst.applySweep(inst.launched, res, nil)
+		inst.landedSeq = inst.sweepSeq
 		return
 	}
 	if snap := inst.sweep.Snapshot(); snap.State == bgjob.StateFailed {
 		inst.applySweep(inst.launched, nil, snap.Err)
+		inst.landedSeq = inst.sweepSeq
 		inst.sweep.Invalidate()
 	}
 }
 
 func (inst *App) renderBody() {
 	inst.runPending()
+	inst.renderStatusRow()
 	for range c.PanelCentralInside().KeepIter() {
 		for dock := range c.DockArea(inst.ids.PrepareStr("wss-dock")) {
 			dock.InitRoot(dockTabDocuments, dockTabMatrix, dockTabDist)
@@ -457,14 +583,19 @@ func (inst *App) runPending() {
 func (inst *App) run() {
 	in := inst.inputs()
 	if inst.tasks == nil {
+		inst.sweepSeq++
+		inst.cancelled = false
 		res, err := analyze(in.a, in.b, clampFloor(in.floor))
 		inst.applySweep(in, res, err)
+		inst.landedSeq = inst.sweepSeq
 		return
 	}
 	if inst.sweep.Running() {
 		inst.pending = true
 		return
 	}
+	inst.sweepSeq++
+	inst.cancelled = false
 	inst.launched = in
 	started := inst.sweep.StartReporting(inst.tasks, bgjob.Spec{Kind: sweepKind, Title: sweepTitle},
 		func(ctx context.Context, report bgjob.Reporter) (res *Analysis, err error) {
@@ -519,10 +650,23 @@ func (inst *App) renderSweepRow(scopeKey string) {
 			Note:     snap.Note,
 			Cancel:   true,
 		}).CancelClicked {
-			inst.sweep.Cancel()
+			inst.cancelSweep()
 		}
 	}
 	c.RequestRepaint()
+}
+
+// cancelSweep stops the running sweep and drops a rerun queued behind it;
+// the previous result, if any, stays. The sweep counts as ended, so an
+// analyze call waiting on it settles as cancelled.
+func (inst *App) cancelSweep() {
+	inst.sweep.Cancel()
+	inst.pending = false
+	inst.cancelled = true
+	inst.landedSeq = inst.sweepSeq
+	if inst.analyzeWant > inst.sweepSeq {
+		inst.analyzeWant = inst.sweepSeq
+	}
 }
 
 // renderStaleBadge is the stale state as a toned badge (L2). idStr keeps
@@ -557,6 +701,9 @@ func (inst *App) renderDocuments() {
 	c.Separator().Send()
 	inst.renderControls()
 	c.Separator().Send()
+	if inst.seedErr != "" {
+		metric(inst.seedErr, tipRun)
+	}
 	inst.renderStatus()
 }
 
@@ -564,11 +711,11 @@ func (inst *App) renderPanes() {
 	for range c.HorizontalTop().KeepIter() {
 		for range c.Vertical().KeepIter() {
 			metric("Document A — rows", tipPaneA)
-			inst.renderPane("doc-a", &inst.docA, "paste the first document…")
+			inst.renderPane("doc-a", &inst.docA, &inst.paneHandles[0], "paste the first document…")
 		}
 		for range c.Vertical().KeepIter() {
 			metric("Document B — columns", tipPaneB)
-			inst.renderPane("doc-b", &inst.docB, "paste the second document…")
+			inst.renderPane("doc-b", &inst.docB, &inst.paneHandles[1], "paste the second document…")
 		}
 	}
 }
@@ -581,11 +728,13 @@ func (inst *App) renderPanes() {
 // neighbour.
 //
 // draft must be an App field: it is the FFI write-back target and the frontend
-// writes into it one frame after the edit.
-func (inst *App) renderPane(idStr string, draft *string, hint string) {
+// writes into it one frame after the edit. handle records the edit's id, so
+// the documents resource reads as being edited while the person types.
+func (inst *App) renderPane(idStr string, draft *string, handle *widgethandle.WidgetHandle, hint string) {
 	for range c.ScrollArea().Vscroll(true).KeepIter() {
 		c.UiSetMinHeight(paneH)
 		c.UiSetMaxHeight(paneH)
+		*handle = widgethandle.Make(inst.ids.PrepareStr(idStr).Derive())
 		_ = c.TextEdit(inst.ids.PrepareStr(idStr), *draft, true).
 			CodeEditor().DesiredWidth(paneW).DesiredRows(paneRows).
 			HintText(hint).
@@ -599,7 +748,7 @@ func (inst *App) renderControls() {
 			// The one action this view exists for (L2).
 			if c.Button(inst.ids.PrepareStr("run"), c.Atoms().Text("Analyze").Keep()).
 				Kind(c.ButtonKindPrimary).SendResp().HasPrimaryClicked() {
-				inst.run()
+				gestureOr(inst, opAnalyze, appops.None{}, inst.analyze)
 			}
 		}
 		if c.Button(inst.ids.PrepareStr("example"), c.Atoms().Text("Load example").Keep()).
@@ -614,6 +763,7 @@ func (inst *App) renderControls() {
 		}
 	}
 	for range c.HoverText(tipFloor).KeepIter() {
+		inst.floorHandle = widgethandle.Make(inst.ids.PrepareStr("floor").Derive())
 		_ = c.SliderF64(inst.ids.PrepareStr("floor"), inst.minSectionBytes,
 			minMinSectionBytes, maxMinSectionBytes).
 			Text("section-length floor (bytes)").FixedDecimals(0).
@@ -783,8 +933,8 @@ func (inst *App) renderHandover() {
 		}
 		for range c.HoverText(tipHandover).KeepIter() {
 			if c.Button(inst.ids.PrepareStr("handover"), c.Atoms().Text(label).Keep()).
-				SendResp().HasPrimaryClicked() && !busy && inst.bus != nil {
-				inst.startHandover()
+				SendResp().HasPrimaryClicked() && !busy && inst.bus != nil && inst.res != nil {
+				gestureOr(inst, opOpenInPlay, appops.None{}, inst.startHandover)
 			}
 		}
 		if inst.bus == nil {

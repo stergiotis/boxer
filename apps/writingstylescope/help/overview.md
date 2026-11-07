@@ -19,10 +19,18 @@ that is the person's job. The measure, the section rule and the band are on
 the **Compression distance between sections** page; this page is the
 window.
 
-The window has no operations catalog, no launch config and no scene yet: an
-agent cannot drive it or seed the panes, and the only thing it publishes for
-SQL is what the person hands to play from the Matrix tab. What an agent can
-read is this book.
+An agent drives the window through its operations catalog, and another app
+opens it on two documents through its launch config; both, with the phases
+of the analysis, are on the **Operating writing style scope as an agent**
+page. The only thing the window publishes for SQL is what the person or an
+agent hands to play from the Matrix tab.
+
+## The status row
+
+Above the tabs, the analysis's phase chip — *no result*, *sweeping*,
+*result*, *stale* or *failed*; a click opens its graph and history — sits
+beside a line saying what the phase holds: the section and pair counts of
+the result, or why the sweep refused.
 
 ## Documents tab
 
@@ -102,9 +110,9 @@ Hovering a cell names the pair under the cursor, its distance, and where
 that distance falls among all the pairs in this matrix.
 
 **Closest pairs** lists up to 25 cells, ascending by distance, with the
-fraction of all pairs each one beats and the byte sizes of both sections. A
-pair at 0.0% is closer than every other pair measured — worth opening both
-sections side by side.
+fraction of all pairs each one beats and the byte sizes of both sections.
+The closest pair measured reads near 100% — worth opening both sections
+side by side.
 
 ### Open in play
 
@@ -156,7 +164,9 @@ distance, has no distribution to draw, and the tab says so.
 ## What persists
 
 Three things are stored under the app's persisted keys and restored when a
-window opens: the two drafts and the floor. The sweep writes them from its
+window opens: the two drafts and the floor. A window opened on documents of
+its own — by a launch config or by `BOXER_WRITINGSTYLESCOPE_DOCS` — neither
+restores nor stores them, so the person's drafts are left as they were. The sweep writes them from its
 own goroutine, and the window writes them once more when it closes, for
 edits made after the last sweep. The result is a recomputable cache and is
 not stored; the first sweep after reopening recomputes it. Nothing else is
