@@ -8,6 +8,7 @@ import (
 	"github.com/stergiotis/boxer/public/analytics/stats/tdigest"
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
+	"github.com/stergiotis/boxer/public/keelson/runtime/lifetime"
 	"github.com/stergiotis/boxer/public/keelson/runtime/task"
 	"github.com/stergiotis/boxer/public/keelson/runtime/widgethandle"
 	"github.com/stergiotis/boxer/public/observability/sysmetrics/sysmsnap"
@@ -16,6 +17,7 @@ import (
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/distsummary"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/lazypane"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/recordtable"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/regexedit"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/timeline"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/treemap"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/treemap/layout"
@@ -111,6 +113,11 @@ type App struct {
 	// view.Filter each frame and the typed text would never appear.
 	// Committed into procView below on every HasChanged response.
 	procFilterDraft string
+	// procFilterHl is the filter box's regexedit highlighter, per window
+	// because the widget owns a highlight cache; procFilter is the view's
+	// filter compiled once per query (viewProcs).
+	procFilterHl regexedit.Cache
+	procFilter   procFilter
 
 	// procView is this window's process-panel sort key, direction,
 	// filter and tree toggle. Per-window like the rest of the UI state
@@ -260,6 +267,11 @@ type App struct {
 	latchedFrozen bool
 	latchedReplay replayValue
 	procFilterH   widgethandle.WidgetHandle
+
+	// scope is the instance's lifetime scope (W5): the replay open and the
+	// coverage queries run as its work, so the host's drain waits for them
+	// and their context ends with the window. Nil on a host without one.
+	scope *lifetime.Scope
 }
 
 var _ app.AppI = (*App)(nil)
@@ -284,12 +296,29 @@ func (inst *App) Manifest() (m app.Manifest) { m = manifest; return }
 func (inst *App) Mount(ctx app.MountContextI) (err error) {
 	inst.ids = ctx.Ids()
 	inst.tasks = task.ForApp(ctx)
+	inst.scope = app.LifetimeOf(ctx)
 	// Capture the host-provided capability bus for the singleton Sampler to
 	// subscribe on (ADR-0090): imztop consumes metrics, it never reads /proc.
 	setSamplerBus(ctx.Bus())
 	inst.claimController()
 	return
 }
+
+// spawn runs f off the render goroutine as work of the instance's lifetime
+// scope (W5), so the host's drain waits for it and ctx ends when the window
+// goes. started is false once the scope has retired, and f then does not run.
+// A host without a scope (a bare test context, the tour) gets a plain
+// goroutine on a context nobody cancels.
+func (inst *App) spawn(f func(ctx context.Context)) (started bool) {
+	if inst.scope != nil {
+		started = inst.scope.Go(f)
+		return
+	}
+	go f(context.Background())
+	started = true
+	return
+}
+
 func (inst *App) Unmount(ctx app.MountContextI) (err error) {
 	inst.releaseController()
 	if inst.procTbl.rec != nil {

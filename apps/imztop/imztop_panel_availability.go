@@ -5,6 +5,7 @@ import (
 	"iter"
 	"time"
 
+	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	"github.com/stergiotis/boxer/public/keelson/runtime/sysmreplay"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/timeline"
@@ -83,7 +84,7 @@ func availabilityBands(viewMinMS, viewMaxMS int64) iter.Seq[tllayout.BackgroundB
 			if !yield(tllayout.BackgroundBand{
 				FromMS: r.StartMS,
 				ToMS:   r.EndMS,
-				Color:  availabilityBandColor,
+				Color:  availabilityBandColor(),
 				Label:  fmt.Sprintf("stored history — %d rows", r.Rows),
 			}) {
 				return
@@ -117,10 +118,18 @@ func previewEvents() (points []*tllayout.PointEvent) {
 	return
 }
 
-// availabilityBandColor shades a covered stretch. The band channel takes a
-// packed RGBA literal, and the alpha is low on the widget's own advice: a band
-// is context under everything else and must not compete with it.
-const availabilityBandColor uint32 = 0x4c9f7038
+// availabilityBandAlpha is low on the widget's own advice: a band is context
+// under everything else and must not compete with it.
+const availabilityBandAlpha uint8 = 0x38
+
+// availabilityBandColor shades a covered stretch: the success role at the band
+// alpha, packed the way the band channel takes it (0xRRGGBBAA, the layout of
+// RGBA8.AsHex). A token read rather than a literal, so the strip follows the
+// theme chosen at launch (L1).
+func availabilityBandColor() (packed uint32) {
+	packed = styletokens.SuccessDefault.AsHex()&0xffffff00 | uint32(availabilityBandAlpha)
+	return
+}
 
 // renderAvailability draws the strip and keeps its coverage fresh.
 //
@@ -131,13 +140,13 @@ func (inst *App) renderAvailability(st ReplayStatus, snap *PublishedSnapshot) {
 	tl := inst.ensureAvailability()
 
 	if from, to, ok := tl.ViewRange(); ok {
-		ensureCoverage(ActiveReplaySource(), from, to)
+		ensureCoverage(inst.spawn, ActiveReplaySource(), from, to)
 	} else {
 		// Before the first Render there is no view to ask about; seed the
 		// query from the range the widget was constructed with so the first
 		// frame after it has something to draw.
 		now := time.Now().UTC()
-		ensureCoverage(ActiveReplaySource(), now.Add(-availabilityContextSpan), now)
+		ensureCoverage(inst.spawn, ActiveReplaySource(), now.Add(-availabilityContextSpan), now)
 	}
 
 	// Refresh the rug from whatever the last background pass loaded. The points

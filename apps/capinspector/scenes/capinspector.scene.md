@@ -16,7 +16,9 @@ A tour of the inspector's surfaces: the empty state of a plain open, a
 status-bar chip retargeting the open window, the wrapped picker, the wiring
 graph with its legend and activity strip, a click on a graph node, the per-cap
 prose and live-consumer line, the three storage-schema sections, a status-bar
-chip reopening a closed window, and F1 opening the inspector's own help.
+chip reopening a closed window, and F1 opening the inspector's own help. The
+backend line of the facts cap is read and asserted, so a cap whose backend
+was rewired fails the scene rather than captures a different picture.
 
 The graph is painter-only, so the node click is by coordinates; the step after
 it asserts which cap became selected, so a layout change fails the scene rather
@@ -38,7 +40,8 @@ accessibility node, so the scene does not open it.
 
 {"do":"note","text":"--- the picker; the graph, its legend and the activity strip ---"}
 {"do":"click","name":"Audit + facts backend","role":"button","settleMs":1200,"comment":"the first frame of a cap lays the graph out; give it a moment"}
-{"do":"wait","valueContains":"Backend: runtime/factsstore","role":"label"}
+{"do":"read","valueContains":"Backend: ","role":"label","pattern":"Backend: (?P<backend>\\S+)","comment":"the first package of the backend line, bound for the assertion below"}
+{"do":"expect","of":"backend","is":"runtime/factsstore"}
 {"do":"wait","valueContains":" no active backend","role":"label","comment":"the legend row is up; each entry is its swatch glyph and its text in one label"}
 {"do":"wait","valueContains":" idle capability","role":"label"}
 {"do":"wait","value":"This capability is a runtime-level service; every app inherits it implicitly.","role":"label","comment":"facts has no per-app filter"}

@@ -11,6 +11,7 @@ import (
 	"github.com/stergiotis/boxer/public/db/clickhouse/clickhouseenv"
 	jk "github.com/stergiotis/boxer/public/db/clickhouse/jackstay"
 	"github.com/stergiotis/boxer/public/hmi/progressest"
+	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	"github.com/stergiotis/boxer/public/keelson/runtime/bgjob"
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
@@ -351,7 +352,7 @@ func pageHeader(title string) {
 // card is a framed block for a summary the operator should read before a
 // click; it inherits the group preset.
 func (inst *App) card(key string) (it func(func() bool)) {
-	fr := c.Frame(inst.ids.PrepareStr(key)).PresetGroup().InnerMargin(10)
+	fr := c.Frame(inst.ids.PrepareStr(key)).PresetGroup().InnerMargin(styletokens.PaddingDefault(styletokens.ActiveDensity()))
 	return func(body func() bool) {
 		for range fr.KeepIter() {
 			body()
@@ -367,14 +368,21 @@ func plural(n int, word string) (s string) {
 	return
 }
 
-// actionButton draws a button that is disabled while busy; disabled, it
-// still takes its place in the layout.
+// actionButton draws a page's own action — the one it exists for, so the
+// primary kind (L2) — disabled while busy; disabled, it still takes its
+// place in the layout.
 func (inst *App) actionButton(key string, label string, busy bool) (clicked bool) {
+	clicked = inst.kindButton(key, label, busy, c.ButtonKindPrimary)
+	return
+}
+
+// kindButton is actionButton with the button's role named by the caller.
+func (inst *App) kindButton(key string, label string, busy bool, kind c.ButtonKindE) (clicked bool) {
 	for range c.HorizontalTop().KeepIter() {
 		if busy {
 			c.UiDisable()
 		}
-		clicked = c.Button(inst.ids.PrepareStr(key), c.Atoms().Text(label).Keep()).SendResp().HasPrimaryClicked() && !busy
+		clicked = c.Button(inst.ids.PrepareStr(key), c.Atoms().Text(label).Keep()).Kind(kind).SendResp().HasPrimaryClicked() && !busy
 	}
 	return
 }
@@ -393,6 +401,8 @@ func (inst *App) smallButton(key string, label string, busy bool) (clicked bool)
 // confirmControls draws an action behind a second click: armLabel arms it,
 // then question names what the click will do, beside confirmLabel and a
 // Cancel. confirmed is the second click; key prefixes the controls' ids.
+// Arming is the page's action (primary); the confirmed click writes the
+// target, so it is drawn in the danger role (L2).
 func (inst *App) confirmControls(key string, armed *bool, armLabel string, question string, confirmLabel string, busy bool) (confirmed bool) {
 	if !*armed {
 		if inst.actionButton(key+"-arm", armLabel, busy) {
@@ -401,7 +411,7 @@ func (inst *App) confirmControls(key string, armed *bool, armLabel string, quest
 		return
 	}
 	badge.New(inst.ids.PrepareStr(key+"-armed"), question).Tone(badge.ToneWarning).Variant(badge.VariantSoft).Send()
-	confirmed = inst.actionButton(key, confirmLabel, busy)
+	confirmed = inst.kindButton(key, confirmLabel, busy, c.ButtonKindDanger)
 	if c.Button(inst.ids.PrepareStr(key+"-disarm"), c.Atoms().Text("Cancel").Keep()).SendResp().HasPrimaryClicked() {
 		*armed = false
 	}
@@ -504,8 +514,17 @@ func passwordLine(name string, set bool) (s string) {
 	return "from " + name + " (not set)"
 }
 
+// noteNoBus is the Connect page's line on a host without a bus (L4): the
+// servers can be discovered, planned and compared, but the plan file and the
+// dialogs behind Open and Export go through the fs broker, and the first save
+// — right after Plan the structure — would otherwise be the first failure.
+const noteNoBus = "No bus on this host: the plan cannot be saved, opened or exported; discovery, planning and comparison still work"
+
 func (inst *App) renderConnect() {
 	pageHeader("Which two servers?")
+	if inst.bus == nil {
+		note(noteNoBus)
+	}
 	if len(inst.recent) > 0 {
 		inst.renderRecent()
 	}
@@ -515,15 +534,15 @@ func (inst *App) renderConnect() {
 		heading("source")
 		heading("target")
 		c.EndRow()
-		c.Label("server").Send()
+		c.Label("Server").Send()
 		c.TextEdit(inst.ids.PrepareStr("src-url"), inst.srcURL, false).HintText("localhost:8123").DesiredWidth(320).SendRespVal(&inst.srcURL)
 		c.TextEdit(inst.ids.PrepareStr("dst-url"), inst.dstURL, false).HintText("replica:8123").DesiredWidth(320).SendRespVal(&inst.dstURL)
 		c.EndRow()
-		c.Label("user").Send()
+		c.Label("User").Send()
 		c.TextEdit(inst.ids.PrepareStr("src-user"), inst.srcUser, false).DesiredWidth(320).SendRespVal(&inst.srcUser)
 		c.TextEdit(inst.ids.PrepareStr("dst-user"), inst.dstUser, false).DesiredWidth(320).SendRespVal(&inst.dstUser)
 		c.EndRow()
-		c.Label("password").Send()
+		c.Label("Password").Send()
 		weak(passwordLine("CLICKHOUSE_PASSWORD", clickhouseenv.Password.Get() != ""))
 		weak(passwordLine("BOXER_JACKSTAY_TARGET_PASSWORD", jk.TargetPasswordEnv.Get() != ""))
 		c.EndRow()
@@ -890,7 +909,8 @@ func (inst *App) renderFilter(pt *jk.PlanTable) {
 			small("connect to the servers to plan with this filter")
 		}
 	case changed:
-		if inst.actionButton("apply-filter", "Plan with this filter", inst.planBusy()) {
+		// Worth pointing at, but the page's action is applying the DDL (L2).
+		if inst.kindButton("apply-filter", "Plan with this filter", inst.planBusy(), c.ButtonKindTertiary) {
 			inst.startStructure()
 		}
 	}

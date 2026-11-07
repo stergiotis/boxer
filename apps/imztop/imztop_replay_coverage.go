@@ -73,8 +73,9 @@ func coverageSnapshot() (runs []sysmreplay.CoverageRun, from, to time.Time, err 
 
 // ensureCoverage kicks a background query when the view has moved outside what
 // is loaded. It never blocks: the caller is the render thread, and the answer
-// arrives for a later frame.
-func ensureCoverage(src *StoreSource, viewFrom, viewTo time.Time) {
+// arrives for a later frame. The query runs under spawn — the window's
+// lifetime scope (W5) — and gives the in-flight slot back when spawn declines.
+func ensureCoverage(spawn spawner, src *StoreSource, viewFrom, viewTo time.Time) {
 	if src == nil || !viewTo.After(viewFrom) {
 		return
 	}
@@ -91,8 +92,8 @@ func ensureCoverage(src *StoreSource, viewFrom, viewTo time.Time) {
 	pad := time.Duration(float64(span) * coveragePadFraction)
 	from, to := viewFrom.Add(-pad), viewTo.Add(pad)
 
-	go func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	started := spawn(func(ctx context.Context) {
+		ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 		defer cancel()
 		runs, err := src.Coverage(ctx, sysmreplay.Window{From: from, To: to}, 0)
 		if err != nil {
@@ -116,7 +117,12 @@ func ensureCoverage(src *StoreSource, viewFrom, viewTo time.Time) {
 			previewPoints = points
 		}
 		coverageMu.Unlock()
-	}()
+	})
+	if !started {
+		coverageMu.Lock()
+		coverageInFlight = false
+		coverageMu.Unlock()
+	}
 }
 
 // seedCoverage installs availability and load directly, bypassing the query.

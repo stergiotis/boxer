@@ -2,7 +2,6 @@ package imztop
 
 import (
 	"cmp"
-	"context"
 	"math"
 	"net/url"
 	"slices"
@@ -352,7 +351,7 @@ type Battery struct {
 type ListProcessesArgs struct {
 	SortBy string `json:",omitzero" desc:"cpu (smoothed, default), cpu_raw, mem, pid, user, name, io_read, io_write"`
 	Order  string `json:",omitzero" desc:"asc or desc; empty takes the key's own direction"`
-	Filter string `json:",omitzero" desc:"case-insensitive substring of the name or command line; empty keeps all"`
+	Filter string `json:",omitzero" desc:"regex battery over the name and command line: space-separated case-insensitive RE2 tokens that must all match; a token that does not compile matches literally; empty keeps all"`
 	Limit  int    `desc:"rows to return, 1 to 50; 0 means 20"`
 }
 
@@ -478,7 +477,7 @@ type CoverageRun struct {
 type SetProcViewArgs struct {
 	SortBy string `json:",omitzero" desc:"cpu, cpu_raw, mem, pid, user, name, io_read, io_write; empty is cpu"`
 	Order  string `json:",omitzero" desc:"asc or desc; empty takes the key's own direction"`
-	Filter string `json:",omitzero" desc:"case-insensitive substring of name or command line; empty shows all"`
+	Filter string `json:",omitzero" desc:"regex battery over the name and command line: space-separated case-insensitive RE2 tokens that must all match; a token that does not compile matches literally; empty shows all"`
 	Tree   bool   `desc:"nest children under parents"`
 }
 
@@ -694,7 +693,7 @@ func (inst *App) applyEnterReplay(w sysmreplay.Window) {
 	if w.From.IsZero() && w.To.IsZero() {
 		w = defaultReplayWindow()
 	}
-	StartReplay(context.Background(), w, StoreSourceOptions{})
+	StartReplay(inst.spawn, w, StoreSourceOptions{})
 	inst.latchProcessWide()
 }
 

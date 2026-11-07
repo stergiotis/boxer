@@ -2,11 +2,28 @@ package imzrt
 
 import (
 	"fmt"
-	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/trendsmooth"
 	"runtime"
 	"time"
 
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/trendsmooth"
+)
+
+// The top bar's texts, as constants so a scene can read them (A5).
+const (
+	// labelFreeze and labelGoLive stop and restart the shared sampler for
+	// every imzrt window — imztop's verbs for the same act (L3); Pause is the
+	// host's act on one window (W6).
+	labelFreeze = "Freeze"
+	labelGoLive = "Go live"
+	// tipFreeze is the hover of that button.
+	tipFreeze = "Stop the sampler for every imzrt window; the plots hold their last sample. Go live restarts it."
+	// intervalStep is what one click on − or + moves the sampling interval by.
+	intervalStep = 500 * time.Millisecond
+	// tipIntervalDown and tipIntervalUp are the hovers of the icon-only
+	// interval buttons (A5). The sampler clamps to 100 ms and 60 s.
+	tipIntervalDown = "Sample 500 ms more often, down to every 100 ms. Sampling runs inside the process it measures, so a shorter interval costs more of what the plots show."
+	tipIntervalUp   = "Sample 500 ms less often, up to every 60 s. A longer interval smooths the plots and misses short spikes."
 )
 
 func (inst *App) renderTopBar(snap *PublishedSnapshot, s *Sampler) {
@@ -32,25 +49,32 @@ func (inst *App) renderTopBar(snap *PublishedSnapshot, s *Sampler) {
 		c.Label(fmt.Sprintf("GC %s", humanCount(snap.GCCyclesTotal))).Send()
 		c.Separator().Vertical().Send()
 
-		// Sampler controls.
-		paused := s.IsPaused()
-		pauseLabel := "Pause"
-		if paused {
-			pauseLabel = "Resume"
+		// Sampler controls. Freeze is the top bar's one action (L2).
+		frozen := s.IsPaused()
+		freezeLabel := labelFreeze
+		if frozen {
+			freezeLabel = labelGoLive
 		}
-		if c.Button(inst.ids.PrepareStr("topbar-pause"), c.Atoms().Text(pauseLabel).Keep()).
-			Selected(paused).
-			SendResp().HasPrimaryClicked() {
-			s.Pause(!paused)
+		for range c.HoverText(tipFreeze).KeepIter() {
+			if c.Button(inst.ids.PrepareStr("topbar-freeze"), c.Atoms().Text(freezeLabel).Keep()).
+				Kind(c.ButtonKindPrimary).
+				Selected(frozen).
+				SendResp().HasPrimaryClicked() {
+				s.Pause(!frozen)
+			}
 		}
 		c.Label(fmt.Sprintf("every %s", s.IntervalLabel())).Send()
-		if c.Button(inst.ids.PrepareStr("topbar-int-down"), c.Atoms().Text("−").Keep()).
-			SendResp().HasPrimaryClicked() {
-			s.SetInterval(s.Interval() - 500*time.Millisecond)
+		for range c.HoverText(tipIntervalDown).KeepIter() {
+			if c.Button(inst.ids.PrepareStr("topbar-int-down"), c.Atoms().Text("−").Keep()).
+				SendResp().HasPrimaryClicked() {
+				s.SetInterval(s.Interval() - intervalStep)
+			}
 		}
-		if c.Button(inst.ids.PrepareStr("topbar-int-up"), c.Atoms().Text("+").Keep()).
-			SendResp().HasPrimaryClicked() {
-			s.SetInterval(s.Interval() + 500*time.Millisecond)
+		for range c.HoverText(tipIntervalUp).KeepIter() {
+			if c.Button(inst.ids.PrepareStr("topbar-int-up"), c.Atoms().Text("+").Keep()).
+				SendResp().HasPrimaryClicked() {
+				s.SetInterval(s.Interval() + intervalStep)
+			}
 		}
 		c.Separator().Vertical().Send()
 

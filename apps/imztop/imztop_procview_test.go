@@ -302,3 +302,39 @@ func TestProcGridColumnsTint(t *testing.T) {
 		t.Error("measurements start descending, identifiers ascending")
 	}
 }
+
+// The filter is a regex battery (F1): tokens are ANDed across the name and
+// the command line, matched case-insensitively, and a token that does not
+// compile matches literally with the view saying so.
+func TestProcFilterIsARegexBattery(t *testing.T) {
+	infos, smoothed := sampleProcs()
+	names := func(v procViewState) (out []string) {
+		got, _ := applyProcView(infos, smoothed, v)
+		for i := range got {
+			out = append(out, got[i].Name)
+		}
+		return
+	}
+	if got := names(procViewState{Filter: "POST -D"}); !slices.Equal(got, []string{"postgres"}) {
+		t.Fatalf("two tokens, one on the name and one on the command line: %v", got)
+	}
+	if got := names(procViewState{Filter: "^(bash|systemd)$"}); !slices.Equal(got, []string{"systemd", "bash"}) {
+		t.Fatalf("an anchored alternation: %v", got)
+	}
+	if got := names(procViewState{Filter: "postgres bash"}); len(got) != 0 {
+		t.Fatalf("tokens are ANDed, so no process carries both: %v", got)
+	}
+	f := parseProcFilter("-D (")
+	if !f.literal {
+		t.Fatal("an unbalanced paren does not compile and should match literally")
+	}
+	if got := names(procViewState{Filter: "-D ("}); len(got) != 0 {
+		t.Fatalf("the literal \"(\" occurs nowhere: %v", got)
+	}
+	if got := names(procViewState{Filter: "postgres ("}); len(got) != 0 {
+		t.Fatalf("a literal token still has to match: %v", got)
+	}
+	if f := parseProcFilter("postgres"); f.literal {
+		t.Fatal("a plain token compiles")
+	}
+}

@@ -119,8 +119,20 @@ type profileEntry struct {
 	pub      *adhocdata.Publisher
 	revision uint64
 	rows     uint64
-	opening  bool
+	// open is the handover to play as a task (D4, W2): Running is the
+	// button's Opening… state, its result the note, its failure the
+	// refusal. lastNote and lastErr are the last outcome, shown after the
+	// reply (W8).
+	open     bgjob.Runner[profileOpened]
+	lastNote string
 	lastErr  string
+}
+
+// profileOpened is what a handover left: the window the host opened and the
+// alias it was seeded on.
+type profileOpened struct {
+	windowKey uint64
+	alias     string
 }
 
 // profilesHub is the process-global capture state (see the package
@@ -263,23 +275,34 @@ func (h *profilesHub) startCapture(spec profileKindSpec, bus app.BusI, tasks tas
 	}
 }
 
-// explore opens a play window seeded on the kind's dataset alias, bound to
+// openInPlay opens a play window seeded on the kind's dataset alias, bound to
 // the introspection endpoint where ad-hoc datasets resolve and following
 // the alias (ADR-0240 §SD7), so a later re-capture reaches the open window.
-// RequestOpen blocks on the bus round-trip, so it runs off the frame loop.
-func (h *profilesHub) explore(spec profileKindSpec, bus app.BusI) {
+// RequestOpen blocks on the bus round-trip, so it runs as a task on the
+// window's task API (W2, W5); the outcome lands through syncEntry on a later
+// frame. A click while one is in flight is dropped by the runner.
+func (h *profilesHub) openInPlay(spec profileKindSpec, bus app.BusI, tasks task.TaskApiI) {
 	key := spec.key
 	e := h.entry(key)
 	h.mu.Lock()
-	if e.pub.Handle() == "" || e.opening || bus == nil {
+	handle, alias := e.pub.Handle(), e.pub.Alias()
+	h.mu.Unlock()
+	if handle == "" {
+		return
+	}
+	if bus == nil {
+		// The button is not drawn without a bus (renderProfilesPanel); a
+		// catalog or a test can still land here.
+		h.mu.Lock()
+		e.lastErr = noteNoBus
 		h.mu.Unlock()
 		return
 	}
-	e.opening = true
-	h.mu.Unlock()
-
-	go func() {
-		alias := e.pub.Alias()
+	started := e.open.Start(tasks, bgjob.Spec{
+		Kind:  "imzrt-open-play",
+		Title: "open play on " + key,
+		Tag:   key,
+	}, func(ctx context.Context) (out *profileOpened, err error) {
 		cfgBytes, err := buscodec.Encode(launchcfg.PlayLaunch{
 			At:       time.Now().UTC(),
 			Sql:      profileSeedSql(alias, spec),
@@ -288,23 +311,26 @@ func (h *profilesHub) explore(spec profileKindSpec, bus app.BusI) {
 			Endpoint: launchcfg.EndpointIntrospection,
 			Datasets: []string{alias},
 		})
-		if err == nil {
-			_, err = windowhost.RequestOpen(bus, launchcfg.AppId, launchcfg.Kind, cfgBytes)
-		}
-		h.mu.Lock()
-		e.opening = false
 		if err != nil {
-			e.lastErr = "explore: " + err.Error()
-			log.Warn().Err(err).Str("kind", key).Msg("imzrt: open play on profile failed")
-		} else {
-			e.lastErr = ""
+			return
 		}
-		h.mu.Unlock()
-	}()
+		windowKey, err := windowhost.RequestOpen(bus, launchcfg.AppId, launchcfg.Kind, cfgBytes)
+		if err != nil {
+			err = eh.Errorf("open play: %w", err)
+			return
+		}
+		out = &profileOpened{windowKey: windowKey, alias: alias}
+		return
+	})
+	if !started {
+		log.Debug().Str("kind", key).Msg("imzrt: open in play already in flight")
+	}
 }
 
 // syncEntry consumes a finished job result into the shared entry (render
-// thread; TakeResult returns each result exactly once).
+// thread; TakeResult returns each result exactly once). A finished open is
+// reported with what the reply carried (W8): the rows the window was opened
+// on, the alias it follows and the window the host gave.
 func (h *profilesHub) syncEntry(e *profileEntry) {
 	if res, _, ok := e.job.TakeResult(); ok {
 		h.mu.Lock()
@@ -313,33 +339,70 @@ func (h *profilesHub) syncEntry(e *profileEntry) {
 		e.lastErr = ""
 		h.mu.Unlock()
 	}
+	if res, _, ok := e.open.TakeResult(); ok {
+		h.mu.Lock()
+		e.lastNote = fmt.Sprintf("opened in play — %d rows as %s, rev %d (window %d)", e.rows, res.alias, e.revision, res.windowKey)
+		e.lastErr = ""
+		h.mu.Unlock()
+	}
 }
+
+// The row's texts, as constants so a scene can read them (A5).
+const (
+	// labelOpenInPlay is the handover button (D4, L3).
+	labelOpenInPlay = "Open in play"
+	// labelOpening replaces the button while the request is in flight.
+	labelOpening = "Opening…"
+	// noteNoBus is the empty state of a host without a bus (L4): capture
+	// and the handover both need the app runtime, so neither button is drawn.
+	noteNoBus = "No bus on this host — capturing and opening in play need the app runtime"
+)
 
 // renderProfilesPanel draws the Profiles tab body: one row per kind with
 // capture/explore affordances and the current dataset's coordinates.
 func (inst *App) renderProfilesPanel() {
 	inst.sectionHeader("Profile capture")
-	c.Label("Captures profile this process, publishes it as an ad-hoc dataset (alias pprof_<kind>, stable handle across re-captures), and Explore opens a play window on it — focused on the flamegraph, with the other lenses a tab away.").Send()
+	c.Label("Captures profile this process, publishes it as an ad-hoc dataset (alias pprof_<kind>, stable handle across re-captures), and Open in play opens a play window on it — focused on the flamegraph, with the other lenses a tab away.").Send()
+	if inst.bus == nil {
+		// L4: the buttons would fail after the click, so they are not drawn
+		// and the row says why.
+		c.Label(noteNoBus).Send()
+	}
 	c.AddSpace(styletokens.PaddingInner(styletokens.ActiveDensity()))
 
 	for _, spec := range profileKinds {
 		e := profiles.entry(spec.key)
 		profiles.syncEntry(e)
 		snap := e.job.Snapshot()
+		openSnap := e.open.Snapshot()
 
 		profiles.mu.Lock()
-		handle, revision, rows, lastErr := e.pub.Handle(), e.revision, e.rows, e.lastErr
+		handle, revision, rows, lastNote, lastErr := e.pub.Handle(), e.revision, e.rows, e.lastNote, e.lastErr
 		profiles.mu.Unlock()
 
 		for range c.Horizontal().KeepIter() {
-			if snap.State == bgjob.StateRunning {
+			switch {
+			case snap.State == bgjob.StateRunning:
 				c.Label(spec.label + ": capturing…").Send()
-			} else if c.Button(inst.ids.PrepareStr("pprof-cap-"+spec.key), c.Atoms().Text("Capture "+spec.label).Keep()).SendResp().HasPrimaryClicked() {
-				profiles.startCapture(spec, inst.bus, inst.tasks)
+			case inst.bus == nil:
+				c.Label(spec.label).Send()
+			default:
+				// Capture is the row's one action (L2); the handover is the
+				// accent outline beside it.
+				if c.Button(inst.ids.PrepareStr("pprof-cap-"+spec.key), c.Atoms().Text("Capture "+spec.label).Keep()).
+					Kind(c.ButtonKindPrimary).SendResp().HasPrimaryClicked() {
+					profiles.startCapture(spec, inst.bus, inst.tasks)
+				}
 			}
 			if handle != "" {
-				if c.Button(inst.ids.PrepareStr("pprof-open-"+spec.key), c.Atoms().Text("Explore").Keep()).SendResp().HasPrimaryClicked() {
-					profiles.explore(spec, inst.bus)
+				switch {
+				case openSnap.State == bgjob.StateRunning:
+					c.Label(labelOpening).Send()
+				case inst.bus != nil:
+					if c.Button(inst.ids.PrepareStr("pprof-open-"+spec.key), c.Atoms().Text(labelOpenInPlay).Keep()).
+						Kind(c.ButtonKindTertiary).SendResp().HasPrimaryClicked() {
+						profiles.openInPlay(spec, inst.bus, inst.tasks)
+					}
 				}
 				c.Label(fmt.Sprintf("keelson('%s') · rev %d · %d rows", handle, revision, rows)).Send()
 			}
@@ -358,6 +421,12 @@ func (inst *App) renderProfilesPanel() {
 		}
 		if snap.State == bgjob.StateFailed && snap.Err != nil {
 			c.Label("capture failed: " + snap.Err.Error()).Send()
+		}
+		if openSnap.State == bgjob.StateFailed && openSnap.Err != nil {
+			// The refusal, with its reason, after the reply (W8).
+			c.Label("open in play refused: " + openSnap.Err.Error()).Send()
+		} else if lastNote != "" {
+			c.Label(lastNote).Send()
 		}
 		if lastErr != "" {
 			c.Label(lastErr).Send()

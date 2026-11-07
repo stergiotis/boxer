@@ -74,21 +74,31 @@ var (
 	replayClose    func()
 )
 
-// StartReplay opens a replay session in the background and returns immediately.
+// spawner runs f off the caller's goroutine and reports whether it will run.
+// A window passes its lifetime scope's Go (App.spawn, W5), so the host's
+// drain sees the work and ctx ends with the window.
+type spawner func(f func(ctx context.Context)) (started bool)
+
+// StartReplay opens a replay session off the caller's goroutine and returns
+// immediately.
 //
 // It is the entry point a UI uses: opening dials ClickHouse and verifies the
 // schema, which blocks for as long as the network takes, and the render thread
 // cannot afford that. Progress is read with [CurrentReplayStatus]. Calling it
-// while a session is opening or open is a no-op.
-func StartReplay(ctx context.Context, w sysmreplay.Window, opts StoreSourceOptions) {
+// while a session is opening or open is a no-op. The open runs under spawn;
+// when spawn declines (the window is going) the claim is given back.
+func StartReplay(spawn spawner, w sysmreplay.Window, opts StoreSourceOptions) {
 	if !beginOpening() {
 		return
 	}
-	go func() {
+	started := spawn(func(ctx context.Context) {
 		if err := enterReplay(ctx, w, opts); err != nil {
 			log.Warn().Err(err).Msg("imztop: replay session could not open")
 		}
-	}()
+	})
+	if !started {
+		abandonOpening()
+	}
 }
 
 // EnterReplay opens the session synchronously and makes it the active sampler.
@@ -120,10 +130,19 @@ func beginOpening() (claimed bool) {
 
 // enterReplay builds the source and the session, then installs them. Every
 // failure it can hit means "there is nothing to replay", and lands the session
-// in ReplayFailed with the reason.
+// in ReplayFailed with the reason — except ctx ending, which is the opening
+// window going away: that open is abandoned and replay stays off.
+//
+// ctx bounds the open only. The session is process-wide (one for every
+// window, ADR-0197 §SD5) and ends with LeaveReplay, so it runs detached from
+// the window that opened it.
 func enterReplay(ctx context.Context, w sysmreplay.Window, opts StoreSourceOptions) (err error) {
 	src, err := NewStoreSource(ctx, opts)
 	if err != nil {
+		if ctx.Err() != nil {
+			abandonOpening()
+			return
+		}
 		failOpening(err)
 		return
 	}
@@ -137,7 +156,7 @@ func enterReplay(ctx context.Context, w sysmreplay.Window, opts StoreSourceOptio
 		failOpening(err)
 		return
 	}
-	session.Start(ctx)
+	session.Start(context.WithoutCancel(ctx))
 	if !installReplay(session, src, src.Host(), src.Endpoint(), src.Close) {
 		// A LeaveReplay landed while this was opening. Honour it rather than
 		// installing a session nobody asked for any more.
@@ -147,7 +166,20 @@ func enterReplay(ctx context.Context, w sysmreplay.Window, opts StoreSourceOptio
 	return
 }
 
-// failOpening records why an open did not succeed, unless it was cancelled.
+// abandonOpening gives an open's claim back without a reason: the window that
+// started it went away before the dial returned.
+func abandonOpening() {
+	replayMu.Lock()
+	defer replayMu.Unlock()
+	if replayState != ReplayOpening {
+		return
+	}
+	replayState = ReplayOff
+	replayErr = nil
+}
+
+// failOpening records why an open did not succeed, unless a LeaveReplay
+// already took the session back to off.
 func failOpening(err error) {
 	replayMu.Lock()
 	defer replayMu.Unlock()

@@ -11,11 +11,13 @@ import (
 	"github.com/apache/arrow-go/v18/arrow/array"
 	"github.com/apache/arrow-go/v18/arrow/memory"
 
+	"github.com/stergiotis/boxer/public/keelson/runtime/help/search"
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
 	"github.com/stergiotis/boxer/public/keelson/runtime/widgethandle"
 	"github.com/stergiotis/boxer/public/observability/sysmetrics/sysmsnap"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/recordtable"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/regexedit"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/imzero2env"
 )
 
@@ -48,8 +50,54 @@ const (
 type procViewState struct {
 	SortBy ProcSortByE
 	Desc   bool
+	// Filter is a regex battery over the name and the command line:
+	// whitespace-separated, case-insensitive RE2 tokens that must all match
+	// (search.ParseQuery). A token that does not compile matches literally.
 	Filter string
 	Tree   bool
+}
+
+// procFilterHint is the filter box's hint: the battery shape, in the words
+// every filter box on the desktop uses.
+const procFilterHint = "Filter (regex, space = AND)"
+
+// noteProcFilterLiteral is the line under the filter box while a token has
+// degraded to a literal match, so the rows are not read as a regex result.
+const noteProcFilterLiteral = "some tokens are not valid regexps and match literally"
+
+// procFilter is a view's filter parsed once: the battery, and whether any
+// token failed to compile and matches literally instead. Parsed when the
+// query changes, not per frame; the zero value keeps every process.
+type procFilter struct {
+	query   string
+	battery search.Battery
+	literal bool
+}
+
+// parseProcFilter compiles q as a battery. Compilation never fails: a token
+// that is not a regexp is matched as text, and literal says so.
+func parseProcFilter(q string) (f procFilter) {
+	f.query = q
+	f.battery = search.ParseQuery(q)
+	for i := range f.battery.Patterns {
+		if f.battery.Patterns[i].Literal {
+			f.literal = true
+			break
+		}
+	}
+	return
+}
+
+// matches reports whether every token matches the process's name or its
+// command line. An empty battery keeps everything.
+func (f *procFilter) matches(p *sysmsnap.ProcInfo) (ok bool) {
+	for i := range f.battery.Patterns {
+		pat := &f.battery.Patterns[i]
+		if !pat.Matches(p.Name) && !pat.Matches(p.Cmd) {
+			return false
+		}
+	}
+	return true
 }
 
 // procViewMemo is one window's cached filter+sort of a published
@@ -122,7 +170,11 @@ func (inst *App) viewProcs(snap *PublishedSnapshot) (infos []sysmsnap.ProcInfo, 
 	if inst.procViewMemo.src == snap && inst.procViewMemo.view == inst.procView {
 		return inst.procViewMemo.infos, inst.procViewMemo.smoothed
 	}
-	infos, smoothed = applyProcView(snap.Procs, snap.ProcCPUSmoothed, inst.procView)
+	// The battery is compiled when the query changes, not per sample.
+	if inst.procFilter.query != inst.procView.Filter {
+		inst.procFilter = parseProcFilter(inst.procView.Filter)
+	}
+	infos, smoothed = applyProcViewWith(snap.Procs, snap.ProcCPUSmoothed, inst.procView, &inst.procFilter)
 	inst.procViewMemo = procViewMemo{
 		src:      snap,
 		view:     inst.procView,
@@ -144,13 +196,24 @@ func (inst *App) viewProcs(snap *PublishedSnapshot) (infos []sysmsnap.ProcInfo, 
 // than compacting in place as it did while the Sampler owned the slices
 // outright. With no filter and nothing to reorder the inputs are returned
 // as they are, which is safe because nobody mutates them.
+//
+// This form compiles v.Filter itself; a window keeps the compiled battery
+// across samples and calls applyProcViewWith.
 func applyProcView(infos []sysmsnap.ProcInfo, smoothed []float32, v procViewState) (outInfos []sysmsnap.ProcInfo, outSmoothed []float32) {
+	f := parseProcFilter(v.Filter)
+	outInfos, outSmoothed = applyProcViewWith(infos, smoothed, v, &f)
+	return
+}
+
+// applyProcViewWith is applyProcView with the battery f already compiled
+// from v.Filter.
+func applyProcViewWith(infos []sysmsnap.ProcInfo, smoothed []float32, v procViewState, f *procFilter) (outInfos []sysmsnap.ProcInfo, outSmoothed []float32) {
 	if v.Filter != "" {
-		needle := strings.ToLower(v.Filter)
 		wi := make([]sysmsnap.ProcInfo, 0, len(infos))
 		ws := make([]float32, 0, len(smoothed))
-		for i, p := range infos {
-			if strings.Contains(strings.ToLower(p.Name), needle) || strings.Contains(strings.ToLower(p.Cmd), needle) {
+		for i := range infos {
+			p := infos[i]
+			if f.matches(&p) {
 				wi = append(wi, p)
 				if i < len(smoothed) {
 					ws = append(ws, smoothed[i])
@@ -259,9 +322,11 @@ func (inst *App) renderProcPanel(snap *PublishedSnapshot) {
 		// reset rule). A local var would be reset to view.Filter
 		// every frame and the typed text would never accumulate.
 		inst.procFilterH = widgethandle.Make(inst.ids.PrepareStr("proc-filter").Derive())
-		resp := c.TextEdit(inst.ids.PrepareStr("proc-filter"), inst.procFilterDraft, false).
+		// regexedit paints the battery shape: one independent pattern per
+		// whitespace-separated token (F1, ADR-0164 §SD4).
+		resp := inst.procFilterHl.TextEdit(inst.ids.PrepareStr("proc-filter"), inst.procFilterDraft, false, regexedit.ModeTokens).
 			DesiredWidth(220).
-			HintText("name or cmd substring").
+			HintText(procFilterHint).
 			SendRespVal(&inst.procFilterDraft)
 		if resp.HasChanged() {
 			inst.setProcFilter(inst.procFilterDraft)
@@ -276,6 +341,11 @@ func (inst *App) renderProcPanel(snap *PublishedSnapshot) {
 			Frame(true).
 			SendResp().HasPrimaryClicked() {
 			inst.toggleProcTree()
+		}
+	}
+	if inst.procFilter.literal {
+		for rt := range c.RichTextLabel(noteProcFilterLiteral) {
+			rt.Small().Weak()
 		}
 	}
 	c.AddSpace(inst.spaceInner())

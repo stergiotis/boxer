@@ -207,7 +207,7 @@ func (inst *App) renderSync() {
 	pageHeader("Copy what, and how?")
 	recMode, why := inst.recommendMode()
 	for range c.HorizontalTop().KeepIter() {
-		c.Label("mode").Send()
+		c.Label("Mode").Send()
 		for _, m := range jk.AllSyncModes {
 			label := m.String()
 			if m == recMode {
@@ -236,7 +236,7 @@ func (inst *App) renderSync() {
 		note(fmt.Sprintf("Repair clears %d target rows and copies %d source rows, as of the last comparison, and only where the target still holds what it showed.", clear, copyRows))
 	default:
 		for range c.HorizontalTop().KeepIter() {
-			c.Label("if a target table already holds rows").Send()
+			c.Label("If a target table already holds rows").Send()
 			for _, pol := range jk.AllExistingPolicies {
 				if inst.radio("existing-"+pol.String(), pol.String(), inst.existing == pol, existingGloss(pol)) {
 					inst.existing = pol
@@ -249,7 +249,7 @@ func (inst *App) renderSync() {
 	}
 	for range c.CollapsingHeader(inst.ids.PrepareStr("advanced"), c.WidgetText().Text("Advanced").Keep()).KeepIter() {
 		for range c.HorizontalTop().KeepIter() {
-			c.Label("on the wire").Send()
+			c.Label("On the wire").Send()
 			for _, comp := range []string{"zstd", "gzip", "none"} {
 				if inst.radio("comp-"+comp, comp, inst.compression == comp || (comp == "none" && inst.compression == ""),
 					"HTTP compression of the relayed stream, both legs") {
@@ -462,7 +462,7 @@ func (inst *App) renderRunHeadline() {
 			if snap.State == bgjob.StateFailed && snap.Err != nil {
 				c.Label(snap.Err.Error()).Wrap().Send()
 			} else {
-				c.Label("cancelled").Send()
+				c.Label("Cancelled").Send()
 			}
 			note("Start it again from the Sync step: the journal resumes it where it stopped.")
 		case reported == 0:

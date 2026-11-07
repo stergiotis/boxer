@@ -1,7 +1,6 @@
 package imztop
 
 import (
-	"context"
 	"fmt"
 	"time"
 
@@ -54,7 +53,7 @@ func (inst *App) renderReplayEntry() {
 	if clicked {
 		// Zero window: enter_replay opens on defaultReplayWindow.
 		gestureOrShared(inst, opEnterReplay, ReplayWindowArgs{}, func() {
-			StartReplay(context.Background(), defaultReplayWindow(), StoreSourceOptions{})
+			StartReplay(inst.spawn, defaultReplayWindow(), StoreSourceOptions{})
 		})
 	}
 }
@@ -73,9 +72,10 @@ func (inst *App) renderReplayBar(st ReplayStatus) {
 		case ReplayOpening:
 			c.Spinner().Send()
 			c.AddSpace(inst.spaceItems())
-			c.Label("opening replay…").Send()
+			c.Label("Opening replay…").Send()
 			c.Separator().Vertical().Send()
 			if c.Button(inst.ids.PrepareStr("replay-cancel"), c.Atoms().Text("Cancel").Keep()).
+				Kind(c.ButtonKindDanger).
 				SendResp().HasPrimaryClicked() {
 				gestureOrShared(inst, opLeaveReplay, appops.None{}, func() { _ = LeaveReplay() })
 			}
@@ -126,7 +126,9 @@ func (inst *App) renderReplayTransport(st ReplayStatus) {
 	if paused {
 		playGlyph, playLabel = icons.PhPlay, "Play"
 	}
+	// The transport's one action (L2); the jog and the step are its toolbar.
 	if c.Button(inst.ids.PrepareStr("replay-play"), c.Atoms().Text(playGlyph+" "+playLabel).Keep()).
+		Kind(c.ButtonKindPrimary).
 		SendResp().HasPrimaryClicked() {
 		gestureOrShared(inst, opSetReplayPaused, SetReplayPausedArgs{Paused: !paused}, func() { session.Pause(!paused) })
 	}
@@ -135,6 +137,7 @@ func (inst *App) renderReplayTransport(st ReplayStatus) {
 	// either way so the row does not reflow as playback toggles.
 	stepped := c.Button(inst.ids.PrepareStr("replay-step"),
 		c.Atoms().Text(icons.PhSkipForward+" Step").Keep()).
+		Kind(c.ButtonKindGhost).
 		SendResp().HasPrimaryClicked()
 	if stepped && paused {
 		session.Step(1)
@@ -168,11 +171,13 @@ func (inst *App) renderReplayTransport(st ReplayStatus) {
 	// where to look.
 	if c.Button(inst.ids.PrepareStr("replay-earlier"),
 		c.Atoms().Text(icons.PhRewind+" earlier").Keep()).
+		Kind(c.ButtonKindGhost).
 		SendResp().HasPrimaryClicked() {
 		inst.jogReplay(session, -1)
 	}
 	if c.Button(inst.ids.PrepareStr("replay-later"),
 		c.Atoms().Text(icons.PhFastForward+" later").Keep()).
+		Kind(c.ButtonKindGhost).
 		SendResp().HasPrimaryClicked() {
 		inst.jogReplay(session, +1)
 	}
@@ -184,6 +189,7 @@ func (inst *App) renderReplayTransport(st ReplayStatus) {
 	if at, ok := session.Position(); ok {
 		c.Label(fmt.Sprintf("at %s", at.Local().Format("15:04:05"))).Send()
 	} else {
+		// designlint:ignore=L1 (a readout, like the "at <time>" beside it, not a control)
 		c.Label("at —").Send()
 	}
 }

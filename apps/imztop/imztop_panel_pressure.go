@@ -10,6 +10,11 @@ import (
 // psiRowHeight is the per-row height of the PSI table.
 const psiRowHeight float32 = 22.0
 
+// tipPSI is the method behind the table, on the hover of its readout line (A5,
+// F3): what a PSI share measures, what some and full mean, and why CPU has no
+// full row.
+const tipPSI = "Linux PSI (Pressure Stall Information): the share of wall time tasks spent stalled on CPU, memory or IO, averaged over 10, 60 and 300 s windows. some = at least one task stalled; full = every non-idle task stalled, a strong saturation signal. CPU has no meaningful full line, so only its some row is shown."
+
 // renderPressurePanel shows Linux PSI (Pressure Stall Information): the share
 // of wall-time tasks spent stalled on CPU / memory / IO, over 10/60/300 s
 // windows. "some" = at least one task stalled; "full" = every non-idle task
@@ -25,7 +30,9 @@ func (inst *App) renderPressurePanel(snap *PublishedSnapshot) {
 	}
 
 	for range c.Horizontal().KeepIter() {
-		c.Label("Share of time stalled · some = any task, full = all non-idle tasks").Send()
+		for range c.HoverText(tipPSI).KeepIter() {
+			c.Label("Share of time stalled · some = any task, full = all non-idle tasks").Send()
+		}
 	}
 	c.AddSpace(inst.spaceInner())
 

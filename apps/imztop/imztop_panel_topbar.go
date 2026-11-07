@@ -41,7 +41,9 @@ func (inst *App) renderTopBar(snap *PublishedSnapshot, s SamplerI) {
 		if frozen {
 			freezeLabel = "Go live"
 		}
+		// The top bar's one action (L2).
 		if c.Button(inst.ids.PrepareStr("topbar-freeze"), c.Atoms().Text(freezeLabel).Keep()).
+			Kind(c.ButtonKindPrimary).
 			Selected(frozen).
 			SendResp().HasPrimaryClicked() {
 			// Freeze acts on the sampler on screen: the live one, or the
