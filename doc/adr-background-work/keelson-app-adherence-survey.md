@@ -15,6 +15,10 @@ reviewed-date: 2026-11-07
 > rows for those two may already be stale. Nothing here is a decision;
 > the skill was amended the same day for the findings in §5, and this page
 > records what was seen.
+>
+> **Later the same day:** a sweep across the apps addressed most of §3 and
+> §4, following the order of §7. The matrix in §2 is the state before it;
+> for the current state read the skill's §11 and the apps themselves.
 
 # Keelson app adherence survey
 

@@ -755,6 +755,16 @@ durability tests moved to the same backend. The P3 ordering test was checked
 for teeth by moving the Filter inside the collapse: deleted and superseded
 keys came back, and the test failed.
 
+
+### 2026-11-07 — the durability test moved with the applet store
+
+The applet store service moved into `public/keelson/runtime/appletstore`
+([ADR-0132](./0132-sqlapplet-sql-defined-applets.md) Update of
+2026-11-07), and its durability integration test moved with it, now
+`service_durability_integration_test` in that package. It still aims
+`FactsBackend` at a scratch database, so the reasoning above for keeping
+`FactsBackend` holds unchanged.
+
 ## References
 
 - [ADR-0100: recordstore — generated leeway ClickHouse store](0100-recordstore-generated-leeway-clickhouse-store.md) — the producer-side decision and its deferrals.

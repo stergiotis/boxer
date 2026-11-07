@@ -801,6 +801,20 @@ governance is the runtime's, not an app's: a moderation gate kept in an app's
 directory is the last-mile check the
 [keelson-app skill](../skills/keelson-app/SKILL.md) (X4) treats as a defect.
 
+
+### 2026-11-07 — a minted applet serves the bundle view's operable subset of play's catalog
+
+A minted applet window forwards play's catalog through the attenuated play
+inside it (`apps/sqlapplet/sqlapplet_app_ops.go`), and the subset it
+forwards is the one [ADR-0288](./0288-adhoc-bundles-datasets-published-with-the-applet-that-reads-them.md)
+§SD8 gives an operable bundle view: reading the window's state and panes,
+running and cancelling, setting a parameter and showing a pane. It leaves
+out `set_sql`, `bind_dataset`, `publish_result`, the bundle and authoring
+operations and `get_detail`, because an applet's document is its
+author's and an agent re-runs it rather than rewrites it. Decided by the
+maintainer on 2026-11-07; a per-applet allowance declared in the
+document's frontmatter was considered and not taken.
+
 ## References
 
 Internal:
