@@ -1,6 +1,7 @@
 package play
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"sync"
@@ -141,7 +142,7 @@ func (inst *PlayApp) rewriteTraceFor() (obs []passreg.ApplyObservation, ok bool)
 	st.forSQL, st.conditions, st.forRaw = runSQL, conds, inst.sql
 	st.valid, st.pending, st.obs = false, true, nil
 	client := inst.client
-	go func() {
+	client.Go(func(context.Context) {
 		computed := client.RewriteTrace(runSQL)
 		st.mu.Lock()
 		defer st.mu.Unlock()
@@ -149,7 +150,7 @@ func (inst *PlayApp) rewriteTraceFor() (obs []passreg.ApplyObservation, ok bool)
 			return // superseded by a newer buffer
 		}
 		st.obs, st.valid, st.pending = computed, true, false
-	}()
+	})
 	return nil, false
 }
 

@@ -200,9 +200,9 @@ func (inst *Client) proveReachInBackground(endpoint string) {
 	if !ok {
 		return
 	}
-	go func() {
+	started := inst.Go(func(ctx context.Context) {
 		defer done()
-		ctx, cancel := context.WithTimeout(context.Background(), reachProbeTimeout)
+		ctx, cancel := context.WithTimeout(ctx, reachProbeTimeout)
 		defer cancel()
 		proven, err := inst.reach.prove(ctx, endpoint, inst.runProbeStatement)
 		switch {
@@ -215,7 +215,10 @@ func (inst *Client) proveReachInBackground(endpoint string) {
 			log.Debug().Str("endpoint", endpoint).
 				Msg("play: endpoint did not fetch the probe; confined runs stay refused")
 		}
-	}()
+	})
+	if !started {
+		done()
+	}
 }
 
 // runProbeStatement executes the probe on one endpoint through an ordinary

@@ -209,17 +209,6 @@ func TestFormatProgressLine(t *testing.T) {
 	require.Equal(t, "12 rows · 0 B read",
 		formatProgressLine(progressView{fresh: true, p: runstream.Progress{ReadRows: 12}}))
 
-	// The top bar's short form carries the percentage the bar cannot show
-	// legibly, then prefers the ETA, falling back to the rate and to the bare
-	// row count while both warm up.
-	require.Equal(t, "77% · 1m20s left", formatProgressBrief(v))
-	require.Equal(t, "1% · 1.2 M rows/s",
-		formatProgressBrief(progressView{fresh: true, knownTotal: true, percent: 1, rate: 1_200_000}))
-	require.Equal(t, "1%", formatProgressBrief(progressView{fresh: true, knownTotal: true, percent: 1}))
-	require.Equal(t, "1.2 M rows/s", formatProgressBrief(progressView{fresh: true, rate: 1_200_000}))
-	require.Equal(t, "12 rows",
-		formatProgressBrief(progressView{fresh: true, p: runstream.Progress{ReadRows: 12}}))
-
 	// The pane strip drops the memory/elapsed tail the status bar carries.
 	strip := formatProgressStrip(v)
 	require.Equal(t, "1.9 G / 2.5 G rows · 1.2 M rows/s · 1m20s left", strip)

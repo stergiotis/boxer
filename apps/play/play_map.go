@@ -775,7 +775,7 @@ func (inst *MapDriver) renderTableEditor() {
 			})
 		}
 		for range c.Horizontal().KeepIter() {
-			c.Label("time column").Send()
+			c.Label("Time column").Send()
 			c.TextEdit(inst.ids.PrepareStr("map-time-col"), inst.timeCol, false).
 				HintText("none").SendRespVal(&inst.timeCol)
 			for rt := range c.RichTextLabel("filtered by the Timeline's brushed window") {

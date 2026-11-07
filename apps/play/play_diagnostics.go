@@ -78,7 +78,10 @@ const (
 // DiagnosticsDriver owns the probe lane and its render-thread state. All
 // methods are render-thread-only; the lane does the async work.
 type DiagnosticsDriver struct {
-	lane *nodeLane
+	// client is the window's, for the lifetime its goroutines count into;
+	// nil on a mock executor, where they run uncounted.
+	client *Client
+	lane   *nodeLane
 	// buildResidual mirrors the Run path's client-side rewrite (steps 1–2 of
 	// BuildStatement). Injected so tests can run the driver on a mock executor
 	// without a Client.
@@ -144,7 +147,12 @@ type probeExecutor struct {
 	opts   *ExecOptions
 }
 
-var _ nodeExecutorI = probeExecutor{}
+var (
+	_ nodeExecutorI   = probeExecutor{}
+	_ scopedExecutorI = probeExecutor{}
+)
+
+func (inst probeExecutor) scopeClient() *Client { return inst.client }
 
 func (inst probeExecutor) execute(ctx context.Context, cn compiledNode, alloc memory.Allocator) (rec arrow.RecordBatch, schema *arrow.Schema, summary Summary, err error) {
 	// Resolve from the statement the probe wraps, never from the wrapper.
@@ -163,7 +171,7 @@ func (inst probeExecutor) execute(ctx context.Context, cn compiledNode, alloc me
 // client (tests, legacy CLI) leaves the lane nil and the verdict at
 // probeNone — the pane then shows the grammar error without a server check.
 func NewDiagnosticsDriver(client *Client) *DiagnosticsDriver {
-	d := &DiagnosticsDriver{}
+	d := &DiagnosticsDriver{client: client}
 	if client != nil {
 		d.lane = newNodeLane(probeExecutor{client: client, opts: newExecOptions("diagnostics")},
 			memory.NewGoAllocator(), diagProbeTimeout)
@@ -234,14 +242,14 @@ func (inst *DiagnosticsDriver) armColumnDiag(raw string, parseErr error) {
 	if parseErr != nil || raw == "" {
 		return
 	}
-	go func() {
+	inst.client.Go(func(context.Context) {
 		diags := inst.resolveDiag(raw)
 		inst.colDiagMu.Lock()
 		if gen == inst.colDiagGen {
 			inst.colDiags = diags
 		}
 		inst.colDiagMu.Unlock()
-	}()
+	})
 }
 
 // columnDiagnostics returns the latest computed column-resolution warnings.

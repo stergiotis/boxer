@@ -603,11 +603,11 @@ func (inst *PlayApp) renderTaggedIdBlock(scope string, b taggedIdBlock) {
 	for range c.Horizontal().KeepIter() {
 		if c.Button(inst.ids.PrepareStr("play-tid-dec-"+scope), c.Atoms().Text("Copy id").Keep()).
 			SendResp().HasPrimaryClicked() {
-			inst.copyToClipboard(dec)
+			inst.copyToClipboard("the id", dec)
 		}
 		if c.Button(inst.ids.PrepareStr("play-tid-hex-"+scope), c.Atoms().Text("Copy hex").Keep()).
 			SendResp().HasPrimaryClicked() {
-			inst.copyToClipboard(hex)
+			inst.copyToClipboard("the id as hex", hex)
 		}
 	}
 }

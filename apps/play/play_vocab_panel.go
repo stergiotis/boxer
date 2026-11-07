@@ -249,6 +249,7 @@ func (inst *PlayApp) renderVocabFilterRow(entries []vocabEntry) {
 			SendRespVal(&st.filter)
 		if st.filter != "" {
 			if c.Button(inst.ids.PrepareStr("vocabFilterClear"), c.Atoms().Text("×").Keep()).
+				Kind(c.ButtonKindGhost).
 				SendResp().HasPrimaryClicked() {
 				st.filter = ""
 			}

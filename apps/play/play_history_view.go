@@ -341,7 +341,7 @@ func (inst *PlayApp) historySqlBlock(key string, caption string, sql string) {
 			}
 			if inst.CanCopy() && c.Button(ids.PrepareStr("copy"), c.Atoms().Text("Copy").Keep()).
 				Small().SendResp().HasPrimaryClicked() {
-				inst.copyToClipboard(sql)
+				inst.copyToClipboard("the SQL", sql)
 			}
 		}
 		// PrepareSql: the detail redraws every frame it is open and the text

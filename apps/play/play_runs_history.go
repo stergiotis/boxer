@@ -47,6 +47,9 @@ const (
 
 // runsHistoryDriver owns the async fetch and its render-thread snapshot.
 type runsHistoryDriver struct {
+	// client is the window's, for the lifetime the fetch counts into; nil
+	// under a substituted fetch, which runs uncounted.
+	client *Client
 	// fetch is the injected data path (nil = no endpoint: the section
 	// stays hidden). Tests substitute it.
 	fetch func(ctx context.Context) ([]queryrunfacts.HistoryRow, error)
@@ -72,7 +75,7 @@ type runsHistoryDriver struct {
 // newRunsHistoryDriver wires the driver against the live endpoint. A nil
 // client (tests, legacy CLI) leaves fetch nil and the section hidden.
 func newRunsHistoryDriver(client *Client) (d *runsHistoryDriver) {
-	d = &runsHistoryDriver{}
+	d = &runsHistoryDriver{client: client}
 	if client != nil {
 		d.fetch = func(ctx context.Context) (rows []queryrunfacts.HistoryRow, err error) {
 			// The history query expands into leeway's read-back helper family,
@@ -126,8 +129,8 @@ func (inst *runsHistoryDriver) refresh() {
 	gen := inst.gen
 	fetch, status := inst.fetch, inst.status
 	inst.mu.Unlock()
-	go func() {
-		ctx, cancel := context.WithTimeout(context.Background(), runsHistoryTimeout)
+	inst.client.Go(func(ctx context.Context) {
+		ctx, cancel := context.WithTimeout(ctx, runsHistoryTimeout)
 		defer cancel()
 		rows, err := fetch(ctx)
 		var capture queryrunfacts.CaptureStatus
@@ -142,7 +145,7 @@ func (inst *runsHistoryDriver) refresh() {
 			inst.inFlight = false
 		}
 		inst.mu.Unlock()
-	}()
+	})
 }
 
 // maybeRefreshOnReveal fires the first fetch when the section first

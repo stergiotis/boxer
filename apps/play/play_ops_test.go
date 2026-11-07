@@ -156,6 +156,24 @@ func TestTheQueryMachineIsMounted(t *testing.T) {
 	assert.Equal(t, opfsm.Edge{From: "idle", To: "running", Label: "Run"}, st.Next[0])
 }
 
+// The projection's lifecycle is mounted beside the query's: the same two
+// queries, over the Projection tab's machine.
+func TestTheProjectionMachineIsMounted(t *testing.T) {
+	_, h := opsLauncher(t)
+	raw, err := h.Snapshot().Query("projection_machine", nil)
+	require.NoError(t, err)
+	m, err := buscodec.Decode[opfsm.Machine](raw)
+	require.NoError(t, err)
+	assert.Contains(t, m.States, "extracting")
+	raw, err = h.Snapshot().Query("projection_state", nil)
+	require.NoError(t, err)
+	st, err := buscodec.Decode[opfsm.State](raw)
+	require.NoError(t, err)
+	assert.Equal(t, "idle", st.Current)
+	require.Len(t, st.Next, 1)
+	assert.Equal(t, opfsm.Edge{From: "idle", To: "extracting", Label: "Compute"}, st.Next[0])
+}
+
 func TestTheAgentMarkClearsWhenThePersonEdits(t *testing.T) {
 	l, h := opsLauncher(t)
 	obo := &app.OnBehalfOf{Task: "t", Epoch: 1}

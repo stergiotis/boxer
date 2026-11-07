@@ -23,6 +23,7 @@ package play
 
 import (
 	"bytes"
+	"context"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/clipboardbroker"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
@@ -81,6 +82,7 @@ func (inst *PlayApp) renderDefinitionPanel() {
 				rt.Strong()
 			}
 			if c.Button(ids.PrepareStr("definitionClose"), c.Atoms().Text("×").Keep()).
+				Kind(c.ButtonKindGhost).
 				SendResp().HasPrimaryClicked() {
 				d.open = false
 			}
@@ -193,25 +195,54 @@ func (inst *PlayApp) renderDefinitionDoc(doc *markdown.Doc) {
 	res := markdown.Render(in)
 	inst.followMdeditLinks(res)
 	for _, act := range res.Actions {
-		inst.copyToClipboard(act.Text)
+		inst.copyToClipboard("the fence", act.Text)
 	}
 }
 
-// copyToClipboard hands text to the clipboard Powerbox (ADR-0026 Update
-// 2026-05-30). It runs off the frame goroutine because Request blocks until
-// the broker acks, and it is a Request rather than a Publish because only
-// the request leg is audited — a capability routed over Publish is invisible
-// to the audit trail that justifies making it a capability.
+// copyToClipboard hands text to the clipboard broker as a labelled payload
+// (ADR-0317 §SD1); what names the text on the status line, where the
+// broker's record lands after its reply — by reference as a handle, as
+// plaintext, or refused with the reason (W8). The label is the person's:
+// the buffer, a row's id and a projection's rule are the window's own text.
+// It runs off the frame goroutine, counted into the window's lifetime,
+// because Write blocks until the broker acks, and it is a Request rather
+// than a Publish because only the request leg is audited.
 //
 // Silent without a bus: callers check CanCopy and withhold the affordance
 // rather than render a dead one.
-func (inst *PlayApp) copyToClipboard(text string) {
-	if inst.bus == nil {
+func (inst *PlayApp) copyToClipboard(what string, text string) {
+	bus := inst.bus
+	if bus == nil {
 		return
 	}
-	go func() {
-		_, _ = inst.bus.Request(clipboardbroker.SubjectWrite, []byte(text))
-	}()
+	inst.client.Go(func(context.Context) {
+		rec, err := clipboardbroker.Write(bus, clipboardbroker.Payload{Text: text, Source: string(AppId) + ":" + what})
+		if err != nil {
+			inst.setActionNote("copy " + what + " failed: " + err.Error())
+			return
+		}
+		note := "copied " + what
+		if rec.Handle != "" {
+			note += " by reference (" + rec.Handle + "): paste it inside boxer"
+		}
+		inst.setActionNote(note)
+	})
+}
+
+// setActionNote lands an action's outcome for the status line; empty
+// clears it. Written after the reply, off the frame goroutine.
+func (inst *PlayApp) setActionNote(note string) {
+	inst.actionMu.Lock()
+	inst.actionNote = note
+	inst.actionMu.Unlock()
+}
+
+// actionNoteNow is the last action's outcome, "" when none stands.
+func (inst *PlayApp) actionNoteNow() (note string) {
+	inst.actionMu.Lock()
+	note = inst.actionNote
+	inst.actionMu.Unlock()
+	return
 }
 
 // CanCopy reports whether the clipboard is reachable from this instance —

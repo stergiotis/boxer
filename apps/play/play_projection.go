@@ -896,6 +896,7 @@ func (inst *PlayApp) renderProjection(rec arrow.RecordBatch, selectedRow int64, 
 			c.Spinner().Size(14).Send()
 			if c.Button(ids.PrepareStr("projectionCancel"),
 				c.Atoms().Text("Cancel").Keep()).
+				Kind(c.ButtonKindDanger).
 				SendResp().HasPrimaryClicked() {
 				// The person's Cancel goes through the catalog (ADR-0270 §SD6).
 				inst.personCancelProjection()
@@ -912,6 +913,7 @@ func (inst *PlayApp) renderProjection(rec arrow.RecordBatch, selectedRow int64, 
 			}
 			if c.Button(ids.PrepareStr("projectionCompute"),
 				c.Atoms().Text(label).Keep()).
+				Kind(c.ButtonKindPrimary).
 				SendResp().HasPrimaryClicked() {
 				// The person's Compute goes through the catalog, as an
 				// agent's does (ADR-0270 §SD6).
@@ -932,6 +934,7 @@ func (inst *PlayApp) renderProjection(rec arrow.RecordBatch, selectedRow int64, 
 		// projector lifecycle (table / graph / history) so the operator
 		// can see what states are reachable from Here and how often the
 		// projector has cycled in this session.
+		inst.projFSMWidget.Opts.Provenance.SampledAt = snap.startedAt
 		inst.projFSMWidget.Render()
 		c.Separator().Vertical().Send()
 		// The run's knobs apply on the next Compute; the layout's apply live.
@@ -989,7 +992,7 @@ func (inst *PlayApp) renderProjection(rec arrow.RecordBatch, selectedRow int64, 
 	if snap.status == projectorStatusDone && snap.result != nil {
 		p.copyText = nil
 		if inst.CanCopy() {
-			p.copyText = inst.copyToClipboard
+			p.copyText = func(text string) { inst.copyToClipboard("the rule", text) }
 		}
 		// The publish affordance sits at the end of the layout controls,
 		// the row with room; it needs the app's bus, so the app renders it.

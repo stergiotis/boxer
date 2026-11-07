@@ -441,6 +441,7 @@ func (inst *PlayLauncher) Mount(ctx app.MountContextI) (err error) {
 	// and fingerprints only.
 	client.SetStampIdentity(ctx.RunId(), string(inst.Manifest().Id), ctx.InstanceKey())
 	client.SetTasks(task.ForApp(ctx))
+	client.SetLifetime(app.LifetimeOf(ctx))
 	// NewLivePlayApp installs the pre-execute SQL pipeline on the client
 	// (standard passes + schema-aware leeway name resolver, ADR-0108/0116) and
 	// wires the resolver into the Diagnostics pane. The carousel-embedded play

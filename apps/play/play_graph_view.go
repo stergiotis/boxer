@@ -231,6 +231,7 @@ func (inst *PlayApp) renderSignalRow(r signalChromeRow) {
 		}
 		if r.Held {
 			if c.Button(ids.PrepareStr("sigClear-"+r.Name), c.Atoms().Text("×").Keep()).
+				Kind(c.ButtonKindGhost).
 				SendResp().HasPrimaryClicked() {
 				inst.personDeleteSignal(r.Name)
 			}

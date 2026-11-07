@@ -29,7 +29,10 @@ var (
 	_ nodeExecutorI          = clientExecutor{}
 	_ progressAwareExecutorI = clientExecutor{}
 	_ labelledExecutorI      = clientExecutor{}
+	_ scopedExecutorI        = clientExecutor{}
 )
+
+func (inst clientExecutor) scopeClient() *Client { return inst.client }
 
 // execute runs the compiled node synchronously and returns the single
 // concatenated record plus the engine summary. The node's signal values ride

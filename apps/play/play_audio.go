@@ -162,7 +162,8 @@ func (inst *PlayApp) audioToggle(key string, raw func() string) {
 	s := &audioSession{key: key, result: inst.frameResult, opening: true}
 	inst.audio = s
 	// Off the render thread: opening the device talks to the sound server.
-	go s.open(data, inst.audioNoDevice)
+	noDevice := inst.audioNoDevice
+	inst.client.Go(func(context.Context) { s.open(data, noDevice) })
 }
 
 // open reads the copy and opens the output. A host with no sound server gets

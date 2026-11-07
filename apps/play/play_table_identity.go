@@ -1,6 +1,7 @@
 package play
 
 import (
+	"context"
 	"encoding/hex"
 	"sync"
 
@@ -121,11 +122,11 @@ func (inst *PlayApp) ensureIdentityJob(rec arrow.RecordBatch, result ResultID) *
 		return job
 	}
 	rec.Retain()
-	go func() {
+	inst.client.Go(func(context.Context) {
 		defer rec.Release()
 		derr := comp.drive(rec)
 		job.finish(comp, derr)
-	}()
+	})
 	return job
 }
 

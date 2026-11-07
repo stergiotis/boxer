@@ -109,10 +109,11 @@ func (inst *PlayApp) SetOpenPlaygroundBundle(alias string) {
 // requestOpenPlayground asks the window host for a full play window
 // seeded with cfg over `windowhost.open` (ADR-0135 §SD7 — the ADR-0132
 // §SD3 escape-hatch upgrade rendered as the minimal toolbar's "Open in
-// Playground" button). Blocks on the bus round-trip, so call it from a
-// goroutine off the frame loop — the clipboard rule. The outcome lands in
-// openPlayErr (empty on success) for the toolbar to surface; a re-click
-// while a request is in flight is dropped.
+// play" button). Blocks on the bus round-trip, so call it from a goroutine
+// off the frame loop — the clipboard rule. The outcome lands after the
+// reply (W8): a refusal in openPlayErr for the toolbar, and either way on
+// the status line, which says what opened; a re-click while a request is
+// in flight is dropped.
 func (inst *PlayApp) requestOpenPlayground(cfg launchcfg.PlayLaunch) {
 	inst.openPlayMu.Lock()
 	if inst.openPlayBusy {
@@ -129,6 +130,28 @@ func (inst *PlayApp) requestOpenPlayground(cfg launchcfg.PlayLaunch) {
 		inst.openPlayErr = err.Error()
 	}
 	inst.openPlayMu.Unlock()
+	if err != nil {
+		inst.setActionNote("open in play failed: " + err.Error())
+		return
+	}
+	inst.setActionNote(openedInPlayNote(cfg))
+}
+
+// openedInPlayNote is the status line's word on what a handover opened: the
+// bundle under its alias, or this buffer, and whether the new window runs
+// it. play hands over a statement, not a published record, so there is no
+// row count to report.
+func openedInPlayNote(cfg launchcfg.PlayLaunch) (note string) {
+	note = "opened in play — "
+	if cfg.Bundle != "" {
+		note += "bundle " + cfg.Bundle
+	} else {
+		note += "this buffer"
+	}
+	if cfg.AutoRun {
+		return note + ", run"
+	}
+	return note + ", not run"
 }
 
 // openPlayground is the blocking body of requestOpenPlayground: encode

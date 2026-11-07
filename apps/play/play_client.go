@@ -25,6 +25,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/adhocdata"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect/keelsonsql"
+	"github.com/stergiotis/boxer/public/keelson/runtime/lifetime"
 	"github.com/stergiotis/boxer/public/keelson/runtime/queryengine"
 	"github.com/stergiotis/boxer/public/keelson/runtime/queryengine/chserver"
 	"github.com/stergiotis/boxer/public/keelson/runtime/runid"
@@ -135,6 +136,15 @@ type Client struct {
 	// keelson tasks under it. nil outside the runtime, where that work runs
 	// untracked.
 	tasks task.TaskApiI
+	// scope is the window's lifetime scope (ADR-0322): the goroutines the
+	// window starts on its own — not the runs, which are tasks under
+	// tasks — are counted into it through Go, so the host's drain waits
+	// for them and their contexts end when the window retires. Set at
+	// Mount from the host's scope; a client built outside the runtime
+	// owns a root scope of its own, retired by PlayApp.Close. Guarded by
+	// mu.
+	scope    *lifetime.Scope
+	ownScope bool
 	// authored remembers the texts behind the authored fingerprints this
 	// client stamped (play_stamp.go), so a captured run it issued can show
 	// its authored statement; the capture itself keeps only the fp.
@@ -199,6 +209,64 @@ func (inst *Client) Tasks() (api task.TaskApiI) {
 	inst.mu.RLock()
 	defer inst.mu.RUnlock()
 	return inst.tasks
+}
+
+// SetLifetime sets the window's lifetime scope; see Client.scope. A nil
+// scope — a host that does not drain — leaves the client to a root of its
+// own.
+func (inst *Client) SetLifetime(s *lifetime.Scope) {
+	if s == nil {
+		return
+	}
+	inst.mu.Lock()
+	inst.scope, inst.ownScope = s, false
+	inst.mu.Unlock()
+}
+
+// lifetime is the scope Go counts into, a root the client owns when none
+// was set.
+func (inst *Client) lifetime() (s *lifetime.Scope) {
+	inst.mu.Lock()
+	defer inst.mu.Unlock()
+	if inst.scope == nil {
+		inst.scope, inst.ownScope = lifetime.New(nil), true
+	}
+	return inst.scope
+}
+
+// LifetimeCtx is the window's work context: it ends when the window
+// retires. A nil client's never ends.
+func (inst *Client) LifetimeCtx() (ctx context.Context) {
+	if inst == nil {
+		return context.Background()
+	}
+	return inst.lifetime().Ctx()
+}
+
+// Go runs f off the frame goroutine, counted into the window's lifetime
+// (ADR-0322): ctx ends when the window retires, and nothing starts after.
+// A nil client — a driver built without one, as a test does — runs f under
+// a context nobody ends; started says whether f runs.
+func (inst *Client) Go(f func(ctx context.Context)) (started bool) {
+	if inst == nil {
+		go f(context.Background())
+		return true
+	}
+	return inst.lifetime().Go(f)
+}
+
+// retireLifetime retires a root scope the client owns; the host's is the
+// host's to retire.
+func (inst *Client) retireLifetime() {
+	if inst == nil {
+		return
+	}
+	inst.mu.Lock()
+	s, own := inst.scope, inst.ownScope
+	inst.mu.Unlock()
+	if s != nil && own {
+		s.Retire()
+	}
 }
 
 // ExecOptions carries per-lane execution settings for ExecuteArrowStream.

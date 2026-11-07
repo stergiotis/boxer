@@ -1,6 +1,7 @@
 package play
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"math"
@@ -1064,5 +1065,7 @@ func (inst *PlayApp) renderVectorFieldTab() {
 // statement is there to be looked at with its result, and its parameters show
 // in the pane only once a Run has parsed them.
 func (inst *PlayApp) openVectorFieldQuery(sql string) {
-	go inst.requestOpenPlayground(launchcfg.PlayLaunch{At: time.Now().UTC(), Sql: sql, AutoRun: true})
+	inst.client.Go(func(context.Context) {
+		inst.requestOpenPlayground(launchcfg.PlayLaunch{At: time.Now().UTC(), Sql: sql, AutoRun: true})
+	})
 }

@@ -1,6 +1,7 @@
 package play
 
 import (
+	"context"
 	"fmt"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/common"
 	"os"
@@ -36,6 +37,7 @@ import (
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/codeview"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/fsmview"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/inspector"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/jobprogress"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/layeredgraph"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/layeredgraph/view"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/lazypane"
@@ -939,6 +941,12 @@ type PlayApp struct {
 	openPlayBusy bool
 	openPlayErr  string
 
+	// actionMu guards actionNote: the outcome of the last copy or
+	// handover, written by its goroutine after the broker's reply and
+	// shown on the status line until the next Run (W8).
+	actionMu   sync.Mutex
+	actionNote string
+
 	// openTallyMu guards the Open in tally request state (ADR-0222 §SD6),
 	// the same pattern. tallyOffer* memoise whether the current buffer is
 	// one tally could browse, because answering that parses the statement
@@ -1179,8 +1187,13 @@ func NewPlayApp(client *Client, graph *queryGraph, initialSQL string, rules *glo
 		projFSM:          projFSM,
 		projFSMWidget: fsmview.New(projFSMIds, "projector-fsm", projFSM, fsmview.Options[projectorStatusE]{
 			Title:         "projector",
+			Tethered:      true,
 			ShowSubscript: true,
 			AutoAnchor:    true,
+			Provenance: inspector.Provenance{
+				Subject:   "app.play.projection.phase",
+				SourceApp: "github.com/stergiotis/boxer/apps/play",
+			},
 		}),
 		queryFSM: queryFSM,
 		queryFSMWidget: fsmview.New(queryFSMIds, "query-state-fsm", queryFSM, fsmview.Options[queryStateE]{
@@ -1364,6 +1377,9 @@ func (inst *PlayApp) Close() {
 	if inst.graph != nil {
 		inst.graph.close() // also closes the main lane
 	}
+	// A root scope the client owns ends here; the host's ended before
+	// Unmount (ADR-0322).
+	inst.client.retireLifetime()
 }
 
 // newProjectorFSM seeds the fsmview.Machine with every transition the
@@ -1728,7 +1744,11 @@ func (inst *PlayApp) render() error {
 
 	inst.frame++
 	inst.autoShotTick()
-	c.RequestRepaint()
+	// Only while something runs (play_repaint.go), so the loop can idle
+	// under reactive cadence once the window settles.
+	if inst.anyRunning() {
+		c.RequestRepaint()
+	}
 	return nil
 }
 
@@ -1900,6 +1920,7 @@ func (inst *PlayApp) executeRun(auto bool, subquery bool) {
 		return
 	}
 	inst.runBlockedReason = ""
+	inst.setActionNote("")
 	// ADR-0181 §SD8 M3: an INSERT wrapper executes only behind the explicit
 	// write opt-in, and never through the Arrow result machinery — a write
 	// answers with a summary, not a stream. Refusal and outcome both ride
@@ -2216,6 +2237,7 @@ func (inst *PlayApp) renderTopBar(schema *arrow.Schema) {
 		if inst.graph.MainLoading() {
 			c.Spinner().Size(16).Send()
 			if c.Button(ids.PrepareStr("cancel"), c.Atoms().Text("Cancel").Keep()).
+				Kind(c.ButtonKindDanger).
 				SendResp().HasPrimaryClicked() {
 				// The person's Cancel goes through the catalog (ADR-0270 §SD6).
 				inst.personCancelRun()
@@ -2274,7 +2296,7 @@ func (inst *PlayApp) renderTopBar(schema *arrow.Schema) {
 		if inst.toolbarMinimal && inst.bus != nil {
 			c.Separator().Vertical().Send()
 
-			// Open in Playground — the recorded §SD3 escape-hatch upgrade
+			// Open in play — the recorded §SD3 escape-hatch upgrade
 			// (ADR-0135 §SD7): compose the buffer + run flags into a
 			// PlayLaunch and ask the window host for a full play window.
 			// Offered whenever a bus is wired — the honest gate: a missing
@@ -2288,7 +2310,7 @@ func (inst *PlayApp) renderTopBar(schema *arrow.Schema) {
 			if openBusy {
 				c.Label("Opening…").Send()
 			} else if c.Button(ids.PrepareStr("openPlayground"),
-				c.Atoms().Text("Open in Playground").Keep()).
+				c.Atoms().Text("Open in play").Keep()).
 				SendResp().HasPrimaryClicked() {
 				// Carry the endpoint so a buffer authored against the
 				// in-process introspection /query endpoint reopens there
@@ -2299,9 +2321,11 @@ func (inst *PlayApp) renderTopBar(schema *arrow.Schema) {
 				// goroutine — see runsOnIntrospection.
 				sql, autoRun, live, bands := inst.sql, inst.AutoRun, inst.liveMain, inst.timelineBandsSql
 				if bundle := inst.openPlaygroundBundle; bundle != "" {
-					go inst.requestOpenPlayground(launchcfg.PlayLaunch{At: time.Now().UTC(), Bundle: bundle, AutoRun: true})
+					inst.client.Go(func(context.Context) {
+						inst.requestOpenPlayground(launchcfg.PlayLaunch{At: time.Now().UTC(), Bundle: bundle, AutoRun: true})
+					})
 				} else {
-					go func() {
+					inst.client.Go(func(context.Context) {
 						endpoint := ""
 						if inst.runsOnIntrospection(sql) {
 							endpoint = launchcfg.EndpointIntrospection
@@ -2314,7 +2338,7 @@ func (inst *PlayApp) renderTopBar(schema *arrow.Schema) {
 							BandsSql: bands,
 							Endpoint: endpoint,
 						})
-					}()
+					})
 				}
 			}
 			if openErr != "" {
@@ -2342,7 +2366,7 @@ func (inst *PlayApp) renderTopBar(schema *arrow.Schema) {
 					if c.Button(ids.PrepareStr("openTally"), c.Atoms().Text("Open in tally").Keep()).
 						SendResp().HasPrimaryClicked() {
 						sql := inst.sql
-						go func() {
+						inst.client.Go(func(context.Context) {
 							inst.requestOpenTally(tallylaunch.TallyLaunch{
 								At:       time.Now().UTC(),
 								Sql:      sql,
@@ -2350,7 +2374,7 @@ func (inst *PlayApp) renderTopBar(schema *arrow.Schema) {
 								Tab:      tallylaunch.TabResults,
 								Target:   "A",
 							})
-						}()
+						})
 					}
 				}
 			}
@@ -2379,7 +2403,7 @@ func (inst *PlayApp) renderTopBar(schema *arrow.Schema) {
 				if c.Button(ids.PrepareStr("loadSql"),
 					c.Atoms().Text("Load .sql…").Keep()).
 					SendResp().HasPrimaryClicked() {
-					go inst.loadFromPicker()
+					inst.client.Go(func(context.Context) { inst.loadFromPicker() })
 				}
 			}
 			if pickErr != "" {
@@ -2413,7 +2437,7 @@ func (inst *PlayApp) renderTopBar(schema *arrow.Schema) {
 				// probe as the Open in Playground button; classified off the
 				// frame goroutine — see runsOnIntrospection.
 				sql := inst.sql
-				go func() {
+				inst.client.Go(func(context.Context) {
 					endpoint := ""
 					if inst.runsOnIntrospection(sql) {
 						endpoint = appletcreatecfg.EndpointIntrospection
@@ -2423,7 +2447,7 @@ func (inst *PlayApp) renderTopBar(schema *arrow.Schema) {
 						Sql:      sql,
 						Endpoint: endpoint,
 					})
-				}()
+				})
 			}
 			if saveErr != "" {
 				for rt := range c.RichTextLabel("Save as applet failed: " + saveErr) {
@@ -3431,8 +3455,13 @@ func (inst *PlayApp) renderResultsLoading() {
 		// absent until the first tick lands or when the endpoint cannot
 		// stream them (non-http, mocks).
 		if v := inst.frameProgress; v.fresh {
-			renderProgressBar(v, loadingProgressWidth)
-			diagWeak(formatProgressLine(v))
+			// The standard row (jobprogress, ADR-0247), stacked: the bar
+			// and its line; the status bar's memory and elapsed tail is
+			// the FSM chip's.
+			in := laneInput(v)
+			in.Inline = false
+			in.BarWidth = loadingProgressWidth
+			jobprogress.Render(in)
 		}
 	}
 }

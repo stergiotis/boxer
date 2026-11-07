@@ -317,7 +317,12 @@ func queryStateTone(s queryStateE) badge.ToneE {
 // window.
 func (inst *PlayApp) renderQuerySummary(numRows int64, elapsed time.Duration, summary Summary, executed time.Time, err error, truncation string) {
 	s := inst.querySummaryLine(numRows, elapsed, summary, executed, err, truncation)
+	// A notice outranks the summary; below it, the last action's outcome —
+	// a copy's record, what a handover opened — stands in until the next
+	// Run clears it.
 	if n := inst.queryNotice(); n != "" {
+		s = n
+	} else if n := inst.actionNoteNow(); n != "" {
 		s = n
 	}
 	if s == "" {

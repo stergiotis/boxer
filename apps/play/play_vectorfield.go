@@ -423,17 +423,18 @@ func (inst *vectorFieldGuest) EnsureSummary(req vectorfield.Request) {
 	}
 	inst.summaryKey = key
 	inst.progress.reset(sqlfield.PurposeSummary)
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(inst.client.LifetimeCtx())
 	job := &vectorFieldSummaryJob{key: key, cancel: cancel}
 	inst.summaryJob = job
 	// Not a task: it re-runs each time the view settles, like the lanes.
-	go func() {
+	// Counted into the window's lifetime, and its context ends with it.
+	inst.client.Go(func(context.Context) {
 		out, err := src.Summarize(ctx, req)
 		job.mu.Lock()
 		job.done, job.out, job.err = true, out, err
 		job.mu.Unlock()
 		cancel()
-	}()
+	})
 }
 
 // StepState is what the layer has of a step.

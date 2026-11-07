@@ -182,7 +182,7 @@ func (inst *identityDetail) valueRow(app *PlayApp, label string, value string, h
 		}
 		if app.CanCopy() {
 			if c.Button(inst.ids.PrepareStr(copyID), c.Atoms().Text("copy").Keep()).SendResp().HasPrimaryClicked() {
-				app.copyToClipboard(value)
+				app.copyToClipboard(label, value)
 			}
 		}
 	}
@@ -211,5 +211,5 @@ func copierOf(app *PlayApp) func(text string) {
 	if !app.CanCopy() {
 		return nil
 	}
-	return app.copyToClipboard
+	return func(text string) { app.copyToClipboard("the component", text) }
 }

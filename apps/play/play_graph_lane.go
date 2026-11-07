@@ -265,18 +265,31 @@ func (inst *nodeLane) startLocked(c compiledNode, demandKey string) {
 	}
 	inst.gen++
 	gen := inst.gen
+	// The run's context is the window's work context where the executor
+	// names one, so a retired window ends the run (ADR-0322); a mock
+	// executor's run ends with its timeout or the lane's close alone.
+	var client *Client
+	parent := context.Background()
+	if s, ok := inst.exec.(scopedExecutorI); ok {
+		client = s.scopeClient()
+		parent = client.LifetimeCtx()
+	}
 	var ctx context.Context
 	var cancel context.CancelFunc
 	if inst.timeout > 0 {
-		ctx, cancel = context.WithTimeout(context.Background(), inst.timeout)
+		ctx, cancel = context.WithTimeout(parent, inst.timeout)
 	} else {
-		ctx, cancel = context.WithCancel(context.Background())
+		ctx, cancel = context.WithCancel(parent)
 	}
 	inst.cancel = cancel
 	inst.loading = true
 	inst.progress = runstream.Progress{}
 	inst.progressFresh = false
-	go inst.run(ctx, cancel, gen, c, demandKey)
+	if !client.Go(func(context.Context) { inst.run(ctx, cancel, gen, c, demandKey) }) {
+		// The window retired: nothing starts after, and the lane says so.
+		cancel()
+		inst.loading = false
+	}
 }
 
 func (inst *nodeLane) run(ctx context.Context, cancel context.CancelFunc, gen uint64, c compiledNode, demandKey string) {

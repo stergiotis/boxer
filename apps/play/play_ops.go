@@ -362,6 +362,14 @@ var playOps = func() (s *appops.Set[*PlayLauncher, opsSnap]) {
 		}
 		return inst.inner.queryFSM
 	}, fsmops.Options{History: 16})
+	// The projection's lifecycle, the Projection tab's chip: projection_state
+	// and projection_machine.
+	fsmops.Mount(s, "projection", "the projection's lifecycle", func(inst *PlayLauncher) opfsm.SourceI {
+		if inst.inner == nil || inst.inner.projFSM == nil {
+			return nil
+		}
+		return inst.inner.projFSM
+	}, fsmops.Options{History: 16})
 
 	appops.Query(s, app.OperationSpec{Name: opGetState, Version: 2,
 		Summary: "read the buffer, the parameters, the signals, Live and the main result's phase",

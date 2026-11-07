@@ -84,6 +84,7 @@ func (inst *PlayApp) renderDocsTab() {
 			SendRespVal(&s.manual)
 		if s.manual != "" {
 			if c.Button(ids.PrepareStr("docsManualClear"), c.Atoms().Text("×").Keep()).
+				Kind(c.ButtonKindGhost).
 				SendResp().HasPrimaryClicked() {
 				s.manual = ""
 			}

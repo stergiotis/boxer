@@ -231,6 +231,14 @@ type nodeExecutorI interface {
 	execute(ctx context.Context, c compiledNode, alloc memory.Allocator) (rec arrow.RecordBatch, schema *arrow.Schema, summary Summary, err error)
 }
 
+// scopedExecutorI is the optional executor upgrade that names the window's
+// client, so a lane's run goroutine is counted into the window's lifetime
+// and its context ends when the window retires (ADR-0322). The mock
+// executors lack it and their lanes run as before.
+type scopedExecutorI interface {
+	scopeClient() *Client
+}
+
 // progressAwareExecutorI is the optional executor upgrade for live query
 // progress (ADR-0115 plane A / S3): a lane that finds it routes execution
 // through executeWithProgress, handing a per-run sink the transport fires

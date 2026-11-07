@@ -195,33 +195,6 @@ func formatProgressLine(v progressView) string {
 	return b.String()
 }
 
-// formatProgressBrief is the short form for the top bar, where the toolbar
-// has no room for the full line: the percentage the bar cannot legibly carry
-// itself, plus the ETA — or the rate while the ETA warms up (or forever, on a
-// query whose total the server never reports).
-func formatProgressBrief(v progressView) string {
-	var b strings.Builder
-	if v.knownTotal {
-		fmt.Fprintf(&b, "%d%%", v.percent)
-	}
-	tail := ""
-	switch {
-	case v.etaValid:
-		tail = progressest.FormatRemaining(v.eta)
-	case v.rate >= 1:
-		tail = formatRate(v.rate)
-	case !v.knownTotal:
-		tail = countAtAGlance(v.p.ReadRows) + " rows"
-	}
-	if tail != "" {
-		if b.Len() > 0 {
-			b.WriteString(" · ")
-		}
-		b.WriteString(tail)
-	}
-	return b.String()
-}
-
 // laneInput is what the inline progress row (jobprogress, ADR-0247) draws of
 // one tick: the bar, and the numbers a reader of a pane that is about to be
 // replaced wants — rows against the total, the rate, the ETA — without the
@@ -257,7 +230,7 @@ func formatProgressStrip(v progressView) string {
 
 // Bar footprints. The toolbar's is compact enough to sit beside Cancel
 // without pushing the rest of the strip around; the pane and empty-state
-// bars can afford more. All three are explicit because egui's ProgressBar
+// bars can afford more. All three are explicit because an inline bar
 // otherwise claims the whole available width, which inside a Horizontal
 // means everything to its right.
 const (
@@ -265,23 +238,6 @@ const (
 	paneProgressWidth    = 190
 	loadingProgressWidth = 260
 )
-
-// renderProgressBar emits the bar itself. With a total to divide by it is
-// determinate; without one it is an animated zero-progress bar — egui draws a
-// minimum-width pill with a rotating arc, which reads as "running, no idea
-// how far" rather than as "0% done".
-//
-// Deliberately no ShowPercentage: egui paints the bar's own text at the
-// bar's LEFT edge, which is exactly where the fill pill sits early in a run,
-// so "1%" renders as a blob followed by "%" (seen live). The percentage
-// rides the adjacent label instead, where it is legible at every value.
-func renderProgressBar(v progressView, width float32) {
-	if v.knownTotal {
-		c.ProgressBar(v.fraction).DesiredWidth(width).Send()
-		return
-	}
-	c.ProgressBar(0).DesiredWidth(width).Animate(true).Send()
-}
 
 // renderTopBarProgress is the always-visible half of the display (the
 // placement decision of 2026-07-28): a bar beside Cancel, so an in-flight run
@@ -300,8 +256,12 @@ func (inst *PlayApp) renderTopBarProgress() {
 		// none — chlocal, mocks): the spinner beside us is the whole signal.
 		return
 	}
-	renderProgressBar(v, topBarProgressWidth)
-	diagWeak(formatProgressBrief(v))
+	// The standard row (jobprogress, ADR-0247), inline beside Cancel: the
+	// bar with the rows, the rate and the ETA. Cancel stays the toolbar's
+	// own button, which goes through the catalog.
+	in := laneInput(v)
+	in.BarWidth = topBarProgressWidth
+	jobprogress.Render(in)
 }
 
 // renderPaneProgressStrip is the in-pane half: a slim bar above a result

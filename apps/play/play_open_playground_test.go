@@ -77,6 +77,7 @@ func TestRequestOpenPlayground_ComposesRequestAndSucceeds(t *testing.T) {
 	defer inst.openPlayMu.Unlock()
 	assert.Empty(t, inst.openPlayErr)
 	assert.False(t, inst.openPlayBusy)
+	assert.Equal(t, "opened in play — this buffer, run", inst.actionNoteNow(), "the status line says what opened, after the reply")
 	assert.Equal(t, windowhost.OpenSubject, bus.gotSubject)
 
 	req, err := buscodec.Decode[launchrequest.LaunchRequest](bus.gotPayload)

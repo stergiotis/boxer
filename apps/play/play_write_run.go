@@ -68,6 +68,14 @@ func (inst *writeRunState) clear() {
 	inst.mu.Unlock()
 }
 
+// running says a write is in flight.
+func (inst *writeRunState) running() (running bool) {
+	inst.mu.Lock()
+	running = inst.inFlight
+	inst.mu.Unlock()
+	return
+}
+
 func (inst *writeRunState) status() string {
 	inst.mu.Lock()
 	defer inst.mu.Unlock()

@@ -338,6 +338,7 @@ func (pane *snippetPane) renderFilterRow(inst *PlayApp) {
 			SendRespVal(&pane.filter)
 		if pane.filter != "" {
 			if c.Button(inst.ids.PrepareStr(pane.key+"FilterClear"), c.Atoms().Text("×").Keep()).
+				Kind(c.ButtonKindGhost).
 				SendResp().HasPrimaryClicked() {
 				pane.filter = ""
 			}
