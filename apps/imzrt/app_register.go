@@ -1,12 +1,21 @@
 package imzrt
 
 import (
+	"embed"
+
 	"github.com/rs/zerolog/log"
 	"github.com/stergiotis/boxer/public/keelson/runtime/adhocdata"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
+	"github.com/stergiotis/boxer/public/keelson/runtime/help"
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
 	"github.com/stergiotis/boxer/public/keelson/runtime/windowhost"
 )
+
+// helpFS embeds the inline help (apps/imzrt/help/*.md), indexed by the help
+// library and shown by the HelpHost on F1 (ADR-0047).
+//
+//go:embed help/*.md
+var helpFS embed.FS
 
 // manifest is the static AppI descriptor every imzrt instance returns. imzrt
 // reads the Go runtime's own metrics and mutates no runtime tunables
@@ -25,6 +34,9 @@ var manifest = app.Manifest{
 	Topics:   []app.TopicT{app.TopicObservability},
 	Keywords: []string{"render", "telemetry", "fps", "frames", "latency"},
 	Surface:  app.SurfaceWindowed,
+	// No operations catalog: the window drives nothing an agent would, and
+	// what it shows is this process's telemetry (ADR-0061). The help says so.
+	Help: help.MustSub(helpFS, "help"),
 	Caps: []app.SubjectFilter{
 		{
 			Pattern:   adhocdata.SubjectPublish,

@@ -1,13 +1,22 @@
 package jackstay
 
 import (
+	"embed"
+
 	"github.com/rs/zerolog/log"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/fsbroker"
+	"github.com/stergiotis/boxer/public/keelson/runtime/help"
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
 	"github.com/stergiotis/boxer/public/keelson/runtime/task"
 )
+
+// helpFS embeds the inline help (apps/jackstay/help/*.md), indexed by the
+// help library and shown by the HelpHost on F1 (ADR-0047).
+//
+//go:embed help/*.md
+var helpFS embed.FS
 
 // AppId is the window's durable identity.
 const AppId app.AppIdT = "github.com/stergiotis/boxer/apps/jackstay"
@@ -53,6 +62,7 @@ var manifest = app.Manifest{
 	// The plans this window used, for the first page's resume list.
 	PersistedKeys: []string{recentKey},
 	Operations:    ops.Catalog(),
+	Help:          help.MustSub(helpFS, "help"),
 }
 
 func init() {

@@ -1,11 +1,21 @@
 package imztop
 
 import (
+	"embed"
+
 	"github.com/rs/zerolog/log"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
+	"github.com/stergiotis/boxer/public/keelson/runtime/help"
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
 	"github.com/stergiotis/boxer/public/keelson/runtime/sysmetricsbus"
 )
+
+// helpFS embeds the inline help (apps/imztop/help/*.md), indexed by the help
+// library and shown by the HelpHost on F1 (ADR-0047); the same sections reach
+// an agent through the help service.
+//
+//go:embed help/*.md
+var helpFS embed.FS
 
 // manifest is the static AppI descriptor every imztop instance
 // returns. Kept package-level so the factory ctor can hand a fresh
@@ -24,6 +34,7 @@ var manifest = app.Manifest{
 	Surface:  app.SurfaceWindowed,
 	// The operations catalog (ADR-0329), in imztop_ops.go.
 	Operations: ops.Catalog(),
+	Help:       help.MustSub(helpFS, "help"),
 	// imztop consumes the system-metrics plane (ADR-0090): it subscribes to a
 	// scraper's published bundles and holds no filesystem or system-state
 	// capability of its own. The host mints its MountCtx.Bus() client gated on
