@@ -1,12 +1,21 @@
 package taskdemo
 
 import (
+	"embed"
+
 	"github.com/rs/zerolog/log"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
+	"github.com/stergiotis/boxer/public/keelson/runtime/help"
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
 	"github.com/stergiotis/boxer/public/keelson/runtime/task"
 )
+
+// helpFS embeds the inline help (apps/taskdemo/help/*.md), indexed by the
+// help library and shown by the HelpHost on F1 (ADR-0047).
+//
+//go:embed help/*.md
+var helpFS embed.FS
 
 // manifest declares the demo's identity + the single Caps entry the task
 // primitive requires. task.ProducerCaps() expands to task.> with
@@ -30,6 +39,7 @@ var manifest = app.Manifest{
 		PreferredHeight: 520,
 	},
 	Caps: task.ProducerCaps(),
+	Help: help.MustSub(helpFS, "help"),
 }
 
 // init registers the demo into app.DefaultRegistry. Factory ctor so each

@@ -6,12 +6,21 @@
 package opsdemo
 
 import (
+	"embed"
+
 	"github.com/rs/zerolog/log"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/clipboardbroker"
+	"github.com/stergiotis/boxer/public/keelson/runtime/help"
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
 )
+
+// helpFS embeds the inline help (apps/opsdemo/help/*.md), indexed by the
+// help library and shown by the HelpHost on F1 (ADR-0047).
+//
+//go:embed help/*.md
+var helpFS embed.FS
 
 // AppId is the demo's manifest id.
 const AppId app.AppIdT = "github.com/stergiotis/boxer/apps/opsdemo"
@@ -27,6 +36,7 @@ var manifest = app.Manifest{
 	Kind:       app.KindDemo,
 	Surface:    app.SurfaceWindowed,
 	Operations: ops.Catalog(),
+	Help:       help.MustSub(helpFS, "help"),
 	Caps: []app.SubjectFilter{{Pattern: clipboardbroker.SubjectWrite, Direction: app.CapDirectionPub,
 		Reason: "opsdemo: copy the note to the clipboard"}},
 	SurfaceHints: app.SurfaceHints{

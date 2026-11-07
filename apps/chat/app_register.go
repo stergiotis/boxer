@@ -1,6 +1,7 @@
 package chat
 
 import (
+	"embed"
 	"slices"
 
 	"github.com/rs/zerolog/log"
@@ -13,6 +14,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/attention"
 	"github.com/stergiotis/boxer/public/keelson/runtime/clipboardbroker"
 	"github.com/stergiotis/boxer/public/keelson/runtime/headstore"
+	"github.com/stergiotis/boxer/public/keelson/runtime/help"
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect/keelsonquery"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect/providersgui"
@@ -24,6 +26,13 @@ import (
 
 // ManifestId is this app's identity — its Go import path (ADR-0026 id rule).
 const ManifestId app.AppIdT = "github.com/stergiotis/boxer/apps/chat"
+
+// helpFS embeds the inline help (apps/chat/help/*.md), indexed by the help
+// library and shown by the HelpHost on F1, and served to a model by
+// read_help (ADR-0047).
+//
+//go:embed help/*.md
+var helpFS embed.FS
 
 // manifest declares the grants the chat uses (ADR-0265 §SD1): the
 // app sends text to the host's model and may ask for its conversations to
@@ -45,6 +54,7 @@ var manifest = app.Manifest{
 	SurfaceHints: app.SurfaceHints{PreferredWidth: 760, PreferredHeight: 720},
 	// The turn's state, for an agent that shares this window (ADR-0269).
 	Operations: ops.Catalog(),
+	Help:       help.MustSub(helpFS, "help"),
 	// The roster's titles, one key per conversation under the prefix
 	// (chat_roster.go). Declared here so the host injects the persist cap;
 	// without it every write the window makes is refused at the bus.

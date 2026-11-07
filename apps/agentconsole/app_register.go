@@ -12,15 +12,24 @@
 package agentconsole
 
 import (
+	"embed"
+
 	"github.com/rs/zerolog/log"
 
 	"github.com/stergiotis/boxer/public/config/env"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/agent"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
+	"github.com/stergiotis/boxer/public/keelson/runtime/help"
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
 	"github.com/stergiotis/boxer/public/keelson/runtime/windowhost"
 )
+
+// helpFS embeds the inline help (apps/agentconsole/help/*.md), indexed by
+// the help library and shown by the HelpHost on F1 (ADR-0047).
+//
+//go:embed help/*.md
+var helpFS embed.FS
 
 // AppId is the console's manifest id.
 const AppId app.AppIdT = "github.com/stergiotis/boxer/apps/agentconsole"
@@ -35,6 +44,7 @@ var manifest = app.Manifest{
 	Keywords: []string{"agent", "operations", "grant", "dispatcher", "adr-0269"},
 	Kind:     app.KindDemo,
 	Surface:  app.SurfaceWindowed,
+	Help:     help.MustSub(helpFS, "help"),
 	Caps: append(agent.ClientCaps("agentconsole: call operations by hand"),
 		app.SubjectFilter{Pattern: windowhost.OpenSubject, Direction: app.CapDirectionPub,
 			Reason: "agentconsole: open a window to work in"}),
