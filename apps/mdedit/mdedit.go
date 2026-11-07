@@ -26,11 +26,15 @@
 package mdedit
 
 import (
-	"github.com/stergiotis/boxer/public/semistructured/markdown/mddocfacts"
-	"github.com/stergiotis/boxer/public/semistructured/markdown/mdline"
+	"context"
+	"errors"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/stergiotis/boxer/public/semistructured/markdown/mddocfacts"
+	"github.com/stergiotis/boxer/public/semistructured/markdown/mdline"
 
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
@@ -40,11 +44,14 @@ import (
 	"github.com/stergiotis/boxer/public/fs/lading/ladingsftp/sftptree"
 	"github.com/stergiotis/boxer/public/identity/identifier"
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
+	"github.com/stergiotis/boxer/public/keelson/runtime/agentrun"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
 	"github.com/stergiotis/boxer/public/keelson/runtime/clipboardbroker"
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
+	"github.com/stergiotis/boxer/public/keelson/runtime/lifetime"
 	"github.com/stergiotis/boxer/public/keelson/runtime/task"
+	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/thestack/fffi2/typed"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/keycodes"
@@ -205,6 +212,11 @@ type App struct {
 	// tasks runs the restore, the file gestures and the send as keelson
 	// tasks owned by this window.
 	tasks task.TaskApiI
+	// scope is the instance's lifetime scope (ADR-0322): the clipboard
+	// write, the autosave and the restore run as its work, so the host's
+	// drain waits for them. nil on a host that does not drain, and in
+	// tests, where spawn runs the work bare.
+	scope *lifetime.Scope
 	// origin is this window as the rows it uploads name it (ADR-0330
 	// §SD3): the host's run, the app and the window's instance key.
 	origin mddocfacts.Origin
@@ -432,6 +444,10 @@ type App struct {
 	exportDone   bool
 	exportErr    error
 	exportedText string
+	// exportWhat names what was copied, for the status line; exportRec is
+	// the broker's record of the copy (ADR-0317 §SD1).
+	exportWhat string
+	exportRec  clipboardbroker.CopyRecord
 	// exportCheckpoint marks a clipboard write that exports the DOCUMENT and
 	// so advances the dirty checkpoint on success. Copying a proposal rides
 	// the same machinery with this false — that text never was the buffer,
@@ -516,8 +532,10 @@ func (inst *App) Mount(ctx app.MountContextI) (err error) {
 	inst.bus = ctx.Bus()
 	inst.store = ctx.Storage()
 	inst.tasks = task.ForApp(ctx)
+	inst.scope = app.LifetimeOf(ctx)
 	inst.origin = mddocfacts.Origin{Run: ctx.RunId(), App: string(manifest.Id), Instance: ctx.InstanceKey()}
-	if inst.handOver(ctx.LaunchConfig()) {
+	handed, err := inst.handOver(ctx.LaunchConfig())
+	if err != nil || handed {
 		return
 	}
 	if seed := DocSeed.Get(); seed != "" {
@@ -525,9 +543,21 @@ func (inst *App) Mount(ctx app.MountContextI) (err error) {
 		return
 	}
 	if inst.store != nil {
-		go inst.restore()
+		inst.spawn(func(context.Context) { inst.restore() })
 	}
 	return
+}
+
+// spawn runs f off the render goroutine as work of the instance's lifetime
+// scope (ADR-0322), so the host's drain waits for it; without a scope the
+// work runs bare. started is false once the scope retired — nothing starts
+// after the window left — and the caller puts back whatever it armed.
+func (inst *App) spawn(f func(ctx context.Context)) (started bool) {
+	if inst.scope == nil {
+		go f(context.Background())
+		return true
+	}
+	return inst.scope.Go(f)
 }
 
 // handOver opens a document another app handed over (launchcfg,
@@ -535,15 +565,18 @@ func (inst *App) Mount(ctx app.MountContextI) (err error) {
 // neither restores nor autosaves the one document mdedit keeps, so the
 // person's own draft is never overwritten, and the handed text stays
 // unsaved until it is saved to a file or copied out. It reports whether
-// the window was opened with one.
-func (inst *App) handOver(raw []byte) (handed bool) {
+// the window was opened with one. A config that does not decode fails the
+// mount: the host validated the claimed kind at the boundary, so the bytes
+// are a defect — codec drift, corruption — and a plain window in their
+// place would hide it (ADR-0135 §SD4).
+func (inst *App) handOver(raw []byte) (handed bool, err error) {
 	if len(raw) == 0 {
-		return false
+		return false, nil
 	}
 	l, err := buscodec.Decode[launchcfg.MdeditLaunch](raw)
 	if err != nil {
-		inst.logger.Warn().Err(err).Msg("mdedit: the launch config does not decode; opening as usual")
-		return false
+		err = eh.Errorf("mdedit: decode launch config: %w", err)
+		return false, err
 	}
 	name := l.Name
 	if name == "" {
@@ -558,7 +591,7 @@ func (inst *App) handOver(raw []byte) (handed bool) {
 	// The mode now; the location once the text is parsed, and again when
 	// the snapshot's text replaces the handed one (ADR-0347 §SD3).
 	inst.applyLaunchOptions(l)
-	return true
+	return true, nil
 }
 
 // adoptDocument makes text this window's document without a store behind
@@ -602,7 +635,10 @@ func (inst *App) Unmount(ctx app.MountContextI) (err error) {
 	// Wait out an autosave already in flight. Its snapshot is older than this
 	// one, so letting the two race would sometimes leave the store holding the
 	// stale version — a silent few seconds of lost work on the next open. The
-	// wait is bounded: a wedged store must not hold the window open.
+	// wait is bounded: a wedged store must not hold the window open. The
+	// host's drain of the lifetime scope (ADR-0322 §SD2) does not replace
+	// it: the drain runs after Unmount returns, so it bounds how long the
+	// autosave may live, not whether it lands before this write.
 	for i := 0; i < 100 && inst.persistInFlight(); i++ {
 		time.Sleep(10 * time.Millisecond)
 	}
@@ -743,11 +779,17 @@ func (inst *App) renderBar() {
 		// button below does — and more so here, since a file dialog is open
 		// for as long as a person takes to decide.
 		openClicked, saveClicked, saveAsClicked := false, false, false
+		// Save leads the row (L2); Open turns to the error role while its
+		// two-click confirmation is armed, since the second click discards.
+		openKind := c.ButtonKindSecondary
+		if inst.confirmDiscard {
+			openKind = c.ButtonKindDanger
+		}
 		for range c.HoverText(tipOpen).KeepIter() {
-			openClicked = c.Button(inst.ids.PrepareStr("open"), atomsOpen).SendResp().HasPrimaryClicked()
+			openClicked = c.Button(inst.ids.PrepareStr("open"), atomsOpen).Kind(openKind).SendResp().HasPrimaryClicked()
 		}
 		for range c.HoverText(tipSave).KeepIter() {
-			saveClicked = c.Button(inst.ids.PrepareStr("save"), atomsSave).SendResp().HasPrimaryClicked()
+			saveClicked = c.Button(inst.ids.PrepareStr("save"), atomsSave).Kind(c.ButtonKindPrimary).SendResp().HasPrimaryClicked()
 		}
 		for range c.HoverText(tipSaveAs).KeepIter() {
 			saveAsClicked = c.Button(inst.ids.PrepareStr("saveas"), atomsSaveAs).SendResp().HasPrimaryClicked()
@@ -1323,9 +1365,12 @@ func (inst *App) persistInFlight() (busy bool) {
 }
 
 // exportClipboard starts a clipboard write for the current buffer — the
-// document export, which checkpoints on success.
+// document export, which checkpoints on success. The text is the person's
+// own, so it carries the zero label; a document handed over by another app
+// arrives without its label (launchcfg carries none), and is copied as the
+// person's too.
 func (inst *App) exportClipboard() {
-	inst.copyToClipboard(inst.src, true)
+	inst.copyToClipboard("the document", inst.src, agentrun.Label{}, true)
 }
 
 // mountCommandDir is the mount point the copied command names, for the
@@ -1337,7 +1382,8 @@ const mountCommandDir = "/mnt/x"
 // the window was given.
 func (inst *App) copyMountCommand() {
 	if cmd, ok := inst.mountCommand(); ok {
-		inst.copyToClipboard(cmd, false)
+		// Composed by the app, not typed by anyone: the system's label.
+		inst.copyToClipboard("the mount command", cmd, agentrun.Label{Level: agentrun.LevelSystem}, false)
 	}
 }
 
@@ -1351,29 +1397,57 @@ func (inst *App) mountCommand() (cmd string, ok bool) {
 	return sftptree.RcloneMount(r.mount, r.snap, mountCommandDir), true
 }
 
-// copyToClipboard starts a clipboard write. The request runs off the render
-// thread on purpose: bus.Request blocks until the broker answers or the
-// request times out, so a host running without a clipboard service would
-// otherwise freeze the frame for the whole timeout. checkpoint says whether a
-// success advances `saved` — see exportCheckpoint.
-func (inst *App) copyToClipboard(text string, checkpoint bool) {
+// copyToClipboard starts a labelled clipboard write (ADR-0317 §SD1): what
+// names the text on the status line and in the broker's record, label says
+// whose text it is, and the broker's record comes back to the status line
+// through drainAsync. The request runs off the render thread on the
+// lifetime scope: clipboardbroker.Write blocks until the broker answers or
+// the request times out, so a host running without a clipboard service
+// would otherwise freeze the frame for the whole timeout. checkpoint says
+// whether a success advances `saved` — see exportCheckpoint.
+func (inst *App) copyToClipboard(what string, text string, label agentrun.Label, checkpoint bool) {
 	if inst.bus == nil {
-		inst.status = "clipboard unavailable"
+		inst.status = "no bus wired — the clipboard needs the app runtime"
 		return
 	}
 	inst.mu.Lock()
 	inst.exporting = true
 	inst.mu.Unlock()
-	go func() {
-		_, err := inst.bus.Request(clipboardbroker.SubjectWrite, []byte(text))
+	bus := inst.bus
+	payload := clipboardbroker.Payload{Text: text, Label: label, Source: string(manifest.Id) + ":" + what}
+	started := inst.spawn(func(context.Context) {
+		rec, err := clipboardbroker.Write(bus, payload)
 		inst.mu.Lock()
 		inst.exporting = false
 		inst.exportDone = true
 		inst.exportErr = err
+		inst.exportRec = rec
+		inst.exportWhat = what
 		inst.exportedText = text
 		inst.exportCheckpoint = checkpoint
 		inst.mu.Unlock()
-	}()
+	})
+	if !started {
+		inst.mu.Lock()
+		inst.exporting = false
+		inst.mu.Unlock()
+	}
+}
+
+// copyNote is the status line's sentence for a finished copy: what left,
+// and how the broker's record says it left — by reference, with the handle
+// to paste inside boxer, or as plaintext with its size, and whether the
+// policy only recorded the exit.
+func copyNote(what string, rec clipboardbroker.CopyRecord) (note string) {
+	note = "copied " + what
+	if rec.Handle != "" {
+		return note + " by reference (" + rec.Handle + "): paste it inside boxer"
+	}
+	note += " — " + strconv.Itoa(rec.Bytes) + " bytes as " + rec.Verdict()
+	if rec.Recorded {
+		note += ", exit recorded"
+	}
+	return
 }
 
 // autosave persists the buffer at most once per autosaveEvery, and only when
@@ -1395,16 +1469,21 @@ func (inst *App) autosave() {
 	inst.mu.Unlock()
 
 	inst.lastPersistAt = now
-	snapshot := inst.src
-	go func() {
-		err := inst.store.Set(docKey, []byte(snapshot))
+	snapshot, store := inst.src, inst.store
+	started := inst.spawn(func(context.Context) {
+		err := store.Set(docKey, []byte(snapshot))
 		inst.mu.Lock()
 		inst.persisting = false
 		inst.persistDone = true
 		inst.persistErr = err
 		inst.persistedText = snapshot
 		inst.mu.Unlock()
-	}()
+	})
+	if !started {
+		inst.mu.Lock()
+		inst.persisting = false
+		inst.mu.Unlock()
+	}
 }
 
 // restore reads the persisted document. Runs once, off the render thread, from
@@ -1431,7 +1510,7 @@ func (inst *App) restore() {
 func (inst *App) drainAsync() {
 	inst.mu.Lock()
 	expDone, expErr, expText := inst.exportDone, inst.exportErr, inst.exportedText
-	expCheckpoint := inst.exportCheckpoint
+	expCheckpoint, expWhat, expRec := inst.exportCheckpoint, inst.exportWhat, inst.exportRec
 	inst.exportDone = false
 	perDone, perErr, perText := inst.persistDone, inst.persistErr, inst.persistedText
 	inst.persistDone = false
@@ -1447,9 +1526,14 @@ func (inst *App) drainAsync() {
 	}
 
 	if expDone {
+		var refused *clipboardbroker.RefusedError
 		switch {
+		case errors.As(expErr, &refused):
+			// The broker's refusal is the person's answer (ADR-0317 §SD4),
+			// not a fault to log.
+			inst.status = "copy of " + expWhat + " refused: " + refused.Record.Reason
 		case expErr != nil:
-			inst.status = "copy failed: " + expErr.Error()
+			inst.status = "copy of " + expWhat + " failed: " + expErr.Error()
 			inst.logger.Warn().Err(expErr).Msg("mdedit: clipboard write failed")
 		default:
 			// The checkpoint is what actually landed on the clipboard, not
@@ -1459,7 +1543,7 @@ func (inst *App) drainAsync() {
 			if expCheckpoint {
 				inst.saved = expText
 			}
-			inst.status = "copied to clipboard"
+			inst.status = copyNote(expWhat, expRec)
 		}
 	}
 	if perDone {

@@ -24,6 +24,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/fsbroker"
 	"github.com/stergiotis/boxer/public/keelson/runtime/task"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/sqleditor"
 )
@@ -170,7 +171,8 @@ func (inst *App) renderForm() {
 				if saveBusy {
 					c.Label("Saving…").Send()
 				} else if c.Button(ids.PrepareStr("save"), c.Atoms().Text("Save applet").Keep()).
-					SendResp().HasPrimaryClicked() {
+					Kind(c.ButtonKindPrimary).SendResp().HasPrimaryClicked() {
+					// The one action the form exists for (L2).
 					inst.submit()
 				}
 				if exportBusy {
@@ -257,7 +259,7 @@ func (inst *App) submit() {
 				failed = decErr
 			case !rep.OK:
 				inst.setStatus("refused: " + rep.Error)
-				failed = eh.Errorf("refused: %s", rep.Error)
+				failed = eb.Build().Str("reason", rep.Error).Errorf("sqlappletcreator: the store refused the applet")
 			default:
 				inst.setStatus("saved " + slug + " (class " + rep.Class + ") — see the Apps menu")
 			}
@@ -338,7 +340,7 @@ func (inst *App) export() {
 			if !wr.Granted {
 				inst.log.Warn().Str("reason", wr.Reason).Msg("sqlappletcreator: export write refused")
 				inst.setStatus("export failed: " + wr.Reason)
-				failed = eh.Errorf("export write refused: %s", wr.Reason)
+				failed = eb.Build().Str("reason", wr.Reason).Errorf("sqlappletcreator: export write refused")
 				return
 			}
 			inst.setStatus("exported " + name + ".md")

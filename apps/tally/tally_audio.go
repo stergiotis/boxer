@@ -59,6 +59,10 @@ const (
 	// audioStagePrefix names the memfd a staged recording occupies, so it is
 	// recognisable in /proc.
 	audioStagePrefix = "tally-audio-"
+	// The zoom buttons' tooltips (A5): icon-only controls, named here so a
+	// scene can read them.
+	tipAudioZoomIn  = "Zoom in: four times closer on the waveform"
+	tipAudioZoomOut = "Zoom out: four times wider on the waveform"
 	// audioCopyChunk is the staging copy's buffer.
 	audioCopyChunk = 1 << 20
 	// audioPlayerHeight and audioMinimapHeight size the two canvases.
@@ -416,11 +420,16 @@ func (inst *App) renderAudioPreview(s *audioSession) {
 		if c.Button(inst.ids.PrepareStr("audio-fit"), c.Atoms().Text("Fit").Keep()).SendResp().HasPrimaryClicked() {
 			p.FitAll()
 		}
-		if c.Button(inst.ids.PrepareStr("audio-zoom-in"), c.Atoms().Text(icons.PhMagnifyingGlassPlus).Keep()).SendResp().HasPrimaryClicked() {
-			p.ZoomBy(4)
+		// Icon-only, so each carries its tooltip (A5).
+		for range c.HoverText(tipAudioZoomIn).KeepIter() {
+			if c.Button(inst.ids.PrepareStr("audio-zoom-in"), c.Atoms().Text(icons.PhMagnifyingGlassPlus).Keep()).SendResp().HasPrimaryClicked() {
+				p.ZoomBy(4)
+			}
 		}
-		if c.Button(inst.ids.PrepareStr("audio-zoom-out"), c.Atoms().Text(icons.PhMagnifyingGlassMinus).Keep()).SendResp().HasPrimaryClicked() {
-			p.ZoomBy(0.25)
+		for range c.HoverText(tipAudioZoomOut).KeepIter() {
+			if c.Button(inst.ids.PrepareStr("audio-zoom-out"), c.Atoms().Text(icons.PhMagnifyingGlassMinus).Keep()).SendResp().HasPrimaryClicked() {
+				p.ZoomBy(0.25)
+			}
 		}
 		c.AddSpace(gap)
 		if c.SliderF64(inst.ids.PrepareStr("audio-volume"), s.volume, 0, 1).Text("volume").SendRespVal(&s.volume).HasChanged() {

@@ -22,6 +22,7 @@ import (
 
 	"github.com/stergiotis/boxer/apps/mdedit/launchcfg"
 	"github.com/stergiotis/boxer/apps/mdedit/mdeditlink"
+	"github.com/stergiotis/boxer/public/keelson/runtime/agentrun"
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
 	"github.com/stergiotis/boxer/public/semistructured/markdown/mdline"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
@@ -228,7 +229,8 @@ func (inst *App) renderCopyLink() {
 	}
 	if clicked && !inst.exportInFlight() {
 		if link, ok := inst.linkHere(); ok {
-			inst.copyToClipboard(link, false)
+			// Composed by the app from the caret's place: the system's label.
+			inst.copyToClipboard("the link", link, agentrun.Label{Level: agentrun.LevelSystem}, false)
 		}
 	}
 }

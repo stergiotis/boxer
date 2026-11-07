@@ -22,6 +22,12 @@ const (
 	opGetDocument = "get_document"
 	opProposeEdit = "propose_edit"
 	opGetProposal = "get_proposal"
+
+	// documentMaxBytes bounds the text get_document returns (a query's
+	// result is bounded, ADR-0269 §SD2): a longer document comes back cut
+	// at a character boundary with Truncated set, while Length and
+	// Revision keep naming the whole, so propose_edit still fits it.
+	documentMaxBytes = 256 << 10
 )
 
 // snap is what queries read: a copy taken after the command stage. The
@@ -45,6 +51,7 @@ type Document struct {
 	SelectionStart int    `desc:"the selection's first byte; equal to SelectionStop when nothing is selected"`
 	SelectionStop  int    `desc:"the byte after the selection"`
 	Modified       bool   `desc:"the document has changes not yet saved"`
+	Truncated      bool   `desc:"the text (and the selection) was cut at the byte cap; Length and Revision are the whole document's"`
 }
 
 // ProposeEditArgs is propose_edit's argument.
@@ -84,15 +91,11 @@ var ops = func() (s *appops.Set[*App, snap]) {
 		return inst.prop.pending.content
 	})
 
-	appops.Query(s, app.OperationSpec{Name: opGetDocument, Version: 1, Summary: "read the document, its revision and the selection",
-		Reads: []string{resDocument}, Agents: true, Untrusted: true, Fork: app.OperationForkReadShared},
+	appops.Query(s, app.OperationSpec{Name: opGetDocument, Version: 1,
+		Summary: "read the document (its text up to " + strconv.Itoa(documentMaxBytes>>10) + " KiB; Truncated says it was cut), its revision and the selection",
+		Reads:   []string{resDocument}, Agents: true, Untrusted: true, Fork: app.OperationForkReadShared},
 		func(sn snap, in appops.None) (d Document, err error) {
-			d = Document{Text: sn.src, Length: len(sn.src), Revision: documentRevision(sn.src), Modified: sn.dirty}
-			if sn.selOk {
-				d.SelectionStart, d.SelectionStop = sn.selStart, sn.selStop
-				d.Selection = sn.src[sn.selStart:sn.selStop]
-			}
-			return
+			return readDocument(sn), nil
 		})
 	appops.Command(s, app.OperationSpec{Name: opProposeEdit, Version: 1,
 		Summary: "propose replacing a span of the document; the person reviews it and applies or discards it",
@@ -118,6 +121,32 @@ var ops = func() (s *appops.Set[*App, snap]) {
 		})
 	return
 }()
+
+// readDocument is get_document over a snapshot: the whole document's
+// length and revision, its text and selection cut to documentMaxBytes.
+func readDocument(sn snap) (d Document) {
+	d = Document{Length: len(sn.src), Revision: documentRevision(sn.src), Modified: sn.dirty}
+	d.Text, d.Truncated = cutAtBytes(sn.src, documentMaxBytes)
+	if sn.selOk {
+		d.SelectionStart, d.SelectionStop = sn.selStart, sn.selStop
+		var cut bool
+		d.Selection, cut = cutAtBytes(sn.src[sn.selStart:sn.selStop], documentMaxBytes)
+		d.Truncated = d.Truncated || cut
+	}
+	return
+}
+
+// cutAtBytes is s cut to at most n bytes on a character boundary; cut says
+// whether anything was dropped.
+func cutAtBytes(s string, n int) (out string, cut bool) {
+	if len(s) <= n {
+		return s, false
+	}
+	for n > 0 && !utf8.RuneStart(s[n]) {
+		n--
+	}
+	return s[:n], true
+}
 
 // checkProposal refuses a proposal that does not fit the buffer: a stale
 // revision, a span outside it, or a span that cuts a character.

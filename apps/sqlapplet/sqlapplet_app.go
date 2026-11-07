@@ -171,8 +171,10 @@ func (inst *appletApp) Frame(ctx app.FrameContextI) (err error) {
 	// Frame, not the bare render pass: the engine reads the window-focus gate
 	// and the column-width store off this context, and an applet window is
 	// entitled to both. Its own manifest id keys the widths, so one applet's
-	// columns never reach another's.
-	err = inst.inner.Frame(ctx)
+	// columns never reach another's. FrameServed, since the window serves
+	// the inner play's operations (sqlapplet_app_ops.go): it judges the
+	// agent mark before the frame and settles it after.
+	err = inst.inner.FrameServed(ctx)
 	return
 }
 

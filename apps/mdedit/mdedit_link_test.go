@@ -22,7 +22,7 @@ func handWith(t *testing.T, l launchcfg.MdeditLaunch) (inst *App) {
 	inst = newApp()
 	wire, err := buscodec.Encode(l)
 	require.NoError(t, err)
-	require.True(t, inst.handOver(wire))
+	mustHandOver(t, inst, wire)
 	inst.refreshDerived()
 	inst.applyPendingLocation()
 	// The same frame's caret tracking, which reads the caret the editor
@@ -109,7 +109,7 @@ func TestLocationIsAppliedAgainWhenTheSnapshotLands(t *testing.T) {
 	inst := newApp()
 	wire, err := buscodec.Encode(launchcfg.MdeditLaunch{Text: "", Name: "a.md", Mount: testRef.mount.Value(), SnapNanos: testRef.snap.UnixNano(), Path: "a.md", Mode: "read", Location: "L2"})
 	require.NoError(t, err)
-	require.True(t, inst.handOver(wire))
+	mustHandOver(t, inst, wire)
 	inst.refreshDerived()
 	inst.applyPendingLocation()
 	assert.True(t, inst.pendingLocationOk, "waits for the snapshot's text rather than judging the handed one")

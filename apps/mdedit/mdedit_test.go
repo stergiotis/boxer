@@ -238,6 +238,8 @@ func TestDrainAsync_ExportCheckpointsWhatLanded(t *testing.T) {
 	inst := &App{src: "hello world", saved: ""}
 	inst.exportDone = true
 	inst.exportedText = "hello"
+	inst.exportWhat = "the document"
+	inst.exportRec = clipboardbroker.CopyRecord{Bytes: 5, Plaintext: true}
 	inst.exportCheckpoint = true
 
 	inst.drainAsync()
@@ -248,7 +250,7 @@ func TestDrainAsync_ExportCheckpointsWhatLanded(t *testing.T) {
 	if !inst.dirty() {
 		t.Error("text typed while the copy was in flight must stay modified")
 	}
-	if inst.status != "copied to clipboard" {
+	if inst.status != "copied the document — 5 bytes as plaintext" {
 		t.Errorf("status: got %q", inst.status)
 	}
 	if inst.exportDone {
@@ -264,6 +266,8 @@ func TestDrainAsync_ResultCopyDoesNotCheckpoint(t *testing.T) {
 	inst := &App{src: "the document", saved: ""}
 	inst.exportDone = true
 	inst.exportedText = "a proposed replacement"
+	inst.exportWhat = "the proposal"
+	inst.exportRec = clipboardbroker.CopyRecord{Handle: "boxer:clip/abc"}
 	inst.exportCheckpoint = false
 
 	inst.drainAsync()
@@ -274,7 +278,7 @@ func TestDrainAsync_ResultCopyDoesNotCheckpoint(t *testing.T) {
 	if !inst.dirty() {
 		t.Error("the document stays modified")
 	}
-	if inst.status != "copied to clipboard" {
+	if inst.status != "copied the proposal by reference (boxer:clip/abc): paste it inside boxer" {
 		t.Errorf("status: got %q", inst.status)
 	}
 }

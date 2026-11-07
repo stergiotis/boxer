@@ -19,6 +19,7 @@ import (
 	"github.com/stergiotis/boxer/public/semistructured/markdown/mdline"
 	"strings"
 
+	"github.com/stergiotis/boxer/public/keelson/runtime/agentrun"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/markdown"
 )
@@ -180,7 +181,9 @@ func (inst *App) renderProposalPane() {
 		case discard:
 			inst.discardProposal()
 		case copyRes && !inst.exportInFlight():
-			inst.copyToClipboard(x.pending.content, false)
+			// A proposal arrives through the catalog, which agents drive:
+			// the model's text until the person applies it.
+			inst.copyToClipboard("the proposal", x.pending.content, agentrun.Label{Level: agentrun.LevelOwnModel}, false)
 		}
 	}
 	if x.pending == nil {

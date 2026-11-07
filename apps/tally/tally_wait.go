@@ -6,6 +6,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	"github.com/stergiotis/boxer/public/keelson/runtime/bgjob"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/badge"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/bgjobrow"
 )
 
@@ -46,11 +47,19 @@ func (inst *App) waiting(job bgjobrow.JobI, id string, note string) (running boo
 // a lane keeps a cancelled key answered, and only a changed key or an
 // invalidation runs it again.
 func (inst *App) laneFailed(job interface{ Invalidate() }, id string, what string, err error) {
+	// The state is a badge with a tone (L2); the sentence beside it says
+	// what and why.
 	if !errors.Is(err, bgjob.ErrCancelled) {
-		c.Label(what + " failed: " + err.Error()).Send()
+		for range c.Horizontal().KeepIter() {
+			badge.New(inst.ids.PrepareStr("failed-"+id), "failed").Tone(styletokens.ToneError).Send()
+			c.AddSpace(styletokens.GapInline(inst.density))
+			c.Label(what + " failed: " + err.Error()).Send()
+		}
 		return
 	}
 	for range c.Horizontal().KeepIter() {
+		badge.New(inst.ids.PrepareStr("cancelled-"+id), "cancelled").Tone(styletokens.ToneWarning).Send()
+		c.AddSpace(styletokens.GapInline(inst.density))
 		c.Label(what + " was cancelled.").Selectable(false).Send()
 		c.AddSpace(styletokens.GapInline(inst.density))
 		if c.Button(inst.ids.PrepareStr("again-"+id), c.Atoms().Text("Run again").Keep()).

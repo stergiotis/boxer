@@ -1,7 +1,9 @@
 package mdedit
 
 import (
+	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -23,6 +25,25 @@ func TestTheCatalogRegisters(t *testing.T) {
 		require.True(t, found, name)
 		assert.True(t, spec.Agents, name)
 	}
+}
+
+// get_document is bounded: a document past the cap comes back cut on a
+// character boundary with Truncated set, and Length and Revision still name
+// the whole, so a proposal quoting them fits the buffer.
+func TestGetDocumentIsBounded(t *testing.T) {
+	long := strings.Repeat("é", documentMaxBytes/2+8)
+	d := readDocument(snap{src: long, selStart: 0, selStop: len(long), selOk: true})
+	assert.True(t, d.Truncated)
+	assert.Equal(t, len(long), d.Length)
+	assert.Equal(t, documentRevision(long), d.Revision)
+	assert.LessOrEqual(t, len(d.Text), documentMaxBytes)
+	assert.True(t, utf8.ValidString(d.Text), "cut on a character boundary")
+	assert.LessOrEqual(t, len(d.Selection), documentMaxBytes)
+	assert.Equal(t, len(long), d.SelectionStop, "the offsets are the whole document's")
+
+	short := readDocument(snap{src: "# A\n"})
+	assert.False(t, short.Truncated)
+	assert.Equal(t, "# A\n", short.Text)
 }
 
 func TestCheckProposal(t *testing.T) {

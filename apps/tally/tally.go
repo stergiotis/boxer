@@ -7,10 +7,13 @@ package tally
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io/fs"
 	"math"
 	"path"
+	"strconv"
+	"sync"
 	"time"
 
 	"github.com/rs/zerolog"
@@ -21,17 +24,20 @@ import (
 	"github.com/stergiotis/boxer/public/fs/lading/ladingsql"
 	"github.com/stergiotis/boxer/public/identity/identifier"
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
+	"github.com/stergiotis/boxer/public/keelson/runtime/agentrun"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/bgjob"
 	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
 	"github.com/stergiotis/boxer/public/keelson/runtime/clipboardbroker"
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
+	"github.com/stergiotis/boxer/public/keelson/runtime/lifetime"
 	"github.com/stergiotis/boxer/public/keelson/runtime/task"
 	"github.com/stergiotis/boxer/public/keelson/runtime/windowhost"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/marshall/clickhouse/componentsql"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/colwidth"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/badge"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/color"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/fsbrowser"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/lazypane"
@@ -139,11 +145,22 @@ type App struct {
 	// tasks reports a recording's peaks build as a keelson task (ADR-0038);
 	// nil when the host gave no bus.
 	tasks task.TaskApiI
+	// scope is the instance's lifetime scope (ADR-0322): the open-in-play
+	// and copy requests run as its work, so the host's drain waits for
+	// them. nil on a host that does not drain, and in tests.
+	scope *lifetime.Scope
+	// gestures is what the open-in-play and copy tasks leave for the frame
+	// (W8): busy while a request runs, and the reply's note once it landed.
+	gestures gestureOutcomes
 
 	lazy   map[uint64]*lazypane.Pane
 	status string
-	imgGen uint64
-	imgs   *c.ImageVersionTracker[string]
+	// connTone and connLabel are the connection's phase as the toolbar's
+	// badge shows it, set beside status by store().
+	connTone  styletokens.Tone
+	connLabel string
+	imgGen    uint64
+	imgs      *c.ImageVersionTracker[string]
 
 	// workingset intent tracking (ADR-0148): baseline once the mounts are
 	// known, dirty on any later change.
@@ -231,8 +248,12 @@ func (inst *App) Mount(ctx app.MountContextI) (err error) {
 	inst.log = ctx.Log()
 	inst.bus = ctx.Bus()
 	if inst.bus != nil {
-		inst.tasks = task.NewBusApi(task.ApiConfig{Bus: inst.bus})
+		// task.ForApp, not a BusApi over the bus alone: every lane's task
+		// then carries the instance key, the mount cancel and the lifetime
+		// scope (ADR-0322), so a window close cascades into its work.
+		inst.tasks = task.ForApp(ctx)
 	}
+	inst.scope = app.LifetimeOf(ctx)
 	inst.configureLanes()
 	inst.status = "connecting…"
 	if raw := ctx.LaunchConfig(); len(raw) > 0 {
@@ -277,6 +298,9 @@ func (inst *App) Frame(ctx app.FrameContextI) (err error) {
 	// Re-resolve: the density preset is runtime-switchable (Layout ▸ Density).
 	inst.density = styletokens.ActiveDensity()
 	inst.ensureColWidths(ctx)
+	if note, landed := inst.gestures.take(); landed {
+		inst.status = note
+	}
 	inst.renderBody()
 	inst.flushColWidths()
 	return
@@ -340,14 +364,17 @@ func (inst *App) store() *storeConn {
 	switch {
 	case busy:
 		inst.status = "connecting…"
+		inst.connTone, inst.connLabel = styletokens.ToneInfo, "connecting"
 		c.RequestRepaint()
 		return nil
 	case !done:
 		return nil
 	case cerr != nil:
 		inst.status = "not connected: " + cerr.Error()
+		inst.connTone, inst.connLabel = styletokens.ToneError, "not connected"
 		return nil
 	}
+	inst.connTone, inst.connLabel = styletokens.ToneSuccess, "connected"
 	return sc
 }
 
@@ -538,23 +565,110 @@ func (inst *App) renderToolbar(sc *storeConn) {
 			inst.mounts.Invalidate()
 		}
 		c.AddSpace(styletokens.GapInline(inst.density))
-		if c.Button(inst.ids.PrepareStr("tb-open-play"), c.Atoms().Text(icons.PhArrowSquareOut+" Open in play").Keep()).
-			SendResp().HasPrimaryClicked() {
-			inst.openInPlay(sc, p)
-		}
-		if c.Button(inst.ids.PrepareStr("tb-copy-path"), c.Atoms().Text(icons.PhLinkSimple+" Copy SFTP path").Keep()).
-			SendResp().HasPrimaryClicked() {
-			inst.copyToClipboard(inst.sftpPath(p))
-		}
-		if c.Button(inst.ids.PrepareStr("tb-copy-rclone"), c.Atoms().Text(icons.PhTerminal+" Copy rclone mount").Keep()).
-			SendResp().HasPrimaryClicked() {
-			if loc, ok := inst.locationOf(p); ok {
-				inst.copyToClipboard(rcloneMountCommand(loc, p.followLatest))
+		// The handover is the view's main action (D4, L2): primary, saying
+		// Opening… while its request is out, and disabled with the copies
+		// on a host with no bus, which the sentence after them explains.
+		openBusy, copyBusy := inst.gestures.busy()
+		for range c.EnabledUi(inst.bus != nil && !openBusy).KeepIter() {
+			openLabel := icons.PhArrowSquareOut + " Open in play"
+			if openBusy {
+				openLabel = icons.PhArrowSquareOut + " Opening…"
+			}
+			if c.Button(inst.ids.PrepareStr("tb-open-play"), c.Atoms().Text(openLabel).Keep()).
+				Kind(c.ButtonKindPrimary).SendResp().HasPrimaryClicked() {
+				inst.openInPlay(sc, p)
 			}
 		}
+		for range c.EnabledUi(inst.bus != nil && !copyBusy).KeepIter() {
+			if c.Button(inst.ids.PrepareStr("tb-copy-path"), c.Atoms().Text(icons.PhLinkSimple+" Copy SFTP path").Keep()).
+				SendResp().HasPrimaryClicked() {
+				inst.copyToClipboard("the SFTP path", inst.sftpPath(p))
+			}
+			if c.Button(inst.ids.PrepareStr("tb-copy-rclone"), c.Atoms().Text(icons.PhTerminal+" Copy rclone mount").Keep()).
+				SendResp().HasPrimaryClicked() {
+				if loc, ok := inst.locationOf(p); ok {
+					inst.copyToClipboard("the rclone mount command", rcloneMountCommand(loc, p.followLatest))
+				}
+			}
+		}
+		if inst.bus == nil {
+			c.Label(noBusNote).Selectable(false).Send()
+		}
 		c.AddSpace(styletokens.GapInline(inst.density) * 3)
+		if inst.connLabel != "" {
+			badge.New(inst.ids.PrepareStr("tb-conn"), inst.connLabel).Tone(inst.connTone).Send()
+		}
 		c.Label(inst.status).Selectable(false).Send()
 	}
+}
+
+// noBusNote says why Open in play and the copies are disabled on a host
+// that wired no bus (L4): they are requests to the window host and the
+// clipboard broker, which need the app runtime.
+const noBusNote = "no bus wired — Open in play and the copies need the app runtime"
+
+// gestureOutcomes is what the open-in-play and copy tasks leave for the
+// frame: whether each is out, and the note its reply gave, taken once.
+type gestureOutcomes struct {
+	mu       sync.Mutex
+	openBusy bool
+	copyBusy bool
+	note     string
+	landed   bool
+}
+
+// busy reports which requests are out.
+func (inst *gestureOutcomes) busy() (open bool, copy bool) {
+	inst.mu.Lock()
+	defer inst.mu.Unlock()
+	return inst.openBusy, inst.copyBusy
+}
+
+// start marks a request out; ok is false while one of its kind already is.
+func (inst *gestureOutcomes) start(open bool) (ok bool) {
+	inst.mu.Lock()
+	defer inst.mu.Unlock()
+	flag := &inst.copyBusy
+	if open {
+		flag = &inst.openBusy
+	}
+	if *flag {
+		return false
+	}
+	*flag = true
+	return true
+}
+
+// land records a reply's note and marks its request done.
+func (inst *gestureOutcomes) land(open bool, note string) {
+	inst.mu.Lock()
+	defer inst.mu.Unlock()
+	if open {
+		inst.openBusy = false
+	} else {
+		inst.copyBusy = false
+	}
+	inst.note, inst.landed = note, true
+}
+
+// take moves a landed note to the frame, once.
+func (inst *gestureOutcomes) take() (note string, landed bool) {
+	inst.mu.Lock()
+	defer inst.mu.Unlock()
+	note, landed = inst.note, inst.landed
+	inst.note, inst.landed = "", false
+	return
+}
+
+// spawn runs f off the render goroutine as work of the instance's lifetime
+// scope (ADR-0322), so the host's drain waits for it; without a scope the
+// work runs bare. started is false once the scope retired.
+func (inst *App) spawn(f func(ctx context.Context)) (started bool) {
+	if inst.scope == nil {
+		go f(context.Background())
+		return true
+	}
+	return inst.scope.Go(f)
 }
 
 // locationOf resolves a pane's place: its mount and the snapshot it shows.
@@ -586,13 +700,52 @@ func (inst *App) sftpPath(p *pane) string {
 	return loc
 }
 
-func (inst *App) copyToClipboard(text string) {
+// copyToClipboard hands text to the clipboard broker as a labelled payload
+// (ADR-0317 §SD1) on a task of the instance's scope, and reports the
+// broker's record on the status line once it answers (W8). what names the
+// text; both texts tally copies are composed by the app from the pane's
+// place, so they carry the system's label.
+func (inst *App) copyToClipboard(what string, text string) {
 	if inst.bus == nil {
+		inst.status = noBusNote
 		return
 	}
-	bus := inst.bus
-	go func() { _, _ = bus.Request(clipboardbroker.SubjectWrite, []byte(text)) }()
-	inst.status = "copied"
+	if !inst.gestures.start(false) {
+		return
+	}
+	bus, tasks := inst.bus, inst.tasks
+	payload := clipboardbroker.Payload{Text: text, Label: agentrun.Label{Level: agentrun.LevelSystem}, Source: string(ManifestId) + ":" + what}
+	started := inst.spawn(func(context.Context) {
+		var rec clipboardbroker.CopyRecord
+		err := task.RunToCompletion(tasks, task.SpawnOpts{Kind: "tally-copy", Title: "tally: copy " + what}, func() (err error) {
+			rec, err = clipboardbroker.Write(bus, payload)
+			return
+		})
+		inst.gestures.land(false, copyNote(what, rec, err))
+	})
+	if !started {
+		inst.gestures.land(false, "")
+	}
+}
+
+// copyNote is the status line's sentence for a finished copy: what left and
+// how the broker's record says it left — by reference, with the handle to
+// paste inside boxer, or as plaintext with its size — or why it was refused.
+func copyNote(what string, rec clipboardbroker.CopyRecord, err error) (note string) {
+	var refused *clipboardbroker.RefusedError
+	switch {
+	case errors.As(err, &refused):
+		return "copy of " + what + " refused: " + refused.Record.Reason
+	case err != nil:
+		return "copy of " + what + " failed: " + err.Error()
+	case rec.Handle != "":
+		return "copied " + what + " by reference (" + rec.Handle + "): paste it inside boxer"
+	}
+	note = "copied " + what + " — " + strconv.Itoa(rec.Bytes) + " bytes as " + rec.Verdict()
+	if rec.Recorded {
+		note += ", exit recorded"
+	}
+	return
 }
 
 // openInPlay hands the pane's directory to play as a query (ADR-0135): the
@@ -604,8 +757,16 @@ func (inst *App) copyToClipboard(text string) {
 // would read the wrong tables there. The expanded statement is longer and
 // reads the layout's tables by name, which is what makes it stand on its
 // own.
+//
+// The request runs on a task of the instance's scope and blocks on the
+// host's reply; the status line says what opened, or the refusal, only
+// then (D4, W8).
 func (inst *App) openInPlay(sc *storeConn, p *pane) {
-	if inst.bus == nil || sc == nil {
+	if inst.bus == nil {
+		inst.status = noBusNote
+		return
+	}
+	if sc == nil {
 		return
 	}
 	loc, ok := inst.locationOf(p)
@@ -628,9 +789,30 @@ func (inst *App) openInPlay(sc *storeConn, p *pane) {
 		inst.status = "open in play: " + err.Error()
 		return
 	}
-	bus := inst.bus
-	go func() { _, _ = windowhost.RequestOpen(bus, playlaunch.AppId, playlaunch.Kind, cfgBytes) }()
-	inst.status = "opened in play"
+	if !inst.gestures.start(true) {
+		return
+	}
+	// What the note names: the directory, its mount and the snapshot
+	// instant the query pins.
+	where := hexID(loc.mount) + " at " + loc.snap.UTC().Format(time.RFC3339)
+	if dir := p.st.Dir(); dir != "." {
+		where = dir + " of " + where
+	}
+	bus, tasks := inst.bus, inst.tasks
+	started := inst.spawn(func(context.Context) {
+		err := task.RunToCompletion(tasks, task.SpawnOpts{Kind: "tally-open-play", Title: "tally: open " + where + " in play"}, func() (err error) {
+			_, err = windowhost.RequestOpen(bus, playlaunch.AppId, playlaunch.Kind, cfgBytes)
+			return
+		})
+		note := "opened in play — " + where
+		if err != nil {
+			note = "open in play refused: " + err.Error()
+		}
+		inst.gestures.land(true, note)
+	})
+	if !started {
+		inst.gestures.land(true, "")
+	}
 }
 
 // renderMounts is the Mounts pane: every mount, and the target pane's mount

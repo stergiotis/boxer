@@ -439,6 +439,9 @@ func manifestFor(def *AppletDef, bookFsys fs.FS) (m app.Manifest) {
 		// default is the right window for an applet opened by a person.
 		SurfaceHints: appletSurfaceHints(),
 		Help:         bookFsys,
+		// The operable subset of play's catalog, served by the window's
+		// attenuated play (sqlapplet_app_ops.go).
+		Operations: appletOps.Catalog(),
 		Caps: []app.SubjectFilter{
 			{
 				Pattern:   clipboardbroker.SubjectWrite,
