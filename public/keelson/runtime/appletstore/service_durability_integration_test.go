@@ -1,6 +1,6 @@
 //go:build integration
 
-package sqlapplet
+package appletstore_test
 
 import (
 	"context"
@@ -12,7 +12,6 @@ import (
 
 	"github.com/stergiotis/boxer/public/keelson/data/chclient"
 	"github.com/stergiotis/boxer/public/keelson/data/storeexec"
-	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/appletstore"
 	"github.com/stergiotis/boxer/public/keelson/runtime/inprocbus"
 	"github.com/stergiotis/boxer/public/keelson/runtime/persist"
@@ -26,23 +25,23 @@ import (
 // developer's running desktop has stored. The persist store's runtime table
 // override (ADR-0100, 2026-08-15) is what lets the generated store — whose
 // baked table is `boxer.persiststate` — be aimed here.
-const durabilityDb = "sqlapplet_store_durability_test"
+const durabilityDb = "appletstore_durability_test"
 
 // bootStore stands up one complete "process worth" of wiring over the
 // production persist backend, aimed at table: a fresh executor over the
 // HTTP client, a fresh persist service on the store backend, a fresh
-// registry, and the store service booting from whatever it finds in
-// persist. Nothing is shared with a previous boot except the ClickHouse
-// rows themselves — which is the whole point, since the in-process reload
-// test (TestStoreReloadMintsAtBoot) keeps the persist service alive across
-// the "reboot" and therefore passed throughout the period when nothing was
-// durable at all.
+// registry and minter, and the store service booting from whatever it
+// finds in persist. Nothing is shared with a previous boot except the
+// ClickHouse rows themselves — which is the whole point, since the
+// in-process reload test (TestReloadMintsAtBoot) keeps the persist service
+// alive across the "reboot" and therefore passed throughout the period when
+// nothing was durable at all.
 //
 // This is the wiring the carousel performs (storeexec over chclient, then
 // OpenStoreBackend), so it also proves that a generated store provisions
 // itself through the HTTP transport — EnsureTable issues its statements one
 // per Exec, because the HTTP interface rejects a multi-statement body.
-func bootStore(t *testing.T, cli *chclient.Client, table string) (reg *app.Registry, svc *StoreService, caller *inprocbus.Client) {
+func bootStore(t *testing.T, cli *chclient.Client, table string) (h storeHarness, caller *inprocbus.Client) {
 	t.Helper()
 	exec, err := storeexec.New(cli, nil)
 	require.NoError(t, err)
@@ -55,14 +54,8 @@ func bootStore(t *testing.T, cli *chclient.Client, table string) (reg *app.Regis
 	require.NoError(t, err)
 	t.Cleanup(ps.Close)
 
-	reg = app.NewRegistry()
-	svc, err = startStore(reg, bus, zerolog.New(zerolog.NewTestWriter(t)))
-	require.NoError(t, err)
-	t.Cleanup(svc.Stop)
-
-	caller = bus.NewClient("test.author", []app.SubjectFilter{
-		{Pattern: appletstore.SubjectSave, Direction: app.CapDirectionBoth, Reason: "test author"},
-	})
+	h = bootHarness(t, bus)
+	caller = newCaller(bus)
 	return
 }
 
@@ -91,49 +84,34 @@ func TestStoreSurvivesProcessRestart_LiveCH(t *testing.T) {
 
 	// Boot 1 — author saves an applet. The first boot also provisions the
 	// scratch database and table (OpenStoreBackendAt runs EnsureTable).
+	doc := testDoc("Durability probe", sql)
 	{
-		reg, _, caller := bootStore(t, cli, table)
-		_, ok := reg.LookupManifest(app.AppIdT(appletIdPrefix + slug))
+		h, caller := bootStore(t, cli, table)
+		_, ok := h.reg.LookupManifest(fixtureIdPrefix + slug)
 		require.False(t, ok, "the scratch database must start empty")
 
-		rep := saveDoc(t, caller, slug, testDoc("Durability probe", sql))
+		rep := saveDoc(t, caller, slug, doc)
 		require.True(t, rep.OK, "refused: %s", rep.Error)
 	}
 
 	// Boot 2 — everything above is gone: new executor, new bus, new
 	// persist service, new registry. Only the ClickHouse rows survive.
 	{
-		reg, svc, _ := bootStore(t, cli, table)
-		m, ok := reg.LookupManifest(app.AppIdT(appletIdPrefix + slug))
+		h, _ := bootStore(t, cli, table)
+		_, ok := h.reg.LookupManifest(fixtureIdPrefix + slug)
 		require.True(t, ok, "a saved applet must mint at the next boot")
-		assert.Equal(t, "Durability probe", m.Display)
-
-		a, err := reg.Open(m.Id)
-		require.NoError(t, err)
-		assert.Equal(t, sql, a.(*appletApp).def.SQL,
+		assert.Equal(t, doc, openDoc(t, h.reg, slug),
 			"the stored document must round-trip through ClickHouse byte-for-byte")
-
-		// The index key is durable too — without it loadStored has nothing
-		// to enumerate and the documents are unreachable even when present.
-		idx, found, err := svc.storage.Get(storeIndexKey)
-		require.NoError(t, err)
-		require.True(t, found)
-		assert.Equal(t, slug, string(idx))
+		// The index key is durable too: boot enumerates stored documents
+		// through it alone, so the mint above could not have happened
+		// without it.
 	}
 
 	// Negative control — the same boot on a memory backend finds nothing.
 	// This is the behaviour that shipped before the facts backend existed.
 	{
-		bus := inprocbus.NewInst(zerolog.Nop())
-		ps, err := persist.NewService(bus, zerolog.Nop(), persist.NewMemoryBackend())
-		require.NoError(t, err)
-		t.Cleanup(ps.Close)
-		reg := app.NewRegistry()
-		svc, err := startStore(reg, bus, zerolog.Nop())
-		require.NoError(t, err)
-		t.Cleanup(svc.Stop)
-
-		_, ok := reg.LookupManifest(app.AppIdT(appletIdPrefix + slug))
+		h := bootHarness(t, newMemoryBus(t))
+		_, ok := h.reg.LookupManifest(fixtureIdPrefix + slug)
 		assert.False(t, ok, "the memory backend must not see another process's applets")
 	}
 }
@@ -160,7 +138,7 @@ func TestStoreWritesStateRows_LiveCH(t *testing.T) {
 		_ = cli.Exec(ctx, "DROP DATABASE IF EXISTS "+db)
 	})
 
-	_, _, caller := bootStore(t, cli, table)
+	_, caller := bootStore(t, cli, table)
 	rep := saveDoc(t, caller, "row-probe", testDoc("Row probe", "SELECT 1"))
 	require.True(t, rep.OK, "refused: %s", rep.Error)
 
@@ -174,7 +152,7 @@ func TestStoreWritesStateRows_LiveCH(t *testing.T) {
 	rows := 0
 	for ent, serr := range reader.ScanState(ctx, recordstore.ScanOpts{}) {
 		require.NoError(t, serr)
-		if ent.State.Has && ent.Owner.Has && ent.Owner.Val.AppId == "runtime.appletstore" {
+		if ent.State.Has && ent.Owner.Has && ent.Owner.Val.AppId == string(appletstore.AppId) {
 			rows++
 		}
 	}

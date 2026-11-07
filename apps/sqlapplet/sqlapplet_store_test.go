@@ -15,9 +15,12 @@ import (
 )
 
 // newStoreHarness stands up a bus, a memory-backed persist service, a
-// caller client holding the play-shaped save cap, and the store service
-// against a fresh registry.
-func newStoreHarness(t *testing.T) (reg *app.Registry, bus *inprocbus.Inst, svc *StoreService, caller *inprocbus.Client) {
+// caller client holding the creator-shaped save cap, and the runtime store
+// service minting through a [StoreMinter] into a fresh registry. The store's
+// own behaviour (persistence, index, gate replies) is tested in
+// public/keelson/runtime/appletstore; these tests cover what the minter
+// adds: the parser behind the gate, the manifest and the opened window.
+func newStoreHarness(t *testing.T) (reg *app.Registry, bus *inprocbus.Inst, svc *appletstore.Service, caller *inprocbus.Client) {
 	t.Helper()
 	logger := zerolog.New(zerolog.NewTestWriter(t))
 	bus = inprocbus.NewInst(logger)
@@ -25,7 +28,7 @@ func newStoreHarness(t *testing.T) (reg *app.Registry, bus *inprocbus.Inst, svc 
 	require.NoError(t, err)
 	t.Cleanup(func() { ps.Close() })
 	reg = app.NewRegistry()
-	svc, err = startStore(reg, bus, logger)
+	svc, err = appletstore.Start(reg, bus, NewStoreMinter(), logger)
 	require.NoError(t, err)
 	t.Cleanup(svc.Stop)
 	caller = bus.NewClient("test.author", []app.SubjectFilter{
@@ -51,8 +54,8 @@ func testDoc(title string, sql string) []byte {
 		"---\n\n# " + title + "\n\nProse.\n\n```sql\n" + sql + "\n```\n")
 }
 
-func TestStoreSaveMintsAndPersists(t *testing.T) {
-	reg, _, svc, caller := newStoreHarness(t)
+func TestStoreSaveMints(t *testing.T) {
+	reg, _, _, caller := newStoreHarness(t)
 
 	rep := saveDoc(t, caller, "my-tables", testDoc("My tables", "SELECT * FROM keelson('apps')"))
 	require.True(t, rep.OK, "refused: %s", rep.Error)
@@ -62,20 +65,12 @@ func TestStoreSaveMintsAndPersists(t *testing.T) {
 	require.True(t, ok, "saved applet must be minted live")
 	assert.Equal(t, "My tables", m.Display)
 	assert.Equal(t, app.KindApplet, m.Kind, "provenance is a column, not a section (ADR-0158 §SD5)")
+	assert.Equal(t, storeDefaultTopics, m.Topics, "a stored applet inherits no book (ADR-0158 §SD7)")
 
 	a, err := reg.Open(m.Id)
 	require.NoError(t, err)
 	assert.Equal(t, "SELECT * FROM keelson('apps')", a.(*appletApp).def.SQL)
-
-	// Persisted: document + index reachable through the service's storage.
-	doc, found, err := svc.storage.Get(storeKeyPrefix + "my-tables")
-	require.NoError(t, err)
-	require.True(t, found)
-	assert.Contains(t, string(doc), "SELECT * FROM keelson('apps')")
-	idx, found, err := svc.storage.Get(storeIndexKey)
-	require.NoError(t, err)
-	require.True(t, found)
-	assert.Equal(t, "my-tables", string(idx))
+	assert.Equal(t, storeBookID, a.(*appletApp).def.BookID)
 }
 
 func TestStoreReloadMintsAtBoot(t *testing.T) {
@@ -83,15 +78,18 @@ func TestStoreReloadMintsAtBoot(t *testing.T) {
 	rep := saveDoc(t, caller, "reloaded", testDoc("Reloaded", "SELECT 1"))
 	require.True(t, rep.OK, "refused: %s", rep.Error)
 
-	// A fresh boot: stop the first service, start another registry over the
-	// same bus + persist backend (O4-D3).
+	// A fresh boot: stop the first service, start another registry and
+	// minter over the same bus + persist backend (O4-D3).
 	svc.Stop()
 	reg2 := app.NewRegistry()
-	svc2, err := startStore(reg2, bus, zerolog.Nop())
+	svc2, err := appletstore.Start(reg2, bus, NewStoreMinter(), zerolog.Nop())
 	require.NoError(t, err)
 	t.Cleanup(svc2.Stop)
-	_, ok := reg2.LookupManifest(app.AppIdT(appletIdPrefix + "reloaded"))
-	assert.True(t, ok, "stored applet must mint at boot from the index")
+	m, ok := reg2.LookupManifest(app.AppIdT(appletIdPrefix + "reloaded"))
+	require.True(t, ok, "stored applet must mint at boot from the index")
+	a, err := reg2.Open(m.Id)
+	require.NoError(t, err)
+	assert.Equal(t, "SELECT 1", a.(*appletApp).def.SQL)
 }
 
 func TestStoreOverwriteSwapsLiveDefinition(t *testing.T) {
@@ -108,7 +106,8 @@ func TestStoreOverwriteSwapsLiveDefinition(t *testing.T) {
 func TestStoreRefusals(t *testing.T) {
 	reg, _, _, caller := newStoreHarness(t)
 
-	// The committed corpus wins slug collisions (O4-D3).
+	// The committed corpus wins slug collisions (O4-D3): the store's rule,
+	// read at the id the minter reports, which must be manifestFor's.
 	committed := &AppletDef{
 		Slug: "taken", Title: "Taken", Summary: "Fixture applet for store tests",
 		SQL:   "SELECT 1",
@@ -126,16 +125,25 @@ func TestStoreRefusals(t *testing.T) {
 	rep = saveDoc(t, caller, "bad-sql", testDoc("Bad", "INSERT INTO t VALUES (1)"))
 	require.False(t, rep.OK)
 	assert.Contains(t, rep.Error, "does not parse")
+}
 
-	// A document without a fence is prose, not an applet.
-	rep = saveDoc(t, caller, "prose", []byte("---\ntitle: \"P\"\n---\n\njust words\n"))
-	require.False(t, rep.OK)
-	assert.Contains(t, rep.Error, "no sql fence")
+// TestStoreMinterParse pins what the minter hands the store's gate: the id
+// manifestFor registers under (the collision rule reads it), the class, and
+// "not an applet" for a document without a fence.
+func TestStoreMinterParse(t *testing.T) {
+	mt := NewStoreMinter()
+	doc := testDoc("Parsed", "SELECT 1")
+	def, applet, err := mt.Parse("parsed", doc)
+	require.NoError(t, err)
+	require.True(t, applet)
+	assert.Equal(t, "parsed", def.Slug)
+	assert.Equal(t, app.AppIdT(appletIdPrefix+"parsed"), def.AppId)
+	assert.Equal(t, analysis.QuerySecurityRead, def.Class)
+	assert.Equal(t, doc, def.Doc)
 
-	// Slug discipline matches the committed books.
-	rep = saveDoc(t, caller, "Bad_Slug", testDoc("X", "SELECT 1"))
-	require.False(t, rep.OK)
-	assert.Contains(t, rep.Error, "slug")
+	_, applet, err = mt.Parse("prose", []byte("---\ntitle: \"P\"\n---\n\njust words\n"))
+	require.NoError(t, err)
+	assert.False(t, applet)
 }
 
 // TestComposeRoundTrip pins the two halves of O4 against each other: the

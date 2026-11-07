@@ -1,11 +1,14 @@
-// Package appletstore is the wire contract of the runtime applet store
-// (ADR-0132 Update "O4"): the bus subject and request/reply shapes through
-// which an authoring app (apps/sqlappletcreator) submits a SQL-applet
-// document for validation, persistence, and minting, plus [ComposeAppletDoc]
-// — the canonical document shape both the authoring side produces and the
-// store's gate parses back. Only the contract lives here — the service
-// implementation is the sqlapplet host's (apps/sqlapplet), which this
-// package must not import (authoring apps import this).
+// Package appletstore is the runtime applet store (ADR-0132 Update "O4"):
+// the bus subject and request/reply shapes through which an authoring app
+// (apps/sqlappletcreator) submits a SQL-applet document, [ComposeAppletDoc]
+// — the canonical document shape the authoring side produces and the gate
+// parses back — and the [Service] that validates, persists and mints it.
+//
+// The gate is the runtime's: the slug rule, the collision rule, persistence,
+// the stored-slug index, boot-time loading and the read-class refusal for an
+// unreviewed document ([AdmitUnreviewed]). What an applet is, its parser and
+// its manifest, is the applet host's, which fills the [MinterI] slot at
+// [Start]; this package does not import it.
 package appletstore
 
 import (

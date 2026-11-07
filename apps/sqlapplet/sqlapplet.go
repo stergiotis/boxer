@@ -24,6 +24,7 @@ import (
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/analysis"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
+	"github.com/stergiotis/boxer/public/keelson/runtime/appletstore"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/markdown"
 )
@@ -200,9 +201,9 @@ func (def *AppletDef) classify() (err error) {
 }
 
 // slugPattern is the accepted applet-slug shape. The slug becomes the minted
-// Manifest.Id basename and therefore its NATS-safe SubjectAlias — keep it to
-// lowercase alphanumerics and dashes.
-var slugPattern = regexp.MustCompile(`^[a-z0-9][a-z0-9-]*$`)
+// Manifest.Id basename and therefore its NATS-safe SubjectAlias; the rule is
+// the applet store's, so a committed and a stored slug obey the same one.
+var slugPattern = appletstore.SlugPattern
 
 // datasetAliasPattern is the accepted ad-hoc dataset alias shape: a bare
 // ClickHouse identifier, since it is interpolated as keelson('<alias>')

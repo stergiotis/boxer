@@ -17,6 +17,7 @@ import (
 	"github.com/stergiotis/boxer/apps/play"
 	"github.com/stergiotis/boxer/apps/sqlapplet"
 	runtimeapp "github.com/stergiotis/boxer/public/keelson/runtime/app"
+	"github.com/stergiotis/boxer/public/keelson/runtime/appletstore"
 	"github.com/stergiotis/boxer/public/keelson/runtime/audit"
 	"github.com/stergiotis/boxer/public/keelson/runtime/hostboot"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect/providersgodep"
@@ -166,9 +167,9 @@ func Run(ctx gocontext.Context, cfg *application.Config, opts RunOptions) (err e
 // applet store on the bus, the play host's passes, components and SQL
 // vocabulary, and the Go-dependency introspection tables.
 func registerHostExtras(rt *hostboot.Runtime) (err error) {
-	appletStore, storeErr := sqlapplet.StartStore(rt.Bus, log.Logger)
+	appletStore, storeErr := appletstore.Start(runtimeapp.DefaultRegistry, rt.Bus, sqlapplet.NewStoreMinter(), log.Logger)
 	if storeErr != nil {
-		log.Warn().Err(storeErr).Msg("sqlapplet: applet store unavailable")
+		log.Warn().Err(storeErr).Msg("appletstore: applet store unavailable")
 	} else {
 		rt.OnClose(appletStore.Stop)
 	}

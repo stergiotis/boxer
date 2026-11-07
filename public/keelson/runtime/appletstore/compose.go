@@ -11,8 +11,8 @@ import (
 // documentation-standard frontmatter, a provenance line, and the buffer as
 // the single sql fence (O4-D5). It is the authoring half of the store
 // contract — the shape [SaveRequest.Doc] must carry, and the exact shape the
-// store's gate ([sqlapplet] ParseDocSource) parses back — so it lives beside
-// the wire types rather than in any one authoring app.
+// store's gate ([MinterI.Parse]) parses back — so it lives beside the wire
+// types rather than in any one authoring app.
 //
 // endpoint is the frontmatter `endpoint` value ("" omits the key — the
 // env-configured default; "introspection" pins the in-process endpoint the

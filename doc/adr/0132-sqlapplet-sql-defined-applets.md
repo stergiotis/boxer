@@ -780,6 +780,27 @@ reviewed — the O4 store, an ad-hoc bundle, a document a tab fetches from its
 origin (ADR-0299) — still classify before accepting, because there the
 classifier's verdict is the gate.
 
+## Updates
+
+### 2026-11-07 — the store service is the runtime's; sqlapplet supplies the minter
+
+The O4 store service moved from `apps/sqlapplet` into
+`public/keelson/runtime/appletstore`, beside its wire contract. The runtime
+package now holds the gate: the save endpoint, the slug and collision rules,
+persistence and the stored-slug index, loading stored documents at boot, and
+the read-class refusal for a document no review stands behind
+(`AdmitUnreviewed`, which the ADR-0299 tab path calls). What an applet is
+stays with sqlapplet, which fills a typed slot, `appletstore.MinterI`, given
+at `appletstore.Start`: the parser the corpus gate runs, the manifest, and the
+live definition an overwrite swaps.
+
+O4-D1 to D5 are unchanged: the subject, the wire shapes and replies, the
+identity `runtime.appletstore` and the persisted keys are as before, so stored
+applets keep loading. The reason is the decision of 2026-11-07 that
+governance is the runtime's, not an app's: a moderation gate kept in an app's
+directory is the last-mile check the
+[keelson-app skill](../skills/keelson-app/SKILL.md) (X4) treats as a defect.
+
 ## References
 
 Internal:

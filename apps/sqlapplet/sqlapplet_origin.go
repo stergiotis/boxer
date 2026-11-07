@@ -14,8 +14,8 @@ import (
 	"strings"
 
 	"github.com/stergiotis/boxer/public/config/env"
-	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/analysis"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
+	"github.com/stergiotis/boxer/public/keelson/runtime/appletstore"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
@@ -68,14 +68,11 @@ func loadOriginApplet(ctx context.Context, reg *app.Registry, client *http.Clien
 		err = eb.Build().Str("url", target.String()).Errorf("sqlapplet: the document carries no sql fence — not an applet")
 		return
 	}
-	// §SD3: no review stands behind this document, so nothing reaching past
-	// the endpoint or writing to it is admitted, whether or not it would run.
-	if def.Class != analysis.QuerySecurityRead {
-		err = eb.Build().Str("url", target.String()).Str("class", def.Class.String()).Errorf("sqlapplet: a document loaded from the origin must be read-class")
-		return
-	}
-	if _, taken := reg.LookupManifest(app.AppIdT(appletIdPrefix + def.Slug)); taken {
-		err = eb.Build().Str("slug", def.Slug).Errorf("sqlapplet: the slug is a committed applet's; rename the document")
+	// §SD3: no review stands behind this document, so the runtime's gate for
+	// an unreviewed document decides: read-class only, and no slug a
+	// committed applet holds.
+	if err = appletstore.AdmitUnreviewed(reg, storeDefinition(def, src)); err != nil {
+		err = eb.Build().Str("url", target.String()).Errorf("sqlapplet: the origin document is refused: %w", err)
 		return
 	}
 	// ADR-0158 §SD7: a document outside any book inherits the store's default
