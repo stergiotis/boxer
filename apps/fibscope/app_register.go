@@ -1,11 +1,20 @@
 package fibscope
 
 import (
+	"embed"
+
 	"github.com/rs/zerolog/log"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
+	"github.com/stergiotis/boxer/public/keelson/runtime/help"
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
 )
+
+// helpFS embeds the inline help (apps/fibscope/help/*.md), indexed by the
+// help library and shown by the HelpHost on F1 (ADR-0047).
+//
+//go:embed help/*.md
+var helpFS embed.FS
 
 // manifest is the per-process AppI descriptor. Static; every newApp() returns
 // the same Manifest value.
@@ -22,6 +31,7 @@ var manifest = app.Manifest{
 	Topics:   []app.TopicT{app.TopicData},
 	Keywords: []string{"fibonacci", "sequence", "numbers"},
 	Surface:  app.SurfaceWindowed,
+	Help:     help.MustSub(helpFS, "help"),
 	SurfaceHints: app.SurfaceHints{
 		// Sized to fit the 64-bit strip and the split/SQL readout on the
 		// Explore tab, and the trade-off plot above the stats table.

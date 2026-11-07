@@ -1,14 +1,23 @@
 package writingstylescope
 
 import (
+	"embed"
+
 	"github.com/rs/zerolog/log"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/adhocdata"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
+	"github.com/stergiotis/boxer/public/keelson/runtime/help"
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
 	"github.com/stergiotis/boxer/public/keelson/runtime/task"
 	"github.com/stergiotis/boxer/public/keelson/runtime/windowhost"
 )
+
+// helpFS embeds the inline help (apps/writingstylescope/help/*.md), indexed by the
+// help library and shown by the HelpHost on F1 (ADR-0047).
+//
+//go:embed help/*.md
+var helpFS embed.FS
 
 // manifest is the per-process AppI descriptor. Static; every newApp() returns
 // the same Manifest value.
@@ -30,6 +39,7 @@ var manifest = app.Manifest{
 	Keywords: []string{"stylometry", "plagiarism", "compression", "similarity",
 		"ncd", "markdown", "documents", "authorship"},
 	Surface: app.SurfaceWindowed,
+	Help:    help.MustSub(helpFS, "help"),
 	SurfaceHints: app.SurfaceHints{
 		// Sized for the two side-by-side paste panes on the Documents tab and
 		// the full-width heatmap plus its colour bar and pair table on the

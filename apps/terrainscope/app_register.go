@@ -1,13 +1,22 @@
 package terrainscope
 
 import (
+	"embed"
+
 	"github.com/rs/zerolog/log"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
+	"github.com/stergiotis/boxer/public/keelson/runtime/help"
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
 	"github.com/stergiotis/boxer/public/keelson/runtime/task"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/basemap"
 )
+
+// helpFS embeds the inline help (apps/terrainscope/help/*.md), indexed by the
+// help library and shown by the HelpHost on F1 (ADR-0047).
+//
+//go:embed help/*.md
+var helpFS embed.FS
 
 // manifest is the per-process AppI descriptor. Static; every newApp()
 // returns the same Manifest value.
@@ -28,6 +37,7 @@ var manifest = app.Manifest{
 	Topics:   []app.TopicT{app.TopicGeo},
 	Keywords: []string{"terrain", "elevation", "line of sight", "viewshed", "swisstopo"},
 	Surface:  app.SurfaceWindowed,
+	Help:     help.MustSub(helpFS, "help"),
 	Caps:     append(basemap.ClientCaps("terrainscope: basemap tiles under the picked points"), task.ProducerCaps()...),
 	SurfaceHints: app.SurfaceHints{
 		// Sized to fit the slippy map plus the sweep plot (and its legend)

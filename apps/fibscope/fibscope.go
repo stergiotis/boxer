@@ -104,7 +104,7 @@ const (
 	tipMaxExp    = "How many distinct ids you expect in the busiest category. The advisor picks the widest tag (the most categories) that still leaves room for this many bodies."
 	tipSQL       = "The constant-tag filter folds to a sargable range at expansion time (identsql.ExpandPass) — the same split the Go code does, golden-locked against ClickHouse."
 	tipStats     = "Every code width: how many tag values it holds, and the largest body under it. Wider tag ⇒ more categories, fewer ids each."
-	tipPlot      = "As the tag widens, body headroom (green) falls one bit per bit while tag capacity (blue) climbs. The amber line marks the advisor's pick."
+	tipPlot      = "As the tag widens, body headroom (the body-bits series) falls one bit per bit while tag capacity (the tag-code series) climbs. The thinner line marks the advisor's pick."
 	tipExhaust   = "Each rate column is the time to fill one tag's body space at that steady ingress rate — max ids ÷ rate, humanized. Narrow tags are effectively inexhaustible (giga-years); a wide tag at MHz rates fills in seconds."
 )
 
