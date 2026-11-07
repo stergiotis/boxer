@@ -205,7 +205,9 @@ func (in Input) render() (res Result) {
 	wasPinned := st.Pinned
 	for range c.Horizontal().KeepIter() {
 		in.renderLevel1Atoms()
-		res.Toggled = inspector.AnchorToggle(ids.PrepareStr("anchor-toggle"), &st.Pinned)
+		// The toggle is named after the window it opens, so a driver finds
+		// this pattern's toggle by name when a pane shows several.
+		res.Toggled = inspector.AnchorToggleNamed(ids.PrepareStr("anchor-toggle"), &st.Pinned, in.Title)
 		tether.CaptureToggle()
 	}
 

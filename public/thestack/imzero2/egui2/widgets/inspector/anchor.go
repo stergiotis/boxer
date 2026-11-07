@@ -42,8 +42,28 @@ import (
 // ADR-0046 §Updates 2026-05-25 records the design pivot that retired the
 // unicode `AnchorChevron` in favour of this widget.
 func AnchorToggle(ids c.WidgetIdCreatorI, pinned *bool) (clicked bool) {
+	return AnchorToggleNamed(ids, pinned, "")
+}
+
+// anchorToggleDefaultName is what the accessibility tree calls a toggle whose
+// caller gave it no name: the thing the toggle opens, so the name stays the
+// same in both states while the tooltip says which way the click goes.
+const anchorToggleDefaultName = "inspector window"
+
+// AnchorToggleNamed is [AnchorToggle] with the name the accessibility tree
+// gives the toggle. The glyph is a Frame, which the tree leaves out, so the
+// toggle is wrapped in an AccessibleRegion: one node, role unknown, the name
+// given, the Frame's bounds. A headless driver anchors it by that name and
+// presses where it is drawn ({"do":"click","name":…,"role":"unknown",
+// "pointer":true}); nothing else changes. An inspector with a title passes
+// it, so two toggles on one screen stay apart; empty takes
+// anchorToggleDefaultName.
+func AnchorToggleNamed(ids c.WidgetIdCreatorI, pinned *bool, name string) (clicked bool) {
 	if pinned == nil {
 		return false
+	}
+	if name == "" {
+		name = anchorToggleDefaultName
 	}
 
 	accent := color.Hex(styletokens.AccentDefault.AsHex())
@@ -74,9 +94,11 @@ func AnchorToggle(ids c.WidgetIdCreatorI, pinned *bool) (clicked bool) {
 	} else {
 		tooltip = "open inspector window"
 	}
-	for range c.HoverText(tooltip).KeepIter() {
-		for range f.KeepIter() {
-			c.LabelAtoms(atoms).Send()
+	for range c.AccessibleRegion(name).KeepIter() {
+		for range c.HoverText(tooltip).KeepIter() {
+			for range f.KeepIter() {
+				c.LabelAtoms(atoms).Send()
+			}
 		}
 	}
 

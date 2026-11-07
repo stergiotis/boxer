@@ -39,7 +39,7 @@ SELECT n, w, sz FROM l ORDER BY n LIMIT 20
 {"do":"wait","name":"Run","comment":"the app has mounted"}
 {"do":"sleep","settleMs":4000}
 {"do":"capture","text":"12_passes_cost","settleMs":600}
-{"do":"click","x":1400,"y":450,"comment":"park the pointer inside the Passes body"}
+{"do":"hover","value":"Rewrite cost","role":"label","comment":"park the pointer inside the Passes body, on the cost section's heading; a wheel step goes to whatever is under it"}
 {"do":"scroll","x":0,"y":-320,"settleMs":500}
 {"do":"capture","text":"12_passes_cost_waterfall","settleMs":600}
 ```

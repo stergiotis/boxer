@@ -29,7 +29,7 @@ SELECT {a:String} AS a, {b:String} AS b, {cc:String} AS c, {d:String} AS d,
 {"do":"sleep","settleMs":1500}
 {"do":"wait","value":"a : String","role":"label","comment":"the first claim is drawn"}
 {"do":"capture","text":"19_params_overflow"}
-{"do":"click","x":150,"y":250,"comment":"park the pointer over the claims — a wheel step goes to whatever is under it"}
+{"do":"hover","value":"a : String","role":"label","comment":"park the pointer over the claims — a wheel step goes to whatever is under it"}
 {"do":"scroll","x":0,"y":-200,"settleMs":600}
 {"do":"capture","text":"19_params_overflow_scrolled","comment":"later claims, the heading and the editor where they were"}
 ```

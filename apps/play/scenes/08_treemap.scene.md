@@ -17,7 +17,7 @@ scene:
 
 # treemap
 
-Treemap — the same population the Icicle scene draws, read as nested areas (ADR-0166): area is the position count, colour is the typical altitude, and the drill navigation replaces the depth axis
+Treemap — the same population the Icicle scene draws, read as nested areas (ADR-0166): area is the position count, colour is the typical altitude, and the drill navigation replaces the depth axis. The scene drills into the largest operator by its cell's name and asserts what the summary line says of it
 
 ```sql
 WITH
@@ -56,6 +56,10 @@ ORDER BY value DESC
 {"do":"click","name":"full"}
 {"do":"capture","text":"08_treemap_all","settleMs":600}
 {"do":"click","name":"drill"}
-{"do":"click","x":200,"y":719}
+{"do":"click","value":"DELTA AIR LINES INC","role":"label","pointer":true,"comment":"the operator with the most positions; its name label sits over the cell Frame that senses the click, so the press lands where it is drawn"}
+{"do":"wait","name":"all","role":"button","comment":"the root is a breadcrumb button only once the view has drilled below it"}
+{"do":"read","valueContains":"child(ren)","role":"label","pattern":"— (?P<positions>\\d+) positions \\([\\d.]+%\\) · (?P<children>\\d+) child","comment":"the summary line now describes the drilled cell"}
+{"do":"expect","of":"children","eq":2,"comment":"two makers under the operator in this sample"}
+{"do":"expect","of":"positions","eq":42}
 {"do":"capture","text":"08_treemap_drill","settleMs":600}
 ```

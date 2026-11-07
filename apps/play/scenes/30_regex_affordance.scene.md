@@ -17,7 +17,7 @@ scene:
 
 # regex affordance
 
-Affordances — the inline regex tester the editor attaches to a recognised multiMatch* call: each pattern compiled in-process and counted against a shared test input
+Affordances — the inline regex tester the editor attaches to a recognised multiMatch* call: each pattern compiled in-process and counted against a shared test input. The scene types the input and asserts the first pattern's count
 
 ```sql
 SELECT ownOp     AS operator,
@@ -33,9 +33,11 @@ LIMIT 20
 ```jsonl trace
 {"do":"wait","name":"Run","comment":"the app has mounted"}
 {"do":"sleep","settleMs":1800}
-{"do":"focus","role":"text_input","nth":1,"comment":"the shared test input — nameless, so by index","settleMs":400}
-{"do":"type","role":"text_input","nth":1,"text":"UNITED AIRLINES INC / DELTA AIR LINES INC TRUSTEE"}
-{"do":"click","x":600,"y":520,"comment":"park the pointer over the affordance block"}
+{"do":"wait","value":"test input","role":"label","comment":"the affordance block is drawn"}
+{"do":"type","id":5703926214490371308,"role":"text_input","text":"UNITED AIRLINES INC / DELTA AIR LINES INC TRUSTEE","comment":"the shared test input: a TextEdit carries no accessible name, so it is anchored by its id, which derives from play's affordanceTestInput widget path and is the same across runs"}
+{"do":"read","valueContains":"match(es)","role":"label","nth":0,"pattern":"→ (?P<matches>\\d+) match","comment":"the first pattern, AIR ?LINES, against the input"}
+{"do":"expect","of":"matches","eq":2}
+{"do":"hover","value":"AFFORDANCES","role":"label","comment":"park the pointer over the affordance block; a wheel step goes to whatever is under it"}
 {"do":"scroll","x":0,"y":-200,"settleMs":500}
 {"do":"capture","text":"30_regex_affordance","settleMs":800}
 ```

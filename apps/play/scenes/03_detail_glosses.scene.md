@@ -38,7 +38,7 @@ LIMIT 20
 {"do":"capture","text":"03_detail_glosses","settleMs":600}
 {"do":"click","name":"per attribute"}
 {"do":"capture","text":"03_detail_glosses_per_attribute","settleMs":600}
-{"do":"click","x":1450,"y":300,"comment":"park the pointer over the Glosses tab"}
+{"do":"hover","valueContains":"Every gloss this build knows","role":"label","comment":"park the pointer over the Glosses tab — the catalog's lead line; a wheel step goes to whatever is under it"}
 {"do":"scroll","x":0,"y":-4000,"settleMs":500}
 {"do":"capture","text":"03_detail_glosses_columns","settleMs":600}
 ```
