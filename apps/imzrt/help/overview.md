@@ -11,10 +11,12 @@ title: Watching the Go runtime
 
 imzrt is a dashboard over the Go runtime of the process it runs in: the heap,
 the garbage collector and the scheduler, read through `runtime/metrics` and
-drawn as sliding-window plots. It changes no runtime tunable (ADR-0061). It
-has no operations catalog: nothing here is driven by an agent, and what it
-shows is this process's own telemetry, which the introspection tables carry
-for other consumers. The one act it performs on purpose is on the
+drawn as sliding-window plots. It changes no runtime tunable (ADR-0061).
+What it shows is this process's own telemetry, which the introspection
+tables also carry for other consumers; its operations catalog, on the
+**Operations** page, lets an agent read the latest sample and the view and
+set the interval, the freeze, the smoothing and the tab through the same
+handlers the buttons use. The one act it performs on purpose is on the
 **Profiles** tab, which has its own page.
 
 ## One sampler for the process
@@ -74,6 +76,8 @@ Memory series are kept in MiB; the time axis is shared by every series.
 
 ## What is not here
 
-No per-goroutine view, no runtime tunable, no catalog, no persisted state.
-Captured profiles are the only thing the window writes, and they go to the
-ad-hoc dataset store rather than to disk; the **Profiles** page says how.
+No per-goroutine view, no runtime tunable, no persisted state, and no
+history by operation: the series behind the plots stay in the window, and
+`get_sample` reads only the latest sample's scalars. Captured profiles are
+the only thing the window writes, and they go to the ad-hoc dataset store
+rather than to disk; the **Profiles** page says how.

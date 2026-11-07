@@ -34,9 +34,11 @@ var manifest = app.Manifest{
 	Topics:   []app.TopicT{app.TopicObservability},
 	Keywords: []string{"render", "telemetry", "fps", "frames", "latency"},
 	Surface:  app.SurfaceWindowed,
-	// No operations catalog: the window drives nothing an agent would, and
-	// what it shows is this process's telemetry (ADR-0061). The help says so.
-	Help: help.MustSub(helpFS, "help"),
+	// The catalog (imzrt_ops.go): the latest sample and the view for an
+	// agent to read, the interval, freeze, smoothing and tab to set, and the
+	// two profile commands, which are consequential and asynchronous.
+	Operations: ops.Catalog(),
+	Help:       help.MustSub(helpFS, "help"),
 	Caps: []app.SubjectFilter{
 		{
 			Pattern:   adhocdata.SubjectPublish,

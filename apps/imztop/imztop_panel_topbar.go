@@ -65,6 +65,13 @@ func (inst *App) renderTopBar(snap *PublishedSnapshot, s SamplerI) {
 		trendsmooth.Render(trendsmooth.Input{Ids: inst.ids, ScopeKey: "trendsmooth", State: inst.smooth})
 		c.Separator().Vertical().Send()
 
+		// The replay phase as a chip (keelson-app T2): off, opening, on or
+		// failed, with the graph and the history behind it.
+		for range c.IdScope(inst.ids.PrepareStr("topbar-replaychip")) {
+			inst.renderReplayChip(inst.frameReplay)
+		}
+		c.Separator().Vertical().Send()
+
 		// Replay entry (ADR-0197). While a session is off this is the whole
 		// control; the transport appears as its own row below. Rendered
 		// unconditionally so the live layout never reflows around it.

@@ -60,26 +60,30 @@ func (inst *App) renderTopBar(snap *PublishedSnapshot, s *Sampler) {
 				Kind(c.ButtonKindPrimary).
 				Selected(frozen).
 				SendResp().HasPrimaryClicked() {
-				s.Pause(!frozen)
+				inst.freezeGesture(s, !frozen)
 			}
 		}
 		c.Label(fmt.Sprintf("every %s", s.IntervalLabel())).Send()
 		for range c.HoverText(tipIntervalDown).KeepIter() {
 			if c.Button(inst.ids.PrepareStr("topbar-int-down"), c.Atoms().Text("−").Keep()).
 				SendResp().HasPrimaryClicked() {
-				s.SetInterval(s.Interval() - intervalStep)
+				inst.intervalGesture(s, -intervalStep)
 			}
 		}
 		for range c.HoverText(tipIntervalUp).KeepIter() {
 			if c.Button(inst.ids.PrepareStr("topbar-int-up"), c.Atoms().Text("+").Keep()).
 				SendResp().HasPrimaryClicked() {
-				s.SetInterval(s.Interval() + intervalStep)
+				inst.intervalGesture(s, intervalStep)
 			}
 		}
 		c.Separator().Vertical().Send()
 
 		// Trend smoothing (ADR-0152); acts on the rate/latency plots only.
-		trendsmooth.Render(trendsmooth.Input{Ids: inst.ids, ScopeKey: "trendsmooth", State: inst.smooth})
+		// The shared row applies its own change; the gesture records it as
+		// the person's (ADR-0269 §SD8).
+		if trendsmooth.Render(trendsmooth.Input{Ids: inst.ids, ScopeKey: "trendsmooth", State: inst.smooth}).Changed {
+			inst.smoothingGesture()
+		}
 		c.Separator().Vertical().Send()
 
 		ts := time.UnixMilli(snap.SampledAtUnixMs).Format("15:04:05")

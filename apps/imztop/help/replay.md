@@ -20,7 +20,9 @@ of them are on the same historical cursor.
 ## The four states
 
 The session is in one of four states, which `get_view` reports as
-`Replay.State`:
+`Replay.State` and the chip in the top bar draws; the chip opens the graph
+of the states and the history of what this window saw, and `replay_state`
+and `replay_machine` serve the same to an agent (the **Operations** page):
 
 - **off** — live data; no session, no connection.
 - **opening** — a session is being opened on its own goroutine. Opening
@@ -37,7 +39,9 @@ What moves them: **Replay** in the top bar, or `enter_replay`, takes off
 (or failed) to opening. The open completing takes opening to on; the open
 failing takes it to failed. **Go live**, **Cancel**, **Dismiss** or
 `leave_replay` take any state to off, and an open still in flight then
-discards itself rather than installing. A window going away while its open
+discards itself rather than installing. The window never drives the
+machine: each frame observes the session and mirrors it, so an edge the
+graph does not declare is logged rather than refused. A window going away while its open
 is in flight gives the claim back and leaves the session off. Entering
 while a session is opening or on is a no-op from the button; the command
 says why on the **Operations** page.

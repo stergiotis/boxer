@@ -391,7 +391,7 @@ func (inst *App) renderProfilesPanel() {
 				// accent outline beside it.
 				if c.Button(inst.ids.PrepareStr("pprof-cap-"+spec.key), c.Atoms().Text("Capture "+spec.label).Keep()).
 					Kind(c.ButtonKindPrimary).SendResp().HasPrimaryClicked() {
-					profiles.startCapture(spec, inst.bus, inst.tasks)
+					inst.captureGesture(spec)
 				}
 			}
 			if handle != "" {
@@ -401,7 +401,7 @@ func (inst *App) renderProfilesPanel() {
 				case inst.bus != nil:
 					if c.Button(inst.ids.PrepareStr("pprof-open-"+spec.key), c.Atoms().Text(labelOpenInPlay).Keep()).
 						Kind(c.ButtonKindTertiary).SendResp().HasPrimaryClicked() {
-						profiles.openInPlay(spec, inst.bus, inst.tasks)
+						inst.openInPlayGesture(spec)
 					}
 				}
 				c.Label(fmt.Sprintf("keelson('%s') · rev %d · %d rows", handle, revision, rows)).Send()

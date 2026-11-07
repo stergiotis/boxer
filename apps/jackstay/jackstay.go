@@ -335,6 +335,10 @@ type App struct {
 	// and the state chip that draws it.
 	phaseMachine *fsmview.Machine[phaseE]
 	phaseChip    *fsmview.View[phaseE]
+
+	// opsPlan is the catalog's copy of the installed plan (jackstay_ops.go),
+	// taken once per plan installed.
+	opsPlan *planView
 }
 
 var _ app.AppI = (*App)(nil)

@@ -30,6 +30,10 @@ offered to agents.
 - `replay` — the replay session, its window, pause and speed, but not the
   playback position, which moves on its own. Process-wide.
 
+- `replay_state` — the replay session's phase as the chip in the top bar
+  draws it: `off`, `opening`, `on` or `failed`. This window's mirror of
+  the process-wide session; the **Replay** page says what moves it.
+
 The two process-wide resources carry their real value only in the
 controlling window; every other window reports a fixed value.
 
@@ -96,6 +100,11 @@ is:
   only while replay is on: *coverage is loaded while replay is on; call
   enter_replay first*.
 
+- `replay_state` — the replay phase, the transitions allowed from it and
+  the latest ones, up to sixteen; `replay_machine` — every phase and every
+  allowed transition, as the chip's graph draws them. The two operations
+  every app's mounted machine offers (ADR-0269).
+
 The process rows, the overview and the view are marked untrusted, since a
 command line is text someone else typed.
 
@@ -124,9 +133,12 @@ beside it.
   imztop window follows. Unavailable while replay is on: *replay is on;
   use set_replay_paused*. The Freeze / Go live button.
 - `enter_replay` — open a replay over a window given as `FromUnixMs` and
-  `ToUnixMs`; both zero opens the last ten minutes. The call returns before
-  the session is open: the open dials ClickHouse on its own goroutine, and
-  `get_view` reports `opening`, then `on` or `failed` with the reason. A
+  `ToUnixMs`; both zero opens the last ten minutes. The command is
+  asynchronous (ADR-0358): the open dials ClickHouse on its own goroutine,
+  the call stays *running* meanwhile, and it settles with the host, the
+  endpoint and the window it opened, fails with the reason the open
+  failed for, or settles as `off` when a leave landed first. `replay_state`
+  and `get_view` report `opening`, then `on` or `failed`, while it runs. A
   session already opening or open over the window asked for is the value
   already set; one open over another window is refused (*use
   set_replay_window*), and one still opening is refused the same way

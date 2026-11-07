@@ -153,6 +153,22 @@ an ad-hoc dataset is deferred until a task needs more than the summary.
 - Sensors and topology have no history (ADR-0197 §SD8); `get_hardware`
   returns the latest reading only.
 
+## Updates
+
+### 2026-11-07 — `enter_replay` settles, and the replay session is a machine agents can read
+
+`enter_replay` keeps its class and effect (a `command`, `view`, the
+endpoint still in the grant per SD4), and is now declared `Async: true`
+under [ADR-0358](./0358-asynchronous-operations-a-pending-outcome-and-a-turn-a-completion-wakes.md):
+the call returns pending and settles with the session's outcome, `on`
+when the open completes, `off` when a leave lands first, and a failure
+carrying the open's reason. Polling `get_view` for the outcome still
+works and is no longer needed. The four replay states are a
+`fsmview` machine mirrored from the session each frame, drawn as a
+tethered chip with provenance `app.imztop.replay.phase`, and mounted
+for agents as `replay_state` and `replay_machine`. Motivated by the
+keelson-app adherence survey.
+
 ## Status
 
 Accepted 2026-10-13. Implemented in `096122a29` and `2072d56dd`.

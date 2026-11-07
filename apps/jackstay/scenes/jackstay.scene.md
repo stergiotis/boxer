@@ -18,7 +18,8 @@ when no target is configured. The scene discovers the server, chooses the
 before anything is written: the DDL, the diff and the sync each wait for a
 click the scene does not make. What is listed is whatever the live server
 holds. The plan file the wizard names for itself lands in its data area,
-under `BOXER_FS_APPDATA_DIR`.
+under `BOXER_FS_APPDATA_DIR`. The scene ends on F1 over the window, which
+opens jackstay's own help.
 
 ```jsonl trace
 {"do":"wait","name":"Discover the servers","role":"button","settleMs":500}
@@ -39,4 +40,8 @@ under `BOXER_FS_APPDATA_DIR`.
 {"do":"click","name":"5 Sync","role":"button"}
 {"do":"read","valueContains":"Recommended:","role":"label","pattern":"^Recommended: (?P<mode>full|repair|sample), because","settleMs":4000}
 {"do":"capture","text":"jackstay-sync"}
+{"do":"key","text":"F1","settleMs":1200}
+{"do":"wait","contains":"Help center","role":"window"}
+{"do":"wait","value":"Syncing two ClickHouse servers","role":"label","comment":"the reader shows jackstay's overview, not the index"}
+{"do":"capture","text":"jackstay-help"}
 ```

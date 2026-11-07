@@ -15,6 +15,7 @@ import (
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/colorscale"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/distsummary"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/fsmview"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/lazypane"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/recordtable"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/regexedit"
@@ -272,6 +273,13 @@ type App struct {
 	// coverage queries run as its work, so the host's drain waits for them
 	// and their context ends with the window. Nil on a host without one.
 	scope *lifetime.Scope
+
+	// The replay session's phase, mirrored each frame from the process-wide
+	// session (imztop_replay_machine.go), and the chip in the top bar that
+	// draws it. The machine is per window: the session is one, the history
+	// of what this window saw is its own.
+	replayMachine *fsmview.Machine[ReplayStateE]
+	replayChip    *fsmview.View[ReplayStateE]
 }
 
 var _ app.AppI = (*App)(nil)
@@ -288,6 +296,7 @@ func newApp() (inst *App) {
 		lazyPanes:         map[uint64]*lazypane.Pane{},
 		procView:          defaultProcView(),
 		smooth:            trendsmooth.New(),
+		replayMachine:     newReplayMachine(),
 	}
 	return
 }
@@ -295,6 +304,7 @@ func newApp() (inst *App) {
 func (inst *App) Manifest() (m app.Manifest) { m = manifest; return }
 func (inst *App) Mount(ctx app.MountContextI) (err error) {
 	inst.ids = ctx.Ids()
+	inst.ensureReplayChip()
 	inst.tasks = task.ForApp(ctx)
 	inst.scope = app.LifetimeOf(ctx)
 	// Capture the host-provided capability bus for the singleton Sampler to
@@ -424,6 +434,7 @@ func (inst *App) renderApp(snap *PublishedSnapshot, s SamplerI) {
 	// One status read per frame, shared by the top bar and the panels that
 	// have to say "not recorded" rather than draw an empty pane (§SD8).
 	inst.frameReplay = CurrentReplayStatus()
+	inst.mirrorReplay(inst.frameReplay)
 	inst.smooth.BeginFrame()
 
 	// The top bar draws in every state, including the one with no snapshot.

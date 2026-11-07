@@ -1,9 +1,11 @@
 package imzrt
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/help"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -16,7 +18,7 @@ func TestHelpCorpusIndexes(t *testing.T) {
 	require.True(t, ok, "imzrt help book must be indexed from Manifest.Help")
 	require.Empty(t, b.Validate(), "help front-matter must conform")
 
-	want := map[string]bool{"overview": false, "profiles": false}
+	want := map[string]bool{"overview": false, "profiles": false, "operations": false}
 	for _, d := range b.Docs() {
 		if _, expected := want[d.Path]; !expected {
 			continue
@@ -49,8 +51,27 @@ func TestHelpCorpusDropsNothing(t *testing.T) {
 	}
 }
 
-// TestHelpSaysThereIsNoCatalog pins the book's claim to the manifest: the day
-// imzrt grows operations, the overview has to stop saying it has none.
-func TestHelpSaysThereIsNoCatalog(t *testing.T) {
-	require.Nil(t, manifest.Operations, "the help book says imzrt has no operations catalog; update apps/imzrt/help/overview.md")
+// TestHelpNamesEveryOperation keeps the book and the catalog together: an
+// operation or resource added to imzrt_ops.go without a line in the help is
+// one a model is told exists (keelson('helpsections')) and nothing explains.
+// Names are matched in backticks, as the book spells them.
+func TestHelpNamesEveryOperation(t *testing.T) {
+	help.SyncFromRegistry()
+	b, ok := help.Book(manifest.Id)
+	require.True(t, ok)
+	var corpus strings.Builder
+	for _, d := range b.Docs() {
+		src, found := b.Source(d.Path)
+		require.True(t, found, d.Path)
+		corpus.Write(src)
+		corpus.WriteByte('\n')
+	}
+	text := corpus.String()
+	require.NotNil(t, manifest.Operations)
+	for _, op := range manifest.Operations.Operations {
+		assert.Containsf(t, text, "`"+op.Name+"`", "operation %q is not named in the help book", op.Name)
+	}
+	for _, r := range manifest.Operations.Resources {
+		assert.Containsf(t, text, "`"+r.Name+"`", "resource %q is not named in the help book", r.Name)
+	}
 }

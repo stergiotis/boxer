@@ -14,7 +14,10 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/data/chclient"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/appops"
+	"github.com/stergiotis/boxer/public/keelson/runtime/appops/fsmops"
+	"github.com/stergiotis/boxer/public/keelson/runtime/appops/opfsm"
 	"github.com/stergiotis/boxer/public/keelson/runtime/sysmreplay"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/observability/sysmetrics/sysmsnap"
 )
 
@@ -510,6 +513,16 @@ type SetReplayPausedArgs struct {
 	Paused bool `desc:"true pauses playback"`
 }
 
+// ReplayOutcome is what enter_replay settles with (ADR-0358): the session
+// that opened, or off when a leave landed while it was opening.
+type ReplayOutcome struct {
+	State      string `desc:"on, or off when the session was left before it opened"`
+	Host       string `desc:"the host whose history is replayed"`
+	Endpoint   string `desc:"the server the history was read from"`
+	FromUnixMs int64  `desc:"the window's start, epoch milliseconds; 0 when unbounded or off"`
+	ToUnixMs   int64  `desc:"the window's end, epoch milliseconds; 0 when unbounded or off"`
+}
+
 type SetReplaySpeedArgs struct {
 	Speed float64 `desc:"one of 0.5, 1, 2, 5, 10, 60"`
 }
@@ -837,6 +850,16 @@ var ops = func() (s *appops.Set[*App, opsSnap]) {
 		func(inst *App) any { return inst.latchedFrozen })
 	s.Resource(resReplay, "the replay session and its transport; process-wide, written through the controlling window",
 		func(inst *App) any { return inst.latchedReplay })
+
+	// The replay phase as every app mounts a machine (keelson-app T3):
+	// replay_state and replay_machine, read from this window's mirror of
+	// the process-wide session.
+	fsmops.Mount(s, "replay", "the replay session's phase: off, opening, on or failed", func(inst *App) opfsm.SourceI {
+		if inst.replayMachine == nil {
+			return nil
+		}
+		return inst.replayMachine
+	}, fsmops.Options{History: 16})
 
 	// --- queries ---
 
@@ -1188,9 +1211,10 @@ var ops = func() (s *appops.Set[*App, opsSnap]) {
 
 	appops.Command(s, app.OperationSpec{Name: opEnterReplay, Version: 1,
 		Summary: "open a replay of recorded history over a window; every imztop window follows",
-		Effect:  app.OperationEffectView, Writes: []string{resReplay}, Agents: true,
+		Effect:  app.OperationEffectView, Writes: []string{resReplay}, Agents: true, Async: true,
 		Gesture: "the Replay button", Rebuild: app.OperationRebuildVolatile,
-		Follows: []string{"the session opens in the background; get_view reports opening, on or failed",
+		Follows: []string{"the call stays running while the session dials the server, and settles with the host and window it opened, or fails with the reason (ADR-0358)",
+			"replay_state reports the phase meanwhile: opening, then on or failed",
 			"an agent's call needs the ClickHouse server holding boxer.facts in its grant"}},
 		func(inst *App, call app.OperationCall, in ReplayWindowArgs) (out appops.None, err error) {
 			if err = refuseUnlessController(inst); err != nil {
@@ -1225,6 +1249,31 @@ var ops = func() (s *appops.Set[*App, opsSnap]) {
 			return
 		})
 	controllerOnly(opEnterReplay, nil)
+	// The open runs on its own goroutine; the call settles from the session's
+	// status once per frame (ADR-0358 §SD1). A leave while it opened settles
+	// it as off rather than failing it: the leave was asked for.
+	appops.Settles(s, opEnterReplay, func(inst *App, _ app.OperationCall) (out ReplayOutcome, settled bool, err error) {
+		st := CurrentReplayStatus()
+		switch st.State {
+		case ReplayOpening:
+			return
+		case ReplayFailed:
+			settled = true
+			reason := "unknown"
+			if st.Err != nil {
+				reason = st.Err.Error()
+			}
+			err = eb.Build().Str("reason", reason).Errorf("replay could not open; the window shows live data, and leave_replay dismisses the failure")
+			return
+		}
+		out = ReplayOutcome{State: st.State.String(), Host: st.Host, Endpoint: st.Endpoint}
+		if session := ActiveReplay(); session != nil {
+			w := session.Window()
+			out.FromUnixMs, out.ToUnixMs = unixMsOrZero(w.From), unixMsOrZero(w.To)
+		}
+		settled = true
+		return
+	})
 
 	appops.Command(s, app.OperationSpec{Name: opLeaveReplay, Version: 1,
 		Summary: "end replay and return every imztop window to live data",

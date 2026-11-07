@@ -48,6 +48,17 @@ type App struct {
 	// mode); the affordances then surface the failure instead of acting.
 	bus   app.BusI
 	tasks task.TaskApiI
+
+	// Operations state (imzrt_ops.go). frameCtx is the current frame's
+	// context, for routing the person's controls through the catalog.
+	// pendingTab is a dock tab show_tab asked for, activated once on the
+	// next frame that draws the dock; shownTab names it, as the view
+	// resource reports it. latchedView is the view resource as this
+	// window last latched it.
+	frameCtx    app.FrameContextI
+	pendingTab  uint64
+	shownTab    string
+	latchedView viewValue
 }
 
 var _ app.AppI = (*App)(nil)
@@ -78,6 +89,10 @@ func (inst *App) Unmount(ctx app.MountContextI) (err error) { return }
 func (inst *App) Frame(ctx app.FrameContextI) (err error) {
 	// Re-resolve: the density preset is runtime-switchable (Layout ▸ Density).
 	inst.density = styletokens.ActiveDensity()
+	inst.frameCtx = ctx
+	// The shared sampler moves inside this window's frame, never between
+	// frames (ADR-0329 §SD3).
+	inst.latchView()
 	s, sErr := ensureSampler()
 	if sErr != nil {
 		renderInitErrorPanel(sErr)
@@ -131,6 +146,11 @@ func (inst *App) renderApp(snap *PublishedSnapshot, s *Sampler) {
 	for range c.PanelCentralInside().KeepIter() {
 		for dock := range c.DockArea(inst.ids.PrepareStr("imzrt-dock")) {
 			dock.InitRoot(dockTabHeap, dockTabGC, dockTabSched, dockTabProfiles)
+			if inst.pendingTab != 0 {
+				// show_tab: once, so the person's next click wins.
+				dock.ActivateTab(inst.pendingTab)
+				inst.pendingTab = 0
+			}
 			for range dock.Tab(dockTabHeap, "Heap") {
 				for range c.ScrollArea().Vscroll(true).AutoShrink(false, false).KeepIter() {
 					inst.renderHeapPanel(snap)

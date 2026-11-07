@@ -87,14 +87,45 @@ at debug. An observation no declared path reaches is logged as a warning.
 
 ## The operations catalog
 
-The catalog carries the phase and nothing that moves it (ADR-0269). The
-steps that write to a server stay behind the window's own confirmations,
-on the **Syncing two ClickHouse servers** page. Two queries, both offered to
-agents and both reading the mounted machine:
+The catalog carries the phase and the plan, and nothing that moves either
+(ADR-0269). There is no command: every step that writes to a server — the
+DDL on Structure, the sync on Sync — stays behind the window's own
+confirmation, which is the person's act (ADR-0259), and the summaries say
+so. Six queries, all offered to agents. Two read the mounted machine:
 
 - `plan_state` — the current phase, the transitions allowed from it and
   the latest ones, up to sixteen.
 - `plan_machine` — every phase and every allowed transition, as the table
   and list above.
 
-Both read the resource `plan_state`, the phase's current value.
+Both read the resource `plan_state`, the phase's current value. Four read
+the plan the window holds, bounded as one inline result; each is refused
+before a plan is open, naming how one is opened:
+
+- `get_plan` — the plan's file name, servers and phase, and its tables in
+  the plan's order: source and target, engine, rows and bytes when
+  planned, the verdict, whether the target needs DDL, the filter, and
+  whether a comparison or a sync left a section. `Limit` is 1 to 200, 0
+  for 50; `Matched` counts every table and `Truncated` says when the limit
+  cut the list. The stale notes and the status line's note and error come
+  with it.
+- `get_table` — one table by its source database and name: the verdict's
+  reasons, the planner's notes, the DDL the target needs (up to sixteen
+  statements, as text — the window runs them, not the catalog), the keys
+  and engines, and the table's last comparison and sync report. A name
+  not in the plan is refused: *no table of that name in the plan; get_plan
+  lists them as database and name*.
+- `get_compare` — the last content comparison: per compared table, when
+  it finished, whether the chunks were identical, final or possibly
+  spurious, the rows on each side, the chunks and how many differed, and
+  the rows missing, extra or changed where resolved. Refused before any
+  table was compared: *Compare content on the Differences page runs the
+  comparison*.
+- `get_sync` — the last sync: when it started and ended, whether it
+  stopped without a result, the rows and bytes it moved, the chunks left
+  failed or stale, and every table's report with its problems. Refused
+  before a sync ran: *Start on the Sync page runs one, behind the window's
+  confirmation*.
+
+Table names, notes and problems are text a server or a plan file carried,
+so the four are marked untrusted.
