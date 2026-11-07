@@ -38,8 +38,9 @@ var manifest = app.Manifest{
 		PreferredWidth:  720,
 		PreferredHeight: 520,
 	},
-	Caps: task.ProducerCaps(),
-	Help: help.MustSub(helpFS, "help"),
+	Caps:       task.ProducerCaps(),
+	Operations: ops.Catalog(),
+	Help:       help.MustSub(helpFS, "help"),
 }
 
 // init registers the demo into app.DefaultRegistry. Factory ctor so each

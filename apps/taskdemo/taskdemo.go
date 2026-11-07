@@ -16,6 +16,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/rs/zerolog"
@@ -93,17 +94,34 @@ type App struct {
 	// slowFrame makes every Frame take slowFrameDelay, for the window
 	// host's slow-window notice (ADR-0351 §SD6) to report.
 	slowFrame bool
+	// unit is the shape spawn uses when its call names none; a Start
+	// button sets it to its shape.
+	unit task.UnitE
+
+	// frameCtx is the current frame's context, through which the Start
+	// buttons route their spawn as the person's gesture (ADR-0269 §SD8).
+	frameCtx app.FrameContextI
+
+	// records is the window's own account of the tasks it spawned, for
+	// list_tasks; the workers write it under recMu.
+	recMu   sync.Mutex
+	records []*taskRecord
+	// spawns holds the record of each spawn call still running, by the
+	// call's key, until it settles; render goroutine only.
+	spawns map[string]*taskRecord
 }
 
 // slowFrameDelay is above the window host's line for a slow Frame.
 const slowFrameDelay = 12 * time.Millisecond
 
 var _ app.AppI = (*App)(nil)
+var _ app.OperationsAppI = (*App)(nil)
 
 func newApp() (inst *App) {
 	inst = &App{
 		ids:         c.NewWidgetIdStack(),
 		durationSec: 5.0,
+		unit:        task.UnitItems,
 		density:     styletokens.ActiveDensity(),
 	}
 	return
@@ -156,6 +174,7 @@ func (inst *App) Unmount(ctx app.MountContextI) (err error) {
 func (inst *App) Frame(ctx app.FrameContextI) (err error) {
 	// Re-resolve: the density preset is runtime-switchable (Layout ▸ Density).
 	inst.density = styletokens.ActiveDensity()
+	inst.frameCtx = ctx
 	inst.renderApp()
 	if inst.slowFrame {
 		time.Sleep(slowFrameDelay)
@@ -166,37 +185,47 @@ func (inst *App) Frame(ctx app.FrameContextI) (err error) {
 // --- producer side ---------------------------------------------------
 
 // startTask starts a worker in the window's scope that spawns a task of
-// the chosen unit + duration and runs the fake-work loop. Nothing starts
-// once the scope retired.
-func (inst *App) startTask(unit task.UnitE) {
+// the chosen unit + duration and runs the fake-work loop, and returns the
+// window's record of it, which the worker fills in. Nothing starts once
+// the scope retired, or where the host gives the window no task API: the
+// record is nil.
+func (inst *App) startTask(unit task.UnitE) (rec *taskRecord) {
 	if inst.tasks == nil {
 		return
 	}
 	durationMs := int64(inst.durationSec * 1000.0)
 	simulateErr := inst.simulateError
-	inst.scope.Go(func(ctx context.Context) {
-		inst.runFakeTask(ctx, unit, durationMs, simulateErr)
-	})
+	rec = &taskRecord{kind: "demo." + unit.String(), title: titleForUnit(unit, durationMs), unit: unit,
+		durationMs: durationMs, state: stateStarting, total: totalForUnit(unit)}
+	if !inst.scope.Go(func(ctx context.Context) {
+		inst.runFakeTask(ctx, rec, unit, durationMs, simulateErr)
+	}) {
+		return nil
+	}
+	inst.record(rec)
+	return
 }
 
 // runFakeTask is the worker. Spawns a task under ctx, the scope's work
 // context, so the handle is cancelled with the scope; ticks every
 // reportTickMs until duration elapses (or until cancelled), and publishes
-// Done or Error.
-func (inst *App) runFakeTask(ctx context.Context, unit task.UnitE, durationMs int64, simulateErr bool) {
-	total := totalForUnit(unit)
-	title := titleForUnit(unit, durationMs)
+// Done or Error, writing each step to rec.
+func (inst *App) runFakeTask(ctx context.Context, rec *taskRecord, unit task.UnitE, durationMs int64, simulateErr bool) {
+	total := rec.total
+	title := rec.title
 
 	h, err := inst.tasks.Spawn(ctx, task.SpawnOpts{
-		Kind:        "demo." + unit.String(),
+		Kind:        rec.kind,
 		Title:       title,
 		Cancellable: true,
 		EstimatedMs: durationMs,
 	})
 	if err != nil {
 		inst.logger.Warn().Err(err).Msg("taskdemo: spawn failed")
+		inst.update(rec, func(r *taskRecord) { r.state, r.reason = stateNotStarted, err.Error() })
 		return
 	}
+	inst.update(rec, func(r *taskRecord) { r.state, r.id = stateRunning, h.Id() })
 
 	startedAt := time.Now()
 	ticker := time.NewTicker(reportTickMs * time.Millisecond)
@@ -208,16 +237,19 @@ func (inst *App) runFakeTask(ctx context.Context, unit task.UnitE, durationMs in
 	for {
 		if h.Cancelled() {
 			_ = h.Done(nil)
+			inst.update(rec, func(r *taskRecord) { r.state = stateCancelled })
 			return
 		}
 		now := time.Now()
 		if simulateErr && now.After(errorAt) {
 			_ = h.Error(errors.New("taskdemo: simulated failure at 80%"), "simulated failure")
+			inst.update(rec, func(r *taskRecord) { r.state, r.reason = stateError, "simulated failure" })
 			return
 		}
 		if now.After(deadline) {
 			h.Report(task.ProgressReport{Current: total, Total: total, Unit: unit})
 			_ = h.Done(nil)
+			inst.update(rec, func(r *taskRecord) { r.state, r.current = stateDone, total })
 			return
 		}
 		fraction := float64(now.Sub(startedAt)) / float64(deadline.Sub(startedAt))
@@ -230,6 +262,7 @@ func (inst *App) runFakeTask(ctx context.Context, unit task.UnitE, durationMs in
 			Total:   total,
 			Unit:    unit,
 		})
+		inst.update(rec, func(r *taskRecord) { r.current = current })
 		<-ticker.C
 	}
 }
@@ -296,17 +329,17 @@ func (inst *App) renderControls() {
 				c.Atoms().Text("Start items task").Keep()).
 				Kind(c.ButtonKindPrimary).
 				SendResp().HasPrimaryClicked() {
-				inst.startTask(task.UnitItems)
+				inst.spawnGesture(task.UnitItems)
 			}
 			if c.Button(inst.ids.PrepareStr("start-bytes"),
 				c.Atoms().Text("Start bytes task").Keep()).
 				SendResp().HasPrimaryClicked() {
-				inst.startTask(task.UnitBytes)
+				inst.spawnGesture(task.UnitBytes)
 			}
 			if c.Button(inst.ids.PrepareStr("start-steps"),
 				c.Atoms().Text("Start steps task").Keep()).
 				SendResp().HasPrimaryClicked() {
-				inst.startTask(task.UnitSteps)
+				inst.spawnGesture(task.UnitSteps)
 			}
 		}
 

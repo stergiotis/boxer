@@ -13,11 +13,11 @@ The task demo spawns fake background work and shows it the way every app's
 work is shown: as keelson tasks, watched by the task monitor. It is the
 showcase for the task primitive (ADR-0038): one window, a **Spawn** section
 with the controls, and the `taskmonitor` widget below it with the in-flight
-and history panes. Nothing it does leaves the process, and it holds no
-data an agent could read, so it declares no operations catalog; the tasks
-it spawns are visible to every observer of the bus like any other app's,
-and, while in flight, in `keelson('tasks')` on a host that runs the task
-supervisor.
+and history panes. Nothing it does leaves the process. An agent drives the
+controls, spawns a task and follows it through the window's operations
+catalog ([Operations](./operations.md)); the tasks it spawns are visible to
+every observer of the bus like any other app's, and, while in flight, in
+`keelson('tasks')` on a host that runs the task supervisor.
 
 ## What a task is here
 
@@ -39,7 +39,9 @@ gate, not the worker, is what the window shows.
 ## The three spawn shapes
 
 The three buttons start a task of one unit each, with the duration the
-slider holds (1 to 60 s, 5 s at first):
+slider holds (1 to 60 s, 5 s at first). A button is the `spawn` operation
+as the person's gesture, so an agent's spawn and a click run the same
+handler:
 
 | Button | Unit | Total | Reads as |
 | --- | --- | --- | --- |
