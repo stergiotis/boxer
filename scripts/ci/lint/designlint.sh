@@ -16,7 +16,8 @@ tags="$(cat ./tags | tr -d "\n")"
 # over a tempfile-built multichecker binary — the tag-aware analyzer path
 # (multichecker.Main's own -tags flag is a deprecated no-op). Hard gate since
 # the M5 fleet backfill (2026-07-12) took every shipped rule to zero findings:
-# ANY output — finding or compile error — fails the build. Intentional
+# ANY output — finding or compile error — fails the build, except a finding
+# of a rule on the warn list below, which prints and passes. Intentional
 # exceptions use the per-line `// designlint:ignore=<rule-id> (reason)`
 # annotation (doc/design-system/policy/tier1-mechanical.md §Annotations).
 # Scoped to the egui2 UI tree and keelson runtime, where IDS tokens apply;
@@ -31,8 +32,20 @@ dl_out=$(go vet -vettool="$dl_bin" -tags "$tags" \
     ./public/thestack/imzero2/... ./public/keelson/runtime/... 2>&1 |
     grep -v '\.out\.go:' | grep -v '\.gen\.go:' | grep -v '^warning: ' || true)
 rm -f "$dl_bin"
-if [ -n "$dl_out" ]; then
+
+# Rules at `warn` severity (tier1-mechanical.md §Graduation lifecycle), by
+# id, alternated with `|`: their findings print and do not fail the gate. A
+# rule leaves the list when its findings reach zero and it graduates. The
+# `# <package>` header lines go vet prints above a package's findings are
+# dropped before the decision, so a package with only warn findings passes.
+warn_rules='L16'
+dl_warn=$(printf '%s\n' "$dl_out" | grep -E ": (${warn_rules}): " || true)
+dl_fail=$(printf '%s\n' "$dl_out" | grep -v '^# ' | grep -vE ": (${warn_rules}): " || true)
+if [ -n "$dl_fail" ]; then
     printf '%s\n' "$dl_out"
     exit 1
+fi
+if [ -n "$dl_warn" ]; then
+    printf 'warn (does not fail the gate):\n%s\n' "$dl_warn"
 fi
 echo "passed"

@@ -36,7 +36,7 @@ The `designlint` binary at `public/keelson/designsystem/lint/cmd/designlint/` sh
 | Rule | Status | Why |
 |---|---|---|
 | L1 — Label casing | **shipped (v1 partial)** | v1 covers the unambiguous case: `c.Label("...")` whose first non-whitespace character is a lowercase Unicode letter. Atom-builder routes (`c.Atoms().Text("...").Keep()` inside `c.Button(...)` / `c.MenuButton(...)`) and `c.WidgetText().Text("...")` titles still need a context-walker to apply per-widget-class casing; v2 expansion deferred. |
-| L2 — Token-only palette | **shipped** | `color.RGB(...)` / `color.RGBA(...)` is the actual Go-side constructor; syntactic detection is reliable. Rust-side equivalents (`Color32::from_rgb`) deferred to a future Rust-side lint (clippy or custom). |
+| L2 — Token-only palette | **shipped** | `color.RGB(...)` / `color.RGBA(...)` is the actual Go-side constructor; syntactic detection is reliable. `color.Hex(<literal>)` and a packed `uint32` colour declaration are L16's, kept apart so they can sit at `warn` while L2 stays at `error`. Rust-side equivalents (`Color32::from_rgb`) deferred to a future Rust-side lint (clippy or custom). |
 | L3 — Token-only spacing | **shipped** | Trigger surface narrowed to `.AddSpace(N)` / `.InnerMargin(N)` / `.OuterMargin(N)` with a numeric BasicLit; hairline allowlist (0 / 0.0 / 1 / 1.0). Variable-bound args (`styletokens.PaddingDefault(d)` etc.) never trigger because they're not BasicLit nodes — the math/ratio/animation-delta false-positive concern dissolves under that scope. |
 | L4 — Token-only rounding | **shipped** | Mirrors L3 on the rounding ladder (ADR-0032 §SD3). Trigger surface: `.CornerRadius(N)` with a numeric BasicLit; sharp-corner allowlist (0 / 0.0). Variable-bound args (`styletokens.RoundingSm` etc.) never trigger because they're not BasicLit nodes. The original L4 slot ("Direct Style mutation outside tokens") was a Rust-side concern structurally out of scope for the Go AST walker; that catalogue entry has been moved to the Rust-side future-work pile and the L4 number is reused for the Go-side rounding rule that fits the same shape as L3 / L2. |
 | L5 — `AllocateUiAtRect` in flow | **shipped** | Lexical detection over the AST stack works cleanly; idiom is `for range c.<Flow>().KeepIter() { c.AllocateUiAtRect(...) }`. |
@@ -47,6 +47,7 @@ The `designlint` binary at `public/keelson/designsystem/lint/cmd/designlint/` sh
 | L10 — Token-only stroke-width | **shipped** | Mirrors L3 / L4 on the stroke ladder (ADR-0032 §SD4). Trigger surface: `.Stroke(...)` with a numeric BasicLit in **either** positional arg, because the binding has both `Stroke(width, col)` (FrameFluid / TintedScopeFluid) and `Stroke(col, width)` (H3RegionFluid / MapPolylineFluid) forms; numeric literals only ever appear in the width position because color args are `color.Hex(...)` CallExprs, so the lit-vs-not-lit signal is reliable without type info. Sentinel allowlist: 0 / 0.0 (disable stroke). Painter free-functions are a second trigger class with a per-name width-arg index (the L11 table idiom), because their coordinate args are bare numeric literals too: all three painter strokes are registered — `c.PaintCircleStroke` (width at index 4), `c.PaintEllipseStroke` (5), `c.PaintRectStroke` (6). A new painter surface joins the table the same way; registration expands the trigger surface and must sweep its callers in the same change. |
 | L11 — Token-only motion-duration | **shipped** | Mirrors L3 / L4 / L10 on the motion ladder (ADR-0032 §SD5). Trigger surface: `.AnimateBoolWithTime(...)` / `.AnimateBoolWithTimeBind(...)` / `.AnimateValueWithTime(...)` / `.AnimateValueWithTimeBind(...)` with a numeric BasicLit at arg index 2 (the `durSecs float32` slot). The arg-index is per-name (every wrapper today sits at index 2; the table keeps room for future signatures). Sentinel allowlist: 0 / 0.0 (instantaneous — matches the reduced-motion collapsed value). Required prereq: `styletokens.MotionQuickSecs()` / `MotionStandardSecs()` / `MotionSlowSecs()` accessors return the ladder values as float32 seconds (the wire form egui's `animate_*` API expects) and gate through the runtime `motionEnabled` flag so reduced-motion mode collapses to zero — a raw literal does not. Named-const fields (`defaultAnimDurSecs float32 = 0.28`) evade detection because they're not BasicLit nodes inside the trigger call; same shape as L3's named-const limitation. |
 | L12 — `Manifest.Id` matches package path | **shipped (warn at landing)** | Pattern rule, not a token rule — added to close the silent-drift hole in [ADR-0026 §SD12](../../adr/0026-app-runtime-and-capability-subjects.md) where `Manifest.Id` literals can diverge from the enclosing Go import path without any compiler signal. Trigger surface narrowed to two shapes (`app.Manifest{Id: …}` field assignment and package-scope `const|var X app.AppIdT = …` typed declarations) so cross-reference tables — `map[K]app.AppIdT{…}` and `[]app.AppIdT{…}`, e.g., the carousel's `legacyCodeToId` — pass through. Test files (`_test.go`) skipped: registry/broker tests use deliberate ad-hoc Ids and forcing them to match the package path would be churn for no signal. `AllowedSpecialIds` allowlist enumerates the runtime services that use NATS-aligned dotted names rather than import paths (`runtime.broker`, `runtime.persist`, `runtime.fs`, `runtime.chlocal`, `runtime.clipboard`, `runtime.sysmetrics`, `runtime.introspect.query`). The list stabilised over the ADR-0026 broker fleet on 2026-07-12 and the rule graduated with the fleet flag-day (§Graduation lifecycle). |
+| L16 — Hex colour literals | **shipped (warn)** | L2's companion for the two colour-literal shapes L2 does not see: `color.Hex(0x…)` with an integer BasicLit argument, and a `const` / `var` whose name says colour (`color` / `colour` in any case, `Hex`, `Tone`) initialised with an integer BasicLit — typed, when the declared type's underlying type is `uint32`; untyped, when the literal is spelled in hex. `color.Hex(styletokens.X.AsHex())` never triggers because the argument is not a BasicLit. Sentinel allowlist: 0 / 0x0 / 0x00000000 (fully transparent — no fill, not a palette choice), as L3 / L4 / L10 allow their disabling sentinels. `_test.go` and generated files are skipped; the package allowlist is L2's. A separate id rather than an L2 extension because L2 is at `error` with zero findings and this shape has findings in the tree (the keelson-app adherence survey, L1); one id per severity keeps the graduation honest. The first rule on `designlint.sh`'s warn list (§Graduation lifecycle). |
 
 Adding any of the deferred rules is a Tier 3 decision per [tier3-human-review.md](./tier3-human-review.md); each follow-on ADR captures the API survey findings that unblock the rule plus the detector design.
 
@@ -136,6 +137,37 @@ L2:
 **Exemption.** Line-level annotation as above. The token module and the vendored scientific palette LUTs are allowlisted by default.
 
 **Recipe.** Step-by-step migration guide for fixing L2 findings in a widget: [howto/migrate-widget-to-ids-tokens.md](../howto/migrate-widget-to-ids-tokens.md). The recipe is sourced from the M5 backfill arc and covers semantic + neutral + data-encoding + sentinel mappings plus the `color.Hex(styletokens.X.AsHex())` bridge.
+
+### L16 — Hex colour literals
+
+**Default severity:** `warn` (landed 2026-11-07 on `designlint.sh`'s warn list; graduates to `error` when its findings reach zero, per §Graduation lifecycle).
+
+**What it catches.** The colour-literal shapes that pass L2:
+
+- a `color.Hex(…)` call whose single argument is an integer literal;
+- a `const` or `var` whose name contains `color` / `colour` (any case), `Hex` or `Tone`, initialised with an integer literal — when the declared type's underlying type is `uint32`, or when there is no declared type and the literal is written in hex.
+
+**Not caught.** The fully transparent sentinel (`0`, `0x0`, `0x00000000`), which disables a fill rather than choosing a colour. A literal that reaches a colour parameter under a name the heuristic misses, or inside a composite literal (`color.Colors{0x…}`); the rule follows no dataflow. `_test.go` and generated files are skipped — a round-trip test needs the literal. The allowlisted packages are L2's.
+
+**Rationale.** [ADR-0031](../../adr/0031-imzero2-design-system-color.md), as for L2. The [keelson-app adherence survey](../../adr-background-work/keelson-app-adherence-survey.md) found `color.Hex(0x…)` and packed `uint32` colours in several apps, all passing L2.
+
+**Example violation:**
+
+```go
+const bandColor uint32 = 0x4c9f7038     // L16: colour literal initialises bandColor
+p.Marker(pt, 8, color.Hex(0x44ff44ff))  // L16: raw color.Hex literal
+```
+
+**Example fix:**
+
+```go
+bandColor := styletokens.InfoDefault.AsHex()
+p.Marker(pt, 8, color.Hex(styletokens.SuccessDefault.AsHex()))
+```
+
+**Configuration:** none beyond the shared allowlist (styletokens, the colour package, the data-encoding LUTs), which lives in code next to the rule.
+
+**Exemption.** `// designlint:ignore=L16 (reason)` on the line or the line before.
 
 ### L3 — Token-only spacing
 
@@ -569,7 +601,7 @@ func renderPanel(c *Ctx) {
 
 ## Configuration: `designlint.yaml`
 
-> **Implementation status: not implemented.** The analyzer reads no configuration file — severities are fixed by the `lint.sh` gate (any finding fails the build since the M5 flag-day), and allowlists live in code next to the rule that owns them (e.g. `l12manifestid.AllowedSpecialIds`, the L3/L4/L10/L11 sentinel allowlists). The schema below is the designed shape, kept for the day a rule needs per-repo or per-package configuration; wiring the reader is part of that rule's landing.
+> **Implementation status: not implemented.** The analyzer reads no configuration file — severities are fixed by the `designlint.sh` gate (a rule id on the script's warn list prints without failing; any other finding fails the build, as every finding has since the M5 flag-day), and allowlists live in code next to the rule that owns them (e.g. `l12manifestid.AllowedSpecialIds`, the L3/L4/L10/L11 sentinel allowlists). The schema below is the designed shape, kept for the day a rule needs per-repo or per-package configuration; wiring the reader is part of that rule's landing.
 
 The repo-root `designlint.yaml` (or per-package `.designlintrc.yaml`) controls per-rule severity and allowlists. Schema sketch:
 
@@ -620,6 +652,8 @@ Per [ADR-0029 §SD14 M2 / M5](../../adr/0029-imzero2-design-system-and-policy-as
 
 The graduation was a fleet-wide flag day, executed once every shipped rule sat at zero — no per-app `// designlint:strict` annotations were ever added. New Tier 1 rules added later (Tier 3 escalation per [tier3-human-review.md](./tier3-human-review.md)) ship at `warn` and follow the same backfill-then-graduate pattern.
 
+- **Warn list (2026-11-07).** A rule at `warn` is named by id in `scripts/ci/lint/designlint.sh`'s `warn_rules`: the gate prints its findings and does not fail on them, while every other finding still fails. Graduation is removing the id from that list once the tree is at zero. L16 is the first rule on it.
+
 ## Adding new rules
 
 Adding a Tier 1 rule is a Tier 3 ([ADR-0029 §SD10](../../adr/0029-imzero2-design-system-and-policy-as-code.md)) decision, captured as an Amendment to [ADR-0029](../../adr/0029-imzero2-design-system-and-policy-as-code.md) §SD8 *and* a corresponding entry in this catalogue.
@@ -638,7 +672,7 @@ Candidate rules under consideration (not yet implemented):
 - **L14 — Grid-alignment.** Catches explicit positions that aren't multiples of 2 px — heuristic-heavy; may stay Tier 2 V9 (rubric) per [ADR-0032 §SD2](../../adr/0032-imzero2-design-system-spacing-density-motion.md).
 - **L15 — Mixed-density tables.** Catches multiple density settings within one app — heuristic; cross-file analysis required.
 
-> **Numbering note.** Earlier drafts of this section catalogued L10–L12 as candidates; L10 (Token-only stroke-width), L11 (Token-only motion-duration), and L12 (Manifest Id matches package path) have all shipped under different designs than those drafts. The candidate slots above are renumbered to L13–L15 to reflect actual availability.
+> **Numbering note.** Earlier drafts of this section catalogued L10–L12 as candidates; L10 (Token-only stroke-width), L11 (Token-only motion-duration), and L12 (Manifest Id matches package path) have all shipped under different designs than those drafts. The candidate slots above are renumbered to L13–L15 to reflect actual availability. L16 (Hex colour literals) took the next number after them so the candidate ids stay stable.
 
 ## Further reading
 

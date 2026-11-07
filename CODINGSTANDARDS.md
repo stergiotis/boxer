@@ -124,6 +124,8 @@ names it.
 * Use `github.com/urfave/cli/v3` for cli commands and flags handling (see [Entry Points](#entry-points)).
 * Use `github.com/dim13/colormap` for scientific color maps (Magma, Inferno, Plasma, Vidiris, Parula).
 * Copy to the clipboard by requesting `clipboard.write` on the bus (`public/keelson/runtime/clipboardbroker`), never by building the egui2 `CopyTextToClipboard` opcode: the broker's request leg is what the audit records, and the host's drain is the opcode's one builder (codelint CS014, [ADR-0026](./doc/adr/0026-app-runtime-and-capability-subjects.md)). A widget takes the host's route as a function and withholds its button without one.
+* Copy with a label: `clipboardbroker.Write` with a `Payload` carrying the text's label and source, and show the record it returns. Never a raw `Request` on `clipboardbroker.SubjectWrite` with the text as bytes, and never `clipboardbroker.WriteText`, the unlabelled path: both leave a copy whose agentic tier the journal cannot tell (codelint CS015, warn; [ADR-0317](./doc/adr/0317-clipboard-and-export-copy-by-reference-and-one-choke-point.md)).
+* Build an app's task API with `task.ForApp(ctx)` from the mount context, never `task.NewBusApi` from a bus alone: the context supplies the instance key, run id, logger and mount cancel, so a task is listed under the app and cancelled with its window. The runtime tree (`public/keelson/runtime/...`) is exempt, since it builds its own where there is no mount context (codelint CS016, warn; [ADR-0038](./doc/adr/0038-keelson-background-task-primitive.md)).
 
 ## Error Handling
 

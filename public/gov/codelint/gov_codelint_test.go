@@ -618,3 +618,67 @@ func TestCS014_FlagsTheClipboardOpcodeOutsideTheBroker(t *testing.T) {
 		t.Errorf("unexpected finding: %+v", f)
 	}
 }
+
+func TestCS015_FlagsTheRawClipboardRequestAndWriteText(t *testing.T) {
+	root, err := filepath.Abs("./testdata/cs015/bad")
+	require.NoError(t, err)
+	pkgs, err := codelint.LoadPackages(codelint.LoadConfig{}, root)
+	require.NoError(t, err)
+	require.NotEmpty(t, pkgs)
+
+	linter := codelint.NewLinter()
+	linter.Register(codelint.NewRuleCS015())
+	var findings []codelint.Finding
+	for f, runErr := range linter.Run(pkgs) {
+		require.NoError(t, runErr)
+		findings = append(findings, f)
+	}
+	require.Len(t, findings, 6, "the constant, the literal, a local constant, an own Request type, a WriteText call and a WriteText value")
+	for _, f := range findings {
+		assert.Equal(t, "CS015", f.RuleId)
+		assert.Equal(t, codelint.FindingSeverityWarn, f.Severity)
+		assert.Contains(t, f.Path, "bad.go")
+		assert.Contains(t, f.Message, "clipboardbroker.Write with a Payload")
+	}
+
+	good, err := filepath.Abs("./testdata/cs015/good")
+	require.NoError(t, err)
+	pkgs, err = codelint.LoadPackages(codelint.LoadConfig{}, good)
+	require.NoError(t, err)
+	for f, runErr := range linter.Run(pkgs) {
+		require.NoError(t, runErr)
+		t.Errorf("unexpected finding: %+v", f)
+	}
+}
+
+func TestCS016_FlagsNewBusApiOutsideTheRuntime(t *testing.T) {
+	root, err := filepath.Abs("./testdata/cs016/bad")
+	require.NoError(t, err)
+	pkgs, err := codelint.LoadPackages(codelint.LoadConfig{}, root)
+	require.NoError(t, err)
+	require.NotEmpty(t, pkgs)
+
+	linter := codelint.NewLinter()
+	linter.Register(codelint.NewRuleCS016())
+	var findings []codelint.Finding
+	for f, runErr := range linter.Run(pkgs) {
+		require.NoError(t, runErr)
+		findings = append(findings, f)
+	}
+	require.Len(t, findings, 2, "a call and a value")
+	for _, f := range findings {
+		assert.Equal(t, "CS016", f.RuleId)
+		assert.Equal(t, codelint.FindingSeverityWarn, f.Severity)
+		assert.Contains(t, f.Path, "bad.go")
+		assert.Contains(t, f.Message, "task.ForApp(ctx)")
+	}
+
+	good, err := filepath.Abs("./testdata/cs016/good")
+	require.NoError(t, err)
+	pkgs, err = codelint.LoadPackages(codelint.LoadConfig{}, good)
+	require.NoError(t, err)
+	for f, runErr := range linter.Run(pkgs) {
+		require.NoError(t, runErr)
+		t.Errorf("unexpected finding: %+v", f)
+	}
+}

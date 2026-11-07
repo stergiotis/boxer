@@ -7,7 +7,8 @@
 //	go build -tags "$(cat tags)" -o "$tmpbin" ./public/keelson/designsystem/lint/cmd/designlint
 //	go vet -vettool="$tmpbin" -tags "$(cat tags)" ./public/thestack/imzero2/...
 //
-// scripts/ci/lint.sh wires exactly this as the warn-only "designlint" step.
+// scripts/ci/lint/designlint.sh wires exactly this as the "designlint" step;
+// the script decides which rule ids fail the gate and which only print.
 //
 // Why a standalone package main and not a boxer.sh subcommand: the
 // `go vet -vettool=` protocol requires a binary that speaks the unitchecker
@@ -23,6 +24,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/designsystem/lint/l10stroke"
 	"github.com/stergiotis/boxer/public/keelson/designsystem/lint/l11motion"
 	"github.com/stergiotis/boxer/public/keelson/designsystem/lint/l12manifestid"
+	"github.com/stergiotis/boxer/public/keelson/designsystem/lint/l16hexcolor"
 	"github.com/stergiotis/boxer/public/keelson/designsystem/lint/l1labelcasing"
 	"github.com/stergiotis/boxer/public/keelson/designsystem/lint/l2color"
 	"github.com/stergiotis/boxer/public/keelson/designsystem/lint/l3spacing"
@@ -46,5 +48,6 @@ func main() {
 		l10stroke.Analyzer,
 		l11motion.Analyzer,
 		l12manifestid.Analyzer,
+		l16hexcolor.Analyzer,
 	)
 }
