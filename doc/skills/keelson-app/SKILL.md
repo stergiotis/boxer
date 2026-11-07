@@ -210,8 +210,8 @@ reports "opened" before the reply.
 `clipboardbroker.Write` with a `Payload` carrying a label and source, off
 the frame, and show the record it returns; never the raw opcode, which
 codelint CS014 catches, and never a raw `bus.Request` on
-`clipboardbroker.SubjectWrite` or the unlabelled text call, which no lint
-catches yet (§12). `apps/chat/chat_actions.go`
+`clipboardbroker.SubjectWrite` or the unlabelled text call, which codelint
+CS015 catches at warn. `apps/chat/chat_actions.go`
 is the shape.
 
 **D6 — Durable state has three tiers and one store.** Persist keys through
@@ -306,7 +306,8 @@ frame takes the result once, and a stale result for an old key is
 dropped. The handle's `Report` may run in a hot loop; emission is gated by
 humanised change. `task.ForApp(ctx)` is the constructor: a
 `task.NewBusApi` built from the bus alone compiles and lists tasks but
-carries no instance key, mount cancel or lifetime. Copy jackstay's runners
+carries no instance key, mount cancel or lifetime (codelint CS016). Copy
+jackstay's runners
 and its `takeResults` at the top of `Frame`.
 
 **W3 — Durable or long work is a watchbill job.** Work that must survive
@@ -571,8 +572,8 @@ the `icons` package, brand marks from the Nerd Fonts subset
 tier-1 lints enforce casing, spacing, rounding, stroke and motion, and the
 palette only where the constructor is `color.RGB` or `color.RGBA`
 ([tier1-mechanical](../../design-system/policy/tier1-mechanical.md)); a
-`color.Hex(0x…)` or a bare `uint32` literal passes the lint and fails the
-rule, so review looks for both (§12). A `designlint:ignore` carries its
+`color.Hex(0x…)` or a bare `uint32` literal is caught by L16, which ships
+at warn until its findings reach zero. A `designlint:ignore` carries its
 reason, and a missing token is a Tier 3 ADR, not a hex literal. The theme is chosen at launch, so only token reads
 follow it. `apps/imztop/imztop_theme.go` derives everything from tokens.
 
@@ -807,10 +808,9 @@ consumer arrives.
   contract and the embed surface, since all three are imported today.
 - A runtime write gate for a statement with a body, so play's environment
   gates of ADR-0270 §SD7 can go (X4).
-- Lints for the shapes the adherence survey found passing: `color.Hex`
-  and `uint32` colour literals (L1); the raw clipboard bus request and the
-  unlabelled text call (D5); a goroutine started outside the lifetime
-  scope (W5); a `task.NewBusApi` without a lifetime (W2).
+- A lint for a goroutine started outside the lifetime scope (W5); the
+  other three shapes the adherence survey found passing now have L16,
+  CS015 and CS016, all at warn until their findings reach zero.
 - A shared hit-highlighting widget (F2), a mid-tone background token the
   find overlays suppress a lint for, a hidden-window pause.
 - A conformance sweep over catalogs comparable to `widgets/conformance`.
