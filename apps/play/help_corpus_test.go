@@ -2,11 +2,13 @@ package play
 
 import (
 	"io/fs"
+	"regexp"
 	"strings"
 	"testing"
 
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
 	"github.com/stergiotis/boxer/public/keelson/runtime/help"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -32,6 +34,7 @@ func TestHelpCorpusIndexes(t *testing.T) {
 		"features":              false,
 		"snippets":              false,
 		"howto-example-queries": false,
+		helpOperationsDoc:       false,
 	}
 	for _, d := range b.Docs() {
 		if _, expected := want[d.Path]; !expected {
@@ -109,6 +112,44 @@ func TestHelpCorpusSQLBlocksParse(t *testing.T) {
 			require.NoErrorf(t, parseErr, "%s:%d: Grammar1 rejects this block, so every pre-execute pass is skipped and the SQL ships verbatim\n%s",
 				path, blk.line, blk.sql)
 		}
+	}
+}
+
+// helpOperationsDoc is the help topic that lists the catalog for an agent
+// (keelson-app A4). TestHelpCorpusNamesEveryOperation keeps it equal to the
+// catalog in code.
+const helpOperationsDoc = "reference-operating-play-through-the-catalog"
+
+// helpOperationRow matches a table row whose first cell is an operation name
+// in backticks — the one shape the operations topic lists operations in, so
+// a name mentioned in prose (a signal, a resource, an argument) is not
+// mistaken for a claim that the catalog has it.
+var helpOperationRow = regexp.MustCompile("(?m)^\\| `([a-z][a-z0-9_]*)` \\|")
+
+// TestHelpCorpusNamesEveryOperation holds the operations topic and the
+// catalog together in both directions: every operation playOps declares has
+// a row in the topic, and every row names an operation the catalog has. A
+// new operation without a row, a renamed one, or a row kept past its
+// operation's removal fails here rather than teaching an agent a name the
+// window does not answer to.
+func TestHelpCorpusNamesEveryOperation(t *testing.T) {
+	raw, err := fs.ReadFile(helpFS, "help/"+helpOperationsDoc+".md")
+	require.NoError(t, err)
+
+	documented := map[string]int{}
+	for _, m := range helpOperationRow.FindAllStringSubmatch(string(raw), -1) {
+		documented[m[1]]++
+	}
+	require.NotEmpty(t, documented, "the operations topic lists no operation rows")
+
+	catalog := map[string]bool{}
+	for _, name := range playOps.Names() {
+		catalog[name] = true
+		assert.Contains(t, documented, name, "operation %q is in the catalog and has no row in %s.md", name, helpOperationsDoc)
+	}
+	for name, n := range documented {
+		assert.Truef(t, catalog[name], "%s.md lists %q, which the catalog does not declare", helpOperationsDoc, name)
+		assert.Equalf(t, 1, n, "%s.md lists %q %d times; one row per operation", helpOperationsDoc, name, n)
 	}
 }
 

@@ -19,6 +19,11 @@ You never write a `FORMAT` clause: the app rewrites the query to end with
 `TRUNCATE`/`CREATE` does not round-trip through the playground, because the
 appended `FORMAT` clause is invalid on those statements.
 
+An agent reaches the same window through its operations catalog rather than
+the widgets. **Operating play through the catalog** lists every operation by
+name, when each is refused, the phases the result and the projection move
+through, and what play reads and publishes.
+
 ## Tabs
 
 The window is a dock of tabs you can rearrange and split (each, and every other
