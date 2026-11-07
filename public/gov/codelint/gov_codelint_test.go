@@ -682,3 +682,45 @@ func TestCS016_FlagsNewBusApiOutsideTheRuntime(t *testing.T) {
 		t.Errorf("unexpected finding: %+v", f)
 	}
 }
+
+func TestCS017_FlagsAGoroutineNoScopeOrTaskOwns(t *testing.T) {
+	const testdataPrefix = "github.com/stergiotis/boxer/public/gov/codelint/testdata/cs017"
+	root, err := filepath.Abs("./testdata/cs017/bad")
+	require.NoError(t, err)
+	pkgs, err := codelint.LoadPackages(codelint.LoadConfig{}, root)
+	require.NoError(t, err)
+	require.NotEmpty(t, pkgs)
+
+	linter := codelint.NewLinter()
+	linter.Register(codelint.NewRuleCS017ForPrefixes(testdataPrefix))
+	var findings []codelint.Finding
+	for f, runErr := range linter.Run(pkgs) {
+		require.NoError(t, runErr)
+		findings = append(findings, f)
+	}
+	require.Len(t, findings, 7, "a literal, a call, a retired fallback, a go inside scope.Go, an annotation without a reason, an unrelated defer and a task call in a nested literal")
+	for _, f := range findings {
+		assert.Equal(t, "CS017", f.RuleId)
+		assert.Equal(t, codelint.FindingSeverityWarn, f.Severity)
+		assert.Contains(t, f.Path, "bad.go")
+		assert.Contains(t, f.Message, "app.LifetimeOf(ctx).Go")
+	}
+
+	// The shipped rule covers the apps tree only.
+	apps := codelint.NewLinter()
+	apps.Register(codelint.NewRuleCS017())
+	for f, runErr := range apps.Run(pkgs) {
+		require.NoError(t, runErr)
+		t.Errorf("finding outside the apps tree: %+v", f)
+	}
+
+	good, err := filepath.Abs("./testdata/cs017/good")
+	require.NoError(t, err)
+	pkgs, err = codelint.LoadPackages(codelint.LoadConfig{}, good+"/...")
+	require.NoError(t, err)
+	require.Len(t, pkgs, 2, "the package and the command below it")
+	for f, runErr := range linter.Run(pkgs) {
+		require.NoError(t, runErr)
+		t.Errorf("unexpected finding: %+v", f)
+	}
+}
