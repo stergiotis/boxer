@@ -340,7 +340,9 @@ A goroutine the app starts goes through `task.ForApp`, through
 is invisible to the host's drain and to the Running tab. Tails and
 drained hooks make no imzero2 calls. A loop selects on both the scope's
 context and `ctx.Cancel()`. `apps/servicedemo` and chat's per-coordinator
-child scopes are the shape.
+child scopes are the shape. Codelint CS017 reports a `go` statement under
+`apps/` that nothing the host drains owns; a goroutine that is process-wide
+on purpose says why in its function's doc comment (`// lifetime: <reason>`).
 
 **W6 — Implement `app.PausableAppI` when you poll.** Pause is the
 person's act; the host stops drawing the window and asks the app once,
@@ -451,9 +453,10 @@ more than a sentence, open a tethered inspector
 a level-1 chip with provenance and a level-2 window on click, sized by
 the inspector surface token.
 
-**A6 — Everything a person can point at has a name.** Buttons, inputs and
-check boxes take their text as the accessible name; labels are anchored
-by value. A painted mark gets a hit region with a `Label`
+**A6 — Everything a person can point at has a name.** Buttons and check
+boxes take their text as the accessible name; a text input takes it from
+`AccessibleName`, since its hint is only the placeholder; labels are
+anchored by value. A painted mark gets a hit region with a `Label`
 (`PaintHitRect`, `PaintHitCircle`, `PaintHitPolygon`) and a painter area an
 `AccessibleRegion`, so the tree names it and a tooltip reads it
 ([imzero2 skill §14.4](../imzero2/SKILL.md), `apps/riskviews/canvas.go`).
@@ -717,7 +720,8 @@ gate for a statement with a body; the runtime ADR that supplies one
 retires them (§12). A runtime service that lives in an app package under
 a `runtime.*` id (sqlapplet's applet store, the moderation gate of
 [ADR-0132](../../adr/0132-sqlapplet-sql-defined-applets.md)) is the runtime's code in an app's directory, not
-an app gate; it moves under the runtime (decided 2026-11-07, §12).
+an app gate; it now lives in `public/keelson/runtime/appletstore`, and
+sqlapplet fills its `MinterI` slot (ADR-0132's Update of 2026-11-07).
 
 **X5 — The leaf is the contract.** What a consumer imports to drive the
 app (its launch config, its operation argument types, its dataset aliases)
@@ -800,19 +804,16 @@ Gaps this page names and does not fill; each is its own ADR when a
 consumer arrives.
 
 - A playground role the host registers so a consumer can substitute play
-  (§0). It has to cover the launch leaf, the bundle and dataset-alias
-  contract and the embed surface, since all three are imported today.
+  (§0). [ADR-0361](../../adr/0361-the-playground-is-a-launch-kind-the-runtime-owns-and-the-host-resolves.md) (proposed) answers it with a launch
+  kind the runtime owns and the host resolves.
 - A runtime write gate for a statement with a body, so play's environment
   gates of ADR-0270 §SD7 can go (X4).
-- A lint for a goroutine started outside the lifetime scope (W5); the
-  other three shapes the adherence survey found passing now have L16,
-  CS015 and CS016, all at warn until their findings reach zero.
+- Graduating L16, CS015, CS016 and CS017 from warn once their findings
+  reach zero.
 - A shared hit-highlighting widget (F2), a mid-tone background token the
   find overlays suppress a lint for, a hidden-window pause.
 - A conformance sweep over catalogs comparable to `widgets/conformance`.
-- Where a `package main` command under `apps/` belongs (§10), and the
-  move of sqlapplet's applet store service under the runtime, decided
-  2026-11-07 and not yet done (X4).
+- Where a `package main` command under `apps/` belongs (§10).
 - A reason parameter on `task.ProducerCaps()` (S3).
 
 The survey that found most of these is

@@ -60,8 +60,8 @@ nesting among the printed nodes.
 Filters, all optional: `--treeText` (name or value contains, case ignored),
 `--treeRole`, `--treeUnder <id>` (that node and below), `--treeLimit`,
 `--treeHidden`. Unnamed containers and `text_run` duplicates of a label are left
-out; an empty text input is not, though it has neither name nor value (its
-hint text does not reach the tree). The header says `nodes=200 of 640` when the limit cut the list — narrow
+out; an empty text input is not. Its hint text reaches the tree only as a
+placeholder, so it has a name only when the app sets `AccessibleName`. The header says `nodes=200 of 640` when the limit cut the list — narrow
 the filter rather than reading a partial scene as the whole one.
 
 A script that parses the dump wants `--treeFormat jsonl` instead: one JSON
@@ -118,8 +118,9 @@ step, or before it for `capture` and `tree`. `modifiers` is a bitmask: 1 alt,
   which counts from 0 in the order `tree` and `--dumpTree` print the matches.
   `tree` and `--dumpTree` are the exception — their fields are a filter.
 - **Static text has no name.** egui puts a label's text in the value, so anchor
-  it with `value` / `valueContains` plus `"role":"label"`. Buttons, check boxes
-  and text inputs carry a name.
+  it with `value` / `valueContains` plus `"role":"label"`. Buttons and check
+  boxes carry a name; a text input carries one when the app sets
+  `AccessibleName` on it.
 - **Ids are stable.** A node id is a function of the widget's path, the same
   across runs and window sizes. Prefer it once you have it, and whenever two
   windows hold the same button (`Close window` is one per window).
