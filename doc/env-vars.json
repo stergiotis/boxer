@@ -2302,7 +2302,7 @@
     {
       "name": "BOXER_WRITINGSTYLESCOPE_DOCS",
       "type": "string",
-      "description": "two markdown files for a new writingstylescope window to compare, document A then document B, separated by the path-list separator as in PATH; the window neither restores nor persists the drafts; for scenes and demos",
+      "description": "two markdown documents for a new writingstylescope window to compare, as a JSON object {\"DocA\": ..., \"DocB\": ...}; the window neither restores nor persists the drafts; for scenes and demos",
       "category": "boxer-writingstylescope",
       "sensitive": false,
       "origin": {

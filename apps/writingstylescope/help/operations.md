@@ -30,11 +30,11 @@ snapshot store holding both files first. A config whose document is over
 1 MiB or whose floor is outside 0 to 4000 fails the open with the reason
 rather than opening a plain window. The first sweep runs on the first frame.
 
-For scenes and headless runs, `BOXER_WRITINGSTYLESCOPE_DOCS` names two
-markdown files, document A then document B, separated by the path-list
-separator as in `PATH` (a colon on Unix). A value that does not name two
-readable files leaves the window on the person's drafts and says why on the
-Documents tab. A launch config wins over the variable. A window opened
+For scenes and headless runs, `BOXER_WRITINGSTYLESCOPE_DOCS` carries the
+two documents' text as a JSON object with `DocA` and `DocB`; the window
+reads no file. A value that does not decode, or lacks either document,
+leaves the window on the person's drafts and says why on the Documents
+tab. A launch config wins over the variable. A window opened
 either way neither restores nor stores the drafts.
 
 ## The resources

@@ -4,7 +4,7 @@ audience: contributor
 status: draft
 generated: true
 generator: public/app env gen-docs
-generated-at: 2026-11-07T16:49:52Z
+generated-at: 2026-11-07T16:54:54Z
 ---
 
 > **Status: draft — pre-human-review.** Machine-generated registry snapshot;
@@ -190,7 +190,7 @@ generated-at: 2026-11-07T16:49:52Z
 
 | Name | Type | Default | CLI flag | Sensitive | Description |
 |------|------|---------|----------|-----------|-------------|
-| `BOXER_WRITINGSTYLESCOPE_DOCS` | string | — | — |  | two markdown files for a new writingstylescope window to compare, document A then document B, separated by the path-list separator as in PATH; the window neither restores nor persists the drafts; for scenes and demos |
+| `BOXER_WRITINGSTYLESCOPE_DOCS` | string | — | — |  | two markdown documents for a new writingstylescope window to compare, as a JSON object {"DocA": ..., "DocB": ...}; the window neither restores nor persists the drafts; for scenes and demos |
 
 ## database (13)
 

@@ -2,8 +2,6 @@ package writingstylescope
 
 import (
 	"errors"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 
@@ -210,16 +208,12 @@ func TestMountAppliesTheLaunchConfig(t *testing.T) {
 }
 
 func TestReadDocsSeed(t *testing.T) {
-	dir := t.TempDir()
-	a, b := filepath.Join(dir, "a.md"), filepath.Join(dir, "b.md")
-	require.NoError(t, os.WriteFile(a, []byte("# A"), 0o600))
-	require.NoError(t, os.WriteFile(b, []byte("# B"), 0o600))
-	ta, tb, err := readDocsSeed(a + string(os.PathListSeparator) + b)
+	ta, tb, err := readDocsSeed(`{"DocA":"# A","DocB":"# B"}`)
 	require.NoError(t, err)
 	assert.Equal(t, "# A", ta)
 	assert.Equal(t, "# B", tb)
-	_, _, err = readDocsSeed(a)
-	assert.ErrorContains(t, err, "names 1 files")
-	_, _, err = readDocsSeed(a + string(os.PathListSeparator) + filepath.Join(dir, "missing.md"))
-	assert.ErrorContains(t, err, "missing.md")
+	_, _, err = readDocsSeed(`{"DocA":"# A"}`)
+	assert.ErrorContains(t, err, "needs both DocA and DocB")
+	_, _, err = readDocsSeed("a.md:b.md")
+	assert.ErrorContains(t, err, "not a JSON object")
 }

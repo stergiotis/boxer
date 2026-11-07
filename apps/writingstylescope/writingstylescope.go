@@ -35,10 +35,9 @@ package writingstylescope
 
 import (
 	"context"
+	"encoding/json/v2"
 	"fmt"
 	"math"
-	"os"
-	"path/filepath"
 	"sort"
 	"strconv"
 	"sync"
@@ -395,29 +394,29 @@ func (inst *App) adoptDocuments(a string, b string) {
 	inst.pending = true
 }
 
-// readDocsSeed reads the two files the seed variable names, separated by
-// the system's path-list separator as PATH is. Its errors are refusals,
+// readDocsSeed decodes the seed variable: a JSON object carrying the two
+// documents' text as DocA and DocB, the BOXER_SQLAPPLETCREATOR_DRAFT shape.
+// The text travels in the variable, as mdedit's seed carries its document,
+// so the window opens no file under its own name. Its errors are refusals,
 // whose reason the Documents tab quotes as it stands.
 func readDocsSeed(seed string) (a string, b string, err error) {
-	paths := filepath.SplitList(seed)
-	if len(paths) != 2 {
-		err = app.RefuseOperation(fmt.Sprintf("it names %d files, not two separated by %q", len(paths), string(os.PathListSeparator)))
+	var docs struct {
+		DocA string
+		DocB string
+	}
+	if jerr := json.Unmarshal([]byte(seed), &docs); jerr != nil {
+		err = app.RefuseOperation("it is not a JSON object with DocA and DocB: " + jerr.Error())
 		return
 	}
-	var texts [2]string
-	for i, p := range paths {
-		raw, rerr := os.ReadFile(p)
-		if rerr != nil {
-			err = app.RefuseOperation(rerr.Error())
-			return
-		}
-		if len(raw) > maxPaneBytes {
-			err = app.RefuseOperation(p + " is over the pane's cap of 1 MiB")
-			return
-		}
-		texts[i] = string(raw)
+	if docs.DocA == "" || docs.DocB == "" {
+		err = app.RefuseOperation("it needs both DocA and DocB")
+		return
 	}
-	a, b = texts[0], texts[1]
+	if len(docs.DocA) > maxPaneBytes || len(docs.DocB) > maxPaneBytes {
+		err = app.RefuseOperation("a document is over the pane's cap of 1 MiB")
+		return
+	}
+	a, b = docs.DocA, docs.DocB
 	return
 }
 

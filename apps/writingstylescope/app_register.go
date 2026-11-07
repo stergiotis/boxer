@@ -71,13 +71,14 @@ var manifest = app.Manifest{
 // docsSeedName is the seed variable's name, quoted where it is refused.
 const docsSeedName = "BOXER_WRITINGSTYLESCOPE_DOCS"
 
-// DocsSeed opens a new window on two files (ADR-0009 seed variable, the
-// BOXER_MDEDIT_DOC shape): a scene needs documents of its own to compare,
+// DocsSeed opens a new window on two documents carried as text in the
+// variable (ADR-0009 seed variable, the BOXER_MDEDIT_DOC shape: no file is
+// read): a scene needs documents of its own to compare,
 // and the drafts the window keeps belong to the person. A seeded window
 // neither restores nor persists them. A caller's launch config wins over it.
 var DocsSeed = env.NewString(env.Spec{
 	Name:        docsSeedName,
-	Description: "two markdown files for a new writingstylescope window to compare, document A then document B, separated by the path-list separator as in PATH; the window neither restores nor persists the drafts; for scenes and demos",
+	Description: "two markdown documents for a new writingstylescope window to compare, as a JSON object {\"DocA\": ..., \"DocB\": ...}; the window neither restores nor persists the drafts; for scenes and demos",
 	Category:    env.CategoryE("boxer-writingstylescope"),
 })
 
