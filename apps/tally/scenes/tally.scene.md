@@ -26,6 +26,10 @@ taken from the repository root, and a second mount named `lading-src` for the
 diff. Without the store the runner reports the scene as skipped; with a store
 that lacks those mounts it fails at its first mount wait.
 
+The Find tab's readout is read and its count expected: the pattern matches
+exactly the one ADR. The scene ends on F1 over the window, which opens
+tally's own help at its overview.
+
 ```jsonl trace
 {"do":"note","text":"ADR-0200 M2 — tally against the local store"}
 {"do":"wait","value":"Mounts","role":"label","settleMs":500,"comment":"the window is up; the mount list is a lane and may still be loading"}
@@ -66,7 +70,8 @@ that lacks those mounts it fails at its first mount wait.
 {"do":"focus","role":"text_input","nth":3,"comment":"the find pattern box. Measured, not reasoned: with the Find tab up the accessibility tree lists the bottom leaf's inputs first and in reverse (needle, min, ext, pattern), then the pane filters"}
 {"do":"type","role":"text_input","nth":3,"text":"0198","settleMs":200}
 {"do":"click","name":"Search","role":"button","settleMs":300}
-{"do":"wait","value":"1 result(s) in this directory","role":"label","settleMs":1500,"comment":"the pattern matched exactly the one ADR"}
+{"do":"read","valueContains":"result(s) in this directory","role":"label","pattern":"^(?P<found>\\d+) result\\(s\\) in this directory$","comment":"the Find tab's readout"}
+{"do":"expect","of":"found","eq":1,"comment":"the pattern matched exactly the one ADR"}
 {"do":"capture","text":"tally-find","comment":"the Find tab: results of the name search"}
 {"do":"note","text":"--- Du: directory totals and the treemap ---"}
 {"do":"click","name":"Du","role":"button","settleMs":400}
@@ -76,4 +81,8 @@ that lacks those mounts it fails at its first mount wait.
 {"do":"click","name":"Problems","role":"button","settleMs":400}
 {"do":"wait","valueContains":"unreadable entries","role":"label","settleMs":1500}
 {"do":"capture","text":"tally-problems","comment":"the Problems tab"}
+{"do":"key","text":"F1","settleMs":1200}
+{"do":"wait","contains":"Help center","role":"window"}
+{"do":"wait","value":"Browsing lading snapshots","role":"label","comment":"the reader shows tally's overview, not the index"}
+{"do":"capture","text":"tally-help"}
 ```

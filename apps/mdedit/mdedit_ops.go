@@ -7,13 +7,17 @@ import (
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/appops"
+	"github.com/stergiotis/boxer/public/keelson/runtime/appops/fsmops"
+	"github.com/stergiotis/boxer/public/keelson/runtime/appops/opfsm"
 )
 
 // The catalog (ADR-0269 §SD2, ADR-0318): what the agentic harness reads
 // and offers in place of a model grant of mdedit's own. An agent reads the
 // document and the selection, and proposes a replacement the person
 // reviews in the proposal pane (mdedit_proposal.go); nothing an agent does
-// through it changes the buffer.
+// through it changes the buffer. The document's lifecycle is mounted as
+// `document` (keelson-app T3): document_state and document_machine are the
+// operations every app's mounted machine offers.
 
 const (
 	resDocument = "document"
@@ -119,6 +123,12 @@ var ops = func() (s *appops.Set[*App, snap]) {
 			}
 			return
 		})
+	fsmops.Mount(s, "document", "the document's lifecycle, from the restore through opens, saves, sends and the follow", func(inst *App) opfsm.SourceI {
+		if inst.docMachine == nil {
+			return nil
+		}
+		return inst.docMachine
+	}, fsmops.Options{History: 16})
 	return
 }()
 

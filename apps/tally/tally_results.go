@@ -406,6 +406,7 @@ func (inst *App) renderResults(sc *storeConn) {
 	if res.Err != nil {
 		inst.status = res.Err.Error()
 	}
+	p.rows = res.Rows
 	if res.Clicked >= 0 || res.Activated >= 0 || res.Navigated {
 		inst.focus = paneIDR
 	}

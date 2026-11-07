@@ -19,14 +19,20 @@ heading; Ctrl+↓ moves it past the block below; Ctrl+D duplicates it; and
 an address typed over a selection — one write-back, as a paste is — makes
 the selection a link. The source pane at the end shows every splice. The
 task box's button is its Phosphor glyph (U+E45E, square), written into the
-JSON as the character.
+JSON as the character and anchored by `contains`, since the widget pads
+the name.
+
+Find then takes a regex battery over the result: `^## here` is two tokens
+that must both occur on a line, so it matches the two headings and nothing
+else, and each token's occurrence on them is a match — four in all, which
+the readout beside the field states and the trace expects.
 
 ```jsonl trace
 {"do":"note","text":"ADR-0334 — block gestures"}
 {"do":"wait","role":"multiline_text_input","settleMs":600}
 {"do":"click","contains":"Blocks","role":"button","settleMs":500}
 {"do":"wait","value":"open","role":"label","settleMs":400}
-{"do":"click","name":"","role":"button","settleMs":600,"comment":"the open task's box: a click flips it to done"}
+{"do":"click","contains":"","role":"button","settleMs":600,"comment":"the open task's box: a click flips it to done"}
 {"do":"wait","value":"Some docs here.","role":"label","settleMs":300}
 {"do":"click","value":"Some docs here.","role":"label","pointer":true,"settleMs":600}
 {"do":"wait","role":"multiline_text_input","value":"Some docs here.","settleMs":300}
@@ -44,4 +50,8 @@ JSON as the character.
 {"do":"wait","role":"multiline_text_input","value":"## Some docs [here.](https://x.y/d)","settleMs":400}
 {"do":"click","contains":"Source","role":"button","settleMs":500}
 {"do":"wait","role":"multiline_text_input","value":"# Title\n\n- [x] open\n- [x] done\n\nLast.\n\n## Some docs here.\n\n## Some docs [here.](https://x.y/d)\n","settleMs":400,"comment":"the box flipped in place, the heading moved below Last. and duplicated, the copy's selection made a link"}
+{"do":"type","role":"text_input","text":"^## here","settleMs":600,"comment":"the find field: two tokens, AND over a line"}
+{"do":"read","valueContains":" of ","role":"label","pattern":"^(?P<at>\\d+) of (?P<n>\\d+)$","comment":"the find readout"}
+{"do":"expect","of":"n","eq":4}
+{"do":"capture","text":"gestures-find-battery"}
 ```

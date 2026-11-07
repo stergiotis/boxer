@@ -51,6 +51,7 @@ var manifest = app.Manifest{
 	}, task.ProducerCaps()...),
 	LaunchKind: launchcfg.Kind,
 	Workingset: true,
+	Operations: ops.Catalog(),
 	Help:       help.MustSub(helpFS, "help"),
 }
 

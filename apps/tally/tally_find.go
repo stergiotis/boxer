@@ -79,7 +79,9 @@ LIMIT 500`,
 
 // grepSQL is the content search with exact line numbers (ADR-0198 §7): only
 // files the store marked text take part, so a line never straddles a block.
-func grepSQL(loc location, scope findScopeE, dir, needle string) string {
+// limit caps the rows: the Find tab's cap, or one past it for the catalog's
+// grep, which reports the cut.
+func grepSQL(loc location, scope findScopeE, dir, needle string, limit int) string {
 	all := scope == findScopeAll
 	pred := "1"
 	if scope == findScopeDir {
@@ -93,8 +95,8 @@ WHERE (mount, path) IN (SELECT mount, path FROM %s WHERE text AND %s)
   AND match(data, %s)
   AND match(line, %s)
 ORDER BY mount, path, lineno
-LIMIT 1000`,
-		relation("fsdata", loc, all), relation("fs", loc, all), pred, q, q)
+LIMIT %d`,
+		relation("fsdata", loc, all), relation("fs", loc, all), pred, q, q, limit)
 }
 
 // renderFind is the Find tab: the knobs, a Search button, and the results
@@ -178,7 +180,7 @@ func (inst *App) findKey(loc location, dir string) string {
 
 func (f *findState) armedSQL(loc location, dir string) string {
 	if strings.TrimSpace(f.needle) != "" {
-		return grepSQL(loc, f.scope, dir, strings.TrimSpace(f.needle))
+		return grepSQL(loc, f.scope, dir, strings.TrimSpace(f.needle), grepRowCap)
 	}
 	minSize, _ := strconv.ParseInt(strings.TrimSpace(f.minSize), 10, 64)
 	return findSQL(loc, f.scope, dir, strings.TrimSpace(f.pattern), strings.TrimSpace(f.ext), minSize)

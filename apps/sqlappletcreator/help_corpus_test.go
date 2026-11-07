@@ -1,6 +1,7 @@
 package sqlappletcreator
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/help"
@@ -47,5 +48,28 @@ func TestHelpCorpusDropsNothing(t *testing.T) {
 		doc, _, parsed := b.Doc(info.Path)
 		require.Truef(t, parsed, "doc %q must parse", info.Path)
 		require.Emptyf(t, doc.Dropped(), "doc %q loses content in the lowering: %+v", info.Path, doc.Dropped())
+	}
+}
+
+// TestHelpBookNamesEveryOperation keeps the book and the catalog together:
+// an operation or resource the book does not name is one a model has to
+// guess at.
+func TestHelpBookNamesEveryOperation(t *testing.T) {
+	help.SyncFromRegistry()
+	b, ok := help.Book(manifest.Id)
+	require.True(t, ok)
+	var corpus strings.Builder
+	for _, d := range b.Docs() {
+		src, found := b.Source(d.Path)
+		require.True(t, found, d.Path)
+		corpus.Write(src)
+	}
+	catalog := ops.Catalog()
+	require.NotEmpty(t, catalog.Operations)
+	for _, spec := range catalog.Operations {
+		require.Containsf(t, corpus.String(), "`"+spec.Name+"`", "operation %q is not named in the help book", spec.Name)
+	}
+	for _, r := range catalog.Resources {
+		require.Containsf(t, corpus.String(), "`"+r.Name+"`", "resource %q is not named in the help book", r.Name)
 	}
 }

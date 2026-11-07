@@ -331,3 +331,28 @@ func TestManifest_DeclaresNoWildcardHandleCap(t *testing.T) {
 			"handle caps are granted dynamically by the broker, never declared")
 	}
 }
+
+func TestMountSeedsTheDraftFromTheSeedVariable(t *testing.T) {
+	DraftSeed.SetForTest(t, `{"Sql":"SELECT 7","Endpoint":"introspection","Slug":"seven","Title":"Seven","Summary":"one line","Icon":"x"}`)
+	inst := &App{}
+	mc := app.NewStaticMountContext(appletcreatecfg.AppId, zerolog.Nop(), nil, nil, nil)
+	require.NoError(t, inst.Mount(mc))
+	assert.Equal(t, "SELECT 7", inst.sql)
+	assert.Equal(t, appletcreatecfg.EndpointIntrospection, inst.endpoint)
+	assert.Equal(t, [4]string{"seven", "Seven", "one line", "x"}, [4]string{inst.slug, inst.title, inst.summary, inst.icon})
+
+	// A caller's launch config wins over the seed.
+	raw, err := buscodec.Encode(appletcreatecfg.AppletCreate{Sql: "SELECT 42"})
+	require.NoError(t, err)
+	inst = &App{}
+	mc = app.NewStaticMountContext(appletcreatecfg.AppId, zerolog.Nop(), nil, nil, nil)
+	mc.SetLaunchConfig(raw)
+	require.NoError(t, inst.Mount(mc))
+	assert.Equal(t, "SELECT 42", inst.sql)
+	assert.Empty(t, inst.slug)
+
+	DraftSeed.SetForTest(t, `{"Slug":"x","Colour":"red"}`)
+	inst = &App{}
+	mc = app.NewStaticMountContext(appletcreatecfg.AppId, zerolog.Nop(), nil, nil, nil)
+	assert.ErrorContains(t, inst.Mount(mc), "draft seed", "an unknown field fails the mount")
+}

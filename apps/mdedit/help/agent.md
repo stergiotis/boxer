@@ -13,9 +13,11 @@ mdedit holds no model grant of its own. An agent reaches the window through
 its operations catalog under a task grant the person approved, reads the
 document, and proposes a replacement that the person applies or discards
 (ADR-0269, ADR-0318). Nothing an agent does through the catalog changes the
-buffer by itself. The catalog has three operations and two resources,
-`document` and `proposal`; `keelson('operations')` lists them with their
-arguments, and this page says how to use them together.
+buffer by itself. The catalog has three operations of its own over two
+resources, `document` and `proposal`, and the two the mounted document
+machine adds, `document_state` and `document_machine`, over the resource
+`document_state`; `keelson('operations')` lists them with their arguments,
+and this page says how to use them together.
 
 ## get_document
 
@@ -67,6 +69,31 @@ A query that says whether a proposal is waiting (`Pending`, with its
 and empty when there has been none. Poll it after `propose_edit` to learn
 the person's verdict; an applied proposal changes the document and so the
 revision, so the next `propose_edit` needs a new `get_document` first.
+
+## document_state and document_machine
+
+The document's lifecycle is a state machine the window mirrors each frame
+and shows as the chip in the summary row (keelson-app T1–T3). `document_state`
+returns the current phase, the transitions open from it with the gesture
+that causes each, and the latest steps; `document_machine` returns every
+phase and every declared edge. The phases:
+
+| Phase | Meaning |
+| --- | --- |
+| `restoring` | the persisted draft is being read, right after the window opens |
+| `clean` | the buffer is the checkpoint: saved, copied to the clipboard, or restored |
+| `modified` | the buffer differs from the checkpoint; `get_document` reports it as `Modified` |
+| `following` | clean, and the file it was opened from is watched; a change on disk is reloaded |
+| `opening` | the file picker is up, or the file is being read (**Open**) |
+| `saving` | the save picker is up, or the bytes are being written (**Save**, **Save as**) |
+| `sending` | the document is being uploaded to `boxer.facts` (**Upload**, **Send to play**) |
+| `changed on disk` | the followed file changed or went away while the buffer held edits; the person saves over it or opens the disk's copy |
+
+A gesture that is cancelled or fails returns to the phase it interrupted;
+the status line says why. Typing moves `clean` or `following` to
+`modified`; a completed copy or save moves it back. A proposal an agent
+makes does not move the phase until the person applies it, which is an
+edit like any other.
 
 ## What the person sees
 

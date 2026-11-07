@@ -227,13 +227,14 @@ func (inst *App) fileInFlight() (busy bool) {
 
 // beginFile claims the single in-flight slot, reporting false when something
 // else already holds it.
-func (inst *App) beginFile(status string) (ok bool) {
+func (inst *App) beginFile(op fileOpE, status string) (ok bool) {
 	inst.mu.Lock()
 	if inst.fileBusy {
 		inst.mu.Unlock()
 		return false
 	}
 	inst.fileBusy = true
+	inst.fileOp = op
 	inst.mu.Unlock()
 	inst.status = status
 	return true
@@ -243,6 +244,7 @@ func (inst *App) beginFile(status string) (ok bool) {
 func (inst *App) finishFile(res fileResult) {
 	inst.mu.Lock()
 	inst.fileBusy = false
+	inst.fileOp = fileOpNone
 	inst.fileDone = true
 	inst.fileRes = res
 	inst.mu.Unlock()
@@ -267,7 +269,7 @@ func (inst *App) openFile() {
 	if !inst.confirmReplace("Open again to discard them") {
 		return
 	}
-	if !inst.beginFile("choose a file to open…") {
+	if !inst.beginFile(fileOpOpen, "choose a file to open…") {
 		return
 	}
 	// Snapshot and clear the current follow on the render thread; its bus
@@ -353,7 +355,7 @@ func (inst *App) saveFile(chooseFile bool) {
 	if handle == "" {
 		status = "choose where to save…"
 	}
-	if !inst.beginFile(status) {
+	if !inst.beginFile(fileOpSave, status) {
 		return
 	}
 	bus := inst.bus

@@ -1,6 +1,18 @@
 package mdedit
 
-// Find and replace (ADR-0178 M3).
+// Find and replace (ADR-0178 M3), as a regex battery (keelson-app F1).
+//
+// The query is the battery every filter box on the desktop takes
+// (ADR-0164 §SD2): whitespace-separated, case-insensitive RE2 tokens parsed
+// by search.ParseQuery, typed into regexedit in ModeTokens so each token is
+// coloured as its own pattern. A token that does not compile matches
+// literally, and a note beside the match count says so. The unit the AND applies to
+// is the line: a line qualifies when every token occurs in it, and each
+// token's occurrences on a qualifying line are the matches — painted,
+// walked and replaced one at a time. A one-token query therefore finds every
+// occurrence, as a plain find does, and a two-token query narrows to the
+// lines that carry both. Overlapping occurrences of different tokens merge
+// into one match, so the list stays disjoint for the splice.
 //
 // Three seams do the work and none of them is new. Occurrences are painted
 // through `sectionStyled` (ADR-0130 L3), the sparse overlay channel that
@@ -38,20 +50,22 @@ package mdedit
 // match is in, which is somewhere the reader can see.
 
 import (
-	"github.com/stergiotis/boxer/public/semistructured/markdown/mdline"
+	"regexp"
+	"slices"
 	"strings"
-	"unicode"
-	"unicode/utf8"
 
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
+	"github.com/stergiotis/boxer/public/keelson/runtime/help/search"
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
 	"github.com/stergiotis/boxer/public/keelson/runtime/widgethandle"
+	"github.com/stergiotis/boxer/public/semistructured/markdown/mdline"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/keycodes"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/codeview"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/color"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/markdownhighlight"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/mdoutline"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/regexedit"
 )
 
 const (
@@ -69,7 +83,7 @@ const (
 	// findFieldWidthPx sizes the two text fields. A TextEdit that states no
 	// width takes spacing().text_edit_width — 280pt each, which pushes the
 	// buttons off the end of a bar that has two of them.
-	findFieldWidthPx = float32(150)
+	findFieldWidthPx = float32(190)
 )
 
 // Match tones. Accent for "here is an occurrence", warning for "and this is
@@ -94,26 +108,29 @@ var (
 const (
 	tipFind = "Find inside the document. Matches are painted in the source pane; the current one is the warmer colour."
 
-	tipFindQuery = "Text to find. Matching is literal — no regular expressions, no whole-word option. Enter goes to the next match, Shift+Enter to the previous one."
+	tipFindQuery = "A regex battery: space-separated, case-insensitive RE2 tokens. A line matches when every token occurs in it, and each token's occurrences on such lines are the matches. A token that is not a valid regexp matches literally, and the row says so. Enter goes to the next match, Shift+Enter to the previous one."
 
 	tipFindClear = "Clear the query. The matches and their painting go with it."
 
 	tipReplaceToggle = "Show the replace row. Kept behind a toggle because its buttons rewrite the buffer."
 
-	tipFindCase = "Match case. With it off, letters fold both ways, including accented and non-Latin ones."
-
 	tipFindPrev = "Go to the previous match: it is selected in the source and the preview scrolls to its section. The source pane itself cannot be scrolled to the caret from here — the editing seam reports no geometry for a byte range — so a match far off-screen is selected where you cannot see it."
 
 	tipFindNext = "Go to the next match: it is selected in the source and the preview scrolls to its section. The source pane itself cannot be scrolled to the caret from here — the editing seam reports no geometry for a byte range — so a match far off-screen is selected where you cannot see it."
 
-	tipReplaceWith = "Text each replaced match becomes. Empty deletes the match."
+	tipReplaceWith = "Text each replaced match becomes, written literally: no $1 groups, no escapes. Empty deletes the match."
 
 	tipReplaceOne = "Replace the current match and move to the next one."
 
 	tipReplaceAll = "Replace every match in the document at once. This rewrites the buffer from outside the editor rather than typing into it, so it is not an edit the widget's own undo history describes."
 
-	hintFindQuery   = "find"
+	hintFindQuery   = "Find (regex, space = AND)"
 	hintReplaceWith = "replace with"
+
+	// noteFindLiteral is the line beside the readout while a token has
+	// degraded to a literal match, so the matches are not read as a regex
+	// result — the words imztop's process filter uses.
+	noteFindLiteral = "some tokens are not valid regexps and match literally"
 )
 
 // matchSpan is one occurrence, as byte offsets into the buffer — the same unit
@@ -129,7 +146,15 @@ type matchSpan struct {
 type findState struct {
 	query       string
 	replacement string
-	matchCase   bool
+
+	// battery is the query compiled (compileFind), res the per-token
+	// matchers that find the spans, and literal whether any token degraded
+	// to a literal match. Compiled when the query changes, not per frame.
+	battery search.Battery
+	res     []*regexp.Regexp
+	literal bool
+	// hl is the query field's regexedit highlighter, per window.
+	hl regexedit.Cache
 
 	// showReplace reveals the replace row. Find itself has no toggle — the
 	// query field is always in the bar and an empty query means "not finding"
@@ -147,13 +172,11 @@ type findState struct {
 	matches []matchSpan
 	idx     int
 
-	// forSrc / forQuery / forCase are the inputs the match list was computed
-	// from — the same text-keyed gate shape the lex and the preview use,
-	// widened to the other things a match depends on. have separates
-	// "computed, no matches" from "not computed".
+	// forSrc / forQuery are the inputs the match list was computed from —
+	// the same text-keyed gate shape the lex and the preview use. have
+	// separates "computed, no matches" from "not computed".
 	forSrc   string
 	forQuery string
-	forCase  bool
 	have     bool
 
 	// resumeAt is a byte offset the next recompute must resume from, set by a
@@ -178,85 +201,94 @@ func (inst *findState) current() (m matchSpan, ok bool) {
 // Matching
 // ---------------------------------------------------------------------------
 
-// findMatches returns the byte ranges of every non-overlapping occurrence of
-// query in src, in document order.
+// compileFind parses q as a battery and compiles each token's effective
+// source — `(?i)` plus the token, quote-meta'd when it degraded — for span
+// finding, since the battery itself only answers whether a text matches.
+// Compilation never fails: a token that is not a regexp is matched as text,
+// and literal says so.
+func compileFind(q string) (b search.Battery, res []*regexp.Regexp, literal bool) {
+	b = search.ParseQuery(q)
+	res = make([]*regexp.Regexp, 0, len(b.Patterns))
+	for i := range b.Patterns {
+		p := &b.Patterns[i]
+		if p.Literal {
+			literal = true
+		}
+		re, err := regexp.Compile(p.EffectiveSource())
+		if err != nil {
+			// The source is a compiled regexp's own text, so this does not
+			// happen; the literal form is the honest fallback if it did.
+			re = regexp.MustCompile("(?i)" + regexp.QuoteMeta(p.Raw))
+		}
+		res = append(res, re)
+	}
+	return
+}
+
+// findMatches returns the byte ranges of every match of the battery in src,
+// in document order and disjoint. The unit is the line: a line qualifies
+// when every token occurs in it, and each token's occurrences on a
+// qualifying line are matches. Zero-width occurrences (`a*` on a line
+// without an a) are not matches; overlapping occurrences of different
+// tokens merge into one.
 //
-// Case-insensitive matching folds rune by rune rather than lowercasing both
-// strings, and that is not fussiness: [strings.ToLower] can change a string's
-// LENGTH — 'İ' lowercases to two runes — so offsets taken against a folded
-// copy would not describe the buffer they are meant to index. Comparing rune
-// pairs keeps every offset a real offset into src.
-func findMatches(src, query string, matchCase bool) (out []matchSpan) {
-	if src == "" || query == "" {
+// The offsets index src itself: RE2 reports byte offsets into the text it
+// ran over, and a line is a slice of src, so an offset plus the line's start
+// is a real offset into the buffer, whatever case folding the matcher did.
+func findMatches(src string, res []*regexp.Regexp) (out []matchSpan) {
+	if src == "" || len(res) == 0 {
 		return nil
 	}
-	if matchCase {
-		for at := 0; at < len(src); {
-			i := strings.Index(src[at:], query)
-			if i < 0 {
-				break
-			}
-			// A literal query is valid UTF-8 and so is the buffer, so a byte
-			// match cannot begin mid-rune: UTF-8 lead bytes never appear as
-			// continuation bytes.
-			start := at + i
-			out = append(out, matchSpan{Start: start, Stop: start + len(query)})
-			at = start + len(query)
+	var line []matchSpan
+	for at := 0; at <= len(src); {
+		stop := len(src)
+		if i := strings.IndexByte(src[at:], '\n'); i >= 0 {
+			stop = at + i
 		}
-		return out
+		line = lineMatches(line[:0], src[at:stop], at, res)
+		out = append(out, line...)
+		at = stop + 1
 	}
-	for at := 0; at < len(src); {
-		n, ok := foldMatchAt(src, query, at)
-		if ok {
-			out = append(out, matchSpan{Start: at, Stop: at + n})
-			at += n
+	return mergeSpans(out)
+}
+
+// lineMatches appends the matches on one line, or nothing when a token is
+// absent from it; base is the line's offset in the buffer.
+func lineMatches(dst []matchSpan, line string, base int, res []*regexp.Regexp) (out []matchSpan) {
+	out = dst
+	for _, re := range res {
+		locs := re.FindAllStringIndex(line, -1)
+		if locs == nil {
+			return dst
+		}
+		for _, loc := range locs {
+			if loc[1] > loc[0] {
+				out = append(out, matchSpan{Start: base + loc[0], Stop: base + loc[1]})
+			}
+		}
+	}
+	return
+}
+
+// mergeSpans sorts the spans and merges the ones that overlap, so the list
+// is ascending and disjoint, which replaceSpans and the overlay both need
+// and two tokens hitting the same bytes would otherwise break. Two
+// occurrences that merely touch stay two matches.
+func mergeSpans(ms []matchSpan) (out []matchSpan) {
+	if len(ms) < 2 {
+		return ms
+	}
+	slices.SortFunc(ms, func(a, b matchSpan) int { return a.Start - b.Start })
+	out = ms[:1]
+	for _, m := range ms[1:] {
+		last := &out[len(out)-1]
+		if m.Start < last.Stop {
+			last.Stop = max(last.Stop, m.Stop)
 			continue
 		}
-		_, w := utf8.DecodeRuneInString(src[at:])
-		at += w
+		out = append(out, m)
 	}
-	return out
-}
-
-// foldMatchAt reports whether src[at:] begins with query under simple case
-// folding, and how many bytes of SRC that took. The two lengths can differ —
-// a two-byte 'ä' matches a two-byte 'Ä' here, but folding is per-rune and
-// nothing guarantees the encodings are the same width in general, which is
-// exactly why the answer is measured against src rather than assumed from
-// len(query).
-func foldMatchAt(src, query string, at int) (n int, ok bool) {
-	s, q := at, 0
-	for q < len(query) {
-		if s >= len(src) {
-			return 0, false
-		}
-		rs, ws := utf8.DecodeRuneInString(src[s:])
-		rq, wq := utf8.DecodeRuneInString(query[q:])
-		if !foldEqual(rs, rq) {
-			return 0, false
-		}
-		s += ws
-		q += wq
-	}
-	return s - at, true
-}
-
-// foldEqual is case-insensitive rune equality. [unicode.SimpleFold] walks the
-// orbit of a rune's case variants, which covers the pairs [unicode.ToLower]
-// alone misses (Kelvin sign, final sigma) without ever leaving one rune.
-func foldEqual(a, b rune) (yes bool) {
-	if a == b {
-		return true
-	}
-	if a > b {
-		a, b = b, a
-	}
-	for r := unicode.SimpleFold(a); r != a; r = unicode.SimpleFold(r) {
-		if r == b {
-			return true
-		}
-	}
-	return false
+	return
 }
 
 // matchAtOrAfter returns the index of the first match starting at or after
@@ -299,9 +331,11 @@ func stepIndex(idx, n, delta int) (next int) {
 // to start than byte zero.
 func (inst *App) ensureMatches() {
 	f := &inst.find
-	if f.have && f.forSrc == inst.src && f.forQuery == f.query &&
-		f.forCase == f.matchCase {
+	if f.have && f.forSrc == inst.src && f.forQuery == f.query {
 		return
+	}
+	if !f.have || f.forQuery != f.query {
+		f.battery, f.res, f.literal = compileFind(f.query)
 	}
 	anchor := 0
 	switch m, ok := f.current(); {
@@ -315,13 +349,12 @@ func (inst *App) ensureMatches() {
 	}
 	f.resumeAtOk = false
 
-	f.forSrc, f.forQuery, f.forCase, f.have =
-		inst.src, f.query, f.matchCase, true
+	f.forSrc, f.forQuery, f.have = inst.src, f.query, true
 	if f.query == "" {
 		f.matches, f.idx = nil, 0
 		return
 	}
-	f.matches = findMatches(inst.src, f.query, f.matchCase)
+	f.matches = findMatches(inst.src, f.res)
 	f.idx = matchAtOrAfter(f.matches, anchor)
 }
 
@@ -576,7 +609,7 @@ func (inst *App) findSummary() (s string) {
 }
 
 // renderFindRow draws the find group inside the bar's state row: the query
-// field, its clear button, the case toggle, navigation, the count readout and
+// field, its clear button, navigation, the count readout, the literal note and
 // the replace-row toggle. Callers own the enclosing horizontal layout.
 //
 // The group is always in the bar rather than behind a checkbox (M3 shipped it
@@ -601,8 +634,10 @@ func (inst *App) renderFindRow() {
 			}
 		}
 	}
+	// regexedit paints the battery shape: one independent pattern per
+	// whitespace-separated token (F1, ADR-0164 §SD4).
 	for range c.HoverText(tipFindQuery).KeepIter() {
-		te := c.TextEdit(inst.ids.PrepareStr("find-query"), f.query, false).
+		te := f.hl.TextEdit(inst.ids.PrepareStr("find-query"), f.query, false, regexedit.ModeTokens).
 			DesiredWidth(findFieldWidthPx).
 			HintText(hintFindQuery).
 			CaptureKeys(uint64(findKeyMask))
@@ -624,11 +659,6 @@ func (inst *App) renderFindRow() {
 			c.CurrentApplicationState.StateManager.OverrideDatabindingSPtr(&f.query)
 		}
 	}
-	for range c.HoverText(tipFindCase).KeepIter() {
-		c.Checkbox(inst.ids.PrepareStr("find-case"), f.matchCase, "Aa").
-			SendRespVal(&f.matchCase)
-	}
-
 	prev, next := false, false
 	for range c.HoverText(tipFindPrev).KeepIter() {
 		prev = c.Button(inst.ids.PrepareStr("find-prev"), atomsFindPrev).
@@ -648,6 +678,11 @@ func (inst *App) renderFindRow() {
 
 	if s := inst.findSummary(); s != "" {
 		c.Label(s).Send()
+	}
+	if f.query != "" && f.literal {
+		for rt := range c.RichTextLabel(noteFindLiteral) {
+			rt.Small().Weak()
+		}
 	}
 
 	// The toggle goes with the editor: in read mode the replace row it reveals

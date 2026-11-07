@@ -139,8 +139,8 @@ func TestM4BuildersExpand(t *testing.T) {
 		"find dir":     findSQL(loc, findScopeDir, "doc/adr", `\.md$`, ".md", 1024),
 		"find mount":   findSQL(loc, findScopeMount, "doc", "", "", 0),
 		"find all":     findSQL(loc, findScopeAll, "doc", "x", "", 0),
-		"grep dir":     grepSQL(loc, findScopeDir, "doc", "TODO"),
-		"grep all":     grepSQL(loc, findScopeAll, "doc", "it's"),
+		"grep dir":     grepSQL(loc, findScopeDir, "doc", "TODO", 1000),
+		"grep all":     grepSQL(loc, findScopeAll, "doc", "it's", 1000),
 		"du root":      duSQL(loc, "."),
 		"du subtree":   duSQL(loc, "doc/adr"),
 		"du files":     duFilesSQL(loc, "doc"),
@@ -153,8 +153,8 @@ func TestM4BuildersExpand(t *testing.T) {
 		assert.Containsf(t, out, "boxer.fs", "%s reads the store", name)
 	}
 	assert.Contains(t, findSQL(loc, findScopeAll, "d", "", "", 0), "fs('*')", "all mounts is the wildcard")
-	assert.Contains(t, grepSQL(loc, findScopeDir, "doc", "TODO"), "startsWith(path, 'doc/')")
-	assert.Contains(t, grepSQL(loc, findScopeAll, "doc", "x"), "fsdata('*')")
+	assert.Contains(t, grepSQL(loc, findScopeDir, "doc", "TODO", 1000), "startsWith(path, 'doc/')")
+	assert.Contains(t, grepSQL(loc, findScopeAll, "doc", "x", 1000), "fsdata('*')")
 	assert.Contains(t, duSQL(loc, "doc/adr"), "HAVING anc = 'doc/adr' OR startsWith(anc, 'doc/adr/')")
 	assert.Contains(t, duSQL(loc, "."), "HAVING 1")
 }

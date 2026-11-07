@@ -25,8 +25,16 @@ graph — is checked over a fixture vault by
 `TestSceneCompBrowserWalksFromTheTable`, in the integration lane, since what
 this scene can assert depends on whatever vault the checkout holds.
 
+The scene ends on F1 over the window. An applet window's help is the
+applet runtime's own book, so the reader opens at the page on operating a
+SQL applet as an agent rather than at the competence book.
+
 ```jsonl trace
 {"do":"read","valueContains":"rows ·","role":"label","pattern":"(?P<rows>\\d+) rows","settleMs":3000}
 {"do":"expect","of":"rows","min":1,"comment":"a populated vault; an empty one is the ADR's documented off-repo state, not a pass"}
 {"do":"capture","text":"comp-browser","settleMs":1000}
+{"do":"key","text":"F1","settleMs":1200}
+{"do":"wait","contains":"Help center","role":"window"}
+{"do":"wait","value":"Operating a SQL applet as an agent","role":"label","comment":"the reader shows the applet runtime's help, not the index"}
+{"do":"capture","text":"comp-browser-help"}
 ```

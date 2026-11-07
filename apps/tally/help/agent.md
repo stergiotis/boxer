@@ -9,13 +9,45 @@ title: Operating tally as an agent
 
 # Operating tally as an agent
 
-tally declares no operations catalog yet: there is no `get_` or `set_`
-operation to call on an open window, and `keelson('operations')` lists none
-for it. What an agent can do is open the window in a chosen state through
-a launch config, read the state it keeps through the workingset, and run
-the same SQL the window runs through play, where the `lading` book carries
-every question as a pasteable applet. This page is the contract of those
-three routes.
+tally declares an operations catalog (ADR-0269, keelson-app A1): an agent
+reads an open window's panes and listings, searches the store with the
+Find tab's own statements, and moves the view — a pane's location and
+selection, the raised tab, the Results query and its run. The resources are
+`panes` and `query`; `keelson('operations')` lists the operations with their
+arguments, and this page says how to use them together with the two other
+routes: opening the window in a chosen state through a launch config, and
+running the same SQL in play, where the `lading` book carries every question
+as a pasteable applet. Nothing in the catalog writes to the store.
+
+## The catalog
+
+Queries answer from the frame's snapshot and take their own arguments; the
+person's quick filter and target pane are not an argument's default.
+
+| Operation | What it does |
+| --- | --- |
+| `get_view` | the panes (location, selection, listing size), the store's mounts with their ids, the tab names, the Results query and where its run stands, whether the window is connected |
+| `list_entries` | one pane's directory as the browser last drew it (`Pane` A, B or R; `Limit` default 50, at most 200); `Truncated` says the listing holds more |
+| `get_selection` | one pane's selected file with the mount and snapshot it is read from |
+| `find` | the Find tab's name search as an external read: a regex battery over the path (space-separated, case-insensitive RE2 tokens that must all match; a token that does not compile matches literally and `Literal` says so), an extension, a minimum size and a scope — `dir`, `snapshot` or `all` — scoped to a browse pane's location; largest first, at most 500 rows, `Truncated` past that, and the statement in `SQL` to run uncapped in play |
+| `grep` | the Find tab's content search: an RE2 pattern over each line of the files the store marked text, with line numbers, at most 1000 rows |
+| `set_location` | point a browse pane at a mount (an id from `get_view`), a snapshot (RFC 3339 with nanoseconds, or `latest`) and a directory; a part left empty keeps the pane's; the pane lists in a later frame |
+| `select_entry` | select a path from the pane's listing; a path the listing does not carry is refused; an empty path clears |
+| `show_tab` | raise a dock tab by name: `paneA`, `paneB`, `results`, `preview`, `info`, `history`, `diff`, `find`, `du`, `problems`; `results` only while the window carries a query |
+| `set_query` | set the Results SQL; a statement that does not classify read-only is refused with its classification named, as the launch config's `Sql` is |
+| `run_query` | run the Results SQL; asynchronous — the call stays running until the lane lands or fails and answers with the result's state; unavailable while a run is in flight or without a query |
+
+The refusals name their remedy: an unknown pane, a mount not in the store's
+list (`get_view` names them), a pane with no location yet (`set_location`),
+a path not in the listing (`list_entries`), a tab the window has not got,
+a query that is not read-only, a search without a store connection. `find`
+and `grep` run against the operator's own ClickHouse credentials with the
+caps above and a one-minute bound; the uncapped answer is play's.
+
+The person's clicks on the Mounts list and its snapshots go through
+`set_location`, so the command log sees them as theirs and an agent's call
+and a click cannot drift (A3); the browser's own selection is a widget
+write-back.
 
 ## Opening tally on a launch config
 
@@ -81,9 +113,9 @@ The scope is the target pane's directory, its whole snapshot, or every
 visible mount's newest snapshot (`fs('*')`). Search is an order, not a
 state: the same knobs run again on the button, and a search that failed is
 re-run rather than remembered. The lane is cancellable from the progress
-row. An agent that needs the uncapped answer runs the same query in play,
-where the `lad-find` and `lad-grep` applets carry it with the knobs as
-parameters.
+row. The catalog's `find` and `grep` run the same statements with the same
+caps; an agent that needs the uncapped answer runs the query in play, where
+the `lad-find` and `lad-grep` applets carry it with the knobs as parameters.
 
 ## Disk usage
 
@@ -104,9 +136,7 @@ on open and is not repeated without a click.
 
 ## What is not here
 
-No catalog, so no agent can select a file, raise a tab or run a search on
-an open window; the launch config is the way to put the window in a state,
-and a new window is the way to change it. There is no write anywhere in the
-app: no rename, delete, upload or snapshot. Snapshots are taken outside it
+There is no write anywhere in the app, in the catalog or out of it: no
+rename, delete, upload or snapshot. Snapshots are taken outside it
 (`boxer fs snapshot`, `ladingingest.Snapshot`), and a tree an app computed
 reaches it through `ladingadhoc.Publish`.

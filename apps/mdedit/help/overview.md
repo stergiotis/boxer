@@ -18,10 +18,11 @@ wikilinks, highlights and frontmatter.
 
 The window keeps a draft of its own. What you type is stored as you go and
 comes back when the window next opens, whether or not it was ever saved to a
-file; the *modified* badge says the buffer differs from the last point it
-was copied out or restored. A document another app handed over, or one a
-scene seeded, is kept apart from that draft and stays unsaved until you
-save or copy it.
+file; the phase chip in the summary row reads *modified* while the buffer
+differs from the last point it was saved, copied out or restored, and
+opens the document's state machine on a click. A document another app
+handed over, or one a scene seeded, is kept apart from that draft and stays
+unsaved until you save or copy it.
 
 ## Modes
 
@@ -56,9 +57,11 @@ Ctrl+E and Ctrl+K in both the source pane and a block.
 
 The second row holds the mode control, the **Panel** toggle and find. The
 last row, directly over the content, is the summary: which file the
-document is bound to or which snapshot it was read from, whether it is
-modified, whether the file moved under it on disk, a word count with a
-reading estimate over the prose alone, and the status line.
+document is bound to or which snapshot it was read from, the document's
+phase — clean, modified, following the file, opening, saving, sending, or
+changed on disk under unsaved edits — as a chip that opens the machine
+behind it, a word count with a reading estimate over the prose alone, and
+the status line.
 
 The side panel shows one view at a time, chosen by its tabs: the outline or
 the files. It needs a window wide enough to spare it, and hides itself
@@ -90,14 +93,19 @@ nesting, and *Clear numbers* takes them out again; both rewrite the text
 from outside the editor, so the editor's own undo does not describe them.
 The column needs a window wide enough to spare it and hides below that.
 
-**Find** is literal: no patterns, no whole-word option, and case folds
-unless *Match case* is on. Matches are painted in the source pane; Enter in
-the query goes to the next one, Shift+Enter to the previous. The source
-pane cannot scroll itself to the caret, so a match far off-screen is
-selected where you cannot see it, while the preview does scroll to its
-section. **Replace** sits behind a toggle because its buttons rewrite the
-buffer; it is hidden in Read mode, where the text it would rewrite is not
-on screen.
+**Find** takes a regex battery, the query every filter box on the desktop
+takes: space-separated, case-insensitive RE2 tokens, coloured in the field
+one token at a time. A line matches when every token occurs in it, and each
+token's occurrences on such lines are the matches, so one token finds every
+occurrence and two narrow to the lines that carry both. A token that is not
+a valid regexp matches literally, and a note beside the count says so.
+Matches are painted in the source pane; Enter in the query goes to the next
+one, Shift+Enter to the previous. The source pane cannot scroll itself to
+the caret, so a match far off-screen is selected where you cannot see it,
+while the preview does scroll to its section. **Replace** sits behind a
+toggle because its buttons rewrite the buffer; the replacement is written
+literally, with no group references. It is hidden in Read mode, where the
+text it would rewrite is not on screen.
 
 ## Files, proposals and the disk
 
@@ -125,8 +133,8 @@ rendered. *Apply* replaces the range, and is refused if the buffer changed
 since the proposal was made; *Discard* drops it; *Copy* takes the text to
 the clipboard and leaves the buffer alone.
 
-When the document is bound to a file, the file is watched. A change on disk
-while the buffer holds unsaved edits is not loaded, and a badge says so:
-save to overwrite the disk's version, or copy your work out and open to
-take the disk's. A file deleted or renamed on disk leaves the buffer
-untouched, and *Save as* gives it a new home.
+When the document is opened from a file, the file is watched. A change on
+disk while the buffer holds unsaved edits is not loaded, and the phase chip
+reads *changed on disk*: save to overwrite the disk's version, or copy
+your work out and open to take the disk's. A file deleted or renamed on
+disk leaves the buffer untouched, and *Save as* gives it a new home.

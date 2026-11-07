@@ -28,59 +28,85 @@ import (
 // findMatches
 // ---------------------------------------------------------------------------
 
-func TestFindMatches_CaseSensitive(t *testing.T) {
+// find compiles q as the bar does and returns its matches in src.
+func find(src, q string) (ms []matchSpan) {
+	_, res, _ := compileFind(q)
+	return findMatches(src, res)
+}
+
+// A one-token battery finds every occurrence, case folded, as a plain find
+// did; the fold is RE2's, so the offsets index the buffer whatever the case
+// variants' byte widths (İ, the Kelvin sign).
+func TestFindMatches_OneTokenFindsEveryOccurrence(t *testing.T) {
 	const src = "cat CAT cat"
-	got := findMatches(src, "cat", true)
-	require.Len(t, got, 2)
+	got := find(src, "cat")
+	require.Len(t, got, 3)
 	assert.Equal(t, matchSpan{0, 3}, got[0])
-	assert.Equal(t, matchSpan{8, 11}, got[1])
+	assert.Equal(t, matchSpan{4, 7}, got[1])
+	assert.Equal(t, matchSpan{8, 11}, got[2])
+
+	const folded = "İstanbul and ÄPFEL and äpfel"
+	got = find(folded, "äpfel")
+	require.Len(t, got, 2)
+	for _, m := range got {
+		assert.True(t, strings.EqualFold("äpfel", folded[m.Start:m.Stop]), "span %v holds %q", m, folded[m.Start:m.Stop])
+	}
+	got = find("300\u212am walk", "km")
+	require.Len(t, got, 1)
+	assert.Equal(t, "\u212am", "300\u212am walk"[got[0].Start:got[0].Stop])
 }
 
 func TestFindMatches_EmptyInputsFindNothing(t *testing.T) {
-	assert.Empty(t, findMatches("", "cat", true))
-	assert.Empty(t, findMatches("cat", "", true))
-	// An empty query with folding on must not loop either — a zero-width
-	// match would never advance the scan.
-	assert.Empty(t, findMatches("cat", "", false))
+	assert.Empty(t, find("", "cat"))
+	assert.Empty(t, find("cat", ""))
+	assert.Empty(t, find("cat", "   "), "a query of spaces has no token")
+	// A token that can match the empty string must not produce zero-width
+	// matches, which could never be painted or replaced.
+	assert.Empty(t, find("cat", "x*"))
 }
 
 // TestFindMatches_NonOverlapping pins the scan resuming past a match rather
 // than one byte on: "aa" in "aaaa" is two occurrences, not three.
 func TestFindMatches_NonOverlapping(t *testing.T) {
-	assert.Equal(t, []matchSpan{{0, 2}, {2, 4}}, findMatches("aaaa", "aa", true))
-	assert.Equal(t, []matchSpan{{0, 2}, {2, 4}}, findMatches("aAaA", "aa", false))
+	assert.Equal(t, []matchSpan{{0, 2}, {2, 4}}, find("aaaa", "aa"))
+	assert.Equal(t, []matchSpan{{0, 2}, {2, 4}}, find("aAaA", "aa"))
 }
 
-// TestFindMatches_FoldedOffsetsIndexTheSource is the reason the fold is done
-// rune by rune instead of over a lowercased copy: strings.ToLower can change a
-// string's LENGTH, and offsets taken against the shorter or longer copy would
-// not describe the buffer they are meant to index.
-func TestFindMatches_FoldedOffsetsIndexTheSource(t *testing.T) {
-	const src = "İstanbul and ÄPFEL and äpfel"
-	got := findMatches(src, "äpfel", false)
+// Tokens are RE2: a class, an anchor at the line's start, a quantifier.
+func TestFindMatches_TokensAreRegexps(t *testing.T) {
+	const src = "# Title\n\nsome text\n## Sub\n"
+	got := find(src, "^#+")
 	require.Len(t, got, 2)
-	for _, m := range got {
-		assert.True(t, strings.EqualFold("äpfel", src[m.Start:m.Stop]),
-			"span %v holds %q", m, src[m.Start:m.Stop])
-	}
-	// The 'İ' above is the trap: it lowercases to TWO runes, so a folded-copy
-	// implementation would have every later offset shifted by one byte.
-	assert.Equal(t, "ÄPFEL", src[got[0].Start:got[0].Stop])
+	assert.Equal(t, "#", src[got[0].Start:got[0].Stop])
+	assert.Equal(t, "##", src[got[1].Start:got[1].Stop])
+	assert.Len(t, find(src, "t[ei]"), 2, "Ti(tle) and te(xt)")
 }
 
-// TestFindMatches_FoldMeasuresTheSourceNotTheQuery covers the case where the
-// match and the query are different byte lengths: 'K' (U+212A, three bytes)
-// folds to 'k' (one byte), so a span sized from len(query) would run past the
-// occurrence and cut the next character in half.
-func TestFindMatches_FoldMeasuresTheSourceNotTheQuery(t *testing.T) {
-	const src = "300Km walk" // U+212A KELVIN SIGN
-	got := findMatches(src, "km", false)
-	require.Len(t, got, 1)
-	assert.Equal(t, "Km", src[got[0].Start:got[0].Stop])
+// Space is AND over a line: both tokens must occur in it, and each token's
+// occurrences on such a line are the matches.
+func TestFindMatches_SpaceIsAndOverALine(t *testing.T) {
+	const src = "cat\ncat dog\ndog\n"
+	got := find(src, "cat dog")
+	require.Len(t, got, 2)
+	assert.Equal(t, "cat", src[got[0].Start:got[0].Stop])
+	assert.Equal(t, "dog", src[got[1].Start:got[1].Stop])
+	assert.Equal(t, 4, got[0].Start, "the first line has no dog, so its cat is not a match")
 }
 
-func TestFindMatches_CaseSensitiveIsNotFolded(t *testing.T) {
-	assert.Empty(t, findMatches("ÄPFEL", "äpfel", true))
+// Occurrences of two tokens over the same bytes merge into one match, so the
+// list stays disjoint for the splice.
+func TestFindMatches_OverlappingTokensMerge(t *testing.T) {
+	got := find("catalog", "cat talog")
+	assert.Equal(t, []matchSpan{{0, 7}}, got)
+}
+
+// A token that is not a regexp matches literally, and the bar says so.
+func TestCompileFind_LiteralFallback(t *testing.T) {
+	_, _, literal := compileFind("quantile( x")
+	assert.True(t, literal)
+	_, _, literal = compileFind("quantile x")
+	assert.False(t, literal)
+	assert.Len(t, find("quantile(0.5)", "quantile("), 1)
 }
 
 // ---------------------------------------------------------------------------
@@ -269,7 +295,7 @@ func TestMatchCuts_AreAscendingAndDeduplicated(t *testing.T) {
 
 func TestReplaceSpans(t *testing.T) {
 	const src = "one cat, two cat, three cat"
-	ms := findMatches(src, "cat", true)
+	ms := find(src, "cat")
 	require.Len(t, ms, 3)
 
 	got, n := replaceSpans(src, ms, "dog")
@@ -304,7 +330,7 @@ func TestReplaceSpans_SkipsSpansTheBufferDoesNotHold(t *testing.T) {
 // first one already lengthened.
 func TestReplaceSpans_LongerReplacementDoesNotShiftLaterSpans(t *testing.T) {
 	const src = "a-b-c"
-	got, n := replaceSpans(src, findMatches(src, "-", true), "___")
+	got, n := replaceSpans(src, find(src, "-"), "___")
 	assert.Equal(t, "a___b___c", got)
 	assert.Equal(t, 2, n)
 }
@@ -376,16 +402,15 @@ func TestReplaceCurrent_WithNoMatchDoesNothing(t *testing.T) {
 
 func TestReplaceAll(t *testing.T) {
 	inst := &App{src: "cat CAT cat"}
-	inst.find.query = "cat"
+	inst.find.query = "c.t"
 	inst.find.replacement = "dog"
-	inst.find.matchCase = true
 	inst.ensureMatches()
 
 	inst.replaceAll()
 
-	assert.Equal(t, "dog CAT dog", inst.src)
+	assert.Equal(t, "dog dog dog", inst.src, "the replacement is literal, and every match of the pattern takes it")
 	assert.True(t, inst.rebindSrc)
-	assert.Equal(t, "replaced 2", inst.status)
+	assert.Equal(t, "replaced 3", inst.status)
 }
 
 func TestReplaceAll_Folded(t *testing.T) {
@@ -438,9 +463,9 @@ func TestGotoMatch_SelectsTheMatchAndTakesFocus(t *testing.T) {
 func TestGotoMatch_ScrollsThePreviewToTheMatchSection(t *testing.T) {
 	inst := &App{src: headingDoc}
 	inst.doc = markdown.Parse([]byte(headingDoc))
-	inst.find.query = "body two"
+	inst.find.query = `body\stwo`
 	inst.ensureMatches()
-	require.Len(t, inst.find.matches, 1)
+	require.Len(t, inst.find.matches, 1, "one token: a space inside it is spelled as a class")
 
 	inst.gotoMatch(0, true)
 
@@ -521,7 +546,7 @@ func TestFindSummary(t *testing.T) {
 // query that stopped matching would leave the bar empty in every screenshot
 // without failing anything.
 func TestTourQueryMatchesTheScene(t *testing.T) {
-	assert.Len(t, findMatches(sampleDoc, tourQuery, false), 2,
+	assert.Len(t, find(sampleDoc, tourQuery), 2,
 		"the tour needs a current match AND another one to differ from")
 }
 

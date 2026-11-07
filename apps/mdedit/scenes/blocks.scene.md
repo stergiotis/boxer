@@ -20,6 +20,12 @@ the document's own undo; a click on another block leaves the open one;
 Ctrl+B wraps from the keyboard; and the source pane, opened at the end,
 shows the bytes every gesture left — the untouched ones unchanged.
 
+The document's phase chip in the summary row is read and must say
+`modified`: a seeded document is kept apart from the window's draft and
+stays unsaved. The chip's label is anchored by its id, which is stable. The
+scene ends on F1 over the window, which opens mdedit's own help at its
+overview.
+
 ```jsonl trace
 {"do":"note","text":"ADR-0334 M3 — blocks over the source"}
 {"do":"wait","role":"multiline_text_input","settleMs":600,"comment":"the window is up in Split; the source pane holds the seeded document"}
@@ -45,4 +51,11 @@ shows the bytes every gesture left — the untouched ones unchanged.
 {"do":"wait","role":"multiline_text_input","value":"First para. More**bold**","settleMs":300}
 {"do":"click","contains":"Source","role":"button","settleMs":500}
 {"do":"wait","role":"multiline_text_input","value":"# Title\n\nFirst para. More**bold**\n\nNew block\n\n- one\n- two\n","settleMs":400,"comment":"the source pane shows the bytes: the heading and the list untouched, the paragraph edited in place, the new block padded by blank lines"}
+{"do":"read","id":17431849017068828092,"role":"label","pattern":"^(?P<phase>[a-z ]+)$","comment":"the document phase chip in the summary row"}
+{"do":"expect","of":"phase","is":"modified"}
+{"do":"capture","text":"mdedit-blocks-source"}
+{"do":"key","text":"F1","settleMs":1200}
+{"do":"wait","contains":"Help center","role":"window"}
+{"do":"wait","value":"Editing markdown","role":"label","comment":"the reader shows mdedit's overview, not the index"}
+{"do":"capture","text":"mdedit-help"}
 ```

@@ -7,6 +7,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
 
 	"github.com/stergiotis/boxer/apps/sqlappletcreator/appletcreatecfg"
+	"github.com/stergiotis/boxer/public/config/env"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/appletstore"
 	"github.com/stergiotis/boxer/public/keelson/runtime/fsbroker"
@@ -50,7 +51,21 @@ var manifest = app.Manifest{
 	},
 	LaunchKind: appletcreatecfg.Kind,
 	Help:       help.MustSub(helpFS, "help"),
+	Operations: ops.Catalog(),
 }
+
+// DraftSeed opens a new window on a draft of the caller's choosing (ADR-0009
+// seed variable, the BOXER_MDEDIT_DOC shape): a scene needs the four fields
+// filled to read them back, and the launch config carries only the buffer
+// and its endpoint. The value is JSON with the launch config's Sql and
+// Endpoint and the draft's Slug, Title, Summary and Icon; the buffer and the
+// endpoint go through the launch config's own path. A caller's launch config
+// wins over it.
+var DraftSeed = env.NewString(env.Spec{
+	Name:        "BOXER_SQLAPPLETCREATOR_DRAFT",
+	Description: "a draft for a new SQL applet creator window, as JSON with Sql and Endpoint (as the launch config carries them) and Slug, Title, Summary and Icon; a caller's launch config wins over it; for scenes and demos",
+	Category:    env.CategoryE("boxer-sqlappletcreator"),
+})
 
 func init() {
 	err := app.DefaultRegistry.RegisterFactory(manifest, func() (a app.AppI, ctorErr error) {

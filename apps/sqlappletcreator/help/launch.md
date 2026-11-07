@@ -35,11 +35,21 @@ authored side by side. The host validates the claimed kind at the
 boundary; a config that then fails to decode fails the mount rather than
 opening an empty editor, because that is a defect and not a plain open.
 
+## Seeding a window without a caller
+
+A scene or a demo that has no app to send the launch config sets
+`BOXER_SQLAPPLETCREATOR_DRAFT` to a JSON object: `Sql` and `Endpoint` as
+the launch config carries them, which take the launch config's own path,
+and `Slug`, `Title`, `Summary` and `Icon`, which fill the four fields. A
+caller's launch config wins over it. A value that is not that object fails
+the mount, as a config that does not decode does.
+
 ## What an agent can and cannot do
 
-There is no operations catalog on the creator, so nothing fills the slug
-or presses Save on an open window; the person does both. An agent that
-wants a buffer saved as an applet asks for the window to be opened on that
-buffer through the launch config and leaves the rest to the person. The
-store's refusal, when it comes, is the store's and is shown verbatim in
-the status line.
+An agent can open the window on a buffer through the launch config, and,
+holding a grant for the window, fill and save the draft through the
+catalog on the **Authoring a SQL applet** page: `set_field` for the slug,
+title, summary and icon, `set_buffer` for the SQL, `save` to send it.
+Export stays the person's. The store's refusal, when it comes, is the
+store's: it is shown verbatim in the status line and is what `save`
+settles with.

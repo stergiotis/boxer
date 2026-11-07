@@ -64,7 +64,13 @@ func (inst *App) laneFailed(job interface{ Invalidate() }, id string, what strin
 		c.AddSpace(styletokens.GapInline(inst.density))
 		if c.Button(inst.ids.PrepareStr("again-"+id), c.Atoms().Text("Run again").Keep()).
 			Small().SendResp().HasPrimaryClicked() {
-			job.Invalidate()
+			if job == &inst.resultLane {
+				// The Results run is an operation (run_query); the click
+				// goes through it so the log sees it as the person's.
+				inst.runQueryGesture()
+			} else {
+				job.Invalidate()
+			}
 		}
 	}
 }

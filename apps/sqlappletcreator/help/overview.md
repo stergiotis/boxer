@@ -67,6 +67,25 @@ store: committing it to a book is how it becomes a shipped applet.
 
 ## Operations
 
-The creator declares no operations catalog. An agent reaches it through
-the launch config on the **Opening the creator** page, and through play's
-own catalog for the buffer it composes.
+The creator's catalog has one resource, `draft`: the four fields and the
+buffer, named by a revision. Through it an agent with a grant for the
+window can fill the form and press Save, and nothing else.
+
+| Operation | Kind | What it does |
+| --- | --- | --- |
+| `get_draft` | query | reads the slug, title, summary, icon, the whole buffer and its revision, the endpoint, whether a save is in flight, and the status line |
+| `set_field` | command | sets one of `slug`, `title`, `summary` or `icon` to the given text; it sets and never toggles, and an empty value clears the field |
+| `set_buffer` | command | replaces the buffer, quoting the revision `get_draft` returned; a buffer that changed since is refused, and the agent reads it again |
+| `save` | command, asynchronous, consequential | composes the draft and sends it to the store; the call stays running until the store replies and settles with that reply |
+
+`save` settles with whether the store accepted the applet, the slug and
+the class it assigned, or the store's refusal in its own words. A refusal
+is the call's outcome, not a failure of it; a draft that does not compose
+(no title, a fence line in the buffer) or a window with no bus is refused
+before anything is sent. While a save is in flight `save` is unavailable,
+as the button is.
+
+Export has no operation. The Powerbox dialog that picks the file is the
+person's, and a file on their disk is not something an agent asks for
+through a form. The **Save applet** button goes through `save`, so the
+command log records a click as the person's.

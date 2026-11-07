@@ -11,6 +11,7 @@
 package sqlappletcreator
 
 import (
+	"encoding/json/v2"
 	"fmt"
 	"strings"
 	"sync"
@@ -23,6 +24,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
 	"github.com/stergiotis/boxer/public/keelson/runtime/fsbroker"
 	"github.com/stergiotis/boxer/public/keelson/runtime/task"
+	"github.com/stergiotis/boxer/public/keelson/runtime/widgethandle"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
@@ -61,6 +63,17 @@ type App struct {
 	saveBusy   bool
 	exportBusy bool
 	status     string
+	// saveOutcome is the last save's settled outcome, what an asynchronous
+	// save call settles with once saveBusy clears (sqlappletcreator_ops.go).
+	saveOutcome SaveOutcome
+
+	// frameCtx is the current frame's context, for routing the Save button
+	// through the catalog (ADR-0269 §SD8); nil outside a host's frame.
+	frameCtx app.FrameContextI
+	// fieldHandles are the four draft fields' and the editor's widgets, as
+	// last drawn: the draft counts as being edited while the person is in
+	// one of them (ADR-0269 §SD4).
+	fieldHandles [5]widgethandle.WidgetHandle
 }
 
 var _ app.AppI = (*App)(nil)
@@ -82,13 +95,49 @@ func (inst *App) Mount(ctx app.MountContextI) (err error) {
 			err = eh.Errorf("sqlappletcreator: decode launch config: %w", dErr)
 			return
 		}
-		inst.sql = cfg.Sql
-		inst.endpoint = cfg.Endpoint
+		inst.applyLaunch(cfg)
+		return
+	}
+	if seed := DraftSeed.Get(); seed != "" {
+		err = inst.applySeed(seed)
 	}
 	return
 }
 
+// applyLaunch seeds the buffer and its endpoint from a launch config.
+func (inst *App) applyLaunch(cfg appletcreatecfg.AppletCreate) {
+	inst.sql = cfg.Sql
+	inst.endpoint = cfg.Endpoint
+}
+
+// draftSeed is DraftSeed's value: the launch config's two fields and the
+// four the window otherwise takes from the person.
+type draftSeed struct {
+	Sql      string
+	Endpoint string
+	Slug     string
+	Title    string
+	Summary  string
+	Icon     string
+}
+
+// applySeed fills the draft from DraftSeed. A value that is not the JSON it
+// names fails the mount, as a launch config that does not decode does: a
+// scene that seeded a draft and got an empty form would assert against the
+// wrong window.
+func (inst *App) applySeed(seed string) (err error) {
+	var d draftSeed
+	if err = json.Unmarshal([]byte(seed), &d, json.RejectUnknownMembers(true)); err != nil {
+		err = eh.Errorf("sqlappletcreator: decode the draft seed: %w", err)
+		return
+	}
+	inst.applyLaunch(appletcreatecfg.AppletCreate{Sql: d.Sql, Endpoint: d.Endpoint})
+	inst.slug, inst.title, inst.summary, inst.icon = d.Slug, d.Title, d.Summary, d.Icon
+	return
+}
+
 func (inst *App) Frame(ctx app.FrameContextI) (err error) {
+	inst.frameCtx = ctx
 	inst.renderForm()
 	return
 }
@@ -127,6 +176,7 @@ func (inst *App) renderFormBody() {
 		Hint:  "-- the query this applet runs",
 	})
 	inst.editor.Render(sqleditor.Decoration{})
+	inst.fieldHandles[4] = inst.editor.TextHandle()
 	// Run-under-cursor is inherited rather than implemented: the app
 	// has only ever shipped whole buffers, so say which statement a
 	// run would take when the buffer holds more than one.
@@ -140,23 +190,27 @@ func (inst *App) renderFormBody() {
 
 	for range c.Horizontal().KeepIter() {
 		c.Label("slug").Send() // designlint:ignore=L1 (field caption; lowercase matches its control's own options)
+		inst.fieldHandles[0] = widgethandle.Make(ids.PrepareStr("slug").Derive())
 		c.TextEdit(ids.PrepareStr("slug"), inst.slug, false).
 			HintText("lowercase-dashes").
 			SendRespVal(&inst.slug)
 	}
 	for range c.Horizontal().KeepIter() {
 		c.Label("title").Send() // designlint:ignore=L1 (field caption; lowercase matches its control's own options)
+		inst.fieldHandles[1] = widgethandle.Make(ids.PrepareStr("title").Derive())
 		c.TextEdit(ids.PrepareStr("title"), inst.title, false).
 			SendRespVal(&inst.title)
 	}
 	for range c.Horizontal().KeepIter() {
 		c.Label("summary").Send() // designlint:ignore=L1 (field caption; lowercase matches its control's own options)
+		inst.fieldHandles[2] = widgethandle.Make(ids.PrepareStr("summary").Derive())
 		c.TextEdit(ids.PrepareStr("summary"), inst.summary, false).
 			HintText("one line: what it does, for whom").
 			SendRespVal(&inst.summary)
 	}
 	for range c.Horizontal().KeepIter() {
 		c.Label("icon").Send() // designlint:ignore=L1 (field caption; lowercase matches its control's own options)
+		inst.fieldHandles[3] = widgethandle.Make(ids.PrepareStr("icon").Derive())
 		c.TextEdit(ids.PrepareStr("icon"), inst.icon, false).
 			SendRespVal(&inst.icon)
 	}
@@ -182,7 +236,7 @@ func (inst *App) renderFormBody() {
 		} else if c.Button(ids.PrepareStr("save"), c.Atoms().Text("Save applet").Keep()).
 			Kind(c.ButtonKindPrimary).SendResp().HasPrimaryClicked() {
 			// The one action the form exists for (L2).
-			inst.submit()
+			inst.saveGesture()
 		}
 		if exportBusy {
 			c.Label("Exporting…").Send()
@@ -223,9 +277,18 @@ func (inst *App) composeDoc() (doc []byte, slug string, err error) {
 // (O4 "A" — mint into the running system). The store is the moderation gate;
 // this app only composes and reports the reply.
 func (inst *App) submit() {
+	_ = inst.startSave()
+}
+
+// startSave is submit with its local refusal returned: a draft that does not
+// compose, or no bus to send it on, is refused before anything is in flight
+// (and said in the status line too). Otherwise the save is in flight when it
+// returns, and saveOutcome holds its reply once saveBusy clears.
+func (inst *App) startSave() (err error) {
 	doc, slug, err := inst.composeDoc()
 	if err != nil {
 		inst.setStatus(err.Error())
+		err = app.RefuseOperation(err.Error())
 		return
 	}
 	payload, err := appletstore.EncodeSaveRequest(appletstore.SaveRequest{Slug: slug, Doc: doc})
@@ -234,11 +297,19 @@ func (inst *App) submit() {
 		return
 	}
 	if inst.bus == nil {
-		inst.setStatus("no bus wired — cannot reach the applet store")
+		const msg = "no bus wired — cannot reach the applet store"
+		inst.setStatus(msg)
+		err = app.RefuseOperation(msg)
 		return
 	}
 	inst.mu.Lock()
+	if inst.saveBusy {
+		inst.mu.Unlock()
+		err = app.RefuseOperation(reasonSaving)
+		return
+	}
 	inst.saveBusy = true
+	inst.saveOutcome = SaveOutcome{Slug: slug}
 	inst.status = "saving " + slug + "…"
 	inst.mu.Unlock()
 	go func() {
@@ -255,24 +326,25 @@ func (inst *App) submit() {
 			replyBytes, reqErr := inst.bus.Request(appletstore.SubjectSave, payload)
 			if reqErr != nil {
 				inst.log.Warn().Err(reqErr).Str("slug", slug).Msg("sqlappletcreator: save request failed")
-				inst.setStatus("save failed: " + reqErr.Error())
+				inst.settleSave(SaveOutcome{Slug: slug, Error: reqErr.Error()}, "save failed: "+reqErr.Error())
 				failed = reqErr
 				return
 			}
 			rep, decErr := appletstore.DecodeSaveReply(replyBytes)
 			switch {
 			case decErr != nil:
-				inst.setStatus("save failed: " + decErr.Error())
+				inst.settleSave(SaveOutcome{Slug: slug, Error: decErr.Error()}, "save failed: "+decErr.Error())
 				failed = decErr
 			case !rep.OK:
-				inst.setStatus("refused: " + rep.Error)
+				inst.settleSave(SaveOutcome{Slug: slug, Refused: rep.Error}, "refused: "+rep.Error)
 				failed = eb.Build().Str("reason", rep.Error).Errorf("sqlappletcreator: the store refused the applet")
 			default:
-				inst.setStatus("saved " + slug + " (class " + rep.Class + ") — see the Apps menu")
+				inst.settleSave(SaveOutcome{Saved: true, Slug: slug, Class: rep.Class}, "saved "+slug+" (class "+rep.Class+") — see the Apps menu")
 			}
 			return
 		})
 	}()
+	return
 }
 
 // export composes the current buffer and writes it to a user-chosen file
@@ -354,6 +426,15 @@ func (inst *App) export() {
 			return
 		})
 	}()
+}
+
+// settleSave records a save's outcome and its status line together, so the
+// settle that reads the outcome never sees the previous save's.
+func (inst *App) settleSave(o SaveOutcome, status string) {
+	inst.mu.Lock()
+	inst.saveOutcome = o
+	inst.status = status
+	inst.mu.Unlock()
 }
 
 func (inst *App) setStatus(s string) {

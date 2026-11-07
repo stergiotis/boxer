@@ -57,6 +57,7 @@ import (
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/keycodes"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/badge"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/codeview"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/fsmview"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/markdown"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/markdownhighlight"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/mdblocks"
@@ -469,6 +470,17 @@ type App struct {
 	fileBusy bool
 	fileDone bool
 	fileRes  fileResult
+	// fileOp names the gesture in flight while fileBusy, for the phase.
+	fileOp fileOpE
+
+	// restoreBusy is the store read Mount spawned, until applyRestore takes
+	// its answer; render-thread only. The phase shows it as restoring.
+	restoreBusy bool
+
+	// The document's phase, mirrored each frame from the flags above
+	// (mdedit_machine.go), and the state chip that draws it.
+	docMachine *fsmview.Machine[phaseE]
+	docChip    *fsmview.View[phaseE]
 
 	// One in-flight upload/send gesture at a time (mdedit_sendplay.go).
 	// sendGesture names what ran (for the failure line) and sendMsg is the
@@ -513,6 +525,7 @@ func newApp() (inst *App) {
 		ids:    c.NewWidgetIdStack(),
 		logger: log.Logger,
 	}
+	inst.docMachine = newDocMachine()
 	// The lading connection is lane-owned: the lane releases what it holds
 	// when invalidated, superseded or closed, so nobody else may close it
 	// (the lane's own contract).
@@ -543,7 +556,7 @@ func (inst *App) Mount(ctx app.MountContextI) (err error) {
 		return
 	}
 	if inst.store != nil {
-		inst.spawn(func(context.Context) { inst.restore() })
+		inst.restoreBusy = inst.spawn(func(context.Context) { inst.restore() })
 	}
 	return
 }
@@ -670,6 +683,7 @@ func (inst *App) renderBody() {
 		c.RequestRepaintAfter(followTickSecs)
 	}
 	inst.clearDiscardConfirm()
+	inst.mirrorPhase()
 	inst.refreshDerived()
 	// Last frame's outline numbering gesture, applied while the parse above
 	// still describes the buffer and before any pane has read either.
@@ -908,26 +922,11 @@ func (inst *App) renderBar() {
 			inst.renderCopyLink()
 		}
 
-		label, tone := "no changes", badge.ToneNeutral
-		if inst.dirty() {
-			label, tone = "modified", badge.ToneWarning
-		}
-		badge.New(inst.ids.PrepareStr("dirty"), label).
-			Tone(tone).Variant(badge.VariantSoft).Size(badge.SizeSm).
-			Tooltip(tipDirty).Send()
-
-		// What the follow found while it could not act (mdedit_follow.go):
-		// the disk moved under unsaved edits, or the file went away.
-		if inst.diskChanged {
-			badge.New(inst.ids.PrepareStr("disk"), "changed on disk").
-				Tone(badge.ToneWarning).Variant(badge.VariantSoft).Size(badge.SizeSm).
-				Tooltip(tipDiskChanged).Send()
-		}
-		if inst.diskGone {
-			badge.New(inst.ids.PrepareStr("disk-gone"), "gone on disk").
-				Tone(badge.ToneWarning).Variant(badge.VariantSoft).Size(badge.SizeSm).
-				Tooltip(tipDiskGone).Send()
-		}
+		// The document's phase as the state chip (keelson-app T2): whether
+		// the buffer is modified, what the follow found while it could not
+		// act, and the gesture in flight, with the machine behind it on
+		// click (mdedit_machine.go).
+		inst.renderPhase()
 
 		for range c.HoverText(tipStats).KeepIter() {
 			c.Label(inst.statsLine()).Send()
@@ -1007,7 +1006,6 @@ func (inst *App) ensureLex() {
 type highlightKey struct {
 	src   string
 	query string
-	fold  bool
 	idx   int
 }
 
@@ -1023,7 +1021,7 @@ type highlightKey struct {
 // (ADR-0130 §Decision 2-3).
 func (inst *App) ensureHighlight() {
 	key := highlightKey{
-		src: inst.src, query: inst.find.query, fold: !inst.find.matchCase,
+		src: inst.src, query: inst.find.query,
 		idx: inst.find.idx,
 	}
 	if inst.hlKeyOk && inst.hlKey == key {
@@ -1571,6 +1569,9 @@ func (inst *App) applyRestore() {
 	done, ok, text := inst.restoreDone, inst.restoreOk, inst.restoreText
 	inst.restoreDone = false
 	inst.mu.Unlock()
+	if done {
+		inst.restoreBusy = false
+	}
 	if !done || !ok {
 		return
 	}

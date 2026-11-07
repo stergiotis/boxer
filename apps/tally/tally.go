@@ -174,6 +174,12 @@ type App struct {
 	// its defaults and nothing persists.
 	colWidths     *colwidth.Resolver
 	colWidthsInit bool
+
+	// frameCtx is the current frame's context, through which the person's
+	// gestures reach the catalog (tally_ops.go); nil outside a frame.
+	frameCtx app.FrameContextI
+	// runArmed is a run_query waiting for the Results lane to land.
+	runArmed bool
 }
 
 var _ app.WorkingsetComposerI = (*App)(nil)
@@ -196,6 +202,9 @@ type pane struct {
 	// cache key first arrives, so it cannot be set before the first render.
 	pendingSel string
 	navigated  bool // this frame
+	// rows is the listing the browser last drew for the pane: what the
+	// catalog's list_entries reports and select_entry checks against.
+	rows []fsbrowser.Entry
 	// paneH is the last height this pane's probe answered with; the browser
 	// is sized to it. Held across frames: the probe is a frame late and
 	// absent on the frame the tab comes back.
@@ -297,6 +306,7 @@ func (inst *App) Unmount(ctx app.MountContextI) (err error) {
 func (inst *App) Frame(ctx app.FrameContextI) (err error) {
 	// Re-resolve: the density preset is runtime-switchable (Layout ▸ Density).
 	inst.density = styletokens.ActiveDensity()
+	inst.frameCtx = ctx
 	inst.ensureColWidths(ctx)
 	if note, landed := inst.gestures.take(); landed {
 		inst.status = note
@@ -844,7 +854,7 @@ func (inst *App) renderMounts(sc *storeConn) {
 			}
 			if c.Button(inst.ids.PrepareSeq(uint64(i)), c.Atoms().Text(icons.PhFolder+" "+label).Keep()).
 				Selected(sel).SendResp().HasPrimaryClicked() && !sel {
-				inst.selectMount(p, m.id)
+				inst.selectMountGesture(inst.target, m.id)
 			}
 			if !sel {
 				continue
@@ -867,7 +877,7 @@ func (inst *App) renderMounts(sc *storeConn) {
 					if c.Button(inst.ids.PrepareSeq(uint64(j)), c.Atoms().Text(text).Keep()).
 						Selected(pinned || (p.followLatest && isLatest)).
 						SendResp().HasPrimaryClicked() {
-						inst.pinSnapshot(p, s.Snap)
+						inst.pinSnapshotGesture(inst.target, s.Snap)
 					}
 				}
 			}
@@ -995,6 +1005,7 @@ func (inst *App) renderPane(sc *storeConn, id paneIDE) {
 	if res.Err != nil {
 		inst.status = res.Err.Error()
 	}
+	p.rows = res.Rows
 	p.navigated = res.Navigated
 	if res.Clicked >= 0 || res.Activated >= 0 || res.Navigated {
 		inst.focus, inst.target = id, id
