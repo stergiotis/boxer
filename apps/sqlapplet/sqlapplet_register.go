@@ -416,9 +416,9 @@ func parseSurfaceHints(raw string) (h app.SurfaceHints) {
 }
 
 // manifestFor builds the minted manifest. Help is the whole contributing
-// book's FS, so the applet's prose page is reachable through the Help
-// center; narrowing Help to the single document is a recorded nicety for
-// later. The cap list is the attenuation in manifest form (ADR-0132 §SD8):
+// book's FS joined with the shared agent topic (sqlapplet_help.go), so the
+// applet's prose page is reachable through the Help center; narrowing Help
+// to the single document is a recorded nicety for later. The cap list is the attenuation in manifest form (ADR-0132 §SD8):
 // the two escape hatches only — clipboard.write for the per-fence Copy in
 // the Definition drawer and windowhost.open for Open in Playground
 // (ADR-0135 §SD7) — and no persisted keys, because the buffer is committed
@@ -438,7 +438,7 @@ func manifestFor(def *AppletDef, bookFsys fs.FS) (m app.Manifest) {
 		// No hints unless the screenshot knob is set: the host's archetype
 		// default is the right window for an applet opened by a person.
 		SurfaceHints: appletSurfaceHints(),
-		Help:         bookFsys,
+		Help:         appletHelp(bookFsys),
 		// The operable subset of play's catalog, served by the window's
 		// attenuated play (sqlapplet_app_ops.go).
 		Operations: appletOps.Catalog(),

@@ -1,6 +1,8 @@
 package sqlappletcreator
 
 import (
+	"embed"
+
 	"github.com/rs/zerolog/log"
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
 
@@ -8,8 +10,12 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/appletstore"
 	"github.com/stergiotis/boxer/public/keelson/runtime/fsbroker"
+	"github.com/stergiotis/boxer/public/keelson/runtime/help"
 	"github.com/stergiotis/boxer/public/keelson/runtime/task"
 )
+
+//go:embed help
+var helpFS embed.FS
 
 // manifest is the creator's identity and attenuation. Windowed, factory-backed
 // (each Open is a fresh App so config-carrying opens and multiple windows work
@@ -43,6 +49,7 @@ var manifest = app.Manifest{
 		task.ProducerCaps()[0],
 	},
 	LaunchKind: appletcreatecfg.Kind,
+	Help:       help.MustSub(helpFS, "help"),
 }
 
 func init() {

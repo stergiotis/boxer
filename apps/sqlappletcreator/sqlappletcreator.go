@@ -99,94 +99,101 @@ func (inst *App) Unmount(ctx app.MountContextI) (err error) { return }
 // window can paste its own), the slug/title/icon drafts, the endpoint note,
 // the Save / Export actions, and the last outcome line.
 func (inst *App) renderForm() {
-	ids := inst.ids
 	for range c.PanelCentralInside().KeepIter() {
 		for range c.ScrollArea().Vscroll(true).AutoShrink(false, false).KeepIter() {
-			for rt := range c.RichTextLabel("Author the buffer below as a SQL applet: give it a slug, title, and optional icon. Save publishes it into the running system (it joins the Apps menu after the store validates and classifies it, ADR-0132 O4); Export writes the document to a file you choose.") {
-				rt.Small().Weak()
-			}
-			c.Separator().Send()
+			inst.renderFormBody()
+		}
+	}
+}
 
-			c.Label("SQL").Send()
-			// The shared editing surface (ADR-0147 §SD3): gutter, marks lane,
-			// lexical-then-semantic colour and the statement tint arrive with
-			// it. The Decoration is zero — this app has no analysis of its own
-			// to contribute, which is the point of the seam being optional.
-			res := inst.editor.Bind(sqleditor.Frame{
-				Value: &inst.sql,
-				Rows:  8,
-				Hint:  "-- the query this applet runs",
-			})
-			inst.editor.Render(sqleditor.Decoration{})
-			// Run-under-cursor is inherited rather than implemented: the app
-			// has only ever shipped whole buffers, so say which statement a
-			// run would take when the buffer holds more than one.
-			if res.Total > 1 {
-				for rt := range c.RichTextLabel(fmt.Sprintf(
-					"%d statements — the applet stores the whole buffer; the caret is in statement %d.",
-					res.Total, res.Number)) {
-					rt.Small().Weak()
-				}
-			}
+// renderFormBody is the form without its panel and scroll area, so a host
+// that owns both (the tour, sqlappletcreator_tour.go) draws the same
+// widgets.
+func (inst *App) renderFormBody() {
+	ids := inst.ids
+	for rt := range c.RichTextLabel("Author the buffer below as a SQL applet: give it a slug, title, and optional icon. Save publishes it into the running system (it joins the Apps menu after the store validates and classifies it, ADR-0132 O4); Export writes the document to a file you choose.") {
+		rt.Small().Weak()
+	}
+	c.Separator().Send()
 
-			for range c.Horizontal().KeepIter() {
-				c.Label("slug").Send() // designlint:ignore=L1 (field caption; lowercase matches its control's own options)
-				c.TextEdit(ids.PrepareStr("slug"), inst.slug, false).
-					HintText("lowercase-dashes").
-					SendRespVal(&inst.slug)
-			}
-			for range c.Horizontal().KeepIter() {
-				c.Label("title").Send() // designlint:ignore=L1 (field caption; lowercase matches its control's own options)
-				c.TextEdit(ids.PrepareStr("title"), inst.title, false).
-					SendRespVal(&inst.title)
-			}
-			for range c.Horizontal().KeepIter() {
-				c.Label("summary").Send() // designlint:ignore=L1 (field caption; lowercase matches its control's own options)
-				c.TextEdit(ids.PrepareStr("summary"), inst.summary, false).
-					HintText("one line: what it does, for whom").
-					SendRespVal(&inst.summary)
-			}
-			for range c.Horizontal().KeepIter() {
-				c.Label("icon").Send() // designlint:ignore=L1 (field caption; lowercase matches its control's own options)
-				c.TextEdit(ids.PrepareStr("icon"), inst.icon, false).
-					SendRespVal(&inst.icon)
-			}
+	c.Label("SQL").Send()
+	// The shared editing surface (ADR-0147 §SD3): gutter, marks lane,
+	// lexical-then-semantic colour and the statement tint arrive with
+	// it. The Decoration is zero — this app has no analysis of its own
+	// to contribute, which is the point of the seam being optional.
+	res := inst.editor.Bind(sqleditor.Frame{
+		Value: &inst.sql,
+		Rows:  8,
+		Hint:  "-- the query this applet runs",
+	})
+	inst.editor.Render(sqleditor.Decoration{})
+	// Run-under-cursor is inherited rather than implemented: the app
+	// has only ever shipped whole buffers, so say which statement a
+	// run would take when the buffer holds more than one.
+	if res.Total > 1 {
+		for rt := range c.RichTextLabel(fmt.Sprintf(
+			"%d statements — the applet stores the whole buffer; the caret is in statement %d.",
+			res.Total, res.Number)) {
+			rt.Small().Weak()
+		}
+	}
 
-			if inst.endpoint == appletcreatecfg.EndpointIntrospection {
-				for rt := range c.RichTextLabel("Endpoint: introspection — the applet reopens against the in-process keelson /query endpoint, where its bare keelson('…') resolves.") {
-					rt.Small().Weak()
-				}
-			}
+	for range c.Horizontal().KeepIter() {
+		c.Label("slug").Send() // designlint:ignore=L1 (field caption; lowercase matches its control's own options)
+		c.TextEdit(ids.PrepareStr("slug"), inst.slug, false).
+			HintText("lowercase-dashes").
+			SendRespVal(&inst.slug)
+	}
+	for range c.Horizontal().KeepIter() {
+		c.Label("title").Send() // designlint:ignore=L1 (field caption; lowercase matches its control's own options)
+		c.TextEdit(ids.PrepareStr("title"), inst.title, false).
+			SendRespVal(&inst.title)
+	}
+	for range c.Horizontal().KeepIter() {
+		c.Label("summary").Send() // designlint:ignore=L1 (field caption; lowercase matches its control's own options)
+		c.TextEdit(ids.PrepareStr("summary"), inst.summary, false).
+			HintText("one line: what it does, for whom").
+			SendRespVal(&inst.summary)
+	}
+	for range c.Horizontal().KeepIter() {
+		c.Label("icon").Send() // designlint:ignore=L1 (field caption; lowercase matches its control's own options)
+		c.TextEdit(ids.PrepareStr("icon"), inst.icon, false).
+			SendRespVal(&inst.icon)
+	}
 
-			c.Separator().Send()
+	if inst.endpoint == appletcreatecfg.EndpointIntrospection {
+		for rt := range c.RichTextLabel("Endpoint: introspection — the applet reopens against the in-process keelson /query endpoint, where its bare keelson('…') resolves.") {
+			rt.Small().Weak()
+		}
+	}
 
-			inst.mu.Lock()
-			saveBusy := inst.saveBusy
-			exportBusy := inst.exportBusy
-			status := inst.status
-			inst.mu.Unlock()
-			// Each action is replaced by a busy label while in flight (the
-			// play toolbar pattern — the label holds the slot, no layout jump).
-			for range c.Horizontal().KeepIter() {
-				if saveBusy {
-					c.Label("Saving…").Send()
-				} else if c.Button(ids.PrepareStr("save"), c.Atoms().Text("Save applet").Keep()).
-					Kind(c.ButtonKindPrimary).SendResp().HasPrimaryClicked() {
-					// The one action the form exists for (L2).
-					inst.submit()
-				}
-				if exportBusy {
-					c.Label("Exporting…").Send()
-				} else if c.Button(ids.PrepareStr("export"), c.Atoms().Text("Export .md…").Keep()).
-					SendResp().HasPrimaryClicked() {
-					inst.export()
-				}
-			}
-			if status != "" {
-				for rt := range c.RichTextLabel(status) {
-					rt.Small().Weak()
-				}
-			}
+	c.Separator().Send()
+
+	inst.mu.Lock()
+	saveBusy := inst.saveBusy
+	exportBusy := inst.exportBusy
+	status := inst.status
+	inst.mu.Unlock()
+	// Each action is replaced by a busy label while in flight (the
+	// play toolbar pattern — the label holds the slot, no layout jump).
+	for range c.Horizontal().KeepIter() {
+		if saveBusy {
+			c.Label("Saving…").Send()
+		} else if c.Button(ids.PrepareStr("save"), c.Atoms().Text("Save applet").Keep()).
+			Kind(c.ButtonKindPrimary).SendResp().HasPrimaryClicked() {
+			// The one action the form exists for (L2).
+			inst.submit()
+		}
+		if exportBusy {
+			c.Label("Exporting…").Send()
+		} else if c.Button(ids.PrepareStr("export"), c.Atoms().Text("Export .md…").Keep()).
+			SendResp().HasPrimaryClicked() {
+			inst.export()
+		}
+	}
+	if status != "" {
+		for rt := range c.RichTextLabel(status) {
+			rt.Small().Weak()
 		}
 	}
 }
