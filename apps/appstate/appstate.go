@@ -3,8 +3,9 @@
 // column-width overrides — read from keelson('app_state'), with a delete
 // per entry and a forget per app through the runtime.appstate seam. Nothing
 // here waits on a store or the bus from the frame goroutine: a poller reads
-// the table on a tick and after every verb, and each verb runs in its own
-// goroutine and lands its outcome for the next frame.
+// the table on a tick and after every verb, and each verb runs as one piece
+// of work on the instance's lifetime scope (W5) and lands its outcome for
+// the next frame.
 package appstate
 
 import (
@@ -21,6 +22,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	as "github.com/stergiotis/boxer/public/keelson/runtime/appstate"
+	"github.com/stergiotis/boxer/public/keelson/runtime/lifetime"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 )
 
@@ -30,6 +32,10 @@ const (
 	refreshEvery = 3 * time.Second
 	// requestTimeout bounds one verb on the bus.
 	requestTimeout = 5 * time.Second
+	// ownDrain bounds the wait for the window's goroutines where the app
+	// owns its scope (a host without a lifetime: tests); a draining host
+	// has its own deadline (ADR-0322).
+	ownDrain = 2 * time.Second
 )
 
 // appSummary is one app's line in the left list.
@@ -105,12 +111,19 @@ type App struct {
 	client *as.Client
 	reader entriesReaderI
 
-	appCtx    context.Context
-	cancelApp context.CancelFunc
-	dirty     chan struct{}
-	wg        sync.WaitGroup
+	// scope counts the poller and the verbs into the instance's lifetime
+	// (W5): the host's, so its drain waits for them, or the app's own root
+	// where the host has none, retired at Unmount. stop is the mount
+	// context's cancel, which the host closes first.
+	scope    *lifetime.Scope
+	ownScope bool
+	stop     <-chan struct{}
+	dirty    chan struct{}
 	// paused stops the poller's reads while the window is paused (ADR-0354).
 	paused atomic.Bool
+	// landed is set when the poller swapped a snapshot in, so the next
+	// frame requests one repaint (W7).
+	landed atomic.Bool
 
 	// The frame's own state.
 	selected string
@@ -150,25 +163,39 @@ func (inst *App) Mount(ctx app.MountContextI) (err error) {
 			inst.reader = r
 		}
 	}
-	inst.appCtx, inst.cancelApp = context.WithCancel(context.Background())
-	inst.wg.Add(1)
-	go inst.poll()
+	inst.stop = ctx.Cancel()
+	if inst.scope = app.LifetimeOf(ctx); inst.scope == nil {
+		// No host drain: the app owns a root scope and retires it at
+		// Unmount.
+		inst.scope, inst.ownScope = lifetime.New(nil), true
+	}
+	inst.scope.Go(inst.poll)
 	inst.markDirty()
 	return
 }
 
-// Unmount stops the poller and waits for verbs in flight.
+// Unmount has the poller and the verbs on the lifetime scope: the host
+// retired it before this and drains it after (ADR-0322); where the app
+// owns the scope it drains it here, bounded.
 func (inst *App) Unmount(ctx app.MountContextI) (err error) {
-	if inst.cancelApp != nil {
-		inst.cancelApp()
+	if inst.ownScope {
+		dctx, cancel := context.WithTimeout(context.Background(), ownDrain)
+		defer cancel()
+		if dErr := inst.scope.Drain(dctx); dErr != nil {
+			inst.logger.Debug().Err(dErr).Msg("appstate: own scope not drained")
+		}
 	}
-	inst.wg.Wait()
 	return
 }
 
 func (inst *App) Frame(ctx app.FrameContextI) (err error) {
 	inst.density = styletokens.ActiveDensity()
 	inst.frameCtx = ctx
+	if inst.landed.Swap(false) {
+		// A snapshot landed since the last frame: one repaint, so the
+		// window shows it before the next input (W7).
+		c.RequestRepaint()
+	}
 	inst.latchRead()
 	inst.render()
 	return
@@ -192,13 +219,16 @@ func (inst *App) markDirty() {
 	}
 }
 
-func (inst *App) poll() {
-	defer inst.wg.Done()
+// poll is the poller, on the lifetime scope: it ends when the scope's
+// context ends or the host closes the mount context's cancel (W5).
+func (inst *App) poll(ctx context.Context) {
 	ticker := time.NewTicker(refreshEvery)
 	defer ticker.Stop()
 	for {
 		select {
-		case <-inst.appCtx.Done():
+		case <-ctx.Done():
+			return
+		case <-inst.stop:
 			return
 		case <-ticker.C:
 		case <-inst.dirty:
@@ -206,34 +236,35 @@ func (inst *App) poll() {
 		if inst.paused.Load() {
 			continue
 		}
-		inst.refresh()
+		inst.refresh(ctx)
 	}
 }
 
 // refresh reads the table and lands it as one snapshot. A failed read keeps
 // the rows the window had; the error says why.
-func (inst *App) refresh() {
+func (inst *App) refresh(ctx context.Context) {
 	var rows entryCols
 	var readErr string
 	if inst.reader == nil {
 		readErr = "this window has no bus to read keelson('app_state') through, so there is nothing to list"
-	} else if got, err := inst.reader.entries(inst.appCtx); err != nil {
+	} else if got, err := inst.reader.entries(ctx); err != nil {
 		readErr = "read: " + err.Error()
 	} else {
 		rows = got
 	}
 	inst.mu.Lock()
-	defer inst.mu.Unlock()
 	inst.snap.reads = inst.reader != nil
 	if readErr != "" {
 		inst.snap.lastError = readErr
-		return
+	} else {
+		if strings.HasPrefix(inst.snap.lastError, "read: ") || inst.snap.lastError == "" {
+			inst.snap.lastError = ""
+		}
+		inst.snap.rows = rows
+		inst.snap.refreshed = time.Now()
 	}
-	if strings.HasPrefix(inst.snap.lastError, "read: ") || inst.snap.lastError == "" {
-		inst.snap.lastError = ""
-	}
-	inst.snap.rows = rows
-	inst.snap.refreshed = time.Now()
+	inst.mu.Unlock()
+	inst.landed.Store(true)
 }
 
 // deleteEntry clears one row, named as the table names it.
@@ -292,18 +323,17 @@ func describe(res as.Result, done string) (note string) {
 	return done + ": " + strings.Join(parts, ", ")
 }
 
-// verb runs one request in its own goroutine and lands its outcome, then
-// asks the poller to re-read so the list shows what the store now holds.
+// verb runs one request on the lifetime scope and lands its outcome, then
+// asks the poller to re-read so the list shows what the store now holds. A
+// scope that retired starts nothing.
 func (inst *App) verb(name string, fn func() (note string, err error)) {
-	if inst.client == nil || inst.appCtx == nil || inst.appCtx.Err() != nil {
+	if inst.client == nil || inst.scope == nil || inst.scope.IsRetired() {
 		return
 	}
 	inst.mu.Lock()
 	inst.snap.inflight++
 	inst.mu.Unlock()
-	inst.wg.Add(1)
-	go func() {
-		defer inst.wg.Done()
+	if !inst.scope.Go(func(context.Context) {
 		note, err := fn()
 		inst.mu.Lock()
 		inst.snap.inflight--
@@ -318,7 +348,11 @@ func (inst *App) verb(name string, fn func() (note string, err error)) {
 		}
 		inst.mu.Unlock()
 		inst.markDirty()
-	}()
+	}) {
+		inst.mu.Lock()
+		inst.snap.inflight--
+		inst.mu.Unlock()
+	}
 }
 
 func (inst *App) snapshot() (s snapshot) {

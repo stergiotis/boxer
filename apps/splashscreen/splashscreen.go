@@ -45,10 +45,9 @@ const (
 // keeps the cost off the startup path for the common case where the user never
 // opens this app.
 //
-// The splash image is optional — it is git-ignored and may be absent on a
-// fresh checkout — so a read/decode failure is recorded in splashErr and
-// surfaced as a degraded pane rather than a hard error. NOTICE is committed,
-// so it is expected to be present.
+// A read/decode failure of the splash image is recorded in splashErr and
+// surfaced as a degraded pane rather than a hard error. Both assets are
+// committed, so either missing is a build that went wrong.
 var (
 	assetsOnce   sync.Once
 	splashPixels []uint32
@@ -252,7 +251,7 @@ func (inst *App) renderAbout() {
 		c.Label(vcs.CopyrightInfo()).Send()
 		c.Label("Licensed under the MIT License (see the NOTICE tab).").Send()
 		c.AddSpace(styletokens.GapItems(inst.density))
-		c.Label("Data Engineering Toolbelt - DB-to-Glass. This window shows the splash artwork, the build provenance of the running binary, and the project NOTICE.").Send()
+		c.Label("This window shows the splash artwork, the build provenance of the running binary, and the project NOTICE.").Send()
 		c.AddSpace(styletokens.PaddingOuter(inst.density))
 		c.Separator().Horizontal().Send()
 		c.AddSpace(styletokens.GapItems(inst.density))

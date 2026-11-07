@@ -104,7 +104,7 @@ func (inst *App) renderApps(apps []appSummary) {
 				}
 				mono(fmt.Sprint(s.entries))
 				mono(humanfmt.Bytes(uint64(s.bytes)))
-				if c.Button(inst.ids.PrepareStr("forget"), c.Atoms().Text("Forget…").Keep()).Small().SendResp().HasPrimaryClicked() {
+				if c.Button(inst.ids.PrepareStr("forget"), c.Atoms().Text("Forget…").Keep()).Kind(c.ButtonKindDanger).Small().SendResp().HasPrimaryClicked() {
 					inst.armForget(s)
 				}
 			}
@@ -138,7 +138,7 @@ func (inst *App) renderEntries(snap snapshot) {
 				mono(sizeOf(r))
 				c.Label(r.Detail).Send()
 				mono(r.WrittenAt)
-				if c.Button(inst.ids.PrepareStr("delete"), c.Atoms().Text("Delete").Keep()).Small().SendResp().HasPrimaryClicked() {
+				if c.Button(inst.ids.PrepareStr("delete"), c.Atoms().Text("Delete").Keep()).Kind(c.ButtonKindDanger).Small().SendResp().HasPrimaryClicked() {
 					inst.deleteEntry(r)
 				}
 			}

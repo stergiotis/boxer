@@ -3,17 +3,21 @@
 // handle, fetch contents), a runtime.persist.{ownAlias}.scratchpad
 // round-trip (save / load / delete a TextEdit's contents), an
 // fs.dialog.watch round-trip (pick a folder, stream change events on
-// fs.handle.{uuid}.event), and a status pane showing what's pending.
-// Demonstrates that an app declaring the right Caps gets working Bus()
-// and Storage() through MountContextI without any direct syscalls.
+// fs.handle.{uuid}.event), and a clipboard section (a labelled copy
+// through the broker). Demonstrates that an app declaring the right Caps
+// gets working Bus() and Storage() through MountContextI without any
+// direct syscalls.
 //
-// Lifecycle: Mount captures the BusI and StorageI from the context.
-// The file dialog flow runs in a goroutine because bus.Request blocks
-// until the picker resolves; results land in fields guarded by
-// `mu` and rendered on the next Frame.
+// Lifecycle: Mount captures the BusI and StorageI from the context and
+// the instance's lifetime scope. Every verb runs as one piece of work on
+// that scope because bus.Request blocks until the broker (or the picker)
+// resolves; results land in fields guarded by `mu` and are drawn on the
+// next Frame. Unmount releases the watch subscription; the host's drain
+// covers the goroutines (ADR-0322).
 package capdemo
 
 import (
+	"context"
 	"fmt"
 	"sync"
 	"time"
@@ -24,7 +28,9 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/clipboardbroker"
 	"github.com/stergiotis/boxer/public/keelson/runtime/fsbroker"
+	"github.com/stergiotis/boxer/public/keelson/runtime/lifetime"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/badge"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/markdown"
 )
 
@@ -45,30 +51,46 @@ const watchEventLimit = 50
 // frame. Keeps the section vertically bounded regardless of cadence.
 const watchEventDisplay = 12
 
+// clipboardSource names the surface a copy leaves from, on the payload's
+// Source so the broker's record and the journal's `copy` entry say where
+// the text came from (ADR-0317 §SD1).
+const clipboardSource = "capdemo.clipboard-doc"
+
+// noBusRemedy is the one sentence every verb shows when the mount context
+// wired no bus: the demo needs the app runtime, which the windowed host
+// provides and a bare test context does not.
+const noBusRemedy = "no bus wired — the broker needs the app runtime; open the demo from the app center under the windowed host"
+
 // clipboardDoc is the markdown rendered in the clipboard section. Parsed
 // once at package load (markdown.Parse is the retain-once / render-many
 // shape) and rendered every frame via Doc.RenderActions, which places a
 // small "Copy" button on each fenced block; a click is consumed from the
-// returned iter.Seq and routed to clipboard.write.
+// returned iter.Seq and routed to a labelled clipboardbroker.Write. The
+// Go block teaches that shape, so what the person copies is the idiom.
 var clipboardDoc = markdown.Parse([]byte("" +
-	"`clipboard.write` copies text to the viewport clipboard through the bus —\n" +
-	"the broker accumulates the request off-frame and the host drains it into an\n" +
-	"egui `copy_text` op. Click the Copy button above either block below.\n\n" +
+	"`clipboard.write` copies text to the viewport clipboard through the broker: a\n" +
+	"labelled `Payload` names what left and from where, and the record that comes\n" +
+	"back says how it left — as plaintext or by handle. Click the Copy button above\n" +
+	"either block below.\n\n" +
 	"```go\n" +
-	"// the consumer wires the code-block button to any action:\n" +
+	"// the consumer wires the code-block button to a labelled copy, off the frame:\n" +
 	"res := markdown.Render(markdown.Input{Ids: ids, Doc: doc, ActionLabels: []string{\"Copy\"}})\n" +
 	"for _, act := range res.Actions {\n" +
-	"\tgo func() { _, _ = bus.Request(clipboardbroker.SubjectWrite, []byte(act.Text)) }()\n" +
+	"\ttext := act.Text\n" +
+	"\tscope.Go(func(context.Context) {\n" +
+	"\t\trec, err := clipboardbroker.Write(bus, clipboardbroker.Payload{Text: text, Source: \"myapp.doc\"})\n" +
+	"\t\t// hand rec.Verdict() and rec.Handle to the next frame\n" +
+	"\t})\n" +
 	"}\n" +
 	"```\n\n" +
 	"```\n" +
 	"plain verbatim block — copies exactly these bytes, no highlighting\n" +
 	"```\n"))
 
-// App is the per-window capdemo instance. Mount captures bus +
-// storage from the MountContextI; Frame renders the three sections;
-// Unmount is a no-op (the goroutine guards against use-after-unmount
-// by checking app state before mutating).
+// App is the per-window capdemo instance. Mount captures bus, storage and
+// the lifetime scope from the MountContextI; Frame applies what the verbs
+// handed over and renders the sections; Unmount releases the watch
+// subscription.
 type App struct {
 	// ids is the per-instance WidgetIdStack. The host pre-pushes a
 	// window-unique salt onto it before every Frame() call (ADR-0026
@@ -87,6 +109,12 @@ type App struct {
 	bus     app.BusI
 	storage app.StorageI
 
+	// scope is the instance's lifetime scope (W5): every verb goroutine
+	// runs on it so the host's drain waits for it. nil on a host without
+	// one (a bare test context), where spawn falls back to a plain
+	// goroutine.
+	scope *lifetime.Scope
+
 	mu sync.Mutex
 
 	// fs.dialog.read state.
@@ -96,11 +124,19 @@ type App struct {
 	previewTotal     int
 	fileErr          string
 
-	// runtime.persist state — the TextEdit binds to scratchpad; the
-	// last operation's status (success / error) lands in
-	// persistStatus.
-	scratchpad    string
-	persistStatus string
+	// runtime.persist state — the TextEdit binds scratchpad on the render
+	// goroutine and nothing else writes it: a Load lands its value in
+	// pendingScratchpad under mu, and Frame moves it across before the
+	// widget binds (T5). The last operation's status and its tone land
+	// in persistStatus / persistTone.
+	scratchpad        string
+	pendingScratchpad *string
+	persistStatus     string
+	persistTone       badge.ToneE
+
+	// clipboard state: the broker's answer to the last copy.
+	clipboardNote string
+	clipboardTone badge.ToneE
 
 	// fs.dialog.watch state. watchUsePoller and watchRecursive are
 	// written directly by the render goroutine (via Checkbox
@@ -129,20 +165,48 @@ func newApp() (inst *App) {
 
 func (inst *App) Manifest() (m app.Manifest) { m = manifest; return }
 
-// Mount captures the per-app BusI and StorageI handles. The values
-// are dormant on M1 hosts (NoopBus / NoopStorage) — every call
-// errors with a documented "not available" message; on M2 hosts
-// (carousel Phase A+B+C wiring) they are real inprocbus.Client /
+// Mount captures the per-app BusI and StorageI handles and the lifetime
+// scope. The values are dormant on M1 hosts (NoopBus / NoopStorage) —
+// every call errors with a documented "not available" message; on M2
+// hosts (carousel Phase A+B+C wiring) they are real inprocbus.Client /
 // persist.Client. Either way, Mount itself is infallible.
 func (inst *App) Mount(ctx app.MountContextI) (err error) {
 	inst.ids = ctx.Ids()
 	inst.logger = ctx.Log()
 	inst.bus = ctx.Bus()
 	inst.storage = ctx.Storage()
+	inst.scope = app.LifetimeOf(ctx)
 	return
 }
 
-func (inst *App) Unmount(ctx app.MountContextI) (err error) { return }
+// Unmount releases the watch subscription so no event lands after the
+// window is gone. The handle itself is the broker's to revoke: it goes
+// with the bus client, which the host closes after the drain
+// (ADR-0322), and the verb goroutines are on the scope that drain waits
+// for.
+func (inst *App) Unmount(ctx app.MountContextI) (err error) {
+	inst.mu.Lock()
+	unsub := inst.watchUnsubscribe
+	inst.watchUnsubscribe = nil
+	inst.watchActive = false
+	inst.mu.Unlock()
+	if unsub != nil {
+		unsub()
+	}
+	return
+}
+
+// spawn runs f as one piece of the instance's work (W5): on the lifetime
+// scope when the host gave one, so the drain waits for it and the Running
+// tab lists it; a plain goroutine on a bare test context. A scope that
+// already retired starts nothing — the window is closing.
+func (inst *App) spawn(f func()) {
+	if inst.scope != nil {
+		inst.scope.Go(func(context.Context) { f() })
+		return
+	}
+	go f()
+}
 
 // Frame renders the demo sections. The host has already pre-pushed a
 // window-unique salt onto inst.ids via c.IdScope (windowhost.
@@ -154,14 +218,23 @@ func (inst *App) Unmount(ctx app.MountContextI) (err error) { return }
 func (inst *App) Frame(ctx app.FrameContextI) (err error) {
 	// Re-resolve: the density preset is runtime-switchable (Layout ▸ Density).
 	inst.density = styletokens.ActiveDensity()
+	inst.takePending()
 	inst.renderApp()
 	return
 }
 
-func (inst *App) renderApp() {
-	for range c.PanelTopInside(inst.ids.PrepareStr("topbar")).Resizable(false).KeepIter() {
-		c.Label("Capability broker demo — exercises fs.dialog.read + runtime.persist.scratchpad").Send()
+// takePending moves what a verb handed over into the fields the widgets
+// bind, before any widget runs this frame.
+func (inst *App) takePending() {
+	inst.mu.Lock()
+	if p := inst.pendingScratchpad; p != nil {
+		inst.scratchpad = *p
+		inst.pendingScratchpad = nil
 	}
+	inst.mu.Unlock()
+}
+
+func (inst *App) renderApp() {
 	for range c.PanelCentralInside().KeepIter() {
 		for range c.ScrollArea().Vscroll(true).KeepIter() {
 			inst.renderFsSection()
@@ -175,29 +248,54 @@ func (inst *App) renderApp() {
 	}
 }
 
+// renderNote draws one outcome as a toned badge (L2): empty draws nothing.
+func (inst *App) renderNote(key string, text string, tone badge.ToneE) {
+	if text == "" {
+		return
+	}
+	badge.New(inst.ids.PrepareStr(key), text).Tone(tone).Variant(badge.VariantSoft).Send()
+}
+
 // renderClipboardSection demonstrates the clipboard.write capability via
 // the markdown widget's code-block action buttons (ADR-0026 Update
 // 2026-05-30). Doc.RenderActions draws a small "Copy" button on each
-// fenced block and yields the clicked blocks; each click fires a
-// clipboard.write Request off the frame goroutine — Request blocks until
-// the broker acks, and the frame thread must not block (same idiom as
-// runPick). The broker enqueues the text; the host's windowed renderer
-// drains it into an egui copy_text op.
+// fenced block and yields the clicked blocks; each click hands a labelled
+// payload to clipboardbroker.Write off the frame goroutine — Write blocks
+// until the broker acks, and the frame thread must not block (same idiom
+// as runPick). The record the broker returns is shown on the next frame.
 func (inst *App) renderClipboardSection() {
 	for range c.CollapsingHeader(inst.ids.PrepareStr("hdr-clipboard"),
 		c.WidgetText().Text("clipboard.write — copy code blocks to the clipboard").Keep()).
 		DefaultOpen(true).KeepIter() {
 		res := markdown.Render(markdown.Input{Ids: inst.ids, ScopeKey: "clipboard-doc", Doc: clipboardDoc, ActionLabels: []string{"Copy"}})
 		for _, act := range res.Actions {
-			if inst.bus == nil {
-				continue
-			}
 			text := act.Text
-			go func() {
-				_, _ = inst.bus.Request(clipboardbroker.SubjectWrite, []byte(text))
-			}()
+			inst.spawn(func() { inst.runCopy(text) })
 		}
+		inst.mu.Lock()
+		note, tone := inst.clipboardNote, inst.clipboardTone
+		inst.mu.Unlock()
+		inst.renderNote("clipboard-note", note, tone)
 	}
+}
+
+// runCopy is one labelled copy (D5): the payload names its source, and the
+// broker's record says how the text left.
+func (inst *App) runCopy(text string) {
+	if inst.bus == nil {
+		inst.setClipboardNote(noBusRemedy, badge.ToneWarning)
+		return
+	}
+	rec, err := clipboardbroker.Write(inst.bus, clipboardbroker.Payload{Text: text, Source: clipboardSource})
+	if err != nil {
+		inst.setClipboardNote("copy: "+err.Error(), badge.ToneError)
+		return
+	}
+	note := fmt.Sprintf("copied %d bytes as %s", rec.Bytes, rec.Verdict())
+	if rec.Handle != "" {
+		note += " (" + rec.Handle + "): paste it inside boxer"
+	}
+	inst.setClipboardNote(note, badge.ToneSuccess)
 }
 
 func (inst *App) renderFsSection() {
@@ -214,18 +312,18 @@ func (inst *App) renderFsSection() {
 
 		for range c.Horizontal().KeepIter() {
 			if busy {
-				c.Label("Picker open… (resolve or cancel in the overlay)").Send()
+				inst.renderNote("pick-busy", "Picker open — resolve or cancel it in the overlay", badge.ToneInfo)
 			} else {
 				if c.Button(inst.ids.PrepareStr("pick"),
 					c.Atoms().Text("Pick a file…").Keep()).
 					SendResp().HasPrimaryClicked() {
-					go inst.runPick()
+					inst.spawn(inst.runPick)
 				}
 				if handle != "" {
 					if c.Button(inst.ids.PrepareStr("close"),
 						c.Atoms().Text("Close handle").Keep()).
 						SendResp().HasPrimaryClicked() {
-						go inst.runClose(handle)
+						inst.spawn(func() { inst.runClose(handle) })
 					}
 				}
 			}
@@ -233,9 +331,7 @@ func (inst *App) renderFsSection() {
 		if handle != "" {
 			c.Label("Granted handle subject: " + handle).Send()
 		}
-		if fileErr != "" {
-			c.Label("Error: " + fileErr).Send()
-		}
+		inst.renderNote("file-err", fileErr, badge.ToneError)
 		if preview != nil {
 			c.Label(fmt.Sprintf("Bytes read: %d (showing first %d)",
 				previewTotal, len(preview))).Send()
@@ -249,14 +345,11 @@ func (inst *App) renderPersistSection() {
 		c.WidgetText().Text("runtime.persist.scratchpad — Set / Get / Delete").Keep()).
 		DefaultOpen(true).KeepIter() {
 		inst.mu.Lock()
-		// Snapshot status under the lock; the TextEdit binding does
-		// its own mutation outside the lock via SendRespVal (single-
-		// threaded render is the synchronisation guarantee that lets
-		// us share `scratchpad` with the lock-protected goroutine
-		// writes; cf. regex_explorer pointer-swap pattern).
-		status := inst.persistStatus
+		status, tone := inst.persistStatus, inst.persistTone
 		inst.mu.Unlock()
 
+		// scratchpad is the render goroutine's: a Load lands in
+		// pendingScratchpad and Frame moved it across before this widget.
 		_ = c.TextEdit(inst.ids.PrepareStr("scratchpad"), inst.scratchpad, true).
 			CodeEditor().
 			DesiredRows(3).
@@ -267,22 +360,22 @@ func (inst *App) renderPersistSection() {
 			if c.Button(inst.ids.PrepareStr("save"),
 				c.Atoms().Text("Save").Keep()).
 				SendResp().HasPrimaryClicked() {
-				go inst.runPersistSet(inst.scratchpad)
+				value := inst.scratchpad
+				inst.spawn(func() { inst.runPersistSet(value) })
 			}
 			if c.Button(inst.ids.PrepareStr("load"),
 				c.Atoms().Text("Load").Keep()).
 				SendResp().HasPrimaryClicked() {
-				go inst.runPersistGet()
+				inst.spawn(inst.runPersistGet)
 			}
 			if c.Button(inst.ids.PrepareStr("delete"),
 				c.Atoms().Text("Delete").Keep()).
+				Kind(c.ButtonKindDanger).
 				SendResp().HasPrimaryClicked() {
-				go inst.runPersistDelete()
+				inst.spawn(inst.runPersistDelete)
 			}
 		}
-		if status != "" {
-			c.Label("Status: " + status).Send()
-		}
+		inst.renderNote("persist-status", status, tone)
 	}
 }
 
@@ -293,7 +386,7 @@ func (inst *App) renderPersistSection() {
 // Frame goroutine sees a consistent snapshot.
 func (inst *App) runPick() {
 	if inst.bus == nil {
-		inst.setFileErr("bus unavailable (M1 host?)")
+		inst.setFileErr(noBusRemedy)
 		return
 	}
 	inst.setBusy(true)
@@ -355,49 +448,54 @@ func (inst *App) runClose(handlePrefix string) {
 
 func (inst *App) runPersistSet(value string) {
 	if inst.storage == nil {
-		inst.setPersistStatus("storage unavailable (M1 host?)")
+		inst.setPersistStatus("no storage wired — persist needs the app runtime", badge.ToneWarning)
 		return
 	}
 	err := inst.storage.Set(scratchpadKey, []byte(value))
 	if err != nil {
-		inst.setPersistStatus("set failed: " + err.Error())
+		inst.setPersistStatus("set failed: "+err.Error(), badge.ToneError)
 		return
 	}
 	inst.setPersistStatus(fmt.Sprintf("saved %d bytes at %s",
-		len(value), time.Now().Format("15:04:05")))
+		len(value), time.Now().Format("15:04:05")), badge.ToneSuccess)
 }
 
+// runPersistGet reads the key and hands the value to the next frame: the
+// TextEdit binds scratchpad on the render goroutine, so this goroutine
+// never writes it.
 func (inst *App) runPersistGet() {
 	if inst.storage == nil {
-		inst.setPersistStatus("storage unavailable (M1 host?)")
+		inst.setPersistStatus("no storage wired — persist needs the app runtime", badge.ToneWarning)
 		return
 	}
 	value, found, err := inst.storage.Get(scratchpadKey)
 	if err != nil {
-		inst.setPersistStatus("get failed: " + err.Error())
+		inst.setPersistStatus("get failed: "+err.Error(), badge.ToneError)
 		return
 	}
 	if !found {
-		inst.setPersistStatus("get: key absent")
+		inst.setPersistStatus("get: key absent", badge.ToneWarning)
 		return
 	}
+	loaded := string(value)
 	inst.mu.Lock()
-	inst.scratchpad = string(value)
+	inst.pendingScratchpad = &loaded
 	inst.persistStatus = fmt.Sprintf("loaded %d bytes", len(value))
+	inst.persistTone = badge.ToneSuccess
 	inst.mu.Unlock()
 }
 
 func (inst *App) runPersistDelete() {
 	if inst.storage == nil {
-		inst.setPersistStatus("storage unavailable (M1 host?)")
+		inst.setPersistStatus("no storage wired — persist needs the app runtime", badge.ToneWarning)
 		return
 	}
 	err := inst.storage.Delete(scratchpadKey)
 	if err != nil {
-		inst.setPersistStatus("delete failed: " + err.Error())
+		inst.setPersistStatus("delete failed: "+err.Error(), badge.ToneError)
 		return
 	}
-	inst.setPersistStatus("deleted")
+	inst.setPersistStatus("deleted", badge.ToneSuccess)
 }
 
 func (inst *App) setBusy(b bool) {
@@ -414,9 +512,17 @@ func (inst *App) setFileErr(s string) {
 	inst.mu.Unlock()
 }
 
-func (inst *App) setPersistStatus(s string) {
+func (inst *App) setPersistStatus(s string, tone badge.ToneE) {
 	inst.mu.Lock()
 	inst.persistStatus = s
+	inst.persistTone = tone
+	inst.mu.Unlock()
+}
+
+func (inst *App) setClipboardNote(s string, tone badge.ToneE) {
+	inst.mu.Lock()
+	inst.clipboardNote = s
+	inst.clipboardTone = tone
 	inst.mu.Unlock()
 }
 
@@ -452,25 +558,25 @@ func (inst *App) renderWatchSection() {
 				if c.Button(inst.ids.PrepareStr("watchpick"),
 					c.Atoms().Text("Pick folder to watch…").Keep()).
 					SendResp().HasPrimaryClicked() {
-					go inst.runWatchPick()
+					inst.spawn(inst.runWatchPick)
 				}
 				if prefix != "" {
 					if c.Button(inst.ids.PrepareStr("watchclose"),
 						c.Atoms().Text("Close handle").Keep()).
 						SendResp().HasPrimaryClicked() {
-						go inst.runWatchClose()
+						inst.spawn(inst.runWatchClose)
 					}
 				}
 			} else {
 				if c.Button(inst.ids.PrepareStr("watchstop"),
 					c.Atoms().Text("Stop watching").Keep()).
 					SendResp().HasPrimaryClicked() {
-					go inst.runWatchStop()
+					inst.spawn(inst.runWatchStop)
 				}
 				if c.Button(inst.ids.PrepareStr("watchclose-active"),
 					c.Atoms().Text("Close handle").Keep()).
 					SendResp().HasPrimaryClicked() {
-					go inst.runWatchClose()
+					inst.spawn(inst.runWatchClose)
 				}
 			}
 		}
@@ -481,8 +587,9 @@ func (inst *App) renderWatchSection() {
 		if backend != "" {
 			c.Label("Backend: " + backend).Send()
 		}
-		if watchErr != "" {
-			c.Label("Error: " + watchErr).Send()
+		inst.renderNote("watch-err", watchErr, badge.ToneError)
+		if active {
+			inst.renderNote("watch-active", "watching", badge.ToneSuccess)
 		}
 		c.Label(fmt.Sprintf("Events received: %d (showing last %d)",
 			evCount, len(display))).Send()
@@ -505,7 +612,7 @@ func (inst *App) renderWatchSection() {
 // pump can't publish an event the subscription has yet to register.
 func (inst *App) runWatchPick() {
 	if inst.bus == nil {
-		inst.setWatchErr("bus unavailable (M1 host?)")
+		inst.setWatchErr(noBusRemedy)
 		return
 	}
 

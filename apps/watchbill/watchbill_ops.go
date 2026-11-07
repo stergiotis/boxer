@@ -9,14 +9,18 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/appops"
 	"github.com/stergiotis/boxer/public/keelson/runtime/appops/fsmops"
 	"github.com/stergiotis/boxer/public/keelson/runtime/appops/opfsm"
+	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
+	"github.com/stergiotis/boxer/public/keelson/runtime/help/search"
 	"github.com/stergiotis/boxer/public/keelson/runtime/watchbill/watchbillstore"
 )
 
 // The window's operations catalog (ADR-0269 M4): a table-shaped participant
 // beside play, so the contract is not drawn around one app. The filters and
 // the selection are view state; cancel and retry write to the durable job
-// store, outside the window, so they are consequential. The person's own
-// pills, row clicks and buttons go through the same handlers.
+// store, outside the window, so they are consequential, and they are
+// asynchronous: the store answers off the frame, and the call settles with
+// what it said (ADR-0358). The person's own pills, row clicks and buttons
+// go through the same handlers.
 
 const (
 	resFilters   = "filters"
@@ -36,8 +40,7 @@ const opsListCap = 200
 type opsSnap struct {
 	jobs     []watchbillstore.Job
 	states   []string
-	kind     string
-	selected string
+	inflight int
 }
 
 // JobRow is one job as list_jobs returns it.
@@ -46,26 +49,33 @@ type JobRow struct {
 	Kind       string    `desc:"the job kind"`
 	Subject    string    `desc:"what the job works on, as its requester named it"`
 	Queue      string    `desc:"the queue"`
-	State      string    `desc:"queued, leased, done, failed, cancelled or dead"`
+	State      string    `desc:"queued, running, succeeded, failed, discarded, cancel, cancelled or abandoned (ADR-0223 §SD2)"`
 	Attempt    uint32    `desc:"how many times it ran"`
 	RunAfter   time.Time `desc:"when it may run next"`
 	FinishedAt time.Time `desc:"when it finished; zero while it has not"`
 	LastError  string    `desc:"the last error, as the job reported it"`
 }
 
+// ListJobsArgs is list_jobs' argument: its own filter over the rows the
+// window holds, not the person's filter row (A2).
+type ListJobsArgs struct {
+	States []string `json:",omitzero" desc:"states to list; empty lists every state among the held rows"`
+	Kind   string   `json:",omitzero" desc:"a regex battery over the kind: space-separated case-insensitive patterns, all of which must match; empty matches every kind"`
+	Limit  int      `json:",omitzero" desc:"rows to return, at most 200; 0 returns 200"`
+}
+
 // JobList is list_jobs' result.
 type JobList struct {
-	Jobs      []JobRow `desc:"the jobs the filters show, newest first as the window lists them"`
+	Jobs      []JobRow `desc:"the jobs the arguments select, newest first as the window lists them"`
 	Truncated bool     `desc:"true when more jobs match than were returned"`
-	States    []string `desc:"the state filter; empty shows every state"`
-	Kind      string   `desc:"the kind filter, a substring"`
-	Selected  string   `desc:"the selected job's id, empty when none"`
+	Held      int      `desc:"how many rows the window holds; the window's state filter bounds them, and set_filters widens it"`
+	HeldFor   []string `desc:"the window's state filter the held rows were read under; empty means every state"`
 }
 
 // SetFiltersArgs is set_filters' argument.
 type SetFiltersArgs struct {
 	States []string `json:",omitzero" desc:"states to show; empty shows every state"`
-	Kind   string   `json:",omitzero" desc:"a substring of the job kind; empty matches every kind"`
+	Kind   string   `json:",omitzero" desc:"a regex battery over the job kind: space-separated case-insensitive patterns, all of which must match; empty matches every kind"`
 }
 
 // JobArgs names one job.
@@ -73,12 +83,19 @@ type JobArgs struct {
 	Id string `desc:"the job id"`
 }
 
+// VerbOutcome is what cancel_job and retry_job settle with, once the store
+// answered.
+type VerbOutcome struct {
+	Id      string `desc:"the job id"`
+	Applied bool   `desc:"true when the store applied the verb; false when the job was in a state it does not apply to, or does not exist"`
+	Note    string `desc:"the outcome as the window's status row shows it"`
+}
+
 var ops = func() (s *appops.Set[*App, opsSnap]) {
 	s = appops.NewSet(func(inst *App) opsSnap {
 		inst.mu.Lock()
 		defer inst.mu.Unlock()
-		return opsSnap{jobs: slices.Clone(inst.snap.jobs), states: inst.filters.stateList(),
-			kind: inst.filters.kind, selected: inst.selectedID}
+		return opsSnap{jobs: slices.Clone(inst.snap.jobs), states: inst.filters.stateList(), inflight: inst.snap.inflight}
 	})
 	// The kind text is read where the person's typing lands, the bound
 	// draft, so the write-back is attributed to the person.
@@ -107,12 +124,25 @@ var ops = func() (s *appops.Set[*App, opsSnap]) {
 		return inst.machine
 	}, fsmops.Options{})
 
-	appops.Query(s, app.OperationSpec{Name: opListJobs, Version: 1, Summary: "list the jobs the filters show",
-		Reads: []string{resFilters, resSelection}, Agents: true, Untrusted: true},
-		func(sn opsSnap, in appops.None) (out JobList, err error) {
-			out = JobList{States: sn.states, Kind: sn.kind, Selected: sn.selected}
-			for _, j := range visible(sn.jobs, sn.kind) {
-				if len(out.Jobs) == opsListCap {
+	appops.Query(s, app.OperationSpec{Name: opListJobs, Version: 1,
+		Summary: "list jobs among the rows the window holds, by state and a kind battery; keelson('watchbill_job') is the full view",
+		Agents:  true, Untrusted: true},
+		func(sn opsSnap, in ListJobsArgs) (out JobList, err error) {
+			for _, st := range in.States {
+				if !slices.Contains(watchbillstore.AllStates, st) {
+					return out, app.RefuseOperation("no state " + st + "; the states are " + strings.Join(watchbillstore.AllStates, ", "))
+				}
+			}
+			limit := in.Limit
+			if limit <= 0 || limit > opsListCap {
+				limit = opsListCap
+			}
+			out = JobList{Held: len(sn.jobs), HeldFor: sn.states}
+			for _, j := range visible(sn.jobs, search.ParseQuery(in.Kind)) {
+				if len(in.States) > 0 && !slices.Contains(in.States, j.State) {
+					continue
+				}
+				if len(out.Jobs) == limit {
 					out.Truncated = true
 					break
 				}
@@ -122,11 +152,11 @@ var ops = func() (s *appops.Set[*App, opsSnap]) {
 			return
 		})
 	appops.Command(s, app.OperationSpec{Name: opSetFilter, Version: 1, Summary: "set the state and kind filters",
-		Effect: app.OperationEffectView, Writes: []string{resFilters}, Agents: true, Gesture: "the state pills and the kind field"},
+		Effect: app.OperationEffectView, Writes: []string{resFilters}, Agents: true, Gesture: "the state pills, the kind field and Clear"},
 		func(inst *App, call app.OperationCall, in SetFiltersArgs) (appops.None, error) {
 			for _, st := range in.States {
 				if !slices.Contains(watchbillstore.AllStates, st) {
-					return appops.None{}, app.RefuseOperation("no state " + st)
+					return appops.None{}, app.RefuseOperation("no state " + st + "; the states are " + strings.Join(watchbillstore.AllStates, ", "))
 				}
 			}
 			inst.setFilters(in.States, in.Kind)
@@ -138,18 +168,31 @@ var ops = func() (s *appops.Set[*App, opsSnap]) {
 			inst.select_(in.Id)
 			return appops.None{}, nil
 		})
-	appops.Command(s, app.OperationSpec{Name: opCancel, Version: 1, Summary: "cancel a job in the durable store",
-		Effect: app.OperationEffectConsequential, Agents: true, Gesture: "the Cancel button"},
+	// Cancel and retry ask the store off the frame and settle with its
+	// answer (ADR-0358): a job the window knows to be ineligible is refused
+	// before the round trip, with the states the verb applies to.
+	appops.Command(s, app.OperationSpec{Name: opCancel, Version: 1, Summary: "cancel a queued or running job in the durable store",
+		Effect: app.OperationEffectConsequential, Agents: true, Async: true, Gesture: "the Cancel button"},
 		func(inst *App, call app.OperationCall, in JobArgs) (appops.None, error) {
+			if job, found := findJob(inst.snapshot().jobs, in.Id); found && !cancellable(job.State) {
+				return appops.None{}, app.RefuseOperation("job " + short(in.Id) + " is " + job.State + "; cancel applies to queued or running jobs")
+			}
 			inst.cancel(in.Id)
 			return appops.None{}, nil
 		})
-	appops.Command(s, app.OperationSpec{Name: opRetry, Version: 1, Summary: "retry a failed or dead job",
-		Effect: app.OperationEffectConsequential, Agents: true, Gesture: "the Retry button"},
+	appops.SettlesRaw(s, opCancel, settleVerb)
+	s.Available(opCancel, verbAvailable)
+	appops.Command(s, app.OperationSpec{Name: opRetry, Version: 1, Summary: "retry a finished job: back in the queue with its attempts reset",
+		Effect: app.OperationEffectConsequential, Agents: true, Async: true, Gesture: "the Retry button"},
 		func(inst *App, call app.OperationCall, in JobArgs) (appops.None, error) {
+			if job, found := findJob(inst.snapshot().jobs, in.Id); found && !watchbillstore.IsFinal(job.State) {
+				return appops.None{}, app.RefuseOperation("job " + short(in.Id) + " is " + job.State + "; retry applies to a finished job: " + strings.Join(watchbillstore.FinalStates, ", "))
+			}
 			inst.retry(in.Id)
 			return appops.None{}, nil
 		})
+	appops.SettlesRaw(s, opRetry, settleVerb)
+	s.Available(opRetry, verbAvailable)
 	return
 }()
 
@@ -158,18 +201,39 @@ func (inst *App) Operations() (h app.OperationsHandlerI) { return ops.Bind(inst)
 
 var _ app.OperationsAppI = (*App)(nil)
 
-// visible applies the kind substring, as visibleJobs does for the window.
-func visible(jobs []watchbillstore.Job, kind string) (out []watchbillstore.Job) {
-	needle := strings.ToLower(strings.TrimSpace(kind))
-	if needle == "" {
-		return jobs
+// cancellable says a cancel applies to the state.
+func cancellable(state string) (yes bool) {
+	return state == watchbillstore.StateQueued || state == watchbillstore.StateRunning
+}
+
+// settleVerb settles cancel_job and retry_job from the outcome the verb
+// landed for the job the call named (ADR-0358 §SD1): pending until the
+// store answered, then the outcome, or the transport's error.
+func settleVerb(inst *App, _ app.OperationCall, args []byte) (settled bool, result []byte, err error) {
+	in, err := buscodec.Decode[JobArgs](args)
+	if err != nil {
+		return true, nil, err
 	}
-	for _, j := range jobs {
-		if strings.Contains(strings.ToLower(j.Kind), needle) {
-			out = append(out, j)
-		}
+	o, found := inst.outcome(in.Id)
+	switch {
+	case !found:
+		return true, nil, app.RefuseOperation("no cancel or retry was asked for job " + short(in.Id))
+	case !o.done:
+		return false, nil, nil
+	case o.err != nil:
+		return true, nil, o.err
 	}
-	return
+	result, err = buscodec.Encode(VerbOutcome{Id: in.Id, Applied: o.applied, Note: o.note})
+	return true, result, err
+}
+
+// verbAvailable gates the verbs while one is in flight (ADR-0358): a
+// second ask before the store answered would race the first.
+func verbAvailable(sn opsSnap) (ok bool, reason string) {
+	if sn.inflight > 0 {
+		return false, "a cancel or retry is in flight; wait for it to settle"
+	}
+	return true, ""
 }
 
 // setFilters replaces the filters; the list is read again. Running before

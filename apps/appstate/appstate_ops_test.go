@@ -36,8 +36,7 @@ func opsFixture(t *testing.T) (inst *App, reader *fixedReader) {
 	reader.cols.Add(entryRow{Kind: "persist", AppId: "y/mdedit", Key: "doc", EntityId: "e4", PayloadBytes: 7})
 	inst = newApp()
 	inst.reader = reader
-	inst.appCtx = context.Background()
-	inst.refresh()
+	inst.refresh(context.Background())
 	snap := inst.snapshot()
 	require.Equal(t, 4, snap.rows.Len())
 	return
@@ -115,7 +114,7 @@ func TestListEntriesIsBounded(t *testing.T) {
 	for i := range opsMaxEntries + 20 {
 		reader.cols.Add(entryRow{Kind: "persist", AppId: "z/many", Key: string(rune('a' + i%26)), EntityId: "m"})
 	}
-	inst.refresh()
+	inst.refresh(context.Background())
 	out, err := query[ListEntriesArgs, ListEntriesResult](t, inst, opListEntries, ListEntriesArgs{App: "many", Limit: opsMaxEntries + 50})
 	require.NoError(t, err)
 	assert.Equal(t, opsMaxEntries+20, out.Matched)
@@ -131,15 +130,14 @@ func TestViewReflectsTheReadAndItsErrors(t *testing.T) {
 	assert.False(t, v.ReadAt.IsZero())
 
 	reader.err = errors.New("boom")
-	inst.refresh()
+	inst.refresh(context.Background())
 	v, err = query[struct{}, View](t, inst, opGetView, struct{}{})
 	require.NoError(t, err)
 	assert.Equal(t, "read: boom", v.ReadError)
 	assert.Equal(t, 4, v.Entries, "a failed read keeps the rows the window had")
 
 	none := newApp()
-	none.appCtx = context.Background()
-	none.refresh()
+	none.refresh(context.Background())
 	v, err = query[struct{}, View](t, none, opGetView, struct{}{})
 	require.NoError(t, err)
 	assert.False(t, v.Reads)
@@ -246,7 +244,7 @@ func TestTheEngineAttributesEachWriter(t *testing.T) {
 	out = w.submit(t, "r1", opRefresh, struct{}{})
 	assert.Equal(t, opwire.PhaseApplied, out.Phase, out.Reason)
 	before := w.eng.Revisions()[resRead]
-	w.inst.refresh()
+	w.inst.refresh(context.Background())
 	w.frame(nil)
 	assert.Greater(t, w.eng.Revisions()[resRead], before, "the landed read moves the resource")
 	assert.Equal(t, opwire.WriterApp, w.eng.Writer(resRead))

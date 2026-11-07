@@ -73,9 +73,11 @@ func TestApp_PersistSet_Get_Delete_RoundTrip(t *testing.T) {
 	require.Contains(t, a.persistStatus, "saved")
 	a.mu.Unlock()
 
-	// Load — must overwrite scratchpad with the persisted value.
+	// Load — the value lands for the next frame, which moves it into the
+	// bound field before the TextEdit runs.
 	a.scratchpad = "" // clear local field to prove Get populates it
 	a.runPersistGet()
+	a.takePending()
 	a.mu.Lock()
 	assert.Equal(t, "hello scratch", a.scratchpad)
 	assert.Contains(t, a.persistStatus, "loaded")
@@ -444,4 +446,22 @@ func resolveSlowly(t *testing.T, fsSvc *fsbroker.Service, path string) {
 	time.Sleep(300 * time.Millisecond)
 	_, err := fsSvc.Resolve(reqId, path)
 	require.NoError(t, err)
+}
+
+// Unmount releases the watch subscription (W5): no event lands after the
+// window is gone, and the verbs ran on the lifetime scope the host drains.
+func TestUnmountReleasesTheWatch(t *testing.T) {
+	a, fsSvc, cleanup := setupApp(t)
+	defer cleanup()
+	resolveWatchPick(t, a, fsSvc, t.TempDir())
+	a.mu.Lock()
+	require.True(t, a.watchActive)
+	require.NotNil(t, a.watchUnsubscribe)
+	a.mu.Unlock()
+
+	require.NoError(t, a.Unmount(nil))
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	assert.False(t, a.watchActive)
+	assert.Nil(t, a.watchUnsubscribe)
 }

@@ -16,7 +16,7 @@ import (
 var manifest = app.Manifest{
 	Id:       "github.com/stergiotis/boxer/apps/watchbilldemo",
 	Version:  "0.1.0",
-	Display:  "Watchbill",
+	Display:  "Watchbill demo",
 	Title:    "Durable job",
 	Summary:  "Enqueue a job on the watchbill and watch a worker take it",
 	Icon:     icons.PhClipboardText,

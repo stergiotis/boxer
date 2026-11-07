@@ -78,7 +78,7 @@ func parseSubject(subject string) (d time.Duration, fail bool, err error) {
 	}
 	if len(fields) == 2 {
 		if fields[1] != subjectFail {
-			return 0, false, eb.Build().Str("subject", subject).Errorf("watchbilldemo: the second word is %q or nothing", subjectFail)
+			return 0, false, eb.Build().Str("subject", subject).Str("expected", subjectFail).Errorf("watchbilldemo: the second word is the fail marker or nothing")
 		}
 		fail = true
 	}

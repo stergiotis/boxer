@@ -4,8 +4,9 @@
 // (ADR-0253), cancel and
 // retry through the client, and the task monitor for live runs. Nothing
 // here waits on a store from the frame goroutine: a poller refreshes on a
-// tick and on every watchbill.changed, and each verb runs in its own
-// goroutine and lands its outcome for the next frame.
+// tick and on every watchbill.changed, and each verb runs as one piece of
+// work on the instance's lifetime scope and lands its outcome for the
+// next frame.
 package watchbill
 
 import (
@@ -23,6 +24,8 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
+	"github.com/stergiotis/boxer/public/keelson/runtime/help/search"
+	"github.com/stergiotis/boxer/public/keelson/runtime/lifetime"
 	"github.com/stergiotis/boxer/public/keelson/runtime/task"
 	wb "github.com/stergiotis/boxer/public/keelson/runtime/watchbill"
 	"github.com/stergiotis/boxer/public/keelson/runtime/watchbill/watchbillstore"
@@ -30,7 +33,9 @@ import (
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/colwidth"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/fsmview"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/inspector"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/recordtable"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/regexedit"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/taskmonitor"
 )
 
@@ -46,10 +51,18 @@ const (
 	idShown = 10
 	// noteFrom is what cancel and retry record on the event.
 	noteFrom = "from the watchbill window"
+	// ownDrain bounds the wait for the window's goroutines where the app
+	// owns its scope (a host without a lifetime: tests); a draining host
+	// has its own deadline (ADR-0322).
+	ownDrain = 2 * time.Second
+	// stateProvenance is where the job chip's value comes from, for the
+	// inspector (ADR-0046).
+	stateProvenance = "app.watchbill.job.state"
 )
 
 // filters is what the window asks the list for. States on the worker,
-// the kind substring in the window.
+// the kind battery in the window (F1): space-separated, case-insensitive
+// patterns, all of which must match the kind.
 type filters struct {
 	states map[string]bool
 	kind   string
@@ -80,6 +93,16 @@ type snapshot struct {
 	reads bool
 }
 
+// verbOutcome is what one cancel or retry landed, keyed by the job it was
+// asked for: pending until the store answered, then applied or not, or a
+// transport failure. An async command settles from it (ADR-0358).
+type verbOutcome struct {
+	done    bool
+	applied bool
+	note    string
+	err     error
+}
+
 // App is the per-window instance.
 type App struct {
 	ids     *c.WidgetIdStack
@@ -96,13 +119,20 @@ type App struct {
 	// the frame that mirrors the new job.
 	mirrored string
 
-	appCtx    context.Context
-	cancelApp context.CancelFunc
-	unsub     func()
-	dirty     chan struct{}
-	wg        sync.WaitGroup
+	// scope counts the poller and the verbs into the instance's lifetime
+	// (W5): the host's, so its drain waits for them, or the app's own root
+	// where the host has none, retired at Unmount. stop is the mount
+	// context's cancel, which the host closes first.
+	scope    *lifetime.Scope
+	ownScope bool
+	stop     <-chan struct{}
+	unsub    func()
+	dirty    chan struct{}
 	// paused stops the poller's reads while the window is paused (ADR-0354).
 	paused atomic.Bool
+	// landed is set when the poller swapped a snapshot in, so the next
+	// frame requests one repaint (W7).
+	landed atomic.Bool
 
 	// The frame's own state: the filters, the selection, the text field
 	// binding, which event's error is unfolded, and whether the poller
@@ -114,6 +144,11 @@ type App struct {
 	list       recordtable.State
 	listRec    arrow.RecordBatch
 	listRecKey jobsRecKey
+	// trailSort, trailList and trailRec are the trail grid's, likewise.
+	trailSort   recordtable.SortState
+	trailList   recordtable.State
+	trailRec    arrow.RecordBatch
+	trailRecKey trailRecKey
 	// widths persists the columns the user dragged (ADR-0151), acquired on
 	// the first frame from the host's capability; nil renders the defaults.
 	widths     *colwidth.Resolver
@@ -124,6 +159,11 @@ type App struct {
 	storage   app.StorageI
 	splitSeen float32
 	kindDraft string
+	// kindHl paints the kind battery; kindBattery is the compiled query,
+	// rebuilt when kindQuery moves, so no frame compiles a regex.
+	kindHl      regexedit.Cache
+	kindBattery search.Battery
+	kindQuery   string
 	// kindH is the kind field's widget, for the catalog's editing check;
 	// frameCtx the frame's context, for routing the person's gestures
 	// through the catalog (ADR-0269).
@@ -140,6 +180,8 @@ type App struct {
 
 	mu   sync.Mutex
 	snap snapshot
+	// verbs is the last cancel or retry per job, under mu.
+	verbs map[string]*verbOutcome
 }
 
 var _ app.AppI = (*App)(nil)
@@ -150,6 +192,7 @@ func newApp() (inst *App) {
 		ids: c.NewWidgetIdStack(), density: styletokens.ActiveDensity(),
 		filters: filters{states: make(map[string]bool, len(watchbillstore.AllStates))},
 		dirty:   make(chan struct{}, 1), shownEvent: -1, autoDraft: true, autoRefresh: true,
+		verbs: make(map[string]*verbOutcome),
 	}
 	inst.machine = newJobMachine()
 	inst.split = newSplitState()
@@ -160,7 +203,7 @@ func (inst *App) Manifest() (m app.Manifest) { m = manifest; return }
 
 // Mount takes the host's bus client, reads a launch config, wires the
 // table reader, the task monitor and the announcements, and starts the
-// poller.
+// poller on the lifetime scope.
 func (inst *App) Mount(ctx app.MountContextI) (err error) {
 	inst.ids = ctx.Ids()
 	inst.logger = ctx.Log()
@@ -168,8 +211,18 @@ func (inst *App) Mount(ctx app.MountContextI) (err error) {
 	inst.client.Timeout = requestTimeout
 	inst.reads = newTableReader(ctx.Bus())
 	inst.tasks = task.ForApp(ctx)
-	inst.appCtx, inst.cancelApp = context.WithCancel(context.Background())
-	inst.chip = fsmview.New(inst.ids, "job-state", inst.machine, fsmview.Options[string]{Title: "job state"})
+	inst.stop = ctx.Cancel()
+	if inst.scope = app.LifetimeOf(ctx); inst.scope == nil {
+		// No host drain: the app owns a root scope and retires it at
+		// Unmount.
+		inst.scope, inst.ownScope = lifetime.New(nil), true
+	}
+	// The chip is tethered (T2): the badge opens the graph, table and
+	// history, and the inspector says where the value came from.
+	inst.chip = fsmview.New(inst.ids, "job-state", inst.machine, fsmview.Options[string]{
+		Title: "job state", Tethered: true, AutoAnchor: true, BadgeTone: toneOf,
+		Provenance: inspector.Provenance{Subject: stateProvenance, SourceApp: string(manifest.Id)},
+	})
 	inst.storage = ctx.Storage()
 	if inst.storage != nil {
 		if raw, found, gerr := inst.storage.Get(splitKey); gerr == nil && found {
@@ -199,8 +252,7 @@ func (inst *App) Mount(ctx app.MountContextI) (err error) {
 			inst.unsub = unsub
 		}
 	}
-	inst.wg.Add(1)
-	go inst.poll()
+	inst.scope.Go(inst.poll)
 	inst.markDirty()
 	return
 }
@@ -215,23 +267,32 @@ func (inst *App) applyLaunch(cfg launchcfg.WatchbillLaunch) {
 	}
 }
 
-// Unmount stops the poller, the subscription and the monitor, and drops the
-// job list's record.
+// Unmount stops the subscription and the monitor, and drops the job
+// list's record. The poller and the verbs are on the lifetime scope: the
+// host retired it before this and drains it after (ADR-0322); where the
+// app owns the scope it drains it here, bounded.
 func (inst *App) Unmount(ctx app.MountContextI) (err error) {
-	if inst.cancelApp != nil {
-		inst.cancelApp()
-	}
 	if inst.unsub != nil {
 		inst.unsub()
 		inst.unsub = nil
 	}
-	inst.wg.Wait()
+	if inst.ownScope {
+		dctx, cancel := context.WithTimeout(context.Background(), ownDrain)
+		defer cancel()
+		if dErr := inst.scope.Drain(dctx); dErr != nil {
+			inst.logger.Debug().Err(dErr).Msg("watchbill app: own scope not drained")
+		}
+	}
 	if inst.monitor != nil {
 		_ = inst.monitor.Close()
 	}
 	if inst.listRec != nil {
 		inst.listRec.Release()
 		inst.listRec = nil
+	}
+	if inst.trailRec != nil {
+		inst.trailRec.Release()
+		inst.trailRec = nil
 	}
 	return
 }
@@ -240,6 +301,11 @@ func (inst *App) Frame(ctx app.FrameContextI) (err error) {
 	inst.frameCtx = ctx
 	inst.density = styletokens.ActiveDensity()
 	inst.ensureWidths(ctx)
+	if inst.landed.Swap(false) {
+		// A snapshot landed since the last frame: one repaint, so the
+		// window shows it before the next input (W7).
+		c.RequestRepaint()
+	}
 	inst.render()
 	return
 }
@@ -294,13 +360,17 @@ func (inst *App) markDirty() {
 	}
 }
 
-func (inst *App) poll() {
-	defer inst.wg.Done()
+// poll is the poller, on the lifetime scope: it ends when the scope's
+// context ends or the host closes the mount context's cancel (W5).
+func (inst *App) poll(ctx context.Context) {
 	ticker := time.NewTicker(refreshEvery)
 	defer ticker.Stop()
 	for {
 		select {
-		case <-inst.appCtx.Done():
+		case <-ctx.Done():
+			inst.storeSplit()
+			return
+		case <-inst.stop:
 			inst.storeSplit()
 			return
 		case <-ticker.C:
@@ -313,7 +383,7 @@ func (inst *App) poll() {
 		if inst.paused.Load() {
 			continue
 		}
-		inst.refresh()
+		inst.refresh(ctx)
 	}
 }
 
@@ -345,7 +415,7 @@ func (inst *App) autoRefreshOn() (on bool) {
 
 // refresh reads the list under the current state filter, the selected
 // job's trail and the worker row, and lands them as one snapshot.
-func (inst *App) refresh() {
+func (inst *App) refresh(ctx context.Context) {
 	inst.mu.Lock()
 	states := inst.filters.stateList()
 	selected := inst.selectedID
@@ -360,7 +430,6 @@ func (inst *App) refresh() {
 		next.jobs = jobs
 	}
 	if inst.reads != nil {
-		ctx := inst.appCtx
 		if selected != "" {
 			if evs, eerr := inst.reads.events(ctx, selected); eerr != nil {
 				next.lastError = firstNonEmpty(next.lastError, "trail: "+eerr.Error())
@@ -375,7 +444,6 @@ func (inst *App) refresh() {
 		}
 	}
 	inst.mu.Lock()
-	defer inst.mu.Unlock()
 	next.lastNote, next.inflight = inst.snap.lastNote, inst.snap.inflight
 	if err != nil {
 		// A failed list keeps the rows we had; the error says why.
@@ -388,6 +456,8 @@ func (inst *App) refresh() {
 		next.events, next.eventsFor = inst.snap.events, inst.snap.eventsFor
 	}
 	inst.snap = next
+	inst.mu.Unlock()
+	inst.landed.Store(true)
 }
 
 func firstNonEmpty(a, b string) (s string) {
@@ -398,43 +468,44 @@ func firstNonEmpty(a, b string) (s string) {
 }
 
 func (inst *App) cancel(id string) {
-	inst.verb("cancel", func() (note string, err error) {
+	inst.verb("cancel", id, func() (applied bool, note string, err error) {
 		ok, err := inst.client.Cancel(id, noteFrom)
 		if err != nil {
-			return "", err
+			return false, "", err
 		}
 		if !ok {
-			return "cancel did not apply to " + short(id), nil
+			return false, "cancel did not apply to " + short(id), nil
 		}
-		return "cancel asked for " + short(id), nil
+		return true, "cancel asked for " + short(id), nil
 	})
 }
 
 func (inst *App) retry(id string) {
-	inst.verb("retry", func() (note string, err error) {
+	inst.verb("retry", id, func() (applied bool, note string, err error) {
 		ok, err := inst.client.Retry(id, noteFrom)
 		if err != nil {
-			return "", err
+			return false, "", err
 		}
 		if !ok {
-			return "retry did not apply to " + short(id), nil
+			return false, "retry did not apply to " + short(id), nil
 		}
-		return "retried " + short(id), nil
+		return true, "retried " + short(id), nil
 	})
 }
 
-// verb runs one request in its own goroutine and lands its outcome.
-func (inst *App) verb(name string, fn func() (note string, err error)) {
-	if inst.client == nil || inst.appCtx == nil || inst.appCtx.Err() != nil {
+// verb runs one request on the lifetime scope and lands its outcome: in
+// the status row, and under the job's id for the async command that
+// asked (ADR-0358). A scope that retired starts nothing.
+func (inst *App) verb(name string, id string, fn func() (applied bool, note string, err error)) {
+	if inst.client == nil || inst.scope == nil || inst.scope.IsRetired() {
 		return
 	}
 	inst.mu.Lock()
 	inst.snap.inflight++
+	inst.verbs[id] = &verbOutcome{}
 	inst.mu.Unlock()
-	inst.wg.Add(1)
-	go func() {
-		defer inst.wg.Done()
-		note, err := fn()
+	if !inst.scope.Go(func(context.Context) {
+		applied, note, err := fn()
 		inst.mu.Lock()
 		inst.snap.inflight--
 		if err != nil {
@@ -443,9 +514,27 @@ func (inst *App) verb(name string, fn func() (note string, err error)) {
 			inst.snap.lastError = ""
 			inst.snap.lastNote = note
 		}
+		inst.verbs[id] = &verbOutcome{done: true, applied: applied, note: note, err: err}
 		inst.mu.Unlock()
 		inst.markDirty()
-	}()
+	}) {
+		inst.mu.Lock()
+		inst.snap.inflight--
+		delete(inst.verbs, id)
+		inst.mu.Unlock()
+	}
+}
+
+// outcome is the last verb's outcome for id; pending is true while it has
+// not landed, and found false when none was asked.
+func (inst *App) outcome(id string) (o verbOutcome, found bool) {
+	inst.mu.Lock()
+	defer inst.mu.Unlock()
+	v, found := inst.verbs[id]
+	if found {
+		o = *v
+	}
+	return
 }
 
 // select_ changes the selection; the poller fetches its trail.
@@ -491,18 +580,48 @@ func (inst *App) snapshot() (s snapshot) {
 	return inst.snap
 }
 
-// visibleJobs applies the kind substring, the window's own filter.
+// visibleJobs applies the kind battery, the window's own filter (F1); the
+// battery is compiled when the query moves, not per frame.
 func (inst *App) visibleJobs(jobs []watchbillstore.Job) (out []watchbillstore.Job) {
-	needle := strings.ToLower(strings.TrimSpace(inst.filters.kind))
-	if needle == "" {
+	q := strings.TrimSpace(inst.filters.kind)
+	if q != inst.kindQuery {
+		inst.kindQuery, inst.kindBattery = q, search.ParseQuery(q)
+	}
+	return visible(jobs, inst.kindBattery)
+}
+
+// visible keeps the jobs whose kind every pattern of the battery hits; an
+// empty battery keeps them all.
+func visible(jobs []watchbillstore.Job, battery search.Battery) (out []watchbillstore.Job) {
+	if battery.IsZero() {
 		return jobs
 	}
 	for _, j := range jobs {
-		if strings.Contains(strings.ToLower(j.Kind), needle) {
+		if kindMatches(battery, j.Kind) {
 			out = append(out, j)
 		}
 	}
 	return
+}
+
+func kindMatches(battery search.Battery, kind string) (ok bool) {
+	for i := range battery.Patterns {
+		if !battery.Patterns[i].Matches(kind) {
+			return false
+		}
+	}
+	return true
+}
+
+// kindLiteral says a token of the compiled kind battery did not compile
+// and matches literally, so the row can say so.
+func (inst *App) kindLiteral() (literal bool) {
+	for i := range inst.kindBattery.Patterns {
+		if inst.kindBattery.Patterns[i].Literal {
+			return true
+		}
+	}
+	return false
 }
 
 func findJob(jobs []watchbillstore.Job, id string) (job watchbillstore.Job, found bool) {

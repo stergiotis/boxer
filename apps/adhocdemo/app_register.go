@@ -29,16 +29,7 @@ var manifest = app.Manifest{
 	// its resolve and events, and the embedded play's two escape hatches:
 	// Copy in the Definition drawer and Open in Playground, which also
 	// opens tally on the published tree (ADR-0222 §SD7).
-	Caps: append([]app.SubjectFilter{
-		{
-			Pattern:   adhocdata.SubjectBundlePublish,
-			Direction: app.CapDirectionPub,
-			Reason:    "adhocdemo: publish and republish the computed series as an ad-hoc bundle (ADR-0288)",
-		},
-		// Regenerate and the tree publish run as keelson tasks owned by
-		// the window.
-		task.ProducerCaps()[0],
-	}, sqlapplet.BundleViewCaps...),
+	Caps:       adhocCaps(),
 	Operations: adhocOps.Catalog(),
 }
 
@@ -50,4 +41,19 @@ func init() {
 	if err != nil {
 		log.Warn().Err(err).Msg("adhocdemo: failed to register factory")
 	}
+}
+
+// adhocCaps composes the manifest's capabilities from the helpers that
+// own them (S3): the publish, the task producer's (the publishes run as
+// keelson tasks owned by the window; the helper's reason is the
+// declaration), and the bundle view's.
+func adhocCaps() (caps []app.SubjectFilter) {
+	caps = []app.SubjectFilter{{
+		Pattern:   adhocdata.SubjectBundlePublish,
+		Direction: app.CapDirectionPub,
+		Reason:    "adhocdemo: publish and republish the computed series as an ad-hoc bundle (ADR-0288)",
+	}}
+	caps = append(caps, task.ProducerCaps()...)
+	caps = append(caps, sqlapplet.BundleViewCaps...)
+	return
 }

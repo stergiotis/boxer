@@ -21,8 +21,8 @@ import (
 	"github.com/stergiotis/boxer/public/identity/identifier"
 	"github.com/stergiotis/boxer/public/keelson/data/chclient"
 	"github.com/stergiotis/boxer/public/keelson/data/storeexec"
+	"github.com/stergiotis/boxer/public/keelson/runtime/bgjob"
 	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
-	"github.com/stergiotis/boxer/public/keelson/runtime/task"
 	"github.com/stergiotis/boxer/public/keelson/runtime/windowhost"
 	"github.com/stergiotis/boxer/public/observability/eh"
 )
@@ -87,39 +87,25 @@ WHERE NOT is_dir AND ext = '.md'
 ORDER BY size DESC`, mount.Value(), snap.UnixNano())
 }
 
-// publishTree is the gesture, whole, off the render thread: connect, publish
+// publishTree is the gesture, whole, as a task: connect, publish
 // (republishing into the held mount so repeated presses leave one mount
-// behind, not one per press), then open tally on it.
+// behind, not one per press), then open tally on it. Frame takes the
+// result; a press while one runs is dropped by the runner.
 func (inst *App) publishTree() {
-	inst.mu.Lock()
-	if inst.treeBusy {
-		inst.mu.Unlock()
-		return
-	}
-	inst.treeBusy = true
-	inst.treeErr = ""
-	inst.treeNote = ""
-	inst.treeGen++
-	gen := inst.treeGen
+	gen := inst.treeGen + 1
 	mount := inst.treeMount
-	inst.mu.Unlock()
-
-	var res ladingadhoc.PublishResult
-	err := task.Run(inst.tasks, context.Background(), task.SpawnOpts{Kind: "adhocdemo.tree", Title: "publish the tree and open tally", Cancellable: true}, func(ctx context.Context) (err error) {
-		res, err = inst.publishAndOpen(ctx, gen, mount)
-		return
-	})
-
-	inst.mu.Lock()
-	inst.treeBusy = false
-	if err != nil {
-		inst.treeErr = err.Error()
-	} else {
-		inst.treeMount = res.Mount
-		inst.treeNote = fmt.Sprintf("browsing %d entries as mount %016x · expires %s",
-			res.Entries, res.Mount.Value(), res.ExpiresAt.UTC().Format("2006-01-02"))
+	started := inst.treeJob.Start(inst.tasks, bgjob.Spec{Kind: "adhocdemo.tree", Title: "publish the tree and open tally"},
+		func(ctx context.Context) (res *ladingadhoc.PublishResult, err error) {
+			r, err := inst.publishAndOpen(ctx, gen, mount)
+			if err != nil {
+				return
+			}
+			return &r, nil
+		})
+	if started {
+		inst.treeGen = gen
+		inst.treeNote = ""
 	}
-	inst.mu.Unlock()
 }
 
 func (inst *App) publishAndOpen(ctx context.Context, gen int, mount identifier.TaggedId) (res ladingadhoc.PublishResult, err error) {
@@ -170,11 +156,4 @@ func (inst *App) publishAndOpen(ctx context.Context, gen int, mount identifier.T
 		return
 	}
 	return
-}
-
-// treeState snapshots what the tree button and its status line read.
-func (inst *App) treeState() (busy bool, note string, errText string) {
-	inst.mu.Lock()
-	defer inst.mu.Unlock()
-	return inst.treeBusy, inst.treeNote, inst.treeErr
 }

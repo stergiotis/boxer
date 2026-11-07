@@ -9,13 +9,11 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
 )
 
-// assetsFS bundles the app's data files (the splash artwork and a copy of the
-// project NOTICE). It is embedded as a *directory* rather than as individual
-// files on purpose: the artwork assets/patronus.png is intentionally
-// git-ignored (see .gitignore) and may be absent on a fresh checkout. A
-// directory embed still builds as long as the directory is non-empty — the
-// committed assets/NOTICE guarantees that — so a missing image degrades to the
-// "image unavailable" pane at runtime instead of breaking the build.
+// assetsFS bundles the app's data files: the splash artwork
+// (assets/splash.png, tracked) and a copy of the project NOTICE. It is
+// embedded as a directory so the two travel as one pattern; a read or
+// decode failure of the artwork still degrades to the "image unavailable"
+// pane at runtime rather than failing the build.
 //
 // assets/NOTICE is a copy of the repo-root NOTICE, refreshed by the generate
 // directive below (an embed pattern cannot escape the package directory).

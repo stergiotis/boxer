@@ -11,6 +11,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/widgethandle"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/badge"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/regexedit"
 )
 
 const seqChip = 0x100
@@ -69,16 +70,22 @@ func (inst *App) renderFilters(snap snapshot, shown int) {
 				gesture(inst, opSetFilter, SetFiltersArgs{States: toggled, Kind: inst.filters.kind}, func() { inst.toggleState(s) })
 			}
 		}
-		// Clear drops every pill and the kind text at once; it is drawn
-		// whether or not a filter is set, so the row never shifts, and it
-		// does nothing when there is nothing to clear.
+		// Clear drops every pill and the kind text at once, through the
+		// catalog like the pills (A3); it is drawn whether or not a filter
+		// is set, so the row never shifts, and it does nothing when there
+		// is nothing to clear. The field is told its binding changed under
+		// it either way: the handler ran after the field was drawn.
 		if c.Button(inst.ids.PrepareStr("clear"), c.Atoms().Text("Clear").Keep()).Small().SendResp().HasPrimaryClicked() {
-			inst.clearFilters()
+			gesture(inst, opSetFilter, SetFiltersArgs{}, inst.clearFilters)
+			c.CurrentApplicationState.StateManager.OverrideDatabindingSPtr(&inst.kindDraft)
 		}
 		c.AddSpace(styletokens.PaddingOuter(inst.density))
 		c.Label("Kind").Send()
+		// The kind box is a regex battery (F1): regexedit paints one
+		// pattern per whitespace-separated token.
 		inst.kindH = widgethandle.Make(inst.ids.PrepareStr("kind").Derive())
-		if c.TextEdit(inst.ids.PrepareStr("kind"), inst.kindDraft, false).SendRespVal(&inst.kindDraft).HasChanged() {
+		if inst.kindHl.TextEdit(inst.ids.PrepareStr("kind"), inst.kindDraft, false, regexedit.ModeTokens).
+			HintText("Filter (regex, space = AND)").SendRespVal(&inst.kindDraft).HasChanged() {
 			inst.filters.kind = inst.kindDraft
 		}
 		if c.Button(inst.ids.PrepareStr("refresh"), c.Atoms().Text("Refresh").Keep()).SendResp().HasPrimaryClicked() {
@@ -89,7 +96,17 @@ func (inst *App) renderFilters(snap snapshot, shown int) {
 		inst.autoRefresh = inst.autoDraft
 		inst.mu.Unlock()
 	}
+	if inst.kindLiteral() {
+		for rt := range c.RichTextLabel("some kind tokens are not valid regexps and match literally") {
+			rt.Small().Weak()
+		}
+	}
+	// The status row (L7): the selected job's state chip, the last
+	// outcome, and when the list was read.
 	for range c.HorizontalTop().KeepIter() {
+		if inst.selectedID != "" && inst.mirrored == inst.selectedID {
+			inst.chip.Render()
+		}
 		switch {
 		case snap.lastError != "":
 			badge.New(inst.ids.PrepareStr("err"), snap.lastError).Tone(badge.ToneError).Variant(badge.VariantSoft).Send()
@@ -122,13 +139,17 @@ func (inst *App) renderDetail(snap snapshot, jobs []watchbillstore.Job) {
 	inst.mirror(job)
 	for range c.Horizontal().KeepIter() {
 		c.LabelAtoms(c.Atoms().BeginRichText(job.ID).Monospace().Heading().End().Keep()).Send()
-		inst.chip.Render()
-		cancellable := job.State == watchbillstore.StateQueued || job.State == watchbillstore.StateRunning
-		if c.Button(inst.ids.PrepareStr("cancel"), c.Atoms().Text("Cancel").Keep()).SendResp().HasPrimaryClicked() && cancellable {
-			gesture(inst, opCancel, JobArgs{Id: job.ID}, func() { inst.cancel(job.ID) })
+		// The verbs are drawn when they apply (L2): Cancel destroys the
+		// run, Retry is what a finished job's detail is for.
+		if cancellable(job.State) {
+			if c.Button(inst.ids.PrepareStr("cancel"), c.Atoms().Text("Cancel").Keep()).Kind(c.ButtonKindDanger).SendResp().HasPrimaryClicked() {
+				gesture(inst, opCancel, JobArgs{Id: job.ID}, func() { inst.cancel(job.ID) })
+			}
 		}
-		if c.Button(inst.ids.PrepareStr("retry"), c.Atoms().Text("Retry").Keep()).SendResp().HasPrimaryClicked() && watchbillstore.IsFinal(job.State) {
-			gesture(inst, opRetry, JobArgs{Id: job.ID}, func() { inst.retry(job.ID) })
+		if watchbillstore.IsFinal(job.State) {
+			if c.Button(inst.ids.PrepareStr("retry"), c.Atoms().Text("Retry").Keep()).Kind(c.ButtonKindPrimary).SendResp().HasPrimaryClicked() {
+				gesture(inst, opRetry, JobArgs{Id: job.ID}, func() { inst.retry(job.ID) })
+			}
 		}
 	}
 	c.AddSpace(styletokens.PaddingInner(inst.density))
@@ -178,40 +199,7 @@ func (inst *App) renderTrail(snap snapshot, job watchbillstore.Job) {
 			c.Label("No transitions recorded yet.").Send()
 			return
 		}
-		for range c.Grid(inst.ids.PrepareStr("events")).NumColumns(6).Striped(true).KeepIter() {
-			for _, h := range []string{"at", "state", "attempt", "worker run", "note", ""} {
-				c.LabelAtoms(c.Atoms().BeginRichText(h).Strong().End().Keep()).Send()
-			}
-			c.EndRow()
-			for i, e := range snap.events.All() {
-				for range c.IdScope(inst.ids.PrepareSeq(uint64(i))) {
-					c.Label(e.At).Send()
-					badge.New(inst.ids.PrepareStr("st"), e.State).Tone(toneOf(e.State)).Variant(badge.VariantSoft).Size(badge.SizeSm).Send()
-					c.Label(fmt.Sprint(e.Attempt)).Send()
-					c.Label(short(e.WorkerRun)).Send()
-					c.Label(e.Note).Send()
-					if e.Error == "" {
-						c.Label("").Send()
-					} else {
-						label := "show error"
-						if inst.shownEvent == i {
-							label = "hide error"
-						}
-						if c.Button(inst.ids.PrepareStr("err"), c.Atoms().Text(label).Keep()).Small().SendResp().HasPrimaryClicked() {
-							if inst.shownEvent == i {
-								inst.shownEvent = -1
-							} else {
-								inst.shownEvent = i
-							}
-						}
-					}
-				}
-				c.EndRow()
-			}
-		}
-		if inst.shownEvent >= 0 && inst.shownEvent < snap.events.Len() {
-			c.LabelAtoms(c.Atoms().BeginRichText(snap.events.Error[inst.shownEvent]).Monospace().Small().End().Keep()).Send()
-		}
+		inst.renderTrailGrid(snap)
 	}
 }
 

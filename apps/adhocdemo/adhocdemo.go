@@ -5,12 +5,16 @@
 // view, the receiver's one constructor. A Regenerate button republishes
 // the bundle; the view follows it on the frame it is drawn, like any
 // receiver of a bundle another app published.
+//
+// Every publish is a task owned by the window on a bgjob runner (W2): the
+// first one starts at Mount and the view is built on the frame its result
+// lands, so the render goroutine never waits on the bus (W1).
 package adhocdemo
 
 import (
+	"context"
 	"fmt"
 	"math"
-	"sync"
 
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/array"
@@ -19,11 +23,15 @@ import (
 
 	"github.com/stergiotis/boxer/apps/play"
 	"github.com/stergiotis/boxer/apps/sqlapplet"
+	"github.com/stergiotis/boxer/public/fs/lading/ladingadhoc"
 	"github.com/stergiotis/boxer/public/identity/identifier"
 	"github.com/stergiotis/boxer/public/keelson/runtime/adhocdata"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
+	"github.com/stergiotis/boxer/public/keelson/runtime/bgjob"
 	"github.com/stergiotis/boxer/public/keelson/runtime/task"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/badge"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/bgjobrow"
 )
 
 // datasetAlias is the name the bundle's document reads its rows by.
@@ -42,7 +50,8 @@ func (inst *App) itemsSpec(gen int) play.BundleSpec {
 		Datasets: []adhocdata.BundleDatasetInput{{LocalName: datasetAlias, ArrowIPCStream: inst.series(gen)}}}
 }
 
-// App is the dogfood embedder.
+// App is the dogfood embedder. Everything on it is the render goroutine's:
+// the runners hand their results to Frame, which is the one writer.
 type App struct {
 	ids   *c.WidgetIdStack
 	bus   app.BusI
@@ -51,26 +60,26 @@ type App struct {
 	// runId (ADR-0330 §SD3).
 	instance uint64
 	log      zerolog.Logger
-	// tasks runs Regenerate and the tree publish as keelson tasks owned
-	// by this window.
+	// tasks runs the publishes as keelson tasks owned by this window.
 	tasks task.TaskApiI
 
 	bundle string
 	view   *sqlapplet.BundleView
 
-	mu        sync.Mutex
+	// gen is the generation the last bundle publish carried; bundleJob
+	// publishes one generation at a time, first at Mount and again on
+	// Regenerate, and Frame takes the result.
 	gen       int
-	busy      bool
-	statusErr string
+	bundleJob bgjob.Runner[adhocdata.BundleResult]
 
-	// The tree half (ADR-0222 §SD7), under the same lock: the mount the
-	// published tree lives in — held so a republish writes another snapshot
-	// of it rather than minting a second mount — and what the button shows.
+	// The tree half (ADR-0222 §SD7): the mount the published tree lives in
+	// — held so a republish writes another snapshot of it rather than
+	// minting a second mount — the generation last published, and what
+	// the button's note shows.
 	treeMount identifier.TaggedId
 	treeGen   int
-	treeBusy  bool
 	treeNote  string
-	treeErr   string
+	treeJob   bgjob.Runner[ladingadhoc.PublishResult]
 }
 
 var _ app.AppI = (*App)(nil)
@@ -86,23 +95,45 @@ func (inst *App) Mount(ctx app.MountContextI) (err error) {
 	inst.tasks = task.ForApp(ctx)
 
 	// The window's own bundle alias (ADR-0288 §SD3): a second adhocdemo
-	// window publishes its own.
+	// window publishes its own. The first publish is a task like every
+	// later one; the view is built when its result lands.
 	inst.bundle = adhocdata.WindowAlias(bundleBase, ctx.InstanceKey())
-	if _, pubErr := play.PublishBundle(inst.bus, inst.itemsSpec(0)); pubErr != nil {
-		inst.statusErr = "publish: " + pubErr.Error()
-		return
-	}
-	inst.view = sqlapplet.NewBundleView(inst.bundle, sqlapplet.BundleViewConfig{Bus: inst.bus, Log: inst.log,
-		RunId: inst.runId, StampAppId: string(ManifestId) + "#items", InstanceKey: ctx.InstanceKey(), Operable: true})
+	inst.startPublish()
 	return
 }
 
+// startPublish publishes the current generation as a task; false when a
+// publish is already in flight. PublishBundle is a synchronous bus request
+// and the series is built inside the task, so neither touches the frame.
+func (inst *App) startPublish() (started bool) {
+	gen := inst.gen
+	return inst.bundleJob.Start(inst.tasks, bgjob.Spec{Kind: "adhocdemo.publish", Title: "publish the series"},
+		func(context.Context) (res *adhocdata.BundleResult, err error) {
+			r, err := play.PublishBundle(inst.bus, inst.itemsSpec(gen))
+			if err != nil {
+				return
+			}
+			return &r, nil
+		})
+}
+
+// takeResults moves what the runners finished into the window, once each,
+// at the top of Frame.
+func (inst *App) takeResults() {
+	if _, _, ok := inst.bundleJob.TakeResult(); ok && inst.view == nil {
+		inst.view = sqlapplet.NewBundleView(inst.bundle, sqlapplet.BundleViewConfig{Bus: inst.bus, Log: inst.log,
+			RunId: inst.runId, StampAppId: string(ManifestId) + "#items", InstanceKey: inst.instance, Operable: true})
+	}
+	if r, _, ok := inst.treeJob.TakeResult(); ok {
+		inst.treeMount = r.Mount
+		inst.treeNote = fmt.Sprintf("browsing %d entries as mount %016x · expires %s",
+			r.Entries, r.Mount.Value(), r.ExpiresAt.UTC().Format("2006-01-02"))
+	}
+}
+
 func (inst *App) Frame(ctx app.FrameContextI) (err error) {
-	inst.mu.Lock()
+	inst.takeResults()
 	view := inst.view
-	busy := inst.busy
-	statusErr := inst.statusErr
-	inst.mu.Unlock()
 	var revision uint64
 	if view != nil {
 		revision = view.Revision()
@@ -111,13 +142,12 @@ func (inst *App) Frame(ctx app.FrameContextI) (err error) {
 	for range c.PanelTopInside(inst.ids.PrepareStr("adhoc-bar")).Resizable(false).KeepIter() {
 		for range c.Horizontal().KeepIter() {
 			if view != nil {
-				label := "Regenerate"
-				if busy {
-					label = "Regenerating…"
+				if c.Button(inst.ids.PrepareStr("regen"), c.Atoms().Text("Regenerate").Keep()).
+					Kind(c.ButtonKindPrimary).SendResp().HasPrimaryClicked() {
+					inst.regenerate()
 				}
-				if c.Button(inst.ids.PrepareStr("regen"), c.Atoms().Text(label).Keep()).SendResp().HasPrimaryClicked() && !busy {
-					go inst.regenerate()
-				}
+				inst.jobRow(&inst.bundleJob, "regen-job", "republishing the series…")
+				inst.failedNote("regen-err", "regenerate", &inst.bundleJob)
 			}
 			if revision > 0 {
 				c.Label(fmt.Sprintf("bundle %s · rev %d", inst.bundle, revision)).Send()
@@ -125,31 +155,30 @@ func (inst *App) Frame(ctx app.FrameContextI) (err error) {
 			c.Separator().Vertical().Send()
 			// The tree half: the same computation as a file tree rather
 			// than as rows, published into the lading store and browsed in
-			// tally (ADR-0222). Off the render thread — it walks a tree and
+			// tally (ADR-0222). A task — it connects, walks a tree and
 			// writes rows.
-			treeBusy, treeNote, treeErr := inst.treeState()
-			label := "Publish tree & browse in tally"
-			if treeBusy {
-				label = "Publishing tree…"
+			if c.Button(inst.ids.PrepareStr("publish-tree"), c.Atoms().Text("Publish tree & browse in tally").Keep()).SendResp().HasPrimaryClicked() {
+				inst.publishTree()
 			}
-			if c.Button(inst.ids.PrepareStr("publish-tree"), c.Atoms().Text(label).Keep()).SendResp().HasPrimaryClicked() && !treeBusy {
-				go inst.publishTree()
+			if !inst.jobRow(&inst.treeJob, "tree-job", "publishing the tree…") && inst.treeNote != "" {
+				c.Label(inst.treeNote).Send()
 			}
-			if treeNote != "" {
-				c.Label(treeNote).Send()
-			}
-			if treeErr != "" {
-				c.Label("tree: " + treeErr).Send()
-			}
+			inst.failedNote("tree-err", "tree", &inst.treeJob)
 		}
 	}
 
 	if view == nil {
+		// The first publish has not landed: say what the pane waits on,
+		// or why it never will (L4).
 		for range c.PanelCentralInside().KeepIter() {
-			if statusErr != "" {
-				c.Label("ad-hoc demo unavailable: " + statusErr).Send()
+			if snap := inst.bundleJob.Snapshot(); snap.State == bgjob.StateFailed {
+				inst.failedNote("publish-err", "publish", &inst.bundleJob)
+				if c.Button(inst.ids.PrepareStr("publish-retry"), c.Atoms().Text("Retry").Keep()).SendResp().HasPrimaryClicked() {
+					inst.startPublish()
+				}
 			} else {
-				c.Label("Preparing…").Send()
+				c.Label("Preparing — waiting on the bundle publish").Send()
+				inst.jobRow(&inst.bundleJob, "publish-job", "publishing the series…")
 			}
 		}
 		return
@@ -160,7 +189,23 @@ func (inst *App) Frame(ctx app.FrameContextI) (err error) {
 	return view.Frame(ctx)
 }
 
+// jobRow draws a runner's progress row while it runs (W4) and reports
+// whether it did; the row keeps frames coming while it draws (W7).
+func (inst *App) jobRow(job bgjobrow.JobI, key string, note string) (running bool) {
+	return bgjobrow.Render(bgjobrow.Input{Job: job, Ids: inst.ids, ScopeKey: key, Inline: true, Note: note}).Running
+}
+
+// failedNote shows a runner's last failure as a badge (W8): the outcome
+// reaches the window, not only the log.
+func (inst *App) failedNote(key string, what string, job bgjobrow.JobI) {
+	if snap := job.Snapshot(); snap.State == bgjob.StateFailed && snap.Err != nil {
+		badge.New(inst.ids.PrepareStr(key), what+" failed: "+snap.Err.Error()).Tone(badge.ToneError).Variant(badge.VariantSoft).Send()
+	}
+}
+
 func (inst *App) Unmount(ctx app.MountContextI) (err error) {
+	inst.bundleJob.Cancel()
+	inst.treeJob.Cancel()
 	if inst.view != nil {
 		inst.view.Close()
 		inst.view = nil
@@ -170,32 +215,16 @@ func (inst *App) Unmount(ctx app.MountContextI) (err error) {
 	return
 }
 
-// regenerate republishes the bundle with a fresh series. Runs off the
-// render thread — bus.Request is synchronous and would stall the frame.
-// The view learns of the new revision from the service's event, like any
-// other receiver.
+// regenerate republishes the bundle with a fresh series, as a task. The
+// view learns of the new revision from the service's event, like any
+// other receiver. A click while a publish runs is dropped: the runner
+// takes one run at a time.
 func (inst *App) regenerate() {
-	inst.mu.Lock()
-	if inst.busy || inst.view == nil {
-		inst.mu.Unlock()
+	if inst.bundleJob.Running() {
 		return
 	}
-	inst.busy = true
 	inst.gen++
-	gen := inst.gen
-	inst.mu.Unlock()
-
-	err := task.RunToCompletion(inst.tasks, task.SpawnOpts{Kind: "adhocdemo.regenerate", Title: "regenerate the series"}, func() (err error) {
-		_, err = play.PublishBundle(inst.bus, inst.itemsSpec(gen))
-		return
-	})
-	if err != nil {
-		inst.log.Warn().Err(err).Msg("adhocdemo: regenerate failed")
-	}
-
-	inst.mu.Lock()
-	inst.busy = false
-	inst.mu.Unlock()
+	inst.startPublish()
 }
 
 // series renders generation gen of the computed series as an Arrow IPC

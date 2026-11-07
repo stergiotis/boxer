@@ -10,6 +10,7 @@ import (
 
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	"github.com/stergiotis/boxer/public/keelson/runtime/watchbill/watchbillstore"
+	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/color"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/recordtable"
 )
@@ -184,5 +185,149 @@ func (inst *App) renderList(snap snapshot, jobs []watchbillstore.Job) {
 	if res.Clicked >= 0 && res.Clicked < int64(len(jobs)) {
 		clicked := jobs[res.Clicked].ID
 		gesture(inst, opSelect, JobArgs{Id: clicked}, func() { inst.select_(clicked) })
+	}
+}
+
+// --- the trail -------------------------------------------------------------
+
+// The selected job's trail is a grid over the same shape (D1): one string
+// record, built when the trail lands, with the attempt as a number so its
+// header sorts as one. A click on a row unfolds its error under the grid.
+
+// trailColumn is one trail column: its header, hover and width, and how a
+// transition's cell reads.
+type trailColumn struct {
+	header  string
+	hover   string
+	width   float32
+	numeric bool
+	text    func(e eventRow) string
+}
+
+var trailColumns = []trailColumn{
+	{header: "at", hover: "when the transition was recorded", width: 190, text: func(e eventRow) string { return e.At }},
+	{header: "state", hover: "the state the row entered (ADR-0223 §SD2)", width: 96, text: func(e eventRow) string { return e.State }},
+	{header: "attempt", hover: "the attempt the transition belongs to", width: 72, numeric: true, text: func(e eventRow) string { return fmt.Sprint(e.Attempt) }},
+	{header: "worker run", hover: "the run that recorded it", width: 130, text: func(e eventRow) string { return short(e.WorkerRun) }},
+	{header: "note", hover: "what the requester or the worker said", width: 220, text: func(e eventRow) string { return e.Note }},
+	{header: "error", hover: "the attempt's error, first line; click the row to unfold it", width: 300, text: func(e eventRow) string { return firstLine(e.Error) }},
+}
+
+// trailSchema is one field per trail column, the attempt an Int64.
+var trailSchema = func() *arrow.Schema {
+	fields := make([]arrow.Field, 0, len(trailColumns))
+	for _, col := range trailColumns {
+		typ := arrow.DataType(arrow.BinaryTypes.String)
+		if col.numeric {
+			typ = arrow.PrimitiveTypes.Int64
+		}
+		fields = append(fields, arrow.Field{Name: col.header, Type: typ})
+	}
+	return arrow.NewSchema(fields, nil)
+}()
+
+// trailRecord holds the trail as a record, row i being transition i.
+func trailRecord(events *eventCols) (rec arrow.RecordBatch) {
+	mem := memory.DefaultAllocator
+	arrs := make([]arrow.Array, 0, len(trailColumns))
+	for _, col := range trailColumns {
+		if col.numeric {
+			b := array.NewInt64Builder(mem)
+			for _, e := range events.All() {
+				b.Append(e.Attempt)
+			}
+			arrs = append(arrs, b.NewArray())
+			b.Release()
+			continue
+		}
+		b := array.NewStringBuilder(mem)
+		for _, e := range events.All() {
+			b.Append(col.text(e))
+		}
+		arrs = append(arrs, b.NewArray())
+		b.Release()
+	}
+	rec = array.NewRecordBatch(trailSchema, arrs, int64(events.Len()))
+	for _, a := range arrs {
+		a.Release()
+	}
+	return
+}
+
+// trailRecKey names what the trail record was built from: the job and the
+// refresh that landed its transitions.
+type trailRecKey struct {
+	job       string
+	refreshed time.Time
+	n         int
+}
+
+// trailRecordFor returns the record for this frame's trail, rebuilding it
+// only when the key moved.
+func (inst *App) trailRecordFor(key trailRecKey, events *eventCols) (rec arrow.RecordBatch) {
+	if inst.trailRec != nil && inst.trailRecKey == key {
+		return inst.trailRec
+	}
+	if inst.trailRec != nil {
+		inst.trailRec.Release()
+	}
+	inst.trailRec, inst.trailRecKey = trailRecord(events), key
+	return inst.trailRec
+}
+
+// trailGridColumns lays the trail columns out, the state cell toned as its
+// badge is.
+func trailGridColumns(events *eventCols) (cols []recordtable.Column) {
+	cols = make([]recordtable.Column, 0, len(trailColumns))
+	for i, col := range trailColumns {
+		typ := "text"
+		if col.numeric {
+			typ = "number"
+		}
+		cols = append(cols, recordtable.Column{
+			Arrow: i, Header: col.header, Hover: col.hover, Width: col.width, WidthType: typ,
+			Cell: func(row int64) (cell recordtable.Cell) {
+				e := events.Row(int(row))
+				cell = recordtable.Cell{Text: col.text(e), LeftAlign: !col.numeric}
+				if col.header == "state" {
+					cell.Tone, cell.Toned = stateTone(watchbillstore.Job{State: e.State})
+				}
+				return
+			},
+		})
+	}
+	return
+}
+
+// trailTableTag scopes the trail's stored widths and its grid.
+const trailTableTag = "trail"
+
+// trailMaxHeight bounds the grid inside the detail's scroll area.
+const trailMaxHeight = 260
+
+// renderTrailGrid draws the trail and unfolds the clicked row's error.
+func (inst *App) renderTrailGrid(snap snapshot) {
+	events := &snap.events
+	rec := inst.trailRecordFor(trailRecKey{job: snap.eventsFor, refreshed: snap.refreshed, n: events.Len()}, events)
+	res := recordtable.RenderGrid(recordtable.Input{
+		Ids: inst.ids, ScopeKey: trailTableTag, Record: rec, Columns: trailGridColumns(events),
+		Widths: inst.widths, TableTag: trailTableTag,
+		Sort: &inst.trailSort, Order: inst.trailSort.OrderFor(rec, rec.NumRows()),
+		Selected: int64(inst.shownEvent), HasSelection: inst.shownEvent >= 0, State: &inst.trailList,
+		MaxHeight: trailMaxHeight,
+	})
+	if res.Err != nil {
+		inst.logger.Warn().Err(res.Err).Msg("watchbill app: trail refused its input")
+	}
+	inst.trailSort.Apply(res)
+	if res.Clicked >= 0 && res.Clicked < int64(events.Len()) {
+		if int(res.Clicked) == inst.shownEvent {
+			inst.shownEvent = -1
+		} else {
+			inst.shownEvent = int(res.Clicked)
+		}
+	}
+	if inst.shownEvent >= 0 && inst.shownEvent < events.Len() && events.Error[inst.shownEvent] != "" {
+		c.LabelAtoms(c.Atoms().BeginRichText(events.Error[inst.shownEvent]).Monospace().Small().End().Keep()).Send()
 	}
 }

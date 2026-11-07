@@ -7,9 +7,9 @@
 //
 // Every bus request is answered by the worker, which may be a store read
 // away; none runs on the frame goroutine. A poller refreshes the list on a
-// tick and on every watchbill.changed it hears, and each verb runs in its
-// own goroutine and lands its outcome under the app's mutex for the next
-// frame to show.
+// tick and on every watchbill.changed it hears, and each verb runs as one
+// piece of work on the instance's lifetime scope (W5) and lands its
+// outcome under the app's mutex for the next frame to show.
 package watchbilldemo
 
 import (
@@ -24,6 +24,7 @@ import (
 
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
+	"github.com/stergiotis/boxer/public/keelson/runtime/lifetime"
 	"github.com/stergiotis/boxer/public/keelson/runtime/task"
 	"github.com/stergiotis/boxer/public/keelson/runtime/watchbill"
 	"github.com/stergiotis/boxer/public/keelson/runtime/watchbill/watchbillstore"
@@ -47,6 +48,10 @@ const (
 	listLimit = 200
 	// idShown is how many characters of an id a row shows.
 	idShown = 8
+	// ownDrain bounds the wait for the window's goroutines where the app
+	// owns its scope (a host without a lifetime: tests); a draining host
+	// has its own deadline (ADR-0322).
+	ownDrain = 2 * time.Second
 )
 
 // App is the per-window instance.
@@ -59,15 +64,21 @@ type App struct {
 	tasks   task.TaskApiI
 	monitor *taskmonitor.Monitor
 
-	// appCtx ends the poller and every verb in flight at Unmount.
-	appCtx    context.Context
-	cancelApp context.CancelFunc
-	unsub     func()
+	// scope counts the poller and the verbs into the instance's lifetime
+	// (W5): the host's, so its drain waits for them, or the app's own root
+	// where the host has none, retired at Unmount. stop is the mount
+	// context's cancel, which the host closes first.
+	scope    *lifetime.Scope
+	ownScope bool
+	stop     <-chan struct{}
+	unsub    func()
 	// dirty asks the poller for a refresh now; one pending is enough.
 	dirty chan struct{}
-	wg    sync.WaitGroup
 	// paused stops the poller's reads while the window is paused (ADR-0354).
 	paused atomic.Bool
+	// landed is set when the poller swapped a list in, so the next frame
+	// requests one repaint (W7).
+	landed atomic.Bool
 
 	// The controls, bound to stable fields.
 	durationSec  float64
@@ -107,7 +118,12 @@ func (inst *App) Mount(ctx app.MountContextI) (err error) {
 	inst.client = watchbill.NewClient(ctx.Bus())
 	inst.client.Timeout = requestTimeout
 	inst.tasks = task.ForApp(ctx)
-	inst.appCtx, inst.cancelApp = context.WithCancel(context.Background())
+	inst.stop = ctx.Cancel()
+	if inst.scope = app.LifetimeOf(ctx); inst.scope == nil {
+		// No host drain: the app owns a root scope and retires it at
+		// Unmount.
+		inst.scope, inst.ownScope = lifetime.New(nil), true
+	}
 
 	inst.monitor = taskmonitor.New(inst.ids, "tm", inst.tasks, taskmonitor.Options{DefaultOpen: true})
 	if startErr := inst.monitor.Start(); startErr != nil {
@@ -121,23 +137,28 @@ func (inst *App) Mount(ctx app.MountContextI) (err error) {
 			inst.unsub = unsub
 		}
 	}
-	inst.wg.Add(1)
-	go inst.poll()
+	inst.scope.Go(inst.poll)
 	inst.markDirty()
 	return
 }
 
-// Unmount stops the poller, the subscription and the monitor. Jobs in
-// flight are the worker's, not the window's, and keep running.
+// Unmount stops the subscription and the monitor. The poller and the verbs
+// are on the lifetime scope: the host retired it before this and drains it
+// after (ADR-0322); where the app owns the scope it drains it here,
+// bounded. Jobs in flight are the worker's, not the window's, and keep
+// running.
 func (inst *App) Unmount(ctx app.MountContextI) (err error) {
-	if inst.cancelApp != nil {
-		inst.cancelApp()
-	}
 	if inst.unsub != nil {
 		inst.unsub()
 		inst.unsub = nil
 	}
-	inst.wg.Wait()
+	if inst.ownScope {
+		dctx, cancel := context.WithTimeout(context.Background(), ownDrain)
+		defer cancel()
+		if dErr := inst.scope.Drain(dctx); dErr != nil {
+			inst.logger.Debug().Err(dErr).Msg("watchbilldemo: own scope not drained")
+		}
+	}
 	if inst.monitor != nil {
 		_ = inst.monitor.Close()
 	}
@@ -146,6 +167,11 @@ func (inst *App) Unmount(ctx app.MountContextI) (err error) {
 
 func (inst *App) Frame(ctx app.FrameContextI) (err error) {
 	inst.density = styletokens.ActiveDensity()
+	if inst.landed.Swap(false) {
+		// A list landed since the last frame: one repaint, so the window
+		// shows it before the next input (W7).
+		c.RequestRepaint()
+	}
 	inst.render()
 	return
 }
@@ -168,14 +194,17 @@ func (inst *App) markDirty() {
 	}
 }
 
-// poll refreshes the list on the tick and on demand until the app ends.
-func (inst *App) poll() {
-	defer inst.wg.Done()
+// poll refreshes the list on the tick and on demand, on the lifetime
+// scope: it ends when the scope's context ends or the host closes the
+// mount context's cancel (W5).
+func (inst *App) poll(ctx context.Context) {
 	ticker := time.NewTicker(refreshEvery)
 	defer ticker.Stop()
 	for {
 		select {
-		case <-inst.appCtx.Done():
+		case <-ctx.Done():
+			return
+		case <-inst.stop:
 			return
 		case <-ticker.C:
 		case <-inst.dirty:
@@ -190,12 +219,13 @@ func (inst *App) poll() {
 func (inst *App) refresh() {
 	jobs, err := inst.client.List(nil, nil, listLimit)
 	inst.mu.Lock()
-	defer inst.mu.Unlock()
 	if err != nil {
 		inst.lastError = "list: " + err.Error()
-		return
+	} else {
+		inst.jobs, inst.refreshed = jobs, time.Now()
 	}
-	inst.jobs, inst.refreshed = jobs, time.Now()
+	inst.mu.Unlock()
+	inst.landed.Store(true)
 }
 
 // enqueue asks the worker for a job with the controls' policy.
@@ -242,17 +272,16 @@ func (inst *App) retry(id string) {
 	})
 }
 
-// verb runs one request in its own goroutine and lands its outcome.
+// verb runs one request on the lifetime scope and lands its outcome; a
+// scope that retired starts nothing.
 func (inst *App) verb(name string, fn func() (note string, err error)) {
-	if inst.client == nil || inst.appCtx == nil || inst.appCtx.Err() != nil {
+	if inst.client == nil || inst.scope == nil || inst.scope.IsRetired() {
 		return
 	}
 	inst.mu.Lock()
 	inst.inflight++
 	inst.mu.Unlock()
-	inst.wg.Add(1)
-	go func() {
-		defer inst.wg.Done()
+	if !inst.scope.Go(func(context.Context) {
 		note, err := fn()
 		inst.mu.Lock()
 		inst.inflight--
@@ -264,7 +293,11 @@ func (inst *App) verb(name string, fn func() (note string, err error)) {
 		}
 		inst.mu.Unlock()
 		inst.markDirty()
-	}()
+	}) {
+		inst.mu.Lock()
+		inst.inflight--
+		inst.mu.Unlock()
+	}
 }
 
 // snapshot is what one frame renders from.
@@ -277,9 +310,6 @@ func (inst *App) snapshot() (jobs []watchbillstore.Job, lastError string, lastNo
 // --- render ----------------------------------------------------------
 
 func (inst *App) render() {
-	for range c.PanelTopInside(inst.ids.PrepareStr("topbar")).Resizable(false).KeepIter() {
-		c.Label("Durable job demo — enqueue a demo.sleep job; a worker in this process claims it, runs it as a task, and the row records every transition").Send()
-	}
 	for range c.PanelCentralInside().KeepIter() {
 		for range c.ScrollArea().Vscroll(true).KeepIter() {
 			inst.renderControls()
@@ -308,8 +338,12 @@ func (inst *App) renderControls() {
 		}
 		_ = c.Checkbox(inst.ids.PrepareStr("fail"), inst.simulateFail, "Fail at the end (exercises the retry policy)").SendRespVal(&inst.simulateFail)
 		for range c.Horizontal().KeepIter() {
-			if c.Button(inst.ids.PrepareStr("enqueue"), c.Atoms().Text("Enqueue job").Keep()).SendResp().HasPrimaryClicked() {
-				inst.enqueue()
+			// The one primary (L2); what the demo shows is the tooltip, not
+			// a banner (L6).
+			for range c.HoverText("Enqueue a demo.sleep job: a worker in this process claims it, runs it as a task, and the row records every transition").KeepIter() {
+				if c.Button(inst.ids.PrepareStr("enqueue"), c.Atoms().Text("Enqueue job").Keep()).Kind(c.ButtonKindPrimary).SendResp().HasPrimaryClicked() {
+					inst.enqueue()
+				}
 			}
 			if c.Button(inst.ids.PrepareStr("refresh"), c.Atoms().Text("Refresh").Keep()).SendResp().HasPrimaryClicked() {
 				inst.markDirty()

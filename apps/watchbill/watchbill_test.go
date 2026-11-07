@@ -440,3 +440,112 @@ func TestTheSelectedJobsMachineIsMounted(t *testing.T) {
 	assert.Empty(t, read().Current, "the machine still mirrors j1, so j2 reports no state")
 	assert.Equal(t, "", h.ResourceValue("job_state"))
 }
+
+// list_jobs is a function of its own arguments and the snapshot (A2): the
+// kind battery and the state list narrow the held rows, and the person's
+// filter row is not read.
+func TestListJobsTakesItsOwnArguments(t *testing.T) {
+	inst := newApp()
+	inst.snap.jobs = []watchbillstore.Job{
+		{ID: "a", Kind: "mail.send", State: watchbillstore.StateQueued},
+		{ID: "b", Kind: "mail.fetch", State: watchbillstore.StateFailed},
+		{ID: "c", Kind: "index.walk", State: watchbillstore.StateQueued},
+	}
+	inst.filters.kind = "index"
+	h := ops.Bind(inst)
+	list := func(in ListJobsArgs) (out JobList) {
+		args, err := buscodec.Encode(in)
+		require.NoError(t, err)
+		raw, err := h.Snapshot().Query(opListJobs, args)
+		require.NoError(t, err)
+		out, err = buscodec.Decode[JobList](raw)
+		require.NoError(t, err)
+		return
+	}
+	assert.Len(t, list(ListJobsArgs{}).Jobs, 3, "the person's kind box is not the query's filter")
+	assert.Equal(t, 3, list(ListJobsArgs{}).Held)
+	got := list(ListJobsArgs{Kind: "MAIL fetch"})
+	require.Len(t, got.Jobs, 1)
+	assert.Equal(t, "b", got.Jobs[0].Id)
+	assert.Len(t, list(ListJobsArgs{States: []string{watchbillstore.StateQueued}}).Jobs, 2)
+	assert.True(t, list(ListJobsArgs{Limit: 1}).Truncated)
+
+	bad, err := buscodec.Encode(ListJobsArgs{States: []string{"exploded"}})
+	require.NoError(t, err)
+	_, err = h.Snapshot().Query(opListJobs, bad)
+	require.Error(t, err)
+}
+
+// cancel_job is asynchronous (ADR-0358): it applies, settles once the
+// store answered, and says whether the verb applied; a job the window
+// knows to be ineligible is refused before the round trip.
+func TestCancelSettlesWithTheStoresAnswer(t *testing.T) {
+	f := newFixture(t)
+	running, err := f.consumer.Enqueue(wb.Request{Kind: "mgr.kind", Subject: "hold"})
+	require.NoError(t, err)
+	f.eventuallyState(t, running.ID, watchbillstore.StateRunning)
+	f.a.markDirty()
+	f.eventuallyListed(t, 1)
+
+	h := ops.Bind(f.a)
+	settler, ok := h.(app.OperationsAsyncI)
+	require.True(t, ok, "an async command settles through the handler")
+	args, err := buscodec.Encode(JobArgs{Id: running.ID})
+	require.NoError(t, err)
+	call := app.OperationCall{Writer: "task:t", Key: "k1"}
+	_, err = h.ApplyCommand(call, opCancel, args)
+	require.NoError(t, err)
+	var out VerbOutcome
+	require.Eventually(t, func() bool {
+		settled, raw, sErr := settler.SettleAsync(call, opCancel, args)
+		require.NoError(t, sErr)
+		if !settled {
+			return false
+		}
+		out, sErr = buscodec.Decode[VerbOutcome](raw)
+		require.NoError(t, sErr)
+		return true
+	}, 3*time.Second, 10*time.Millisecond, "the cancel settles when the store answers")
+	assert.True(t, out.Applied)
+	assert.Equal(t, running.ID, out.Id)
+	f.eventuallyState(t, running.ID, watchbillstore.StateCancelled)
+
+	f.a.markDirty()
+	require.Eventually(t, func() bool {
+		j, _ := findJob(f.a.snapshot().jobs, running.ID)
+		return j.State == watchbillstore.StateCancelled
+	}, 3*time.Second, 10*time.Millisecond)
+	_, err = h.ApplyCommand(call, opCancel, args)
+	require.Error(t, err, "a cancelled job is refused before the round trip")
+	assert.Contains(t, err.Error(), "cancel applies to queued or running jobs")
+
+	_, _, err = settler.SettleAsync(call, opCancel, mustEncode(t, JobArgs{Id: "never-asked"}))
+	require.Error(t, err, "a job no verb was asked for has nothing to settle")
+}
+
+func mustEncode(t *testing.T, v any) (b []byte) {
+	t.Helper()
+	b, err := buscodec.Encode(v)
+	require.NoError(t, err)
+	return
+}
+
+// The trail is a record like the list (D1): rebuilt when its key moves, the
+// attempt held as a number, the state cell toned.
+func TestTrailRecord(t *testing.T) {
+	inst := &App{}
+	at := time.Now()
+	events := &eventCols{JobId: []string{"j"}, At: []string{"2026-01-01T00:00:00Z"}, State: []string{watchbillstore.StateFailed},
+		Attempt: []int64{2}, WorkerRun: []string{"run-1"}, Note: []string{"n"}, Error: []string{"boom\nmore"}}
+	rec := inst.trailRecordFor(trailRecKey{job: "j", refreshed: at, n: 1}, events)
+	assert.Same(t, rec, inst.trailRecordFor(trailRecKey{job: "j", refreshed: at, n: 1}, events), "an unchanged key reuses the record")
+	assert.NotSame(t, rec, inst.trailRecordFor(trailRecKey{job: "k", refreshed: at, n: 1}, events), "another job rebuilds it")
+	defer inst.trailRec.Release()
+	assert.Equal(t, int64(1), inst.trailRec.NumRows())
+
+	cols := trailGridColumns(events)
+	assert.Equal(t, "2", cols[2].Cell(0).Text)
+	assert.False(t, cols[2].Cell(0).LeftAlign, "numbers centre")
+	assert.True(t, cols[1].Cell(0).Toned, "the state cell keeps its tone")
+	assert.Equal(t, "boom", cols[5].Cell(0).Text, "the error cell shows the first line")
+}
