@@ -15,6 +15,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"time"
 
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/array"
@@ -68,9 +69,23 @@ type App struct {
 
 	// gen is the generation the last bundle publish carried; bundleJob
 	// publishes one generation at a time, first at Mount and again on
-	// Regenerate, and Frame takes the result.
-	gen       int
-	bundleJob bgjob.Runner[adhocdata.BundleResult]
+	// Regenerate, and Frame takes the result. publishedGen is the
+	// generation whose publish landed, -1 before the first; a regenerate
+	// call settles when it reaches the generation the call asked for.
+	gen          int
+	publishedGen int
+	bundleJob    bgjob.Runner[adhocdata.BundleResult]
+	// publish is the bundle publish, play.PublishBundle on the bus when
+	// nil; a test lands one without a bus.
+	publish func(spec play.BundleSpec) (res adhocdata.BundleResult, err error)
+
+	// frameCtx is the current frame's context, through which the buttons
+	// go to the catalog (A3); nil outside a frame.
+	frameCtx app.FrameContextI
+	// pendingGen and pendingTree are the generations each agent's call
+	// waits for, by the call's key, until the call settles (ADR-0358).
+	pendingGen  map[string]int
+	pendingTree map[string]int
 
 	// The tree half (ADR-0222 §SD7): the mount the published tree lives in
 	// — held so a republish writes another snapshot of it rather than
@@ -80,6 +95,19 @@ type App struct {
 	treeGen   int
 	treeNote  string
 	treeJob   bgjob.Runner[ladingadhoc.PublishResult]
+	// treeLandedGen, treeEntries and treeExpires are the last tree
+	// publish that landed, for the settle and get_view.
+	treeLandedGen int
+	treeEntries   uint64
+	treeExpires   time.Time
+	// publishTreeFn is the tree publish and the tally open, publishAndOpen
+	// when nil; a test lands one without a server.
+	publishTreeFn func(ctx context.Context, gen int, mount identifier.TaggedId) (res ladingadhoc.PublishResult, err error)
+}
+
+func newApp() (inst *App) {
+	inst = &App{publishedGen: -1}
+	return
 }
 
 var _ app.AppI = (*App)(nil)
@@ -109,7 +137,11 @@ func (inst *App) startPublish() (started bool) {
 	gen := inst.gen
 	return inst.bundleJob.Start(inst.tasks, bgjob.Spec{Kind: "adhocdemo.publish", Title: "publish the series"},
 		func(context.Context) (res *adhocdata.BundleResult, err error) {
-			r, err := play.PublishBundle(inst.bus, inst.itemsSpec(gen))
+			publish := inst.publish
+			if publish == nil {
+				publish = func(spec play.BundleSpec) (adhocdata.BundleResult, error) { return play.PublishBundle(inst.bus, spec) }
+			}
+			r, err := publish(inst.itemsSpec(gen))
 			if err != nil {
 				return
 			}
@@ -120,18 +152,28 @@ func (inst *App) startPublish() (started bool) {
 // takeResults moves what the runners finished into the window, once each,
 // at the top of Frame.
 func (inst *App) takeResults() {
-	if _, _, ok := inst.bundleJob.TakeResult(); ok && inst.view == nil {
-		inst.view = sqlapplet.NewBundleView(inst.bundle, sqlapplet.BundleViewConfig{Bus: inst.bus, Log: inst.log,
-			RunId: inst.runId, StampAppId: string(ManifestId) + "#items", InstanceKey: inst.instance, Operable: true})
+	if _, _, ok := inst.bundleJob.TakeResult(); ok {
+		// The runner takes one run at a time, so the run that landed is
+		// the generation last asked for.
+		inst.publishedGen = inst.gen
+		// The view reads the bundle through the bus; a window without
+		// one (a test landing a publish through the seam) has no view.
+		if inst.view == nil && inst.bus != nil {
+			inst.view = sqlapplet.NewBundleView(inst.bundle, sqlapplet.BundleViewConfig{Bus: inst.bus, Log: inst.log,
+				RunId: inst.runId, StampAppId: string(ManifestId) + "#items", InstanceKey: inst.instance, Operable: true})
+		}
 	}
 	if r, _, ok := inst.treeJob.TakeResult(); ok {
 		inst.treeMount = r.Mount
+		inst.treeLandedGen, inst.treeEntries, inst.treeExpires = inst.treeGen, r.Entries, r.ExpiresAt
 		inst.treeNote = fmt.Sprintf("browsing %d entries as mount %016x · expires %s",
 			r.Entries, r.Mount.Value(), r.ExpiresAt.UTC().Format("2006-01-02"))
 	}
 }
 
 func (inst *App) Frame(ctx app.FrameContextI) (err error) {
+	inst.frameCtx = ctx
+	defer func() { inst.frameCtx = nil }()
 	inst.takeResults()
 	view := inst.view
 	var revision uint64
@@ -144,7 +186,7 @@ func (inst *App) Frame(ctx app.FrameContextI) (err error) {
 			if view != nil {
 				if c.Button(inst.ids.PrepareStr("regen"), c.Atoms().Text("Regenerate").Keep()).
 					Kind(c.ButtonKindPrimary).SendResp().HasPrimaryClicked() {
-					inst.regenerate()
+					inst.regenerateGesture()
 				}
 				inst.jobRow(&inst.bundleJob, "regen-job", "republishing the series…")
 				inst.failedNote("regen-err", "regenerate", &inst.bundleJob)
@@ -158,7 +200,7 @@ func (inst *App) Frame(ctx app.FrameContextI) (err error) {
 			// tally (ADR-0222). A task — it connects, walks a tree and
 			// writes rows.
 			if c.Button(inst.ids.PrepareStr("publish-tree"), c.Atoms().Text("Publish tree & browse in tally").Keep()).SendResp().HasPrimaryClicked() {
-				inst.publishTree()
+				inst.publishTreeGesture()
 			}
 			if !inst.jobRow(&inst.treeJob, "tree-job", "publishing the tree…") && inst.treeNote != "" {
 				c.Label(inst.treeNote).Send()

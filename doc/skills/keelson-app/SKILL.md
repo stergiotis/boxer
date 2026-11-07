@@ -318,9 +318,9 @@ bus ([watchbill how-to](../../howto/watchbill-jobs.md)). Prefer a
 running, copy `OnBehalfOf` onto the request so the job carries the
 delegation and runs under the agentic entry frame
 ([ADR-0344](../../adr/0344-agent-caused-jobs-in-a-process-of-their-own-and-the-entry-frame-every-stack-carries.md)).
-`apps/watchbilldemo` shows the handler and the monitor; the `OnBehalfOf`
-copy is in the how-to's section 2, and no app in the tree does it yet
-(observed 2026-11-07).
+`apps/watchbilldemo` is the end-to-end example: the handler, the monitor,
+and an async `enqueue` command that copies the call's `OnBehalfOf` onto
+the request, with `TestOnBehalfOfReachesTheRequest` beside it.
 
 **W4 — Progress, cancel and ETA come from the standard row, never a raw
 bar.** A running task or job is drawn with `widgets/jobprogress` (fraction,

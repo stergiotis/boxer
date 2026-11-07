@@ -59,12 +59,16 @@ lands its outcome for the next frame. A paused window reads nothing until
 it resumes. Jobs in flight are the worker's, not the window's: closing the
 window does not stop them.
 
-## No catalog
+## The catalog
 
-The window declares no operations: its state is the controls, and what
-they set reaches the store as a job row, which the Watchbill window and
-`keelson('watchbill')` already expose to agents. Drive the queue from
-Watchbill's `list_jobs`, `cancel_job` and `retry_job`.
+The window declares a small operations catalog, written out in
+[Operations](operations.md): the controls as one resource, `get_view` and
+`list_jobs` over the window's last list, `set_control` over the controls,
+and `enqueue`, which is the Enqueue job button under another name. An
+agent's `enqueue` carries the agent's context onto the job, so the row says
+which task and call caused it and the worker runs it under the agentic
+entry frame. Cancel and retry across every kind are the Watchbill window's
+`cancel_job` and `retry_job`.
 
 ## When there is no worker or no bus
 

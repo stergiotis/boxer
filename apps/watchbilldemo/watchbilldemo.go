@@ -28,6 +28,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/task"
 	"github.com/stergiotis/boxer/public/keelson/runtime/watchbill"
 	"github.com/stergiotis/boxer/public/keelson/runtime/watchbill/watchbillstore"
+	"github.com/stergiotis/boxer/public/observability/eh"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/badge"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/taskmonitor"
@@ -80,6 +81,10 @@ type App struct {
 	// requests one repaint (W7).
 	landed atomic.Bool
 
+	// frameCtx is the current frame's context, through which the Enqueue
+	// button goes to the catalog (A3); nil outside a frame.
+	frameCtx app.FrameContextI
+
 	// The controls, bound to stable fields.
 	durationSec  float64
 	simulateFail bool
@@ -93,6 +98,9 @@ type App struct {
 	lastNote  string
 	refreshed time.Time
 	inflight  int
+	// enqueues holds what each enqueue an agent's call asked for landed,
+	// by the call's key, until the call settles (ADR-0358).
+	enqueues map[string]*enqueueOutcome
 }
 
 var _ app.AppI = (*App)(nil)
@@ -104,6 +112,7 @@ func newApp() (inst *App) {
 	inst = &App{
 		ids: c.NewWidgetIdStack(), density: styletokens.ActiveDensity(),
 		durationSec: 3.0, maxAttempts: 1, dirty: make(chan struct{}, 1),
+		enqueues: make(map[string]*enqueueOutcome),
 	}
 	return
 }
@@ -167,6 +176,8 @@ func (inst *App) Unmount(ctx app.MountContextI) (err error) {
 
 func (inst *App) Frame(ctx app.FrameContextI) (err error) {
 	inst.density = styletokens.ActiveDensity()
+	inst.frameCtx = ctx
+	defer func() { inst.frameCtx = nil }()
 	if inst.landed.Swap(false) {
 		// A list landed since the last frame: one repaint, so the window
 		// shows it before the next input (W7).
@@ -228,61 +239,87 @@ func (inst *App) refresh() {
 	inst.landed.Store(true)
 }
 
-// enqueue asks the worker for a job with the controls' policy.
-func (inst *App) enqueue() {
-	req := watchbill.Request{
+// request is what Enqueue sends: the controls' policy, and the agent's
+// context when an agent's call is the one enqueuing, so the job carries
+// the delegation and runs under the agentic entry frame (ADR-0344 §SD2).
+// obo is nil on the person's own path; the worker attests it.
+func (inst *App) request(obo *app.OnBehalfOf) (req watchbill.Request) {
+	req = watchbill.Request{
 		Kind:        KindSleep,
 		Subject:     Subject(time.Duration(inst.durationSec*float64(time.Second)), inst.simulateFail),
 		MaxAttempts: uint32(inst.maxAttempts),
 		Backoff:     backoffChoices[inst.backoffIdx],
 		BackoffBase: time.Second,
+		OnBehalfOf:  obo,
 	}
-	inst.verb("enqueue", func() (note string, err error) {
-		job, err := inst.client.Enqueue(req)
+	return
+}
+
+// enqueue is the person's own path: no call, no delegation.
+func (inst *App) enqueue() { inst.enqueueAs(app.OperationCall{}) }
+
+// enqueueAs asks the worker for a job with the controls' policy, on behalf
+// of whoever the call names; the outcome lands under the call's key for
+// the settle (ADR-0358), and in the status row for the next frame.
+func (inst *App) enqueueAs(call app.OperationCall) {
+	req := inst.request(call.OnBehalfOf)
+	inst.verb("enqueue", call.Key, func() (note string, job watchbillstore.Job, err error) {
+		job, err = inst.client.Enqueue(req)
 		if err != nil {
-			return "", err
+			return "", job, err
 		}
-		return "enqueued " + short(job.ID) + " as " + job.State, nil
+		return "enqueued " + short(job.ID) + " as " + job.State, job, nil
 	})
 }
 
 func (inst *App) cancel(id string) {
-	inst.verb("cancel", func() (note string, err error) {
+	inst.verb("cancel", "", func() (note string, _ watchbillstore.Job, err error) {
 		ok, err := inst.client.Cancel(id, "from the demo window")
 		if err != nil {
-			return "", err
+			return "", watchbillstore.Job{}, err
 		}
 		if !ok {
-			return "cancel did not apply to " + short(id), nil
+			return "cancel did not apply to " + short(id), watchbillstore.Job{}, nil
 		}
-		return "cancel asked for " + short(id), nil
+		return "cancel asked for " + short(id), watchbillstore.Job{}, nil
 	})
 }
 
 func (inst *App) retry(id string) {
-	inst.verb("retry", func() (note string, err error) {
+	inst.verb("retry", "", func() (note string, _ watchbillstore.Job, err error) {
 		ok, err := inst.client.Retry(id, "from the demo window")
 		if err != nil {
-			return "", err
+			return "", watchbillstore.Job{}, err
 		}
 		if !ok {
-			return "retry did not apply to " + short(id), nil
+			return "retry did not apply to " + short(id), watchbillstore.Job{}, nil
 		}
-		return "retried " + short(id), nil
+		return "retried " + short(id), watchbillstore.Job{}, nil
 	})
 }
 
 // verb runs one request on the lifetime scope and lands its outcome; a
-// scope that retired starts nothing.
-func (inst *App) verb(name string, fn func() (note string, err error)) {
+// scope that retired starts nothing. A non-empty key is an agent's call
+// waiting to settle: the outcome lands under it as well as in the status
+// row, and a verb that could not start lands its failure there so the
+// call ends rather than hangs.
+func (inst *App) verb(name string, key string, fn func() (note string, job watchbillstore.Job, err error)) {
 	if inst.client == nil || inst.scope == nil || inst.scope.IsRetired() {
+		if key != "" {
+			inst.mu.Lock()
+			inst.enqueues[key] = &enqueueOutcome{done: true, err: eh.Errorf("watchbilldemo: no bus or the window is closing")}
+			inst.mu.Unlock()
+		}
 		return
 	}
 	inst.mu.Lock()
 	inst.inflight++
+	if key != "" {
+		inst.enqueues[key] = &enqueueOutcome{}
+	}
 	inst.mu.Unlock()
 	if !inst.scope.Go(func(context.Context) {
-		note, err := fn()
+		note, job, err := fn()
 		inst.mu.Lock()
 		inst.inflight--
 		if err != nil {
@@ -291,11 +328,17 @@ func (inst *App) verb(name string, fn func() (note string, err error)) {
 			inst.lastError = ""
 			inst.lastNote = note
 		}
+		if key != "" {
+			inst.enqueues[key] = &enqueueOutcome{done: true, job: job, err: err}
+		}
 		inst.mu.Unlock()
 		inst.markDirty()
 	}) {
 		inst.mu.Lock()
 		inst.inflight--
+		if key != "" {
+			inst.enqueues[key] = &enqueueOutcome{done: true, err: eh.Errorf("watchbilldemo: the window is closing")}
+		}
 		inst.mu.Unlock()
 	}
 }
@@ -342,7 +385,7 @@ func (inst *App) renderControls() {
 			// a banner (L6).
 			for range c.HoverText("Enqueue a demo.sleep job: a worker in this process claims it, runs it as a task, and the row records every transition").KeepIter() {
 				if c.Button(inst.ids.PrepareStr("enqueue"), c.Atoms().Text("Enqueue job").Keep()).Kind(c.ButtonKindPrimary).SendResp().HasPrimaryClicked() {
-					inst.enqueue()
+					inst.enqueueGesture()
 				}
 			}
 			if c.Button(inst.ids.PrepareStr("refresh"), c.Atoms().Text("Refresh").Keep()).SendResp().HasPrimaryClicked() {

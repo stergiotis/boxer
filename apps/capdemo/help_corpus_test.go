@@ -1,6 +1,8 @@
 package capdemo
 
 import (
+	"io/fs"
+	"strings"
 	"testing"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/help"
@@ -48,4 +50,38 @@ func TestHelpCorpusDropsNothing(t *testing.T) {
 		require.Truef(t, parsed, "doc %q must parse", info.Path)
 		require.Emptyf(t, doc.Dropped(), "doc %q loses content in the lowering: %+v", info.Path, doc.Dropped())
 	}
+}
+
+// TestHelpNamesTheCatalog keeps the book and the catalog together (A4):
+// every operation and resource the window declares is named, in code
+// spans, somewhere in the help text, so a model reading the book can find
+// what it may call.
+func TestHelpNamesTheCatalog(t *testing.T) {
+	text := helpText(t)
+	for _, op := range manifest.Operations.Operations {
+		require.Containsf(t, text, "`"+op.Name+"`", "the help book names operation %s", op.Name)
+	}
+	for _, r := range manifest.Operations.Resources {
+		require.Containsf(t, text, "`"+r.Name+"`", "the help book names resource %s", r.Name)
+	}
+}
+
+// helpText is every page of the book, concatenated.
+func helpText(t *testing.T) (text string) {
+	t.Helper()
+	var b strings.Builder
+	err := fs.WalkDir(manifest.Help, ".", func(p string, d fs.DirEntry, err error) error {
+		if err != nil || d.IsDir() {
+			return err
+		}
+		src, rerr := fs.ReadFile(manifest.Help, p)
+		if rerr != nil {
+			return rerr
+		}
+		b.Write(src)
+		b.WriteByte('\n')
+		return nil
+	})
+	require.NoError(t, err)
+	return b.String()
 }

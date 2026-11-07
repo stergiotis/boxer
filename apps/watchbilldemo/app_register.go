@@ -38,8 +38,9 @@ var manifest = app.Manifest{
 		PreferredWidth:  900,
 		PreferredHeight: 620,
 	},
-	Caps: append(watchbill.ClientCaps(), task.ProducerCaps()...),
-	Help: help.MustSub(helpFS, "help"),
+	Caps:       append(watchbill.ClientCaps(), task.ProducerCaps()...),
+	Operations: ops.Catalog(),
+	Help:       help.MustSub(helpFS, "help"),
 }
 
 // init registers the app and the handler for its kind. The handler is

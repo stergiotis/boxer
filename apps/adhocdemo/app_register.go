@@ -46,7 +46,7 @@ var manifest = app.Manifest{
 
 func init() {
 	err := app.DefaultRegistry.RegisterFactory(manifest, func() (a app.AppI, ctorErr error) {
-		a = &App{}
+		a = newApp()
 		return
 	})
 	if err != nil {

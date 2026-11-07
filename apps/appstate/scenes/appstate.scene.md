@@ -17,11 +17,18 @@ keep something across restarts on the left, the selected app's entries in
 the middle, a delete per entry and a forget per app. The scene asserts that
 the window reads `keelson('app_state')` through the host's endpoint without
 an error — the status line reports the read — and captures the result;
-what is listed is whatever the live store holds.
+what is listed is whatever the live store holds. It ends with F1 on the
+window's own help.
 
 ```jsonl trace
 {"do":"wait","name":"Refresh","role":"button","settleMs":500}
 {"do":"read","valueContains":"entries across","role":"label","pattern":"(?P<entries>\\d+) entries across (?P<apps>\\d+) apps","settleMs":4000}
 {"do":"expect","of":"entries","min":0}
 {"do":"capture","text":"appstate"}
+
+{"do":"note","text":"--- F1 over the window opens the window's help ---"}
+{"do":"key","text":"F1","settleMs":1200}
+{"do":"wait","contains":"Help center","role":"window"}
+{"do":"wait","value":"App state","role":"label","comment":"the reader shows the overview, not the index"}
+{"do":"capture","text":"appstate-help"}
 ```

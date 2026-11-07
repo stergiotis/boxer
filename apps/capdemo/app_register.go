@@ -76,13 +76,16 @@ var manifest = app.Manifest{
 		},
 	},
 	PersistedKeys: []string{scratchpadKey},
+	Operations:    ops.Catalog(),
 	Help:          help.MustSub(helpFS, "help"),
 }
 
 // init registers the demo into app.DefaultRegistry. Factory ctor so
 // two open windows get independent App state. No screenshot tour
 // mode — the goroutine-driven async picker doesn't compose with the
-// 4-frame tour, and the demo's purpose is interactive validation.
+// 4-frame tour, and the demo's purpose is interactive validation. The
+// catalog is read-only for the same reason: every verb is a dialog the
+// person answers.
 func init() {
 	err := app.DefaultRegistry.RegisterFactory(manifest, func() (a app.AppI, ctorErr error) {
 		a = newApp()

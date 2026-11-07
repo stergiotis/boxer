@@ -70,6 +70,34 @@ wired — opening tally needs the app runtime", and without the server with
 "ClickHouse not reachable". The whole gesture is one task bounded at 30
 seconds.
 
+## For agents: the window's own operations
+
+The catalog has two resources of the window's own, `generation`, the
+series generation asked for and the one whose publish landed, and `tree`,
+the same for the tree with its mount, and three operations over them:
+
+- `get_view` — the bundle's alias, the revision the view shows, the
+  generation asked for and the one published, whether a publish runs and
+  its last error; the tree's generation, mount, note and error.
+- `regenerate` — the Regenerate button: the next generation, republished
+  under the same alias as a task. It is asynchronous and settles when the
+  republish lands, with the generation, the alias and the revision the
+  view shows at that moment; the view follows the service's event, so the
+  revision may still be the previous one for a frame. It is unavailable
+  before the first publish landed ("the first publish has not landed;
+  get_view says what it waits on") and while one runs ("a publish is in
+  flight; wait for it to settle"). A failed publish settles the call with
+  the failure.
+- `publish_tree` — the Publish tree button. It writes a snapshot into the
+  lading store and opens a tally window, both outside this window, so it is
+  consequential and the host asks the person every time; it is
+  asynchronous and settles when the snapshot landed, with the generation,
+  the mount, the entries and the expiry. Unavailable while one runs.
+  Without a server or a bus it settles with the failure the bar shows.
+
+The two buttons go through the same two commands, so the command log
+records a click under the operation an agent would call.
+
 ## For agents: the delegated bundle-view operations
 
 The view is operable, so the window's catalog offers a subset of play's

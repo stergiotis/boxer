@@ -80,9 +80,20 @@ same line, "no bus wired — the broker needs the app runtime; open the demo
 from the app center under the windowed host", or "no storage wired" for
 the persist verbs.
 
-## No catalog, no tour
+## For agents: a read-only catalog, and no tour
 
-The window declares no operations and registers no tour entry. Its
-sections wait on a person approving a picker, which neither a model nor
-the screenshot driver can do; the demo's purpose is interactive
-validation of the broker, and the registration comment says so.
+The window's catalog has one resource, `sections`, and one query,
+`get_view`, which reads what each section holds: the file handle and
+whether the picker is open, the scratchpad's length and the persist
+section's last note, the watch handle, backend, whether it is active and
+how many events arrived, the clipboard's last note, and whether the window
+has a bus and storage at all. It has no commands: every verb here is a
+dialog the broker puts to the person — a file pick, a folder pick, a copy
+to their clipboard — or a write to the window's own persisted key, and
+none of them is an agent's to ask for. An agent that wants a file picked
+reports it and asks.
+
+The window registers no tour entry either. Its sections wait on a person
+approving a picker, which the screenshot driver cannot do; the demo's
+purpose is interactive validation of the broker, and the registration
+comment says so.

@@ -55,11 +55,12 @@ func TestHelpCorpusDropsNothing(t *testing.T) {
 }
 
 // TestHelpNamesTheCatalog keeps the book and the catalog together (A4).
-// The catalog is play's operable subset forwarded under the bundle_ prefix
-// (ADR-0288 §SD8), so the book names the prefix's list query and every
-// forwarded operation that belongs to no pane or to the one pane the
-// bundle's document shows; the operations of panes it does not show are
-// play's, declared here only to be reported unavailable.
+// The window's own operations and resources are named in code spans. The
+// rest of the catalog is play's operable subset forwarded under the
+// bundle_ prefix (ADR-0288 §SD8), so the book names the prefix's list
+// query and every forwarded operation that belongs to no pane or to the
+// one pane the bundle's document shows; the operations of panes it does
+// not show are play's, declared here only to be reported unavailable.
 func TestHelpNamesTheCatalog(t *testing.T) {
 	text := helpText(t)
 	require.Contains(t, text, "`"+sqlapplet.BundleOpPrefix+"list_views`")
@@ -70,7 +71,16 @@ func TestHelpNamesTheCatalog(t *testing.T) {
 		require.Containsf(t, text, "`"+sqlapplet.BundleOpPrefix+o.Spec.Name+"`", "the help book names operation %s%s", sqlapplet.BundleOpPrefix, o.Spec.Name)
 	}
 	for _, op := range manifest.Operations.Operations {
-		require.Truef(t, strings.HasPrefix(op.Name, sqlapplet.BundleOpPrefix), "every operation is a forwarded one: %s", op.Name)
+		if strings.HasPrefix(op.Name, sqlapplet.BundleOpPrefix) {
+			continue
+		}
+		require.Containsf(t, text, "`"+op.Name+"`", "the help book names operation %s", op.Name)
+	}
+	for _, r := range manifest.Operations.Resources {
+		if strings.HasPrefix(r.Name, sqlapplet.BundleOpPrefix) {
+			continue
+		}
+		require.Containsf(t, text, "`"+r.Name+"`", "the help book names resource %s", r.Name)
 	}
 }
 

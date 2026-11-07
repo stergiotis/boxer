@@ -96,7 +96,11 @@ func (inst *App) publishTree() {
 	mount := inst.treeMount
 	started := inst.treeJob.Start(inst.tasks, bgjob.Spec{Kind: "adhocdemo.tree", Title: "publish the tree and open tally"},
 		func(ctx context.Context) (res *ladingadhoc.PublishResult, err error) {
-			r, err := inst.publishAndOpen(ctx, gen, mount)
+			publish := inst.publishTreeFn
+			if publish == nil {
+				publish = inst.publishAndOpen
+			}
+			r, err := publish(ctx, gen, mount)
 			if err != nil {
 				return
 			}
