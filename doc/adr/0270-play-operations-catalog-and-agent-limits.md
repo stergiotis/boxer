@@ -1264,6 +1264,25 @@ records the result's provenance for `check` when it answers, because the
 model learns the id then, before a snapshot may have seen the result. An
 operable view does not offer `query`, as it does not offer `set_sql`.
 
+### 2026-11-07 — a run leaves `panes` where it was
+
+A run resets the observed node to its query's sink, and the observed node
+was part of `panes` whatever its value, so a run of a query shaped
+differently from the last moved `panes`. An agent that read the state, set
+the buffer and ran it then had its `show_pane` refused: "panes moved since
+it was read". Its own run had moved the resource, and `run` reports
+revisions only of what it declares, so retrying could not clear the
+conflict, only a fresh read could. In three benchmark attempts of the SECO
+report task this refusal was the most frequent one (two to three per
+attempt).
+
+The sink is what the unbound panels draw when nothing else is observed, so
+`panes` now includes the observed node only when it is another node. A run
+moves `panes` when it changes what the panels are fed: when the person had
+observed an intermediate node, which the run resets. The footprint
+conformance test no longer observes `run` → `panes`, and that gap leaves
+its allowlist.
+
 ## References
 
 - [ADR-0269](./0269-app-operations-a-command-query-contract-agents-drive-under-a-task-grant.md) — the contract this catalog serves.

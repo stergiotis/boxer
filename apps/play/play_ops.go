@@ -733,8 +733,12 @@ func (inst *PlayApp) paneDigest() (digest string) {
 	var b strings.Builder
 	b.WriteString(strconv.FormatUint(inst.raisedTab, 10))
 	// The observed node feeds every panel without a binding (list_panes'
-	// Node), so the person's "observe in panels" moves the resource.
-	b.WriteString("|observed=" + string(inst.observedNode))
+	// Node), so the person's "observe in panels" moves the resource. The
+	// sink is what they draw by default: a run resets the observed node to
+	// its new sink, which leaves the panels fed as they were.
+	if inst.observedNode != "" && inst.observedNode != inst.currentSplit.Sink {
+		b.WriteString("|observed=" + string(inst.observedNode))
+	}
 	for _, t := range tabs {
 		b.WriteString("|" + t + "=" + string(inst.tabBindings[t]))
 	}

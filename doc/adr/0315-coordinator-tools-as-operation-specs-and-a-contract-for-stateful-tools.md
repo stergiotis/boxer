@@ -227,6 +227,14 @@ See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-d
 
 ## Updates
 
+### 2026-11-07 — `run` no longer touches the panes
+
+Play's `panes` resource included the observed node even when it was the
+sink a run resets it to, so every run of a differently shaped query moved
+it. It now includes the observed node only when that node is not the sink
+(ADR-0270, Update of this date), and the conformance test's allowlist loses
+`run` → `panes`.
+
 ### 2026-11-04 — SD6 is implemented, without a separate handle
 
 [ADR-0358](./0358-asynchronous-operations-a-pending-outcome-and-a-turn-a-completion-wakes.md)

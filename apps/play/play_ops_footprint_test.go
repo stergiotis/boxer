@@ -43,8 +43,6 @@ var footprintAllowlist = map[string]string{
 	// The parameter slots follow the buffer, as set_sql's Follows says;
 	// the declaration understates it.
 	"set_sql params": "ADR-0315 §SD8: effect declarations understating what follows a write",
-	// A new result re-feeds the panes, as run's Follows says.
-	"run panes": "ADR-0315 §SD8: effect declarations understating what follows a write",
 }
 
 type footprintCommand struct {
