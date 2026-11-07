@@ -45,6 +45,7 @@ the linked document wins.
 | Draw a graph over a slippy map | [doc/howto/graph-on-a-map.md](./doc/howto/graph-on-a-map.md) |
 | Draw a gridded vector field (wind, currents) on a map | [doc/howto/vector-field-on-a-map.md](./doc/howto/vector-field-on-a-map.md) |
 | Run an app in a browser tab — build the bundle, serve it, what the tab lacks | [doc/howto/imzero2-in-the-browser.md](./doc/howto/imzero2-in-the-browser.md) |
+| Design or write an app under `apps/` — data as Arrow, a readable state machine, tasks and progress, the operations catalog and help book, honest analysis, IDS look, the frame cost model | [doc/skills/keelson-app/SKILL.md](./doc/skills/keelson-app/SKILL.md) |
 | Drive a running app, or write a headless scene that asserts and captures | [doc/skills/imzero2-drive/SKILL.md](./doc/skills/imzero2-drive/SKILL.md) |
 | Diagnose janky / laggy rendering | [doc/howto/imzero2-render-troubleshooting.md](./doc/howto/imzero2-render-troubleshooting.md) |
 | Report a vulnerability | [SECURITY.md](./SECURITY.md) |
