@@ -93,7 +93,11 @@ be overwritten by that write-back, which is the race §SD4's order exists to
 prevent. It also strains C3: the render goroutine is blocked in a read from
 the client, so serving commands there needs that read made interruptible. O3
 vendors eframe, which is a member of the egui ring that moves on every egui
-release. O4 gives up Wayland-native scaling and input for every person in
+release. That cost is ours only until upstream takes the change: another egui
+application carries O3 in a fork with the pull request open
+([emilk/egui#8631](https://github.com/emilk/egui/pull/8631); ADR-0363
+(proposed) §M3), and once a release has it O3 comes free and replaces O1,
+painting nothing while the window is hidden. O4 gives up Wayland-native scaling and input for every person in
 order to serve agents. O5 alone leaves C1 unmet. It is kept as the floor for
 the stalls O1 does not remove: a client that hangs, a suspended machine.
 

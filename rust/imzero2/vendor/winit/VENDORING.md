@@ -57,3 +57,22 @@ On an eframe bump that moves winit, unpack the new release, re-apply the table
 above, and run the hidden-window check of ADR-0332's verification plan: a
 minimised client keeps passing, at most `FRAME_CALLBACK_BOUND` apart. If
 upstream has a bound of its own by then, drop this copy.
+
+## When to drop it
+
+The same stall is fixed one layer up by changes submitted upstream from
+another egui application's forks
+([ADR-0363](../../../../doc/adr/0363-porting-from-an-end-user-egui-application.md),
+proposed, §M3):
+
+- [emilk/egui#8631](https://github.com/emilk/egui/pull/8631): eframe paces
+  Wayland frames by frame callbacks, presents without a blocking swap, and
+  runs `App::logic` without a paint once a redraw is 250 ms overdue.
+- [rust-windowing/winit#4709](https://github.com/rust-windowing/winit/pull/4709)
+  and [#4710](https://github.com/rust-windowing/winit/pull/4710): the Wayland
+  `suspended` state is reported as `Occluded`.
+
+Once a winit and an eframe release on the egui ring carry them, the host's
+passes continue while hidden without this copy, and without painting a
+window nobody sees. Check the hidden-window procedure against that release,
+then remove the copy and its `[patch.crates-io]` entry.
