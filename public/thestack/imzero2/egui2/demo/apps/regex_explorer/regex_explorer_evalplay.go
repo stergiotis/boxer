@@ -26,10 +26,8 @@ import (
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/array"
 	"github.com/apache/arrow-go/v18/arrow/memory"
-	"github.com/stergiotis/boxer/apps/play/launchcfg"
 	"github.com/stergiotis/boxer/public/keelson/runtime/adhocdata"
-	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
-	"github.com/stergiotis/boxer/public/keelson/runtime/windowhost"
+	"github.com/stergiotis/boxer/public/keelson/runtime/playground"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
@@ -287,22 +285,17 @@ func (inst *App) openEvalPlayground(sql string, datasets []string, names []strin
 		err = eh.Errorf("no bus wired")
 		return
 	}
-	cfgBytes, err := buscodec.Encode(launchcfg.PlayLaunch{
+	// The leaf names the role, not play, so this does not drag the whole
+	// playground — and its registry-registering init() — into every host
+	// that links this app or the regexsummary widget (ADR-0017 §SD4).
+	if _, err = playground.Open(bus, playground.Launch{
 		At:           time.Now().UTC(),
 		Sql:          sql,
 		AutoRun:      true,
-		Endpoint:     launchcfg.EndpointIntrospection,
+		Endpoint:     playground.EndpointIntrospection,
 		Datasets:     datasets,
 		DatasetNames: names,
-	})
-	if err != nil {
-		err = eh.Errorf("encode launch config: %w", err)
-		return
-	}
-	// launchcfg carries the app id so naming play does not drag the whole
-	// playground — and its registry-registering init() — into every host
-	// that links this app or the regexsummary widget (ADR-0017 §SD4).
-	if _, err = windowhost.RequestOpen(bus, launchcfg.AppId, launchcfg.Kind, cfgBytes); err != nil {
+	}); err != nil {
 		err = eh.Errorf("open playground: %w", err)
 		return
 	}

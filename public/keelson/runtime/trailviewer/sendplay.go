@@ -6,13 +6,11 @@ import (
 
 	"github.com/apache/arrow-go/v18/arrow"
 
-	playlaunch "github.com/stergiotis/boxer/apps/play/launchcfg"
 	"github.com/stergiotis/boxer/public/keelson/runtime/adhocdata"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/appops"
 	"github.com/stergiotis/boxer/public/keelson/runtime/bgjob"
-	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
-	"github.com/stergiotis/boxer/public/keelson/runtime/windowhost"
+	"github.com/stergiotis/boxer/public/keelson/runtime/playground"
 	"github.com/stergiotis/boxer/public/observability/eh"
 )
 
@@ -99,12 +97,8 @@ func publishToPlay(bus app.BusI, pub *adhocdata.Publisher, rec arrow.RecordBatch
 	// The default endpoint, not the introspection one: play routes a statement
 	// naming only keelson tables to the host and one naming plain tables to
 	// the server, so the same window reads the rows and the marts.
-	cfg, err := buscodec.Encode(playlaunch.PlayLaunch{Sql: playSql, AutoRun: true,
-		Datasets: []string{pub.Alias()}, DatasetNames: []string{datasetRows}})
-	if err != nil {
-		return "", eh.Errorf("encode the play launch config: %w", err)
-	}
-	if _, err = windowhost.RequestOpen(bus, playlaunch.AppId, playlaunch.Kind, cfg); err != nil {
+	if _, err = playground.Open(bus, playground.Launch{Sql: playSql, AutoRun: true,
+		Datasets: []string{pub.Alias()}, DatasetNames: []string{datasetRows}}); err != nil {
 		return "", eh.Errorf("open play: %w", err)
 	}
 	return fmt.Sprintf("sent %d rows to play as %s", rec.NumRows(), datasetRows), nil

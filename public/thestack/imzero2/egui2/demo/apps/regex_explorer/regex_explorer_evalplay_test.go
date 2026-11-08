@@ -23,7 +23,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/stergiotis/boxer/apps/play/launchcfg"
 	"github.com/stergiotis/boxer/public/keelson/runtime/adhocdata"
 	runtimeapp "github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
@@ -31,6 +30,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/codec/launchrequest"
 	"github.com/stergiotis/boxer/public/keelson/runtime/inprocbus"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect"
+	"github.com/stergiotis/boxer/public/keelson/runtime/playground"
 	"github.com/stergiotis/boxer/public/keelson/runtime/windowhost"
 )
 
@@ -380,15 +380,15 @@ func TestEvalHandoffPublishesBothAndOpensPlay(t *testing.T) {
 
 	reqs := rig.opens.all()
 	require.Len(t, reqs, 1)
-	assert.Equal(t, launchcfg.AppId, reqs[0].TargetAppId)
-	assert.Equal(t, launchcfg.Kind, reqs[0].ConfigKind)
+	assert.Empty(t, reqs[0].TargetAppId, "the handover names the kind (ADR-0361 §SD8)")
+	assert.Equal(t, playground.Kind, reqs[0].ConfigKind)
 
-	cfg, err := buscodec.Decode[launchcfg.PlayLaunch](reqs[0].Config)
+	cfg, err := buscodec.Decode[playground.Launch](reqs[0].Config)
 	require.NoError(t, err)
 	assert.True(t, cfg.AutoRun, "the join should be on screen when the window appears")
 	// Ad-hoc datasets only resolve at the in-process keelson endpoint, and
 	// the window follows the aliases the buffer names (ADR-0240 §SD7).
-	assert.Equal(t, launchcfg.EndpointIntrospection, cfg.Endpoint)
+	assert.Equal(t, playground.EndpointIntrospection, cfg.Endpoint)
 	// The window's own aliases, bound in play under the base names the
 	// buffer writes (ADR-0288 §SD3).
 	assert.Equal(t, []string{rig.app.goPub.Alias(), rig.app.chPub.Alias()}, cfg.Datasets)
@@ -451,7 +451,7 @@ func TestEvalHandoffDegradesWithoutClickHouseResult(t *testing.T) {
 
 	reqs := rig.opens.all()
 	require.Len(t, reqs, 1)
-	cfg, err := buscodec.Decode[launchcfg.PlayLaunch](reqs[0].Config)
+	cfg, err := buscodec.Decode[playground.Launch](reqs[0].Config)
 	require.NoError(t, err)
 	assert.NotContains(t, cfg.Sql, "FULL OUTER JOIN")
 	assert.Contains(t, cfg.Sql, "only the Go side was published")

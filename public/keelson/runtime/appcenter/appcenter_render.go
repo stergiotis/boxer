@@ -5,7 +5,6 @@ import (
 	"strings"
 	"time"
 
-	playlaunch "github.com/stergiotis/boxer/apps/play/launchcfg"
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
 	"github.com/stergiotis/boxer/public/keelson/runtime/widgethandle"
@@ -136,7 +135,7 @@ func (inst *App) renderPage(snap snapshot) {
 		return
 	}
 	adrDir := packageDir(inst.selected, snap.global.coderefs.cols.Pkg)
-	play := appIndex(apps, playlaunch.AppId) >= 0
+	play := hasPlayground(apps)
 	sec := func(key string, title string, body func()) {
 		sql := ""
 		if play {

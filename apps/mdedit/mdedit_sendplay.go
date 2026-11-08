@@ -23,13 +23,11 @@ import (
 	"context"
 	"time"
 
-	playlaunch "github.com/stergiotis/boxer/apps/play/launchcfg"
 	"github.com/stergiotis/boxer/public/keelson/data/chclient"
 	"github.com/stergiotis/boxer/public/keelson/data/storeexec"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
-	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
+	"github.com/stergiotis/boxer/public/keelson/runtime/playground"
 	"github.com/stergiotis/boxer/public/keelson/runtime/task"
-	"github.com/stergiotis/boxer/public/keelson/runtime/windowhost"
 	"github.com/stergiotis/boxer/public/semistructured/markdown/mddocfacts"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 )
@@ -179,15 +177,10 @@ func uploadDoc(ctx context.Context, src, fileName string, origin mddocfacts.Orig
 // Sequenced after the Flush by its caller, so the AutoRun query cannot race
 // its own row.
 func openInPlay(bus app.BusI, id uint64) (err error) {
-	cfg := playlaunch.PlayLaunch{
+	_, err = playground.Open(bus, playground.Launch{
 		Sql:     playLaunchSQL(id),
 		AutoRun: true,
 		Tab:     "detail",
-	}
-	cfgBytes, err := buscodec.Encode(cfg)
-	if err != nil {
-		return
-	}
-	_, err = windowhost.RequestOpen(bus, playlaunch.AppId, playlaunch.Kind, cfgBytes)
+	})
 	return
 }

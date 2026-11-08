@@ -38,14 +38,12 @@ import (
 
 	"github.com/rs/zerolog/log"
 
-	"github.com/stergiotis/boxer/apps/play/launchcfg"
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	"github.com/stergiotis/boxer/public/keelson/runtime/adhocdata"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/bgjob"
-	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
+	"github.com/stergiotis/boxer/public/keelson/runtime/playground"
 	"github.com/stergiotis/boxer/public/keelson/runtime/task"
-	"github.com/stergiotis/boxer/public/keelson/runtime/windowhost"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/observability/profiling/pprofarrow"
@@ -303,18 +301,14 @@ func (h *profilesHub) openInPlay(spec profileKindSpec, bus app.BusI, tasks task.
 		Title: "open play on " + key,
 		Tag:   key,
 	}, func(ctx context.Context) (out *profileOpened, err error) {
-		cfgBytes, err := buscodec.Encode(launchcfg.PlayLaunch{
+		windowKey, err := playground.Open(bus, playground.Launch{
 			At:       time.Now().UTC(),
 			Sql:      profileSeedSql(alias, spec),
 			AutoRun:  true,
 			Tab:      profileExploreTab,
-			Endpoint: launchcfg.EndpointIntrospection,
+			Endpoint: playground.EndpointIntrospection,
 			Datasets: []string{alias},
 		})
-		if err != nil {
-			return
-		}
-		windowKey, err := windowhost.RequestOpen(bus, launchcfg.AppId, launchcfg.Kind, cfgBytes)
 		if err != nil {
 			err = eh.Errorf("open play: %w", err)
 			return

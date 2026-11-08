@@ -10,11 +10,9 @@ import (
 
 	"github.com/google/pprof/profile"
 
-	playlaunch "github.com/stergiotis/boxer/apps/play/launchcfg"
 	"github.com/stergiotis/boxer/public/keelson/runtime/adhocdata"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/bgjob"
-	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
 	"github.com/stergiotis/boxer/public/keelson/runtime/task"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/profiling/pprofarrow"
@@ -226,19 +224,5 @@ func cpuSeedSql(key uint64) string {
 // exploreCpu opens play on the measurement's dataset, narrowed to the one
 // window the filter shows, if it shows one.
 func (inst *App) exploreCpu(key uint64) {
-	cfg, err := buscodec.Encode(playlaunch.PlayLaunch{
-		At:       time.Now().UTC(),
-		Sql:      cpuSeedSql(key),
-		AutoRun:  true,
-		Endpoint: playlaunch.EndpointIntrospection,
-		Tab:      "icicle",
-		Datasets: []string{cpuDatasetAlias},
-	})
-	if err != nil {
-		inst.mu.Lock()
-		inst.snap.openNote = "explore: " + err.Error()
-		inst.mu.Unlock()
-		return
-	}
-	inst.request(playlaunch.AppId, playlaunch.Kind, cfg)
+	inst.exploreInPlay(cpuSeedSql(key), "icicle", cpuDatasetAlias)
 }

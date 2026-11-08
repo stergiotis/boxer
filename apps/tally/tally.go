@@ -18,7 +18,6 @@ import (
 
 	"github.com/rs/zerolog"
 
-	playlaunch "github.com/stergiotis/boxer/apps/play/launchcfg"
 	"github.com/stergiotis/boxer/apps/tally/launchcfg"
 	"github.com/stergiotis/boxer/public/fs/lading/ladingschema"
 	"github.com/stergiotis/boxer/public/fs/lading/ladingsql"
@@ -31,8 +30,8 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/clipboardbroker"
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
 	"github.com/stergiotis/boxer/public/keelson/runtime/lifetime"
+	"github.com/stergiotis/boxer/public/keelson/runtime/playground"
 	"github.com/stergiotis/boxer/public/keelson/runtime/task"
-	"github.com/stergiotis/boxer/public/keelson/runtime/windowhost"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/marshall/clickhouse/componentsql"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
@@ -793,12 +792,7 @@ func (inst *App) openInPlay(sc *storeConn, p *pane) {
 		}
 		sql = expanded
 	}
-	cfg := playlaunch.PlayLaunch{Sql: sql, AutoRun: true}
-	cfgBytes, err := buscodec.Encode(cfg)
-	if err != nil {
-		inst.status = "open in play: " + err.Error()
-		return
-	}
+	cfg := playground.Launch{Sql: sql, AutoRun: true}
 	if !inst.gestures.start(true) {
 		return
 	}
@@ -811,7 +805,7 @@ func (inst *App) openInPlay(sc *storeConn, p *pane) {
 	bus, tasks := inst.bus, inst.tasks
 	started := inst.spawn(func(context.Context) {
 		err := task.RunToCompletion(tasks, task.SpawnOpts{Kind: "tally-open-play", Title: "tally: open " + where + " in play"}, func() (err error) {
-			_, err = windowhost.RequestOpen(bus, playlaunch.AppId, playlaunch.Kind, cfgBytes)
+			_, err = playground.Open(bus, cfg)
 			return
 		})
 		note := "opened in play — " + where

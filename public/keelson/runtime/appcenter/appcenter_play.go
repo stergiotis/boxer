@@ -1,12 +1,12 @@
 package appcenter
 
 import (
+	"slices"
 	"strings"
 	"time"
 
-	playlaunch "github.com/stergiotis/boxer/apps/play/launchcfg"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
-	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
+	"github.com/stergiotis/boxer/public/keelson/runtime/playground"
 	"github.com/stergiotis/boxer/public/keelson/runtime/windowhost"
 )
 
@@ -156,24 +156,56 @@ func playTab(key string) string {
 	return ""
 }
 
-// openInPlay opens a play window running sql on the introspection endpoint,
-// focused on tab when set, off the frame goroutine. A refusal lands as the
-// status line's note.
+// openInPlay opens the playground running sql on the introspection
+// endpoint, focused on tab when set, off the frame goroutine. A refusal
+// lands as the status line's note.
 func (inst *App) openInPlay(sql string, tab string) {
-	cfg, err := buscodec.Encode(playlaunch.PlayLaunch{
+	inst.openPlayground("open in play", playground.Launch{
 		At:       time.Now().UTC(),
 		Sql:      sql,
 		AutoRun:  true,
-		Endpoint: playlaunch.EndpointIntrospection,
+		Endpoint: playground.EndpointIntrospection,
 		Tab:      tab,
 	})
-	if err != nil {
-		inst.mu.Lock()
-		inst.snap.openNote = "open in play: " + err.Error()
-		inst.mu.Unlock()
+}
+
+// exploreInPlay opens the playground on a published dataset, seeded with
+// sql, focused on tab, and following alias — the CPU measurement's handover.
+func (inst *App) exploreInPlay(sql string, tab string, alias string) {
+	inst.openPlayground("explore", playground.Launch{
+		At:       time.Now().UTC(),
+		Sql:      sql,
+		AutoRun:  true,
+		Endpoint: playground.EndpointIntrospection,
+		Tab:      tab,
+		Datasets: []string{alias},
+	})
+}
+
+// hasPlayground reports whether apps lists an app that takes the
+// playground's launch kind, so the sections offer their queries.
+func hasPlayground(apps *appCols) bool {
+	return slices.Contains(apps.LaunchKind, playground.Kind)
+}
+
+// openPlayground opens the playground on launch by kind (ADR-0361 §SD8),
+// off the frame goroutine; what prefixes a refusal on the status line.
+func (inst *App) openPlayground(what string, launch playground.Launch) {
+	if inst.bus == nil || inst.appCtx == nil || inst.appCtx.Err() != nil {
 		return
 	}
-	inst.request(playlaunch.AppId, playlaunch.Kind, cfg)
+	inst.wg.Add(1)
+	go func() {
+		defer inst.wg.Done()
+		_, err := playground.Open(inst.bus, launch)
+		note := ""
+		if err != nil {
+			note = what + ": " + err.Error()
+		}
+		inst.mu.Lock()
+		inst.snap.openNote = note
+		inst.mu.Unlock()
+	}()
 }
 
 // request asks the window host to open target, with a launch config when

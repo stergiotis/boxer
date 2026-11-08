@@ -66,16 +66,16 @@ because the person registered it as a coordinator, and that there is one
 harness is a review convention, not an enforced one
 ([ADR-0318](../../adr/0318-model-inference-is-the-harnesss-apps-expose-operations.md)).
 Play is the destination of every handover (§2) by default, and the role
-it fills, the playground a window opens on a dataset or a statement, is
-to be abstracted so a consumer's own playground can take it. The coupling
-has three shapes today (observed 2026-11-07): the launch-config leaf
-`apps/play/launchcfg`, which apps and runtime packages (the app center,
-the trail viewer) import as a leaf; the bundle and embed surface of the
-`play` package itself (`PublishBundle`, `NewLivePlayApp`, `PlayApp`),
-which sqlapplet and adhocdemo import whole; and the capslock check and
-the tab commands. The abstraction has to cover all three (§12). An app
-written against this skill names the role, not play, wherever the text
-allows, imports only the leaf, and keeps that import in one file.
+it fills, the playground a window opens on a dataset or a statement, is a
+launch kind the runtime owns: the contract is the leaf
+`public/keelson/runtime/playground`, an open names the kind and no app, and
+the host resolves it to the launchable app that takes the kind
+([ADR-0361](../../adr/0361-the-playground-is-a-launch-kind-the-runtime-owns-and-the-host-resolves.md)).
+Play's embed (`NewLivePlayApp`, `PlayApp`) and its operations catalog stay
+play's (§SD6), so a consumer that keeps applets still links play and
+designates its own app for the kind. An app written against this skill
+opens the playground through the leaf, not play, and keeps that import in
+one file.
 
 Three operators, then, and each operation an app offers is designed for
 one of them before it is written:
@@ -182,10 +182,10 @@ as imzrt's profile captures are; say why in the call's comment.
 
 **D4 — Handover to the playground is the export.** The gesture is one
 button, labelled *Open in play* or *Send to play*, that publishes (D3) and
-then calls `windowhost.RequestOpen` with the playground's launch config
-naming the alias, never the handle. The playground is play unless the
-host registers another (§0), and the dependency on play's leaf sits in
-one file of the app ([ADR-0135](../../adr/0135-app-launch-requests.md)). The
+then calls `playground.Open` with a launch config naming the alias, never
+the handle. The playground is play unless the host registers another (§0),
+and the import of the leaf sits in one file of the app
+([ADR-0135](../../adr/0135-app-launch-requests.md)). The
 request blocks and refuses with a reason; the button says *Opening…* while
 busy, reports the refusal, and says what opened ("opened in play — N rows
 as <the alias or handle the publisher gave>"). A window with no bus says
@@ -770,7 +770,7 @@ lines are the minter's and the rest are each minted window's.
       ids scoped (P2–P6)
 - [ ] Any new seam has a witness and is a typed Go slot (X1–X2)
 - [ ] The app declares and never enforces: no allowlist, prompt, audit
-      row or budget of its own; play is named in one place (§0, X4)
+      row or budget of its own; the playground is opened through its leaf, from one file (§0, X4)
 
 ## 11. Where to copy from
 
@@ -803,9 +803,6 @@ row says before copying.
 Gaps this page names and does not fill; each is its own ADR when a
 consumer arrives.
 
-- A playground role the host registers so a consumer can substitute play
-  (§0). [ADR-0361](../../adr/0361-the-playground-is-a-launch-kind-the-runtime-owns-and-the-host-resolves.md) (proposed) answers it with a launch
-  kind the runtime owns and the host resolves.
 - A runtime write gate for a statement with a body, so play's environment
   gates of ADR-0270 §SD7 can go (X4).
 - Graduating L16, CS015, CS016 and CS017 from warn once their findings

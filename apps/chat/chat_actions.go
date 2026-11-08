@@ -10,16 +10,14 @@ import (
 	"context"
 	"time"
 
-	"github.com/stergiotis/boxer/apps/play/launchcfg"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/marshalling"
 	"github.com/stergiotis/boxer/public/keelson/runtime/agentrun"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/bgjob"
-	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
 	"github.com/stergiotis/boxer/public/keelson/runtime/clipboardbroker"
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsschema"
+	"github.com/stergiotis/boxer/public/keelson/runtime/playground"
 	"github.com/stergiotis/boxer/public/keelson/runtime/trail/trailviews"
-	"github.com/stergiotis/boxer/public/keelson/runtime/windowhost"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
@@ -182,13 +180,13 @@ func (inst *App) copyText(what string, text string) {
 // openSqlInPlay opens a play window with sql in its editor, not run: the
 // SQL is the model's, and the person runs it.
 func (inst *App) openSqlInPlay(sql string) {
-	inst.openPlay("the SQL", launchcfg.PlayLaunch{Sql: sql})
+	inst.openPlay("the SQL", playground.Launch{Sql: sql})
 }
 
 // openCallInPlay opens play on a failed call's row in the host's call
 // record.
 func (inst *App) openCallInPlay(callId string) {
-	inst.openPlay("the call record", launchcfg.PlayLaunch{Sql: callRecordSql(callId), AutoRun: true, Endpoint: launchcfg.EndpointIntrospection})
+	inst.openPlay("the call record", playground.Launch{Sql: callRecordSql(callId), AutoRun: true, Endpoint: playground.EndpointIntrospection})
 }
 
 // callRecordSql reads one call's row.
@@ -199,7 +197,7 @@ func callRecordSql(callId string) (sql string) {
 // openTrailInPlay opens play on the conversation's rows of the audit
 // trail's timeline, run: what the host recorded this chat doing.
 func (inst *App) openTrailInPlay(convId string) {
-	inst.openPlay("the conversation's trail", launchcfg.PlayLaunch{Sql: trailSql(convId), AutoRun: true, Endpoint: launchcfg.EndpointDefault})
+	inst.openPlay("the conversation's trail", playground.Launch{Sql: trailSql(convId), AutoRun: true, Endpoint: playground.EndpointDefault})
 }
 
 // trailSql reads one conversation's rows of the trail timeline, oldest
@@ -214,7 +212,7 @@ func trailSql(convId string) (sql string) {
 		"ORDER BY `timestamp:ts`, `opaque:seq`"
 }
 
-func (inst *App) openPlay(what string, l launchcfg.PlayLaunch) {
+func (inst *App) openPlay(what string, l playground.Launch) {
 	bus := inst.bus
 	inst.runAction("chat-open-play", "open "+what+" in play", func(ctx context.Context) (note string, err error) {
 		if err = requestPlay(bus, l); err != nil {
@@ -226,13 +224,8 @@ func (inst *App) openPlay(what string, l launchcfg.PlayLaunch) {
 
 // requestPlay asks the host for a play window on l and waits for its reply.
 // It blocks on the bus: call it off the frame.
-func requestPlay(bus app.BusI, l launchcfg.PlayLaunch) (err error) {
-	cfg, err := buscodec.Encode(l)
-	if err != nil {
-		err = eh.Errorf("encode the play launch config: %w", err)
-		return
-	}
-	if _, err = windowhost.RequestOpen(bus, launchcfg.AppId, launchcfg.Kind, cfg); err != nil {
+func requestPlay(bus app.BusI, l playground.Launch) (err error) {
+	if _, err = playground.Open(bus, l); err != nil {
 		err = eh.Errorf("open play: %w", err)
 	}
 	return
@@ -241,9 +234,9 @@ func requestPlay(bus app.BusI, l launchcfg.PlayLaunch) (err error) {
 // requestPlayOnDatasets is a play window that runs sql on the host's
 // introspection endpoint over the ad-hoc datasets scoped, shown under names
 // (ADR-0240): the Analytics handover's shape. This file is the one that
-// names play's launch config.
+// names the playground's launch config.
 func requestPlayOnDatasets(bus app.BusI, sql string, scoped []string, names []string) (err error) {
-	return requestPlay(bus, launchcfg.PlayLaunch{Sql: sql, AutoRun: true, Endpoint: launchcfg.EndpointIntrospection,
+	return requestPlay(bus, playground.Launch{Sql: sql, AutoRun: true, Endpoint: playground.EndpointIntrospection,
 		Datasets: scoped, DatasetNames: names})
 }
 

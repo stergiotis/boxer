@@ -15,11 +15,9 @@ import (
 	"github.com/apache/arrow-go/v18/arrow/array"
 	"github.com/apache/arrow-go/v18/arrow/memory"
 
-	"github.com/stergiotis/boxer/apps/play/launchcfg"
 	"github.com/stergiotis/boxer/public/keelson/runtime/adhocdata"
-	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
+	"github.com/stergiotis/boxer/public/keelson/runtime/playground"
 	"github.com/stergiotis/boxer/public/keelson/runtime/task"
-	"github.com/stergiotis/boxer/public/keelson/runtime/windowhost"
 	"github.com/stergiotis/boxer/public/observability/eh"
 )
 
@@ -182,19 +180,14 @@ func (inst *App) handover(res *Analysis) (note string, err error) {
 
 	// The window's own alias (ADR-0288 §SD3); the launched play reads it
 	// as pairs.
-	cfg := launchcfg.PlayLaunch{
+	cfg := playground.Launch{
 		Sql:          handoverSql(datasetAlias),
 		AutoRun:      true,
-		Endpoint:     launchcfg.EndpointIntrospection,
+		Endpoint:     playground.EndpointIntrospection,
 		Datasets:     []string{pub.Alias},
 		DatasetNames: []string{datasetAlias},
 	}
-	cfgBytes, err := buscodec.Encode(cfg)
-	if err != nil {
-		err = eh.Errorf("encode play launch config: %w", err)
-		return
-	}
-	if _, err = windowhost.RequestOpen(inst.bus, launchcfg.AppId, launchcfg.Kind, cfgBytes); err != nil {
+	if _, err = playground.Open(inst.bus, cfg); err != nil {
 		err = eh.Errorf("open play: %w", err)
 		return
 	}

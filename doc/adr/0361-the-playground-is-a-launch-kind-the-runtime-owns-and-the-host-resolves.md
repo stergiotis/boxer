@@ -1,12 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-11-07
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to accepted
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-11-08
 ---
-
-> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
 
 # ADR-0361: The playground is a launch kind the runtime owns and the host resolves
 
@@ -283,8 +281,8 @@ the reply's window key says which window opened.
 
 | Surface | Change | Moves with it |
 | --- | --- | --- |
-| runtime leaf `playground` (new) | added: the launch DTO and kind, the endpoint constants, the open helper, the bundle composer and publisher, the bundle document type and its parser slot | the codec golden moves from play's leaf, byte-identical |
-| `launchrequest` codec and its vocabulary | reshaped additively: a request may carry a kind and no target; the persisted row records the resolved app and that it was resolved | the codec's generated code and golden; readers of launch rows |
+| runtime leaf `playground` (new) | added: the launch DTO and kind, the endpoint constants, the open helper, the bundle composer and publisher, the bundle document type and its parser slot | the generated codec moves from play's leaf, differing only by the renamed Go type and package |
+| launch request and its persisted row | the request's wire shape is unchanged, since an empty target already round-trips; a request may now carry a kind and no target. The persisted row names the resolved app and gains a membership saying it was resolved | the row's vocabulary and golden; readers of launch rows |
 | `windowhost` open service | resolution by kind, three refusals (none, several undesignated, designation invalid) | `RequestOpen`'s documented refusals |
 | `app.Registry` | added: a designation of an app for a kind | wiring sites that link two takers |
 | `apps/play/launchcfg` | reshaped: aliases; its `kindcheck` registration removed | play's own tests |
@@ -356,8 +354,8 @@ state, though its confinement is SD8's first step. Further options:
   aliases stand.
 - **Path in the tree.** By kind of change:
   - *Runtime:* add the leaf; add resolution and its refusals to the open
-    service; add the designation to the registry; extend the launch request
-    codec and regenerate it.
+    service; add the designation to the registry; add the membership that
+    marks a launch row as resolved from its kind.
   - *Play:* turn `launchcfg` into aliases and drop its registration; declare
     the leaf's kind; turn the bundle composer and parser slot into aliases
     and forwarders.
@@ -389,9 +387,9 @@ state, though its confinement is SD8's first step. Further options:
     designated taker; skips a taker the launch limit removed; persists a row
     naming the resolved app. A fixture app taking the kind stands in for a
     substitute.
-  - In the leaf: the codec golden is byte-identical to play's old golden, and
-    a launch row and a workingset record encoded under the old package
-    decode under the new one.
+  - In the leaf: the generated codec differs from play's old one only by the
+    renamed Go type and package, and a launch row and a workingset record
+    encoded under the old package decode under the new one.
   - The existing handover scenes (writingstylescope's, the trail viewer's)
     keep passing once their callers open by kind.
 - **What would fail.** A wire change to the moved DTO, a by-kind open that
@@ -419,7 +417,7 @@ state, though its confinement is SD8's first step. Further options:
 
 ## Status
 
-Proposed — awaiting review by the maintainer.
+Accepted 2026-11-08.
 
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers (Tier 1 in-place / Tier 2 dated `## Updates` entry / Tier 3 new superseding ADR).
