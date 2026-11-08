@@ -206,7 +206,7 @@ young_in_lock() {
 # the starting lockfile.
 lock_moves() {
     awk -F'\t' '
-        NR == FNR { r[$1] = ($1 in r) ? r[$1] "," $2 : $2; next }
+        NR == FNR { if ($1 in r) r[$1] = r[$1] "," $2; else r[$1] = $2; next }
         { print $1, (($1 in r) ? r[$1] : "(new)"), "->", $2; seen[$1] = 1 }
         END { for (n in r) if (!(n in seen)) print n, r[n], "-> (removed)" }
     ' <(LC_ALL=C comm -23 <(lock_pkgs "$tmp/Cargo.lock.before") <(lock_pkgs "$1")) \
