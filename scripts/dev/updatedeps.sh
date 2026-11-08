@@ -176,6 +176,43 @@ within_cooldown() { # NAME VERSION -> 0 if it may land
     [ "$t" = old ] || aged "$t"
 }
 
+# step_back_target NAME VERSION: the version to step a too-young VERSION back
+# to: the newest stable, unyanked release older than it that is past the
+# cooldown, or that the lockfile already held before this run.
+step_back_target() {
+    local f="$tmp/idx-${1,,}"
+    pubtime "$1" "$2" >/dev/null || return 1
+    {
+        jq -r --argjson cut "$cutoff" '
+            select((.yanked | not)
+                and (.vers | split("+")[0] | contains("-") | not)
+                and (.pubtime == null or (.pubtime | fromdateiso8601) <= $cut))
+            | .vers' "$f"
+        lock_pkgs "$tmp/Cargo.lock.before" | awk -F'\t' -v n="$1" '$1 == n { print $2 }'
+        echo "$2"
+    } | sort -Vu | awk -v y="$2" '$0 == y { if (p != "") print p; exit } { p = $0 }' | grep .
+}
+
+# young_in_lock FILE: "name<TAB>version" for each crates.io package FILE gained
+# over the starting lockfile that may not land yet.
+young_in_lock() {
+    local name ver
+    while IFS=$'\t' read -r name ver; do
+        within_cooldown "$name" "$ver" || printf '%s\t%s\n' "$name" "$ver"
+    done < <(LC_ALL=C comm -13 <(lock_pkgs "$tmp/Cargo.lock.before") <(lock_pkgs "$1"))
+}
+
+# lock_moves FILE: one "name old -> new" line per package that differs from
+# the starting lockfile.
+lock_moves() {
+    awk -F'\t' '
+        NR == FNR { r[$1] = ($1 in r) ? r[$1] "," $2 : $2; next }
+        { print $1, (($1 in r) ? r[$1] : "(new)"), "->", $2; seen[$1] = 1 }
+        END { for (n in r) if (!(n in seen)) print n, r[n], "-> (removed)" }
+    ' <(LC_ALL=C comm -23 <(lock_pkgs "$tmp/Cargo.lock.before") <(lock_pkgs "$1")) \
+      <(LC_ALL=C comm -13 <(lock_pkgs "$tmp/Cargo.lock.before") <(lock_pkgs "$1")) | LC_ALL=C sort
+}
+
 update_cargo() {
     local dir="$target"
     [ -f "$dir/Cargo.lock" ] || die "$dir has no Cargo.lock"
@@ -203,26 +240,36 @@ update_cargo() {
         for t in "${want[@]}"; do read -r name old new <<<"$t"; moves+=("$name $old -> $new"); done
         report; return
     fi
-    for t in "${want[@]}"; do
-        read -r name old new <<<"$t"
-        if (cd "$dir" && cargo update --quiet -p "$name@$old" --precise "$new" 2>"$tmp/precise.err"); then
-            moves+=("$name $old -> $new")
-        else
-            held+=("$name $new (cargo refused --precise: $(head -1 "$tmp/precise.err"))")
-        fi
+    # Update everything, then step back what landed inside the cooldown. Applying
+    # versions one at a time does not work on a large graph: each --precise drags
+    # its neighbours forward, to versions the cooldown would refuse. A step back
+    # can be refused until a dependent has stepped back too, hence the rounds.
+    held=()
+    (cd "$dir" && cargo update --quiet)
+    local round progress target_ver young=()
+    for round in $(seq 1 25); do
+        mapfile -t young < <(young_in_lock "$dir/Cargo.lock")
+        [ ${#young[@]} -gt 0 ] || break
+        progress=0
+        for t in "${young[@]}"; do
+            IFS=$'\t' read -r name new <<<"$t"
+            target_ver=$(step_back_target "$name" "$new") || continue
+            if (cd "$dir" && cargo update --quiet -p "$name@$new" --precise "$target_ver" 2>/dev/null); then
+                held+=("$name $new -> stepped back to $target_ver")
+                progress=1
+            fi
+        done
+        [ "$progress" = 1 ] || break
     done
+    mapfile -t moves < <(lock_moves "$dir/Cargo.lock")
     report
     [ ${#moves[@]} -gt 0 ] || return 0
 
-    # Every crates.io package the lockfile gained, including ones a --precise
-    # pulled in on its own.
-    local young=()
-    while IFS=$'\t' read -r name new; do
-        within_cooldown "$name" "$new" || young+=("$name $new")
-    done < <(LC_ALL=C comm -13 <(lock_pkgs "$tmp/Cargo.lock.before") <(lock_pkgs "$dir/Cargo.lock"))
+    # Whatever is still young could not be stepped back.
+    mapfile -t young < <(young_in_lock "$dir/Cargo.lock")
     if [ ${#young[@]} -gt 0 ]; then
         printf '  %s\n' "${young[@]}"
-        die "versions above are inside the cooldown or not found on crates.io; restore with: git restore ${files[*]}"
+        die "versions above are inside the cooldown and could not be stepped back; restore with: git restore ${files[*]}"
     fi
 
     case "$dir" in
