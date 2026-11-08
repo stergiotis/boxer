@@ -201,7 +201,7 @@ func (inst *App) renderBar() {
 		for range c.HorizontalTop().KeepIter() {
 			badge.New(inst.ids.PrepareStr("not-kept"), "not kept: "+conv.notKept).
 				Tone(badge.ToneWarning).Variant(badge.VariantSoft).Size(badge.SizeSm).Send()
-			if c.Button(inst.ids.PrepareStr("not-kept-ok"), atomsGotIt).Frame(false).Small().SendResp().HasPrimaryClicked() {
+			if c.Button(inst.ids.PrepareStr("not-kept-ok"), atomsGotIt).Kind(c.ButtonKindGhost).Small().SendResp().HasPrimaryClicked() {
 				conv.notKeptNoted = true
 			}
 		}
@@ -212,7 +212,7 @@ func (inst *App) renderBar() {
 					rt.Small().Weak()
 				}
 			}
-			if c.Button(inst.ids.PrepareStr("past-ok"), atomsGotIt).Frame(false).Small().SendResp().HasPrimaryClicked() {
+			if c.Button(inst.ids.PrepareStr("past-ok"), atomsGotIt).Kind(c.ButtonKindGhost).Small().SendResp().HasPrimaryClicked() {
 				inst.pastNoted = true
 			}
 		}
@@ -231,12 +231,12 @@ func (inst *App) renderConvId(scope string) {
 			}
 		}
 		for range c.HoverText(tipCopyConvId).KeepIter() {
-			if c.Button(inst.ids.PrepareStr("copy"), atomsCopy).Frame(false).Small().SendResp().HasPrimaryClicked() {
+			if c.Button(inst.ids.PrepareStr("copy"), atomsCopy).Kind(c.ButtonKindGhost).Small().SendResp().HasPrimaryClicked() {
 				inst.copyText("the conversation's id", id)
 			}
 		}
 		for range c.HoverText(tipOpenTrail).KeepIter() {
-			if c.Button(inst.ids.PrepareStr("trail"), atomsOpenTrail).Frame(false).Small().SendResp().HasPrimaryClicked() {
+			if c.Button(inst.ids.PrepareStr("trail"), atomsOpenTrail).Kind(c.ButtonKindGhost).Small().SendResp().HasPrimaryClicked() {
 				inst.openTrailInPlay(id)
 			}
 		}
@@ -293,7 +293,7 @@ func (inst *App) renderRename() {
 	if c.Button(inst.ids.PrepareStr("rename-ok"), atomsRenameOk).Small().SendResp().HasPrimaryClicked() {
 		commit = true
 	}
-	if c.Button(inst.ids.PrepareStr("rename-cancel"), atomsGotIt).Frame(false).Small().SendResp().HasPrimaryClicked() {
+	if c.Button(inst.ids.PrepareStr("rename-cancel"), atomsGotIt).Kind(c.ButtonKindGhost).Small().SendResp().HasPrimaryClicked() {
 		cancel = true
 	}
 	switch {
@@ -456,7 +456,7 @@ func (inst *App) renderComposer() {
 				}
 			}
 			c.LabelAtoms(c.Atoms().BeginRichText(s.text).Small().Weak().End().Keep()).Wrap().Selectable(true).Send()
-			if s.failed && c.Button(inst.ids.PrepareStr("note-ok"), atomsGotIt).Frame(false).Small().SendResp().HasPrimaryClicked() {
+			if s.failed && c.Button(inst.ids.PrepareStr("note-ok"), atomsGotIt).Kind(c.ButtonKindGhost).Small().SendResp().HasPrimaryClicked() {
 				inst.note = status{}
 			}
 		}
@@ -702,9 +702,12 @@ func (inst *App) renderActions(i int, e *entry) {
 	conv := inst.conv
 	last := conv.lastUser()
 	for range c.HorizontalTop().KeepIter() {
+		// Icon-only actions are ghost buttons: no frame until hovered, but the
+		// frame's padding, so the target is wider than the glyph (a frameless
+		// one was the glyph's 13 points; ADR-0363 (proposed) M1).
 		action := func(key string, atoms typed.RetainedFffiHolderTyped[c.AtomsS], tip string) (clicked bool) {
 			for range c.HoverText(tip).KeepIter() {
-				clicked = c.Button(inst.ids.PrepareStr(key), atoms).Frame(false).Small().SendResp().HasPrimaryClicked()
+				clicked = c.Button(inst.ids.PrepareStr(key), atoms).Kind(c.ButtonKindGhost).Small().SendResp().HasPrimaryClicked()
 			}
 			return
 		}
