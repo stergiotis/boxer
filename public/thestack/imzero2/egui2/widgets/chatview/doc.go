@@ -42,11 +42,11 @@
 // Of the window, only the messages near the viewport are laid out (ADR-0363
 // M5, after the technique of the zapfast messaging client). The unit is a
 // message or system row together with the day separator that opens it,
-// keyed by its ordinal. A unit within three viewports above the viewport or
-// one below it (never less than a fixed floor) is laid out, with a probe
-// either side of it; while following, so are the units that fill a
-// viewport and the margin above the tail; a jump's target is laid out
-// wherever it is. Every other unit
+// keyed by its message (see below). A unit within three viewports above
+// the viewport or one below it (never less than a fixed floor) is laid out,
+// with a probe either side of it; while following, so are the units that
+// fill a viewport and the margin above the tail; a jump's target is laid
+// out wherever it is. Every other unit
 // stands in as space: its measured height from the cache in [State], or,
 // until it has been laid out once, an estimate from its body's length and
 // the chrome its rows carry. The estimate is kept until a measurement
@@ -58,13 +58,28 @@
 // lay entirely above the viewport turn out taller or shorter than they were
 // assumed to be, what the reader is looking at moves for that one frame.
 // The next frame takes the difference out of the space above the first
-// laid-out unit and asks for a scroll by as much, which lands the frame
-// after; from then on the content sits where it was. The scroll is asked
-// with ScrollToCursor at an absolute offset, the only scroll the bindings
-// offer, so the wheel movement of the frame before a correction is lost.
-// No correction is made while following or while a jump is under way: both
+// laid-out unit and asks for a scroll by as much (UiScrollWithDelta, which
+// is relative, so the wheel's own movement in that frame is kept), which
+// lands the frame after; from then on the content sits where it was. No
+// correction is made while following or while a jump is under way: both
 // scroll to a cursor in their own frame's layout. A jump stays under way,
 // asking for its target every frame, until the target sits where the jump
 // put it, the reader scrolls away, or a bound of frames runs out, since the
 // units it passes may be measured on the way.
+//
+// Units are keyed by [Model.Key], or, without one, by a message's place
+// among the rows that are not markers, so a height stays with its message
+// when a marker is inserted before it or its time changes. Without Key,
+// messages inserted before a message rename it.
+//
+// # Accessibility
+//
+// The units are one list to assistive technology (ADR-0363 M2): an
+// AccessibleList named "Messages" whose length is the model's message count,
+// and a row per laid-out unit at its ordinal, named by its key, so its node
+// keeps its id when rows before it come and go. The length is the model's,
+// not the window's, so a row's position does not change when the window
+// widens. Rows standing in as space have no node. The current row — the
+// list's active descendant — is the newest message while following, else
+// the laid-out unit at the viewport's top.
 package chatview

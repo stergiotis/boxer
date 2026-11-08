@@ -38,8 +38,9 @@ func definitionsWidgetProc() (widgets []*ir.ProceduralNode) {
 `)).
 		Build())
 	// uiScrollWithDelta scrolls the scroll area around the current Ui by
-	// (dx, dy) points at the end of the pass, without animation: positive dy
-	// moves the content up. It is the relative correction a virtualized list
+	// (dx, dy) points at the end of the pass, without animation: the content
+	// moves by the delta, as in egui's scroll_with_delta, so a negative dy
+	// moves it up. It is the relative correction a virtualized list
 	// applies when rows above the viewport turn out taller or shorter than
 	// it assumed (ADR-0363 §M5, proposed).
 	widgets = append(widgets, idl.NewProceduralNode("uiScrollWithDelta").WithEffect(ir.EffectLocal).

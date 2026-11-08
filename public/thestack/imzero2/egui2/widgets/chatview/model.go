@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/stergiotis/boxer/public/hashing/splitmix64"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/color"
 )
@@ -86,6 +87,14 @@ type Model struct {
 	// EditedMS is when an edited message was edited; read only where
 	// FlagEdited is set. May be nil.
 	EditedMS []int64
+	// Key names each message for as long as it exists — a message id, a
+	// record id — so the height a message measured and its node in the
+	// accessibility tree stay with it when messages are inserted before it.
+	// Keys must be distinct. May be nil: the key is then derived from the
+	// message's place among the rows that are not markers, which holds while
+	// a marker comes and goes before it but not when messages are inserted
+	// before it.
+	Key []uint64
 
 	Participants []Participant
 
@@ -115,6 +124,9 @@ func (inst *Model) Validate() error {
 	}
 	if inst.EditedMS != nil && len(inst.EditedMS) != n {
 		return fmt.Errorf("chatview: EditedMS has %d entries for %d messages", len(inst.EditedMS), n)
+	}
+	if inst.Key != nil && len(inst.Key) != n {
+		return fmt.Errorf("chatview: Key has %d entries for %d messages", len(inst.Key), n)
 	}
 	np := int32(len(inst.Participants))
 	for i := range n {
@@ -151,6 +163,44 @@ func (inst *Model) Validate() error {
 		}
 	}
 	return nil
+}
+
+// key is message i's key: Key's, else one derived from its place among the
+// rows that are not markers (see keyCounter).
+func (inst *Model) key(i int) uint64 {
+	if inst.Key != nil {
+		return inst.Key[i]
+	}
+	var kc keyCounter
+	for j := range i {
+		kc.next(inst, j)
+	}
+	return kc.next(inst, i)
+}
+
+// keyCounter derives message keys in ordinal order when the model carries
+// none. A message is keyed by how many messages that are not markers come
+// before it, a marker by the same count and its place in a run of markers.
+// The key so holds while a marker is inserted or moved before a message and
+// while a message's time or body changes — a host's pending reply carries
+// the current time — and changes when messages are inserted before it.
+type keyCounter struct {
+	messages, markers uint64
+}
+
+// markerKeySalt separates a marker's key from a message's.
+const markerKeySalt uint64 = 0x6d61726b65720000
+
+func (inst *keyCounter) next(m *Model, i int) (k uint64) {
+	if m.Flags[i]&FlagMarker != 0 {
+		k = splitmix64.Forward(splitmix64.Forward(inst.messages^markerKeySalt) ^ inst.markers)
+		inst.markers++
+		return
+	}
+	k = splitmix64.Forward(inst.messages)
+	inst.messages++
+	inst.markers = 0
+	return
 }
 
 // Reactions returns the reaction slices of message i (all empty when the

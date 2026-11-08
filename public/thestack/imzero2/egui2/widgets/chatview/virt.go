@@ -52,22 +52,38 @@ const (
 )
 
 // unit is one measured, cached and stood-in element of the transcript:
-// rows[from:to] of the frame's plan, key the message ordinal of its last row.
+// rows[from:to] of the frame's plan; ord is the message ordinal of its last
+// row and key that message's key (Model.key), which names it in the height
+// cache and the accessibility tree.
 type unit struct {
 	from, to int
-	key      int32
+	ord      int32
+	key      uint64
 }
 
 // unitsOf groups the plan's rows into units: a day separator joins the row
 // after it, which is always a message or a system line.
-func unitsOf(rows []row, dst []unit) []unit {
+func unitsOf(m *Model, rows []row, dst []unit) []unit {
 	dst = dst[:0]
 	start := 0
+	var kc keyCounter
+	at := 0 // the next ordinal kc has not counted
 	for i, r := range rows {
 		if r.kind == rowDay {
 			continue
 		}
-		dst = append(dst, unit{from: start, to: i + 1, key: r.msg})
+		ord := int(r.msg)
+		var key uint64
+		if m.Key != nil {
+			key = m.Key[ord]
+		} else {
+			for ; at < ord; at++ {
+				kc.next(m, at)
+			}
+			key = kc.next(m, ord)
+			at = ord + 1
+		}
+		dst = append(dst, unit{from: start, to: i + 1, ord: r.msg, key: key})
 		start = i + 1
 	}
 	return dst
@@ -84,7 +100,8 @@ type rowHeight struct {
 // laidOut is a unit laid out this frame: the height it was assumed to have
 // when the frame was planned, and the probes either side of it.
 type laidOut struct {
-	key      int32
+	key      uint64
+	ord      int32
 	assumed  float32
 	top, bot uint64
 }
@@ -104,19 +121,14 @@ type viewport struct {
 // virt is the virtualization's part of State. Its zero value has measured
 // nothing.
 type virt struct {
-	heights map[int32]rowHeight
+	heights map[uint64]rowHeight
 	drawn   []laidOut
 	view    viewport
-	// correctedTo is the offset a correction asked for last frame; it is
-	// that frame's offset from then on, not the readback's, so corrections
-	// on consecutive frames add up rather than replace each other.
-	correctedTo float32
+	// correctedBy is the scroll a correction asked for last frame; the
+	// readback does not hold it yet, so the frame's offset is assumed to be
+	// the readback's plus it.
+	correctedBy float32
 	corrected   bool
-	// correctedFrom is the offset the correcting frame was assumed to start
-	// at. The correction replaced whatever the offset really was, so the
-	// next readback's difference from it — the wheel of the frame before —
-	// is added back by the next correction.
-	correctedFrom float32
 	// seekProbe is where last frame asked to scroll to the jump's target.
 	seekProbe uint64
 	// scrolled is set when last frame scrolled to a cursor in its own
@@ -138,11 +150,11 @@ type rectReader func(seq uint64) (c.UiRectValue, bool)
 // they were assumed to have — differed from that assumption, the amount the
 // content the reader was looking at moved down; it is 0 when last frame
 // scrolled to a cursor of its own (see scrolled). seek is where the jump's
-// target (message ordinal seekKey) sat in the viewport, when it was laid
+// target (message ordinal seekOrd) sat in the viewport, when it was laid
 // out, and how much the units laid out above it differed from what they
 // were assumed to be. ok is false when the transcript did not reach the
 // screen last frame; nothing is changed then.
-func (inst *virt) readBack(read rectReader, viewSeq, contentSeq, unitsSeq uint64, seekKey int32) (grew float32, seek seekReading, ok bool) {
+func (inst *virt) readBack(read rectReader, viewSeq, contentSeq, unitsSeq uint64, seekOrd int32) (grew float32, seek seekReading, ok bool) {
 	vr, okV := read(viewSeq)
 	cr, okC := read(contentSeq)
 	if !okV || !okC {
@@ -154,11 +166,11 @@ func (inst *virt) readBack(read rectReader, viewSeq, contentSeq, unitsSeq uint64
 		v.base = ur.MinY - cr.MinY
 	}
 	if inst.heights == nil {
-		inst.heights = map[int32]rowHeight{}
+		inst.heights = map[uint64]rowHeight{}
 	}
-	aboveSeek := seekKey >= 0
+	aboveSeek := seekOrd >= 0
 	for _, d := range inst.drawn {
-		if d.key == seekKey {
+		if d.ord == seekOrd {
 			aboveSeek = false
 		}
 		t, okT := read(d.top)
@@ -198,7 +210,7 @@ type seekReading struct {
 // which the cache then keeps.
 func (inst *virt) height(u unit, estimate func(unit) float32) float32 {
 	if inst.heights == nil {
-		inst.heights = map[int32]rowHeight{}
+		inst.heights = map[uint64]rowHeight{}
 	}
 	if h, ok := inst.heights[u.key]; ok {
 		return h.h
@@ -208,14 +220,18 @@ func (inst *virt) height(u unit, estimate func(unit) float32) float32 {
 	return e
 }
 
-// prune drops cached heights outside the message ordinals [first, n) once
-// the cache holds well more than the window.
-func (inst *virt) prune(first, n int) {
-	if len(inst.heights) <= 2*(n-first)+64 {
+// prune drops cached heights of messages no longer in the window once the
+// cache holds well more than the window.
+func (inst *virt) prune() {
+	if len(inst.heights) <= 2*len(inst.units)+64 {
 		return
 	}
+	keep := make(map[uint64]struct{}, len(inst.units))
+	for _, u := range inst.units {
+		keep[u.key] = struct{}{}
+	}
 	for k := range inst.heights {
-		if int(k) < first || int(k) >= n {
+		if _, ok := keep[k]; !ok {
 			delete(inst.heights, k)
 		}
 	}
@@ -261,27 +277,24 @@ func spaceBefore(hs []float32, mask []bool) (s float32) {
 }
 
 // correction is what a frame does about units above the viewport having
-// changed height by grew: the offset to scroll to (asked for this frame, in
-// effect from the next), and how much of the change to take out of the
-// space above the first laid-out unit this frame, so the frame between the
-// readback and the scroll already shows the reader's content where it was.
-// lost is scroll movement a correction last frame replaced; it is scrolled
-// by again, but takes nothing out of the space above, since no content
-// moved.
-func correction(grew, lost, offset, viewH, contentH, spaceAbove float32) (target, absorb float32, ok bool) {
-	if math.Abs(float64(grew+lost)) < float64(minCorrection) {
+// changed height by grew: how far to scroll (asked for this frame, relative
+// to wherever the offset then is, in effect from the next frame), and how
+// much of the change to take out of the space above the first laid-out unit
+// this frame, so the frame between the readback and the scroll already
+// shows the reader's content where it was. offset is the frame's assumed
+// offset; the scroll range bounds both.
+func correction(grew, offset, viewH, contentH, spaceAbove float32) (delta, absorb float32, ok bool) {
+	if math.Abs(float64(grew)) < float64(minCorrection) {
 		return
 	}
-	target = max(0, min(offset+grew+lost, contentH-viewH))
-	// The part of the change the scroll makes up for, as far as the scroll
-	// range lets it.
-	absorb = target - offset - lost
+	delta = max(0, min(offset+grew, contentH-viewH)) - offset
+	absorb = delta
 	if grew >= 0 {
 		absorb = max(0, min(absorb, grew, spaceAbove))
 	} else {
 		absorb = min(0, max(absorb, grew))
 	}
-	return target, absorb, target != offset
+	return delta, absorb, delta != 0
 }
 
 // estimate is the height assumed for unit u before it has been measured: the
@@ -347,8 +360,8 @@ func wrappedLines(s string, w float32) (n int) {
 // unitProbes derives the probe seqs either side of a unit, under the same
 // scope the unit's message row opens. The scope is opened for the
 // derivation alone; it emits nothing.
-func unitProbes(ids *c.WidgetIdStack, key int32) (top, bot uint64) {
-	for range c.IdScope(ids.PrepareSeq(uint64(key))) {
+func unitProbes(ids *c.WidgetIdStack, ord int32) (top, bot uint64) {
+	for range c.IdScope(ids.PrepareSeq(uint64(ord))) {
 		top = ids.ProbeSeq("unit-top")
 		bot = ids.ProbeSeq("unit-bottom")
 	}
@@ -407,18 +420,21 @@ func (inst *State) beginFrame(n int) (first int) {
 type framePlan struct {
 	// seekUnit is the jump's target unit, laid out wherever it is; -1 none.
 	seekUnit int
-	// correct asks for a scroll to target, for units above the viewport
-	// that changed height; absorb is taken out of the space above the
-	// first laid-out unit for this frame.
-	correct        bool
-	target, absorb float32
+	// correct asks for a scroll by delta, for units above the viewport that
+	// changed height; absorb is taken out of the space above the first
+	// laid-out unit for this frame.
+	correct       bool
+	delta, absorb float32
+	// current is the unit the reader is at — the newest message while
+	// following, else the one at the viewport's top; -1 none.
+	current int
 }
 
 // planFrame reads last frame's probes back and plans the frame over rows,
-// the plan of message ordinals [first, n): it settles a jump under way,
+// the plan of the window of m: it settles a jump under way,
 // fills the height cache, marks the units to lay out and decides the
 // scroll correction. gap is the content's item spacing.
-func (inst *State) planFrame(read rectReader, viewSeq, contentSeq, unitsSeq uint64, rows []row, first, n int, gap float32, est func(unit) float32) (fp framePlan) {
+func (inst *State) planFrame(read rectReader, viewSeq, contentSeq, unitsSeq uint64, m *Model, rows []row, gap float32, est func(unit) float32) (fp framePlan) {
 	vt := &inst.virt
 	grew, sk, readOk := vt.readBack(read, viewSeq, contentSeq, unitsSeq, inst.seek-1)
 	follow := inst.Follow()
@@ -438,8 +454,8 @@ func (inst *State) planFrame(read rectReader, viewSeq, contentSeq, unitsSeq uint
 		}
 	}
 
-	vt.units = unitsOf(rows, vt.units)
-	vt.prune(first, n)
+	vt.units = unitsOf(m, rows, vt.units)
+	vt.prune()
 	vt.hs = vt.hs[:0]
 	vt.mask = vt.mask[:0]
 	fp.seekUnit = -1
@@ -449,7 +465,7 @@ func (inst *State) planFrame(read rectReader, viewSeq, contentSeq, unitsSeq uint
 		vt.hs = append(vt.hs, h)
 		vt.mask = append(vt.mask, false)
 		unitsH += h
-		if inst.seek > 0 && u.key == inst.seek-1 {
+		if inst.seek > 0 && u.ord == inst.seek-1 {
 			fp.seekUnit = i
 		}
 	}
@@ -458,7 +474,7 @@ func (inst *State) planFrame(read rectReader, viewSeq, contentSeq, unitsSeq uint
 		offset, viewH = vt.view.offset, vt.view.h
 	}
 	if vt.corrected {
-		offset = vt.correctedTo
+		offset += vt.correctedBy
 	}
 	markNear(vt.hs, vt.mask, offset-vt.view.base, viewH, vt.view.ok, follow)
 	if fp.seekUnit >= 0 {
@@ -469,13 +485,10 @@ func (inst *State) planFrame(read rectReader, viewSeq, contentSeq, unitsSeq uint
 	// space above until the scroll lands. Following and a jump under way
 	// set the scroll themselves.
 	if readOk && !follow && inst.seek == 0 {
-		var lost float32
-		if vt.corrected {
-			lost = vt.view.offset - vt.correctedFrom
-		}
-		fp.target, fp.absorb, fp.correct = correction(grew, lost, offset, viewH, vt.view.base+unitsH, spaceBefore(vt.hs, vt.mask))
+		fp.delta, fp.absorb, fp.correct = correction(grew, offset, viewH, vt.view.base+unitsH, spaceBefore(vt.hs, vt.mask))
 	}
-	vt.corrected, vt.correctedTo, vt.correctedFrom = fp.correct, fp.target, offset
+	vt.corrected, vt.correctedBy = fp.correct, fp.delta
+	fp.current = currentUnit(m, vt.units, vt.hs, vt.mask, offset-vt.view.base+fp.absorb, follow)
 	vt.scrolled = follow || fp.seekUnit >= 0
 	vt.drawn = vt.drawn[:0]
 	vt.seekProbe = 0
@@ -501,4 +514,39 @@ func (inst *virt) walk(absorb float32, space func(float32), lay func(i int)) {
 	if s > 0 {
 		space(s)
 	}
+}
+
+// currentUnit is the unit the reader is at, among those laid out: while
+// following, the newest that is a message rather than a marker; else the
+// first whose bottom is below top, the viewport's top in unit coordinates.
+// -1 when nothing is laid out.
+func currentUnit(m *Model, units []unit, hs []float32, mask []bool, top float32, follow bool) int {
+	if follow {
+		last := -1
+		for i := len(units) - 1; i >= 0; i-- {
+			if !mask[i] {
+				continue
+			}
+			if last < 0 {
+				last = i
+			}
+			if m.Flags[units[i].ord]&FlagMarker == 0 {
+				return i
+			}
+		}
+		return last
+	}
+	var y float32
+	last := -1
+	for i, h := range hs {
+		y += h
+		if !mask[i] {
+			continue
+		}
+		last = i
+		if y > top {
+			return i
+		}
+	}
+	return last
 }

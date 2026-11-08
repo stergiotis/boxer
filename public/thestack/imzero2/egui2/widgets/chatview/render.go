@@ -34,6 +34,8 @@ const (
 	// fitSlack keeps a measured body from wrapping its widest line again at
 	// exactly its own width.
 	fitSlack float32 = 1
+	// messagesListName names the transcript's list to assistive technology.
+	messagesListName = "Messages"
 	// scrollAlignTop / scrollAlignCenter / scrollAlignBottom are
 	// ScrollToCursor's alignment codes (0 top, 1 centre, 2 bottom).
 	scrollAlignTop    uint8 = 0
@@ -102,7 +104,7 @@ func Render(in Input) (res Result) {
 			textW = paneW
 		}
 		fp := st.planFrame(c.CurrentApplicationState.StateManager.GetUiRect, viewSeq, contentSeq, unitsSeq,
-			rows, first, n, gap, func(u unit) float32 {
+			m, rows, gap, func(u unit) float32 {
 				return estimate(m, rows, u, layout, in.Viewer, textW, dens)
 			})
 
@@ -110,16 +112,6 @@ func Render(in Input) (res Result) {
 		for range c.ScrollArea().Vscroll(true).AutoShrink(false, false).Animated(!fp.correct).KeepIter() {
 			c.UiSetMinWidthAvailable()
 			c.CaptureUiAvailableRect(contentSeq)
-			// The spacing is pinned so a top-aligned scroll lands where it
-			// is asked to: egui leaves one item spacing above the cursor.
-			c.UiSetItemSpacing(gap, gap)
-			if fp.correct {
-				// ScrollToCursor is the one scroll the bindings offer: the
-				// cursor is moved to the offset asked for, and back.
-				c.AddSpace(fp.target + gap)
-				c.ScrollToCursor(scrollAlignTop)
-				c.AddSpace(-(fp.target + gap))
-			}
 			if first > 0 {
 				for range c.VerticalCentered().KeepIter() {
 					label := icons.PhArrowUp + " older (" + strconv.Itoa(first) + " more)"
@@ -132,21 +124,35 @@ func Render(in Input) (res Result) {
 				}
 			}
 			c.CaptureUiAvailableRect(unitsSeq)
-			vt.walk(fp.absorb, c.AddSpace, func(i int) {
-				u := vt.units[i]
-				top, bot := unitProbes(ids, u.key)
-				c.CaptureUiAvailableRect(top)
-				for _, r := range rows[u.from:u.to] {
-					if i == fp.seekUnit && r.kind != rowDay {
-						vt.seekProbe = ids.ProbeSeq("seek")
-						c.CaptureUiAvailableRect(vt.seekProbe)
-						c.ScrollToCursor(st.seekAlign)
+			// The messages are one list to assistive technology: a row per
+			// message laid out, at its ordinal among the model's messages,
+			// named by its key so its node survives rows inserted before it.
+			for range c.AccessibleList(messagesListName, uint32(n)).KeepIter() {
+				vt.walk(fp.absorb, c.AddSpace, func(i int) {
+					u := vt.units[i]
+					top, bot := unitProbes(ids, u.ord)
+					c.CaptureUiAvailableRect(top)
+					for range c.AccessibleListItem(u.key, uint32(u.ord), 0, i == fp.current).KeepIter() {
+						for _, r := range rows[u.from:u.to] {
+							if i == fp.seekUnit && r.kind != rowDay {
+								vt.seekProbe = ids.ProbeSeq("seek")
+								c.CaptureUiAvailableRect(vt.seekProbe)
+								c.ScrollToCursor(st.seekAlign)
+							}
+							renderRow(in, m, st, r, layout, bubbleW, dens, loc, &res)
+						}
 					}
-					renderRow(in, m, st, r, layout, bubbleW, dens, loc, &res)
-				}
-				c.CaptureUiAvailableRect(bot)
-				vt.drawn = append(vt.drawn, laidOut{key: u.key, assumed: vt.hs[i], top: top, bot: bot})
-			})
+					c.CaptureUiAvailableRect(bot)
+					vt.drawn = append(vt.drawn, laidOut{key: u.key, ord: u.ord, assumed: vt.hs[i], top: top, bot: bot})
+				})
+			}
+			if fp.correct {
+				// Relative to wherever the offset is when the pass ends, so
+				// the wheel of this frame is kept; last in the content, so no
+				// scroll area inside a body takes it. Negative moves the
+				// content up.
+				c.UiScrollWithDelta(0, -fp.delta)
+			}
 			if st.Follow() {
 				c.ScrollToCursor(scrollAlignBottom)
 			}

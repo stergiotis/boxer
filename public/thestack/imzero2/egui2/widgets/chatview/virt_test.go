@@ -28,6 +28,8 @@ type simHost struct {
 	rects map[uint64]c.UiRectValue
 	// animTarget is an animated scroll under way; NaN none.
 	animTarget float32
+	// current is the ordinal of the unit last frame marked current; -1 none.
+	current int32
 	// pos is where each unit laid out last frame started, in screen
 	// coordinates; virtual is where every unit started, a stand-in at its
 	// place inside the space it is part of.
@@ -59,7 +61,7 @@ func (inst *simHost) frame(t *testing.T, st *State, m *Model, est func(unit) flo
 	n := m.Len()
 	first := st.beginFrame(n)
 	rows := plan(m, time.UTC, first)
-	fp = st.planFrame(inst.read, simView, simContent, simUnits, rows, first, n, inst.sp, est)
+	fp = st.planFrame(inst.read, simView, simContent, simUnits, m, rows, inst.sp, est)
 	vt := &st.virt
 	rects := map[uint64]c.UiRectValue{}
 	contentTop := inst.viewTop - inst.offset
@@ -68,30 +70,31 @@ func (inst *simHost) frame(t *testing.T, st *State, m *Model, est func(unit) flo
 	y := contentTop
 	rects[simUnits] = c.UiRectValue{MinY: y}
 	scrollTo, animated := float32(math.NaN()), false
-	if fp.correct {
-		scrollTo = fp.target
-	}
 	clear(inst.pos)
 	clear(inst.virtual)
+	inst.current = -1
 	next := 0 // the first unit whose virtual position is not recorded yet
 	vt.walk(fp.absorb, func(s float32) {
 		// A run of stand-ins: each unit at its stand-in height.
 		v := y
 		for ; next < len(vt.units) && !vt.mask[next]; next++ {
-			inst.virtual[vt.units[next].key] = v
+			inst.virtual[vt.units[next].ord] = v
 			v += vt.hs[next]
 		}
 		y += s
 	}, func(i int) {
 		for ; next < i; next++ {
-			inst.virtual[vt.units[next].key] = y
+			inst.virtual[vt.units[next].ord] = y
 		}
 		next = i + 1
-		inst.virtual[vt.units[i].key] = y
+		inst.virtual[vt.units[i].ord] = y
 		u := vt.units[i]
-		top, bot := simUnitProbes(u.key)
+		top, bot := simUnitProbes(u.ord)
 		rects[top] = c.UiRectValue{MinY: y}
-		inst.pos[u.key] = y
+		inst.pos[u.ord] = y
+		if i == fp.current {
+			inst.current = u.ord
+		}
 		if i == fp.seekUnit {
 			vt.seekProbe = simSeek
 			rects[simSeek] = c.UiRectValue{MinY: y}
@@ -101,11 +104,11 @@ func (inst *simHost) frame(t *testing.T, st *State, m *Model, est func(unit) flo
 			}
 			scrollTo, animated = y-contentTop-want, true
 		}
-		h, ok := inst.truth[u.key]
-		require.True(t, ok, "unit %d has a true height", u.key)
+		h, ok := inst.truth[u.ord]
+		require.True(t, ok, "unit %d has a true height", u.ord)
 		y += h
 		rects[bot] = c.UiRectValue{MinY: y}
-		vt.drawn = append(vt.drawn, laidOut{key: u.key, assumed: vt.hs[i], top: top, bot: bot})
+		vt.drawn = append(vt.drawn, laidOut{key: u.key, ord: u.ord, assumed: vt.hs[i], top: top, bot: bot})
 	})
 	contentH := y - contentTop
 	if st.Follow() {
@@ -119,13 +122,20 @@ func (inst *simHost) frame(t *testing.T, st *State, m *Model, est func(unit) flo
 	default:
 		inst.offset, inst.animTarget = scrollTo, float32(math.NaN())
 	}
+	if fp.correct {
+		inst.offset += fp.delta
+	}
 	if !math.IsNaN(float64(inst.animTarget)) {
 		inst.offset += (inst.animTarget - inst.offset) / 2
 		if math.Abs(float64(inst.animTarget-inst.offset)) < 1 {
 			inst.offset, inst.animTarget = inst.animTarget, float32(math.NaN())
 		}
 	}
-	inst.offset += inst.wheel
+	if inst.wheel != 0 {
+		// The wheel ends an animated scroll, as egui's does.
+		inst.offset += inst.wheel
+		inst.animTarget = float32(math.NaN())
+	}
 	inst.offset = max(0, min(inst.offset, contentH-inst.viewH))
 	return
 }
@@ -233,7 +243,7 @@ func TestEstimate(t *testing.T) {
 	m.Body[2] = m.Body[1]
 	m.ReplyTo[3] = 0
 	rows := plan(m, time.UTC, 0)
-	units := unitsOf(rows, nil)
+	units := unitsOf(m, rows, nil)
 	require.Len(t, units, 4)
 	d := styletokens.DensityStandard
 	h := func(i int) float32 { return estimate(m, rows, units[i], LayoutDialogue, 0, 200, d) }
@@ -250,11 +260,11 @@ func TestEstimate(t *testing.T) {
 func TestUnitsOf(t *testing.T) {
 	m := twoParty()
 	rows := plan(m, time.UTC, 0)
-	units := unitsOf(rows, nil)
+	units := unitsOf(m, rows, nil)
 	require.Len(t, units, 6)
-	assert.Equal(t, unit{from: 0, to: 2, key: 0}, units[0])
-	assert.Equal(t, unit{from: 2, to: 3, key: 1}, units[1])
-	assert.Equal(t, unit{from: 6, to: 8, key: 5}, units[5])
+	assert.Equal(t, unit{from: 0, to: 2, ord: 0, key: m.key(0)}, units[0])
+	assert.Equal(t, unit{from: 2, to: 3, ord: 1, key: m.key(1)}, units[1])
+	assert.Equal(t, unit{from: 6, to: 8, ord: 5, key: m.key(5)}, units[5])
 }
 
 // A unit above the viewport that grows moves what the reader looks at for
@@ -312,9 +322,8 @@ func TestAnchorHoldsWhenAUnitAboveChangesHeight(t *testing.T) {
 
 // Scrolling up through history that was estimated too short: every unit is
 // measured inside the margin above the viewport, and once the wheel stops
-// the reader's units sit where the wheel alone put them. A correction
-// replaces the offset the wheel had moved, and the next frame scrolls that
-// movement again.
+// the reader's units sit where the wheel alone put them. A correction is
+// relative, so it keeps the wheel of the frame it lands in.
 func TestScrollingUpThroughUnmeasuredHistory(t *testing.T) {
 	m := longModel(300)
 	truth := uniform(300, 75)
@@ -449,33 +458,28 @@ func TestJumpArrivesAtItsTarget(t *testing.T) {
 // A correction moves by the change, within the scroll range, and takes out
 // of the space above no more than there is.
 func TestCorrection(t *testing.T) {
-	target, absorb, ok := correction(40, 0, 1000, 600, 5000, 800)
+	delta, absorb, ok := correction(40, 1000, 600, 5000, 800)
 	assert.True(t, ok)
-	assert.Equal(t, float32(1040), target)
+	assert.Equal(t, float32(40), delta)
 	assert.Equal(t, float32(40), absorb)
 
-	target, absorb, ok = correction(40, 0, 1000, 600, 5000, 10)
+	delta, absorb, ok = correction(40, 1000, 600, 5000, 10)
 	assert.True(t, ok)
-	assert.Equal(t, float32(1040), target)
+	assert.Equal(t, float32(40), delta)
 	assert.Equal(t, float32(10), absorb, "only as much as stands in above")
 
-	_, _, ok = correction(0.2, 0, 1000, 600, 5000, 800)
+	_, _, ok = correction(0.2, 1000, 600, 5000, 800)
 	assert.False(t, ok, "below a pixel's half is not worth a scroll")
 
-	target, absorb, ok = correction(-50, 0, 30, 600, 5000, 0)
+	delta, absorb, ok = correction(-50, 30, 600, 5000, 0)
 	assert.True(t, ok)
-	assert.Equal(t, float32(0), target, "the scroll range ends at the top")
+	assert.Equal(t, float32(-30), delta, "the scroll range ends at the top")
 	assert.Equal(t, float32(-30), absorb)
 
-	target, absorb, ok = correction(40, -25, 1000, 600, 5000, 800)
+	delta, absorb, ok = correction(60, 4370, 600, 5000, 900)
 	assert.True(t, ok)
-	assert.Equal(t, float32(1015), target, "the wheel a correction replaced is scrolled again")
-	assert.Equal(t, float32(40), absorb, "and takes nothing out of the space above")
-
-	target, absorb, ok = correction(0, -25, 1000, 600, 5000, 800)
-	assert.True(t, ok)
-	assert.Equal(t, float32(975), target)
-	assert.Equal(t, float32(0), absorb)
+	assert.Equal(t, float32(30), delta, "and at the bottom")
+	assert.Equal(t, float32(30), absorb)
 }
 
 // A frame that scrolled to a cursor in its own layout — following the tail,
@@ -499,4 +503,98 @@ func TestNoCorrectionForAFrameThatFollowed(t *testing.T) {
 	y, ok := host.screenY(199)
 	require.True(t, ok)
 	assert.InDelta(t, host.viewH-60, y, 0.5, "the tail stays where following left it")
+}
+
+// A message's key stays with it when a marker is inserted before it — the
+// "new since you looked" line — and when its time changes, as a pending
+// reply's does; it is the host's own when the model carries one.
+func TestMessageKeys(t *testing.T) {
+	m := longModel(6)
+	before := make([]uint64, m.Len())
+	for i := range before {
+		before[i] = m.key(i)
+	}
+	// A marker inserted before message 3, at its time, as the chat app does.
+	ins := func(s []int64, v int64) []int64 { return append(s[:3:3], append([]int64{v}, s[3:]...)...) }
+	m.TimeMS = ins(m.TimeMS, m.TimeMS[3])
+	m.Sender = append(m.Sender[:3:3], append([]int32{-1}, m.Sender[3:]...)...)
+	m.Body = append(m.Body[:3:3], append([]string{"new since you looked"}, m.Body[3:]...)...)
+	m.ReplyTo = append(m.ReplyTo[:3:3], append([]int32{-1}, m.ReplyTo[3:]...)...)
+	m.Flags = append(m.Flags[:3:3], append([]FlagsE{FlagSystem | FlagMarker}, m.Flags[3:]...)...)
+	m.Status = append(m.Status[:3:3], append([]StatusE{0}, m.Status[3:]...)...)
+	require.NoError(t, m.Validate())
+	for i := range 3 {
+		assert.Equal(t, before[i], m.key(i))
+	}
+	for i := 3; i < len(before); i++ {
+		assert.Equal(t, before[i], m.key(i+1), "message %d keeps its key one ordinal on", i)
+	}
+	seen := map[uint64]bool{}
+	for i := range m.Len() {
+		assert.False(t, seen[m.key(i)], "key of %d is distinct", i)
+		seen[m.key(i)] = true
+	}
+	// The units of a plan carry the same keys.
+	rows := plan(m, time.UTC, 2)
+	for _, u := range unitsOf(m, rows, nil) {
+		assert.Equal(t, m.key(int(u.ord)), u.key)
+	}
+
+	// A pending reply carries the current time; its key does not move.
+	last := m.Len() - 1
+	k := m.key(last)
+	m.TimeMS[last] += 1500
+	assert.Equal(t, k, m.key(last))
+
+	m.Key = make([]uint64, m.Len())
+	for i := range m.Key {
+		m.Key[i] = uint64(100 + i)
+	}
+	assert.Equal(t, uint64(101), m.key(1))
+	assert.Equal(t, uint64(102), unitsOf(m, plan(m, time.UTC, 0), nil)[2].key)
+	m.Key = []uint64{7}
+	assert.Error(t, m.Validate())
+}
+
+// The current row is the newest message while following — not the marker
+// after it — and the one at the viewport's top otherwise.
+func TestCurrentUnit(t *testing.T) {
+	m := longModel(5)
+	m.Flags[4] = FlagSystem | FlagMarker
+	m.Sender[4] = -1
+	rows := plan(m, time.UTC, 0)
+	units := unitsOf(m, rows, nil)
+	hs := []float32{100, 100, 100, 100, 100}
+	all := []bool{true, true, true, true, true}
+	assert.Equal(t, 3, currentUnit(m, units, hs, all, 0, true))
+	assert.Equal(t, 0, currentUnit(m, units, hs, all, 0, false))
+	assert.Equal(t, 1, currentUnit(m, units, hs, all, 150, false), "the unit the viewport's top cuts")
+	assert.Equal(t, 2, currentUnit(m, units, hs, all, 200, false), "a unit that ends at the top is above it")
+	some := []bool{false, false, true, true, false}
+	assert.Equal(t, 2, currentUnit(m, units, hs, some, 50, false), "only a laid-out unit is current")
+	assert.Equal(t, -1, currentUnit(m, units, hs, make([]bool, 5), 0, false))
+}
+
+// While scrolling, the current row is a laid-out unit at the viewport's
+// top; while following, the newest message.
+func TestCurrentFollowsTheReader(t *testing.T) {
+	m := longModel(200)
+	host := newSimHost(uniform(200, 60))
+	var st State
+	for range 4 {
+		host.frame(t, &st, m, constEstimate(60))
+	}
+	assert.Equal(t, int32(199), host.current)
+	st.SetFollow(false)
+	host.wheel = -300
+	for range 6 {
+		host.frame(t, &st, m, constEstimate(60))
+	}
+	host.wheel = 0
+	host.frame(t, &st, m, constEstimate(60))
+	host.frame(t, &st, m, constEstimate(60))
+	y, ok := host.screenY(host.current)
+	require.True(t, ok, "the current unit is laid out")
+	assert.LessOrEqual(t, y, float32(0))
+	assert.Greater(t, y+60, float32(0), "it is the unit the viewport's top cuts")
 }
