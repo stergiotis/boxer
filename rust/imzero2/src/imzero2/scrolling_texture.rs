@@ -115,11 +115,65 @@ fn draw_textured_quad(
     painter.add(mesh);
 }
 
+/// When a cache entry was last drawn, by pass and by clock.
+#[derive(Clone, Copy)]
+pub(crate) struct Touched {
+    frame: u64,
+    at: Option<crate::imzero2::clock::Instant>,
+}
+
+/// The pass counter and clock a texture cache ages its entries by
+/// (ADR-0363 §M7, proposed). Age is measured on the clock, because the pass
+/// rate varies from vsync to a one-second heartbeat to a hidden window's few
+/// passes a second, and an age counted in passes stretches with it. A floor
+/// in passes keeps an entry the last few passes drew: after a suspend or a
+/// compositor stall the clock jumps while the entry is still on screen.
+#[derive(Default)]
+pub(crate) struct IdleClock {
+    frame: u64,
+    now: Option<crate::imzero2::clock::Instant>,
+}
+
+impl IdleClock {
+    /// An entry not drawn for this long is dropped.
+    pub(crate) const MAX_AGE: std::time::Duration = std::time::Duration::from_secs(10);
+    /// An entry drawn within this many passes is kept whatever the clock
+    /// says. Anything on screen is drawn every pass, so this only has to
+    /// outlast a skipped pass or two.
+    pub(crate) const MIN_AGE_FRAMES: u64 = 8;
+    /// The age in passes used when no clock reading is available (an entry
+    /// touched before the first tick).
+    const FALLBACK_AGE_FRAMES: u64 = 600;
+
+    pub(crate) fn advance(&mut self, now: crate::imzero2::clock::Instant) {
+        self.frame = self.frame.wrapping_add(1);
+        self.now = Some(now);
+    }
+
+    pub(crate) fn touch(&self) -> Touched {
+        Touched {
+            frame: self.frame,
+            at: self.now,
+        }
+    }
+
+    pub(crate) fn is_idle(&self, t: Touched) -> bool {
+        let frames = self.frame.saturating_sub(t.frame);
+        if frames < Self::MIN_AGE_FRAMES {
+            return false;
+        }
+        match (self.now, t.at) {
+            (Some(now), Some(at)) => now.duration_since(at) >= Self::MAX_AGE,
+            _ => frames >= Self::FALLBACK_AGE_FRAMES,
+        }
+    }
+}
+
 struct Entry {
     tex: TextureHandle,
     width_slots: u32,
     height_slots: u32,
-    last_touched_frame: u64,
+    touched: Touched,
     /// CPU-side mirror of the GPU texture pixels (straight RGBA, row-
     /// major, top-left origin). Maintained alongside `set_partial`
     /// updates so the SVG-export cache can hand the visitor a complete
@@ -137,7 +191,7 @@ struct Entry {
 #[derive(Default)]
 pub struct ScrollingTextureCache {
     entries: HashMap<u64, Entry>,
-    frame: u64,
+    clock: IdleClock,
     texture_cache: Option<crate::imzero2::svgexport::TexturePixelCacheHandle>,
     /// Set while a capture replay runs (ADR-0281 §SD5): nothing is uploaded
     /// into the capture context and no live entry changes; a texture the
@@ -147,10 +201,6 @@ pub struct ScrollingTextureCache {
 }
 
 impl ScrollingTextureCache {
-    /// Default eviction threshold: entry not touched for this many frames → dropped.
-    /// ~10 s at 60 Hz.
-    const MAX_AGE_FRAMES: u64 = 600;
-
     pub fn new() -> Self {
         Self::default()
     }
@@ -164,16 +214,21 @@ impl ScrollingTextureCache {
         self.texture_cache = Some(handle);
     }
 
-    /// Advance the frame counter and evict stale entries. Called once per
-    /// frame by the interpreter's `interpret_commands_outer`; dropped entries
+    /// Advance the pass counter and evict entries idle for
+    /// [`IdleClock::MAX_AGE`]. Called once per frame by the interpreter's
+    /// `interpret_commands_outer`; dropped entries
     /// release their `TextureHandle` at the next frame boundary (egui defers
     /// GPU destruction to the end of the frame).
     pub fn tick(&mut self) {
-        self.frame = self.frame.wrapping_add(1);
-        let frame = self.frame;
+        self.tick_at(crate::imzero2::clock::Instant::now());
+    }
+
+    pub fn tick_at(&mut self, now: crate::imzero2::clock::Instant) {
+        self.clock.advance(now);
+        let clock = &self.clock;
         let cache = self.texture_cache.as_ref();
         self.entries.retain(|_, e| {
-            let keep = frame.saturating_sub(e.last_touched_frame) < Self::MAX_AGE_FRAMES;
+            let keep = !clock.is_idle(e.touched);
             if !keep && let Some(cache) = cache {
                 // The evicted texture's id is never drawn again; its pixel
                 // mirror would otherwise stay in the export cache for good.
@@ -257,7 +312,7 @@ impl ScrollingTextureCache {
                     tex,
                     width_slots,
                     height_slots,
-                    last_touched_frame: self.frame,
+                    touched: self.clock.touch(),
                     rgba,
                     mirror_stale: false,
                     nearest,
@@ -352,10 +407,10 @@ impl ScrollingTextureCache {
         } else {
             self.ensure_entry(ctx, id, width_slots, height_slots, filter_opts)
         };
-        let frame = self.frame;
+        let touched = self.clock.touch();
         let entry = self.entries.get_mut(&id).expect("entry just ensured above");
         if !read_only {
-            entry.last_touched_frame = frame;
+            entry.touched = touched;
         }
 
         if !read_only && payload_valid && new_count > 0 {
@@ -794,13 +849,33 @@ mod tests {
     }
 
     #[test]
+    fn idle_eviction_follows_the_clock_at_a_slow_cadence() {
+        let ctx = Context::default();
+        let (mut c, _mirror) = cache_with_mirror();
+        let t0 = crate::imzero2::clock::Instant::now();
+        c.tick_at(t0);
+        c.ensure_entry(&ctx, 9, 4, 2, TextureOptions::NEAREST);
+        let secs = IdleClock::MAX_AGE.as_secs() + 2;
+        for s in 1..=secs {
+            c.tick_at(t0 + std::time::Duration::from_secs(s));
+        }
+        assert!(
+            c.entries.is_empty(),
+            "evicted within {secs} one-second passes"
+        );
+    }
+
+    #[test]
     fn idle_eviction_drops_the_mirror_entry() {
         let ctx = Context::default();
         let (mut c, mirror) = cache_with_mirror();
+        let t0 = crate::imzero2::clock::Instant::now();
+        c.tick_at(t0);
         c.ensure_entry(&ctx, 9, 4, 2, TextureOptions::NEAREST);
         let tex = tex_id(&c, 9);
-        for _ in 0..ScrollingTextureCache::MAX_AGE_FRAMES {
-            c.tick();
+        let later = t0 + IdleClock::MAX_AGE;
+        for _ in 0..IdleClock::MIN_AGE_FRAMES {
+            c.tick_at(later);
         }
         assert!(c.entries.is_empty());
         assert!(mirror.lock().unwrap().get(tex).is_none());

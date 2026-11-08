@@ -22,7 +22,9 @@ use std::collections::HashMap;
 
 use egui::{Color32, ColorImage, Context, Rect, Sense, TextureHandle, TextureOptions, pos2, vec2};
 
-use crate::imzero2::scrolling_texture::{HOVER_RC_NONE, color32_from_rgba_u32, filter_to_options};
+use crate::imzero2::scrolling_texture::{
+    HOVER_RC_NONE, IdleClock, Touched, color32_from_rgba_u32, filter_to_options,
+};
 
 // Fit wire values — mirror FitE in the Go IDL.
 pub const FIT_NATIVE: u8 = 0;
@@ -35,13 +37,13 @@ struct Entry {
     w: u32,
     h: u32,
     content_version: u64,
-    last_touched_frame: u64,
+    touched: Touched,
 }
 
 #[derive(Default)]
 pub struct ImageCache {
     entries: HashMap<u64, Entry>,
-    frame: u64,
+    clock: IdleClock,
     /// Optional CPU mirror of uploaded pixels. Populated on every
     /// `upload` so the SVG exporter can embed image-widget textures as
     /// `<image>` data URLs. Defaults to `None` (no mirroring) for
@@ -56,10 +58,6 @@ pub struct ImageCache {
 }
 
 impl ImageCache {
-    /// Default eviction threshold — matches `ScrollingTextureCache::MAX_AGE_FRAMES`
-    /// (~10 s at 60 Hz). Entries not touched within this window get dropped.
-    const MAX_AGE_FRAMES: u64 = 600;
-
     pub fn new() -> Self {
         Self::default()
     }
@@ -74,14 +72,19 @@ impl ImageCache {
         self.texture_cache = Some(handle);
     }
 
-    /// Advance the per-frame counter and evict stale entries. Called once per
-    /// real frame from `interpret_commands_outer`.
+    /// Advance the pass counter and evict entries idle for
+    /// [`IdleClock::MAX_AGE`]. Called once per real frame from
+    /// `interpret_commands_outer`.
     pub fn tick(&mut self) {
-        self.frame = self.frame.wrapping_add(1);
-        let frame = self.frame;
+        self.tick_at(crate::imzero2::clock::Instant::now());
+    }
+
+    pub fn tick_at(&mut self, now: crate::imzero2::clock::Instant) {
+        self.clock.advance(now);
+        let clock = &self.clock;
         let cache = self.texture_cache.as_ref();
         self.entries.retain(|_, e| {
-            let keep = frame.saturating_sub(e.last_touched_frame) < Self::MAX_AGE_FRAMES;
+            let keep = !clock.is_idle(e.touched);
             if !keep && let Some(cache) = cache {
                 // The evicted texture's id is never drawn again; its pixel
                 // mirror would otherwise stay in the export cache for good.
@@ -139,8 +142,19 @@ impl ImageCache {
             return;
         }
         let color_pixels: Vec<Color32> = pixels.iter().map(|v| color32_from_rgba_u32(*v)).collect();
-        let img = ColorImage::new([w as usize, h as usize], color_pixels.clone());
-        let tex = ctx.load_texture(format!("image:{id}"), img, filter_opts);
+        let img = ColorImage::new([w as usize, h as usize], color_pixels);
+        // New pixels of the same shape go into the texture already allocated,
+        // which keeps its id: a widget re-uploading every frame (a live view)
+        // then updates one texture instead of allocating one and freeing
+        // another each pass, and the export mirror stays keyed by one id.
+        let tex = match self.entries.get(&id) {
+            Some(e) if (e.w, e.h) == (w, h) => {
+                let mut tex = e.tex.clone();
+                tex.set(img, filter_opts);
+                tex
+            }
+            _ => ctx.load_texture(format!("image:{id}"), img, filter_opts),
+        };
 
         // Mirror to the SVG-export pixel cache when one is attached. Done
         // before inserting the entry so the cache always sees the same
@@ -172,7 +186,7 @@ impl ImageCache {
                 w,
                 h,
                 content_version,
-                last_touched_frame: self.frame,
+                touched: self.clock.touch(),
             },
         );
         // Every `load_texture` hands out a fresh TextureId, so the replaced
@@ -226,7 +240,7 @@ impl ImageCache {
             }
         }
         let entry = self.entries.get_mut(&id)?;
-        entry.last_touched_frame = self.frame;
+        entry.touched = self.clock.touch();
         Some(entry.tex.id())
     }
 
@@ -328,7 +342,7 @@ impl ImageCache {
                 // hit (version moved, empty pixels) still draws the old frame
                 // below rather than starving.
                 if let Some(e) = self.entries.get_mut(&id) {
-                    e.last_touched_frame = self.frame;
+                    e.touched = self.clock.touch();
                     // fall through: draw the stale entry
                 } else {
                     let (_rect, resp) = ui
@@ -363,7 +377,7 @@ impl ImageCache {
                 ui.allocate_exact_size(vec2(0.0, 0.0), Sense::hover().union(Sense::click()));
             return (resp, HOVER_RC_NONE, true);
         };
-        entry.last_touched_frame = self.frame;
+        entry.touched = self.clock.touch();
 
         let native_w = entry.w;
         let native_h = entry.h;
@@ -427,22 +441,105 @@ mod tests {
     }
 
     #[test]
-    fn reupload_drops_the_replaced_mirror_entry() {
+    fn reupload_of_a_new_shape_drops_the_replaced_mirror_entry() {
         let ctx = Context::default();
         let (mut c, mirror) = cache_with_mirror();
-        let px = [0xff00_00ffu32; 4];
-        let first = c.ensure(&ctx, 7, 2, 2, 1, TextureOptions::NEAREST, &px).unwrap();
-        let second = c.ensure(&ctx, 7, 2, 2, 2, TextureOptions::NEAREST, &px).unwrap();
-        assert_ne!(
-            first, second,
-            "load_texture hands out a fresh id per upload"
-        );
+        let first = c
+            .ensure(
+                &ctx,
+                7,
+                2,
+                2,
+                1,
+                TextureOptions::NEAREST,
+                &[0xff00_00ffu32; 4],
+            )
+            .unwrap();
+        let second = c
+            .ensure(
+                &ctx,
+                7,
+                4,
+                1,
+                2,
+                TextureOptions::NEAREST,
+                &[0xff00_00ffu32; 4],
+            )
+            .unwrap();
+        assert_ne!(first, second, "a new shape allocates a new texture");
         let m = mirror.lock().unwrap();
         assert!(
             m.get(first).is_none(),
             "the replaced texture's pixels must leave the mirror"
         );
         assert!(m.get(second).is_some());
+    }
+
+    #[test]
+    fn reupload_of_the_same_shape_keeps_the_texture() {
+        let ctx = Context::default();
+        let (mut c, mirror) = cache_with_mirror();
+        let first = c
+            .ensure(
+                &ctx,
+                7,
+                2,
+                2,
+                1,
+                TextureOptions::NEAREST,
+                &[0xff00_00ffu32; 4],
+            )
+            .unwrap();
+        let second = c
+            .ensure(
+                &ctx,
+                7,
+                2,
+                2,
+                2,
+                TextureOptions::NEAREST,
+                &[0x00ff_00ffu32; 4],
+            )
+            .unwrap();
+        assert_eq!(
+            first, second,
+            "new pixels of the same shape go into the same texture"
+        );
+        let m = mirror.lock().unwrap();
+        let cached = m.get(second).expect("mirror holds the new pixels");
+        assert_eq!(&cached.rgba[..4], &[0x00, 0xff, 0x00, 0xff]);
+    }
+
+    #[test]
+    fn idle_eviction_follows_the_clock_at_a_slow_cadence() {
+        // One pass a second, as under the reactive heartbeat: an entry nothing
+        // draws goes after about MAX_AGE, not after hundreds of passes.
+        let ctx = Context::default();
+        let (mut c, _mirror) = cache_with_mirror();
+        let t0 = crate::imzero2::clock::Instant::now();
+        c.tick_at(t0);
+        c.ensure(&ctx, 3, 1, 1, 1, TextureOptions::NEAREST, &[0u32; 1]).unwrap();
+        let secs = IdleClock::MAX_AGE.as_secs() + 2;
+        for s in 1..=secs {
+            c.tick_at(t0 + std::time::Duration::from_secs(s));
+        }
+        assert!(
+            c.entries.is_empty(),
+            "evicted within {secs} one-second passes"
+        );
+    }
+
+    #[test]
+    fn a_long_pause_does_not_evict_what_the_last_pass_drew() {
+        // A suspended machine or a stalled compositor: the clock jumps, but the
+        // entry was drawn on the pass before, so it is still in use.
+        let ctx = Context::default();
+        let (mut c, _mirror) = cache_with_mirror();
+        let t0 = crate::imzero2::clock::Instant::now();
+        c.tick_at(t0);
+        c.ensure(&ctx, 3, 1, 1, 1, TextureOptions::NEAREST, &[0u32; 1]).unwrap();
+        c.tick_at(t0 + std::time::Duration::from_secs(3600));
+        assert_eq!(c.entries.len(), 1);
     }
 
     #[test]
@@ -460,9 +557,12 @@ mod tests {
         let ctx = Context::default();
         let (mut c, mirror) = cache_with_mirror();
         let px = [0u32; 1];
+        let t0 = crate::imzero2::clock::Instant::now();
+        c.tick_at(t0);
         let tex = c.ensure(&ctx, 3, 1, 1, 1, TextureOptions::NEAREST, &px).unwrap();
-        for _ in 0..ImageCache::MAX_AGE_FRAMES {
-            c.tick();
+        let later = t0 + IdleClock::MAX_AGE;
+        for _ in 0..IdleClock::MIN_AGE_FRAMES {
+            c.tick_at(later);
         }
         assert!(c.entries.is_empty());
         assert!(mirror.lock().unwrap().get(tex).is_none());

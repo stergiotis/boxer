@@ -59,6 +59,14 @@ pub fn apply_style_only(ctx: &Context, density: Density) {
         // IDS pt sizes. Display + Micro land in Name slots (no built-in
         // egui tier matches them).
         tokens::apply_typography(style, density);
+        // Linear glyph coverage on Linux, as FreeType and cairo blend it, in
+        // both themes (ADR-0363 §M7, proposed). egui's dark-mode default
+        // (`2c - c²`) draws text heavier than the desktop's own apps and than
+        // the SVG export, which a browser renders.
+        if cfg!(target_os = "linux") {
+            style.visuals.text_options.color_transfer_function =
+                egui::epaint::FontColorTransferFunction::Off;
+        }
     });
 }
 
@@ -182,4 +190,25 @@ pub fn apply_tour_neutral_overrides(ctx: &Context) {
         style.visuals.widgets.active.bg_stroke = inactive_stroke;
     });
     button::set_tour_neutral();
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// On Linux glyph coverage is blended linearly, as `FreeType` and cairo
+    /// draw it, so text weighs what it does in the desktop's own apps and in
+    /// the SVG export, which a browser renders. egui's dark-mode curve
+    /// (`2c - c²`) turns a half-covered pixel into three-quarters alpha.
+    /// ADR-0363 §M7 (proposed); the observation is zapfast's.
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn linux_text_coverage_is_linear_in_the_dark_theme() {
+        let ctx = Context::default();
+        apply_style_only(&ctx, Density::default());
+        assert_eq!(
+            ctx.global_style().visuals.text_options.color_transfer_function,
+            egui::epaint::FontColorTransferFunction::Off
+        );
+    }
 }
