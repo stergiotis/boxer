@@ -82,30 +82,44 @@ func Render(in Input) (res Result) {
 		bubbleW := paneW * frac
 		layout := chooseLayout(m, in.Viewer, in.Layout)
 
-		// A jump is consumed at the start of the frame: a quote strip
-		// requests one mid-loop, after the quoted (earlier) row has been
-		// drawn, so it must survive to the next frame's loop.
-		jump, jumpAlign := st.jump, scrollAlignCenter
-		if st.jumpTop {
-			jumpAlign = scrollAlignTop
-		}
-		st.jump, st.jumpTop = 0, false
 		n := m.Len()
-		first := max(0, n-st.Window())
-		if jump > 0 {
-			if j := int(jump - 1); j < first {
-				st.window = n - j
-				first = j
-			}
-		}
+		first := st.beginFrame(n)
 		rows := plan(m, loc, first)
 
 		renderHeader(ids, st, m, first)
 		if !in.FillHost {
 			c.UiSetMinHeight(minHeight)
 		}
-		for range c.ScrollArea().Vscroll(true).AutoShrink(false, false).KeepIter() {
+
+		// Last frame's readback, and from it the frame's plan: which units
+		// are laid out, what the rest stand in with, and whether the scroll
+		// is corrected for units above the viewport that changed height.
+		vt := &st.virt
+		viewSeq, contentSeq, unitsSeq := ids.ProbeSeq("view"), ids.ProbeSeq("content"), ids.ProbeSeq("units")
+		gap := styletokens.GapItems(dens)
+		textW := bubbleW
+		if layout == LayoutThread {
+			textW = paneW
+		}
+		fp := st.planFrame(c.CurrentApplicationState.StateManager.GetUiRect, viewSeq, contentSeq, unitsSeq,
+			rows, first, n, gap, func(u unit) float32 {
+				return estimate(m, rows, u, layout, in.Viewer, textW, dens)
+			})
+
+		c.CaptureUiAvailableRect(viewSeq)
+		for range c.ScrollArea().Vscroll(true).AutoShrink(false, false).Animated(!fp.correct).KeepIter() {
 			c.UiSetMinWidthAvailable()
+			c.CaptureUiAvailableRect(contentSeq)
+			// The spacing is pinned so a top-aligned scroll lands where it
+			// is asked to: egui leaves one item spacing above the cursor.
+			c.UiSetItemSpacing(gap, gap)
+			if fp.correct {
+				// ScrollToCursor is the one scroll the bindings offer: the
+				// cursor is moved to the offset asked for, and back.
+				c.AddSpace(fp.target + gap)
+				c.ScrollToCursor(scrollAlignTop)
+				c.AddSpace(-(fp.target + gap))
+			}
 			if first > 0 {
 				for range c.VerticalCentered().KeepIter() {
 					label := icons.PhArrowUp + " older (" + strconv.Itoa(first) + " more)"
@@ -117,12 +131,22 @@ func Render(in Input) (res Result) {
 					}
 				}
 			}
-			for _, r := range rows {
-				if jump > 0 && r.kind != rowDay && r.msg == jump-1 {
-					c.ScrollToCursor(jumpAlign)
+			c.CaptureUiAvailableRect(unitsSeq)
+			vt.walk(fp.absorb, c.AddSpace, func(i int) {
+				u := vt.units[i]
+				top, bot := unitProbes(ids, u.key)
+				c.CaptureUiAvailableRect(top)
+				for _, r := range rows[u.from:u.to] {
+					if i == fp.seekUnit && r.kind != rowDay {
+						vt.seekProbe = ids.ProbeSeq("seek")
+						c.CaptureUiAvailableRect(vt.seekProbe)
+						c.ScrollToCursor(st.seekAlign)
+					}
+					renderRow(in, m, st, r, layout, bubbleW, dens, loc, &res)
 				}
-				renderRow(in, m, st, r, layout, bubbleW, dens, loc, &res)
-			}
+				c.CaptureUiAvailableRect(bot)
+				vt.drawn = append(vt.drawn, laidOut{key: u.key, assumed: vt.hs[i], top: top, bot: bot})
+			})
 			if st.Follow() {
 				c.ScrollToCursor(scrollAlignBottom)
 			}

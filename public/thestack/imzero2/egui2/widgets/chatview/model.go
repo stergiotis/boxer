@@ -178,6 +178,19 @@ type State struct {
 	// fits holds the measured width of the viewer's host-drawn bubbles, by
 	// ordinal (see blockFit).
 	fits map[int]blockFit
+	// seek is the jump under way (ordinal+1; 0 none): its target is laid
+	// out and the scroll asked for it every frame until the target sits
+	// where the jump put it, since the units between it and the viewport
+	// may still be measured on the way. seekAlign is its ScrollToCursor
+	// alignment, seekLeft the shown frames it may still take, seekErr the
+	// distance left at the last readback (0 before the first).
+	seek      int32
+	seekAlign uint8
+	seekLeft  int
+	seekErr   float32
+	// virt is the height cache and the viewport readback (virt.go); its
+	// zero value has measured nothing.
+	virt virt
 }
 
 // blockFit is one viewer's bubble's host-drawn body, measured: its natural
@@ -208,7 +221,8 @@ func (inst *State) Follow() bool { return !inst.unfollow }
 // SetFollow pins the view to the tail (true) or releases it.
 func (inst *State) SetFollow(on bool) { inst.unfollow = !on }
 
-// Window is how many of the newest messages are drawn.
+// Window is how many of the newest messages the transcript holds; of
+// those, only the ones near the viewport are laid out (see the package doc).
 func (inst *State) Window() int {
 	if inst.window <= 0 {
 		return defaultWindow
@@ -216,8 +230,8 @@ func (inst *State) Window() int {
 	return inst.window
 }
 
-// SetWindow sets how many of the newest messages are drawn; 0 restores the
-// default.
+// SetWindow sets how many of the newest messages the transcript holds; 0
+// restores the default.
 func (inst *State) SetWindow(n int) { inst.window = n }
 
 // JumpTo asks the next Render to bring a message into view, widening the

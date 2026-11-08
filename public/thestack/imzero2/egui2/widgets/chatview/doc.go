@@ -13,10 +13,10 @@
 // takes: [Model] is one slice per attribute over message ordinals, with the
 // reactions as a ragged co-array (values plus offsets), and [State] carries
 // what must survive frames — the selection, whether the view follows the
-// tail, the tail window, a pending jump. [Render] draws where it is called
-// and reports the frame's clicks in a [Result]. Ordinals are the widget's
-// only identity; a host whose model is rebuilt between frames projects its
-// own keys onto State before each Render.
+// tail, the tail window, a pending jump, the measured row heights. [Render]
+// draws where it is called and reports the frame's clicks in a [Result].
+// Ordinals are the widget's only identity; a host whose model is rebuilt
+// between frames projects its own keys onto State before each Render.
 //
 // The widget knows nothing about how a body is rendered beyond plain wrapped
 // text: [Input.Block] lets the host draw a message's body itself — a markdown
@@ -36,4 +36,35 @@
 // "older" affordance above the first drawn row widens the window. The
 // bubble width is a fraction of the pane's width, read from the pane-size
 // probe and held across the frame the probe is absent.
+//
+// # Virtualization
+//
+// Of the window, only the messages near the viewport are laid out (ADR-0363
+// M5, after the technique of the zapfast messaging client). The unit is a
+// message or system row together with the day separator that opens it,
+// keyed by its ordinal. A unit within three viewports above the viewport or
+// one below it (never less than a fixed floor) is laid out, with a probe
+// either side of it; while following, so are the units that fill a
+// viewport and the margin above the tail; a jump's target is laid out
+// wherever it is. Every other unit
+// stands in as space: its measured height from the cache in [State], or,
+// until it has been laid out once, an estimate from its body's length and
+// the chrome its rows carry. The estimate is kept until a measurement
+// replaces it, so a unit stands in with the same height every frame.
+//
+// Every readback is one frame late — the host runs one egui pass per frame
+// — so a unit's height is known the frame after it is first laid out, and a
+// unit is first laid out a few viewports before it shows. When units that
+// lay entirely above the viewport turn out taller or shorter than they were
+// assumed to be, what the reader is looking at moves for that one frame.
+// The next frame takes the difference out of the space above the first
+// laid-out unit and asks for a scroll by as much, which lands the frame
+// after; from then on the content sits where it was. The scroll is asked
+// with ScrollToCursor at an absolute offset, the only scroll the bindings
+// offer, so the wheel movement of the frame before a correction is lost.
+// No correction is made while following or while a jump is under way: both
+// scroll to a cursor in their own frame's layout. A jump stays under way,
+// asking for its target every frame, until the target sits where the jump
+// put it, the reader scrolls away, or a bound of frames runs out, since the
+// units it passes may be measured on the way.
 package chatview
