@@ -735,6 +735,13 @@ func (in *Input) renderHeaders(res *Result, et c.EndETableFluid, cols []colwidth
 						} else {
 							glyph = in.Sort.Glyph(col.Arrow)
 						}
+						// An unsorted column keeps the glyph's room, so its
+						// header does not change width when a sort starts,
+						// and a one-letter name is not a target the width of
+						// one letter (ADR-0363 (proposed) M1).
+						if glyph == "" {
+							glyph = "\u00a0\u00a0"
+						}
 						for range c.HoverText(hover + hint).KeepIter() {
 							btn := c.Button(ids.PrepareSeq(uint64(pos)),
 								c.Atoms().BeginRichText(name+glyph).Strong().Monospace().End().Keep()).
