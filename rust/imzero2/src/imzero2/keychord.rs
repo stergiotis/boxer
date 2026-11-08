@@ -53,13 +53,15 @@ pub fn drain_shell_chords(ctx: &egui::Context) -> u64 {
                 modifiers,
                 ..
             } = ev
+                && modifiers.alt
+                && !modifiers.ctrl
+                && !modifiers.command
+                && !modifiers.mac_cmd
             {
-                if modifiers.alt && !modifiers.ctrl && !modifiers.command && !modifiers.mac_cmd {
-                    let bit = crate::imzero2::shellchords::shell_chord_bit(*key, modifiers.shift);
-                    if bit != 0 {
-                        chords |= bit;
-                        return false;
-                    }
+                let bit = crate::imzero2::shellchords::shell_chord_bit(*key, modifiers.shift);
+                if bit != 0 {
+                    chords |= bit;
+                    return false;
                 }
             }
             true
@@ -138,13 +140,15 @@ mod tests {
     fn a_chord_leaves_the_queue_with_its_text_and_the_rest_stays() {
         let ctx = egui::Context::default();
         let alt = mods(false, false, true, false);
-        let mut raw = egui::RawInput::default();
-        raw.events = vec![
-            key(egui::Key::J, alt),
-            egui::Event::Text("j".to_owned()),
-            key(egui::Key::A, egui::Modifiers::NONE),
-            key(egui::Key::J, mods(false, true, false, true)),
-        ];
+        let raw = egui::RawInput {
+            events: vec![
+                key(egui::Key::J, alt),
+                egui::Event::Text("j".to_owned()),
+                key(egui::Key::A, egui::Modifiers::NONE),
+                key(egui::Key::J, mods(false, true, false, true)),
+            ],
+            ..Default::default()
+        };
         ctx.begin_pass(raw);
         let set = drain_shell_chords(&ctx);
         assert_eq!(
@@ -171,11 +175,13 @@ mod tests {
     #[test]
     fn without_a_chord_nothing_is_touched() {
         let ctx = egui::Context::default();
-        let mut raw = egui::RawInput::default();
-        raw.events = vec![
-            key(egui::Key::A, mods(false, false, true, false)),
-            egui::Event::Text("a".to_owned()),
-        ];
+        let raw = egui::RawInput {
+            events: vec![
+                key(egui::Key::A, mods(false, false, true, false)),
+                egui::Event::Text("a".to_owned()),
+            ],
+            ..Default::default()
+        };
         ctx.begin_pass(raw);
         assert_eq!(drain_shell_chords(&ctx), 0);
         assert_eq!(ctx.input(|i| i.events.len()), 2);

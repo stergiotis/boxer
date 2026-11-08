@@ -293,6 +293,8 @@ func ShellChordsRustFile() string {
 	b.WriteString("// from the Go table and fails if the two disagree.\n\n")
 	b.WriteString("/// The bit a key pressed with Alt (and Shift as stated) sets in the shell's\n")
 	b.WriteString("/// per-frame chord set; 0 for a key that is no chord.\n")
+	b.WriteString("// One arm per chord: a chord bound to two keys is two arms with one bit.\n")
+	b.WriteString("#[allow(clippy::match_same_arms)]\n")
 	b.WriteString("pub fn shell_chord_bit(k: egui::Key, shift: bool) -> u64 {\n    match (k, shift) {\n")
 	arms := make([]string, len(keycodes.ShellChords))
 	width := 0

@@ -6,6 +6,8 @@
 
 /// The bit a key pressed with Alt (and Shift as stated) sets in the shell's
 /// per-frame chord set; 0 for a key that is no chord.
+// One arm per chord: a chord bound to two keys is two arms with one bit.
+#[allow(clippy::match_same_arms)]
 pub fn shell_chord_bit(k: egui::Key, shift: bool) -> u64 {
     match (k, shift) {
         (egui::Key::J, false) => 1u64 << 0,          // FocusNext

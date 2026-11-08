@@ -378,8 +378,7 @@ func definitionsWidget() (widgets []*ir.BuilderFactoryNode) {
 	let style = c.style_of(c.theme());
 	let mut lj = egui::text::LayoutJob::default();
 	let mut link_of_section: Vec<Option<usize>> = Vec::new();
-	let mut atom_index: u32 = 0;
-	for atom in atoms.into_iter() {
+	for (atom_index, atom) in (0u32..).zip(atoms) {
 		let link = link_atoms.iter().position(|&a| a == atom_index);
 		let before = lj.sections.len();
 		if let egui::AtomKind::Text(wt) = atom.kind {
@@ -416,7 +415,6 @@ func definitionsWidget() (widgets []*ir.BuilderFactoryNode) {
 		for _ in before..lj.sections.len() {
 			link_of_section.push(link);
 		}
-		atom_index += 1;
 	}
 	imzero2_egui::style::linked::LinkedLabel::new(lj, link_of_section)
 };

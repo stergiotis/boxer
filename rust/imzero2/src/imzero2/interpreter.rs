@@ -370,7 +370,7 @@ impl TableCell {
 }
 
 /// Draws one table cell's content under the column's alignment. A left
-/// column keeps the cell's own layout, which egui_extras inherits from
+/// column keeps the cell's own layout, which `egui_extras` inherits from
 /// the table's surroundings; the other two keep that layout's vertical
 /// placement and move only the horizontal one, so the three read on one
 /// baseline. Under a vertical layout that is its cross alignment; under
@@ -6473,8 +6473,7 @@ egui::Grid::new(i);
                     let style = c.style_of(c.theme());
                     let mut lj = egui::text::LayoutJob::default();
                     let mut link_of_section: Vec<Option<usize>> = Vec::new();
-                    let mut atom_index: u32 = 0;
-                    for atom in atoms.into_iter() {
+                    for (atom_index, atom) in (0u32..).zip(atoms) {
                         let link = link_atoms.iter().position(|&a| a == atom_index);
                         let before = lj.sections.len();
                         if let egui::AtomKind::Text(wt) = atom.kind {
@@ -6511,7 +6510,6 @@ egui::Grid::new(i);
                         for _ in before..lj.sections.len() {
                             link_of_section.push(link);
                         }
-                        atom_index += 1;
                     }
                     imzero2_egui::style::linked::LinkedLabel::new(lj, link_of_section)
                 };
@@ -11649,9 +11647,9 @@ egui::Window::new(label).id(i);
         //tracing::debug!("late culled widget {:?}", f);
         None
     }
-    /// apply_widget for a TextEdit: shown through TextEdit::show so the
+    /// `apply_widget` for a `TextEdit`: shown through `TextEdit::show` so the
     /// galley it laid out is kept for reportCursorRects, with the response
-    /// sent through r7 exactly as apply_widget sends it.
+    /// sent through r7 exactly as `apply_widget` sends it.
     pub fn apply_text_edit(
         &mut self,
         w: egui::TextEdit<'_>,
