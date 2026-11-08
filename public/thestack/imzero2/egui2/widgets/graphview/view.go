@@ -787,6 +787,18 @@ func (v *View) stepAndPaint(w, h float32, fp ForceParams, ap AuraParams, topoCha
 
 	v.updateAuras(ap, w, h)
 	v.paint(w, h)
+	if v.wantsFrame() {
+		c.RequestRepaint()
+	}
+}
+
+// wantsFrame says the next frame has work of its own: the layout is still
+// moving, or the fit latch is still counting frames. Under the reactive
+// cadence nothing else asks for one, and the picture would advance only
+// on input (ADR-0062); it stops asking once the layout settles, so a
+// resting graph costs no frames.
+func (v *View) wantsFrame() bool {
+	return !v.IsSettled() || v.fitPending
 }
 
 // stepLayout advances a force layout by this frame's steps: the fast-forward
