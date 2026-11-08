@@ -605,11 +605,9 @@ func (inst *GraphviewDriver) render(edgesRec arrow.RecordBatch, ec networkEdgesC
 	o.Force.Paused = inst.paused || inst.frozen
 	o.Hier.Orientation = inst.effectiveOrientation()
 	o.LabelsAlways = inst.labeled
-	// The aura colours are the WIDGET's cycle rather than this contract's group
-	// palette, which the node bodies take: that palette is the *Subtle
-	// background tones, chosen dark so one light ink reads on them, and a
-	// translucent blob of one over the same dark panel would be a blob nobody
-	// can see. The legend names the group, so the reader pairs them by label.
+	// The aura colours are the WIDGET's cycle in sorted id order, and the node
+	// bodies take the same cycle at the same positions (graphviewGroupRanks),
+	// so a legend swatch is the colour of the nodes it names.
 	//
 	// The aura reach stays at the widget's default. Shortening it looks like a
 	// way to tighten the blobs and is not: the ramps of one group stop
@@ -1360,6 +1358,57 @@ func (inst *GraphviewDriver) effectiveSeeds() (rows []int32) {
 	return
 }
 
+// graphviewCycleColor is the k-th colour of the cycle the widget's auras take.
+func graphviewCycleColor(k int) color.Color {
+	return color.Hex(styletokens.QualitativeCycle(k).AsHex())
+}
+
+// graphviewSortedRanks gives each distinct non-empty value its position in
+// sorted order, which is how the widget numbers its auras (it ignores an empty
+// id).
+func graphviewSortedRanks(values []string) map[string]int {
+	sorted := slices.Compact(slices.Sorted(slices.Values(values)))
+	ranks := make(map[string]int, len(sorted))
+	for _, v := range sorted {
+		if v != "" {
+			ranks[v] = len(ranks)
+		}
+	}
+	return ranks
+}
+
+// graphviewGroupRanks is each `group`'s position in the cycle: the aura's own
+// where the group has one, so a node and its aura agree, and past the auras in
+// declaration order where a `groups` set left the group without one.
+func graphviewGroupRanks(m *netModel) map[string]int {
+	ranks := graphviewSortedRanks(m.AuraValues)
+	for _, g := range m.groups() {
+		if _, seen := ranks[g]; !seen {
+			ranks[g] = len(ranks)
+		}
+	}
+	return ranks
+}
+
+// graphviewVertexFill resolves a node disc's colour under the contract's
+// tone-over-group rule. It differs from the layered panel's netModel.vertexFill
+// in the role the colour plays: the disc carries its label outside, so it is a
+// foreground mark on the panel, and takes the Default tone or the qualitative
+// cycle rather than the *Subtle tones a label sits on. ok=false leaves the
+// style default in charge.
+func graphviewVertexFill(m *netModel, ranks map[string]int, i int) (col color.Color, ok bool) {
+	if tone := m.Tone[i]; tone != "" {
+		if col, ok = networkTone(tone, true); ok {
+			return
+		}
+	}
+	k, has := ranks[m.Group[i]]
+	if !has {
+		return
+	}
+	return graphviewCycleColor(k), true
+}
+
 // graphviewDonutColors resolves the `donut_tones` column to the colours the
 // ring slices take (§SD2). The column is tone FAMILIES rather than colours,
 // like `tone` itself, so the design system stays the one place a family's
@@ -1688,9 +1737,10 @@ func (inst *GraphviewDriver) deriveChannels(m *netModel) {
 	}
 
 	// Fill: `tone_by`, else the contract's tone-over-group.
+	ranks := graphviewGroupRanks(m)
 	for i := range n {
 		nc.Color[i] = color.Color{}
-		if col, ok := m.vertexFill(i); ok {
+		if col, ok := graphviewVertexFill(m, ranks, i); ok {
 			nc.Color[i] = col
 		}
 	}
@@ -1713,19 +1763,13 @@ func (inst *GraphviewDriver) deriveChannels(m *netModel) {
 				}
 			}
 		case lbl != nil:
-			// A label takes the group palette by distinct value, in the order
-			// the rows first name them.
-			idx := make(map[string]int, 8)
+			// A label takes the cycle by its sorted position, the order the
+			// auras take theirs, so `tone_by = group` agrees with them.
+			labelRanks := graphviewSortedRanks(lbl)
 			for i, l := range lbl {
-				if l == "" {
-					continue
+				if k, has := labelRanks[l]; has {
+					nc.Color[i] = graphviewCycleColor(k)
 				}
-				k, seen := idx[l]
-				if !seen {
-					k = len(idx)
-					idx[l] = k
-				}
-				nc.Color[i] = networkGroupColor(k)
 			}
 		case sets != nil:
 			inst.chanReasons = append(inst.chanReasons, "`tone_by = "+sel.Column+"`: a set cannot colour one node")

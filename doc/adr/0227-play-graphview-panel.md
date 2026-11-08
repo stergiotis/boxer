@@ -316,6 +316,19 @@ Accepted 2026-09-13. The panel, the shared network model and the Projection
 tab's reading of it (ADR-0230 §SD4) are in the tree. Later changes go in
 dated entries under `## Updates`.
 
+## Updates
+
+### 2026-11-08 — node discs take the aura cycle, not the Subtle tones
+
+SD4 kept the aura colours apart from the group palette because the palette is
+the Subtle tones, chosen so one light ink reads on a node body. A Graphview disc
+carries its label outside the disc, so that reason never applied to it, and the
+tones sat at about 1.1:1 against the dark panel. Node fills now take the
+qualitative cycle by the auras' sorted id order, so a legend swatch is the colour
+of its nodes. A `tone` takes its Default variant. The layered panel keeps the
+Subtle tones, since its labels sit on the body. The cycle's contrast limits on
+the light theme (ADR-0156) now apply to these discs.
+
 ## References
 
 - [ADR-0129](./0129-play-layered-graph-panel.md) — the contract this panel

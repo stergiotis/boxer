@@ -125,6 +125,8 @@ type netCaps struct {
 // a node body is a background, so the palette is background fills (dark, L≈0.2)
 // and the default light NodeText reads on them, where the kanban dot vocabulary
 // deliberately excludes the *Subtle tones because a dot is a foreground mark.
+// The layered panel's: a Graphview disc carries its label outside, so it is a
+// foreground mark too and takes graphviewVertexFill's colours instead.
 var networkGroupPalette = []styletokens.RGBA8{
 	styletokens.AccentSubtle,
 	styletokens.InfoSubtle,
@@ -697,8 +699,9 @@ func (inst *netModel) edgeStroke(i int) (col color.Color, ok bool) {
 }
 
 // groups lists the distinct `group` values in the order the vertices first
-// named them: the palette order of both panels and the aura order of the live
-// one, so a legend reads the same way twice.
+// named them: the palette order of the layered panel and the order the live
+// one reports them in. The live panel's colours follow the auras' sorted order
+// (graphviewGroupRanks).
 func (inst *netModel) groups() (out []string) {
 	if len(inst.groupIdx) == 0 {
 		return

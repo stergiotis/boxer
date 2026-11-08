@@ -206,9 +206,24 @@ func TestGraphviewTonedVertexKeepsItsAura(t *testing.T) {
 	b, _ := gvNodeByName(d, "b")
 	assert.Equal(t, []string{"x"}, a.Auras)
 	assert.Equal(t, []string{"x"}, b.Auras)
-	want, _ := networkTone("error", false)
-	assert.Equal(t, want, a.Color, "the tone still wins the fill")
+	want, _ := networkTone("error", true)
+	assert.Equal(t, want, a.Color, "the tone still wins the fill, in its foreground variant")
 	assert.NotEqual(t, a.Color, b.Color)
+}
+
+// A node takes the colour of its aura. The widget numbers auras by sorted id,
+// so the first group a query names is not the first colour.
+func TestGraphviewNodeFillMatchesItsAuraColour(t *testing.T) {
+	vr := netTonedVerts(t, []string{"a", "b", "c"}, []string{"zebra", "ant", ""}, []string{"", "", ""})
+	er := netEdges(t, []string{"a", "b"}, []string{"b", "c"}, nil)
+	d := gvBuild(t, er, vr)
+
+	zebra, _ := gvNodeByName(d, "a")
+	ant, _ := gvNodeByName(d, "b")
+	ungrouped, _ := gvNodeByName(d, "c")
+	assert.Equal(t, graphviewCycleColor(1), zebra.Color)
+	assert.Equal(t, graphviewCycleColor(0), ant.Color)
+	assert.Equal(t, color.Color{}, ungrouped.Color, "no group leaves the style default in charge")
 }
 
 // A vertex `weight` sizes the node and an edge `weight` widens the stroke,
