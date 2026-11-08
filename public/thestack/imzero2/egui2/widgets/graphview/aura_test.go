@@ -91,6 +91,25 @@ func TestAuraSingleNodeContourIsACircleAtTheExtent(t *testing.T) {
 	}
 }
 
+// A node with no declared radius has NaN in the slot (ADR-0232 §SD4), and the
+// kernel has to size it from the style default as the disc does: a NaN reach
+// computes an empty cell range, and the aura vanishes with the legend still
+// listing it.
+func TestAuraUnsetRadiusTakesTheStyleDefault(t *testing.T) {
+	nodes := []NodeSpec{{Id: 1, Auras: []string{"A"}}}
+	g, set, cm := setupField(t, nodes)
+	p := AuraParams{Enabled: true, CellSize: 2, DrawLimit: 0.5}.withDefaults()
+	var f auraField
+	f.compute(&g, cm, &set, nil, 5, 400, 400, p)
+	var out rings
+	f.contours(0, &out)
+	require.Equal(t, 1, out.count(), "the unset radius still draws its aura")
+	xs, ys := out.ring(0)
+	extent := float64(kernelFor(5, p).extent(p.DrawLimit))
+	want := math.Pi * extent * extent
+	require.InDelta(t, want, -float64(signedArea(xs, ys)), want*0.1)
+}
+
 func TestAuraAccumulationIsAComplementaryProduct(t *testing.T) {
 	nodes := []NodeSpec{{Id: 1, Radius: 30, Auras: []string{"A"}, PinX: -50}, {Id: 2, Radius: 30, Auras: []string{"A"}, PinX: 50}}
 	g, set, cm := setupField(t, nodes)

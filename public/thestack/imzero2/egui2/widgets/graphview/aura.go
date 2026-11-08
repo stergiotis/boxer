@@ -297,7 +297,7 @@ func (f *auraField) compute(g *graph, cm cam.Camera, set *auraSet, hidden map[st
 		if len(mem) == 0 {
 			continue
 		}
-		r := g.radius[s]
+		r := g.radiusOr(s, defaultRadius)
 		if r <= 0 {
 			r = defaultRadius
 		}
