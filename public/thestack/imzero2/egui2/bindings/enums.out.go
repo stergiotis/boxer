@@ -183,32 +183,33 @@ const (
 	FuncProcIdTimeRangePicker                     FuncProcIdE = FuncProcIdOffset + 175
 	FuncProcIdTintedScope                         FuncProcIdE = FuncProcIdOffset + 176
 	FuncProcIdUiClipToMaxRect                     FuncProcIdE = FuncProcIdOffset + 177
-	FuncProcIdUiDisable                           FuncProcIdE = FuncProcIdOffset + 178
-	FuncProcIdUiScrollWithDelta                   FuncProcIdE = FuncProcIdOffset + 179
-	FuncProcIdUiSetHeight                         FuncProcIdE = FuncProcIdOffset + 180
-	FuncProcIdUiSetItemSpacing                    FuncProcIdE = FuncProcIdOffset + 181
-	FuncProcIdUiSetMaxHeight                      FuncProcIdE = FuncProcIdOffset + 182
-	FuncProcIdUiSetMaxWidth                       FuncProcIdE = FuncProcIdOffset + 183
-	FuncProcIdUiSetMinHeight                      FuncProcIdE = FuncProcIdOffset + 184
-	FuncProcIdUiSetMinWidth                       FuncProcIdE = FuncProcIdOffset + 185
-	FuncProcIdUiSetMinWidthAvailable              FuncProcIdE = FuncProcIdOffset + 186
-	FuncProcIdUiSetWidth                          FuncProcIdE = FuncProcIdOffset + 187
-	FuncProcIdUiWithLayout                        FuncProcIdE = FuncProcIdOffset + 188
-	FuncProcIdVectorSize                          FuncProcIdE = FuncProcIdOffset + 189
-	FuncProcIdVertical                            FuncProcIdE = FuncProcIdOffset + 190
-	FuncProcIdVerticalCentered                    FuncProcIdE = FuncProcIdOffset + 191
-	FuncProcIdVerticalCenteredJustified           FuncProcIdE = FuncProcIdOffset + 192
-	FuncProcIdWarnIfDebugBuild                    FuncProcIdE = FuncProcIdOffset + 193
-	FuncProcIdWidgetText                          FuncProcIdE = FuncProcIdOffset + 194
-	FuncProcIdWidgetsGlobalThemePreferenceButtons FuncProcIdE = FuncProcIdOffset + 195
-	FuncProcIdWindow                              FuncProcIdE = FuncProcIdOffset + 196
-	FuncProcIdWindowPlace                         FuncProcIdE = FuncProcIdOffset + 197
+	FuncProcIdUiClipToMaxRectX                    FuncProcIdE = FuncProcIdOffset + 178
+	FuncProcIdUiDisable                           FuncProcIdE = FuncProcIdOffset + 179
+	FuncProcIdUiScrollWithDelta                   FuncProcIdE = FuncProcIdOffset + 180
+	FuncProcIdUiSetHeight                         FuncProcIdE = FuncProcIdOffset + 181
+	FuncProcIdUiSetItemSpacing                    FuncProcIdE = FuncProcIdOffset + 182
+	FuncProcIdUiSetMaxHeight                      FuncProcIdE = FuncProcIdOffset + 183
+	FuncProcIdUiSetMaxWidth                       FuncProcIdE = FuncProcIdOffset + 184
+	FuncProcIdUiSetMinHeight                      FuncProcIdE = FuncProcIdOffset + 185
+	FuncProcIdUiSetMinWidth                       FuncProcIdE = FuncProcIdOffset + 186
+	FuncProcIdUiSetMinWidthAvailable              FuncProcIdE = FuncProcIdOffset + 187
+	FuncProcIdUiSetWidth                          FuncProcIdE = FuncProcIdOffset + 188
+	FuncProcIdUiWithLayout                        FuncProcIdE = FuncProcIdOffset + 189
+	FuncProcIdVectorSize                          FuncProcIdE = FuncProcIdOffset + 190
+	FuncProcIdVertical                            FuncProcIdE = FuncProcIdOffset + 191
+	FuncProcIdVerticalCentered                    FuncProcIdE = FuncProcIdOffset + 192
+	FuncProcIdVerticalCenteredJustified           FuncProcIdE = FuncProcIdOffset + 193
+	FuncProcIdWarnIfDebugBuild                    FuncProcIdE = FuncProcIdOffset + 194
+	FuncProcIdWidgetText                          FuncProcIdE = FuncProcIdOffset + 195
+	FuncProcIdWidgetsGlobalThemePreferenceButtons FuncProcIdE = FuncProcIdOffset + 196
+	FuncProcIdWindow                              FuncProcIdE = FuncProcIdOffset + 197
+	FuncProcIdWindowPlace                         FuncProcIdE = FuncProcIdOffset + 198
 )
 
 // IdlFingerprint is the IDL these bindings were generated from, as
 // ir.Fingerprint digests it; the Rust client's generated enums carry the same
 // value from the same generation (ADR-0278 SD6, proposed).
-const IdlFingerprint uint64 = 0xc8b80ace2ff526a9
+const IdlFingerprint uint64 = 0x2f4b1a8b6e6122ee
 const (
 	AtomsMethodIdBuild AtomsMethodIdE = 0
 

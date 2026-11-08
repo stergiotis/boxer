@@ -208,6 +208,22 @@ func definitionsWidgetProc() (widgets []*ir.ProceduralNode) {
 					}
 `)).
 		Build())
+	// uiClipToMaxRectX is uiClipToMaxRect on the horizontal axis only: the
+	// current Ui paints nothing left or right of its max_rect and keeps the
+	// inherited clip above and below. A row allocated one interaction height
+	// tall holds content taller than that — chips, framed labels — which
+	// uiClipToMaxRect would cut through; a row that must not run into what
+	// sits beside it wants only its sides clipped.
+	widgets = append(widgets, idl.NewProceduralNode("uiClipToMaxRectX").WithEffect(ir.EffectLocal).
+		WithApplyCodeClientRust(rustClientCode(`
+					if {{EguiUiOptionalOuter}}.is_some() {
+						let ui = {{EguiUiOptionalOuter}}.as_mut().unwrap();
+						let clip = ui.clip_rect();
+						let x = ui.max_rect().x_range();
+						ui.shrink_clip_rect(egui::Rect::from_x_y_ranges(x, clip.y_range()));
+					}
+`)).
+		Build())
 	widgets = append(widgets, idl.NewProceduralNode("uiSetWidth").WithEffect(ir.EffectLocal).
 		AddArguments(idl.NewArgumentsBuilder().PlainArg("width", ctabb.F32).Build()).
 		WithApplyCodeClientRust(rustClientCode(`

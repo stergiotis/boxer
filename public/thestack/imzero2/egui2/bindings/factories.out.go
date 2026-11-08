@@ -1991,6 +1991,13 @@ func UiClipToMaxRect() {
 	r.SendIntermediate()
 }
 
+func UiClipToMaxRectX() {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteUint32(uint32(FuncProcIdUiClipToMaxRectX))
+
+	r.SendIntermediate()
+}
+
 func UiDisable() {
 	r := typed.NewRetainedFffiBuilder()
 	r.WriteUint32(uint32(FuncProcIdUiDisable))

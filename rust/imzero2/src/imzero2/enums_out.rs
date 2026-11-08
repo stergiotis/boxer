@@ -184,32 +184,33 @@ pub enum FuncProcId {
     TimeRangePicker = fenums::FUNC_PROC_ID_OFFSET + 175,
     TintedScope = fenums::FUNC_PROC_ID_OFFSET + 176,
     UiClipToMaxRect = fenums::FUNC_PROC_ID_OFFSET + 177,
-    UiDisable = fenums::FUNC_PROC_ID_OFFSET + 178,
-    UiScrollWithDelta = fenums::FUNC_PROC_ID_OFFSET + 179,
-    UiSetHeight = fenums::FUNC_PROC_ID_OFFSET + 180,
-    UiSetItemSpacing = fenums::FUNC_PROC_ID_OFFSET + 181,
-    UiSetMaxHeight = fenums::FUNC_PROC_ID_OFFSET + 182,
-    UiSetMaxWidth = fenums::FUNC_PROC_ID_OFFSET + 183,
-    UiSetMinHeight = fenums::FUNC_PROC_ID_OFFSET + 184,
-    UiSetMinWidth = fenums::FUNC_PROC_ID_OFFSET + 185,
-    UiSetMinWidthAvailable = fenums::FUNC_PROC_ID_OFFSET + 186,
-    UiSetWidth = fenums::FUNC_PROC_ID_OFFSET + 187,
-    UiWithLayout = fenums::FUNC_PROC_ID_OFFSET + 188,
-    VectorSize = fenums::FUNC_PROC_ID_OFFSET + 189,
-    Vertical = fenums::FUNC_PROC_ID_OFFSET + 190,
-    VerticalCentered = fenums::FUNC_PROC_ID_OFFSET + 191,
-    VerticalCenteredJustified = fenums::FUNC_PROC_ID_OFFSET + 192,
-    WarnIfDebugBuild = fenums::FUNC_PROC_ID_OFFSET + 193,
-    WidgetText = fenums::FUNC_PROC_ID_OFFSET + 194,
-    WidgetsGlobalThemePreferenceButtons = fenums::FUNC_PROC_ID_OFFSET + 195,
-    Window = fenums::FUNC_PROC_ID_OFFSET + 196,
-    WindowPlace = fenums::FUNC_PROC_ID_OFFSET + 197,
+    UiClipToMaxRectX = fenums::FUNC_PROC_ID_OFFSET + 178,
+    UiDisable = fenums::FUNC_PROC_ID_OFFSET + 179,
+    UiScrollWithDelta = fenums::FUNC_PROC_ID_OFFSET + 180,
+    UiSetHeight = fenums::FUNC_PROC_ID_OFFSET + 181,
+    UiSetItemSpacing = fenums::FUNC_PROC_ID_OFFSET + 182,
+    UiSetMaxHeight = fenums::FUNC_PROC_ID_OFFSET + 183,
+    UiSetMaxWidth = fenums::FUNC_PROC_ID_OFFSET + 184,
+    UiSetMinHeight = fenums::FUNC_PROC_ID_OFFSET + 185,
+    UiSetMinWidth = fenums::FUNC_PROC_ID_OFFSET + 186,
+    UiSetMinWidthAvailable = fenums::FUNC_PROC_ID_OFFSET + 187,
+    UiSetWidth = fenums::FUNC_PROC_ID_OFFSET + 188,
+    UiWithLayout = fenums::FUNC_PROC_ID_OFFSET + 189,
+    VectorSize = fenums::FUNC_PROC_ID_OFFSET + 190,
+    Vertical = fenums::FUNC_PROC_ID_OFFSET + 191,
+    VerticalCentered = fenums::FUNC_PROC_ID_OFFSET + 192,
+    VerticalCenteredJustified = fenums::FUNC_PROC_ID_OFFSET + 193,
+    WarnIfDebugBuild = fenums::FUNC_PROC_ID_OFFSET + 194,
+    WidgetText = fenums::FUNC_PROC_ID_OFFSET + 195,
+    WidgetsGlobalThemePreferenceButtons = fenums::FUNC_PROC_ID_OFFSET + 196,
+    Window = fenums::FUNC_PROC_ID_OFFSET + 197,
+    WindowPlace = fenums::FUNC_PROC_ID_OFFSET + 198,
 }
 
 /// The IDL this client was generated from, as ir.Fingerprint digests it; the
 /// Go server's generated enums carry the same value from the same generation
 /// (ADR-0278 SD6, proposed).
-pub const IDL_FINGERPRINT: u64 = 0xc8b80ace2ff526a9;
+pub const IDL_FINGERPRINT: u64 = 0x2f4b1a8b6e6122ee;
 #[derive(strum::FromRepr, Debug, PartialEq, Eq)]
 #[repr(u32)]
 pub enum AccessibleListBuilderMethodId {

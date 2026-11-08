@@ -193,6 +193,7 @@ status: draft
 | TimeRangePicker | BuilderFactory | Yes | 2 | 0 | 4 | Immediate, Retained |
 | TintedScope | BuilderFactory | Yes | 1 | 0 | 4 | Immediate, Retained, BlockIterator |
 | UiClipToMaxRect | Procedural | No | 0 | 0 | - | - |
+| UiClipToMaxRectX | Procedural | No | 0 | 0 | - | - |
 | UiDisable | Procedural | No | 0 | 0 | - | - |
 | UiScrollWithDelta | Procedural | No | 2 | 0 | - | - |
 | UiSetHeight | Procedural | No | 1 | 0 | - | - |
@@ -3228,6 +3229,13 @@ Block
 ---
 
 ### UiClipToMaxRect
+
+- **Type:** Procedural
+- **Identity:** No
+
+---
+
+### UiClipToMaxRectX
 
 - **Type:** Procedural
 - **Identity:** No

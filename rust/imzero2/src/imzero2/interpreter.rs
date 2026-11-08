@@ -10725,6 +10725,23 @@ if multiline { egui::TextEdit::multiline(&mut text).id(i) } else { egui::TextEdi
                     ui.shrink_clip_rect(r);
                 }
             }
+            FuncProcId::UiClipToMaxRectX => {
+                #[cfg(feature = "puffin")]
+                puffin::profile_scope!("match FuncProcId::UiClipToMaxRectX");
+                // arguments
+                if d == 0 {
+                    self.end_consume_message()?;
+                }
+                // apply
+                // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+
+                if u.is_some() {
+                    let ui = u.as_mut().unwrap();
+                    let clip = ui.clip_rect();
+                    let x = ui.max_rect().x_range();
+                    ui.shrink_clip_rect(egui::Rect::from_x_y_ranges(x, clip.y_range()));
+                }
+            }
             FuncProcId::UiDisable => {
                 #[cfg(feature = "puffin")]
                 puffin::profile_scope!("match FuncProcId::UiDisable");

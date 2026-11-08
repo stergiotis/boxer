@@ -308,52 +308,62 @@ func DecorateRenderer(inner func() error, cc ChromeConfig) func() error {
 		}
 		if !screenshotMode {
 			for range c.PanelBottom(ids.PrepareStr("bottomPanel")).Resizable(false).KeepIter() {
+				// Right to left, so the codec indicator is drawn first and
+				// keeps the right edge; the rest runs left to right in what
+				// is left and is clipped there. Laid out left to right, the
+				// frame-time quantiles pushed the indicator past the window's
+				// edge below about 1700 points (ADR-0363 (proposed) M1).
 				for range c.Horizontal().KeepIter() {
-					c.AddSpace(styletokens.GapItems(density))
-					// While agents' marks are on the overlay (ADR-0297): say
-					// so where the person looks, with the way to clear them.
-					if cc.Host != nil {
-						if n := cc.Host.Marks().Len(); n > 0 {
-							label := icons.PhHighlighter + " " + strconv.Itoa(n) + " agent mark"
-							if n != 1 {
-								label += "s"
-							}
-							c.Label(label).Send()
-							if c.Button(ids.PrepareStr("statusClearMarks"), c.Atoms().Text("Clear").Keep()).SendResp().HasPrimaryClicked() {
-								cc.Host.Marks().ClearAll()
-							}
-							c.AddSpace(styletokens.GapSections(density))
+					for range c.UiWithLayout().MainDirRightToLeft().CrossAlignCenter().KeepIter() {
+						// ADR-0088: compact active-codec indicator; clicking it opens
+						// the video-output settings dialog (ShowDialog, below).
+						if cc.VideoOutput {
+							videooutput.RenderStatus(videooutput.Input{Ids: ids, State: videoState})
 						}
-					}
-					if cc.Status != nil {
-						rs := runtimestatus.Render(runtimestatus.Input{
-							Ids: ids, ScopeKey: "runtimestatus", Snapshot: cc.Status, Clickable: cc.Host != nil,
-						})
-						if capId := rs.Clicked; capId != "" && cc.Host != nil {
-							// Push the selection first: a fresh open pops it in
-							// newApp(), a raise leaves it for the live instance's
-							// next Frame (consumePendingSelection). OpenOrRaise
-							// keeps the status bar at one inspector — clicking
-							// another chip retargets and raises that window
-							// rather than stacking a sibling per click.
-							capinspector.PushSelection(capinspector.CapId(capId))
-							_, _, openErr := cc.Host.OpenOrRaise(capinspector.ManifestId)
-							if openErr != nil {
-								log.Warn().Err(openErr).Str("capId", capId).
-									Msg("status-bar: capinspector open failed")
+						for range c.HorizontalLeftToRight().KeepIter() {
+							c.UiClipToMaxRectX()
+							c.AddSpace(styletokens.GapItems(density))
+							// While agents' marks are on the overlay (ADR-0297): say
+							// so where the person looks, with the way to clear them.
+							if cc.Host != nil {
+								if n := cc.Host.Marks().Len(); n > 0 {
+									label := icons.PhHighlighter + " " + strconv.Itoa(n) + " agent mark"
+									if n != 1 {
+										label += "s"
+									}
+									c.Label(label).Send()
+									if c.Button(ids.PrepareStr("statusClearMarks"), c.Atoms().Text("Clear").Keep()).SendResp().HasPrimaryClicked() {
+										cc.Host.Marks().ClearAll()
+									}
+									c.AddSpace(styletokens.GapSections(density))
+								}
 							}
+							if cc.Status != nil {
+								rs := runtimestatus.Render(runtimestatus.Input{
+									Ids: ids, ScopeKey: "runtimestatus", Snapshot: cc.Status, Clickable: cc.Host != nil,
+								})
+								if capId := rs.Clicked; capId != "" && cc.Host != nil {
+									// Push the selection first: a fresh open pops it in
+									// newApp(), a raise leaves it for the live instance's
+									// next Frame (consumePendingSelection). OpenOrRaise
+									// keeps the status bar at one inspector — clicking
+									// another chip retargets and raises that window
+									// rather than stacking a sibling per click.
+									capinspector.PushSelection(capinspector.CapId(capId))
+									_, _, openErr := cc.Host.OpenOrRaise(capinspector.ManifestId)
+									if openErr != nil {
+										log.Warn().Err(openErr).Str("capId", capId).
+											Msg("status-bar: capinspector open failed")
+									}
+								}
+								// Visual separator before the metrics block; the
+								// status segment is process-static info, metrics
+								// is per-frame telemetry — the gap signals the
+								// shift in cadence.
+								c.AddSpace(styletokens.GapSections(density))
+							}
+							metricsoverlay.Render(metricsoverlay.Input{Ids: ids, ScopeKey: "metrics", Fps: fpsState})
 						}
-						// Visual separator before the metrics block; the
-						// status segment is process-static info, metrics
-						// is per-frame telemetry — the gap signals the
-						// shift in cadence.
-						c.AddSpace(styletokens.GapSections(density))
-					}
-					metricsoverlay.Render(metricsoverlay.Input{Ids: ids, ScopeKey: "metrics", Fps: fpsState})
-					// ADR-0088: compact active-codec indicator; clicking it opens
-					// the video-output settings dialog (ShowDialog, below).
-					if cc.VideoOutput {
-						videooutput.RenderStatus(videooutput.Input{Ids: ids, State: videoState})
 					}
 				}
 			}
