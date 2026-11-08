@@ -55,6 +55,7 @@ steps=(
     "repro_build_parity repro_build_parity.sh"
     "gofmt              lint/gofmt.sh"
     "rustfmt            lint/rustfmt.sh"
+    "rust-dep-sources   lint/rust-dep-sources.sh"
     "ids-fonts          lint/ids-fonts.sh"
     "fetcher-discipline fetcher-discipline.sh"
     "egui-persistence   lint/egui-persistence.sh"
