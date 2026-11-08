@@ -52,6 +52,8 @@ pub mod text_edit_highlight;
 pub mod time_range_picker;
 #[cfg(any(feature = "headless", feature = "browser"))]
 pub mod treemap;
+#[cfg(not(target_arch = "wasm32"))]
+pub mod wake;
 #[cfg(feature = "headless")]
 pub mod wscarrier;
 

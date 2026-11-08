@@ -44,6 +44,10 @@ impl<R: std::io::BufRead, W: std::io::Write> App<'_, R, W> {
         fffi.set_capture_raster(Box::new(
             crate::imzero2::captureraster::SoftCaptureRaster::default(),
         ));
+        // ADR-0363 §M4 (proposed): the host can ask for a pass between
+        // heartbeats, so data that reached Go is drawn without waiting.
+        let ctx = cc.egui_ctx.clone();
+        crate::imzero2::wake::spawn_from_env(move || ctx.request_repaint());
         Self {
             fffi,
             warmup_passes: WARMUP_PASSES,

@@ -172,6 +172,18 @@ var (
 		Default:     RenderCadenceContinuous,
 	}, []string{RenderCadenceContinuous, RenderCadenceReactive})
 
+	// WakeFifo is set by the Go host for the client it launches, not by
+	// hand: the path of a FIFO the host writes a byte to when the window
+	// should run a pass now, between the reactive cadence's heartbeats
+	// (ADR-0363 §M4, proposed). The client (src/imzero2/wake.rs) reads it with
+	// std::env; the host sets it in application.newWaker. Unset, the client
+	// keeps its cadence.
+	WakeFifo = env.NewString(env.Spec{
+		Name:        "IMZERO2_WAKE_FIFO",
+		Description: "set by the host for its client: FIFO the host writes to when the window should run a pass between heartbeats",
+		Category:    env.CategorySystem,
+	})
+
 	// Puffin gates the Rust client's puffin profiler: scope collection
 	// (puffin::set_scopes_on) and the loopback puffin_http server on
 	// 127.0.0.1:8585, which a `puffin_viewer --url 127.0.0.1:8585` attaches to.

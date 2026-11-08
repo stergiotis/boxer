@@ -3064,6 +3064,17 @@
       }
     },
     {
+      "name": "IMZERO2_WAKE_FIFO",
+      "type": "string",
+      "description": "set by the host for its client: FIFO the host writes to when the window should run a pass between heartbeats",
+      "category": "system",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/thestack/imzero2/imzero2env"
+      }
+    },
+    {
       "name": "KEELSON_EASTEREGG",
       "type": "bool",
       "default": "false",

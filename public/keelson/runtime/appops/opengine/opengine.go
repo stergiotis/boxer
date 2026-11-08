@@ -34,6 +34,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/appops/opwire"
 	"github.com/stergiotis/boxer/public/keelson/runtime/entrypoint"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/hostwake"
 )
 
 // DefaultKeepCalls bounds how many finished calls the engine remembers for
@@ -214,6 +215,9 @@ func (inst *Engine) Submit(op string, req opwire.CallRequest) (out opwire.Outcom
 	inst.queue = append(inst.queue, c)
 	inst.remember(c)
 	out = c.outcome
+	// The queue is applied in a frame, and under the reactive cadence the
+	// next frame may be a heartbeat away (ADR-0363 §M4, proposed).
+	hostwake.Wake()
 	return
 }
 

@@ -21,6 +21,7 @@ import (
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/thestack/fffi2/runtime"
 	"github.com/stergiotis/boxer/public/thestack/fffi2/typed"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/hostwake"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/imzero2env"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/metrics"
 )
@@ -202,9 +203,21 @@ func (inst *Application[U]) Launch() (err error) {
 		cmd.Stderr = os.Stderr
 		inst.stdout = bufio.NewWriter(si)
 		inst.stdin = bufio.NewReader(so)
+		w, werr := newWaker(cmd)
+		if werr != nil {
+			log.Warn().Err(werr).Msg("no wake channel to the client; it keeps its cadence")
+		}
 		err = cmd.Start()
 		if err != nil {
+			if w != nil {
+				_ = w.Close()
+			}
 			return eb.Build().Str("path", cfg.ClientBinary).Errorf("error while running main loop in external binary: %w", err)
+		}
+		if w != nil {
+			go w.run()
+			hostwake.Set(w.wake)
+			inst.closers = append(inst.closers, w)
 		}
 		go func() {
 			e := cmd.Wait()
