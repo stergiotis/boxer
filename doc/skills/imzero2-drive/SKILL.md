@@ -81,7 +81,7 @@ substring), `value`, `valueContains`, `role`, `nth`.
 | `type` | anchor, `text` | focuses the node, then sends the text |
 | `set_value` | anchor, `text` | sets a slider or drag value |
 | `focus`, `scroll_into_view` | anchor | |
-| `key` | `text` (`Enter`, `Escape`, `ArrowDown`, `A`…), `modifiers` | key down and up to whatever is focused |
+| `key` | `text` (`Enter`, `Escape`, `ArrowDown`, `A`…), `modifiers`, `focusTrace` | key down and up to whatever is focused; with `"focusTrace":true` it samples the tree while it settles and fails if focus fell from a widget to the window root, moved more than once, or the focused item came back under a new node id |
 | `hover` | anchor, or `x`,`y` | moves the pointer — to the node's centre when anchored |
 | `drag` | `x`,`y`,`toX`,`toY`; anchored: `x`,`y` is the delta | press, moves, release |
 | `scroll` | `x`,`y` as the wheel delta | scrolls under the pointer — `hover` first |

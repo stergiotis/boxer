@@ -131,6 +131,13 @@ type Step struct {
 	// the key press; a pointer `click` holds it for the click.
 	Modifiers uint32 `json:"modifiers,omitempty"`
 
+	// FocusTrace makes a `key` step check what the key did to keyboard
+	// focus: the tree is taken before the key and sampled while the step
+	// settles (at least [FocusTraceMinWindow]), and the step fails on
+	// focus falling to the window root, moving more than once, or the
+	// focused item coming back under a new node id ([FocusFailures]).
+	FocusTrace bool `json:"focusTrace,omitempty"`
+
 	// Cadence for the `cadence` verb: 0 continuous, 1 reactive.
 	Cadence uint32 `json:"cadence,omitempty"`
 
@@ -203,6 +210,9 @@ func (inst Step) wants(sidecar string) bool {
 func (inst Step) check() (err error) {
 	if inst.Do == "" {
 		return eh.Errorf("step has no \"do\" verb")
+	}
+	if inst.FocusTrace && inst.Do != "key" {
+		return eb.Build().Str("do", inst.Do).Errorf("only a key step takes \"focusTrace\"")
 	}
 	if len(inst.Sidecars) > 0 && inst.Do != "capture" {
 		return eb.Build().Str("do", inst.Do).Errorf("only a capture step takes \"sidecars\"")
@@ -479,9 +489,29 @@ func RunTrace(c *Client, steps []Step, opts RunOptions) (err error) {
 					Errorf("settle before the step failed: %w", err)
 			}
 		}
+		var focusBefore *TreeSnapshot
+		if st.FocusTrace {
+			if focusBefore, err = c.Tree(opts.Timeout); err != nil {
+				return eb.Build().Int("step", i+1).Errorf("unable to fetch the tree before a traced key: %w", err)
+			}
+		}
 		if err = runStep(c, st, node, opts); err != nil {
 			return eb.Build().Int("step", i+1).Str("step_desc", st.describe()).
 				Errorf("step failed: %w", err)
+		}
+		if st.FocusTrace {
+			// The sampling is the step's settle.
+			samples, e := traceFocus(c, settle, opts.Timeout)
+			if e != nil {
+				return eb.Build().Int("step", i+1).Errorf("unable to trace focus after the key: %w", e)
+			}
+			if failures := FocusFailures(focusBefore, samples); len(failures) > 0 {
+				return eb.Build().Int("step", i+1).Str("step_desc", st.describe()).Strs("focus", failures).
+					Errorf("focus trace failed")
+			}
+			stale = true
+			log.Info().Int("samples", len(samples)).Msg(st.describe())
+			continue
 		}
 		// Every verb but a pure observation can move the UI, so the cached
 		// tree is assumed stale unless the verb only read.
