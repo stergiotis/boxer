@@ -103,7 +103,8 @@ func TestACompactionSpendsNoNotice(t *testing.T) {
 			notes = append(notes, e.Name)
 		}
 	}
-	assert.Equal(t, []string{"ceiling", "artefact"}, notes, "the snapshots are told again; no notice is composed")
+	// The rig's host describes no app, so the apps note has nothing to say.
+	assert.Equal(t, []string{"desktop", "ceiling", "artefact"}, notes, "the snapshots are told again; no notice is composed")
 	assert.NotEmpty(t, coord.pixelsNote(), "the pixels notice is still news")
 }
 

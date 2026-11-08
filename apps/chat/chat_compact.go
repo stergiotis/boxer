@@ -309,6 +309,7 @@ func (inst *coordinator) compact(s *requestState, plan projection.Plan, c projec
 	inst.cuts++
 	// The snapshots are news again: the cut took the notes that carried them.
 	inst.toldOnce, inst.artToldN = false, false
+	inst.appsTold, inst.deskTold = "", ""
 	inst.mu.Unlock()
 	for _, src := range contextSources {
 		if src.form != contextFormSnapshot {

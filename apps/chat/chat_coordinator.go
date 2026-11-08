@@ -129,6 +129,10 @@ type coordinator struct {
 	art      *artefact
 	artTold  int
 	artToldN bool
+	// appsTold and deskTold are the apps and desktop notes as last told,
+	// empty when not told (chat_desktop_note.go).
+	appsTold string
+	deskTold string
 	// artJournaled is the head last written to the journal, by revision
 	// and text (chat_artefact_journal.go); zero is revision 0, empty.
 	artJournaled     int

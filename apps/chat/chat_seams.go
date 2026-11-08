@@ -83,6 +83,8 @@ type contextSource struct {
 
 // contextSources are the sources in the order the model reads their items.
 var contextSources = []contextSource{
+	{name: "apps", form: contextFormSnapshot, compose: func(ctx context.Context, inst *coordinator, _ string) string { return inst.appsNote(ctx) }},
+	{name: "desktop", form: contextFormSnapshot, compose: func(ctx context.Context, inst *coordinator, _ string) string { return inst.desktopNote(ctx) }},
 	{name: "ceiling", form: contextFormSnapshot, compose: func(_ context.Context, inst *coordinator, _ string) string { return inst.ceilingNote() }},
 	{name: "artefact", form: contextFormSnapshot, compose: func(_ context.Context, inst *coordinator, _ string) string { return inst.artefactNote() }},
 	{name: "pixels", form: contextFormNotice, compose: func(_ context.Context, inst *coordinator, _ string) string { return inst.pixelsNote() }},
@@ -100,6 +102,8 @@ type toldMarks struct {
 	pix         pixelPolicy
 	pixOnce     bool
 	pixSees     bool
+	apps        string
+	desk        string
 	cuts        int
 }
 
@@ -108,7 +112,7 @@ func (inst *coordinator) toldNow() (m toldMarks) {
 	inst.mu.Lock()
 	defer inst.mu.Unlock()
 	return toldMarks{ceiling: inst.told, ceilingOnce: inst.toldOnce, art: inst.artTold, artN: inst.artToldN,
-		pix: inst.pix.told, pixOnce: inst.pix.toldOnce, pixSees: inst.pix.toldSees, cuts: inst.cuts}
+		pix: inst.pix.told, pixOnce: inst.pix.toldOnce, pixSees: inst.pix.toldSees, apps: inst.appsTold, desk: inst.deskTold, cuts: inst.cuts}
 }
 
 // untell puts the watermarks back as they stood before the turn, so the
@@ -122,7 +126,14 @@ func (inst *coordinator) untell(m toldMarks) {
 	defer inst.mu.Unlock()
 	if inst.cuts != m.cuts {
 		inst.toldOnce, inst.artToldN, inst.pix.toldOnce = false, false, false
+		inst.appsTold, inst.deskTold = "", ""
 		return
+	}
+	if inst.appsTold != "" {
+		inst.appsTold = m.apps
+	}
+	if inst.deskTold != "" {
+		inst.deskTold = m.desk
 	}
 	if inst.toldOnce {
 		inst.told, inst.toldOnce = m.ceiling, m.ceilingOnce

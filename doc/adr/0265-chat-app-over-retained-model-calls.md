@@ -629,6 +629,45 @@ branches side by side**, which wait on branch-aware projection over a
 **branching into a new conversation**; and **a system prompt of the
 person's**.
 
+### 2026-11-07 — the host says where the model stands: the apps and desktop notes
+
+A conversation with Apps opened the same way every time: `list_windows`,
+refused for want of a task; `describe_app` with no arguments; then
+`request_access`, `open_window` and a read of the window. In benchmark takes
+of the SECO data-quality tasks (the hackathon_2026 repository's agent
+benchmark plan) six to twenty-one calls came before the first that did any
+work, 30–80 % of a short task's calls. `describe_app` with no arguments
+answers with every app and every operation, 165 091 characters on that host:
+the first model call read 9 k input tokens, the second 49.5 k, and every call
+after carried the 40 k, two thirds of a short conversation's input.
+
+Two snapshots join the context injector of
+[ADR-0310](./0310-harness-profile-and-registry-composition-declared-per-seam.md)
+§SD11, ahead of the ceiling, told when they are news like the others and
+again after a compaction or an unread turn:
+
+- **apps** — every app the model can work with, one line each: its id,
+  name and summary, and whether it has help or no operations. 58 apps took
+  6 547 characters.
+- **desktop** — whether the model has a task and, when it has, the windows
+  the task holds, by window, app, mode and load. Titles are left out: they
+  are the apps' and the person's text (ADR-0269 §SD7), which a note of the
+  host's does not carry, so telling it taints nothing.
+
+The coordinator prompt now points to the notes and names `describe_app` with
+no arguments as long, for the app at hand instead. Both notes need Apps on;
+a conversation that only asks questions is told neither.
+
+An A/B on the benchmark's five tasks (deepseek-v4-flash, three attempts an
+arm, the same host built with and without the notes): no attempt with the
+notes made the whole-list call, where every attempt without them made it
+once; input tokens fell from 4.78 M to 2.73 M an attempt and from 75.5 k to
+37.9 k a call, active time by 64 s, with correctness unchanged within noise
+(8.27 against 8.00 figures). The calls before the first that works stayed at
+five to seven: the notes make them cheaper, not fewer. Seeing one app's
+operations, the model guessed another's arguments more often, each costing a
+refusal that carries the schema.
+
 ## References
 
 - [ADR-0264](./0264-retained-model-conversations-on-facts.md) — what the app sends and why it reads nothing back.
