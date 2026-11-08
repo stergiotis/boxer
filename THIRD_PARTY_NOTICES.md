@@ -499,6 +499,48 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
   which is also the re-sync procedure.
 - Not covered by `scripts/ci/license_gate.sh`, for the reason given in 1.8.
 
+### 1.13 Carmine Paolino -- zapfast, techniques ported (MIT)
+
+- Origin: <https://github.com/crmne/zapfast>, commit
+  `421d194fb45530ad0811e2b5d81be8f805c47748`.
+- Use: techniques from this egui desktop application, reimplemented in the
+  imzero2 host, its IDL, Go widgets and the scene tooling. The ports and
+  the rules they follow are in
+  [ADR-0363](doc/adr/0363-porting-from-an-end-user-egui-application.md)
+  (proposed). No zapfast file is vendored, and zapfast is not a dependency.
+- Files: a ported file that follows zapfast's code closely enough to be a
+  translation (ADR-0363 §SD2) carries the notice below in its header and
+  is listed here:
+  - `rust/imzero2/src/imzero2/a11y.rs` (the announcer and the list
+    semantics, after zapfast's `announcer.rs` and `ui/list_nav.rs`);
+  - `rust/imzero2/imzero2_egui/src/style/selection.rs` (the shared selection
+    column, after zapfast's `markup::paint_selectable`).
+- Licence: MIT, compatible with the root [LICENSE](LICENSE).
+
+```
+MIT License
+
+Copyright (c) 2026 Carmine Paolino
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+```
+
 ## 2. Vendored binary artifacts
 
 ### 2.1 h3.wasm -- H3 hierarchical geospatial index (Apache-2.0)

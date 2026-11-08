@@ -16,6 +16,7 @@ pub mod fresh;
 pub mod linked;
 pub mod pill;
 pub mod progress;
+pub mod selection;
 pub mod slider;
 pub mod tokens;
 

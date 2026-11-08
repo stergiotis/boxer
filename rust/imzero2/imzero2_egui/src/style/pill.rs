@@ -205,10 +205,12 @@ impl Widget for PillLabel {
             pills,
         } = self;
         let label = Self::label(job, wrap_mode, selectable, ui);
-        if pills.is_empty() {
+        let selectable = selectable.unwrap_or_else(|| ui.style().interaction.selectable_labels);
+        // egui's own Label is used where it does the same: no pills, and no
+        // selection an off-screen label would have to keep alive.
+        if pills.is_empty() && !(selectable && super::selection::wanted_off_screen(ui)) {
             return ui.add(label);
         }
-        let selectable = selectable.unwrap_or_else(|| ui.style().interaction.selectable_labels);
         let pill_of = |section_index: usize| pills.get(section_index).copied().flatten();
         // Reserve a slot below the text for the pills: shapes added after the
         // label would paint over its glyphs.
@@ -217,7 +219,22 @@ impl Widget for PillLabel {
         response.widget_info(|| {
             egui::WidgetInfo::labeled(egui::WidgetType::Label, ui.is_enabled(), galley.text())
         });
-        if ui.is_rect_visible(response.rect) {
+        let color = ui.style().visuals.text_color();
+        if !ui.is_rect_visible(response.rect) {
+            // Off screen, but it may hold one end of a selection, which egui
+            // drops in any pass that does not see both ends.
+            if selectable && super::selection::wanted_off_screen(ui) {
+                super::selection::register(
+                    ui,
+                    &response,
+                    galley_pos,
+                    galley,
+                    color,
+                    Stroke::NONE,
+                    false,
+                );
+            }
+        } else {
             let radius = egui::CornerRadius::same(tokens::rounding::SM as u8);
             let ppp = ui.pixels_per_point();
             let mut shapes = Vec::new();
@@ -229,7 +246,6 @@ impl Widget for PillLabel {
             }
             ui.painter().set(bg_idx, Shape::Vec(shapes));
 
-            let color = ui.style().visuals.text_color();
             let underline = if response.has_focus() || response.highlighted() {
                 Stroke::new(1.0, color)
             } else {

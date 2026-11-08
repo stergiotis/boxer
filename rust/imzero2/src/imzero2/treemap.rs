@@ -25,11 +25,15 @@ use egui::accesskit;
 // One role vocabulary for the driver's tree and a capture's (ADR-0301).
 use super::interpreter::optree::role_name;
 
-/// `TreeNode.flags` bits. Wire-stable: append, never renumber.
+/// `TreeNode.flags` bits. Wire-stable: append, never renumber. Mirrored by
+/// the `Flag*` constants in the Go carrier client.
 pub const FLAG_DISABLED: u32 = 1;
 pub const FLAG_HIDDEN: u32 = 2;
 pub const FLAG_FOCUSED: u32 = 4;
 pub const FLAG_SELECTED: u32 = 8;
+/// A live region: a screen reader speaks its text when it changes
+/// (ADR-0363 §M2, proposed).
+pub const FLAG_LIVE: u32 = 16;
 
 /// Wire codes for [`pb::AccessKitAction::action`] (ADR-0154 SD3). Pinned here
 /// rather than taken from `accesskit::Action as u32`: that enum carries no
@@ -85,6 +89,12 @@ pub fn snapshot(update: &accesskit::TreeUpdate, pass: u64) -> pb::TreeSnapshot {
             }
             if update.focus == *id {
                 flags |= FLAG_FOCUSED;
+            }
+            if matches!(
+                node.live(),
+                Some(accesskit::Live::Polite | accesskit::Live::Assertive)
+            ) {
+                flags |= FLAG_LIVE;
             }
             // Bounds are optional upstream (a node that was never laid out has
             // none); a zero rect is the honest answer and keeps every node in
@@ -211,5 +221,23 @@ mod tests {
         assert_eq!(f & FLAG_HIDDEN, FLAG_HIDDEN);
         assert_eq!(f & FLAG_SELECTED, FLAG_SELECTED);
         assert_eq!(f & FLAG_FOCUSED, 0, "focus is elsewhere");
+        assert_eq!(f & FLAG_LIVE, 0, "not a live region");
+    }
+
+    #[test]
+    fn a_live_region_is_flagged() {
+        let id = accesskit::NodeId(8);
+        let mut n = node(accesskit::Role::Label);
+        n.set_value("Query done");
+        n.set_live(accesskit::Live::Polite);
+        let update = accesskit::TreeUpdate {
+            nodes: vec![(id, n)],
+            tree: Some(accesskit::Tree::new(id)),
+            tree_id: accesskit::TreeId::ROOT,
+            focus: accesskit::NodeId(0),
+        };
+        let snap = snapshot(&update, 0);
+        assert_eq!(snap.nodes[0].flags & FLAG_LIVE, FLAG_LIVE);
+        assert_eq!(snap.nodes[0].value, "Query done");
     }
 }

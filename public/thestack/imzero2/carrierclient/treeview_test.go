@@ -98,6 +98,11 @@ func TestFormatNodeIsWhatAStepTakes(t *testing.T) {
 	assert.Contains(t, FormatNode(big), "#9223372036854775813")
 }
 
+func TestFormatNodeFlagsALiveRegion(t *testing.T) {
+	n := &TreeNode{Id: 9, Role: "label", Value: "Query done", Flags: FlagLive}
+	assert.Equal(t, `label ="Query done" #9 @0,0 [live]`, FormatNode(n))
+}
+
 func TestFormatNodeClipsLongTextOnARuneBoundary(t *testing.T) {
 	n := &TreeNode{Id: 1, Role: "text_input", Value: strings.Repeat("ä", maxTreeText+10)}
 	line := FormatNode(n)

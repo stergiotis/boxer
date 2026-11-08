@@ -208,7 +208,8 @@ message TreeNode {
   float y = 6;
   float w = 7;
   float h = 8;
-  // Bitmask: 1=disabled, 2=hidden, 4=focused, 8=selected.
+  // Bitmask: 1=disabled, 2=hidden, 4=focused, 8=selected, 16=live (a live
+  // region: a screen reader speaks its text when it changes).
   uint32 flags = 9;
   // 0 when this is the root.
   uint64 parent = 10;

@@ -6,6 +6,16 @@ import "github.com/stergiotis/boxer/public/thestack/fffi2/typed"
 
 import "github.com/stergiotis/boxer/public/thestack/fffi2/runtime"
 
+type AccessibleListFluid struct {
+	r *typed.RetainedFffiBuilder
+}
+type AccessibleListMethodIdE uint32
+
+type AccessibleListItemFluid struct {
+	r *typed.RetainedFffiBuilder
+}
+type AccessibleListItemMethodIdE uint32
+
 type AccessibleRegionFluid struct {
 	r *typed.RetainedFffiBuilder
 }
@@ -188,6 +198,11 @@ type HorizontalCenteredFluid struct {
 	r *typed.RetainedFffiBuilder
 }
 type HorizontalCenteredMethodIdE uint32
+
+type HorizontalLeftToRightFluid struct {
+	r *typed.RetainedFffiBuilder
+}
+type HorizontalLeftToRightMethodIdE uint32
 
 type HorizontalTopFluid struct {
 	r *typed.RetainedFffiBuilder

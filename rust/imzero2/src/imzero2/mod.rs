@@ -1,3 +1,4 @@
+pub mod a11y;
 #[cfg(feature = "desktop")]
 pub mod app;
 pub mod appconfig;

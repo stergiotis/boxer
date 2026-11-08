@@ -38,6 +38,9 @@ const (
 	FlagHidden   uint32 = 2
 	FlagFocused  uint32 = 4
 	FlagSelected uint32 = 8
+	// FlagLive marks a live region, whose text a screen reader speaks when
+	// it changes: what the app announced (ADR-0363 §M2, proposed).
+	FlagLive uint32 = 16
 )
 
 // Client drives an imzero2 headless host over its remote-access carrier

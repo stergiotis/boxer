@@ -28,6 +28,8 @@ pub struct LinkedLabel {
     job: LayoutJob,
     wrap_mode: Option<TextWrapMode>,
     selectable: Option<bool>,
+    /// See [`super::selection::register`].
+    shared_column: bool,
     /// One entry per job section; `None` where the section has no background.
     pills: Vec<Option<Pill>>,
     /// One entry per job section: the index of the link the section is
@@ -56,9 +58,17 @@ impl LinkedLabel {
             job,
             wrap_mode: None,
             selectable: None,
+            shared_column: false,
             pills,
             link_of_section,
         }
+    }
+
+    /// Lets a selection drag sweep from this paragraph into a neighbour that
+    /// does not overlap it horizontally ([`super::selection::register`]).
+    pub fn selection_column(mut self) -> Self {
+        self.shared_column = true;
+        self
     }
 
     /// Mirrors `Label::selectable`.
@@ -78,6 +88,7 @@ impl LinkedLabel {
             mut job,
             wrap_mode,
             selectable,
+            shared_column,
             pills,
             link_of_section,
         } = self;
@@ -101,7 +112,22 @@ impl LinkedLabel {
         });
         let mut clicked = None;
         let mut zones = Vec::new();
-        if ui.is_rect_visible(response.rect) {
+        let color = ui.style().visuals.text_color();
+        if !ui.is_rect_visible(response.rect) {
+            // Off screen, but it may hold one end of a selection, which egui
+            // drops in any pass that does not see both ends.
+            if selectable && super::selection::wanted_off_screen(ui) {
+                super::selection::register(
+                    ui,
+                    &response,
+                    galley_pos,
+                    galley,
+                    color,
+                    Stroke::NONE,
+                    shared_column,
+                );
+            }
+        } else {
             let radius = egui::CornerRadius::same(tokens::rounding::SM as u8);
             let ppp = ui.pixels_per_point();
             let mut shapes = Vec::new();
@@ -145,15 +171,20 @@ impl LinkedLabel {
             zones = links.iter().map(|l| (l.0, l.2.expand(0.5))).collect();
             ui.painter().set(bg_idx, Shape::Vec(shapes));
 
-            let color = ui.style().visuals.text_color();
             let underline = if response.has_focus() || response.highlighted() {
                 Stroke::new(1.0, color)
             } else {
                 Stroke::NONE
             };
             if selectable {
-                egui::text_selection::LabelSelectionState::label_text_selection(
-                    ui, &response, galley_pos, galley, color, underline,
+                super::selection::register(
+                    ui,
+                    &response,
+                    galley_pos,
+                    galley,
+                    color,
+                    underline,
+                    shared_column,
                 );
             } else {
                 ui.painter().add(

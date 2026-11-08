@@ -11,6 +11,44 @@ import (
 	"iter"
 )
 
+func (inst AccessibleListFluid) Send() {
+	r := inst.r
+
+	r.SendIntermediate()
+}
+func (inst AccessibleListFluid) KeepIter() iter.Seq[functional.NilIteratorValueType] {
+
+	r := inst.r.BuildRetained()
+	return func(yield func(functional.NilIteratorValueType) bool) {
+
+		r.SyncRetained()
+		defer func() {
+			End()
+		}()
+
+		yield(functional.NilIteratorValue)
+
+	}
+}
+func (inst AccessibleListItemFluid) Send() {
+	r := inst.r
+
+	r.SendIntermediate()
+}
+func (inst AccessibleListItemFluid) KeepIter() iter.Seq[functional.NilIteratorValueType] {
+
+	r := inst.r.BuildRetained()
+	return func(yield func(functional.NilIteratorValueType) bool) {
+
+		r.SyncRetained()
+		defer func() {
+			End()
+		}()
+
+		yield(functional.NilIteratorValue)
+
+	}
+}
 func (inst AccessibleRegionFluid) Send() {
 	r := inst.r
 
@@ -1786,6 +1824,25 @@ func (inst HorizontalCenteredFluid) KeepIter() iter.Seq[functional.NilIteratorVa
 
 	}
 }
+func (inst HorizontalLeftToRightFluid) Send() {
+	r := inst.r
+
+	r.SendIntermediate()
+}
+func (inst HorizontalLeftToRightFluid) KeepIter() iter.Seq[functional.NilIteratorValueType] {
+
+	r := inst.r.BuildRetained()
+	return func(yield func(functional.NilIteratorValueType) bool) {
+
+		r.SyncRetained()
+		defer func() {
+			End()
+		}()
+
+		yield(functional.NilIteratorValue)
+
+	}
+}
 func (inst HorizontalTopFluid) Send() {
 	r := inst.r
 
@@ -2028,6 +2085,13 @@ func (inst LabelAtomsLinkedFluid) Selectable(val bool) LabelAtomsLinkedFluid {
 func (inst LabelAtomsLinkedFluid) Wrap() LabelAtomsLinkedFluid {
 	r := inst.r
 	r.WriteOpCode(uint32(LabelAtomsLinkedMethodIdWrap))
+
+	return inst
+}
+
+func (inst LabelAtomsLinkedFluid) SelectionColumn() LabelAtomsLinkedFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(LabelAtomsLinkedMethodIdSelectionColumn))
 
 	return inst
 }

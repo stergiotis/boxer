@@ -21,6 +21,41 @@ func definitionsWidgetProc() (widgets []*ir.ProceduralNode) {
 					}
 `)).
 		Build())
+	// announce queues `text` to be spoken by a screen reader at the end of
+	// the pass, through one of two live-region nodes that take turns so a
+	// repeated text is spoken again. `assertive` interrupts what is being
+	// said; keep it for errors. The nodes are in the tree `imzero2 drive`
+	// reads, as labels flagged live, so a scene can wait on what a person
+	// would hear (ADR-0363 §M2, proposed). Host effect: the announcer keeps
+	// its slots across passes, and a capture replay must not speak.
+	widgets = append(widgets, idl.NewProceduralNode("announce").WithEffect(ir.EffectHost).
+		AddArguments(idl.NewArgumentsBuilder().
+			PlainArg("text", ctabb.S).
+			PlainArg("assertive", ctabb.B).
+			Build()).
+		WithApplyCodeClientRust(rustClientCode(`
+					self.announcer.say(text.as_str(), assertive);
+`)).
+		Build())
+	// uiScrollWithDelta scrolls the scroll area around the current Ui by
+	// (dx, dy) points at the end of the pass, without animation: positive dy
+	// moves the content up. It is the relative correction a virtualized list
+	// applies when rows above the viewport turn out taller or shorter than
+	// it assumed (ADR-0363 §M5, proposed).
+	widgets = append(widgets, idl.NewProceduralNode("uiScrollWithDelta").WithEffect(ir.EffectLocal).
+		AddArguments(idl.NewArgumentsBuilder().
+			PlainArg("dx", ctabb.F32).
+			PlainArg("dy", ctabb.F32).
+			Build()).
+		WithApplyCodeClientRust(rustClientCode(`
+					if {{EguiUiOptionalOuter}}.is_some() {
+						{{EguiUiOptionalOuter}}.as_mut().unwrap().scroll_with_delta_animation(
+							egui::vec2(dx, dy),
+							egui::style::ScrollAnimation::none(),
+						);
+					}
+`)).
+		Build())
 	// uiSetItemSpacing — override `spacing.item_spacing` for the CURRENT Ui.
 	//
 	// Scope is the Ui the op lands in: egui's Style is cloned into each
@@ -328,6 +363,12 @@ func definitionsWidget() (widgets []*ir.BuilderFactoryNode) {
 			AddMethods(idl.NewMethodBuilder().
 				BeginMethod("selectable").Arg("val", ctabb.B).CodeClientRust(rustClientCode("{{Instance}} = {{Instance}}.selectable(val);\n")).EndMethod().
 				BeginMethod("wrap").CodeClientRust(rustClientCode("{{Instance}} = {{Instance}}.wrap_mode(egui::TextWrapMode::Wrap);")).EndMethod().
+				// selectionColumn lets a selection drag sweep from this
+				// paragraph into a neighbour that does not overlap it
+				// horizontally — an incoming and an outgoing message, two
+				// side-by-side cells — which egui otherwise treats as another
+				// column (ADR-0363 §M6, proposed).
+				BeginMethod("selectionColumn").CodeClientRust(rustClientCode("{{Instance}} = {{Instance}}.selection_column();\n")).EndMethod().
 				Build()...).
 			WithSettingImmediate(true).
 			WithSettingRetained(true).

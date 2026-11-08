@@ -464,6 +464,10 @@ type PlayApp struct {
 	// surfaces the graph + transition history + provenance as a status-bar chip.
 	queryFSM       *fsmview.Machine[queryStateE]
 	queryFSMWidget *fsmview.View[queryStateE]
+	// announcement is what syncQueryFSM found worth saying this frame, spoken
+	// right after it through c.Announce (play_announce.go).
+	announcement      string
+	announceAssertive bool
 	// progress folds the observed lane's live ticks into a smoothed rate and
 	// a damped ETA (play_progress.go); frameProgress is this frame's answer,
 	// computed once in Render and read by every display site — the top bar,
@@ -1575,6 +1579,10 @@ func (inst *PlayApp) render() error {
 	// runs outside the rec!=nil guard so idle / empty / failed are observed
 	// too. The status bar and its chip both read inst.queryFSM.
 	inst.syncQueryFSM(loading, numRows, executed, err)
+	if inst.announcement != "" {
+		c.Announce(inst.announcement, inst.announceAssertive)
+		inst.announcement = ""
+	}
 
 	// Fold this frame's progress tick into the ETA estimator, once, before
 	// any display site reads it (the damped ETA is stateful — see

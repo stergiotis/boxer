@@ -1247,7 +1247,8 @@ type TreeNode struct {
 	Y     float32 `protobuf:"fixed32,6,opt,name=y,proto3" json:"y,omitempty"`
 	W     float32 `protobuf:"fixed32,7,opt,name=w,proto3" json:"w,omitempty"`
 	H     float32 `protobuf:"fixed32,8,opt,name=h,proto3" json:"h,omitempty"`
-	// Bitmask: 1=disabled, 2=hidden, 4=focused, 8=selected.
+	// Bitmask: 1=disabled, 2=hidden, 4=focused, 8=selected, 16=live (a live
+	// region: a screen reader speaks its text when it changes).
 	Flags uint32 `protobuf:"varint,9,opt,name=flags,proto3" json:"flags,omitempty"`
 	// 0 when this is the root.
 	Parent        uint64   `protobuf:"varint,10,opt,name=parent,proto3" json:"parent,omitempty"`

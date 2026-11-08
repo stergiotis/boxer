@@ -980,6 +980,30 @@ APIs with `egui::Ui` callbacks (like `egui_table::TableDelegate`) use `WithDefer
   }
   ```
 
+## A Row Reversed Inside a Right-Aligned Container
+* **The Symptom:** A row of widgets in a right-aligned table cell or bubble comes out in reverse order: the icon that should lead the row trails it.
+* **The Cause:** egui's `ui.horizontal` runs right to left when the enclosing ui prefers it — a `MainDirRightToLeft` row, a right-aligned cell — so `c.Horizontal()` there lays out last-to-first.
+* **The Pattern:** `c.HorizontalLeftToRight()` is `Horizontal` that always runs left to right (ADR-0363 (proposed) §M7). Use it for a row whose order means something; keep `Horizontal` where following the container is the point.
+
+## A Centred Row That Swallows the Column
+* **The Symptom:** A row built with `c.UiWithLayout().MainDirLeftToRight().CrossAlignCenter()` directly inside a vertical container pushes everything after it to the bottom of the pane.
+* **The Cause:** A centred cross axis in a top-down parent claims the whole remaining height, so the row's rect is the rest of the column.
+* **The Pattern:** Wrap it in `c.Horizontal()` (or `HorizontalLeftToRight`), whose height starts at one interaction row and grows to its content.
+
+## A Shortcut That Fires With Shift, or a Shift Shortcut That Never Fires
+* **The Symptom:** Host-side: a handler written for F1 also runs on Shift+F1. Or a chord bound to Shift+`[` never fires on a US layout.
+* **The Cause:** egui's `consume_key(Modifiers::NONE, key)` matches *logically*: it insists only on the modifiers asked for, so Shift held still matches. And a key is reported by what it types, so Shift+`[` arrives as `{`, Shift+`=` as `+`.
+* **The Pattern:** In the host, match the more specific chord first or compare modifiers exactly (`keychord::chord_matches`). In a chord table, list every spelling a keyboard can produce — `keycodes.ShellChords` binds CountUp under Plus, Shift+Plus and Shift+Equals for this reason. A layout that puts a different character on the shifted key produces neither spelling, so prefer letters and arrows for anything that must work everywhere.
+
+## A Selection That Disappears While Scrolling
+* **The Symptom:** Text selected across several labels in a scroll area vanishes once its start scrolls out of view, or a drag from a right-aligned message upward past a left-aligned one leaves the left one unselected.
+* **The Cause:** egui drops a selection in any pass that does not see both of its ends, and its labels take part in selection only while on screen. Separately, it treats two labels whose bounds do not overlap horizontally as separate columns and does not sweep from one to the other when the drag ends outside both.
+* **The Pattern:** `LabelAtomsLinked` and the pill label keep taking part while off screen and a selection exists (ADR-0363 (proposed) §M6). `.SelectionColumn()` on a `LabelAtomsLinked` gives it its clip rect's width for egui's column test, for bubbles and side-by-side cells. Neither helps a row that is not drawn at all: a virtualized list (chatview) that stands rows in as space loses a selection whose end it stopped drawing.
+
+## Something Changed and Nobody Heard It
+* **The Symptom:** A query finishes, an export fails, an agent turn ends — and a screen reader says nothing, and a scene has nothing to wait on but a status label that may not exist.
+* **The Pattern:** `c.Announce(text, assertive)` speaks `text` at the end of the pass through two live regions that take turns, so a repeated message is spoken again; `assertive` interrupts, keep it for errors. The announcement is a `label` flagged `live` in `imzero2 drive`'s tree, so a scene can `wait` on `valueContains`. A list the person moves a cursor through is `c.AccessibleList(name, len)` around its rows, each row a `c.AccessibleListItem(key, index, selected, current)`: the list is one node with its length, each row says its position, and the current row is the list's active descendant (ADR-0363 (proposed) §M2).
+
 ## Gallery Scroll-Host Layout — Side Panels Collapse, and the Tour Hides It
 * **The Symptom:** A widget-gallery demo puts a control column beside a filling content area with `c.PanelLeftInside(...)` + `c.PanelCentralInside()`. The screenshot tour looks perfect, but in the *interactive* gallery the left panel collapses to a sliver and clips its controls while the central area fills wide. Related symptoms from the same layout: a fixed-width output column (`UiSetMaxWidth`) strands dead space on the right of a wide window with its scrollbar floating mid-pane, and a `DockArea` overflows / clips instead of scrolling.
 * **The Cause:** The two demo hosts are not equivalent. The **TestDriver** (tour; `IMZERO2_SCREENSHOT_DIR` set) wraps each demo in a bounded `c.AllocateUiAtRect(0, 0, stageW, stageH)` — finite width **and** height, with a real region for side panels to claim. The **InteractiveDriver** (the gallery you click around in) wraps each demo in `c.ScrollArea().Vscroll(true).AutoShrink(false, false)` — full host width but **unbounded, scrollable height**, and **no CentralPanel region**. egui side panels (`SidePanel` / the `*Inside` variants) size against a CentralPanel region; inside a bare scroll area they get a degenerate width and clip. A `DockArea` (egui_dock fills its allocated rect) has no finite height to fill in the vscroll, so it clips. The tour's bounded rect papers over both — which is exactly why a tour-only "fix" readily regresses the gallery.

@@ -53,7 +53,10 @@ window "SQL Playground" #6652989512278090663 @566,366
 
 Role, then the name in quotes, then the value after `=`, then `#id`, then `@`
 the bounds centre in logical points, then flags (`disabled`, `hidden`,
-`focused`, `selected`). Everything is spelled the way a step takes it: the
+`focused`, `selected`, `live`). `live` is a live region: text a screen reader
+speaks when it changes, which is how an app announces a result (`c.Announce`,
+ADR-0363 (proposed) §M2) — `wait` on its `value` to wait for what a person
+would hear. Everything is spelled the way a step takes it: the
 quoted text is a JSON string, the id is what `"id"` reads. Indentation is
 nesting among the printed nodes.
 

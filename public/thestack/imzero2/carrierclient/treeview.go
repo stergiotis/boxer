@@ -252,7 +252,7 @@ func FormatNode(n *TreeNode) string {
 	for _, f := range []struct {
 		bit  uint32
 		name string
-	}{{FlagDisabled, "disabled"}, {FlagHidden, "hidden"}, {FlagFocused, "focused"}, {FlagSelected, "selected"}} {
+	}{{FlagDisabled, "disabled"}, {FlagHidden, "hidden"}, {FlagFocused, "focused"}, {FlagSelected, "selected"}, {FlagLive, "live"}} {
 		if n.GetFlags()&f.bit != 0 {
 			flags = append(flags, f.name)
 		}

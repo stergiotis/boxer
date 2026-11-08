@@ -216,8 +216,12 @@ func mirrorObservedFSM[T mirroredStateI](m *fsmview.Machine[T], obs T, subject s
 // pre-finish snapshot — the torn read that used to manufacture a spurious
 // idle, an edge no declared path reaches and so still a warning.
 func (inst *PlayApp) syncQueryFSM(loading bool, numRows int64, executed time.Time, err error) {
+	prev := inst.queryFSM.Current()
 	mirrorObservedFSM(inst.queryFSM,
 		inst.observeQueryState(loading, numRows, executed, err), "query result")
+	if text, assertive := queryAnnouncement(prev, inst.queryFSM.Current(), numRows, err); text != "" {
+		inst.announcement, inst.announceAssertive = text, assertive
+	}
 }
 
 // newQueryFSM declares the query result lifecycle graph: Idle→Running→

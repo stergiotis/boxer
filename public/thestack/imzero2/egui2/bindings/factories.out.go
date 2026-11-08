@@ -11,6 +11,34 @@ import "github.com/stergiotis/boxer/public/keelson/runtime/widgethandle"
 import "encoding/binary"
 import "github.com/stergiotis/boxer/public/thestack/fffi2/runtime"
 
+func AccessibleList(name string, len uint32) (inst AccessibleListFluid) {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteOpCode(uint32(FuncProcIdAccessibleList))
+	r.WriteString(name)
+	r.WriteUint32(len)
+
+	inst = AccessibleListFluid{
+		r: r,
+	}
+
+	return
+}
+
+func AccessibleListItem(key uint64, index uint32, selected uint8, current bool) (inst AccessibleListItemFluid) {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteOpCode(uint32(FuncProcIdAccessibleListItem))
+	r.WriteUint64(key)
+	r.WriteUint32(index)
+	r.WriteUint8(selected)
+	r.WriteBool(current)
+
+	inst = AccessibleListItemFluid{
+		r: r,
+	}
+
+	return
+}
+
 func AccessibleRegion(name string) (inst AccessibleRegionFluid) {
 	r := typed.NewRetainedFffiBuilder()
 	r.WriteOpCode(uint32(FuncProcIdAccessibleRegion))
@@ -71,6 +99,15 @@ func AnimateValueWithTime(animId uint64, target float32, durSecs float32) {
 	r.WriteUint64(animId)
 	r.WriteFloat32(target)
 	r.WriteFloat32(durSecs)
+
+	r.SendIntermediate()
+}
+
+func Announce(text string, assertive bool) {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteUint32(uint32(FuncProcIdAnnounce))
+	r.WriteString(text)
+	r.WriteBool(assertive)
 
 	r.SendIntermediate()
 }
@@ -579,6 +616,17 @@ func HorizontalCentered() (inst HorizontalCenteredFluid) {
 	r.WriteOpCode(uint32(FuncProcIdHorizontalCentered))
 
 	inst = HorizontalCenteredFluid{
+		r: r,
+	}
+
+	return
+}
+
+func HorizontalLeftToRight() (inst HorizontalLeftToRightFluid) {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteOpCode(uint32(FuncProcIdHorizontalLeftToRight))
+
+	inst = HorizontalLeftToRightFluid{
 		r: r,
 	}
 
@@ -1946,6 +1994,15 @@ func UiClipToMaxRect() {
 func UiDisable() {
 	r := typed.NewRetainedFffiBuilder()
 	r.WriteUint32(uint32(FuncProcIdUiDisable))
+
+	r.SendIntermediate()
+}
+
+func UiScrollWithDelta(dx float32, dy float32) {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteUint32(uint32(FuncProcIdUiScrollWithDelta))
+	r.WriteFloat32(dx)
+	r.WriteFloat32(dy)
 
 	r.SendIntermediate()
 }

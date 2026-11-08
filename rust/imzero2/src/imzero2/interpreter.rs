@@ -962,6 +962,13 @@ pub struct ImZeroFffi<'a, R: std::io::BufRead, W: std::io::Write> {
     // as image_cache.
     pub paint_image_cache: ImageCache,
 
+    // ADR-0363 §M2 (proposed): what the `announce` op queued this pass, spoken
+    // through two live-region nodes emitted after the body; and the
+    // `accessibleList` blocks open around the op being interpreted, innermost
+    // last, which their `accessibleListItem` rows report to. Module: a11y.
+    pub announcer: crate::imzero2::a11y::Announcer,
+    pub a11y_lists: Vec<crate::imzero2::a11y::ListFrame>,
+
     // Frame-metrics introspection — captured at the bottom of
     // interpret_commands_outer, drained by the fetchFrameMetrics fetcher
     // with one-frame display lag. Reported in microseconds; saturates at
@@ -1201,6 +1208,8 @@ impl<R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'_, R, W> {
             consoles: ConsoleCache::default(),
             image_cache: ImageCache::new(),
             paint_image_cache: ImageCache::new(),
+            announcer: Default::default(),
+            a11y_lists: Vec::new(),
             last_interpret_us: 0,
             capture_replay: false,
             capture_raster: None,
@@ -1385,6 +1394,9 @@ impl<R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'_, R, W> {
         );
         let mut root = Some(&mut root_ui);
         let result = self.interpret_outer(ctx, &mut root);
+        self.announcer.show(ctx);
+        // A list left open by a body that failed must not catch next pass's rows.
+        self.a11y_lists.clear();
         // The export plugin runs at the end of this pass. Bring the ring
         // textures' mirror up to date only when it will read it: the copy
         // is the whole texture, too much to repeat on every push.
@@ -1932,6 +1944,69 @@ impl<R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'_, R, W> {
             clippy::useless_let_if_seq
         )]
         match f {
+            FuncProcId::AccessibleList => {
+                #[cfg(feature = "puffin")]
+                puffin::profile_scope!("match FuncProcId::AccessibleList");
+                // arguments
+                let mut name = self.io.read_plain_s()?;
+                let mut len = self.io.read_plain_u32()?;
+                // construct
+                if d == 0 {
+                    self.end_consume_message()?;
+                }
+                // apply
+                // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+
+                if u.is_some() {
+                    let ui = u.as_mut().unwrap();
+                    ui.scope(|ui| {
+                        let frame = crate::imzero2::a11y::begin_list(ui, name.as_str(), len);
+                        self.a11y_lists.push(frame);
+                        let _ = self.interpret_outer_logged(c, &mut Some(ui));
+                        if let Some(frame) = self.a11y_lists.pop() {
+                            crate::imzero2::a11y::end_list(ui.ctx(), frame, ui.min_rect());
+                        }
+                    });
+                } else {
+                    self.interpret_outer(c, &mut None)?;
+                }
+            }
+            FuncProcId::AccessibleListItem => {
+                #[cfg(feature = "puffin")]
+                puffin::profile_scope!("match FuncProcId::AccessibleListItem");
+                // arguments
+                let mut key = self.io.read_plain_u64()?;
+                let mut index = self.io.read_plain_u32()?;
+                let mut selected = self.io.read_plain_u8()?;
+                let mut current = self.io.read_plain_b()?;
+                // construct
+                if d == 0 {
+                    self.end_consume_message()?;
+                }
+                // apply
+                // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+
+                if u.is_some() {
+                    let ui = u.as_mut().unwrap();
+                    let builder =
+                        crate::imzero2::a11y::row_builder(ui, key, self.a11y_lists.last());
+                    let r = ui.scope_builder(builder, |ui| {
+                        let _ = self.interpret_outer_logged(c, &mut Some(ui));
+                        ui.unique_id()
+                    });
+                    crate::imzero2::a11y::mark_row(
+                        ui.ctx(),
+                        self.a11y_lists.last_mut(),
+                        r.inner,
+                        r.response.rect,
+                        index,
+                        selected,
+                        current,
+                    );
+                } else {
+                    self.interpret_outer(c, &mut None)?;
+                }
+            }
             FuncProcId::AccessibleRegion => {
                 #[cfg(feature = "puffin")]
                 puffin::profile_scope!("match FuncProcId::AccessibleRegion");
@@ -2074,6 +2149,20 @@ impl<R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'_, R, W> {
                     c.animate_value_with_time(aid, target, dur_secs)
                 };
                 self.r9_f64_push(anim_id, val as f64);
+            }
+            FuncProcId::Announce => {
+                #[cfg(feature = "puffin")]
+                puffin::profile_scope!("match FuncProcId::Announce");
+                // arguments
+                let mut text = self.io.read_plain_s()?;
+                let mut assertive = self.io.read_plain_b()?;
+                if d == 0 {
+                    self.end_consume_message()?;
+                }
+                // apply
+                if !self.capture_replay {
+                    self.announcer.say(text.as_str(), assertive);
+                }
             }
             FuncProcId::Atoms => {
                 #[cfg(feature = "puffin")]
@@ -5903,6 +5992,34 @@ egui::Grid::new(i);
                     self.interpret_outer(c, &mut None)?;
                 }
             }
+            FuncProcId::HorizontalLeftToRight => {
+                #[cfg(feature = "puffin")]
+                puffin::profile_scope!("match FuncProcId::HorizontalLeftToRight");
+                // arguments
+                // construct
+                if d == 0 {
+                    self.end_consume_message()?;
+                }
+                // apply
+                // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+
+                if u.is_some() {
+                    let ui = u.as_mut().unwrap();
+                    let initial = egui::vec2(
+                        ui.available_size_before_wrap().x,
+                        ui.spacing().interact_size.y,
+                    );
+                    ui.allocate_ui_with_layout(
+                        initial,
+                        egui::Layout::left_to_right(egui::Align::Center),
+                        |ui| {
+                            let _ = self.interpret_outer_logged(c, &mut Some(ui));
+                        },
+                    );
+                } else {
+                    self.interpret_outer(c, &mut None)?;
+                }
+            }
             FuncProcId::HorizontalTop => {
                 #[cfg(feature = "puffin")]
                 puffin::profile_scope!("match FuncProcId::HorizontalTop");
@@ -6419,6 +6536,14 @@ egui::Grid::new(i);
                             puffin::profile_scope!("match LabelAtomsLinkedBuilderMethodId::Wrap");
                             // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
                             w = w.wrap_mode(egui::TextWrapMode::Wrap);
+                        }
+                        LabelAtomsLinkedBuilderMethodId::SelectionColumn => {
+                            #[cfg(feature = "puffin")]
+                            puffin::profile_scope!(
+                                "match LabelAtomsLinkedBuilderMethodId::SelectionColumn"
+                            );
+                            // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+                            w = w.selection_column();
                         }
                     }
                 }
@@ -10614,6 +10739,25 @@ if multiline { egui::TextEdit::multiline(&mut text).id(i) } else { egui::TextEdi
 
                 if u.is_some() {
                     u.as_mut().unwrap().disable();
+                }
+            }
+            FuncProcId::UiScrollWithDelta => {
+                #[cfg(feature = "puffin")]
+                puffin::profile_scope!("match FuncProcId::UiScrollWithDelta");
+                // arguments
+                let mut dx = self.io.read_plain_f32()?;
+                let mut dy = self.io.read_plain_f32()?;
+                if d == 0 {
+                    self.end_consume_message()?;
+                }
+                // apply
+                // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+
+                if u.is_some() {
+                    u.as_mut().unwrap().scroll_with_delta_animation(
+                        egui::vec2(dx, dy),
+                        egui::style::ScrollAnimation::none(),
+                    );
                 }
             }
             FuncProcId::UiSetHeight => {

@@ -573,6 +573,26 @@ func definitionsBlock() (blocks []*ir.BuilderFactoryNode) {
 						self.interpret_outer({{EguiContext}}, &mut None)?;
 					}
 `)).Build())
+		// horizontalLeftToRight is horizontal that always runs left to
+		// right. egui's horizontal runs right to left inside a container
+		// that prefers it — a right-aligned table cell or bubble — which
+		// reverses a row of widgets drawn there (ADR-0363 §M7, proposed).
+		blocks = append(blocks, idl.NewBuilderFactoryNode("horizontalLeftToRight").
+			WithSettingImmediate(true).
+			WithSettingBlockIterator(true).
+			WithConstructionCodeClientRust(ir.EmptyCode).
+			WithApplyCodeClientRust(
+				rustClientCode(`
+					if {{EguiUiOptionalOuter}}.is_some() {
+						let ui = {{EguiUiOptionalOuter}}.as_mut().unwrap();
+						let initial = egui::vec2(ui.available_size_before_wrap().x, ui.spacing().interact_size.y);
+						ui.allocate_ui_with_layout(initial, egui::Layout::left_to_right(egui::Align::Center), |ui| {
+							let _ = self.interpret_outer_logged({{EguiContext}}, &mut Some(ui));
+						});
+					} else {
+						self.interpret_outer({{EguiContext}}, &mut None)?;
+					}
+`)).Build())
 		blocks = append(blocks, idl.NewBuilderFactoryNode("horizontalCentered").
 			WithSettingImmediate(true).
 			WithSettingBlockIterator(true).
@@ -1100,6 +1120,74 @@ let mut layout = egui::Layout::default();`)).
 								y1: visible.max.y.into(),
 							});
 						});
+					} else {
+						self.interpret_outer({{EguiContext}}, &mut None)?;
+					}
+`)).Build())
+	// accessibleList makes its body one labelled list in the accessibility
+	// tree (role ListBox, `len` rows) for the accessibleListItem rows drawn
+	// inside it. The row marked current becomes the list's active
+	// descendant, which is how a screen reader follows a cursor that moves
+	// through the rows while egui's focus stays on the list's own widget
+	// (ADR-0363 §M2, proposed). `len` counts every row, drawn or not, so a
+	// list that draws only the rows near the view still says how long it is.
+	blocks = append(blocks, idl.NewBuilderFactoryNode("accessibleList").
+		AddArguments(idl.NewArgumentsBuilder().
+			PlainArg("name", ctabb.S).
+			PlainArg("len", ctabb.U32).
+			Build()).
+		WithSettingImmediate(true).
+		WithSettingBlockIterator(true).
+		WithConstructionCodeClientRust(ir.EmptyCode).
+		WithApplyCodeClientRust(rustClientCode(`
+					if {{EguiUiOptionalOuter}}.is_some() {
+						let ui = {{EguiUiOptionalOuter}}.as_mut().unwrap();
+						ui.scope(|ui| {
+							let frame = crate::imzero2::a11y::begin_list(ui, name.as_str(), len);
+							self.a11y_lists.push(frame);
+							let _ = self.interpret_outer_logged({{EguiContext}}, &mut Some(ui));
+							if let Some(frame) = self.a11y_lists.pop() {
+								crate::imzero2::a11y::end_list(ui.ctx(), frame, ui.min_rect());
+							}
+						});
+					} else {
+						self.interpret_outer({{EguiContext}}, &mut None)?;
+					}
+`)).Build())
+	// accessibleListItem draws its body as one row of the enclosing
+	// accessibleList: role ListBoxOption at `index` (0-based) of the list's
+	// `len`. `key` names the row for as long as it exists — a message id,
+	// a record id — so its node keeps its id when rows before it come and
+	// go. `selected` is 0 where selection does not apply, 1 not selected,
+	// 2 selected. One row per list should be `current`. Outside a list it
+	// is a row of nothing and only keeps its stable id.
+	blocks = append(blocks, idl.NewBuilderFactoryNode("accessibleListItem").
+		AddArguments(idl.NewArgumentsBuilder().
+			PlainArg("key", ctabb.U64).
+			PlainArg("index", ctabb.U32).
+			PlainArg("selected", ctabb.U8).
+			PlainArg("current", ctabb.B).
+			Build()).
+		WithSettingImmediate(true).
+		WithSettingBlockIterator(true).
+		WithConstructionCodeClientRust(ir.EmptyCode).
+		WithApplyCodeClientRust(rustClientCode(`
+					if {{EguiUiOptionalOuter}}.is_some() {
+						let ui = {{EguiUiOptionalOuter}}.as_mut().unwrap();
+						let builder = crate::imzero2::a11y::row_builder(ui, key, self.a11y_lists.last());
+						let r = ui.scope_builder(builder, |ui| {
+							let _ = self.interpret_outer_logged({{EguiContext}}, &mut Some(ui));
+							ui.unique_id()
+						});
+						crate::imzero2::a11y::mark_row(
+							ui.ctx(),
+							self.a11y_lists.last_mut(),
+							r.inner,
+							r.response.rect,
+							index,
+							selected,
+							current,
+						);
 					} else {
 						self.interpret_outer({{EguiContext}}, &mut None)?;
 					}

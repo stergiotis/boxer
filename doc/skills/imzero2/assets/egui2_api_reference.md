@@ -15,12 +15,15 @@ status: draft
 
 | Name | Type | Identity | Plain Args | Eval Args | Methods | Features |
 |------|------|----------|------------|-----------|---------|----------|
+| AccessibleList | BuilderFactory | No | 2 | 0 | 0 | Immediate, BlockIterator |
+| AccessibleListItem | BuilderFactory | No | 4 | 0 | 0 | Immediate, BlockIterator |
 | AccessibleRegion | BuilderFactory | No | 1 | 0 | 0 | Immediate, BlockIterator |
 | AddSpace | Procedural | No | 1 | 0 | - | - |
 | AllocateUiAtRect | BuilderFactory | No | 4 | 0 | 0 | Immediate, BlockIterator |
 | AnimateBoolResponsive | Procedural | No | 2 | 0 | - | - |
 | AnimateBoolWithTime | Procedural | No | 3 | 0 | - | - |
 | AnimateValueWithTime | Procedural | No | 3 | 0 | - | - |
+| Announce | Procedural | No | 2 | 0 | - | - |
 | Atoms | BuilderFactory | No | 0 | 0 | 21 | Retained |
 | Button | BuilderFactory | Yes | 0 | 1 | 9 | Immediate, Retained |
 | CaptureAvailableSize | Procedural | No | 0 | 0 | - | - |
@@ -92,6 +95,7 @@ status: draft
 | GuiZoomZoomMenuButtons | Procedural | No | 0 | 0 | - | - |
 | Horizontal | BuilderFactory | No | 0 | 0 | 0 | Immediate, BlockIterator |
 | HorizontalCentered | BuilderFactory | No | 0 | 0 | 0 | Immediate, BlockIterator |
+| HorizontalLeftToRight | BuilderFactory | No | 0 | 0 | 0 | Immediate, BlockIterator |
 | HorizontalTop | BuilderFactory | No | 0 | 0 | 0 | Immediate, BlockIterator |
 | HorizontalWrapped | BuilderFactory | No | 0 | 0 | 0 | Immediate, BlockIterator |
 | HoverText | BuilderFactory | No | 1 | 0 | 0 | Immediate, BlockIterator |
@@ -103,7 +107,7 @@ status: draft
 | Indent | BuilderFactory | Yes | 0 | 0 | 0 | Immediate, BlockIterator |
 | Label | BuilderFactory | No | 1 | 0 | 4 | Immediate, Retained |
 | LabelAtoms | BuilderFactory | No | 0 | 1 | 4 | Immediate, Retained |
-| LabelAtomsLinked | BuilderFactory | Yes | 3 | 1 | 2 | Immediate, Retained |
+| LabelAtomsLinked | BuilderFactory | Yes | 3 | 1 | 3 | Immediate, Retained |
 | LabelWidgetText | BuilderFactory | No | 0 | 1 | 0 | Immediate, Retained |
 | MeasureText | Procedural | No | 4 | 0 | - | - |
 | MeasureTextSize | Procedural | No | 5 | 0 | - | - |
@@ -190,6 +194,7 @@ status: draft
 | TintedScope | BuilderFactory | Yes | 1 | 0 | 4 | Immediate, Retained, BlockIterator |
 | UiClipToMaxRect | Procedural | No | 0 | 0 | - | - |
 | UiDisable | Procedural | No | 0 | 0 | - | - |
+| UiScrollWithDelta | Procedural | No | 2 | 0 | - | - |
 | UiSetHeight | Procedural | No | 1 | 0 | - | - |
 | UiSetItemSpacing | Procedural | No | 2 | 0 | - | - |
 | UiSetMaxHeight | Procedural | No | 1 | 0 | - | - |
@@ -211,6 +216,46 @@ status: draft
 
 
 ## BuilderFactory Nodes
+
+### AccessibleList
+
+- **Type:** BuilderFactory
+- **Identity:** No
+- **Features:** Immediate, BlockIterator
+
+#### Constructor Arguments
+
+| Name | Kind | Type |
+|------|------|------|
+| name | plain | s |
+| len | plain | u32 |
+
+#### Return Type
+
+Block
+
+---
+
+### AccessibleListItem
+
+- **Type:** BuilderFactory
+- **Identity:** No
+- **Features:** Immediate, BlockIterator
+
+#### Constructor Arguments
+
+| Name | Kind | Type |
+|------|------|------|
+| key | plain | u64 |
+| index | plain | u32 |
+| selected | plain | u8 |
+| current | plain | b |
+
+#### Return Type
+
+Block
+
+---
 
 ### AccessibleRegion
 
@@ -932,6 +977,18 @@ Block
 
 ---
 
+### HorizontalLeftToRight
+
+- **Type:** BuilderFactory
+- **Identity:** No
+- **Features:** Immediate, BlockIterator
+
+#### Return Type
+
+Block
+
+---
+
 ### HorizontalTop
 
 - **Type:** BuilderFactory
@@ -1155,6 +1212,7 @@ Label
 
 - **Selectable**(val: b)
 - **Wrap**()
+- **SelectionColumn**()
 
 #### Return Type
 
@@ -2806,6 +2864,20 @@ Block
 
 ---
 
+### Announce
+
+- **Type:** Procedural
+- **Identity:** No
+
+#### Constructor Arguments
+
+| Name | Kind | Type |
+|------|------|------|
+| text | plain | s |
+| assertive | plain | b |
+
+---
+
 ### CaptureAvailableSize
 
 - **Type:** Procedural
@@ -3166,6 +3238,20 @@ Block
 
 - **Type:** Procedural
 - **Identity:** No
+
+---
+
+### UiScrollWithDelta
+
+- **Type:** Procedural
+- **Identity:** No
+
+#### Constructor Arguments
+
+| Name | Kind | Type |
+|------|------|------|
+| dx | plain | f32 |
+| dy | plain | f32 |
 
 ---
 
