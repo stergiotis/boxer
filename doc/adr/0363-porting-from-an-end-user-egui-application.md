@@ -184,7 +184,12 @@ found that an app whose control rows are laid out on one line (play,
 mdedit) overflows a window narrower than the rows, and the window clips
 them. Wrapping those rows did not hold: a wrapped row is laid out at the
 width the window's content had, so it wraps past the window's edge. That
-is open, and the two scenes that show it carry exceptions naming it.
+is open, and the two scenes that show it carry exceptions naming it. A probe of
+egui alone (2026-11-08: a resizable window laid out wide, then placed
+narrower once) wraps such a row at the placed width on the next frame, so
+the overflow is not egui's resize memory by itself; where the desktop's
+cells and learned minimums (ADR-0346) come into it is the next thing to
+look at.
 
 ### M2 — Accessibility semantics in the IDL ✓
 
