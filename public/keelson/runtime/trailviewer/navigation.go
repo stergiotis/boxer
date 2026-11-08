@@ -5,6 +5,7 @@ import (
 	"math"
 	"slices"
 	"sort"
+	"strconv"
 	"time"
 
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
@@ -40,8 +41,11 @@ const (
 	// detailLaneHeight sizes the detail strip's lanes so six fit about
 	// 100 px with the default gap.
 	detailLaneHeight = 13
-	// detailIntensityFloor keeps a bucket of one row visible.
-	detailIntensityFloor = 0.15
+	// detailIntensityFloor is where the detail strip's counts start on the
+	// opacity scale, so a bucket of one row is visible and still reads as
+	// less than a bucket of a hundred. The timeline's density rug starts at
+	// the same place (rugDensityMinTint).
+	detailIntensityFloor = 0.3
 	// outOfHoursAlpha is the band tint's alpha behind the detail strip.
 	outOfHoursAlpha = 0x22
 	// outOfHoursMaxDays bounds the bands yielded for one view.
@@ -421,8 +425,9 @@ func foldKeys(buckets []Bucket) (keys []string, index func(key string) int) {
 }
 
 // detailIntervals is the detail strip's data: one interval per (bucket,
-// series) with the series as its lane and its count against the largest
-// as intensity, floored so a bucket of one row is visible.
+// series) with the series as its lane, its count against the largest mapped
+// onto [detailIntensityFloor, 1] as intensity, and the count in words for the
+// tooltip.
 func detailIntervals(buckets []Bucket, step time.Duration) (ivs []*layout.IntervalEvent, keys []string) {
 	if len(buckets) == 0 || step <= 0 {
 		return
@@ -450,9 +455,17 @@ func detailIntervals(buckets []Bucket, step time.Duration) (ivs []*layout.Interv
 			continue
 		}
 		ivs = append(ivs, &layout.IntervalEvent{FromMS: k.bucket * 1000, ToMS: (k.bucket + int64(step/time.Second)) * 1000, KindID: int32(k.series),
-			Intensity: float32(max(float64(n)/float64(maxN), detailIntensityFloor)), LaneHint: keys[k.series]})
+			Intensity: float32(detailIntensityFloor + (1-detailIntensityFloor)*float64(n)/float64(maxN)), LaneHint: keys[k.series], Note: rowCount(n)})
 	}
 	return
+}
+
+// rowCount is a bucket's count in words, for the strip's tooltip.
+func rowCount(n uint64) string {
+	if n == 1 {
+		return "1 row"
+	}
+	return strconv.FormatUint(n, 10) + " rows"
 }
 
 // detailColors is the qualitative cycle as the detail strip's lane palette,

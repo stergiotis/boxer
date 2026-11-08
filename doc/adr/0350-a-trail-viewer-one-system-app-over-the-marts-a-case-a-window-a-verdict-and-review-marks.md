@@ -548,9 +548,11 @@ steps are its frames and wrong here.
 
 **The detail strip** is a `timeline` locked to the window the table read
 (`LockedView`, `SetRangeUnits` every frame): one lane per series of the
-strip's buckets with the count as intensity, floored so a bucket of one
-row is visible, the out-of-hours spans and weekend days as background
-bands in the picker's zone. Its brush narrows the window through
+strip's buckets, the series as hue and the count as opacity
+(`FadeIntervalColors`) from a floor, so a bucket of one row is visible and
+still reads as the least, the exact count in the cell's tooltip, the
+out-of-hours spans and weekend days as background bands in the picker's
+zone. Its brush narrows the window through
 `set_range` and is then taken back, as play's timeline does; a click on a
 cell selects the newest held row of its bucket and the widget's own
 highlight is cleared, so it does not compete with the table's.

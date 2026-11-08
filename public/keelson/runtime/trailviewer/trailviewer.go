@@ -812,7 +812,8 @@ func (inst *App) renderBand(now time.Time) {
 
 // renderDetailStrip is the detail strip (ADR-0350 §SD13): a timeline
 // locked to the window the table read, one lane per series of the strip's
-// buckets with the count as intensity, the out-of-hours bands behind. Its
+// buckets with the count as the series colour's opacity and a tooltip line,
+// the out-of-hours bands behind. Its
 // brush narrows the window through set_range and is then taken back, as
 // play does; a click on a cell selects the newest held row of its bucket.
 func (inst *App) renderDetailStrip() {
@@ -821,7 +822,7 @@ func (inst *App) renderDetailStrip() {
 		inst.detailVis = timeline.DefaultVisuals()
 		inst.detailVis.LaneHeight = detailLaneHeight
 		inst.detailTl = timeline.New(inst.ids, "trail-detail", nil, timeline.Options{TimeZone: inst.picker.loc, LockedView: true, Brush: true, NowLine: true,
-			IntervalColors: detailColors(), BackgroundBands: outOfHoursBands(func() *time.Location { return inst.picker.loc }), Visuals: &inst.detailVis,
+			IntervalColors: detailColors(), FadeIntervalColors: true, BackgroundBands: outOfHoursBands(func() *time.Location { return inst.picker.loc }), Visuals: &inst.detailVis,
 			ContainerWidth: stripFallbackWidth})
 	}
 	tl := inst.detailTl

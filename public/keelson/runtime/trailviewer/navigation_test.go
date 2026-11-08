@@ -236,7 +236,7 @@ func TestBackPopsAndDoesNotPush(t *testing.T) {
 }
 
 // The detail strip's intervals: one per (bucket, series), the series as
-// lane, the count against the largest as intensity, floored.
+// lane, the count against the largest as intensity from a floor up.
 func TestTheDetailIntervalsComeFromTheBuckets(t *testing.T) {
 	T := time.Date(2026, 3, 1, 12, 0, 0, 0, time.UTC)
 	step := time.Minute
@@ -253,8 +253,10 @@ func TestTheDetailIntervalsComeFromTheBuckets(t *testing.T) {
 	require.Len(t, byLane["auditEvent"], 2)
 	require.Len(t, byLane["llmCall"], 1)
 	assert.InDelta(t, 1.0, byLane["auditEvent"][1].Intensity, 1e-6, "the largest count")
-	assert.InDelta(t, 0.4, byLane["llmCall"][0].Intensity, 1e-6)
-	assert.InDelta(t, detailIntensityFloor, byLane["auditEvent"][0].Intensity, 1e-6, "a bucket of one row is floored, so it is visible")
+	assert.InDelta(t, 0.58, byLane["llmCall"][0].Intensity, 1e-6, "four of ten, on the scale from the floor to one")
+	assert.InDelta(t, 0.37, byLane["auditEvent"][0].Intensity, 1e-6, "a bucket of one row is above the floor, so it is visible and still the least")
+	assert.Equal(t, "1 row", byLane["auditEvent"][0].Note, "the count is the tooltip's")
+	assert.Equal(t, "4 rows", byLane["llmCall"][0].Note)
 	ivs, _ = detailIntervals(nil, step)
 	assert.Empty(t, ivs)
 	assert.Len(t, detailColors(), stripKeys+1)
