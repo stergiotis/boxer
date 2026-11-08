@@ -47,7 +47,9 @@ func registry(t *testing.T) *app.Registry {
 		Surface: app.SurfaceWindowed, Topics: []app.TopicT{app.AllTopics[0]}}
 	require.NoError(t, r.RegisterFactory(plain, func() (app.AppI, error) { return nil, nil }))
 	applet := app.Manifest{Id: "github.com/x/apps/sqlapplet/slow-queries", Display: "Slow queries", Summary: "the slowest queries of the hour",
-		Kind: app.KindApplet, Keywords: []string{"latency"}, Surface: app.SurfaceWindowed, Topics: []app.TopicT{app.AllTopics[0]}}
+		Kind: app.KindApplet, Keywords: []string{"latency"}, Surface: app.SurfaceWindowed, Topics: []app.TopicT{app.AllTopics[0]},
+		// A minted applet serves a catalog of its own.
+		Operations: notesSet().Catalog()}
 	require.NoError(t, r.RegisterFactory(applet, func() (app.AppI, error) { return nil, nil }))
 	return r
 }
@@ -110,7 +112,9 @@ func TestDescribeSearch(t *testing.T) {
 	cli := serve(t)
 	apps, err := cli.Describe(context.Background(), DescribeRequest{Search: "REPLACE"})
 	require.NoError(t, err)
-	require.Len(t, apps, 1)
+	require.Len(t, apps, 2, "a search reaches an applet's operations too")
+	assert.Equal(t, "Notes", apps[0].Display)
+	assert.Equal(t, "Slow queries", apps[1].Display)
 	apps, err = cli.Describe(context.Background(), DescribeRequest{Search: "nothing like this"})
 	require.NoError(t, err)
 	assert.Empty(t, apps)

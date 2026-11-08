@@ -1178,6 +1178,19 @@ drew; past five seconds without a frame, a queued command's status, a query's
 answer or refusal, and the window list (`StalledSecs`) say how long. "The
 window has not drawn yet" is kept for a window that never drew.
 
+### 2026-11-07 — an applet stays out of the plain list when it has operations
+
+The rule above — an SQL applet is listed only when named or searched for —
+was enforced only for an app with no operations for agents, which every
+applet was. Since applets serve play's operable subset (ADR-0132, Update of
+2026-11-07), each has some fifty, and they all entered `describe` with no
+arguments: 129 apps and 4 009 operations, 1 733 124 characters, against 58
+apps and 165 091 characters the day before. A model that made that call, as
+the coordinator's prompt told it to, carried some 430 k tokens in every
+later call. The exclusion now applies before an app's operations are read,
+whatever they are; a search or the app's id still finds an applet and its
+operations.
+
 ## References
 
 - [ADR-0026](./0026-app-runtime-and-capability-subjects.md) — the subject taxonomy SD3 extends; the threat model SD6 keeps.
