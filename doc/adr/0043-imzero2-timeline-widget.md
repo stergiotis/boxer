@@ -135,6 +135,15 @@ See [`DOCUMENTATION_STANDARD.md`](../DOCUMENTATION_STANDARD.md) for the edit-pol
 
 ## Updates
 
+### 2026-11-08 — A categorical palette can carry intensity as opacity; an interval can carry a tooltip note
+
+`Options.IntervalColors` outranks intensity, so a caller whose bars are binned
+counts by kind had nowhere to show the count: the hue was taken and the
+tooltip printed only the extent. `Options.FadeIntervalColors` scales each
+palette entry's alpha by the event's `Intensity`, and `IntervalEvent.Note` adds
+a line to the tooltip. The option is off by default because a caller passing a
+palette need not set `Intensity`, and a zero would paint nothing.
+
 ### 2026-09-28 — LOD rungs finer than the axis unit collapse instead of panicking (refines the 2026-05-19 panic-on-non-ascending entry)
 
 `layout.BuildLODIndexUnit` still panics on scales that do not ascend as

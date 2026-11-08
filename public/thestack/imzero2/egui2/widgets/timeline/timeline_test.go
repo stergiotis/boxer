@@ -3,6 +3,7 @@ package timeline
 import (
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/graphview/scenetest"
 	"math"
+	"strings"
 	"testing"
 	"time"
 
@@ -346,6 +347,46 @@ func TestIntervalColors_Option(t *testing.T) {
 		if tl.intervalColors[i] != palette[i] {
 			t.Errorf("intervalColors[%d]: got %+v want %+v", i, tl.intervalColors[i], palette[i])
 		}
+	}
+}
+
+// TestIntervalFill_Fade: the palette ignores intensity unless asked, and when
+// asked keeps the hue and scales only the alpha.
+func TestIntervalFill_Fade(t *testing.T) {
+	palette := []color.Color{color.Hex(0x11223344), color.RGB(0xaa, 0xbb, 0xcc)}
+	ev := &layout.IntervalEvent{KindID: 1, Intensity: 0.5}
+
+	plain := newTestTimeline(t, nil, withIntervalColors(palette))
+	if got := plain.intervalFill(ev).Literal(); got != 0xaabbccff {
+		t.Errorf("no fade: got %#x want the palette entry", got)
+	}
+
+	fade := withOptions(func(o *Options) { o.FadeIntervalColors = true })
+	tl := newTestTimeline(t, nil, withIntervalColors(palette), fade)
+	if got := tl.intervalFill(ev).Literal(); got != 0xaabbcc80 {
+		t.Errorf("half intensity: got %#x want alpha 0x80", got)
+	}
+	if got := tl.intervalFill(&layout.IntervalEvent{KindID: 1, Intensity: 2}).Literal(); got != 0xaabbccff {
+		t.Errorf("intensity past 1 clamps: got %#x", got)
+	}
+	if got := tl.intervalFill(&layout.IntervalEvent{KindID: 0, Intensity: 0.5}).Literal(); got != 0x11223322 {
+		t.Errorf("a translucent entry scales from its own alpha: got %#x", got)
+	}
+
+	off := withOptions(func(o *Options) { o.NoIntensityEncoding = true })
+	if got := newTestTimeline(t, nil, withIntervalColors(palette), fade, off).intervalFill(ev).Literal(); got != 0xaabbccff {
+		t.Errorf("NoIntensityEncoding: got %#x want no fade", got)
+	}
+}
+
+func TestFormatIntervalTooltip_Note(t *testing.T) {
+	tl := newTestTimeline(t, nil)
+	ev := &layout.IntervalEvent{FromMS: 0, ToMS: 30_000, Note: "12 rows"}
+	if tip := tl.formatIntervalTooltip(ev, "audit"); !strings.HasPrefix(tip, "audit\n") || !strings.HasSuffix(tip, "\n30s\n12 rows") {
+		t.Errorf("hint first, note last: got %q", tip)
+	}
+	if tip := tl.formatIntervalTooltip(ev, ""); !strings.HasSuffix(tip, "\n30s\n12 rows") || strings.HasPrefix(tip, "\n") {
+		t.Errorf("no hint: got %q", tip)
 	}
 }
 

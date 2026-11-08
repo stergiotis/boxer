@@ -47,13 +47,16 @@ func (inst PointEvent) AsTime() (t time.Time) {
 // FromMS <= ToMS is required. Degenerate FromMS == ToMS is permitted and
 // represents a zero-width "instant in interval form"; renderers typically
 // clamp to one pixel. LaneHint pins the event to a named row (LifeLines-style
-// per-actor lane); empty hint hands placement to the greedy packer.
+// per-actor lane); empty hint hands placement to the greedy packer. Note, when
+// set, is one more line in the hover tooltip, for what the bar's extent does
+// not say — the count a binned bar stands for.
 type IntervalEvent struct {
 	FromMS    int64
 	ToMS      int64
 	KindID    int32
 	Intensity float32
 	LaneHint  string
+	Note      string
 }
 
 // AsFromTime converts FromMS to a time.Time in UTC.

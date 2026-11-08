@@ -538,10 +538,11 @@ type Timeline struct {
 	// playheadMS is the caller-set instant, valid only while playheadHas.
 	// Zero is a real epoch millisecond, so presence needs its own flag rather
 	// than a sentinel.
-	playheadMS       int64
-	playheadHas      bool
-	intensityEncoded bool
-	intervalColors   []color.Color // categorical interval palette (KindID-indexed); overrides intensity when non-empty
+	playheadMS         int64
+	playheadHas        bool
+	intensityEncoded   bool
+	fadeIntervalColors bool
+	intervalColors     []color.Color // categorical interval palette (KindID-indexed); overrides intensity when non-empty
 
 	selection SelectionInfo
 	// selLane backs a SelectionLane selection. Read only while
@@ -634,8 +635,14 @@ type Options struct {
 	NoIntensityEncoding bool
 	// IntervalColors, when non-empty, paints bars from this palette indexed
 	// by IntervalEvent.KindID (modulo len); it outranks intensity and flat
-	// colouring.
+	// colouring, unless FadeIntervalColors brings intensity back.
 	IntervalColors []color.Color
+	// FadeIntervalColors scales each IntervalColors entry's alpha by its
+	// event's Intensity, so the hue says which kind and the opacity how much.
+	// An Intensity of 0 paints nothing, so a caller whose smallest bar must
+	// stay visible floors it. Inert without IntervalColors or under
+	// NoIntensityEncoding.
+	FadeIntervalColors bool
 	// Visuals replaces DefaultVisuals when non-nil. Start from
 	// DefaultVisuals and change the fields you care about.
 	Visuals *Visuals
@@ -722,6 +729,7 @@ func (inst *Timeline) applyOpts() {
 	inst.nowLineEnabled = o.NowLine
 	inst.intensityEncoded = !o.NoIntensityEncoding
 	inst.intervalColors = o.IntervalColors
+	inst.fadeIntervalColors = o.FadeIntervalColors
 	if o.Visuals != nil {
 		inst.visuals = *o.Visuals
 	} else {
@@ -1710,19 +1718,42 @@ func (inst *Timeline) paintLanes(tm layout.TickMap, vl verticalLayout) {
 			if x1-x0 < inst.visuals.BarMinPx {
 				x1 = min(x0+inst.visuals.BarMinPx, vl.axisEndPx)
 			}
-			fill := inst.visuals.IntervalColor
-			if n := len(inst.intervalColors); n > 0 {
-				fill = inst.intervalColors[((int(ev.KindID)%n)+n)%n] // categorical, negative-KindID-safe
-			} else if inst.intensityEncoded {
-				rgba := styletokens.Sequential(inst.visuals.IntensityColormap, clamp01(ev.Intensity))
-				fill = color.Hex(rgba.AsHex())
-			}
-			c.PaintRectFilled(x0, y0, x1, y1, inst.visuals.CornerRadius, fill).Send()
+			c.PaintRectFilled(x0, y0, x1, y1, inst.visuals.CornerRadius, inst.intervalFill(ev)).Send()
 			if inst.selection.Kind == SelectionInterval && inst.selection.Interval == ev {
 				c.PaintRectStroke(x0, y0, x1, y1, inst.visuals.CornerRadius, inst.visuals.SelectionStrokeColor, selectionStrokeWidthPx).Send()
 			}
 		}
 	}
+}
+
+// intervalFill is one interval bar's colour: the categorical palette when
+// there is one, faded by intensity if asked; otherwise the intensity colormap
+// or the flat colour.
+func (inst *Timeline) intervalFill(ev *layout.IntervalEvent) (fill color.Color) {
+	if n := len(inst.intervalColors); n > 0 {
+		fill = inst.intervalColors[((int(ev.KindID)%n)+n)%n] // categorical, negative-KindID-safe
+		if inst.fadeIntervalColors && inst.intensityEncoded {
+			fill = fadeAlpha(fill, ev.Intensity)
+		}
+		return
+	}
+	fill = inst.visuals.IntervalColor
+	if inst.intensityEncoded {
+		rgba := styletokens.Sequential(inst.visuals.IntensityColormap, clamp01(ev.Intensity))
+		fill = color.Hex(rgba.AsHex())
+	}
+	return
+}
+
+// fadeAlpha scales col's alpha by f, in [0,1]. A retained colour adopted
+// without its literal has no alpha to scale and is returned as it is.
+func fadeAlpha(col color.Color, f float32) (out color.Color) {
+	rgba := col.Literal()
+	if rgba == 0 {
+		return col
+	}
+	a := uint32(float32(rgba&0xff)*clamp01(f) + 0.5)
+	return color.Hex(rgba&0xffffff00 | a)
 }
 
 // paintAxis draws the bottom tick axis (baseline + tick marks + labels) through
@@ -2082,11 +2113,13 @@ func (inst *Timeline) formatIntervalTooltip(ev *layout.IntervalEvent, hint strin
 	from := inst.formatValue(ev.FromMS, "2006-01-02 15:04:05")
 	to := inst.formatValue(ev.ToMS, "15:04:05")
 	dur := time.Duration(ev.DurationMS()) * inst.unitOrMS()
-	if hint != "" {
-		text = fmt.Sprintf("%s\n%s – %s\n%s", hint, from, to, dur)
-		return
-	}
 	text = fmt.Sprintf("%s – %s\n%s", from, to, dur)
+	if hint != "" {
+		text = hint + "\n" + text
+	}
+	if ev.Note != "" {
+		text += "\n" + ev.Note
+	}
 	return
 }
 
