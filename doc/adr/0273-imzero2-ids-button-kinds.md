@@ -86,6 +86,21 @@ that reads `button.rs`.
 the rest stroke so a capture does not depend on where the cursor is.
 `IdsButton` does the same for the kinds while that override is active.
 
+### SD5 — A status badge stays visibly unlike a button
+
+The badge widget's `Solid` and `Outline` variants resolve to the tokens of
+the `Primary` / `Danger` and `Tertiary` kinds, and what can be clicked has
+to be readable at rest, not found by hovering. So:
+
+- `badge.Send`, the display-only terminal, draws `Solid` and `Outline` as
+  `Soft` and ignores `Selected`. Those looks belong to `SendResp`.
+- A badge from `SendResp` changes on hover, by the same emphasis steps as
+  the kinds, and shows the pointer cursor. Its stroke width is constant,
+  because egui counts a `Frame`'s stroke in its size.
+- A badge takes its size's own corner radius rather than `Rounding.Sm`, and
+  its default size sets the label at caption size. Neither is to be aligned
+  with the button's: at rest they are what separates the two.
+
 ## Alternatives considered
 
 - **Tone × emphasis, as badge has.** Rejected: 24 combinations that
@@ -96,6 +111,9 @@ the rest stroke so a capture does not depend on where the cursor is.
   colour change (Context).
 - **Sending colours from Go.** Rejected: the client already knows the
   theme and the state, and Go knows neither until a frame later.
+- **A syntactic check for SD5.** Rejected: call sites hold the variant in a
+  variable, which a chain-walking check does not see. The terminal knows
+  whether the badge can be clicked, so the rule sits there.
 
 ## Consequences
 

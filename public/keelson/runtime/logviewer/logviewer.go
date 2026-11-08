@@ -363,27 +363,23 @@ func (inst *LogViewerApp) renderCounters(src *Source) {
 			Send()
 		c.AddSpace(styletokens.GapItems(inst.density))
 		droppedTone := badge.ToneNeutral
-		droppedVariant := badge.VariantSoft
 		if dropped > 0 {
 			droppedTone = badge.ToneWarning
-			droppedVariant = badge.VariantSolid
 		}
 		badge.New(inst.ids.PrepareStr("c-dropped"),
 			fmt.Sprintf("Dropped %d", dropped)).
-			Tone(droppedTone).Variant(droppedVariant).
+			Tone(droppedTone).Variant(badge.VariantSoft).
 			Size(badge.SizeSm).Monospace().
 			Tooltip("events dropped because the flush ring filled up — bridge is falling behind the writer").
 			Send()
 		c.AddSpace(styletokens.GapItems(inst.density))
 		parseTone := badge.ToneNeutral
-		parseVariant := badge.VariantSoft
 		if parseErrs > 0 {
 			parseTone = badge.ToneError
-			parseVariant = badge.VariantSolid
 		}
 		badge.New(inst.ids.PrepareStr("c-parse"),
 			fmt.Sprintf("ParseErrs %d", parseErrs)).
-			Tone(parseTone).Variant(parseVariant).
+			Tone(parseTone).Variant(badge.VariantSoft).
 			Size(badge.SizeSm).Monospace().
 			Tooltip("zerolog events that failed CBOR decoding — usually a writer schema mismatch").
 			Send()
@@ -625,7 +621,7 @@ func (inst *LogViewerApp) renderTailTable(newest []Entry) {
 		inst.cellPad(i, 1, func() {
 			badge.New(inst.ids.PrepareSeq(lvIdBadgeBase+uint64(i)), levelLabel(r.Level)).
 				Tone(levelTone(r.Level)).
-				Variant(badge.VariantSolid).
+				Variant(badge.VariantSoft).
 				Size(badge.SizeSm).
 				Pill().
 				Monospace().
@@ -776,18 +772,18 @@ func (inst *LogViewerApp) renderDetailPane() {
 		KeepIter() {
 		for range c.Horizontal().KeepIter() {
 			badge.New(inst.ids.PrepareStr("d-lvl"), levelLabel(r.Level)).
-				Tone(levelTone(r.Level)).Variant(badge.VariantSolid).
+				Tone(levelTone(r.Level)).Variant(badge.VariantSoft).
 				Size(badge.SizeSm).Pill().Monospace().Strong().Send()
 			c.AddSpace(styletokens.GapItems(inst.density))
 			if r.AppId != "" {
 				badge.New(inst.ids.PrepareStr("d-app"), shortAppId(string(r.AppId))).
-					Tone(badge.TonePrimary).Variant(badge.VariantOutline).
+					Tone(badge.TonePrimary).Variant(badge.VariantSoft).
 					Size(badge.SizeSm).Tooltip(string(r.AppId)).Send()
 			}
 			if r.Service != "" {
 				c.AddSpace(styletokens.GapInline(inst.density))
 				badge.New(inst.ids.PrepareStr("d-svc"), r.Service).
-					Tone(badge.ToneNeutral).Variant(badge.VariantOutline).
+					Tone(badge.ToneNeutral).Variant(badge.VariantSoft).
 					Size(badge.SizeSm).Send()
 			}
 			c.AddSpace(styletokens.PaddingOuter(inst.density))

@@ -7,7 +7,8 @@ package styletokens
 const (
 	// RoundingNone — sharp corners, the Swiss default for most surfaces.
 	RoundingNone float32 = 0.0
-	// RoundingSm — subtle softening: buttons, badges, inline chips.
+	// RoundingSm — subtle softening: buttons, inline chips. Not badges, which
+	// are rounder so that they read apart from a button (ADR-0273 SD5).
 	RoundingSm float32 = 2.0
 	// RoundingMd — cards, dialogs, panels.
 	RoundingMd float32 = 4.0

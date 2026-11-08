@@ -1566,14 +1566,14 @@ Treat it as the canonical recipe for "rounded, padded, coloured text pill" — a
 | Knob                         | Effect |
 |------------------------------|--------|
 | `Tone(badge.ToneE)`          | Semantic colour family — Neutral / Primary / Success / Warning / Error / Info |
-| `Variant(badge.VariantE)`    | Solid (filled) / Soft (translucent) / Outline (border) / Ghost (text-only) |
-| `Size(badge.SizeE)`          | Sm / Md / Lg — adjusts inner padding, corner radius, font scale |
+| `Variant(badge.VariantE)`    | Solid (filled) / Soft (translucent) / Outline (border) / Ghost (text-only). `Send` draws Solid and Outline as Soft: they share a button's colours, so they are for clickable badges ([ADR-0273](../../adr/0273-imzero2-ids-button-kinds.md) SD5). |
+| `Size(badge.SizeE)`          | Sm (default) / Md / Lg — adjusts inner padding, corner radius, font scale |
 | `Icon(string)`               | Prefixes label with a glyph (typically a `nf.*` NerdFont rune) |
-| `Selected(bool)`             | Forces "pressed" look (Solid + tone stroke) regardless of Variant — pair with `SendResp` for filter chips |
+| `Selected(bool)`             | Forces "pressed" look (Solid + tone stroke) regardless of Variant — `SendResp` only, for filter chips; `Send` ignores it |
 | `Strong()` / `Monospace()`   | Bold / monospace label. Monospace is recommended for numeric counts. |
 | `Pill()`                     | Forces full-rounding (corner = 100 px, egui clamps to half-height). Use for notification dots / status pills. |
 | `Tooltip(string)`            | Wraps the chip in a `HoverText` scope — shows on hover via §12 overlay-interact pattern. |
-| `Send()` / `SendResp()`      | Display-only / interactive (threads `SenseClick`, returns `ResponseFlagsE`). |
+| `Send()` / `SendResp()`      | Display-only / interactive (threads `SenseClick`, returns `ResponseFlagsE`, changes on hover and shows the pointer cursor). |
 
 ### 17.2 v1 keeps Badge atomic — close-X is a separate Badge
 

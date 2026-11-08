@@ -1327,9 +1327,9 @@ func (inst *App) renderDetail() {
 	r := &inst.selected
 	l := inst.verdicts.line(r.Run)
 	for range c.Horizontal().KeepIter() {
-		badge.New(inst.ids.PrepareStr("d-verdict"), l.Mark()).Tone(toneOf(l.Tone())).Variant(badge.VariantSolid).Size(badge.SizeSm).
+		badge.New(inst.ids.PrepareStr("d-verdict"), l.Mark()).Tone(toneOf(l.Tone())).Variant(badge.VariantSoft).Size(badge.SizeSm).
 			Tooltip(l.Label()).Send()
-		badge.New(inst.ids.PrepareStr("d-kind"), appops.CutText(r.Kind, 40)).Tone(badge.TonePrimary).Variant(badge.VariantOutline).Size(badge.SizeSm).Send()
+		badge.New(inst.ids.PrepareStr("d-kind"), appops.CutText(r.Kind, 40)).Tone(badge.TonePrimary).Variant(badge.VariantSoft).Size(badge.SizeSm).Send()
 		c.LabelAtoms(c.Atoms().BeginRichTextColored(detailMutedFg, detailBgClear,
 			inst.picker.format(r.Ts(), time.RFC3339Nano)+" · id "+strconv.FormatUint(r.Id, 10)).Small().Monospace().End().Keep()).Send()
 		for _, t := range DetailTabs {

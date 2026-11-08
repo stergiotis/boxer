@@ -5,7 +5,7 @@
 //
 // The widget covers four typical roles:
 //
-//   - Status indicator        (Tone + Variant + Send)
+//   - Status indicator        (Tone + Send)
 //   - Notification count      (Tone + numeric label + Send)
 //   - Filter chip             (Tone + Selected + SendResp → toggle)
 //   - Dismissible tag         (compose a badge in a Horizontal with a
@@ -14,9 +14,12 @@
 // Two terminals:
 //
 //   - Send()                                — fire-and-forget, no interaction.
+//     Draws VariantSolid and VariantOutline as VariantSoft and ignores
+//     Selected: those looks say "this can be clicked" (ADR-0273 SD5).
 //   - SendResp() ResponseFlagsE             — emits with SenseClick; the
 //     returned flags expose HasPrimaryClicked / HasHovered / etc., usable
-//     immediately under the standard one-frame-lag contract.
+//     immediately under the standard one-frame-lag contract. The badge
+//     changes on hover and shows the pointer cursor, as a control does.
 package badge
 
 import (
@@ -48,13 +51,16 @@ const (
 // VariantE chooses fill / stroke / fg combinations for a given tone.
 //
 //   - Solid    — fully filled with the tone colour, contrasting fg text.
-//     Use for "current status" / loud emphasis.
+//     SendResp only: the same colours as a Primary or Danger button.
 //   - Soft     — translucent tone fill, tone-tinted fg. Default. Reads as
 //     a category tag without dominating the surrounding layout.
-//   - Outline  — transparent fill, tone stroke, tone fg. Good for
-//     interactive filter chips where Selected swaps to Solid.
+//   - Outline  — transparent fill, tone stroke, tone fg. SendResp only: the
+//     same colours as a Tertiary button. Good for filter chips, where
+//     Selected swaps to Solid.
 //   - Ghost    — transparent fill, no stroke, tone fg. Useful for inline
 //     "close ×" affordances on a chip and other minimal markers.
+//
+// Send draws Solid and Outline as Soft.
 type VariantE uint8
 
 const (
@@ -64,7 +70,8 @@ const (
 	VariantGhost
 )
 
-// SizeE controls inner padding, corner radius and font metrics.
+// SizeE controls inner padding, corner radius and font metrics. SizeSm, the
+// default, sets the label at caption size, below a button's body-size label.
 type SizeE uint8
 
 const (
@@ -90,7 +97,7 @@ type Fluid struct {
 }
 
 // New constructs a chip / status pill with sensible defaults
-// (ToneNeutral + VariantSoft + SizeMd). Pass any
+// (ToneNeutral + VariantSoft + SizeSm). Pass any
 // WidgetIdCreatorI — typically `ids.PrepareStr("status")` for relative
 // scoping, or `MakeAbsoluteIdHighEntropy(...)` for top-level overlays.
 //
@@ -98,7 +105,6 @@ type Fluid struct {
 //
 //	badge.New(ids.PrepareStr("env"), "production").
 //	    Tone(badge.ToneError).
-//	    Variant(badge.VariantSolid).
 //	    Send()
 func New(id c.WidgetIdCreatorI, label string) Fluid {
 	return Fluid{
@@ -106,7 +112,7 @@ func New(id c.WidgetIdCreatorI, label string) Fluid {
 		label:   label,
 		tone:    ToneNeutral,
 		variant: VariantSoft,
-		size:    SizeMd,
+		size:    SizeSm,
 	}
 }
 
@@ -121,16 +127,15 @@ func (inst Fluid) Size(sz SizeE) Fluid       { inst.size = sz; return inst }
 func (inst Fluid) Icon(glyph string) Fluid { inst.icon = glyph; return inst }
 
 // Selected forces the chip into a "pressed" look (Solid fill + tone stroke +
-// contrasting fg) regardless of Variant. Pair with SendResp() to build
-// filter chips.
+// contrasting fg) regardless of Variant. SendResp only, for filter chips;
+// Send ignores it.
 func (inst Fluid) Selected(on bool) Fluid { inst.selected = on; return inst }
 
 // Monospace renders the label in the egui monospace font — useful for codes,
 // hashes or count strings where digit widths should align.
 func (inst Fluid) Monospace() Fluid { inst.monospace = true; return inst }
 
-// Strong renders the label bold. Combine with Solid + Strong for a
-// loud "STATUS" pill.
+// Strong renders the label bold.
 func (inst Fluid) Strong() Fluid { inst.strong = true; return inst }
 
 // Pill overrides the size-derived corner radius with a value larger than any
@@ -147,11 +152,28 @@ func (inst Fluid) Tooltip(text string) Fluid { inst.tooltip = text; return inst 
 
 // resolveTone maps (tone, variant, selected) into the four colour /
 // stroke-width arguments needed by Frame + RichTextColored.
-func (inst Fluid) resolveTone() (fill color.Color, stroke color.Color, strokeW float32, fg color.Color) {
+//
+// A badge that cannot be clicked must not look like a button, so it draws
+// Solid and Outline as Soft and is never selected (ADR-0273 SD5).
+//
+// A clickable badge always has a stroke, transparent where the variant draws
+// none: egui counts the stroke in a Frame's size, so one that appeared on
+// hover would move the layout. Hover follows the button kinds of ADR-0273 —
+// a filled badge goes one emphasis lighter, an outline gains a soft fill, a
+// ghost gains a soft fill alone.
+func (inst Fluid) resolveTone(interactive, hovered bool) (fill color.Color, stroke color.Color, strokeW float32, fg color.Color) {
 	base, soft, fgOnSolid, fgOnSoft := tonePalette(inst.tone)
 	transparent := color.Transparent
 
-	switch inst.variant {
+	variant, selected := inst.variant, inst.selected
+	if !interactive {
+		selected = false
+		if variant == VariantSolid || variant == VariantOutline {
+			variant = VariantSoft
+		}
+	}
+
+	switch variant {
 	case VariantSolid:
 		fill, stroke, strokeW, fg = base, transparent, 0, fgOnSolid
 	case VariantOutline:
@@ -162,11 +184,28 @@ func (inst Fluid) resolveTone() (fill color.Color, stroke color.Color, strokeW f
 		fill, stroke, strokeW, fg = soft, transparent, 0, fgOnSoft
 	}
 
-	if inst.selected {
+	if selected {
 		fill = base
 		stroke = base
 		strokeW = 1.0
 		fg = fgOnSolid
+	}
+	if !interactive {
+		return
+	}
+	strokeW = 1.0
+	if !hovered {
+		return
+	}
+	switch {
+	case selected || variant == VariantSolid:
+		fill, stroke = fgOnSoft, fgOnSoft
+	case variant == VariantOutline:
+		fill, stroke = soft, fgOnSoft
+	case variant == VariantGhost:
+		fill = soft
+	default: // Soft
+		stroke = base
 	}
 	return
 }
@@ -198,7 +237,9 @@ func tonePalette(tone ToneE) (base, soft, fgOnSolid, fgOnSoft color.Color) {
 
 // resolveLayout returns the per-side inner margin in pixels, the corner
 // radius in pixels, and a flag indicating whether the label should be
-// styled with .Small() to match the chip's footprint.
+// styled with .Small() to match the chip's footprint. The radii are
+// deliberately larger than the Rounding.Sm a button takes: the shape is what
+// tells the two apart at a glance (ADR-0273 SD5).
 func (inst Fluid) resolveLayout() (left, right, top, bottom, corner float32, useSmall bool) {
 	switch inst.size {
 	case SizeSm:
@@ -216,7 +257,11 @@ func (inst Fluid) resolveLayout() (left, right, top, bottom, corner float32, use
 // Returns the Frame's effective widget id so SendResp can read its
 // previous-frame response slot.
 func (inst Fluid) emit(senseClick bool) (frameId uint64) {
-	fill, stroke, strokeW, fg := inst.resolveTone()
+	f := c.Frame(inst.idGen)
+	frameId = f.Id()
+	// The previous frame's hover, under the standard one-frame-lag contract.
+	hovered := senseClick && c.CurrentApplicationState.StateManager.GetResponseByIdRaw(frameId).HasHovered()
+	fill, stroke, strokeW, fg := inst.resolveTone(senseClick, hovered)
 	left, right, top, bottom, corner, useSmall := inst.resolveLayout()
 	if inst.pill {
 		// Larger than any realistic chip half-height; egui clamps to fit.
@@ -243,15 +288,14 @@ func (inst Fluid) emit(senseClick bool) (frameId uint64) {
 	}
 	atomsKept := a.End().Keep()
 
-	f := c.Frame(inst.idGen).
+	f = f.
 		Fill(fill).
 		CornerRadius(corner).
 		Stroke(strokeW, stroke).
 		InnerMarginSides(left, right, top, bottom)
 	if senseClick {
-		f = f.SenseClick()
+		f = f.SenseClick().HoverCursorPointer()
 	}
-	frameId = f.Id()
 
 	emitFrame := func() {
 		for range f.KeepIter() {

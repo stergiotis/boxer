@@ -520,20 +520,17 @@ func (inst *View[T]) renderTable() {
 	for range c.IdScope(inst.ids.PrepareStr("states")) {
 		for s := range inst.machine.States() {
 			for range c.Horizontal().KeepIter() {
-				tone := badge.ToneNeutral
-				variant := badge.VariantSoft
-				if s == current {
-					tone = badge.TonePrimary
-					variant = badge.VariantSolid
-				}
 				// NodeId is a hash of the state's label, so it is a
 				// high-entropy id already.
-				badge.New(inst.ids.PrepareHighEntropy(inst.machine.NodeId(s)),
+				state := badge.New(inst.ids.PrepareHighEntropy(inst.machine.NodeId(s)),
 					inst.machine.Label(s)).
-					Tone(tone).
-					Variant(variant).
-					Size(badge.SizeSm).
-					Send()
+					Tone(badge.ToneNeutral).
+					Variant(badge.VariantSoft).
+					Size(badge.SizeSm)
+				if s == current {
+					state = state.Tone(badge.TonePrimary).Strong()
+				}
+				state.Send()
 				c.AddSpace(styletokens.GapInline(inst.density))
 				c.Label(formatOutgoing(inst.machine, s)).Send()
 			}

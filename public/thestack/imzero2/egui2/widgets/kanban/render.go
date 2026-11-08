@@ -811,7 +811,7 @@ func renderSwimlaneHeader(ids *c.WidgetIdStack, m *Model, density styletokens.De
 			c.AddSpace(styletokens.GapInline(density))
 			badge.New(ids.PrepareStr("st"), "in "+m.columnTitle(s.parent.ColumnID)).
 				Tone(badge.ToneNeutral).
-				Variant(badge.VariantOutline).
+				Variant(badge.VariantSoft).
 				Size(badge.SizeSm).
 				Send()
 		}

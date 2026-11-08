@@ -579,7 +579,8 @@ follow it. `apps/imztop/imztop_theme.go` derives everything from tokens.
 `Kind(c.ButtonKindPrimary)` on the action the view exists for, `Danger` on
 what destroys, `Ghost` for the toolbar; the client colours them per theme
 ([ADR-0273](../../adr/0273-imzero2-ids-button-kinds.md)). Status is a
-`badge` with a tone, never a coloured label.
+`badge` with a tone, never a coloured label, and it stays Soft or Ghost so
+that it does not read as a button.
 
 **L3 — Familiar vocabulary, consistent verbs.** *Open in play*, *Send to
 play*, *Cancel*, *Retry*, *Refresh*, *Pause*, *Resume*, *Freeze*, *Go

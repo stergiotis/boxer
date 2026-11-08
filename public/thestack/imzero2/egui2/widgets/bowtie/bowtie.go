@@ -246,7 +246,7 @@ func (inst *Diagram) renderLegend() {
 		for _, s := range [...]StatusE{StatusEffective, StatusDegraded, StatusFailed, StatusUntested} {
 			for range c.IdScope(inst.ids.PrepareSeq(uint64(s))) {
 				badge.New(inst.ids.PrepareStr("status"), s.Label()).
-					Tone(s.Tone()).Variant(badge.VariantSolid).Size(badge.SizeSm).Icon(s.Icon()).Send()
+					Tone(s.Tone()).Variant(badge.VariantSoft).Size(badge.SizeSm).Icon(s.Icon()).Send()
 			}
 		}
 		for rt := range c.RichTextLabel("threats → prevention barriers → top event → mitigation barriers → consequences") {

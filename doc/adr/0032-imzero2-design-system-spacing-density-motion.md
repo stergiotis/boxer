@@ -378,6 +378,10 @@ Both are needed: the Go token tables feed each widget's own spacing arithmetic, 
 
 **Not addressed.** Persistence is unchanged: the choice lives for the process, and the `$XDG_CONFIG_HOME/imzero2/density.toml` surface §SD1 reserves is still deferred, so a restart returns to whatever `IMZERO2_DENSITY` says. Open question 5 (per-screen override) is untouched — the preset stays fleet-wide within the app, and mixed-density screens remain a Tier 2 rubric V4 finding.
 
+### 2026-11-08 — Badges are not on `Rounding.Sm`
+
+The §SD3 table lists badges under `Rounding.Sm`. The badge widget has kept radii of its own, larger than that, and [ADR-0273 SD5](./0273-imzero2-ids-button-kinds.md) now makes this intentional: at rest the shape is part of what separates a badge from a button. `Rounding.Sm` applies to buttons and inline chips.
+
 ## References
 
 - [ADR-0029 — ImZero2 design system: foundations, data-intensive patterns, policy-as-code](./0029-imzero2-design-system-and-policy-as-code.md) — parent; §SD3 (density), §SD6 (spacing), §SD7 (motion).

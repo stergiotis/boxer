@@ -101,7 +101,7 @@ func demoBadgeStyle(ids *c.WidgetIdStack) {
 	c.Label("FFFI2 primitives. No new IDL or Rust opcodes were added.").Send()
 	c.AddSpace(styletokens.PaddingInner(d))
 
-	badgeSection(d, "tones × variants", "rows = tone, columns = Solid / Soft / Outline / Ghost")
+	badgeSection(d, "tones × variants", "rows = tone, columns = Solid / Soft / Outline / Ghost; clickable, so hover shows the feedback")
 	tones := []struct {
 		tone  badge.ToneE
 		label string
@@ -120,8 +120,8 @@ func demoBadgeStyle(ids *c.WidgetIdStack) {
 		for range c.IdScope(ids.PrepareSeq(uint64(0xba0e0000 + ti))) {
 			for range c.Horizontal().KeepIter() {
 				for vi, v := range variants {
-					badge.New(ids.PrepareSeq(uint64(vi)), t.label).
-						Tone(t.tone).Variant(v).Send()
+					_ = badge.New(ids.PrepareSeq(uint64(vi)), t.label).
+						Tone(t.tone).Variant(v).SendResp()
 				}
 			}
 		}
@@ -131,11 +131,11 @@ func demoBadgeStyle(ids *c.WidgetIdStack) {
 	badgeSection(d, "sizes", "Sm / Md / Lg adjust inner padding, corner radius and font scale")
 	for range c.Horizontal().KeepIter() {
 		badge.New(ids.PrepareStr("sz-sm"), "small").
-			Tone(badge.TonePrimary).Variant(badge.VariantSolid).Size(badge.SizeSm).Send()
+			Tone(badge.TonePrimary).Variant(badge.VariantSoft).Size(badge.SizeSm).Send()
 		badge.New(ids.PrepareStr("sz-md"), "medium").
-			Tone(badge.TonePrimary).Variant(badge.VariantSolid).Size(badge.SizeMd).Send()
+			Tone(badge.TonePrimary).Variant(badge.VariantSoft).Size(badge.SizeMd).Send()
 		badge.New(ids.PrepareStr("sz-lg"), "large").
-			Tone(badge.TonePrimary).Variant(badge.VariantSolid).Size(badge.SizeLg).Send()
+			Tone(badge.TonePrimary).Variant(badge.VariantSoft).Size(badge.SizeLg).Send()
 	}
 }
 
@@ -157,9 +157,9 @@ func demoBadgeExtras(ids *c.WidgetIdStack) {
 		badge.New(ids.PrepareStr("ic-warn"), "deprecated").
 			Tone(badge.ToneWarning).Variant(badge.VariantSoft).Icon(icons.IconWarning).Send()
 		badge.New(ids.PrepareStr("ic-err"), "failed").
-			Tone(badge.ToneError).Variant(badge.VariantSolid).Strong().Icon(icons.IconError).Send()
+			Tone(badge.ToneError).Variant(badge.VariantSoft).Strong().Icon(icons.IconError).Send()
 		badge.New(ids.PrepareStr("ic-info"), "preview").
-			Tone(badge.ToneInfo).Variant(badge.VariantOutline).Icon(icons.IconInfo).Send()
+			Tone(badge.ToneInfo).Variant(badge.VariantSoft).Icon(icons.IconInfo).Send()
 		badge.New(ids.PrepareStr("ic-tag"), "release").
 			Tone(badge.TonePrimary).Variant(badge.VariantSoft).Icon(icons.IconTag).Send()
 	}
@@ -168,13 +168,13 @@ func demoBadgeExtras(ids *c.WidgetIdStack) {
 	badgeSection(d, "pill shape", ".Pill() overrides the size-derived corner radius for the fully-rounded look")
 	for range c.Horizontal().KeepIter() {
 		badge.New(ids.PrepareStr("pl-1"), "1").
-			Tone(badge.TonePrimary).Variant(badge.VariantSolid).Size(badge.SizeSm).Pill().Monospace().Send()
+			Tone(badge.TonePrimary).Variant(badge.VariantSoft).Size(badge.SizeSm).Pill().Monospace().Send()
 		badge.New(ids.PrepareStr("pl-12"), "12").
-			Tone(badge.ToneError).Variant(badge.VariantSolid).Size(badge.SizeSm).Pill().Monospace().Strong().Send()
+			Tone(badge.ToneError).Variant(badge.VariantSoft).Size(badge.SizeSm).Pill().Monospace().Strong().Send()
 		badge.New(ids.PrepareStr("pl-99"), "99+").
-			Tone(badge.ToneError).Variant(badge.VariantSolid).Size(badge.SizeSm).Pill().Monospace().Strong().Send()
+			Tone(badge.ToneError).Variant(badge.VariantSoft).Size(badge.SizeSm).Pill().Monospace().Strong().Send()
 		badge.New(ids.PrepareStr("pl-live"), "LIVE").
-			Tone(badge.ToneSuccess).Variant(badge.VariantSolid).Pill().Strong().Send()
+			Tone(badge.ToneSuccess).Variant(badge.VariantSoft).Pill().Strong().Send()
 		badge.New(ids.PrepareStr("pl-beta"), "BETA").
 			Tone(badge.ToneWarning).Variant(badge.VariantSoft).Pill().Strong().Send()
 	}
@@ -189,7 +189,7 @@ func demoBadgeExtras(ids *c.WidgetIdStack) {
 			Tone(badge.ToneWarning).Variant(badge.VariantSoft).Icon(icons.IconWarning).
 			Tooltip("removed in v3.0 — see migration guide").Send()
 		badge.New(ids.PrepareStr("tt-3"), "down").
-			Tone(badge.ToneError).Variant(badge.VariantSolid).Strong().Icon(icons.IconError).
+			Tone(badge.ToneError).Variant(badge.VariantSoft).Strong().Icon(icons.IconError).
 			Tooltip("connection refused (last seen 4m ago)").Send()
 	}
 }
@@ -254,7 +254,7 @@ func demoBadgeInteractive(ids *c.WidgetIdStack, st *badgesInteractiveState) {
 			c.AddSpace(styletokens.GapItems(d))
 			c.Label("DB").Send()
 			badge.New(ids.PrepareStr("db"), "down").
-				Tone(badge.ToneError).Variant(badge.VariantSolid).Strong().
+				Tone(badge.ToneError).Variant(badge.VariantSoft).Strong().
 				Size(badge.SizeSm).Icon(icons.IconCircle).Send()
 		}
 	}
@@ -265,12 +265,12 @@ func demoBadgeInteractive(ids *c.WidgetIdStack, st *badgesInteractiveState) {
 		for range c.Horizontal().KeepIter() {
 			c.Label("Inbox").Send()
 			badge.New(ids.PrepareStr("inbox"), fmt.Sprintf("%d", st.notifyUnread)).
-				Tone(badge.TonePrimary).Variant(badge.VariantSolid).
+				Tone(badge.TonePrimary).Variant(badge.VariantSoft).
 				Size(badge.SizeSm).Pill().Monospace().Send()
 			c.AddSpace(styletokens.GapItems(d))
 			c.Label("Alerts").Send()
 			badge.New(ids.PrepareStr("alerts"), fmt.Sprintf("%d", st.notifyAlerts)).
-				Tone(badge.ToneError).Variant(badge.VariantSolid).
+				Tone(badge.ToneError).Variant(badge.VariantSoft).
 				Size(badge.SizeSm).Pill().Monospace().Strong().Send()
 			c.AddSpace(styletokens.GapItems(d))
 			c.Label("Messages").Send()

@@ -110,7 +110,7 @@ func (taskedRenderer) Render(in ComponentInput) {
 		for i, tag := range v.Tags {
 			badge.New(in.Ids.PrepareSeq(uint64(i)), tag).
 				Tone(badge.ToneNeutral).
-				Variant(badge.VariantOutline).
+				Variant(badge.VariantSoft).
 				Size(badge.SizeSm).
 				Pill().
 				Monospace().
