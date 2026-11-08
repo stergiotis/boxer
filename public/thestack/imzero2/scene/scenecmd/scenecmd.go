@@ -8,6 +8,7 @@ package scenecmd
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -32,6 +33,8 @@ const (
 	flagHostDir = "hostDir"
 	flagIgnore  = "ignoreRequires"
 	flagSlow    = "slow"
+	flagLayout  = "layout"
+	flagLayOnly = "layoutOnly"
 )
 
 // NewCommand builds the `scene` subcommand.
@@ -48,7 +51,10 @@ func NewCommand() *cli.Command {
 			"   imzero2 scene --only history apps/play/scenes  # those whose name contains it\n" +
 			"   imzero2 scene --dryRun apps/play/scenes        # resolve anchors, capture nothing\n\n" +
 			"Exit status is the assertion: non-zero when any scene failed. A scene whose\n" +
-			"precondition does not hold is skipped, reported as skipped, and is not a pass.",
+			"precondition does not hold is skipped, reported as skipped, and is not a pass.\n\n" +
+			"Every capture that writes a tree sidecar is checked for layout invariants\n" +
+			"(ADR-0363 M1); a finding fails the scene unless its layoutExceptions cover it.\n" +
+			"   imzero2 scene --layoutOnly apps/play/scenes    # check what an earlier run left in --out",
 		Flags: []cli.Flag{
 			&cli.StringFlag{Name: flagOut, Value: "tmp/scenes", Usage: "directory for captures, logs and the gallery index", TakesFile: true},
 			&cli.DurationFlag{Name: flagTimeout, Value: 60 * time.Second, Usage: "bound on the wait for the carrier and on each driver request"},
@@ -57,6 +63,8 @@ func NewCommand() *cli.Command {
 			&cli.BoolFlag{Name: flagList, Usage: "list the scenes and exit"},
 			&cli.BoolFlag{Name: flagSlow, Usage: "also run scenes tagged slow, which are skipped otherwise"},
 			&cli.BoolFlag{Name: flagIgnore, Usage: "run scenes whose preconditions do not hold instead of skipping them"},
+			&cli.BoolFlag{Name: flagLayout, Value: true, Usage: "check the layout invariants over every capture with a tree sidecar; --layout=false skips them"},
+			&cli.BoolFlag{Name: flagLayOnly, Usage: "launch nothing: check the layout of the captures an earlier run left in --out"},
 			&cli.StringSliceFlag{Name: flagOnly, Usage: "run only scenes whose name contains this; repeatable"},
 			&cli.StringFlag{Name: flagClient, Usage: "headless Rust client; default: the CPU rasterizer build, then the wgpu build", TakesFile: true},
 			&cli.StringFlag{Name: flagRoot, Usage: "checkout holding rust/imzero2 (the client, the fonts); default: found from the working directory", TakesFile: true},
@@ -114,6 +122,17 @@ func run(ctx context.Context, cmd *cli.Command) (err error) {
 	var results []scene.Result
 	counts := map[scene.StatusE]int{}
 	for _, d := range docs {
+		if cmd.Bool(flagLayOnly) {
+			res, checkable := checkLayoutOnly(d, out)
+			if !checkable {
+				// Nothing to check is not a scene of this run.
+				continue
+			}
+			results = append(results, res)
+			counts[res.Status]++
+			report(w, res, "")
+			continue
+		}
 		res := scene.RunDoc(d, scene.Options{
 			OutDir:         out,
 			RepoRoot:       root,
@@ -127,19 +146,12 @@ func run(ctx context.Context, cmd *cli.Command) (err error) {
 			Out:            w,
 			Logger:         log.Logger,
 		})
+		if res.Status == scene.StatusPass && cmd.Bool(flagLayout) && !cmd.Bool(flagDryRun) {
+			applyLayout(&res, out)
+		}
 		results = append(results, res)
 		counts[res.Status]++
-		line := fmt.Sprintf("%-5s %-40s %5.1fs", res.Status, d.Name, res.Duration.Seconds())
-		if res.Reason != "" {
-			line += "  " + res.Reason
-		}
-		_, _ = fmt.Fprintln(w, line)
-		if res.Err != nil {
-			// The rendered error, fields included: what a step read and what
-			// it expected are fields, and a bare message would drop them.
-			_, _ = fmt.Fprintln(w, indent(scene.PlainError(res.Err)))
-			_, _ = fmt.Fprintln(w, "      host log: "+filepath.Join(out, "logs", d.Name+".host.log"))
-		}
+		report(w, res, filepath.Join(out, "logs", d.Name+".host.log"))
 	}
 	// The host's periodic dump sink always writes its first frame.
 	_ = os.Remove(filepath.Join(out, "frame_000000.png"))
@@ -152,6 +164,70 @@ func run(ctx context.Context, cmd *cli.Command) (err error) {
 		return eb.Build().Int("failed", counts[scene.StatusFail]).Errorf("scenes failed")
 	}
 	return nil
+}
+
+// report prints one scene's status line, and its error when it has one.
+func report(w io.Writer, res scene.Result, hostLog string) {
+	line := fmt.Sprintf("%-5s %-40s %5.1fs", res.Status, res.Doc.Name, res.Duration.Seconds())
+	if res.Reason != "" {
+		line += "  " + res.Reason
+	}
+	_, _ = fmt.Fprintln(w, line)
+	if res.Err != nil {
+		// The rendered error, fields included: what a step read and what
+		// it expected are fields, and a bare message would drop them.
+		_, _ = fmt.Fprintln(w, indent(scene.PlainError(res.Err)))
+		if hostLog != "" {
+			_, _ = fmt.Fprintln(w, "      host log: "+hostLog)
+		}
+	}
+}
+
+// applyLayout checks a passed scene's captures and fails it on a finding no
+// exception covers.
+func applyLayout(res *scene.Result, out string) {
+	rep, err := scene.CheckLayout(res.Doc, out)
+	if err == nil {
+		err = rep.Err()
+	}
+	if err != nil {
+		res.Status, res.Err = scene.StatusFail, err
+	}
+	if s := rep.Summary(); s != "" {
+		res.Reason = strings.TrimPrefix(res.Reason+"; "+s, "; ")
+	}
+}
+
+// checkLayoutOnly is applyLayout over files an earlier run wrote. checkable is
+// false for a scene that asks for no tree sidecar. One whose sidecars are
+// not there is skipped: there is nothing to check, which is not a pass.
+func checkLayoutOnly(d *scene.Doc, out string) (res scene.Result, checkable bool) {
+	start := time.Now()
+	res = scene.Result{Doc: d, Status: scene.StatusPass}
+	defer func() { res.Duration = time.Since(start) }()
+	rep, err := scene.CheckLayout(d, out)
+	switch {
+	case err != nil:
+		res.Status, res.Err = scene.StatusFail, err
+		return res, true
+	case len(rep.Checked) == 0 && len(rep.Missing) == 0:
+		return res, false
+	case len(rep.Checked) == 0:
+		res.Status, res.Reason = scene.StatusSkip, "not in --"+flagOut+": "+strings.Join(rep.Missing, ", ")
+		return res, true
+	}
+	for _, c := range d.CaptureFiles() {
+		res.Captures = append(res.Captures, c.PNG)
+		res.Sidecars = append(res.Sidecars, c.Sidecars...)
+	}
+	if err = rep.Err(); err != nil {
+		res.Status, res.Err = scene.StatusFail, err
+	}
+	res.Reason = rep.Summary()
+	if len(rep.Missing) > 0 {
+		res.Reason += "; not in --" + flagOut + ": " + strings.Join(rep.Missing, ", ")
+	}
+	return res, true
 }
 
 func indent(text string) string {

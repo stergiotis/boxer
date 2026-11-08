@@ -12,6 +12,15 @@ scene:
     BOXER_LLM_SCRIPT: "apps/chat/scenes/chat-coordinator-play.script.jsonl"
     BOXER_CHAT_APPS: "true"
     BOXER_CHAT_DRAFT: "Show the first three apps in play."
+  layoutExceptions:
+    - invariant: outside
+      capture: chat-analytics
+      role: button
+      reason: "play lays its toolbar and tab rows out on one line, wider than the window it opens in here; the window clips them. Open in ADR-0363 (proposed) M1: control rows that wrap inside a narrow window."
+    - invariant: outside
+      capture: chat-analytics
+      role: check_box
+      reason: "play lays its toolbar and tab rows out on one line, wider than the window it opens in here; the window clips them. Open in ADR-0363 (proposed) M1: control rows that wrap inside a narrow window."
 ---
 
 > **Status: draft — pre-human-review.** Not verified; do not cite as authoritative.

@@ -8,6 +8,15 @@ scene:
   env:
     IMZERO2_DESKTOP_LAYOUT: tile
     BOXER_MDEDIT_DOC: "# A link in a paragraph\n\n[Open the notes, a link whose words are the whole paragraph](mdedit://0123456789abcdef/20260101T120000.000000000Z/notes/a.md)\n\nThe paragraph after it is prose, and a click on it opens nothing.\n"
+  layoutExceptions:
+    - invariant: outside
+      capture: links
+      role: button
+      reason: "two mdedit windows tile a viewport 900 wide; mdedit lays its control rows out on one line, wider than its cell, and the window clips them. Open in ADR-0363 (proposed) M1: control rows that wrap inside a narrow window."
+    - invariant: outside
+      capture: links
+      role: text_input
+      reason: "two mdedit windows tile a viewport 900 wide; mdedit lays its control rows out on one line, wider than its cell, and the window clips them. Open in ADR-0363 (proposed) M1: control rows that wrap inside a narrow window."
 ---
 
 > **Status: draft — pre-human-review.** Not verified; do not cite as authoritative.

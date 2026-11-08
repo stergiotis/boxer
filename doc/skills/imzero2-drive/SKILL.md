@@ -182,6 +182,7 @@ scene:
   env: {BOXER_PLAY_FOCUS_TABLE: "1", BOXER_PLAY_AUTORUN: "1"}
   requires: [clickhouse, "table:default.some_table"]   # unmet → skipped, not failed; "exists:<table>" needs no rows
   fallbackFont: Noto Naskh Arabic   # optional: replaces the CJK fallback face; not installed → skipped
+  matrix: {themes: [dark, light]}   # optional: one launch per theme (and per size, with `sizes`); see Layout checks
 ---
 
 # What the scene shows
@@ -215,6 +216,65 @@ Other spec keys: `fps`, `needs: [raster]` (implied by a `capture`), `services:
 `stepSettleMs` (the default pause after a step), `tags: [slow]` for a scene
 that waits out a timer — skipped unless the run passes `--slow`. A document cannot run
 commands; preconditions and services are names the runner knows.
+
+### Layout checks and the matrix
+
+Every capture whose step asks for the `tree` sidecar is checked for four
+layout invariants after the scene passes
+([ADR-0363](../../adr/0363-porting-from-an-end-user-egui-application.md) M1,
+package `scene/layoutcheck`). A finding fails the scene and is printed one per
+line:
+
+| Invariant | Fails when |
+| --- | --- |
+| `outside` | an interactive node (button, check box, text input, slider, combo box, link, tab, menu item…) reaches past the left or right edge of the viewport, or of the egui window it is in |
+| `overlap` | two enabled interactive siblings (same parent in the sidecar) intersect by more than 1 point in both axes |
+| `hit-size` | an interactive node is narrower or shorter than 14 points, egui's `icon_width` |
+| `clipped` | the host drew a node's text elided with `…` while the node's own text is longer; needs the `svg` sidecar too |
+
+What the tree cannot say limits them. Bounds are unclipped, so a scroll area's
+content is in the tree where it would be laid out unscrolled: vertical edges
+are not checked at all, and a capture taken with a list scrolled can report an
+overlap between a scrolled row and a fixed control. A node's text is the text
+the app gave it, so an ellipsis in the tree is the app's own and is not a
+finding; elision is read from the svg. Capture with `"sidecars":["svg","tree"]`
+for all four.
+
+A finding the scene means to produce is recorded in the scene, never in the
+checker. An exception names the invariant, an anchor in a step's vocabulary
+(`id`, `name`, `contains`, `value`, `valueContains`, `role`; several matches are
+fine), optionally the `capture` it applies to, and a `reason`, which is
+required. An overlap is excused when either node matches.
+
+`matrix` runs the same trace once per size and theme. Each combination is its
+own launch, named `<scene>-<WxH>-<theme>`, and so are its captures; an axis the
+matrix leaves out is left out of the name. `light` sets `IMZERO2_THEME=fresh`
+and `dark` sets it to `dark` (ADR-0258 fixes the theme at launch). A scene with
+`matrix.sizes` leaves `size` empty, and one with `matrix.themes` leaves
+`IMZERO2_THEME` out of its `env`. A scene without a matrix runs once, as before.
+
+```yaml
+scene:
+  launch: mdedit
+  matrix:
+    sizes: [1600x1000, 900x500]
+    themes: [dark, light]
+  layoutExceptions:
+    - invariant: outside
+      capture: wide-table     # as the trace names it; the matrix suffix is added
+      role: button
+      contains: "column "
+      reason: the result table scrolls sideways; its header buttons run past the window
+```
+
+```sh
+scripts/dev/scene.sh --layout=false apps/play/scenes        # run without the checks
+scripts/dev/scene.sh --layoutOnly --out tmp/scenes apps/chat/scenes
+                                  # launch nothing; check what an earlier run left in --out
+```
+
+A stricter floor, a vertical check or anything app-specific is a Go test over
+`layoutcheck.Check` with its own `Options`.
 
 A scene whose oracle is a computation is a Go test instead, in the
 `//go:build integration` lane, over the same harness: `scenetest.Launch`, trace

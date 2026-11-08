@@ -151,7 +151,7 @@ of the vendored copy it would replace.
   already applies agent commands after the frame's write-back (ADR-0269
   §SD4).
 
-### M1 — Layout invariants over scene captures
+### M1 — Layout invariants over scene captures ✓
 
 A checker reads the sidecars of scene captures and fails on:
 
@@ -172,6 +172,19 @@ close that gap.
 A known exception is recorded in the scene, never in the checker. Scenes
 also gain a matrix axis that runs the same trace at several sizes and, at
 launch, in light and dark (ADR-0258 fixes the theme at launch).
+
+Overlap is advisory: it is reported beside a scene's result and fails
+nothing, because unclipped bounds make it report content scrolled under a
+fixed control. Two nodes with the same rect are one control listed twice
+and are not an overlap. The first run over the scenes that capture a tree
+(2026-11-08) found the status bar's codec indicator past the right edge at
+any width under about 1700 points, frameless glyph buttons 13 points wide,
+and one-letter table headers 7.8 points wide; those are fixed. It also
+found that an app whose control rows are laid out on one line (play,
+mdedit) overflows a window narrower than the rows, and the window clips
+them. Wrapping those rows did not hold: a wrapped row is laid out at the
+width the window's content had, so it wraps past the window's edge. That
+is open, and the two scenes that show it carry exceptions naming it.
 
 ### M2 — Accessibility semantics in the IDL ✓
 

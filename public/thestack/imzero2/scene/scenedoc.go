@@ -10,6 +10,7 @@ import (
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/carrierclient"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/scene/layoutcheck"
 	"gopkg.in/yaml.v3"
 )
 
@@ -50,6 +51,11 @@ type Spec struct {
 	// Tags classify the scene; KnownTags lists the ones there are. A scene
 	// tagged TagSlow runs only when asked for (Options.Slow).
 	Tags []string `yaml:"tags"`
+	// Matrix runs the trace once per size and theme it lists; see Matrix.
+	Matrix Matrix `yaml:"matrix"`
+	// LayoutExceptions excuse layout findings (ADR-0363 M1) the scene means
+	// to produce; the invariants themselves know no app.
+	LayoutExceptions []layoutcheck.Exception `yaml:"layoutExceptions"`
 }
 
 const (
@@ -219,6 +225,9 @@ func ParseDoc(path string, src []byte) (doc *Doc, err error) {
 	}
 	if doc.Spec.HasTag(TagSlow) && doc.Spec.HasTag(TagFast) {
 		return nil, eb.Build().Str("path", path).Errorf("a scene is tagged slow or fast, not both")
+	}
+	if err = doc.Spec.validateLayout(); err != nil {
+		return nil, eb.Build().Str("path", path).Errorf("unable to accept the scene's matrix or layout exceptions: %w", err)
 	}
 	for _, f := range fences {
 		switch {

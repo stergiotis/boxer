@@ -61,7 +61,8 @@ func CollectDocs(paths []string) (docs []*Doc, err error) {
 			if e != nil {
 				return nil, e
 			}
-			docs = append(docs, doc)
+			// A scene with a matrix is one document per size and theme.
+			docs = append(docs, doc.Variants()...)
 		}
 	}
 	return docs, nil
