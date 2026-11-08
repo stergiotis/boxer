@@ -10,12 +10,12 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/stergiotis/boxer/apps/play"
 	"github.com/stergiotis/boxer/apps/sqlapplet"
 	"github.com/stergiotis/boxer/public/keelson/runtime/adhocdata"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/clipboardbroker"
 	"github.com/stergiotis/boxer/public/keelson/runtime/inprocbus"
+	"github.com/stergiotis/boxer/public/keelson/runtime/playground"
 	"github.com/stergiotis/boxer/public/keelson/runtime/windowhost"
 )
 
@@ -23,7 +23,7 @@ import (
 // rows read as items on the introspection endpoint (ADR-0288 §SD2).
 func TestItemsBundleComposes(t *testing.T) {
 	inst := &App{log: zerolog.Nop(), bundle: adhocdata.WindowAlias(bundleBase, 7)}
-	doc, err := play.ComposeBundleDoc(inst.itemsSpec(0))
+	doc, err := playground.ComposeBundleDoc(inst.itemsSpec(0))
 	require.NoError(t, err)
 	def, err := sqlapplet.ParseDocSource(string(ManifestId), "items.md", doc)
 	require.NoError(t, err)

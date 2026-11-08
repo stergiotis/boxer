@@ -662,7 +662,9 @@ func (inst *Store) WriteAppLifecycle(row factsstore.AppLifecycleRow) (id uint64,
 // MembRuntimeRun identities; the caller rides MembLaunchCaller as a
 // mixed-low-card-ref; the tile key reuses MembLifecycleTileKey so the
 // row joins the lifecycle row on one column; the raw config bytes land
-// on the blob section (nil for a plain open — no blob attribute).
+// on the blob section (nil for a plain open — no blob attribute); a row
+// the host resolved from a kind (ADR-0361 §SD2) carries
+// MembLaunchResolvedFromKind on the bool section.
 func (inst *Store) WriteLaunch(row factsstore.LaunchRow) (id uint64, err error) {
 	id = inst.nextId.Add(1)
 	ts := defaultTs(row.Ts)
@@ -692,6 +694,12 @@ func (inst *Store) WriteLaunch(row factsstore.LaunchRow) (id uint64, err error) 
 		blob := ent.GetSectionBlobArray()
 		blob.BeginAttributeSingle(row.Config).AddMembershipLowCardRef(vocab.MembLaunchConfig.GetId().Value()).EndAttribute()
 		blob.EndSection()
+	}
+
+	if row.ResolvedFromKind {
+		bsec := ent.GetSectionBool()
+		bsec.BeginAttribute(true).AddMembershipLowCardRef(vocab.MembLaunchResolvedFromKind.GetId().Value()).EndAttribute()
+		bsec.EndSection()
 	}
 
 	err = inst.commitAndShip(context.Background(), ent)

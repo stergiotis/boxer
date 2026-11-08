@@ -208,6 +208,12 @@ var (
 	MembLaunchConfigKind = NkRegistry.MustBegin("runtimeLaunchConfigKind", 63).End()
 	MembLaunchConfig     = NkRegistry.MustBegin("runtimeLaunchConfig", 64).End()
 
+	// MembLaunchResolvedFromKind is true on a launch row whose request
+	// named a kind and no app, so the host resolved the app (ADR-0361
+	// §SD2). Absent on a by-id open. Bool section, the MembPersistTombstone
+	// pattern.
+	MembLaunchResolvedFromKind = NkRegistry.MustBegin("runtimeLaunchResolvedFromKind", 562).End()
+
 	// App-workingset (kind + name), ADR-0148 §SD6 — one row per saved
 	// workingset: the launch config that would reproduce the closing
 	// window's user-authored state, written at the closing edge exactly as
@@ -859,7 +865,7 @@ var AllMembs = []registry.RegisteredNaturalKey{
 	MembQueryRunExceptionCode, MembQueryRunExceptionText, MembQueryRunQueryText,
 	MembQueryRunAuthoredFp, MembQueryRunSentFp, MembQueryRunChainFp, MembQueryRunEnvFp,
 	MembQueryRunProfileEvent,
-	MembKindLaunch, MembLaunchCaller, MembLaunchConfigKind, MembLaunchConfig,
+	MembKindLaunch, MembLaunchCaller, MembLaunchConfigKind, MembLaunchConfig, MembLaunchResolvedFromKind,
 	MembKindWorkingset, MembWorkingsetName,
 	MembKindColumnWidth, MembColWidthTier, MembColWidthScope,
 	MembColWidthColumnKey, MembColWidthPoints, MembColWidthFontSize,

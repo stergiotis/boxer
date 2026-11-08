@@ -1,118 +1,28 @@
-// Package launchcfg is play's launch config (ADR-0135 §SD7): the typed
-// arguments another app can open a play window with over
-// `windowhost.open`. The DTO follows the runtime codec grammar and the
-// generated codec is the only wire form — callers encode with Marshal /
-// buscodec.Encode, play decodes in Mount with the generated Unmarshal.
-//
-// Vocabulary (narrow, ADR-0135 cohort in the keelson vdd):
-//
-//   - [vdd.MembPlayLaunchSql] / [vdd.MembPlayLaunchBandsSql] — text,
-//     the editor buffer and the Timeline bands buffer.
-//   - [vdd.MembPlayLaunchAutoRun] / [vdd.MembPlayLaunchLive] — bool
-//     flags.
-//   - [vdd.MembPlayLaunchTab] — symbol, the initially focused tab id.
-//   - [vdd.MembPlayLaunchDatasets] — string list, the dataset aliases the
-//     window follows (ADR-0240 §SD7).
-//
-// Seeding priority in play's Mount: a window opened WITH a config
-// applies it above both the BOXER_PLAY_* env overrides and the
-// persisted session buffer; plainly-opened windows are unaffected.
+// Package launchcfg holds play's own app id and re-exports the playground's
+// launch contract, which moved to public/keelson/runtime/playground (ADR-0361
+// §SD4). Its aliases go when nothing outside apps/play imports the package;
+// the compiler is the check. A caller that means the role and not play
+// imports the playground leaf and opens by kind; AppId stays for a caller
+// that means play.
 package launchcfg
 
-import "time"
+import "github.com/stergiotis/boxer/public/keelson/runtime/playground"
 
-// AppId is play's registered manifest id — the target another app names
-// in a `windowhost.open` request (ADR-0135 §SD7). Kept here, in the leaf
-// launch contract, rather than in the app package: importing `apps/play`
-// for a constant drags the whole playground — and its registry-registering
-// init() — into the importer, which silently registers the SQL playground
-// as a side effect (ADR-0017 §SD4). `play.AppId` re-exports this value, so
-// existing call sites are unaffected. Untyped so it flows into
-// app.AppIdT contexts (Manifest.Id, RequestOpen) without this leaf
-// depending on the app runtime. The appletcreatecfg.AppId precedent.
+// AppId is play's registered manifest id. Kept here, in a leaf, rather than
+// in the app package: importing `apps/play` for a constant drags the whole
+// playground — and its registry-registering init() — into the importer
+// (ADR-0017 §SD4). `play.AppId` re-exports this value. Untyped so it flows
+// into app.AppIdT contexts without this leaf depending on the app runtime.
 const AppId = "github.com/stergiotis/boxer/apps/play"
 
-// Kind is the vocabulary kind name of this config — the value play's
-// manifest declares as LaunchKind and callers put in
-// launchrequest.LaunchRequest.ConfigKind.
-const Kind = "playLaunch"
+// Kind is the launch kind play's manifest declares, the leaf's own.
+const Kind = playground.Kind
 
-// Endpoint values for the PlayLaunch.Endpoint field. Empty behaves like
-// EndpointDefault.
+// Endpoint constants for PlayLaunch.Endpoint.
 const (
-	// EndpointDefault keeps play's env-configured ClickHouse target.
-	EndpointDefault = "default"
-	// EndpointIntrospection binds the opened window's client to the
-	// in-process keelson `/query` endpoint (introspect.LocalQueryEndpoint,
-	// ADR-0094 §SD6) — where ad-hoc `keelson('<handle>')` datasets resolve
-	// (ADR-0134). Ignored, with a warning, when no such endpoint is up.
-	EndpointIntrospection = "introspection"
+	EndpointDefault       = playground.EndpointDefault
+	EndpointIntrospection = playground.EndpointIntrospection
 )
 
-// PlayLaunch is the flat wire form of play's launch arguments.
-type PlayLaunch struct {
-	_ struct{} `kind:"playLaunch"`
-
-	// FactId is the per-row event id (zero from producers; the launch
-	// row's durable id is minted by the facts store on persist).
-	FactId uint64 `lw:",id"`
-
-	// NaturalKey is the entity natural key; the facts SetId is 2-arg.
-	// These bus DTOs carry no separate key, so it stays the nil default.
-	NaturalKey []byte `lw:",naturalKey"`
-
-	// At is the event timestamp. time.Time matches the facts
-	// SetTimestamp signature directly (strict 1:1); the leeway wire
-	// truncates to u32 seconds, while the bus preserves full nanos.
-	At time.Time `lw:",ts"`
-
-	// Sql is the initial editor buffer. Non-empty wins over the
-	// BOXER_PLAY_SQL override and the persisted-session restore; empty
-	// falls through to that existing chain.
-	Sql string `lw:"playLaunchSql,textArray"`
-
-	// AutoRun triggers a Run of the seeded buffer on mount. Applied
-	// whenever the window carries a config (replacing the
-	// BOXER_PLAY_AUTORUN tier), matching the "config beats env" rule.
-	AutoRun bool `lw:"playLaunchAutoRun,bool"`
-
-	// Live enables live re-run on the main lane (SetLiveMain).
-	Live bool `lw:"playLaunchLive,bool"`
-
-	// BandsSql seeds the Timeline panel's bands editor when non-empty;
-	// empty leaves the persisted/env-seeded bands untouched.
-	BandsSql string `lw:"playLaunchBandsSql,textArray"`
-
-	// Tab selects the initially focused body tab by id when non-empty
-	// (ActivateTab); an unknown id is a warning, not a mount error.
-	Tab string `lw:"playLaunchTab,symbol"`
-
-	// Endpoint binds the opened window's client to a query target:
-	// EndpointIntrospection points it at the in-process keelson `/query`
-	// endpoint (where ad-hoc datasets resolve, ADR-0240); empty or
-	// EndpointDefault keeps play's env-configured ClickHouse. An
-	// "introspection" request with no such endpoint up is a warning, not a
-	// mount error — the window opens on the default target.
-	Endpoint string `lw:"playLaunchEndpoint,symbol"`
-
-	// Datasets lists the ad-hoc dataset aliases the window keeps bound
-	// (ADR-0240 §SD7): Sql names `keelson('<alias>')`, the window resolves
-	// each alias to the newest live dataset at mount and follows publish
-	// and retract from then on, exactly as a declared applet does. Empty
-	// follows nothing.
-	Datasets []string `lw:"playLaunchDatasets,stringArray"`
-
-	// DatasetNames are the names the window binds Datasets under, index
-	// for index — the names Sql reads in keelson('…') (ADR-0288
-	// §SD3). A publisher of window-scoped aliases launches with its
-	// window's alias in Datasets and the base name here; empty, or an
-	// empty entry, binds the alias under itself.
-	DatasetNames []string `lw:"playLaunchDatasetNames,stringArray"`
-
-	// Bundle names an ad-hoc bundle the window opens and follows (ADR-0288
-	// §SD4): its document seeds the buffer, its datasets are
-	// bound under their local names, and a republish reloads both. It
-	// takes the window to the introspection endpoint, where datasets
-	// resolve, and supersedes Sql and Datasets.
-	Bundle string `lw:"playLaunchBundle,symbol"`
-}
+// PlayLaunch is the playground's launch config.
+type PlayLaunch = playground.Launch

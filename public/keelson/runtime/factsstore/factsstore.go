@@ -199,7 +199,10 @@ type LaunchRow struct {
 	TileKey     uint64
 	ConfigKind  string // empty for a plain open
 	Config      []byte // raw facts-CBOR config bytes; nil for a plain open
-	Ts          time.Time
+	// ResolvedFromKind is true when the request named a kind and no app,
+	// and TargetAppId is the app the host resolved it to (ADR-0361 §SD2).
+	ResolvedFromKind bool
+	Ts               time.Time
 }
 
 // LogFieldKindE discriminates the runtime type of a LogField's value. Drives

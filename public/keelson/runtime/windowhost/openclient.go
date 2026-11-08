@@ -15,7 +15,7 @@ import (
 // audited OpenSubject (ADR-0135 §SD1), optionally delivering a launch
 // config: configKind is the vocabulary kind the config bytes claim and
 // config is its facts-CBOR (encode with the config's generated codec, e.g.
-// buscodec.Encode(launchcfg.PlayLaunch{…})); pass "" and nil for a plain
+// buscodec.Encode(playground.Launch{…})); pass "" and nil for a plain
 // open. It is the client half of OpenService — the mirror of
 // adhocdata.PublishRequest — so an app drives windowhost.open without
 // re-deriving the request/reply codec dance.
@@ -27,16 +27,42 @@ import (
 // error carrying the host's reason; on success it returns the opened
 // window's key.
 func RequestOpen(bus app.BusI, targetAppId app.AppIdT, configKind string, config []byte) (windowKey uint64, err error) {
-	if bus == nil {
-		err = eh.Errorf("windowhost: RequestOpen: no bus wired")
-		return
-	}
-	reqBytes, err := buscodec.Encode(launchrequest.LaunchRequest{
+	return requestOpen(bus, launchrequest.LaunchRequest{
 		At:          time.Now().UTC(),
 		TargetAppId: string(targetAppId),
 		ConfigKind:  configKind,
 		Config:      config,
 	})
+}
+
+// RequestOpenKind asks the window host to open whichever app takes
+// configKind, naming no target (ADR-0361 §SD2). The host resolves the kind
+// at the open: the launchable apps declaring it as their LaunchKind, the
+// one designated for it at the wiring site if several do; several with no
+// designation, a designation that is not among them, or none at all are
+// refusals carrying the reason. Everything after resolution is RequestOpen:
+// same subject, same caller caps, same size cap, same probe, same reply.
+// config must be non-empty: the host refuses a claimed kind with no bytes.
+func RequestOpenKind(bus app.BusI, configKind string, config []byte) (windowKey uint64, err error) {
+	if configKind == "" {
+		err = eh.Errorf("windowhost: RequestOpenKind: no config kind")
+		return
+	}
+	return requestOpen(bus, launchrequest.LaunchRequest{
+		At:         time.Now().UTC(),
+		ConfigKind: configKind,
+		Config:     config,
+	})
+}
+
+// requestOpen runs the launch request/reply over the open subject and turns
+// a refusal reply into an error.
+func requestOpen(bus app.BusI, req launchrequest.LaunchRequest) (windowKey uint64, err error) {
+	if bus == nil {
+		err = eh.Errorf("windowhost: RequestOpen: no bus wired")
+		return
+	}
+	reqBytes, err := buscodec.Encode(req)
 	if err != nil {
 		err = eh.Errorf("windowhost: encode launch request: %w", err)
 		return

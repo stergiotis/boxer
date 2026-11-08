@@ -1,6 +1,7 @@
 package play
 
 import (
+	"github.com/stergiotis/boxer/public/keelson/runtime/playground"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
@@ -79,18 +80,5 @@ func (inst *PlayApp) NotifyDatasetRevision(alias string, revision uint64) {
 // ([A-Za-z_][A-Za-z0-9_]*, ≤64 bytes) — the same shape the handle and
 // alias must satisfy on the capability side.
 func validDatasetIdentifier(s string) bool {
-	if s == "" || len(s) > 64 {
-		return false
-	}
-	for i := 0; i < len(s); i++ {
-		ch := s[i]
-		ok := ch == '_' ||
-			(ch >= 'a' && ch <= 'z') ||
-			(ch >= 'A' && ch <= 'Z') ||
-			(i > 0 && ch >= '0' && ch <= '9')
-		if !ok {
-			return false
-		}
-	}
-	return true
+	return playground.ValidIdentifier(s)
 }

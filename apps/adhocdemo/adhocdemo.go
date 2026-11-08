@@ -1,7 +1,7 @@
 // Package adhocdemo dogfoods ad-hoc bundles (ADR-0288, over
 // ADR-0240's datasets): it generates a computed series, publishes it as a
 // bundle — the rows and an applet document that reads them as `items` —
-// through play.PublishBundle, and shows it through a sqlapplet bundle
+// through playground.PublishBundle, and shows it through a sqlapplet bundle
 // view, the receiver's one constructor. A Regenerate button republishes
 // the bundle; the view follows it on the frame it is drawn, like any
 // receiver of a bundle another app published.
@@ -22,7 +22,6 @@ import (
 	"github.com/apache/arrow-go/v18/arrow/memory"
 	"github.com/rs/zerolog"
 
-	"github.com/stergiotis/boxer/apps/play"
 	"github.com/stergiotis/boxer/apps/sqlapplet"
 	"github.com/stergiotis/boxer/public/fs/lading/ladingadhoc"
 	"github.com/stergiotis/boxer/public/identity/identifier"
@@ -30,6 +29,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/bgjob"
 	"github.com/stergiotis/boxer/public/keelson/runtime/lifetime"
+	"github.com/stergiotis/boxer/public/keelson/runtime/playground"
 	"github.com/stergiotis/boxer/public/keelson/runtime/task"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/badge"
@@ -45,8 +45,8 @@ const bundleBase = "adhocdemo_items"
 
 // itemsSpec is the bundle generation gen publishes: the series, and SQL
 // that reads it ordered by x on the table.
-func (inst *App) itemsSpec(gen int) play.BundleSpec {
-	return play.BundleSpec{Alias: inst.bundle, Title: "Ad-hoc items", Summary: "a computed series published as an ad-hoc bundle",
+func (inst *App) itemsSpec(gen int) playground.BundleSpec {
+	return playground.BundleSpec{Alias: inst.bundle, Title: "Ad-hoc items", Summary: "a computed series published as an ad-hoc bundle",
 		Sql: "SELECT * FROM keelson('" + datasetAlias + "') ORDER BY x", Tabs: []string{"table"},
 		Prose:    "The host publishes a computed series as a bundle; Regenerate republishes it.",
 		Datasets: []adhocdata.BundleDatasetInput{{LocalName: datasetAlias, ArrowIPCStream: inst.series(gen)}}}
@@ -79,9 +79,9 @@ type App struct {
 	gen          int
 	publishedGen int
 	bundleJob    bgjob.Runner[adhocdata.BundleResult]
-	// publish is the bundle publish, play.PublishBundle on the bus when
+	// publish is the bundle publish, playground.PublishBundle on the bus when
 	// nil; a test lands one without a bus.
-	publish func(spec play.BundleSpec) (res adhocdata.BundleResult, err error)
+	publish func(spec playground.BundleSpec) (res adhocdata.BundleResult, err error)
 
 	// frameCtx is the current frame's context, through which the buttons
 	// go to the catalog (A3); nil outside a frame.
@@ -144,7 +144,9 @@ func (inst *App) startPublish() (started bool) {
 		func(context.Context) (res *adhocdata.BundleResult, err error) {
 			publish := inst.publish
 			if publish == nil {
-				publish = func(spec play.BundleSpec) (adhocdata.BundleResult, error) { return play.PublishBundle(inst.bus, spec) }
+				publish = func(spec playground.BundleSpec) (adhocdata.BundleResult, error) {
+					return playground.PublishBundle(inst.bus, spec)
+				}
 			}
 			r, err := publish(inst.itemsSpec(gen))
 			if err != nil {

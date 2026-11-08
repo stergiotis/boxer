@@ -1,16 +1,16 @@
-package launchcfg_test
+package playground_test
 
 import (
 	"testing"
 	"time"
 
-	"github.com/stergiotis/boxer/apps/play/launchcfg"
 	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
 	"github.com/stergiotis/boxer/public/keelson/runtime/codec/kindcheck"
+	"github.com/stergiotis/boxer/public/keelson/runtime/playground"
 )
 
-func samplePlayLaunch() launchcfg.PlayLaunch {
-	return launchcfg.PlayLaunch{
+func sampleLaunch() playground.Launch {
+	return playground.Launch{
 		FactId:   3,
 		At:       time.Unix(0, 1_700_000_000_000_000_000).UTC(),
 		Sql:      "SELECT count() FROM boxer.facts",
@@ -21,8 +21,8 @@ func samplePlayLaunch() launchcfg.PlayLaunch {
 	}
 }
 
-func TestBuscodecAutoRegistersPlayLaunch(t *testing.T) {
-	got := buscodec.Lookup[launchcfg.PlayLaunch]()
+func TestBuscodecAutoRegistersLaunch(t *testing.T) {
+	got := buscodec.Lookup[playground.Launch]()
 	want := "playLaunch-sparse-cbor"
 	if got.Name() != want {
 		t.Fatalf("Lookup.Name() = %q, want %q", got.Name(), want)
@@ -30,12 +30,12 @@ func TestBuscodecAutoRegistersPlayLaunch(t *testing.T) {
 }
 
 func TestBuscodecRoundTrip(t *testing.T) {
-	orig := samplePlayLaunch()
+	orig := sampleLaunch()
 	wire, err := buscodec.Encode(orig)
 	if err != nil {
 		t.Fatalf("Encode: %v", err)
 	}
-	got, err := buscodec.Decode[launchcfg.PlayLaunch](wire)
+	got, err := buscodec.Decode[playground.Launch](wire)
 	if err != nil {
 		t.Fatalf("Decode: %v", err)
 	}
@@ -57,11 +57,11 @@ func TestBuscodecRoundTrip(t *testing.T) {
 	}
 }
 
-func TestKindcheckIdentifiesPlayLaunch(t *testing.T) {
+func TestKindcheckIdentifiesLaunch(t *testing.T) {
 	// The window host gates argument-carrying opens on this check
-	// (ADR-0135 §SD1); pin that encoded PlayLaunch bytes pass as their
-	// own kind and are refused as a different one.
-	wire, err := buscodec.Encode(samplePlayLaunch())
+	// (ADR-0135 §SD1); pin that encoded Launch bytes pass as their own
+	// kind and are refused as a different one.
+	wire, err := buscodec.Encode(sampleLaunch())
 	if err != nil {
 		t.Fatalf("Encode: %v", err)
 	}

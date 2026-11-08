@@ -10,7 +10,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/stergiotis/boxer/apps/play"
 	"github.com/stergiotis/boxer/apps/sqlapplet"
 	"github.com/stergiotis/boxer/public/fs/lading/ladingadhoc"
 	"github.com/stergiotis/boxer/public/identity/identifier"
@@ -21,6 +20,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/appops/opwire"
 	"github.com/stergiotis/boxer/public/keelson/runtime/bgjob"
 	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
+	"github.com/stergiotis/boxer/public/keelson/runtime/playground"
 )
 
 // opsFixture is a window without a bus whose publishes land through the
@@ -38,7 +38,7 @@ func newOpsFixture(t *testing.T) (f *opsFixture) {
 	f = &opsFixture{inst: newApp()}
 	f.inst.log = zerolog.Nop()
 	f.inst.bundle = adhocdata.WindowAlias(bundleBase, 3)
-	f.inst.publish = func(spec play.BundleSpec) (res adhocdata.BundleResult, err error) {
+	f.inst.publish = func(spec playground.BundleSpec) (res adhocdata.BundleResult, err error) {
 		if f.publishErr != nil {
 			return res, f.publishErr
 		}

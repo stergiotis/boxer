@@ -1,6 +1,6 @@
-package launchcfg_test
+package playground_test
 
-//go:generate sh -c "go test -tags=\"$(cat ../../../tags)\" -run TestGeneratorMatchesCheckedInOutput . -update"
+//go:generate sh -c "go test -tags=\"$(cat ../../../../tags)\" -run TestGeneratorMatchesCheckedInOutput . -update"
 
 import (
 	"flag"
@@ -12,17 +12,17 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/codec/factswrapper"
 )
 
-var updateGolden = flag.Bool("update", false, "rewrite launchcfg.out.go with the current generator output")
+var updateGolden = flag.Bool("update", false, "rewrite playground.out.go with the current generator output")
 
 // TestGeneratorMatchesCheckedInOutput runs the keelson codec generator
-// on launchcfg.go and asserts the bytes match the committed
-// launchcfg.out.go. Rerun with `-update` after intentional generator
+// on playground.go and asserts the bytes match the committed
+// playground.out.go. Rerun with `-update` after intentional generator
 // changes.
 func TestGeneratorMatchesCheckedInOutput(t *testing.T) {
 	_, thisFile, _, _ := runtime.Caller(0)
 	dir := filepath.Dir(thisFile)
-	inputPath := filepath.Join(dir, "launchcfg.go")
-	outputPath := filepath.Join(dir, "launchcfg.out.go")
+	inputPath := filepath.Join(dir, "playground.go")
+	outputPath := filepath.Join(dir, "playground.out.go")
 
 	generated, err := factswrapper.FactsWrapper{}.Generate(inputPath, "")
 	if err != nil {

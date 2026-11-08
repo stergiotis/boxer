@@ -6,6 +6,7 @@ import (
 	tallylaunch "github.com/stergiotis/boxer/apps/tally/launchcfg"
 	"github.com/stergiotis/boxer/public/fs/lading/ladingsql"
 	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
+	"github.com/stergiotis/boxer/public/keelson/runtime/playground"
 	"github.com/stergiotis/boxer/public/keelson/runtime/windowhost"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
@@ -154,10 +155,11 @@ func openedInPlayNote(cfg launchcfg.PlayLaunch) (note string) {
 	return note + ", not run"
 }
 
-// openPlayground is the blocking body of requestOpenPlayground: encode
-// the config, wrap it in a LaunchRequest naming play, run the audited
-// request, and turn a refusal reply into an error. The caller identity
-// is attributed by the bus (Msg.Sender) — nothing to add here.
+// openPlayground is the blocking body of requestOpenPlayground: open the
+// playground on cfg by kind (ADR-0361 §SD8), through the leaf's helper, so
+// an embed's "Open in play" reaches whichever app takes the kind in this
+// host. The caller identity is attributed by the bus (Msg.Sender) — nothing
+// to add here.
 func (inst *PlayApp) openPlayground(cfg launchcfg.PlayLaunch) (err error) {
 	if inst.bus == nil {
 		err = eh.Errorf("play: open playground: no bus wired")
@@ -177,15 +179,7 @@ func (inst *PlayApp) openPlayground(cfg launchcfg.PlayLaunch) (err error) {
 			cfg.BandsSql = inst.client.rewriteDatasetAliases(cfg.BandsSql)
 		}
 	}
-	cfgBytes, err := buscodec.Encode(cfg)
-	if err != nil {
-		err = eh.Errorf("play: encode launch config: %w", err)
-		return
-	}
-	// windowhost.RequestOpen composes the LaunchRequest, runs the audited
-	// round-trip, and turns a refusal reply into an error — the shared
-	// client half of the open subject (its error already names the reason).
-	if _, err = windowhost.RequestOpen(inst.bus, AppId, launchcfg.Kind, cfgBytes); err != nil {
+	if _, err = playground.Open(inst.bus, cfg); err != nil {
 		err = eh.Errorf("play: open playground: %w", err)
 		return
 	}

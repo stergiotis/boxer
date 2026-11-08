@@ -26,8 +26,7 @@ import (
 // cannot import.
 func fakeAppletDocs(t *testing.T) {
 	t.Helper()
-	prev := appletDocParser.Load()
-	SetAppletDocParser(func(path string, src []byte) (doc AppletDoc, err error) {
+	prev := SetAppletDocParser(func(path string, src []byte) (doc AppletDoc, err error) {
 		text := string(src)
 		if strings.HasPrefix(text, "---\n") {
 			// play's own composed documents: frontmatter, then the first
@@ -51,7 +50,7 @@ func fakeAppletDocs(t *testing.T) {
 		doc.Runnable = !strings.HasPrefix(text, "INSERT")
 		return
 	})
-	t.Cleanup(func() { appletDocParser.Store(prev) })
+	t.Cleanup(func() { SetAppletDocParser(prev) })
 }
 
 func intStream(t *testing.T, vals ...int64) []byte {
@@ -221,9 +220,8 @@ func TestABundleThatWritesIsNotRun(t *testing.T) {
 func TestOpenBundleRefusals(t *testing.T) {
 	l, h, _ := bundleLauncher(t)
 	t.Cleanup(l.closeBundle)
-	prev := appletDocParser.Load()
-	appletDocParser.Store(nil)
-	t.Cleanup(func() { appletDocParser.Store(prev) })
+	prev := SetAppletDocParser(nil)
+	t.Cleanup(func() { SetAppletDocParser(prev) })
 	_, err := openBundleOp(t, h, "sales")
 	assert.ErrorContains(t, err, "parser")
 

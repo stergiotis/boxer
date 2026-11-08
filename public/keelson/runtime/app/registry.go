@@ -85,6 +85,12 @@ type Registry struct {
 	// with it, so the surfaces that read it every frame do not filter.
 	unlaunchable map[AppIdT]struct{}
 	launchable   []Manifest
+	// designations names the app that takes a launch kind when several
+	// launchable apps declare it (ADR-0361 §SD2).
+	designations map[string]AppIdT
+	// coordinators are the app ids or subject aliases the host resolved as
+	// coordinators at boot (ADR-0364, proposed).
+	coordinators []string
 }
 
 // NewRegistry returns an empty Registry. Tests use this for isolation;
@@ -485,6 +491,49 @@ func (inst *Registry) Launchable(id AppIdT) (ok bool) {
 	defer inst.mu.RUnlock()
 	_, refused := inst.unlaunchable[id]
 	ok = !refused
+	return
+}
+
+// DesignateForKind names id as the app that takes launch kind when more than
+// one launchable app declares it (ADR-0361 §SD2). It is the wiring site's
+// call, made after the registrations it chooses between: id must be
+// registered and declare kind as its LaunchKind, and a kind is designated
+// once — a second call for the same kind is refused rather than resolved by
+// call order.
+func (inst *Registry) DesignateForKind(kind string, id AppIdT) (err error) {
+	if kind == "" {
+		err = eb.Build().Str("id", string(id)).Errorf("registry: designation needs a kind")
+		return
+	}
+	inst.mu.Lock()
+	defer inst.mu.Unlock()
+	idx, ok := inst.byId[id]
+	if !ok {
+		err = eb.Build().Str("id", string(id)).Str("kind", kind).Errorf("registry: designated app is not registered")
+		return
+	}
+	if launchKind := inst.entries[idx].manifest.LaunchKind; launchKind != kind {
+		err = eb.Build().Str("id", string(id)).Str("kind", kind).Str("launchKind", launchKind).
+			Errorf("registry: designated app's manifest does not declare the kind")
+		return
+	}
+	if prev, repeated := inst.designations[kind]; repeated {
+		err = eb.Build().Str("id", string(id)).Str("kind", kind).Str("designated", string(prev)).
+			Errorf("registry: kind already designated")
+		return
+	}
+	if inst.designations == nil {
+		inst.designations = make(map[string]AppIdT, 2)
+	}
+	inst.designations[kind] = id
+	return
+}
+
+// Designation returns the app designated for kind (DesignateForKind), if any.
+func (inst *Registry) Designation(kind string) (id AppIdT, ok bool) {
+	inst.mu.RLock()
+	id, ok = inst.designations[kind]
+	inst.mu.RUnlock()
 	return
 }
 

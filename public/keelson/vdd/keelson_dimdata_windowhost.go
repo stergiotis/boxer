@@ -36,7 +36,7 @@ var (
 )
 
 // PlayLaunch config columns (ADR-0135 §SD7) — the launch config play
-// accepts (apps/play/launchcfg, kind playLaunch). Text sections for the
+// accepts (public/keelson/runtime/playground, kind playLaunch). Text sections for the
 // two SQL columns (open-cardinality), symbol for the tab id (small
 // closed set), bool for the two flags.
 var (

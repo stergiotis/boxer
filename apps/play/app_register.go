@@ -23,6 +23,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/help"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect/keelsonquery"
+	"github.com/stergiotis/boxer/public/keelson/runtime/playground"
 	"github.com/stergiotis/boxer/public/keelson/runtime/task"
 	"github.com/stergiotis/boxer/public/keelson/runtime/windowhost"
 	"github.com/stergiotis/boxer/public/observability/eh"
@@ -335,7 +336,7 @@ func (inst *PlayLauncher) Manifest() (m app.Manifest) {
 		// Launch config (ADR-0135 §SD7): windows opened over
 		// `windowhost.open` may carry a launchcfg.PlayLaunch; Mount
 		// decodes it and seeds the editor above the env/persisted chain.
-		LaunchKind: launchcfg.Kind,
+		LaunchKind: playground.Kind,
 		// Workingset participation (ADR-0148 §SD7): the host pulls a
 		// PlayLaunch out of a window the user acted in and hands it back
 		// at the next plain open. play is the reference adopter (§SD8).

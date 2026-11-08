@@ -82,7 +82,7 @@ func TestRequestOpenPlayground_ComposesRequestAndSucceeds(t *testing.T) {
 
 	req, err := buscodec.Decode[launchrequest.LaunchRequest](bus.gotPayload)
 	require.NoError(t, err)
-	assert.Equal(t, string(AppId), req.TargetAppId)
+	assert.Empty(t, req.TargetAppId, "the handover names the kind, and the host resolves it (ADR-0361 §SD8)")
 	assert.Equal(t, launchcfg.Kind, req.ConfigKind)
 	sent, err := buscodec.Decode[launchcfg.PlayLaunch](req.Config)
 	require.NoError(t, err)

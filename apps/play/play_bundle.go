@@ -13,8 +13,8 @@ package play
 // bundle as it stands when it is next drawn (§SD7).
 //
 // The applet document format is sqlapplet's (ADR-0132), and sqlapplet
-// imports play, so play reaches the parser through SetAppletDocParser,
-// which sqlapplet installs when it is linked.
+// imports play, so play reaches the parser through the playground leaf's
+// slot (ADR-0361 §SD5), which sqlapplet fills when it is linked.
 
 import (
 	"bytes"
@@ -24,7 +24,6 @@ import (
 	"slices"
 	"strconv"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/rs/zerolog"
@@ -35,44 +34,25 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/appops"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect/keelsonquery"
+	"github.com/stergiotis/boxer/public/keelson/runtime/playground"
 )
 
-// AppletDoc is an applet document reduced to what a play window applies.
-type AppletDoc struct {
-	Title    string
-	Sql      string
-	BandsSql string
-	// Datasets are the local names the document reads in keelson('…').
-	Datasets []string
-	// Tab is the first pane the document names, empty for none.
-	Tab string
-	// Introspection is true when the document asks for the introspection
-	// endpoint, where ad-hoc datasets resolve.
-	Introspection bool
-	Preamble      []byte
-	// Runnable is true when the document's SQL is a plain read, which a
-	// window runs on open, as an applet's (ADR-0132 §SD5).
-	Runnable bool
-}
+// AppletDoc is an applet document reduced to what a window applies; the
+// type moved to the playground leaf (ADR-0361 §SD5).
+type AppletDoc = playground.AppletDoc
 
 // AppletDocParserFunc parses an applet document.
-type AppletDocParserFunc func(path string, src []byte) (doc AppletDoc, err error)
+type AppletDocParserFunc = playground.AppletDocParserFunc
 
-var appletDocParser atomic.Pointer[AppletDocParserFunc]
-
-// SetAppletDocParser installs the applet document parser play opens bundles
-// with; sqlapplet installs its own at init. Without one a bundle is refused
-// with the reason.
-func SetAppletDocParser(fn AppletDocParserFunc) {
-	appletDocParser.Store(&fn)
+// SetAppletDocParser installs the applet document parser the playground
+// slot holds, returning the one it replaced; see
+// playground.SetAppletDocParser.
+func SetAppletDocParser(fn AppletDocParserFunc) (previous AppletDocParserFunc) {
+	return playground.SetAppletDocParser(fn)
 }
 
 func parseAppletDoc(path string, src []byte) (doc AppletDoc, err error) {
-	fn := appletDocParser.Load()
-	if fn == nil {
-		return doc, app.RefuseOperation("no applet document parser is linked into this host, so a bundle cannot be opened")
-	}
-	return (*fn)(path, src)
+	return playground.ParseAppletDoc(path, src)
 }
 
 // bundlePollInterval paces re-asking for a bundle that is not live when no
@@ -399,7 +379,7 @@ func addBundleOps(s *appops.Set[*PlayLauncher, opsSnap]) {
 				return out, app.RefuseOperation("the window has not mounted")
 			case !validDatasetIdentifier(in.Alias):
 				return out, app.RefuseOperation("a bundle alias is a bare identifier: letters, digits and _, at most 64 bytes")
-			case appletDocParser.Load() == nil:
+			case !playground.HasAppletDocParser():
 				return out, app.RefuseOperation("no applet document parser is linked into this host, so a bundle cannot be opened")
 			}
 			ep := introspect.LocalQueryEndpoint()

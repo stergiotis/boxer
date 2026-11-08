@@ -78,3 +78,31 @@ func TestBuscodecRoundTripPlainOpen(t *testing.T) {
 		t.Errorf("Config: got %x, want empty", got.Config)
 	}
 }
+
+// TestBuscodecRoundTripByKind pins the wire form of an open by kind
+// (ADR-0361 §SD2): an empty target with a kind survives the round trip, so
+// the request needs no new field.
+func TestBuscodecRoundTripByKind(t *testing.T) {
+	orig := launchrequest.LaunchRequest{
+		At:         time.Unix(0, 1_700_000_000_000_000_000).UTC(),
+		ConfigKind: "playLaunch",
+		Config:     []byte{0xaa, 0xbb},
+	}
+	wire, err := buscodec.Encode(orig)
+	if err != nil {
+		t.Fatalf("Encode: %v", err)
+	}
+	got, err := buscodec.Decode[launchrequest.LaunchRequest](wire)
+	if err != nil {
+		t.Fatalf("Decode: %v", err)
+	}
+	if got.TargetAppId != "" {
+		t.Errorf("TargetAppId: got %q, want empty", got.TargetAppId)
+	}
+	if got.ConfigKind != orig.ConfigKind {
+		t.Errorf("ConfigKind: got %q, want %q", got.ConfigKind, orig.ConfigKind)
+	}
+	if !bytes.Equal(got.Config, orig.Config) {
+		t.Errorf("Config: got %x, want %x", got.Config, orig.Config)
+	}
+}

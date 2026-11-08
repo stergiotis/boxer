@@ -29,9 +29,12 @@ const OpenServiceAppId app.AppIdT = "runtime.windowhost"
 
 // OpenService subscribes OpenSubject and forwards decoded requests to
 // the host's OpenWithConfig, replying with the window key or the named
-// refusal. On each accepted open it persists the request as a
-// factsstore.LaunchRow beside the app-lifecycle "started" row the Open
-// itself emitted (§SD6) — best-effort, like every audit write.
+// refusal. A request with a kind and no target is first resolved to the
+// app that takes the kind (ADR-0361 §SD2, see ResolveLaunchKind); from
+// there it runs as a by-id open. On each accepted open it persists the
+// request as a factsstore.LaunchRow beside the app-lifecycle "started"
+// row the Open itself emitted (§SD6) — best-effort, like every audit
+// write; the row names the app that opened.
 //
 // Handlers run synchronously on the requester's goroutine (inprocbus
 // dispatch), so the service leans on OpenWithConfig being safe off the
@@ -98,20 +101,36 @@ func (inst *OpenService) handleRequest(msg *app.Msg) {
 		inst.reply(msg.Reply, 0, "openservice: decode request: "+err.Error())
 		return
 	}
-	key, err := inst.host.OpenWithConfig(app.AppIdT(req.TargetAppId), req.ConfigKind, req.Config)
+	target := app.AppIdT(req.TargetAppId)
+	resolved := false
+	if target == "" && req.ConfigKind != "" {
+		target, err = inst.host.ResolveLaunchKind(req.ConfigKind)
+		if err != nil {
+			inst.log.Info().Err(err).
+				Str("caller", string(msg.Sender)).
+				Str("kind", req.ConfigKind).
+				Msg("openservice: open by kind refused")
+			inst.reply(msg.Reply, 0, err.Error())
+			return
+		}
+		resolved = true
+	}
+	key, err := inst.host.OpenWithConfig(target, req.ConfigKind, req.Config)
 	if err != nil {
 		inst.log.Info().Err(err).
 			Str("caller", string(msg.Sender)).
-			Str("target", req.TargetAppId).
+			Str("target", string(target)).
+			Bool("resolvedFromKind", resolved).
 			Str("kind", req.ConfigKind).
 			Msg("openservice: open refused")
 		inst.reply(msg.Reply, 0, err.Error())
 		return
 	}
-	inst.emitLaunchFact(msg.Sender, req, key)
+	inst.emitLaunchFact(msg.Sender, target, resolved, req, key)
 	inst.log.Info().
 		Str("caller", string(msg.Sender)).
-		Str("target", req.TargetAppId).
+		Str("target", string(target)).
+		Bool("resolvedFromKind", resolved).
 		Str("kind", req.ConfigKind).
 		Uint64("windowKey", uint64(key)).
 		Msg("openservice: opened window")
@@ -136,8 +155,9 @@ func (inst *OpenService) reply(subject string, windowKey uint64, reason string) 
 // beside the app-lifecycle "started" row OpenWithConfig already wrote —
 // same best-effort contract: a write failure is logged at warn and
 // never bubbles. The caller identity is attributed from the bus
-// envelope (msg.Sender), not from the payload.
-func (inst *OpenService) emitLaunchFact(caller app.AppIdT, req launchrequest.LaunchRequest, key WindowKeyT) {
+// envelope (msg.Sender), not from the payload. target is the app that
+// opened: the request's target, or the app resolved from its kind.
+func (inst *OpenService) emitLaunchFact(caller app.AppIdT, target app.AppIdT, resolved bool, req launchrequest.LaunchRequest, key WindowKeyT) {
 	inst.host.mu.Lock()
 	runId := inst.host.runId
 	facts := inst.host.facts
@@ -150,17 +170,18 @@ func (inst *OpenService) emitLaunchFact(caller app.AppIdT, req launchrequest.Lau
 		cfg = nil // wire round-trips nil as empty; keep the row's plain-open shape
 	}
 	_, err := facts.WriteLaunch(factsstore.LaunchRow{
-		RunId:       runId,
-		CallerAppId: caller,
-		TargetAppId: app.AppIdT(req.TargetAppId),
-		TileKey:     uint64(key),
-		ConfigKind:  req.ConfigKind,
-		Config:      cfg,
+		RunId:            runId,
+		CallerAppId:      caller,
+		TargetAppId:      target,
+		TileKey:          uint64(key),
+		ConfigKind:       req.ConfigKind,
+		Config:           cfg,
+		ResolvedFromKind: resolved,
 	})
 	if err != nil {
 		inst.log.Warn().Err(err).
 			Str("caller", string(caller)).
-			Str("target", req.TargetAppId).
+			Str("target", string(target)).
 			Uint64("windowKey", uint64(key)).
 			Msg("openservice: write launch fact failed")
 	}

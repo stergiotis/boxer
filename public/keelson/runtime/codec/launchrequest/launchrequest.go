@@ -1,9 +1,10 @@
 // Package launchrequest is the leeway-coded wire form of the app-launch
 // request payload published on `windowhost.open` (ADR-0135 §SD1). The
-// request names a target app and optionally carries a launch config as
-// facts-CBOR bytes produced by the target app's own generated codec
-// (§SD2); the window host validates the claimed kind and the size cap at
-// the boundary before any decode.
+// request names a target app, or carries a kind and no target (ADR-0361
+// §SD2) so the host resolves the app that takes the kind, and optionally
+// carries a launch config as facts-CBOR bytes produced by the target
+// app's own generated codec (§SD2); the window host validates the
+// claimed kind and the size cap at the boundary before any decode.
 //
 // Vocabulary:
 //
@@ -35,7 +36,11 @@ type LaunchRequest struct {
 	// truncates to u32 seconds, while the bus preserves full nanos.
 	At time.Time `lw:",ts"`
 
-	// TargetAppId names the app to open.
+	// TargetAppId names the app to open. Empty, with ConfigKind set,
+	// asks the host to resolve the app that takes the kind (ADR-0361
+	// §SD2); the persisted row names the app that opened. The empty value
+	// is the wire's own (the attribute is present and carries ""), so
+	// this needed no new field.
 	TargetAppId string `lw:"appId,stringArray"`
 
 	// ConfigKind is the vocabulary kind name Config's bytes claim
@@ -45,7 +50,8 @@ type LaunchRequest struct {
 	ConfigKind string `lw:"launchConfigKind,symbol"`
 
 	// Config is the launch config as facts-CBOR bytes produced by the
-	// target app's generated codec. Empty means "open plainly". Capped
+	// target app's generated codec. Empty means "open plainly"; with an
+	// empty TargetAppId, ConfigKind and Config must both be set. Capped
 	// at the host boundary (64 KiB) before any decode.
 	Config []byte `lw:"launchConfig,blobArray"`
 }

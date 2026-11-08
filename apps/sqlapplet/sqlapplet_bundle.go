@@ -4,8 +4,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/stergiotis/boxer/apps/play"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/analysis"
+	"github.com/stergiotis/boxer/public/keelson/runtime/playground"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
@@ -13,12 +13,12 @@ import (
 // applet documents; this package owns their parser and play cannot import
 // it, so it hands play the parser when it is linked.
 func init() {
-	play.SetAppletDocParser(parseBundleDoc)
+	playground.SetAppletDocParser(parseBundleDoc)
 }
 
 // parseBundleDoc parses a bundle's applet document into what a play window
 // applies.
-func parseBundleDoc(path string, src []byte) (doc play.AppletDoc, err error) {
+func parseBundleDoc(path string, src []byte) (doc playground.AppletDoc, err error) {
 	def, err := ParseDocSource("bundle", bundleDocPath(path), src)
 	if err != nil {
 		return
@@ -27,7 +27,7 @@ func parseBundleDoc(path string, src []byte) (doc play.AppletDoc, err error) {
 		// A document with no sql fence is a prose page: nothing to run.
 		return doc, eb.Build().Str("path", path).Errorf("a bundle's document has no sql fence")
 	}
-	doc = play.AppletDoc{Title: def.Title, Sql: def.SQL, BandsSql: def.BandsSQL, Datasets: def.Datasets,
+	doc = playground.AppletDoc{Title: def.Title, Sql: def.SQL, BandsSql: def.BandsSQL, Datasets: def.Datasets,
 		Introspection: def.Endpoint == EndpointIntrospection, Preamble: []byte(def.Preamble),
 		Runnable: def.Class == analysis.QuerySecurityRead}
 	if len(def.Tabs) > 0 {
