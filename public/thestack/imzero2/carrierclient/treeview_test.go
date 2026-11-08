@@ -98,6 +98,14 @@ func TestFormatNodeIsWhatAStepTakes(t *testing.T) {
 	assert.Contains(t, FormatNode(big), "#9223372036854775813")
 }
 
+func TestSelectNodesKeepsAnUnnamedListRow(t *testing.T) {
+	list := &TreeNode{Id: 1, Role: "list_box", Name: "Messages", Children: []uint64{2, 3}}
+	row := &TreeNode{Id: 2, Role: "list_box_option", Parent: 1, Flags: FlagSelected}
+	box := &TreeNode{Id: 3, Role: "generic_container", Parent: 1}
+	view := SelectNodes(&TreeSnapshot{Nodes: []*TreeNode{list, row, box}}, TreeFilter{})
+	assert.Equal(t, []uint64{1, 2}, ids(view), "the row stays, the unnamed container goes")
+}
+
 func TestFormatNodeFlagsALiveRegion(t *testing.T) {
 	n := &TreeNode{Id: 9, Role: "label", Value: "Query done", Flags: FlagLive}
 	assert.Equal(t, `label ="Query done" #9 @0,0 [live]`, FormatNode(n))

@@ -63,7 +63,9 @@ nesting among the printed nodes.
 Filters, all optional: `--treeText` (name or value contains, case ignored),
 `--treeRole`, `--treeUnder <id>` (that node and below), `--treeLimit`,
 `--treeHidden`. Unnamed containers and `text_run` duplicates of a label are left
-out; an empty text input is not. Its hint text reaches the tree only as a
+out; an empty text input is not, and neither is a list's row
+(`list_box_option`), whose text is in its children — reach rows by role and
+`nth`. Its hint text reaches the tree only as a
 placeholder, so it has a name only when the app sets `AccessibleName`. The header says `nodes=200 of 640` when the limit cut the list — narrow
 the filter rather than reading a partial scene as the whole one.
 

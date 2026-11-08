@@ -94,8 +94,11 @@ func (inst TreeFilter) matches(n *TreeNode) bool {
 	// address them and listing them buries the ones it can. An empty text
 	// input is the exception: egui gives it no label, and its value is the
 	// text, so a composer that was just sent from has neither and would
-	// vanish from the list while it is still there to type into.
-	if n.GetName() == "" && n.GetValue() == "" && !IsEditableRole(role) {
+	// vanish from the list while it is still there to type into. A list's
+	// row is the other: its text is in its children, and the row itself —
+	// its position, whether it is selected — is what a step reaches with
+	// role list_box_option and nth (ADR-0363 (proposed) M2).
+	if n.GetName() == "" && n.GetValue() == "" && !IsEditableRole(role) && role != "listboxoption" {
 		return false
 	}
 	want := normaliseRole(inst.Role)
