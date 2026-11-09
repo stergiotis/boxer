@@ -167,3 +167,63 @@ func TestNoWindowIsIgnored(t *testing.T) {
 	}
 	assert.Empty(t, e.States())
 }
+
+func call(key string, at time.Time, op string, digest string, changes bool) ActionObs {
+	return ActionObs{At: at, Key: key, Task: "task-1", Window: chat, Instance: 9, Operation: op,
+		ArgsDigest: digest, Result: opwire.ResultDone, Changes: changes}
+}
+
+// An analysis: the buffer changes and the same run and read follow it.
+func TestRepeat_notCountedAcrossAWindowThatChanged(t *testing.T) {
+	e := NewEngine(DefaultThresholds())
+	at := t0
+	for q := range 8 {
+		for i, c := range []struct {
+			op, digest string
+			changes    bool
+		}{{"set_sql", "sql" + strconv.Itoa(q), true}, {"run", "{}", false}, {"sample_rows", "{}", false}} {
+			at = at.Add(4 * time.Second)
+			signals, actions := e.Action(call(strconv.Itoa(q)+"-"+strconv.Itoa(i), at, c.op, c.digest, c.changes))
+			assert.Empty(t, signals, "query %d: %s", q, c.op)
+			assert.Empty(t, actions)
+		}
+	}
+}
+
+// Nothing changed between the runs: this is the loop the signal is for.
+func TestRepeat_sameWriteDoesNotExcuseTheReads(t *testing.T) {
+	e := NewEngine(DefaultThresholds())
+	var got []SignalE
+	for q := range 3 {
+		at := t0.Add(time.Duration(q) * time.Minute)
+		for i, c := range []struct {
+			op      string
+			changes bool
+		}{{"set_sql", true}, {"run", false}, {"sample_rows", false}} {
+			signals, _ := e.Action(call(strconv.Itoa(q)+"-"+strconv.Itoa(i), at, c.op, "same", c.changes))
+			got = append(got, kinds(signals)...)
+		}
+	}
+	assert.Equal(t, []SignalE{SignalRepeat, SignalRepeat, SignalRepeat}, got)
+}
+
+// Alternating between two values keeps the operation's own count.
+func TestRepeat_alternatingWritesAreCounted(t *testing.T) {
+	e := NewEngine(DefaultThresholds())
+	var got []SignalE
+	for i, digest := range []string{"a", "b", "a", "b", "a"} {
+		signals, _ := e.Action(call(strconv.Itoa(i), t0.Add(time.Duration(i)*time.Minute), "set_sql", digest, true))
+		got = append(got, kinds(signals)...)
+	}
+	assert.Equal(t, []SignalE{SignalRepeat}, got)
+}
+
+func TestChangesWindow(t *testing.T) {
+	assert.True(t, changesWindow("view"))
+	assert.True(t, changesWindow("document"))
+	assert.False(t, changesWindow("run"))
+	assert.False(t, changesWindow("consequential"))
+	assert.False(t, changesWindow("none"))
+	assert.False(t, changesWindow(""))
+	assert.False(t, changesWindow("unspecified"))
+}

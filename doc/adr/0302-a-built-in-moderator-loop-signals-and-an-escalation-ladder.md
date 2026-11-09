@@ -243,6 +243,23 @@ each keeps its own threshold. The note lived in that package's doc while
 this record was proposed. Thresholds from the harness profile remain ahead
 (SD6).
 
+### 2026-11-08 — `repeat` does not count across a window that changed
+
+§SD3's `repeat` keyed on the argument digest alone, so an operation whose
+arguments do not name what it acts on counted as a loop however much the window
+had changed. Play's `run` and `sample_rows` take the same arguments for every
+query: a `set_sql`, `run`, `sample_rows` sequence reached Stop on the sixth
+query ([ADR-0364](./0364-chatlets-the-chat-specialised-by-a-committed-markdown-document.md)
+(proposed), the audit-trail worked example).
+
+A completed call with a `view` or `document` effect, with arguments new to that
+window within the repeat window, now clears the task's counts of the *other*
+operations on it. Its own count stays, so alternating between two values is
+still counted, and a write repeated with the same arguments clears nothing. A
+`run` effect does not clear: a run consumes the window's inputs, and clearing on
+it would erase the count of the write before it. Writing different values for
+ever is not this signal's to catch; `rounds` and the ration are.
+
 ## References
 
 - [ADR-0300](./0300-metered-model-calls-and-rules-a-moderator-writes.md) (proposed) — the moderator's surface.

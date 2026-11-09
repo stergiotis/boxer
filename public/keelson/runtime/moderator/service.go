@@ -250,7 +250,7 @@ func (inst *Service) handle(in input) {
 		}
 		signals, actions = inst.eng.Action(ActionObs{At: r.At, Key: r.Key, Task: r.Task,
 			Window: Window{App: string(r.Actor), Instance: r.ActorInstance}, Instance: r.Instance, Operation: r.Operation,
-			ArgsDigest: r.ArgsDigest, Result: result})
+			ArgsDigest: r.ArgsDigest, Result: result, Changes: changesWindow(r.Effect)})
 	}
 	inst.mu.Unlock()
 	for _, s := range signals {
@@ -361,4 +361,12 @@ func (inst *Service) States() (out []State) {
 	inst.mu.Lock()
 	defer inst.mu.Unlock()
 	return inst.eng.States()
+}
+
+// changesWindow says an operation's declared effect changes what the window
+// holds. A run consumes those inputs, and an effect outside the window does
+// not touch them; counting either would let it clear the count of the write
+// before it, and an unknown effect cannot reset a count at all.
+func changesWindow(effect string) bool {
+	return effect == app.OperationEffectView.String() || effect == app.OperationEffectDocument.String()
 }

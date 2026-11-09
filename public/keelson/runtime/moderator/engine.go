@@ -129,6 +129,9 @@ type ActionObs struct {
 	Operation  string
 	ArgsDigest string
 	Result     opwire.ResultE
+	// Changes says the operation's declared effect changes what the window
+	// holds: a view or document effect.
+	Changes bool
 }
 
 // Signal is a signal raised on a window.
@@ -340,6 +343,17 @@ func (inst *Engine) Action(o ActionObs) (signals []Signal, actions []Action) {
 		}
 	}
 	times = append(times, o.At)
+	// A write with arguments new to the window moved what the other calls
+	// read: the same read after it is a new look, not a loop (ADR-0302,
+	// Update of 2026-11-08). The operation's own count stays, so alternating
+	// between two values is still counted.
+	if o.Changes && len(times) == 1 {
+		for k := range ws.repeats {
+			if k.task == o.Task && k.instance == o.Instance && k.operation != o.Operation {
+				delete(ws.repeats, k)
+			}
+		}
+	}
 	if len(times) >= inst.cfg.RepeatCount {
 		delete(ws.repeats, rk)
 		raise(SignalRepeat, o.Operation+" on window "+strconv.FormatUint(o.Instance, 10)+" with the same arguments "+
