@@ -283,6 +283,7 @@ update_cargo() {
         *)                   gate "cargo test" bash -c "cd '$dir' && cargo test --locked --quiet" ;;
     esac
     gate "license gate" scripts/ci/license_gate.sh
+    gate "cargo advisories" scripts/ci/cargo_advisories.sh "$dir/Cargo.lock"
 
     [ "$commit" = 1 ] && do_commit "${files[@]}"
     return 0

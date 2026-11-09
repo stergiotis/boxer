@@ -37,7 +37,7 @@ revisit first if the repo ever takes external contributions.
 |---|---|---|---|
 | [lint.yaml](../.github/workflows/lint.yaml) | — | [scripts/ci/lint.sh](../scripts/ci/lint.sh) | `gofmt`, `go vet`, staticcheck, errcheck, doclint, h3 wasm parity |
 | [test.yaml](../.github/workflows/test.yaml) | — | [scripts/ci/gotest.sh](../scripts/ci/gotest.sh) | race + cover + JSON tests, tparse-formatted; post-test drift gate (generator tests rewrite in place, so the tree must end clean) |
-| [vuln.yaml](../.github/workflows/vuln.yaml) | — | [scripts/ci/govuln.sh](../scripts/ci/govuln.sh) | `govulncheck -show verbose ./public/...` |
+| [vuln.yaml](../.github/workflows/vuln.yaml) | — | [scripts/ci/govuln.sh](../scripts/ci/govuln.sh) | `govulncheck -show verbose ./...`; OSV check of the Rust lockfiles |
 | [licenses.yaml](../.github/workflows/licenses.yaml) | — | [scripts/ci/license_gate.sh](../scripts/ci/license_gate.sh) | CycloneDX SBOM → in-tree policy gate |
 | [codestat.yaml](../.github/workflows/codestat.yaml) | weekly cron (Mon 06:00 UTC) | inline | `scc` line counts split human vs. LLM, dependency inventory, authorship attribution |
 | [codeql.yaml](../.github/workflows/codeql.yaml) | weekly cron (Tue 05:37 UTC) | GitHub CodeQL action | CodeQL security scan of the Go tree, built with the repo's build tags |
@@ -306,9 +306,13 @@ since been retired in favour of trailer-based attribution.
 
 ## 6. Supply-chain and license gates
 
-- `govulncheck` runs against `./public/...` on `v*` tags and manual dispatch
+- `govulncheck` runs against the whole module on `v*` tags and manual dispatch
   via the [vuln workflow](../.github/workflows/vuln.yaml), and as a gate of
-  every dependency update.
+  every Go dependency update.
+- [scripts/ci/cargo_advisories.sh](../scripts/ci/cargo_advisories.sh) checks the
+  crates.io packages in the Rust lockfiles against OSV: every lockfile in that
+  workflow, and the updated one as a gate of a Rust dependency update. Advisories
+  fail it; informational entries such as "unmaintained" are listed and pass.
 - Dependency updates are local, gated commits made by
   [scripts/dev/updatedeps.sh](../scripts/dev/updatedeps.sh), one target per
   run (`go` or a `rust/<crate>` lockfile), with a publish-age cooldown.

@@ -1,4 +1,4 @@
-name: Go vulnerability checks
+name: Vulnerability checks
 
 on:
   workflow_dispatch:
@@ -27,3 +27,13 @@ jobs:
         run: ./scripts/ci/install.sh
       - name: Check for Vulnerabilities
         run: ./scripts/ci/govuln.sh
+  cargo-advisories:
+    name: cargo advisories
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Check every Rust lockfile against OSV
+        run: ./scripts/ci/cargo_advisories.sh

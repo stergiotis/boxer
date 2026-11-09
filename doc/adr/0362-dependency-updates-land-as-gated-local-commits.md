@@ -50,6 +50,11 @@ a tag. Its PRs also add a branch and a merge commit to a trunk-based history.
    alerts continue. A security PR is a notice: the fix lands through the
    script. GitHub Actions updates still come as PRs, because they change only
    CI and their SHA pins are what Dependabot does well.
+6. **Rust lockfiles are checked for advisories.** Go has `govulncheck`; Rust
+   gets [scripts/ci/cargo_advisories.sh](../../scripts/ci/cargo_advisories.sh),
+   which queries OSV. It is a gate of every Cargo update and a job of the vuln
+   workflow. A non-informational advisory fails it, and so does a scan that
+   cannot finish.
 
 The tag-only CI decision of 2026-06-27 is unchanged.
 
