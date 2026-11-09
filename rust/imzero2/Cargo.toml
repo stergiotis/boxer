@@ -297,6 +297,12 @@ rand = "0.10.2"
 [profile.release]
 opt-level = 2
 
+# Keep the browser host byte-reproducible (ADR-0278 SD5). With several codegen
+# units this crate's ThinLTO-promoted symbols vary from build to build, and so
+# did the host's digest.
+[profile.release.package.fux-vt]
+codegen-units = 1
+
 # Production: whole-graph LTO in a single codegen unit, symbols stripped.
 # opt-level stays at release's 2 until a measurement says 3 pays for the size.
 # panic stays `unwind` on purpose: the headless hosts run on tokio, which
@@ -311,12 +317,6 @@ opt-level = 2
 # rasterise and tessellate no consistent difference. Binaries 11–15 %
 # smaller, builds ~2–2.5× longer. Two builds from copies at different paths
 # were byte-identical (desktop, headless_mesh), so ADR-0215 holds under LTO.
-# Keep the browser host byte-reproducible (ADR-0278 SD5). With several codegen
-# units this crate's ThinLTO-promoted symbols vary from build to build, and so
-# did the host's digest.
-[profile.release.package.fux-vt]
-codegen-units = 1
-
 [profile.dist]
 inherits = "release"
 lto = "fat"
