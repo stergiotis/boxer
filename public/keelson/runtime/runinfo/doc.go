@@ -1,6 +1,6 @@
 // Package runinfo captures the identity of a single pebble2impl process
 // boot — a "run" — and makes it discoverable to every app launched
-// inside that run via two channels: the PEBBLE2_RUN_ID environment
+// inside that run via two channels: the BOXER_RUN_ID environment
 // variable, and a zerolog field on the base logger that app loggers
 // derive from.
 //
@@ -10,7 +10,7 @@
 // result in a process singleton. Subsequent Get() calls return the
 // same Inst. Init also has two intentional side effects:
 //
-//  1. Sets PEBBLE2_RUN_ID in the environment so apps that prefer plain
+//  1. Sets BOXER_RUN_ID in the environment so apps that prefer plain
 //     env lookups, sub-processes spawned by the runtime, and CLI tooling
 //     can read it without importing this package.
 //  2. Returns a logger-wrapper closure so callers can tag their base

@@ -329,12 +329,12 @@ Every boxer process boot is a *run*, identified by a 16-character
 nanoid (the `run_id`). The carousel initialises it at startup via
 `runtime/runinfo.Init()`, which:
 
-- Allocates the run_id (or inherits `PEBBLE2_RUN_ID` from a parent
+- Allocates the run_id (or inherits `BOXER_RUN_ID` from a parent
   process so wrapped invocations participate in the parent's run).
 - Captures hostname, pid, Go version, VCS revision / modified flag /
   build info, and module path — using `boxer/public/observability/vcs`
   for the build metadata.
-- Sets the `PEBBLE2_RUN_ID` env var so app code that prefers plain
+- Sets the `BOXER_RUN_ID` env var so app code that prefers plain
   `os.Getenv` reads it without importing runinfo.
 - Returns a logger wrapper so the carousel can tag `log.Logger` with
   `run_id` once; per-app loggers built via `app.AppLogger` inherit it

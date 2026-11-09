@@ -152,7 +152,7 @@ var Registry = map[CapId]CapSpec{
 		Display:       "Run identity",
 		SubjectFamily: "(process identity)",
 		Description: "Per-process identifier minted by runinfo.Init() at boot " +
-			"and exported as PEBBLE2_RUN_ID for child processes (incl. the Rust " +
+			"and exported as BOXER_RUN_ID for child processes (incl. the Rust " +
 			"client). Every audit row carries this id so a session's activity " +
 			"groups under one runtime-start fact. ADR-0026 §SD12 / 2026-05-12 " +
 			"runtime-run amendment.",

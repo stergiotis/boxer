@@ -99,7 +99,7 @@ func TestApplyFilterSubstring(t *testing.T) {
 	specs := []env.Spec{
 		{Name: "BOXER_LOG_LEVEL", Category: env.CategoryObservability, Description: "zerolog level"},
 		{Name: "CLICKHOUSE_URL", Category: env.CategoryDatabase, Description: "CH HTTP URL"},
-		{Name: "PEBBLE2_RUN_ID", Category: env.CategoryE("runinfo"), Description: "per-process run id"},
+		{Name: "BOXER_RUN_ID", Category: env.CategoryE("runinfo"), Description: "per-process run id"},
 	}
 
 	got := applyFilter(specs, Filter{Query: "log"})
@@ -108,11 +108,11 @@ func TestApplyFilterSubstring(t *testing.T) {
 
 	got = applyFilter(specs, Filter{Query: "process run"})
 	require.Len(t, got, 1)
-	assert.Equal(t, "PEBBLE2_RUN_ID", got[0].Name)
+	assert.Equal(t, "BOXER_RUN_ID", got[0].Name)
 
 	got = applyFilter(specs, Filter{Query: "RUN"})
 	require.Len(t, got, 1)
-	assert.Equal(t, "PEBBLE2_RUN_ID", got[0].Name)
+	assert.Equal(t, "BOXER_RUN_ID", got[0].Name)
 
 	got = applyFilter(specs, Filter{Query: "xyzzy"})
 	assert.Empty(t, got)

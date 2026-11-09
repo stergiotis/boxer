@@ -359,6 +359,16 @@ Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded
 
 ## Updates
 
+### 2026-11-09 — the run id travels as `BOXER_RUN_ID`
+
+`runinfo.EnvVar` and the Rust `runinfo::ENV_VAR` are renamed from
+`PEBBLE2_RUN_ID` to `BOXER_RUN_ID`, next to the `BOXER_RUN_DRIVER_*`
+variables the same package declares. The old name is not read: a wrapper
+that pre-sets the run id, as the 2026-05-12 and 2026-05-14 entries describe,
+sets `BOXER_RUN_ID`, and an imzero2 client built before the rename runs
+unbound (`standalone`) until it is rebuilt. Those entries keep the name they
+were written with.
+
 ### 2026-10-12 — §SD3: `runtime.audit.{id}` is a write verb; `runtime.anchor.*` carries scope and scheme
 
 [ADR-0327](./0327-evidence-as-a-record-store-profile-chain-vault-marks-seals-and-anchors-any-store-opts-into.md) (proposed) §SD8 turns the `runtime.audit.{id}` row of the

@@ -11,7 +11,7 @@ status: draft
 # Run identity
 
 A 16-character nanoid minted by `runinfo.Init()` at process boot and
-exported as `PEBBLE2_RUN_ID` for child processes (including the Rust
+exported as `BOXER_RUN_ID` for child processes (including the Rust
 client).
 
 Every audit row carries this id so a session's activity groups under
@@ -27,7 +27,7 @@ the window.
 
 - `runtime/runinfo/runinfo.go` — id minting + env-var export
 - `runtime/heartbeat/heartbeat.go` — periodic liveness ticker
-- `src/rust/src/runinfo.rs` — Rust-side env-var bridge
+- `rust/imzero2/src/runinfo.rs` — Rust-side env-var bridge
 - `runtime/factsstore/chstore/runsessions.go` — `LookupRunStart` /
   `LifecyclesByRun` / `LastHeartbeatForRun` read helpers
 

@@ -172,7 +172,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // every subsequent log line carries the inherited run_id. The
     // guard binding must outlive every event we want tagged — kept in
     // scope for the duration of main. ADR-0026 §2026-05-12 follow-up
-    // (b): cross-process audit attribution via PEBBLE2_RUN_ID.
+    // (b): cross-process audit attribution via BOXER_RUN_ID.
     let _run_span = imzero2::runinfo::enter_root_span();
     imzero2::runinfo::log_bound_run();
 

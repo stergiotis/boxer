@@ -21,8 +21,8 @@ import (
 // EnvVar is the env-var name under which Init() exports the run_id so
 // apps and child processes can read it without importing this package.
 // Kept as a string constant for cross-language sync (Rust mirrors this
-// name in src/rust/src/runinfo.rs).
-const EnvVar = "PEBBLE2_RUN_ID"
+// name in rust/imzero2/src/runinfo.rs).
+const EnvVar = "BOXER_RUN_ID"
 
 // RunId is the registry-backed spec for EnvVar. The variable carries
 // the spec for discovery; reads go through RunId.Lookup() so we can
@@ -70,7 +70,7 @@ var (
 // this makes Init safe to call from multiple entry points (e.g. the
 // carousel main plus a test bootstrap) without races.
 //
-// Side effects on first call: sets the PEBBLE2_RUN_ID env var to the
+// Side effects on first call: sets the BOXER_RUN_ID env var to the
 // generated run_id (unless the env var is already set, in which case
 // the inherited value is reused — useful for sub-processes that want
 // to participate in a parent process's run identity).

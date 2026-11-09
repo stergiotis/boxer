@@ -62,7 +62,7 @@ type Result struct {
 type Snapshot struct {
 	// RunIdShort is the first 8 chars of the inherited run_id, or
 	// "standalone" when running without runinfo. Truncating keeps
-	// the bar one-liner-friendly; full id is in PEBBLE2_RUN_ID and
+	// the bar one-liner-friendly; full id is in BOXER_RUN_ID and
 	// every log line.
 	RunIdShort string
 	// FactsBackend is "ch" when chstore.NewWithFallback returned a

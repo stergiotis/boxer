@@ -42,7 +42,7 @@ func TestProvidersSnapshotWell(t *testing.T) {
 }
 
 func TestEnvProviderHasRows(t *testing.T) {
-	// config/env and runinfo register at least PEBBLE2_RUN_ID and
+	// config/env and runinfo register at least BOXER_RUN_ID and
 	// KEELSON_INTROSPECT_SBOM_PATH, so the live registry is non-empty.
 	rec, err := envProvider{}.Snapshot(introspect.AllColumns())
 	require.NoError(t, err)

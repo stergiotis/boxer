@@ -1,6 +1,6 @@
 //! Mirror of the Go-side `runtime/runinfo` package. The Go-side
 //! `runinfo.Init()` mints a 16-char nanoid for the process and
-//! exports it as `PEBBLE2_RUN_ID` before spawning the Rust client.
+//! exports it as `BOXER_RUN_ID` before spawning the Rust client.
 //! Reading the same env var here lands the same identifier on both
 //! sides of the wire so a future audit event minted by Rust can
 //! attribute itself to the Go parent's run (ADR-0026 §2026-05-12
@@ -13,7 +13,7 @@
 use std::sync::OnceLock;
 
 /// Env var name; kept in sync with `runinfo.EnvVar` on the Go side.
-pub const ENV_VAR: &str = "PEBBLE2_RUN_ID";
+pub const ENV_VAR: &str = "BOXER_RUN_ID";
 
 /// Sentinel logged when the env var is absent (e.g., the Rust client
 /// was launched standalone rather than from the Go carousel). The
@@ -23,7 +23,7 @@ pub const STANDALONE: &str = "standalone";
 
 static RUN_ID: OnceLock<Option<String>> = OnceLock::new();
 
-/// Returns the inherited `run_id`, or None when `PEBBLE2_RUN_ID` is
+/// Returns the inherited `run_id`, or None when `BOXER_RUN_ID` is
 /// unset. Cached on first read; subsequent calls are lock-free.
 pub fn run_id() -> Option<&'static str> {
     RUN_ID.get_or_init(|| std::env::var(ENV_VAR).ok().filter(|s| !s.is_empty())).as_deref()
@@ -75,7 +75,7 @@ pub fn log_bound_run() {
 mod tests {
     use super::*;
 
-    // These tests mutate the process-global ENV_VAR (PEBBLE2_RUN_ID) and cargo
+    // These tests mutate the process-global ENV_VAR (BOXER_RUN_ID) and cargo
     // runs tests in parallel, so a shared lock serializes them — otherwise one
     // test's set_var races another's remove_var + assert (the flake that hit
     // parse_helper_returns_none_when_unset). Recover from poisoning so a single
