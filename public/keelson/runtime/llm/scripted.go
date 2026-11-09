@@ -42,12 +42,16 @@ const ScriptedEndpoint = "http://127.0.0.1/scripted"
 // StreamMs, after the delay, writes a content reply word by word over that
 // long to a caller that streams (ADR-0286), so a scene can see an answer
 // grow; a caller that does not stream waits it out and gets the whole.
+// Reasoning is what the model reasoned before a content reply, written the
+// same way over ReasoningMs, ahead of the content.
 type ScriptReply struct {
-	Content  string         `json:"content,omitempty"`
-	Tool     string         `json:"tool,omitempty"`
-	Args     jsontext.Value `json:"args,omitempty"`
-	DelayMs  uint32         `json:"delayMs,omitempty"`
-	StreamMs uint32         `json:"streamMs,omitempty"`
+	Content     string         `json:"content,omitempty"`
+	Tool        string         `json:"tool,omitempty"`
+	Args        jsontext.Value `json:"args,omitempty"`
+	DelayMs     uint32         `json:"delayMs,omitempty"`
+	StreamMs    uint32         `json:"streamMs,omitempty"`
+	Reasoning   string         `json:"reasoning,omitempty"`
+	ReasoningMs uint32         `json:"reasoningMs,omitempty"`
 }
 
 // ScriptedClient answers the n-th reply of its script to a request that
@@ -94,6 +98,12 @@ func NewScriptedClient(script []byte) (inst *ScriptedClient, err error) {
 		}
 		if r.StreamMs > 0 && r.Tool != "" {
 			return nil, &ScriptError{Line: n, Reason: "streamMs writes content; a tool reply has none"}
+		}
+		if r.Reasoning != "" && r.Tool != "" {
+			return nil, &ScriptError{Line: n, Reason: "reasoning goes before a content reply"}
+		}
+		if r.ReasoningMs > 0 && r.Reasoning == "" {
+			return nil, &ScriptError{Line: n, Reason: "reasoningMs writes reasoning; the reply has none"}
 		}
 		inst.replies = append(inst.replies, r)
 	}
@@ -157,6 +167,26 @@ func sleep(ctx context.Context, d time.Duration) (err error) {
 	return
 }
 
+// writeWords hands text to onDelta word by word over ms; with no time to
+// write it over, it writes nothing, and a caller that does not stream only
+// waits.
+func writeWords(ctx context.Context, text string, ms uint32, onDelta func(openaichat.Delta), delta func(string) openaichat.Delta) (err error) {
+	if ms == 0 {
+		return
+	}
+	words := strings.SplitAfter(text, " ")
+	step := time.Duration(ms) * time.Millisecond / time.Duration(len(words))
+	for _, w := range words {
+		if err = sleep(ctx, step); err != nil {
+			return
+		}
+		if onDelta != nil {
+			onDelta(delta(w))
+		}
+	}
+	return
+}
+
 func (inst *ScriptedClient) answer(ctx context.Context, req openaichat.CompletionRequest, onDelta func(openaichat.Delta)) (resp openaichat.CompletionResponse, err error) {
 	n := 0
 	for _, m := range req.Messages {
@@ -174,19 +204,13 @@ func (inst *ScriptedClient) answer(ctx context.Context, req openaichat.Completio
 		return
 	}
 	if r.Tool == "" {
-		if r.StreamMs > 0 {
-			words := strings.SplitAfter(r.Content, " ")
-			step := time.Duration(r.StreamMs) * time.Millisecond / time.Duration(len(words))
-			for _, w := range words {
-				if err = sleep(ctx, step); err != nil {
-					return
-				}
-				if onDelta != nil {
-					onDelta(openaichat.Delta{Content: w})
-				}
-			}
+		if err = writeWords(ctx, r.Reasoning, r.ReasoningMs, onDelta, func(w string) openaichat.Delta { return openaichat.Delta{Reasoning: w} }); err != nil {
+			return
 		}
-		resp.Content, resp.FinishReason = r.Content, "stop"
+		if err = writeWords(ctx, r.Content, r.StreamMs, onDelta, func(w string) openaichat.Delta { return openaichat.Delta{Content: w} }); err != nil {
+			return
+		}
+		resp.Content, resp.Reasoning, resp.FinishReason = r.Content, r.Reasoning, "stop"
 		return
 	}
 	if onDelta != nil {

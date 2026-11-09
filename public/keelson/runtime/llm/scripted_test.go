@@ -85,6 +85,23 @@ func TestAScriptedReplyWaitsItsDelay(t *testing.T) {
 	assert.ErrorIs(t, err, context.Canceled, "a cancelled request stops waiting")
 }
 
+// A reply's reasoning is written ahead of its content, and comes back whole.
+func TestAScriptedReplyReasonsBeforeItAnswers(t *testing.T) {
+	cli, err := NewScriptedClient([]byte(`{"content":"done now","streamMs":10,"reasoning":"weigh it","reasoningMs":10}`))
+	require.NoError(t, err)
+	var got []openaichat.Delta
+	resp, err := cli.CompleteStream(context.Background(), openaichat.CompletionRequest{}, func(d openaichat.Delta) { got = append(got, d) })
+	require.NoError(t, err)
+	assert.Equal(t, []openaichat.Delta{{Reasoning: "weigh "}, {Reasoning: "it"}, {Content: "done "}, {Content: "now"}}, got)
+	assert.Equal(t, "weigh it", resp.Reasoning)
+	assert.Equal(t, "done now", resp.Content)
+
+	_, err = NewScriptedClient([]byte(`{"tool":"t","reasoning":"weigh it"}`))
+	assert.Error(t, err, "reasoning goes before a content reply")
+	_, err = NewScriptedClient([]byte(`{"content":"x","reasoningMs":10}`))
+	assert.Error(t, err, "nothing to write")
+}
+
 // A StreamMs reply is written word by word to a caller that streams, and
 // whole to one that does not; a tool reply streams its name.
 func TestAScriptedReplyStreamsItsWords(t *testing.T) {
