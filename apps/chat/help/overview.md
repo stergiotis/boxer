@@ -100,6 +100,10 @@ send nothing, and can start its conversations watched. **Artefact** comes to
 the front when the model first writes it. The running turn counts steps, with
 no limit beside the count. **Definition** shows the document itself.
 
+The plain chat can look the same way: **Simple view** in Settings folds its
+bar, brings **Artefact** forward and counts steps, and is remembered for the
+next window.
+
 ## The turn, the journal, and Keep
 
 A **turn** is one message you send and all that answering it takes: with

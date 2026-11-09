@@ -122,6 +122,7 @@ var escMask = keycodes.MaskOf(keycodes.Escape)
 func (inst *App) render() {
 	inst.syncLevels()
 	inst.syncLooked()
+	inst.syncSimpleView()
 	inst.syncArtefactTab()
 	inst.storeTitle()
 	inst.publishTurn()
@@ -140,7 +141,7 @@ func (inst *App) render() {
 // (ADR-0265 §SD4). Then the task while Apps is on, then at most one notice.
 // The options themselves are in the Settings tab.
 func (inst *App) renderBar() {
-	if inst.preset != nil && inst.preset.Simple {
+	if inst.simple {
 		inst.renderSimpleBar()
 	} else {
 		if inst.conv.started {
@@ -536,7 +537,7 @@ func (inst *App) renderComposer() {
 			}
 		}
 	}
-	if inst.preset == nil || !inst.preset.Simple || inst.detailsOpen {
+	if !inst.simple || inst.detailsOpen {
 		inst.renderTransformPicker()
 	}
 	w, h, ok := c.CapturePaneSize(c.ProbeSeq("chat", "composer") ^ inst.ids.PrepareHighEntropy(composerProbeSalt).Derive())
@@ -703,7 +704,7 @@ func (inst *App) renderWaiting() {
 	for range c.HorizontalTop().KeepIter() {
 		c.Spinner().Send()
 		line := "thinking… " + elapsed(p.started)
-		if inst.preset != nil {
+		if inst.guided() {
 			line = "working… " + elapsed(p.started)
 		}
 		if note := inst.turn.Snapshot().Note; note != "" {

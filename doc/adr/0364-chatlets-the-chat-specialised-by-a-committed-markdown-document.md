@@ -136,7 +136,12 @@ The other keys are for someone new to the window or tired:
   toggle in the bar's first row. A collapsing header was not taken: it needs a row of
   its own in the bar it exists to shorten. What holds a task, its Stop, what it
   read, the warning that a conversation is not kept and the context warning stay
-  outside the fold. Settings still has the ladder.
+  outside the fold. Settings still has the ladder. The plain chat offers the same
+  view as a Settings checkbox, off by default and kept in the app's storage under
+  `simpleViewKey`, which also brings its artefact forward and describes its turns
+  as a preset's are. A preset neither reads nor writes that key, its view being its
+  document's, and neither does a window a scene launched, which shares the store of
+  the machine it runs on.
 - `followups`, in the shape of starters, are offered under the latest answer. A
   click fills the composer, as a starter's does.
 - `watch: true` starts each new conversation watched

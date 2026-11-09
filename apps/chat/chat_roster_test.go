@@ -72,7 +72,7 @@ func TestTheRosterGroupsConversations(t *testing.T) {
 // declaration the bus refuses the write, which is what a manifest with no
 // PersistedKeys did.
 func TestTheRostersTitleReachesTheStore(t *testing.T) {
-	assert.Equal(t, []string{titleStorePrefix}, manifest.PersistedKeys)
+	assert.Contains(t, manifest.PersistedKeys, titleStorePrefix)
 	bus := inprocbus.NewInst(zerolog.Nop())
 	bus.SetRequestTimeout(2 * time.Second)
 	backend := persist.NewMemoryBackend()

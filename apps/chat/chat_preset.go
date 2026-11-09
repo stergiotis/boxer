@@ -131,6 +131,7 @@ func NewPreset(p Preset) (a app.AppI, err error) {
 	inst.apps, inst.questions, inst.artefact, inst.perms = p.Apps, p.Questions, p.Artefact, limit
 	inst.rounds = float64(clampRounds(p.Rounds))
 	inst.thinking = !p.HideThinking
+	inst.simple = p.Simple
 	if p.Source != "" {
 		inst.definition = markdown.Parse([]byte(p.Source))
 	}

@@ -22,6 +22,11 @@ under a running model step, from the moment you tick it. Off, the step only
 says it is reasoning, and the text is under the step's details once the call
 ends.
 
+**Simple view** folds the bar under **Details**, brings **Artefact** to the
+front when the model first writes it, and describes a running turn as
+"working…" with a count of steps. The next chat window opens the way you left
+this. A chatlet's document sets its view, so its Settings do not offer this.
+
 ## What the model may do
 
 - **Apps** — let the model work in app windows. A checkbox before the first

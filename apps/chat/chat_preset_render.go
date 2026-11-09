@@ -106,7 +106,7 @@ func wordList(items []string, conj string) string {
 
 const tipDetails = "The conversation's id, what the model may do, its context and model, Watch and Urgent. What holds a task and Stop stay in view."
 
-// renderSimpleBar is the bar of a simple preset window: New conversation,
+// renderSimpleBar is the bar of a simple window: New conversation,
 // the title and Details, which unfolds the rest. It is a toggle in the row
 // rather than a collapsing header, which would take a row of its own in the
 // bar it exists to shorten.
@@ -158,12 +158,12 @@ func (inst *App) renderFollowups(i int, e *entry) {
 	}
 }
 
-// turnNote is the running turn's progress line. A preset's says which step
-// it is on: "round 3 of 48" reads as a bar that is nearly empty, and 48 is
-// only a limit.
-func turnNote(preset bool, round int, limit int, doing string) (note string) {
+// turnNote is the running turn's progress line. A guided window's says which
+// step it is on: "round 3 of 48" reads as a bar that is nearly empty, and 48
+// is only a limit.
+func turnNote(guided bool, round int, limit int, doing string) (note string) {
 	note = "round " + strconv.Itoa(round+1) + " of " + strconv.Itoa(limit)
-	if preset {
+	if guided {
 		note = "step " + strconv.Itoa(round+1)
 	}
 	if doing != "" {
@@ -193,12 +193,12 @@ func (inst *artefactShown) advance(conv string, written bool) (bring bool) {
 	return false
 }
 
-// syncArtefactTab brings a preset's artefact forward when the model first
-// writes it or proposes to: the result of the conversation should not wait
-// in a tab the person has to know about. The render goroutine calls it once
-// per frame.
+// syncArtefactTab brings a guided window's artefact forward when the model
+// first writes it or proposes to: the result of the conversation should not
+// wait in a tab the person has to know about. The render goroutine calls it
+// once per frame.
 func (inst *App) syncArtefactTab() {
-	if inst.preset == nil || !inst.artefactOn() {
+	if !inst.guided() || !inst.artefactOn() {
 		return
 	}
 	n, _ := inst.conv.art.head()

@@ -226,6 +226,7 @@ const (
 		"This chat's captures: any screenshot of this conversation, without asking — the windows were shared with the task.\n" +
 		"A shown image stays in the model's context for its turn only. What was sent cannot be called back; lowering this binds from the next request on."
 	tipPixelsLocal = "Send screenshots only to a model on this machine, or one this host trusts with sealed data: every request carrying pixels is labelled confined, and the host refuses it elsewhere."
+	tipSimple      = "Fold the bar under Details, bring the artefact forward when the model first writes it, and describe a running turn in plain words. Remembered for the next window."
 	tipThinking    = "While a model call reasons, draw what it writes under the step. Off, the step only says it is reasoning. Either way the text is kept under the step's details once the call ends."
 	tipTyped       = "Offer each operation of the task's windows to the model as a tool of its own, instead of one call_operation tool. More tools in every request; some models call them more reliably."
 )
@@ -399,6 +400,12 @@ func (inst *App) renderSettings() {
 		// sections below run past the fold.
 		for range c.HoverText(tipThinking).KeepIter() {
 			c.Checkbox(inst.ids.PrepareStr("thinking"), inst.thinking, "Show the model's reasoning as it writes").SendRespVal(&inst.thinking)
+		}
+	}
+	if inst.preset == nil {
+		// A preset's document sets its view, and Details unfolds it.
+		for range c.HoverText(tipSimple).KeepIter() {
+			c.Checkbox(inst.ids.PrepareStr("simple"), inst.simple, "Simple view").SendRespVal(&inst.simple)
 		}
 	}
 	inst.renderMaySection()

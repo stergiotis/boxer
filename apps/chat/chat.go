@@ -14,6 +14,7 @@ import (
 	"github.com/rs/zerolog"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/agent"
@@ -26,6 +27,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/lifetime"
 	"github.com/stergiotis/boxer/public/keelson/runtime/llm"
 	"github.com/stergiotis/boxer/public/keelson/runtime/task"
+	"github.com/stergiotis/boxer/public/keelson/runtime/topo"
 	"github.com/stergiotis/boxer/public/thestack/fffi2/typed"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/chatview"
@@ -179,7 +181,18 @@ type App struct {
 	// written. Off, the step still says it is reasoning, and the text is
 	// under the step's details once it ends.
 	thinking bool
-	// detailsOpen unfolds the bar of a simple preset window.
+	// simple is the Simple view (chat_simple.go): a preset's from its
+	// document, the plain chat's from Settings. simpleKept is what the store
+	// holds as far as this window knows, simpleRead whether the store has
+	// answered, and simpleWriting whether a write is on its way. simpleStore
+	// is nil for a window that does not keep the choice.
+	simple        bool
+	simpleStore   app.StorageI
+	simpleKept    bool
+	simpleRead    bool
+	simpleWriting atomic.Bool
+	simpleJob     bgjob.Runner[bool]
+	// detailsOpen unfolds the bar of a simple window.
 	detailsOpen bool
 	// artShown is whether this conversation's artefact was brought forward.
 	artShown     artefactShown
@@ -277,6 +290,8 @@ func (inst *App) Mount(ctx app.MountContextI) (err error) {
 	cli := llm.NewClient(bus)
 	inst.cli, inst.bus = cli, bus
 	inst.storage = ctx.Storage()
+	inst.simpleStore = simpleStoreFor(inst.storage, inst.preset != nil, topo.Self())
+	inst.loadSimpleView()
 	inst.startLevels()
 	inst.tasks = task.ForApp(ctx)
 	for i := range inst.bandKeys {
@@ -314,6 +329,7 @@ func (inst *App) Unmount(ctx app.MountContextI) (err error) {
 	inst.stopLevels()
 	inst.unpublishTurn()
 	inst.rosterJob.Cancel()
+	inst.simpleJob.Cancel()
 	inst.handover.Cancel()
 	inst.runsJob.Cancel()
 	inst.resumeJob.Cancel()
@@ -506,11 +522,11 @@ func (inst *App) launchTurn(req llm.Request, coord *coordinator) (started bool) 
 	// The limit the turn runs under, for its progress line.
 	coord.setRounds(limit)
 	logProfile()
-	preset := inst.preset != nil
+	guided := inst.guided()
 	ok := inst.turn.StartReporting(inst.tasks, bgjob.Spec{Kind: "chat-turn", Title: "answer"},
 		func(ctx context.Context, report bgjob.Reporter) (res *turnResult, err error) {
 			return runTurn(ctx, cli, coord, req, func(round int, doing string) {
-				report(uint64(round+1), uint64(limit), turnNote(preset, round, limit, doing))
+				report(uint64(round+1), uint64(limit), turnNote(guided, round, limit, doing))
 			})
 		})
 	return ok

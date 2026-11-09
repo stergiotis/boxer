@@ -56,9 +56,10 @@ var manifest = app.Manifest{
 	Operations: ops.Catalog(),
 	Help:       help.MustSub(helpFS, "help"),
 	// The roster's titles, one key per conversation under the prefix
-	// (chat_roster.go). Declared here so the host injects the persist cap;
-	// without it every write the window makes is refused at the bus.
-	PersistedKeys: []string{titleStorePrefix},
+	// (chat_roster.go), and the Simple view setting (chat_simple.go).
+	// Declared here so the host injects the persist cap; without it every
+	// write the window makes is refused at the bus.
+	PersistedKeys: []string{titleStorePrefix, simpleViewKey},
 	Caps: slices.Concat(
 		llm.ClientCaps("chat: send the conversation to the host's model"),
 		llm.RetainCaps("chat: keep the conversation on boxer.facts where the host's BOXER_LLM_RETAIN allows (ADR-0264)"),

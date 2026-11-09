@@ -1,0 +1,4 @@
+# The scripted model of chat-simple-view.scene.md: one reply per line, picked
+# by the conversation's position.
+{"tool":"artefact_write","args":{"base_revision":0,"text":"# Notes\n\nThe scripted model wrote this note.\n"}}
+{"content":"The note is in the Artefact tab.","delayMs":3000}
