@@ -134,6 +134,49 @@ starters:
 	assert.NotContains(t, p.System, "Hello")
 }
 
+func TestParse_thinking(t *testing.T) {
+	p, err := ParseDocSource("b", "example.md", []byte(validDoc), testTopics)
+	require.NoError(t, err)
+	assert.False(t, p.HideThinking, "absent is shown, as in the plain chat")
+	for value, hidden := range map[string]bool{"shown": false, "hidden": true} {
+		doc := strings.Replace(validDoc, "rounds: 12", "rounds: 12\nthinking: "+value, 1)
+		p, err = ParseDocSource("b", "example.md", []byte(doc), testTopics)
+		require.NoError(t, err)
+		assert.Equal(t, hidden, p.HideThinking, value)
+	}
+	for _, bad := range []string{"secret", "false", "off"} {
+		doc := strings.Replace(validDoc, "rounds: 12", "rounds: 12\nthinking: "+bad, 1)
+		_, err = ParseDocSource("b", "example.md", []byte(doc), testTopics)
+		require.Error(t, err, bad)
+		assert.Contains(t, err.Error(), "must be shown or hidden", bad)
+	}
+}
+
+func TestParse_easeOfUseKeys(t *testing.T) {
+	p, err := ParseDocSource("b", "example.md", []byte(validDoc), testTopics)
+	require.NoError(t, err)
+	assert.False(t, p.Simple, "absent is the full bar")
+	assert.False(t, p.Watch)
+	assert.Empty(t, p.Purpose)
+
+	doc := strings.Replace(validDoc, "rounds: 12", `rounds: 12
+view: simple
+watch: true
+purpose: "It does the example thing."
+followups:
+  - {label: "Again", text: "Do it again"}`, 1)
+	p, err = ParseDocSource("b", "example.md", []byte(doc), testTopics)
+	require.NoError(t, err)
+	assert.True(t, p.Simple)
+	assert.True(t, p.Watch)
+	assert.Equal(t, "It does the example thing.", p.Purpose)
+	assert.Equal(t, []chat.Starter{{Label: "Again", Text: "Do it again"}}, p.Followups)
+
+	_, err = ParseDocSource("b", "example.md", []byte(strings.Replace(validDoc, "rounds: 12", "rounds: 12\nview: tiny", 1)), testTopics)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "must be full or simple")
+}
+
 func TestParse_starterRefusals(t *testing.T) {
 	for name, c := range map[string]struct{ value, want string }{
 		"not a list":    {"starters: nope", "must be a list"},

@@ -371,6 +371,11 @@ func (inst *coordinator) ceilingNote() (note string) {
 		rounds = int(RoundsEnv.Get())
 	}
 	note += " A turn takes at most " + strconv.Itoa(rounds) + " rounds of tool calls; request_access with rounds asks the person for more."
+	if d := serverDestination(); d != "" && inst.preset != nil && inst.ceiling.Reach >= agent.ReachData {
+		// Without it the model learns the name from a window it opened, and
+		// the person answers a second dialog (ADR-0364, proposed).
+		note += " This host's ClickHouse server is the destination " + d + ": if your plan reads the server, name it in your first request_access."
+	}
 	if !inst.ceiling.Unpaced && s.Level >= agent.LevelView {
 		note += " The host spaces your changes so the person can follow them: a call that changes a window may take a moment to return."
 	}
@@ -870,6 +875,9 @@ func (inst *coordinator) launched(appName string, got agent.Launched) (content s
 func (inst *coordinator) requestAccess(ctx context.Context, asked agent.Asked, plan string, args map[string]any) (content string, activity string) {
 	ceiling := inst.ceilingNow()
 	req := agent.GrantRequest{Plan: plan, Conversation: inst.conversation, Handle: inst.handle(), Ceiling: &ceiling, Asked: asked}
+	if inst.preset != nil {
+		req.Purpose = inst.preset.Purpose
+	}
 	launches, bad := openArg(args["open"])
 	if bad != "" {
 		// Nothing is asked of the person for a request it cannot read.

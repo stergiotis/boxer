@@ -169,9 +169,7 @@ func (inst *App) renderStep(i int, s *turnStep) {
 				c.Spinner().Send()
 				c.LabelAtoms(c.Atoms().BeginRichText(inst.markedLine(s)).Small().End().Keep()).Selectable(false).Send()
 			}
-			if s.kind == stepModel && s.content == "" && s.reasoning != "" {
-				// The reasoning as it is written: the answer, once it
-				// starts, shows under the trail.
+			if inst.showsReasoning(s) {
 				inst.liveReasoning(i, s.reasoning)
 			}
 			c.RequestRepaint()
@@ -187,6 +185,13 @@ func (inst *App) renderStep(i int, s *turnStep) {
 			}
 		}
 	}
+}
+
+// showsReasoning says whether a running step draws its reasoning as it is
+// written: until the answer starts, which shows under the trail, and while
+// the window's setting has it on.
+func (inst *App) showsReasoning(s *turnStep) bool {
+	return inst.thinking && s.kind == stepModel && s.content == "" && s.reasoning != ""
 }
 
 // stepLabel is a step with nothing to open, in its tone.

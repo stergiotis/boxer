@@ -2,11 +2,14 @@ package chat
 
 import (
 	"encoding/hex"
+	"net/url"
 	"slices"
+	"strings"
 	"unicode/utf8"
 
 	"lukechampine.com/blake3"
 
+	"github.com/stergiotis/boxer/public/db/clickhouse/clickhouseenv"
 	"github.com/stergiotis/boxer/public/keelson/runtime/agent"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
@@ -60,6 +63,23 @@ type Preset struct {
 	// sends it. Neither is the model's to read.
 	Greeting string
 	Starters []Starter
+	// Followups are ready-made next messages, under the latest answer. As
+	// with a starter, a click fills the composer and nothing is sent.
+	Followups []Starter
+	// Purpose is one sentence the host's access dialog shows beside what
+	// the model asks for, as the app's own description of itself. It asks
+	// for nothing and approves nothing.
+	Purpose string
+	// Watch starts a conversation watched, so a turn that ends while the
+	// person is elsewhere is reported; they can stop watching.
+	Watch bool
+	// Simple folds what a person only sometimes needs under Details. What
+	// holds a task, what it read and Stop stay in view.
+	Simple bool
+	// HideThinking starts the window without the reasoning drawn while the
+	// model writes it. It is a start and no limit: only the window's look
+	// changes, and the person can show it from Settings.
+	HideThinking bool
 	// Source is the document the preset was made from, shown in the
 	// Definition tab so the person can read what the model is told. Empty, the
 	// tab is not offered.
@@ -76,6 +96,7 @@ type Starter struct {
 const (
 	maxStarters     = 6
 	maxStarterLabel = 40
+	maxPurpose      = 200
 )
 
 // presetWindowWidth leaves the column room for its four titles with
@@ -109,6 +130,7 @@ func NewPreset(p Preset) (a app.AppI, err error) {
 	inst.preset, inst.limit = &p, limit
 	inst.apps, inst.questions, inst.artefact, inst.perms = p.Apps, p.Questions, p.Artefact, limit
 	inst.rounds = float64(clampRounds(p.Rounds))
+	inst.thinking = !p.HideThinking
 	if p.Source != "" {
 		inst.definition = markdown.Parse([]byte(p.Source))
 	}
@@ -127,8 +149,14 @@ func (inst Preset) Validate() (err error) {
 	if inst.Rounds < 0 {
 		return eb.Build().Str("id", string(inst.Manifest.Id)).Int("rounds", inst.Rounds).Errorf("a preset's rounds are negative")
 	}
-	if err = inst.validateStarters(); err != nil {
+	if err = inst.validateButtons("starter", inst.Starters); err != nil {
 		return
+	}
+	if err = inst.validateButtons("follow-up", inst.Followups); err != nil {
+		return
+	}
+	if utf8.RuneCountInString(inst.Purpose) > maxPurpose || strings.Contains(inst.Purpose, "\n") {
+		return eb.Build().Str("id", string(inst.Manifest.Id)).Int("max", maxPurpose).Errorf("a preset's purpose is one short sentence")
 	}
 	if err = inst.Manifest.Validate(); err != nil {
 		return eb.Build().Str("id", string(inst.Manifest.Id)).Errorf("the preset's manifest: %w", err)
@@ -140,21 +168,23 @@ func (inst Preset) Validate() (err error) {
 	return
 }
 
-func (inst Preset) validateStarters() (err error) {
+// validateButtons bounds a list of ready-made messages; what names them says
+// which list a refusal is about.
+func (inst Preset) validateButtons(what string, list []Starter) (err error) {
 	id := string(inst.Manifest.Id)
-	if len(inst.Starters) > maxStarters {
-		return eb.Build().Str("id", id).Int("starters", len(inst.Starters)).Int("max", maxStarters).Errorf("a preset has too many starters")
+	if len(list) > maxStarters {
+		return eb.Build().Str("id", id).Int("count", len(list)).Int("max", maxStarters).Errorf("a preset has too many %ss", what)
 	}
-	seen := make(map[string]struct{}, len(inst.Starters))
-	for _, s := range inst.Starters {
+	seen := make(map[string]struct{}, len(list))
+	for _, s := range list {
 		if s.Label == "" || s.Text == "" {
-			return eb.Build().Str("id", id).Str("label", s.Label).Errorf("a starter needs a label and a text")
+			return eb.Build().Str("id", id).Str("label", s.Label).Errorf("a %s needs a label and a text", what)
 		}
 		if utf8.RuneCountInString(s.Label) > maxStarterLabel {
-			return eb.Build().Str("id", id).Str("label", s.Label).Int("max", maxStarterLabel).Errorf("a starter's label is too long")
+			return eb.Build().Str("id", id).Str("label", s.Label).Int("max", maxStarterLabel).Errorf("a %s's label is too long", what)
 		}
 		if _, dup := seen[s.Label]; dup {
-			return eb.Build().Str("id", id).Str("label", s.Label).Errorf("two starters share a label")
+			return eb.Build().Str("id", id).Str("label", s.Label).Errorf("two %ss share a label", what)
 		}
 		seen[s.Label] = struct{}{}
 	}
@@ -223,6 +253,18 @@ func (inst permissions) capped(limit permissions) permissions {
 	inst.unpaced = inst.unpaced && limit.unpaced
 	inst.pixels = min(inst.pixels, limit.pixels)
 	return inst
+}
+
+// serverDestination is how a grant names the server a play window opens on,
+// empty when that is not a URL with a host.
+func serverDestination() string { return destinationOfURL(clickhouseenv.URL.Get()) }
+
+func destinationOfURL(raw string) string {
+	u, err := url.Parse(raw)
+	if err != nil || u.Host == "" {
+		return ""
+	}
+	return "clickhouse:" + u.Host
 }
 
 // owner is the app this window's runs belong to.

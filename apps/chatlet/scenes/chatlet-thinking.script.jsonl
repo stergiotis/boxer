@@ -1,0 +1,3 @@
+# The scripted model of chatlet-thinking.scene.md (ADR-0364, proposed): one reply
+# that reasons for sixteen seconds before it answers.
+{"reasoning":"Weighing the question first: which time range does the person mean, which views hold it, and whether the conversation's own rows have to be left out of the count before anything can be said about the host.","reasoningMs":16000,"delayMs":500,"content":"Nothing to report from this scripted model."}

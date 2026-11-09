@@ -31,7 +31,7 @@ var knownKeys = map[string]struct{}{
 	"title": {}, "summary": {}, "icon": {}, "topics": {}, "keywords": {},
 	"apps": {}, "questions": {}, "artefact": {}, "rounds": {},
 	"allow": {}, "changes": {}, "reach": {}, "launch": {}, "desktop": {},
-	"greeting": {}, "starters": {},
+	"greeting": {}, "starters": {}, "followups": {}, "purpose": {}, "watch": {}, "view": {}, "thinking": {},
 }
 
 // ParseDocSource reads one chatlet document into the preset it mints. topics
@@ -64,7 +64,8 @@ func ParseDocSource(bookID string, path string, src []byte, topics []app.TopicT)
 	p = chat.Preset{Manifest: m, Book: bookID, System: def.System,
 		Apps: r.flag("apps"), Questions: r.flag("questions"), Artefact: r.flag("artefact"), Launch: r.flag("launch"), Desktop: r.flag("desktop"),
 		Rounds: r.number("rounds"), Allow: r.required("allow"), Changes: r.required("changes"), Reach: r.required("reach"),
-		Greeting: r.text("greeting"), Starters: r.starters("starters"), Source: string(src)}
+		Greeting: r.text("greeting"), Starters: r.starters("starters"), Followups: r.starters("followups"), Purpose: r.text("purpose"), Watch: r.flag("watch"),
+		Simple: r.oneOf("view", "full", "simple"), HideThinking: r.oneOf("thinking", "shown", "hidden"), Source: string(src)}
 	if err = r.err; err != nil {
 		return
 	}
@@ -132,6 +133,25 @@ func (inst *reader) text(key string) (v string) {
 	v, ok := raw.(string)
 	if !ok {
 		inst.fail(key, "must be a string")
+	}
+	return
+}
+
+// oneOf reads a key that takes one of two words, and says whether it was the
+// second; absent is the first, the plain chat's. Words rather than a flag:
+// "thinking: false" reads as a model that does not reason, which no key here
+// can arrange.
+func (inst *reader) oneOf(key string, first string, second string) (isSecond bool) {
+	raw, has := inst.meta[key]
+	if !has {
+		return
+	}
+	switch raw {
+	case first:
+	case second:
+		isSecond = true
+	default:
+		inst.fail(key, "must be "+first+" or "+second)
 	}
 	return
 }

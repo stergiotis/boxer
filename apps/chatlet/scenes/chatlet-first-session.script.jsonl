@@ -1,0 +1,5 @@
+# The scripted model of chatlet-first-session.scene.md (ADR-0364, proposed):
+# one reply per line, picked by the conversation's position.
+{"tool":"request_access","args":{"plan":"open play to answer the question","open":[{"app":"play"}],"destinations":["keelson:apps"]}}
+{"tool":"artefact_write","args":{"base_revision":0,"text":"# Findings of the first session\n\nThe scripted model wrote this report.\n"}}
+{"content":"The report is written up in the Artefact tab.","delayMs":3000}

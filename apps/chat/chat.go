@@ -174,7 +174,15 @@ type App struct {
 	// advanced fills the Analytics tab (AdvancedSeed); stats are the
 	// window's records, across its conversations. handover publishes them
 	// and opens play.
-	advanced     bool
+	advanced bool
+	// thinking draws the reasoning under a running model step as it is
+	// written. Off, the step still says it is reasoning, and the text is
+	// under the step's details once it ends.
+	thinking bool
+	// detailsOpen unfolds the bar of a simple preset window.
+	detailsOpen bool
+	// artShown is whether this conversation's artefact was brought forward.
+	artShown     artefactShown
 	stats        chatStats
 	bus          app.BusI
 	pubs         statsPublishers
@@ -232,7 +240,7 @@ var _ app.AppI = (*App)(nil)
 func newApp() (inst *App) {
 	inst = &App{turnMachine: newTurnMachine(), log: zerolog.Nop(), ids: c.NewWidgetIdStack(), keep: true, draft: DraftSeed.Get(), conv: newConversation(), apps: AppsSeed.Get() || registeredCoordinator(),
 		questions: QuestionsSeed.Get(), artefact: ArtefactSeed.Get(), advanced: AdvancedSeed.Get(), pubs: newStatsPublishers(), perms: defaultPermissions().withPixels(pixelsSeed(), PixelsLocalSeed.Get()),
-		opTools: OperationToolsSeed.Get(), rounds: float64(clampRounds(0)), confinedTier: fallbackConfinedTier()}
+		opTools: OperationToolsSeed.Get(), rounds: float64(clampRounds(0)), thinking: true, confinedTier: fallbackConfinedTier()}
 	if inst.artefact {
 		// A window seeded with the artefact opens on its tab, as it opened
 		// on its panel.
@@ -447,6 +455,9 @@ func (inst *App) startTurn(text string) (started bool) {
 	if !inst.launchTurn(req, coord) {
 		return false
 	}
+	if !conv.started && inst.preset != nil && inst.preset.Watch {
+		inst.setWatch(true)
+	}
 	coord.personSpoke()
 	conv.begin(text, time.Now().UnixMilli(), inst.editedNext)
 	inst.pending = &pendingTurn{req: req, started: time.Now()}
@@ -495,14 +506,11 @@ func (inst *App) launchTurn(req llm.Request, coord *coordinator) (started bool) 
 	// The limit the turn runs under, for its progress line.
 	coord.setRounds(limit)
 	logProfile()
+	preset := inst.preset != nil
 	ok := inst.turn.StartReporting(inst.tasks, bgjob.Spec{Kind: "chat-turn", Title: "answer"},
 		func(ctx context.Context, report bgjob.Reporter) (res *turnResult, err error) {
 			return runTurn(ctx, cli, coord, req, func(round int, doing string) {
-				note := "round " + strconv.Itoa(round+1) + " of " + strconv.Itoa(limit)
-				if doing != "" {
-					note += " · " + doing
-				}
-				report(uint64(round+1), uint64(limit), note)
+				report(uint64(round+1), uint64(limit), turnNote(preset, round, limit, doing))
 			})
 		})
 	return ok

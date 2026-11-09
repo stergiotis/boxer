@@ -122,6 +122,7 @@ var escMask = keycodes.MaskOf(keycodes.Escape)
 func (inst *App) render() {
 	inst.syncLevels()
 	inst.syncLooked()
+	inst.syncArtefactTab()
 	inst.storeTitle()
 	inst.publishTurn()
 	inst.syncRoster()
@@ -139,20 +140,34 @@ func (inst *App) render() {
 // (ADR-0265 §SD4). Then the task while Apps is on, then at most one notice.
 // The options themselves are in the Settings tab.
 func (inst *App) renderBar() {
-	conv := inst.conv
-	if conv.started {
-		inst.renderTitle()
-	}
-	for range c.HorizontalTop().KeepIter() {
-		if c.Button(inst.ids.PrepareStr("new"), atomsNew).SendResp().HasPrimaryClicked() {
-			inst.newConversation()
-			conv = inst.conv
+	if inst.preset != nil && inst.preset.Simple {
+		inst.renderSimpleBar()
+	} else {
+		if inst.conv.started {
+			inst.renderTitle()
 		}
-		inst.renderScale()
-		inst.renderTurnState()
+		for range c.HorizontalTop().KeepIter() {
+			inst.renderNewButton()
+			inst.renderScale()
+			inst.renderTurnState()
+		}
+		inst.renderConversationRow()
 	}
-	// A row of its own for what the conversation is: the controls above
-	// already fill a narrow window.
+	inst.renderTask()
+	inst.renderBarNotice()
+}
+
+// renderNewButton is New conversation.
+func (inst *App) renderNewButton() {
+	if c.Button(inst.ids.PrepareStr("new"), atomsNew).SendResp().HasPrimaryClicked() {
+		inst.newConversation()
+	}
+}
+
+// renderConversationRow is a row of its own for what the conversation is:
+// the controls above it already fill a narrow window.
+func (inst *App) renderConversationRow() {
+	conv := inst.conv
 	for range c.HorizontalTop().KeepIter() {
 		inst.renderConvId("conv-id-bar")
 		if conv.started {
@@ -193,7 +208,11 @@ func (inst *App) renderBar() {
 			}
 		}
 	}
-	inst.renderTask()
+}
+
+// renderBarNotice is at most one notice under the bar.
+func (inst *App) renderBarNotice() {
+	conv := inst.conv
 	switch {
 	case conv.notKept != "" && !conv.notKeptNoted:
 		// Shown until read, once per conversation; the badge's hover keeps
@@ -246,33 +265,43 @@ func (inst *App) renderConvId(scope string) {
 // renderTitle is the conversation's title — click to rename — Open in
 // mdedit, Watch and Urgent.
 func (inst *App) renderTitle() {
-	conv := inst.conv
 	for range c.HorizontalTop().KeepIter() {
-		if inst.renaming {
-			inst.renderRename()
-		} else {
-			title := conv.title
-			if title == "" {
-				title = "Untitled"
-			}
-			for range c.HoverText(titleTip(conv)).KeepIter() {
-				if c.Button(inst.ids.PrepareStr("title"), c.Atoms().BeginRichText(title).Strong().End().Keep()).Frame(false).SendResp().HasPrimaryClicked() {
-					inst.renaming, inst.renameDraft = true, conv.title
-					c.CurrentApplicationState.StateManager.OverrideDatabindingSPtr(&inst.renameDraft)
-				}
-			}
-			if conv.titleAsked && conv.titleSource == titleFirstLine && conv.titleNote == "" {
-				c.Spinner().Send()
-			}
-		}
-		for range c.HoverText(tipMdedit).KeepIter() {
-			if c.Button(inst.ids.PrepareStr("open-mdedit"), atomsMdedit).Small().SendResp().HasPrimaryClicked() {
-				inst.openInMdedit()
-			}
-		}
-		inst.renderWatchToggle()
-		inst.renderUrgentToggle()
+		inst.renderTitleText()
+		inst.renderTitleActions()
 	}
+}
+
+// renderTitleText is the title, or its editor while it is renamed.
+func (inst *App) renderTitleText() {
+	conv := inst.conv
+	if inst.renaming {
+		inst.renderRename()
+		return
+	}
+	title := conv.title
+	if title == "" {
+		title = "Untitled"
+	}
+	for range c.HoverText(titleTip(conv)).KeepIter() {
+		if c.Button(inst.ids.PrepareStr("title"), c.Atoms().BeginRichText(title).Strong().End().Keep()).Frame(false).SendResp().HasPrimaryClicked() {
+			inst.renaming, inst.renameDraft = true, conv.title
+			c.CurrentApplicationState.StateManager.OverrideDatabindingSPtr(&inst.renameDraft)
+		}
+	}
+	if conv.titleAsked && conv.titleSource == titleFirstLine && conv.titleNote == "" {
+		c.Spinner().Send()
+	}
+}
+
+// renderTitleActions is Open in mdedit, Watch and Urgent.
+func (inst *App) renderTitleActions() {
+	for range c.HoverText(tipMdedit).KeepIter() {
+		if c.Button(inst.ids.PrepareStr("open-mdedit"), atomsMdedit).Small().SendResp().HasPrimaryClicked() {
+			inst.openInMdedit()
+		}
+	}
+	inst.renderWatchToggle()
+	inst.renderUrgentToggle()
 }
 
 // renderRename is the title's inline editor: Enter or the check keeps the
@@ -400,7 +429,12 @@ func tokens(n int64) (s string) {
 // renderEmpty is the transcript before the first send: what this window
 // talks to, what it keeps, and how to send.
 func (inst *App) renderEmpty() {
-	c.AddSpace(48)
+	if inst.preset != nil {
+		// It says more than a plain chat's, in a window no taller.
+		c.AddSpace(8)
+	} else {
+		c.AddSpace(48)
+	}
 	for range c.VerticalCentered().KeepIter() {
 		switch {
 		case !inst.answered:
@@ -414,7 +448,8 @@ func (inst *App) renderEmpty() {
 			c.LabelAtoms(c.Atoms().BeginRichText(inst.model.Reason).Weak().End().Keep()).Wrap().Selectable(true).Send()
 		default:
 			first := "at " + inst.model.EndpointHost
-			if inst.preset != nil {
+			preset := inst.preset != nil
+			if preset {
 				inst.renderPresetEmpty()
 				first = "with " + inst.model.Model + " " + first
 			} else {
@@ -429,15 +464,20 @@ func (inst *App) renderEmpty() {
 				lines = append(lines, "not kept: only the call counts are recorded")
 			}
 			switch {
+			case preset:
+				// renderPresetEmpty said what the model can do, in words.
 			case inst.apps:
 				lines = append(lines, "Apps on: the model may ask you to share windows with it")
 			case inst.coord != nil:
 				lines = append(lines, "Apps off: the model gets no tools and cannot open or drive windows — turn Apps on in Settings before the first message")
 			}
-			if inst.questions && inst.coord != nil {
+			if !preset && inst.questions && inst.coord != nil {
 				lines = append(lines, "Questions on: the model may ask you with a form of options")
 			}
-			lines = append(lines, "Ctrl+Enter sends · Esc cancels a running answer")
+			if !preset {
+				// A preset's composer hint says the first, and this has to fit.
+				lines = append(lines, "Ctrl+Enter sends · Esc cancels a running answer")
+			}
 			for _, l := range lines {
 				for rt := range c.RichTextLabel(l) {
 					rt.Weak()
@@ -496,7 +536,9 @@ func (inst *App) renderComposer() {
 			}
 		}
 	}
-	inst.renderTransformPicker()
+	if inst.preset == nil || !inst.preset.Simple || inst.detailsOpen {
+		inst.renderTransformPicker()
+	}
 	w, h, ok := c.CapturePaneSize(c.ProbeSeq("chat", "composer") ^ inst.ids.PrepareHighEntropy(composerProbeSalt).Derive())
 	if !ok || w <= 0 {
 		w = fallbackComposerW
@@ -661,6 +703,9 @@ func (inst *App) renderWaiting() {
 	for range c.HorizontalTop().KeepIter() {
 		c.Spinner().Send()
 		line := "thinking… " + elapsed(p.started)
+		if inst.preset != nil {
+			line = "working… " + elapsed(p.started)
+		}
 		if note := inst.turn.Snapshot().Note; note != "" {
 			// The tool loop's round, so a long turn reads as working.
 			line += " · " + note
@@ -699,6 +744,7 @@ func (inst *App) renderEntry(i int, e *entry) {
 		inst.renderFailure(e)
 	}
 	inst.renderActions(i, e)
+	inst.renderFollowups(i, e)
 }
 
 // renderActions is the row under a message. Retry, Edit and Regenerate

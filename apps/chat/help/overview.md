@@ -85,7 +85,20 @@ composer so that sending replaces the answer; on the last reply
 **Retry**, **Edit**, **Copy details** and, when the call reached the host's
 record, **Open call in play**. A code block has **Copy**, and SQL has
 **Open in play**. While a turn runs, a bubble reads "thinking… N s" with the
-round and the step, and the answer appears as it streams.
+round and the step, the reasoning as the model writes it unless Settings
+hides it, and the answer as it streams.
+
+## A chatlet's window
+
+A chatlet is this window specialised by a committed document. Before the
+first message it says what the model can and cannot do, in words taken from
+its settings. If its document asks for the simple view, the bar shows only
+**New conversation**, the title and **Details**, which unfolds the rest; the
+task, **Stop task** and the warnings stay in view. A document can also offer
+ready-made next messages under the latest answer, which fill the composer and
+send nothing, and can start its conversations watched. **Artefact** comes to
+the front when the model first writes it. The running turn counts steps, with
+no limit beside the count. **Definition** shows the document itself.
 
 ## The turn, the journal, and Keep
 

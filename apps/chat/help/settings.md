@@ -17,6 +17,11 @@ granted, by you in the host's dialog, under that ceiling. The chat computes
 neither bound's effect: it relays the settings and draws what the host
 reports.
 
+At the top, **Show the model's reasoning as it writes** draws the reasoning
+under a running model step, from the moment you tick it. Off, the step only
+says it is reasoning, and the text is under the step's details once the call
+ends.
+
 ## What the model may do
 
 - **Apps** — let the model work in app windows. A checkbox before the first

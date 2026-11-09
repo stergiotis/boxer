@@ -102,10 +102,19 @@ func (inst *App) renderDock() {
 		// The transcript and the composer scroll themselves.
 		for range dock.TabNoScroll(uint64(tabTranscript), tabTranscript.title()) {
 			inst.markTabShown(tabTranscript)
-			if len(inst.conv.entries) == 0 && inst.pending == nil {
-				inst.renderEmpty()
-			} else {
+			switch {
+			case len(inst.conv.entries) != 0 || inst.pending != nil:
 				inst.renderTranscript()
+			case inst.preset != nil:
+				// A preset's empty state can be taller than the tab, and its
+				// last lines say where the conversation goes.
+				for range c.PushId(inst.ids.PrepareStr("preset-empty")).KeepIter() {
+					for range c.ScrollArea().Vscroll(true).Hscroll(false).KeepIter() {
+						inst.renderEmpty()
+					}
+				}
+			default:
+				inst.renderEmpty()
 			}
 		}
 		for range dock.TabNoScroll(uint64(tabComposer), tabComposer.title()) {

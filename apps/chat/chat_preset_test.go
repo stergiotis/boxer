@@ -172,6 +172,109 @@ func TestPreset_digestIgnoresWhatTheModelDoesNotRead(t *testing.T) {
 	assert.Equal(t, a.digest(), b.digest())
 }
 
+// The reasoning is the window's to show or not, and a preset only sets where
+// that starts: a plain window shows it, and what the step keeps is untouched.
+func TestThinking_startsWhereThePresetSaysAndOnlyHidesTheStream(t *testing.T) {
+	reasoning := turnStep{kind: stepModel, reasoning: "weighing it"}
+	assert.True(t, newApp().showsReasoning(&reasoning), "a plain window shows it")
+
+	p := auditTrailPreset()
+	p.HideThinking = true
+	a, err := NewPreset(p)
+	require.NoError(t, err)
+	inst := a.(*App)
+	assert.False(t, inst.showsReasoning(&reasoning))
+	assert.True(t, reasoning.hasDetail(), "the finished step still has it to open")
+
+	inst.thinking = true
+	assert.True(t, inst.showsReasoning(&reasoning), "the person can turn it on")
+	answering := turnStep{kind: stepModel, reasoning: "weighing it", content: "the answer"}
+	assert.False(t, inst.showsReasoning(&answering), "the answer takes over once it starts")
+	assert.False(t, inst.showsReasoning(&turnStep{kind: stepTool, reasoning: "x"}))
+}
+
+// What the empty window says follows from the settings, so it moves when
+// they do.
+func TestPlainAbilities_followTheSettings(t *testing.T) {
+	limit, err := auditTrailPreset().limit()
+	require.NoError(t, err)
+	lines := limit.plainAbilities(true, true, true)
+	require.Len(t, lines, 3)
+	assert.Equal(t, "It can open app windows, read, edit and run things in the windows you share, reach this host and its data servers, ask you questions and write a document for you.", lines[0])
+	assert.Equal(t, "It cannot publish or export, reach the network or arrange your desktop.", lines[1])
+
+	lowered := limit
+	lowered.allow, lowered.changes = allowRead, changesAsk
+	lines = lowered.plainAbilities(true, false, true)
+	assert.Contains(t, lines[0], "read the windows you share")
+	assert.NotContains(t, lines[0], "document", "a read-only window cannot write the artefact")
+	assert.NotContains(t, lines[2], "waits for your OK", "reading changes nothing")
+
+	lowered.allow = allowEdit
+	assert.Contains(t, lowered.plainAbilities(true, false, false)[2], "Each change waits for your OK.")
+
+	outside := unlimited()
+	lines = outside.plainAbilities(true, false, false)
+	assert.Contains(t, lines[0], "publish or export once you confirm")
+	assert.Len(t, lines, 2, "nothing it cannot do, so no such line")
+
+	assert.Equal(t, []string{"It can talk with you.", "It cannot open or work in windows."}, limit.plainAbilities(false, false, false))
+}
+
+func TestTurnNote_aPresetCountsStepsNotAgainstItsLimit(t *testing.T) {
+	assert.Equal(t, "round 3 of 48 · asking", turnNote(false, 2, 48, "asking"))
+	assert.Equal(t, "step 3 · asking", turnNote(true, 2, 48, "asking"))
+	assert.Equal(t, "step 1", turnNote(true, 0, 48, ""))
+}
+
+func TestArtefactShown_comesForwardOncePerConversation(t *testing.T) {
+	var a artefactShown
+	assert.False(t, a.advance("one", false))
+	assert.False(t, a.advance("one", false))
+	assert.True(t, a.advance("one", true), "the first write")
+	assert.False(t, a.advance("one", true), "once")
+	assert.False(t, a.advance("two", true), "a resumed conversation stays where it was left")
+	assert.False(t, a.advance("two", true))
+	assert.False(t, a.advance("three", false))
+	assert.True(t, a.advance("three", true), "the next conversation's own first write")
+}
+
+func TestPreset_followupsAndPurposeAreBounded(t *testing.T) {
+	p := auditTrailPreset()
+	p.Followups = []Starter{{Label: "Same", Text: "a"}, {Label: "Same", Text: "b"}}
+	err := p.Validate()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "two follow-ups share a label")
+
+	p = auditTrailPreset()
+	p.Purpose = strings.Repeat("x", maxPurpose+1)
+	assert.Error(t, p.Validate())
+	p.Purpose = "one line\nand another"
+	assert.Error(t, p.Validate())
+	p.Purpose = "One short sentence."
+	assert.NoError(t, p.Validate())
+	base := auditTrailPreset()
+	assert.Equal(t, base.digest(), p.digest(), "the model does not read it")
+}
+
+// The model is told the server before its first request, so one dialog can
+// cover it; a plain chat's note is unchanged, and a window that cannot reach
+// the server is not told of one.
+func TestCeilingNote_namesTheServerForAPresetThatCanReachIt(t *testing.T) {
+	p := auditTrailPreset()
+	note := func(preset *Preset, reach agent.ReachE) string {
+		coord := newCoordinatorIn(nil, nil, nil, "conv")
+		coord.apps, coord.preset, coord.rounds = true, preset, 24
+		coord.ceiling = agent.Ceiling{Reach: reach}
+		return coord.ceilingNote()
+	}
+	assert.Contains(t, note(&p, agent.ReachData), "destination "+serverDestination())
+	assert.NotContains(t, note(&p, agent.ReachHost), "clickhouse:")
+	assert.NotContains(t, note(nil, agent.ReachData), "clickhouse:")
+	assert.Equal(t, "clickhouse:ch.example:8123", destinationOfURL("http://ch.example:8123/"))
+	assert.Empty(t, destinationOfURL("not a url"))
+}
+
 func TestJoinDraft(t *testing.T) {
 	assert.Equal(t, "t", joinDraft("", "t"))
 	assert.Equal(t, "t", joinDraft("  \n", "t"))

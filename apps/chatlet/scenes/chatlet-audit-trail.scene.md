@@ -32,7 +32,7 @@ assertion is the host's own answer: the one committed chatlet was selected by
 
 ```jsonl trace
 {"do":"note","text":"ADR-0364: a chatlet minted from a document, against a scripted model"}
-{"do":"wait","valueContains":"→ scripted","role":"label"}
+{"do":"wait","valueContains":"with scripted at","role":"label"}
 {"do":"wait","valueContains":"Ask what happened on this host","role":"label","comment":"the document's greeting"}
 {"do":"wait","name":"The last 24 hours","role":"button"}
 {"do":"capture","text":"chatlet-empty","sidecars":["svg","tree"]}

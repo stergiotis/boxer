@@ -213,6 +213,14 @@ See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-d
 
 ## Updates
 
+### 2026-11-09 — the live reasoning is the window's to hide
+
+The reasoning box under a running model step is now a setting of the
+window, on by default. Off, the step still says it is reasoning and the
+finished step keeps the text. A chatlet can start with it off
+([ADR-0364](./0364-chatlets-the-chat-specialised-by-a-committed-markdown-document.md)
+§SD6, proposed). The stream itself is unchanged.
+
 ### 2026-10-28 — accepted with SD1–SD4 built
 
 Accepted after the service, the bus inbox and the chat were built against

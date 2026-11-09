@@ -96,6 +96,9 @@ window the model opens. The settings follow from that path:
 | reach | data | `clickhouse:<host>` needs it; network does not |
 | launch | on | it opens its own play window |
 | desktop | off | nothing here arranges windows |
+| thinking | hidden | the person wants the report; each step's reasoning stays under its details |
+| view | simple | someone asking what happened does not need the conversation's id or the ladder |
+| watch | true | a turn can run for minutes (one drive took 20 rounds) |
 | rounds | 48 | a margin over the default 24: one drive used 20 (below) |
 
 An agent's run in play must classify as a read
@@ -105,8 +108,11 @@ prompt has to say to exclude the conversation's own.
 
 ### SD6 — The window shows what it is
 
-The empty transcript shows the document's `greeting` and up to six `starters`,
-each a `{label, text}`. A starter fills the composer and the person sends it, as
+The empty transcript shows the document's `greeting`, up to six `starters`, each
+a `{label, text}`, and what the model can and cannot do in words. Those words are
+derived from the window's settings, so they cannot disagree with what the host
+enforces; they claim nothing beyond a level, and an app's narrower rule stays the
+document's to state. A starter fills the composer and the person sends it, as
 the transforms picker does
 ([ADR-0318](./0318-model-inference-is-the-harnesss-apps-expose-operations.md)
 §SD4); nothing is sent on a click. A **Definition** tab, only in a chatlet's
@@ -115,6 +121,35 @@ titles, renders the whole document with its frontmatter, as the applet's drawer
 does (ADR-0132, Update of 2026-08-01): a person can read what the model is told
 and the limits it runs under before the first send. The greeting and starters
 are not the model's to read, so they are outside the run's fingerprint.
+
+`thinking: hidden` starts the window without the reasoning drawn as the model
+writes it; absent, it is shown, as in the plain chat. It is a starting value and
+not a limit in the sense of SD2: it changes only what the window draws, so Settings
+can turn it back on, the finished step keeps the text, and the fingerprint does
+not see it. The key takes words because `thinking: false` reads as a model that
+does not reason, which no key here can arrange.
+
+The other keys are for someone new to the window or tired:
+
+- `view: simple` folds the conversation's id, the ladder, the turn's state, the
+  model line, the context, Open in mdedit, Watch and Urgent under a **Details**
+  toggle in the bar's first row. A collapsing header was not taken: it needs a row of
+  its own in the bar it exists to shorten. What holds a task, its Stop, what it
+  read, the warning that a conversation is not kept and the context warning stay
+  outside the fold. Settings still has the ladder.
+- `followups`, in the shape of starters, are offered under the latest answer. A
+  click fills the composer, as a starter's does.
+- `watch: true` starts each new conversation watched
+  ([ADR-0323](./0323-attention-levels-one-table-two-scales-configurable-within-a-floor.md) §SD4). The
+  person can stop watching.
+- `purpose` is one sentence for the host's access dialog, shown after the
+  host-derived facts and before the model's plan, in the app's name. It asks for
+  nothing and approves nothing (SD2).
+
+Without being asked for, a preset's running turn counts steps ("step 3") rather
+than "round 3 of 48", which reads as progress towards a limit that is only a
+limit, and its artefact tab comes forward the first time the model writes or
+proposes to write it. A plain chat does neither.
 
 ## Alternatives
 
@@ -138,8 +173,12 @@ are not the model's to read, so they are outside the run's fingerprint.
 ## Known friction, recorded 2026-11-08
 
 - **Two dialogs on a first session.** A committed document cannot name the
-  deployment's ClickHouse host, and the model learns `clickhouse:<host>` from
-  play's `get_state` after opening the window, so it asks twice.
+  deployment's ClickHouse host, and the model learned `clickhouse:<host>` from
+  play's `get_state` after opening the window, so it asked twice. A preset's
+  ceiling note now names `CLICKHOUSE_URL`'s host when the window can reach data,
+  and the audit-trail prompt asks for one request. That makes one dialog likely
+  and does not guarantee it: a window retargeted to another endpoint names another
+  destination, and whether a model follows it has not been driven.
 - **The moderator's `rounds` signal.** With `BOXER_MODERATOR` on, a turn that
   reaches round 16 raises one signal
   ([ADR-0302](./0302-a-built-in-moderator-loop-signals-and-an-escalation-ladder.md)
@@ -179,6 +218,8 @@ nothing about how the settings do in general.
    `kind = 'chatlet'`, the audit-trail document and a scripted scene (SD1, SD5).
 3. ✓ The window: greeting and starters in the empty state, a Definition tab
    (SD6).
+4. ✓ For someone new or tired: the plain statement of abilities, `view`,
+   `followups`, `watch`, `purpose`, `thinking` (SD6).
 
 ## Deferred
 
