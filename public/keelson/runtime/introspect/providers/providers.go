@@ -204,6 +204,10 @@ func appsTable(reg *app.Registry, rs []app.Registration) *introspect.Table {
 		// Whether a window may be opened under the launch limit
 		// (KEELSON_LAUNCHABLE_APPS_WHERE, ADR-0272); true when none is set.
 		Bool("launchable", func(i int) bool { return reg.Launchable(m(i).Id) }).
+		// Whether the app may ask the person for an agent task grant: named
+		// by BOXER_AGENT_COORDINATORS or selected by its predicate at boot
+		// (ADR-0364, proposed). false until the host has resolved them.
+		Bool("coordinator", func(i int) bool { return reg.Coordinator(m(i).Id) }).
 		// Where the app came from (ADR-0339): the package whose code
 		// registered it and the module that package was built from, read
 		// off the binary's build information rather than declared. A

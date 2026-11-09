@@ -272,7 +272,10 @@ type Options struct {
 // Runtime is the booted host: every wired piece, exported so a caller can
 // label, inspect or extend it, plus the render loop and the shutdown edge.
 type Runtime struct {
-	RunInfo *runinfo.Inst
+	// coordinators are the names and ids resolved at boot from
+	// BOXER_AGENT_COORDINATORS and its predicate.
+	coordinators []string
+	RunInfo      *runinfo.Inst
 	// AgentRuns is the run journal's store (ADR-0308) and Anchors the
 	// chain heads' (ADR-0314); nil when the service did not start.
 	AgentRuns agentrun.StoreI
@@ -501,6 +504,10 @@ func Boot(ctx context.Context, opts Options) (rt *Runtime, err error) {
 		reg = app.DefaultRegistry
 	}
 	if err = launchlimit.Apply(ctx, rt.Bus, reg, rt.ChLocal != nil, logger); err != nil {
+		err = eh.Errorf("hostboot: %w", err)
+		return
+	}
+	if err = rt.resolveCoordinators(ctx, reg); err != nil {
 		err = eh.Errorf("hostboot: %w", err)
 		return
 	}
@@ -1089,7 +1096,7 @@ func (rt *Runtime) bootAgent() {
 	// Durable where the trail is (ADR-0269 §SD9), as for llm_calls.
 	headless := imzero2env.HeadlessListen.Get() != ""
 	cfg := agent.Config{TestGrants: headlessOnly(agent.TestGrantsEnv.Get(), headless),
-		Trail: rt.Trail, Coordinators: agent.ParseCoordinators(agent.CoordinatorsEnv.Get()), Deadline: agent.DeadlineEnv.Get(),
+		Trail: rt.Trail, Coordinators: rt.coordinators, Deadline: agent.DeadlineEnv.Get(),
 		RequestTimeout: agent.RequestTimeoutEnv.Get(),
 		Pace:           agent.PaceEnv.Get(), CallsMin: int(agent.CallsMinEnv.Get()), CallsMax: int(agent.CallsMaxEnv.Get())}
 	// A call a model asked for names its intent (ADR-0358 §SD7). The

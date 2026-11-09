@@ -92,6 +92,17 @@
       }
     },
     {
+      "name": "BOXER_AGENT_COORDINATORS_WHERE",
+      "type": "string",
+      "description": "ClickHouse boolean expression over keelson.apps columns; the launchable apps it selects at boot may ask the person for an agent task grant, beside those BOXER_AGENT_COORDINATORS names (ADR-0364, proposed), e.g. kind = 'chatlet'. Unset selects none; set and not evaluable, the host does not boot",
+      "category": "system",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/keelson/runtime/agent"
+      }
+    },
+    {
       "name": "BOXER_AGENT_DEADLINE",
       "type": "duration",
       "default": "30m",

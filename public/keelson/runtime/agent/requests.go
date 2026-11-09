@@ -28,6 +28,17 @@ var CoordinatorsEnv = env.NewString(env.Spec{
 	Category:    env.CategorySystem,
 })
 
+// CoordinatorsWhereEnv selects coordinators by a predicate over keelson.apps
+// (ADR-0364, proposed), beside the names CoordinatorsEnv lists. The host
+// evaluates it once at boot, in the shape of the launch limit (ADR-0272). It
+// is spliced into a statement, so it carries the trust of any other variable
+// the process reads.
+var CoordinatorsWhereEnv = env.NewString(env.Spec{
+	Name:        "BOXER_AGENT_COORDINATORS_WHERE",
+	Description: "ClickHouse boolean expression over keelson.apps columns; the launchable apps it selects at boot may ask the person for an agent task grant, beside those BOXER_AGENT_COORDINATORS names (ADR-0364, proposed), e.g. kind = 'chatlet'. Unset selects none; set and not evaluable, the host does not boot",
+	Category:    env.CategorySystem,
+})
+
 // ParseCoordinators splits CoordinatorsEnv's value.
 func ParseCoordinators(s string) (names []string) {
 	for _, n := range strings.Split(s, ",") {
