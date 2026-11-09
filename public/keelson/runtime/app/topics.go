@@ -108,12 +108,16 @@ const (
 	// KindDemo is an app that exists to demonstrate a widget or a runtime
 	// facility rather than to do a user's work.
 	KindDemo KindE = 2
+	// KindChatlet is an app minted from a committed chatlet document
+	// (ADR-0364, proposed). Stamped by the minter, never hand-written.
+	KindChatlet KindE = 3
 )
 
 var AllKinds = []KindE{
 	KindApp,
 	KindApplet,
 	KindDemo,
+	KindChatlet,
 }
 
 // String renders the kind as its wire/display token.
@@ -123,6 +127,8 @@ func (inst KindE) String() (s string) {
 		s = "applet"
 	case KindDemo:
 		s = "demo"
+	case KindChatlet:
+		s = "chatlet"
 	default:
 		s = "app"
 	}
@@ -133,6 +139,6 @@ func (inst KindE) String() (s string) {
 // value is valid — an app that declares no kind is an ordinary app, which is
 // the common case and should not need a line in every manifest.
 func (inst KindE) IsValid() (ok bool) {
-	ok = inst == KindApp || inst == KindApplet || inst == KindDemo
+	ok = inst == KindApp || inst == KindApplet || inst == KindDemo || inst == KindChatlet
 	return
 }

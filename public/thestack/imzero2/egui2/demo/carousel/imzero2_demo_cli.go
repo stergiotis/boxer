@@ -15,6 +15,7 @@ import (
 
 	"github.com/stergiotis/boxer/apps/capinspector"
 	"github.com/stergiotis/boxer/apps/play"
+	"github.com/stergiotis/boxer/apps/chatlet"
 	"github.com/stergiotis/boxer/apps/sqlapplet"
 	runtimeapp "github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/appletstore"
@@ -127,6 +128,13 @@ func Run(ctx gocontext.Context, cfg *application.Config, opts RunOptions) (err e
 	}
 	if appletCount > 0 {
 		log.Info().Int("applets", appletCount).Msg("sqlapplet: manifests minted")
+	}
+	chatletCount, chatletErrs := chatlet.MintManifests(log.Logger)
+	for _, mintErr := range chatletErrs {
+		log.Warn().Err(mintErr).Msg("chatlet: mint")
+	}
+	if chatletCount > 0 {
+		log.Info().Int("chatlets", chatletCount).Msg("chatlet: manifests minted")
 	}
 	launchApps, resolveErr := resolveLaunchSql(opts.Launch)
 	if resolveErr != nil {

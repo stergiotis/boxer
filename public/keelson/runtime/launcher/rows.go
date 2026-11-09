@@ -396,6 +396,12 @@ func (inst *Inst) renderRowBadges(ids *c.WidgetIdStack, m app.Manifest, isOpen b
 			Size(badge.SizeSm).
 			Tooltip("minted from a committed SQL-applet document").
 			Send()
+	case app.KindChatlet:
+		badge.New(ids.PrepareStr(key("kind")), "chatlet").
+			Tone(badge.ToneInfo).
+			Size(badge.SizeSm).
+			Tooltip("the chat, specialised by a committed document").
+			Send()
 	case app.KindDemo:
 		badge.New(ids.PrepareStr(key("kind")), "demo").
 			Tone(badge.ToneNeutral).

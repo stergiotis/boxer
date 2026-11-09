@@ -301,10 +301,11 @@ func (inst *Service) describe(msg *app.Msg) (rep wireDescribeReply, req wireDesc
 		if req.App != "" && !matchesApp(m, req.App) {
 			continue
 		}
-		// An applet only when named or searched for: a build mints dozens,
-		// each with play's operable subset, and the whole list is the
+		// An applet or a chatlet only when named or searched for: a build
+		// mints dozens of applets, each with play's operable subset, a
+		// chatlet carries the chat's catalog, and the whole list is the
 		// model's first call.
-		if m.Kind == app.KindApplet && req.App == "" && search == "" {
+		if (m.Kind == app.KindApplet || m.Kind == app.KindChatlet) && req.App == "" && search == "" {
 			continue
 		}
 		appHit := search == "" || containsFold(string(m.Id), search) || containsFold(m.Display, search) || containsFold(m.Summary, search) ||

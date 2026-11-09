@@ -1,0 +1,8 @@
+# The scripted model of chatlet-audit-trail.scene.md (ADR-0364, proposed): one
+# reply per line, picked by the conversation's position.
+{"tool":"request_access","args":{"plan":"read which chatlets may coordinate","open":[{"app":"play"}],"destinations":["keelson:apps"]}}
+{"tool":"open_window","args":{"app":"play"}}
+{"tool":"call_operation","args":{"window":"$window","operation":"get_state","args":{},"title":"Reading play's buffer"}}
+{"tool":"call_operation","args":{"window":"$window","operation":"set_sql","args":{"sql":"SELECT concat('selected=', toString(countIf(coordinator)), ' of ', toString(count())) AS verdict FROM keelson('apps') WHERE kind = 'chatlet'"},"reason":"which chatlets the predicate selected"}}
+{"tool":"call_operation","args":{"window":"$window","operation":"run","args":{}}}
+{"content":"Play shows which chatlets the host selected as coordinators."}
