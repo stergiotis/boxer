@@ -218,6 +218,9 @@ type wireCall struct {
 	// (ADR-0312 §SD4); recorded, stamped on the on-behalf-of context and
 	// attested back to a wall that asks.
 	Tier uint8 `json:"tier,omitempty"`
+	// Run is the tagged id of the conversation's run journal as the
+	// coordinator declares it; stamped on the on-behalf-of context.
+	Run uint64 `json:"run,omitempty"`
 }
 
 type wireOutcome struct {

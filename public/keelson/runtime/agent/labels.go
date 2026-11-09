@@ -86,7 +86,7 @@ func (inst *Service) onBehalfOf(t *task, e *entry, rec *callRec) (obo *app.OnBeh
 	obo = &app.OnBehalfOf{Task: t.id, Epoch: t.epoch, Call: rec.callId, Principal: "person",
 		Act: []string{"person", string(t.actor) + "#" + strconv.FormatUint(t.actorInstance, 10),
 			string(e.app) + "#" + strconv.FormatUint(e.instance, 10)},
-		Destinations: slices.Clone(t.destinations), Tier: rec.tier}
+		Destinations: slices.Clone(t.destinations), Tier: rec.tier, Run: rec.run}
 	return
 }
 
@@ -172,7 +172,7 @@ func (inst *Service) CallContext(taskId string, epoch uint64, callId string, sen
 		conversation = rec.conversation
 	}
 	cc = app.CallContext{Task: t.id, Epoch: t.epoch, Call: rec.callId, Conversation: conversation, Turn: rec.turn,
-		App: rec.app, Instance: rec.instance, Operation: rec.spec.Name, Tier: rec.tier, InFlight: rec.outcome.Phase == opwire.PhaseUnspecified}
+		App: rec.app, Instance: rec.instance, Operation: rec.spec.Name, Tier: rec.tier, Run: rec.run, InFlight: rec.outcome.Phase == opwire.PhaseUnspecified}
 	if rec.cause.Has {
 		cc.ModelCall = rec.cause.Val.ModelCall
 		cc.ToolIndex = rec.cause.Val.ToolIndex

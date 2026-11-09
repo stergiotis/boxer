@@ -581,6 +581,11 @@ type OnBehalfOf struct {
 	// reads a tier sees the run's; the host checks the dispatcher's
 	// attested copy ([CallContext]), never the callee's word alone.
 	Tier uint8
+	// Run is the tagged id of the run journal the coordinator writes for
+	// the conversation, as it declared it on the call; 0 where it declared
+	// none. A callee that records what the call caused names it so the
+	// record joins the run.
+	Run uint64
 }
 
 // DelegationI is what a host service that reaches outside asks about an
@@ -616,6 +621,9 @@ type CallContext struct {
 	// (ADR-0312 §SD4), as the dispatcher recorded it; 0 where it declared
 	// none. A wall takes the higher of this and what the sender declares.
 	Tier uint8
+	// Run is the run journal's tagged id the coordinator declared on the
+	// call, as the dispatcher recorded it; 0 where it declared none.
+	Run uint64
 	// InFlight is true when the window had not answered the call yet:
 	// work its handler did. False is work the window did later, under a
 	// call it had answered while the task stayed live (ADR-0288

@@ -159,6 +159,10 @@ type callRec struct {
 	// (ADR-0312 §SD4), stamped on the on-behalf-of context and attested
 	// through CallContext.
 	tier uint8
+	// run is the run journal's tagged id the coordinator declared on the
+	// call, stamped on the on-behalf-of context and attested through
+	// CallContext.
+	run uint64
 	// title and why are the model's title for the call and the reason it
 	// gave, bounded, for the dispatch row.
 	title string
@@ -525,7 +529,7 @@ func (inst *Service) call(msg *app.Msg) (rep wireCallReply) {
 		return
 	}
 	rec := &callRec{key: req.Key, instance: req.Instance, argsDigest: digest(req.Args), created: time.Now(),
-		turn: req.Turn, cause: causeOf(req), tier: req.Tier, title: boundLabel(req.Title, maxCallTitleRunes), why: boundLabel(req.Reason, maxCallReasonRunes)}
+		turn: req.Turn, cause: causeOf(req), tier: req.Tier, run: req.Run, title: boundLabel(req.Title, maxCallTitleRunes), why: boundLabel(req.Reason, maxCallReasonRunes)}
 	if t.test {
 		rec.args = req.Args
 	}

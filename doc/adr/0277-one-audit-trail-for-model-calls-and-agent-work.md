@@ -640,6 +640,19 @@ the component by its slots
   Update of this date); a row of the trail's kinds written past the
   recorder is still a gap.
 
+### 2026-11-09 — a call names its run journal
+
+A window that records what an agent's call caused had the task and the
+call to name it by, but not the conversation's run journal: the tagged id
+a record could carry across cells and join on. `agent.CallRequest`, the
+wire call and the dispatcher's record gain `Run`, the coordinator's
+`agentrun.Run.Id` as it declares it on each call, as it declares the tier;
+`app.OnBehalfOf.Run` carries it to the callee and `app.CallContext.Run`
+attests it to a host service that asks. Chat fills it from its journal's
+writer; a coordinator that keeps no journal leaves it 0. The first consumer
+is a downstream record editor whose patches name the run and the call that
+recorded them.
+
 ## References
 
 - [ADR-0191](./0191-runtime-instance-attribution.md) — the `(run id, instance key)` decision this extends to the generated kinds.

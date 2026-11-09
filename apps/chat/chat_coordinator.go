@@ -1076,8 +1076,12 @@ func (inst *coordinator) call(ctx context.Context, o toolOrigin, toolCall string
 	inst.mu.Lock()
 	title, tier := inst.curTitle, inst.curTier
 	inst.mu.Unlock()
+	var run uint64
+	if w := inst.journalNow(); w != nil {
+		run = w.Run().Id
+	}
 	out, err := inst.cli.Call(ctx, agent.CallRequest{Handle: h, Instance: instance, Operation: op, Args: opArgs, Key: key, Reason: reason,
-		Title: title, Turn: o.turn, ModelCall: o.modelCall, ToolCall: toolCall, ToolIndex: uint32(max(o.index, 0)), Tier: uint8(tier), Journal: o.journal})
+		Title: title, Turn: o.turn, ModelCall: o.modelCall, ToolCall: toolCall, ToolIndex: uint32(max(o.index, 0)), Tier: uint8(tier), Journal: o.journal, Run: run})
 	where := op + " in window " + strconv.FormatUint(instance, 10)
 	if err != nil {
 		return "error: " + err.Error(), where + ": " + err.Error()

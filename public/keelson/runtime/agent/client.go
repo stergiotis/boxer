@@ -378,6 +378,10 @@ type CallRequest struct {
 	// coordinator declares on every call so that the work the call causes
 	// carries it to the walls that read one (ADR-0312 §SD4).
 	Tier uint8
+	// Run is the tagged id of the run journal the coordinator writes for
+	// the conversation (agentrun.Run.Id); 0 when it keeps none. A window
+	// that records what the call caused names it.
+	Run uint64
 }
 
 func outcomeOfWire(w wireOutcome) (out Outcome) {
@@ -406,7 +410,7 @@ func callReply(rep wireCallReply, err error) (out Outcome, rerr error) {
 func (inst *Client) Call(ctx context.Context, r CallRequest) (out Outcome, err error) {
 	return callReply(roundTrip[wireCall, wireCallReply](ctx, inst, SubjectCall, wireCall{V: wireVersion, Handle: r.Handle,
 		Instance: r.Instance, Operation: r.Operation, Args: r.Args, Expects: r.Expects, Key: r.Key, Reason: r.Reason, Title: r.Title,
-		Turn: r.Turn, ModelCall: r.ModelCall, ToolCall: r.ToolCall, ToolIndex: r.ToolIndex, Tier: r.Tier, Journal: r.Journal}))
+		Turn: r.Turn, ModelCall: r.ModelCall, ToolCall: r.ToolCall, ToolIndex: r.ToolIndex, Tier: r.Tier, Journal: r.Journal, Run: r.Run}))
 }
 
 // Status reads a call's or a capture's phase by key, waiting up to wait
