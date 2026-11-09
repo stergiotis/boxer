@@ -108,6 +108,20 @@ and the host keeps them only when its `BOXER_LLM_RETAIN` is durable: the
 badge reads *keep asked* until the first answer says, then *kept* or *not
 kept* with the host's reason. The journal is written either way.
 
+## A chatlet
+
+A chatlet is this window made for one scenario from a committed document, with
+an entry of its own in the launcher ([ADR-0364](../../../doc/adr/0364-chatlets-the-chat-specialised-by-a-committed-markdown-document.md)).
+It starts with the settings the document names, and those are also the most its
+Settings tab offers: you can lower them and not raise them. Everything else about
+what the model may do is as in any chat, so the model still asks and you still
+decide. The empty transcript shows the document's greeting and starters; a
+starter fills the composer and waits for you to send it. The **Definition** tab,
+in the place of Analytics, shows the whole document, which is exactly what the model is told, with the
+settings it runs under. A chatlet's conversations are listed in its own
+Conversations tab and not in the plain chat's. Editing a chatlet's prompt leaves
+its earlier conversations read-only.
+
 ## Seeding a window
 
 For scenes and demos a new window takes its starting state from the

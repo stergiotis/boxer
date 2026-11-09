@@ -16,7 +16,9 @@ import (
 //
 // The tab set is fixed: a tab declared later would land in the first leaf,
 // beside the transcript, rather than in the column. So a tab whose feature
-// is off stays, and says how to turn it on.
+// is off stays, and says how to turn it on. Definition is fixed per window:
+// a preset's window has it in Analytics' place from the first frame, since
+// the column has room for four titles; the plain chat never has it.
 
 // chatTabE names a tab of the dock; the values are its stable dock ids.
 type chatTabE uint64
@@ -28,6 +30,7 @@ const (
 	tabSettings
 	tabAnalytics
 	tabArtefact
+	tabDefinition
 	tabEnd
 )
 
@@ -45,6 +48,8 @@ func (inst chatTabE) title() string {
 		return "Analytics"
 	case tabArtefact:
 		return "Artefact"
+	case tabDefinition:
+		return "Definition"
 	}
 	return "?"
 }
@@ -87,8 +92,12 @@ func (inst *App) renderDock() {
 		// transcript alone. root keeps addressing the transcript's leaf
 		// after each split.
 		root := dock.InitRoot(uint64(tabTranscript))
+		third := tabAnalytics
+		if inst.definition != nil {
+			third = tabDefinition
+		}
 		_ = dock.Split(root, c.DockRight, dockSplitColumn,
-			uint64(tabConversations), uint64(tabSettings), uint64(tabAnalytics), uint64(tabArtefact))
+			uint64(tabConversations), uint64(tabSettings), uint64(third), uint64(tabArtefact))
 		_ = dock.Split(root, c.DockBelow, dockSplitComposer, uint64(tabComposer))
 		// The transcript and the composer scroll themselves.
 		for range dock.TabNoScroll(uint64(tabTranscript), tabTranscript.title()) {
@@ -119,9 +128,16 @@ func (inst *App) renderDock() {
 				inst.renderSettings()
 			}
 		}
-		for range dock.Tab(uint64(tabAnalytics), tabAnalytics.title()) {
-			w := inst.markTabShown(tabAnalytics)
-			inst.renderStatsTab(w)
+		if third == tabAnalytics {
+			for range dock.Tab(uint64(tabAnalytics), tabAnalytics.title()) {
+				w := inst.markTabShown(tabAnalytics)
+				inst.renderStatsTab(w)
+			}
+		} else {
+			for range dock.Tab(uint64(tabDefinition), tabDefinition.title()) {
+				inst.markTabShown(tabDefinition)
+				inst.renderDefinitionTab()
+			}
 		}
 		title := tabArtefact.title()
 		if inst.artefactOn() && (inst.conv.art.pending() != nil || inst.coord.pixelAskNow() != nil) {

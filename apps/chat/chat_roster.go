@@ -206,7 +206,7 @@ func (inst *App) listRoster() {
 	inst.rosterJob.Start(nil, bgjob.Spec{Kind: "chat-roster", Title: "the roster"}, func(ctx context.Context) (out *rosterExtra, err error) {
 		var runs []agentrun.Run
 		if store != nil {
-			if runs, err = store.ListRuns(ctx, string(ManifestId), runsListLimit); err != nil {
+			if runs, err = store.ListRuns(ctx, inst.owner(), runsListLimit); err != nil {
 				return
 			}
 		}
@@ -257,7 +257,7 @@ func (inst *App) syncRoster() {
 // renderRoster draws the panel's groups.
 func (inst *App) renderRoster() {
 	here := strconv.FormatUint(inst.window, 10)
-	live, resumable, stranded, closed := buildRoster(inst.runs, inst.roster, string(ManifestId), here)
+	live, resumable, stranded, closed := buildRoster(inst.runs, inst.roster, inst.owner(), here)
 	if len(live) > 0 {
 		inst.rosterHeading("In windows", len(live))
 		for i := range live {

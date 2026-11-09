@@ -127,7 +127,9 @@ func registeredCoordinator() (yes bool) {
 			return true
 		}
 	}
-	return
+	// A coordinators predicate is evaluated at boot (ADR-0364, proposed)
+	// and held by the registry.
+	return app.DefaultRegistry.Coordinator(ManifestId)
 }
 
 func init() {

@@ -113,6 +113,10 @@ type coordinator struct {
 	// nil leaves query_windows unanswered.
 	kq           *keelsonquery.Client
 	conversation string
+	// owner is the app the conversation's run belongs to, empty for the
+	// plain chat; preset is the scenario whose section it carries.
+	owner  string
+	preset *Preset
 
 	// opTools offers each operation of the task's windows as a typed tool;
 	// ceiling is the most the person's settings let the model do (ADR-0280),

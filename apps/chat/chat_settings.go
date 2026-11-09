@@ -122,6 +122,18 @@ func (inst permissions) ceiling(apps bool) (ceil agent.Ceiling) {
 	return
 }
 
+// The options Settings offers for the ladder and for reach, least first.
+var (
+	allowOptions = []struct {
+		level allowE
+		label string
+	}{{allowRead, "Read"}, {allowView, "View"}, {allowEdit, "Edit"}, {allowRun, "Run"}, {allowOutside, "Outside"}}
+	reachOptions = []struct {
+		reach agent.ReachE
+		label string
+	}{{agent.ReachHost, "This host"}, {agent.ReachData, "Data endpoints"}, {agent.ReachNetwork, "Network"}}
+)
+
 // artPolicy is what the settings let the model do to the artefact
 // (ADR-0282 §SD3): Edit and above write, Ask first makes each write a
 // proposal. The chat enforces it; the host never sees an artefact call.
@@ -251,6 +263,7 @@ func (inst *App) remoteModel() (remote bool) {
 // ceiling or — while a turn runs and may be widening the grant — the second
 // changes. Asking is also what moves the task's ceiling in the host.
 func (inst *App) syncAuthority() {
+	inst.perms = inst.perms.capped(inst.limitNow())
 	ceil := inst.perms.ceiling(inst.appsOn())
 	inst.conv.art.setPolicy(inst.perms.artPolicy())
 	inst.conv.art.setMeta(inst.artMeta())
@@ -431,30 +444,52 @@ func (inst *App) renderMaySection() {
 	for range c.HoverText(tipAllow).KeepIter() {
 		c.Label("At most").Selectable(false).Send()
 	}
-	selector.Segmented(inst.ids, "allow", &inst.perms.allow).Style(selector.StyleRadio).
-		Option(allowRead, "Read").Option(allowView, "View").Option(allowEdit, "Edit").
-		Option(allowRun, "Run").Option(allowOutside, "Outside").Send()
+	limit := inst.limitNow()
+	allow := selector.Segmented(inst.ids, "allow", &inst.perms.allow).Style(selector.StyleRadio)
+	for _, o := range allowOptions {
+		if o.level <= limit.allow {
+			allow = allow.Option(o.level, o.label)
+		}
+	}
+	allow.Send()
 	for range c.HoverText(tipChanges).KeepIter() {
 		c.Label("Changes").Selectable(false).Send()
 	}
-	selector.Segmented(inst.ids, "changes", &inst.perms.changes).Style(selector.StyleRadio).
-		Option(changesAsk, "Ask first").Option(changesApply, "Apply directly").Send()
+	changes := selector.Segmented(inst.ids, "changes", &inst.perms.changes).Style(selector.StyleRadio).
+		Option(changesAsk, "Ask first")
+	if limit.changes >= changesApply {
+		changes = changes.Option(changesApply, "Apply directly")
+	}
+	changes.Send()
 	for range c.HoverText(tipReach).KeepIter() {
 		c.Label("Reach").Selectable(false).Send()
 	}
-	selector.Segmented(inst.ids, "reach", &inst.perms.reach).Style(selector.StyleRadio).
-		Option(agent.ReachHost, "This host").Option(agent.ReachData, "Data endpoints").Option(agent.ReachNetwork, "Network").Send()
+	reach := selector.Segmented(inst.ids, "reach", &inst.perms.reach).Style(selector.StyleRadio)
+	for _, o := range reachOptions {
+		if o.reach <= limit.reach {
+			reach = reach.Option(o.reach, o.label)
+		}
+	}
+	reach.Send()
 	for range c.HoverText(tipPace).KeepIter() {
 		c.Label("Pace").Selectable(false).Send()
 	}
-	selector.Segmented(inst.ids, "pace", &inst.perms.unpaced).Style(selector.StyleRadio).Vertical().
-		Option(false, "At a pace I can follow").Option(true, "As fast as it can").Send()
-	c.AddSpace(styletokens.PaddingInner(styletokens.ActiveDensity()))
-	for range c.HoverText(tipLaunch).KeepIter() {
-		c.Checkbox(inst.ids.PrepareStr("launch"), inst.perms.launch, "Open windows").SendRespVal(&inst.perms.launch)
+	pace := selector.Segmented(inst.ids, "pace", &inst.perms.unpaced).Style(selector.StyleRadio).Vertical().
+		Option(false, "At a pace I can follow")
+	if limit.unpaced {
+		pace = pace.Option(true, "As fast as it can")
 	}
-	for range c.HoverText(tipDesktop).KeepIter() {
-		c.Checkbox(inst.ids.PrepareStr("desktop"), inst.perms.desktop, "Arrange the desktop").SendRespVal(&inst.perms.desktop)
+	pace.Send()
+	c.AddSpace(styletokens.PaddingInner(styletokens.ActiveDensity()))
+	if limit.launch {
+		for range c.HoverText(tipLaunch).KeepIter() {
+			c.Checkbox(inst.ids.PrepareStr("launch"), inst.perms.launch, "Open windows").SendRespVal(&inst.perms.launch)
+		}
+	}
+	if limit.desktop {
+		for range c.HoverText(tipDesktop).KeepIter() {
+			c.Checkbox(inst.ids.PrepareStr("desktop"), inst.perms.desktop, "Arrange the desktop").SendRespVal(&inst.perms.desktop)
+		}
 	}
 	for range c.HoverText(tipTyped).KeepIter() {
 		c.Checkbox(inst.ids.PrepareStr("typed"), inst.opTools, "A tool per operation").SendRespVal(&inst.opTools)
@@ -466,7 +501,7 @@ func (inst *App) renderMaySection() {
 	capLevel, localRequired := pixelsCap()
 	sel := selector.Segmented(inst.ids, "pixels", &inst.perms.pixels).Style(selector.StyleRadio).Vertical()
 	for _, l := range agent.AllPixels {
-		if l <= capLevel {
+		if l <= capLevel && l <= limit.pixels {
 			sel = sel.Option(l, pixelsLabel(l))
 		}
 	}

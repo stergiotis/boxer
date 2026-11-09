@@ -413,10 +413,16 @@ func (inst *App) renderEmpty() {
 			}
 			c.LabelAtoms(c.Atoms().BeginRichText(inst.model.Reason).Weak().End().Keep()).Wrap().Selectable(true).Send()
 		default:
-			for rt := range c.RichTextLabel("Chat with " + inst.model.Model) {
-				rt.Heading()
+			first := "at " + inst.model.EndpointHost
+			if inst.preset != nil {
+				inst.renderPresetEmpty()
+				first = "with " + inst.model.Model + " " + first
+			} else {
+				for rt := range c.RichTextLabel("Chat with " + inst.model.Model) {
+					rt.Heading()
+				}
 			}
-			lines := []string{"at " + inst.model.EndpointHost}
+			lines := []string{first}
 			if inst.keep {
 				lines = append(lines, "kept on boxer.facts where the host allows; read afterwards in play")
 			} else {

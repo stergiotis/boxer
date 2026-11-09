@@ -62,13 +62,22 @@ func transformRequest(def promptbook.PromptDef) (s string) {
 // pickTransform puts a transformation's request in the composer: in place
 // of an empty draft, after one the person has started.
 func (inst *App) pickTransform(def promptbook.PromptDef) {
-	req := transformRequest(def)
-	if strings.TrimSpace(inst.draft) == "" {
-		inst.draft = req
-	} else {
-		inst.draft = strings.TrimRight(inst.draft, "\n") + "\n\n" + req
-	}
+	inst.fillDraft(transformRequest(def))
+}
+
+// fillDraft puts text in the composer, after what is there, for the person
+// to edit and send.
+func (inst *App) fillDraft(text string) {
+	inst.draft = joinDraft(inst.draft, text)
 	c.CurrentApplicationState.StateManager.OverrideDatabindingSPtr(&inst.draft)
+}
+
+// joinDraft is draft with text after it, a blank line between.
+func joinDraft(draft string, text string) string {
+	if strings.TrimSpace(draft) == "" {
+		return text
+	}
+	return strings.TrimRight(draft, "\n") + "\n\n" + text
 }
 
 // renderTransformPicker draws the picker above the composer. Only with

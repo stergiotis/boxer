@@ -122,8 +122,8 @@ func (inst *coordinator) openJournal(ctx context.Context, keep bool) (w *agentru
 	p := profileNow()
 	settings, _ := json.Marshal(journalSettings{Keep: keep, Apps: apps, Questions: questions, Artefact: art, Ceiling: ceiling.Level().String(), CeilingSpec: &ceiling,
 		Rounds: clampRounds(rounds), Pixels: pixelsNameOf(pix.chosen), PixelsLocal: pix.localOnly, OperationTools: opTools})
-	w, err = agentrun.Open(ctx, store, agentrun.Run{Conversation: inst.conversation, OwnerApp: string(ManifestId),
-		Coordinator: inst.window, Profile: p.Id, Fingerprint: runFingerprint(p.Fingerprint(), inst.confinedTier), Settings: string(settings)})
+	w, err = agentrun.Open(ctx, store, agentrun.Run{Conversation: inst.conversation, OwnerApp: inst.ownerApp(),
+		Coordinator: inst.window, Profile: p.Id, Fingerprint: runFingerprint(p.Fingerprint(), inst.confinedTier, inst.preset.digest()), Settings: string(settings)})
 	if err != nil {
 		return
 	}
@@ -213,6 +213,7 @@ func harnessLabel() agentrun.Label { return agentrun.Label{Level: agentrun.Level
 
 // sectionOrder is the prompt book's declared order (chat_prompts.go).
 func sectionOrder() (order projection.Order) {
+	order = append(order, presetSectionName)
 	for _, s := range promptSections {
 		order = append(order, s.slug)
 	}
@@ -242,6 +243,9 @@ func (inst *coordinator) syncSections(ctx context.Context, w *agentrun.Writer) (
 			continue
 		}
 		entries = append(entries, agentrun.Entry{Kind: agentrun.KindSection, Name: sec.slug, Book: promptBookId, Body: want, Label: harnessLabel()})
+	}
+	if inst.preset != nil && live[presetSectionName] != inst.preset.System {
+		entries = append(entries, agentrun.Entry{Kind: agentrun.KindSection, Name: presetSectionName, Book: inst.preset.Book, Body: inst.preset.System, Label: harnessLabel()})
 	}
 	if len(entries) == 0 {
 		return

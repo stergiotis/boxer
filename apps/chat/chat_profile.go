@@ -147,10 +147,16 @@ func (inst ProfileT) Validate() (err error) {
 	if inst.CompactTriggerPercent < 1 || inst.CompactTriggerPercent > 100 || inst.CompactContextFloor <= 0 {
 		return eb.Build().Int("percent", inst.CompactTriggerPercent).Int64("floor", inst.CompactContextFloor).Errorf("the compaction trigger is not a share of a context")
 	}
+	return inst.validateHead(0)
+}
+
+// validateHead checks that compaction has room under the profile's smallest
+// context for the head at its largest, every section on, with extra bytes
+// more.
+func (inst ProfileT) validateHead(extra int) (err error) {
 	c := inst.Compact
 	c.TriggerTokens = inst.CompactContextFloor * int64(inst.CompactTriggerPercent) / 100
-	// The head at its largest: every section on.
-	if err = c.Validate(int64(len(systemPromptOf(true, true, true))) / 4); err != nil {
+	if err = c.Validate(int64(len(systemPromptOf(true, true, true))+extra) / 4); err != nil {
 		return eb.Build().Errorf("compaction: %w", err)
 	}
 	return
@@ -164,9 +170,14 @@ func (inst ProfileT) Validate() (err error) {
 // every exit as they stand, so a change there needs no strand. The call
 // rows and the profile entry carry the profile's own fingerprint, which
 // keelson('harness_profiles') joins on.
-func runFingerprint(profile string, confined agentrun.TierE) string {
+func runFingerprint(profile string, confined agentrun.TierE, preset string) string {
 	h := blake3.New(32, nil)
-	for _, p := range []string{"profile", profile, "confined", confined.String()} {
+	parts := []string{"profile", profile, "confined", confined.String()}
+	// A run of the plain chat fingerprints as it always has.
+	if preset != "" {
+		parts = append(parts, "preset", preset)
+	}
+	for _, p := range parts {
 		_, _ = h.Write([]byte(p))
 		_, _ = h.Write([]byte{0})
 	}

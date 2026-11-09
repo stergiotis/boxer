@@ -58,7 +58,7 @@ func (inst *App) listRuns() {
 		return
 	}
 	inst.runsJob.Start(inst.tasks, bgjob.Spec{Kind: "chat-runs", Title: "conversations"}, func(ctx context.Context) (runs *[]agentrun.Run, err error) {
-		got, err := store.ListRuns(ctx, string(ManifestId), runsListLimit)
+		got, err := store.ListRuns(ctx, inst.owner(), runsListLimit)
 		if err != nil {
 			return
 		}
@@ -95,7 +95,7 @@ func (inst *App) resumeRun(id string) {
 		inst.setNote("this conversation is being deleted", true)
 		return
 	}
-	fingerprint := runFingerprint(profileNow().Fingerprint(), inst.confinedTier)
+	fingerprint := runFingerprint(profileNow().Fingerprint(), inst.confinedTier, inst.preset.digest())
 	storage := inst.storage
 	retiring := inst.retiring[id]
 	delete(inst.retiring, id)
@@ -108,7 +108,7 @@ func (inst *App) resumeRun(id string) {
 				return nil, eb.Build().Str("conversation", id).Errorf("the run is still being closed; resume it again in a moment")
 			}
 		}
-		of, found, err := agentrun.RunOfConversation(ctx, store, string(ManifestId), id)
+		of, found, err := agentrun.RunOfConversation(ctx, store, inst.owner(), id)
 		if err != nil {
 			return
 		}
@@ -370,7 +370,7 @@ func (inst *App) deleteRun(id string) {
 		ctx = journalCtx(ctx)
 		w := live
 		if w == nil {
-			of, found, ferr := agentrun.RunOfConversation(ctx, store, string(ManifestId), id)
+			of, found, ferr := agentrun.RunOfConversation(ctx, store, inst.owner(), id)
 			if ferr != nil {
 				return "", ferr
 			}

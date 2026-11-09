@@ -31,6 +31,7 @@ import (
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/chatview"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/ecdf"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/fsmview"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/markdown"
 )
 
 // App is one chat window.
@@ -205,6 +206,14 @@ type App struct {
 	pace      paceTracker
 	rosterJob bgjob.Runner[rosterExtra]
 	rosterAt  time.Time
+
+	// preset is the scenario the window was made for and limit the most
+	// its settings may reach (chat_preset.go); nil for the plain chat.
+	preset *Preset
+	limit  permissions
+	// definition is the preset's document, parsed once; nil offers no
+	// Definition tab.
+	definition *markdown.Doc
 }
 
 // pendingTurn is a turn in flight.
@@ -232,7 +241,14 @@ func newApp() (inst *App) {
 	return
 }
 
-func (inst *App) Manifest() (m app.Manifest) { m = manifest; return }
+func (inst *App) Manifest() (m app.Manifest) {
+	if inst.preset != nil {
+		m = inst.preset.Manifest
+		return
+	}
+	m = manifest
+	return
+}
 
 // Mount takes the host's id stack and bus and asks, off the frame, whether
 // a model is offered.
@@ -509,6 +525,7 @@ func (inst *App) newCoordinator(conversation string) (coord *coordinator) {
 	}
 	coord.window = strconv.FormatUint(inst.window, 10)
 	coord.confinedTier = inst.confinedTier
+	coord.owner, coord.preset = inst.owner(), inst.preset
 	if inst.anchors != nil {
 		coord.anchors = inst.anchors
 	} else if inst.coord != nil {

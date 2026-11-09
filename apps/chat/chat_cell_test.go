@@ -52,7 +52,7 @@ func TestAResumeUnderAnotherConfinedTierIsReadOnly(t *testing.T) {
 	settleTitle(t, first)
 	id := first.conv.id
 	run, _, _ := conversationRun(store, id)
-	assert.Equal(t, runFingerprint(profileNow().Fingerprint(), agentrun.TierRed), run.Fingerprint)
+	assert.Equal(t, runFingerprint(profileNow().Fingerprint(), agentrun.TierRed, ""), run.Fingerprint)
 	ref, _ := first.coord.profileRef()
 	assert.Equal(t, defaultProfileId+"@"+clip(profileNow().Fingerprint(), 12), ref)
 

@@ -112,7 +112,7 @@ func changedLines(old string, new string) (ls mdspan.LineSpan) {
 func (inst *App) artMeta() (m artMeta) {
 	conv := inst.conv
 	m = artMeta{conversation: conv.id, title: conv.title, run: inst.runId, window: inst.window, keep: conv.keep,
-		app: string(ManifestId)}
+		app: inst.owner()}
 	if !conv.started {
 		m.keep = inst.keep
 	}
