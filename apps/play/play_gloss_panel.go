@@ -8,7 +8,7 @@ import (
 	"github.com/stergiotis/boxer/public/hmi/gloss"
 	"github.com/stergiotis/boxer/public/hmi/gloss/glosssql"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
-	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/color"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/glossview"
 )
 
 // play_gloss_panel.go is the Glosses tab (ADR-0186 §SD6): the result-side
@@ -89,15 +89,7 @@ func (inst *PlayApp) renderGlossCatalogRow(g gloss.GlossI) {
 			for rt := range c.RichTextLabel("e.g.") {
 				rt.Small().Weak()
 			}
-			if col, toned := toneColor(sample.face.Tone); toned {
-				for rt := range c.RichTextLabelColored(col, color.Transparent, sample.face.Text) {
-					rt.Monospace().Small()
-				}
-			} else {
-				for rt := range c.RichTextLabel(sample.face.Text) {
-					rt.Monospace().Small()
-				}
-			}
+			glossview.Face(sample.face, "", glossview.Style{Monospace: true, Small: true})
 		}
 	}
 	for rt := range c.RichTextLabel(g.Doc()) {

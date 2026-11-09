@@ -3,15 +3,14 @@ package play
 import (
 	"strconv"
 	"strings"
-	"sync"
 
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/ipc"
 	"github.com/stergiotis/boxer/public/hmi/gloss"
-	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/lwsql"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/color"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/glossview"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/leewaywidgets"
 )
 
@@ -30,26 +29,15 @@ import (
 // aliased column is never offered to the rules.
 
 // glossSourceAlias names the explicit-alias source in hover text.
-const glossSourceAlias = "alias"
+const glossSourceAlias = gloss.SourceAlias
 
-var (
-	defaultRepositoryOnce sync.Once
-	defaultRepository     *gloss.Repository
-)
-
-// DefaultRepository is the process-wide gloss rule repository over the
-// default catalog: what the self-registered PlayLauncher hands its windows,
-// and what NewPlayApp / NewLivePlayApp use for a nil argument. A deployment
-// that links play registers its rule sets on it before the first window
-// mounts — an init of its own package does — or hands its own repository to
-// the constructor / PlayLauncher.Rules instead. Rule sets are code, checked
-// in beside the glosses they bind (ADR-0186, its 2026-08-15 Update).
-func DefaultRepository() *gloss.Repository {
-	defaultRepositoryOnce.Do(func() {
-		defaultRepository = gloss.NewRepository(nil)
-	})
-	return defaultRepository
-}
+// DefaultRepository is the process-wide gloss rule repository,
+// gloss.DefaultRepository: what the self-registered PlayLauncher hands its
+// windows, and what NewPlayApp / NewLivePlayApp use for a nil argument. A
+// deployment registers its rule sets on it before the first window mounts,
+// or hands its own repository to the constructor / PlayLauncher.Rules
+// instead.
+func DefaultRepository() *gloss.Repository { return gloss.DefaultRepository() }
 
 // glossMarkerPrefix is the directive keyword, matched case-insensitively after
 // the `--` the way ADR-0124's `play: enum ` is: `-- play: gloss <token> <regex>`.
@@ -223,32 +211,21 @@ func (inst *PlayApp) glossNotes() []string { return inst.glossRes.notes }
 // the per-cell path is a field read, and keeps the matches that lost for
 // the Glosses tab.
 func (inst *PlayApp) resolveGlossColumn(field arrow.Field, specLine string, rules []gloss.Rule) (gc glossColumn) {
-	gc.specLine = specLine
-	matches := gloss.MatchAll(rules, specLine)
-	if d, declared := inst.glossCatalog().ParseColumn(field.Name); declared {
-		gc.label = d.Label
-		gc.mediaType = d.MediaType
-		gc.params = d.Params
-		gc.source = glossSourceAlias
-		gc.shadowed = matches // an aliased column is never offered to the rules
-		if d.Reason != "" {
-			gc.reason = d.Reason
-			return gc
-		}
-		gc.inst = d.Instance
-	} else if len(matches) > 0 {
-		r := matches[0]
-		gc.mediaType = r.MediaType
-		gc.params = r.Params
-		gc.source = r.Source + ": " + r.Pattern
-		gc.inst = r.Instance
-		gc.shadowed = matches[1:]
-	} else {
-		return gc
-	}
-	gc.rowOK, gc.rowReason = gc.inst.Accepts(gloss.KindOfArrow(field.Type))
-	gc.elemOK, gc.elemReason = gc.inst.Accepts(gloss.KindOfArrow(listElemType(field.Type)))
-	return gc
+	return glossColumnOf(gloss.Resolve(inst.glossCatalog(), field.Name, specLine, rules, gloss.KindOfArrow(field.Type), gloss.KindOfArrow(listElemType(field.Type))))
+}
+
+// glossColumnOf is a column's resolution as the grids keep it.
+func glossColumnOf(r gloss.Resolution) glossColumn {
+	return glossColumn{label: r.Label, mediaType: r.MediaType, params: r.Params, inst: r.Instance, source: r.Source,
+		shadowed: r.Shadowed, specLine: r.SpecLine, reason: r.Reason,
+		rowOK: r.RowOK, rowReason: r.RowReason, elemOK: r.ElemOK, elemReason: r.ElemReason}
+}
+
+// resolution is the column's resolution as gloss states it.
+func (inst *glossColumn) resolution() gloss.Resolution {
+	return gloss.Resolution{Label: inst.label, MediaType: inst.mediaType, Params: inst.params, Instance: inst.inst, Source: inst.source,
+		Shadowed: inst.shadowed, SpecLine: inst.specLine, Reason: inst.reason,
+		RowOK: inst.rowOK, RowReason: inst.rowReason, ElemOK: inst.elemOK, ElemReason: inst.elemReason}
 }
 
 // glossCell renders one grid cell: the gloss's inline face when the column
@@ -285,14 +262,11 @@ func (inst *PlayApp) glossCell(gc *glossColumn, arr arrow.Array, row int64, elem
 // toggle is off; empty for every other cell. The grids render such a cell as
 // a hyperlink instead of a selectable button.
 func (inst *PlayApp) glossLink(gc *glossColumn, arr arrow.Array, row int64) string {
-	if gc == nil || inst.tableOpts.rawCells || gc.mediaType != gloss.MediaTypeURL || !gc.glossed() {
+	if gc == nil || inst.tableOpts.rawCells {
 		return ""
 	}
-	raw, ok := gloss.ArrowCell{Arr: arr, Row: int(row)}.Raw()
-	if !ok {
-		return ""
-	}
-	return strings.TrimSpace(raw)
+	r := gc.resolution()
+	return r.Link(gloss.ArrowCell{Arr: arr, Row: int(row)})
 }
 
 // glossText is the text-backed variant for a grid that already holds the
@@ -312,47 +286,13 @@ func glossHover(gc *glossColumn) string {
 	if gc == nil {
 		return ""
 	}
-	var head string
-	token := gloss.CompactMediaType(gc.mediaType, gc.params)
-	switch {
-	case gc.mediaType == "":
-	case gc.reason != "":
-		head = "gloss " + token + " refused: " + gc.reason
-	case gc.inst != nil && !gc.rowOK:
-		head = "gloss " + token + " (" + gc.source + ") — not applied: " + gc.rowReason
-	default:
-		head = "glossed as " + token + " (" + gc.source + ")"
-	}
-	if gc.specLine == "" {
-		return head
-	}
-	if head == "" {
-		return "spec: " + gc.specLine
-	}
-	return head + " — spec: " + gc.specLine
+	r := gc.resolution()
+	return r.Hover()
 }
 
 // toneColor maps an inline face's tone onto the design system's semantic
-// palette (ADR-0031). Neutral is "no colour": the cell keeps the text style
-// it would have had, rather than a neutral grey that would read as disabled.
-func toneColor(t gloss.ToneE) (col color.Color, ok bool) {
-	var def styletokens.RGBA8
-	switch t {
-	case gloss.ToneInfo:
-		def = styletokens.InfoDefault
-	case gloss.ToneSuccess:
-		def = styletokens.SuccessDefault
-	case gloss.ToneWarning:
-		def = styletokens.WarningDefault
-	case gloss.ToneError:
-		def = styletokens.ErrorDefault
-	case gloss.ToneAccent:
-		def = styletokens.AccentDefault
-	default:
-		return
-	}
-	return color.Hex(def.AsHex()), true
-}
+// palette, as glossview does for every host.
+func toneColor(t gloss.ToneE) (col color.Color, ok bool) { return glossview.ToneColor(t) }
 
 // anyGlossed reports whether at least one column of schema resolves to a
 // gloss (accepted or not) — the condition for showing the raw toggle.

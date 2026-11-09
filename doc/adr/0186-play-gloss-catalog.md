@@ -868,6 +868,27 @@ artefact of how it is carried. A column whose Arrow array does not match the
 layout its canonical type implies keeps arrow's rendering rather than becoming
 an invented address.
 
+### 2026-11-09 — resolution and the default repository leave play
+
+The second host of glosses, a downstream record editor, needed what play
+kept to itself and none of play. Three pieces move out:
+
+- **`gloss.Resolve`** binds a column's gloss: a declaration in its name
+  first, never offered to the rules, then the first matching rule, then the
+  gloss's verdict on the value kind. It returns a `gloss.Resolution` with
+  `Face` (the face of one value, or its text when not glossed), `Link` (the
+  URL of a `gloss/url` value) and `Hover` (the header's account). play's
+  per-column state converts from it in one place.
+- **`gloss.DefaultRepository`** is the process-wide repository;
+  `play.DefaultRepository` forwards to it.
+- **`widgets/glossview`** draws a face: `ToneColor` (the semantic palette
+  mapping that was play's `toneColor`), `Face` (text in its tone, or a
+  hyperlink) and `Value` (one resolved value, with an optional hover).
+
+The core stays free of any UI; the widget package is the imzero2 half. play's
+other face-drawing sites keep their own wrapping and only take the tone
+mapping from glossview.
+
 ## References
 
 - [ADR-0123](./0123-play-content-typed-detail-cells.md) — content-typed detail cells; the gate this ADR keeps.
