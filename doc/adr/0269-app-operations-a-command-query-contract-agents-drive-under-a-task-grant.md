@@ -859,6 +859,16 @@ for the edit-policy tiers.
 
 ## Updates
 
+### 2026-11-09 — a request may carry the app's own sentence
+
+`GrantRequest.Purpose` is one sentence the dialog shows in the requesting
+app's name, after the host-derived facts and before the model's plan (§SD5
+orders them that way, and keeps the model's words last as its claim). It
+widens nothing and is not recorded on the grant: a chatlet's comes from its
+committed document, which the actor already identifies
+([ADR-0364](./0364-chatlets-the-chat-specialised-by-a-committed-markdown-document.md)
+§SD6, proposed).
+
 ### 2026-10-11 — the stateful-tool contract on an operation spec
 
 `OperationSpec` carries four declarations from

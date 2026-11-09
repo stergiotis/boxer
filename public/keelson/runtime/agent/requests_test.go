@@ -441,3 +441,21 @@ func TestAHeldCallRoutedPastTheDeadlineWaitsForMoreTime(t *testing.T) {
 	r.host.frame(7)
 	assert.Equal(t, "start", r.host.docs[7].text, "nothing landed past the deadline")
 }
+
+// The app's sentence reaches the request the dialog draws, as its own field
+// and apart from the model's plan.
+func TestAPurposeReachesTheDialogApartFromThePlan(t *testing.T) {
+	r := coordinatorRig(t)
+	got := make(chan Grant, 1)
+	go func() {
+		g, err := r.cli.Request(context.Background(), GrantRequest{Plan: "the model's words", Purpose: "the app's words",
+			Entries: []GrantEntry{{Instance: 7, Mode: ModeAct}}})
+		assert.NoError(t, err)
+		got <- g
+	}()
+	var plan, purpose string
+	r.person(true, func(req *request) { plan, purpose = req.plan, req.purpose })
+	<-got
+	assert.Equal(t, "the model's words", plan)
+	assert.Equal(t, "the app's words", purpose)
+}

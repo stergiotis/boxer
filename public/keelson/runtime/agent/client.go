@@ -181,6 +181,10 @@ type GrantRequest struct {
 	// it.
 	Conversation string
 	Plan         string
+	// Purpose is the app's own sentence on what it is for, shown in the
+	// dialog as the app's and kept apart from the model's plan. It widens
+	// nothing.
+	Purpose      string
 	Entries      []GrantEntry
 	Destinations []string
 	// Calls is the call budget asked for; zero is DefaultCallBudget. The
@@ -272,7 +276,7 @@ func (inst *Client) Request(ctx context.Context, r GrantRequest) (g Grant, err e
 // RequestKey sends a request and returns its key without waiting; a test
 // grant comes back at once as g.
 func (inst *Client) RequestKey(ctx context.Context, r GrantRequest) (key string, g Grant, err error) {
-	req := wireGrantRequest{V: wireVersion, Handle: r.Handle, Conversation: r.Conversation, Plan: r.Plan, Destinations: r.Destinations, Calls: r.Calls,
+	req := wireGrantRequest{V: wireVersion, Handle: r.Handle, Conversation: r.Conversation, Plan: r.Plan, Purpose: r.Purpose, Destinations: r.Destinations, Calls: r.Calls,
 		DeadlineSecs: uint32(r.Deadline / time.Second), Rounds: r.Rounds, wireCause: r.Asked.wire()}
 	if r.Ceiling != nil {
 		w := wireOfCeiling(*r.Ceiling)

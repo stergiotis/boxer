@@ -108,6 +108,7 @@ type wireGrantRequest struct {
 	// it (ADR-0269 §SD7).
 	Conversation string           `json:"conversation,omitempty"`
 	Plan         string           `json:"plan"`
+	Purpose      string           `json:"purpose,omitempty"`
 	Entries      []wireGrantEntry `json:"entries"`
 	Destinations []string         `json:"destinations,omitempty"`
 	Calls        uint32           `json:"calls,omitempty"`

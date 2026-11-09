@@ -487,6 +487,12 @@ func (inst *Chrome) renderRequest(r *request, windows []windowRow, waiting int, 
 			}
 		})
 	}
+	if r.purpose != "" && r.held == nil {
+		// The app's words, not the host's and not the model's.
+		bounded(ids.PrepareStr("agent-purpose-"+r.key), modelTextHeight, func() {
+			c.Label("what it is for, as " + svc.display(r.actor) + " describes itself: " + r.purpose).Wrap().Send()
+		})
+	}
 	if r.plan != "" && r.held == nil {
 		bounded(ids.PrepareStr("agent-plan-"+r.key), modelTextHeight, func() {
 			for rt := range c.RichTextLabel("its plan, as the model wrote it: " + r.plan) {

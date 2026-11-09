@@ -104,6 +104,8 @@ type request struct {
 	// task is the task being widened; nil for a new grant.
 	task *task
 	plan string
+	// purpose is the requesting app's own sentence, shown as the app's.
+	purpose string
 	// rounds is how many more rounds of its turn the coordinator asks for.
 	rounds       uint32
 	wanted       map[uint64]ModeE
@@ -216,7 +218,7 @@ func (inst *Service) requestGrant(msg *app.Msg) (rep wireGrantReply) {
 		return
 	}
 	r := &request{key: "req-" + randomHex(8), actor: msg.Sender, actorInstance: msg.SenderInstance, conversation: req.Conversation, task: t,
-		plan: req.Plan, wanted: make(map[uint64]ModeE), wantedOps: make(map[uint64][]string),
+		plan: req.Plan, purpose: req.Purpose, wanted: make(map[uint64]ModeE), wantedOps: make(map[uint64][]string),
 		destinations: req.Destinations, calls: req.Calls, deadline: time.Duration(req.DeadlineSecs) * time.Second,
 		rounds: req.Rounds, launches: req.Launches, ceiling: ceiling,
 		created: time.Now(), share: make(map[uint64]bool), shareFlag: make(map[uint64]*bool), mode: make(map[uint64]ModeE),
