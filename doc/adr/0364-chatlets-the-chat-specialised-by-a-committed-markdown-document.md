@@ -1,12 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-11-08
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to accepted
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-11-09
 ---
-
-> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
 
 # ADR-0364: Chatlets — the chat specialised by a committed markdown document
 
@@ -181,9 +179,10 @@ proposes to write it. A plain chat does neither.
   deployment's ClickHouse host, and the model learned `clickhouse:<host>` from
   play's `get_state` after opening the window, so it asked twice. A preset's
   ceiling note now names `CLICKHOUSE_URL`'s host when the window can reach data,
-  and the audit-trail prompt asks for one request. That makes one dialog likely
-  and does not guarantee it: a window retargeted to another endpoint names another
-  destination, and whether a model follows it has not been driven.
+  and the audit-trail prompt asks for one request. In the second drive below the
+  model asked once, with the server among its destinations. Nothing guarantees it:
+  a window retargeted to another endpoint names another destination, and that case
+  has not been driven.
 - **The moderator's `rounds` signal.** With `BOXER_MODERATOR` on, a turn that
   reaches round 16 raises one signal
   ([ADR-0302](./0302-a-built-in-moderator-loop-signals-and-an-escalation-ladder.md)
@@ -194,7 +193,7 @@ proposes to write it. A plain chat does neither.
   540 of that; hiding them while `desktop` is off would change the
   preservation golden and was not taken.
 
-## One drive, recorded 2026-11-09
+## Two drives, recorded 2026-11-09
 
 One conversation from the "last 24 hours" starter, `deepseek-flash` over the
 host's `boxer.dm_trail_*` and `agg_trail_*` views, a test grant in the person's
@@ -203,8 +202,17 @@ operations, about 784k input tokens summed over the calls. The figures of the
 report recomputed outside the chat matched, its 11 `cite` assertions held, and
 it excluded its own conversation as the prompt asks. It asked for access twice
 (the friction above). It used play's `query`, one call for what `set_sql`, `run`
-and `sample_rows` do, and the prompt now names it. One drive of one model says
-nothing about how the settings do in general.
+and `sample_rows` do, and the prompt now names it.
+
+A second conversation from the same starter, model and test grant, after the
+ceiling note and the one-request prompt, with the moderator off. It asked for
+access once, for one play window, the server and the four host tables it read,
+and took 27 model calls under that one task with no operation refused. Its report
+stated its window and excluded its own conversation; its figures were not
+recomputed outside the chat. It closed its play window when it was done, which the
+prompt neither asks for nor forbids.
+
+Two drives of one model say nothing about how the settings do in general.
 
 ## Verification plan — Tier 1
 
@@ -224,7 +232,8 @@ nothing about how the settings do in general.
 3. ✓ The window: greeting and starters in the empty state, a Definition tab
    (SD6).
 4. ✓ For someone new or tired: the plain statement of abilities, `view`,
-   `followups`, `watch`, `purpose`, `thinking` (SD6).
+   `followups`, `watch`, `purpose`, `thinking` (SD6), and the same Simple view
+   as a setting of the plain chat.
 
 ## Deferred
 
@@ -239,7 +248,7 @@ nothing about how the settings do in general.
 
 ## Status
 
-Proposed — awaiting review by the code owner.
+Accepted 2026-11-09.
 
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers.
