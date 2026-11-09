@@ -1,12 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-11-07
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to accepted
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-11-09
 ---
-
-> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
 
 # ADR-0362: Dependency updates land as gated local commits; Dependabot only alerts
 
@@ -85,7 +83,7 @@ The tag-only CI decision of 2026-06-27 is unchanged.
 
 ## Status
 
-Proposed 2026-11-07, awaiting review.
+Accepted 2026-11-09.
 
 ## References
 
