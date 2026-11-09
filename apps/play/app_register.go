@@ -19,6 +19,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
 	"github.com/stergiotis/boxer/public/keelson/runtime/clipboardbroker"
+	"github.com/stergiotis/boxer/public/keelson/runtime/externaledit"
 	"github.com/stergiotis/boxer/public/keelson/runtime/fsbroker"
 	"github.com/stergiotis/boxer/public/keelson/runtime/help"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect"
@@ -204,6 +205,11 @@ type PlayLauncher struct {
 
 var _ app.AppI = (*PlayLauncher)(nil)
 
+// editCaps are the Editor's hand-over to the host's editor app
+// (externaledit): offer, wait and close; the window open is declared with
+// the applet creator's.
+var editCaps = externaledit.ClientCaps("hand the SQL buffer to the host's editor app and take each save back")
+
 // AppId is play's registered manifest id — the target another app names
 // in a `windowhost.open` request (ADR-0135 §SD7).
 //
@@ -321,6 +327,9 @@ func (inst *PlayLauncher) Manifest() (m app.Manifest) {
 			// The Map, Graph and Vector field panes' basemap tiles, fetched
 			// through the host's egress service (ADR-0262 §SD6).
 			basemap.ClientCaps("play: basemap tiles under the Map, Graph and Vector field panes")[0],
+			// The Editor's buffer handed to the host's editor app, each save
+			// taken back (externaledit); the window open is declared above.
+			editCaps[0], editCaps[1], editCaps[2],
 			// Query runs, write runs, the projector, the vector-field
 			// builds and the publishes run as keelson tasks owned by the
 			// window.

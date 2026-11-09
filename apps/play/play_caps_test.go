@@ -189,8 +189,10 @@ func TestManifest_DeclaresFsAndPersist(t *testing.T) {
 	// publish_result and the Publish menu, adhoc.read for the column values
 	// list_bundles shows (ADR-0288 §SD4, §SD5). task.> for the query runs,
 	// write runs, projector, vector-field builds and publishes the window
-	// starts, which run as keelson tasks owned by it.
-	require.Len(t, m.Caps, 15)
+	// starts, which run as keelson tasks owned by it. externaledit.offer,
+	// .wait and .close for the Editor's buffer handed to the host's editor
+	// app (the window open is the applet creator's).
+	require.Len(t, m.Caps, 18)
 	patterns := make([]string, 0, len(m.Caps))
 	for _, cap := range m.Caps {
 		patterns = append(patterns, cap.Pattern)

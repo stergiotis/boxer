@@ -69,6 +69,13 @@ outcome — a copy, an open — and a warning when the context is nearly full.
 While you edit a message you took back, a strip says so, with **Cancel
 edit**.
 
+Where the host registers one editor app, such as a terminal, **Edit in**
+`<editor>` above the input hands the draft to it (ADR-0365). Each save there
+replaces the draft while it still holds what was handed over; if you typed
+here meanwhile, the save waits until you take it or keep yours. Sending the
+message ends the edit. In the Simple view the button shows only while an
+edit runs or the bar is unfolded.
+
 Before the first message the transcript says what the window talks to and
 keeps: `Chat with <model>`, its endpoint, whether the conversation is kept
 on `boxer.facts`, whether Apps and Questions are on, and the keys. A host

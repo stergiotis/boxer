@@ -28,6 +28,7 @@ import (
 	"github.com/stergiotis/boxer/public/hmi/gloss"
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
+	"github.com/stergiotis/boxer/public/keelson/runtime/externaledit"
 	"github.com/stergiotis/boxer/public/keelson/runtime/fsbroker"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/lwsql"
@@ -35,6 +36,7 @@ import (
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/colwidth"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/basemap"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/codeview"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/editexternally"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/fsmview"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/inspector"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/jobprogress"
@@ -280,6 +282,9 @@ type PlayApp struct {
 	// renderSnippetsTab, captured-and-cleared by renderSqlEditor.
 	pendingSnippetInsert  string
 	pendingSnippetReplace string
+	// externalEdit is the SQL buffer handed to the host's editor app, whose
+	// saves come back through ReplaceSql (externaledit).
+	externalEdit externaledit.Editing
 	// runsHist backs the History tab's "Recorded runs" section (ADR-0115
 	// S2): captured KindQueryRun facts read back from the live endpoint,
 	// fetched manually and on first reveal (play_runs_history.go).
@@ -1329,6 +1334,7 @@ func (inst *PlayApp) editorTabPresent() bool {
 // still-running goroutines hit their generation/closed guards and are
 // dropped. Idempotent; the app is unusable afterwards.
 func (inst *PlayApp) Close() {
+	inst.externalEdit.End()
 	if inst.projector != nil {
 		inst.projector.Detach()
 	}
@@ -2526,6 +2532,23 @@ func (inst *PlayApp) renderTopBar(schema *arrow.Schema) {
 			for range c.HoverText("Marks the query the caret is in: its extent, the WITH items and SET prelude it closes over, and any reference to an outer table alias that would not resolve if it ran alone. The gutter's | says when running it alone would differ from Run. Adds a Run subquery button; changes nothing about what Run or Ctrl+Enter do.").KeepIter() {
 				c.Checkbox(ids.PrepareStr("subqueryMode"), inst.subqueryMode, "Subquery").
 					SendRespVal(&inst.subqueryMode)
+			}
+		}
+
+		// Edit in the host's editor app: the buffer is handed over and each
+		// save replaces it, unless the buffer was edited here meanwhile.
+		// Drawn only where the host registers one editor app.
+		if _, ok := externaledit.Editor(); ok && inst.editorTabPresent() && !inst.toolbarMinimal && inst.bus != nil {
+			c.Separator().Vertical().Send()
+			current := inst.sql
+			if inst.pendingSnippetReplace != "" {
+				current = inst.pendingSnippetReplace
+			}
+			if text, replace := editexternally.Render(editexternally.Input{
+				Ids: ids, ScopeKey: "editExternally", Editing: &inst.externalEdit, Bus: inst.bus,
+				Name: "query.sql", Text: current,
+			}); replace {
+				inst.ReplaceSql(text)
 			}
 		}
 

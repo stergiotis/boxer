@@ -13,6 +13,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/attention"
 	"github.com/stergiotis/boxer/public/keelson/runtime/clipboardbroker"
+	"github.com/stergiotis/boxer/public/keelson/runtime/externaledit"
 	"github.com/stergiotis/boxer/public/keelson/runtime/headstore"
 	"github.com/stergiotis/boxer/public/keelson/runtime/help"
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
@@ -85,6 +86,9 @@ var manifest = app.Manifest{
 		// The conversation's grants and calls, for the Analytics panel's
 		// agent surface (ADR-0283 §SD2).
 		keelsonquery.ClientCaps(agent.TableGrants, agent.TableActions),
+		// The draft handed to the host's editor app, each save taken back;
+		// the window open is declared below.
+		externaledit.ClientCaps("chat: hand the draft to the host's editor app and take each save back")[:3],
 		[]app.SubjectFilter{
 			{Pattern: adhocdata.SubjectPublish, Direction: app.CapDirectionPub,
 				Reason: "chat: publish the window's token and answer statistics and its agent surface as ad-hoc datasets for Open in play (ADR-0240)"},

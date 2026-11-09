@@ -9,6 +9,7 @@ import (
 
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	"github.com/stergiotis/boxer/public/keelson/runtime/agent"
+	"github.com/stergiotis/boxer/public/keelson/runtime/externaledit"
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
 	"github.com/stergiotis/boxer/public/keelson/runtime/widgethandle"
 	"github.com/stergiotis/boxer/public/thestack/fffi2/typed"
@@ -18,6 +19,7 @@ import (
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/chatview"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/codeview"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/color"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/editexternally"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/markdown"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/markdownhighlight"
 )
@@ -539,6 +541,21 @@ func (inst *App) renderComposer() {
 	}
 	if !inst.simple || inst.detailsOpen {
 		inst.renderTransformPicker()
+	}
+	// The draft handed to the host's editor app, each save taking its place
+	// unless it was edited here meanwhile; drawn only where the host
+	// registers one editor app, and in the simple view only while an edit
+	// runs.
+	if _, ok := externaledit.Editor(); ok && inst.bus != nil && (!inst.simple || inst.detailsOpen || inst.externalEdit.Active()) {
+		for range c.HorizontalTop().KeepIter() {
+			if text, replace := editexternally.Render(editexternally.Input{
+				Ids: inst.ids, ScopeKey: "draft-external", Editing: &inst.externalEdit, Bus: inst.bus,
+				Name: "message.md", Text: inst.draft, Small: true,
+			}); replace {
+				inst.draft = text
+				c.CurrentApplicationState.StateManager.OverrideDatabindingSPtr(&inst.draft)
+			}
+		}
 	}
 	w, h, ok := c.CapturePaneSize(c.ProbeSeq("chat", "composer") ^ inst.ids.PrepareHighEntropy(composerProbeSalt).Derive())
 	if !ok || w <= 0 {

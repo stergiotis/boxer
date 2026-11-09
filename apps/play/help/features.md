@@ -386,6 +386,11 @@ so you can tune the patterns without leaving the panel.
   **Signals**); nothing is sent, since the server could only reject it.
 - **Load .sql…** (shown when the host wired the file capability) opens a file picker
   and replaces the buffer with the chosen file's contents.
+- **Edit in** `<editor>` (shown when the host registers one editor app, such as
+  a terminal; ADR-0365) hands the buffer to that app. Each save there
+  replaces the buffer while it still holds what was handed over; if you
+  edited it here meanwhile, the save waits until you take it or keep yours.
+  **Stop editing** ends it.
 - Results land in the **Table** tab and feed every result pane whose contract
   they meet (see [How a pane reads the query](#how-a-pane-reads-the-query)); the
   **status bar** names the outcome.

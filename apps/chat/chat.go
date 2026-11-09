@@ -22,6 +22,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/bgjob"
 	"github.com/stergiotis/boxer/public/keelson/runtime/cell"
+	"github.com/stergiotis/boxer/public/keelson/runtime/externaledit"
 	"github.com/stergiotis/boxer/public/keelson/runtime/headstore"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect/keelsonquery"
 	"github.com/stergiotis/boxer/public/keelson/runtime/lifetime"
@@ -235,6 +236,10 @@ type App struct {
 	// definition is the preset's document, parsed once; nil offers no
 	// Definition tab.
 	definition *markdown.Doc
+
+	// externalEdit is the draft handed to the host's editor app
+	// (externaledit).
+	externalEdit externaledit.Editing
 }
 
 // pendingTurn is a turn in flight.
@@ -317,6 +322,7 @@ func (inst *App) Mount(ctx app.MountContextI) (err error) {
 // Unmount cancels a turn in flight; the client tells the host to stop the
 // call (llm.cancel, ADR-0254).
 func (inst *App) Unmount(ctx app.MountContextI) (err error) {
+	inst.externalEdit.End()
 	inst.turn.Cancel()
 	if inst.coord != nil {
 		// The run closes with its last head (ADR-0314 §SD3), once the
@@ -439,6 +445,8 @@ func (inst *App) answeredSoFar() (res *turnResult) {
 // send starts a turn for the draft and clears the composer.
 func (inst *App) send() {
 	if inst.startTurn(inst.draft) {
+		// A sent draft is done with: its edit elsewhere ends.
+		inst.externalEdit.End()
 		inst.draft = ""
 		c.CurrentApplicationState.StateManager.OverrideDatabindingSPtr(&inst.draft)
 	}
