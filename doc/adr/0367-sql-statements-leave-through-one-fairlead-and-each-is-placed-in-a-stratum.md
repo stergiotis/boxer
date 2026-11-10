@@ -223,6 +223,45 @@ Accepted 2026-11-10.
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers (Tier 1 in-place / Tier 2 dated `## Updates` entry / Tier 3 new superseding ADR).
 
+## Updates
+
+### 2026-11-10 — a first journal, shapes in the report, and what stayed deferred
+
+**A first measurement.** One run of the default test lane with the journal
+on, at the commit that added the shape column, folded by statement shape:
+662 shapes left the process. 382 are unplaced, nearly all of them writes
+and DDL the grammar does not read. Of the 280 reads, 147 are *derive*, 109
+*restrict* and 24 *verbatim*. This counts what the tests send, not what a
+running host sends: statements to a query process outnumber statements to
+the server about six to one in it, and neither the integration lane nor
+a scene was recorded. It says the simpler strata are not a rounding error
+among reads; it does not say how a workload divides.
+
+**Shapes.** `analysis.StatementShape` folds statements that differ in
+literals, on tokens rather than on a parse, and the report counts shapes
+beside texts. SD4's division of labour is unchanged: the journal still
+records text.
+
+**Routing stays where it is.** Play's dispatch is a seam with one resolver
+and one consumer, and [ADR-0141](0141-play-endpoint-dispatch-seam.md) keeps its
+vocabulary play-internal until a second consumer needs it. The journal
+produced no such consumer, so nothing is lifted into the runtime and no
+pass places statements. What would reopen it: a second app that has to
+choose between endpoints per statement, or a host that must refuse a
+stratum.
+
+**The lane arithmetic, restated.** The hand-written facts store now spells
+its columns and lookups in one file. It was not moved onto the leeway read
+surface, and the reason is not the envelope migration alone: that surface
+expands into functions installed on the server, and whether the runtime's
+own store may require them, or installs them itself at setup, is a
+decision nobody has taken.
+
+**Write coverage.** A test now checks that every string and number the
+three run-session writers are handed is present in the stored row. It does
+not check which membership carries a value, which the removed round trips
+did.
+
 ## References
 
 - [ADR-0117](0117-passthrough-table-classifier.md) — passthrough tables.
