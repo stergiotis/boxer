@@ -38,23 +38,6 @@ var _ factsstore.LogReaderI = (*Store)(nil)
 // render path.
 const appTrailCap = uint32(10000)
 
-// Column names of the sections the three reads draw on, beyond the ones
-// runsessions.go and recentlogs.go spell.
-const (
-	atSymLR     = "`tv:symbol:lr:lr:u64:1247:::0::data`"
-	atSymValue  = "`tv:symbol:value:val:s:124::I:0::data`"
-	atSymLRCard = "`tv:symbol:lrcard:lrcard:u64:4E:::0::data`"
-	atU64Value  = "`tv:u64Array:value:val:u64h:4:::0::data`"
-	atU64LR     = "`tv:u64Array:lr:lr:u64:1247:::0::data`"
-	atU64LRCard = "`tv:u64Array:lrcard:lrcard:u64:4E:::0::data`"
-	atStrValue  = "`tv:stringArray:value:val:sh:4::8:0::data`"
-	atStrLen    = "`tv:stringArray:len:len:u64:4D:::0::data`"
-	atStrLR     = "`tv:stringArray:lr:lr:u64:1247:::0::data`"
-	atStrLRCard = "`tv:stringArray:lrcard:lrcard:u64:4E:::0::data`"
-	atIdCol     = "`id:id:u64:47::0:`"
-	atTsCol     = "`ts:ts:z64:47::0:`"
-)
-
 // appTrailExprs are the attribution projections every row kind shares: the
 // app and run from the mixed-low-card symbol lane, the window from the u64
 // lane (ADR-0191 §SD3).
@@ -66,21 +49,21 @@ type appTrailExprs struct {
 }
 
 func buildAppTrailExprs() (e appTrailExprs) {
-	e.appId = pickLcrString(atSymValue, atSymLR, atSymLRCard, vocab.MembRuntimeApp.GetId().Value())
-	e.runId = pickLcrString(atSymValue, atSymLR, atSymLRCard, vocab.MembRuntimeRun.GetId().Value())
-	e.instanceKey = pickLcrNumeric(atU64Value, atU64LR, atU64LRCard, vocab.MembLifecycleTileKey.GetId().Value(), "0")
-	e.tsSec = fmt.Sprintf("toUnixTimestamp(%s)", atTsCol)
+	e.appId = pickLcrString(symValue, symLR, symLRCard, vocab.MembRuntimeApp.GetId().Value())
+	e.runId = pickLcrString(symValue, symLR, symLRCard, vocab.MembRuntimeRun.GetId().Value())
+	e.instanceKey = pickLcrNumeric(u64Value, u64LR, u64LRCard, vocab.MembLifecycleTileKey.GetId().Value(), "0")
+	e.tsSec = fmt.Sprintf("toUnixTimestamp(%s)", tsCol)
 	return
 }
 
 // appTrailWhere is the kind tag, the app gate and the look-back.
 func appTrailWhere(kind uint64, since time.Time) string {
 	parts := []string{
-		fmt.Sprintf("has(%s, %d)", atSymLR, kind),
-		fmt.Sprintf("has(%s, %d)", atSymLR, vocab.MembRuntimeApp.GetId().Value()),
+		fmt.Sprintf("has(%s, %d)", symLR, kind),
+		fmt.Sprintf("has(%s, %d)", symLR, vocab.MembRuntimeApp.GetId().Value()),
 	}
 	if !since.IsZero() {
-		parts = append(parts, fmt.Sprintf("%s >= toDateTime(%d, 'UTC')", atTsCol, since.Unix()))
+		parts = append(parts, fmt.Sprintf("%s >= toDateTime(%d, 'UTC')", tsCol, since.Unix()))
 	}
 	return strings.Join(parts, " AND ")
 }
@@ -116,10 +99,10 @@ func (inst *Store) AppRuns(ctx context.Context, filter factsstore.AppTrailFilter
 func composeAppRunsSql(table string, filter factsstore.AppTrailFilter) string {
 	e := buildAppTrailExprs()
 	l := buildLifecycleColumnExprs()
-	seenWhere := []string{fmt.Sprintf("hasAny(%s, [%d, %d])", atSymLR,
+	seenWhere := []string{fmt.Sprintf("hasAny(%s, [%d, %d])", symLR,
 		vocab.MembKindRuntimeHeartbeat.GetId().Value(), vocab.MembKindRuntimeRun.GetId().Value())}
 	if !filter.Since.IsZero() {
-		seenWhere = append(seenWhere, fmt.Sprintf("%s >= toDateTime(%d, 'UTC')", atTsCol, filter.Since.Unix()))
+		seenWhere = append(seenWhere, fmt.Sprintf("%s >= toDateTime(%d, 'UTC')", tsCol, filter.Since.Unix()))
 	}
 	return fmt.Sprintf(`
 SELECT s.run_id, s.app_id, s.instance_key, s.started, s.stopped, s.stop_reason, ifNull(h.seen, 0) AS run_seen
@@ -220,7 +203,7 @@ ORDER BY ts_sec DESC, id DESC
 LIMIT %d BY app_id
 LIMIT %d
 FORMAT TabSeparated`,
-		atIdCol, e.tsSec, e.appId, e.instanceKey, e.runId,
+		idCol, e.tsSec, e.appId, e.instanceKey, e.runId,
 		l.level, l.caller, l.message, l.errStr,
 		table,
 		appTrailWhere(vocab.MembKindLog.GetId().Value(), filter.Since),
@@ -266,7 +249,7 @@ func (inst *Store) AppAuditSummary(ctx context.Context, filter factsstore.AppTra
 // requests that carry one. Rows of the retired audit kind are not read.
 func composeAppAuditSql(table string, filter factsstore.AppTrailFilter) string {
 	e := buildAppTrailExprs()
-	list := func(m uint64) string { return pickLcrList(atStrValue, atStrLen, atStrLR, atStrLRCard, m) }
+	list := func(m uint64) string { return pickLcrList(strValue, strLen, strLR, strLRCard, m) }
 	where := appTrailWhere(vocab.MembKindAuditEvent.GetId().Value(), filter.Since) +
 		" AND " + symbolEquals(vocab.MembAuditEventDomain.GetId().Value(), busaudit.BusDomain) +
 		" AND " + symbolEquals(vocab.MembAuditEventAction.GetId().Value(), busaudit.BusActionRequest)
@@ -302,24 +285,11 @@ ORDER BY requests DESC, app_id ASC, subject ASC, result ASC
 LIMIT %d
 FORMAT TabSeparated`,
 		quoteSqlString(busaudit.BusRefSubject), attr(busaudit.BusAttrLatencyMs),
-		e.appId, e.tsSec, pickLcrString(atSymValue, atSymLR, atSymLRCard, vocab.MembAuditEventOutcome.GetId().Value()),
+		e.appId, e.tsSec, pickLcrString(symValue, symLR, symLRCard, vocab.MembAuditEventOutcome.GetId().Value()),
 		list(vocab.MembAuditEventRefTypes.GetId().Value()), list(vocab.MembAuditEventRefValues.GetId().Value()),
 		list(vocab.MembAuditEventAttrKeys.GetId().Value()), list(vocab.MembAuditEventAttrValues.GetId().Value()),
 		table, where,
 		appTrailLimit(filter.Limit))
-}
-
-// pickLcrList is the values of the attribute under membershipId on an
-// array-valued section, read on the plain channel: the attribute that owns
-// the membership's position in the lr lane (what LW_RAGGED_PARENT_IDS
-// computes over lrcard), then its run of the flattened value array, located
-// by the per-attribute len column (what LW_LIST_BY_TAG_EQUAL does); [] when
-// the row has no such attribute.
-func pickLcrList(valueArr, lenArr, lrArr, lrCardArr string, membershipId uint64) (expr string) {
-	attr := fmt.Sprintf("arrayElement(arrayFlatten(arrayMap((i, c) -> arrayWithConstant(c, i), arrayEnumerate(%[1]s), %[1]s)), indexOf(%[2]s, %[3]d))",
-		lrCardArr, lrArr, membershipId)
-	return fmt.Sprintf("if(%[1]s > 0, arraySlice(%[2]s, arraySum(arraySlice(%[3]s, 1, %[1]s - 1)) + 1, arrayElement(%[3]s, %[1]s)), [])",
-		attr, valueArr, lenArr)
 }
 
 func parseAppAudit(raw []byte) (rows []factsstore.AppAuditRow, err error) {
@@ -417,20 +387,11 @@ func (inst *Store) LogRows(ctx context.Context, filter factsstore.LogRowsFilter)
 	return
 }
 
-// Columns the log-row read draws on beyond the ones above. Each field kind
-// has its own section; the field's name rides the mixed channel (lmr, with
-// the name as the high-card parameter in mrhp), per encodeLogEntity.
-const (
-	lrTextValue  = "`tv:textArray:value:val:sh:5::7:0::data`"
-	lrTextLen    = "`tv:textArray:len:len:u64:4D:::0::data`"
-	lrTextLR     = "`tv:textArray:lr:lr:u64:1247:::0::data`"
-	lrTextLRCard = "`tv:textArray:lrcard:lrcard:u64:4E:::0::data`"
-	lrU64Len     = "`tv:u64Array:len:len:u64:4D:::0::data`"
-)
-
 // logFieldSection is one section a log field may land in: its value
 // column, its per-attribute len column (empty for a scalar section), and
-// how a value is rendered as text.
+// how a value is rendered as text. Each field kind has its own section; the
+// field's name rides the mixed channel (lmr, with the name as the high-card
+// parameter in mrhp), per encodeLogEntity.
 type logFieldSection struct {
 	kind   string
 	name   string
@@ -450,24 +411,6 @@ var logFieldSections = []logFieldSection{
 }
 
 func toStringExpr(v string) string { return "toString(" + v + ")" }
-
-// ownerOf maps each position of a membership lane (lr or lmr) to the
-// 1-based attribute that carries it, by expanding the per-attribute card
-// column: the same arithmetic as LW_RAGGED_PARENT_IDS. Unlike the
-// cumulative-sum lookup in pickLcrString, it stays right when one
-// attribute carries more than one membership on the lane.
-func ownerOf(cardArr string) string {
-	return fmt.Sprintf("arrayFlatten(arrayMap((i, c) -> arrayWithConstant(c, i), arrayEnumerate(%[1]s), %[1]s))", cardArr)
-}
-
-// pickScalarAttr is the value of the attribute that carries membershipId on
-// the plain lane of a scalar section (one value per attribute); zero when
-// the row has none.
-func pickScalarAttr(valueArr, lrArr, lrCardArr string, membershipId uint64, zero string) string {
-	idx := fmt.Sprintf("indexOf(%s, %d)", lrArr, membershipId)
-	return fmt.Sprintf("if(%[1]s > 0, arrayElement(%[2]s, arrayElement(%[3]s, %[1]s)), %[4]s)",
-		idx, valueArr, ownerOf(lrCardArr), zero)
-}
 
 // logFieldsExpr is every MembLogField attribute of a row as [kind, name,
 // value-as-text] triples, section by section. Attributes carrying other
@@ -507,16 +450,16 @@ func quoteSqlLiteral(s string) string {
 // on what the level is; the ORDER BY is the table's sorting key, so a
 // LIMIT reads in order rather than sorting the look-back.
 func composeLogRowsSql(table string, filter factsstore.LogRowsFilter) string {
-	sym := func(m uint64) string { return pickScalarAttr(atSymValue, atSymLR, atSymLRCard, m, "''") }
+	sym := func(m uint64) string { return pickScalarAttr(symValue, symLR, symLRCard, m, "''") }
 	str := func(m uint64) string {
-		return "arrayElement(" + pickLcrList(atStrValue, atStrLen, atStrLR, atStrLRCard, m) + ", 1)"
+		return "arrayElement(" + pickLcrList(strValue, strLen, strLR, strLRCard, m) + ", 1)"
 	}
-	where := []string{fmt.Sprintf("has(%s, %d)", atSymLR, vocab.MembKindLog.GetId().Value())}
+	where := []string{fmt.Sprintf("has(%s, %d)", symLR, vocab.MembKindLog.GetId().Value())}
 	if !filter.Since.IsZero() {
-		where = append(where, fmt.Sprintf("%s >= fromUnixTimestamp64Nano(%d, 'UTC')", atTsCol, filter.Since.UnixNano()))
+		where = append(where, fmt.Sprintf("%s >= fromUnixTimestamp64Nano(%d, 'UTC')", tsCol, filter.Since.UnixNano()))
 	}
 	if !filter.Until.IsZero() {
-		where = append(where, fmt.Sprintf("%s < fromUnixTimestamp64Nano(%d, 'UTC')", atTsCol, filter.Until.UnixNano()))
+		where = append(where, fmt.Sprintf("%s < fromUnixTimestamp64Nano(%d, 'UTC')", tsCol, filter.Until.UnixNano()))
 	}
 	if len(filter.Levels) > 0 {
 		q := make([]string, 0, len(filter.Levels))
@@ -556,20 +499,20 @@ WHERE %s
 ORDER BY %s DESC, %s DESC
 LIMIT %d
 FORMAT JSONEachRow`,
-		atIdCol, atTsCol,
+		idCol, tsCol,
 		sym(vocab.MembRuntimeApp.GetId().Value()),
 		sym(vocab.MembRuntimeRun.GetId().Value()),
-		pickLcrList(atU64Value, lrU64Len, atU64LR, atU64LRCard, vocab.MembLifecycleTileKey.GetId().Value()),
+		pickLcrList(u64Value, u64Len, u64LR, u64LRCard, vocab.MembLifecycleTileKey.GetId().Value()),
 		sym(vocab.MembLogLevel.GetId().Value()),
 		sym(vocab.MembLogCaller.GetId().Value()),
 		sym(vocab.MembLogService.GetId().Value()),
 		str(vocab.MembLogMessage.GetId().Value()),
 		str(vocab.MembLogError.GetId().Value()),
-		pickLcrList(lrTextValue, lrTextLen, lrTextLR, lrTextLRCard, vocab.MembLogStack.GetId().Value()),
+		pickLcrList(textValue, textLen, textLR, textLRCard, vocab.MembLogStack.GetId().Value()),
 		logFieldsExpr(),
 		table,
 		strings.Join(where, " AND "),
-		atTsCol, atIdCol,
+		tsCol, idCol,
 		appTrailLimit(filter.Limit))
 }
 

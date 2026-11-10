@@ -75,10 +75,6 @@ func (inst *Store) AppLaunchStats(ctx context.Context, halfLife time.Duration, l
 // leaving the open one single.
 func composeAppLaunchStatsSql(table string, halfLife time.Duration, limit uint32) (sql string) {
 	e := buildLifecycleColumnExprs()
-	const (
-		symLR = "`tv:symbol:lr:lr:u64:1247:::0::data`"
-		tsCol = "`ts:ts:z64:47::0:`"
-	)
 	whereParts := []string{
 		fmt.Sprintf("has(%s, %d)", symLR, vocab.MembKindAppLifecycle.GetId().Value()),
 		fmt.Sprintf("has(%s, %d)", symLR, vocab.MembRuntimeApp.GetId().Value()),
