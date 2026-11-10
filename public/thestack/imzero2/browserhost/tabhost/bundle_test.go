@@ -31,6 +31,8 @@ func TestModuleTagsAndToolchain(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "tags"), []byte("a,b\n"), 0o644))
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "go.mod"), []byte("module example.com/acme\n\ngo 1.27.0\n\nrequire x v1\n"), 0o644))
 	require.Equal(t, "a,b", readTags(dir))
+	require.Equal(t, "a,b,noasm", wasmTags(dir))
+	require.Equal(t, "noasm", wasmTags(t.TempDir()))
 	require.Equal(t, "1.27.0", goModVersion(dir))
 }
 

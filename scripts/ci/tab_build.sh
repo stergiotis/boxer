@@ -17,7 +17,10 @@ here=$(dirname "$(readlink -f "$BASH_SOURCE")")
 cd "$here/../.."
 # shellcheck source=/dev/null
 source scripts/dev/go-build-env.sh
+# noasm, as tabhost.wasmTags adds it: arrow-go's arrow/math links no kernel on
+# wasm without it (ADR-0078, Update 2026-08-29).
 tags=$(cat ./tags)
+tags="${tags:+$tags,}noasm"
 out=$(mktemp -d "${TMPDIR:-/tmp}/tab_build.XXXXXX")
 trap 'rm -rf "$out"' EXIT
 

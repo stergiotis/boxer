@@ -137,7 +137,7 @@ func goListDir(subject string, args ...string) (dir string, err error) {
 // The go command's output goes to diag.
 func buildGoModule(mainDir string, pkg string, dst string, optimize bool, diag io.Writer) (err error) {
 	args := append([]string{"build"}, goBuildFlags...)
-	args = append(args, "-buildmode=c-shared", "-ldflags=-s -w", "-tags", readTags(mainDir), "-o", dst, pkg)
+	args = append(args, "-buildmode=c-shared", "-ldflags=-s -w", "-tags", wasmTags(mainDir), "-o", dst, pkg)
 	env := append(append(os.Environ(), goBuildEnv...), "GOOS=wasip1", "GOARCH=wasm") //boxer:lint disable=CS011 reason="forwards the ambient process environment into the go build of the tab module"
 	if !hasVar(env, "GOTOOLCHAIN") {
 		if v := goModVersion(mainDir); v != "" {
@@ -360,6 +360,20 @@ func readTags(dir string) (tags string) {
 		return ""
 	}
 	return strings.ReplaceAll(strings.TrimSpace(string(b)), "\n", "")
+}
+
+// wasmTags is the module's tags for a wasm build: its own, and `noasm`. Some
+// dependencies select their pure-Go kernels by that tag and by nothing else,
+// so on an architecture they carry no assembly for, leaving it out links
+// neither implementation. arrow-go's `arrow/math` is the recorded case: its
+// function table stays nil and the first call panics (ADR-0078, Update
+// 2026-08-29).
+func wasmTags(dir string) (tags string) {
+	tags = readTags(dir)
+	if tags == "" {
+		return "noasm"
+	}
+	return tags + ",noasm"
 }
 
 // goModVersion is the `go` directive of the module's go.mod.
