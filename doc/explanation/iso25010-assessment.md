@@ -201,10 +201,10 @@ One line per graded cell that carries a reason; a cell with no line was graded w
 | P2 | + | One IDL emits Rust, Go, and docs; codecs regenerate against new targets (the anchor schema proved generator portability). |
 | P3 | + | The model is the durable investment: projections adapt it; the second substrate ran it on DuckDB and DataFusion. |
 | P5 | + | SoA shapes scale with the columnar engine; measured across 1M→100M tiers with a footprint ratio stable to 0.2%. |
-| SC1/2 | + | CGO_ENABLED=0 static Go; the musl-static path cleared; the engine replaceable in principle at a measured 2–3× cost band. |
+| SC1/2 | + | CGO_ENABLED=0 static Go; the musl-static path cleared; leeway's read queries reproduced on two other engines within a measured 2–3× band — the mapping's read path only, not the runtime's other uses of the engine. |
 | SC3 | + | The same app source runs unchanged on desktop, browser, and appliance — placement is the host's call, not the app's. |
 | ENF | + | Per-package wasm-amenability (packageprops) makes portability a drift-checked property of every package. |
-| TRI | + | Replaceability is tested, not asserted: the second-substrate trial exists to measure it. |
+| TRI | + | Replaceability is tested where it is claimed, not asserted: the second-substrate trial measures it for leeway's read path. |
 
 #### Safety
 
@@ -272,7 +272,7 @@ These are the two rows where the premises knowingly counteract. Interoperability
 
 ### Flexibility: the quiet second winner
 
-The 2023 model's Flexibility characteristic (formerly Portability) is facilitated from more directions than one would expect for a stack this opinionated: installability by airgapped bundles, static binaries, and 109–119 MB appliance images; adaptability by one app source running unchanged on desktop, browser, and appliance; replaceability of the engine measured at a 2–3× cost band rather than asserted; scalability measured across a 10× data-tier sweep (1M smoke to the 10M reportable tier; 100M descoped). The wasm-amenability of every package is tracked as drift-checked metadata — portability treated as a queryable property, the same move the project makes everywhere else.
+The 2023 model's Flexibility characteristic (formerly Portability) is facilitated from more directions than one would expect for a stack this opinionated: installability by airgapped bundles, static binaries, and 109–119 MB appliance images; adaptability by one app source running unchanged on desktop, browser, and appliance; replaceability measured rather than asserted where it has been tried — leeway's read queries on two other engines, within a 2–3× band, with the runtime's coordination, retention and governance uses of the engine outside that measurement; scalability measured across a 10× data-tier sweep (1M smoke to the 10M reportable tier; 100M descoped). The wasm-amenability of every package is tracked as drift-checked metadata — portability treated as a queryable property, the same move the project makes everywhere else.
 
 ### Safety: applicable only by analogy — but the analogues are present
 

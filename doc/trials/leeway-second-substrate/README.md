@@ -26,6 +26,47 @@ status: draft
 
 # leeway on a second substrate — a toolbelt trial
 
+## 0 The claim, and how to cite it
+
+**On one workstation, over one corpus (the JSONBench set at 10M documents),
+hot runs only, and with every membership at arity 1, leeway's canonical JSON
+mapping moved from ClickHouse to DuckDB and to DataFusion with all fourteen
+queries reproducing the ClickHouse oracle, and the leeway configurations
+stayed within a 2–3× latency band of each other: 1.24 s on ClickHouse's
+native format against 3.31 s for the same rows as Parquet on DataFusion over
+the five queries that name their paths (2.7×), and 1.50 s on ClickHouse
+against 2.92 s as Parquet on DuckDB over the six whose path is in the data
+(1.9×).** Two divergences from the oracle are explained in §4a and neither is
+about the mapping.
+
+What the evidence is worth: one machine, one corpus, no cold runs, figures
+from more than one sitting with 5–10 % between them, and a page no human has
+reviewed. The trial reversed seven of its own published readings on the way.
+
+The claim changes when:
+
+- **a membership has arity above 1.** Every figure was produced at arity 1,
+  and §4a names arity as the largest untested dimension.
+- **the table is `boxer.facts` rather than the canonical JSON mapping.** The
+  facts-layout arm was descoped and its hypothesis is open (§6).
+- **cold reads matter.** None was measured.
+
+Misreadings the numbers invite:
+
+- **"The engine is replaceable at 2–3×."** The trial moved leeway's *read
+  queries*. It did not move writes, and nothing in it touches what the
+  runtime otherwise asks of ClickHouse: compare-and-set, retention, mutation,
+  access control, the query log.
+- **"DataFusion is 2.7× slower than ClickHouse."** The pair compared is
+  ClickHouse reading its native format against DataFusion reading Parquet
+  exported from it, on one query set; on the other set the slowest
+  configuration is a different engine. §1 puts ranking engines out of scope.
+- **"Parquet costs 2–3×."** The band spans format, engine and rendering
+  together and does not isolate any one of them.
+- **A figure from a table under `runs/`.** Those are per-arm evidence, and
+  several arms measure a native JSON type or a typed-column shape rather
+  than leeway.
+
 ## 1 Question and scope
 
 leeway is meant to be reasonably technology-neutral: a data-mapping engine

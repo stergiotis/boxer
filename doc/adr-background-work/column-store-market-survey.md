@@ -658,10 +658,11 @@ niche systems, not in mainstream OLAP.
 ---
 
 *Local note: this repo sits on the Yandex line (ClickHouse via leeway, G3)
-with G5 touchpoints (Parquet/Arrow interchange). The currents that matter
+with G5 touchpoints (Arrow interchange; Parquet through ClickHouse only,
+since [ADR-0202](../adr/0202-retire-arrow-parquet.md) retired the in-tree writer). The currents that matter
 here: Iceberg-write maturity in ClickHouse, OTel-style wide events, and
 agent-facing SQL surfaces. On the format layer (§7), the interchange bet
-stays Parquet + Arrow until a post-Parquet reader reaches the G3 engines; the
+stays Arrow, with Parquet at the engine, until a post-Parquet reader reaches the G3 engines; the
 random-access-first designs are the ones to watch against leeway's
 point-lookup ambitions. Market background for the substrate premises in
 [why-boxer](../explanation/why-boxer.md) and for the leeway read-surface work
