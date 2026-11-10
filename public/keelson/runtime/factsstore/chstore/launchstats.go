@@ -5,7 +5,7 @@ package chstore
 // ADR-0158 §SD10 deferred ranking because it "needs a launch record in
 // boxer.facts". That record has existed since ADR-0026: every window open
 // writes an app-lifecycle `started` row carrying the app id and a timestamp.
-// What was missing is this — one aggregate across runs. [Store.LifecyclesByRun]
+// What was missing is this — one aggregate across runs. [Store.ListRunEvents]
 // refuses to scan without a run anchor, and that refusal is right for its own
 // consumer (a per-run timeline), so this is a second query rather than a
 // loosening of the first.

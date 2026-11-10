@@ -180,13 +180,13 @@ func (inst *runStore) WriteLogs(rows []factsstore.LogRow) (ids []uint64, err err
 }
 
 // readerOf adapts the store's log-row read to the viewer's query.
-func readerOf(store *chstore.Store) logviewer.ReadFunc {
+func readerOf(store factsstore.LogReaderI) logviewer.ReadFunc {
 	return func(ctx context.Context, q logviewer.Query) (rows []logviewer.Entry, err error) {
 		limit := uint32(0)
 		if q.Limit > 0 {
 			limit = uint32(q.Limit)
 		}
-		read, err := store.LogRows(ctx, chstore.LogRowsFilter{
+		read, err := store.LogRows(ctx, factsstore.LogRowsFilter{
 			Since: q.Since, Levels: q.Levels, AppContains: q.App, MessageContains: q.Message,
 			RunId: q.RunId, InstanceKey: q.InstanceKey, Limit: limit,
 		})

@@ -134,8 +134,8 @@ type HistoryFilter struct {
 	Task string
 }
 
-// HistoryLimitCap bounds one history read the same way RecentLogs caps
-// its window — an operator pane, not an export path.
+// HistoryLimitCap bounds one history read the same way the facts store caps
+// its reads — an operator pane, not an export path.
 const HistoryLimitCap = 500
 
 // The column names these queries are written in — handles (ADR-0116),

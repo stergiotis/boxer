@@ -1,8 +1,8 @@
 // Package chstore is the ClickHouse-backed factsstore.FactsStoreI per
 // ADR-0026 M2.5c. Writes go through the generated leeway DML builders
 // (runtime/factsschema/dml.InEntityFacts) and ship as Arrow IPC via
-// chclient.InsertArrow. Reads (RecentLogs, the run-session views, the run
-// events) are hand-composed leeway-shaped SELECTs against the array-encoded
+// chclient.InsertArrow. Reads (the app trail, the log rows, the run events, the
+// launch statistics) are hand-composed leeway-shaped SELECTs against the array-encoded
 // membership columns — the code class ADR-0105 D5 replaces with generated
 // stores kind by kind. App state left this table for its own generated
 // store: persist state with ADR-0105 D3a, workingsets and column-width
@@ -162,7 +162,7 @@ func (inst *Store) Ping(ctx context.Context) (err error) {
 // the caller passes an empty engineClause — the shape every first-run
 // initialisation (SetupTable(ctx, "")) uses.
 //
-// Time-ordered by default: every audit read (RecentLogs, LifecyclesByRun,
+// Time-ordered by default: every audit read (the log rows, the run events,
 // the latest-wins lists) is ORDER BY ts, so a sorted primary key turns those into a
 // sparse-index range read instead of the full scan that ORDER BY tuple()
 // forced. Retention — TTL / partitioning to bound a forever-growing

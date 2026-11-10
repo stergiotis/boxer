@@ -28,12 +28,12 @@ import (
 // Composed here the SQL is built once, in Go, and ships raw.
 //
 // The extraction is hand-written array arithmetic rather than the LW_GET
-// surface AGENTS.md prefers, for the reason runsessions.go gives beside it:
+// surface AGENTS.md prefers:
 // this store ships SQL directly, with no client-side expansion pass, so the
 // LW_GET family is not available to it — and the server-side read-back UDFs
 // it would expand into are not something the store may assume is installed.
 
-// runEventsCap bounds one read, mirroring recentLogsCap. A run's trail is
+// runEventsCap bounds one read. A run's trail is
 // bounded by its own length, which for a long-lived process with heartbeats
 // every 30 s is a few thousand rows a day; the cap keeps a month-long run
 // from pulling its whole history into a render path.

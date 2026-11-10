@@ -227,7 +227,7 @@ func TestStore_LogRows_RoundTripAndFilters_LiveCH(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	rows, err := s.LogRows(ctx, chstore.LogRowsFilter{Limit: 10})
+	rows, err := s.LogRows(ctx, factsstore.LogRowsFilter{Limit: 10})
 	require.NoError(t, err)
 	require.Len(t, rows, 4)
 	assert.Equal(t, "level-less", rows[1].Row.Message, "newest first")
@@ -255,7 +255,7 @@ func TestStore_LogRows_RoundTripAndFilters_LiveCH(t *testing.T) {
 	assert.True(t, at.Equal(byName["t"].Time))
 	assert.Equal(t, factsstore.LogFieldKindTime, byName["t"].Kind)
 
-	pick := func(f chstore.LogRowsFilter) (msgs []string) {
+	pick := func(f factsstore.LogRowsFilter) (msgs []string) {
 		t.Helper()
 		rs, rErr := s.LogRows(ctx, f)
 		require.NoError(t, rErr)
@@ -264,16 +264,16 @@ func TestStore_LogRows_RoundTripAndFilters_LiveCH(t *testing.T) {
 		}
 		return
 	}
-	assert.Equal(t, []string{full.Message, "high cpu"}, pick(chstore.LogRowsFilter{Levels: []string{"warn", "error"}}),
+	assert.Equal(t, []string{full.Message, "high cpu"}, pick(factsstore.LogRowsFilter{Levels: []string{"warn", "error"}}),
 		"a level floor drops level-less rows")
-	assert.Equal(t, []string{"high cpu"}, pick(chstore.LogRowsFilter{AppContains: "IMZ"}))
-	assert.Equal(t, []string{full.Message}, pick(chstore.LogRowsFilter{MessageContains: `S A \ "QUOTED`}),
+	assert.Equal(t, []string{"high cpu"}, pick(factsstore.LogRowsFilter{AppContains: "IMZ"}))
+	assert.Equal(t, []string{full.Message}, pick(factsstore.LogRowsFilter{MessageContains: `S A \ "QUOTED`}),
 		"quotes and backslashes in a needle stay inside the literal")
-	assert.Empty(t, pick(chstore.LogRowsFilter{MessageContains: `'; DROP TABLE x; --`}))
-	assert.Equal(t, []string{"high cpu"}, pick(chstore.LogRowsFilter{InstanceKey: 3}))
-	assert.Len(t, pick(chstore.LogRowsFilter{RunId: "run-a"}), 4)
-	assert.Empty(t, pick(chstore.LogRowsFilter{RunId: "run-b"}))
-	assert.Equal(t, []string{full.Message, "level-less"}, pick(chstore.LogRowsFilter{Since: t0.Add(2 * time.Second)}))
-	assert.Equal(t, []string{"high cpu", "starting"}, pick(chstore.LogRowsFilter{Until: t0.Add(2 * time.Second)}))
-	assert.Equal(t, []string{full.Message}, pick(chstore.LogRowsFilter{Limit: 1}))
+	assert.Empty(t, pick(factsstore.LogRowsFilter{MessageContains: `'; DROP TABLE x; --`}))
+	assert.Equal(t, []string{"high cpu"}, pick(factsstore.LogRowsFilter{InstanceKey: 3}))
+	assert.Len(t, pick(factsstore.LogRowsFilter{RunId: "run-a"}), 4)
+	assert.Empty(t, pick(factsstore.LogRowsFilter{RunId: "run-b"}))
+	assert.Equal(t, []string{full.Message, "level-less"}, pick(factsstore.LogRowsFilter{Since: t0.Add(2 * time.Second)}))
+	assert.Equal(t, []string{"high cpu", "starting"}, pick(factsstore.LogRowsFilter{Until: t0.Add(2 * time.Second)}))
+	assert.Equal(t, []string{full.Message}, pick(factsstore.LogRowsFilter{Limit: 1}))
 }

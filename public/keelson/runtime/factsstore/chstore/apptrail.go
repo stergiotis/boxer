@@ -2,15 +2,14 @@ package chstore
 
 // The app center's cross-run reads (ADR-0260 §SD5): window sessions, the
 // newest log rows per app, and the bus's requests folded per subject — over
-// every process the trail holds. [Store.LifecyclesByRun] and
-// [Store.ListRunEvents] refuse to scan without a run anchor, which is right
+// every process the trail holds. [Store.ListRunEvents] refuses to scan without a run anchor, which is right
 // for a per-run timeline; these are the across-runs aggregates, each bounded
 // by a look-back and a cap so that an introspection table, which sees no
 // predicate, can serve them.
 //
-// The extraction is hand-written array arithmetic for the reason
-// runsessions.go gives: this store ships SQL directly, with no expansion
-// pass, so the LW_GET family is not available to it.
+// The extraction is hand-written array arithmetic because this store ships
+// SQL directly, with no expansion pass, so the LW_GET family is not available
+// to it.
 
 import (
 	"bytes"
@@ -32,6 +31,7 @@ import (
 )
 
 var _ factsstore.AppTrailReaderI = (*Store)(nil)
+var _ factsstore.LogReaderI = (*Store)(nil)
 
 // appTrailCap bounds every read. Generous against a trail a person reads,
 // and there so a long-lived trail cannot pull an unbounded result into a
@@ -404,44 +404,11 @@ func parseUnixOrZero(s string) (t time.Time, err error) {
 	return
 }
 
-// LogRowsFilter selects the log rows [Store.LogRows] returns. Every field
-// but Limit is optional; the zero value of each is "no constraint". The
-// read is bounded by Since and by Limit, as the other reads here are, so a
-// caller that sets neither still gets at most appTrailCap rows.
-type LogRowsFilter struct {
-	// Since and Until bound the row's timestamp: Since inclusive, Until
-	// exclusive.
-	Since time.Time
-	Until time.Time
-	// Levels keeps rows whose level is one of these; empty keeps every
-	// row, including level-less ones.
-	Levels []string
-	// AppContains and MessageContains are case-insensitive substrings of
-	// the app id and of the message.
-	AppContains     string
-	MessageContains string
-	// RunId keeps the rows stamped with this run (ADR-0191 §SD3).
-	RunId string
-	// InstanceKey keeps the rows of this window (ADR-0191 §SD4); 0 keeps
-	// every row.
-	InstanceKey uint64
-	Limit       uint32
-}
-
-// LogRowRead is one log row as [Store.LogRows] reads it back: the row the
-// writer was handed, less the structured error chain, which the writer does
-// not persist (only its flat summary in Error), plus the run the row was
-// stamped with.
-type LogRowRead struct {
-	Row   factsstore.LogRow
-	RunId string
-}
-
 // LogRows returns the log rows matching filter, newest first, with their
 // envelope, their attribution and their typed fields: what the log viewer
 // shows of a row. Every filter is applied in the query, so Limit counts
 // matching rows.
-func (inst *Store) LogRows(ctx context.Context, filter LogRowsFilter) (rows []LogRowRead, err error) {
+func (inst *Store) LogRows(ctx context.Context, filter factsstore.LogRowsFilter) (rows []factsstore.LogRowRead, err error) {
 	raw, err := inst.queryAll(ctx, "log rows", composeLogRowsSql(inst.qualifiedTable(), filter))
 	if err != nil {
 		return
@@ -539,7 +506,7 @@ func quoteSqlLiteral(s string) string {
 // the projected aliases, so a filter on the level and the projection agree
 // on what the level is; the ORDER BY is the table's sorting key, so a
 // LIMIT reads in order rather than sorting the look-back.
-func composeLogRowsSql(table string, filter LogRowsFilter) string {
+func composeLogRowsSql(table string, filter factsstore.LogRowsFilter) string {
 	sym := func(m uint64) string { return pickScalarAttr(atSymValue, atSymLR, atSymLRCard, m, "''") }
 	str := func(m uint64) string {
 		return "arrayElement(" + pickLcrList(atStrValue, atStrLen, atStrLR, atStrLRCard, m) + ", 1)"
@@ -624,8 +591,8 @@ type logRowJson struct {
 	Fields      [][]string `json:"fields"`
 }
 
-func parseLogRows(raw []byte) (rows []LogRowRead, err error) {
-	rows = []LogRowRead{}
+func parseLogRows(raw []byte) (rows []factsstore.LogRowRead, err error) {
+	rows = []factsstore.LogRowRead{}
 	dec := json.NewDecoder(bytes.NewReader(raw))
 	for {
 		var j logRowJson
@@ -636,7 +603,7 @@ func parseLogRows(raw []byte) (rows []LogRowRead, err error) {
 			err = eh.Errorf("chstore: log rows: decode: %w", err)
 			return
 		}
-		var r LogRowRead
+		var r factsstore.LogRowRead
 		if r, err = j.row(); err != nil {
 			return
 		}
@@ -644,7 +611,7 @@ func parseLogRows(raw []byte) (rows []LogRowRead, err error) {
 	}
 }
 
-func (inst logRowJson) row() (out LogRowRead, err error) {
+func (inst logRowJson) row() (out factsstore.LogRowRead, err error) {
 	ns, err := strconv.ParseInt(inst.TsNs, 10, 64)
 	if err != nil {
 		err = eb.Build().Str("ts", inst.TsNs).Errorf("chstore: log rows: parse ts: %w", err)
@@ -655,7 +622,7 @@ func (inst logRowJson) row() (out LogRowRead, err error) {
 		err = eb.Build().Str("instance", inst.InstanceKey).Errorf("chstore: log rows: parse instance key: %w", err)
 		return
 	}
-	out = LogRowRead{RunId: inst.RunId, Row: factsstore.LogRow{
+	out = factsstore.LogRowRead{RunId: inst.RunId, Row: factsstore.LogRow{
 		Ts: time.Unix(0, ns).UTC(), AppId: app.AppIdT(inst.AppId), InstanceKey: key,
 		Level: inst.Level, Caller: inst.Caller, Service: inst.Service,
 		Message: inst.Message, Error: inst.Err, Stack: inst.Stack,

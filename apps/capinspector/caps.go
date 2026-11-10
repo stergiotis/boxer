@@ -174,8 +174,8 @@ var Registry = map[CapId]CapSpec{
 			"boxer.persiststate — see the persist capability. " +
 			"chstore.NewWithFallback returns a live " +
 			"ClickHouse-backed Store when reachable; otherwise " +
-			"InMemoryFactsStore. Read paths: LookupRunStart, LifecyclesByRun, " +
-			"LastHeartbeatForRun, RecentLogs.",
+			"InMemoryFactsStore. Read paths: the reader interfaces beside " +
+			"FactsStoreI (run events, app trail, launch history, log rows).",
 		Backend: "runtime/factsstore + runtime/factsstore/chstore",
 		// Two true alternatives — the canonical example of the
 		// "available vs effective" visual. The carousel picks one at

@@ -425,8 +425,7 @@ type AppLaunchStat struct {
 // This is the read ADR-0158 §SD10 named as ranking's blocker. The write half
 // has existed since ADR-0026: every window open writes an app-lifecycle
 // `started` row. What was missing is exactly this — an aggregate ACROSS runs,
-// which [Store.LifecyclesByRun] deliberately refuses to offer because a
-// run-anchored reader is what its own consumer needed.
+// which the run-anchored [RunEventReaderI] deliberately does not offer.
 type AppLaunchHistoryReaderI interface {
 	// AppLaunchStats returns one row per app that has ever been opened, in
 	// Score-descending order. halfLife sets the decay: a launch that old
@@ -508,6 +507,47 @@ type AppTrailReaderI interface {
 	// AppAuditSummary returns audited requests folded per (app, subject,
 	// result), most requested first.
 	AppAuditSummary(ctx context.Context, filter AppTrailFilter) (rows []AppAuditRow, err error)
+}
+
+// LogRowsFilter selects the log rows [LogReaderI.LogRows] returns. Every
+// field but Limit is optional; the zero value of each is "no constraint".
+// The read is bounded by Since and by Limit, so a caller that sets neither
+// still gets a capped number of rows.
+type LogRowsFilter struct {
+	// Since and Until bound the row's timestamp: Since inclusive, Until
+	// exclusive.
+	Since time.Time
+	Until time.Time
+	// Levels keeps rows whose level is one of these; empty keeps every
+	// row, including level-less ones.
+	Levels []string
+	// AppContains and MessageContains are case-insensitive substrings of
+	// the app id and of the message.
+	AppContains     string
+	MessageContains string
+	// RunId keeps the rows stamped with this run (ADR-0191 §SD3).
+	RunId string
+	// InstanceKey keeps the rows of this window (ADR-0191 §SD4); 0 keeps
+	// every row.
+	InstanceKey uint64
+	Limit       uint32
+}
+
+// LogRowRead is one log row as [LogReaderI.LogRows] reads it back: the row
+// the writer was handed, less the structured error chain, which the writer
+// does not persist (only its flat summary in Error), plus the run the row
+// was stamped with.
+type LogRowRead struct {
+	Row   LogRow
+	RunId string
+}
+
+// LogReaderI is the optional capability behind the log viewer: log rows read
+// back with their attribution and typed fields (ADR-0367 §SD5). The filter is
+// applied by the store, so Limit counts matching rows.
+type LogReaderI interface {
+	// LogRows returns the log rows matching filter, newest first.
+	LogRows(ctx context.Context, filter LogRowsFilter) (rows []LogRowRead, err error)
 }
 
 // FactsStoreI is the contract implementations satisfy. Write methods
