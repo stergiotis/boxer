@@ -35,6 +35,7 @@ import (
 	"strings"
 
 	"github.com/stergiotis/boxer/public/db/clickhouse/chhttp"
+	"github.com/stergiotis/boxer/public/db/fairlead"
 	"github.com/stergiotis/boxer/public/keelson/runtime/queryengine"
 	"github.com/stergiotis/boxer/public/keelson/runtime/runid"
 	"github.com/stergiotis/boxer/public/keelson/runtime/runstream"
@@ -186,7 +187,12 @@ func (inst *Engine) Deliver(ctx context.Context, req queryengine.Request) (st qu
 		}
 		reqURL = reqURL + sep + qs.Encode()
 	}
-	httpReq, buildErr := http.NewRequestWithContext(ctx, "POST", reqURL, strings.NewReader(req.SQL))
+	// The engine's exit point (ADR-0367 §SD1).
+	sql, err := fairlead.Lead(ctx, fairlead.ExitServer, "chserver.deliver", req.SQL)
+	if err != nil {
+		return
+	}
+	httpReq, buildErr := http.NewRequestWithContext(ctx, "POST", reqURL, strings.NewReader(sql))
 	if buildErr != nil {
 		err = eh.Errorf("chserver: unable to build request: %w", buildErr)
 		return
@@ -305,7 +311,10 @@ func (inst *Engine) Kill(ctx context.Context, runID string) (err error) {
 	}
 	// The id is interpolated as a literal, which is safe only because the
 	// charset check above rejected everything a quote could hide in.
-	sql := "KILL QUERY WHERE query_id='" + runID + "' ASYNC"
+	sql, err := fairlead.Lead(ctx, fairlead.ExitServer, "chserver.kill", "KILL QUERY WHERE query_id='"+runID+"' ASYNC")
+	if err != nil {
+		return
+	}
 	req, buildErr := http.NewRequestWithContext(ctx, "POST", inst.endpoint, strings.NewReader(sql))
 	if buildErr != nil {
 		err = eh.Errorf("chserver: unable to build kill request: %w", buildErr)

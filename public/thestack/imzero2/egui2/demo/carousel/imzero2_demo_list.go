@@ -15,6 +15,7 @@ import (
 	"github.com/apache/arrow-go/v18/arrow/ipc"
 	"github.com/apache/arrow-go/v18/arrow/memory"
 
+	"github.com/stergiotis/boxer/public/db/fairlead"
 	"github.com/stergiotis/boxer/public/extbin"
 	"github.com/stergiotis/boxer/public/keelson/data/chlocalpool"
 	runtimeapp "github.com/stergiotis/boxer/public/keelson/runtime/app"
@@ -186,6 +187,11 @@ func runChLocalQuery(arrowBytes []byte, query, format string, stdout io.Writer) 
 	chPath := ""
 	if _, statErr := os.Stat(chlocalpool.DefaultBinaryPath); statErr == nil {
 		chPath = chlocalpool.DefaultBinaryPath
+	}
+	query, err = fairlead.Lead(context.Background(), fairlead.ExitLocal, "carousel.demoList", query)
+	if err != nil {
+		// A refusal is not an unreachable binary.
+		return true, err
 	}
 	cmd, err := extbin.ClickHouseLocal.Command(context.Background(),
 		extbin.Opts{Path: chPath},

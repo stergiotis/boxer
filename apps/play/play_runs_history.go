@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/dustin/go-humanize"
+	"github.com/stergiotis/boxer/public/db/fairlead"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/queryrunfacts"
@@ -199,6 +200,10 @@ func captureLine(st queryrunfacts.CaptureStatus, now time.Time) (line string) {
 // endpoint and returns the body — the fetchColumnNames transport without
 // the parameter channel, for the readback SELECTs this file issues.
 func (inst *Client) rawTsvQuery(ctx context.Context, sql string) (raw []byte, err error) {
+	sql, err = fairlead.Lead(ctx, fairlead.ExitServer, "play.history", sql)
+	if err != nil {
+		return
+	}
 	var req *http.Request
 	req, err = http.NewRequestWithContext(ctx, "POST", inst.URL(), strings.NewReader(sql))
 	if err != nil {

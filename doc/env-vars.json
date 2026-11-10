@@ -739,6 +739,17 @@
       }
     },
     {
+      "name": "BOXER_FAIRLEAD_JOURNAL_DIR",
+      "type": "path",
+      "description": "directory each process appends one JSON line per distinct SQL statement it sends to (file `<pid>-<start>.jsonl`); empty records nothing. Statement text is written as sent, bound values excluded and inlined literals included, so the directory is as sensitive as the queries",
+      "category": "dev",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/db/fairlead"
+      }
+    },
+    {
       "name": "BOXER_FFPROBE_BIN",
       "type": "path",
       "description": "explicit path to the ffprobe binary the audio decoder spawns; empty uses the PATH lookup",

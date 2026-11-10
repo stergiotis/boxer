@@ -21,6 +21,7 @@ import (
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/env"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/passes"
+	"github.com/stergiotis/boxer/public/db/fairlead"
 	"github.com/stergiotis/boxer/public/keelson/data/passreg"
 	"github.com/stergiotis/boxer/public/keelson/runtime/adhocdata"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
@@ -719,6 +720,10 @@ func (inst *Client) fetchColumnNames(ctx context.Context, db string, table strin
 // harvest share: no dispatch, no rewrites — the pinned endpoint's own
 // catalog is what both ask about.
 func (inst *Client) queryTabSeparated(ctx context.Context, q string, params map[string]string) (raw []byte, err error) {
+	q, err = fairlead.Lead(ctx, fairlead.ExitServer, "play.catalog", q)
+	if err != nil {
+		return
+	}
 	reqURL := inst.URL()
 	qs := url.Values{}
 	for k, v := range params {

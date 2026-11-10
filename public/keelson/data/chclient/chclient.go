@@ -26,6 +26,7 @@ import (
 	"github.com/apache/arrow-go/v18/arrow/ipc"
 	"github.com/rs/zerolog/log"
 	"github.com/stergiotis/boxer/public/db/clickhouse/clickhouseenv"
+	"github.com/stergiotis/boxer/public/db/fairlead"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
@@ -33,6 +34,15 @@ import (
 // Config carries the connection URL + credentials. URL is the base HTTP
 // endpoint (e.g. "http://localhost:8123/"); operations append query
 // strings as needed.
+// The client's exit points (ADR-0367 §SD1): every statement it sends is led
+// through the fairlead under one of these names.
+const (
+	sitePost         = "chclient.post"
+	siteInsertArrow  = "chclient.insertArrow"
+	siteQueryStream  = "chclient.queryStream"
+	siteInsertStream = "chclient.insertStream"
+)
+
 type Config struct {
 	URL      string
 	User     string
@@ -276,7 +286,12 @@ func (inst *Client) InsertArrowSettings(ctx context.Context, table string, recor
 		err = eh.Errorf("chclient insertArrow: close writer: %w", err)
 		return
 	}
-	fullURL := withSettings(inst.queryURL("INSERT INTO "+table+" FORMAT Arrow"), settings)
+	var insertSQL string
+	insertSQL, err = fairlead.Lead(ctx, fairlead.ExitServer, siteInsertArrow, "INSERT INTO "+table+" FORMAT Arrow")
+	if err != nil {
+		return
+	}
+	fullURL := withSettings(inst.queryURL(insertSQL), settings)
 	var req *http.Request
 	req, err = http.NewRequestWithContext(ctx, http.MethodPost, fullURL, buf)
 	if err != nil {
@@ -359,6 +374,10 @@ func (inst *Client) doStream(req *http.Request) (resp *http.Response, err error)
 // the body, as ClickHouse's HTTP interface sends it; a consumer that parses
 // the stream sees it as corrupt data. Caller MUST close the body.
 func (inst *Client) QueryStream(ctx context.Context, sql string, opts StreamOptions) (body io.ReadCloser, contentEncoding string, err error) {
+	sql, err = fairlead.Lead(ctx, fairlead.ExitServer, siteQueryStream, sql)
+	if err != nil {
+		return
+	}
 	var req *http.Request
 	// The statement is the request body: a long one (a repair's leaf list)
 	// would otherwise ride the URL.
@@ -386,6 +405,10 @@ func (inst *Client) QueryStream(ctx context.Context, sql string, opts StreamOpti
 // QueryStream body straight into another's InsertStream, and the bytes are
 // never decoded (ADR-0259 §SD5).
 func (inst *Client) InsertStream(ctx context.Context, insertSQL string, body io.Reader, opts StreamOptions) (err error) {
+	insertSQL, err = fairlead.Lead(ctx, fairlead.ExitServer, siteInsertStream, insertSQL)
+	if err != nil {
+		return
+	}
 	var req *http.Request
 	req, err = http.NewRequestWithContext(ctx, http.MethodPost, inst.streamURL(insertSQL, opts, false), body)
 	if err != nil {
@@ -455,6 +478,10 @@ func withSettings(u string, settings map[string]string) string {
 }
 
 func (inst *Client) postSQL(ctx context.Context, sql string, params map[string]string, settings map[string]string) (body io.ReadCloser, err error) {
+	sql, err = fairlead.Lead(ctx, fairlead.ExitServer, sitePost, sql)
+	if err != nil {
+		return
+	}
 	reqURL := withSettings(inst.paramsURL(params), settings)
 	var req *http.Request
 	req, err = http.NewRequestWithContext(ctx, http.MethodPost, reqURL, strings.NewReader(sql))

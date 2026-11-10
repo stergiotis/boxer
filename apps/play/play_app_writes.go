@@ -9,6 +9,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/stergiotis/boxer/public/db/fairlead"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect"
 	"github.com/stergiotis/boxer/public/keelson/runtime/queryengine"
@@ -79,6 +80,10 @@ func (inst *Client) servesConfined(target string) (ok bool) {
 // body as the data (the ClickHouse HTTP convention for an insert), and
 // returns the response body.
 func (inst *Client) postStatement(ctx context.Context, endpoint string, sql string, body io.Reader) (raw []byte, err error) {
+	sql, err = fairlead.Lead(ctx, fairlead.ExitServer, "play.statement", sql)
+	if err != nil {
+		return
+	}
 	sep := "?"
 	if strings.Contains(endpoint, "?") {
 		sep = "&"

@@ -18,6 +18,7 @@ import (
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/ipc"
 	"github.com/apache/arrow-go/v18/arrow/memory"
+	"github.com/stergiotis/boxer/public/db/fairlead"
 	"github.com/stergiotis/boxer/public/extbin"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
@@ -52,6 +53,11 @@ func NewLocalExecutor(path string, alloc memory.Allocator) (inst *LocalExecutor,
 }
 
 func (inst *LocalExecutor) run(ctx context.Context, sql string, outputFormat string, stdin []byte) (stdout []byte, err error) {
+	// The executor's exit point (ADR-0367 §SD1).
+	sql, err = fairlead.Lead(ctx, fairlead.ExitLocal, "chexec.local", sql)
+	if err != nil {
+		return
+	}
 	args := []string{"--path", inst.path, "--multiquery"}
 	// The identity stamp (ADR-0295 §SD3) as a command-line setting; a
 	// statement's own SETTINGS log_comment still wins over it.

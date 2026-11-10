@@ -121,6 +121,7 @@ for the parts that have no such term. New house names belong in this table.
 | `watchbill` | the roster that assigns each hand a duty on each watch | durable work as job rows claimed by writing — `public/keelson/runtime/watchbill` ([ADR-0223](doc/adr/0223-watchbill-durable-work-on-facts.md)) |
 | `stevedore` | the hand who works the hatch, loading cargo and checking it against the manifest; what the cargo is, is the shipper's business | routing, failure and state handling around an ingestion processor a streaming framework drives — `public/streaming/stevedore` ([ADR-0252](doc/adr/0252-stevedore-routing-failure-and-state-handling-for-framework-driven-ingestion.md)) |
 | `jackstay` | the wire rigged between two ships under way, along which loads are hauled across | the guided sync of tables from one ClickHouse server to another — `public/db/clickhouse/jackstay` ([ADR-0259](doc/adr/0259-jackstay-guided-clickhouse-to-clickhouse-sync.md)) |
+| `fairlead` | the fitting a line is led through, so that it runs from one known place however it was made up on deck | the one opening every SQL statement passes on its way out of the process — `public/db/fairlead` ([ADR-0367](doc/adr/0367-sql-statements-leave-through-one-fairlead-and-each-is-placed-in-a-stratum.md)) |
 
 ### Glossary
 <dl>

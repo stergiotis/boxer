@@ -13,6 +13,7 @@ import (
 	"github.com/stergiotis/boxer/public/app/commands/datasource"
 	"github.com/stergiotis/boxer/public/app/commands/designsystem"
 	"github.com/stergiotis/boxer/public/app/commands/egui2gen"
+	fairleadcli "github.com/stergiotis/boxer/public/app/commands/fairlead"
 	"github.com/stergiotis/boxer/public/app/commands/findAnchor"
 	"github.com/stergiotis/boxer/public/app/commands/http"
 	"github.com/stergiotis/boxer/public/app/commands/iconsgen"
@@ -143,6 +144,7 @@ func mainC() (exitCode int) {
 			datacatalog.NewCliCommand(),
 			datasource.NewCliCommand(),
 			designsystem.NewCliCommand(),
+			fairleadcli.NewCliCommand(),
 			findAnchor.NewCliCommand(),
 			http.NewCliCommand(),
 			key.NewCliCommand(),

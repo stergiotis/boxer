@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/stergiotis/boxer/public/db/clickhouse/clickhouseenv"
+	"github.com/stergiotis/boxer/public/db/fairlead"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
@@ -47,6 +48,10 @@ func NewClientFromEnv() (inst *Client) {
 
 // QueryTSV runs sql and returns the TSV body, one row per line.
 func (inst *Client) QueryTSV(ctx context.Context, sql string) (rows []string, err error) {
+	sql, err = fairlead.Lead(ctx, fairlead.ExitServer, "loadstudy.query", sql)
+	if err != nil {
+		return
+	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, inst.Endpoint, strings.NewReader(sql))
 	if err != nil {
 		err = eb.Build().Str("endpoint", inst.Endpoint).Errorf("build request: %w", err)

@@ -41,6 +41,7 @@ import (
 	"time"
 
 	"github.com/rs/zerolog"
+	"github.com/stergiotis/boxer/public/db/fairlead"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/runid"
 	"github.com/stergiotis/boxer/public/keelson/runtime/runstream"
@@ -268,7 +269,12 @@ func pollSQL(ids []string) (sql string) {
 }
 
 func (inst *Poller) query(ctx context.Context, ids []string) (rows []processRow, err error) {
-	req, err := http.NewRequestWithContext(ctx, "POST", inst.endpoint, strings.NewReader(pollSQL(ids)))
+	// The poller's exit point (ADR-0367 §SD1).
+	sql, err := fairlead.Lead(ctx, fairlead.ExitServer, "queryprogress.poll", pollSQL(ids))
+	if err != nil {
+		return
+	}
+	req, err := http.NewRequestWithContext(ctx, "POST", inst.endpoint, strings.NewReader(sql))
 	if err != nil {
 		err = eh.Errorf("queryprogress: build request: %w", err)
 		return

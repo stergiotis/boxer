@@ -9,6 +9,7 @@ import (
 	"encoding/json/v2"
 
 	"github.com/rs/zerolog/log"
+	"github.com/stergiotis/boxer/public/db/fairlead"
 	"github.com/stergiotis/boxer/public/extbin"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
@@ -71,12 +72,16 @@ func newMineTrendsCommand() *cli.Command {
 				return eh.Errorf("unable to close flat-rows tempfile: %w", closeErr)
 			}
 
+			miningSQL, leadErr := fairlead.Lead(ctx, fairlead.ExitLocal, "commitdigest.trends", trendMiningSQL)
+			if leadErr != nil {
+				return leadErr
+			}
 			cmd, cmdErr := extbin.ClickHouseLocal.Command(ctx, extbin.Opts{Path: bin},
 				"--input-format=JSONEachRow",
 				"--structure="+FlatCommitChangeStructure,
 				"--file="+flatFile.Name(),
 				"--output_format_json_escape_forward_slashes=0",
-				"--query="+trendMiningSQL,
+				"--query="+miningSQL,
 			)
 			if cmdErr != nil {
 				return eb.Build().Str("binary", bin).Errorf("unable to build clickhouse local command: %w", cmdErr)

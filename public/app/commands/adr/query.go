@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/stergiotis/boxer/public/db/fairlead"
 	"github.com/stergiotis/boxer/public/extbin"
 	"github.com/stergiotis/boxer/public/gov/adrcorpus"
 	"github.com/stergiotis/boxer/public/keelson/data/chlocalpool"
@@ -127,7 +128,10 @@ func RunQuery(tables ArrowTables, query, format string, stdout io.Writer) (ok bo
 	if format == "" {
 		format = "PrettyCompact"
 	}
-	script := chTablePrelude(tables) + query
+	script, err := fairlead.Lead(context.Background(), fairlead.ExitLocal, "adr.query", chTablePrelude(tables)+query)
+	if err != nil {
+		return true, err
+	}
 	cmd, err := extbin.ClickHouseLocal.Command(context.Background(),
 		extbin.Opts{Path: bin, Dir: filepath.Dir(tables.Adr)},
 		"--multiquery", "--output-format", format)

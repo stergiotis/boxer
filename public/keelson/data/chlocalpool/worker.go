@@ -10,6 +10,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/stergiotis/boxer/public/db/fairlead"
 	"github.com/stergiotis/boxer/public/extbin"
 	"github.com/stergiotis/boxer/public/keelson/runtime/procpool"
 	"github.com/stergiotis/boxer/public/observability/eh"
@@ -136,6 +137,13 @@ func newWorker(ctx context.Context, cfg Config, release procpool.ReleaseFunc) (w
 // Idempotent: subsequent calls return the first error.
 func (inst *Worker) WriteSQL(sql string, format string) (err error) {
 	inst.submitOnce.Do(func() {
+		// The pool's exit point (ADR-0367 §SD1). A worker takes its statement
+		// without a context, so the passes run under the background one.
+		sql, leadErr := fairlead.Lead(context.Background(), fairlead.ExitLocal, "chlocalpool.worker", sql)
+		if leadErr != nil {
+			inst.submitErr = leadErr
+			return
+		}
 		var payload string
 		if format == "" {
 			payload = sql + ";\n"
