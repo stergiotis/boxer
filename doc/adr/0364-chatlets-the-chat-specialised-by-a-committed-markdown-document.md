@@ -246,6 +246,17 @@ Two drives of one model say nothing about how the settings do in general.
   scenario the ceiling and the grant dialog do not bound enough.
 - **Runtime-authored chatlets.** Trigger: a gate that can stand in for review.
 
+## Updates
+
+### 2026-11-10 — Embedded in another app's window
+
+A chatlet can also be drawn inside another app's window, as a sqlapplet can,
+with its capabilities on the host's manifest and its runs and storage under
+a composed identity:
+[ADR-0368](./0368-an-embedded-chat-a-chatlet-drawn-in-another-apps-window-under-the-hosts-governance.md)
+(proposed). Nothing above changes: the minted window is still one document's
+app.
+
 ## Status
 
 Accepted 2026-11-09.
