@@ -102,6 +102,13 @@ var mutatingLeadingTokens = map[int]struct{}{
 // Total: no input errors, and no input is rejected.
 func ClassifyStatementKind(sql string) (kind KindE) {
 	pr, err := nanopass.Parse(sql)
+	kind = statementKind(sql, pr, err)
+	return
+}
+
+// statementKind is [ClassifyStatementKind] over a parse the caller already
+// made, so a caller asking several questions of one statement parses once.
+func statementKind(sql string, pr *nanopass.ParseResult, err error) (kind KindE) {
 	if err == nil {
 		if pr.InsertStmt() != nil {
 			kind = KindMutating
