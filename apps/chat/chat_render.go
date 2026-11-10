@@ -129,6 +129,10 @@ func (inst *App) render() {
 	inst.storeTitle()
 	inst.publishTurn()
 	inst.syncRoster()
+	if inst.compact() {
+		inst.renderCompact()
+		return
+	}
 	for range c.PanelTopInside(inst.ids.PrepareStr("bar")).Resizable(false).KeepIter() {
 		inst.renderBar()
 	}
@@ -614,7 +618,10 @@ func (inst *App) renderComposer() {
 				b = b.HighlightJob(inst.hlJob)
 			}
 			inst.draftId = b.Id()
-			b.SendRespVal(&inst.draft)
+			flags := b.SendRespVal(&inst.draft)
+			if inst.embed != nil {
+				inst.embed.draftFocused = flags.HasFocus()
+			}
 		}
 	}
 	if cancel {

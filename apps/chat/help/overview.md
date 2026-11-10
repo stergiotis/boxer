@@ -111,6 +111,16 @@ The plain chat can look the same way: **Simple view** in Settings folds its
 bar, brings **Artefact** forward and counts steps, and is remembered for the
 next window.
 
+## A chat inside another app
+
+Another app can draw a chatlet inside its own window (ADR-0368). The pane
+works as a chatlet's window does, and the access dialog names the app it sits
+in. Its conversations are listed in its own Conversations tab, not in the
+chat's or the chatlet's. A narrow pane shows the transcript and the composer,
+with a row above them naming the other tabs: a click shows one in their
+place, and **Chat** brings the transcript back. In a window with two panes,
+Ctrl+Enter sends only from the composer you are typing in.
+
 ## The turn, the journal, and Keep
 
 A **turn** is one message you send and all that answering it takes: with

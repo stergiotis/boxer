@@ -57,11 +57,13 @@ func (inst *App) listRuns() {
 	if store == nil {
 		return
 	}
+	owner, pane := inst.owner(), inst.paneKey()
 	inst.runsJob.Start(inst.tasks, bgjob.Spec{Kind: "chat-runs", Title: "conversations"}, func(ctx context.Context) (runs *[]agentrun.Run, err error) {
-		got, err := store.ListRuns(ctx, inst.owner(), runsListLimit)
+		got, err := store.ListRuns(ctx, owner, runsListLimit)
 		if err != nil {
 			return
 		}
+		got = ownRuns(got, pane)
 		sort.SliceStable(got, func(i, j int) bool { return got[i].Created.After(got[j].Created) })
 		return &got, nil
 	})
@@ -97,6 +99,7 @@ func (inst *App) resumeRun(id string) {
 	}
 	fingerprint := runFingerprint(profileNow().Fingerprint(), inst.confinedTier, inst.preset.digest())
 	storage := inst.storage
+	owner, pane := inst.owner(), inst.paneKey()
 	retiring := inst.retiring[id]
 	delete(inst.retiring, id)
 	inst.resumeJob.Start(inst.tasks, bgjob.Spec{Kind: "chat-resume", Title: "resume"}, func(ctx context.Context) (r *resumed, err error) {
@@ -108,11 +111,11 @@ func (inst *App) resumeRun(id string) {
 				return nil, eb.Build().Str("conversation", id).Errorf("the run is still being closed; resume it again in a moment")
 			}
 		}
-		of, found, err := agentrun.RunOfConversation(ctx, store, inst.owner(), id)
+		of, found, err := agentrun.RunOfConversation(ctx, store, owner, id)
 		if err != nil {
 			return
 		}
-		if !found {
+		if !found || runPane(of) != pane {
 			return nil, eb.Build().Str("conversation", id).Errorf("no run of the conversation")
 		}
 		w, err := agentrun.Reopen(ctx, store, of.Id)
@@ -374,7 +377,7 @@ func (inst *App) deleteRun(id string) {
 			if ferr != nil {
 				return "", ferr
 			}
-			if !found {
+			if !found || runPane(of) != inst.paneKey() {
 				return "", eb.Build().Str("conversation", id).Errorf("no run of the conversation")
 			}
 			if w, err = agentrun.Reopen(ctx, store, of.Id); err != nil {

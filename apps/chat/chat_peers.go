@@ -45,13 +45,13 @@ func (inst *App) publishTurn() {
 		return
 	}
 	inst.published = p
-	peerTurns.Store(strconv.FormatUint(inst.window, 10), p)
+	peerTurns.Store(peerKeyOf(strconv.FormatUint(inst.window, 10), inst.paneKey()), p)
 }
 
 // unpublishTurn drops this window's line.
 func (inst *App) unpublishTurn() {
 	if inst.window != 0 {
-		peerTurns.Delete(strconv.FormatUint(inst.window, 10))
+		peerTurns.Delete(peerKeyOf(strconv.FormatUint(inst.window, 10), inst.paneKey()))
 	}
 }
 

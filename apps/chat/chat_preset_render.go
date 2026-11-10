@@ -111,9 +111,12 @@ const tipDetails = "The conversation's id, what the model may do, its context an
 // rather than a collapsing header, which would take a row of its own in the
 // bar it exists to shorten.
 func (inst *App) renderSimpleBar() {
-	for range c.HorizontalTop().KeepIter() {
+	// A compact pane gives the title a row of its own: wrapped beside the
+	// buttons, a long one would push Details out of the row.
+	titleOwnRow := inst.compact()
+	for range inst.barRow() {
 		inst.renderNewButton()
-		if inst.conv.started {
+		if inst.conv.started && !titleOwnRow {
 			inst.renderTitleText()
 		}
 		caret := icons.PhCaretRight
@@ -126,9 +129,15 @@ func (inst *App) renderSimpleBar() {
 			}
 		}
 	}
+	if titleOwnRow && inst.conv.started {
+		for range c.HorizontalTop().KeepIter() {
+			inst.renderTitleText()
+		}
+	}
 	if !inst.detailsOpen {
 		return
 	}
+	// Not wrapped: the turn chip in a wrapped row takes a tall line.
 	for range c.HorizontalTop().KeepIter() {
 		inst.renderScale()
 		inst.renderTurnState()

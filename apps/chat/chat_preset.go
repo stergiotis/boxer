@@ -270,6 +270,10 @@ func destinationOfURL(raw string) string {
 
 // owner is the app this window's runs belong to.
 func (inst *App) owner() string {
+	if inst.embed != nil {
+		// The host is the app the bus and the run journal know.
+		return string(inst.embed.host)
+	}
 	if inst.preset != nil {
 		return string(inst.preset.Manifest.Id)
 	}

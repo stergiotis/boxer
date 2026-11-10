@@ -240,6 +240,10 @@ type App struct {
 	// externalEdit is the draft handed to the host's editor app
 	// (externaledit).
 	externalEdit externaledit.Editing
+
+	// embed is the pane's side of a chat drawn in another app's window
+	// (chat_embed.go); nil for a window of its own.
+	embed *embedding
 }
 
 // pendingTurn is a turn in flight.
@@ -354,6 +358,10 @@ func (inst *App) Frame(ctx app.FrameContextI) (err error) {
 	inst.focused = true
 	if f, ok := ctx.(app.WindowFocusI); ok {
 		inst.focused = f.WindowFocused()
+	}
+	if inst.embed != nil {
+		// The host's window may hold another composer.
+		inst.focused = inst.focused && inst.embed.draftFocused
 	}
 	inst.drain()
 	inst.render()
@@ -557,7 +565,7 @@ func (inst *App) newCoordinator(conversation string) (coord *coordinator) {
 	}
 	coord.window = strconv.FormatUint(inst.window, 10)
 	coord.confinedTier = inst.confinedTier
-	coord.owner, coord.preset = inst.owner(), inst.preset
+	coord.owner, coord.preset, coord.pane = inst.owner(), inst.preset, inst.paneKey()
 	if inst.anchors != nil {
 		coord.anchors = inst.anchors
 	} else if inst.coord != nil {

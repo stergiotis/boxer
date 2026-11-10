@@ -117,6 +117,8 @@ type coordinator struct {
 	// plain chat; preset is the scenario whose section it carries.
 	owner  string
 	preset *Preset
+	// pane is the embedded chat's key, kept on the run row (chat_embed.go).
+	pane string
 
 	// opTools offers each operation of the task's windows as a typed tool;
 	// ceiling is the most the person's settings let the model do (ADR-0280),

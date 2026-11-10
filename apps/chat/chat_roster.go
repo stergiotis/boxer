@@ -201,14 +201,16 @@ const rosterRefresh = 3 * time.Second
 // listRoster reads the windows, the grants and the titles, off the frame.
 func (inst *App) listRoster() {
 	kq, storage, store, bus := inst.kq, inst.storage, inst.journalStore(), inst.bus
+	owner, pane := inst.owner(), inst.paneKey()
 	inst.rosterAt = time.Now()
 	// Not a task: it re-runs every rosterRefresh (see App.tasks).
 	inst.rosterJob.Start(nil, bgjob.Spec{Kind: "chat-roster", Title: "the roster"}, func(ctx context.Context) (out *rosterExtra, err error) {
 		var runs []agentrun.Run
 		if store != nil {
-			if runs, err = store.ListRuns(ctx, inst.owner(), runsListLimit); err != nil {
+			if runs, err = store.ListRuns(ctx, owner, runsListLimit); err != nil {
 				return
 			}
+			runs = ownRuns(runs, pane)
 		}
 		x := rosterExtra{titles: make(map[string]string, len(runs)), runs: runs, at: time.Now()}
 		if kq != nil {
@@ -335,7 +337,7 @@ func (inst *App) rosterStatus(row *rosterRow) (line string, level attention.Leve
 		line, level = inst.turnLine()
 		return "this window · " + line, level
 	case row.group == rosterLive:
-		if p, ok := peerTurnOf(row.window, row.run.Conversation); ok {
+		if p, ok := peerTurnOf(peerKeyOf(row.window, inst.paneKey()), row.run.Conversation); ok {
 			level = p.level
 			if row.notice != nil {
 				level = max(level, row.notice.Level)
@@ -450,7 +452,7 @@ func (inst *App) rosterTainted(row *rosterRow) bool {
 		_, tainted, _ := inst.coord.stateOrNone()
 		return tainted
 	case row.group == rosterLive:
-		p, ok := peerTurnOf(row.window, row.run.Conversation)
+		p, ok := peerTurnOf(peerKeyOf(row.window, inst.paneKey()), row.run.Conversation)
 		return ok && p.tainted
 	}
 	return false

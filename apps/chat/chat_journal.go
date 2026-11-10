@@ -90,6 +90,9 @@ type journalSettings struct {
 	Pixels         string `json:"pixels,omitempty"`
 	PixelsLocal    bool   `json:"pixels_local,omitempty"`
 	OperationTools bool   `json:"operation_tools,omitempty"`
+	// Pane is the key of the embedded chat that wrote the run (ADR-0368,
+	// proposed): its host lists every run it owns, and each pane its own.
+	Pane string `json:"pane,omitempty"`
 }
 
 // openJournal opens the run on the first act of a conversation: the run
@@ -121,7 +124,7 @@ func (inst *coordinator) openJournal(ctx context.Context, keep bool) (w *agentru
 	}
 	p := profileNow()
 	settings, _ := json.Marshal(journalSettings{Keep: keep, Apps: apps, Questions: questions, Artefact: art, Ceiling: ceiling.Level().String(), CeilingSpec: &ceiling,
-		Rounds: clampRounds(rounds), Pixels: pixelsNameOf(pix.chosen), PixelsLocal: pix.localOnly, OperationTools: opTools})
+		Rounds: clampRounds(rounds), Pixels: pixelsNameOf(pix.chosen), PixelsLocal: pix.localOnly, OperationTools: opTools, Pane: inst.pane})
 	w, err = agentrun.Open(ctx, store, agentrun.Run{Conversation: inst.conversation, OwnerApp: inst.ownerApp(),
 		Coordinator: inst.window, Profile: p.Id, Fingerprint: runFingerprint(p.Fingerprint(), inst.confinedTier, inst.preset.digest()), Settings: string(settings)})
 	if err != nil {

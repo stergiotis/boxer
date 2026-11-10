@@ -102,20 +102,7 @@ func (inst *App) renderDock() {
 		// The transcript and the composer scroll themselves.
 		for range dock.TabNoScroll(uint64(tabTranscript), tabTranscript.title()) {
 			inst.markTabShown(tabTranscript)
-			switch {
-			case len(inst.conv.entries) != 0 || inst.pending != nil:
-				inst.renderTranscript()
-			case inst.preset != nil:
-				// A preset's empty state can be taller than the tab, and its
-				// last lines say where the conversation goes.
-				for range c.PushId(inst.ids.PrepareStr("preset-empty")).KeepIter() {
-					for range c.ScrollArea().Vscroll(true).Hscroll(false).KeepIter() {
-						inst.renderEmpty()
-					}
-				}
-			default:
-				inst.renderEmpty()
-			}
+			inst.renderTranscriptBody()
 		}
 		for range dock.TabNoScroll(uint64(tabComposer), tabComposer.title()) {
 			inst.markTabShown(tabComposer)
@@ -123,11 +110,7 @@ func (inst *App) renderDock() {
 		}
 		// The tabs carry what the bar's buttons used to: a highlight in
 		// another conversation, a change of the artefact waiting.
-		convTitle := tabConversations.title()
-		if n := len(inst.roster.notices); n > 0 {
-			convTitle += " · " + icons.PhStar + " " + strconv.Itoa(n)
-		}
-		for range dock.Tab(uint64(tabConversations), convTitle) {
+		for range dock.Tab(uint64(tabConversations), inst.conversationsTitle()) {
 			inst.markTabShown(tabConversations)
 			inst.renderRunsTab()
 		}
@@ -148,13 +131,46 @@ func (inst *App) renderDock() {
 				inst.renderDefinitionTab()
 			}
 		}
-		title := tabArtefact.title()
-		if inst.artefactOn() && (inst.conv.art.pending() != nil || inst.coord.pixelAskNow() != nil) {
-			title += " · waiting"
-		}
-		for range dock.TabNoScroll(uint64(tabArtefact), title) {
+		for range dock.TabNoScroll(uint64(tabArtefact), inst.artefactTitle()) {
 			inst.markTabShown(tabArtefact)
 			inst.renderArtefactTab()
 		}
 	}
+}
+
+// renderTranscriptBody is the transcript, or the empty state before the
+// first message.
+func (inst *App) renderTranscriptBody() {
+	switch {
+	case len(inst.conv.entries) != 0 || inst.pending != nil:
+		inst.renderTranscript()
+	case inst.preset != nil:
+		// A preset's empty state can be taller than the tab, and its
+		// last lines say where the conversation goes.
+		for range c.PushId(inst.ids.PrepareStr("preset-empty")).KeepIter() {
+			for range c.ScrollArea().Vscroll(true).Hscroll(false).KeepIter() {
+				inst.renderEmpty()
+			}
+		}
+	default:
+		inst.renderEmpty()
+	}
+}
+
+// conversationsTitle carries a highlight in another conversation.
+func (inst *App) conversationsTitle() (title string) {
+	title = tabConversations.title()
+	if n := len(inst.roster.notices); n > 0 {
+		title += " · " + icons.PhStar + " " + strconv.Itoa(n)
+	}
+	return
+}
+
+// artefactTitle carries a change of the artefact waiting.
+func (inst *App) artefactTitle() (title string) {
+	title = tabArtefact.title()
+	if inst.artefactOn() && (inst.conv.art.pending() != nil || inst.coord.pixelAskNow() != nil) {
+		title += " · waiting"
+	}
+	return
 }

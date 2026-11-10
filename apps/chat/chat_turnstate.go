@@ -244,7 +244,7 @@ func (inst *App) renderTurnState() {
 	}
 	inst.turnChip.Opts.Provenance = inspector.Provenance{
 		Subject:   "app.chat.turn.state",
-		SourceApp: inst.owner(),
+		SourceApp: inst.identity(),
 	}
 	inst.turnChip.Render()
 }
