@@ -24,13 +24,17 @@ import (
 // ReportRow counts the distinct statements of one exit point that share a
 // classification.
 type ReportRow struct {
-	Site       string
-	Exit       string
-	Parsed     bool
-	Kind       analysis.KindE
-	Security   analysis.QuerySecurityClassE
-	Stratum    analysis.QueryStratumE
+	Site     string
+	Exit     string
+	Parsed   bool
+	Kind     analysis.KindE
+	Security analysis.QuerySecurityClassE
+	Stratum  analysis.QueryStratumE
+	// Statements counts distinct texts; Shapes counts them after
+	// [analysis.StatementShape] has folded the ones that differ only in a
+	// literal.
 	Statements int64
+	Shapes     int64
 }
 
 type reportKey struct {
@@ -46,15 +50,17 @@ type reportKey struct {
 // file's contribution and is reported in torn; any other read failure is an
 // error.
 type Report struct {
-	seen map[fairlead.JournalEntry]struct{}
-	rows map[reportKey]int64
-	torn int32
+	seen   map[fairlead.JournalEntry]struct{}
+	rows   map[reportKey]int64
+	shapes map[reportKey]map[string]struct{}
+	torn   int32
 }
 
 func NewReport() (inst *Report) {
 	inst = &Report{
-		seen: make(map[fairlead.JournalEntry]struct{}, 1024),
-		rows: make(map[reportKey]int64, 64),
+		seen:   make(map[fairlead.JournalEntry]struct{}, 1024),
+		rows:   make(map[reportKey]int64, 64),
+		shapes: make(map[reportKey]map[string]struct{}, 64),
 	}
 	return
 }
@@ -71,7 +77,14 @@ func (inst *Report) Add(r io.Reader) {
 		}
 		inst.seen[e] = struct{}{}
 		c := analysis.Classify(e.SQL, "")
-		inst.rows[reportKey{e.Site, e.Exit, c.Parsed, c.Kind, c.Security, c.Stratum}]++
+		key := reportKey{e.Site, e.Exit, c.Parsed, c.Kind, c.Security, c.Stratum}
+		inst.rows[key]++
+		set := inst.shapes[key]
+		if set == nil {
+			set = make(map[string]struct{}, 8)
+			inst.shapes[key] = set
+		}
+		set[analysis.StatementShape(e.SQL)] = struct{}{}
 	}
 }
 
@@ -80,7 +93,7 @@ func (inst *Report) Add(r io.Reader) {
 func (inst *Report) Rows() (rows []ReportRow) {
 	rows = make([]ReportRow, 0, len(inst.rows))
 	for k, n := range inst.rows {
-		rows = append(rows, ReportRow{k.site, k.exit, k.parsed, k.kind, k.security, k.stratum, n})
+		rows = append(rows, ReportRow{k.site, k.exit, k.parsed, k.kind, k.security, k.stratum, n, int64(len(inst.shapes[k]))})
 	}
 	slices.SortFunc(rows, func(a, b ReportRow) int {
 		return cmp.Or(
@@ -101,9 +114,9 @@ func (inst *Report) Torn() (n int32) {
 
 func writeRows(w io.Writer, rows []ReportRow) (err error) {
 	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
-	_, _ = fmt.Fprintln(tw, "site\texit\tparsed\tkind\tsecurity\tstratum\tstatements")
+	_, _ = fmt.Fprintln(tw, "site\texit\tparsed\tkind\tsecurity\tstratum\tstatements\tshapes")
 	for _, r := range rows {
-		_, _ = fmt.Fprintf(tw, "%s\t%s\t%t\t%s\t%s\t%s\t%d\n", r.Site, r.Exit, r.Parsed, r.Kind, r.Security, r.Stratum, r.Statements)
+		_, _ = fmt.Fprintf(tw, "%s\t%s\t%t\t%s\t%s\t%s\t%d\t%d\n", r.Site, r.Exit, r.Parsed, r.Kind, r.Security, r.Stratum, r.Statements, r.Shapes)
 	}
 	err = tw.Flush()
 	return

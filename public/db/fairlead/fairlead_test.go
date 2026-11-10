@@ -12,7 +12,18 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// isolate empties the installed passes for one test and puts them back, so a
+// run with [JournalDir] set, whose journal installs itself on the first
+// statement, tests the same thing as a run without.
+func isolate(t *testing.T) {
+	t.Helper()
+	envOnce.Do(installFromEnv)
+	saved := installed.Swap(nil)
+	t.Cleanup(func() { installed.Store(saved) })
+}
+
 func TestLeadWithNothingInstalledIsTheIdentity(t *testing.T) {
+	isolate(t)
 	ctx := context.Background()
 	const sql = "SELECT 1"
 	out, err := Lead(ctx, ExitServer, "test.site", sql)
@@ -25,6 +36,7 @@ func TestLeadWithNothingInstalledIsTheIdentity(t *testing.T) {
 }
 
 func TestPassesRunInInstallOrderAndSeeEachOthersText(t *testing.T) {
+	isolate(t)
 	removeA := Install(PassFunc(func(_ context.Context, st Statement) (string, error) {
 		return st.SQL + " /*a*/", nil
 	}))
@@ -55,6 +67,7 @@ func TestPassesRunInInstallOrderAndSeeEachOthersText(t *testing.T) {
 }
 
 func TestARefusalStopsTheStatement(t *testing.T) {
+	isolate(t)
 	refusal := errors.New("not here")
 	remove := Install(PassFunc(func(context.Context, Statement) (string, error) {
 		return "", refusal
@@ -136,6 +149,7 @@ func TestReadJournalStopsAtATornLine(t *testing.T) {
 }
 
 func TestJournalInADirectory(t *testing.T) {
+	isolate(t)
 	dir := filepath.Join(t.TempDir(), "journal")
 	remove, err := installJournalIn(dir)
 	require.NoError(t, err)
