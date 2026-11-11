@@ -466,6 +466,24 @@ func TestKeepIsFixedAtTheFirstSendAndNewConversationStartsOver(t *testing.T) {
 	assert.False(t, inst.startTurn("   "), "a blank draft is not sent")
 }
 
+// A read-only conversation refuses a send with a failure on the status
+// line; New conversation, the way out it names, clears it.
+func TestNewConversationClearsTheReadOnlyNote(t *testing.T) {
+	inst := appOn(t, &fakeModel{})
+	inst.conv.stranded = true
+	require.False(t, inst.startTurn("q1"))
+	s, ok := inst.noteShown()
+	require.True(t, ok)
+	require.True(t, s.failed)
+	require.Contains(t, s.text, "read-only")
+
+	inst.newConversation()
+	_, ok = inst.noteShown()
+	assert.False(t, ok, "the warning about the conversation left behind is gone")
+	assert.True(t, inst.startTurn("q1"), "the new conversation takes a send")
+	drainUntil(t, inst)
+}
+
 // The badge says what the host did.
 func TestKeepBadge(t *testing.T) {
 	conv := keeping()

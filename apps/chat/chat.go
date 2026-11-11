@@ -578,12 +578,15 @@ func (inst *App) newCoordinator(conversation string) (coord *coordinator) {
 }
 
 // newConversation stops a turn in flight — Invalidate cancels it and drops
-// its answer — and starts over.
+// its answer — and starts over. The status line spoke of the conversation
+// left behind, so it goes too: a failure there stays until dismissed, and
+// the read-only one names this very gesture as its way out.
 func (inst *App) newConversation() {
 	inst.turn.Invalidate()
 	inst.titleJob.Invalidate()
 	inst.pending = nil
 	inst.renaming = false
+	inst.note = status{}
 	if inst.coord != nil {
 		if h := inst.coord.handle(); h != "" {
 			// A task belongs to one conversation (ADR-0269 §SD6).
