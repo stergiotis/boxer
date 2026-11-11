@@ -302,6 +302,16 @@ of `EnsureReadSurface` ran against no server here — the one at hand already
 carried the revision — so it is covered only by the surface package's own
 install tests.
 
+### 2026-11-11 — `SetupStatements` carries the surface too
+
+The entry above left `SetupStatements` installing nothing, which made the
+one caller that runs setup through its own client the exception to
+"mandatory". It now returns the table DDL followed by the whole surface —
+function families, marker, views. `ComposeSetupSQL` stays the table script.
+What the statement list cannot do is what needs a connection: it replaces
+the surface whether or not the server is at the revision, and it neither
+probes for collisions, drops retired names nor creates dependent views.
+
 ## References
 
 - [ADR-0117](0117-passthrough-table-classifier.md) — passthrough tables.

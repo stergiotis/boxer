@@ -173,13 +173,15 @@ func (inst *Store) Ping(ctx context.Context) (err error) {
 // clause rather than imposed here, since it deletes data.
 const defaultEngineClause = "MergeTree() ORDER BY `ts:ts:z64:47::0:`"
 
-// ComposeSetupSQL returns the exact DDL script SetupTable applies for cfg:
+// ComposeSetupSQL returns the exact table DDL script SetupTable applies for cfg:
 // the CREATE DATABASE + CREATE TABLE statements (separated by ';'), composed
 // with no database connection and no side effects. An empty engineClause
 // selects defaultEngineClause — the first-run default. SetupTable is defined
 // in terms of this function, so a caller that only wants the SQL (the
 // `keelsonddl` CLI) emits byte-for-byte what first-run initialisation
-// executes, with no risk of drift.
+// executes for the table, with no risk of drift. The read surface is not in
+// it: SetupStatements carries both, and `leeway sqlsurface print` is the
+// surface as a script.
 //
 // The columns are referenced by their leeway-encoded physical names (e.g.
 // "id:id:u64:47::0:") since the table has no logical aliases.
@@ -224,7 +226,7 @@ func ComposeSetupSQL(cfg Config, engineClause string) (sql string, err error) {
 // re-creating the table if the trail is expendable.
 func (inst *Store) SetupTable(ctx context.Context, engineClause string) (err error) {
 	var stmts []string
-	stmts, err = SetupStatements(inst.cfg, engineClause)
+	stmts, err = tableStatements(inst.cfg, engineClause)
 	if err != nil {
 		return
 	}
@@ -265,10 +267,30 @@ func (inst *Store) EnsureReadSurface(ctx context.Context) (err error) {
 	return
 }
 
-// SetupStatements is ComposeSetupSQL split into the statements SetupTable
-// executes one by one, for a caller that runs them through its own client
-// (queryrunsvc, which tags every query it sends).
+// SetupStatements is the whole of setup as statements, for a caller that
+// runs them one by one through its own client (queryrunsvc, which tags every
+// query it sends): the table DDL of ComposeSetupSQL, then leeway's SQL read
+// surface — its function families, the revision marker, and the views — in
+// the order [lwsqlsurface.AllStatements] gives, which is dependency order.
+// A server these ran on can be written and read (ADR-0367, update of
+// 2026-11-11).
+//
+// It is what SetupTable does without the checks a connection allows: every
+// surface statement is a CREATE OR REPLACE and runs whether or not the
+// server already carries the revision, and nothing probes for a name
+// collision, drops a retired spelling or creates a dependent view.
+// [lwsqlsurface.Install] does those; a host boot runs it.
 func SetupStatements(cfg Config, engineClause string) (stmts []string, err error) {
+	stmts, err = tableStatements(cfg, engineClause)
+	if err != nil {
+		return
+	}
+	stmts = append(stmts, lwsqlsurface.AllStatements("")...)
+	return
+}
+
+// tableStatements is ComposeSetupSQL split into statements.
+func tableStatements(cfg Config, engineClause string) (stmts []string, err error) {
 	ddl, err := ComposeSetupSQL(cfg, engineClause)
 	if err != nil {
 		return

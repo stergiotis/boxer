@@ -27,8 +27,9 @@ import (
 // the resolved pull URL. It is also callable on its own for a
 // dry-run-style setup against a scratch database.
 func (s *Service) Reconcile(ctx context.Context) (err error) {
-	// chstore's own DDL, run through this service's client so it carries
-	// the reconcile tag like everything else the service sends.
+	// chstore's own setup — the table and the read surface its reads need —
+	// run through this service's client so it carries the reconcile tag like
+	// everything else the service sends.
 	stmts, err := chstore.SetupStatements(chstore.Config{Database: s.cfg.Database, Table: s.cfg.Table}, "")
 	if err != nil {
 		err = eh.Errorf("queryrunsvc: reconcile: %w", err)
@@ -37,7 +38,7 @@ func (s *Service) Reconcile(ctx context.Context) (err error) {
 	for _, stmt := range stmts {
 		err = s.cli.Exec(ctx, stmt)
 		if err != nil {
-			err = eh.Errorf("queryrunsvc: reconcile: facts ddl: %w", err)
+			err = eh.Errorf("queryrunsvc: reconcile: facts setup: %w", err)
 			return
 		}
 	}

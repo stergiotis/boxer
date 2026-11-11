@@ -9,6 +9,7 @@ import (
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsschema/factsread"
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsstore"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/lwsqlsurface"
 )
 
 // authoredReads is every read this store composes, with every optional
@@ -54,6 +55,29 @@ func TestPrepare_KeepsByAuthoredTextAndAppendsTheFormat(t *testing.T) {
 	require.True(t, strings.HasSuffix(a, "\nFORMAT TabSeparated"))
 	require.True(t, strings.HasSuffix(b, "\nFORMAT JSONEachRow"))
 	require.Equal(t, strings.TrimSuffix(a, "TabSeparated"), strings.TrimSuffix(b, "JSONEachRow"))
+}
+
+// TestSetupStatements_CarryTheTableAndTheReadSurface: a caller that runs
+// them through its own client ends with a server the reads work on.
+func TestSetupStatements_CarryTheTableAndTheReadSurface(t *testing.T) {
+	stmts, err := SetupStatements(Config{Database: "boxer", Table: "facts"}, "")
+	require.NoError(t, err)
+	table, err := tableStatements(Config{Database: "boxer", Table: "facts"}, "")
+	require.NoError(t, err)
+	require.Equal(t, table, stmts[:len(table)], "the table comes first")
+	surface := lwsqlsurface.AllStatements("")
+	require.Equal(t, surface, stmts[len(table):])
+	require.Contains(t, stmts, lwsqlsurface.MarkerStatement())
+	all := strings.Join(stmts, "\n")
+	for name := range authoredReads() {
+		out, err := factsread.Prepare(authoredReads()[name], "boxer.facts")
+		require.NoError(t, err)
+		for _, fn := range []string{"LW_VALUE_BY_TAG_EQUAL", "LW_LIST_BY_TAG_EQUAL", "LW_RAGGED_PARENT_IDS", "LW_CO_GATHER", "LW_RAGGED_ELEM"} {
+			if strings.Contains(out, fn+"(") {
+				require.Contains(t, all, fn, "%s calls %s, which setup does not create", name, fn)
+			}
+		}
+	}
 }
 
 // BenchmarkPrepareLogRows is the expansion of the largest read, uncached:
