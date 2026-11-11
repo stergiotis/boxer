@@ -145,21 +145,22 @@ func (inst tsBandKindE) String() (name string) {
 // letting a lane spin.
 const tsProfileMaxLen int32 = 500_000
 
-// The change point ceilings (ADR-0163 Update 2026-11-11), each measured on the
-// case that is slowest for its method rather than a typical one.
+// The change point ceilings (ADR-0163 Update 2026-11-11).
 //
 // PELT is linear while changes keep being found and quadratic over a stretch
-// with none, which is also the most ordinary input there is. The ceilings are
-// where that worst case stays a wait of a few seconds; the mean-and-variance
-// cost takes a logarithm per candidate and reaches it sooner. The penalty
-// path runs PELT some tens of times. The remaining methods are linear, the
-// run-length posterior with a constant that grows with the expected run.
+// with none, which is also the most ordinary input there is. Its ceilings are
+// where that case took a few seconds when they were set (2026-11-11: 3.4 s
+// for 50,000 samples of noise under the mean cost, and for 25,000 under the
+// mean-and-variance cost, which takes a logarithm per candidate). The penalty
+// path runs PELT some tens of times. The run-length posterior costs samples
+// times tsBocpdMaxRun, about 5 s at its ceiling on the same day. Binary
+// segmentation and MOSUM take the smoother's ceiling.
 const (
 	tsPeltMaxLen        int32 = 50_000
 	tsPeltMeanVarMaxLen int32 = 25_000
 	tsPeltPathMaxLen    int32 = 10_000
-	tsBocpdMaxLen       int32 = 200_000
-	tsChangeLinearMax   int32 = 5_000_000
+	tsBocpdMaxLen       int32 = 100_000
+	tsChangeLongMax     int32 = tsSmoothMaxLen
 )
 
 // tsSegmentOut is the output every segmentation shares: the Timeline band
@@ -245,28 +246,29 @@ var tsFuncs = []tsFuncSpec{
 	{
 		Name: "tsPeltMean", Args: tsSegmentArgs(), Out: tsSegmentOut(),
 		Causal: false, MaxLen: tsPeltMaxLen, Shipped: true, Bands: tsBandSegment,
-		Doc: "segments between shifts in LEVEL, by PELT: the exact optimum of a penalised Gaussian mean cost, with the noise scale estimated from the first differences." + tsDocSegmentTail,
+		Doc: "segments between shifts in level, by PELT (exact optimum of a penalised mean cost). Two-sided. Assumes independent noise: trends and autocorrelation come back as changes. `penalty` is in multiples of BIC; check the count with tsPeltMeanPath.",
 	},
 	{
 		Name: "tsPeltMeanVar", Args: tsSegmentArgs(), Out: tsSegmentOut(),
 		Causal: false, MaxLen: tsPeltMeanVarMaxLen, Shipped: true, Bands: tsBandSegment,
-		Doc: "segments between shifts in level OR spread, by PELT with a Gaussian mean-and-variance cost. Give `minSegment` room (tens of samples): a variance fitted to a handful of samples that happen to agree looks like a regime." + tsDocSegmentTail,
+		Doc: "segments between shifts in level or spread, by PELT with a mean-and-variance cost; give minSegment tens of samples. Two-sided. Assumes independent noise: trends and autocorrelation come back as changes. `penalty` is in multiples of BIC; check the count with tsPeltMeanPath.",
 	},
 	{
 		Name: "tsPeltRank", Args: tsSegmentArgs(), Out: tsSegmentOut(),
 		Causal: false, MaxLen: tsPeltMaxLen, Shipped: true, Bands: tsBandSegment,
-		Doc: "segments between shifts in LOCATION, by PELT on the ranks of the values: outliers and skew do not move it, and a change in spread around an unchanged median is invisible to it. `level` and `spread` describe each segment; they are not what was fitted." + tsDocSegmentTail,
+		Doc: "segments between shifts in location, by PELT on ranks: unmoved by outliers, blind to a change in spread alone. Two-sided. Assumes independent noise: trends and autocorrelation come back as changes. `penalty` is in multiples of BIC; check the count with tsPeltMeanPath.",
 	},
 	{
 		Name: "tsBinSegMean", Args: tsSegmentArgs(), Out: tsSegmentOut(),
-		Causal: false, MaxLen: tsChangeLinearMax, Shipped: true, Bands: tsBandSegment,
-		Doc: "segments between shifts in level, by binary segmentation: greedy and approximate where `tsPeltMean` is exact, so a short excursion can hide between two splits — and fast on series PELT refuses." + tsDocSegmentTail,
+		Causal: false, MaxLen: tsChangeLongMax, Shipped: true, Bands: tsBandSegment,
+		Doc: "segments between shifts in level, by binary segmentation: greedy, can miss a short excursion, takes long series. Two-sided. Assumes independent noise: trends and autocorrelation come back as changes. `penalty` is in multiples of BIC; check the count with tsPeltMeanPath.",
 	},
 	{
 		Name: "tsPeltMeanPath",
 		Args: []tsArgSpec{{"t", tsArgColumn}, {"v", tsArgColumn}, {"minSegment", tsArgInt}},
 		Out: []tsOutputCol{
 			{"changes", arrow.PrimitiveTypes.Int64},
+			{"penalty", arrow.PrimitiveTypes.Float64},
 			{"penalty_from", arrow.PrimitiveTypes.Float64},
 			{"penalty_to", arrow.PrimitiveTypes.Float64},
 			{"octaves", arrow.PrimitiveTypes.Float64},
@@ -274,7 +276,7 @@ var tsFuncs = []tsFuncSpec{
 			{"complete", arrow.FixedWidthTypes.Boolean},
 		},
 		Causal: false, MaxLen: tsPeltPathMaxLen, Shipped: true,
-		Doc: "the penalty sensitivity of `tsPeltMean` (CROPS): one row per change count that is optimal for some penalty between 1/2 and 64 times BIC, with the range it holds over and that range's width in doublings. A count that holds over a wide range is the data's; one that moves with every step is the penalty's. Not a series — bind it to a Table.",
+		Doc: "penalty sensitivity of tsPeltMean (CROPS): per change count, a `penalty` it is optimal at and the range it holds over, in multiples of BIC. A count that holds over many octaves is the data's. Ranges are valid only where `complete`. Bind to a Table.",
 	},
 	{
 		Name: "tsMosumScores",
@@ -285,7 +287,7 @@ var tsFuncs = []tsFuncSpec{
 			{"warm_up", arrow.FixedWidthTypes.Boolean},
 			{"threshold", arrow.PrimitiveTypes.Float64},
 		},
-		Causal: false, MaxLen: tsChangeLinearMax, Shipped: true,
+		Causal: false, MaxLen: tsChangeLongMax, Shipped: true,
 		NoBaseline: tsNoBaselineChange,
 		Threshold:  "the MOSUM critical value at 5%: exceeded somewhere with that probability in a series of independent noise with no change. It is asymptotic, and too low for autocorrelated noise",
 		Doc:        "the MOSUM statistic: at each sample, the mean of the `bandwidth` samples before against the mean of the `bandwidth` after, in units of its standard error. Two-sided. `warm_up` marks the ends, where a window does not fit.",
@@ -294,7 +296,7 @@ var tsFuncs = []tsFuncSpec{
 		Name:   "tsMosumSegments",
 		Args:   []tsArgSpec{{"t", tsArgColumn}, {"v", tsArgColumn}, {"bandwidth", tsArgInt}},
 		Out:    tsSegmentOut(),
-		Causal: false, MaxLen: tsChangeLinearMax, Shipped: true, Bands: tsBandSegment,
+		Causal: false, MaxLen: tsChangeLongMax, Shipped: true, Bands: tsBandSegment,
 		Doc: "segments between the changes the MOSUM test reports at 5%: the positions where `tsMosumScores` exceeds its threshold and is the largest within 0.4 bandwidths. Two changes closer than a bandwidth blur into one. Two-sided; the level assumes independent noise.",
 	},
 	{
@@ -308,7 +310,7 @@ var tsFuncs = []tsFuncSpec{
 			{"upper", arrow.PrimitiveTypes.Float64},
 			{"lower", arrow.PrimitiveTypes.Float64},
 		},
-		Causal: true, MaxLen: tsChangeLinearMax, Shipped: true,
+		Causal: true, MaxLen: tsChangeLongMax, Shipped: true,
 		NoBaseline: tsNoBaselineChange,
 		Threshold:  "the CUSUM decision interval h = 5σ: with the allowance of 0.5σ, about one false alarm per 465 samples of independent Gaussian noise whose mean and scale are KNOWN. They are estimated from the warm-up here, so false alarms are more frequent than that",
 		Doc:        "Page's two-sided CUSUM chart: the larger of the upward and downward sums, in standard deviations of the first `warmup` samples. Causal — what a monitor would have shown. After an alarm the chart re-estimates over another `warmup` samples and is blind meanwhile (`warm_up`).",
@@ -324,7 +326,7 @@ var tsFuncs = []tsFuncSpec{
 			{"direction", arrow.BinaryTypes.String},
 			{"delay", arrow.PrimitiveTypes.Int64},
 		},
-		Causal: true, MaxLen: tsChangeLinearMax, Shipped: true, Bands: tsBandAlarm,
+		Causal: true, MaxLen: tsChangeLongMax, Shipped: true, Bands: tsBandAlarm,
 		Doc: "the alarms of `tsCusumScores`, as bands from where the chart places the change to where it raised the alarm — the band's width is the detection delay, also in `delay` as samples. Causal.",
 	},
 	{
@@ -338,7 +340,7 @@ var tsFuncs = []tsFuncSpec{
 		},
 		Causal: true, MaxLen: tsBocpdMaxLen, Shipped: true,
 		NoBaseline: tsNoBaselineChange,
-		Doc:        "Bayesian online change point detection: the posterior probability, given the samples so far, that the current regime began within the last `lag` samples; `run` is the most probable regime length. A probability under the model — Gaussian regimes, independent samples, a change every `expectedRun` samples on average — and only as good as that model. Causal. The prior is taken from the first 50 samples, which are not scored.",
+		Doc:        "Bayesian online detection, causal: the probability that the regime began within the last `lag` samples, under a Gaussian model with a change every `expectedRun` samples on average. A model's probability, not a frequency. The first 50 samples set the prior and are not scored.",
 	},
 
 	// Reserved, not shipped. The motif vocabulary waits for the motif-set

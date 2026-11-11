@@ -2422,11 +2422,18 @@ samples late, and that delay is the price of not knowing the future.
 valid, a larger number reports fewer changes, and a `{name:Float64}` slot
 makes it a live control. No single value is right, which is what `penalties`
 is for. Bind a Table pane to it (Graph tab, *fill tab*): one row per change
-count that is optimal for some penalty, the range of penalties it holds over,
-and that range's width in `octaves`. A count that holds over several doublings
-is a property of the data. One that changes with every small step is a
-property of the penalty, and reporting it as a finding would be reporting the
-knob.
+count that is optimal for some penalty, a `penalty` it is optimal at, the
+range of penalties it holds over, and that range's width in `octaves`. A count
+that holds over several doublings is a property of the data. One that changes
+with every small step is a property of the penalty, and reporting it as a
+finding would be reporting the knob.
+
+The table is built from a bounded number of PELT runs. On a series with a
+different optimum at nearly every penalty (a random walk is one) the budget
+runs out, `complete` is false on every row, and the rows present have others
+missing between them. The ranges are then not known: `penalty_from` and
+`penalty_to` both repeat `penalty` and `octaves` is 0. That outcome is itself
+the reading: no change count is stable on that input.
 
 What every one of these assumes, and the Series pane repeats under the plot:
 
@@ -2454,7 +2461,9 @@ PELT is fast while it keeps finding changes and slow over a long stretch with
 none, so `tsPeltMean` and `tsPeltRank` refuse past 50,000 rows, `tsPeltMeanVar`
 past 25,000 and `tsPeltMeanPath` past 10,000, each naming its limit. Aggregate
 to a coarser grid in `base`, or use `tsBinSegMean` or `tsMosumSegments`, which
-are linear.
+take millions of rows. `tsBocpdScores` refuses past 100,000; it follows at
+most 2,000 regime lengths at once, and a regime that outlasts that is tracked
+as one that stops gaining confidence.
 
 The Series toolbar's **Change points** menu writes these CTEs for you, around
 a `base` you fill in. It holds no settings and runs nothing: what you pick

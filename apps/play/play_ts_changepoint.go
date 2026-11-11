@@ -5,7 +5,6 @@ import (
 	"strconv"
 
 	"github.com/apache/arrow-go/v18/arrow"
-	"github.com/apache/arrow-go/v18/arrow/array"
 	"github.com/apache/arrow-go/v18/arrow/memory"
 	"github.com/stergiotis/boxer/public/analytics/timeseries/changepoint"
 	"github.com/stergiotis/boxer/public/observability/eh"
@@ -25,6 +24,11 @@ const (
 	// out that what survives it is not in doubt.
 	tsPathPenaltyLo = 0.5
 	tsPathPenaltyHi = 64.0
+	// tsBocpdMaxRun truncates the run-length posterior. Every sample walks
+	// that many hypotheses, so with the function's row ceiling it bounds the
+	// wait; a regime that outlasts it is tracked as one hypothesis that stops
+	// gaining confidence.
+	tsBocpdMaxRun = 2000
 	// tsBocpdPriorSamples is the prefix the run-length model's prior is taken
 	// from. Those samples are then not scored: a prior taken from the samples
 	// it goes on to judge would let each reading depend on more than its past.
@@ -142,30 +146,39 @@ func tsApplyPenaltyPath(call *tsCall, _ []int64, vals []float64, params map[stri
 	}
 	n := path.Len()
 	changes := make([]int64, n)
+	at := make([]float64, n)
 	lo := make([]float64, n)
 	hi := make([]float64, n)
 	octaves := make([]float64, n)
 	complete := make([]bool, n)
 	for i := range n {
 		changes[i] = int64(path.NumChanges[i])
-		lo[i] = path.Penalty[i] / bic
-		hi[i] = tsPathPenaltyHi
+		at[i] = path.Found[i] / bic
+		complete[i] = path.Complete
+		// A range is known only when no segmentation is missing beside the
+		// row. On a path the budget cut short, the row keeps the one penalty
+		// it was found at and claims no width.
+		lo[i], hi[i] = at[i], at[i]
+		if !path.Complete {
+			continue
+		}
+		lo[i], hi[i] = path.Penalty[i]/bic, tsPathPenaltyHi
 		if i+1 < n {
 			hi[i] = path.Penalty[i+1] / bic
 		}
 		if hi[i] > lo[i] {
 			octaves[i] = math.Log2(hi[i] / lo[i])
 		}
-		complete[i] = path.Complete
 	}
 	b := newTsBuilder(call.Spec, alloc, n)
 	defer b.Release()
 	b.ints(0, changes)
-	b.floats(1, lo)
-	b.floats(2, hi)
-	b.floats(3, octaves)
-	b.floats(4, path.Cost)
-	b.bools(5, complete)
+	b.floats(1, at)
+	b.floats(2, lo)
+	b.floats(3, hi)
+	b.floats(4, octaves)
+	b.floats(5, path.Cost)
+	b.bools(6, complete)
 	return b.build(n)
 }
 
@@ -330,10 +343,13 @@ func tsApplyBocpdScores(call *tsCall, ts []int64, vals []float64, params map[str
 	prior, err := changepoint.PriorFromSample(vals[:tsBocpdPriorSamples])
 	if err != nil {
 		err = eb.Build().Str("function", call.Spec.Name).Int("prefix", tsBocpdPriorSamples).
-			Errorf("the prior is taken from the first samples and they do not vary; start the input where the series does: %w", err)
+			Errorf("the prior is taken from the first samples of the input: %w", err)
 		return
 	}
-	det, err := changepoint.NewBocpd(changepoint.BocpdConfig{ExpectedRun: float64(expectedRun), Prior: prior, Lag: lag})
+	det, err := changepoint.NewBocpd(changepoint.BocpdConfig{
+		ExpectedRun: float64(expectedRun), Prior: prior, Lag: lag,
+		MaxRun: int32(min(changepoint.DefaultBocpdRunFactor*int64(expectedRun), tsBocpdMaxRun)),
+	})
 	if err != nil {
 		err = eh.Errorf("%w", err)
 		return
@@ -383,9 +399,4 @@ func formatTsSigned(v float64) string {
 		return "+" + formatTsScore(v)
 	}
 	return formatTsScore(v)
-}
-
-func (inst *tsBuilder) ints(col int, vs []int64) {
-	b := inst.fields[col].(*array.Int64Builder)
-	b.AppendValues(vs, nil)
 }

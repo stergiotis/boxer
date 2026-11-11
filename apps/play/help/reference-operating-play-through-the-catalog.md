@@ -343,7 +343,7 @@ what it draws, and `get_series` reports each:
   where a detector reports nothing yet.
 - **Change points are spelled in SQL.** `get_series` lists the pane's
   Change points menu under `changes`: one scaffold per question (shifts in
-  level, in level or spread, despite outliers, at a known time scale, what
+  level, the same on a long series, in level or spread, despite outliers, at a known time scale, what
   a monitor would have alarmed on, the probability a change just
   happened), each with the method's assumption in `about`. Put the current
   query into the scaffold's `base` and apply it with `set_sql`; the result
@@ -353,9 +353,12 @@ what it draws, and `get_series` reports each:
   boundaries are the changes, and no segment is a detection) or an alarm
   (from the estimated change to its detection). Every method reads the
   samples as independent: say so when reporting a change count, and read
-  it against the `tsPeltMeanPath` table before calling it a finding.
+  it against the `tsPeltMeanPath` table before calling it a finding. When
+  that table's `complete` is false its ranges are not known, and no count
+  on that input is stable enough to report as one.
 - **A threshold is drawn only when the method supplies one.** `threshold`
   and `threshold_is` carry the level and the condition it holds under;
-  repeat the condition with the number.
+  repeat the condition with the number. `params` names the detector's
+  parameters as its function does.
 - **Verdicts are the person's.** Spans carry recorded verdicts; no
   operation records one.

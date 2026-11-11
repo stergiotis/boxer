@@ -223,6 +223,7 @@ type SeriesDriver struct {
 	scoreCall     *tsCall
 	scoreWindow   int32
 	scoreWindowOK bool
+	scoreParams   string
 	// spanCall is the client node behind the span channel, likewise.
 	spanCall *tsCall
 	// scoresGen counts the score lane's inputs (rebuildOverlays), so
@@ -231,6 +232,7 @@ type SeriesDriver struct {
 	scoresFor       arrow.RecordBatch
 	scoresForCall   *tsCall
 	scoresForWindow int32
+	scoresForParams string
 	// The M3 adjudication state: the current input's identity, the verdicts
 	// read back for it, and the measured comparison they make possible.
 	inputHash string
@@ -704,8 +706,10 @@ func (inst *SeriesDriver) rebuildOverlays(scoreRec arrow.RecordBatch, spanRec ar
 	// scoresGen moves when the score lane's input does: another record, or
 	// another detector call or window. Holding the record keeps its address
 	// from being reused; it is compared, never read.
-	if scoreRec != inst.scoresFor || inst.scoreCall != inst.scoresForCall || inst.scoreWindow != inst.scoresForWindow {
+	if scoreRec != inst.scoresFor || inst.scoreCall != inst.scoresForCall || inst.scoreWindow != inst.scoresForWindow ||
+		inst.scoreParams != inst.scoresForParams {
 		inst.scoresFor, inst.scoresForCall, inst.scoresForWindow = scoreRec, inst.scoreCall, inst.scoreWindow
+		inst.scoresForParams = inst.scoreParams
 		inst.scoresGen++
 	}
 	inst.scores = seriesScores{}
@@ -724,10 +728,10 @@ func (inst *SeriesDriver) rebuildOverlays(scoreRec arrow.RecordBatch, spanRec ar
 		sc.detector = inst.scoreCall.Spec.Name
 		sc.causal = inst.scoreCall.Spec.Causal
 		sc.window = inst.scoreWindow
-		if len(inst.scoreCall.Spec.Args) > 2 {
-			sc.windowName = inst.scoreCall.Spec.Args[2].Name
+		sc.params = inst.scoreParams
+		if sc.hasThreshold {
+			sc.thresholdNote = inst.scoreCall.Spec.Threshold
 		}
-		sc.thresholdNote = inst.scoreCall.Spec.Threshold
 	}
 	sc.baseline, sc.baselineWhy = inst.buildSeriesBaseline()
 	inst.scores = sc
@@ -1116,23 +1120,24 @@ func (inst *PlayApp) renderSeriesTab(rec arrow.RecordBatch, schema *arrow.Schema
 func (inst *PlayApp) noteSeriesScoreCall() {
 	node, ok := findSplitNode(inst.currentSplit, seriesScoresNodeID)
 	if !ok || node.Client == nil {
-		inst.seriesDriver.noteScoreCall(nil, 0, false)
+		inst.seriesDriver.noteScoreCall(nil, 0, false, "")
 		return
 	}
 	call := node.Client
+	// A slot resolves through the same params the lane sends, so a parameter
+	// driven by a live signal moves the caption and the baseline with it.
+	params := resolveSignalNamesWithDefaults(node.Reads, inst.lastRunBound, inst.frameSig)
+	shown := tsCallParams(call, params)
 	// The window is the third argument of every scoring function in the
 	// roster, but the roster is meant to grow — so the position is CHECKED
 	// rather than assumed, and a future function shaped differently loses
 	// its baseline instead of panicking.
 	if len(call.Args) < 3 || call.Spec.Args[2].Kind != tsArgInt {
-		inst.seriesDriver.noteScoreCall(call, 0, false)
+		inst.seriesDriver.noteScoreCall(call, 0, false, shown)
 		return
 	}
-	// A slot resolves through the same params the lane sends, so a window
-	// driven by a live signal moves the baseline with it.
-	params := resolveSignalNamesWithDefaults(node.Reads, inst.lastRunBound, inst.frameSig)
 	window, wErr := tsIntArg(call, 2, params)
-	inst.seriesDriver.noteScoreCall(call, window, wErr == nil)
+	inst.seriesDriver.noteScoreCall(call, window, wErr == nil, shown)
 }
 
 // noteSeriesSpanCall tells the driver what produced the span channel, so the

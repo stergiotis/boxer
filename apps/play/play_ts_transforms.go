@@ -304,6 +304,11 @@ func (inst *tsBuilder) floats(col int, vs []float64) {
 	b.AppendValues(vs, nil)
 }
 
+func (inst *tsBuilder) ints(col int, vs []int64) {
+	b := inst.fields[col].(*array.Int64Builder)
+	b.AppendValues(vs, nil)
+}
+
 func (inst *tsBuilder) bools(col int, vs []bool) {
 	b := inst.fields[col].(*array.BooleanBuilder)
 	b.AppendValues(vs, nil)

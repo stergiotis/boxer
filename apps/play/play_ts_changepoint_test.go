@@ -178,7 +178,9 @@ func TestTsPenaltyPathMatchesThePackage(t *testing.T) {
 	path, err := series.PenaltyPath(tsPathPenaltyLo*bic, tsPathPenaltyHi*bic, 0)
 	require.NoError(t, err)
 
+	require.True(t, path.Complete)
 	changes := tsIntCol(t, rec, "changes")
+	at := tsFloatCol(t, rec, "penalty")
 	lo, hi := tsFloatCol(t, rec, "penalty_from"), tsFloatCol(t, rec, "penalty_to")
 	octaves := tsFloatCol(t, rec, "octaves")
 	require.Len(t, changes, path.Len())
@@ -186,6 +188,8 @@ func TestTsPenaltyPathMatchesThePackage(t *testing.T) {
 	for i := range changes {
 		assert.Equal(t, int64(path.NumChanges[i]), changes[i])
 		assert.InDelta(t, path.Penalty[i]/bic, lo[i], 1e-12)
+		assert.GreaterOrEqual(t, at[i], lo[i])
+		assert.LessOrEqual(t, at[i], hi[i])
 		if i+1 < len(changes) {
 			assert.Equal(t, lo[i+1], hi[i], "the ranges are contiguous")
 		}
@@ -203,7 +207,40 @@ func TestTsPenaltyPathMatchesThePackage(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, int32(2), seg.NumChanges())
 	for _, c := range tsBoolCol(t, rec, "complete") {
-		assert.Equal(t, path.Complete, c)
+		assert.True(t, c)
+	}
+}
+
+// A path the run budget cut short has rows missing between the ones present,
+// so a range read off neighbours would be too wide. Each row then carries the
+// one penalty it was found at, which typed back does reproduce its count.
+func TestTsPenaltyPathClaimsNoRangeWhenIncomplete(t *testing.T) {
+	// A random walk: every penalty has its own optimum, far more than the
+	// budget of runs.
+	rng := rand.New(rand.NewPCG(8, 17))
+	vals := make([]float64, 3000)
+	for i := 1; i < len(vals); i++ {
+		vals[i] = vals[i-1] + rng.NormFloat64()
+	}
+	rec, err := tsRunCall(t, tsChangeSQL("tsPeltMeanPath(t, v, 5)"), vals)
+	require.NoError(t, err)
+	defer rec.Release()
+	complete := tsBoolCol(t, rec, "complete")
+	require.NotEmpty(t, complete)
+	require.False(t, complete[0], "the fixture is meant to exhaust the budget")
+	series, err := changepoint.NewSeries(vals, changepoint.Config{MinSegment: 5})
+	require.NoError(t, err)
+	changes, at := tsIntCol(t, rec, "changes"), tsFloatCol(t, rec, "penalty")
+	lo, hi, octaves := tsFloatCol(t, rec, "penalty_from"), tsFloatCol(t, rec, "penalty_to"), tsFloatCol(t, rec, "octaves")
+	for i := range changes {
+		assert.Equal(t, at[i], lo[i])
+		assert.Equal(t, at[i], hi[i])
+		assert.Zero(t, octaves[i])
+		if i%8 == 0 {
+			seg, pErr := series.Pelt(at[i] * series.PenaltyBIC())
+			require.NoError(t, pErr)
+			assert.Equal(t, changes[i], int64(seg.NumChanges()), "row %d", i)
+		}
 	}
 }
 
@@ -227,6 +264,7 @@ func TestTsMosumMatchesThePackage(t *testing.T) {
 	}
 	sc, ok := foldSeriesScores(rec)
 	require.True(t, ok, "the Series pane's score channel reads the output as it is")
+	assert.True(t, sc.hasThreshold)
 	assert.Equal(t, want.Critical, sc.threshold)
 
 	segs, err := tsRunCall(t, tsChangeSQL("tsMosumSegments(t, v, 40)"), vals)
@@ -364,7 +402,37 @@ func TestTsBocpdMatchesTheDetector(t *testing.T) {
 	flat := make([]float64, 200)
 	_, err = tsRunCall(t, tsChangeSQL("tsBocpdScores(t, v, 200, 8)"), flat)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "do not vary")
+	assert.Contains(t, err.Error(), "first samples of the input")
+	assert.Contains(t, err.Error(), "no variation")
+}
+
+// The expected run is a belief about the data, not a size: the largest one a
+// buffer can spell must cost what a modest one does.
+func TestTsBocpdBoundsItsWorkWhateverTheExpectedRun(t *testing.T) {
+	vals := tsSteps(9, []int{300, 300}, []float64{0, 4})
+	rec, err := tsRunCall(t, tsChangeSQL("tsBocpdScores(t, v, 2147483647, 8)"), vals)
+	require.NoError(t, err)
+	defer rec.Release()
+	assert.Equal(t, int64(len(vals)), rec.NumRows())
+}
+
+// Whether a window is constant is decided on the samples: 0.1 is not a
+// binary fraction, and its prefix sums differ in their last bits.
+func TestTsMosumIsSilentInsideAnInexactConstantStretch(t *testing.T) {
+	rng := rand.New(rand.NewPCG(3, 4))
+	vals := make([]float64, 400)
+	for i := range vals {
+		vals[i] = 0.1
+		if i >= 200 {
+			vals[i] += rng.NormFloat64()
+		}
+	}
+	rec, err := tsRunCall(t, tsChangeSQL("tsMosumSegments(t, v, 20)"), vals)
+	require.NoError(t, err)
+	defer rec.Release()
+	for _, from := range tsMsCol(t, rec, timelineSlotBandFrom)[1:] {
+		assert.GreaterOrEqual(t, from, tsGridMs(181))
+	}
 }
 
 // --- the number argument ------------------------------------------------------
@@ -402,6 +470,19 @@ func TestTsNumberArgReadsLiteralsAndSlots(t *testing.T) {
 	assert.Equal(t, 0.75, v)
 	_, err = tsNumberArg(call, 3, map[string]string{"param_pen": "lots"})
 	assert.Error(t, err)
+	_, err = tsNumberArg(call, 3, map[string]string{"param_pen": "1e3"})
+	assert.Error(t, err, "a slot takes what a literal takes, and no more")
+
+	// One rule for both kinds: a slot's value is trimmed, and an empty one is
+	// unbound.
+	n, err := tsIntArg(&tsCall{Spec: spec, Args: []string{"t", "v", "{seg:UInt32}", "1"}}, 2,
+		map[string]string{"param_seg": " 7 "})
+	require.NoError(t, err)
+	assert.Equal(t, int32(7), n)
+	_, err = tsIntArg(&tsCall{Spec: spec, Args: []string{"t", "v", "{seg:UInt32}", "1"}}, 2,
+		map[string]string{"param_seg": "  "})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "no value")
 }
 
 // --- the registry's change point entries ----------------------------------------
@@ -423,6 +504,9 @@ func TestTsChangeRegistryIsConsistent(t *testing.T) {
 		if spec.NoBaseline != "" {
 			assert.Contains(t, joined, "score", "%s: only a score lane has a baseline to decline", spec.Name)
 		}
+		// list_functions cuts a description at refMaxDoc. A caveat past the
+		// cut is one an agent never reads.
+		assert.LessOrEqual(t, len(spec.Doc), refMaxDoc, "%s: the description is cut where an agent reads it", spec.Name)
 	}
 }
 
@@ -490,8 +574,14 @@ func TestChangeScoresDeclineTheAnomalyBaseline(t *testing.T) {
 	assert.Nil(t, baseline)
 	assert.Contains(t, why, "not a baseline for a change score")
 
+	call := d.scoreCall
+	assert.Equal(t, "warmup 50", tsCallParams(call, nil))
+	bocpd, _ := tsFuncByName("tsBocpdScores")
+	assert.Equal(t, "expectedRun 250, lag 12", tsCallParams(
+		&tsCall{Spec: bocpd, Args: []string{"t", "v", "250", "{lag:UInt32}"}}, map[string]string{"param_lag": "12"}))
+
 	d.scores = seriesScores{t: []float64{1}, detector: spec.Name, causal: true, window: 50,
-		windowName: "warmup", threshold: 5, thresholdNote: spec.Threshold, baselineWhy: why}
+		params: tsCallParams(call, nil), threshold: 5, thresholdNote: spec.Threshold, baselineWhy: why}
 	line := d.seriesOverlayCaption()
 	assert.Contains(t, line, "tsCusumScores, warmup 50")
 	assert.Contains(t, line, "The horizontal line at 5 is the CUSUM decision interval")

@@ -47,6 +47,14 @@ var seriesChangeMethods = []seriesChangeMethod{
 		},
 	},
 	{
+		ID: "level-long", Label: "shifts in level, on a long series",
+		About: "Binary segmentation: greedy where PELT is exact, so a short excursion can hide between two splits. " +
+			"For series past PELT's row ceiling. Same assumption: independent noise within a segment.",
+		ctes: func(t string, v string, _ int) []string {
+			return []string{"spans AS (SELECT tsBinSegMean(" + t + ", " + v + ", 5, 1) FROM base)"}
+		},
+	},
+	{
 		ID: "level-or-spread", Label: "shifts in level or spread",
 		About: "PELT with a mean-and-variance cost. Needs room per segment (30 samples here): " +
 			"a variance fitted to a few samples that agree looks like a regime.",

@@ -73,7 +73,8 @@ type SeriesSpanReading struct {
 type SeriesOverlays struct {
 	Caption      string              `json:",omitzero" desc:"the pane's caption under the score plot: the detector, its window, whether it is causal, what the baseline curve is"`
 	Detector     string              `json:",omitzero" desc:"the detector behind the score lane, when a client node made it"`
-	Window       int32               `json:",omitzero" desc:"the detector's third argument: its window, warm-up, bandwidth or expected run, as the caption names it"`
+	Params       string              `json:",omitzero" desc:"the detector's parameters, each with the name its function gives it"`
+	Window       int32               `json:",omitzero" desc:"the first of those parameters, which the baseline is matched to when one is drawn"`
 	Threshold    *float64            `json:",omitzero" desc:"the level the method itself supplies, drawn as a horizontal line; absent when the method supplies none"`
 	ThresholdIs  string              `json:",omitzero" desc:"what that level is and the condition it holds under"`
 	Causal       bool                `desc:"whether each score uses only earlier samples"`
@@ -84,7 +85,7 @@ type SeriesOverlays struct {
 	ScoreMaxAt   string              `json:",omitzero" desc:"when the highest score falls, UTC"`
 	SpanKind     string              `json:",omitzero" desc:"what a span is: a flagged extent, a segment between change points (its boundaries are the changes), or an alarm (from the estimated change to its detection)"`
 	Spans        []SeriesSpanReading `json:",omitzero" desc:"the spans, at most 100"`
-	SpansCut     int32               `json:",omitzero" desc:"extents past the 100 listed"`
+	SpansCut     int32               `json:",omitzero" desc:"spans past the 100 listed"`
 	SpansSkipped int32               `json:",omitzero" desc:"span rows the pane skipped: an unknown colour token, or an end before its start"`
 	Readout      string              `json:",omitzero" desc:"the pane's measured readout of the detector against the baseline on the confirmed spans, with its caveats"`
 }
@@ -240,6 +241,7 @@ func (inst *PlayApp) seriesOverlays(d *SeriesDriver) (o *SeriesOverlays) {
 		f := inst.paneViews.seriesOverlay
 		o.Caption, o.WarmUp, o.ScoreMax, o.ScoreMaxAt = f.caption, f.warm, f.scoreMax, f.scoreMaxAt
 		o.Detector, o.Window, o.Causal = opsLabel(sc.detector), sc.window, sc.causal
+		o.Params = opsLabel(sc.params)
 		o.Baseline, o.BaselineWhy = len(sc.baseline) > 0, sc.baselineWhy
 		if sc.thresholdNote != "" {
 			o.Threshold, o.ThresholdIs = finite(sc.threshold), sc.thresholdNote

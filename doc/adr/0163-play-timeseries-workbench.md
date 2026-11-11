@@ -398,17 +398,13 @@ the ADR-0150 mould (standard library only, freestanding WASM). Its package
 comment carries the methods, citations and the assumptions; this entry
 records only what binds play.
 
-**Roster.** Ten names, one algorithm each (§SD3):
+**Roster.** Ten names, one algorithm each (§SD3); the registry `tsFuncs`
+holds each one's arguments, output contract and causality.
 
-| Function | Output | Causal |
-|---|---|---|
-| `tsPeltMean`, `tsPeltMeanVar`, `tsPeltRank`, `tsBinSegMean(t, v, minSegment, penalty)` | segments on the `_tl_band_*` contract, plus `level, spread, samples, shift` | no |
-| `tsPeltMeanPath(t, v, minSegment)` | `changes, penalty_from, penalty_to, octaves, cost, complete` | no |
-| `tsMosumScores(t, v, bandwidth)` | `t, score, warm_up, threshold` | no |
-| `tsMosumSegments(t, v, bandwidth)` | segments, as above | no |
-| `tsCusumScores(t, v, warmup)` | `t, score, warm_up, threshold, upper, lower` | yes |
-| `tsCusumAlarms(t, v, warmup)` | `_tl_band_*` from estimated onset to alarm, plus `direction, delay` | yes |
-| `tsBocpdScores(t, v, expectedRun, lag)` | `t, score, warm_up, run` | yes |
+- Penalised segmentations, two-sided: `tsPeltMean`, `tsPeltMeanVar`,
+  `tsPeltRank`, `tsBinSegMean`, and the penalty path `tsPeltMeanPath`.
+- The moving-sum test, two-sided: `tsMosumScores`, `tsMosumSegments`.
+- Sequential, causal: `tsCusumScores`, `tsCusumAlarms`, `tsBocpdScores`.
 
 **Decisions.**
 
@@ -419,8 +415,11 @@ records only what binds play.
   are read and never evaluated.
 - **`penalty` is in multiples of BIC.** A penalty in cost units depends on the
   series length and the cost, which a person typing it does not have in view.
-  One is the convention; `tsPeltMeanPath` reports its ranges in the same unit
-  so a row can be typed back as an argument.
+  One is the convention; `tsPeltMeanPath` reports in the same unit, so a
+  row's `penalty` can be typed back as an argument. The path is found with a
+  bounded number of runs; when the bound ends the search the rows say so and
+  claim no range, since a range read off a neighbour that may be missing is
+  too wide.
 - **Segments are bands, and bands now say what they are.** A segmentation
   speaks the Timeline band contract so it draws on the Series pane and the
   Timeline unchanged. The registry entry carries the kind — flagged extent,
@@ -438,16 +437,18 @@ records only what binds play.
   supplies none and gets no line.
 - **The parameters a name fixes.** MOSUM at 5% with a 0.4-bandwidth
   neighbourhood; CUSUM at an allowance of 0.5σ and a decision interval of 5σ;
-  the run-length prior from the first 50 samples, which are then not scored.
-  A different setting is a new name.
+  the run-length prior from the first 50 samples, which are then not scored,
+  and at most 2,000 run lengths followed at once. A different setting is a
+  new name.
 - **A menu that writes SQL.** The Series toolbar's *Change points* menu
   inserts a scaffold per question, in the §SD2 manner, and `get_series`
   returns the same scaffolds. It holds no parameters and runs nothing; the
   panel-side analysis controls this ADR rejected stay rejected.
 - **Ceilings by method.** PELT is linear while it finds changes and quadratic
   over a stretch with none, which is the ordinary input. Each PELT name
-  refuses at the length where that worst case is a wait of a few seconds; the
-  constants and what was measured are beside them in the registry.
+  refuses at the length where that worst case is a wait of a few seconds, and
+  the run-length posterior likewise; the constants and the dated measurements
+  are beside them in the registry.
 
 **Deferred, each with a trigger.**
 

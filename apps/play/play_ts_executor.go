@@ -196,45 +196,48 @@ func readTsInput(call *tsCall, in arrow.RecordBatch) (ts []int64, vals []float64
 // the ARGUMENT text still holds the slot spelling, so the value comes from
 // the params the compiled node carries.
 func tsIntArg(call *tsCall, pos int, params map[string]string) (v int32, err error) {
-	text := call.Args[pos]
-	if isTsIntLiteral(text) {
-		return tsParseInt32(call, pos, text)
+	text, slot, err := tsArgText(call, pos, params)
+	if err != nil {
+		return
 	}
-	name := tsSlotName(text)
-	raw, bound := params["param_"+name]
-	if !bound || raw == "" {
-		err = eb.Build().Str("function", call.Spec.Name).Str("arg", call.Spec.Args[pos].Name).Str("slot", name).
+	if !isTsIntLiteral(text) {
+		err = eb.Build().Str("function", call.Spec.Name).Str("arg", call.Spec.Args[pos].Name).Str("slot", slot).
+			Str("value", text).Errorf("an argument's slot value is not a whole number")
+		return
+	}
+	return tsParseInt32(call, pos, text)
+}
+
+// tsArgText returns a literal argument as written, or the value its slot is
+// bound to, trimmed; slot is the slot's name, empty for a literal. Both
+// argument kinds read through here, so a slot is bound, or not, the same way
+// for either.
+func tsArgText(call *tsCall, pos int, params map[string]string) (text string, slot string, err error) {
+	text = call.Args[pos]
+	if !strings.HasPrefix(text, "{") {
+		return
+	}
+	slot = tsSlotName(text)
+	text = strings.TrimSpace(params["param_"+slot])
+	if text == "" {
+		err = eb.Build().Str("function", call.Spec.Name).Str("arg", call.Spec.Args[pos].Name).Str("slot", slot).
 			Errorf("an argument reads a slot with no value. Bind it — a SET line, or a control that " +
 				"writes the signal — before the analysis can run")
-		return
 	}
-	if !isTsIntLiteral(raw) {
-		err = eb.Build().Str("function", call.Spec.Name).Str("arg", call.Spec.Args[pos].Name).Str("slot", name).
-			Str("value", raw).Errorf("an argument's slot value is not a whole number")
-		return
-	}
-	return tsParseInt32(call, pos, raw)
+	return
 }
 
 // tsNumberArg reads a positional number argument, literal or slot, the way
 // tsIntArg reads an integer one.
 func tsNumberArg(call *tsCall, pos int, params map[string]string) (v float64, err error) {
-	text := call.Args[pos]
+	text, slot, err := tsArgText(call, pos, params)
+	if err != nil {
+		return
+	}
 	if !isTsNumberLiteral(text) {
-		name := tsSlotName(text)
-		raw, bound := params["param_"+name]
-		if !bound || raw == "" {
-			err = eb.Build().Str("function", call.Spec.Name).Str("arg", call.Spec.Args[pos].Name).Str("slot", name).
-				Errorf("an argument reads a slot with no value. Bind it — a SET line, or a control that " +
-					"writes the signal — before the analysis can run")
-			return
-		}
-		text = strings.TrimSpace(raw)
-		if !isTsNumberLiteral(text) {
-			err = eb.Build().Str("function", call.Spec.Name).Str("arg", call.Spec.Args[pos].Name).Str("slot", name).
-				Str("value", raw).Errorf("an argument's slot value is not a plain non-negative number")
-			return
-		}
+		err = eb.Build().Str("function", call.Spec.Name).Str("arg", call.Spec.Args[pos].Name).Str("slot", slot).
+			Str("value", text).Errorf("an argument's value is not a plain non-negative number")
+		return
 	}
 	v, cErr := strconv.ParseFloat(text, 64)
 	if cErr != nil || math.IsInf(v, 0) {

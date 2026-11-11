@@ -64,17 +64,18 @@ type seriesScores struct {
 	detector string
 	causal   bool
 	window   int32
-	// windowName is what the detector calls that third argument — `window`
-	// for the anomaly scores, `warmup`, `bandwidth` or `expectedRun` for the
-	// change scores — so the caption names the number it prints.
-	windowName string
+	// params is the detector's parameters as the caption prints them, each
+	// with the name the function gives it ("warmup 60", "expectedRun 250,
+	// lag 10"). window above is the one of them the baseline is matched to.
+	params string
 
 	// threshold is the level the method itself supplies, read from the
 	// lane's optional `threshold` column, and thresholdNote the condition it
-	// holds under (the registry's). Drawn only when both are present: a
-	// level without its condition is the false precision the survey's S4
-	// forbids.
+	// holds under (the registry's). thresholdNote is set only when both are
+	// in hand: a level without its condition is the false precision the
+	// survey's S4 forbids, and a condition without a level draws nothing.
 	threshold     float64
+	hasThreshold  bool
 	thresholdNote string
 }
 
@@ -89,10 +90,28 @@ type seriesSpan struct {
 // the panel can label causality and compute the baseline at the same window.
 // Called from the tab body, which is where the split and the resolved params
 // both exist.
-func (inst *SeriesDriver) noteScoreCall(call *tsCall, window int32, windowOK bool) {
+func (inst *SeriesDriver) noteScoreCall(call *tsCall, window int32, windowOK bool, params string) {
 	inst.scoreCall = call
 	inst.scoreWindow = window
 	inst.scoreWindowOK = windowOK
+	inst.scoreParams = params
+}
+
+// tsCallParams renders a call's non-column arguments as "name value" pairs,
+// a slot shown as the value it is bound to.
+func tsCallParams(call *tsCall, params map[string]string) string {
+	parts := make([]string, 0, len(call.Args))
+	for i, a := range call.Spec.Args {
+		if a.Kind == tsArgColumn || i >= len(call.Args) {
+			continue
+		}
+		text, _, err := tsArgText(call, i, params)
+		if err != nil {
+			text = call.Args[i]
+		}
+		parts = append(parts, a.Name+" "+text)
+	}
+	return strings.Join(parts, ", ")
 }
 
 // noteSpanCall records the client node behind the span channel, which is the
@@ -127,7 +146,7 @@ func foldSeriesScores(rec arrow.RecordBatch) (out seriesScores, ok bool) {
 	}
 	if hi := schema.FieldIndices("threshold"); len(hi) > 0 {
 		// One level per lane: the methods that supply one supply a constant.
-		out.threshold, _ = numericCellValue(rec.Column(hi[0]), 0)
+		out.threshold, out.hasThreshold = numericCellValue(rec.Column(hi[0]), 0)
 	}
 	tArr, sArr := rec.Column(tCol), rec.Column(sIdx[0])
 	n := int(rec.NumRows())
@@ -427,11 +446,11 @@ func (inst *SeriesDriver) seriesOverlayCaption() (line string) {
 	sc := &inst.scores
 	var b strings.Builder
 	if sc.detector != "" {
-		name := sc.windowName
-		if name == "" {
-			name = "window"
+		params := sc.params
+		if params == "" {
+			params = fmt.Sprintf("window %d", sc.window)
 		}
-		fmt.Fprintf(&b, "%s, %s %d — ", sc.detector, name, sc.window)
+		fmt.Fprintf(&b, "%s, %s — ", sc.detector, params)
 	}
 	if sc.causal {
 		b.WriteString("causal: each value uses only what came before it, so replaying this IS the backtest.")
