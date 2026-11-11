@@ -8,6 +8,7 @@ import (
 
 	"github.com/rs/zerolog/log"
 	"github.com/stergiotis/boxer/public/config"
+	"github.com/stergiotis/boxer/public/keelson/data/chclient"
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
@@ -38,8 +39,7 @@ func NewCliCommand() *cli.Command {
 			[]cli.Flag{
 				&cli.StringFlag{
 					Name:  flagURL,
-					Value: "http://localhost:8123/",
-					Usage: "ClickHouse HTTP endpoint",
+					Usage: "ClickHouse HTTP endpoint; when not given, CLICKHOUSE_ENDPOINT, then CLICKHOUSE_URL, then http://localhost:8123/",
 				},
 				&cli.StringFlag{
 					Name:    flagUser,
@@ -68,8 +68,12 @@ func NewCliCommand() *cli.Command {
 			// embedding the app calls the same function.
 			RegisterHostSql(log.Logger)
 
+			url := cmd.String(flagURL)
+			if url == "" {
+				url = chclient.ConfigFromEnv().URL
+			}
 			clientCfg := ClientConfig{
-				URL:          cmd.String(flagURL),
+				URL:          url,
 				User:         cmd.String(flagUser),
 				Password:     cmd.String(flagPassword),
 				AllowWrites:  AllowWrites.Get() != "",

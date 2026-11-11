@@ -12,8 +12,8 @@ import (
 	"github.com/rs/zerolog/log"
 	"github.com/stergiotis/boxer/apps/play/launchcfg"
 	"github.com/stergiotis/boxer/public/config/env"
-	"github.com/stergiotis/boxer/public/db/clickhouse/clickhouseenv"
 	"github.com/stergiotis/boxer/public/hmi/gloss"
+	"github.com/stergiotis/boxer/public/keelson/data/chclient"
 	"github.com/stergiotis/boxer/public/keelson/data/chlocalbroker"
 	"github.com/stergiotis/boxer/public/keelson/runtime/adhocdata"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
@@ -410,10 +410,13 @@ func (inst *PlayLauncher) Mount(ctx app.MountContextI) (err error) {
 	if initSQL == "" {
 		initSQL = "SELECT * FROM boxer.facts"
 	}
+	// The endpoint and credentials resolve as everywhere else in boxer:
+	// CLICKHOUSE_ENDPOINT, then CLICKHOUSE_URL, then localhost.
+	chEnv := chclient.ConfigFromEnv()
 	cfg := ClientConfig{
-		URL:          clickhouseenv.URL.Get(),
-		User:         clickhouseenv.User.Get(),
-		Password:     clickhouseenv.Password.Get(),
+		URL:          chEnv.URL,
+		User:         chEnv.User,
+		Password:     chEnv.Password,
 		AllowWrites:  AllowWrites.Get() != "",
 		AppWritesOff: AppWrites.Get() == "off",
 	}
