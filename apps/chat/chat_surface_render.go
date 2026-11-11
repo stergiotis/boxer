@@ -20,9 +20,15 @@ import (
 
 const (
 	surfaceGraphH float32 = 340
-	// surfaceLiveEvery is how often the surface is read again while a turn
-	// runs: the model may be widening the grant and calling.
+	// surfaceLiveEvery is the least time between two reads of the surface
+	// while a turn runs. A read is three queries through the host, so it
+	// follows the turn's tool calls (turnSteps.toolActivity) rather than
+	// the clock.
 	surfaceLiveEvery = 3 * time.Second
+	// surfaceQuietEvery is how often a running turn reads the surface with
+	// no tool call to prompt it, for what changes without one: a window the
+	// person opened or closed.
+	surfaceQuietEvery = 30 * time.Second
 
 	tipSurface        = "Everything the model could reach from this conversation — each open window's operations, opening an app, arranging the desktop — with what the settings and the running task allow, and the calls the model made."
 	tipSurfaceRefresh = "Read the grants and calls again."
@@ -38,7 +44,9 @@ type surfaceView struct {
 	model *surfaceModel
 	conv  string
 	turns int
-	err   string
+	// acts is the coordinator's tool activity when the last read started.
+	acts uint64
+	err  string
 	// graph switches the section between the list and the graph.
 	graph bool
 	gv    *graphview.View
@@ -101,8 +109,8 @@ func usesText(cell *surfaceCell) (s string) {
 }
 
 // refreshSurface starts a read when the snapshot is missing, describes
-// another conversation, predates the last landed turn, or is old while a
-// turn runs.
+// another conversation, predates the last landed turn, or — while a turn
+// runs — predates a tool call or is older than surfaceQuietEvery.
 func (inst *App) refreshSurface(force bool) {
 	sv := &inst.surface
 	if res, _, ok := sv.job.TakeResult(); ok {
@@ -119,8 +127,12 @@ func (inst *App) refreshSurface(force bool) {
 		return
 	}
 	stale := force || sv.conv != inst.conv.id || sv.turns != len(inst.stats.turns)
-	if sv.err == "" && sv.model != nil && inst.pending != nil && time.Since(sv.model.at) > surfaceLiveEvery {
-		stale = true
+	acts := inst.coord.steps.toolActivity()
+	if sv.err == "" && sv.model != nil && inst.pending != nil {
+		age := time.Since(sv.model.at)
+		if age > surfaceQuietEvery || (acts != sv.acts && age > surfaceLiveEvery) {
+			stale = true
+		}
 	}
 	if sv.model == nil && sv.err == "" {
 		stale = true
@@ -131,9 +143,9 @@ func (inst *App) refreshSurface(force bool) {
 	if sv.conv != inst.conv.id {
 		sv.model, sv.err = nil, ""
 	}
-	sv.conv, sv.turns = inst.conv.id, len(inst.stats.turns)
+	sv.conv, sv.turns, sv.acts = inst.conv.id, len(inst.stats.turns), acts
 	cli, kq, ceiling, conv, tasks := inst.agentCli, inst.kq, inst.coord.ceilingNow(), inst.conv.id, inst.coord.heldTasks()
-	// Not a task: it re-runs every surfaceLiveEvery (see App.tasks).
+	// Not a task: it re-runs through a turn (see App.tasks).
 	sv.job.Start(nil, bgjob.Spec{Kind: "chat-surface", Title: "the agent surface"},
 		func(ctx context.Context) (m *surfaceModel, err error) {
 			return fetchSurface(ctx, cli, kq, ceiling, conv, tasks)

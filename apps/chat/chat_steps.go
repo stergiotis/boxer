@@ -87,6 +87,11 @@ type turnSteps struct {
 	mu    sync.Mutex
 	steps []turnStep
 	ver   uint64
+	// acts moves when a tool call starts, finishes, or starts or stops
+	// waiting on the person: the moments the host's grants and action
+	// records can have changed. Unlike ver it does not move with what the
+	// model streams.
+	acts uint64
 	// base is the handle of the turn's first step. Handles are not reused
 	// across turns, so a stopped turn's late finish or delta misses the
 	// next turn's steps.
@@ -115,6 +120,9 @@ func (inst *turnSteps) begin(s turnStep) (i int) {
 	defer inst.mu.Unlock()
 	inst.steps = append(inst.steps, s)
 	inst.ver++
+	if s.kind == stepTool {
+		inst.acts++
+	}
 	return inst.base + len(inst.steps) - 1
 }
 
@@ -145,6 +153,9 @@ func (inst *turnSteps) finish(i int, f func(s *turnStep)) {
 		s.waitSince = time.Time{}
 	}
 	inst.ver++
+	if s.kind == stepTool {
+		inst.acts++
+	}
 }
 
 // grow adds what the model wrote to running step i (ADR-0286 §SD4). The
@@ -186,8 +197,20 @@ func (inst *turnSteps) personWait(on bool) {
 			s.waitSince = time.Time{}
 		}
 		inst.ver++
+		inst.acts++
 		return
 	}
+}
+
+// toolActivity is acts: a reader that keeps it knows whether a tool call
+// started, finished or waited since.
+func (inst *turnSteps) toolActivity() (acts uint64) {
+	if inst == nil {
+		return 0
+	}
+	inst.mu.Lock()
+	defer inst.mu.Unlock()
+	return inst.acts
 }
 
 // waitingOnPerson says the step waits on the person now.

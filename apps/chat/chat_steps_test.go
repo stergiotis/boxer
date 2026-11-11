@@ -281,3 +281,31 @@ func TestAnApprovedRetryIsStreamed(t *testing.T) {
 	defer model.mu.Unlock()
 	assert.Equal(t, 1, model.calls)
 }
+
+// Tool activity moves when a tool call starts, finishes or waits on the
+// person, and not with model calls or what a model streams: it is what the
+// surface section re-reads on (refreshSurface).
+func TestToolActivityFollowsToolCallsOnly(t *testing.T) {
+	var s turnSteps
+	s.reset()
+	model := s.begin(turnStep{kind: stepModel})
+	s.grow(model, llm.Delta{Content: "thinking"})
+	s.finish(model, func(*turnStep) {})
+	if got := s.toolActivity(); got != 0 {
+		t.Fatalf("model steps moved tool activity to %d", got)
+	}
+	tool := s.begin(turnStep{kind: stepTool})
+	if got := s.toolActivity(); got != 1 {
+		t.Fatalf("after a tool call began: %d", got)
+	}
+	s.personWait(true)
+	s.personWait(false)
+	s.finish(tool, func(*turnStep) {})
+	if got := s.toolActivity(); got != 4 {
+		t.Fatalf("after waiting and finishing: %d", got)
+	}
+	var none *turnSteps
+	if got := none.toolActivity(); got != 0 {
+		t.Fatalf("nil steps: %d", got)
+	}
+}
