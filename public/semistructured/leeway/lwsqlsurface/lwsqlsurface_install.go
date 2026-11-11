@@ -504,17 +504,18 @@ func firstLine(s string) (out string) {
 
 // InstallIfDrifted is what a host runs at every start: a full [Install] when
 // the server does not carry what this build declares, and otherwise only the
-// registered dependents.
+// registered dependents whose statements changed.
 //
 // The surface's own functions and views are keyed by the revision marker, so
 // a server that reports in sync has nothing of them to replace, and
 // re-creating all of it per boot was most of what a host sent a server. The
 // dependents carry no revision — their definitions can change in a build
-// that leaves the marker alone — so they are re-created each time, as an
-// install does.
+// that leaves the marker alone — so each is keyed by a digest of its
+// statements instead (installDriftedDependents).
 //
-// installed reports whether the full install ran. A report that cannot be
-// read is treated as drift.
+// installed reports whether anything was replaced: the full install ran, or
+// a dependent was re-created. A report that cannot be read is treated as
+// drift.
 func InstallIfDrifted(ctx context.Context, conn Conn) (installed bool, err error) {
 	rep, rerr := Reconcile(ctx, conn, ReconcileReport)
 	if rerr != nil || !rep.InSync() {
@@ -522,6 +523,7 @@ func InstallIfDrifted(ctx context.Context, conn Conn) (installed bool, err error
 		err = Install(ctx, conn)
 		return
 	}
-	err = installDependents(ctx, conn)
+	replaced, err := installDriftedDependents(ctx, conn)
+	installed = replaced > 0
 	return
 }

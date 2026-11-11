@@ -18,8 +18,9 @@ import (
 	_ "github.com/stergiotis/boxer/public/keelson/runtime/trail/trailviews"
 )
 
-// sqlSurfaceTimeout bounds the boot reconcile: getting on for a hundred
-// sequential round trips, as play's reconcile (which this matches).
+// sqlSurfaceTimeout bounds the boot reconcile, which on a drifted server is
+// getting on for a hundred sequential round trips, as play's reconcile
+// (which this matches).
 const sqlSurfaceTimeout = 2 * time.Minute
 
 // installSQLSurface reconciles the read surface and its dependents on the
@@ -29,9 +30,8 @@ const sqlSurfaceTimeout = 2 * time.Minute
 //
 // The function families themselves are already there when this runs: the
 // facts store's setup installs them, because its reads need them
-// (chstore.Store.EnsureReadSurface). What this adds on every boot is the
-// dependents, which go stale without a revision change; the surface itself
-// is replaced only when the server has drifted from what this build declares
+// (chstore.Store.EnsureReadSurface). A start against a server that already
+// carries this build's surface and dependents replaces nothing
 // (lwsqlsurface.InstallIfDrifted).
 func installSQLSurface(cfg chstore.Config, logger zerolog.Logger) {
 	go func() {

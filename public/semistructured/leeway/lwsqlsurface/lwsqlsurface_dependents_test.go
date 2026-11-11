@@ -108,17 +108,20 @@ func (inst countingConn) Exec(ctx context.Context, sql string) (err error) {
 	return inst.localConn.Exec(ctx, sql)
 }
 
-// A host start against a server in sync replaces nothing of the surface and
-// still re-creates the dependents; against a drifted one it installs.
+// A host start against a server in sync executes nothing: the surface is at
+// its revision and the dependent's statements are the ones last installed.
+// A dependent whose statements changed is re-created alone; a drifted
+// surface is installed in full.
 func TestInstallIfDriftedLeavesASyncedSurfaceAlone(t *testing.T) {
 	n := 0
 	conn := countingConn{localConn: newLocalConn(t), execs: &n}
 	ran := 0
+	database := "dep2"
 	defer lwsqlsurface.RegisterDependent(lwsqlsurface.Dependent{
 		Name: "test: counted",
 		Statements: func(ctx context.Context, c lwsqlsurface.Conn) ([]string, error) {
 			ran++
-			return []string{"CREATE DATABASE IF NOT EXISTS dep2"}, nil
+			return []string{"CREATE DATABASE IF NOT EXISTS " + database}, nil
 		},
 	})()
 
@@ -132,8 +135,19 @@ func TestInstallIfDriftedLeavesASyncedSurfaceAlone(t *testing.T) {
 	installed, err = lwsqlsurface.InstallIfDrifted(t.Context(), conn)
 	require.NoError(t, err)
 	require.False(t, installed)
-	require.Equal(t, 1, n, "only the dependent's statement is executed")
-	require.Equal(t, 2, ran)
+	require.Equal(t, 0, n, "nothing is executed")
+	require.Equal(t, 2, ran, "the dependent is still asked for its statements")
+
+	database = "dep3"
+	installed, err = lwsqlsurface.InstallIfDrifted(t.Context(), conn)
+	require.NoError(t, err)
+	require.True(t, installed, "changed statements are drift")
+	require.Equal(t, 2, n, "the dependent's statement and its digest marker")
+	n = 0
+	installed, err = lwsqlsurface.InstallIfDrifted(t.Context(), conn)
+	require.NoError(t, err)
+	require.False(t, installed)
+	require.Equal(t, 0, n)
 
 	require.NoError(t, conn.Exec(t.Context(), "DROP FUNCTION "+lwsqlsurface.VersionFunctionName))
 	n = 0

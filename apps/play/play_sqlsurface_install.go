@@ -46,8 +46,7 @@ const surfaceInstallTimeout = 2 * time.Minute
 // unknown-function or unknown-table error — an attributable signal — while
 // the warning below records why.
 //
-// A server already in sync is left as it is, apart from the dependent views
-// (lwsqlsurface.InstallIfDrifted). Nothing here asks for ReconcileDrop:
+// A server already in sync is left as it is (lwsqlsurface.InstallIfDrifted). Nothing here asks for ReconcileDrop:
 // this runs unattended at startup against whatever endpoint is configured,
 // which is the last place that should delete a function nobody asked it to.
 // The Vocabulary panel reports the same drift where a human can see it.

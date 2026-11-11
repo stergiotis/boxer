@@ -2,7 +2,10 @@ package lwsqlsurface
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -90,19 +93,83 @@ func sortedDependents() (ds []Dependent) {
 // installed by then, so the error says what is left stale rather than
 // suggesting the install did nothing.
 func installDependents(ctx context.Context, conn Conn) (err error) {
+	_, err = reconcileDependents(ctx, conn, true)
+	return
+}
+
+// installDriftedDependents re-creates the families whose statements differ
+// from the ones the server last had installed, and reports how many that
+// was.
+//
+// What it compares is a digest of the family's statements and the surface
+// revision they inline, which the previous install left on the server as a
+// marker function (dependentMarkerName). A family therefore needs no
+// revision of its own to be skipped, and a change to its definitions is
+// picked up without anyone bumping one. What the digest cannot see is a view
+// removed by hand on the server: the marker still matches, and it takes a
+// full [Install] to put the view back.
+func installDriftedDependents(ctx context.Context, conn Conn) (replaced int, err error) {
+	return reconcileDependents(ctx, conn, false)
+}
+
+func reconcileDependents(ctx context.Context, conn Conn, force bool) (replaced int, err error) {
 	for _, d := range sortedDependents() {
 		var stmts []string
 		stmts, err = d.Statements(ctx, conn)
 		if err != nil {
-			return eb.Build().Str("dependent", d.Name).Errorf("install dependent views (the surface is installed): %w", err)
+			return replaced, eb.Build().Str("dependent", d.Name).Errorf("install dependent views (the surface is installed): %w", err)
+		}
+		if len(stmts) == 0 {
+			continue
+		}
+		marker := dependentMarkerName(d.Name)
+		digest := dependentDigest(stmts)
+		if !force {
+			// A marker that is absent fails the query, which reads as drift.
+			have, qErr := queryTrimmed(ctx, conn, "SELECT "+marker+"()")
+			if qErr == nil && have == digest {
+				continue
+			}
 		}
 		for _, stmt := range stmts {
 			e := conn.Exec(ctx, stmt)
 			if e != nil {
-				return eb.Build().Str("dependent", d.Name).Str("statement", firstLine(stmt)).
+				return replaced, eb.Build().Str("dependent", d.Name).Str("statement", firstLine(stmt)).
 					Errorf("install dependent views (the surface is installed): %w", e)
 			}
 		}
+		// Last, so a family that stopped half way is re-created next time.
+		e := conn.Exec(ctx, "CREATE OR REPLACE FUNCTION "+marker+" AS () -> '"+digest+"'")
+		if e != nil {
+			return replaced, eb.Build().Str("dependent", d.Name).Errorf("record the dependent's digest: %w", e)
+		}
+		replaced++
 	}
-	return nil
+	return replaced, nil
+}
+
+// dependentMarkerName is the function that reports the digest a family was
+// last installed with. Like the feature probe it stays outside the `LW_`
+// namespace, which Reconcile reads as the surface's own.
+func dependentMarkerName(name string) (marker string) {
+	var sb strings.Builder
+	sb.WriteString("leewayDependentDigest_")
+	for _, r := range name {
+		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') {
+			sb.WriteRune(r)
+		}
+	}
+	return sb.String()
+}
+
+// dependentDigest covers the statements and the surface revision they are
+// expanded against.
+func dependentDigest(stmts []string) (digest string) {
+	h := sha256.New()
+	_, _ = h.Write([]byte(strconv.Itoa(Version)))
+	for _, stmt := range stmts {
+		_, _ = h.Write([]byte{0})
+		_, _ = h.Write([]byte(stmt))
+	}
+	return hex.EncodeToString(h.Sum(nil))
 }
