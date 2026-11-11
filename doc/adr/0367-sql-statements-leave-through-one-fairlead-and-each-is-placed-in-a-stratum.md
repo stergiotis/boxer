@@ -354,6 +354,19 @@ the expansion memo of the previous entries missed on every call.
 Play's dispatch sent eleven statements in this recording, so it says little
 about an editor workload.
 
+### 2026-11-11 — two things the journal asked for
+
+**A script is classified by its last statement.** The report splits a text
+the grammar does not read as one statement, classifies the last statement
+and marks the row `script`. `Classify` is unchanged and still answers the
+closed way for a script; the mark keeps such a row from passing for a
+statement that stood alone. Re-read this way, the recording's statements to
+the query process are reads, nearly all *derive*.
+
+**A host start leaves a surface in sync alone.** Hosts call
+`lwsqlsurface.InstallIfDrifted`, which installs only on drift and otherwise
+re-creates the dependent views, whose definitions carry no revision.
+
 ## References
 
 - [ADR-0117](0117-passthrough-table-classifier.md) — passthrough tables.

@@ -35,6 +35,10 @@ type ReportRow struct {
 	// literal.
 	Statements int64
 	Shapes     int64
+	// Script marks texts that hold several statements. Their classification
+	// is that of the last one: the statements before it set a stage — a
+	// temporary table — and the last is what the caller asked.
+	Script bool
 }
 
 type reportKey struct {
@@ -43,6 +47,7 @@ type reportKey struct {
 	kind       analysis.KindE
 	security   analysis.QuerySecurityClassE
 	stratum    analysis.QueryStratumE
+	script     bool
 }
 
 // Report folds journal files into rows. A statement text counts once per
@@ -77,7 +82,17 @@ func (inst *Report) Add(r io.Reader) {
 		}
 		inst.seen[e] = struct{}{}
 		c := analysis.Classify(e.SQL, "")
-		key := reportKey{e.Site, e.Exit, c.Parsed, c.Kind, c.Security, c.Stratum}
+		script := false
+		if !c.Parsed {
+			// The grammar reads one statement. A script is classified by its
+			// last statement and marked, so the row does not pass for a
+			// statement that stood alone.
+			if stmts := analysis.SplitStatements(e.SQL); len(stmts) > 1 {
+				c = analysis.Classify(stmts[len(stmts)-1], "")
+				script = true
+			}
+		}
+		key := reportKey{e.Site, e.Exit, c.Parsed, c.Kind, c.Security, c.Stratum, script}
 		inst.rows[key]++
 		set := inst.shapes[key]
 		if set == nil {
@@ -93,7 +108,7 @@ func (inst *Report) Add(r io.Reader) {
 func (inst *Report) Rows() (rows []ReportRow) {
 	rows = make([]ReportRow, 0, len(inst.rows))
 	for k, n := range inst.rows {
-		rows = append(rows, ReportRow{k.site, k.exit, k.parsed, k.kind, k.security, k.stratum, n, int64(len(inst.shapes[k]))})
+		rows = append(rows, ReportRow{k.site, k.exit, k.parsed, k.kind, k.security, k.stratum, n, int64(len(inst.shapes[k])), k.script})
 	}
 	slices.SortFunc(rows, func(a, b ReportRow) int {
 		return cmp.Or(
@@ -102,8 +117,16 @@ func (inst *Report) Rows() (rows []ReportRow) {
 			cmp.Compare(a.Stratum, b.Stratum),
 			cmp.Compare(a.Security, b.Security),
 			cmp.Compare(a.Kind, b.Kind),
+			cmp.Compare(btoi(a.Script), btoi(b.Script)),
 		)
 	})
+	return
+}
+
+func btoi(b bool) (i int) {
+	if b {
+		i = 1
+	}
 	return
 }
 
@@ -114,9 +137,9 @@ func (inst *Report) Torn() (n int32) {
 
 func writeRows(w io.Writer, rows []ReportRow) (err error) {
 	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
-	_, _ = fmt.Fprintln(tw, "site\texit\tparsed\tkind\tsecurity\tstratum\tstatements\tshapes")
+	_, _ = fmt.Fprintln(tw, "site\texit\tparsed\tkind\tsecurity\tstratum\tscript\tstatements\tshapes")
 	for _, r := range rows {
-		_, _ = fmt.Fprintf(tw, "%s\t%s\t%t\t%s\t%s\t%s\t%d\t%d\n", r.Site, r.Exit, r.Parsed, r.Kind, r.Security, r.Stratum, r.Statements, r.Shapes)
+		_, _ = fmt.Fprintf(tw, "%s\t%s\t%t\t%s\t%s\t%s\t%t\t%d\t%d\n", r.Site, r.Exit, r.Parsed, r.Kind, r.Security, r.Stratum, r.Script, r.Statements, r.Shapes)
 	}
 	err = tw.Flush()
 	return
