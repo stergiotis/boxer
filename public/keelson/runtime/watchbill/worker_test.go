@@ -292,6 +292,26 @@ func TestExpireFinishedRows(t *testing.T) {
 	assert.Len(t, f.store.Events(id), 2)
 }
 
+// Expiry keeps its own cadence, a hundredth of Keep: a poll inside it leaves
+// a row that is past Keep where it is, and the next one after it deletes it.
+func TestExpireDoesNotRideOnEveryPoll(t *testing.T) {
+	f := newFixture(t, "run-a", func(c *Config) { c.Keep = 100 * time.Minute })
+	id := f.enqueue(t, Request{})
+	f.tick(t)
+	f.clk.advance(100 * time.Minute)
+	f.tick(t) // expires; the row is exactly Keep old and stays
+	f.clk.advance(30 * time.Second)
+	f.tick(t)
+	_, found, err := f.store.Get(context.Background(), id)
+	require.NoError(t, err)
+	assert.True(t, found, "past Keep, and the expiry is not due")
+	f.clk.advance(30 * time.Second)
+	f.tick(t)
+	_, found, err = f.store.Get(context.Background(), id)
+	require.NoError(t, err)
+	assert.False(t, found)
+}
+
 // Retry puts a finished job back with its attempts reset.
 func TestRetryResetsAttempts(t *testing.T) {
 	f := newFixture(t, "run-a")

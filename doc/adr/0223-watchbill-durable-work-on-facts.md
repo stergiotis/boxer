@@ -525,6 +525,15 @@ statements are byte-identical, and the store still runs them as written:
 `UpdateIf` brackets its guard and refuses an empty one, and the cancel
 request is deliberately unguarded.
 
+### 2026-11-11 — expiry keeps its own cadence
+
+The worker expired finished rows on every poll, which on the ClickHouse
+store is one lightweight `DELETE` — a mutation — per poll, nearly all of
+them deleting nothing. Expiry now runs every hundredth of the keep
+duration, at least every ten minutes (`expireEvery`), so a finished row may
+outlive `KEELSON_WATCHBILL_KEEP` by that much. Cancels, the sweep and
+claims still run on every poll.
+
 ## References
 
 - [ADR-0038](./0038-keelson-background-task-primitive.md) — the task primitive; the Update of 2026-06-22 this ADR withdraws.

@@ -86,8 +86,10 @@ type Worker struct {
 	mu       sync.Mutex
 	running  map[string]*run
 	lastTick time.Time
-	ticks    uint64
-	unsubReq func()
+	// lastExpire is when the finished rows were last expired (expire).
+	lastExpire time.Time
+	ticks      uint64
+	unsubReq   func()
 	// notices is told a job's terminal state (SetNotices); nil tells
 	// no one.
 	notices atomic.Pointer[noticesRef]
@@ -330,7 +332,7 @@ func (inst *Worker) loop(ctx context.Context) {
 }
 
 // Tick is one pass of the loop, exposed so a test drives it without a
-// clock: honour cancels, sweep, expire, then fill the free slots. wg
+// clock: honour cancels, sweep, expire when due, then fill the free slots. wg
 // counts the runs started; nil is accepted when the caller does not wait.
 func (inst *Worker) Tick(ctx context.Context, wg *sync.WaitGroup) (err error) {
 	now := inst.now().UTC()
@@ -343,10 +345,40 @@ func (inst *Worker) Tick(ctx context.Context, wg *sync.WaitGroup) (err error) {
 	if err = inst.sweep(ctx, now); err != nil {
 		return
 	}
-	if err = inst.cfg.Store.Expire(ctx, now.Add(-inst.cfg.Keep)); err != nil {
+	if err = inst.expire(ctx, now); err != nil {
 		return
 	}
 	return inst.fill(ctx, now, wg)
+}
+
+// expireEveryMax bounds how long a finished row may outlive Keep.
+const expireEveryMax = 10 * time.Minute
+
+// expireEvery is how often the finished rows are expired: a hundredth of
+// Keep, and no less often than expireEveryMax. A row past Keep is of no
+// consequence to the queue, and on a ClickHouse store each expiry is a
+// mutation, so it does not ride on every poll.
+func expireEvery(keep time.Duration) (every time.Duration) {
+	return min(keep/100, expireEveryMax)
+}
+
+// expire deletes the rows finished longer ago than Keep, when the last time
+// it did so is at least expireEvery back. A failed expiry is tried again at
+// the next poll.
+func (inst *Worker) expire(ctx context.Context, now time.Time) (err error) {
+	inst.mu.Lock()
+	due := inst.lastExpire.IsZero() || now.Sub(inst.lastExpire) >= expireEvery(inst.cfg.Keep)
+	inst.mu.Unlock()
+	if !due {
+		return
+	}
+	if err = inst.cfg.Store.Expire(ctx, now.Add(-inst.cfg.Keep)); err != nil {
+		return
+	}
+	inst.mu.Lock()
+	inst.lastExpire = now
+	inst.mu.Unlock()
+	return
 }
 
 // honourCancels cancels the context of every held job whose row says
