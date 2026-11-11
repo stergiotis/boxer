@@ -4,7 +4,6 @@ package play
 
 import (
 	"slices"
-	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -50,49 +49,75 @@ func TestSceneChatBodiesTakeTheirHeightUpToTheCeiling(t *testing.T) {
 	})
 	scenetest.Run(t, s, `
 {"do":"wait","name":"Run","role":"button"}
-{"do":"read","valueContains":"6 rows","role":"label","pattern":"^(?P<rows>6) rows"}
+{"do":"wait","value":"6 rows","role":"label","comment":"the run's announcement; the status line holds the same words and more, so a contains-match is ambiguous"}
 {"do":"click","name":"Chat","role":"button"}
 {"do":"sleep","settleMs":1500}`)
 
+	// The transcript lays out only the messages near its view (chatview's
+	// virtualization), and a message not laid out is not in the tree. The
+	// pane opens at the tail, so the ceiling is measured there and the gaps
+	// between whole messages are gathered while scrolling up.
+	//
 	// The session's own connection: a second one would start a second video
 	// decoder on the carrier's stream for nothing.
-	snap, err := s.Client.Tree(10 * time.Second)
-	require.NoError(t, err)
-
-	// The transcript's text labels, one per message, by its prefix. The
-	// Detail pane repeats the selected row's body further right, so the
-	// leftmost label of each prefix is the bubble's.
 	type textBox struct{ top, h float32 }
-	byPrefix := map[string]textBox{}
-	leftmost := map[string]float32{}
-	for _, n := range snap.Nodes {
-		if n.Role != "label" {
-			continue
+	transcript := func() (byPrefix map[string]textBox) {
+		snap, err := s.Client.Tree(10 * time.Second)
+		require.NoError(t, err)
+		// One text label per message, by its prefix. The Detail pane repeats
+		// the selected row's body further right, so only labels in the left
+		// half are the transcript's.
+		byPrefix = map[string]textBox{}
+		for _, n := range snap.Nodes {
+			if n.Role != "label" || n.X > 700 {
+				continue
+			}
+			prefix, _, found := strings.Cut(n.Value, ".")
+			if !found || !slices.Contains([]string{"Grow 0", "Grow 1", "Grow 2", "Grow 3", "Huge", "Tail"}, prefix) {
+				continue
+			}
+			byPrefix[prefix] = textBox{top: n.Y, h: n.H}
 		}
-		prefix, _, found := strings.Cut(n.Value, ".")
-		if !found || !slices.Contains([]string{"Grow 0", "Grow 1", "Grow 2", "Grow 3", "Huge", "Tail"}, prefix) {
-			continue
-		}
-		if x, seen := leftmost[prefix]; seen && x <= n.X {
-			continue
-		}
-		leftmost[prefix] = n.X
-		byPrefix[prefix] = textBox{top: n.Y, h: n.H}
+		return
 	}
-	require.Len(t, byPrefix, 6, "every message's text is in the tree")
-
 	// Whole bubbles: the gap to the next message is the text's own height
 	// plus one constant chrome. A clipped bubble makes the gap constant
-	// instead, so the chrome would shrink as the text grows.
+	// instead, so the chrome would shrink as the text grows. A gap is taken
+	// from any view that lays out both of its messages, on the way from the
+	// tail to the top.
+	order := []string{"Grow 0", "Grow 1", "Grow 2", "Grow 3", "Huge"}
+	gaps := map[int]float32{}
+	note := func(view map[string]textBox) {
+		for i := range 4 {
+			cur, hasCur := view[order[i]]
+			next, hasNext := view[order[i+1]]
+			if hasCur && hasNext {
+				gaps[i] = next.top - cur.top - cur.h
+			}
+		}
+	}
+	atTail := transcript()
+	for _, p := range []string{"Grow 3", "Huge", "Tail"} {
+		require.Contains(t, atTail, p, "at the tail, the last messages are laid out")
+	}
+	note(atTail)
+	heights := map[string]float32{}
+	for range 8 {
+		scenetest.Run(t, s, `
+{"do":"hover","x":400,"y":770,"comment":"near the pane's foot: the huge message has a scroll area of its own that would take the wheel"}
+{"do":"scroll","x":0,"y":300}
+{"do":"sleep","settleMs":600}`)
+		view := transcript()
+		note(view)
+		for p, b := range view {
+			heights[p] = b.h
+		}
+	}
 	var chrome []float32
 	for i := range 4 {
-		cur := byPrefix["Grow "+strconv.Itoa(i)]
-		next := byPrefix["Huge"]
-		if i < 3 {
-			next = byPrefix["Grow "+strconv.Itoa(i+1)]
-		}
-		require.Greater(t, cur.h, float32(3*cardBlockLineHeight), "message %d must be several lines long to test anything", i)
-		chrome = append(chrome, next.top-cur.top-cur.h)
+		require.Contains(t, gaps, i, "no view laid out both %s and %s", order[i], order[i+1])
+		require.Greater(t, heights[order[i]], float32(3*cardBlockLineHeight), "message %d must be several lines long to test anything", i)
+		chrome = append(chrome, gaps[i])
 	}
 	for i, c := range chrome {
 		assert.InDelta(t, chrome[0], c, 2, "message %d is not shown whole: its bubble is %.0f points short of its text", i, chrome[0]-c)
@@ -100,7 +125,7 @@ func TestSceneChatBodiesTakeTheirHeightUpToTheCeiling(t *testing.T) {
 
 	// The ceiling: the huge text is thousands of points tall, and its bubble
 	// shows the ceiling's worth of it.
-	huge, tail := byPrefix["Huge"], byPrefix["Tail"]
+	huge, tail := atTail["Huge"], atTail["Tail"]
 	require.Greater(t, huge.h, float32(4*chatBlockMaxHeight), "the huge message must be far past the ceiling to test it")
 	shown := tail.top - huge.top - chrome[0]
 	assert.InDelta(t, chatBlockMaxHeight, shown, 12, "a long body scrolls at the ceiling rather than growing or collapsing")
