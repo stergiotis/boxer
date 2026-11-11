@@ -1942,11 +1942,7 @@ func openRunningOrNil(open func(filter string) error) func(filter string) {
 // connectLading is the lading publish service's connection: the server the
 // CLICKHOUSE_* variables name, pinged before it is used.
 func connectLading(ctx context.Context) (exec recordstore.ExecutorI, err error) {
-	client := chclient.New(chclient.ConfigFromEnv(), nil)
-	if err = client.Ping(ctx); err != nil {
-		return nil, eh.Errorf("ClickHouse not reachable: %w", err)
-	}
-	return storeexec.New(client, nil)
+	return storeexec.ConnectFromEnv(ctx)
 }
 
 // stampDriver writes the driver stamp of a window host's run row (ADR-0344

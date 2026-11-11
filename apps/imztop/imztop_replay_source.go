@@ -81,14 +81,9 @@ func NewStoreSource(ctx context.Context, opts StoreSourceOptions) (inst *StoreSo
 	if opts.Endpoint != "" {
 		cfg.URL = opts.Endpoint
 	}
-	client := chclient.New(cfg, nil)
-	if perr := client.Ping(ctx); perr != nil {
-		err = eb.Build().Str("url", cfg.URL).Errorf("imztop: replay needs ClickHouse: %w", perr)
-		return
-	}
-	exec, err := storeexec.New(client, nil)
+	exec, err := storeexec.Connect(ctx, cfg)
 	if err != nil {
-		err = eh.Errorf("imztop: replay executor: %w", err)
+		err = eh.Errorf("imztop: replay needs ClickHouse: %w", err)
 		return
 	}
 	store := sysmfacts.NewSysmetricsStore(exec, nil, sysmfacts.SysmetricsStoreConfig{})

@@ -25,7 +25,6 @@ import (
 	"github.com/urfave/cli/v3"
 
 	"github.com/rs/zerolog"
-	"github.com/stergiotis/boxer/public/keelson/data/chclient"
 	"github.com/stergiotis/boxer/public/keelson/data/storeexec"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/coveragebus"
@@ -72,8 +71,7 @@ func NewCliCommand() *cli.Command {
 
 // open connects to the server and provisions the tables in the layout.
 func open(ctx context.Context, cmd *cli.Command) (store *watchbill.SqlStore, err error) {
-	client := chclient.New(chclient.ConfigFromEnv(), nil)
-	exec, err := storeexec.New(client, nil)
+	exec, err := storeexec.ConnectFromEnv(ctx)
 	if err != nil {
 		return nil, eh.Errorf("executor: %w", err)
 	}

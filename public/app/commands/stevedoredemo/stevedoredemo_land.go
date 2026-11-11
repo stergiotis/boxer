@@ -13,7 +13,6 @@ import (
 	"github.com/twmb/franz-go/pkg/kgo"
 	"github.com/urfave/cli/v3"
 
-	"github.com/stergiotis/boxer/public/keelson/data/chclient"
 	"github.com/stergiotis/boxer/public/keelson/data/storeexec"
 	"github.com/stergiotis/boxer/public/keelson/runtime/runinfo"
 	"github.com/stergiotis/boxer/public/observability/eh"
@@ -88,8 +87,7 @@ func openDeadLetters(ctx context.Context, cmd *cli.Command) (dead deadletter.Sto
 	case "log":
 		dead = deadletter.Log{Logger: &log.Logger}
 	case "clickhouse":
-		client := chclient.New(chclient.ConfigFromEnv(), nil)
-		exec, xerr := storeexec.New(client, nil)
+		exec, xerr := storeexec.ConnectFromEnv(ctx)
 		if xerr != nil {
 			return nil, closeFn, eh.Errorf("executor: %w", xerr)
 		}

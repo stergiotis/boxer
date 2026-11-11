@@ -19,7 +19,6 @@ import (
 	"github.com/stergiotis/boxer/public/fs/lading/ladingadhoc"
 	"github.com/stergiotis/boxer/public/fs/lading/ladingpolicy"
 	"github.com/stergiotis/boxer/public/identity/identifier"
-	"github.com/stergiotis/boxer/public/keelson/data/chclient"
 	"github.com/stergiotis/boxer/public/keelson/data/storeexec"
 	"github.com/stergiotis/boxer/public/keelson/runtime/bgjob"
 	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
@@ -120,14 +119,8 @@ func (inst *App) publishAndOpen(ctx context.Context, gen int, mount identifier.T
 	ctx, cancel := context.WithTimeout(ctx, treeTimeout)
 	defer cancel()
 
-	client := chclient.New(chclient.ConfigFromEnv(), nil)
-	if err = client.Ping(ctx); err != nil {
-		err = eh.Errorf("ClickHouse not reachable: %w", err)
-		return
-	}
-	exec, err := storeexec.New(client, nil)
+	exec, err := storeexec.ConnectFromEnv(ctx)
 	if err != nil {
-		err = eh.Errorf("executor: %w", err)
 		return
 	}
 	res, err = ladingadhoc.Publish(ctx, exec, ladingadhoc.PublishInput{

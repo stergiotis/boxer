@@ -8,7 +8,6 @@ import (
 
 	cli "github.com/urfave/cli/v3"
 
-	"github.com/stergiotis/boxer/public/keelson/data/chclient"
 	"github.com/stergiotis/boxer/public/keelson/data/storeexec"
 	"github.com/stergiotis/boxer/public/keelson/runtime/runinfo"
 	"github.com/stergiotis/boxer/public/observability/eh"
@@ -65,12 +64,8 @@ func runIngest(cliCtx context.Context, cmd *cli.Command) (err error) {
 
 	var store *mddocfacts.MddocStore
 	if !cmd.Bool("dry-run") {
-		client := chclient.New(chclient.ConfigFromEnv(), nil)
-		if err = client.Ping(ctx); err != nil {
-			return eh.Errorf("ping clickhouse: %w", err)
-		}
 		var exec *storeexec.Executor
-		exec, err = storeexec.New(client, nil)
+		exec, err = storeexec.ConnectFromEnv(ctx)
 		if err != nil {
 			return
 		}

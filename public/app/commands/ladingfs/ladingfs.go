@@ -31,7 +31,6 @@ import (
 	"github.com/stergiotis/boxer/public/fs/lading/ladingsftp"
 	"github.com/stergiotis/boxer/public/fs/lading/ladingsql"
 	"github.com/stergiotis/boxer/public/identity/identifier"
-	"github.com/stergiotis/boxer/public/keelson/data/chclient"
 	"github.com/stergiotis/boxer/public/keelson/data/storeexec"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
@@ -67,16 +66,7 @@ func layoutOf(cmd *cli.Command) ladingschema.Layout {
 // connect reaches the server the environment names and returns the executor
 // every verb writes and reads through.
 func connect(ctx context.Context) (exec recordstore.ExecutorI, err error) {
-	client := chclient.New(chclient.ConfigFromEnv(), nil)
-	err = client.Ping(ctx)
-	if err != nil {
-		return nil, eh.Errorf("ClickHouse not reachable: %w", err)
-	}
-	exec, err = storeexec.New(client, nil)
-	if err != nil {
-		return nil, eh.Errorf("executor: %w", err)
-	}
-	return
+	return storeexec.ConnectFromEnv(ctx)
 }
 
 func newPurgeCommand() *cli.Command {

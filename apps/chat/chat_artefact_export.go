@@ -27,7 +27,6 @@ import (
 	"github.com/stergiotis/boxer/public/fs/lading/ladingschema"
 	"github.com/stergiotis/boxer/public/identity/identifier"
 	"github.com/stergiotis/boxer/public/identity/tagmint"
-	"github.com/stergiotis/boxer/public/keelson/data/chclient"
 	"github.com/stergiotis/boxer/public/keelson/data/storeexec"
 	"github.com/stergiotis/boxer/public/keelson/runtime/agentrun"
 	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
@@ -410,11 +409,7 @@ func (inst *App) exportNow(ctx context.Context, p *exportPlan, name string) (not
 // (ADR-0341); the text and each screenshot are checked against the digests
 // the export recorded.
 func readExport(ctx context.Context, rec exportRecord) (art *artefact, err error) {
-	client := chclient.New(chclient.ConfigFromEnv(), nil)
-	if err = client.Ping(ctx); err != nil {
-		return nil, eh.Errorf("ClickHouse not reachable: %w", err)
-	}
-	exec, err := storeexec.New(client, nil)
+	exec, err := storeexec.ConnectFromEnv(ctx)
 	if err != nil {
 		return
 	}

@@ -19,7 +19,6 @@ import (
 	"time"
 
 	"github.com/rs/zerolog/log"
-	"github.com/stergiotis/boxer/public/keelson/data/chclient"
 	"github.com/stergiotis/boxer/public/keelson/data/storeexec"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/natsbus"
@@ -30,7 +29,6 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/sysmtee"
 	"github.com/stergiotis/boxer/public/keelson/runtime/topo"
 	"github.com/stergiotis/boxer/public/observability/eh"
-	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/urfave/cli/v3"
 )
 
@@ -81,16 +79,9 @@ func NewCliCommand() *cli.Command {
 // agree with decode as absent, which is indistinguishable from having written
 // nothing.
 func startTee(ctx context.Context, bus app.BusI, host string, flushInterval time.Duration, persistProcCmd bool) (stop func() error, err error) {
-	cfg := chclient.ConfigFromEnv()
-	client := chclient.New(cfg, nil)
-	err = client.Ping(ctx)
+	exec, err := storeexec.ConnectFromEnv(ctx)
 	if err != nil {
-		err = eb.Build().Str("url", cfg.URL).Errorf("sysmetricsd: tee needs ClickHouse: %w", err)
-		return
-	}
-	exec, err := storeexec.New(client, nil)
-	if err != nil {
-		err = eh.Errorf("sysmetricsd: tee executor: %w", err)
+		err = eh.Errorf("sysmetricsd: tee needs ClickHouse: %w", err)
 		return
 	}
 	store := sysmfacts.NewSysmetricsStore(exec, nil, sysmfacts.SysmetricsStoreConfig{})
