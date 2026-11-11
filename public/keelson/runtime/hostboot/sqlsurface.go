@@ -30,16 +30,19 @@ const sqlSurfaceTimeout = 2 * time.Minute
 // The function families themselves are already there when this runs: the
 // facts store's setup installs them, because its reads need them
 // (chstore.Store.EnsureReadSurface). What this adds on every boot is the
-// views and the dependents, which go stale without a revision change.
+// dependents, which go stale without a revision change; the surface itself
+// is replaced only when the server has drifted from what this build declares
+// (lwsqlsurface.InstallIfDrifted).
 func installSQLSurface(cfg chstore.Config, logger zerolog.Logger) {
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), sqlSurfaceTimeout)
 		defer cancel()
 		client := chclient.New(chclient.Config{URL: cfg.URL, User: cfg.User, Password: cfg.Password}, nil)
-		if err := lwsqlsurface.Install(ctx, client); err != nil {
+		installed, err := lwsqlsurface.InstallIfDrifted(ctx, client)
+		if err != nil {
 			logger.Warn().Err(err).Str("url", cfg.URL).Msg("hostboot: leeway SQL surface install failed; the trail views may be missing or stale on this server")
 			return
 		}
-		logger.Info().Str("url", cfg.URL).Int("version", lwsqlsurface.Version).Msg("hostboot: leeway SQL surface and its dependent views reconciled")
+		logger.Info().Str("url", cfg.URL).Int("version", lwsqlsurface.Version).Bool("installed", installed).Msg("hostboot: leeway SQL surface and its dependent views reconciled")
 	}()
 }

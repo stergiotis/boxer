@@ -46,7 +46,8 @@ const surfaceInstallTimeout = 2 * time.Minute
 // unknown-function or unknown-table error — an attributable signal — while
 // the warning below records why.
 //
-// Reconcile is not called here, and deliberately not with ReconcileDrop:
+// A server already in sync is left as it is, apart from the dependent views
+// (lwsqlsurface.InstallIfDrifted). Nothing here asks for ReconcileDrop:
 // this runs unattended at startup against whatever endpoint is configured,
 // which is the last place that should delete a function nobody asked it to.
 // The Vocabulary panel reports the same drift where a human can see it.
@@ -63,12 +64,12 @@ func installSQLSurface(url, user, password string, logger zerolog.Logger) {
 			ctx, cancel := context.WithTimeout(context.Background(), surfaceInstallTimeout)
 			defer cancel()
 			client := chclient.New(chclient.Config{URL: url, User: user, Password: password}, nil)
-			err := lwsqlsurface.Install(ctx, client)
+			installed, err := lwsqlsurface.InstallIfDrifted(ctx, client)
 			if err != nil {
 				logger.Warn().Err(err).Str("url", url).Msg("play: leeway SQL surface install failed; part of the surface is missing on this server")
 				return
 			}
-			logger.Info().Str("url", url).Int("version", lwsqlsurface.Version).Msg("play: leeway SQL surface reconciled")
+			logger.Info().Str("url", url).Int("version", lwsqlsurface.Version).Bool("installed", installed).Msg("play: leeway SQL surface reconciled")
 		}()
 	})
 }

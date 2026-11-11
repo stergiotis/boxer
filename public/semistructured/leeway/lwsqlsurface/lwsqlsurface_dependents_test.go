@@ -96,3 +96,48 @@ func TestRegisterDependentRefusesDuplicatesAndBlanks(t *testing.T) {
 	require.Panics(t, func() { lwsqlsurface.RegisterDependent(lwsqlsurface.Dependent{Name: "test: no statements"}) })
 	require.NotContains(t, lwsqlsurface.Dependents(), "test: no statements")
 }
+
+// countingConn counts the statements executed through it.
+type countingConn struct {
+	*localConn
+	execs *int
+}
+
+func (inst countingConn) Exec(ctx context.Context, sql string) (err error) {
+	*inst.execs++
+	return inst.localConn.Exec(ctx, sql)
+}
+
+// A host start against a server in sync replaces nothing of the surface and
+// still re-creates the dependents; against a drifted one it installs.
+func TestInstallIfDriftedLeavesASyncedSurfaceAlone(t *testing.T) {
+	n := 0
+	conn := countingConn{localConn: newLocalConn(t), execs: &n}
+	ran := 0
+	defer lwsqlsurface.RegisterDependent(lwsqlsurface.Dependent{
+		Name: "test: counted",
+		Statements: func(ctx context.Context, c lwsqlsurface.Conn) ([]string, error) {
+			ran++
+			return []string{"CREATE DATABASE IF NOT EXISTS dep2"}, nil
+		},
+	})()
+
+	installed, err := lwsqlsurface.InstallIfDrifted(t.Context(), conn)
+	require.NoError(t, err)
+	require.True(t, installed, "an empty server is drifted")
+	first := n
+	require.Greater(t, first, len(lwsqlsurface.Statements()))
+
+	n = 0
+	installed, err = lwsqlsurface.InstallIfDrifted(t.Context(), conn)
+	require.NoError(t, err)
+	require.False(t, installed)
+	require.Equal(t, 1, n, "only the dependent's statement is executed")
+	require.Equal(t, 2, ran)
+
+	require.NoError(t, conn.Exec(t.Context(), "DROP FUNCTION "+lwsqlsurface.VersionFunctionName))
+	n = 0
+	installed, err = lwsqlsurface.InstallIfDrifted(t.Context(), conn)
+	require.NoError(t, err)
+	require.True(t, installed, "a missing marker is drift")
+}
