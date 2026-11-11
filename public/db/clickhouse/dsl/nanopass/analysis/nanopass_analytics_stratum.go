@@ -183,13 +183,21 @@ func fromHasFinalOrSample(stmt *grammar1.SelectStmtContext) (found bool) {
 // from a single parse (ADR-0367 §SD2). The zero value is the closed answer on
 // every axis: unknown kind, mutating, unplaced.
 type Classification struct {
-	// Parsed reports whether the grammar read the statement. When it did
-	// not, Kind comes from the leading keyword and every other field is its
-	// zero value.
-	Parsed   bool
-	Kind     KindE
-	Security QuerySecurityClassE
-	Stratum  QueryStratumE
+	// Parsed reports whether the grammar read the statement — for a wrapper
+	// that Introspects, the statement it wraps. When it did not, Kind comes
+	// from the leading keyword and, unless Introspects, every other field
+	// is its zero value.
+	Parsed bool
+	// Introspects marks a statement that reports on a statement or a named
+	// object instead of returning rows: EXPLAIN, DESCRIBE, EXISTS. Around a
+	// statement the grammar reads, the other fields are that statement's —
+	// what a server has to understand to answer — except Passthrough, since
+	// no row of a table is returned. About a named object, the statement is
+	// a read with no stratum.
+	Introspects bool
+	Kind        KindE
+	Security    QuerySecurityClassE
+	Stratum     QueryStratumE
 	// Witnesses are the constructs that lowered Security below read.
 	Witnesses []SecurityWitness
 	// Passthrough lists the base tables returned 1:1 (ADR-0117). A
@@ -212,6 +220,23 @@ func Classify(sql string, defaultDatabase string) (c Classification) {
 	pr, err := nanopass.Parse(sql)
 	c.Kind = statementKind(sql, pr, err)
 	if err != nil {
+		if c.Kind != KindReadOnly {
+			return
+		}
+		inner, catalogue, ok := introspected(sql)
+		switch {
+		case !ok:
+		case catalogue:
+			c.Introspects, c.Security = true, QuerySecurityRead
+		default:
+			// The wrapped statement has to be one the grammar reads: an
+			// introspection wrapped in another is left unread.
+			w := Classify(inner, defaultDatabase)
+			if w.Parsed && !w.Introspects && w.Kind == KindReadOnly {
+				c = w
+				c.Introspects, c.Passthrough = true, nil
+			}
+		}
 		return
 	}
 	c.Parsed = true

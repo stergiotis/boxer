@@ -18,6 +18,8 @@ func TestReportFoldsJournalsPerSiteAndClassification(t *testing.T) {
 		`{"site":"a.post","exit":"server","sql":"CREATE TABLE t (a UInt8) ENGINE = Memory"}`,
 		`{"site":"b.local","exit":"local","sql":"SELECT a FROM t WHERE a > 1"}`,
 		`{"site":"b.local","exit":"local","sql":"CREATE TEMPORARY TABLE s AS SELECT 1 AS a; SELECT * FROM s"}`,
+		`{"site":"c.meta","exit":"server","sql":"DESCRIBE (SELECT a FROM t WHERE a > 1) FORMAT ArrowStream"}`,
+		`{"site":"c.meta","exit":"server","sql":"EXISTS TABLE db.t"}`,
 	}, "\n") + "\n"
 	// A second process saw one statement again, one new one, and was killed
 	// mid-line.
@@ -32,17 +34,19 @@ func TestReportFoldsJournalsPerSiteAndClassification(t *testing.T) {
 	require.EqualValues(t, 1, rep.Torn())
 
 	require.Equal(t, []ReportRow{
-		{"a.post", "server", false, analysis.KindMutating, analysis.QuerySecurityMutating, analysis.QueryStratumUnplaced, 1, 1, false},
-		{"a.post", "server", true, analysis.KindReadOnly, analysis.QuerySecurityRead, analysis.QueryStratumDerive, 1, 1, false},
-		{"a.post", "server", true, analysis.KindReadOnly, analysis.QuerySecurityRead, analysis.QueryStratumVerbatim, 2, 2, false},
-		{"b.local", "local", true, analysis.KindReadOnly, analysis.QuerySecurityRead, analysis.QueryStratumRestrict, 3, 2, false},
-		{"b.local", "local", true, analysis.KindReadOnly, analysis.QuerySecurityRead, analysis.QueryStratumVerbatim, 1, 1, true},
+		{"a.post", "server", false, analysis.KindMutating, analysis.QuerySecurityMutating, analysis.QueryStratumUnplaced, 1, 1, false, false},
+		{"a.post", "server", true, analysis.KindReadOnly, analysis.QuerySecurityRead, analysis.QueryStratumDerive, 1, 1, false, false},
+		{"a.post", "server", true, analysis.KindReadOnly, analysis.QuerySecurityRead, analysis.QueryStratumVerbatim, 2, 2, false, false},
+		{"b.local", "local", true, analysis.KindReadOnly, analysis.QuerySecurityRead, analysis.QueryStratumRestrict, 3, 2, false, false},
+		{"b.local", "local", true, analysis.KindReadOnly, analysis.QuerySecurityRead, analysis.QueryStratumVerbatim, 1, 1, true, false},
+		{"c.meta", "server", false, analysis.KindReadOnly, analysis.QuerySecurityRead, analysis.QueryStratumUnplaced, 1, 1, false, true},
+		{"c.meta", "server", true, analysis.KindReadOnly, analysis.QuerySecurityRead, analysis.QueryStratumRestrict, 1, 1, false, true},
 	}, rep.Rows())
 
 	var out bytes.Buffer
 	require.NoError(t, writeRows(&out, rep.Rows()))
 	lines := strings.Split(strings.TrimSpace(out.String()), "\n")
-	require.Len(t, lines, 6)
-	require.Equal(t, []string{"site", "exit", "parsed", "kind", "security", "stratum", "script", "statements", "shapes"}, strings.Fields(lines[0]))
-	require.Equal(t, []string{"a.post", "server", "true", "read-only", "read", "verbatim", "false", "2", "2"}, strings.Fields(lines[3]))
+	require.Len(t, lines, 8)
+	require.Equal(t, []string{"site", "exit", "parsed", "kind", "security", "stratum", "script", "introspects", "statements", "shapes"}, strings.Fields(lines[0]))
+	require.Equal(t, []string{"a.post", "server", "true", "read-only", "read", "verbatim", "false", "false", "2", "2"}, strings.Fields(lines[3]))
 }

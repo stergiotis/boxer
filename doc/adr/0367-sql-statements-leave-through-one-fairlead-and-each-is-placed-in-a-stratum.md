@@ -377,6 +377,33 @@ their expansion is kept. A value a person types into a filter is no longer
 part of the SQL. What a journal line omits (see Deferred) now includes
 these values. The level list of the log read is still written as literals.
 
+### 2026-11-11 — a second recording: dependents by digest, introspection classified
+
+A longer recording, with a play session in it, showed three things the
+first did not.
+
+**Dependent views are keyed by a digest of their statements.** A host start
+against a server in sync still re-created the trail and journal views every
+time. `InstallIfDrifted` now leaves a dependent alone when the digest of its
+statements and the surface revision matches the one its last install
+recorded on the server, which supersedes "otherwise re-creates the
+dependent views" in the entry above. A view removed by hand is not noticed
+by this check; a full install restores it.
+
+**Statements that report rather than return rows are classified.**
+`EXPLAIN` and `DESCRIBE` around a statement the grammar reads take that
+statement's security class and stratum, and `EXISTS` or `DESCRIBE` of a
+named object is a read with no stratum; `Classification.Introspects` marks
+both, and the report has a column for it. `SHOW`, a `DESCRIBE` of a table
+function and an `EXPLAIN` of a write stay unread.
+
+**Two polling loops were most of the traffic, and neither is a query
+problem.** The job queue expired finished rows on every poll
+([ADR-0223](0223-watchbill-durable-work-on-facts.md), update of this date),
+and the chat window re-read its agent surface on a timer through a running
+turn; it now re-reads when a tool call starts or ends. Both were found by
+reading the journal, which is the use §SD4 intends for it.
+
 ## References
 
 - [ADR-0117](0117-passthrough-table-classifier.md) — passthrough tables.

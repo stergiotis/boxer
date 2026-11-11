@@ -39,6 +39,9 @@ type ReportRow struct {
 	// is that of the last one: the statements before it set a stage — a
 	// temporary table — and the last is what the caller asked.
 	Script bool
+	// Introspects marks statements that report on a statement or an object
+	// instead of returning rows ([analysis.Classification.Introspects]).
+	Introspects bool
 }
 
 type reportKey struct {
@@ -48,6 +51,7 @@ type reportKey struct {
 	security   analysis.QuerySecurityClassE
 	stratum    analysis.QueryStratumE
 	script     bool
+	introspect bool
 }
 
 // Report folds journal files into rows. A statement text counts once per
@@ -92,7 +96,7 @@ func (inst *Report) Add(r io.Reader) {
 				script = true
 			}
 		}
-		key := reportKey{e.Site, e.Exit, c.Parsed, c.Kind, c.Security, c.Stratum, script}
+		key := reportKey{e.Site, e.Exit, c.Parsed, c.Kind, c.Security, c.Stratum, script, c.Introspects}
 		inst.rows[key]++
 		set := inst.shapes[key]
 		if set == nil {
@@ -108,7 +112,7 @@ func (inst *Report) Add(r io.Reader) {
 func (inst *Report) Rows() (rows []ReportRow) {
 	rows = make([]ReportRow, 0, len(inst.rows))
 	for k, n := range inst.rows {
-		rows = append(rows, ReportRow{k.site, k.exit, k.parsed, k.kind, k.security, k.stratum, n, int64(len(inst.shapes[k])), k.script})
+		rows = append(rows, ReportRow{k.site, k.exit, k.parsed, k.kind, k.security, k.stratum, n, int64(len(inst.shapes[k])), k.script, k.introspect})
 	}
 	slices.SortFunc(rows, func(a, b ReportRow) int {
 		return cmp.Or(
@@ -118,6 +122,7 @@ func (inst *Report) Rows() (rows []ReportRow) {
 			cmp.Compare(a.Security, b.Security),
 			cmp.Compare(a.Kind, b.Kind),
 			cmp.Compare(btoi(a.Script), btoi(b.Script)),
+			cmp.Compare(btoi(a.Introspects), btoi(b.Introspects)),
 		)
 	})
 	return
@@ -137,9 +142,9 @@ func (inst *Report) Torn() (n int32) {
 
 func writeRows(w io.Writer, rows []ReportRow) (err error) {
 	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
-	_, _ = fmt.Fprintln(tw, "site\texit\tparsed\tkind\tsecurity\tstratum\tscript\tstatements\tshapes")
+	_, _ = fmt.Fprintln(tw, "site\texit\tparsed\tkind\tsecurity\tstratum\tscript\tintrospects\tstatements\tshapes")
 	for _, r := range rows {
-		_, _ = fmt.Fprintf(tw, "%s\t%s\t%t\t%s\t%s\t%s\t%t\t%d\t%d\n", r.Site, r.Exit, r.Parsed, r.Kind, r.Security, r.Stratum, r.Script, r.Statements, r.Shapes)
+		_, _ = fmt.Fprintf(tw, "%s\t%s\t%t\t%s\t%s\t%s\t%t\t%t\t%d\t%d\n", r.Site, r.Exit, r.Parsed, r.Kind, r.Security, r.Stratum, r.Script, r.Introspects, r.Statements, r.Shapes)
 	}
 	err = tw.Flush()
 	return

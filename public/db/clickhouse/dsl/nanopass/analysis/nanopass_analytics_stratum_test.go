@@ -132,3 +132,47 @@ func TestClassify(t *testing.T) {
 		}
 	})
 }
+
+// A statement that reports on another is classified by the one it wraps; a
+// question about a named object is a read with no stratum. What is not
+// recognised stays closed.
+func TestClassifyIntrospection(t *testing.T) {
+	tests := []struct {
+		name        string
+		sql         string
+		introspects bool
+		parsed      bool
+		security    QuerySecurityClassE
+		stratum     QueryStratumE
+	}{
+		{"describe_select", `DESCRIBE (SELECT * FROM db.t) SETTINGS output_format_arrow_string_as_string=1 FORMAT ArrowStream`, true, true, QuerySecurityRead, QueryStratumVerbatim},
+		{"describe_table_select", `DESC TABLE (SELECT count() FROM t)`, true, true, QuerySecurityRead, QueryStratumDerive},
+		{"explain_select", `EXPLAIN SELECT a FROM t WHERE a > 1`, true, true, QuerySecurityRead, QueryStratumRestrict},
+		{"explain_kind_and_options", `EXPLAIN PLAN indexes = 1 SELECT * FROM t`, true, true, QuerySecurityRead, QueryStratumVerbatim},
+		{"explain_ast_after_comment", "EXPLAIN AST\n-- a note\nSELECT * FROM t", true, true, QuerySecurityRead, QueryStratumVerbatim},
+		{"exists_table", `EXISTS TABLE db.t`, true, false, QuerySecurityRead, QueryStratumUnplaced},
+		{"describe_name", `DESCRIBE TABLE db.t`, true, false, QuerySecurityRead, QueryStratumUnplaced},
+
+		{"describe_table_function", `DESCRIBE TABLE url('http://example.invalid/x', 'CSV')`, false, false, QuerySecurityMutating, QueryStratumUnplaced},
+		{"explain_of_a_write", `EXPLAIN INSERT INTO t SELECT 1`, false, false, QuerySecurityMutating, QueryStratumUnplaced},
+		{"explain_then_a_statement", `EXPLAIN SELECT 1; DROP TABLE t`, false, false, QuerySecurityMutating, QueryStratumUnplaced},
+		{"show", `SHOW TABLES`, false, false, QuerySecurityMutating, QueryStratumUnplaced},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := Classify(tt.sql, "")
+			require.Equal(t, KindReadOnly, c.Kind)
+			require.Equal(t, tt.introspects, c.Introspects)
+			require.Equal(t, tt.parsed, c.Parsed)
+			require.Equal(t, tt.security, c.Security)
+			require.Equal(t, tt.stratum, c.Stratum)
+			require.Empty(t, c.Passthrough)
+		})
+	}
+
+	t.Run("a wrapped read beyond the endpoint keeps its class", func(t *testing.T) {
+		c := Classify(`DESCRIBE (SELECT * FROM url('http://example.invalid/x', 'CSV'))`, "")
+		require.True(t, c.Introspects)
+		require.NotEqual(t, QuerySecurityRead, c.Security)
+	})
+}
