@@ -323,6 +323,37 @@ did. Gap: integer and string columns are read at whatever width and encoding
 the server chooses, and the set accepted is the one observed against one
 server version.
 
+### 2026-11-11 — a journal from two hosts in use
+
+**A second measurement,** from two host processes used interactively
+against a server, chat mostly and play a little: 852 distinct statements in
+181 shapes. It reverses the first one's proportion — 670 statements went to
+the server and 182 to a query process — so the test lane's six-to-one says
+what tests send and nothing about a host.
+
+| | Statements | Shapes |
+| --- | --- | --- |
+| Reads: derive | 215 | 15 |
+| Reads: restrict | 160 | 9 |
+| Reads: verbatim | 2 | 2 |
+| Unplaced | 475 | 155 |
+
+**What the unplaced rows are.** About a third of everything sent to the
+server is the read surface being installed and its retired names dropped,
+once per boot. Row-level `UPDATE` and `DELETE` from two generated stores
+account for most of the rest; they are few shapes and many statements.
+Every statement to the query process is a two-statement script — a
+temporary table, then a read — which the grammar does not read as one
+statement, so those reads have no stratum. That is a gap in what `Classify`
+is handed, not in the strata.
+
+**What repeats.** Four shapes carry nearly all the reads, each sent many
+times with a literal that moves. For the facts store's own reads that means
+the expansion memo of the previous entries missed on every call.
+
+Play's dispatch sent eleven statements in this recording, so it says little
+about an editor workload.
+
 ## References
 
 - [ADR-0117](0117-passthrough-table-classifier.md) — passthrough tables.
