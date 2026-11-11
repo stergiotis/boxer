@@ -3,7 +3,7 @@ type: explanation
 audience: contributor
 status: stable
 reviewed-by: "p@stergiotis"
-reviewed-date: 2026-09-14
+reviewed-date: 2026-11-11
 ---
 
 # How boxer's bets meet the ISO 25010 product-quality model

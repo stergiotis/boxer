@@ -3,7 +3,7 @@ type: explanation
 audience: contributors and integrators deciding how to run boxer and where its data lives
 status: stable
 reviewed-by: "p@stergiotis"
-reviewed-date: 2026-08-23
+reviewed-date: 2026-11-11
 ---
 
 > This page decides nothing; where it and an ADR disagree, the ADR is the
