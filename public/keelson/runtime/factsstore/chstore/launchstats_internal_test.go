@@ -1,7 +1,6 @@
 package chstore
 
 import (
-	"strings"
 	"testing"
 	"time"
 
@@ -73,5 +72,5 @@ func TestComposeAppLaunchStatsSql_ShapeIsTheDecision(t *testing.T) {
 	assert.Contains(t, sql, "LIMIT 100")
 	assert.Contains(t, sql, "1209600.000000", "the half-life reaches the query in seconds")
 	assert.Contains(t, sql, "app_id != ''", "a row with no app reference is not an app's launch")
-	assert.Equal(t, 1, strings.Count(sql, "FORMAT TabSeparated"))
+	assert.Contains(t, sql, "LW_GET('symbol', 'runtime-lifecycle-phase'", "the phase is read by name, not by lane position")
 }

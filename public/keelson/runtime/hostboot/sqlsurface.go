@@ -26,6 +26,11 @@ const sqlSurfaceTimeout = 2 * time.Minute
 // facts server, in the background: boot does not wait, and a failure leaves
 // a warning and the server as it was. No drop is asked for — this runs
 // unattended against whatever endpoint is configured.
+//
+// The function families themselves are already there when this runs: the
+// facts store's setup installs them, because its reads need them
+// (chstore.Store.EnsureReadSurface). What this adds on every boot is the
+// views and the dependents, which go stale without a revision change.
 func installSQLSurface(cfg chstore.Config, logger zerolog.Logger) {
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), sqlSurfaceTimeout)

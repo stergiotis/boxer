@@ -19,12 +19,12 @@ type columnExprsLifecycle struct {
 }
 
 func buildLifecycleColumnExprs() (e columnExprsLifecycle) {
-	e.id = idCol
-	e.tsSec = fmt.Sprintf("toUnixTimestamp(%s)", tsCol)
-	e.appId = pickLcrString(symValue, symLR, symLRCard, vocab.MembRuntimeApp.GetId().Value())
-	e.runId = pickLcrString(symValue, symLR, symLRCard, vocab.MembRuntimeRun.GetId().Value())
-	e.phase = pickLcrString(symValue, symLR, symLRCard, vocab.MembLifecyclePhase.GetId().Value())
-	e.stopReason = pickLcrString(strValue, strLR, strLRCard, vocab.MembLifecycleStopReason.GetId().Value())
-	e.tileKey = pickLcrNumeric(u64Value, u64LR, u64LRCard, vocab.MembLifecycleTileKey.GetId().Value(), "0")
+	e.id = hId
+	e.tsSec = fmt.Sprintf("toUnixTimestamp(%s)", hTs)
+	e.appId = sym(vocab.MembRuntimeApp)
+	e.runId = sym(vocab.MembRuntimeRun)
+	e.phase = sym(vocab.MembLifecyclePhase)
+	e.stopReason = str(vocab.MembLifecycleStopReason)
+	e.tileKey = u64(vocab.MembLifecycleTileKey)
 	return
 }

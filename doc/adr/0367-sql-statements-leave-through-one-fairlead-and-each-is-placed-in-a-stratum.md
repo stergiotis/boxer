@@ -262,6 +262,46 @@ three run-session writers are handed is present in the stored row. It does
 not check which membership carries a value, which the removed round trips
 did.
 
+### 2026-11-11 — the read surface is part of setup, and the facts store reads through it
+
+**Decided.** The question the previous entry left open is answered: the
+leeway read surface is mandatory initial setup. The reason is the
+statements, not the server — SQL in this tree should be as readable and as
+high-level as the surface allows, and a store that may not assume the
+surface is a store that must spell lane positions.
+
+**What follows.** `chstore.Store.SetupTable` installs the surface when the
+server does not report the build's revision, and fails setup when it cannot;
+`NewWithFallback` then falls back to the in-memory store, as it does for a
+failed table DDL. Every read of the store is authored with handles and the
+`LW_GET` family and expanded before it ships by `factsread.Prepare`, which
+the query-run history shares. The store names no physical column in a read,
+and the *lane arithmetic* item under Deferred is closed; it did not wait for
+[ADR-0366](0366-the-facts-envelope-says-what-a-row-is-where-it-lives-and-how-long.md)
+after all, whose migration now has handles to move rather than physical
+column names.
+
+**Surfaces.** Added: the package `factsread`; `chstore.Store.EnsureReadSurface`.
+Changed: `SetupTable` does more than DDL, and a role that may create the
+table but not a function now fails setup. `SetupStatements` and
+`ComposeSetupSQL` are unchanged and install nothing — a caller that runs
+them through its own client gets a table it can write and not read.
+
+**Costs.** The store links the SQL parser, which the log host and the
+browser tab linked already. An expansion parses the statement: a few
+milliseconds for the largest read (`BenchmarkPrepareLogRows`), paid once per
+distinct authored text and again on every call for a read whose filter
+carries a moving timestamp. Two builds at different surface revisions
+sharing one server reinstall over each other at every setup.
+
+**Verification.** A test with no server expands every read with every
+optional filter set and fails on a physical column name or an unexpanded
+call. The store's live-server tests passed unchanged across the rewrite,
+which is the evidence that the rows read the same. Gap: the install branch
+of `EnsureReadSurface` ran against no server here — the one at hand already
+carried the revision — so it is covered only by the surface package's own
+install tests.
+
 ## References
 
 - [ADR-0117](0117-passthrough-table-classifier.md) — passthrough tables.

@@ -125,6 +125,12 @@ asks — `drop-undeclared --confirm`, a separate command so it cannot happen by
 accident. `--fail-on-drift` makes `status` exit non-zero, for a deployment
 check.
 
+- **The runtime's facts store installs it as part of setup**
+  ([ADR-0367](../adr/0367-sql-statements-leave-through-one-fairlead-and-each-is-placed-in-a-stratum.md),
+  update of 2026-11-11): its own reads are authored with `LW_GET`, so a
+  server it has set up carries the function families at the build's
+  revision. A host boot then reconciles the views and their dependents in
+  the background.
 - **play** reconciles the configured endpoint at startup, and its
   **Vocabulary** tab ([ADR-0174](../adr/0174-play-sql-vocabulary-panel.md))
   lists all three populations marked against that endpoint — including the

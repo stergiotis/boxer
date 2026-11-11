@@ -179,16 +179,14 @@ func readClient() *chclient.Client {
 }
 
 // attributionOf reads back the run id and instance key of the single row in
-// the test table, through the physical lanes rather than through LW_GET: this
-// package ships raw SQL and runs no client-side expansion pass, so naming a
-// membership here is not available. The membership IDS are the point of the
-// assertion anyway — a test that resolved them the same way the writer does
-// would agree with itself.
+// the test table, through the physical lanes rather than through the read
+// surface the store's own reads are authored against. The membership IDS and
+// the lanes are the point of the assertion — a test that resolved them the
+// way the reader does would agree with it.
 //
 // Both ride the LOW-CARD-REF channel (the run since ADR-0277 §SD8): the
 // value lane is a ragged run per attribute, so the position comes from the
-// cumulative sum of the cardinality lane — the form runsessions.go composes
-// for its readers.
+// cumulative sum of the cardinality lane.
 func attributionOf(t *testing.T) (runId string, instanceKey string) {
 	t.Helper()
 	const (

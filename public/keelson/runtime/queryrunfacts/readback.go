@@ -6,18 +6,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/env"
-	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
-	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/passes"
-	"github.com/stergiotis/boxer/public/keelson/runtime/factsschema/dml"
+	"github.com/stergiotis/boxer/public/keelson/runtime/factsschema/factsread"
 	"github.com/stergiotis/boxer/public/keelson/runtime/vocab"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
-	"github.com/stergiotis/boxer/public/semistructured/leeway/constructsql"
-	"github.com/stergiotis/boxer/public/semistructured/leeway/lwsql"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/lwsqlsurface"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/namemint/registry"
-	"github.com/stergiotis/boxer/public/semistructured/leeway/naming"
 )
 
 // readback.go is the S2 read side: the history SELECT that pivots
@@ -163,77 +157,14 @@ const (
 	hU64Len   = "`u64Array:len`"
 )
 
-// The membership channels these sections carry. Every facts section
-// carries more than one, so naming one is not optional.
+// The membership channels and the two reads every history column is one of
+// are factsread's; the names here keep this file's statements short.
 const (
-	// plainChannel is the ordinary one-membership-per-attribute channel:
-	// the counters, the fingerprints, the enumerations.
-	plainChannel = "chan:low-card-ref"
-	// mixedChannel is one membership shared by several attributes, told
-	// apart by a high-cardinality parameter: every ProfileEvents counter
-	// (the MembLogField pattern). The app and run stamps used to ride it
-	// and moved to the plain channel (ADR-0277 §SD8).
-	mixedChannel = "chan:low-card-ref-high-card-params"
+	plainChannel = factsread.PlainChannel
+	mixedChannel = factsread.MixedChannel
 )
 
-// membName is the spelling a membership is named by in an LW_ call: the
-// registry's own folded natural key (`runtime-query-run-duration-ms`), which
-// the extraction pass resolves back to the id before the statement ships
-// (ADR-0171 §SD4).
-//
-// Names rather than ids, everywhere, for the sake of the one query a person
-// reads — the ProfileEvents drill-down goes into play's editor, and
-// `LW_SEL('u64Array', 'runtime-query-run-profile-event', …)` is what that
-// pane should show instead of a nineteen-digit constant. Applying the same
-// rule to the history query costs nothing: it is expanded before it ships,
-// so its names never leave this process.
-func membName(m registry.RegisteredNaturalKey) (name string) {
-	return string(m.GetNaturalKey())
-}
-
-// getScalar reads the attribute carrying memb on a scalar section — the
-// type default when the row does not carry it.
-func getScalar(section string, memb string) (expr string) {
-	return fmt.Sprintf("LW_GET('%s', '%s', '%s')", section, memb, plainChannel)
-}
-
-// getListFirst reads the single value of the attribute carrying memb on an
-// array-valued section.
-//
-// Every QueryRun attribute on those sections holds exactly one value
-// (EncodeEntity writes them with BeginAttributeSingle), so the first is
-// the only one — and an absent membership yields an empty run, whose first
-// element is the type default. That is the same answer the previous
-// hand-written form gave, reached without assuming the run length.
-//
-// The verb follows the SECTION's arity, not the Go field's type: only
-// `symbol` stores one value per attribute, so every `*Array` section reads
-// through LW_GET_LIST even where the value is a scalar counter.
-func getListFirst(section string, memb string) (expr string) {
-	return fmt.Sprintf("arrayElement(LW_GET_LIST('%s', '%s', '%s'), 1)", section, memb, plainChannel)
-}
-
-// membershipIds resolves the names above for [prepare], over the runtime
-// vocabulary alone.
-//
-// [github.com/stergiotis/boxer/public/keelson/runtime/introspect/providers.MembershipLookup]
-// is the general form of this and is what play binds, but it answers for all
-// four facts-writing vocabularies and pulls their packages in with it — more
-// than doubling what a capture daemon links, to read names out of the one
-// vocabulary this package writes. The two cannot disagree: the names are
-// collision-free across the set (the provider's own test asserts it), so both
-// reach the same registry entry for any name this file emits.
-type membershipIds struct{}
-
-// LookupMembership is constructsql.MembershipIdsI — one method, spelled as
-// marshallreflect.LookupI and readback.IdLookup spell it.
-func (membershipIds) LookupMembership(name string) (id uint64, err error) {
-	e, err := vocab.NkRegistry.Lookup(naming.StylableName(name))
-	if err != nil {
-		return 0, eb.Build().Str("name", name).Errorf("queryrunfacts: membership is not in the runtime vocabulary: %w", err)
-	}
-	return e.GetId().Value(), nil
-}
+func membName(m registry.RegisteredNaturalKey) (name string) { return factsread.MembName(m) }
 
 // ComposeHistorySql builds the newest-first history SELECT over
 // factsTable, expanded and ready to post. limit is clamped to
@@ -273,9 +204,9 @@ func composeHistoryAuthored(factsTable string, limit int, filter HistoryFilter) 
 	if limit <= 0 || limit > HistoryLimitCap {
 		limit = HistoryLimitCap
 	}
-	sym := func(m registry.RegisteredNaturalKey) string { return getScalar("symbol", membName(m)) }
-	str := func(m registry.RegisteredNaturalKey) string { return getListFirst("stringArray", membName(m)) }
-	u64 := func(m registry.RegisteredNaturalKey) string { return getListFirst("u64Array", membName(m)) }
+	sym := func(m registry.RegisteredNaturalKey) string { return factsread.Scalar("symbol", m) }
+	str := func(m registry.RegisteredNaturalKey) string { return factsread.ListFirst("stringArray", m) }
+	u64 := func(m registry.RegisteredNaturalKey) string { return factsread.ListFirst("u64Array", m) }
 	sql = fmt.Sprintf(`SELECT
   %s AS id,
   toUnixTimestamp(%s) AS ts_sec,
@@ -326,7 +257,7 @@ LIMIT %d`,
 		u64(vocab.MembQueryRunResultBytes),
 		u64(vocab.MembQueryRunMemoryPeakBytes),
 		u64(vocab.MembQueryRunNormalizedHash),
-		getListFirst("i64Array", membName(vocab.MembQueryRunExceptionCode)),
+		factsread.ListFirst("i64Array", vocab.MembQueryRunExceptionCode),
 		str(vocab.MembQueryRunExceptionText),
 		str(vocab.MembQueryRunQueryText),
 		u64(vocab.MembLifecycleTileKey),
@@ -406,50 +337,10 @@ ORDER BY count DESC`,
 	return
 }
 
-// prepare rewrites an authored query into the one that executes: column
-// handles become physical names, and the LW_ extraction calls become the
-// read-back expressions that locate an attribute by membership.
-//
-// Both resolve against the schema [dml.CreateSchemaFacts] generates rather
-// than against the server: the names and lanes are a property of the code
-// that writes the table, so the history query can be composed — and
-// tested — with nothing running, and a handle or a section spelled wrongly
-// here fails here instead of as a column ClickHouse has never heard of.
-//
-// Handles first, extraction second. The expansion emits physical names,
-// and those contain colons; feeding them back through the handle resolver
-// would invite it to read one as a `section:column` of its own.
+// prepare is [factsread.Prepare]: handles to physical names, LW_ extraction
+// calls to read-back expressions, against the generated schema.
 func prepare(sql string, table string) (out string, err error) {
-	database, _, qualified := strings.Cut(table, ".")
-	if !qualified || database == "" {
-		return "", eb.Build().Str("table", table).Errorf("queryrunfacts: table is not database-qualified")
-	}
-	resolver := lwsql.NewResolver(passes.NewStaticSchemaProvider(
-		map[string][]string{table: factsColumnNames()}))
-
-	out = sql
-	for _, pass := range []nanopass.Pass{
-		passes.ResolveColumnNames(resolver, database, nil),
-		constructsql.ExtractExpandPassWithIds(resolver, membershipIds{}, database),
-	} {
-		out, err = pass.Apply(env.NewEnvironment(), out)
-		if err != nil {
-			return "", eb.Build().Str("pass", pass.Name).Errorf("queryrunfacts: readback pass failed: %w", err)
-		}
-	}
-	return out, nil
-}
-
-// factsColumnNames is the table's physical column list, off the generated
-// Arrow schema — the same source the DML builders write through, so the
-// read side and the write side cannot disagree about a name.
-func factsColumnNames() (names []string) {
-	fields := dml.CreateSchemaFacts().Fields()
-	names = make([]string, 0, len(fields))
-	for i := range fields {
-		names = append(names, fields[i].Name)
-	}
-	return names
+	return factsread.Prepare(sql, table)
 }
 
 // SurfaceVersionSql asks an endpoint which revision of leeway's SQL read

@@ -28,6 +28,10 @@ import (
 // If the user wants stricter behaviour (e.g. fail-fast on missing CH,
 // or no environment at all), they can construct a Store directly with
 // New and skip this helper.
+// setupTimeout bounds first-run setup, as the host's own surface reconcile
+// is bounded.
+const setupTimeout = 2 * time.Minute
+
 func NewWithFallback(cfg Config, logger zerolog.Logger, pingTimeout time.Duration) (store factsstore.FactsStoreI, isChStore bool) {
 	cfg = ConfigWithEnvDefaults(cfg)
 	if pingTimeout <= 0 {
@@ -52,14 +56,17 @@ func NewWithFallback(cfg Config, logger zerolog.Logger, pingTimeout time.Duratio
 		store = factsstore.NewInMemoryFactsStore()
 		return
 	}
-	// Reachable — also try to set up the table (best-effort; if DDL
-	// fails the writer will fail too, but we surface it here loudly).
-	setupErr := ch.SetupTable(ctx, "")
+	// Reachable — set up the table and the read surface. Setup gets its own
+	// budget: on a server that has never carried the surface it is a full
+	// install, which a ping's timeout does not cover.
+	setupCtx, cancelSetup := context.WithTimeout(context.Background(), setupTimeout)
+	defer cancelSetup()
+	setupErr := ch.SetupTable(setupCtx, "")
 	if setupErr != nil {
 		logger.Warn().Err(setupErr).
 			Str("url", cfg.URL).
 			Str("user", cfg.User).
-			Msg("factsstore: ClickHouse reachable but DDL setup failed; falling back to in-memory")
+			Msg("factsstore: ClickHouse reachable but setup failed (table DDL or the leeway SQL read surface); falling back to in-memory")
 		store = factsstore.NewInMemoryFactsStore()
 		return
 	}

@@ -436,6 +436,14 @@ value 0, which no window is, and no longer by absence. The readers in
 an empty run as unattributed — so their answers do not change. Natural
 keys, and the ids derived from them, are unchanged.
 
+### 2026-11-11 — the provider's extraction is authored on the read surface
+
+The paragraph above that explains hand-written array arithmetic no longer
+describes the store. The read surface is part of the store's setup and its
+reads are authored with `LW_GET`
+([ADR-0367](0367-sql-statements-leave-through-one-fairlead-and-each-is-placed-in-a-stratum.md),
+update of 2026-11-11).
+
 ## References
 
 - [ADR-0026 — app runtime and capability subjects](0026-app-runtime-and-capability-subjects.md) — §SD6 defines the facts vocabulary this extends, §SD4 the NATS swap the deferral waits on.

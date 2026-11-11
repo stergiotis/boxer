@@ -22,28 +22,21 @@ type recentLogsColumnExprs struct {
 }
 
 func buildColumnExprs() (e recentLogsColumnExprs) {
-	e.id = idCol
+	e.id = hId
 	// `ts` is z64 — emitted by the leeway DDL pipeline as
 	// DateTime64(9,'UTC') (nano precision). We coerce to unix-seconds
 	// so the Go side can re-hydrate via time.Unix without the
 	// timezone-decode ambiguity TabSeparated otherwise has. Sub-second
 	// precision is discarded here by design; callers needing per-event
 	// ordering fall back to the `id` column.
-	e.tsSec = fmt.Sprintf("toUnixTimestamp(%s)", tsCol)
-	// AppId is a Mixed-Low-Card-Ref membership: the mrhp array (high-
-	// card parameter) is parallel to lmr (same length, same order), so
-	// arrayFirst zips cleanly.
-	e.appId = pickLcrString(symValue, symLR, symLRCard, vocab.MembRuntimeApp.GetId().Value())
-	// Envelope LCR fields: value[] is parallel to *card[] (one entry
-	// per attribute), but lr[] is a SUBSET array (only LCR attrs). We
-	// map an LCR id → position in lr → position in value via cumulative
-	// sums on lrcard.
-	e.level = pickLcrString(symValue, symLR, symLRCard, vocab.MembLogLevel.GetId().Value())
-	e.caller = pickLcrString(symValue, symLR, symLRCard, vocab.MembLogCaller.GetId().Value())
-	e.service = pickLcrString(symValue, symLR, symLRCard, vocab.MembLogService.GetId().Value())
-	e.message = pickLcrString(strValue, strLR, strLRCard, vocab.MembLogMessage.GetId().Value())
-	e.errStr = pickLcrString(strValue, strLR, strLRCard, vocab.MembLogError.GetId().Value())
-	e.stack = pickLcrString(textValue, textLR, textLRCard, vocab.MembLogStack.GetId().Value())
+	e.tsSec = fmt.Sprintf("toUnixTimestamp(%s)", hTs)
+	e.appId = sym(vocab.MembRuntimeApp)
+	e.level = sym(vocab.MembLogLevel)
+	e.caller = sym(vocab.MembLogCaller)
+	e.service = sym(vocab.MembLogService)
+	e.message = str(vocab.MembLogMessage)
+	e.errStr = str(vocab.MembLogError)
+	e.stack = text(vocab.MembLogStack)
 	return
 }
 

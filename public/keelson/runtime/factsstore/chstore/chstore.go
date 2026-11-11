@@ -12,6 +12,8 @@ package chstore
 import (
 	"context"
 	"fmt"
+	"io"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -30,6 +32,7 @@ import (
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	dmlruntime "github.com/stergiotis/boxer/public/semistructured/leeway/dml/runtime"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/lwsqlsurface"
 )
 
 // Config carries the connection coordinates + qualified target table.
@@ -205,9 +208,11 @@ func ComposeSetupSQL(cfg Config, engineClause string) (sql string, err error) {
 }
 
 // SetupTable applies the boxer.facts DDL idempotently against the live CH
-// connection. engineClause supplies the MergeTree partition / order / TTL
-// settings (empty selects defaultEngineClause). The SQL is composed by
-// ComposeSetupSQL, so this path and the `keelsonddl` CLI cannot drift.
+// connection, then makes sure the server carries leeway's SQL read surface
+// ([Store.EnsureReadSurface]). engineClause supplies the MergeTree partition
+// / order / TTL settings (empty selects defaultEngineClause). The DDL is
+// composed by ComposeSetupSQL, so this path and the `keelsonddl` CLI cannot
+// drift.
 //
 // Idempotent means CREATE TABLE IF NOT EXISTS, which is not the same as
 // migrating: an existing table is left exactly as it is, including its column
@@ -229,6 +234,33 @@ func (inst *Store) SetupTable(ctx context.Context, engineClause string) (err err
 			err = eh.Errorf("chstore: setup: exec: %w", err)
 			return
 		}
+	}
+	err = inst.EnsureReadSurface(ctx)
+	return
+}
+
+// EnsureReadSurface installs leeway's SQL read surface when the server does
+// not carry the revision this build emits against (ADR-0367, update of
+// 2026-11-11). The surface is part of setup rather than an optional extra:
+// every read of this store expands into its functions, so a store whose
+// server lacks them can write and cannot read.
+//
+// A server already at the build's revision costs one round trip. Anything
+// else — no marker, or another revision — is a full install, which is on the
+// order of a hundred statements and replaces what another build installed;
+// two builds of different revisions sharing a server take turns.
+func (inst *Store) EnsureReadSurface(ctx context.Context) (err error) {
+	body, qerr := inst.cli.Query(ctx, "SELECT "+lwsqlsurface.VersionFunctionName+"()")
+	if qerr == nil {
+		raw, rerr := io.ReadAll(body)
+		_ = body.Close()
+		if rerr == nil && strings.TrimSpace(string(raw)) == strconv.Itoa(lwsqlsurface.Version) {
+			return
+		}
+	}
+	err = lwsqlsurface.Install(ctx, inst.cli)
+	if err != nil {
+		err = eh.Errorf("chstore: setup: install the leeway SQL read surface: %w", err)
 	}
 	return
 }

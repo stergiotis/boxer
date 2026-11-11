@@ -7,9 +7,8 @@ package chstore
 // by a look-back and a cap so that an introspection table, which sees no
 // predicate, can serve them.
 //
-// The extraction is hand-written array arithmetic because this store ships
-// SQL directly, with no expansion pass, so the LW_GET family is not available
-// to it.
+// Each is authored against the read surface and expanded before it ships
+// (authored.go).
 
 import (
 	"bytes"
@@ -24,6 +23,7 @@ import (
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	busaudit "github.com/stergiotis/boxer/public/keelson/runtime/audit"
+	"github.com/stergiotis/boxer/public/keelson/runtime/factsschema/factsread"
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsstore"
 	"github.com/stergiotis/boxer/public/keelson/runtime/vocab"
 	"github.com/stergiotis/boxer/public/observability/eh"
@@ -49,21 +49,21 @@ type appTrailExprs struct {
 }
 
 func buildAppTrailExprs() (e appTrailExprs) {
-	e.appId = pickLcrString(symValue, symLR, symLRCard, vocab.MembRuntimeApp.GetId().Value())
-	e.runId = pickLcrString(symValue, symLR, symLRCard, vocab.MembRuntimeRun.GetId().Value())
-	e.instanceKey = pickLcrNumeric(u64Value, u64LR, u64LRCard, vocab.MembLifecycleTileKey.GetId().Value(), "0")
-	e.tsSec = fmt.Sprintf("toUnixTimestamp(%s)", tsCol)
+	e.appId = sym(vocab.MembRuntimeApp)
+	e.runId = sym(vocab.MembRuntimeRun)
+	e.instanceKey = u64(vocab.MembLifecycleTileKey)
+	e.tsSec = fmt.Sprintf("toUnixTimestamp(%s)", hTs)
 	return
 }
 
 // appTrailWhere is the kind tag, the app gate and the look-back.
 func appTrailWhere(kind uint64, since time.Time) string {
 	parts := []string{
-		fmt.Sprintf("has(%s, %d)", symLR, kind),
-		fmt.Sprintf("has(%s, %d)", symLR, vocab.MembRuntimeApp.GetId().Value()),
+		fmt.Sprintf("has(%s, %d)", hSymLr, kind),
+		fmt.Sprintf("has(%s, %d)", hSymLr, vocab.MembRuntimeApp.GetId().Value()),
 	}
 	if !since.IsZero() {
-		parts = append(parts, fmt.Sprintf("%s >= toDateTime(%d, 'UTC')", tsCol, since.Unix()))
+		parts = append(parts, fmt.Sprintf("%s >= toDateTime(%d, 'UTC')", hTs, since.Unix()))
 	}
 	return strings.Join(parts, " AND ")
 }
@@ -77,7 +77,7 @@ func appTrailLimit(limit uint32) uint32 {
 
 // AppRuns implements [factsstore.AppTrailReaderI].
 func (inst *Store) AppRuns(ctx context.Context, filter factsstore.AppTrailFilter) (rows []factsstore.AppRunRow, err error) {
-	raw, err := inst.queryAll(ctx, "app runs", composeAppRunsSql(inst.qualifiedTable(), filter))
+	raw, err := inst.queryAuthored(ctx, "app runs", composeAppRunsSql(inst.qualifiedTable(), filter), "TabSeparated")
 	if err != nil {
 		return
 	}
@@ -99,10 +99,10 @@ func (inst *Store) AppRuns(ctx context.Context, filter factsstore.AppTrailFilter
 func composeAppRunsSql(table string, filter factsstore.AppTrailFilter) string {
 	e := buildAppTrailExprs()
 	l := buildLifecycleColumnExprs()
-	seenWhere := []string{fmt.Sprintf("hasAny(%s, [%d, %d])", symLR,
+	seenWhere := []string{fmt.Sprintf("hasAny(%s, [%d, %d])", hSymLr,
 		vocab.MembKindRuntimeHeartbeat.GetId().Value(), vocab.MembKindRuntimeRun.GetId().Value())}
 	if !filter.Since.IsZero() {
-		seenWhere = append(seenWhere, fmt.Sprintf("%s >= toDateTime(%d, 'UTC')", tsCol, filter.Since.Unix()))
+		seenWhere = append(seenWhere, fmt.Sprintf("%s >= toDateTime(%d, 'UTC')", hTs, filter.Since.Unix()))
 	}
 	return fmt.Sprintf(`
 SELECT s.run_id, s.app_id, s.instance_key, s.started, s.stopped, s.stop_reason, ifNull(h.seen, 0) AS run_seen
@@ -131,8 +131,7 @@ LEFT JOIN (
   GROUP BY run_id
 ) AS h ON h.run_id = s.run_id
 ORDER BY greatest(s.started, s.stopped) DESC, s.app_id ASC, s.instance_key ASC
-SETTINGS join_use_nulls = 1
-FORMAT TabSeparated`,
+SETTINGS join_use_nulls = 1`,
 		e.runId, e.appId, e.instanceKey, l.phase, l.stopReason, e.tsSec,
 		table,
 		appTrailWhere(vocab.MembKindAppLifecycle.GetId().Value(), filter.Since),
@@ -176,7 +175,7 @@ func (inst *Store) AppLogTail(ctx context.Context, filter factsstore.AppTrailFil
 		err = eh.Errorf("chstore: AppLogTail requires a positive perApp")
 		return
 	}
-	raw, err := inst.queryAll(ctx, "app log tail", composeAppLogTailSql(inst.qualifiedTable(), filter, perApp))
+	raw, err := inst.queryAuthored(ctx, "app log tail", composeAppLogTailSql(inst.qualifiedTable(), filter, perApp), "TabSeparated")
 	if err != nil {
 		return
 	}
@@ -201,9 +200,8 @@ FROM (
 WHERE app_id != ''
 ORDER BY ts_sec DESC, id DESC
 LIMIT %d BY app_id
-LIMIT %d
-FORMAT TabSeparated`,
-		idCol, e.tsSec, e.appId, e.instanceKey, e.runId,
+LIMIT %d`,
+		hId, e.tsSec, e.appId, e.instanceKey, e.runId,
 		l.level, l.caller, l.message, l.errStr,
 		table,
 		appTrailWhere(vocab.MembKindLog.GetId().Value(), filter.Since),
@@ -233,7 +231,7 @@ func parseAppLogTail(raw []byte) (rows []factsstore.AppLogRow, err error) {
 
 // AppAuditSummary implements [factsstore.AppTrailReaderI].
 func (inst *Store) AppAuditSummary(ctx context.Context, filter factsstore.AppTrailFilter) (rows []factsstore.AppAuditRow, err error) {
-	raw, err := inst.queryAll(ctx, "app audit summary", composeAppAuditSql(inst.qualifiedTable(), filter))
+	raw, err := inst.queryAuthored(ctx, "app audit summary", composeAppAuditSql(inst.qualifiedTable(), filter), "TabSeparated")
 	if err != nil {
 		return
 	}
@@ -249,10 +247,9 @@ func (inst *Store) AppAuditSummary(ctx context.Context, filter factsstore.AppTra
 // requests that carry one. Rows of the retired audit kind are not read.
 func composeAppAuditSql(table string, filter factsstore.AppTrailFilter) string {
 	e := buildAppTrailExprs()
-	list := func(m uint64) string { return pickLcrList(strValue, strLen, strLR, strLRCard, m) }
 	where := appTrailWhere(vocab.MembKindAuditEvent.GetId().Value(), filter.Since) +
-		" AND " + symbolEquals(vocab.MembAuditEventDomain.GetId().Value(), busaudit.BusDomain) +
-		" AND " + symbolEquals(vocab.MembAuditEventAction.GetId().Value(), busaudit.BusActionRequest)
+		" AND " + sym(vocab.MembAuditEventDomain) + " = " + quoteSqlString(busaudit.BusDomain) +
+		" AND " + sym(vocab.MembAuditEventAction) + " = " + quoteSqlString(busaudit.BusActionRequest)
 	attr := func(key string) string {
 		return fmt.Sprintf("arrayElement(attr_values, indexOf(attr_keys, %s))", quoteSqlString(key))
 	}
@@ -282,12 +279,11 @@ FROM (
 WHERE app_id != ''
 GROUP BY app_id, subject, result
 ORDER BY requests DESC, app_id ASC, subject ASC, result ASC
-LIMIT %d
-FORMAT TabSeparated`,
+LIMIT %d`,
 		quoteSqlString(busaudit.BusRefSubject), attr(busaudit.BusAttrLatencyMs),
-		e.appId, e.tsSec, pickLcrString(symValue, symLR, symLRCard, vocab.MembAuditEventOutcome.GetId().Value()),
-		list(vocab.MembAuditEventRefTypes.GetId().Value()), list(vocab.MembAuditEventRefValues.GetId().Value()),
-		list(vocab.MembAuditEventAttrKeys.GetId().Value()), list(vocab.MembAuditEventAttrValues.GetId().Value()),
+		e.appId, e.tsSec, sym(vocab.MembAuditEventOutcome),
+		strList(vocab.MembAuditEventRefTypes), strList(vocab.MembAuditEventRefValues),
+		strList(vocab.MembAuditEventAttrKeys), strList(vocab.MembAuditEventAttrValues),
 		table, where,
 		appTrailLimit(filter.Limit))
 }
@@ -321,21 +317,6 @@ func parseAppAudit(raw []byte) (rows []factsstore.AppAuditRow, err error) {
 		})
 		return
 	})
-	return
-}
-
-// queryAll runs sql and reads the whole body.
-func (inst *Store) queryAll(ctx context.Context, what string, sql string) (raw []byte, err error) {
-	body, err := inst.cli.Query(ctx, sql)
-	if err != nil {
-		err = eb.Build().Str("read", what).Errorf("chstore: app trail query: %w", err)
-		return
-	}
-	defer func() { _ = body.Close() }()
-	raw, err = io.ReadAll(body)
-	if err != nil {
-		err = eb.Build().Str("read", what).Errorf("chstore: app trail body: %w", err)
-	}
 	return
 }
 
@@ -379,7 +360,7 @@ func parseUnixOrZero(s string) (t time.Time, err error) {
 // shows of a row. Every filter is applied in the query, so Limit counts
 // matching rows.
 func (inst *Store) LogRows(ctx context.Context, filter factsstore.LogRowsFilter) (rows []factsstore.LogRowRead, err error) {
-	raw, err := inst.queryAll(ctx, "log rows", composeLogRowsSql(inst.qualifiedTable(), filter))
+	raw, err := inst.queryAuthored(ctx, "log rows", composeLogRowsSql(inst.qualifiedTable(), filter), "JSONEachRow")
 	if err != nil {
 		return
 	}
@@ -387,27 +368,25 @@ func (inst *Store) LogRows(ctx context.Context, filter factsstore.LogRowsFilter)
 	return
 }
 
-// logFieldSection is one section a log field may land in: its value
-// column, its per-attribute len column (empty for a scalar section), and
-// how a value is rendered as text. Each field kind has its own section; the
-// field's name rides the mixed channel (lmr, with the name as the high-card
-// parameter in mrhp), per encodeLogEntity.
+// logFieldSection is one section a log field may land in, and how a value
+// of it is rendered as text. Each field kind has its own section; the
+// field's name rides the mixed channel as the high-cardinality parameter,
+// per encodeLogEntity.
 type logFieldSection struct {
 	kind   string
 	name   string
-	value  string
 	scalar bool
 	render func(v string) string
 }
 
 var logFieldSections = []logFieldSection{
-	{kind: "string", name: "stringArray", value: "`tv:stringArray:value:val:sh:4::8:0::data`", render: func(v string) string { return v }},
-	{kind: "int", name: "i64Array", value: "`tv:i64Array:value:val:i64h:4:::0::data`", render: toStringExpr},
-	{kind: "uint", name: "u64Array", value: "`tv:u64Array:value:val:u64h:4:::0::data`", render: toStringExpr},
-	{kind: "float", name: "f64Array", value: "`tv:f64Array:value:val:f64h:4A:::0::data`", render: toStringExpr},
-	{kind: "bool", name: "bool", value: "`tv:bool:value:val:b:4:::0::data`", scalar: true, render: toStringExpr},
-	{kind: "bytes", name: "blobArray", value: "`tv:blobArray:value:val:yh:4:::0::data`", render: func(v string) string { return "base64Encode(" + v + ")" }},
-	{kind: "time", name: "timeArray", value: "`tv:timeArray:value:val:z64h:4:::0::data`", render: func(v string) string { return "toString(toUnixTimestamp64Nano(" + v + "))" }},
+	{kind: "string", name: "stringArray", render: func(v string) string { return v }},
+	{kind: "int", name: "i64Array", render: toStringExpr},
+	{kind: "uint", name: "u64Array", render: toStringExpr},
+	{kind: "float", name: "f64Array", render: toStringExpr},
+	{kind: "bool", name: "bool", scalar: true, render: toStringExpr},
+	{kind: "bytes", name: "blobArray", render: func(v string) string { return "base64Encode(" + v + ")" }},
+	{kind: "time", name: "timeArray", render: func(v string) string { return "toString(toUnixTimestamp64Nano(" + v + "))" }},
 }
 
 func toStringExpr(v string) string { return "toString(" + v + ")" }
@@ -417,23 +396,23 @@ func toStringExpr(v string) string { return "toString(" + v + ")" }
 // mixed memberships are left out, so slots a writer adds beside the fields
 // do not show up as fields.
 func logFieldsExpr() string {
-	membId := vocab.MembLogField.GetId().Value()
+	field := factsread.MembName(vocab.MembLogField)
 	parts := make([]string, 0, len(logFieldSections))
 	for _, s := range logFieldSections {
-		lmr := fmt.Sprintf("`tv:%s:lmr:lmr:u64:1247:::0::data`", s.name)
-		mrhp := fmt.Sprintf("`tv:%s:mrhp:mrhp:y:4:::0::data`", s.name)
-		lmrCard := fmt.Sprintf("`tv:%s:lmrcard:lmrcard:u64:4E:::0::data`", s.name)
-		attr := fmt.Sprintf("arrayElement(%s, j)", ownerOf(lmrCard))
-		var pos string
+		// The two selectors are co-indexed: the positions the membership
+		// occupies on the mixed lane, and the attribute each belongs to.
+		names := fmt.Sprintf("LW_CO_GATHER(`%s:mrhp`, LW_SEL('%s', '%s', '%s'))", s.name, s.name, field, factsread.MixedChannel)
+		attrs := fmt.Sprintf("LW_SEL_ATTRS('%s', '%s', '%s')", s.name, field, factsread.MixedChannel)
+		var values string
 		if s.scalar {
-			pos = attr
+			values = fmt.Sprintf("LW_CO_GATHER(`%s:value`, %s)", s.name, attrs)
 		} else {
-			lenArr := fmt.Sprintf("`tv:%s:len:len:u64:4D:::0::data`", s.name)
-			pos = fmt.Sprintf("arraySum(arraySlice(%[1]s, 1, %[2]s - 1)) + 1", lenArr, attr)
+			// The value lane is flattened across attributes, so an
+			// attribute index is not a value index.
+			values = fmt.Sprintf("arrayMap(a -> LW_RAGGED_ELEM(`%[1]s:value`, `%[1]s:len`, a, 1), %[2]s)", s.name, attrs)
 		}
-		value := s.render(fmt.Sprintf("arrayElement(%s, %s)", s.value, pos))
-		parts = append(parts, fmt.Sprintf("arrayMap(j -> [%s, toString(arrayElement(%s, j)), %s], arrayFilter(j -> arrayElement(%s, j) = %d, arrayEnumerate(%s)))",
-			quoteSqlLiteral(s.kind), mrhp, value, lmr, membId, lmr))
+		parts = append(parts, fmt.Sprintf("arrayMap((n, v) -> [%s, toString(n), %s], %s, %s)",
+			quoteSqlLiteral(s.kind), s.render("v"), names, values))
 	}
 	return "arrayConcat(" + strings.Join(parts, ",\n    ") + ")"
 }
@@ -450,16 +429,12 @@ func quoteSqlLiteral(s string) string {
 // on what the level is; the ORDER BY is the table's sorting key, so a
 // LIMIT reads in order rather than sorting the look-back.
 func composeLogRowsSql(table string, filter factsstore.LogRowsFilter) string {
-	sym := func(m uint64) string { return pickScalarAttr(symValue, symLR, symLRCard, m, "''") }
-	str := func(m uint64) string {
-		return "arrayElement(" + pickLcrList(strValue, strLen, strLR, strLRCard, m) + ", 1)"
-	}
-	where := []string{fmt.Sprintf("has(%s, %d)", symLR, vocab.MembKindLog.GetId().Value())}
+	where := []string{fmt.Sprintf("has(%s, %d)", hSymLr, vocab.MembKindLog.GetId().Value())}
 	if !filter.Since.IsZero() {
-		where = append(where, fmt.Sprintf("%s >= fromUnixTimestamp64Nano(%d, 'UTC')", tsCol, filter.Since.UnixNano()))
+		where = append(where, fmt.Sprintf("%s >= fromUnixTimestamp64Nano(%d, 'UTC')", hTs, filter.Since.UnixNano()))
 	}
 	if !filter.Until.IsZero() {
-		where = append(where, fmt.Sprintf("%s < fromUnixTimestamp64Nano(%d, 'UTC')", tsCol, filter.Until.UnixNano()))
+		where = append(where, fmt.Sprintf("%s < fromUnixTimestamp64Nano(%d, 'UTC')", hTs, filter.Until.UnixNano()))
 	}
 	if len(filter.Levels) > 0 {
 		q := make([]string, 0, len(filter.Levels))
@@ -486,33 +461,32 @@ SELECT
   toString(toUnixTimestamp64Nano(%s)) AS ts_ns,
   %s AS app_id,
   %s AS run_id,
-  toString(arrayElement(%s, 1)) AS instance_key,
+  toString(%s) AS instance_key,
   %s AS level,
   %s AS caller,
   %s AS service,
   %s AS message,
   %s AS err,
-  arrayElement(%s, 1) AS stack,
+  %s AS stack,
   %s AS fields
 FROM %s
 WHERE %s
 ORDER BY %s DESC, %s DESC
-LIMIT %d
-FORMAT JSONEachRow`,
-		idCol, tsCol,
-		sym(vocab.MembRuntimeApp.GetId().Value()),
-		sym(vocab.MembRuntimeRun.GetId().Value()),
-		pickLcrList(u64Value, u64Len, u64LR, u64LRCard, vocab.MembLifecycleTileKey.GetId().Value()),
-		sym(vocab.MembLogLevel.GetId().Value()),
-		sym(vocab.MembLogCaller.GetId().Value()),
-		sym(vocab.MembLogService.GetId().Value()),
-		str(vocab.MembLogMessage.GetId().Value()),
-		str(vocab.MembLogError.GetId().Value()),
-		pickLcrList(textValue, textLen, textLR, textLRCard, vocab.MembLogStack.GetId().Value()),
+LIMIT %d`,
+		hId, hTs,
+		sym(vocab.MembRuntimeApp),
+		sym(vocab.MembRuntimeRun),
+		u64(vocab.MembLifecycleTileKey),
+		sym(vocab.MembLogLevel),
+		sym(vocab.MembLogCaller),
+		sym(vocab.MembLogService),
+		str(vocab.MembLogMessage),
+		str(vocab.MembLogError),
+		text(vocab.MembLogStack),
 		logFieldsExpr(),
 		table,
 		strings.Join(where, " AND "),
-		tsCol, idCol,
+		hTs, hId,
 		appTrailLimit(filter.Limit))
 }
 

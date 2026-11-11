@@ -17,7 +17,6 @@ package chstore
 import (
 	"context"
 	"fmt"
-	"io"
 	"strconv"
 	"strings"
 	"time"
@@ -45,16 +44,9 @@ func (inst *Store) AppLaunchStats(ctx context.Context, halfLife time.Duration, l
 	if limit == 0 || limit > launchStatsCap {
 		limit = launchStatsCap
 	}
-	sql := composeAppLaunchStatsSql(inst.qualifiedTable(), halfLife, limit)
-	body, qerr := inst.cli.Query(ctx, sql)
-	if qerr != nil {
-		err = eh.Errorf("chstore: app launch stats query: %w", qerr)
-		return
-	}
-	defer func() { _ = body.Close() }()
-	raw, rerr := io.ReadAll(body)
-	if rerr != nil {
-		err = eh.Errorf("chstore: app launch stats read: %w", rerr)
+	raw, err := inst.queryAuthored(ctx, "app launch stats",
+		composeAppLaunchStatsSql(inst.qualifiedTable(), halfLife, limit), "TabSeparated")
+	if err != nil {
 		return
 	}
 	stats, err = parseAppLaunchStats(raw)
@@ -76,8 +68,8 @@ func (inst *Store) AppLaunchStats(ctx context.Context, halfLife time.Duration, l
 func composeAppLaunchStatsSql(table string, halfLife time.Duration, limit uint32) (sql string) {
 	e := buildLifecycleColumnExprs()
 	whereParts := []string{
-		fmt.Sprintf("has(%s, %d)", symLR, vocab.MembKindAppLifecycle.GetId().Value()),
-		fmt.Sprintf("has(%s, %d)", symLR, vocab.MembRuntimeApp.GetId().Value()),
+		fmt.Sprintf("has(%s, %d)", hSymLr, vocab.MembKindAppLifecycle.GetId().Value()),
+		fmt.Sprintf("has(%s, %d)", hSymLr, vocab.MembRuntimeApp.GetId().Value()),
 		fmt.Sprintf("%s = 'started'", e.phase),
 	}
 	halfLifeSec := halfLife.Seconds()
@@ -97,10 +89,9 @@ FROM (
 WHERE app_id != ''
 GROUP BY app_id
 ORDER BY score DESC, last_ts DESC, app_id ASC
-LIMIT %d
-FORMAT TabSeparated`,
+LIMIT %d`,
 		halfLifeSec,
-		e.appId, tsCol,
+		e.appId, hTs,
 		table,
 		strings.Join(whereParts, " AND "),
 		limit)

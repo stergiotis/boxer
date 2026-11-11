@@ -3,7 +3,6 @@ package chstore
 import (
 	"context"
 	"fmt"
-	"io"
 	"strconv"
 	"strings"
 	"time"
@@ -27,11 +26,9 @@ import (
 // BenchmarkPlayPipeline (nanopass_test) keeps that buffer as its fixture.
 // Composed here the SQL is built once, in Go, and ships raw.
 //
-// The extraction is hand-written array arithmetic rather than the LW_GET
-// surface AGENTS.md prefers:
-// this store ships SQL directly, with no client-side expansion pass, so the
-// LW_GET family is not available to it — and the server-side read-back UDFs
-// it would expand into are not something the store may assume is installed.
+// The statement is authored against the read surface and expanded here by
+// two passes, once per distinct text (authored.go): the cost above was the
+// editor's whole chain re-parsing per pass, not the extraction.
 
 // runEventsCap bounds one read. A run's trail is
 // bounded by its own length, which for a long-lived process with heartbeats
@@ -91,16 +88,9 @@ func (inst *Store) ListRunEvents(filter factsstore.RunEventFilter) (rows []facts
 	if limit == 0 || limit > runEventsCap {
 		limit = runEventsCap
 	}
-	sql := composeRunEventsSql(inst.qualifiedTable(), filter, limit)
-	body, qerr := inst.cli.Query(context.Background(), sql)
-	if qerr != nil {
-		err = eh.Errorf("chstore: run events query: %w", qerr)
-		return
-	}
-	defer func() { _ = body.Close() }()
-	raw, rerr := io.ReadAll(body)
-	if rerr != nil {
-		err = eh.Errorf("chstore: run events read: %w", rerr)
+	raw, err := inst.queryAuthored(context.Background(), "run events",
+		composeRunEventsSql(inst.qualifiedTable(), filter, limit), "TabSeparated")
+	if err != nil {
 		return
 	}
 	rows, err = parseRunEventRows(raw)
@@ -121,30 +111,29 @@ func composeRunEventsSql(table string, filter factsstore.RunEventFilter, limit u
 	idArray := "[" + strings.Join(ids, ",") + "]"
 	labelArray := "[" + strings.Join(labels, ",") + "]"
 
-	appExpr := pickLcrString(symValue, symLR, symLRCard, vocab.MembRuntimeApp.GetId().Value())
-	runExpr := pickLcrString(symValue, symLR, symLRCard, vocab.MembRuntimeRun.GetId().Value())
-	instanceExpr := pickLcrNumeric(u64Value, u64LR, u64LRCard,
-		vocab.MembLifecycleTileKey.GetId().Value(), "0")
+	appExpr := sym(vocab.MembRuntimeApp)
+	runExpr := sym(vocab.MembRuntimeRun)
+	instanceExpr := u64(vocab.MembLifecycleTileKey)
 	// A row carries exactly one kind, so intersecting the kind lane with the
 	// kind ids yields one id and transform() names it.
 	kindExpr := fmt.Sprintf("transform(arrayElement(arrayIntersect(%s, %s), 1), %s, %s, '?')",
-		symLR, idArray, idArray, labelArray)
+		hSymLr, idArray, idArray, labelArray)
 	// What the row says, in written order. Every writer opens the symbol
 	// section with its kind label, so element 1 is that; the app and run are
 	// already their own columns and drop out. The string section carries the
 	// free-text half (log message, stop reason).
 	detailExpr := fmt.Sprintf(
 		"arrayStringConcat(arrayConcat(arrayFilter(v -> v != %s AND v != %s, arraySlice(%s, 2)), %s), ' · ')",
-		appExpr, runExpr, symValue, strValue)
+		appExpr, runExpr, hSymValue, hStrValue)
 
 	// The cheap necessary guard first: hasAny over the kind lane prunes the
 	// granules holding other vocabularies' rows (sysmetrics, capmap) through
 	// the skip index, which indexOf and countEqual never do.
-	where := []string{fmt.Sprintf("hasAny(%s, %s)", symLR, idArray)}
+	where := []string{fmt.Sprintf("hasAny(%s, %s)", hSymLr, idArray)}
 	attribution := runExpr + " = " + quoteSqlString(filter.RunId)
 	if !filter.Since.IsZero() {
 		attribution = fmt.Sprintf("(%s OR (%s = '' AND %s >= toDateTime64(%s, 9, 'UTC')))",
-			attribution, runExpr, tsCol,
+			attribution, runExpr, hTs,
 			quoteSqlString(filter.Since.UTC().Format("2006-01-02 15:04:05.000000000")))
 	}
 	where = append(where, attribution)
@@ -161,10 +150,9 @@ SELECT
 FROM %s
 WHERE %s
 ORDER BY %s ASC, %s ASC
-LIMIT %d
-FORMAT TabSeparated`,
-		idCol, tsCol, kindExpr, appExpr, instanceExpr, runExpr, detailExpr,
-		table, strings.Join(where, " AND "), tsCol, idCol, limit)
+LIMIT %d`,
+		hId, hTs, kindExpr, appExpr, instanceExpr, runExpr, detailExpr,
+		table, strings.Join(where, " AND "), hTs, hId, limit)
 	return
 }
 
