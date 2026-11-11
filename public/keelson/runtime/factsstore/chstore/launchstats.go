@@ -17,7 +17,6 @@ package chstore
 import (
 	"context"
 	"fmt"
-	"strconv"
 	"strings"
 	"time"
 
@@ -25,7 +24,6 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsstore"
 	"github.com/stergiotis/boxer/public/keelson/runtime/vocab"
 	"github.com/stergiotis/boxer/public/observability/eh"
-	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 var _ factsstore.AppLaunchHistoryReaderI = (*Store)(nil)
@@ -44,13 +42,24 @@ func (inst *Store) AppLaunchStats(ctx context.Context, halfLife time.Duration, l
 	if limit == 0 || limit > launchStatsCap {
 		limit = launchStatsCap
 	}
-	raw, err := inst.queryAuthored(ctx, "app launch stats",
-		composeAppLaunchStatsSql(inst.qualifiedTable(), halfLife, limit), "TabSeparated")
-	if err != nil {
-		return
+	err = inst.readRows(ctx, "app launch stats",
+		composeAppLaunchStatsSql(inst.qualifiedTable(), halfLife, limit), 4, func(r row) {
+			stats = append(stats, launchStatOf(r))
+		})
+	if stats == nil && err == nil {
+		stats = []factsstore.AppLaunchStat{}
 	}
-	stats, err = parseAppLaunchStats(raw)
 	return
+}
+
+// launchStatOf reads one row of composeAppLaunchStatsSql's result.
+func launchStatOf(r row) factsstore.AppLaunchStat {
+	return factsstore.AppLaunchStat{
+		AppId:  app.AppIdT(r.str(0)),
+		Opens:  r.u64(1),
+		LastTs: time.Unix(r.i64(2), 0).UTC(),
+		Score:  r.f64(3),
+	}
 }
 
 // composeAppLaunchStatsSql groups the `started` app-lifecycle rows by app and
@@ -95,50 +104,5 @@ LIMIT %d`,
 		table,
 		strings.Join(whereParts, " AND "),
 		limit)
-	return
-}
-
-// parseAppLaunchStats reads the four-column TabSeparated result.
-//
-// A malformed line fails the whole read rather than being skipped: this feeds
-// an ordering, and an ordering computed from a silently truncated trail is
-// worse than one the caller knows it could not compute.
-func parseAppLaunchStats(raw []byte) (stats []factsstore.AppLaunchStat, err error) {
-	stats = []factsstore.AppLaunchStat{}
-	text := strings.TrimRight(string(raw), "\n")
-	if text == "" {
-		return
-	}
-	for _, line := range strings.Split(text, "\n") {
-		if line == "" {
-			continue
-		}
-		parts := strings.Split(line, "\t")
-		if len(parts) != 4 {
-			err = eb.Build().Int("got", len(parts)).Str("line", line).Errorf("chstore: app launch stats: expected 4 columns")
-			return
-		}
-		opens, perr := strconv.ParseUint(parts[1], 10, 64)
-		if perr != nil {
-			err = eb.Build().Str("opens", parts[1]).Errorf("chstore: app launch stats: parse opens: %w", perr)
-			return
-		}
-		lastTs, terr := strconv.ParseInt(parts[2], 10, 64)
-		if terr != nil {
-			err = eb.Build().Str("lastTs", parts[2]).Errorf("chstore: app launch stats: parse last_ts: %w", terr)
-			return
-		}
-		score, serr := strconv.ParseFloat(parts[3], 64)
-		if serr != nil {
-			err = eb.Build().Str("score", parts[3]).Errorf("chstore: app launch stats: parse score: %w", serr)
-			return
-		}
-		stats = append(stats, factsstore.AppLaunchStat{
-			AppId:  app.AppIdT(parts[0]),
-			Opens:  opens,
-			LastTs: time.Unix(lastTs, 0).UTC(),
-			Score:  score,
-		})
-	}
 	return
 }

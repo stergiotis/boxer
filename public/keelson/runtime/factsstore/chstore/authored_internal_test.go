@@ -46,15 +46,16 @@ func TestAuthoredReads_ExpandWithNoServer(t *testing.T) {
 	}
 }
 
-func TestPrepare_KeepsByAuthoredTextAndAppendsTheFormat(t *testing.T) {
+// TestPrepare_CarriesNoFormat: the executor asks for Arrow, so a statement
+// that names a format of its own would be sent with two.
+func TestPrepare_CarriesNoFormat(t *testing.T) {
 	authored := composeAppLaunchStatsSql("boxer.facts", time.Hour, 10)
-	a, err := prepare(authored, "boxer.facts", "TabSeparated")
+	a, err := prepare(authored, "boxer.facts")
 	require.NoError(t, err)
-	b, err := prepare(authored, "boxer.facts", "JSONEachRow")
+	b, err := prepare(authored, "boxer.facts")
 	require.NoError(t, err)
-	require.True(t, strings.HasSuffix(a, "\nFORMAT TabSeparated"))
-	require.True(t, strings.HasSuffix(b, "\nFORMAT JSONEachRow"))
-	require.Equal(t, strings.TrimSuffix(a, "TabSeparated"), strings.TrimSuffix(b, "JSONEachRow"))
+	require.Equal(t, a, b)
+	require.NotContains(t, a, "FORMAT")
 }
 
 // TestSetupStatements_CarryTheTableAndTheReadSurface: a caller that runs

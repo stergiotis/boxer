@@ -11,12 +11,9 @@ package chstore
 // (authored.go).
 
 import (
-	"bytes"
 	"context"
 	"encoding/base64"
-	"encoding/json"
 	"fmt"
-	"io"
 	"strconv"
 	"strings"
 	"time"
@@ -77,11 +74,13 @@ func appTrailLimit(limit uint32) uint32 {
 
 // AppRuns implements [factsstore.AppTrailReaderI].
 func (inst *Store) AppRuns(ctx context.Context, filter factsstore.AppTrailFilter) (rows []factsstore.AppRunRow, err error) {
-	raw, err := inst.queryAuthored(ctx, "app runs", composeAppRunsSql(inst.qualifiedTable(), filter), "TabSeparated")
-	if err != nil {
-		return
-	}
-	rows, err = parseAppRuns(raw)
+	rows = []factsstore.AppRunRow{}
+	err = inst.readRows(ctx, "app runs", composeAppRunsSql(inst.qualifiedTable(), filter), 7, func(r row) {
+		rows = append(rows, factsstore.AppRunRow{
+			RunId: r.str(0), AppId: app.AppIdT(r.str(1)), InstanceKey: r.u64(2),
+			StartedAt: r.unix(3), StoppedAt: r.unix(4), StopReason: r.str(5), RunSeenAt: r.unix(6),
+		})
+	})
 	return
 }
 
@@ -141,45 +140,19 @@ SETTINGS join_use_nulls = 1`,
 		strings.Join(seenWhere, " AND "))
 }
 
-func parseAppRuns(raw []byte) (rows []factsstore.AppRunRow, err error) {
-	rows = []factsstore.AppRunRow{}
-	err = eachTsvLine(raw, 7, "app runs", func(p []string) (err error) {
-		key, err := strconv.ParseUint(p[2], 10, 64)
-		if err != nil {
-			return
-		}
-		started, err := parseUnixOrZero(p[3])
-		if err != nil {
-			return
-		}
-		stopped, err := parseUnixOrZero(p[4])
-		if err != nil {
-			return
-		}
-		seen, err := parseUnixOrZero(p[6])
-		if err != nil {
-			return
-		}
-		rows = append(rows, factsstore.AppRunRow{
-			RunId: unescapeTabSeparated(p[0]), AppId: app.AppIdT(unescapeTabSeparated(p[1])), InstanceKey: key,
-			StartedAt: started, StoppedAt: stopped, StopReason: unescapeTabSeparated(p[5]), RunSeenAt: seen,
-		})
-		return
-	})
-	return
-}
-
 // AppLogTail implements [factsstore.AppTrailReaderI].
 func (inst *Store) AppLogTail(ctx context.Context, filter factsstore.AppTrailFilter, perApp uint32) (rows []factsstore.AppLogRow, err error) {
 	if perApp == 0 {
 		err = eh.Errorf("chstore: AppLogTail requires a positive perApp")
 		return
 	}
-	raw, err := inst.queryAuthored(ctx, "app log tail", composeAppLogTailSql(inst.qualifiedTable(), filter, perApp), "TabSeparated")
-	if err != nil {
-		return
-	}
-	rows, err = parseAppLogTail(raw)
+	rows = []factsstore.AppLogRow{}
+	err = inst.readRows(ctx, "app log tail", composeAppLogTailSql(inst.qualifiedTable(), filter, perApp), 8, func(r row) {
+		rows = append(rows, factsstore.AppLogRow{
+			Ts: time.Unix(r.i64(0), 0).UTC(), AppId: app.AppIdT(r.str(1)), InstanceKey: r.u64(2),
+			RunId: r.str(3), Level: r.str(4), Caller: r.str(5), Message: r.str(6), Error: r.str(7),
+		})
+	})
 	return
 }
 
@@ -208,34 +181,16 @@ LIMIT %d`,
 		perApp, appTrailLimit(filter.Limit))
 }
 
-func parseAppLogTail(raw []byte) (rows []factsstore.AppLogRow, err error) {
-	rows = []factsstore.AppLogRow{}
-	err = eachTsvLine(raw, 8, "app log tail", func(p []string) (err error) {
-		ts, err := strconv.ParseInt(p[0], 10, 64)
-		if err != nil {
-			return
-		}
-		key, err := strconv.ParseUint(p[2], 10, 64)
-		if err != nil {
-			return
-		}
-		rows = append(rows, factsstore.AppLogRow{
-			Ts: time.Unix(ts, 0).UTC(), AppId: app.AppIdT(unescapeTabSeparated(p[1])), InstanceKey: key,
-			RunId: unescapeTabSeparated(p[3]), Level: unescapeTabSeparated(p[4]), Caller: unescapeTabSeparated(p[5]),
-			Message: unescapeTabSeparated(p[6]), Error: unescapeTabSeparated(p[7]),
-		})
-		return
-	})
-	return
-}
-
 // AppAuditSummary implements [factsstore.AppTrailReaderI].
 func (inst *Store) AppAuditSummary(ctx context.Context, filter factsstore.AppTrailFilter) (rows []factsstore.AppAuditRow, err error) {
-	raw, err := inst.queryAuthored(ctx, "app audit summary", composeAppAuditSql(inst.qualifiedTable(), filter), "TabSeparated")
-	if err != nil {
-		return
-	}
-	rows, err = parseAppAudit(raw)
+	rows = []factsstore.AppAuditRow{}
+	err = inst.readRows(ctx, "app audit summary", composeAppAuditSql(inst.qualifiedTable(), filter), 8, func(r row) {
+		rows = append(rows, factsstore.AppAuditRow{
+			AppId: app.AppIdT(r.str(0)), Subject: r.str(1), Result: r.str(2),
+			Requests: r.u64(3), FirstAt: r.unix(4), LastAt: r.unix(5),
+			MeanLatencyMs: r.f64(6), MaxLatencyMs: uint32(r.u64(7)),
+		})
+	})
 	return
 }
 
@@ -288,83 +243,40 @@ LIMIT %d`,
 		appTrailLimit(filter.Limit))
 }
 
-func parseAppAudit(raw []byte) (rows []factsstore.AppAuditRow, err error) {
-	rows = []factsstore.AppAuditRow{}
-	err = eachTsvLine(raw, 8, "app audit summary", func(p []string) (err error) {
-		n, err := strconv.ParseUint(p[3], 10, 64)
-		if err != nil {
-			return
-		}
-		first, err := parseUnixOrZero(p[4])
-		if err != nil {
-			return
-		}
-		last, err := parseUnixOrZero(p[5])
-		if err != nil {
-			return
-		}
-		mean, err := strconv.ParseFloat(p[6], 64)
-		if err != nil {
-			return
-		}
-		mx, err := strconv.ParseUint(p[7], 10, 32)
-		if err != nil {
-			return
-		}
-		rows = append(rows, factsstore.AppAuditRow{
-			AppId: app.AppIdT(unescapeTabSeparated(p[0])), Subject: unescapeTabSeparated(p[1]), Result: unescapeTabSeparated(p[2]),
-			Requests: n, FirstAt: first, LastAt: last, MeanLatencyMs: mean, MaxLatencyMs: uint32(mx),
-		})
-		return
-	})
-	return
-}
-
-// eachTsvLine splits a TabSeparated body into lines of exactly cols fields.
-// A malformed line fails the whole read, as parseAppLaunchStats does: a
-// table silently missing rows is worse than one that says it could not be
-// read.
-func eachTsvLine(raw []byte, cols int, what string, fn func(parts []string) error) (err error) {
-	text := strings.TrimRight(string(raw), "\n")
-	if text == "" {
-		return
-	}
-	for line := range strings.SplitSeq(text, "\n") {
-		if line == "" {
-			continue
-		}
-		parts := strings.Split(line, "\t")
-		if len(parts) != cols {
-			return eb.Build().Str("read", what).Int("got", len(parts)).Int("want", cols).Str("line", line).Errorf("chstore: app trail: wrong column count")
-		}
-		if err = fn(parts); err != nil {
-			return eb.Build().Str("read", what).Str("line", line).Errorf("chstore: app trail parse: %w", err)
-		}
-	}
-	return
-}
-
-// parseUnixOrZero reads unix seconds; 0 is the zero time, not the epoch,
-// because the aggregates above write 0 for "no such row".
-func parseUnixOrZero(s string) (t time.Time, err error) {
-	v, err := strconv.ParseInt(s, 10, 64)
-	if err != nil || v == 0 {
-		return
-	}
-	t = time.Unix(v, 0).UTC()
-	return
-}
-
 // LogRows returns the log rows matching filter, newest first, with their
 // envelope, their attribution and their typed fields: what the log viewer
 // shows of a row. Every filter is applied in the query, so Limit counts
 // matching rows.
 func (inst *Store) LogRows(ctx context.Context, filter factsstore.LogRowsFilter) (rows []factsstore.LogRowRead, err error) {
-	raw, err := inst.queryAuthored(ctx, "log rows", composeLogRowsSql(inst.qualifiedTable(), filter), "JSONEachRow")
-	if err != nil {
-		return
+	rows = []factsstore.LogRowRead{}
+	var ferr error
+	err = inst.readRows(ctx, "log rows", composeLogRowsSql(inst.qualifiedTable(), filter), 11, func(r row) {
+		out := factsstore.LogRowRead{RunId: r.str(2), Row: factsstore.LogRow{
+			Ts: time.Unix(0, r.i64(0)).UTC(), AppId: app.AppIdT(r.str(1)), InstanceKey: r.u64(3),
+			Level: r.str(4), Caller: r.str(5), Service: r.str(6),
+			Message: r.str(7), Error: r.str(8), Stack: r.str(9),
+		}}
+		for _, f := range r.stringLists(10) {
+			if len(f) != 3 {
+				if ferr == nil {
+					ferr = eb.Build().Int("got", len(f)).Errorf("chstore: log rows: a field is not a [kind, name, value] triple")
+				}
+				return
+			}
+			lf, perr := parseLogField(f[0], f[1], f[2])
+			if perr != nil {
+				if ferr == nil {
+					ferr = perr
+				}
+				return
+			}
+			out.Row.Fields = append(out.Row.Fields, lf)
+		}
+		rows = append(rows, out)
+	})
+	if err == nil {
+		err = ferr
 	}
-	rows, err = parseLogRows(raw)
 	return
 }
 
@@ -453,15 +365,14 @@ func composeLogRowsSql(table string, filter factsstore.LogRowsFilter) string {
 		where = append(where, "run_id = "+quoteSqlLiteral(filter.RunId))
 	}
 	if filter.InstanceKey != 0 {
-		where = append(where, fmt.Sprintf("instance_key = %s", quoteSqlLiteral(strconv.FormatUint(filter.InstanceKey, 10))))
+		where = append(where, fmt.Sprintf("instance_key = %d", filter.InstanceKey))
 	}
 	return fmt.Sprintf(`
 SELECT
-  toString(%s) AS id,
-  toString(toUnixTimestamp64Nano(%s)) AS ts_ns,
+  toUnixTimestamp64Nano(%s) AS ts_ns,
   %s AS app_id,
   %s AS run_id,
-  toString(%s) AS instance_key,
+  %s AS instance_key,
   %s AS level,
   %s AS caller,
   %s AS service,
@@ -473,7 +384,7 @@ FROM %s
 WHERE %s
 ORDER BY %s DESC, %s DESC
 LIMIT %d`,
-		hId, hTs,
+		hTs,
 		sym(vocab.MembRuntimeApp),
 		sym(vocab.MembRuntimeRun),
 		u64(vocab.MembLifecycleTileKey),
@@ -488,74 +399,6 @@ LIMIT %d`,
 		strings.Join(where, " AND "),
 		hTs, hId,
 		appTrailLimit(filter.Limit))
-}
-
-// logRowJson is one line of composeLogRowsSql's output. Integers arrive as
-// strings, which the query writes explicitly so the server's 64-bit
-// quoting setting does not decide the shape.
-type logRowJson struct {
-	Id          string     `json:"id"`
-	TsNs        string     `json:"ts_ns"`
-	AppId       string     `json:"app_id"`
-	RunId       string     `json:"run_id"`
-	InstanceKey string     `json:"instance_key"`
-	Level       string     `json:"level"`
-	Caller      string     `json:"caller"`
-	Service     string     `json:"service"`
-	Message     string     `json:"message"`
-	Err         string     `json:"err"`
-	Stack       string     `json:"stack"`
-	Fields      [][]string `json:"fields"`
-}
-
-func parseLogRows(raw []byte) (rows []factsstore.LogRowRead, err error) {
-	rows = []factsstore.LogRowRead{}
-	dec := json.NewDecoder(bytes.NewReader(raw))
-	for {
-		var j logRowJson
-		if err = dec.Decode(&j); err == io.EOF {
-			err = nil
-			return
-		} else if err != nil {
-			err = eh.Errorf("chstore: log rows: decode: %w", err)
-			return
-		}
-		var r factsstore.LogRowRead
-		if r, err = j.row(); err != nil {
-			return
-		}
-		rows = append(rows, r)
-	}
-}
-
-func (inst logRowJson) row() (out factsstore.LogRowRead, err error) {
-	ns, err := strconv.ParseInt(inst.TsNs, 10, 64)
-	if err != nil {
-		err = eb.Build().Str("ts", inst.TsNs).Errorf("chstore: log rows: parse ts: %w", err)
-		return
-	}
-	key, err := strconv.ParseUint(inst.InstanceKey, 10, 64)
-	if err != nil {
-		err = eb.Build().Str("instance", inst.InstanceKey).Errorf("chstore: log rows: parse instance key: %w", err)
-		return
-	}
-	out = factsstore.LogRowRead{RunId: inst.RunId, Row: factsstore.LogRow{
-		Ts: time.Unix(0, ns).UTC(), AppId: app.AppIdT(inst.AppId), InstanceKey: key,
-		Level: inst.Level, Caller: inst.Caller, Service: inst.Service,
-		Message: inst.Message, Error: inst.Err, Stack: inst.Stack,
-	}}
-	for _, f := range inst.Fields {
-		if len(f) != 3 {
-			err = eb.Build().Int("got", len(f)).Errorf("chstore: log rows: a field is not a [kind, name, value] triple")
-			return
-		}
-		var lf factsstore.LogField
-		if lf, err = parseLogField(f[0], f[1], f[2]); err != nil {
-			return
-		}
-		out.Row.Fields = append(out.Row.Fields, lf)
-	}
-	return
 }
 
 // parseLogField turns one rendered field back into its typed form: the

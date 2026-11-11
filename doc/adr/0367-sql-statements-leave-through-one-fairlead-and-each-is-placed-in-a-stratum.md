@@ -312,6 +312,17 @@ What the statement list cannot do is what needs a connection: it replaces
 the surface whether or not the server is at the revision, and it neither
 probes for collisions, drops retired names nor creates dependent views.
 
+### 2026-11-11 — the facts store's reads arrive as Arrow
+
+The store's reads no longer name an output format or parse text. They go
+through the `recordstore.ExecutorI` adapter the generated stores use and
+read typed columns from record batches; the tab-separated and JSON parsers
+and the unescaping that went with them are removed. A column of an
+unexpected type or a wrong column count fails the read, as a malformed line
+did. Gap: integer and string columns are read at whatever width and encoding
+the server chooses, and the set accepted is the one observed against one
+server version.
+
 ## References
 
 - [ADR-0117](0117-passthrough-table-classifier.md) — passthrough tables.

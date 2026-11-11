@@ -11,7 +11,6 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsstore"
 	"github.com/stergiotis/boxer/public/keelson/runtime/vocab"
 	"github.com/stergiotis/boxer/public/observability/eh"
-	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 // runevents.go reads the trail back as rows (ADR-0191 §SD7): one flattened
@@ -88,15 +87,20 @@ func (inst *Store) ListRunEvents(filter factsstore.RunEventFilter) (rows []facts
 	if limit == 0 || limit > runEventsCap {
 		limit = runEventsCap
 	}
-	raw, err := inst.queryAuthored(context.Background(), "run events",
-		composeRunEventsSql(inst.qualifiedTable(), filter, limit), "TabSeparated")
-	if err != nil {
-		return
-	}
-	rows, err = parseRunEventRows(raw)
-	if err != nil {
-		err = eh.Errorf("chstore: run events parse: %w", err)
-	}
+	rows = []factsstore.RunEventRow{}
+	err = inst.readRows(context.Background(), "run events",
+		composeRunEventsSql(inst.qualifiedTable(), filter, limit), 7, func(r row) {
+			rows = append(rows, factsstore.RunEventRow{
+				FactId:      r.str(0),
+				Ts:          time.UnixMilli(r.i64(1)).UTC(),
+				Kind:        r.str(2),
+				AppId:       app.AppIdT(r.str(3)),
+				InstanceKey: r.u64(4),
+				RunId:       r.str(5),
+				Detail:      r.str(6),
+				Source:      factsstore.RunEventSourceFacts,
+			})
+		})
 	return
 }
 
@@ -153,43 +157,5 @@ ORDER BY %s ASC, %s ASC
 LIMIT %d`,
 		hId, hTs, kindExpr, appExpr, instanceExpr, runExpr, detailExpr,
 		table, strings.Join(where, " AND "), hTs, hId, limit)
-	return
-}
-
-func parseRunEventRows(raw []byte) (rows []factsstore.RunEventRow, err error) {
-	rows = []factsstore.RunEventRow{}
-	if len(raw) == 0 {
-		return
-	}
-	for line := range strings.SplitSeq(strings.TrimRight(string(raw), "\n"), "\n") {
-		if line == "" {
-			continue
-		}
-		parts := strings.Split(line, "\t")
-		if len(parts) != 7 {
-			err = eb.Build().Int("got", len(parts)).Str("line", line).Errorf("chstore: run events: expected 7 columns")
-			return
-		}
-		tsMs, perr := strconv.ParseInt(parts[1], 10, 64)
-		if perr != nil {
-			err = eb.Build().Str("ts", parts[1]).Errorf("chstore: run events: parse ts: %w", perr)
-			return
-		}
-		instance, perr := strconv.ParseUint(parts[4], 10, 64)
-		if perr != nil {
-			err = eb.Build().Str("instanceKey", parts[4]).Errorf("chstore: run events: parse instance_key: %w", perr)
-			return
-		}
-		rows = append(rows, factsstore.RunEventRow{
-			Ts:          time.UnixMilli(tsMs).UTC(),
-			Kind:        unescapeTabSeparated(parts[2]),
-			AppId:       app.AppIdT(unescapeTabSeparated(parts[3])),
-			InstanceKey: instance,
-			RunId:       unescapeTabSeparated(parts[5]),
-			Detail:      unescapeTabSeparated(parts[6]),
-			Source:      factsstore.RunEventSourceFacts,
-			FactId:      unescapeTabSeparated(parts[0]),
-		})
-	}
 	return
 }

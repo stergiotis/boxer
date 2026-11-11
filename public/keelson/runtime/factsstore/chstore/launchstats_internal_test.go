@@ -4,17 +4,45 @@ import (
 	"testing"
 	"time"
 
+	"github.com/apache/arrow-go/v18/arrow"
+	"github.com/apache/arrow-go/v18/arrow/array"
+	"github.com/apache/arrow-go/v18/arrow/memory"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/stergiotis/boxer/public/keelson/runtime/factsstore"
 )
 
-// TestParseAppLaunchStats_ReadsTheFourColumns is the always-running half of
-// ADR-0214 §SD7's verification: the SQL needs a server, the parse does not.
-func TestParseAppLaunchStats_ReadsTheFourColumns(t *testing.T) {
-	raw := []byte("github.com/x/play\t12\t1756600000\t7.5\n" +
-		"github.com/x/imztop\t3\t1756500000\t0.25\n")
-	stats, err := parseAppLaunchStats(raw)
-	require.NoError(t, err)
+// launchStatsRecord builds a result batch the way the server shapes one: the
+// app as a string, the count and timestamp as integers, the score a float.
+func launchStatsRecord(t *testing.T, fields []arrow.Field, fill func(b *array.RecordBuilder)) arrow.RecordBatch {
+	t.Helper()
+	b := array.NewRecordBuilder(memory.NewGoAllocator(), arrow.NewSchema(fields, nil))
+	defer b.Release()
+	fill(b)
+	rec := b.NewRecordBatch()
+	t.Cleanup(rec.Release)
+	return rec
+}
+
+// TestLaunchStatOf_ReadsTheFourColumns is the always-running half of
+// ADR-0214 §SD7's verification: the SQL needs a server, the row read does
+// not. The widths are the server's choices, not this package's, so a
+// narrower integer reads the same.
+func TestLaunchStatOf_ReadsTheFourColumns(t *testing.T) {
+	rec := launchStatsRecord(t, []arrow.Field{
+		{Name: "app_id", Type: arrow.BinaryTypes.Binary},
+		{Name: "opens", Type: arrow.PrimitiveTypes.Uint64},
+		{Name: "last_ts", Type: arrow.PrimitiveTypes.Uint32},
+		{Name: "score", Type: arrow.PrimitiveTypes.Float64},
+	}, func(b *array.RecordBuilder) {
+		b.Field(0).(*array.BinaryBuilder).AppendValues([][]byte{[]byte("github.com/x/play"), []byte("github.com/x/imztop")}, nil)
+		b.Field(1).(*array.Uint64Builder).AppendValues([]uint64{12, 3}, nil)
+		b.Field(2).(*array.Uint32Builder).AppendValues([]uint32{1756600000, 1756500000}, nil)
+		b.Field(3).(*array.Float64Builder).AppendValues([]float64{7.5, 0.25}, nil)
+	})
+	var stats []factsstore.AppLaunchStat
+	require.NoError(t, eachRow(rec, "app launch stats", 4, func(r row) { stats = append(stats, launchStatOf(r)) }))
 	require.Len(t, stats, 2)
 	assert.Equal(t, "github.com/x/play", string(stats[0].AppId))
 	assert.Equal(t, uint64(12), stats[0].Opens)
@@ -22,35 +50,30 @@ func TestParseAppLaunchStats_ReadsTheFourColumns(t *testing.T) {
 	assert.InDelta(t, 7.5, stats[0].Score, 1e-9)
 }
 
-// TestParseAppLaunchStats_EmptyIsEmptyNotNil keeps "no history" a slice a
-// caller can range over without a nil check, matching the store's other
-// readers.
-func TestParseAppLaunchStats_EmptyIsEmptyNotNil(t *testing.T) {
-	stats, err := parseAppLaunchStats(nil)
-	require.NoError(t, err)
-	assert.NotNil(t, stats)
-	assert.Empty(t, stats)
-
-	stats, err = parseAppLaunchStats([]byte("\n"))
-	require.NoError(t, err)
-	assert.Empty(t, stats)
-}
-
-// TestParseAppLaunchStats_MalformedFailsTheRead: this feeds an ordering, and an
-// ordering computed from a silently truncated trail is worse than one the
-// caller knows it could not compute.
-func TestParseAppLaunchStats_MalformedFailsTheRead(t *testing.T) {
-	for name, raw := range map[string]string{
-		"too few columns": "app\t1\t2\n",
-		"bad opens":       "app\tmany\t1756600000\t1.0\n",
-		"bad ts":          "app\t1\tyesterday\t1.0\n",
-		"bad score":       "app\t1\t1756600000\tlots\n",
-	} {
-		t.Run(name, func(t *testing.T) {
-			_, err := parseAppLaunchStats([]byte(raw))
-			require.Error(t, err)
+// TestEachRow_MalformedFailsTheRead: this feeds an ordering, and an ordering
+// computed from a silently truncated trail is worse than one the caller
+// knows it could not compute.
+func TestEachRow_MalformedFailsTheRead(t *testing.T) {
+	str := arrow.Field{Name: "app_id", Type: arrow.BinaryTypes.String}
+	t.Run("too few columns", func(t *testing.T) {
+		rec := launchStatsRecord(t, []arrow.Field{str}, func(b *array.RecordBuilder) {
+			b.Field(0).(*array.StringBuilder).Append("app")
 		})
-	}
+		require.Error(t, eachRow(rec, "app launch stats", 4, func(r row) { _ = launchStatOf(r) }))
+	})
+	t.Run("a count that is not a number", func(t *testing.T) {
+		rec := launchStatsRecord(t, []arrow.Field{str,
+			{Name: "opens", Type: arrow.BinaryTypes.String},
+			{Name: "last_ts", Type: arrow.PrimitiveTypes.Uint32},
+			{Name: "score", Type: arrow.PrimitiveTypes.Float64},
+		}, func(b *array.RecordBuilder) {
+			b.Field(0).(*array.StringBuilder).Append("app")
+			b.Field(1).(*array.StringBuilder).Append("many")
+			b.Field(2).(*array.Uint32Builder).Append(1)
+			b.Field(3).(*array.Float64Builder).Append(1)
+		})
+		require.Error(t, eachRow(rec, "app launch stats", 4, func(r row) { _ = launchStatOf(r) }))
+	})
 }
 
 // TestComposeAppLaunchStatsSql_ShapeIsTheDecision pins the three choices in the

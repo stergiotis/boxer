@@ -1,12 +1,9 @@
 package chstore
 
 import (
-	"context"
-	"io"
 	"sync"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsschema/factsread"
-	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/namemint/registry"
 )
 
@@ -53,45 +50,26 @@ var prepared struct {
 	byAuthored map[string]string
 }
 
-// prepare expands an authored statement for table and appends format. The
-// expansion parses the statement, which costs milliseconds
-// (BenchmarkPrepareLogRows), so the result is kept by authored text.
-func prepare(authored string, table string, format string) (sql string, err error) {
+// prepare expands an authored statement for table. The expansion parses the
+// statement, which costs milliseconds (BenchmarkPrepareLogRows), so the
+// result is kept by authored text.
+func prepare(authored string, table string) (sql string, err error) {
 	key := table + "\x00" + authored
 	prepared.Lock()
 	sql, hit := prepared.byAuthored[key]
 	prepared.Unlock()
-	if !hit {
-		sql, err = factsread.Prepare(authored, table)
-		if err != nil {
-			return "", err
-		}
-		prepared.Lock()
-		if prepared.byAuthored == nil || len(prepared.byAuthored) >= preparedCap {
-			prepared.byAuthored = make(map[string]string, preparedCap)
-		}
-		prepared.byAuthored[key] = sql
-		prepared.Unlock()
-	}
-	return sql + "\nFORMAT " + format, nil
-}
-
-// queryAuthored expands authored, runs it and reads the whole body.
-func (inst *Store) queryAuthored(ctx context.Context, what string, authored string, format string) (raw []byte, err error) {
-	sql, err := prepare(authored, inst.qualifiedTable(), format)
-	if err != nil {
-		err = eb.Build().Str("read", what).Errorf("chstore: compose: %w", err)
+	if hit {
 		return
 	}
-	body, err := inst.cli.Query(ctx, sql)
+	sql, err = factsread.Prepare(authored, table)
 	if err != nil {
-		err = eb.Build().Str("read", what).Errorf("chstore: query: %w", err)
-		return
+		return "", err
 	}
-	defer func() { _ = body.Close() }()
-	raw, err = io.ReadAll(body)
-	if err != nil {
-		err = eb.Build().Str("read", what).Errorf("chstore: body: %w", err)
+	prepared.Lock()
+	if prepared.byAuthored == nil || len(prepared.byAuthored) >= preparedCap {
+		prepared.byAuthored = make(map[string]string, preparedCap)
 	}
+	prepared.byAuthored[key] = sql
+	prepared.Unlock()
 	return
 }

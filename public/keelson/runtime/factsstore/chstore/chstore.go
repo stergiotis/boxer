@@ -23,6 +23,7 @@ import (
 	"lukechampine.com/blake3"
 
 	"github.com/stergiotis/boxer/public/keelson/data/chclient"
+	"github.com/stergiotis/boxer/public/keelson/data/storeexec"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsschema"
 	factsddl "github.com/stergiotis/boxer/public/keelson/runtime/factsschema/ddl"
@@ -130,8 +131,11 @@ func ConfigWithEnvDefaults(cfg Config) (out Config) {
 // InEntityFacts builder, encodes one row, and ships it as a single-record
 // Arrow IPC batch through chclient.InsertArrow.
 type Store struct {
-	cfg       Config
-	cli       *chclient.Client
+	cfg Config
+	cli *chclient.Client
+	// exec is cli as the executor the reads go through: statements out,
+	// Arrow record batches back.
+	exec      *storeexec.Executor
 	allocator memory.Allocator
 	nextId    atomic.Uint64
 }
@@ -151,6 +155,10 @@ func New(cfg Config) (s *Store, err error) {
 			URL: cfg.URL, User: cfg.User, Password: cfg.Password,
 		}, nil),
 		allocator: memory.NewGoAllocator(),
+	}
+	s.exec, err = storeexec.New(s.cli, s.allocator)
+	if err != nil {
+		err = eh.Errorf("chstore: %w", err)
 	}
 	return
 }
