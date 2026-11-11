@@ -15,19 +15,23 @@ import (
 // authoredReads is every read this store composes, with every optional
 // filter set, so a clause that only appears under a filter is expanded too.
 func authoredReads() (reads map[string]string) {
+	return authoredReadsAt(time.Unix(1700000000, 0), "r")
+}
+
+func authoredReadsAt(since time.Time, run string) (reads map[string]string) {
 	const table = "boxer.facts"
-	since := time.Unix(1700000000, 0)
+	b := binds{}
 	trail := factsstore.AppTrailFilter{Since: since, Limit: 10}
 	return map[string]string{
-		"run events":   composeRunEventsSql(table, factsstore.RunEventFilter{RunId: "r", Since: since}, 10),
+		"run events":   composeRunEventsSql(table, factsstore.RunEventFilter{RunId: run, Since: since}, 10, b),
 		"launch stats": composeAppLaunchStatsSql(table, time.Hour, 10),
-		"app runs":     composeAppRunsSql(table, trail),
-		"app log tail": composeAppLogTailSql(table, trail, 3),
-		"app audit":    composeAppAuditSql(table, trail),
+		"app runs":     composeAppRunsSql(table, trail, b),
+		"app log tail": composeAppLogTailSql(table, trail, 3, b),
+		"app audit":    composeAppAuditSql(table, trail, b),
 		"log rows": composeLogRowsSql(table, factsstore.LogRowsFilter{
 			Since: since, Until: since.Add(time.Hour), Levels: []string{"error"}, AppContains: "a",
-			MessageContains: "m", RunId: "r", InstanceKey: 7, Limit: 10,
-		}),
+			MessageContains: "m", RunId: run, InstanceKey: 7, Limit: 10,
+		}, b),
 	}
 }
 
@@ -44,6 +48,30 @@ func TestAuthoredReads_ExpandWithNoServer(t *testing.T) {
 		require.NotContains(t, out, "LW_SEL", "%s: a selector was left unexpanded", name)
 		require.Equal(t, 0, strings.Count(out, "FORMAT"), name)
 	}
+}
+
+// TestAuthoredReads_TextDoesNotMoveWithTheFilterValues: a polled read with
+// a moving look-back is one statement, so its expansion is kept, and a value
+// a person typed is bound rather than written into the SQL.
+func TestAuthoredReads_TextDoesNotMoveWithTheFilterValues(t *testing.T) {
+	a := authoredReadsAt(time.Unix(1700000000, 0), "r")
+	b := authoredReadsAt(time.Unix(1800000000, 5), "it's \\ another")
+	require.Equal(t, a, b)
+	for name, authored := range a {
+		out, err := factsread.Prepare(authored, "boxer.facts")
+		require.NoError(t, err, name)
+		if strings.Contains(authored, "{since:Int64}") {
+			require.Contains(t, out, "{since:Int64}", "%s: the placeholder survives the expansion", name)
+		}
+	}
+}
+
+func TestBinds_EscapeWhatTheServerUnescapes(t *testing.T) {
+	b := binds{}
+	require.Equal(t, "{q:String}", b.str("q", "a\tb\\c\nd'e"))
+	require.Equal(t, `a\tb\\c\nd'e`, b["q"])
+	require.Equal(t, "{n:Int64}", b.i64("n", -3))
+	require.Equal(t, "-3", b["n"])
 }
 
 // TestPrepare_CarriesNoFormat: the executor asks for Arrow, so a statement

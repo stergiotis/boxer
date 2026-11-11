@@ -54,13 +54,13 @@ func buildAppTrailExprs() (e appTrailExprs) {
 }
 
 // appTrailWhere is the kind tag, the app gate and the look-back.
-func appTrailWhere(kind uint64, since time.Time) string {
+func appTrailWhere(kind uint64, since time.Time, b binds) string {
 	parts := []string{
 		fmt.Sprintf("has(%s, %d)", hSymLr, kind),
 		fmt.Sprintf("has(%s, %d)", hSymLr, vocab.MembRuntimeApp.GetId().Value()),
 	}
 	if !since.IsZero() {
-		parts = append(parts, fmt.Sprintf("%s >= toDateTime(%d, 'UTC')", hTs, since.Unix()))
+		parts = append(parts, fmt.Sprintf("%s >= toDateTime(%s, 'UTC')", hTs, b.i64("since", since.Unix())))
 	}
 	return strings.Join(parts, " AND ")
 }
@@ -75,7 +75,8 @@ func appTrailLimit(limit uint32) uint32 {
 // AppRuns implements [factsstore.AppTrailReaderI].
 func (inst *Store) AppRuns(ctx context.Context, filter factsstore.AppTrailFilter) (rows []factsstore.AppRunRow, err error) {
 	rows = []factsstore.AppRunRow{}
-	err = inst.readRows(ctx, "app runs", composeAppRunsSql(inst.qualifiedTable(), filter), 7, func(r row) {
+	b := binds{}
+	err = inst.readRows(ctx, "app runs", composeAppRunsSql(inst.qualifiedTable(), filter, b), b, 7, func(r row) {
 		rows = append(rows, factsstore.AppRunRow{
 			RunId: r.str(0), AppId: app.AppIdT(r.str(1)), InstanceKey: r.u64(2),
 			StartedAt: r.unix(3), StoppedAt: r.unix(4), StopReason: r.str(5), RunSeenAt: r.unix(6),
@@ -95,13 +96,13 @@ func (inst *Store) AppRuns(ctx context.Context, filter factsstore.AppTrailFilter
 // stamped the run on every row, and the instance key restarts in every
 // process, so (app, instance) alone would fold every such session of an app
 // into one that spans the whole look-back.
-func composeAppRunsSql(table string, filter factsstore.AppTrailFilter) string {
+func composeAppRunsSql(table string, filter factsstore.AppTrailFilter, b binds) string {
 	e := buildAppTrailExprs()
 	l := buildLifecycleColumnExprs()
 	seenWhere := []string{fmt.Sprintf("hasAny(%s, [%d, %d])", hSymLr,
 		vocab.MembKindRuntimeHeartbeat.GetId().Value(), vocab.MembKindRuntimeRun.GetId().Value())}
 	if !filter.Since.IsZero() {
-		seenWhere = append(seenWhere, fmt.Sprintf("%s >= toDateTime(%d, 'UTC')", hTs, filter.Since.Unix()))
+		seenWhere = append(seenWhere, fmt.Sprintf("%s >= toDateTime(%s, 'UTC')", hTs, b.i64("since", filter.Since.Unix())))
 	}
 	return fmt.Sprintf(`
 SELECT s.run_id, s.app_id, s.instance_key, s.started, s.stopped, s.stop_reason, ifNull(h.seen, 0) AS run_seen
@@ -133,7 +134,7 @@ ORDER BY greatest(s.started, s.stopped) DESC, s.app_id ASC, s.instance_key ASC
 SETTINGS join_use_nulls = 1`,
 		e.runId, e.appId, e.instanceKey, l.phase, l.stopReason, e.tsSec,
 		table,
-		appTrailWhere(vocab.MembKindAppLifecycle.GetId().Value(), filter.Since),
+		appTrailWhere(vocab.MembKindAppLifecycle.GetId().Value(), filter.Since, b),
 		appTrailLimit(filter.Limit),
 		e.runId, e.tsSec,
 		table,
@@ -147,7 +148,8 @@ func (inst *Store) AppLogTail(ctx context.Context, filter factsstore.AppTrailFil
 		return
 	}
 	rows = []factsstore.AppLogRow{}
-	err = inst.readRows(ctx, "app log tail", composeAppLogTailSql(inst.qualifiedTable(), filter, perApp), 8, func(r row) {
+	b := binds{}
+	err = inst.readRows(ctx, "app log tail", composeAppLogTailSql(inst.qualifiedTable(), filter, perApp, b), b, 8, func(r row) {
 		rows = append(rows, factsstore.AppLogRow{
 			Ts: time.Unix(r.i64(0), 0).UTC(), AppId: app.AppIdT(r.str(1)), InstanceKey: r.u64(2),
 			RunId: r.str(3), Level: r.str(4), Caller: r.str(5), Message: r.str(6), Error: r.str(7),
@@ -159,7 +161,7 @@ func (inst *Store) AppLogTail(ctx context.Context, filter factsstore.AppTrailFil
 // composeAppLogTailSql takes the newest perApp rows of each app with
 // `LIMIT n BY`, so a chatty app cannot crowd a quiet one out of the tail.
 // Fields and stack are not read (ADR-0260 §SD5).
-func composeAppLogTailSql(table string, filter factsstore.AppTrailFilter, perApp uint32) string {
+func composeAppLogTailSql(table string, filter factsstore.AppTrailFilter, perApp uint32, b binds) string {
 	e := buildAppTrailExprs()
 	l := buildColumnExprs()
 	return fmt.Sprintf(`
@@ -177,14 +179,15 @@ LIMIT %d`,
 		hId, e.tsSec, e.appId, e.instanceKey, e.runId,
 		l.level, l.caller, l.message, l.errStr,
 		table,
-		appTrailWhere(vocab.MembKindLog.GetId().Value(), filter.Since),
+		appTrailWhere(vocab.MembKindLog.GetId().Value(), filter.Since, b),
 		perApp, appTrailLimit(filter.Limit))
 }
 
 // AppAuditSummary implements [factsstore.AppTrailReaderI].
 func (inst *Store) AppAuditSummary(ctx context.Context, filter factsstore.AppTrailFilter) (rows []factsstore.AppAuditRow, err error) {
 	rows = []factsstore.AppAuditRow{}
-	err = inst.readRows(ctx, "app audit summary", composeAppAuditSql(inst.qualifiedTable(), filter), 8, func(r row) {
+	b := binds{}
+	err = inst.readRows(ctx, "app audit summary", composeAppAuditSql(inst.qualifiedTable(), filter, b), b, 8, func(r row) {
 		rows = append(rows, factsstore.AppAuditRow{
 			AppId: app.AppIdT(r.str(0)), Subject: r.str(1), Result: r.str(2),
 			Requests: r.u64(3), FirstAt: r.unix(4), LastAt: r.unix(5),
@@ -200,9 +203,9 @@ func (inst *Store) AppAuditSummary(ctx context.Context, filter factsstore.AppTra
 // the latency from its attributes. The writer records a latency only when it is
 // positive, so an absent one reads as zero and the mean is taken over the
 // requests that carry one. Rows of the retired audit kind are not read.
-func composeAppAuditSql(table string, filter factsstore.AppTrailFilter) string {
+func composeAppAuditSql(table string, filter factsstore.AppTrailFilter, b binds) string {
 	e := buildAppTrailExprs()
-	where := appTrailWhere(vocab.MembKindAuditEvent.GetId().Value(), filter.Since) +
+	where := appTrailWhere(vocab.MembKindAuditEvent.GetId().Value(), filter.Since, b) +
 		" AND " + sym(vocab.MembAuditEventDomain) + " = " + quoteSqlString(busaudit.BusDomain) +
 		" AND " + sym(vocab.MembAuditEventAction) + " = " + quoteSqlString(busaudit.BusActionRequest)
 	attr := func(key string) string {
@@ -250,7 +253,8 @@ LIMIT %d`,
 func (inst *Store) LogRows(ctx context.Context, filter factsstore.LogRowsFilter) (rows []factsstore.LogRowRead, err error) {
 	rows = []factsstore.LogRowRead{}
 	var ferr error
-	err = inst.readRows(ctx, "log rows", composeLogRowsSql(inst.qualifiedTable(), filter), 11, func(r row) {
+	b := binds{}
+	err = inst.readRows(ctx, "log rows", composeLogRowsSql(inst.qualifiedTable(), filter, b), b, 11, func(r row) {
 		out := factsstore.LogRowRead{RunId: r.str(2), Row: factsstore.LogRow{
 			Ts: time.Unix(0, r.i64(0)).UTC(), AppId: app.AppIdT(r.str(1)), InstanceKey: r.u64(3),
 			Level: r.str(4), Caller: r.str(5), Service: r.str(6),
@@ -340,13 +344,13 @@ func quoteSqlLiteral(s string) string {
 // the projected aliases, so a filter on the level and the projection agree
 // on what the level is; the ORDER BY is the table's sorting key, so a
 // LIMIT reads in order rather than sorting the look-back.
-func composeLogRowsSql(table string, filter factsstore.LogRowsFilter) string {
+func composeLogRowsSql(table string, filter factsstore.LogRowsFilter, b binds) string {
 	where := []string{fmt.Sprintf("has(%s, %d)", hSymLr, vocab.MembKindLog.GetId().Value())}
 	if !filter.Since.IsZero() {
-		where = append(where, fmt.Sprintf("%s >= fromUnixTimestamp64Nano(%d, 'UTC')", hTs, filter.Since.UnixNano()))
+		where = append(where, fmt.Sprintf("%s >= fromUnixTimestamp64Nano(%s, 'UTC')", hTs, b.i64("since", filter.Since.UnixNano())))
 	}
 	if !filter.Until.IsZero() {
-		where = append(where, fmt.Sprintf("%s < fromUnixTimestamp64Nano(%d, 'UTC')", hTs, filter.Until.UnixNano()))
+		where = append(where, fmt.Sprintf("%s < fromUnixTimestamp64Nano(%s, 'UTC')", hTs, b.i64("until", filter.Until.UnixNano())))
 	}
 	if len(filter.Levels) > 0 {
 		q := make([]string, 0, len(filter.Levels))
@@ -356,16 +360,16 @@ func composeLogRowsSql(table string, filter factsstore.LogRowsFilter) string {
 		where = append(where, "level IN ("+strings.Join(q, ", ")+")")
 	}
 	if filter.AppContains != "" {
-		where = append(where, "positionCaseInsensitiveUTF8(app_id, "+quoteSqlLiteral(filter.AppContains)+") > 0")
+		where = append(where, "positionCaseInsensitiveUTF8(app_id, "+b.str("app", filter.AppContains)+") > 0")
 	}
 	if filter.MessageContains != "" {
-		where = append(where, "positionCaseInsensitiveUTF8(message, "+quoteSqlLiteral(filter.MessageContains)+") > 0")
+		where = append(where, "positionCaseInsensitiveUTF8(message, "+b.str("message", filter.MessageContains)+") > 0")
 	}
 	if filter.RunId != "" {
-		where = append(where, "run_id = "+quoteSqlLiteral(filter.RunId))
+		where = append(where, "run_id = "+b.str("run", filter.RunId))
 	}
 	if filter.InstanceKey != 0 {
-		where = append(where, fmt.Sprintf("instance_key = %d", filter.InstanceKey))
+		where = append(where, "instance_key = "+b.u64("instance", filter.InstanceKey))
 	}
 	return fmt.Sprintf(`
 SELECT

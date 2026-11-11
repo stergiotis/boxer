@@ -186,13 +186,13 @@ func eachRow(rec arrow.RecordBatch, what string, cols int, fn func(r row)) (err 
 	return
 }
 
-// readRows expands authored, runs it and calls fn for every row.
-func (inst *Store) readRows(ctx context.Context, what string, authored string, cols int, fn func(r row)) (err error) {
+// readRows expands authored, runs it with b bound and calls fn for every row.
+func (inst *Store) readRows(ctx context.Context, what string, authored string, b binds, cols int, fn func(r row)) (err error) {
 	sql, err := prepare(authored, inst.qualifiedTable())
 	if err != nil {
 		return eb.Build().Str("read", what).Errorf("chstore: compose: %w", err)
 	}
-	for rec, qerr := range inst.exec.QueryArrow(ctx, sql) {
+	for rec, qerr := range inst.exec.QueryArrowParams(ctx, sql, b) {
 		if qerr != nil {
 			return eb.Build().Str("read", what).Errorf("chstore: query: %w", qerr)
 		}

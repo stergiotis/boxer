@@ -254,6 +254,13 @@ func (inst *Client) QueryParams(ctx context.Context, sql string, params map[stri
 	return
 }
 
+// QueryParamsSettings is QueryParams with request-level settings, as
+// QuerySettings. Caller MUST close the returned body.
+func (inst *Client) QueryParamsSettings(ctx context.Context, sql string, params map[string]string, settings map[string]string) (body io.ReadCloser, err error) {
+	body, err = inst.postSQL(ctx, sql, params, settings)
+	return
+}
+
 // InsertArrow POSTs Arrow IPC records to INSERT INTO {table} FORMAT Arrow.
 // The records slice may be empty (no-op). Caller is responsible for
 // releasing the records after the call returns.

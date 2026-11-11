@@ -43,7 +43,7 @@ func (inst *Store) AppLaunchStats(ctx context.Context, halfLife time.Duration, l
 		limit = launchStatsCap
 	}
 	err = inst.readRows(ctx, "app launch stats",
-		composeAppLaunchStatsSql(inst.qualifiedTable(), halfLife, limit), 4, func(r row) {
+		composeAppLaunchStatsSql(inst.qualifiedTable(), halfLife, limit), nil, 4, func(r row) {
 			stats = append(stats, launchStatOf(r))
 		})
 	if stats == nil && err == nil {

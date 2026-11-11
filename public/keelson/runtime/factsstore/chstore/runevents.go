@@ -88,8 +88,9 @@ func (inst *Store) ListRunEvents(filter factsstore.RunEventFilter) (rows []facts
 		limit = runEventsCap
 	}
 	rows = []factsstore.RunEventRow{}
+	b := binds{}
 	err = inst.readRows(context.Background(), "run events",
-		composeRunEventsSql(inst.qualifiedTable(), filter, limit), 7, func(r row) {
+		composeRunEventsSql(inst.qualifiedTable(), filter, limit, b), b, 7, func(r row) {
 			rows = append(rows, factsstore.RunEventRow{
 				FactId:      r.str(0),
 				Ts:          time.UnixMilli(r.i64(1)).UTC(),
@@ -104,7 +105,7 @@ func (inst *Store) ListRunEvents(filter factsstore.RunEventFilter) (rows []facts
 	return
 }
 
-func composeRunEventsSql(table string, filter factsstore.RunEventFilter, limit uint32) (sql string) {
+func composeRunEventsSql(table string, filter factsstore.RunEventFilter, limit uint32, b binds) (sql string) {
 	kinds := runEventKinds()
 	ids := make([]string, 0, len(kinds))
 	labels := make([]string, 0, len(kinds))
@@ -134,11 +135,10 @@ func composeRunEventsSql(table string, filter factsstore.RunEventFilter, limit u
 	// granules holding other vocabularies' rows (sysmetrics, capmap) through
 	// the skip index, which indexOf and countEqual never do.
 	where := []string{fmt.Sprintf("hasAny(%s, %s)", hSymLr, idArray)}
-	attribution := runExpr + " = " + quoteSqlString(filter.RunId)
+	attribution := runExpr + " = " + b.str("run", filter.RunId)
 	if !filter.Since.IsZero() {
-		attribution = fmt.Sprintf("(%s OR (%s = '' AND %s >= toDateTime64(%s, 9, 'UTC')))",
-			attribution, runExpr, hTs,
-			quoteSqlString(filter.Since.UTC().Format("2006-01-02 15:04:05.000000000")))
+		attribution = fmt.Sprintf("(%s OR (%s = '' AND %s >= fromUnixTimestamp64Nano(%s, 'UTC')))",
+			attribution, runExpr, hTs, b.i64("since", filter.Since.UnixNano()))
 	}
 	where = append(where, attribution)
 

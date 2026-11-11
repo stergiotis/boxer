@@ -367,6 +367,16 @@ the query process are reads, nearly all *derive*.
 `lwsqlsurface.InstallIfDrifted`, which installs only on drift and otherwise
 re-creates the dependent views, whose definitions carry no revision.
 
+### 2026-11-11 — the facts store binds its filter values
+
+The store's reads send a filter's value beside the statement, as a bound
+parameter, instead of writing it into the text. A read's text now depends
+on which filters are set and not on what they hold, so the polled reads the
+recording showed re-sent with a moving literal are one statement each and
+their expansion is kept. A value a person types into a filter is no longer
+part of the SQL. What a journal line omits (see Deferred) now includes
+these values. The level list of the log read is still written as literals.
+
 ## References
 
 - [ADR-0117](0117-passthrough-table-classifier.md) — passthrough tables.

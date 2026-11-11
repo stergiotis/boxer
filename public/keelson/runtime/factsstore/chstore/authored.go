@@ -1,6 +1,8 @@
 package chstore
 
 import (
+	"strconv"
+	"strings"
 	"sync"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsschema/factsread"
@@ -40,9 +42,37 @@ func u64(m registry.RegisteredNaturalKey) string  { return factsread.ListFirst("
 // strList is every value of the attribute carrying m on the string section.
 func strList(m registry.RegisteredNaturalKey) string { return factsread.List("stringArray", m) }
 
-// preparedCap bounds the memo of expanded statements. A read whose filter
-// carries a moving timestamp authors a new text on every call and misses;
-// the reads that repeat (a run's events, the launch statistics) hit.
+// binds are the values a read sends beside its statement, by placeholder
+// name. A filter's value goes here rather than into the text, so the text of
+// a read depends on which filters are set and not on what they hold: a
+// polled read with a moving look-back is one statement, expanded once, and a
+// value a person typed is never part of the SQL.
+type binds map[string]string
+
+// i64 binds v and returns its placeholder.
+func (inst binds) i64(name string, v int64) string {
+	inst[name] = strconv.FormatInt(v, 10)
+	return "{" + name + ":Int64}"
+}
+
+// u64 binds v and returns its placeholder.
+func (inst binds) u64(name string, v uint64) string {
+	inst[name] = strconv.FormatUint(v, 10)
+	return "{" + name + ":UInt64}"
+}
+
+// str binds v and returns its placeholder. The server reads a bound string
+// in its escaped text form, where a backslash, a tab and a line break are
+// written as escapes.
+func (inst binds) str(name string, v string) string {
+	inst[name] = bindEscaper.Replace(v)
+	return "{" + name + ":String}"
+}
+
+var bindEscaper = strings.NewReplacer(`\`, `\\`, "\t", `\t`, "\n", `\n`, "\r", `\r`)
+
+// preparedCap bounds the memo of expanded statements, which holds one entry
+// per read and combination of filters set.
 const preparedCap = 64
 
 var prepared struct {

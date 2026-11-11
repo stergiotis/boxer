@@ -154,8 +154,19 @@ func (inst *Executor) Exec(ctx context.Context, sql string) (err error) {
 // this implementation's to release. An error ends the sequence as a final
 // (nil, err) pair.
 func (inst *Executor) QueryArrow(ctx context.Context, sql string) iter.Seq2[arrow.RecordBatch, error] {
+	return inst.QueryArrowParams(ctx, sql, nil)
+}
+
+// QueryArrowParams is QueryArrow with server-side parameter binding: each
+// params entry fills the `{name:Type}` placeholder of its name in sql, as
+// [chclient.Client.QueryParams] describes. The statement text then does not
+// change with the values, which is what lets a caller prepare it once.
+//
+// It is not part of [recordstore.ExecutorI]: binding is a property of this
+// transport, and a caller that needs it holds this type.
+func (inst *Executor) QueryArrowParams(ctx context.Context, sql string, params map[string]string) iter.Seq2[arrow.RecordBatch, error] {
 	return func(yield func(arrow.RecordBatch, error) bool) {
-		body, err := inst.client.QuerySettings(ctx, withArrowStreamFormat(sql), inst.settings(ctx))
+		body, err := inst.client.QueryParamsSettings(ctx, withArrowStreamFormat(sql), params, inst.settings(ctx))
 		if err != nil {
 			yield(nil, eh.Errorf("storeexec: query: %w", err))
 			return
