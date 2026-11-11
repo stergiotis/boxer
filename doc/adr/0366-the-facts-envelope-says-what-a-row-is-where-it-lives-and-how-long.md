@@ -1,12 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-11-09
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to accepted
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-11-11
 ---
-
-> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
 
 # ADR-0366: The facts envelope says what a row is, where it lives and how long
 
@@ -32,7 +30,7 @@ things the record therefore cannot say, with what each has cost there:
 - **What a row is.** A row's kind is recoverable only from its
   tagged-value arrays, so a read that is not by id scans every kind. A
   `WHERE` over a current-state view pivots the whole table (0.4–1.2 s over
-  a 517 401-message mail corpus, measured 2026-11-06); five domains there
+  a corpus of about half a million entities, measured 2026-11-06); five domains there
   carry derived tables of their own for that reason, and one left for a
   facts-shaped table with another order.
 - **Which dataset a row belongs to.** An imported corpus and a person's
@@ -40,7 +38,7 @@ things the record therefore cannot say, with what each has cost there:
   Nothing can be rebuilt, measured or removed as a unit.
 - **How long a row lives.** Supersession by a newer row is the only
   lifecycle. `expiresAt` is written and no table clause enforces it.
-  Removal of one entity is invented per kind; the mail store alone has
+  Removal of one entity is invented per kind; one store alone has
   four spellings of it.
 
 Two further things are reinvented per ingest because the record does not
@@ -49,9 +47,9 @@ skip-if-unchanged test, and a derived table's timestamp watermark has
 needed correcting twice (2026-11-06 and 2026-11-09) — and when the thing a row describes happened, the write
 instant being the only time every row has.
 
-The question arose in a consumer's mail client, which was asked
+The question arose in a consumer's application, which was asked
 (2026-11-09) to serve three ways of working: a large corpus worked on
-intensively, a glimpse at a live mailbox removable at once, and daily use.
+intensively, a glimpse at a live source removable at once, and daily use.
 They differ in scope and in lifecycle and in nothing else, and those are
 the dimensions the envelope lacks.
 
@@ -164,7 +162,7 @@ departure from it.
   carry the document's. Whether the sorting key is `(genus, id, ts)`,
   which clusters by genus alone, or `(genus, locality, id, ts)`, which
   also puts a document's items side by side and asks a read by id to give
-  the locality as well, is decided by measurement in §M1 on the mail
+  the locality as well, is decided by measurement in §M1 on the
   corpus named in the Context, because the sorting key is as immutable as
   the partition key.
 
@@ -377,7 +375,7 @@ shared table.
 
 ## Status
 
-Proposed — awaiting review by the owner. It records the design reached on
+Accepted 2026-11-11. It records the design reached on
 2026-11-09.
 
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
