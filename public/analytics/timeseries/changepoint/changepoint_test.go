@@ -58,13 +58,16 @@ func oracleWorking(vals []float64, cost changepoint.CostE, sigma float64) (work 
 		_, ss := oracleMeanSq(ranks)
 		return ranks, ss / float64(len(ranks))
 	}
-	return vals, 1
+	_, ss := oracleMeanSq(vals)
+	return vals, 1e-10 * ss / float64(len(vals))
 }
 
+// For the mean-and-variance cost div is the ε of the cost's definition: 1e-10
+// of the whole series' variance, added to each segment's.
 func oracleCost(work []float64, div float64, cost changepoint.CostE, start int, end int) (c float64) {
 	_, ss := oracleMeanSq(work[start:end])
 	if cost == changepoint.CostMeanVar {
-		return float64(end-start) * math.Log(ss/float64(end-start))
+		return float64(end-start) * math.Log(ss/float64(end-start)+div)
 	}
 	return ss / div
 }
@@ -135,15 +138,19 @@ func drawSeries(t *rapid.T, minLen int, maxLen int) (vals []float64) {
 	n := rapid.IntRange(minLen, maxLen).Draw(t, "len")
 	pieces := rapid.IntRange(1, 4).Draw(t, "pieces")
 	vals = make([]float64, n)
-	level := 0.0
+	level, quiet := 0.0, 1.0
 	for i := range vals {
 		if pieces > 1 && i > 0 && i%(n/pieces+1) == 0 {
 			level += float64(rapid.IntRange(-6, 6).Draw(t, "shift"))
+			// Some pieces are quieter than the rest by five orders of
+			// magnitude, and some exactly constant: where the variance term
+			// of the mean-and-variance cost is decided by its ε.
+			quiet = rapid.SampledFrom([]float64{1, 1, 1.0 / (1 << 17), 0}).Draw(t, "quiet")
 		}
 		// Quantised to a binary fraction, so the affine and monotone transforms
 		// the invariance properties apply are exact and neither create nor
 		// break a tie.
-		vals[i] = level + float64(rapid.IntRange(-1024, 1024).Draw(t, fmt.Sprintf("e%d", i)))/1024
+		vals[i] = level + quiet*float64(rapid.IntRange(-1024, 1024).Draw(t, fmt.Sprintf("e%d", i)))/1024
 	}
 	return
 }
@@ -167,20 +174,17 @@ func TestPropertyPeltMatchesUnprunedOptimum(t *testing.T) {
 		if div == 0 {
 			t.Skip("constant series")
 		}
-		if cost == changepoint.CostMeanVar {
-			// The implementation floors a segment variance; the oracle does
-			// not, so a draw with an exactly constant stretch is outside what
-			// the two can be compared on.
-			for s := 0; s+minSeg <= len(vals); s++ {
-				if _, ss := oracleMeanSq(vals[s : s+minSeg]); ss < 1e-6 {
-					t.Skip("near-constant stretch")
-				}
-			}
-		}
 		want := oracleOptimal(work, div, cost, minSeg, penalty)
 		got := oraclePenalised(work, div, cost, seg.Starts, penalty)
-		assert.InDelta(t, want, got, 1e-6*(1+math.Abs(want)), "starts %v", seg.Starts)
-		assert.InDelta(t, got-penalty*float64(len(seg.Starts)), seg.Cost, 1e-6*(1+math.Abs(got)))
+		tol := 1e-6 * (1 + math.Abs(want))
+		if cost == changepoint.CostMeanVar {
+			// Where a segment's variance is all ε, the logarithm's argument is
+			// 1e-10 of the series' variance and the prefix sums resolve about
+			// 1e-16 of it: six digits, per sample.
+			tol = 2e-5 * float64(len(vals))
+		}
+		assert.InDelta(t, want, got, tol, "starts %v", seg.Starts)
+		assert.InDelta(t, got-penalty*float64(len(seg.Starts)), seg.Cost, tol)
 
 		prev := int32(0)
 		for _, s := range seg.Starts {
@@ -521,4 +525,96 @@ func BenchmarkPelt(b *testing.B) {
 			}
 		})
 	}
+}
+
+// A quiet stretch five orders of magnitude below the rest, at a small
+// penalty: the case in which a variance bounded from below, rather than
+// offset, let a pruned candidate be the optimum.
+func TestPeltMeanVarIsExactNearTheVarianceOffset(t *testing.T) {
+	vals := []float64{-1.1e-06, -6.1e-06, 1.2e-06, 6.6e-06, 5e-07, -8e-07, 1.1285766, -0.1430147}
+	series, err := changepoint.NewSeries(vals, changepoint.Config{Cost: changepoint.CostMeanVar})
+	require.NoError(t, err)
+	penalty := 0.1 * series.PenaltyBIC()
+	seg, err := series.Pelt(penalty)
+	require.NoError(t, err)
+	work, div := oracleWorking(vals, changepoint.CostMeanVar, 0)
+	want := oracleOptimal(work, div, changepoint.CostMeanVar, 2, penalty)
+	assert.InDelta(t, want, oraclePenalised(work, div, changepoint.CostMeanVar, seg.Starts, penalty), 1e-4)
+}
+
+func TestIncompletePathRowsAreOptimalWhereFound(t *testing.T) {
+	lengths, levels := make([]int, 12), make([]float64, 12)
+	for i := range lengths {
+		lengths[i], levels[i] = 30, float64(i%4)*1.5
+	}
+	vals := steps(9, lengths, levels, unit(12))
+	series, err := changepoint.NewSeries(vals, changepoint.Config{})
+	require.NoError(t, err)
+	bic := series.PenaltyBIC()
+	path, err := series.PenaltyPath(0.05*bic, 64*bic, 4)
+	require.NoError(t, err)
+	require.False(t, path.Complete)
+	for i, row := range path.All() {
+		seg, err := series.Pelt(row.Penalty)
+		require.NoError(t, err)
+		assert.Equal(t, path.NumChanges[i], seg.NumChanges(), "row %d at its Found penalty", i)
+		assert.ElementsMatch(t, row.Starts, seg.Starts)
+	}
+}
+
+func TestSeriesAtTheEdgesOfTheFloatRange(t *testing.T) {
+	// Squares of these underflow to zero; the answer must be the one the same
+	// series gives at an ordinary scale.
+	unitScale := steps(12, []int{20, 20}, []float64{0, 5}, unit(2))
+	tiny := make([]float64, len(unitScale))
+	for i, v := range unitScale {
+		tiny[i] = v * 1e-170
+	}
+	for _, cost := range changepoint.AllCosts {
+		want, err := changepoint.NewSeries(unitScale, changepoint.Config{Cost: cost, MinSegment: 3})
+		require.NoError(t, err)
+		wantSeg, err := want.Pelt(want.PenaltyBIC())
+		require.NoError(t, err)
+		require.Contains(t, wantSeg.Starts, int32(20), cost.String())
+		series, err := changepoint.NewSeries(tiny, changepoint.Config{Cost: cost, MinSegment: 3})
+		require.NoError(t, err)
+		seg, err := series.Pelt(series.PenaltyBIC())
+		require.NoError(t, err)
+		assert.Equal(t, wantSeg.Starts, seg.Starts, cost.String())
+	}
+	// A range no float holds is refused rather than answered with NaN.
+	huge := make([]float64, 40)
+	for i := range huge {
+		huge[i] = 1e308
+		if i >= 20 {
+			huge[i] = -1e308
+		}
+	}
+	_, err := changepoint.NewSeries(huge, changepoint.Config{})
+	assert.Error(t, err)
+	// Large values that do fit are handled.
+	for i := range huge {
+		huge[i] /= 4
+	}
+	series, err := changepoint.NewSeries(huge, changepoint.Config{})
+	require.NoError(t, err)
+	seg, err := series.Pelt(series.PenaltyBIC())
+	require.NoError(t, err)
+	assert.Equal(t, []int32{20}, seg.Starts)
+	assert.False(t, math.IsNaN(seg.Cost))
+}
+
+func TestNoiseScaleIsRaisedToWhatThePrefixSumsResolve(t *testing.T) {
+	// Seven exact constants and a little noise elsewhere: the estimated scale
+	// is eight orders below the range, and rounding alone would split the
+	// constant stretch.
+	vals := []float64{0.003, 0, -0.001, 0.0185, 0, 0.64, 0.002, 3, 3, 3, 3, 3, 3, 3, 0, 0, 0, 0, 0, 0, 0}
+	series, err := changepoint.NewSeries(vals, changepoint.Config{NoiseScale: 1e-12})
+	require.NoError(t, err)
+	assert.InDelta(t, 1e-6*2.06, series.NoiseScale(), 1e-7)
+	seg, err := series.Pelt(series.PenaltyBIC())
+	require.NoError(t, err)
+	assert.NotContains(t, seg.Starts, int32(10), "no change inside the constant stretch")
+	assert.Contains(t, seg.Starts, int32(7))
+	assert.Contains(t, seg.Starts, int32(14))
 }

@@ -1,6 +1,7 @@
 package changepoint
 
 import (
+	"iter"
 	"slices"
 
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
@@ -16,17 +17,22 @@ const DefaultPathMaxRuns int32 = 64
 // Struct-of-arrays: a reader usually wants one column — the change counts
 // against the penalties — and the starts only for the row it settles on.
 type Path struct {
+	// Found[i] is a penalty at which segmentation i was computed, and so one
+	// at which it is optimal. Ascending.
+	Found []float64
 	// Penalty[i] is the smallest penalty in the searched interval at which
 	// segmentation i is optimal; it stays optimal up to Penalty[i+1], or to the
-	// interval's upper end for the last one. Ascending.
+	// interval's upper end for the last one. Ascending. Only meaningful when
+	// Complete: the ranges are derived from neighbouring rows, and a missing
+	// neighbour makes them too wide.
 	Penalty []float64
 	// NumChanges[i] is segmentation i's change count. Strictly descending.
 	NumChanges []int32
 	// Cost[i] is segmentation i's unpenalised cost. Ascending.
 	Cost []float64
-	// Complete is false when the run budget ended the search early. The rows
-	// present are still each optimal at their own Penalty, but segmentations
-	// may be missing between them and the ranges are then not contiguous.
+	// Complete is false when the run budget ended the search early. Each row
+	// present is still optimal at its Found penalty, but segmentations are
+	// missing between them, so Penalty does not bound where a row holds.
 	Complete bool
 
 	offsets []int32
@@ -35,7 +41,7 @@ type Path struct {
 
 // Len returns the number of segmentations on the path.
 func (inst Path) Len() (count int) {
-	return len(inst.Penalty)
+	return len(inst.Found)
 }
 
 // Starts returns segmentation i's change positions, as in
@@ -43,6 +49,18 @@ func (inst Path) Len() (count int) {
 func (inst Path) Starts(i int) (starts []int32) {
 	starts = inst.starts[inst.offsets[i]:inst.offsets[i+1]]
 	return
+}
+
+// All iterates the path's segmentations, each carrying the penalty it was
+// found at.
+func (inst Path) All() iter.Seq2[int, Segmentation] {
+	return func(yield func(int, Segmentation) bool) {
+		for i := range inst.Found {
+			if !yield(i, Segmentation{Starts: inst.Starts(i), Cost: inst.Cost[i], Penalty: inst.Found[i]}) {
+				return
+			}
+		}
+	}
 }
 
 // PenaltyPath finds the segmentations optimal for the penalties in
@@ -144,6 +162,7 @@ func (inst *Series) PenaltyPath(penaltyLo float64, penaltyHi float64, maxRuns in
 			from = (s.Cost - prev.Cost) / float64(prev.NumChanges()-s.NumChanges())
 			from = min(max(from, penaltyLo), penaltyHi)
 		}
+		path.Found = append(path.Found, s.Penalty)
 		path.Penalty = append(path.Penalty, from)
 		path.NumChanges = append(path.NumChanges, s.NumChanges())
 		path.Cost = append(path.Cost, s.Cost)

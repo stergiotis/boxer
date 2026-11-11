@@ -2,6 +2,7 @@ package changepoint_test
 
 import (
 	"math"
+	"math/rand/v2"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -357,4 +358,61 @@ func TestBocpdErrors(t *testing.T) {
 	p, err := changepoint.PriorFromSample([]float64{1, 2, 3})
 	require.NoError(t, err)
 	assert.Equal(t, changepoint.NormalGammaPrior{Mean: 2, Kappa: 1, Alpha: 1, Beta: 1}, p)
+}
+
+// Prefix sums of a constant that is not a binary fraction differ in their
+// last bits; whether a window is constant must not be decided from them.
+func TestMosumIsSilentInsideAnInexactConstantStretch(t *testing.T) {
+	rng := rand.New(rand.NewPCG(3, 4))
+	vals := make([]float64, 400)
+	for i := range vals {
+		vals[i] = 0.1
+		if i >= 200 {
+			vals[i] += rng.NormFloat64()
+		}
+	}
+	res, err := changepoint.Mosum(vals, changepoint.MosumConfig{Bandwidth: 20})
+	require.NoError(t, err)
+	for k := 20; k <= 180; k++ {
+		require.Zero(t, res.Stat[k], "k=%d: both windows are constant and equal", k)
+	}
+	for _, s := range res.Starts {
+		assert.GreaterOrEqual(t, s, int32(181))
+	}
+}
+
+func TestMosumPeakRuleMatchesTheDirectScan(t *testing.T) {
+	vals := steps(24, []int{150, 40, 160, 90}, []float64{0, 3, -1, 1}, unit(4))
+	const g = 30
+	res, err := changepoint.Mosum(vals, changepoint.MosumConfig{Bandwidth: g})
+	require.NoError(t, err)
+	reach := int(changepoint.DefaultMosumEta * g)
+	var want []int32
+	for k := g; k <= len(vals)-g; k++ {
+		peak := res.Stat[k] > res.Critical
+		for j := max(g, k-reach); peak && j <= min(len(vals)-g, k+reach); j++ {
+			peak = !(res.Stat[j] > res.Stat[k] || (j < k && res.Stat[j] == res.Stat[k]))
+		}
+		if peak {
+			want = append(want, int32(k))
+		}
+	}
+	require.NotEmpty(t, want)
+	assert.Equal(t, want, res.Starts)
+}
+
+func TestCusumRefusesAMeanWithoutItsScale(t *testing.T) {
+	_, err := changepoint.NewCusum(changepoint.CusumConfig{Mean: 100})
+	assert.Error(t, err)
+}
+
+func TestBocpdRefusesATruncationItCannotHold(t *testing.T) {
+	good := changepoint.NormalGammaPrior{Kappa: 1, Alpha: 1, Beta: 1}
+	_, err := changepoint.NewBocpd(changepoint.BocpdConfig{ExpectedRun: 2147483647, Prior: good})
+	assert.Error(t, err)
+	// A long expected run is fine once the truncation is stated.
+	det, err := changepoint.NewBocpd(changepoint.BocpdConfig{ExpectedRun: 2147483647, Prior: good, MaxRun: 100})
+	require.NoError(t, err)
+	_, err = det.Push(0.5)
+	assert.NoError(t, err)
 }

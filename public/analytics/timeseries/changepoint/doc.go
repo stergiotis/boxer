@@ -73,9 +73,6 @@
 // were not neighbours. Sampling is assumed regular in whatever sense the
 // caller cares about: the methods see an ordered sequence and no timestamps.
 //
-// The package has no dependency beyond the standard library and the error
-// helpers, and compiles for freestanding WASM.
-//
 // # Not here
 //
 // Wild binary segmentation, kernel and energy-distance (E-divisive) costs,

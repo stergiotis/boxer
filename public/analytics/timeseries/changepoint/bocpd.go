@@ -6,9 +6,14 @@ import (
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
-// DefaultBocpdRunFactor sets the default truncation of the run-length
-// posterior, as a multiple of the expected run length.
-const DefaultBocpdRunFactor = 8
+const (
+	// DefaultBocpdRunFactor sets the default truncation of the run-length
+	// posterior, as a multiple of the expected run length.
+	DefaultBocpdRunFactor = 8
+	// BocpdRunLimit is the largest truncation accepted. The detector holds a
+	// handful of arrays of that length and walks them on every sample.
+	BocpdRunLimit = 1 << 20
+)
 
 // NormalGammaPrior is the conjugate prior of a Gaussian regime with unknown
 // mean and variance: the precision is Gamma(Alpha, Beta), and given it the
@@ -136,11 +141,9 @@ type Bocpd struct {
 // NewBocpd validates cfg and returns a detector ready for its first sample.
 func NewBocpd(cfg BocpdConfig) (inst *Bocpd, err error) {
 	p := cfg.Prior
-	for name, v := range map[string]float64{"expectedRun": cfg.ExpectedRun, "mean": p.Mean, "kappa": p.Kappa, "alpha": p.Alpha, "beta": p.Beta} {
-		if math.IsNaN(v) || math.IsInf(v, 0) {
-			err = eb.Build().Str("field", name).Errorf("a configuration value is not finite")
-			return
-		}
+	err = checkConfig([]string{"expectedRun", "mean", "kappa", "alpha", "beta"}, cfg.ExpectedRun, p.Mean, p.Kappa, p.Alpha, p.Beta)
+	if err != nil {
+		return
 	}
 	if !(cfg.ExpectedRun > 1) {
 		err = eb.Build().Float64("expectedRun", cfg.ExpectedRun).Errorf("the expected run length must exceed one sample")
@@ -155,11 +158,16 @@ func NewBocpd(cfg BocpdConfig) (inst *Bocpd, err error) {
 		err = eb.Build().Int32("maxRun", cfg.MaxRun).Int32("lag", cfg.Lag).Errorf("the run limit or the lag is negative")
 		return
 	}
-	maxRun := int(cfg.MaxRun)
-	if maxRun == 0 {
-		maxRun = int(math.Ceil(DefaultBocpdRunFactor * cfg.ExpectedRun))
+	limit := float64(cfg.MaxRun)
+	if cfg.MaxRun == 0 {
+		limit = math.Ceil(DefaultBocpdRunFactor * cfg.ExpectedRun)
 	}
-	maxRun = max(maxRun, 2)
+	if limit > BocpdRunLimit {
+		err = eb.Build().Float64("maxRun", limit).Int("limit", BocpdRunLimit).
+			Errorf("the run-length truncation is above the limit; set MaxRun, which an expected run this long needs anyway")
+		return
+	}
+	maxRun := max(int(limit), 2)
 	lag := max(int(cfg.Lag), 1)
 	inst = &Bocpd{
 		hazard:  1 / cfg.ExpectedRun,
@@ -206,9 +214,10 @@ func (inst *Bocpd) Push(v float64) (reading BocpdReading, err error) {
 		return
 	}
 	inst.count++
-	next := inst.scratch
-	clear(next)
 	top := inst.maxRun
+	// Only the slots this sample can reach are written and read.
+	next := inst.scratch
+	clear(next[:min(inst.active+2, top+1)])
 	// A change: whatever the run was, this sample starts a new one and is
 	// scored under the prior. The first sample has nothing before it, so it
 	// starts a run with certainty.
@@ -249,7 +258,7 @@ func (inst *Bocpd) Push(v float64) (reading BocpdReading, err error) {
 		// Every hypothesis gave the sample a density of zero in floating
 		// point. The sample is then beyond what any regime on record explains,
 		// which the model can only read as a new one.
-		clear(next)
+		clear(next[:inst.active+1])
 		next[1], sum = 1, 1
 	}
 	inv := 1 / sum

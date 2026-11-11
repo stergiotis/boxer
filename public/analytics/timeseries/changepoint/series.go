@@ -22,6 +22,13 @@ type Config struct {
 	// against. Zero accepts [NoiseScaleMAD] of the series. Ignored by the
 	// other costs: [CostMeanVar] fits a variance per segment and [CostRank]
 	// scales by the variance of the ranks.
+	//
+	// A scale below a millionth of the series' largest deviation from its
+	// mean is raised to that, given or estimated. Costs are differences of
+	// prefix sums, which resolve about sixteen digits of the whole series;
+	// against a smaller scale a constant stretch would cost more than a
+	// penalty by rounding alone. At that ratio any shift there is to find is
+	// found either way. [Series.NoiseScale] reports the value in effect.
 	NoiseScale float64
 }
 
@@ -57,7 +64,7 @@ func NewSeries(vals []float64, cfg Config) (inst *Series, err error) {
 			Errorf("the series is shorter than two minimum segments, so it has no place for a change")
 		return
 	}
-	err = checkFinite(vals)
+	work, scale, err := normalise(vals)
 	if err != nil {
 		return
 	}
@@ -66,22 +73,35 @@ func NewSeries(vals []float64, cfg Config) (inst *Series, err error) {
 	case CostMean:
 		inst.noiseScale = cfg.NoiseScale
 		if inst.noiseScale == 0 {
-			inst.noiseScale = NoiseScaleMAD(vals)
+			inst.noiseScale = NoiseScaleMAD(work) * scale
 		}
-		inst.table = newCostTable(CostMean, vals, inst.noiseScale)
+		sigma := 0.0
+		if scale > 0 {
+			sigma = max(inst.noiseScale/scale, noiseScaleFloorRel)
+			inst.noiseScale = sigma * scale
+		}
+		inst.table = newCostTable(CostMean, work, sigma)
 	case CostMeanVar:
-		inst.table = newCostTable(CostMeanVar, vals, 1)
+		inst.table = newCostTable(CostMeanVar, work, 1)
+		if scale > 0 {
+			inst.table.logUnit = 2 * math.Log(scale)
+		}
 	case CostRank:
 		ranks := midRanks(vals)
 		var sumSq float64
 		centre := 0.5 * float64(n+1)
-		for _, r := range ranks {
-			sumSq += (r - centre) * (r - centre)
+		for i, r := range ranks {
+			ranks[i] = r - centre
+			sumSq += ranks[i] * ranks[i]
 		}
 		inst.table = newCostTable(CostMean, ranks, math.Sqrt(sumSq/float64(n)))
 	}
 	return
 }
+
+// noiseScaleFloorRel is the smallest noise scale [CostMean] works with, as a
+// fraction of the series' largest deviation from its mean.
+const noiseScaleFloorRel = 1e-6
 
 // Len returns the number of samples.
 func (inst *Series) Len() (n int) {

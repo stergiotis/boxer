@@ -17,9 +17,14 @@ const (
 	// scale is an input, see [Config.NoiseScale].
 	CostMean CostE = iota
 	// CostMeanVar fits each segment with its own mean and its own variance,
-	// the Gaussian −2·log-likelihood up to a constant: len·log σ̂². It sees
-	// shifts in level and in spread, and needs segments of at least two
-	// samples.
+	// the Gaussian −2·log-likelihood up to a constant: len·log(σ̂² + ε). It
+	// sees shifts in level and in spread, and needs segments of at least two
+	// samples. ε is 1e-10 of the whole series' variance: without it a constant
+	// stretch costs −∞ and the segmentation collapses onto every run of
+	// repeated values. It is added rather than applied as a lower bound
+	// because a bound would let merging two segments cost less than keeping
+	// them apart, which is the one thing the pruning in [Series.Pelt] may not
+	// meet.
 	CostMeanVar
 	// CostRank is [CostMean] applied to the mid-ranks of the values, scaled to
 	// unit variance (Lung-Yut-Fong, Lévy-Leduc and Cappé, 2015). Ranks are
@@ -65,9 +70,8 @@ func (inst CostE) minSegment() (length int32) {
 	return 1
 }
 
-// varFloorRel bounds a segment's variance from below as a fraction of the
-// whole series' variance. Without it a constant stretch has log σ̂² = −∞ and
-// the segmentation collapses onto every run of repeated values.
+// varFloorRel is ε of [CostMeanVar], as a fraction of the whole series'
+// variance.
 const varFloorRel = 1e-10
 
 // madToSigma converts a median absolute deviation to a Gaussian standard
@@ -165,30 +169,61 @@ type costTable struct {
 	// the mean and rank costs divided by the noise scale. Length n+1.
 	sum   []float64
 	sumSq []float64
-	// varFloor is the meanvar cost's lower bound on a segment variance.
+	// varFloor is the ε the meanvar cost adds to a segment variance.
 	varFloor float64
+	// logUnit restores the meanvar cost to the caller's units: the working
+	// values were divided by a scale, which shifts every log-variance by the
+	// same amount.
+	logUnit float64
 	// flat marks a series with no variation at all, on which every cost is 0.
 	flat bool
 }
 
-// newCostTable builds the table. scale is the divisor applied to the centred
-// values (1 for meanvar).
-func newCostTable(kind CostE, vals []float64, scale float64) (inst costTable) {
-	n := len(vals)
+// normalise centres vals on their mean and divides by the largest deviation,
+// so every later square is of a number in [−1, 1]: prefix sums of squares
+// then neither overflow for a series near the top of the float range nor
+// underflow to nothing for one near the bottom. scale is the divisor, 0 for
+// a constant series. A series whose range itself is not representable is
+// refused.
+func normalise(vals []float64) (work []float64, scale float64, err error) {
+	err = checkFinite(vals)
+	if err != nil {
+		return
+	}
+	var mean float64
+	for i, v := range vals {
+		mean += (v - mean) / float64(i+1)
+	}
+	for _, v := range vals {
+		scale = max(scale, math.Abs(v-mean))
+	}
+	if math.IsInf(scale, 0) || math.IsNaN(scale) {
+		err = eb.Build().Errorf("the series spans more than a float can hold the difference of")
+		return
+	}
+	work = make([]float64, len(vals))
+	if scale == 0 {
+		return
+	}
+	for i, v := range vals {
+		work[i] = (v - mean) / scale
+	}
+	return
+}
+
+// newCostTable builds the table over working values, each divided by scale
+// (1 for meanvar).
+func newCostTable(kind CostE, work []float64, scale float64) (inst costTable) {
+	n := len(work)
 	inst.kind = kind
 	inst.sum = make([]float64, n+1)
 	inst.sumSq = make([]float64, n+1)
-	var mean float64
-	for _, v := range vals {
-		mean += v
-	}
-	mean /= float64(max(n, 1))
 	inv := 1.0
 	if scale > 0 {
 		inv = 1 / scale
 	}
-	for i, v := range vals {
-		w := (v - mean) * inv
+	for i, v := range work {
+		w := v * inv
 		inst.sum[i+1] = inst.sum[i] + w
 		inst.sumSq[i+1] = inst.sumSq[i] + w*w
 	}
@@ -213,7 +248,7 @@ func (inst *costTable) cost(start int, end int) (cost float64) {
 		ss = 0
 	}
 	if inst.kind == CostMeanVar {
-		cost = length * math.Log(max(ss/length, inst.varFloor))
+		cost = length * (math.Log(ss/length+inst.varFloor) + inst.logUnit)
 		return
 	}
 	cost = ss

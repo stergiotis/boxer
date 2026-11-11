@@ -64,13 +64,13 @@ type CusumReading struct {
 }
 
 // Cusum is the two-sided tabular cumulative-sum chart of Page, "Continuous
-// inspection schemes", Biometrika 41 (1954), doi:10.1093/biomet/41.1-2.100:
+// inspection schemes", Biometrika 41 (1954), doi:10.1093/biomet/41.1-2.100.
 //
 //	z  = (x − μ)/σ
 //	S⁺ = max(0, S⁺ + z − k)
 //	S⁻ = max(0, S⁻ − z − k)
 //
-// with an alarm when either sum exceeds h. It is sequential: each reading
+// An alarm is raised when either sum exceeds h. The chart is sequential: each reading
 // uses the samples up to it and nothing later, so the readings are what a
 // monitor running at the time would have shown.
 //
@@ -102,11 +102,13 @@ type Cusum struct {
 
 // NewCusum validates cfg and returns a chart ready for its first sample.
 func NewCusum(cfg CusumConfig) (inst *Cusum, err error) {
-	for name, v := range map[string]float64{"mean": cfg.Mean, "sigma": cfg.Sigma, "allowance": cfg.Allowance, "threshold": cfg.Threshold} {
-		if math.IsNaN(v) || math.IsInf(v, 0) {
-			err = eb.Build().Str("field", name).Errorf("a configuration value is not finite")
-			return
-		}
+	err = checkConfig([]string{"mean", "sigma", "allowance", "threshold"}, cfg.Mean, cfg.Sigma, cfg.Allowance, cfg.Threshold)
+	if err != nil {
+		return
+	}
+	if cfg.Sigma == 0 && cfg.Mean != 0 {
+		err = eb.Build().Float64("mean", cfg.Mean).Errorf("an in-control mean is given without its standard deviation; give both, or neither to estimate them")
+		return
 	}
 	if cfg.Sigma < 0 || cfg.Allowance < 0 || cfg.Threshold < 0 {
 		err = eb.Build().Float64("sigma", cfg.Sigma).Float64("allowance", cfg.Allowance).Float64("threshold", cfg.Threshold).
@@ -132,6 +134,18 @@ func NewCusum(cfg CusumConfig) (inst *Cusum, err error) {
 			inst.cfg.Warmup = DefaultCusumWarmup
 		}
 		inst.warming = true
+	}
+	return
+}
+
+// checkConfig refuses a configuration value that is not finite, naming the
+// first in the order given.
+func checkConfig(names []string, vals ...float64) (err error) {
+	for i, v := range vals {
+		if math.IsNaN(v) || math.IsInf(v, 0) {
+			err = eb.Build().Str("field", names[i]).Errorf("a configuration value is not finite")
+			return
+		}
 	}
 	return
 }

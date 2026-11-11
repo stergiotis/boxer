@@ -93,11 +93,22 @@ func Mosum(vals []float64, cfg MosumConfig) (res MosumResult, err error) {
 		err = eb.Build().Float64("eta", cfg.Eta).Errorf("the neighbourhood fraction is outside (0, 1]")
 		return
 	}
-	err = checkFinite(vals)
+	work, _, err := normalise(vals)
 	if err != nil {
 		return
 	}
-	table := newCostTable(CostMean, vals, 1)
+	table := newCostTable(CostMean, work, 1)
+	// runLen[i] counts the equal samples ending at i. Whether a window is
+	// constant is asked of the samples: prefix sums of a constant stretch
+	// differ in their last bits, and a variance of 1e-33 under a difference
+	// of 1e-17 would read as a change of any size.
+	runLen := make([]int32, n)
+	for i := range vals {
+		runLen[i] = 1
+		if i > 0 && vals[i] == vals[i-1] {
+			runLen[i] = runLen[i-1] + 1
+		}
+	}
 	res.Stat = make([]float64, n)
 	res.First, res.Last = int32(g), int32(n-g)
 	res.Critical = MosumCritical(n, g, alpha)
@@ -105,34 +116,37 @@ func Mosum(vals []float64, cfg MosumConfig) (res MosumResult, err error) {
 	for k := g; k <= n-g; k++ {
 		left := table.sum[k] - table.sum[k-g]
 		right := table.sum[k+g] - table.sum[k]
-		variance := (table.cost(k-g, k) + table.cost(k, k+g)) / (2 * gf)
-		if variance <= 0 {
+		if int(runLen[k-1]) >= g && int(runLen[k+g-1]) >= g {
 			// Both windows are constant. Equal constants are no change; unequal
 			// ones are a change the noise scale cannot be asked about, and it
 			// is reported as exceeding any level.
-			if left != right {
+			if vals[k-1] != vals[k] {
 				res.Stat[k] = math.Inf(1)
 			}
 			continue
 		}
+		variance := max((table.cost(k-g, k)+table.cost(k, k+g))/(2*gf), table.varFloor)
 		res.Stat[k] = math.Abs(right-left) / math.Sqrt(2*gf*variance)
 	}
+	// A position is reported when it holds the largest statistic within reach
+	// on both sides, the first such position on a plateau. The window maximum
+	// is kept in a deque of candidate positions with decreasing statistics;
+	// an equal newcomer does not displace an earlier one, so the front is
+	// always the first position of the maximum.
 	reach := max(int(eta*gf), 1)
+	deque := make([]int32, 0, 2*reach+1)
+	next := g
 	for k := g; k <= n-g; k++ {
-		s := res.Stat[k]
-		if !(s > res.Critical) {
-			continue
-		}
-		peak := true
-		for j := max(g, k-reach); j <= min(n-g, k+reach); j++ {
-			// Strict on the left only, so a plateau reports its first position
-			// once rather than every position or none.
-			if res.Stat[j] > s || (j < k && res.Stat[j] == s) {
-				peak = false
-				break
+		for hi := min(n-g, k+reach); next <= hi; next++ {
+			for len(deque) > 0 && res.Stat[deque[len(deque)-1]] < res.Stat[next] {
+				deque = deque[:len(deque)-1]
 			}
+			deque = append(deque, int32(next))
 		}
-		if peak {
+		for int(deque[0]) < k-reach {
+			deque = deque[1:]
+		}
+		if int(deque[0]) == k && res.Stat[k] > res.Critical {
 			res.Starts = append(res.Starts, int32(k))
 		}
 	}

@@ -1,6 +1,7 @@
 package changepoint
 
 import (
+	"container/heap"
 	"slices"
 
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
@@ -28,15 +29,11 @@ func (inst *Series) BinSeg(penalty float64, maxChanges int32) (seg Segmentation,
 		err = eb.Build().Int32("maxChanges", maxChanges).Errorf("the change limit is negative")
 		return
 	}
-	type pending struct {
-		start, end, split int32
-		gain              float64
-	}
-	queue := make([]pending, 0, 16)
+	queue := make(splitQueue, 0, 16)
 	push := func(start int32, end int32) {
 		split, gain, ok := inst.bestSplit(int(start), int(end))
 		if ok && gain > penalty {
-			queue = append(queue, pending{start: start, end: end, split: split, gain: gain})
+			heap.Push(&queue, pendingSplit{start: start, end: end, split: split, gain: gain})
 		}
 	}
 	push(0, int32(inst.n))
@@ -44,15 +41,7 @@ func (inst *Series) BinSeg(penalty float64, maxChanges int32) (seg Segmentation,
 		if maxChanges > 0 && int32(len(seg.Starts)) >= maxChanges {
 			break
 		}
-		at := 0
-		for i := range queue {
-			if queue[i].gain > queue[at].gain {
-				at = i
-			}
-		}
-		p := queue[at]
-		queue[at] = queue[len(queue)-1]
-		queue = queue[:len(queue)-1]
+		p := heap.Pop(&queue).(pendingSplit)
 		seg.Starts = append(seg.Starts, p.split)
 		push(p.start, p.split)
 		push(p.split, p.end)
@@ -60,6 +49,26 @@ func (inst *Series) BinSeg(penalty float64, maxChanges int32) (seg Segmentation,
 	slices.Sort(seg.Starts)
 	seg.Penalty = penalty
 	seg.Cost = inst.costOf(seg.Starts)
+	return
+}
+
+// pendingSplit is a stretch whose best split is known and not yet taken.
+type pendingSplit struct {
+	start, end, split int32
+	gain              float64
+}
+
+// splitQueue orders pending splits by decreasing gain.
+type splitQueue []pendingSplit
+
+func (inst splitQueue) Len() int           { return len(inst) }
+func (inst splitQueue) Less(i, j int) bool { return inst[i].gain > inst[j].gain }
+func (inst splitQueue) Swap(i, j int)      { inst[i], inst[j] = inst[j], inst[i] }
+func (inst *splitQueue) Push(x any)        { *inst = append(*inst, x.(pendingSplit)) }
+func (inst *splitQueue) Pop() (x any) {
+	old := *inst
+	x = old[len(old)-1]
+	*inst = old[:len(old)-1]
 	return
 }
 
