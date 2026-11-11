@@ -1,12 +1,14 @@
 package play
 
 import (
+	"math"
 	"strconv"
 	"strings"
 
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/memory"
 	"github.com/dustin/go-humanize"
+	"github.com/stergiotis/boxer/public/analytics/timeseries/changepoint"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
@@ -111,6 +113,26 @@ func applyTsCall(call *tsCall, in arrow.RecordBatch, params map[string]string, a
 		return tsApplyScores(call, ts, vals, params, alloc)
 	case "tsAnomalySpans":
 		return tsApplySpans(call, ts, vals, params, alloc)
+	case "tsPeltMean":
+		return tsApplyPenalised(call, ts, vals, params, alloc, changepoint.CostMean, false)
+	case "tsPeltMeanVar":
+		return tsApplyPenalised(call, ts, vals, params, alloc, changepoint.CostMeanVar, false)
+	case "tsPeltRank":
+		return tsApplyPenalised(call, ts, vals, params, alloc, changepoint.CostRank, false)
+	case "tsBinSegMean":
+		return tsApplyPenalised(call, ts, vals, params, alloc, changepoint.CostMean, true)
+	case "tsPeltMeanPath":
+		return tsApplyPenaltyPath(call, ts, vals, params, alloc)
+	case "tsMosumScores":
+		return tsApplyMosumScores(call, ts, vals, params, alloc)
+	case "tsMosumSegments":
+		return tsApplyMosumSegments(call, ts, vals, params, alloc)
+	case "tsCusumScores":
+		return tsApplyCusumScores(call, ts, vals, params, alloc)
+	case "tsCusumAlarms":
+		return tsApplyCusumAlarms(call, ts, vals, params, alloc)
+	case "tsBocpdScores":
+		return tsApplyBocpdScores(call, ts, vals, params, alloc)
 	}
 	err = eb.Build().Str("function", call.Spec.Name).Errorf("the function is recognised but not implemented")
 	return
@@ -192,6 +214,33 @@ func tsIntArg(call *tsCall, pos int, params map[string]string) (v int32, err err
 		return
 	}
 	return tsParseInt32(call, pos, raw)
+}
+
+// tsNumberArg reads a positional number argument, literal or slot, the way
+// tsIntArg reads an integer one.
+func tsNumberArg(call *tsCall, pos int, params map[string]string) (v float64, err error) {
+	text := call.Args[pos]
+	if !isTsNumberLiteral(text) {
+		name := tsSlotName(text)
+		raw, bound := params["param_"+name]
+		if !bound || raw == "" {
+			err = eb.Build().Str("function", call.Spec.Name).Str("arg", call.Spec.Args[pos].Name).Str("slot", name).
+				Errorf("an argument reads a slot with no value. Bind it — a SET line, or a control that " +
+					"writes the signal — before the analysis can run")
+			return
+		}
+		text = strings.TrimSpace(raw)
+		if !isTsNumberLiteral(text) {
+			err = eb.Build().Str("function", call.Spec.Name).Str("arg", call.Spec.Args[pos].Name).Str("slot", name).
+				Str("value", raw).Errorf("an argument's slot value is not a plain non-negative number")
+			return
+		}
+	}
+	v, cErr := strconv.ParseFloat(text, 64)
+	if cErr != nil || math.IsInf(v, 0) {
+		err = eb.Build().Str("function", call.Spec.Name).Str("arg", call.Spec.Args[pos].Name).Str("digits", text).Errorf("an argument is out of range")
+	}
+	return
 }
 
 // tsParseInt32 converts already-validated digits, guarding the width.

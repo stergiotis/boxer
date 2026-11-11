@@ -385,6 +385,87 @@ fallback rather than the fix. At 900×900 the probe reports 168pt, still far
 under the 350pt the two fixed boxes wanted: the bug reproduces there, it is
 simply also legible there.
 
+## Update 2026-11-11 — change points join the vocabulary
+
+The survey listed change point and drift detection as a non-goal of this
+exposure (§5.8), on the grounds that no series had asked for it. That is
+reversed here by request rather than by a measured series: the roster below
+ships without a boxer recording that needed it, and the first one that does is
+what should test its defaults.
+
+**Substrate.** `public/analytics/timeseries/changepoint`, a leaf package in
+the ADR-0150 mould (standard library only, freestanding WASM). Its package
+comment carries the methods, citations and the assumptions; this entry
+records only what binds play.
+
+**Roster.** Ten names, one algorithm each (§SD3):
+
+| Function | Output | Causal |
+|---|---|---|
+| `tsPeltMean`, `tsPeltMeanVar`, `tsPeltRank`, `tsBinSegMean(t, v, minSegment, penalty)` | segments on the `_tl_band_*` contract, plus `level, spread, samples, shift` | no |
+| `tsPeltMeanPath(t, v, minSegment)` | `changes, penalty_from, penalty_to, octaves, cost, complete` | no |
+| `tsMosumScores(t, v, bandwidth)` | `t, score, warm_up, threshold` | no |
+| `tsMosumSegments(t, v, bandwidth)` | segments, as above | no |
+| `tsCusumScores(t, v, warmup)` | `t, score, warm_up, threshold, upper, lower` | yes |
+| `tsCusumAlarms(t, v, warmup)` | `_tl_band_*` from estimated onset to alarm, plus `direction, delay` | yes |
+| `tsBocpdScores(t, v, expectedRun, lag)` | `t, score, warm_up, run` | yes |
+
+**Decisions.**
+
+- **A third argument kind, a non-negative decimal.** §SD3 allowed columns,
+  integers and slots. A penalty is a scale, and rounding it to a whole number
+  removes the useful part of its range. The kind takes a plain decimal literal
+  or a slot; signs, exponents and expressions stay refused, since arguments
+  are read and never evaluated.
+- **`penalty` is in multiples of BIC.** A penalty in cost units depends on the
+  series length and the cost, which a person typing it does not have in view.
+  One is the convention; `tsPeltMeanPath` reports its ranges in the same unit
+  so a row can be typed back as an argument.
+- **Segments are bands, and bands now say what they are.** A segmentation
+  speaks the Timeline band contract so it draws on the Series pane and the
+  Timeline unchanged. The registry entry carries the kind — flagged extent,
+  segment, alarm — because the pane's reading differs: the inventory line is
+  worded per kind, and the adjudication row of §SD6 is withheld for segments,
+  which tile the series and are not detections.
+- **No baseline beside a change score.** §SD5 mandates the moving-average
+  residual beside a score. It answers whether a sample is unlike its
+  neighbours, which a lasting shift stops being after one window, so drawing
+  it would present a comparison that is not one. The caption says so through
+  the same "no baseline, because" line §SD5 already requires.
+- **A threshold is drawn when the method supplies one, with its condition.**
+  The MOSUM critical value and the CUSUM decision interval are drawn as a
+  line; the caption states the condition each holds under (S4). `tsBocpdScores`
+  supplies none and gets no line.
+- **The parameters a name fixes.** MOSUM at 5% with a 0.4-bandwidth
+  neighbourhood; CUSUM at an allowance of 0.5σ and a decision interval of 5σ;
+  the run-length prior from the first 50 samples, which are then not scored.
+  A different setting is a new name.
+- **A menu that writes SQL.** The Series toolbar's *Change points* menu
+  inserts a scaffold per question, in the §SD2 manner, and `get_series`
+  returns the same scaffolds. It holds no parameters and runs nothing; the
+  panel-side analysis controls this ADR rejected stay rejected.
+- **Ceilings by method.** PELT is linear while it finds changes and quadratic
+  over a stretch with none, which is the ordinary input. Each PELT name
+  refuses at the length where that worst case is a wait of a few seconds; the
+  constants and what was measured are beside them in the registry.
+
+**Deferred, each with a trigger.**
+
+- **A baseline for change scores** — the first labelled series with regime
+  changes, which is also what would let §SD6's readout score them. A
+  difference of adjacent window means is the candidate one-liner.
+- **Vertical change markers as a channel of their own** — the first reader
+  for whom band boundaries are not legible enough.
+- **A change point fixture** in the §SD7 lab — with the baseline above; the
+  generator's kinds are anomaly kinds.
+- **Wild binary segmentation, kernel and energy costs, classifier-based
+  detection, BEAST, regression breaks, multivariate input** — each with the
+  series that needs it. The kernel and energy costs are quadratic in memory or
+  time as usually implemented and would need their own ceilings.
+- **Functional pruning (FPOP)**, which removes PELT's quadratic case for the
+  mean cost — the first series refused at the ceiling that aggregation does
+  not serve.
+
 ## Status
 
 Accepted 2026-08-05. Consumes the survey's settled dialogue (Q1–Q9);

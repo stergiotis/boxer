@@ -223,6 +223,8 @@ type SeriesDriver struct {
 	scoreCall     *tsCall
 	scoreWindow   int32
 	scoreWindowOK bool
+	// spanCall is the client node behind the span channel, likewise.
+	spanCall *tsCall
 	// scoresGen counts the score lane's inputs (rebuildOverlays), so
 	// get_series walks a score lane once (play_ops_series.go).
 	scoresGen       uint64
@@ -722,6 +724,10 @@ func (inst *SeriesDriver) rebuildOverlays(scoreRec arrow.RecordBatch, spanRec ar
 		sc.detector = inst.scoreCall.Spec.Name
 		sc.causal = inst.scoreCall.Spec.Causal
 		sc.window = inst.scoreWindow
+		if len(inst.scoreCall.Spec.Args) > 2 {
+			sc.windowName = inst.scoreCall.Spec.Args[2].Name
+		}
+		sc.thresholdNote = inst.scoreCall.Spec.Threshold
 	}
 	sc.baseline, sc.baselineWhy = inst.buildSeriesBaseline()
 	inst.scores = sc
@@ -751,6 +757,7 @@ func (inst *SeriesDriver) renderControls() {
 			c.Checkbox(inst.ids.PrepareStr("series-decimate"), inst.decimate, "envelope").
 				SendRespVal(&inst.decimate)
 		}
+		inst.renderChangePointMenu()
 	}
 }
 
@@ -1069,6 +1076,7 @@ func (inst *PlayApp) renderSeriesTab(rec arrow.RecordBatch, schema *arrow.Schema
 	// the detector's causality, and the window to compute the mandated
 	// baseline at (§SD5 S3).
 	inst.noteSeriesScoreCall()
+	inst.noteSeriesSpanCall()
 	inst.noteSeriesAdjudication()
 	inst.noteFixtureLab()
 	inputs := map[ChannelID]channelInput{
@@ -1125,6 +1133,17 @@ func (inst *PlayApp) noteSeriesScoreCall() {
 	params := resolveSignalNamesWithDefaults(node.Reads, inst.lastRunBound, inst.frameSig)
 	window, wErr := tsIntArg(call, 2, params)
 	inst.seriesDriver.noteScoreCall(call, window, wErr == nil)
+}
+
+// noteSeriesSpanCall tells the driver what produced the span channel, so the
+// pane can say whether its bands are flagged extents, segments or alarms.
+func (inst *PlayApp) noteSeriesSpanCall() {
+	node, ok := findSplitNode(inst.currentSplit, seriesSpansNodeID)
+	if !ok {
+		inst.seriesDriver.noteSpanCall(nil)
+		return
+	}
+	inst.seriesDriver.noteSpanCall(node.Client)
 }
 
 // noteSeriesAdjudication resolves what is being adjudicated and reads back

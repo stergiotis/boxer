@@ -1204,6 +1204,22 @@ confirm / false-alarm buttons per flagged span, which append to
 `boxer.tslabels`. The **Snippets** library covers this from "A number against
 time" through "Reading a client node".
 
+The same vocabulary finds **change points**, the positions where a series
+moves to a new level or spread and stays there. `tsPeltMean`, `tsPeltMeanVar`,
+`tsPeltRank` and `tsBinSegMean(t, v, minSegment, penalty)` return the segments
+between changes as bands with each segment's `level`, `spread`, `samples` and
+`shift`; `penalty` is in multiples of the BIC penalty and may be a decimal.
+`tsPeltMeanPath(t, v, minSegment)` tabulates how the change count moves with
+the penalty. `tsMosumScores` and `tsMosumSegments(t, v, bandwidth)` are a
+windowed test. `tsCusumScores` and `tsCusumAlarms(t, v, warmup)` and
+`tsBocpdScores(t, v, expectedRun, lag)` are sequential: each value uses only
+earlier samples. The Series toolbar's **Change points** menu writes any of
+these into the editor as a scaffold; it runs nothing itself. All of them read
+the samples as independent, so a trend or a daily cycle comes back as changes.
+A score that comes with its method's own threshold draws it as a horizontal
+line, and the caption states the condition the threshold holds under. The
+**Snippets** section "Where a series changes level" has the worked query.
+
 ### Chart
 
 The plain chart the specialised panes leave uncovered (ADR-0172), by exact
@@ -1584,7 +1600,7 @@ where a name is actually evaluated — which is what decides how it fails:
   helpers, and the panel marks that dependency), `gloss(...)` (an alias
   declaring how a column renders — see [Glosses](#glosses)), and `LW_ID_*`
   (which is both — installable *and* expanded here).
-- **play** — the `ts*` family, computed locally over the rows a sub-query returns.
+- **play** — the `ts*` family (smoothing, anomaly scores, change points), computed locally over the rows a sub-query returns.
   The server never sees the name.
 
 Until the endpoint has answered, server rows show `?` rather than a verdict: an

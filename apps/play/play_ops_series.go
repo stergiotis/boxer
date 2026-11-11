@@ -54,7 +54,14 @@ type SeriesFinding struct {
 	Scaffold string `desc:"the SQL that button inserts, with the measured step filled in and the current query to go where it says; adapt it and apply it with set_sql"`
 }
 
-// SeriesSpanReading is one flagged extent of the spans channel.
+// SeriesChangeScaffold is one entry of the pane's Change points menu.
+type SeriesChangeScaffold struct {
+	Question string `desc:"what the entry looks for, as the menu labels it"`
+	About    string `desc:"the method behind it and what it assumes or cannot see"`
+	Scaffold string `desc:"the SQL the entry inserts: the analysis as ts* CTEs over a base CTE the current query goes into; adapt it and apply it with set_sql"`
+}
+
+// SeriesSpanReading is one band of the spans channel.
 type SeriesSpanReading struct {
 	From    string `desc:"its start, UTC"`
 	To      string `desc:"its end, UTC"`
@@ -66,14 +73,17 @@ type SeriesSpanReading struct {
 type SeriesOverlays struct {
 	Caption      string              `json:",omitzero" desc:"the pane's caption under the score plot: the detector, its window, whether it is causal, what the baseline curve is"`
 	Detector     string              `json:",omitzero" desc:"the detector behind the score lane, when a client node made it"`
-	Window       int32               `json:",omitzero" desc:"the detector's window"`
+	Window       int32               `json:",omitzero" desc:"the detector's third argument: its window, warm-up, bandwidth or expected run, as the caption names it"`
+	Threshold    *float64            `json:",omitzero" desc:"the level the method itself supplies, drawn as a horizontal line; absent when the method supplies none"`
+	ThresholdIs  string              `json:",omitzero" desc:"what that level is and the condition it holds under"`
 	Causal       bool                `desc:"whether each score uses only earlier samples"`
 	Baseline     bool                `desc:"whether the moving-average residual baseline is drawn beside the score"`
 	BaselineWhy  string              `json:",omitzero" desc:"why no baseline is drawn"`
 	WarmUp       int32               `json:",omitzero" desc:"positions with no score"`
 	ScoreMax     *float64            `json:",omitzero" desc:"the highest score"`
 	ScoreMaxAt   string              `json:",omitzero" desc:"when the highest score falls, UTC"`
-	Spans        []SeriesSpanReading `json:",omitzero" desc:"the flagged extents, at most 100"`
+	SpanKind     string              `json:",omitzero" desc:"what a span is: a flagged extent, a segment between change points (its boundaries are the changes), or an alarm (from the estimated change to its detection)"`
+	Spans        []SeriesSpanReading `json:",omitzero" desc:"the spans, at most 100"`
 	SpansCut     int32               `json:",omitzero" desc:"extents past the 100 listed"`
 	SpansSkipped int32               `json:",omitzero" desc:"span rows the pane skipped: an unknown colour token, or an end before its start"`
 	Readout      string              `json:",omitzero" desc:"the pane's measured readout of the detector against the baseline on the confirmed spans, with its caveats"`
@@ -81,23 +91,24 @@ type SeriesOverlays struct {
 
 // SeriesReading is get_series' result.
 type SeriesReading struct {
-	Drawn       PaneDraw            `desc:"which draw this is of, its status line, and why it drew nothing when it did not"`
-	X           string              `json:",omitzero" desc:"the time column"`
-	Points      int32               `json:",omitzero" desc:"timed rows drawn"`
-	From        string              `json:",omitzero" desc:"the first time, UTC"`
-	To          string              `json:",omitzero" desc:"the last time, UTC"`
-	Untimed     int64               `json:",omitzero" desc:"rows without a time, left out"`
-	Lanes       []SeriesLaneReading `json:",omitzero" desc:"the drawn lanes, at most 12"`
-	LanesHidden int32               `json:",omitzero" desc:"numeric columns past the 12 lanes the pane draws"`
-	Grid        *SeriesGridReading  `json:",omitzero" desc:"the Δt classification"`
-	Finding     *SeriesFinding      `json:",omitzero" desc:"the pane's finding when the grid is worth acting on"`
-	Smoothing   bool                `desc:"whether the smoothed trend is drawn over the raw line; drawing only, every reading and analysis uses the raw values"`
-	HalfWidth   int32               `desc:"the smoothing kernel's half-width, in samples"`
-	Envelope    bool                `desc:"whether a long series is drawn as a per-pixel min/max envelope; drawing only, extremes are kept"`
-	DrawnPoints int32               `json:",omitzero" desc:"samples the last draw plotted, when the envelope thinned them"`
-	SourcePts   int32               `json:",omitzero" desc:"samples the envelope thinned from"`
-	Overlays    *SeriesOverlays     `json:",omitzero" desc:"the score and span overlays, when the buffer names a scores or spans CTE"`
-	LaneNotes   []string            `json:",omitzero" desc:"what the status line says about the scores and spans lanes: a query that failed or is still running"`
+	Drawn       PaneDraw               `desc:"which draw this is of, its status line, and why it drew nothing when it did not"`
+	X           string                 `json:",omitzero" desc:"the time column"`
+	Points      int32                  `json:",omitzero" desc:"timed rows drawn"`
+	From        string                 `json:",omitzero" desc:"the first time, UTC"`
+	To          string                 `json:",omitzero" desc:"the last time, UTC"`
+	Untimed     int64                  `json:",omitzero" desc:"rows without a time, left out"`
+	Lanes       []SeriesLaneReading    `json:",omitzero" desc:"the drawn lanes, at most 12"`
+	LanesHidden int32                  `json:",omitzero" desc:"numeric columns past the 12 lanes the pane draws"`
+	Grid        *SeriesGridReading     `json:",omitzero" desc:"the Δt classification"`
+	Finding     *SeriesFinding         `json:",omitzero" desc:"the pane's finding when the grid is worth acting on"`
+	Smoothing   bool                   `desc:"whether the smoothed trend is drawn over the raw line; drawing only, every reading and analysis uses the raw values"`
+	HalfWidth   int32                  `desc:"the smoothing kernel's half-width, in samples"`
+	Envelope    bool                   `desc:"whether a long series is drawn as a per-pixel min/max envelope; drawing only, extremes are kept"`
+	DrawnPoints int32                  `json:",omitzero" desc:"samples the last draw plotted, when the envelope thinned them"`
+	SourcePts   int32                  `json:",omitzero" desc:"samples the envelope thinned from"`
+	Overlays    *SeriesOverlays        `json:",omitzero" desc:"the score and span overlays, when the buffer names a scores or spans CTE"`
+	Changes     []SeriesChangeScaffold `json:",omitzero" desc:"the pane's Change points menu: one scaffold per question, each naming its method's assumptions"`
+	LaneNotes   []string               `json:",omitzero" desc:"what the status line says about the scores and spans lanes: a query that failed or is still running"`
 }
 
 // SetSeriesOptionsArgs is set_series_options' argument; a field left out
@@ -118,6 +129,7 @@ type seriesFoldView struct {
 	lanesHidden int32
 	grid        SeriesGridReading
 	finding     *SeriesFinding
+	changes     []SeriesChangeScaffold
 }
 
 // seriesOverlayKey identifies what the score lane's walk depends on: the
@@ -161,6 +173,9 @@ func (inst *SeriesDriver) foldView() (v *seriesFoldView) {
 	}
 	if hint, action, sql := inst.gridFinding(); hint != "" {
 		v.finding = &SeriesFinding{Text: hint, Action: action, Scaffold: sql}
+	}
+	if len(inst.t) > 0 {
+		v.changes = inst.changeScaffolds()
 	}
 	v.lanes = make([]SeriesLaneReading, 0, len(inst.lanes))
 	for i := range inst.lanes {
@@ -226,6 +241,12 @@ func (inst *PlayApp) seriesOverlays(d *SeriesDriver) (o *SeriesOverlays) {
 		o.Caption, o.WarmUp, o.ScoreMax, o.ScoreMaxAt = f.caption, f.warm, f.scoreMax, f.scoreMaxAt
 		o.Detector, o.Window, o.Causal = opsLabel(sc.detector), sc.window, sc.causal
 		o.Baseline, o.BaselineWhy = len(sc.baseline) > 0, sc.baselineWhy
+		if sc.thresholdNote != "" {
+			o.Threshold, o.ThresholdIs = finite(sc.threshold), sc.thresholdNote
+		}
+	}
+	if len(d.spans) > 0 {
+		o.SpanKind = seriesBandKind(d.spanCall).String()
 	}
 	n := min(len(d.spans), opsSeriesMaxSpans)
 	o.SpansCut = int32(len(d.spans) - n)
@@ -277,6 +298,7 @@ func seriesReading(sn *opsSnap, _ appops.None) (out SeriesReading, err error) {
 	f := v.fold
 	out.X, out.Points, out.From, out.To, out.Untimed = f.x, f.points, f.from, f.to, f.untimed
 	out.Lanes, out.LanesHidden, out.Finding = f.lanes, f.lanesHidden, f.finding
+	out.Changes = f.changes
 	g := f.grid
 	out.Grid = &g
 	out.DrawnPoints, out.SourcePts = v.drawn, v.sourced
@@ -346,7 +368,8 @@ func addSeriesOps(s *appops.Set[*PlayLauncher, opsSnap]) {
 		digest:   seriesOptionsDigest,
 		get:      opGetSeries,
 		getSummary: "read what the Series pane last drew: the time range, the Δt class with the pane's finding and scaffold SQL, " +
-			"each lane's range, the smoothing and envelope, and the score and span overlays with each span's recorded verdict",
+			"each lane's range, the smoothing and envelope, the score and span overlays with each span's recorded verdict, " +
+			"and the change point scaffolds",
 		set:        opSetSeriesOptions,
 		setSummary: "set the Series pane's smoothing, its half-width, or the envelope; drawing only",
 		gesture:    "the smoothing stepper above the series",

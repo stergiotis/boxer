@@ -64,6 +64,18 @@ type seriesScores struct {
 	detector string
 	causal   bool
 	window   int32
+	// windowName is what the detector calls that third argument — `window`
+	// for the anomaly scores, `warmup`, `bandwidth` or `expectedRun` for the
+	// change scores — so the caption names the number it prints.
+	windowName string
+
+	// threshold is the level the method itself supplies, read from the
+	// lane's optional `threshold` column, and thresholdNote the condition it
+	// holds under (the registry's). Drawn only when both are present: a
+	// level without its condition is the false precision the survey's S4
+	// forbids.
+	threshold     float64
+	thresholdNote string
 }
 
 // seriesSpan is one folded band from the span channel.
@@ -81,6 +93,12 @@ func (inst *SeriesDriver) noteScoreCall(call *tsCall, window int32, windowOK boo
 	inst.scoreCall = call
 	inst.scoreWindow = window
 	inst.scoreWindowOK = windowOK
+}
+
+// noteSpanCall records the client node behind the span channel, which is the
+// only place it says what its bands are. Nil for a hand-written CTE.
+func (inst *SeriesDriver) noteSpanCall(call *tsCall) {
+	inst.spanCall = call
 }
 
 // foldSeriesScores reads the score channel. The contract is the one
@@ -106,6 +124,10 @@ func foldSeriesScores(rec arrow.RecordBatch) (out seriesScores, ok bool) {
 	warmCol := -1
 	if wi := schema.FieldIndices("warm_up"); len(wi) > 0 {
 		warmCol = wi[0]
+	}
+	if hi := schema.FieldIndices("threshold"); len(hi) > 0 {
+		// One level per lane: the methods that supply one supply a constant.
+		out.threshold, _ = numericCellValue(rec.Column(hi[0]), 0)
 	}
 	tArr, sArr := rec.Column(tCol), rec.Column(sIdx[0])
 	n := int(rec.NumRows())
@@ -182,6 +204,8 @@ func (inst *SeriesDriver) buildSeriesBaseline() (baseline []float64, why string)
 	switch {
 	case inst.scoreCall == nil:
 		return nil, "the score channel is not a ts* node, so its input and window are unknown — no baseline to compare against"
+	case inst.scoreCall.Spec.NoBaseline != "":
+		return nil, inst.scoreCall.Spec.NoBaseline
 	case !inst.scoreWindowOK:
 		return nil, "the detector's window is not a resolved number, so the baseline has no window to match"
 	case len(inst.scoreCall.Args) < 2:
@@ -261,6 +285,10 @@ func (inst *SeriesDriver) renderSeriesScorePlot(w float32, h float32) {
 		}
 		p.SetNextColor(color.Hex(styletokens.QualitativeCycle(3).AsHex()).Literal()).SetNextWeight(1.6)
 		p.Line(label, sc.t, sc.score)
+		if sc.thresholdNote != "" {
+			p.SetNextColor(color.Hex(styletokens.NeutralStrong.AsHex()).Literal()).SetNextWeight(1)
+			p.InfLinesH("the method's threshold", []float64{sc.threshold})
+		}
 	}
 }
 
@@ -314,7 +342,9 @@ func warmUpRuns(warm []bool) (runs [][2]int) {
 // question it does not answer (are adjudications facts, and if so what is
 // their identity) is deferred to its own dialogue rather than guessed at here.
 func (inst *SeriesDriver) renderSeriesAdjudication() {
-	if len(inst.spans) == 0 || inst.adjudicate == nil {
+	if len(inst.spans) == 0 || inst.adjudicate == nil || seriesBandKind(inst.spanCall) == tsBandSegment {
+		// Segments tile the series: none of them is a detection a person
+		// could confirm or call a false alarm.
 		return
 	}
 	if inst.haveRead {
@@ -397,7 +427,11 @@ func (inst *SeriesDriver) seriesOverlayCaption() (line string) {
 	sc := &inst.scores
 	var b strings.Builder
 	if sc.detector != "" {
-		fmt.Fprintf(&b, "%s, window %d — ", sc.detector, sc.window)
+		name := sc.windowName
+		if name == "" {
+			name = "window"
+		}
+		fmt.Fprintf(&b, "%s, %s %d — ", sc.detector, name, sc.window)
 	}
 	if sc.causal {
 		b.WriteString("causal: each value uses only what came before it, so replaying this IS the backtest.")
@@ -412,6 +446,9 @@ func (inst *SeriesDriver) seriesOverlayCaption() (line string) {
 	case len(sc.baseline) > 0:
 		b.WriteString(" The grey curve is a moving-average residual at the same window: the one-liner this has to beat to be worth its cost.")
 	}
+	if sc.thresholdNote != "" {
+		fmt.Fprintf(&b, " The horizontal line at %s is %s.", formatTsScore(sc.threshold), sc.thresholdNote)
+	}
 	var warm int
 	for _, w := range sc.warm {
 		if w {
@@ -422,6 +459,35 @@ func (inst *SeriesDriver) seriesOverlayCaption() (line string) {
 		fmt.Fprintf(&b, " %d position(s) carry no score at all (shaded) — the detector had too little history, or too little room at the end.", warm)
 	}
 	return b.String()
+}
+
+// seriesBandKind is what the span channel's rows stand for. A `spans` CTE
+// written by hand is read as flagged extents, which is what the channel
+// carried before any other kind existed.
+func seriesBandKind(call *tsCall) tsBandKindE {
+	if call == nil || call.Spec.Bands == tsBandNone {
+		return tsBandExtent
+	}
+	return call.Spec.Bands
+}
+
+// seriesSpanInventory is the line that says what the bands are. It differs by
+// kind because the reading does: an extent is a finding, a segment is not, and
+// an alarm's width is a delay rather than a duration.
+func seriesSpanInventory(call *tsCall, count int) (line string) {
+	switch seriesBandKind(call) {
+	case tsBandSegment:
+		line = fmt.Sprintf("%d segment(s), so %d change(s), by %s", count, max(count-1, 0), call.Spec.Name) +
+			" — each band is one segment and each boundary a change; warm bands sit above the segment before, cool ones below." +
+			" Two-sided: a boundary is placed with hindsight, good to a few samples at best, and carries no confidence of its own."
+	case tsBandAlarm:
+		line = fmt.Sprintf("%d alarm(s), by %s", count, call.Spec.Name) +
+			" — each band runs from where the chart places the change to where it raised the alarm, so its width is the detection delay."
+	default:
+		line = fmt.Sprintf("%d flagged extent(s)", count) +
+			" — plateaus, not peaks: the band is how long the run lasted, and its label carries the peak score."
+	}
+	return
 }
 
 // renderSeriesOverlayChrome paints the caption plus the span inventory.
@@ -435,8 +501,7 @@ func (inst *SeriesDriver) renderSeriesOverlayChrome() {
 		return
 	}
 	var b strings.Builder
-	fmt.Fprintf(&b, "%d flagged extent(s)", len(inst.spans))
-	b.WriteString(" — plateaus, not peaks: the band is how long the run lasted, and its label carries the peak score.")
+	b.WriteString(seriesSpanInventory(inst.spanCall, len(inst.spans)))
 	if inst.spansSkipped > 0 {
 		fmt.Fprintf(&b, " %d row(s) skipped (an unknown colour token, or an end before its start).", inst.spansSkipped)
 	}

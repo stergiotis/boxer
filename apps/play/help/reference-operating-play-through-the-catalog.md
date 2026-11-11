@@ -152,7 +152,7 @@ cannot be bound, and the refusal names the CTEs to write with `set_sql`.
 | `set_chart_options` | command, document | the mark (bar, line, scatter, heatmap) or the log axis; drawing only | a mark this chart does not offer; a log axis when a value drawn is zero, negative or missing |
 | `get_dist` | query | per series the count, quantiles, band width and Wasserstein-1 distance to the baseline; the views the result admits | the pane is not drawn |
 | `set_dist_options` | command, document | the view: ecdf, shift, boxen or histogram; drawing only | a view this result does not admit |
-| `get_series` | query | the time range, the Δt class with the finding and its scaffold SQL, each lane's range, smoothing and envelope, the score and span overlays | the pane is not drawn |
+| `get_series` | query | the time range, the Δt class with the finding and its scaffold SQL, each lane's range, smoothing and envelope, the score and span overlays, the change point scaffolds | the pane is not drawn |
 | `set_series_options` | command, document | smoothing, its half-width, or the envelope; drawing only | a half-width outside the kernel's range, which the refusal names |
 | `get_timeline` | query | mode, events and skipped rows, lanes, extent, brushed window, selected row and bands | the pane is not drawn |
 | `set_timeline_options` | command, document | the now line | never, once the pane exists |
@@ -341,5 +341,21 @@ what it draws, and `get_series` reports each:
   Beside it the pane draws a moving-average residual at the same window
   as the baseline a detector has to beat, and shades the warm-up region
   where a detector reports nothing yet.
+- **Change points are spelled in SQL.** `get_series` lists the pane's
+  Change points menu under `changes`: one scaffold per question (shifts in
+  level, in level or spread, despite outliers, at a known time scale, what
+  a monitor would have alarmed on, the probability a change just
+  happened), each with the method's assumption in `about`. Put the current
+  query into the scaffold's `base` and apply it with `set_sql`; the result
+  arrives as the `spans` and `scores` overlays, and `sample_rows` on those
+  nodes reads the segments' `level`, `spread`, `samples` and `shift`.
+  `span_kind` says whether a span is a flagged extent, a segment (the
+  boundaries are the changes, and no segment is a detection) or an alarm
+  (from the estimated change to its detection). Every method reads the
+  samples as independent: say so when reporting a change count, and read
+  it against the `tsPeltMeanPath` table before calling it a finding.
+- **A threshold is drawn only when the method supplies one.** `threshold`
+  and `threshold_is` carry the level and the condition it holds under;
+  repeat the condition with the number.
 - **Verdicts are the person's.** Spans carry recorded verdicts; no
   operation records one.

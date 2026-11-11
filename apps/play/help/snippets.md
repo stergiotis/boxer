@@ -2294,7 +2294,8 @@ channels BY NAME — `scores` and `spans` — the way the Sankey takes its `flow
 and `nodes`, so calling them anything else leaves the overlays empty. The sink
 selects from `base`, which is the series being charted.
 
-Four functions ship. `tsSmooth(t, v, halfWidth)` and `tsProfile(t, v, window)`
+Four functions cover smoothing and anomalies; the change point functions have
+their own section below. `tsSmooth(t, v, halfWidth)` and `tsProfile(t, v, window)`
 are two-sided — every value sees the whole series, so they describe the data
 but are not what an alert would have known. `tsAnomalyScores(t, v, window)` is
 causal: each score uses only what came before it, which is what makes replaying
@@ -2371,6 +2372,93 @@ anomalies come last. Same (kind, seed), same series, every time.
 
 The lab needs the ad-hoc capability; without it the affordance is absent
 rather than offering a button that could not work.
+
+## Where a series changes level (change points)
+
+An anomaly is a stretch unlike the rest that then ends. A change point is a
+boundary after which the new behaviour *is* the rest, and the anomaly scores
+above are blind to it by design: a level that persists stops being unusual one
+window later. The change point functions are the same kind of CTE, over
+`public/analytics/timeseries/changepoint`.
+
+This one needs no table. It builds a series with a shift up at sample 200 and
+a shift down at 420, and asks two questions of it:
+
+```sql
+WITH
+  base AS (
+    SELECT toDateTime64('2026-01-01 00:00:00', 3, 'UTC') + toIntervalMinute(number) AS t,
+           multiIf(number < 200, 10, number < 420, 14, 11)
+             + (sipHash64(number) % 2000) / 1000 - 1 AS v
+    FROM numbers(600)
+    ORDER BY t
+  ),
+  spans  AS (SELECT tsPeltMean(t, v, 5, 1) FROM base),
+  scores AS (SELECT tsCusumScores(t, v, 60) FROM base),
+  penalties AS (SELECT tsPeltMeanPath(t, v, 5) FROM base)
+SELECT * FROM base
+```
+
+`spans` is the offline answer: the segments between changes, as bands, with
+each segment's `level`, `spread`, `samples` and its `shift` from the segment
+before. A warm band sits above its predecessor, a cool one below. `scores` is
+the online answer: what a monitor running at the time would have shown, with
+the level it alarms at drawn across the plot. They are not the same answer.
+The segmentation places each change with hindsight; the chart reaches it some
+samples late, and that delay is the price of not knowing the future.
+
+| Function | Finds | Causal |
+|---|---|---|
+| `tsPeltMean(t, v, minSegment, penalty)` | shifts in level; the exact penalised optimum | no |
+| `tsPeltMeanVar(t, v, minSegment, penalty)` | shifts in level or spread; give `minSegment` tens of samples | no |
+| `tsPeltRank(t, v, minSegment, penalty)` | shifts in location, unmoved by outliers; blind to a change in spread alone | no |
+| `tsBinSegMean(t, v, minSegment, penalty)` | shifts in level, greedily; fast, and can miss a short excursion | no |
+| `tsPeltMeanPath(t, v, minSegment)` | how the change count of `tsPeltMean` moves with the penalty | no |
+| `tsMosumScores(t, v, bandwidth)`, `tsMosumSegments(t, v, bandwidth)` | shifts at a chosen time scale, with a 5% critical value | no |
+| `tsCusumScores(t, v, warmup)`, `tsCusumAlarms(t, v, warmup)` | a monitor's running sums, and its alarms from estimated onset to detection | yes |
+| `tsBocpdScores(t, v, expectedRun, lag)` | the probability that the regime began within the last `lag` samples | yes |
+
+`penalty` is in multiples of the BIC penalty: `1` is the convention, `2.5` is
+valid, a larger number reports fewer changes, and a `{name:Float64}` slot
+makes it a live control. No single value is right, which is what `penalties`
+is for. Bind a Table pane to it (Graph tab, *fill tab*): one row per change
+count that is optimal for some penalty, the range of penalties it holds over,
+and that range's width in `octaves`. A count that holds over several doublings
+is a property of the data. One that changes with every small step is a
+property of the penalty, and reporting it as a finding would be reporting the
+knob.
+
+What every one of these assumes, and the Series pane repeats under the plot:
+
+- **Independent samples within a regime.** Autocorrelated noise wanders, a
+  wander looks like a short-lived level, and all of these then report changes
+  that are not there. A trend comes back as a staircase and a daily cycle as
+  two changes a day. Difference, detrend or aggregate past the correlation
+  length in `base`, where it is recorded.
+- **A segmentation is not a list of detections.** Nothing attaches a
+  confidence to one boundary, and its position is good to a few samples for a
+  clear shift and worse for a faint one. The pane offers no confirm / false
+  alarm row for segments for that reason; it does for `tsCusumAlarms`.
+- **A supplied threshold holds under its own condition.** The MOSUM critical
+  value is for a series with no change at all. The CUSUM false-alarm rate is
+  tabulated for a known mean and scale, and here both are estimated from
+  `warmup` samples, so alarms on plain noise are more frequent than the table
+  says. The caption states the condition next to the line.
+- **`tsBocpdScores` is a probability under a model**: Gaussian regimes, a
+  change every `expectedRun` samples on average. It is not a frequency.
+- **No baseline is drawn beside a change score.** The moving-average residual
+  the anomaly scores are compared with asks a different question, and the
+  caption says so rather than drawing a comparison that is not one.
+
+PELT is fast while it keeps finding changes and slow over a long stretch with
+none, so `tsPeltMean` and `tsPeltRank` refuse past 50,000 rows, `tsPeltMeanVar`
+past 25,000 and `tsPeltMeanPath` past 10,000, each naming its limit. Aggregate
+to a coarser grid in `base`, or use `tsBinSegMean` or `tsMosumSegments`, which
+are linear.
+
+The Series toolbar's **Change points** menu writes these CTEs for you, around
+a `base` you fill in. It holds no settings and runs nothing: what you pick
+becomes SQL in the buffer.
 
 ## Reading a client node, and why the sink cannot
 

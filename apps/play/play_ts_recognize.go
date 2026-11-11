@@ -207,6 +207,21 @@ func readTsArgs(pr *nanopass.ParseResult, fn *grammar1.ColumnExprFunctionContext
 					"Arguments are read, never evaluated — nothing computes them before the transform runs."}
 			}
 			call.Args[i] = text
+		case tsArgNumber:
+			switch a.(type) {
+			case *grammar1.ColumnExprParamSlotContext:
+				call.Slots = append(call.Slots, text)
+			case *grammar1.ColumnExprLiteralContext:
+				if !isTsNumberLiteral(text) {
+					return &tsRecognizeErr{Reason: "`" + spec.Name + "` argument " + spec.Args[i].Name +
+						" must be a plain non-negative number such as 1 or 2.5, not `" + text + "`."}
+				}
+			default:
+				return &tsRecognizeErr{Reason: "`" + spec.Name + "` argument " + spec.Args[i].Name +
+					" must be " + tsArgNumber.String() + ", not `" + text + "`. " +
+					"Arguments are read, never evaluated — nothing computes them before the transform runs."}
+			}
+			call.Args[i] = text
 		}
 	}
 	return
@@ -317,6 +332,26 @@ func isTsIntLiteral(text string) bool {
 		}
 	}
 	return true
+}
+
+// isTsNumberLiteral reports whether literal text is a plain non-negative
+// decimal: digits, at most one point, at least one digit. No sign, exponent,
+// hex or special value — every number the vocabulary takes is a scale a
+// person types, and the narrow form is one the executor parses the same way
+// ClickHouse would.
+func isTsNumberLiteral(text string) bool {
+	digits, points := 0, 0
+	for i := 0; i < len(text); i++ {
+		switch c := text[i]; {
+		case c >= '0' && c <= '9':
+			digits++
+		case c == '.':
+			points++
+		default:
+			return false
+		}
+	}
+	return digits > 0 && points <= 1
 }
 
 // tsSignature renders a spec as its call form, for error messages.
