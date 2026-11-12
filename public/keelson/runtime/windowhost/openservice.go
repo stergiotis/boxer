@@ -1,6 +1,7 @@
 package windowhost
 
 import (
+	"strings"
 	"time"
 
 	"github.com/rs/zerolog"
@@ -110,7 +111,7 @@ func (inst *OpenService) handleRequest(msg *app.Msg) {
 				Str("caller", string(msg.Sender)).
 				Str("kind", req.ConfigKind).
 				Msg("openservice: open by kind refused")
-			inst.reply(msg.Reply, 0, err.Error())
+			inst.reply(msg.Reply, 0, refusalText(err))
 			return
 		}
 		resolved = true
@@ -123,7 +124,7 @@ func (inst *OpenService) handleRequest(msg *app.Msg) {
 			Bool("resolvedFromKind", resolved).
 			Str("kind", req.ConfigKind).
 			Msg("openservice: open refused")
-		inst.reply(msg.Reply, 0, err.Error())
+		inst.reply(msg.Reply, 0, refusalText(err))
 		return
 	}
 	inst.emitLaunchFact(msg.Sender, target, resolved, req, key)
@@ -140,6 +141,18 @@ func (inst *OpenService) handleRequest(msg *app.Msg) {
 // reply publishes a LaunchReply to the requester's inbox. A publish
 // failure is logged — there is nothing else to do with it; the caller
 // times out and retries or surfaces the error.
+// refusalText is the reply's reason for a refused open: the error's message
+// without the package prefix the host's errors carry for its own log. The
+// caller's RefusedError names the subject already, so the text a person
+// reads is "windowhost: open refused: app not registered", not the prefix
+// twice.
+func refusalText(err error) (reason string) {
+	reason = err.Error()
+	reason = strings.TrimPrefix(reason, "windowhost: ")
+	reason = strings.TrimPrefix(reason, "open: ")
+	return
+}
+
 func (inst *OpenService) reply(subject string, windowKey uint64, reason string) {
 	err := buscodec.Reply(inst.busClient.Publish, subject, launchreply.LaunchReply{
 		At:        time.Now().UTC(),

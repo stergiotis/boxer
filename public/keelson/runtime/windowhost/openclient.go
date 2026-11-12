@@ -8,7 +8,6 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/codec/launchreply"
 	"github.com/stergiotis/boxer/public/keelson/runtime/codec/launchrequest"
 	"github.com/stergiotis/boxer/public/observability/eh"
-	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 // RequestOpen asks the window host to open targetAppId's window over the
@@ -55,8 +54,24 @@ func RequestOpenKind(bus app.BusI, configKind string, config []byte) (windowKey 
 	})
 }
 
+// RefusedError is a request the window host refused. Its message carries
+// the host's reason, so a caller that shows err.Error() shows why: which app
+// was unknown, which kind no app takes, which candidates an open by kind
+// found and none designated (ADR-0361 §SD2). errors.As reaches the reason
+// for a caller that words the outcome itself.
+type RefusedError struct {
+	// Act is the request refused: "open" or "raise".
+	Act string
+	// Reason is the host's text, as its reply carried it.
+	Reason string
+}
+
+func (inst *RefusedError) Error() string {
+	return "windowhost: " + inst.Act + " refused: " + inst.Reason
+}
+
 // requestOpen runs the launch request/reply over the open subject and turns
-// a refusal reply into an error.
+// a refusal reply into a RefusedError.
 func requestOpen(bus app.BusI, req launchrequest.LaunchRequest) (windowKey uint64, err error) {
 	if bus == nil {
 		err = eh.Errorf("windowhost: RequestOpen: no bus wired")
@@ -78,7 +93,7 @@ func requestOpen(bus app.BusI, req launchrequest.LaunchRequest) (windowKey uint6
 		return
 	}
 	if rep.Reason != "" {
-		err = eb.Build().Str("reason", rep.Reason).Errorf("windowhost: open refused")
+		err = &RefusedError{Act: "open", Reason: rep.Reason}
 		return
 	}
 	windowKey = rep.WindowKey

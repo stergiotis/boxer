@@ -206,8 +206,8 @@ func TestOpenById_IsNotResolved(t *testing.T) {
 }
 
 // The client half: RequestOpenKind names no target and the service resolves
-// it; a refusal comes back as an error carrying the reason as structured
-// data, as RequestOpen's do.
+// it; a refusal comes back as a RefusedError whose message carries the
+// host's reason, as RequestOpen's do.
 func TestRequestOpenKind_RoundTripAndRefusal(t *testing.T) {
 	reg := app.NewRegistry()
 	registerTakers(t, reg, "test.taker")
@@ -223,6 +223,30 @@ func TestRequestOpenKind_RoundTripAndRefusal(t *testing.T) {
 	assert.ErrorContains(t, err, "no config kind", "an open by kind needs a kind")
 
 	_, err = RequestOpenKind(fx.caller, "someOtherKind", testCfgBytes)
-	assert.ErrorContains(t, err, "open refused", "a refusal returns an error, not a timeout")
+	assert.ErrorContains(t, err, "open refused: no app in this host takes launch kind \"someOtherKind\"", "a refusal returns the host's reason, not a timeout")
+	var refused *RefusedError
+	require.ErrorAs(t, err, &refused)
+	assert.Equal(t, "open", refused.Act)
 	assert.Len(t, fx.facts.Launches(), 1, "a refusal writes no launch fact")
+}
+
+// The text a caller shows is the host's reason once, under one prefix: a
+// by-id open of an app the host does not know reads "windowhost: open
+// refused: app not registered", and an open by kind with two undesignated
+// takers names them.
+func TestRefusalTextCarriesTheReasonOnce(t *testing.T) {
+	reg := app.NewRegistry()
+	registerTakers(t, reg, "test.taker.a", "test.taker.b")
+	fx := mkOpenServiceFixture(t, reg)
+
+	_, err := RequestOpen(fx.caller, "test.nobody", "", nil)
+	require.Error(t, err)
+	assert.Equal(t, "windowhost: open refused: app not registered", err.Error())
+
+	_, err = RequestOpenKind(fx.caller, testCfgKind, testCfgBytes)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "windowhost: open refused: several apps take launch kind")
+	assert.Contains(t, err.Error(), "test.taker.a")
+	assert.Contains(t, err.Error(), "test.taker.b")
+	assert.NotContains(t, err.Error(), "refused: windowhost:", "the prefix appears once")
 }

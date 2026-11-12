@@ -62,5 +62,5 @@ func TestOpenNamesTheKindAndNoApp(t *testing.T) {
 func TestOpenSurfacesARefusal(t *testing.T) {
 	bus := &fakeBus{reply: launchreply.LaunchReply{Reason: "no app in this host takes launch kind"}}
 	_, err := playground.Open(bus, playground.Launch{Sql: "SELECT 1"})
-	assert.ErrorContains(t, err, "open refused")
+	assert.ErrorContains(t, err, "open refused: no app in this host takes launch kind")
 }

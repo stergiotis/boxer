@@ -73,7 +73,7 @@ func RequestRaise(bus app.BusI, windowKey uint64) (err error) {
 		return eh.Errorf("windowhost: decode raise reply: %w", err)
 	}
 	if rep.Reason != "" {
-		return eb.Build().Str("reason", rep.Reason).Errorf("windowhost: raise refused")
+		return &RefusedError{Act: "raise", Reason: rep.Reason}
 	}
 	return
 }

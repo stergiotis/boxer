@@ -25,7 +25,7 @@ func (inst *Inst) ResolveLaunchKind(kind string) (id app.AppIdT, err error) {
 	}
 	switch len(candidates) {
 	case 0:
-		err = eb.Build().Str("kind", kind).Errorf("windowhost: no app in this host takes launch kind %q", kind) //boxer:lint disable=CS013 reason="a refusal reaches the caller as its reply text, and the kind is the fact the caller can act on"
+		err = eb.Build().Str("kind", kind).Errorf("no app in this host takes launch kind %q", kind) //boxer:lint disable=CS013 reason="a refusal reaches the caller as its reply text, and the kind is the fact the caller can act on"
 		return
 	case 1:
 		id = candidates[0]
@@ -38,7 +38,7 @@ func (inst *Inst) ResolveLaunchKind(kind string) (id app.AppIdT, err error) {
 	list := strings.Join(names, ", ")
 	designated, ok := inst.registry.Designation(kind)
 	if !ok {
-		err = eb.Build().Str("kind", kind).Strs("candidates", names).Errorf("windowhost: several apps take launch kind %q and none is designated: %s", kind, list) //boxer:lint disable=CS013 reason="a refusal reaches the caller as its reply text, and the candidates are what it must name"
+		err = eb.Build().Str("kind", kind).Strs("candidates", names).Errorf("several apps take launch kind %q and none is designated: %s", kind, list) //boxer:lint disable=CS013 reason="a refusal reaches the caller as its reply text, and the candidates are what it must name"
 		return
 	}
 	for _, c := range candidates {
@@ -47,6 +47,6 @@ func (inst *Inst) ResolveLaunchKind(kind string) (id app.AppIdT, err error) {
 			return
 		}
 	}
-	err = eb.Build().Str("kind", kind).Str("designated", string(designated)).Strs("candidates", names).Errorf("windowhost: the app designated for launch kind %q is not launchable here (%s); candidates: %s", kind, string(designated), list) //boxer:lint disable=CS013 reason="a refusal reaches the caller as its reply text, and the designation and candidates are what it must name"
+	err = eb.Build().Str("kind", kind).Str("designated", string(designated)).Strs("candidates", names).Errorf("the app designated for launch kind %q is not launchable here (%s); candidates: %s", kind, string(designated), list) //boxer:lint disable=CS013 reason="a refusal reaches the caller as its reply text, and the designation and candidates are what it must name"
 	return
 }

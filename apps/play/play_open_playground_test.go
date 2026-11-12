@@ -146,8 +146,7 @@ func TestRequestOpenPlayground_RefusalSurfaces(t *testing.T) {
 
 	inst.openPlayMu.Lock()
 	defer inst.openPlayMu.Unlock()
-	assert.Contains(t, inst.openPlayErr, "refused")
-	assert.Contains(t, inst.openPlayErr, "open refused", "the panel shows the message; windowhost's reason is now a field")
+	assert.Contains(t, inst.openPlayErr, "open refused: app accepts no launch config", "the panel shows the host's reason")
 }
 
 func TestRequestOpenPlayground_TransportErrorSurfaces(t *testing.T) {
@@ -197,8 +196,7 @@ func TestRequestSaveApplet_RefusalSurfaces(t *testing.T) {
 
 	inst.saveAppletMu.Lock()
 	defer inst.saveAppletMu.Unlock()
-	assert.Contains(t, inst.saveAppletErr, "refused")
-	assert.Contains(t, inst.saveAppletErr, "open refused", "the panel shows the message; windowhost's reason is now a field")
+	assert.Contains(t, inst.saveAppletErr, "open refused: app accepts no launch config", "the panel shows the host's reason")
 }
 
 // Open in tally (ADR-0222 §SD6) — tally's own "Open in play" mirrored. The
