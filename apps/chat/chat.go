@@ -244,6 +244,9 @@ type App struct {
 	// embed is the pane's side of a chat drawn in another app's window
 	// (chat_embed.go); nil for a window of its own.
 	embed *embedding
+
+	// stops are the window's stops and their tab (chat_stops_app.go).
+	stops stopsView
 }
 
 // pendingTurn is a turn in flight.
@@ -268,6 +271,7 @@ func newApp() (inst *App) {
 		// on its panel.
 		inst.dockActivate = tabArtefact
 	}
+	inst.seedStops(StopsSeed.Get())
 	return
 }
 
@@ -365,6 +369,7 @@ func (inst *App) Frame(ctx app.FrameContextI) (err error) {
 	}
 	inst.drain()
 	inst.render()
+	inst.syncStopClose(ctx)
 	return
 }
 
@@ -407,6 +412,7 @@ func (inst *App) drain() {
 		inst.conv.landTurn(p.req, res, nil, now)
 		inst.pending = nil
 		inst.turnEnded("the turn ended")
+		inst.landStops(res)
 		if !p.live.seen || !inst.view.Follow() {
 			inst.view.ScrollToStart(asked)
 		}
@@ -475,6 +481,10 @@ func (inst *App) startTurn(text string) (started bool) {
 		inst.setNote("this conversation is being deleted; New conversation starts over", true)
 		return false
 	}
+	if inst.conv.ended != "" {
+		inst.setNote("this conversation was ended: "+inst.conv.ended+". New conversation starts over", true)
+		return false
+	}
 	conv := inst.conv
 	if !conv.started {
 		conv.keep, conv.apps, conv.questions, conv.artefact = inst.keep, inst.apps, inst.questions, inst.artefact
@@ -519,7 +529,7 @@ func (inst *App) syncWake() {
 // completion with it.
 func (inst *App) wakeReady() bool {
 	coord := inst.coord
-	return inst.cli != nil && coord != nil && inst.pending == nil && inst.editing == nil && !inst.conv.stranded && inst.deleting != inst.conv.id && coord.wakeDue()
+	return inst.cli != nil && coord != nil && inst.pending == nil && inst.editing == nil && !inst.conv.stranded && inst.conv.ended == "" && inst.deleting != inst.conv.id && coord.wakeDue()
 }
 
 // launchTurn starts req's turn on the coordinator.
@@ -537,6 +547,7 @@ func (inst *App) launchTurn(req llm.Request, coord *coordinator) (started bool) 
 	limit := clampRounds(int(inst.rounds))
 	// The limit the turn runs under, for its progress line.
 	coord.setRounds(limit)
+	coord.setStops(inst.stopsInForce())
 	logProfile()
 	guided := inst.guided()
 	ok := inst.turn.StartReporting(inst.tasks, bgjob.Spec{Kind: "chat-turn", Title: "answer"},
@@ -555,6 +566,7 @@ func (inst *App) newCoordinator(conversation string) (coord *coordinator) {
 	if inst.bus != nil {
 		coord.ask.host = busQueue{bus: inst.bus}
 	}
+	coord.setStopRunner(stopRunnerFor(inst.bus))
 	switch {
 	case inst.journals != nil:
 		coord.store = inst.journals

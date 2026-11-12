@@ -453,6 +453,7 @@ func (inst *App) adopt(r *resumed) {
 	}
 	coord.mu.Unlock()
 	coord.offer(conv.apps, conv.questions)
+	inst.adoptStops(coord, r.entries)
 	if conv.artefact {
 		// The revisions live in the artefact store, not in entries: the
 		// last export, when there is one, brings the exported revision back

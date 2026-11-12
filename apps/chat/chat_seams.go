@@ -538,12 +538,33 @@ func runTurn(ctx context.Context, cli completerI, coord *coordinator, req llm.Re
 		// §SD3).
 		coord.shipHead(jctx, w, func(c anchor.Cadence) bool { return c.PerTurn })
 	}()
+	if err = coord.beginStopsTurn(jctx, w, req.Turn); err != nil {
+		return
+	}
+	// stopped ends the turn on a stop's verdict (ADR-0370 §SD4, proposed):
+	// the reason, and whether the conversation ends with it.
+	stopped := func(v stopVerdict) {
+		out.stopped = v.reason
+		if v.action >= stopActionEnd {
+			out.ended, out.endedWhy = v.action, v.reason
+		}
+	}
 	parent := req.ParentCallId
 	limit := coord.roundLimit()
 	_, mode := seams.toolMode.Get()
 	for round := 0; round < limit; round++ {
 		if progress != nil {
 			progress(round, "")
+		}
+		// Before a request the stops see the round before it and what the
+		// artefact has become (ADR-0370 §SD5).
+		var sv stopVerdict
+		if sv, err = coord.checkStops(ctx, jctx, w, req.Turn, round, stopPointRequest, false); err != nil {
+			return
+		}
+		if sv.action >= stopActionStop {
+			stopped(sv)
+			return
 		}
 		rs := requestState{ctx: ctx, jctx: jctx, coord: coord, cli: cli, w: w, req: req, round: round, limit: limit, parent: parent}
 		seams.configure.Apply(&rs)
@@ -598,8 +619,21 @@ func runTurn(ctx context.Context, cli completerI, coord *coordinator, req llm.Re
 		}
 		out.messages = append(slices.Clip(sent), openaichat.Message{Role: openaichat.ChatRoleAssistant, Content: res.Content, ToolCalls: res.ToolCalls})
 		verdict, _, _ := seams.stop.Decide(stopState{toolCalls: len(res.ToolCalls), lastRound: round == limit-1})
+		// After a reply the stops see it and the calls it asks for, before
+		// any of them runs. An answer leaves nothing to hold or stop: there
+		// only a stop that ends the conversation acts.
+		if sv, err = coord.checkStops(ctx, jctx, w, req.Turn, round, stopPointReply, verdict == stopVerdictAnswered); err != nil {
+			return
+		}
 		if verdict == stopVerdictAnswered {
+			if sv.action >= stopActionEnd {
+				out.ended, out.endedWhy = sv.action, sv.reason
+			}
 			break
+		}
+		if sv.action >= stopActionStop {
+			stopped(sv)
+			return
 		}
 		if verdict == stopVerdictStopped {
 			out.stopped = "the model kept calling tools past " + strconv.Itoa(limit) + " rounds"

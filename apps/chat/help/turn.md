@@ -43,6 +43,10 @@ it waits on.
 - `model → tool`: the model calls a tool. `tool → model`: the tool returns.
 - `tool → your turn`: the tool asks you — a grant request, a question, a
   consequential command to confirm. `your turn → tool`: you decide.
+- `model → your turn`, `tool → your turn`: a [stop](stops.md) holds the turn.
+  Continue returns it to where it was; Stop the turn ends it `stopped`.
+- `model → stopped`, `tool → stopped`: a stop ended the turn, or could not
+  be checked.
 - `model → answered`: the answer. `model → failed`: the call was refused or
   failed. `model → stopped`: the call failed after tool calls were made, or
   the turn ran out of rounds; its calls happened, unlike a failed turn's.

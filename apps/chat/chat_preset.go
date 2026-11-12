@@ -84,6 +84,11 @@ type Preset struct {
 	// Definition tab so the person can read what the model is told. Empty, the
 	// tab is not offered.
 	Source string
+	// Stops are the scenario's stops (ADR-0370, proposed): in force in every
+	// conversation of the window, and not the person's to remove or weaken.
+	// They are not the model's to read, so they are outside the run's
+	// fingerprint, as the greeting is.
+	Stops []Stop
 }
 
 // Starter is one ready-made first message.
@@ -99,9 +104,9 @@ const (
 	maxPurpose      = 200
 )
 
-// presetWindowWidth leaves the column room for its four titles with
-// Definition among them, the longest of the four it replaces one of.
-const presetWindowWidth = 840
+// presetWindowWidth leaves the column room for its five titles with
+// Definition among them, a little longer than the Analytics it stands in for.
+const presetWindowWidth = chatWindowWidth + 10
 
 // BaseManifest is the chat's manifest for a preset to build on: the
 // capabilities, the operations and the help are the chat's, so a preset
@@ -126,7 +131,14 @@ func NewPreset(p Preset) (a app.AppI, err error) {
 	if err != nil {
 		return
 	}
+	stops, err := compileStops(p.Stops, stopOriginPreset)
+	if err != nil {
+		return
+	}
 	inst := newApp()
+	inst.stops.preset = stops
+	// A seeded stop does not take a name the scenario uses.
+	inst.stops.own = slices.DeleteFunc(inst.stops.own, func(s stop) bool { _, taken := stops.find(s.spec.Name); return taken })
 	inst.preset, inst.limit = &p, limit
 	inst.apps, inst.questions, inst.artefact, inst.perms = p.Apps, p.Questions, p.Artefact, limit
 	inst.rounds = float64(clampRounds(p.Rounds))
@@ -158,6 +170,9 @@ func (inst Preset) Validate() (err error) {
 	}
 	if utf8.RuneCountInString(inst.Purpose) > maxPurpose || strings.Contains(inst.Purpose, "\n") {
 		return eb.Build().Str("id", string(inst.Manifest.Id)).Int("max", maxPurpose).Errorf("a preset's purpose is one short sentence")
+	}
+	if _, err = compileStops(inst.Stops, stopOriginPreset); err != nil {
+		return eb.Build().Str("id", string(inst.Manifest.Id)).Errorf("the preset's stops: %w", err)
 	}
 	if err = inst.Manifest.Validate(); err != nil {
 		return eb.Build().Str("id", string(inst.Manifest.Id)).Errorf("the preset's manifest: %w", err)

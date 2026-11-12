@@ -266,6 +266,9 @@ type coordinator struct {
 	// journalFailed says the writer refused a write and the next turn
 	// reopens the run before its first act.
 	journalFailed bool
+	// stops are the conversation's stops and their firings
+	// (chat_stops_turn.go); it guards itself.
+	stops stopsRuntime
 }
 
 // newCoordinator is a coordinator over an in-process journal store; the
@@ -282,6 +285,7 @@ func newCoordinatorIn(parent *lifetime.Scope, cli *agent.Client, kq *keelsonquer
 		pendingCalls: make(map[string]pendingCall), refused: make(map[string]string), typed: make(map[string]typedOp), opCache: make(map[string][]agent.Operation), windowApps: make(map[uint64]string),
 		opEffects: make(map[string]map[string]string), resultIds: make(map[string]uint64), scope: lifetime.New(parent), confinedTier: fallbackConfinedTier()}
 	inst.scope.OnDrained(inst.closeJournal)
+	inst.ask.clock = &inst.stops.clock
 	return
 }
 
@@ -402,6 +406,7 @@ func (inst *coordinator) setStage(s stageE) {
 // awaitPerson marks a call as waiting on the person until done is called.
 // The running call's step says so while it waits.
 func (inst *coordinator) awaitPerson() (done func()) {
+	inst.stops.clock.enter()
 	inst.mu.Lock()
 	inst.waiting++
 	if inst.waiting == 1 {
@@ -415,6 +420,7 @@ func (inst *coordinator) awaitPerson() (done func()) {
 			inst.steps.personWait(false)
 		}
 		inst.mu.Unlock()
+		inst.stops.clock.leave()
 	}
 }
 
@@ -1176,6 +1182,11 @@ type turnResult struct {
 	// stoppedErr is the model call's error behind stopped, nil when the
 	// rounds ran out.
 	stoppedErr error
+	// ended is end or close when a stop ended the conversation with this
+	// turn, answered or stopped, and endedWhy says which and on what
+	// (ADR-0370 §SD4, proposed); none otherwise.
+	ended    stopActionE
+	endedWhy string
 	// digest is the last request's digest, as the journal recorded it.
 	digest string
 }

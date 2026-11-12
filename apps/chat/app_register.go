@@ -52,7 +52,7 @@ var manifest = app.Manifest{
 	Keywords:     []string{"chat", "llm", "model", "conversation", "assistant"},
 	Kind:         app.KindApp,
 	Surface:      app.SurfaceWindowed,
-	SurfaceHints: app.SurfaceHints{PreferredWidth: 760, PreferredHeight: 720},
+	SurfaceHints: app.SurfaceHints{PreferredWidth: chatWindowWidth, PreferredHeight: 720},
 	// The turn's state, for an agent that shares this window (ADR-0269).
 	Operations: ops.Catalog(),
 	Help:       help.MustSub(helpFS, "help"),
@@ -89,6 +89,9 @@ var manifest = app.Manifest{
 		// The draft handed to the host's editor app, each save taken back;
 		// the window open is declared below.
 		externaledit.ClientCaps("chat: hand the draft to the host's editor app and take each save back")[:3],
+		// The conversation's stops are statements over its own run, checked
+		// in the host's local SQL worker (ADR-0370, proposed).
+		StopsCaps(),
 		[]app.SubjectFilter{
 			{Pattern: adhocdata.SubjectPublish, Direction: app.CapDirectionPub,
 				Reason: "chat: publish the window's token and answer statistics and its agent surface as ad-hoc datasets for Open in play (ADR-0240)"},

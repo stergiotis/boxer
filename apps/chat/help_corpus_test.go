@@ -16,7 +16,7 @@ func TestHelpCorpusIndexes(t *testing.T) {
 	require.True(t, ok, "chat help book must be indexed from Manifest.Help")
 	require.Empty(t, b.Validate(), "help front-matter must conform")
 
-	want := map[string]bool{"overview": false, "turn": false, "coordinator": false, "settings": false, "artefact": false}
+	want := map[string]bool{"overview": false, "turn": false, "coordinator": false, "settings": false, "artefact": false, "stops": false}
 	for _, d := range b.Docs() {
 		if _, expected := want[d.Path]; !expected {
 			continue

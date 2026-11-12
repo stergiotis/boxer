@@ -693,6 +693,17 @@
       }
     },
     {
+      "name": "BOXER_CHAT_STOPS",
+      "type": "string",
+      "description": "stops a new chat window starts with, as a JSON list such as [{\"name\":\"box\",\"then\":\"ask\",\"after\":\"15m\"}] (ADR-0370); they are the person's own, shown and removable in the Stops tab; for scenes and demos",
+      "category": "boxer-chat",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/apps/chat"
+      }
+    },
+    {
       "name": "BOXER_CHAT_WAKES_MAX",
       "type": "int64",
       "default": "4",

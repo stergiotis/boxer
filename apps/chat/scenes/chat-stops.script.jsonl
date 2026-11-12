@@ -1,0 +1,4 @@
+# The scripted model of chat-stops.scene.md: one turn of two model calls —
+# ask_user with one question, then the answer.
+{"tool":"ask_user","args":{"title":"Asking about the report","questions":[{"question":"Which format?","header":"Format","options":[{"label":"Markdown"},{"label":"CSV"}]}]}}
+{"content":"Here is the report, in the format you chose."}

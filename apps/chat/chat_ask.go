@@ -144,6 +144,9 @@ type asker struct {
 	// host is the host's queue the question also waits in (ADR-0324,
 	// proposed); nil asks in the window alone.
 	host hostQueueI
+	// clock, when set, counts the time a question waited as time the turn
+	// did not work (chat_stops_turn.go).
+	clock *heldClock
 }
 
 // ask shows qs and waits for the answer, or for the turn to end.
@@ -159,6 +162,10 @@ func (inst *asker) askVia(ctx context.Context, qs []askQuestion, via hostAsk) (r
 	// Room for an answer from each surface: the second is never read, and
 	// neither sender blocks.
 	o := &openAsk{questions: qs, reply: make(chan askReply, 2), form: newAskForm(qs)}
+	if inst.clock != nil {
+		inst.clock.enter()
+		defer inst.clock.leave()
+	}
 	if inst.host != nil && via.kind != "" {
 		hctx, cancel := context.WithCancel(ctx)
 		defer cancel()

@@ -9,7 +9,7 @@ import (
 
 // The window's body is one dock, as play's is: the transcript, the composer
 // split below it, and a column of tabs beside them — Conversations,
-// Settings, Analytics, Artefact. Every divider drags. The split fractions
+// Settings, Analytics, Artefact, Stops. Every divider drags. The split fractions
 // are a preset: once the person drags one, the dock's own state wins for
 // the life of the window. The bar above the dock stays fixed; the tabs
 // themselves are how a pane is reached, and their titles carry its state.
@@ -18,7 +18,7 @@ import (
 // beside the transcript, rather than in the column. So a tab whose feature
 // is off stays, and says how to turn it on. Definition is fixed per window:
 // a preset's window has it in Analytics' place from the first frame, since
-// the column has room for four titles; the plain chat never has it.
+// the column has room for five titles; the plain chat never has it.
 
 // chatTabE names a tab of the dock; the values are its stable dock ids.
 type chatTabE uint64
@@ -31,6 +31,7 @@ const (
 	tabAnalytics
 	tabArtefact
 	tabDefinition
+	tabStops
 	tabEnd
 )
 
@@ -50,6 +51,8 @@ func (inst chatTabE) title() string {
 		return "Artefact"
 	case tabDefinition:
 		return "Definition"
+	case tabStops:
+		return "Stops"
 	}
 	return "?"
 }
@@ -57,11 +60,16 @@ func (inst chatTabE) title() string {
 // The dock's initial splits: the share the transcript keeps above the
 // composer, and the share the transcript and composer keep beside the
 // column — at the window's default width, what leaves the column room for
-// its four tab titles.
+// its five tab titles, Stops with a two-digit count among them.
 const (
 	dockSplitComposer float32 = 0.80
-	dockSplitColumn   float32 = 0.56
+	dockSplitColumn   float32 = 0.52
 )
+
+// chatWindowWidth is the window's default width: with dockSplitColumn, the
+// column's five titles fit and the transcript keeps the width it had under
+// four.
+const chatWindowWidth = 860
 
 // tabProbeSalt names each tab's visibility probe, through the id stack and
 // with the tab's id folded in.
@@ -97,7 +105,7 @@ func (inst *App) renderDock() {
 			third = tabDefinition
 		}
 		_ = dock.Split(root, c.DockRight, dockSplitColumn,
-			uint64(tabConversations), uint64(tabSettings), uint64(third), uint64(tabArtefact))
+			uint64(tabConversations), uint64(tabSettings), uint64(third), uint64(tabArtefact), uint64(tabStops))
 		_ = dock.Split(root, c.DockBelow, dockSplitComposer, uint64(tabComposer))
 		// The transcript and the composer scroll themselves.
 		for range dock.TabNoScroll(uint64(tabTranscript), tabTranscript.title()) {
@@ -134,6 +142,12 @@ func (inst *App) renderDock() {
 		for range dock.TabNoScroll(uint64(tabArtefact), inst.artefactTitle()) {
 			inst.markTabShown(tabArtefact)
 			inst.renderArtefactTab()
+		}
+		for range dock.Tab(uint64(tabStops), inst.stopsTitle()) {
+			inst.markTabShown(tabStops)
+			for range c.IdScope(inst.ids.PrepareStr("stops-body")) {
+				inst.renderStopsTab()
+			}
 		}
 	}
 }

@@ -22,7 +22,8 @@ is for the person at the window and for an agent that shares it: the
 [turn machine](turn.md) is what such an agent can read; the
 [coordinator](coordinator.md) is how this window's model works in others;
 [settings and ceilings](settings.md) say who enforces what; the
-[artefact](artefact.md) is the conversation's document.
+[artefact](artefact.md) is the conversation's document; [stops](stops.md)
+are the conditions that hold or end a conversation.
 
 ## The bar
 
@@ -50,8 +51,8 @@ it here and it is read in play.
 ## The dock
 
 The body is a dock of tabs: **Transcript** and **Message** (the composer)
-on the left, and a column of **Conversations**, **Settings**, **Analytics**
-and **Artefact**. Every divider drags. A tab whose feature is off stays and
+on the left, and a column of **Conversations**, **Settings**, **Analytics**,
+**Artefact** and **Stops**. Every divider drags. A tab whose feature is off stays and
 says how to turn it on. **Conversations** lists the conversations other
 chat windows hold and the runs this host kept, which a click resumes
 (ADR-0308). **Analytics** is part of Advanced (`BOXER_CHAT_ADVANCED`): the
