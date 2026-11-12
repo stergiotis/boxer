@@ -70,7 +70,9 @@ func (inst *App) renderAsk(o *openAsk) {
 }
 
 func (inst *App) renderAskQuestion(f *askForm, i int, q *askQuestion) {
-	for range c.HorizontalTop().KeepIter() {
+	// Wrapped: a question longer than the pane is read, not run off its edge
+	// — a held turn's names its stop and the row that fired (ADR-0370).
+	for range c.HorizontalWrapped().KeepIter() {
 		if q.Header != "" {
 			badge.New(inst.ids.PrepareStr("header"), q.Header).Tone(badge.ToneInfo).Variant(badge.VariantSoft).Size(badge.SizeSm).Send()
 		}
