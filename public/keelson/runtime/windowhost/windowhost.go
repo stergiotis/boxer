@@ -24,6 +24,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/statestore"
 	"github.com/stergiotis/boxer/public/keelson/runtime/task"
 	"github.com/stergiotis/boxer/public/keelson/runtime/widgethandle"
+	"github.com/stergiotis/boxer/public/keelson/runtime/workstatelet"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
@@ -263,6 +264,13 @@ type Inst struct {
 	// whose window closed in between matches nothing and the raise is
 	// dropped, which is the right answer. Zero = nothing pending.
 	pendingRaise WindowKeyT
+
+	// workstatelets is the catalog a workstatelet's id is opened from
+	// (ADR-0369, proposed); nil until SetWorkstatelets. Under mu.
+	workstatelets *workstatelet.Catalog
+	// pendingCaptures are the capture requests the next Frame answers
+	// (RequestWorkstateletCapture). Written under mu, consumed by Frame.
+	pendingCaptures []func(doc workstatelet.Doc, err error)
 
 	// pendingArrange queues one whole-desktop arrangement (Arrange) for the
 	// next Frame. Written under mu, consumed by Frame like pendingRaise.
@@ -537,7 +545,19 @@ func (inst *Inst) SetDialogTasks(tasks task.TaskApiI) {
 // For an app that declares Manifest.Workingset this is also the restore
 // path: OpenWithConfig looks up the app's stored record and, when one is
 // usable, opens the window carrying it (ADR-0148 §SD5).
+//
+// A workstatelet's id opens the windows its document lists instead of a
+// window of its own (ADR-0369 (proposed) §SD3); key is then the document's
+// first window that opened.
 func (inst *Inst) Open(appId app.AppIdT) (key WindowKeyT, err error) {
+	if m, ok := inst.registry.LookupManifest(appId); ok && m.Kind == app.KindWorkstatelet {
+		var opened []WindowKeyT
+		opened, _, err = inst.OpenWorkstatelet(appId)
+		if len(opened) > 0 {
+			key = opened[0]
+		}
+		return
+	}
 	key, err = inst.OpenWithConfig(appId, "", nil)
 	return
 }
@@ -603,6 +623,14 @@ func (inst *Inst) OpenWithConfig(appId app.AppIdT, kind string, cfg []byte) (key
 	m, ok := inst.registry.LookupManifest(appId)
 	if !ok {
 		err = eb.Build().Str("id", string(appId)).Errorf("windowhost: app not registered")
+		return
+	}
+	// A workstatelet is opened by the person, through Open; a launch
+	// request or a task's launch reaches this door directly and is refused
+	// (ADR-0369 (proposed) §SD5).
+	if m.Kind == app.KindWorkstatelet {
+		err = eb.Build().Str("id", string(appId)).
+			Errorf("a workstatelet opens from the launcher or at boot, not through a launch request")
 		return
 	}
 	// Every open passes here — launcher, launch request, agent, seed — so
@@ -1275,6 +1303,7 @@ func (inst *Inst) Frame(ids *c.WidgetIdStack) (err error) {
 		inst.arranging = nil
 		inst.stepTiling(nil)
 		inst.snapshotGeometry(nil)
+		inst.stepCaptures()
 		inst.reapClosed()
 		return
 	}
@@ -1459,6 +1488,7 @@ func (inst *Inst) Frame(ids *c.WidgetIdStack) (err error) {
 		}
 	}
 	inst.mu.Unlock()
+	inst.stepCaptures()
 	inst.reapClosed()
 	return
 }
