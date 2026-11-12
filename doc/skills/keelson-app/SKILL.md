@@ -5,7 +5,7 @@ type: reference
 audience: contributor or agent writing or reviewing an app under apps/
 status: stable
 reviewed-by: "p@stergiotis"
-reviewed-date: 2026-11-07
+reviewed-date: 2026-11-12
 ---
 
 # Writing a keelson app — the house idiom
@@ -98,8 +98,9 @@ in a page or in the ADR; each has its section here.
    which it publishes, and what play receives on handover (§2).
 2. **State.** The phases the window moves through, as a machine the person
    and an agent can read (§3).
-3. **Work.** What runs off the frame, as tasks or watchbill jobs, and what
-   pausing does to it (§4).
+3. **Work.** What runs off the frame, as tasks or watchbill jobs, what
+   pausing does to it, and how each computation grows with the
+   deployment's n (§4, W9).
 4. **Operators.** Which operations a person, a team and an agent get, and
    what the help book has to say for the agent to use them (§5).
 5. **Method.** For an analytical app, the method, its assumptions and how
@@ -372,6 +373,42 @@ the loop from idling at all.
 success is shown when its reply arrives, with the detail the reply
 carries; a refusal is shown with its reason. Nothing is logged to the
 status line before the round trip.
+
+**W9 — Place work by how it grows with n, at the deployment's n.** Apps
+here run over tables of billions of rows, fleets of hosts, trees of
+millions of files; the fixture a test or a demo uses is three or four
+orders of magnitude smaller, and a method that is instant on it can be
+hours or out of memory in use. So, for each computation, name n (rows,
+series, nodes, hosts, pairs) and the growth in time and in memory, in the
+doc comment of the function that does it, beside the method's citation
+(F3). The growth then decides where the work runs:
+
+- **Per frame:** proportional to what is on screen, not to n (P1).
+  `recordtable` emits only the visible rows; a body that walks every row
+  or sorts the whole record each frame leaves the frame.
+- **Linear or n log n over the data:** ClickHouse, when it can express
+  it (D2); otherwise a task (W2). Pulling n rows into Go to compute an
+  aggregate ClickHouse would return is the shape to replace.
+- **Quadratic and above** (all pairs, a distance or similarity matrix, a
+  naive join of two lists, a layout over every node): never the frame and
+  never unbounded. A task with progress and cancel (W2, W4) at minimum, a
+  watchbill job when it outlives the window (W3), and an input cap the
+  window states.
+- **Super-polynomial** (exp(n), n!: every subset, every ordering, exact
+  combinatorial optimisation, backtracking search): not on an unbounded
+  input at all. Use a polynomial approximation and state what it gives up
+  (F3), or bound n explicitly and refuse beyond it with the remedy (F6).
+  RE2 batteries (F1) are linear by construction; a backtracking regex
+  engine is not.
+
+A cap, a sample or a truncation is part of the method and is shown where
+the result is: "first N of M", a `Truncated` flag on a query (A2), a
+sampled series named as sampled; a silent cut at a fixture-sized limit is
+a wrong answer at the deployment's size. Quadratic memory deserves the
+same suspicion as quadratic time: n² cells at n = 10⁵ is 10¹⁰. Check the
+growth at two sizes an order of magnitude apart, in a benchmark or a test,
+rather than trusting one small run; `keelson('frame_times')` (P5) shows
+what reached the frame anyway.
 
 ## 5. The operator surface: operations, help, names, attention
 
@@ -751,6 +788,10 @@ lines are the minter's and the rest are each minted window's.
 - [ ] Off-frame work on `task.ForApp` or watchbill; jobprogress or
       bgjobrow, never a raw bar; goroutines in the lifetime scope;
       `PausableAppI` where there is a poller (W2–W6)
+- [ ] Each computation names its n and its growth; per-frame work is
+      proportional to the screen, quadratic work runs on a task with a
+      stated cap, nothing super-polynomial runs on an unbounded input,
+      and caps and samples are shown with the result (W9)
 - [ ] Catalog: queries bounded and argument-taking, commands set and never
       toggle, effects honest, async settled, refusals name the remedy,
       gestures on one path, catalog tests (A1–A3)
