@@ -19,6 +19,28 @@ into the entries. The machinery sections every entry repeats (coverage,
 breaking changes, …) are omitted; the compilation process is described in
 [README.md](./README.md).
 
+## [2026-10-11 – 2026-11-12](./2026-10-11--2026-11-12.md)
+
+- [The person's attention (ADR-0323, ADR-0324, ADR-0328)](./2026-10-11--2026-11-12.md#the-persons-attention-adr-0323-adr-0324-adr-0328)
+- [The chat window](./2026-10-11--2026-11-12.md#the-chat-window)
+- [Long tasks (ADR-0355, ADR-0357, ADR-0358)](./2026-10-11--2026-11-12.md#long-tasks-adr-0355-adr-0357-adr-0358)
+- [Cited replies (ADR-0340)](./2026-10-11--2026-11-12.md#cited-replies-adr-0340)
+- [Evidence as a record-store profile (ADR-0326, ADR-0327, ADR-0330)](./2026-10-11--2026-11-12.md#evidence-as-a-record-store-profile-adr-0326-adr-0327-adr-0330)
+- [The trail: views, a viewer, a scorecard (ADR-0350)](./2026-10-11--2026-11-12.md#the-trail-views-a-viewer-a-scorecard-adr-0350)
+- [Coverage and agent-caused jobs (ADR-0343, ADR-0344)](./2026-10-11--2026-11-12.md#coverage-and-agent-caused-jobs-adr-0343-adr-0344)
+- [Apps under one contract (ADR-0329, ADR-0345)](./2026-10-11--2026-11-12.md#apps-under-one-contract-adr-0329-adr-0345)
+- [Chatlets and the embedded chat (ADR-0364, ADR-0368)](./2026-10-11--2026-11-12.md#chatlets-and-the-embedded-chat-adr-0364-adr-0368)
+- [The desktop](./2026-10-11--2026-11-12.md#the-desktop)
+- [mdedit (ADR-0334, ADR-0347, ADR-0341, ADR-0342)](./2026-10-11--2026-11-12.md#mdedit-adr-0334-adr-0347-adr-0341-adr-0342)
+- [The markdown reading surface](./2026-10-11--2026-11-12.md#the-markdown-reading-surface)
+- [Tables: recordtable (ADR-0336)](./2026-10-11--2026-11-12.md#tables-recordtable-adr-0336)
+- [Diagrams and risk views](./2026-10-11--2026-11-12.md#diagrams-and-risk-views)
+- [play](./2026-10-11--2026-11-12.md#play)
+- [imzero2](./2026-10-11--2026-11-12.md#imzero2)
+- [SQL statements through one opening (ADR-0367)](./2026-10-11--2026-11-12.md#sql-statements-through-one-opening-adr-0367)
+- [Platform and smaller surfaces](./2026-10-11--2026-11-12.md#platform-and-smaller-surfaces)
+- [Dependencies and gates (ADR-0362)](./2026-10-11--2026-11-12.md#dependencies-and-gates-adr-0362)
+
 ## [2026-09-30 – 2026-10-11](./2026-09-30--2026-10-11.md)
 
 - [Apps that agents can operate (ADR-0269, ADR-0270)](./2026-09-30--2026-10-11.md#apps-that-agents-can-operate-adr-0269-adr-0270)
