@@ -489,3 +489,22 @@ func TestTsReservedFamily(t *testing.T) {
 		assert.False(t, tsIsReservedName(name), name)
 	}
 }
+
+// A slot bound by a SET line reaches the client transform. The prelude rides
+// in the SQL for ClickHouse to substitute, which never happens to an argument
+// play evaluates itself.
+func TestTsSlotBoundBySetLine(t *testing.T) {
+	split, err := splitGraph("SET param_win = 48;\n" +
+		"WITH base AS (SELECT 1 AS t, 2 AS v), scores AS (SELECT tsProfile(t, v, {win:UInt32}) FROM base)\n" +
+		"SELECT * FROM base")
+	require.NoError(t, err)
+	node, ok := findSplitNode(split, "scores")
+	require.True(t, ok)
+	require.NotNil(t, node.Client)
+
+	c := compileNodeFor(split, node, map[string]bool{"win": true}, nil)
+	assert.Equal(t, "48", c.Params["param_win"])
+	got, aErr := tsIntArg(node.Client, 2, c.Params)
+	require.NoError(t, aErr)
+	assert.Equal(t, int32(48), got)
+}

@@ -1126,7 +1126,7 @@ func (inst *PlayApp) noteSeriesScoreCall() {
 	call := node.Client
 	// A slot resolves through the same params the lane sends, so a parameter
 	// driven by a live signal moves the caption and the baseline with it.
-	params := resolveSignalNamesWithDefaults(node.Reads, inst.lastRunBound, inst.frameSig)
+	params := tsNodeParams(inst.currentSplit, node, inst.lastRunBound, inst.frameSig)
 	shown := tsCallParams(call, params)
 	// The window is the third argument of every scoring function in the
 	// roster, but the roster is meant to grow — so the position is CHECKED

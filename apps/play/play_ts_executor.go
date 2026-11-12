@@ -66,9 +66,39 @@ func tsCompiledNode(split splitResult, node splitNode, bound map[string]bool, si
 	return compiledNode{
 		SQL:    fuseNode(split, node.Client.Input),
 		NodeID: node.Client.Input,
-		Params: resolveSignalNamesWithDefaults(node.Reads, bound, sig),
+		Params: tsNodeParams(split, node, bound, sig),
 		Client: node.Client,
 	}
+}
+
+// tsNodeParams is what a client node's argument slots resolve against: the
+// node's live signals, and the values the buffer's SET prelude pins.
+//
+// An ordinary node needs only the signals, because its SET lines ride in the
+// SQL and ClickHouse substitutes them. A client transform's arguments are
+// never sent anywhere, so a slot bound by a SET line would otherwise read as
+// unbound. The prelude wins over a signal of the same name, as it does on the
+// server.
+func tsNodeParams(split splitResult, node splitNode, bound map[string]bool, sig SignalEnvI) (params map[string]string) {
+	params = resolveSignalNamesWithDefaults(node.Reads, bound, sig)
+	if len(split.Prelude) == 0 || len(node.Reads) == 0 {
+		return
+	}
+	_, pinned, err := ExtractParams(strings.Join(split.Prelude, ";\n") + ";\nSELECT 1")
+	if err != nil {
+		return
+	}
+	for _, name := range node.Reads {
+		raw, ok := pinned["param_"+string(name)]
+		if !ok {
+			continue
+		}
+		if params == nil {
+			params = make(map[string]string, 1)
+		}
+		params["param_"+string(name)] = raw
+	}
+	return
 }
 
 // compileNodeFor is tsCompiledNode for a client node and the ordinary fusion
