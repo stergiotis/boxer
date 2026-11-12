@@ -121,3 +121,28 @@ func TestHeadBaseKeepsTheTipAndEndsTheStrokeBeforeIt(t *testing.T) {
 	require.InDelta(t, 30, bx, 1e-4)
 	require.InDelta(t, 32, by, 1e-4)
 }
+
+// A chevron comes to a point on its east edge and is notched to the same
+// depth on its west edge, both at mid-height, inside its box.
+func TestChevronOutlineIsNotchedWestAndPointedEast(t *testing.T) {
+	xs, ys := chevronOutline(10, 20, 110, 60, 12)
+	require.Equal(t, []float32{10, 98, 110, 98, 10, 22}, xs)
+	require.Equal(t, []float32{20, 20, 40, 60, 60, 40}, ys)
+
+	// A stage too narrow for the inset keeps a body between notch and point.
+	xs, _ = chevronOutline(0, 0, 30, 20, 25)
+	require.Less(t, xs[5], xs[1], "the notch stays west of the point's shoulder")
+}
+
+// A queue's boxes are centred on the node and evenly spaced.
+func TestQueueCellsAreCentredAndEvenlySpaced(t *testing.T) {
+	lefts := queueCells(200, 1)
+	require.Len(t, lefts, pipelineview.QueueCells)
+	side := float32(pipelineview.QueueCellSize)
+	require.InDelta(t, 200, (lefts[0]+lefts[len(lefts)-1]+side)/2, 1e-4, "the row is centred")
+	for i := 1; i < len(lefts); i++ {
+		require.InDelta(t, pipelineview.QueueCellSize+pipelineview.QueueCellGap, lefts[i]-lefts[i-1], 1e-4)
+	}
+	half := queueCells(200, 0.5)
+	require.InDelta(t, (lefts[len(lefts)-1]-lefts[0])/2, half[len(half)-1]-half[0], 1e-4, "the row scales with the fit")
+}

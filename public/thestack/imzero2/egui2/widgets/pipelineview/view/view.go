@@ -7,8 +7,9 @@
 // into the target canvas (uniform scale, centred; a spine schematic is
 // expected to fit its host, so there is no pan/zoom), then paints edges
 // (orthogonal polylines with rounded corners, dashed for feedback, a filled
-// arrow head at the target), stage boxes, endpoint glyphs (document,
-// cylinder, parallelogram, discard), class-tinted port pins and labels, with
+// arrow head at the target), stages (a box, or a chevron), endpoint glyphs
+// (document, cylinder, parallelogram, discard, a queue's row of boxes),
+// class-tinted port pins and labels, with
 // one PaintSenseRegion per node so hover/click is reported back. The
 // reported interaction is from the previous frame (immediate-mode one-frame
 // lag).
@@ -256,17 +257,37 @@ func Render(idBase uint64, lay *pipelineview.Layout, opts RenderOpts) RenderResu
 					txt = c2
 				}
 			}
-			if n.Kind == pipelineview.NodeStage {
+			isQueue := n.Kind == pipelineview.NodeEndpoint && n.EKind == pipelineview.EndpointQueue
+			switch {
+			case n.Kind == pipelineview.NodeStage && n.Shape == pipelineview.StageChevron:
+				xs, ys := chevronOutline(cx-w/2, cy-h/2, cx+w/2, cy+h/2, float32(pipelineview.ChevronInset*scale))
+				c.PaintPolygonFilled(xs, ys, fill).Concave().Send()
+				c.PaintPolyline(append(xs, xs[0]), append(ys, ys[0]), st.StageStroke, st.StageStrokeW).Send()
+			case n.Kind == pipelineview.NodeStage:
 				minX, minY, maxX, maxY := cx-w/2, cy-h/2, cx+w/2, cy+h/2
 				c.PaintRectFilled(minX, minY, maxX, maxY, st.Rounding, fill).Send()
 				c.PaintRectStroke(minX, minY, maxX, maxY, st.Rounding, st.StageStroke, st.StageStrokeW).Send()
-			} else {
+			case isQueue:
+				side := float32(pipelineview.QueueCellSize * scale)
+				for _, x := range queueCells(cx, fscale) {
+					c.PaintRectFilled(x, cy-side/2, x+side, cy+side/2, side*queueCellRounding, fill).Send()
+					c.PaintRectStroke(x, cy-side/2, x+side, cy+side/2, side*queueCellRounding, st.EndpointStroke, st.StageStrokeW).Send()
+				}
+			default:
 				drawEndpointGlyph(n.EKind, cx, cy, w, h, fill, st.EndpointStroke, st.StageStrokeW)
 			}
 			if hovered[n.ID] {
 				c.PaintRectStroke(cx-w/2-2, cy-h/2-2, cx+w/2+2, cy+h/2+2, st.Rounding, st.Highlight, st.StageStrokeW+1.5).Send()
 			}
-			if n.Sublabel != "" {
+			if isQueue {
+				// The boxes hold the centre line; the label goes over them
+				// and the sublabel under them.
+				off := float32((pipelineview.QueueCellSize/2 + pipelineview.QueueTextGap) * scale)
+				c.PaintText(cx, cy-off, 1, 2, n.Label, fontPt*fscale, txt).Send()
+				if n.Sublabel != "" {
+					c.PaintText(cx, cy+off, 1, 0, n.Sublabel, fontPt*0.85*fscale, st.EndpointSub).Send()
+				}
+			} else if n.Sublabel != "" {
 				// Stack the two lines around the centre: label bottom-anchored
 				// just above it, sublabel top-anchored just below.
 				c.PaintText(cx, cy+1*fscale, 1, 2, n.Label, fontPt*fscale, txt).Send()
@@ -431,6 +452,35 @@ func norm(dx, dy float32) (nx, ny float32) {
 		return 0, 0
 	}
 	return dx / l, dy / l
+}
+
+// queueCellRounding is the corner radius of a queue endpoint's box, as a
+// fraction of its side.
+const queueCellRounding = 0.3
+
+// chevronOutline is a chevron stage's outline inside the box (l, t)-(r, b),
+// clockwise from its north-west corner: the east edge comes to a point at
+// mid-height and the west edge is notched to the same depth. inset is
+// clamped so the notch and the point never cross.
+func chevronOutline(l, t, r, b float32, inset float32) (xs []float32, ys []float32) {
+	inset = min(inset, (r-l)/3)
+	cy := (t + b) / 2
+	xs = []float32{l, r - inset, r, r - inset, l, l + inset}
+	ys = []float32{t, t, cy, b, b, cy}
+	return
+}
+
+// queueCells is the west edge of each box of a queue endpoint centred on
+// cx, at the fit scale.
+func queueCells(cx float32, scale float32) (lefts []float32) {
+	side := float32(pipelineview.QueueCellSize) * scale
+	step := side + float32(pipelineview.QueueCellGap)*scale
+	x := cx - float32(pipelineview.QueueRowWidth())*scale/2
+	lefts = make([]float32, pipelineview.QueueCells)
+	for i := range lefts {
+		lefts[i] = x + float32(i)*step
+	}
+	return
 }
 
 // drawEndpointGlyph paints the endpoint shape for kind at centre (cx, cy)

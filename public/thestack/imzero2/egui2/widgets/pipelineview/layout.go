@@ -47,6 +47,28 @@ const (
 	margin            = 14.0
 )
 
+// The geometry of the shapes a painter has to agree with the layout on, in
+// layout units (points before the fit scale).
+const (
+	// ChevronInset is how deep a chevron stage's west notch and its east
+	// point reach into its bounding box.
+	ChevronInset = 10.0
+	// QueueCells is the number of boxes a queue endpoint draws.
+	QueueCells = 6
+	// QueueCellSize is the side of one box of a queue endpoint.
+	QueueCellSize = 10.0
+	// QueueCellGap separates two boxes of a queue endpoint.
+	QueueCellGap = 5.0
+	// QueueTextGap separates a queue endpoint's row of boxes from the label
+	// over it and the sublabel under it.
+	QueueTextGap = 3.0
+)
+
+// QueueRowWidth is the width of a queue endpoint's row of boxes.
+func QueueRowWidth() float64 {
+	return QueueCells*QueueCellSize + (QueueCells-1)*QueueCellGap
+}
+
 // Point is a 2-D coordinate in the output space.
 type Point struct{ X, Y float64 }
 
@@ -68,6 +90,7 @@ type NodeLayout struct {
 	Sublabel string // endpoint detail line; drawn smaller under Label
 	Kind     NodeKind
 	EKind    EndpointKind // meaningful when Kind == NodeEndpoint
+	Shape    StageShape   // meaningful when Kind == NodeStage
 	Center   Point
 	W, H     float64
 }
@@ -187,6 +210,11 @@ func Compute(p Pipeline, opts LayoutOpts) (*Layout, error) {
 		si := &stageInfo{st: st}
 		lw, lh := measure(labelOr(st.Label, st.ID), fontSize)
 		si.w = math.Max(minStageW, lw+2*stagePadX)
+		if st.Shape == StageChevron {
+			// The notch and the point take their depth from the label's
+			// room, so the box grows by both.
+			si.w += 2 * ChevronInset
+		}
 		if lh+2*stagePadY > stageH {
 			stageH = lh + 2*stagePadY
 		}
@@ -257,14 +285,22 @@ func Compute(p Pipeline, opts LayoutOpts) (*Layout, error) {
 	eps := make(map[string]*epInfo, len(p.Endpoints))
 	for _, ep := range p.Endpoints {
 		lw, lh := measure(labelOr(ep.Label, ep.ID), fontSize*endpointFontScale)
+		slh := 0.0
 		if ep.Sublabel != "" {
-			slw, slh := measure(ep.Sublabel, fontSize*endpointFontScale*sublabelScale)
+			var slw float64
+			slw, slh = measure(ep.Sublabel, fontSize*endpointFontScale*sublabelScale)
 			lw = math.Max(lw, slw)
-			lh += slh
 		}
-		h := lh + 2*endPadY
-		if ep.Kind == EndpointStore {
+		h := lh + slh + 2*endPadY
+		switch ep.Kind {
+		case EndpointStore:
 			h += storeCapPad
+		case EndpointQueue:
+			// The row of boxes sits on the centre line, where an axial
+			// edge meets the node, so the text lines over and under it
+			// take the same room whichever is taller.
+			lw = math.Max(lw, QueueRowWidth())
+			h = QueueCellSize + 2*(math.Max(lh, slh)+QueueTextGap)
 		}
 		eps[ep.ID] = &epInfo{ep: ep, w: math.Max(minEndW, lw+2*endPadX), h: h}
 		epOrder = append(epOrder, ep.ID)
@@ -457,14 +493,22 @@ func Compute(p Pipeline, opts LayoutOpts) (*Layout, error) {
 		left := si.centerX - si.w/2
 		top := si.centerY - stageH/2
 		bottom := si.centerY + stageH/2
+		// A chevron's north and south edges are shorter than its box by
+		// the notch and the point; its pins spread over what both edges
+		// share.
+		span := si.w
+		if si.st.Shape == StageChevron {
+			left += ChevronInset
+			span -= 2 * ChevronInset
+		}
 		for i, po := range si.southPorts {
-			px := left + si.w*float64(i+1)/float64(len(si.southPorts)+1)
+			px := left + span*float64(i+1)/float64(len(si.southPorts)+1)
 			pt := Point{px, bottom}
 			pins = append(pins, PortPin{Stage: id, Port: po.Name, Class: po.Class, Pos: pt})
 			pinPos[pinKey(id, po.Name)] = pt
 		}
 		for i, po := range si.northPorts {
-			px := left + si.w*float64(i+1)/float64(len(si.northPorts)+1)
+			px := left + span*float64(i+1)/float64(len(si.northPorts)+1)
 			pt := Point{px, top}
 			pins = append(pins, PortPin{Stage: id, Port: po.Name, Class: po.Class, Pos: pt})
 			pinPos[pinKey(id, po.Name)] = pt
@@ -660,7 +704,7 @@ func Compute(p Pipeline, opts LayoutOpts) (*Layout, error) {
 	for _, id := range order {
 		si := byID[id]
 		lay.Nodes = append(lay.Nodes, NodeLayout{
-			ID: id, Label: labelOr(si.st.Label, id), Kind: NodeStage,
+			ID: id, Label: labelOr(si.st.Label, id), Kind: NodeStage, Shape: si.st.Shape,
 			Center: Point{si.centerX, si.centerY}, W: si.w, H: stageH,
 		})
 	}

@@ -50,6 +50,23 @@ const (
 	EndpointStream
 	// EndpointNull is a small "discard" glyph (circle with a slash).
 	EndpointNull
+	// EndpointQueue is a row of small boxes, the messages of a queue: a
+	// topic or a stream that holds what is in flight between two stages.
+	// The row sits on the node's centre line, the label over it and the
+	// sublabel under it.
+	EndpointQueue
+)
+
+// StageShape selects the outline a stage is drawn with.
+type StageShape uint8
+
+const (
+	// StageBox is a rounded rectangle.
+	StageBox StageShape = iota
+	// StageChevron is a box notched on its west edge and pointed on its
+	// east edge: a step the flow passes through, as a stream processor is.
+	// It is wider than a box of the same label by the notch and the point.
+	StageChevron
 )
 
 // Port declares a named side port on a stage. Declaration order is display
@@ -62,9 +79,10 @@ type Port struct {
 
 // Stage is one processing step on the spine.
 type Stage struct {
-	ID    string // unique across stages AND endpoints; sense-region key
-	Label string // drawn text; empty means the ID is used
-	Ports []Port // named side ports; the primary west/east anchors are implicit
+	ID    string     // unique across stages AND endpoints; sense-region key
+	Label string     // drawn text; empty means the ID is used
+	Ports []Port     // named side ports; the primary west/east anchors are implicit
+	Shape StageShape // the outline; the zero value is a box
 }
 
 // Group composes children in series (the spine order) or in parallel

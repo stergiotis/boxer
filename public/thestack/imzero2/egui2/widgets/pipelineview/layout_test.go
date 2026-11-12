@@ -350,3 +350,83 @@ func TestToGraphModel(t *testing.T) {
 		t.Errorf("ToGraphModel edges = %d, want 12", len(m.Edges))
 	}
 }
+
+// nodeOf is the placed node with id.
+func nodeOf(t *testing.T, lay *Layout, id string) NodeLayout {
+	t.Helper()
+	for _, n := range lay.Nodes {
+		if n.ID == id {
+			return n
+		}
+	}
+	t.Fatalf("no node %q", id)
+	return NodeLayout{}
+}
+
+// A chevron takes its notch and its point out of the label's room, so it is
+// wider than a box of the same label by both, and its pins keep to what its
+// north and south edges share.
+func TestChevronStageIsWiderAndKeepsItsPinsOnItsEdges(t *testing.T) {
+	model := func(shape StageShape) Pipeline {
+		return Pipeline{
+			Root: Group{Children: []Element{
+				Stage{ID: "a", Label: "resample", Shape: shape, Ports: []Port{
+					{Name: "left", Class: PortArtifact}, {Name: "right", Class: PortArtifact},
+				}},
+			}},
+			Endpoints: []Endpoint{{ID: "l", Label: "l"}, {ID: "r", Label: "r"}},
+			Edges: []Edge{
+				{From: Ref{Stage: "a", Port: "left"}, To: Ref{Endpoint: "l"}},
+				{From: Ref{Stage: "a", Port: "right"}, To: Ref{Endpoint: "r"}},
+			},
+		}
+	}
+	box, chevron := mustCompute(t, model(StageBox)), mustCompute(t, model(StageChevron))
+	b, c := nodeOf(t, box, "a"), nodeOf(t, chevron, "a")
+	if c.Shape != StageChevron || b.Shape != StageBox {
+		t.Fatalf("shapes not carried: box %v, chevron %v", b.Shape, c.Shape)
+	}
+	if got, want := c.W-b.W, 2*ChevronInset; math.Abs(got-want) > 1e-9 {
+		t.Errorf("chevron is wider by %.1f, want %.1f", got, want)
+	}
+	if c.H != b.H {
+		t.Errorf("chevron height %.1f differs from the box's %.1f", c.H, b.H)
+	}
+	west, east := c.Center.X-c.W/2+ChevronInset, c.Center.X+c.W/2-ChevronInset
+	for _, pin := range chevron.Pins {
+		if pin.Pos.X <= west || pin.Pos.X >= east {
+			t.Errorf("pin %s at x=%.1f is off the chevron's straight edge (%.1f, %.1f)", pin.Port, pin.Pos.X, west, east)
+		}
+	}
+}
+
+// A queue's row of boxes sits on the node's centre line, so the node is as
+// tall over the row as under it, and never narrower than the row.
+func TestQueueEndpointCentresItsRow(t *testing.T) {
+	model := func(sublabel string) Pipeline {
+		return Pipeline{
+			Root:      Group{Children: []Element{Stage{ID: "a"}}},
+			Endpoints: []Endpoint{{ID: "q", Label: "t", Sublabel: sublabel, Kind: EndpointQueue}},
+			Edges:     []Edge{{From: Ref{Stage: "a"}, To: Ref{Endpoint: "q"}}},
+		}
+	}
+	bare, sub := nodeOf(t, mustCompute(t, model("")), "q"), nodeOf(t, mustCompute(t, model("a sublabel")), "q")
+	if bare.EKind != EndpointQueue {
+		t.Fatalf("kind not carried: %v", bare.EKind)
+	}
+	if bare.W < QueueRowWidth() {
+		t.Errorf("queue is %.1f wide, narrower than its row of %.1f", bare.W, QueueRowWidth())
+	}
+	_, lh := estimateText("t", defaultFontSize*endpointFontScale)
+	if want := QueueCellSize + 2*(lh+QueueTextGap); math.Abs(bare.H-want) > 1e-9 {
+		t.Errorf("queue height %.2f, want the row and one text line on either side, %.2f", bare.H, want)
+	}
+	if sub.H != bare.H {
+		t.Errorf("a sublabel smaller than the label changed the height: %.2f against %.2f", sub.H, bare.H)
+	}
+	// The axial edge meets the node at its centre line, where the row is.
+	a := nodeOf(t, mustCompute(t, model("")), "a")
+	if math.Abs(bare.Center.Y-a.Center.Y) > 1e-9 {
+		t.Errorf("queue centre y=%.1f is off the spine at y=%.1f", bare.Center.Y, a.Center.Y)
+	}
+}

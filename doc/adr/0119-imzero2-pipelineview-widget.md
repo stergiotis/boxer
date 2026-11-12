@@ -418,6 +418,33 @@ share a lineage of ideas, not code.
 and would make the tour capture non-deterministic, so it waits for a consumer
 that actually streams.
 
+### 2026-11-12 — Two more shapes: a chevron stage and a queue endpoint
+
+A consumer outside this repository draws message routes: stream-processor
+pipelines on the spine and, hanging from each, the topic or stream it
+writes. With one box for every stage and a parallelogram for every stream,
+a copy, a pipeline and a socket looked alike, and nothing said that a place
+holds messages in flight. Two additions, both to the glyph vocabulary of
+SD1 and neither to the closed port-class set:
+
+- **`Stage.Shape`**, `StageBox` (the zero value) or `StageChevron`: a box
+  notched on its west edge and pointed on its east edge. The layout widens
+  a chevron by the notch and the point, so its label keeps its room, and
+  spreads its pins over what its north and south edges share. The primary
+  anchors stay on the bounding box, so an incoming arrow ends at the mouth
+  of the notch and an outgoing one starts at the point.
+- **`EndpointQueue`**: a row of six small boxes, the messages of a queue.
+  The row sits on the node's centre line, where an axial edge meets it, with
+  the label over it and the sublabel under it; the node is as tall over the
+  row as under it for that reason.
+
+The geometry the painter has to share with the layout (`ChevronInset`, the
+queue's cell size, gap and count) is exported from the layout package; the
+outline and the cell positions are pure functions in `view`, pinned by
+tests. A layout without either shape is unchanged, and the golden is
+untouched. The gallery demo still draws the canned shell pipeline and shows
+neither shape.
+
 ## References
 
 ### Clean-room sources — papers (the implement-from set)
