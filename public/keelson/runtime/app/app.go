@@ -162,6 +162,24 @@ type WindowFocusI interface {
 	WindowFocused() (focused bool)
 }
 
+// WindowCloseI is the optional frame-context capability by which an app asks
+// the host to close the window it is drawn in (ADR-0370 §SD9, proposed). The
+// host closes it at the end of the frame along the path its own close takes
+// — leave, unmount, drain, unload — with reason on the lifecycle row, so an
+// app does nothing after the call that it would not do before any other
+// close. Call it from Frame.
+//
+// asked is false when the host has no window of the app's to close: a
+// single-surface host, a test fake, a pane drawn in another app's window.
+// The app then falls back to whatever it does without the capability; a
+// context that lacks the interface altogether is the same case.
+//
+// It is not a capability subject: the call reaches nothing but the caller's
+// own window, which the person can open again.
+type WindowCloseI interface {
+	CloseWindow(reason string) (asked bool)
+}
+
 // LifetimeI is the optional mount-context capability a host provides when it
 // drains an instance between Unmount and unload (ADR-0322, proposed). The
 // scope is retired with Cancel(), before Unmount; after Unmount the host

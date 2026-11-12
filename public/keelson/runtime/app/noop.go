@@ -237,11 +237,15 @@ type StaticFrameContext struct {
 	// gesture backs OperationsGestureI; nil when the host serves no catalog
 	// for this window.
 	gesture func(op string, args []byte) (result []byte, err error)
+	// closeWindow backs WindowCloseI; nil when the host has no window of
+	// the app's to close.
+	closeWindow func(reason string)
 }
 
 var _ FrameContextI = (*StaticFrameContext)(nil)
 var _ WindowFocusI = (*StaticFrameContext)(nil)
 var _ OperationsGestureI = (*StaticFrameContext)(nil)
+var _ WindowCloseI = (*StaticFrameContext)(nil)
 
 // NewStaticFrameContext wraps a MountContext with a host-supplied egui scope.
 // scope may be nil in M1; consumers that need it should error at the per-app
@@ -271,6 +275,22 @@ func (inst *StaticFrameContext) OperationGesture(op string, args []byte) (result
 	}
 	result, err = inst.gesture(op, args)
 	return
+}
+
+// SetWindowClose installs the host's close for the window carrying this
+// context (ADR-0370 §SD9, proposed); nil removes it.
+func (inst *StaticFrameContext) SetWindowClose(fn func(reason string)) {
+	inst.closeWindow = fn
+}
+
+// CloseWindow asks the host to close the window; asked is false when the
+// host installed no close.
+func (inst *StaticFrameContext) CloseWindow(reason string) (asked bool) {
+	if inst.closeWindow == nil {
+		return
+	}
+	inst.closeWindow(reason)
+	return true
 }
 
 func (inst *StaticFrameContext) EguiScope() (scope any) {

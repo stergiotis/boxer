@@ -778,6 +778,10 @@ func (inst *Inst) OpenWithConfig(appId app.AppIdT, kind string, cfg []byte) (key
 	appIds := c.NewWidgetIdStack()
 	mountCtx.SetIds(appIds)
 	frameCtx := app.NewStaticFrameContext(mountCtx, nil)
+	// The window may ask to be closed (app.WindowCloseI). Close marks the
+	// request under inst.mu, which the render loop does not hold across an
+	// app's Frame, and the window is reaped at the end of the frame.
+	frameCtx.SetWindowClose(func(reason string) { inst.Close(key, selfCloseReason(reason)) })
 	// Column-width capability (ADR-0151 M4) in the ADR-0155 §SD1 shape: an
 	// optional capability on the frame context, not a contract method. Only
 	// wrapped when a state store exists, because absence of the capability
@@ -1032,6 +1036,16 @@ func (inst *Inst) reapWindow(w *window, reason string, unmountMsg string) (cl cl
 	// drain, then unload: the caller's
 	cl.unload = append(append(cl.unload, carried...), w)
 	return
+}
+
+// selfCloseReason is the lifecycle row's reason for a window its own app
+// asked to close, so the row tells that close from the person's and from
+// the host's.
+func selfCloseReason(reason string) string {
+	if reason == "" {
+		return "self-close"
+	}
+	return "self-close: " + reason
 }
 
 func containsWindow(ws []*window, w *window) (found bool) {
