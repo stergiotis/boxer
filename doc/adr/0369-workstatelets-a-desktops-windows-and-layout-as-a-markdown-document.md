@@ -224,12 +224,12 @@ text, which is how a captured document reaches a book.
 
 ## Milestones
 
-1. **M1 — The document and the books.** Parser, writer, book registry,
+1. **M1 — The document and the books.** ✓ Parser, writer, book registry,
    minting, the kind.
-2. **M2 — The host opens one.** SD4–SD6.
-3. **M3 — Capture and the store.** SD7, SD8, the Window menu entry.
-4. **M4 — `keelson('workstatelets')`.**
-5. **M5 — A committed document and its scene.** `apps/workstatelets`; its
+2. **M2 — The host opens one.** ✓ SD4–SD6.
+3. **M3 — Capture and the store.** ✓ SD7, SD8, the Window menu entry.
+4. **M4 — `keelson('workstatelets')`.** ✓
+5. **M5 — A committed document and its scene.** ✓ `apps/workstatelets`; its
    test states the document's config in Go and compares the bytes.
 
 ## Deferred

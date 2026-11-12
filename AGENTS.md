@@ -41,6 +41,7 @@ the linked document wins.
 | See how watchbill's pieces fit, and what it serializes | [doc/explanation/watchbill-architecture.md](./doc/explanation/watchbill-architecture.md) |
 | Snapshot a file tree into ClickHouse and query it | [doc/howto/lading-snapshot-store.md](./doc/howto/lading-snapshot-store.md) |
 | Ingest a markdown vault and query its graph, tags and properties | [doc/howto/markdown-facts-obsidian-queries.md](./doc/howto/markdown-facts-obsidian-queries.md) |
+| Save the open windows and their layout as one launcher entry, or commit such a set to a book | [doc/howto/workstatelets.md](./doc/howto/workstatelets.md) |
 | Show an Arrow record as a table — sortable headers, full-cell row selection, widths that persist | [doc/howto/recordtable-grids.md](./doc/howto/recordtable-grids.md) |
 | Draw a graph over a slippy map | [doc/howto/graph-on-a-map.md](./doc/howto/graph-on-a-map.md) |
 | Draw a gridded vector field (wind, currents) on a map | [doc/howto/vector-field-on-a-map.md](./doc/howto/vector-field-on-a-map.md) |
