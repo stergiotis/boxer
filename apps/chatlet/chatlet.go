@@ -32,6 +32,7 @@ var knownKeys = map[string]struct{}{
 	"apps": {}, "questions": {}, "artefact": {}, "rounds": {},
 	"allow": {}, "changes": {}, "reach": {}, "launch": {}, "desktop": {},
 	"greeting": {}, "starters": {}, "followups": {}, "purpose": {}, "watch": {}, "view": {}, "thinking": {},
+	"stops": {},
 }
 
 // ParseDocSource reads one chatlet document into the preset it mints. topics
@@ -65,7 +66,8 @@ func ParseDocSource(bookID string, path string, src []byte, topics []app.TopicT)
 		Apps: r.flag("apps"), Questions: r.flag("questions"), Artefact: r.flag("artefact"), Launch: r.flag("launch"), Desktop: r.flag("desktop"),
 		Rounds: r.number("rounds"), Allow: r.required("allow"), Changes: r.required("changes"), Reach: r.required("reach"),
 		Greeting: r.text("greeting"), Starters: r.starters("starters"), Followups: r.starters("followups"), Purpose: r.text("purpose"), Watch: r.flag("watch"),
-		Simple: r.oneOf("view", "full", "simple"), HideThinking: r.oneOf("thinking", "shown", "hidden"), Source: string(src)}
+		Simple: r.oneOf("view", "full", "simple"), HideThinking: r.oneOf("thinking", "shown", "hidden"), Source: string(src),
+		Stops: r.stops("stops")}
 	if err = r.err; err != nil {
 		return
 	}
@@ -191,6 +193,95 @@ func (inst *reader) starters(key string) (out []chat.Starter) {
 			}
 		}
 		out = append(out, s)
+	}
+	return
+}
+
+// stops reads the scenario's stops (ADR-0370, proposed): a list of mappings,
+// each a name, an action and one kind. Unknown fields are refused, as at the
+// top level: a misspelt kind must not read as a stop that never fires.
+// Whether a stop constructs is the preset's to say (chat.Preset.Validate).
+func (inst *reader) stops(key string) (out []chat.Stop) {
+	raw, has := inst.meta[key]
+	if !has {
+		return
+	}
+	list, ok := raw.([]any)
+	if !ok {
+		inst.fail(key, "must be a list")
+		return
+	}
+	for _, e := range list {
+		fields, isMap := stringKeyed(e)
+		if !isMap {
+			inst.fail(key, "entries must be mappings with a name, a then and one kind")
+			return
+		}
+		var s chat.Stop
+		for k, v := range fields {
+			str, isStr := v.(string)
+			switch k {
+			case "name":
+				s.Name = str
+			case "then":
+				s.Then = str
+			case "after":
+				s.After = str
+			case "artefact_match":
+				s.ArtefactMatch = str
+			case "journal_match":
+				s.JournalMatch = str
+			case "tool_match":
+				s.ToolMatch = str
+			case "arguments_match":
+				s.ArgumentsMatch = str
+			case "sql":
+				s.SQL = str
+			case "artefact_bytes":
+				n, isNum := wholeNumber(v)
+				if !isNum {
+					inst.fail(key, "artefact_bytes must be a whole number")
+					return
+				}
+				s.ArtefactBytes, isStr = n, true
+			case "in":
+				kinds, isList := v.([]any)
+				if !isList {
+					inst.fail(key, "in must be a list of entry kinds")
+					return
+				}
+				for _, kind := range kinds {
+					name, isName := kind.(string)
+					if !isName {
+						inst.fail(key, "in must be a list of entry kinds")
+						return
+					}
+					s.In = append(s.In, name)
+				}
+				isStr = true
+			default:
+				inst.fail(key, "entries may not carry "+k)
+				return
+			}
+			if !isStr {
+				inst.fail(key, "field "+k+" must be a string")
+				return
+			}
+		}
+		out = append(out, s)
+	}
+	return
+}
+
+// wholeNumber reads a YAML integer, whichever type the decoder chose.
+func wholeNumber(v any) (n int, ok bool) {
+	switch t := v.(type) {
+	case int:
+		return t, true
+	case int64:
+		return int(t), true
+	case uint64:
+		return int(t), true
 	}
 	return
 }

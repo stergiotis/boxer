@@ -257,6 +257,17 @@ a composed identity:
 (proposed). Nothing above changes: the minted window is still one document's
 app.
 
+### 2026-11-12 — Stops
+
+A document may declare `stops`: named conditions that hold a turn, end it,
+end the conversation or close the window, each a query over the
+conversation's run
+([ADR-0370](./0370-stops-declared-conditions-that-hold-or-end-a-conversation-each-a-query-over-its-run.md)
+(proposed)). They are in force in every conversation of the window and the
+person cannot remove them, which is SD2's direction: a stop can only narrow.
+Like the greeting, they are not the model's to read and are outside the run's
+fingerprint. A document whose stop does not construct is refused.
+
 ## Status
 
 Accepted 2026-11-09.

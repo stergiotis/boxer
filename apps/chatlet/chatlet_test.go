@@ -216,3 +216,56 @@ func TestRegisterBook_refuses(t *testing.T) {
 	require.Error(t, RegisterBook("x", fstest.MapFS{}, nil))
 	require.Error(t, RegisterBook("chatlet", fstest.MapFS{}, testTopics), "the package's own book holds the id")
 }
+
+// A document's stops are read into the preset (ADR-0370, proposed), and a
+// stop that does not construct refuses the document: a misspelt stop must
+// not read as no stop.
+func TestStops_areReadAndAStopThatDoesNotConstructIsRefused(t *testing.T) {
+	doc := strings.Replace(validDoc, "reach: host\n", `reach: host
+stops:
+  - name: time-box
+    after: 15m
+    then: ask
+  - name: report-size
+    artefact_bytes: 200000
+    then: stop
+  - name: said
+    journal_match: 'DONE'
+    in: [reply]
+    then: end
+  - name: no-ddl
+    tool_match: '^(set_sql|query)$'
+    arguments_match: '(?i)\b(drop|alter)\b'
+    then: pause
+  - name: spend
+    sql: "SELECT turn, count() AS n FROM journal WHERE kind = 'reply' GROUP BY turn HAVING n >= 30"
+    then: close
+`, 1)
+	p, err := ParseDocSource("chatlet/test", "example.md", []byte(doc), testTopics)
+	require.NoError(t, err)
+	require.Len(t, p.Stops, 5)
+	assert.Equal(t, chat.Stop{Name: "time-box", Then: "ask", After: "15m"}, p.Stops[0])
+	assert.Equal(t, 200000, p.Stops[1].ArtefactBytes)
+	assert.Equal(t, []string{"reply"}, p.Stops[2].In)
+	assert.Equal(t, `(?i)\b(drop|alter)\b`, p.Stops[3].ArgumentsMatch)
+	assert.Equal(t, "close", p.Stops[4].Then)
+	_, err = chat.NewPreset(p)
+	require.NoError(t, err)
+
+	for name, c := range map[string]struct {
+		stops string
+		want  string
+	}{
+		"an unknown field":    {"stops:\n  - name: a\n    afterr: 15m\n    then: ask\n", "may not carry afterr"},
+		"not a list":          {"stops: 15m\n", "must be a list"},
+		"a number for a name": {"stops:\n  - name: 7\n    after: 15m\n    then: ask\n", "must be a string"},
+		"an unknown action":   {"stops:\n  - name: a\n    after: 15m\n    then: halt\n", "then must be"},
+		"no kind":             {"stops:\n  - name: a\n    then: ask\n", "exactly one of"},
+		"a file read":         {"stops:\n  - name: a\n    sql: \"SELECT * FROM file('/etc/passwd', 'LineAsString')\"\n    then: ask\n", "must only read"},
+		"a name used twice":   {"stops:\n  - name: a\n    after: 15m\n    then: ask\n  - name: a\n    after: 30m\n    then: stop\n", "share a name"},
+	} {
+		_, err = ParseDocSource("chatlet/test", "example.md", []byte(strings.Replace(validDoc, "reach: host\n", "reach: host\n"+c.stops, 1)), testTopics)
+		require.Error(t, err, name)
+		assert.Contains(t, err.Error(), c.want, name)
+	}
+}
