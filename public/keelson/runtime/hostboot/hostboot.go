@@ -7,6 +7,7 @@ import (
 	"os/signal"
 	"slices"
 	"strconv"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -69,6 +70,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/watchbill/lane"
 	"github.com/stergiotis/boxer/public/keelson/runtime/watchbill/watchbillstore"
 	"github.com/stergiotis/boxer/public/keelson/runtime/windowhost"
+	"github.com/stergiotis/boxer/public/keelson/runtime/workstatelet"
 	"github.com/stergiotis/boxer/public/observability/coverage"
 	"github.com/stergiotis/boxer/public/observability/coverage/covsnap"
 	"github.com/stergiotis/boxer/public/observability/eh"
@@ -208,6 +210,10 @@ type Options struct {
 	// Registry is the app registry the window host serves; nil is
 	// app.DefaultRegistry.
 	Registry *app.Registry
+	// Workstatelets is the catalog the window host opens workstatelet
+	// documents from and captured ones are minted into (ADR-0369,
+	// proposed); nil is workstatelet.DefaultCatalog.
+	Workstatelets *workstatelet.Catalog
 	// Services selects the optional services.
 	Services Services
 	// LaunchApps are pre-resolved apps opened without a config, best-effort
@@ -382,6 +388,9 @@ type Runtime struct {
 	// openRunning opens it on the Running tab under a filter, for a slow
 	// window's notice (ADR-0351 §SD6); nil where showRunning is.
 	openRunning func(filter string) (err error)
+	// workstateletMenu is the Window menu's "Save desktop as workstatelet"
+	// (ADR-0369 (proposed) §SD7); nil where captures cannot be stored.
+	workstateletMenu *imzhost.WorkstateletMenu
 }
 
 // Boot wires the runtime in the carousel's order (ADR-0211 §SD1): identity,
@@ -871,6 +880,14 @@ func (rt *Runtime) bootWindowHost() (err error) {
 		// The apps label by the host's declaration (cell.OfMount).
 		host.SetMountValue(cell.MountKey{}, rt.Cell)
 	}
+	// Workstatelets (ADR-0369, proposed): the host opens a minted document's
+	// windows, and where the persist service runs a capture of the desktop
+	// is stored and minted. Before the seeds below, so a workstatelet named
+	// by --launch opens.
+	host.SetWorkstatelets(rt.workstatelets())
+	if rt.Persist != nil {
+		rt.bootWorkstateletStore(host, reg, logger)
+	}
 	// The shutdown drain (ADR-0322, proposed) is cut from the grace: the
 	// signal handler forces the exit one grace after it reaps, and the
 	// drain must end well before that.
@@ -1311,6 +1328,7 @@ func (rt *Runtime) bootIntrospect() {
 		Registry:         rt.Introspect,
 		Facts:            rt.Facts,
 		PersistExec:      rt.PersistExec,
+		Workstatelets:    rt.workstatelets(),
 		Log:              logger,
 	}
 	if rt.AgentRuns != nil {
@@ -1384,6 +1402,98 @@ func (rt *Runtime) bootIntrospect() {
 	})
 }
 
+// sceneComponentPrefix begins the component mark of a host a scene launched
+// (scene.Launch sets it).
+const sceneComponentPrefix = "scene-"
+
+// workstatelets is the catalog this runtime mints into and opens from.
+func (rt *Runtime) workstatelets() (cat *workstatelet.Catalog) {
+	cat = rt.opts.Workstatelets
+	if cat == nil {
+		cat = workstatelet.DefaultCatalog
+	}
+	return
+}
+
+// workstateletMenuFor is the Window menu's save entry, offered only by a
+// chrome that has the window host the capture reads.
+func (rt *Runtime) workstateletMenuFor(host *windowhost.Inst) (menu *imzhost.WorkstateletMenu) {
+	if host != nil {
+		menu = rt.workstateletMenu
+	}
+	return
+}
+
+// bootWorkstateletStore starts the store of captured workstatelet documents
+// (ADR-0369 (proposed) §SD8) and builds the Window menu's save over it. A
+// store that does not start leaves the menu without the entry; documents of
+// committed books open either way.
+func (rt *Runtime) bootWorkstateletStore(host *windowhost.Inst, reg *app.Registry, logger zerolog.Logger) {
+	var store *workstatelet.Store
+	if strings.HasPrefix(topo.Self(), sceneComponentPrefix) {
+		// A scene's host shares the persist store of the machine it runs
+		// on. Its captures stay in the process, and the documents a person
+		// stored there are not minted into a scene's launcher.
+		store = workstatelet.NewStore(reg, rt.workstatelets(), workstatelet.NewMemoryStorage(), logger)
+	} else {
+		var err error
+		store, err = workstatelet.StartStore(reg, rt.workstatelets(), rt.Bus, logger)
+		if err != nil {
+			logger.Warn().Err(err).Msg("hostboot: workstatelet store unavailable; the desktop cannot be saved as a workstatelet")
+			return
+		}
+	}
+	var mu sync.Mutex
+	status := ""
+	setStatus := func(text string) {
+		mu.Lock()
+		status = text
+		mu.Unlock()
+	}
+	rt.workstateletMenu = &imzhost.WorkstateletMenu{
+		Save: func(title string) (saveErr error) {
+			title = strings.TrimSpace(title)
+			slug, ok := workstatelet.SlugOf(title)
+			if !ok {
+				saveErr = eh.Errorf("a title needs at least one letter or digit")
+				return
+			}
+			setStatus("Saving…")
+			host.RequestWorkstateletCapture(func(doc workstatelet.Doc, captureErr error) {
+				if captureErr != nil {
+					setStatus("Not saved: " + captureErr.Error())
+					return
+				}
+				doc.Slug, doc.Title = slug, title
+				doc.Note = "Captured from the desktop on " + time.Now().Format(time.DateOnly) + "."
+				// The persist round trip stays off the render goroutine,
+				// which is where the capture is handed over.
+				go func() {
+					id, replaced, storeErr := store.Save(doc)
+					switch {
+					case storeErr != nil:
+						logger.Warn().Err(storeErr).Str("slug", slug).Msg("hostboot: workstatelet not saved")
+						setStatus("Not saved: " + storeErr.Error())
+					case replaced:
+						logger.Info().Str("id", string(id)).Int("windows", len(doc.Windows)).Msg("hostboot: workstatelet replaced")
+						setStatus("Replaced " + id.SubjectAlias() + " (" + strconv.Itoa(len(doc.Windows)) + " windows)")
+					default:
+						logger.Info().Str("id", string(id)).Int("windows", len(doc.Windows)).Msg("hostboot: workstatelet saved")
+						setStatus("Saved as " + id.SubjectAlias() + " (" + strconv.Itoa(len(doc.Windows)) + " windows); it is in the launcher")
+					}
+				}()
+			})
+			return
+		},
+		Status: func() (text string) {
+			mu.Lock()
+			text = status
+			mu.Unlock()
+			return
+		},
+	}
+}
+
 func (rt *Runtime) chrome(extraMenus func(), host *windowhost.Inst) imzhost.ChromeConfig {
 	// Running windows opens through the window host, so a chrome without one
 	// does not offer it.
@@ -1392,12 +1502,13 @@ func (rt *Runtime) chrome(extraMenus func(), host *windowhost.Inst) imzhost.Chro
 		showRunning = rt.showRunning
 	}
 	return imzhost.ChromeConfig{
-		ExtraMenus:  extraMenus,
-		Status:      rt.Status,
-		Host:        host,
-		VideoOutput: rt.opts.VideoOutput,
-		HelpHost:    rt.opts.HelpHost,
-		ShowRunning: showRunning,
+		ExtraMenus:    extraMenus,
+		Status:        rt.Status,
+		Host:          host,
+		VideoOutput:   rt.opts.VideoOutput,
+		HelpHost:      rt.opts.HelpHost,
+		ShowRunning:   showRunning,
+		Workstatelets: rt.workstateletMenuFor(host),
 		// The launcher is bound wherever a window host exists — it is that
 		// host's own surface (ADR-0214 §SD1), not an optional service, and the
 		// only path that has no window host is the screenshot tour, which does

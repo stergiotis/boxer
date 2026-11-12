@@ -44,6 +44,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/task/supervisor"
 	"github.com/stergiotis/boxer/public/keelson/runtime/watchbill"
 	"github.com/stergiotis/boxer/public/keelson/runtime/windowhost"
+	"github.com/stergiotis/boxer/public/keelson/runtime/workstatelet"
 	"github.com/stergiotis/boxer/public/storage/recordstore"
 	"github.com/stergiotis/boxer/public/storage/recordstore/evidence/anchor"
 )
@@ -108,6 +109,10 @@ type Deps struct {
 	// whether a store was wired. Same typed-nil trap as Coverage: assign
 	// only a non-nil store.
 	State statestore.WorkingsetStoreI
+	// Workstatelets is the catalog of minted workstatelet documents, backing
+	// keelson.workstatelets (ADR-0369 (proposed) §SD8). nil is allowed and
+	// leaves that table empty.
+	Workstatelets *workstatelet.Catalog
 	// Coverage is the live coverage sampler, backing the
 	// keelson.coverage_* tables (ADR-0169 §SD5). nil is allowed — an
 	// uninstrumented build leaves the tables empty rather than absent, so
@@ -239,6 +244,11 @@ func Start(deps Deps) (stop func(context.Context) error, err error) {
 	// store answers with an empty table, so the table name is always there.
 	if e := introspectproviders.RegisterWorkingsets(reg, deps.State); e != nil {
 		deps.Log.Warn().Err(e).Msg("introspecthost: workingsets provider registration failed")
+	}
+	// ADR-0369 (proposed) §SD8: the minted workstatelet documents.
+	// Registered unconditionally — a nil catalog answers with an empty table.
+	if e := introspectproviders.RegisterWorkstatelets(reg, deps.Workstatelets); e != nil {
+		deps.Log.Warn().Err(e).Msg("introspecthost: workstatelets provider registration failed")
 	}
 	// ADR-0191 §SD7: this run's own event trail, read through the facts
 	// store that wrote it and the persist store beside it. Registered

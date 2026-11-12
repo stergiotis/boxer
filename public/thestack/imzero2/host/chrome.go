@@ -60,6 +60,22 @@ type ChromeConfig struct {
 	// window with what it costs (ADR-0348). Host boot sets it where the app
 	// center can be launched. May be nil.
 	ShowRunning func() (err error)
+	// Workstatelets, when non-nil, puts "Save desktop as workstatelet" in the
+	// Window menu (ADR-0369, proposed). Host boot sets it where captured
+	// documents can be stored. May be nil.
+	Workstatelets *WorkstateletMenu
+}
+
+// WorkstateletMenu is what the Window menu's "Save desktop as workstatelet"
+// calls (ADR-0369 (proposed) §SD7).
+type WorkstateletMenu struct {
+	// Save asks for a capture of the open windows, stored under title. It
+	// returns once the capture is queued, with an error for a title that
+	// cannot name a document; the outcome of the capture is Status.
+	Save func(title string) (err error)
+	// Status is the last save's outcome in a line of text, empty before the
+	// first one.
+	Status func() (text string)
 }
 
 // DecorateRenderer wraps an inner renderer in the shared host chrome:
@@ -110,6 +126,11 @@ func DecorateRenderer(inner func() error, cc ChromeConfig) func() error {
 	videoState := &videooutput.State{}
 	// The frame-rate inspector's pinned state, owned here as the widget asks.
 	fpsState := &distsummary.State{}
+	// The title typed into Window ▸ Save desktop as workstatelet, at one
+	// address across frames as a bound text field needs, and what Save
+	// answered on the click.
+	workstateletTitle := new(string)
+	workstateletRefusal := ""
 	return func() error {
 		// F1 global shortcut: open or raise HelpHost. The cached value
 		// was drained from egui's input queue during StateManager.Sync
@@ -290,6 +311,35 @@ func DecorateRenderer(inner func() error, cc ChromeConfig) func() error {
 					// re-places each one from its defaults.
 					if c.Button(ids.PrepareStr("arrangeWindows"), c.Atoms().Text("Reset window positions").Keep()).SendResp().HasPrimaryClicked() {
 						c.MemoryResetAreas()
+					}
+					// The open windows and the layout as one document, listed
+					// in the launcher from then on (ADR-0369 (proposed) §SD7).
+					if cc.Workstatelets != nil {
+						c.Separator().Horizontal().Send()
+						for range c.MenuButton(c.Atoms().Text("Save desktop as workstatelet").Keep()).KeepIter() {
+							for range c.IdScope(ids.PrepareStr("workstatelet")) {
+								c.TextEdit(ids.PrepareStr("title"), *workstateletTitle, false).
+									HintText("Title").
+									AccessibleName("Workstatelet title").
+									DesiredWidth(220).
+									SendRespVal(workstateletTitle)
+								// The button is drawn whatever the title holds; an
+								// empty title is refused by Save, with the reason.
+								if c.Button(ids.PrepareStr("save"), c.Atoms().Text("Save").Keep()).SendResp().HasPrimaryClicked() {
+									workstateletRefusal = ""
+									if err := cc.Workstatelets.Save(*workstateletTitle); err != nil {
+										workstateletRefusal = err.Error()
+									}
+								}
+								status := workstateletRefusal
+								if status == "" && cc.Workstatelets.Status != nil {
+									status = cc.Workstatelets.Status()
+								}
+								if status != "" {
+									c.Label(status).Wrap().Send()
+								}
+							}
+						}
 					}
 					if cc.Host != nil {
 						// Every agent's marks at once; a task's own
