@@ -247,6 +247,14 @@ An unattended mode, compiled in by a build tag, lets the host decide grant
 requests within a ceiling the person preset
 ([ADR-0298](../adr/0298-an-unattended-mode-the-host-decides-within-preset-bounds.md)).
 
+A fourth, proposed, is the conversation's own and not the host's: a
+chat or a chatlet may carry **stops**, named queries over the conversation's
+run that hold its turn, end it, end the conversation or close its window when
+they return rows the person has not acknowledged
+([ADR-0370](../adr/0370-stops-declared-conditions-that-hold-or-end-a-conversation-each-a-query-over-its-run.md)).
+A stop reads the words the moderator is not given; it grants nothing and is
+no safeguard against a model that means to avoid it.
+
 ### 11. A conversation has a workspace
 
 Beside the transcript, a conversation may hold an **artefact**: one
