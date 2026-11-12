@@ -644,6 +644,19 @@ names a substrate rather than a table. Records saved before the move stay on
 facts as trail and are not restored; ADR-0105 records why the maintainer
 accepted that once.
 
+## Update — 2026-11-12: a named desktop is a document, not a named workingset
+
+[ADR-0369](./0369-workstatelets-a-desktops-windows-and-layout-as-a-markdown-document.md)
+(proposed) takes up part of two deferrals above by another route. A
+workstatelet document lists windows, each with the bytes its app composes
+here, and the layout they take; the host writes one from the open desktop
+and opens one on request. The store's name dimension (§SD3) is not used for
+it: the bytes are carried in the document, and `default` stays the only
+name written.
+
+What stays deferred, unchanged: the desktop reopened at boot without being
+asked, the named-set picker over stored records, and window geometry.
+
 ## Status
 
 Accepted (2026-07-29). Implemented 2026-07-29.

@@ -503,6 +503,16 @@ learns the minimums afresh. Cycling the layout (Alt+Space twice) is the
 by-hand remedy. `TestSceneTiledDesktop` types into a window under Rows and
 asserts its row grew and the rows stayed an even line.
 
+### 2026-11-12 — a document can carry the layout, the order and the float set
+
+§SD7 leaves the layout, the order and the float set session-scoped. A
+workstatelet document
+([ADR-0369](./0369-workstatelets-a-desktops-windows-and-layout-as-a-markdown-document.md),
+proposed) names a layout and its parameters, lists its windows in order and
+marks the floating ones; opening it sets all three for its windows, and a
+capture of the desktop writes them. Nothing is kept or restored without that
+document, so the choice is still session-scoped.
+
 ## References
 
 - [ADR-0026](./0026-app-runtime-and-capability-subjects.md) — one viewport; the docking revert of 2026-05-13.
