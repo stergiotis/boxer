@@ -2469,6 +2469,248 @@ The Series toolbar's **Change points** menu writes these CTEs for you, around
 a `base` you fill in. It holds no settings and runs nothing: what you pick
 becomes SQL in the buffer.
 
+The sections below take one question each. Every series is generated, so each
+runs against any server, and the counts quoted are what that series gives.
+
+### A change in spread, with the level unmoved
+
+The level stays at 10 and the noise widens at sample 300. A cost that fits a
+variance per segment reports that one change.
+
+```sql
+WITH
+  base AS (
+    SELECT toDateTime64('2026-01-01 00:00:00', 3, 'UTC') + toIntervalMinute(number) AS t,
+           10 + if(number < 300, 0.3, 2) * ((sipHash64(number) % 2000) / 1000 - 1) AS v
+    FROM numbers(600)
+    ORDER BY t
+  ),
+  spans AS (SELECT tsPeltMeanVar(t, v, 30, 1) FROM base)
+SELECT * FROM base
+```
+
+Replace `tsPeltMeanVar` with `tsPeltMean` and the answer is six changes, all in
+the loud half. The mean cost measures every segment against one noise scale,
+so wide noise reads as a level that keeps moving. Neither function says which
+kind of change it found; the `spread` column of each band does.
+
+### Outliers that are not changes
+
+One shift, at sample 300, and about one sample in forty thrown 25 units high.
+
+```sql
+WITH
+  base AS (
+    SELECT toDateTime64('2026-01-01 00:00:00', 3, 'UTC') + toIntervalMinute(number) AS t,
+           if(number < 300, 10, 12) + (sipHash64(number) % 2000) / 1000 - 1
+             + if(sipHash64(number, 1) % 40 = 0, 25, 0) AS v
+    FROM numbers(600)
+    ORDER BY t
+  ),
+  spans AS (SELECT tsPeltRank(t, v, 5, 1) FROM base)
+SELECT * FROM base
+```
+
+`tsPeltRank` reports the one shift. `tsPeltMean` on the same series reports
+eighteen changes, most of them a short segment fenced around a spike: a spike
+is far cheaper to explain as a regime of its own than as noise. The rank cost
+pays for that with what it cannot see, a change in spread around an unchanged
+median.
+
+### What a monitor would have alarmed on, and how late
+
+The two-shift series again, read the way a monitor reads it: one sample at a
+time, with nothing after it.
+
+```sql
+WITH
+  base AS (
+    SELECT toDateTime64('2026-01-01 00:00:00', 3, 'UTC') + toIntervalMinute(number) AS t,
+           multiIf(number < 200, 10, number < 420, 14, 11)
+             + (sipHash64(number) % 2000) / 1000 - 1 AS v
+    FROM numbers(600)
+    ORDER BY t
+  ),
+  scores AS (SELECT tsCusumScores(t, v, 60) FROM base),
+  spans  AS (SELECT tsCusumAlarms(t, v, 60) FROM base)
+SELECT * FROM base
+```
+
+Each band runs from where the chart places the change to the sample that
+raised the alarm, so its width is the detection delay; `delay` carries it in
+samples. There are three alarms for two shifts. The first, at 01:44, is on
+plain noise, and it is the caption's caveat made visible: the mean and scale
+were estimated from sixty samples. The rows under the caption take a
+**confirm** or **false alarm** for each, as they do for anomaly spans. After
+every alarm the chart re-estimates for another `warmup` samples and sees
+nothing meanwhile, which the shading shows.
+
+### The probability that a change just happened
+
+`tsBocpdScores` answers in a probability instead of a statistic against a
+threshold: how likely it is that the current regime began within the last
+`lag` samples.
+
+```sql
+WITH
+  base AS (
+    SELECT toDateTime64('2026-01-01 00:00:00', 3, 'UTC') + toIntervalMinute(number) AS t,
+           multiIf(number < 200, 10, number < 420, 14, 11)
+             + (sipHash64(number) % 2000) / 1000 - 1 AS v
+    FROM numbers(600)
+    ORDER BY t
+  ),
+  scores AS (SELECT tsBocpdScores(t, v, 250, 10) FROM base)
+SELECT * FROM base
+```
+
+The score sits near 0, rises to 1 within a few samples of each shift and
+falls back once the new regime is more than `lag` samples old. Near the end it
+rises partway on noise and withdraws, which a segmentation never shows: a
+causal detector can change its mind. `expectedRun` is the prior on how often
+regimes change. A smaller one makes the score quicker and jumpier.
+
+### Shifts at a chosen time scale
+
+MOSUM compares the mean of the `bandwidth` samples before each position with
+the mean of those after it. The bandwidth is the question: it finds changes
+that are at least that far apart and large against noise averaged over it.
+
+```sql
+WITH
+  base AS (
+    SELECT toDateTime64('2026-01-01 00:00:00', 3, 'UTC') + toIntervalMinute(number) AS t,
+           multiIf(number < 200, 10, number < 420, 14, 11)
+             + (sipHash64(number) % 2000) / 1000 - 1 AS v
+    FROM numbers(600)
+    ORDER BY t
+  ),
+  scores AS (SELECT tsMosumScores(t, v, 40) FROM base),
+  spans  AS (SELECT tsMosumSegments(t, v, 40) FROM base)
+SELECT * FROM base
+```
+
+The statistic peaks at each shift, the line across it is the 5% critical
+value, and `spans` holds the segments between the peaks that cross it. The
+first and last `bandwidth` samples are shaded: no window fits there, so a
+change that close to either end is not looked for.
+
+### A penalty you can turn
+
+A clear shift at sample 200 and a faint one, a third of a unit, at 400. The
+penalty is a slot, bound by the `SET` line.
+
+```sql
+SET param_penalty = 1;
+WITH
+  base AS (
+    SELECT toDateTime64('2026-01-01 00:00:00', 3, 'UTC') + toIntervalMinute(number) AS t,
+           multiIf(number < 200, 10, number < 400, 12, 12.35)
+             + (sipHash64(number) % 2000) / 1000 - 1 AS v
+    FROM numbers(600)
+    ORDER BY t
+  ),
+  spans AS (SELECT tsPeltMean(t, v, 5, {penalty:Float64}) FROM base)
+SELECT * FROM base
+```
+
+At 1 both shifts are reported. Set it to 4 and the faint one is gone. Neither
+answer is wrong: the faint shift is in the data, and it is also the size of
+thing a stricter penalty is meant to ignore. Remove the `SET` line and
+`penalty` is a signal, set from the Graph tab's **signals** section, which
+re-runs the analysis without touching the buffer.
+
+### A series with no changes that reports forty-five
+
+A random walk: each sample is the one before plus noise. It has no change in
+level anywhere, because it has no level.
+
+```sql
+WITH
+  base AS (
+    SELECT toDateTime64('2026-01-01 00:00:00', 3, 'UTC') + toIntervalMinute(number) AS t,
+           sum((sipHash64(number) % 2000) / 1000 - 1) OVER (ORDER BY number) AS v
+    FROM numbers(600)
+    ORDER BY t
+  ),
+  spans AS (SELECT tsPeltMean(t, v, 5, 1) FROM base)
+SELECT * FROM base
+```
+
+`tsPeltMean` reports forty-five changes, and the bands look as convincing as
+the ones above. This is the independence assumption failing, and every
+function in the family fails the same way. The remedy belongs in `base`.
+Differencing the same walk leaves its steps, which are independent:
+
+```sql
+WITH
+  base AS (
+    SELECT t, w - lagInFrame(w, 1, w) OVER (ORDER BY t) AS v
+    FROM (
+      SELECT toDateTime64('2026-01-01 00:00:00', 3, 'UTC') + toIntervalMinute(number) AS t,
+             sum((sipHash64(number) % 2000) / 1000 - 1) OVER (ORDER BY number) AS w
+      FROM numbers(600)
+    )
+    ORDER BY t
+  ),
+  spans AS (SELECT tsPeltMean(t, v, 5, 1) FROM base)
+SELECT * FROM base
+```
+
+One segment, no change. On a series of your own, a change count that falls
+apart under differencing, or under aggregation to a coarser grid, was
+describing the wander.
+
+### A long series
+
+Two hundred thousand samples, with the level alternating every forty
+thousand. That is past the row ceiling of every PELT function.
+
+```sql
+WITH
+  base AS (
+    SELECT toDateTime64('2026-01-01 00:00:00', 3, 'UTC') + toIntervalSecond(number) AS t,
+           10 + 3 * (intDiv(number, 40000) % 2)
+             + (sipHash64(number) % 2000) / 1000 - 1 AS v
+    FROM numbers(200000)
+    ORDER BY t
+  ),
+  spans AS (SELECT tsBinSegMean(t, v, 5, 1) FROM base)
+SELECT * FROM base
+```
+
+Binary segmentation finds the four changes. It splits greedily, best split
+first, so it is not guaranteed the optimum PELT is: a short excursion can
+sit unseen between two splits that each looked worse than leaving it alone.
+`tsMosumSegments` is the other function that takes a series this long.
+
+### A real series: queries per minute
+
+The same question of the server's own query log, filled to a regular grid
+first so that a quiet minute is a zero and not a missing row.
+
+```sql
+WITH
+  base AS (
+    SELECT t, v
+    FROM (
+      SELECT toDateTime64(toStartOfMinute(event_time), 3) AS t, count() AS v
+      FROM system.query_log
+      WHERE event_time > now() - INTERVAL 12 HOUR
+      GROUP BY t
+    )
+    ORDER BY t WITH FILL STEP INTERVAL 1 MINUTE
+  ),
+  spans AS (SELECT tsPeltRank(t, v, 10, 1) FROM base)
+SELECT * FROM base
+```
+
+The rank cost is the choice here because a count per minute is skewed and
+bursty, and `minSegment` 10 says a regime shorter than ten minutes is not one.
+What comes back depends on the server. Query counts are also autocorrelated
+and often periodic, so read the bands with the random walk above in mind, and
+aggregate to a coarser grid before trusting a count.
+
 ## Reading a client node, and why the sink cannot
 
 A `ts*` CTE is a **terminal leaf**: its output never exists as SQL, so nothing
