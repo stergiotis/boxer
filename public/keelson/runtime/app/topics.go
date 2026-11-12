@@ -111,6 +111,11 @@ const (
 	// KindChatlet is an app minted from a committed chatlet document
 	// (ADR-0364, proposed). Stamped by the minter, never hand-written.
 	KindChatlet KindE = 3
+	// KindWorkstatelet is a launcher entry minted from a workstatelet
+	// document (ADR-0369, proposed). It has no window of its own: the window
+	// host opens the windows its document lists. Stamped by the minter,
+	// never hand-written.
+	KindWorkstatelet KindE = 4
 )
 
 var AllKinds = []KindE{
@@ -118,6 +123,7 @@ var AllKinds = []KindE{
 	KindApplet,
 	KindDemo,
 	KindChatlet,
+	KindWorkstatelet,
 }
 
 // String renders the kind as its wire/display token.
@@ -129,6 +135,8 @@ func (inst KindE) String() (s string) {
 		s = "demo"
 	case KindChatlet:
 		s = "chatlet"
+	case KindWorkstatelet:
+		s = "workstatelet"
 	default:
 		s = "app"
 	}
@@ -139,6 +147,6 @@ func (inst KindE) String() (s string) {
 // value is valid — an app that declares no kind is an ordinary app, which is
 // the common case and should not need a line in every manifest.
 func (inst KindE) IsValid() (ok bool) {
-	ok = inst == KindApp || inst == KindApplet || inst == KindDemo || inst == KindChatlet
+	ok = inst == KindApp || inst == KindApplet || inst == KindDemo || inst == KindChatlet || inst == KindWorkstatelet
 	return
 }

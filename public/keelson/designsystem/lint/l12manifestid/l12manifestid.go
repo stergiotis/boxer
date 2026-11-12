@@ -69,6 +69,10 @@ var AllowedSpecialIds = map[string]bool{
 	// reading the declaring package's import path and correctly finding they
 	// differ; what was wrong was the list, not the constant.
 	"runtime.appletstore": true,
+	// runtime.workstatelet — the workstatelet store (ADR-0369, proposed): a
+	// bus client and a persist namespace under this id, as the applet
+	// store has.
+	"runtime.workstatelet": true,
 	// runtime.watchbill — the durable-work worker (ADR-0223). A host-side
 	// runtime service like every entry above: hostboot mints its bus client
 	// under this id, and its two subjects are NATS-aligned, so the id is a

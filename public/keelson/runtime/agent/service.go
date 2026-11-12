@@ -301,6 +301,11 @@ func (inst *Service) describe(msg *app.Msg) (rep wireDescribeReply, req wireDesc
 		if req.App != "" && !matchesApp(m, req.App) {
 			continue
 		}
+		// A workstatelet is not an app a task can open or operate: a launch
+		// refuses it (ADR-0369 (proposed) §SD5).
+		if m.Kind == app.KindWorkstatelet {
+			continue
+		}
 		// An applet or a chatlet only when named or searched for: a build
 		// mints dozens of applets, each with play's operable subset, a
 		// chatlet carries the chat's catalog, and the whole list is the

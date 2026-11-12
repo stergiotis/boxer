@@ -402,6 +402,12 @@ func (inst *Inst) renderRowBadges(ids *c.WidgetIdStack, m app.Manifest, isOpen b
 			Size(badge.SizeSm).
 			Tooltip("the chat, specialised by a committed document").
 			Send()
+	case app.KindWorkstatelet:
+		badge.New(ids.PrepareStr(key("kind")), "workstatelet").
+			Tone(badge.ToneInfo).
+			Size(badge.SizeSm).
+			Tooltip("opens the windows a document lists, in the layout it names").
+			Send()
 	case app.KindDemo:
 		badge.New(ids.PrepareStr(key("kind")), "demo").
 			Tone(badge.ToneNeutral).

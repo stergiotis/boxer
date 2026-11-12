@@ -612,6 +612,8 @@ func kindLabel(k app.KindE) (s string) {
 		s = "Applets"
 	case app.KindChatlet:
 		s = "Chatlets"
+	case app.KindWorkstatelet:
+		s = "Workstatelets"
 	case app.KindDemo:
 		s = "Demos"
 	default:

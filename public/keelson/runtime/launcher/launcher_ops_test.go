@@ -96,11 +96,11 @@ func TestSetFilterSetsWholeAndRefusesUnknownNames(t *testing.T) {
 		assert.True(t, f.kinds.shows(app.KindApp))
 		assert.Equal(t, []string{"sql"}, selectedTopicNames(f.topics))
 	}
-	assert.Equal(t, []bool{true, false, false, false}, w.inst.kindShown, "the checkboxes follow the command")
+	assert.Equal(t, []bool{true, false, false, false, false}, w.inst.kindShown, "the checkboxes follow the command")
 
 	require.NoError(t, command(t, w, opSetFilter, SetFilterArgs{}))
 	assert.Equal(t, filterT{}, w.inst.filterState(), "empty kinds show all, empty topics restrict nothing")
-	assert.Equal(t, []bool{true, true, true, true}, w.inst.kindShown)
+	assert.Equal(t, []bool{true, true, true, true, true}, w.inst.kindShown)
 
 	assert.Contains(t, refusal(command(t, w, opSetFilter, SetFilterArgs{Kinds: []string{"widget"}})).Reason, "app, applet, demo")
 	assert.Contains(t, refusal(command(t, w, opSetFilter, SetFilterArgs{Topics: []string{"nope"}})).Reason, "runtime, code")
