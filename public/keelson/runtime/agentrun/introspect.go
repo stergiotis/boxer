@@ -153,6 +153,16 @@ func entriesTable(rows []Entry) *introspect.Table {
 		String("attachments", func(i int) string { return rows[i].Attachments })
 }
 
+// EntriesArrow is entries as an Arrow file in the columns of
+// keelson('agent_run_entries'): one table definition, so a statement
+// written against a run's entries in a local worker (ADR-0370, proposed)
+// reads the same relation a reader of the introspection table does.
+func EntriesArrow(entries []Entry) (b []byte, err error) {
+	rec := entriesTable(entries).Build(introspect.Projection{}, len(entries))
+	defer rec.Release()
+	return introspect.EncodeFile(rec)
+}
+
 // commitmentsList spells an entry's commitments in component order.
 func commitmentsList(commitments map[string]string) (out []string) {
 	for _, component := range componentOrder {
