@@ -348,7 +348,7 @@ func (inst *Inst) renderAppRow(ids *c.WidgetIdStack, et c.EndETableFluid, rowIdx
 	// could disagree.
 	if flags.HasDoubleClicked() {
 		inst.cursor = rowIdx
-		inst.open(m.Id)
+		inst.launch(m.Id)
 		return
 	}
 	if flags.HasPrimaryClicked() {

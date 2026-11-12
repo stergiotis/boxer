@@ -484,6 +484,22 @@ func (inst *Registry) LimitLaunches(allowed []AppIdT) {
 	inst.rebuildLaunchable()
 }
 
+// Singleton reports whether id was registered with Register (one AppI for
+// every Open) rather than RegisterFactory; ok is false when id is not
+// registered. A second window of a singleton shows the same instance, so a
+// caller choosing between a new window and a raise asks this.
+func (inst *Registry) Singleton(id AppIdT) (singleton bool, ok bool) {
+	inst.mu.RLock()
+	defer inst.mu.RUnlock()
+	idx, exists := inst.byId[id]
+	if !exists {
+		return
+	}
+	singleton = inst.entries[idx].singleton
+	ok = true
+	return
+}
+
 // Launchable reports whether a window of id may be opened under the launch
 // limit. It does not say whether id is registered.
 func (inst *Registry) Launchable(id AppIdT) (ok bool) {

@@ -24,7 +24,8 @@
 //
 // This package does not import windowhost (§SD3). The windowhost renders the
 // component for its empty-state pane, so the dependency must run one way; what
-// the launcher needs of a host — open-or-raise, and which apps have windows —
+// the launcher needs of a host — open a new window, open-or-raise, and which
+// apps have windows —
 // it declares as [HostI] and receives at construction. windowhost supplies an
 // adapter.
 package launcher

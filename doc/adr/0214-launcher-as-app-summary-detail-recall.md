@@ -427,6 +427,31 @@ trace named in the verification plan is a follow-up.
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers.
 
+## Updates
+
+### 2026-11-12 — the default action follows the registration: a new window for a factory app, a raise for a singleton
+
+SD10 made open-or-raise the default for every app. In use, the default
+surprised people the other way: picking an app that already had a window
+brought that window back when they had asked for another, and the second
+window was a click away in the detail pane only. The registration already
+says which answer is right. A factory-registered app (`RegisterFactory`)
+gets a fresh instance per window, so a second window is a second working
+copy. A singleton (`Register`) shows the same instance in every window,
+so a second one is a duplicate view of shared state, which is what SD10
+called a bug.
+
+The launcher's default action — the Apps menu's recents, a row's double
+click, Enter, and the detail pane's primary button — now opens a new
+window for a factory app and raises a singleton's window when it has one
+(`app.Registry.Singleton`). The detail pane names what the primary button
+will do: Open with no window, New window for a factory app with one, and
+Raise for a singleton with one. A factory app with a window also shows a
+Raise button. A singleton is no longer offered a New window button, since
+its second window shares the instance. The launcher's own window, from
+"Browse all apps…", and the help center stay open-or-raise: they are
+helpers the launcher reaches for, not apps the person picked.
+
 ## References
 
 - [ADR-0158](./0158-app-classification-topics-keywords-kind.md) — topics,

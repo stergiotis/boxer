@@ -22,12 +22,13 @@ import (
 // be the importing side. windowhost supplies the adapter.
 type HostI interface {
 	// OpenOrRaiseApp opens appId, or raises its window when one is already
-	// open. Raise-rather-than-open is the launcher's default action (§SD10):
-	// a second click on a visible app used to open a silent duplicate.
+	// open. It is the launcher's action for a singleton app, whose second
+	// window would show the same instance, and for the windows the launcher
+	// opens as helpers (itself, the help center).
 	OpenOrRaiseApp(appId app.AppIdT) (err error)
 	// OpenNewApp opens a further window for appId even when one already
-	// exists: the explicit verb for a second instance, so the default action
-	// can stay raise without making duplicates unreachable.
+	// exists. It is the launcher's action for a factory-registered app
+	// (ADR-0214 §Updates 2026-11-12): each window is its own instance.
 	OpenNewApp(appId app.AppIdT) (err error)
 	// OpenAppIds reports which apps currently hold a window, for the row's
 	// "open" badge. Order is not meaningful; the launcher builds a set.
@@ -251,7 +252,7 @@ func (inst *Inst) renderListPane(ids *c.WidgetIdStack) {
 	// Acted on after the rows are drawn: opening a window mutates the host,
 	// and the row that asked for it should already be on screen when it does.
 	if openIdx >= 0 && openIdx < len(rows) && rows[openIdx].heading == "" {
-		inst.open(rows[openIdx].m.Id)
+		inst.launch(rows[openIdx].m.Id)
 	}
 }
 
@@ -507,8 +508,46 @@ func (inst *Inst) emptyResultHint() (s string) {
 	return
 }
 
-// open runs the launcher's default action for one app (§SD10): raise the
-// window when one exists, open one when it does not.
+// launch runs the launcher's default action for an app the person picked
+// (ADR-0214 §Updates 2026-11-12): a factory-registered app opens a new
+// window, since each window is its own instance; a singleton raises its
+// window when it has one, since a second would show the same instance.
+func (inst *Inst) launch(id app.AppIdT) {
+	if inst.registry != nil {
+		if singleton, ok := inst.registry.Singleton(id); ok && !singleton {
+			inst.openNew(id)
+			return
+		}
+	}
+	inst.open(id)
+}
+
+// launchVerbE names what launch will do to an app, for the label of the
+// control that runs it.
+type launchVerbE uint8
+
+const (
+	launchVerbOpen launchVerbE = iota
+	launchVerbRaise
+	launchVerbNewWindow
+)
+
+// launchVerb reports what launch does for id given whether it has a window.
+func (inst *Inst) launchVerb(id app.AppIdT, isOpen bool) (verb launchVerbE) {
+	if !isOpen {
+		return launchVerbOpen
+	}
+	if inst.registry != nil {
+		if singleton, ok := inst.registry.Singleton(id); ok && !singleton {
+			return launchVerbNewWindow
+		}
+	}
+	return launchVerbRaise
+}
+
+// open raises id's window when one exists and opens one when it does not.
+// It is launch's action for a singleton and the launcher's action for its
+// helper windows.
 func (inst *Inst) open(id app.AppIdT) {
 	if inst.host == nil {
 		inst.logger.Warn().Str("id", string(id)).

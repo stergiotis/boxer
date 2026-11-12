@@ -39,7 +39,7 @@ func (inst *Inst) RenderMenu(ids *c.WidgetIdStack) {
 			}
 			if c.Button(ids.PrepareStr("menu-recent-"+string(m.Id)), c.Atoms().Text(label).Keep()).
 				SendResp().HasPrimaryClicked() {
-				inst.open(m.Id)
+				inst.launch(m.Id)
 			}
 		}
 		if len(recents) > 0 {

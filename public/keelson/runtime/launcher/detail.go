@@ -93,22 +93,30 @@ func (inst *Inst) renderDetailHead(ids *c.WidgetIdStack, m app.Manifest) {
 // selection colours exactly while the button was armed.
 func (inst *Inst) renderDetailActions(ids *c.WidgetIdStack, m app.Manifest) {
 	_, isOpen := inst.openAppSet()[m.Id]
+	// The primary button is the launch action Enter and a double click run;
+	// a factory app with a window also offers Raise, so reaching the window
+	// already open stays one click (ADR-0214 §Updates 2026-11-12).
+	verb := inst.launchVerb(m.Id, isOpen)
 	label := icons.PhArrowSquareOut + " Open"
 	hint := "Enter opens"
-	if isOpen {
+	switch verb {
+	case launchVerbRaise:
 		label = icons.PhArrowSquareOut + " Raise"
 		hint = "Enter raises"
+	case launchVerbNewWindow:
+		label = icons.PhPlus + " New window"
+		hint = "Enter opens a new window"
 	}
 	for range c.Horizontal().KeepIter() {
 		if c.Button(ids.PrepareStr("detail-open"), c.Atoms().Text(label).Keep()).
 			Kind(c.ButtonKindPrimary).
 			SendResp().HasPrimaryClicked() {
-			inst.open(m.Id)
+			inst.launch(m.Id)
 		}
-		if isOpen {
-			if c.Button(ids.PrepareStr("detail-open-new"), c.Atoms().Text(icons.PhPlus+" New window").Keep()).
+		if verb == launchVerbNewWindow {
+			if c.Button(ids.PrepareStr("detail-raise"), c.Atoms().Text(icons.PhArrowSquareOut+" Raise").Keep()).
 				SendResp().HasPrimaryClicked() {
-				inst.openNew(m.Id)
+				inst.open(m.Id)
 			}
 		}
 		if inst.helpAppId != "" && inst.hasHelp(m) && inst.registry.Launchable(inst.helpAppId) {
