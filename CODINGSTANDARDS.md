@@ -24,6 +24,13 @@ This carries a few obligations:
 *   **Keep `main` buildable.** CI runs on every push (see [§1 of ENGINEERING_PRACTICES.md](./doc/ENGINEERING_PRACTICES.md#1-ci-surface)), so each commit should compile and pass the default test and lint gates under the active build tags. A change that spans several files lands as one self-contained commit rather than a sequence that leaves intermediate `HEAD`s broken.
 *   **State lives in front-matter, not branches.** Draft and stable documents — and `proposed` vs. `accepted` ADRs — coexist on `main`, distinguished by their front-matter `status` (and a draft banner), never by branch. See [doc/DOCUMENTATION_STANDARD.md](./doc/DOCUMENTATION_STANDARD.md).
 *   **Small, focused commits.** Review is continuous rather than gated at a merge boundary, so each commit stays scoped to one concern and carries its rationale in the message.
+*   **Subjects carry a type.** A commit subject reads `type(scope): summary`, for example `feat(recordtable): group the rows`.
+    *   The **type** is one of `feat` (adds behaviour), `fix` (corrects it), `refactor` (changes neither), `perf`, `test`, `docs`, `build`, `ci`, `style`, `chore` (maintenance with no change in behaviour or prose, such as a regeneration or a dependency bump), or `wip` (an unfinished step that a later commit completes; it still leaves `main` buildable). An ADR, a how-to or a skill is `docs`, and a new lint rule is a `feat` of its linter.
+    *   The **scope** is the package, app or subsystem changed. Two that move together are comma-separated (`feat(chat,attention): …`); a change with no single home leaves the scope out (`docs: …`) and keeps the type.
+    *   A change that breaks an interface, a wire or stored shape, or a variable someone sets carries **`!` before the colon** (`refactor(db)!: …`), whatever its type. The body says what breaks and what a caller does about it.
+    *   A commit that seems to need two types is usually two commits. Where it cannot be split, it takes the type of its main effect rather than none.
+
+    The [changelog](./doc/changelog/README.md) selects a window's features and breaking changes by these markers, so a subject without a type, or a break without `!`, drops out of that selection and has to be found by reading.
 
 The "no PR branches" assumption is shared with the [documentation standard](./doc/DOCUMENTATION_STANDARD.md) and suits a small, AI-assisted team where review happens as work lands rather than at a merge gate.
 

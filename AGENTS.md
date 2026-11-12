@@ -101,6 +101,11 @@ one concurrent agent session against a single git index, so `git add -A` can rac
 and clobber another session's staged work. Scope every commit to the files you
 changed: `git commit -- <paths>` (or `git add <paths>` first).
 
+**Type every commit subject.** `type(scope): summary`, with `!` before the
+colon on a breaking change. Follow the rule, not the last few subjects in
+`git log`. The types, the scope rules and what counts as breaking:
+[CODINGSTANDARDS § Version Control](./CODINGSTANDARDS.md#version-control).
+
 **Don't commit unless asked.** Leave changes in the working tree for review.
 
 ## Design before code
