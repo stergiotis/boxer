@@ -20,7 +20,7 @@ import (
 //
 // The context components lead: every row carries Origin, so it leads each
 // entity's archetype. The store binds the facts canonical wire encoder
-// (CanonWire), the preimage of the seals ADR-0327 (proposed) §SD5 adds.
+// (CanonWire), the preimage of the seals ADR-0327 §SD5 adds.
 func TestGenerateTrailStore(t *testing.T) {
 	ids, err := storegen.MembershipIds(vocab.NkRegistry)
 	require.NoError(t, err)

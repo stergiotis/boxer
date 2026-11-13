@@ -11,7 +11,7 @@ var BrowserTargetDir = env.NewPath(env.Spec{
 })
 
 // HostURL is where `bundle` fetches the browser host by digest: the base URL a
-// file named <sha256>.wasm is appended to (ADR-0278 SD5, proposed).
+// file named <sha256>.wasm is appended to (ADR-0278 SD5).
 var HostURL = env.NewString(env.Spec{
 	Name:        "BOXER_TAB_HOST_URL",
 	Default:     "https://stergiotis.github.io/boxer/tabhost/",

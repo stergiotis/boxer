@@ -13,7 +13,7 @@ import (
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 )
 
-// An embedded chat (ADR-0368, proposed) is a preset's chat drawn inside
+// An embedded chat (ADR-0368) is a preset's chat drawn inside
 // another app's window, as a sqlapplet's play is (ADR-0132 §SD8,
 // ADR-0134 §SD7). The host keeps the governance: the chat's capabilities
 // ride the host's manifest (EmbedCaps), the host is the app the bus, the

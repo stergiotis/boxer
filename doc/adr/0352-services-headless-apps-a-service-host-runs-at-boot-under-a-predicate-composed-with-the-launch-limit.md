@@ -1,12 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-11-01
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to accepted
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-11-12
 ---
-
-> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
 
 # ADR-0352: Services — headless apps a service host runs at boot, under a predicate composed with the launch limit
 
@@ -84,7 +82,7 @@ before the window host, it mounts each selected service once:
   the end: `shutdown`, `mount-error`, or `unmount-error`;
 - `Mount` on the service's own goroutine, under pprof labels naming the app
   id and the instance key, so a service's CPU is attributable the way
-  ADR-0351 (proposed) attributes a window's.
+  ADR-0351 attributes a window's.
 
 A `Mount` that returns an error is logged, recorded, and the service left
 out; the host boots on. That is hostboot's policy for every optional
@@ -270,7 +268,7 @@ No wire encoding, subject or vocabulary changes.
 - `RegisterHostService` and headless apps coexist; the former is for code
   that needs the `Runtime`, the latter for everything with a manifest.
 - The app center lists services on their app pages. A Running-tab row per
-  service ([ADR-0348](./0348-a-running-page-in-the-app-center-open-windows-what-they-cost-raise-and-close.md), proposed)
+  service ([ADR-0348](./0348-a-running-page-in-the-app-center-open-windows-what-they-cost-raise-and-close.md))
   is a later cut.
 
 ## Migration — Tier 1
@@ -312,7 +310,7 @@ No wire encoding, subject or vocabulary changes.
 
 ## Status
 
-Proposed — awaiting review.
+Accepted 2026-11-12.
 
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers (Tier 1 in-place / Tier 2 dated `## Updates` entry / Tier 3 new superseding ADR).

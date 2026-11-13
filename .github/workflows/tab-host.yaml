@@ -1,5 +1,5 @@
 name: tab-host
-# ADR-0278 SD5 (proposed): build the Rust browser host a browser tab runs
+# ADR-0278 SD5: build the Rust browser host a browser tab runs
 # beside the Go module, check it against the digest the tree records in
 # browserhost.sum, and publish it on GitHub Pages under that digest, so a
 # module consuming boxer can fetch the host its pin needs without a Rust

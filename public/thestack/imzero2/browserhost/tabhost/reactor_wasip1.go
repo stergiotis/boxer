@@ -16,7 +16,7 @@ func registerReactor(inst *Program) {
 
 // idlFingerprint is the IDL the bindings were generated from; the worker
 // compares it with the browser host's before setup and refuses a pair from
-// different generations (ADR-0278 SD6, proposed).
+// different generations (ADR-0278 SD6).
 //
 //go:wasmexport idl_fingerprint
 func idlFingerprint() int64 {

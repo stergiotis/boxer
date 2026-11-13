@@ -453,7 +453,7 @@ the `index` key live exactly as long as the process — a restart silently
 empties the runtime applet library. Export (fs Powerbox save) remains the
 only durable path out of an authoring session.
 
-The repair is recorded as a milestone of ADR-0151 (proposed): a thin
+The repair is recorded as a milestone of ADR-0151: a thin
 `persist.FactsBackend` over the existing `FactsStoreI`
 `WriteState`/`LatestState`/`DeleteState` methods, plus the carousel wiring
 flip. When that lands, stored applets become durable with no change to this

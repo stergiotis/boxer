@@ -177,7 +177,7 @@ type Input struct {
 	// facts canonical wire encoder `factsschema/ra` carries (ADR-0327
 	// (proposed) §SD2); nothing is emitted for it.
 	CanonWire bool
-	// Evidence is the evidence profile (ADR-0327 (proposed) §SD2). Its
+	// Evidence is the evidence profile (ADR-0327 §SD2). Its
 	// components' memberships must be in Ids, like every other component's.
 	Evidence *gen.Evidence
 	// Contributions and InsertSettings are gen.Input's, passed through.

@@ -3,7 +3,7 @@ package app
 import "slices"
 
 // SetCoordinators records the app ids or subject aliases the host resolved
-// as coordinators at boot (ADR-0364, proposed). The dispatcher holds the
+// as coordinators at boot (ADR-0364). The dispatcher holds the
 // same list and decides by it; the registry's copy is what keelson.apps and
 // an app's own default read.
 func (inst *Registry) SetCoordinators(names []string) {

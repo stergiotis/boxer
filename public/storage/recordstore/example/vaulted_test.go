@@ -43,7 +43,7 @@ func appendVaulted(t *testing.T, v *LedgerVaulted, seed string, texts ...string)
 // Append (gen.Evidence.Vault) keeps content out of the ledger: the content
 // row is keyed by the ledger row's scope and ordinal and named by its
 // component, gains an opening, and the ledger row carries one commitment
-// per component (ADR-0327 (proposed) §SD4). Joined, the rows verify; a
+// per component (ADR-0327 §SD4). Joined, the rows verify; a
 // changed content row breaks at its commitment.
 func TestVaultedContentIsCommittedNotStored(t *testing.T) {
 	v := newVaulted(t)

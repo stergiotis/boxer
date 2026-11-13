@@ -1,12 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-10-24
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to accepted
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-11-12
 ---
-
-> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
 
 # ADR-0332: A hidden desktop host keeps running passes, and a window that stops drawing says so
 
@@ -211,7 +209,7 @@ it ignore it.
 
 ## Status
 
-Proposed 2026-10-24.
+Accepted 2026-11-12.
 
 ## References
 

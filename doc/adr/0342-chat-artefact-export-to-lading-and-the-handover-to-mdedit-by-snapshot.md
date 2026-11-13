@@ -1,12 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-10-26
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to accepted
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-11-12
 ---
-
-> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
 
 # ADR-0342: The chat's artefact exported to lading, and handed to mdedit by snapshot
 
@@ -30,7 +28,7 @@ Two gaps follow from the sealing:
   ([ADR-0308](./0308-the-run-journal-is-the-only-source-of-model-input.md)
   §SD6) gets its text back from the journal, but its screenshots are gone.
 
-ADR-0341 (proposed) gives an app a way to publish a tree into the lading
+ADR-0341 gives an app a way to publish a tree into the lading
 store, under its own mount tag, with a placement check before anything is
 written. This ADR is its first client.
 
@@ -260,14 +258,14 @@ without them is the text handover as before.
 
 ## Status
 
-Proposed — awaiting review by the code owner, after ADR-0341.
+Accepted 2026-11-12.
 
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers.
 
 ## References
 
-- [ADR-0341](./0341-lading-publish-a-write-only-capability-with-the-placement-check-at-the-door.md) (proposed) — the publish service.
+- [ADR-0341](./0341-lading-publish-a-write-only-capability-with-the-placement-check-at-the-door.md) — the publish service.
 - [ADR-0284](./0284-chat-artefact-screenshots-sealed-under-a-budget.md) §SD1, §SD6, update of 2026-10-26 — the screenshots, sealed; durable storage deferred.
 - [ADR-0282](./0282-chat-artefact-one-markdown-document-per-conversation.md) — the artefact.
 - [ADR-0311](./0311-labels-integrity-levels-tlp-tiers-marks-and-endorsement.md) §SD2, §SD3, §SD5 — the run's label, endorsement, mixed documents.

@@ -14,7 +14,7 @@ type Head struct {
 	Digest  string
 }
 
-// OriginByE says how a row's origin was established (ADR-0327 (proposed)
+// OriginByE says how a row's origin was established (ADR-0327
 // §SD6): a reader weighs the origin by it.
 type OriginByE uint8
 
@@ -78,7 +78,7 @@ func AttestationFrom(ctx context.Context) (a Attestation, ok bool) {
 	return
 }
 
-// Identity is what a written-by component records (ADR-0327 (proposed)
+// Identity is what a written-by component records (ADR-0327
 // §SD6, law L35): the call identity's origin and claims, the batch, and
 // the attestation, as read off one context.
 type Identity struct {

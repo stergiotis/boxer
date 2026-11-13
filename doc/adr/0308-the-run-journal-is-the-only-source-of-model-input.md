@@ -441,7 +441,7 @@ fingerprint, the one `keelson('harness_profiles')` lists.
 
 ### 2026-10-12 — SD1, SD8, SD9: the journal is a store under the evidence profile
 
-The entry table is generated under [ADR-0327](./0327-evidence-as-a-record-store-profile-chain-vault-marks-seals-and-anchors-any-store-opts-into.md) (proposed)'s profile (§SD9): the
+The entry table is generated under [ADR-0327](./0327-evidence-as-a-record-store-profile-chain-vault-marks-seals-and-anchors-any-store-opts-into.md)'s profile (§SD9): the
 chain is the profile's component on every row (`Prev`, `Digest`,
 `Scheme`, the mark, the commitments by component), the identity a row was
 committed under is the written-by component inside the digest (law L35),

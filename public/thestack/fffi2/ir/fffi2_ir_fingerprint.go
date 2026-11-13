@@ -18,7 +18,7 @@ import (
 //
 // The generator writes the value into both sides' generated enums, so two
 // halves built from one generation carry the same number and halves from
-// different IDLs almost surely do not (ADR-0278 SD6, proposed).
+// different IDLs almost surely do not (ADR-0278 SD6).
 func Fingerprint(tls []NodeI) (fp uint64) {
 	h := blake3.New(32, nil)
 	for _, tl := range tls {

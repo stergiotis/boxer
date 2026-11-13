@@ -1,4 +1,4 @@
-// Package rutter is the road-network routing engine (ADR-0256, proposed):
+// Package rutter is the road-network routing engine (ADR-0256):
 // a graph of arcs with identities, a metric as a column over them, Dijkstra
 // as the oracle, an Inertial Flow nested-dissection order, a Customizable
 // Contraction Hierarchy with basic customization and an elimination-tree

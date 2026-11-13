@@ -98,7 +98,7 @@ Implement **O1**. The Rust host gains a runtime-selectable codec lane — built 
 
 - **SD11 — Desktop mode degrades cleanly.** With no remote sink, the SD9 model is empty / "native, N/A", the SD10 widget self-disables (or hides), and `SetVideoPipeline` (SD3) is a no-op. The shared interpreter carries both hosts without branching on host type in app logic.
 
-- **SD12 — Scope is the single active viewer.** Capabilities are those of the viewer currently being encoded for (ADR-0082's single re-pointed encoder). On take-session handoff, re-probe the new active viewer and re-offer. Passive viewers (ADR-0086, proposed) and intersection-across-viewers are deferred — a heterogeneous roster would otherwise force the offered set down to the weakest viewer, a policy question this ADR does not pre-empt.
+- **SD12 — Scope is the single active viewer.** Capabilities are those of the viewer currently being encoded for (ADR-0082's single re-pointed encoder). On take-session handoff, re-probe the new active viewer and re-offer. Passive viewers (ADR-0086) and intersection-across-viewers are deferred — a heterogeneous roster would otherwise force the offered set down to the weakest viewer, a policy question this ADR does not pre-empt.
 
 - **SD13 — Security posture unchanged.** `DecodeCapabilities` rides the ADR-0082-authenticated wire; `SetVideoPipeline` is host-internal over FFFI2. No new transport, no new auth boundary, no new bind surface. Capabilities are non-sensitive; the only new authority is "the authenticated active session can choose its own codec," which is within the session's existing trust envelope.
 
@@ -198,7 +198,7 @@ switch to its codec probes again.
 - [ADR-0024](./0024-imzero2-remote-access-browser-viewer.md) — the headless render + ffmpeg + browser WebCodecs foundation this ADR extends; SD3/SD4/SD5 (encoder, Annex-B framing, WebCodecs), SD8 (input edge bent here), SD11 (encoder-backend selection deferred — revisited here), and the acceptance notes (VAAPI ENOSYS, resize teardown/rebuild, SD9 mailbox).
 - [ADR-0082](./0082-imzero2-remote-session-auth-tls.md) — single active session, take-session handoff, the authenticated channels the new messages ride.
 - [ADR-0062](./0062-imzero2-render-cadence.md) — the cadence control folded into the SD10 panel; `SetCadence` is the runtime-control proof-of-pattern.
-- [ADR-0086](./0086-imzero2-active-passive-viewers-and-roster.md) (proposed) — active/passive viewers; SD12 scopes capability modeling to the active viewer and defers multi-viewer reconciliation to this ADR's resolution.
+- [ADR-0086](./0086-imzero2-active-passive-viewers-and-roster.md) — active/passive viewers; SD12 scopes capability modeling to the active viewer and defers multi-viewer reconciliation to this ADR's resolution.
 - [ADR-0087](./0087-imzero2-client-compositor-compartmentalization.md) (accepted) — client compositor posture; the browser decode-probe (SD8) lives in the viewer's decode path.
 - [ADR-0009](./0009-environment-variable-registry.md) — `IMZERO2_HEADLESS_ENCODER_ARGS` remains the startup default selector.
 - [ADR-0048](./0048-go-file-package-naming.md) — naming for the `videopipeline` package (SD9).

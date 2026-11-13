@@ -91,7 +91,7 @@ type ApiConfig struct {
 	// window close cascades into worker cancellation.
 	MountCancel <-chan struct{}
 
-	// Lifetime is the app instance's lifetime scope (ADR-0322, proposed).
+	// Lifetime is the app instance's lifetime scope (ADR-0322).
 	// When non-nil, every spawned task holds it until the worker calls Done
 	// or Error on the handle, so the host's drain waits for the worker to
 	// finish rather than for the handle to turn terminal, which a mount

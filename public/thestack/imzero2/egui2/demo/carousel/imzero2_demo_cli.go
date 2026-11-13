@@ -139,7 +139,7 @@ func Run(ctx gocontext.Context, cfg *application.Config, opts RunOptions) (err e
 	if chatletCount > 0 {
 		log.Info().Int("chatlets", chatletCount).Msg("chatlet: manifests minted")
 	}
-	// Workstatelet documents (ADR-0369, proposed), minted here for the same
+	// Workstatelet documents (ADR-0369), minted here for the same
 	// reason: a document's alias resolves under --launch like an app's.
 	workstateletCount, workstateletErrs := workstatelet.MintManifests(log.Logger)
 	for _, mintErr := range workstateletErrs {

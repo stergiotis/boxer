@@ -16,7 +16,7 @@
 //     over the same Arrow schema (universal read).
 //   - ra/runtime_facts_canonwire.out.go — the canonical wire encoder
 //     (ADR-0210) over those readaccess classes, which a facts-bound
-//     record store generated with CanonWire binds (ADR-0327 (proposed)).
+//     record store generated with CanonWire binds (ADR-0327).
 //   - ddl/runtime_facts_ddl.out.go      — CH CREATE TABLE wrapper
 //     with the column block baked as a string constant and a runtime
 //     ComposeCreateTableSql(engineClause) entrypoint.
@@ -220,7 +220,7 @@ func GenerateReadAccess(outPath string) (err error) {
 // description and class namer as GenerateReadAccess — the encoder calls
 // the readaccess classes by name, so the two are one package. A
 // facts-bound record store generated with CanonWire binds it
-// (ADR-0327 (proposed) §SD2).
+// (ADR-0327 §SD2).
 func GenerateCanonWire(outPath string) (err error) {
 	var tbl common.TableDesc
 	tbl, err = buildTableDesc()

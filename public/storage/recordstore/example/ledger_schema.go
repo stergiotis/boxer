@@ -10,7 +10,7 @@ import (
 )
 
 // GetLedgerSchemaInManipulator builds the evidence-profile reference
-// schema (ADR-0327 (proposed) §SD2): a uint64 id as the Key (the scope; a
+// schema (ADR-0327 §SD2): a uint64 id as the Key (the scope; a
 // component's plain id binding needs the column named so, as the facts
 // envelope names it), a uint64 ordinal as the Order, and the three facts
 // data sections the profile's components bind by name — symbol,

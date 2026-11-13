@@ -110,7 +110,7 @@ type Deps struct {
 	// only a non-nil store.
 	State statestore.WorkingsetStoreI
 	// Workstatelets is the catalog of minted workstatelet documents, backing
-	// keelson.workstatelets (ADR-0369 (proposed) §SD8). nil is allowed and
+	// keelson.workstatelets (ADR-0369 §SD8). nil is allowed and
 	// leaves that table empty.
 	Workstatelets *workstatelet.Catalog
 	// Coverage is the live coverage sampler, backing the
@@ -245,7 +245,7 @@ func Start(deps Deps) (stop func(context.Context) error, err error) {
 	if e := introspectproviders.RegisterWorkingsets(reg, deps.State); e != nil {
 		deps.Log.Warn().Err(e).Msg("introspecthost: workingsets provider registration failed")
 	}
-	// ADR-0369 (proposed) §SD8: the minted workstatelet documents.
+	// ADR-0369 §SD8: the minted workstatelet documents.
 	// Registered unconditionally — a nil catalog answers with an empty table.
 	if e := introspectproviders.RegisterWorkstatelets(reg, deps.Workstatelets); e != nil {
 		deps.Log.Warn().Err(e).Msg("introspecthost: workstatelets provider registration failed")
@@ -286,7 +286,7 @@ func Start(deps Deps) (stop func(context.Context) error, err error) {
 	if e := introspectproviders.RegisterEffects(reg, deps.Bus, deps.Tasks); e != nil {
 		deps.Log.Warn().Err(e).Msg("introspecthost: effects provider registration failed")
 	}
-	// ADR-0126 §SD5, narrowed by ADR-0349 (proposed): the topology tables
+	// ADR-0126 §SD5, narrowed by ADR-0349: the topology tables
 	// are registered on every host; a process-lifetime metric-plane consumer
 	// feeds their observed rows only where the deployment declares a
 	// topology. imztop's consumer is mount-gated, so the host holds its own.

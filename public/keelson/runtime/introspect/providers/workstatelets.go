@@ -1,4 +1,4 @@
-// workstatelets — the minted workstatelet documents (ADR-0369 (proposed)
+// workstatelets — the minted workstatelet documents (ADR-0369
 // §SD8). keelson('apps') lists each one as a launcher entry of kind
 // workstatelet; this table adds what the entry opens and the document's
 // text, which is how a document captured from the desktop reaches a book.

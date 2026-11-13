@@ -7,7 +7,7 @@ import (
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 )
 
-// The compact layout (ADR-0368, proposed) is for a pane with little room:
+// The compact layout (ADR-0368) is for a pane with little room:
 // the bar, then a row naming the tabs, then the transcript over the
 // composer, or the one tab picked in their place. No divider drags and
 // nothing docks, so the pane fits whatever region the host gives it.

@@ -3143,7 +3143,7 @@ func (inst emitter) emitDrainCanonical(p func(string, ...any)) {
 }
 
 // emitCanonicalItem writes CanonicalItem, the CanonWire option's verb over
-// one entity (ADR-0327 (proposed) §SD2).
+// one entity (ADR-0327 §SD2).
 func (inst emitter) emitCanonicalItem(p func(string, ...any)) {
 	hasPT := len(inst.model.passthrough) > 0
 	p("// CanonicalItem is the canonical wire item of ent as this store")

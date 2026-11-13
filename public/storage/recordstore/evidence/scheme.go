@@ -66,7 +66,7 @@ func (inst Scheme) ContentDigest(content []byte) string {
 }
 
 // RowDigest is the digest of a row's canonical item alone, as a seal names
-// the row (ADR-0327 (proposed) §SD5).
+// the row (ADR-0327 §SD5).
 func (inst Scheme) RowDigest(item []byte) string {
 	h := inst.digester.NewRecord()
 	_, _ = h.Write(item)

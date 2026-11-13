@@ -8,7 +8,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsstore"
 )
 
-// The drain step of the closing edge (ADR-0322, proposed): between an
+// The drain step of the closing edge (ADR-0322): between an
 // instance's Unmount and the close of its bus client, the host waits for the
 // instance's lifetime scope (app.LifetimeI) to be done, so work the app
 // counted in writes its tail over a live bus. A window close drains off the

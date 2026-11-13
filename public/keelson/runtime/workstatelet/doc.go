@@ -1,4 +1,4 @@
-// Package workstatelet holds the workstatelet document (ADR-0369, proposed):
+// Package workstatelet holds the workstatelet document (ADR-0369):
 // one markdown file that lists windows to open and, optionally, the desktop
 // layout they take.
 //

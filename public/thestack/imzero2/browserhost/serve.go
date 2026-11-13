@@ -42,7 +42,7 @@ type ServeConfig struct {
 	// request is served (tests; a caller that asked for port 0).
 	OnListen func(addr net.Addr)
 	// Assets are files served by name when Dir lacks them — the page,
-	// worker and shim a binary embeds (ADR-0278 SD3, proposed). A file in
+	// worker and shim a binary embeds (ADR-0278 SD3). A file in
 	// Dir wins, so a harness that brings its own page keeps it.
 	Assets map[string][]byte
 }

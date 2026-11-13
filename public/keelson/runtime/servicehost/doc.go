@@ -1,5 +1,5 @@
 // Package servicehost mounts headless apps — services — at boot and stops
-// them at shutdown (ADR-0352 (proposed)). It does for an app whose manifest
+// them at shutdown (ADR-0352). It does for an app whose manifest
 // declares SurfaceHeadless what windowhost does for a windowed one: a bus
 // client minted from the declared caps, an instance key, the app-lifecycle
 // rows, a lifetime scope drained before the bus closes, and the closing

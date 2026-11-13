@@ -237,7 +237,7 @@ func TestGenerate_EmitsNoDdlExecutionSurface(t *testing.T) {
 		"CREATE TABLE IF NOT EXISTS boxer.facts")
 }
 
-// TestGenerate_CanonWireBindsTheFactsEncoder is ADR-0327 (proposed) §SD2:
+// TestGenerate_CanonWireBindsTheFactsEncoder is ADR-0327 §SD2:
 // a facts-bound store generated with CanonWire emits no encoder of its own
 // and calls the one `factsschema/ra` carries, under factsschema's stylable
 // name, so DrainCanonical and CanonicalItem compute the same item every
@@ -267,7 +267,7 @@ func TestGenerate_CanonWireBindsTheFactsEncoder(t *testing.T) {
 // A component may be defined in another package: the emitted codec
 // declares the store's package, not the DTO's, and refers to the DTO's
 // type by its bare name, which the store's package provides as a type
-// alias (ADR-0327 (proposed) §SD8: the trail's audit event is the audit
+// alias (ADR-0327 §SD8: the trail's audit event is the audit
 // package's).
 func TestGenerate_TakesAComponentFromAnotherPackage(t *testing.T) {
 	out := t.TempDir()

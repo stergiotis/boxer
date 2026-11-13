@@ -4,7 +4,7 @@ audience: contributor
 status: draft
 generated: true
 generator: public/app env gen-docs
-generated-at: 2026-11-12T20:42:37Z
+generated-at: 2026-11-12T21:46:07Z
 ---
 
 > **Status: draft — pre-human-review.** Machine-generated registry snapshot;

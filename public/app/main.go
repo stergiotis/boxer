@@ -90,7 +90,7 @@ import (
 	// BOXER_KAFKA_*; declared by the kafka CLI, which no binary mounts. The
 	// CLI already links franz-go, so it costs no dependency.
 	_ "github.com/stergiotis/boxer/public/streaming/persisted/kafka/cli"
-	// IMZERO2_BROWSER_TARGET_DIR (ADR-0278, proposed); read by a tab binary's
+	// IMZERO2_BROWSER_TARGET_DIR (ADR-0278); read by a tab binary's
 	// `bundle`, which this binary is not.
 	_ "github.com/stergiotis/boxer/public/thestack/imzero2/browserhost/tabhost"
 )

@@ -302,7 +302,7 @@ func (inst *Service) describe(msg *app.Msg) (rep wireDescribeReply, req wireDesc
 			continue
 		}
 		// A workstatelet is not an app a task can open or operate: a launch
-		// refuses it (ADR-0369 (proposed) §SD5).
+		// refuses it (ADR-0369 §SD5).
 		if m.Kind == app.KindWorkstatelet {
 			continue
 		}

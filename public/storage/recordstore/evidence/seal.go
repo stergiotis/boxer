@@ -13,7 +13,7 @@ type SealedRow struct {
 	Digest string
 }
 
-// Seal is one seal of a sealed store (ADR-0327 (proposed) §SD5): the row
+// Seal is one seal of a sealed store (ADR-0327 §SD5): the row
 // it is, the seal it follows in its stream (zero for the stream's first),
 // its digest, and the rows it names. A store's seal component converts to
 // it.

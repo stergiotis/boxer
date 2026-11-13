@@ -26,7 +26,7 @@ desktop messaging client written in Rust directly on eframe and egui, MIT
 licensed, released for Linux, macOS and Windows. It and the imzero2 host
 were both on egui 0.36.2 when this survey was made (2026-11-08, zapfast
 commit `421d194fb45530ad0811e2b5d81be8f805c47748`). Both had patched winit
-for the same Wayland stall, independently: ADR-0332 (proposed) and zapfast's
+for the same Wayland stall, independently: ADR-0332 and zapfast's
 egui and winit forks. That overlap is why the comparison was made. The
 survey read zapfast's rendering and pacing, text and selection, testing and
 accessibility, and UI architecture and dependency handling, and checked each
@@ -215,7 +215,7 @@ settled query is the first announcement.
 
 [vendor/winit/VENDORING.md](../../rust/imzero2/vendor/winit/VENDORING.md)
 records emilk/egui#8631 and rust-windowing/winit#4709/#4710 as the
-condition for dropping the copy. ADR-0332 (proposed) records that its O3
+condition for dropping the copy. ADR-0332 records that its O3
 kill-reason weakens once those land. When a release carries them, the host
 runs logic without painting while hidden, and consumes `Occluded` under
 ADR-0062 §SD6.
@@ -373,5 +373,5 @@ See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-d
 - Upstream pull requests tracked under M3: emilk/egui#8631,
   rust-windowing/winit#4709, rust-windowing/winit#4710.
 - ADR-0062 (render cadence), ADR-0248 (scenes), ADR-0258 (theme at launch),
-  ADR-0267 (Go widget contract), ADR-0269 (operations), ADR-0332 (proposed;
-  hidden desktop host).
+  ADR-0267 (Go widget contract), ADR-0269 (operations), ADR-0332 (hidden
+  desktop host).

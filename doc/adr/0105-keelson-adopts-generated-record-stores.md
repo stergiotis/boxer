@@ -593,7 +593,7 @@ per kind, and no fold.
 | `runtime/vocab` | `+` workingset / column-width state memberships as needed (or reuse of the launch cohort's terms) | assignment golden |
 | `windowhost`, `egui2/colwidth`, `introspect/providers/workingsets` | read/write the state store instead of `FactsStoreI` | ADR-0148 §SD7 provider contract unchanged in shape |
 | ADR-0148, ADR-0151 (accepted) | dated Updates: substrate moves | — |
-| ADR-0185 (proposed) | in place: one substrate, `ScanLive` instead of the fold, `ListAllColumnWidths` unnecessary | — |
+| ADR-0185 | in place: one substrate, `ScanLive` instead of the fold, `ListAllColumnWidths` unnecessary | — |
 | ADR-0026 §SD6 reading | the principle becomes *trail on `boxer.facts`, state on `boxer.persiststate`* — a two-table stance stated once, instead of per-kind exceptions | — |
 
 **Verification.** `recordstore/example` round-trip gains a `ScanLive` case

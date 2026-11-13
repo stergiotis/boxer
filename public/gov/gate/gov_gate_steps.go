@@ -342,7 +342,7 @@ func moduleOf(dir string) (module string) {
 	return ""
 }
 
-// StepTab checks each configured browser-tab binary (ADR-0278 SD7, proposed):
+// StepTab checks each configured browser-tab binary (ADR-0278 SD7):
 // it must compile for wasip1, which compiles exactly the apps it links, and
 // its report of the bus subjects those apps declare that no tab service
 // answers is printed. The report never fails the step — an app may degrade

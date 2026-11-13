@@ -109,10 +109,10 @@ const (
 	// facility rather than to do a user's work.
 	KindDemo KindE = 2
 	// KindChatlet is an app minted from a committed chatlet document
-	// (ADR-0364, proposed). Stamped by the minter, never hand-written.
+	// (ADR-0364). Stamped by the minter, never hand-written.
 	KindChatlet KindE = 3
 	// KindWorkstatelet is a launcher entry minted from a workstatelet
-	// document (ADR-0369, proposed). It has no window of its own: the window
+	// document (ADR-0369). It has no window of its own: the window
 	// host opens the windows its document lists. Stamped by the minter,
 	// never hand-written.
 	KindWorkstatelet KindE = 4

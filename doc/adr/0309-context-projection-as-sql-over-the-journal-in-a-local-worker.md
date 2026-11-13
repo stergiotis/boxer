@@ -354,6 +354,6 @@ L30 goes with the worker move as before.
 - [ADR-0201](./0201-leeway-canonical-record-form.md), [ADR-0210](./0210-leeway-canonical-wire-generator.md), [ADR-0289](./0289-leeway-rows-for-readers-canonical-forms-a-read-model-and-kinds-in-projection.md) — canonical forms for identity and for a lossless stream.
 - [ADR-0108](./0108-keelson-sql-pass-registry.md) — the pass registry whose shape SD5 copies.
 - [ADR-0277](./0277-one-audit-trail-for-model-calls-and-agent-work.md) — the trail; call keys.
-- [ADR-0300](./0300-metered-model-calls-and-rules-a-moderator-writes.md) (proposed) — the per-call dependency refused.
+- [ADR-0300](./0300-metered-model-calls-and-rules-a-moderator-writes.md) — the per-call dependency refused.
 - [ADR-0308](./0308-the-run-journal-is-the-only-source-of-model-input.md) — the journal.
 - [agent-harness](../adr-background-work/agent-harness.md) §2.3 and Appendix A — the spike and its conditions.

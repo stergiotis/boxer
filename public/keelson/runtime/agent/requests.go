@@ -29,7 +29,7 @@ var CoordinatorsEnv = env.NewString(env.Spec{
 })
 
 // CoordinatorsWhereEnv selects coordinators by a predicate over keelson.apps
-// (ADR-0364, proposed), beside the names CoordinatorsEnv lists. The host
+// (ADR-0364), beside the names CoordinatorsEnv lists. The host
 // evaluates it once at boot, in the shape of the launch limit (ADR-0272). It
 // is spliced into a statement, so it carries the trust of any other variable
 // the process reads.

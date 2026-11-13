@@ -54,7 +54,7 @@ type AuditEvent struct {
 	// OriginBy is how the row's origin was established, one of
 	// evidence.OriginByE's names: the host's own service wrote it, the host
 	// took it from a bus envelope's sender, or the writing process stated
-	// it (ADR-0327 (proposed) §SD6).
+	// it (ADR-0327 §SD6).
 	OriginBy string `lw:"auditEventOriginBy,symbol"`
 	// Purpose is the opaque purpose code the claims stated, when one was.
 	Purpose option.Option[string] `lw:"auditEventPurpose,symbol"`

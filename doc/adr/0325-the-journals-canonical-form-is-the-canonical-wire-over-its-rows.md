@@ -321,7 +321,7 @@ vault store no longer needs its contribution seam.
 
 ### 2026-10-12 — SD1, SD2, SD3: the canonical item is the profile's, on any store
 
-[ADR-0327](./0327-evidence-as-a-record-store-profile-chain-vault-marks-seals-and-anchors-any-store-opts-into.md) (proposed) §SD2 gives every store generated with `CanonWire` the
+[ADR-0327](./0327-evidence-as-a-record-store-profile-chain-vault-marks-seals-and-anchors-any-store-opts-into.md) §SD2 gives every store generated with `CanonWire` the
 canonical item of a stored row (`CanonicalItem`), the preimage SD2
 describes with the chain fields at zero, so the journal's form is one
 case of the generator's. SD1's chain fields are the profile's chain

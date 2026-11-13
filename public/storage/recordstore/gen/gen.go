@@ -55,7 +55,7 @@ type Scaffold struct {
 	// encoder (ADR-0210), generated under the same Stylable, so a store
 	// bound to it may set Input.CanonWire: DrainCanonical and
 	// CanonicalItem then call the shared encoder instead of an emitted
-	// one (ADR-0327 (proposed) §SD2).
+	// one (ADR-0327 §SD2).
 	CanonWire bool
 }
 
@@ -262,7 +262,7 @@ type Input struct {
 	// else needs no executor: it is how a writer computes the canonical
 	// item of a row it has not stored (ADR-0325 §SD2). The encoder reads
 	// the read-access classes by name, so under SharedRA the bound package
-	// must carry one (Scaffold.CanonWire; ADR-0327 (proposed) §SD2).
+	// must carry one (Scaffold.CanonWire; ADR-0327 §SD2).
 	CanonWire bool
 
 	// Contributions gives the builder StartContribution and one
@@ -284,7 +284,7 @@ type Input struct {
 	// DDLTail remains a raw suffix on top of whatever is composed here.
 	DDL *clickhouse.TableOptions
 
-	// Evidence is the evidence profile (ADR-0327 (proposed) §SD2): the
+	// Evidence is the evidence profile (ADR-0327 §SD2): the
 	// chain, the written-by component and the vault, emitted into the
 	// store's package as components and a store of its own and taken
 	// through the component pipeline with the hand-written ones. nil opts
@@ -431,7 +431,7 @@ func (inst Input) Generate() (err error) {
 		return
 	}
 	// The evidence profile's own components, emitted and then taken as the
-	// hand-written ones are (ADR-0327 (proposed) §SD2).
+	// hand-written ones are (ADR-0327 §SD2).
 	if inst.evidenceOn() {
 		var emitted []string
 		if emitted, err = inst.emitEvidenceDTOs(); err != nil {
@@ -507,7 +507,7 @@ func (inst Input) Generate() (err error) {
 	if err != nil || !inst.evidenceVault() {
 		return
 	}
-	// 7. The vault store beside the ledger (ADR-0327 (proposed) §SD4).
+	// 7. The vault store beside the ledger (ADR-0327 §SD4).
 	err = inst.generateVault()
 	return
 }

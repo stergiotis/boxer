@@ -323,5 +323,5 @@ registry stays the default when nothing is supplied. Background:
 - [ADR-0241](./0241-cooperative-image-identification-watermark.md) — attribution for screens.
 - [ADR-0254](./0254-model-inference-as-a-keelson-capability.md), [ADR-0262](./0262-http-egress-as-a-keelson-capability.md) — the two walls.
 - [ADR-0269](./0269-app-operations-a-command-query-contract-agents-drive-under-a-task-grant.md) — grants, taint, untrusted content.
-- [ADR-0298](./0298-an-unattended-mode-the-host-decides-within-preset-bounds.md) (proposed) — unattended mode, out of scope here.
+- [ADR-0298](./0298-an-unattended-mode-the-host-decides-within-preset-bounds.md) — unattended mode, out of scope here.
 - [agent-harness](../adr-background-work/agent-harness.md) §4 and [agent-harness-threat-model](../adr-background-work/agent-harness-threat-model.md) — the analysis and the interview record.

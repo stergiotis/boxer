@@ -844,7 +844,7 @@ first caller (ADR-0265 §SD4). The vocabulary is `mdeditLaunchText` and
 
 ### 2026-10-24 — a formatted source pane, the keyboard, and a Blocks mode
 
-[ADR-0334](./0334-mdedit-blocks-over-the-source.md) (proposed) takes the
+[ADR-0334](./0334-mdedit-blocks-over-the-source.md) takes the
 editor the rest of the way the §Alternatives entry on a WYSIWYG editor
 declined for M0, and this ADR's contracts hold under it unchanged. The
 source pane is proportional and sized — heading lines scaled by level,

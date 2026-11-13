@@ -13,7 +13,7 @@ import (
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
-// Where is the service predicate (ADR-0352 (proposed) §SD3). It is spliced
+// Where is the service predicate (ADR-0352 §SD3). It is spliced
 // into `SELECT id FROM apps WHERE surface = 'headless' AND launchable AND
 // (<Where>)`, so it carries the trust of any other variable the process
 // reads, and it can select nothing but a headless app the launch limit

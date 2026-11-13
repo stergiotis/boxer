@@ -1,7 +1,7 @@
 // Package web is what the page loads beside the two wasm modules: the worker
 // that runs them and the WASI shim between them (ADR-0263), plus the viewer
 // page itself, gathered so a server can hand all three out of the binary
-// that serves the bundle (ADR-0278 SD3, proposed). A page, worker and shim
+// that serves the bundle (ADR-0278 SD3). A page, worker and shim
 // taken from one binary come from one boxer version.
 package web
 

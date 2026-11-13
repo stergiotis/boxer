@@ -1,12 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-10-02
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to accepted
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-11-12
 ---
-
-> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
 
 # ADR-0273: imzero2 — button kinds named by role, coloured from the IDS palette
 
@@ -139,6 +137,6 @@ to be readable at rest, not found by hovering. So:
 
 ## Status
 
-Proposed. Built behind `ButtonFluid.Kind`; the IDS showcase has a row of
+Accepted 2026-11-12. Built behind `ButtonFluid.Kind`; the IDS showcase has a row of
 one button per kind, captured at rest and on hover under both themes by
 a headless scene.

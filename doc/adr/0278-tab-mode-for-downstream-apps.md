@@ -408,7 +408,7 @@ through the host transport as any request without `NoEgress` does. The page's
 claim is that it loads nothing from *elsewhere*, which a file served beside it
 keeps. `tabhost.Options` gains `Prepare`, a step the tab runs before the app
 is looked up. Both serve
-[ADR-0299](./0299-sql-applets-a-tab-loads-from-its-origin.md) (proposed):
+[ADR-0299](./0299-sql-applets-a-tab-loads-from-its-origin.md):
 the demo build writes the repository's code volume and complexity as an
 applet document beside the page, and the demo binary opens it in place of an
 app. The demo still loads nothing from another site.

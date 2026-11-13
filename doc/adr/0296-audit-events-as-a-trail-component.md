@@ -395,7 +395,7 @@ See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-d
 
 ### 2026-10-12 — §SD1, §SD6, §SD7: the audit event below the runtime
 
-[ADR-0327](./0327-evidence-as-a-record-store-profile-chain-vault-marks-seals-and-anchors-any-store-opts-into.md) (proposed) §SD8 moves `AuditEvent`, its bounds and the recorder's own
+[ADR-0327](./0327-evidence-as-a-record-store-profile-chain-vault-marks-seals-and-anchors-any-store-opts-into.md) §SD8 moves `AuditEvent`, its bounds and the recorder's own
 domain's constants to `storage/recordstore/evidence/audit`; the trail
 re-exports them as aliases, keeps `Event`, the gap and the invalid rows,
 and binds the component through the alias (the generator now emits a

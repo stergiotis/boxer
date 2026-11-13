@@ -22,7 +22,7 @@
 // the worker posts to; files the directory lacks may come from assets the
 // serving binary embeds. Package web embeds the worker, the WASI shim and
 // the viewer page; package tabhost is a tab binary's body as a library
-// (ADR-0278, proposed), and public/thestack/cmd/imzero2tab is boxer's tab
+// (ADR-0278), and public/thestack/cmd/imzero2tab is boxer's tab
 // binary over it. scripts/dev/build_tab_bundle.sh assembles a servable
 // directory.
 package browserhost

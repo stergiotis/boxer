@@ -12,7 +12,7 @@ import (
 )
 
 // TestGenerateLedgerStore emits the evidence-profile store package
-// (ADR-0327 (proposed) §SD2): the id as the Key (the scope), the ordinal
+// (ADR-0327 §SD2): the id as the Key (the scope), the ordinal
 // as the Order, the chain and the written-by components emitted by the generator
 // beside the fixture's note, under a registry-style id snapshot (the
 // profile's components share sections, which declaration-order ids cannot

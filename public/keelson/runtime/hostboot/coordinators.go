@@ -22,7 +22,7 @@ func composeCoordinators(where string) string {
 
 // resolveCoordinators reads who may ask the person for a grant: the names
 // BOXER_AGENT_COORDINATORS lists and the apps its predicate selects, once,
-// after the launch limit (ADR-0364, proposed). Set and not evaluable, the
+// after the launch limit (ADR-0364). Set and not evaluable, the
 // host does not boot, as for the launch limit: running with a different set
 // of coordinators than the operator asked for is the worse failure.
 func (rt *Runtime) resolveCoordinators(ctx context.Context, reg *app.Registry) (err error) {

@@ -422,4 +422,4 @@ See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-d
 - [ADR-0276](./0276-agents-read-and-arrange-windows.md) — window state off the render thread.
 - [ADR-0277](./0277-one-audit-trail-for-model-calls-and-agent-work.md) — the trail.
 - [ADR-0280](./0280-a-ceiling-on-what-a-chats-model-may-do-scored-on-a-ladder.md) — ceilings.
-- [ADR-0298](./0298-an-unattended-mode-the-host-decides-within-preset-bounds.md) (proposed) — unattended mode.
+- [ADR-0298](./0298-an-unattended-mode-the-host-decides-within-preset-bounds.md) — unattended mode.

@@ -11,7 +11,7 @@ import (
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
-// windowhost_workstatelet.go is the host half of ADR-0369 (proposed):
+// windowhost_workstatelet.go is the host half of ADR-0369:
 // opening the windows a workstatelet document lists, in its order and
 // layout, and writing a document from the windows that are open.
 

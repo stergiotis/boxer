@@ -48,7 +48,7 @@ import (
 )
 
 // Services selects the services the tab boots beside the mounted app, as
-// hostboot.Services does for the native host (ADR-0278 SD2, proposed). The
+// hostboot.Services does for the native host (ADR-0278 SD2). The
 // zero value is the bus and the app; each service the tab gains is added
 // here as a field, so a binary turns it on rather than building it.
 type Services struct {

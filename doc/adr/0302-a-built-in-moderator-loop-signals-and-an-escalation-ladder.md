@@ -262,7 +262,7 @@ ever is not this signal's to catch; `rounds` and the ration are.
 
 ## References
 
-- [ADR-0300](./0300-metered-model-calls-and-rules-a-moderator-writes.md) (proposed) — the moderator's surface.
+- [ADR-0300](./0300-metered-model-calls-and-rules-a-moderator-writes.md) — the moderator's surface.
 - [ADR-0269](./0269-app-operations-a-command-query-contract-agents-drive-under-a-task-grant.md) — task grants and action records.
 - [ADR-0277](./0277-one-audit-trail-for-model-calls-and-agent-work.md) — the trail.
 - [ADR-0296](./0296-audit-events-as-a-trail-component.md) — audit events.

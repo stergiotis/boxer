@@ -13,7 +13,7 @@ import (
 
 // The Rust client's generated enums carry the same IDL fingerprint as these
 // bindings: the two are written by one generator from one IR, so a mismatch
-// means only one side was regenerated (ADR-0278 SD6, proposed). The browser
+// means only one side was regenerated (ADR-0278 SD6). The browser
 // worker refuses such a pair at start; this catches it before a build.
 func TestIdlFingerprintMatchesTheRustClient(t *testing.T) {
 	b, err := os.ReadFile(filepath.Join("..", "..", "..", "..", "..", "rust", "imzero2", "src", "imzero2", "enums_out.rs"))

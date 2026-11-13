@@ -21,7 +21,7 @@ import (
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/basemap"
 )
 
-// The checks a module runs on its tab binary (ADR-0278 SD7, proposed): that
+// The checks a module runs on its tab binary (ADR-0278 SD7): that
 // it compiles for wasip1 — which compiles exactly the apps it links — and a
 // report of what those apps declare that the tab does not serve. The report
 // is information, not a failure: an app may degrade by design.

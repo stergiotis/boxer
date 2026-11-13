@@ -192,7 +192,7 @@ var (
 	})
 
 	// WasmOpt shrinks the tab's Go module when installed; a bundle without it
-	// keeps the unoptimised module (ADR-0278 SD4, proposed).
+	// keeps the unoptimised module (ADR-0278 SD4).
 	WasmOpt = Declare(Program{
 		Name:        "wasm-opt",
 		Kind:        Host,

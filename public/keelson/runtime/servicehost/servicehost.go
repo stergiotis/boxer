@@ -31,7 +31,7 @@ const (
 
 	// StopReasonShutdown, StopReasonMountError and StopReasonUnmountError are
 	// the stop reasons a service's "stopped" lifecycle row carries
-	// (ADR-0352 (proposed) §SD2); the first two are windowhost's words for
+	// (ADR-0352 §SD2); the first two are windowhost's words for
 	// the same edges.
 	StopReasonShutdown     = "shutdown"
 	StopReasonMountError   = "mount-error"
@@ -106,7 +106,7 @@ type Config struct {
 	// Subscriptions, when set, lists the bus's live subscriptions once every
 	// selected service's Mount has returned, so the host can say which of a
 	// service's publish caps no subscriber answers in this process
-	// (ADR-0352 (proposed) §SD6). nil skips the check.
+	// (ADR-0352 §SD6). nil skips the check.
 	Subscriptions func() []inprocbus.SubscriptionInfo
 	// ShutdownDrain bounds the drain in ReapAll; zero is DefaultShutdownDrain.
 	ShutdownDrain time.Duration

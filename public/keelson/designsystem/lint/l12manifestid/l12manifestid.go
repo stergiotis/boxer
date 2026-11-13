@@ -69,7 +69,7 @@ var AllowedSpecialIds = map[string]bool{
 	// reading the declaring package's import path and correctly finding they
 	// differ; what was wrong was the list, not the constant.
 	"runtime.appletstore": true,
-	// runtime.workstatelet — the workstatelet store (ADR-0369, proposed): a
+	// runtime.workstatelet — the workstatelet store (ADR-0369): a
 	// bus client and a persist namespace under this id, as the applet
 	// store has.
 	"runtime.workstatelet": true,

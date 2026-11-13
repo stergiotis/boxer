@@ -284,6 +284,6 @@ the clearance is still refused rather than offered an approval path.
 - [ADR-0254](./0254-model-inference-as-a-keelson-capability.md), [ADR-0262](./0262-http-egress-as-a-keelson-capability.md) — the two walls.
 - [ADR-0264](./0264-retained-model-conversations-on-facts.md) — the facts write path's locality.
 - [ADR-0269](./0269-app-operations-a-command-query-contract-agents-drive-under-a-task-grant.md) §SD6, [ADR-0270](./0270-play-operations-catalog-and-agent-limits.md) — budgets; publish operations; agent limits.
-- [ADR-0300](./0300-metered-model-calls-and-rules-a-moderator-writes.md) (proposed) — the ledger.
+- [ADR-0300](./0300-metered-model-calls-and-rules-a-moderator-writes.md) — the ledger.
 - [ADR-0307](./0307-threat-model-for-an-interactive-single-person-cell.md), [ADR-0311](./0311-labels-integrity-levels-tlp-tiers-marks-and-endorsement.md) — the threat model and the label.
 - [agent-harness](../adr-background-work/agent-harness.md) §4.4, §4.5 and Appendix A (c) — the analysis and the canary spike.

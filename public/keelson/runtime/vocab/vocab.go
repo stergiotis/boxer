@@ -730,7 +730,7 @@ var (
 	MembAgentrunVerdictSource   = NkRegistry.MustBegin("agentrunVerdictSource", 516).End()
 	MembAgentrunVerdictEndpoint = NkRegistry.MustBegin("agentrunVerdictEndpoint", 517).End()
 	MembAgentrunVerdictReason   = NkRegistry.MustBegin("agentrunVerdictReason", 518).End()
-	// The evidence profile's components (ADR-0327 (proposed) §SD2): the
+	// The evidence profile's components (ADR-0327 §SD2): the
 	// chain with its mark and commitments, the written-by component, and
 	// the opening on a vault row. The shredded component binds verbatim
 	// names and needs no id.
@@ -756,13 +756,13 @@ var (
 	MembEvidenceWrittenByBatch        = NkRegistry.MustBegin("evidenceWrittenByBatch", 479).End()
 	MembEvidenceKindOpening           = NkRegistry.MustBegin("evidenceKindOpening", 480).End()
 	MembEvidenceOpeningValue          = NkRegistry.MustBegin("evidenceOpeningValue", 481).End()
-	// How an audit event's origin was established (ADR-0327 (proposed)
+	// How an audit event's origin was established (ADR-0327
 	// §SD6), beside PrincipalBy.
 	MembAuditEventOriginBy = NkRegistry.MustBegin("auditEventOriginBy", 482).End()
 	// The mechanism that established an audit event's principal, beside
 	// PrincipalBy (ADR-0296 Update 2026-10-13).
 	MembAuditEventPrincipalVia = NkRegistry.MustBegin("auditEventPrincipalVia", 483).End()
-	// The evidence profile's seal component (ADR-0327 (proposed) §SD5): one
+	// The evidence profile's seal component (ADR-0327 §SD5): one
 	// row per durable flush of a sealed store, naming the batch's rows.
 	MembEvidenceKindSeal       = NkRegistry.MustBegin("evidenceKindSeal", 490).End()
 	MembEvidenceSealStream     = NkRegistry.MustBegin("evidenceSealStream", 491).End()
@@ -774,7 +774,7 @@ var (
 	// The tier the egress wall saw on a fetch (ADR-0312 §SD4), beside the
 	// fetch record's other attributes (217–227).
 	MembHttpFetchTier = NkRegistry.MustBegin("httpFetchTier", 497).End()
-	// The lading publish record (ADR-0341 §SD5, proposed): one row per
+	// The lading publish record (ADR-0341 §SD5): one row per
 	// publish into the lading store, written or refused, and why.
 	MembKindLadingPublish     = NkRegistry.MustBegin("runtimeKindLadingPublish", 498).End()
 	MembLadingPublishTag      = NkRegistry.MustBegin("ladingPublishTag", 499).End()

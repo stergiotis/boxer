@@ -125,7 +125,7 @@ a Tier-1 surface under the ADR trigger and renumbers opcodes on both sides.
   config; play accepts `PlayLaunch{Sql AutoRun Live BandsSql Tab}`, so "open
   this selection in play" is one audited request.
 - **Workingsets** (ADR-0148), **column widths** (ADR-0151), the **app-state
-  manager** (ADR-0185, proposed) — the GUI's own state is data: the last
+  manager** (ADR-0185) — the GUI's own state is data: the last
   location, pinned comparisons, layout mode, bookmarks.
 - **Powerbox** (ADR-0026 §SD7, `fsbroker`) — `fs.dialog.read` / `.write` /
   `.bundle`; handle ops shipped: `.read .write .close .watch .unwatch`; the
@@ -290,7 +290,7 @@ Each item names the mechanism, so the claim is checkable.
 7. **The GUI's own state is data.** Locations, layout mode, pinned
    comparisons, bookmarks go into a launch-kind DTO (ADR-0135 / 0148),
    column widths into ADR-0151's store, and the app-state manager
-   (ADR-0185, proposed) can list and clear them — the data-centricity
+   (ADR-0185) can list and clear them — the data-centricity
    invariant applied to the tool itself.
 
 ## 6 Options for the shape (QOC)

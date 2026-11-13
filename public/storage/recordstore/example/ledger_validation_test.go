@@ -32,7 +32,7 @@ func evidenceInto(t *testing.T, manip *common.TableManipulator, roles gen.Roles,
 	}.Generate()
 }
 
-// The chain profile's preconditions (ADR-0327 (proposed) §SD2): a uint64
+// The chain profile's preconditions (ADR-0327 §SD2): a uint64
 // Key as the scope, a uint64 Order as the ordinal, and no Cas.
 func TestEvidenceChainRefusesAStringKey(t *testing.T) {
 	manip, err := GetRevSchemaInManipulator()

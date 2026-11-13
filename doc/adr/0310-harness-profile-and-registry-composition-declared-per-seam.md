@@ -381,6 +381,6 @@ path, carries what they compare.
 - [ADR-0094](./0094-keelson-introspection-tables.md) — introspection tables.
 - [ADR-0265](./0265-chat-app-over-retained-model-calls.md) — the chat's turn loop this record restructures.
 - [ADR-0269](./0269-app-operations-a-command-query-contract-agents-drive-under-a-task-grant.md), [ADR-0280](./0280-a-ceiling-on-what-a-chats-model-may-do-scored-on-a-ladder.md) — authority, read as a guard.
-- [ADR-0300](./0300-metered-model-calls-and-rules-a-moderator-writes.md), [ADR-0302](./0302-a-built-in-moderator-loop-signals-and-an-escalation-ladder.md) (proposed) — rations and the moderator.
+- [ADR-0300](./0300-metered-model-calls-and-rules-a-moderator-writes.md), [ADR-0302](./0302-a-built-in-moderator-loop-signals-and-an-escalation-ladder.md) — rations and the moderator.
 - [ADR-0308](./0308-the-run-journal-is-the-only-source-of-model-input.md), [ADR-0309](./0309-context-projection-as-sql-over-the-journal-in-a-local-worker.md) — the journal and the projection the profile parameterises.
 - [agent-harness](../adr-background-work/agent-harness.md) §1.2, §2.5–§2.9 — the analysis.

@@ -198,7 +198,7 @@ type SeedWindow struct {
 }
 
 // SeedService is one launch config delivered to a service at boot
-// (ADR-0352 (proposed) §SD1): servicehost.Seed, named here beside
+// (ADR-0352 §SD1): servicehost.Seed, named here beside
 // SeedWindow.
 type SeedService = servicehost.Seed
 
@@ -225,13 +225,13 @@ type Options struct {
 	// Ignored in screenshot mode.
 	SeedWindows []SeedWindow
 	// SeedServices are launch configs delivered to services at their Mount
-	// (ADR-0352 (proposed) §SD1), the service form of SeedWindow: a seed
+	// (ADR-0352 §SD1), the service form of SeedWindow: a seed
 	// that does not fit its app is a boot error; one naming a service the
 	// predicate did not select is logged and skipped. Ignored in screenshot
 	// mode.
 	SeedServices []SeedService
 	// NoWindowHost boots a process without a window host and without the
-	// imzero2 client (ADR-0352 (proposed) §SD6): identity, facts, bus,
+	// imzero2 client (ADR-0352 §SD6): identity, facts, bus,
 	// services and the service host, nothing drawn. Such a process hosts
 	// headless apps only; Wait, not Run, holds it until a signal. Ignored in
 	// screenshot mode.
@@ -369,7 +369,7 @@ type Runtime struct {
 	// Host is the window host; nil in screenshot mode and under
 	// NoWindowHost.
 	Host *windowhost.Inst
-	// Services is the service host (ADR-0352 (proposed) §SD2): the headless
+	// Services is the service host (ADR-0352 §SD2): the headless
 	// apps KEELSON_SERVICES_WHERE selected, mounted at boot. nil in
 	// screenshot mode.
 	Services *servicehost.Inst
@@ -389,7 +389,7 @@ type Runtime struct {
 	// window's notice (ADR-0351 §SD6); nil where showRunning is.
 	openRunning func(filter string) (err error)
 	// workstateletMenu is the Window menu's "Save desktop as workstatelet"
-	// (ADR-0369 (proposed) §SD7); nil where captures cannot be stored.
+	// (ADR-0369 §SD7); nil where captures cannot be stored.
 	workstateletMenu *imzhost.WorkstateletMenu
 }
 
@@ -880,7 +880,7 @@ func (rt *Runtime) bootWindowHost() (err error) {
 		// The apps label by the host's declaration (cell.OfMount).
 		host.SetMountValue(cell.MountKey{}, rt.Cell)
 	}
-	// Workstatelets (ADR-0369, proposed): the host opens a minted document's
+	// Workstatelets (ADR-0369): the host opens a minted document's
 	// windows, and where the persist service runs a capture of the desktop
 	// is stored and minted. Before the seeds below, so a workstatelet named
 	// by --launch opens.
@@ -888,7 +888,7 @@ func (rt *Runtime) bootWindowHost() (err error) {
 	if rt.Persist != nil {
 		rt.bootWorkstateletStore(host, reg, logger)
 	}
-	// The shutdown drain (ADR-0322, proposed) is cut from the grace: the
+	// The shutdown drain (ADR-0322) is cut from the grace: the
 	// signal handler forces the exit one grace after it reaps, and the
 	// drain must end well before that.
 	grace := rt.opts.ShutdownGrace
@@ -896,7 +896,7 @@ func (rt *Runtime) bootWindowHost() (err error) {
 		grace = DefaultShutdownGrace
 	}
 	host.SetDrainDeadlines(0, grace/2)
-	// The services (ADR-0352 (proposed) §SD2) start before the first window
+	// The services (ADR-0352 §SD2) start before the first window
 	// opens, with instance keys from the window host's allocator so no
 	// window and service share one.
 	if err = rt.bootServiceHost(context.Background(), reg, host.AllocateInstanceKey); err != nil {
@@ -1425,7 +1425,7 @@ func (rt *Runtime) workstateletMenuFor(host *windowhost.Inst) (menu *imzhost.Wor
 }
 
 // bootWorkstateletStore starts the store of captured workstatelet documents
-// (ADR-0369 (proposed) §SD8) and builds the Window menu's save over it. A
+// (ADR-0369 §SD8) and builds the Window menu's save over it. A
 // store that does not start leaves the menu without the entry; documents of
 // committed books open either way.
 func (rt *Runtime) bootWorkstateletStore(host *windowhost.Inst, reg *app.Registry, logger zerolog.Logger) {
@@ -1775,7 +1775,7 @@ func (rt *Runtime) Reap() {
 	})
 }
 
-// bootServiceHost selects the services (ADR-0352 (proposed) §SD3) after the
+// bootServiceHost selects the services (ADR-0352 §SD3) after the
 // launch limit has been applied to reg, mounts them, records the selection
 // on the trail, and registers keelson('services'). A set predicate that
 // cannot be evaluated is a boot error, as the launch limit's is; unset, no

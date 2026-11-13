@@ -23,7 +23,7 @@ import (
 	"github.com/stergiotis/boxer/public/thestack/imzero2/browserhost/web"
 )
 
-// The bundle subcommand (ADR-0278 SD4, proposed): a servable directory built
+// The bundle subcommand (ADR-0278 SD4): a servable directory built
 // from whichever module the binary runs in, so a consumer bundles its own tab
 // without boxer's scripts. It writes the Go module, the Rust browser host and
 // the fonts; the page, worker and shim are served out of the binary by
@@ -177,7 +177,7 @@ const (
 	hostFromSource = "source"
 )
 
-// placeHost puts the browser host at dst (ADR-0278 SD5, proposed): the file
+// placeHost puts the browser host at dst (ADR-0278 SD5): the file
 // --host names, as given; else fetched by the digest browserhost.sum records,
 // or built from the boxer module's sources. auto builds when the module being
 // bundled is boxer itself — a developer changing the host wants that build,

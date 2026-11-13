@@ -313,7 +313,7 @@ kind.
 
 ### 2026-10-12 — SD2, SD4, SD7: a commitment per component, erasure per component, the audit package
 
-Under [ADR-0327](./0327-evidence-as-a-record-store-profile-chain-vault-marks-seals-and-anchors-any-store-opts-into.md) (proposed) §SD4 the vault holds one row per (run, ordinal,
+Under [ADR-0327](./0327-evidence-as-a-record-store-profile-chain-vault-marks-seals-and-anchors-any-store-opts-into.md) §SD4 the vault holds one row per (run, ordinal,
 component) with its own opening, and the ledger's chain component
 carries one commitment per component, so SD4's erasure names a
 component: an `erased` mark naming the ordinal and the component, the

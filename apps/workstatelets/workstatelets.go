@@ -1,5 +1,5 @@
 // Package workstatelets is the in-tree book of workstatelet documents
-// (ADR-0369, proposed): each markdown file under book/ is one document, and
+// (ADR-0369): each markdown file under book/ is one document, and
 // a shell that links this package and mints the registered books lists each
 // one in its launcher.
 //

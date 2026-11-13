@@ -33,7 +33,7 @@ func TestManifest_Validate_Headless_OK(t *testing.T) {
 	require.NoError(t, err)
 }
 
-// ADR-0352 (proposed) §SD1: a headless app declares Summary and Topics on
+// ADR-0352 §SD1: a headless app declares Summary and Topics on
 // the same terms as a windowed one, and never a Workingset.
 func TestManifest_Validate_Headless_NeedsSummaryAndTopics(t *testing.T) {
 	noSummary := Manifest{Id: "org.test.headless", Display: "Headless tool", Topics: []TopicT{TopicRuntime}, Surface: SurfaceHeadless}
@@ -233,7 +233,7 @@ func TestManifest_Validate_WindowedNeedsTopics(t *testing.T) {
 func TestManifest_Validate_HeadlessNeedsTopicsToo(t *testing.T) {
 	// A headless app is selected to run by a predicate over keelson.apps and
 	// shown in the app center, so it declares topics as a windowed app does
-	// (ADR-0352 (proposed) §SD1; before it, ADR-0158 §SD2 exempted it).
+	// (ADR-0352 §SD1; before it, ADR-0158 §SD2 exempted it).
 	m := Manifest{
 		Id:      "org.test.x",
 		Display: "X",

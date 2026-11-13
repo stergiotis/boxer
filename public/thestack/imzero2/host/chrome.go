@@ -61,13 +61,13 @@ type ChromeConfig struct {
 	// center can be launched. May be nil.
 	ShowRunning func() (err error)
 	// Workstatelets, when non-nil, puts "Save desktop as workstatelet" in the
-	// Window menu (ADR-0369, proposed). Host boot sets it where captured
+	// Window menu (ADR-0369). Host boot sets it where captured
 	// documents can be stored. May be nil.
 	Workstatelets *WorkstateletMenu
 }
 
 // WorkstateletMenu is what the Window menu's "Save desktop as workstatelet"
-// calls (ADR-0369 (proposed) §SD7).
+// calls (ADR-0369 §SD7).
 type WorkstateletMenu struct {
 	// Save asks for a capture of the open windows, stored under title. It
 	// returns once the capture is queued, with an error for a title that
@@ -313,7 +313,7 @@ func DecorateRenderer(inner func() error, cc ChromeConfig) func() error {
 						c.MemoryResetAreas()
 					}
 					// The open windows and the layout as one document, listed
-					// in the launcher from then on (ADR-0369 (proposed) §SD7).
+					// in the launcher from then on (ADR-0369 §SD7).
 					if cc.Workstatelets != nil {
 						c.Separator().Horizontal().Send()
 						for range c.MenuButton(c.Atoms().Text("Save desktop as workstatelet").Keep()).KeepIter() {

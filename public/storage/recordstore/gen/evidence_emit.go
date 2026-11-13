@@ -17,7 +17,7 @@ import (
 	"github.com/stergiotis/boxer/public/semistructured/leeway/valueaspects"
 )
 
-// Evidence is the evidence profile (ADR-0327 (proposed) §SD2): the
+// Evidence is the evidence profile (ADR-0327 §SD2): the
 // properties a generated store opts into, each a component the generator
 // emits into the store's package and the verbs over it. The components
 // bind the facts data sections by name — `symbol`, `stringArray`,
@@ -40,7 +40,7 @@ type Evidence struct {
 	// chained store, inside the digest (law L35).
 	WrittenBy bool
 	// Vault names the lw:-tagged DTO sources of the vaulted components
-	// (ADR-0327 (proposed) §SD4), one kind per file, beside ComponentPaths
+	// (ADR-0327 §SD4), one kind per file, beside ComponentPaths
 	// and not in it: they are the vault store's, and a ledger that could
 	// scan and decode content it never stores would say the wrong thing
 	// about itself. The generator emits a second store, <Store>VaultStore
@@ -64,7 +64,7 @@ type Evidence struct {
 	// i64Array, f64Array, bool, null, emptyObject and emptyArray, each
 	// taking the mixed verbatim name + parameters channel.
 	Shredded bool
-	// Seals emits the profile's seal component (ADR-0327 (proposed) §SD5)
+	// Seals emits the profile's seal component (ADR-0327 §SD5)
 	// for a store with many writers that seals its flushes instead of
 	// chaining its rows: one row per durable flush naming the batch's rows
 	// and their row digests, chained to the stream's previous seal, with
@@ -565,7 +565,7 @@ type EvidenceOpening struct {
 }
 
 // emitVaulted writes <Store>Vaulted, the writer and reader over the ledger
-// and its vault store (ADR-0327 (proposed) §SD4).
+// and its vault store (ADR-0327 §SD4).
 func (inst emitter) emitVaulted(p func(string, ...any)) {
 	st, ent, chain := inst.storeType(), inst.entityType(), evidenceChainKind
 	vst, vent, venv := inst.vaultStoreName()+"Store", inst.vaultStoreName()+"Entity", inst.vaultStoreName()+"Envelope"

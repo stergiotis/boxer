@@ -615,7 +615,7 @@ obey the repository's privacy rule.
 | ADR-0311 §SD8 | marks not shown; marks on trail rows deferred |
 | ADR-0314 §SD7; ADR-0327 §SD11 | per-entry signatures; a public anchor store; the generic chain-head row |
 | [ADR-0330](../adr/0330-a-shared-audit-recorder-below-the-runtime-one-sealed-writer-over-a-narrow-store-binding.md) (accepted 2026-10-30, M3 landed the same day) | the trail's buffer, seals, reads and forwarding are `auditrec`'s over a trail binding; a stored-twice batch no longer verifies as a fork; the host flushes the trail every second |
-| ADR-0343 (proposed) | coverage views exist, no derived view installed; a **driver stamp on the run row** (person / scene / headless driver / coordinator) deferred — the one field that tells a scene run from a person's |
+| ADR-0343 | coverage views exist, no derived view installed; a **driver stamp on the run row** (person / scene / headless driver / coordinator) deferred — the one field that tells a scene run from a person's |
 | ADR-0345 Alternatives | `log_tail` under the agent schema "deferred, not rejected" |
 | ADR-0323 §SD8 | highlight words, moderator-set levels, per-level effects deferred |
 | [agent-harness](./agent-harness.md) §2.7 S15/S16, §6 | S16 "Presentation" is "`apps/chat` render code, which also writes coordinator state"; open decisions #10 branching, #28 what "Keep off" means once the journal is always written, #30 anchoring cadence and what a regulator needs to check without the cell |

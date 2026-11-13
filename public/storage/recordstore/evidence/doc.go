@@ -1,6 +1,6 @@
 // Package evidence holds the laws a record store under the evidence
 // profile satisfies, and the hash constructions they are stated over
-// (ADR-0327 (proposed) §SD1): a chain digest per row over the row's
+// (ADR-0327 §SD1): a chain digest per row over the row's
 // canonical item and its predecessor's digest; a commitment per vaulted
 // component under an opening that is destroyed with the content; a mark
 // that says what an absent component means; heads anchored outside the

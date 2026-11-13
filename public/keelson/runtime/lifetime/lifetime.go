@@ -1,5 +1,5 @@
 // Package lifetime groups work that is retired as one, and lets the owner
-// wait for it to finish (ADR-0322, proposed).
+// wait for it to finish (ADR-0322).
 //
 // A [Scope] has two contexts and a drain:
 //

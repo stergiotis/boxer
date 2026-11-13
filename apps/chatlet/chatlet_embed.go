@@ -7,7 +7,7 @@ import (
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
-// A chatlet embeds as a sqlapplet does (ADR-0368, proposed): a host draws
+// A chatlet embeds as a sqlapplet does (ADR-0368): a host draws
 // the chat its document makes inside its own window, with the chat's
 // capabilities on its own manifest (chat.EmbedCaps). A document of a
 // registered book is listed in the launcher too; a host that wants one

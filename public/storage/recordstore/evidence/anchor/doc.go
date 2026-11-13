@@ -1,5 +1,5 @@
 // Package anchor is the anchor store contract below the keelson runtime
-// (ADR-0327 (proposed) §SD7): the append-only record
+// (ADR-0327 §SD7): the append-only record
 // `(cell, scope, ordinal, scheme, digest)` of chain heads and seals an
 // organisation holds outside any person's control, answered with a
 // receipt, so that a store written on a host the person administers can

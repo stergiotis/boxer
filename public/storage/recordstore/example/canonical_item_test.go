@@ -11,7 +11,7 @@ import (
 // CanonicalItem (gen.Input.CanonWire) is the canonical wire item of one
 // entity as the store would write it: the same bytes DrainCanonical
 // writes for the row the entity was decoded from, so a verifier reading
-// rows back computes what the writer chained (ADR-0327 (proposed) §SD2).
+// rows back computes what the writer chained (ADR-0327 §SD2).
 func TestCanonicalItemIsTheDrainedRow(t *testing.T) {
 	st := NewRevStore(nil, nil, RevStoreConfig{})
 	defer st.Close()

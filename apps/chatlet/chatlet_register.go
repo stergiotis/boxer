@@ -63,7 +63,7 @@ func RegisterBook(id string, fsys fs.FS, topics []app.TopicT) (err error) {
 
 // MintManifests registers one app per document of every registered book. The
 // shell calls it once, before launch resolution and before the host's boot,
-// so the coordinators predicate sees the minted set (ADR-0364, proposed).
+// so the coordinators predicate sees the minted set (ADR-0364).
 // A document that does not parse mints nothing and its siblings still do; the
 // corpus test is the gate that keeps one off main.
 func MintManifests(logger zerolog.Logger) (minted int, errs []error) {

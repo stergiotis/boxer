@@ -81,8 +81,7 @@ own input always lands first; a consequential command is confirmed each
 time. Agents also read the desktop as data and may arrange windows
 ([ADR-0276](../adr/0276-agents-read-and-arrange-windows.md)) and point at
 things through an overlay anchored to windows
-([ADR-0297](../adr/0297-inscribe-an-overlay-agents-annotate-the-desktop-through.md),
-proposed).
+([ADR-0297](../adr/0297-inscribe-an-overlay-agents-annotate-the-desktop-through.md)).
 
 *Why not drive the UI by clicking?* A click reaches only widgets, breaks on
 a layout change, and cannot be checked against a declared purpose. A
@@ -235,7 +234,7 @@ clients to alarm management, are in
 
 ### 10. Cost and runaway loops are the host's to bound
 
-Three records are proposed, not accepted; read them as direction.
+Three records carry it.
 Model calls are metered per account and admitted, clamped, queued or
 refused by rules, with the queue ordered by window state
 ([ADR-0300](../adr/0300-metered-model-calls-and-rules-a-moderator-writes.md)).
@@ -264,8 +263,8 @@ lint and a diff the person reads
 Screenshots the model collects sit beside it, sealed on disk under a budget
 ([ADR-0284](../adr/0284-chat-artefact-screenshots-sealed-under-a-budget.md)).
 The artefact can be exported to the snapshot store and handed to mdedit
-([ADR-0342](../adr/0342-chat-artefact-export-to-lading-and-the-handover-to-mdedit-by-snapshot.md),
-proposed). An Analytics tab shows the agent surface and what of it was
+([ADR-0342](../adr/0342-chat-artefact-export-to-lading-and-the-handover-to-mdedit-by-snapshot.md)).
+An Analytics tab shows the agent surface and what of it was
 granted and used ([ADR-0283](../adr/0283-chat-analytics-the-agent-surface-and-what-was-granted-and-used.md)),
 and past conversations are read in play over SQL
 ([ADR-0239](../adr/0239-play-chat-panel-and-chatview-widget.md),

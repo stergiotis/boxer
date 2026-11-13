@@ -539,7 +539,7 @@ none leaves the symbols absent and the tier CLEAR.
 
 ### 2026-10-12 — §SD3: the trail seals its flushes; audit events gain write-ahead and `originBy`
 
-Under [ADR-0327](./0327-evidence-as-a-record-store-profile-chain-vault-marks-seals-and-anchors-any-store-opts-into.md) (proposed) §SD5 every batch the server takes carries one seal row
+Under [ADR-0327](./0327-evidence-as-a-record-store-profile-chain-vault-marks-seals-and-anchors-any-store-opts-into.md) §SD5 every batch the server takes carries one seal row
 naming the batch's other rows by the digest of their canonical items,
 chained to the run's previous durable seal (law L34); a batch the cap
 dropped yields the audit-gap row the next seal names, and each durable

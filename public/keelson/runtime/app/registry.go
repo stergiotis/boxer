@@ -89,7 +89,7 @@ type Registry struct {
 	// launchable apps declare it (ADR-0361 §SD2).
 	designations map[string]AppIdT
 	// coordinators are the app ids or subject aliases the host resolved as
-	// coordinators at boot (ADR-0364, proposed).
+	// coordinators at boot (ADR-0364).
 	coordinators []string
 }
 

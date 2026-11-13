@@ -71,7 +71,7 @@ func Evaluate(ctx context.Context, bus *inprocbus.Inst, reg *app.Registry, where
 // EvaluateAs is Evaluate for another predicate over keelson.apps, evaluated
 // the same way — once, on clickhouse-local, over a registry's current rows —
 // under the caller's bus identity and name: the service host's selection
-// (ADR-0352 (proposed) §SD3) composes with the launch limit by reading the
+// (ADR-0352 §SD3) composes with the launch limit by reading the
 // `launchable` column this package's Apply has already set.
 func EvaluateAs(ctx context.Context, bus *inprocbus.Inst, reg *app.Registry, as app.AppIdT, name string, where string, log zerolog.Logger) (ids []app.AppIdT, err error) {
 	tables := introspect.NewRegistry()

@@ -1,4 +1,4 @@
-// Package servicedemo is a headless app — a service (ADR-0352 (proposed)
+// Package servicedemo is a headless app — a service (ADR-0352
 // §SD1) — that does one visible thing: it counts ticks in the background
 // and keeps the count under a persist key, so a reader can see the
 // service host's lifecycle on something: keelson('services') shows it

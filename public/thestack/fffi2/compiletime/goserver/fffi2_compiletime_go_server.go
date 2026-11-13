@@ -887,7 +887,7 @@ const (
 
 // IdlFingerprint is the IDL these bindings were generated from, as
 // ir.Fingerprint digests it; the Rust client's generated enums carry the same
-// value from the same generation (ADR-0278 SD6, proposed).
+// value from the same generation (ADR-0278 SD6).
 const IdlFingerprint uint64 = 0x%016x
 `, ir.Fingerprint(tls))
 	tracker.MergeError(err)

@@ -19,7 +19,7 @@ import (
 )
 
 // hostSumText is the browser host this tree builds, as browserhost.sum
-// records it (ADR-0278 SD5, proposed).
+// records it (ADR-0278 SD5).
 //
 //go:embed browserhost.sum
 var hostSumText string

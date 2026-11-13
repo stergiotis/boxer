@@ -1,9 +1,9 @@
 package chat
 
-// Exporting the artefact to the lading store (ADR-0342, proposed): the
+// Exporting the artefact to the lading store (ADR-0342): the
 // person's gesture writes the head revision's text and the screenshots it
 // names as one snapshot of the conversation's mount, through the host's
-// publish service (ADR-0341, proposed), which checks the label before any
+// publish service (ADR-0341), which checks the label before any
 // row is written. Confirming endorses the head for publishing when no
 // endorsement covers it (ADR-0311 §SD3, law L15). Open in mdedit takes the
 // same path when the artefact has screenshots, and hands mdedit the snapshot.

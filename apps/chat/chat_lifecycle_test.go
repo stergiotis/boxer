@@ -254,7 +254,7 @@ func TestTheEffectClassIsTheCatalogsInTheDefaultConfig(t *testing.T) {
 }
 
 // A window that closes while a turn runs keeps its bus until the run is
-// closed (ADR-0322, proposed): the coordinator's scope is a child of the
+// closed (ADR-0322): the coordinator's scope is a child of the
 // window's, so the host's drain, which ends before the bus closes, ends
 // only after the stopped turn wrote its tail and the late close landed.
 func TestTheWindowDrainWaitsForTheRunsClose(t *testing.T) {

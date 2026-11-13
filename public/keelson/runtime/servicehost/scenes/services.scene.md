@@ -18,7 +18,7 @@ scene:
 
 # services — a headless app the host runs
 
-The service host (ADR-0352 (proposed)) under a predicate that selects the
+The service host (ADR-0352) under a predicate that selects the
 demo service: `keelson('services')` lists every headless app the process
 registered, with the tick service selected and running and its instance
 key, and the lifecycle rows the host wrote for it.

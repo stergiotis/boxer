@@ -380,7 +380,7 @@ func (inst Manifest) Validate() (err error) {
 	// ADR-0158 §SD1/§SD2: topics are the launcher's only subject axis, so a
 	// windowed app that declares none cannot be sectioned or filtered — it
 	// would exist in the registry and be reachable from nowhere. A headless
-	// app (ADR-0352 (proposed) §SD1) is selected to run by a predicate over
+	// app (ADR-0352 §SD1) is selected to run by a predicate over
 	// keelson.apps and shown in the app center on the same terms, so it
 	// declares them too.
 	if len(inst.Topics) == 0 {
@@ -399,7 +399,7 @@ func (inst Manifest) Validate() (err error) {
 	// windowed app without the third is an entry a reader cannot tell from
 	// its siblings. Required for the same reason and on the same terms as
 	// Topics; a headless app's row in keelson('services') and its app
-	// center page read it the same way (ADR-0352 (proposed) §SD1).
+	// center page read it the same way (ADR-0352 §SD1).
 	//
 	// Non-empty only. The style budget (length, not repeating Display) is a
 	// tree-wide test, not a Validate check: RegisterFactory answers a
@@ -425,7 +425,7 @@ func (inst Manifest) Validate() (err error) {
 			Errorf("manifest: Workingset requires a non-empty LaunchKind")
 		return
 	}
-	// ADR-0352 (proposed) §SD1: a workingset is composed at a closing edge a
+	// ADR-0352 §SD1: a workingset is composed at a closing edge a
 	// person caused, and a headless app has no window to close.
 	if inst.Workingset && inst.Surface == SurfaceHeadless {
 		err = eb.Build().Str("id", string(inst.Id)).

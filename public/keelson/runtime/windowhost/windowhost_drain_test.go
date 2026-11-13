@@ -14,7 +14,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/lifetime"
 )
 
-// ADR-0322 (proposed): between Unmount and the bus close the host drains
+// ADR-0322: between Unmount and the bus close the host drains
 // the instance's lifetime scope. tailApp starts work in Mount that, once
 // the work context ends, writes its tail over the bus and leaves when
 // release is closed.

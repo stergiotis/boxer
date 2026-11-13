@@ -10,10 +10,10 @@ reviewed-date: 2026-10-12
 
 ## Context
 
-ADR-0324 (proposed) holds every decision the person owes in one host queue
+ADR-0324 holds every decision the person owes in one host queue
 and decides what opens on its own: a *critical* item's card when it
 arrives (§SD3), and a *your turn* item's card once it has waited
-unacknowledged for `BOXER_ATTENTION_ESCALATE` (§SD4). ADR-0323 (proposed)
+unacknowledged for `BOXER_ATTENTION_ESCALATE` (§SD4). ADR-0323
 adds highlights, such as a watched turn that ended, which the host's control
 counts. All of this assumes the person is at the screen and willing to be
 interrupted. It deferred the person's status to its own decision

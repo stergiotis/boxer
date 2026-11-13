@@ -45,7 +45,7 @@ func appendAll(t *testing.T, st *LedgerStore, ctx context.Context, seed string, 
 // sets Prev, Digest and Scheme on the chain component, and digests the
 // row's canonical item with Prev and Digest at zero against the head's
 // digest — so the rows verify under law L31 from the seed, and a changed
-// row breaks at itself (ADR-0327 (proposed) §SD2).
+// row breaks at itself (ADR-0327 §SD2).
 func TestAppendChainedRowsVerifyFromTheSeed(t *testing.T) {
 	st := newLedger(t)
 	ctx := context.Background()

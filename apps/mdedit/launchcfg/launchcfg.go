@@ -18,7 +18,7 @@ const Kind = "mdeditLaunch"
 // MdeditLaunch is a handed-over document: Text is its markdown, Name what
 // the window calls it and offers as the file name when it is saved. Mount,
 // SnapNanos and Path, when Mount is set, name the same document in a lading
-// snapshot (ADR-0342 §SD5, proposed): the window reads it and the images it
+// snapshot (ADR-0342 §SD5): the window reads it and the images it
 // embeds from there, and keeps Text if the snapshot cannot be read. Text may
 // be empty when the snapshot names the document: the window shows the
 // snapshot's text when the read lands.

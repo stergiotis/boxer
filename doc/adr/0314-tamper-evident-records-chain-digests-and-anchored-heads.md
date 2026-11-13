@@ -255,7 +255,7 @@ the run row as the first predecessor, and L31 do not change.
 
 ### 2026-10-12 — §SD1, §SD2, §SD3: the chain, the anchors and law L32 are the evidence profile's
 
-[ADR-0327](./0327-evidence-as-a-record-store-profile-chain-vault-marks-seals-and-anchors-any-store-opts-into.md) (proposed) generalises this record. §SD1's chain is the profile's
+[ADR-0327](./0327-evidence-as-a-record-store-profile-chain-vault-marks-seals-and-anchors-any-store-opts-into.md) generalises this record. §SD1's chain is the profile's
 chain component on any generated store with a uint64 scope and ordinal,
 verified by one `evidence.Verify` over the row's canonical item (law
 L31, with the mark clause of §SD5); the journal's digest name is

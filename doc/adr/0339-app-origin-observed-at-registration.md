@@ -1,10 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-10-25
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-11-12
 ---
-
-> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
 
 # ADR-0339: An app's origin is observed at registration, not declared — package and module from the call stack and the build information
 
@@ -153,7 +153,7 @@ The default `go test` lane covers it in three places:
 
 ## Status
 
-Proposed — awaiting review by the code owner. Built alongside the proposal.
+Accepted 2026-11-12. Built alongside the proposal.
 
 ## References
 
