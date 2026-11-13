@@ -125,9 +125,12 @@ selectStmt:
 
 projectionClause : SELECT DISTINCT? topClause? columnExprList projectionExceptClause?;
 projectionExceptClause : EXCEPT staticOrDynamicColumnSelection;
+// COLUMNS is a keyword that is also a name (see the keyword rule), so
+// `EXCEPT COLUMNS('re')` could start either list; the dynamic one comes first
+// and wins.
 staticOrDynamicColumnSelection
-    : identifier (COMMA identifier)*       # StaticColumnList
-    | dynamicColumnSelection               # DynamicColumnList;
+    : dynamicColumnSelection               # DynamicColumnList
+    | identifier (COMMA identifier)*       # StaticColumnList;
 dynamicColumnSelection
     : COLUMNS LPAREN STRING_LITERAL RPAREN;
 topClause: TOP DECIMAL_LITERAL (WITH TIES)?;
@@ -226,6 +229,11 @@ columnExpr
     | SUBSTRING LPAREN columnExpr FROM columnExpr (FOR columnExpr)? RPAREN                # ColumnExprSubstring
     | TIMESTAMP STRING_LITERAL                                                            # ColumnExprTimestamp
     | TRIM LPAREN (BOTH | LEADING | TRAILING) STRING_LITERAL FROM columnExpr RPAREN       # ColumnExprTrim
+    // COLUMNS is a keyword that is also a name (`AS columns`, `system.columns`),
+    // so `COLUMNS('re')` also matches the function-call alternatives below.
+    // Ambiguity resolves to the lowest alternative, so the dynamic selection
+    // must stay ahead of them.
+    | dynamicColumnSelection                                                              # ColumnExprDynamic
     | identifier (LPAREN columnExprList? RPAREN) OVER LPAREN windowExpr RPAREN            # ColumnExprWinFunction
     | identifier (LPAREN columnExprList? RPAREN) OVER identifier                          # ColumnExprWinFunctionTarget
     | identifier (LPAREN columnExprList? RPAREN)? LPAREN DISTINCT? columnArgList? RPAREN  # ColumnExprFunction
@@ -268,7 +276,6 @@ columnExpr
     | LPAREN columnExprList RPAREN                                                        # ColumnExprTuple
     | LBRACKET columnExprList? RBRACKET                                                   # ColumnExprArray
     | columnIdentifier                                                                    # ColumnExprIdentifier
-    | dynamicColumnSelection                                                              # ColumnExprDynamic
     ;
 columnArgList: columnArgExpr (COMMA columnArgExpr)*;
 columnArgExpr: columnLambdaExpr | columnExpr;
@@ -284,7 +291,7 @@ columnIdentifier: (columnQualifier DOT)? nestedIdentifier;
 // shared tableIdentifier let `t.c` in a projection be read as `db.table`
 // whenever a FROM-clause continuation (`,` `)` WHERE JOIN …) could follow it.
 // Only DOT follows columnQualifier, which makes the decision SLL-exact.
-columnQualifier: (databaseIdentifier DOT)? (identifier | COLUMNS | paramSlot);
+columnQualifier: (databaseIdentifier DOT)? (identifier | paramSlot);
 nestedIdentifier: identifier (DOT identifier)?;
 
 // Tables
@@ -301,12 +308,7 @@ tableFunctionExpr: identifier LPAREN tableArgList? RPAREN;
 // Without it a query parameterised on its database or table cannot be parsed at
 // all, so an applet carrying one never mounts. Consumers must treat
 // `Identifier()` as optional here and fall back to `GetText()`.
-//
-// COLUMNS is admitted in the same position, and only there: `system.columns`
-// is a real table, but COLUMNS cannot join the `keyword` rule, because
-// `COLUMNS('re')` would then match both ColumnExprFunction and
-// ColumnExprDynamic. After a DOT or before one, the token is unambiguous.
-tableIdentifier: (databaseIdentifier DOT)? (identifier | COLUMNS | paramSlot);
+tableIdentifier: (databaseIdentifier DOT)? (identifier | paramSlot);
 tableArgList: tableArgExpr (COMMA tableArgExpr)*;
 // The columnExpr alternative admits expression arguments — row tuples
 // `values('a UInt8, b UInt8', (1, 2))`, arrays, arithmetic, function calls —
@@ -350,7 +352,7 @@ literal
 interval: SECOND | MINUTE | HOUR | DAY | WEEK | MONTH | QUARTER | YEAR;
 keyword
     : AFTER | ALIAS | ALL | ALTER | AND | ANTI | ANY | ARRAY | AS | ASCENDING | ASOF | AST | ASYNC | ATTACH | BETWEEN | BOTH | BY | CASE
-    | CAST | CHECK | CLEAR | CLUSTER | CODEC | COLLATE | COLUMN | COMMENT | CONSTRAINT | CREATE | CROSS | CUBE | CURRENT | DATABASE
+    | CAST | CHECK | CLEAR | CLUSTER | CODEC | COLLATE | COLUMN | COLUMNS | COMMENT | CONSTRAINT | CREATE | CROSS | CUBE | CURRENT | DATABASE
     | DATABASES | DATE | DEDUPLICATE | DEFAULT | DELAY | DELETE | DESCRIBE | DESC | DESCENDING | DETACH | DICTIONARIES | DICTIONARY | DISK
     | DISTINCT | DISTRIBUTED | DROP | ELSE | END | ENGINE | EVENTS | EXISTS | EXPLAIN | EXPRESSION | EXTRACT | FETCHES | FINAL | FIRST
     | FLUSH | FOR | FOLLOWING | FORMAT | FREEZE | FROM | FULL | FUNCTION | GLOBAL | GRANULARITY | GROUP | HAVING | HIERARCHICAL | ID

@@ -112,6 +112,8 @@ var goldenExtraInputs = []struct{ name, sql string }{
 	{"qualified_star", "SELECT t.*, db.t.* FROM db.t AS t"},
 	{"columns_qualifier", "SELECT columns.name, system.columns.type FROM system.columns"},
 	{"columns_upper", "SELECT COLUMNS.name FROM system.COLUMNS"},
+	{"columns_alias", "SELECT database, count() AS columns FROM system.columns GROUP BY database ORDER BY columns DESC"},
+	{"columns_dynamic", "SELECT COLUMNS('^a'), * EXCEPT COLUMNS('^b') FROM t"},
 	{"param_table", "SELECT a FROM {db:Identifier}.{t:Identifier} WHERE {t:Identifier}.a = {v:UInt8}"},
 	{"handle_resolution", "SELECT t.h_x, h_y FROM t"},
 	{"dynamic_columns", "SELECT x_id, t.x_id, y FROM t"},

@@ -71,11 +71,11 @@ func (v *BaseClickHouseParserGrammar1Visitor) VisitProjectionExceptClause(ctx *P
 	return v.VisitChildren(ctx)
 }
 
-func (v *BaseClickHouseParserGrammar1Visitor) VisitStaticColumnList(ctx *StaticColumnListContext) interface{} {
+func (v *BaseClickHouseParserGrammar1Visitor) VisitDynamicColumnList(ctx *DynamicColumnListContext) interface{} {
 	return v.VisitChildren(ctx)
 }
 
-func (v *BaseClickHouseParserGrammar1Visitor) VisitDynamicColumnList(ctx *DynamicColumnListContext) interface{} {
+func (v *BaseClickHouseParserGrammar1Visitor) VisitStaticColumnList(ctx *StaticColumnListContext) interface{} {
 	return v.VisitChildren(ctx)
 }
 

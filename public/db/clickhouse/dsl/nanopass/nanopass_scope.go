@@ -544,11 +544,9 @@ func extractFromAliasExpr(aliasExpr *grammar1.TableExprAliasContext, parentScope
 // the grammar admits because ClickHouse substitutes there. A slot is not an
 // identifier, so it is neither decoded nor resolvable: no schema lookup will
 // match it, which is correct, because the real name is not known until the
-// server substitutes it. `columns` arrives as the COLUMNS token rather than an
-// identifier (the grammar admits it in table position only) and is returned
-// as written.
+// server substitutes it.
 //
-// Returns "" for a nil node or a shape carrying none of the three children.
+// Returns "" for a nil node or a shape carrying neither child.
 func TableIdentifierName(tid *grammar1.TableIdentifierContext) (name string) {
 	if tid == nil {
 		return
@@ -559,20 +557,16 @@ func TableIdentifierName(tid *grammar1.TableIdentifierContext) (name string) {
 	}
 	if ps := tid.ParamSlot(); ps != nil {
 		name = ps.GetText()
-		return
-	}
-	if kw := tid.COLUMNS(); kw != nil {
-		name = kw.GetText()
 	}
 	return
 }
 
 // ColumnQualifierName is [TableIdentifierName] for a column's table qualifier
 // — `t` in `t.c`. The grammar spells that position as its own rule, with the
-// same children as tableIdentifier (ADR-0304), so the same three shapes
-// occur: an identifier, a parameter slot, or the COLUMNS token.
+// same children as tableIdentifier, so the same two shapes occur: an
+// identifier or a parameter slot.
 //
-// Returns "" for a nil node or a shape carrying none of the three children.
+// Returns "" for a nil node or a shape carrying neither child.
 func ColumnQualifierName(cq grammar1.IColumnQualifierContext) (name string) {
 	ctx, ok := cq.(*grammar1.ColumnQualifierContext)
 	if !ok || ctx == nil {
@@ -584,10 +578,6 @@ func ColumnQualifierName(cq grammar1.IColumnQualifierContext) (name string) {
 	}
 	if ps := ctx.ParamSlot(); ps != nil {
 		name = ps.GetText()
-		return
-	}
-	if kw := ctx.COLUMNS(); kw != nil {
-		name = kw.GetText()
 	}
 	return
 }

@@ -146,6 +146,21 @@ name in the tree changes.
   `InjectParamsAsCTE` cells, which turned out to differ from run to run in
   either tree (map iteration order; fixed alongside).
 
+## Updates
+
+- **2026-11-13** — `COLUMNS` joined grammar1's `keyword` rule, so `columns`
+  is a name wherever an identifier stands (`AS columns`, `ORDER BY columns`,
+  `WITH … AS columns`, a lambda argument), not only beside a DOT. The
+  `| COLUMNS` alternatives of `columnQualifier` and `tableIdentifier` above
+  were dropped with it, and so were the consumers' `COLUMNS()` branches: the
+  token now arrives as an `identifier`. `COLUMNS('re')` is held to the dynamic
+  selection by alternative order (`ColumnExprDynamic` ahead of the
+  function-call alternatives, `DynamicColumnList` ahead of
+  `StaticColumnList`). The decision this ADR records, a qualifier rule only
+  DOT can follow, is unchanged; `TestColumnsIsAName` pins SLL/LL agreement on
+  the new positions and `TestColumnsCallIsDynamicSelection` the ordering.
+  Found when play refused an agent's `count() AS columns` as unclassifiable.
+
 ## Status
 
 Accepted 2026-10-10.

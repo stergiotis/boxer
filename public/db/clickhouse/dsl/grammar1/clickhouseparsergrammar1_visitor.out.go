@@ -55,11 +55,11 @@ type ClickHouseParserGrammar1Visitor interface {
 	// Visit a parse tree produced by ClickHouseParserGrammar1#projectionExceptClause.
 	VisitProjectionExceptClause(ctx *ProjectionExceptClauseContext) interface{}
 
-	// Visit a parse tree produced by ClickHouseParserGrammar1#StaticColumnList.
-	VisitStaticColumnList(ctx *StaticColumnListContext) interface{}
-
 	// Visit a parse tree produced by ClickHouseParserGrammar1#DynamicColumnList.
 	VisitDynamicColumnList(ctx *DynamicColumnListContext) interface{}
+
+	// Visit a parse tree produced by ClickHouseParserGrammar1#StaticColumnList.
+	VisitStaticColumnList(ctx *StaticColumnListContext) interface{}
 
 	// Visit a parse tree produced by ClickHouseParserGrammar1#dynamicColumnSelection.
 	VisitDynamicColumnSelection(ctx *DynamicColumnSelectionContext) interface{}
