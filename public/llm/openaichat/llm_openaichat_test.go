@@ -99,6 +99,24 @@ func TestEncodeRequestThinkingFlag(t *testing.T) {
 		"chat_template_kwargs.enable_thinking=true must round-trip; got %s", s)
 }
 
+// TestEncodeRequestReasoningEffort proves the level reaches the wire as
+// reasoning_effort, and that an empty one sends no member.
+func TestEncodeRequestReasoningEffort(t *testing.T) {
+	inst, err := NewClient("https://example.com/v1/", "")
+	require.NoError(t, err)
+	req := CompletionRequest{ModelId: "test-model", Messages: []Message{{Role: ChatRoleUser, Content: "hi"}}}
+	body, err := inst.route.Encode(req)
+	require.NoError(t, err)
+	assert.NotContains(t, string(body), "reasoning_effort")
+	req.ReasoningEffort = "low"
+	body, err = inst.route.Encode(req)
+	require.NoError(t, err)
+	assert.Contains(t, string(body), `"reasoning_effort":"low"`)
+	req.Extra = map[string]any{"reasoning_effort": "high"}
+	_, err = inst.route.Encode(req)
+	require.Error(t, err, "the member twice is a collision, not an override")
+}
+
 // TestEncodeRequestInlinesExtra proves Extra members land at the top level of
 // the wire object (llama.cpp-style sampler passthrough) and that a nil map
 // leaves the body untouched.

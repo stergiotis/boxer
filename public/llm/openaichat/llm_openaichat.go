@@ -173,6 +173,12 @@ func JSONSchemaFormat(name string, schema jsontext.Value, strict bool) *Response
 // it. ToolChoice is "auto" / "none" / "required", or a function name to force
 // that one tool.
 //
+// ReasoningEffort is sent verbatim as reasoning_effort, the OpenAI
+// chat-completions member that sets how much a reasoning model thinks
+// ("none", "minimal", "low", "medium", "high", "xhigh", "max"; each model
+// accepts a subset). Empty omits it and leaves the provider's default; a
+// provider that does not know the member may reject the request.
+//
 // Extra carries provider-specific request members that have no first-class
 // field — for example llama.cpp server sampler knobs (dry_multiplier, top_k,
 // min_p). Members are merged verbatim into the top level of the wire request;
@@ -180,18 +186,19 @@ func JSONSchemaFormat(name string, schema jsontext.Value, strict bool) *Response
 // than silently overriding it. Leave it nil for providers that reject unknown
 // fields (Gemini's OpenAI-compat shim does).
 type CompletionRequest struct {
-	ModelId        string
-	Messages       []Message
-	Temperature    *float32
-	MaxTokens      int32
-	NumCtx         int32
-	Seed           *int64
-	Stop           []string
-	EnableThinking bool
-	Tools          []Tool
-	ToolChoice     string
-	ResponseFormat *ResponseFormat
-	Extra          map[string]any
+	ModelId         string
+	Messages        []Message
+	Temperature     *float32
+	MaxTokens       int32
+	NumCtx          int32
+	Seed            *int64
+	Stop            []string
+	EnableThinking  bool
+	ReasoningEffort string
+	Tools           []Tool
+	ToolChoice      string
+	ResponseFormat  *ResponseFormat
+	Extra           map[string]any
 }
 
 // CompletionResponse is the decoded result of a single completion. FinishReason
@@ -468,6 +475,7 @@ type wireRequest struct {
 	StreamOptions      *wireStreamOptions  `json:"stream_options,omitempty"`
 	Options            *wireOptions        `json:"options,omitempty"`
 	ChatTemplateKwargs map[string]any      `json:"chat_template_kwargs,omitempty"`
+	ReasoningEffort    string              `json:"reasoning_effort,omitempty"`
 	ResponseFormat     *wireResponseFormat `json:"response_format,omitempty"`
 	Tools              []wireTool          `json:"tools,omitempty"`
 	ToolChoice         any                 `json:"tool_choice,omitempty"`
@@ -927,14 +935,15 @@ func (inst Route) Encode(req CompletionRequest) (body []byte, err error) {
 
 func (inst Route) encode(req CompletionRequest, stream bool) (body []byte, err error) {
 	wreq := wireRequest{
-		Model:       req.ModelId,
-		Messages:    make([]wireOutMessage, 0, len(req.Messages)),
-		Temperature: req.Temperature,
-		MaxTokens:   req.MaxTokens,
-		Seed:        req.Seed,
-		Stop:        req.Stop,
-		Stream:      stream,
-		Extra:       req.Extra,
+		Model:           req.ModelId,
+		Messages:        make([]wireOutMessage, 0, len(req.Messages)),
+		Temperature:     req.Temperature,
+		MaxTokens:       req.MaxTokens,
+		Seed:            req.Seed,
+		Stop:            req.Stop,
+		Stream:          stream,
+		ReasoningEffort: req.ReasoningEffort,
+		Extra:           req.Extra,
 	}
 	if stream {
 		wreq.StreamOptions = &wireStreamOptions{IncludeUsage: true}

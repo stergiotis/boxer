@@ -39,6 +39,9 @@ type Config struct {
 	ApiKey string
 	// MaxTokens is the ceiling when a request names none.
 	MaxTokens int32
+	// ReasoningEffort is sent as reasoning_effort on every call whose
+	// request does not set that member in its Extra; empty sends none.
+	ReasoningEffort string
 	// ContextTokens is the model's context size as the deployment states
 	// it; zero asks the endpoint's model list once (ProbeContextTokens),
 	// unless Client replaces the endpoint or Route declares one.
@@ -95,7 +98,7 @@ type Config struct {
 func ConfigFromEnv() (cfg Config) {
 	cfg = Config{
 		Endpoint: Endpoint.Get(), Model: Model.Get(), ApiKey: ApiKey.Get(),
-		MaxTokens: int32(MaxTokens.Get()), ContextTokens: int32(ContextTokens.Get()), Timeout: Timeout.Get(), Retain: RetainE(Retain.Get()),
+		MaxTokens: int32(MaxTokens.Get()), ReasoningEffort: ReasoningEffort.Get(), ContextTokens: int32(ContextTokens.Get()), Timeout: Timeout.Get(), Retain: RetainE(Retain.Get()),
 		TrustedHosts: ParseTrustedHosts(TrustedHosts.Get()),
 		Moderators:   ParseTrustedHosts(Moderators.Get()), Unruled: UnruledE(Unruled.Get()),
 	}
@@ -430,6 +433,12 @@ func (inst *Service) handleComplete(msg *app.Msg, retained bool) {
 		ModelId: inst.cfg.Model, Messages: req.Messages, Temperature: req.Temperature, MaxTokens: maxTokens,
 		Seed: req.Seed, Stop: req.Stop, EnableThinking: req.EnableThinking, Tools: req.Tools,
 		ToolChoice: req.ToolChoice, ResponseFormat: req.ResponseFormat, Extra: extra,
+	}
+	// The host's reasoning level, unless the request sets its own through
+	// the extra: both would put the member on the wire twice, which the
+	// encoder refuses.
+	if _, own := extra["reasoning_effort"]; !own {
+		creq.ReasoningEffort = inst.cfg.ReasoningEffort
 	}
 	// The prompt's size is the request body as the route sends it: the
 	// messages and their images, the tool schemas, the arguments of earlier

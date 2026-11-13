@@ -171,6 +171,25 @@ func TestCompleteThroughTheHostsModel(t *testing.T) {
 	assert.True(t, seen, "the call is a request the bus audits with the app as sender")
 }
 
+// The host's reasoning level reaches the provider on a request that sets
+// none; a request that sets reasoning_effort through its extra keeps its
+// own, and the call still encodes.
+func TestTheHostsReasoningEffort(t *testing.T) {
+	msg := []openaichat.Message{{Role: openaichat.ChatRoleUser, Content: "hi"}}
+	p := &fakeProvider{resp: openaichat.CompletionResponse{Content: "out", FinishReason: "stop"}}
+	cfg := localCfg(p)
+	cfg.ReasoningEffort = "low"
+	cli, _, _ := serve(t, cfg)
+	_, err := cli.Complete(context.Background(), Request{Messages: msg})
+	require.NoError(t, err)
+	assert.Equal(t, "low", p.seen.ReasoningEffort)
+
+	_, err = cli.Complete(context.Background(), Request{Messages: msg, Extra: map[string]any{"reasoning_effort": "high"}})
+	require.NoError(t, err)
+	assert.Empty(t, p.seen.ReasoningEffort, "the request's own level, not the host's")
+	assert.Equal(t, "high", p.seen.Extra["reasoning_effort"])
+}
+
 // A request's provider-specific members reach the provider as the app sent
 // them, nested members included; a request without any sends none.
 func TestExtraReachesTheProvider(t *testing.T) {
@@ -309,6 +328,9 @@ func TestConfigFromEnvGatesOnEndpointAndModel(t *testing.T) {
 	assert.Equal(t, int32(4096), cfg.MaxTokens)
 	assert.Equal(t, 120*time.Second, cfg.Timeout)
 	assert.Equal(t, RetainOff, cfg.Retain, "text is not kept unless the deployment says so")
+	assert.Empty(t, cfg.ReasoningEffort, "no level is sent unless the deployment names one")
+	ReasoningEffort.SetForTest(t, "medium")
+	assert.Equal(t, "medium", ConfigFromEnv().ReasoningEffort)
 }
 
 // The durable row carries the counts and the verdict and never the text,

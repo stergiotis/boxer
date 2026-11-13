@@ -1184,6 +1184,26 @@
       }
     },
     {
+      "name": "BOXER_LLM_REASONING_EFFORT",
+      "type": "categorial-string",
+      "description": "reasoning level sent as reasoning_effort on every llm.complete whose request does not set one in its provider-specific extra; unset sends none and leaves the provider's default; each model accepts only some of the values, and a server that does not know the member may reject the call; reasoning tokens count against BOXER_LLM_MAXTOKENS",
+      "category": "llm",
+      "sensitive": false,
+      "allowed": [
+        "none",
+        "minimal",
+        "low",
+        "medium",
+        "high",
+        "xhigh",
+        "max"
+      ],
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/keelson/runtime/llm"
+      }
+    },
+    {
       "name": "BOXER_LLM_RETAIN",
       "type": "categorial-string",
       "default": "off",

@@ -41,6 +41,17 @@ var (
 		Category:    env.CategoryLLM,
 	})
 
+	// ReasoningEffort is the one reasoning level the host asks of its model,
+	// sent as the OpenAI chat-completions member reasoning_effort. Unset
+	// sends nothing and leaves the provider's default; the values are
+	// OpenAI's, and a model or compatible server may accept only some of
+	// them, or reject the member outright.
+	ReasoningEffort = env.NewCategorialString(env.Spec{
+		Name:        "BOXER_LLM_REASONING_EFFORT",
+		Description: "reasoning level sent as reasoning_effort on every llm.complete whose request does not set one in its provider-specific extra; unset sends none and leaves the provider's default; each model accepts only some of the values, and a server that does not know the member may reject the call; reasoning tokens count against BOXER_LLM_MAXTOKENS",
+		Category:    env.CategoryLLM,
+	}, []string{"none", "minimal", "low", "medium", "high", "xhigh", "max"})
+
 	// Timeout bounds one completion on the service side. A client that
 	// names no wait of its own learns it from llm.describe and waits that
 	// long plus ReplyMargin, so this one value governs the apps too.
