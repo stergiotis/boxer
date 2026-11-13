@@ -39,6 +39,15 @@ func DestinationKeelsonBundle(bundle string) (name string) {
 // DestinationClickHouse is how a grant names an endpoint, by host.
 func DestinationClickHouse(host string) (name string) { return "clickhouse:" + host }
 
+// syntaxDetail is ": " and the parser's line:column diagnostics for a
+// statement the grammar rejected, or "" when err carries none.
+func syntaxDetail(err error) (detail string) {
+	if d := nanopass.SyntaxErrorDiagnostics(err); len(d) > 0 {
+		detail = ": " + strings.Join(d, "; ")
+	}
+	return
+}
+
 // checkAgentLimits checks a residual against the grant's destinations:
 // a plain read, keelson() tables it lists, and an endpoint it lists unless
 // the run goes to the host's introspection engine. aliasOf maps a bound
@@ -47,7 +56,7 @@ func DestinationClickHouse(host string) (name string) { return "clickhouse:" + h
 func checkAgentLimits(residual string, dec dispatchDecision, obo *app.OnBehalfOf, aliasOf map[string]datasetName) (err error) {
 	pr, perr := nanopass.Parse(residual)
 	if perr != nil {
-		return &AgentLimitError{Reason: "the statement cannot be classified, so an agent cannot run it"}
+		return &AgentLimitError{Reason: "boxer's grammar does not parse the statement, so it cannot be classified and an agent cannot run it" + syntaxDetail(perr)}
 	}
 	class, witnesses, cerr := analysis.ClassifyQuerySecurity(pr)
 	if cerr != nil || class != analysis.QuerySecurityRead {

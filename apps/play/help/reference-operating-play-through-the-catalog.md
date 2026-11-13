@@ -102,8 +102,10 @@ rerun after an agent's input, a `check`, an `explain_sql` — is judged on
 the statement about to be sent, after the client-side rewrites, and fails
 before sending when:
 
-- the statement cannot be classified, or is not a plain read (the refusal
-  names the witness: a mutating function, a DDL keyword);
+- boxer's grammar does not parse the statement, so it cannot be
+  classified (the refusal quotes the parser's `line:column` diagnostics;
+  `validate_sql` reports the same), or it is not a plain read (the
+  refusal names the witness: a mutating function, a DDL keyword);
 - a `keelson()` table or dataset it names is not in the grant as
   `keelson:<table>`, as the dataset's global alias, or as its bundle's
   `keelson-bundle:<alias>` (a task runs without an entry on a dataset it

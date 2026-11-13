@@ -1,6 +1,7 @@
 package nanopass
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/antlr4-go/antlr/v4"
@@ -83,11 +84,34 @@ func (inst *errorListener) buildError(kind string) error {
 	if n > maxReportedErrors {
 		shown = shown[:maxReportedErrors]
 	}
-	// The line:column detail goes into the message itself — eb fields are
-	// structured-only and would not surface in Error().
-	return eb.Build().
-		Int("errorCount", n).
-		Str("kind", kind).Strs("errors", shown).Errorf("the parser reported errors")
+	return &syntaxError{
+		diagnostics: shown,
+		err: eb.Build().
+			Int("errorCount", n).
+			Str("kind", kind).Strs("errors", shown).Errorf("the parser reported errors"),
+	}
+}
+
+// syntaxError is a statement the grammar rejected. It wraps the structured
+// error and keeps the parser's line:column diagnostics readable, because eb
+// fields do not surface in Error().
+type syntaxError struct {
+	diagnostics []string
+	err         error
+}
+
+func (inst *syntaxError) Error() string { return inst.err.Error() }
+func (inst *syntaxError) Unwrap() error { return inst.err }
+
+// SyntaxErrorDiagnostics returns the parser's line:column diagnostics when
+// err is, or wraps, a rejection by [Parse] or [ParseCanonical]; nil otherwise.
+// At most the first few diagnostics are kept.
+func SyntaxErrorDiagnostics(err error) (diagnostics []string) {
+	var se *syntaxError
+	if errors.As(err, &se) {
+		diagnostics = se.diagnostics
+	}
+	return
 }
 
 // attempt carries one parse attempt's outcome. Both stages of a two-stage

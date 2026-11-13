@@ -239,7 +239,7 @@ func validateStatement(client *Client, obo *app.OnBehalfOf, stmt string) (out Va
 	}
 	out.Canonical, err = canonicalStatement(stmt)
 	if err != nil {
-		out.Error, err = err.Error(), nil
+		out.Error, err = err.Error()+syntaxDetail(err), nil
 		return
 	}
 	out.Kind = statementKind(stmt)
