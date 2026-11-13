@@ -51,6 +51,12 @@ type Spec struct {
 	// Tags classify the scene; KnownTags lists the ones there are. A scene
 	// tagged TagSlow runs only when asked for (Options.Slow).
 	Tags []string `yaml:"tags"`
+	// FallbackFont is a fontconfig family that replaces the CJK fallback
+	// face, for a scene whose text needs glyphs the main face and the CJK
+	// face both lack (Arabic, say). The host takes one fallback face, so the
+	// CJK one is gone for that scene. A family that is not installed skips
+	// the scene, as an unmet precondition does.
+	FallbackFont string `yaml:"fallbackFont"`
 	// Matrix runs the trace once per size and theme it lists; see Matrix.
 	Matrix Matrix `yaml:"matrix"`
 	// LayoutExceptions excuse layout findings (ADR-0363 M1) the scene means

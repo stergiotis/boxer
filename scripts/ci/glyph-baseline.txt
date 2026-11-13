@@ -55,3 +55,15 @@ U+27E9	public/semistructured/leeway/card/leeway_card_topospark.go
 # these entries wrong.
 U+2717	public/hmi/gloss/luhn.go
 U+2717	public/hmi/gloss/regexp.go
+
+# --- right-to-left probe ---
+# The rtl-text demo holds Arabic still for scenes/rtl-text.scene.md, which
+# launches with an Arabic fallback face (`fallbackFont`). Under the default
+# chain the letters are tofu, and the demo says it needs an Arabic face.
+U+0627	public/thestack/imzero2/egui2/demo/apps/widgets/egui2_hl_rtl_demo.go
+U+0628	public/thestack/imzero2/egui2/demo/apps/widgets/egui2_hl_rtl_demo.go
+U+062D	public/thestack/imzero2/egui2/demo/apps/widgets/egui2_hl_rtl_demo.go
+U+062F	public/thestack/imzero2/egui2/demo/apps/widgets/egui2_hl_rtl_demo.go
+U+0631	public/thestack/imzero2/egui2/demo/apps/widgets/egui2_hl_rtl_demo.go
+U+0639	public/thestack/imzero2/egui2/demo/apps/widgets/egui2_hl_rtl_demo.go
+U+0645	public/thestack/imzero2/egui2/demo/apps/widgets/egui2_hl_rtl_demo.go

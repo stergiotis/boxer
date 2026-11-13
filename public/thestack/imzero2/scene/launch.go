@@ -218,13 +218,17 @@ func Launch(spec Spec, opts Options) (s *Session, err error) {
 		"--clientInitialMainWindowWidth", strconv.Itoa(w),
 		"--clientInitialMainWindowHeight", strconv.Itoa(h),
 	}
+	fallback := resolveFont("Noto Sans Mono CJK JP", "CJK")
+	if spec.FallbackFont != "" {
+		fallback = resolveFont(spec.FallbackFont, spec.FallbackFont)
+	}
 	for _, f := range []struct{ flag, path string }{
 		{"--mainFontTTF", resolveFont("Noto Sans", "Noto Sans")},
 		{"--monoFontTTF", resolveFont("DejaVu Sans Mono", "DejaVu Sans Mono")},
 		{"--phosphorFontTTF", filepath.Join(opts.RepoRoot, "rust", "imzero2", "assets", "fonts", "phosphor", "Phosphor.ttf")},
 		// Without a fallback a codepoint the main font lacks renders as a
 		// different glyph than on a desktop launch, at a different size.
-		{"--fallbackFontTTF", resolveFont("Noto Sans Mono CJK JP", "CJK")},
+		{"--fallbackFontTTF", fallback},
 		// The bold face of the main family; without it headings and strong
 		// runs render at regular weight.
 		{"--boldFontTTF", resolveFont("Noto Sans:bold", "Noto Sans")},

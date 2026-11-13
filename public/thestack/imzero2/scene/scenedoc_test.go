@@ -17,6 +17,7 @@ const sampleDoc = "---\n" +
 	"  env:\n" +
 	"    BOXER_PLAY_FOCUS_TABLE: \"1\"\n" +
 	"  requires: [clickhouse]\n" +
+	"  fallbackFont: Noto Naskh Arabic\n" +
 	"---\n\n" +
 	"# A result table\n\n" +
 	"The table pane after a run.\n\n" +
@@ -36,6 +37,7 @@ func TestParseDoc(t *testing.T) {
 	assert.Equal(t, "play", doc.Spec.Launch)
 	assert.Equal(t, "1", doc.Spec.Env["BOXER_PLAY_FOCUS_TABLE"])
 	assert.Equal(t, []string{"clickhouse"}, doc.Spec.Requires)
+	assert.Equal(t, "Noto Naskh Arabic", doc.Spec.FallbackFont)
 	assert.Equal(t, "SELECT 1 AS a,\n       2 AS b", doc.SQL, "the first role-less sql fence is the buffer")
 	require.Len(t, doc.Steps, 2)
 	assert.Equal(t, []string{"table"}, doc.Captures())

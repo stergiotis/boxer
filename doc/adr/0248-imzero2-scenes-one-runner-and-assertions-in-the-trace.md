@@ -376,6 +376,17 @@ passes `--slow` (`Options.Slow`). An unknown tag is a parse error, as a
 misspelt spec key is. The chat's scenes of the person being away are the
 first slow ones.
 
+### 2026-10-13 — a scene can name its fallback face
+
+The runner launches every scene with the same font chain, and the host's
+font flags have no environment form a scene's `env` could set, so no scene
+could show a script the chain lacks. `fallbackFont:` in the `scene:` spec is
+a fontconfig family that replaces the CJK fallback face for that scene (the
+host takes one fallback). A family that is not installed skips the scene, as
+an unmet precondition does, and `--ignoreRequires` runs it anyway. The first
+user is the gallery's right-to-left text scene, which needs an Arabic face.
+No decision changes.
+
 ## References
 
 - [ADR-0154](./0154-headless-carrier-tree-and-driver.md) — the carrier, the

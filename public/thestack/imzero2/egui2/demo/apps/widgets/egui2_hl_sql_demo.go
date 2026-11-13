@@ -33,11 +33,10 @@ ORDER BY month`)
 func demoInternationalText(ids *c.WidgetIdStack) {
 	// Scripts limited to those covered by the default font chain
 	// (Noto Sans for Latin/Greek/Cyrillic, NotoSansMonoCJK fallback for
-	// CJK). Arabic and Indic/SE-Asian scripts are excluded — they need
-	// HarfBuzz-class shaping (joining for Arabic, mark positioning for
-	// Devanagari/Thai/Tamil) which epaint 0.34.x does not ship. See
-	// doc/explanation/egui-arabic-bidi-status.md for the pipeline
-	// analysis and the upstream harfrust integration status.
+	// CJK). Arabic and Indic/SE-Asian scripts are excluded: the chain has
+	// no face for them, and egui has no bidi step for right-to-left text.
+	// The "rtl-text" demo and scenes/rtl-text.scene.md track what egui does
+	// with Arabic.
 	for range c.CollapsingHeader(ids.PrepareStr("i18n-mixed"), c.WidgetText().Text("mixed scripts").Keep()).DefaultOpen(true).KeepIter() {
 		atoms := c.Atoms()
 		for rt := range atoms.StyledText("English ") {

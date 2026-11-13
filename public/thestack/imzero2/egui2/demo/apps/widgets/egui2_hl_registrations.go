@@ -280,7 +280,7 @@ func init() {
 		Name: "i18n", Category: "Text & code", Title: icons.IconGlobe + " international text",
 		Stage:       [2]float32{1024, 500},
 		Kind:        registry.DemoKindUX,
-		Description: "International text rendering: Latin/Greek/Cyrillic/CJK and emoji against the bundled font atlas. RTL scripts (Arabic, Hebrew) and Indic/SE-Asian (Devanagari, Thai, Tamil) are excluded — see doc/explanation/egui-arabic-bidi-status.md.",
+		Description: "International text rendering: Latin/Greek/Cyrillic/CJK and emoji against the bundled font atlas. RTL scripts (Arabic, Hebrew) and Indic/SE-Asian (Devanagari, Thai, Tamil) are excluded — the default font chain has no face for them; the rtl-text demo shows Arabic.",
 		Render:      func(ids *c.WidgetIdStack) { demoInternationalText(ids) },
 	})
 	registry.Register(registry.Demo{

@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -91,6 +92,14 @@ func RunDoc(doc *Doc, opts Options) (res Result) {
 		if unmet != "" {
 			res.Reason = "ran although " + unmet
 		}
+	}
+	if f := doc.Spec.FallbackFont; f != "" && resolveFont(f, f) == "" {
+		unmet := "font family " + strconv.Quote(f) + " is not installed"
+		if !opts.IgnoreRequires {
+			res.Status, res.Reason = StatusSkip, unmet
+			return res
+		}
+		res.Reason = "ran although " + unmet
 	}
 
 	spec := doc.Spec
