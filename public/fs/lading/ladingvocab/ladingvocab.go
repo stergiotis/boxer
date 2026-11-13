@@ -78,9 +78,10 @@ const NamingStyle = naming.LowerSpinalCase
 // 2026-08-20 and could not keep its previous values: they were short-prefix
 // tags this contract reserves for the runtime generators.
 //
-// **…335 through …344 are taken** by consuming repositories, claimed between
-// 2026-08-30 and 2026-09-23: vocabularies, and the tags their lading mounts
-// and radar ids are minted under. The first of them crossed at the same cost
+// **…335 through …346 are taken** by consuming repositories, claimed between
+// 2026-08-30 and 2026-11-05: vocabularies, and the tags their lading mounts
+// and radar ids are minted under — the last two, …345 and …346, a mail
+// vocabulary and its mount. The first of them crossed at the same cost
 // as the nineteen above: a hand-picked base encoded to a width-8 tag, so every
 // membership id moved and the facts written under the old base had to be
 // re-crawled. Two repositories have now paid that, which is the argument for
@@ -89,7 +90,7 @@ const NamingStyle = naming.LowerSpinalCase
 // own is what keeps a mount's body from colliding with a membership ordinal
 // under one tag.
 //
-// The next free value is 2178345.
+// The next free value is 2178347.
 var TagValueClaim = tagmint.MustClaim("lading", 2178315, MaxExpectedMemberships)
 
 // MaxExpectedMemberships is what this vocabulary tells the mint it will need.
