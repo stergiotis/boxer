@@ -67,3 +67,30 @@ func TestRegistrySingleton(t *testing.T) {
 	_, ok = reg.Singleton("test.unknown")
 	assert.False(t, ok)
 }
+
+// A launcher opened when none was starts from an empty search box and keeps
+// the facet filters; a second window opened beside the first keeps the query
+// both share.
+func TestFirstLauncherWindowStartsWithAnEmptyQuery(t *testing.T) {
+	inst := newTestInst()
+	inst.searchText = "log viewer"
+	inst.topicFilter = topicFilterT(0).toggledAt(0)
+
+	first := NewApp(inst)
+	require.NoError(t, first.Mount(nil))
+	inst.consumeFreshQuery()
+	assert.Equal(t, "", inst.searchText, "a fresh launch clears the last search")
+	assert.Equal(t, topicFilterT(0).toggledAt(0), inst.topicFilter, "the chips carry over")
+
+	inst.searchText = "play"
+	second := NewApp(inst)
+	require.NoError(t, second.Mount(nil))
+	inst.consumeFreshQuery()
+	assert.Equal(t, "play", inst.searchText, "a window beside an open one shares its query")
+
+	require.NoError(t, second.Unmount(nil))
+	require.NoError(t, first.Unmount(nil))
+	require.NoError(t, NewApp(inst).Mount(nil))
+	inst.consumeFreshQuery()
+	assert.Equal(t, "", inst.searchText, "closed and reopened, the box is empty again")
+}

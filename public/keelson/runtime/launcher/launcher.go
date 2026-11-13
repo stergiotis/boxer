@@ -3,6 +3,7 @@ package launcher
 import (
 	"strconv"
 	"strings"
+	"sync/atomic"
 
 	"github.com/rs/zerolog"
 
@@ -97,6 +98,13 @@ type Inst struct {
 	// F2-then-type works without a click) and cleared once spent — a standing
 	// request would fight every other focusable widget on the pane.
 	wantFocus bool
+	// wantFreshQuery asks the next Render to clear the query, for a launcher
+	// opened when none was: a launch starts from an empty search box, while
+	// the facet chips, and the query between windows that are open together
+	// or the empty-state pane, carry over. windows counts the mounted
+	// launcher windows that decide it; Mount and Unmount move it.
+	wantFreshQuery bool
+	windows        atomic.Int32
 
 	// cursor is the keyboard cursor's index into the *currently rendered*
 	// row list. Row lists change under it as the query changes, so it is
@@ -205,6 +213,7 @@ func (inst *Inst) SetInspect(fn func(target app.AppIdT) (err error)) {
 // or a PanelCentral. It does not open a window of its own.
 func (inst *Inst) Render(ids *c.WidgetIdStack) {
 	inst.density = styletokens.ActiveDensity()
+	inst.consumeFreshQuery()
 	for range c.PanelLeftInside(ids.PrepareStr("launcher-list")).
 		DefaultSize(listPanelDefaultWidth).
 		Resizable(true).
@@ -214,6 +223,19 @@ func (inst *Inst) Render(ids *c.WidgetIdStack) {
 	for range c.PanelCentralInside().KeepIter() {
 		inst.renderDetailPane(ids)
 	}
+}
+
+// consumeFreshQuery clears the query a Mount asked to clear, keeping the
+// facet filters. It runs on the frame, where the rest of the state is
+// written.
+func (inst *Inst) consumeFreshQuery() {
+	if !inst.wantFreshQuery {
+		return
+	}
+	inst.wantFreshQuery = false
+	f := inst.filterState()
+	f.query = ""
+	inst.applyFilter(f)
 }
 
 // renderListPane draws the query field, the facet controls, and the rows.

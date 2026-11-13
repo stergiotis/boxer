@@ -31,7 +31,9 @@ const LauncherKeyLabel = "F2"
 // Default is the process-wide launcher component. One value backs the app's
 // windows and the windowhost's empty-state pane (§SD2), which is what keeps
 // the query and the facet filters from resetting as a person moves between
-// them. Mirrors app.DefaultRegistry / help.DefaultLibrary in shape and role.
+// them. A launcher window opened when none was clears the query and keeps
+// the filters (launcherApp.Mount). Mirrors app.DefaultRegistry /
+// help.DefaultLibrary in shape and role.
 //
 // The host arrives later, through SetHost: the window host is constructed
 // after registration, and the launcher is one of the apps it hosts.
@@ -91,10 +93,17 @@ func (inst *launcherApp) Mount(ctx app.MountContextI) (err error) {
 	// A window that just opened should be typeable into. The shortcut's whole
 	// promise is F2-then-type (§SD9).
 	inst.inst.FocusQueryField()
+	// A launcher opened when none was starts from an empty search box: the
+	// last launch's query is a finished search, not where the next one
+	// begins.
+	if inst.inst.windows.Add(1) == 1 {
+		inst.inst.wantFreshQuery = true
+	}
 	return
 }
 
 func (inst *launcherApp) Unmount(ctx app.MountContextI) (err error) {
+	inst.inst.windows.Add(-1)
 	inst.releaseController()
 	return
 }
