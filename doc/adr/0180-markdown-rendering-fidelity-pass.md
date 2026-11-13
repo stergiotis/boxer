@@ -333,7 +333,7 @@ See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-d
 ### 2026-11-05 — Flowing tables are grids of wrapping cells; prose carries the design system's leading; inline backgrounds are pills
 
 Three changes from the
-[markdown-rendering-quality trial](../trials/markdown-rendering-quality/README.md),
+markdown-rendering-quality trial (removed 2026-11-08, see below),
 whose first run put mdedit's reading mode beside browser renderings of the
 same markdown and whose blind votes went against it. Each keeps this ADR's
 decisions and moves what they left:
@@ -516,6 +516,13 @@ source bytes (mdspan) or indexing it (mdextract) must not take it
 unasked; the widget's default set and the trial's HTML arm opt in. A
 `--flag` in prose outside a code span becomes an en dash, which is the
 convention's cost and the reason flags are written in code spans.
+
+### 2026-11-08 — The markdown-rendering-quality trial is removed
+
+The trial these updates cite, its harness and the GitHub stylesheet it
+vendored as a reference arm are deleted from the tree. The decisions above
+stand on their own; the trial's protocol, runs and votes remain in git
+history, last at `fde00aef4`.
 
 ## References
 

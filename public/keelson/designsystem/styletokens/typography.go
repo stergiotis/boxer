@@ -36,8 +36,8 @@ const (
 	// BodyLeading — line height of reading prose as a multiple of the body
 	// size, the `--ids-line` of the IDS web stylesheet (ADR-0076): a
 	// document set at the font's own line height (about 1.4 for the
-	// bundled faces) read tighter than every HTML reference in the
-	// markdown-rendering-quality trial. UI chrome keeps the font's height;
+	// bundled faces) read tighter than every HTML reference it was
+	// compared with (ADR-0180, 2026-11-05 update). UI chrome keeps the font's height;
 	// this is for runs of prose.
 	BodyLeading float32 = 1.6
 )

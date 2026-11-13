@@ -273,8 +273,8 @@ type Input struct {
 }
 
 // readingMeasureEm is the design system's reading column in em: the
-// `max-width: 50em` of the IDS lean stylesheet (ADR-0076), which the
-// markdown-rendering-quality trial's references share within a few em.
+// `max-width: 50em` of the IDS lean stylesheet (ADR-0076), which common
+// HTML markdown stylesheets share within a few em (ADR-0180, 2026-11-05 update).
 const readingMeasureEm = 50
 
 // ReadingMeasure is the design system's reading column at the active
