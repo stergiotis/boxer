@@ -36,7 +36,7 @@ it was shown.
 {"do":"wait","valueContains":"It would go to","role":"label"}
 {"do":"capture","text":"chat-artefact-pixels-consent","settleMs":500}
 {"do":"click","contains":"Allow","role":"button"}
-{"do":"wait","valueContains":"I looked at the demo window's capture.","role":"label","settleMs":500}
+{"do":"wait","valueContains":"I looked at the demo window","role":"label","settleMs":500,"comment":"short of the apostrophe, which the reply draws typographic"}
 {"do":"wait","valueContains":"artefact_view_image · shown · screenshot-1.png","role":"label","comment":"the transcript's tool line"}
 {"do":"capture","text":"chat-artefact-pixels","settleMs":500}
 ```

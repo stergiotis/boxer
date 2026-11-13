@@ -41,6 +41,6 @@ its colour, with the steps it wrote per minute (ADR-0324 background §3.4,
 {"do":"read","contains":"nothing waits on you","role":"button","on":"name","pattern":"(?P<cleared>on you)$","comment":"looking cleared the highlight"}
 {"do":"capture","text":"chat-watch-looked"}
 {"do":"click","contains":"Conversations","role":"button","settleMs":4000,"comment":"the roster samples the runs every three seconds; two samples give a pace"}
-{"do":"wait","valueContains":"/min","role":"label","comment":"the pace gauge on the open conversation"}
+{"do":"wait","valueContains":"/min","role":"label","nth":0,"comment":"the pace gauge on the open conversation, whose row comes first; a run another host writes to the same store has one too"}
 {"do":"capture","text":"chat-watch-roster"}
 ```

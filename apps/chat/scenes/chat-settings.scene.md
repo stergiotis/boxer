@@ -34,7 +34,7 @@ stands in for the person's approval.
 {"do":"note","text":"ADR-0280: the chat's settings are a ceiling the host enforces"}
 {"do":"wait","valueContains":"→ scripted","role":"label"}
 {"do":"wait","contains":"now talk only · may run","role":"button"}
-{"do":"wait","valueContains":"chat-","role":"label","comment":"the conversation's id, readable in the bar"}
+{"do":"wait","valueContains":"chat-","role":"label","nth":0,"comment":"the conversation's id, readable in the bar, ahead of the roster, which names an untitled run of the same store by its id"}
 {"do":"click","contains":"Send","role":"button","comment":"turn 1, the seeded draft"}
 {"do":"wait","valueContains":"The note is written.","role":"label","settleMs":1000}
 {"do":"wait","valueContains":"set_note in window 2 · rendered","role":"label"}
