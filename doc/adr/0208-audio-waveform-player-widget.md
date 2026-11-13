@@ -596,6 +596,65 @@ well under the library's request timeout. The fork stays unbuilt; if upstream
 merges a fix for #52 and #53 the sink can cork again for the power saving a
 suspended sink brings, which is the only thing this loses.
 
+### 2026-11-13 — the pulse sink starts its stream once and never restarts it
+
+After the 2026-09-29 update one sequence still restarted the stream: a seek
+while playing corked it, dropped it to idle and started it again, and Play on
+a stopped sink started it too. Both end in the library's `Start`, which waits
+without a time limit for the server's Started event, on the caller's
+goroutine. `sink.SinkI` says no method may block on a device, and the widget
+calls these from the frame, so a wait there freezes every window of the host.
+The wait was met in use: a host froze on Play over a source whose first read
+failed.
+
+The server sends Started only on a change from having run dry to holding a
+buffer of frames. Three cases never produce it, or lose it:
+
+- **The source gives less than a buffer.** A first read that fails was
+  answered as the end of the data, which idles the stream before anything is
+  sent; a source with a few milliseconds left sends too little. Either way
+  the server never starts and `Start` never returns. This one is
+  deterministic.
+- **A restart the server never sees run dry.** Cork, flush, uncork and the
+  first buffer can all land within one cycle of the server, which then has
+  no change to report. Against PipeWire's pulse server a seek while playing
+  that closely followed another did not return.
+- **An underflow report between the uncork and the Started.** The library
+  drops a Started that arrives while its underflow flag is set, and a server
+  still playing out its buffer when it is flushed reports exactly that
+  underflow. Play directly after the end of a source is this case.
+
+Options weighed: a time limit around `Start` (the stream is then in an
+unknown state, and the library offers no way to cancel the wait); the fork
+the 2026-09-29 update describes; and extending that update's own remedy from
+Pause to everything. The third is taken. The stream is started once, by the
+first Play, on a goroutine of its own, and stays running and uncorked while
+the sink is open. The pull callback waits whenever the sink is not playing —
+paused, stopped, or at the end of its source — and a seek moves the cursor
+it reads from. For the first two buffers after the start the callback
+delivers frames whatever the transport does, silence where it has nothing
+else, so the one `Start` gets its Started even over a failing or very short
+source.
+
+What this costs. A seek while playing no longer flushes the server's buffer:
+the old position is heard for up to one latency before the new one, where
+SD6's restart left a gap of about the same length; SD6's bound on seek
+latency holds as before. `Underflow` cannot be cleared without a restart, so
+it keeps the value it had when playback was first paused or first ended. The
+stream outlives the end of its source, so the server keeps the stream open,
+starved, until the sink is closed. If the first `Start` is never answered,
+its goroutine stays waiting and the stream plays; `Close` waits a quarter of
+a second for it at most.
+
+The integration lane now holds, against a real server: Play over a source
+whose every read fails, and over one shorter than the buffer, returns and
+ends; sixty seeks in a row while playing each return; Play directly after
+the end, repeated, restarts from the beginning; a start a hundred frames
+before the end plays out. The default lane holds the callback's contract
+without a server: it waits while the sink is not playing, delivers the frames
+it owes as silence, and returns the end of the data only once the sink is
+closed.
+
 ## References
 
 - [ADR-0003](./0003-h3-wasm-bridge.md) — the no-cgo stance and the wasm route for native libraries.

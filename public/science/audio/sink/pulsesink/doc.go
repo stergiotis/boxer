@@ -29,22 +29,36 @@
 //
 // # Transport
 //
-// Pause parks the pull callback; the stream stays running and uncorked, and
-// what the server already holds — one latency at most — plays out. Play
-// releases the callback. The stream is never corked and uncorked in place:
-// the library (jfreymuth/pulse v0.1.3) answers the Started event an uncork
-// provokes with a blocking send that only its Start receives, so a Resume
-// parks its read loop for good and every later round trip times out
-// (upstream issue #52). oto's PulseAudio backend suspends the same way, and
-// this package follows it. Two consequences: the server underflows once per
-// pause, so Underflow is frozen from the first pause until the next start;
-// and while parked the library processes no server events, so nothing here
-// makes a round trip during a pause. A seek while playing corks, drops the
-// stream to idle and starts it again — the one sequence that does wait for
-// a Started — which flushes the server buffer; anything else would play the
-// old position for a buffer's worth of time. A seek while paused only moves
-// the cursor. The end of the source ends the stream; Play then restarts from
-// frame 0, as the Null sink does.
+// The stream is started once, by the first Play, and then left running and
+// uncorked for as long as the sink is open. Everything else is done to the
+// pull callback: while the sink is paused, stopped or at the end of its
+// source the callback waits, Play releases it, and a seek moves the cursor
+// it reads from. What the server already holds — one latency at most — plays
+// out after a pause, and after a seek while playing it is still the old
+// position that is heard for that long.
+//
+// The stream is left alone because the library (jfreymuth/pulse v0.1.3)
+// offers no call on it that is safe to repeat. An uncork in place makes the
+// server send a Started event, which the library answers with a blocking
+// send that only its Start receives, so a Resume parks its read loop for
+// good and every later round trip times out (upstream issue #52). And Start
+// waits without a time limit for that event, which the server sends only
+// when the stream had run dry before and now holds a buffer of frames: a
+// second Start right after a cork, or over a source that has less than a
+// buffer to give, waits for good. oto's PulseAudio backend suspends by
+// waiting in the callback too.
+//
+// So that no caller waits, the one Start runs on a goroutine of its own, and
+// for the first two buffers after it the callback delivers frames whatever
+// the transport is doing — silence where the sink is paused or the source
+// has ended or failed — which is what lets the server report the start.
+//
+// Three consequences. The server runs dry whenever the callback waits, so
+// Underflow keeps the value it had when playback was first paused or first
+// ended. While the callback waits the library processes no server events, so
+// nothing here makes a round trip then. And the stream does not end with the
+// source: Play at the end plays from frame 0 again, as the Null sink does,
+// on the same stream.
 //
 // # Channels
 //

@@ -4,6 +4,7 @@ package pulsesink_test
 
 import (
 	"context"
+	"errors"
 	"path/filepath"
 	"testing"
 	"time"
@@ -112,7 +113,7 @@ func TestPauseResumeCyclesKeepTheStreamAlive(t *testing.T) {
 	require.Less(t, time.Since(started), 500*time.Millisecond, "close waited on a blocked read loop")
 }
 
-func TestSeekFlushesAndEndStops(t *testing.T) {
+func TestSeekMovesAndEndStops(t *testing.T) {
 	requireServer(t)
 	s, format := openSilence(t, 2)
 	s.Play()
@@ -183,4 +184,105 @@ func TestNonUnityRateNeverRestartsTheDecoder(t *testing.T) {
 	s.Pause()
 	require.Zero(t, src.Restarts(), "playback at any rate reads the decoder forwards only")
 	require.False(t, s.Underflow())
+}
+
+// within fails the test when fn has not returned after a second: the calls
+// it wraps are made from a frame loop, where a wait freezes the window.
+func within(t *testing.T, what string, fn func()) {
+	t.Helper()
+	done := make(chan struct{})
+	go func() { fn(); close(done) }()
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatalf("%s did not return within a second", what)
+	}
+}
+
+func waitEnded(t *testing.T, s *pulsesink.Sink) {
+	t.Helper()
+	deadline := time.Now().Add(3 * time.Second)
+	for !s.Ended() && time.Now().Before(deadline) {
+		time.Sleep(10 * time.Millisecond)
+	}
+	require.True(t, s.Ended(), "playback did not end")
+	require.Equal(t, sink.StateStopped, s.State())
+	require.Equal(t, s.Frames(), s.Position())
+}
+
+// failing is a source whose every read fails.
+type failing struct{ pcm.SourceI }
+
+func (failing) ReadFramesAt(context.Context, int64, []float32) (int, error) {
+	return 0, errors.New("the decoder died")
+}
+
+// The library's Start waits, without a time limit, for the server to report
+// the stream started, and the server reports that only once it holds a
+// buffer of frames. A source that fails on its first read, or has less than
+// a buffer left, used to leave Play waiting for good.
+func TestPlayReturnsWhenTheSourceGivesNothing(t *testing.T) {
+	requireServer(t)
+	format := pcm.Format{SampleRate: 48000, Channels: 2}
+	src, err := pcm.NewSynthSource(format, format.DurationToFrames(2*time.Second), pcm.Silence())
+	require.NoError(t, err)
+	s, err := pulsesink.Open(failing{src}, pulsesink.Options{AppName: "boxer-test", Latency: 40 * time.Millisecond})
+	require.NoError(t, err)
+	within(t, "Play over a failing source", s.Play)
+	waitEnded(t, s)
+	within(t, "Play again over a failing source", s.Play)
+	waitEnded(t, s)
+	started := time.Now()
+	require.NoError(t, s.Close())
+	require.Less(t, time.Since(started), 500*time.Millisecond)
+}
+
+func TestASourceShorterThanTheBufferPlaysOut(t *testing.T) {
+	requireServer(t)
+	format := pcm.Format{SampleRate: 48000, Channels: 2}
+	src, err := pcm.NewSynthSource(format, format.DurationToFrames(5*time.Millisecond), pcm.Silence())
+	require.NoError(t, err)
+	s, err := pulsesink.Open(src, pulsesink.Options{AppName: "boxer-test", Latency: 300 * time.Millisecond})
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, s.Close()) })
+	within(t, "Play", s.Play)
+	waitEnded(t, s)
+}
+
+// A seek while playing used to cork the stream, drop it to idle and start it
+// again, and that second Start did not always return: the server reports a
+// start only when it had run dry before, which a cork and an uncork within
+// one of its cycles never show it. The stream is started once now and a seek
+// only moves the cursor.
+func TestSeeksAndRestartsNeverWait(t *testing.T) {
+	requireServer(t)
+	s, format := openSilence(t, 10)
+	within(t, "Play", s.Play)
+	time.Sleep(200 * time.Millisecond)
+	for i := range 60 {
+		target := format.DurationToFrames(time.Duration(1+i%5) * time.Second)
+		within(t, "a seek while playing", func() { require.NoError(t, s.SeekFrame(target)) })
+		require.GreaterOrEqual(t, s.Position(), target)
+	}
+	at := s.Position()
+	time.Sleep(300 * time.Millisecond)
+	require.Greater(t, s.Position(), at+format.DurationToFrames(150*time.Millisecond), "playback goes on after the seeks")
+
+	// To the last moments, where less than a buffer is left, and to the end.
+	within(t, "a seek to the last moments while playing", func() { require.NoError(t, s.SeekFrame(s.Frames()-100)) })
+	waitEnded(t, s)
+	// Play at once after the end, while the server may still be playing out
+	// its buffer: the case in which a second Start saw no dry server.
+	for range 5 {
+		within(t, "Play after the end", s.Play)
+		time.Sleep(120 * time.Millisecond)
+		require.Positive(t, s.Position(), "playback restarted from the beginning and advances")
+		within(t, "a seek to the end while playing", func() { require.NoError(t, s.SeekFrame(s.Frames())) })
+		waitEnded(t, s)
+	}
+
+	// From stopped at the last moments: a start with almost nothing to play.
+	require.NoError(t, s.SeekFrame(s.Frames()-100))
+	within(t, "Play from the last moments", s.Play)
+	waitEnded(t, s)
 }
