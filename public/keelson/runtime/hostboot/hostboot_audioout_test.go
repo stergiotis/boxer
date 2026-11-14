@@ -23,7 +23,7 @@ func (inst namedDevice) OpenSink(src pcm.SourceI, _ string) (sink.SinkI, error) 
 }
 
 // The audio-output service is opt-in, opens on the device the options name,
-// and answers an app that declared the subject (ADR-0372 §SD2, proposed).
+// and answers an app that declared the subject (ADR-0372 §SD2).
 func TestBoot_AudioOutServesTheConfiguredDevice(t *testing.T) {
 	opts := minimalOptions(t, newTestRegistry(t))
 	opts.Services.AudioOut = true

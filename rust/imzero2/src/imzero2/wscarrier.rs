@@ -21,7 +21,7 @@
 //! lane messages server→client (ADR-0128 — mesh frames + texture updates,
 //! active when the session codec is `mesh`; the shared encoder never runs),
 //! 0x05 audio lane messages both ways between the Go host and the active
-//! connection's audio device (ADR-0372, proposed — forwarded unread; see
+//! connection's audio device (ADR-0372 — forwarded unread; see
 //! [`crate::imzero2::audiolane`]).
 //!
 //! Session model (ADR-0086): connections are first-class — a [`Registry`]

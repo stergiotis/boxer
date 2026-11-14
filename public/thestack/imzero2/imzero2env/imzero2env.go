@@ -186,7 +186,7 @@ var (
 
 	// AudioLaneToDevice and AudioLaneFromDevice are set by the Go host for
 	// the client it launches, not by hand: the two FIFOs of the audio lane
-	// (ADR-0372, proposed, §SD4), on which the host and the client's carrier
+	// (ADR-0372 §SD4), on which the host and the client's carrier
 	// exchange the messages of a remote viewer's audio device. The client
 	// (src/imzero2/audiolane.rs) reads them with std::env; the host sets
 	// them in application.newAudioLane when IMZERO2_HEADLESS_LISTEN names a

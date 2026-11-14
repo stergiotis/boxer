@@ -4,7 +4,7 @@ package browserhost
 
 import "unsafe"
 
-// The tab's audio lane (ADR-0372, proposed, §SD4). A worker has no audio
+// The tab's audio lane (ADR-0372 §SD4). A worker has no audio
 // device; the page around it has. Lane messages cross to the worker through
 // two host imports, as the tab's HTTP does, and the worker posts them to the
 // page on the port the mesh already uses. The Rust browser host is not

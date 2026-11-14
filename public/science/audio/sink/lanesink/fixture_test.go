@@ -14,7 +14,7 @@ import (
 // The wire fixture lives in the viewer page's audio suite, between two
 // markers, where the page's reader is tested against it. This test holds the
 // Go codec to the same bytes: each entry must be what the Append function
-// writes for its fields, and must decode to them (ADR-0372, proposed,
+// writes for its fields, and must decode to them (ADR-0372,
 // verification plan).
 const (
 	fixtureFile  = "rust/imzero2/src/imzero2/viewer/tests/suite-phase5-audio-lane.js"

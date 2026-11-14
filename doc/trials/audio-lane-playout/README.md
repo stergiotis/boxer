@@ -67,7 +67,7 @@ browser".**
 ## 1 Question and scope
 
 [ADR-0372](../../adr/0372-audio-output-for-the-browser-hosts-a-host-provided-sink-and-a-side-lane.md)
-(proposed) plays an app's sound through a viewer's page: Go sends chunks, the
+plays an app's sound through a viewer's page: Go sends chunks, the
 page schedules them and reports what it played, and Go keeps a target ahead
 of that count. Its milestone M4 asks of a measurement whether the device
 runs dry, at which target buffer, on which carrier. This trial is the

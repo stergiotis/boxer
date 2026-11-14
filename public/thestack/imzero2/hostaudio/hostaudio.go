@@ -1,5 +1,5 @@
 // Package hostaudio joins the two ends of the audio lane inside the Go host
-// (ADR-0372, proposed, §SD4): the device that plays an app's sound through a
+// (ADR-0372 §SD4): the device that plays an app's sound through a
 // remote viewer, and the application that launched the imzero2 client and
 // holds the pipes to its carrier.
 //

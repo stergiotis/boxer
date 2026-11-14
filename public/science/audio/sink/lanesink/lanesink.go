@@ -347,7 +347,7 @@ type mark struct {
 // Sink is one stream of a [Device]. While the remote device runs it is a
 // playout engine whose frames go out as chunks; otherwise it is the
 // device-less clock, so a playing sink keeps advancing with nobody
-// listening (ADR-0372 §SD9, proposed). The switch carries the position, the
+// listening (ADR-0372 §SD9). The switch carries the position, the
 // state, the rate, the volume and whether playback had ended across.
 type Sink struct {
 	dev      *Device

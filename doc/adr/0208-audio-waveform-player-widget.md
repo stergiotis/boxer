@@ -660,7 +660,7 @@ closed.
 SD6 named `sink.SinkI` as the seam for an output brokered by the runtime and
 left the capability to a later decision.
 [ADR-0372](./0372-audio-output-for-the-browser-hosts-a-host-provided-sink-and-a-side-lane.md)
-(proposed) is that decision, and its first milestone changed two things
+is that decision, and its first milestone changed two things
 here.
 
 The apps no longer open the pulse sink themselves: they ask the runtime on

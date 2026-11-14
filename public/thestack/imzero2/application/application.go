@@ -208,7 +208,7 @@ func (inst *Application[U]) Launch() (err error) {
 			log.Warn().Err(werr).Msg("no wake channel to the client; it keeps its cadence")
 		}
 		// The audio lane exists where the client serves remote viewers: one
-		// of their pages is the session's audio device (ADR-0372, proposed).
+		// of their pages is the session's audio device (ADR-0372).
 		var lane *audioLane
 		if imzero2env.HeadlessListen.Get() != "" {
 			var lerr error

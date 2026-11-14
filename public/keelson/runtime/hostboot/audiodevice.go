@@ -15,7 +15,7 @@ import (
 const laneWait = 3 * time.Second
 
 // laneOrPulse is the audio device of a host that was told to serve remote
-// viewers (ADR-0372, proposed, §SD2). Where the process has an audio lane to
+// viewers (ADR-0372 §SD2). Where the process has an audio lane to
 // a carrier, the person is at a viewer's page and the stream goes there.
 // Where it has none — FIFOs are not available, or the client that was
 // launched has no carrier and never opened its end — the person is at the

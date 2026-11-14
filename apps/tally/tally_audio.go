@@ -304,7 +304,7 @@ type audioSession struct {
 }
 
 // openAudioSession stages p and opens it as a track. The sink is the output
-// the host gives on bus (ADR-0372, proposed) and the device-less clock where
+// the host gives on bus (ADR-0372) and the device-less clock where
 // it gives none, so a host with no sound still gets a moving playhead and a
 // reason on screen.
 func openAudioSession(ctx context.Context, bus app.BusI, fsys fs.FS, p string, size int64, modTime time.Time) (inst *audioSession, err error) {

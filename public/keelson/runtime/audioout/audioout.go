@@ -17,7 +17,7 @@ import (
 )
 
 // SubjectOpen is the request subject an app publishes to for an audio output
-// (ADR-0372 §SD1, proposed). The request is an [OpenRequest], the reply an
+// (ADR-0372 §SD1). The request is an [OpenRequest], the reply an
 // [OpenReply].
 const SubjectOpen = "audio.out.open"
 

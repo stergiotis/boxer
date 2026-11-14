@@ -70,7 +70,7 @@ type Services struct {
 	// a visitor switches on (a map's tiles, a fetch an app makes), and can
 	// still read a file served beside its page (ADR-0299 §SD2).
 	NoEgress bool
-	// AudioOut serves audio.out.open in the tab (ADR-0372, proposed, §SD2):
+	// AudioOut serves audio.out.open in the tab (ADR-0372 §SD2):
 	// an app that asks for an output plays through the page around the
 	// worker, over the tab's audio lane. A native run of the tab binary has
 	// no page, and its apps get the device-less sink.

@@ -1,5 +1,5 @@
 // Package playout is the part of a device-backed sink that is not the
-// device (ADR-0372 §SD3, proposed): the transport state, the cursor into the
+// device (ADR-0372 §SD3): the transport state, the cursor into the
 // source, the rate resampler, the gain and the position bookkeeping of
 // ADR-0208 §SD6, over any device that takes interleaved float32 frames.
 //

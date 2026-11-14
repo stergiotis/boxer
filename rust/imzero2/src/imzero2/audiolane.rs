@@ -1,4 +1,4 @@
-//! The audio lane's pipe pair to the Go host (ADR-0372 SD4, proposed).
+//! The audio lane's pipe pair to the Go host (ADR-0372 SD4).
 //!
 //! Sound is the Go host's: it decodes, resamples and keeps the position. The
 //! device is a viewer's page. Between the two, this host is a relay that does

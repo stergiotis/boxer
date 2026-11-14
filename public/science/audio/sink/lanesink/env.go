@@ -3,7 +3,7 @@ package lanesink
 import "github.com/stergiotis/boxer/public/config/env"
 
 // Target is how much audio a [Device] keeps its remote device ahead by when
-// its options name none (ADR-0372, proposed, §SD5). It is the lane's latency
+// its options name none (ADR-0372 §SD5). It is the lane's latency
 // and a floor: the device keeps two and a half report intervals and 30 ms
 // ahead at least — 80 ms with a page that reports every 20 ms, whatever is
 // set here — and raises the figure further, to four seconds at most, where

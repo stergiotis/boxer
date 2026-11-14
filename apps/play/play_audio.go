@@ -174,9 +174,9 @@ func (inst *PlayApp) audioToggle(key string, raw func() string) {
 	inst.client.Go(func(context.Context) { s.open(bus, data, noDevice) })
 }
 
-// open reads the copy and opens the output the host gives on bus (ADR-0372,
-// proposed). A host that gives none gets the device-less clock and a reason
-// on screen rather than a failed open (ADR-0208 §SD6) — the playhead still
+// open reads the copy and opens the output the host gives on bus (ADR-0372).
+// A host that gives none gets the device-less clock and a reason on screen
+// rather than a failed open (ADR-0208 §SD6) — the playhead still
 // moves, so the pane still says what playing would look like.
 func (inst *audioSession) open(bus app.BusI, data string, noDevice bool) {
 	// Nothing here holds the lock while it talks to the sound server: the

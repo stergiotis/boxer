@@ -10,7 +10,7 @@ import (
 
 // WirePrefix is the one-byte type prefix lane messages carry on the carrier's
 // WebSocket and on the tab worker's port, beside the video, input, session
-// and mesh prefixes (ADR-0372 §SD4, proposed). The messages below are what
+// and mesh prefixes (ADR-0372 §SD4). The messages below are what
 // follows it.
 const WirePrefix byte = 0x05
 

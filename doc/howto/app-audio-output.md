@@ -13,9 +13,9 @@ status: draft
 An app asks the runtime for an output and plays through whatever the host
 has behind it: the machine's sound server on a desktop, the page of the
 active viewer in a remote session, the page around a browser tab
-([ADR-0372](../adr/0372-audio-output-for-the-browser-hosts-a-host-provided-sink-and-a-side-lane.md),
-proposed). This covers the app's side. It does not cover decoding, the
-waveform widget or the audio subtree, which are
+([ADR-0372](../adr/0372-audio-output-for-the-browser-hosts-a-host-provided-sink-and-a-side-lane.md)).
+This covers the app's side. It does not cover decoding, the waveform widget
+or the audio subtree, which are
 [ADR-0208](../adr/0208-audio-waveform-player-widget.md)'s.
 
 ## When to use this recipe

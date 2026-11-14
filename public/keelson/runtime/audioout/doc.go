@@ -1,5 +1,5 @@
-// Package audioout is the runtime's audio-output capability (ADR-0372,
-// proposed, §SD1 and §SD2): an app asks the host for an output over a
+// Package audioout is the runtime's audio-output capability (ADR-0372
+// §SD1 and §SD2): an app asks the host for an output over a
 // source and is handed a
 // [github.com/stergiotis/boxer/public/science/audio/sink.SinkI]; the host
 // binary decides what device is behind it.

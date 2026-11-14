@@ -192,7 +192,7 @@ func TestManifest_DeclaresFsAndPersist(t *testing.T) {
 	// starts, which run as keelson tasks owned by it. externaledit.offer,
 	// .wait and .close for the Editor's buffer handed to the host's editor
 	// app (the window open is the applet creator's). audio.out.open for the
-	// audio/wav gloss's play button (ADR-0372, proposed).
+	// audio/wav gloss's play button (ADR-0372).
 	require.Len(t, m.Caps, 19)
 	patterns := make([]string, 0, len(m.Caps))
 	for _, cap := range m.Caps {

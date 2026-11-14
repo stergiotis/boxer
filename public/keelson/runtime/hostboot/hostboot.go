@@ -145,7 +145,7 @@ type Services struct {
 	// Clipboard is clipboard.*: copies drained into egui copy ops each frame.
 	Clipboard bool
 	// AudioOut is audio.out.open: an audio output for an app that asks for
-	// one, on Options.AudioDevice (ADR-0372, proposed, §SD2). Without it an
+	// one, on Options.AudioDevice (ADR-0372 §SD2). Without it an
 	// app that plays sound gets the device-less sink.
 	AudioOut bool
 	// Coverage samples Go coverage counters onto the bus when
@@ -227,7 +227,7 @@ type Options struct {
 	// where the person is: the audio lane to the active remote viewer's page
 	// when IMZERO2_HEADLESS_LISTEN names a carrier and the client that was
 	// launched has one, and otherwise audioout.PulseDevice, the sound server
-	// of the machine the process runs on (ADR-0372, proposed, §SD2).
+	// of the machine the process runs on (ADR-0372 §SD2).
 	AudioDevice audioout.DeviceI
 	// LaunchApps are pre-resolved apps opened without a config, best-effort
 	// (a failed open is logged and skipped). In screenshot mode

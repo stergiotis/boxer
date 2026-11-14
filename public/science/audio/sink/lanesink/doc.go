@@ -1,4 +1,4 @@
-// Package lanesink is the Go end of the audio lane (ADR-0372, proposed,
+// Package lanesink is the Go end of the audio lane (ADR-0372
 // §SD4–§SD6 and §SD9): a device whose samples are played somewhere else — by
 // the viewer page of a remote session, or by the page around a browser tab —
 // and reach it as messages.

@@ -41,7 +41,7 @@ const (
 )
 
 // audioLane is the Go end of the audio lane to the client's carrier
-// (ADR-0372, proposed, §SD4): two FIFOs, each message a little-endian u32
+// (ADR-0372 §SD4): two FIFOs, each message a little-endian u32
 // length and that many bytes. What the device sends ([hostaudio.Send]) is
 // written to one; what the carrier forwards from the viewer's page is read
 // from the other and handed in ([hostaudio.Deliver]).
