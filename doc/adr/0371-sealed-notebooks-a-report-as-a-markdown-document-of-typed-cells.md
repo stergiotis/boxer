@@ -463,6 +463,46 @@ A surface that needs one of these is a play buffer, an applet or a
 workstatelet, which exist. A notebook with a section per region is written
 that way by whoever writes it: a programme or an agent emits the text.
 
+### SD10 — An app of its own: one document, two faces
+
+A notebook is written in an app of its own, which embeds play as an applet
+window does ([ADR-0132](./0132-sqlapplet-sql-defined-applets.md) §SD8). It
+holds one document and shows it two ways.
+
+- **Read.** The cell stack of SD4 over what is stored. No server is asked.
+- **Records.** A play instance whose buffer is the notebook's records
+  (SD6). Its panes, its diagnostics and its query graph work on the
+  statements against live data.
+
+Taking the buffer back writes it into the text: each record's statement
+into the cell of its name, a record the buffer adds as a cell after the one
+before it in the buffer. Prose, presentation cells and a record whose
+statement did not change keep their bytes. A buffer that drops a record or
+orders two records the other way round is refused, naming the record,
+since either is an edit of the text around the statements. A record whose
+statement changed is stale (SD8) until the notebook is collected.
+
+Collection is the app's, not play's: the embedded play's client runs each
+record, the blobs are written beside the file and then the text. It is a
+command the person confirms. Checking asks no server.
+
+The app does not edit prose or presentation cells in its first cut. The
+text is edited in any editor and read again.
+
+**Operations.** The split follows what an operation concerns. Play has the
+ones over *the buffer as records*: `get_notebook`, and its inverse
+`set_notebook`, which replaces the buffer with a notebook's records. The
+app has the ones over *the document and its files*: reading it, checking
+it, and asking for collection. The app serves the embedded play's catalog
+under play's names beside its own, as an applet window does, so an agent
+works on the records and on the document through one window.
+
+Rejected: collection in play, since play has no folder and a window that
+writes files beside a document it does not hold; a pane of play that draws
+the notebook, since play's buffer is one statement and has no place for
+prose or presentation cells; an editor for the text in the first cut,
+which doubles it for a need any editor meets.
+
 ## Surfaces — Tier 1
 
 | Surface | Change | Moves with it |
@@ -476,7 +516,9 @@ that way by whoever writes it: a programme or an agent emits the text.
 | Strata (ADR-0367), passthrough classifier (ADR-0117) | unchanged | — |
 | Markdown widget `Input` / `Result` | unchanged | — |
 | Play buffer and its graph | unchanged; a notebook is one more producer of a buffer, and a buffer of a notebook's records | — |
-| Play's operations catalog and toolbar | added: `get_notebook`, **Copy as notebook**; Load reads a notebook as its buffer | play's help reference and features page |
+| Play's operations catalog and toolbar | added: `get_notebook`, `set_notebook`, **Copy as notebook**; Load reads a notebook as its buffer | play's help reference and features page |
+| Sample notebooks, package `mdnotebook/samples` | added: three notebooks with their blobs, each record making its own rows | the gallery's samples demo, the how-to; a panel registered as a renderer needs a cell in `renderers.md` |
+| Play's help book | added: the topic that lists the renderers and what each reads | held to the registered renderers and to the sample by a test |
 | Markdown document facts (ADR-0218) | a cell kind is added, so prose cells are rows | the facts DDL and the vocabulary's assignment table |
 
 ## Alternatives
@@ -630,7 +672,11 @@ that way by whoever writes it: a programme or an agent emits the text.
   over the fixture asserts each cell kind is drawn, with play's panels as
   the renderers. The widget conformance lane covers the cell-stack package.
   The integration lane runs the evaluator's table and a collection through
-  clickhouse-local.
+  clickhouse-local. The sample notebooks are held
+  three ways: sealed, with every presentation cell answered, in the default
+  lane; collected again through clickhouse-local and compared row for row
+  in the integration lane; and each cell drawn by the panel it names, with
+  a cell for every registered renderer, in play's tests and in a scene.
 - **What would fail.** A fence the scan and the parse disagree on; a
   computing or filtering statement admitted as a presentation cell; a
   renamed column the evaluator and ClickHouse answer differently; a cell
@@ -659,22 +705,34 @@ that way by whoever writes it: a programme or an agent emits the text.
 - **M7 — The buffer both ways.** Play reads a notebook as its buffer and
   its buffer as a notebook's records (SD6).
 
-M1 to M5 and M7 are in the tree as of 2026-11-14. M6 is not built.
+- **M8 — Samples and the renderer reference.** Notebooks to read and to
+  start from, and play's help topic of what each renderer reads.
+- **M9 — The buffer written back.** `set_notebook` in play, and a
+  notebook's records replaced from a buffer with the rest of its text kept
+  (SD10).
+- **M10 — The app.** The two faces, check and collection, and the app's
+  operations (SD10).
+
+M1 to M5 and M7 to M9 are in the tree as of 2026-11-14. M6 and M10 are not
+built.
 
 ## Open questions
 
 - **Q1 — The name.** "Notebook" is a working name beside applet, chatlet and
   workstatelet.
-- **Q2 — Hosts beyond the first.** mdedit's Read mode draws a notebook
+- **Q2 — Hosts and the folder.** mdedit's Read mode draws a notebook
   loaded from a snapshot, where its blobs are found as a snapshot
   document's images are. A notebook opened from a single file or held in
   the persist store has no place to read blobs from and is drawn as
-  markdown; whether a file dialog grants the folder, or a viewer app of its
-  own does, is open. A host takes a document for a notebook when it holds a
-  record, listed or written as a cell: an applet document spells its panels
-  as a notebook spells presentation cells, and without a record such a cell
-  has nothing to read. So is showing the statements in the reading mode: it
-  draws the report, and the text is in the other modes.
+  markdown. SD10 gives the notebook an app; which grant of the host's file
+  broker carries a file together with the folder beside it, for reading
+  and for collection's writes, is settled when the app is built, and so is
+  whether mdedit's Read mode stays once it exists. A host takes a document
+  for a notebook when it holds a record, listed or written as a cell: an
+  applet document spells its panels as a notebook spells presentation
+  cells, and without a record such a cell has nothing to read. Whether the
+  reading mode shows the statements is open too: it draws the report, and
+  the text is in the other modes.
 - **Q3 — Parameters.** A buffer's `SET param_*` prelude has no place in the
   text: SD6 refuses a record that starts with `SET`. A notebook with
   parameters would need them in its frontmatter and in the hash SD8 keeps

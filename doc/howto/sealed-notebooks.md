@@ -20,6 +20,16 @@ a cell only picks columns of what is stored and names them.** Everything a
 reader sees is drawn from the stored results, with no server, so a filter,
 an order or an aggregate belongs in a record.
 
+## Start from a sample
+
+[`mdnotebook/samples`](../../public/semistructured/markdown/mdnotebook/samples)
+holds three notebooks with their blobs: `minimal.md`, a notebook in two
+records; `report.md`, a report that leads with its figures and ends with how
+they were collected; and `renderers.md`, one cell per renderer over the
+smallest record that satisfies it. Every record there makes its own rows, so
+a copy collects against any ClickHouse, and the widget gallery's **notebook
+samples** demo draws all three.
+
 ## 1. Write the text
 
 A notebook is markdown. Three spellings are its own, each starting in
@@ -72,10 +82,11 @@ is listed as a problem, and the notebook is not sealed.
 
 `table` is always there. Every other name is a result panel of play, under
 its panel id — `chart`, `series`, `dist`, `graphview`, `sankey`, `treemap`
-and the rest of the list in `apps/play/play_notebook_renderers.go`. A panel
-reads columns by name, which is what the alias is for: the chart above reads
-`x`, `series` and every number left. The contract of each panel is play's
-own, and a panel that does not read a result says why in the cell.
+and the rest. A panel reads columns by name, which is what the alias is for:
+the chart above reads `x`, `series` and every number left. What each one
+reads is listed in play's help,
+[Notebook renderers](../../apps/play/help/reference-notebook-renderers.md),
+and a panel that does not read a result says why in the cell.
 
 A panel that reads more than one relation takes the others from the cell's
 `WITH` list, each member named for the channel it fills. A member with no
@@ -95,7 +106,8 @@ SELECT * FROM edges
 
 prints the records as one statement, each a `WITH` query in document order.
 Paste it into a play window to work on the statements against live data, or
-pick the notebook with play's **Load .sql…**, which reads it the same way.
+pick the notebook with play's **Load .sql…**, which reads it the same way;
+an agent hands play the text with the operation `set_notebook`.
 
 The way back is play's **Copy as notebook** (the operation `get_notebook`
 for an agent): each `WITH` query of the buffer as a record cell, its own
