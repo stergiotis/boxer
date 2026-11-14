@@ -1092,6 +1092,14 @@ func (inst *PlayApp) loadFromPicker() {
 	// frame (review finding); consumePickedSql applies it at the next frame
 	// top, after which the debounce re-formats and the next Run persists.
 	loaded := string(body)
+	// A notebook is loaded as the buffer of its records (ADR-0371 §SD6).
+	if sql, isNotebook, nErr := bufferOfNotebook(body); isNotebook {
+		if nErr != nil {
+			inst.setLoadErr("the notebook's records: " + nErr.Error())
+			return
+		}
+		loaded = sql
+	}
 	inst.pickMu.Lock()
 	inst.pickedSql = &loaded
 	inst.pickErr = ""
@@ -2467,6 +2475,13 @@ func (inst *PlayApp) renderTopBar(schema *arrow.Schema) {
 				for rt := range c.RichTextLabel("Save as applet failed: " + saveErr) {
 					rt.Small().Weak()
 				}
+			}
+			// The buffer as a notebook's records (ADR-0371 §SD6), to paste
+			// into a notebook's text: play_notebook_buffer.go.
+			if c.Button(ids.PrepareStr("copyNotebook"),
+				c.Atoms().Text("Copy as notebook").Keep()).
+				SendResp().HasPrimaryClicked() {
+				inst.personCopyNotebook()
 			}
 		}
 

@@ -342,6 +342,18 @@ describes, and nothing in play changes to evaluate it. **Sealed**, a record
 is its stored result, bound by name to the evaluator that answers the
 presentation cells (SD7).
 
+The reading goes both ways, and play holds both ends of it. A notebook
+loaded into a play window is the buffer of its records. A buffer read as a
+notebook has each query of its `WITH` list as a record cell and its own
+`SELECT` as the last record, under a name its reader gives, with one table
+cell over it. The two are inverse: the notebook of a notebook's buffer has
+its records, and the buffer of a buffer's notebook answers as the buffer
+does (checked against ClickHouse, 2026-11-14). A buffer that binds or reads
+a parameter, whose `WITH` list holds an expression or is `RECURSIVE`, or
+that has a node play computes itself, is not a notebook's, and play says
+which part. Play collects nothing and draws no notebook: what it gains is
+the two readings.
+
 There is no session state. A cell is a `SELECT`; a statement of any other
 kind is refused when the buffer is built. A cell cannot hold a relation as a
 value, so a cell that shows data names a record — the difference from the
@@ -463,7 +475,8 @@ that way by whoever writes it: a programme or an agent emits the text.
 | Play's panels (`PanelI`) | unchanged; a second caller beside play's dispatch | a panel whose face starts reading its play instance leaves the registry |
 | Strata (ADR-0367), passthrough classifier (ADR-0117) | unchanged | — |
 | Markdown widget `Input` / `Result` | unchanged | — |
-| Play buffer and its graph | unchanged; a notebook is one more producer of a buffer | — |
+| Play buffer and its graph | unchanged; a notebook is one more producer of a buffer, and a buffer of a notebook's records | — |
+| Play's operations catalog and toolbar | added: `get_notebook`, **Copy as notebook**; Load reads a notebook as its buffer | play's help reference and features page |
 | Markdown document facts (ADR-0218) | a cell kind is added, so prose cells are rows | the facts DDL and the vocabulary's assignment table |
 
 ## Alternatives
@@ -643,8 +656,10 @@ that way by whoever writes it: a programme or an agent emits the text.
 - **M5 — A first host.** mdedit's Read mode, for a document from a
   snapshot.
 - **M6 — Cells as facts.** The projection of SD2 in `boxer.facts`.
+- **M7 — The buffer both ways.** Play reads a notebook as its buffer and
+  its buffer as a notebook's records (SD6).
 
-M1 to M5 are in the tree as of 2026-11-14. M6 is not built.
+M1 to M5 and M7 are in the tree as of 2026-11-14. M6 is not built.
 
 ## Open questions
 

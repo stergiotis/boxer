@@ -385,7 +385,16 @@ so you can tune the patterns without leaving the panel.
   references a placeholder that neither a `SET` nor a signal fills (see
   **Signals**); nothing is sent, since the server could only reject it.
 - **Load .sql…** (shown when the host wired the file capability) opens a file picker
-  and replaces the buffer with the chosen file's contents.
+  and replaces the buffer with the chosen file's contents. A sealed notebook
+  (ADR-0371) — markdown with `sql` fences that carry an id — is loaded as the
+  buffer of its records: each record a WITH query, the last the statement's
+  own SELECT.
+- **Copy as notebook** copies the buffer the other way: each WITH query as a
+  record cell, the buffer's own SELECT as the record `main`, and one table
+  cell over it. Pasted into a file, `boxer markdown notebook collect`
+  computes and stores the results. A buffer with parameters, a WITH
+  expression or a node computed in play is refused, with the part a notebook
+  cannot hold in the status bar.
 - **Edit in** `<editor>` (shown when the host registers one editor app, such as
   a terminal; ADR-0365) hands the buffer to that app. Each save there
   replaces the buffer while it still holds what was handed over; if you

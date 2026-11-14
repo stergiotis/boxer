@@ -534,6 +534,7 @@ var playOps = func() (s *appops.Set[*PlayLauncher, opsSnap]) {
 	addCompletionOps(s)
 	addEndpointFunctionOps(s)
 	addQueryGraphOps(s)
+	addNotebookOps(s)
 	addHistoryOps(s)
 	addWorkOps(s)
 	return

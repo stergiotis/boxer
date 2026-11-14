@@ -94,7 +94,15 @@ SELECT * FROM edges
 ```
 
 prints the records as one statement, each a `WITH` query in document order.
-Paste it into a play window to work on the statements against live data.
+Paste it into a play window to work on the statements against live data, or
+pick the notebook with play's **Load .sql…**, which reads it the same way.
+
+The way back is play's **Copy as notebook** (the operation `get_notebook`
+for an agent): each `WITH` query of the buffer as a record cell, its own
+`SELECT` as the record `main`, and one table cell over it. Paste the cells
+over the notebook's records, or into a new file to start a notebook from a
+buffer. A buffer with parameters or a `WITH` expression is refused: a
+notebook holds neither.
 
 ## 4. Collect
 
