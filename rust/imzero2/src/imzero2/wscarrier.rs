@@ -72,6 +72,22 @@ use prost::Message as _;
 /// mailboxes; mesh delivery has one queued frame batch (ADR-0242).
 const VIDEO_CHANNEL_CAP: usize = 16;
 
+/// Bound of a connection's audio lane queue (ADR-0372 SD4). The Go host keeps
+/// what is in flight to a target ahead of what the device played, a handful
+/// of messages; a queue this full is a viewer that stopped reading, and it
+/// is reaped rather than left with a hole in its audio.
+const AUDIO_CHANNEL_CAP: usize = 64;
+
+/// The largest audio lane message accepted from a viewer. What a device sends
+/// is an announcement of six bytes or a report of seventeen; anything bigger
+/// is not one of them.
+const AUDIO_DEVICE_MESSAGE_MAX: usize = 64;
+
+/// Lane message kinds the carrier itself looks at; the layouts are the Go
+/// `lanesink` package's. Kinds from a device have the high bit set.
+const AUDIO_KIND_FROM_DEVICE: u8 = 0x80;
+const AUDIO_KIND_DEVICE: u8 = 0x81;
+
 /// Default bound on simultaneously-parked connections (ADR-0086 SD2 /
 /// ADR-0082 SD5 `IMZERO2_HEADLESS_MAX_CONNECTIONS`). Read from the env once
 /// at [`WsCarrier::start`]; this is the fallback.
@@ -141,12 +157,19 @@ struct Conn {
     webcodecs: bool,
     /// Optional device label ("iPad"), reported by the `ClientHello`.
     label: String,
-    /// This connection has announced an audio device while it owned the
-    /// session (ADR-0372 SD8). Nothing of the audio lane is sent toward a
-    /// connection before it has: a viewer that cannot play — the native one
-    /// rejects a prefix it does not know — never sees the prefix. Cleared by
-    /// every change of owner.
+    /// This connection has announced an audio device in its current spell as
+    /// owner (ADR-0372 SD8). Lane messages from the Go host flow toward it
+    /// only while this holds. Cleared by every change of owner.
     audio_device: bool,
+    /// This connection has announced an audio device at some point, so it
+    /// knows the audio prefix. Nothing of the lane is sent toward one that
+    /// has not: a viewer that cannot play — the native one rejects a prefix
+    /// it does not know — never sees the prefix.
+    audio_capable: bool,
+    /// The connection's audio lane queue. `None` once it overflowed, which
+    /// ends the session task: the viewer reconnects and starts clean.
+    audio_tx: Option<tokio::sync::mpsc::Sender<Vec<u8>>>,
+    audio_rx: Option<tokio::sync::mpsc::Receiver<Vec<u8>>>,
     /// Outbound queue for this connection (video + per-recipient control).
     tx: tokio::sync::mpsc::Sender<Vec<u8>>,
     /// Latest-value mailbox for this connection's authoritative session state
@@ -204,8 +227,9 @@ struct Registry {
     /// two render passes is never missed.
     owner_reset: bool,
     /// Where audio lane messages for the Go host go (ADR-0372 SD4); `None`
-    /// when the host named no lane.
-    audio_to_host: Option<std::sync::mpsc::Sender<Vec<u8>>>,
+    /// when the host named no lane. Bounded: a host that stopped reading
+    /// loses reports, which the next one replaces.
+    audio_to_host: Option<std::sync::mpsc::SyncSender<Vec<u8>>>,
 }
 
 impl Registry {
@@ -238,38 +262,91 @@ impl Registry {
         self.owner_reset = true;
         // The audio device belonged to the previous owner (ADR-0372 SD8):
         // the Go host is told it went away, here rather than by a departing
-        // page, and the next owner's page announces its own.
+        // page.
         for c in &mut self.conns {
             c.audio_device = false;
         }
         if let Some(tx) = &self.audio_to_host {
-            let _ = tx.send(crate::imzero2::audiolane::DEVICE_ABSENT.to_vec());
+            let _ = tx.try_send(crate::imzero2::audiolane::DEVICE_ABSENT.to_vec());
+        }
+        // The next owner's page announces its own device when it sees itself
+        // become the owner. It may not see that: rosters are a latest-value
+        // mailbox, and a connection that lost the session and got it back
+        // between two deliveries sees no change. So a connection that has
+        // announced before is asked to announce again.
+        if let Some(c) = next.and_then(|id| self.conns.iter_mut().find(|c| c.id == id))
+            && c.audio_capable
+        {
+            let mut probe = vec![pb::PREFIX_AUDIO];
+            probe.extend_from_slice(&crate::imzero2::audiolane::DEVICE_PROBE);
+            Self::queue_audio(c, probe);
+        }
+    }
+
+    /// Queue one framed lane message for `c`. A full queue is a viewer that
+    /// stopped reading: the queue is closed, which ends its session task
+    /// once it has drained, so the viewer reconnects and announces afresh.
+    /// A lane message is not dropped with the connection left open: neither
+    /// side would learn of the hole.
+    fn queue_audio(c: &mut Conn, framed: Vec<u8>) -> bool {
+        let Some(tx) = &c.audio_tx else {
+            return false;
+        };
+        match tx.try_send(framed) {
+            Ok(()) => true,
+            Err(tokio::sync::mpsc::error::TrySendError::Full(_)) => {
+                tracing::warn!(id = c.id, "audio lane queue full — reaping the viewer");
+                c.audio_tx = None;
+                c.audio_device = false;
+                false
+            }
+            Err(tokio::sync::mpsc::error::TrySendError::Closed(_)) => false,
         }
     }
 
     /// Accept one audio lane message from `id` for the Go host, iff `id` owns
-    /// the session (ADR-0372 SD8). The first one marks the connection as an
-    /// audio device, which is what lets lane messages flow toward it.
+    /// the session (ADR-0372 SD8) and the message is a device's: short, and
+    /// of a kind a device sends. An announcement marks the connection as an
+    /// audio device, which is what lets lane messages flow toward it; until
+    /// one has, nothing else of its lane is forwarded.
     fn accept_audio(&mut self, id: u64, msg: &[u8]) -> bool {
-        if !self.is_active(id) || msg.is_empty() {
+        if !self.is_active(id) || msg.is_empty() || msg.len() > AUDIO_DEVICE_MESSAGE_MAX {
             return false;
         }
-        let Some(tx) = &self.audio_to_host else {
+        if msg[0] < AUDIO_KIND_FROM_DEVICE {
+            return false;
+        }
+        let Some(tx) = self.audio_to_host.clone() else {
             return false;
         };
-        if tx.send(msg.to_vec()).is_err() {
+        let Some(c) = self.conns.iter_mut().find(|c| c.id == id) else {
+            return false;
+        };
+        if msg[0] == AUDIO_KIND_DEVICE {
+            c.audio_device = true;
+            c.audio_capable = true;
+        } else if !c.audio_device {
             return false;
         }
-        if let Some(c) = self.conns.iter_mut().find(|c| c.id == id) {
-            c.audio_device = true;
-        }
-        true
+        tx.try_send(msg.to_vec()).is_ok()
     }
 
-    /// The outbound queue of the active connection's audio device, if it has
-    /// announced one.
-    fn audio_device_tx(&self) -> Option<tokio::sync::mpsc::Sender<Vec<u8>>> {
-        self.active_id.and_then(|id| self.find(id)).filter(|c| c.audio_device).map(|c| c.tx.clone())
+    /// Queue one lane message from the Go host for the active connection's
+    /// audio device, if it has announced one.
+    fn send_audio(&mut self, msg: &[u8]) -> bool {
+        let Some(id) = self.active_id else {
+            return false;
+        };
+        let Some(c) = self.conns.iter_mut().find(|c| c.id == id) else {
+            return false;
+        };
+        if !c.audio_device {
+            return false;
+        }
+        let mut framed = Vec::with_capacity(1 + msg.len());
+        framed.push(pb::PREFIX_AUDIO);
+        framed.extend_from_slice(msg);
+        Self::queue_audio(c, framed)
     }
 
     /// Accept one wire input event from `id`, iff `id` owns input right now
@@ -318,12 +395,16 @@ impl Registry {
         };
         let (video_tx, video_rx) = tokio::sync::mpsc::channel(VIDEO_CHANNEL_CAP);
         let (mesh_tx, mesh_rx) = tokio::sync::mpsc::channel(1);
+        let (audio_tx, audio_rx) = tokio::sync::mpsc::channel(AUDIO_CHANNEL_CAP);
         self.conns.push(Conn {
             id,
             role,
             webcodecs: false,
             label: String::new(),
             audio_device: false,
+            audio_capable: false,
+            audio_tx: Some(audio_tx),
+            audio_rx: Some(audio_rx),
             tx,
             state: tokio::sync::watch::channel(None).0,
             stream: tokio::sync::watch::channel(None).0,
@@ -1454,9 +1535,11 @@ async fn handle_session(
             c.stream.subscribe(),
             c.video_rx.take()?,
             c.mesh_rx.take()?,
+            c.audio_rx.take()?,
         ))
     });
-    let Some((id, mut state_rx, mut stream_rx, mut video_rx, mut mesh_rx)) = admitted else {
+    let Some((id, mut state_rx, mut stream_rx, mut video_rx, mut mesh_rx, mut audio_rx)) = admitted
+    else {
         tracing::info!(%peer, "rejecting connection — MAX_CONNECTIONS reached");
         return Ok(());
     };
@@ -1590,6 +1673,26 @@ async fn handle_session(
                         None => break Ok(()), // all senders gone (only after registry removal)
                     }
                 }
+                out = audio_rx.recv() => {
+                    // The audio lane (ADR-0372): its own queue, so it neither
+                    // crowds out nor waits behind the control traffic above.
+                    match out {
+                        Some(payload) => {
+                            match tokio::time::timeout(WRITE_TIMEOUT, ws_tx.send(tokio_tungstenite::tungstenite::Message::Binary(payload.into()))).await {
+                                Ok(Ok(())) => {}
+                                Ok(Err(e)) => break Err(e),
+                                Err(_) => {
+                                    tracing::info!(%peer, id, "viewer unresponsive (audio send timed out) — reaping connection");
+                                    break Ok(());
+                                }
+                            }
+                        }
+                        // The queue overflowed and was closed (or the
+                        // registry removed the connection): end here, so the
+                        // viewer reconnects and its device starts clean.
+                        None => break Ok(()),
+                    }
+                }
                 _ = ping.tick() => {
                     let join_expired = inner.registry.lock().map(|r| r.find(id).is_some_and(|c| c.awaiting_keyframe && c.joining_since.elapsed() > JOIN_TIMEOUT)).unwrap_or(false);
                     let video = inner.hello.lock().map(|h| h.codec != "mesh").unwrap_or(false);
@@ -1682,21 +1785,11 @@ async fn handle_session(
 /// Forward one audio lane message from the Go host to the active connection's
 /// audio device (ADR-0372 SD4/SD8). With no such device it is dropped: the Go
 /// side sends only after an announcement, so this is a message that crossed a
-/// change of owner. A full queue drops it too, and says so — the host's flow
-/// control keeps well under the queue in flight, so that is a stalled viewer.
+/// change of owner. The owner check and the enqueue share the registry lock,
+/// so a message cannot be filed with a connection that just lost the session.
 fn send_audio_to_device(inner: &Inner, msg: &[u8]) {
-    let tx = inner.registry.lock().ok().and_then(|r| r.audio_device_tx());
-    let Some(tx) = tx else {
-        return;
-    };
-    let mut framed = Vec::with_capacity(1 + msg.len());
-    framed.push(pb::PREFIX_AUDIO);
-    framed.extend_from_slice(msg);
-    if tx.try_send(framed).is_err() {
-        tracing::warn!(
-            bytes = msg.len(),
-            "audio lane message dropped — active viewer queue full or gone"
-        );
+    if let Ok(mut r) = inner.registry.lock() {
+        r.send_audio(msg);
     }
 }
 
@@ -2351,20 +2444,30 @@ mod tests {
         assert_eq!(out, vec![InputItem::Event(mk_move(1.0))]);
     }
 
+    /// An audio queue receiver for a registry-only test, as the session task
+    /// takes it.
+    fn take_audio_rx(inner: &Inner, id: u64) -> tokio::sync::mpsc::Receiver<Vec<u8>> {
+        let mut reg = inner.registry.lock().unwrap();
+        reg.conns.iter_mut().find(|c| c.id == id).unwrap().audio_rx.take().unwrap()
+    }
+
+    fn lane(kind_and_rest: &[u8]) -> Vec<u8> {
+        [&[pb::PREFIX_AUDIO][..], kind_and_rest].concat()
+    }
+
     /// The audio lane (ADR-0372 SD8): only the owner's messages reach the Go
     /// host, nothing goes toward a connection that has not announced a device,
     /// and a change of owner tells the host the device went away.
     #[test]
     fn the_audio_device_is_the_owners_and_ends_with_its_ownership() {
         let inner = mk_inner();
-        let (to_host, host) = std::sync::mpsc::channel::<Vec<u8>>();
-        let (a_tx, mut a_rx) = tokio::sync::mpsc::channel::<Vec<u8>>(4);
-        let (b_tx, mut b_rx) = tokio::sync::mpsc::channel::<Vec<u8>>(4);
+        let (to_host, host) = std::sync::mpsc::sync_channel::<Vec<u8>>(16);
         let (a, b) = {
             let mut reg = inner.registry.lock().unwrap();
             reg.audio_to_host = Some(to_host);
-            (reg.admit(a_tx).unwrap(), reg.admit(b_tx).unwrap())
+            (reg.admit(mk_tx()).unwrap(), reg.admit(mk_tx()).unwrap())
         };
+        let (mut a_rx, mut b_rx) = (take_audio_rx(&inner, a), take_audio_rx(&inner, b));
         let absent = crate::imzero2::audiolane::DEVICE_ABSENT.to_vec();
         assert_eq!(
             host.try_recv().unwrap(),
@@ -2372,32 +2475,46 @@ mod tests {
             "admission is a change of owner"
         );
 
-        // Before the owner's page announced a device, nothing is sent to it.
+        // Before the owner's page announced a device, nothing is sent to it,
+        // and nothing but an announcement is taken from it.
         send_audio_to_device(&inner, &[0x05]);
         assert!(
             a_rx.try_recv().is_err(),
             "no lane message before an announcement"
         );
+        let report = [0x82u8, 7, 0, 0, 0, 1, 0, 0, 0, 0, 4, 0, 0, 0, 0, 0, 0];
+        handle_client_message(&lane(&report), &inner, a);
+        assert!(
+            host.try_recv().is_err(),
+            "a report from a connection with no device is dropped"
+        );
 
         let announce = [0x81u8, 0x02, 0x80, 0xbb, 0, 0];
-        handle_client_message(
-            &[&[pb::PREFIX_AUDIO][..], &announce[..]].concat(),
-            &inner,
-            b,
-        );
+        handle_client_message(&lane(&announce), &inner, b);
         assert!(
             host.try_recv().is_err(),
             "a passive connection's lane messages are dropped"
         );
-        handle_client_message(
-            &[&[pb::PREFIX_AUDIO][..], &announce[..]].concat(),
-            &inner,
-            a,
-        );
+        handle_client_message(&lane(&announce), &inner, a);
         assert_eq!(
             host.try_recv().unwrap(),
             announce.to_vec(),
-            "the owner's arrive unread and unprefixed"
+            "the owner's arrive unprefixed"
+        );
+        handle_client_message(&lane(&report), &inner, a);
+        assert_eq!(host.try_recv().unwrap(), report.to_vec());
+
+        // Only what a device sends is taken: short, and of a device's kind.
+        handle_client_message(&lane(&[0x01, 7, 0, 0, 0]), &inner, a);
+        handle_client_message(
+            &lane(&vec![0x82u8; AUDIO_DEVICE_MESSAGE_MAX + 1]),
+            &inner,
+            a,
+        );
+        handle_client_message(&lane(&[]), &inner, a);
+        assert!(
+            host.try_recv().is_err(),
+            "a host-bound kind, an oversized message and an empty one are dropped"
         );
 
         send_audio_to_device(&inner, &[0x01, 7, 0, 0, 0]);
@@ -2410,20 +2527,131 @@ mod tests {
             "the passive connection hears nothing"
         );
 
-        // A takeover: the host is told the device went away, and the new
-        // owner gets nothing until its own page announces.
+        // A takeover: the host is told the device went away, the old owner's
+        // messages stop counting, and the new owner gets nothing until its
+        // own page announces. It never announced, so it is not asked to.
         assert!(inner.registry.lock().unwrap().take_session(b));
         assert_eq!(host.try_recv().unwrap(), absent);
+        handle_client_message(&lane(&report), &inner, a);
+        assert!(host.try_recv().is_err(), "the demoted owner is refused");
         send_audio_to_device(&inner, &[0x02]);
         assert!(a_rx.try_recv().is_err() && b_rx.try_recv().is_err());
-        handle_client_message(
-            &[&[pb::PREFIX_AUDIO][..], &announce[..]].concat(),
-            &inner,
-            b,
-        );
+        handle_client_message(&lane(&announce), &inner, b);
         assert_eq!(host.try_recv().unwrap(), announce.to_vec());
         send_audio_to_device(&inner, &[0x02]);
         assert_eq!(b_rx.try_recv().unwrap(), vec![pb::PREFIX_AUDIO, 0x02]);
+    }
+
+    /// The session can leave a connection and come back to it between two
+    /// roster deliveries, so its page never sees itself lose it and would not
+    /// announce again. The carrier asks it to — a connection that announced
+    /// before, never one that did not.
+    #[test]
+    fn a_returning_owner_is_asked_to_announce_again() {
+        let inner = mk_inner();
+        let (to_host, host) = std::sync::mpsc::sync_channel::<Vec<u8>>(16);
+        let (a, b) = {
+            let mut reg = inner.registry.lock().unwrap();
+            reg.audio_to_host = Some(to_host);
+            (reg.admit(mk_tx()).unwrap(), reg.admit(mk_tx()).unwrap())
+        };
+        let (mut a_rx, mut b_rx) = (take_audio_rx(&inner, a), take_audio_rx(&inner, b));
+        let announce = [0x81u8, 0x02, 0x80, 0xbb, 0, 0];
+        handle_client_message(&lane(&announce), &inner, a);
+        while host.try_recv().is_ok() {}
+
+        // b takes the session and leaves at once; a is promoted again.
+        {
+            let mut reg = inner.registry.lock().unwrap();
+            assert!(reg.take_session(b));
+            reg.remove(b);
+            assert!(reg.is_active(a));
+        }
+        assert!(
+            b_rx.try_recv().is_err(),
+            "a connection that never announced is not sent the prefix"
+        );
+        let probe = [
+            &[pb::PREFIX_AUDIO][..],
+            &crate::imzero2::audiolane::DEVICE_PROBE[..],
+        ]
+        .concat();
+        assert_eq!(
+            a_rx.try_recv().unwrap(),
+            probe,
+            "the returning owner is asked to announce"
+        );
+
+        // Until it does, it has no device: the host was told so, and nothing
+        // flows either way.
+        let absent = crate::imzero2::audiolane::DEVICE_ABSENT.to_vec();
+        let mut told = 0;
+        while let Ok(msg) = host.try_recv() {
+            assert_eq!(msg, absent);
+            told += 1;
+        }
+        assert_eq!(told, 3, "once per change of owner: taken, left, returned");
+        send_audio_to_device(&inner, &[0x02]);
+        assert!(a_rx.try_recv().is_err());
+        handle_client_message(&lane(&announce), &inner, a);
+        assert_eq!(host.try_recv().unwrap(), announce.to_vec());
+        send_audio_to_device(&inner, &[0x02]);
+        assert_eq!(a_rx.try_recv().unwrap(), vec![pb::PREFIX_AUDIO, 0x02]);
+    }
+
+    /// A viewer that stopped reading its audio is not left with a hole: when
+    /// its queue is full it is closed, which ends the session task once what
+    /// was queued is written, and the viewer reconnects.
+    #[test]
+    fn a_full_audio_queue_reaps_the_viewer() {
+        let inner = mk_inner();
+        let (to_host, _host) = std::sync::mpsc::sync_channel::<Vec<u8>>(16);
+        let a = {
+            let mut reg = inner.registry.lock().unwrap();
+            reg.audio_to_host = Some(to_host);
+            reg.admit(mk_tx()).unwrap()
+        };
+        let mut a_rx = take_audio_rx(&inner, a);
+        handle_client_message(&lane(&[0x81u8, 0x02, 0x80, 0xbb, 0, 0]), &inner, a);
+        for _ in 0..AUDIO_CHANNEL_CAP {
+            send_audio_to_device(&inner, &[0x02, 1]);
+        }
+        send_audio_to_device(&inner, &[0x02, 2]);
+        send_audio_to_device(&inner, &[0x02, 3]);
+        for _ in 0..AUDIO_CHANNEL_CAP {
+            assert_eq!(
+                a_rx.try_recv().unwrap(),
+                vec![pb::PREFIX_AUDIO, 0x02, 1],
+                "what was queued is still delivered"
+            );
+        }
+        assert!(
+            matches!(
+                a_rx.try_recv(),
+                Err(tokio::sync::mpsc::error::TryRecvError::Disconnected)
+            ),
+            "then the queue is closed, which is what ends the session task"
+        );
+    }
+
+    /// A host that stopped reading the lane costs reports, not memory.
+    #[test]
+    fn a_host_that_does_not_read_bounds_what_waits_for_it() {
+        let inner = mk_inner();
+        let (to_host, host) = std::sync::mpsc::sync_channel::<Vec<u8>>(2);
+        let a = {
+            let mut reg = inner.registry.lock().unwrap();
+            reg.audio_to_host = Some(to_host);
+            reg.admit(mk_tx()).unwrap()
+        };
+        for _ in 0..10 {
+            handle_client_message(&lane(&[0x81u8, 0x02, 0x80, 0xbb, 0, 0]), &inner, a);
+        }
+        let mut waiting = 0;
+        while host.try_recv().is_ok() {
+            waiting += 1;
+        }
+        assert_eq!(waiting, 2);
     }
 
     /// A takeover discards what the previous owner had queued and asks the host

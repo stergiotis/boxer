@@ -7,8 +7,10 @@
 //! bytes, without the wire prefix the carrier adds toward a viewer
 //! ([`crate::imzero2::inputproto::PREFIX_AUDIO`]).
 //!
-//! Without the variables, or where a FIFO cannot be opened, nothing starts
-//! and the session has no audio device, which the Go side reads as silence.
+//! Without the variables nothing starts. Each direction opens on its own and
+//! waits for the host's end, so a host that opens neither, or only one,
+//! leaves a lane that carries nothing that way; the Go side reads a device
+//! it never hears from as nobody listening.
 
 /// The FIFO the host writes and this process reads: messages toward the
 /// device.
@@ -16,20 +18,29 @@ pub const TO_DEVICE_ENV: &str = "IMZERO2_AUDIO_LANE_TO_DEVICE";
 /// The FIFO this process writes and the host reads: messages from the device.
 pub const FROM_DEVICE_ENV: &str = "IMZERO2_AUDIO_LANE_FROM_DEVICE";
 
-/// The largest message either direction carries. A chunk holds half a second
-/// of audio at most, well under this; a length above it is a broken stream.
+/// The largest message taken from the host. A chunk holds half a second of
+/// audio at most, well under this; a length above it is a broken stream.
 const MAX_MESSAGE: usize = 4 << 20;
+
+/// How many messages for the host may wait. What a device sends is small and
+/// frequent; a host that stopped reading loses reports, not memory.
+const TO_HOST_QUEUE: usize = 256;
 
 /// The lane message a carrier writes itself: the device went away. Its layout
 /// is `lanesink`'s device announcement, state absent, no rate.
 pub const DEVICE_ABSENT: [u8; 6] = [0x81, 0x00, 0, 0, 0, 0];
 
+/// The lane message a carrier writes toward a viewer: announce your device
+/// again. Its layout is `lanesink`'s probe, a kind with no fields.
+pub const DEVICE_PROBE: [u8; 1] = [0x06];
+
 /// Starts the lane when the host named both FIFOs. `to_device` is given each
 /// message the host sends, on the reader's thread. The returned sender takes
-/// messages for the host; it never blocks.
+/// messages for the host with `try_send`, which never blocks; a full queue
+/// refuses the message.
 pub fn spawn_from_env(
     to_device: impl Fn(Vec<u8>) + Send + 'static,
-) -> Option<std::sync::mpsc::Sender<Vec<u8>>> {
+) -> Option<std::sync::mpsc::SyncSender<Vec<u8>>> {
     let down = std::env::var(TO_DEVICE_ENV).ok().filter(|p| !p.is_empty())?;
     let up = std::env::var(FROM_DEVICE_ENV).ok().filter(|p| !p.is_empty())?;
     spawn(down, up, to_device)
@@ -39,7 +50,7 @@ fn spawn(
     down: String,
     up: String,
     to_device: impl Fn(Vec<u8>) + Send + 'static,
-) -> Option<std::sync::mpsc::Sender<Vec<u8>>> {
+) -> Option<std::sync::mpsc::SyncSender<Vec<u8>>> {
     let reader = std::thread::Builder::new().name("imzero2-audio-down".into()).spawn(move || {
         // Opening a FIFO for reading waits for the host to open it for writing.
         let mut fifo = match std::fs::File::open(&down) {
@@ -65,7 +76,7 @@ fn spawn(
         tracing::warn!(error = %e, "audio lane: unable to start the reader thread");
         return None;
     }
-    let (tx, rx) = std::sync::mpsc::channel::<Vec<u8>>();
+    let (tx, rx) = std::sync::mpsc::sync_channel::<Vec<u8>>(TO_HOST_QUEUE);
     let writer = std::thread::Builder::new().name("imzero2-audio-up".into()).spawn(move || {
         // Opening a FIFO for writing waits for the host to open it for reading.
         let mut fifo = match std::fs::OpenOptions::new().write(true).open(&up) {

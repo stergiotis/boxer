@@ -272,7 +272,7 @@
       "name": "BOXER_AUDIO_LANE_TARGET",
       "type": "duration",
       "default": "150ms",
-      "description": "audio lane: how much audio a remote audio device is kept ahead by (ADR-0372 §SD5); it grows on its own where the device reports slowly",
+      "description": "audio lane: how much audio a remote audio device is kept ahead by (ADR-0372 §SD5); never less than 2.5 report intervals and 30 ms (80 ms against a browser page), and grown to 4 s at most where the device reports slowly",
       "category": "system",
       "sensitive": false,
       "origin": {

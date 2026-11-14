@@ -16,9 +16,30 @@
 // its target ahead of that count. What is in flight is therefore bounded by
 // what the remote device consumed, and its clock is the one playback
 // follows: nothing is paced by wall time on this side, so the two clocks
-// cannot drift apart. The target is the lane's latency. It grows when
-// reports come slower than it allows for — a page whose timers the browser
-// has slowed — and shrinks back when they speed up.
+// cannot drift apart. The target is the lane's latency. It is never less
+// than two and a half report intervals and the lead a device starts a
+// stream with, grows when reports come slower than it allows for — a page whose timers the browser has slowed — up to four
+// seconds, and shrinks back when they speed up.
+//
+// # Loss
+//
+// A carrier may lose a message: a queue that was full, a viewer that
+// stalled. Each chunk says which frame of its epoch it starts at, so a
+// device that missed one plays the next behind what it has and counts the
+// frames in between as played; the two sides then agree again on what is in
+// flight. When everything in flight is lost no later chunk arrives to show
+// the hole, and the device, with nothing to play, reports nothing. A device
+// that is not synchronous looks for that: a playing stream with frames in
+// flight and no report for two seconds is opened again, in a new epoch, at
+// the last frame the device confirmed.
+//
+// # The end
+//
+// Playback has ended when the remote device has played the source's last
+// frames, not when they were sent: until then the stream is playing and its
+// position is short of the end. A pause, a change of rate and a change of
+// volume take effect on the frames sent from then on, so they are heard one
+// target late; a seek starts a new epoch, which drops what the device holds.
 //
 // # With nobody listening
 //

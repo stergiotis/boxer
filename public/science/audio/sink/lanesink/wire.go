@@ -22,8 +22,12 @@ const (
 	// KindOpen announces a stream and the epoch its first chunks carry: u32
 	// stream, u32 epoch, u32 sample rate, u8 channels, u8 sample format.
 	KindOpen KindE = 0x01
-	// KindChunk carries frames of a stream: u32 stream, u32 epoch, then
-	// interleaved samples to the end of the message.
+	// KindChunk carries frames of a stream: u32 stream, u32 epoch, u64 the
+	// index of its first frame within the epoch, then interleaved samples to
+	// the end of the message. The index is what lets a device that missed a
+	// chunk know it: it plays the next one behind what it has and counts the
+	// frames in between as played, so the two sides agree again on how many
+	// are in flight.
 	KindChunk KindE = 0x02
 	// KindFlush drops what the device holds of a stream and starts the epoch
 	// the following chunks carry: u32 stream, u32 epoch.
@@ -36,6 +40,12 @@ const (
 	// on it, and not before, so a session in which no app asks for an output
 	// never touches the browser's audio.
 	KindWant KindE = 0x05
+	// KindProbe asks a device to announce itself again; it has no fields. A
+	// carrier writes it when the session's owner became a connection that
+	// had announced a device before, since that connection's page may not
+	// have seen itself lose the session in between. This package never
+	// sends it.
+	KindProbe KindE = 0x06
 
 	// KindDevice announces the device, and voids every stream of an earlier
 	// announcement: u8 state, u32 sample rate.
@@ -79,7 +89,15 @@ func (inst DeviceStateE) String() (s string) {
 }
 
 // chunkHeaderLen is the length of a chunk message before its samples.
-const chunkHeaderLen = 9
+const chunkHeaderLen = 17
+
+// The sample rates a device may announce. Outside them an announcement is
+// taken for no device: a rate is a figure a browser reports, and one far off
+// is a mistake that would size buffers.
+const (
+	MinDeviceRate = 8000
+	MaxDeviceRate = 384000
+)
 
 // AppendOpen appends an open message to dst.
 func AppendOpen(dst []byte, stream uint32, epoch uint32, sampleRate uint32, channels uint8) (out []byte) {
@@ -91,11 +109,13 @@ func AppendOpen(dst []byte, stream uint32, epoch uint32, sampleRate uint32, chan
 }
 
 // AppendChunk appends a chunk message carrying samples, converted to signed
-// 16-bit with clipping, to dst.
-func AppendChunk(dst []byte, stream uint32, epoch uint32, samples []float32) (out []byte) {
+// 16-bit with clipping, to dst. first is the index of its first frame within
+// the epoch.
+func AppendChunk(dst []byte, stream uint32, epoch uint32, first uint64, samples []float32) (out []byte) {
 	out = append(dst, byte(KindChunk))
 	out = binary.LittleEndian.AppendUint32(out, stream)
 	out = binary.LittleEndian.AppendUint32(out, epoch)
+	out = binary.LittleEndian.AppendUint64(out, first)
 	for _, v := range samples {
 		out = binary.LittleEndian.AppendUint16(out, uint16(toS16(v)))
 	}
@@ -133,6 +153,9 @@ func AppendClose(dst []byte, stream uint32) (out []byte) {
 // AppendWant appends a want message to dst.
 func AppendWant(dst []byte) (out []byte) { return append(dst, byte(KindWant)) }
 
+// AppendProbe appends a probe message to dst.
+func AppendProbe(dst []byte) (out []byte) { return append(dst, byte(KindProbe)) }
+
 // AppendDevice appends a device announcement to dst. A device writes it; so
 // does a carrier, with [DeviceAbsent], when the connection that owned the
 // device went away.
@@ -158,7 +181,8 @@ type Message struct {
 	Channels   uint8
 	Format     SampleFormatE
 	State      DeviceStateE
-	Frames     uint64
+	// Frames is a played report's count, and a chunk's first frame.
+	Frames uint64
 	// Samples are a chunk's sample bytes, aliasing the decoded buffer.
 	Samples []byte
 }
@@ -184,7 +208,7 @@ func Decode(b []byte) (m Message, err error) {
 		}
 	case KindChunk:
 		if need(chunkHeaderLen) {
-			m.Stream, m.Epoch, m.Samples = u32(1), u32(5), b[chunkHeaderLen:]
+			m.Stream, m.Epoch, m.Frames, m.Samples = u32(1), u32(5), binary.LittleEndian.Uint64(b[9:]), b[chunkHeaderLen:]
 		}
 	case KindFlush:
 		if need(9) {
@@ -194,7 +218,7 @@ func Decode(b []byte) (m Message, err error) {
 		if need(5) {
 			m.Stream = u32(1)
 		}
-	case KindWant:
+	case KindWant, KindProbe:
 	case KindDevice:
 		if need(6) {
 			m.State, m.SampleRate = DeviceStateE(b[1]), u32(2)

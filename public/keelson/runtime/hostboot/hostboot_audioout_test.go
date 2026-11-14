@@ -11,6 +11,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/audioout"
 	"github.com/stergiotis/boxer/public/science/audio/pcm"
 	"github.com/stergiotis/boxer/public/science/audio/sink"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/hostaudio"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/imzero2env"
 )
 
@@ -56,9 +57,10 @@ func TestBoot_AudioOutDefaultsToThePulseDevice(t *testing.T) {
 	assert.True(t, AllServices().AudioOut, "the carousel's hosts offer an output")
 }
 
-// With a remote carrier configured the person is at a viewer's page, so the
-// default device is the audio lane rather than this machine's sound server.
-func TestBoot_AudioOutDefaultsToTheLaneBehindACarrier(t *testing.T) {
+// With a carrier configured the device follows whether the process has an
+// audio lane to it: the lane where the client opened its end, this machine's
+// sound server where no lane exists.
+func TestBoot_AudioOutFollowsTheLaneBehindACarrier(t *testing.T) {
 	imzero2env.HeadlessListen.SetForTest(t, "127.0.0.1:0")
 	opts := minimalOptions(t, newTestRegistry(t))
 	opts.Services.AudioOut = true
@@ -66,5 +68,23 @@ func TestBoot_AudioOutDefaultsToTheLaneBehindACarrier(t *testing.T) {
 	require.NoError(t, err)
 	defer rt.Close()
 	require.NotNil(t, rt.AudioOut)
-	assert.Equal(t, "lane", rt.AudioOut.Device().Name())
+	assert.Equal(t, "pulse", rt.AudioOut.Device().Name(), "no lane: FIFOs unavailable, or no client launched")
+
+	lane := hostaudio.Attach(func([]byte) {})
+	defer lane.Detach()
+	lane.Connected()
+	assert.Equal(t, "lane", rt.AudioOut.Device().Name(), "the client opened its end")
+
+	src, err := pcm.NewSynthSource(pcm.Format{SampleRate: 48000, Channels: 1}, 480, pcm.Silence())
+	require.NoError(t, err)
+	cli := rt.Bus.NewClient("hostboot.test.player", []app.SubjectFilter{
+		{Pattern: audioout.SubjectOpen, Direction: app.CapDirectionPub, Reason: "test"},
+	})
+	s, st := audioout.Open(cli, src)
+	defer func() { require.NoError(t, s.Close()) }()
+	assert.True(t, st.Audible(), st.Reason)
+	assert.Equal(t, "lane", st.Device)
+	yes, reason := audioout.Audible(s)
+	assert.False(t, yes, "granted, and nobody listens yet")
+	assert.Contains(t, reason, "no viewer")
 }

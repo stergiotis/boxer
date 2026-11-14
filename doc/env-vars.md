@@ -4,7 +4,7 @@ audience: contributor
 status: draft
 generated: true
 generator: public/app env gen-docs
-generated-at: 2026-11-14T10:11:06Z
+generated-at: 2026-11-14T12:09:07Z
 ---
 
 > **Status: draft — pre-human-review.** Machine-generated registry snapshot;
@@ -373,7 +373,7 @@ generated-at: 2026-11-14T10:11:06Z
 | `BOXER_ADHOC_DIR` | string | — | — |  | directory whose filesystem holds the unnamed sealed files of ad-hoc datasets, staged recordings and window captures (ADR-0240 §SD1, ADR-0281); empty resolves to <user cache dir>/boxer/adhoc; must support O_TMPFILE (ext4, tmpfs) |
 | `BOXER_AGENT_COORDINATORS` | string | — | — |  | comma-separated app ids or subject aliases allowed to ask the person for an agent task grant (ADR-0269), e.g. chat,agentconsole; empty allows none |
 | `BOXER_AGENT_COORDINATORS_WHERE` | string | — | — |  | ClickHouse boolean expression over keelson.apps columns; the launchable apps it selects at boot may ask the person for an agent task grant, beside those BOXER_AGENT_COORDINATORS names (ADR-0364, proposed), e.g. kind = 'chatlet'. Unset selects none; set and not evaluable, the host does not boot |
-| `BOXER_AUDIO_LANE_TARGET` | duration | `150ms` | — |  | audio lane: how much audio a remote audio device is kept ahead by (ADR-0372 §SD5); it grows on its own where the device reports slowly |
+| `BOXER_AUDIO_LANE_TARGET` | duration | `150ms` | — |  | audio lane: how much audio a remote audio device is kept ahead by (ADR-0372 §SD5); never less than 2.5 report intervals and 30 ms (80 ms against a browser page), and grown to 4 s at most where the device reports slowly |
 | `BOXER_AUDIO_PEAKS_CACHE_DIR` | path | — | — |  | directory holding cached audio peaks pyramids (ADR-0208 §SD4); empty uses <user cache dir>/boxer/audio-peaks |
 | `BOXER_CLICKHOUSE_LOCAL` | path | — | — |  | explicit path to the clickhouse binary `clickhouse local` runs; empty uses the PATH lookup |
 | `BOXER_COMPONENT` | string | — | — |  | component identity mark, injected by the supervisor (unit Environment= line, launcher script) and inherited by children; read by the topology layer (ADR-0126); empty = unmarked |

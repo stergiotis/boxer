@@ -31,6 +31,7 @@ type fixtureEntry struct {
 	Channels   uint8   `json:"channels"`
 	State      uint8   `json:"state"`
 	Frames     uint64  `json:"frames"`
+	First      uint64  `json:"first"`
 	Samples    []int16 `json:"samples"`
 }
 
@@ -79,15 +80,18 @@ func TestWireMatchesTheViewerPagesFixture(t *testing.T) {
 			for i, s := range e.Samples {
 				samples[i] = float32(s) / 32767
 			}
-			got = AppendChunk(nil, e.Stream, e.Epoch, samples)
-			expect.Kind, expect.Samples = KindChunk, want[chunkHeaderLen:]
+			got = AppendChunk(nil, e.Stream, e.Epoch, e.First, samples)
+			expect.Kind, expect.Frames, expect.Samples = KindChunk, e.First, want[chunkHeaderLen:]
 		case "flush":
 			got = AppendFlush(nil, e.Stream, e.Epoch)
 			expect.Kind = KindFlush
 		case "close":
 			got = AppendClose(nil, e.Stream)
 			expect.Kind = KindClose
-		case "device":
+		case "probe":
+			got = AppendProbe(nil)
+			expect.Kind = KindProbe
+		case "device", "suspended":
 			got = AppendDevice(nil, DeviceStateE(e.State), e.SampleRate)
 			expect.Kind, expect.State, expect.SampleRate = KindDevice, DeviceStateE(e.State), e.SampleRate
 		case "played":
@@ -101,7 +105,11 @@ func TestWireMatchesTheViewerPagesFixture(t *testing.T) {
 		require.NoError(t, err, e.Name)
 		require.Equal(t, expect, m, "the fields of %q", e.Name)
 	}
-	for _, name := range []string{"want", "open", "chunk", "flush", "close", "device", "played"} {
+	// The states are spelled out in the fixture as numbers, which is what
+	// the page writes; they must be this package's.
+	require.Equal(t, DeviceStateE(1), DeviceSuspended)
+	require.Equal(t, DeviceStateE(2), DeviceRunning)
+	for _, name := range []string{"want", "probe", "open", "chunk", "flush", "close", "device", "suspended", "played"} {
 		require.True(t, seen[name], "the fixture has no %q entry", name)
 	}
 }

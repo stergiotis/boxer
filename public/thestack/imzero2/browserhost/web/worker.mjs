@@ -111,9 +111,13 @@ try {
     framed.set(msg, 1);
     self.postMessage({ kind: 'mesh', bytes: framed.buffer }, [framed.buffer]);
   });
-  audioIn = (bytes) => r.audioIn(bytes);
-  for (const bytes of audioWaiting) audioIn(bytes);
-  audioWaiting = null;
+  // A failure in the lane must not stop the application: it is logged once
+  // and the lane goes quiet. After the module has exited nothing is pumped.
+  let audioFailed = false;
+  audioIn = (bytes) => {
+    if (exited || audioFailed) return;
+    try { r.audioIn(bytes); } catch (err) { audioFailed = true; log('worker — audio lane stopped: ' + (err && err.message || err)); }
+  };
   let frames = 0, timer = null, lastTick = -Infinity, exited = false;
   const minMs = 1000 / fps;
   const schedule = (ms) => { clearTimeout(timer); timer = setTimeout(tick, Math.max(0, ms)); };
@@ -129,6 +133,8 @@ try {
   };
   wake = () => { if (!exited) schedule(0); };
   r.onHttpSettled(() => wake());
+  for (const bytes of audioWaiting) audioIn(bytes);
+  audioWaiting = null;
   tick();
 } catch (err) {
   log('worker error: ' + (err && err.stack || err));

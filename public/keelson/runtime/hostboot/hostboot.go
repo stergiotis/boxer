@@ -225,9 +225,9 @@ type Options struct {
 	Services Services
 	// AudioDevice is what Services.AudioOut opens streams on. Nil picks by
 	// where the person is: the audio lane to the active remote viewer's page
-	// when IMZERO2_HEADLESS_LISTEN names a carrier, and otherwise
-	// audioout.PulseDevice, the sound server of the machine the process runs
-	// on (ADR-0372, proposed, §SD2).
+	// when IMZERO2_HEADLESS_LISTEN names a carrier and the client that was
+	// launched has one, and otherwise audioout.PulseDevice, the sound server
+	// of the machine the process runs on (ADR-0372, proposed, §SD2).
 	AudioDevice audioout.DeviceI
 	// LaunchApps are pre-resolved apps opened without a config, best-effort
 	// (a failed open is logged and skipped). In screenshot mode
@@ -834,11 +834,11 @@ func (rt *Runtime) bootServices(ctx context.Context, factsCfg chstore.Config) {
 		switch {
 		case dev != nil:
 		case imzero2env.HeadlessListen.Get() != "":
-			lane := hostaudio.NewLaneDevice(hostaudio.Traced(lanesink.Options{}, logger), func(err error) {
+			lane, closeLane := hostaudio.NewLaneDevice(hostaudio.Traced(lanesink.Options{}, logger), func(err error) {
 				logger.Warn().Err(err).Msg("audioout: audio lane message refused")
 			})
-			rt.cleanups = append(rt.cleanups, lane.Close)
-			dev = lane
+			rt.cleanups = append(rt.cleanups, closeLane)
+			dev = &laneOrPulse{lane: lane}
 		default:
 			dev = audioout.PulseDevice{}
 		}

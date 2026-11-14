@@ -4,51 +4,103 @@
 // holds the pipes to its carrier.
 //
 // Neither end knows the other, and either may come first. The application
-// installs how a message leaves ([SetSender]) and hands in what arrives
-// ([Deliver]); the device sends ([Send]) and says where arrivals go
-// ([SetReceiver]). Until both are there a message goes nowhere, which the
-// device reads as nobody listening.
+// attaches its lane ([Attach]), says when the client has opened its end
+// ([Lane.Connected]) and hands in what arrives ([Deliver]); the device sends
+// ([Send]) and says where arrivals go ([SetReceiver]). Until both are there
+// a message goes nowhere, which the device reads as nobody listening.
+//
+// Whether a lane exists is also what a host chooses its device by ([Await]):
+// a client that never opens its end has no carrier, and its person is at the
+// machine, not at a viewer's page.
 package hostaudio
 
 import (
+	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/rs/zerolog"
 
 	"github.com/stergiotis/boxer/public/science/audio/sink/lanesink"
 )
 
+// Lane is one application's audio lane as this package holds it.
+type Lane struct {
+	send      func(msg []byte)
+	started   time.Time
+	connected chan struct{}
+	once      sync.Once
+}
+
 var (
-	sender   atomic.Pointer[func(msg []byte)]
+	lane     atomic.Pointer[Lane]
 	receiver atomic.Pointer[func(msg []byte)]
 )
 
-// SetSender installs how a lane message leaves toward the client's carrier;
-// nil removes it. The function must not wait and must not keep msg.
-func SetSender(f func(msg []byte)) {
-	if f == nil {
-		sender.Store(nil)
-		return
-	}
-	sender.Store(&f)
+// Attach makes send the way a lane message leaves toward the client's
+// carrier, replacing an earlier lane. The function must not wait and must
+// not keep msg. The lane is not connected yet: the client has not opened
+// its end.
+func Attach(send func(msg []byte)) (l *Lane) {
+	l = &Lane{send: send, started: time.Now(), connected: make(chan struct{})}
+	lane.Store(l)
+	return l
+}
+
+// Connected records that the client opened its end of the lane. Idempotent.
+func (inst *Lane) Connected() {
+	inst.once.Do(func() { close(inst.connected) })
+}
+
+// Detach removes the lane, unless a later one has replaced it. Idempotent.
+func (inst *Lane) Detach() {
+	lane.CompareAndSwap(inst, nil)
 }
 
 // Send carries one lane message, without its wire prefix, toward the
-// carrier. Without a sender it is dropped.
+// carrier. Without a lane it is dropped.
 func Send(msg []byte) {
-	if f := sender.Load(); f != nil {
-		(*f)(msg)
+	if l := lane.Load(); l != nil {
+		l.send(msg)
 	}
 }
 
-// SetReceiver installs where lane messages from the carrier go; nil removes
-// it. The function is called off the render path.
-func SetReceiver(f func(msg []byte)) {
-	if f == nil {
-		receiver.Store(nil)
-		return
+// Await reports whether this process has an audio lane to a carrier. With
+// no lane attached it says no at once, and with a connected one yes. For a
+// lane the client has not opened yet it waits, until the client does or
+// until wait has passed since the lane was attached: a client with a
+// carrier opens its end as it starts, so one that has not by then has none.
+func Await(wait time.Duration) (ok bool) {
+	l := lane.Load()
+	if l == nil {
+		return false
 	}
-	receiver.Store(&f)
+	left := wait - time.Since(l.started)
+	if left <= 0 {
+		select {
+		case <-l.connected:
+			return true
+		default:
+			return false
+		}
+	}
+	timer := time.NewTimer(left)
+	defer timer.Stop()
+	select {
+	case <-l.connected:
+		return true
+	case <-timer.C:
+		return false
+	}
+}
+
+// SetReceiver installs where lane messages from the carrier go and returns
+// what removes it again, unless a later receiver has replaced it. The
+// function is called off the render path.
+func SetReceiver(f func(msg []byte)) (release func()) {
+	p := &f
+	receiver.Store(p)
+	return func() { receiver.CompareAndSwap(p, nil) }
 }
 
 // Deliver hands in one lane message that arrived from the carrier. Without a
@@ -78,13 +130,17 @@ func Traced(opts lanesink.Options, logger zerolog.Logger) (out lanesink.Options)
 
 // NewLaneDevice returns an audio lane device on this process's lane to its
 // client and makes it the receiver. A message the device refuses is passed
-// to onRefused, which may be nil.
-func NewLaneDevice(opts lanesink.Options, onRefused func(err error)) (dev *lanesink.Device) {
+// to onRefused, which may be nil. close closes the device and stops it being
+// the receiver.
+func NewLaneDevice(opts lanesink.Options, onRefused func(err error)) (dev *lanesink.Device, close func()) {
 	dev = lanesink.NewDevice(Send, opts)
-	SetReceiver(func(msg []byte) {
+	release := SetReceiver(func(msg []byte) {
 		if err := dev.Receive(msg); err != nil && onRefused != nil {
 			onRefused(err)
 		}
 	})
-	return dev
+	return dev, func() {
+		release()
+		dev.Close()
+	}
 }

@@ -981,22 +981,34 @@ canvas.addEventListener("webglcontextrestored", () => {
 // rate, gain, seeking and the position are Go's.
 //
 // One AudioContext, made only once Go says an app wants an output (WANT), so
-// a session that plays nothing never touches the browser's audio. A browser
-// starts a context suspended until the person acts on the page; resume() is
-// tried on WANT and again on every pointer or key press while it is wanted.
+// a session that plays nothing never touches the browser's audio, and
+// suspended again when no stream has been open for a while. A browser starts
+// a context suspended until the person acts on the page; resume() is tried on
+// WANT and again on every input that counts as acting on it. A browser that
+// only honours resume() inside the input's own handler needs that second
+// input.
 //
 // Each chunk becomes a buffer source scheduled on the context's timeline,
-// directly behind the one before it. Positions are whole frames since an
-// anchor time, never a running sum of durations, so two chunks meet on a
-// sample. A stream that ran dry gets a new anchor a little ahead of now.
-const AUDIO_OPEN = 0x01, AUDIO_CHUNK = 0x02, AUDIO_FLUSH = 0x03, AUDIO_CLOSE = 0x04, AUDIO_WANT = 0x05;
+// directly behind the one before it. A run of chunks that follow one another
+// is a segment: an anchor time, the epoch frame it starts at, and a frame
+// count, so positions are whole frames since the anchor, never a running sum
+// of durations, and two chunks meet on a sample. A new segment starts when a
+// stream has run dry (a little ahead of now) and when a chunk does not start
+// where the last one ended — a chunk was lost. The frames in between are then
+// counted as played once the new segment starts, so that this side and Go
+// agree again on how many frames are in flight.
+const AUDIO_OPEN = 0x01, AUDIO_CHUNK = 0x02, AUDIO_FLUSH = 0x03, AUDIO_CLOSE = 0x04, AUDIO_WANT = 0x05,
+      AUDIO_PROBE = 0x06;
 const AUDIO_DEVICE = 0x81, AUDIO_PLAYED = 0x82;
 const AUDIO_SUSPENDED = 1, AUDIO_RUNNING = 2;
 const AUDIO_FORMAT_S16LE = 1;
-// How often a stream's played count is reported while it changes, and how far
-// ahead of now a stream that has nothing scheduled starts.
-const AUDIO_REPORT_MS = 20, AUDIO_LEAD_S = 0.03;
-let audioCtx = null, audioWanted = false, audioIsDevice = false, audioTimer = null;
+// How often a stream's played count is reported while it changes; how far
+// ahead of now a stream with nothing scheduled starts; how much must still be
+// scheduled for a chunk to be placed behind it (less, and its start could
+// already be in the past for the audio thread: it would play late and overlap
+// the next); and how long the context stays running with no stream open.
+const AUDIO_REPORT_MS = 20, AUDIO_LEAD_S = 0.03, AUDIO_MIN_AHEAD_S = 0.01, AUDIO_IDLE_MS = 30000;
+let audioCtx = null, audioWanted = false, audioIsDevice = false, audioTimer = null, audioIdleTimer = null;
 // What the last announcement said, so that a state the Go side already knows
 // is not announced again: an announcement restarts every stream.
 let audioAnnouncedState = -1, audioAnnouncedRate = 0;
@@ -1012,15 +1024,17 @@ function audioStop(s) {
     n.disconnect();
   }
   s.nodes.clear();
+  s.segs.length = 0;
 }
 function audioDropAll() {
   for (const s of audioStreams.values()) audioStop(s);
   audioStreams.clear();
   audioTimerUpdate();
 }
-// This page is now the session's device (it became the active viewer, or the
-// worker said hello: force), or its context changed state. An announcement
-// voids every stream of an earlier one, here as on the Go side.
+// This page is now the session's device (it became the active viewer, the
+// worker said hello, or the carrier asked: force), or its context changed
+// state. An announcement voids every stream of an earlier one, here as on
+// the Go side.
 function audioAnnounce(force) {
   audioIsDevice = true;
   const state = audioCtx && audioCtx.state === "running" ? AUDIO_RUNNING : AUDIO_SUSPENDED;
@@ -1041,29 +1055,49 @@ function audioReset() {
   audioWanted = false;
   audioAnnouncedState = -1;
   audioDropAll();
+  audioSuspend();
+}
+function audioSuspend() {
+  if (audioIdleTimer !== null) { clearTimeout(audioIdleTimer); audioIdleTimer = null; }
+  audioWanted = false;
+  if (audioCtx && audioCtx.state === "running") audioCtx.suspend().catch(() => {});
 }
 function audioWant() {
   audioWanted = true;
+  if (audioIdleTimer !== null) { clearTimeout(audioIdleTimer); audioIdleTimer = null; }
   if (!audioCtx) {
     const Ctor = window.AudioContext || window.webkitAudioContext;
     if (!Ctor) return; // no Web Audio here: the device stays suspended
-    audioCtx = new Ctor({ latencyHint: "interactive" });
+    try { audioCtx = new Ctor({ latencyHint: "interactive" }); } catch (_) { return; }
     audioCtx.onstatechange = () => { if (audioIsDevice) audioAnnounce(false); };
   }
   if (audioCtx.state === "running") audioAnnounce(false);
-  else audioCtx.resume().catch(() => { /* not allowed yet: the next gesture retries */ });
+  else audioCtx.resume().catch(() => { /* not allowed yet: the next input retries */ });
 }
 function audioGesture() {
   if (audioWanted && audioCtx && audioCtx.state !== "running") audioCtx.resume().catch(() => {});
 }
-document.addEventListener("pointerdown", audioGesture, true);
-document.addEventListener("keydown", audioGesture, true);
+// Every event a browser counts as the person acting on the page: a touch
+// counts on its release, a mouse on its press.
+for (const type of ["pointerdown", "pointerup", "mousedown", "touchend", "click", "keydown"]) {
+  document.addEventListener(type, audioGesture, true);
+}
 
-// Frames of the stream's epoch the context has consumed.
+// Frames of the stream's epoch the context has consumed: the count of the
+// last segment that has started, lost frames before it included. It never
+// goes back.
 function audioPlayed(s) {
-  if (s.sched === 0) return s.base;
-  const n = Math.floor((audioCtx.currentTime - s.t0) * s.rate);
-  return s.base + Math.max(0, Math.min(s.sched, n));
+  const now = audioCtx.currentTime;
+  let played = 0;
+  for (let i = s.segs.length - 1; i >= 0; i--) {
+    const g = s.segs[i];
+    if (g.t0 > now) continue;
+    played = g.base + Math.max(0, Math.min(g.frames, Math.floor((now - g.t0) * s.rate)));
+    if (i > 0) s.segs.splice(0, i); // what lies before it is done
+    break;
+  }
+  s.played = Math.max(s.played, played);
+  return s.played;
 }
 function audioTick() {
   for (const s of audioStreams.values()) {
@@ -1077,24 +1111,65 @@ function audioTick() {
   }
 }
 function audioTimerUpdate() {
-  if (audioStreams.size > 0 && audioTimer === null) audioTimer = setInterval(audioTick, AUDIO_REPORT_MS);
-  else if (audioStreams.size === 0 && audioTimer !== null) { clearInterval(audioTimer); audioTimer = null; }
+  if (audioStreams.size > 0) {
+    if (audioTimer === null) audioTimer = setInterval(audioTick, AUDIO_REPORT_MS);
+    if (audioIdleTimer !== null) { clearTimeout(audioIdleTimer); audioIdleTimer = null; }
+    return;
+  }
+  if (audioTimer !== null) { clearInterval(audioTimer); audioTimer = null; }
+  // Nothing open: after a while the output device is let go. The context's
+  // change of state is announced, and Go asks again when a stream wants it.
+  if (audioIdleTimer === null && audioCtx && audioCtx.state === "running") {
+    audioIdleTimer = setTimeout(() => { audioIdleTimer = null; if (audioStreams.size === 0) audioSuspend(); }, AUDIO_IDLE_MS);
+  }
+}
+function audioSchedule(s, first, d, offset, frames) {
+  const now = audioCtx.currentTime;
+  const last = s.segs.length ? s.segs[s.segs.length - 1] : null;
+  const lastEnd = last ? last.t0 + last.frames / s.rate : -Infinity;
+  let seg = last;
+  if (!last || first !== s.next || lastEnd < now + AUDIO_MIN_AHEAD_S) {
+    // Nothing scheduled, the stream is about to run dry, or a chunk was
+    // lost: a new segment. Behind what is still scheduled where that is far
+    // enough ahead, else a little ahead of now.
+    const lead = Math.max(AUDIO_LEAD_S, 2 * (audioCtx.baseLatency || 0));
+    seg = { t0: Math.max(now + lead, lastEnd), base: first, frames: 0 };
+    s.segs.push(seg);
+  }
+  const buf = audioCtx.createBuffer(s.channels, frames, s.rate);
+  for (let c = 0; c < s.channels; c++) {
+    const out = buf.getChannelData(c);
+    for (let i = 0, o = offset + 2 * c; i < frames; i++, o += 2 * s.channels) out[i] = d.getInt16(o, true) / 32768;
+  }
+  const node = audioCtx.createBufferSource();
+  node.buffer = buf;
+  node.connect(audioCtx.destination);
+  node.onended = () => { s.nodes.delete(node); node.disconnect(); };
+  node.start(seg.t0 + seg.frames / s.rate);
+  s.nodes.add(node);
+  seg.frames += frames;
+  s.next = first + frames;
 }
 function onAudio(p) {
   if (!audioIsDevice || p.length < 1) return;
   const d = new DataView(p.buffer, p.byteOffset, p.byteLength);
   const kind = p[0];
   if (kind === AUDIO_WANT) { audioWant(); return; }
+  if (kind === AUDIO_PROBE) { audioAnnounce(true); return; }
   if (p.length < 5) return;
   const id = d.getUint32(1, true);
   if (kind === AUDIO_OPEN) {
-    if (p.length < 15 || !audioCtx || p[14] !== AUDIO_FORMAT_S16LE || p[13] < 1) return;
+    // Go opens every stream at the rate this device announced, mono or
+    // stereo; anything else is not a stream this device can play.
+    if (p.length < 15 || !audioCtx || p[14] !== AUDIO_FORMAT_S16LE) return;
+    if (p[13] < 1 || p[13] > 2 || d.getUint32(9, true) !== audioCtx.sampleRate) return;
     const old = audioStreams.get(id);
     if (old) audioStop(old);
-    // t0: context time of the anchor; sched: frames scheduled since it;
-    // base: frames of the epoch played before it.
+    // segs: the scheduled segments, each {t0: context time of its anchor,
+    // base: the epoch frame it starts at, frames: scheduled in it};
+    // next: the epoch frame the next chunk is expected to start at.
     audioStreams.set(id, { id, epoch: d.getUint32(5, true), rate: d.getUint32(9, true), channels: p[13],
-                           nodes: new Set(), t0: 0, sched: 0, base: 0, reported: -1 });
+                           nodes: new Set(), segs: [], next: 0, played: 0, reported: -1 });
     audioTimerUpdate();
     return;
   }
@@ -1108,31 +1183,19 @@ function onAudio(p) {
     if (p.length < 9) return;
     audioStop(s);
     s.epoch = d.getUint32(5, true);
-    s.t0 = 0; s.sched = 0; s.base = 0; s.reported = -1;
+    s.next = 0; s.played = 0; s.reported = -1;
   } else if (kind === AUDIO_CHUNK) {
-    if (p.length < 9 || d.getUint32(5, true) !== s.epoch || !audioCtx) return;
-    const frames = Math.floor((p.length - 9) / (2 * s.channels));
-    if (frames === 0) return;
-    const buf = audioCtx.createBuffer(s.channels, frames, s.rate);
-    for (let c = 0; c < s.channels; c++) {
-      const out = buf.getChannelData(c);
-      for (let i = 0, o = 9 + 2 * c; i < frames; i++, o += 2 * s.channels) out[i] = d.getInt16(o, true) / 32768;
+    if (p.length < 17 || d.getUint32(5, true) !== s.epoch || !audioCtx || audioCtx.state !== "running") return;
+    const first = Number(d.getBigUint64(9, true));
+    const frames = Math.floor((p.length - 17) / (2 * s.channels));
+    // A chunk that starts before what was already taken is a repeat.
+    if (frames === 0 || !Number.isSafeInteger(first) || first < s.next) return;
+    try {
+      audioSchedule(s, first, d, 17, frames);
+    } catch (e) {
+      // A buffer the browser refused: the frames are skipped like lost ones.
+      console.warn("audio lane: chunk not scheduled", e);
     }
-    const now = audioCtx.currentTime;
-    if (s.sched === 0 || s.t0 + s.sched / s.rate < now) {
-      // Nothing scheduled, or the stream ran dry: what was scheduled has
-      // played, and the next frame starts a little ahead of now.
-      s.base += s.sched;
-      s.sched = 0;
-      s.t0 = now + AUDIO_LEAD_S;
-    }
-    const node = audioCtx.createBufferSource();
-    node.buffer = buf;
-    node.connect(audioCtx.destination);
-    node.onended = () => { s.nodes.delete(node); node.disconnect(); };
-    node.start(s.t0 + s.sched / s.rate);
-    s.nodes.add(node);
-    s.sched += frames;
   }
 }
 
