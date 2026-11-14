@@ -2,10 +2,13 @@
 // notebook: a markdown document of typed cells with the blobs it names
 // (ADR-0371).
 //
-// Package mdnotebook reads the text; the view stacks the notebook's cells. A prose cell goes through the markdown
-// widget, which is not extended; every other cell is drawn by its kind: a
-// record as its folded statement, a presentation cell as its folded
-// statement over its result, a media cell by its media type. A presentation
+// Package mdnotebook reads the text; the view stacks the notebook's cells. A
+// prose cell goes through the markdown widget, which is not extended; every
+// other cell is drawn by its kind: a record as its folded statement, a
+// presentation cell as its folded statement over its result, a media cell
+// by its media type. Each of those is set in from a rule along its left
+// edge, which spans the cell and takes the tone of its state: neutral as
+// collected, warning when stale, error when it has nothing to show. A presentation
 // cell names its renderer; `table` is built in and [RegisterRenderer] adds
 // the rest, one process-wide set that the packages owning the drawings fill.
 //

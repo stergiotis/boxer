@@ -179,6 +179,8 @@ type cellView struct {
 	// a record or a presentation cell.
 	doc   *markdown.Doc
 	title string
+	// stored says a record's result was read.
+	stored bool
 	// stale says why what is stored for a record is not what the text would
 	// compute — its statement was edited, or it reads a record whose was —
 	// "" for a fresh one.
@@ -331,6 +333,7 @@ func (inst *View) Set(p *Prepared) {
 			cv.title = "record " + cell.Id
 			if rec, found := inst.loaded.Records[cell.Name]; found {
 				cv.title += " — " + shape(rec)
+				cv.stored = true
 			} else {
 				cv.title += " — not stored"
 			}

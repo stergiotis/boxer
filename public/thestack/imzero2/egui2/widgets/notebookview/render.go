@@ -5,9 +5,11 @@ import (
 
 	"github.com/apache/arrow-go/v18/arrow"
 
+	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	"github.com/stergiotis/boxer/public/semistructured/markdown/mdnotebook"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/badge"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/color"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/markdown"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/recordtable"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/waveform"
@@ -88,12 +90,43 @@ func (inst *View) renderProblems() {
 	}
 }
 
+// cellFrame is the frame of a cell that is not prose: a rule along its left
+// edge and the cell set in from it, no box, as the markdown widget draws a
+// quote. What the rule spans is one cell — its statement, what it says of
+// its state and its result — so a reader sees where a stored result ends
+// and the prose goes on. The rule takes the tone of the cell's state, which
+// then reads down the page's margin: neutral for a cell as collected,
+// warning for a stale one, error for one that has nothing to show.
+func (inst *View) cellFrame(cell *mdnotebook.Cell, cv *cellView) c.FrameFluid {
+	rule := styletokens.NeutralBorderDefault
+	switch {
+	case cv.refusal != nil, cv.mediaErr != "", cell.Kind == mdnotebook.CellKindRecord && !cv.stored:
+		rule = styletokens.ErrorDefault
+	case cv.stale != "", cv.staleRead != "":
+		rule = styletokens.WarningDefault
+	}
+	bar := styletokens.StrokeStrong
+	return c.Frame(inst.ids.PrepareStr("cell")).
+		EdgeBarLeft(bar, color.Hex(rule.AsHex())).
+		InnerMarginSides(bar+styletokens.PaddingDefault(styletokens.ActiveDensity()), 0, styletokens.StrokeHair, styletokens.StrokeHair)
+}
+
 func (inst *View) renderCell(i int) {
 	cell := &inst.nb.Cells[i]
 	cv := &inst.cells[i]
-	switch cell.Kind {
-	case mdnotebook.CellKindProse:
+	if cell.Kind == mdnotebook.CellKindProse {
 		inst.markdown(cv.doc, cell)
+		return
+	}
+	for range inst.cellFrame(cell, cv).KeepIter() {
+		for range c.Vertical().KeepIter() {
+			inst.renderCellBody(i, cell, cv)
+		}
+	}
+}
+
+func (inst *View) renderCellBody(i int, cell *mdnotebook.Cell, cv *cellView) {
+	switch cell.Kind {
 	case mdnotebook.CellKindRecord:
 		if cv.stale != "" {
 			for range c.Horizontal().KeepIter() {
