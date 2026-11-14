@@ -859,6 +859,14 @@ for the edit-policy tiers.
 
 ## Updates
 
+### 2026-11-14 — a confirmation shows the call's arguments
+
+The confirmation of a consequential command shows the call's arguments as
+the model wrote them, indented and bounded, with what was cut counted. The
+person confirms what the call carries; the operation's summary and the
+model's reason alone left the arguments unseen, so a command could run
+with a payload the person never read.
+
 ### 2026-11-09 — a request may carry the app's own sentence
 
 `GrantRequest.Purpose` is one sentence the dialog shows in the requesting

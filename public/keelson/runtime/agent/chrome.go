@@ -1,9 +1,12 @@
 package agent
 
 import (
+	"encoding/json/jsontext"
 	"math"
 	"slices"
 	"strconv"
+	"strings"
+	"unicode/utf8"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/appops/opwire"
@@ -262,6 +265,31 @@ const (
 	modelTextHeight  float32 = 120
 )
 
+// maxConfirmationArgs bounds the arguments a confirmation shows; what is
+// cut is counted in their place.
+const maxConfirmationArgs = 8 << 10
+
+// confirmationArgs is a call's arguments as a confirmation shows them: the
+// model's JSON, indented when it parses, cut at maxConfirmationArgs bytes.
+// The person confirms what the call carries, so nothing is summarised.
+func confirmationArgs(args string) string {
+	if strings.TrimSpace(args) == "" || strings.TrimSpace(args) == "{}" {
+		return "(none)"
+	}
+	v := jsontext.Value(args)
+	if v.Indent(jsontext.WithIndent("  ")) == nil {
+		args = string(v)
+	}
+	if len(args) > maxConfirmationArgs {
+		cut := maxConfirmationArgs
+		for cut > 0 && !utf8.RuneStart(args[cut]) {
+			cut--
+		}
+		args = args[:cut] + "\n… " + strconv.Itoa(len(args)-cut) + " more bytes not shown"
+	}
+	return args
+}
+
 // bounded draws body in a vertical scroll area no taller than maxH. The
 // area is pushed under an id of its own: two scroll areas in one modal
 // would otherwise share egui's default scroll id, and with it the offset.
@@ -376,7 +404,12 @@ func (inst *Chrome) renderConfirmationBody(p proposalRef, waiting int, ids *c.Wi
 	rec := p.rec
 	who := svc.display(p.t.actor) + " (window " + strconv.FormatUint(p.t.actorInstance, 10) + ")"
 	c.Label(who + " asks to " + rec.spec.Summary + " (" + rec.spec.Name + ") in window " +
-		strconv.FormatUint(rec.instance, 10) + ".").Wrap().Send()
+		strconv.FormatUint(rec.instance, 10) + ", with these arguments, as the model wrote them:").Wrap().Send()
+	bounded(ids.PrepareStr("agent-confirm-args-"+rec.key), modelTextHeight, func() {
+		for rt := range c.RichTextLabel(confirmationArgs(rec.req.Args)) {
+			rt.Monospace()
+		}
+	})
 	c.Label("This writes outside the app and cannot be undone from here.").Wrap().Send()
 	if svc.Unattended() {
 		c.Label("The host runs unattended, and still asks a person to confirm every change outside the app (ADR-0298).").Wrap().Send()
