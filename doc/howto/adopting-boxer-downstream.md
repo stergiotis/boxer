@@ -181,9 +181,10 @@ from boxer's `rust/imzero2`; the Go side is boxer's
 Optional. A keelson app can run in a browser tab as a WebAssembly module beside
 boxer's Rust browser host
 ([ADR-0263](../adr/0263-imzero2-browser-both-modules-in-one-worker-mesh-to-the-painter.md)).
-A tab has none of the host's runtime services — file dialogs, the model,
-ad-hoc datasets, the window host — so an app that needs one runs degraded or
-not at all; [imzero2-in-the-browser](imzero2-in-the-browser.md) lists what is
+A tab has few of the host's runtime services — no file dialogs, model,
+ad-hoc datasets or window host; what it can have is a field of
+`tabhost.Services`, audio output among them — so an app that needs a missing
+one runs degraded or not at all; [imzero2-in-the-browser](imzero2-in-the-browser.md) lists what is
 missing. The pieces are boxer's
 ([ADR-0278](../adr/0278-tab-mode-for-downstream-apps.md)); your repository
 carries one `package main`.

@@ -655,6 +655,37 @@ without a server: it waits while the sink is not playing, delivers the frames
 it owes as silence, and returns the end of the data only once the sink is
 closed.
 
+### 2026-11-14 — the output is the host's to give, and the pulse sink's transport is an engine
+
+SD6 named `sink.SinkI` as the seam for an output brokered by the runtime and
+left the capability to a later decision.
+[ADR-0372](./0372-audio-output-for-the-browser-hosts-a-host-provided-sink-and-a-side-lane.md)
+(proposed) is that decision, and its first milestone changed two things
+here.
+
+The apps no longer open the pulse sink themselves: they ask the runtime on
+their bus client (`audioout.Open`) and get the host's device, or `sink.Null`
+with the reason. On a desktop the device is still the pulse sink, so what is
+heard there did not change; behind a remote viewer or in a browser tab it is
+that ADR's lane to the viewer's page.
+
+What the pulse sink did that was not pulse — the transport state, the
+forward-only reads with their held lookahead, the rate resampler, the gain,
+the position bookkeeping — moved to `sink/playout` as an engine a device
+wraps, because the lane's device needs the same and must not grow a second
+copy. The pulse sink keeps its stream, its one start and its priming, under
+the engine's lock, and its integration lane ran unchanged against a real
+server. The engine also takes a device rate: a device that states one rate,
+as a browser's does, gets every stream resampled to it by the same linear
+interpolation that does the playback rate, which gives the deferred question
+of the resampler's quality a second consumer. `pulsesink.Open` stays for a
+caller with no runtime around it.
+
+One thing found on the way and left as it was: under the race detector the
+integration lane reports a race between the library's `Start` and its
+underflow flag, read when a source gives nothing at the start. It reproduces
+on the commit before this change.
+
 ## References
 
 - [ADR-0003](./0003-h3-wasm-bridge.md) — the no-cgo stance and the wasm route for native libraries.

@@ -163,12 +163,24 @@ background) and caches the result; ADR-0077 accepts bundle size for the
 LAN-served tier it targets. The lever for a smaller
 tab is which apps a build links; a tab for one app should link that app.
 
+## Sound
+
+A tab binary that sets `tabhost.Services.AudioOut` serves `audio.out.open`
+([ADR-0372](../adr/0372-audio-output-for-the-browser-hosts-a-host-provided-sink-and-a-side-lane.md),
+proposed): an app that asks for an output plays through the page around the
+worker. boxer's `imzero2tab` and the demo binary set it. The browser keeps a
+page silent until the person clicks or presses a key in it; until then the
+app says so and its playhead moves anyway. A recording is read inside the
+worker's export, so it has to be in memory, and nothing in a tab decodes
+through ffmpeg. The app's side is
+[app-audio-output](app-audio-output.md).
+
 ## What the tab does not have
 
-- **The runtime services.** Only the app's own bus client exists; a request
-  to persist, appstate, fsbroker, adhocdata or the clipboard broker gets
-  the bus's timeout. An app that needs one of them at mount does not
-  mount.
+- **Most runtime services.** Beside the app's own bus client only what
+  `tabhost.Services` names exists; a request to persist, appstate, fsbroker,
+  adhocdata or the clipboard broker gets the bus's timeout. An app that
+  needs one of them at mount does not mount.
 - **The HTTP egress service** (ADR-0262). Map basemap tiles are fetched by
   the tab itself instead, straight from the tile server (OpenStreetMap
   unless `BOXER_MAP_TILE_URL` names another), and the map panes start with
