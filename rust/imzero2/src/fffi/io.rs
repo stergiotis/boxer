@@ -78,6 +78,11 @@ impl ReplayReader {
     }
 }
 
+/// Bytes read per block by the slice readers: large enough that the reads
+/// under it are bulk copies, small enough to stay in cache while its elements
+/// are decoded. A multiple of every element width.
+const SLICE_BLOCK_BYTES: usize = 64 * 1024;
+
 pub struct ImZeroFffiIo<R: std::io::BufRead, W: std::io::Write> {
     pub r: R,
     pub w: W,
@@ -101,6 +106,9 @@ pub struct ImZeroFffiIo<R: std::io::BufRead, W: std::io::Write> {
     /// (ADR-0301) compares it with the blocks replayed to say how many
     /// parts of a message were not drawn.
     pub deferred_blocks_read: u64,
+    /// The block the slice readers read through; kept so that a slice costs
+    /// no allocation beyond its own vector. Empty until the first slice.
+    slice_block: Vec<u8>,
 }
 impl<R: std::io::BufRead, W: std::io::Write> ImZeroFffiIo<R, W> {
     pub fn new(r: R, w: W) -> Self {
@@ -115,6 +123,7 @@ impl<R: std::io::BufRead, W: std::io::Write> ImZeroFffiIo<R, W> {
             replay_saved_read_bytes_counts: Vec::new(),
             capture_replay: false,
             deferred_blocks_read: 0,
+            slice_block: Vec::new(),
         }
     }
     pub fn reset_counts(&mut self) {
@@ -488,45 +497,57 @@ impl<R: std::io::BufRead, W: std::io::Write> ImZeroFffiIo<R, W> {
             }
         }
     }
-    pub fn read_plain_f32h(&mut self) -> FffiResult<Vec<f32>> {
+    /// Read a slice of fixed-width little-endian elements in blocks rather
+    /// than one element at a time. An element-wise loop pays a `read_exact`
+    /// and its bookkeeping per element, which for a pixel slice of an image
+    /// was about half of this process's time while the image was being
+    /// replaced (doc/trials/image-upload-cost). The block goes through a
+    /// buffer kept on the reader, so a large slice costs no second allocation
+    /// of its own size; `decode` turns one element's bytes into its value and
+    /// is what keeps the wire little-endian on any target.
+    #[inline(always)]
+    fn read_plain_le_h<T, const N: usize>(
+        &mut self,
+        decode: impl Fn([u8; N]) -> T,
+    ) -> FffiResult<Vec<T>> {
         let len = self.read_slice_len()?;
         let mut v = Vec::with_capacity(len);
-        for _ in 0..len {
-            v.push(self.read_plain_f32()?);
+        let mut block = std::mem::take(&mut self.slice_block);
+        block.resize(SLICE_BLOCK_BYTES, 0);
+        let mut left = len;
+        let mut res = Ok(());
+        while left > 0 {
+            let n = left.min(SLICE_BLOCK_BYTES / N);
+            let bytes = &mut block[..n * N];
+            res = self.read_exact_active(bytes);
+            if res.is_err() {
+                break;
+            }
+            v.extend(bytes.chunks_exact(N).map(|c| {
+                let mut e = [0u8; N];
+                e.copy_from_slice(c);
+                decode(e)
+            }));
+            left -= n;
         }
+        self.slice_block = block;
+        res?;
         Ok(v)
+    }
+    pub fn read_plain_f32h(&mut self) -> FffiResult<Vec<f32>> {
+        self.read_plain_le_h(f32::from_le_bytes)
     }
     pub fn read_plain_f64h(&mut self) -> FffiResult<Vec<f64>> {
-        let len = self.read_slice_len()?;
-        let mut v = Vec::with_capacity(len);
-        for _ in 0..len {
-            v.push(self.read_plain_f64()?);
-        }
-        Ok(v)
+        self.read_plain_le_h(f64::from_le_bytes)
     }
     pub fn read_plain_u64h(&mut self) -> FffiResult<Vec<u64>> {
-        let len = self.read_slice_len()?;
-        let mut v = Vec::with_capacity(len);
-        for _ in 0..len {
-            v.push(self.read_plain_u64()?);
-        }
-        Ok(v)
+        self.read_plain_le_h(u64::from_le_bytes)
     }
     pub fn read_plain_i64h(&mut self) -> FffiResult<Vec<i64>> {
-        let len = self.read_slice_len()?;
-        let mut v = Vec::with_capacity(len);
-        for _ in 0..len {
-            v.push(self.read_plain_i64()?);
-        }
-        Ok(v)
+        self.read_plain_le_h(i64::from_le_bytes)
     }
     pub fn read_plain_u32h(&mut self) -> FffiResult<Vec<u32>> {
-        let len = self.read_slice_len()?;
-        let mut v = Vec::with_capacity(len);
-        for _ in 0..len {
-            v.push(self.read_plain_u32()?);
-        }
-        Ok(v)
+        self.read_plain_le_h(u32::from_le_bytes)
     }
     pub fn read_plain_u8h(&mut self) -> FffiResult<Vec<u8>> {
         let len = self.read_slice_len()?;
@@ -794,5 +815,82 @@ mod tests {
         wire.extend_from_slice(&9u64.to_le_bytes());
         let mut io = io_over(wire);
         assert_eq!(io.read_plain_u64h().unwrap(), vec![7, 9]);
+    }
+
+    /// The slice readers go through a block of `SLICE_BLOCK_BYTES`; a slice
+    /// shorter than a block, exactly one, one element over and several blocks
+    /// long must all come back whole, in order, and leave the wire at the
+    /// byte after them.
+    #[test]
+    fn slices_read_whole_across_block_boundaries() {
+        let per_block = super::SLICE_BLOCK_BYTES / 4;
+        for len in [
+            0,
+            1,
+            per_block - 1,
+            per_block,
+            per_block + 1,
+            3 * per_block + 7,
+        ] {
+            let mut wire = Vec::new();
+            wire.extend_from_slice(&(len as u32).to_le_bytes());
+            for i in 0..len as u32 {
+                wire.extend_from_slice(&i.wrapping_mul(0x9e37_79b9).to_le_bytes());
+            }
+            wire.extend_from_slice(&0xdead_beef_u32.to_le_bytes());
+            let mut io = io_over(wire);
+            let got = io.read_plain_u32h().unwrap();
+            assert_eq!(got.len(), len);
+            assert!(
+                got.iter().enumerate().all(|(i, &v)| v == (i as u32).wrapping_mul(0x9e37_79b9)),
+                "u32 slice of {len} elements came back changed"
+            );
+            assert_eq!(io.read_plain_u32().unwrap(), 0xdead_beef);
+            assert_eq!(io.read_bytes_count, 4 + 4 * len + 4);
+        }
+    }
+
+    /// Every element type decodes little-endian and bit-exactly: negative
+    /// integers, a NaN with a payload and signed zero included.
+    #[test]
+    fn slice_elements_decode_bit_exactly() {
+        let f32s = [1.5f32, -0.0, f32::from_bits(0x7fc0_1234), f32::MIN_POSITIVE];
+        let f64s = [-2.25f64, f64::from_bits(0x7ff8_0000_0000_beef), f64::MAX];
+        let u64s = [0u64, u64::MAX, 0x0102_0304_0506_0708];
+        let i64s = [i64::MIN, -1, 42];
+        let mut wire = Vec::new();
+        wire.extend_from_slice(&(f32s.len() as u32).to_le_bytes());
+        for v in &f32s {
+            wire.extend_from_slice(&v.to_le_bytes());
+        }
+        wire.extend_from_slice(&(f64s.len() as u32).to_le_bytes());
+        for v in &f64s {
+            wire.extend_from_slice(&v.to_le_bytes());
+        }
+        wire.extend_from_slice(&(u64s.len() as u32).to_le_bytes());
+        for v in &u64s {
+            wire.extend_from_slice(&v.to_le_bytes());
+        }
+        wire.extend_from_slice(&(i64s.len() as u32).to_le_bytes());
+        for v in &i64s {
+            wire.extend_from_slice(&v.to_le_bytes());
+        }
+        let mut io = io_over(wire);
+        let bits32 = |v: &[f32]| v.iter().map(|x| x.to_bits()).collect::<Vec<_>>();
+        let bits64 = |v: &[f64]| v.iter().map(|x| x.to_bits()).collect::<Vec<_>>();
+        assert_eq!(bits32(&io.read_plain_f32h().unwrap()), bits32(&f32s));
+        assert_eq!(bits64(&io.read_plain_f64h().unwrap()), bits64(&f64s));
+        assert_eq!(io.read_plain_u64h().unwrap(), u64s);
+        assert_eq!(io.read_plain_i64h().unwrap(), i64s);
+    }
+
+    /// A slice whose elements end before its length says they do is an
+    /// error, as it was element by element, not a short vector.
+    #[test]
+    fn truncated_slice_is_an_error() {
+        let mut wire = Vec::new();
+        wire.extend_from_slice(&5u32.to_le_bytes());
+        wire.extend_from_slice(&[0u8; 4 * 3 + 2]);
+        assert!(io_over(wire).read_plain_u32h().is_err());
     }
 }
