@@ -44,6 +44,11 @@ func (inst *PlayApp) ReplaceSql(text string) {
 	inst.raiseDockTab(dockTabEditor)
 }
 
+// BufferSql is the SQL editor's buffer as it stands: what Run would send,
+// before any rewrite. Render goroutine only. An embedder that gave the
+// instance its buffer reads back here what the person made of it.
+func (inst *PlayApp) BufferSql() string { return inst.sql }
+
 // ActivateTab focuses the dock tab with the given registry slug ("editor",
 // "table", … — the ids from Tabs().Specs()) on the next dock send. An unknown
 // slug is an error, matching the registry's validation style. The SQL delivery

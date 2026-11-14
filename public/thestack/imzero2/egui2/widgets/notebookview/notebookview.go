@@ -108,6 +108,46 @@ type Prepared struct {
 // Notebook is the notebook that was prepared.
 func (inst *Prepared) Notebook() *mdnotebook.Notebook { return inst.nb }
 
+// Check is what stands between a prepared notebook and being sealed, as
+// `boxer markdown notebook check` reports it.
+type Check struct {
+	// Problems are what the text, its frontmatter and its files disagree
+	// on, each with the cell it was found in.
+	Problems []string
+	// Stale are the records whose statement was edited since collection,
+	// and Derived the records that read one of them.
+	Stale   []string
+	Derived []string
+	// Refused are the presentation cells that have no answer, each as its
+	// renderer and what was refused.
+	Refused []string
+}
+
+// Sealed says the notebook shows what it stores and nothing else is owed.
+func (inst Check) Sealed() bool {
+	return len(inst.Problems) == 0 && len(inst.Stale) == 0 && len(inst.Derived) == 0 && len(inst.Refused) == 0
+}
+
+// Check reports the notebook as it was prepared. It reads nothing.
+func (inst *Prepared) Check() (ck Check) {
+	if inst == nil {
+		return
+	}
+	ck.Problems = append(ck.Problems, inst.problems...)
+	ck.Stale = append(ck.Stale, inst.stale...)
+	if inst.loaded != nil {
+		for _, d := range mdnotebook.DerivedStaleRecords(inst.nb, inst.loaded) {
+			ck.Derived = append(ck.Derived, d.Record+" reads "+d.Edited)
+		}
+	}
+	for i := range inst.cells {
+		if err := inst.cells[i].refusal; err != nil {
+			ck.Refused = append(ck.Refused, "sql "+inst.nb.Cells[i].Renderer+": "+err.Error())
+		}
+	}
+	return
+}
+
 // Release releases the records and results. A view releases what it was
 // handed; this is for a Prepared no view took.
 func (inst *Prepared) Release() {

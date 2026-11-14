@@ -197,6 +197,12 @@ func nameList(names []string) (out string) {
 	return
 }
 
+// SealedNames are the sealed datasets and tables a statement names, sorted:
+// the test play's own dispatch applies before it places a run (ADR-0145).
+// An embedder that sends a statement elsewhere than through this client
+// asks here first.
+func SealedNames(sql string) (names []string) { return sealedNames(sql) }
+
 // sealedNames returns the sealed datasets a statement names, by asking the
 // local introspection plane about every table it references (ADR-0145 §SD3).
 //
