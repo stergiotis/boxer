@@ -12,6 +12,10 @@ import (
 	"github.com/stergiotis/boxer/public/science/audio/sink"
 )
 
+// MaxRateRatio bounds how far a device's sample rate may lie from its
+// source's, in either direction.
+const MaxRateRatio = 32.0
+
 // Options configure [New].
 type Options struct {
 	// Clock supplies wall time for the position interpolation; nil is
@@ -49,7 +53,12 @@ type Engine struct {
 
 	// lag is how many device frames the device holds unplayed, as it last
 	// said; the audible position trails what was delivered by that much.
-	lag int64
+	// A device that knows which source frames those are says so instead
+	// (lagSource, with lagIsSource set), which stays right across a change
+	// of rate.
+	lag         int64
+	lagSource   int64
+	lagIsSource bool
 
 	// Position bookkeeping, all in source frames.
 	startPos    int64     // cursor when playback last started
@@ -84,6 +93,15 @@ func New(src pcm.SourceI, opts Options) (inst *Engine, err error) {
 	}
 	if opts.DeviceRate == 0 {
 		opts.DeviceRate = format.SampleRate
+	}
+	// One device frame spans rate × srcPerDev source frames. A ratio far
+	// from one is a mistaken rate, and it would size a single request's
+	// lookahead by it.
+	if ratio := float64(format.SampleRate) / float64(opts.DeviceRate); ratio > MaxRateRatio || ratio < 1/MaxRateRatio {
+		return nil, eb.Build().
+			Uint32("sourceRate", format.SampleRate).
+			Uint32("deviceRate", opts.DeviceRate).
+			Errorf("device rate too far from the source's")
 	}
 	inst = &Engine{
 		format:     format,
@@ -319,7 +337,27 @@ func (inst *Engine) WaitLocked() { inst.resumed.Wait() }
 // says so whenever it learns. While playing it also anchors the wall-clock
 // interpolation at now, since the figure describes this instant.
 func (inst *Engine) SetLagLocked(deviceFrames int64) {
-	inst.lag = max(deviceFrames, 0)
+	inst.lag, inst.lagIsSource = max(deviceFrames, 0), false
+	inst.anchorLocked()
+}
+
+// SetLagSourceLocked is [Engine.SetLagLocked] for a device that knows which
+// source frames it holds unplayed: the count is in source frames. Device
+// frames made at one rate keep the source span they were made with, so a
+// lag stated this way does not move the position when the rate changes.
+func (inst *Engine) SetLagSourceLocked(sourceFrames int64) {
+	inst.lagSource, inst.lagIsSource = max(sourceFrames, 0), true
+	inst.anchorLocked()
+}
+
+// DeliveredEndLocked is the source frame up to which frames were handed to
+// the device: the position the readout reaches once the device has played
+// everything it holds.
+func (inst *Engine) DeliveredEndLocked() (frame int64) { return inst.startPos + inst.delivered }
+
+// anchorLocked restarts the wall-clock interpolation at now on a playing
+// engine, after the lag was restated.
+func (inst *Engine) anchorLocked() {
 	if inst.state == sink.StatePlaying {
 		now := inst.clock.Now()
 		// Read the position first: it is monotone, so the new anchor cannot
@@ -347,7 +385,11 @@ func (inst *Engine) positionLocked(now time.Time) (frame int64) {
 		return min(inst.cursor, inst.frames)
 	}
 	deliveredEnd := inst.startPos + inst.delivered
-	base := deliveredEnd - int64(float64(inst.lag)*inst.stepLocked())
+	lagSource := inst.lagSource
+	if !inst.lagIsSource {
+		lagSource = int64(float64(inst.lag) * inst.stepLocked())
+	}
+	base := deliveredEnd - lagSource
 	if base < inst.startPos {
 		base = inst.startPos
 	}
@@ -364,9 +406,13 @@ func (inst *Engine) positionLocked(now time.Time) (frame int64) {
 }
 
 // ProduceLocked fills out with up to outFrames device frames from the cursor
-// on, at the engine's rate and volume, and returns how many it wrote. Zero
-// means the source has ended or failed; the caller then calls
-// [Engine.EndLocked]. It is called only while the engine is playing.
+// on, at the engine's rate and volume, and returns how many it wrote. Asked
+// for at least one frame, zero means the source has ended or failed, and the
+// caller then calls [Engine.EndLocked] once the device has played what it
+// holds; asked for none it writes none, which says nothing about the source.
+// It is called only while the engine is playing and open. A device that
+// states its lag restates it after a call that wrote frames, in the same
+// lock hold.
 //
 // The source is read strictly forwards: the interpolation's lookahead frames
 // stay in scratch across calls instead of being read again, so a decoder
@@ -398,7 +444,11 @@ func (inst *Engine) ProduceLocked(out []float32, outFrames int) (produced int) {
 			return 0
 		}
 	} else {
-		need := int(framesNeeded(outFrames, inst.frac, step))
+		// Enough frames for the interpolation, and for every frame the
+		// cursor then moves past: at a step above two it skips frames the
+		// interpolation never touches, and they are read all the same, so
+		// the next read continues where this one ended.
+		need := int(max(framesNeeded(outFrames, inst.frac, step), int64(math.Floor(inst.frac+float64(outFrames)*step))))
 		if cap(inst.scratch) < need*channels {
 			grown := make([]float32, need*channels)
 			copy(grown, inst.scratch[:inst.held*channels])

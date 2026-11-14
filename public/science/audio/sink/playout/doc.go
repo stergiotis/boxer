@@ -9,13 +9,19 @@
 // device calls, between [Engine.Lock] and [Engine.Unlock]: it asks for
 // frames with [Engine.ProduceLocked] while the engine is playing, ends
 // playback with [Engine.EndLocked] when that returns none, and says how many
-// frames it holds unplayed with [Engine.SetLagLocked]. A device that owns
+// frames it holds unplayed with [Engine.SetLagLocked], after every call that
+// wrote frames, or which source frames with [Engine.SetLagSourceLocked].
+// Between Lock and Unlock only the Locked methods may be called: the others
+// take the lock themselves. A device that owns
 // further state of its own keeps it under the same lock, so a transport call
 // and a pull never see each other half done. A device type wraps an engine
 // and adds what only it does to a transport call — starting a stream on the
 // first Play, dropping a remote buffer on a seek.
 //
 // # Reads
+//
+// The source read happens under the engine's lock, as it did in the pulse
+// sink: a transport call made while a read is under way waits for it.
 //
 // The source is read strictly forwards at every rate: the frame or two of
 // lookahead the interpolation needs are kept across calls rather than read

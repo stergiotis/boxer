@@ -343,3 +343,92 @@ func TestRangesAndGain(t *testing.T) {
 	_, err = New(nil, Options{})
 	require.Error(t, err)
 }
+
+// Above a step of two source frames per device frame the interpolation
+// skips frames. They are read all the same, or every pull would start at an
+// offset the source was not at — a decoder restart for an ffmpeg-backed one.
+func TestProduceIsSequentialAtStepsAboveTwo(t *testing.T) {
+	cases := []struct {
+		name               string
+		source, deviceRate uint32
+		rate               float64
+	}{
+		{"rate 3", 48000, 0, 3},
+		{"rate 4", 48000, 0, 4},
+		{"96k on a 44.1k device", 96000, 44100, 1},
+		{"192k on a 48k device", 192000, 48000, 1},
+		{"48k on a 16k device at 1.3", 48000, 16000, 1.3},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			format := pcm.Format{SampleRate: tc.source, Channels: 2}
+			base, err := pcm.NewSynthSource(format, int64(tc.source)*30, pcm.Sine(format, 440, 0.8))
+			require.NoError(t, err)
+			src := &offsetSource{SourceI: base}
+			inst := newPlaying(t, src, Options{DeviceRate: tc.deviceRate})
+			require.NoError(t, inst.SetRate(tc.rate))
+			sizes := []int{1024, 960, 333, 2048}
+			for step := range 200 {
+				out := make([]float32, sizes[step%len(sizes)]*2)
+				require.Positive(t, pull(inst, out, len(out)/2))
+			}
+			require.Zero(t, src.backwardReads(), "every read continues where the previous one ended")
+		})
+	}
+}
+
+func TestADeviceRateFarFromTheSourcesIsRefused(t *testing.T) {
+	format := pcm.Format{SampleRate: 48000, Channels: 1}
+	src, err := pcm.NewSynthSource(format, 48000, pcm.Silence())
+	require.NoError(t, err)
+	for _, rate := range []uint32{1, 100, 1000, 48000 * 64} {
+		_, err = New(src, Options{DeviceRate: rate})
+		require.Error(t, err, "device rate %d", rate)
+	}
+	for _, rate := range []uint32{8000, 44100, 96000, 192000} {
+		_, err = New(src, Options{DeviceRate: rate})
+		require.NoError(t, err, "device rate %d", rate)
+	}
+}
+
+// A lag stated in source frames does not move the position when the rate
+// changes: the frames the device holds keep the span they were made with.
+func TestALagInSourceFramesSurvivesARateChange(t *testing.T) {
+	format := pcm.Format{SampleRate: 48000, Channels: 1}
+	src, err := pcm.NewSynthSource(format, 48000*600, pcm.Silence())
+	require.NoError(t, err)
+	clock := sink.NewManualClock(time.Unix(0, 0))
+	inst := newPlaying(t, src, Options{Clock: clock})
+	require.NoError(t, inst.SetRate(4))
+	out := make([]float32, 9600)
+	require.Equal(t, 9600, pull(inst, out, 9600))
+	inst.Lock()
+	require.Equal(t, int64(9600*4), inst.DeliveredEndLocked())
+	// The device holds 2880 of them: 11520 source frames at the rate they
+	// were made at.
+	inst.SetLagSourceLocked(2880 * 4)
+	inst.Unlock()
+	before := inst.Position()
+	require.Equal(t, int64(9600*4-2880*4), before)
+
+	require.NoError(t, inst.SetRate(0.5))
+	require.Equal(t, before, inst.Position(), "no jump at the change")
+	clock.Advance(10 * time.Millisecond)
+	require.Equal(t, before+240, inst.Position(), "and the readout moves on at the new rate")
+}
+
+// Asked for no frames the engine writes none, and that is not the end of the
+// source.
+func TestAZeroAskIsNotTheEnd(t *testing.T) {
+	format := pcm.Format{SampleRate: 1000, Channels: 2}
+	src, err := pcm.NewSynthSource(format, 100, pcm.Silence())
+	require.NoError(t, err)
+	inst := newPlaying(t, src, Options{})
+	inst.Lock()
+	require.Zero(t, inst.ProduceLocked(nil, 0))
+	require.Zero(t, inst.ProduceLocked(make([]float32, 1), 1), "less than one frame of room")
+	inst.Unlock()
+	require.False(t, inst.Ended())
+	out := make([]float32, 20)
+	require.Equal(t, 10, pull(inst, out, 10))
+}
