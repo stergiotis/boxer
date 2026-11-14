@@ -12,12 +12,15 @@
 //	[LIMIT n [OFFSET m]] [SETTINGS …]
 //	[FORMAT ArrowStream | TabSeparated[WithNames] | CSV[WithNames] | JSONEachRow]
 //
-// where a source is keelson(…), values(…) over constants or an earlier WITH
-// query, a list is * and constants each with an optional alias, and a
-// constant is a literal, true, false, a {slot:Type} parameter or a WITH
-// constant (keelsonsql.EvalConstant). It evaluates nothing: it resolves a
-// call's arguments, snapshots the provider, types the constants as
-// ClickHouse types them and encodes the record. A setting — a SET, a
+// where a source is keelson(…), values(…) over constants, an earlier WITH
+// query or a table the caller bound by name ([ReadTables]); a list is *,
+// bare columns of the source and constants, each with an optional alias; and
+// a constant is a literal, true, false, a {slot:Type} parameter or a WITH
+// constant (keelsonsql.EvalConstant). It evaluates nothing per row: it
+// resolves a call's arguments, snapshots the provider, hands on the
+// source's columns — some of them, under other names, sharing their buffers
+// (ADR-0290, update of 2026-11-13) — types the constants as ClickHouse types
+// them and encodes the record. A setting — a SET, a
 // SETTINGS clause or a request's query-string key — is accepted only when
 // it changes neither the rows nor their encoding (ignorableSetting). Every
 // other statement is refused with [ErrNeedsClickHouse], naming what the
@@ -54,7 +57,73 @@ func Run(ctx context.Context, reg *introspect.Registry, sql string, params map[s
 // Read is Run without the encoding: the record the statement reads, which
 // the caller releases, and the format it asked for.
 func Read(reg *introspect.Registry, sql string, params map[string]string) (batch arrow.RecordBatch, format string, err error) {
-	return read(reg, sql, params, nil)
+	batch, format, _, err = read(reg, sql, params, nil, nil)
+	return
+}
+
+// Named is a relation under the name a statement gave it.
+type Named struct {
+	Name  string
+	Batch arrow.RecordBatch
+}
+
+// Answer is what [ReadTables] returns; the caller releases it.
+type Answer struct {
+	// Main is the record the statement reads.
+	Main arrow.RecordBatch
+	// With is every WITH query of the statement, in order, read whole,
+	// whether or not the statement's own SELECT names it.
+	With []Named
+	// Tables names the bound tables the statement read, in the order it
+	// first read them.
+	Tables []string
+}
+
+// Release releases the answer's records.
+func (inst *Answer) Release() {
+	if inst == nil {
+		return
+	}
+	if inst.Main != nil {
+		inst.Main.Release()
+		inst.Main = nil
+	}
+	for i := range inst.With {
+		inst.With[i].Batch.Release()
+	}
+	inst.With = nil
+}
+
+// ReadTables is Read over tables the caller binds by name. A statement
+// reads a bound table as it reads an earlier WITH query, `FROM name`, and
+// is answered as ClickHouse would answer it with each table before it as a
+// WITH query of the same rows. So a WITH query may not take a bound table's
+// name. The tables are borrowed: what the answer holds of them it retains.
+//
+// It is the evaluator of a statement whose data is already at hand — a
+// stored result, say — and it returns the statement's WITH queries beside
+// its own relation, for a caller that reads more than one relation of a
+// statement.
+func ReadTables(reg *introspect.Registry, sql string, params map[string]string, tables map[string]arrow.RecordBatch) (ans *Answer, err error) {
+	if tables == nil {
+		tables = map[string]arrow.RecordBatch{}
+	}
+	main, _, ev, err := read(reg, sql, params, nil, tables)
+	if err != nil {
+		return nil, err
+	}
+	ans = &Answer{Main: main}
+	for i, cte := range ev.ctes {
+		var batch arrow.RecordBatch
+		batch, err = ev.evalSelect(cte.sel, i)
+		if err != nil {
+			ans.Release()
+			return nil, err
+		}
+		ans.With = append(ans.With, Named{Name: cte.name, Batch: batch})
+	}
+	ans.Tables = ev.reads
+	return ans, nil
 }
 
 // Runner serves the evaluator as an introspection endpoint's runner
@@ -84,7 +153,7 @@ func answer(ctx context.Context, reg *introspect.Registry, sql string, params ma
 	if err = ctx.Err(); err != nil {
 		return nil, "", err
 	}
-	batch, format, err := read(reg, sql, params, settings)
+	batch, format, _, err := read(reg, sql, params, settings, nil)
 	if err != nil {
 		return nil, "", err
 	}
@@ -97,19 +166,20 @@ func answer(ctx context.Context, reg *introspect.Registry, sql string, params ma
 // clause, as ClickHouse's HTTP interface reads it from the query string.
 const defaultFormatSetting = "default_format"
 
-func read(reg *introspect.Registry, sql string, params map[string]string, settings map[string]string) (batch arrow.RecordBatch, format string, err error) {
+// read answers sql. tables is nil for a statement that may name none.
+func read(reg *introspect.Registry, sql string, params map[string]string, settings map[string]string, tables map[string]arrow.RecordBatch) (batch arrow.RecordBatch, format string, ev *evaluator, err error) {
 	for name := range settings {
 		if name != defaultFormatSetting && !ignorableSetting(name) {
-			return nil, "", refuse("the setting " + name)
+			return nil, "", nil, refuse("the setting " + name)
 		}
 	}
 	pr, err := nanopass.Parse(sql)
 	if err != nil {
-		return nil, "", eb.Build().Errorf("%w: it does not parse: %w", ErrNeedsClickHouse, err)
+		return nil, "", nil, eb.Build().Errorf("%w: it does not parse: %w", ErrNeedsClickHouse, err)
 	}
 	qs, ok := pr.Tree.(*grammar1.QueryStmtContext)
 	if !ok || qs.Query() == nil {
-		return nil, "", refuse("not a SELECT")
+		return nil, "", nil, refuse("not a SELECT")
 	}
 	format = FormatTabSeparated
 	if df := settings[defaultFormatSetting]; df != "" {
@@ -120,42 +190,42 @@ func read(reg *introspect.Registry, sql string, params map[string]string, settin
 	}
 	canonical, known := canonicalFormat(format)
 	if !known {
-		return nil, "", refuse("FORMAT " + format)
+		return nil, "", nil, refuse("FORMAT " + format)
 	}
 	format = canonical
 	q := qs.Query().(*grammar1.QueryContext)
 	sets := q.AllSetStmt()
 	for _, st := range sets {
 		if err = checkSettings(st.SettingExprList(), "SET ", true); err != nil {
-			return nil, "", err
+			return nil, "", nil, err
 		}
 	}
 	// The scope binds the SET param_ prelude itself.
 	scope, err := keelsonsql.NewConstScope(pr, params)
 	if err != nil {
-		return nil, "", err
+		return nil, "", nil, err
 	}
-	ev := &evaluator{reg: reg, scope: scope}
+	ev = &evaluator{reg: reg, scope: scope, tables: tables}
 	su := q.SelectUnionStmt().(*grammar1.SelectUnionStmtContext)
 	if err = ev.readCtes(su); err != nil {
-		return nil, "", err
+		return nil, "", nil, err
 	}
 	sel, err := single(su)
 	if err != nil {
-		return nil, "", err
+		return nil, "", nil, err
 	}
 	if sc, isClause := sel.SettingsClause().(*grammar1.SettingsClauseContext); isClause && sc != nil {
 		if err = checkSettings(sc.SettingExprList(), "SETTINGS ", false); err != nil {
-			return nil, "", err
+			return nil, "", nil, err
 		}
 	}
 	limit, offset, err := limits(sel)
 	if err != nil {
-		return nil, "", err
+		return nil, "", nil, err
 	}
 	batch, err = ev.evalSelect(sel, len(ev.ctes))
 	if err != nil {
-		return nil, "", err
+		return nil, "", nil, err
 	}
 	if offset > 0 || limit >= 0 {
 		n := batch.NumRows()
@@ -168,7 +238,7 @@ func read(reg *introspect.Registry, sql string, params map[string]string, settin
 		batch.Release()
 		batch = sliced
 	}
-	return batch, format, nil
+	return batch, format, ev, nil
 }
 
 // checkSettings refuses a setting in l that is not ignorable; a SET may also

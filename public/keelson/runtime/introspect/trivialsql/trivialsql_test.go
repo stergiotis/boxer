@@ -107,6 +107,9 @@ func TestRun_Shapes(t *testing.T) {
 		{"WITH t AS (SELECT * FROM values('a String', 'p', 'q')) SELECT * FROM t LIMIT 1, 1", nil, "q\n"},
 		{"SELECT * FROM values('it''s', 'a b')", nil, "it\\'s\na b\n"},
 		{"SELECT * FROM values('a UInt8')", nil, "a UInt8\n"},
+		// Bare columns: a subset and a rename (probe; both were refusals).
+		{"SELECT v FROM keelson('plain')", nil, "1\n2\n"},
+		{"WITH x AS (SELECT v FROM keelson('plain')) SELECT * FROM x", nil, "1\n2\n"},
 	}
 	for _, c := range cases {
 		assert.Equal(t, c.want, run(t, c.sql, c.params), c.sql)
@@ -168,7 +171,6 @@ func TestRun_RefusesWhatNeedsClickHouse(t *testing.T) {
 		"SELECT * FROM values('a UInt8', 1) SETTINGS database = 'nope'",
 		"SELECT * FROM values('`a` String', 'x')",
 		"SELECT * FROM values('(a UInt8', 1)",
-		"SELECT v FROM keelson('plain')",
 		"SELECT * FROM keelson('plain') WHERE v = 1",
 		"SELECT * FROM keelson('plain') ORDER BY v",
 		"SELECT count() FROM keelson('plain')",
@@ -177,7 +179,6 @@ func TestRun_RefusesWhatNeedsClickHouse(t *testing.T) {
 		"SELECT * FROM (SELECT * FROM keelson('plain'))",
 		"SELECT * FROM system.tables",
 		"SELECT * FROM url('http://x', 'ArrowStream')",
-		"WITH x AS (SELECT v FROM keelson('plain')) SELECT * FROM x",
 		"SET limit = 1; SELECT * FROM keelson('plain')",
 		"SELECT * FROM keelson('plain') SETTINGS limit = 1",
 		"SELECT * FROM keelson('plain') SETTINGS max_result_rows = 1",

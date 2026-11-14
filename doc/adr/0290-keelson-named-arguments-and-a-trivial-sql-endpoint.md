@@ -292,6 +292,46 @@ play pointed there runs `SELECT * FROM keelson('env') LIMIT 12` into its Table
 and Detail panes; what it refused at start was its SQL-surface install, the
 first instance of Q1.
 
+### 2026-11-13 — a select list may name the source's columns, and a caller may bind tables
+
+SD3's list was `*` and constants. It now also takes a bare column of the
+source, with or without an alias: `SELECT a AS x, c FROM …`. Nothing is
+evaluated per row — a selected column is the source's array under another
+name, sharing its buffers — so the evaluator is no nearer an engine than it
+was. The need came from
+[ADR-0371](./0371-sealed-notebooks-a-report-as-a-markdown-document-of-typed-cells.md)
+(proposed), where one stored result is drawn as a table and as a plot under
+the column names each reads.
+
+One rule of ClickHouse's decides what is refused. A name in a select list
+resolves to an alias of the same list before a column of the source, through
+chains and around cycles: `SELECT a AS b, b` returns `a` twice. That
+resolution is not modelled. A column whose name another item has for its
+alias is refused, as are an alias a WITH expression also has, a qualified
+column, a parenthesised one and two output columns of one name. A column the
+source does not have is an error in the outermost SELECT, as in ClickHouse,
+and a refusal inside a WITH query, where ClickHouse may find the name among
+the outer aliases. `WHERE`, `ORDER BY` and every expression stay refused.
+
+`trivialsql.ReadTables` answers a statement over tables its caller binds by
+name. A bound table is read as an earlier WITH query is, and the statement
+is answered as ClickHouse would answer it with each table written before it
+as a WITH query of the same rows; a WITH query that takes a bound table's
+name is therefore an error. A WITH query that reads one written after it,
+which ClickHouse answers, is refused. So is a WITH query that reads a table
+nobody bound: ClickHouse resolves a WITH query only where the statement
+reads it, and every WITH query is answered here. In the statement's own
+`FROM` such a name is an error, as in ClickHouse. It returns every WITH
+query of the statement beside the statement's own relation. `Read`, `Run`
+and the HTTP endpoint bind no table, and a bare table name stays a refusal
+there.
+
+Verified by a table of statements, each classed by how the evaluator's
+answer relates to ClickHouse's — the same bytes, a refusal of what
+ClickHouse answers, an error where ClickHouse errors. The default lane
+checks the evaluator's half; the integration lane runs both through
+clickhouse-local (classes first recorded against 26.9).
+
 ## References
 
 - [ADR-0094](./0094-keelson-introspection-tables.md) — keelson introspection tables and the `keelson()` macro.

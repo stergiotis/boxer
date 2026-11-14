@@ -3,6 +3,7 @@ package trivialsql
 import (
 	"bytes"
 	"errors"
+	"slices"
 	"strings"
 
 	"github.com/apache/arrow-go/v18/arrow"
@@ -22,6 +23,10 @@ type evaluator struct {
 	reg   *introspect.Registry
 	scope *keelsonsql.ConstScope
 	ctes  []namedSelect
+	// tables are the relations the caller bound by name ([ReadTables]);
+	// reads names the ones the statement read, in order of first read.
+	tables map[string]arrow.RecordBatch
+	reads  []string
 }
 
 // namedSelect is a WITH query, `name AS (SELECT …)`; it may name the WITH
@@ -80,6 +85,11 @@ func (inst *evaluator) readCtes(su *grammar1.SelectUnionStmtContext) (err error)
 				return eb.Build().Str("with", name).Errorf("trivialsql: WITH names a query twice")
 			}
 		}
+		if _, bound := inst.tables[name]; bound {
+			// A bound table stands before the statement as a WITH query,
+			// so this is the same name twice.
+			return eb.Build().Str("with", name).Errorf("trivialsql: WITH names a query as a bound table is named")
+		}
 		if inst.scope.IsWithName(name) {
 			return refuse("WITH naming a query and an expression alike (" + name + ")")
 		}
@@ -101,17 +111,23 @@ func single(su *grammar1.SelectUnionStmtContext) (sel *grammar1.SelectStmtContex
 	return s, nil
 }
 
-// projItem is one item of a SELECT list: * or a named constant.
+// projItem is one item of a SELECT list: *, a column of the source under
+// its name or an alias, or a named constant.
 type projItem struct {
-	star  bool
-	name  string
-	value keelsonsql.Constant
+	star bool
+	// column is the source column a bare identifier names, when isColumn.
+	column   string
+	isColumn bool
+	name     string
+	aliased  bool
+	value    keelsonsql.Constant
 }
 
 // evalSelect answers sel, which may name the first visible WITH queries:
-// its source read whole — a keelson() call, values(), a WITH query, or one
-// row when there is no FROM — then its SELECT list of * and constants. A
-// clause that filters, groups, orders or joins is refused.
+// its source read whole — a keelson() call, values(), a WITH query, a bound
+// table, or one row when there is no FROM — then its SELECT list of *,
+// columns and constants. A clause that filters, groups, orders or joins is
+// refused.
 func (inst *evaluator) evalSelect(sel *grammar1.SelectStmtContext, visible int) (batch arrow.RecordBatch, err error) {
 	switch {
 	case sel.ArrayJoinClause() != nil:
@@ -141,11 +157,17 @@ func (inst *evaluator) evalSelect(sel *grammar1.SelectStmtContext, visible int) 
 		}
 	}
 	defer src.Release()
-	return project(src, items, sel.FromClause() != nil)
+	return project(src, items, sel.FromClause() != nil, visible == len(inst.ctes))
 }
 
-// projection reads the SELECT list: * and constants, each constant named
-// by its alias or by ClickHouse's default name for it.
+// projection reads the SELECT list: *, bare columns of the source and
+// constants, a column named by its alias or its own name, a constant by its
+// alias or by ClickHouse's default name for it.
+//
+// ClickHouse resolves a name in the list to an alias of the list before a
+// column of the source, through chains and around cycles (`a AS b, b AS a`
+// answers a as a and b as b). That resolution is not modelled: a column
+// whose name another item has for its alias is refused.
 func (inst *evaluator) projection(sel *grammar1.SelectStmtContext) (items []projItem, err error) {
 	proj := sel.ProjectionClause().(*grammar1.ProjectionClauseContext)
 	if proj.DISTINCT() != nil || proj.TopClause() != nil || proj.ProjectionExceptClause() != nil {
@@ -163,13 +185,29 @@ func (inst *evaluator) projection(sel *grammar1.SelectStmtContext) (items []proj
 				return nil, refuse("an alias without AS (" + col.GetText() + ")")
 			}
 			expr, name, aliased := keelsonsql.Aliased(col.ColumnExpr())
+			if aliased && inst.scope.IsWithName(name) {
+				// ClickHouse: MULTIPLE_EXPRESSIONS_FOR_ALIAS, unless the two
+				// expressions are the same.
+				return nil, refuse("an alias a WITH expression also has (" + name + ")")
+			}
+			if column, isColumn := bareColumn(expr); isColumn && sel.FromClause() != nil && !inst.scope.IsWithName(column) {
+				if !aliased {
+					name = column
+				}
+				items = append(items, projItem{column: column, isColumn: true, name: name, aliased: aliased})
+				continue
+			}
 			if !aliased && isParam(expr) {
 				return nil, refuse("a parameter without AS, which ClickHouse names _CAST(…)")
 			}
 			var v keelsonsql.Constant
 			v, err = keelsonsql.EvalConstant(expr, inst.scope)
 			if err != nil {
-				return nil, constantErr(err)
+				var nc *keelsonsql.NotConstantError
+				if errors.As(err, &nc) {
+					return nil, refuse("an expression in the SELECT list (" + nc.Found + ")")
+				}
+				return nil, err
 			}
 			if v.Null {
 				return nil, refuse("NULL as a column, whose type is Nullable(Nothing)")
@@ -177,12 +215,42 @@ func (inst *evaluator) projection(sel *grammar1.SelectStmtContext) (items []proj
 			if !aliased {
 				name = defaultName(v)
 			}
-			items = append(items, projItem{name: name, value: v})
+			items = append(items, projItem{name: name, aliased: aliased, value: v})
 		default:
 			return nil, refuse("a subquery in the SELECT list")
 		}
 	}
+	for i, it := range items {
+		if !it.isColumn {
+			continue
+		}
+		for j, other := range items {
+			if j != i && other.aliased && other.name == it.column {
+				return nil, refuse("the name " + it.column + ", which is a column and an alias in the SELECT list")
+			}
+		}
+	}
 	return
+}
+
+// bareColumn is the name of e when e is one unqualified identifier that is
+// not true or false: `a`, not `t.a`, `(a)` or `a.b`. A quoted true or false
+// is a name, as in ClickHouse.
+func bareColumn(e grammar1.IColumnExprContext) (name string, ok bool) {
+	id, isIdent := e.(*grammar1.ColumnExprIdentifierContext)
+	if !isIdent {
+		return "", false
+	}
+	ci := id.ColumnIdentifier().(*grammar1.ColumnIdentifierContext)
+	ni := ci.NestedIdentifier().(*grammar1.NestedIdentifierContext)
+	if ci.ColumnQualifier() != nil || len(ni.AllIdentifier()) != 1 {
+		return "", false
+	}
+	text := ni.GetText()
+	if strings.EqualFold(text, "true") || strings.EqualFold(text, "false") {
+		return "", false
+	}
+	return nanopass.DecodeIdentifier(text), true
 }
 
 func isAliased(e grammar1.IColumnExprContext) bool {
@@ -284,6 +352,34 @@ func (inst *evaluator) from(fc *grammar1.FromClauseContext, visible int) (batch 
 				}
 				return inst.unshadowed(batch, "WITH query's column")
 			}
+			if bound, found := inst.tables[name]; found {
+				if !slices.Contains(inst.reads, name) {
+					inst.reads = append(inst.reads, name)
+				}
+				bound.Retain()
+				return inst.unshadowed(bound, "bound table's column")
+			}
+			for j := visible + 1; j < len(inst.ctes); j++ {
+				if inst.ctes[j].name == name {
+					// ClickHouse answers a WITH query that reads one written
+					// after it; here a query is read only once it is written.
+					return nil, refuse("a WITH query read before it is written (" + name + ")")
+				}
+			}
+			if inst.tables != nil {
+				if visible < len(inst.ctes) {
+					// ClickHouse resolves a WITH query only where the
+					// statement reads it, and answers the statement
+					// otherwise. Every WITH query is answered here, so this
+					// one is a refusal, as a column it lacks is (project).
+					return nil, refuse("a WITH query reading a table that is not bound (" + name + ")")
+				}
+				// ClickHouse: UNKNOWN_TABLE.
+				return nil, eb.Build().Str("table", name).Errorf("trivialsql: no table of that name is bound")
+			}
+		}
+		if inst.tables != nil {
+			return nil, refuse("a table of a database (" + ti.GetText() + "), where only the bound tables can be read")
 		}
 		return nil, refuse("a table other than keelson() and values() (" + ti.GetText() + ")")
 	}
@@ -304,11 +400,14 @@ func (inst *evaluator) unshadowed(batch arrow.RecordBatch, what string) (out arr
 	return batch, nil
 }
 
-// project builds the SELECT list over src: * is src's columns, a constant a
-// column of its value on every row. A name given twice, or a WITH constant
-// named like a column of src, is refused: which one ClickHouse would pick
-// is not modelled here.
-func project(src arrow.RecordBatch, items []projItem, hasFrom bool) (batch arrow.RecordBatch, err error) {
+// project builds the SELECT list over src: * is src's columns, a column is
+// src's array under the item's name, a constant a column of its value on
+// every row. A name given twice, or a WITH constant named like a column of
+// src, is refused: which one ClickHouse would pick is not modelled here. A
+// column src does not have is an error in the outermost SELECT, as in
+// ClickHouse, and refused in a WITH query, where ClickHouse may find the
+// name among the outer SELECT's aliases.
+func project(src arrow.RecordBatch, items []projItem, hasFrom bool, outermost bool) (batch arrow.RecordBatch, err error) {
 	n := src.NumRows()
 	var fields []arrow.Field
 	var cols []arrow.Array
@@ -341,6 +440,24 @@ func project(src arrow.RecordBatch, items []projItem, hasFrom bool) (batch arrow
 				if err = add(f, c); err != nil {
 					return nil, err
 				}
+			}
+			continue
+		}
+		if it.isColumn {
+			idx := src.Schema().FieldIndices(it.column)
+			switch {
+			case len(idx) == 0 && outermost:
+				// ClickHouse: UNKNOWN_IDENTIFIER.
+				return nil, eb.Build().Str("column", it.column).Errorf("trivialsql: the source has no such column")
+			case len(idx) != 1:
+				return nil, refuse("the column " + it.column + ", which the source does not have once")
+			}
+			f := src.Schema().Field(idx[0])
+			f.Name = it.name
+			c := src.Column(idx[0])
+			c.Retain()
+			if err = add(f, c); err != nil {
+				return nil, err
 			}
 			continue
 		}
