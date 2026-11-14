@@ -157,7 +157,7 @@ a second source. One package defines it.
 | Cell | Spelling | Drawn as |
 | --- | --- | --- |
 | Prose | markdown | by the markdown widget |
-| Record | a `sql` fence, and an id on a line after it | not drawn; its statement, folded |
+| Record | a `sql` fence, and an id on a line after it | not drawn; one line, or its statement |
 | Presentation cell | a `sql` fence with a renderer as its second and last word (`sql chart`) | its result, by that renderer |
 | Media | the image form alone on a line, naming a blob the markdown widget does not draw | by the blob's extension |
 
@@ -199,11 +199,17 @@ SELECT t AS hour, p99 AS "p99@gloss/duration;unit=ms" FROM p99_by_hour
 ![Stand-up, Tuesday](w45.blobs/7be0….wav)
 ````
 
-Read with its statements folded, the same text is drawn roughly as below.
+Read with its statements hidden, the same text is drawn roughly as below.
 The sketch shows which cell becomes what; it does not fix a look. A reader
-draws the statements one of three ways — hidden, folded under their cells,
-or open — and the report is the first: a record is then one line that says
-what is stored, and a presentation cell is its result alone.
+draws the statements or hides them, and the report is the second: a record
+is then one line that says what is stored, and a presentation cell is its
+result under its header. Every cell that is not prose has a header, and the
+header folds the whole cell — its statement and its result — to that one
+line, which still says what the cell is and whether something is wrong with
+it. Folding is the reader's, cell by cell, and a folded cell is not built.
+Rejected: a fold of the statement alone under each cell, with the result
+always drawn, which was built first: it gave a reader two things to fold in
+one cell and no way to put a long chart away.
 
 ```
 ┌────────────────────────────────────────────────────────┐
@@ -213,9 +219,9 @@ what is stored, and a presentation cell is its result alone.
 │ The 99th percentile was 412 ms.                        │  prose with a val: link
 │                         ╌╌╌╌╌╌                         │
 │                                                        │
-│ ▸ record p99-by-hour — 168 rows × 2 columns            │  record, folded: not drawn
+│   record p99-by-hour — 168 rows × 2 columns            │  record: one line, not drawn
 │                                                        │
-│ ▸ sql chart                                            │  presentation cell, folded
+│ ▾ chart                                                │  presentation cell, its header
 │ ╭─ p99_by_hour ────────────────────────────── chart ─╮ │  the record, t named x
 │ │ 600 ┤              ▂▄▂                             │ │
 │ │ 400 ┤       ▂▄▆▇▇▇▇███▇▆▄▂                         │ │
@@ -224,7 +230,7 @@ what is stored, and a presentation cell is its result alone.
 │ │       Mon    Tue    Wed    Thu    Fri              │ │
 │ ╰────────────────────────────────────────────────────╯ │
 │                                                        │
-│ ▸ sql table                                            │  presentation cell, folded
+│ ▾ table                                                │  presentation cell, its header
 │ ╭─ p99_by_hour ────────────────────────────── table ─╮ │  the same record, renamed
 │ │ hour               p99                             │ │
 │ │ ─────────────────  ──────                          │ │
@@ -432,12 +438,12 @@ stale and needs no server.
 
 ```
 ┌────────────────────────────────────────────────────────┐
-│ ▾ record p99-by-hour        ⚠ edited since collection  │  record, unfolded
+│ ▾ record p99-by-hour        ⚠ edited since collection  │  record, statements shown
 │   SELECT toStartOfHour(ts) AS t,                       │
 │          quantile(0.95)(lag_ms) AS p99                 │
 │   FROM ingest_lag GROUP BY t                           │
 │                                                        │
-│ ▸ sql chart                                            │
+│ ▾ sql chart                                            │
 │ ╭─ p99_by_hour ───────────────────── ⚠ stale record ─╮ │  reads a stale record
 │ │ (the chart of the stored record, still shown)      │ │
 │ ╰────────────────────────────────────────────────────╯ │
