@@ -514,10 +514,17 @@ back, a collection — leads to a new one, and a file on disk the snapshot
 was taken from is not written. The command line of SD8 stays the way to
 collect a notebook that is a file.
 
-The app does not edit prose or presentation cells in its first cut. With
-the document in the store an editor on disk does not reach it, so that
-text arrives with the snapshot: from an ingest of a folder, or from mdedit
-for a document it holds.
+The app has no editor for prose and presentation cells: the text is
+handed to one and comes back. Where the host registers an editor app, the
+window offers it as play offers it for its buffer
+([ADR-0365](./0365-external-edit-a-text-handed-to-the-hosts-editor-app-and-each-save-returned.md)),
+and each save replaces the text. Where it registers none, the window hands
+the text to mdedit by mdedit's launch config, with the snapshot the
+document is of, and mdedit hands a text that holds a record back by the
+app's own launch kind. A text that comes back is shown over the stored
+results of the snapshot it left with, as an edit: nothing of it is stored
+until the notebook is collected. The launch kind is also how any other app
+opens a notebook here.
 
 **Operations.** The split follows what an operation concerns. Play has the
 ones over *the buffer as records*: `get_notebook`, and its inverse
@@ -753,8 +760,8 @@ grant and that mdedit and the snapshot browser already read.
 M1 to M5 and M7 to M9 are in the tree as of 2026-11-14, and of M10 the two
 faces, the check, the operations over the document and collection, for a
 notebook opened from a sample or from the store, which the window lists.
-M6 is not built, nor is a launch kind by which another app opens a
-notebook here. A collection, the store's refusal of a tier above its
+M6 is not built. The text goes to mdedit and comes back by launch kinds,
+which a scene drives. A collection, the store's refusal of a tier above its
 ceiling, and the opening of the snapshot it wrote are run in the
 integration lane against a server and a store of the test's own.
 
@@ -766,11 +773,12 @@ integration lane against a server and a store of the test's own.
   loaded from a snapshot, and SD10's app opens one from a snapshot too; a
   notebook opened from a single file or held in the persist store has no
   place to read blobs from and is drawn as markdown. Whether mdedit's Read
-  mode stays once the app exists, and how the text of a notebook in the
-  store is edited — in the app, or by a hand-over to mdedit that publishes
-  what it saves — are open. A host takes a document for a notebook when it
-  holds a record, listed or written as a cell: an applet document spells
-  its panels as a notebook spells presentation cells, and without a record
+  mode stays beside the app is open. So is a hand-over that is one edit
+  and not two windows: mdedit as an editor app in ADR-0365's sense needs
+  the service that keeps a handed text, which is the host's and not in
+  this tree. A host takes a document for a notebook when it holds a
+  record, listed or written as a cell: an applet document spells its
+  panels as a notebook spells presentation cells, and without a record
   such a cell has nothing to read. Whether the reading mode shows the
   statements is open too: it draws the report, and the text is in the
   other modes.
