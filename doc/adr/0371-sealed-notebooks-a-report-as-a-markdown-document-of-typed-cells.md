@@ -761,7 +761,13 @@ M1 to M5 and M7 to M9 are in the tree as of 2026-11-14, and of M10 the two
 faces, the check, the operations over the document and collection, for a
 notebook opened from a sample or from the store, which the window lists.
 M6 is not built. The text goes to mdedit and comes back by launch kinds,
-which a scene drives. A collection, the store's refusal of a tier above its
+which a scene drives. A window that is closed keeps its notebook as a
+workingset ([ADR-0148](./0148-app-workingsets.md)): the launch config that
+opens it again. A recording is played by the host of the cell stack,
+through the output the runtime gives
+([ADR-0372](./0372-audio-output-for-the-browser-hosts-a-host-provided-sink-and-a-side-lane.md)):
+the stack draws the transport and holds no output, and the app is the one
+host that plays so far. A collection, the store's refusal of a tier above its
 ceiling, and the opening of the snapshot it wrote are run in the
 integration lane against a server and a store of the test's own.
 

@@ -73,7 +73,7 @@ SELECT t AS x, region AS series, p99 FROM p99_by_hour
   through. Write any label; collection replaces it.
 
 A recording is the image form alone on a line, naming a `.wav` beside the
-notebook. An image is ordinary markdown, read from its file beside the
+notebook; the notebook window plays it. An image is ordinary markdown, read from its file beside the
 notebook. A picture or a recording whose file is named by its content hash,
 as a record's blob is, is checked against that name; one that cannot be read
 is listed as a problem, and the notebook is not sealed.
