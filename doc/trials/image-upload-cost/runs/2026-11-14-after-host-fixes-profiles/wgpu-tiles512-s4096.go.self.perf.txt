@@ -1,0 +1,11 @@
+# Go side, tiles512 s4096: self
+# perf report --stdio --no-children --percent-limit 0.5, perf version 7.0.14
+    59.52%  [.] runtime.memmove
+     5.92%  [.] runtime.stealWork
+     1.68%  [.] runtime.findRunnable
+     1.22%  [.] runtime.reentersyscall
+     1.13%  [.] runtime.lock2
+     0.74%  [.] runtime.unlock2
+     0.70%  [.] runtime.exitsyscall
+     0.67%  [.] runtime.mallocgcSmallScanNoHeaderSC5
+     0.54%  [.] 0x0000000000000a09

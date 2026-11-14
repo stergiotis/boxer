@@ -1,0 +1,255 @@
+# host client (wgpu), tiles512 s4096: inclusive
+# perf report --stdio --children --percent-limit 0.5, perf version 7.0.14
+    99.32%     0.00%  [.] __libc_start_call_main
+    99.32%     0.00%  [.] __libc_start_main@@GLIBC_2.34
+    99.32%     0.00%  [.] call_init (inlined)
+    99.32%     0.00%  [.] std::rt::lang_start_internal
+    99.32%     0.00%  [.] std::sys::backtrace::__rust_begin_short_backtrace
+    99.32%     0.00%  [.] map_err<(), imzero2::imzero2::headless::HeadlessError, alloc::boxed::Box<dyn core::error::Error, alloc::alloc::Global>, fn(imzero2::imzero2::headless::HeadlessError) -> alloc
+    99.32%     0.00%  [.] run_imzero2 (inlined)
+    99.32%     0.00%  [.] std::panic::catch_unwind::<std::rt::lang_start_internal::{closure#0}, isize> (inlined)
+    99.32%     0.00%  [.] std::panicking::catch_unwind::<isize, std::rt::lang_start_internal::{closure#0}> (inlined)
+    99.32%     0.00%  [.] std::panicking::catch_unwind::do_call::<std::rt::lang_start_internal::{closure#0}, isize> (inlined)
+    99.32%     0.00%  [.] std::rt::lang_start::{{closure}}
+    99.32%     0.00%  [.] std::rt::lang_start_internal::{closure#0} (inlined)
+    98.71%     0.01%  [.] imzero2::imzero2::headless::run_main_loop
+    93.89%     0.00%  [.] _start
+    79.76%     0.00%  [.] imzero2::main
+    79.76%     0.00%  [.] main
+    47.89%     0.00%  [.] values<egui::viewport::ViewportId, egui::viewport::ViewportOutput, alloc::alloc::Global> (inlined)
+    47.89%     0.00%  [.] close_requested (inlined)
+    47.89%     0.00%  [.] iter<egui::viewport::ViewportId, egui::viewport::ViewportOutput, alloc::alloc::Global> (inlined)
+    47.87%     0.01%  [.] egui::context::Context::run_ui_dyn
+    47.84%     0.00%  [.] run_dyn (inlined)
+    47.78%     0.00%  [.] {closure#1} (inlined)
+    47.64%     0.00%  [.] imzero2::imzero2::headless::run_main_loop::{{closure}}
+    47.64%     0.00%  [.] imzero2::imzero2::interpreter::ImZeroFffi<R,W>::interpret_commands_outer
+    47.61%     0.03%  [.] imzero2::imzero2::interpreter::ImZeroFffi<R,W>::interpret_outer
+    47.60%     0.00%  [.] branch<bool, imzero2::imzero2::interpreter::InterpretError> (inlined)
+    47.59%     0.07%  [.] imzero2::imzero2::interpreter::ImZeroFffi<R,W>::interpret_inner
+    47.36%     0.00%  [.] egui::containers::frame::Frame::show_dyn
+    47.33%     0.00%  [.] call_once<(&mut egui::ui::Ui), dyn core::ops::function::FnOnce<(&mut egui::ui::Ui), Output=()>, alloc::alloc::Global> (inlined)
+    47.33%     0.00%  [.] drop<dyn core::ops::function::FnOnce<(&mut egui::ui::Ui), Output=()>, alloc::alloc::Global> (inlined)
+    47.33%     0.00%  [.] for_value_raw<dyn core::ops::function::FnOnce<(&mut egui::ui::Ui), Output=()>> (inlined)
+    47.33%     0.00%  [.] size_of_val_raw<dyn core::ops::function::FnOnce<(&mut egui::ui::Ui), Output=()>> (inlined)
+    47.32%     0.00%  [.] egui::ui::Ui::scope_dyn
+    47.31%     0.00%  [.] imzero2::imzero2::interpreter::ImZeroFffi<R,W>::interpret_outer_logged
+    47.29%     0.00%  [.] call_once<(&mut egui::ui::Ui), dyn core::ops::function::FnOnce<(&mut egui::ui::Ui), Output=()>, alloc::alloc::Global> (inlined)
+    47.29%     0.00%  [.] drop<dyn core::ops::function::FnOnce<(&mut egui::ui::Ui), Output=()>, alloc::alloc::Global> (inlined)
+    47.29%     0.00%  [.] for_value_raw<dyn core::ops::function::FnOnce<(&mut egui::ui::Ui), Output=()>> (inlined)
+    47.29%     0.00%  [.] size_of_val_raw<dyn core::ops::function::FnOnce<(&mut egui::ui::Ui), Output=()>> (inlined)
+    47.24%     0.01%  [.] core::ops::function::FnOnce::call_once{{vtable.shim}}
+    47.23%     0.00%  [.] drop_in_place<core::result::Result<(), imzero2::imzero2::interpreter::InterpretError>> (inlined)
+    47.23%     0.00%  [.] {closure#80}<std::io::stdio::StdinLock, std::io::stdio::StdoutLock> (inlined)
+    46.88%     0.01%  [.] egui::containers::window::Window::show_dyn
+    46.88%     0.00%  [.] egui::containers::window::Window::show
+    46.83%     0.00%  [.] call_once<(&mut egui::ui::Ui), dyn core::ops::function::FnOnce<(&mut egui::ui::Ui), Output=core::option::Option<()>>, alloc::alloc::Global> (inlined)
+    46.83%     0.00%  [.] show<core::option::Option<()>, egui::containers::window::{impl#2}::show_dyn::{closure_env#6}<()>> (inlined)
+    46.83%     0.00%  [.] show_dyn<core::option::Option<()>> (inlined)
+    46.81%     0.00%  [.] egui::containers::resize::Resize::show
+    46.79%     0.00%  [.] {closure#0}<()> (inlined)
+    46.79%     0.00%  [.] contains (inlined)
+    46.79%     0.00%  [.] egui::containers::collapsing_header::CollapsingState::show_body_unindented
+    46.79%     0.00%  [.] egui::ui::Ui::scope_builder
+    46.79%     0.00%  [.] map<egui::response::InnerResponse<()>, (), egui::containers::window::{impl#2}::show_dyn::{closure#6}::{closure#0}::{closure_env#1}<()>> (inlined)
+    46.79%     0.00%  [.] should_close (inlined)
+    46.77%     0.00%  [.] as_ref<alloc::sync::ArcInner<epaint::mutex::RwLock<egui::context::ContextImpl>>> (inlined)
+    46.77%     0.00%  [.] call_once<(&mut egui::ui::Ui), dyn core::ops::function::FnOnce<(&mut egui::ui::Ui), Output=()>, alloc::alloc::Global> (inlined)
+    46.77%     0.00%  [.] core::ops::function::FnOnce::call_once{{vtable.shim}}
+    46.77%     0.00%  [.] core::ops::function::FnOnce::call_once{{vtable.shim}}
+    46.77%     0.00%  [.] drop<dyn core::ops::function::FnOnce<(&mut egui::ui::Ui), Output=()>, alloc::alloc::Global> (inlined)
+    46.77%     0.00%  [.] drop<epaint::mutex::RwLock<egui::context::ContextImpl>, alloc::alloc::Global> (inlined)
+    46.77%     0.00%  [.] drop_in_place<alloc::sync::Arc<epaint::mutex::RwLock<egui::context::ContextImpl>, alloc::alloc::Global>> (inlined)
+    46.77%     0.00%  [.] drop_in_place<core::result::Result<(), imzero2::imzero2::interpreter::InterpretError>> (inlined)
+    46.77%     0.00%  [.] drop_in_place<egui::context::Context> (inlined)
+    46.77%     0.00%  [.] drop_in_place<egui::response::Response> (inlined)
+    46.77%     0.00%  [.] egui::containers::frame::Frame::show
+    46.77%     0.00%  [.] egui::containers::window::Window::show_dyn::{{closure}}::{{closure}}::{{closure}}
+    46.77%     0.00%  [.] for_value_raw<dyn core::ops::function::FnOnce<(&mut egui::ui::Ui), Output=()>> (inlined)
+    46.77%     0.00%  [.] inner<epaint::mutex::RwLock<egui::context::ContextImpl>, alloc::alloc::Global> (inlined)
+    46.77%     0.00%  [.] size_of_val_raw<dyn core::ops::function::FnOnce<(&mut egui::ui::Ui), Output=()>> (inlined)
+    46.77%     0.00%  [.] {closure#144}<std::io::stdio::StdinLock, std::io::stdio::StdoutLock> (inlined)
+    46.72%     0.00%  [.] egui::containers::scroll_area::ScrollArea::show_viewport_dyn
+    46.72%     0.00%  [.] show<(), imzero2::imzero2::interpreter::{impl#5}::interpret_inner::{closure_env#99}<std::io::stdio::StdinLock, std::io::stdio::StdoutLock>> (inlined)
+    46.70%     0.00%  [.] as_ref<alloc::sync::ArcInner<epaint::mutex::RwLock<egui::context::ContextImpl>>> (inlined)
+    46.70%     0.00%  [.] drop<epaint::mutex::RwLock<egui::context::ContextImpl>, alloc::alloc::Global> (inlined)
+    46.70%     0.00%  [.] drop_in_place<alloc::sync::Arc<epaint::mutex::RwLock<egui::context::ContextImpl>, alloc::alloc::Global>> (inlined)
+    46.70%     0.00%  [.] drop_in_place<egui::context::Context> (inlined)
+    46.70%     0.00%  [.] drop_in_place<egui::response::Response> (inlined)
+    46.70%     0.00%  [.] inner<epaint::mutex::RwLock<egui::context::ContextImpl>, alloc::alloc::Global> (inlined)
+    46.69%     0.00%  [.] as_ref<alloc::sync::ArcInner<epaint::mutex::RwLock<egui::context::ContextImpl>>> (inlined)
+    46.69%     0.00%  [.] call_once<(&mut egui::ui::Ui), dyn core::ops::function::FnOnce<(&mut egui::ui::Ui), Output=egui::containers::collapsing_header::CollapsingResponse<()>>, alloc::alloc::Global>
+    46.69%     0.00%  [.] call_once<(&mut egui::ui::Ui, emath::rect::Rect), dyn core::ops::function::FnOnce<(&mut egui::ui::Ui, emath::rect::Rect), Output=()>, alloc::alloc::Global> (inlined)
+    46.69%     0.00%  [.] contains (inlined)
+    46.69%     0.00%  [.] core::ops::function::FnOnce::call_once{{vtable.shim}}
+    46.69%     0.00%  [.] core::ops::function::FnOnce::call_once{{vtable.shim}}
+    46.69%     0.00%  [.] core::ops::function::FnOnce::call_once{{vtable.shim}}
+    46.69%     0.00%  [.] core::ops::function::FnOnce::call_once{{vtable.shim}}
+    46.69%     0.00%  [.] dealloc_nonnull (inlined)
+    46.69%     0.00%  [.] deallocate (inlined)
+    46.69%     0.00%  [.] deallocate_impl (inlined)
+    46.69%     0.00%  [.] deallocate_impl_runtime (inlined)
+    46.69%     0.00%  [.] drop<dyn core::ops::function::FnOnce<(&mut egui::ui::Ui), Output=egui::containers::collapsing_header::CollapsingResponse<()>>, alloc::alloc::Global> (inlined)
+    46.69%     0.00%  [.] drop<dyn core::ops::function::FnOnce<(&mut egui::ui::Ui, emath::rect::Rect), Output=()>, alloc::alloc::Global> (inlined)
+    46.69%     0.00%  [.] drop<epaint::mutex::RwLock<egui::context::ContextImpl>, alloc::alloc::Global> (inlined)
+    46.69%     0.00%  [.] drop_in_place<alloc::sync::Arc<epaint::mutex::RwLock<egui::context::ContextImpl>, alloc::alloc::Global>> (inlined)
+    46.69%     0.00%  [.] drop_in_place<core::result::Result<(), imzero2::imzero2::interpreter::InterpretError>> (inlined)
+    46.69%     0.00%  [.] drop_in_place<egui::context::Context> (inlined)
+    46.69%     0.00%  [.] drop_in_place<egui::response::Response> (inlined)
+    46.69%     0.00%  [.] egui::containers::collapsing_header::CollapsingHeader::show
+    46.69%     0.00%  [.] egui::containers::collapsing_header::CollapsingHeader::show_dyn
+    46.69%     0.00%  [.] egui::containers::collapsing_header::CollapsingState::show_body_indented
+    46.69%     0.00%  [.] egui::ui::Ui::indent_dyn
+    46.69%     0.00%  [.] egui::ui::Ui::scope_builder
+    46.69%     0.00%  [.] egui::ui::Ui::scope_builder
+    46.69%     0.00%  [.] for_value_raw<dyn core::ops::function::FnOnce<(&mut egui::ui::Ui, emath::rect::Rect), Output=()>> (inlined)
+    46.69%     0.00%  [.] inner<epaint::mutex::RwLock<egui::context::ContextImpl>, alloc::alloc::Global> (inlined)
+    46.69%     0.00%  [.] scope_dyn<egui::containers::collapsing_header::CollapsingResponse<()>> (inlined)
+    46.69%     0.00%  [.] should_close (inlined)
+    46.69%     0.00%  [.] show_body_unindented<(), egui::containers::collapsing_header::{impl#0}::show_body_indented::{closure_env#0}<(), alloc::boxed::Box<dyn core::ops::function::FnOnce<(&mut egui::
+    46.69%     0.00%  [.] size_of_val_raw<dyn core::ops::function::FnOnce<(&mut egui::ui::Ui, emath::rect::Rect), Output=()>> (inlined)
+    46.69%     0.00%  [.] {closure#0}<(), alloc::boxed::Box<dyn core::ops::function::FnOnce<(&mut egui::ui::Ui), Output=()>, alloc::alloc::Global>> (inlined)
+    46.69%     0.00%  [.] {closure#0}<(), imzero2::imzero2::interpreter::{impl#5}::interpret_inner::{closure_env#99}<std::io::stdio::StdinLock, std::io::stdio::StdoutLock>> (inlined)
+    46.69%     0.00%  [.] {closure#0}<()> (inlined)
+    46.69%     0.00%  [.] {closure#1}<()> (inlined)
+    46.69%     0.00%  [.] {closure#99}<std::io::stdio::StdinLock, std::io::stdio::StdoutLock> (inlined)
+    46.69%     0.00%  [.] call_once<(&mut egui::ui::Ui), dyn core::ops::function::FnOnce<(&mut egui::ui::Ui), Output=()>, alloc::alloc::Global> (inlined)
+    46.69%     0.00%  [.] call_once<(&mut egui::ui::Ui), dyn core::ops::function::FnOnce<(&mut egui::ui::Ui), Output=()>, alloc::alloc::Global> (inlined)
+    46.69%     0.00%  [.] core::ops::function::FnOnce::call_once{{vtable.shim}}
+    46.69%     0.00%  [.] drop<dyn core::ops::function::FnOnce<(&mut egui::ui::Ui), Output=()>, alloc::alloc::Global> (inlined)
+    46.69%     0.00%  [.] drop<dyn core::ops::function::FnOnce<(&mut egui::ui::Ui), Output=()>, alloc::alloc::Global> (inlined)
+    46.69%     0.00%  [.] for_value_raw<dyn core::ops::function::FnOnce<(&mut egui::ui::Ui), Output=()>> (inlined)
+    46.69%     0.00%  [.] for_value_raw<dyn core::ops::function::FnOnce<(&mut egui::ui::Ui), Output=()>> (inlined)
+    46.69%     0.00%  [.] size_of_val_raw<dyn core::ops::function::FnOnce<(&mut egui::ui::Ui), Output=()>> (inlined)
+    46.69%     0.00%  [.] size_of_val_raw<dyn core::ops::function::FnOnce<(&mut egui::ui::Ui), Output=()>> (inlined)
+    46.69%     0.00%  [.] {closure#0}<(), alloc::boxed::Box<dyn core::ops::function::FnOnce<(&mut egui::ui::Ui), Output=()>, alloc::alloc::Global>> (inlined)
+    39.20%     0.04%  [.] imzero2::imzero2::interpreter::ImZeroFffi<R,W>::drain_paint_cmds_to_painter
+    37.22%     0.00%  [.] eq (inlined)
+    37.22%     0.00%  [.] is_mesh (inlined)
+    36.80%     0.02%  [.] imzero2::imzero2::image::ImageCache::ensure
+    36.76%     0.01%  [.] imzero2::imzero2::image::ImageCache::upload
+    35.07%     0.00%  [.] imzero2::imzero2::wscarrier::WsCarrier::ingest_textures
+    34.99%    29.48%  [.] imzero2::imzero2::meshlane::TextureStore::ingest
+    33.33%     0.00%  [.] collect<core::iter::adapters::map::Map<core::slice::iter::Iter<u32>, imzero2::imzero2::image::{impl#0}::upload::{closure_env#0}>, alloc::vec::Vec<ecolor::color32::Color32, al
+    33.33%     0.00%  [.] extend_trusted<ecolor::color32::Color32, alloc::alloc::Global, core::iter::adapters::map::Map<core::slice::iter::Iter<u32>, imzero2::imzero2::scrolling_texture::{impl#2}::pus
+    33.33%     0.00%  [.] fold<ecolor::color32::Color32, core::slice::iter::Iter<u32>, imzero2::imzero2::scrolling_texture::{impl#2}::push_and_draw::{closure_env#2}, (), core::iter::traits::iterator::
+    33.33%     0.00%  [.] fold<u32, (), core::iter::adapters::map::map_fold::{closure_env#0}<&u32, ecolor::color32::Color32, (), imzero2::imzero2::scrolling_texture::{impl#2}::push_and_draw::{closure_
+    33.33%     0.00%  [.] for_each<core::iter::adapters::map::Map<core::slice::iter::Iter<u32>, imzero2::imzero2::scrolling_texture::{impl#2}::push_and_draw::{closure_env#2}>, alloc::vec::{impl#21}::e
+    33.33%     0.00%  [.] from_iter<ecolor::color32::Color32, core::iter::adapters::map::Map<core::slice::iter::Iter<u32>, imzero2::imzero2::image::{impl#0}::upload::{closure_env#0}>> (inlined)
+    33.33%     0.00%  [.] spec_extend<ecolor::color32::Color32, core::iter::adapters::map::Map<core::slice::iter::Iter<u32>, imzero2::imzero2::scrolling_texture::{impl#2}::push_and_draw::{closure_env#
+    33.32%     0.00%  [.] {closure#0}<&u32, ecolor::color32::Color32, (), imzero2::imzero2::scrolling_texture::{impl#2}::push_and_draw::{closure_env#2}, core::iter::traits::iterator::Iterator::for_eac
+    33.27%    33.25%  [.] <alloc::vec::Vec<T> as alloc::vec::spec_from_iter_nested::SpecFromIterNested<T,I>>::from_iter
+    30.02%     0.00%  [.] append_elements<u8, alloc::alloc::Global> (inlined)
+    30.02%     0.00%  [.] extend_from_slice<u8, alloc::alloc::Global> (inlined)
+    30.02%     0.00%  [.] spec_extend<u8, alloc::alloc::Global> (inlined)
+    28.91%     0.00%  [.] color32_from_rgba_u32 (inlined)
+    28.91%     0.00%  [.] {closure#2} (inlined)
+    27.32%     0.00%  [.] from_rgba_unmultiplied (inlined)
+    27.32%     0.00%  [.] from_rgba_unmultiplied_const (inlined)
+    19.68%     0.00%  [.] reserve<alloc::alloc::Global> (inlined)
+    19.68%     0.00%  [.] reserve<u8, alloc::alloc::Global> (inlined)
+    19.56%     0.00%  [.] imzero2::main
+    19.56%     0.00%  [.] main
+    15.40%    15.33%  [.] __memmove_avx512_unaligned_erms
+    14.23%     0.00%  [.] mul_frac_round (inlined)
+    12.04%     0.00%  [.] render_and_readback (inlined)
+    11.29%     0.03%  [.] egui_wgpu::renderer::Renderer::update_texture
+    11.29%     0.00%  [.] next<epaint::image::ImageDelta> (inlined)
+    10.70%     0.00%  [.] add<epaint::image::ImageDelta> (inlined)
+    10.21%     0.00%  [.] copy_nonoverlapping<u8> (inlined)
+    10.19%     0.01%  [.] wgpu_core::device::queue::<impl wgpu_core::global::Global>::queue_write_texture
+    10.19%     0.00%  [.] wgpu::api::queue::Queue::write_texture
+    10.19%     0.00%  [.] write_texture (inlined)
+    10.19%     0.00%  [.] drop<wgpu_core::device::queue::Queue, alloc::alloc::Global> (inlined)
+    10.19%     0.00%  [.] drop_in_place<alloc::sync::Arc<wgpu_core::device::queue::Queue, alloc::alloc::Global>> (inlined)
+    10.18%     0.00%  [.] as_ref<alloc::sync::ArcInner<wgpu_core::device::queue::Queue>> (inlined)
+    10.18%     0.00%  [.] inner<wgpu_core::device::queue::Queue, alloc::alloc::Global> (inlined)
+     7.07%     0.00%  [.] branch<alloc::vec::Vec<u32, alloc::alloc::Global>, imzero2::fffi::common::FffiError> (inlined)
+     7.06%     6.58%  [.] imzero2::fffi::io::ImZeroFffiIo<R,W>::read_plain_u32h
+     7.06%     0.00%  [.] read_plain_le_h<std::io::stdio::StdinLock, std::io::stdio::StdoutLock, u32, 4, fn([u8; 4]) -> u32> (inlined)
+     6.53%     0.00%  [.] extend<u32, alloc::alloc::Global, core::iter::adapters::map::Map<core::slice::iter::ChunksExact<u8>, imzero2::fffi::io::{impl#2}::read_plain_le_h::{closure_env#0}<std::io::st
+     6.53%     0.00%  [.] extend_trusted<u32, alloc::alloc::Global, core::iter::adapters::map::Map<core::slice::iter::ChunksExact<u8>, imzero2::fffi::io::{impl#2}::read_plain_le_h::{closure_env#0}<std
+     6.53%     0.00%  [.] fold<core::slice::iter::ChunksExact<u8>, (), core::iter::adapters::map::map_fold::{closure_env#0}<&[u8], u32, (), imzero2::fffi::io::{impl#2}::read_plain_le_h::{closure_env#0
+     6.53%     0.00%  [.] fold<u32, core::slice::iter::ChunksExact<u8>, imzero2::fffi::io::{impl#2}::read_plain_le_h::{closure_env#0}<std::io::stdio::StdinLock, std::io::stdio::StdoutLock, u32, 4, fn(
+     6.53%     0.00%  [.] for_each<core::iter::adapters::map::Map<core::slice::iter::ChunksExact<u8>, imzero2::fffi::io::{impl#2}::read_plain_le_h::{closure_env#0}<std::io::stdio::StdinLock, std::io::
+     6.53%     0.00%  [.] spec_extend<u32, core::iter::adapters::map::Map<core::slice::iter::ChunksExact<u8>, imzero2::fffi::io::{impl#2}::read_plain_le_h::{closure_env#0}<std::io::stdio::StdinLock, s
+     5.90%     0.00%  [.] {closure#0}<&[u8], u32, (), imzero2::fffi::io::{impl#2}::read_plain_le_h::{closure_env#0}<std::io::stdio::StdinLock, std::io::stdio::StdoutLock, u32, 4, fn([u8; 4]) -> u32>, 
+     5.44%     5.38%  [.] <alloc::vec::Vec<T> as alloc::vec::spec_from_iter_nested::SpecFromIterNested<T,I>>::from_iter
+     5.44%     0.00%  [.] as_ref<alloc::sync::ArcInner<std::sync::poison::mutex::Mutex<imzero2::imzero2::svgexport::TexturePixelCache>>> (inlined)
+     5.44%     0.00%  [.] deref<std::sync::poison::mutex::Mutex<imzero2::imzero2::svgexport::TexturePixelCache>, alloc::alloc::Global> (inlined)
+     5.44%     0.00%  [.] inner<std::sync::poison::mutex::Mutex<imzero2::imzero2::svgexport::TexturePixelCache>, alloc::alloc::Global> (inlined)
+     5.43%     0.00%  [.] _start
+     5.39%     0.00%  [.] extend_trusted<u8, alloc::alloc::Global, core::iter::adapters::flatten::FlatMap<core::slice::iter::Iter<u32>, [u8; 4], imzero2::imzero2::image::{impl#0}::upload::{closure_env
+     5.39%     0.00%  [.] fold<[u8; 4], core::slice::iter::Iter<u32>, imzero2::imzero2::image::{impl#0}::upload::{closure_env#1}, (), core::iter::adapters::flatten::{impl#18}::iter_fold::flatten::{clo
+     5.39%     0.00%  [.] fold<core::iter::adapters::map::Map<core::slice::iter::Iter<u32>, imzero2::imzero2::image::{impl#0}::upload::{closure_env#1}>, (), core::iter::adapters::flatten::{impl#18}::i
+     5.39%     0.00%  [.] fold<core::iter::adapters::map::Map<core::slice::iter::Iter<u32>, imzero2::imzero2::image::{impl#0}::upload::{closure_env#1}>, core::array::iter::IntoIter<u8, 4>, (), core::i
+     5.39%     0.00%  [.] fold<core::slice::iter::Iter<u32>, [u8; 4], imzero2::imzero2::image::{impl#0}::upload::{closure_env#1}, (), core::iter::traits::iterator::Iterator::for_each::call::{closure_e
+     5.39%     0.00%  [.] fold<u32, (), core::iter::adapters::map::map_fold::{closure_env#0}<&u32, [u8; 4], (), imzero2::imzero2::image::{impl#0}::upload::{closure_env#1}, core::iter::adapters::flatte
+     5.39%     0.00%  [.] for_each<core::iter::adapters::flatten::FlatMap<core::slice::iter::Iter<u32>, [u8; 4], imzero2::imzero2::image::{impl#0}::upload::{closure_env#1}>, alloc::vec::{impl#21}::ext
+     5.39%     0.00%  [.] iter_fold<core::iter::adapters::map::Map<core::slice::iter::Iter<u32>, imzero2::imzero2::image::{impl#0}::upload::{closure_env#1}>, core::array::iter::IntoIter<u8, 4>, (), co
+     5.39%     0.00%  [.] spec_extend<u8, core::iter::adapters::flatten::FlatMap<core::slice::iter::Iter<u32>, [u8; 4], imzero2::imzero2::image::{impl#0}::upload::{closure_env#1}>, alloc::alloc::Globa
+     4.91%     0.00%  [.] from_rgba_premultiplied (inlined)
+     4.41%     0.00%  [.] {closure#0}<ecolor::color32::Color32, alloc::alloc::Global, core::iter::adapters::map::Map<core::slice::iter::Iter<u32>, imzero2::imzero2::scrolling_texture::{impl#2}::push_a
+     4.41%     0.00%  [.] {closure#0}<ecolor::color32::Color32, alloc::vec::{impl#21}::extend_trusted::{closure_env#0}<ecolor::color32::Color32, alloc::alloc::Global, core::iter::adapters::map::Map<co
+     4.36%     0.00%  [.] {closure#0}<&u32, [u8; 4], (), imzero2::imzero2::image::{impl#0}::upload::{closure_env#1}, core::iter::adapters::flatten::{impl#18}::iter_fold::flatten::{closure_env#0}<[u8; 
+     4.08%     0.00%  [.] write<ecolor::color32::Color32> (inlined)
+     3.89%     0.00%  [.] write<u32> (inlined)
+     3.89%     0.00%  [.] {closure#0}<u32, alloc::alloc::Global, core::iter::adapters::map::Map<core::slice::iter::ChunksExact<u8>, imzero2::fffi::io::{impl#2}::read_plain_le_h::{closure_env#0}<std::i
+     3.89%     0.00%  [.] {closure#0}<u32, alloc::vec::{impl#21}::extend_trusted::{closure_env#0}<u32, alloc::alloc::Global, core::iter::adapters::map::Map<core::slice::iter::ChunksExact<u8>, imzero2:
+     3.59%     0.00%  [.] {closure#1} (inlined)
+     2.20%     0.00%  [.] imzero2::imzero2::image::ImageCache::ensure
+     2.19%     0.00%  [.] imzero2::imzero2::image::ImageCache::upload
+     2.15%     1.82%  [.] imzero2::imzero2::meshlane::TextureStore::ingest
+     2.15%     0.00%  [.] imzero2::imzero2::wscarrier::WsCarrier::ingest_textures
+     2.09%     0.00%  [.] from_rgb (inlined)
+     2.00%     0.00%  [.] copy_from_slice<u8> (inlined)
+     2.00%     0.00%  [.] copy_from_slice_impl<u8> (inlined)
+     2.00%     0.00%  [.] copy_nonoverlapping<u8> (inlined)
+     2.00%     0.00%  [.] {closure#0}<std::io::stdio::StdinLock, std::io::stdio::StdoutLock, u32, 4, fn([u8; 4]) -> u32> (inlined)
+     1.23%     0.00%  [.] drop_in_place<alloc::vec::Vec<epaint::ClippedPrimitive, alloc::alloc::Global>> (inlined)
+     1.17%     0.01%  [.] imzero2::imzero2::wscarrier::WsCarrier::on_frame
+     1.09%     0.00%  [.] needs_to_grow<alloc::alloc::Global> (inlined)
+     1.00%     0.00%  [.] capacity<alloc::alloc::Global> (inlined)
+     0.88%     0.00%  [.] to_array (inlined)
+     0.88%     0.00%  [.] hash_all_at_once<blake3::join::SerialJoin> (inlined)
+     0.88%     0.00%  [.] join<blake3::compress_subtree_wide::{closure_env#0}<blake3::join::SerialJoin>, blake3::compress_subtree_wide::{closure_env#1}<blake3::join::SerialJoin>, usize, usize> (inline
+     0.88%     0.01%  [.] blake3::compress_subtree_wide
+     0.88%     0.00%  [.] blake3::compress_subtree_to_parent_node
+     0.88%     0.00%  [.] blake3::hash
+     0.86%     0.86%  [.] _blake3_hash_many_avx512
+     0.85%     0.00%  [.] {closure#1}<blake3::join::SerialJoin> (inlined)
+     0.85%     0.00%  [.] {closure#0}<blake3::join::SerialJoin> (inlined)
+     0.81%     0.00%  [.] 0x0000000000000002
+     0.81%     0.00%  [.] compress_chunks_parallel (inlined)
+     0.77%     0.00%  [.] call_mut<((), u8), core::iter::traits::iterator::Iterator::for_each::call::{closure_env#0}<u8, alloc::vec::{impl#21}::extend_trusted::{closure_env#0}<u8, alloc::alloc::Global
+     0.77%     0.00%  [.] fold<u8, (), &mut core::iter::traits::iterator::Iterator::for_each::call::{closure_env#0}<u8, alloc::vec::{impl#21}::extend_trusted::{closure_env#0}<u8, alloc::alloc::Global,
+     0.77%     0.00%  [.] fold<u8, 4, (), &mut core::iter::traits::iterator::Iterator::for_each::call::{closure_env#0}<u8, alloc::vec::{impl#21}::extend_trusted::{closure_env#0}<u8, alloc::alloc::Glob
+     0.77%     0.00%  [.] try_fold<(), core::array::iter::iter_inner::{impl#8}::try_fold::{closure_env#0}<u8, (), core::ops::try_trait::{impl#2}::wrap_mut_2::{closure_env#0}<(), (), u8, &mut core::ite
+     0.77%     0.00%  [.] try_fold<u8, (), core::ops::try_trait::{impl#2}::wrap_mut_2::{closure_env#0}<(), (), u8, &mut core::iter::traits::iterator::Iterator::for_each::call::{closure_env#0}<u8, allo
+     0.77%     0.00%  [.] write<u8> (inlined)
+     0.77%     0.00%  [.] {closure#0}<(), (), u8, &mut core::iter::traits::iterator::Iterator::for_each::call::{closure_env#0}<u8, alloc::vec::{impl#21}::extend_trusted::{closure_env#0}<u8, alloc::all
+     0.77%     0.00%  [.] {closure#0}<[u8; 4], (), core::iter::adapters::flatten::{impl#20}::fold::flatten::{closure_env#0}<core::array::iter::IntoIter<u8, 4>, (), core::iter::traits::iterator::Iterat
+     0.77%     0.00%  [.] {closure#0}<core::array::iter::IntoIter<u8, 4>, (), core::iter::traits::iterator::Iterator::for_each::call::{closure_env#0}<u8, alloc::vec::{impl#21}::extend_trusted::{closur
+     0.77%     0.00%  [.] {closure#0}<u8, (), core::ops::try_trait::{impl#2}::wrap_mut_2::{closure_env#0}<(), (), u8, &mut core::iter::traits::iterator::Iterator::for_each::call::{closure_env#0}<u8, a
+     0.77%     0.00%  [.] {closure#0}<u8, alloc::alloc::Global, core::iter::adapters::flatten::FlatMap<core::slice::iter::Iter<u32>, [u8; 4], imzero2::imzero2::image::{impl#0}::upload::{closure_env#1}
+     0.77%     0.00%  [.] {closure#0}<u8, alloc::vec::{impl#21}::extend_trusted::{closure_env#0}<u8, alloc::alloc::Global, core::iter::adapters::flatten::FlatMap<core::slice::iter::Iter<u32>, [u8; 4],
+     0.67%     0.00%  [.] as_ref<alloc::sync::ArcInner<epaint::mutex::RwLock<egui::context::ContextImpl>>> (inlined)
+     0.67%     0.00%  [.] drop<epaint::mutex::RwLock<egui::context::ContextImpl>, alloc::alloc::Global> (inlined)
+     0.67%     0.00%  [.] drop_in_place<alloc::sync::Arc<epaint::mutex::RwLock<egui::context::ContextImpl>, alloc::alloc::Global>> (inlined)
+     0.67%     0.00%  [.] drop_in_place<egui::context::Context> (inlined)
+     0.67%     0.00%  [.] drop_in_place<egui::response::InnerResponse<()>> (inlined)
+     0.67%     0.00%  [.] drop_in_place<egui::response::Response> (inlined)
+     0.67%     0.00%  [.] inner<epaint::mutex::RwLock<egui::context::ContextImpl>, alloc::alloc::Global> (inlined)
+     0.62%     0.00%  [.] next<u8> (inlined)
+     0.62%     0.00%  [.] split_at_checked<u8> (inlined)
+     0.62%     0.00%  [.] egui::containers::panel::Panel::show_inside_dyn
+     0.59%     0.00%  [.] add<epaint::image::ImageDelta> (inlined)
+     0.59%     0.00%  [.] egui::ui::Ui::allocate_ui_with_layout_dyn
+     0.56%     0.03%  [.] wgpu_core::device::queue::Queue::write_texture
+     0.55%     0.00%  [.] call_once<(&mut egui::ui::Ui), dyn core::ops::function::FnOnce<(&mut egui::ui::Ui), Output=()>, alloc::alloc::Global> (inlined)
+     0.55%     0.00%  [.] core::ops::function::FnOnce::call_once{{vtable.shim}}
+     0.55%     0.00%  [.] drop<dyn core::ops::function::FnOnce<(&mut egui::ui::Ui), Output=()>, alloc::alloc::Global> (inlined)
+     0.55%     0.00%  [.] for_value_raw<dyn core::ops::function::FnOnce<(&mut egui::ui::Ui), Output=()>> (inlined)
+     0.55%     0.00%  [.] size_of_val_raw<dyn core::ops::function::FnOnce<(&mut egui::ui::Ui), Output=()>> (inlined)
+     0.55%     0.00%  [.] {closure#0}<()> (inlined)
+     0.54%     0.09%  [.] <std::io::stdio::StdinLock as std::io::Read>::read_exact

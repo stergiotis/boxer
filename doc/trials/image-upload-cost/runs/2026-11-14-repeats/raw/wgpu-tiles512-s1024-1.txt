@@ -1,0 +1,5 @@
+label ="bench done arm=tiles512 side=s1024 tiles=4 payload_bytes=4194304 frames=120"
+label ="bench go emit_p50_us=4741 emit_p95_us=11396 render_p50_us=5265 sync_p50_us=4148 total_p50_us=9389 total_p95_us=17881"
+label ="bench host interpret_p50_us=6000 interpret_p95_us=13124 written_p50_bytes=4201400"
+label ="bench cycle period_p50_us=9440 period_p95_us=17946 first_total_us=11637 first_interpret_us=7161 first_period_us=11643"
+raster stats (per frame: rasterize, then tessellate separately) backend="wgpu" frames=1140 width_px=1100 height_px=900 mean_us=749 p50_us=589 p90_us=1162 p99_us=1666 min_us=248 max_us=2862 tess_mean_us=50 tess_p50_us=47 prims=13 tris=4848

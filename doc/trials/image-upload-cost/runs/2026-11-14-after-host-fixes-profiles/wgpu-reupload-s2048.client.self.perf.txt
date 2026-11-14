@@ -1,0 +1,9 @@
+# host client (wgpu), reupload s2048: self
+# perf report --stdio --no-children --percent-limit 0.5, perf version 7.0.14
+    31.45%  [.] <alloc::vec::Vec<T> as alloc::vec::spec_from_iter_nested::SpecFromIterNested<T,I>>::from_iter
+    26.58%  [.] imzero2::imzero2::meshlane::TextureStore::ingest
+    13.44%  [.] __memmove_avx512_unaligned_erms
+     5.58%  [.] <alloc::vec::Vec<T> as alloc::vec::spec_from_iter_nested::SpecFromIterNested<T,I>>::from_iter
+     4.76%  [.] imzero2::fffi::io::ImZeroFffiIo<R,W>::read_plain_u32h
+     3.39%  [k] 0xffffffff98e00b90
+     3.38%  [.] _blake3_hash_many_avx512

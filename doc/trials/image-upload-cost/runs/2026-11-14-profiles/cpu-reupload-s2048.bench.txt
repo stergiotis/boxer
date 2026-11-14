@@ -1,0 +1,8 @@
+# imagebench cpu-reupload-s2048 — what the demo reported
+label ="bench done arm=reupload side=s2048 tiles=1 payload_bytes=16777216 frames=60"
+label ="bench go emit_p50_us=22590 emit_p95_us=39093 render_p50_us=23317 sync_p50_us=19310 total_p50_us=44076 total_p95_us=61731"
+label ="bench host interpret_p50_us=28910 interpret_p95_us=46586 written_p50_bytes=16784103"
+label ="bench cycle period_p50_us=44443 period_p95_us=61365 first_total_us=57287 first_interpret_us=36506 first_period_us=57442"
+# CPU time over the 20 s window, seconds (user, system) — perf below samples user time only
+client user=15.71 system=3.24
+go     user=5.58 system=3.43

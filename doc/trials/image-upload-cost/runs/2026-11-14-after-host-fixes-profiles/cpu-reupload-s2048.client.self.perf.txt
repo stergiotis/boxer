@@ -1,0 +1,14 @@
+# host client (cpu), reupload s2048: self
+# perf report --stdio --no-children --percent-limit 0.5, perf version 7.0.14
+    24.26%  [.] <alloc::vec::Vec<T> as alloc::vec::spec_from_iter_nested::SpecFromIterNested<T,I>>::from_iter
+    22.44%  [.] imzero2::imzero2::meshlane::TextureStore::ingest
+    13.88%  [.] <alloc::vec::Vec<T> as alloc::vec::spec_from_iter_nested::SpecFromIterNested<T,I>>::from_iter
+     6.73%  [.] egui_software_backend::egui_texture::EguiTexture::sample_bilinear
+     5.10%  [.] <alloc::vec::Vec<T> as alloc::vec::spec_from_iter_nested::SpecFromIterNested<T,I>>::from_iter
+     4.14%  [.] imzero2::fffi::io::ImZeroFffiIo<R,W>::read_plain_u32h
+     3.99%  [.] __memmove_avx512_unaligned_erms
+     3.23%  [k] 0xffffffff98e00b90
+     2.41%  [.] _blake3_hash_many_avx512
+     1.67%  [.] egui_software_backend::color::avx2::Avx2Impl::dispatch_avx2
+     1.11%  [.] egui_software_backend::color::avx2::Avx2Impl::dispatch_avx2
+     0.72%  [.] floorf

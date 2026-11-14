@@ -1,0 +1,24 @@
+# Go side, tiles512 s4096: self
+# perf report --stdio --no-children --percent-limit 0.5, perf version 7.0.14
+    24.16%  [.] runtime.stealWork
+    21.96%  [.] runtime.memmove
+     7.85%  [.] runtime.findRunnable
+     3.14%  [.] runtime.checkTimersNoP
+     3.11%  [.] runtime.lock2
+     2.79%  [.] runtime.reentersyscall
+     1.77%  [k] 0xffffffff98e00080
+     1.76%  [.] runtime.netpollready
+     1.44%  [.] runtime.netpollblock
+     1.40%  [.] runtime.netpoll
+     1.33%  [.] runtime.casgstatus
+     1.31%  [.] runtime.unlock2
+     1.29%  [.] 0x0000000000000a09
+     1.28%  [.] runtime.pidleput
+     1.17%  [.] runtime.netpollblockcommit
+     1.10%  [.] runtime.pidleget
+     0.95%  [.] runtime.(*limiterEvent).stop
+     0.68%  [.] runtime.exitsyscall
+     0.67%  [.] runtime.(*timers).check
+     0.57%  [.] runtime.checkRunqsNoP
+     0.52%  [.] runtime.(*timeHistogram).record
+     0.51%  [k] 0xffffffff9972251d

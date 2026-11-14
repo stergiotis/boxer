@@ -1,0 +1,8 @@
+# imagebench wgpu-tiles512-s4096 — what the demo reported
+label ="bench done arm=tiles512 side=s4096 tiles=64 payload_bytes=67108864 frames=30"
+label ="bench go emit_p50_us=17427 emit_p95_us=20358 render_p50_us=17966 sync_p50_us=40784 total_p50_us=58999 total_p95_us=69310"
+label ="bench host interpret_p50_us=30316 interpret_p95_us=33454 written_p50_bytes=67119318"
+label ="bench cycle period_p50_us=59168 period_p95_us=69754 first_total_us=105526 first_interpret_us=58380 first_period_us=105644"
+# CPU time over the 20 s window, seconds (user, system) — perf below samples user time only
+client user=13.95 system=4.06
+go     user=2.13 system=4.57

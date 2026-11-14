@@ -1,0 +1,9 @@
+# host client (wgpu), tiles512 s4096: self
+# perf report --stdio --no-children --percent-limit 0.5, perf version 7.0.14
+    20.41%  [.] imzero2::fffi::io::ImZeroFffiIo<R,W>::read_plain_u32h
+    18.94%  [.] <std::io::stdio::StdinLock as std::io::Read>::read_exact
+    17.50%  [.] __memmove_avx512_unaligned_erms
+    13.31%  [.] <alloc::vec::Vec<T> as alloc::vec::spec_from_iter_nested::SpecFromIterNested<T,I>>::from_iter
+    12.56%  [.] imzero2::fffi::io::ImZeroFffiIo<R,W>::read_plain_u32
+    12.02%  [.] imzero2::imzero2::meshlane::TextureStore::ingest
+     2.17%  [.] <alloc::vec::Vec<T> as alloc::vec::spec_from_iter_nested::SpecFromIterNested<T,I>>::from_iter

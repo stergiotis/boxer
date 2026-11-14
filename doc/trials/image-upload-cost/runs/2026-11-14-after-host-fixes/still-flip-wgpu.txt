@@ -1,0 +1,31 @@
+# mean(blue - red) per dumped live frame, every thirtieth frame
+frame_000030.png	+2.63
+frame_000060.png	+2.62
+frame_000090.png	-7.49
+frame_000120.png	-7.49
+frame_000150.png	-7.49
+frame_000180.png	-7.49
+frame_000210.png	-7.49
+frame_000240.png	-7.49
+frame_000270.png	-7.49
+frame_000300.png	-7.49
+frame_000330.png	+9.92
+frame_000360.png	+9.92
+frame_000390.png	+9.92
+frame_000420.png	+9.92
+frame_000450.png	+9.92
+frame_000480.png	+9.92
+frame_000510.png	+9.92
+frame_000540.png	+9.92
+frame_000570.png	+9.92
+frame_000600.png	+9.91
+frame_000630.png	+9.91
+frame_000660.png	+9.91
+frame_000690.png	+9.91
+frame_000720.png	+9.91
+frame_000750.png	+9.91
+capture after-flip.png	+9.92
+capture after-nudge.png	+9.91
+first pattern's plateau: -7.49
+verdict after the swap, nothing else changed: the frame shows the second pattern
+verdict after the nudge: the frame shows the second pattern

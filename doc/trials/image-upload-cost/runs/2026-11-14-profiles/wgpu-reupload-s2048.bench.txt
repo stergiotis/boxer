@@ -1,0 +1,8 @@
+# imagebench wgpu-reupload-s2048 — what the demo reported
+label ="bench done arm=reupload side=s2048 tiles=1 payload_bytes=16777216 frames=60"
+label ="bench go emit_p50_us=20223 emit_p95_us=48879 render_p50_us=20999 sync_p50_us=15660 total_p50_us=36685 total_p95_us=65810"
+label ="bench host interpret_p50_us=25442 interpret_p95_us=50215 written_p50_bytes=16784103"
+label ="bench cycle period_p50_us=37037 period_p95_us=65826 first_total_us=49652 first_interpret_us=32372 first_period_us=49704"
+# CPU time over the 20 s window, seconds (user, system) — perf below samples user time only
+client user=15.88 system=2.89
+go     user=6.74 system=3.72

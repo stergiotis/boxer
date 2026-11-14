@@ -1,0 +1,13 @@
+# host client (cpu), reupload s4096: self
+# perf report --stdio --no-children --percent-limit 0.5, perf version 7.0.14
+    16.41%  [.] <std::io::stdio::StdinLock as std::io::Read>::read_exact
+    14.02%  [.] imzero2::fffi::io::ImZeroFffiIo<R,W>::read_plain_u32h
+    12.97%  [.] <alloc::vec::Vec<T> as alloc::vec::spec_from_iter_nested::SpecFromIterNested<T,I>>::from_iter
+    11.76%  [.] imzero2::imzero2::meshlane::TextureStore::ingest
+    10.28%  [.] __memmove_avx512_unaligned_erms
+     9.71%  [.] imzero2::fffi::io::ImZeroFffiIo<R,W>::read_plain_u32
+     9.17%  [.] <alloc::vec::Vec<T> as alloc::vec::spec_from_iter_nested::SpecFromIterNested<T,I>>::from_iter
+     4.94%  [k] 0xffffffff98e00b90
+     3.05%  [.] <alloc::vec::Vec<T> as alloc::vec::spec_from_iter_nested::SpecFromIterNested<T,I>>::from_iter
+     1.10%  [k] 0xffffffff995f3b8e
+     1.01%  [k] 0xffffffff9a504c80

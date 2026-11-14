@@ -1,0 +1,11 @@
+date: 2026-11-14
+commit: 136c90877 (plus the uncommitted imagebench demo and this trial directory)
+cpu: AMD RYZEN AI MAX+ PRO 395 w/ Radeon 8060S, 32 logical cores
+memory: 122 GiB
+kernel: Linux 7.0.0-43-generic
+governor: powersave, epp: balance_performance
+go: go1.27.3 linux/amd64
+rustc: rustc 1.96.1 (31fca3adb 2026-06-26)
+egui / wgpu pinned: egui = "0.36.2", wgpu = { version = "30.0.1", optional = true }
+scene cadence: 240 Hz, window 1100x900; perf: cycles:u, user call chains, 997 Hz, 20 s window per cell (kernel.perf_event_paranoid=2)
+clients: profiling builds (line tables, frame pointers) of the same sources, in their own target directories

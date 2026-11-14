@@ -1,0 +1,24 @@
+# Go side, reupload s2048: self
+# perf report --stdio --no-children --percent-limit 0.5, perf version 7.0.14
+    29.28%  [.] runtime.tryDeferToSpanScan
+    10.17%  [.] runtime.memmove
+     6.51%  [.] internal/runtime/gc/scan.scanSpanPackedAVX512.abi0
+     5.38%  [.] runtime.scanSpan
+     3.95%  [.] runtime.scanObject
+     3.35%  [.] runtime.typePointers.next
+     3.08%  [.] runtime.(*spanInlineMarkBits).tryAcquire
+     2.82%  [.] runtime.memclrNoHeapPointers
+     2.78%  [.] runtime.greyobject
+     2.43%  [.] runtime.scanObjectsSmall
+     2.37%  [.] runtime.spanSetScans
+     2.02%  [.] runtime.gcFlushBgCredit
+     1.66%  [.] runtime.(*sweepLocker).tryAcquire
+     1.52%  [.] runtime.gcDrain
+     1.13%  [.] runtime.stealWork
+     0.93%  [.] runtime.(*sweepLocked).sweep
+     0.89%  [.] runtime.newMarkBits
+     0.83%  [.] internal/runtime/gc/scan.FilterNilAVX512.abi0
+     0.82%  [.] runtime.findObject
+     0.70%  [.] runtime.scanObjectSmall
+     0.63%  [.] runtime.findRunnable
+     0.50%  [.] runtime.lock2

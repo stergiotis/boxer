@@ -1,0 +1,5 @@
+label ="bench done arm=resident side=s8192 tiles=1 payload_bytes=268435456 frames=12"
+label ="bench go emit_p50_us=1 emit_p95_us=2 render_p50_us=332 sync_p50_us=3858 total_p50_us=4163 total_p95_us=4204"
+label ="bench host interpret_p50_us=297 interpret_p95_us=423 written_p50_bytes=6925"
+label ="bench cycle period_p50_us=4128 period_p95_us=4296 first_total_us=599012 first_interpret_us=264767 first_period_us=599161"
+raster stats (per frame: rasterize, then tessellate separately) backend="cpu" frames=1440 width_px=1100 height_px=900 mean_us=277 p50_us=104 p90_us=270 p99_us=2212 min_us=25 max_us=98463 tess_mean_us=39 tess_p50_us=33 prims=12 tris=4808

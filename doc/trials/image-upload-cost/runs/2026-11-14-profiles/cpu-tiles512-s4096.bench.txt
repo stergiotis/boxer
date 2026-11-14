@@ -1,0 +1,8 @@
+# imagebench cpu-tiles512-s4096 — what the demo reported
+label ="bench done arm=tiles512 side=s4096 tiles=64 payload_bytes=67108864 frames=30"
+label ="bench go emit_p50_us=76652 emit_p95_us=88518 render_p50_us=77407 sync_p50_us=45433 total_p50_us=123723 total_p95_us=156002"
+label ="bench host interpret_p50_us=94140 interpret_p95_us=127329 written_p50_bytes=67119277"
+label ="bench cycle period_p50_us=123807 period_p95_us=156091 first_total_us=171779 first_interpret_us=132528 first_period_us=172167"
+# CPU time over the 20 s window, seconds (user, system) — perf below samples user time only
+client user=18.75 system=1.20
+go     user=2.59 system=4.44

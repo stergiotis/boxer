@@ -1,0 +1,12 @@
+date: 2026-11-14
+commit: e08d80422 (plus the uncommitted imagebench demo and this trial directory)
+cpu: AMD RYZEN AI MAX+ PRO 395 w/ Radeon 8060S, 32 logical cores
+memory: 122 GiB
+kernel: Linux 7.0.0-43-generic
+governor: powersave, epp: balance_performance
+go: go1.27.3 linux/amd64
+rustc: rustc 1.96.1 (31fca3adb 2026-06-26)
+egui / wgpu pinned: egui = "0.36.2", wgpu = { version = "30.0.1", optional = true }
+scene cadence: 240 Hz (FPS=240), window 1100x900
+load average at start: 2.29 3.18 4.35
+load average at end: 7.12 7.24 6.06

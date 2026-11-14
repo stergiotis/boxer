@@ -1,0 +1,11 @@
+# host client (cpu), tiles512 s4096: self
+# perf report --stdio --no-children --percent-limit 0.5, perf version 7.0.14
+    28.55%  [.] <alloc::vec::Vec<T> as alloc::vec::spec_from_iter_nested::SpecFromIterNested<T,I>>::from_iter
+    27.02%  [.] imzero2::imzero2::meshlane::TextureStore::ingest
+    19.12%  [.] <alloc::vec::Vec<T> as alloc::vec::spec_from_iter_nested::SpecFromIterNested<T,I>>::from_iter
+     5.85%  [.] imzero2::fffi::io::ImZeroFffiIo<R,W>::read_plain_u32h
+     5.25%  [.] __memmove_avx512_unaligned_erms
+     4.85%  [.] <alloc::vec::Vec<T> as alloc::vec::spec_from_iter_nested::SpecFromIterNested<T,I>>::from_iter
+     2.54%  [.] egui_software_backend::egui_texture::EguiTexture::sample_bilinear
+     0.81%  [.] _blake3_hash_many_avx512
+     0.66%  [.] egui_software_backend::color::avx2::Avx2Impl::dispatch_avx2
