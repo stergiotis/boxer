@@ -476,3 +476,11 @@ The general reconcile the 2026-08-07 Update left open now exists as
 default and drops them only when a caller asks — an undeclared name may
 belong to a fork or a downstream consumer, and hosts reconcile
 automatically at startup.
+
+## Update 2026-11-14 — the server floor is 26.8
+
+§Consequences left the minimum server version for lambda-parameter UDFs
+untested. boxer's ClickHouse floor is now 26.8
+([README § Requirements](../../README.md#requirements)), above the 26.7 the
+pack was verified on, so no supported server falls in the untested range.
+The install's feature probe stays, and its refusal names the floor.

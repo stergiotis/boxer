@@ -4,7 +4,8 @@ package play
 // the active result's query run again under `EXPLAIN ANALYZE`, which
 // executes it and annotates the plan with what each step measured — rows and
 // bytes in and out, wall time and its share of the execution, parallelism
-// (ClickHouse 26.7+).
+// (ClickHouse 26.7 and later; the house floor, 26.8, has it — README
+// § Requirements).
 //
 // It runs only when asked. Unlike the EXPLAIN AST probe, which is parse-only
 // and armed by every grammar-rejected buffer, this executes the whole query
@@ -237,7 +238,7 @@ func (inst *PlayApp) renderDiagAnalyze() {
 			diagWeak("This endpoint's SQL surface has no EXPLAIN: the query runs here, but cannot be profiled.")
 			return
 		}
-		c.Label("EXPLAIN ANALYZE failed (it needs ClickHouse 26.7 or later):").Wrap().Send()
+		c.Label("EXPLAIN ANALYZE failed:").Wrap().Send()
 		c.Label(v.err.Error()).Wrap().Selectable(true).Send()
 		return
 	}

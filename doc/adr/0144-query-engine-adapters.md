@@ -211,6 +211,14 @@ See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-d
 
 ## Updates
 
+### 2026-11-14 — 26.8 is the house floor
+
+boxer's ClickHouse floor is 26.8 ([README § Requirements](../../README.md#requirements)),
+so every supported server lets `X-ClickHouse-Format` win over the
+statement's clause. The format check of the 2026-10-24 entry stays: a body
+in another format now means a server below the floor, and the run still
+fails with both format names rather than delivering it.
+
 ### 2026-10-24 — engine 2 delivers the requested FORMAT or fails the run
 
 A statement's own FORMAT clause used to win over the requested one: `chserver`

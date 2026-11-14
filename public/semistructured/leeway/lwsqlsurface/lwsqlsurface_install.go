@@ -34,8 +34,8 @@ const featureProbeName = "leewaySurfaceFeatureProbe"
 // statement is CREATE OR REPLACE. Steps, each failing loudly rather than
 // degrading silently:
 //
-//  1. feature probe — lambda-parameter SQL UDFs (the floor was verified on
-//     ClickHouse 26.7; older servers are untested),
+//  1. feature probe — lambda-parameter SQL UDFs (verified on ClickHouse
+//     26.7, below the house floor of 26.8 — README § Requirements),
 //  2. collision check — no declared name may resolve to a non-UDF server
 //     function (e.g. a builtin arriving with a server upgrade),
 //  3. CREATE OR REPLACE the three function families in dependency order,
@@ -445,7 +445,7 @@ func probeLambdaSupport(ctx context.Context, conn Conn) (err error) {
 	// install replaces it.
 	_ = conn.Exec(ctx, "DROP FUNCTION IF EXISTS "+featureProbeName)
 	if e != nil {
-		err = eh.Errorf("server lacks lambda-parameter SQL UDF support (floor verified on ClickHouse 26.7): %w", e)
+		err = eh.Errorf("server lacks lambda-parameter SQL UDF support (boxer needs ClickHouse 26.8 or later): %w", e)
 	}
 	return
 }

@@ -32,8 +32,8 @@ the kernel underneath, or are extending it.
 Caveats up front:
 
 - Every example and edge-case claim on this page was executed verbatim against
-  ClickHouse 26.7; older servers may lack a few functions (`arrayFold`,
-  `arrayZipUnaligned`). The
+  ClickHouse 26.7, one release below boxer's floor of 26.8
+  ([README § Requirements](../../README.md#requirements)). The
   [ClickHouse array-function reference](https://clickhouse.com/docs/en/sql-reference/functions/array-functions)
   is authoritative for signatures.
 - These are hand-written-query idioms. The DQL read-back generator

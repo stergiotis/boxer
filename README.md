@@ -22,6 +22,31 @@ Rather than assembling best-of-breed parts with fragmented models and logs, boxe
 
 Boxer reimplements and vendors much of what mainstream practice imports or rents. The premises behind that trade — dependencies as owned liabilities with known incentives, problem-oriented description languages on a boring host, one machine-readable data model projected across memory / wire / storage, a toolkit that observes itself (runtime and code), mechanical sympathy as the efficiency posture, one machine-checked architect, and interfaces split by task complexity up to agentic operation — are stated, with their costs and failure modes, in [doc/explanation/why-boxer.md](doc/explanation/why-boxer.md). The full form of the statement above, and what each clause rests on, is in [doc/explanation/positioning-statement.md](doc/explanation/positioning-statement.md); the drawing behind its process and host clauses is [doc/ARCHITECTURE.md](doc/ARCHITECTURE.md).
 
+## Requirements
+The oldest versions boxer supports. Nothing older is tested; below a floor, expect failures rather than reduced function.
+
+| Component | Floor | Set by |
+| --- | --- | --- |
+| Go | **1.27.3** | the `go` directive in [`go.mod`](go.mod) ([ADR-0199](doc/adr/0199-adopt-go-1-27.md)) |
+| Rust | **1.96** | the highest `rust-version` a crate under [`rust/`](rust) declares (`rust/imzero2-viewer`; the renderer, `rust/imzero2`, declares 1.95). The build itself uses the toolchain each crate's `rust-toolchain` file pins, patch included — 1.96.1 — because two artifacts are byte-compared against committed blobs ([ADR-0215](doc/adr/0215-retire-mimalloc-reproducible-builds.md)) |
+| ClickHouse | **26.8** | this README; nothing in the tree pins or checks it. It holds for a server and for `clickhouse local` alike. At 26.8 a server lets `X-ClickHouse-Format` win over a statement's own `FORMAT` clause, which `chserver` relies on ([ADR-0144](doc/adr/0144-query-engine-adapters.md)); the lightweight `UPDATE` that watchbill's claim rests on is on by default there, at tier Beta ([ADR-0223](doc/adr/0223-watchbill-durable-work-on-facts.md)) |
+
+**The native Rust hosts are linked against the build machine's glibc.** The Go host has no libc dependency (`CGO_ENABLED=0`, set by [`scripts/dev/go-build-env.sh`](scripts/dev/go-build-env.sh)). The Rust hosts under `rust/imzero2` (desktop and headless alike) are dynamic glibc executables, so a host binary runs only where the glibc is as new as the build machine's and the CPU architecture is the same ([ARCHITECTURE §2.4](doc/ARCHITECTURE.md#24-what-the-appliance-adds)). This rule depends on the build machine, not on boxer, so the table can't give it a version. The appliance image avoids the question by shipping the glibc libraries the host links with ([ADR-0206](doc/adr/0206-gokrazy-appliance-image.md)).
+
+### Browser: needed only in some modes
+
+**boxer does not need a browser or any web stack to build, test or run.** The desktop host draws in a native window (winit and wgpu, through eframe). The command line, the integration lane and the headless test driver (`imzero2 drive`) need no display at all. No web view or JavaScript engine is linked into the Go host or into the native Rust hosts. A browser comes in only in two cases: when the person looking at the app sits at a different machine from the one running it, or when the app itself is built to run inside a tab. Which mode a deployment uses is its own choice; [ARCHITECTURE §2.8](doc/ARCHITECTURE.md#28-the-modes-side-by-side) compares them.
+
+| Mode | Where the app runs | What the viewer needs |
+| --- | --- | --- |
+| desktop | this machine, native window | no browser — a display server and a GPU driver |
+| headless pixel stream (GPU or CPU rasterized, appliance video) | a server or the appliance | a browser with **WebCodecs**, or the native Windows viewer under [`rust/imzero2-viewer`](rust/imzero2-viewer) (draft) |
+| headless mesh lane (appliance mesh) | a server or the appliance | a browser with **WebGL 2** |
+| tab mode | inside the browser tab, as wasm | a browser with **WebGL 2** |
+| SVG over HTTP, headless driver | a server | no browser — any HTTP client, or none |
+
+Each browser row names the feature the viewer has to support. No browser version is tested.
+
 ## Installation
 ```
 go get github.com/stergiotis/boxer
@@ -54,7 +79,7 @@ Boxer is a collection of packages under `public/`. The larger subsystems:
 ImZero **v1** (Dear ImGui-based) lives in [`imzero_imgui`](https://github.com/stergiotis/imzero_imgui). ImZero **v2** (egui-based) is part of this module: the Go side under `public/thestack/{imzero2,fffi2}`, its Rust egui renderer under `rust/imzero2`, and runnable demo applications under `apps/` (`play`, `imztop`, `tally`, `capdemo`, `capinspector`, `taskdemo`, …).
 
 ## Building
-Boxer requires **Go 1.27** (ADR-0199) and needs no build tags to compile. The set boxer itself builds with lives in [`./tags`](tags), which has been **empty** since ADR-0212. Pass it anyway to every `go build`, `go test`, and `go vet` invocation, so that what you build matches what CI builds and a tag added later reaches you:
+The toolchain floors are under [Requirements](#requirements). Boxer needs no build tags to compile. The set boxer itself builds with lives in [`./tags`](tags), which has been **empty** since ADR-0212. Pass it anyway to every `go build`, `go test`, and `go vet` invocation, so that what you build matches what CI builds and a tag added later reaches you:
 
 ```
 go build -tags="$(cat ./tags)" ./...

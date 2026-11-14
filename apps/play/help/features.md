@@ -1527,7 +1527,7 @@ shows only its first line — or the usual result summary.
 
 **Execution profile** runs only when you press **Profile the active result**,
 because it executes the query again: the active result's statement goes to the
-server under `EXPLAIN ANALYZE` (ClickHouse 26.7 or later), routed, rewritten and
+server under `EXPLAIN ANALYZE`, routed, rewritten and
 bound exactly as its Run was, and the result is discarded there. What comes
 back is the plan with what each step measured — rows and bytes in and out, wall
 time and its share of the execution, parallelism. The section shows the query's

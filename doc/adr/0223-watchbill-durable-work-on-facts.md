@@ -440,6 +440,14 @@ See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-d
 
 ## Updates
 
+### 2026-11-14 — the version floor is the repository's
+
+The ClickHouse version floor this ADR listed as a surface — 26.8, for the
+lightweight `UPDATE` the claim rests on — is now boxer's floor as a whole
+([README § Requirements](../../README.md#requirements)). The claim's
+dependence on a Beta-tier feature is unchanged: a later server line that
+withdraws it still takes the claim with it.
+
 ### 2026-09-14 — the client protocol, queues and worker presence are ADR-0234's
 
 [ADR-0234](./0234-watchbill-client-protocol-and-worker-presence.md)
