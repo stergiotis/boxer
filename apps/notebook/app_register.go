@@ -17,8 +17,10 @@
 // is handed the text and hands it back by this app's launch config
 // (notebook_handover.go).
 //
-// deferred: the phase machine of the window; serving the embedded play's
-// catalog; a tour entry. Each follows the first use that needs it.
+// deferred: serving the embedded play's catalog from this window, as an
+// applet window does. An agent works a notebook's statements in a play
+// window of its own and hands the buffer here; the forwarding follows the
+// first use that needs one window.
 package notebook
 
 import (
@@ -29,6 +31,7 @@ import (
 	"github.com/stergiotis/boxer/apps/notebook/launchcfg"
 	"github.com/stergiotis/boxer/public/config/env"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
+	"github.com/stergiotis/boxer/public/keelson/runtime/audioout"
 	"github.com/stergiotis/boxer/public/keelson/runtime/externaledit"
 	"github.com/stergiotis/boxer/public/keelson/runtime/help"
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
@@ -59,11 +62,16 @@ var manifest = app.Manifest{
 	Surface:  app.SurfaceWindowed,
 	// LaunchKind takes a notebook another app hands over (launchcfg).
 	LaunchKind: launchcfg.Kind,
+	// The open notebook is kept across a close (ADR-0148): by its snapshot,
+	// with its text when that was edited here.
+	Workingset: true,
 	Operations: ops.Catalog(),
 	Help:       help.MustSub(helpFS, "help"),
 	Caps: append(append(task.ProducerCaps(), externaledit.ClientCaps("notebook: hand the notebook's text to the host's editor app and take each save back")...),
 		app.SubjectFilter{Pattern: ladingpublish.Subject(mountTag), Direction: app.CapDirectionPub,
 			Reason: "notebook: publish a collected notebook and its stored results to the lading store, under the notebook mount tag (ADR-0371 §SD10)"},
+		app.SubjectFilter{Pattern: audioout.SubjectOpen, Direction: app.CapDirectionPub,
+			Reason: "notebook: play a recording the notebook holds"},
 		// The two below are declarations, not routes: nothing publishes on
 		// `ch.server.read.*`. They say what this process dials from the
 		// window's own code, where a reviewer looks for it (ADR-0026 §SD10).

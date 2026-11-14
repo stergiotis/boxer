@@ -4,6 +4,8 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/agentrun"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/appops"
+	"github.com/stergiotis/boxer/public/keelson/runtime/appops/fsmops"
+	"github.com/stergiotis/boxer/public/keelson/runtime/appops/opfsm"
 	"github.com/stergiotis/boxer/public/semistructured/markdown/mdnotebook"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/notebookview"
 )
@@ -122,6 +124,12 @@ var ops = func() (s *appops.Set[*App, snap]) {
 		sn.collecting = inst.collect.job.Running()
 		return
 	})
+	fsmops.Mount(s, "notebook", "where the window's notebook stands, from nothing open to sealed", func(inst *App) opfsm.SourceI {
+		if inst.phaseMachine == nil {
+			return nil
+		}
+		return inst.phaseMachine
+	}, fsmops.Options{History: 16})
 	s.Resource(resDocument, "the notebook's text", func(inst *App) any {
 		if inst.doc == nil {
 			return ""

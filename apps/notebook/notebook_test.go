@@ -14,6 +14,7 @@ import (
 	"github.com/stergiotis/boxer/apps/notebook/launchcfg"
 	"github.com/stergiotis/boxer/public/keelson/runtime/agentrun"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
+	"github.com/stergiotis/boxer/public/keelson/runtime/audioout/nowplaying"
 	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
 	"github.com/stergiotis/boxer/public/keelson/runtime/ladingpublish"
 	"github.com/stergiotis/boxer/public/semistructured/markdown/mdnotebook"
@@ -26,7 +27,7 @@ func TestTheCatalogRegisters(t *testing.T) {
 	m, ok := app.LookupManifest(AppId)
 	require.True(t, ok)
 	require.NotNil(t, m.Operations, app.DefaultRegistry.OperationsDiagnostic(AppId))
-	for _, name := range []string{opGetDocument, opCheckNotebook, opSetRecords, opShowFace, opOpenSample, opOpenSnapshot, opCollectNotebook} {
+	for _, name := range []string{opGetDocument, opCheckNotebook, opSetRecords, opShowFace, opOpenSample, opOpenSnapshot, opCollectNotebook, "notebook_state", "notebook_machine"} {
 		spec, found := m.Operations.Lookup(name)
 		require.True(t, found, name)
 		assert.True(t, spec.Agents, name)
@@ -280,4 +281,53 @@ func TestALaunchConfigHandsANotebookOver(t *testing.T) {
 	assert.Equal(t, "edited", other.handed)
 	assert.Equal(t, "w45.md", other.handedName)
 	assert.Nil(t, other.doc, "the snapshot is read first")
+}
+
+// A recording of the notebook is read from where the notebook's files are
+// and played by the window's player; a window that turns to another
+// document stops it.
+func TestARecordingIsPlayedFromTheNotebooksFiles(t *testing.T) {
+	t.Cleanup(scenetest.Install())
+	inst := newApp()
+	assert.Nil(t, inst.recordings(), "a window that was not mounted plays nothing")
+	inst.player = nowplaying.New(nil, nil)
+	require.NoError(t, inst.openSample("report"))
+	var rec string
+	for i := range inst.nb.Cells {
+		if cell := &inst.nb.Cells[i]; cell.Kind == mdnotebook.CellKindMedia {
+			rec = cell.Path
+		}
+	}
+	require.NotEmpty(t, rec, "the report sample holds a recording")
+
+	r := inst.recordings()
+	require.NotNil(t, r)
+	assert.False(t, r.State(rec).Active)
+	r.Toggle(rec)
+	deadline := time.Now().Add(5 * time.Second)
+	for st := r.State(rec); !st.Active || st.Opening; st = r.State(rec) {
+		require.True(t, time.Now().Before(deadline), "the recording did not open")
+		time.Sleep(time.Millisecond)
+	}
+	st := r.State(rec)
+	assert.True(t, st.Playing, st.Note)
+	assert.Contains(t, st.Note, "no output device", "a window with no bus plays on a silent clock")
+	r.Seek(rec, 0.5)
+	assert.InDelta(t, 0.5, r.State(rec).Fraction, 0.05)
+
+	r.Toggle("report.blobs/nothing.wav")
+	for st := r.State("report.blobs/nothing.wav"); !st.Active || st.Opening; st = r.State("report.blobs/nothing.wav") {
+		require.True(t, time.Now().Before(deadline), "the missing recording did not settle")
+		time.Sleep(time.Millisecond)
+	}
+	assert.Contains(t, r.State("report.blobs/nothing.wav").Note, "not played")
+
+	r.Toggle(rec)
+	for st := r.State(rec); !st.Active || st.Opening; st = r.State(rec) {
+		require.True(t, time.Now().Before(deadline), "the recording did not open again")
+		time.Sleep(time.Millisecond)
+	}
+	require.NoError(t, inst.openSample("minimal"))
+	assert.False(t, r.State(rec).Active, "another document's recording is not this one's")
+	require.NoError(t, inst.Unmount(nil))
 }

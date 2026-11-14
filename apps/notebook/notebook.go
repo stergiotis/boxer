@@ -14,6 +14,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/agentrun"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/appops"
+	"github.com/stergiotis/boxer/public/keelson/runtime/audioout/nowplaying"
 	"github.com/stergiotis/boxer/public/keelson/runtime/bgjob"
 	"github.com/stergiotis/boxer/public/keelson/runtime/externaledit"
 	"github.com/stergiotis/boxer/public/keelson/runtime/ladingpublish"
@@ -26,6 +27,7 @@ import (
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/badge"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/bgjobrow"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/editexternally"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/fsmview"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/notebookview"
 )
 
@@ -63,8 +65,9 @@ type document struct {
 	// fsys is the notebook's directory: where the blobs it names are found.
 	fsys fs.FS
 	// ref names the document in the lading store, nil for one that is not
-	// of a snapshot.
-	ref *snapshotRef
+	// of a snapshot; sample names the sample it is, "" for none.
+	ref    *snapshotRef
+	sample string
 	// edited says the text is no longer the one that was opened: a buffer
 	// was taken back into it.
 	edited bool
@@ -157,6 +160,21 @@ type App struct {
 	handNote string
 	handBusy bool
 
+	// phaseMachine mirrors where the notebook stands (notebook_machine.go)
+	// and phaseChip shows it in the status row.
+	phaseMachine *fsmview.Machine[phaseE]
+	phaseChip    *fsmview.View[phaseE]
+
+	// player plays the notebook's recordings (notebook_recordings.go);
+	// built at Mount, nil in a window that was not mounted.
+	player *nowplaying.Player
+
+	// statements is how the Read face shows a cell's statement.
+	statements notebookview.StatementsE
+	// touched says the person did something in the window: what makes its
+	// workingset worth keeping (ADR-0148 §SD4).
+	touched bool
+
 	// note is the outcome of the last gesture, shown in the status row.
 	note string
 	// clicked is where the face buttons write.
@@ -165,9 +183,10 @@ type App struct {
 
 var _ app.AppI = (*App)(nil)
 var _ app.OperationsAppI = (*App)(nil)
+var _ app.WorkingsetComposerI = (*App)(nil)
 
 func newApp() (inst *App) {
-	inst = &App{ids: c.NewWidgetIdStack()}
+	inst = &App{ids: c.NewWidgetIdStack(), phaseMachine: newPhaseMachine(), statements: notebookview.StatementsFolded}
 	inst.collect.tier = defaultTier()
 	return
 }
@@ -190,10 +209,15 @@ func (inst *App) Mount(ctx app.MountContextI) (err error) {
 		// A host without a lifetime scope (a bare test context).
 		inst.scope, inst.ownScope = lifetime.New(nil), true
 	}
-	// A launch config wins over the seeds (ADR-0135 §SD7).
-	handed, err := inst.handOver(ctx.LaunchConfig())
-	if handed || err != nil {
-		return
+	inst.player = nowplaying.New(inst.bus, inst.scope.Go)
+	// A caller's launch config wins over the seeds, and a seed over a
+	// restored workingset (ADR-0135 §SD7, ADR-0148 §SD5).
+	seeded := SampleSeed.Get() != "" || SnapshotSeed.Get() != ""
+	if !(seeded && ctx.LaunchReason() == app.LaunchReasonRestore) {
+		handed, hErr := inst.handOver(ctx.LaunchConfig())
+		if handed || hErr != nil {
+			return hErr
+		}
 	}
 	switch {
 	case SampleSeed.Get() != "":
@@ -209,6 +233,9 @@ func (inst *App) Mount(ctx app.MountContextI) (err error) {
 
 func (inst *App) Unmount(ctx app.MountContextI) (err error) {
 	inst.externalEdit.End()
+	if inst.player != nil {
+		inst.player.Stop()
+	}
 	inst.collect.job.Cancel()
 	inst.browse.list.Close()
 	inst.open.Close()
@@ -253,7 +280,7 @@ func (inst *App) openSample(name string) (err error) {
 		return
 	}
 	inst.opening = nil
-	inst.setDocument(&document{name: file, origin: "sample " + file, text: text, fsys: samples.FS()})
+	inst.setDocument(&document{name: file, origin: "sample " + file, sample: strings.TrimSuffix(file, ".md"), text: text, fsys: samples.FS()})
 	return
 }
 
@@ -266,14 +293,19 @@ func (inst *App) setText(text []byte) (changed bool) {
 	doc := *inst.doc
 	doc.text, doc.edited = text, true
 	inst.setDocument(&doc)
+	inst.touched = true
 	return true
 }
 
 // setDocument makes doc the window's document and reads its text.
 func (inst *App) setDocument(doc *document) {
 	if inst.doc != nil && inst.doc.origin != doc.origin {
-		// A text handed to the editor was the other document's.
+		// A text handed to the editor was the other document's, and so was
+		// a recording that plays.
 		inst.externalEdit.End()
+		if inst.player != nil {
+			inst.player.Stop()
+		}
 	}
 	inst.doc = doc
 	inst.nb, inst.docErr = nil, ""
@@ -411,7 +443,7 @@ func (inst *App) poll() (busy bool) {
 		return reading || !done
 	}
 	if inst.view == nil {
-		inst.view = notebookview.New(inst.ids, "notebook", notebookview.Options{Statements: notebookview.StatementsFolded})
+		inst.view = notebookview.New(inst.ids, "notebook", notebookview.Options{Statements: inst.statements, Recordings: inst.recordings()})
 	}
 	if inst.given != r {
 		// The view takes the prepared notebook and releases it; the lane's
@@ -439,6 +471,7 @@ const (
 func (inst *App) Frame(ctx app.FrameContextI) (err error) {
 	inst.landCollect()
 	inst.landHandOver()
+	inst.mirrorPhase()
 	if inst.poll() || inst.collect.job.Running() {
 		c.RequestRepaint()
 	}
@@ -544,6 +577,9 @@ func (inst *App) renderCollect(ctx app.FrameContextI) {
 		}
 		return
 	}
+	if inst.bufferDiffers() {
+		c.Label("The Records face holds statements the text does not: collection runs the text. Take the buffer back first to collect what is in the buffer.").Wrap().Send()
+	}
 	c.Label("Collecting runs the " + itoa(uint64(len(inst.records()))) + " records on the server and publishes the notebook with its stored results to the lading store, " +
 		"where everyone who reads the store reads them. State how confidential what the records read is:").Wrap().Send()
 	for range c.HorizontalTop().KeepIter() {
@@ -574,6 +610,7 @@ func (inst *App) renderCollect(ctx app.FrameContextI) {
 // on a lane and lands in a later frame.
 func (inst *App) openSnapshot(ref snapshotRef) {
 	inst.opening = &ref
+	inst.touched = true
 	inst.browse.shown = false
 	inst.note = "opening " + ref.String()
 }
@@ -634,6 +671,18 @@ func (inst *App) renderBrowse(ctx app.FrameContextI) {
 	c.Separator().Send()
 }
 
+// bufferDiffers says the embedded play's buffer would change the text if
+// it were taken back. Asked while the confirmation of a collection is
+// open, where the answer matters: collection runs the text.
+func (inst *App) bufferDiffers() bool {
+	if inst.inner == nil || inst.nb == nil || inst.doc == nil {
+		return false
+	}
+	text, err := mdnotebook.SetRecords(inst.nb, inst.inner.BufferSql(), "")
+	// A buffer the text cannot take is one the person is still working on.
+	return err != nil || string(text) != string(inst.doc.text)
+}
+
 // collectTiers are the tiers the confirmation offers, lowest first.
 var collectTiers = []agentrun.TierE{agentrun.TierClear, agentrun.TierGreen, agentrun.TierAmber, agentrun.TierAmberStrict, agentrun.TierRed}
 
@@ -656,18 +705,7 @@ func (inst *App) noteTakeBack(changed bool, err error) {
 
 func (inst *App) renderStatus() {
 	for range c.HorizontalTop().KeepIter() {
-		switch {
-		case inst.doc == nil:
-			badge.New(inst.ids.PrepareStr("state"), "nothing open").Tone(badge.ToneNeutral).Send()
-		case inst.nb == nil:
-			badge.New(inst.ids.PrepareStr("state"), "not a notebook").Tone(badge.ToneError).Send()
-		case !inst.checked:
-			badge.New(inst.ids.PrepareStr("state"), "reading").Tone(badge.ToneInfo).Send()
-		case inst.check.Sealed():
-			badge.New(inst.ids.PrepareStr("state"), "sealed").Tone(badge.ToneSuccess).Send()
-		default:
-			badge.New(inst.ids.PrepareStr("state"), "not sealed").Tone(badge.ToneWarning).Send()
-		}
+		inst.renderPhase()
 		if inst.doc != nil {
 			if inst.doc.edited {
 				badge.New(inst.ids.PrepareStr("edited"), "edited").Tone(badge.ToneWarning).
@@ -719,11 +757,33 @@ func (inst *App) renderRead() {
 		c.Label("Reading the notebook's stored results…").Send()
 		return
 	}
+	for range c.HorizontalTop().KeepIter() {
+		c.Label("statements").Send()
+		for i, mode := range statementModes {
+			for range c.IdScope(inst.ids.PrepareSeq(uint64(i))) {
+				if c.RadioButton(inst.ids.PrepareStr("statements"), c.Atoms().Text(mode.label).Keep(), inst.statements == mode.value).SendRespVal(&inst.clicked).HasPrimaryClicked() {
+					inst.statements = mode.value
+				}
+			}
+		}
+	}
+	inst.view.Opts.Statements = inst.statements
 	// The view draws into the Ui it is given and scrolls by it; the scroll
 	// area is the host's to provide.
 	for range c.ScrollArea().Vscroll(true).AutoShrink(false, false).KeepIter() {
 		inst.view.Render()
 	}
+}
+
+// statementModes are how the Read face shows a cell's statement: the
+// report, the report with each statement under a fold, the notebook.
+var statementModes = []struct {
+	label string
+	value notebookview.StatementsE
+}{
+	{"hidden", notebookview.StatementsHidden},
+	{"folded", notebookview.StatementsFolded},
+	{"shown", notebookview.StatementsOpen},
 }
 
 func (inst *App) renderRecords(ctx app.FrameContextI) (err error) {

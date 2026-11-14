@@ -34,7 +34,14 @@ one cell per renderer.
 
 - **Read** draws the notebook from what it stores. No server is asked. A
   record is a line that unfolds to its statement, a presentation cell is
-  its picture, and a figure in a sentence is the stored value.
+  its picture, and a figure in a sentence is the stored value. The
+  **statements** choice above it shows the report alone (*hidden*), each
+  statement under a fold (*folded*), or every statement (*shown*).
+  A recording has its waveform, and under it play or pause and the
+  position over its length. A click on the waveform moves the playhead, or
+  starts the recording there. One recording plays at a time, through the
+  output the host gives; where nothing is heard the row says why, and the
+  playhead moves all the same.
 - **Records** is a play window whose buffer is the notebook's records:
   each record a `WITH` query in document order, the last the buffer's own
   `SELECT`. Run it, bind panes to its nodes and change the statements
@@ -90,11 +97,19 @@ a snapshot never changes, and a file on disk the snapshot was taken from
 is not written. A notebook that is a file is collected on the command
 line, `boxer markdown notebook collect`.
 
+A window that is closed remembers its notebook: one of a snapshot by the
+snapshot, with its text when that was edited here, and a text that is of
+no snapshot whole. The next window opens on it.
+
 ## The status row
 
-The badge reads **sealed** when the notebook shows what it stores, **not
-sealed** otherwise, and **reading** while the stored results are read. The
-line beside it counts the records, the problems, the stale records and the
+The chip says where the notebook stands: **nothing open**, **opening** a
+snapshot, **reading** the stored results, **sealed** when the notebook
+shows what it stores, **stale** when a record was edited since collection
+and nothing else is wrong, **not sealed** for a problem or a cell with no
+answer, **not a notebook** for a text that cannot be read as one, and
+**collecting**. A click on it opens
+the phases and the gesture behind each move. The line beside it counts the records, the problems, the stale records and the
 presentation cells with no answer. **edited** says a buffer was taken back
 since the notebook was opened.
 
@@ -115,6 +130,8 @@ over a buffer are play's, in a play window.
 | `collect_notebook` | command, consequential, async | runs every record once on the server and publishes the notebook with its stored results as a new snapshot under the `Tier` the caller states; settles with the snapshot, and the person confirms an agent's call | no notebook is open; a collection is running; the tier is not one of the five; a record reads sealed data; the window has no bus; the store refuses the tree |
 | `show_face` | command, view | shows the read face or the records face | the face is neither |
 | `open_snapshot` | command, document | opens a notebook of a lading snapshot, named as `<mount, hex>@<snapshot, unix nanoseconds>:<path>`; the read lands in a later frame | the name is not of that form |
+| `notebook_state` | query | the notebook's current phase, the edges out of it and the last 16 transitions | never |
+| `notebook_machine` | query | every phase and every edge | never |
 | `open_sample` | command, document | opens a sample in place of the document | no sample of that name |
 
 To work on a notebook's statements: read the text with `get_document`,

@@ -130,6 +130,31 @@ func (inst *App) editInMdedit() {
 	}
 }
 
+// ComposeWorkingset is the host's closing-edge hook (ADR-0148 §SD4): the
+// launch config that opens this window's notebook again, written only when
+// the person did something in the window. A notebook of a snapshot is
+// named by its snapshot, with its text when that was edited here; a text
+// that is of no snapshot travels whole. A sample that was not edited is not
+// kept: an empty window offers it.
+func (inst *App) ComposeWorkingset() (cfg []byte, dirty bool, err error) {
+	doc := inst.doc
+	if !inst.touched || doc == nil || (doc.sample != "" && !doc.edited) {
+		return nil, false, nil
+	}
+	l := launchcfg.NotebookLaunch{Name: doc.name}
+	if r := doc.ref; r != nil {
+		l.Mount, l.SnapNanos, l.Path = r.mount.Value(), r.snap.UnixNano(), r.path
+	}
+	if doc.ref == nil || doc.edited {
+		l.Text = string(doc.text)
+	}
+	cfg, err = buscodec.Encode(l)
+	if err != nil {
+		return nil, false, eh.Errorf("notebook: encode workingset: %w", err)
+	}
+	return cfg, true, nil
+}
+
 // landHandOver takes the outcome of a hand-over into the status row.
 func (inst *App) landHandOver() {
 	inst.mu.Lock()

@@ -17,6 +17,8 @@ The notebook window of ADR-0371 §SD10 over the `report` sample. The Read
 face draws the notebook from what it stores; the Records face is a play
 window whose buffer is the notebook's records. Taking the buffer back
 without a change leaves the text as it was, and the status row says so.
+The recording in the report is played and paused: its transport shows the
+position over the length.
 Collection is opened as far as its confirmation, where the person states
 the tier, and cancelled: a scene has no store to publish to.
 
@@ -33,6 +35,14 @@ the records, the problems, the stale records and the refused cells.
 {"do":"expect","of":"refused","eq":0}
 {"do":"wait","valueContains":"519.5 ms","role":"label","comment":"the figure in the sentence, as stored"}
 {"do":"capture","text":"notebook-read","settleMs":800}
+
+{"do":"note","text":"--- the recording plays and is paused: the playhead holds, heard or not ---"}
+{"do":"click","contains":"Play","role":"button","settleMs":200}
+{"do":"wait","contains":"Pause","role":"button","nth":1,"comment":"the transport's, after the window chrome's own Pause; it plays, and a scene has no listener"}
+{"do":"click","contains":"Pause","role":"button","nth":1,"settleMs":300,"comment":"paused inside the recording's three seconds, so what follows does not race its end"}
+{"do":"wait","contains":"Play","role":"button"}
+{"do":"wait","valueContains":" / 0:03","role":"label","comment":"the position over the length"}
+{"do":"capture","text":"notebook-recording","settleMs":300}
 
 {"do":"note","text":"--- the records as a play buffer ---"}
 {"do":"click","name":"Records","role":"radio_button","settleMs":800}

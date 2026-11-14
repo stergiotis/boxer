@@ -238,6 +238,7 @@ func (inst *App) landCollect() {
 		cs.mount = res.ref.mount.Value()
 		ref := res.ref
 		inst.opening = &ref
+		inst.touched = true
 		inst.note = "collected " + itoa(uint64(len(res.records))) + " records and published " + itoa(res.files) +
 			" files to the lading store as " + ref.String() + ", kept until " + res.expires
 		return
