@@ -482,26 +482,63 @@ orders two records the other way round is refused, naming the record,
 since either is an edit of the text around the statements. A record whose
 statement changed is stale (SD8) until the notebook is collected.
 
-Collection is the app's, not play's: the embedded play's client runs each
-record, the blobs are written beside the file and then the text. It is a
-command the person confirms. Checking asks no server.
+**Where the document is.** The app opens a notebook from a lading snapshot
+([ADR-0198](./0198-fs-snapshot-store.md)), as mdedit
+opens a snapshot document: the text is a file of the snapshot and its blobs
+are the files beside it. The host's file broker grants one file to read or
+to write and a folder to watch, and none of the three reads a folder's
+files or writes into one, so a notebook opened through it would have no
+blobs and nowhere to put new ones.
 
-The app does not edit prose or presentation cells in its first cut. The
-text is edited in any editor and read again.
+Collection is the app's, not play's. Each record's statement is sent as
+the command line sends it, on a connection of the app's own: play's run
+path bounds a result's rows and rewrites the statement, which serve
+exploring and would store something other than what the statement
+answers. The text with its blobs is published as a new snapshot through
+the host's write path into the store
+([ADR-0341](./0341-lading-publish-a-write-only-capability-with-the-placement-check-at-the-door.md)),
+under a mount tag of the app's own. The window then shows that snapshot. It
+is a command the person confirms. Checking asks no server.
+
+The write path takes the tree's confidentiality tier as the caller's
+statement (ADR-0341 §SD3), and a notebook's stored results are whatever its
+records read, which the app does not know. So the person states the tier
+where they confirm the collection, starting from the highest tier the
+store may hold; an agent's call names it as an argument and the person
+confirms the call. Whether the tree is confined is derived, not stated: a
+notebook whose records name sealed data, by the test play's dispatch
+applies, is refused before anything runs.
+
+A snapshot does not change, so every edit the app makes — a buffer taken
+back, a collection — leads to a new one, and a file on disk the snapshot
+was taken from is not written. The command line of SD8 stays the way to
+collect a notebook that is a file.
+
+The app does not edit prose or presentation cells in its first cut. With
+the document in the store an editor on disk does not reach it, so that
+text arrives with the snapshot: from an ingest of a folder, or from mdedit
+for a document it holds.
 
 **Operations.** The split follows what an operation concerns. Play has the
 ones over *the buffer as records*: `get_notebook`, and its inverse
 `set_notebook`, which replaces the buffer with a notebook's records. The
 app has the ones over *the document and its files*: reading it, checking
-it, and asking for collection. The app serves the embedded play's catalog
-under play's names beside its own, as an applet window does, so an agent
-works on the records and on the document through one window.
+it, writing a buffer into its records, and asking for collection. An agent
+works the statements in a play window and hands the buffer to the app.
+Serving the embedded play's catalog from the app's window, as an applet
+window does, would make that one window; it waits for a use that needs
+it.
 
 Rejected: collection in play, since play has no folder and a window that
 writes files beside a document it does not hold; a pane of play that draws
 the notebook, since play's buffer is one statement and has no place for
 prose or presentation cells; an editor for the text in the first cut,
-which doubles it for a need any editor meets.
+which doubles it. For the document's place: a folder grant in the file
+broker, which keeps a notebook an ordinary file for every tool and costs a
+change to what the broker may hand an app; and the app's own data area,
+where a notebook is hidden from every other tool and travels without its
+blobs. The store was chosen (2026-11-14) as the place that needs no new
+grant and that mdedit and the snapshot browser already read.
 
 ## Surfaces — Tier 1
 
@@ -713,26 +750,29 @@ which doubles it for a need any editor meets.
 - **M10 — The app.** The two faces, check and collection, and the app's
   operations (SD10).
 
-M1 to M5 and M7 to M9 are in the tree as of 2026-11-14. M6 and M10 are not
-built.
+M1 to M5 and M7 to M9 are in the tree as of 2026-11-14, and of M10 the two
+faces, the check and the operations over the document, for a notebook
+opened from a sample or from a snapshot named in the environment. M6 is
+not built, nor is the hand-over that opens a notebook from the snapshot
+browser. M10's collection is in the tree and has run against a stood-in
+server and store only.
 
 ## Open questions
 
 - **Q1 — The name.** "Notebook" is a working name beside applet, chatlet and
   workstatelet.
-- **Q2 — Hosts and the folder.** mdedit's Read mode draws a notebook
-  loaded from a snapshot, where its blobs are found as a snapshot
-  document's images are. A notebook opened from a single file or held in
-  the persist store has no place to read blobs from and is drawn as
-  markdown. SD10 gives the notebook an app; which grant of the host's file
-  broker carries a file together with the folder beside it, for reading
-  and for collection's writes, is settled when the app is built, and so is
-  whether mdedit's Read mode stays once it exists. A host takes a document
-  for a notebook when it holds a record, listed or written as a cell: an
-  applet document spells its panels as a notebook spells presentation
-  cells, and without a record such a cell has nothing to read. Whether the
-  reading mode shows the statements is open too: it draws the report, and
-  the text is in the other modes.
+- **Q2 — Hosts beside the app.** mdedit's Read mode draws a notebook
+  loaded from a snapshot, and SD10's app opens one from a snapshot too; a
+  notebook opened from a single file or held in the persist store has no
+  place to read blobs from and is drawn as markdown. Whether mdedit's Read
+  mode stays once the app exists, and how the text of a notebook in the
+  store is edited — in the app, or by a hand-over to mdedit that publishes
+  what it saves — are open. A host takes a document for a notebook when it
+  holds a record, listed or written as a cell: an applet document spells
+  its panels as a notebook spells presentation cells, and without a record
+  such a cell has nothing to read. Whether the reading mode shows the
+  statements is open too: it draws the report, and the text is in the
+  other modes.
 - **Q3 — Parameters.** A buffer's `SET param_*` prelude has no place in the
   text: SD6 refuses a record that starts with `SET`. A notebook with
   parameters would need them in its frontmatter and in the hash SD8 keeps
@@ -749,6 +789,10 @@ built.
 - **Q8 — Panels that read their play instance.** Whether the table and the
   detail pane become renderers, and whether the cell stack's `table` and
   play's then remain two.
+- **Q10 — A tier that is derived.** SD10 has the person state the tier of
+  a collected notebook. Deriving it — from the snapshot the notebook was
+  opened from, or from a label the tables its records read would carry —
+  needs a label to read, and a query's result carries none in this tree.
 - **Q9 — Media beyond a recording.** A media cell is drawn by its blob's
   extension, and the Detail pane's block faces (ADR-0123) draw content by
   media type. Whether the two share one registry is not decided; a recording
