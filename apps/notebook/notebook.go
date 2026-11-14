@@ -719,7 +719,11 @@ func (inst *App) renderRead() {
 		c.Label("Reading the notebook's stored results…").Send()
 		return
 	}
-	inst.view.Render()
+	// The view draws into the Ui it is given and scrolls by it; the scroll
+	// area is the host's to provide.
+	for range c.ScrollArea().Vscroll(true).AutoShrink(false, false).KeepIter() {
+		inst.view.Render()
+	}
 }
 
 func (inst *App) renderRecords(ctx app.FrameContextI) (err error) {
