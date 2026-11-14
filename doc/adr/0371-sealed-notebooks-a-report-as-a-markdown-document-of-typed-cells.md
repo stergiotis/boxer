@@ -751,11 +751,12 @@ grant and that mdedit and the snapshot browser already read.
   operations (SD10).
 
 M1 to M5 and M7 to M9 are in the tree as of 2026-11-14, and of M10 the two
-faces, the check and the operations over the document, for a notebook
-opened from a sample or from a snapshot named in the environment. M6 is
-not built, nor is the hand-over that opens a notebook from the snapshot
-browser. M10's collection is in the tree and has run against a stood-in
-server and store only.
+faces, the check, the operations over the document and collection, for a
+notebook opened from a sample or from the store, which the window lists.
+M6 is not built, nor is a launch kind by which another app opens a
+notebook here. A collection, the store's refusal of a tier above its
+ceiling, and the opening of the snapshot it wrote are run in the
+integration lane against a server and a store of the test's own.
 
 ## Open questions
 

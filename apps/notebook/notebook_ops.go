@@ -22,6 +22,7 @@ const (
 	opSetRecords    = "set_records"
 	opShowFace      = "show_face"
 	opOpenSample    = "open_sample"
+	opOpenSnapshot  = "open_snapshot"
 	// opCollectNotebook writes outside the window, to the lading store:
 	// consequential, so the person confirms an agent's call every time.
 	opCollectNotebook = "collect_notebook"
@@ -93,6 +94,11 @@ type CollectOutcome struct {
 	Files     uint64   `desc:"the files of the snapshot: the text, the stored results and what the notebook names beside them"`
 	Bytes     uint64   `desc:"their bytes"`
 	KeptUntil string   `desc:"the day the snapshot expires"`
+}
+
+// OpenSnapshotArgs is open_snapshot's argument.
+type OpenSnapshotArgs struct {
+	Snapshot string `desc:"a notebook in the lading store, as <mount id, hex>@<snapshot, unix nanoseconds>:<path in the snapshot>: what get_document gives as Origin after the word snapshot, and collect_notebook as Snapshot"`
 }
 
 // OpenSampleArgs is open_sample's argument.
@@ -192,6 +198,18 @@ var ops = func() (s *appops.Set[*App, snap]) {
 			if err := inst.openSample(in.Name); err != nil {
 				return appops.None{}, app.RefuseOperation(err.Error())
 			}
+			return appops.None{}, nil
+		})
+	appops.Command(s, app.OperationSpec{Name: opOpenSnapshot, Version: 1,
+		Summary: "open a notebook of a lading snapshot in place of the window's document; its stored results are read from the files beside it",
+		Effect:  app.OperationEffectDocument, Writes: []string{resDocument}, Agents: true, Gesture: "Open…, then a file of the list",
+		Follows: []string{"the snapshot is read off the frame: get_document gives the new Origin once it has landed, and the status row says when it could not be opened"}},
+		func(inst *App, call app.OperationCall, in OpenSnapshotArgs) (appops.None, error) {
+			ref, err := parseSnapshotRef(in.Snapshot)
+			if err != nil {
+				return appops.None{}, app.RefuseOperation(err.Error())
+			}
+			inst.openSnapshot(ref)
 			return appops.None{}, nil
 		})
 	// Collection runs off the frame and settles when the snapshot was

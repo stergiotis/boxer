@@ -19,8 +19,11 @@ records and stores the results.
 ## Opening a notebook
 
 A notebook is opened from a lading snapshot, where its stored results lie
-beside its text. A window is given one with the variable
-`BOXER_NOTEBOOK_SNAPSHOT`, as `<mount, hex>@<snapshot, unix nanoseconds>:<path>`.
+beside its text. **Open…** lists the markdown files of the store — the
+newest snapshot of each mount, at its root and one folder down — and a
+click opens one; a file that holds a record is a notebook. A new window is
+given one with the variable `BOXER_NOTEBOOK_SNAPSHOT`, as
+`<mount, hex>@<snapshot, unix nanoseconds>:<path>`.
 An empty window offers the three samples: `minimal`, a notebook in two
 records; `report`, a report that leads with its figures; and `renderers`,
 one cell per renderer.
@@ -89,6 +92,7 @@ over a buffer are play's, in a play window.
 | `set_records` | command, document | writes a play buffer into the record cells by name; the buffer's own `SELECT` is the last record, or the one `Sink` names | no notebook is open; the buffer is not a notebook's (a parameter, a `SET`, a `WITH` expression); it drops or reorders a record |
 | `collect_notebook` | command, consequential, async | runs every record once on the server and publishes the notebook with its stored results as a new snapshot under the `Tier` the caller states; settles with the snapshot, and the person confirms an agent's call | no notebook is open; a collection is running; the tier is not one of the five; a record reads sealed data; the window has no bus; the store refuses the tree |
 | `show_face` | command, view | shows the read face or the records face | the face is neither |
+| `open_snapshot` | command, document | opens a notebook of a lading snapshot, named as `<mount, hex>@<snapshot, unix nanoseconds>:<path>`; the read lands in a later frame | the name is not of that form |
 | `open_sample` | command, document | opens a sample in place of the document | no sample of that name |
 
 To work on a notebook's statements: read the text with `get_document`,

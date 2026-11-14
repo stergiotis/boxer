@@ -44,7 +44,7 @@ func TestHelpNamesEveryOperation(t *testing.T) {
 	for _, m := range helpOperationRow.FindAllStringSubmatch(string(raw), -1) {
 		documented[m[1]]++
 	}
-	for _, name := range []string{opGetDocument, opCheckNotebook, opSetRecords, opShowFace, opOpenSample, opCollectNotebook} {
+	for _, name := range []string{opGetDocument, opCheckNotebook, opSetRecords, opShowFace, opOpenSample, opOpenSnapshot, opCollectNotebook} {
 		assert.Equalf(t, 1, documented[name], "the operation %s has one row in the overview", name)
 		_, declared := manifest.Operations.Lookup(name)
 		assert.Truef(t, declared, "the catalog declares %s", name)

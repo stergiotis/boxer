@@ -121,6 +121,15 @@ type App struct {
 	run     mdnotebook.RunFunc
 	publish func(ladingpublish.Request) (ladingpublish.Result, error)
 
+	// browse is the panel that lists the store's markdown files: shown
+	// says it is open, seq names the listing it wants, and list is the lane
+	// one is read on.
+	browse struct {
+		shown bool
+		seq   uint64
+		list  bgjob.Keyed[*listing]
+	}
+
 	// note is the outcome of the last gesture, shown in the status row.
 	note string
 	// clicked is where the face buttons write.
@@ -164,6 +173,7 @@ func (inst *App) Mount(ctx app.MountContextI) (err error) {
 
 func (inst *App) Unmount(ctx app.MountContextI) (err error) {
 	inst.collect.job.Cancel()
+	inst.browse.list.Close()
 	inst.open.Close()
 	inst.read.Close()
 	if inst.view != nil {
@@ -354,6 +364,8 @@ const (
 	labelRecords   = "Records"
 	labelTakeBack  = "Take the buffer back"
 	labelCollect   = "Collect…"
+	labelOpen      = "Open…"
+	tipOpen        = "List the markdown files of the lading store, the newest snapshot of each mount, and open one."
 	labelCollectGo = "Collect and publish"
 	tipCollect     = "Run every record once on the server and publish the notebook with its stored results as a new snapshot. Asks for the confidentiality tier first."
 	tipTier        = "The tier is your statement of how confidential the stored results are: the window cannot know what the records read. The store refuses a tier above its ceiling."
@@ -366,6 +378,7 @@ func (inst *App) Frame(ctx app.FrameContextI) (err error) {
 		c.RequestRepaint()
 	}
 	inst.renderToolbar(ctx)
+	inst.renderBrowse(ctx)
 	inst.renderCollect(ctx)
 	inst.renderStatus()
 	c.Separator().Send()
@@ -412,6 +425,13 @@ func (inst *App) renderToolbar(ctx app.FrameContextI) {
 					SendResp().HasPrimaryClicked() {
 					sql := inst.inner.BufferSql()
 					gesture(ctx, opSetRecords, SetRecordsArgs{Sql: sql}, func() { inst.takeBack(sql) })
+				}
+			}
+		}
+		if !inst.browse.shown {
+			for range c.HoverText(tipOpen).KeepIter() {
+				if c.Button(inst.ids.PrepareStr("open"), c.Atoms().Text(labelOpen).Keep()).SendResp().HasPrimaryClicked() {
+					inst.browse.shown = true
 				}
 			}
 		}
@@ -469,6 +489,70 @@ func (inst *App) renderCollect(ctx app.FrameContextI) {
 			cs.armed = false
 		}
 	}
+}
+
+// openSnapshot makes the window open the notebook ref names; the read runs
+// on a lane and lands in a later frame.
+func (inst *App) openSnapshot(ref snapshotRef) {
+	inst.opening = &ref
+	inst.browse.shown = false
+	inst.note = "opening " + ref.String()
+}
+
+// renderBrowse draws the panel that lists the store's markdown files, the
+// newest snapshot of each mount.
+func (inst *App) renderBrowse(ctx app.FrameContextI) {
+	b := &inst.browse
+	if !b.shown {
+		return
+	}
+	l, done, err, busy := b.list.Demand(itoa(b.seq), func(ctx context.Context) (*listing, error) {
+		sc, cErr := connectLading(ctx)
+		if cErr != nil {
+			return nil, cErr
+		}
+		defer sc.close()
+		return sc.list(ctx)
+	})
+	for range c.HorizontalTop().KeepIter() {
+		c.Label("Open from the lading store").Send()
+		if c.Button(inst.ids.PrepareStr("browseRefresh"), c.Atoms().Text("Refresh").Keep()).SendResp().HasPrimaryClicked() {
+			b.seq++
+		}
+		if c.Button(inst.ids.PrepareStr("browseClose"), c.Atoms().Text("Close").Keep()).SendResp().HasPrimaryClicked() {
+			b.shown = false
+		}
+	}
+	switch {
+	case busy || !done:
+		c.RequestRepaint()
+		c.Label("Reading the lading store…").Send()
+	case err != nil:
+		c.Label("The lading store could not be read: " + err.Error()).Wrap().Send()
+	case l == nil || len(l.files) == 0:
+		c.Label("The lading store holds no markdown file. Collecting a notebook puts it there, and so does taking a folder of notebooks into the store.").Wrap().Send()
+	default:
+		line := itoa(uint64(len(l.files))) + " markdown files, the newest snapshot of each mount; one that holds a record is a notebook"
+		if l.truncated {
+			line = "the first " + line + " (the store holds more)"
+		}
+		c.Label(line).Send()
+		for range c.ScrollArea().Vscroll(true).MaxHeight(220).AutoShrink(false, true).KeepIter() {
+			for i := range l.files {
+				f := l.files[i]
+				for range c.IdScope(inst.ids.PrepareSeq(uint64(i))) {
+					for range c.HorizontalTop().KeepIter() {
+						if c.Button(inst.ids.PrepareStr("stored"), c.Atoms().Text(f.mount+" · "+f.ref.path).Keep()).SendResp().HasPrimaryClicked() {
+							ref := f.ref
+							gesture(ctx, opOpenSnapshot, OpenSnapshotArgs{Snapshot: ref.String()}, func() { inst.openSnapshot(ref) })
+						}
+						c.Label("snapshot of " + f.ref.snap.UTC().Format("2006-01-02 15:04") + " UTC").Send()
+					}
+				}
+			}
+		}
+	}
+	c.Separator().Send()
 }
 
 // collectTiers are the tiers the confirmation offers, lowest first.
@@ -533,8 +617,8 @@ func (inst *App) renderEmpty(ctx app.FrameContextI) {
 	if inst.docErr != "" {
 		c.Label(inst.docErr).Wrap().Send()
 	}
-	c.Label("No notebook is open. A notebook is opened from a lading snapshot, where its stored results lie beside it; " +
-		"until the snapshot browser opens one here, a window is given one with BOXER_NOTEBOOK_SNAPSHOT. The samples are at hand:").Wrap().Send()
+	c.Label("No notebook is open. A notebook is opened from a lading snapshot, where its stored results lie beside it: Open… lists the store. " +
+		"The samples are at hand too, and collecting one puts it in the store:").Wrap().Send()
 	for range c.HorizontalTop().KeepIter() {
 		for i, file := range samples.Names() {
 			name := strings.TrimSuffix(file, ".md")
