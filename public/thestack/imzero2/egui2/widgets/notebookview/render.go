@@ -55,7 +55,6 @@ func (inst *View) Render() (ev Events) {
 		}
 		inst.renderProblems()
 	}
-	inst.drawn = inst.Opts.Statements
 	inst.scrollSection, inst.scrollOffset = "", -1
 	return inst.events
 }
@@ -122,37 +121,86 @@ func (inst *View) renderCell(i int) {
 	}
 	for range inst.cellFrame(cell, cv).KeepIter() {
 		for range c.Vertical().KeepIter() {
-			inst.renderCellBody(i, cell, cv)
+			if inst.header(cell, cv) {
+				inst.renderCellBody(i, cell, cv)
+			}
 		}
 	}
+}
+
+// hasBody says whether a cell has anything under its header. A record's
+// body is its statement: with the statements hidden it is one line.
+func (inst *View) hasBody(cell *mdnotebook.Cell, cv *cellView) bool {
+	if cell.Kind == mdnotebook.CellKindRecord {
+		return inst.Opts.Statements == StatementsShown || cv.stale != ""
+	}
+	return true
+}
+
+// header draws a cell's header: its title, which is the fold of the whole
+// cell, and its state, so a folded cell still says what it is and whether
+// something is wrong with it. It reports whether the body is to be drawn;
+// under a folded header nothing is built, so a folded cell costs its
+// header alone.
+func (inst *View) header(cell *mdnotebook.Cell, cv *cellView) (open bool) {
+	title := cv.title
+	if cell.Kind == mdnotebook.CellKindPresentation && inst.Opts.Statements == StatementsShown {
+		// As the fence spells it, beside the statement it heads.
+		title = "sql " + title
+	}
+	body := inst.hasBody(cell, cv)
+	for range c.Horizontal().KeepIter() {
+		if body {
+			caret := icons.PhCaretDown
+			if cv.folded {
+				caret = icons.PhCaretRight
+			}
+			if c.Button(inst.ids.PrepareStr("fold"), c.Atoms().Text(caret+" "+title).Keep()).Frame(false).
+				SendResp().HasPrimaryClicked() {
+				cv.folded = !cv.folded
+				if inst.folds == nil {
+					inst.folds = make(map[string]bool)
+				}
+				if cv.folded {
+					inst.folds[cv.foldKey] = true
+				} else {
+					delete(inst.folds, cv.foldKey)
+				}
+				// The cell was drawn before the click was known.
+				c.RequestRepaint()
+			}
+		} else {
+			weakLabel(title)
+		}
+		switch {
+		case cv.refusal != nil:
+			kind, _ := refusalText(cv.refusal)
+			badge.New(inst.ids.PrepareStr("state"), kind).Tone(badge.ToneError).Send()
+		case cv.mediaErr != "":
+			badge.New(inst.ids.PrepareStr("state"), "media").Tone(badge.ToneError).Send()
+		case cv.stale != "", cv.staleRead != "":
+			badge.New(inst.ids.PrepareStr("state"), "stale").Tone(badge.ToneWarning).Send()
+		}
+	}
+	return body && !cv.folded
 }
 
 func (inst *View) renderCellBody(i int, cell *mdnotebook.Cell, cv *cellView) {
 	switch cell.Kind {
 	case mdnotebook.CellKindRecord:
 		if cv.stale != "" {
-			for range c.Horizontal().KeepIter() {
-				badge.New(inst.ids.PrepareStr("stale"), "stale").Tone(badge.ToneWarning).Send()
-				weakLabel(cv.stale)
-			}
+			weakLabel(cv.stale)
 		}
-		inst.statement(cell, cv)
+		inst.statement(cv)
 	case mdnotebook.CellKindPresentation:
-		inst.statement(cell, cv)
+		inst.statement(cv)
 		inst.renderResult(cell, cv)
 	case mdnotebook.CellKindMedia:
-		switch {
-		case cv.mediaErr != "":
-			for range c.Horizontal().KeepIter() {
-				badge.New(inst.ids.PrepareStr("media"), "media").Tone(badge.ToneError).Send()
-				c.Label(cv.mediaErr).Send()
-			}
-		default:
-			inst.recording(i, cell, cv)
-			if cell.Alt != "" {
-				weakLabel(cell.Alt)
-			}
+		if cv.mediaErr != "" {
+			c.Label(cv.mediaErr).Send()
+			return
 		}
+		inst.recording(i, cell, cv)
 	}
 }
 
@@ -254,39 +302,22 @@ func (inst *View) claims(url string) bool {
 
 // statement draws a cell's SQL under a fold named by its title. Hidden, a
 // record is its title alone and a presentation cell draws nothing here.
-func (inst *View) statement(cell *mdnotebook.Cell, cv *cellView) {
-	mode := inst.Opts.Statements
-	if mode == StatementsHidden {
-		if cell.Kind == mdnotebook.CellKindRecord {
-			weakLabel(cv.title)
-		}
-		return
-	}
-	h := c.CollapsingHeader(inst.ids.PrepareStr("statement"), c.WidgetText().Text(cv.title).Keep())
-	if mode != inst.drawn {
-		// The frame the option changes on sets every fold; after it the
-		// fold is the reader's.
-		h = h.Open(mode == StatementsOpen)
-	}
-	for range h.KeepIter() {
+// statement draws a cell's statement, where statements are shown.
+func (inst *View) statement(cv *cellView) {
+	if inst.Opts.Statements == StatementsShown {
 		inst.markdown(cv.doc, nil)
 	}
 }
 
 func (inst *View) renderResult(cell *mdnotebook.Cell, cv *cellView) {
+	// The header carries the badge; here is what it stands for.
 	if cv.refusal != nil {
-		kind, text := refusalText(cv.refusal)
-		for range c.Horizontal().KeepIter() {
-			badge.New(inst.ids.PrepareStr("refusal"), kind).Tone(badge.ToneError).Send()
-			c.Label(text).Send()
-		}
+		_, text := refusalText(cv.refusal)
+		c.Label(text).Send()
 		return
 	}
 	if cv.staleRead != "" {
-		for range c.Horizontal().KeepIter() {
-			badge.New(inst.ids.PrepareStr("stale"), "stale").Tone(badge.ToneWarning).Send()
-			weakLabel(cv.staleRead)
-		}
+		weakLabel(cv.staleRead)
 	}
 	drawn := false
 	if cell.Renderer != mdnotebook.RendererTable {

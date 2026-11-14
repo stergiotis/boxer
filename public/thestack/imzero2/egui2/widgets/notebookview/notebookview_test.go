@@ -179,3 +179,45 @@ func BenchmarkRenderFixture(b *testing.B) {
 	}
 	b.ReportMetric(float64(messages())/float64(b.N), "messages/frame")
 }
+
+// A folded cell builds nothing under its header: its renderer is not
+// called. The fold is kept when the notebook is set again, and FoldAll
+// folds and unfolds every cell that has a header.
+func TestAFoldedCellBuildsNothing(t *testing.T) {
+	t.Cleanup(scenetest.Install())
+	v := notebookview.New(c.NewWidgetIdStack(), "fold", notebookview.Options{Statements: notebookview.StatementsHidden})
+	defer v.Close()
+	src, err := fs.ReadFile(fixture.FS(), fixture.Name)
+	require.NoError(t, err)
+	nb, err := mdnotebook.Read(src)
+	require.NoError(t, err)
+	before := len(chartCalls)
+	v.SetNotebook(nb, fixture.FS())
+	charts := chartCalls[before:]
+	require.Len(t, charts, 2)
+	frame(v)
+	assert.Equal(t, 1, *charts[0])
+	assert.Zero(t, v.Folded())
+
+	v.FoldAll(true)
+	assert.Positive(t, v.Folded())
+	frame(v)
+	frame(v)
+	assert.Equal(t, 1, *charts[0], "a folded cell's renderer is not called")
+	assert.Equal(t, 1, *charts[1])
+
+	// Set again: the folds are the reader's and are kept.
+	before = len(chartCalls)
+	v.SetNotebook(nb, fixture.FS())
+	again := chartCalls[before:]
+	require.Len(t, again, 2)
+	assert.Positive(t, v.Folded())
+	frame(v)
+	assert.Zero(t, *again[0])
+
+	v.FoldAll(false)
+	assert.Zero(t, v.Folded())
+	frame(v)
+	assert.Equal(t, 1, *again[0])
+	assert.Equal(t, 1, *again[1])
+}

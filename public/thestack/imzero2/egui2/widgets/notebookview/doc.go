@@ -4,9 +4,10 @@
 //
 // Package mdnotebook reads the text; the view stacks the notebook's cells. A
 // prose cell goes through the markdown widget, which is not extended; every
-// other cell is drawn by its kind: a record as its folded statement, a
-// presentation cell as its folded statement over its result, a media cell
-// by its media type. Each of those is set in from a rule along its left
+// other cell is drawn by its kind under a header: a record as its
+// statement, a presentation cell as its statement over its result, a media
+// cell by its media type. The header folds the whole cell, and a folded
+// cell builds nothing under it. Each of those is set in from a rule along its left
 // edge, which spans the cell and takes the tone of its state: neutral as
 // collected, warning when stale, error when it has nothing to show. A presentation
 // cell names its renderer; `table` is built in and [RegisterRenderer] adds

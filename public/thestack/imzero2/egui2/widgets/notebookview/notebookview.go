@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"io/fs"
+	"path"
 	"strconv"
 	"strings"
 	"time"
@@ -22,27 +23,24 @@ import (
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/recordtable"
 )
 
-// StatementsE is how a notebook's SQL is drawn.
+// StatementsE is whether a notebook's SQL is drawn.
 type StatementsE uint8
 
 const (
-	// StatementsFolded draws each statement under a fold the reader opens.
-	StatementsFolded StatementsE = iota
+	// StatementsShown draws each statement in its cell, over its result:
+	// the notebook.
+	StatementsShown StatementsE = iota
 	// StatementsHidden draws no statement: the report. A record is one
 	// line that says what is stored; a presentation cell is its result.
 	StatementsHidden
-	// StatementsOpen draws every statement unfolded: the notebook.
-	StatementsOpen
 )
 
-var AllStatements = []StatementsE{StatementsFolded, StatementsHidden, StatementsOpen}
+var AllStatements = []StatementsE{StatementsShown, StatementsHidden}
 
 // Options configure a view. The view re-reads them every frame.
 type Options struct {
-	// Statements is how the SQL is drawn. A change folds or unfolds every
-	// statement once; the reader's own folding holds until the next change,
-	// and under StatementsOpen until the next notebook, which is unfolded
-	// like the first.
+	// Statements is whether the SQL is drawn. Folding is the reader's and
+	// is of whole cells: see [View.FoldAll].
 	Statements StatementsE
 	// LinkClaims lets the host take the links it recognises in the
 	// notebook's prose, as [markdown.Input.LinkClaims] does; a click on one
@@ -268,6 +266,11 @@ type cellView struct {
 	// noRenderer then says so, for a name that is not the table's.
 	renderer   CellRenderer
 	noRenderer string
+	// folded says the reader folded the cell to its header: nothing under
+	// it is built. foldKey names the cell for the fold to outlive a
+	// notebook set again.
+	folded  bool
+	foldKey string
 	// grid is the table's state, at one address for the life of the
 	// notebook; gridFrames counts the frames it was drawn in.
 	grid       recordtable.State
@@ -293,9 +296,9 @@ type View struct {
 	// notebook: the pin is a hash over the records.
 	pinLabel   string
 	staleLabel string
-	// drawn is the Statements value the folds were last set for: the value
-	// the last frame drew with, until a notebook is set.
-	drawn StatementsE
+	// folds are the cells the reader folded, by fold key: a notebook set
+	// again — its text edited, its records collected — keeps them.
+	folds map[string]bool
 	// scrollSection and scrollOffset are one-shot scroll targets for the
 	// next Render; scrollOffset is -1 for none.
 	scrollSection string
@@ -384,12 +387,6 @@ func (inst *View) Set(p *Prepared) {
 	if len(inst.stale) > 0 {
 		inst.staleLabel = "edited since collection: " + strings.Join(inst.stale, ", ")
 	}
-	// A statement drawn for the first time starts folded, whatever the
-	// option says: have the next frame unfold a notebook set under
-	// StatementsOpen.
-	if inst.drawn == StatementsOpen {
-		inst.drawn = StatementsFolded
-	}
 	popts := markdown.ParseOptions{Resolver: imageResolver{images: p.images}}
 	fence := func(c *mdnotebook.Cell) *markdown.Doc {
 		// The statement alone: the id line is not part of what is shown.
@@ -405,6 +402,7 @@ func (inst *View) Set(p *Prepared) {
 			cv.doc = markdown.ParseWith([]byte(nb.Text(i)), popts)
 		case mdnotebook.CellKindRecord:
 			cv.doc = fence(cell)
+			cv.foldKey = "record:" + cell.Name
 			cv.title = "record " + cell.Id
 			if rec, found := inst.loaded.Records[cell.Name]; found {
 				cv.title += " — " + shape(rec)
@@ -421,7 +419,10 @@ func (inst *View) Set(p *Prepared) {
 			}
 		case mdnotebook.CellKindPresentation:
 			cv.doc = fence(cell)
-			cv.title = "sql " + cell.Renderer
+			// Its place among the cells names it: a presentation cell has no
+			// id of its own, so a cell put in above it moves its fold.
+			cv.foldKey = "cell:" + strconv.Itoa(i) + ":" + cell.Renderer
+			cv.title = cell.Renderer
 			if cv.result != nil {
 				for _, name := range cv.result.Reads {
 					edited, stale := inst.loaded.StaleSource(name)
@@ -440,8 +441,46 @@ func (inst *View) Set(p *Prepared) {
 					cv.noRenderer = "no renderer named " + cell.Renderer + "; shown as a table"
 				}
 			}
+		case mdnotebook.CellKindMedia:
+			cv.foldKey = "media:" + cell.Path
+			cv.title = "recording " + path.Base(cell.Path)
+			if cell.Alt != "" {
+				cv.title = "recording — " + cell.Alt
+			}
+		}
+		cv.folded = inst.folds[cv.foldKey]
+	}
+}
+
+// FoldAll folds every cell to its header, or unfolds every one. A cell's
+// fold is otherwise the reader's, by a click on its header, and is kept
+// when the notebook is set again.
+func (inst *View) FoldAll(folded bool) {
+	if inst.folds == nil {
+		inst.folds = make(map[string]bool)
+	}
+	for i := range inst.cells {
+		cv := &inst.cells[i]
+		if cv.foldKey == "" {
+			continue
+		}
+		cv.folded = folded
+		if folded {
+			inst.folds[cv.foldKey] = true
+		} else {
+			delete(inst.folds, cv.foldKey)
 		}
 	}
+}
+
+// Folded counts the cells that are folded.
+func (inst *View) Folded() (n int) {
+	for i := range inst.cells {
+		if inst.cells[i].folded {
+			n++
+		}
+	}
+	return
 }
 
 func problemText(p mdnotebook.Problem) string {

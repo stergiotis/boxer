@@ -44,8 +44,9 @@ func init() {
 //
 //   - the text is the artefact: the view is handed the fixture's markdown
 //     and its directory, nothing else;
-//   - a report is the notebook with its statements folded, and "show
-//     statements" is the only difference between the two;
+//   - a report is the notebook with its statements hidden, and that is
+//     the only difference between the two; a cell's header folds the whole
+//     cell, statement and result;
 //   - editing a record's statement makes what is stored stale, and every
 //     cell that reads the record says so, while nothing is recomputed;
 //   - a presentation renderer is registered under a name by the package
@@ -111,6 +112,12 @@ func demoNotebook(ids *c.WidgetIdStack, st *notebookDemoState) {
 			}
 		}
 		c.Checkbox(ids.PrepareStr("edited"), st.edited, "edit a record's statement").SendRespVal(&st.edited)
+		if c.Button(ids.PrepareStr("foldAll"), c.Atoms().Text("Fold all").Keep()).SendResp().HasPrimaryClicked() {
+			st.view.FoldAll(true)
+		}
+		if c.Button(ids.PrepareStr("unfoldAll"), c.Atoms().Text("Unfold all").Keep()).SendResp().HasPrimaryClicked() {
+			st.view.FoldAll(false)
+		}
 	}
 	if st.edited != st.applied {
 		st.load()
@@ -119,6 +126,7 @@ func demoNotebook(ids *c.WidgetIdStack, st *notebookDemoState) {
 	nb := st.view.Notebook()
 	c.Label(fmt.Sprintf("notebook: %d cells · %d records · %d problems", len(nb.Cells), len(nb.Records), len(st.view.Problems()))).Send()
 	c.Label(fmt.Sprintf("renderers: %d registered", len(notebookview.RegisteredRenderers()))).Send()
+	c.Label(fmt.Sprintf("folded: %d cells", st.view.Folded())).Send()
 	if st.last != "" {
 		c.Label("last: " + st.last).Send()
 	}
@@ -138,6 +146,5 @@ var notebookStatementModes = []struct {
 	value notebookview.StatementsE
 }{
 	{"hidden (report)", notebookview.StatementsHidden},
-	{"folded", notebookview.StatementsFolded},
-	{"open (notebook)", notebookview.StatementsOpen},
+	{"shown (notebook)", notebookview.StatementsShown},
 }

@@ -35,8 +35,12 @@ one cell per renderer.
 - **Read** draws the notebook from what it stores. No server is asked. A
   record is a line that unfolds to its statement, a presentation cell is
   its picture, and a figure in a sentence is the stored value. The
-  **statements** choice above it shows the report alone (*hidden*), each
-  statement under a fold (*folded*), or every statement (*shown*).
+  **statements** choice above it draws each cell's statement (*shown*, the
+  notebook) or none (*hidden*, the report). Every cell has a header, and a
+  click on it folds the whole cell — statement and result — to that line,
+  which still says what the cell is and whether it is stale or refused.
+  **Fold all** and **Unfold all** do it for every cell; a fold is kept when
+  the text changes.
   A recording has its waveform, and under it play or pause and the
   position over its length. A click on the waveform moves the playhead, or
   starts the recording there. One recording plays at a time, through the

@@ -23,8 +23,8 @@ them, so a binary without play fails the scene instead of showing tables.
 Five captures. The first is the report: no statement drawn, every record
 fresh, the figures in the opening sentence equal to what the records hold.
 The second switches the second chart alone to bars: two cells of one
-renderer keep their own state. The third folds each statement under its
-cell, the fourth unfolds them: the notebook. The fifth is after an edit to
+renderer keep their own state. The third folds one cell to its header, the
+fourth shows the statements: the notebook. The fifth is after an edit to
 one record's statement: what is stored is no longer what the statement would
 compute, and the cells that read that record say so while still showing it.
 
@@ -58,13 +58,16 @@ the state; the two cells that filter and compute say what was refused.
 {"do":"capture","text":"notebook-second-chart-bars","settleMs":800}
 {"do":"click","name":"Line","nth":1}
 
-{"do":"note","text":"--- folded: each statement under a fold the reader opens ---"}
-{"do":"click","name":"folded","role":"radio_button"}
-{"do":"wait","contains":"record stats","settleMs":400}
+{"do":"note","text":"--- a cell folded to its header: the whole cell, and nothing under it is built ---"}
+{"do":"click","contains":"chart","role":"button","nth":0,"settleMs":400,"comment":"the first chart's header"}
+{"do":"wait","value":"folded: 1 cells","role":"label"}
 {"do":"capture","text":"notebook-folded","settleMs":800}
+{"do":"click","name":"Unfold all","role":"button","settleMs":400}
+{"do":"wait","value":"folded: 0 cells","role":"label"}
 
-{"do":"note","text":"--- the notebook: the same text with its statements unfolded ---"}
-{"do":"click","name":"open (notebook)","role":"radio_button"}
+{"do":"note","text":"--- the notebook: the same text with its statements shown ---"}
+{"do":"click","name":"shown (notebook)","role":"radio_button"}
+{"do":"wait","contains":"record stats","role":"button","settleMs":400,"comment":"a record's header, over its statement"}
 {"do":"capture","text":"notebook-statements","settleMs":800}
 {"do":"click","name":"hidden (report)","role":"radio_button"}
 

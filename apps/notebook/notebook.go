@@ -186,7 +186,7 @@ var _ app.OperationsAppI = (*App)(nil)
 var _ app.WorkingsetComposerI = (*App)(nil)
 
 func newApp() (inst *App) {
-	inst = &App{ids: c.NewWidgetIdStack(), phaseMachine: newPhaseMachine(), statements: notebookview.StatementsFolded}
+	inst = &App{ids: c.NewWidgetIdStack(), phaseMachine: newPhaseMachine(), statements: notebookview.StatementsShown}
 	inst.collect.tier = defaultTier()
 	return
 }
@@ -766,6 +766,12 @@ func (inst *App) renderRead() {
 				}
 			}
 		}
+		if c.Button(inst.ids.PrepareStr("foldAll"), c.Atoms().Text("Fold all").Keep()).SendResp().HasPrimaryClicked() {
+			inst.view.FoldAll(true)
+		}
+		if c.Button(inst.ids.PrepareStr("unfoldAll"), c.Atoms().Text("Unfold all").Keep()).SendResp().HasPrimaryClicked() {
+			inst.view.FoldAll(false)
+		}
 	}
 	inst.view.Opts.Statements = inst.statements
 	// The view draws into the Ui it is given and scrolls by it; the scroll
@@ -775,15 +781,14 @@ func (inst *App) renderRead() {
 	}
 }
 
-// statementModes are how the Read face shows a cell's statement: the
-// report, the report with each statement under a fold, the notebook.
+// statementModes are whether the Read face shows a cell's statement: the
+// notebook, or the report.
 var statementModes = []struct {
 	label string
 	value notebookview.StatementsE
 }{
+	{"shown", notebookview.StatementsShown},
 	{"hidden", notebookview.StatementsHidden},
-	{"folded", notebookview.StatementsFolded},
-	{"shown", notebookview.StatementsOpen},
 }
 
 func (inst *App) renderRecords(ctx app.FrameContextI) (err error) {

@@ -91,7 +91,7 @@ func demoNotebookSamples(ids *c.WidgetIdStack, st *notebookSamplesState) {
 	}
 	st.view.Opts.Statements = notebookview.StatementsHidden
 	if st.statements {
-		st.view.Opts.Statements = notebookview.StatementsOpen
+		st.view.Opts.Statements = notebookview.StatementsShown
 	}
 	nb := st.view.Notebook()
 	c.Label(fmt.Sprintf("sample: %d cells · %d records · %d problems", len(nb.Cells), len(nb.Records), len(st.view.Problems()))).Send()
