@@ -7,6 +7,7 @@ import (
 	"io/fs"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/apache/arrow-go/v18/arrow"
 
@@ -53,6 +54,38 @@ type Options struct {
 	// handed a box of this height at most: one written to fill its pane
 	// fills the box, not the rest of the window.
 	ResultMaxHeight float32
+	// Recordings plays the notebook's recordings: with one, a recording's
+	// cell has a transport under its waveform and a playhead on it. Nil
+	// leaves a recording drawn and not heard; a click on it is still
+	// reported in [Events.Media].
+	Recordings RecordingsI
+}
+
+// RecordingState is one recording's playback as its cell shows it.
+type RecordingState struct {
+	// Active says the recording is the one the host plays or has paused.
+	Active bool
+	// Opening says it is being read or its output opened.
+	Opening bool
+	Playing bool
+	// Fraction is the playhead in [0, 1] and Position the same as a time.
+	Fraction float64
+	Position time.Duration
+	// Note says why nothing is heard, "" when it is.
+	Note string
+}
+
+// RecordingsI is what plays a notebook's recordings. The view holds no
+// output and reads no file while it draws: the host does both, and the view
+// asks it once per frame for each recording it shows. path is a media
+// cell's path, relative to the notebook.
+type RecordingsI interface {
+	// State reports the recording's playback.
+	State(path string) RecordingState
+	// Toggle plays or pauses it; starting one stops whichever played.
+	Toggle(path string)
+	// Seek moves its playhead when it is the one that plays.
+	Seek(path string, fraction float64)
 }
 
 // ValClick is a click on a figure in a sentence.
@@ -89,6 +122,8 @@ type preparedCell struct {
 	cols    []recordtable.Column
 
 	overview *peaks.Overview
+	// duration is a recording's length.
+	duration time.Duration
 	mediaErr string
 }
 
@@ -191,7 +226,7 @@ func Prepare(nb *mdnotebook.Notebook, fsys fs.FS) (p *Prepared) {
 				pc.cols = columnsOf(pc.result.Main)
 			}
 		case mdnotebook.CellKindMedia:
-			pc.overview, pc.mediaErr = overviewOf(p.loaded.Assets[cell.Path])
+			pc.overview, pc.duration, pc.mediaErr = overviewOf(p.loaded.Assets[cell.Path])
 		}
 	}
 	for _, img := range nb.Images {
@@ -451,20 +486,21 @@ func columnsOf(rec arrow.RecordBatch) (cols []recordtable.Column) {
 	return
 }
 
-func overviewOf(a mdnotebook.Asset) (overview *peaks.Overview, problem string) {
+func overviewOf(a mdnotebook.Asset) (overview *peaks.Overview, duration time.Duration, problem string) {
 	if a.Err != nil {
-		return nil, a.Err.Error()
+		return nil, 0, a.Err.Error()
 	}
 	data := a.Data
 	f, err := wavfile.NewReader(bytes.NewReader(data), int64(len(data)))
 	if err != nil {
-		return nil, err.Error()
+		return nil, 0, err.Error()
 	}
+	duration = f.Format().FramesToDuration(f.Frames())
 	overview, err = peaks.ComputeOverview(context.Background(), f, overviewColumns)
 	if err != nil {
-		return nil, err.Error()
+		return nil, 0, err.Error()
 	}
-	return overview, ""
+	return overview, duration, ""
 }
 
 // refusalText is what a cell shows in place of a result it has not got.

@@ -5,7 +5,9 @@ import (
 
 	"github.com/apache/arrow-go/v18/arrow"
 
+	"github.com/stergiotis/boxer/public/hmi/gloss"
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
+	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
 	"github.com/stergiotis/boxer/public/semistructured/markdown/mdnotebook"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/badge"
@@ -146,16 +148,75 @@ func (inst *View) renderCellBody(i int, cell *mdnotebook.Cell, cv *cellView) {
 				c.Label(cv.mediaErr).Send()
 			}
 		default:
-			res := waveform.RenderThumbnail(waveform.ThumbnailInput{
-				Ids: inst.ids, Key: "wave", Overview: cv.overview, W: thumbW, H: thumbH, Progress: -1,
-			})
-			if res.Clicked {
-				inst.events.Media = append(inst.events.Media, MediaClick{Cell: i, Path: cell.Path, Fraction: res.Fraction})
-			}
+			inst.recording(i, cell, cv)
 			if cell.Alt != "" {
 				weakLabel(cell.Alt)
 			}
 		}
+	}
+}
+
+// recordingRepaintHz keeps a playhead moving while its recording plays.
+const recordingRepaintHz = 30
+
+// recording draws a recording: its waveform, and with a host that plays
+// recordings a playhead on it and the transport under it — play or pause,
+// the position over the length, and why nothing is heard when nothing is.
+// A click on the waveform moves the playhead of the recording that plays
+// and starts one that does not; it is reported either way.
+func (inst *View) recording(i int, cell *mdnotebook.Cell, cv *cellView) {
+	player := inst.Opts.Recordings
+	var st RecordingState
+	if player != nil {
+		st = player.State(cell.Path)
+	}
+	progress := -1.0
+	if st.Active && !st.Opening {
+		progress = st.Fraction
+	}
+	res := waveform.RenderThumbnail(waveform.ThumbnailInput{
+		Ids: inst.ids, Key: "wave", Overview: cv.overview, W: thumbW, H: thumbH, Progress: progress,
+	})
+	if res.Clicked {
+		inst.events.Media = append(inst.events.Media, MediaClick{Cell: i, Path: cell.Path, Fraction: res.Fraction})
+		if player != nil {
+			if !st.Active {
+				player.Toggle(cell.Path)
+			}
+			player.Seek(cell.Path, res.Fraction)
+			c.RequestRepaint()
+		}
+	}
+	if player == nil {
+		return
+	}
+	for range c.HorizontalTop().KeepIter() {
+		// The word beside the glyph is the button's name: what a person
+		// reads and a scene clicks.
+		label := icons.PhPlay + " Play"
+		if st.Playing {
+			label = icons.PhPause + " Pause"
+		}
+		for range c.EnabledUi(!st.Opening).KeepIter() {
+			if c.Button(inst.ids.PrepareStr("toggle"), c.Atoms().Text(label).Keep()).Small().
+				SendResp().HasPrimaryClicked() {
+				player.Toggle(cell.Path)
+				// The row was drawn before the click was known: a paused
+				// recording asks for no frame of its own.
+				c.RequestRepaint()
+			}
+		}
+		readout := gloss.FormatClock(cv.duration)
+		if st.Active {
+			readout = gloss.FormatClock(st.Position) + " / " + readout
+		}
+		c.LabelAtoms(c.Atoms().BeginRichText(readout).Small().Monospace().End().Keep()).Selectable(false).Send()
+		if st.Note != "" {
+			weakLabel(st.Note)
+		}
+	}
+	if st.Playing || st.Opening {
+		c.RequestRepaintAfter(1.0 / recordingRepaintHz)
 	}
 }
 

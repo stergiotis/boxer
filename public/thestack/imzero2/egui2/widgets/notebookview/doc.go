@@ -18,8 +18,11 @@
 // markdown is parsed. [View.SetNotebook] is both, for files that are at
 // hand.
 //
-// What it does not do: play audio (a click on a recording is reported), or
-// fold cells under headings.
+// A recording is heard through the host: the view holds no output. A host
+// that gives it [Options.Recordings] gets a transport and a playhead on
+// each recording; one that does not gets the waveform and the click.
+//
+// What it does not do: fold cells under headings.
 //
 // Readbacks in [Events] are one frame behind, as every widget's are.
 package notebookview
