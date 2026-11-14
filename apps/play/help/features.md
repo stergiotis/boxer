@@ -394,7 +394,8 @@ so you can tune the patterns without leaving the panel.
   cell over it. Pasted into a file, `boxer markdown notebook collect`
   computes and stores the results. A buffer with parameters, a WITH
   expression or a node computed in play is refused, with the part a notebook
-  cannot hold in the status bar.
+  cannot hold in the status bar. **Notebook renderers** lists the panes a
+  notebook's cell can name and what each reads.
 - **Edit in** `<editor>` (shown when the host registers one editor app, such as
   a terminal; ADR-0365) hands the buffer to that app. Each save there
   replaces the buffer while it still holds what was handed over; if you

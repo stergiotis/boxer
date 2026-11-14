@@ -35,6 +35,7 @@ func TestHelpCorpusIndexes(t *testing.T) {
 		"snippets":              false,
 		"howto-example-queries": false,
 		helpOperationsDoc:       false,
+		helpRenderersDoc:        false,
 	}
 	for _, d := range b.Docs() {
 		if _, expected := want[d.Path]; !expected {
