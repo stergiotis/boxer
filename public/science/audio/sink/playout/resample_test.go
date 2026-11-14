@@ -1,4 +1,4 @@
-package pulsesink
+package playout
 
 import (
 	"math"
