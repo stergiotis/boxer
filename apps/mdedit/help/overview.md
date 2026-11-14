@@ -67,6 +67,13 @@ The side panel shows one view at a time, chosen by its tabs: the outline or
 the files. It needs a window wide enough to spare it, and hides itself
 below that.
 
+**Open in notebook** appears when the document is a sealed notebook, one
+that holds a record (ADR-0371). It opens the notebook window on the text
+as it stands here, with the snapshot the document was read from, so the
+stored results it names are found there. That window is where a
+notebook's records are worked on and where it is collected; it hands a
+text here with **Edit in mdedit**.
+
 ## The source pane
 
 The source is syntax-coloured, with headings, code and emphasis set in their

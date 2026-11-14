@@ -220,5 +220,5 @@ func (inst *storeConn) open(ref snapshotRef) (doc *document, err error) {
 	if err != nil {
 		return nil, err
 	}
-	return &document{name: path.Base(ref.path), origin: "snapshot " + ref.String(), text: h.Data, fsys: dir}, nil
+	return &document{name: path.Base(ref.path), origin: "snapshot " + ref.String(), text: h.Data, fsys: dir, ref: &ref}, nil
 }

@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/stergiotis/boxer/apps/notebook/launchcfg"
 	"github.com/stergiotis/boxer/public/keelson/runtime/agentrun"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
@@ -235,4 +236,48 @@ func TestCollectPublishesTheNotebookUnderTheStatedTier(t *testing.T) {
 	assert.Contains(t, inst.note, "not collected")
 	assert.Nil(t, inst.opening)
 	require.NoError(t, inst.Unmount(nil))
+}
+
+// A launch config opens the notebook it carries: a text alone is shown
+// with no stored result, a snapshot is opened with the text that came
+// along kept for when it lands, and bytes that do not decode fail the open.
+func TestALaunchConfigHandsANotebookOver(t *testing.T) {
+	t.Cleanup(scenetest.Install())
+	text, err := fs.ReadFile(samples.FS(), "minimal.md")
+	require.NoError(t, err)
+
+	inst := newApp()
+	handed, err := inst.handOver(nil)
+	require.NoError(t, err)
+	assert.False(t, handed)
+	_, err = inst.handOver([]byte("not a launch config"))
+	require.ErrorContains(t, err, "decode launch config")
+
+	raw, err := buscodec.Encode(launchcfg.NotebookLaunch{Text: string(text), Name: "draft.md"})
+	require.NoError(t, err)
+	handed, err = inst.handOver(raw)
+	require.NoError(t, err)
+	require.True(t, handed)
+	doc, err := query[Document](t, inst.Operations(), opGetDocument)
+	require.NoError(t, err)
+	assert.Equal(t, "draft.md", doc.Name)
+	assert.Equal(t, "handed over as draft.md", doc.Origin)
+	read(t, inst)
+	ck, err := query[CheckReport](t, inst.Operations(), opCheckNotebook)
+	require.NoError(t, err)
+	assert.False(t, ck.Sealed, "the text has no file beside it: nothing it stores is found")
+	assert.NotEmpty(t, ck.Problems)
+	require.NoError(t, inst.Unmount(nil))
+
+	other := newApp()
+	raw, err = buscodec.Encode(launchcfg.NotebookLaunch{Text: "edited", Mount: 0x2a, SnapNanos: 1731500000000000000, Path: "reports/./w45.md"})
+	require.NoError(t, err)
+	handed, err = other.handOver(raw)
+	require.NoError(t, err)
+	require.True(t, handed)
+	require.NotNil(t, other.opening)
+	assert.Equal(t, "2a@1731500000000000000:reports/w45.md", other.opening.String())
+	assert.Equal(t, "edited", other.handed)
+	assert.Equal(t, "w45.md", other.handedName)
+	assert.Nil(t, other.doc, "the snapshot is read first")
 }

@@ -24,7 +24,9 @@ newest snapshot of each mount, at its root and one folder down — and a
 click opens one; a file that holds a record is a notebook. A new window is
 given one with the variable `BOXER_NOTEBOOK_SNAPSHOT`, as
 `<mount, hex>@<snapshot, unix nanoseconds>:<path>`.
-An empty window offers the three samples: `minimal`, a notebook in two
+Another app opens a notebook here by the launch kind `notebookLaunch`,
+as mdedit's **Open in notebook** does. An empty window offers the three
+samples: `minimal`, a notebook in two
 records; `report`, a report that leads with its figures; and `renderers`,
 one cell per renderer.
 
@@ -45,6 +47,26 @@ buffer adds becomes a record cell after the one before it. A buffer that
 drops one of the notebook's records, or orders two of them the other way
 round, is refused and the status row says which record: both are edits of
 the text around the statements.
+
+## Editing the text
+
+The window has no editor for prose and presentation cells; the text is
+edited elsewhere and comes back.
+
+- **Edit in mdedit** opens mdedit on the notebook's text, with the snapshot
+  the notebook is of. There, **Open in notebook** opens a notebook window
+  on the text as it then stands. Each hand-over opens a window, and neither
+  window follows the other afterwards.
+- Where the host registers an editor app of its own, the bar offers **Edit
+  in** that editor instead. Each save there replaces the text here, unless
+  the text was changed here meanwhile; then the save waits until it is
+  taken or the text here is kept.
+
+A text that comes back is shown over the stored results of the snapshot it
+left with, and the status row says **edited**: a record whose statement
+changed is stale, and nothing is stored until the notebook is collected. A
+text that left without a snapshot, as a sample's does, comes back alone and
+finds no stored result beside it.
 
 ## Collecting
 

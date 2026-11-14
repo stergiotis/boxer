@@ -5,6 +5,7 @@ import (
 	"io/fs"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/rs/zerolog"
 
@@ -14,7 +15,9 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/appops"
 	"github.com/stergiotis/boxer/public/keelson/runtime/bgjob"
+	"github.com/stergiotis/boxer/public/keelson/runtime/externaledit"
 	"github.com/stergiotis/boxer/public/keelson/runtime/ladingpublish"
+	"github.com/stergiotis/boxer/public/keelson/runtime/lifetime"
 	"github.com/stergiotis/boxer/public/keelson/runtime/task"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/semistructured/markdown/mdnotebook"
@@ -22,6 +25,7 @@ import (
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/badge"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/bgjobrow"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/editexternally"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/notebookview"
 )
 
@@ -58,6 +62,9 @@ type document struct {
 	text   []byte
 	// fsys is the notebook's directory: where the blobs it names are found.
 	fsys fs.FS
+	// ref names the document in the lading store, nil for one that is not
+	// of a snapshot.
+	ref *snapshotRef
 	// edited says the text is no longer the one that was opened: a buffer
 	// was taken back into it.
 	edited bool
@@ -130,6 +137,26 @@ type App struct {
 		list  bgjob.Keyed[*listing]
 	}
 
+	// externalEdit is the notebook's text handed to the host's editor app,
+	// whose saves come back as the text (ADR-0365): how prose and
+	// presentation cells are edited. It ends when the window turns to
+	// another document.
+	externalEdit externaledit.Editing
+
+	// handed is a text a launch carried for the snapshot being opened: put
+	// in place of the snapshot's when it lands, as an edit of it.
+	handed     string
+	handedName string
+	// scope is the window's lifetime, where a hand-over's round trip runs;
+	// ownScope says the host gave none. handNote is what the last one came
+	// to, written off the frame under mu, and handBusy that one is in
+	// flight.
+	scope    *lifetime.Scope
+	ownScope bool
+	mu       sync.Mutex
+	handNote string
+	handBusy bool
+
 	// note is the outcome of the last gesture, shown in the status row.
 	note string
 	// clicked is where the face buttons write.
@@ -159,6 +186,15 @@ func (inst *App) Mount(ctx app.MountContextI) (err error) {
 	inst.runId = ctx.RunId()
 	inst.instanceKey = ctx.InstanceKey()
 	inst.tasks = task.ForApp(ctx)
+	if inst.scope = app.LifetimeOf(ctx); inst.scope == nil {
+		// A host without a lifetime scope (a bare test context).
+		inst.scope, inst.ownScope = lifetime.New(nil), true
+	}
+	// A launch config wins over the seeds (ADR-0135 §SD7).
+	handed, err := inst.handOver(ctx.LaunchConfig())
+	if handed || err != nil {
+		return
+	}
 	switch {
 	case SampleSeed.Get() != "":
 		err = inst.openSample(SampleSeed.Get())
@@ -172,6 +208,7 @@ func (inst *App) Mount(ctx app.MountContextI) (err error) {
 }
 
 func (inst *App) Unmount(ctx app.MountContextI) (err error) {
+	inst.externalEdit.End()
 	inst.collect.job.Cancel()
 	inst.browse.list.Close()
 	inst.open.Close()
@@ -187,6 +224,9 @@ func (inst *App) Unmount(ctx app.MountContextI) (err error) {
 	if inst.store != nil {
 		inst.store.close()
 		inst.store = nil
+	}
+	if inst.ownScope && inst.scope != nil {
+		inst.scope.Retire()
 	}
 	return
 }
@@ -217,8 +257,24 @@ func (inst *App) openSample(name string) (err error) {
 	return
 }
 
+// setText puts text in place of the document's, as an edit of it: the
+// records it changed are stale until the notebook is collected.
+func (inst *App) setText(text []byte) (changed bool) {
+	if inst.doc == nil || string(text) == string(inst.doc.text) {
+		return false
+	}
+	doc := *inst.doc
+	doc.text, doc.edited = text, true
+	inst.setDocument(&doc)
+	return true
+}
+
 // setDocument makes doc the window's document and reads its text.
 func (inst *App) setDocument(doc *document) {
+	if inst.doc != nil && inst.doc.origin != doc.origin {
+		// A text handed to the editor was the other document's.
+		inst.externalEdit.End()
+	}
 	inst.doc = doc
 	inst.nb, inst.docErr = nil, ""
 	inst.checked, inst.check = false, notebookview.Check{}
@@ -241,13 +297,7 @@ func (inst *App) setRecords(sql string, sink string) (changed bool, err error) {
 	if err != nil {
 		return false, app.RefuseOperation(err.Error())
 	}
-	if string(text) == string(inst.doc.text) {
-		return false, nil
-	}
-	doc := *inst.doc
-	doc.text, doc.edited = text, true
-	inst.setDocument(&doc)
-	return true, nil
+	return inst.setText(text), nil
 }
 
 // records are the notebook's record names, in document order.
@@ -317,14 +367,22 @@ func (inst *App) poll() (busy bool) {
 			return true
 		case err != nil || o == nil:
 			inst.opening = nil
+			msg := ""
 			if err != nil {
-				msg := "the snapshot could not be opened: " + err.Error()
-				if inst.doc == nil {
-					inst.docErr = msg
-				} else {
-					// What was open stays open.
-					inst.note = msg
-				}
+				msg = "the snapshot could not be opened: " + err.Error()
+			}
+			switch {
+			case inst.handed != "":
+				// The text that was handed over is still the document: it
+				// is shown with no stored result.
+				inst.setDocument(&document{name: inst.handedName, origin: "handed over as " + inst.handedName, text: []byte(inst.handed), fsys: emptyFS{}})
+				inst.handed = ""
+				inst.note = msg
+			case inst.doc == nil:
+				inst.docErr = msg
+			default:
+				// What was open stays open.
+				inst.note = msg
 			}
 		default:
 			inst.opening = nil
@@ -333,6 +391,12 @@ func (inst *App) poll() (busy bool) {
 			}
 			inst.store = o.store
 			inst.setDocument(o.doc)
+			if inst.handed != "" {
+				if inst.setText([]byte(inst.handed)) {
+					inst.note = "the text that was handed over is shown over the snapshot's stored results; what it changed is not stored until the notebook is collected"
+				}
+				inst.handed = ""
+			}
 		}
 	}
 	if inst.nb == nil {
@@ -374,6 +438,7 @@ const (
 
 func (inst *App) Frame(ctx app.FrameContextI) (err error) {
 	inst.landCollect()
+	inst.landHandOver()
 	if inst.poll() || inst.collect.job.Running() {
 		c.RequestRepaint()
 	}
@@ -428,6 +493,20 @@ func (inst *App) renderToolbar(ctx app.FrameContextI) {
 				}
 			}
 		}
+		// Edit in the host's editor app: the text is handed over and each
+		// save replaces it, unless it was changed here meanwhile. Drawn
+		// only where the host registers one editor app (ADR-0365).
+		if _, ok := externaledit.Editor(); ok && inst.doc != nil && inst.bus != nil {
+			if text, replace := editexternally.Render(editexternally.Input{
+				Ids: inst.ids, ScopeKey: "editExternally", Editing: &inst.externalEdit, Bus: inst.bus,
+				Name: inst.doc.name, Text: string(inst.doc.text), Disabled: inst.collect.job.Running(),
+			}); replace {
+				if inst.setText([]byte(text)) {
+					inst.note = "the editor's save is the notebook's text; what it changed is not stored until the notebook is collected"
+				}
+			}
+		}
+		inst.renderEditInMdedit()
 		if !inst.browse.shown {
 			for range c.HoverText(tipOpen).KeepIter() {
 				if c.Button(inst.ids.PrepareStr("open"), c.Atoms().Text(labelOpen).Keep()).SendResp().HasPrimaryClicked() {

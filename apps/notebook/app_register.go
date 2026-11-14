@@ -12,9 +12,13 @@
 // with its blobs as a new snapshot; the person states the tree's
 // confidentiality tier when they confirm it (notebook_collect.go).
 //
-// deferred: a launch kind, so the snapshot browser opens a notebook here;
-// the phase machine of the window; serving the embedded play's catalog; a
-// tour entry. Each follows the first use that needs it.
+// The text is edited elsewhere and comes back: in the editor app the host
+// registers, whose saves replace the text (ADR-0365), or in mdedit, which
+// is handed the text and hands it back by this app's launch config
+// (notebook_handover.go).
+//
+// deferred: the phase machine of the window; serving the embedded play's
+// catalog; a tour entry. Each follows the first use that needs it.
 package notebook
 
 import (
@@ -22,8 +26,10 @@ import (
 
 	"github.com/rs/zerolog/log"
 
+	"github.com/stergiotis/boxer/apps/notebook/launchcfg"
 	"github.com/stergiotis/boxer/public/config/env"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
+	"github.com/stergiotis/boxer/public/keelson/runtime/externaledit"
 	"github.com/stergiotis/boxer/public/keelson/runtime/help"
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
 	"github.com/stergiotis/boxer/public/keelson/runtime/ladingpublish"
@@ -37,22 +43,25 @@ import (
 //go:embed help/*.md
 var helpFS embed.FS
 
-// AppId is the app's manifest id.
-const AppId app.AppIdT = "github.com/stergiotis/boxer/apps/notebook"
+// AppId is the app's manifest id; another app names it through the launch
+// leaf.
+const AppId app.AppIdT = launchcfg.AppId
 
 var manifest = app.Manifest{
-	Id:         AppId,
-	Version:    "0.1.0",
-	Display:    "Notebook",
-	Title:      "Notebook",
-	Summary:    "Read a sealed notebook and work on its records in play",
-	Icon:       icons.PhNotebook,
-	Topics:     []app.TopicT{app.TopicData},
-	Keywords:   []string{"notebook", "report", "sealed", "records", "markdown", "adr-0371"},
-	Surface:    app.SurfaceWindowed,
+	Id:       AppId,
+	Version:  "0.1.0",
+	Display:  "Notebook",
+	Title:    "Notebook",
+	Summary:  "Read a sealed notebook and work on its records in play",
+	Icon:     icons.PhNotebook,
+	Topics:   []app.TopicT{app.TopicData},
+	Keywords: []string{"notebook", "report", "sealed", "records", "markdown", "adr-0371"},
+	Surface:  app.SurfaceWindowed,
+	// LaunchKind takes a notebook another app hands over (launchcfg).
+	LaunchKind: launchcfg.Kind,
 	Operations: ops.Catalog(),
 	Help:       help.MustSub(helpFS, "help"),
-	Caps: append(task.ProducerCaps(),
+	Caps: append(append(task.ProducerCaps(), externaledit.ClientCaps("notebook: hand the notebook's text to the host's editor app and take each save back")...),
 		app.SubjectFilter{Pattern: ladingpublish.Subject(mountTag), Direction: app.CapDirectionPub,
 			Reason: "notebook: publish a collected notebook and its stored results to the lading store, under the notebook mount tag (ADR-0371 §SD10)"},
 		// The two below are declarations, not routes: nothing publishes on

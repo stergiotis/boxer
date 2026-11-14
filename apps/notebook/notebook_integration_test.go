@@ -20,11 +20,13 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/stergiotis/boxer/apps/notebook/launchcfg"
 	"github.com/stergiotis/boxer/public/fs/lading"
 	"github.com/stergiotis/boxer/public/fs/lading/ladingschema"
 	"github.com/stergiotis/boxer/public/keelson/data/storeexec"
 	"github.com/stergiotis/boxer/public/keelson/runtime/agentrun"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
+	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
 	"github.com/stergiotis/boxer/public/keelson/runtime/inprocbus"
 	"github.com/stergiotis/boxer/public/keelson/runtime/ladingpublish"
 	"github.com/stergiotis/boxer/public/storage/recordstore"
@@ -228,4 +230,28 @@ func TestCollectAgainstAServerAndTheLadingStore(t *testing.T) {
 	require.NoError(t, err)
 	assert.Len(t, doc.Records, 5)
 	require.NoError(t, other.Unmount(nil))
+
+	// The text edited elsewhere and handed back with its snapshot: it is
+	// shown over the snapshot's stored results, and the record it changed
+	// is stale until the notebook is collected.
+	edited := strings.Replace(doc.Text, "numbers(96)", "numbers( 96 )", 1)
+	require.NotEqual(t, doc.Text, edited)
+	raw, err := buscodec.Encode(launchcfg.NotebookLaunch{Text: edited, Name: "report.md",
+		Mount: second.mount.Value(), SnapNanos: second.snap.UnixNano(), Path: second.path})
+	require.NoError(t, err)
+	back := newApp()
+	handed, err := back.handOver(raw)
+	require.NoError(t, err)
+	require.True(t, handed)
+	deadline = time.Now().Add(60 * time.Second)
+	for back.opening != nil || !back.checked {
+		require.True(t, time.Now().Before(deadline), "the handed-over notebook was not opened in time: %s", back.docErr)
+		back.poll()
+		time.Sleep(5 * time.Millisecond)
+	}
+	assert.Equal(t, edited, string(back.doc.text))
+	assert.True(t, back.doc.edited)
+	assert.Equal(t, []string{"p99_by_hour"}, back.check.Stale)
+	assert.Empty(t, back.check.Problems, "the stored results are found beside the snapshot's text")
+	require.NoError(t, back.Unmount(nil))
 }

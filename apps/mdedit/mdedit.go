@@ -382,6 +382,9 @@ type App struct {
 	// readFromSnapshot marks readName as a lading-snapshot source rather than
 	// a Powerbox-named file — the badge tooltip says which contract applies.
 	readFromSnapshot bool
+	// nbHand is the hand-over of a notebook to the notebook window
+	// (mdedit_notebook_handover.go).
+	nbHand notebookHandover
 	// snapRef is the snapshot a document was read from, for the command that
 	// mounts it; nil for any other document.
 	snapRef *snapshotRef
@@ -599,6 +602,8 @@ func (inst *App) handOver(raw []byte) (handed bool, err error) {
 		name = "a handed-over document"
 	}
 	inst.adoptDocument(l.Text, name)
+	// The name a hand-over gave, for handing the text on.
+	inst.nbHand.name = l.Name
 	if l.Mount != 0 {
 		inst.handedSnap = &handedSnapshot{mount: identifier.TaggedId(l.Mount), snap: time.Unix(0, l.SnapNanos), path: l.Path, name: name, text: l.Text, location: l.Location}
 		// The snapshot exists whether or not this window can read it.
@@ -842,6 +847,10 @@ func (inst *App) renderBar() {
 				inst.sendDoc(false)
 			}
 		}
+
+		// A buffer that is a notebook is handed to the window that works on
+		// one (mdedit_notebook_handover.go).
+		inst.renderOpenNotebook()
 
 		// The button renders unconditionally. Dropping it from the tree while
 		// a request is in flight would collapse the row and strobe it back on
