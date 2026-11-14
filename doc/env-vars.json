@@ -269,6 +269,29 @@
       }
     },
     {
+      "name": "BOXER_AUDIO_LANE_TARGET",
+      "type": "duration",
+      "default": "150ms",
+      "description": "audio lane: how much audio a remote audio device is kept ahead by (ADR-0372 §SD5); it grows on its own where the device reports slowly",
+      "category": "system",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/science/audio/sink/lanesink"
+      }
+    },
+    {
+      "name": "BOXER_AUDIO_LANE_TRACE",
+      "type": "bool",
+      "description": "audio lane: log every played report of the remote audio device, for measuring the lane",
+      "category": "dev",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/science/audio/sink/lanesink"
+      }
+    },
+    {
       "name": "BOXER_AUDIO_PEAKS_CACHE_DIR",
       "type": "path",
       "description": "directory holding cached audio peaks pyramids (ADR-0208 §SD4); empty uses <user cache dir>/boxer/audio-peaks",
@@ -2353,6 +2376,17 @@
       }
     },
     {
+      "name": "BOXER_WAVEFORM_DEMO_AUTOPLAY",
+      "type": "bool",
+      "description": "the waveform gallery demo asks for the host's audio output and plays at mount, for scripted runs",
+      "category": "dev",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/demo/apps/widgets"
+      }
+    },
+    {
       "name": "BOXER_WAVEFORM_DEMO_FILE",
       "type": "path",
       "description": "recording the waveform gallery demo opens at mount, for scripted scenes; empty opens the synthetic track",
@@ -2550,6 +2584,28 @@
       "type": "string",
       "description": "set to \"1\" to allow demo widgets to fetch external resources",
       "category": "dev",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/thestack/imzero2/imzero2env"
+      }
+    },
+    {
+      "name": "IMZERO2_AUDIO_LANE_FROM_DEVICE",
+      "type": "string",
+      "description": "set by the host for its client: FIFO the client writes what the active viewer's audio device announces and reports to",
+      "category": "system",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/thestack/imzero2/imzero2env"
+      }
+    },
+    {
+      "name": "IMZERO2_AUDIO_LANE_TO_DEVICE",
+      "type": "string",
+      "description": "set by the host for its client: FIFO the host writes audio lane messages for the active viewer's audio device to",
+      "category": "system",
       "sensitive": false,
       "origin": {
         "module": "github.com/stergiotis/boxer",

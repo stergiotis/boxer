@@ -9,10 +9,11 @@ import (
 
 	"github.com/dustin/go-humanize"
 	"github.com/stergiotis/boxer/public/hmi/gloss"
+	"github.com/stergiotis/boxer/public/keelson/runtime/app"
+	"github.com/stergiotis/boxer/public/keelson/runtime/audioout"
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
 	"github.com/stergiotis/boxer/public/science/audio/peaks"
 	"github.com/stergiotis/boxer/public/science/audio/sink"
-	"github.com/stergiotis/boxer/public/science/audio/sink/pulsesink"
 	"github.com/stergiotis/boxer/public/science/audio/wavfile"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/waveform"
@@ -127,6 +128,13 @@ func (inst *PlayApp) audioStateOf(key string) (st audioState) {
 	if s.sink == nil {
 		return
 	}
+	if st.deviceErr == "" {
+		// An output played elsewhere, by a viewer's page, may have nobody
+		// listening at this moment (ADR-0372 §SD9); the playhead still moves.
+		if yes, reason := audioout.Audible(s.sink); !yes {
+			st.deviceErr = "silent: " + reason
+		}
+	}
 	st.playing = s.sink.State() == sink.StatePlaying
 	if frames := s.sink.Frames(); frames > 0 {
 		pos := s.sink.Position()
@@ -162,15 +170,15 @@ func (inst *PlayApp) audioToggle(key string, raw func() string) {
 	s := &audioSession{key: key, result: inst.frameResult, opening: true}
 	inst.audio = s
 	// Off the render thread: opening the device talks to the sound server.
-	noDevice := inst.audioNoDevice
-	inst.client.Go(func(context.Context) { s.open(data, noDevice) })
+	noDevice, bus := inst.audioNoDevice, inst.bus
+	inst.client.Go(func(context.Context) { s.open(bus, data, noDevice) })
 }
 
-// open reads the copy and opens the output. A host with no sound server gets
-// the device-less clock and a reason on screen rather than a failed open
-// (ADR-0208 §SD6) — the playhead still moves, so the pane still says what
-// playing would look like.
-func (inst *audioSession) open(data string, noDevice bool) {
+// open reads the copy and opens the output the host gives on bus (ADR-0372,
+// proposed). A host that gives none gets the device-less clock and a reason
+// on screen rather than a failed open (ADR-0208 §SD6) — the playhead still
+// moves, so the pane still says what playing would look like.
+func (inst *audioSession) open(bus app.BusI, data string, noDevice bool) {
 	// Nothing here holds the lock while it talks to the sound server: the
 	// faces read the session's state every frame.
 	var out sink.SinkI
@@ -182,11 +190,10 @@ func (inst *audioSession) open(data string, noDevice bool) {
 	case noDevice:
 		deviceErr = "no output device (disabled)"
 	default:
-		dev, oerr := pulsesink.Open(f, pulsesink.Options{AppName: "boxer play"})
-		if oerr != nil {
-			deviceErr = "no output device: " + oerr.Error()
-		} else {
-			out = dev
+		dev, st := audioout.Open(bus, f)
+		out = dev
+		if !st.Audible() {
+			deviceErr = "no output device: " + st.Reason
 		}
 	}
 	if out == nil && f != nil {

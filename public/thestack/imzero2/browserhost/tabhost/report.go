@@ -16,6 +16,7 @@ import (
 
 	"github.com/stergiotis/boxer/public/extbin"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
+	"github.com/stergiotis/boxer/public/keelson/runtime/audioout"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/basemap"
@@ -49,12 +50,10 @@ var answeredInTab = map[string]string{
 	basemap.ClientCaps("")[0].Pattern: "the basemap fetches its tiles itself in a tab (ADR-0262 Update 2026-10-03)",
 }
 
-// serves reports whether a service the options turn on answers pattern. No
-// in-tab service exists yet (SD2), so nothing is served; each service added to
-// Services claims its subjects here.
+// serves reports whether a service the options turn on answers pattern; each
+// service added to Services claims its subjects here.
 func (inst Services) serves(pattern string) (yes bool) {
-	_ = pattern
-	return false
+	return inst.AudioOut && pattern == audioout.SubjectOpen
 }
 
 // Report lists reg's apps and, per app, each declared subject the services do

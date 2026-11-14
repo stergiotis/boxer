@@ -26,5 +26,10 @@ pub const PREFIX_SESSION: u8 = 0x03;
 /// prefix selects `1` = mesh frame (ordered hash list + unseen bodies) or
 /// `2` = texture whole/partial update.
 pub const PREFIX_MESH: u8 = 0x04;
+/// Audio lane messages, both ways (ADR-0372, proposed): toward the active
+/// viewer what its audio device plays, from it what the device announces and
+/// reports. The carrier forwards them unread; their layout is the Go
+/// `lanesink` package's.
+pub const PREFIX_AUDIO: u8 = 0x05;
 
 include!(concat!(env!("OUT_DIR"), "/boxer.imzero2.v1.rs"));

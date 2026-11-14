@@ -35,7 +35,7 @@ func TestAudioSessionOverACompressedRecording(t *testing.T) {
 	info, err := os.Stat(flac)
 	require.NoError(t, err)
 
-	s, err := openAudioSession(context.Background(), os.DirFS(dir), "tone.flac", info.Size(), info.ModTime())
+	s, err := openAudioSession(context.Background(), nil, os.DirFS(dir), "tone.flac", info.Size(), info.ModTime())
 	require.NoError(t, err)
 	defer func() { require.NoError(t, s.close()) }()
 	require.Equal(t, decode.KindFfmpeg, s.staged.kind)

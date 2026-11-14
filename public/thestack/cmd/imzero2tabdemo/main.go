@@ -86,7 +86,7 @@ func newTab() (inst *tabhost.Program) {
 	})
 	inst = tabhost.New(tabhost.Options{
 		DefaultApp: splashscreen.ManifestId,
-		Services:   tabhost.Services{KeelsonSQL: keelsonTables(), NoEgress: true},
+		Services:   tabhost.Services{KeelsonSQL: keelsonTables(), NoEgress: true, AudioOut: true},
 		// An applet document published beside the page — the repository's
 		// complexity map the demo build writes — opens by
 		// BOXER_SQLAPPLET_TAB_DOC (ADR-0299). The committed applets

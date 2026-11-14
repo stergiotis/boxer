@@ -3,6 +3,8 @@ pub mod a11y;
 pub mod app;
 pub mod appconfig;
 pub mod apphost;
+#[cfg(feature = "headless")]
+pub mod audiolane;
 #[cfg(feature = "browser")]
 pub mod browser;
 #[cfg(feature = "capture_raster")]

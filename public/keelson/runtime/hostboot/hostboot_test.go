@@ -108,6 +108,7 @@ func TestBoot_MinimalHostSeedsConfiguredWindow(t *testing.T) {
 	assert.Nil(t, rt.ChLocal)
 	assert.Nil(t, rt.Adhoc)
 	assert.Nil(t, rt.Clipboard)
+	assert.Nil(t, rt.AudioOut)
 	assert.NotNil(t, rt.Tasks, "the task supervisor is part of the minimal boot")
 	require.NotNil(t, rt.Host)
 	assert.Equal(t, 2, rt.Host.Len(), "one plain seed and one configured seed")

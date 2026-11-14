@@ -29,22 +29,27 @@ import (
 	"os/signal"
 	"runtime"
 
+	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 	"github.com/urfave/cli/v3"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
+	"github.com/stergiotis/boxer/public/keelson/runtime/audioout"
+	"github.com/stergiotis/boxer/public/keelson/runtime/inprocbus"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect/introspecthttp"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect/trivialsql"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/observability/logging"
+	"github.com/stergiotis/boxer/public/science/audio/sink/lanesink"
 	fffiruntime "github.com/stergiotis/boxer/public/thestack/fffi2/runtime"
 	"github.com/stergiotis/boxer/public/thestack/fffi2/typed"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/application"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/browserhost"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/browserhost/web"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/hostaudio"
 )
 
 // Services selects the services the tab boots beside the mounted app, as
@@ -65,6 +70,11 @@ type Services struct {
 	// a visitor switches on (a map's tiles, a fetch an app makes), and can
 	// still read a file served beside its page (ADR-0299 §SD2).
 	NoEgress bool
+	// AudioOut serves audio.out.open in the tab (ADR-0372, proposed, §SD2):
+	// an app that asks for an output plays through the page around the
+	// worker, over the tab's audio lane. A native run of the tab binary has
+	// no page, and its apps get the device-less sink.
+	AudioOut bool
 }
 
 // noEgress is the transport of a tab with Services.NoEgress: requests to the
@@ -113,11 +123,31 @@ func installKeelsonSQL(reg *introspect.Registry) (err error) {
 	return
 }
 
+// startAudioOut puts the audio-output service on bus with the tab's lane as
+// its device. The lane tops a stream up on the calling goroutine: in a tab
+// goroutines run only inside the worker's exports. Without a page nothing
+// is started.
+func startAudioOut(bus *inprocbus.Inst) {
+	var dev *lanesink.Device
+	send, ok := browserhost.AudioLane(func(msg []byte) {
+		if err := dev.Receive(msg); err != nil {
+			log.Warn().Err(err).Msg("tabhost: audio lane message refused")
+		}
+	})
+	if !ok {
+		return
+	}
+	dev = lanesink.NewDevice(send, hostaudio.Traced(lanesink.Options{Sync: true}, log.Logger))
+	if _, err := audioout.NewService(bus, log.Logger, dev); err != nil {
+		log.Warn().Err(err).Msg("tabhost: audio-output service start failed; audio.out.open will be unbound")
+	}
+}
+
 // Options configure a tab binary.
 type Options struct {
 	// DefaultApp is the registered app id mounted when -app is not given.
 	DefaultApp app.AppIdT
-	// Services are the in-tab services to boot (none exist yet).
+	// Services are the in-tab services to boot.
 	Services Services
 	// Prepare, when set, runs once at start, after the tab's HTTP transport
 	// and services are installed and before the app is looked up. base is
@@ -221,6 +251,10 @@ func (inst *Program) tab(ctx context.Context, cmd *cli.Command) (err error) {
 		return nil
 	}
 	ids := c.NewWidgetIdStack()
+	bus := inprocbus.NewInst(zerolog.Nop())
+	if inst.opts.Services.AudioOut {
+		startAudioOut(bus)
+	}
 	var mounted *browserhost.Mounted
 	host.RenderLoopHandler = func() (err error) {
 		st := c.CurrentApplicationState
@@ -229,7 +263,7 @@ func (inst *Program) tab(ctx context.Context, cmd *cli.Command) (err error) {
 		if prepareErr != nil {
 			c.Label("tabhost: " + prepareErr.Error()).Send()
 		} else if mounted == nil {
-			mounted, err = browserhost.Mount(appId, ids, log.Logger)
+			mounted, err = browserhost.MountOn(bus, appId, ids, log.Logger)
 			if err != nil {
 				c.Label("tabhost: " + err.Error()).Send()
 				err = nil

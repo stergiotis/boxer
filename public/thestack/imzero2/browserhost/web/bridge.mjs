@@ -312,6 +312,10 @@ export function makeWasi(queue, stderr, argv, env = []) {
   const pending = new Map();
   let nextHandle = 1;
   let onSettled = () => {};
+  const audioIn = [];
+  // Until the host says where lane messages go, they wait.
+  let audioOutEarly = [];
+  let onAudioOut = (m) => { audioOutEarly.push(m); };
   const u32 = (b, o) => new DataView(b.buffer, b.byteOffset).getUint32(o, true);
   const field = (b, o) => { const n = u32(b, o); return [b.subarray(o + 4, o + 4 + n), o + 4 + n]; };
   const frame = (status, headers, body) => {
@@ -400,8 +404,28 @@ export function makeWasi(queue, stderr, argv, env = []) {
       pending.delete(h);
       e.ctl.abort();
     },
+    // The audio lane (ADR-0372 SD4): a worker has no audio device, so the
+    // module's lane messages are handed to the host, which posts them to the
+    // page; what the page sends back waits in audioIn until the module's
+    // audio_pump export reads it with audio_recv. A message that does not
+    // fit the module's buffer is dropped: what a device sends is a few
+    // integers.
+    audio_send(ptr, n) {
+      onAudioOut(u8().slice(ptr, ptr + n));
+    },
+    audio_recv(dst, cap) {
+      for (;;) {
+        const m = audioIn.shift();
+        if (!m) return 0;
+        if (m.length > cap) continue;
+        u8().set(m, dst);
+        return m.length;
+      }
+    },
   };
-  return { imports: stubbed, env: env_imports, setMemory(m) { mem = m; }, onHttpSettled(fn) { onSettled = fn; }, httpPending: () => pending.size, names: (mod) => WebAssembly.Module.imports(mod).map((i) => i.name) };
+  return { imports: stubbed, env: env_imports, setMemory(m) { mem = m; }, onHttpSettled(fn) { onSettled = fn; }, httpPending: () => pending.size,
+    onAudioOut(fn) { onAudioOut = fn; for (const m of audioOutEarly) fn(m); audioOutEarly = []; }, audioPush(bytes) { audioIn.push(bytes); },
+    names: (mod) => WebAssembly.Module.imports(mod).map((i) => i.name) };
 }
 
 // Builds a complete import object for a module from the shim, one entry per
@@ -508,6 +532,16 @@ export async function startReactor({ goBytes, stub, argv, log, env }) {
     // A request the module started asynchronously settled: the worker
     // answers with a frame, in which the waiting goroutine collects it.
     onHttpSettled(fn) { wasi.onHttpSettled(fn); },
+    // The audio lane: onAudioOut is given each message the module sends
+    // toward the device; audioIn queues one from the device and runs the
+    // module's pump, which is not a frame. A module built without the lane
+    // has no pump, and what is queued for it is never read.
+    onAudioOut(fn) { wasi.onAudioOut(fn); },
+    audioIn(bytes) {
+      if (typeof instance.exports.audio_pump !== 'function') return;
+      wasi.audioPush(bytes);
+      try { instance.exports.audio_pump(); } catch (e) { if (!(e && e.wasiExit !== undefined)) throw e; }
+    },
     lines,
     stats: () => ({ stub: stub.stats(), bridge: queue.stats() }),
   };

@@ -33,6 +33,12 @@ type Mounted struct {
 // needs a bus peer beyond itself (persist, fsbroker, adhocdata, ...) gets the
 // bus's timeout on those requests.
 func Mount(id app.AppIdT, ids *c.WidgetIdStack, logger zerolog.Logger) (m *Mounted, err error) {
+	return MountOn(inprocbus.NewInst(zerolog.Nop()), id, ids, logger)
+}
+
+// MountOn is Mount on a bus the caller made, which is how a host puts a
+// service of its own beside the app before the app mounts.
+func MountOn(bus *inprocbus.Inst, id app.AppIdT, ids *c.WidgetIdStack, logger zerolog.Logger) (m *Mounted, err error) {
 	manifest, ok := app.DefaultRegistry.LookupManifest(id)
 	if !ok {
 		return nil, ErrNoSuchApp
@@ -42,7 +48,6 @@ func Mount(id app.AppIdT, ids *c.WidgetIdStack, logger zerolog.Logger) (m *Mount
 		return nil, eb.Build().Str("app", string(id)).Errorf("browserhost: open: %w", err)
 	}
 	stop := make(chan struct{})
-	bus := inprocbus.NewInst(zerolog.Nop())
 	mc := app.NewStaticMountContext(manifest.Id, logger.With().Str("app", string(manifest.Id)).Logger(), nil, bus.NewClient(manifest.Id, manifest.Caps), stop)
 	mc.SetIds(ids)
 	m = &Mounted{inst: inst, mount: mc, frame: app.NewStaticFrameContext(mc, nil), stop: stop}

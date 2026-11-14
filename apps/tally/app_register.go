@@ -7,6 +7,7 @@ import (
 
 	"github.com/stergiotis/boxer/apps/tally/launchcfg"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
+	"github.com/stergiotis/boxer/public/keelson/runtime/audioout"
 	"github.com/stergiotis/boxer/public/keelson/runtime/clipboardbroker"
 	"github.com/stergiotis/boxer/public/keelson/runtime/help"
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
@@ -44,6 +45,11 @@ var manifest = app.Manifest{
 		{
 			Pattern:   clipboardbroker.SubjectWrite,
 			Reason:    "copy a snapshot path or an rclone mount command",
+			Direction: app.CapDirectionPub,
+		},
+		{
+			Pattern:   audioout.SubjectOpen,
+			Reason:    "play the recording in the preview",
 			Direction: app.CapDirectionPub,
 		},
 		// A recording's peaks build is a background job the task monitor

@@ -4,6 +4,7 @@ import (
 	"github.com/rs/zerolog/log"
 	"github.com/stergiotis/boxer/public/keelson/data/chlocalbroker"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
+	"github.com/stergiotis/boxer/public/keelson/runtime/audioout"
 	"github.com/stergiotis/boxer/public/keelson/runtime/clipboardbroker"
 	"github.com/stergiotis/boxer/public/keelson/runtime/httpegress"
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
@@ -37,6 +38,11 @@ var manifest = app.Manifest{
 			Pattern:   clipboardbroker.SubjectWrite,
 			Direction: app.CapDirectionPub,
 			Reason:    "gallery: the cbordiag demo's copy buttons go through the clipboard broker (ADR-0026)",
+		},
+		{
+			Pattern:   audioout.SubjectOpen,
+			Direction: app.CapDirectionPub,
+			Reason:    "gallery: the waveform demo's 'output device' switch (ADR-0372)",
 		},
 	},
 		// Demos that run background jobs as keelson tasks (ADR-0038): the

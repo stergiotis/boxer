@@ -11,6 +11,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/stergiotis/boxer/public/fs/lading/ladingview"
+	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/thestack/fffi2/typed"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/codeview"
@@ -84,11 +85,11 @@ func (inst *App) renderPreviewDoc(content previewContent) {
 // loadPreview reads one file through the view and classifies it. Off the
 // render thread: every adapter call is a query. The read goes through
 // ladingview so this package handles bytes, never file handles.
-func loadPreview(ctx context.Context, fsys fs.FS, p string) (out previewContent, err error) {
+func loadPreview(ctx context.Context, bus app.BusI, fsys fs.FS, p string) (out previewContent, err error) {
 	out.path = p
 	kind := classifyByName(p)
 	if kind == previewKindAudio {
-		return loadAudioPreview(ctx, fsys, p)
+		return loadAudioPreview(ctx, bus, fsys, p)
 	}
 	budget := int64(previewMaxBytes)
 	if kind == previewKindImage {
@@ -176,7 +177,7 @@ func classifyByName(p string) previewKindE {
 // loadAudioPreview stages the recording and opens it as a track. It does not
 // go through [ladingview.ReadHead]: a recording is read whole, into staging,
 // and the head a preview would keep is the part the decoder wants least.
-func loadAudioPreview(ctx context.Context, fsys fs.FS, p string) (out previewContent, err error) {
+func loadAudioPreview(ctx context.Context, bus app.BusI, fsys fs.FS, p string) (out previewContent, err error) {
 	out.path = p
 	out.kind = previewKindAudio
 	info, err := fs.Stat(fsys, p)
@@ -189,7 +190,7 @@ func loadAudioPreview(ctx context.Context, fsys fs.FS, p string) (out previewCon
 		out.note = "a directory"
 		return
 	}
-	out.audio, err = openAudioSession(ctx, fsys, p, out.size, info.ModTime())
+	out.audio, err = openAudioSession(ctx, bus, fsys, p, out.size, info.ModTime())
 	if err != nil {
 		out.kind = previewKindError
 		out.note = err.Error()

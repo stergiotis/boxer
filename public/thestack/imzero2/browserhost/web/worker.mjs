@@ -41,7 +41,9 @@ const log = (line) => self.postMessage({ kind: 'log', line });
 // structured log included — to the page's server (`imzero2tab serve` logs them),
 // since a worker's console is out of reach for a headless capture.
 const tee = q.get('log') ? (line) => { fetch('./log', { method: 'POST', body: line }).catch(() => {}); } : () => {};
-const PREFIX_INPUT = 0x02, PREFIX_SESSION = 0x03;
+const PREFIX_INPUT = 0x02, PREFIX_SESSION = 0x03, PREFIX_AUDIO = 0x05;
+// The audio lane message with which the page's device announces itself.
+const AUDIO_KIND_DEVICE = 0x81;
 
 try {
   const fontBytes = (slot) => fetch(q.get(`${slot}Font`) || `./fonts/${slot}.ttf`)
@@ -66,11 +68,22 @@ try {
   };
   // wake is set once the reactor runs: anything from the page earns a frame
   let wake = () => {};
+  // The audio lane (ADR-0372 SD4): what the page's device sends goes to the
+  // Go module's pump, not to the Rust host, and earns no frame — a played
+  // report arrives many times a second while something plays. Only the
+  // device's announcement does, so that what the app says about its output
+  // is redrawn. Until the reactor runs, messages wait here.
+  let audioWaiting = [], audioIn = (bytes) => { audioWaiting.push(bytes); };
   self.onmessage = (e) => {
     const m = e.data;
     if (m.kind !== 'input') return;
     const b = new Uint8Array(m.bytes);
     if (b.length < 2) return;
+    if (b[0] === PREFIX_AUDIO) {
+      audioIn(b.slice(1));
+      if (b[1] === AUDIO_KIND_DEVICE) wake();
+      return;
+    }
     if (b[0] === PREFIX_INPUT) stub.input(b.subarray(1));
     else if (b[0] === PREFIX_SESSION && stub.session(b.subarray(1)) === 1) sendHello();
     wake();
@@ -90,6 +103,17 @@ try {
   if (!env.some((e) => e.startsWith('BOXER_TAB_BASE='))) env.push(`BOXER_TAB_BASE=${new URL('./', self.location.href).href}`);
   const r = await startReactor({ goBytes, stub, argv, env, log: (l) => { tee(l); if (!l.startsWith('{')) log(l); } });
   log('worker — running the application');
+  // Lane messages toward the device are wire messages like the mesh's, and
+  // the page tells them apart by their prefix.
+  r.onAudioOut((msg) => {
+    const framed = new Uint8Array(1 + msg.length);
+    framed[0] = PREFIX_AUDIO;
+    framed.set(msg, 1);
+    self.postMessage({ kind: 'mesh', bytes: framed.buffer }, [framed.buffer]);
+  });
+  audioIn = (bytes) => r.audioIn(bytes);
+  for (const bytes of audioWaiting) audioIn(bytes);
+  audioWaiting = null;
   let frames = 0, timer = null, lastTick = -Infinity, exited = false;
   const minMs = 1000 / fps;
   const schedule = (ms) => { clearTimeout(timer); timer = setTimeout(tick, Math.max(0, ms)); };

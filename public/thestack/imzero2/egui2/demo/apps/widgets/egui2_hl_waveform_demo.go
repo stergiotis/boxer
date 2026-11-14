@@ -11,11 +11,12 @@ import (
 	"github.com/stergiotis/boxer/public/config/env"
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	runtimeapp "github.com/stergiotis/boxer/public/keelson/runtime/app"
+	"github.com/stergiotis/boxer/public/keelson/runtime/audioout"
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
 	"github.com/stergiotis/boxer/public/keelson/runtime/task"
+	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/science/audio/pcm"
 	"github.com/stergiotis/boxer/public/science/audio/sink"
-	"github.com/stergiotis/boxer/public/science/audio/sink/pulsesink"
 	"github.com/stergiotis/boxer/public/science/audio/track"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/demo/apps/registry"
@@ -58,6 +59,15 @@ var waveformDemoFile = env.NewPath(env.Spec{
 	Category:    env.CategoryDev,
 })
 
+// waveformDemoAutoplay, when set, has the demo ask for the host's output and
+// play its track at mount: the scripted route to sound in a host no driver
+// reaches into, a browser tab among them.
+var waveformDemoAutoplay = env.NewBool(env.Spec{
+	Name:        "BOXER_WAVEFORM_DEMO_AUTOPLAY",
+	Description: "the waveform gallery demo asks for the host's audio output and plays at mount, for scripted runs",
+	Category:    env.CategoryDev,
+})
+
 type waveformDemoState struct {
 	tr     *track.Track
 	player *waveform.Player
@@ -81,7 +91,10 @@ type waveformDemoState struct {
 	// tasks is the host's task API (nil in the tour and headless lanes): a
 	// background peaks build is reported through it as a keelson task
 	// (ADR-0038), so the task monitor shows it and can cancel it.
-	tasks       task.TaskApiI
+	tasks task.TaskApiI
+	// bus is the gallery's bus client, on which the output device is asked
+	// for; nil outside the app runtime, where the device stays off.
+	bus         runtimeapp.BusI
 	buildTaskId string
 
 	// Annotations (SD8): host-owned, regenerated per track.
@@ -107,7 +120,7 @@ func init() {
 			"fetched off the frame thread. The track here is synthetic — a gated tone on " +
 			"the left, a chirp on the right. It opens on the device-less clock, so play " +
 			"moves the playhead without audio hardware; 'output device' swaps in the " +
-			"PulseAudio sink and plays through the speakers, with rate and volume. " +
+			"output the host gives (ADR-0372) and plays through it, with rate and volume. " +
 			"'twelve hours' opens a 12 h synthetic track whose peaks build in the " +
 			"background while you scroll it; 'open' loads a recording from disk (WAV " +
 			"natively, other formats through ffmpeg), its peaks cached for the next open.",
@@ -116,7 +129,14 @@ func init() {
 			if bus != nil {
 				tasks = task.NewBusApi(task.ApiConfig{Bus: bus})
 			}
-			return newWaveformDemoState(ids, tasks)
+			st := newWaveformDemoState(ids, tasks)
+			st.bus = bus
+			if waveformDemoAutoplay.Get() && st.tr != nil {
+				st.device = true
+				st.setDevice()
+				st.tr.Sink().Play()
+			}
+			return st
 		},
 		RenderStateful: func(ids *c.WidgetIdStack, state any) {
 			demoWaveform(ids, state.(*waveformDemoState))
@@ -205,6 +225,31 @@ func newWaveformDemoState(ids *c.WidgetIdStack, tasks task.TaskApiI) (st *wavefo
 		st.openFile()
 	}
 	return st
+}
+
+// setDevice puts the track on the output the host gives when st.device is
+// set, and back on the device-less clock when it is not. Where the host gives
+// none the old sink stays and the switch goes back, with the reason.
+func (st *waveformDemoState) setDevice() {
+	st.deviceErr = ""
+	var err error
+	if st.device {
+		err = st.tr.ReplaceSink(func(src pcm.SourceI) (sink.SinkI, error) {
+			out, status := audioout.Open(st.bus, src)
+			if !status.Audible() {
+				_ = out.Close()
+				return nil, eh.New(status.Reason)
+			}
+			return out, nil
+		})
+	} else {
+		err = st.tr.ReplaceSink(func(src pcm.SourceI) (sink.SinkI, error) { return sink.NewNull(src, nil), nil })
+	}
+	if err != nil {
+		st.device = false
+		st.deviceErr = err.Error()
+		c.CurrentApplicationState.StateManager.OverrideDatabindingBPtr(&st.device)
+	}
 }
 
 // setTrack swaps the track and rebuilds the player over it; the old track is
@@ -333,21 +378,7 @@ func demoWaveform(ids *c.WidgetIdStack, st *waveformDemoState) {
 	}
 	for range c.HorizontalTop().KeepIter() {
 		if c.Checkbox(ids.PrepareStr("wf-device"), st.device, "output device").SendRespVal(&st.device).HasChanged() {
-			st.deviceErr = ""
-			var err error
-			if st.device {
-				err = st.tr.ReplaceSink(func(src pcm.SourceI) (sink.SinkI, error) {
-					return pulsesink.Open(src, pulsesink.Options{AppName: "boxer widget gallery"})
-				})
-			} else {
-				err = st.tr.ReplaceSink(func(src pcm.SourceI) (sink.SinkI, error) { return sink.NewNull(src, nil), nil })
-			}
-			if err != nil {
-				// The old sink stays; put the checkbox back and say why.
-				st.device = false
-				st.deviceErr = err.Error()
-				c.CurrentApplicationState.StateManager.OverrideDatabindingBPtr(&st.device)
-			}
+			st.setDevice()
 		}
 		if c.SliderF64(ids.PrepareStr("wf-rate"), st.rate, 0.5, 2.0).Text("rate").FixedDecimals(2).SendRespVal(&st.rate).HasChanged() {
 			// Snap to 0.05 steps: a slider released at "1.00" must mean exactly
@@ -380,6 +411,12 @@ func demoWaveform(ids *c.WidgetIdStack, st *waveformDemoState) {
 	}
 	if st.deviceErr != "" {
 		c.Label("no output device: " + st.deviceErr).Selectable(false).Send()
+	} else if st.device {
+		// An output whose samples are played elsewhere may have nobody
+		// listening yet; the playhead moves all the same.
+		if yes, reason := audioout.Audible(st.tr.Sink()); !yes {
+			c.Label("silent: " + reason).Selectable(false).Send()
+		}
 	}
 	for range c.HorizontalTop().KeepIter() {
 		if c.Button(ids.PrepareStr("wf-12h"), c.Atoms().Text(icons.PhClock+" twelve hours").Keep()).SendResp().HasPrimaryClicked() {

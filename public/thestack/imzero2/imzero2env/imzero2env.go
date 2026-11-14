@@ -184,6 +184,24 @@ var (
 		Category:    env.CategorySystem,
 	})
 
+	// AudioLaneToDevice and AudioLaneFromDevice are set by the Go host for
+	// the client it launches, not by hand: the two FIFOs of the audio lane
+	// (ADR-0372, proposed, §SD4), on which the host and the client's carrier
+	// exchange the messages of a remote viewer's audio device. The client
+	// (src/imzero2/audiolane.rs) reads them with std::env; the host sets
+	// them in application.newAudioLane when IMZERO2_HEADLESS_LISTEN names a
+	// carrier. Unset, the session has no audio device.
+	AudioLaneToDevice = env.NewString(env.Spec{
+		Name:        "IMZERO2_AUDIO_LANE_TO_DEVICE",
+		Description: "set by the host for its client: FIFO the host writes audio lane messages for the active viewer's audio device to",
+		Category:    env.CategorySystem,
+	})
+	AudioLaneFromDevice = env.NewString(env.Spec{
+		Name:        "IMZERO2_AUDIO_LANE_FROM_DEVICE",
+		Description: "set by the host for its client: FIFO the client writes what the active viewer's audio device announces and reports to",
+		Category:    env.CategorySystem,
+	})
+
 	// Puffin gates the Rust client's puffin profiler: scope collection
 	// (puffin::set_scopes_on) and the loopback puffin_http server on
 	// 127.0.0.1:8585, which a `puffin_viewer --url 127.0.0.1:8585` attaches to.

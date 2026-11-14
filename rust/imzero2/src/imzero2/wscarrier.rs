@@ -19,7 +19,10 @@
 //! prefix (SD6): 0x01 video chunks server→client, 0x02 protobuf input
 //! events client→server, 0x03 session control both ways, 0x04 draw-stream
 //! lane messages server→client (ADR-0128 — mesh frames + texture updates,
-//! active when the session codec is `mesh`; the shared encoder never runs).
+//! active when the session codec is `mesh`; the shared encoder never runs),
+//! 0x05 audio lane messages both ways between the Go host and the active
+//! connection's audio device (ADR-0372, proposed — forwarded unread; see
+//! [`crate::imzero2::audiolane`]).
 //!
 //! Session model (ADR-0086): connections are first-class — a [`Registry`]
 //! holds each [`Conn`] with its role (`active` | `passive`) and a
@@ -138,6 +141,12 @@ struct Conn {
     webcodecs: bool,
     /// Optional device label ("iPad"), reported by the `ClientHello`.
     label: String,
+    /// This connection has announced an audio device while it owned the
+    /// session (ADR-0372 SD8). Nothing of the audio lane is sent toward a
+    /// connection before it has: a viewer that cannot play — the native one
+    /// rejects a prefix it does not know — never sees the prefix. Cleared by
+    /// every change of owner.
+    audio_device: bool,
     /// Outbound queue for this connection (video + per-recipient control).
     tx: tokio::sync::mpsc::Sender<Vec<u8>>,
     /// Latest-value mailbox for this connection's authoritative session state
@@ -194,6 +203,9 @@ struct Registry {
     /// anything the new owner sent. Sticky, so a change that lands between
     /// two render passes is never missed.
     owner_reset: bool,
+    /// Where audio lane messages for the Go host go (ADR-0372 SD4); `None`
+    /// when the host named no lane.
+    audio_to_host: Option<std::sync::mpsc::Sender<Vec<u8>>>,
 }
 
 impl Registry {
@@ -206,6 +218,7 @@ impl Registry {
             owner_epoch: 0,
             input: Vec::new(),
             owner_reset: false,
+            audio_to_host: None,
         }
     }
 
@@ -223,6 +236,40 @@ impl Registry {
         self.owner_epoch = self.owner_epoch.wrapping_add(1);
         self.input.clear();
         self.owner_reset = true;
+        // The audio device belonged to the previous owner (ADR-0372 SD8):
+        // the Go host is told it went away, here rather than by a departing
+        // page, and the next owner's page announces its own.
+        for c in &mut self.conns {
+            c.audio_device = false;
+        }
+        if let Some(tx) = &self.audio_to_host {
+            let _ = tx.send(crate::imzero2::audiolane::DEVICE_ABSENT.to_vec());
+        }
+    }
+
+    /// Accept one audio lane message from `id` for the Go host, iff `id` owns
+    /// the session (ADR-0372 SD8). The first one marks the connection as an
+    /// audio device, which is what lets lane messages flow toward it.
+    fn accept_audio(&mut self, id: u64, msg: &[u8]) -> bool {
+        if !self.is_active(id) || msg.is_empty() {
+            return false;
+        }
+        let Some(tx) = &self.audio_to_host else {
+            return false;
+        };
+        if tx.send(msg.to_vec()).is_err() {
+            return false;
+        }
+        if let Some(c) = self.conns.iter_mut().find(|c| c.id == id) {
+            c.audio_device = true;
+        }
+        true
+    }
+
+    /// The outbound queue of the active connection's audio device, if it has
+    /// announced one.
+    fn audio_device_tx(&self) -> Option<tokio::sync::mpsc::Sender<Vec<u8>>> {
+        self.active_id.and_then(|id| self.find(id)).filter(|c| c.audio_device).map(|c| c.tx.clone())
     }
 
     /// Accept one wire input event from `id`, iff `id` owns input right now
@@ -276,6 +323,7 @@ impl Registry {
             role,
             webcodecs: false,
             label: String::new(),
+            audio_device: false,
             tx,
             state: tokio::sync::watch::channel(None).0,
             stream: tokio::sync::watch::channel(None).0,
@@ -500,6 +548,18 @@ impl WsCarrier {
             tree_wanted: std::sync::atomic::AtomicBool::new(false),
             capture_request: std::sync::Mutex::new(None),
         });
+        // The audio lane (ADR-0372 SD4), when the Go host named one: what it
+        // sends goes to the active connection's audio device, what that
+        // device sends goes back.
+        let audio_inner = inner.clone();
+        let audio_to_host = crate::imzero2::audiolane::spawn_from_env(move |msg| {
+            send_audio_to_device(&audio_inner, &msg);
+        });
+        if audio_to_host.is_some()
+            && let Ok(mut r) = inner.registry.lock()
+        {
+            r.audio_to_host = audio_to_host;
+        }
         // Bind synchronously so startup errors (port in use) fail fast in
         // the caller instead of asynchronously on the carrier thread.
         let ws_listener = std::net::TcpListener::bind(listen)?;
@@ -1619,6 +1679,27 @@ async fn handle_session(
     result
 }
 
+/// Forward one audio lane message from the Go host to the active connection's
+/// audio device (ADR-0372 SD4/SD8). With no such device it is dropped: the Go
+/// side sends only after an announcement, so this is a message that crossed a
+/// change of owner. A full queue drops it too, and says so — the host's flow
+/// control keeps well under the queue in flight, so that is a stalled viewer.
+fn send_audio_to_device(inner: &Inner, msg: &[u8]) {
+    let tx = inner.registry.lock().ok().and_then(|r| r.audio_device_tx());
+    let Some(tx) = tx else {
+        return;
+    };
+    let mut framed = Vec::with_capacity(1 + msg.len());
+    framed.push(pb::PREFIX_AUDIO);
+    framed.extend_from_slice(msg);
+    if tx.try_send(framed).is_err() {
+        tracing::warn!(
+            bytes = msg.len(),
+            "audio lane message dropped — active viewer queue full or gone"
+        );
+    }
+}
+
 fn handle_client_message(data: &[u8], inner: &Inner, id: u64) {
     let Some((&prefix, payload)) = data.split_first() else {
         return;
@@ -1632,6 +1713,13 @@ fn handle_client_message(data: &[u8], inner: &Inner, id: u64) {
     // enqueue.
     let active = inner.registry.lock().map(|r| r.is_active(id)).unwrap_or(false);
     match prefix {
+        pb::PREFIX_AUDIO => {
+            // Owner-only, checked under the registry lock that also marks the
+            // connection as a device (ADR-0372 SD8); forwarded unread.
+            if let Ok(mut r) = inner.registry.lock() {
+                r.accept_audio(id, payload);
+            }
+        }
         pb::PREFIX_INPUT => {
             match pb::InputEvent::decode(payload) {
                 Ok(ev) => {
@@ -2261,6 +2349,81 @@ mod tests {
         let mut out = Vec::new();
         drain_input(&inner, &mut out);
         assert_eq!(out, vec![InputItem::Event(mk_move(1.0))]);
+    }
+
+    /// The audio lane (ADR-0372 SD8): only the owner's messages reach the Go
+    /// host, nothing goes toward a connection that has not announced a device,
+    /// and a change of owner tells the host the device went away.
+    #[test]
+    fn the_audio_device_is_the_owners_and_ends_with_its_ownership() {
+        let inner = mk_inner();
+        let (to_host, host) = std::sync::mpsc::channel::<Vec<u8>>();
+        let (a_tx, mut a_rx) = tokio::sync::mpsc::channel::<Vec<u8>>(4);
+        let (b_tx, mut b_rx) = tokio::sync::mpsc::channel::<Vec<u8>>(4);
+        let (a, b) = {
+            let mut reg = inner.registry.lock().unwrap();
+            reg.audio_to_host = Some(to_host);
+            (reg.admit(a_tx).unwrap(), reg.admit(b_tx).unwrap())
+        };
+        let absent = crate::imzero2::audiolane::DEVICE_ABSENT.to_vec();
+        assert_eq!(
+            host.try_recv().unwrap(),
+            absent,
+            "admission is a change of owner"
+        );
+
+        // Before the owner's page announced a device, nothing is sent to it.
+        send_audio_to_device(&inner, &[0x05]);
+        assert!(
+            a_rx.try_recv().is_err(),
+            "no lane message before an announcement"
+        );
+
+        let announce = [0x81u8, 0x02, 0x80, 0xbb, 0, 0];
+        handle_client_message(
+            &[&[pb::PREFIX_AUDIO][..], &announce[..]].concat(),
+            &inner,
+            b,
+        );
+        assert!(
+            host.try_recv().is_err(),
+            "a passive connection's lane messages are dropped"
+        );
+        handle_client_message(
+            &[&[pb::PREFIX_AUDIO][..], &announce[..]].concat(),
+            &inner,
+            a,
+        );
+        assert_eq!(
+            host.try_recv().unwrap(),
+            announce.to_vec(),
+            "the owner's arrive unread and unprefixed"
+        );
+
+        send_audio_to_device(&inner, &[0x01, 7, 0, 0, 0]);
+        assert_eq!(
+            a_rx.try_recv().unwrap(),
+            vec![pb::PREFIX_AUDIO, 0x01, 7, 0, 0, 0]
+        );
+        assert!(
+            b_rx.try_recv().is_err(),
+            "the passive connection hears nothing"
+        );
+
+        // A takeover: the host is told the device went away, and the new
+        // owner gets nothing until its own page announces.
+        assert!(inner.registry.lock().unwrap().take_session(b));
+        assert_eq!(host.try_recv().unwrap(), absent);
+        send_audio_to_device(&inner, &[0x02]);
+        assert!(a_rx.try_recv().is_err() && b_rx.try_recv().is_err());
+        handle_client_message(
+            &[&[pb::PREFIX_AUDIO][..], &announce[..]].concat(),
+            &inner,
+            b,
+        );
+        assert_eq!(host.try_recv().unwrap(), announce.to_vec());
+        send_audio_to_device(&inner, &[0x02]);
+        assert_eq!(b_rx.try_recv().unwrap(), vec![pb::PREFIX_AUDIO, 0x02]);
     }
 
     /// A takeover discards what the previous owner had queued and asks the host

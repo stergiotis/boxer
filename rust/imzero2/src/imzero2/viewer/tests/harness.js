@@ -13,7 +13,7 @@
   const H = window.__imzero2Harness;
   if (!H) throw new Error("harness stub did not run before the viewer script");
 
-  const PREFIX = { VIDEO: 0x01, INPUT: 0x02, SESSION: 0x03, MESH: 0x04 };
+  const PREFIX = { VIDEO: 0x01, INPUT: 0x02, SESSION: 0x03, MESH: 0x04, AUDIO: 0x05 };
   H.PREFIX = PREFIX;
 
   // ---- protobuf writer (test side) ---------------------------------------

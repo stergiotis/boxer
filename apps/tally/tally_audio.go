@@ -14,6 +14,8 @@ import (
 	"golang.org/x/sys/unix"
 
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
+	"github.com/stergiotis/boxer/public/keelson/runtime/app"
+	"github.com/stergiotis/boxer/public/keelson/runtime/audioout"
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
 	"github.com/stergiotis/boxer/public/keelson/runtime/sealed"
 	"github.com/stergiotis/boxer/public/keelson/runtime/task"
@@ -22,7 +24,6 @@ import (
 	"github.com/stergiotis/boxer/public/science/audio/decode"
 	"github.com/stergiotis/boxer/public/science/audio/pcm"
 	"github.com/stergiotis/boxer/public/science/audio/sink"
-	"github.com/stergiotis/boxer/public/science/audio/sink/pulsesink"
 	"github.com/stergiotis/boxer/public/science/audio/track"
 	"github.com/stergiotis/boxer/public/science/audio/wavfile"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
@@ -302,10 +303,11 @@ type audioSession struct {
 	volume    float64
 }
 
-// openAudioSession stages p and opens it as a track. The sink is the audio
-// device where one opens and the device-less clock otherwise, so a host with
-// no sound server still gets a moving playhead and a reason on screen.
-func openAudioSession(ctx context.Context, fsys fs.FS, p string, size int64, modTime time.Time) (inst *audioSession, err error) {
+// openAudioSession stages p and opens it as a track. The sink is the output
+// the host gives on bus (ADR-0372, proposed) and the device-less clock where
+// it gives none, so a host with no sound still gets a moving playhead and a
+// reason on screen.
+func openAudioSession(ctx context.Context, bus app.BusI, fsys fs.FS, p string, size int64, modTime time.Time) (inst *audioSession, err error) {
 	staged, err := stageRecording(ctx, fsys, p, size)
 	if err != nil {
 		return nil, err
@@ -336,11 +338,8 @@ func openAudioSession(ctx context.Context, fsys fs.FS, p string, size int64, mod
 		// precisely so it leaves nothing behind; it is not written.
 		NoCache: true,
 		NewSink: func(s pcm.SourceI) sink.SinkI {
-			out, oerr := pulsesink.Open(s, pulsesink.Options{AppName: "boxer tally"})
-			if oerr != nil {
-				inst.deviceErr = oerr.Error()
-				return sink.NewNull(s, nil)
-			}
+			out, st := audioout.Open(bus, s)
+			inst.deviceErr = st.Reason
 			return out
 		},
 	}
@@ -476,6 +475,10 @@ func (inst *App) renderAudioPreview(s *audioSession) {
 	}
 	if s.deviceErr != "" {
 		c.Label("silent: no output device (" + s.deviceErr + ")").Selectable(false).Send()
+	} else if yes, reason := audioout.Audible(s.tr.Sink()); !yes {
+		// An output played elsewhere, by a viewer's page, may have nobody
+		// listening at this moment (ADR-0372 §SD9); the playhead still moves.
+		c.Label("silent: " + reason).Selectable(false).Send()
 	}
 	state := "paused"
 	switch {

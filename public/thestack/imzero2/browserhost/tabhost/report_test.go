@@ -6,6 +6,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
+	"github.com/stergiotis/boxer/public/keelson/runtime/audioout"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/basemap"
 )
 
@@ -35,4 +36,18 @@ func TestReportListsGapsAndAnswered(t *testing.T) {
 	require.Equal(t, "org.test.b", rep.Gaps[1].App)
 	require.Len(t, rep.Answered, 1)
 	require.Equal(t, basemap.ClientCaps("")[0].Pattern, rep.Answered[0].Pattern)
+}
+
+// A service the options turn on claims its subject: the report then lists it
+// neither as a gap nor as answered by other means.
+func TestServicesServeTheirSubjects(t *testing.T) {
+	if (Services{}).serves(audioout.SubjectOpen) {
+		t.Fatal("a tab without the audio-output service does not serve audio.out.open")
+	}
+	if !(Services{AudioOut: true}).serves(audioout.SubjectOpen) {
+		t.Fatal("a tab with the audio-output service serves audio.out.open")
+	}
+	if (Services{AudioOut: true}).serves("fs.dialog.read") {
+		t.Fatal("the audio-output service serves nothing else")
+	}
 }

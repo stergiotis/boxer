@@ -30,6 +30,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/appstate"
 	"github.com/stergiotis/boxer/public/keelson/runtime/attention"
 	"github.com/stergiotis/boxer/public/keelson/runtime/attention/attentionchrome"
+	"github.com/stergiotis/boxer/public/keelson/runtime/audioout"
 	"github.com/stergiotis/boxer/public/keelson/runtime/audit"
 	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
 	"github.com/stergiotis/boxer/public/keelson/runtime/cell"
@@ -75,6 +76,7 @@ import (
 	"github.com/stergiotis/boxer/public/observability/coverage/covsnap"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
+	"github.com/stergiotis/boxer/public/science/audio/sink/lanesink"
 	"github.com/stergiotis/boxer/public/storage/recordstore"
 	"github.com/stergiotis/boxer/public/storage/recordstore/evidence"
 	"github.com/stergiotis/boxer/public/storage/recordstore/evidence/anchor"
@@ -86,6 +88,7 @@ import (
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/filepicker"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/runtimestatus"
 	imzhost "github.com/stergiotis/boxer/public/thestack/imzero2/host"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/hostaudio"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/imzero2env"
 )
 
@@ -141,6 +144,10 @@ type Services struct {
 	LadingPublish bool
 	// Clipboard is clipboard.*: copies drained into egui copy ops each frame.
 	Clipboard bool
+	// AudioOut is audio.out.open: an audio output for an app that asks for
+	// one, on Options.AudioDevice (ADR-0372, proposed, §SD2). Without it an
+	// app that plays sound gets the device-less sink.
+	AudioOut bool
 	// Coverage samples Go coverage counters onto the bus when
 	// IMZERO2_COVERAGE_INTERVAL asks for it (ADR-0169), and, when
 	// IMZERO2_COVERAGE_TRAIL asks for it too, writes coverage to the trail
@@ -180,7 +187,7 @@ type Services struct {
 func AllServices() Services {
 	return Services{
 		Fs: true, Persist: true, Watchbill: true, ChLocal: true, AdhocData: true, LadingPublish: true,
-		Clipboard: true, Coverage: true, Sysmetrics: true, Introspect: true,
+		Clipboard: true, AudioOut: true, Coverage: true, Sysmetrics: true, Introspect: true,
 		AppState: true, LLM: true, HTTP: true, Agent: true, SQLSurface: true,
 	}
 }
@@ -216,6 +223,12 @@ type Options struct {
 	Workstatelets *workstatelet.Catalog
 	// Services selects the optional services.
 	Services Services
+	// AudioDevice is what Services.AudioOut opens streams on. Nil picks by
+	// where the person is: the audio lane to the active remote viewer's page
+	// when IMZERO2_HEADLESS_LISTEN names a carrier, and otherwise
+	// audioout.PulseDevice, the sound server of the machine the process runs
+	// on (ADR-0372, proposed, §SD2).
+	AudioDevice audioout.DeviceI
 	// LaunchApps are pre-resolved apps opened without a config, best-effort
 	// (a failed open is logged and skipped). In screenshot mode
 	// (IMZERO2_SCREENSHOT_DIR set) they are the tour renderers instead and
@@ -295,7 +308,7 @@ type Runtime struct {
 	Facts     factsstore.FactsStoreI
 	IsChStore bool
 	Bus       *inprocbus.Inst
-	// Fs, Persist, ChLocal, Adhoc, Clipboard and Tasks are nil when the
+	// Fs, Persist, ChLocal, Adhoc, Clipboard, AudioOut and Tasks are nil when the
 	// service is off or failed to start.
 	Fs        *fsbroker.Service
 	Persist   *persist.Service
@@ -303,6 +316,7 @@ type Runtime struct {
 	Adhoc     *adhocdata.Service
 	Lading    *ladingpublish.Service
 	Clipboard *clipboardbroker.Service
+	AudioOut  *audioout.Service
 	Tasks     *tasksupervisor.Supervisor
 	// persistStore is the backend behind runtime.persist, which host
 	// services keep their own state in too.
@@ -813,6 +827,27 @@ func (rt *Runtime) bootServices(ctx context.Context, factsCfg chstore.Config) {
 		} else {
 			rt.Clipboard = clipSvc
 			rt.cleanups = append(rt.cleanups, clipSvc.Close)
+		}
+	}
+	if svc.AudioOut {
+		dev := rt.opts.AudioDevice
+		switch {
+		case dev != nil:
+		case imzero2env.HeadlessListen.Get() != "":
+			lane := hostaudio.NewLaneDevice(hostaudio.Traced(lanesink.Options{}, logger), func(err error) {
+				logger.Warn().Err(err).Msg("audioout: audio lane message refused")
+			})
+			rt.cleanups = append(rt.cleanups, lane.Close)
+			dev = lane
+		default:
+			dev = audioout.PulseDevice{}
+		}
+		audioSvc, audioErr := audioout.NewService(rt.Bus, logger, dev)
+		if audioErr != nil {
+			logger.Warn().Err(audioErr).Msg("audioout: service start failed; audio.out.open will be unbound")
+		} else {
+			rt.AudioOut = audioSvc
+			rt.cleanups = append(rt.cleanups, audioSvc.Close)
 		}
 	}
 	if svc.Coverage {

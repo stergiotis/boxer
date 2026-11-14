@@ -54,7 +54,7 @@ func newTab() (inst *tabhost.Program) {
 	}
 	inst = tabhost.New(tabhost.Options{
 		DefaultApp: "github.com/stergiotis/boxer/apps/play",
-		Services:   tabhost.Services{KeelsonSQL: reg},
+		Services:   tabhost.Services{KeelsonSQL: reg, AudioOut: true},
 		Prepare:    prepare,
 	}, &cli.Command{Name: "imzero2tab", Version: vcs.BuildVersionInfo(), Before: logging.Apply})
 	return

@@ -207,10 +207,22 @@ func (inst *Application[U]) Launch() (err error) {
 		if werr != nil {
 			log.Warn().Err(werr).Msg("no wake channel to the client; it keeps its cadence")
 		}
+		// The audio lane exists where the client serves remote viewers: one
+		// of their pages is the session's audio device (ADR-0372, proposed).
+		var lane *audioLane
+		if imzero2env.HeadlessListen.Get() != "" {
+			var lerr error
+			if lane, lerr = newAudioLane(cmd); lerr != nil {
+				log.Warn().Err(lerr).Msg("no audio lane to the client; the session has no audio device")
+			}
+		}
 		err = cmd.Start()
 		if err != nil {
 			if w != nil {
 				_ = w.Close()
+			}
+			if lane != nil {
+				_ = lane.Close()
 			}
 			return eb.Build().Str("path", cfg.ClientBinary).Errorf("error while running main loop in external binary: %w", err)
 		}
@@ -218,6 +230,10 @@ func (inst *Application[U]) Launch() (err error) {
 			go w.run()
 			hostwake.Set(w.wake)
 			inst.closers = append(inst.closers, w)
+		}
+		if lane != nil {
+			lane.start()
+			inst.closers = append(inst.closers, lane)
 		}
 		go func() {
 			e := cmd.Wait()

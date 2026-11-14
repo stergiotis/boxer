@@ -1062,8 +1062,9 @@ func (inst *App) renderPreview(sc *storeConn) {
 	}
 	laneKey := fmt.Sprintf("%x@%d:%s", key.mount.Value(), key.snap, p.selected)
 	path := p.selected
+	bus := inst.bus
 	content, done, perr, busy := inst.preview.Demand(laneKey, func(ctx context.Context) (previewContent, error) {
-		return loadPreview(ctx, fsys, path)
+		return loadPreview(ctx, bus, fsys, path)
 	})
 	if busy {
 		inst.waiting(&inst.preview, "preview", "Loading "+path+"…")

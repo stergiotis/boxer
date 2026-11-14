@@ -17,6 +17,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/data/chlocalbroker"
 	"github.com/stergiotis/boxer/public/keelson/runtime/adhocdata"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
+	"github.com/stergiotis/boxer/public/keelson/runtime/audioout"
 	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
 	"github.com/stergiotis/boxer/public/keelson/runtime/clipboardbroker"
 	"github.com/stergiotis/boxer/public/keelson/runtime/externaledit"
@@ -323,6 +324,11 @@ func (inst *PlayLauncher) Manifest() (m app.Manifest) {
 				Pattern:   clipboardbroker.SubjectWrite,
 				Direction: app.CapDirectionPub,
 				Reason:    "Copy buttons: the Definition pane's SQL fences and gloss/taggedid's block face (ADR-0026 Update 2026-05-30)",
+			},
+			{
+				Pattern:   audioout.SubjectOpen,
+				Direction: app.CapDirectionPub,
+				Reason:    "play a recording held in a cell: the audio/wav gloss's block face (ADR-0245 §SD6, ADR-0372)",
 			},
 			// The Map, Graph and Vector field panes' basemap tiles, fetched
 			// through the host's egress service (ADR-0262 §SD6).
