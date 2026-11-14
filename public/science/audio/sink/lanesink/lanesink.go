@@ -160,6 +160,14 @@ func (inst *Device) State() (state DeviceStateE, sampleRate uint32) {
 // while one runs and on the device-less clock otherwise. label is unused: the
 // remote device shows no stream names. The sink does not own src.
 func (inst *Device) OpenSink(src pcm.SourceI, label string) (s sink.SinkI, err error) {
+	return inst.OpenSinkWithLatency(src, label, 0)
+}
+
+// OpenSinkWithLatency is OpenSink for a stream kept ahead of the device by
+// at least latency, where that is more than the device's target: a source
+// whose reads are slow or uneven then has that long to deliver before the
+// device runs dry. The bound on a target holds for it too.
+func (inst *Device) OpenSinkWithLatency(src pcm.SourceI, label string, latency time.Duration) (s sink.SinkI, err error) {
 	if src == nil {
 		return nil, eh.New("nil source")
 	}
@@ -175,7 +183,7 @@ func (inst *Device) OpenSink(src pcm.SourceI, label string) (s sink.SinkI, err e
 	if inst.closed {
 		return nil, eh.New("the audio lane is closed")
 	}
-	out := &Sink{dev: inst, id: inst.nextID, src: src, channels: int(format.Channels)}
+	out := &Sink{dev: inst, id: inst.nextID, src: src, channels: int(format.Channels), minTarget: latency}
 	out.cur = sink.NewNull(src, inst.clock)
 	inst.nextID++
 	inst.streams[out.id] = out
@@ -354,6 +362,9 @@ type Sink struct {
 	id       uint32
 	src      pcm.SourceI
 	channels int
+	// minTarget is the least the stream is kept ahead by, as its opener
+	// asked; zero leaves it to the device's target.
+	minTarget time.Duration
 
 	mu sync.Mutex
 	// cur is the transport in force: eng while attached, a sink.Null
@@ -545,7 +556,7 @@ func (inst *Sink) sourceAtLocked(dev int64) (src int64) {
 
 // targetFramesLocked is how many device frames the stream is kept ahead by.
 func (inst *Sink) targetFramesLocked() (frames int64) {
-	target := max(inst.dev.target, time.Duration(float64(inst.gap)*reportHeadroom)+deviceLead)
+	target := max(inst.dev.target, inst.minTarget, time.Duration(float64(inst.gap)*reportHeadroom)+deviceLead)
 	target = min(target, maxTarget)
 	return int64(target.Seconds() * float64(inst.devRate))
 }

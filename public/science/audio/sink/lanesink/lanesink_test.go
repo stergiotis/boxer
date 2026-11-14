@@ -842,3 +842,33 @@ func TestTheTargetHasAFloor(t *testing.T) {
 	require.LessOrEqual(t, rs.inFlight(), floor)
 	require.Greater(t, rs.inFlight(), floor-least-1)
 }
+
+// A stream opened with a latency above the device's target is kept that far
+// ahead; one that asks for less keeps the device's target.
+func TestAStreamsLatencyRaisesItsOwnTarget(t *testing.T) {
+	r := newRemote(t, Options{Sync: true})
+	format := pcm.Format{SampleRate: testRate, Channels: 1}
+	deep, err := r.dev.OpenSinkWithLatency(ramp(t, format, 60*testRate), "test", 400*time.Millisecond)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = deep.Close() })
+	shallow, err := r.dev.OpenSinkWithLatency(ramp(t, format, 60*testRate), "test", 20*time.Millisecond)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = shallow.Close() })
+	r.announce(DeviceRunning, testRate)
+	deep.Play()
+	shallow.Play()
+	for range 50 {
+		r.advance(20 * time.Millisecond)
+	}
+	least := int64(quantum.Seconds() * testRate)
+	asked := int64((400 * time.Millisecond).Seconds() * testRate)
+	require.Zero(t, r.underruns)
+	for id, rs := range r.streams {
+		want := targetFrames
+		if id == deep.(*Sink).id {
+			want = asked
+		}
+		require.LessOrEqual(t, rs.inFlight(), want)
+		require.Greater(t, rs.inFlight(), want-least-1)
+	}
+}

@@ -26,7 +26,7 @@ type laneOrPulse struct {
 	pulse audioout.PulseDevice
 }
 
-var _ audioout.DeviceI = (*laneOrPulse)(nil)
+var _ audioout.LatencyDeviceI = (*laneOrPulse)(nil)
 
 // Name implements [audioout.DeviceI]: the kind of device a stream opened now
 // would get. It waits as OpenSink does.
@@ -41,8 +41,13 @@ func (inst *laneOrPulse) Name() (name string) {
 // it may wait, at most until laneWait after the launch, for the client to
 // open its end of the lane.
 func (inst *laneOrPulse) OpenSink(src pcm.SourceI, label string) (s sink.SinkI, err error) {
+	return inst.OpenSinkWithLatency(src, label, 0)
+}
+
+// OpenSinkWithLatency implements [audioout.LatencyDeviceI] as OpenSink does.
+func (inst *laneOrPulse) OpenSinkWithLatency(src pcm.SourceI, label string, latency time.Duration) (s sink.SinkI, err error) {
 	if hostaudio.Await(laneWait) {
-		return inst.lane.OpenSink(src, label)
+		return inst.lane.OpenSinkWithLatency(src, label, latency)
 	}
-	return inst.pulse.OpenSink(src, label)
+	return inst.pulse.OpenSinkWithLatency(src, label, latency)
 }

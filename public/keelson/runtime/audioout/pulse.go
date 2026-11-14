@@ -1,6 +1,8 @@
 package audioout
 
 import (
+	"time"
+
 	"github.com/stergiotis/boxer/public/science/audio/pcm"
 	"github.com/stergiotis/boxer/public/science/audio/sink"
 	"github.com/stergiotis/boxer/public/science/audio/sink/pulsesink"
@@ -15,7 +17,7 @@ type PulseDevice struct {
 	Server string
 }
 
-var _ DeviceI = PulseDevice{}
+var _ LatencyDeviceI = PulseDevice{}
 
 // Name implements [DeviceI].
 func (inst PulseDevice) Name() (name string) { return "pulse" }
@@ -23,11 +25,17 @@ func (inst PulseDevice) Name() (name string) { return "pulse" }
 // OpenSink implements [DeviceI]. The server's mixer shows the stream under
 // the app's id.
 func (inst PulseDevice) OpenSink(src pcm.SourceI, label string) (s sink.SinkI, err error) {
+	return inst.OpenSinkWithLatency(src, label, 0)
+}
+
+// OpenSinkWithLatency implements [LatencyDeviceI]: latency is the stream
+// buffer asked of the server.
+func (inst PulseDevice) OpenSinkWithLatency(src pcm.SourceI, label string, latency time.Duration) (s sink.SinkI, err error) {
 	name := "boxer"
 	if label != "" {
 		name += " " + label
 	}
-	out, err := pulsesink.Open(src, pulsesink.Options{AppName: name, Server: inst.Server})
+	out, err := pulsesink.Open(src, pulsesink.Options{AppName: name, Server: inst.Server, Latency: latency})
 	if err != nil {
 		return nil, err
 	}

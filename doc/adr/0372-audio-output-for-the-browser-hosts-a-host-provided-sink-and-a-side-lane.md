@@ -446,6 +446,26 @@ Accepted 2026-11-14.
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers (Tier 1 in-place / Tier 2 dated `## Updates` entry / Tier 3 new superseding ADR).
 
+## Updates
+
+### 2026-11-14 — an app may ask for a deeper buffer
+
+SD1's request carried the stream's shape and nothing about how it is read.
+The first app outside this repository to move onto the capability had opened
+the pulse sink with a 300 ms stream buffer, because its source decodes inside
+the device's pull and the sink's 60 ms default ran dry under load; with the
+request as it stood, moving it would have taken that buffer away.
+
+The request therefore carries a latency (`audioout.Options.Latency`, through
+`audioout.OpenWith`): how much audio the app asks the device to hold ahead of
+its output, zero being the device's default. A device that can hold more
+implements `audioout.LatencyDeviceI`. The pulse device passes the figure to
+the server as the stream buffer. The lane device keeps that stream ahead by
+at least the figure where it exceeds the lane's target (SD5), under the same
+bound; the lane's own target stays the host's to set. A device without the
+interface is opened as before. The figure is a request about dropouts, not a
+promise about delay: a seek or a pause is heard that much later.
+
 ## References
 
 - [ADR-0208](./0208-audio-waveform-player-widget.md) — the audio subtree, `sink.SinkI` and the seam this decision uses; its update of 2026-11-14 records what M1 changed there.

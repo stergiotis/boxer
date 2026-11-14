@@ -48,12 +48,24 @@ type DeviceI interface {
 	OpenSink(src pcm.SourceI, label string) (s sink.SinkI, err error)
 }
 
+// LatencyDeviceI is a [DeviceI] that can hold more audio ahead of its output
+// than it does by default, for a stream whose request names a latency.
+type LatencyDeviceI interface {
+	DeviceI
+	// OpenSinkWithLatency is OpenSink for a stream that asks for at least
+	// latency of audio held ahead; zero is the device's default.
+	OpenSinkWithLatency(src pcm.SourceI, label string, latency time.Duration) (s sink.SinkI, err error)
+}
+
 // OpenRequest describes the stream an app asks an output for. It is what the
 // service records; the source itself stays with the caller.
 type OpenRequest struct {
 	SampleRate uint32
 	Channels   uint16
 	Frames     int64
+	// Latency is how much audio the app asks the device to hold ahead of
+	// its output; zero is the device's default. See [Options].
+	Latency time.Duration
 }
 
 // OpenReply is the service's answer: a token to redeem in process, or a
@@ -91,9 +103,10 @@ func (inst Status) Audible() (yes bool) { return inst.Reason == "" }
 
 // grant is a token the service handed out and nobody redeemed yet.
 type grant struct {
-	svc    *Service
-	from   app.AppIdT
-	record int // index into svc.records, offset by svc.dropped
+	svc     *Service
+	from    app.AppIdT
+	record  int // index into svc.records, offset by svc.dropped
+	latency time.Duration
 }
 
 // pending holds the unredeemed grants of every service in the process, so
@@ -206,7 +219,7 @@ func (inst *Service) grant(from app.AppIdT, req OpenRequest) (token string) {
 	inst.mu.Unlock()
 
 	pending.mu.Lock()
-	pending.grants[token] = grant{svc: inst, from: from, record: index}
+	pending.grants[token] = grant{svc: inst, from: from, record: index, latency: req.Latency}
 	pending.order = append(pending.order, token)
 	if len(pending.order) > maxPending {
 		delete(pending.grants, pending.order[0])
@@ -234,7 +247,11 @@ func redeem(token string, src pcm.SourceI) (s sink.SinkI, device string, err err
 		return nil, "", eh.Errorf("the grant is not one this process can redeem")
 	}
 	device = g.svc.dev.Name()
-	s, err = g.svc.dev.OpenSink(src, string(g.from))
+	if dev, ok := g.svc.dev.(LatencyDeviceI); ok && g.latency > 0 {
+		s, err = dev.OpenSinkWithLatency(src, string(g.from), g.latency)
+	} else {
+		s, err = g.svc.dev.OpenSink(src, string(g.from))
+	}
 
 	g.svc.mu.Lock()
 	if i := g.record - g.svc.dropped; i >= 0 && i < len(g.svc.records) {
@@ -265,15 +282,30 @@ func Audible(s sink.SinkI) (yes bool, reason string) {
 	return true, ""
 }
 
-// Open asks the host for an audio output over src on the app's bus client.
+// Options are what an app may ask of its output beyond the source.
+type Options struct {
+	// Latency is how much audio the device is asked to hold ahead of its
+	// output, for a source whose reads are slow or uneven: the output runs
+	// dry less readily, and a seek or a pause is heard that much later. Zero
+	// is the device's default. A device may hold more, and one that cannot
+	// hold more than its default ignores the figure.
+	Latency time.Duration
+}
+
+// Open is [OpenWith] with no options.
+func Open(bus app.BusI, src pcm.SourceI) (s sink.SinkI, status Status) {
+	return OpenWith(bus, src, Options{})
+}
+
+// OpenWith asks the host for an audio output over src on the app's bus client.
 // It always returns a sink the caller owns and closes: the host's device
 // where the request was granted and the device opened, and otherwise the
 // device-less [sink.Null], with the reason in status. The sink does not own
 // src.
 //
 // The request waits on the bus and the device may talk to a sound server, so
-// Open is called off the render path.
-func Open(bus app.BusI, src pcm.SourceI) (s sink.SinkI, status Status) {
+// it is called off the render path.
+func OpenWith(bus app.BusI, src pcm.SourceI, opts Options) (s sink.SinkI, status Status) {
 	null := func(reason string) (sink.SinkI, Status) {
 		return sink.NewNull(src, nil), Status{Reason: reason}
 	}
@@ -284,7 +316,7 @@ func Open(bus app.BusI, src pcm.SourceI) (s sink.SinkI, status Status) {
 		return null("the app has no bus")
 	}
 	format := src.Format()
-	payload, err := buscodec.Encode(OpenRequest{SampleRate: format.SampleRate, Channels: format.Channels, Frames: src.Frames()})
+	payload, err := buscodec.Encode(OpenRequest{SampleRate: format.SampleRate, Channels: format.Channels, Frames: src.Frames(), Latency: max(opts.Latency, 0)})
 	if err != nil {
 		return null(err.Error())
 	}

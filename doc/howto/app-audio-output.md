@@ -61,6 +61,11 @@ with a manifest and a bus client.
    With a `track`, open it in `track.Options.NewSink`, or swap it in later
    with `track.ReplaceSink`.
 
+   A source whose reads are slow or uneven — one that decodes as it is
+   read — can ask for more audio held ahead of the output with
+   `audioout.OpenWith(bus, src, audioout.Options{Latency: d})`. The output
+   runs dry less readily, and a seek or a pause is heard that much later.
+
 3. **Drive it through `sink.SinkI`.** `Play`, `Pause`, `SeekFrame`,
    `SetRate`, `SetVolume`, and `Position` once per frame for the playhead.
    None of them waits on a device.

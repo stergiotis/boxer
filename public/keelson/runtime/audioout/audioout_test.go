@@ -3,6 +3,7 @@ package audioout_test
 import (
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/require"
@@ -161,4 +162,39 @@ func TestAudible(t *testing.T) {
 	require.True(t, yes)
 	yes, _ = audioout.Audible(nil)
 	require.False(t, yes)
+}
+
+// latencyDevice is a fakeDevice that takes a request's latency.
+type latencyDevice struct {
+	fakeDevice
+	latencies []time.Duration
+}
+
+func (inst *latencyDevice) OpenSinkWithLatency(src pcm.SourceI, label string, latency time.Duration) (sink.SinkI, error) {
+	inst.latencies = append(inst.latencies, latency)
+	return inst.OpenSink(src, label)
+}
+
+// A latency the app names reaches a device that can take it and is recorded;
+// a device that cannot is opened as it always is.
+func TestOpenWithALatency(t *testing.T) {
+	dev := &latencyDevice{}
+	bus, svc := served(t, dev)
+	client := bus.NewClient("test.player", playerCaps())
+
+	_, st := audioout.OpenWith(client, source(t), audioout.Options{Latency: 300 * time.Millisecond})
+	require.True(t, st.Audible(), st.Reason)
+	require.Equal(t, []time.Duration{300 * time.Millisecond}, dev.latencies)
+	require.Equal(t, 300*time.Millisecond, svc.Records()[0].Request.Latency)
+
+	_, st = audioout.Open(client, source(t))
+	require.True(t, st.Audible(), st.Reason)
+	require.Len(t, dev.latencies, 1, "no latency asked, the plain open")
+	require.Len(t, dev.opened, 2)
+
+	plain := &fakeDevice{}
+	bus, _ = served(t, plain)
+	_, st = audioout.OpenWith(bus.NewClient("test.player", playerCaps()), source(t), audioout.Options{Latency: time.Second})
+	require.True(t, st.Audible(), st.Reason)
+	require.Len(t, plain.opened, 1)
 }
