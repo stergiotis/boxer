@@ -29,6 +29,35 @@ const DefaultSink = "main"
 // no parameters; a WITH item that is an expression, because a record is a
 // relation; WITH RECURSIVE and a FORMAT, as for a record written by hand.
 func FromBuffer(sql string, sink string) (text []byte, err error) {
+	records, err := bufferRecords(sql, sink)
+	if err != nil {
+		return nil, err
+	}
+	var b strings.Builder
+	for _, r := range records {
+		b.WriteString(recordCellText(r.name, r.statement))
+		b.WriteString("\n")
+	}
+	b.WriteString("```sql " + RendererTable + "\nSELECT * FROM " + records[len(records)-1].name + "\n```\n")
+	return []byte(b.String()), nil
+}
+
+// bufferRecord is one part of a buffer read as a notebook's records.
+type bufferRecord struct{ name, statement string }
+
+// recordCellText is a record cell as [FromBuffer] and [SetRecords] write
+// one: the statement in a fence it cannot close, and its id on the next
+// line. A block id holds no underscore; the reader writes it back as one.
+func recordCellText(name, statement string) (text string) {
+	fence := fenceFor(statement, '`', 3)
+	return fence + "sql\n" + statement + "\n" + fence + "\n^" + strings.ReplaceAll(name, "_", "-") + "\n"
+}
+
+// bufferRecords takes a buffer apart: each query of its WITH list, then its
+// own SELECT under the name sink ([DefaultSink] when empty). Each part is a
+// record as one written by hand is, checked here, so what is made of the
+// parts is a notebook collection takes.
+func bufferRecords(sql string, sink string) (records []bufferRecord, err error) {
 	if sink == "" {
 		sink = DefaultSink
 	}
@@ -43,7 +72,7 @@ func FromBuffer(sql string, sink string) (text []byte, err error) {
 	if pErr != nil {
 		return nil, eh.Errorf("the buffer does not parse: %w", pErr)
 	}
-	fail := func(what string) ([]byte, error) {
+	fail := func(what string) ([]bufferRecord, error) {
 		return nil, eh.Errorf("the buffer is not a notebook's: %s", what)
 	}
 	qs, ok := pr.Tree.(*grammar1.QueryStmtContext)
@@ -68,8 +97,6 @@ func FromBuffer(sql string, sink string) (text []byte, err error) {
 		return fail("it reads the parameter " + slots[0].GetText() + ", and a notebook holds no parameters")
 	}
 
-	type record struct{ name, statement string }
-	var records []record
 	seen := map[string]struct{}{}
 	own := src
 	if c := su.Ctes(); c != nil {
@@ -98,7 +125,7 @@ func FromBuffer(sql string, sink string) (text []byte, err error) {
 			if r.Empty() {
 				return fail("the WITH query " + name + " is empty")
 			}
-			records = append(records, record{name: name, statement: strings.TrimSpace(pr.Source[r.Start:r.End])})
+			records = append(records, bufferRecord{name: name, statement: strings.TrimSpace(pr.Source[r.Start:r.End])})
 		}
 		r := pr.SourceRangeOf(cc)
 		if r.Empty() {
@@ -109,35 +136,26 @@ func FromBuffer(sql string, sink string) (text []byte, err error) {
 	if _, taken := seen[sink]; taken {
 		return nil, eb.Build().Str("sink", sink).Errorf("the buffer has a WITH query of the name its own SELECT was to take; give the SELECT another")
 	}
-	records = append(records, record{name: sink, statement: own})
-
-	var b strings.Builder
+	records = append(records, bufferRecord{name: sink, statement: own})
 	for _, r := range records {
-		// Each part is a record as one written by hand is: checked now, so
-		// the notebook that comes out is one collection takes.
 		if _, rErr := readRecordStatement(&Cell{Name: r.name, Body: r.statement}); rErr != nil {
 			return nil, rErr
 		}
-		fence := fenceFor(r.statement)
-		b.WriteString(fence + "sql\n" + r.statement + "\n" + fence + "\n")
-		// A block id holds no underscore; the reader writes it back as one.
-		b.WriteString("^" + strings.ReplaceAll(r.name, "_", "-") + "\n\n")
 	}
-	b.WriteString("```sql " + RendererTable + "\nSELECT * FROM " + sink + "\n```\n")
-	return []byte(b.String()), nil
+	return records, nil
 }
 
-// fenceFor is a fence that body cannot close: one backtick longer than the
-// longest run of backticks in it, and three at least.
-func fenceFor(body string) (fence string) {
+// fenceFor is a fence of ch that body cannot close: one longer than the
+// longest run of ch in it, and least at least.
+func fenceFor(body string, ch byte, least int) (fence string) {
 	longest, run := 0, 0
 	for i := 0; i < len(body); i++ {
-		if body[i] == '`' {
+		if body[i] == ch {
 			run++
 			longest = max(longest, run)
 		} else {
 			run = 0
 		}
 	}
-	return strings.Repeat("`", max(3, longest+1))
+	return strings.Repeat(string(ch), max(least, longest+1))
 }

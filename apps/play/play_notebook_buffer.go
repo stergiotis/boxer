@@ -9,8 +9,8 @@ package play
 //   - get_notebook, and the toolbar's "Copy as notebook": the buffer as a
 //     notebook's text, every WITH query a record cell and the buffer's own
 //     SELECT the last (mdnotebook.FromBuffer).
-//   - Load: a picked file that holds record cells is read as the buffer of
-//     its records (mdnotebook.Buffer).
+//   - Load, and set_notebook: a text that holds record cells is read as the
+//     buffer of its records (mdnotebook.Buffer).
 //
 // The two are inverse, so a notebook's records can be opened here, worked
 // on against the server, and written back as cells.
@@ -23,7 +23,10 @@ import (
 	"github.com/stergiotis/boxer/public/semistructured/markdown/mdnotebook"
 )
 
-const opGetNotebook = "get_notebook"
+const (
+	opGetNotebook = "get_notebook"
+	opSetNotebook = "set_notebook"
+)
 
 // notebookMaxBytes bounds get_notebook's reading. A notebook cut short is
 // not the buffer's, so a longer one is refused, not truncated.
@@ -32,6 +35,11 @@ const notebookMaxBytes = 64 << 10
 // NotebookArgs is get_notebook's argument.
 type NotebookArgs struct {
 	Sink string `json:",omitzero" desc:"the record name for the buffer's own SELECT; main when left out. A buffer with a WITH query of that name needs another"`
+}
+
+// SetNotebookArgs is set_notebook's argument.
+type SetNotebookArgs struct {
+	Markdown string `desc:"a notebook's text (ADR-0371). Its record cells, in document order, become the buffer: each a WITH query, the last the buffer's own SELECT. Prose, presentation cells and stored results are not read"`
 }
 
 // BufferNotebook is get_notebook's result.
@@ -118,5 +126,26 @@ func addNotebookOps(s *appops.Set[*PlayLauncher, opsSnap]) {
 				return BufferNotebook{}, app.RefuseOperation("the buffer's notebook is " + strconv.Itoa(len(out.Markdown)) + " bytes, over the " + strconv.Itoa(notebookMaxBytes) + " this reading returns; copy it from the window")
 			}
 			return out, nil
+		})
+	appops.Command(s, app.OperationSpec{Name: opSetNotebook, Version: 1,
+		Summary: "replace the SQL buffer with a notebook's records (ADR-0371): each record cell a WITH query in document order, the last the buffer's own SELECT",
+		Effect:  app.OperationEffectDocument, Writes: []string{opsResSql}, Agents: true, Gesture: "Load, with a notebook file",
+		Rebuild: app.OperationRebuildRefold, Fork: app.OperationForkPerInstance,
+		Follows: []string{"the buffer is an ordinary one: run it, and get_query_graph has each record as a node",
+			"get_notebook reads the buffer back as record cells; the notebook's prose and presentation cells stay in its text, which this does not hold"}},
+		func(inst *PlayLauncher, call app.OperationCall, in SetNotebookArgs) (appops.None, error) {
+			if inst.inner == nil {
+				return appops.None{}, app.RefuseOperation("the window has not mounted")
+			}
+			sql, isNotebook, err := bufferOfNotebook([]byte(in.Markdown))
+			if !isNotebook {
+				return appops.None{}, app.RefuseOperation("the text holds no record cell, a sql fence followed by an id; set_sql takes a statement")
+			}
+			if err != nil {
+				return appops.None{}, app.RefuseOperation("the notebook's records: " + err.Error())
+			}
+			inst.inner.swapSql(sql)
+			inst.inner.markAgent(call.OnBehalfOf)
+			return appops.None{}, nil
 		})
 }

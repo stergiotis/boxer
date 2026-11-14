@@ -1,6 +1,7 @@
 package play
 
 import (
+	"io/fs"
 	"strings"
 	"testing"
 
@@ -8,8 +9,10 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
+	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
 	"github.com/stergiotis/boxer/public/semistructured/markdown/mdnotebook"
 	"github.com/stergiotis/boxer/public/semistructured/markdown/mdnotebook/fixture"
+	"github.com/stergiotis/boxer/public/semistructured/markdown/mdnotebook/samples"
 )
 
 const notebookTestBuffer = "WITH recent AS (SELECT number AS n FROM numbers(10)),\n" +
@@ -87,5 +90,44 @@ func TestGetNotebookRefusesWhatANotebookCannotHold(t *testing.T) {
 		_, err := h.Snapshot().Query(opGetNotebook, nil)
 		require.ErrorAs(t, err, &refusal, sql)
 		assert.Contains(t, refusal.Reason, want, sql)
+	}
+}
+
+// set_notebook is Load for an agent: the notebook's records become the
+// buffer, and get_notebook reads them back.
+func TestSetNotebookReplacesTheBufferWithTheRecords(t *testing.T) {
+	l, h := opsLauncher(t)
+	text, err := fs.ReadFile(samples.FS(), "minimal.md")
+	require.NoError(t, err)
+	args, err := buscodec.Encode(SetNotebookArgs{Markdown: string(text)})
+	require.NoError(t, err)
+	_, err = h.ApplyCommand(app.OperationCall{Writer: "task:t"}, opSetNotebook, args)
+	require.NoError(t, err)
+
+	nb, err := mdnotebook.Read(text)
+	require.NoError(t, err)
+	want, err := mdnotebook.Buffer(nb)
+	require.NoError(t, err)
+	assert.Equal(t, want, l.inner.sql)
+	back := queryOp[BufferNotebook](t, h, opGetNotebook, NotebookArgs{Sink: "totals"})
+	assert.Equal(t, []string{"readings", "totals"}, back.Records)
+
+	// The buffer written back into the text it came from is that text.
+	again, err := mdnotebook.SetRecords(nb, l.inner.sql, "")
+	require.NoError(t, err)
+	assert.Equal(t, string(text), string(again))
+
+	held := l.inner.sql
+	for markdown, want := range map[string]string{
+		"SELECT 1 AS one":                                          "holds no record cell",
+		"```sql\nDROP TABLE t\n```\n^gone\n":                       "the notebook's records",
+		"```sql\nSELECT 1\n```\n^a\n\n```sql\nSELECT 2\n```\n^a\n": "the notebook's records",
+	} {
+		args, err = buscodec.Encode(SetNotebookArgs{Markdown: markdown})
+		require.NoError(t, err)
+		_, err = h.ApplyCommand(app.OperationCall{Writer: "task:t"}, opSetNotebook, args)
+		require.Error(t, err, markdown)
+		assert.Contains(t, err.Error(), want, markdown)
+		assert.Equal(t, held, l.inner.sql, "a refused text leaves the buffer as it was")
 	}
 }

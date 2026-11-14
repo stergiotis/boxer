@@ -15,7 +15,9 @@
 // [Collect] is the one step that does need a server: it computes every
 // record once, in document order, and returns the text sealed over the
 // results. [Buffer] is the same records as the one statement to try in
-// play.
+// play; [FromBuffer] is a buffer as a new notebook's records, and
+// [SetRecords] writes one back into a notebook's text, keeping the rest.
+// Package samples holds notebooks to read and to start from.
 //
 // The package has no UI. The widget that draws a notebook is
 // widgets/notebookview.

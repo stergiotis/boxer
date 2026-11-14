@@ -74,6 +74,7 @@ window's first frame.
 | Operation | Kind | What it does | Unavailable or refused when |
 | --- | --- | --- | --- |
 | `set_sql` | command, document | replaces the SQL buffer; the parameter slots follow after a short debounce | never, once mounted |
+| `set_notebook` | command, document | replaces the SQL buffer with a notebook's records (ADR-0371): each record cell a WITH query in document order, the last the buffer's own SELECT; `get_notebook` the other way | the text holds no record cell; a record is not one SELECT, or two share a name |
 | `set_param` | command, document | sets one parameter in its tier: a pinned one rewrites its SET line, a live one writes its signal | the slot is not in the buffer yet (conflict: read `get_state` again); an enum value the slot does not offer; a value outside a range control's shape |
 | `set_signal` | command, document | sets one signal with the task as its writer; `selection` is a row of a node's result, and `selection_node`, `selection_id` and `selection_key` follow it from that row | a signal a pane publishes and does not take back (`tl_from`, `vp_min_x`, `gv_selection`, …), naming the pane's command instead; a selection that is not a row number, names a node not on screen, or a row the result lacks; `node` with any signal but `selection` |
 | `delete_signal` | command, document | deletes one held signal, so a parameter reading it falls back to unfilled or its default | nothing holds the signal; a signal a pane publishes |
