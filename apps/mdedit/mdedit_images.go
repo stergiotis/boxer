@@ -100,6 +100,7 @@ func (inst *App) setSnapshotImages(s *snapshotImages) {
 		old.job.Close()
 	}
 	inst.snapImages = s
+	inst.resetNotebook()
 	inst.reparseForImages()
 }
 

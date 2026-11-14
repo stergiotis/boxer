@@ -390,6 +390,9 @@ type App struct {
 	// handed-over document's snapshot, until the window has read it.
 	snapImages *snapshotImages
 	handedSnap *handedSnapshot
+	// notebook is the reading mode's sealed notebook, when the snapshot
+	// document is one (mdedit_notebook.go).
+	notebook notebookState
 
 	// files is the side panel's files view state (mdedit_files.go).
 	files filesState
@@ -641,6 +644,7 @@ func (inst *App) Unmount(ctx app.MountContextI) (err error) {
 	inst.files.load.Close()
 	inst.files.mounts.Close()
 	inst.files.conn.Close()
+	inst.resetNotebook()
 
 	if inst.store == nil || inst.src == inst.persistedSrc {
 		return
@@ -1209,6 +1213,9 @@ func (inst *App) renderSource() {
 // renderPreview emits the rendered document. Callers own the enclosing scroll
 // area.
 func (inst *App) renderPreview() {
+	if inst.renderNotebook() {
+		return
+	}
 	if inst.doc == nil {
 		c.Label("Nothing to preview yet.").Send()
 		return

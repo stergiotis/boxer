@@ -117,6 +117,13 @@ snapshot read-only. The command needs rclone 1.64 or later and a `boxer`
 executable on `PATH`; the lading snapshot-store how-to (§6) sets both up and
 reads its failure messages.
 
+A snapshot document that is a sealed notebook — markdown that holds stored
+records as `sql` fences, and cells over them — is drawn as one in **Read**
+mode:
+its stored results as tables and panels, read from the blobs beside it in
+the snapshot. The other modes show its text. A notebook that is not from a
+snapshot has nowhere to read its blobs from, and reads as markdown.
+
 A snapshot document also offers **Link** beside it: an `mdedit://` link to
 the document at the section the caret is in, in the current mode. Any app
 that renders markdown opens such a link in a new mdedit window — the chat,
