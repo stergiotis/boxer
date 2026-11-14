@@ -15,6 +15,13 @@ the mean over [48](val:stats.hours) hours was
 [299.9 ms](val:stats.mean_ms "gloss/duration;unit=ms"). The slower region was
 [emea](val:slowest.region).
 
+## What was said
+
+The stand-up where the slow hours came up, as it was recorded. A recording
+is a file beside the notebook, named by its content like a stored result.
+
+![Stand-up, Tuesday](report.blobs/6c05c8c146cad65573d80da58ab6492b.wav)
+
 ## By hour
 
 ```sql chart

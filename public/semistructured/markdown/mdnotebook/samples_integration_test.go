@@ -88,7 +88,19 @@ func TestSamplesAreWhatCollectionWrites(t *testing.T) {
 			defer stored.Release()
 			require.Empty(t, mdnotebook.Problems(nb, stored))
 			require.Empty(t, stored.Stale, "a record was edited since the sample was collected; run with -update-samples")
+			// What collection wrote, over the files the notebook keeps
+			// beside it and collection does not make: a recording, an image.
 			fresh := fstest.MapFS{}
+			kept, dErr := os.ReadDir(filepath.Join(samplesDir, blobDir))
+			require.NoError(t, dErr)
+			for _, e := range kept {
+				if strings.HasSuffix(e.Name(), mdnotebook.RecordExt) {
+					continue
+				}
+				data, fErr := os.ReadFile(filepath.Join(samplesDir, blobDir, e.Name()))
+				require.NoError(t, fErr)
+				fresh[blobDir+"/"+e.Name()] = &fstest.MapFile{Data: data}
+			}
 			for p, data := range out.Blobs {
 				fresh[p] = &fstest.MapFile{Data: data}
 			}
