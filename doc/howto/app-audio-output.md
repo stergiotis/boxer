@@ -95,6 +95,17 @@ plays it with no input.
   has not enabled sound.
   **Cause:** the browser's autoplay rule.
   **Fix:** click or press a key in the page.
+- **Symptom:** in Safari the first press of play is silent and the second
+  plays.
+  **Cause:** the page starts its audio when the app's request arrives,
+  which is after the press; that browser honours a start only inside the
+  press's own handler.
+  **Fix:** none on the app's side; the next input starts it.
+- **Symptom:** a scene run is silent on a machine with sound.
+  **Cause:** a scene's launcher configures a carrier, so the output is the
+  lane, and no viewer listens.
+  **Fix:** none needed: the playhead moves and the readouts hold. To hear
+  it, open the scene's viewer page.
 - **Symptom:** a second viewer hears nothing.
   **Cause:** the audio device belongs to the active viewer only.
   **Fix:** take the session on that viewer.

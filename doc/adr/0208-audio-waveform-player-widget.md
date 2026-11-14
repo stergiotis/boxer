@@ -681,6 +681,15 @@ interpolation that does the playback rate, which gives the deferred question
 of the resampler's quality a second consumer. `pulsesink.Open` stays for a
 caller with no runtime around it.
 
+A review of that work found a fault the pulse sink had carried since M3:
+above a step of two source frames per output frame the interpolation skips
+frames, and the cursor moved past frames that were never read, so a decoder
+whose random access is a process restart restarted on nearly every
+callback. The sink reached that step only at playback rates above 2; an
+engine with a device rate reaches it at rate 1 for a 96 kHz recording on a
+48 kHz device. The skipped frames are read now, and the forward-read test
+covers steps above two.
+
 One thing found on the way and left as it was: under the race detector the
 integration lane reports a race between the library's `Start` and its
 underflow flag, read when a source gives nothing at the start. It reproduces

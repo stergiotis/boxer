@@ -3,11 +3,10 @@
 #
 #   measure.sh <run-dir> [arm ...]
 #
-# An arm is <carrier>-<target ms>[-busy]: carrier `tab` (the lane inside a
-# browser tab) or `headless` (the lane through the headless host's carrier);
-# the target is BOXER_AUDIO_LANE_TARGET; `busy` runs the tab at a continuous
-# 60 Hz cadence, so the worker that pumps the lane is also building frames.
-# With no arms named it runs the protocol's set.
+# An arm is <carrier>-<target ms>: carrier `tab` (the lane inside a browser
+# tab) or `headless` (the lane through the headless host's carrier); the
+# target is BOXER_AUDIO_LANE_TARGET. With no arms named it runs the
+# protocol's set.
 #
 # Environment:
 #   SCRATCH     where the bundle and the binaries are built (default: a new
@@ -19,13 +18,14 @@
 #   KEEP_TRACE  1 keeps each arm's trace.jsonl, one line per played report
 #
 # Each arm leaves <run-dir>/<arm>/{report.json,row.json}; the rows are
-# collected in <run-dir>/results.jsonl and the machine in <run-dir>/env.txt.
+# collected in <run-dir>/results.jsonl, and the machine and what was run on
+# it in <run-dir>/env.txt.
 set -uo pipefail
 
 run=${1:?usage: measure.sh <run-dir> [arm ...]}
 shift
 arms=("$@")
-[ "${#arms[@]}" -gt 0 ] || arms=(tab-40 tab-80 tab-150 tab-300 tab-150-busy headless-40 headless-80 headless-150 headless-300)
+[ "${#arms[@]}" -gt 0 ] || arms=(tab-40 tab-80 tab-150 tab-300 headless-40 headless-80 headless-150 headless-300)
 
 here=$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")
 root=$(cd "$here/../../.." && pwd)
@@ -73,6 +73,14 @@ if [ "${SKIP_BUILD:-0}" != 1 ]; then
     cargo build --release --locked --no-default-features --features headless --target-dir target/headless_mesh > "$SCRATCH/cargo.log" 2>&1 ) || { tail -5 "$SCRATCH/cargo.log"; exit 2; }
 fi
 client="$root/rust/imzero2/target/headless_mesh/release/imzero2"
+# What was run, so a row can be tied to a build: with SKIP_BUILD the commit
+# above is the tree's at the run, not necessarily the binaries'.
+{
+  echo "skip_build: ${SKIP_BUILD:-0}"
+  for f in "$SCRATCH/tab/imzero2tab.wasm" "$SCRATCH/tab/imzero2_browser.wasm" "$SCRATCH/tabserve" "$SCRATCH/host" "$client"; do
+    echo "sha256 $(basename "$f"): $(sha256sum "$f" 2>/dev/null | cut -d' ' -f1) built $(date -u -r "$f" +%Y-%m-%dT%H:%MZ 2>/dev/null)"
+  done
+} >> "$run/env.txt"
 
 # The viewer page with the probe placed before its own script.
 compose() {
@@ -87,11 +95,9 @@ browse() { # url logfile
   br=$!; pids+=("$br"); brprofile=$profile
 }
 # Reduces one arm's evidence to a row. It reads report.json (the page probe's
-# summary) and trace.jsonl (the Go side's "audio lane report" lines). The
-# residual is, per played report of a playing stream, the device frames by
-# which the Go side's estimate of the device differed from what the device
-# then said, in milliseconds at the device's rate: it includes the time the
-# report took to arrive and excludes the browser's output latency.
+# summary) and trace.jsonl (the Go side's "audio lane report" lines, one per
+# played report of a playing stream): how many there were, in how many the
+# device had played everything it was sent, and the target in force.
 reduce() { # arm-dir
   python3 - "$1" <<'PY'
 import json
@@ -108,7 +114,7 @@ arm = sys.argv[1]
 with open(f"{arm}/report.json") as f:
     report = json.loads(f.read().strip().splitlines()[-1])
 
-residual_ms, dry, reports, targets = [], 0, 0, []
+dry, reports, targets = 0, 0, []
 with open(f"{arm}/trace.jsonl") as f:
     for line in f:
         line = line.strip()
@@ -118,16 +124,14 @@ with open(f"{arm}/trace.jsonl") as f:
         if not r.get("playing") or r.get("sent", 0) == 0:
             continue
         reports += 1
-        rate = r["deviceRate"]
-        residual_ms.append(abs(r["estimated"] - r["reported"]) * 1000.0 / rate)
-        targets.append(r["target"] * 1000.0 / rate)
+        targets.append(r["target"] * 1000.0 / r["deviceRate"])
         if r["reported"] >= r["sent"]:
             dry += 1
-residual_ms.sort()
 targets.sort()
 seconds = report["contextSeconds"] or 1
 row = {
     "arm": arm.rstrip("/").split("/")[-1],
+    "device_rate": report["rate"],
     "context_s": round(report["contextSeconds"], 2),
     "scheduled_s": round(report["scheduledSeconds"], 2),
     "first_audio_ms": report["firstAudioMs"],
@@ -141,11 +145,9 @@ row = {
     "lead_median_ms": report["leadMedianMs"],
     "go_reports": reports,
     "go_reports_dry": dry,
+    "target_min_ms": round(targets[0], 1) if targets else None,
     "target_median_ms": round(quantile(targets, 0.5), 1) if targets else None,
     "target_max_ms": round(targets[-1], 1) if targets else None,
-    "residual_p50_ms": round(quantile(residual_ms, 0.5), 2) if residual_ms else None,
-    "residual_p95_ms": round(quantile(residual_ms, 0.95), 2) if residual_ms else None,
-    "residual_max_ms": round(residual_ms[-1], 2) if residual_ms else None,
 }
 print(json.dumps(row))
 PY
@@ -156,8 +158,7 @@ await() { # pid: wait for it to exit, at most the probe time plus a margin
 }
 
 for arm in "${arms[@]}"; do
-  carrier=${arm%%-*}; rest=${arm#*-}; target=${rest%%-*}; busy=0
-  case "$arm" in *-busy) busy=1 ;; esac
+  carrier=${arm%%-*}; target=${arm#*-}
   out="$run/$arm"; mkdir -p "$out"
   echo "measure: arm $arm" >&2
   case "$carrier" in
@@ -169,7 +170,6 @@ for arm in "${arms[@]}"; do
       port=$(sed -n 's/^PORT //p' "$out/serve.out" | head -1)
       [ -n "$port" ] || { echo "measure: the tab server did not start" >&2; exit 2; }
       inner="app=$(quote "$app")&log=1&env=BOXER_WAVEFORM_DEMO_AUTOPLAY%3D1&env=BOXER_AUDIO_LANE_TRACE%3D1&env=BOXER_AUDIO_LANE_TARGET%3D${target}ms"
-      [ "$busy" = 1 ] && inner="$inner&cadence=continuous&fps=60"
       browse "http://127.0.0.1:$port/index.html?probe_ms=$PROBE_MS&worker=$(quote "worker.mjs?$inner")" "$out/browser.log"
       await "$srv" || echo "measure: arm $arm produced no report" >&2
       kill "$br" "$srv" 2>/dev/null; wait "$br" "$srv" 2>/dev/null; rm -rf "$brprofile"

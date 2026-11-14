@@ -1,0 +1,1 @@
+{"arm": "tab-150", "device_rate": 48000, "context_s": 18.81, "scheduled_s": 18.87, "first_audio_ms": 1224, "buffers": 937, "underruns": 0, "underruns_per_min": 0.0, "overlaps": 0, "late_starts": 0, "lead_min_ms": 118, "lead_p05_ms": 129, "lead_median_ms": 139, "go_reports": 939, "go_reports_dry": 0, "target_min_ms": 150.0, "target_median_ms": 150.0, "target_max_ms": 150.0}

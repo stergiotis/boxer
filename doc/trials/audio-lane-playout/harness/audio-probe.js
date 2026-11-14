@@ -4,6 +4,9 @@
 // time and length, whether it met the one before it, and how far ahead of
 // the context's clock the schedule runs. After ?probe_ms it posts one JSON
 // summary to ./report. It changes nothing the page plays.
+//
+// It sees a stream that ran dry only when a later source is scheduled after
+// the gap; one that ran dry and stayed dry shows as a lead at or below zero.
 (function () {
   const params = new URLSearchParams(location.search);
   const observeMs = Number(params.get("probe_ms") || "20000");
@@ -42,10 +45,13 @@
     };
     return ctx;
   };
-  // How far the schedule runs ahead of the clock, ten times a second.
+  // How far the schedule runs ahead of the clock. The page reports, and so
+  // is topped up, every 20 ms; sampling at an interval that shares no factor
+  // with that walks through the phases of the cycle instead of sitting on
+  // one of them.
   setInterval(() => {
     if (ctxRef && lastEnd !== null) rec.leadMs.push(Math.round((lastEnd - ctxRef.currentTime) * 1000));
-  }, 100);
+  }, 37);
   setTimeout(() => {
     const lead = rec.leadMs.slice().sort((a, b) => a - b);
     const q = (p) => (lead.length ? lead[Math.min(lead.length - 1, Math.floor(p * lead.length))] : null);

@@ -1,0 +1,1 @@
+{"arm": "headless-300", "device_rate": 48000, "context_s": 19.95, "scheduled_s": 20.17, "first_audio_ms": 79, "buffers": 995, "underruns": 0, "underruns_per_min": 0.0, "overlaps": 0, "late_starts": 0, "lead_min_ms": 257, "lead_p05_ms": 257, "lead_median_ms": 279, "go_reports": 997, "go_reports_dry": 0, "target_min_ms": 300.0, "target_median_ms": 300.0, "target_max_ms": 300.0}
