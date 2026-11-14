@@ -103,6 +103,14 @@ pub enum ColorFieldOrder {
 /// Software render backend for egui.
 pub struct EguiSoftwareRender {
     textures: HashMap<egui::TextureId, EguiTexture>,
+    // boxer delta: the revision of each texture's contents, a value no two
+    // deltas share, and the counter it is drawn from. A cached primitive is
+    // keyed on what it drew; without the revision in that key a texture whose
+    // pixels are replaced or patched under an unchanged mesh keeps its cached
+    // raster, and the old pixels stay on screen. See `set_textures` and the
+    // primitive hash in `render_prims_to_cache`.
+    texture_revisions: HashMap<egui::TextureId, u32>,
+    texture_epoch: u32,
     cached_primitives: HashMap<u32, CachedPrimitive>,
     tiles_dim: [usize; 2],
     dirty_tiles: Vec<u8>,
@@ -126,6 +134,8 @@ impl EguiSoftwareRender {
     pub fn new(output_field_order: ColorFieldOrder) -> Self {
         EguiSoftwareRender {
             textures: Default::default(),
+            texture_revisions: Default::default(),
+            texture_epoch: Default::default(),
             cached_primitives: Default::default(),
             tiles_dim: Default::default(),
             dirty_tiles: Default::default(),
@@ -724,6 +734,14 @@ impl EguiSoftwareRender {
                             egui::TextureId::Managed(id) => id as u32,
                             egui::TextureId::User(id) => id as u32 + 9358476,
                         });
+                        // boxer delta: the texture's contents are part of what
+                        // this primitive drew.
+                        hasher.hash_wrap(
+                            self.texture_revisions
+                                .get(&px_mesh.texture_id)
+                                .copied()
+                                .unwrap_or(0),
+                        );
                         for ind in &px_mesh.indices {
                             let v = px_mesh.vertices[*ind as usize];
 
@@ -975,6 +993,13 @@ impl EguiSoftwareRender {
             .iter()
             .flat_map(|(id, deltas)| deltas.iter().map(move |delta| (id, delta)))
         {
+            // boxer delta: every delta, whole or partial, is a new revision of
+            // the texture. A partial one cannot be told from a patch of pixels
+            // some mesh already shows, so it is not exempt; for the font atlas
+            // that means the text drawn in a pass that adds a glyph is
+            // rasterized again once.
+            self.texture_epoch = self.texture_epoch.wrapping_add(1);
+            self.texture_revisions.insert(*id, self.texture_epoch);
             if delta.options.magnification != delta.options.minification {
                 // Would need helper lanes to impl?
                 #[cfg(feature = "log")]
@@ -1021,6 +1046,9 @@ impl EguiSoftwareRender {
     pub fn free_textures(&mut self, textures_delta: &egui::TexturesDelta) {
         for free in &textures_delta.free {
             self.textures.remove(free);
+            // boxer delta: the counter never repeats, so an id that comes back
+            // gets a revision no cached primitive was keyed on.
+            self.texture_revisions.remove(free);
         }
     }
 }

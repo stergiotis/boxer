@@ -509,6 +509,24 @@ than the Zen 2's 4.4×:
 which is what twice the L3 should buy. "Size a CPU-rasterized appliance at
 1080p–1200p" survives on a third part.
 
+### 2026-11-14 — the staleness was observed, and is guarded
+
+Consequences recorded a staleness failure mode as "unobserved across the
+gallery; unguarded": the primitive cache keyed on a texture's id, so a texture
+mutated in place under an unchanged mesh would keep its cached raster. The
+[image upload-cost trial](../trials/image-upload-cost/README.md) observed it
+on this host: an image re-uploaded to the same texture id under a still frame
+showed its old pixels until the image moved.
+
+The cache key now includes a per-texture revision that every texture delta
+bumps, whole or partial — a delta to the vendored rasterizer, recorded in its
+[`VENDORING.md`](../../rust/imzero2/vendor/egui_software_backend/VENDORING.md).
+The cost is that a pass which adds a glyph to the font atlas rasterizes the
+text it draws again once. The unit test that named this failure mode,
+`softraster::tests::texture_mutated_in_place_still_repaints`, had been passing
+without exercising it — an `Area` changes its mesh over its first passes — and
+now settles the frame before replacing the texture.
+
 ## References
 
 - [ADR-0024](./0024-imzero2-remote-access-browser-viewer.md) — the headless host and pixel streaming.

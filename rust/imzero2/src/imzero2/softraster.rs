@@ -421,12 +421,17 @@ mod tests {
     }
 
     /// The failure mode the incremental path takes on, and the reason it is
-    /// worth a test rather than a comment: the primitive cache keys on a
-    /// texture's *id*, not its contents, so a texture mutated in place under an
-    /// unchanged mesh produces no dirty tile and the old pixels survive.
+    /// worth a test rather than a comment: a cached primitive is keyed on what
+    /// it drew, and unless the texture's contents are part of that key, a
+    /// texture mutated in place under an unchanged mesh produces no dirty tile
+    /// and the old pixels survive. `egui::TextureHandle::set` and
+    /// `set_partial` are exactly that shape — same id, same mesh, new pixels.
     ///
-    /// `egui::TextureHandle::set` is exactly that shape — same id, same mesh,
-    /// new pixels.
+    /// The frame has to have settled first, or the test proves nothing: an
+    /// `Area` draws nothing on its first pass and then fades in, so for several
+    /// passes the mesh changes by itself and the frame changes whether or not
+    /// the rasterizer noticed the texture. Hence no fade-in, three passes, and
+    /// a check that a fourth leaves the frame as it was.
     #[test]
     fn texture_mutated_in_place_still_repaints() {
         let ctx = egui::Context::default();
@@ -441,34 +446,54 @@ mod tests {
         );
         let id = tex.id();
         let draw = move |c: &egui::Context| {
-            egui::Area::new("tex".into()).fixed_pos(egui::Pos2::ZERO).show(c, |ui| {
-                let mut mesh = egui::Mesh::with_texture(id);
-                mesh.add_rect_with_uv(
-                    egui::Rect::from_min_size(egui::pos2(40.0, 40.0), egui::Vec2::splat(64.0)),
-                    egui::Rect::from_min_max(egui::Pos2::ZERO, egui::pos2(1.0, 1.0)),
-                    egui::Color32::WHITE,
-                );
-                ui.painter().add(egui::Shape::mesh(mesh));
-                ui.allocate_space(ui.available_size());
-            });
+            // No fade-in: it changes the mesh's colours over the first passes.
+            egui::Area::new("tex".into()).fixed_pos(egui::Pos2::ZERO).fade_in(false).show(
+                c,
+                |ui| {
+                    let mut mesh = egui::Mesh::with_texture(id);
+                    mesh.add_rect_with_uv(
+                        egui::Rect::from_min_size(egui::pos2(40.0, 40.0), egui::Vec2::splat(64.0)),
+                        egui::Rect::from_min_max(egui::Pos2::ZERO, egui::pos2(1.0, 1.0)),
+                        egui::Color32::WHITE,
+                    );
+                    ui.painter().add(egui::Shape::mesh(mesh));
+                    ui.allocate_space(ui.available_size());
+                },
+            );
+        };
+        let differing = |a: &[u8], b: &[u8]| {
+            a.chunks_exact(4).zip(b.chunks_exact(4)).filter(|(x, y)| x != y).count()
         };
 
-        render_into(&mut soft, &ctx, 0, draw, &mut frame);
-        let green = frame.clone();
+        for i in 0..3 {
+            render_into(&mut soft, &ctx, i, draw, &mut frame);
+        }
+        let settled = frame.clone();
+        render_into(&mut soft, &ctx, 3, draw, &mut frame);
+        assert_eq!(differing(&settled, &frame), 0, "the frame had not settled");
 
-        // Same id, same mesh, different pixels.
+        // Same id, same mesh, every pixel new.
         tex.set(
             solid(egui::Color32::from_rgb(200, 20, 200)),
             egui::TextureOptions::NEAREST,
         );
-        render_into(&mut soft, &ctx, 1, draw, &mut frame);
-
-        let changed =
-            green.chunks_exact(4).zip(frame.chunks_exact(4)).filter(|(a, b)| a != b).count();
+        render_into(&mut soft, &ctx, 4, draw, &mut frame);
         assert!(
-            changed > 0,
-            "texture was replaced under an unchanged mesh and the frame did not \
-             change: the incremental blit is serving stale tiles"
+            differing(&settled, &frame) > 0,
+            "a texture replaced under a settled frame did not reach it"
+        );
+        let replaced = frame.clone();
+
+        // Same id, same mesh, a quarter of the pixels new.
+        tex.set_partial(
+            [0, 0],
+            egui::ColorImage::new([8, 8], vec![egui::Color32::from_rgb(20, 20, 220); 8 * 8]),
+            egui::TextureOptions::NEAREST,
+        );
+        render_into(&mut soft, &ctx, 5, draw, &mut frame);
+        assert!(
+            differing(&replaced, &frame) > 0,
+            "a partial update of a texture under a settled frame did not reach it"
         );
     }
 }

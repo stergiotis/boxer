@@ -35,8 +35,9 @@ one egui minor bump measured so far cost zero lines in the render core.
 
 ## Deltas against upstream
 
-Everything below is a deletion, a version pin or an API adaptation; no
-rasterizer logic was touched.
+Everything below is a deletion, a version pin or an API adaptation, with one
+exception that changes behaviour: the last row, which adds a term to the
+primitive cache's key. No raster routine was touched.
 
 | What | Why |
 | --- | --- |
@@ -51,6 +52,7 @@ rasterizer logic was touched.
 | `#![allow(clippy::all)]` on both crate roots | `check.sh` runs `cargo clippy --workspace -- -D warnings`, and **clippy lints path dependencies** — `exclude` does not spare them, so upstream's style choices would become hard errors in our gate. `cargo fmt` reaches them too; that one is handled on the other side, by naming packages in `check.sh` instead of `--all`. |
 | added `EguiSoftwareRender::blit_dirty_to_buffer` — **offered upstream as [PR #17](https://github.com/DGriffin91/egui_software_backend/pull/17); drop this row from the delta list if it merges** | `blit_canvas_to_buffer` paints every *occupied* tile every frame, which for a viewport-filling UI is the whole frame — measured at 60–75 % of the frame cost. The addition paints only *dirty* tiles, resetting each to a caller-supplied clear colour first so the alpha composite does not stack. Purely additive; the original is untouched. Worth offering upstream. |
 | `EguiSoftwareRender::{set_textures, free_textures}` widened from private to `pub` | the host has to apply a pass's texture deltas on frames nobody consumes pixels for — deltas are incremental, so dropping them corrupts a later viewer's texture state. Both call sites are marked `// boxer delta:` in `src/lib.rs`. |
+| the primitive cache key includes a per-texture revision (`texture_revisions`, `texture_epoch`), bumped by every delta `set_textures` applies and dropped by `free_textures` | upstream keys a cached primitive on the texture's *id*; a texture replaced or patched in place under an unchanged mesh then keeps its cached raster and the old pixels stay on screen — observed on the host with an image re-uploaded under a still frame (`doc/trials/image-upload-cost`), and pinned by `softraster::tests::texture_mutated_in_place_still_repaints`. The cost: a pass that adds a glyph to the font atlas rasterizes the text it draws again once. Marked `// boxer delta:` in `src/lib.rs`; not yet offered upstream. |
 
 ## How this copy is built
 
