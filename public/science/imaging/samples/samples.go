@@ -1,6 +1,7 @@
 package samples
 
 import (
+	"image"
 	"math"
 	"slices"
 
@@ -22,10 +23,27 @@ const (
 	// NameSmall is 48 × 32 of 8-bit samples: few enough pixels that a
 	// fitted view shows each as a square.
 	NameSmall = "small"
+	// NameFloat is 640 × 480 of 32-bit float samples spanning six decades —
+	// a background near 1, one peak near 10⁵ and a trough down to −50 — with
+	// a block of invalid (NaN) samples: what a log or asinh stretch and the
+	// handling of invalid samples are for.
+	NameFloat = "float"
+	// NameScaled is 480 × 320 of 16-bit samples under a value transform,
+	// value = 0.01 × stored − 40: a sample stands for a quantity the file
+	// does not store directly, as a detector's counts stand for a
+	// temperature. Limits, the histogram and statistics are in values.
+	NameScaled = "scaled"
 )
 
+// FloatInvalid is the float sample's block of invalid samples: columns
+// [40, 120) and rows [300, 380).
+var FloatInvalid = image.Rect(40, 300, 120, 380)
+
+// ScaledTransform is the scaled sample's value transform.
+var ScaledTransform = imaging.ValueTransform{Scale: 0.01, Offset: -40}
+
 // Names lists the sample images in the order a menu shows them.
-func Names() []string { return []string{NameField, NameColour, NameSmall} }
+func Names() []string { return []string{NameField, NameColour, NameSmall, NameFloat, NameScaled} }
 
 // ByName makes the named sample image. Its provenance names it as
 // synthetic.
@@ -37,6 +55,10 @@ func ByName(name string) (img imaging.Image, err error) {
 		return colour()
 	case NameSmall:
 		return small()
+	case NameFloat:
+		return float()
+	case NameScaled:
+		return scaled()
 	}
 	return img, eb.Build().Str("name", name).Strs("names", slices.Clone(Names())).Errorf("no sample image of that name")
 }
@@ -104,4 +126,50 @@ func small() (imaging.Image, error) {
 		return imaging.Image{}, err
 	}
 	return imaging.NewImage(imaging.ColorModelGray, []imaging.Plane{p}, imaging.Provenance{SourceName: "synthetic small"})
+}
+
+func float() (imaging.Image, error) {
+	const w, h = 640, 480
+	s := make([]float32, w*h)
+	for y := range h {
+		for x := range w {
+			dx, dy := float64(x-430), float64(y-170)
+			peak := 1e5 * math.Exp(-(dx*dx+dy*dy)/(2*30*30))
+			tx, ty := float64(x-160), float64(y-140)
+			trough := -51 * math.Exp(-(tx*tx+ty*ty)/(2*40*40))
+			ripple := 0.5 + 0.4*math.Sin(float64(x)/23)*math.Cos(float64(y)/31)
+			v := float32(ripple + peak + trough)
+			if image.Pt(x, y).In(FloatInvalid) {
+				v = float32(math.NaN())
+			}
+			s[y*w+x] = v
+		}
+	}
+	p, err := imaging.NewPlaneF32(w, h, s)
+	if err != nil {
+		return imaging.Image{}, err
+	}
+	return imaging.NewImage(imaging.ColorModelGray, []imaging.Plane{p}, imaging.Provenance{SourceName: "synthetic float"})
+}
+
+func scaled() (imaging.Image, error) {
+	const w, h = 480, 320
+	s := make([]uint16, w*h)
+	for y := range h {
+		for x := range w {
+			// Stored 4000 … 9000 across the image, a warm spot reaching
+			// 30000: values −0 … 50 and up to 260.
+			dx, dy := float64(x-330), float64(y-120)
+			spot := 21000 * math.Exp(-(dx*dx+dy*dy)/(2*25*25))
+			s[y*w+x] = uint16(4000 + 5000*float64(x)/float64(w-1) + spot)
+		}
+	}
+	p, err := imaging.NewPlaneU16(w, h, s)
+	if err != nil {
+		return imaging.Image{}, err
+	}
+	if p, err = p.WithTransform(ScaledTransform); err != nil {
+		return imaging.Image{}, err
+	}
+	return imaging.NewImage(imaging.ColorModelGray, []imaging.Plane{p}, imaging.Provenance{SourceName: "synthetic scaled"})
 }
