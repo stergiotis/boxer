@@ -43,6 +43,7 @@ var manifest = app.Manifest{
 	Keywords: []string{"stylometry", "plagiarism", "compression", "similarity",
 		"ncd", "markdown", "documents", "authorship"},
 	Surface:    app.SurfaceWindowed,
+	Maturity:   app.MaturitySupported,
 	Help:       help.MustSub(helpFS, "help"),
 	LaunchKind: launchcfg.Kind,
 	Operations: ops.Catalog(),

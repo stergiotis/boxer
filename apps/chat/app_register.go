@@ -52,6 +52,7 @@ var manifest = app.Manifest{
 	Keywords:     []string{"chat", "llm", "model", "conversation", "assistant"},
 	Kind:         app.KindApp,
 	Surface:      app.SurfaceWindowed,
+	Maturity:     app.MaturityCore,
 	SurfaceHints: app.SurfaceHints{PreferredWidth: chatWindowWidth, PreferredHeight: 720},
 	// The turn's state, for an agent that shares this window (ADR-0269).
 	Operations: ops.Catalog(),

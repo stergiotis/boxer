@@ -36,6 +36,7 @@ var manifest = app.Manifest{
 	Topics:   []app.TopicT{app.TopicData},
 	Keywords: []string{"clickhouse", "sync", "copy", "migrate", "diff", "replicate", "leeway"},
 	Surface:  app.SurfaceWindowed,
+	Maturity: app.MaturitySupported,
 	SurfaceHints: app.SurfaceHints{
 		PreferredWidth:  1280,
 		PreferredHeight: 820,

@@ -40,6 +40,7 @@ var manifest = app.Manifest{
 	Keywords: []string{"help", "docs", "documentation", "manual", "book"},
 	Shell:    true,
 	Surface:  app.SurfaceWindowed,
+	Maturity: app.MaturityCore,
 	SurfaceHints: app.SurfaceHints{
 		PreferredWidth:  styletokens.SurfaceApp.W,
 		PreferredHeight: styletokens.SurfaceApp.H,

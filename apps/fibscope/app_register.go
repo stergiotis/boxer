@@ -35,6 +35,7 @@ var manifest = app.Manifest{
 	Topics:     []app.TopicT{app.TopicData},
 	Keywords:   []string{"fibonacci", "sequence", "numbers"},
 	Surface:    app.SurfaceWindowed,
+	Maturity:   app.MaturitySupported,
 	Help:       help.MustSub(helpFS, "help"),
 	LaunchKind: launchcfg.Kind,
 	Operations: ops.Catalog(),

@@ -53,6 +53,7 @@ var manifest = app.Manifest{
 	Keywords: []string{"launcher", "apps", "open", "start", "run", "find", "search", "palette", "menu"},
 	Shell:    true,
 	Surface:  app.SurfaceWindowed,
+	Maturity: app.MaturityCore,
 	SurfaceHints: app.SurfaceHints{
 		PreferredWidth:  styletokens.SurfaceApp.W,
 		PreferredHeight: styletokens.SurfaceApp.H,

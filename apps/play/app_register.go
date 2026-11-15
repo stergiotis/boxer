@@ -244,6 +244,7 @@ func (inst *PlayLauncher) Manifest() (m app.Manifest) {
 		Topics:   []app.TopicT{app.TopicSql, app.TopicData},
 		Keywords: []string{"query", "queries", "playground", "editor", "clickhouse", "ide"},
 		Surface:  app.SurfaceWindowed,
+		Maturity: app.MaturityCore,
 		// No SurfaceHints: the host's archetype fallback picks the size.
 		// BOXER_PLAY_WINDOW_SIZE overrides it for scripted screenshots —
 		// play's dock is three zones deep and the fallback opens narrow

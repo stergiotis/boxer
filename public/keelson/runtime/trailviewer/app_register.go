@@ -30,6 +30,7 @@ var manifest = runtimeapp.Manifest{
 	Topics:   []runtimeapp.TopicT{runtimeapp.TopicRuntime, runtimeapp.TopicObservability},
 	Keywords: []string{"trail", "audit", "evidence", "seal", "timeline", "review"},
 	Surface:  runtimeapp.SurfaceWindowed,
+	Maturity: runtimeapp.MaturitySupported,
 	// The time range picker evaluates expressions it cannot read itself
 	// through the chlocal pool (ADR-0016 Phase 4).
 	Caps: []runtimeapp.SubjectFilter{{

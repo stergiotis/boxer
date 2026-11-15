@@ -58,6 +58,9 @@ func ParseDocSource(bookID string, path string, src []byte, topics []app.TopicT)
 	m := chat.BaseManifest()
 	m.Id, m.Display, m.Title, m.Summary = app.AppIdT(idPrefix+def.Slug), def.Title, def.Title, def.Summary
 	m.Kind = app.KindChatlet
+	// The chat's grade is the chat's: a document promises what its prompt
+	// and its permissions do, which nobody has graded (ADR-0375 §SD6).
+	m.Maturity = app.MaturityUnstated
 	if def.Icon != "" {
 		m.Icon = def.Icon
 	}

@@ -34,6 +34,7 @@ var manifest = app.Manifest{
 	Topics:       []app.TopicT{app.TopicSql},
 	Keywords:     []string{"applet", "author", "publish", "save"},
 	Surface:      app.SurfaceWindowed,
+	Maturity:     app.MaturitySupported,
 	SurfaceHints: app.SurfaceHints{PreferredWidth: 640, PreferredHeight: 560},
 	Caps: []app.SubjectFilter{
 		{

@@ -34,6 +34,7 @@ var manifest = app.Manifest{
 	Topics:   []app.TopicT{app.TopicObservability},
 	Keywords: []string{"render", "telemetry", "fps", "frames", "latency"},
 	Surface:  app.SurfaceWindowed,
+	Maturity: app.MaturitySupported,
 	// The catalog (imzrt_ops.go): the latest sample and the view for an
 	// agent to read, the interval, freeze, smoothing and tab to set, and the
 	// two profile commands, which are consequential and asynchronous.

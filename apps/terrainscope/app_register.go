@@ -40,6 +40,7 @@ var manifest = app.Manifest{
 	Topics:     []app.TopicT{app.TopicGeo},
 	Keywords:   []string{"terrain", "elevation", "line of sight", "viewshed", "swisstopo"},
 	Surface:    app.SurfaceWindowed,
+	Maturity:   app.MaturitySupported,
 	Help:       help.MustSub(helpFS, "help"),
 	Caps:       append(basemap.ClientCaps("terrainscope: basemap tiles under the picked points"), task.ProducerCaps()...),
 	LaunchKind: launchcfg.Kind,

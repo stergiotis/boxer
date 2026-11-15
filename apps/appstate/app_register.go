@@ -36,6 +36,7 @@ var manifest = app.Manifest{
 	Topics:   []app.TopicT{app.TopicRuntime},
 	Keywords: []string{"app state", "persist", "workingset", "column width", "forget", "clear", "storage"},
 	Surface:  app.SurfaceWindowed,
+	Maturity: app.MaturitySupported,
 	// The operations catalog (ADR-0345), in appstate_ops.go.
 	Operations: ops.Catalog(),
 	Help:       help.MustSub(helpFS, "help"),

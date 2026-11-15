@@ -41,6 +41,7 @@ var manifest = app.Manifest{
 	Topics:   []app.TopicT{app.TopicAbout},
 	Keywords: []string{"about", "licence", "license", "notice", "version"},
 	Surface:  app.SurfaceWindowed,
+	Maturity: app.MaturitySupported,
 	SurfaceHints: app.SurfaceHints{
 		// Portrait-ish to suit the portrait artwork plus the tab strip.
 		PreferredWidth:  620,

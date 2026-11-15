@@ -30,6 +30,7 @@ var manifest = app.Manifest{
 	Topics:   []app.TopicT{app.TopicRuntime},
 	Keywords: []string{"app", "inspect", "capability", "state", "coverage", "adr", "log", "run", "history", "running", "window", "task", "frame time"},
 	Surface:  app.SurfaceWindowed,
+	Maturity: app.MaturitySupported,
 	SurfaceHints: app.SurfaceHints{
 		PreferredWidth:  1200,
 		PreferredHeight: 800,

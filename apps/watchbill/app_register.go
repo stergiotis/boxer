@@ -36,6 +36,7 @@ var manifest = app.Manifest{
 	Topics:   []app.TopicT{app.TopicRuntime},
 	Keywords: []string{"watchbill", "job", "queue", "durable", "worker", "retry", "cancel", "river"},
 	Surface:  app.SurfaceWindowed,
+	Maturity: app.MaturitySupported,
 	SurfaceHints: app.SurfaceHints{
 		PreferredWidth:  1280,
 		PreferredHeight: 800,

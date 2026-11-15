@@ -32,6 +32,7 @@ var manifest = app.Manifest{
 	Topics:   []app.TopicT{app.TopicData},
 	Keywords: []string{"lading", "snapshot", "browser", "files", "fs", "mount"},
 	Surface:  app.SurfaceWindowed,
+	Maturity: app.MaturitySupported,
 	SurfaceHints: app.SurfaceHints{
 		PreferredWidth:  1200,
 		PreferredHeight: 760,

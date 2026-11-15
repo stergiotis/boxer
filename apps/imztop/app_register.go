@@ -32,6 +32,7 @@ var manifest = app.Manifest{
 	Topics:   []app.TopicT{app.TopicObservability},
 	Keywords: []string{"top", "htop", "process", "processes", "cpu", "memory"},
 	Surface:  app.SurfaceWindowed,
+	Maturity: app.MaturitySupported,
 	// The operations catalog (ADR-0329), in imztop_ops.go.
 	Operations: ops.Catalog(),
 	Help:       help.MustSub(helpFS, "help"),

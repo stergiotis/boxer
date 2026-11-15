@@ -51,6 +51,7 @@ var manifest = app.Manifest{
 	Topics:     []app.TopicT{app.TopicData, app.TopicSensing},
 	Keywords:   []string{"image", "png", "jpeg", "histogram", "pixel", "16-bit", "contrast", "stretch", "colour map"},
 	Surface:    app.SurfaceWindowed,
+	Maturity:   app.MaturityIncubating,
 	Help:       help.MustSub(helpFS, "help"),
 	Operations: ops.Catalog(),
 	SurfaceHints: app.SurfaceHints{

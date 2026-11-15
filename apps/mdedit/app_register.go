@@ -57,6 +57,7 @@ var manifest = app.Manifest{
 	Topics:   []app.TopicT{app.TopicCode},
 	Keywords: []string{"markdown", "editor", "notes", "preview", "obsidian", "writing"},
 	Surface:  app.SurfaceWindowed,
+	Maturity: app.MaturitySupported,
 	// LaunchKind takes a document another app hands over (launchcfg).
 	LaunchKind: launchcfg.Kind,
 	// Operations are how the agentic harness reads the document and

@@ -27,6 +27,7 @@ var manifest = runtimeapp.Manifest{
 	Topics:   []runtimeapp.TopicT{runtimeapp.TopicRuntime, runtimeapp.TopicObservability},
 	Keywords: []string{"log", "logs", "zerolog", "trace", "level"},
 	Surface:  runtimeapp.SurfaceWindowed,
+	Maturity: runtimeapp.MaturitySupported,
 	// The operations catalog (ADR-0345), in logviewer_ops.go.
 	Operations: ops.Catalog(),
 	// Width matches SurfaceWorkspace exactly; height rises 600→720 (a

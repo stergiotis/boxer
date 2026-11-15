@@ -60,6 +60,7 @@ var manifest = app.Manifest{
 	Topics:   []app.TopicT{app.TopicData},
 	Keywords: []string{"notebook", "report", "sealed", "records", "markdown", "adr-0371"},
 	Surface:  app.SurfaceWindowed,
+	Maturity: app.MaturityIncubating,
 	// LaunchKind takes a notebook another app hands over (launchcfg).
 	LaunchKind: launchcfg.Kind,
 	// The open notebook is kept across a close (ADR-0148): by its snapshot,

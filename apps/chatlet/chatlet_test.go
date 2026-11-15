@@ -44,6 +44,7 @@ func TestCorpus_everyDocumentMakesAWindow(t *testing.T) {
 			require.False(t, seen[string(p.Manifest.Id)], "duplicate id %s", p.Manifest.Id)
 			seen[string(p.Manifest.Id)] = true
 			assert.Equal(t, app.KindChatlet, p.Manifest.Kind)
+			assert.Equal(t, app.MaturityUnstated, p.Manifest.Maturity, "a document does not take the chat's grade")
 			a, err := chat.NewPreset(p)
 			require.NoError(t, err, "document %s", p.Manifest.Id)
 			assert.Equal(t, p.Manifest.Id, a.Manifest().Id)
