@@ -86,13 +86,31 @@ reports `LimitsPending` until then.
 `imageview.Viewer` is a semi-retained widget
 ([ADR-0267](../adr/0267-imzero2-go-widget-api-contract-immediate-and-semi-retained.md)):
 make one per view with `New`, give it an image with `SetImage`, call
-`Render` or `RenderFill` every frame, and `Close` it when the view goes. It
-starts goroutines of its own — tile workers, the level build, the histogram
-count — and `Close` waits for them. They are not keelson tasks, so a keelson
-host neither lists them nor drains them; an app that needs them in its
-lifetime scope has to wait for that seam. The gallery demo
+`Render` or `RenderFill` every frame, and `Close` it when the view goes. Its
+level build and histogram counts are background jobs: pass the app's task
+API in `Options.Tasks` (`task.ForApp(ctx)` in `Mount`, before `New`) and
+each runs as a task of the window, which the host lists, can cancel and
+drains on close; draw `LevelJob()` and `HistogramJob()` with
+`widgets/bgjobrow` for the standard progress row. Without a task API they
+run untracked. `Close` cancels them without waiting. The tile workers are
+the map's own and stop with `Close`. The gallery demo
 `egui2_hl_imageview_demo.go` and [`apps/imagescope`](../../apps/imagescope/app_register.go)
 are the two callers to copy from.
+
+## Showing something that is not an image in memory
+
+A renderer — a document page, a plot, anything that can draw a rectangle at
+a scale — is an `imageview.SourceI`: it describes its size, model, kind and
+the levels it answers, below and above full resolution, and returns the
+samples of one tile at a level when asked, on the viewer's workers, honouring
+the context. `Viewer.SetSource(src, keepView)` shows it; keep the view when
+the next page replaces this one. Mark it `Rendered`, return 8-bit RGB, and
+the default recipe shows it as drawn. The viewer keeps its tiles in a cache
+bounded by `Options.SampleCacheBytes`, so a contrast change asks the
+renderer nothing; call `Invalidate` when what it draws changes. The bound is
+the memory a procedural source costs the viewer
+([ADR-0374](../adr/0374-imageview-shows-a-tile-source-and-the-decoder-streams-into-one.md)
+§SD9). The histogram and percentile limits are not offered for a source.
 
 ## Keeping up
 
