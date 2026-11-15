@@ -9,6 +9,7 @@ import (
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/science/imaging"
 	"github.com/stergiotis/boxer/public/science/imaging/display"
+	"github.com/stergiotis/boxer/public/science/imaging/levels"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/portolan"
 )
 
@@ -16,16 +17,18 @@ import (
 const tileSize = 512
 
 // checkerSize is the side of one square of the checkerboard under a
-// transparent pixel, in image pixels.
+// transparent pixel, in cells of the level being drawn: image pixels at full
+// resolution, and about as many screen pixels at every level below it.
 const checkerSize = 8
 
 // shown is everything a worker needs to map a tile, fixed at the moment the
-// viewer published it: the image, which plane or the image as stored, and
-// the mappers compiled from the recipe. It is never modified once stored.
+// viewer published it: the image, its reduced levels as far as they are
+// built, which plane or the image as stored, and the mappers compiled from
+// the recipe. It is never modified once stored.
 type shown struct {
 	img     imaging.Image
-	plane   imaging.Plane // the single plane shown, or the zero plane for a colour composite
-	alpha   imaging.Plane // the alpha drawn with a single plane, or the zero plane
+	pyramid *levels.Pyramid // nil until built
+	plane   int             // the single plane shown, or asStored
 	planes  *display.PlaneMapper
 	colours *display.ColorMapper
 	checker [2]uint32
@@ -40,32 +43,43 @@ type tileSource struct {
 
 var _ portolan.TilePixelsI = (*tileSource)(nil)
 
-// TilePixels maps the tile at (coords.X, coords.Y) of the full-resolution
-// level. Pixels outside the image are transparent; pixels inside it are
-// opaque, a transparent sample having been laid over the checkerboard.
+// TilePixels maps the tile at (coords.X, coords.Y) of level −coords.Z: zoom
+// 0 is the image's own samples and each zoom below it one halving. Pixels
+// outside the image are transparent; pixels inside it are opaque, a
+// transparent sample having been laid over the checkerboard.
 func (inst *tileSource) TilePixels(_ context.Context, coords portolan.TileCoords) (px []uint32, w, h int, err error) {
-	if coords.Z != 0 {
-		return nil, 0, 0, eb.Build().Int("level", coords.Z).Errorf("image has no tiles at this level")
-	}
 	px = make([]uint32, tileSize*tileSize)
 	sh := inst.cur.Load()
 	if sh == nil || sh.img.IsZero() {
 		return px, tileSize, tileSize, nil
 	}
+	k := -coords.Z
+	if k < 0 || k > levels.CountFor(sh.img.Width(), sh.img.Height(), levels.Options{}) {
+		return nil, 0, 0, eb.Build().Int("level", k).Errorf("image has no tiles at this level")
+	}
+	lw, lh := levels.Size(sh.img.Width(), sh.img.Height(), k)
 	x0, y0 := coords.X*tileSize, coords.Y*tileSize
-	rect := image.Rect(x0, y0, x0+tileSize, y0+tileSize).Intersect(image.Rect(0, 0, sh.img.Width(), sh.img.Height()))
+	rect := image.Rect(x0, y0, x0+tileSize, y0+tileSize).Intersect(image.Rect(0, 0, lw, lh))
 	if rect.Empty() {
 		return px, tileSize, tileSize, nil
+	}
+	from, region, err := sh.level(k, rect)
+	if err != nil {
+		return nil, 0, 0, err
 	}
 	dst := px
 	whole := rect.Dx() == tileSize && rect.Dy() == tileSize
 	if !whole {
 		dst = make([]uint32, rect.Dx()*rect.Dy())
 	}
-	if sh.colours != nil {
-		err = sh.colours.Map(dst, sh.img, rect)
-	} else {
-		err = sh.planes.Map(dst, sh.plane, sh.alpha, rect)
+	switch {
+	case sh.colours != nil:
+		err = sh.colours.Map(dst, from, region)
+	case sh.plane == asStored:
+		alpha, _ := from.Alpha()
+		err = sh.planes.Map(dst, from.Plane(0), alpha, region)
+	default:
+		err = sh.planes.Map(dst, from.Plane(sh.plane), imaging.Plane{}, region)
 	}
 	if err != nil {
 		return nil, 0, 0, err
@@ -77,6 +91,27 @@ func (inst *tileSource) TilePixels(_ context.Context, coords portolan.TileCoords
 		}
 	}
 	return px, tileSize, tileSize, nil
+}
+
+// level returns an image to map level k's cells in rect from, and where in
+// that image they are: the image itself at level 0, the built level when
+// there is one, and otherwise a reduction of just those cells, made on the
+// spot — the same cells a build gives, only slower.
+func (inst *shown) level(k int, rect image.Rectangle) (from imaging.Image, region image.Rectangle, err error) {
+	if k == 0 {
+		return inst.img, rect, nil
+	}
+	if lv, ok := inst.pyramid.Level(k); ok {
+		return lv.Mean, rect, nil
+	}
+	planes := make([]imaging.Plane, inst.img.PlaneCount())
+	for i := range planes {
+		if planes[i], _, _, err = levels.Reduce(inst.img.Plane(i), k, rect); err != nil {
+			return from, region, err
+		}
+	}
+	from, err = imaging.NewImage(inst.img.Model(), planes, imaging.Provenance{})
+	return from, image.Rect(0, 0, rect.Dx(), rect.Dy()), err
 }
 
 // overChecker lays every pixel that is not opaque over a checkerboard fixed

@@ -12,16 +12,21 @@ import (
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/imageview"
 )
 
-// The imageview demo (ADR-0373 M2): three synthetic images — a 16-bit
+// The imageview demo (ADR-0373 M2, M3): three synthetic images — a 16-bit
 // greyscale field whose interesting range is a small part of what 16 bits
 // hold, an 8-bit colour image with an alpha ramp, and a tiny greyscale one to
-// zoom into — and the controls a recipe has. Nothing is read from disk, so
-// the demo captures the same on every host.
+// zoom into — and the controls a recipe has. The field is larger than the
+// view, so fitted it is drawn from a reduced level; its saturated column and
+// bright blob are what a percentile stretch is for. Nothing is read from
+// disk, so the demo captures the same on every host.
 type imageViewDemoState struct {
 	v       *imageview.Viewer
 	images  []imageViewDemoImage
 	current int
-	// Bound values keep one address across frames.
+	// Bound values keep one address across frames. A checkbox writes its
+	// bound value between frames, when the responses arrive, so invert and
+	// flag are compared with the recipe before the boxes are drawn and never
+	// overwritten from it while a toggle may be pending.
 	invert, flag, smooth bool
 	problem              string
 }
@@ -34,6 +39,9 @@ type imageViewDemoImage struct {
 // imageViewDemoPalettes is the short list the demo offers; the widget has
 // more (imageview.PaletteNames).
 var imageViewDemoPalettes = []string{imageview.PaletteGray, "batlow", "viridis", "magma", "vik"}
+
+// imageViewDemoPercentiles are the percentile stretches the demo offers.
+var imageViewDemoPercentiles = [][2]float64{{1, 99}, {0.1, 99.9}}
 
 func newImageViewDemoState(ids *c.WidgetIdStack) *imageViewDemoState {
 	st := &imageViewDemoState{v: imageview.New(ids, "imageview-demo", imageview.Options{})}
@@ -132,6 +140,13 @@ func (st *imageViewDemoState) set(change func(r *display.Recipe)) {
 	}
 }
 
+// syncChecks sets the checkboxes to what the viewer's recipe says, after
+// anything that replaced the recipe.
+func (st *imageViewDemoState) syncChecks() {
+	r := st.v.Recipe()
+	st.invert, st.flag = r.Invert, r.FlagClipped
+}
+
 func demoImageView(ids *c.WidgetIdStack, st *imageViewDemoState) {
 	img := st.v.Image()
 	recipe := st.v.Recipe()
@@ -143,7 +158,8 @@ func demoImageView(ids *c.WidgetIdStack, st *imageViewDemoState) {
 			if imageViewDemoButton(ids, "image", uint64(i), im.name, st.current == i) {
 				st.current = i
 				st.v.SetImage(im.img)
-				st.invert, st.flag, st.problem = false, false, ""
+				st.problem = ""
+				st.syncChecks()
 			}
 		}
 		if imageViewDemoButton(ids, "nav", 0, "fit", false) {
@@ -162,6 +178,7 @@ func demoImageView(ids *c.WidgetIdStack, st *imageViewDemoState) {
 			if err := st.v.SetAsStored(); err != nil {
 				st.problem = err.Error()
 			}
+			st.syncChecks()
 		}
 		for i, name := range img.Model().PlaneNames() {
 			if imageViewDemoButton(ids, "plane", uint64(i), name, single && plane == i) {
@@ -169,6 +186,7 @@ func demoImageView(ids *c.WidgetIdStack, st *imageViewDemoState) {
 				if err := st.v.SetPlane(i); err != nil {
 					st.problem = err.Error()
 				}
+				st.syncChecks()
 			}
 		}
 		c.Label("Limits").Selectable(false).Send()
@@ -183,6 +201,19 @@ func demoImageView(ids *c.WidgetIdStack, st *imageViewDemoState) {
 				st.set(func(r *display.Recipe) { r.Limits = l })
 			}
 		}
+		for i, pct := range imageViewDemoPercentiles {
+			current := recipe.Limits.Source == display.LimitsSourcePercentile &&
+				recipe.Limits.PercentLo == pct[0] && recipe.Limits.PercentHi == pct[1]
+			label := fmt.Sprintf("%g–%g %%", pct[0], pct[1])
+			if single || !img.Model().IsColor() {
+				if imageViewDemoButton(ids, "percentile", uint64(i), label, current) {
+					st.problem = ""
+					if err := st.v.SetPercentileLimits(pct[0], pct[1]); err != nil {
+						st.problem = err.Error()
+					}
+				}
+			}
+		}
 	}
 	for range c.HorizontalTop().KeepIter() {
 		c.Label("Transfer").Selectable(false).Send()
@@ -191,13 +222,14 @@ func demoImageView(ids *c.WidgetIdStack, st *imageViewDemoState) {
 				st.set(func(r *display.Recipe) { r.Transfer = tr })
 			}
 		}
-		st.invert, st.flag = recipe.Invert, recipe.FlagClipped
-		if c.Checkbox(ids.PrepareStr("invert"), st.invert, "invert").SendRespVal(&st.invert).HasChanged() {
-			st.set(func(r *display.Recipe) { r.Invert = st.invert })
+		// A toggle since the last frame shows as a bound value that differs
+		// from the recipe; a recipe the viewer refuses puts the box back.
+		if current := st.v.Recipe(); st.invert != current.Invert || st.flag != current.FlagClipped {
+			st.set(func(r *display.Recipe) { r.Invert, r.FlagClipped = st.invert, st.flag })
+			st.syncChecks()
 		}
-		if c.Checkbox(ids.PrepareStr("flag"), st.flag, "flag clipped").SendRespVal(&st.flag).HasChanged() {
-			st.set(func(r *display.Recipe) { r.FlagClipped = st.flag })
-		}
+		c.Checkbox(ids.PrepareStr("invert"), st.invert, "invert").SendRespVal(&st.invert)
+		c.Checkbox(ids.PrepareStr("flag"), st.flag, "flag clipped").SendRespVal(&st.flag)
 		c.Label("Palette").Selectable(false).Send()
 		for i, name := range imageViewDemoPalettes {
 			current := recipe.Palette == name || (recipe.Palette == "" && name == imageview.PaletteGray)
@@ -207,11 +239,17 @@ func demoImageView(ids *c.WidgetIdStack, st *imageViewDemoState) {
 		}
 	}
 
-	ev := st.v.Render(960, 400)
+	ev := st.v.Render(960, 470)
 
-	c.Label(fmt.Sprintf("%s · %d × %d · %s %s · limits %.6g … %.6g (%s) · %s",
+	// The limits may have been dragged in this Render.
+	recipe = st.v.Recipe()
+	levels := "levels building"
+	if st.v.LevelsReady() {
+		levels = "levels ready"
+	}
+	c.Label(fmt.Sprintf("%s · %d × %d · %s %s · limits %.6g … %.6g (%s) · %s · level %d, %s",
 		img.Provenance().SourceName, img.Width(), img.Height(), img.Model(), img.Kind(),
-		recipe.Limits.Lo, recipe.Limits.Hi, recipe.Limits.Source, recipe.Transfer)).Selectable(false).Send()
+		recipe.Limits.Lo, recipe.Limits.Hi, recipe.Limits.Source, recipe.Transfer, st.v.Level(), levels)).Selectable(false).Send()
 	if ev.ClickedOk {
 		c.Label(fmt.Sprintf("clicked pixel (%d, %d)", ev.Clicked.Col, ev.Clicked.Row)).Selectable(false).Send()
 	}
@@ -223,10 +261,10 @@ func demoImageView(ids *c.WidgetIdStack, st *imageViewDemoState) {
 func init() {
 	registry.Register(registry.Demo{
 		Name: "imageview", Category: "Graphics & canvas", Title: icons.IconFileImage + " imageview (samples and a recipe)",
-		Stage:       [2]float32{1024, 760},
+		Stage:       [2]float32{1024, 800},
 		Flags:       registry.DemoFlagNeedsLargeArea | registry.DemoFlagNonDeterministic,
 		Kind:        registry.DemoKindUX,
-		Description: "The image viewer of ADR-0373: an image is planes of samples kept at their own bit depth, and what is shown is those planes through a recipe — limits, a transfer function, and for a single plane a colour map — mapped in Go for the tiles in view. A colour image opens as stored; any one plane can be shown by itself instead. The readout under the image is read from the samples, not from what was drawn, so it does not change with the recipe. Pan by dragging, zoom with the wheel. Tiles arrive from worker goroutines, so a capture taken at once can show the image partly drawn.",
+		Description: "The image viewer of ADR-0373: an image is planes of samples kept at their own bit depth, and what is shown is those planes through a recipe — limits, a transfer function, and for a single plane a colour map — mapped in Go for the tiles in view. A colour image opens as stored; any one plane can be shown by itself instead. The readout under the image is read from the samples, not from what was drawn, so it does not change with the recipe. Under a single plane is its histogram, counted over the whole plane, with the two limits as handles to drag; a percentile stretch sets them where a few extreme samples cannot pull them wide. Shown smaller than it is, the image is drawn from means of blocks of samples, and the readout says so. Pan by dragging, zoom with the wheel. Tiles arrive from worker goroutines, so a capture taken at once can show the image partly drawn.",
 		Init: func(ids *c.WidgetIdStack) (state any) {
 			return newImageViewDemoState(ids)
 		},

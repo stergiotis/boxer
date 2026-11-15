@@ -181,8 +181,10 @@ renderer and no wire changes.
   sample per screen pixel. Only tiles in view are mapped and shipped; after a
   recipe change they are replaced coarse level first, under a per-frame
   budget of bytes, with the previous pixels left on screen until their
-  replacement lands. The view says which level it is showing. Level building
-  is a reported task; until it finishes, full-resolution tiles serve.
+  replacement lands. The view says which level it is showing. Levels are
+  built off the frame; until they are, a tile below full resolution is
+  reduced from the samples when it is asked for, to the same cells, so
+  nothing on screen changes when the build lands.
 - **SD7 — The widget.** `imageview` is semi-retained
   ([ADR-0267](./0267-imzero2-go-widget-api-contract-immediate-and-semi-retained.md))
   and owns no navigation of its own: view state, gestures, tile life cycle
@@ -234,8 +236,13 @@ renderer and no wire changes.
   [`widgets/imageview`](../../public/thestack/imzero2/egui2/widgets/imageview/doc.go).
   A transparent sample is laid over a checkerboard fixed to the image's
   pixel grid when its tile is mapped, so no tile leaves Go translucent.
-- **M3** — levels, the per-frame budget and coarse-first replacement; the
-  histogram with draggable limits.
+- **M3** ✓ — levels
+  ([`imaging/levels`](../../public/science/imaging/levels/doc.go)), the
+  per-frame budget and coarse-first replacement; the histogram with
+  draggable limits, counted over the whole plane
+  ([`imaging/stats`](../../public/science/imaging/stats/doc.go)), and
+  percentile limits. The minimum and maximum beside each level are built;
+  nothing drawn reads them yet.
 - **M4** — the app: catalog, help book, state machine, scenes; region
   statistics and the hand-over to play.
 

@@ -27,11 +27,26 @@
 // latitude −row, which this package converts at its boundary and nowhere
 // else.
 //
-// # Limits of this cut
+// # Levels
 //
-// The image is shown from its full-resolution tiles at every zoom, so a view
-// that fits a large image on screen draws all of its tiles; levels are
-// ADR-0373 M3. A magnified image is drawn without interpolation unless
-// [Options.Smooth] is set, and with it set a faint seam can show where two
-// tiles meet.
+// Shown smaller than it is, the image is drawn from reduced levels
+// ([levels]): each cell the mean of the block of samples it covers, the
+// level chosen so that a screen pixel never has less than one cell behind
+// it (§SD6). The levels are built on a goroutine of the viewer's own when an
+// image is set; until they are done a tile below full resolution is reduced
+// on the spot, to the same cells, so nothing changes on screen when the
+// build lands. The readout line says when what is drawn is means, and
+// [Viewer.Level] reports it.
+//
+// # What a change costs
+//
+// A new recipe re-maps the tiles in view and nothing else; they are replaced
+// coarser levels first, and no more than a fixed number of bytes ships to
+// the host per frame, the previous pixels standing in meanwhile (§SD6,
+// §SD11).
+//
+// # Limits
+//
+// A magnified image is drawn without interpolation unless [Options.Smooth]
+// is set, and with it set a faint seam can show where two tiles meet.
 package imageview

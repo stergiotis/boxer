@@ -1,15 +1,20 @@
 package imageview
 
 import (
+	"context"
 	"fmt"
 	"math"
 	"strconv"
 	"strings"
+	"sync"
+	"sync/atomic"
 
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/science/imaging"
 	"github.com/stergiotis/boxer/public/science/imaging/display"
+	"github.com/stergiotis/boxer/public/science/imaging/levels"
+	"github.com/stergiotis/boxer/public/science/imaging/stats"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/color"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/portolan"
@@ -26,6 +31,9 @@ type Options struct {
 	// HideReadout leaves out the line under the image that names the pixel
 	// under the pointer; Events still carry it.
 	HideReadout bool
+	// HideHistogram leaves out the strip under a single-plane view that
+	// shows the plane's histogram and the two limits as handles to drag.
+	HideHistogram bool
 }
 
 // Readout is one pixel of the image as its samples have it: the stored
@@ -47,6 +55,9 @@ type Events struct {
 	// Clicked is the pixel a click landed on.
 	Clicked   Readout
 	ClickedOk bool
+	// LimitsChanged reports that a drag of a limit handle changed the
+	// recipe this frame; Viewer.Recipe has the new one.
+	LimitsChanged bool
 	// Err is set when the viewer could not draw what it was asked to and
 	// drew a message in its place.
 	Err error
@@ -59,6 +70,10 @@ const (
 	maxZoom = 6
 	// asStored is the plane index meaning "the image as stored".
 	asStored = -1
+	// uploadBudgetBytes is how much tile data one frame ships to the host
+	// (ADR-0373 §SD6, §SD11): about what the image upload-cost trial found a
+	// headless host to take within a 30 Hz frame.
+	uploadBudgetBytes = 16 << 20
 
 	colorBarWidth  = 72
 	readoutHeight  = 22
@@ -82,12 +97,39 @@ type Viewer struct {
 	src *tileSource
 
 	img        imaging.Image
+	pyramid    *levels.Pyramid
 	plane      int
 	recipe     display.Recipe
 	palette    *display.Palette
 	fitPending bool
 	hover      Readout
 	hoverOk    bool
+
+	// The level build runs on a goroutine of the viewer's own: buildGen
+	// names the image it is for, built is where it leaves its result for
+	// Render to pick up, and Close waits for it.
+	buildGen    uint64
+	buildCancel context.CancelFunc
+	built       atomic.Pointer[buildResult]
+	building    sync.WaitGroup
+
+	// Histograms are counted per plane, on the same goroutines' terms.
+	hists             map[int]*stats.Histogram
+	histWanted        map[int]bool
+	histDone          chan histResult
+	pendingPercentile bool
+	percentLo         float64
+	percentHi         float64
+	drag              limitDrag
+	// Scratch of the histogram strip, reused across frames.
+	histBars                       []uint64
+	histX0, histY0, histX1, histY1 []float32
+	histCols                       []uint32
+}
+
+type buildResult struct {
+	gen     uint64
+	pyramid *levels.Pyramid
 }
 
 // New makes a viewer with no image. Every id it derives is scoped under
@@ -96,13 +138,20 @@ func New(ids *c.WidgetIdStack, scopeKey string, opts Options) *Viewer {
 	if scopeKey == "" {
 		scopeKey = "imageview"
 	}
-	inst := &Viewer{Opts: opts, ids: ids, key: scopeKey, src: &tileSource{}, plane: asStored}
+	inst := &Viewer{
+		Opts: opts, ids: ids, key: scopeKey, src: &tileSource{}, plane: asStored,
+		hists: make(map[int]*stats.Histogram, 4), histWanted: make(map[int]bool, 4),
+		// Room for every plane of an image, so a counting goroutine never
+		// waits on a viewer that has stopped rendering.
+		histDone: make(chan histResult, 8),
+	}
 	inst.m = portolan.New(ids, "view", portolan.Options{
-		Source:        sourceFor(imaging.Image{}),
-		Loader:        portolan.LoaderOptions{Pixels: inst.src},
-		CRS:           portolan.Simple,
-		NoInitialView: true,
-		NearestTiles:  !opts.Smooth,
+		Source:            sourceFor(imaging.Image{}),
+		Loader:            portolan.LoaderOptions{Pixels: inst.src},
+		CRS:               portolan.Simple,
+		NoInitialView:     true,
+		NearestTiles:      !opts.Smooth,
+		UploadBudgetBytes: uploadBudgetBytes,
 		// Only arrows and Escape are the map's; nothing here needs them
 		// taken from a host that has its own.
 		NoKeyboard: true,
@@ -111,8 +160,10 @@ func New(ids *c.WidgetIdStack, scopeKey string, opts Options) *Viewer {
 }
 
 // sourceFor describes an image to portolan as a tile source: its tiles exist
-// at the full-resolution level only, inside the image's bounds, and the view
-// may zoom well past both ends of that.
+// from full resolution down through its reduced levels, inside the image's
+// bounds, and the view may zoom well past both ends of that. Between two
+// levels the finer one is drawn, so a screen pixel never has less than one
+// sample behind it (ADR-0373 §SD6).
 func sourceFor(img imaging.Image) portolan.TileSource {
 	src := portolan.TileSource{
 		TileSize:         portolan.Pt(tileSize, tileSize),
@@ -123,9 +174,11 @@ func sourceFor(img imaging.Image) portolan.TileSource {
 		NoWrap:           true,
 		Opacity:          1,
 		KeepBuffer:       1,
+		PreferFiner:      true,
 	}
 	if !img.IsZero() {
 		src.Bounds = boundsOf(img)
+		src.MinNativeZoom = -levels.CountFor(img.Width(), img.Height(), levels.Options{})
 	}
 	return src
 }
@@ -136,8 +189,76 @@ func boundsOf(img imaging.Image) portolan.LatLngBounds {
 	return portolan.LatLngBoundsOf(portolan.LL(-float64(img.Height()), 0), portolan.LL(0, float64(img.Width())))
 }
 
-// Close stops the viewer's workers. It must not be rendered afterwards.
-func (inst *Viewer) Close() { inst.m.Close() }
+// Close stops the viewer's workers and waits for a level build under way.
+// The viewer must not be rendered afterwards.
+func (inst *Viewer) Close() {
+	inst.stopBuild()
+	inst.m.Close()
+}
+
+// stopBuild cancels the level build, if one is running, and waits for it.
+func (inst *Viewer) stopBuild() {
+	if inst.buildCancel != nil {
+		inst.buildCancel()
+		inst.buildCancel = nil
+	}
+	inst.building.Wait()
+	inst.built.Store(nil)
+	for len(inst.histDone) > 0 {
+		<-inst.histDone
+	}
+	clear(inst.hists)
+	clear(inst.histWanted)
+	inst.pendingPercentile = false
+	inst.drag = limitDrag{}
+}
+
+// startBuild reduces the image on a goroutine. Until it is done the tiles
+// below full resolution are reduced one by one as they are asked for, to the
+// same cells.
+func (inst *Viewer) startBuild(img imaging.Image) {
+	inst.buildGen++
+	if levels.CountFor(img.Width(), img.Height(), levels.Options{}) == 0 {
+		return
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	inst.buildCancel = cancel
+	gen := inst.buildGen
+	inst.building.Go(func() {
+		if pyramid, err := levels.Build(ctx, img, levels.Options{}); err == nil {
+			inst.built.Store(&buildResult{gen: gen, pyramid: pyramid})
+		}
+	})
+}
+
+// adoptLevels takes over a finished build. The tiles on screen are already
+// the cells the build made, so nothing is invalidated: later tiles are read
+// from the levels instead of reduced on the spot.
+func (inst *Viewer) adoptLevels() {
+	result := inst.built.Swap(nil)
+	if result == nil || result.gen != inst.buildGen || inst.img.IsZero() {
+		return
+	}
+	inst.pyramid = result.pyramid
+	_ = inst.publish(inst.plane, inst.recipe)
+}
+
+// LevelsReady reports whether the image's reduced levels are built; an image
+// small enough to need none is ready at once.
+func (inst *Viewer) LevelsReady() bool {
+	return inst.img.IsZero() || inst.pyramid != nil ||
+		levels.CountFor(inst.img.Width(), inst.img.Height(), levels.Options{}) == 0
+}
+
+// Level is the level the current view is drawn from: 0 for the image's own
+// samples, k when every cell drawn is the mean of a 2^k × 2^k block of them.
+func (inst *Viewer) Level() int {
+	if inst.img.IsZero() || !inst.m.View().Loaded() {
+		return 0
+	}
+	k := -int(math.Ceil(inst.m.View().Zoom() - 1e-6))
+	return min(max(k, 0), levels.CountFor(inst.img.Width(), inst.img.Height(), levels.Options{}))
+}
 
 // Image is the image being shown; the zero image when there is none.
 func (inst *Viewer) Image() imaging.Image { return inst.img }
@@ -145,7 +266,9 @@ func (inst *Viewer) Image() imaging.Image { return inst.img }
 // SetImage shows another image, as stored and under its default recipe, and
 // fits it to the view on the next frame. The zero image shows nothing.
 func (inst *Viewer) SetImage(img imaging.Image) {
+	inst.stopBuild()
 	inst.img = img
+	inst.pyramid = nil
 	inst.plane = asStored
 	inst.hoverOk = false
 	inst.fitPending = !img.IsZero()
@@ -157,6 +280,9 @@ func (inst *Viewer) SetImage(img imaging.Image) {
 		_ = inst.publish(0, display.DefaultPlaneRecipe(img.Plane(0)))
 	}
 	inst.m.SetSource(sourceFor(img))
+	if !img.IsZero() {
+		inst.startBuild(img)
+	}
 }
 
 // Recipe is the recipe the image is shown through.
@@ -200,6 +326,8 @@ func (inst *Viewer) SetPlane(index int) error {
 	if err := inst.publish(index, recipe); err != nil {
 		return err
 	}
+	// A stretch asked for on another plane is not carried over to this one.
+	inst.pendingPercentile, inst.drag = false, limitDrag{}
 	inst.m.InvalidateTiles()
 	return nil
 }
@@ -215,6 +343,7 @@ func (inst *Viewer) SetAsStored() error {
 	if err := inst.publish(asStored, recipe); err != nil {
 		return err
 	}
+	inst.pendingPercentile, inst.drag = false, limitDrag{}
 	inst.m.InvalidateTiles()
 	return nil
 }
@@ -233,18 +362,13 @@ func (inst *Viewer) publish(plane int, recipe display.Recipe) error {
 	if !ok {
 		return eb.Build().Str("palette", recipe.Palette).Strs("known", PaletteNames()).Errorf("no colour map of that name")
 	}
-	sh := &shown{img: inst.img, checker: checkerColours()}
+	sh := &shown{img: inst.img, pyramid: inst.pyramid, plane: plane, checker: checkerColours()}
 	var err error
-	switch {
-	case plane == asStored && inst.img.Model().IsColor():
+	if plane == asStored && inst.img.Model().IsColor() {
 		sh.colours, err = display.CompileColor(recipe, inst.img.Kind(), inst.img.Plane(0).Transform())
-	case plane == asStored:
-		sh.plane = inst.img.Plane(0)
-		sh.alpha, _ = inst.img.Alpha()
-		sh.planes, err = display.CompilePlane(recipe, sh.plane.Kind(), sh.plane.Transform(), palette)
-	default:
-		sh.plane = inst.img.Plane(plane)
-		sh.planes, err = display.CompilePlane(recipe, sh.plane.Kind(), sh.plane.Transform(), palette)
+	} else {
+		p := inst.img.Plane(max(plane, 0))
+		sh.planes, err = display.CompilePlane(recipe, p.Kind(), p.Transform(), palette)
 	}
 	if err != nil {
 		return err
@@ -304,6 +428,8 @@ func (inst *Viewer) RenderFill(fallbackW, fallbackH float32) Events {
 // image, a colour bar beside it when one plane is shown, and the readout
 // line beneath.
 func (inst *Viewer) Render(w, h float32) (ev Events) {
+	inst.adoptLevels()
+	inst.adoptHistograms()
 	for range c.IdScope(inst.ids.PrepareStr(inst.key)) {
 		if inst.img.IsZero() {
 			c.Label("No image").Send()
@@ -316,7 +442,12 @@ func (inst *Viewer) Render(w, h float32) (ev Events) {
 		if !inst.Opts.HideReadout {
 			readoutH = readoutHeight + layoutGap
 		}
-		cw, ch := max(w-barW, fallbackCanvas), max(h-readoutH, fallbackCanvas)
+		histH := float32(0)
+		if inst.singlePlane() && !inst.Opts.HideHistogram {
+			histH = histogramHeight + layoutGap
+			inst.wantHistogram()
+		}
+		cw, ch := max(w-barW, fallbackCanvas), max(h-readoutH-histH, fallbackCanvas)
 
 		inst.m.SetNearestTiles(!inst.Opts.Smooth)
 		if inst.fitPending {
@@ -340,6 +471,9 @@ func (inst *Viewer) Render(w, h float32) (ev Events) {
 		ev.Hover, ev.HoverOk = inst.hover, inst.hoverOk
 		if mev.ClickedOk {
 			ev.Clicked, ev.ClickedOk = inst.readoutAt(mev.Clicked)
+		}
+		if histH > 0 {
+			ev.LimitsChanged = inst.renderHistogram(cw)
 		}
 		if !inst.Opts.HideReadout {
 			c.Label(inst.readoutText()).Selectable(false).Send()
@@ -371,6 +505,10 @@ func (inst *Viewer) readoutText() string {
 		b.WriteString("—")
 	}
 	fmt.Fprintf(&b, "   ×%s", formatMagnification(inst.Magnification()))
+	if k := inst.Level(); k > 0 {
+		// What is drawn is not the samples: say so, and say what it is.
+		fmt.Fprintf(&b, "   drawn from means of %d × %d", 1<<k, 1<<k)
+	}
 	return b.String()
 }
 

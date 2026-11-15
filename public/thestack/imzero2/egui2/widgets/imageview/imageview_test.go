@@ -5,6 +5,7 @@ import (
 	"image"
 	"math"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -12,6 +13,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/widgethandle"
 	"github.com/stergiotis/boxer/public/science/imaging"
 	"github.com/stergiotis/boxer/public/science/imaging/display"
+	"github.com/stergiotis/boxer/public/science/imaging/levels"
 	"github.com/stergiotis/boxer/public/thestack/fffi2/typed"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/graphview/scenetest"
@@ -60,9 +62,27 @@ func grayImage(t *testing.T, w, h int) imaging.Image {
 	return img
 }
 
+// waitForLevels waits for the viewer's level build and adopts it, as the
+// Render after its completion would.
+func waitForLevels(t *testing.T, v *Viewer) {
+	t.Helper()
+	deadline := time.Now().Add(10 * time.Second)
+	for v.built.Load() == nil && time.Now().Before(deadline) {
+		time.Sleep(time.Millisecond)
+	}
+	v.adoptLevels()
+	require.True(t, v.LevelsReady(), "the levels were built")
+}
+
 func tile(t *testing.T, v *Viewer, x, y int) []uint32 {
 	t.Helper()
-	px, w, h, err := v.src.TilePixels(context.Background(), portolan.TileCoords{X: x, Y: y})
+	return tileAt(t, v, x, y, 0)
+}
+
+// tileAt is the tile at (x, y) of level k.
+func tileAt(t *testing.T, v *Viewer, x, y, k int) []uint32 {
+	t.Helper()
+	px, w, h, err := v.src.TilePixels(context.Background(), portolan.TileCoords{X: x, Y: y, Z: -k})
 	require.NoError(t, err)
 	require.Equal(t, tileSize, w)
 	require.Equal(t, tileSize, h)
@@ -266,4 +286,234 @@ func TestEveryPaletteNameResolves(t *testing.T) {
 	assert.Equal(t, uint32(0x808080ff), gray.Colors[128], "the grey ramp is the identity")
 	_, ok = paletteFor("jet")
 	assert.False(t, ok)
+}
+
+func TestATileBelowFullResolutionIsTheRecipeAppliedToTheLevelsMeans(t *testing.T) {
+	v := New(c.NewWidgetIdStack(), "", Options{})
+	defer v.Close()
+	img := grayImage(t, 2300, 1100)
+	v.SetImage(img)
+	p := img.Plane(0)
+	require.Equal(t, 3, levels.CountFor(2300, 1100, levels.Options{}), "2300 → 1150 → 575 → 288")
+
+	// What a tile of level k must be: the recipe applied to the means the
+	// definition gives, transparent outside the level.
+	want := func(k, x, y int) []uint32 {
+		lw, lh := levels.Size(2300, 1100, k)
+		rect := image.Rect(x*tileSize, y*tileSize, (x+1)*tileSize, (y+1)*tileSize).Intersect(image.Rect(0, 0, lw, lh))
+		out := make([]uint32, tileSize*tileSize)
+		if rect.Empty() {
+			return out
+		}
+		mean, _, _, err := levels.Reduce(p, k, rect)
+		require.NoError(t, err)
+		m, err := display.CompilePlane(v.Recipe(), p.Kind(), p.Transform(), nil)
+		require.NoError(t, err)
+		dst := make([]uint32, rect.Dx()*rect.Dy())
+		require.NoError(t, m.Map(dst, mean, imaging.Plane{}, image.Rect(0, 0, rect.Dx(), rect.Dy())))
+		for row := range rect.Dy() {
+			copy(out[row*tileSize:], dst[row*rect.Dx():(row+1)*rect.Dx()])
+		}
+		return out
+	}
+	check := func(when string) {
+		for k := 1; k <= 3; k++ {
+			lw, lh := levels.Size(2300, 1100, k)
+			for y := 0; y*tileSize < lh; y++ {
+				for x := 0; x*tileSize < lw; x++ {
+					require.Equal(t, want(k, x, y), tileAt(t, v, x, y, k), "%s: level %d tile (%d,%d)", when, k, x, y)
+				}
+			}
+		}
+	}
+	// Whether or not the build has landed, the tiles are the same cells.
+	check("before or during the build")
+	waitForLevels(t, v)
+	require.NotNil(t, v.pyramid)
+	check("from the built levels")
+
+	_, _, _, err := v.src.TilePixels(context.Background(), portolan.TileCoords{Z: -4})
+	assert.Error(t, err, "there is no fourth level")
+	assert.Equal(t, -3, sourceFor(img).MinNativeZoom)
+	assert.Zero(t, sourceFor(colourImage(t, 40, 30, nil)).MinNativeZoom, "a small image has no reduced levels")
+}
+
+func TestTheViewSaysWhichLevelItDraws(t *testing.T) {
+	t.Cleanup(scenetest.Install())
+	sm := c.CurrentApplicationState.StateManager
+	v := New(c.NewWidgetIdStack(), "", Options{})
+	defer v.Close()
+	assert.Zero(t, v.Level())
+	assert.True(t, v.LevelsReady(), "no image, nothing to build")
+	v.SetImage(grayImage(t, 2300, 1100))
+	v.Render(600, 400) // the fit: 2300 wide into about 520
+	sm.ScriptReset()
+	assert.InDelta(t, 520.0/2300, v.Magnification(), 0.01)
+	assert.Equal(t, 2, v.Level(), "magnification 0.226 lies between 1/4 and 1/8: level 2 is the finer")
+	assert.Contains(t, v.readoutText(), "drawn from means of 4 × 4")
+
+	v.ActualSize()
+	v.Render(600, 400)
+	sm.ScriptReset()
+	assert.Zero(t, v.Level())
+	assert.NotContains(t, v.readoutText(), "means")
+
+	v.m.View().SetZoom(-20)
+	assert.Equal(t, 3, v.Level(), "never past the last level the image has")
+}
+
+func TestSettingAnotherImageStopsTheBuildOfTheLast(t *testing.T) {
+	v := New(c.NewWidgetIdStack(), "", Options{})
+	big := grayImage(t, 3000, 3000)
+	v.SetImage(big)
+	small := colourImage(t, 40, 30, nil)
+	v.SetImage(small)
+	assert.Nil(t, v.built.Load(), "nothing of the first build is left to adopt")
+	assert.True(t, v.LevelsReady())
+	v.SetImage(big)
+	waitForLevels(t, v)
+	v.Close() // waits; a second Close of the build side must not hang
+	v.stopBuild()
+}
+
+// rampImage is a w × 1-row-repeated 16-bit plane whose samples run from 0 to
+// top across the columns, with a few far outliers when asked.
+func rampImage(t *testing.T, w, h int, top uint16, outliers bool) imaging.Image {
+	t.Helper()
+	s := make([]uint16, w*h)
+	for row := range h {
+		for col := range w {
+			s[row*w+col] = uint16(col * int(top) / (w - 1))
+		}
+	}
+	if outliers {
+		s[0], s[1] = 60000, 65535
+	}
+	p, err := imaging.NewPlaneU16(w, h, s)
+	require.NoError(t, err)
+	img, err := imaging.NewImage(imaging.ColorModelGray, []imaging.Plane{p}, imaging.Provenance{})
+	require.NoError(t, err)
+	return img
+}
+
+// waitForHistogram waits for the shown plane's histogram and adopts it.
+func waitForHistogram(t *testing.T, v *Viewer) {
+	t.Helper()
+	deadline := time.Now().Add(10 * time.Second)
+	for time.Now().Before(deadline) {
+		v.adoptHistograms()
+		if _, ok := v.Histogram(); ok {
+			return
+		}
+		time.Sleep(time.Millisecond)
+	}
+	t.Fatal("the histogram was not counted")
+}
+
+func TestDraggingALimitHandleChangesTheRecipeAndNothingElse(t *testing.T) {
+	t.Cleanup(scenetest.Install())
+	sm := c.CurrentApplicationState.StateManager
+	ids := c.NewWidgetIdStack()
+	v := New(ids, "h", Options{})
+	defer v.Close()
+	v.SetImage(rampImage(t, 201, 50, 1000, false))
+	require.Equal(t, display.Limits{Lo: 0, Hi: 1000, Source: display.LimitsSourceData}, v.Recipe().Limits)
+	v.Render(400, 300) // asks for the histogram
+	sm.ScriptReset()
+	waitForHistogram(t, v)
+
+	var canvas, lo, hi widgethandle.WidgetHandle
+	for range c.IdScope(ids.PrepareStr("h")) {
+		canvas = widgethandle.Make(ids.PrepareStr("hist").Derive())
+		lo = widgethandle.Make(ids.PrepareStr("hist-lo").Derive())
+		hi = widgethandle.Make(ids.PrepareStr("hist-hi").Derive())
+	}
+	// The strip is as wide as the image canvas: 400 less the colour bar and
+	// its gap. Its axis runs 0 … 1000, so a pixel is 3.125 values.
+	const stripW = 400 - colorBarWidth - layoutGap
+	frame := func(pointerX float32, loFlags, hiFlags c.ResponseFlagsE) Events {
+		nan := float32(math.NaN())
+		sm.ScriptCanvasCursor(canvas, c.CanvasCursorValue{OriginX: 50, OriginY: 400, PosX: nan, PosY: nan})
+		sm.ScriptPointer(c.PointerValue{X: 50 + pointerX, Y: 420, Valid: true})
+		sm.ScriptResponse(lo, loFlags)
+		sm.ScriptResponse(hi, hiFlags)
+		ev := v.Render(400, 300)
+		require.False(t, typed.HasErrors(), typed.GetError())
+		sm.ScriptReset()
+		return ev
+	}
+	down := c.IsPointerButtonDownResponseFlags
+
+	// Press the upper handle two pixels left of where it stands: nothing
+	// moves, and the limits stay the data's.
+	ev := frame(stripW-2, 0, c.DragStartedResponseFlags|down)
+	assert.False(t, ev.LimitsChanged)
+	require.True(t, v.drag.active)
+	assert.Equal(t, display.LimitsSourceData, v.Recipe().Limits.Source)
+	// Drag it to the middle of the strip.
+	ev = frame(stripW/2-2, 0, c.DraggedResponseFlags|down)
+	assert.True(t, ev.LimitsChanged)
+	l := v.Recipe().Limits
+	assert.InDelta(t, 500, l.Hi, 1e-9)
+	assert.Equal(t, 0.0, l.Lo)
+	assert.Equal(t, display.LimitsSourceManual, l.Source, "a dragged limit is one a person set")
+	// The axis holds still while the handle is held, so the same pointer
+	// position is the same value.
+	ev = frame(stripW/2-2, 0, c.DraggedResponseFlags|down)
+	assert.False(t, ev.LimitsChanged)
+	// Release.
+	frame(stripW/4, 0, c.DragStoppedResponseFlags)
+	assert.False(t, v.drag.active)
+	assert.InDelta(t, 500, v.Recipe().Limits.Hi, 1e-9, "the release frame moves nothing")
+
+	// The lower handle cannot cross the upper one.
+	frame(0, c.DragStartedResponseFlags|down, 0)
+	frame(stripW, c.DraggedResponseFlags|down, 0)
+	l = v.Recipe().Limits
+	assert.Less(t, l.Lo, l.Hi)
+	assert.InDelta(t, 500, l.Lo, 1, "it stops just short of the upper limit")
+	frame(stripW, 0, 0)
+	assert.False(t, v.drag.active, "a drag ends when the button is no longer down")
+
+	// The samples were never touched: the readout of a pixel is its sample.
+	r, ok := v.readoutAt(portolan.LL(-0.5, 100.5))
+	require.True(t, ok)
+	assert.Equal(t, 500.0, r.Stored[0])
+}
+
+func TestPercentileLimitsWaitForTheHistogramAndIgnoreOutliers(t *testing.T) {
+	v := New(c.NewWidgetIdStack(), "", Options{})
+	defer v.Close()
+	v.SetImage(rampImage(t, 1001, 20, 1000, true))
+	assert.Equal(t, 65535.0, v.Recipe().Limits.Hi, "the data range is the outliers'")
+	_, ok := v.Histogram()
+	assert.False(t, ok, "counted off the frame, so not there at the first asking")
+
+	require.NoError(t, v.SetPercentileLimits(1, 99))
+	waitForHistogram(t, v)
+	l := v.Recipe().Limits
+	assert.Equal(t, display.LimitsSourcePercentile, l.Source)
+	assert.Equal(t, 1.0, l.PercentLo)
+	assert.Equal(t, 99.0, l.PercentHi)
+	assert.InDelta(t, 10, l.Lo, 2)
+	assert.InDelta(t, 990, l.Hi, 2)
+	h, ok := v.Histogram()
+	require.True(t, ok)
+	assert.EqualValues(t, 1001*20, h.Valid, "over the whole plane")
+
+	// With the histogram already there the stretch applies at once.
+	require.NoError(t, v.SetPercentileLimits(10, 90))
+	assert.InDelta(t, 100, v.Recipe().Limits.Lo, 2)
+
+	assert.Error(t, v.SetPercentileLimits(90, 10))
+	assert.Error(t, v.SetPercentileLimits(-1, 50))
+	v.SetImage(colourImage(t, 40, 30, nil))
+	assert.Error(t, v.SetPercentileLimits(1, 99), "a colour composite has no single plane to take percentiles of")
+	_, ok = v.Histogram()
+	assert.False(t, ok)
+	require.NoError(t, v.SetPlane(0))
+	require.NoError(t, v.SetPercentileLimits(0, 50))
+	require.NoError(t, v.SetPlane(1))
+	waitForHistogram(t, v)
+	assert.Equal(t, display.LimitsSourceData, v.Recipe().Limits.Source, "a stretch asked for on one plane is not applied to another")
 }
