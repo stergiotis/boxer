@@ -14,11 +14,20 @@ import (
 // pngInfo is what a PNG file says about itself in the chunks before its
 // pixel data.
 type pngInfo struct {
-	bitDepth   uint8
-	colorType  uint8
-	hasTRNS    bool
-	animated   bool
-	colourDecl []string
+	width, height int
+	bitDepth      uint8
+	colorType     uint8
+	compression   uint8
+	filter        uint8
+	interlace     uint8
+	hasTRNS       bool
+	animated      bool
+	colourDecl    []string
+	palette       []byte // PLTE's body: three bytes an entry
+	trns          []byte // tRNS's body
+	// idatAt is the offset of the first IDAT chunk's length field; 0 when
+	// the scan found none.
+	idatAt int
 }
 
 const (
@@ -44,13 +53,23 @@ func scanPNG(data []byte) (info pngInfo, err error) {
 		chunk := data[body : body+length]
 		switch kind {
 		case "IHDR":
+			if seenHeader {
+				// The first header is the one the standard decoder reads;
+				// a second is refused by the row decoder.
+				break
+			}
 			if length < 13 {
 				return info, eb.Build().Int("length", length).Errorf("PNG header chunk is too short")
 			}
+			info.width, info.height = int(binary.BigEndian.Uint32(chunk[0:4])), int(binary.BigEndian.Uint32(chunk[4:8]))
 			info.bitDepth, info.colorType = chunk[8], chunk[9]
+			info.compression, info.filter, info.interlace = chunk[10], chunk[11], chunk[12]
 			seenHeader = true
+		case "PLTE":
+			info.palette = chunk
 		case "tRNS":
 			info.hasTRNS = true
+			info.trns = chunk
 		case "acTL":
 			info.animated = true
 		case "sRGB":
@@ -68,6 +87,9 @@ func scanPNG(data []byte) (info pngInfo, err error) {
 		case "cICP":
 			info.colourDecl = append(info.colourDecl, "coding-independent code points")
 		case "IDAT", "IEND":
+			if kind == "IDAT" {
+				info.idatAt = pos
+			}
 			pos = len(data)
 			continue
 		}
@@ -89,14 +111,29 @@ func decodePNG(data []byte, sourceName string) (img imaging.Image, err error) {
 		return img, eb.Build().Str("source", sourceName).Uint8("bitDepth", info.bitDepth).Uint8("colorType", info.colorType).
 			Errorf("the PNG decoder does not read this file: %w", err)
 	}
-	prov := imaging.Provenance{
+	model, kind, prov, err := pngLayout(info, sourceName)
+	if err != nil {
+		return img, err
+	}
+	planes, err := planesOf(src, model, kind)
+	if err != nil {
+		return img, eb.Build().Str("source", sourceName).Errorf("PNG pixels to planes: %w", err)
+	}
+	return imaging.NewImage(model, planes, prov)
+}
+
+// pngLayout is what a PNG's header and chunks make of it: the colour model
+// and sample kind of its planes, and the provenance that records what the
+// reader did. Both the whole decode and the row decoder use it, so the two
+// give the same image.
+func pngLayout(info pngInfo, sourceName string) (model imaging.ColorModelE, kind imaging.SampleKindE, prov imaging.Provenance, err error) {
+	prov = imaging.Provenance{
 		SourceName:       sourceName,
 		Format:           FormatPNG.String(),
 		Decoder:          "go image/png",
 		StoredBitDepth:   info.bitDepth,
 		ColorDeclaration: strings.Join(info.colourDecl, "; "),
 	}
-	var model imaging.ColorModelE
 	switch info.colorType {
 	case pngColorGray:
 		model, prov.StoredColorType = imaging.ColorModelGray, "gray"
@@ -110,7 +147,7 @@ func decodePNG(data []byte, sourceName string) (img imaging.Image, err error) {
 		model, prov.StoredColorType = imaging.ColorModelRGB, "palette"
 		prov.Derivations |= imaging.DerivationPaletteExpanded
 	default:
-		return img, eb.Build().Str("source", sourceName).Uint8("colorType", info.colorType).Errorf("PNG colour type is not one the format defines")
+		return model, kind, prov, eb.Build().Str("source", sourceName).Uint8("colorType", info.colorType).Errorf("PNG colour type is not one the format defines")
 	}
 	if info.hasTRNS {
 		switch model {
@@ -124,7 +161,7 @@ func decodePNG(data []byte, sourceName string) (img imaging.Image, err error) {
 			}
 		}
 	}
-	kind := imaging.SampleKindU8
+	kind = imaging.SampleKindU8
 	if info.bitDepth == 16 {
 		kind = imaging.SampleKindU16
 	}
@@ -134,9 +171,8 @@ func decodePNG(data []byte, sourceName string) (img imaging.Image, err error) {
 	if info.animated {
 		prov.Derivations |= imaging.DerivationDefaultFrameOnly
 	}
-	planes, err := planesOf(src, model, kind)
-	if err != nil {
-		return img, eb.Build().Str("source", sourceName).Errorf("PNG pixels to planes: %w", err)
-	}
-	return imaging.NewImage(model, planes, prov)
+	return model, kind, prov, nil
 }
+
+// pngConfig is the standard decoder's reading of a PNG header.
+var pngConfig = png.DecodeConfig

@@ -18,6 +18,18 @@
 // than 8 bits per sample reaches this package already scaled to the 8-bit
 // range by the decoder. An animated PNG yields its default image.
 //
+// # Into tiles, row by row
+//
+// [DecodeTiled] reads the same files into a store of tiles with every
+// reduced level built (ADR-0374 §SD7). A non-interlaced PNG goes through a
+// row decoder of this package's own, written from the PNG specification:
+// it holds two rows of the file and a band of rows besides the store, and
+// hands the store over before the first row is read, so a viewer can show
+// tiles as they are built. Its planes and provenance are those [Decode]
+// gives, but for the decoder's name; a test over every colour type and bit
+// depth and a fuzz target against the standard decoder hold it to that. An
+// interlaced PNG and a JPEG are decoded whole and then stored.
+//
 // # What is refused
 //
 // Whatever the standard library's decoders do not read is refused with their

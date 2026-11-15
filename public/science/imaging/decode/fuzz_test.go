@@ -2,13 +2,16 @@ package decode
 
 import (
 	"bytes"
+	"context"
 	"image"
 	"image/color"
 	"image/jpeg"
 	"image/png"
+	"slices"
 	"testing"
 
 	"github.com/stergiotis/boxer/public/science/imaging"
+	"github.com/stergiotis/boxer/public/science/imaging/tiles"
 )
 
 // fuzzMaxPixels keeps a fuzzed image small enough that a run spends its
@@ -146,5 +149,36 @@ func FuzzScanners(f *testing.F) {
 		_, _ = scanPNG(data)
 		_ = scanJPEG(data)
 		_ = scanJPEG(data).frameName()
+	})
+}
+
+// FuzzDecodeTiled holds the row decoder to the whole decode on any input:
+// each accepts what the other accepts, and what they accept they read to the
+// same samples.
+func FuzzDecodeTiled(f *testing.F) {
+	fuzzSeeds(f)
+	f.Fuzz(func(t *testing.T, data []byte) {
+		img, errW := Decode(data, "fuzz", Options{MaxPixels: fuzzMaxPixels})
+		s, errS := DecodeTiled(context.Background(), data, "fuzz", Options{MaxPixels: fuzzMaxPixels}, tiles.Options{}, nil)
+		switch {
+		case errW != nil && errS != nil:
+			return
+		case errW == nil && errS != nil:
+			t.Fatalf("the row decoder refused a file the whole decode reads: %v", errS)
+		case errW != nil && errS == nil:
+			t.Fatalf("the row decoder read a file the whole decode refuses: %v", errW)
+		}
+		got, err := s.Read(context.Background(), image.Rect(0, 0, img.Width(), img.Height()))
+		if err != nil {
+			t.Fatalf("the store does not read back: %v", err)
+		}
+		if got.Model() != img.Model() || got.Kind() != img.Kind() {
+			t.Fatalf("%s %s from the rows, %s %s whole", got.Model(), got.Kind(), img.Model(), img.Kind())
+		}
+		for i := range img.PlaneCount() {
+			if !slices.Equal(img.Plane(i).U8(), got.Plane(i).U8()) || !slices.Equal(img.Plane(i).U16(), got.Plane(i).U16()) {
+				t.Fatalf("plane %d differs between the row decoder and the whole decode", i)
+			}
+		}
 	})
 }
