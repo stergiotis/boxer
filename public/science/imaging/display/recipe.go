@@ -202,6 +202,14 @@ func (inst Recipe) level(x float64) float64 {
 	return y
 }
 
+// Level is the level a value is drawn at, in [0, 1]: its position between
+// the limits, clamped, through the transfer function and the inversion. A
+// single plane looks the level up in its palette; a colour bar draws it.
+func (inst Recipe) Level(value float64) float64 {
+	x, _, _ := inst.position(value)
+	return inst.level(x)
+}
+
 // NominalLimits is the whole range an integer sample kind can hold, through
 // the value transform. A float kind has none and reports ok false.
 func NominalLimits(kind imaging.SampleKindE, transform imaging.ValueTransform) (limits Limits, ok bool) {
@@ -248,4 +256,17 @@ func DefaultRecipe(img imaging.Image) Recipe {
 		limits = Limits{Lo: 0, Hi: 1, Source: LimitsSourceManual}
 	}
 	return Recipe{Limits: limits}
+}
+
+// DefaultPlaneRecipe is the view one plane opens in when it is shown by
+// itself, whatever image it belongs to: the range of its data, linear, with
+// the same fallbacks as [DefaultRecipe].
+func DefaultPlaneRecipe(plane imaging.Plane) Recipe {
+	if limits, ok := DataLimits(plane); ok {
+		return Recipe{Limits: limits}
+	}
+	if limits, ok := NominalLimits(plane.Kind(), plane.Transform()); ok {
+		return Recipe{Limits: limits}
+	}
+	return Recipe{Limits: Limits{Lo: 0, Hi: 1, Source: LimitsSourceManual}}
 }

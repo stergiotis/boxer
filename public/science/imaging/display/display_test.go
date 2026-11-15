@@ -319,6 +319,23 @@ func TestDefaultRecipeSaysWhereItsLimitsCameFrom(t *testing.T) {
 	assert.Equal(t, Limits{Lo: 10 - 2*4000, Hi: 10 - 2*100, Source: LimitsSourceData}, r.Limits, "limits are in values, lower first")
 }
 
+func TestDefaultPlaneRecipeAndLevel(t *testing.T) {
+	p, _ := imaging.NewPlaneU8(3, 1, []uint8{10, 60, 110})
+	r := DefaultPlaneRecipe(p)
+	assert.Equal(t, Limits{Lo: 10, Hi: 110, Source: LimitsSourceData}, r.Limits)
+	assert.InDelta(t, 0.5, r.Level(60), 1e-12)
+	assert.Equal(t, 0.0, r.Level(-5), "below the limits is the bottom level")
+	assert.Equal(t, 1.0, r.Level(500))
+	r.Invert = true
+	assert.Equal(t, 1.0, r.Level(-5))
+
+	flat, _ := imaging.NewPlaneU8(2, 1, []uint8{4, 4})
+	assert.Equal(t, LimitsSourceNominal, DefaultPlaneRecipe(flat).Limits.Source)
+	nan := float32(math.NaN())
+	none, _ := imaging.NewPlaneF32(1, 1, []float32{nan})
+	assert.NoError(t, DefaultPlaneRecipe(none).Validate())
+}
+
 func TestARecipeReadsAsTextAndComesBackEqual(t *testing.T) {
 	r := Recipe{
 		Limits:   Limits{Lo: -1.5, Hi: 4000, Source: LimitsSourcePercentile, PercentLo: 0.5, PercentHi: 99.5},

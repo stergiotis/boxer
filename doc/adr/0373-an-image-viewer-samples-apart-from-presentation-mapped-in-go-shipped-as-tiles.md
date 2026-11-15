@@ -227,9 +227,13 @@ renderer and no wire changes.
   plane and for a colour image, with their tests:
   [`public/science/imaging`](../../public/science/imaging/doc.go) and its
   `decode` and `display` packages.
-- **M2** — portolan's pixel-tile seam and `imageview` showing an image at
+- **M2** ✓ — portolan's pixel-tile seam and `imageview` showing an image at
   full resolution, as stored or one plane of it: pan, zoom, readout, colour
-  bar.
+  bar. The seam is `portolan.TilePixelsI` on the loader and
+  `Map.InvalidateTiles`; the widget is
+  [`widgets/imageview`](../../public/thestack/imzero2/egui2/widgets/imageview/doc.go).
+  A transparent sample is laid over a checkerboard fixed to the image's
+  pixel grid when its tile is mapped, so no tile leaves Go translucent.
 - **M3** — levels, the per-frame budget and coarse-first replacement; the
   histogram with draggable limits.
 - **M4** — the app: catalog, help book, state machine, scenes; region
