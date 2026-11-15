@@ -305,6 +305,26 @@ Proposed — awaiting review by the repository owner.
 
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 
+## Updates
+
+### 2026-11-15 — keys reach the host through the map; a replaced source's tiles are dropped
+
+§SD5's "keys stay off in the map and reach the host's frame" did not hold:
+the canvas is drawn inside `Render`, so a host has no frame around it to
+take Page Up or Page Down with. The map's key-capturing frame now takes the
+keys the host names (`imageview.Options.Keys`, portolan's
+`Options.HostKeys`) and reports their presses in `Events.Keys` without
+acting on them; the map's own arrows stay off in imageview.
+
+Adopting §SD1 in a PDF viewer met a defect at the seam: a tile under way
+when the source was replaced could be answered by the old source and
+stored for the new one. portolan's `Map.SetSource` now starts a content
+revision, an answer requested under an older one is not shown and the tile
+is asked again, and a call no request waits on has its context cancelled
+and leaves the loader's in-flight index — which is what §SD1's "must honour
+`ctx`" presupposed. imageview publishes a new source to its workers before
+the map asks for its tiles.
+
 ## References
 
 - [ADR-0373](./0373-an-image-viewer-samples-apart-from-presentation-mapped-in-go-shipped-as-tiles.md) — the viewer this extends.
