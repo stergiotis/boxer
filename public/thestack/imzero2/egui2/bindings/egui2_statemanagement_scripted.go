@@ -38,6 +38,12 @@ func (inst *StateManager) ScriptCanvasWheel(h widgethandle.WidgetHandle, v Canva
 	inst.r23CanvasWheel[h.Resolve()] = v
 }
 
+// ScriptCapturedKeys sets the R26 keys a capturing Frame ate, as the host
+// reports them for the Frame behind the handle.
+func (inst *StateManager) ScriptCapturedKeys(h widgethandle.WidgetHandle, keys []CapturedKey) {
+	inst.r26KeyCaptures[h.Resolve()] = keys
+}
+
 // ScriptPointer sets the R20 global pointer.
 func (inst *StateManager) ScriptPointer(v PointerValue) { inst.r20Pointer = v }
 
@@ -45,8 +51,8 @@ func (inst *StateManager) ScriptPointer(v PointerValue) { inst.r20Pointer = v }
 func (inst *StateManager) ScriptModifiers(v ModifiersValue) { inst.r17Modifiers = v }
 
 // ScriptReset is the scripted frame boundary: it clears the registers the
-// Script* setters fill — every response, canvas row and wheel capture, the
-// pointer and the modifiers — and the frame's seen-id set, as Sync does.
+// Script* setters fill — every response, canvas row, wheel and key capture,
+// the pointer and the modifiers — and the frame's seen-id set, as Sync does.
 func (inst *StateManager) ScriptReset() {
 	seenIds.Clear()
 	inst.responseFlags.Reset()
@@ -54,6 +60,7 @@ func (inst *StateManager) ScriptReset() {
 	clear(inst.r28TextRects)
 	clear(inst.r29Console)
 	clear(inst.r23CanvasWheel)
+	clear(inst.r26KeyCaptures)
 	inst.r20Pointer = PointerValue{}
 	inst.r17Modifiers = ModifiersValue{}
 }
