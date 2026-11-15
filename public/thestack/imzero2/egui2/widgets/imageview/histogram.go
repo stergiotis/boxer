@@ -2,7 +2,6 @@ package imageview
 
 import (
 	"context"
-	"encoding/hex"
 	"math"
 	"strconv"
 
@@ -55,10 +54,20 @@ func (inst *Viewer) Histogram() (h stats.Histogram, ok bool) {
 	return h, false
 }
 
-// histogramKey names the count of one plane of the image shown.
+// histogramKey names the count of one plane of the source shown: its
+// generation, which moves with every source and every Invalidate.
 func (inst *Viewer) histogramKey(plane int) string {
-	sum := inst.img.Hash()
-	return hex.EncodeToString(sum[:8]) + "/" + strconv.Itoa(plane)
+	return strconv.FormatUint(inst.gen, 10) + "/" + strconv.Itoa(plane)
+}
+
+// histogramAvailable reports whether the source shown can have a histogram:
+// an image in memory, or a source that counts one itself.
+func (inst *Viewer) histogramAvailable() bool {
+	if !inst.img.IsZero() {
+		return true
+	}
+	_, ok := inst.source.(HistogramSourceI)
+	return ok
 }
 
 // wantHistogram asks for the shown plane's histogram: it is counted as a
@@ -67,15 +76,23 @@ func (inst *Viewer) histogramKey(plane int) string {
 // begun; a superseded count's result is dropped.
 func (inst *Viewer) wantHistogram() {
 	idx := inst.shownPlaneIndex()
-	if inst.hists[idx] != nil || inst.img.IsZero() {
+	if inst.hists[idx] != nil || !inst.histogramAvailable() {
 		return
 	}
-	plane := inst.img.Plane(idx)
+	count := func(ctx context.Context) (*stats.Histogram, error) {
+		hs := inst.source.(HistogramSourceI)
+		h, err := hs.Histogram(ctx, idx)
+		return &h, err
+	}
+	if !inst.img.IsZero() {
+		plane := inst.img.Plane(idx)
+		count = func(context.Context) (*stats.Histogram, error) {
+			h := stats.Of(plane)
+			return &h, nil
+		}
+	}
 	inst.histJob.Configure(inst.Opts.Tasks, histogramKind, histogramTitle)
-	val, done, err, busy := inst.histJob.Demand(inst.histogramKey(idx), func(context.Context) (*stats.Histogram, error) {
-		h := stats.Of(plane)
-		return &h, nil
-	})
+	val, done, err, busy := inst.histJob.Demand(inst.histogramKey(idx), count)
 	if done && !busy && err == nil && val != nil {
 		inst.hists[idx] = val
 	}

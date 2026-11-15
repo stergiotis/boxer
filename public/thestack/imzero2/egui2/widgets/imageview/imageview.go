@@ -369,8 +369,8 @@ func (inst *Viewer) SetSource(src SourceI, keepView bool) error {
 	inst.dropWork()
 	inst.img, inst.pyramid = imaging.Image{}, nil
 	inst.useSource(src, keepView)
-	if err := inst.publish(asStored, defaultRecipeFor(info, asStored)); err != nil {
-		return inst.publish(0, defaultRecipeFor(info, 0))
+	if err := inst.publish(asStored, defaultRecipeFor(src, info, asStored)); err != nil {
+		return inst.publish(0, defaultRecipeFor(src, info, 0))
 	}
 	return nil
 }
@@ -416,10 +416,21 @@ func (inst *Viewer) clearSource() {
 }
 
 // defaultRecipeFor is the recipe a source opens under, as stored or one
-// plane: the nominal range of its kind through the plane's transform, linear
-// — which shows 8-bit colour as it was rendered — or 0 to 1 for a float
-// source, which has no nominal range.
-func defaultRecipeFor(info SourceInfo, plane int) display.Recipe {
+// plane, as an image in memory opens: a single plane over its data range
+// when the source knows it, and otherwise — and for a colour image — the
+// nominal range of its kind through the plane's transform, linear, which
+// shows 8-bit colour as it was rendered; 0 to 1 for a float source with
+// neither.
+func defaultRecipeFor(src SourceI, info SourceInfo, plane int) display.Recipe {
+	single := plane != asStored || !info.Model.IsColor()
+	if rs, ok := src.(RangeSourceI); ok && single {
+		i := max(plane, 0)
+		if lo, hi, ok := rs.StoredRange(i); ok && hi > lo {
+			t := info.Transform(i)
+			a, b := t.Apply(lo), t.Apply(hi)
+			return display.Recipe{Limits: display.Limits{Lo: min(a, b), Hi: max(a, b), Source: display.LimitsSourceData}}
+		}
+	}
 	if l, ok := display.NominalLimits(info.Kind, info.Transform(max(plane, 0))); ok {
 		return display.Recipe{Limits: l}
 	}
@@ -454,7 +465,7 @@ func (inst *Viewer) SetRecipe(recipe display.Recipe) error {
 	if !inst.singlePlane() {
 		return eb.Build().Errorf("percentile limits apply to a single plane; show one first")
 	}
-	if inst.img.IsZero() {
+	if !inst.histogramAvailable() {
 		return eb.Build().Errorf("percentile limits need every sample at hand, which a source does not offer; set the limits")
 	}
 	if !(lo >= 0 && lo < hi && hi <= 100) {
@@ -511,7 +522,7 @@ func (inst *Viewer) SetPlane(index int) error {
 	if index == inst.plane {
 		return nil
 	}
-	recipe := defaultRecipeFor(inst.info, index)
+	recipe := defaultRecipeFor(inst.source, inst.info, index)
 	if !inst.img.IsZero() {
 		recipe = display.DefaultPlaneRecipe(inst.img.Plane(index))
 	}
@@ -531,7 +542,7 @@ func (inst *Viewer) SetAsStored() error {
 	if inst.info.IsZero() || inst.plane == asStored {
 		return nil
 	}
-	recipe := defaultRecipeFor(inst.info, asStored)
+	recipe := defaultRecipeFor(inst.source, inst.info, asStored)
 	if !inst.img.IsZero() {
 		recipe = display.DefaultRecipe(inst.img)
 	}
@@ -621,7 +632,10 @@ func (inst *Viewer) readoutAt(ll portolan.LatLng) (r Readout, ok bool) {
 		}
 		var d TileData
 		have := false
-		if inst.info.Resident {
+		if tt, ok := sh.source.(tryTileI); ok {
+			d, have = tt.tryTile(0, col/tileSize, row/tileSize)
+			at = d.Region.Min.Add(image.Pt(col%tileSize, row%tileSize))
+		} else if inst.info.Resident {
 			var err error
 			d, err = sh.source.Tile(context.Background(), 0, col/tileSize, row/tileSize)
 			have = err == nil
@@ -862,9 +876,9 @@ func (inst *Viewer) Render(w, h float32) (ev Events) {
 			readoutH = readoutHeight + layoutGap
 		}
 		histH := float32(0)
-		// A histogram counts every sample, which only an image in memory
-		// has at hand.
-		if inst.singlePlane() && !inst.Opts.HideHistogram && !inst.img.IsZero() {
+		// A histogram counts every sample: an image in memory has them at
+		// hand, and a source may count them itself.
+		if inst.singlePlane() && !inst.Opts.HideHistogram && inst.histogramAvailable() {
 			histH = histogramHeight + layoutGap
 			inst.wantHistogram()
 		}
