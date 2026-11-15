@@ -64,6 +64,13 @@ type Style struct {
 	// box. nil takes a rune-count estimate at the house glyph ratio; a
 	// caller with the ImPlot estimator passes it for one shared answer.
 	TextWidth func(s string, fontSize float32) float32
+	// Horizontal lays the items out left to right, each as wide as its own
+	// label, wrapping onto a further line where the next one would pass
+	// MaxWidth — the legend for under a plot. Unset, one item per line.
+	Horizontal bool
+	// MaxWidth bounds a horizontal legend's box; 0 keeps every item on one
+	// line. An item wider than the bound gets a line of its own.
+	MaxWidth float32
 }
 
 // DefaultStyle is the design-token appearance.
@@ -118,61 +125,120 @@ func estimateTextWidth(s string, fontSize float32) float32 {
 	return float32(utf8.RuneCountInString(s)) * fontSize * glyphWidthRatio
 }
 
-// Measure returns the box the items need. Zero for no items.
-func Measure(items []Item, st Style) (w, h float32) {
+// itemGap is the space between two items on one line of a horizontal
+// legend, in units of Padding.
+const itemGap = 2
+
+// layout calls fn with each item's cell — the swatch, the label and the
+// padding before them, relative to the box's top-left — in item order, and
+// returns the box size. st must have its defaults filled in.
+func layout(items []Item, st Style, fn func(i int, x, y, w float32)) (w, h float32) {
 	if len(items) == 0 {
 		return
 	}
-	st = st.withDefaults()
-	widest := float32(0)
-	for i := range items {
-		widest = max(widest, st.TextWidth(items[i].Label, st.FontSize))
+	if !st.Horizontal {
+		widest := float32(0)
+		for i := range items {
+			widest = max(widest, st.TextWidth(items[i].Label, st.FontSize))
+		}
+		w = st.Padding*3 + st.Swatch + widest
+		h = st.Padding*2 + float32(len(items))*st.RowHeight
+		if fn != nil {
+			for i := range items {
+				fn(i, 0, st.Padding+float32(i)*st.RowHeight, w)
+			}
+		}
+		return
 	}
-	w = st.Padding*3 + st.Swatch + widest
-	h = st.Padding*2 + float32(len(items))*st.RowHeight
+	x, line := float32(0), 0
+	for i := range items {
+		cw := st.Padding*2 + st.Swatch + st.TextWidth(items[i].Label, st.FontSize)
+		if x > 0 && st.MaxWidth > 0 && x+st.Padding*itemGap+cw+st.Padding > st.MaxWidth {
+			x, line = 0, line+1
+		}
+		if x > 0 {
+			x += st.Padding * itemGap
+		}
+		if fn != nil {
+			fn(i, x, st.Padding+float32(line)*st.RowHeight, cw)
+		}
+		x += cw
+		w = max(w, x+st.Padding)
+	}
+	h = st.Padding*2 + float32(line+1)*st.RowHeight
 	return
+}
+
+// Measure returns the box the items need. Zero for no items.
+func Measure(items []Item, st Style) (w, h float32) {
+	return layout(items, st.withDefaults(), nil)
 }
 
 // Paint emits the box, one swatch and one label per item, with the box's
 // top-left at (x, y). It returns the box size so a caller can place what
 // follows. Nothing is emitted for no items.
 func Paint(items []Item, x, y float32, st Style) (w, h float32) {
-	w, h = Measure(items, st)
+	st = st.withDefaults()
+	w, h = layout(items, st, nil)
 	if len(items) == 0 {
 		return
 	}
-	st = st.withDefaults()
 	c.PaintRectFilled(x, y, x+w, y+h, st.Rounding, st.Background).Send()
 	c.PaintRectStroke(x, y, x+w, y+h, st.Rounding, st.Border, styletokens.StrokeHair).Send()
-	for i := range items {
+	layout(items, st, func(i int, cx, cy, _ float32) {
 		it := &items[i]
-		ry := y + st.Padding + float32(i)*st.RowHeight
+		rx, ry := x+cx, y+cy
 		sw, txt := it.Color, st.Text
 		if it.Hidden {
 			sw, txt = dimmed(it.Color), st.TextHidden
 		}
-		c.PaintRectFilled(x+st.Padding, ry+(st.RowHeight-st.Swatch)/2, x+st.Padding+st.Swatch, ry+(st.RowHeight+st.Swatch)/2, min(st.Rounding, st.Swatch/2), sw).Send()
-		t := c.PaintText(x+st.Padding*2+st.Swatch, ry+st.RowHeight/2, 0, 1, it.Label, st.FontSize, txt)
+		c.PaintRectFilled(rx+st.Padding, ry+(st.RowHeight-st.Swatch)/2, rx+st.Padding+st.Swatch, ry+(st.RowHeight+st.Swatch)/2, min(st.Rounding, st.Swatch/2), sw).Send()
+		t := c.PaintText(rx+st.Padding*2+st.Swatch, ry+st.RowHeight/2, 0, 1, it.Label, st.FontSize, txt)
 		if st.Monospace {
 			t = t.Monospace()
 		}
 		t.Send()
-	}
+	})
 	return
 }
 
-// EmitSense stamps one sense region per row, keyed prefix+Key under ids,
-// over the rows Paint drew at (x, y). Read reads them back next frame.
+// EmitSense stamps one sense region per item, keyed prefix+Key under ids,
+// over the cells Paint drew at (x, y) — a whole row of a vertical legend,
+// the item's own extent in a horizontal one. Read reads them back next frame.
+//
+// Each row also gets a hit region labelled with the row's Label, which gives
+// it an accessibility node of that name and a tooltip saying what a click
+// does. A sense region carries no name, so without it a scene or an agent
+// could not find a row; the hit region only names and hovers, the sense
+// region under it keeps the click. An agent driving the host clicks a row by
+// name with a pointer press (imzero2 drive's "pointer": true), since an
+// AccessKit click reaches the hit region and not the sense region.
 func EmitSense(ids *c.WidgetIdStack, prefix string, items []Item, x, y float32, st Style) {
 	if len(items) == 0 {
 		return
 	}
-	w, _ := Measure(items, st)
 	st = st.withDefaults()
-	for i := range items {
-		ry := y + st.Padding + float32(i)*st.RowHeight
-		c.PaintSenseRegion(ids.PrepareStr(prefix+items[i].key()), x, ry, w, st.RowHeight).Send()
+	layout(items, st, func(i int, cx, cy, cw float32) {
+		it := &items[i]
+		rx, ry := x+cx, y+cy
+		c.PaintSenseRegion(ids.PrepareStr(prefix+it.key()), rx, ry, cw, st.RowHeight).Send()
+		if it.Label != "" {
+			c.PaintHitRect(ids.PrepareStr(prefix+it.key()+nameSuffix), rx, ry, rx+cw, ry+st.RowHeight).
+				Label(it.Label).Tooltip(rowTip(it.Hidden)).Send()
+		}
+	})
+}
+
+// nameSuffix keys a row's naming hit region apart from its sense region. The
+// unit separator does not occur in a label a person would write.
+const nameSuffix = "\x1fname"
+
+// rowTip is the tooltip under a row's name: what a click on it does.
+func rowTip(hidden bool) string {
+	if hidden {
+		return "Hidden. Click to show."
 	}
+	return "Click to hide."
 }
 
 // Read returns the index of the row the previous frame's input clicked and
