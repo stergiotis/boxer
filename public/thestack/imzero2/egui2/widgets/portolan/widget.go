@@ -225,8 +225,13 @@ func (m *Map) wirePyramid() {
 // not remembered, so this is valid before the first Render.
 func (m *Map) Handles() (canvas, area widgethandle.WidgetHandle) {
 	for range c.IdScope(m.ids.PrepareStr(m.key)) {
-		canvas = widgethandle.Make(m.ids.PrepareStr("portolan-canvas").Derive())
-		area = widgethandle.Make(m.ids.PrepareStr("portolan-area").Derive())
+		// Render draws the canvas inside its key-capturing Frame, which
+		// scopes the ids beneath it; the same scope is opened here so these
+		// are the handles the frame's registers are keyed by.
+		for range c.IdScope(m.ids.PrepareStr("portolan-keys")) {
+			canvas = widgethandle.Make(m.ids.PrepareStr("portolan-canvas").Derive())
+			area = widgethandle.Make(m.ids.PrepareStr("portolan-area").Derive())
+		}
 	}
 	return
 }
