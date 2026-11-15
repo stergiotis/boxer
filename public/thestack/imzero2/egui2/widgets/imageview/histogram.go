@@ -5,7 +5,6 @@ import (
 
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	"github.com/stergiotis/boxer/public/keelson/runtime/widgethandle"
-	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/science/imaging/display"
 	"github.com/stergiotis/boxer/public/science/imaging/stats"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
@@ -94,25 +93,10 @@ func (inst *Viewer) adoptHistograms() {
 	}
 }
 
-// SetPercentileLimits shows a single plane between two percentiles of its
-// values, a stretch a few extreme samples cannot pull wide. The histogram it
-// needs is counted off the frame; when it is not ready the stretch is
-// applied by the Render that finds it so. A colour composite is refused: its
-// limits are not a property of one plane.
-func (inst *Viewer) SetPercentileLimits(percentLo, percentHi float64) error {
-	if !inst.singlePlane() {
-		return eb.Build().Errorf("percentile limits apply to a single plane; show one first")
-	}
-	if !(percentLo >= 0 && percentLo < percentHi && percentHi <= 100) {
-		return eb.Build().Float64("lo", percentLo).Float64("hi", percentHi).
-			Errorf("percentiles must be an ascending pair within 0 and 100")
-	}
-	inst.pendingPercentile, inst.percentLo, inst.percentHi = true, percentLo, percentHi
-	inst.wantHistogram()
-	inst.applyPendingPercentile()
-	return nil
-}
-
+// applyPendingPercentile sets percentile limits that waited for the
+// histogram, once it is counted. Percentiles that fall on one value leave the
+// limits in force: the call that asked has returned, so there is no one to
+// refuse.
 func (inst *Viewer) applyPendingPercentile() {
 	if !inst.pendingPercentile || !inst.singlePlane() {
 		return
@@ -121,17 +105,14 @@ func (inst *Viewer) applyPendingPercentile() {
 	if p == nil {
 		return
 	}
-	h := *p
 	inst.pendingPercentile = false
-	limits, ok := display.PercentileLimits(h, inst.percentLo, inst.percentHi)
+	limits, ok := display.PercentileLimits(*p, inst.percentLo, inst.percentHi)
 	if !ok {
-		// The percentiles fall on one value: there is no range to show, and
-		// the view keeps the one it has.
 		return
 	}
 	recipe := inst.recipe
 	recipe.Limits = limits
-	_ = inst.SetRecipe(recipe)
+	_ = inst.applyRecipe(recipe)
 }
 
 // histogramAxis is the range of values the strip spans: the plane's data
@@ -190,7 +171,8 @@ func (inst *Viewer) renderHistogram(w float32) (changed bool) {
 			} else {
 				recipe.Limits.Lo = min(value, recipe.Limits.Hi-gap)
 			}
-			// Only a limit that moved becomes one a person set.
+			// Only a limit that moved becomes one a person set; it replaces
+			// a percentile stretch still waiting for its histogram.
 			if recipe.Limits != inst.recipe.Limits {
 				recipe.Limits.Source, recipe.Limits.PercentLo, recipe.Limits.PercentHi = display.LimitsSourceManual, 0, 0
 				changed = inst.SetRecipe(recipe) == nil

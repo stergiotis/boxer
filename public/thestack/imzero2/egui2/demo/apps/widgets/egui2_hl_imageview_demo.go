@@ -142,9 +142,9 @@ func demoImageView(ids *c.WidgetIdStack, st *imageViewDemoState) {
 			if single || !img.Model().IsColor() {
 				if imageViewDemoButton(ids, "percentile", uint64(i), label, current) {
 					st.problem = ""
-					if err := st.v.SetPercentileLimits(pct[0], pct[1]); err != nil {
-						st.problem = err.Error()
-					}
+					st.set(func(r *display.Recipe) {
+						r.Limits = display.Limits{Source: display.LimitsSourcePercentile, PercentLo: pct[0], PercentHi: pct[1]}
+					})
 				}
 			}
 		}

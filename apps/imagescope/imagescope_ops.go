@@ -137,6 +137,7 @@ type View struct {
 	Magnification float64   `desc:"screen pixels per image pixel in the current view"`
 	Level         int       `desc:"0 when the view draws the samples themselves; k when each drawn cell is the mean of a 2^k × 2^k block"`
 	LevelsReady   bool      `desc:"the reduced levels are built"`
+	LimitsPending bool      `desc:"percentile limits asked for wait for the plane's histogram; View.Recipe carries the limits in force until they land"`
 	Error         string    `desc:"why the last open failed; empty otherwise"`
 	Note          string    `desc:"the last open's outcome that was not a failure; empty otherwise"`
 	Refused       string    `desc:"why the person's last change to the view was refused; empty otherwise"`
@@ -165,7 +166,7 @@ type Measurement struct {
 
 // OpenSampleArgs names a sample image.
 type OpenSampleArgs struct {
-	Name string `desc:"field (1400 × 1000, 16-bit, one plane), colour (640 × 480, 8-bit rgba) or small (48 × 32, 8-bit, one plane)"`
+	Name string `desc:"field (1400 × 1000, 16-bit, one plane), colour (640 × 480, 8-bit rgba), small (48 × 32, 8-bit, one plane), float (640 × 480, 32-bit float with a block of invalid samples) or scaled (480 × 320, 16-bit under a value transform)"`
 }
 
 // OpenOutcome is what open_sample settles with.
@@ -267,7 +268,6 @@ func (inst *App) setRecipe(in SetRecipeArgs) (err error) {
 	}
 	i, _ := inst.viewer.Plane()
 	shown := inst.img.Plane(max(i, 0))
-	percentile := false
 	switch in.Limits {
 	case limitsData:
 		l, ok := display.DataLimits(shown)
@@ -293,17 +293,12 @@ func (inst *App) setRecipe(in SetRecipeArgs) (err error) {
 		if !(in.PercentLo >= 0 && in.PercentLo < in.PercentHi && in.PercentHi <= 100) {
 			return app.RefuseOperation("percentiles are an ascending pair within 0 and 100")
 		}
-		percentile = true
+		recipe.Limits = display.Limits{Source: display.LimitsSourcePercentile, PercentLo: in.PercentLo, PercentHi: in.PercentHi}
 	default:
 		return app.RefuseOperation("limits are data, nominal, percentile or manual")
 	}
 	if err = inst.viewer.SetRecipe(recipe); err != nil {
 		return refuse(err)
-	}
-	if percentile {
-		if err = inst.viewer.SetPercentileLimits(in.PercentLo, in.PercentHi); err != nil {
-			return refuse(err)
-		}
 	}
 	inst.syncChecks()
 	return nil
@@ -382,6 +377,7 @@ type opsSnap struct {
 	magnification float64
 	level         int
 	levelsReady   bool
+	limitsPending bool
 	opening       bool
 	openErr       string
 	openNote      string
@@ -397,6 +393,7 @@ func (inst *App) opsSnapshot() (sn opsSnap) {
 		openErr: inst.openErr, openNote: inst.openNote, problem: inst.problem, measured: inst.measured, seedErr: inst.seedErr}
 	if !inst.img.IsZero() {
 		sn.magnification, sn.level, sn.levelsReady = inst.viewer.Magnification(), inst.viewer.Level(), inst.viewer.LevelsReady()
+		sn.limitsPending = inst.viewer.LimitsPending()
 	}
 	if inst.measureErr != nil {
 		sn.measureErr = inst.measureErr.Error()
@@ -480,7 +477,7 @@ var ops = func() (s *appops.Set[*App, opsSnap]) {
 		Reads:   []string{resImage, resView}, Agents: true, Fork: app.OperationForkReadShared},
 		func(sn opsSnap, _ appops.None) (out View, err error) {
 			out = View{Phase: sn.phase.String(), Image: imageInfo(sn.img), View: sn.view, Magnification: sn.magnification,
-				Level: sn.level, LevelsReady: sn.levelsReady, Error: sn.openErr, Note: sn.openNote, Refused: sn.problem,
+				Level: sn.level, LevelsReady: sn.levelsReady, LimitsPending: sn.limitsPending, Error: sn.openErr, Note: sn.openNote, Refused: sn.problem,
 				Measured: sn.measured != nil, MeasureError: sn.measureErr, Handover: sn.handover, SeedProblem: sn.seedErr}
 			return
 		})
@@ -557,7 +554,7 @@ var ops = func() (s *appops.Set[*App, opsSnap]) {
 		Summary: "set the display recipe, whole: limits, transfer function, colour map, inversion and clipping marks; the samples are not changed",
 		Effect:  app.OperationEffectView, Writes: []string{resView}, Agents: true,
 		Gesture: "the Limits buttons, and the controls under Advanced", Rebuild: app.OperationRebuildVolatile, Fork: app.OperationForkPerInstance,
-		Follows: []string{"percentile limits are counted over the whole plane off the frame; get_view reports the limits once they land",
+		Follows: []string{"percentile limits are computed from the plane's histogram, counted over the whole plane off the frame; until it is, get_view's LimitsPending is true and the limits in force stay",
 			"a name that is not a transfer function or a colour map is refused naming the ones that are"}},
 		func(inst *App, _ app.OperationCall, in SetRecipeArgs) (out appops.None, err error) {
 			err = inst.setRecipe(in)

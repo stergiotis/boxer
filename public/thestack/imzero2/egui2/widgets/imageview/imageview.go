@@ -37,13 +37,15 @@ type Options struct {
 	HideHistogram bool
 }
 
-// Readout is one pixel of the image as its samples have it: the stored
-// sample of each plane, in the model's plane order. Valid is false for an
-// invalid sample of a float plane.
+// Readout is one pixel of the image as its samples have it, each plane in
+// the model's plane order: the stored sample, and the value it stands for
+// through the plane's value transform — the same number unless the plane has
+// one. Valid is false for an invalid sample of a float plane.
 type Readout struct {
 	Col, Row int
 	Planes   int
 	Stored   [4]float64
+	Values   [4]float64
 	Valid    [4]bool
 }
 
@@ -303,10 +305,56 @@ func (inst *Viewer) Recipe() display.Recipe { return inst.recipe }
 // SetRecipe shows the image through another recipe. One that cannot be
 // compiled — limits that are not a range, a palette this package does not
 // have — is refused and the view stays as it was.
+//
+// Limits whose Source is [display.LimitsSourcePercentile] are computed here
+// from PercentLo and PercentHi; their Lo and Hi are not read. They need the
+// histogram of the plane shown, which is counted off the frame: when it is
+// ready the limits are set at once, and otherwise the rest of the recipe is
+// applied at once and the limits by the Render that finds the histogram
+// counted, [Viewer.LimitsPending] reporting true meanwhile. Percentile
+// limits are refused for a colour composite, whose limits are not a property
+// of one plane, and when the two percentiles fall on one value. A later
+// recipe of any other kind replaces a percentile stretch still pending.
 func (inst *Viewer) SetRecipe(recipe display.Recipe) error {
 	if inst.img.IsZero() {
 		return eb.Build().Errorf("no image to show a recipe on")
 	}
+	if recipe.Limits.Source != display.LimitsSourcePercentile {
+		inst.pendingPercentile = false
+		return inst.applyRecipe(recipe)
+	}
+	lo, hi := recipe.Limits.PercentLo, recipe.Limits.PercentHi
+	if !inst.singlePlane() {
+		return eb.Build().Errorf("percentile limits apply to a single plane; show one first")
+	}
+	if !(lo >= 0 && lo < hi && hi <= 100) {
+		return eb.Build().Float64("lo", lo).Float64("hi", hi).Errorf("percentiles must be an ascending pair within 0 and 100")
+	}
+	if h, ok := inst.Histogram(); ok {
+		limits, ok := display.PercentileLimits(h, lo, hi)
+		if !ok {
+			return eb.Build().Float64("lo", lo).Float64("hi", hi).Errorf("the two percentiles fall on one value; there is no range between them")
+		}
+		inst.pendingPercentile = false
+		recipe.Limits = limits
+		return inst.applyRecipe(recipe)
+	}
+	// Until the histogram is counted the limits in force stay.
+	recipe.Limits = inst.recipe.Limits
+	if err := inst.applyRecipe(recipe); err != nil {
+		return err
+	}
+	inst.pendingPercentile, inst.percentLo, inst.percentHi = true, lo, hi
+	return nil
+}
+
+// LimitsPending reports whether percentile limits asked for through
+// [Viewer.SetRecipe] wait for the histogram they are computed from; until
+// they land, [Viewer.Recipe] carries the limits in force.
+func (inst *Viewer) LimitsPending() bool { return inst.pendingPercentile }
+
+// applyRecipe compiles a recipe with resolved limits and shows it.
+func (inst *Viewer) applyRecipe(recipe display.Recipe) error {
 	if recipe == inst.recipe {
 		return nil
 	}
@@ -424,7 +472,9 @@ func (inst *Viewer) readoutAt(ll portolan.LatLng) (r Readout, ok bool) {
 	}
 	r = Readout{Col: col, Row: row, Planes: inst.img.PlaneCount()}
 	for i := range r.Planes {
-		r.Stored[i], r.Valid[i] = inst.img.Plane(i).StoredAt(col, row)
+		p := inst.img.Plane(i)
+		r.Stored[i], r.Valid[i] = p.StoredAt(col, row)
+		r.Values[i] = p.Transform().Apply(r.Stored[i])
 	}
 	return r, true
 }
@@ -572,10 +622,15 @@ func (inst *Viewer) readoutText() string {
 			}
 			b.WriteString(names[i])
 			b.WriteByte(' ')
-			if inst.hover.Valid[i] {
-				b.WriteString(formatSample(inst.hover.Stored[i], inst.img.Kind()))
-			} else {
+			switch p := inst.img.Plane(i); {
+			case !inst.hover.Valid[i]:
 				b.WriteString("invalid")
+			case p.Transform().IsIdentity():
+				b.WriteString(formatSample(inst.hover.Stored[i], inst.img.Kind()))
+			default:
+				// The value is what the limits, the colour bar and the
+				// histogram are in; the stored sample is what the file holds.
+				fmt.Fprintf(&b, "%s (stored %s)", formatValue(inst.hover.Values[i]), formatSample(inst.hover.Stored[i], inst.img.Kind()))
 			}
 		}
 	} else {

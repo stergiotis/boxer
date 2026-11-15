@@ -4,6 +4,7 @@ import (
 	"context"
 	"image"
 	"math"
+	"slices"
 	"testing"
 	"time"
 
@@ -14,6 +15,7 @@ import (
 	"github.com/stergiotis/boxer/public/science/imaging"
 	"github.com/stergiotis/boxer/public/science/imaging/display"
 	"github.com/stergiotis/boxer/public/science/imaging/levels"
+	"github.com/stergiotis/boxer/public/science/imaging/samples"
 	"github.com/stergiotis/boxer/public/thestack/fffi2/typed"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/graphview/scenetest"
@@ -145,7 +147,8 @@ func TestThePointerReadsTheStoredSamplesWhateverTheRecipe(t *testing.T) {
 
 	ev := pointAt(37, 11, c.ContainsPointerResponseFlags)
 	require.True(t, ev.HoverOk)
-	assert.Equal(t, Readout{Col: 37, Row: 11, Planes: 4, Stored: [4]float64{37, 11, 48, 163}, Valid: [4]bool{true, true, true, true}}, ev.Hover)
+	assert.Equal(t, Readout{Col: 37, Row: 11, Planes: 4, Stored: [4]float64{37, 11, 48, 163},
+		Values: [4]float64{37, 11, 48, 163}, Valid: [4]bool{true, true, true, true}}, ev.Hover, "without a transform a value is its sample")
 	assert.False(t, ev.ClickedOk)
 
 	// A recipe that crushes everything to black changes what is drawn and
@@ -489,7 +492,7 @@ func TestPercentileLimitsWaitForTheHistogramAndIgnoreOutliers(t *testing.T) {
 	_, ok := v.Histogram()
 	assert.False(t, ok, "counted off the frame, so not there at the first asking")
 
-	require.NoError(t, v.SetPercentileLimits(1, 99))
+	require.NoError(t, v.SetRecipe(percentile(v, 1, 99)))
 	waitForHistogram(t, v)
 	l := v.Recipe().Limits
 	assert.Equal(t, display.LimitsSourcePercentile, l.Source)
@@ -502,17 +505,17 @@ func TestPercentileLimitsWaitForTheHistogramAndIgnoreOutliers(t *testing.T) {
 	assert.EqualValues(t, 1001*20, h.Valid(), "over the whole plane")
 
 	// With the histogram already there the stretch applies at once.
-	require.NoError(t, v.SetPercentileLimits(10, 90))
+	require.NoError(t, v.SetRecipe(percentile(v, 10, 90)))
 	assert.InDelta(t, 100, v.Recipe().Limits.Lo, 2)
 
-	assert.Error(t, v.SetPercentileLimits(90, 10))
-	assert.Error(t, v.SetPercentileLimits(-1, 50))
+	assert.Error(t, v.SetRecipe(percentile(v, 90, 10)))
+	assert.Error(t, v.SetRecipe(percentile(v, -1, 50)))
 	v.SetImage(colourImage(t, 40, 30, nil))
-	assert.Error(t, v.SetPercentileLimits(1, 99), "a colour composite has no single plane to take percentiles of")
+	assert.Error(t, v.SetRecipe(percentile(v, 1, 99)), "a colour composite has no single plane to take percentiles of")
 	_, ok = v.Histogram()
 	assert.False(t, ok)
 	require.NoError(t, v.SetPlane(0))
-	require.NoError(t, v.SetPercentileLimits(0, 50))
+	require.NoError(t, v.SetRecipe(percentile(v, 0, 50)))
 	require.NoError(t, v.SetPlane(1))
 	waitForHistogram(t, v)
 	assert.Equal(t, display.LimitsSourceData, v.Recipe().Limits.Source, "a stretch asked for on one plane is not applied to another")
@@ -551,4 +554,166 @@ func TestARegionIsPixelsClippedToTheImageAndGoesWithIt(t *testing.T) {
 	_, ok = v.Region()
 	assert.False(t, ok, "another image has no region")
 	assert.True(t, v.Selecting(), "the mode is the viewer's, not the image's")
+}
+
+// percentile is v's recipe with percentile limits asked for.
+func percentile(v *Viewer, lo, hi float64) display.Recipe {
+	r := v.Recipe()
+	r.Limits = display.Limits{Source: display.LimitsSourcePercentile, PercentLo: lo, PercentHi: hi}
+	return r
+}
+
+func TestAPercentileRecipeAppliesTheRestAtOnceAndALaterRecipeReplacesIt(t *testing.T) {
+	v := New(c.NewWidgetIdStack(), "", Options{})
+	defer v.Close()
+	v.SetImage(rampImage(t, 1001, 20, 1000, true))
+	before := v.Recipe().Limits
+
+	r := percentile(v, 1, 99)
+	r.Transfer, r.Invert = display.TransferSqrt, true
+	require.NoError(t, v.SetRecipe(r))
+	if v.LimitsPending() {
+		got := v.Recipe()
+		assert.Equal(t, display.TransferSqrt, got.Transfer, "the rest of the recipe is applied at once")
+		assert.True(t, got.Invert)
+		assert.Equal(t, before, got.Limits, "the limits in force stay until the histogram is counted")
+
+		// A manual recipe asked for meanwhile wins over the stretch.
+		manual := got
+		manual.Limits = display.Limits{Lo: 100, Hi: 200, Source: display.LimitsSourceManual}
+		require.NoError(t, v.SetRecipe(manual))
+		assert.False(t, v.LimitsPending())
+		waitForHistogram(t, v)
+		assert.Equal(t, manual.Limits, v.Recipe().Limits, "the stretch that was replaced does not land")
+	}
+
+	waitForHistogram(t, v)
+	require.NoError(t, v.SetRecipe(percentile(v, 1, 99)))
+	assert.False(t, v.LimitsPending(), "with the histogram counted the limits are set at once")
+	assert.Equal(t, display.LimitsSourcePercentile, v.Recipe().Limits.Source)
+	assert.InDelta(t, 990, v.Recipe().Limits.Hi, 2)
+
+	v.SetImage(flatImage(t, 30, 20, 7))
+	waitForHistogram(t, v)
+	assert.Error(t, v.SetRecipe(percentile(v, 1, 99)), "the two percentiles fall on one value")
+}
+
+// flatImage is an 8-bit plane of one value.
+func flatImage(t *testing.T, w, h int, value uint8) imaging.Image {
+	t.Helper()
+	s := make([]uint8, w*h)
+	for i := range s {
+		s[i] = value
+	}
+	p, err := imaging.NewPlaneU8(w, h, s)
+	require.NoError(t, err)
+	img, err := imaging.NewImage(imaging.ColorModelGray, []imaging.Plane{p}, imaging.Provenance{})
+	require.NoError(t, err)
+	return img
+}
+
+// sampleImage is one of the synthetic samples.
+func sampleImage(t *testing.T, name string) imaging.Image {
+	t.Helper()
+	img, err := samples.ByName(name)
+	require.NoError(t, err)
+	return img
+}
+
+// A float plane with invalid samples, through every stage: an invalid
+// sample is the checkerboard in a tile at full resolution and at a reduced
+// level, says so in the readout, is left out of the histogram, and does not
+// move limits taken from the data or from percentiles.
+func TestAFloatPlaneWithInvalidSamplesEndToEnd(t *testing.T) {
+	v := New(c.NewWidgetIdStack(), "", Options{})
+	defer v.Close()
+	img := sampleImage(t, samples.NameFloat)
+	v.SetImage(img)
+	checker := checkerColours()
+	isChecker := func(px uint32) bool { return px == checker[0] || px == checker[1] }
+
+	l := v.Recipe().Limits
+	assert.Equal(t, display.LimitsSourceData, l.Source)
+	assert.Less(t, l.Lo, -40.0)
+	assert.Greater(t, l.Hi, 9e4)
+	assert.False(t, math.IsNaN(l.Lo) || math.IsNaN(l.Hi), "invalid samples are not in the data range")
+
+	col, row := samples.FloatInvalid.Min.X+10, samples.FloatInvalid.Min.Y+10
+	px := tile(t, v, 0, 0)
+	assert.True(t, isChecker(px[row*tileSize+col]), "an invalid sample is drawn as the checkerboard")
+	assert.False(t, isChecker(px[10*tileSize+300]), "a valid one is not")
+	lv := tileAt(t, v, 0, 0, 1)
+	assert.True(t, isChecker(lv[(row/2)*tileSize+col/2]), "a reduced cell over invalid samples only is invalid too")
+
+	r, ok := v.readoutAt(portolan.LL(-float64(row)-0.5, float64(col)+0.5))
+	require.True(t, ok)
+	assert.False(t, r.Valid[0])
+	v.hover, v.hoverOk = r, true
+	assert.Contains(t, v.readoutText(), "gray invalid")
+
+	h, ok := v.Histogram()
+	if !ok {
+		waitForHistogram(t, v)
+		h, _ = v.Histogram()
+	}
+	invalid := uint64(samples.FloatInvalid.Dx() * samples.FloatInvalid.Dy())
+	assert.Equal(t, invalid, h.Invalid())
+	assert.Equal(t, uint64(img.Width()*img.Height())-invalid, h.Valid())
+
+	require.NoError(t, v.SetRecipe(percentile(v, 1, 99)))
+	// The 99th percentile by nearest rank over the valid samples, which a
+	// float histogram locates to within one of its bins.
+	var vals []float64
+	for _, x := range img.Plane(0).F32() {
+		if x == x {
+			vals = append(vals, float64(x))
+		}
+	}
+	slices.Sort(vals)
+	want := vals[int(math.Ceil(0.99*float64(len(vals))))-1]
+	assert.InDelta(t, want, v.Recipe().Limits.Hi, h.BinWidth())
+	assert.Less(t, v.Recipe().Limits.Hi, 0.7*l.Hi, "well inside the data range")
+	r2 := v.Recipe()
+	r2.Transfer = display.TransferAsinh
+	require.NoError(t, v.SetRecipe(r2), "a stretch over limits that span zero")
+	_ = tile(t, v, 0, 0)
+}
+
+// A plane under a value transform: limits, the colour bar, the histogram and
+// the readout are in values, and the readout says which stored sample a
+// value came from.
+func TestAPlaneUnderAValueTransformEndToEnd(t *testing.T) {
+	v := New(c.NewWidgetIdStack(), "", Options{})
+	defer v.Close()
+	img := sampleImage(t, samples.NameScaled)
+	v.SetImage(img)
+	tr := samples.ScaledTransform
+
+	slo, shi, ok := img.Plane(0).StoredRange()
+	require.True(t, ok)
+	l := v.Recipe().Limits
+	assert.InDelta(t, tr.Apply(slo), l.Lo, 1e-9, "the data limits are values")
+	assert.InDelta(t, tr.Apply(shi), l.Hi, 1e-9)
+
+	r, ok := v.readoutAt(portolan.LL(-0.5, 0.5))
+	require.True(t, ok)
+	assert.Equal(t, 4000.0, r.Stored[0])
+	assert.InDelta(t, 0.0, r.Values[0], 1e-9)
+	v.hover, v.hoverOk = r, true
+	assert.Contains(t, v.readoutText(), "gray 0 (stored 4000)")
+
+	waitForHistogram(t, v)
+	h, _ := v.Histogram()
+	hlo, hhi, _ := h.Range()
+	assert.InDelta(t, l.Lo, hlo, 1e-9, "the histogram's range is in values too")
+	assert.InDelta(t, l.Hi, hhi, 1e-9)
+
+	// Limits set in values map the stored samples they stand for: the sample
+	// at the lower limit is the darkest grey, at the upper the lightest.
+	rec := v.Recipe()
+	rec.Limits = display.Limits{Lo: 0, Hi: 50, Source: display.LimitsSourceManual}
+	require.NoError(t, v.SetRecipe(rec))
+	px := tile(t, v, 0, 0)
+	assert.Equal(t, uint32(0x000000ff), px[0], "stored 4000 is value 0, the lower limit")
+	assert.Equal(t, uint32(0xffffffff), px[0*tileSize+479], "stored 9000 is value 50, the upper limit")
 }
