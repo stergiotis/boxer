@@ -267,6 +267,12 @@ type Manifest struct {
 	// introspection column, not a browse section. Zero value KindApp covers
 	// ordinary Go apps, so most manifests leave it unset.
 	Kind KindE
+	// Maturity is what the app promises those who depend on it (ADR-0375):
+	// a filter, a badge and two introspection columns, `maturity` and
+	// `maturity_rank`, which the predicates over keelson.apps can name. The
+	// zero value is unstated and ranks below every stated grade, so most
+	// manifests may leave it unset and none is refused for leaving it out.
+	Maturity MaturityE
 	// Shell marks an app the host's own chrome opens — the launcher behind
 	// the Apps menu and its key, help behind F1. It labels rather than
 	// exempts: a launch limit (ADR-0272) applies to shell apps like any
@@ -413,6 +419,14 @@ func (inst Manifest) Validate() (err error) {
 	if !inst.Kind.IsValid() {
 		err = eb.Build().Str("id", string(inst.Id)).
 			Uint8("kind", uint8(inst.Kind)).Errorf("manifest: invalid Kind")
+		return
+	}
+	// Out of range only. A manifest that states no grade is valid: a
+	// rejection drops the app with a Warn (ADR-0158 §SD9), and a required
+	// grade would cost every ungraded app its place in the launcher.
+	if !inst.Maturity.IsValid() {
+		err = eb.Build().Str("id", string(inst.Id)).
+			Uint8("maturity", uint8(inst.Maturity)).Errorf("manifest: invalid Maturity")
 		return
 	}
 	// ADR-0148 §SD7: a workingset record is an instance of the app's

@@ -173,6 +173,12 @@ func appsTable(reg *app.Registry, rs []app.Registration) *introspect.Table {
 		// Provenance, deliberately a column rather than a section (ADR-0158
 		// §SD5): "show me every applet" is a filter, not a place apps live.
 		String("kind", func(i int) string { return m(i).Kind.String() }).
+		// What the app promises (ADR-0375). The name is for equality
+		// (`maturity = 'incubating'`); the rank orders the grades, which
+		// their names do not, so "this grade or better" is
+		// `maturity_rank >= 2`. An ungraded app is 'unstated', rank 0.
+		String("maturity", func(i int) string { return m(i).Maturity.String() }).
+		Int32("maturity_rank", func(i int) int32 { return m(i).Maturity.Rank() }).
 		String("surface", func(i int) string { return m(i).Surface.String() }).
 		Int32("preferred_width", func(i int) int32 { return int32(m(i).SurfaceHints.PreferredWidth) }).
 		Int32("preferred_height", func(i int) int32 { return int32(m(i).SurfaceHints.PreferredHeight) }).

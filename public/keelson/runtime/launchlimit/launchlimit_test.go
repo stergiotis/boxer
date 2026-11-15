@@ -19,8 +19,8 @@ func fixtureRegistry(t *testing.T) (reg *app.Registry) {
 	t.Helper()
 	reg = app.NewRegistry()
 	for _, m := range []app.Manifest{
-		{Id: "test.shell", Shell: true, Topics: []app.TopicT{app.TopicRuntime}},
-		{Id: "test.data", Topics: []app.TopicT{app.TopicData}},
+		{Id: "test.shell", Shell: true, Topics: []app.TopicT{app.TopicRuntime}, Maturity: app.MaturityCore},
+		{Id: "test.data", Topics: []app.TopicT{app.TopicData}, Maturity: app.MaturityIncubating},
 		{Id: "test.applet", Kind: app.KindApplet, Topics: []app.TopicT{app.TopicSql}},
 	} {
 		m.Version, m.Display, m.Summary, m.Surface = "0.1.0", string(m.Id), "fixture", app.SurfaceWindowed
@@ -77,6 +77,24 @@ func TestEvaluate_SelectsByColumns(t *testing.T) {
 	ids, err = Evaluate(context.Background(), bus, reg, "kind != 'applet'", zerolog.Nop())
 	require.NoError(t, err)
 	assert.Equal(t, []app.AppIdT{"test.data", "test.shell"}, ids)
+}
+
+// A predicate names a grade, and asks for a grade or better by its rank; an
+// app that states none is below every stated one.
+func TestEvaluate_SelectsByMaturity(t *testing.T) {
+	bus := newBus(t)
+	reg := fixtureRegistry(t)
+	ids, err := Evaluate(context.Background(), bus, reg, "maturity = 'incubating' OR shell", zerolog.Nop())
+	require.NoError(t, err)
+	assert.Equal(t, []app.AppIdT{"test.data", "test.shell"}, ids)
+
+	ids, err = Evaluate(context.Background(), bus, reg, "maturity_rank >= 2", zerolog.Nop())
+	require.NoError(t, err)
+	assert.Equal(t, []app.AppIdT{"test.shell"}, ids, "neither the incubating app nor the ungraded applet")
+
+	ids, err = Evaluate(context.Background(), bus, reg, "maturity = 'unstated'", zerolog.Nop())
+	require.NoError(t, err)
+	assert.Equal(t, []app.AppIdT{"test.applet"}, ids)
 }
 
 func TestEvaluate_BadPredicateFails(t *testing.T) {

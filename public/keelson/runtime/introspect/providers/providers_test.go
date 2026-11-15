@@ -224,6 +224,32 @@ func TestAppsTableRendersClassification(t *testing.T) {
 	assert.Equal(t, "applet", firstString(t, rec, "kind"))
 }
 
+// TestAppsTableRendersMaturity covers the ADR-0375 columns: the grade by
+// name, and by a rank that orders the grades as their names do not.
+func TestAppsTableRendersMaturity(t *testing.T) {
+	rs := make([]app.Registration, 0, len(app.AllMaturities))
+	for _, g := range app.AllMaturities {
+		rs = append(rs, app.Registration{Manifest: app.Manifest{
+			Id: app.AppIdT("test." + g.String()), Display: g.String(), Surface: app.SurfaceWindowed,
+			Summary: "fixture summary", Topics: []app.TopicT{app.TopicRuntime}, Maturity: g,
+		}})
+		require.NoError(t, rs[len(rs)-1].Manifest.Validate(), "the fixtures must be manifests the registry would accept")
+	}
+	rec := appsTable(app.NewRegistry(), rs).Build(introspect.AllColumns(), len(rs))
+	defer rec.Release()
+
+	names := rec.Schema().FieldIndices("maturity")
+	require.NotEmpty(t, names)
+	ranks := rec.Schema().FieldIndices("maturity_rank")
+	require.NotEmpty(t, ranks)
+	nameCol := rec.Column(names[0]).(*array.String)
+	rankCol := rec.Column(ranks[0]).(*array.Int32)
+	for i, want := range []string{"unstated", "incubating", "supported", "core"} {
+		assert.Equal(t, want, nameCol.Value(i))
+		assert.EqualValues(t, i, rankCol.Value(i), "the rank rises with what %s promises", want)
+	}
+}
+
 // firstStringList returns the row-0 value of the named List<Utf8> column.
 func firstStringList(t *testing.T, rec arrow.RecordBatch, col string) (out []string) {
 	t.Helper()
