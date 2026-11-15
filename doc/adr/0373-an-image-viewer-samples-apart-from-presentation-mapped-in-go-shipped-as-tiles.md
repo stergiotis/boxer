@@ -119,8 +119,8 @@ renderer and no wire changes.
 
 ### Subsidiary design decisions
 
-- **SD1 — An image is planes and a colour model, and a view shows it as
-  stored or one plane of it.** An image is one to four planes of one size and
+- **SD1 — An image is planes and a colour model, shown as stored or one plane of it.**
+  An image is one to four planes of one size and
   one sample kind, with a colour model that says what they are: grey, grey
   with alpha, RGB, RGBA. A colour image opens as a colour image — its planes
   composited as red, green and blue, alpha as transparency over a
@@ -361,7 +361,10 @@ renderer and no wire changes.
   on screen (the case the cpu rasteriser's cache missed until
   [ADR-0205](./0205-imzero2-cpu-rasterized-pixel-host.md)'s 2026-11-14
   update); a level whose extremes do not bound its samples.
-- **Gap.** Interactive cost is not gated; the
+- **Gap.** A scene cannot set the transfer parameter: the headless host
+  sends a `set_value` as text, which egui's number box ignores and its slider
+  does not handle at all (observed 2026-11-15, egui 0.36), so the slider's
+  sync is tested in Go only. Interactive cost is not gated; the
   [trial](../trials/image-upload-cost/README.md) is rerun when the path or
   the widget's tiling changes. The desktop host is covered by no lane.
 
