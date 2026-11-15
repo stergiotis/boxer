@@ -1,12 +1,18 @@
 package configview
 
 import (
+	"embed"
+
 	"github.com/rs/zerolog/log"
 
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
+	"github.com/stergiotis/boxer/public/keelson/runtime/help"
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
 )
+
+//go:embed help
+var helpFS embed.FS
 
 // ManifestId is exported so callers can host.Open(configview.ManifestId)
 // without hard-coding the string.
@@ -25,12 +31,14 @@ var manifest = app.Manifest{
 	Topics:   []app.TopicT{app.TopicRuntime},
 	Keywords: []string{"config", "env", "environment", "settings", "flags"},
 	Surface:  app.SurfaceWindowed,
+	Maturity: app.MaturitySupported,
 	// The operations catalog (ADR-0345 M2), in configview_ops.go.
 	Operations: ops.Catalog(),
 	SurfaceHints: app.SurfaceHints{
 		PreferredWidth:  styletokens.SurfaceTool.W,
 		PreferredHeight: styletokens.SurfaceTool.H,
 	},
+	Help: help.MustSub(helpFS, "help"),
 }
 
 func init() {
