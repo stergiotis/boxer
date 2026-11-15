@@ -40,7 +40,7 @@ func writeChunk(buf *bytes.Buffer, kind string, body []byte) {
 
 // rawPNG writes a file whose pixel (x, y) has, in each of its channels, the
 // sample sample(x, y, channel).
-func rawPNG(t *testing.T, w, h int, colorType, bitDepth uint8, extra []pngChunk, sample func(x, y, c int) uint16) []byte {
+func rawPNG(t testing.TB, w, h int, colorType, bitDepth uint8, extra []pngChunk, sample func(x, y, c int) uint16) []byte {
 	t.Helper()
 	channels := map[uint8]int{pngColorGray: 1, pngColorRGB: 3, pngColorPalette: 1, pngColorGrayAlpha: 2, pngColorRGBA: 4}[colorType]
 	var out bytes.Buffer
@@ -267,7 +267,7 @@ func TestAPremultipliedPictureIsUnmultipliedOnTheSlowPath(t *testing.T) {
 	assert.Greater(t, got(0), uint8(190), "red is about 100·255/128, not 100")
 }
 
-func jpegOf(t *testing.T, img image.Image) []byte {
+func jpegOf(t testing.TB, img image.Image) []byte {
 	t.Helper()
 	var buf bytes.Buffer
 	require.NoError(t, jpeg.Encode(&buf, img, &jpeg.Options{Quality: 90}))
