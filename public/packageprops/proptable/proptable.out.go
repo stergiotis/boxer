@@ -420,6 +420,7 @@ var Table = packageprops.Table{
 	{ImportPath: "github.com/stergiotis/boxer/public/science/imaging/decode", Props: packageprops.Props{WASMWASI: packageprops.WASMUnknown, WASMJS: packageprops.WASMUnknown, WASMFreestanding: packageprops.WASMUnknown}},
 	{ImportPath: "github.com/stergiotis/boxer/public/science/imaging/display", Props: packageprops.Props{WASMWASI: packageprops.WASMUnknown, WASMJS: packageprops.WASMUnknown, WASMFreestanding: packageprops.WASMUnknown}},
 	{ImportPath: "github.com/stergiotis/boxer/public/science/imaging/levels", Props: packageprops.Props{WASMWASI: packageprops.WASMUnknown, WASMJS: packageprops.WASMUnknown, WASMFreestanding: packageprops.WASMUnknown}},
+	{ImportPath: "github.com/stergiotis/boxer/public/science/imaging/samples", Props: packageprops.Props{WASMWASI: packageprops.WASMUnknown, WASMJS: packageprops.WASMUnknown, WASMFreestanding: packageprops.WASMUnknown}},
 	{ImportPath: "github.com/stergiotis/boxer/public/science/imaging/stats", Props: packageprops.Props{WASMWASI: packageprops.WASMUnknown, WASMJS: packageprops.WASMUnknown, WASMFreestanding: packageprops.WASMUnknown}},
 	{ImportPath: "github.com/stergiotis/boxer/public/science/units", Props: packageprops.Props{WASMWASI: packageprops.WASMCompiles, WASMJS: packageprops.WASMCompiles, WASMFreestanding: packageprops.WASMCompiles}},
 	{ImportPath: "github.com/stergiotis/boxer/public/semistructured/cbor", Props: packageprops.Props{WASMWASI: packageprops.WASMCompiles, WASMJS: packageprops.WASMCompiles, WASMFreestanding: packageprops.WASMCompiles}},

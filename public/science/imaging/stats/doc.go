@@ -14,6 +14,9 @@
 // samples are spread evenly across it — right to the width of a bin, which
 // [Histogram.BinWidth] reports.
 //
+// The mean and the standard deviation come with the count. The standard
+// deviation is over the samples as the whole population.
+//
 // Invalid samples of a float plane are counted and left out of everything
 // else.
 package stats

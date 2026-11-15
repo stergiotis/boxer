@@ -2,11 +2,11 @@ package widgets
 
 import (
 	"fmt"
-	"math"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
 	"github.com/stergiotis/boxer/public/science/imaging"
 	"github.com/stergiotis/boxer/public/science/imaging/display"
+	"github.com/stergiotis/boxer/public/science/imaging/samples"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/demo/apps/registry"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/imageview"
@@ -45,81 +45,15 @@ var imageViewDemoPercentiles = [][2]float64{{1, 99}, {0.1, 99.9}}
 
 func newImageViewDemoState(ids *c.WidgetIdStack) *imageViewDemoState {
 	st := &imageViewDemoState{v: imageview.New(ids, "imageview-demo", imageview.Options{})}
-	st.images = []imageViewDemoImage{
-		{"field 16-bit", imageViewDemoField()},
-		{"colour + alpha", imageViewDemoColour()},
-		{"small 8-bit", imageViewDemoSmall()},
+	for _, im := range []struct{ label, name string }{
+		{"field 16-bit", samples.NameField}, {"colour + alpha", samples.NameColour}, {"small 8-bit", samples.NameSmall},
+	} {
+		if img, err := samples.ByName(im.name); err == nil {
+			st.images = append(st.images, imageViewDemoImage{im.label, img})
+		}
 	}
 	st.v.SetImage(st.images[0].img)
 	return st
-}
-
-// imageViewDemoField is 1400 × 1000 of 16-bit samples: a slow wave between
-// about 1500 and 4500, one bright blob reaching 40000, and a column of
-// saturated pixels — the shape of a detector frame, where the nominal range
-// shows almost nothing and a stretch shows the rest.
-func imageViewDemoField() imaging.Image {
-	const w, h = 1400, 1000
-	s := make([]uint16, w*h)
-	for y := range h {
-		for x := range w {
-			wave := (0.5 + 0.5*math.Sin(float64(x)/40)) * (0.5 + 0.5*math.Cos(float64(y)/55))
-			dx, dy := float64(x-980), float64(y-330)
-			blob := 36000 * math.Exp(-(dx*dx+dy*dy)/(2*45*45))
-			v := 1500 + 3000*wave + blob
-			if x == 200 && y%7 == 0 {
-				v = 65535
-			}
-			s[y*w+x] = uint16(min(v, 65535))
-		}
-	}
-	p, _ := imaging.NewPlaneU16(w, h, s)
-	img, _ := imaging.NewImage(imaging.ColorModelGray, []imaging.Plane{p}, imaging.Provenance{SourceName: "synthetic field"})
-	return img
-}
-
-// imageViewDemoColour is 640 × 480 of 8-bit RGBA: red rises with the column,
-// green with the row, blue in blocks, and the right third fades to
-// transparent.
-func imageViewDemoColour() imaging.Image {
-	const w, h = 640, 480
-	var s [4][]uint8
-	for i := range s {
-		s[i] = make([]uint8, w*h)
-	}
-	for y := range h {
-		for x := range w {
-			i := y*w + x
-			s[0][i] = uint8(x * 255 / (w - 1))
-			s[1][i] = uint8(y * 255 / (h - 1))
-			s[2][i] = uint8(((x/40 + y/40) % 2) * 200)
-			s[3][i] = 255
-			if x > 2*w/3 {
-				s[3][i] = uint8(255 - (x-2*w/3)*255/(w/3))
-			}
-		}
-	}
-	planes := make([]imaging.Plane, 4)
-	for i := range planes {
-		planes[i], _ = imaging.NewPlaneU8(w, h, s[i])
-	}
-	img, _ := imaging.NewImage(imaging.ColorModelRGBA, planes, imaging.Provenance{SourceName: "synthetic colour"})
-	return img
-}
-
-// imageViewDemoSmall is 48 × 32 of 8-bit samples: few enough pixels that the
-// fitted view shows each as a square.
-func imageViewDemoSmall() imaging.Image {
-	const w, h = 48, 32
-	s := make([]uint8, w*h)
-	for y := range h {
-		for x := range w {
-			s[y*w+x] = uint8((x*5 + y*3) % 256)
-		}
-	}
-	p, _ := imaging.NewPlaneU8(w, h, s)
-	img, _ := imaging.NewImage(imaging.ColorModelGray, []imaging.Plane{p}, imaging.Provenance{SourceName: "synthetic small"})
-	return img
 }
 
 func imageViewDemoButton(ids *c.WidgetIdStack, key string, seq uint64, label string, selected bool) bool {

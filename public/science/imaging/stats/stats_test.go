@@ -1,6 +1,7 @@
 package stats
 
 import (
+	"image"
 	"math"
 	"slices"
 	"testing"
@@ -128,4 +129,109 @@ func TestValuesGoThroughThePlanesTransform(t *testing.T) {
 	assert.Equal(t, 40.0, lo, "the range is in values, lower first")
 	assert.Equal(t, 80.0, hi)
 	assert.Equal(t, 60.0, h.Value(20))
+}
+
+// A region's histogram and moments are those of the samples inside it and
+// of no others, for every sample kind.
+func TestARegionIsCountedOverItsOwnSamples(t *testing.T) {
+	rapid.Check(t, func(t *rapid.T) {
+		kind := rapid.SampledFrom(imaging.AllSampleKinds).Draw(t, "kind")
+		w := rapid.IntRange(1, 30).Draw(t, "w")
+		h := rapid.IntRange(1, 30).Draw(t, "h")
+		raw := rapid.SliceOfN(rapid.Uint16(), w*h, w*h).Draw(t, "samples")
+		var p imaging.Plane
+		var err error
+		switch kind {
+		case imaging.SampleKindU8:
+			s := make([]uint8, w*h)
+			for i := range s {
+				s[i] = uint8(raw[i])
+			}
+			p, err = imaging.NewPlaneU8(w, h, s)
+		case imaging.SampleKindU16:
+			p, err = imaging.NewPlaneU16(w, h, slices.Clone(raw))
+		default:
+			s := make([]float32, w*h)
+			for i := range s {
+				s[i] = float32(raw[i])/9 - 2000
+				if raw[i]%7 == 0 {
+					s[i] = float32(math.NaN())
+				}
+			}
+			p, err = imaging.NewPlaneF32(w, h, s)
+		}
+		require.NoError(t, err)
+		x0 := rapid.IntRange(0, w-1).Draw(t, "x0")
+		y0 := rapid.IntRange(0, h-1).Draw(t, "y0")
+		rect := image.Rect(x0, y0, rapid.IntRange(x0+1, w).Draw(t, "x1"), rapid.IntRange(y0+1, h).Draw(t, "y1"))
+
+		got, err := OfRegion(p, rect)
+		require.NoError(t, err)
+		var vals []float64
+		invalid := 0
+		for y := rect.Min.Y; y < rect.Max.Y; y++ {
+			for x := rect.Min.X; x < rect.Max.X; x++ {
+				if v, ok := p.StoredAt(x, y); ok {
+					vals = append(vals, v)
+				} else {
+					invalid++
+				}
+			}
+		}
+		require.EqualValues(t, len(vals), got.Valid)
+		require.EqualValues(t, invalid, got.Invalid)
+		mean, okMean := got.Mean()
+		sd, okSd := got.StdDev()
+		require.Equal(t, len(vals) > 0, okMean)
+		require.Equal(t, len(vals) > 0, okSd)
+		if len(vals) == 0 {
+			return
+		}
+		var sum float64
+		for _, v := range vals {
+			sum += v
+		}
+		wantMean := sum / float64(len(vals))
+		var m2 float64
+		for _, v := range vals {
+			m2 += (v - wantMean) * (v - wantMean)
+		}
+		require.InDelta(t, wantMean, mean, 1e-6*(1+math.Abs(wantMean)))
+		require.InDelta(t, math.Sqrt(m2/float64(len(vals))), sd, 1e-6*(1+sd))
+		require.Equal(t, slices.Min(vals), got.Lo)
+		require.Equal(t, slices.Max(vals), got.Hi)
+		var total uint64
+		for _, n := range got.Counts {
+			total += n
+		}
+		require.EqualValues(t, len(vals), total)
+	})
+}
+
+func TestARegionOutsideThePlaneIsRefusedAndMomentsFollowTheTransform(t *testing.T) {
+	p, _ := imaging.NewPlaneU8(4, 2, []uint8{1, 2, 3, 4, 5, 6, 7, 8})
+	_, err := OfRegion(p, image.Rect(0, 0, 5, 2))
+	assert.Error(t, err)
+	_, err = OfRegion(p, image.Rectangle{})
+	assert.Error(t, err)
+
+	h, err := OfRegion(p, image.Rect(1, 0, 3, 2)) // 2, 3, 6, 7
+	require.NoError(t, err)
+	mean, _ := h.Mean()
+	sd, _ := h.StdDev()
+	assert.Equal(t, 4.5, mean)
+	assert.InDelta(t, math.Sqrt((2.5*2.5*2+1.5*1.5*2)/4), sd, 1e-12)
+	med, ok := h.Percentile(50)
+	assert.True(t, ok)
+	assert.Equal(t, 3.0, med, "the nearest-rank median of 2, 3, 6, 7")
+
+	q, err := p.WithTransform(imaging.ValueTransform{Scale: -2, Offset: 10})
+	require.NoError(t, err)
+	hq, _ := OfRegion(q, image.Rect(1, 0, 3, 2))
+	meanQ, _ := hq.Mean()
+	sdQ, _ := hq.StdDev()
+	assert.Equal(t, 1.0, meanQ)
+	assert.InDelta(t, 2*sd, sdQ, 1e-12, "a standard deviation scales by the magnitude of the scale")
+	_, ok = Histogram{}.Mean()
+	assert.False(t, ok)
 }
