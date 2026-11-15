@@ -25,7 +25,7 @@ var manifest = runtimeapp.Manifest{
 	Version:  "0.1.0",
 	Display:  "Trail viewer",
 	Title:    "Trail Viewer",
-	Summary:  "Read the audit trail by case and time window, with the evidence verdict per run",
+	Summary:  "Read the audit trail by case and time, with each run's evidence verdict",
 	Icon:     icons.PhFootprints,
 	Topics:   []runtimeapp.TopicT{runtimeapp.TopicRuntime, runtimeapp.TopicObservability},
 	Keywords: []string{"trail", "audit", "evidence", "seal", "timeline", "review"},

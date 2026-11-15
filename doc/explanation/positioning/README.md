@@ -45,6 +45,7 @@ is what remains before a page flips to `stable`.
 | [imzero2](./imzero2.md) | an app author who needs one source on every host | a web frontend beside a backend; a remote-desktop stack | [widgets](./widgets.md) |
 | [widgets](./widgets.md) | an app author who needs scientific display | one crate or JavaScript library per need | child of [imzero2](./imzero2.md) |
 | [play](./play.md) | whoever writes ClickHouse SQL at the keyboard | a dashboard layer with a global filter bus; a modelling language between author and engine | — |
+| [notebook](./notebook.md) | whoever hands a finding over as a report (*proposed*) | a computational notebook with a session's saved outputs; a dashboard that queries on open | [play](./play.md), [lading](./lading.md) |
 | [watchbill](./watchbill.md) | a developer giving an app or headless binary durable work | a job queue on a second substrate — relational store, file or broker | — |
 | [lading](./lading.md) | an operator with file trees to find, diff and account for | a filesystem indexer or a backup catalog | — |
 | [stevedore](./stevedore.md) | an application team owning an ingestion handler under a framework | per-processor framing and landing code; a standalone consumer service | — |
@@ -169,6 +170,18 @@ itself, so the pasted query stays the truth. The cost is a reactive runtime
 that can surprise, plain SQL's lack of define-once measures, and a desktop
 app rather than a web page.
 
+**notebook.** For someone who has to hand a finding over — a report whose
+every number a reader can check, read where the database is not — a sealed
+notebook is a markdown report that holds its own data: prose, records whose
+results were computed once on the server and stored beside the text, and
+presentation cells that only pick and name columns of what is stored. Unlike
+a computational notebook, whose saved outputs are whatever the last run of a
+session left behind, a sealed notebook lets nothing that shows compute: a
+number in a sentence is a link to a stored value, and a stored result names
+the statement that made it. The cost is no parameters and no filtering by
+the reader, a collection step against a server, and a reader that needs
+boxer to draw the charts. The decision is proposed.
+
 **watchbill.** For a developer giving an app or a headless binary work that
 must survive the process — a download, an export, a long computation — on a
 box that has a ClickHouse server and nothing else, watchbill is durable work
@@ -251,7 +264,9 @@ the first time it uses it; the wording here and there is the same.
 - **applet** — A small app defined entirely by one markdown document holding SQL, launched like any other app.
 - **bus** — The in-process message bus every app request travels over; a NATS client can stand in for it.
 - **capability** — What an app may request; here a filter on bus addresses, declared in the app's manifest and checked against its code.
+- **cell** — A presentation cell names a stored result, the columns to take from it and the picture to draw; it cannot filter, order or calculate.
 - **claim** — A worker takes a job by one conditional update that succeeds for exactly one claimant, then reads the row back to confirm it won.
+- **collect** — Collection runs every record once on the server and stores the results with the text; it is the one step that needs a server.
 - **cst** — A concrete syntax tree keeps every token of the source, including comments and whitespace, which an abstract syntax tree discards.
 - **facts** — `boxer.facts`: the one ClickHouse table shape every durable record lands in, so any record can be joined with any other in SQL.
 - **fffi** — A framed foreign-function interface batches a frame's worth of UI calls into one message from Go to Rust, instead of one cross-language call per widget.
@@ -264,7 +279,9 @@ the first time it uses it; the wording here and there is the same.
 - **patch** — A patch records a change and the patches it depends on; two patches that touch unrelated things apply in either order, which is what "commute" means here.
 - **plane** — The one-way channel the metrics scraper publishes on; the UI subscribes to it instead of reading the operating system itself.
 - **processor** — The program a streaming framework starts to transform each message; stevedore is the part of that program that is not the transformation.
+- **record** — A named SQL statement in the notebook whose result was computed on the server and stored; later parts of the notebook read it by name.
 - **sbom** — A software bill of materials: the machine-readable list of every dependency in a build, here in CycloneDX form.
+- **sealed** — A notebook is sealed when every result it shows is stored with it and matches the statement written beside it, so it reads the same wherever it is opened.
 - **snapshot** — One complete listing of a tree at one moment; a later walk is a new snapshot, never an update to the old one.
 - **sow** — Schema-on-write: the structure is declared before data is stored, so readers get typed columns instead of parsing at query time.
 - **tag** — The tag is the part of the identifier that says what kind of thing it names; Fibonacci coding lets frequent kinds get short tags.

@@ -6,9 +6,10 @@ status: draft
 # reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to stable
 ---
 
-> **Status: draft — pre-human-review.** Written against ADR-0373 while it is
-> proposed; its exported API is not a Tier 1 surface until the ADR is
-> accepted, so pin the boxer version you build against.
+> **Status: draft — pre-human-review.** Written against ADR-0373 and
+> ADR-0374. Their exported API is a Tier 1 surface: a change to it is
+> recorded in their dated updates. Boxer is pre-1.0, so pin the version you
+> build against.
 
 # Reading, measuring and showing an image with boxer's image packages
 
@@ -131,4 +132,4 @@ the memory a procedural source costs the viewer
 
 The packages are pre-1.0 like the rest of boxer. On a bump, the compiler
 finds a renamed or removed symbol; a contract above that changed is recorded
-in ADR-0373, under `## Updates` once the ADR is accepted.
+in a dated entry under `## Updates` of ADR-0373 or ADR-0374.

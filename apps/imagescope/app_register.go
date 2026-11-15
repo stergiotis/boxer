@@ -46,7 +46,7 @@ var manifest = app.Manifest{
 	Version:    "0.1.0",
 	Display:    "Image scope",
 	Title:      "Image scope — an image as samples, through a recipe",
-	Summary:    "Inspect an image's samples through limits, a transfer function and a colour map",
+	Summary:    "View image samples through limits, a transfer function and a colour map",
 	Icon:       icons.IconFileImage,
 	Topics:     []app.TopicT{app.TopicData, app.TopicSensing},
 	Keywords:   []string{"image", "png", "jpeg", "histogram", "pixel", "16-bit", "contrast", "stretch", "colour map"},
