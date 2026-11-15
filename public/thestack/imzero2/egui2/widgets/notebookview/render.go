@@ -3,8 +3,6 @@ package notebookview
 import (
 	"strings"
 
-	"github.com/apache/arrow-go/v18/arrow"
-
 	"github.com/stergiotis/boxer/public/hmi/gloss"
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
@@ -47,9 +45,19 @@ func (inst *View) Render() (ev Events) {
 			weakLabel("no notebook")
 			break
 		}
-		inst.renderStatus()
+		if !inst.Opts.Plain {
+			inst.renderStatus()
+		}
 		for i := range inst.cells {
-			for range c.IdScope(inst.ids.PrepareSeq(uint64(i))) {
+			// A cell that is not prose is scoped by its name, so what a
+			// renderer keeps on the host survives a cell put in above it.
+			var scope *c.WidgetIdStack
+			if key := inst.cells[i].foldKey; key != "" {
+				scope = inst.ids.PrepareStr(key)
+			} else {
+				scope = inst.ids.PrepareSeq(uint64(i))
+			}
+			for range c.IdScope(scope) {
 				inst.renderCell(i)
 			}
 		}
@@ -60,10 +68,25 @@ func (inst *View) Render() (ev Events) {
 }
 
 // renderStatus says whether the notebook is sealed: every record stored
-// under the pin and fresh.
+// under the pin and fresh. A bound notebook stores nothing: it says whose
+// its records are.
 func (inst *View) renderStatus() {
+	if inst.pinLabel == "" {
+		if inst.bound {
+			inst.pinLabel = count(int64(len(inst.loaded.Records)), "record") + " held by the host"
+		} else {
+			inst.pinLabel = "data " + mdnotebook.PinOf(inst.nb.Records)
+		}
+		if len(inst.stale) > 0 {
+			inst.staleLabel = "edited since collection: " + strings.Join(inst.stale, ", ")
+		}
+	}
 	for range c.Horizontal().KeepIter() {
 		switch {
+		case inst.bound && len(inst.problems) > 0:
+			badge.New(inst.ids.PrepareStr("status"), "problems").Tone(badge.ToneError).Send()
+		case inst.bound:
+			badge.New(inst.ids.PrepareStr("status"), "bound").Tone(badge.ToneNeutral).Send()
 		case len(inst.stale) > 0:
 			badge.New(inst.ids.PrepareStr("status"), "stale").Tone(badge.ToneWarning).Send()
 			weakLabel(inst.staleLabel)
@@ -99,17 +122,23 @@ func (inst *View) renderProblems() {
 // then reads down the page's margin: neutral for a cell as collected,
 // warning for a stale one, error for one that has nothing to show.
 func (inst *View) cellFrame(cell *mdnotebook.Cell, cv *cellView) c.FrameFluid {
-	rule := styletokens.NeutralBorderDefault
-	switch {
-	case cv.refusal != nil, cv.mediaErr != "", cell.Kind == mdnotebook.CellKindRecord && !cv.stored:
-		rule = styletokens.ErrorDefault
-	case cv.stale != "", cv.staleRead != "":
-		rule = styletokens.WarningDefault
-	}
+	rule, _ := cellTone(cell, cv)
 	bar := styletokens.StrokeStrong
 	return c.Frame(inst.ids.PrepareStr("cell")).
 		EdgeBarLeft(bar, color.Hex(rule.AsHex())).
 		InnerMarginSides(bar+styletokens.PaddingDefault(styletokens.ActiveDensity()), 0, styletokens.StrokeHair, styletokens.StrokeHair)
+}
+
+// cellTone is the tone of a cell's state, and whether anything is wrong
+// with it.
+func cellTone(cell *mdnotebook.Cell, cv *cellView) (rule styletokens.RGBA8, wrong bool) {
+	switch {
+	case cv.refusal != nil, cv.mediaErr != "", cell.Kind == mdnotebook.CellKindRecord && !cv.stored:
+		return styletokens.ErrorDefault, true
+	case cv.stale != "", cv.staleRead != "":
+		return styletokens.WarningDefault, true
+	}
+	return styletokens.NeutralBorderDefault, false
 }
 
 func (inst *View) renderCell(i int) {
@@ -118,6 +147,13 @@ func (inst *View) renderCell(i int) {
 	if cell.Kind == mdnotebook.CellKindProse {
 		inst.markdown(cv.doc, cell)
 		return
+	}
+	if inst.Opts.Plain && !cv.folded {
+		if _, wrong := cellTone(cell, cv); !wrong {
+			// The cell's content alone, where prose would stand.
+			inst.renderCellBody(i, cell, cv)
+			return
+		}
 	}
 	for range inst.cellFrame(cell, cv).KeepIter() {
 		for range c.Vertical().KeepIter() {
@@ -191,9 +227,9 @@ func (inst *View) renderCellBody(i int, cell *mdnotebook.Cell, cv *cellView) {
 		if cv.stale != "" {
 			weakLabel(cv.stale)
 		}
-		inst.statement(cv)
+		inst.statement(cell, cv)
 	case mdnotebook.CellKindPresentation:
-		inst.statement(cv)
+		inst.statement(cell, cv)
 		inst.renderResult(cell, cv)
 	case mdnotebook.CellKindMedia:
 		if cv.mediaErr != "" {
@@ -300,13 +336,17 @@ func (inst *View) claims(url string) bool {
 	return isVal(url) || (inst.Opts.LinkClaims != nil && inst.Opts.LinkClaims(url))
 }
 
-// statement draws a cell's SQL under a fold named by its title. Hidden, a
-// record is its title alone and a presentation cell draws nothing here.
-// statement draws a cell's statement, where statements are shown.
-func (inst *View) statement(cv *cellView) {
-	if inst.Opts.Statements == StatementsShown {
-		inst.markdown(cv.doc, nil)
+// statement draws a cell's statement, where statements are shown. It is
+// parsed when it is first drawn: a report never parses one.
+func (inst *View) statement(cell *mdnotebook.Cell, cv *cellView) {
+	if inst.Opts.Statements != StatementsShown {
+		return
 	}
+	if cv.doc == nil {
+		// The statement alone: the id line is not part of what is shown.
+		cv.doc = markdown.Parse([]byte("```sql\n" + strings.TrimRight(cell.Body, "\n") + "\n```\n"))
+	}
+	inst.markdown(cv.doc, nil)
 }
 
 func (inst *View) renderResult(cell *mdnotebook.Cell, cv *cellView) {
@@ -319,6 +359,10 @@ func (inst *View) renderResult(cell *mdnotebook.Cell, cv *cellView) {
 	if cv.staleRead != "" {
 		weakLabel(cv.staleRead)
 	}
+	if cell.Renderer == RendererKV {
+		inst.renderFields(cv)
+		return
+	}
 	drawn := false
 	if cell.Renderer != mdnotebook.RendererTable {
 		reason := cv.noRenderer
@@ -327,7 +371,7 @@ func (inst *View) renderResult(cell *mdnotebook.Cell, cv *cellView) {
 				// A child Ui of bounded height: what a renderer reads as
 				// the room left is the box.
 				for range c.Vertical().KeepIter() {
-					c.UiSetMaxHeight(inst.resultMaxHeight())
+					c.UiSetMaxHeight(inst.resultMaxHeight(cv))
 					reason = cv.renderer(cv.result)
 				}
 			}
@@ -340,24 +384,29 @@ func (inst *View) renderResult(cell *mdnotebook.Cell, cv *cellView) {
 	}
 	if !drawn {
 		cv.gridFrames++
-		inst.grid("main", cv.result.Main, cv.cols, &cv.grid, cv.gridFrames == gridRefitFrame)
+		inst.grid("main", cv, cv.gridFrames == gridRefitFrame)
 	}
 }
 
-func (inst *View) resultMaxHeight() float32 {
+// resultMaxHeight is the ceiling of a cell's drawn result: the cell's own
+// when it names one, the view's otherwise.
+func (inst *View) resultMaxHeight(cv *cellView) float32 {
+	if cv.maxHeight > 0 {
+		return cv.maxHeight
+	}
 	if h := inst.Opts.ResultMaxHeight; h > 0 {
 		return h
 	}
 	return defaultResultMaxHeight
 }
 
-// grid draws a record as a table. refit asks the grid to fit its columns
-// again: its first fit measures the rows of its first frame, which are
-// fewer than the rows it goes on to show, so a column whose first values
-// are its shortest comes out too narrow.
-func (inst *View) grid(key string, rec arrow.RecordBatch, cols []recordtable.Column, state *recordtable.State, refit bool) {
+// grid draws a cell's own relation as a table. refit asks the grid to fit
+// its columns again: its first fit measures the rows of its first frame,
+// which are fewer than the rows it goes on to show, so a column whose first
+// values are its shortest comes out too narrow.
+func (inst *View) grid(key string, cv *cellView, refit bool) {
 	res := recordtable.RenderGrid(recordtable.Input{
-		Ids: inst.ids, ScopeKey: key, Record: rec, Columns: cols, State: state, MaxHeight: inst.resultMaxHeight(), Selected: -1, Refit: refit,
+		Ids: inst.ids, ScopeKey: key, Record: cv.result.Main, Columns: cv.cols, State: &cv.grid, MaxHeight: inst.resultMaxHeight(cv), Selected: -1, Refit: refit,
 	})
 	if res.Err != nil {
 		weakLabel(res.Err.Error())

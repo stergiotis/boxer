@@ -46,11 +46,11 @@ var notebookPanels = map[PanelID]func(ids *c.WidgetIdStack) PanelI{
 
 func init() {
 	for id, build := range notebookPanels {
-		notebookview.RegisterRenderer(string(id), func(ids *c.WidgetIdStack) notebookview.CellRenderer {
+		notebookview.RegisterRenderer(string(id), func(ids *c.WidgetIdStack) (notebookview.CellRenderer, func()) {
 			panel := build(ids)
 			return func(res *mdnotebook.Result) (reason string) {
 				return renderNotebookCell(panel, res)
-			}
+			}, nil
 		})
 	}
 }

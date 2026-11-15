@@ -23,11 +23,15 @@ func frame(v *notebookview.View) notebookview.Events {
 	return v.Render()
 }
 
-// chartCalls counts, per instance the factory built, the frames it drew.
-var chartCalls []*int
+// chartCalls counts, per instance the factory built, the frames it drew;
+// chartsClosed the instances the view closed.
+var (
+	chartCalls   []*int
+	chartsClosed int
+)
 
 func init() {
-	notebookview.RegisterRenderer("chart", func(ids *c.WidgetIdStack) notebookview.CellRenderer {
+	notebookview.RegisterRenderer("chart", func(ids *c.WidgetIdStack) (notebookview.CellRenderer, func()) {
 		n := new(int)
 		chartCalls = append(chartCalls, n)
 		return func(res *mdnotebook.Result) string {
@@ -36,7 +40,7 @@ func init() {
 				return "no relation"
 			}
 			return ""
-		}
+		}, func() { chartsClosed++ }
 	})
 }
 
@@ -206,18 +210,19 @@ func TestAFoldedCellBuildsNothing(t *testing.T) {
 	assert.Equal(t, 1, *charts[0], "a folded cell's renderer is not called")
 	assert.Equal(t, 1, *charts[1])
 
-	// Set again: the folds are the reader's and are kept.
+	// Set again: the folds are the reader's and are kept, and so is each
+	// cell's renderer, since its text did not change.
 	before = len(chartCalls)
 	v.SetNotebook(nb, fixture.FS())
-	again := chartCalls[before:]
-	require.Len(t, again, 2)
+	assert.Len(t, chartCalls, before, "a cell whose text is unchanged keeps its renderer")
+	again := charts
 	assert.Positive(t, v.Folded())
 	frame(v)
-	assert.Zero(t, *again[0])
+	assert.Equal(t, 1, *again[0])
 
 	v.FoldAll(false)
 	assert.Zero(t, v.Folded())
 	frame(v)
-	assert.Equal(t, 1, *again[0])
-	assert.Equal(t, 1, *again[1])
+	assert.Equal(t, 2, *again[0])
+	assert.Equal(t, 2, *again[1])
 }

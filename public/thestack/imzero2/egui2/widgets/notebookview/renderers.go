@@ -15,23 +15,29 @@ import (
 type CellRenderer func(res *mdnotebook.Result) (reason string)
 
 // RendererFactory builds the renderer of one presentation cell. The view
-// calls it once per cell when a notebook is set, so what a renderer keeps
+// calls it once per cell, and a cell whose text is unchanged keeps its
+// renderer when the notebook is set again, so what a renderer keeps
 // between frames (a layout, a camera, a fold of the rows) is that cell's
-// own. ids is the view's stack; at render time it is scoped to the cell.
-type RendererFactory func(ids *c.WidgetIdStack) CellRenderer
+// own and outlives the records under it. ids is the view's stack; at render
+// time it is scoped to the cell.
+//
+// close, when not nil, is called once when the view drops the renderer: its
+// cell is gone from the notebook, or the view is closed. A renderer that
+// owns workers stops them there.
+type RendererFactory func(ids *c.WidgetIdStack) (draw CellRenderer, close func())
 
 var renderers = map[string]RendererFactory{}
 
 // RegisterRenderer makes build the renderer of every `sql <name>` cell in
 // the process. It is called from an init function, by the package that owns
 // the drawing: a host that shows notebooks links that package and does not
-// import it. A name registered twice, or the built-in `table`, panics.
+// import it. A name registered twice, or a built-in one, panics.
 func RegisterRenderer(name string, build RendererFactory) {
 	if name == "" || build == nil {
 		panic("notebookview: RegisterRenderer needs a name and a factory")
 	}
-	if name == mdnotebook.RendererTable {
-		panic("notebookview: the renderer `table` is built in")
+	if name == mdnotebook.RendererTable || name == RendererKV {
+		panic("notebookview: the renderer `" + name + "` is built in")
 	}
 	if _, taken := renderers[name]; taken {
 		panic("notebookview: renderer `" + name + "` registered twice")
