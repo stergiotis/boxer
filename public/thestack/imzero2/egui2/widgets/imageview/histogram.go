@@ -206,7 +206,7 @@ func (inst *Viewer) renderHistogram(w float32) (changed bool) {
 	// limits, and the two handles.
 	xLo, xHi := toPx(inst.recipe.Limits.Lo), toPx(inst.recipe.Limits.Hi)
 	if ready && span > 0 {
-		inst.paintHistogramBars(hist, axisLo, span, w, h, xLo, xHi)
+		inst.paintHistogramBars(inst.hists[inst.shownPlaneIndex()], axisLo, span, w, h, xLo, xHi)
 	}
 	handle := color.Hex(styletokens.AccentDefault.AsHex())
 	for _, x := range [2]float32{xLo, xHi} {
@@ -226,28 +226,43 @@ func (inst *Viewer) renderHistogram(w float32) (changed bool) {
 	return changed
 }
 
+// histBarsKey names what the strip's bars were binned from; the bars are
+// binned again only when it changes, not every frame.
+type histBarsKey struct {
+	hist   *stats.Histogram
+	axisLo float64
+	span   float64
+	n      int
+}
+
 // paintHistogramBars draws one bar per two pixels of the strip: the count of
 // the samples whose values fall under it, on a logarithmic height so that a
-// handful of samples is still visible beside a million.
-func (inst *Viewer) paintHistogramBars(hist stats.Histogram, axisLo, span float64, w, h, xLo, xHi float32) {
+// handful of samples is still visible beside a million. Binning walks every
+// bin of the histogram — 65536 for a 16-bit plane — so it is done when the
+// histogram, the axis or the strip's width changes and kept otherwise.
+func (inst *Viewer) paintHistogramBars(hist *stats.Histogram, axisLo, span float64, w, h, xLo, xHi float32) {
 	n := max(int(w/2), 1)
-	if cap(inst.histBars) < n {
-		inst.histBars = make([]uint64, n)
-	}
-	bars := inst.histBars[:n]
-	clear(bars)
-	for i, count := range hist.Counts {
-		if count == 0 {
-			continue
+	if key := (histBarsKey{hist, axisLo, span, n}); key != inst.histBarsFor {
+		inst.histBarsFor = key
+		if cap(inst.histBars) < n {
+			inst.histBars = make([]uint64, n)
 		}
-		value := hist.Value(hist.BinStored(i))
-		bar := int((value - axisLo) / span * float64(n))
-		bars[min(max(bar, 0), n-1)] += count
+		inst.histBars = inst.histBars[:n]
+		clear(inst.histBars)
+		for i, count := range hist.Counts {
+			if count == 0 {
+				continue
+			}
+			value := hist.Value(hist.BinStored(i))
+			bar := int((value - axisLo) / span * float64(n))
+			inst.histBars[min(max(bar, 0), n-1)] += count
+		}
+		inst.histTop = 0
+		for _, v := range inst.histBars {
+			inst.histTop = max(inst.histTop, v)
+		}
 	}
-	var top uint64
-	for _, v := range bars {
-		top = max(top, v)
-	}
+	bars, top := inst.histBars, inst.histTop
 	if top == 0 {
 		return
 	}

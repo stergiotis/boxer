@@ -517,3 +517,38 @@ func TestPercentileLimitsWaitForTheHistogramAndIgnoreOutliers(t *testing.T) {
 	waitForHistogram(t, v)
 	assert.Equal(t, display.LimitsSourceData, v.Recipe().Limits.Source, "a stretch asked for on one plane is not applied to another")
 }
+
+func TestARegionIsPixelsClippedToTheImageAndGoesWithIt(t *testing.T) {
+	v := New(c.NewWidgetIdStack(), "", Options{})
+	defer v.Close()
+	_, ok := v.Region()
+	assert.False(t, ok)
+	v.SetRegion(image.Rect(1, 1, 5, 5))
+	_, ok = v.Region()
+	assert.False(t, ok, "no image, no region")
+
+	v.SetImage(grayImage(t, 100, 60))
+	v.SetRegion(image.Rect(90, 50, 140, 80))
+	r, ok := v.Region()
+	require.True(t, ok)
+	assert.Equal(t, image.Rect(90, 50, 100, 60), r, "clipped to the image")
+	v.SetRegion(image.Rect(200, 200, 210, 210))
+	_, ok = v.Region()
+	assert.False(t, ok, "a rectangle that misses the image clears the mark")
+
+	// A box on the view marks every pixel it touches: pixel (col, row)
+	// covers [col, col+1) × [row, row+1), and latitude is the negated row.
+	box := portolan.LatLngBoundsOf(portolan.LL(-20.2, 10.5), portolan.LL(-4.9, 30.01))
+	assert.Equal(t, image.Rect(10, 4, 31, 21), v.pixelsIn(box))
+	off := portolan.LatLngBoundsOf(portolan.LL(-500, 300), portolan.LL(-400, 400))
+	assert.True(t, v.pixelsIn(off).Empty())
+
+	assert.False(t, v.Selecting())
+	v.SetSelecting(true)
+	assert.True(t, v.Selecting())
+	v.SetRegion(image.Rect(0, 0, 10, 10))
+	v.SetImage(grayImage(t, 20, 20))
+	_, ok = v.Region()
+	assert.False(t, ok, "another image has no region")
+	assert.True(t, v.Selecting(), "the mode is the viewer's, not the image's")
+}

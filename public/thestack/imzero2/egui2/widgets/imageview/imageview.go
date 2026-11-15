@@ -3,6 +3,7 @@ package imageview
 import (
 	"context"
 	"fmt"
+	"image"
 	"math"
 	"strconv"
 	"strings"
@@ -55,6 +56,9 @@ type Events struct {
 	// Clicked is the pixel a click landed on.
 	Clicked   Readout
 	ClickedOk bool
+	// RegionChanged reports that a box drawn while selecting set a new
+	// region this frame; Viewer.Region has it.
+	RegionChanged bool
 	// LimitsChanged reports that a drag of a limit handle changed the
 	// recipe this frame; Viewer.Recipe has the new one.
 	LimitsChanged bool
@@ -104,6 +108,7 @@ type Viewer struct {
 	fitPending bool
 	hover      Readout
 	hoverOk    bool
+	selecting  bool
 
 	// The level build runs on a goroutine of the viewer's own: buildGen
 	// names the image it is for, built is where it leaves its result for
@@ -112,6 +117,10 @@ type Viewer struct {
 	buildCancel context.CancelFunc
 	built       atomic.Pointer[buildResult]
 	building    sync.WaitGroup
+
+	// region is the rectangle of pixels marked on the image, empty when
+	// there is none.
+	region image.Rectangle
 
 	// Histograms are counted per plane, on the same goroutines' terms.
 	hists             map[int]*stats.Histogram
@@ -123,6 +132,8 @@ type Viewer struct {
 	drag              limitDrag
 	// Scratch of the histogram strip, reused across frames.
 	histBars                       []uint64
+	histBarsFor                    histBarsKey
+	histTop                        uint64
 	histX0, histY0, histX1, histY1 []float32
 	histCols                       []uint32
 }
@@ -269,6 +280,7 @@ func (inst *Viewer) SetImage(img imaging.Image) {
 	inst.stopBuild()
 	inst.img = img
 	inst.pyramid = nil
+	inst.region = image.Rectangle{}
 	inst.plane = asStored
 	inst.hoverOk = false
 	inst.fitPending = !img.IsZero()
@@ -348,8 +360,13 @@ func (inst *Viewer) SetAsStored() error {
 	return nil
 }
 
-// singlePlane reports whether the current view is one plane through a
-// palette, which is when a colour bar means something.
+// IsSinglePlane reports whether what is shown is one plane through a colour
+// map — a plane picked out of a colour image, or a greyscale image — and not
+// a colour composite. It is when there is a histogram, a colour bar and a
+// choice of colour map.
+func (inst *Viewer) IsSinglePlane() bool { return inst.singlePlane() }
+
+// singlePlane is IsSinglePlane.
 func (inst *Viewer) singlePlane() bool {
 	return !inst.img.IsZero() && (inst.plane != asStored || !inst.img.Model().IsColor())
 }
@@ -412,6 +429,61 @@ func (inst *Viewer) readoutAt(ll portolan.LatLng) (r Readout, ok bool) {
 	return r, true
 }
 
+// Region is the rectangle of pixels marked on the image: columns
+// [Min.X, Max.X) and rows [Min.Y, Max.Y), per the image's pixel convention.
+// ok is false when none is marked.
+func (inst *Viewer) Region() (region image.Rectangle, ok bool) {
+	return inst.region, !inst.region.Empty()
+}
+
+// SetRegion marks a rectangle of pixels, clipped to the image; an empty
+// rectangle, or one that misses the image, clears the mark. The mark is drawn
+// over the image and changes nothing about how the image is shown.
+func (inst *Viewer) SetRegion(region image.Rectangle) {
+	inst.region = image.Rectangle{}
+	if !inst.img.IsZero() {
+		if r := region.Intersect(image.Rect(0, 0, inst.img.Width(), inst.img.Height())); !r.Empty() {
+			inst.region = r
+		}
+	}
+}
+
+// Selecting reports whether a drag marks a region instead of panning.
+func (inst *Viewer) Selecting() bool { return inst.selecting }
+
+// SetSelecting makes a drag on the image mark a region — reported by
+// [Events.RegionChanged] when the drag is released — instead of panning.
+// The wheel still zooms. It holds until set otherwise.
+func (inst *Viewer) SetSelecting(on bool) {
+	inst.selecting = on
+	inst.m.SetBoxSelect(on)
+}
+
+// pixelsIn is the pixels a box on the view touches: every pixel any part of
+// which lies inside it, clipped to the image.
+func (inst *Viewer) pixelsIn(box portolan.LatLngBounds) image.Rectangle {
+	if inst.img.IsZero() {
+		return image.Rectangle{}
+	}
+	sw, ne := box.SouthWest, box.NorthEast
+	r := image.Rect(int(math.Floor(sw.Lng)), int(math.Floor(-ne.Lat)), int(math.Ceil(ne.Lng)), int(math.Ceil(-sw.Lat)))
+	return r.Intersect(image.Rect(0, 0, inst.img.Width(), inst.img.Height()))
+}
+
+// paintRegion outlines the marked region over the image, on the pixels'
+// outer edges.
+func (inst *Viewer) paintRegion(p portolan.Projector) {
+	r := inst.region
+	if r.Empty() {
+		return
+	}
+	lats := []float64{-float64(r.Min.Y), -float64(r.Min.Y), -float64(r.Max.Y), -float64(r.Max.Y)}
+	lngs := []float64{float64(r.Min.X), float64(r.Max.X), float64(r.Max.X), float64(r.Min.X)}
+	fill := styletokens.AccentDefault
+	fill.A = 0x20
+	p.ConvexPolygon(lats, lngs, color.Hex(fill.AsHex()), color.Hex(styletokens.AccentDefault.AsHex()), styletokens.StrokeRegular)
+}
+
 // RenderFill is Render sized to the pane the viewer sits in, as reported one
 // frame late; the fallback is used on the first frame and in a hidden tab.
 func (inst *Viewer) RenderFill(fallbackW, fallbackH float32) Events {
@@ -459,7 +531,7 @@ func (inst *Viewer) Render(w, h float32) (ev Events) {
 		}
 		var mev portolan.Events
 		for range c.HorizontalTop().KeepIter() {
-			mev = inst.m.Render(cw, ch, nil)
+			mev = inst.m.Render(cw, ch, inst.paintRegion)
 			if barW > 0 {
 				inst.paintColorBar(colorBarWidth, ch)
 			}
@@ -471,6 +543,11 @@ func (inst *Viewer) Render(w, h float32) (ev Events) {
 		ev.Hover, ev.HoverOk = inst.hover, inst.hoverOk
 		if mev.ClickedOk {
 			ev.Clicked, ev.ClickedOk = inst.readoutAt(mev.Clicked)
+		}
+		if mev.SelectedOk {
+			if r := inst.pixelsIn(mev.Selected); !r.Empty() && r != inst.region {
+				inst.region, ev.RegionChanged = r, true
+			}
 		}
 		if histH > 0 {
 			ev.LimitsChanged = inst.renderHistogram(cw)
