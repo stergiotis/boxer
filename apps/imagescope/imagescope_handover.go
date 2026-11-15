@@ -24,6 +24,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/task"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/science/imaging"
+	"github.com/stergiotis/boxer/public/science/imaging/tiles"
 )
 
 const (
@@ -43,14 +44,14 @@ const (
 // handoverRegion is what a handover would publish: the marked region, or
 // the whole image when none is marked. It refuses an image or region above
 // the bound.
-func handoverRegion(img imaging.Image, region image.Rectangle) (r image.Rectangle, err error) {
-	if img.IsZero() {
+func handoverRegion(pic *tiles.Store, region image.Rectangle) (r image.Rectangle, err error) {
+	if pic == nil {
 		return r, app.RefuseOperation("there is no image; open one first")
 	}
 	r = region
 	what := "the marked region"
 	if r.Empty() {
-		r, what = image.Rect(0, 0, img.Width(), img.Height()), "the whole image"
+		r, what = image.Rect(0, 0, pic.Width(), pic.Height()), "the whole image"
 	}
 	if n := int64(r.Dx()) * int64(r.Dy()); n > maxHandoverPixels {
 		return r, app.RefuseOperation(fmt.Sprintf("%s has %d pixels and at most %d are sent; mark a smaller region", what, n, maxHandoverPixels))
@@ -58,11 +59,13 @@ func handoverRegion(img imaging.Image, region image.Rectangle) (r image.Rectangl
 	return r, nil
 }
 
-// pixelsArrow renders the samples of rect as an Arrow IPC stream: one row
-// per pixel in row-major order, its column and row, and one column per plane
-// holding the stored sample in the plane's own kind. Rows and bytes are
-// proportional to the region's pixels, which the caller has bounded.
-func pixelsArrow(img imaging.Image, rect image.Rectangle) (stream []byte, rows int64, err error) {
+// pixelsArrow renders the samples of a region of an image — read out of it,
+// its top left pixel at at — as an Arrow IPC stream: one row per pixel in
+// row-major order, its column and row in the image, and one column per
+// plane holding the stored sample in the plane's own kind. Rows and bytes
+// are proportional to the region's pixels, which the caller has bounded.
+func pixelsArrow(img imaging.Image, at image.Point) (stream []byte, rows int64, err error) {
+	rect := image.Rect(at.X, at.Y, at.X+img.Width(), at.Y+img.Height())
 	names := img.Model().PlaneNames()
 	fields := []arrow.Field{
 		{Name: "col", Type: arrow.PrimitiveTypes.Uint32},
@@ -95,7 +98,7 @@ func pixelsArrow(img imaging.Image, rect image.Rectangle) (stream []byte, rows i
 	for i := range names {
 		p := img.Plane(i)
 		for y := rect.Min.Y; y < rect.Max.Y; y++ {
-			lo, hi := y*w+rect.Min.X, y*w+rect.Max.X
+			lo, hi := (y-rect.Min.Y)*w, (y-rect.Min.Y+1)*w
 			switch b := rb.Field(2 + i).(type) {
 			case *array.Uint8Builder:
 				b.AppendValues(p.U8()[lo:hi], nil)
@@ -121,22 +124,22 @@ func pixelsArrow(img imaging.Image, rect image.Rectangle) (stream []byte, rows i
 // columns of the window's table are nearest-rank percentiles, a rule
 // ClickHouse's quantile functions do not all share, so only the median —
 // quantileExactLow's lower median — is restated here.
-func handoverSql(alias string, img imaging.Image) (sql string) {
+func handoverSql(alias string, pic *tiles.Store) (sql string) {
 	var b strings.Builder
 	b.WriteString("-- Pixels of the region marked in imagescope, one row per pixel: col, row and a\n")
 	b.WriteString("-- column per plane holding the stored sample. This restates the window's table.\n")
-	for i, p := range img.Model().PlaneNames() {
+	for i, p := range pic.Model().PlaneNames() {
 		if i > 0 {
 			b.WriteString("UNION ALL\n")
 		}
 		v := p
-		if t := img.Plane(i).Transform(); !t.IsIdentity() {
+		if t := pic.Transform(i); !t.IsIdentity() {
 			v = fmt.Sprintf("(%s * %s + %s)", p, strconv.FormatFloat(t.Scale, 'g', -1, 64), strconv.FormatFloat(t.Offset, 'g', -1, 64))
 		}
 		fmt.Fprintf(&b, "SELECT '%[1]s' AS plane, count() AS samples, min(%[2]s) AS min, max(%[2]s) AS max,\n"+
 			"       avg(%[2]s) AS mean, stddevPop(%[2]s) AS sd, quantileExactLow(0.5)(%[2]s) AS median\n"+
 			"FROM keelson('%[3]s')\n", p, v, alias)
-		if img.Kind() == imaging.SampleKindF32 {
+		if pic.Kind() == imaging.SampleKindF32 {
 			fmt.Fprintf(&b, "WHERE NOT isNaN(%s)\n", p)
 		}
 	}
@@ -148,11 +151,11 @@ func handoverSql(alias string, img imaging.Image) (sql string) {
 // keelson task, so it has a row. A host that provides no scope gets a plain
 // goroutine — there is nothing to drain it into.
 func (inst *App) startHandover() {
-	img := inst.img
+	pic := inst.pic
 	region, _ := inst.viewer.Region()
 	run := func(context.Context) {
 		_ = task.RunToCompletion(inst.tasks, task.SpawnOpts{Kind: handoverKind, Title: handoverTitle}, func() error {
-			return inst.requestHandover(img, region)
+			return inst.requestHandover(pic, region)
 		})
 	}
 	if inst.scope != nil {
@@ -167,7 +170,7 @@ func (inst *App) startHandover() {
 // goroutine; the outcome lands in the handover fields for the button to
 // show, after the reply (W8). A second request while one is in flight is
 // dropped.
-func (inst *App) requestHandover(img imaging.Image, region image.Rectangle) (err error) {
+func (inst *App) requestHandover(pic *tiles.Store, region image.Rectangle) (err error) {
 	inst.handoverMu.Lock()
 	if inst.handoverBusy {
 		inst.handoverMu.Unlock()
@@ -176,7 +179,7 @@ func (inst *App) requestHandover(img imaging.Image, region image.Rectangle) (err
 	inst.handoverBusy, inst.handoverErr, inst.handoverNote = true, "", ""
 	inst.handoverMu.Unlock()
 
-	note, err := inst.handover(img, region)
+	note, err := inst.handover(pic, region)
 
 	inst.handoverMu.Lock()
 	inst.handoverBusy = false
@@ -193,15 +196,19 @@ func (inst *App) requestHandover(img imaging.Image, region image.Rectangle) (err
 // handover is the blocking body: publish — the publisher republishes onto
 // the handle it holds, so repeated presses do not leak datasets — and then
 // ask the window host for a play window.
-func (inst *App) handover(img imaging.Image, region image.Rectangle) (note string, err error) {
+func (inst *App) handover(pic *tiles.Store, region image.Rectangle) (note string, err error) {
 	if inst.bus == nil {
 		return "", eh.Errorf("no bus on this host; the handover needs the app runtime")
 	}
-	rect, err := handoverRegion(img, region)
+	rect, err := handoverRegion(pic, region)
 	if err != nil {
 		return "", err
 	}
-	stream, rows, err := pixelsArrow(img, rect)
+	samples, err := pic.Read(context.Background(), rect)
+	if err != nil {
+		return "", eh.Errorf("read the pixels: %w", err)
+	}
+	stream, rows, err := pixelsArrow(samples, rect.Min)
 	if err != nil {
 		return "", eh.Errorf("encode the pixels: %w", err)
 	}
@@ -210,7 +217,7 @@ func (inst *App) handover(img imaging.Image, region image.Rectangle) (note strin
 		return "", eh.Errorf("publish the pixels: %w", err)
 	}
 	cfg := playground.Launch{
-		Sql:          handoverSql(datasetAlias, img),
+		Sql:          handoverSql(datasetAlias, pic),
 		AutoRun:      true,
 		Endpoint:     playground.EndpointIntrospection,
 		Datasets:     []string{pub.Alias},

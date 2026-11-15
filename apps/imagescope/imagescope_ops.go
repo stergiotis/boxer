@@ -14,8 +14,8 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/appops"
 	"github.com/stergiotis/boxer/public/keelson/runtime/appops/fsmops"
 	"github.com/stergiotis/boxer/public/keelson/runtime/appops/opfsm"
-	"github.com/stergiotis/boxer/public/science/imaging"
 	"github.com/stergiotis/boxer/public/science/imaging/display"
+	"github.com/stergiotis/boxer/public/science/imaging/tiles"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/imageview"
 )
 
@@ -72,7 +72,7 @@ type ImageInfo struct {
 	StoredBitDepth int      `desc:"bits per sample as the file stored them; 0 when unknown"`
 	Lossy          bool     `desc:"the format's compression does not preserve samples: they are what the decoder reconstructs"`
 	Notes          []string `desc:"what to know about the samples before reading numbers off them"`
-	SampleHash     string   `desc:"BLAKE3 digest of the planes, hex; equal images have equal hashes"`
+	SampleHash     string   `desc:"BLAKE3 digest of the planes, hex; equal images have equal hashes; empty while the image is still being read"`
 }
 
 // SetRecipeArgs is the display recipe, whole: set_recipe's argument and
@@ -205,16 +205,18 @@ func refuse(err error) error {
 var errNoImage = app.RefuseOperation("there is no image; open_sample opens one, or the person opens a file with Open…")
 
 // imageInfo is the image resource's value.
-func imageInfo(img imaging.Image) (out ImageInfo) {
-	if img.IsZero() {
+func imageInfo(pic *tiles.Store) (out ImageInfo) {
+	if pic == nil {
 		return
 	}
-	p := img.Provenance()
-	sum := p.SampleHash
-	return ImageInfo{Open: true, Name: p.SourceName, Width: img.Width(), Height: img.Height(),
-		Model: img.Model().String(), Kind: img.Kind().String(), Planes: slices.Clone(img.Model().PlaneNames()),
-		Format: p.Format, StoredBitDepth: int(p.StoredBitDepth), Lossy: p.Lossy, Notes: sourceNotes(img),
-		SampleHash: hex.EncodeToString(sum[:])}
+	p := pic.Provenance()
+	out = ImageInfo{Open: true, Name: p.SourceName, Width: pic.Width(), Height: pic.Height(),
+		Model: pic.Model().String(), Kind: pic.Kind().String(), Planes: slices.Clone(pic.Model().PlaneNames()),
+		Format: p.Format, StoredBitDepth: int(p.StoredBitDepth), Lossy: p.Lossy, Notes: sourceNotes(p)}
+	if p.SampleHash != ([32]byte{}) {
+		out.SampleHash = hex.EncodeToString(p.SampleHash[:])
+	}
+	return out
 }
 
 // recipeArgs is a recipe as set_recipe takes it.
@@ -230,12 +232,12 @@ func recipeArgs(r display.Recipe) (out SetRecipeArgs) {
 
 // viewState is the view resource's value.
 func (inst *App) viewState() (out ViewState) {
-	if inst.img.IsZero() {
+	if inst.pic == nil {
 		return
 	}
 	out.Plane = planeAsStored
 	if i, single := inst.viewer.Plane(); single {
-		out.Plane = inst.img.Model().PlaneNames()[i]
+		out.Plane = inst.pic.Model().PlaneNames()[i]
 	}
 	out.Recipe = recipeArgs(inst.viewer.Recipe())
 	r, _ := inst.viewer.Region()
@@ -248,7 +250,7 @@ func (inst *App) viewState() (out ViewState) {
 // limits are counted over the whole plane off the frame, so they land a
 // little after the call; get_view reports the limits in force.
 func (inst *App) setRecipe(in SetRecipeArgs) (err error) {
-	if inst.img.IsZero() {
+	if inst.pic == nil {
 		return errNoImage
 	}
 	recipe := inst.viewer.Recipe()
@@ -267,16 +269,21 @@ func (inst *App) setRecipe(in SetRecipeArgs) (err error) {
 		}
 	}
 	i, _ := inst.viewer.Plane()
-	shown := inst.img.Plane(max(i, 0))
+	i = max(i, 0)
 	switch in.Limits {
 	case limitsData:
-		l, ok := display.DataLimits(shown)
+		lo, hi, ok := inst.pic.StoredRange(i)
 		if !ok {
-			return app.RefuseOperation("the plane shown has no range to take limits from; set them manually")
+			return app.RefuseOperation("the plane shown has no range to take limits from yet; it is still being read, or has no valid sample; set them manually")
 		}
-		recipe.Limits = l
+		t := inst.pic.Transform(i)
+		a, b := t.Apply(lo), t.Apply(hi)
+		if !(b != a) {
+			return app.RefuseOperation("the plane shown holds one value; there is no range to take limits from")
+		}
+		recipe.Limits = display.Limits{Lo: min(a, b), Hi: max(a, b), Source: display.LimitsSourceData}
 	case limitsNominal:
-		l, ok := display.NominalLimits(shown.Kind(), shown.Transform())
+		l, ok := display.NominalLimits(inst.pic.Kind(), inst.pic.Transform(i))
 		if !ok {
 			return app.RefuseOperation("a float plane has no nominal range; use data, percentile or manual")
 		}
@@ -307,15 +314,15 @@ func (inst *App) setRecipe(in SetRecipeArgs) (err error) {
 // setPlane shows the image as stored or one named plane of it, under that
 // view's default recipe with the colour map kept.
 func (inst *App) setPlane(name string) (err error) {
-	if inst.img.IsZero() {
+	if inst.pic == nil {
 		return errNoImage
 	}
 	if name == planeAsStored {
 		err = inst.viewer.SetAsStored()
 	} else {
-		i := slices.Index(inst.img.Model().PlaneNames(), name)
+		i := slices.Index(inst.pic.Model().PlaneNames(), name)
 		if i < 0 {
-			return app.RefuseOperation("no plane named " + name + "; this image has " + strings.Join(inst.img.Model().PlaneNames(), ", ") + ", and as stored")
+			return app.RefuseOperation("no plane named " + name + "; this image has " + strings.Join(inst.pic.Model().PlaneNames(), ", ") + ", and as stored")
 		}
 		err = inst.viewer.SetPlane(i)
 	}
@@ -327,14 +334,14 @@ func (inst *App) setPlane(name string) (err error) {
 // region that reaches outside the image is refused, naming the image's
 // size, so that what is measured is what was asked for.
 func (inst *App) setRegion(in RegionArgs) (err error) {
-	if inst.img.IsZero() {
+	if inst.pic == nil {
 		return errNoImage
 	}
 	if in.isZero() {
 		inst.viewer.SetRegion(image.Rectangle{})
 		return nil
 	}
-	if err = checkRegion(inst.img, in); err != nil {
+	if err = checkRegion(inst.pic, in); err != nil {
 		return err
 	}
 	inst.viewer.SetRegion(in.rect())
@@ -342,19 +349,19 @@ func (inst *App) setRegion(in RegionArgs) (err error) {
 }
 
 // checkRegion refuses a region that is empty or not inside the image.
-func checkRegion(img imaging.Image, in RegionArgs) error {
+func checkRegion(pic *tiles.Store, in RegionArgs) error {
 	if in.Width <= 0 || in.Height <= 0 {
 		return app.RefuseOperation("a region's width and height are positive")
 	}
-	if !in.rect().In(image.Rect(0, 0, img.Width(), img.Height())) {
-		return app.RefuseOperation(fmt.Sprintf("the region reaches outside the image, which is %d columns by %d rows", img.Width(), img.Height()))
+	if !in.rect().In(image.Rect(0, 0, pic.Width(), pic.Height())) {
+		return app.RefuseOperation(fmt.Sprintf("the region reaches outside the image, which is %d columns by %d rows", pic.Width(), pic.Height()))
 	}
 	return nil
 }
 
 // setZoom fits the image or shows it at one sample per screen pixel.
 func (inst *App) setZoom(mode string) error {
-	if inst.img.IsZero() {
+	if inst.pic == nil {
 		return errNoImage
 	}
 	switch mode {
@@ -372,7 +379,7 @@ func (inst *App) setZoom(mode string) error {
 // the command stage. The image and the measurement are immutable values.
 type opsSnap struct {
 	phase         phaseE
-	img           imaging.Image
+	pic           *tiles.Store
 	view          ViewState
 	magnification float64
 	level         int
@@ -389,9 +396,9 @@ type opsSnap struct {
 }
 
 func (inst *App) opsSnapshot() (sn opsSnap) {
-	sn = opsSnap{phase: inst.observePhase(), img: inst.img, view: inst.viewState(), opening: inst.open.Running(),
+	sn = opsSnap{phase: inst.observePhase(), pic: inst.pic, view: inst.viewState(), opening: inst.open.Running(),
 		openErr: inst.openErr, openNote: inst.openNote, problem: inst.problem, measured: inst.measured, seedErr: inst.seedErr}
-	if !inst.img.IsZero() {
+	if inst.pic != nil {
 		sn.magnification, sn.level, sn.levelsReady = inst.viewer.Magnification(), inst.viewer.Level(), inst.viewer.LevelsReady()
 		sn.limitsPending = inst.viewer.LimitsPending()
 	}
@@ -402,18 +409,19 @@ func (inst *App) opsSnapshot() (sn opsSnap) {
 	return
 }
 
-// readPixels answers read_pixels from an image: the block clipped to the
-// image, then to the bound by dropping whole rows.
-func readPixels(img imaging.Image, in RegionArgs) (out Pixels, err error) {
+// readPixels answers read_pixels from the store: the block clipped to the
+// image, then to the bound by dropping whole rows, and read out of the
+// tiles, waiting for any not read yet.
+func readPixels(pic *tiles.Store, in RegionArgs) (out Pixels, err error) {
 	if in.Width == 0 && in.Height == 0 {
 		in.Width, in.Height = 1, 1
 	}
 	if in.Width <= 0 || in.Height <= 0 {
 		return out, app.RefuseOperation("a block's width and height are positive; both 0 reads one pixel")
 	}
-	r := in.rect().Intersect(image.Rect(0, 0, img.Width(), img.Height()))
+	r := in.rect().Intersect(image.Rect(0, 0, pic.Width(), pic.Height()))
 	if r.Empty() {
-		return out, app.RefuseOperation(fmt.Sprintf("the block is outside the image, which is %d columns by %d rows", img.Width(), img.Height()))
+		return out, app.RefuseOperation(fmt.Sprintf("the block is outside the image, which is %d columns by %d rows", pic.Width(), pic.Height()))
 	}
 	out.Truncated = r != in.rect()
 	if r.Dx() > opsMaxPixels {
@@ -423,13 +431,17 @@ func readPixels(img imaging.Image, in RegionArgs) (out Pixels, err error) {
 		r.Max.Y, out.Truncated = r.Min.Y+rows, true
 	}
 	out.Region = regionArgsOf(r)
-	out.Planes = slices.Clone(img.Model().PlaneNames())
-	out.Values = make([][]float64, img.PlaneCount())
+	block, err := pic.Read(context.Background(), r)
+	if err != nil {
+		return out, refuse(err)
+	}
+	out.Planes = slices.Clone(pic.Model().PlaneNames())
+	out.Values = make([][]float64, block.PlaneCount())
 	for i := range out.Values {
-		p := img.Plane(i)
+		p := block.Plane(i)
 		vals := make([]float64, 0, r.Dx()*r.Dy())
-		for y := r.Min.Y; y < r.Max.Y; y++ {
-			for x := r.Min.X; x < r.Max.X; x++ {
+		for y := range r.Dy() {
+			for x := range r.Dx() {
 				v, ok := p.ValueAt(x, y)
 				if !ok {
 					v = 0
@@ -452,11 +464,11 @@ func measurementOf(m *measurement) Measurement {
 var ops = func() (s *appops.Set[*App, opsSnap]) {
 	s = appops.NewSet((*App).opsSnapshot)
 
-	s.Resource(resImage, "the image open: its name, size, colour model, sample kind and where its samples came from", func(inst *App) any { return imageInfo(inst.img) })
+	s.Resource(resImage, "the image open: its name, size, colour model, sample kind and where its samples came from", func(inst *App) any { return imageInfo(inst.pic) })
 	s.Resource(resView, "what is shown of the image and how: the plane, the display recipe and the marked region", func(inst *App) any { return inst.viewState() })
 	s.Restorable(resView, func(inst *App, v any) bool {
 		vs, ok := v.(ViewState)
-		if !ok || inst.img.IsZero() {
+		if !ok || inst.pic == nil {
 			return false
 		}
 		if inst.setPlane(vs.Plane) != nil || inst.setRecipe(vs.Recipe) != nil {
@@ -476,7 +488,7 @@ var ops = func() (s *appops.Set[*App, opsSnap]) {
 		Summary: "read the phase, the image open, the plane and recipe it is shown through, the marked region, the magnification and the level drawn",
 		Reads:   []string{resImage, resView}, Agents: true, Fork: app.OperationForkReadShared},
 		func(sn opsSnap, _ appops.None) (out View, err error) {
-			out = View{Phase: sn.phase.String(), Image: imageInfo(sn.img), View: sn.view, Magnification: sn.magnification,
+			out = View{Phase: sn.phase.String(), Image: imageInfo(sn.pic), View: sn.view, Magnification: sn.magnification,
 				Level: sn.level, LevelsReady: sn.levelsReady, LimitsPending: sn.limitsPending, Error: sn.openErr, Note: sn.openNote, Refused: sn.problem,
 				Measured: sn.measured != nil, MeasureError: sn.measureErr, Handover: sn.handover, SeedProblem: sn.seedErr}
 			return
@@ -486,17 +498,17 @@ var ops = func() (s *appops.Set[*App, opsSnap]) {
 		Summary: "read a block of the image's samples, every plane, at most 1024 pixels; the values are the samples themselves, whatever the recipe shows",
 		Reads:   []string{resImage}, Agents: true, Fork: app.OperationForkReadShared},
 		func(sn opsSnap, in RegionArgs) (out Pixels, err error) {
-			if sn.img.IsZero() {
+			if sn.pic == nil {
 				return out, errNoImage
 			}
-			return readPixels(sn.img, in)
+			return readPixels(sn.pic, in)
 		})
 
 	appops.Query(s, app.OperationSpec{Name: opMeasure, Version: 1,
 		Summary: "statistics of every plane over a region, from the samples at full resolution: count, range, mean, standard deviation, median, 1st and 99th percentile, with the method stated; the zero region means the marked one",
 		Reads:   []string{resImage, resView}, Agents: true, Fork: app.OperationForkReadShared},
 		func(sn opsSnap, in RegionArgs) (out Measurement, err error) {
-			if sn.img.IsZero() {
+			if sn.pic == nil {
 				return out, errNoImage
 			}
 			if in.isZero() {
@@ -505,13 +517,13 @@ var ops = func() (s *appops.Set[*App, opsSnap]) {
 					return out, app.RefuseOperation("no region is marked; pass one, or mark one with set_region")
 				}
 			}
-			if err = checkRegion(sn.img, in); err != nil {
+			if err = checkRegion(sn.pic, in); err != nil {
 				return out, err
 			}
 			if m := sn.measured; m != nil && m.region == in.rect() {
 				return measurementOf(m), nil
 			}
-			m, merr := measureRegion(context.Background(), sn.img, in.rect(), func(uint64, uint64, string) {})
+			m, merr := measureRegion(context.Background(), sn.pic, in.rect(), func(uint64, uint64, string) {})
 			if merr != nil {
 				return out, refuse(merr)
 			}
@@ -540,11 +552,11 @@ var ops = func() (s *appops.Set[*App, opsSnap]) {
 		if inst.landedGen <= inst.sampleCallGen || inst.open.Running() {
 			return out, false, nil
 		}
-		return OpenOutcome{Phase: inst.observePhase().String(), Image: describeImage(inst.img), Error: inst.openErr}, true, nil
+		return OpenOutcome{Phase: inst.observePhase().String(), Image: describeImage(inst.pic), Error: inst.openErr}, true, nil
 	})
 
 	needsImage := func(sn opsSnap) (ok bool, reason string) {
-		if sn.img.IsZero() {
+		if sn.pic == nil {
 			return false, "there is no image; open_sample opens one, or the person opens a file with Open…"
 		}
 		return true, ""
@@ -607,7 +619,7 @@ var ops = func() (s *appops.Set[*App, opsSnap]) {
 				return
 			}
 			region, _ := inst.viewer.Region()
-			if _, err = handoverRegion(inst.img, region); err != nil {
+			if _, err = handoverRegion(inst.pic, region); err != nil {
 				return
 			}
 			inst.startHandover()
@@ -615,7 +627,7 @@ var ops = func() (s *appops.Set[*App, opsSnap]) {
 		})
 	s.Available(opSendToPlay, func(sn opsSnap) (ok bool, reason string) {
 		switch {
-		case sn.img.IsZero():
+		case sn.pic == nil:
 			return false, "there is no image; open_sample opens one, or the person opens a file with Open…"
 		case sn.handover.Busy:
 			return false, "a handover is in flight"

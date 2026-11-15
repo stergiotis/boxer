@@ -32,7 +32,11 @@ agent** page.
 
 **Open…** raises the system file picker. The app does not see the
 filesystem: it is handed the one file picked, reads it once and gives the
-handle back. Nothing is kept after the window closes — neither the image nor
+handle back. A PNG is shown as it is read, from the top down; the
+histogram, the data limits and measurements are offered once the whole file
+is in, and the limits then move to the image's data range unless you set
+them meanwhile. If the file turns out to be damaged, what was shown before
+comes back. Nothing is kept after the window closes — neither the image nor
 the view of it.
 
 The **Sample** buttons, on the empty window and under *Advanced*, open a

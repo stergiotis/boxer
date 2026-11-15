@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/array"
@@ -18,9 +19,9 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/bgjob"
 	"github.com/stergiotis/boxer/public/keelson/runtime/lifetime"
 	"github.com/stergiotis/boxer/public/keelson/runtime/task"
-	"github.com/stergiotis/boxer/public/science/imaging"
 	"github.com/stergiotis/boxer/public/science/imaging/display"
 	"github.com/stergiotis/boxer/public/science/imaging/samples"
+	"github.com/stergiotis/boxer/public/science/imaging/tiles"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/badge"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/bgjobrow"
@@ -99,8 +100,16 @@ type App struct {
 	// the top of Frame. openGen counts opens started and landedGen the last
 	// that ended, so open_sample settles on the open it caused
 	// (sampleCallGen is the generation at the call).
-	open          bgjob.Runner[opened]
-	img           imaging.Image
+	open bgjob.Runner[opened]
+	pic  *tiles.Store
+	// arriving is a store an open in flight has started filling, handed
+	// over so the window shows it as it fills; prev is what was shown
+	// before it, put back if the open fails; openRecipe is the recipe the
+	// store was first shown under, so the default can follow the data range
+	// once it is known, unless the person changed it meanwhile.
+	arriving      atomic.Pointer[tiles.Store]
+	prev          *tiles.Store
+	openRecipe    display.Recipe
 	openErr       string
 	openNote      string
 	openGen       uint64
@@ -177,8 +186,8 @@ func (inst *App) bindIds(ids *c.WidgetIdStack) {
 	old := inst.viewer
 	inst.viewer = imageview.New(ids, "viewer", imageview.Options{Tasks: inst.tasks})
 	if old != nil {
-		if !inst.img.IsZero() {
-			inst.viewer.SetImage(inst.img)
+		if inst.pic != nil {
+			_ = inst.viewer.SetSource(imageview.StoreSource(inst.pic), false)
 			if _, single := old.Plane(); single {
 				i, _ := old.Plane()
 				_ = inst.viewer.SetPlane(i)
@@ -269,13 +278,13 @@ func (inst *App) renderBody() {
 	for range c.PanelTopInside(inst.ids.PrepareStr("controls")).Resizable(false).KeepIter() {
 		inst.renderControls()
 	}
-	if !inst.img.IsZero() {
+	if inst.pic != nil {
 		for range c.PanelBottomInside(inst.ids.PrepareStr("measure")).Resizable(false).KeepIter() {
 			inst.renderMeasurePane()
 		}
 	}
 	for range c.PanelCentralInside().KeepIter() {
-		if inst.img.IsZero() {
+		if inst.pic == nil {
 			inst.renderEmpty()
 			continue
 		}
@@ -314,7 +323,10 @@ func (inst *App) renderStatusRow() {
 			Tone(badge.ToneWarning).Variant(badge.VariantSoft).Send()
 	}
 	// What the samples are, before any number is read off them (F3).
-	for i, note := range sourceNotes(inst.img) {
+	if inst.pic == nil {
+		return
+	}
+	for i, note := range sourceNotes(inst.pic.Provenance()) {
 		badge.New(inst.ids.PrepareSeq(uint64(i)), note).Tone(badge.ToneWarning).Variant(badge.VariantSoft).Send()
 	}
 }
@@ -324,7 +336,7 @@ func (inst *App) renderStatusRow() {
 // and one fold for the rest (L5).
 func (inst *App) renderControls() {
 	inst.renderStatusRow()
-	have := !inst.img.IsZero()
+	have := inst.pic != nil
 	for range c.Horizontal().KeepIter() {
 		open := c.Button(inst.ids.PrepareStr("open"), c.Atoms().Text("Open…").Keep())
 		if !have {
@@ -366,9 +378,9 @@ func (inst *App) renderControls() {
 			if inst.button("stored", planeAsStored, tipAsStored, !single) {
 				inst.viewGesture(opSetPlane, SetPlaneArgs{Plane: planeAsStored}, func() error { return inst.setPlane(planeAsStored) })
 			}
-			for i, name := range inst.img.Model().PlaneNames() {
+			for i, name := range inst.pic.Model().PlaneNames() {
 				// A greyscale image's one plane is the image as stored.
-				if !inst.img.Model().IsColor() && !inst.img.Model().HasAlpha() {
+				if !inst.pic.Model().IsColor() && !inst.pic.Model().HasAlpha() {
 					break
 				}
 				if inst.button(name, name, tipPlane, single && plane == i) {
@@ -584,7 +596,7 @@ func (inst *App) renderHandover() {
 				SendResp().HasPrimaryClicked() && !busy && inst.bus != nil {
 				gestureOr(inst, opSendToPlay, appops.None{}, func() {
 					region, _ := inst.viewer.Region()
-					if _, err := handoverRegion(inst.img, region); err != nil {
+					if _, err := handoverRegion(inst.pic, region); err != nil {
 						inst.problem = refusalText(err)
 						return
 					}

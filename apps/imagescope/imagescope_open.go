@@ -15,6 +15,8 @@ import (
 	"github.com/stergiotis/boxer/public/science/imaging"
 	"github.com/stergiotis/boxer/public/science/imaging/decode"
 	"github.com/stergiotis/boxer/public/science/imaging/samples"
+	"github.com/stergiotis/boxer/public/science/imaging/tiles"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/imageview"
 )
 
 // Handle ops. The broker splits `fs.handle.{uuid}.{op}` on dots, so these
@@ -33,28 +35,32 @@ const (
 // an outcome, not a failure, and shown as a note.
 var errOpenCancelled = errors.New("no file was chosen")
 
-// opened is what an open leaves: the image, and the region a seed asked to
-// mark on it.
+// opened is what an open leaves: the image as a store of tiles, and the
+// region a seed asked to mark on it.
 type opened struct {
-	img    imaging.Image
+	pic    *tiles.Store
 	region image.Rectangle
 }
 
 // startOpen runs one open on the runner (W2): at most one in flight, its
 // result taken at the top of a later frame. The load reads or makes the
-// image off the render goroutine; decoding costs time proportional to the
-// file's pixels and holds the file's bytes and its planes together until it
-// returns.
-func (inst *App) startOpen(region image.Rectangle, load func(ctx context.Context, report bgjob.Reporter) (imaging.Image, error)) (started bool) {
+// image off the render goroutine into a store of tiles; a load that hands
+// the store over before it is filled, through arrive, has it shown as it
+// fills (ADR-0374 §SD7). Decoding costs time proportional to the file's
+// pixels; a PNG streamed into the store holds the file's bytes, the store
+// and a band of rows, any other file its decoded image as well, for a
+// moment.
+func (inst *App) startOpen(region image.Rectangle, load func(ctx context.Context, report bgjob.Reporter, arrive func(*tiles.Store)) (*tiles.Store, error)) (started bool) {
 	inst.openErr, inst.openNote = "", ""
 	inst.openGen++
+	inst.arriving.Store(nil)
 	started = inst.open.StartReporting(inst.tasks, bgjob.Spec{Kind: openKind, Title: openTitle},
 		func(ctx context.Context, report bgjob.Reporter) (res *opened, err error) {
-			img, err := load(ctx, report)
+			pic, err := load(ctx, report, func(s *tiles.Store) { inst.arriving.Store(s) })
 			if err != nil {
 				return nil, err
 			}
-			return &opened{img: img, region: region}, nil
+			return &opened{pic: pic, region: region}, nil
 		})
 	if !started {
 		inst.openGen--
@@ -64,9 +70,13 @@ func (inst *App) startOpen(region image.Rectangle, load func(ctx context.Context
 
 // openSample opens a synthetic sample image by name.
 func (inst *App) openSample(name string, region image.Rectangle) (started bool) {
-	return inst.startOpen(region, func(_ context.Context, report bgjob.Reporter) (imaging.Image, error) {
+	return inst.startOpen(region, func(ctx context.Context, report bgjob.Reporter, _ func(*tiles.Store)) (*tiles.Store, error) {
 		report(0, 0, "making the sample")
-		return samples.ByName(name)
+		img, err := samples.ByName(name)
+		if err != nil {
+			return nil, err
+		}
+		return tiles.FromImage(ctx, img, tiles.Options{})
 	})
 }
 
@@ -92,18 +102,18 @@ func (inst *App) openFile() {
 		return
 	}
 	bus := inst.bus
-	inst.startOpen(image.Rectangle{}, func(ctx context.Context, report bgjob.Reporter) (img imaging.Image, err error) {
+	inst.startOpen(image.Rectangle{}, func(ctx context.Context, report bgjob.Reporter, arrive func(*tiles.Store)) (pic *tiles.Store, err error) {
 		report(0, 0, "choose a PNG or JPEG file")
 		reply, err := bus.RequestWithTimeout(fsbroker.SubjectDialogRead, nil, fsbroker.DialogTimeout)
 		if err != nil {
-			return img, eh.Errorf("the file picker did not answer: %w", err)
+			return nil, eh.Errorf("the file picker did not answer: %w", err)
 		}
 		dr, err := fsbroker.UnmarshalDialogReply(reply)
 		if err != nil {
-			return img, eh.Errorf("the file picker's reply was not understood: %w", err)
+			return nil, eh.Errorf("the file picker's reply was not understood: %w", err)
 		}
 		if !dr.Granted {
-			return img, errOpenCancelled
+			return nil, errOpenCancelled
 		}
 		report(0, 0, "reading "+dr.DisplayName)
 		body, err := bus.RequestWithTimeout(dr.HandleSubjectPrefix+opHandleRead, nil, fsbroker.HandleOpTimeout)
@@ -111,7 +121,7 @@ func (inst *App) openFile() {
 		// worked, so no standing authority outlives the gesture.
 		_, _ = bus.RequestWithTimeout(dr.HandleSubjectPrefix+opHandleClose, nil, fsbroker.HandleOpTimeout)
 		if err != nil {
-			return img, eh.Errorf("%s could not be read: %w", dr.DisplayName, err)
+			return nil, eh.Errorf("%s could not be read: %w", dr.DisplayName, err)
 		}
 		if decode.Sniff(body) == 0 {
 			// What is neither format may be the broker's refusal, which
@@ -121,26 +131,42 @@ func (inst *App) openFile() {
 				if reason == "" {
 					reason = "the file could not be read"
 				}
-				return img, eh.Errorf("%s: %s", dr.DisplayName, reason)
+				return nil, eh.Errorf("%s: %s", dr.DisplayName, reason)
 			}
 		}
 		if err = ctx.Err(); err != nil {
-			return img, err
+			return nil, err
 		}
 		report(0, 0, "decoding "+dr.DisplayName)
-		img, err = decode.Decode(body, dr.DisplayName, decode.Options{})
+		pic, err = decode.DecodeTiled(ctx, body, dr.DisplayName, decode.Options{}, tiles.Options{
+			Progress: func(done, total int64) { report(uint64(done), uint64(total), "decoding "+dr.DisplayName) },
+		}, arrive)
 		if err != nil {
-			return img, eh.Errorf("%s is not an image this viewer reads: %w", dr.DisplayName, err)
+			return nil, eh.Errorf("%s is not an image this viewer reads: %w", dr.DisplayName, err)
 		}
-		return img, nil
+		return pic, nil
 	})
 }
 
-// takeOpen moves the open's outcome onto the instance once, at the top of
-// the frame. A failure or a cancel leaves the image that was shown.
+// takeOpen moves the open's outcome onto the instance, at the top of the
+// frame. A store handed over before it is filled is shown at once and
+// keeps filling; a failure or a cancel puts back what was shown before.
 func (inst *App) takeOpen() {
+	if s := inst.arriving.Swap(nil); s != nil && s != inst.pic {
+		inst.prev = inst.pic
+		inst.setPic(s)
+	}
 	if res, _, ok := inst.open.TakeResult(); ok {
-		inst.setImage(res.img)
+		if res.pic != inst.pic {
+			inst.setPic(res.pic)
+		} else if inst.viewer.Recipe() == inst.openRecipe {
+			// Shown while it filled, under the nominal range; now that the
+			// data range is known the default follows it, unless the person
+			// changed the recipe meanwhile.
+			_ = inst.viewer.SetSource(imageview.StoreSource(res.pic), true)
+			inst.syncChecks()
+		}
+		inst.prev = nil
 		if !res.region.Empty() {
 			inst.viewer.SetRegion(res.region)
 		}
@@ -154,15 +180,26 @@ func (inst *App) takeOpen() {
 		} else {
 			inst.openErr = snap.Err.Error()
 		}
+		if inst.pic != nil && inst.pic.Err() != nil || inst.prev != nil {
+			// The store shown while it filled will not finish.
+			inst.setPic(inst.prev)
+		}
+		inst.prev = nil
 		inst.landedGen = inst.openGen
 		inst.open.Invalidate()
 	}
 }
 
-// setImage shows an image and drops what was derived from the last one.
-func (inst *App) setImage(img imaging.Image) {
-	inst.img = img
-	inst.viewer.SetImage(img)
+// setPic shows a store, or nothing for nil, and drops what was derived from
+// the last one.
+func (inst *App) setPic(s *tiles.Store) {
+	inst.pic = s
+	if s == nil {
+		_ = inst.viewer.SetSource(nil, false)
+	} else {
+		_ = inst.viewer.SetSource(imageview.StoreSource(s), false)
+	}
+	inst.openRecipe = inst.viewer.Recipe()
 	inst.measure.Invalidate()
 	inst.measured, inst.measureErr, inst.measuring = nil, nil, false
 	inst.syncChecks()
@@ -171,19 +208,18 @@ func (inst *App) setImage(img imaging.Image) {
 
 // describeImage is an image in one line: its name, size, model and sample
 // kind.
-func describeImage(img imaging.Image) (s string) {
-	if img.IsZero() {
+func describeImage(s *tiles.Store) string {
+	if s == nil {
 		return "no image"
 	}
-	return fmt.Sprintf("%s · %d × %d · %s %s", img.Provenance().SourceName, img.Width(), img.Height(), img.Model(), img.Kind())
+	return fmt.Sprintf("%s · %d × %d · %s %s", s.Provenance().SourceName, s.Width(), s.Height(), s.Model(), s.Kind())
 }
 
 // sourceNotes lists what a person should know about where the samples came
 // from before reading numbers off them (ADR-0373 §SD5, §SD10; keelson-app
 // F3): lossy compression, what the reader changed, a colour declaration
 // that was not applied.
-func sourceNotes(img imaging.Image) (notes []string) {
-	p := img.Provenance()
+func sourceNotes(p imaging.Provenance) (notes []string) {
 	if p.Lossy {
 		notes = append(notes, noteLossy)
 	}

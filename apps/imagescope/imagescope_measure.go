@@ -2,7 +2,6 @@ package imagescope
 
 import (
 	"context"
-	"encoding/hex"
 	"fmt"
 	"image"
 
@@ -11,8 +10,7 @@ import (
 	"github.com/apache/arrow-go/v18/arrow/memory"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/bgjob"
-	"github.com/stergiotis/boxer/public/science/imaging"
-	"github.com/stergiotis/boxer/public/science/imaging/stats"
+	"github.com/stergiotis/boxer/public/science/imaging/tiles"
 )
 
 const (
@@ -55,23 +53,25 @@ const methodMeasure = "Computed from the region's stored samples at full resolut
 // methodMeasureFloat is added when a plane's percentiles are not exact.
 const methodMeasureFloat = " A float plane's percentiles are located within one of 4096 equal bins over the region's range, so they are right to a bin's width."
 
-// measureRegion computes the statistics of every plane over rect. n is the
-// region's pixels times the planes: time is linear in n, and memory is one
-// histogram per plane — one bin per sample value an integer kind can hold,
-// 4096 bins for a float plane — whatever the region's size.
-func measureRegion(ctx context.Context, img imaging.Image, rect image.Rectangle, report bgjob.Reporter) (m *measurement, err error) {
-	names := img.Model().PlaneNames()
-	m = &measurement{region: rect, exact: true, planes: make([]PlaneStatistics, 0, img.PlaneCount())}
-	for i := range img.PlaneCount() {
+// measureRegion computes the statistics of every plane over rect from the
+// store's level-0 tiles. n is the region's pixels times the planes: time is
+// linear in n, and memory is one histogram per plane per tile — one bin per
+// sample value an integer kind can hold, 4096 bins for a float plane —
+// whatever the region's size. A float plane is read twice, once for the
+// range its bins divide.
+func measureRegion(ctx context.Context, s *tiles.Store, rect image.Rectangle, report bgjob.Reporter) (m *measurement, err error) {
+	names := s.Model().PlaneNames()
+	count := s.Model().PlaneCount()
+	m = &measurement{region: rect, exact: s.Kind().IsInteger(), planes: make([]PlaneStatistics, 0, count)}
+	for i := range count {
 		if err = ctx.Err(); err != nil {
 			return nil, err
 		}
-		report(uint64(i), uint64(img.PlaneCount()), "measuring "+names[i])
-		h, herr := stats.OfRegion(img.Plane(i), rect)
+		report(uint64(i), uint64(count), "measuring "+names[i])
+		h, herr := s.Histogram(ctx, i, rect)
 		if herr != nil {
 			return nil, herr
 		}
-		m.exact = m.exact && h.IsExact()
 		ps := PlaneStatistics{Plane: names[i], Samples: h.Valid(), Invalid: h.Invalid()}
 		ps.Min, ps.Max, _ = h.Range()
 		ps.Mean, _ = h.Mean()
@@ -81,7 +81,7 @@ func measureRegion(ctx context.Context, img imaging.Image, rect image.Rectangle,
 		ps.P99, _ = h.Percentile(99)
 		m.planes = append(m.planes, ps)
 	}
-	report(uint64(img.PlaneCount()), uint64(img.PlaneCount()), "")
+	report(uint64(count), uint64(count), "")
 	return m, nil
 }
 
@@ -93,12 +93,10 @@ func (inst *measurement) method() (s string) {
 	return methodMeasure + methodMeasureFloat
 }
 
-// measureKey names a measurement: the image by the digest of its samples,
-// which the image carries from when it was assembled, and the region. It is
-// asked for every frame, so it must not read the samples.
-func measureKey(img imaging.Image, rect image.Rectangle) (key string) {
-	sum := img.Provenance().SampleHash
-	return hex.EncodeToString(sum[:8]) + "|" + rect.String()
+// measureKey names a measurement: the store, by its identity, and the
+// region. It is asked for every frame, so it reads no sample.
+func measureKey(s *tiles.Store, rect image.Rectangle) (key string) {
+	return fmt.Sprintf("%p|%s", s, rect)
 }
 
 // demandMeasurement keeps the measurement of the marked region current: it
@@ -107,13 +105,13 @@ func measureKey(img imaging.Image, rect image.Rectangle) (key string) {
 // measure.
 func (inst *App) demandMeasurement() {
 	rect, marked := inst.viewer.Region()
-	if inst.img.IsZero() || !marked {
+	if inst.pic == nil || !marked {
 		inst.measured, inst.measureErr, inst.measuring = nil, nil, false
 		return
 	}
-	img := inst.img
-	val, done, err, busy := inst.measure.DemandReporting(measureKey(img, rect), func(ctx context.Context, report bgjob.Reporter) (*measurement, error) {
-		return measureRegion(ctx, img, rect, report)
+	pic := inst.pic
+	val, done, err, busy := inst.measure.DemandReporting(measureKey(pic, rect), func(ctx context.Context, report bgjob.Reporter) (*measurement, error) {
+		return measureRegion(ctx, pic, rect, report)
 	})
 	inst.measuring = busy
 	inst.measured, inst.measureErr = nil, nil

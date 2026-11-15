@@ -23,6 +23,8 @@ import (
 	"github.com/stergiotis/boxer/public/science/imaging"
 	"github.com/stergiotis/boxer/public/science/imaging/display"
 	"github.com/stergiotis/boxer/public/science/imaging/samples"
+	"github.com/stergiotis/boxer/public/science/imaging/tiles"
+	"github.com/stergiotis/boxer/public/thestack/fffi2/typed"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/graphview/scenetest"
 )
@@ -41,10 +43,26 @@ func testApp(t *testing.T) (inst *App) {
 func withSample(t *testing.T, name string) (inst *App) {
 	t.Helper()
 	inst = testApp(t)
+	inst.setPic(sampleStore(t, name))
+	return
+}
+
+// sampleStore is a sample image as a store.
+func sampleStore(t *testing.T, name string) *tiles.Store {
+	t.Helper()
 	img, err := samples.ByName(name)
 	require.NoError(t, err)
-	inst.setImage(img)
-	return
+	s, err := tiles.FromImage(context.Background(), img, tiles.Options{})
+	require.NoError(t, err)
+	return s
+}
+
+// sampleImage is a sample image in memory, to compare a store against.
+func sampleImage(t *testing.T, name string) imaging.Image {
+	t.Helper()
+	img, err := samples.ByName(name)
+	require.NoError(t, err)
+	return img
 }
 
 // settle runs the top of a frame until cond holds.
@@ -97,7 +115,7 @@ func TestThePhaseFollowsTheImageAndTheRegion(t *testing.T) {
 
 	require.True(t, inst.openSample(samples.NameSmall, image.Rectangle{}))
 	assert.Equal(t, phaseOpening, inst.observePhase())
-	settle(t, inst, func() bool { return !inst.img.IsZero() })
+	settle(t, inst, func() bool { return inst.pic != nil && !inst.open.Running() })
 	assert.Equal(t, phaseViewing, inst.observePhase())
 	assert.Contains(t, inst.phaseLine(), "synthetic small")
 	assert.Empty(t, inst.openNote, "a landed open needs no note beside the phase line")
@@ -118,8 +136,8 @@ func TestAnOpenThatFailsReturnsToThePhaseItInterrupted(t *testing.T) {
 	boom := errors.New("not an image")
 	inst := testApp(t)
 	fail := func(err error) {
-		require.True(t, inst.startOpen(image.Rectangle{}, func(context.Context, bgjob.Reporter) (imaging.Image, error) {
-			return imaging.Image{}, err
+		require.True(t, inst.startOpen(image.Rectangle{}, func(context.Context, bgjob.Reporter, func(*tiles.Store)) (*tiles.Store, error) {
+			return nil, err
 		}))
 		settle(t, inst, func() bool { return !inst.open.Running() && inst.landedGen == inst.openGen })
 	}
@@ -127,13 +145,12 @@ func TestAnOpenThatFailsReturnsToThePhaseItInterrupted(t *testing.T) {
 	assert.Equal(t, phaseEmpty, inst.observePhase())
 	assert.Contains(t, inst.openErr, "not an image")
 
-	img, _ := samples.ByName(samples.NameSmall)
-	inst.setImage(img)
+	inst.setPic(sampleStore(t, samples.NameSmall))
 	fail(errOpenCancelled)
 	assert.Equal(t, phaseViewing, inst.observePhase(), "the image that was shown stays")
 	assert.Empty(t, inst.openErr, "choosing no file is not a failure")
 	assert.Equal(t, "open cancelled", inst.openNote)
-	assert.False(t, inst.img.IsZero())
+	assert.NotNil(t, inst.pic)
 }
 
 func TestEveryPhaseIsReachable(t *testing.T) {
@@ -207,7 +224,7 @@ func TestWithoutAnImageTheViewOperationsRefuseNamingTheWayOn(t *testing.T) {
 func TestOpenSampleShowsTheImageAsStored(t *testing.T) {
 	inst := testApp(t)
 	require.NoError(t, command(t, inst, opOpenSample, OpenSampleArgs{Name: samples.NameColour}))
-	settle(t, inst, func() bool { return !inst.img.IsZero() })
+	settle(t, inst, func() bool { return inst.pic != nil && !inst.open.Running() })
 	v, err := query[appops.None, View](t, inst, opGetView, appops.None{})
 	require.NoError(t, err)
 	assert.Equal(t, "viewing", v.Phase)
@@ -300,6 +317,7 @@ func TestSetPlaneAndTheViewResource(t *testing.T) {
 
 func TestReadPixelsIsTheSamplesAndIsBounded(t *testing.T) {
 	inst := withSample(t, samples.NameColour)
+	colour := sampleImage(t, samples.NameColour)
 	// The recipe has no say in what a pixel is.
 	args := recipeArgs(inst.viewer.Recipe())
 	args.Invert = true
@@ -310,7 +328,7 @@ func TestReadPixelsIsTheSamplesAndIsBounded(t *testing.T) {
 	assert.Equal(t, RegionArgs{Col: 639, Row: 479, Width: 1, Height: 1}, px.Region)
 	assert.Equal(t, []string{"red", "green", "blue", "alpha"}, px.Planes)
 	for i, name := range px.Planes {
-		want, _ := inst.img.Plane(i).StoredAt(639, 479)
+		want, _ := colour.Plane(i).StoredAt(639, 479)
 		assert.Equal(t, []float64{want}, px.Values[i], name)
 	}
 	assert.False(t, px.Truncated)
@@ -320,7 +338,7 @@ func TestReadPixelsIsTheSamplesAndIsBounded(t *testing.T) {
 	assert.True(t, px.Truncated)
 	assert.Equal(t, RegionArgs{Width: 100, Height: 10}, px.Region, "whole rows that fit in 1024 pixels")
 	assert.Len(t, px.Values[0], 1000)
-	want, _ := inst.img.Plane(0).StoredAt(37, 9)
+	want, _ := colour.Plane(0).StoredAt(37, 9)
 	assert.Equal(t, want, px.Values[0][9*100+37], "row-major")
 
 	px, err = query[RegionArgs, Pixels](t, inst, opReadPixels, RegionArgs{Col: 630, Row: 470, Width: 50, Height: 50})
@@ -381,7 +399,9 @@ func TestTheHandoverCarriesTheRegionsSamplesInTheirOwnKind(t *testing.T) {
 	img, err := samples.ByName(samples.NameField)
 	require.NoError(t, err)
 	rect := image.Rect(198, 0, 202, 3)
-	stream, rows, err := pixelsArrow(img, rect)
+	region, err := sampleStore(t, samples.NameField).Read(context.Background(), rect)
+	require.NoError(t, err)
+	stream, rows, err := pixelsArrow(region, rect.Min)
 	require.NoError(t, err)
 	assert.EqualValues(t, 12, rows)
 	rd, err := ipc.NewReader(bytes.NewReader(stream))
@@ -401,27 +421,24 @@ func TestTheHandoverCarriesTheRegionsSamplesInTheirOwnKind(t *testing.T) {
 	}
 	assert.EqualValues(t, 65535, gray.Value(2), "the saturated column at row 0 arrives as 16 bits")
 
-	colour, _ := samples.ByName(samples.NameColour)
-	sql := handoverSql(datasetAlias, colour)
+	sql := handoverSql(datasetAlias, sampleStore(t, samples.NameColour))
 	assert.Contains(t, sql, "FROM keelson('pixels')")
 	assert.Contains(t, sql, "avg(red)")
 	assert.Contains(t, sql, "UNION ALL")
 	assert.Contains(t, sql, "quantileExactLow(0.5)(alpha)")
 	assert.NotContains(t, sql, "isNaN", "integer samples have no invalid ones")
 
-	scaled, _ := samples.ByName(samples.NameScaled)
-	sql = handoverSql(datasetAlias, scaled)
+	sql = handoverSql(datasetAlias, sampleStore(t, samples.NameScaled))
 	assert.Contains(t, sql, "avg((gray * 0.01 + -40))", "the statistics are restated in values")
 	assert.Contains(t, sql, "count() AS samples")
-	float, _ := samples.ByName(samples.NameFloat)
-	assert.Contains(t, handoverSql(datasetAlias, float), "WHERE NOT isNaN(gray)", "invalid samples are left out, as in the window")
+	assert.Contains(t, handoverSql(datasetAlias, sampleStore(t, samples.NameFloat)), "WHERE NOT isNaN(gray)", "invalid samples are left out, as in the window")
 }
 
 func TestTheHandoverRefusesWhatIsTooLargeNamingTheRemedy(t *testing.T) {
-	_, err := handoverRegion(imaging.Image{}, image.Rectangle{})
+	_, err := handoverRegion(nil, image.Rectangle{})
 	assert.Contains(t, refusal(t, err), "there is no image")
 
-	img, _ := samples.ByName(samples.NameField)
+	img := sampleStore(t, samples.NameField)
 	r, err := handoverRegion(img, image.Rectangle{})
 	require.NoError(t, err)
 	assert.Equal(t, image.Rect(0, 0, 1400, 1000), r, "no region: the whole image")
@@ -433,7 +450,9 @@ func TestTheHandoverRefusesWhatIsTooLargeNamingTheRemedy(t *testing.T) {
 	require.NoError(t, err)
 	bigImg, err := imaging.NewImage(imaging.ColorModelGray, []imaging.Plane{big}, imaging.Provenance{})
 	require.NoError(t, err)
-	_, err = handoverRegion(bigImg, image.Rectangle{})
+	bigStore, err := tiles.FromImage(context.Background(), bigImg, tiles.Options{})
+	require.NoError(t, err)
+	_, err = handoverRegion(bigStore, image.Rectangle{})
 	assert.Equal(t, "the whole image has 8388608 pixels and at most 4194304 are sent; mark a smaller region", refusal(t, err))
 
 	inst := withSample(t, samples.NameSmall)
@@ -460,20 +479,21 @@ func TestALossySourceSaysSoBeforeItsNumbers(t *testing.T) {
 		SourceName: "x.jpg", Format: "jpeg", Lossy: true,
 		Derivations: imaging.DerivationYCbCrConverted | imaging.DerivationDefaultFrameOnly, ColorDeclaration: "gAMA 0.45455"})
 	require.NoError(t, err)
-	notes := sourceNotes(img)
+	notes := sourceNotes(img.Provenance())
 	require.Len(t, notes, 4)
 	assert.Equal(t, noteLossy, notes[0])
 	assert.Contains(t, notes[1], "luma and chroma")
 	assert.Contains(t, notes[2], "animation")
 	assert.Contains(t, notes[3], "gAMA 0.45455")
 	assert.Contains(t, notes[3], "not applied")
-	info := imageInfo(img)
+	pic, err := tiles.FromImage(context.Background(), img, tiles.Options{})
+	require.NoError(t, err)
+	info := imageInfo(pic)
 	assert.True(t, info.Lossy)
 	assert.Equal(t, notes, info.Notes)
 
-	clean, _ := samples.ByName(samples.NameSmall)
-	assert.Empty(t, sourceNotes(clean))
-	assert.Empty(t, sourceNotes(imaging.Image{}))
+	assert.Empty(t, sourceNotes(sampleImage(t, samples.NameSmall).Provenance()))
+	assert.Empty(t, sourceNotes(imaging.Provenance{}))
 }
 
 func TestAFloatRegionCountsItsInvalidSamplesAndAScaledOneIsInValues(t *testing.T) {
@@ -498,7 +518,7 @@ func TestAFloatRegionCountsItsInvalidSamplesAndAScaledOneIsInValues(t *testing.T
 	px, err = query[RegionArgs, Pixels](t, inst, opReadPixels, RegionArgs{})
 	require.NoError(t, err)
 	assert.InDelta(t, 0.0, px.Values[0][0], 1e-9, "read_pixels gives values")
-	info := imageInfo(inst.img)
+	info := imageInfo(inst.pic)
 	assert.Equal(t, "u16", info.Kind)
 }
 
@@ -531,4 +551,100 @@ func TestTheParameterSliderAndTheRecipeStayInStep(t *testing.T) {
 	inst.renderParamSlider(before)
 	sm.ScriptReset()
 	assert.Equal(t, before, inst.viewer.Recipe(), "sqrt takes no parameter")
+}
+
+// A store handed over before it is filled is shown at once and fills in
+// place; when it lands, the default limits follow its data range, unless
+// the person changed the recipe meanwhile; a failure puts back what was
+// shown before.
+func TestAnImageIsShownWhileItIsRead(t *testing.T) {
+	img := sampleImage(t, samples.NameField)
+	inst := withSample(t, samples.NameSmall)
+	before := inst.pic
+
+	for _, outcome := range []string{"lands", "fails"} {
+		inst.setPic(before)
+		release := make(chan struct{})
+		var b *tiles.Builder
+		require.True(t, inst.startOpen(image.Rectangle{}, func(ctx context.Context, _ bgjob.Reporter, arrive func(*tiles.Store)) (*tiles.Store, error) {
+			var err error
+			b, err = tiles.NewBuilder(img.Width(), img.Height(), img.Model(), img.Kind(), nil, img.Provenance(), tiles.Options{})
+			if err != nil {
+				return nil, err
+			}
+			arrive(b.Store())
+			<-release
+			if outcome == "fails" {
+				err = errors.New("the file ended early")
+				b.Fail(err)
+				return nil, err
+			}
+			if err = b.Add(img); err != nil {
+				return nil, err
+			}
+			return b.Store(), b.Finish()
+		}))
+		settle(t, inst, func() bool { return inst.pic != before })
+		assert.Equal(t, phaseOpening, inst.observePhase(), "%s: shown while it is read", outcome)
+		assert.Equal(t, display.LimitsSourceNominal, inst.viewer.Recipe().Limits.Source, "%s: the data range is not known yet", outcome)
+		close(release)
+		settle(t, inst, func() bool { return !inst.open.Running() && inst.landedGen == inst.openGen })
+		if outcome == "fails" {
+			assert.Same(t, before, inst.pic, "what was shown before is put back")
+			assert.Contains(t, inst.openErr, "the file ended early")
+			continue
+		}
+		assert.NotSame(t, before, inst.pic)
+		assert.Equal(t, display.LimitsSourceData, inst.viewer.Recipe().Limits.Source, "the default follows the data range once it is known")
+		assert.Equal(t, img.Hash(), inst.pic.Provenance().SampleHash)
+	}
+
+	// Changed by the person while it was read: the recipe stays theirs.
+	release := make(chan struct{})
+	require.True(t, inst.startOpen(image.Rectangle{}, func(ctx context.Context, _ bgjob.Reporter, arrive func(*tiles.Store)) (*tiles.Store, error) {
+		b, err := tiles.NewBuilder(img.Width(), img.Height(), img.Model(), img.Kind(), nil, img.Provenance(), tiles.Options{})
+		if err != nil {
+			return nil, err
+		}
+		arrive(b.Store())
+		<-release
+		if err = b.Add(img); err != nil {
+			return nil, err
+		}
+		return b.Store(), b.Finish()
+	}))
+	settle(t, inst, func() bool { return inst.observePhase() == phaseOpening && inst.pic != nil && !inst.pic.Finished() })
+	args := recipeArgs(inst.viewer.Recipe())
+	args.Limits, args.Lo, args.Hi = limitsManual, 100, 200
+	require.NoError(t, command(t, inst, opSetRecipe, args))
+	close(release)
+	settle(t, inst, func() bool { return !inst.open.Running() && inst.landedGen == inst.openGen })
+	assert.Equal(t, display.Limits{Lo: 100, Hi: 200, Source: display.LimitsSourceManual}, inst.viewer.Recipe().Limits)
+}
+
+// The window renders in every phase: empty, opening, viewing, measured.
+// The frame is the render goroutine's, so a nil it reads is a crash of the
+// host.
+func TestTheWindowRendersInEveryPhase(t *testing.T) {
+	t.Cleanup(scenetest.Install())
+	sm := c.CurrentApplicationState.StateManager
+	inst := testApp(t)
+	frame := func() {
+		inst.takeResults()
+		inst.mirrorPhase()
+		inst.renderBody()
+		require.False(t, typed.HasErrors(), typed.GetError())
+		sm.ScriptReset()
+	}
+	frame()
+	require.True(t, inst.openSample(samples.NameField, image.Rect(10, 10, 60, 40)))
+	frame()
+	settle(t, inst, func() bool { return inst.pic != nil && !inst.open.Running() })
+	frame()
+	settle(t, inst, func() bool { return inst.measured != nil })
+	frame()
+	assert.Equal(t, phaseMeasured, inst.observePhase())
+	inst.setPic(nil)
+	frame()
+	assert.Equal(t, phaseEmpty, inst.observePhase())
 }

@@ -48,7 +48,7 @@ func (inst *App) observePhase() (ph phaseE) {
 	switch {
 	case inst.open.Running():
 		return phaseOpening
-	case inst.img.IsZero():
+	case inst.pic == nil:
 		return phaseEmpty
 	}
 	if _, marked := inst.viewer.Region(); marked {
@@ -161,5 +161,5 @@ func (inst *App) phaseLine() (s string) {
 	if ph == phaseEmpty || ph == phaseOpening {
 		return ph.String()
 	}
-	return ph.String() + ": " + describeImage(inst.img)
+	return ph.String() + ": " + describeImage(inst.pic)
 }

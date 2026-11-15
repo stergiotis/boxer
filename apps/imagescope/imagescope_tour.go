@@ -9,10 +9,12 @@ package imagescope
 // is no bus.
 
 import (
+	"context"
 	"image"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
 	"github.com/stergiotis/boxer/public/science/imaging/samples"
+	"github.com/stergiotis/boxer/public/science/imaging/tiles"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/demo/apps/registry"
 )
@@ -43,7 +45,9 @@ func tourInit(ids *c.WidgetIdStack) (state any) {
 	inst := newApp()
 	inst.bindIds(ids)
 	if img, err := samples.ByName(samples.NameField); err == nil {
-		inst.setImage(img)
+		if pic, err := tiles.FromImage(context.Background(), img, tiles.Options{}); err == nil {
+			inst.setPic(pic)
+		}
 		inst.viewer.SetRegion(tourRegion)
 	}
 	return inst
@@ -58,7 +62,7 @@ func tourRender(ids *c.WidgetIdStack, state any) {
 	inst.takeResults()
 	inst.mirrorPhase()
 	inst.renderControls()
-	if !inst.img.IsZero() {
+	if inst.pic != nil {
 		inst.viewer.Render(1000, 480)
 		inst.renderMeasurePane()
 	}
