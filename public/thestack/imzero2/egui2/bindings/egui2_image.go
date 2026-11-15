@@ -144,6 +144,15 @@ func (inst *ImageVersionTracker[K]) PixelsToSendFor(key K, widgetId uint64, cont
 	return inst.PixelsToSend(key, contentVersion, pixels)
 }
 
+// LastSent reports the content version last recorded as sent for `key`, and
+// ok false when none is. A caller that defers an upload — to spread a burst
+// over several frames — draws with this version and an empty slice in the
+// meantime, which is the texture the host holds.
+func (inst *ImageVersionTracker[K]) LastSent(key K) (contentVersion uint64, ok bool) {
+	contentVersion, ok = inst.last[key]
+	return
+}
+
 // Forget drops the version record for `key`. Call after ImageRelease() so
 // the next Image() call for the same id re-uploads fresh pixels.
 func (inst *ImageVersionTracker[K]) Forget(key K) {

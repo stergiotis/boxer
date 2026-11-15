@@ -207,6 +207,10 @@ func (p *Pyramid) Reset() {
 // request pass unless the level changed.
 func (p *Pyramid) SetView(v *View, noPrune, noUpdate bool) {
 	z := int(jsRound(v.Zoom()))
+	if p.src.PreferFiner {
+		// A zoom a hair above a whole level is that level, not the next.
+		z = int(math.Ceil(v.Zoom() - 1e-6))
+	}
 	hasZoom := true
 	if float64(z) > p.src.MaxZoom || float64(z) < p.src.MinZoom {
 		hasZoom = false

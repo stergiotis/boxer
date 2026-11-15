@@ -52,6 +52,14 @@ type Options struct {
 	// NearestTiles draws tiles without interpolation, so a magnified tile
 	// shows its pixels as squares. SetNearestTiles changes it later.
 	NearestTiles bool
+	// UploadBudgetBytes bounds the tile pixels shipped to the host in one
+	// frame; 0 is no bound. Once a frame has shipped this much, a tile that
+	// would need an upload is drawn from the texture the host already holds
+	// — or not at all, if it has none — and ships on a later frame. Tiles
+	// ship in the order they are drawn, back to front, so the levels that
+	// stand in beneath the current one go first. A frame always ships at
+	// least one tile, so the bound is passed by at most one tile's size.
+	UploadBudgetBytes int64
 }
 
 // Projector is what an overlay callback paints with: conversions between
@@ -173,6 +181,10 @@ type tilePixels struct {
 // tileVersion is the tile's paintImage content version: the source
 // generation above the per-tile pixel generation.
 func (m *Map) tileVersion(t *tilePixels) uint64 { return m.srcGen<<32 | t.gen }
+
+// noPixels is the non-nil empty slice that asks the host to draw the texture
+// it holds.
+var noPixels = []uint32{}
 
 // mapKeyMask is what the map eats while focused: the arrows pan, Escape
 // cancels a box zoom. The zoom keys wait for keycodes the vocabulary lacks.
@@ -602,6 +614,7 @@ func (m *Map) frame(w, h float32, overlay func(Projector)) {
 	// ---- draw ----
 	c.PaintClipPush(0, 0, w, h).Send()
 	if !m.opts.NoTiles {
+		var shipped int64
 		for _, td := range m.pyramid.Draw(m.view, now) {
 			px, ok := m.pixels[td.Wrapped]
 			if !ok || px == nil {
@@ -609,7 +622,24 @@ func (m *Map) frame(w, h float32, overlay func(Projector)) {
 			}
 			id := m.tileId(td.Wrapped)
 			version := m.tileVersion(px)
+			if m.opts.UploadBudgetBytes > 0 && shipped >= m.opts.UploadBudgetBytes {
+				sent, was := m.tracker.LastSent(td.Wrapped)
+				held := was && !sm.TextureStarved(id)
+				if !held || sent != version {
+					// Over this frame's budget and in need of an upload:
+					// the host's texture stands in, and the next frame
+					// carries on.
+					again = true
+					if held {
+						r := td.Rect
+						c.PaintImage(id, float32(r.Min.X), float32(r.Min.Y), float32(r.Max.X), float32(r.Max.Y),
+							uint32(px.w), uint32(px.h), sent, noPixels).Opacity(float32(td.Opacity)).Nearest(m.opts.NearestTiles).Send()
+					}
+					continue
+				}
+			}
 			send := m.tracker.PixelsToSendFor(td.Wrapped, id, version, px.px)
+			shipped += int64(len(send)) * 4
 			if len(send) > 0 {
 				m.bytesShipped += uint64(len(send)) * 4
 			}

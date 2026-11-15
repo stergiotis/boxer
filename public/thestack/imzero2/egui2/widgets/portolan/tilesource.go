@@ -58,6 +58,12 @@ type TileSource struct {
 	// KeepBuffer is how many tiles beyond the viewport are kept loaded, 2
 	// by default.
 	KeepBuffer int
+	// PreferFiner takes the tiles of the level at or above the view's zoom
+	// instead of the nearest one, so that between two levels a tile is drawn
+	// smaller than it is and never larger: at least one of its pixels for
+	// every screen pixel. It is what a raster that is measured, not merely
+	// looked at, wants; Leaflet's rule, the default, halves the tiles drawn.
+	PreferFiner bool
 }
 
 // NewTileSource applies Leaflet's defaults and TileLayer's option
