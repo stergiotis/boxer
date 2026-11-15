@@ -38,6 +38,12 @@ type Options struct {
 	// their knobs, zero meaning Leaflet's value field by field.
 	NoDragging, NoScrollWheelZoom, NoDoubleClickZoom bool
 	NoPinchZoom, NoBoxZoom, NoKeyboard               bool
+	// HostKeys are keys the map takes while it has focus and hands to its
+	// host in [Events.Keys] instead of acting on them — Page Up and Page
+	// Down for a document, the arrows when the host moves by them. A key in
+	// both sets is the host's. A press on the map focuses it for them even
+	// with NoKeyboard; [Map.SetHostKeys] changes them later.
+	HostKeys keycodes.Mask
 	// WheelPans makes the wheel pan the view, up and down and — with the
 	// shift key, or a horizontal wheel — sideways, as a document scrolls;
 	// the wheel then zooms only with the zoom modifier, which egui reports
@@ -153,6 +159,8 @@ type Map struct {
 	pressOriginX, pressOriginY float32
 	pressOriginOk              bool
 	keyFrameID                 uint64
+	// keys are the host's keys taken this frame (Options.HostKeys).
+	keys []c.CapturedKey
 
 	// per-frame readback
 	events    ViewEvents
@@ -274,6 +282,9 @@ func (m *Map) Handles() (canvas, area widgethandle.WidgetHandle) {
 // to, so set it every frame it should hold.
 func (m *Map) SetPointerVeto(on bool) { m.pointerVeto = on }
 
+// SetHostKeys sets [Options.HostKeys] from here on.
+func (m *Map) SetHostKeys(keys keycodes.Mask) { m.opts.HostKeys = keys }
+
 // SetWheelPans sets [Options.WheelPans] from here on.
 func (m *Map) SetWheelPans(on bool) { m.opts.WheelPans = on }
 
@@ -351,6 +362,10 @@ type Events struct {
 	// will be selected or zoomed to; BoxingOk says one is being dragged.
 	Boxing   LatLngBounds
 	BoxingOk bool
+	// Keys are the presses of [Options.HostKeys] the map took last frame,
+	// auto-repeats included, in order. The slice is the map's and is valid
+	// until the next Render.
+	Keys []c.CapturedKey
 }
 
 // ViewHash changes whenever the view does — centre, zoom or size — for
@@ -567,7 +582,7 @@ func (m *Map) RenderFill(fallbackW, fallbackH float32, overlay func(Projector)) 
 // in canvas coordinates through the Projector.
 func (m *Map) Render(w, h float32, overlay func(Projector)) (ev Events) {
 	defer func() {
-		ev = Events{ViewEvents: m.events, Clicked: m.clicked, ClickedOk: m.clickedOk, Selected: m.selected, SelectedOk: m.selectedOk}
+		ev = Events{ViewEvents: m.events, Clicked: m.clicked, ClickedOk: m.clickedOk, Selected: m.selected, SelectedOk: m.selectedOk, Keys: m.keys}
 		if r, ok := m.box.rect(); ok && m.view.Loaded() {
 			ev.Boxing = LatLngBoundsOf(m.view.ContainerPointToLatLng(r.Min), m.view.ContainerPointToLatLng(r.Max))
 			ev.BoxingOk = true
@@ -576,8 +591,8 @@ func (m *Map) Render(w, h float32, overlay func(Projector)) (ev Events) {
 	for range c.IdScope(m.ids.PrepareStr(m.key)) {
 		// The key-capturing Frame around the body: while it has focus (a
 		// click on the map gives it), the arrows pan and Escape cancels a box
-		// zoom (ADR-0177).
-		kf := c.Frame(m.ids.PrepareStr("portolan-keys")).CaptureKeys(uint64(mapKeyMask))
+		// zoom (ADR-0177), and the host's keys are taken for it.
+		kf := c.Frame(m.ids.PrepareStr("portolan-keys")).CaptureKeys(uint64(m.keyMask()))
 		m.keyFrameID = kf.Id()
 		for range kf.KeepIter() {
 			m.frame(w, h, overlay)
@@ -632,7 +647,8 @@ func (m *Map) frame(w, h float32, overlay func(Projector)) {
 			m.focusKeys()
 		}
 	}
-	if m.view.Loaded() && !m.opts.NoKeyboard {
+	m.keys = m.keys[:0]
+	if m.takesKeys() {
 		m.handleKeys(sm)
 	}
 
@@ -826,17 +842,40 @@ func (m *Map) handleInput(cur, areaCur c.CanvasCursorValue, areaOk bool, flags c
 	}
 }
 
+// keyMask is what the capture Frame eats while focused: the map's own keys
+// unless NoKeyboard, and the host's.
+func (m *Map) keyMask() keycodes.Mask {
+	mask := m.opts.HostKeys
+	if !m.opts.NoKeyboard {
+		mask |= mapKeyMask
+	}
+	return mask
+}
+
+// takesKeys reports whether the map has any keys to take.
+func (m *Map) takesKeys() bool { return m.keyMask() != 0 }
+
 // focusKeys asks egui to focus the key-capturing Frame.
 func (m *Map) focusKeys() {
-	if !m.opts.NoKeyboard && m.keyFrameID != 0 {
+	if m.takesKeys() && m.keyFrameID != 0 {
 		c.RequestFocus(m.keyFrameID)
 	}
 }
 
-// handleKeys applies the keys the capture Frame ate while focused.
+// handleKeys applies the keys the capture Frame ate while focused, and
+// keeps the host's for Events.Keys.
 func (m *Map) handleKeys(sm *c.StateManager) {
 	caps := sm.GetCapturedKeys(widgethandle.Make(m.keyFrameID))
 	for _, k := range caps {
+		if m.opts.HostKeys.Has(k.Code) {
+			if k.Down() {
+				m.keys = append(m.keys, k)
+			}
+			continue
+		}
+		if m.opts.NoKeyboard || !m.view.Loaded() {
+			continue
+		}
 		switch k.Code {
 		case keycodes.ArrowLeft:
 			keyboardPan(m.view, -1, 0, k.Shift(), m.hopts)

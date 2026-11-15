@@ -38,7 +38,9 @@
 // marks, selections and labelled hit regions land on the pixels they name.
 // While a region is dragged, [Events.Drag] says where it stands.
 // [Options.WheelScrolls] makes the wheel scroll the image as a document
-// does. None of this exposes portolan, whose geographic coordinates stay
+// does, and [Options.Keys] names keys the viewer takes while it has focus
+// and hands over in [Events.Keys] — Page Up and Page Down for a document.
+// None of this exposes portolan, whose geographic coordinates stay
 // behind this package's boundary (ADR-0374 §SD4, §SD5).
 //
 // # What is shown

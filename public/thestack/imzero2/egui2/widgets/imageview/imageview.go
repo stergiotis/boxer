@@ -17,6 +17,7 @@ import (
 	"github.com/stergiotis/boxer/public/science/imaging/levels"
 	"github.com/stergiotis/boxer/public/science/imaging/stats"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/keycodes"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/color"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/portolan"
 )
@@ -39,6 +40,11 @@ type Options struct {
 	// shift — sideways, as a document reader expects; the wheel then zooms
 	// only with the zoom modifier, as a pinch does (ADR-0374 §SD5).
 	WheelScrolls bool
+	// Keys are keys the viewer takes while it has focus — a press on the
+	// image gives it — and reports in [Events.Keys] without acting on them:
+	// Page Up and Page Down for a document, the arrows for a host that
+	// moves by them. Nothing is taken when it is empty.
+	Keys keycodes.Mask
 	// Overlay, when not nil, paints over the image every frame, after it and
 	// before the marked region: hits, selections, annotations, hit regions
 	// with labels. It draws with c.Paint* in canvas coordinates, which the
@@ -106,6 +112,10 @@ type Events struct {
 	// LimitsChanged reports that a drag of a limit handle changed the
 	// recipe this frame; Viewer.Recipe has the new one.
 	LimitsChanged bool
+	// Keys are the presses of [Options.Keys] taken since the last frame,
+	// auto-repeats included, in order, with their modifiers. The slice is
+	// the viewer's and is valid until the next Render.
+	Keys []c.CapturedKey
 	// Err is set when the viewer could not draw what it was asked to and
 	// drew a message in its place.
 	Err error
@@ -898,6 +908,7 @@ func (inst *Viewer) Render(w, h float32) (ev Events) {
 
 		inst.m.SetNearestTiles(!inst.Opts.Smooth)
 		inst.m.SetWheelPans(inst.Opts.WheelScrolls)
+		inst.m.SetHostKeys(inst.Opts.Keys)
 		// The view needs its size before it can fit, centre or show anything.
 		inst.m.View().SetSize(portolan.Pt(float64(cw), float64(ch)))
 		if inst.fitPending {
@@ -922,6 +933,7 @@ func (inst *Viewer) Render(w, h float32) (ev Events) {
 			ev.Clicked, ev.ClickedOk = inst.readoutAt(mev.Clicked)
 		}
 		ev.ViewChanged = mev.ViewEvents.Any()
+		ev.Keys = mev.Keys
 		if mev.BoxingOk && inst.selecting {
 			ev.Drag = inst.pixelsIn(mev.Boxing)
 			ev.DragOk = !ev.Drag.Empty()

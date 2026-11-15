@@ -9,6 +9,11 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/stergiotis/boxer/public/keelson/runtime/widgethandle"
+	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/keycodes"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/graphview/scenetest"
 )
 
 // snapPixels answers with the colour it read when the call began, as a
@@ -172,4 +177,41 @@ func TestTileLoader_CancelOfTheLastWaiterAbandonsTheCall(t *testing.T) {
 	assert.Equal(t, uint32(0xbbbbbbff), got[0].Pixels[0])
 	assert.Equal(t, int64(2), src.calls.Load())
 	assert.Zero(t, l.Health().ConsecutiveFailures)
+}
+
+// The host's keys are reported and not acted on; the map's own keys still
+// move it unless NoKeyboard; nothing else is reported.
+func TestHostKeysAreReportedAndNotActedOn(t *testing.T) {
+	sm := c.CurrentApplicationState.StateManager
+	press := func(code keycodes.Code) c.CapturedKey { return c.CapturedKey{Code: code, Edges: 1} }
+	for _, noKeyboard := range []bool{false, true} {
+		t.Run(map[bool]string{false: "with the map's keys", true: "NoKeyboard"}[noKeyboard], func(t *testing.T) {
+			t.Cleanup(scenetest.Install())
+			m := New(c.NewWidgetIdStack(), "", Options{NoTiles: true, CRS: Simple, Center: LL(-500, 500), Zoom: 0, NoKeyboard: noKeyboard,
+				HostKeys: keycodes.MaskOf(keycodes.PageDown, keycodes.ArrowDown)})
+			defer m.Close()
+			assert.True(t, m.keyMask().Has(keycodes.PageDown))
+			assert.Equal(t, !noKeyboard, m.keyMask().Has(keycodes.ArrowLeft))
+			m.Render(400, 300, nil)
+			sm.ScriptReset()
+			keys := func(k ...c.CapturedKey) Events {
+				sm.ScriptCapturedKeys(widgethandle.Make(m.keyFrameID), k)
+				ev := m.Render(400, 300, nil)
+				sm.ScriptReset()
+				return ev
+			}
+
+			ev := keys(press(keycodes.PageDown), press(keycodes.ArrowDown), c.CapturedKey{Code: keycodes.PageDown})
+			require.Len(t, ev.Keys, 2, "the presses of the host's keys, not the release")
+			assert.Equal(t, keycodes.PageDown, ev.Keys[0].Code)
+			assert.Equal(t, keycodes.ArrowDown, ev.Keys[1].Code)
+			assert.Nil(t, m.view.anim.pan, "the host's arrow did not pan")
+
+			ev = keys(press(keycodes.ArrowLeft))
+			assert.Empty(t, ev.Keys, "the map's own key is not the host's")
+			assert.Equal(t, !noKeyboard, m.view.anim.pan != nil, "the map's own arrow pans unless NoKeyboard")
+
+			assert.Empty(t, keys().Keys, "a frame without keys reports none")
+		})
+	}
 }
