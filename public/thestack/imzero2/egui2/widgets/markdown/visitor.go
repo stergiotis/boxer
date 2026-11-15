@@ -7,6 +7,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"unicode/utf8"
 
 	"github.com/stergiotis/boxer/public/containers"
@@ -79,6 +80,21 @@ func (inst *lowerCtx) countDroppedKind(kind string, count int) {
 	inst.dropped[kind] += count
 }
 
+// parsers holds one parser per feature set. A parser keeps nothing of the
+// documents it has parsed — what a parse learns goes into its context and
+// its tree — so one serves every document of its features, on any
+// goroutine. The resolver is not part of it: it reaches only the HTML
+// renderers, which this package does not run.
+var parsers sync.Map // obsidian.FeatureE → parser.Parser
+
+func parserFor(features obsidian.FeatureE) parser.Parser {
+	if p, built := parsers.Load(features); built {
+		return p.(parser.Parser)
+	}
+	p, _ := parsers.LoadOrStore(features, obsidian.New(obsidian.Options{Features: features}).Parser())
+	return p.(parser.Parser)
+}
+
 // parseAndLower runs goldmark with the configured Obsidian extensions,
 // then lowers the AST top-level blocks into segment values that
 // pre-build retained Atoms / CodeViewJob holders. Frontmatter is
@@ -89,12 +105,8 @@ func (inst *lowerCtx) countDroppedKind(kind string, count int) {
 // third return value. The fourth is the per-kind tally of AST nodes the
 // lowering could not represent — see [Doc.Dropped].
 func parseAndLower(src []byte, cfg *config) (segments []segment, frontmatter *containers.BinarySearchGrowingKV[string, any], headings []HeadingInfo, dropped map[string]int) {
-	gm := obsidian.New(obsidian.Options{
-		Features: cfg.features,
-		Resolver: cfg.resolver,
-	})
 	pc := obsidian.NewParserContext()
-	root := gm.Parser().Parse(text.NewReader(src), parser.WithContext(pc))
+	root := parserFor(cfg.features).Parse(text.NewReader(src), parser.WithContext(pc))
 
 	if cfg.features&obsidian.FeatureFrontmatter != 0 {
 		frontmatter = containers.NewBinarySearchGrowingKVFromAnyMap(obsidian.GetFrontmatter(pc))
