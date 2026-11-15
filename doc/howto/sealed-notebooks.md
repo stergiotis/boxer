@@ -155,6 +155,46 @@ from a snapshot, the place its blobs are found beside it
 the text. The widget gallery's notebook demo draws a fixture, and
 `widgets/notebookview` is the widget for any other host.
 
+## A notebook a programme writes over what it holds
+
+A host that already holds the relations a report shows — the row a person
+selected, and what hangs off it — need not store them to read them back.
+It writes the text for the thing at hand, with a section for each relation
+there is, and hands the relations over by name. The notebook is then
+*bound*: not sealed, with no pin, and nothing on disk.
+
+```go
+var w mdnotebook.Writer
+w.Markdown("# " + mdnotebook.Figure("thing", "name", ""))
+w.Cell(notebookview.RendererKV, "SELECT kind, lag AS "+
+    mdnotebook.Alias("lag", "gloss/duration;unit=ms")+" FROM thing")
+if places != nil {
+    w.Heading(2, "Where")
+    w.Cell(notebookcells.RendererPoints, "SELECT latitude AS lat, longitude AS lon, name AS label FROM places")
+}
+nb, err := mdnotebook.Read(w.Bytes())
+view.Set(notebookview.PrepareFrom(nb, notebookview.Source{Records: records, Glosses: catalog}))
+```
+
+- **Data goes in the relations, not in the text.** `Writer.Paragraph` and
+  `Escape` draw a value as written, and a figure (`Figure`) reads it from
+  its record, so the text depends on which sections there are and the view
+  keeps the cells that did not change from one thing to the next.
+- **A record is whatever the host hands over under its name**: a slice of a
+  result is enough, and the view holds its own reference.
+- **`notebookview.Options.Plain`** draws the content alone, for a notebook
+  that is part of another surface.
+- **A cell's height** is its own when its statement says so:
+  `WITH cell_opts AS (SELECT 160 AS height) SELECT …`.
+- **Three renderers are made for this**: `kv`, the view's own, draws a row
+  as labelled values and a `gloss/url` column as a link the host may claim;
+  `marks` and `points` are package `widgets/notebookcells`, which the host
+  links with a blank import.
+- **To keep one**, `mdnotebook.Seal` stores what was bound: it returns the
+  text with its frontmatter and the blobs to write beside it.
+
+The gallery's "notebook written by a programme" demo is this, end to end.
+
 ## What a cell refuses, and where it belongs
 
 | In a presentation cell | Instead |
