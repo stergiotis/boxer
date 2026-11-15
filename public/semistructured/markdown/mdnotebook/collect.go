@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"path"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -16,6 +17,7 @@ import (
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/grammar1"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/passes"
+	"github.com/stergiotis/boxer/public/hmi/gloss"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
@@ -184,14 +186,12 @@ func Collect(ctx context.Context, nb *Notebook, blobDir string, run RunFunc) (ou
 	if err != nil {
 		return nil, err
 	}
-	out = &Collected{Blobs: make(map[string][]byte)}
 	records := make(map[string]arrow.RecordBatch)
 	defer func() {
 		for _, r := range records {
 			r.Release()
 		}
 	}()
-	collected := make(map[string]struct{})
 	for i, st := range sts {
 		var sql string
 		sql, err = passes.SetFormat("ArrowStream").Run(compose(sts, i))
@@ -209,30 +209,87 @@ func Collect(ctx context.Context, nb *Notebook, blobDir string, run RunFunc) (ou
 			return nil, eb.Build().Str("record", st.name).Errorf("read the record's result: %w", err)
 		}
 		records[st.name] = rec
+	}
+	return Seal(nb, records, blobDir, nil)
+}
+
+// Seal is nb sealed over records: the half of [Collect] that stores, for
+// relations that were computed by other means — a notebook bound to what
+// its host held ([Bind]). Each record is a blob under blobDir, relative to
+// the notebook, and an entry of the frontmatter, with the hash of its
+// cell's statement when it has a cell; every figure's label is the
+// rendering of its value in cat, nil for [gloss.Default]. A frontmatter
+// entry records does not name is kept as it is. Nothing is written: the
+// caller writes the blobs, then the text.
+//
+// A record is stored as an Arrow stream of one batch without schema
+// metadata, so the same rows are the same blob whoever stores them.
+func Seal(nb *Notebook, records map[string]arrow.RecordBatch, blobDir string, cat *gloss.Catalog) (out *Collected, err error) {
+	// The records that have a cell in document order, then the rest by name.
+	names := make([]string, 0, len(records))
+	of := make(map[string]string, len(records))
+	for _, c := range nb.recordCells() {
+		if _, given := records[c.Name]; !given {
+			continue
+		}
+		if _, dup := of[c.Name]; !dup {
+			names = append(names, c.Name)
+			of[c.Name] = StatementHash(statementText(c.Body))
+		}
+	}
+	cellless := len(names)
+	for name := range records {
+		if _, hasCell := of[name]; !hasCell {
+			if !reIdent.MatchString(name) {
+				return nil, eb.Build().Str("record", name).Errorf("the record's name is not an identifier")
+			}
+			names = append(names, name)
+		}
+	}
+	sort.Strings(names[cellless:])
+
+	out = &Collected{Blobs: make(map[string][]byte, len(names))}
+	for _, name := range names {
 		var blob []byte
-		blob, err = encodeRecord(rec)
+		blob, err = encodeRecord(records[name])
 		if err != nil {
-			return nil, eb.Build().Str("record", st.name).Errorf("encode the record: %w", err)
+			return nil, eb.Build().Str("record", name).Errorf("encode the record: %w", err)
 		}
 		p := path.Join(blobDir, BlobHash(blob)+RecordExt)
 		out.Blobs[p] = blob
-		out.Records = append(out.Records, RecordRef{Name: st.name, Blob: p, Of: StatementHash(st.text)})
-		collected[st.name] = struct{}{}
+		out.Records = append(out.Records, RecordRef{Name: name, Blob: p, Of: of[name]})
 	}
 	listed := append([]RecordRef(nil), out.Records...)
 	for _, ref := range nb.Records {
-		if _, redone := collected[ref.Name]; !redone {
+		if _, redone := records[ref.Name]; !redone {
 			listed = append(listed, ref)
 			out.Records = append(out.Records, ref)
 		}
 	}
 	sortRecords(out.Records)
-	body, err := relabel(nb, records)
+	body, _, err := relabel(nb, records, cat, true)
 	if err != nil {
 		return nil, err
 	}
 	out.Text = append(writeFrontmatter(nb.Src[:nb.BodyStart], listed), body...)
 	return out, nil
+}
+
+// Relabel is nb's text with every figure's label the rendering of its value
+// in records: what a reader of a bound notebook draws, where the label as
+// written is a placeholder ([Bind]). cat is the catalog the glosses are
+// resolved in, nil for [gloss.Default]. A figure whose value cannot be read,
+// or reads as text a link's label cannot hold, keeps its label. changed is
+// false, and text is nb's own, when no label differs.
+func Relabel(nb *Notebook, records map[string]arrow.RecordBatch, cat *gloss.Catalog) (text []byte, changed bool) {
+	if len(nb.Vals) == 0 {
+		return nb.Src, false
+	}
+	body, changed, _ := relabel(nb, records, cat, false)
+	if !changed {
+		return nb.Src, false
+	}
+	return append(append(make([]byte, 0, nb.BodyStart+len(body)), nb.Src[:nb.BodyStart]...), body...), true
 }
 
 // oneBatch reads an Arrow stream of any number of batches as one record.
@@ -290,7 +347,12 @@ func oneBatch(stream []byte) (rec arrow.RecordBatch, err error) {
 }
 
 // encodeRecord writes a record as a blob: an Arrow stream of one batch.
+// Schema metadata is the writer's, not the data's, and is not stored.
 func encodeRecord(rec arrow.RecordBatch) (blob []byte, err error) {
+	if rec.Schema().Metadata().Len() > 0 {
+		rec = array.NewRecordBatch(arrow.NewSchema(rec.Schema().Fields(), nil), rec.Columns(), rec.NumRows())
+		defer rec.Release()
+	}
 	var buf bytes.Buffer
 	w := ipc.NewWriter(&buf, ipc.WithSchema(rec.Schema()))
 	if err = w.Write(rec); err != nil {
@@ -303,9 +365,13 @@ func encodeRecord(rec arrow.RecordBatch) (blob []byte, err error) {
 }
 
 // relabel is the notebook's body with every figure's label the rendering
-// of its value in records. A figure of a record that was not collected
-// keeps its label.
-func relabel(nb *Notebook, records map[string]arrow.RecordBatch) (body []byte, err error) {
+// of its value in records. A figure of a record that is not among them
+// keeps its label. strict fails on a figure whose value cannot be read or
+// held by a label; otherwise such a figure keeps its label too.
+func relabel(nb *Notebook, records map[string]arrow.RecordBatch, cat *gloss.Catalog, strict bool) (body []byte, changed bool, err error) {
+	if cat == nil && len(nb.Vals) > 0 {
+		cat = gloss.Default()
+	}
 	var b bytes.Buffer
 	at := nb.BodyStart
 	for i := range nb.Cells {
@@ -323,22 +389,29 @@ func relabel(nb *Notebook, records map[string]arrow.RecordBatch) (body []byte, e
 			if m[8] >= 0 {
 				token = string(text[m[8]:m[9]])
 			}
-			v, vErr := ValueOf(records, record, column, token)
+			v, vErr := ValueOf(cat, records, record, column, token)
 			if vErr != nil {
-				return nil, eb.Build().Int("cell", i).Errorf("the figure %s.%s: %w", record, column, vErr)
+				if !strict {
+					continue
+				}
+				return nil, false, eb.Build().Int("cell", i).Errorf("the figure %s.%s: %w", record, column, vErr)
 			}
 			// An empty label would leave a link the reader no longer finds
 			// (reValLink), so the figure would be lost to every later check.
 			if v.Face.Text == "" || strings.ContainsAny(v.Face.Text, "[]\n") {
-				return nil, eb.Build().Int("cell", i).Str("value", v.Face.Text).Errorf("the figure %s.%s reads as text a link's label cannot hold", record, column)
+				if !strict {
+					continue
+				}
+				return nil, false, eb.Build().Int("cell", i).Str("value", v.Face.Text).Errorf("the figure %s.%s reads as text a link's label cannot hold", record, column)
 			}
+			changed = changed || v.Face.Text != string(text[m[2]:m[3]])
 			b.Write(nb.Src[at : c.Start+m[2]])
 			b.WriteString(v.Face.Text)
 			at = c.Start + m[3]
 		}
 	}
 	b.Write(nb.Src[at:])
-	return b.Bytes(), nil
+	return b.Bytes(), changed, nil
 }
 
 // yamlScalar is s as a value of a YAML flow mapping: plain where the

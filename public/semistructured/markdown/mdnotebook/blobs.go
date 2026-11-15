@@ -11,6 +11,7 @@ import (
 
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/analysis"
+	"github.com/stergiotis/boxer/public/hmi/gloss"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
@@ -109,6 +110,13 @@ type Asset struct {
 type Loaded struct {
 	// Records holds each record that could be read, by name.
 	Records map[string]arrow.RecordBatch
+	// Bound says the records were handed over by the host that reads the
+	// notebook ([Bind]) and none was read from a blob. Nothing is stored,
+	// so no record is stale and the notebook has no pin.
+	Bound bool
+	// Glosses is the catalog a column's gloss and a figure's are resolved
+	// in; nil is [gloss.Default], built on first use.
+	Glosses *gloss.Catalog
 	// Stale names the records whose cell no longer hashes to what the
 	// frontmatter says the blob was computed from.
 	Stale map[string]bool
@@ -138,17 +146,7 @@ func (inst *Loaded) Release() {
 // directory. A file that cannot be read is a problem, not an error: the
 // rest of the notebook is still drawn.
 func Load(nb *Notebook, fsys fs.FS) (ld *Loaded) {
-	ld = &Loaded{Records: make(map[string]arrow.RecordBatch), Stale: make(map[string]bool), Assets: make(map[string]Asset)}
-	asset := func(cell int, what string, p string) {
-		if _, seen := ld.Assets[p]; seen {
-			return
-		}
-		data, err := ReadAsset(fsys, p)
-		ld.Assets[p] = Asset{Data: data, Err: err}
-		if err != nil {
-			ld.Problems = append(ld.Problems, Problem{Cell: cell, Text: what + " " + p + ": " + err.Error()})
-		}
-	}
+	ld = &Loaded{Records: make(map[string]arrow.RecordBatch), Stale: make(map[string]bool)}
 	for _, ref := range nb.Records {
 		rec, err := readRecord(fsys, ref.Blob)
 		if err != nil {
@@ -157,16 +155,7 @@ func Load(nb *Notebook, fsys fs.FS) (ld *Loaded) {
 		}
 		ld.Records[ref.Name] = rec
 	}
-	// In document order: a cell's recording, a prose cell's images.
-	nextImage := 0
-	for i := range nb.Cells {
-		if nb.Cells[i].Kind == CellKindMedia {
-			asset(i, "recording", nb.Cells[i].Path)
-		}
-		for ; nextImage < len(nb.Images) && nb.Images[nextImage].Cell == i; nextImage++ {
-			asset(i, "image", nb.Images[nextImage].Path)
-		}
-	}
+	ld.loadAssets(nb, fsys)
 	for i := range nb.Cells {
 		c := &nb.Cells[i]
 		if c.Kind != CellKindRecord {
@@ -178,6 +167,66 @@ func Load(nb *Notebook, fsys fs.FS) (ld *Loaded) {
 	}
 	ld.StaleVia = staleVia(nb, ld.Stale)
 	return ld
+}
+
+// Bind is a notebook over records its host holds: a record's name stands
+// for the relation handed over under it, not for a stored result. It is for
+// a notebook a programme writes to show data it already has, where storing
+// each relation to read it back would be the only reason to store it. The
+// frontmatter's `records` entry is not read, and a record cell is shown as
+// its statement and never run.
+//
+// The records are retained and [Loaded.Release] releases them; the caller
+// keeps its own references. fsys is where the recordings and prose images
+// are read from, as [Load] reads them; nil is a notebook that names no file.
+//
+// [Seal] stores a bound notebook, which [Load] then reads.
+func Bind(nb *Notebook, records map[string]arrow.RecordBatch, fsys fs.FS) (ld *Loaded) {
+	ld = &Loaded{Records: make(map[string]arrow.RecordBatch, len(records)), Bound: true}
+	for name, rec := range records {
+		rec.Retain()
+		ld.Records[name] = rec
+	}
+	ld.loadAssets(nb, fsys)
+	return ld
+}
+
+// loadAssets reads the notebook's recordings and prose images, in document
+// order: a cell's recording, a prose cell's images.
+func (inst *Loaded) loadAssets(nb *Notebook, fsys fs.FS) {
+	inst.Assets = make(map[string]Asset)
+	asset := func(cell int, what string, p string) {
+		if _, seen := inst.Assets[p]; seen {
+			return
+		}
+		var a Asset
+		if fsys == nil {
+			a.Err = eb.Build().Str("path", p).Errorf("the notebook was given no files")
+		} else {
+			a.Data, a.Err = ReadAsset(fsys, p)
+		}
+		inst.Assets[p] = a
+		if a.Err != nil {
+			inst.Problems = append(inst.Problems, Problem{Cell: cell, Text: what + " " + p + ": " + a.Err.Error()})
+		}
+	}
+	nextImage := 0
+	for i := range nb.Cells {
+		if nb.Cells[i].Kind == CellKindMedia {
+			asset(i, "recording", nb.Cells[i].Path)
+		}
+		for ; nextImage < len(nb.Images) && nb.Images[nextImage].Cell == i; nextImage++ {
+			asset(i, "image", nb.Images[nextImage].Path)
+		}
+	}
+}
+
+// Catalog is the catalog the notebook's glosses are resolved in.
+func (inst *Loaded) Catalog() (cat *gloss.Catalog) {
+	if inst.Glosses == nil {
+		inst.Glosses = gloss.Default()
+	}
+	return inst.Glosses
 }
 
 // StaleSource reports a record whose stored result is not what the text

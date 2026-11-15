@@ -192,15 +192,15 @@ func TestEvaluate(t *testing.T) {
 func TestValueOfMatchesTheLabelsInTheText(t *testing.T) {
 	nb, ld := readFixture(t)
 	for _, ref := range nb.Vals {
-		v, err := mdnotebook.ValueOf(ld.Records, ref.Record, ref.Column, ref.Gloss)
+		v, err := mdnotebook.ValueOf(nil, ld.Records, ref.Record, ref.Column, ref.Gloss)
 		require.NoError(t, err)
 		assert.Equal(t, ref.Label, v.Face.Text, "the label is the value's rendering when it was stored")
 	}
-	_, err := mdnotebook.ValueOf(ld.Records, "p99_by_hour", "p99", "")
+	_, err := mdnotebook.ValueOf(nil, ld.Records, "p99_by_hour", "p99", "")
 	assert.Error(t, err, "a value is read from a record of one row")
-	_, err = mdnotebook.ValueOf(ld.Records, "stats", "p99_ms", "gloss/nosuch")
+	_, err = mdnotebook.ValueOf(nil, ld.Records, "stats", "p99_ms", "gloss/nosuch")
 	assert.Error(t, err, "a gloss the catalog does not hold")
-	plain, err := mdnotebook.ValueOf(ld.Records, "stats", "p99_ms", "")
+	plain, err := mdnotebook.ValueOf(nil, ld.Records, "stats", "p99_ms", "")
 	require.NoError(t, err)
 	assert.Equal(t, "412.3", plain.Face.Text, "the record's column declares no gloss")
 }

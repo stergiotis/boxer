@@ -19,6 +19,12 @@
 // [SetRecords] writes one back into a notebook's text, keeping the rest.
 // Package samples holds notebooks to read and to start from.
 //
+// A programme that shows data it already holds writes the text with
+// [Writer] and hands its relations over with [Bind], in place of blobs:
+// nothing is stored, and [Problems] holds the notebook to what was handed
+// over. [Seal] stores a bound notebook; it is the half of [Collect] that
+// needs no server.
+//
 // The package has no UI. The widget that draws a notebook is
 // widgets/notebookview.
 package mdnotebook

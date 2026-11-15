@@ -19,12 +19,13 @@ type Value struct {
 // ValueOf reads the value a `val:` link names: the column of a record of
 // one row. column is the column's label, the part of its name before any
 // gloss token. token is the gloss the link asks for; empty, the value is
-// shown through the gloss its column declares, or plainly.
+// shown through the gloss its column declares, or plainly. cat is the
+// catalog both are resolved in, nil for [gloss.Default].
 //
 // A link that carries its own token keeps the record free of presentation:
 // the record's statement names a column, and the sentence says how the
 // figure reads.
-func ValueOf(records map[string]arrow.RecordBatch, record string, column string, token string) (v Value, err error) {
+func ValueOf(cat *gloss.Catalog, records map[string]arrow.RecordBatch, record string, column string, token string) (v Value, err error) {
 	rec, found := records[record]
 	if !found {
 		return v, eb.Build().Str("record", record).Errorf("the notebook has no record of that name")
@@ -32,7 +33,9 @@ func ValueOf(records map[string]arrow.RecordBatch, record string, column string,
 	if rec.NumRows() != 1 {
 		return v, eb.Build().Str("record", record).Int64("rows", rec.NumRows()).Errorf("a value is read from a record of one row")
 	}
-	cat := gloss.Default()
+	if cat == nil {
+		cat = gloss.Default()
+	}
 	for i, f := range rec.Schema().Fields() {
 		d, declared := cat.ParseColumn(f.Name)
 		label := f.Name

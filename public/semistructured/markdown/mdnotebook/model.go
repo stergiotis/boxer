@@ -61,6 +61,10 @@ type Cell struct {
 	Path      string
 	Title     string
 	MediaType string
+	// Section is the text of the last heading before a cell that is not
+	// prose, "" for a cell under none: what a reader would call the cell,
+	// and what stays when cells above it come and go.
+	Section string
 }
 
 // RecordRef is one record as the frontmatter lists it.
@@ -101,6 +105,10 @@ type Problem struct {
 	// Cell indexes Notebook.Cells, -1 for the frontmatter.
 	Cell int
 	Text string
+	// Record names the record the frontmatter does not list, "" for any
+	// other problem. A notebook whose records its host binds lists none, so
+	// [Problems] drops these for the records that are bound.
+	Record string
 }
 
 // Notebook is a notebook's text taken apart.

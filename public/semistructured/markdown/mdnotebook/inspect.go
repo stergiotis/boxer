@@ -4,18 +4,36 @@ package mdnotebook
 // stale record: what the text and its frontmatter disagree on, a blob that
 // could not be read, and a figure whose label is no longer the rendering of
 // its value (ADR-0371 §SD5, §SD8).
+//
+// A bound notebook ([Bind]) stores nothing, so two of these do not apply to
+// it: a record the frontmatter does not list is a problem only when it is
+// not bound either, and a figure's label is not held to its value, which a
+// reader draws in its place ([Relabel]).
 func Problems(nb *Notebook, ld *Loaded) (problems []Problem) {
-	problems = append(problems, nb.Problems...)
+	for _, p := range nb.Problems {
+		if ld.Bound && p.Record != "" {
+			if _, bound := ld.Records[p.Record]; bound {
+				continue
+			}
+			p.Text = "the record " + p.Record + " is not bound"
+		}
+		problems = append(problems, p)
+	}
 	problems = append(problems, ld.Problems...)
+	if len(nb.Vals) == 0 {
+		return
+	}
+	cat := ld.Catalog()
 	for _, ref := range nb.Vals {
 		if _, loaded := ld.Records[ref.Record]; !loaded {
 			// Already a problem of the frontmatter or of the blob.
 			continue
 		}
-		v, err := ValueOf(ld.Records, ref.Record, ref.Column, ref.Gloss)
+		v, err := ValueOf(cat, ld.Records, ref.Record, ref.Column, ref.Gloss)
 		switch {
 		case err != nil:
 			problems = append(problems, Problem{Cell: ref.Cell, Text: "val:" + ref.Record + "." + ref.Column + ": " + err.Error()})
+		case ld.Bound:
 		case v.Face.Text != ref.Label:
 			problems = append(problems, Problem{Cell: ref.Cell, Text: "val:" + ref.Record + "." + ref.Column + " reads “" + ref.Label + "” in the text and “" + v.Face.Text + "” in the record"})
 		}

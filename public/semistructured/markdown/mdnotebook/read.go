@@ -33,6 +33,8 @@ var (
 	// gloss token as the link's title.
 	reValLink = regexp.MustCompile(`\[([^\]]+)\]\(val:([A-Za-z_][A-Za-z0-9_]*)\.([A-Za-z_][A-Za-z0-9_]*)(?:[ \t]+"([^"]*)")?\)`)
 	reIdent   = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
+	// An ATX heading: its text, without the closing run of `#`.
+	reHeading = regexp.MustCompile(`^ {0,3}#{1,6}[ \t]+(.*?)[ \t#]*$`)
 	// An image's target in prose, in either spelling.
 	reImage = regexp.MustCompile(`!\[[^\]]*\]\(([^)\s"]+)|!\[\[([^\]|]+)`)
 )
@@ -153,6 +155,9 @@ func stringMap(v any) (m map[string]any, ok bool) {
 }
 
 func splitLines(src []byte, from int) (lines []line) {
+	if from < len(src) {
+		lines = make([]line, 0, bytes.Count(src[from:], []byte{'\n'})+1)
+	}
 	off := from
 	for off < len(src) {
 		end := bytes.IndexByte(src[off:], '\n')
@@ -225,9 +230,11 @@ func fenceClose(text string, ch byte, n int) bool {
 // scan finds the cells. A cell fence and a media line start in column 0;
 // what lies between two of them is one prose cell, other fences included.
 func (inst *Notebook) scan() {
-	src := inst.Src
-	lines := splitLines(src, inst.BodyStart)
-	text := func(i int) string { return string(src[lines[i].start:lines[i].stop]) }
+	// One copy of the text, so a line is a slice of it and not a string of
+	// its own each time it is looked at.
+	src := string(inst.Src)
+	lines := splitLines(inst.Src, inst.BodyStart)
+	text := func(i int) string { return src[lines[i].start:lines[i].stop] }
 	blank := func(i int) bool { return strings.TrimSpace(text(i)) == "" }
 
 	proseFirst, proseLast := -1, -1
@@ -293,7 +300,7 @@ func (inst *Notebook) scan() {
 				bodyStop = lines[j].start
 			}
 			if i+1 <= last {
-				c.Body = string(src[lines[i+1].start:bodyStop])
+				c.Body = src[lines[i+1].start:bodyStop]
 			}
 			inst.Cells = append(inst.Cells, c)
 			if !closed {
@@ -371,11 +378,18 @@ func MediaTypeOf(p string) (mediaType string) {
 // disagree on.
 func (inst *Notebook) check() {
 	seen := make(map[string]int)
+	section := ""
 	for i := range inst.Cells {
 		c := &inst.Cells[i]
+		if c.Kind != CellKindProse {
+			c.Section = section
+		}
 		switch c.Kind {
 		case CellKindProse:
 			text := inst.Src[c.Start:c.Stop]
+			if h := lastHeading(text); h != "" {
+				section = h
+			}
 			for _, m := range figures(text) {
 				ref := ValRef{Cell: i, Label: string(text[m[2]:m[3]]), Record: string(text[m[4]:m[5]]), Column: string(text[m[6]:m[7]])}
 				if m[8] >= 0 {
@@ -383,7 +397,7 @@ func (inst *Notebook) check() {
 				}
 				inst.Vals = append(inst.Vals, ref)
 				if _, found := inst.Record(ref.Record); !found {
-					inst.Problems = append(inst.Problems, Problem{Cell: i, Text: "the value " + ref.Record + "." + ref.Column + " names a record the frontmatter does not list"})
+					inst.Problems = append(inst.Problems, Problem{Cell: i, Text: "the value " + ref.Record + "." + ref.Column + " names a record the frontmatter does not list", Record: ref.Record})
 				}
 			}
 			for _, p := range images(text) {
@@ -400,19 +414,62 @@ func (inst *Notebook) check() {
 			}
 			seen[c.Name] = i
 			if _, found := inst.Record(c.Name); !found {
-				inst.Problems = append(inst.Problems, Problem{Cell: i, Text: "the record " + c.Name + " has no stored result"})
+				inst.Problems = append(inst.Problems, Problem{Cell: i, Text: "the record " + c.Name + " has no stored result", Record: c.Name})
 			}
 		}
 	}
+}
+
+// lastHeading is the text of the last heading in a prose cell's text, "" when
+// it holds none. A `#` line inside a fenced block is code.
+func lastHeading(text []byte) (heading string) {
+	lines := splitLines(text, 0)
+	for i := 0; i < len(lines); i++ {
+		l := text[lines[i].start:lines[i].stop]
+		t := bytes.TrimLeft(l, " ")
+		if len(t) == 0 {
+			continue
+		}
+		switch t[0] {
+		case '`', '~':
+			ch, n, _, _, ok := fenceOpen(string(l))
+			if !ok {
+				continue
+			}
+			for i++; i < len(lines) && !fenceClose(string(text[lines[i].start:lines[i].stop]), ch, n); i++ {
+			}
+		case '#':
+			if m := reHeading.FindSubmatch(l); m != nil {
+				heading = string(m[1])
+			}
+		}
+	}
+	return
 }
 
 // figures are the `val:` links of a prose cell's text that the markdown
 // parse draws as links, each as reValLink's submatch indexes. A link inside
 // a fenced block or a code span is text there — a sample of the spelling,
 // say — and is no figure: it names no value to check, and collection leaves
-// it as it is.
+// it as it is. Neither is one whose bracket is escaped, which the parse
+// draws as the characters it is.
 func figures(text []byte) (matches [][]int) {
-	return outsideCode(text, reValLink.FindAllSubmatchIndex(text, -1))
+	for _, m := range outsideCode(text, reValLink.FindAllSubmatchIndex(text, -1)) {
+		if !escapedAt(text, m[0]) && !escapedAt(text, m[3]) {
+			matches = append(matches, m)
+		}
+	}
+	return
+}
+
+// escapedAt reports a character a backslash escapes: one after an odd run
+// of them.
+func escapedAt(text []byte, at int) bool {
+	n := 0
+	for at-1-n >= 0 && text[at-1-n] == '\\' {
+		n++
+	}
+	return n%2 == 1
 }
 
 // images are the files a prose cell's text draws as images: the targets of
