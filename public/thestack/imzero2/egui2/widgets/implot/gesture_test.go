@@ -175,6 +175,39 @@ func TestRangeGestureBoxZoom(t *testing.T) {
 	requireNoGesture(t, r.frame(nil), "the frame after the report")
 }
 
+// Under WheelScrollsPane a plain wheel step leaves the plot alone, for the
+// pane to scroll, while a pinch or Ctrl+wheel step still zooms it.
+func TestWheelScrollsPane(t *testing.T) {
+	clock := time.Unix(1_800_000_000, 0)
+	clockNow = func() time.Time { return clock }
+	t.Cleanup(func() { clockNow = time.Now })
+	r := newGestureRig(t, func(p *Plot) {
+		p.WheelScrollsPane()
+		p.SetupAxisLimits(AxisX1, 0, 10, CondOnce).SetupAxisLimits(AxisY1, 0, 10, CondOnce)
+		p.Line("l", []float64{0, 10}, []float64{0, 10})
+	})
+	r.frame(nil)
+	step := func(zoom, scrollY float32) func() {
+		return func() {
+			r.sm.ScriptCanvasWheel(r.canvas, c.CanvasWheelValue{Zoom: zoom, ScrollY: scrollY, HoverX: float32(math.NaN()), HoverY: float32(math.NaN())})
+		}
+	}
+	r.frame(step(1, 40))
+	r.frame(nil)
+	if lo, hi, _ := r.last.AxisLimits(AxisX1); lo != 0 || hi != 10 {
+		t.Errorf("a plain wheel step zoomed the plot to [%v,%v]", lo, hi)
+	}
+	clock = clock.Add(wheelQuiet)
+	r.frame(nil)
+	requireNoGesture(t, r.frame(nil), "after a plain wheel step")
+
+	r.frame(step(1.25, 0))
+	r.frame(nil)
+	if lo, hi, _ := r.last.AxisLimits(AxisX1); hi-lo >= 10 {
+		t.Errorf("a pinch step left the plot at [%v,%v]; it zooms under WheelScrollsPane too", lo, hi)
+	}
+}
+
 // Wheel steps report once, after the wheel rests, with the last step's range.
 func TestRangeGestureWheel(t *testing.T) {
 	clock := time.Unix(1_800_000_000, 0)

@@ -61,15 +61,18 @@ type plotState struct {
 
 	// previous frame's transform + plot-area rect (canvas px), the basis
 	// for interpreting this frame's gestures.
-	prev     transform
-	prevOk   bool
-	dragging bool
-	dragBox  bool
-	boxStart [2]float32
-	boxCur   [2]float32
-	lastDrag [2]float32
-	hoverPos [2]float32
-	hoverOk  bool
+	prev   transform
+	prevOk bool
+	// prevWheelScrollsPane is WheelScrollsPane as the previous frame's
+	// canvas was emitted under: whether it left the plain wheel to the pane.
+	prevWheelScrollsPane bool
+	dragging             bool
+	dragBox              bool
+	boxStart             [2]float32
+	boxCur               [2]float32
+	lastDrag             [2]float32
+	hoverPos             [2]float32
+	hoverOk              bool
 
 	// Legend state: per-label visibility toggles (clicks) and the label
 	// hovered last frame (series highlight). Same-label items share one
@@ -168,6 +171,8 @@ type Plot struct {
 	nextWeight    float32
 	noInputs      bool
 	noLegend      bool
+	// wheelScrollsPane leaves the plain wheel to the surrounding pane.
+	wheelScrollsPane bool
 	// Per-series hover readout and crosshair link (seriesreadout.go).
 	hoverSeries bool
 	noSeriesBox bool
@@ -505,9 +510,10 @@ func (p *Plot) applyInteractions() {
 	// Wheel: egui delivers pinch/ctrl-wheel as Zoom and plain wheel as
 	// ScrollY; ImPlot's convention is that the plain wheel zooms a plot, so
 	// both fold into one multiplicative factor, anchored at the pointer.
+	// Under WheelScrollsPane the plain wheel belongs to the surrounding pane.
 	wheelX, wheelY := false, false
 	zoom := float32(wheel.Zoom)
-	if wheel.ScrollY != 0 {
+	if wheel.ScrollY != 0 && !st.prevWheelScrollsPane {
 		zoom *= float32(math.Pow(1.1, float64(wheel.ScrollY)/40.0))
 	}
 	if zoom != 1.0 && zoom > 0 {
@@ -695,6 +701,17 @@ func (p *Plot) SetupAxisTicks(axis AxisE, values []float64, labels []string) *Pl
 // thumbnails. Callable any time before End.
 func (p *Plot) NoInputs() *Plot {
 	p.noInputs = true
+	return p
+}
+
+// WheelScrollsPane leaves the plain wheel to the surrounding pane for the
+// frame: it scrolls the page the plot sits in instead of zooming the plot.
+// Pinch and Ctrl+wheel still zoom, and every other gesture stays. For plots
+// stacked in a scrolling page, such as a dashboard's panels, where a wheel
+// that zooms whichever plot the pointer crosses keeps the page from
+// scrolling. Callable any time before End.
+func (p *Plot) WheelScrollsPane() *Plot {
+	p.wheelScrollsPane = true
 	return p
 }
 

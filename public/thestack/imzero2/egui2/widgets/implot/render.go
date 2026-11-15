@@ -240,12 +240,14 @@ func (p *Plot) End() {
 		p.emitToolChrome(tr, areaX, areaY, areaW, areaH, true)
 		lx, ly := p.legendOrigin(areaX, areaY, areaW)
 		p.emitLegend(leg, lx, ly, true)
-		c.PaintCanvas(p.ids.PrepareStr("implot-canvas"), p.w, p.h).
+		canvas := c.PaintCanvas(p.ids.PrepareStr("implot-canvas"), p.w, p.h).
 			Background(color.Hex(colPlotBg)).
 			Sense(true, true, true).
-			CaptureZoom().
-			CaptureScroll().
-			Send()
+			CaptureZoom()
+		if !p.wheelScrollsPane {
+			canvas = canvas.CaptureScroll()
+		}
+		canvas.Send()
 	} else {
 		p.emitToolChrome(tr, areaX, areaY, areaW, areaH, false)
 		lx, ly := p.legendOrigin(areaX, areaY, areaW)
@@ -260,6 +262,7 @@ func (p *Plot) End() {
 
 	st.prev = tr
 	st.prevOk = tr.valid()
+	st.prevWheelScrollsPane = p.wheelScrollsPane
 
 	p.emitContextMenu()
 }
