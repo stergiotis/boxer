@@ -46,7 +46,8 @@ type measurement struct {
 
 // methodMeasure states what the statistics are and what they assume, where
 // the numbers are (keelson-app F3).
-const methodMeasure = "Computed from the region's stored samples at full resolution, never from what is drawn or from a reduced level. " +
+const methodMeasure = "Computed from the region's stored samples at full resolution, never from what is drawn or from a reduced level, and stated in values: the samples through the plane's value transform, where it has one. " +
+	"Invalid samples (NaN in a float plane) are counted apart and left out of every other figure. " +
 	"The standard deviation is over these samples as the whole population (divisor n): it describes the region and estimates nothing beyond it. " +
 	"Percentiles are nearest rank: the smallest sample with at least that share of the samples at or below it. " +
 	"The planes are measured separately; nothing here accounts for transparency or for how the samples were encoded."
@@ -125,6 +126,7 @@ func (inst *App) demandMeasurement() {
 var statsSchema = arrow.NewSchema([]arrow.Field{
 	{Name: "plane", Type: arrow.BinaryTypes.String},
 	{Name: "samples", Type: arrow.PrimitiveTypes.Uint64},
+	{Name: "invalid", Type: arrow.PrimitiveTypes.Uint64},
 	{Name: "min", Type: arrow.PrimitiveTypes.Float64},
 	{Name: "max", Type: arrow.PrimitiveTypes.Float64},
 	{Name: "mean", Type: arrow.PrimitiveTypes.Float64},
@@ -142,8 +144,9 @@ func statsRecord(m *measurement) arrow.RecordBatch {
 	for _, p := range m.planes {
 		rb.Field(0).(*array.StringBuilder).Append(p.Plane)
 		rb.Field(1).(*array.Uint64Builder).Append(p.Samples)
+		rb.Field(2).(*array.Uint64Builder).Append(p.Invalid)
 		for i, v := range []float64{p.Min, p.Max, p.Mean, p.StdDev, p.Median, p.P01, p.P99} {
-			rb.Field(2 + i).(*array.Float64Builder).Append(v)
+			rb.Field(3 + i).(*array.Float64Builder).Append(v)
 		}
 	}
 	return rb.NewRecordBatch()

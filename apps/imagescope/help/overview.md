@@ -38,8 +38,11 @@ the view of it.
 The **Sample** buttons, on the empty window and under *Advanced*, open a
 synthetic image made from its own coordinates: a 16-bit field with a bright
 blob and a saturated column, an 8-bit colour image that fades to transparent,
-and a small 8-bit image to zoom into. They are for trying the controls;
-nothing about them is measured.
+a small 8-bit image to zoom into, a float image spanning six decades with a
+block of invalid samples, and a 16-bit image whose samples stand for values
+through a scale and an offset. They are for trying the controls; nothing
+about them is measured. The last two are the only way to reach float samples
+and value transforms here, since PNG and JPEG carry neither.
 
 The status row leads with the window's phase chip — *empty*, *opening*,
 *viewing*, *measuring*, *measured* — and carries what the last open came to.

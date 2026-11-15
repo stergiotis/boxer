@@ -4,7 +4,7 @@ audience: contributor
 status: draft
 generated: true
 generator: public/app env gen-docs
-generated-at: 2026-11-15T11:50:02Z
+generated-at: 2026-11-15T12:47:28Z
 ---
 
 > **Status: draft — pre-human-review.** Machine-generated registry snapshot;
@@ -83,7 +83,7 @@ generated-at: 2026-11-15T11:50:02Z
 | Name | Type | Default | CLI flag | Sensitive | Description |
 |------|------|---------|----------|-----------|-------------|
 | `BOXER_IMAGESCOPE_REGION` | string | — | — |  | a region to mark on the image BOXER_IMAGESCOPE_SAMPLE opens, as four integers: column, row, width, height in pixels, separated by commas; for scenes and demos |
-| `BOXER_IMAGESCOPE_SAMPLE` | string | — | — |  | the synthetic sample image a new imagescope window opens on: field, colour or small; for scenes and demos |
+| `BOXER_IMAGESCOPE_SAMPLE` | string | — | — |  | the synthetic sample image a new imagescope window opens on: field, colour, small, float or scaled; for scenes and demos |
 
 ## boxer-lading (3)
 

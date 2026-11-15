@@ -11,6 +11,7 @@ import (
 	"context"
 	"fmt"
 	"image"
+	"strconv"
 	"strings"
 
 	"github.com/apache/arrow-go/v18/arrow"
@@ -113,20 +114,31 @@ func pixelsArrow(img imaging.Image, rect image.Rectangle) (stream []byte, rows i
 
 // handoverSql is the buffer the opened play window is seeded with: the
 // statistics table, one row per plane, computed by ClickHouse from the
-// pixels. The percentile columns of the window's table are nearest-rank
-// percentiles, a rule ClickHouse's quantile functions do not all share, so
-// only the median — quantileExactLow's lower median — is restated here.
-func handoverSql(alias string, planes []string) (sql string) {
+// pixels, in values as the window's table is. The dataset holds stored
+// samples, so a plane's value transform is written into the query, and a
+// float plane's invalid samples — NaN, which an aggregate would carry into
+// its result — are left out as the window leaves them out. The percentile
+// columns of the window's table are nearest-rank percentiles, a rule
+// ClickHouse's quantile functions do not all share, so only the median —
+// quantileExactLow's lower median — is restated here.
+func handoverSql(alias string, img imaging.Image) (sql string) {
 	var b strings.Builder
 	b.WriteString("-- Pixels of the region marked in imagescope, one row per pixel: col, row and a\n")
 	b.WriteString("-- column per plane holding the stored sample. This restates the window's table.\n")
-	for i, p := range planes {
+	for i, p := range img.Model().PlaneNames() {
 		if i > 0 {
 			b.WriteString("UNION ALL\n")
 		}
-		fmt.Fprintf(&b, "SELECT '%[1]s' AS plane, count() AS samples, min(%[1]s) AS min, max(%[1]s) AS max,\n"+
-			"       avg(%[1]s) AS mean, stddevPop(%[1]s) AS sd, quantileExactLow(0.5)(%[1]s) AS median\n"+
-			"FROM keelson('%[2]s')\n", p, alias)
+		v := p
+		if t := img.Plane(i).Transform(); !t.IsIdentity() {
+			v = fmt.Sprintf("(%s * %s + %s)", p, strconv.FormatFloat(t.Scale, 'g', -1, 64), strconv.FormatFloat(t.Offset, 'g', -1, 64))
+		}
+		fmt.Fprintf(&b, "SELECT '%[1]s' AS plane, count() AS samples, min(%[2]s) AS min, max(%[2]s) AS max,\n"+
+			"       avg(%[2]s) AS mean, stddevPop(%[2]s) AS sd, quantileExactLow(0.5)(%[2]s) AS median\n"+
+			"FROM keelson('%[3]s')\n", p, v, alias)
+		if img.Kind() == imaging.SampleKindF32 {
+			fmt.Fprintf(&b, "WHERE NOT isNaN(%s)\n", p)
+		}
 	}
 	return b.String()
 }
@@ -198,7 +210,7 @@ func (inst *App) handover(img imaging.Image, region image.Rectangle) (note strin
 		return "", eh.Errorf("publish the pixels: %w", err)
 	}
 	cfg := playground.Launch{
-		Sql:          handoverSql(datasetAlias, img.Model().PlaneNames()),
+		Sql:          handoverSql(datasetAlias, img),
 		AutoRun:      true,
 		Endpoint:     playground.EndpointIntrospection,
 		Datasets:     []string{pub.Alias},

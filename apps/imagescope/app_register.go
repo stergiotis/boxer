@@ -86,7 +86,7 @@ const sampleSeedName = "BOXER_IMAGESCOPE_SAMPLE"
 // file picker, which no script can answer.
 var SampleSeed = env.NewString(env.Spec{
 	Name:        sampleSeedName,
-	Description: "the synthetic sample image a new imagescope window opens on: field, colour or small; for scenes and demos",
+	Description: "the synthetic sample image a new imagescope window opens on: field, colour, small, float or scaled; for scenes and demos",
 	Category:    env.CategoryE("boxer-imagescope"),
 })
 

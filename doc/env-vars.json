@@ -888,7 +888,7 @@
     {
       "name": "BOXER_IMAGESCOPE_SAMPLE",
       "type": "string",
-      "description": "the synthetic sample image a new imagescope window opens on: field, colour or small; for scenes and demos",
+      "description": "the synthetic sample image a new imagescope window opens on: field, colour, small, float or scaled; for scenes and demos",
       "category": "boxer-imagescope",
       "sensitive": false,
       "origin": {

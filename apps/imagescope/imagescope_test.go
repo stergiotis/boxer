@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"image"
+	"math"
 	"testing"
 	"time"
 
@@ -200,7 +201,7 @@ func TestWithoutAnImageTheViewOperationsRefuseNamingTheWayOn(t *testing.T) {
 	for _, e := range []error{inst.setRecipe(SetRecipeArgs{}), inst.setPlane(planeAsStored), inst.setRegion(RegionArgs{}), inst.setZoom(zoomFit)} {
 		assert.Contains(t, refusal(t, e), "there is no image")
 	}
-	assert.Contains(t, refusal(t, command(t, inst, opOpenSample, OpenSampleArgs{Name: "nope"})), "the samples are field, colour, small")
+	assert.Contains(t, refusal(t, command(t, inst, opOpenSample, OpenSampleArgs{Name: "nope"})), "the samples are field, colour, small, float, scaled")
 }
 
 func TestOpenSampleShowsTheImageAsStored(t *testing.T) {
@@ -370,7 +371,7 @@ func TestMeasureIsOverTheSamplesOfTheRegionAndStatesItsMethod(t *testing.T) {
 	assert.EqualValues(t, len(inst.statsColumns()), rec.NumCols())
 	assert.Equal(t, "17694.9", formatFigure(17694.9343359375), "six significant digits, not fifteen")
 	assert.Equal(t, "3347", formatFigure(3347))
-	assert.Equal(t, 9.0, rec.Column(4).(*array.Float64).Value(0))
+	assert.Equal(t, 9.0, rec.Column(5).(*array.Float64).Value(0), "the mean")
 	assert.Equal(t, "columns 0–3, rows 0–1 · 4 × 2 = 8 pixels", regionLine(inst.measured.region))
 }
 
@@ -400,11 +401,20 @@ func TestTheHandoverCarriesTheRegionsSamplesInTheirOwnKind(t *testing.T) {
 	}
 	assert.EqualValues(t, 65535, gray.Value(2), "the saturated column at row 0 arrives as 16 bits")
 
-	sql := handoverSql(datasetAlias, []string{"red", "alpha"})
+	colour, _ := samples.ByName(samples.NameColour)
+	sql := handoverSql(datasetAlias, colour)
 	assert.Contains(t, sql, "FROM keelson('pixels')")
 	assert.Contains(t, sql, "avg(red)")
 	assert.Contains(t, sql, "UNION ALL")
 	assert.Contains(t, sql, "quantileExactLow(0.5)(alpha)")
+	assert.NotContains(t, sql, "isNaN", "integer samples have no invalid ones")
+
+	scaled, _ := samples.ByName(samples.NameScaled)
+	sql = handoverSql(datasetAlias, scaled)
+	assert.Contains(t, sql, "avg((gray * 0.01 + -40))", "the statistics are restated in values")
+	assert.Contains(t, sql, "count() AS samples")
+	float, _ := samples.ByName(samples.NameFloat)
+	assert.Contains(t, handoverSql(datasetAlias, float), "WHERE NOT isNaN(gray)", "invalid samples are left out, as in the window")
 }
 
 func TestTheHandoverRefusesWhatIsTooLargeNamingTheRemedy(t *testing.T) {
@@ -464,4 +474,61 @@ func TestALossySourceSaysSoBeforeItsNumbers(t *testing.T) {
 	clean, _ := samples.ByName(samples.NameSmall)
 	assert.Empty(t, sourceNotes(clean))
 	assert.Empty(t, sourceNotes(imaging.Image{}))
+}
+
+func TestAFloatRegionCountsItsInvalidSamplesAndAScaledOneIsInValues(t *testing.T) {
+	inst := withSample(t, samples.NameFloat)
+	// Columns 0–199, rows 280–399 overlap the invalid block, columns 40–119
+	// and rows 300–379, in 80 × 80 samples.
+	m, err := query[RegionArgs, Measurement](t, inst, opMeasure, RegionArgs{Col: 0, Row: 280, Width: 200, Height: 120})
+	require.NoError(t, err)
+	assert.EqualValues(t, 24000, m.Pixels)
+	assert.EqualValues(t, 6400, m.Planes[0].Invalid)
+	assert.EqualValues(t, 24000-6400, m.Planes[0].Samples)
+	assert.False(t, math.IsNaN(m.Planes[0].Mean), "the mean is over the valid samples")
+	assert.Contains(t, m.Method, "4096 equal bins", "a float plane's percentiles are said to be right to a bin")
+	px, err := query[RegionArgs, Pixels](t, inst, opReadPixels, RegionArgs{Col: 50, Row: 310})
+	require.NoError(t, err)
+	assert.Equal(t, 1, px.Invalid)
+
+	inst = withSample(t, samples.NameScaled)
+	m, err = query[RegionArgs, Measurement](t, inst, opMeasure, RegionArgs{Width: 1, Height: 1})
+	require.NoError(t, err)
+	assert.InDelta(t, 0.0, m.Planes[0].Mean, 1e-9, "stored 4000 is the value 0")
+	px, err = query[RegionArgs, Pixels](t, inst, opReadPixels, RegionArgs{})
+	require.NoError(t, err)
+	assert.InDelta(t, 0.0, px.Values[0][0], 1e-9, "read_pixels gives values")
+	info := imageInfo(inst.img)
+	assert.Equal(t, "u16", info.Kind)
+}
+
+// The parameter slider follows the recipe, and a value moved on it since the
+// last frame becomes the recipe's; a transfer function without a parameter
+// draws no slider and sets nothing.
+func TestTheParameterSliderAndTheRecipeStayInStep(t *testing.T) {
+	t.Cleanup(scenetest.Install())
+	sm := c.CurrentApplicationState.StateManager
+	inst := withSample(t, samples.NameFloat)
+	args := recipeArgs(inst.viewer.Recipe())
+	args.Transfer = "asinh"
+	require.NoError(t, command(t, inst, opSetRecipe, args))
+	assert.Equal(t, 0.1, inst.param, "asinh's default, as the slider shows it")
+
+	inst.param = 1e-5 // the slider was moved
+	inst.renderParamSlider(inst.viewer.Recipe())
+	sm.ScriptReset()
+	assert.Equal(t, 1e-5, inst.viewer.Recipe().Param)
+	assert.Equal(t, 1e-5, inst.param)
+
+	args = recipeArgs(inst.viewer.Recipe())
+	args.Transfer, args.Param = "log", 0
+	require.NoError(t, command(t, inst, opSetRecipe, args))
+	assert.Equal(t, 1000.0, inst.param, "a new transfer function starts from its default")
+
+	args.Transfer = "sqrt"
+	require.NoError(t, command(t, inst, opSetRecipe, args))
+	before := inst.viewer.Recipe()
+	inst.renderParamSlider(before)
+	sm.ScriptReset()
+	assert.Equal(t, before, inst.viewer.Recipe(), "sqrt takes no parameter")
 }

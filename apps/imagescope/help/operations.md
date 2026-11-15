@@ -21,7 +21,7 @@ needs a particular image asks the person to open it with **Open…**, then
 reads `get_view`.
 
 For scenes and headless runs, `BOXER_IMAGESCOPE_SAMPLE` opens a new window on
-a sample (`field`, `colour` or `small`) and `BOXER_IMAGESCOPE_REGION` marks a
+a sample (`field`, `colour`, `small`, `float` or `scaled`) and `BOXER_IMAGESCOPE_REGION` marks a
 region on it: column, row, width, height. A value that names no sample or
 does not parse leaves the window as it would otherwise be and says so in the
 status row.
@@ -56,9 +56,10 @@ An open that fails or is cancelled returns to the phase it interrupted;
   cell is the mean of a 2^k × 2^k block) and what the last open, measurement
   and handover came to.
 - `read_pixels` — a block of samples, every plane, as values in row-major
-  order. At most 1024 pixels: a larger block is cut to whole rows that fit
-  and `Truncated` is set. Both sizes zero reads one pixel. The values are
-  the samples, whatever the recipe shows.
+  order, through the plane's value transform; an invalid sample is 0 and
+  counted in `Invalid`. At most 1024 pixels: a larger block is cut to whole rows that fit
+  and `Truncated` is set. Both sizes zero reads one pixel. The values come
+  from the samples, whatever the recipe shows.
 - `measure` — statistics of every plane over a region, with the method
   stated in `Method`. The zero region means the marked one, and is refused
   when none is marked. A region that reaches outside the image is refused
@@ -73,8 +74,8 @@ row + 1); row 0 is the top. A region is `Col`, `Row`, `Width`, `Height`.
 
 Every command sets a value; none toggles, so a repeat leaves the same view.
 
-- `open_sample` — open `field`, `colour` or `small` in place of what is
-  shown. It settles when the image is shown. The view returns to the image
+- `open_sample` — open `field`, `colour`, `small`, `float` or `scaled` in
+  place of what is shown. It settles when the image is shown. The view returns to the image
   as stored under its default recipe and the region is cleared.
 - `set_plane` — `as stored`, or a plane name from `get_view`. The recipe
   returns to that view's default, keeping the colour map, so call
@@ -82,8 +83,10 @@ Every command sets a value; none toggles, so a repeat leaves the same view.
 - `set_recipe` — the whole recipe. Read `get_view`, change fields of
   `View.Recipe` and send it back. `Limits` is `data`, `nominal`,
   `percentile` (with `PercentLo` and `PercentHi`; a single plane only) or
-  `manual` (with `Lo` and `Hi`). Percentile limits are counted off the frame
-  and land a little after the call; `get_view` reports the limits in force.
+  `manual` (with `Lo` and `Hi`). Percentile limits need the plane's
+  histogram, which is counted off the frame: until it is, `get_view`'s
+  `LimitsPending` is true and the limits in force stay. Percentiles that fall
+  on one value are refused once the histogram is there.
   A name that is no transfer function or colour map is refused naming the
   ones that are.
 - `set_region` — mark a region; the zero region clears the mark. The window

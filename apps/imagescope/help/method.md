@@ -16,9 +16,18 @@ assumes.
 ## Samples and values
 
 A sample is what the file stores: an integer from 0 to 255 or from 0 to
-65535. PNG and JPEG carry no physical unit and no scale, so here a sample's
-value is the sample. The samples of a 16-bit PNG are kept as 16 bits; they
-are never passed through 8.
+65535. The samples of a 16-bit PNG are kept as 16 bits; they are never
+passed through 8. A plane may carry a value transform — a scale and an
+offset — saying what quantity a sample stands for; the limits, the colour
+bar, the histogram and every statistic are then in values, and the readout
+gives the value with the stored sample beside it. PNG and JPEG carry no
+scale, so a file's value is its sample; the *scaled* sample image has one.
+
+A float plane — the *float* sample image is one; PNG and JPEG hold none —
+may mark a sample invalid with NaN. An invalid sample is drawn as the
+checkerboard, named *invalid* in the readout, counted in the statistics'
+*invalid* column and left out of every other figure, the histogram and the
+limits included.
 
 Pixel (column, row) covers the square from (column, row) to (column + 1,
 row + 1), and row 0 is the top. A region of columns 10–19 and rows 0–4 is
@@ -44,7 +53,12 @@ The recipe maps a value to a colour in three steps. The value is placed
 between the two limits, giving a number from 0 to 1, with values outside the
 limits taken as 0 or 1. The transfer function bends that number — *linear*
 leaves it, *log*, *sqrt* and *asinh* give more of the colour map to low
-values, *gamma* raises it to a power. The result picks a colour from the
+values, *gamma* raises it to a power. The transfer functions that take a
+parameter have a slider for it under *Advanced*: log's covers about as many
+decades as its parameter has digits, three by default, and asinh's about
+one by default, reaching further down as it is made smaller. An image that
+spans more decades than the parameter covers shows its low values as the
+bottom of the colour map. The result picks a colour from the
 colour map, or for a colour image sets the level of red, green and blue
 under one shared recipe.
 
@@ -90,7 +104,10 @@ bar heights are therefore not proportional to counts.
 A percentile is nearest rank: the *p*th percentile is the smallest sample
 value with at least *p* percent of the samples at or below it. It is always a
 value that occurs in the data, and the median of an even number of samples
-is the lower of the two middle ones. Other tools interpolate between ranks
+is the lower of the two middle ones. A float plane has no finite set of
+values, so its histogram divides the range into 4096 equal bins and a
+percentile is located within one bin: it is right to a bin's width, which
+over a range of six decades is coarse at the low end. Other tools interpolate between ranks
 or pick the upper middle value, and can differ by one sample value.
 
 ## Region statistics

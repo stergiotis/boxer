@@ -134,6 +134,9 @@ type App struct {
 	// with the recipe before the boxes are drawn, and set from it only by
 	// syncChecks, after something else changed the recipe.
 	invert, flag, selecting, smooth bool
+	// param is the transfer function's parameter as the slider holds it:
+	// the recipe's, or the function's default when the recipe gives none.
+	param float64
 	// problem is why the last change to the view was refused; empty
 	// otherwise.
 	problem string
@@ -417,6 +420,7 @@ func (inst *App) renderAdvancedControls(recipe display.Recipe) {
 			inst.recipeGesture(func(a *SetRecipeArgs) { a.Invert, a.FlagClipped = inst.invert, inst.flag })
 			inst.syncChecks()
 		}
+		inst.renderParamSlider(recipe)
 		for range c.HoverText(tipInvert).KeepIter() {
 			c.Checkbox(inst.ids.PrepareStr("invert"), inst.invert, "Invert").SendRespVal(&inst.invert)
 		}
@@ -496,6 +500,7 @@ func (inst *App) renderMeasurePane() {
 // where the number is (F3).
 const (
 	tipSamples = "Valid samples counted in the region."
+	tipInvalid = "Samples left out as invalid: NaN in a float plane. Every other figure is over the valid samples only."
 	tipSd      = "Standard deviation over the region's samples as the whole population (divisor n). It describes the region and estimates nothing beyond it."
 	tipMedian  = "50th percentile, nearest rank: the smallest sample with at least half of the samples at or below it."
 	tipP01     = "1st percentile, nearest rank."
@@ -521,13 +526,14 @@ func (inst *App) statsColumns() []recordtable.Column {
 	inst.statsCols = []recordtable.Column{
 		{Arrow: 0, Header: "plane", NoSort: true},
 		{Arrow: 1, Header: "samples", Hover: tipSamples, NoSort: true},
-		{Arrow: 2, Header: "min", Cell: figure(2), NoSort: true},
-		{Arrow: 3, Header: "max", Cell: figure(3), NoSort: true},
-		{Arrow: 4, Header: "mean", Cell: figure(4), NoSort: true},
-		{Arrow: 5, Header: "sd", Hover: tipSd, Cell: figure(5), NoSort: true},
-		{Arrow: 6, Header: "median", Hover: tipMedian, Cell: figure(6), NoSort: true},
-		{Arrow: 7, Header: "1 %", Hover: tipP01, Cell: figure(7), NoSort: true},
-		{Arrow: 8, Header: "99 %", Hover: tipP99, Cell: figure(8), NoSort: true},
+		{Arrow: 2, Header: "invalid", Hover: tipInvalid, NoSort: true},
+		{Arrow: 3, Header: "min", Cell: figure(3), NoSort: true},
+		{Arrow: 4, Header: "max", Cell: figure(4), NoSort: true},
+		{Arrow: 5, Header: "mean", Cell: figure(5), NoSort: true},
+		{Arrow: 6, Header: "sd", Hover: tipSd, Cell: figure(6), NoSort: true},
+		{Arrow: 7, Header: "median", Hover: tipMedian, Cell: figure(7), NoSort: true},
+		{Arrow: 8, Header: "1 %", Hover: tipP01, Cell: figure(8), NoSort: true},
+		{Arrow: 9, Header: "99 %", Hover: tipP99, Cell: figure(9), NoSort: true},
 	}
 	return inst.statsCols
 }
@@ -610,11 +616,53 @@ func metric(text string, tip string) {
 	}
 }
 
-// syncChecks sets the check boxes to what the viewer's recipe says, after
-// anything but a box changed the recipe.
+// syncChecks sets the check boxes and the parameter slider to what the
+// viewer's recipe says, after anything but them changed the recipe.
 func (inst *App) syncChecks() {
 	r := inst.viewer.Recipe()
 	inst.invert, inst.flag = r.Invert, r.FlagClipped
+	inst.param = effectiveParam(r)
+}
+
+// effectiveParam is the transfer parameter a recipe is mapped with.
+func effectiveParam(r display.Recipe) float64 {
+	if r.Param > 0 {
+		return r.Param
+	}
+	return r.Transfer.DefaultParam()
+}
+
+// paramRanges is, per transfer function that takes a parameter, the
+// slider's range and its tooltip. The ranges are wide on purpose: a float
+// image can span many decades, and log's parameter is about ten to the
+// number of decades it brings into view.
+var paramRanges = map[display.TransferE]struct {
+	lo, hi float64
+	label  string
+	tip    string
+}{
+	display.TransferLog:   {1, 1e9, "a", "log(a·x + 1) / log(a + 1) of the position x between the limits: a brings about log₁₀(a) decades above the lower limit into view. The default is 1000, three decades."},
+	display.TransferAsinh: {1e-9, 1, "b", "asinh(x / b) / asinh(1 / b): nearly linear for x below b, logarithmic above, so it treats values near the lower limit and either side of zero alike. Smaller b reaches further down; the default is 0.1, about one decade."},
+	display.TransferGamma: {0.05, 20, "γ", "x raised to γ: below 1 lifts the low values, above 1 presses them down. The default is 1, which is linear."},
+}
+
+// renderParamSlider draws the slider for the transfer function's parameter,
+// for a function that takes one, and applies a value moved since the last
+// frame (the check boxes' pattern).
+func (inst *App) renderParamSlider(recipe display.Recipe) {
+	pr, ok := paramRanges[recipe.Transfer]
+	if !ok {
+		return
+	}
+	if inst.param != effectiveParam(recipe) && inst.param > 0 {
+		p := inst.param
+		inst.recipeGesture(func(a *SetRecipeArgs) { a.Param = p })
+		inst.syncChecks()
+	}
+	for range c.HoverText(pr.tip).KeepIter() {
+		c.SliderF64(inst.ids.PrepareStr("param"), inst.param, pr.lo, pr.hi).Logarithmic(true).
+			Text(pr.label).MaxDecimals(9).SendRespVal(&inst.param)
+	}
 }
 
 // refusalText is an error's reason as the window shows it.
