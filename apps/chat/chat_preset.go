@@ -84,7 +84,7 @@ type Preset struct {
 	// Definition tab so the person can read what the model is told. Empty, the
 	// tab is not offered.
 	Source string
-	// Stops are the scenario's stops (ADR-0370, proposed): in force in every
+	// Stops are the scenario's stops (ADR-0370): in force in every
 	// conversation of the window, and not the person's to remove or weaken.
 	// They are not the model's to read, so they are outside the run's
 	// fingerprint, as the greeting is.

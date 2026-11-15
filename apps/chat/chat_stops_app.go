@@ -21,7 +21,7 @@ import (
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/sqleditor"
 )
 
-// The window's side of stops (ADR-0370 §SD6, §SD8, proposed): the preset's
+// The window's side of stops (ADR-0370 §SD6, §SD8): the preset's
 // stops, fixed for the window; the person's own, kept for the window across
 // its conversations as its Settings are; the Stops tab; and what a stop
 // that ends the conversation does to the window.

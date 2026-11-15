@@ -197,7 +197,7 @@ func (inst *reader) starters(key string) (out []chat.Starter) {
 	return
 }
 
-// stops reads the scenario's stops (ADR-0370, proposed): a list of mappings,
+// stops reads the scenario's stops (ADR-0370): a list of mappings,
 // each a name, an action and one kind. Unknown fields are refused, as at the
 // top level: a misspelt kind must not read as a stop that never fires.
 // Whether a stop constructs is the preset's to say (chat.Preset.Validate).

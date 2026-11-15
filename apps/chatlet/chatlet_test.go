@@ -217,7 +217,7 @@ func TestRegisterBook_refuses(t *testing.T) {
 	require.Error(t, RegisterBook("chatlet", fstest.MapFS{}, testTopics), "the package's own book holds the id")
 }
 
-// A document's stops are read into the preset (ADR-0370, proposed), and a
+// A document's stops are read into the preset (ADR-0370), and a
 // stop that does not construct refuses the document: a misspelt stop must
 // not read as no stop.
 func TestStops_areReadAndAStopThatDoesNotConstructIsRefused(t *testing.T) {

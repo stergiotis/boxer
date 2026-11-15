@@ -11,7 +11,7 @@ title: Stops
 
 A stop is a condition you, or the chatlet you opened, put on a conversation:
 a time box, a size the artefact may reach, a phrase that marks the work as
-done, a tool call you want a look at first (ADR-0370, proposed). When it
+done, a tool call you want a look at first (ADR-0370). When it
 holds, the stop holds the turn, ends it, ends the conversation or closes the
 window. The **Stops** tab lists the stops in force, takes one of your own, and
 shows what fired.

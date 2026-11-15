@@ -541,7 +541,7 @@ func runTurn(ctx context.Context, cli completerI, coord *coordinator, req llm.Re
 	if err = coord.beginStopsTurn(jctx, w, req.Turn); err != nil {
 		return
 	}
-	// stopped ends the turn on a stop's verdict (ADR-0370 §SD4, proposed):
+	// stopped ends the turn on a stop's verdict (ADR-0370 §SD4):
 	// the reason, and whether the conversation ends with it.
 	stopped := func(v stopVerdict) {
 		out.stopped = v.reason

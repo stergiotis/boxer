@@ -12,7 +12,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/attention"
 )
 
-// Stops in the turn loop (ADR-0370 §SD4, §SD5, proposed). A check runs
+// Stops in the turn loop (ADR-0370 §SD4, §SD5). A check runs
 // before each request and after each reply. It sits beside the
 // turn-stopping guard and is not an element of it: a guard is a function of
 // a reply, a check calls the worker and may wait on the person, and a

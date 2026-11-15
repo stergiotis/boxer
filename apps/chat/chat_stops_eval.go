@@ -20,7 +20,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect"
 )
 
-// Evaluating stops (ADR-0370 §SD1, proposed): the run's entries, the tool
+// Evaluating stops (ADR-0370 §SD1): the run's entries, the tool
 // calls its replies asked for, the artefact and a clock go to the host's
 // local SQL worker as four tables, and one statement returns every stop's
 // rows. A row's text is its identity; the worker returns it as the JSON of

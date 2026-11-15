@@ -196,8 +196,8 @@ type conversation struct {
 	// fingerprint differs from this build's, or it was deleted (ADR-0308
 	// §SD5, §SD8).
 	stranded bool
-	// ended says a stop ended the conversation, and on what (ADR-0370 §SD4,
-	// proposed): its run is closed and no turn starts in it.
+	// ended says a stop ended the conversation, and on what (ADR-0370 §SD4):
+	// its run is closed and no turn starts in it.
 	ended string
 }
 

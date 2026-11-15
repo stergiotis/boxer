@@ -7,7 +7,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/agentrun"
 )
 
-// Stops in the journal (ADR-0370 §SD3, §SD6, proposed). Every entry here is
+// Stops in the journal (ADR-0370 §SD3, §SD6). Every entry here is
 // extension-private (KindIgnorable): the projection skips it, so the model
 // is shown none of it.
 //

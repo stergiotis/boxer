@@ -163,7 +163,7 @@ type WindowFocusI interface {
 }
 
 // WindowCloseI is the optional frame-context capability by which an app asks
-// the host to close the window it is drawn in (ADR-0370 §SD9, proposed). The
+// the host to close the window it is drawn in (ADR-0370 §SD9). The
 // host closes it at the end of the frame along the path its own close takes
 // — leave, unmount, drain, unload — with reason on the lifecycle row, so an
 // app does nothing after the call that it would not do before any other

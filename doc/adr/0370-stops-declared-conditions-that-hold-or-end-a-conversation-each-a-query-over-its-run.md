@@ -1,12 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-11-12
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to accepted
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-11-15
 ---
-
-> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
 
 # ADR-0370: Stops — declared conditions that hold or end a conversation, each a query over its run
 
@@ -335,7 +333,7 @@ which a stop neither replaces nor reads.
 
 ## Status
 
-Proposed — awaiting review by the code owner. M1–M5 are built against this
+Accepted 2026-11-15. M1–M5 are built against this
 text, and the verification plan's lanes ran on 2026-11-12; the worker's cost
 per check was not measured.
 

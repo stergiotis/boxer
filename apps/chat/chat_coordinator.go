@@ -1184,7 +1184,7 @@ type turnResult struct {
 	stoppedErr error
 	// ended is end or close when a stop ended the conversation with this
 	// turn, answered or stopped, and endedWhy says which and on what
-	// (ADR-0370 §SD4, proposed); none otherwise.
+	// (ADR-0370 §SD4); none otherwise.
 	ended    stopActionE
 	endedWhy string
 	// digest is the last request's digest, as the journal recorded it.

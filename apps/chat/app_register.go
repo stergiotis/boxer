@@ -90,7 +90,7 @@ var manifest = app.Manifest{
 		// the window open is declared below.
 		externaledit.ClientCaps("chat: hand the draft to the host's editor app and take each save back")[:3],
 		// The conversation's stops are statements over its own run, checked
-		// in the host's local SQL worker (ADR-0370, proposed).
+		// in the host's local SQL worker (ADR-0370).
 		StopsCaps(),
 		[]app.SubjectFilter{
 			{Pattern: adhocdata.SubjectPublish, Direction: app.CapDirectionPub,

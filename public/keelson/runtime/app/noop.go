@@ -278,7 +278,7 @@ func (inst *StaticFrameContext) OperationGesture(op string, args []byte) (result
 }
 
 // SetWindowClose installs the host's close for the window carrying this
-// context (ADR-0370 §SD9, proposed); nil removes it.
+// context (ADR-0370 §SD9); nil removes it.
 func (inst *StaticFrameContext) SetWindowClose(fn func(reason string)) {
 	inst.closeWindow = fn
 }

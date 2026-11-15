@@ -17,7 +17,7 @@ scene:
 
 # chat — a stop holds the turn, and Continue goes on from where it was
 
-ADR-0370 (proposed) on the headless host, against the scripted model in
+ADR-0370 on the headless host, against the scripted model in
 [chat-stops.script.jsonl](./chat-stops.script.jsonl). The window is seeded
 with two stops of the person's own: one that pauses the turn when the model
 calls `ask_user`, and a two-hour time box that stays quiet. The model's

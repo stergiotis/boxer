@@ -7,8 +7,8 @@ status: draft
 ---
 
 > **Status: draft — pre-human-review.** Compiled 2026-11-12 to feed
-> [ADR-0370](../adr/0370-stops-declared-conditions-that-hold-or-end-a-conversation-each-a-query-over-its-run.md)
-> (proposed); nothing here is a decision. The claims about other products
+> [ADR-0370](../adr/0370-stops-declared-conditions-that-hold-or-end-a-conversation-each-a-query-over-its-run.md);
+> nothing here is a decision. The claims about other products
 > were read from each product's public documentation or source on the compile
 > date by a model-run research pass and were not re-read by a person. A claim
 > marked `[u]` could not be confirmed from a current source; a claim marked

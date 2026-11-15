@@ -155,7 +155,7 @@ func entriesTable(rows []Entry) *introspect.Table {
 
 // EntriesArrow is entries as an Arrow file in the columns of
 // keelson('agent_run_entries'): one table definition, so a statement
-// written against a run's entries in a local worker (ADR-0370, proposed)
+// written against a run's entries in a local worker (ADR-0370)
 // reads the same relation a reader of the introspection table does.
 func EntriesArrow(entries []Entry) (b []byte, err error) {
 	rec := entriesTable(entries).Build(introspect.Projection{}, len(entries))

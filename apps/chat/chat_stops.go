@@ -15,7 +15,7 @@ import (
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
-// Stops (ADR-0370, proposed): a conversation may carry named conditions
+// Stops (ADR-0370): a conversation may carry named conditions
 // that hold its turn, end it, end the conversation or close its window. A
 // stop is one SELECT over four relations of the run (chat_stops_eval.go);
 // the rows it returns are its evidence, and it fires on rows the person has
