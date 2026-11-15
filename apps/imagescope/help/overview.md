@@ -57,7 +57,9 @@ Drag to pan and use the wheel to zoom. **Fit** shows the whole image and
 **1:1** one sample per screen pixel. Magnified, each sample is a square
 unless *Smooth* is on. Shown smaller than it is, the image is drawn from
 means of blocks of samples, and the line under the image says so: *drawn from
-means of 4 × 4*. That line also names the pixel under the pointer and its
+means of 4 × 4*. Those reduced levels are built in the background when an
+image opens, with a progress row in the status row; cancelling it changes
+nothing on screen, since each tile is then reduced as it is needed. That line also names the pixel under the pointer and its
 stored values, one per plane.
 
 **Show** chooses between the image *as stored* — a colour image as colour,

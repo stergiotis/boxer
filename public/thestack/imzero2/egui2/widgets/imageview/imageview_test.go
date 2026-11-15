@@ -5,12 +5,15 @@ import (
 	"image"
 	"math"
 	"slices"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/stergiotis/boxer/public/keelson/runtime/bgjob"
+	"github.com/stergiotis/boxer/public/keelson/runtime/task"
 	"github.com/stergiotis/boxer/public/keelson/runtime/widgethandle"
 	"github.com/stergiotis/boxer/public/science/imaging"
 	"github.com/stergiotis/boxer/public/science/imaging/display"
@@ -69,10 +72,10 @@ func grayImage(t *testing.T, w, h int) imaging.Image {
 func waitForLevels(t *testing.T, v *Viewer) {
 	t.Helper()
 	deadline := time.Now().Add(10 * time.Second)
-	for v.built.Load() == nil && time.Now().Before(deadline) {
+	for !v.LevelsReady() && time.Now().Before(deadline) {
+		v.adoptLevels()
 		time.Sleep(time.Millisecond)
 	}
-	v.adoptLevels()
 	require.True(t, v.LevelsReady(), "the levels were built")
 }
 
@@ -337,8 +340,8 @@ func TestATileBelowFullResolutionIsTheRecipeAppliedToTheLevelsMeans(t *testing.T
 
 	_, _, _, err := v.src.TilePixels(context.Background(), portolan.TileCoords{Z: -4})
 	assert.Error(t, err, "there is no fourth level")
-	assert.Equal(t, -3, sourceFor(img).MinNativeZoom)
-	assert.Zero(t, sourceFor(colourImage(t, 40, 30, nil)).MinNativeZoom, "a small image has no reduced levels")
+	assert.Equal(t, -3, sourceFor((&imageSource{img: img}).Info()).MinNativeZoom)
+	assert.Zero(t, sourceFor((&imageSource{img: colourImage(t, 40, 30, nil)}).Info()).MinNativeZoom, "a small image has no reduced levels")
 }
 
 func TestTheViewSaysWhichLevelItDraws(t *testing.T) {
@@ -369,14 +372,66 @@ func TestSettingAnotherImageStopsTheBuildOfTheLast(t *testing.T) {
 	v := New(c.NewWidgetIdStack(), "", Options{})
 	big := grayImage(t, 3000, 3000)
 	v.SetImage(big)
+	assert.Equal(t, bgjob.StateRunning, v.LevelJob().Snapshot().State)
 	small := colourImage(t, 40, 30, nil)
 	v.SetImage(small)
-	assert.Nil(t, v.built.Load(), "nothing of the first build is left to adopt")
-	assert.True(t, v.LevelsReady())
+	assert.Equal(t, bgjob.StateIdle, v.LevelJob().Snapshot().State, "the first build is cancelled and its result will be dropped")
+	assert.True(t, v.LevelsReady(), "a small image needs no levels")
 	v.SetImage(big)
 	waitForLevels(t, v)
-	v.Close() // waits; a second Close of the build side must not hang
-	v.stopBuild()
+	v.Close()
+	v.Close() // a second Close does nothing
+}
+
+// recordingTasks is a task API that records the kinds spawned and runs
+// every task untracked.
+type recordingTasks struct {
+	task.NoopTaskApi
+	mu    sync.Mutex
+	kinds []string
+}
+
+func (inst *recordingTasks) Spawn(ctx context.Context, opts task.SpawnOpts) (task.HandleI, error) {
+	inst.mu.Lock()
+	inst.kinds = append(inst.kinds, opts.Kind)
+	inst.mu.Unlock()
+	return inst.NoopTaskApi.Spawn(ctx, opts)
+}
+
+func (inst *recordingTasks) spawned() []string {
+	inst.mu.Lock()
+	defer inst.mu.Unlock()
+	return slices.Clone(inst.kinds)
+}
+
+// The level build and the histogram count run as tasks of the API the
+// viewer was given, so a keelson host lists them, cancels them and drains
+// them with the window; each is also a job the standard row can draw.
+func TestTheBackgroundWorkRunsAsTasksOfTheGivenApi(t *testing.T) {
+	tasks := &recordingTasks{}
+	v := New(c.NewWidgetIdStack(), "", Options{Tasks: tasks})
+	defer v.Close()
+	v.SetImage(grayImage(t, 2300, 1100))
+	waitForLevels(t, v)
+	waitForHistogram(t, v)
+	assert.ElementsMatch(t, []string{levelsKind, histogramKind}, tasks.spawned())
+
+	snap := v.HistogramJob().Snapshot()
+	assert.NotEqual(t, bgjob.StateRunning, snap.State)
+	_, ok := v.Histogram()
+	assert.True(t, ok, "a counted histogram is kept, not counted again")
+	assert.ElementsMatch(t, []string{levelsKind, histogramKind}, tasks.spawned())
+
+	// A cancelled build leaves the view reducing tiles on demand.
+	v.SetImage(grayImage(t, 3000, 3000))
+	v.LevelJob().Cancel()
+	deadline := time.Now().Add(5 * time.Second)
+	for v.LevelJob().Snapshot().State == bgjob.StateRunning && time.Now().Before(deadline) {
+		time.Sleep(time.Millisecond)
+	}
+	v.adoptLevels()
+	assert.False(t, v.LevelsReady())
+	_ = tileAt(t, v, 0, 0, 2)
 }
 
 // rampImage is a w × 1-row-repeated 16-bit plane whose samples run from 0 to

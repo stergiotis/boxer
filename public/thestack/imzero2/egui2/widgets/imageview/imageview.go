@@ -7,10 +7,10 @@ import (
 	"math"
 	"strconv"
 	"strings"
-	"sync"
-	"sync/atomic"
 
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
+	"github.com/stergiotis/boxer/public/keelson/runtime/bgjob"
+	"github.com/stergiotis/boxer/public/keelson/runtime/task"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/science/imaging"
 	"github.com/stergiotis/boxer/public/science/imaging/display"
@@ -35,12 +35,37 @@ type Options struct {
 	// HideHistogram leaves out the strip under a single-plane view that
 	// shows the plane's histogram and the two limits as handles to drag.
 	HideHistogram bool
+	// SampleCacheBytes bounds the samples kept of a source that is not
+	// resident, so a recipe change maps them again without asking the source
+	// (ADR-0374 §SD3, §SD9); 0 takes [DefaultSampleCacheBytes].
+	SampleCacheBytes int64
+	// Tasks is the keelson task API the viewer's background work runs
+	// under — the level build and the histogram counts — so each is a task
+	// the host lists, can cancel, and drains when the window closes. In a
+	// keelson app it is task.ForApp(ctx); nil runs the work untracked.
+	Tasks task.TaskApiI
+}
+
+// Kinds of the viewer's background tasks.
+const (
+	levelsKind     = "imageview.levels"
+	levelsTitle    = "build an image's reduced levels"
+	histogramKind  = "imageview.histogram"
+	histogramTitle = "count a plane's histogram"
+)
+
+// JobI is one of the viewer's background jobs as the standard job row
+// (widgets/bgjobrow) draws it: its state, progress and cancel.
+type JobI interface {
+	Snapshot() bgjob.Snapshot
+	Cancel()
 }
 
 // Readout is one pixel of the image as its samples have it, each plane in
 // the model's plane order: the stored sample, and the value it stands for
 // through the plane's value transform — the same number unless the plane has
-// one. Valid is false for an invalid sample of a float plane.
+// one. Valid is false for an invalid sample of a float plane. Planes is 0
+// when the pixel's samples are not at hand: a source's tile not loaded yet.
 type Readout struct {
 	Col, Row int
 	Planes   int
@@ -102,6 +127,13 @@ type Viewer struct {
 	m   *portolan.Map
 	src *tileSource
 
+	// source is what is shown and info what it said about itself; img is
+	// the image when the source is one in memory (SetImage), and the zero
+	// image otherwise. gen files a source's cached tiles: it moves with
+	// every new source and every Invalidate.
+	source     SourceI
+	info       SourceInfo
+	gen        uint64
 	img        imaging.Image
 	pyramid    *levels.Pyramid
 	plane      int
@@ -112,22 +144,18 @@ type Viewer struct {
 	hoverOk    bool
 	selecting  bool
 
-	// The level build runs on a goroutine of the viewer's own: buildGen
-	// names the image it is for, built is where it leaves its result for
-	// Render to pick up, and Close waits for it.
-	buildGen    uint64
-	buildCancel context.CancelFunc
-	built       atomic.Pointer[buildResult]
-	building    sync.WaitGroup
+	// The level build runs once per image and the histogram count once per
+	// plane asked for, both as background jobs under Opts.Tasks. A stale
+	// result — for an image no longer shown — is dropped by the job itself.
+	levelJob bgjob.Runner[levels.Pyramid]
+	histJob  bgjob.Keyed[*stats.Histogram]
 
 	// region is the rectangle of pixels marked on the image, empty when
 	// there is none.
 	region image.Rectangle
 
-	// Histograms are counted per plane, on the same goroutines' terms.
+	// hists holds the histograms counted for the image shown, by plane.
 	hists             map[int]*stats.Histogram
-	histWanted        map[int]bool
-	histDone          chan histResult
 	pendingPercentile bool
 	percentLo         float64
 	percentHi         float64
@@ -140,11 +168,6 @@ type Viewer struct {
 	histCols                       []uint32
 }
 
-type buildResult struct {
-	gen     uint64
-	pyramid *levels.Pyramid
-}
-
 // New makes a viewer with no image. Every id it derives is scoped under
 // scopeKey on ids; empty takes "imageview".
 func New(ids *c.WidgetIdStack, scopeKey string, opts Options) *Viewer {
@@ -153,13 +176,10 @@ func New(ids *c.WidgetIdStack, scopeKey string, opts Options) *Viewer {
 	}
 	inst := &Viewer{
 		Opts: opts, ids: ids, key: scopeKey, src: &tileSource{}, plane: asStored,
-		hists: make(map[int]*stats.Histogram, 4), histWanted: make(map[int]bool, 4),
-		// Room for every plane of an image, so a counting goroutine never
-		// waits on a viewer that has stopped rendering.
-		histDone: make(chan histResult, 8),
+		hists: make(map[int]*stats.Histogram, 4),
 	}
 	inst.m = portolan.New(ids, "view", portolan.Options{
-		Source:            sourceFor(imaging.Image{}),
+		Source:            sourceFor(SourceInfo{}),
 		Loader:            portolan.LoaderOptions{Pixels: inst.src},
 		CRS:               portolan.Simple,
 		NoInitialView:     true,
@@ -172,12 +192,12 @@ func New(ids *c.WidgetIdStack, scopeKey string, opts Options) *Viewer {
 	return inst
 }
 
-// sourceFor describes an image to portolan as a tile source: its tiles exist
-// from full resolution down through its reduced levels, inside the image's
-// bounds, and the view may zoom well past both ends of that. Between two
-// levels the finer one is drawn, so a screen pixel never has less than one
-// sample behind it (ADR-0373 §SD6).
-func sourceFor(img imaging.Image) portolan.TileSource {
+// sourceFor describes a source to portolan as a tile source: its tiles exist
+// at the levels the source declares, inside its bounds, and the view may
+// zoom well past both ends of them. Between two levels the finer one is
+// drawn, so a screen pixel never has less than one cell behind it
+// (ADR-0373 §SD6). A level is a zoom: level k is portolan's zoom k.
+func sourceFor(info SourceInfo) portolan.TileSource {
 	src := portolan.TileSource{
 		TileSize:         portolan.Pt(tileSize, tileSize),
 		MinZoom:          minZoom,
@@ -189,72 +209,74 @@ func sourceFor(img imaging.Image) portolan.TileSource {
 		KeepBuffer:       1,
 		PreferFiner:      true,
 	}
-	if !img.IsZero() {
-		src.Bounds = boundsOf(img)
-		src.MinNativeZoom = -levels.CountFor(img.Width(), img.Height(), levels.Options{})
+	if !info.IsZero() {
+		src.Bounds = boundsFor(info.Width, info.Height)
+		src.MinNativeZoom, src.MaxNativeZoom = -info.Reduced, info.Magnified
 	}
 	return src
 }
 
-// boundsOf is the image's extent on portolan's flat coordinate system:
+// boundsFor is an extent of pixels on portolan's flat coordinate system:
 // longitude is the column and latitude the negated row.
-func boundsOf(img imaging.Image) portolan.LatLngBounds {
-	return portolan.LatLngBoundsOf(portolan.LL(-float64(img.Height()), 0), portolan.LL(0, float64(img.Width())))
+func boundsFor(width, height int) portolan.LatLngBounds {
+	return portolan.LatLngBoundsOf(portolan.LL(-float64(height), 0), portolan.LL(0, float64(width)))
 }
 
-// Close stops the viewer's workers and waits for a level build under way.
-// The viewer must not be rendered afterwards.
+// Close stops the viewer's tile workers and cancels its background jobs.
+// It does not wait for them: a job ends at its next check of its context
+// and drops its result, and under a keelson task API the host drains it
+// with the window. The viewer must not be rendered afterwards.
 func (inst *Viewer) Close() {
-	inst.stopBuild()
+	inst.dropWork()
+	inst.histJob.Close()
 	inst.m.Close()
 }
 
-// stopBuild cancels the level build, if one is running, and waits for it.
-func (inst *Viewer) stopBuild() {
-	if inst.buildCancel != nil {
-		inst.buildCancel()
-		inst.buildCancel = nil
-	}
-	inst.building.Wait()
-	inst.built.Store(nil)
-	for len(inst.histDone) > 0 {
-		<-inst.histDone
-	}
+// dropWork cancels the jobs for the image shown and forgets what they
+// produced.
+func (inst *Viewer) dropWork() {
+	inst.levelJob.Invalidate()
+	inst.histJob.Invalidate()
 	clear(inst.hists)
-	clear(inst.histWanted)
 	inst.pendingPercentile = false
 	inst.drag = limitDrag{}
 }
 
-// startBuild reduces the image on a goroutine. Until it is done the tiles
-// below full resolution are reduced one by one as they are asked for, to the
-// same cells.
+// startBuild reduces the image as a background job. Until it lands the
+// tiles below full resolution are reduced one by one as they are asked for,
+// to the same cells. Its cost is linear in the image's samples (ADR-0373
+// §SD6).
 func (inst *Viewer) startBuild(img imaging.Image) {
-	inst.buildGen++
 	if levels.CountFor(img.Width(), img.Height(), levels.Options{}) == 0 {
 		return
 	}
-	ctx, cancel := context.WithCancel(context.Background())
-	inst.buildCancel = cancel
-	gen := inst.buildGen
-	inst.building.Go(func() {
-		if pyramid, err := levels.Build(ctx, img, levels.Options{}); err == nil {
-			inst.built.Store(&buildResult{gen: gen, pyramid: pyramid})
-		}
-	})
+	inst.levelJob.StartReporting(inst.Opts.Tasks, bgjob.Spec{Kind: levelsKind, Title: levelsTitle},
+		func(ctx context.Context, report bgjob.Reporter) (*levels.Pyramid, error) {
+			return levels.Build(ctx, img, levels.Options{Progress: func(done, total int64) {
+				report(uint64(done), uint64(total), "reducing")
+			}})
+		})
 }
 
 // adoptLevels takes over a finished build. The tiles on screen are already
 // the cells the build made, so nothing is invalidated: later tiles are read
 // from the levels instead of reduced on the spot.
 func (inst *Viewer) adoptLevels() {
-	result := inst.built.Swap(nil)
-	if result == nil || result.gen != inst.buildGen || inst.img.IsZero() {
+	pyramid, _, ok := inst.levelJob.TakeResult()
+	if !ok || inst.img.IsZero() {
 		return
 	}
-	inst.pyramid = result.pyramid
+	inst.pyramid = pyramid
+	inst.source = &imageSource{img: inst.img, pyramid: pyramid}
 	_ = inst.publish(inst.plane, inst.recipe)
 }
+
+// LevelJob is the build of the image's reduced levels. Cancelled, the view
+// goes on reducing the tiles it needs one by one.
+func (inst *Viewer) LevelJob() JobI { return &inst.levelJob }
+
+// HistogramJob is the count of the shown plane's histogram.
+func (inst *Viewer) HistogramJob() JobI { return &inst.histJob }
 
 // LevelsReady reports whether the image's reduced levels are built; an image
 // small enough to need none is ready at once.
@@ -266,37 +288,119 @@ func (inst *Viewer) LevelsReady() bool {
 // Level is the level the current view is drawn from: 0 for the image's own
 // samples, k when every cell drawn is the mean of a 2^k × 2^k block of them.
 func (inst *Viewer) Level() int {
-	if inst.img.IsZero() || !inst.m.View().Loaded() {
+	if inst.info.IsZero() || !inst.m.View().Loaded() {
 		return 0
 	}
 	k := -int(math.Ceil(inst.m.View().Zoom() - 1e-6))
-	return min(max(k, 0), levels.CountFor(inst.img.Width(), inst.img.Height(), levels.Options{}))
+	return min(max(k, 0), inst.info.Reduced)
 }
 
-// Image is the image being shown; the zero image when there is none.
+// Image is the image being shown when it was set with [Viewer.SetImage];
+// the zero image otherwise.
 func (inst *Viewer) Image() imaging.Image { return inst.img }
 
-// SetImage shows another image, as stored and under its default recipe, and
-// fits it to the view on the next frame. The zero image shows nothing.
+// SourceInfo is what the source shown said about itself; the zero value
+// when nothing is shown.
+func (inst *Viewer) SourceInfo() SourceInfo { return inst.info }
+
+// SetImage shows an image in memory, as stored and under its default recipe,
+// and fits it to the view on the next frame; its reduced levels are built in
+// the background. The zero image shows nothing.
 func (inst *Viewer) SetImage(img imaging.Image) {
-	inst.stopBuild()
-	inst.img = img
-	inst.pyramid = nil
-	inst.region = image.Rectangle{}
-	inst.plane = asStored
-	inst.hoverOk = false
-	inst.fitPending = !img.IsZero()
+	inst.dropWork()
+	inst.img, inst.pyramid = img, nil
 	if img.IsZero() {
-		inst.src.cur.Store(nil)
-	} else if err := inst.publish(asStored, display.DefaultRecipe(img)); err != nil {
+		inst.clearSource()
+		return
+	}
+	inst.useSource(&imageSource{img: img}, false)
+	if err := inst.publish(asStored, display.DefaultRecipe(img)); err != nil {
 		// A default recipe always validates; an image this package cannot
 		// map (a float colour image) is shown as its first plane instead.
 		_ = inst.publish(0, display.DefaultPlaneRecipe(img.Plane(0)))
 	}
-	inst.m.SetSource(sourceFor(img))
-	if !img.IsZero() {
-		inst.startBuild(img)
+	inst.startBuild(img)
+}
+
+// SetSource shows a source — a renderer that draws a tile when asked, a
+// store a decoder filled (ADR-0374 §SD1) — as stored and under a default
+// recipe: the nominal range of its sample kind, or 0 to 1 for floats. With
+// keepView the view stays where it is, as when the next page of a document
+// replaces this one; otherwise it fits the source on the next frame. A
+// source whose description the viewer cannot show is refused and what was
+// shown stays.
+//
+// What needs every sample at hand — the histogram, percentile limits, the
+// readout of a pixel whose tile is not loaded — is offered for an image in
+// memory and not for a source.
+func (inst *Viewer) SetSource(src SourceI, keepView bool) error {
+	if src == nil {
+		inst.dropWork()
+		inst.img, inst.pyramid = imaging.Image{}, nil
+		inst.clearSource()
+		return nil
 	}
+	info := src.Info()
+	if err := info.Validate(); err != nil {
+		return err
+	}
+	inst.dropWork()
+	inst.img, inst.pyramid = imaging.Image{}, nil
+	inst.useSource(src, keepView)
+	if err := inst.publish(asStored, defaultRecipeFor(info, asStored)); err != nil {
+		return inst.publish(0, defaultRecipeFor(info, 0))
+	}
+	return nil
+}
+
+// Invalidate says the source's content changed and its geometry did not:
+// the samples kept of it are dropped, and the tiles in view are asked for
+// again, coarser levels first, the old ones standing until they are
+// replaced (ADR-0374 §SD3). For an image in memory there is nothing to
+// drop; the tiles are mapped again.
+func (inst *Viewer) Invalidate() {
+	if inst.info.IsZero() {
+		return
+	}
+	inst.gen++
+	inst.src.cache.clear()
+	_ = inst.publish(inst.plane, inst.recipe)
+	inst.m.InvalidateTiles()
+}
+
+// useSource makes src the source shown and resets what belonged to the last.
+func (inst *Viewer) useSource(src SourceI, keepView bool) {
+	inst.source, inst.info = src, src.Info()
+	inst.gen++
+	inst.src.cache.clear()
+	inst.region = image.Rectangle{}
+	inst.plane = asStored
+	inst.hoverOk = false
+	inst.fitPending = !keepView || !inst.m.View().Loaded()
+	inst.m.SetSource(sourceFor(inst.info))
+}
+
+// clearSource shows nothing.
+func (inst *Viewer) clearSource() {
+	inst.source, inst.info = nil, SourceInfo{}
+	inst.gen++
+	inst.src.cache.clear()
+	inst.region = image.Rectangle{}
+	inst.plane = asStored
+	inst.hoverOk, inst.fitPending = false, false
+	inst.src.cur.Store(nil)
+	inst.m.SetSource(sourceFor(SourceInfo{}))
+}
+
+// defaultRecipeFor is the recipe a source opens under, as stored or one
+// plane: the nominal range of its kind through the plane's transform, linear
+// — which shows 8-bit colour as it was rendered — or 0 to 1 for a float
+// source, which has no nominal range.
+func defaultRecipeFor(info SourceInfo, plane int) display.Recipe {
+	if l, ok := display.NominalLimits(info.Kind, info.Transform(max(plane, 0))); ok {
+		return display.Recipe{Limits: l}
+	}
+	return display.Recipe{Limits: display.Limits{Lo: 0, Hi: 1, Source: display.LimitsSourceManual}}
 }
 
 // Recipe is the recipe the image is shown through.
@@ -316,7 +420,7 @@ func (inst *Viewer) Recipe() display.Recipe { return inst.recipe }
 // of one plane, and when the two percentiles fall on one value. A later
 // recipe of any other kind replaces a percentile stretch still pending.
 func (inst *Viewer) SetRecipe(recipe display.Recipe) error {
-	if inst.img.IsZero() {
+	if inst.info.IsZero() {
 		return eb.Build().Errorf("no image to show a recipe on")
 	}
 	if recipe.Limits.Source != display.LimitsSourcePercentile {
@@ -326,6 +430,9 @@ func (inst *Viewer) SetRecipe(recipe display.Recipe) error {
 	lo, hi := recipe.Limits.PercentLo, recipe.Limits.PercentHi
 	if !inst.singlePlane() {
 		return eb.Build().Errorf("percentile limits apply to a single plane; show one first")
+	}
+	if inst.img.IsZero() {
+		return eb.Build().Errorf("percentile limits need every sample at hand, which a source does not offer; set the limits")
 	}
 	if !(lo >= 0 && lo < hi && hi <= 100) {
 		return eb.Build().Float64("lo", lo).Float64("hi", hi).Errorf("percentiles must be an ascending pair within 0 and 100")
@@ -375,13 +482,16 @@ func (inst *Viewer) Plane() (index int, ok bool) {
 // under that plane's default recipe. Setting the plane already shown changes
 // nothing, the recipe included.
 func (inst *Viewer) SetPlane(index int) error {
-	if index < 0 || index >= inst.img.PlaneCount() {
-		return eb.Build().Int("plane", index).Int("planes", inst.img.PlaneCount()).Errorf("image has no such plane")
+	if index < 0 || index >= inst.info.Model.PlaneCount() {
+		return eb.Build().Int("plane", index).Int("planes", inst.info.Model.PlaneCount()).Errorf("image has no such plane")
 	}
 	if index == inst.plane {
 		return nil
 	}
-	recipe := display.DefaultPlaneRecipe(inst.img.Plane(index))
+	recipe := defaultRecipeFor(inst.info, index)
+	if !inst.img.IsZero() {
+		recipe = display.DefaultPlaneRecipe(inst.img.Plane(index))
+	}
 	recipe.Palette = inst.recipe.Palette
 	if err := inst.publish(index, recipe); err != nil {
 		return err
@@ -395,10 +505,13 @@ func (inst *Viewer) SetPlane(index int) error {
 // SetAsStored returns to the image as stored, under its default recipe.
 // When it is already shown that way nothing changes.
 func (inst *Viewer) SetAsStored() error {
-	if inst.img.IsZero() || inst.plane == asStored {
+	if inst.info.IsZero() || inst.plane == asStored {
 		return nil
 	}
-	recipe := display.DefaultRecipe(inst.img)
+	recipe := defaultRecipeFor(inst.info, asStored)
+	if !inst.img.IsZero() {
+		recipe = display.DefaultRecipe(inst.img)
+	}
 	recipe.Palette = inst.recipe.Palette
 	if err := inst.publish(asStored, recipe); err != nil {
 		return err
@@ -416,7 +529,7 @@ func (inst *Viewer) IsSinglePlane() bool { return inst.singlePlane() }
 
 // singlePlane is IsSinglePlane.
 func (inst *Viewer) singlePlane() bool {
-	return !inst.img.IsZero() && (inst.plane != asStored || !inst.img.Model().IsColor())
+	return !inst.info.IsZero() && (inst.plane != asStored || !inst.info.Model.IsColor())
 }
 
 // publish compiles a recipe for a view of the image and, when that works,
@@ -427,13 +540,16 @@ func (inst *Viewer) publish(plane int, recipe display.Recipe) error {
 	if !ok {
 		return eb.Build().Str("palette", recipe.Palette).Strs("known", PaletteNames()).Errorf("no colour map of that name")
 	}
-	sh := &shown{img: inst.img, pyramid: inst.pyramid, plane: plane, checker: checkerColours()}
+	limit := inst.Opts.SampleCacheBytes
+	if limit <= 0 {
+		limit = DefaultSampleCacheBytes
+	}
+	sh := &shown{source: inst.source, info: inst.info, gen: inst.gen, plane: plane, checker: checkerColours(), cacheBytes: limit}
 	var err error
-	if plane == asStored && inst.img.Model().IsColor() {
-		sh.colours, err = display.CompileColor(recipe, inst.img.Kind(), inst.img.Plane(0).Transform())
+	if plane == asStored && inst.info.Model.IsColor() {
+		sh.colours, err = display.CompileColor(recipe, inst.info.Kind, inst.info.Transform(0))
 	} else {
-		p := inst.img.Plane(max(plane, 0))
-		sh.planes, err = display.CompilePlane(recipe, p.Kind(), p.Transform(), palette)
+		sh.planes, err = display.CompilePlane(recipe, inst.info.Kind, inst.info.Transform(max(plane, 0)), palette)
 	}
 	if err != nil {
 		return err
@@ -453,7 +569,7 @@ func (inst *Viewer) Magnification() float64 {
 }
 
 // Fit shows the whole image on the next frame.
-func (inst *Viewer) Fit() { inst.fitPending = !inst.img.IsZero() }
+func (inst *Viewer) Fit() { inst.fitPending = !inst.info.IsZero() }
 
 // ActualSize shows the image at one screen pixel per image pixel, about the
 // centre of the current view.
@@ -464,17 +580,41 @@ func (inst *Viewer) ActualSize() {
 }
 
 // readoutAt reads the samples of the pixel a point of the flat coordinate
-// system falls in.
+// system falls in. The pixel is always reported when it is inside the
+// image; its samples are read from the image in memory, from a resident
+// source, or from the cached tile that holds it, and Planes is 0 when none
+// of those has them — the source is never asked from the frame.
 func (inst *Viewer) readoutAt(ll portolan.LatLng) (r Readout, ok bool) {
 	col, row := int(math.Floor(ll.Lng)), int(math.Floor(-ll.Lat))
-	if inst.img.IsZero() || !inst.img.Plane(0).Contains(col, row) {
+	if inst.info.IsZero() || col < 0 || row < 0 || col >= inst.info.Width || row >= inst.info.Height {
 		return r, false
 	}
-	r = Readout{Col: col, Row: row, Planes: inst.img.PlaneCount()}
+	r = Readout{Col: col, Row: row}
+	samples, at := inst.img, image.Pt(col, row)
+	if samples.IsZero() {
+		sh := inst.src.cur.Load()
+		if sh == nil {
+			return r, true
+		}
+		var d TileData
+		have := false
+		if inst.info.Resident {
+			var err error
+			d, err = sh.source.Tile(context.Background(), 0, col/tileSize, row/tileSize)
+			have = err == nil
+			at = d.Region.Min.Add(image.Pt(col%tileSize, row%tileSize))
+		} else {
+			d, at, have = inst.src.cachedSample(sh, col, row)
+		}
+		if !have {
+			return r, true
+		}
+		samples = d.Samples
+	}
+	r.Planes = samples.PlaneCount()
 	for i := range r.Planes {
-		p := inst.img.Plane(i)
-		r.Stored[i], r.Valid[i] = p.StoredAt(col, row)
-		r.Values[i] = p.Transform().Apply(r.Stored[i])
+		r.Stored[i], r.Valid[i] = samples.Plane(i).StoredAt(at.X, at.Y)
+		r.Values[i] = inst.info.Transform(i).Apply(r.Stored[i])
 	}
 	return r, true
 }
@@ -491,8 +631,8 @@ func (inst *Viewer) Region() (region image.Rectangle, ok bool) {
 // over the image and changes nothing about how the image is shown.
 func (inst *Viewer) SetRegion(region image.Rectangle) {
 	inst.region = image.Rectangle{}
-	if !inst.img.IsZero() {
-		if r := region.Intersect(image.Rect(0, 0, inst.img.Width(), inst.img.Height())); !r.Empty() {
+	if !inst.info.IsZero() {
+		if r := region.Intersect(image.Rect(0, 0, inst.info.Width, inst.info.Height)); !r.Empty() {
 			inst.region = r
 		}
 	}
@@ -512,12 +652,12 @@ func (inst *Viewer) SetSelecting(on bool) {
 // pixelsIn is the pixels a box on the view touches: every pixel any part of
 // which lies inside it, clipped to the image.
 func (inst *Viewer) pixelsIn(box portolan.LatLngBounds) image.Rectangle {
-	if inst.img.IsZero() {
+	if inst.info.IsZero() {
 		return image.Rectangle{}
 	}
 	sw, ne := box.SouthWest, box.NorthEast
 	r := image.Rect(int(math.Floor(sw.Lng)), int(math.Floor(-ne.Lat)), int(math.Ceil(ne.Lng)), int(math.Ceil(-sw.Lat)))
-	return r.Intersect(image.Rect(0, 0, inst.img.Width(), inst.img.Height()))
+	return r.Intersect(image.Rect(0, 0, inst.info.Width, inst.info.Height))
 }
 
 // paintRegion outlines the marked region over the image, on the pixels'
@@ -553,7 +693,7 @@ func (inst *Viewer) Render(w, h float32) (ev Events) {
 	inst.adoptLevels()
 	inst.adoptHistograms()
 	for range c.IdScope(inst.ids.PrepareStr(inst.key)) {
-		if inst.img.IsZero() {
+		if inst.info.IsZero() {
 			c.Label("No image").Send()
 			return
 		}
@@ -565,7 +705,9 @@ func (inst *Viewer) Render(w, h float32) (ev Events) {
 			readoutH = readoutHeight + layoutGap
 		}
 		histH := float32(0)
-		if inst.singlePlane() && !inst.Opts.HideHistogram {
+		// A histogram counts every sample, which only an image in memory
+		// has at hand.
+		if inst.singlePlane() && !inst.Opts.HideHistogram && !inst.img.IsZero() {
 			histH = histogramHeight + layoutGap
 			inst.wantHistogram()
 		}
@@ -575,7 +717,7 @@ func (inst *Viewer) Render(w, h float32) (ev Events) {
 		if inst.fitPending {
 			// The view needs its size before it can fit anything to it.
 			inst.m.View().SetSize(portolan.Pt(float64(cw), float64(ch)))
-			if err := inst.m.View().FitBounds(boundsOf(inst.img), portolan.FitOptions{}); err == nil {
+			if err := inst.m.View().FitBounds(boundsFor(inst.info.Width, inst.info.Height), portolan.FitOptions{}); err == nil {
 				inst.fitPending = false
 			}
 		}
@@ -615,30 +757,31 @@ func (inst *Viewer) readoutText() string {
 	var b strings.Builder
 	if inst.hoverOk {
 		fmt.Fprintf(&b, "x %d  y %d   ", inst.hover.Col, inst.hover.Row)
-		names := inst.img.Model().PlaneNames()
+		names := inst.info.Model.PlaneNames()
 		for i := range inst.hover.Planes {
 			if i > 0 {
 				b.WriteString("  ")
 			}
 			b.WriteString(names[i])
 			b.WriteByte(' ')
-			switch p := inst.img.Plane(i); {
+			switch {
 			case !inst.hover.Valid[i]:
 				b.WriteString("invalid")
-			case p.Transform().IsIdentity():
-				b.WriteString(formatSample(inst.hover.Stored[i], inst.img.Kind()))
+			case inst.info.Transform(i).IsIdentity():
+				b.WriteString(formatSample(inst.hover.Stored[i], inst.info.Kind))
 			default:
 				// The value is what the limits, the colour bar and the
 				// histogram are in; the stored sample is what the file holds.
-				fmt.Fprintf(&b, "%s (stored %s)", formatValue(inst.hover.Values[i]), formatSample(inst.hover.Stored[i], inst.img.Kind()))
+				fmt.Fprintf(&b, "%s (stored %s)", formatValue(inst.hover.Values[i]), formatSample(inst.hover.Stored[i], inst.info.Kind))
 			}
 		}
 	} else {
 		b.WriteString("—")
 	}
 	fmt.Fprintf(&b, "   ×%s", formatMagnification(inst.Magnification()))
-	if k := inst.Level(); k > 0 {
-		// What is drawn is not the samples: say so, and say what it is.
+	if k := inst.Level(); k > 0 && !inst.info.Rendered {
+		// What is drawn is not the samples: say so, and say what it is. A
+		// rendered source draws each level anew, so there is nothing to say.
 		fmt.Fprintf(&b, "   drawn from means of %d × %d", 1<<k, 1<<k)
 	}
 	return b.String()

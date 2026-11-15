@@ -175,7 +175,7 @@ func (inst *App) bindIds(ids *c.WidgetIdStack) {
 	}
 	inst.ids = ids
 	old := inst.viewer
-	inst.viewer = imageview.New(ids, "viewer", imageview.Options{})
+	inst.viewer = imageview.New(ids, "viewer", imageview.Options{Tasks: inst.tasks})
 	if old != nil {
 		if !inst.img.IsZero() {
 			inst.viewer.SetImage(inst.img)
@@ -198,10 +198,12 @@ func (inst *App) Manifest() (m app.Manifest) { m = manifest; return }
 // A seed that names no sample, or a region seed that does not parse, is
 // reported in the status row and the window opens empty or unmarked.
 func (inst *App) Mount(ctx app.MountContextI) (err error) {
+	// The task API first: the viewer made for the host's id stack runs its
+	// level build and histogram counts as tasks of this window.
+	inst.tasks = task.ForApp(ctx)
 	inst.bindIds(ctx.Ids())
 	inst.logger = ctx.Log()
 	inst.bus = ctx.Bus()
-	inst.tasks = task.ForApp(ctx)
 	inst.scope = app.LifetimeOf(ctx)
 	inst.measure.Configure(inst.tasks, measureKind, measureTitle)
 	inst.phaseChip = fsmview.New(inst.ids, "image-phase", inst.phaseMachine, fsmview.Options[phaseE]{
@@ -292,6 +294,10 @@ func (inst *App) renderStatusRow() {
 			c.Label(inst.phaseLine()).Send()
 		}
 		bgjobrow.Render(bgjobrow.Input{Ids: inst.ids, ScopeKey: "open-row", Job: &inst.open, Note: "opening…", Cancel: true, Inline: true})
+		// The viewer's own work, as rows of the same kind (W4). A cancelled
+		// level build leaves the view reducing the tiles it needs one by one.
+		bgjobrow.Render(bgjobrow.Input{Ids: inst.ids, ScopeKey: "levels-row", Job: inst.viewer.LevelJob(), Note: "building levels…", Cancel: true, Inline: true})
+		bgjobrow.Render(bgjobrow.Input{Ids: inst.ids, ScopeKey: "histogram-row", Job: inst.viewer.HistogramJob(), Note: "counting the histogram…", Inline: true})
 		switch {
 		case inst.openErr != "":
 			badge.New(inst.ids.PrepareStr("open-err"), "open failed: "+inst.openErr).

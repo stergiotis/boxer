@@ -1,7 +1,10 @@
 package imageview
 
 import (
+	"context"
+	"encoding/hex"
 	"math"
+	"strconv"
 
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	"github.com/stergiotis/boxer/public/keelson/runtime/widgethandle"
@@ -19,14 +22,6 @@ const (
 	// axis: a recipe needs its upper limit above its lower one.
 	minLimitSpan = 1e-4
 )
-
-// histResult is a histogram a goroutine has finished, for the image and
-// plane it names.
-type histResult struct {
-	gen   uint64
-	plane int
-	hist  *stats.Histogram
-}
 
 // limitDrag is a drag of one limit's handle in progress. The strip's axis is
 // held as it was at the press, so the value under the pointer does not slide
@@ -60,37 +55,45 @@ func (inst *Viewer) Histogram() (h stats.Histogram, ok bool) {
 	return h, false
 }
 
-// wantHistogram counts the shown plane on a goroutine unless it is counted
-// or being counted already.
-func (inst *Viewer) wantHistogram() {
-	idx := inst.shownPlaneIndex()
-	if inst.hists[idx] != nil || inst.histWanted[idx] {
-		return
-	}
-	inst.histWanted[idx] = true
-	plane, gen := inst.img.Plane(idx), inst.buildGen
-	inst.building.Go(func() {
-		h := stats.Of(plane)
-		inst.histDone <- histResult{gen: gen, plane: idx, hist: &h}
-	})
+// histogramKey names the count of one plane of the image shown.
+func (inst *Viewer) histogramKey(plane int) string {
+	sum := inst.img.Hash()
+	return hex.EncodeToString(sum[:8]) + "/" + strconv.Itoa(plane)
 }
 
-// adoptHistograms takes over finished histograms of the current image and
-// applies a percentile stretch that was waiting for one.
+// wantHistogram asks for the shown plane's histogram: it is counted as a
+// background job unless it is counted already, and kept once it lands.
+// Counting is linear in the plane's samples and is not interrupted once
+// begun; a superseded count's result is dropped.
+func (inst *Viewer) wantHistogram() {
+	idx := inst.shownPlaneIndex()
+	if inst.hists[idx] != nil || inst.img.IsZero() {
+		return
+	}
+	plane := inst.img.Plane(idx)
+	inst.histJob.Configure(inst.Opts.Tasks, histogramKind, histogramTitle)
+	val, done, err, busy := inst.histJob.Demand(inst.histogramKey(idx), func(context.Context) (*stats.Histogram, error) {
+		h := stats.Of(plane)
+		return &h, nil
+	})
+	if done && !busy && err == nil && val != nil {
+		inst.hists[idx] = val
+	}
+}
+
+// adoptHistograms takes over a count of the shown plane that has landed,
+// and applies a percentile stretch that was waiting for it.
 func (inst *Viewer) adoptHistograms() {
-	for {
-		select {
-		case r := <-inst.histDone:
-			if r.gen != inst.buildGen {
-				continue
+	if inst.singlePlane() {
+		idx := inst.shownPlaneIndex()
+		if inst.hists[idx] == nil {
+			// A question, not an order: nothing starts here.
+			if val, done, err, busy := inst.histJob.Demand(inst.histogramKey(idx), nil); done && !busy && err == nil && val != nil {
+				inst.hists[idx] = val
 			}
-			inst.hists[r.plane] = r.hist
-			delete(inst.histWanted, r.plane)
-		default:
-			inst.applyPendingPercentile()
-			return
 		}
 	}
+	inst.applyPendingPercentile()
 }
 
 // applyPendingPercentile sets percentile limits that waited for the

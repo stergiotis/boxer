@@ -6,6 +6,26 @@
 // samples: it maps the tiles in view to colours on portolan's loader workers
 // and never changes a plane.
 //
+// # Sources
+//
+// What a viewer shows is a [SourceI]: a description and a tile of samples at
+// a level when asked (ADR-0374 §SD1). [Viewer.SetImage] shows an image in
+// memory as one, building its reduced levels in the background.
+// [Viewer.SetSource] shows any other — a renderer that draws a page or a
+// plot at the scale in view, levels above full resolution included, or a
+// store a decoder filled — and can keep the view, as a page turn does.
+// Every source hands back samples, so the recipe applies to all of them; a
+// rendered source's 8-bit colour passes through the default recipe as it was
+// drawn, and the viewer claims nothing about it as a measurement.
+//
+// The tiles of a source that is not resident are kept in a sample cache
+// bounded by [Options.SampleCacheBytes], so a recipe change maps them again
+// without asking the source; [Viewer.Invalidate] drops them when the
+// source's content changes, and the old tiles stand until the new ones land.
+// The histogram and percentile limits need every sample at hand and are
+// offered for an image in memory only; the readout of a source reads the
+// tile at hand and never asks the source from the frame.
+//
 // # What is shown
 //
 // An image opens as stored (§SD1): a colour image as its red, green and blue
@@ -32,11 +52,20 @@
 // Shown smaller than it is, the image is drawn from reduced levels
 // ([levels]): each cell the mean of the block of samples it covers, the
 // level chosen so that a screen pixel never has less than one cell behind
-// it (§SD6). The levels are built on a goroutine of the viewer's own when an
-// image is set; until they are done a tile below full resolution is reduced
-// on the spot, to the same cells, so nothing changes on screen when the
-// build lands. The readout line says when what is drawn is means, and
-// [Viewer.Level] reports it.
+// it (§SD6). The levels are built as a background job when an image is set;
+// until they are done a tile below full resolution is reduced on the spot,
+// to the same cells, so nothing changes on screen when the build lands. The
+// readout line says when what is drawn is means, and [Viewer.Level] reports
+// it.
+//
+// # Background work
+//
+// The level build and each plane's histogram count are background jobs
+// ([Viewer.LevelJob], [Viewer.HistogramJob]) that widgets/bgjobrow draws as
+// the standard row. Given a keelson task API in [Options.Tasks], each runs as
+// a task of it, which the host lists, can cancel, and drains when the window
+// closes; without one they run untracked. [Viewer.Close] cancels them and
+// does not wait. The tile workers are the map's own and stop with Close.
 //
 // # What a change costs
 //
