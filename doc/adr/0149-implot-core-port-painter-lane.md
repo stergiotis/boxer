@@ -923,3 +923,65 @@ dropped their pick and read hover and click back from the regions.
 the marks of one canvas; an AccessKit Click action on a region (its node
 offers Focus only, since the region does not sense clicks); a role richer
 than unknown (AccessKit has `GraphicsSymbol`, egui's `WidgetType` does not).
+
+## Update 2026-11-15 — range gestures, zoned time axes, an outside legend, and a per-series hover readout
+
+Four requests from a downstream dashboard viewer, which draws Grafana-style
+time series panels on this port, each for something it had to report as
+unsupported. All four are Go-side; no IDL, binding or host change.
+
+**Range gestures** (`RangeGesture`, `gesture.go`). An app whose data depends
+on the range could poll the limits, but a change there may as well come from
+an auto-fit, a link or its own `SetupAxisLimits`, and a wheel zoom moves the
+range on every notch. The plot now records what the person did — a released
+box, a pan, a double-click fit, a run of wheel steps — per axis, and hands
+each one to exactly one handle: the next frame's, from `Begin` to `End`. The
+wheel has no release, so a run finishes after it has rested for 300 ms, and
+the plot books a repaint for that moment, since an idle window draws no
+frame of its own. The reported range is the one the gesture asked for, held
+to the constraints, not the one the axis settled on: a viewer that pins its
+time axis every frame and sets the dashboard range from the gesture has to
+read the person's choice past its own pin. *Rejected:* a callback (the rest
+of the API is readback); reporting from the frame the gesture finished in
+(a fit's range is only known at `End`, which a `Scoped` body cannot read
+past). *Not ported:* upstream's query rectangle, which upstream itself
+replaced with `DragRect`, also not ported.
+
+**Time zones** (`SetupAxisTimeZone`, `TimeTicksIn`). A `ScaleTime` axis
+takes a `*time.Location` for its ticks, labels, hover readout and tags.
+Calendar rungs walk the zone's calendar, so a day across a DST change is 23
+or 25 hours long; rungs of several hours keep the same wall-clock hours; rungs
+of an hour or less step evenly from a local hour boundary, so the hour the
+clocks go back over is labelled twice rather than skipped, and the readout
+carries the zone's abbreviation to tell its two readings apart. Under UTC
+the located ticks are what they were. *Rejected:* upstream's `UseLocalTime`
+flag, which covers the machine's zone and not the one a dashboard names.
+
+**The legend's placement and hidden set** (`SetupLegend`,
+`SeriesHidden`/`SetSeriesHidden`). The legend goes inside (the default), to
+the right of the plot area, or below it as a wrapping row — the shared
+`legend` package gained the horizontal layout — and the plot area shrinks
+by what it takes. The hidden set, which only clicks on the legend changed,
+is readable and settable, so a legend the caller draws or restores toggles
+the same series. Every legend row now also emits a labelled hit region (the
+2026-11-01 (2) update), so it is a named node a scene or an agent can find;
+it is clicked by name with a pointer press, the region offering no AccessKit
+Click. *Deferred, not killed:* a table legend with a value column per series
+(a viewer can build one from `SeriesReadout` and the hidden set), and
+upstream's other locations.
+
+**Per-series readout and a shared crosshair** (`HoverSeries`,
+`SeriesReadout`, `CrosshairLink`, `seriesreadout.go`). While hovered, a plot
+with `HoverSeries` marks every visible labelled line, scatter, stairs, stems
+or shaded series at its sample nearest the pointer's x — for stairs, the last
+sample at or before it — and lists them in a box beside a vertical line;
+`SeriesReadout` hands the same rows to the caller. Plots that join one
+`CrosshairLink` draw the line, and their readouts, at the x the pointer is
+over in any of them; the caller holds the link, as it holds the range-link
+endpoints. The nearest sample is found by a scan rather than a binary
+search: whether x is sorted is itself an O(n) question, and drawing the
+series already walks every sample each frame. A link not refreshed for a
+second reads as empty, so a hovered plot that stops being drawn does not
+leave its line in the others. *Rejected:* a group registry inside the
+package (it would need its own lifetime rules, where a caller-held value
+has the caller's).
