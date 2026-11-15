@@ -2,6 +2,7 @@ package passes_test
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
@@ -436,6 +437,27 @@ func TestNormalizeIdentifiersBooleanLiteralsUntouched(t *testing.T) {
 	// true and false should not become "true" and "false"
 	assert.NotContains(t, got, `"true"`)
 	assert.NotContains(t, got, `"false"`)
+}
+
+func TestNormalizeIdentifiersGroupByAndOrderByAllStayBare(t *testing.T) {
+	// GROUP BY ALL and ORDER BY ALL are keywords; quoted, ALL names a
+	// column "all" and the server answers Unknown expression identifier.
+	for _, tc := range []struct{ sql, want string }{
+		{"SELECT a, count() FROM t GROUP BY ALL", `GROUP BY ALL`},
+		{"SELECT a, count() FROM t GROUP BY all WITH TOTALS", `GROUP BY all WITH TOTALS`},
+		{"SELECT a FROM t ORDER BY ALL DESC", `ORDER BY ALL DESC`},
+		{"SELECT t, avg(x) FROM m GROUP BY ALL ORDER BY t WITH FILL STEP 60", `GROUP BY ALL ORDER BY "t" WITH FILL STEP 60`},
+	} {
+		t.Run(tc.sql, func(t *testing.T) {
+			got := mustProduceValidSQL(t, passes.CanonicalizeIdentifiers, tc.sql)
+			assert.Contains(t, got, tc.want)
+			assert.NotContains(t, strings.ToLower(got), `"all"`)
+			assert.Equal(t, got, mustProduceValidSQL(t, passes.CanonicalizeIdentifiers, got), "not idempotent")
+		})
+	}
+	// Beside other items, all is a column's name and is quoted.
+	got := mustProduceValidSQL(t, passes.CanonicalizeIdentifiers, "SELECT a FROM t GROUP BY a, all")
+	assert.Contains(t, got, `GROUP BY "a", "all"`)
 }
 
 func TestNormalizeIdentifiersNullUntouched(t *testing.T) {

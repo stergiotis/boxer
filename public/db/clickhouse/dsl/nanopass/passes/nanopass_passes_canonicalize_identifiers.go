@@ -13,7 +13,8 @@ import (
 // double-quoted. Keyword tokens used as names (e.g. a table named "system")
 // are quoted. JSON_TRUE/JSON_FALSE are skipped (boolean literals, not names),
 // as are param slots ({name: Type}) and type expressions — ClickHouse
-// requires both bare.
+// requires both bare. The ALL of GROUP BY ALL and ORDER BY ALL stays bare
+// too: it is the keyword, which quoted would name a column "all".
 var CanonicalizeIdentifiers = nanopass.LiftBodyPass(
 	"CanonicalizeIdentifiers",
 	canonicalizeIdentifiersImpl,
@@ -54,6 +55,23 @@ func canonicalizeIdentifiersImpl(sql string) (result string, err error) {
 			// left alone).
 			quoteIfKeyword(rw, c, guard)
 			return false
+		case *grammar1.GroupByClauseContext:
+			// GROUP BY ALL: the grammar reads the ALL keyword as a column
+			// name; quoted it would name a column "all".
+			if c.LPAREN() == nil {
+				if list, ok := c.ColumnExprList().(*grammar1.ColumnExprListContext); ok && len(list.AllColumnsExpr()) == 1 {
+					keepBareAll(list.ColumnsExpr(0), guard)
+				}
+			}
+			return true
+		case *grammar1.OrderByClauseContext:
+			// ORDER BY ALL, likewise.
+			if list, ok := c.OrderExprList().(*grammar1.OrderExprListContext); ok && len(list.AllOrderExpr()) == 1 {
+				if e := list.OrderExpr(0).ColumnExpr(); e != nil {
+					keepBareAll(e, guard)
+				}
+			}
+			return true
 		case *grammar1.ParamSlotContext:
 			// {name: Type} — ClickHouse parameter syntax takes a bare name
 			// and a bare type; quoting either breaks the slot.
@@ -121,6 +139,18 @@ func (inst *fusionGuard) replacement(tok antlr.Token, quoted string) string {
 		}
 	}
 	return quoted
+}
+
+// keepBareAll marks the token of ctx as done when ctx is the ALL keyword
+// alone, so that the walk leaves it bare.
+func keepBareAll(ctx antlr.ParserRuleContext, guard *fusionGuard) {
+	start, stop := ctx.GetStart(), ctx.GetStop()
+	if start == nil || stop == nil || start.GetTokenIndex() != stop.GetTokenIndex() {
+		return
+	}
+	if start.GetTokenType() == grammar1.ClickHouseLexerALL {
+		guard.processed[start.GetTokenIndex()] = true
+	}
 }
 
 // quoteIfKeyword walks the direct identifier child of ctx and quotes its
