@@ -253,13 +253,19 @@ The notebook is drawn by a widget that stacks cells: a prose cell through
 the markdown widget, every other cell by its kind. The markdown widget gains
 no hook and no knowledge of records, panels or audio.
 
-A presentation cell names one renderer: `table`, which the cell stack draws
-itself, or a name a package registered. A registration is a name and a
+A presentation cell names one renderer: `table` or `kv`, which the cell
+stack draws itself, or a name a package registered. `kv` draws a relation as
+labelled values, a row a block and a column a line: the few facts of one
+thing, where a grid's header says nothing. A registration is a name and a
 factory, made at start-up by the package that owns the drawing. Play
 registers its result panels under their panel ids, so a `sql chart` cell is
 drawn by the panel that draws a chart tab. A host that shows notebooks links
 play and does not import it; in a binary without play the same cell is drawn
 as a table and says which renderer is missing.
+
+A panel is a drawing made for a dock tab. Package `notebookcells` registers
+two made for a report, which need nothing of play: `marks`, instants and
+intervals on one axis, and `points`, places on a map.
 
 A panel is handed the cell's relations through the interface play's own
 dispatch uses (`PanelI`): the cell's relation is the channel `main`, and a
@@ -278,9 +284,21 @@ own; the cell stack is handed the result on the render goroutine.
 The cell stack builds one renderer per cell. What a renderer keeps between
 frames — a layout, a camera, a mark type the reader chose
 ([ADR-0267](./0267-imzero2-go-widget-api-contract-immediate-and-semi-retained.md))
-— is that cell's, and is not stored in the notebook. A renderer draws in a
-box of bounded height: a panel written to fill a dock tab fills the box, not
-the rest of the window.
+— is that cell's, and is not stored in the notebook. A cell whose text is
+unchanged keeps its renderer when the notebook is set again, over other
+records or with cells added around it, and its prose keeps its parse; a
+renderer is told when its cell is gone. A renderer draws in a box of bounded
+height: a panel written to fill a dock tab fills the box, not the rest of
+the window. The height is the reader's for every cell, and a cell's own
+where its statement says so in a settings member (SD6):
+`WITH cell_opts AS (SELECT 160 AS height)`.
+
+A host that shows a report inside another surface may ask for the
+notebook's content alone: no line saying whether it is sealed, and no header
+or rule on a cell that has nothing wrong. A cell that is refused, stale or
+unread keeps both. The glosses a column or a figure names are resolved in
+the catalog the host hands over, which is the built-in one when it hands
+none.
 
 Only a panel whose drawing needs nothing but its relations is a renderer.
 Play's table, detail, schema, cards and chat panels read their play
@@ -302,7 +320,12 @@ failing that by the column's own name, as a result column names one
 The notebook reader claims `val:` links, shows the value's provenance on
 hover, and reports a label that no longer equals the rendering of its value.
 A `val:` link inside a code span or a fenced block is a sample of the
-spelling, not a figure: it is neither checked nor rewritten.
+spelling, not a figure: it is neither checked nor rewritten. Neither is one
+whose bracket is escaped.
+
+In a bound notebook (SD6) nothing was stored, so the label is a placeholder:
+the reader draws the rendering of the value in its place and holds the label
+to nothing.
 
 ### SD6 — One buffer, two phases
 
@@ -342,11 +365,25 @@ panel's settings row, and the trivial evaluator already answers it.
 
 The notebook's records, in document order, are one play buffer: each
 record a `WITH` query and the last the statement's own `SELECT`. The buffer
-has two bindings. **Live**, a record's body is its statement, and the
+has three bindings. **Live**, a record's body is its statement, and the
 buffer is an ordinary one: its graph is recovered by the analysis ADR-0097
 describes, and nothing in play changes to evaluate it. **Sealed**, a record
 is its stored result, bound by name to the evaluator that answers the
-presentation cells (SD7).
+presentation cells (SD7). **Bound**, a record is a relation the host that
+reads the notebook holds and hands over under the record's name.
+
+A bound notebook is for a programme that writes a notebook to show data it
+already has: the row a person selected, say, with a section for each kind of
+thing the row holds. Stored first, each relation would be encoded, hashed
+and decoded to be read once. Bound, the evaluator answers from the host's
+own columns; the text lists no record and needs no record cell, so it
+depends on which sections there are and not on what they hold. A bound
+notebook is not sealed and has no pin (SD8), and storing it is the step that
+makes it so. Measured on 2026-11-15 for a notebook of four sections over
+three records, text written, read, prepared and set: 47 kB and 361
+allocations bound, against 120 kB and 925 stored and read back
+(`BenchmarkShowNextRow` in `notebookview`, the arms `bound-host-catalog` and
+`blobs`).
 
 The reading goes both ways, and play holds both ends of it. A notebook
 loaded into a play window is the buffer of its records. A buffer read as a
@@ -425,6 +462,11 @@ new value, so the text a person reads without boxer is what the records
 hold. A frontmatter entry with no cell — a relation stored by other means —
 is kept as it is. Blobs no longer listed are not removed.
 
+Storing is a step of its own, apart from computing: the same step seals a
+bound notebook (SD6) over the relations its host held, which have no
+statement to hash. A blob holds no schema metadata, which is its writer's,
+so two writers of the same rows name the same blob.
+
 A reader checks each blob against its name and holds the records in process.
 Presentation results are not stored; they are computed from the records when
 the notebook is read.
@@ -467,7 +509,10 @@ buffer need no window; they are commands (`boxer markdown notebook`).
 
 A surface that needs one of these is a play buffer, an applet or a
 workstatelet, which exist. A notebook with a section per region is written
-that way by whoever writes it: a programme or an agent emits the text.
+that way by whoever writes it: a programme or an agent emits the text. A
+programme writes it through `mdnotebook.Writer`, which keeps what SD1 asks
+of a cell and escapes what it is given as data, so no value opens a cell or
+a figure.
 
 ### SD10 — An app of its own: one document, two faces
 
@@ -559,6 +604,8 @@ grant and that mdedit and the snapshot browser already read.
 | --- | --- | --- |
 | Notebook text form (SD1–SD3, SD5, SD8's frontmatter) | added | package `mdnotebook`, its fixture, and the test that the line scan and the parse agree |
 | Renderer registry by name (SD4) | added, in the cell-stack package `notebookview` | play registers its panels; a panel added to play is registered there |
+| Records bound by the host, the step that stores them, and the writer (SD6, SD8, SD9) | added: `mdnotebook.Bind`, `Seal`, `Writer`; `notebookview.PrepareFrom` | the test that a writer's data stays out of the cells, and the one that a bound notebook sealed reads back sealed |
+| Renderers for a report (SD4) | added: `kv` in the cell stack; `marks` and `points` in package `notebookcells` | a host links the package; the gallery's bound notebook |
 | The trivial evaluator's accepted shape (ADR-0290 §SD3) | a bare column with an optional alias in a select list, the refusals of SD7, and `ReadTables` over tables bound by name | its parity tests against ClickHouse, and ADR-0290's update of 2026-11-13 |
 | `boxer markdown notebook` | added: `collect`, `check`, `buffer` | the how-to |
 | mdedit's Read mode | a snapshot document that is a notebook is drawn as one | mdedit's help page |
@@ -689,6 +736,11 @@ grant and that mdedit and the snapshot browser already read.
   format has no loop.
 - Not every panel is a renderer (SD4), and the ones that are were written
   against play's types: the registration lives in play.
+- A bound notebook (SD6) is as good as the relations its host hands over:
+  nothing checks them against a name, and two readers bound to different
+  relations read different reports from one text.
+- What a figure in a bound notebook reads depends on the catalog of the
+  host that draws it, as a column's gloss does.
 - The text form is a contract from its first use. A change to a spelling is a
   migration of stored notebooks.
 
@@ -762,6 +814,10 @@ grant and that mdedit and the snapshot browser already read.
   (SD10).
 - **M10 — The app.** The two faces, check and collection, and the app's
   operations (SD10).
+- **M11 — A notebook written for what a host holds.** Bound records and the
+  step that stores them, the writer, the plain reading, a cell's own height,
+  and the renderers `kv`, `marks` and `points` (SD4, SD6, SD8, SD9). Built
+  2026-11-15, not yet in a host beside the gallery.
 
 M1 to M5 and M7 to M9 are in the tree as of 2026-11-14, and of M10 the two
 faces, the check, the operations over the document and collection, for a
@@ -802,11 +858,19 @@ integration lane against a server and a store of the test's own.
   pin identify data, not bytes.
 - **Q5 — A panel's controls in a report.** SD4 draws a panel as play does,
   toolbar included. A report may want the drawing alone, or the controls
-  only when the statements are shown.
+  only when the statements are shown. The cell stack's own header is
+  settled (SD4); a panel's toolbar is not: each panel draws its own, and
+  none has a way to be asked for less.
 - **Q6 — Settings a reader chose.** A panel with a settings channel takes
   them from the cell's text; the chart's mark type has no such channel, so
   a report cannot say "bars".
-- **Q7 — A cell's height.** The box of SD4 is one height for every cell.
+- **Q7 — A cell's settings.** A cell says its own height (SD4). Whether it
+  says more that way — a caption, a width — is open; a height was the one
+  setting a report could not do without.
+- **Q11 — A map with tiles and cells.** `points` draws country outlines and
+  no basemap: a renderer is built with no way to reach the host's tile
+  service. H3 cells need the H3 runtime, which the caller of the overlay
+  owns. Both wait for a renderer to be handed something of its host.
 - **Q8 — Panels that read their play instance.** Whether the table and the
   detail pane become renderers, and whether the cell stack's `table` and
   play's then remain two.
