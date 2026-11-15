@@ -299,9 +299,9 @@ source, with or without an alias: `SELECT a AS x, c FROM …`. Nothing is
 evaluated per row — a selected column is the source's array under another
 name, sharing its buffers — so the evaluator is no nearer an engine than it
 was. The need came from
-[ADR-0371](./0371-sealed-notebooks-a-report-as-a-markdown-document-of-typed-cells.md)
-(proposed), where one stored result is drawn as a table and as a plot under
-the column names each reads.
+[ADR-0371](./0371-sealed-notebooks-a-report-as-a-markdown-document-of-typed-cells.md),
+where one stored result is drawn as a table and as a plot under the column
+names each reads.
 
 One rule of ClickHouse's decides what is refused. A name in a select list
 resolves to an alias of the same list before a column of the source, through
