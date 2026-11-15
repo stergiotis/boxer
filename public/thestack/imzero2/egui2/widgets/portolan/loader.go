@@ -9,6 +9,7 @@ import (
 	"image/draw"
 	_ "image/jpeg" // raster tile servers serve PNG; aerial layers JPEG
 	_ "image/png"
+	"strconv"
 	"sync"
 	"time"
 
@@ -25,6 +26,19 @@ type TileFetcherI interface {
 	Get(ctx context.Context, url string) (data []byte, err error)
 }
 
+// TilePixelsI supplies a tile's pixels directly, for a raster that is not
+// fetched by URL: an image held in memory, a field rendered on demand
+// (ADR-0373 §SD7). TilePixels is called on a loader worker, off the frame
+// thread and possibly from several workers at once, with the tile's wrapped
+// coordinates; it returns the tile in the paintImage packing — 0xRRGGBBAA,
+// straight alpha, row-major — at the source's tile size, transparent where
+// the raster has nothing. The loader keeps no copy of what it returns and
+// does not cache it: a source whose content changes says so through
+// [Map.InvalidateTiles].
+type TilePixelsI interface {
+	TilePixels(ctx context.Context, coords TileCoords) (px []uint32, w, h int, err error)
+}
+
 // errNoFetcher is every fetch's outcome for a loader built without one.
 var errNoFetcher = errors.New("portolan: no tile fetcher")
 
@@ -35,6 +49,9 @@ var errNoFetcher = errors.New("portolan: no tile fetcher")
 type LoaderOptions struct {
 	// Fetcher fetches a tile's bytes; nil fails every tile.
 	Fetcher TileFetcherI
+	// Pixels, when set, supplies every tile's pixels and the source's URL
+	// template, the fetcher and the byte cache are not used.
+	Pixels TilePixelsI
 	// Workers is the number of concurrent fetches — Leaflet's and the old binding's
 	// per-host budget of six.
 	Workers int
@@ -80,6 +97,9 @@ type TileArrival struct {
 	W, H   int
 	Failed bool
 	Err    error
+	// Revision is the content revision a pixel-source tile was requested
+	// under (Map.InvalidateTiles); 0 for a fetched tile.
+	Revision uint64
 }
 
 // LoaderHealth is what an operator would want to know when the map is grey:
@@ -95,6 +115,10 @@ type LoaderHealth struct {
 type tileRequest struct {
 	coords, wrapped TileCoords
 	url             string
+	// pixels marks a request the pixel source answers; revision is the
+	// content revision it was made under.
+	pixels   bool
+	revision uint64
 }
 
 // tileWaiter is a request riding on a URL's fetch; several can share one
@@ -142,9 +166,23 @@ func NewTileLoader(opts LoaderOptions) *TileLoader {
 	return l
 }
 
+// RequestPixels asks the pixel source for a tile under a content revision.
+// Like Request it is idempotent per coords while one is pending or in flight,
+// so a tile asked for again under a newer revision before the first answer
+// arrives gets the first answer, marked with the older revision.
+func (l *TileLoader) RequestPixels(coords, wrapped TileCoords, revision uint64) {
+	key := "pixels:" + strconv.FormatUint(revision, 10) + ":" + wrapped.Key()
+	l.request(&tileRequest{coords: coords, wrapped: wrapped, url: key, pixels: true, revision: revision})
+}
+
 // Request asks for a tile. It is idempotent per coords while the request is
 // pending or in flight.
 func (l *TileLoader) Request(coords, wrapped TileCoords, url string) {
+	l.request(&tileRequest{coords: coords, wrapped: wrapped, url: url})
+}
+
+func (l *TileLoader) request(req *tileRequest) {
+	coords := req.coords
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	if l.closed {
@@ -161,7 +199,7 @@ func (l *TileLoader) Request(coords, wrapped TileCoords, url string) {
 			}
 		}
 	}
-	l.pending[coords] = &tileRequest{coords: coords, wrapped: wrapped, url: url}
+	l.pending[coords] = req
 	l.queue = append(l.queue, coords)
 	l.cond.Signal()
 }
@@ -255,6 +293,20 @@ func (l *TileLoader) worker() {
 			continue
 		}
 		l.inflight[req.url] = []tileWaiter{{coords, req.wrapped}}
+		if req.pixels {
+			l.mu.Unlock()
+			px, w, h, err := l.pixels(req)
+			l.mu.Lock()
+			if err != nil {
+				l.health.ConsecutiveFailures++
+				l.health.LastError = err.Error()
+				l.health.LastFailureAt = time.Now()
+			} else {
+				l.health.ConsecutiveFailures = 0
+			}
+			l.deliver(req, px, w, h, err) // unlocks
+			continue
+		}
 		if exp, bad := l.negative[req.url]; bad && time.Now().Before(exp) {
 			// A hit on the negative cache is not a new failure: it neither
 			// extends the entry (the tile is retried once the TTL from the
@@ -310,9 +362,28 @@ func (l *TileLoader) deliver(req *tileRequest, px []uint32, w, h int, err error)
 		}
 		l.arrivals = append(l.arrivals, TileArrival{
 			Coords: wt.coords, Wrapped: wt.wrapped, URL: req.url, Pixels: px, W: w, H: h, Failed: err != nil, Err: err,
+			Revision: req.revision,
 		})
 	}
 	l.mu.Unlock()
+}
+
+// pixels asks the pixel source for one tile and checks what came back.
+func (l *TileLoader) pixels(req *tileRequest) (px []uint32, w, h int, err error) {
+	if l.opts.Pixels == nil {
+		return nil, 0, 0, eb.Build().Errorf("portolan: no pixel source")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), l.opts.Timeout)
+	defer cancel()
+	px, w, h, err = l.opts.Pixels.TilePixels(ctx, req.wrapped)
+	if err != nil {
+		return nil, 0, 0, eh.Errorf("portolan: pixel source failed: %w", err)
+	}
+	if w <= 0 || h <= 0 || len(px) != w*h {
+		return nil, 0, 0, eb.Build().Int("w", w).Int("h", h).Int("pixels", len(px)).
+			Errorf("portolan: pixel source returned a tile whose size and pixel count disagree")
+	}
+	return px, w, h, nil
 }
 
 func (l *TileLoader) fetch(url string) ([]byte, error) {

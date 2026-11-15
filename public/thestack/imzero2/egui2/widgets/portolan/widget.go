@@ -2,6 +2,7 @@ package portolan
 
 import (
 	"math"
+	"sort"
 	"time"
 
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
@@ -48,6 +49,9 @@ type Options struct {
 	// NoTiles draws no basemap at all — background and overlays only; the
 	// offline mode play uses. SetNoTiles toggles it later.
 	NoTiles bool
+	// NearestTiles draws tiles without interpolation, so a magnified tile
+	// shows its pixels as squares. SetNearestTiles changes it later.
+	NearestTiles bool
 }
 
 // Projector is what an overlay callback paints with: conversions between
@@ -112,6 +116,11 @@ type Map struct {
 	// version (tileVersion), so a switch re-uploads under the same ids
 	// instead of showing the old source's pixels.
 	srcGen uint64
+	// contentRev counts InvalidateTiles calls: the revision a pixel-source
+	// tile is requested under. refreshing holds the tiles asked for again
+	// while their previous pixels stay on screen.
+	contentRev uint64
+	refreshing map[TileCoords]struct{}
 
 	// pointerVeto is set for one frame by SetPointerVeto: a widget drawn
 	// over the map has taken this frame's pointer (ADR-0228 §SD2).
@@ -176,7 +185,7 @@ func New(ids *c.WidgetIdStack, scopeKey string, opts Options) *Map {
 	if scopeKey == "" {
 		scopeKey = "portolan"
 	}
-	if opts.Source.URLTemplate == "" {
+	if opts.Source.URLTemplate == "" && opts.Loader.Pixels == nil {
 		opts.Source = NewTileSource("https://tile.openstreetmap.org/{z}/{x}/{y}.png")
 	} else {
 		opts.Source = opts.Source.Normalized()
@@ -206,6 +215,7 @@ func New(ids *c.WidgetIdStack, scopeKey string, opts Options) *Map {
 		holders:        make(map[TileCoords]int, 64),
 		wrappedOf:      make(map[TileCoords]TileCoords, 64),
 		errTiles:       make(map[TileCoords]struct{}, 8),
+		refreshing:     make(map[TileCoords]struct{}, 16),
 		srcGen:         1,
 	}
 	m.wirePyramid()
@@ -257,9 +267,10 @@ func (m *Map) Source() TileSource { return m.opts.Source }
 // SetSource switches the tile source: requests to the old one are cancelled
 // and its tiles dropped, the pyramid restarts on the new one at the current
 // view, and the view's layer zoom limits follow the source. An empty template
-// is ignored.
+// is ignored, except on a map whose tiles come from a pixel source, where
+// the template is not used.
 func (m *Map) SetSource(src TileSource) {
-	if src.URLTemplate == "" {
+	if src.URLTemplate == "" && m.opts.Loader.Pixels == nil {
 		return
 	}
 	src = src.Normalized()
@@ -274,6 +285,7 @@ func (m *Map) SetSource(src TileSource) {
 	m.holders = make(map[TileCoords]int, 64)
 	m.wrappedOf = make(map[TileCoords]TileCoords, 64)
 	m.errTiles = make(map[TileCoords]struct{}, 8)
+	m.refreshing = make(map[TileCoords]struct{}, 16)
 	m.srcGen++
 	m.opts.Source = src
 	m.pyramid = NewPyramid(src)
@@ -374,8 +386,47 @@ func (m *Map) requestTile(coords, wrapped TileCoords) {
 			return
 		}
 	}
+	if m.opts.Loader.Pixels != nil {
+		m.loader.RequestPixels(coords, wrapped, m.contentRev)
+		return
+	}
 	m.loader.Request(coords, wrapped, m.opts.Source.URL(wrapped, m.pyramid.GlobalRows()))
 }
+
+// InvalidateTiles says that every tile's content is out of date: what a
+// pixel source returns has changed (ADR-0373 §SD7). The tiles on screen stay
+// there and each is asked for again, coarser levels first; a tile is
+// replaced when its new pixels arrive. On a map whose tiles are fetched by
+// URL it does nothing — a URL's content is the source's business.
+func (m *Map) InvalidateTiles() {
+	if m.opts.Loader.Pixels == nil {
+		return
+	}
+	m.contentRev++
+	held := make([]TileCoords, 0, len(m.wrappedOf))
+	for coords, wrapped := range m.wrappedOf {
+		if px := m.pixels[wrapped]; px != nil {
+			held = append(held, coords)
+		}
+	}
+	sort.Slice(held, func(a, b int) bool {
+		ca, cb := held[a], held[b]
+		if ca.Z != cb.Z {
+			return ca.Z < cb.Z
+		}
+		if ca.Y != cb.Y {
+			return ca.Y < cb.Y
+		}
+		return ca.X < cb.X
+	})
+	for _, coords := range held {
+		m.refreshing[coords] = struct{}{}
+		m.loader.RequestPixels(coords, m.wrappedOf[coords], m.contentRev)
+	}
+}
+
+// SetNearestTiles turns interpolation of the tiles off or back on.
+func (m *Map) SetNearestTiles(on bool) { m.opts.NearestTiles = on }
 
 func (m *Map) dropHolder(coords TileCoords) {
 	wrapped, ok := m.wrappedOf[coords]
@@ -383,6 +434,7 @@ func (m *Map) dropHolder(coords TileCoords) {
 		return
 	}
 	delete(m.wrappedOf, coords)
+	delete(m.refreshing, coords)
 	if m.holders[wrapped]--; m.holders[wrapped] <= 0 {
 		delete(m.holders, wrapped)
 		delete(m.pixels, wrapped)
@@ -397,6 +449,15 @@ func (m *Map) dropHolder(coords TileCoords) {
 // byte cache makes that image one fetch.
 func (m *Map) absorbArrivals(arrivals []TileArrival, now time.Time) {
 	errURL := m.opts.Source.ErrorTileURL
+	var again []TileArrival
+	defer func() {
+		for _, a := range again {
+			if _, held := m.wrappedOf[a.Coords]; held {
+				m.refreshing[a.Coords] = struct{}{}
+				m.loader.RequestPixels(a.Coords, a.Wrapped, m.contentRev)
+			}
+		}
+	}()
 	for _, a := range arrivals {
 		if _, held := m.wrappedOf[a.Coords]; !held {
 			// Requested under a source since switched: nothing holds it.
@@ -407,6 +468,20 @@ func (m *Map) absorbArrivals(arrivals []TileArrival, now time.Time) {
 			continue
 		}
 		isErrImage := errURL != "" && a.URL == errURL
+		// A pixel-source tile asked for again keeps its place in the pyramid
+		// and only swaps its pixels; one that answers an older revision than
+		// the current one is asked for once more.
+		_, refresh := m.refreshing[a.Coords]
+		stale := m.opts.Loader.Pixels != nil && a.Revision < m.contentRev
+		if refresh {
+			delete(m.refreshing, a.Coords)
+		}
+		if stale {
+			again = append(again, a)
+		}
+		if refresh && a.Failed {
+			continue
+		}
 		if !a.Failed {
 			var gen uint64
 			if old := m.pixels[a.Wrapped]; old != nil {
@@ -418,6 +493,9 @@ func (m *Map) absorbArrivals(arrivals []TileArrival, now time.Time) {
 			} else {
 				delete(m.errTiles, a.Wrapped)
 			}
+		}
+		if refresh {
+			continue
 		}
 		m.pyramid.TileReady(m.view, a.Coords, a.Failed || isErrImage, now)
 	}
@@ -537,7 +615,7 @@ func (m *Map) frame(w, h float32, overlay func(Projector)) {
 			}
 			r := td.Rect
 			c.PaintImage(id, float32(r.Min.X), float32(r.Min.Y), float32(r.Max.X), float32(r.Max.Y),
-				uint32(px.w), uint32(px.h), version, send).Opacity(float32(td.Opacity)).Send()
+				uint32(px.w), uint32(px.h), version, send).Opacity(float32(td.Opacity)).Nearest(m.opts.NearestTiles).Send()
 		}
 	}
 	if overlay != nil {

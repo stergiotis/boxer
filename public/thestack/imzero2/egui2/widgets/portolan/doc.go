@@ -37,6 +37,13 @@
 // The sub-package h3overlay draws H3 cells and regions on the map through
 // the h3 wasm bridge; the map itself does not depend on it.
 //
+// Tiles need not come from a URL. A loader given a [TilePixelsI] asks it for
+// every tile's pixels instead of fetching and decoding one, which with the
+// Simple CRS makes the widget a tiled viewer of a raster held in memory
+// (ADR-0373 §SD7); [Map.InvalidateTiles] says that what the source returns
+// has changed, and the tiles on screen are replaced as their new pixels
+// arrive.
+//
 // Two deliberate departures from upstream: pixel rounding uses JavaScript's
 // Math.round (half toward +∞, see jsRound), not Go's math.Round; and LatLng
 // carries no altitude — nothing in this tree's map has one, and Leaflet's
