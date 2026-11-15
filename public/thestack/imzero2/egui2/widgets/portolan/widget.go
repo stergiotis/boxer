@@ -663,12 +663,16 @@ func (m *Map) frame(w, h float32, overlay func(Projector)) {
 	// The drag-owning region last, so it wins the hit test, over a canvas that
 	// senses click and hover only (ADR-0204 §SD6).
 	c.PaintSenseRegion(m.ids.PrepareStr("portolan-area"), 0, 0, w, h).Send()
-	c.PaintCanvas(m.ids.PrepareStr("portolan-canvas"), w, h).
+	canvas := c.PaintCanvas(m.ids.PrepareStr("portolan-canvas"), w, h).
 		Background(color.Hex(m.opts.Background)).
 		Sense(true, false, true).
-		CaptureZoom().
-		CaptureScroll().
-		Send()
+		CaptureZoom()
+	if !m.opts.NoScrollWheelZoom {
+		// A map the wheel does not zoom leaves it to what encloses it: a
+		// page scrolls under the pointer wherever it is.
+		canvas = canvas.CaptureScroll()
+	}
+	canvas.Send()
 
 	m.pointerVeto = false
 	if again || m.view.Animating() || m.wheel.hasStart || m.pinch.active ||
