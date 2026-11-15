@@ -18,20 +18,26 @@ func TestAnIntegerHistogramCountsEverySampleExactly(t *testing.T) {
 	require.NoError(t, err)
 	h := Of(p)
 	assert.True(t, h.IsExact())
-	assert.Len(t, h.Counts, 65536)
-	assert.EqualValues(t, 3, h.Counts[7])
-	assert.EqualValues(t, 1, h.Counts[300])
-	assert.EqualValues(t, 1, h.Counts[65535])
-	assert.EqualValues(t, 5, h.Valid)
-	assert.Zero(t, h.Invalid)
-	assert.Equal(t, 7.0, h.Lo)
-	assert.Equal(t, 65535.0, h.Hi)
+	assert.Zero(t, h.Count(-1))
+	assert.Zero(t, h.Count(65536), "a bin that does not exist")
+	_, _, ok := Histogram{}.StoredRange()
+	assert.False(t, ok)
+	assert.Equal(t, 65536, h.Bins())
+	assert.EqualValues(t, 3, h.Count(7))
+	assert.EqualValues(t, 1, h.Count(300))
+	assert.EqualValues(t, 1, h.Count(65535))
+	assert.EqualValues(t, 5, h.Valid())
+	assert.Zero(t, h.Invalid())
+	lo, hi, okR := h.StoredRange()
+	assert.True(t, okR)
+	assert.Equal(t, 7.0, lo)
+	assert.Equal(t, 65535.0, hi)
 	assert.Equal(t, 1.0, h.BinWidth())
 
 	q, _ := imaging.NewPlaneU8(3, 1, []uint8{0, 255, 9})
 	h8 := Of(q)
-	assert.Len(t, h8.Counts, 256)
-	lo, hi, ok := h8.Range()
+	assert.Equal(t, 256, h8.Bins())
+	lo, hi, ok = h8.Range()
 	assert.True(t, ok)
 	assert.Equal(t, 0.0, lo)
 	assert.Equal(t, 255.0, hi)
@@ -88,14 +94,15 @@ func TestAFloatHistogramLeavesInvalidSamplesOutAndIsRightToABin(t *testing.T) {
 	require.NoError(t, err)
 	h := Of(p)
 	assert.False(t, h.IsExact())
-	assert.EqualValues(t, n, h.Valid)
-	assert.EqualValues(t, 2, h.Invalid)
-	assert.Equal(t, 0.0, h.Lo)
-	assert.Equal(t, 50.0, h.Hi)
+	assert.EqualValues(t, n, h.Valid())
+	assert.EqualValues(t, 2, h.Invalid())
+	lo, hi, _ := h.StoredRange()
+	assert.Equal(t, 0.0, lo)
+	assert.Equal(t, 50.0, hi)
 	assert.InDelta(t, 50.0/FloatBins, h.BinWidth(), 1e-12)
 	var total uint64
-	for _, c := range h.Counts {
-		total += c
+	for i := range h.Bins() {
+		total += h.Count(i)
 	}
 	assert.EqualValues(t, n, total, "the largest sample is in the last bin, not past it")
 	for _, pct := range []float64{1, 25, 50, 90, 99.5} {
@@ -106,15 +113,15 @@ func TestAFloatHistogramLeavesInvalidSamplesOutAndIsRightToABin(t *testing.T) {
 
 	flat, _ := imaging.NewPlaneF32(3, 1, []float32{2.5, 2.5, nan})
 	hf := Of(flat)
-	assert.EqualValues(t, 2, hf.Valid)
+	assert.EqualValues(t, 2, hf.Valid())
 	got, ok := hf.PercentileStored(50)
 	assert.True(t, ok)
 	assert.Equal(t, 2.5, got)
 
 	none, _ := imaging.NewPlaneF32(2, 1, []float32{nan, nan})
 	hn := Of(none)
-	assert.Zero(t, hn.Valid)
-	assert.EqualValues(t, 2, hn.Invalid)
+	assert.Zero(t, hn.Valid())
+	assert.EqualValues(t, 2, hn.Invalid())
 	_, ok = hn.PercentileStored(50)
 	assert.False(t, ok)
 }
@@ -178,8 +185,8 @@ func TestARegionIsCountedOverItsOwnSamples(t *testing.T) {
 				}
 			}
 		}
-		require.EqualValues(t, len(vals), got.Valid)
-		require.EqualValues(t, invalid, got.Invalid)
+		require.EqualValues(t, len(vals), got.Valid())
+		require.EqualValues(t, invalid, got.Invalid())
 		mean, okMean := got.Mean()
 		sd, okSd := got.StdDev()
 		require.Equal(t, len(vals) > 0, okMean)
@@ -198,11 +205,12 @@ func TestARegionIsCountedOverItsOwnSamples(t *testing.T) {
 		}
 		require.InDelta(t, wantMean, mean, 1e-6*(1+math.Abs(wantMean)))
 		require.InDelta(t, math.Sqrt(m2/float64(len(vals))), sd, 1e-6*(1+sd))
-		require.Equal(t, slices.Min(vals), got.Lo)
-		require.Equal(t, slices.Max(vals), got.Hi)
+		lo, hi, _ := got.StoredRange()
+		require.Equal(t, slices.Min(vals), lo)
+		require.Equal(t, slices.Max(vals), hi)
 		var total uint64
-		for _, n := range got.Counts {
-			total += n
+		for i := range got.Bins() {
+			total += got.Count(i)
 		}
 		require.EqualValues(t, len(vals), total)
 	})

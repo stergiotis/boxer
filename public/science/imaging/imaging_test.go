@@ -166,3 +166,21 @@ func TestDerivationsAreASet(t *testing.T) {
 		seen |= x
 	}
 }
+
+func TestTheDigestIsComputedOnceAndTheImageOwnsItsPlaneList(t *testing.T) {
+	a, err := NewPlaneU8(2, 1, []uint8{1, 2})
+	require.NoError(t, err)
+	b, err := NewPlaneU8(2, 1, []uint8{3, 4})
+	require.NoError(t, err)
+	planes := []Plane{a}
+	img, err := NewImage(ColorModelGray, planes, Provenance{SampleHash: [32]byte{9}})
+	require.NoError(t, err)
+	assert.Equal(t, img.digest(), img.Hash(), "the digest is of the samples")
+	assert.Equal(t, img.Hash(), img.Provenance().SampleHash, "a SampleHash the caller set is replaced")
+
+	planes[0] = b
+	assert.Equal(t, uint8(1), img.Plane(0).U8()[0], "reusing the slice passed in does not change the image")
+	assert.Equal(t, img.digest(), img.Hash())
+
+	assert.Equal(t, [32]byte{}, Image{}.Hash(), "the empty image has the zero digest")
+}

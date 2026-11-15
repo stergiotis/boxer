@@ -11,23 +11,60 @@ import (
 // FloatBins is how many bins the histogram of a float plane has.
 const FloatBins = 4096
 
-// Histogram is how often each stored sample value occurs in a plane. The
+// Histogram is how often each stored sample value occurs in a plane or a
+// region of one, with the mean and the standard deviation of what it
+// counted. It is made by [Of] or [OfRegion] and read through its methods; the
 // zero value is the histogram of nothing.
+//
+// Two scales meet here. A bin, its edges and [Histogram.StoredRange] are in
+// stored samples, which is what was counted; [Histogram.Range],
+// [Histogram.Mean], [Histogram.StdDev] and [Histogram.Percentile] are in
+// values, the samples through the plane's value transform
+// ([imaging.ValueTransform]); [Histogram.Value] turns one into the other.
 type Histogram struct {
-	// Counts holds one count per bin. For an integer plane bin i is the
-	// stored value i; for a float plane the bins divide [Lo, Hi] evenly and
-	// the last one includes Hi.
-	Counts []uint64
-	// Lo and Hi are the smallest and largest valid stored sample.
-	Lo, Hi float64
-	// Valid is the number of samples counted; Invalid the number left out.
-	Valid, Invalid uint64
+	// counts holds one count per bin. For an integer plane bin i is the
+	// stored value i; for a float plane the bins divide [lo, hi] evenly and
+	// the last one includes hi.
+	counts []uint64
+	// lo and hi are the smallest and largest valid stored sample.
+	lo, hi float64
+	// valid is the number of samples counted; invalid the number left out.
+	valid, invalid uint64
 
 	kind      imaging.SampleKindE
 	transform imaging.ValueTransform
 	// mean and m2 are the mean of the stored samples and the sum of their
 	// squared deviations from it.
 	mean, m2 float64
+}
+
+// Valid is the number of samples counted.
+func (inst Histogram) Valid() uint64 { return inst.valid }
+
+// Invalid is the number of samples left out as invalid: NaN in a float
+// plane.
+func (inst Histogram) Invalid() uint64 { return inst.invalid }
+
+// Bins is the number of bins: one per value an integer kind can hold, or
+// [FloatBins]; 0 when nothing was counted.
+func (inst Histogram) Bins() int { return len(inst.counts) }
+
+// Count is the number of samples in bin i, and 0 for a bin that does not
+// exist.
+func (inst Histogram) Count(i int) uint64 {
+	if i < 0 || i >= len(inst.counts) {
+		return 0
+	}
+	return inst.counts[i]
+}
+
+// StoredRange is the smallest and largest stored sample counted; ok is false
+// when nothing was counted.
+func (inst Histogram) StoredRange() (lo, hi float64, ok bool) {
+	if inst.valid == 0 {
+		return 0, 0, false
+	}
+	return inst.lo, inst.hi, true
 }
 
 // Of counts the samples of a plane.
@@ -50,17 +87,17 @@ func OfRegion(plane imaging.Plane, rect image.Rectangle) (h Histogram, err error
 	w := plane.Width()
 	switch plane.Kind() {
 	case imaging.SampleKindU8:
-		h.Counts = make([]uint64, 1<<8)
+		h.counts = make([]uint64, 1<<8)
 		for y := rect.Min.Y; y < rect.Max.Y; y++ {
 			for _, v := range plane.U8()[y*w+rect.Min.X : y*w+rect.Max.X] {
-				h.Counts[v]++
+				h.counts[v]++
 			}
 		}
 	case imaging.SampleKindU16:
-		h.Counts = make([]uint64, 1<<16)
+		h.counts = make([]uint64, 1<<16)
 		for y := rect.Min.Y; y < rect.Max.Y; y++ {
 			for _, v := range plane.U16()[y*w+rect.Min.X : y*w+rect.Max.X] {
-				h.Counts[v]++
+				h.counts[v]++
 			}
 		}
 	case imaging.SampleKindF32:
@@ -72,21 +109,21 @@ func OfRegion(plane imaging.Plane, rect image.Rectangle) (h Histogram, err error
 	// An integer plane's range and moments are read off its counts: the
 	// mean first, then the squared deviations from it, which loses nothing
 	// a float64 can hold.
-	h.Valid = uint64(rect.Dx()) * uint64(rect.Dy())
-	h.Lo, h.Hi = math.NaN(), math.NaN()
+	h.valid = uint64(rect.Dx()) * uint64(rect.Dy())
+	h.lo, h.hi = math.NaN(), math.NaN()
 	var sum float64
-	for i, n := range h.Counts {
+	for i, n := range h.counts {
 		if n == 0 {
 			continue
 		}
-		if h.Lo != h.Lo {
-			h.Lo = float64(i)
+		if h.lo != h.lo {
+			h.lo = float64(i)
 		}
-		h.Hi = float64(i)
+		h.hi = float64(i)
 		sum += float64(i) * float64(n)
 	}
-	h.mean = sum / float64(h.Valid)
-	for i, n := range h.Counts {
+	h.mean = sum / float64(h.valid)
+	for i, n := range h.counts {
 		if n != 0 {
 			d := float64(i) - h.mean
 			h.m2 += d * d * float64(n)
@@ -108,26 +145,26 @@ func (inst *Histogram) countFloats(samples []float32, w int, rect image.Rectangl
 		}
 	}
 	if lo > hi {
-		inst.Invalid = uint64(rect.Dx()) * uint64(rect.Dy())
+		inst.invalid = uint64(rect.Dx()) * uint64(rect.Dy())
 		return
 	}
-	inst.Lo, inst.Hi = float64(lo), float64(hi)
-	inst.Counts = make([]uint64, FloatBins)
+	inst.lo, inst.hi = float64(lo), float64(hi)
+	inst.counts = make([]uint64, FloatBins)
 	scale := 0.0
 	if hi > lo {
-		scale = FloatBins / (inst.Hi - inst.Lo)
+		scale = FloatBins / (inst.hi - inst.lo)
 	}
 	for y := rect.Min.Y; y < rect.Max.Y; y++ {
 		for _, v := range samples[y*w+rect.Min.X : y*w+rect.Max.X] {
 			if v != v {
-				inst.Invalid++
+				inst.invalid++
 				continue
 			}
 			x := float64(v)
-			inst.Counts[min(int((x-inst.Lo)*scale), FloatBins-1)]++
-			inst.Valid++
+			inst.counts[min(int((x-inst.lo)*scale), FloatBins-1)]++
+			inst.valid++
 			d := x - inst.mean
-			inst.mean += d / float64(inst.Valid)
+			inst.mean += d / float64(inst.valid)
 			inst.m2 += d * (x - inst.mean)
 		}
 	}
@@ -136,7 +173,7 @@ func (inst *Histogram) countFloats(samples []float32, w int, rect image.Rectangl
 // Mean is the arithmetic mean of the values counted; ok is false when
 // nothing was counted.
 func (inst Histogram) Mean() (mean float64, ok bool) {
-	if inst.Valid == 0 {
+	if inst.valid == 0 {
 		return 0, false
 	}
 	return inst.Value(inst.mean), true
@@ -147,10 +184,10 @@ func (inst Histogram) Mean() (mean float64, ok bool) {
 // less): it describes these samples and estimates nothing beyond them. ok is
 // false when nothing was counted.
 func (inst Histogram) StdDev() (sd float64, ok bool) {
-	if inst.Valid == 0 {
+	if inst.valid == 0 {
 		return 0, false
 	}
-	return math.Abs(inst.transform.Scale) * math.Sqrt(inst.m2/float64(inst.Valid)), true
+	return math.Abs(inst.transform.Scale) * math.Sqrt(inst.m2/float64(inst.valid)), true
 }
 
 // Percentile is [Histogram.PercentileStored] as a value.
@@ -165,10 +202,10 @@ func (inst Histogram) IsExact() bool { return inst.kind.IsInteger() }
 
 // BinWidth is the width of one bin in stored units: 1 for an integer plane.
 func (inst Histogram) BinWidth() float64 {
-	if inst.kind.IsInteger() || len(inst.Counts) == 0 {
+	if inst.kind.IsInteger() || len(inst.counts) == 0 {
 		return 1
 	}
-	return (inst.Hi - inst.Lo) / float64(len(inst.Counts))
+	return (inst.hi - inst.lo) / float64(len(inst.counts))
 }
 
 // BinStored is the stored value at the lower edge of bin i.
@@ -176,7 +213,7 @@ func (inst Histogram) BinStored(i int) float64 {
 	if inst.kind.IsInteger() {
 		return float64(i)
 	}
-	return inst.Lo + float64(i)*inst.BinWidth()
+	return inst.lo + float64(i)*inst.BinWidth()
 }
 
 // Value turns a stored sample into the value it stands for, through the
@@ -186,10 +223,10 @@ func (inst Histogram) Value(stored float64) float64 { return inst.transform.Appl
 // Range is the smallest and largest value in the plane; ok is false when it
 // has no valid sample.
 func (inst Histogram) Range() (lo, hi float64, ok bool) {
-	if inst.Valid == 0 {
+	if inst.valid == 0 {
 		return 0, 0, false
 	}
-	a, b := inst.Value(inst.Lo), inst.Value(inst.Hi)
+	a, b := inst.Value(inst.lo), inst.Value(inst.hi)
 	return min(a, b), max(a, b), true
 }
 
@@ -200,18 +237,18 @@ func (inst Histogram) Range() (lo, hi float64, ok bool) {
 // reached. ok is false for a plane with no valid sample or a p outside
 // [0, 100].
 func (inst Histogram) PercentileStored(p float64) (stored float64, ok bool) {
-	if inst.Valid == 0 || !(p >= 0 && p <= 100) {
+	if inst.valid == 0 || !(p >= 0 && p <= 100) {
 		return 0, false
 	}
 	if p == 0 {
-		return inst.Lo, true
+		return inst.lo, true
 	}
 	if p == 100 {
-		return inst.Hi, true
+		return inst.hi, true
 	}
-	target := p / 100 * float64(inst.Valid)
+	target := p / 100 * float64(inst.valid)
 	var seen float64
-	for i, n := range inst.Counts {
+	for i, n := range inst.counts {
 		if n == 0 {
 			continue
 		}
@@ -220,9 +257,9 @@ func (inst Histogram) PercentileStored(p float64) (stored float64, ok bool) {
 				return float64(i), true
 			}
 			within := (target - seen) / float64(n)
-			return min(inst.BinStored(i)+within*inst.BinWidth(), inst.Hi), true
+			return min(inst.BinStored(i)+within*inst.BinWidth(), inst.hi), true
 		}
 		seen += float64(n)
 	}
-	return inst.Hi, true
+	return inst.hi, true
 }

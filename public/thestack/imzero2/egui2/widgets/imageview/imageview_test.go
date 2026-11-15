@@ -499,7 +499,7 @@ func TestPercentileLimitsWaitForTheHistogramAndIgnoreOutliers(t *testing.T) {
 	assert.InDelta(t, 990, l.Hi, 2)
 	h, ok := v.Histogram()
 	require.True(t, ok)
-	assert.EqualValues(t, 1001*20, h.Valid, "over the whole plane")
+	assert.EqualValues(t, 1001*20, h.Valid(), "over the whole plane")
 
 	// With the histogram already there the stretch applies at once.
 	require.NoError(t, v.SetPercentileLimits(10, 90))

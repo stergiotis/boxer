@@ -133,9 +133,18 @@ func (inst *LimitsSourceE) UnmarshalText(text []byte) error {
 // Limits is the range of values a recipe shows, in the image's values — the
 // stored samples through their value transform — with a record of where the
 // two numbers came from (ADR-0373 §SD4).
+//
+// Lo and Hi are what a mapper compiles with, whatever the source. For
+// [LimitsSourcePercentile] they are the two percentiles' values, found from a
+// histogram by [PercentileLimits]; this package does not count one, so a
+// recipe that names percentiles without their values cannot be compiled
+// until something resolves it — the image viewer widget does, in its
+// SetRecipe.
 type Limits struct {
-	Lo, Hi    float64
-	Source    LimitsSourceE
+	Lo, Hi float64
+	Source LimitsSourceE
+	// PercentLo and PercentHi are the percentiles, 0 to 100, for
+	// [LimitsSourcePercentile]; zero otherwise.
 	PercentLo float64
 	PercentHi float64
 }

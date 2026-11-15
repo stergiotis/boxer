@@ -3,6 +3,7 @@ package imaging
 import (
 	"encoding/binary"
 	"math"
+	"slices"
 
 	"lukechampine.com/blake3"
 
@@ -352,8 +353,11 @@ type Image struct {
 
 // NewImage assembles an image. The planes must match the model in number and
 // each other in size and kind; alpha, where the model has it, is the last
-// plane and is straight — not multiplied into the others. The provenance's
-// SampleHash is computed here.
+// plane and is straight — not multiplied into the others. The image keeps a
+// copy of the planes slice, so the caller may reuse it; the samples are
+// shared, and stay the planes' (see [NewPlaneU8]). The digest of the samples
+// is computed here, once, and is what [Image.Hash] and the provenance's
+// SampleHash report; a SampleHash the caller set is replaced.
 func NewImage(model ColorModelE, planes []Plane, provenance Provenance) (img Image, err error) {
 	if model.PlaneCount() == 0 || len(planes) != model.PlaneCount() {
 		return img, eb.Build().Stringer("model", model).Int("planes", len(planes)).
@@ -367,8 +371,8 @@ func NewImage(model ColorModelE, planes []Plane, provenance Provenance) (img Ima
 				Errorf("planes of an image must share one size and one sample kind")
 		}
 	}
-	img = Image{model: model, planes: planes, provenance: provenance}
-	img.provenance.SampleHash = img.Hash()
+	img = Image{model: model, planes: slices.Clone(planes), provenance: provenance}
+	img.provenance.SampleHash = img.digest()
 	return
 }
 
@@ -426,8 +430,12 @@ func (inst Image) Alpha() (plane Plane, ok bool) {
 // size, and each plane's samples in storage order, integers and float bit
 // patterns little-endian. Two images with the same digest hold the same
 // samples whatever file they came from; value transforms and provenance are
-// not part of it.
-func (inst Image) Hash() (sum [32]byte) {
+// not part of it. It was computed when the image was assembled, so asking
+// costs nothing; it is the zero digest for the empty image.
+func (inst Image) Hash() (sum [32]byte) { return inst.provenance.SampleHash }
+
+// digest computes [Image.Hash] from the samples.
+func (inst Image) digest() (sum [32]byte) {
 	h := blake3.New(32, nil)
 	var head [10]byte
 	head[0], head[1] = byte(inst.model), byte(inst.Kind())

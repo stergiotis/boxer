@@ -249,7 +249,8 @@ func (inst *Viewer) paintHistogramBars(hist *stats.Histogram, axisLo, span float
 		}
 		inst.histBars = inst.histBars[:n]
 		clear(inst.histBars)
-		for i, count := range hist.Counts {
+		for i := range hist.Bins() {
+			count := hist.Count(i)
 			if count == 0 {
 				continue
 			}

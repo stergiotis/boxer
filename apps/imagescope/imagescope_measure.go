@@ -71,7 +71,7 @@ func measureRegion(ctx context.Context, img imaging.Image, rect image.Rectangle,
 			return nil, herr
 		}
 		m.exact = m.exact && h.IsExact()
-		ps := PlaneStatistics{Plane: names[i], Samples: h.Valid, Invalid: h.Invalid}
+		ps := PlaneStatistics{Plane: names[i], Samples: h.Valid(), Invalid: h.Invalid()}
 		ps.Min, ps.Max, _ = h.Range()
 		ps.Mean, _ = h.Mean()
 		ps.StdDev, _ = h.StdDev()
