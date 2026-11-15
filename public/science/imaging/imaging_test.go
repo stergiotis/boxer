@@ -184,3 +184,23 @@ func TestTheDigestIsComputedOnceAndTheImageOwnsItsPlaneList(t *testing.T) {
 
 	assert.Equal(t, [32]byte{}, Image{}.Hash(), "the empty image has the zero digest")
 }
+
+// The digest of samples written row by row, the planes interleaved, is the
+// digest of the image the rows make: a decoder can compute it as it goes.
+func TestADigestWrittenRowByRowIsTheImagesHash(t *testing.T) {
+	const w, h = 7, 5
+	r, g := make([]uint16, w*h), make([]uint16, w*h)
+	for i := range r {
+		r[i], g[i] = uint16(i*997), uint16(65535-i)
+	}
+	pr, _ := NewPlaneU16(w, h, r)
+	pg, _ := NewPlaneU16(w, h, g)
+	img, err := NewImage(ColorModelGrayAlpha, []Plane{pr, pg}, Provenance{})
+	require.NoError(t, err)
+	d := NewDigest(ColorModelGrayAlpha, SampleKindU16, w, h)
+	for row := range h {
+		d.WriteU16(0, r[row*w:(row+1)*w])
+		d.WriteU16(1, g[row*w:(row+1)*w])
+	}
+	assert.Equal(t, img.Hash(), d.Sum())
+}

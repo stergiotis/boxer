@@ -1,11 +1,8 @@
 package imaging
 
 import (
-	"encoding/binary"
 	"math"
 	"slices"
-
-	"lukechampine.com/blake3"
 
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
@@ -426,9 +423,9 @@ func (inst Image) Alpha() (plane Plane, ok bool) {
 	return inst.planes[len(inst.planes)-1], true
 }
 
-// Hash is the BLAKE3 digest of the image's samples: the model, the kind, the
-// size, and each plane's samples in storage order, integers and float bit
-// patterns little-endian. Two images with the same digest hold the same
+// Hash is the BLAKE3 digest of the image's samples, as [Digest] defines it:
+// the model, the kind, the size, and each plane's own digest of its samples
+// in storage order, integers and float bit patterns little-endian. Two images with the same digest hold the same
 // samples whatever file they came from; value transforms and provenance are
 // not part of it. It was computed when the image was assembled, so asking
 // costs nothing; it is the zero digest for the empty image.
@@ -436,35 +433,9 @@ func (inst Image) Hash() (sum [32]byte) { return inst.provenance.SampleHash }
 
 // digest computes [Image.Hash] from the samples.
 func (inst Image) digest() (sum [32]byte) {
-	h := blake3.New(32, nil)
-	var head [10]byte
-	head[0], head[1] = byte(inst.model), byte(inst.Kind())
-	binary.LittleEndian.PutUint32(head[2:], uint32(inst.Width()))
-	binary.LittleEndian.PutUint32(head[6:], uint32(inst.Height()))
-	_, _ = h.Write(head[:])
-	buf := make([]byte, 0, 1<<16)
-	for _, p := range inst.planes {
-		switch p.kind {
-		case SampleKindU8:
-			_, _ = h.Write(p.u8)
-		case SampleKindU16:
-			for start := 0; start < len(p.u16); start += cap(buf) / 2 {
-				buf = buf[:0]
-				for _, v := range p.u16[start:min(start+cap(buf)/2, len(p.u16))] {
-					buf = binary.LittleEndian.AppendUint16(buf, v)
-				}
-				_, _ = h.Write(buf)
-			}
-		case SampleKindF32:
-			for start := 0; start < len(p.f32); start += cap(buf) / 4 {
-				buf = buf[:0]
-				for _, v := range p.f32[start:min(start+cap(buf)/4, len(p.f32))] {
-					buf = binary.LittleEndian.AppendUint32(buf, math.Float32bits(v))
-				}
-				_, _ = h.Write(buf)
-			}
-		}
+	d := NewDigest(inst.model, inst.Kind(), inst.Width(), inst.Height())
+	for i, p := range inst.planes {
+		d.WritePlane(i, p)
 	}
-	h.Sum(sum[:0])
-	return
+	return d.Sum()
 }

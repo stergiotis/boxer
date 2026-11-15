@@ -28,6 +28,10 @@ type Histogram struct {
 	counts []uint64
 	// lo and hi are the smallest and largest valid stored sample.
 	lo, hi float64
+	// binLo and binHi are what a float histogram's bins divide: the range
+	// of the samples counted, or a range given so that histograms of parts
+	// of a plane line up and can be merged.
+	binLo, binHi float64
 	// valid is the number of samples counted; invalid the number left out.
 	valid, invalid uint64
 
@@ -101,7 +105,7 @@ func OfRegion(plane imaging.Plane, rect image.Rectangle) (h Histogram, err error
 			}
 		}
 	case imaging.SampleKindF32:
-		h.countFloats(plane.F32(), w, rect)
+		h.countFloats(plane.F32(), w, rect, 0, 0, false)
 		return h, nil
 	default:
 		return h, nil
@@ -132,10 +136,32 @@ func OfRegion(plane imaging.Plane, rect image.Rectangle) (h Histogram, err error
 	return h, nil
 }
 
-// countFloats fills the histogram of a float region: the range first, then
-// the counts and the running mean and squared deviations (Welford's
-// recurrence, which does not subtract two large sums).
-func (inst *Histogram) countFloats(samples []float32, w int, rect image.Rectangle) {
+// OfRegionIn is [OfRegion] with a float plane's bins dividing [binLo, binHi]
+// instead of the region's own range, so that histograms of several regions
+// of one plane — the tiles of a store — line up and [Merge] can add them. A
+// sample outside the range is counted in the nearest end bin. For an integer
+// plane, whose bins are its values, the range is not read.
+func OfRegionIn(plane imaging.Plane, rect image.Rectangle, binLo, binHi float64) (h Histogram, err error) {
+	if plane.Kind() != imaging.SampleKindF32 {
+		return OfRegion(plane, rect)
+	}
+	if rect.Empty() || !rect.In(image.Rect(0, 0, plane.Width(), plane.Height())) {
+		return h, eb.Build().Stringer("region", rect).Int("width", plane.Width()).Int("height", plane.Height()).
+			Errorf("region to count is empty or not inside the plane")
+	}
+	if !(binHi >= binLo) || math.IsInf(binLo, 0) || math.IsInf(binHi, 0) {
+		return h, eb.Build().Float64("lo", binLo).Float64("hi", binHi).Errorf("bin range is not a finite ascending pair")
+	}
+	h.kind, h.transform = plane.Kind(), plane.Transform()
+	h.countFloats(plane.F32(), plane.Width(), rect, binLo, binHi, true)
+	return h, nil
+}
+
+// countFloats fills the histogram of a float region: the range first — the
+// region's own unless one is given — then the counts and the running mean
+// and squared deviations (Welford's recurrence, which does not subtract two
+// large sums).
+func (inst *Histogram) countFloats(samples []float32, w int, rect image.Rectangle, binLo, binHi float64, given bool) {
 	lo, hi := float32(math.Inf(1)), float32(math.Inf(-1))
 	for y := rect.Min.Y; y < rect.Max.Y; y++ {
 		for _, v := range samples[y*w+rect.Min.X : y*w+rect.Max.X] {
@@ -144,15 +170,21 @@ func (inst *Histogram) countFloats(samples []float32, w int, rect image.Rectangl
 			}
 		}
 	}
+	inst.counts = make([]uint64, FloatBins)
+	if given {
+		inst.binLo, inst.binHi = binLo, binHi
+	}
 	if lo > hi {
 		inst.invalid = uint64(rect.Dx()) * uint64(rect.Dy())
 		return
 	}
 	inst.lo, inst.hi = float64(lo), float64(hi)
-	inst.counts = make([]uint64, FloatBins)
+	if !given {
+		inst.binLo, inst.binHi = inst.lo, inst.hi
+	}
 	scale := 0.0
-	if hi > lo {
-		scale = FloatBins / (inst.hi - inst.lo)
+	if inst.binHi > inst.binLo {
+		scale = FloatBins / (inst.binHi - inst.binLo)
 	}
 	for y := rect.Min.Y; y < rect.Max.Y; y++ {
 		for _, v := range samples[y*w+rect.Min.X : y*w+rect.Max.X] {
@@ -161,7 +193,7 @@ func (inst *Histogram) countFloats(samples []float32, w int, rect image.Rectangl
 				continue
 			}
 			x := float64(v)
-			inst.counts[min(int((x-inst.lo)*scale), FloatBins-1)]++
+			inst.counts[min(max(int((x-inst.binLo)*scale), 0), FloatBins-1)]++
 			inst.valid++
 			d := x - inst.mean
 			inst.mean += d / float64(inst.valid)
@@ -205,7 +237,7 @@ func (inst Histogram) BinWidth() float64 {
 	if inst.kind.IsInteger() || len(inst.counts) == 0 {
 		return 1
 	}
-	return (inst.hi - inst.lo) / float64(len(inst.counts))
+	return (inst.binHi - inst.binLo) / float64(len(inst.counts))
 }
 
 // BinStored is the stored value at the lower edge of bin i.
@@ -213,7 +245,7 @@ func (inst Histogram) BinStored(i int) float64 {
 	if inst.kind.IsInteger() {
 		return float64(i)
 	}
-	return inst.lo + float64(i)*inst.BinWidth()
+	return inst.binLo + float64(i)*inst.BinWidth()
 }
 
 // Value turns a stored sample into the value it stands for, through the
@@ -257,9 +289,47 @@ func (inst Histogram) PercentileStored(p float64) (stored float64, ok bool) {
 				return float64(i), true
 			}
 			within := (target - seen) / float64(n)
-			return min(inst.BinStored(i)+within*inst.BinWidth(), inst.hi), true
+			return min(max(inst.BinStored(i)+within*inst.BinWidth(), inst.lo), inst.hi), true
 		}
 		seen += float64(n)
 	}
 	return inst.hi, true
+}
+
+// Merge is the histogram of the samples two histograms counted, as if they
+// had been counted together: of two parts of one plane, such as two tiles.
+// They must be of one sample kind and value transform and, for a float
+// plane, of one bin range ([OfRegionIn]). The moments combine exactly (Chan
+// et al.'s pairwise update), so the mean and standard deviation are those of
+// all the samples; a float histogram's percentiles stay right to a bin.
+func Merge(a, b Histogram) (h Histogram, err error) {
+	switch {
+	case a.counts == nil && a.invalid == 0:
+		return b, nil
+	case b.counts == nil && b.invalid == 0:
+		return a, nil
+	case a.kind != b.kind || a.transform != b.transform:
+		return h, eb.Build().Stringer("kind", a.kind).Stringer("other kind", b.kind).Errorf("histograms of different kinds or transforms do not merge")
+	case len(a.counts) != len(b.counts) || a.binLo != b.binLo || a.binHi != b.binHi:
+		return h, eb.Build().Float64("lo", a.binLo).Float64("hi", a.binHi).Float64("other lo", b.binLo).Float64("other hi", b.binHi).
+			Errorf("float histograms over different bin ranges do not merge")
+	}
+	h = Histogram{kind: a.kind, transform: a.transform, binLo: a.binLo, binHi: a.binHi,
+		valid: a.valid + b.valid, invalid: a.invalid + b.invalid, counts: make([]uint64, len(a.counts))}
+	for i := range h.counts {
+		h.counts[i] = a.counts[i] + b.counts[i]
+	}
+	switch {
+	case a.valid == 0:
+		h.lo, h.hi, h.mean, h.m2 = b.lo, b.hi, b.mean, b.m2
+	case b.valid == 0:
+		h.lo, h.hi, h.mean, h.m2 = a.lo, a.hi, a.mean, a.m2
+	default:
+		na, nb, n := float64(a.valid), float64(b.valid), float64(h.valid)
+		delta := b.mean - a.mean
+		h.mean = a.mean + delta*nb/n
+		h.m2 = a.m2 + b.m2 + delta*delta*na*nb/n
+		h.lo, h.hi = min(a.lo, b.lo), max(a.hi, b.hi)
+	}
+	return h, nil
 }

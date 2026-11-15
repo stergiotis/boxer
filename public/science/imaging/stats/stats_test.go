@@ -243,3 +243,84 @@ func TestARegionOutsideThePlaneIsRefusedAndMomentsFollowTheTransform(t *testing.
 	_, ok = Histogram{}.Mean()
 	assert.False(t, ok)
 }
+
+// Histograms of the tiles of a region, merged, are the histogram of the
+// region: the same counts, range and moments, for every sample kind.
+func TestMergedTilesAreTheWhole(t *testing.T) {
+	rapid.Check(t, func(t *rapid.T) {
+		kind := rapid.SampledFrom(imaging.AllSampleKinds).Draw(t, "kind")
+		w := rapid.IntRange(1, 40).Draw(t, "w")
+		h := rapid.IntRange(1, 40).Draw(t, "h")
+		raw := rapid.SliceOfN(rapid.Uint16(), w*h, w*h).Draw(t, "samples")
+		var p imaging.Plane
+		switch kind {
+		case imaging.SampleKindU8:
+			s := make([]uint8, w*h)
+			for i := range s {
+				s[i] = uint8(raw[i])
+			}
+			p, _ = imaging.NewPlaneU8(w, h, s)
+		case imaging.SampleKindU16:
+			p, _ = imaging.NewPlaneU16(w, h, slices.Clone(raw))
+		default:
+			s := make([]float32, w*h)
+			for i := range s {
+				s[i] = float32(raw[i])/7 - 900
+				if raw[i]%11 == 0 {
+					s[i] = float32(math.NaN())
+				}
+			}
+			p, _ = imaging.NewPlaneF32(w, h, s)
+		}
+		whole, err := OfRegion(p, image.Rect(0, 0, w, h))
+		require.NoError(t, err)
+		lo, hi, _ := whole.StoredRange()
+		tw := rapid.IntRange(1, w).Draw(t, "tile w")
+		th := rapid.IntRange(1, h).Draw(t, "tile h")
+		var merged Histogram
+		for y := 0; y < h; y += th {
+			for x := 0; x < w; x += tw {
+				part, err := OfRegionIn(p, image.Rect(x, y, min(x+tw, w), min(y+th, h)), lo, hi)
+				require.NoError(t, err)
+				merged, err = Merge(merged, part)
+				require.NoError(t, err)
+			}
+		}
+		require.Equal(t, whole.Valid(), merged.Valid())
+		require.Equal(t, whole.Invalid(), merged.Invalid())
+		if whole.Valid() == 0 {
+			return
+		}
+		require.Equal(t, whole.Bins(), merged.Bins())
+		for i := range whole.Bins() {
+			require.Equal(t, whole.Count(i), merged.Count(i), "bin %d", i)
+		}
+		mlo, mhi, _ := merged.StoredRange()
+		require.Equal(t, lo, mlo)
+		require.Equal(t, hi, mhi)
+		wm, _ := whole.Mean()
+		mm, _ := merged.Mean()
+		require.InDelta(t, wm, mm, 1e-9*(1+math.Abs(wm)))
+		ws, _ := whole.StdDev()
+		ms, _ := merged.StdDev()
+		require.InDelta(t, ws, ms, 1e-6*(1+ws))
+		for _, pct := range []float64{1, 50, 99} {
+			a, _ := whole.PercentileStored(pct)
+			b, _ := merged.PercentileStored(pct)
+			require.Equal(t, a, b, "p=%v", pct)
+		}
+	})
+}
+
+func TestHistogramsThatDoNotLineUpDoNotMerge(t *testing.T) {
+	a, _ := imaging.NewPlaneF32(2, 1, []float32{1, 2})
+	h1, _ := OfRegionIn(a, image.Rect(0, 0, 2, 1), 0, 10)
+	h2, _ := OfRegionIn(a, image.Rect(0, 0, 2, 1), 0, 20)
+	_, err := Merge(h1, h2)
+	assert.Error(t, err)
+	b, _ := imaging.NewPlaneU8(2, 1, []uint8{1, 2})
+	_, err = Merge(h1, Of(b))
+	assert.Error(t, err)
+	_, err = OfRegionIn(a, image.Rect(0, 0, 2, 1), 5, 1)
+	assert.Error(t, err, "a descending range")
+}
