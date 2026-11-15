@@ -243,8 +243,18 @@ renderer and no wire changes.
   ([`imaging/stats`](../../public/science/imaging/stats/doc.go)), and
   percentile limits. The minimum and maximum beside each level are built;
   nothing drawn reads them yet.
-- **M4** — the app: catalog, help book, state machine, scenes; region
-  statistics and the hand-over to play.
+- **M4** ✓ — the app, [`apps/imagescope`](../../apps/imagescope/app_register.go)
+  under its working name: files through the file broker's read dialog, a
+  phase machine mirrored from the open and the measurement, an operations
+  catalog, a help book with a method page, two scenes and a tour entry.
+  Region statistics are per plane over the region's samples at full
+  resolution: count, range, mean, the standard deviation with divisor n, and
+  nearest-rank percentiles, which are sample values
+  ([`imaging/stats`](../../public/science/imaging/stats/doc.go)). *Send to
+  play* publishes the region's samples, one row per pixel, at most about four
+  megapixels, and a larger region is refused rather than cut. No operation
+  opens a file: the picker is the person's. Nothing persists, and there is no
+  launch configuration (Deferred).
 
 ## Surfaces — Tier 1
 
@@ -253,7 +263,7 @@ renderer and no wire changes.
 | Exported Go API: `public/science/imaging` with `decode` and `display` (image, plane, recipe, mapping, levels, PNG/JPEG readers) | added | their tests; the package-properties table |
 | Exported Go API: portolan's options | a tile source that supplies pixels, and content invalidation, added beside the URL source | portolan's pyramid tests; no existing caller changes |
 | Exported Go API: `widgets/imageview` | added | `widgets/conformance`, a gallery demo, a scene |
-| App registry | one app added | its launch configuration, help book and scenes |
+| App registry | one app added, `apps/imagescope`; two seed variables, `BOXER_IMAGESCOPE_SAMPLE` and `BOXER_IMAGESCOPE_REGION` | its operations catalog, help book, scenes and tour entry; the environment-variable registry |
 | egui2 IDL, FFFI2 frame, mesh wire, renderers | none | — |
 
 ## Alternatives
@@ -373,6 +383,12 @@ renderer and no wire changes.
   behaviour, border rule and output kind, pulled by the view and by export.
   Its own ADR; SD9's three rules are what this one fixes for it.
 - **Regions beyond a rectangle, and compared or linked views.**
+- **A launch configuration for the app** — opening a window on an image
+  another app holds. It waits for the first app that has an image to hand
+  over; until then a window opens empty or on a sample.
+- **Line profiles.** SD9 names them beside the histogram and region
+  statistics as results that leave as tables; the first cut has region
+  statistics only.
 - **An explicit release for `paintImage` textures.** An opcode change; taken
   up if idle eviction proves too slow under real panning.
 

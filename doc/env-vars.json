@@ -875,6 +875,28 @@
       }
     },
     {
+      "name": "BOXER_IMAGESCOPE_REGION",
+      "type": "string",
+      "description": "a region to mark on the image BOXER_IMAGESCOPE_SAMPLE opens, as four integers: column, row, width, height in pixels, separated by commas; for scenes and demos",
+      "category": "boxer-imagescope",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/apps/imagescope"
+      }
+    },
+    {
+      "name": "BOXER_IMAGESCOPE_SAMPLE",
+      "type": "string",
+      "description": "the synthetic sample image a new imagescope window opens on: field, colour or small; for scenes and demos",
+      "category": "boxer-imagescope",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/apps/imagescope"
+      }
+    },
+    {
       "name": "BOXER_IMZERO_DEBUG_MODE",
       "type": "string",
       "description": "imzero2 debug profile: memcheck|massif|flamegraph|heaptrack; empty uses the default launcher",
@@ -1579,6 +1601,28 @@
       "origin": {
         "module": "github.com/stergiotis/boxer",
         "package": "github.com/stergiotis/boxer/public/keelson/runtime/moderator"
+      }
+    },
+    {
+      "name": "BOXER_NOTEBOOK_SAMPLE",
+      "type": "string",
+      "description": "the sample notebook a new notebook window opens: minimal, report or renderers; for scenes and demos",
+      "category": "boxer-notebook",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/apps/notebook"
+      }
+    },
+    {
+      "name": "BOXER_NOTEBOOK_SNAPSHOT",
+      "type": "string",
+      "description": "the notebook a new notebook window opens from the lading store, as <mount id, hex>@<snapshot, unix nanoseconds>:<path in the snapshot>",
+      "category": "boxer-notebook",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/apps/notebook"
       }
     },
     {
