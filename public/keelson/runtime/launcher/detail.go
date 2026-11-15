@@ -64,6 +64,11 @@ func (inst *Inst) renderDetailHead(ids *c.WidgetIdStack, m app.Manifest) {
 				Size(badge.SizeSm).
 				Send()
 		}
+		if m.Maturity != app.MaturityUnstated {
+			badge.New(ids.PrepareStr("detail-maturity"), m.Maturity.String()).
+				Size(badge.SizeSm).
+				Send()
+		}
 	}
 	if m.Summary != "" {
 		c.Label(m.Summary).Send()

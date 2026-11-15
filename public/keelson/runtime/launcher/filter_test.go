@@ -596,3 +596,62 @@ func TestEmptyResultHint_NamesWhichFilterIsResponsible(t *testing.T) {
 	inst.kindShown[indexOfKind(t, app.KindDemo)] = false
 	assert.Contains(t, inst.emptyResultHint(), "both")
 }
+
+// mkMaturityManifest is a manifest of one grade, for the maturity axis.
+func mkMaturityManifest(id string, display string, g app.MaturityE) (m app.Manifest) {
+	m = mkTopicManifest(id, display, app.TopicRuntime)
+	m.Maturity = g
+	return
+}
+
+func TestMaturityFilter_NothingSelectedRestrictsNothing(t *testing.T) {
+	f := maturityFilterT(0)
+	assert.True(t, f.isInert())
+	for _, g := range app.AllMaturities {
+		assert.True(t, f.shows(g), "%s passes an inert filter", g)
+	}
+	f = f.toggled(app.MaturityIncubating)
+	assert.False(t, f.isInert())
+	assert.True(t, f.shows(app.MaturityIncubating))
+	assert.False(t, f.shows(app.MaturityUnstated), "an ungraded app is not an incubating one")
+	assert.False(t, f.shows(app.MaturityCore))
+	assert.True(t, f.toggled(app.MaturityIncubating).isInert(), "a second toggle clears it")
+}
+
+func TestFilterManifests_MaturityChipsNarrowWithoutAQuery(t *testing.T) {
+	in := []app.Manifest{
+		mkMaturityManifest("a", "Ungraded", app.MaturityUnstated),
+		mkMaturityManifest("b", "A spike", app.MaturityIncubating),
+		mkMaturityManifest("c", "A tool", app.MaturitySupported),
+		mkMaturityManifest("d", "The store", app.MaturityCore),
+	}
+	only := maturityFilterT(0).toggled(app.MaturityIncubating)
+	assert.Equal(t, []string{"A spike"}, displaysOf(filterManifests(in, filterT{maturities: only}, nil)))
+
+	relied := maturityFilterT(0).toggled(app.MaturitySupported).toggled(app.MaturityCore)
+	assert.Equal(t, []string{"A tool", "The store"}, displaysOf(filterManifests(in, filterT{maturities: relied}, nil)))
+}
+
+func TestFilterManifests_MaturityComposesWithKindAndQuery(t *testing.T) {
+	spike := mkMaturityManifest("a", "Widget spike", app.MaturityIncubating)
+	demo := mkMaturityManifest("b", "Widget demo", app.MaturityIncubating)
+	demo.Kind = app.KindDemo
+	tool := mkMaturityManifest("c", "Widget tool", app.MaturitySupported)
+	f := filterT{
+		query:      "widget",
+		kinds:      kindFilterT(0).toggled(app.KindDemo),
+		maturities: maturityFilterT(0).toggled(app.MaturityIncubating),
+	}
+	// "widget" matches all three; the demo is hidden by kind, the tool by
+	// grade.
+	assert.Equal(t, []string{"Widget spike"}, displaysOf(filterManifests([]app.Manifest{spike, demo, tool}, f, nil)))
+	assert.False(t, filterT{maturities: maturityFilterT(0).toggled(app.MaturityCore)}.isInert())
+}
+
+func TestMaturityLabel_NamesEveryGrade(t *testing.T) {
+	assert.Equal(t, "Ungraded", maturityLabel(app.MaturityUnstated))
+	assert.Equal(t, "Incubating", maturityLabel(app.MaturityIncubating))
+	assert.Equal(t, "Supported", maturityLabel(app.MaturitySupported))
+	assert.Equal(t, "Core", maturityLabel(app.MaturityCore))
+	assert.NotEmpty(t, maturityLabel(app.MaturityE(99)))
+}

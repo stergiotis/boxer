@@ -415,6 +415,16 @@ func (inst *Inst) renderRowBadges(ids *c.WidgetIdStack, m app.Manifest, isOpen b
 			Tooltip("demonstrates a widget or a runtime facility rather than doing a user's work").
 			Send()
 	}
+	// Only the grade that warns: an incubating app is one a person should
+	// not build on, and that is worth a mark on the row. The other grades
+	// are in the detail pane and behind the maturity chips (ADR-0375).
+	if m.Maturity == app.MaturityIncubating {
+		badge.New(ids.PrepareStr(key("maturity")), "incubating").
+			Tone(badge.ToneWarning).
+			Size(badge.SizeSm).
+			Tooltip("exists to learn what can be built: its operations, its stored state and the app itself may change or go").
+			Send()
+	}
 }
 
 // rowLabel is the name on the row: Display, falling back to the Id when a

@@ -65,6 +65,15 @@ func kindNameList() (s string) {
 	return
 }
 
+func maturityNameList() (s string) {
+	names := make([]string, 0, len(app.AllMaturities))
+	for _, g := range app.AllMaturities {
+		names = append(names, g.String())
+	}
+	s = strings.Join(names, ", ")
+	return
+}
+
 func topicNameList() (s string) {
 	names := make([]string, 0, len(app.AllTopics))
 	for _, t := range app.AllTopics {
@@ -75,8 +84,9 @@ func topicNameList() (s string) {
 }
 
 // parseFilterArgs turns a caller's filter into the component's value. Kinds
-// are the kinds shown, empty meaning all; topics the topics selected, empty
-// meaning no restriction — the chips' own polarity (filter.go).
+// are the kinds shown, empty meaning all; maturities and topics the ones
+// selected, empty meaning no restriction — the chips' own polarity
+// (filter.go).
 func parseFilterArgs(in SetFilterArgs) (f filterT, err error) {
 	f.query = strings.TrimSpace(in.Query)
 	if len(in.Kinds) > 0 {
@@ -101,6 +111,16 @@ func parseFilterArgs(in SetFilterArgs) (f filterT, err error) {
 			}
 		}
 	}
+	for _, name := range in.Maturities {
+		g, ok := app.ParseMaturity(strings.ToLower(strings.TrimSpace(name)))
+		if !ok {
+			err = app.RefuseOperation("maturities are among " + maturityNameList())
+			return
+		}
+		if !f.maturities.selected(g) {
+			f.maturities = f.maturities.toggled(g)
+		}
+	}
 	for _, name := range in.Topics {
 		idx, ok := topicIndex(app.TopicT(strings.ToLower(strings.TrimSpace(name))))
 		if !ok {
@@ -123,14 +143,25 @@ func (inst *Inst) applyFilter(f filterT) {
 		inst.kindShown[i] = f.kinds.shows(k)
 	}
 	inst.appliedKinds = f.kinds
+	inst.maturityFilter = f.maturities
 	inst.topicFilter = f.topics
 }
 
-// shownKindNames and selectedTopicNames are the filter as get_view spells it.
+// shownKindNames, selectedMaturityNames and selectedTopicNames are the filter
+// as get_view spells it.
 func shownKindNames(f kindFilterT) (names []string) {
 	for _, k := range app.AllKinds {
 		if f.shows(k) {
 			names = append(names, k.String())
+		}
+	}
+	return
+}
+
+func selectedMaturityNames(f maturityFilterT) (names []string) {
+	for _, g := range app.AllMaturities {
+		if f.selected(g) {
+			names = append(names, g.String())
 		}
 	}
 	return
@@ -186,6 +217,7 @@ func (inst *launcherApp) opsSnapshot() (sn opsSnap) {
 type View struct {
 	Query      string   `desc:"the search box; space-separated regular expressions, ANDed"`
 	Kinds      []string `desc:"the kinds shown: app, applet, demo"`
+	Maturities []string `desc:"the maturity grades selected, among unstated, incubating, supported, core; empty means no restriction"`
 	Topics     []string `desc:"the topics selected; empty means no restriction"`
 	Selected   string   `desc:"the app id the detail pane describes; empty when the list is empty"`
 	Rows       int      `desc:"app rows the list shows under the filter; browsing lists an app under every topic it declares"`
@@ -195,9 +227,10 @@ type View struct {
 
 // SetFilterArgs sets the filter whole.
 type SetFilterArgs struct {
-	Query  string   `json:",omitzero" desc:"space-separated regular expressions, ANDed; empty browses by topic"`
-	Kinds  []string `json:",omitzero" desc:"the kinds to show, among app, applet, demo; empty shows all"`
-	Topics []string `json:",omitzero" desc:"the topics to restrict to; empty means no restriction"`
+	Query      string   `json:",omitzero" desc:"space-separated regular expressions, ANDed; empty browses by topic"`
+	Kinds      []string `json:",omitzero" desc:"the kinds to show, among app, applet, demo; empty shows all"`
+	Maturities []string `json:",omitzero" desc:"the maturity grades to restrict to, among unstated, incubating, supported, core; empty means no restriction"`
+	Topics     []string `json:",omitzero" desc:"the topics to restrict to; empty means no restriction"`
 }
 
 // ShowAppArgs selects an app's row, which the detail pane describes.
@@ -208,7 +241,7 @@ type ShowAppArgs struct {
 var ops = func() (s *appops.Set[*launcherApp, opsSnap]) {
 	s = appops.NewSet((*launcherApp).opsSnapshot)
 
-	s.Resource(resFilter, "the query, the kind toggles and the topic chips; shared by every launcher window, written through the controlling one",
+	s.Resource(resFilter, "the query, the kind toggles, the maturity chips and the topic chips; shared by every launcher window, written through the controlling one",
 		func(inst *launcherApp) any {
 			if !inst.isController() {
 				return filterT{}
@@ -260,16 +293,17 @@ var ops = func() (s *appops.Set[*launcherApp, opsSnap]) {
 		Summary: "read the launcher's filter, its selection and how many apps the list shows; the apps themselves are keelson('apps'), and opening one is the host's launch",
 		Agents:  true, Untrusted: true, Fork: app.OperationForkReadShared},
 		func(sn opsSnap, _ appops.None) (out View, err error) {
-			out = View{Query: sn.filter.query, Kinds: shownKindNames(sn.filter.kinds), Topics: selectedTopicNames(sn.filter.topics),
+			out = View{Query: sn.filter.query, Kinds: shownKindNames(sn.filter.kinds),
+				Maturities: selectedMaturityNames(sn.filter.maturities), Topics: selectedTopicNames(sn.filter.topics),
 				Selected: string(sn.selected), Rows: sn.rows, Total: sn.total, Controller: sn.controller}
 			return
 		})
 
 	appops.Command(s, app.OperationSpec{Name: opSetFilter, Version: 1,
-		Summary: "set the launcher's filter whole: the query, the kinds shown and the topics selected",
+		Summary: "set the launcher's filter whole: the query, the kinds shown, the maturity grades and the topics selected",
 		Effect:  app.OperationEffectView, Writes: []string{resFilter}, Agents: true,
 		Follows: []string{"a changed filter moves the selection to the list's first row"},
-		Gesture: "the search box and its clear button, the kind checkboxes, the topic chips", Rebuild: app.OperationRebuildVolatile},
+		Gesture: "the search box and its clear button, the kind checkboxes, the maturity chips, the topic chips", Rebuild: app.OperationRebuildVolatile},
 		func(inst *launcherApp, _ app.OperationCall, in SetFilterArgs) (out appops.None, err error) {
 			if err = refuseUnlessController(inst); err != nil {
 				return
@@ -317,7 +351,7 @@ func gestureOr[In any](inst *Inst, op string, in In, direct func()) {
 
 // filterArgs spells f as a caller would.
 func filterArgs(f filterT) (in SetFilterArgs) {
-	in = SetFilterArgs{Query: f.query, Topics: selectedTopicNames(f.topics)}
+	in = SetFilterArgs{Query: f.query, Maturities: selectedMaturityNames(f.maturities), Topics: selectedTopicNames(f.topics)}
 	if f.kinds.hidesAnything() {
 		in.Kinds = shownKindNames(f.kinds)
 	}

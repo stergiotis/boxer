@@ -254,3 +254,52 @@ func TestTheEngineAttributesEachWriter(t *testing.T) {
 	assert.Equal(t, opwire.WriterPerson, ew.eng.Writer(resSelection))
 	assert.Equal(t, app.AppIdT(fixTop), c.selected)
 }
+
+// The maturity grades are part of the filter a command sets whole: named by
+// their tokens, refused when unknown, and read back by get_view.
+func TestSetFilterSelectsMaturityGrades(t *testing.T) {
+	w := opsFixture(t)
+	w.claimController()
+	require.NoError(t, command(t, w, opSetFilter, SetFilterArgs{Maturities: []string{"Incubating", "core"}}))
+	f := w.inst.filterState()
+	assert.Equal(t, []string{"incubating", "core"}, selectedMaturityNames(f.maturities))
+	assert.Empty(t, w.inst.visibleManifests(), "the fixture's apps state no grade")
+
+	v, err := query[struct{}, View](t, w, opGetView, struct{}{})
+	require.NoError(t, err)
+	assert.Equal(t, []string{"incubating", "core"}, v.Maturities)
+	assert.Zero(t, v.Rows)
+	assert.Equal(t, "(no matches — filtered to selected maturity grades)", w.inst.emptyResultHint())
+
+	require.NoError(t, command(t, w, opSetFilter, SetFilterArgs{Maturities: []string{"unstated"}}))
+	assert.Len(t, w.inst.visibleManifests(), 3, "an ungraded app is selected by its own grade")
+
+	assert.Contains(t, refusal(command(t, w, opSetFilter, SetFilterArgs{Maturities: []string{"beta"}})).Reason, "unstated, incubating, supported, core")
+	assert.Equal(t, []string{"unstated"}, selectedMaturityNames(w.inst.filterState().maturities), "a refused command changes nothing")
+
+	require.NoError(t, command(t, w, opSetFilter, SetFilterArgs{}))
+	assert.Equal(t, filterT{}, w.inst.filterState(), "empty maturities restrict nothing")
+}
+
+func TestFilterArgsRoundTripWithMaturities(t *testing.T) {
+	f := filterT{query: "q", maturities: maturityFilterT(0).toggled(app.MaturityIncubating).toggled(app.MaturitySupported)}
+	back, err := parseFilterArgs(filterArgs(f))
+	require.NoError(t, err)
+	assert.Equal(t, f, back)
+	assert.Empty(t, filterArgs(filterT{}).Maturities, "no selected grade spells as no maturities")
+}
+
+// The maturity chips are drawn only where they can tell apps apart.
+func TestPresentMaturities_ListsTheGradesInUse(t *testing.T) {
+	w := opsFixture(t)
+	assert.Equal(t, []app.MaturityE{app.MaturityUnstated}, w.inst.presentMaturities(), "an ungraded host has one grade, so no row")
+
+	reg := app.NewRegistry()
+	for i, g := range []app.MaturityE{app.MaturityCore, app.MaturityIncubating, app.MaturityIncubating} {
+		m := mkTopicManifest("github.com/example/graded"+string(rune('a'+i)), "Graded", app.TopicRuntime)
+		m.Maturity = g
+		require.NoError(t, reg.RegisterFactory(m, func() (app.AppI, error) { return nil, errors.New("fixture") }))
+	}
+	inst := New(reg, nil, nil, zerolog.Nop())
+	assert.Equal(t, []app.MaturityE{app.MaturityIncubating, app.MaturityCore}, inst.presentMaturities(), "weakest first, each once")
+}

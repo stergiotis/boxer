@@ -114,28 +114,64 @@ func (inst kindFilterT) hidesAnything() (ok bool) {
 	return
 }
 
+// maturityFilterT is the set of app.MaturityE grades the launcher restricts
+// the view to (ADR-0375), a bitmask over the grades' values.
+//
+// It takes the topic chips' polarity, not the kind toggles': the zero value
+// selects nothing and means no restriction. The gesture it serves is "show me
+// only what is incubating", one click on one chip, which a hidden-set would
+// spell as three.
+type maturityFilterT uint8
+
+// isInert reports whether the filter restricts nothing.
+func (inst maturityFilterT) isInert() (ok bool) {
+	ok = inst == 0
+	return
+}
+
+// selected reports whether grade g is selected.
+func (inst maturityFilterT) selected(g app.MaturityE) (ok bool) {
+	ok = inst&(1<<g) != 0
+	return
+}
+
+// toggled returns the filter with grade g flipped.
+func (inst maturityFilterT) toggled(g app.MaturityE) (out maturityFilterT) {
+	out = inst ^ (1 << g)
+	return
+}
+
+// shows reports whether a manifest of grade g passes. An inert filter passes
+// every grade.
+func (inst maturityFilterT) shows(g app.MaturityE) (ok bool) {
+	ok = inst.isInert() || inst.selected(g)
+	return
+}
+
 // filterT is the launcher's whole filter state in one value: the query
-// string, the provenance toggles, and the topic chips. Every surface resolves
-// through it.
+// string, the provenance toggles, the maturity chips and the topic chips.
+// Every surface resolves through it.
 type filterT struct {
-	query  string
-	kinds  kindFilterT
-	topics topicFilterT
+	query      string
+	kinds      kindFilterT
+	maturities maturityFilterT
+	topics     topicFilterT
 }
 
 // isInert reports whether the filter would remove nothing.
 func (inst filterT) isInert() (ok bool) {
 	ok = strings.TrimSpace(inst.query) == "" &&
 		!inst.kinds.hidesAnything() &&
+		inst.maturities.isInert() &&
 		inst.topics.isInert()
 	return
 }
 
-// admits applies the two facet axes — kind and topic — to one manifest. Split
-// out because the query axis is scored rather than boolean, so the two halves
-// of the filter no longer read as one condition.
+// admits applies the three facet axes — kind, maturity and topic — to one
+// manifest. Split out because the query axis is scored rather than boolean,
+// so the two halves of the filter no longer read as one condition.
 func (inst filterT) admits(m app.Manifest) (ok bool) {
-	ok = inst.kinds.shows(m.Kind) && inst.topics.showsAny(m.Topics)
+	ok = inst.kinds.shows(m.Kind) && inst.maturities.shows(m.Maturity) && inst.topics.showsAny(m.Topics)
 	return
 }
 

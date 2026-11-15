@@ -86,6 +86,9 @@ type Inst struct {
 	// topicFilter is held as the mask itself: its chips are SelectableLabels,
 	// whose click response is read within the frame.
 	topicFilter topicFilterT
+	// maturityFilter is held as the mask too, for the same reason: its chips
+	// are SelectableLabels (ADR-0375).
+	maturityFilter maturityFilterT
 
 	// selected is the app whose detail the right pane shows. Written from the
 	// cursor once per frame (see renderRows) rather than assigned by each
@@ -252,6 +255,7 @@ func (inst *Inst) renderListPane(ids *c.WidgetIdStack) {
 	}
 	fieldId := inst.renderSearchBox(ids)
 	inst.renderKindToggles(ids, "pane")
+	inst.renderMaturityChips(ids)
 	inst.renderTopicChips(ids)
 	c.Separator().Horizontal().Send()
 
@@ -340,10 +344,10 @@ func (inst *Inst) query() (q string) {
 	return
 }
 
-// filterState is the whole filter in one comparable value: the query and both
-// facet axes.
+// filterState is the whole filter in one comparable value: the query and the
+// three facet axes.
 func (inst *Inst) filterState() (f filterT) {
-	f = filterT{query: inst.query(), kinds: inst.kindFilter(), topics: inst.topicFilter}
+	f = filterT{query: inst.query(), kinds: inst.kindFilter(), maturities: inst.maturityFilter, topics: inst.topicFilter}
 	return
 }
 
@@ -351,7 +355,7 @@ func (inst *Inst) filterState() (f filterT) {
 // the search both draw from.
 func (inst *Inst) visibleManifests() (out []app.Manifest) {
 	out = filterManifests(inst.registry.LaunchableManifests(),
-		filterT{kinds: inst.kindFilter(), topics: inst.topicFilter}, inst.rank)
+		filterT{kinds: inst.kindFilter(), maturities: inst.maturityFilter, topics: inst.topicFilter}, inst.rank)
 	return
 }
 
@@ -444,6 +448,60 @@ func (inst *Inst) renderKindToggles(ids *c.WidgetIdStack, scope string) {
 	}
 }
 
+// presentMaturities lists the grades the launchable apps carry, weakest
+// first.
+func (inst *Inst) presentMaturities() (grades []app.MaturityE) {
+	var seen maturityFilterT
+	for _, m := range inst.registry.LaunchableManifests() {
+		if m.Maturity.IsValid() {
+			seen |= 1 << m.Maturity
+		}
+	}
+	for _, g := range app.AllMaturities {
+		if seen.selected(g) {
+			grades = append(grades, g)
+		}
+	}
+	return
+}
+
+// renderMaturityChips draws the maturity filter (ADR-0375): one selectable
+// chip per grade some launchable app carries, with none selected meaning no
+// restriction.
+//
+// The row is drawn only where it can tell apps apart: on a host whose apps
+// all carry one grade, an ungraded host among them, there is nothing to
+// choose and the row would be one more line above the list. A selection made
+// while the row was drawn keeps it drawn, so it can always be cleared.
+func (inst *Inst) renderMaturityChips(ids *c.WidgetIdStack) {
+	grades := inst.presentMaturities()
+	if len(grades) < 2 && inst.maturityFilter.isInert() {
+		return
+	}
+	for range c.HorizontalWrapped().KeepIter() {
+		c.Label("Maturity:").Send()
+		for _, g := range grades {
+			if c.SelectableLabel(ids.PrepareStr("maturity-chip-"+g.String()),
+				inst.maturityFilter.selected(g), maturityLabel(g)).
+				SendResp().HasPrimaryClicked() {
+				// The click computes the next state, so the command sets and
+				// never toggles (ADR-0345 §SD2).
+				f := inst.filterState()
+				f.maturities = f.maturities.toggled(g)
+				inst.setFilterGesture(f)
+			}
+		}
+		if !inst.maturityFilter.isInert() {
+			if c.Button(ids.PrepareStr("maturity-chip-clear"), c.Atoms().Text(icons.PhX+" Clear").Keep()).
+				SendResp().HasPrimaryClicked() {
+				f := inst.filterState()
+				f.maturities = 0
+				inst.setFilterGesture(f)
+			}
+		}
+	}
+}
+
 // renderTopicChips draws the topic filter (ADR-0158 §SD6): one selectable
 // chip per vocabulary member some registered app carries, wrapping, with none
 // selected meaning no restriction.
@@ -518,6 +576,10 @@ func renderSearchNotes(b search.Battery, nHits int, nTotal int) {
 // annoying elsewhere.
 func (inst *Inst) emptyResultHint() (s string) {
 	switch {
+	case !inst.maturityFilter.isInert() && (!inst.topicFilter.isInert() || inst.kindFilter().hidesAnything()):
+		s = "(no matches — a maturity filter and other filters are active)"
+	case !inst.maturityFilter.isInert():
+		s = "(no matches — filtered to selected maturity grades)"
 	case !inst.topicFilter.isInert() && inst.kindFilter().hidesAnything():
 		s = "(no matches — a topic filter and hidden kinds are both active)"
 	case !inst.topicFilter.isInert():
@@ -640,6 +702,25 @@ func kindLabel(k app.KindE) (s string) {
 		s = "Demos"
 	default:
 		s = k.String()
+	}
+	return
+}
+
+// maturityLabel is a grade's chip label: its token with a capital, and
+// "Ungraded" for the grade nobody stated, which reads as a fact about the app
+// where "Unstated" reads as a fact about the label.
+func maturityLabel(g app.MaturityE) (s string) {
+	switch g {
+	case app.MaturityUnstated:
+		s = "Ungraded"
+	case app.MaturityIncubating:
+		s = "Incubating"
+	case app.MaturitySupported:
+		s = "Supported"
+	case app.MaturityCore:
+		s = "Core"
+	default:
+		s = g.String()
 	}
 	return
 }
