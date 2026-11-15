@@ -38,8 +38,13 @@ type Options struct {
 	// their knobs, zero meaning Leaflet's value field by field.
 	NoDragging, NoScrollWheelZoom, NoDoubleClickZoom bool
 	NoPinchZoom, NoBoxZoom, NoKeyboard               bool
-	NoZoomAnimation                                  bool
-	Handlers                                         HandlerOptions
+	// WheelPans makes the wheel pan the view, up and down and — with the
+	// shift key, or a horizontal wheel — sideways, as a document scrolls;
+	// the wheel then zooms only with the zoom modifier, which egui reports
+	// as a zoom, as it does a pinch. It overrides the wheel's zoom.
+	WheelPans       bool
+	NoZoomAnimation bool
+	Handlers        HandlerOptions
 	// Background is the colour under the tiles, 0xRRGGBBAA; 0 takes the
 	// design system's panel background (styletokens.NeutralBgPanel), which is
 	// also the sea under landoverlay's default land.
@@ -266,6 +271,9 @@ func (m *Map) Handles() (canvas, area widgethandle.WidgetHandle) {
 // to, so set it every frame it should hold.
 func (m *Map) SetPointerVeto(on bool) { m.pointerVeto = on }
 
+// SetWheelPans sets [Options.WheelPans] from here on.
+func (m *Map) SetWheelPans(on bool) { m.opts.WheelPans = on }
+
 // SetBoxSelect turns box selection on or off. On, a plain drag draws the
 // box-zoom rectangle and, when released, reports its bounds in
 // [Events.Selected] instead of zooming to it; panning by drag is off while it
@@ -330,6 +338,10 @@ type Events struct {
 	// selection was on (SetBoxSelect); SelectedOk says there was one.
 	Selected   LatLngBounds
 	SelectedOk bool
+	// Boxing is the box being dragged, as it stands this frame, whether it
+	// will be selected or zoomed to; BoxingOk says one is being dragged.
+	Boxing   LatLngBounds
+	BoxingOk bool
 }
 
 // ViewHash changes whenever the view does — centre, zoom or size — for
@@ -535,6 +547,10 @@ func (m *Map) RenderFill(fallbackW, fallbackH float32, overlay func(Projector)) 
 func (m *Map) Render(w, h float32, overlay func(Projector)) (ev Events) {
 	defer func() {
 		ev = Events{ViewEvents: m.events, Clicked: m.clicked, ClickedOk: m.clickedOk, Selected: m.selected, SelectedOk: m.selectedOk}
+		if r, ok := m.box.rect(); ok && m.view.Loaded() {
+			ev.Boxing = LatLngBoundsOf(m.view.ContainerPointToLatLng(r.Min), m.view.ContainerPointToLatLng(r.Max))
+			ev.BoxingOk = true
+		}
 	}()
 	for range c.IdScope(m.ids.PrepareStr(m.key)) {
 		// The key-capturing Frame around the body: while it has focus (a
@@ -667,9 +683,9 @@ func (m *Map) frame(w, h float32, overlay func(Projector)) {
 		Background(color.Hex(m.opts.Background)).
 		Sense(true, false, true).
 		CaptureZoom()
-	if !m.opts.NoScrollWheelZoom {
-		// A map the wheel does not zoom leaves it to what encloses it: a
-		// page scrolls under the pointer wherever it is.
+	if !m.opts.NoScrollWheelZoom || m.opts.WheelPans {
+		// A map the wheel neither zooms nor pans leaves it to what encloses
+		// it: a page scrolls under the pointer wherever it is.
 		canvas = canvas.CaptureScroll()
 	}
 	canvas.Send()
@@ -770,7 +786,14 @@ func (m *Map) handleInput(cur, areaCur c.CanvasCursorValue, areaOk bool, flags c
 		if !m.opts.NoPinchZoom && wheel.Zoom > 0 && wheel.Zoom != 1 {
 			m.pinch.step(v, float64(wheel.Zoom), anchor, now, m.hopts)
 		}
-		if !m.opts.NoScrollWheelZoom && wheel.ScrollY != 0 {
+		switch {
+		case m.opts.WheelPans:
+			// The content follows the wheel: a scroll down shows what lies
+			// below, as on a page.
+			if wheel.ScrollX != 0 || wheel.ScrollY != 0 {
+				v.PanBy(Point{X: -float64(wheel.ScrollX), Y: -float64(wheel.ScrollY)})
+			}
+		case !m.opts.NoScrollWheelZoom && wheel.ScrollY != 0:
 			m.wheel.wheel(float64(wheel.ScrollY), anchor, now)
 		}
 	}
