@@ -35,6 +35,15 @@ type Options struct {
 	// HideHistogram leaves out the strip under a single-plane view that
 	// shows the plane's histogram and the two limits as handles to drag.
 	HideHistogram bool
+	// WheelScrolls makes the wheel scroll the image, up and down and — with
+	// shift — sideways, as a document reader expects; the wheel then zooms
+	// only with the zoom modifier, as a pinch does (ADR-0374 §SD5).
+	WheelScrolls bool
+	// Overlay, when not nil, paints over the image every frame, after it and
+	// before the marked region: hits, selections, annotations, hit regions
+	// with labels. It draws with c.Paint* in canvas coordinates, which the
+	// [Projector] converts to and from image pixels (§SD4).
+	Overlay func(p Projector)
 	// SampleCacheBytes bounds the samples kept of a source that is not
 	// resident, so a recipe change maps them again without asking the source
 	// (ADR-0374 §SD3, §SD9); 0 takes [DefaultSampleCacheBytes].
@@ -86,6 +95,14 @@ type Events struct {
 	// RegionChanged reports that a box drawn while selecting set a new
 	// region this frame; Viewer.Region has it.
 	RegionChanged bool
+	// ViewChanged reports that the view moved or zoomed since the last frame,
+	// whoever moved it.
+	ViewChanged bool
+	// Drag is the rectangle of pixels a drag is marking while Selecting, as
+	// it stands this frame — before it is released and becomes the region;
+	// DragOk says a drag is under way.
+	Drag   image.Rectangle
+	DragOk bool
 	// LimitsChanged reports that a drag of a limit handle changed the
 	// recipe this frame; Viewer.Recipe has the new one.
 	LimitsChanged bool
@@ -143,6 +160,10 @@ type Viewer struct {
 	hover      Readout
 	hoverOk    bool
 	selecting  bool
+	// pendingView and pendingShow hold a SetView or a Reveal asked for before
+	// the view could take it.
+	pendingView *pendingView
+	pendingShow *image.Rectangle
 
 	// The level build runs once per image and the histogram count once per
 	// plane asked for, both as background jobs under Opts.Tasks. A stale
@@ -179,6 +200,7 @@ func New(ids *c.WidgetIdStack, scopeKey string, opts Options) *Viewer {
 		hists: make(map[int]*stats.Histogram, 4),
 	}
 	inst.m = portolan.New(ids, "view", portolan.Options{
+		WheelPans:         opts.WheelScrolls,
 		Source:            sourceFor(SourceInfo{}),
 		Loader:            portolan.LoaderOptions{Pixels: inst.src},
 		CRS:               portolan.Simple,
@@ -377,6 +399,7 @@ func (inst *Viewer) useSource(src SourceI, keepView bool) {
 	inst.plane = asStored
 	inst.hoverOk = false
 	inst.fitPending = !keepView || !inst.m.View().Loaded()
+	inst.pendingView, inst.pendingShow = nil, nil
 	inst.m.SetSource(sourceFor(inst.info))
 }
 
@@ -619,6 +642,142 @@ func (inst *Viewer) readoutAt(ll portolan.LatLng) (r Readout, ok bool) {
 	return r, true
 }
 
+// View is what is shown: the image pixel at the centre of the view, in
+// continuous pixel coordinates (pixel (col, row) covers [col, col+1) ×
+// [row, row+1)), and the magnification, screen pixels per image pixel. ok
+// is false before the view has been laid out.
+func (inst *Viewer) View() (centerX, centerY, magnification float64, ok bool) {
+	v := inst.m.View()
+	if !v.Loaded() {
+		return 0, 0, 0, false
+	}
+	ctr := v.Center()
+	return ctr.Lng, -ctr.Lat, math.Pow(2, v.Zoom()), true
+}
+
+// SetView centres the view on a point in image pixels at a magnification,
+// held within the zooms the viewer allows. Before the view is laid out it is
+// applied on the next frame, after a pending fit, which it replaces.
+func (inst *Viewer) SetView(centerX, centerY, magnification float64) {
+	if !(magnification > 0) || math.IsNaN(centerX) || math.IsNaN(centerY) {
+		return
+	}
+	inst.fitPending = false
+	inst.pendingShow = nil
+	inst.pendingView = &pendingView{x: centerX, y: centerY, mag: magnification}
+	inst.applyPendingView()
+}
+
+// Reveal brings a rectangle of pixels into view: nothing moves when it is in
+// view already; it is centred, at the magnification shown, when it fits;
+// and the view zooms out to it when it does not. Before the view is laid out
+// it is applied on the next frame.
+func (inst *Viewer) Reveal(r image.Rectangle) {
+	if inst.info.IsZero() {
+		return
+	}
+	r = r.Intersect(image.Rect(0, 0, inst.info.Width, inst.info.Height))
+	if r.Empty() {
+		return
+	}
+	inst.pendingView = nil
+	inst.pendingShow = &r
+	inst.applyPendingView()
+}
+
+// pendingView is a view asked for before it could be applied.
+type pendingView struct{ x, y, mag float64 }
+
+// applyPendingView applies a SetView or a Reveal once the view can take it.
+func (inst *Viewer) applyPendingView() {
+	v := inst.m.View()
+	// A view is set as soon as its size is known; a reveal waits for the fit
+	// or the view it is revealed within.
+	if inst.fitPending || v.Size().X <= 0 || v.Size().Y <= 0 {
+		return
+	}
+	switch {
+	case inst.pendingView != nil:
+		pv := inst.pendingView
+		inst.pendingView = nil
+		zoom := min(max(math.Log2(pv.mag), minZoom), maxZoom)
+		v.SetView(portolan.LL(-pv.y, pv.x), zoom)
+	case inst.pendingShow != nil && v.Loaded():
+		r := *inst.pendingShow
+		inst.pendingShow = nil
+		if seen := inst.visiblePixels(); r.In(seen) {
+			return
+		}
+		mag := math.Pow(2, v.Zoom())
+		size := v.Size()
+		cx, cy := float64(r.Min.X+r.Max.X)/2, float64(r.Min.Y+r.Max.Y)/2
+		if float64(r.Dx())*mag <= size.X && float64(r.Dy())*mag <= size.Y {
+			v.PanTo(portolan.LL(-cy, cx))
+			return
+		}
+		_ = v.FitBounds(boundsOfRect(r), portolan.FitOptions{})
+	}
+}
+
+// boundsOfRect is a rectangle of pixels on portolan's flat coordinate system.
+func boundsOfRect(r image.Rectangle) portolan.LatLngBounds {
+	return portolan.LatLngBoundsOf(portolan.LL(-float64(r.Max.Y), float64(r.Min.X)), portolan.LL(-float64(r.Min.Y), float64(r.Max.X)))
+}
+
+// visiblePixels is the pixels any part of which is in view.
+func (inst *Viewer) visiblePixels() image.Rectangle {
+	v := inst.m.View()
+	if !v.Loaded() {
+		return image.Rectangle{}
+	}
+	return pixelsOf(v.Bounds(), inst.info)
+}
+
+// pixelsOf is the pixels a box on portolan's flat coordinate system touches,
+// clipped to the image.
+func pixelsOf(box portolan.LatLngBounds, info SourceInfo) image.Rectangle {
+	sw, ne := box.SouthWest, box.NorthEast
+	r := image.Rect(int(math.Floor(sw.Lng)), int(math.Floor(-ne.Lat)), int(math.Ceil(ne.Lng)), int(math.Ceil(-sw.Lat)))
+	return r.Intersect(image.Rect(0, 0, info.Width, info.Height))
+}
+
+// Projector converts between image pixels and the canvas the image is drawn
+// in, for an [Options.Overlay]: c.Paint* calls made with what it returns land
+// on the pixels they name. Image pixels are continuous: pixel (col, row)
+// covers [col, col+1) × [row, row+1).
+type Projector struct {
+	p    portolan.Projector
+	info SourceInfo
+}
+
+// ToCanvas is the canvas point of an image point.
+func (inst Projector) ToCanvas(x, y float64) (cx, cy float32) {
+	pt := inst.p.ToCanvas(portolan.LL(-y, x))
+	return float32(pt.X), float32(pt.Y)
+}
+
+// ToPixel is the image point of a canvas point.
+func (inst Projector) ToPixel(cx, cy float32) (x, y float64) {
+	ll := inst.p.ToLatLng(portolan.Pt(float64(cx), float64(cy)))
+	return ll.Lng, -ll.Lat
+}
+
+// Visible is the pixels of the image any part of which is in view: what an
+// overlay with many marks need consider.
+func (inst Projector) Visible() image.Rectangle { return pixelsOf(inst.p.View().Bounds(), inst.info) }
+
+// Magnification is screen pixels per image pixel this frame.
+func (inst Projector) Magnification() float64 { return math.Pow(2, inst.p.View().Zoom()) }
+
+// paintOver is what portolan's overlay draws: the host's overlay, then the
+// marked region over it.
+func (inst *Viewer) paintOver(p portolan.Projector) {
+	if inst.Opts.Overlay != nil {
+		inst.Opts.Overlay(Projector{p: p, info: inst.info})
+	}
+	inst.paintRegion(p)
+}
+
 // Region is the rectangle of pixels marked on the image: columns
 // [Min.X, Max.X) and rows [Min.Y, Max.Y), per the image's pixel convention.
 // ok is false when none is marked.
@@ -655,9 +814,7 @@ func (inst *Viewer) pixelsIn(box portolan.LatLngBounds) image.Rectangle {
 	if inst.info.IsZero() {
 		return image.Rectangle{}
 	}
-	sw, ne := box.SouthWest, box.NorthEast
-	r := image.Rect(int(math.Floor(sw.Lng)), int(math.Floor(-ne.Lat)), int(math.Ceil(ne.Lng)), int(math.Ceil(-sw.Lat)))
-	return r.Intersect(image.Rect(0, 0, inst.info.Width, inst.info.Height))
+	return pixelsOf(box, inst.info)
 }
 
 // paintRegion outlines the marked region over the image, on the pixels'
@@ -714,16 +871,18 @@ func (inst *Viewer) Render(w, h float32) (ev Events) {
 		cw, ch := max(w-barW, fallbackCanvas), max(h-readoutH-histH, fallbackCanvas)
 
 		inst.m.SetNearestTiles(!inst.Opts.Smooth)
+		inst.m.SetWheelPans(inst.Opts.WheelScrolls)
+		// The view needs its size before it can fit, centre or show anything.
+		inst.m.View().SetSize(portolan.Pt(float64(cw), float64(ch)))
 		if inst.fitPending {
-			// The view needs its size before it can fit anything to it.
-			inst.m.View().SetSize(portolan.Pt(float64(cw), float64(ch)))
 			if err := inst.m.View().FitBounds(boundsFor(inst.info.Width, inst.info.Height), portolan.FitOptions{}); err == nil {
 				inst.fitPending = false
 			}
 		}
+		inst.applyPendingView()
 		var mev portolan.Events
 		for range c.HorizontalTop().KeepIter() {
-			mev = inst.m.Render(cw, ch, inst.paintRegion)
+			mev = inst.m.Render(cw, ch, inst.paintOver)
 			if barW > 0 {
 				inst.paintColorBar(colorBarWidth, ch)
 			}
@@ -735,6 +894,11 @@ func (inst *Viewer) Render(w, h float32) (ev Events) {
 		ev.Hover, ev.HoverOk = inst.hover, inst.hoverOk
 		if mev.ClickedOk {
 			ev.Clicked, ev.ClickedOk = inst.readoutAt(mev.Clicked)
+		}
+		ev.ViewChanged = mev.ViewEvents.Any()
+		if mev.BoxingOk && inst.selecting {
+			ev.Drag = inst.pixelsIn(mev.Boxing)
+			ev.DragOk = !ev.Drag.Empty()
 		}
 		if mev.SelectedOk {
 			if r := inst.pixelsIn(mev.Selected); !r.Empty() && r != inst.region {

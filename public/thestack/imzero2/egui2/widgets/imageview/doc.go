@@ -26,6 +26,19 @@
 // offered for an image in memory only; the readout of a source reads the
 // tile at hand and never asks the source from the frame.
 //
+// # The view and the overlay
+//
+// A host reads and sets the view in image pixels: [Viewer.View] and
+// [Viewer.SetView] (the pixel at the centre and the magnification),
+// [Viewer.Reveal] to bring a rectangle into view moving no more than it
+// must, and [Events.ViewChanged]. [Options.Overlay] paints over the image
+// every frame through a [Projector] between image pixels and the canvas, so
+// marks, selections and labelled hit regions land on the pixels they name.
+// While a region is dragged, [Events.Drag] says where it stands.
+// [Options.WheelScrolls] makes the wheel scroll the image as a document
+// does. None of this exposes portolan, whose geographic coordinates stay
+// behind this package's boundary (ADR-0374 §SD4, §SD5).
+//
 // # What is shown
 //
 // An image opens as stored (§SD1): a colour image as its red, green and blue
