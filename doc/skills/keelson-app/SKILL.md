@@ -496,7 +496,7 @@ boxes take their text as the accessible name; a text input takes it from
 anchored by value. A painted mark gets a hit region with a `Label`
 (`PaintHitRect`, `PaintHitCircle`, `PaintHitPolygon`) and a painter area an
 `AccessibleRegion`, so the tree names it and a tooltip reads it
-([imzero2 skill §14.4](../imzero2/SKILL.md), `apps/riskviews/canvas.go`).
+([imzero2 skill §14.4](../imzero2/SKILL.md), `widgets/riskmatrix/hover.go`).
 A scene that has to click by coordinates is a defect report against the
 widget.
 
@@ -592,9 +592,8 @@ then its diagnostics. A caption under a derived series says what was
 applied to what, as play's node captions do.
 
 **F7 — Grade the evidence for a view.** A view built on a published
-finding says so, and one built on guidance says that instead
-(riskviews' per-view `evidence` line). A prototype says it is one, in the
-window.
+finding says so, and one built on guidance says that instead, in a line
+under the view. A prototype says it is one, in the window.
 
 ## 7. Look and feel: calm, dense, familiar
 
@@ -827,7 +826,7 @@ row says before copying.
 | goroutines in the lifetime scope | `apps/servicedemo`, chat's coordinator scopes | a hand-built cancel-and-WaitGroup |
 | handover to play with an honest button | `apps/writingstylescope`, `apps/imzrt`, `trailviewer.sendToPlay` | a fire-and-forget `go RequestOpen` |
 | method caveats as tooltips, no false threshold | `apps/writingstylescope`, `apps/terrainscope` | a method named only in a doc comment |
-| evidence grading per view, hit labels on painted marks | `apps/riskviews` (a `KindDemo` with no catalog, help or tour; copy those two things only) | |
+| hit labels on painted marks | `widgets/riskmatrix`, `widgets/bowtie` | |
 | small catalog with revision conflicts | `apps/mdedit/mdedit_ops.go` | |
 | an agent-caused job that carries its delegation | `apps/watchbilldemo/watchbilldemo_ops.go` | |
 | async command, agent limits | `apps/play/play_ops.go`, `play_agent_limits.go` | |
