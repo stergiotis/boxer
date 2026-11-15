@@ -66,3 +66,25 @@ func GapPanels(d DensityE) (v float32) { v = Px(d, 6); return }
 
 // MarginFrame returns Px[6] — outside panel margins (panel-to-window-edge).
 func MarginFrame(d DensityE) (v float32) { v = Px(d, 6); return }
+
+// ---- Derived ----
+
+// ButtonPaddingY returns the padding above and below the text of a button,
+// combo box or selectable label under the active theme. A label placed
+// beside such a control in a top-aligned row takes it as its own top and
+// bottom margin, so that its text reads on the control's line.
+func ButtonPaddingY(d DensityE) (v float32) { return buttonPaddingY(d, ActiveTheme()) }
+
+// buttonPaddingY mirrors imzero2_egui's style: the IDS spacing sets the
+// button padding to PaddingInner (tokens/mod.rs apply_spacing), and the
+// fresh theme adds freshButtonPadding to it (fresh.rs).
+func buttonPaddingY(d DensityE, th ThemeE) (v float32) {
+	v = PaddingInner(d)
+	if th == ThemeFresh {
+		v += freshButtonPadding
+	}
+	return
+}
+
+// freshButtonPadding is what the fresh theme adds to the button padding.
+const freshButtonPadding = 2

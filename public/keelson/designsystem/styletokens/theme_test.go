@@ -42,3 +42,19 @@ func TestFreshPaletteIsLight(t *testing.T) {
 		t.Error("applyFreshPalette left the accent at the IDS value")
 	}
 }
+
+// TestButtonPaddingYFollowsTheTheme pins the mirror of imzero2_egui's
+// button padding: PaddingInner, and two more points under the fresh theme.
+func TestButtonPaddingYFollowsTheTheme(t *testing.T) {
+	for _, d := range []DensityE{DensityTight, DensityStandard, DensityRoomy} {
+		if got, want := buttonPaddingY(d, ThemeDark), PaddingInner(d); got != want {
+			t.Errorf("dark, density %v: %v, want %v", d, got, want)
+		}
+		if got, want := buttonPaddingY(d, ThemeFresh), PaddingInner(d)+2; got != want {
+			t.Errorf("fresh, density %v: %v, want %v", d, got, want)
+		}
+	}
+	if got, want := ButtonPaddingY(DensityStandard), buttonPaddingY(DensityStandard, ActiveTheme()); got != want {
+		t.Errorf("ButtonPaddingY = %v, want the active theme's %v", got, want)
+	}
+}
