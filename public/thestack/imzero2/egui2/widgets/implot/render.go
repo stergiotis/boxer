@@ -55,12 +55,42 @@ func (p *Plot) End() {
 	st.y.rng = sanitizeScaled(st.y.rng, st.y.scale)
 	st.x.constrain()
 	st.y.constrain()
+	st.gestures.settle(&st.x, &st.y)
 	// Constraints are per-frame Setup state: consumed here, re-declared
 	// by the caller next frame.
 	st.x.consOk, st.y.consOk = false, false
 	st.initialized = true
 	st.onceApplied = true
 	st.writeLinks()
+
+	// --- Legend rows and last frame's clicks and hovers on them, read
+	// before the layout (an outside legend takes its room from the plot
+	// area) and before the draw, so a toggle applies this frame. One entry
+	// per distinct label — same-label items share it. The rows are the
+	// shared legend package's; emitLegend fills in colour and state.
+	st.legendHover = ""
+	sm := c.CurrentApplicationState.StateManager
+	var leg []int
+	if !p.noLegend {
+		leg = legendIndices(p.series)
+	}
+	st.legendItems = st.legendItems[:0]
+	for _, si := range leg {
+		st.legendItems = append(st.legendItems, legend.Item{Label: p.series[si].label})
+	}
+	if clicked, hovered := legend.Read(sm, p.ids, legendPrefix, st.legendItems); clicked >= 0 || hovered >= 0 {
+		if clicked >= 0 {
+			l := st.legendItems[clicked].Label
+			p.SetSeriesHidden(l, !st.hidden[l])
+		}
+		if hovered >= 0 {
+			st.legendHover = st.legendItems[hovered].Label
+		}
+	}
+	p.legendW, p.legendH = 0, 0
+	if len(leg) > 0 {
+		p.legendW, p.legendH = legend.Measure(st.legendItems, p.legendStyle())
+	}
 
 	// --- Layout, ticks and label placement (layoutFrame). One pass settles
 	// it unless the x band stacks: extra lanes there deepen the bottom
@@ -118,36 +148,12 @@ func (p *Plot) End() {
 		c.PaintText(areaX+areaW/2, 4, 1, 0, p.titleShown, titleFontSize, color.Hex(colTitle)).Send()
 	}
 	if st.x.label != "" {
-		c.PaintText(areaX+areaW/2, p.h-16, 1, 0, st.x.label, labelFontSize, color.Hex(colAxisLabel)).Send()
+		c.PaintText(areaX+areaW/2, p.h-16-p.legendBelowReserve(), 1, 0, st.x.label, labelFontSize, color.Hex(colAxisLabel)).Send()
 	}
 	if st.y.label != "" {
 		// The painter lane has no rotated text yet; the y label sits
 		// horizontally above the tick column (deviation noted in doc.go).
 		c.PaintText(2, areaY-2, 0, 2, st.y.label, labelFontSize, color.Hex(colAxisLabel)).Send()
-	}
-
-	// --- Legend interaction: last frame's flags for each entry's sense
-	// region, read before the draw so a toggle applies this frame. One
-	// entry per distinct label — same-label items share it. The rows are
-	// the shared legend package's; emitLegend fills in colour and state.
-	st.legendHover = ""
-	sm := c.CurrentApplicationState.StateManager
-	var leg []int
-	if !p.noLegend {
-		leg = legendIndices(p.series)
-	}
-	st.legendItems = st.legendItems[:0]
-	for _, si := range leg {
-		st.legendItems = append(st.legendItems, legend.Item{Label: p.series[si].label})
-	}
-	if clicked, hovered := legend.Read(sm, p.ids, legendPrefix, st.legendItems); clicked >= 0 || hovered >= 0 {
-		if clicked >= 0 {
-			l := st.legendItems[clicked].Label
-			st.hidden[l] = !st.hidden[l]
-		}
-		if hovered >= 0 {
-			st.legendHover = st.legendItems[hovered].Label
-		}
 	}
 
 	// --- Series, clipped to the plot area (the M0 clip stack). emitting
@@ -186,18 +192,38 @@ func (p *Plot) End() {
 		c.PaintRectStroke(x0, y0, x1, y1, 0, color.Hex(colBoxStroke), styletokens.StrokeHair).Send()
 	}
 	p.emitToolsClipped(tr, areaX, areaY, areaW, areaH)
+
+	// --- Hover guide and per-series readout (seriesreadout.go): the x is
+	// the pointer's, or a linked plot's; the line and the marks stay in
+	// the clip, the box below may overhang it.
+	st.readoutOk = false
+	st.readout = st.readout[:0]
+	readX, hovered, readOk := p.hoverX(tr)
+	showGuide := readOk && (p.hoverSeries || p.crosshair != nil) && st.x.rng.Contains(readX)
+	var lineX float64
+	if showGuide {
+		lineX = p.collectReadout(readX)
+		st.readoutX, st.readoutOk = readX, len(st.readout) > 0
+		p.emitHoverGuide(tr, lineX, areaY, areaH)
+	}
 	c.PaintClipPop().Send()
 	c.PaintRectStroke(areaX, areaY, areaX+areaW, areaY+areaH, 0, color.Hex(colBorder), styletokens.StrokeHair).Send()
 
 	// --- Hover readout, ImPlot's mouse-position text, bottom-right
 	// corner. Suppressed on NoInputs plots (sparklines, inert popups) and
 	// under NoMouseText: hover state stays readable through HoverPlotPos,
-	// the inlay text would just be noise there.
-	if st.hoverOk && !p.noInputs && !p.noMouseText {
+	// the inlay text would just be noise there. A per-series box at the
+	// pointer replaces it: its header names the x, and the two would
+	// overlap near the corner.
+	seriesBox := showGuide && hovered && len(st.readout) > 0 && !p.noSeriesBox
+	if st.hoverOk && !p.noInputs && !p.noMouseText && !seriesBox {
 		hx := tr.plotX(st.hoverPos[0])
 		hy := tr.plotY(st.hoverPos[1])
 		c.PaintText(areaX+areaW-4, areaY+areaH-3, 2, 2,
 			st.readoutText(hx, hy), tickFontSize, color.Hex(colReadout)).Monospace().Send()
+	}
+	if showGuide {
+		p.emitSeriesBox(tr, lineX, hovered, areaY)
 	}
 
 	// --- Interaction surfaces + the canvas drain. Sense-region emission
@@ -212,7 +238,8 @@ func (p *Plot) End() {
 	if !p.noInputs {
 		c.PaintSenseRegion(p.ids.PrepareStr("implot-area"), areaX, areaY, areaW, areaH).Send()
 		p.emitToolChrome(tr, areaX, areaY, areaW, areaH, true)
-		p.emitLegend(leg, areaX, areaY, true)
+		lx, ly := p.legendOrigin(areaX, areaY, areaW)
+		p.emitLegend(leg, lx, ly, true)
 		c.PaintCanvas(p.ids.PrepareStr("implot-canvas"), p.w, p.h).
 			Background(color.Hex(colPlotBg)).
 			Sense(true, true, true).
@@ -221,7 +248,8 @@ func (p *Plot) End() {
 			Send()
 	} else {
 		p.emitToolChrome(tr, areaX, areaY, areaW, areaH, false)
-		p.emitLegend(leg, areaX, areaY, false)
+		lx, ly := p.legendOrigin(areaX, areaY, areaW)
+		p.emitLegend(leg, lx, ly, false)
 		// Hover sense stays on: HoverPlotPos consumers (crosshairs) keep
 		// working on an inert plot; only gestures and the wheel are gone.
 		c.PaintCanvas(p.ids.PrepareStr("implot-canvas"), p.w, p.h).
@@ -256,12 +284,12 @@ func (p *Plot) layoutFrame(lanes, maxLanes int) (areaX, areaY, areaW, areaH floa
 	topGutter := topGutterFor(p.titleShown != "", st.y.label != "")
 	bottomGutter := bottomGutterFor(st.x.label != "", st.x.flags&AxisFlagsNoTickLabels == 0, lanes)
 	areaY = topGutter
-	areaH = max(p.h-topGutter-bottomGutter, minPlotAreaH)
+	areaH = max(p.h-topGutter-bottomGutter-p.legendBelowReserve(), minPlotAreaH)
 
 	if len(p.yCustomTicks) > 0 {
 		st.ticksY = filterTicksInRange(st.y.rng, p.yCustomTicks, st.ticksY)
 	} else {
-		st.ticksY = locateTicksScaled(st.y.rng, areaH, st.y.scale, st.ticksY)
+		st.ticksY = locateTicksScaled(st.y.rng, areaH, st.y.scale, st.y.loc, st.ticksY)
 	}
 	if st.y.flags&AxisFlagsNoTickLabels != 0 {
 		st.yBand.begin(0)
@@ -304,17 +332,17 @@ func (p *Plot) layoutFrame(lanes, maxLanes int) (areaX, areaY, areaW, areaH floa
 		leftGutter += 16
 	}
 	areaX = leftGutter
-	areaW = max(p.w-leftGutter-10, 16)
+	areaW = max(p.w-leftGutter-10-p.legendRightReserve(), 16)
 
 	switch {
 	case len(p.xCustomTicks) > 0:
 		st.ticksX = filterTicksInRange(st.x.rng, p.xCustomTicks, st.ticksX)
 	case st.x.flags&AxisFlagsNoTickLabels != 0:
-		st.ticksX = locateTicksScaled(st.x.rng, areaW, st.x.scale, st.ticksX)
+		st.ticksX = locateTicksScaled(st.x.rng, areaW, st.x.scale, st.x.loc, st.ticksX)
 	default:
 		// Located ticks are a choice rather than data, so an axis whose own
 		// labels would collide locates fewer of them instead of stacking.
-		st.ticksX = locateTicksFitted(st.x.rng, areaW, st.x.scale, tickLabelGap, st.ticksX)
+		st.ticksX = locateTicksFitted(st.x.rng, areaW, st.x.scale, st.x.loc, tickLabelGap, st.ticksX)
 	}
 	if st.x.flags&AxisFlagsNoTickLabels != 0 {
 		st.xBand.begin(0)
@@ -669,21 +697,62 @@ const (
 // legendPrefix keys the legend rows' sense regions under the plot's ids.
 const legendPrefix = "legend-"
 
-// legendStyle is the shared legend package dressed in this plot's chrome.
-func legendStyle() legend.Style {
-	return legend.Style{
+// Outside-legend geometry: the gap between the legend and the plot area or
+// the axis label next to it, and the margin a legend below keeps from the
+// canvas edges.
+const (
+	legendGap    = 6
+	legendMargin = 4
+)
+
+// legendStyle is the shared legend package dressed in this plot's chrome,
+// laid out for this frame's placement.
+func (p *Plot) legendStyle() legend.Style {
+	st := legend.Style{
 		FontSize: tickFontSize, RowHeight: 16, Padding: 6, Swatch: 10, Rounding: 3,
 		Background: color.Hex(colLegendBg), Border: color.Hex(colBorder),
 		Text: color.Hex(colTickLabel), TextHidden: color.Hex(colLegendHidden),
 		Monospace: true, TextWidth: EstimateTextWidth,
 	}
+	if p.legendPlace == LegendBelow {
+		st.Horizontal = true
+		st.MaxWidth = p.w - 2*legendMargin
+	}
+	return st
+}
+
+// legendRightReserve and legendBelowReserve are the room an outside legend
+// takes from the plot area's width and height; zero inside or without one.
+func (p *Plot) legendRightReserve() float32 {
+	if p.legendPlace != LegendRight || p.legendW == 0 {
+		return 0
+	}
+	return p.legendW + legendGap
+}
+
+func (p *Plot) legendBelowReserve() float32 {
+	if p.legendPlace != LegendBelow || p.legendH == 0 {
+		return 0
+	}
+	return p.legendH + legendGap
+}
+
+// legendOrigin is the legend box's top-left for this frame's placement.
+func (p *Plot) legendOrigin(areaX, areaY, areaW float32) (x, y float32) {
+	switch p.legendPlace {
+	case LegendRight:
+		return areaX + areaW + legendGap, areaY
+	case LegendBelow:
+		return max((p.w-p.legendW)/2, legendMargin), p.h - p.legendH - legendMargin
+	}
+	return areaX + 8, areaY + 8
 }
 
 // emitLegend draws the entry list with color swatches through the shared
-// legend package and — when interactive — stamps one sense region per
-// entry; clicks toggle series visibility, hover highlights. leg holds each
-// distinct label's first series index (legendIndices).
-func (p *Plot) emitLegend(leg []int, areaX, areaY float32, interactive bool) {
+// legend package at (lx, ly) and — when interactive — stamps one sense
+// region per entry; clicks toggle series visibility, hover highlights. leg
+// holds each distinct label's first series index (legendIndices).
+func (p *Plot) emitLegend(leg []int, lx, ly float32, interactive bool) {
 	st := p.st
 	if len(leg) == 0 {
 		return
@@ -698,8 +767,7 @@ func (p *Plot) emitLegend(leg []int, areaX, areaY float32, interactive bool) {
 		items = append(items, legend.Item{Label: s.label, Color: color.Hex(colHex), Hidden: st.hidden[s.label]})
 	}
 	st.legendItems = items
-	lst := legendStyle()
-	lx, ly := areaX+8, areaY+8
+	lst := p.legendStyle()
 	legend.Paint(items, lx, ly, lst)
 	if interactive {
 		legend.EmitSense(p.ids, legendPrefix, items, lx, ly, lst)

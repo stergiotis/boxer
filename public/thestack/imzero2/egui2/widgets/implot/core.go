@@ -104,8 +104,8 @@ type ScaleE uint8
 
 const (
 	ScaleLinear ScaleE = iota
-	// ScaleTime treats values as Unix seconds (UTC labels, ImPlot's
-	// default; a UseLocalTime knob can follow when needed).
+	// ScaleTime treats values as Unix seconds, labelled in UTC (ImPlot's
+	// default) unless SetupAxisTimeZone names another zone.
 	ScaleTime
 	ScaleLog10
 	// ScaleSymLog is ImPlot's asinh-based symmetric log: linear near
@@ -293,12 +293,14 @@ func filterTicksInRange(rng Range, src []tick, dst []tick) []tick {
 // locateTicksScaled dispatches to the scale's locator. SymLog currently
 // uses the default locator on raw values — an approximation recorded in
 // the package doc; Log10 and Time have faithful ports.
-func locateTicksScaled(rng Range, sizePx float32, scale ScaleE, dst []tick) []tick {
+//
+// loc is the zone of a time axis (nil is UTC); other scales ignore it.
+func locateTicksScaled(rng Range, sizePx float32, scale ScaleE, loc *time.Location, dst []tick) []tick {
 	switch scale {
 	case ScaleLog10:
 		return locateTicksLog10(rng, dst)
 	case ScaleTime:
-		return locateTicksTime(rng, sizePx, dst)
+		return locateTicksTime(rng, sizePx, loc, dst)
 	}
 	return locateTicks(rng, sizePx, dst)
 }
@@ -355,10 +357,20 @@ var timeSteps = []timeStep{
 
 // locateTicksTime ports the shape of ImPlot's time locator: pick the
 // smallest unit whose tick count fits the pixel density, snap the first
-// tick to that unit's boundary (UTC), and walk. Minor ticks and the
-// two-level context labels of upstream are deferred (package doc).
-func locateTicksTime(rng Range, sizePx float32, dst []tick) []tick {
+// tick to that unit's boundary, and walk. Minor ticks and the two-level
+// context labels of upstream are deferred (package doc).
+//
+// Boundaries and labels are in loc (nil is UTC). Rungs of a day or more walk
+// the zone's calendar, so a tick is a local midnight and a day with a DST
+// change is 23 or 25 hours long; weeks start on a Monday. Rungs of several
+// hours fall on the same wall-clock hours of every local day. Rungs of an
+// hour or less step evenly from a local hour boundary, so where the clocks
+// go back an hour's labels repeat rather than leaving a gap.
+func locateTicksTime(rng Range, sizePx float32, loc *time.Location, dst []tick) []tick {
 	dst = dst[:0]
+	if loc == nil {
+		loc = time.UTC
+	}
 	rng = rng.sanitize()
 	nMax := max(int(math.Round(float64(sizePx)/110.0)), 2)
 	span := rng.Size()
@@ -369,34 +381,60 @@ func locateTicksTime(rng Range, sizePx float32, dst []tick) []tick {
 			break
 		}
 	}
-	tMin := time.Unix(int64(math.Floor(rng.Min)), 0).UTC()
-	var cur time.Time
-	if step.months > 0 {
-		monthsSinceZero := (tMin.Year()*12 + int(tMin.Month()) - 1) / step.months * step.months
-		cur = time.Date(monthsSinceZero/12, time.Month(monthsSinceZero%12+1), 1, 0, 0, 0, 0, time.UTC)
-		for len(dst) < 64 {
-			v := float64(cur.Unix())
-			if v > rng.Max {
-				break
-			}
-			if rng.Contains(v) {
-				dst = append(dst, tick{value: v, major: true, label: cur.Format(step.format)})
-			}
-			cur = cur.AddDate(0, step.months, 0)
-		}
-		return dst
-	}
-	d := time.Duration(step.sec * float64(time.Second))
-	cur = tMin.Truncate(d)
-	for len(dst) < 128 {
+	tMin := time.Unix(int64(math.Floor(rng.Min)), 0).In(loc)
+	// emit appends cur unless it lies outside the range or does not advance
+	// (a wall-clock time a DST change skipped normalizes onto its neighbour),
+	// and reports whether the walk should go on.
+	emit := func(cur time.Time) bool {
 		v := float64(cur.Unix())
 		if v > rng.Max {
-			break
+			return false
 		}
-		if rng.Contains(v) {
+		if rng.Contains(v) && (len(dst) == 0 || v > dst[len(dst)-1].value) {
 			dst = append(dst, tick{value: v, major: true, label: cur.Format(step.format)})
 		}
-		cur = cur.Add(d)
+		return true
+	}
+	y, mo, d := tMin.Date()
+	switch {
+	case step.months > 0:
+		monthsSinceZero := (y*12 + int(mo) - 1) / step.months * step.months
+		for i := 0; len(dst) < 64; i++ {
+			if !emit(time.Date(monthsSinceZero/12, time.Month(monthsSinceZero%12+1+i*step.months), 1, 0, 0, 0, 0, loc)) {
+				break
+			}
+		}
+	case step.sec >= 86400:
+		days := int(step.sec / 86400)
+		// Civil days since Monday 1969-12-29, floored to the step.
+		civil := int(time.Date(y, mo, d, 0, 0, 0, 0, time.UTC).Unix()/86400) + 3
+		first := civil - ((civil%days)+days)%days - 3
+		for i := 0; len(dst) < 128; i++ {
+			if !emit(time.Date(1970, 1, 1+first+i*days, 0, 0, 0, 0, loc)) {
+				break
+			}
+		}
+	case step.sec > 3600:
+		hours := int(step.sec / 3600)
+		h0 := tMin.Hour() / hours * hours
+		for i := 0; len(dst) < 128; i++ {
+			if !emit(time.Date(y, mo, d, h0+i*hours, 0, 0, 0, loc)) {
+				break
+			}
+		}
+	default:
+		// The hour boundary is found in absolute time, by taking the wall
+		// clock's minutes and seconds off: time.Date of an hour the clocks
+		// repeat may pick its later instance and skip ticks.
+		dur := time.Duration(step.sec * float64(time.Second))
+		hour := tMin.Add(-time.Duration(tMin.Minute())*time.Minute - time.Duration(tMin.Second())*time.Second)
+		cur := hour.Add(tMin.Sub(hour) / dur * dur)
+		for len(dst) < 128 {
+			if !emit(cur) {
+				break
+			}
+			cur = cur.Add(dur)
+		}
 	}
 	return dst
 }

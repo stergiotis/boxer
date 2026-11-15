@@ -4,6 +4,7 @@ import (
 	"iter"
 	"math"
 	"strings"
+	"time"
 
 	"github.com/rs/zerolog/log"
 	"github.com/stergiotis/boxer/public/keelson/runtime/widgethandle"
@@ -33,6 +34,8 @@ type axisState struct {
 	flags    AxisFlags
 	label    string
 	scale    ScaleE
+	// loc is a ScaleTime axis's zone (SetupAxisTimeZone); nil is UTC.
+	loc *time.Location
 	// touched: a gesture moved this axis; AxisFlagsFollow stops
 	// refitting until the next explicit fit clears it.
 	touched bool
@@ -76,6 +79,16 @@ type plotState struct {
 	legendItems []legend.Item // this frame's rows, reused across frames
 	heatCache   map[string]*heatTex
 	imgSent     map[string]uint64
+
+	// Range gestures the person made, finished, settled and handed to the
+	// next frame's handle (gesture.go).
+	gestures gestureTrack
+
+	// The per-series readout of the last End (seriesreadout.go): the x it
+	// read at and a row per series, reused across frames.
+	readout   []ReadoutRow
+	readoutX  float64
+	readoutOk bool
 
 	// Context-menu state: open flag, screen anchor, and an open-counter
 	// that salts the window id so each opening re-anchors at the pointer.
@@ -155,15 +168,26 @@ type Plot struct {
 	nextWeight    float32
 	noInputs      bool
 	noLegend      bool
-	noMouseText   bool
-	ended         bool
+	// Per-series hover readout and crosshair link (seriesreadout.go).
+	hoverSeries bool
+	noSeriesBox bool
+	crosshair   *CrosshairLink
+	// legendPlace is this frame's SetupLegend; legendW/H the box End
+	// measured for it before the layout, which an outside legend shrinks.
+	legendPlace      LegendPlacementE
+	legendW, legendH float32
+	noMouseText      bool
+	ended            bool
 	// emitting is true while End invokes item renderers; item declarations
 	// from inside a Custom closure are debug-logged no-ops (they would
 	// silently never render — the series loop is already underway).
-	emitting     bool
-	customSeq    uint64 // ordinal of the next Custom item emitted; scopes its hit-region ids
-	clickOk      bool
-	clickPos     [2]float32
+	emitting  bool
+	customSeq uint64 // ordinal of the next Custom item emitted; scopes its hit-region ids
+	clickOk   bool
+	clickPos  [2]float32
+	// gesture is what RangeGesture reports: the gestures that settled last
+	// frame, taken over from the plot state at Begin.
+	gesture      [2]gestureRec
 	xCustomTicks []tick
 	yCustomTicks []tick
 }
@@ -186,6 +210,8 @@ func Begin(ids *c.WidgetIdStack, title string, w float32, h float32) *Plot {
 	shown, _, _ := strings.Cut(title, "##")
 	p := &Plot{ids: ids, st: st, scopeId: scopeId, w: w, h: h, title: title, titleShown: shown,
 		dataXMin: math.Inf(1), dataXMax: math.Inf(-1), dataYMin: math.Inf(1), dataYMax: math.Inf(-1)}
+	p.gesture = st.gestures.done
+	st.gestures.done = [2]gestureRec{}
 	p.applyInteractions()
 	return p
 }
@@ -205,6 +231,7 @@ func Begin(ids *c.WidgetIdStack, title string, w float32, h float32) *Plot {
 // ones.
 func (st *plotState) beginFrame() {
 	st.x.scale, st.y.scale = ScaleLinear, ScaleLinear
+	st.x.loc, st.y.loc = nil, nil
 }
 
 // Scoped opens a plot and yields it exactly once; End runs when the
@@ -325,13 +352,16 @@ func (g gestureLocks) zoom(w *pxWindow, ax float32, ay float32, factor float32) 
 // The flag is only ever set here, never cleared: assigning the negation would
 // drop a fit already pending from FitNext or from an earlier gesture this
 // frame.
-func (g gestureLocks) requestFit(x *axisState, y *axisState, wantX bool, wantY bool) {
+func (g gestureLocks) requestFit(x *axisState, y *axisState, wantX bool, wantY bool) (fitX bool, fitY bool) {
 	if wantX && !g.noZoomX {
 		x.fitNext = true
+		fitX = true
 	}
 	if wantY && !g.noZoomY {
 		y.fitNext = true
+		fitY = true
 	}
+	return fitX, fitY
 }
 
 // applyInteractions interprets last frame's gesture registers against last
@@ -390,8 +420,20 @@ func (p *Plot) applyInteractions() {
 		return
 	}
 
+	// A wheel run finishes when the wheel has rested, or as soon as another
+	// gesture starts. Until it finishes, a repaint is booked for when it
+	// would: an idle window draws no frame on its own, and the run would
+	// otherwise wait for the next pointer move to report.
+	gs := &st.gestures
+	now := clockNow()
+	otherStarts := flags.HasDragStarted() || flags.HasDoubleClicked()
+	if gs.wheelFlush(now, otherStarts) {
+		c.RequestRepaintAfter(wheelQuiet.Seconds())
+	}
+
 	if flags.HasDragStarted() && posOk {
 		st.dragging = true
+		gs.panMoved = [2]bool{}
 		st.dragBox = boxMod
 		st.boxStart = [2]float32{posX, posY}
 		st.boxCur = st.boxStart
@@ -417,33 +459,42 @@ func (p *Plot) applyInteractions() {
 		} else {
 			mx, my := locks.pan(&w, posX-st.lastDrag[0], posY-st.lastDrag[1])
 			movedX, movedY = movedX || mx, movedY || my
+			gs.panMoved[AxisX1] = gs.panMoved[AxisX1] || mx
+			gs.panMoved[AxisY1] = gs.panMoved[AxisY1] || my
 			st.lastDrag = [2]float32{posX, posY}
 		}
 	}
+	panEnded := false
 	if flags.HasDragStopped() && st.dragging {
 		if st.dragBox {
-			x0 := pr.plotX(st.boxStart[0])
-			x1 := pr.plotX(st.boxCur[0])
-			y0 := pr.plotY(st.boxStart[1])
-			y1 := pr.plotY(st.boxCur[1])
-			if abs32(st.boxCur[0]-st.boxStart[0]) > 5 && abs32(st.boxCur[1]-st.boxStart[1]) > 5 {
-				// Box-zoom is a zoom on both axes; a NoZoom axis keeps its
-				// range and the box degenerates to a one-axis zoom.
-				if !locks.noZoomX {
-					st.x.rng = Range{math.Min(x0, x1), math.Max(x0, x1)}
-					st.x.touched = true
-				}
-				if !locks.noZoomY {
-					st.y.rng = Range{math.Min(y0, y1), math.Max(y0, y1)}
-					st.y.touched = true
-				}
+			// Box-zoom is a zoom on both axes; a NoZoom axis keeps its
+			// range and the box degenerates to a one-axis zoom.
+			rx, ry, okX, okY := boxZoomRanges(pr, st.boxStart, st.boxCur, locks)
+			if okX {
+				st.x.rng = rx
+				st.x.touched = true
+				gs.finish(AxisX1, GestureBoxZoom, rx)
 			}
+			if okY {
+				st.y.rng = ry
+				st.y.touched = true
+				gs.finish(AxisY1, GestureBoxZoom, ry)
+			}
+		} else {
+			panEnded = true
 		}
 		st.dragging = false
 		st.dragBox = false
 	}
 	if flags.HasDoubleClicked() {
-		locks.requestFit(&st.x, &st.y, true, true)
+		// The range is the one End fits to; settle fills it in.
+		fx, fy := locks.requestFit(&st.x, &st.y, true, true)
+		if fx {
+			gs.finish(AxisX1, GestureFit, st.x.rng)
+		}
+		if fy {
+			gs.finish(AxisY1, GestureFit, st.y.rng)
+		}
 	}
 	if flags.HasSecondaryClicked() && posOk && curOk {
 		st.ctxOpen = true
@@ -454,6 +505,7 @@ func (p *Plot) applyInteractions() {
 	// Wheel: egui delivers pinch/ctrl-wheel as Zoom and plain wheel as
 	// ScrollY; ImPlot's convention is that the plain wheel zooms a plot, so
 	// both fold into one multiplicative factor, anchored at the pointer.
+	wheelX, wheelY := false, false
 	zoom := float32(wheel.Zoom)
 	if wheel.ScrollY != 0 {
 		zoom *= float32(math.Pow(1.1, float64(wheel.ScrollY)/40.0))
@@ -464,8 +516,9 @@ func (p *Plot) applyInteractions() {
 			ax = (w.x0 + w.x1) / 2
 			ay = (w.y0 + w.y1) / 2
 		}
-		mx, my := locks.zoom(&w, ax, ay, zoom)
-		movedX, movedY = movedX || mx, movedY || my
+		wx, wy := locks.zoom(&w, ax, ay, zoom)
+		movedX, movedY = movedX || wx, movedY || wy
+		wheelX, wheelY = wx, wy
 	}
 	// Assign per axis: an axis no gesture moved is never written back, so it
 	// keeps its exact range instead of accumulating a lossy round trip
@@ -477,6 +530,19 @@ func (p *Plot) applyInteractions() {
 	if movedY {
 		st.y.rng = Range{pr.plotY(w.y1), pr.plotY(w.y0)}
 		st.y.touched = true
+	}
+	if wheelX || wheelY {
+		gs.wheelStep([2]bool{wheelX, wheelY}, [2]Range{st.x.rng, st.y.rng}, now)
+		c.RequestRepaintAfter(wheelQuiet.Seconds())
+	}
+	if panEnded {
+		if gs.panMoved[AxisX1] {
+			gs.finish(AxisX1, GesturePan, st.x.rng)
+		}
+		if gs.panMoved[AxisY1] {
+			gs.finish(AxisY1, GesturePan, st.y.rng)
+		}
+		gs.panMoved = [2]bool{}
 	}
 }
 
@@ -533,6 +599,26 @@ func (p *Plot) SetupAxisScale(axis AxisE, scale ScaleE) *Plot {
 	return p
 }
 
+// SetupAxisTimeZone sets the zone a ScaleTime axis is read in: its ticks
+// fall on the zone's calendar boundaries (midnights, month starts; a day
+// with a DST change is 23 or 25 hours long) and its tick labels, the hover
+// readout and TagX/TagY print its wall-clock time, the latter two with the
+// zone's abbreviation. A nil loc is UTC, the default. The values stay Unix
+// seconds; only their reading changes. Other scales ignore it. Per-frame
+// Setup state like the scale, and a house extension: upstream has a
+// UseLocalTime flag, not a zone.
+func (p *Plot) SetupAxisTimeZone(axis AxisE, loc *time.Location) *Plot {
+	if p.warnIfLocked("SetupAxisTimeZone") {
+		return p
+	}
+	if axis == AxisY1 {
+		p.st.y.loc = loc
+	} else {
+		p.st.x.loc = loc
+	}
+	return p
+}
+
 // SetupAxisLimitsConstraints clamps the axis's visible range inside
 // [vmin, vmax] — upstream's SetupAxisLimitsConstraints. Pan and zoom
 // cannot escape the constraint; a viewport wider than it is pulled in.
@@ -552,23 +638,28 @@ func (p *Plot) SetupAxisLimitsConstraints(axis AxisE, vmin float64, vmax float64
 // constrain pulls the range inside the axis's constraints, preserving
 // the span when it fits and clamping to the full constraint otherwise.
 func (ax *axisState) constrain() {
+	ax.rng = ax.constrainRange(ax.rng)
+}
+
+// constrainRange is r pulled inside the axis's constraints, as constrain
+// does to the visible range; r itself when there are none.
+func (ax *axisState) constrainRange(r Range) Range {
 	if !ax.consOk {
-		return
+		return r
 	}
 	lo, hi := ax.consMin, ax.consMax
 	if !(hi > lo) {
-		return
+		return r
 	}
-	r := ax.rng
 	if r.Size() >= hi-lo {
-		ax.rng = Range{lo, hi}
-		return
+		return Range{lo, hi}
 	}
 	if r.Min < lo {
-		ax.rng = Range{lo, lo + r.Size()}
+		return Range{lo, lo + r.Size()}
 	} else if r.Max > hi {
-		ax.rng = Range{hi - r.Size(), hi}
+		return Range{hi - r.Size(), hi}
 	}
+	return r
 }
 
 // SetupAxisTicks replaces the axis's located ticks with caller-supplied
@@ -620,6 +711,64 @@ func (p *Plot) NoMouseText() *Plot {
 // series exist — upstream's ImPlotFlags_NoLegend.
 func (p *Plot) NoLegend() *Plot {
 	p.noLegend = true
+	return p
+}
+
+// LegendPlacementE says where a plot's legend goes — the location half of
+// upstream's SetupLegend, narrowed to the placements a caller has asked for.
+type LegendPlacementE uint8
+
+const (
+	// LegendInside is the default: a list over the plot area's top-left
+	// corner, over the data.
+	LegendInside LegendPlacementE = iota
+	// LegendRight is a list to the right of the plot area, top-aligned with
+	// it; the area narrows by the legend's width. Upstream's
+	// Outside|East|North.
+	LegendRight
+	// LegendBelow lays the items out in a row under the x axis label,
+	// wrapping onto further lines at the canvas width; the area gets shorter
+	// by the legend's height. Upstream's Outside|South|Horizontal.
+	LegendBelow
+)
+
+// SetupLegend places the legend. An outside placement takes its room from
+// the plot area, so a long legend leaves less of it; MinBoxHeight does not
+// count a legend below. Like every Setup call it holds for this frame only
+// and must precede the first item.
+func (p *Plot) SetupLegend(place LegendPlacementE) *Plot {
+	if p.warnIfLocked("SetupLegend") {
+		return p
+	}
+	p.legendPlace = place
+	return p
+}
+
+// SeriesHidden reports whether the series under label is hidden — the state
+// a click on its legend row toggles. A house extension: upstream keeps the
+// flag on its item and exposes it only through the legend.
+func (p *Plot) SeriesHidden(label string) bool {
+	if p == nil || p.st == nil {
+		return false
+	}
+	return p.st.hidden[label]
+}
+
+// SetSeriesHidden hides or shows the series under label, as a click on its
+// legend row does. The flag is retained state, not a per-frame declaration:
+// it holds until the person clicks the row or the caller sets it again, so
+// a caller sets it on a change — restoring saved state, or from a legend it
+// draws itself — and not every frame, which would undo the person's clicks.
+// Callable any time before End; it applies to this frame.
+func (p *Plot) SetSeriesHidden(label string, hidden bool) *Plot {
+	if p == nil || p.st == nil {
+		return p
+	}
+	if hidden {
+		p.st.hidden[label] = true
+	} else {
+		delete(p.st.hidden, label)
+	}
 	return p
 }
 

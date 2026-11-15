@@ -377,11 +377,11 @@ func TestLocateTicksFittedThinsForWideLabels(t *testing.T) {
 	}
 	collided := 0
 	for _, sizePx := range []float32{700, 900, 1000} {
-		if slotOK(locateTicksScaled(rng, sizePx, ScaleLinear, nil), sizePx) {
+		if slotOK(locateTicksScaled(rng, sizePx, ScaleLinear, nil, nil), sizePx) {
 			continue
 		}
 		collided++
-		fitted := locateTicksFitted(rng, sizePx, ScaleLinear, tickLabelGap, nil)
+		fitted := locateTicksFitted(rng, sizePx, ScaleLinear, nil, tickLabelGap, nil)
 		if !slotOK(fitted, sizePx) {
 			t.Errorf("at %vpx the fitted ticks still collide: %d majors", sizePx, countMajor(fitted))
 		}
@@ -397,8 +397,8 @@ func TestLocateTicksFittedThinsForWideLabels(t *testing.T) {
 func TestLocateTicksFittedLeavesRoomyAxesAlone(t *testing.T) {
 	// The common case must be untouched, or every existing plot moves.
 	rng := Range{0, 10}
-	plain := locateTicksScaled(rng, 500, ScaleLinear, nil)
-	fitted := locateTicksFitted(rng, 500, ScaleLinear, tickLabelGap, nil)
+	plain := locateTicksScaled(rng, 500, ScaleLinear, nil, nil)
+	fitted := locateTicksFitted(rng, 500, ScaleLinear, nil, tickLabelGap, nil)
 	if len(plain) != len(fitted) {
 		t.Fatalf("fitted %d ticks, plain %d", len(fitted), len(plain))
 	}
@@ -413,7 +413,7 @@ func TestLocateTicksFittedLeavesRoomyAxesAlone(t *testing.T) {
 func TestLocateTicksFittedTerminatesOnDecadeLocator(t *testing.T) {
 	// Log10 ignores the size hint, so the fit loop cannot converge there;
 	// it must stop at the iteration cap and leave usable ticks behind.
-	fitted := locateTicksFitted(Range{1e-9, 1e9}, 80, ScaleLog10, tickLabelGap, nil)
+	fitted := locateTicksFitted(Range{1e-9, 1e9}, 80, ScaleLog10, nil, tickLabelGap, nil)
 	if countMajor(fitted) == 0 {
 		t.Error("no major ticks survived the fit loop")
 	}

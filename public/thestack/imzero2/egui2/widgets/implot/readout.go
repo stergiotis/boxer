@@ -26,17 +26,32 @@ func timeCursorLayout(stepSec float64) (layout string, trunc time.Duration) {
 	return "2006-01-02", 24 * time.Hour
 }
 
-// formatTimeCursor prints Unix seconds v as a UTC instant at the precision a
-// tick step of stepSec warrants. A value no time.Time can hold prints as a
-// number.
-func formatTimeCursor(v float64, stepSec float64) string {
+// formatTimeCursor prints Unix seconds v as an instant in loc (nil is UTC)
+// at the precision a tick step of stepSec warrants. Outside UTC an instant
+// with a time of day carries the zone's abbreviation, which also tells apart
+// the two readings of an hour the clocks go back over. A value no time.Time
+// can hold prints as a number.
+func formatTimeCursor(v float64, stepSec float64, loc *time.Location) string {
 	if math.IsNaN(v) || math.IsInf(v, 0) || math.Abs(v) > 1e15 {
 		return strconv.FormatFloat(v, 'g', 6, 64)
 	}
+	if loc == nil {
+		loc = time.UTC
+	}
 	secs := math.Floor(v)
-	t := time.Unix(int64(secs), int64((v-secs)*1e9)).UTC()
+	t := time.Unix(int64(secs), 0).In(loc)
 	layout, trunc := timeCursorLayout(stepSec)
-	return t.Truncate(trunc).Format(layout)
+	if trunc == time.Hour {
+		// The layout prints minutes; take the wall clock's off. Truncate
+		// would round in absolute time, off the hour in a zone whose offset
+		// is not whole hours.
+		t = t.Add(-time.Duration(t.Minute())*time.Minute - time.Duration(t.Second())*time.Second)
+	}
+	s := t.Format(layout)
+	if trunc < 24*time.Hour && loc != time.UTC && loc.String() != "UTC" {
+		s += " " + t.Format("MST")
+	}
+	return s
 }
 
 // majorTickStep is the spacing of the first two major ticks, which on a
@@ -61,7 +76,7 @@ func majorTickStep(ticks []tick, rng Range) float64 {
 // ticks: a dated instant on a ScaleTime axis, %.6g otherwise.
 func axisValueText(ax *axisState, ticks []tick, v float64) string {
 	if ax.scale == ScaleTime {
-		return formatTimeCursor(v, majorTickStep(ticks, ax.rng))
+		return formatTimeCursor(v, majorTickStep(ticks, ax.rng), ax.loc)
 	}
 	return strconv.FormatFloat(v, 'g', 6, 64)
 }
@@ -70,7 +85,7 @@ func axisValueText(ax *axisState, ticks []tick, v float64) string {
 // tick formatter at two decimals otherwise.
 func axisTagText(ax *axisState, ticks []tick, v float64) string {
 	if ax.scale == ScaleTime {
-		return formatTimeCursor(v, majorTickStep(ticks, ax.rng))
+		return formatTimeCursor(v, majorTickStep(ticks, ax.rng), ax.loc)
 	}
 	return formatTick(v, 2)
 }

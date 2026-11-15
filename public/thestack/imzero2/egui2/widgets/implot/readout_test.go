@@ -25,7 +25,7 @@ func TestAxisTextTimeScale(t *testing.T) {
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			ax := axisState{scale: ScaleTime, rng: Range{Min: instant - c.span.Seconds()/2, Max: instant + c.span.Seconds()/2}}
-			ticks := locateTicksTime(ax.rng, 800, nil)
+			ticks := locateTicksTime(ax.rng, 800, nil, nil)
 			require.GreaterOrEqual(t, countMajor(ticks), 2)
 			require.Equal(t, c.want, axisValueText(&ax, ticks, instant))
 			require.Equal(t, c.want, axisTagText(&ax, ticks, instant))
@@ -34,7 +34,7 @@ func TestAxisTextTimeScale(t *testing.T) {
 
 	t.Run("seconds", func(t *testing.T) {
 		ax := axisState{scale: ScaleTime, rng: Range{Min: instant - 30, Max: instant + 30}}
-		ticks := locateTicksTime(ax.rng, 800, nil)
+		ticks := locateTicksTime(ax.rng, 800, nil, nil)
 		require.Equal(t, "2026-10-18 19:07:42", axisValueText(&ax, ticks, instant+0.4))
 	})
 
@@ -51,8 +51,8 @@ func TestAxisTextTimeScale(t *testing.T) {
 	})
 
 	t.Run("out of time range", func(t *testing.T) {
-		require.Equal(t, "NaN", formatTimeCursor(math.NaN(), 3600))
-		require.Equal(t, "1e+300", formatTimeCursor(1e300, 3600))
+		require.Equal(t, "NaN", formatTimeCursor(math.NaN(), 3600, nil))
+		require.Equal(t, "1e+300", formatTimeCursor(1e300, 3600, nil))
 	})
 }
 

@@ -47,8 +47,14 @@
 // House extensions beyond the upstream surface, named as such in their
 // doc comments: Boxes, BarsRef/BarsHRef (bars from a base value rather
 // than 0, so two series around one base draw diverging bars — a tornado),
-// IncludeX/IncludeY, TimeTicksLocal,
-// AxisFlagsFollow, Clicked/HoverPlotPos, NewDetached, the pixel-space
+// IncludeX/IncludeY, TimeTicksLocal and TimeTicksIn (another zone),
+// AxisFlagsFollow, Clicked/HoverPlotPos, NewDetached, RangeGesture (what
+// the person did to the range, as distinct from a fit or a link moving it),
+// SeriesHidden/SetSeriesHidden (the legend's hidden set), SetupLegend's
+// outside placements (upstream has them, with more locations),
+// SetupAxisTimeZone, HoverSeries/SeriesReadout (each series' value at the
+// hovered x) with CrosshairLink/SetupCrosshair (one hovered x shared across
+// plots; seriesreadout.go), the pixel-space
 // readbacks HoverPixelPos/ClickedPixelPos/PlotAreaPrev (hit-testing
 // pixel-pinned custom geometry), and the two process-wide palette
 // selectors — SetChrome for the frame around the data (IDS-token default,
@@ -74,13 +80,23 @@
 //   - The y-axis label renders horizontally (no rotated-text command).
 //   - SymLog uses the asinh transform with the default locator on raw
 //     values; upstream's dedicated symlog locator is not yet ported.
-//   - Time axes label in UTC only and place major ticks only — upstream's
-//     minor time ticks and second-line context labels are deferred.
+//   - Time axes label in UTC, or in the zone SetupAxisTimeZone names
+//     (upstream has a local-time flag, not a zone), and place major ticks
+//     only — upstream's minor time ticks and second-line context labels are
+//     deferred.
 //   - The hover readout and TagX/TagY print a ScaleTime value as a dated
-//     UTC instant (readout.go). A time axis drawn as a linear axis with its
-//     own ticks — TimeTicksLocal, for local time — prints seconds, since
-//     nothing marks it as time; a local-time ScaleTime or a per-axis
-//     formatter (upstream's SetupAxisFormat) is deferred.
+//     instant in the axis's zone (readout.go). A time axis drawn as a linear
+//     axis with its own ticks — TimeTicksLocal, TimeTicksIn — prints
+//     seconds, since nothing marks it as time; such a plot moves to
+//     ScaleTime with a zone. A per-axis formatter (upstream's
+//     SetupAxisFormat) is deferred.
+//   - The legend goes inside at the top left, outside to the right, or
+//     below as a wrapping row; upstream's other locations, and a legend
+//     drawn as a table with a value column per series, are deferred.
+//   - Upstream's query rectangle — select a range without zooming — is not
+//     ported (upstream itself replaced it with DragRect, which is not
+//     ported either); RangeGesture reports box zooms, wheel runs, pans and
+//     fits.
 //   - Digital channels use fixed bit-height/gap constants (there is no
 //     style system to override upstream's defaults).
 //   - Image takes caller-owned RGBA pixels plus a content version (the

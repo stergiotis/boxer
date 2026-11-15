@@ -207,7 +207,7 @@ func TestLog10Ticks(t *testing.T) {
 func TestTimeTicks(t *testing.T) {
 	// 48 h window starting mid-hour: ticks must snap to unit boundaries.
 	t0 := float64(1_780_000_000) // fixed epoch, keeps the test deterministic
-	ticks := locateTicksTime(Range{t0, t0 + 48*3600}, 500, nil)
+	ticks := locateTicksTime(Range{t0, t0 + 48*3600}, 500, nil, nil)
 	if len(ticks) < 2 {
 		t.Fatalf("too few time ticks: %d", len(ticks))
 	}

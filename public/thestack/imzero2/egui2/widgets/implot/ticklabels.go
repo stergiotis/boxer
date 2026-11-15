@@ -1,6 +1,9 @@
 package implot
 
-import "slices"
+import (
+	"slices"
+	"time"
+)
 
 // Tick-label placement — the pass that keeps labels off each other.
 //
@@ -315,10 +318,10 @@ func (b *labelBand) pack(lo, hi float32) {
 //
 // sizePx is the real axis length in pixels; gap is the ink-free space a
 // label wants beside it.
-func locateTicksFitted(rng Range, sizePx float32, scale ScaleE, gap float32, dst []tick) []tick {
+func locateTicksFitted(rng Range, sizePx float32, scale ScaleE, loc *time.Location, gap float32, dst []tick) []tick {
 	eff := sizePx
 	for range 5 {
-		dst = locateTicksScaled(rng, eff, scale, dst)
+		dst = locateTicksScaled(rng, eff, scale, loc, dst)
 		var widest float32
 		majors := 0
 		for i := range dst {

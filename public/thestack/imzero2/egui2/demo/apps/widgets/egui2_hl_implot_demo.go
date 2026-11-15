@@ -2,6 +2,7 @@ package widgets
 
 import (
 	"math"
+	"time"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
@@ -16,11 +17,16 @@ type implotDemoState struct {
 	xs, sin, cos, damped []float64
 }
 
-// implotM3State carries the M3 scales demo's series.
+// implotM3State carries the M3 scales demo's series, and the two time
+// plots' shared x range and crosshair (stable across frames, per the
+// heap-pointer rule).
 type implotM3State struct {
-	tXs, tYs         []float64
+	tXs, tYs, tErr   []float64
 	eXs              []float64
 	e1Ys, e2Ys, e3Ys []float64
+	tMin, tMax       float64
+	cross            implot.CrosshairLink
+	gesture          string
 }
 
 // implotM4State carries the M4 heatmap/histogram demo's data.
@@ -176,7 +182,7 @@ func init() {
 		Stage:       [2]float32{660, 580},
 		Flags:       registry.DemoFlagNeedsLargeArea,
 		Kind:        registry.DemoKindMixed,
-		Description: "ADR-0149 M2 item breadth on one plot: bars, scatter, stairs, stems, shaded, infinite reference lines — with a clickable legend (toggle visibility, hover to highlight).",
+		Description: "ADR-0149 M2 item breadth on one plot: bars, scatter, stairs, stems, shaded, infinite reference lines — with a clickable legend below the plot (toggle visibility, hover to highlight).",
 		Init: func(_ *c.WidgetIdStack) (state any) {
 			st := &implotM2State{}
 			const n = 24
@@ -205,6 +211,7 @@ func init() {
 				p.SetupAxes("x", "value", implot.AxisFlagsNone, implot.AxisFlagsNone)
 				p.SetupAxisLimits(implot.AxisX1, -0.8, 23.8, implot.CondOnce)
 				p.SetupAxisLimits(implot.AxisY1, -2.6, 10.6, implot.CondOnce)
+				p.SetupLegend(implot.LegendBelow)
 				p.Bars("bars", st.barXs, st.barYs, 0.66)
 				p.Stairs("stairs", st.stairXs, st.stairYs)
 				p.Stems("stems", st.stemXs, st.stemYs, -2.2)
@@ -218,10 +225,10 @@ func init() {
 		Name:        "implot_m3",
 		Category:    "Graphics & canvas",
 		Title:       icons.IconPaintBucket + " implot M3 (time / log scales)",
-		Stage:       [2]float32{660, 580},
+		Stage:       [2]float32{660, 680},
 		Flags:       registry.DemoFlagNeedsLargeArea,
 		Kind:        registry.DemoKindMixed,
-		Description: "ADR-0149 M3 axis scales, two plots in one frame (the per-id R24 register at work): a Unix-seconds time axis with boundary-snapped ticks, and a log10 y axis with decade ticks turning exponentials into straight lines.",
+		Description: "ADR-0149 M3 axis scales, three plots in one frame (the per-id R24 register at work): two Unix-seconds time axes with boundary-snapped ticks, sharing their range and a crosshair — hover either and both mark each series' value at that instant; Shift+drag reports the range gesture under them — and a log10 y axis with decade ticks turning exponentials into straight lines.",
 		Init: func(_ *c.WidgetIdStack) (state any) {
 			st := &implotM3State{}
 			// Fixed epoch keeps the tour capture deterministic.
@@ -231,6 +238,7 @@ func init() {
 				tt := base + float64(i)/float64(n-1)*48*3600
 				st.tXs = append(st.tXs, tt)
 				st.tYs = append(st.tYs, 42+9*math.Sin(float64(i)/11)+3*math.Cos(float64(i)/3.1))
+				st.tErr = append(st.tErr, 2+1.5*math.Sin(float64(i)/7+1)+0.6*math.Cos(float64(i)/2.3))
 				x := float64(i) / float64(n-1) * 10
 				st.eXs = append(st.eXs, x)
 				st.e1Ys = append(st.e1Ys, math.Exp(x*0.9))
@@ -241,10 +249,33 @@ func init() {
 		},
 		RenderStateful: func(ids *c.WidgetIdStack, state any) {
 			st := state.(*implotM3State)
-			for p := range implot.Scoped(ids, "requests over 48 h", 620, 240) {
-				p.SetupAxes("", "rate", implot.AxisFlagsNone, implot.AxisFlagsNone)
+			timePlot := func(p *implot.Plot, ylabel string) {
+				p.SetupAxes("", ylabel, implot.AxisFlagsNone, implot.AxisFlagsNone)
 				p.SetupAxisScale(implot.AxisX1, implot.ScaleTime)
+				p.SetupAxisLinks(implot.AxisX1, &st.tMin, &st.tMax)
+				p.SetupCrosshair(&st.cross)
+				p.HoverSeries()
+			}
+			for p := range implot.Scoped(ids, "requests over 48 h", 620, 170) {
+				timePlot(p, "rate")
 				p.Line("rate", st.tXs, st.tYs)
+				if vmin, vmax, kind, ok := p.RangeGesture(implot.AxisX1); ok {
+					st.gesture = kind.String() + " to " + time.Unix(int64(vmin), 0).UTC().Format("Jan 2 15:04") +
+						" – " + time.Unix(int64(vmax), 0).UTC().Format("Jan 2 15:04") + " UTC"
+				}
+			}
+			for p := range implot.Scoped(ids, "errors over 48 h", 620, 170) {
+				timePlot(p, "errors")
+				p.Line("errors", st.tXs, st.tErr)
+				if vmin, vmax, kind, ok := p.RangeGesture(implot.AxisX1); ok {
+					st.gesture = kind.String() + " to " + time.Unix(int64(vmin), 0).UTC().Format("Jan 2 15:04") +
+						" – " + time.Unix(int64(vmax), 0).UTC().Format("Jan 2 15:04") + " UTC"
+				}
+			}
+			if st.gesture == "" {
+				c.Label("Last range gesture: none yet").Send()
+			} else {
+				c.Label("Last range gesture: " + st.gesture).Send()
 			}
 			for p2 := range implot.Scoped(ids, "log-scale growth", 620, 240) {
 				p2.SetupAxes("x", "value (log10)", implot.AxisFlagsNone, implot.AxisFlagsNone)
