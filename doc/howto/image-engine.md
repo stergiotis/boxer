@@ -72,6 +72,18 @@ changed on the way — a palette expanded, chroma converted, an animation cut
 to its first frame, a lossy source — is in `Provenance`, and a project that
 shows numbers should show those notes beside them, as the app does.
 
+## A large PNG, into tiles
+
+`decode.DecodeTiled` reads a file into an `imaging/tiles` store: level 0
+cut into 512-pixel tiles, every reduced level built in the same pass. A
+non-interlaced PNG is decoded row by row, so the image is never held whole
+besides the store; the store is handed to an `onStore` callback before the
+first row, and `imageview.StoreSource(store)` shows it as it fills, a tile
+not built yet being waited for off the frame. The store answers a region's
+histogram (`Histogram`) and samples (`Read`) from its tiles, and its
+provenance carries the image's digest once it is finished. An interlaced
+PNG and a JPEG take the whole decode first.
+
 ## Percentile limits
 
 A `display.Recipe` whose `Limits.Source` is `LimitsSourcePercentile` is a
@@ -107,7 +119,10 @@ the context. `Viewer.SetSource(src, keepView)` shows it; keep the view when
 the next page replaces this one. Mark it `Rendered`, return 8-bit RGB, and
 the default recipe shows it as drawn. The viewer keeps its tiles in a cache
 bounded by `Options.SampleCacheBytes`, so a contrast change asks the
-renderer nothing; call `Invalidate` when what it draws changes. The bound is
+renderer nothing; call `Invalidate` when what it draws changes. For a
+document, `Options.WheelScrolls` makes the wheel scroll; `View`, `SetView`
+and `Reveal` move the view in image pixels, and `Options.Overlay` paints
+marks and labelled hit regions over the image through a `Projector`. The bound is
 the memory a procedural source costs the viewer
 ([ADR-0374](../adr/0374-imageview-shows-a-tile-source-and-the-decoder-streams-into-one.md)
 §SD9). The histogram and percentile limits are not offered for a source.

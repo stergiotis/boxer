@@ -184,13 +184,29 @@ store of tiles and levels that is itself a source.
 - **M1 ✓ — The source and the sample cache.** `SetImage` over an in-memory
   source; `Invalidate`; `SetSource` keeping the view
   ([`imageview.SourceI`](../../public/thestack/imzero2/egui2/widgets/imageview/sourcei.go)).
-- **M2 — The view and the overlay.** View, overlay, `ViewChanged` and the
-  drag in pixels; portolan's wheel-pans interaction and box in progress.
-- **M3 — The streaming decoder.** The PNG row decoder and the tiled store
+- **M2 ✓ — The view and the overlay.** View, overlay, `ViewChanged` and the
+  drag in pixels; portolan's wheel-pans interaction and box in progress. The
+  call that brings a rectangle into view is `Reveal`, since the widget
+  contract reserves `Show` for a show-and-hide pair.
+- **M3 ✓ — The streaming decoder.** The PNG row decoder and the tiled store
   with one-pass levels; JPEG and interlaced PNG through the whole decoder
-  into the same store; numbers through the source.
-- **M4 — A rendering source.** One in the gallery with magnified levels; the
-  image engine how-to updated.
+  into the same store; numbers through the source
+  ([`imaging/tiles`](../../public/science/imaging/tiles/doc.go),
+  `decode.DecodeTiled`, `imageview.StoreSource`). A source that counts its
+  own histogram (`imageview.HistogramSourceI`) gets the histogram strip and
+  percentile limits. The app opens every file into a store and shows it as
+  it fills. For the store's digest to be computed as rows arrive, an image's
+  digest is now BLAKE3 over a header and each plane's own digest, rather
+  than over the planes in one stream. Measured informally on one machine
+  (2026-11-15), the row decoder's peak memory is about the store's size,
+  well below decoding whole and then building levels, and it is slower than
+  that path.
+- **M4 ✓ — A rendering source.** One in the gallery with magnified levels
+  (`egui2_hl_imagerender_demo.go`) and a scene that zooms past full
+  resolution, finds the overlay's marks by name, and checks that a recipe
+  change renders nothing again
+  ([`imageview/scenes`](../../public/thestack/imzero2/egui2/widgets/imageview/scenes/rendered-source.scene.md));
+  the image engine how-to updated.
 
 ## Surfaces — Tier 1
 
