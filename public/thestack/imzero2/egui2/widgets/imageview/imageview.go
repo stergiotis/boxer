@@ -341,6 +341,7 @@ func (inst *Viewer) SetImage(img imaging.Image) {
 		// map (a float colour image) is shown as its first plane instead.
 		_ = inst.publish(0, display.DefaultPlaneRecipe(img.Plane(0)))
 	}
+	inst.showSource()
 	inst.startBuild(img)
 }
 
@@ -369,6 +370,7 @@ func (inst *Viewer) SetSource(src SourceI, keepView bool) error {
 	inst.dropWork()
 	inst.img, inst.pyramid = imaging.Image{}, nil
 	inst.useSource(src, keepView)
+	defer inst.showSource()
 	if err := inst.publish(asStored, defaultRecipeFor(src, info, asStored)); err != nil {
 		return inst.publish(0, defaultRecipeFor(src, info, 0))
 	}
@@ -391,6 +393,8 @@ func (inst *Viewer) Invalidate() {
 }
 
 // useSource makes src the source shown and resets what belonged to the last.
+// The map goes on showing the last until [Viewer.showSource], which is called
+// once the new source is published to the workers.
 func (inst *Viewer) useSource(src SourceI, keepView bool) {
 	inst.source, inst.info = src, src.Info()
 	inst.gen++
@@ -400,6 +404,14 @@ func (inst *Viewer) useSource(src SourceI, keepView bool) {
 	inst.hoverOk = false
 	inst.fitPending = !keepView || !inst.m.View().Loaded()
 	inst.pendingView, inst.pendingShow = nil, nil
+}
+
+// showSource hands the map the source published last. It comes after the
+// publish because the map asks for the new source's tiles at once, and a
+// worker answers a tile from the source published when it runs: a source
+// published after the request would leave the request answered by the last
+// one, under the new source's revision.
+func (inst *Viewer) showSource() {
 	inst.m.SetSource(sourceFor(inst.info))
 }
 

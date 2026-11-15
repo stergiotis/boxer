@@ -129,10 +129,13 @@ type Map struct {
 	// version (tileVersion), so a switch re-uploads under the same ids
 	// instead of showing the old source's pixels.
 	srcGen uint64
-	// contentRev counts InvalidateTiles calls: the revision a pixel-source
-	// tile is requested under. refreshing holds the tiles asked for again
-	// while their previous pixels stay on screen.
+	// contentRev counts InvalidateTiles and SetSource calls: the revision a
+	// pixel-source tile is requested under. sourceRev is the revision the
+	// last SetSource moved it to; a tile answered under an older one was
+	// answered by a source no longer shown. refreshing holds the tiles asked
+	// for again while their previous pixels stay on screen.
 	contentRev uint64
+	sourceRev  uint64
 	refreshing map[TileCoords]struct{}
 
 	// pointerVeto is set for one frame by SetPointerVeto: a widget drawn
@@ -242,7 +245,7 @@ func New(ids *c.WidgetIdStack, scopeKey string, opts Options) *Map {
 func (m *Map) wirePyramid() {
 	m.pyramid.OnRequest = m.requestTile
 	m.pyramid.OnAbort = func(coords TileCoords) { m.loader.Cancel(coords); m.dropHolder(coords) }
-	m.pyramid.OnUnload = m.dropHolder
+	m.pyramid.OnUnload = func(coords TileCoords) { m.loader.Cancel(coords); m.dropHolder(coords) }
 }
 
 // Handles returns the canvas and area handles this map's sense surfaces use,
@@ -288,7 +291,11 @@ func (m *Map) Source() TileSource { return m.opts.Source }
 // and its tiles dropped, the pyramid restarts on the new one at the current
 // view, and the view's layer zoom limits follow the source. An empty template
 // is ignored, except on a map whose tiles come from a pixel source, where
-// the template is not used.
+// the template is not used. On such a map the switch is also a new content
+// revision: a tile the pixel source answers for a request made before it is
+// not shown, and is asked for again — the pixel source is one object across
+// switches, so only the revision tells its answers apart. The pixel source
+// must therefore answer for the new content by the time SetSource is called.
 func (m *Map) SetSource(src TileSource) {
 	if src.URLTemplate == "" && m.opts.Loader.Pixels == nil {
 		return
@@ -307,6 +314,8 @@ func (m *Map) SetSource(src TileSource) {
 	m.errTiles = make(map[TileCoords]struct{}, 8)
 	m.refreshing = make(map[TileCoords]struct{}, 16)
 	m.srcGen++
+	m.contentRev++
+	m.sourceRev = m.contentRev
 	m.opts.Source = src
 	m.pyramid = NewPyramid(src)
 	m.wirePyramid()
@@ -473,7 +482,7 @@ func (m *Map) dropHolder(coords TileCoords) {
 // byte cache makes that image one fetch.
 func (m *Map) absorbArrivals(arrivals []TileArrival, now time.Time) {
 	errURL := m.opts.Source.ErrorTileURL
-	var again []TileArrival
+	var again, unseen []TileArrival
 	defer func() {
 		for _, a := range again {
 			if _, held := m.wrappedOf[a.Coords]; held {
@@ -481,10 +490,22 @@ func (m *Map) absorbArrivals(arrivals []TileArrival, now time.Time) {
 				m.loader.RequestPixels(a.Coords, a.Wrapped, m.contentRev)
 			}
 		}
+		for _, a := range unseen {
+			if wrapped, held := m.wrappedOf[a.Coords]; held {
+				m.loader.RequestPixels(a.Coords, wrapped, m.contentRev)
+			}
+		}
 	}()
 	for _, a := range arrivals {
 		if _, held := m.wrappedOf[a.Coords]; !held {
 			// Requested under a source since switched: nothing holds it.
+			continue
+		}
+		if m.opts.Loader.Pixels != nil && a.Revision < m.sourceRev {
+			// Answered for the source before the last switch, at coordinates
+			// the new one holds as well: these are not its pixels. The tile
+			// is still waited for, so it is asked of the new source.
+			unseen = append(unseen, a)
 			continue
 		}
 		if a.Failed && errURL != "" && a.URL != errURL {

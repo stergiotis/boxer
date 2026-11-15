@@ -13,7 +13,9 @@
 // memory as one, building its reduced levels in the background.
 // [Viewer.SetSource] shows any other — a renderer that draws a page or a
 // plot at the scale in view, levels above full resolution included, or a
-// store a decoder filled — and can keep the view, as a page turn does.
+// store a decoder filled — and can keep the view, as a page turn does. A
+// tile still being asked of the source a new one replaces is not shown for
+// the new one; its context is cancelled, as is any tile's the view gives up.
 // Every source hands back samples, so the recipe applies to all of them; a
 // rendered source's 8-bit colour passes through the default recipe as it was
 // drawn, and the viewer claims nothing about it as a measurement.

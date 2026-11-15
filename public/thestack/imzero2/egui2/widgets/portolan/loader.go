@@ -32,9 +32,11 @@ type TileFetcherI interface {
 // thread and possibly from several workers at once, with the tile's wrapped
 // coordinates; it returns the tile in the paintImage packing — 0xRRGGBBAA,
 // straight alpha, row-major — at the source's tile size, transparent where
-// the raster has nothing. The loader keeps no copy of what it returns and
-// does not cache it: a source whose content changes says so through
-// [Map.InvalidateTiles].
+// the raster has nothing. ctx ends at the loader's timeout, and earlier
+// when the view gives the tile up — it scrolled away, or the map's source
+// was switched — so a source that renders should check it. The loader keeps
+// no copy of what it returns and does not cache it: a source whose content
+// changes says so through [Map.InvalidateTiles].
 type TilePixelsI interface {
 	TilePixels(ctx context.Context, coords TileCoords) (px []uint32, w, h int, err error)
 }
@@ -127,6 +129,17 @@ type tileWaiter struct {
 	coords, wrapped TileCoords
 }
 
+// flight is one fetch or pixel-source call under way and the requests
+// waiting on it. When every one of them is withdrawn the flight is
+// abandoned: its context is cancelled, it leaves the in-flight index so a
+// new request for the same coordinates starts a call of its own, and what it
+// returns is delivered to no one and booked as neither success nor failure.
+type flight struct {
+	waiters   []tileWaiter
+	cancel    context.CancelFunc
+	abandoned bool
+}
+
 // TileLoader fetches, caches and decodes tiles on a worker pool, off the
 // frame thread (ADR-0165's constraint): the frame requests tiles and drains
 // arrivals. Requests are served in the order they were made — the pyramid
@@ -139,7 +152,7 @@ type TileLoader struct {
 	cond      *sync.Cond
 	queue     []TileCoords
 	pending   map[TileCoords]*tileRequest // queued, not started
-	inflight  map[string][]tileWaiter     // url → requests waiting on it
+	inflight  map[string]*flight          // url → the call and who waits on it
 	cancelled map[TileCoords]struct{}     // cancelled while in flight
 	arrivals  []TileArrival
 	cache     *byteCache
@@ -154,7 +167,7 @@ func NewTileLoader(opts LoaderOptions) *TileLoader {
 	l := &TileLoader{
 		opts:      opts,
 		pending:   make(map[TileCoords]*tileRequest, 64),
-		inflight:  make(map[string][]tileWaiter, 16),
+		inflight:  make(map[string]*flight, 16),
 		cancelled: make(map[TileCoords]struct{}, 16),
 		cache:     newByteCache(opts.ByteCacheTiles),
 		negative:  make(map[string]time.Time, 16),
@@ -192,8 +205,8 @@ func (l *TileLoader) request(req *tileRequest) {
 	if _, ok := l.pending[coords]; ok {
 		return
 	}
-	for _, waiting := range l.inflight {
-		for _, w := range waiting {
+	for _, f := range l.inflight {
+		for _, w := range f.waiters {
 			if w.coords == coords {
 				return
 			}
@@ -204,8 +217,11 @@ func (l *TileLoader) request(req *tileRequest) {
 	l.cond.Signal()
 }
 
-// Cancel withdraws a request: a queued one is dropped, one in flight is
-// finished but not delivered.
+// Cancel withdraws a request: a queued one is dropped, one in flight is not
+// delivered. When it was the last request waiting on its call, the call's
+// context is cancelled and the call is forgotten, so a request for the same
+// coordinates made afterwards — by a source that replaced this one — starts
+// a call of its own instead of waiting on this one's answer.
 func (l *TileLoader) Cancel(coords TileCoords) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -213,13 +229,33 @@ func (l *TileLoader) Cancel(coords TileCoords) {
 		delete(l.pending, coords)
 		return
 	}
-	for _, waiting := range l.inflight {
-		for _, w := range waiting {
-			if w.coords == coords {
-				l.cancelled[coords] = struct{}{}
-				return
+	for url, f := range l.inflight {
+		for _, w := range f.waiters {
+			if w.coords != coords {
+				continue
 			}
+			l.cancelled[coords] = struct{}{}
+			for _, o := range f.waiters {
+				if _, gone := l.cancelled[o.coords]; !gone {
+					return
+				}
+			}
+			l.abandonLocked(url, f)
+			return
 		}
+	}
+}
+
+// abandonLocked gives up a flight no one waits on any more. Mutex held.
+func (l *TileLoader) abandonLocked(url string, f *flight) {
+	f.abandoned = true
+	delete(l.inflight, url)
+	for _, w := range f.waiters {
+		delete(l.cancelled, w.coords)
+	}
+	f.waiters = nil
+	if f.cancel != nil {
+		f.cancel()
 	}
 }
 
@@ -240,8 +276,8 @@ func (l *TileLoader) Pending() int {
 
 func (l *TileLoader) pendingLocked() (n int) {
 	n = len(l.pending)
-	for _, w := range l.inflight {
-		n += len(w)
+	for _, f := range l.inflight {
+		n += len(f.waiters)
 	}
 	return
 }
@@ -252,18 +288,22 @@ func (l *TileLoader) Health() LoaderHealth {
 	defer l.mu.Unlock()
 	h := l.health
 	h.Pending = len(l.pending)
-	for _, w := range l.inflight {
-		h.InFlight += len(w)
+	for _, f := range l.inflight {
+		h.InFlight += len(f.waiters)
 	}
 	return h
 }
 
-// Close stops the workers; pending requests are dropped.
+// Close stops the workers; pending requests are dropped and the calls under
+// way are cancelled.
 func (l *TileLoader) Close() {
 	l.mu.Lock()
 	l.closed = true
 	l.pending = map[TileCoords]*tileRequest{}
 	l.queue = nil
+	for url, f := range l.inflight {
+		l.abandonLocked(url, f)
+	}
 	l.mu.Unlock()
 	l.cond.Broadcast()
 }
@@ -287,31 +327,36 @@ func (l *TileLoader) worker() {
 			continue
 		}
 		delete(l.pending, coords)
-		if waiting, busy := l.inflight[req.url]; busy {
-			l.inflight[req.url] = append(waiting, tileWaiter{coords, req.wrapped})
+		if f, busy := l.inflight[req.url]; busy {
+			f.waiters = append(f.waiters, tileWaiter{coords, req.wrapped})
 			l.mu.Unlock()
 			continue
 		}
-		l.inflight[req.url] = []tileWaiter{{coords, req.wrapped}}
+		ctx, cancel := context.WithTimeout(context.Background(), l.opts.Timeout)
+		f := &flight{waiters: []tileWaiter{{coords, req.wrapped}}, cancel: cancel}
+		l.inflight[req.url] = f
 		if req.pixels {
 			l.mu.Unlock()
-			px, w, h, err := l.pixels(req)
+			px, w, h, err := l.pixels(ctx, req)
 			l.mu.Lock()
-			if err != nil {
+			switch {
+			case f.abandoned:
+				// Cancelled by the loader: neither a failure nor a success.
+			case err != nil:
 				l.health.ConsecutiveFailures++
 				l.health.LastError = err.Error()
 				l.health.LastFailureAt = time.Now()
-			} else {
+			default:
 				l.health.ConsecutiveFailures = 0
 			}
-			l.deliver(req, px, w, h, err) // unlocks
+			l.deliver(f, req, px, w, h, err) // unlocks
 			continue
 		}
 		if exp, bad := l.negative[req.url]; bad && time.Now().Before(exp) {
 			// A hit on the negative cache is not a new failure: it neither
 			// extends the entry (the tile is retried once the TTL from the
 			// real failure has passed) nor counts in Health.
-			l.deliver(req, nil, 0, 0, eb.Build().Str("retryAfter", exp.Format(time.RFC3339)).Errorf("portolan: tile failed recently and is not retried yet"))
+			l.deliver(f, req, nil, 0, 0, eb.Build().Str("retryAfter", exp.Format(time.RFC3339)).Errorf("portolan: tile failed recently and is not retried yet"))
 			continue // deliver unlocks
 		}
 		data, cached := l.cache.get(req.url)
@@ -319,7 +364,7 @@ func (l *TileLoader) worker() {
 
 		var err error
 		if !cached {
-			data, err = l.fetch(req.url)
+			data, err = l.fetch(ctx, req.url)
 			if err == nil {
 				l.mu.Lock()
 				l.cache.put(req.url, data)
@@ -332,8 +377,10 @@ func (l *TileLoader) worker() {
 			px, w, h, err = decodeTile(data)
 		}
 		l.mu.Lock()
-		l.record(req.url, err)
-		l.deliver(req, px, w, h, err) // unlocks
+		if !f.abandoned {
+			l.record(req.url, err)
+		}
+		l.deliver(f, req, px, w, h, err) // unlocks
 	}
 }
 
@@ -350,12 +397,17 @@ func (l *TileLoader) record(url string, err error) {
 	}
 }
 
-// deliver hands an outcome to every request waiting on its URL. Called with
+// deliver hands a flight's outcome to every request waiting on it and ends
+// the flight; an abandoned flight has no one left to hand it to. Called with
 // the mutex held; releases it.
-func (l *TileLoader) deliver(req *tileRequest, px []uint32, w, h int, err error) {
-	waiting := l.inflight[req.url]
-	delete(l.inflight, req.url)
-	for _, wt := range waiting {
+func (l *TileLoader) deliver(f *flight, req *tileRequest, px []uint32, w, h int, err error) {
+	if l.inflight[req.url] == f {
+		delete(l.inflight, req.url)
+	}
+	if f.cancel != nil {
+		f.cancel()
+	}
+	for _, wt := range f.waiters {
 		if _, gone := l.cancelled[wt.coords]; gone {
 			delete(l.cancelled, wt.coords)
 			continue
@@ -369,12 +421,10 @@ func (l *TileLoader) deliver(req *tileRequest, px []uint32, w, h int, err error)
 }
 
 // pixels asks the pixel source for one tile and checks what came back.
-func (l *TileLoader) pixels(req *tileRequest) (px []uint32, w, h int, err error) {
+func (l *TileLoader) pixels(ctx context.Context, req *tileRequest) (px []uint32, w, h int, err error) {
 	if l.opts.Pixels == nil {
 		return nil, 0, 0, eb.Build().Errorf("portolan: no pixel source")
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), l.opts.Timeout)
-	defer cancel()
 	px, w, h, err = l.opts.Pixels.TilePixels(ctx, req.wrapped)
 	if err != nil {
 		return nil, 0, 0, eh.Errorf("portolan: pixel source failed: %w", err)
@@ -386,12 +436,10 @@ func (l *TileLoader) pixels(req *tileRequest) (px []uint32, w, h int, err error)
 	return px, w, h, nil
 }
 
-func (l *TileLoader) fetch(url string) ([]byte, error) {
+func (l *TileLoader) fetch(ctx context.Context, url string) ([]byte, error) {
 	if l.opts.Fetcher == nil {
 		return nil, errNoFetcher
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), l.opts.Timeout)
-	defer cancel()
 	data, err := l.opts.Fetcher.Get(ctx, url)
 	if err != nil {
 		return nil, eh.Errorf("portolan: tile fetch failed: %w", err)

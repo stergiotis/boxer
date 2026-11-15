@@ -5,6 +5,7 @@ import (
 	"image"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -12,6 +13,7 @@ import (
 	"github.com/stergiotis/boxer/public/science/imaging"
 	"github.com/stergiotis/boxer/public/science/imaging/display"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/graphview/scenetest"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/portolan"
 )
 
@@ -225,4 +227,60 @@ func TestANewSourceCanKeepTheView(t *testing.T) {
 
 	require.NoError(t, v.SetSource(nil, false))
 	assert.True(t, v.SourceInfo().IsZero(), "a nil source shows nothing")
+}
+
+// heldSource is a pattern source whose tiles wait until released, as a page
+// still rendering when the next one is shown.
+type heldSource struct {
+	*patternSource
+	gate chan struct{}
+}
+
+func (inst *heldSource) Tile(ctx context.Context, level, col, row int) (TileData, error) {
+	inst.calls.Add(1)
+	select {
+	case <-inst.gate:
+	case <-ctx.Done():
+		return TileData{}, ctx.Err()
+	}
+	inst.calls.Add(-1)
+	return inst.patternSource.Tile(ctx, level, col, row)
+}
+
+// A page turned while the page before is still rendering, to a page of the
+// same size with the view kept: every tile of the new page is asked of the
+// new source. A call under way for the old page used to be answered for the
+// new one, which then never asked for the tile.
+func TestASourceReplacedWhileItsTilesAreUnderWayIsNotShownForTheNext(t *testing.T) {
+	t.Cleanup(scenetest.Install())
+	sm := c.CurrentApplicationState.StateManager
+	v := New(c.NewWidgetIdStack(), "", Options{HideColorBar: true, HideReadout: true, HideHistogram: true})
+	defer v.Close()
+	frame := func() {
+		v.Render(400, 300)
+		sm.ScriptReset()
+	}
+	first := &heldSource{patternSource: newPatternSource(1000, 1300, 2, 0), gate: make(chan struct{})}
+	require.NoError(t, v.SetSource(first, false))
+	deadline := time.Now().Add(5 * time.Second)
+	for first.calls.Load() == 0 && time.Now().Before(deadline) {
+		frame()
+		time.Sleep(time.Millisecond)
+	}
+	require.Positive(t, first.calls.Load(), "tiles of the first page are under way")
+
+	second := newPatternSource(1000, 1300, 2, 0)
+	second.version.Store(7)
+	require.NoError(t, v.SetSource(second, true))
+	close(first.gate)
+	frame()
+	for v.m.Loading() && time.Now().Before(deadline) {
+		frame()
+		time.Sleep(time.Millisecond)
+	}
+	require.False(t, v.m.Loading(), "the second page loaded")
+	loaded := v.m.Stats().TileLoad
+	require.Positive(t, loaded)
+	assert.GreaterOrEqual(t, second.calls.Load(), int64(loaded), "every tile shown was asked of the second page")
+	assert.Zero(t, v.m.Stats().TileError)
 }
