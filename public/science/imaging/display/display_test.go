@@ -12,6 +12,7 @@ import (
 	"pgregory.net/rapid"
 
 	"github.com/stergiotis/boxer/public/science/imaging"
+	"github.com/stergiotis/boxer/public/science/imaging/stats"
 )
 
 func whole(p imaging.Plane) image.Rectangle { return image.Rect(0, 0, p.Width(), p.Height()) }
@@ -334,6 +335,43 @@ func TestDefaultPlaneRecipeAndLevel(t *testing.T) {
 	nan := float32(math.NaN())
 	none, _ := imaging.NewPlaneF32(1, 1, []float32{nan})
 	assert.NoError(t, DefaultPlaneRecipe(none).Validate())
+}
+
+func TestPercentileLimitsIgnoreAFewExtremeSamples(t *testing.T) {
+	// 998 samples between 1000 and 1997 and two at the ends of the type.
+	s := make([]uint16, 1000)
+	for i := range s {
+		s[i] = uint16(1000 + i)
+	}
+	s[0], s[999] = 0, 65535
+	p, err := imaging.NewPlaneU16(1000, 1, s)
+	require.NoError(t, err)
+	data, ok := DataLimits(p)
+	require.True(t, ok)
+	assert.Equal(t, 65535.0, data.Hi-data.Lo, "the data range is the two outliers")
+
+	l, ok := PercentileLimits(stats.Of(p), 1, 99)
+	require.True(t, ok)
+	assert.Equal(t, Limits{Lo: 1009, Hi: 1989, Source: LimitsSourcePercentile, PercentLo: 1, PercentHi: 99}, l)
+	assert.NoError(t, Recipe{Limits: l}.Validate())
+
+	_, ok = PercentileLimits(stats.Of(p), 99, 1)
+	assert.False(t, ok, "not an ascending pair")
+	_, ok = PercentileLimits(stats.Of(p), -5, 50)
+	assert.False(t, ok)
+	_, ok = PercentileLimits(stats.Histogram{}, 1, 99)
+	assert.False(t, ok, "nothing counted")
+	flat, _ := imaging.NewPlaneU16(3, 1, []uint16{5, 5, 5})
+	_, ok = PercentileLimits(stats.Of(flat), 1, 99)
+	assert.False(t, ok, "both percentiles are the one value")
+
+	// Under a negative scale the limits still come out lower first.
+	q, err := p.WithTransform(imaging.ValueTransform{Scale: -1, Offset: 0})
+	require.NoError(t, err)
+	l, ok = PercentileLimits(stats.Of(q), 1, 99)
+	require.True(t, ok)
+	assert.Equal(t, -1989.0, l.Lo)
+	assert.Equal(t, -1009.0, l.Hi)
 }
 
 func TestARecipeReadsAsTextAndComesBackEqual(t *testing.T) {

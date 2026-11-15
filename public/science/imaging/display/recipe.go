@@ -5,6 +5,7 @@ import (
 
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/science/imaging"
+	"github.com/stergiotis/boxer/public/science/imaging/stats"
 )
 
 // TransferE is the transfer function of a recipe. The zero value is linear.
@@ -231,6 +232,28 @@ func DataLimits(plane imaging.Plane) (limits Limits, ok bool) {
 	}
 	a, b := plane.Transform().Apply(lo), plane.Transform().Apply(hi)
 	return Limits{Lo: min(a, b), Hi: max(a, b), Source: LimitsSourceData}, true
+}
+
+// PercentileLimits is the range between two percentiles of a plane's values,
+// by its histogram: a stretch that a handful of extreme samples cannot pull
+// wide. The percentiles are recorded in the limits. It reports ok false when
+// the histogram counted nothing, the percentiles are not an ascending pair
+// within 0 … 100, or both land on the same value.
+func PercentileLimits(h stats.Histogram, percentLo, percentHi float64) (limits Limits, ok bool) {
+	if !(percentLo < percentHi) {
+		return limits, false
+	}
+	a, okA := h.PercentileStored(percentLo)
+	b, okB := h.PercentileStored(percentHi)
+	if !okA || !okB {
+		return limits, false
+	}
+	lo, hi := h.Value(a), h.Value(b)
+	lo, hi = min(lo, hi), max(lo, hi)
+	if !(hi > lo) {
+		return limits, false
+	}
+	return Limits{Lo: lo, Hi: hi, Source: LimitsSourcePercentile, PercentLo: percentLo, PercentHi: percentHi}, true
 }
 
 // DefaultRecipe is the view an image opens in (ADR-0373 §SD4): a colour image
