@@ -38,7 +38,8 @@ may ask again.
 
 A **task** is one grant: which windows, in which mode — observe, suggest or
 act — with which destinations, call budget and deadline. Its row in the bar
-names it, with **Stop task**; the windows it holds carry a badge from which
+names it, with **Stop task**, which ends the task and, like **Cancel**, the
+turn running in it; the windows it holds carry a badge from which
 you can lower the mode. A request while a task exists is a widening of it,
 asked the same way. A grant dies with this window's instance (ADR-0322).
 

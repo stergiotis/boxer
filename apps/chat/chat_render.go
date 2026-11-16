@@ -625,10 +625,7 @@ func (inst *App) renderComposer() {
 		}
 	}
 	if cancel {
-		inst.turn.Cancel()
-		if inst.coord != nil {
-			inst.coord.holdWakes()
-		}
+		inst.cancelTurn()
 	}
 	// The chord is read for the whole process; only the focused window acts
 	// on it, so two open chats do not both send (play's claimRunChord).
@@ -998,7 +995,21 @@ func (inst *App) renderTask() {
 			coord.mu.Lock()
 			coord.grant = agent.Grant{}
 			coord.mu.Unlock()
+			// The person stopped the work, not only the grant: a turn left
+			// running reads the task's end as a refusal and asks for a new one.
+			if inst.pending != nil {
+				inst.cancelTurn()
+			}
 		}
+	}
+}
+
+// cancelTurn stops the turn in flight and withholds wakes until the person
+// next speaks.
+func (inst *App) cancelTurn() {
+	inst.turn.Cancel()
+	if inst.coord != nil {
+		inst.coord.holdWakes()
 	}
 }
 
