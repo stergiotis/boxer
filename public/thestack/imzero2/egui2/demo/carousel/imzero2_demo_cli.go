@@ -14,8 +14,9 @@ import (
 	"github.com/stergiotis/boxer/public/config"
 
 	"github.com/stergiotis/boxer/apps/capinspector"
-	"github.com/stergiotis/boxer/apps/play"
 	"github.com/stergiotis/boxer/apps/chatlet"
+	"github.com/stergiotis/boxer/apps/notebooklet"
+	"github.com/stergiotis/boxer/apps/play"
 	"github.com/stergiotis/boxer/apps/sqlapplet"
 	// The in-tree book of workstatelet documents registers itself.
 	_ "github.com/stergiotis/boxer/apps/workstatelets"
@@ -138,6 +139,14 @@ func Run(ctx gocontext.Context, cfg *application.Config, opts RunOptions) (err e
 	}
 	if chatletCount > 0 {
 		log.Info().Int("chatlets", chatletCount).Msg("chatlet: manifests minted")
+	}
+	// Notebooklets (ADR-0380): a committed notebook, read live.
+	notebookletCount, notebookletErrs := notebooklet.MintManifests(log.Logger)
+	for _, mintErr := range notebookletErrs {
+		log.Warn().Err(mintErr).Msg("notebooklet: mint")
+	}
+	if notebookletCount > 0 {
+		log.Info().Int("notebooklets", notebookletCount).Msg("notebooklet: manifests minted")
 	}
 	// Workstatelet documents (ADR-0369), minted here for the same
 	// reason: a document's alias resolves under --launch like an app's.
