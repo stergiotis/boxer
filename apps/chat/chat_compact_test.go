@@ -286,6 +286,59 @@ func TestAHeavyResultIsElidedAndRecalled(t *testing.T) {
 	assert.True(t, strings.HasPrefix(content, "error:"))
 }
 
+// A turn grown past the trigger by its own rounds is elided at a round
+// rather than refused (ADR-0316 Update 2026-11-16): the earlier results
+// become stubs, the latest rounds stay, and the person's message of that
+// turn reaches the model as their message, not inside the recalled band.
+func TestALongTurnIsElidedAtARound(t *testing.T) {
+	model := &sizedModel{answerBytes: 10}
+	inst := appOver(t, model, agentrun.NewMemStore())
+	inst.coord.setRoute("", true, compactContext)
+	w, err := inst.coord.openJournal(context.Background(), false)
+	require.NoError(t, err)
+	result := strings.Repeat("<row/>", 2000)
+	turn := []agentrun.Entry{{Kind: agentrun.KindUser, Role: projection.RoleUser, Body: "tidy every note", Turn: "t0", Label: harnessLabel()}}
+	for r := range 6 {
+		key, id := "t0#"+itoa(uint32(r)), "c"+itoa(uint32(r))
+		turn = append(turn,
+			agentrun.Entry{Kind: agentrun.KindReply, Key: key, Role: projection.RoleAssistant, Calls: projection.CallsBody([]openaichat.ToolCall{{Id: id, Name: "read_window_tree", Arguments: "{}"}}), Turn: "t0", Label: agentrun.Label{Level: agentrun.LevelOwnModel}},
+			agentrun.Entry{Kind: agentrun.KindIntent, Key: key + "#0", Name: id, Effect: agentrun.EffectNone, Turn: "t0"},
+			agentrun.Entry{Kind: agentrun.KindOutcome, Key: key + "#0", Name: id, Role: projection.RoleTool, Body: result, Turn: "t0", Label: agentrun.Label{Level: agentrun.LevelExternal}})
+	}
+	turn = append(turn,
+		agentrun.Entry{Kind: agentrun.KindReply, Key: "t0#6", Role: projection.RoleAssistant, Body: "tidied", Turn: "t0", Label: agentrun.Label{Level: agentrun.LevelOwnModel}},
+		agentrun.Entry{Kind: agentrun.KindTurn, Turn: "t0", Body: "answered"})
+	_, err = w.Append(context.Background(), turn...)
+	require.NoError(t, err)
+	require.True(t, inst.startTurn("q1"))
+	drainUntil(t, inst)
+
+	names, steps := compactSteps(inst)
+	require.Equal(t, []string{"elided"}, names, "elided, not refused")
+	assert.Contains(t, steps[0].result, "keeping your message")
+	require.Len(t, model.seen, 1, "no summariser call")
+	req := model.seen[0]
+	assert.NotContains(t, req.Messages[0].Content, "tidy every note", "the message is not in the recalled band")
+	var asked []string
+	for _, m := range req.Messages {
+		if m.Role == openaichat.ChatRoleUser {
+			asked = append(asked, m.Content)
+		}
+	}
+	assert.Equal(t, []string{"tidy every note", "q1"}, asked, "the person's messages, as theirs")
+	stubs := strings.Count(req.Messages[0].Content, "was elided")
+	assert.Positive(t, stubs)
+	results := 0
+	for _, m := range req.Messages {
+		if m.Role == openaichat.ChatRoleTool {
+			results++
+		}
+	}
+	assert.Equal(t, 6, stubs+results, "every result is a stub or whole")
+	assert.GreaterOrEqual(t, results, 1, "the latest rounds stay whole")
+	assert.Empty(t, projection.CheckCompaction(w.Entries()))
+}
+
 // A recall over the budget is cut on a rune boundary.
 func TestARecallCutsOnARuneBoundary(t *testing.T) {
 	inst := appOver(t, &sizedModel{}, agentrun.NewMemStore())

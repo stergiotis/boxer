@@ -208,7 +208,7 @@ func (inst ProfileT) Fingerprint() string {
 	w("async", inst.CallWait.String(), inst.PendingMax.String(), strconv.Itoa(inst.WakesMax))
 	c := inst.Compact
 	w("compact", strconv.Itoa(inst.CompactTriggerPercent), strconv.FormatInt(inst.CompactContextFloor, 10), strconv.Itoa(c.KeepTurns), strconv.Itoa(c.PinBytes), strconv.Itoa(c.ElideMinBytes),
-		strconv.FormatInt(c.SummaryTokens, 10), strconv.FormatInt(c.TailTokens, 10), strconv.FormatInt(c.RoundMarginTokens, 10))
+		strconv.FormatInt(c.SummaryTokens, 10), strconv.FormatInt(c.TailTokens, 10), strconv.FormatInt(c.RoundMarginTokens, 10), strconv.Itoa(c.KeepRounds))
 	w(append([]string{"supersede", strconv.Itoa(inst.SupersedeBatchBytes)}, inst.SupersededReads...)...)
 	return hex.EncodeToString(h.Sum(nil))
 }
@@ -226,7 +226,7 @@ func defaultProfile() (p ProfileT) {
 		PixelsMax: PixelsMaxEnv.Get(), PixelsLocalRequired: PixelsLocalRequiredEnv.Get(),
 		CallWait: CallWaitEnv.Get(), PendingMax: PendingMaxEnv.Get(), WakesMax: int(WakesMaxEnv.Get()),
 		ImageBudgetBytes: ImageBudgetBytes.Get(), ImageBudgetCount: ImageBudgetCount.Get(), ImageMaxPixels: ImageMaxPixels.Get(),
-		Compact:               projection.Constants{KeepTurns: 2, PinBytes: 4096, ElideMinBytes: 512, SummaryTokens: 1024, TailTokens: 2048, RoundMarginTokens: 1024},
+		Compact:               projection.Constants{KeepTurns: 2, KeepRounds: 2, PinBytes: 4096, ElideMinBytes: 512, SummaryTokens: 1024, TailTokens: 2048, RoundMarginTokens: 1024},
 		CompactTriggerPercent: 70, CompactContextFloor: 16384, AnchorCadence: headstore.DefaultCadence(),
 		SupersededReads:     []string{"get_state", "get_view", "get_kernel", "list_panes", "list_windows", "query_windows", "describe_app", "artefact_read", "artefact_outline", "artefact_lint", "artefact_images"},
 		SupersedeBatchBytes: 16 << 10}
@@ -313,7 +313,7 @@ func (inst ProfileT) fields() map[string]string {
 		"pixels_max": inst.PixelsMax, "pixels_local_required": strconv.FormatBool(inst.PixelsLocalRequired),
 		"image_budget_bytes": strconv.FormatInt(inst.ImageBudgetBytes, 10), "image_budget_count": strconv.FormatInt(inst.ImageBudgetCount, 10), "image_max_pixels": strconv.FormatInt(inst.ImageMaxPixels, 10),
 		"compact_trigger_percent": strconv.Itoa(inst.CompactTriggerPercent), "compact_context_floor": strconv.FormatInt(inst.CompactContextFloor, 10),
-		"compact_keep_turns": strconv.Itoa(c.KeepTurns), "compact_pin_bytes": strconv.Itoa(c.PinBytes), "compact_elide_min_bytes": strconv.Itoa(c.ElideMinBytes),
+		"compact_keep_turns": strconv.Itoa(c.KeepTurns), "compact_keep_rounds": strconv.Itoa(c.KeepRounds), "compact_pin_bytes": strconv.Itoa(c.PinBytes), "compact_elide_min_bytes": strconv.Itoa(c.ElideMinBytes),
 		"compact_summary_tokens": strconv.FormatInt(c.SummaryTokens, 10), "compact_tail_tokens": strconv.FormatInt(c.TailTokens, 10), "compact_round_margin_tokens": strconv.FormatInt(c.RoundMarginTokens, 10),
 		"anchor_cadence": inst.AnchorCadence.String(),
 		"call_wait":      inst.CallWait.String(), "pending_max": inst.PendingMax.String(), "wakes_max": strconv.Itoa(inst.WakesMax),

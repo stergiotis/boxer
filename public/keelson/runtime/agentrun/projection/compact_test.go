@@ -1,6 +1,8 @@
 package projection
 
 import (
+	"slices"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -12,30 +14,49 @@ import (
 	"github.com/stergiotis/boxer/public/llm/openaichat"
 )
 
-var testConstants = Constants{TriggerTokens: 600, KeepTurns: 1, PinBytes: 200, ElideMinBytes: 100, SummaryTokens: 50, TailTokens: 100, RoundMarginTokens: 50}
+var testConstants = Constants{TriggerTokens: 600, KeepTurns: 1, KeepRounds: 2, PinBytes: 200, ElideMinBytes: 100, SummaryTokens: 50, TailTokens: 100, RoundMarginTokens: 50}
 
 // longRun is turns of one call each with a result of resultBytes.
 func longRun(turns int, resultBytes int) (es []agentrun.Entry) {
+	return roundsRun(turns, 1, resultBytes)
+}
+
+// roundsRun is turns of rounds calls each, one a round, with a result of
+// resultBytes each, and an answer.
+func roundsRun(turns int, rounds int, resultBytes int) (es []agentrun.Entry) {
 	es = append(es, agentrun.Entry{Ordinal: 1, Kind: agentrun.KindSection, Name: "coordinator", Body: "Work in windows."})
-	ord := uint32(2)
+	for t := 1; t <= turns; t++ {
+		es = appendTurn(es, "t"+string(rune('0'+t)), rounds, resultBytes)
+	}
+	return
+}
+
+// appendTurn appends a turn of rounds calls and an answer after es.
+func appendTurn(es []agentrun.Entry, turn string, rounds int, resultBytes int) []agentrun.Entry {
+	ord := uint32(len(es) + 1)
+	if n := len(es); n > 0 {
+		ord = es[n-1].Ordinal + 1
+	}
 	add := func(e agentrun.Entry) {
 		e.Ordinal = ord
 		ord++
 		es = append(es, e)
 	}
-	for t := 1; t <= turns; t++ {
-		turn := "t" + string(rune('0'+t))
-		callId := "c" + turn
-		add(agentrun.Entry{Kind: agentrun.KindUser, Role: RoleUser, Body: "question " + turn, Turn: turn})
-		add(agentrun.Entry{Kind: agentrun.KindRequest, Key: turn + "#0", Turn: turn})
-		add(agentrun.Entry{Kind: agentrun.KindReply, Key: turn + "#0", Role: RoleAssistant, Calls: CallsBody([]openaichat.ToolCall{{Id: callId, Name: "read_window_tree"}}), Turn: turn, Label: agentrun.Label{Level: agentrun.LevelOwnModel}})
-		add(agentrun.Entry{Kind: agentrun.KindIntent, Key: turn + "#0#0", Name: callId, Turn: turn})
-		add(agentrun.Entry{Kind: agentrun.KindOutcome, Key: turn + "#0#0", Name: callId, Role: RoleTool, Body: strings.Repeat("x", resultBytes), Turn: turn, Label: agentrun.Label{Level: agentrun.LevelExternal}})
-		add(agentrun.Entry{Kind: agentrun.KindRequest, Key: turn + "#1", Turn: turn})
-		add(agentrun.Entry{Kind: agentrun.KindReply, Key: turn + "#1", Role: RoleAssistant, Body: "answer " + turn, Turn: turn, Label: agentrun.Label{Level: agentrun.LevelOwnModel}})
-		add(agentrun.Entry{Kind: agentrun.KindTurn, Turn: turn, Body: "answered"})
+	add(agentrun.Entry{Kind: agentrun.KindUser, Role: RoleUser, Body: "question " + turn, Turn: turn})
+	for r := 0; r <= rounds; r++ {
+		key := turn + "#" + strconv.Itoa(r)
+		add(agentrun.Entry{Kind: agentrun.KindRequest, Key: key, Turn: turn})
+		if r == rounds {
+			add(agentrun.Entry{Kind: agentrun.KindReply, Key: key, Role: RoleAssistant, Body: "answer " + turn, Turn: turn, Label: agentrun.Label{Level: agentrun.LevelOwnModel}})
+			break
+		}
+		callId := "c" + turn + "r" + strconv.Itoa(r)
+		add(agentrun.Entry{Kind: agentrun.KindReply, Key: key, Role: RoleAssistant, Calls: CallsBody([]openaichat.ToolCall{{Id: callId, Name: "read_window_tree"}}), Turn: turn, Label: agentrun.Label{Level: agentrun.LevelOwnModel}})
+		add(agentrun.Entry{Kind: agentrun.KindIntent, Key: key + "#0", Name: callId, Turn: turn})
+		add(agentrun.Entry{Kind: agentrun.KindOutcome, Key: key + "#0", Name: callId, Role: RoleTool, Body: strings.Repeat("x", resultBytes), Turn: turn, Label: agentrun.Label{Level: agentrun.LevelExternal}})
 	}
-	return
+	add(agentrun.Entry{Kind: agentrun.KindTurn, Turn: turn, Body: "answered"})
+	return es
 }
 
 func TestThePlanIsNoneUnderTheTrigger(t *testing.T) {
@@ -206,7 +227,8 @@ func TestTheLawsCatchABrokenJournal(t *testing.T) {
 	assert.Contains(t, strings.Join(broken2, "\n"), "inside the span of call c1")
 	// A cut that is not a user entry is the other L2 breach.
 	es4 := longRun(2, 10)
-	es4 = append(es4, agentrun.Entry{Ordinal: uint32(len(es4) + 1), Kind: agentrun.KindCompact, Target: 4, Body: "question t1"})
+	require.Equal(t, agentrun.KindRequest, es4[2].Kind)
+	es4 = append(es4, agentrun.Entry{Ordinal: uint32(len(es4) + 1), Kind: agentrun.KindCompact, Target: es4[2].Ordinal, Body: "question t1"})
 	assert.True(t, hasLaw(CheckCompaction(es4), "L2"))
 	// The mark satisfies L25.
 	es3 := longRun(2, 10)
@@ -252,15 +274,19 @@ func TestTheConstantsThrashCheck(t *testing.T) {
 }
 
 // For any run the plan's cut is a live user entry that starts a turn after
-// the previous cut, outside the kept turns, and the span is exactly the
-// live messages in [from, cut).
-func TestThePlanCutsOnATurnStart(t *testing.T) {
+// the previous cut, outside the kept turns, or a reply inside them that
+// leaves the kept rounds and keeps its turn's message; the span is exactly
+// the live messages in [from, cut) but that one, and the laws hold once
+// it is applied.
+func TestThePlanCutsOnATurnStartOrARound(t *testing.T) {
 	rapid.Check(t, func(rt *rapid.T) {
-		turns := rapid.IntRange(2, 7).Draw(rt, "turns")
+		turns := rapid.IntRange(1, 7).Draw(rt, "turns")
+		rounds := rapid.IntRange(1, 6).Draw(rt, "rounds")
 		bytes := rapid.IntRange(10, 1500).Draw(rt, "bytes")
-		es := longRun(turns, bytes)
+		es := roundsRun(turns, rounds, bytes)
 		c := testConstants
 		c.KeepTurns = rapid.IntRange(1, 3).Draw(rt, "keep")
+		c.KeepRounds = rapid.IntRange(1, 3).Draw(rt, "keep_rounds")
 		p := PlanCompaction(es, order, c, 0, 0)
 		if p.Verdict == VerdictNone || p.Verdict == VerdictRefuse {
 			return
@@ -268,20 +294,43 @@ func TestThePlanCutsOnATurnStart(t *testing.T) {
 		require.NotEmpty(rt, p.Span, "a compaction removes something")
 		require.Less(rt, p.After, p.Estimated)
 		cut := es[p.Cut-1]
-		require.Equal(rt, agentrun.KindUser, cut.Kind)
-		starts := 0
-		for _, e := range es {
-			if e.Kind == agentrun.KindUser && e.Ordinal >= p.Cut {
-				starts++
+		switch cut.Kind {
+		case agentrun.KindUser:
+			require.Zero(rt, p.Pinned)
+			starts := 0
+			for _, e := range es {
+				if e.Kind == agentrun.KindUser && e.Ordinal >= p.Cut {
+					starts++
+				}
 			}
+			require.GreaterOrEqual(rt, starts, c.KeepTurns)
+		case agentrun.KindReply:
+			require.Equal(rt, VerdictElide, p.Verdict, "a round is cut by elision only")
+			pinned := es[p.Pinned-1]
+			require.Equal(rt, agentrun.KindUser, pinned.Kind)
+			require.Equal(rt, cut.Turn, pinned.Turn)
+			replies := 0
+			for _, e := range es {
+				if e.Kind == agentrun.KindReply && e.Ordinal >= p.Cut {
+					replies++
+				}
+			}
+			require.GreaterOrEqual(rt, replies, c.KeepRounds)
+		default:
+			rt.Fatalf("a cut on a %s entry", cut.Kind)
 		}
-		require.GreaterOrEqual(rt, starts, c.KeepTurns)
 		for _, m := range p.Span {
 			require.Less(rt, m.Ordinal, p.Cut)
 			require.GreaterOrEqual(rt, m.Ordinal, p.From)
+			require.NotEqual(rt, p.Pinned, m.Ordinal)
 		}
 		compact := agentrun.Entry{Ordinal: uint32(len(es) + 1), Kind: agentrun.KindCompact, Target: p.Cut, From: p.From, Form: FormElide, Body: p.Elided, Label: p.Label}
-		require.Empty(rt, CheckCompaction(append(es, compact)))
+		es = append(es, compact)
+		require.Empty(rt, CheckCompaction(es))
+		if p.Verdict == VerdictElide {
+			// A summary's size is the summariser's; the elision is the plan's.
+			require.Empty(rt, CheckBound(es, order, c, nil))
+		}
 	})
 }
 
@@ -299,4 +348,153 @@ func TestAnchoringNeverUndershootsTheEstimate(t *testing.T) {
 	dense := Anchored(b, base, 10*Tokens(base))
 	assert.Equal(t, 10*Tokens(b), dense, "a denser tokenizer scales the estimate up")
 	assert.Equal(t, Tokens(b), Anchored(b, Batch{}, 2000), "nothing to scale by")
+}
+
+// applyPlan appends the plan's compact entry as the elide act writes it.
+func applyPlan(es []agentrun.Entry, p Plan) []agentrun.Entry {
+	return append(es, agentrun.Entry{Ordinal: es[len(es)-1].Ordinal + 1, Kind: agentrun.KindCompact, Target: p.Cut, From: p.From, Form: FormElide, Body: p.Elided, Label: p.Label})
+}
+
+// The first turn of a conversation, grown past the trigger by its own
+// rounds, is compacted at a round (ADR-0316 Update 2026-11-16): the cut
+// sits on a reply, the latest rounds stay whole, the earlier results are
+// stubs, and the person's message stays a body message at its own level,
+// verbatim, before the rounds kept.
+func TestTheFirstTurnIsElidedAtARound(t *testing.T) {
+	es := roundsRun(1, 6, 600)
+	p := PlanCompaction(es, order, testConstants, 0, 0)
+	require.Equal(t, VerdictElide, p.Verdict, "estimated %d after %d", p.Estimated, p.After)
+	cut := es[p.Cut-1]
+	assert.Equal(t, agentrun.KindReply, cut.Kind)
+	require.NotZero(t, p.Pinned)
+	assert.Equal(t, "question t1", es[p.Pinned-1].Body)
+	assert.NotContains(t, p.Elided, "question t1", "the pinned message is not carried twice")
+	assert.Contains(t, p.Elided, "was elided: 600 bytes")
+	assert.Empty(t, p.Person)
+	// The pinned message is inside [From, Cut): its tier reaches the
+	// compaction's label, as law L3 reads the span.
+	tiered := slices.Clone(es)
+	tiered[p.Pinned-1].Label.Tier = agentrun.TierE(3)
+	assert.EqualValues(t, 3, PlanCompaction(tiered, order, testConstants, 0, 0).Label.Tier)
+
+	es = applyPlan(es, p)
+	b := Fold(es, order)
+	var pinned *Message
+	for i, m := range b.Messages {
+		if m.Part == PartBody && m.Ordinal == p.Pinned {
+			pinned = &b.Messages[i]
+			assert.Equal(t, PartSummary, b.Messages[i-1].Part, "after the recalled band")
+			assert.Greater(t, b.Messages[i+1].Ordinal, p.Cut-1, "before the entries from the cut")
+		}
+	}
+	require.NotNil(t, pinned, "the person's message is in the body")
+	assert.Equal(t, "question t1", pinned.Content, "verbatim, outside any band")
+	assert.Equal(t, agentrun.LevelPerson, pinned.Label.Level, "at the person's level")
+	assert.LessOrEqual(t, Tokens(b), testConstants.TriggerTokens)
+	assert.Empty(t, CheckCompaction(es))
+	assert.Empty(t, CheckBound(es, order, testConstants, nil))
+	assert.Equal(t, VerdictNone, PlanCompaction(es, order, testConstants, 0, 0).Verdict)
+	replies := 0
+	for _, m := range b.Messages {
+		if m.Part == PartBody && m.Role == RoleAssistant {
+			replies++
+		}
+	}
+	assert.GreaterOrEqual(t, replies, testConstants.KeepRounds, "the latest rounds stay whole")
+}
+
+// A later round cut in the same turn rolls the elision on and keeps the
+// same message; one in the next turn moves the pin, and the earlier
+// turn's message goes into the elision verbatim (law L25).
+func TestRoundCutsRollAndMoveThePin(t *testing.T) {
+	// A trigger large enough for the rolling elision's stubs: under
+	// testConstants' 600 they alone would pass it.
+	c := testConstants
+	c.TriggerTokens = 2000
+	es := roundsRun(1, 6, 1600)
+	first := PlanCompaction(es, order, c, 0, 0)
+	require.Equal(t, VerdictElide, first.Verdict)
+	es = applyPlan(es, first)
+
+	es = appendTurn(es, "t2", 6, 1600)
+	next := PlanCompaction(es, order, c, 0, 0)
+	require.Equal(t, VerdictElide, next.Verdict, "estimated %d after %d", next.Estimated, next.After)
+	assert.Equal(t, first.Cut, next.From)
+	assert.Greater(t, next.Cut, first.Cut)
+	assert.True(t, strings.HasPrefix(next.Elided, first.Elided), "the elision is rolling")
+	assert.Equal(t, "question t2", es[next.Pinned-1].Body)
+	assert.Contains(t, next.Elided, "The person said:\nquestion t1", "the earlier pin is elided verbatim")
+	es = applyPlan(es, next)
+	assert.Empty(t, CheckCompaction(es))
+	assert.Empty(t, CheckBound(es, order, c, nil))
+	b := Fold(es, order)
+	for _, m := range b.Messages {
+		if m.Part == PartBody && m.Role == RoleUser {
+			assert.Equal(t, "question t2", m.Content, "only the current turn's message is pinned")
+		}
+	}
+}
+
+// A call answered after a later reply makes that reply no cut: the cut
+// would part the call from its result (law L2).
+func TestARoundCutNeverPartsACallFromItsResult(t *testing.T) {
+	es := roundsRun(1, 6, 600)
+	// Move the first round's result after the second round's reply.
+	var firstOutcome, secondReply int
+	replies := 0
+	for i, e := range es {
+		switch {
+		case e.Kind == agentrun.KindOutcome && firstOutcome == 0:
+			firstOutcome = i
+		case e.Kind == agentrun.KindReply:
+			replies++
+			if replies == 2 {
+				secondReply = i
+			}
+		}
+	}
+	blocked := es[firstOutcome].Ordinal
+	es[firstOutcome].Ordinal, es[secondReply].Ordinal = es[secondReply].Ordinal, blocked
+	slices.SortFunc(es, func(a, b agentrun.Entry) int { return int(a.Ordinal) - int(b.Ordinal) })
+	require.Equal(t, agentrun.KindReply, es[blocked-1].Kind, "the second reply now comes before the first result")
+	cuts := roundCuts(es, liveOf(Fold(es, order)), 0, testConstants.KeepRounds)
+	require.NotEmpty(t, cuts, "the later rounds are still cuts")
+	assert.NotContains(t, cuts, blocked, "the reply between a call and its result is no cut")
+	p := PlanCompaction(es, order, testConstants, 0, 0)
+	if p.Verdict == VerdictElide {
+		assert.Empty(t, CheckCompaction(applyPlan(es, p)))
+	}
+}
+
+func liveOf(b Batch) map[uint32]bool {
+	live := make(map[uint32]bool)
+	for _, m := range b.Messages {
+		if m.Part == PartBody {
+			live[m.Ordinal] = true
+		}
+	}
+	return live
+}
+
+// The laws read a round cut: a reply is a cut (L2), and the message it
+// keeps in the body is not asked of the elision (L25); a message of the
+// same turn that is not the first is.
+func TestTheLawsReadARoundCut(t *testing.T) {
+	es := roundsRun(1, 3, 10)
+	var reply2 uint32
+	n := 0
+	for _, e := range es {
+		if e.Kind == agentrun.KindReply {
+			if n++; n == 2 {
+				reply2 = e.Ordinal
+			}
+		}
+	}
+	ok := append(slices.Clone(es), agentrun.Entry{Ordinal: es[len(es)-1].Ordinal + 1, Kind: agentrun.KindCompact, Target: reply2, Body: "elided"})
+	assert.Empty(t, CheckCompaction(ok))
+	// A second message of the person's in the turn, before the cut, is
+	// not pinned: the elision must carry it.
+	es[3] = agentrun.Entry{Ordinal: es[3].Ordinal, Kind: agentrun.KindUser, Role: RoleUser, Body: "and also", Turn: "t1"}
+	bad := append(slices.Clone(es), agentrun.Entry{Ordinal: es[len(es)-1].Ordinal + 1, Kind: agentrun.KindCompact, Target: reply2, Body: "elided"})
+	assert.True(t, hasLaw(CheckCompaction(bad), "L25"), "%v", CheckCompaction(bad))
 }

@@ -222,6 +222,7 @@ func genEntries(t *rapid.T) (entries []agentrun.Entry) {
 	names := []string{"coordinator", "questions", "artefact", "extra"}
 	marks := []string{"", "p1", "p2", "p1,p2"}
 	var calls []string
+	var replies []uint32
 	for i := 1; i <= n; i++ {
 		kind := rapid.SampledFrom([]agentrun.KindE{agentrun.KindUser, agentrun.KindReply, agentrun.KindOutcome, agentrun.KindNote, agentrun.KindSection,
 			agentrun.KindTools, agentrun.KindCompact, agentrun.KindEdit, agentrun.KindRequest, agentrun.KindIntent, agentrun.KindProfile, agentrun.KindIgnorable}).Draw(t, "kind")
@@ -235,6 +236,10 @@ func genEntries(t *rapid.T) (entries []agentrun.Entry) {
 			e.Tools = &agentrun.ToolCatalog{Names: rapid.SliceOfN(rapid.SampledFrom([]string{"a", "b"}), 0, 2).Draw(t, "tools")}
 		case agentrun.KindCompact, agentrun.KindEdit:
 			e.Target = uint32(rapid.IntRange(0, i).Draw(t, "target"))
+			if kind == agentrun.KindCompact && len(replies) > 0 && rapid.Bool().Draw(t, "on_reply") {
+				// A cut on a round, which keeps its turn's first message.
+				e.Target = rapid.SampledFrom(replies).Draw(t, "reply")
+			}
 			if kind == agentrun.KindEdit && rapid.Bool().Draw(t, "drop") {
 				e.Form = agentrun.FormDrop
 			}
@@ -250,6 +255,7 @@ func genEntries(t *rapid.T) (entries []agentrun.Entry) {
 			e.Role = rapid.SampledFrom([]string{RoleTool, "", "host"}).Draw(t, "role")
 			e.Key = rapid.SampledFrom([]string{"", "llm-1#0"}).Draw(t, "key")
 		case agentrun.KindReply:
+			replies = append(replies, uint32(i))
 			if rapid.Bool().Draw(t, "calls") {
 				id := "c" + strconv.Itoa(i)
 				calls = append(calls, id)
@@ -261,6 +267,8 @@ func genEntries(t *rapid.T) (entries []agentrun.Entry) {
 			}
 		}
 		e.Run = 7
+		// Turns let a cut on a reply keep its turn's first user entry.
+		e.Turn = rapid.SampledFrom([]string{"", "t1", "t2"}).Draw(t, "turn")
 		if rapid.Bool().Draw(t, "reentry") {
 			e.WriterRun = rapid.SampledFrom([]uint64{7, 98, 99}).Draw(t, "writer")
 			e.WriterOrdinal = uint32(rapid.IntRange(0, i).Draw(t, "writer_ordinal"))

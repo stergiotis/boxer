@@ -162,12 +162,13 @@ func configureCompaction(s *requestState) {
 	case projection.VerdictNone:
 		return
 	case projection.VerdictRefuse:
-		// Nothing outside the kept turns brings the request under the
-		// trigger: the request goes out as it is, and the journal says so
-		// once a turn.
+		// No cut brings the request under the trigger, neither at a turn
+		// start nor at a round outside the kept ones: the request goes out
+		// as it is, and the journal says so once a turn.
 		if !compactNoted(entries, s.req.Turn, compactNoteRefused) {
-			why := "the request is " + strconv.FormatInt(plan.Estimated, 10) + " tokens, over the trigger of " + strconv.FormatInt(c.TriggerTokens, 10) + ", and no cut outside the kept turns brings it under"
-			log.Warn().Str("conversation", s.coord.conversation).Int64("estimated", plan.Estimated).Int64("trigger", c.TriggerTokens).Msg("chat: the request is over the trigger and no cut outside the kept turns fits")
+			why := "the request is " + strconv.FormatInt(plan.Estimated, 10) + " tokens, over the trigger of " + strconv.FormatInt(c.TriggerTokens, 10) +
+				", and no cut brings it under, at a turn start or at a round outside the latest " + strconv.Itoa(c.KeepRounds)
+			log.Warn().Str("conversation", s.coord.conversation).Int64("estimated", plan.Estimated).Int64("trigger", c.TriggerTokens).Msg("chat: the request is over the trigger and no cut fits")
 			s.coord.compactStep(s.round, "refused", why, true, false)
 			s.err = s.coord.noteCompaction(s.jctx, s.w, s.req.Turn, compactNoteRefused, why)
 		}
@@ -371,6 +372,12 @@ func cutRunes(s string, n int) string {
 // compactWhat is a made compaction's line: where it cut and what it
 // brought the request from and to, as the plan estimated.
 func compactWhat(plan projection.Plan) string {
-	return "cut at ordinal " + strconv.FormatUint(uint64(plan.Cut), 10) + ", from " + strconv.FormatUint(uint64(plan.From), 10) +
+	where := "cut at ordinal "
+	if plan.Pinned != 0 {
+		// A cut on a round keeps the person's message (ADR-0316 Update
+		// 2026-11-16).
+		where = "cut inside the turn, keeping your message, at ordinal "
+	}
+	return where + strconv.FormatUint(uint64(plan.Cut), 10) + ", from " + strconv.FormatUint(uint64(plan.From), 10) +
 		": about " + strconv.FormatInt(plan.Estimated, 10) + " tokens to about " + strconv.FormatInt(plan.After, 10)
 }

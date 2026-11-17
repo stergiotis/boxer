@@ -83,6 +83,11 @@ WITH
     SELECT argMax(target, ord) AS ccut, argMax(body, ord) AS csummary, max(ord) AS cord, argMax(run, ord) AS crun,
            argMax(level, ord) AS clevel, argMax(tier, ord) AS ctier, argMax(exposure, ord) AS cexposure, argMax(origin, ord) AS corigin
     FROM journal WHERE kind = 'compact'),
+  pin AS (
+    SELECT min(ord) AS pord FROM journal
+    WHERE kind = 'user' AND turn != ''
+      AND ord < (SELECT max(ccut) FROM cut)
+      AND turn = (SELECT any(turn) FROM journal WHERE kind = 'reply' AND ord = (SELECT max(ccut) FROM cut))),
   summary AS (
     SELECT 1 AS part, toUInt32(cord) AS ord, 'system' AS role,
            concat('<recalled source="self" run="', replaceAll(replaceAll(replaceAll(replaceAll(crun, '&', '&amp;'), '"', '&quot;'), '<', '&lt;'), '>', '&gt;'),
@@ -123,7 +128,7 @@ WITH
       FROM journal AS j LEFT JOIN edits AS e ON e.etarget = j.ord
       WHERE j.kind IN ('user', 'reply', 'outcome', 'note')
         AND NOT (j.kind = 'outcome' AND j.role != 'tool')
-        AND j.ord >= (SELECT if(count() = 0, 0, max(ccut)) FROM cut)
+        AND (j.ord >= (SELECT if(count() = 0, 0, max(ccut)) FROM cut) OR (j.ord != 0 AND j.ord = (SELECT max(pord) FROM pin)))
         AND NOT (e.etarget != 0 AND e.eform = 'drop'))),
   tools AS (
     SELECT 3 AS part, toUInt32(ord) AS ord, 'tools' AS role, body AS content, '' AS calls, '' AS call_key, '' AS tool_call_id, '' AS attachments,
@@ -145,6 +150,7 @@ func JournalTable(entries []agentrun.Entry) (b []byte, err error) {
 		String("kind", func(i int) string { return rows[i].Kind.String() }).
 		String("key", func(i int) string { return rows[i].Key }).
 		String("role", func(i int) string { return rows[i].Role }).
+		String("turn", func(i int) string { return rows[i].Turn }).
 		// The record kinds' body is their record as text (agentrun's
 		// RecordBody): the tools entry's names, which the tools pass reads.
 		String("body", func(i int) string { return rows[i].RecordBody() }).

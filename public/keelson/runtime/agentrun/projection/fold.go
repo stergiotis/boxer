@@ -103,8 +103,13 @@ func Fold(entries []agentrun.Entry, order Order) (b Batch) {
 			latest = &es[i]
 		}
 	}
+	// pin is the person's message a cut on a round keeps in the body, at
+	// its own level, before the entries from the cut (ADR-0316 Update
+	// 2026-11-16).
+	var pin uint32
 	if latest != nil {
 		cut = latest.Target
+		pin = roundCutPin(es, cut)
 		b.Messages = append(b.Messages, summaryMessage(*latest))
 	}
 
@@ -116,9 +121,9 @@ func Fold(entries []agentrun.Entry, order Order) (b Batch) {
 		}
 	}
 
-	// messages from the cut on, in ordinal order.
+	// messages from the cut on, and the pinned one, in ordinal order.
 	for _, e := range es {
-		if e.Ordinal < cut {
+		if e.Ordinal < cut && (pin == 0 || e.Ordinal != pin) {
 			continue
 		}
 		var role string

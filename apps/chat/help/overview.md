@@ -48,6 +48,14 @@ content** or **holds confined content**. Under the rows, at most one
 notice: why the conversation is not kept, or that closing the window ends
 it here and it is read in play.
 
+When a request reaches the profile's share of the route's context, the
+chat compacts the conversation before sending it (ADR-0316): older tool
+results become stubs the model can `recall`, and an older span may be
+summarised. Your messages are never summarised; inside a long turn the cut
+falls between rounds, and your message stays as you wrote it. A step of
+the turn says what was done, or **refused** when no cut could bring the
+request under, in which case it went out as it was.
+
 ## The dock
 
 The body is a dock of tabs: **Transcript** and **Message** (the composer)

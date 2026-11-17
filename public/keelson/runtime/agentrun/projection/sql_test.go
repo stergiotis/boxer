@@ -3,6 +3,7 @@ package projection
 import (
 	"context"
 	"os"
+	"slices"
 	"strconv"
 	"testing"
 	"time"
@@ -115,4 +116,33 @@ func TestAnEmptyJournalProjectsNothing(t *testing.T) {
 	assert.Empty(t, b.Messages)
 	assert.Empty(t, b.Tools)
 	assert.True(t, Fold(nil, order).Equal(b))
+}
+
+// A cut on a round keeps its turn's first message in the body: the worker
+// keeps the same one as the fold (law L4, ADR-0316 Update 2026-11-16),
+// for a pin in the same turn as the cut and after the pin has moved on.
+func TestTheWorkerKeepsTheRoundCutsMessage(t *testing.T) {
+	runner := workerRunner(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	c := testConstants
+	c.TriggerTokens = 2000
+	es := roundsRun(1, 6, 1600)
+	first := PlanCompaction(es, order, c, 0, 0)
+	require.Equal(t, VerdictElide, first.Verdict)
+	require.NotZero(t, first.Pinned)
+	es = applyPlan(es, first)
+	compacted := slices.Clone(es)
+	es = appendTurn(es, "t2", 6, 1600)
+	for _, journal := range [][]agentrun.Entry{compacted, es} {
+		sql, err := Project(ctx, runner, journal, order)
+		require.NoError(t, err)
+		assert.True(t, Fold(journal, order).Equal(sql), "worker:\n%+v\nfold:\n%+v", sql, Fold(journal, order))
+	}
+	next := PlanCompaction(es, order, c, 0, 0)
+	require.Equal(t, VerdictElide, next.Verdict)
+	es = applyPlan(es, next)
+	sql, err := Project(ctx, runner, es, order)
+	require.NoError(t, err)
+	assert.True(t, Fold(es, order).Equal(sql), "worker:\n%+v\nfold:\n%+v", sql, Fold(es, order))
 }

@@ -16,19 +16,24 @@ import (
 // Fold's. The plan reads the
 // request the fold projects now, sizes it from the provider's last
 // reported usage plus an estimate for what came after, and when it
-// reaches the trigger picks a cut on a turn start that leaves the kept
-// tail under the trigger with room for the summary and one more round.
-// The ladder is cheapest first (§SD2): a derived elision, the span's tool
-// results replaced by stubs a `recall` brings back, before any summary.
+// reaches the trigger picks a cut that leaves the kept tail under the
+// trigger with room for the summary and one more round: on a turn start
+// outside the kept turns, or, by elision only, on a round inside them
+// (Update 2026-11-16). The ladder is cheapest first (§SD2): a derived
+// elision, the span's tool results replaced by stubs a `recall` brings
+// back, before any summary.
 
 // Constants are a profile's compaction constants (ADR-0316 §SD3, ADR-0310
 // §SD7); every one of them is data on the profile.
 type Constants struct {
 	// TriggerTokens is the request size the plan compacts at.
 	TriggerTokens int64
-	// KeepTurns is how many of the latest turns stay whole whatever the
-	// size; a cut never enters them.
+	// KeepTurns is how many of the latest turns no turn-start cut enters.
 	KeepTurns int
+	// KeepRounds is how many of the latest rounds stay whole whatever the
+	// size: a cut on a round inside the kept turns leaves them (ADR-0316
+	// Update 2026-11-16).
+	KeepRounds int
 	// PinBytes bounds the person's messages a summary carries verbatim;
 	// past it they are marked summarised (law L25).
 	PinBytes int
@@ -47,8 +52,8 @@ type Constants struct {
 // with the person's pinned words, the kept tail and one round's margin
 // fit under the trigger, or every request would compact.
 func (inst Constants) Validate(headTokens int64) (err error) {
-	if inst.TriggerTokens <= 0 || inst.KeepTurns < 1 || inst.PinBytes < 0 || inst.ElideMinBytes < 0 || inst.SummaryTokens <= 0 || inst.TailTokens < 0 || inst.RoundMarginTokens < 0 {
-		return eb.Build().Int64("trigger", inst.TriggerTokens).Int("keep", inst.KeepTurns).Int64("summary", inst.SummaryTokens).Errorf("the compaction constants are not all positive")
+	if inst.TriggerTokens <= 0 || inst.KeepTurns < 1 || inst.KeepRounds < 1 || inst.PinBytes < 0 || inst.ElideMinBytes < 0 || inst.SummaryTokens <= 0 || inst.TailTokens < 0 || inst.RoundMarginTokens < 0 {
+		return eb.Build().Int64("trigger", inst.TriggerTokens).Int("keep", inst.KeepTurns).Int64("summary", inst.SummaryTokens).Int("keep_rounds", inst.KeepRounds).Errorf("the compaction constants are not all positive")
 	}
 	if need := headTokens + inst.summaryAllowance() + inst.TailTokens + inst.RoundMarginTokens; need >= inst.TriggerTokens {
 		return eb.Build().Int64("head", headTokens).Int64("need", need).Int64("trigger", inst.TriggerTokens).Errorf("the profile thrashes: the head, the summary, the tail and a round's margin reach the trigger")
@@ -105,8 +110,9 @@ const (
 	VerdictElide
 	// VerdictSummarise: the span must be summarised.
 	VerdictSummarise
-	// VerdictRefuse: no cut outside the kept turns brings the request
-	// under the trigger; the kept tail alone is too large.
+	// VerdictRefuse: no cut brings the request under the trigger: neither
+	// a turn start outside the kept turns nor a round outside the kept
+	// rounds; the kept rounds alone are too large.
 	VerdictRefuse
 )
 
@@ -142,6 +148,10 @@ type Plan struct {
 	Cut  uint32
 	From uint32
 	Span []Message
+	// Pinned is the person's message a cut on a round keeps in the body,
+	// outside the span: the first of the cut's turn. Zero for a cut on a
+	// turn start.
+	Pinned uint32
 	// Previous is the standing summary, empty without one.
 	Previous string
 	// Label is the least label the compaction may carry: the join of the
@@ -277,21 +287,25 @@ func PlanCompaction(entries []agentrun.Entry, order Order, c Constants, reported
 		}
 	}
 	starts = slices.DeleteFunc(starts, func(o uint32) bool { return !live[o] })
-	keep := c.KeepTurns
-	if keep < 1 {
-		keep = 1
+	keep := max(c.KeepTurns, 1)
+	// The rounds are tried inside the kept turns: from the first kept
+	// turn's start on, or from the previous cut when there are fewer turns
+	// than the kept ones.
+	roundsFrom := cut
+	if len(starts) >= keep {
+		roundsFrom = starts[len(starts)-keep]
+		// A cut at the first kept turn's start keeps exactly the kept turns.
+		starts = starts[:len(starts)-keep+1]
+	} else {
+		starts = nil
 	}
-	if len(starts) < keep {
-		p.Verdict = VerdictRefuse
-		return
-	}
-	// A cut at the first kept turn's start keeps exactly the kept turns.
-	starts = starts[:len(starts)-keep+1]
-	// Cheapest first: the earliest cut whose elision fits keeps the most
-	// without a model; failing every cut, the earliest whose summary fits
-	// is summarised. A cut that removes nothing is no compaction. The
-	// elision's size is summed from pieces rendered once per message; the
-	// elision itself is rendered for the chosen cut alone.
+	// Cheapest first (§SD2, Update 2026-11-16): the earliest turn start
+	// whose elision fits keeps the most without a model; then the earliest
+	// round inside the kept turns whose elision fits; failing both, the
+	// earliest turn start whose summary fits is summarised. A cut that
+	// removes nothing is no compaction. The elision's size is summed from
+	// pieces rendered once per message; the elision itself is rendered for
+	// the chosen cut alone.
 	previous := p.Previous
 	label := p.Label
 	pieces := make(map[uint32]string, len(b.Messages))
@@ -301,9 +315,10 @@ func PlanCompaction(entries []agentrun.Entry, order Order, c Constants, reported
 		}
 	}
 	band := messageTokens(Message{Content: Recalled("self", RunText(run), 0, "")})
-	var summarise Plan
-	for _, s := range starts {
-		q := Plan{Cut: s, From: cut, Previous: previous, Label: label, Estimated: p.Estimated}
+	// try sizes the cut at s; pin is the person's message a round cut
+	// keeps in the body, outside the span.
+	try := func(s uint32, pin uint32) (q Plan, elides bool, summarises bool) {
+		q = Plan{Cut: s, From: cut, Pinned: pin, Previous: previous, Label: label, Estimated: p.Estimated}
 		var removed int64
 		elidedBytes := len(elidePrefix(previous))
 		for _, m := range b.Messages {
@@ -311,6 +326,12 @@ func PlanCompaction(entries []agentrun.Entry, order Order, c Constants, reported
 				q.CutText = m.Content
 			}
 			if m.Part != PartBody || m.Ordinal >= s {
+				continue
+			}
+			if m.Ordinal == pin {
+				// Kept in the body, but inside [From, Cut): the label
+				// covers it as law L3 reads the span.
+				q.Label = q.Label.Join(m.Label)
 				continue
 			}
 			if len(q.Span) > 0 {
@@ -325,22 +346,36 @@ func PlanCompaction(entries []agentrun.Entry, order Order, c Constants, reported
 			}
 		}
 		if len(q.Span) == 0 {
-			continue
+			return
 		}
 		// What the compaction leaves: the request less the span and the
 		// standing summary, plus the new summary message.
 		rest := p.Estimated - removed - previousTokens
 		q.After = rest + band + int64(elidedBytes)/4
 		if q.After+c.RoundMarginTokens <= c.TriggerTokens {
-			q.Verdict = VerdictElide
+			q.Verdict, elides = VerdictElide, true
+			return
+		}
+		if after := rest + c.summaryAllowance(); after+c.RoundMarginTokens <= c.TriggerTokens {
+			q.Verdict, q.After, summarises = VerdictSummarise, after, true
+		}
+		return
+	}
+	var summarise Plan
+	for _, s := range starts {
+		q, elides, summarises := try(s, 0)
+		if elides {
 			q.Elided = Elide(previous, q.Span, c.ElideMinBytes)
 			return q
 		}
-		if summarise.Verdict == VerdictNone {
-			if after := rest + c.summaryAllowance(); after+c.RoundMarginTokens <= c.TriggerTokens {
-				q.Verdict, q.After = VerdictSummarise, after
-				summarise = q
-			}
+		if summarises && summarise.Verdict == VerdictNone {
+			summarise = q
+		}
+	}
+	for _, r := range roundCuts(es, live, roundsFrom, c.KeepRounds) {
+		if q, elides, _ := try(r, roundCutPin(es, r)); elides {
+			q.Elided = Elide(previous, q.Span, c.ElideMinBytes)
+			return q
 		}
 	}
 	if summarise.Verdict == VerdictNone {
@@ -349,6 +384,71 @@ func PlanCompaction(entries []agentrun.Entry, order Order, c Constants, reported
 	}
 	summarise.Elided = Elide(previous, summarise.Span, c.ElideMinBytes)
 	return summarise
+}
+
+// roundCuts are the round cuts the plan may take, earliest first: each
+// live reply after from that opens a round, the latest keep rounds
+// excluded, and none with a call before it answered at or after it (law
+// L2). es is sorted by ordinal.
+func roundCuts(es []agentrun.Entry, live map[uint32]bool, from uint32, keep int) (cuts []uint32) {
+	keep = max(keep, 1)
+	var replies []uint32
+	for _, e := range es {
+		if e.Kind == agentrun.KindReply && e.Ordinal > from && live[e.Ordinal] {
+			replies = append(replies, e.Ordinal)
+		}
+	}
+	if len(replies) < keep {
+		return nil
+	}
+	// A cut at the keep-th reply from the end keeps exactly the kept rounds.
+	replies = replies[:len(replies)-keep+1]
+	// answeredAt is where each call is answered, opened where it is called.
+	opened := make(map[string]uint32)
+	answeredAt := make(map[string]uint32)
+	for _, e := range es {
+		switch e.Kind {
+		case agentrun.KindReply:
+			for _, call := range ParseCalls(e.Calls) {
+				opened[call.Id] = e.Ordinal
+			}
+		case agentrun.KindOutcome:
+			if _, ok := opened[e.Name]; ok {
+				answeredAt[e.Name] = max(answeredAt[e.Name], e.Ordinal)
+			}
+		}
+	}
+	for _, r := range replies {
+		inside := false
+		for id, at := range opened {
+			if at < r && answeredAt[id] >= r {
+				inside = true
+				break
+			}
+		}
+		if !inside {
+			cuts = append(cuts, r)
+		}
+	}
+	return
+}
+
+// roundCutPin is the person's message a cut on a round keeps in the
+// body (ADR-0316 Update 2026-11-16): the first user entry of the turn of
+// the reply the cut sits on. It is zero for a cut that is not on a reply,
+// or on a reply with no turn. es is sorted by ordinal.
+func roundCutPin(es []agentrun.Entry, cut uint32) (pin uint32) {
+	i, found := slices.BinarySearchFunc(es, cut, func(e agentrun.Entry, o uint32) int { return int(e.Ordinal) - int(o) })
+	if !found || es[i].Kind != agentrun.KindReply || es[i].Turn == "" {
+		return 0
+	}
+	turn := es[i].Turn
+	for _, e := range es[:i] {
+		if e.Kind == agentrun.KindUser && e.Turn == turn {
+			return e.Ordinal
+		}
+	}
+	return 0
 }
 
 // elideHeading opens an elided span.
@@ -459,9 +559,11 @@ func PersonVerbatim(person []Message, pinBytes int) string {
 
 // CheckCompaction is laws L22, L23, L25 and the boundary rule of L2 over a
 // journal (ADR-0316 §SD4): each compact's From is the previous cut, cuts
-// strictly increase, a cut is a user entry no earlier call is answered
-// past, and every live user message before a cut is in the summary
-// verbatim or the summary is marked. It returns a line per breach.
+// strictly increase, a cut is a user entry or a reply opening a round
+// (Update 2026-11-16) that no earlier call is answered past, and every
+// live user message before a cut is in the summary verbatim or the
+// summary is marked, but the one a cut on a round keeps in the body. It
+// returns a line per breach.
 func CheckCompaction(entries []agentrun.Entry) (broken []string) {
 	es := slices.Clone(entries)
 	slices.SortFunc(es, func(a, b agentrun.Entry) int { return int(a.Ordinal) - int(b.Ordinal) })
@@ -502,9 +604,10 @@ func CheckCompaction(entries []agentrun.Entry) (broken []string) {
 		if e.Target == 0 || e.Target >= e.Ordinal {
 			broken = append(broken, at(e.Ordinal)+": the cut is not an earlier ordinal")
 		}
-		if t, ok := byOrdinal[e.Target]; !ok || t.Kind != agentrun.KindUser {
-			broken = append(broken, at(e.Ordinal)+": L2: the cut is not a user entry")
+		if t, ok := byOrdinal[e.Target]; !ok || (t.Kind != agentrun.KindUser && t.Kind != agentrun.KindReply) {
+			broken = append(broken, at(e.Ordinal)+": L2: the cut is not a user entry or a reply")
 		}
+		pin := roundCutPin(es, e.Target)
 		open := make(map[string]bool)
 		for _, x := range es {
 			if x.Ordinal >= e.Ordinal {
@@ -521,7 +624,7 @@ func CheckCompaction(entries []agentrun.Entry) (broken []string) {
 		}
 		marked := strings.Contains(e.Body, PersonSummarisedMark)
 		for _, x := range es {
-			if x.Kind != agentrun.KindUser || x.Ordinal < e.From || x.Ordinal >= e.Target || x.Ordinal >= e.Ordinal || dropped[x.Ordinal] || shown[x.Ordinal] == "" {
+			if x.Kind != agentrun.KindUser || x.Ordinal < e.From || x.Ordinal >= e.Target || x.Ordinal >= e.Ordinal || x.Ordinal == pin || dropped[x.Ordinal] || shown[x.Ordinal] == "" {
 				continue
 			}
 			if !marked && !strings.Contains(e.Body, shown[x.Ordinal]) {

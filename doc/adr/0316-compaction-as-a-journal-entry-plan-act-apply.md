@@ -285,6 +285,64 @@ out over the trigger. The context meter, which read the last answer's
 reported size one answer too long, reads the request as re-projected
 after a cut until the next answer reports its own.
 
+### 2026-11-16 — §SD2, §SD3, §SD4: elision may cut at a round inside the kept turns
+
+The plan's candidate cuts were turn starts outside the kept turns, so a
+request whose kept turns alone pass the trigger was refused, every turn
+it stayed there. In a coordinator's work that is the common case, not
+the edge: one message from the person starts many tool rounds, and their
+results grow the turn the plan may not touch. A conversation's first
+`KeepTurns` turns can never be compacted at all. The refusal sends the
+request as it is, and the overflow claimant it relies on is not built
+(SD6). Two other harnesses read on this date compact inside the running
+turn rather than refuse: opencode keeps a recent tail sized in tokens
+rather than turns, and crush summarises the whole session between steps
+and re-queues the request.
+
+The plan gains one rung, between eliding at a turn start and
+summarising:
+
+- **elide at a round** — when no turn-start cut fits by elision, the
+  candidates are the rounds inside the kept turns, earliest first, each
+  cut on the reply entry that opens a round, with every call before it
+  answered (L2's span rule, unchanged), and the latest `KeepRounds`
+  rounds kept whole. Only elision is planned at a round: the turn's tool
+  results become stubs that `recall` brings back, and the model's words
+  and call names stay. A summary still cuts only at a turn start, and
+  is tried after this rung, so a conversation that elision at a round
+  cannot bring under the trigger is summarised as before.
+
+**The person's message stays in the body.** A round cut places the
+opening message of its turn before the cut. In the elision it would
+re-enter in the recalled band, at the model's level, and the request the
+turn is working on must not be demoted (SD3, "the person is not
+summarised"). The apply pass therefore keeps the first user entry of the
+cut reply's turn, with its latest edit, as a body message at its own
+level, after the recalled band and before the entries from the cut on,
+and the elision leaves it out rather than carry it twice. The rule
+follows from the target's kind, so the `compact` entry gains no field;
+the SQL projection reads the journal's `turn` column for it. When a later
+cut leaves that turn, its message goes into the elision like any other.
+
+**Laws.** L2: a cut sits on a user entry or on a reply, never inside a
+call–result span. L25: the message a round cut keeps in the body is not
+asked of the elision; the others before the cut are verbatim in it or
+marked, as before. L3 reads `[From, Cut)`, the kept message included, so
+the compaction's label covers it. L22, L23 and L24 are unchanged.
+
+**What still refuses.** A request over the trigger when the latest
+`KeepRounds` rounds, the head and the person's message alone pass it,
+which a single large result can do; and one where the rolling elision
+has itself grown past what the trigger leaves, a stub a result, with no
+turn start a summary fits at. The first is the overflow claimant's to
+handle, which stays deferred; the second needs the combined entry below.
+
+**Migration.** `KeepRounds` is a profile constant (default 2), checked
+for thrash with the others, so a profile's fingerprint changes and a
+resumed run compares against the new one. A summary combined with an
+elision at a round in one entry is deferred: when a turn-start summary
+does not fit on its own, the plan refuses.
+
 ## References
 
 - [ADR-0265](./0265-chat-app-over-retained-model-calls.md) §SD5 — the deferred context window.
