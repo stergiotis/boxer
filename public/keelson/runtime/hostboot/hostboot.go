@@ -27,6 +27,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/appcenter"
 	appcenterlaunch "github.com/stergiotis/boxer/public/keelson/runtime/appcenter/launchcfg"
+	"github.com/stergiotis/boxer/public/keelson/runtime/appoverride"
 	"github.com/stergiotis/boxer/public/keelson/runtime/appstate"
 	"github.com/stergiotis/boxer/public/keelson/runtime/attention"
 	"github.com/stergiotis/boxer/public/keelson/runtime/attention/attentionchrome"
@@ -217,6 +218,14 @@ type Options struct {
 	// Registry is the app registry the window host serves; nil is
 	// app.DefaultRegistry.
 	Registry *app.Registry
+	// AppsOverrideSql restates the descriptive properties of the
+	// registered apps for this process (ADR-0376, proposed): a ClickHouse
+	// SELECT over keelson.apps returning id and any of display, summary,
+	// icon, topics, keywords and maturity, evaluated once at boot before
+	// the launch limit. It is a downstream binary's override;
+	// KEELSON_APPS_OVERRIDE_SQL, the operator's, is applied after it and
+	// reads the table as it left it. Empty overrides nothing.
+	AppsOverrideSql string
 	// Workstatelets is the catalog the window host opens workstatelet
 	// documents from and captured ones are minted into (ADR-0369,
 	// proposed); nil is workstatelet.DefaultCatalog.
@@ -525,6 +534,12 @@ func Boot(ctx context.Context, opts Options) (rt *Runtime, err error) {
 	reg := opts.Registry
 	if reg == nil {
 		reg = app.DefaultRegistry
+	}
+	// The override (ADR-0376) lands before the launch limit, so the
+	// predicates over keelson.apps select by the values it leaves.
+	if err = appoverride.Apply(ctx, rt.Bus, reg, rt.ChLocal != nil, opts.AppsOverrideSql, logger); err != nil {
+		err = eh.Errorf("hostboot: %w", err)
+		return
 	}
 	if err = launchlimit.Apply(ctx, rt.Bus, reg, rt.ChLocal != nil, logger); err != nil {
 		err = eh.Errorf("hostboot: %w", err)

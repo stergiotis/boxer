@@ -225,7 +225,11 @@ func appsTable(reg *app.Registry, rs []app.Registration) *introspect.Table {
 		String("module_version", func(i int) string { return rs[i].Origin.ModuleVersion }).
 		String("module_sum", func(i int) string { return rs[i].Origin.ModuleSum }).
 		String("module_replace", func(i int) string { return rs[i].Origin.Replace }).
-		Bool("module_main", func(i int) bool { return rs[i].Origin.Main })
+		Bool("module_main", func(i int) bool { return rs[i].Origin.Main }).
+		// The columns whose values a deployment's override replaced at boot
+		// (KEELSON_APPS_OVERRIDE_SQL or the host's wiring, ADR-0376); empty
+		// when the row is as the app declared it.
+		StringList("overridden", func(i int) []string { return rs[i].Overridden })
 }
 
 // --- build (runinfo + vcs) ---------------------------------------------------

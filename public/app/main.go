@@ -79,6 +79,9 @@ import (
 	// BOXER_TRAILVIEWER_* (ADR-0350, proposed); read by the trail viewer,
 	// which only the graphical host links.
 	_ "github.com/stergiotis/boxer/public/keelson/runtime/trailviewer"
+	// KEELSON_APPS_OVERRIDE_SQL (ADR-0376); read by hostboot, which this
+	// binary does not link.
+	_ "github.com/stergiotis/boxer/public/keelson/runtime/appoverride"
 	// KEELSON_LAUNCHABLE_APPS_WHERE (ADR-0272); read by hostboot, which this
 	// binary does not link.
 	_ "github.com/stergiotis/boxer/public/keelson/runtime/launchlimit"

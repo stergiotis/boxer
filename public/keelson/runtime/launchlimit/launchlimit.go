@@ -74,22 +74,7 @@ func Evaluate(ctx context.Context, bus *inprocbus.Inst, reg *app.Registry, where
 // (ADR-0352 §SD3) composes with the launch limit by reading the
 // `launchable` column this package's Apply has already set.
 func EvaluateAs(ctx context.Context, bus *inprocbus.Inst, reg *app.Registry, as app.AppIdT, name string, where string, log zerolog.Logger) (ids []app.AppIdT, err error) {
-	tables := introspect.NewRegistry()
-	if err = tables.Register(providers.NewAppsProvider(reg)); err != nil {
-		return
-	}
-	pool := introspectengine.DefaultPoolName
-	client := bus.NewClient(as, []app.SubjectFilter{
-		{Pattern: chlocalbroker.SubjectExecPrefix + pool, Direction: app.CapDirectionPub, Reason: name + ": evaluate the predicate on clickhouse-local"},
-	})
-	defer func() { _ = client.Close() }()
-	eng, err := introspectengine.New(introspectengine.Config{Registry: tables, Bus: client, PoolName: pool}, log)
-	if err != nil {
-		return
-	}
-	ctx, cancel := context.WithTimeout(ctx, evalTimeout)
-	defer cancel()
-	body, _, err := eng.Query(ctx, "SELECT id FROM apps WHERE ("+where+") ORDER BY id", "TSVRaw")
+	body, err := QueryAs(ctx, bus, reg, as, name, "SELECT id FROM apps WHERE ("+where+") ORDER BY id", "TSVRaw", log)
 	if err != nil {
 		err = eb.Build().Str("where", where).Errorf("%s: evaluate the predicate: %w", name, err)
 		return
@@ -100,5 +85,30 @@ func EvaluateAs(ctx context.Context, bus *inprocbus.Inst, reg *app.Registry, as 
 			ids = append(ids, app.AppIdT(id))
 		}
 	}
+	return
+}
+
+// QueryAs runs sql on clickhouse-local over a table registry holding only
+// keelson.apps over reg's current rows, under the caller's bus identity and
+// name, and returns the body in format. It is the one place the boot-time
+// readers of keelson.apps — the predicates and the override (ADR-0376) —
+// reach the engine, so they read the same table.
+func QueryAs(ctx context.Context, bus *inprocbus.Inst, reg *app.Registry, as app.AppIdT, name string, sql string, format string, log zerolog.Logger) (body []byte, err error) {
+	tables := introspect.NewRegistry()
+	if err = tables.Register(providers.NewAppsProvider(reg)); err != nil {
+		return
+	}
+	pool := introspectengine.DefaultPoolName
+	client := bus.NewClient(as, []app.SubjectFilter{
+		{Pattern: chlocalbroker.SubjectExecPrefix + pool, Direction: app.CapDirectionPub, Reason: name + ": query keelson.apps on clickhouse-local"},
+	})
+	defer func() { _ = client.Close() }()
+	eng, err := introspectengine.New(introspectengine.Config{Registry: tables, Bus: client, PoolName: pool}, log)
+	if err != nil {
+		return
+	}
+	ctx, cancel := context.WithTimeout(ctx, evalTimeout)
+	defer cancel()
+	body, _, err = eng.Query(ctx, sql, format)
 	return
 }

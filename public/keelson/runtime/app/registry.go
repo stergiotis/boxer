@@ -1,6 +1,7 @@
 package app
 
 import (
+	"slices"
 	"sort"
 	"sync"
 
@@ -43,6 +44,9 @@ type entry struct {
 	// origin is the code that registered, observed at registration
 	// (ADR-0339).
 	origin Origin
+	// overridden are the keelson.apps columns an override replaced
+	// (ADR-0376), sorted; manifest holds the overridden values.
+	overridden []string
 }
 
 // Registration is one registry row: a manifest plus how it was
@@ -61,6 +65,9 @@ type Registration struct {
 	// Origin is the package and module whose code registered the app
 	// (ADR-0339), observed rather than declared.
 	Origin Origin
+	// Overridden are the keelson.apps columns whose values in Manifest an
+	// override replaced (ADR-0376), sorted; nil when none was.
+	Overridden []string
 }
 
 // Registry is the canonical list of apps in this process. Apps register
@@ -378,7 +385,7 @@ func (inst *Registry) Registrations() (regs []Registration) {
 	defer inst.mu.RUnlock()
 	regs = make([]Registration, len(inst.entries))
 	for i, e := range inst.entries {
-		regs[i] = Registration{Manifest: e.manifest, Singleton: e.singleton, OperationsDiagnostic: e.opsDiagnostic, Origin: e.origin}
+		regs[i] = Registration{Manifest: e.manifest, Singleton: e.singleton, OperationsDiagnostic: e.opsDiagnostic, Origin: e.origin, Overridden: slices.Clone(e.overridden)}
 	}
 	return
 }
