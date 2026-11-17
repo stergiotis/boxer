@@ -155,3 +155,12 @@ func TestLawL15FindsAnUnendorsedConsequentialAct(t *testing.T) {
 }
 
 func jsonUnmarshal(s string, v any) error { return json.Unmarshal([]byte(s), v) }
+
+// A refusal reads as one in the turn's steps, whoever refused.
+func TestARefusedOutcomeIsARefusal(t *testing.T) {
+	assert.True(t, callRefused(`{"phase":"refused","reason":"above the ceiling"}`))
+	assert.True(t, callRefused(`{"phase":"denied"}`))
+	assert.False(t, callRefused(`{"phase":"completed"}`))
+	assert.False(t, callRefused(`{"phase":"conflict"}`))
+	assert.False(t, callRefused("not json"))
+}

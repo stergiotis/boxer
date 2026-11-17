@@ -382,7 +382,7 @@ func (sequentialTools) run(s *roundState) {
 			form = agentrun.FormPending
 		}
 		coord.steps.finish(step, func(st *turnStep) {
-			st.result, st.activity, st.refused = clip(content, stepResultMax), activity, strings.HasPrefix(content, "error:")
+			st.result, st.activity, st.refused = clip(content, stepResultMax), activity, strings.HasPrefix(content, "error:") || callRefused(content)
 		})
 		s.out.activity = append(s.out.activity, activity)
 		untrusted, confined := coord.lastResultLabel()

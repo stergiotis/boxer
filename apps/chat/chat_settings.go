@@ -411,6 +411,7 @@ func (inst *App) renderSettings() {
 	inst.renderMaySection()
 	inst.renderConversationSection()
 	inst.renderModelSection()
+	inst.renderHarnessSection()
 }
 
 // renderMaySection is the scale and the options that move it.
@@ -506,9 +507,6 @@ func (inst *App) renderMaySection() {
 			c.Checkbox(inst.ids.PrepareStr("desktop"), inst.perms.desktop, "Arrange the desktop").SendRespVal(&inst.perms.desktop)
 		}
 	}
-	for range c.HoverText(tipTyped).KeepIter() {
-		c.Checkbox(inst.ids.PrepareStr("typed"), inst.opTools, "A tool per operation").SendRespVal(&inst.opTools)
-	}
 	c.AddSpace(styletokens.PaddingInner(styletokens.ActiveDensity()))
 	for range c.HoverText(tipPixels).KeepIter() {
 		c.Label("Pixels").Selectable(false).Send()
@@ -542,14 +540,26 @@ func (inst *App) renderMaySection() {
 	case !p.reaches():
 		weak("This conversation's model is off this machine and not trusted with sealed data: it sees no pixels.")
 	}
-	c.AddSpace(styletokens.PaddingInner(styletokens.ActiveDensity()))
-	lo, hi := roundRange()
-	for range c.HorizontalTop().KeepIter() {
-		for range c.HoverText(tipRounds).KeepIter() {
-			c.SliderF64(inst.ids.PrepareStr("rounds"), inst.rounds, float64(lo), float64(hi)).
-				Integer().Text("rounds per turn").SendRespVal(&inst.rounds)
+}
+
+// renderHarnessSection is how the harness runs a turn: tuning a person
+// rarely moves, folded under Settings' last header.
+func (inst *App) renderHarnessSection() {
+	c.AddSpace(styletokens.PaddingOuter(styletokens.ActiveDensity()))
+	for range c.CollapsingHeader(inst.ids.PrepareStr("harness"), c.WidgetText().Text("Harness").Keep()).KeepIter() {
+		if inst.coord != nil {
+			for range c.HoverText(tipTyped).KeepIter() {
+				c.Checkbox(inst.ids.PrepareStr("typed"), inst.opTools, "A tool per operation").SendRespVal(&inst.opTools)
+			}
 		}
-		weak("(" + strconv.Itoa(lo) + "–" + strconv.Itoa(hi) + ")")
+		lo, hi := roundRange()
+		for range c.HorizontalTop().KeepIter() {
+			for range c.HoverText(tipRounds).KeepIter() {
+				c.SliderF64(inst.ids.PrepareStr("rounds"), inst.rounds, float64(lo), float64(hi)).
+					Integer().Text("rounds per turn").SendRespVal(&inst.rounds)
+			}
+			weak("(" + strconv.Itoa(lo) + "–" + strconv.Itoa(hi) + ")")
+		}
 	}
 }
 

@@ -97,7 +97,7 @@ func (inst *artefactView) ensure(n int, text string, set []artImage, store *imag
 	if inst.inline == nil {
 		inst.inline = make(map[string]imagedecode.Thumbnail)
 	}
-	inst.doc = markdown.ParseWith([]byte(text), markdown.ParseOptions{
+	inst.doc = markdown.ParseWith([]byte(withoutChatProperties(text)), markdown.ParseOptions{
 		Resolver:  &artImageResolver{set: set, store: store, decoded: inst.inline},
 		ImageMaxW: uint32(artefactPanelW) - 40,
 		ImageMaxH: pixelPreviewH,
@@ -116,9 +116,11 @@ func (inst *artefactView) ensure(n int, text string, set []artImage, store *imag
 	inst.findings = artLinter.LintSource([]byte(text))
 }
 
+// diffOf is the diff of two revisions as the person reads them, without the
+// chat's properties (withoutChatProperties), built once per key.
 func (inst *artefactView) diffOf(key string, old string, new string) []diffLine {
 	if inst.diffKey != key {
-		inst.diffKey, inst.diff = key, lineDiff(old, new)
+		inst.diffKey, inst.diff = key, lineDiff(withoutChatProperties(old), withoutChatProperties(new))
 	}
 	return inst.diff
 }
@@ -145,7 +147,7 @@ func (inst *App) renderArtefact() {
 		c.Label("revision " + strconv.Itoa(n) + " · " + plural(lineCount(text), "line")).Selectable(false).Send()
 		if text != "" {
 			if c.Button(inst.ids.PrepareStr("art-copy"), atomsArtCopy).Small().SendResp().HasPrimaryClicked() {
-				inst.copyText("the artefact", text)
+				inst.copyCited("the artefact", text, text+citationFoot(text, inst.conv.citationIndex()))
 			}
 			inst.renderEndorse(n, text)
 			for range c.HoverText(tipArtExport).KeepIter() {
@@ -162,6 +164,14 @@ func (inst *App) renderArtefact() {
 					}
 				}
 			}
+		}
+	}
+	if text != "" {
+		if inst.renderCiteHold("art-copy", "copy the artefact", text) {
+			inst.copyCited("the artefact", text, text+citationFoot(text, inst.conv.citationIndex()))
+		}
+		if inst.renderCiteHold("art-mdedit", "open the artefact in mdedit", text) {
+			inst.openArtefactInMdedit(text)
 		}
 	}
 	switch p := art.policyNow(); {

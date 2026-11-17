@@ -21,8 +21,8 @@ ADR-0282 on the headless host, against the scripted model in
 panel as a diff.
 
 - The first write is a draft whose link `[[#Risk]]` names no heading; the
-  diff shows the chat's `chat_*` properties stamped into its frontmatter
-  beside the model's own. It is accepted and becomes revision 1, and the
+  diff shows the model's own properties and leaves out the `chat_*` ones the
+  chat stamps beside them (ADR-0379 §SD5). It is accepted and becomes revision 1, and the
   write's result carries the lint finding.
 - The second write fixes the link; accepted, it is revision 2.
 - In Revisions, the person selects revision 1, sees its diff and reverts to
@@ -40,7 +40,7 @@ panel as a diff.
 {"do":"wait","valueContains":"Proposed change","role":"label","settleMs":500}
 {"do":"wait","valueContains":"Drafting the plan · artefact_write","role":"label"}
 {"do":"wait","valueContains":"Drafting the plan (artefact_write) · waiting for you","role":"label","comment":"the trail says the write waits on the person"}
-{"do":"wait","valueContains":"+ chat_conversation: chat-","role":"label","comment":"the chat's properties, in the diff"}
+{"do":"wait","valueContains":"+ status: draft","role":"label","comment":"the model's properties in the diff; the chat's own are left out of it (ADR-0379 §SD5)"}
 {"do":"capture","text":"chat-artefact-proposal"}
 {"do":"click","contains":"Accept","role":"button"}
 {"do":"wait","valueContains":"Fixing the link · artefact_edit","role":"label","settleMs":500}

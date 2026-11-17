@@ -26,7 +26,7 @@ weight.
 {"do":"note","text":"ADR-0324: F8, next by weight"}
 {"do":"wait","valueContains":"→ scripted","role":"label"}
 {"do":"click","contains":"Send","role":"button","comment":"the seeded draft"}
-{"do":"click","contains":"Watch","role":"button","comment":"tell me when this turn ends"}
+{"do":"click","name":"\ue0d0 Watch","role":"button","comment":"tell me when this turn ends; by name, since the launcher lists Watchbill"}
 {"do":"click","contains":"Widget gallery","role":"window","pointer":true,"comment":"look elsewhere while the model answers"}
 {"do":"read","contains":"nothing waits on you","role":"button","on":"name","pattern":"(?P<highlights>\\d+)$","comment":"the turn ended unseen"}
 {"do":"expect","of":"highlights","eq":1}

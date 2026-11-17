@@ -142,3 +142,38 @@ func TestAFormAnsweredInTheHostsCard(t *testing.T) {
 	_, ok = replyOf(qs, attention.Answer{Phase: attention.PhaseAnswered, Choices: [][]int{{0}}})
 	assert.False(t, ok, "half a form is not an answer")
 }
+
+// A question is the window's alone while the person is in the window, and
+// waits in the host's queue once they are not.
+func TestAQuestionGoesToTheQueueOnlyOnceTheWindowLosesFocus(t *testing.T) {
+	q := &fakeQueue{}
+	var mu sync.Mutex
+	in := true
+	a := &asker{host: q, focused: func() bool {
+		mu.Lock()
+		defer mu.Unlock()
+		return in
+	}}
+	posted := func() int {
+		q.mu.Lock()
+		defer q.mu.Unlock()
+		return len(q.posted)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go func() { _, _ = a.askVia(ctx, twoOptions(), asQuestion) }()
+	require.Eventually(t, func() bool { return a.current() != nil }, time.Second, 5*time.Millisecond)
+	time.Sleep(3 * hostPollInterval)
+	assert.Equal(t, 0, posted(), "the window has the person: no card")
+	mu.Lock()
+	in = false
+	mu.Unlock()
+	require.Eventually(t, func() bool { return posted() == 1 }, 2*time.Second, 10*time.Millisecond, "they looked elsewhere: the card")
+	mu.Lock()
+	in = true
+	mu.Unlock()
+	time.Sleep(3 * hostPollInterval)
+	q.mu.Lock()
+	assert.Equal(t, 0, q.withdrawn, "a posted card stays until it is answered")
+	q.mu.Unlock()
+}

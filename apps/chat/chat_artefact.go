@@ -315,24 +315,64 @@ func (inst *artefact) commit(base int, rev artRevision) (n int, err error) {
 	return rev.n, nil
 }
 
-// restore puts the journal's head on the artefact, under its number, for a
-// resume: over nothing, or over the revision an export brought back
-// (ADR-0342 §SD7) when the journal's is later. The revisions between are
-// not read back, so a revert reaches the export's at most. The head comes
-// without screenshots: their bytes are sealed to the process (ADR-0284).
-// Nothing is restored over an artefact that moved.
+// restore puts one revision from the journal on the artefact, under its
+// number: restoreHistory with a history of one.
 func (inst *artefact) restore(n int, text string) (ok bool) {
+	return inst.restoreHistory([]artRevision{{n: n, text: text, source: revSourceResume, atMs: time.Now().UnixMilli()}})
+}
+
+// restoreHistory puts the revisions the journal read back (artefactHistoryOf)
+// on the artefact for a resume, numbers rising: over nothing, or around the
+// revision an export brought back (ADR-0342 §SD7), which stands for its own
+// number. The journal keeps text and not screenshots (ADR-0284): a revision
+// before the export's has none, and one after takes the set before it, as a
+// text write does, so the export's survive into the head. ok says the head
+// moved. Nothing is restored over an artefact that moved.
+func (inst *artefact) restoreHistory(revs []artRevision) (ok bool) {
 	inst.mu.Lock()
 	defer inst.mu.Unlock()
-	if inst.proposal != nil || n <= 0 {
+	if inst.proposal != nil || len(inst.revs) > 1 {
 		return false
 	}
-	if k := len(inst.revs); k > 0 && (k > 1 || inst.revs[0].n >= n) {
+	var exported *artRevision
+	if len(inst.revs) == 1 {
+		e := inst.revs[0]
+		exported = &e
+	}
+	headBefore := 0
+	if exported != nil {
+		headBefore = exported.n
+	}
+	out := make([]artRevision, 0, len(revs)+1)
+	for _, r := range revs {
+		if r.n <= 0 {
+			continue
+		}
+		if exported != nil && r.n >= exported.n {
+			out = append(out, *exported)
+			exported = nil
+			if out[len(out)-1].n == r.n {
+				continue
+			}
+		}
+		var prev []artImage
+		if k := len(out); k > 0 {
+			prev = out[k-1].images
+		}
+		r.images, r.ownImages = append([]artImage(nil), prev...), true
+		out = append(out, r)
+	}
+	if exported != nil {
+		out = append(out, *exported)
+	}
+	if len(out) == 0 {
 		return false
 	}
-	inst.revs = append(inst.revs, artRevision{n: n, text: text, source: revSourceResume, atMs: time.Now().UnixMilli(), ownImages: true})
-	inst.lastN = max(inst.lastN, n)
-	return true
+	inst.revs = out
+	for _, r := range out {
+		inst.lastN = max(inst.lastN, r.n)
+	}
+	return out[len(out)-1].n != headBefore
 }
 
 // reserveThrough keeps the numbers up to n from being handed out.

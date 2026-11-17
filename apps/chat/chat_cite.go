@@ -84,7 +84,7 @@ const citeNote = "Refer to an assertion in your reply by its id in square bracke
 
 // citeSchema is the cite tool's parameter schema.
 var citeSchema = `{"type":"object","properties":{"assertions":{"type":"array","minItems":1,"maxItems":` + strconv.Itoa(maxCiteAssertions) + `,"items":{"type":"object","properties":{` +
-	`"id":{"type":"string","description":"letters then digits, unique in this turn: a1, a2"},` +
+	`"id":{"type":"string","description":"letters then digits, unique in this conversation: an id an earlier turn used is refused, so take the next free one the last cite named: a1, a2, …"},` +
 	`"rests_on":{"type":"array","minItems":1,"items":{"type":"string"},"description":"what the claim is drawn from, in one window: the result_id a query, describe_result or sample_rows answered with (its result's id), as text, e.g. \"12\""},` +
 	`"says":{"type":"string","description":"the claim as the reply will state it"},` +
 	`"form":{"type":"string","enum":["value","holds"],"description":"value: the statement returns one cell, compared with expect at the precision expect shows; holds: it returns one boolean"},` +
@@ -126,6 +126,7 @@ func (inst *coordinator) cite(ctx context.Context, o toolOrigin, call openaichat
 		return "error: at most " + strconv.Itoa(maxCiteCalls) + " cite calls per turn; answer with what held", "cite: budget spent"
 	}
 	seen := map[string]bool{}
+	usedBefore := assertionIdsBefore(entries, o.turn)
 	res := citeResult{Note: citeNote}
 	counts := map[string]int{}
 	var verdicts []agentrun.Entry
@@ -138,6 +139,10 @@ func (inst *coordinator) cite(ctx context.Context, o toolOrigin, call openaichat
 			out.Reason = "the id must be letters then digits, e.g. a1"
 		case seen[a.Id]:
 			out.Reason = "the id names an earlier assertion of this call"
+		case usedBefore[a.Id]:
+			// An artefact gathers references across turns: one id naming two
+			// checks would be checked, shown and copied as the later one.
+			out.Reason = "the id " + a.Id + " names an assertion of an earlier turn, and ids are unique in this conversation; use " + nextAssertionId(usedBefore, seen)
 		case a.Form != assertionValue && a.Form != assertionHolds:
 			out.Reason = "the form must be value or holds"
 		case strings.TrimSpace(a.Statement) == "":
@@ -175,8 +180,34 @@ func (inst *coordinator) cite(ctx context.Context, o toolOrigin, call openaichat
 		log.Warn().Err(err).Str("conversation", inst.conversation).Msg("chat: the verdicts were not journaled")
 		return "error: the verdicts could not be recorded: " + err.Error(), "cite: not journaled"
 	}
+	res.Note += " The next free id is " + nextAssertionId(usedBefore, seen) + "."
 	b, _ = json.Marshal(res)
 	return string(b), "cite · " + citeSummary(counts)
+}
+
+// assertionIdsBefore are the assertion ids the conversation's turns before
+// turn named in their verdicts (ADR-0340 §SD1, unique per conversation).
+func assertionIdsBefore(entries []agentrun.Entry, turn string) (ids map[string]bool) {
+	ids = map[string]bool{}
+	for _, e := range entries {
+		if e.Kind == agentrun.KindVerdict && e.Turn != turn {
+			ids[e.Name] = true
+		}
+	}
+	return
+}
+
+// nextAssertionId is the first a<n> above every a-numbered id in either set.
+func nextAssertionId(sets ...map[string]bool) string {
+	top := 0
+	for _, set := range sets {
+		for id := range set {
+			if n, err := strconv.Atoi(strings.TrimPrefix(id, "a")); err == nil && strings.HasPrefix(id, "a") && n > top {
+				top = n
+			}
+		}
+	}
+	return "a" + strconv.Itoa(top+1)
 }
 
 // citeSummary is the activity line's count of outcomes, in a fixed order.
@@ -369,11 +400,7 @@ func (inst *coordinator) noteResultId(key string, resultText string) {
 // resultIdOf is the result id a query outcome named, read out of the
 // outcome as the model saw it, delimiters stripped; 0 when it named none.
 func resultIdOf(body string) (id uint64) {
-	text := body
-	if i := strings.Index(text, "\">>\n"); strings.HasPrefix(text, untrustedOpen) && i >= 0 {
-		text = text[i+len("\">>\n"):]
-		text = strings.TrimSuffix(strings.TrimRight(text, "\n"), untrustedClose)
-	}
+	text, _, _ := unwrapUntrusted(body)
 	var co struct {
 		Result map[string]any `json:"result"`
 	}

@@ -298,7 +298,7 @@ func TestAStopHoldsTheTurnAndContinueGoesOn(t *testing.T) {
 	go func() {
 		o := waitAsk(t, coord)
 		assert.Contains(t, o.questions[0].Question, `The stop "box" fired`)
-		assert.Contains(t, o.questions[0].Question, row)
+		assert.Contains(t, o.questions[0].Question, stopRowText(row), "the row as fields")
 		assert.Equal(t, stagePerson, coord.stageNow())
 		o.form.single[0], o.form.chosen[0][0] = 0, true
 		o.submit()
@@ -354,7 +354,7 @@ func TestStopEndAndCloseEndTheTurn(t *testing.T) {
 		coord.setStops(mustStops(t, Stop{Name: "size", Then: then, ArtefactBytes: 10}))
 		res, err := runTurn(context.Background(), cli, coord, req, nil)
 		require.NoError(t, err, then)
-		assert.Contains(t, res.stopped, `the stop "size" fired (each 10 bytes the artefact reaches): {"steps":1}`, then)
+		assert.Contains(t, res.stopped, `the stop "size" fired (each 10 bytes the artefact reaches): steps 1`, then)
 		assert.Equal(t, ended, res.ended, then)
 		assert.Empty(t, model.seen, "no model call was made: "+then)
 		assert.True(t, coord.wakesHeld, then)
@@ -434,4 +434,17 @@ func TestTheHelpPagesStatementsAreAdmittedAndRun(t *testing.T) {
 		assert.Empty(t, r.err, r.name)
 		assert.Empty(t, r.rows, r.name)
 	}
+}
+
+// A held turn's question reads a tool call's row as fields, not as the
+// worker's JSON line with its arguments escaped a second time.
+func TestAStopRowReadsAsFields(t *testing.T) {
+	row := `{"ordinal":4,"position":0,"name":"ask_user","arguments":"{\"questions\":[{\"question\":\"Which format?\"}]}"}`
+	got := stopRowText(row)
+	assert.Equal(t, `ordinal 4 · position 0 · name ask_user · arguments {"questions":[{"question":"Which format?"}]}`, got)
+	assert.NotContains(t, stopQuestion([]stopFiring{{Stop: "before-asking", What: "each tool call", Shown: []string{row}}}), `\"`)
+
+	long := `{"match":"` + strings.Repeat("x", 200) + `"}`
+	assert.Equal(t, "match "+strings.Repeat("x", stopRowValueRunes)+"…", stopRowText(long))
+	assert.Equal(t, "not json", stopRowText("not json"))
 }

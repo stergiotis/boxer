@@ -89,8 +89,10 @@ data is held once, so the model can choose not to.
 ## Questions, the queue and the journal
 
 With **Questions** on, `ask_user` puts a form of options in the
-conversation and the turn waits for your answer; the same question also
-waits in the host's queue, where it can be answered. Decisions the model
+conversation and the turn waits for your answer. A question is drawn in
+one place (ADR-0379 §SD1): the form, while the chat window has your focus,
+and a card in the host's queue once you are in another window. A posted
+card stays until it is answered, and answering either settles both. Decisions the model
 owes you never open a modal: they are cards in the queue, acknowledged,
 shelved or answered there (ADR-0324).
 

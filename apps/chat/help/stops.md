@@ -24,7 +24,7 @@ means to avoid a pattern can. What the model may do is decided in
 
 Every stop is one `SELECT` over the conversation's own record. No rows means
 it is quiet. Any row means it fired, and the rows are what you are shown as
-the reason.
+the reason, each as its columns and values, a long value cut short.
 
 The tab shows the query each stop runs. For a stop of your own it is an SQL
 editor: change the statement there and press **Apply**. Until then the
@@ -92,8 +92,8 @@ one turn. A statement whose rows differ at every check fires at every check.
 
 | `then` | Effect |
 | --- | --- |
-| `pause` | holds the turn; the form in the transcript offers Continue and Stop the turn |
-| `ask` | holds the turn and puts the same question in the host's queue |
+| `pause` | holds the turn; the transcript asks with two buttons, Continue and Stop the turn |
+| `ask` | holds the turn, and puts the same question in the host's queue once the chat window loses your focus |
 | `stop` | ends the turn as stopped; the conversation stays open |
 | `end` | ends the conversation; the window stays and shows the record |
 | `close` | ends the conversation and closes the window; in a pane inside another app's window it acts as `end` |

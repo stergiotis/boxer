@@ -42,12 +42,15 @@ this. A chatlet's document sets its view, so its Settings do not offer this.
   spaces the model's changes so each can be followed and stopped.
 - **Open windows**, **Arrange the desktop** — whether a grant may let the
   model open windows and arrange them.
-- **A tool per operation** — each operation of the task's windows as a
-  typed tool beside `call_operation`.
 - **Pixels** — none, ask, ask-once, captures: which of the artefact's
   screenshots the model may see, and with whose consent (ADR-0287); **Only
   to a local model** keeps them to a model on this machine or one the host
   trusts with sealed data.
+
+The **Harness** header, folded, holds the tuning a person rarely moves:
+
+- **A tool per operation** — each operation of the task's windows as a
+  typed tool beside `call_operation`.
 - **rounds per turn** — a slider within the host's range.
 
 Under the scale a line says why *now* is where it is: no task yet, Apps

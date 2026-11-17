@@ -3,7 +3,7 @@ type: reference
 audience: contributor
 status: draft
 scene:
-  launch: chat
+  launch: "subject_alias IN ('chat','widgets')"
   size: 1400x900
   env:
     BOXER_LLM_SCRIPT: "apps/chat/scenes/chat-urgent.script.jsonl"
@@ -29,6 +29,7 @@ once.
 {"do":"wait","valueContains":"→ scripted","role":"label"}
 {"do":"click","contains":"Send","role":"button","comment":"the seeded draft"}
 {"do":"wait","valueContains":"needs a speed","role":"label"}
+{"do":"click","contains":"Chat","role":"window","pointer":true,"comment":"the chat in front: the gallery opened over it"}
 {"do":"click","contains":"Urgent","role":"button","comment":"the window asks the host"}
 {"do":"wait","name":"Make urgent","role":"button","comment":"the host's card, opened at once: the request came from the active window"}
 {"do":"capture","text":"chat-urgent-card"}
@@ -40,6 +41,7 @@ once.
 {"do":"wait","contains":"Busy · ","role":"button"}
 {"do":"type","role":"multiline_text_input","text":"Go on.","comment":"a second message: the scripted model answers by position"}
 {"do":"click","contains":"Send","role":"button"}
+{"do":"click","contains":"Widget gallery","role":"window","pointer":true,"comment":"look elsewhere: a question goes to the queue once the chat loses focus (ADR-0379 §SD1)"}
 {"do":"wait","contains":"Your turn — critical","role":"window","comment":"the question opens at once, Busy notwithstanding"}
 {"do":"capture","text":"chat-urgent-busy"}
 ```

@@ -62,7 +62,7 @@ const (
 	tipConvId     = "This conversation's id. The host's records name it — keelson('llm_calls') and keelson('agent_actions') in their conversation column, and the audit trail on boxer.facts — so it is what to search for to find what this chat did. New conversation starts a new one."
 	tipCopyConvId = "Copy the conversation's id"
 	tipOpenTrail  = "Open what this conversation did in play: its rows of the audit trail's timeline on boxer.facts, oldest first"
-	tipCopy       = "Copy this message's markdown"
+	tipCopy       = "Copy this message's markdown, its references marked with how their checks came out and its citations under it"
 	tipRetry      = "Send this message again"
 	tipEditFailed = "Put this message back in the composer to change it"
 	tipEdit       = "Take this turn back and put its message in the composer; sending replaces the answer. Cancel edit puts it back."
@@ -225,8 +225,10 @@ func (inst *App) renderBarNotice() {
 		// Shown until read, once per conversation; the badge's hover keeps
 		// the reason after.
 		for range c.HorizontalTop().KeepIter() {
-			badge.New(inst.ids.PrepareStr("not-kept"), "not kept: "+conv.notKept).
-				Tone(badge.ToneWarning).Variant(badge.VariantSoft).Size(badge.SizeSm).Send()
+			// The host's reason names its configuration; the line says what
+			// it means for the person, and the hover says why.
+			badge.New(inst.ids.PrepareStr("not-kept"), "not kept: the host stores no messages to read in play").
+				Tone(badge.ToneWarning).Variant(badge.VariantSoft).Size(badge.SizeSm).Tooltip("Not kept: " + conv.notKept + "\n\n" + tipKeep).Send()
 			if c.Button(inst.ids.PrepareStr("not-kept-ok"), atomsGotIt).Kind(c.ButtonKindGhost).Small().SendResp().HasPrimaryClicked() {
 				conv.notKeptNoted = true
 			}
@@ -381,7 +383,7 @@ func (inst *App) renderContext() {
 	}
 	if limit <= 0 {
 		for range c.HoverText(tipContext + " The host does not know the model's context size; BOXER_LLM_CONTEXT_TOKENS states it.").KeepIter() {
-			c.Label("context " + tokens(used)).Selectable(false).Send()
+			c.Label("context " + tokens(used) + " tokens").Selectable(false).Send()
 		}
 		return
 	}
@@ -396,7 +398,7 @@ func (inst *App) renderContext() {
 		tip += " Compaction is off for this conversation, so a full context fails the turn."
 	}
 	for range c.HoverText(tip).KeepIter() {
-		bar := c.ProgressBar(min(frac, 1)).DesiredWidth(contextBarW).Text("context " + tokens(used) + " / " + tokens(limit))
+		bar := c.ProgressBar(min(frac, 1)).DesiredWidth(contextBarW).Text("context " + tokens(used) + " / " + tokens(limit) + " tokens")
 		if over {
 			bar = bar.Fill(color.Hex(styletokens.WarningDefault.AsHex()))
 		}
@@ -464,21 +466,41 @@ func (inst *App) renderEmpty() {
 					rt.Heading()
 				}
 			}
+			// A started conversation is empty only while its one turn is
+			// taken back for an edit: what it was started with stands, and
+			// the window's settings are for the next conversation.
+			conv := inst.conv
+			if !preset && !conv.started {
+				// Before the first message, the choices it fixes are offered
+				// here, where the person is about to type, as well as in
+				// Settings.
+				inst.renderFirstSendChoices(first)
+				return
+			}
+			keep, questions := inst.keep, inst.questions
+			if conv.started {
+				keep, questions = conv.keep && conv.notKept == "", conv.questions
+			}
 			lines := []string{first}
-			if inst.keep {
+			switch {
+			case keep:
 				lines = append(lines, "kept on boxer.facts where the host allows; read afterwards in play")
-			} else {
+			case conv.started && conv.notKept != "":
+				lines = append(lines, "not kept: "+conv.notKept)
+			default:
 				lines = append(lines, "not kept: only the call counts are recorded")
 			}
 			switch {
 			case preset:
 				// renderPresetEmpty said what the model can do, in words.
-			case inst.apps:
+			case inst.appsOn():
 				lines = append(lines, "Apps on: the model may ask you to share windows with it")
+			case inst.coord != nil && conv.started:
+				lines = append(lines, "Apps off for this conversation: the model gets no tools — New conversation starts one with the settings in Settings")
 			case inst.coord != nil:
 				lines = append(lines, "Apps off: the model gets no tools and cannot open or drive windows — turn Apps on in Settings before the first message")
 			}
-			if !preset && inst.questions && inst.coord != nil {
+			if !preset && questions && inst.coord != nil {
 				lines = append(lines, "Questions on: the model may ask you with a form of options")
 			}
 			if !preset {
@@ -491,6 +513,39 @@ func (inst *App) renderEmpty() {
 				}
 			}
 		}
+	}
+}
+
+// renderFirstSendChoices is the plain chat's empty transcript under its
+// heading: where the model is, the four choices the first message fixes —
+// the same fields Settings binds — and the keys.
+func (inst *App) renderFirstSendChoices(where string) {
+	for rt := range c.RichTextLabel(where) {
+		rt.Weak()
+	}
+	c.AddSpace(styletokens.PaddingInner(styletokens.ActiveDensity()))
+	for rt := range c.RichTextLabel("This conversation — fixed at its first message:") {
+		rt.Small().Weak()
+	}
+	for range c.IdScope(inst.ids.PrepareStr("first-send")) {
+		if inst.coord != nil {
+			for range c.HoverText(tipApps).KeepIter() {
+				c.Checkbox(inst.ids.PrepareStr("apps"), inst.apps, "Apps — the model may ask to work in your windows").SendRespVal(&inst.apps)
+			}
+			for range c.HoverText(tipQuestions).KeepIter() {
+				c.Checkbox(inst.ids.PrepareStr("questions"), inst.questions, "Questions — the model may ask you with a form").SendRespVal(&inst.questions)
+			}
+			for range c.HoverText(tipArtefact).KeepIter() {
+				c.Checkbox(inst.ids.PrepareStr("artefact"), inst.artefact, "Artefact — a document the model writes beside the chat").SendRespVal(&inst.artefact)
+			}
+		}
+		for range c.HoverText(tipKeep).KeepIter() {
+			c.Checkbox(inst.ids.PrepareStr("keep"), inst.keep, "Keep — store the messages, to read later in play").SendRespVal(&inst.keep)
+		}
+	}
+	c.AddSpace(styletokens.PaddingInner(styletokens.ActiveDensity()))
+	for rt := range c.RichTextLabel("Ctrl+Enter sends · Esc cancels a running answer") {
+		rt.Small().Weak()
 	}
 }
 
@@ -732,6 +787,10 @@ func (inst *App) renderWaiting() {
 			// The tool loop's round, so a long turn reads as working.
 			line += " · " + note
 		}
+		if steps := inst.stepsNow(); oneModelCall(steps) {
+			// renderSteps draws no step line for it: the phase is said here.
+			line += " · " + modelPhase(&steps[0])
+		}
 		c.Label(line).Selectable(false).Send()
 	}
 	inst.renderSteps()
@@ -766,6 +825,9 @@ func (inst *App) renderEntry(i int, e *entry) {
 		inst.renderFailure(e)
 	}
 	inst.renderActions(i, e)
+	if inst.renderCiteHold("entry", "copy the message", e.text) {
+		inst.copyCited("the message", e.text, e.shown())
+	}
 	inst.renderFollowups(i, e)
 }
 
@@ -786,7 +848,7 @@ func (inst *App) renderActions(i int, e *entry) {
 			return
 		}
 		if action("copy", atomsCopy, tipCopy) {
-			inst.copyText("the message", e.text)
+			inst.copyCited("the message", e.text, e.shown())
 		}
 		switch {
 		case e.speaker == speakerUser && i == last && e.failed && !e.woken:

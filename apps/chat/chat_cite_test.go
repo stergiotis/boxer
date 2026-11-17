@@ -172,3 +172,21 @@ func TestACitedReplyShowsItsMarks(t *testing.T) {
 	assert.False(t, a.heldByCitations("copy it", e.text), "sent on the second gesture")
 	assert.True(t, a.heldByCitations("copy it", e.text), "and held again after")
 }
+
+// Assertion ids are unique in the conversation: an artefact gathers
+// references across turns, and one id naming two checks would be shown and
+// copied as the later one.
+func TestAssertionIdsAreUniqueInTheConversation(t *testing.T) {
+	entries := []agentrun.Entry{
+		{Kind: agentrun.KindVerdict, Name: "a1", Turn: "t1"},
+		{Kind: agentrun.KindVerdict, Name: "a3", Turn: "t1"},
+		{Kind: agentrun.KindVerdict, Name: "a9", Turn: "t2"},
+	}
+	before := assertionIdsBefore(entries, "t2")
+	assert.True(t, before["a1"])
+	assert.True(t, before["a3"])
+	assert.False(t, before["a9"], "the turn's own ids are the call's to check")
+	assert.Equal(t, "a4", nextAssertionId(before, nil))
+	assert.Equal(t, "a10", nextAssertionId(before, map[string]bool{"a9": true}))
+	assert.Equal(t, "a1", nextAssertionId(nil))
+}

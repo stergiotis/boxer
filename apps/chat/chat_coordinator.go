@@ -1032,6 +1032,16 @@ func wrapUntrusted(source string, text string) (s string) {
 	return untrustedOpen + source + "\">>\n" + text + "\n" + untrustedClose
 }
 
+// unwrapUntrusted is what wrapUntrusted delimited and where it came from;
+// ok false, and s as it is, for text it did not wrap.
+func unwrapUntrusted(s string) (text string, source string, ok bool) {
+	head, rest, found := strings.Cut(s, "\">>\n")
+	if !found || !strings.HasPrefix(head, untrustedOpen) {
+		return s, "", false
+	}
+	return strings.TrimSuffix(strings.TrimRight(rest, "\n"), untrustedClose), strings.TrimPrefix(head, untrustedOpen), true
+}
+
 // callOutcome is what the model reads of one call.
 type callOutcome struct {
 	Phase     string            `json:"phase"`

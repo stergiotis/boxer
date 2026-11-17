@@ -88,6 +88,19 @@ func stampChat(text string, m artMeta) (out string, reason string) {
 	return string(b), ""
 }
 
+// withoutChatProperties is text without the properties the chat keeps: what
+// the person reads in the Document view and in a diff, where a dozen lines
+// the model did not write and cannot change would stand before what it did.
+// The Source view and every copy keep them. Text whose frontmatter is not
+// valid YAML is returned as it is.
+func withoutChatProperties(text string) string {
+	b, _, err := mdspan.SetFrontmatter([]byte(text), nil, chatProperties)
+	if err != nil {
+		return text
+	}
+	return string(b)
+}
+
 // changedLines is the lines of new that differ from old: from the first
 // differing line to the last, by common head and tail.
 func changedLines(old string, new string) (ls mdspan.LineSpan) {

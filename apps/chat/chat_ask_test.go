@@ -164,3 +164,17 @@ func TestBothTogglesOfferEveryTool(t *testing.T) {
 	assert.Contains(t, systemPrompt(true, true), "ask_user")
 	assert.NotContains(t, systemPrompt(true, false), "ask_user")
 }
+
+// A harness question drawn as buttons is answered by the click.
+func TestAButtonAnswersAtOnce(t *testing.T) {
+	qs := []askQuestion{{Header: "Stop", Question: "Go on?", Buttons: true,
+		Options: []askOption{{Label: stopChoiceContinue}, {Label: stopChoiceStop}}}}
+	o := &openAsk{questions: qs, reply: make(chan askReply, 2), form: newAskForm(qs)}
+	o.choose(0, 1)
+	r := <-o.reply
+	require.Len(t, r.Answers, 1)
+	require.Len(t, r.Answers[0].Chosen, 1)
+	assert.Equal(t, stopChoiceStop, r.Answers[0].Chosen[0].Label)
+	o.choose(0, 0)
+	assert.Empty(t, o.reply, "one answer per question")
+}

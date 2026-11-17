@@ -2,11 +2,13 @@ package chat
 
 import (
 	"context"
+	"encoding/json/jsontext"
 	"encoding/json/v2"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/agentrun"
 	"github.com/stergiotis/boxer/public/keelson/runtime/attention"
@@ -310,7 +312,7 @@ func (inst *coordinator) checkStops(ctx context.Context, jctx context.Context, w
 func (inst *coordinator) holdOnStops(ctx context.Context, fired []stopFiring, action stopActionE) (goOn bool, err error) {
 	inst.setStage(stagePerson)
 	defer inst.setStage(stageModel)
-	q := askQuestion{Header: "Stop", Question: stopQuestion(fired),
+	q := askQuestion{Header: "Stop", Question: stopQuestion(fired), Buttons: true,
 		Options: []askOption{
 			{Label: stopChoiceContinue, Description: "the turn goes on from where it is"},
 			{Label: stopChoiceStop, Description: "the turn ends here; what it did stays in the record"}}}
@@ -339,12 +341,58 @@ func stopFiringLine(f stopFiring) (s string) {
 	}
 	s += " fired (" + f.What + ")"
 	if len(f.Shown) > 0 {
-		s += ": " + clip(f.Shown[0], stopMatchClip)
+		s += ": " + stopRowText(f.Shown[0])
 		if rest := len(f.Shown) - 1 + f.More; rest > 0 {
 			s += " and " + plural(rest, "more row")
 		}
 	}
 	return
+}
+
+// stopRowValueRunes bounds each value of a row as the person reads it.
+const stopRowValueRunes = 80
+
+// stopRowText is a stop's row as the person reads it: the worker hands each
+// row over as a JSONEachRow line, whose string values are quoted and whose
+// nested JSON, a tool call's arguments, is escaped a second time. It reads
+// "name ask_user · arguments {…}", each value unquoted and clipped. A row
+// that is not a JSON object is clipped as it is.
+func stopRowText(row string) string {
+	var fields []string
+	dec := jsontext.NewDecoder(strings.NewReader(row))
+	if tok, err := dec.ReadToken(); err != nil || tok.Kind() != '{' {
+		return clipRunes(row, stopMatchClip)
+	}
+	for dec.PeekKind() != '}' {
+		tok, err := dec.ReadToken()
+		if err != nil {
+			return clipRunes(row, stopMatchClip)
+		}
+		// A token is valid only until the next read.
+		key := tok.String()
+		val, err := dec.ReadValue()
+		if err != nil {
+			return clipRunes(row, stopMatchClip)
+		}
+		text := string(val)
+		if val.Kind() == '"' {
+			var s string
+			if json.Unmarshal(val, &s) == nil {
+				text = s
+			}
+		}
+		fields = append(fields, key+" "+clipRunes(oneLine(text), stopRowValueRunes))
+	}
+	return strings.Join(fields, " · ")
+}
+
+// clipRunes keeps the first n runes of s, marking a cut with an ellipsis.
+func clipRunes(s string, n int) string {
+	if utf8.RuneCountInString(s) <= n {
+		return s
+	}
+	r := []rune(s)
+	return string(r[:n]) + "…"
 }
 
 // stopReason is why a turn does not go on, naming every stop that fired.

@@ -33,6 +33,10 @@ var (
 // question 1's option 1 would be one widget.
 func (inst *App) renderAsk(o *openAsk) {
 	f := &o.form
+	if len(o.questions) == 1 && o.questions[0].Buttons && !o.questions[0].MultiSelect {
+		inst.renderAskButtons(o)
+		return
+	}
 	for range c.IdScope(inst.ids.PrepareStr("ask")) {
 		for range c.IdScope(inst.ids.PrepareStr("ask-" + strconv.FormatUint(o.seq, 10))) {
 			for i := range o.questions {
@@ -63,6 +67,42 @@ func (inst *App) renderAsk(o *openAsk) {
 				}
 				if c.Button(inst.ids.PrepareStr("skip"), atomsSkip).SendResp().HasPrimaryClicked() {
 					o.skip()
+				}
+			}
+		}
+	}
+}
+
+// renderAskButtons draws a harness question as its question and one button
+// per option, the first the primary; a click answers. Each option's
+// description is its button's hover.
+func (inst *App) renderAskButtons(o *openAsk) {
+	q := &o.questions[0]
+	for range c.IdScope(inst.ids.PrepareStr("ask-buttons-" + strconv.FormatUint(o.seq, 10))) {
+		for range c.HorizontalWrapped().KeepIter() {
+			if q.Header != "" {
+				badge.New(inst.ids.PrepareStr("header"), q.Header).Tone(badge.ToneInfo).Variant(badge.VariantSoft).Size(badge.SizeSm).Send()
+			}
+			c.LabelAtoms(c.Atoms().BeginRichText(q.Question).Strong().End().Keep()).Wrap().Selectable(true).Send()
+		}
+		if o.form.sent {
+			for range c.HorizontalTop().KeepIter() {
+				c.Spinner().Send()
+				c.Label("Answered").Selectable(false).Send()
+			}
+			return
+		}
+		for range c.HorizontalWrapped().KeepIter() {
+			for j := range q.Options {
+				opt := &q.Options[j]
+				b := c.Button(inst.ids.PrepareStr("option-"+strconv.Itoa(j)), c.Atoms().Text(opt.Label).Keep())
+				if j == 0 {
+					b = b.Kind(c.ButtonKindPrimary)
+				}
+				for range c.HoverText(opt.Description).KeepIter() {
+					if b.SendResp().HasPrimaryClicked() {
+						o.choose(0, j)
+					}
 				}
 			}
 		}

@@ -355,4 +355,15 @@ func TestTheJournalsHeadGoesOverAnEarlierExport(t *testing.T) {
 	assert.Equal(t, "exported\n", text)
 
 	assert.True(t, testArtefact(t).restore(4, "only\n"))
+
+	// The export brought its screenshots back; a later head from the
+	// journal keeps them, since its text may still show them.
+	art = testArtefact(t)
+	art.lastN = 2
+	shot := artImage{name: "screenshot-1.png", hash: "h1", w: 4, h: 4, bytes: 100}
+	_, err := art.commit(0, artRevision{text: "![[screenshot-1.png]]\n", images: []artImage{shot}, ownImages: true, source: revSourceModel})
+	require.NoError(t, err)
+	require.True(t, art.restore(5, "later\n\n![[screenshot-1.png]]\n"))
+	require.Len(t, art.headImages(), 1)
+	assert.Equal(t, "screenshot-1.png", art.headImages()[0].name)
 }

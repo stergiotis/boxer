@@ -95,6 +95,14 @@ func callCompleted(content string) bool {
 	return json.Unmarshal([]byte(content), &co) == nil && co.Phase == "completed"
 }
 
+// callRefused says an operation's outcome is a refusal: the app's
+// (refused) or the dispatcher's (denied). The step reads it as one, as it
+// reads a tool's own error.
+func callRefused(content string) bool {
+	var co callOutcome
+	return json.Unmarshal([]byte(content), &co) == nil && (co.Phase == "refused" || co.Phase == "denied")
+}
+
 // endorseEntry is the person's endorsement of a consequential call they
 // decided in the dispatcher's dialog: the digest of the arguments as the
 // call showed them — over their shredded attributes, so their spelling

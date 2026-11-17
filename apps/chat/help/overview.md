@@ -61,7 +61,10 @@ request under, in which case it went out as it was.
 The body is a dock of tabs: **Transcript** and **Message** (the composer)
 on the left, and a column of **Conversations**, **Settings**, **Analytics**,
 **Artefact** and **Stops**. Every divider drags. A tab whose feature is off stays and
-says how to turn it on. **Conversations** lists the conversations other
+says how to turn it on. A title carries what waits there as a glyph or a
+count: a star and a count on Conversations for a highlight elsewhere, an
+hourglass on Artefact for a change or a screenshot view waiting on you, the
+number of stops in force on Stops. **Conversations** lists the conversations other
 chat windows hold and the runs this host kept, which a click resumes
 (ADR-0308). **Analytics** is part of Advanced (`BOXER_CHAT_ADVANCED`): the
 conversation's agent surface and its token and answer statistics, with
@@ -85,24 +88,33 @@ here meanwhile, the save waits until you take it or keep yours. Sending the
 message ends the edit. In the Simple view the button shows only while an
 edit runs or the bar is unfolded.
 
-Before the first message the transcript says what the window talks to and
-keeps: `Chat with <model>`, its endpoint, whether the conversation is kept
-on `boxer.facts`, whether Apps and Questions are on, and the keys. A host
+Before the first message the transcript says what the window talks to,
+`Chat with <model>` and its endpoint, and offers the four choices the first
+message fixes: **Apps**, **Questions**, **Artefact** and **Keep**, the same
+options as in Settings. After **Edit** takes back a conversation's only
+turn, it says what that conversation was started with instead. A host
 without a model says "No model to talk to" and why.
 
 ## The transcript
 
 Your messages and the model's are bubbles; a line beginning `⚙` is the
 coordinator's activity — a tool call and how it ended — with **Details**
-listing the turn's steps. Under each message: **Copy**; on your last
+listing the turn's steps. A refused or failed call's line is in the error
+tone, since it usually names a setting to change. Under each message:
+**Copy**, which copies the message as shown, its references marked with
+how their checks came out and its citations under it (a copy that cites a
+claim that did not hold is held once, with the reason and **Anyway** under
+the message); on your last
 message **Edit**, which takes the turn back and puts its text in the
 composer so that sending replaces the answer; on the last reply
 **Regenerate**. A message whose turn got no answer shows why, with
 **Retry**, **Edit**, **Copy details** and, when the call reached the host's
 record, **Open call in play**. A code block has **Copy**, and SQL has
-**Open in play**. While a turn runs, a bubble reads "thinking… N s" with the
-round and the step, the reasoning as the model writes it unless Settings
-hides it, and the answer as it streams.
+**Open in play**. While a turn runs, a bubble reads "thinking… N s" with what the model is
+doing, the reasoning as the model writes it unless Settings hides it, and
+the answer as it streams. Once the turn calls a tool, the round and the
+turn's steps are listed under it; a conversation without tools has no
+rounds to count.
 
 ## A chatlet's window
 

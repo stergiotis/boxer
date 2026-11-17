@@ -136,8 +136,16 @@ func (inst *App) cancelEdit() {
 
 // copyText puts text on the clipboard; what names it on the status line.
 func (inst *App) copyText(what string, text string) {
+	inst.copyCited(what, text, text)
+}
+
+// copyCited copies what the person reads — references marked with their
+// verdicts and the citations under them, which the raw text lacks — and
+// holds the copy on the raw text's references (ADR-0340 §SD6), whose marks
+// the guard would not recognise.
+func (inst *App) copyCited(what string, raw string, text string) {
 	bus, coord := inst.bus, inst.coord
-	if inst.heldByCitations("copy "+what, text) {
+	if inst.heldByCitations("copy "+what, raw) {
 		return
 	}
 	// What a chat copies is model-touched unless it is the conversation's

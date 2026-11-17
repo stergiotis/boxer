@@ -4,10 +4,11 @@ package chat
 // revisions live in memory, so the coordinator writes the head as an
 // extension-private entry the projection skips (ADR-0308 §SD2,
 // KindIgnorable) whenever it moved — at a turn's end, and at a revert, a
-// rewind or a restore between turns. A resumed conversation takes the last
-// such entry as its artefact (chat_resume.go). The screenshots are not
-// written: their bytes are sealed to the process by design (ADR-0284), and
-// a restored artefact has none.
+// rewind or a restore between turns. A resumed conversation takes those
+// entries as its artefact's revisions, the last as its head
+// (chat_resume.go). The screenshots are not written: their bytes are sealed
+// to the process by design (ADR-0284), and a restored artefact has only
+// those an export brought back.
 
 import (
 	"context"
@@ -66,6 +67,42 @@ func artefactOfEntries(entries []agentrun.Entry) (n int, text string, ok bool) {
 		if e.Kind == agentrun.KindIgnorable && e.Name == artefactEntryName && isArtefactSnapshotForm(e.Form) {
 			n, text, ok = int(e.Target), e.Body, true
 		}
+	}
+	return
+}
+
+// artefactHistoryOf is the artefact's revisions as the journal's snapshots
+// tell them, numbers rising: one per move of the head between turns, not
+// one per write inside a turn. A snapshot under a number at or below an
+// earlier one — a rewind, or the restore after an edit was cancelled —
+// takes back what was numbered from there on, as the live artefact did.
+func artefactHistoryOf(entries []agentrun.Entry) (revs []artRevision) {
+	for _, e := range entries {
+		if e.Kind != agentrun.KindIgnorable || e.Name != artefactEntryName || !isArtefactSnapshotForm(e.Form) {
+			continue
+		}
+		n := int(e.Target)
+		for len(revs) > 0 && revs[len(revs)-1].n >= n {
+			revs = revs[:len(revs)-1]
+		}
+		if n <= 0 {
+			continue
+		}
+		r := artRevision{n: n, text: e.Body, source: revSourceResume, turn: e.Turn}
+		if !e.At.IsZero() {
+			r.atMs = e.At.UnixMilli()
+		}
+		if e.Form == artefactFormRevert {
+			// A revert made an earlier text current again: name which, when
+			// the history still holds it.
+			for i := len(revs) - 1; i >= 0; i-- {
+				if revs[i].text == e.Body {
+					r.source, r.revertedTo = revSourceRevert, revs[i].n
+					break
+				}
+			}
+		}
+		revs = append(revs, r)
 	}
 	return
 }

@@ -3,7 +3,7 @@ type: reference
 audience: contributor
 status: draft
 scene:
-  launch: chat
+  launch: "subject_alias IN ('chat','widgets')"
   size: 1400x900
   env:
     BOXER_LLM_SCRIPT: "apps/chat/scenes/chat-queue-form.script.jsonl"
@@ -26,6 +26,7 @@ the same turn.
 {"do":"note","text":"ADR-0324 SD5: a form in the card"}
 {"do":"wait","valueContains":"→ scripted","role":"label"}
 {"do":"click","contains":"Send","role":"button","comment":"the seeded draft"}
+{"do":"click","contains":"Widget gallery","role":"window","pointer":true,"comment":"look elsewhere: a question goes to the queue once the chat loses focus (ADR-0379 §SD1)"}
 {"do":"wait","contains":"your turn · 1","comment":"the form waits in the host's queue"}
 {"do":"key","text":"F8","comment":"its card"}
 {"do":"wait","contains":"Your turn","role":"window"}

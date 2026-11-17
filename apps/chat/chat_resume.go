@@ -457,9 +457,9 @@ func (inst *App) adopt(r *resumed) {
 	if conv.artefact {
 		// The revisions live in the artefact store, not in entries: the
 		// last export, when there is one, brings the exported revision back
-		// with its screenshots (ADR-0342 §SD7, proposed), and the head the
-		// journal last wrote goes on top when it is later
-		// (chat_artefact_journal.go); otherwise the artefact starts empty.
+		// with its screenshots (ADR-0342 §SD7), and the journal's snapshots
+		// of the head stand around it (chat_artefact_journal.go); otherwise
+		// the artefact starts empty.
 		// The snapshot note re-told at the next turn tells the model where
 		// it stands.
 		if r.art != nil {
@@ -468,7 +468,9 @@ func (inst *App) adopt(r *resumed) {
 		}
 		conv.art.reserveThrough(revisionsNamed(r.entries))
 		if n, text, ok := artefactOfEntries(r.entries); ok {
-			conv.art.restore(n, text)
+			// Every snapshot the journal holds, so Revisions reaches back
+			// past the head: one revision per turn that moved it.
+			conv.art.restoreHistory(artefactHistoryOf(r.entries))
 			coord.mu.Lock()
 			coord.artJournaled, coord.artJournaledText = n, text
 			coord.mu.Unlock()

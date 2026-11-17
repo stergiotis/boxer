@@ -11,8 +11,12 @@ package chat
 import (
 	"strings"
 
+	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	"github.com/stergiotis/boxer/public/keelson/runtime/agentrun"
 	"github.com/stergiotis/boxer/public/keelson/runtime/agentrun/projection"
+	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
+	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/color"
 )
 
 // citationMark is one verdict as the readers show it.
@@ -189,9 +193,41 @@ func (inst *App) heldByCitations(what string, text string) (held bool) {
 	}
 	if inst.citeConfirmed[key] {
 		delete(inst.citeConfirmed, key)
+		if inst.citeHeld.key == key {
+			inst.citeHeld = citeHeldNote{}
+		}
 		return false
 	}
 	inst.citeConfirmed[key] = true
+	inst.citeHeld = citeHeldNote{key: key, why: why}
 	inst.setNote("held: "+why+"; "+what+" again to send it anyway", true)
 	return true
+}
+
+// citeHeldNote is a gesture the guard held: its key and why.
+type citeHeldNote struct {
+	key, why string
+}
+
+var atomsAnyway = c.Atoms().Text("Anyway").Keep()
+
+// renderCiteHold draws, under the control that made it, why the gesture
+// what on raw was held, and a button that makes it again; again says it was
+// clicked. Nothing is drawn while no gesture of this kind is held, and a
+// digest is taken only when one is.
+func (inst *App) renderCiteHold(key string, what string, raw string) (again bool) {
+	h := inst.citeHeld
+	if h.key == "" || !strings.HasPrefix(h.key, what+"\x00") || h.key != what+"\x00"+agentrun.ContentDigest(raw) {
+		return false
+	}
+	for range c.IdScope(inst.ids.PrepareStr("cite-hold-" + key)) {
+		for range c.HorizontalWrapped().KeepIter() {
+			for rt := range c.RichTextLabelColored(color.Hex(styletokens.WarningDefault.AsHex()), color.Transparent, icons.PhWarning) {
+				rt.Small()
+			}
+			c.LabelAtoms(c.Atoms().BeginRichText("Held: " + h.why + ".").Small().End().Keep()).Wrap().Selectable(true).Send()
+			again = c.Button(inst.ids.PrepareStr("anyway"), atomsAnyway).Small().SendResp().HasPrimaryClicked()
+		}
+	}
+	return
 }

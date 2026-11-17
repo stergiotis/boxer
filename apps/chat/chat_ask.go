@@ -48,6 +48,10 @@ type askQuestion struct {
 	Header      string      `json:"header,omitempty"`
 	MultiSelect bool        `json:"multi_select,omitempty"`
 	Options     []askOption `json:"options"`
+	// Buttons draws a single choice as one button per option, answered on
+	// the click: for the harness's own yes-or-no questions, which need no
+	// note and no answer of the person's own. Never the model's to set.
+	Buttons bool `json:"-"`
 }
 
 // parseQuestions reads ask_user's arguments; reason, when not empty, says
@@ -147,6 +151,10 @@ type asker struct {
 	// clock, when set, counts the time a question waited as time the turn
 	// did not work (chat_stops_turn.go).
 	clock *heldClock
+	// focused says the chat's window has the person's focus; while it does
+	// the question is the window's alone, and it goes to the host's queue
+	// once the person looks elsewhere. nil posts at once.
+	focused func() bool
 }
 
 // ask shows qs and waits for the answer, or for the turn to end.
@@ -169,7 +177,7 @@ func (inst *asker) askVia(ctx context.Context, qs []askQuestion, via hostAsk) (r
 	if inst.host != nil && via.kind != "" {
 		hctx, cancel := context.WithCancel(ctx)
 		defer cancel()
-		go watchHost(hctx, inst.host, qs, via, o.reply)
+		go watchHost(hctx, inst.host, qs, via, inst.focused, o.reply)
 	}
 	inst.mu.Lock()
 	inst.seq++
@@ -290,6 +298,18 @@ func (inst *askForm) reply(qs []askQuestion) (r askReply, ok bool) {
 }
 
 // submit sends the form once it answers every question.
+// choose answers question i with option j, as a click on its button does.
+func (inst *openAsk) choose(i int, j int) {
+	if inst.form.sent || i >= len(inst.form.chosen) || j >= len(inst.form.chosen[i]) {
+		return
+	}
+	for k := range inst.form.chosen[i] {
+		inst.form.chosen[i][k] = k == j
+	}
+	inst.form.single[i] = j
+	inst.submit()
+}
+
 func (inst *openAsk) submit() {
 	if inst.form.sent {
 		return

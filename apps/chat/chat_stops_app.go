@@ -446,9 +446,7 @@ func (inst *App) renderStopsTab() {
 				c.Label("could not be checked: " + ev.firing.Error).Wrap().Send()
 			default:
 				for _, row := range ev.firing.Shown {
-					for rt := range c.RichTextLabel(row) {
-						rt.Monospace().Small()
-					}
+					c.LabelAtoms(c.Atoms().BeginRichText(stopRowText(row)).Monospace().Small().End().Keep()).Wrap().Selectable(true).Send()
 				}
 				if ev.firing.More > 0 {
 					weak("and " + plural(ev.firing.More, "more row"))
@@ -578,7 +576,7 @@ func (inst *App) presetTitle() string {
 // stopsTitle is the tab's title, with the count of stops in force.
 func (inst *App) stopsTitle() string {
 	if n := len(inst.stops.preset) + len(inst.stops.own); n > 0 {
-		return tabStops.title() + " · " + strconv.Itoa(n)
+		return tabStops.title() + " " + strconv.Itoa(n)
 	}
 	return tabStops.title()
 }

@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/stergiotis/boxer/public/keelson/runtime/agentrun"
 	"github.com/stergiotis/boxer/public/keelson/runtime/llm"
 	"github.com/stergiotis/boxer/public/llm/openaichat"
 	"github.com/stergiotis/boxer/public/semistructured/markdown/mdspan"
@@ -312,4 +313,32 @@ func TestChangedLines(t *testing.T) {
 	assert.Equal(t, mdspan.LineSpan{First: 2, Last: 3}, changedLines("a\nb\nc\n", "a\nB\nX\nc\n"))
 	assert.Equal(t, mdspan.LineSpan{First: 2, Last: 2}, changedLines("a\nb\nc\n", "a\nc\n"))
 	assert.Equal(t, mdspan.LineSpan{First: 1, Last: 1}, changedLines("", "x\n"))
+}
+
+// The journal's snapshots are the resumed artefact's revisions; a rewind's
+// takes back what was numbered after it, as the live artefact did.
+func TestTheArtefactsHistoryIsReadBackFromTheJournal(t *testing.T) {
+	snap := func(form string, n uint32, text string) agentrun.Entry {
+		return agentrun.Entry{Kind: agentrun.KindIgnorable, Name: artefactEntryName, Form: form, Target: n, Body: text}
+	}
+	revs := artefactHistoryOf([]agentrun.Entry{
+		snap(artefactFormTurn, 1, "a"),
+		snap(artefactFormTurn, 3, "b"),
+		snap(artefactFormRewind, 1, "a"),
+		snap(artefactFormTurn, 5, "c"),
+		{Kind: agentrun.KindIgnorable, Name: artefactEntryName, Form: "export", Target: 9, Body: "a record"},
+		snap(artefactFormRevert, 6, "a"),
+	})
+	require.Len(t, revs, 3)
+	assert.Equal(t, []int{1, 5, 6}, []int{revs[0].n, revs[1].n, revs[2].n})
+	assert.Equal(t, revSourceRevert, revs[2].source)
+	assert.Equal(t, 1, revs[2].revertedTo)
+
+	art := testArtefact(t)
+	require.True(t, art.restoreHistory(revs))
+	n, text := art.head()
+	assert.Equal(t, 6, n)
+	assert.Equal(t, "a", text)
+	_, ok := art.text(5)
+	assert.True(t, ok, "Revisions reaches back past the head")
 }

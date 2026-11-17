@@ -28,7 +28,7 @@ its colour, with the steps it wrote per minute (ADR-0324 background §3.4,
 {"do":"note","text":"ADR-0323 SD4: watch a conversation"}
 {"do":"wait","valueContains":"→ scripted","role":"label"}
 {"do":"click","contains":"Send","role":"button","comment":"the seeded draft"}
-{"do":"click","contains":"Watch","role":"button","comment":"tell me when this turn ends"}
+{"do":"click","name":"\ue0d0 Watch","role":"button","comment":"tell me when this turn ends; by name, since the launcher lists Watchbill"}
 {"do":"click","contains":"Widget gallery","role":"window","pointer":true,"comment":"look elsewhere while the model answers"}
 {"do":"read","contains":"nothing waits on you","role":"button","on":"name","pattern":"(?P<highlights>\\d+)$","comment":"one highlight, after what waits"}
 {"do":"expect","of":"highlights","eq":1}
@@ -37,7 +37,7 @@ its colour, with the steps it wrote per minute (ADR-0324 background §3.4,
 {"do":"capture","text":"chat-watch-highlight"}
 {"do":"click","name":"Open","role":"button"}
 {"do":"wait","value":"\ue03e new since you looked","role":"label","comment":"the chat marks what landed while the person was away"}
-{"do":"read","valueContains":" messages","role":"label","pattern":"(?P<count>2 of 2) messages","comment":"the marker is a row, not a message"}
+{"do":"read","valueContains":" of 2 messages","role":"label","pattern":"(?P<count>2 of 2) messages","comment":"the marker is a row, not a message"}
 {"do":"read","contains":"nothing waits on you","role":"button","on":"name","pattern":"(?P<cleared>on you)$","comment":"looking cleared the highlight"}
 {"do":"capture","text":"chat-watch-looked"}
 {"do":"click","contains":"Conversations","role":"button","settleMs":4000,"comment":"the roster samples the runs every three seconds; two samples give a pace"}

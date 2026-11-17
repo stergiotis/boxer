@@ -92,11 +92,23 @@ func replyOf(qs []askQuestion, a attention.Answer) (r askReply, ok bool) {
 // until ctx ends; it withdraws the question when it returns. The host's
 // refusal is an answer of its own: the model reads why and goes on. A host
 // without the queue leaves the question to the window.
-func watchHost(ctx context.Context, host hostQueueI, qs []askQuestion, via hostAsk, reply chan<- askReply) {
+func watchHost(ctx context.Context, host hostQueueI, qs []askQuestion, via hostAsk, focused func() bool, reply chan<- askReply) {
 	send := func(r askReply) {
 		select {
 		case reply <- r:
 		default:
+		}
+	}
+	t := time.NewTicker(hostPollInterval)
+	defer t.Stop()
+	// One place for a decision: the window's form while the person is in
+	// the window, the queue's card once they are not. A card once posted
+	// stays until it is answered, so it does not come and go with focus.
+	for focused != nil && focused() {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
 		}
 	}
 	key, refused, err := host.post(questionOf(qs, via))
@@ -108,8 +120,6 @@ func watchHost(ctx context.Context, host hostQueueI, qs []askQuestion, via hostA
 		return
 	}
 	defer host.withdraw(key)
-	t := time.NewTicker(hostPollInterval)
-	defer t.Stop()
 	for {
 		select {
 		case <-ctx.Done():

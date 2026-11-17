@@ -14,7 +14,9 @@ reads and edits through tools, under the ceiling, which you review in the
 **Artefact** tab (ADR-0282). It is on when the Artefact option was on at
 the conversation's first message (`BOXER_CHAT_ARTEFACT` seeds it); the tab
 says how to turn it on otherwise. The document lives in memory with the
-conversation; a resume reads its head back from the journal.
+conversation. A resume reads its revisions back from the journal, one per
+turn that moved it, the last as the head; the writes inside a turn do not
+come back (ADR-0379 §SD4). Screenshots come back only with an export.
 
 ## Revisions
 
@@ -38,7 +40,15 @@ apply directly; Revisions can take any back" under **Apply directly**.
 The document carries the conversation's properties in its frontmatter,
 stamped by the chat: `chat_conversation`, `chat_title`, `chat_started`,
 `chat_model`, `chat_endpoint`, `chat_run`, `chat_app`, `chat_window`,
-`chat_task` and `chat_keep`.
+`chat_task` and `chat_keep`. The **Document** view, a proposal's diff and
+a revision's diff leave them out, since the model neither wrote them nor
+can change them; **Source**, **Copy**, **Export** and **Open in mdedit**
+keep them.
+
+**Copy** copies the text with the citations its references name as a foot,
+as the hand-off to mdedit does. A copy or a hand-off of text that cites a
+claim that did not hold, or that names no check, is held once: the reason
+shows under the buttons, with **Anyway**.
 
 ## The model's tools
 

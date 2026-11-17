@@ -58,8 +58,7 @@ refused statement and an edit.
 {"do":"wait","valueContains":"The stop \"before-asking\" fired","role":"label","comment":"held after the reply, before ask_user runs"}
 {"do":"wait","valueContains":"waiting for you","role":"label","comment":"the tab lists the firing"}
 {"do":"capture","text":"chat-stops-held"}
-{"do":"click","name":"Continue","role":"radio_button"}
-{"do":"click","contains":"Answer","role":"button"}
+{"do":"click","name":"Continue","role":"button","comment":"a held turn asks yes or no: a click answers"}
 {"do":"wait","valueContains":"Which format?","role":"label","comment":"the same turn went on: the model's own question"}
 {"do":"wait","valueContains":"you continued","role":"label"}
 {"do":"click","name":"Markdown","role":"radio_button"}

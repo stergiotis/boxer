@@ -509,6 +509,12 @@ func TestAResumeRestoresTheArtefact(t *testing.T) {
 	n, text = third.conv.art.head()
 	assert.Equal(t, 3, n, "the revert's revision number")
 	assert.Equal(t, "# v1\n", text)
+	revs := third.conv.art.revisions()
+	require.Len(t, revs, 3, "every snapshot the journal holds, not the head alone")
+	assert.Equal(t, []int{1, 2, 3}, []int{revs[0].n, revs[1].n, revs[2].n})
+	assert.Equal(t, "# v2\n", revs[1].text)
+	assert.Equal(t, revSourceRevert, revs[2].source)
+	assert.Equal(t, 1, revs[2].revertedTo)
 	var forms []string
 	for _, e := range third.coord.journalNow().Entries() {
 		if e.Kind == agentrun.KindIgnorable && e.Name == artefactEntryName {

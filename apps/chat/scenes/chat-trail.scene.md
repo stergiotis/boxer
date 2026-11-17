@@ -42,6 +42,7 @@ waiting line counts against.
 {"do":"wait","valueContains":"SELECT work_w, work_h","role":"label"}
 {"do":"capture","text":"chat-trail-details"}
 {"do":"click","name":"Settings","role":"button","settleMs":500}
+{"do":"click","name":"Harness","settleMs":500,"comment":"the harness tuning is folded"}
 {"do":"scroll_into_view","name":"rounds per turn","role":"slider","settleMs":500}
 {"do":"capture","text":"chat-trail-rounds"}
 ```

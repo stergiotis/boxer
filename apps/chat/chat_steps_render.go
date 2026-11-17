@@ -60,6 +60,18 @@ func (inst *App) renderSteps() {
 	if len(steps) == 0 {
 		return
 	}
+	if oneModelCall(steps) {
+		// The waiting line says what the one call is doing; a summary and
+		// a step list would say it twice more. Its reasoning still shows.
+		for range c.IdScope(inst.ids.PrepareStr("steps")) {
+			for range c.IdScope(inst.ids.PrepareSeq(0)) {
+				if inst.showsReasoning(&steps[0]) {
+					inst.liveReasoning(0, steps[0].reasoning)
+				}
+			}
+		}
+		return
+	}
 	for range c.IdScope(inst.ids.PrepareStr("steps")) {
 		for range c.HoverText(tipSteps).KeepIter() {
 			weak(stepsSummary(steps))
@@ -92,6 +104,26 @@ func (inst *App) renderSteps() {
 			i++
 		}
 	}
+}
+
+// oneModelCall says the turn so far is one model call, still running and
+// with no tool call before it: what a plain question's turn is throughout.
+func oneModelCall(steps []turnStep) bool {
+	return len(steps) == 1 && steps[0].kind == stepModel && !steps[0].done
+}
+
+// modelPhase is what a running model call is doing, in the words its step
+// line uses.
+func modelPhase(s *turnStep) string {
+	switch {
+	case len(s.asking) > 0:
+		return "asking for " + strings.Join(s.asking, ", ")
+	case s.content != "":
+		return "writing the answer"
+	case s.reasoning != "":
+		return "reasoning"
+	}
+	return "waiting for the answer"
 }
 
 // foldRun is the least run of routine steps the trail folds.
@@ -227,14 +259,8 @@ func stepLine(s *turnStep) (line string) {
 	case stepModel:
 		line = icons.PhRobot + " model, round " + strconv.Itoa(s.round+1) + " · " + duration(took)
 		switch {
-		case !s.done && len(s.asking) > 0:
-			line += " · asking for " + strings.Join(s.asking, ", ")
-		case !s.done && s.content != "":
-			line += " · writing the answer"
-		case !s.done && s.reasoning != "":
-			line += " · reasoning"
 		case !s.done:
-			line += " · waiting for the answer"
+			line += " · " + modelPhase(s)
 		case s.failed:
 			line += " · failed"
 		default:
@@ -279,6 +305,10 @@ func (inst *App) renderStepDetail(s *turnStep) {
 	inst.stepText("args", "arguments", s.args)
 	if s.kind == stepCompact {
 		inst.stepText("result", "why", s.result)
+	} else if text, source, ok := unwrapUntrusted(s.result); ok {
+		// The delimiters are for the model; the person reads the content
+		// and where it came from. Copy step keeps what the model read.
+		inst.stepText("result", "came back · untrusted, from "+source, text)
 	} else {
 		inst.stepText("result", "came back", s.result)
 	}
@@ -333,10 +363,20 @@ func (inst *App) renderToolEntry(e *entry) {
 			break
 		}
 	}
+	refused := false
+	for i := range e.steps {
+		refused = refused || (e.steps[i].kind == stepTool && (e.steps[i].refused || e.steps[i].failed))
+	}
 	for range c.HoverText(levelTip(level)).KeepIter() {
-		if level > attention.LevelData {
+		switch {
+		case refused:
+			// A refusal usually names a setting to change: the line the
+			// person has to read, not one to skim past.
+			c.LabelAtoms(c.Atoms().BeginRichTextColored(color.Hex(styletokens.ErrorDefault.AsHex()), color.Transparent, line).Small().End().Keep()).
+				Wrap().Selectable(true).Send()
+		case level > attention.LevelData:
 			c.LabelAtoms(c.Atoms().BeginRichText(line).Small().Italics().End().Keep()).Wrap().Selectable(false).Send()
-		} else {
+		default:
 			c.LabelAtoms(c.Atoms().BeginRichText(line).Small().Weak().Italics().End().Keep()).Wrap().Selectable(false).Send()
 		}
 	}

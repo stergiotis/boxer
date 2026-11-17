@@ -175,7 +175,7 @@ func (inst *App) renderTranscriptBody() {
 func (inst *App) conversationsTitle() (title string) {
 	title = tabConversations.title()
 	if n := len(inst.roster.notices); n > 0 {
-		title += " · " + icons.PhStar + " " + strconv.Itoa(n)
+		title += " " + icons.PhStar + strconv.Itoa(n)
 	}
 	return
 }
@@ -184,7 +184,9 @@ func (inst *App) conversationsTitle() (title string) {
 func (inst *App) artefactTitle() (title string) {
 	title = tabArtefact.title()
 	if inst.artefactOn() && (inst.conv.art.pending() != nil || inst.coord.pixelAskNow() != nil) {
-		title += " · waiting"
+		// A glyph, not a word: the column's titles have to fit its
+		// default width, and "waiting" pushed the last tab out of it.
+		title += " " + icons.PhHourglassMedium
 	}
 	return
 }

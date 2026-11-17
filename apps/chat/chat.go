@@ -64,6 +64,9 @@ type App struct {
 	// citeConfirmed are the copies and hand-offs held once for citing a
 	// claim that did not hold, by gesture and digest (chat_citations.go).
 	citeConfirmed map[string]bool
+	// citeHeld is the latest held gesture, drawn beside the control that
+	// made it (renderCiteHold).
+	citeHeld citeHeldNote
 	// questions lets the model ask the person with a form (ask_user); the
 	// turn is the coordinator's tool loop then too, with or without Apps.
 	questions bool
@@ -114,6 +117,9 @@ type App struct {
 	hlJob typed.RetainedFffiHolderTyped[c.CodeViewJobS]
 	hlOk  bool
 	view  chatview.State
+	// windowFocused is focused for the coordinator's goroutines, before an
+	// embedded pane narrows it to its composer.
+	windowFocused atomic.Bool
 	// focused is whether this window is the shell's active one, which
 	// gates the process-wide Ctrl+Enter chord (play's claimRunChord).
 	focused bool
@@ -363,6 +369,9 @@ func (inst *App) Frame(ctx app.FrameContextI) (err error) {
 	if f, ok := ctx.(app.WindowFocusI); ok {
 		inst.focused = f.WindowFocused()
 	}
+	// The window's focus, not the embedded composer's: where a question
+	// the model asks is drawn (asker.focused).
+	inst.windowFocused.Store(inst.focused)
 	if inst.embed != nil {
 		// The host's window may hold another composer.
 		inst.focused = inst.focused && inst.embed.draftFocused
@@ -550,9 +559,16 @@ func (inst *App) launchTurn(req llm.Request, coord *coordinator) (started bool) 
 	coord.setStops(inst.stopsInForce())
 	logProfile()
 	guided := inst.guided()
+	// A conversation that offers the model no tools answers in one call: a
+	// round count says nothing there.
+	oneCall := !conv.apps && !conv.questions && !conv.artefact
 	ok := inst.turn.StartReporting(inst.tasks, bgjob.Spec{Kind: "chat-turn", Title: "answer"},
 		func(ctx context.Context, report bgjob.Reporter) (res *turnResult, err error) {
 			return runTurn(ctx, cli, coord, req, func(round int, doing string) {
+				if oneCall {
+					report(uint64(round+1), uint64(limit), doing)
+					return
+				}
 				report(uint64(round+1), uint64(limit), turnNote(guided, round, limit, doing))
 			})
 		})
@@ -565,6 +581,7 @@ func (inst *App) newCoordinator(conversation string) (coord *coordinator) {
 	coord = newCoordinatorIn(inst.scope, inst.agentCli, inst.kq, conversation)
 	if inst.bus != nil {
 		coord.ask.host = busQueue{bus: inst.bus}
+		coord.ask.focused = inst.windowFocused.Load
 	}
 	coord.setStopRunner(stopRunnerFor(inst.bus))
 	switch {
