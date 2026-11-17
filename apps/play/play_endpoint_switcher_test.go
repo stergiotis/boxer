@@ -9,6 +9,7 @@ import (
 	"github.com/stergiotis/boxer/apps/play/launchcfg"
 	"github.com/stergiotis/boxer/public/db/clickhouse/clickhouseenv"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect"
+	"github.com/stergiotis/boxer/public/keelson/runtime/queryendpoint"
 )
 
 // The endpoint switcher's "External (reset)" preset, and the invariant that
@@ -115,4 +116,33 @@ func TestSetEndpointRefusesEmpty(t *testing.T) {
 
 	assert.Equal(t, testExternalURL, inst.client.URL(), "target unchanged")
 	assert.True(t, inst.autoEndpoint, "Auto survives a pin that did not happen")
+}
+
+// A request to a target this process lists among its query endpoints carries
+// the credential the entry holds, which is how an endpoint hands its own
+// process the secret it minted; every other target carries the configured
+// one, and so does a listed endpoint that asks for none.
+func TestCredentialFor_ListedEndpointCarriesItsOwn(t *testing.T) {
+	client := NewClient(ClientConfig{URL: testExternalURL, User: "configured", Password: "configured-pw"}, nil)
+	user, password := client.credentialFor(testExternalURL)
+	assert.Equal(t, []string{"configured", "configured-pw"}, []string{user, password})
+
+	const gate = "http://127.0.0.1:59998"
+	retract, err := queryendpoint.Publish(queryendpoint.Endpoint{Name: "t-play-gate", URL: gate, User: "in-host", Password: "minted"})
+	require.NoError(t, err)
+	t.Cleanup(retract)
+	user, password = client.credentialFor(gate)
+	assert.Equal(t, []string{"in-host", "minted"}, []string{user, password})
+	user, _ = client.credentialFor(gate + "/other")
+	assert.Equal(t, "configured", user, "only the listed address")
+
+	plain, err := queryendpoint.Publish(queryendpoint.Endpoint{Name: "t-play-plain", URL: "http://127.0.0.1:59997/query"})
+	require.NoError(t, err)
+	t.Cleanup(plain)
+	user, password = client.credentialFor("http://127.0.0.1:59997/query")
+	assert.Equal(t, []string{"configured", "configured-pw"}, []string{user, password})
+
+	retract()
+	user, _ = client.credentialFor(gate)
+	assert.Equal(t, "configured", user, "an endpoint that stopped lends nothing")
 }

@@ -27,6 +27,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect/keelsonsql"
 	"github.com/stergiotis/boxer/public/keelson/runtime/lifetime"
+	"github.com/stergiotis/boxer/public/keelson/runtime/queryendpoint"
 	"github.com/stergiotis/boxer/public/keelson/runtime/queryengine"
 	"github.com/stergiotis/boxer/public/keelson/runtime/queryengine/chserver"
 	"github.com/stergiotis/boxer/public/keelson/runtime/runid"
@@ -97,7 +98,9 @@ type Client struct {
 	// mu guards targetURL, the live endpoint. It starts at cfg.URL and can be
 	// switched at runtime via SetURL — e.g. play's endpoint switcher points at
 	// the in-process keelson introspection /query endpoint (ADR-0094 §SD6).
-	// cfg.User/cfg.Password are not switchable in v1.
+	// cfg.User/cfg.Password are not switchable; a target this process
+	// lists among its query endpoints takes the credential its entry
+	// carries instead (credentialFor).
 	//
 	// targetURL is the *manual base* now, not the target: what a request is
 	// actually sent to comes from a dispatchDecision (play_dispatch.go), and
@@ -177,6 +180,17 @@ type datasetOrigin struct {
 	// publisherTask is the task whose attested call published the
 	// bundle's live revision; that task runs on it without a grant entry.
 	publisherTask string
+}
+
+// credentialFor is the user and password a request to target carries: the
+// ones of the query endpoint this process lists at that address, which is
+// how an endpoint hands the process's own windows the secret it minted for
+// them (ADR-0377 §SD3), and the configured ones for every other target.
+func (inst *Client) credentialFor(target string) (user string, password string) {
+	if e, ok := queryendpoint.ByURL(target); ok && e.User != "" {
+		return e.User, e.Password
+	}
+	return inst.cfg.User, inst.cfg.Password
 }
 
 func NewClient(cfg ClientConfig, httpClient *http.Client) *Client {
@@ -670,10 +684,11 @@ func (inst *Client) engineFor(dec dispatchDecision) (eng *chserver.Engine, err e
 	if err != nil {
 		return
 	}
+	user, password := inst.credentialFor(target)
 	eng, err = chserver.New(chserver.Config{
 		Endpoint:   target,
-		User:       inst.cfg.User,
-		Password:   inst.cfg.Password,
+		User:       user,
+		Password:   password,
 		HTTPClient: inst.http,
 		// Two ways an endpoint may see sealed plaintext (ADR-0145 §SD5):
 		// it IS this process's plane — exempt by identity, since the string
@@ -725,6 +740,7 @@ func (inst *Client) queryTabSeparated(ctx context.Context, q string, params map[
 		return
 	}
 	reqURL := inst.URL()
+	user, password := inst.credentialFor(reqURL)
 	qs := url.Values{}
 	for k, v := range params {
 		qs.Set("param_"+k, v)
@@ -742,11 +758,11 @@ func (inst *Client) queryTabSeparated(ctx context.Context, q string, params map[
 		return
 	}
 	req.Header.Set("Content-Type", "text/plain; charset=utf-8")
-	if inst.cfg.User != "" {
-		req.Header.Set("X-ClickHouse-User", inst.cfg.User)
+	if user != "" {
+		req.Header.Set("X-ClickHouse-User", user)
 	}
-	if inst.cfg.Password != "" {
-		req.Header.Set("X-ClickHouse-Key", inst.cfg.Password)
+	if password != "" {
+		req.Header.Set("X-ClickHouse-Key", password)
 	}
 	var resp *http.Response
 	resp, err = inst.http.Do(req)

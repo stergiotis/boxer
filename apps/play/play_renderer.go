@@ -31,6 +31,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/externaledit"
 	"github.com/stergiotis/boxer/public/keelson/runtime/fsbroker"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect"
+	"github.com/stergiotis/boxer/public/keelson/runtime/queryendpoint"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/lwsql"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/colwidth"
@@ -2582,11 +2583,11 @@ func (inst *PlayApp) renderTopBar(schema *arrow.Schema) {
 // renderEndpointSwitcher is the toolbar control for the query target. It shows
 // where queries go, read-only, beside a fixed-label "Endpoint" menu (a
 // dynamic MenuButton label would shift its derived id and drop menu state). The
-// menu offers the Auto preset, a manual URL, and two fixed presets: the
+// menu offers the Auto preset, a manual URL, and the presets: the
 // in-process keelson introspection /query endpoint (shown only when a
 // co-resident host published one via introspecthost.Start →
-// introspect.LocalQueryEndpoint, ADR-0094 §SD6) and the external server
-// ("External"). Every widget uses an explicit stable id, so conditionally
+// introspect.LocalQueryEndpoint, ADR-0094 §SD6), every other query endpoint
+// the process lists (ADR-0377), and the external server ("External"). Every widget uses an explicit stable id, so conditionally
 // showing the keelson preset never drifts the others' ids.
 //
 // Auto installs the keelson-aware resolver (ADR-0141) — a read naming only
@@ -2616,8 +2617,9 @@ func (inst *PlayApp) renderEndpointSwitcher() {
 	}
 
 	base := inst.client.URL()
-	label := fmt.Sprintf("%s  as %s", truncateRunes(base, 40), inst.client.cfg.User)
-	full := fmt.Sprintf("%s  as %s", base, inst.client.cfg.User)
+	user, _ := inst.client.credentialFor(base)
+	label := fmt.Sprintf("%s  as %s", truncateRunes(base, 40), user)
+	full := fmt.Sprintf("%s  as %s", base, user)
 	// What the server said about this user's readonly level (play_readonly.go):
 	// a degraded run is visible here rather than only in query_log.
 	note := inst.client.ReadonlyNote(base)
@@ -2674,6 +2676,20 @@ func (inst *PlayApp) renderEndpointSwitcher() {
 				Selected(base == local).
 				SendResp().HasPrimaryClicked() {
 				inst.setEndpoint(local)
+			}
+		}
+		// The other query endpoints this process serves (ADR-0377), each
+		// under its own stable id. A run pinned to one carries the credential
+		// its entry holds, not the configured user's.
+		for _, e := range queryendpoint.All() {
+			if e.Name == queryendpoint.NameIntrospection {
+				continue
+			}
+			if c.Button(ids.PrepareStr("endpointListed:"+e.Name),
+				c.Atoms().Text(e.Label()+" — "+e.URL).Keep()).
+				Selected(base == e.URL).
+				SendResp().HasPrimaryClicked() {
+				inst.setEndpoint(e.URL)
 			}
 		}
 		// Offered only when there is something to reset to: SetURL ignores an

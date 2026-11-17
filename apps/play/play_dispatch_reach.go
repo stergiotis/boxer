@@ -225,10 +225,11 @@ func (inst *Client) proveReachInBackground(endpoint string) {
 // delivery. The statement is not confined — it reads a nonce URL, not sealed
 // data — so it passes the engine's own gate without a declaration.
 func (inst *Client) runProbeStatement(ctx context.Context, endpoint string, sql string) (err error) {
+	user, password := inst.credentialFor(endpoint)
 	eng, err := chserver.New(chserver.Config{
 		Endpoint:   endpoint,
-		User:       inst.cfg.User,
-		Password:   inst.cfg.Password,
+		User:       user,
+		Password:   password,
 		HTTPClient: inst.http,
 	})
 	if err != nil {

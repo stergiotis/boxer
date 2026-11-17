@@ -39,6 +39,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/llm"
 	"github.com/stergiotis/boxer/public/keelson/runtime/llm/promptbook"
 	"github.com/stergiotis/boxer/public/keelson/runtime/moderator"
+	"github.com/stergiotis/boxer/public/keelson/runtime/queryendpoint"
 	"github.com/stergiotis/boxer/public/keelson/runtime/statestore"
 	"github.com/stergiotis/boxer/public/keelson/runtime/sysmetricsbus"
 	"github.com/stergiotis/boxer/public/keelson/runtime/task/supervisor"
@@ -450,8 +451,20 @@ func Start(deps Deps) (stop func(context.Context) error, err error) {
 	// by a runner — an unbacked endpoint answers 503, so offering it as a
 	// query target would be a foot-gun. External consumers still reach the
 	// tables via url('<BaseURL>/table/<name>') regardless.
+	retractEndpoint := func() {}
 	if cfg.Runner != nil {
 		introspect.SetLocalQueryEndpoint(endpoint)
+		// Listed by name too, beside whatever else this process serves.
+		if retract, perr := queryendpoint.Publish(queryendpoint.Endpoint{
+			Name:    queryendpoint.NameIntrospection,
+			Display: "Keelson introspection",
+			Summary: "Read the runtime's own tables and ad-hoc datasets as keelson('<name>')",
+			URL:     endpoint,
+		}); perr != nil {
+			deps.Log.Warn().Err(perr).Msg("introspecthost: the /query endpoint is not listed among the process's query endpoints")
+		} else {
+			retractEndpoint = retract
+		}
 		// Published together: a co-resident dispatcher needs both the plane
 		// and the one question about it that decides confinement (ADR-0145).
 		introspect.SetLocalSealedPredicate(reg.IsSealed)
@@ -469,6 +482,7 @@ func Start(deps Deps) (stop func(context.Context) error, err error) {
 
 	stop = func(ctx context.Context) error {
 		introspect.SetLocalQueryEndpoint("")
+		retractEndpoint()
 		introspect.SetLocalSealedPredicate(nil)
 		introspect.SetLocalProbe(nil)
 		if topoHolder != nil {
