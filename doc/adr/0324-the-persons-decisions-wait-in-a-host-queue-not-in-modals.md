@@ -315,6 +315,14 @@ bound. It reads `Queue.Pending`, which classifies and orders the items as
 chrome's. A shelf that has come due reads as back. On a host without the
 agent service the queue is not built and the table is empty.
 
+### 2026-11-17 — a chat's question in one place, by focus
+
+[ADR-0379](./0379-the-chat-window-one-place-for-a-decision-ids-unique-per-conversation-and-what-the-person-reads.md)
+§SD1 narrows the row for chat `ask_user` and exit approvals. While the chat
+window has focus, the question is the window's form alone. It is posted to
+the queue once the window loses focus, and a posted card stays until it is
+answered. Answering either surface still settles both.
+
 ## References
 
 - [Juggling — one operator, many streams](../adr-background-work/juggling-many-agent-streams.md)

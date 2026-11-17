@@ -300,6 +300,13 @@ the resume line tells the person and the model so. The image set, a
 revert's history and a proposal waiting under Ask first at the host's end
 stay deferred.
 
+### 2026-11-17 — every snapshot comes back on resume
+
+[ADR-0379](./0379-the-chat-window-one-place-for-a-decision-ids-unique-per-conversation-and-what-the-person-reads.md)
+§SD4 reads every snapshot back as a revision, not the last alone, so Revert
+reaches the turns before the head. An export's screenshots carry into the
+later revisions. Writes inside a turn still do not come back.
+
 None.
 
 ## References

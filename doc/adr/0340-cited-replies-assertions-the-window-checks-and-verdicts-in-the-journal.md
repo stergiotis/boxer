@@ -519,6 +519,16 @@ The gate's order and every bound are unchanged. The history is in memory
 and per window, so a check after the window closed stays `unchecked`
 (SD1) and a recheck from the journal stays deferred.
 
+### 2026-11-17 — ids unique per conversation; a copy carries the marks
+
+[ADR-0379](./0379-the-chat-window-one-place-for-a-decision-ids-unique-per-conversation-and-what-the-person-reads.md)
+§SD2 makes an assertion id unique in the conversation, not the turn: `cite`
+refuses an id an earlier turn used and names the next free one. The SD6
+rule for an id two turns reused remains for runs written before. Its §SD3
+makes a copy carry the references' marks and the citations. The guard
+still reads the raw references, and a held gesture is drawn beside its
+control.
+
 ## References
 
 - [ADR-0269](./0269-app-operations-a-command-query-contract-agents-drive-under-a-task-grant.md), [ADR-0270](./0270-play-operations-catalog-and-agent-limits.md) — the operation contract, play's catalog and agent limits.
