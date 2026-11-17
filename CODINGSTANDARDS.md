@@ -419,7 +419,7 @@ var LogLevel = env.NewString(env.Spec{
 })
 ```
 
-Read the value through the handle (`LogLevel.Get(ctx)` / `LogLevel.Lookup(ctx)`); derive CLI flags with `Spec.AsCliFlag()`; override in tests with `SetForTest`. Rationale: a single registry yields discoverability, typed parsing, doc generation (`boxer env gen-docs`), and prevents the lowercase-name and typo defects that motivated ADR-0009.
+Read the value through the handle (`LogLevel.Get(ctx)` / `LogLevel.Lookup(ctx)`); derive CLI flags with `Spec.AsCliFlag()`; override in tests with `SetForTest`. Rationale: a single registry yields discoverability, typed parsing, doc generation (`boxer env gen-docs`), a commented environment file to fill in (`boxer env gen-envfile`), and prevents the lowercase-name and typo defects that motivated ADR-0009.
 
 ## Concurrency Patterns
 *  **Context:** usage is mandatory for all I/O bound or long-running functions. `ctx` must be the first argument.

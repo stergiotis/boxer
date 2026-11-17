@@ -39,6 +39,11 @@ func NewGenDocsCommand() (cmd *cli.Command) {
 				Usage: "the command the markdown tells a reader to re-run after a spec changes",
 				Value: "go generate ./public/config/env/...",
 			},
+			&cli.StringFlag{
+				Name:  "envfile-command",
+				Usage: "the subcommand the markdown names for a commented environment file; empty omits it, for a host that does not mount gen-envfile",
+				Value: "env gen-envfile",
+			},
 		},
 		Action: runGenDocs,
 	}
@@ -50,6 +55,7 @@ func runGenDocs(ctx context.Context, cmd *cli.Command) (err error) {
 	body := Render(Options{
 		GeneratorPath:  cmd.String("generator"),
 		RegenerateHint: cmd.String("regenerate-hint"),
+		EnvFileCommand: cmd.String("envfile-command"),
 	})
 	err = writeOutput(outPath, []byte(body))
 	if err != nil {

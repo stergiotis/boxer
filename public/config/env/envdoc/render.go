@@ -34,6 +34,12 @@ type Options struct {
 	// suppresses the hint paragraph.
 	RegenerateHint string
 
+	// EnvFileCommand is the subcommand the page names for rendering the
+	// same variables as a commented environment file (e.g. "env
+	// gen-envfile"). Empty omits the sentence, for a host that does not
+	// mount NewGenEnvFileCommand.
+	EnvFileCommand string
+
 	// Status sets the front-matter `status:` value. Empty defaults to
 	// "draft" — machine-generated registry snapshots are pre-human-
 	// review by definition (DOCUMENTATION_STANDARD §4), so promoting
@@ -122,6 +128,9 @@ func renderSpecs(specs []env.Spec, opts Options) (out string) {
 		len(specs), len(cats))
 	if opts.RegenerateHint != "" {
 		intro += " Re-run `" + opts.RegenerateHint + "` after adding or modifying specs."
+	}
+	if opts.EnvFileCommand != "" {
+		intro += " `" + opts.EnvFileCommand + "` renders the same variables as a commented environment file to fill in."
 	}
 	b.WriteString(intro + "\n\n")
 
