@@ -54,6 +54,9 @@ func registry(t *testing.T) *app.Registry {
 	dashboardlet := app.Manifest{Id: "github.com/x/apps/dashboardlet/fleet", Display: "Fleet", Summary: "the fleet at a glance",
 		Kind: app.KindDashboardlet, Keywords: []string{"fleet"}, Surface: app.SurfaceWindowed, Topics: []app.TopicT{app.AllTopics[0]}}
 	require.NoError(t, r.RegisterFactory(dashboardlet, func() (app.AppI, error) { return nil, nil }))
+	notebooklet := app.Manifest{Id: "github.com/x/apps/notebooklet/throughput", Display: "Throughput", Summary: "the throughput report, read live",
+		Kind: app.KindNotebooklet, Keywords: []string{"throughput"}, Surface: app.SurfaceWindowed, Topics: []app.TopicT{app.AllTopics[0]}}
+	require.NoError(t, r.RegisterFactory(notebooklet, func() (app.AppI, error) { return nil, nil }))
 	return r
 }
 
@@ -91,6 +94,10 @@ func TestDescribeListsAgentOperationsWithoutSchemas(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, found, 1, "a keyword finds a dashboardlet")
 	assert.Equal(t, "Fleet", found[0].Display)
+	found, err = cli.Describe(context.Background(), DescribeRequest{Search: "throughput"})
+	require.NoError(t, err)
+	require.Len(t, found, 1, "a keyword finds a notebooklet")
+	assert.Equal(t, "Throughput", found[0].Display)
 	require.Len(t, apps[0].Operations, 1, "debug_dump is not exposed to agents")
 	op := apps[0].Operations[0]
 	assert.Equal(t, "set_note", op.Name)

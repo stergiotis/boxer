@@ -306,12 +306,12 @@ func (inst *Service) describe(msg *app.Msg) (rep wireDescribeReply, req wireDesc
 		if m.Kind == app.KindWorkstatelet {
 			continue
 		}
-		// An applet, a chatlet or a dashboardlet only when named or
-		// searched for: a build mints dozens of applets, each with play's
-		// operable subset, a chatlet carries the chat's catalog, a
-		// dashboardlet its viewer's, and the whole list is the model's
-		// first call.
-		if (m.Kind == app.KindApplet || m.Kind == app.KindChatlet || m.Kind == app.KindDashboardlet) && req.App == "" && search == "" {
+		// An applet, a chatlet, a dashboardlet or a notebooklet only when
+		// named or searched for: a build mints dozens of applets, each with
+		// play's operable subset, a chatlet carries the chat's catalog, a
+		// dashboardlet its viewer's, a notebooklet its pane's, and the
+		// whole list is the model's first call.
+		if (m.Kind == app.KindApplet || m.Kind == app.KindChatlet || m.Kind == app.KindDashboardlet || m.Kind == app.KindNotebooklet) && req.App == "" && search == "" {
 			continue
 		}
 		appHit := search == "" || containsFold(string(m.Id), search) || containsFold(m.Display, search) || containsFold(m.Summary, search) ||

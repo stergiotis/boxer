@@ -414,6 +414,12 @@ func (inst *Inst) renderRowBadges(ids *c.WidgetIdStack, m app.Manifest, isOpen b
 			Size(badge.SizeSm).
 			Tooltip("one dashboard from a committed document, in the dashboard viewer").
 			Send()
+	case app.KindNotebooklet:
+		badge.New(ids.PrepareStr(key("kind")), "notebooklet").
+			Tone(badge.ToneInfo).
+			Size(badge.SizeSm).
+			Tooltip("a committed notebook, its records computed on the server when it opens; nothing is stored").
+			Send()
 	case app.KindDemo:
 		badge.New(ids.PrepareStr(key("kind")), "demo").
 			Tone(badge.ToneNeutral).
