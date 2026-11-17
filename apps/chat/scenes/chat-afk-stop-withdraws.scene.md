@@ -44,7 +44,7 @@ Tagged slow with the other scenes of the person being away.
 {"do":"click","contains":"your turn","role":"button"}
 {"do":"click","contains":"Next","role":"button","comment":"its card, non-modal"}
 {"do":"wait","valueContains":"asks to call set_sql","role":"label","nth":0}
-{"do":"wait","valueContains":"waiting for you","role":"label"}
+{"do":"wait","valueContains":"waiting for you","role":"label","nth":1}
 {"do":"click","contains":"Cancel","role":"button","comment":"the person stops the turn"}
 {"do":"wait","contains":"Send","role":"button"}
 {"do":"click","name":"Analytics","role":"button","settleMs":800}

@@ -41,9 +41,9 @@ reads its outcome. Tagged slow, since it waits out the deadline.
 {"do":"click","contains":"your turn","role":"button"}
 {"do":"click","contains":"Next","role":"button","comment":"its card, non-modal"}
 {"do":"wait","valueContains":"deadline has passed","role":"label","nth":0}
-{"do":"wait","valueContains":"waiting for you","role":"label"}
+{"do":"wait","valueContains":"waiting for you","role":"label","nth":1}
 {"do":"sleep","settleMs":11000,"comment":"past the chat's ten seconds"}
-{"do":"wait","valueContains":"waiting for you","role":"label"}
+{"do":"wait","valueContains":"waiting for you","role":"label","nth":1}
 {"do":"capture","text":"chat-afk-late-call-waiting"}
 {"do":"click","name":"Approve","role":"button","comment":"more time"}
 {"do":"wait","name":"rendered","role":"radio_button","comment":"the model read the write's outcome"}
