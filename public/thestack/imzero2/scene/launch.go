@@ -218,20 +218,21 @@ func Launch(spec Spec, opts Options) (s *Session, err error) {
 		"--clientInitialMainWindowWidth", strconv.Itoa(w),
 		"--clientInitialMainWindowHeight", strconv.Itoa(h),
 	}
-	fallback := resolveFont("Noto Sans Mono CJK JP", "CJK")
+	fonts, _ := fontconfigResolver().Resolve()
 	if spec.FallbackFont != "" {
-		fallback = resolveFont(spec.FallbackFont, spec.FallbackFont)
+		fonts.Fallback = resolveFont(spec.FallbackFont, spec.FallbackFont)
 	}
+	fallback := fonts.Fallback
 	for _, f := range []struct{ flag, path string }{
-		{"--mainFontTTF", resolveFont("Noto Sans", "Noto Sans")},
-		{"--monoFontTTF", resolveFont("DejaVu Sans Mono", "DejaVu Sans Mono")},
+		{"--mainFontTTF", fonts.Main},
+		{"--monoFontTTF", fonts.Mono},
 		{"--phosphorFontTTF", filepath.Join(opts.RepoRoot, "rust", "imzero2", "assets", "fonts", "phosphor", "Phosphor.ttf")},
 		// Without a fallback a codepoint the main font lacks renders as a
 		// different glyph than on a desktop launch, at a different size.
 		{"--fallbackFontTTF", fallback},
 		// The bold face of the main family; without it headings and strong
 		// runs render at regular weight.
-		{"--boldFontTTF", resolveFont("Noto Sans:bold", "Noto Sans")},
+		{"--boldFontTTF", fonts.Bold},
 	} {
 		if _, e := os.Stat(f.path); f.path != "" && e == nil {
 			args = append(args, f.flag, f.path)

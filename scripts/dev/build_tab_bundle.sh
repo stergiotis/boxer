@@ -17,9 +17,9 @@
 # `imzero2tab serve` proxies /ch/ to a ClickHouse HTTP endpoint (--chURL,
 # default http://127.0.0.1:8123/); the worker hands the module CLICKHOUSE_URL
 # for it.
-# Fonts follow rust/imzero2/font-resolve.sh (MAIN_FONT, MONO_FONT,
-# PHOSPHOR_FONT, FALLBACK_FONT override); a slot with no file is left to
-# egui's default face. See doc/howto/imzero2-in-the-browser.md.
+# Fonts are the ones fontconfig finds plus boxer's icon font (MAIN_FONT,
+# MONO_FONT, PHOSPHOR_FONT, FALLBACK_FONT override); a slot with no file is
+# left to egui's default face. See doc/howto/imzero2-in-the-browser.md.
 set -euo pipefail
 out=${1:?usage: build_tab_bundle.sh <out-dir>}
 here=$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")

@@ -4,11 +4,10 @@ set -o pipefail
 here=$(dirname "$(readlink -f "$BASH_SOURCE")")
 cd "$here"
 VSYNC="${VSYNC:-on}"
-# Font selection lives in font-resolve.sh, sourced rather than repeated: the
-# launchers here and the ones in consuming repositories (which reach this
-# file through their boxer pin) then cannot drift apart. Set
-# MAIN_FONT / MONO_FONT / PHOSPHOR_FONT / FALLBACK_FONT beforehand to pin a
-# face; hmi-fonts-pragmatapro.sh is exactly that, scoped to a licensed install.
+# The host finds the text faces through fontconfig; font-resolve.sh adds the
+# icon font and any face pinned beforehand (MAIN_FONT / BOLD_FONT / MONO_FONT /
+# PHOSPHOR_FONT / FALLBACK_FONT); hmi-fonts-pragmatapro.sh is exactly that,
+# scoped to a licensed install.
 . "$here/font-resolve.sh"
 imzero2_resolve_fonts
 

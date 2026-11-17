@@ -43,9 +43,10 @@ trial, not this page.
    subcommand, which builds the Go tab host as a wasip1 reactor
    (`public/thestack/cmd/imzero2tab`) and the Rust browser host as a wasm32
    cdylib (`rust/imzero2/browser`), and writes the fonts, the worker, the
-   WASI shim and the viewer page beside them. Fonts follow
-   `rust/imzero2/font-resolve.sh`; set `MAIN_FONT` and friends to pin faces,
-   or pass `--fonts <dir>` to `bundle`. A slot with no file is left to egui's
+   WASI shim and the viewer page beside them. Fonts are the ones the host
+   finds through fontconfig (`imzero2 fonts` prints them) plus boxer's icon
+   font; set `MAIN_FONT` and friends to pin faces, or pass `--fonts <dir>` to
+   `bundle`. A slot with no file is left to egui's
    default face. Inside boxer the Rust host is built from source, which
    needs cargo and the `wasm32-unknown-unknown` target; `bundle --host
    <file>` takes a prebuilt one instead. From a module that depends on boxer,

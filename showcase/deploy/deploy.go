@@ -33,6 +33,7 @@ import (
 	"github.com/stergiotis/boxer/public/extbin"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/fontresolve"
 )
 
 // Built release artifacts this package executes. Their paths are computed at
@@ -891,15 +892,13 @@ func parseProbe(s string) (aus, keyframes int) {
 	return aus, keyframes
 }
 
+// resolveFont returns override when set, else the file fontconfig finds for
+// family, taken only when fontconfig answers with that family.
 func resolveFont(override, family string) string {
 	if override != "" {
 		return override
 	}
-	out, err := extbin.FcMatch.Output(context.Background(), extbin.Opts{}, "-f", "%{file}", family)
-	if err != nil {
-		return ""
-	}
-	return strings.TrimSpace(string(out))
+	return fontresolve.Resolver{Fontconfig: fontresolve.Fontconfig{}}.Family(family, family)
 }
 
 func copyFile(src, dst string, mode os.FileMode) error {

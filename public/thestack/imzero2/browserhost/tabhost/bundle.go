@@ -2,7 +2,6 @@ package tabhost
 
 import (
 	"bufio"
-	"bytes"
 	"context"
 	"crypto/sha256" //boxer:lint disable=CS009 reason="the published browser host is addressed by SHA-256 so that CI and anyone fetching it can check it with stock sha256sum"
 	"encoding/hex"
@@ -21,6 +20,7 @@ import (
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/browserhost/web"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/fontresolve"
 )
 
 // The bundle subcommand (ADR-0278 SD4): a servable directory built
@@ -41,10 +41,12 @@ var goBuildFlags = []string{"-trimpath", "-buildvcs=auto"}
 
 var goBuildEnv = []string{"CGO_ENABLED=0"}
 
-// fontSlots are the faces the worker fetches from ./fonts/<slot>.ttf, in the
-// order font-resolve.sh fills MAIN_FONT, MONO_FONT, PHOSPHOR_FONT and
-// FALLBACK_FONT.
-var fontSlots = []string{"main", "mono", "phosphor", "fallback"}
+// fontSlots are the faces the worker fetches from ./fonts/<slot>.ttf;
+// fontSlotVars are the variables that pin each.
+var (
+	fontSlots    = []string{"main", "mono", "phosphor", "fallback"}
+	fontSlotVars = []string{"MAIN_FONT", "MONO_FONT", "PHOSPHOR_FONT", "FALLBACK_FONT"}
+)
 
 func bundleCommand() (cmd *cli.Command) {
 	return &cli.Command{
@@ -55,7 +57,7 @@ func bundleCommand() (cmd *cli.Command) {
 			&cli.StringFlag{Name: "pkg", Usage: "the main package to build for the tab; empty is this binary's own"},
 			&cli.StringFlag{Name: "host", Usage: "a prebuilt imzero2_browser.wasm, used as given; empty obtains it per --hostFrom"},
 			&cli.StringFlag{Name: "hostFrom", Value: hostFromAuto, Usage: "auto: build from source inside boxer, fetch by the recorded digest from any other module (building when the fetch fails); fetch; source (needs cargo and the wasm32-unknown-unknown target)"},
-			&cli.StringFlag{Name: "fonts", Usage: "a directory holding main.ttf, mono.ttf, phosphor.ttf and fallback.ttf (each optional); empty resolves them as boxer's launchers do"},
+			&cli.StringFlag{Name: "fonts", Usage: "a directory holding main.ttf, mono.ttf, phosphor.ttf and fallback.ttf (each optional); empty takes MAIN_FONT, MONO_FONT, PHOSPHOR_FONT, FALLBACK_FONT where set, else what fontconfig finds and boxer's icon font"},
 			&cli.BoolFlag{Name: "withAssets", Usage: "also write the page, worker and shim, for serving the bundle with something other than this binary"},
 			&cli.BoolFlag{Name: "wasmOpt", Usage: "shrink the Go module with wasm-opt -Oz (binaryen); off by default — on a module of tens of megabytes it can need more memory than a CI runner has"},
 		},
@@ -309,8 +311,9 @@ func fileSha256(path string) (sum string, err error) {
 	return hex.EncodeToString(h.Sum(nil)), nil
 }
 
-// placeFonts copies the four faces from dir, or from what boxer's resolver
-// finds. A face that is missing is left to egui's default and said so.
+// placeFonts copies the four faces from dir, or else the ones the variables
+// pin and fontconfig finds, with the icon font from boxerDir. A face that is
+// missing is left to egui's default and said so.
 func placeFonts(dir string, boxerDir string, dst string) {
 	paths := make([]string, len(fontSlots))
 	if dir != "" {
@@ -318,15 +321,12 @@ func placeFonts(dir string, boxerDir string, dst string) {
 			paths[i] = filepath.Join(dir, slot+".ttf")
 		}
 	} else {
-		lib := filepath.Join(boxerDir, "rust", "imzero2", "font-resolve.sh")
-		o, err := extbin.Bash.Output(context.Background(), extbin.Opts{}, "-c", `source "$1" && imzero2_resolve_fonts >/dev/null 2>&1; printf '%s\n' "$MAIN_FONT" "$MONO_FONT" "$PHOSPHOR_FONT" "$FALLBACK_FONT"`, "bash", lib)
-		if err != nil {
-			log.Warn().Err(err).Msg("bundle: the font resolver failed; egui's default faces")
-			return
-		}
-		sc := bufio.NewScanner(bytes.NewReader(o))
-		for i := 0; i < len(fontSlots) && sc.Scan(); i++ {
-			paths[i] = strings.TrimSpace(sc.Text())
+		found, _ := fontresolve.Resolver{Fontconfig: fontresolve.Fontconfig{}}.Resolve()
+		resolved := []string{found.Main, found.Mono, filepath.Join(boxerDir, "rust", "imzero2", "assets", "fonts", "phosphor", "Phosphor.ttf"), found.Fallback}
+		for i, v := range fontSlotVars {
+			if paths[i] = os.Getenv(v); paths[i] == "" {
+				paths[i] = resolved[i]
+			}
 		}
 	}
 	for i, slot := range fontSlots {

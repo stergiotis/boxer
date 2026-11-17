@@ -50,10 +50,8 @@ for _a in "$@"; do
 done
 set -- "${_sbx_args[@]}"
 
-# Same font resolution as the windowed launcher, from the same file: the
-# headless carrier streams the same UI, so a face missing here is the same
-# ragged frame — seen in a browser instead of a window. Sourcing it also picks
-# up the monospace face this launcher used to omit.
+# The same font flags as the windowed launcher, from the same file: the icon
+# font and any pinned face; the host finds the rest.
 . "$here/font-resolve.sh"
 imzero2_resolve_fonts
 

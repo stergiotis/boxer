@@ -2,14 +2,13 @@ package scene
 
 import (
 	"bytes"
-	"context"
 	"os"
 	"path/filepath"
 	"strings"
 
-	"github.com/stergiotis/boxer/public/extbin"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/fontresolve"
 )
 
 // client.go decides which Rust client a scene runs against, and refuses one
@@ -110,19 +109,11 @@ func chooseClient(root string, explicit string, needs []string) (client string, 
 }
 
 // resolveFont asks fontconfig for a family and takes the answer only if it is
-// that family: fc-match always answers, with a fallback when it has no match,
-// and a scene rendered in a fallback font is a different picture.
+// that family: a scene rendered in a substitute font is a different picture.
 func resolveFont(pattern, family string) string {
-	out, err := extbin.FcMatch.Output(context.Background(), extbin.Opts{}, "-f", "%{file}\t%{family}\n", pattern)
-	if err != nil {
-		return ""
-	}
-	file, fam, ok := strings.Cut(strings.TrimSpace(string(out)), "\t")
-	if !ok || !strings.Contains(fam, family) {
-		return ""
-	}
-	if _, e := os.Stat(file); e != nil {
-		return ""
-	}
-	return file
+	return fontconfigResolver().Family(pattern, family)
+}
+
+func fontconfigResolver() fontresolve.Resolver {
+	return fontresolve.Resolver{Fontconfig: fontresolve.Fontconfig{}}
 }

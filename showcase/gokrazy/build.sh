@@ -90,15 +90,17 @@ closure_of() {  # <binary>... -> newline-separated absolute paths
 }
 
 # ---- fonts ------------------------------------------------------------------
-# gokrazy has no fontconfig, so the host cannot fc-match at run time the way
-# hmi_headless.sh does; the files ship in the image and the paths are passed as
-# flags. The CJK fallback is deliberately left out — it is ~20 MB for glyphs the
-# widget demo never draws. A demo that needs them stages a third font here.
+# gokrazy has no fontconfig, so the host cannot find fonts at run time the way
+# it does on a desktop; the files ship in the image and the paths are passed as
+# flags. The main face is the one the host would pick on this build machine
+# (`imzero2 fonts`). The CJK fallback is deliberately left out — it is ~20 MB
+# for glyphs the widget demo never draws. A demo that needs them stages a third
+# font here.
 phosphor="$repo/rust/imzero2/assets/fonts/phosphor/Phosphor.ttf"
 [ -f "$phosphor" ] || { echo "build.sh: missing $phosphor" >&2; exit 1; }
 main_font="${MAIN_FONT:-}"
-if [ -z "$main_font" ] && command -v fc-match >/dev/null 2>&1; then
-    main_font=$(fc-match -f '%{file}' 'Noto Sans' 2>/dev/null || true)
+if [ -z "$main_font" ]; then
+    main_font=$(cd "$repo" && go run ./public/thestack/cmd/imzero2 imzero2 fonts --face main) || true
 fi
 [ -n "$main_font" ] && [ -f "$main_font" ] || {
     echo "build.sh: no main font found; set MAIN_FONT=/path/to/font.ttf" >&2; exit 1; }
