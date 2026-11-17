@@ -35,7 +35,7 @@ var manifest = app.Manifest{
 	Version:      "0.1.0",
 	Display:      "Embedded notebook demo",
 	Title:        "Embedded notebook demo",
-	Summary:      "A host that draws a notebook's live reading in a region of its own window",
+	Summary:      "A host that draws a notebook's live reading in its own window",
 	Icon:         icons.PhNotebook,
 	Topics:       []app.TopicT{app.TopicData},
 	Keywords:     []string{"notebook", "embed", "live", "pane", "adr-0380"},

@@ -90,7 +90,7 @@ func ParseDocSource(bookID string, p string, src []byte, fsys fs.FS, topics []ap
 		Version: "0.1.0",
 		Display: title,
 		Title:   title,
-		Summary: "The notebook " + title + ", its records computed on the server when it opens",
+		Summary: "A committed notebook, its records computed when it opens",
 		Icon:    icons.PhNotebook,
 		Topics:  topics,
 		Kind:    app.KindNotebooklet,

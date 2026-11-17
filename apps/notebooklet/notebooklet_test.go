@@ -56,6 +56,7 @@ func TestMintedManifestsHoldToThePanesCaps(t *testing.T) {
 		m, ok := reg.LookupManifest(app.AppIdT(idPrefix + slug))
 		require.True(t, ok, slug)
 		assert.Equal(t, app.KindNotebooklet, m.Kind)
+		assert.LessOrEqual(t, len([]rune(m.Summary)), 72, "the launcher's summary budget")
 		assert.Equal(t, slug, Slug(m.Id))
 		require.NoError(t, m.Operations.Validate())
 		for _, name := range []string{opGetDocument, opOpenInNotebook, notebook.OperationRunLive, notebook.OperationShowStored, notebook.OperationGetReading} {
