@@ -377,9 +377,10 @@ func (inst *coordinator) ceilingNote() (note string) {
 		rounds = int(RoundsEnv.Get())
 	}
 	note += " A turn takes at most " + strconv.Itoa(rounds) + " rounds of tool calls; request_access with rounds asks the person for more."
-	if d := serverDestination(); d != "" && inst.preset != nil && inst.ceiling.Reach >= agent.ReachData {
+	if d := serverDestination(); d != "" && inst.ceiling.Reach >= agent.ReachData {
 		// Without it the model learns the name from a window it opened, and
-		// the person answers a second dialog (ADR-0364, proposed).
+		// the person answers a second dialog (ADR-0364): in the plain chat
+		// as in a chatlet, the most repeated widening on the record.
 		note += " This host's ClickHouse server is the destination " + d + ": if your plan reads the server, name it in your first request_access."
 	}
 	if !inst.ceiling.Unpaced && s.Level >= agent.LevelView {

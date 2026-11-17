@@ -258,9 +258,9 @@ func TestPreset_followupsAndPurposeAreBounded(t *testing.T) {
 }
 
 // The model is told the server before its first request, so one dialog can
-// cover it; a plain chat's note is unchanged, and a window that cannot reach
+// cover it, in a chatlet and in the plain chat; a window that cannot reach
 // the server is not told of one.
-func TestCeilingNote_namesTheServerForAPresetThatCanReachIt(t *testing.T) {
+func TestCeilingNote_namesTheServerToAWindowThatCanReachIt(t *testing.T) {
 	p := auditTrailPreset()
 	note := func(preset *Preset, reach agent.ReachE) string {
 		coord := newCoordinatorIn(nil, nil, nil, "conv")
@@ -270,7 +270,8 @@ func TestCeilingNote_namesTheServerForAPresetThatCanReachIt(t *testing.T) {
 	}
 	assert.Contains(t, note(&p, agent.ReachData), "destination "+serverDestination())
 	assert.NotContains(t, note(&p, agent.ReachHost), "clickhouse:")
-	assert.NotContains(t, note(nil, agent.ReachData), "clickhouse:")
+	assert.Contains(t, note(nil, agent.ReachData), "destination "+serverDestination(), "the plain chat too")
+	assert.NotContains(t, note(nil, agent.ReachHost), "clickhouse:")
 	assert.Equal(t, "clickhouse:ch.example:8123", destinationOfURL("http://ch.example:8123/"))
 	assert.Empty(t, destinationOfURL("not a url"))
 }
