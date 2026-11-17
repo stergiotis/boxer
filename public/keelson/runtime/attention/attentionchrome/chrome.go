@@ -485,13 +485,15 @@ func (inst *Chrome) renderRow(e attention.Entry, now time.Time, ids *c.WidgetIdS
 			inst.openCard(k)
 			inst.listOpen = false
 		}
-		inst.renderPersonActs(e, now, ids, "row")
+		inst.renderPersonActs(e, now, ids, "row", true)
 	}
 }
 
 // renderPersonActs draws Acknowledge and Shelve, or Unshelve (ADR-0324
-// §SD4).
-func (inst *Chrome) renderPersonActs(e attention.Entry, now time.Time, ids *c.WidgetIdStack, scope string) {
+// §SD4). ack false leaves Acknowledge out: on an open card the person is
+// looking at the item, and escalation, which Acknowledge stops, would only
+// open the card that is open.
+func (inst *Chrome) renderPersonActs(e attention.Entry, now time.Time, ids *c.WidgetIdStack, scope string, ack bool) {
 	k := scope + "-" + e.Key
 	q := inst.svc.Queue
 	if !e.ShelvedUntil.IsZero() {
@@ -502,7 +504,7 @@ func (inst *Chrome) renderPersonActs(e attention.Entry, now time.Time, ids *c.Wi
 		}
 		return
 	}
-	if !e.Acked {
+	if ack && !e.Acked {
 		if c.Button(ids.PrepareStr("attention-ack-"+k), c.Atoms().Text("Acknowledge").Keep()).Small().SendResp().HasPrimaryClicked() {
 			q.Acknowledge(e.Item, now)
 			inst.read = time.Time{}
@@ -581,7 +583,7 @@ func (inst *Chrome) RenderCards(ids *c.WidgetIdStack) {
 			}
 			c.Separator().Send()
 			for range c.HorizontalTop().KeepIter() {
-				inst.renderPersonActs(e, now, ids, "card")
+				inst.renderPersonActs(e, now, ids, "card", false)
 				if c.Button(ids.PrepareStr("attention-close-"+key), c.Atoms().Text("Close").Keep()).Small().SendResp().HasPrimaryClicked() {
 					closeIt = true
 				}

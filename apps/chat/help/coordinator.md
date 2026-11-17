@@ -30,7 +30,11 @@ plan will reach (`keelson:apps`, `clickhouse:host:port`, `publish:<prefix>`),
 whether it wants to arrange the desktop, and more rounds when its plan will
 not fit. The request carries the **ceiling** from your Settings, and waits
 for your decision in the host's queue (ADR-0324) — the turn's state reads
-**your turn** — as a card you approve, lower or refuse. The model reads
+**your turn** — as a card you approve, lower or refuse. The card lists
+the windows the model asked for, with the other open windows folded under
+it; a widening lists only what it adds, with what the task already holds
+folded; each destination is said in words beside its name; the call
+budget is under **Details**. The model reads
 "access granted" with the terms, or "the person did not grant access" with
 the reason, and a next step it can take. An expired request
 (`BOXER_AGENT_REQUEST_TIMEOUT`) is a refusal for that turn only; the model

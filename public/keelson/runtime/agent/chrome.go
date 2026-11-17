@@ -6,6 +6,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
@@ -449,7 +450,9 @@ func (inst *Chrome) renderRequest(r *request, windows []windowRow, waiting int, 
 		c.Label(who + " asks to call " + r.held.req.Operation + " in window " + strconv.FormatUint(r.held.req.Instance, 10) + ".").Wrap().Send()
 		c.Label(needText(r.held)).Wrap().Send()
 	case r.task != nil:
-		c.Label(who + " asks to widen task " + r.task.id + ".").Wrap().Send()
+		for range c.HoverText("task " + r.task.id).KeepIter() {
+			c.Label(who + " asks for more in the task it holds. What it already holds is folded below; what is new is listed.").Wrap().Send()
+		}
 	default:
 		c.Label(who + " asks to start a task.").Wrap().Send()
 	}
@@ -463,22 +466,30 @@ func (inst *Chrome) renderRequest(r *request, windows []windowRow, waiting int, 
 	if taintedConv {
 		c.Label("This conversation has read untrusted content: what the model writes may have been steered by it.").Wrap().Send()
 	}
+	if r.task != nil {
+		inst.renderHeldTerms(r, windows, ids)
+	}
 	if r.held == nil || r.held.need == needInstance {
 		c.Separator().Send()
-		c.Label("Share these windows, in the mode you pick:").Send()
-		if len(windows) == 0 {
+		asked, others := svc.splitWindows(r, windows)
+		switch {
+		case len(windows) == 0:
 			c.Label("No other window is open").Send()
+		case len(asked) > 0:
+			c.Label("Share these windows, in the mode you pick:").Send()
+		default:
+			c.Label("The model asked for none of the open windows.").Wrap().Send()
 		}
 		// One row per window: whether it is shared, the mode, and what the
-		// mode lets the task do — the columns aligned across windows.
-		bounded(ids.PrepareStr("agent-share-list-"+r.key), shareListHeight, func() {
-			for range c.Grid(ids.PrepareStr("agent-share-grid-" + r.key)).NumColumns(3).KeepIter() {
-				for _, w := range windows {
-					inst.renderShareRow(r, w, ids)
-					c.EndRow()
-				}
+		// mode lets the task do — the columns aligned across windows. The
+		// windows the model asked for come first; the rest are folded, to be
+		// shared from here when the person wants to.
+		inst.renderShareGrid(r, asked, "asked", ids)
+		if len(others) > 0 {
+			for range c.CollapsingHeader(ids.PrepareStr("agent-share-others-"+r.key), c.WidgetText().Text("Other open windows · "+strconv.Itoa(len(others))).Keep()).KeepIter() {
+				inst.renderShareGrid(r, others, "others", ids)
 			}
-		})
+		}
 	}
 	if len(r.launches) > 0 {
 		bounded(ids.PrepareStr("agent-launch-list-"+r.key), launchListHeight, func() {
@@ -505,13 +516,26 @@ func (inst *Chrome) renderRequest(r *request, windows []windowRow, waiting int, 
 		r.desktopShare = *flag
 		svc.mu.Unlock()
 	}
-	if len(r.destinations) > 0 {
+	if dests := svc.newDestinations(r); len(dests) > 0 {
+		c.Label("Its work may also:").Send()
 		bounded(ids.PrepareStr("agent-destinations-"+r.key), modelTextHeight, func() {
-			c.Label("destinations: " + joinComma(r.destinations)).Wrap().Send()
+			for _, d := range dests {
+				renderDestination(d)
+			}
 		})
 	}
 	if r.task == nil {
-		inst.renderBudget(r, ids)
+		// The budget is tuning: its default is what the coordinator asked
+		// for, and the header says it without unfolding.
+		svc.mu.Lock()
+		calls := svc.clampCalls(r.calls)
+		if r.callsFlag != nil {
+			calls = int(math.Round(*r.callsFlag))
+		}
+		svc.mu.Unlock()
+		for range c.CollapsingHeader(ids.PrepareStr("agent-details-"+r.key), c.WidgetText().Text("Details · up to "+strconv.Itoa(calls)+" calls").Keep()).KeepIter() {
+			inst.renderBudget(r, ids)
+		}
 	}
 	if r.held != nil && r.held.req.Reason != "" {
 		bounded(ids.PrepareStr("agent-reason-"+r.key), modelTextHeight, func() {
@@ -544,6 +568,147 @@ func (inst *Chrome) renderRequest(r *request, windows []windowRow, waiting int, 
 		decline = c.Button(ids.PrepareStr("agent-decline-"+r.key), c.Atoms().Text("Decline").Keep()).SendResp().HasPrimaryClicked()
 	}
 	return
+}
+
+// renderShareGrid is one grid of window rows; part keeps the ids of a
+// request's two grids apart.
+func (inst *Chrome) renderShareGrid(r *request, windows []windowRow, part string, ids *c.WidgetIdStack) {
+	if len(windows) == 0 {
+		return
+	}
+	bounded(ids.PrepareStr("agent-share-list-"+part+"-"+r.key), shareListHeight, func() {
+		for range c.Grid(ids.PrepareStr("agent-share-grid-" + part + "-" + r.key)).NumColumns(3).KeepIter() {
+			for _, w := range windows {
+				inst.renderShareRow(r, w, ids)
+				c.EndRow()
+			}
+		}
+	})
+}
+
+// splitWindows is the windows a request asked for, and the others it may
+// share, leaving out what its task already holds: that is listed under
+// what the task holds.
+func (inst *Service) splitWindows(r *request, windows []windowRow) (asked []windowRow, others []windowRow) {
+	inst.mu.Lock()
+	defer inst.mu.Unlock()
+	for _, w := range windows {
+		_, wanted := r.wanted[w.key]
+		switch {
+		case wanted || r.share[w.key]:
+			asked = append(asked, w)
+		case r.task != nil && r.task.entries[w.key] != nil:
+		default:
+			others = append(others, w)
+		}
+	}
+	return
+}
+
+// newDestinations is what a request asks to reach that its task does not
+// already reach.
+func (inst *Service) newDestinations(r *request) (out []string) {
+	inst.mu.Lock()
+	defer inst.mu.Unlock()
+	for _, d := range r.destinations {
+		if r.task == nil || !slices.Contains(r.task.destinations, d) {
+			out = append(out, d)
+		}
+	}
+	return
+}
+
+// renderHeldTerms is what a widened task already holds, folded: its
+// windows and their modes, the apps it may open, where its work reaches,
+// its desktop mode and its calls.
+func (inst *Chrome) renderHeldTerms(r *request, windows []windowRow, ids *c.WidgetIdStack) {
+	svc := inst.svc
+	titles := make(map[uint64]string, len(windows))
+	for _, w := range windows {
+		titles[w.key] = w.title
+	}
+	svc.mu.Lock()
+	t := r.task
+	var lines []string
+	keys := make([]uint64, 0, len(t.entries))
+	for k := range t.entries {
+		keys = append(keys, k)
+	}
+	slices.Sort(keys)
+	for _, k := range keys {
+		e := t.entries[k]
+		name := titles[k]
+		if name == "" {
+			name = e.alias
+		}
+		lines = append(lines, name+" (window "+strconv.FormatUint(k, 10)+") in "+e.mode.String()+" mode")
+	}
+	apps := make([]string, 0, len(t.launches))
+	for id, le := range t.launches {
+		apps = append(apps, "open up to "+strconv.Itoa(le.count)+" window(s) of "+svc.display(id)+" in "+le.mode.String()+" mode, "+strconv.Itoa(le.used)+" opened")
+	}
+	slices.Sort(apps)
+	lines = append(lines, apps...)
+	dests := slices.Clone(t.destinations)
+	if t.desktop == ModeAct {
+		lines = append(lines, "arrange every window on the desktop")
+	}
+	calls := strconv.Itoa(t.callsUsed) + " of " + strconv.Itoa(t.callsBudget) + " calls made"
+	if !t.deadline.IsZero() {
+		if left := time.Until(t.deadline).Round(time.Minute); left > 0 {
+			calls += "; ends in " + left.String()
+		} else {
+			calls += "; its time is up"
+		}
+	}
+	lines = append(lines, calls)
+	svc.mu.Unlock()
+	for range c.CollapsingHeader(ids.PrepareStr("agent-held-"+r.key), c.WidgetText().Text("What the task already holds").Keep()).KeepIter() {
+		bounded(ids.PrepareStr("agent-held-list-"+r.key), modelTextHeight, func() {
+			for _, l := range lines {
+				for rt := range c.RichTextLabel(l) {
+					rt.Small()
+				}
+			}
+			for _, d := range dests {
+				renderDestination(d)
+			}
+		})
+	}
+}
+
+// destinationText is a grant destination in words: what reaching it lets
+// the task's work do. A class it does not know is shown as its name.
+func destinationText(d string) string {
+	class, rest, _ := strings.Cut(d, ":")
+	switch class {
+	case "clickhouse":
+		return "query the ClickHouse server at " + rest
+	case "keelson":
+		return "read this host's table keelson('" + rest + "')"
+	case "keelson-bundle":
+		return "read the shared dataset bundle " + rest
+	case "publish":
+		return "publish bundles whose names start with " + rest + ", without a confirmation each"
+	case "git":
+		return "read the git repository " + rest
+	case "http":
+		return "fetch over HTTP from " + rest
+	case "llm":
+		return "call a model service"
+	}
+	return d
+}
+
+// renderDestination is one destination: its words, and its name as the
+// grant records it.
+func renderDestination(d string) {
+	for range c.HorizontalWrapped().KeepIter() {
+		c.Label("· " + destinationText(d)).Send()
+		for rt := range c.RichTextLabel(d) {
+			rt.Small().Weak().Monospace()
+		}
+	}
 }
 
 // renderBudget is the new task's call budget: a slider over the host's
