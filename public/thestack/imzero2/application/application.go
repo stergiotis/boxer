@@ -21,6 +21,7 @@ import (
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/thestack/fffi2/runtime"
 	"github.com/stergiotis/boxer/public/thestack/fffi2/typed"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/fontresolve"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/hostwake"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/imzero2env"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/metrics"
@@ -104,6 +105,9 @@ func (inst *Application[U]) Launch() (err error) {
 		inst.stdout = bufio.NewWriter(out)
 		inst.stdin = bufio.NewReader(in)
 	} else {
+		if cfg.DiscoverFonts {
+			cfg.fillFonts(fontresolve.Resolver{Fontconfig: fontresolve.Fontconfig{}})
+		}
 		args := make([]string, 0, 32)
 		args = append(args, "imzero2")
 		if cfg.MainFontTTF != "" {

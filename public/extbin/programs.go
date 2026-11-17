@@ -230,10 +230,17 @@ var (
 		InstallHint: "part of policycoreutils (SELinux)",
 	})
 
-	// FcMatch resolves a font file path via fontconfig for the deploy showcase
-	// and for the imzero2 scene runner's host launch.
+	// FcMatch resolves a font file path via fontconfig for the imzero2 font
+	// resolver and the deploy showcase.
 	FcMatch = Declare(Program{
 		Name:        "fc-match",
+		Kind:        Host,
+		InstallHint: "install fontconfig",
+	})
+
+	// FcQuery reads a font file's charset for the imzero2 font resolver.
+	FcQuery = Declare(Program{
+		Name:        "fc-query",
 		Kind:        Host,
 		InstallHint: "install fontconfig",
 	})

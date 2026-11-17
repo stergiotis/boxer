@@ -156,7 +156,10 @@ type Config struct {
 	FallbackFontTTF string
 	// BoldFontTTF is the bold face of the main family; empty shows bold
 	// text at regular weight. It takes MainFontTweak.
-	BoldFontTTF       string
+	BoldFontTTF string
+	// DiscoverFonts fills the main, bold, mono and fallback faces left empty
+	// through fontconfig when the client starts.
+	DiscoverFonts     bool
 	MainFontTweak     FontTweakConfig
 	MonoFontTweak     FontTweakConfig
 	PhosphorFontTweak FontTweakConfig
@@ -196,6 +199,12 @@ func (inst *Config) ToCliFlags(nameTransf config.NameTransformFunc, envVarNameTr
 			Name:     nameTransf("boldFontTTF"),
 			Value:    inst.BoldFontTTF,
 			Usage:    "bold proportional face; empty shows bold text at regular weight",
+			Category: "fonts",
+		},
+		&cli.BoolFlag{
+			Name:     nameTransf("discoverFonts"),
+			Value:    true,
+			Usage:    "find the main (Noto Sans), bold, mono (a face covering the box-drawing block) and fallback (Noto Sans CJK) faces not named by their flags through fontconfig",
 			Category: "fonts",
 		},
 		&cli.Float64Flag{
@@ -254,6 +263,7 @@ func (inst *Config) FromContext(ctx context.Context, nameTransf config.NameTrans
 	inst.PhosphorFontTTF = cmd.String(nameTransf("phosphorFontTTF"))
 	inst.FallbackFontTTF = cmd.String(nameTransf("fallbackFontTTF"))
 	inst.BoldFontTTF = cmd.String(nameTransf("boldFontTTF"))
+	inst.DiscoverFonts = cmd.Bool(nameTransf("discoverFonts"))
 	inst.MainFontSizeInPixels = float32(cmd.Float64(nameTransf("mainFontSizeInPixels")))
 	inst.MainFontTweak = FontTweakConfig{
 		Scale:         float32(cmd.Float64(nameTransf("mainFontScale"))),

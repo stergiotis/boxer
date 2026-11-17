@@ -43,6 +43,7 @@ import (
 	"github.com/stergiotis/boxer/public/thestack/imzero2/carrierclient/drivecmd"
 	demo "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/demo/carousel"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/driver"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/fontresolve/fontscmd"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/scene/scenecmd"
 	"github.com/stergiotis/boxer/showcase/deploy"
 )
@@ -91,6 +92,7 @@ func New(opts Options, cliApp *cli.Command) (inst *Program) {
 				deploy.NewCommand(),
 				drivecmd.NewCommand(),
 				scenecmd.NewCommand(),
+				fontscmd.NewCommand(),
 			},
 		},
 		observability.NewCliCommand(),
