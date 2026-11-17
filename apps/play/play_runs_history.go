@@ -211,12 +211,11 @@ func (inst *Client) rawTsvQuery(ctx context.Context, sql string) (raw []byte, er
 		return
 	}
 	req.Header.Set("Content-Type", "text/plain; charset=utf-8")
-	user, password := inst.credentialFor(req.URL.String())
-	if user != "" {
-		req.Header.Set("X-ClickHouse-User", user)
+	if inst.cfg.User != "" {
+		req.Header.Set("X-ClickHouse-User", inst.cfg.User)
 	}
-	if password != "" {
-		req.Header.Set("X-ClickHouse-Key", password)
+	if inst.cfg.Password != "" {
+		req.Header.Set("X-ClickHouse-Key", inst.cfg.Password)
 	}
 	var resp *http.Response
 	resp, err = inst.http.Do(req)

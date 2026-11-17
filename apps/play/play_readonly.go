@@ -66,8 +66,7 @@ func (inst *readonlyLevels) put(key string, level uint8) {
 
 // knownReadonlyLevel is the level learned for target, 0 when none was.
 func (inst *Client) knownReadonlyLevel(target string) (level uint8) {
-	user, _ := inst.credentialFor(target)
-	level, _ = inst.readonly.get(readonlyKey(user, target))
+	level, _ = inst.readonly.get(readonlyKey(inst.cfg.User, target))
 	return
 }
 
@@ -80,8 +79,7 @@ func (inst *Client) learnReadonlyLevel(ctx context.Context, eng *chserver.Engine
 	if err == nil || !isReadonlyRefusal(err) {
 		return
 	}
-	user, _ := inst.credentialFor(target)
-	key := readonlyKey(user, target)
+	key := readonlyKey(inst.cfg.User, target)
 	if known, ok := inst.readonly.get(key); ok {
 		// Another run learned the level while this one was in flight:
 		// retry at it. Sent at it already and still refused: something else

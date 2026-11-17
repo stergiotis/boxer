@@ -28,20 +28,15 @@ same shape: a gateway that runs house table functions in Go and forwards
 the statement to ClickHouse. Its apps can reach it only by having the
 whole process's ClickHouse target swapped for it in the environment, and a
 dashboard that reads it cannot say so. A second hook per endpoint would
-repeat that for every endpoint and still not say how to authenticate.
-
-Such an endpoint listens on loopback, which every local process and
-browser tab shares. The introspection plane asks for no credential; an
-endpoint that reaches personal data cannot do the same, and a ClickHouse
-user with a password is more than an app in the same process should need.
+repeat that for every endpoint.
 
 ## Decision
 
 **SD1 — A registry lists the query endpoints this process serves.**
 `public/keelson/runtime/queryendpoint` holds, per endpoint, a name, the
 loopback URL of an HTTP interface in ClickHouse's dialect, a display name
-and a summary, and the credential a co-resident client presents (SD3). It
-is process-wide and in memory, like the hook it generalises. The server
+and a summary. It is process-wide and in memory, like the hook it
+generalises. The server
 publishes its entry once it listens and retracts it when it stops.
 
 **SD2 — A name is what a document names.** Lowercase letters, digits and
@@ -50,12 +45,12 @@ no entry describes. The introspection plane publishes itself as
 `introspection`, the word launch configs and applets already use. A name
 is published once; a second publish of a live name is refused.
 
-**SD3 — An endpoint may mint a credential for the process.** An endpoint
-that must not serve every local caller mints a secret when it starts and
-publishes it in its entry as a user and a password. Holding it means
-running in this process. The endpoint decides what a caller presenting it
-may do and as whom it acts. The secret is never logged, never persisted
-and never a column of an introspection table.
+**SD3 — An entry carries no credential.** A client sends a listed
+endpoint the credential it sends the target the environment names. An
+endpoint that forwards statements to that target passes it on; one that
+needs none, as the introspection plane, ignores it. An endpoint that
+wanted callers of its own process told apart from other local callers
+would need more than this; none does (Alternatives).
 
 **SD4 — The existing hook stays.** `introspect.LocalQueryEndpoint` and the
 predicates published beside it keep their callers: play's dispatch reads
@@ -69,21 +64,24 @@ is judged by the locality wall as that engine is: a statement naming
 sealed data is refused there unless the target has proven it reaches this
 plane.
 
-**SD6 — play lists the endpoints and sends each its own credential.**
-play's Endpoint menu offers every listed endpoint after the introspection
-preset. play pins a URL, so the credential follows the URL: a request to
-an address an entry lists carries that entry's user and password, and a
-request to any other address carries the configured ones. The label beside
-the menu names the user the pinned target is asked as.
+**SD6 — play lists the endpoints.** play's Endpoint menu offers every
+listed endpoint after the introspection preset, and pins its URL like a
+typed one. play's one configured credential goes to whatever is pinned.
 
 ## Alternatives
 
-- **One more process-wide hook per endpoint.** No list for a menu, no
-  place for a credential, and a new exported function per endpoint.
+- **One more process-wide hook per endpoint.** No list for a menu, and a
+  new exported function per endpoint.
+- **An entry that carries a credential the endpoint minted for the
+  process.** Built first, for a gateway that served database users by
+  name and wanted its own host's windows admitted without one: a secret
+  in the entry, and play sending each pinned address the credential of
+  its entry. The gateway then stopped asking anything of a caller, and
+  the mechanism had no user left; it was removed the same day rather
+  than kept for a case nobody has.
 - **An introspection table of endpoints.** Fits the runtime's habit of
-  showing what is live as rows, and can follow (Deferred). It cannot be
-  the registry: a table is readable by everything that can query the
-  plane, and the credential must not be.
+  showing what is live as rows, and can follow (Deferred). The consumers
+  are in the process and want a function call, not a query.
 - **A bus subject that answers the endpoints.** A request and a reply for
   what is a read of process memory; the consumers are in the process by
   definition.
@@ -95,11 +93,8 @@ the menu names the user the pinned target is asked as.
 - A window can offer every endpoint the process serves without knowing
   which binary it is linked into; a document can name one. A downstream
   dashboard viewer resolves a datasource reference through the list.
-- An endpoint that mints a credential needs no account on the database for
-  the process's own apps.
-- Anything running in the process can read a minted secret. That is the
-  boundary SD3 draws, and it is the one the introspection plane already
-  has.
+- A listed endpoint that forwards to the database is reached with the
+  rights the client already has there, no more.
 - Two endpoints cannot share a name; the second to start fails its
   publish and says so.
 
@@ -108,8 +103,8 @@ the menu names the user the pinned target is asked as.
 - **Launch configs and applets name any listed endpoint.** Today the
   field admits `default` and `introspection`. Trigger: the first applet
   that reads a downstream endpoint.
-- **`keelson('query_endpoints')`**, without the credential. Trigger: the
-  first question about which endpoints a running host serves.
+- **`keelson('query_endpoints')`**. Trigger: the first question about
+  which endpoints a running host serves.
 
 ## Status
 

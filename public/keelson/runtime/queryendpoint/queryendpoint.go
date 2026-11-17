@@ -48,14 +48,11 @@ type Endpoint struct {
 	Display string
 	// Summary says in a clause what the endpoint answers.
 	Summary string
-	// URL is where statements are posted.
+	// URL is where statements are posted. A client sends it the
+	// credential it sends the target the environment names: an endpoint
+	// that forwards to that target passes it on, and one that needs none
+	// ignores it.
 	URL string
-	// User and Password are the credential a client in this process
-	// presents, as ClickHouse's HTTP interface takes one; both empty when
-	// the endpoint asks for none. A password is a secret minted for the
-	// process: it is not logged or stored.
-	User     string
-	Password string
 }
 
 // Label is the endpoint's display name, or its name when it has none.
@@ -107,23 +104,6 @@ func Lookup(name string) (e Endpoint, ok bool) {
 	mu.RLock()
 	e, ok = endpoints[name]
 	mu.RUnlock()
-	return
-}
-
-// ByURL finds the listed endpoint statements for target are posted to, so
-// a client that holds only a URL can learn the credential that goes with
-// it.
-func ByURL(target string) (e Endpoint, ok bool) {
-	if target == "" {
-		return
-	}
-	mu.RLock()
-	defer mu.RUnlock()
-	for _, c := range endpoints {
-		if c.URL == target {
-			return c, true
-		}
-	}
 	return
 }
 

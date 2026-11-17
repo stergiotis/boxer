@@ -7,10 +7,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// An endpoint is listed from its publish to its retract, found by name
-// and by URL, and listed by name among the others.
+// An endpoint is listed from its publish to its retract, found by name,
+// and listed by name among the others.
 func TestPublishLookupRetract(t *testing.T) {
-	gate := Endpoint{Name: "t-gate", Display: "Gate", URL: "http://127.0.0.1:8124", User: "in-host", Password: "s3cret"}
+	gate := Endpoint{Name: "t-gate", Display: "Gate", URL: "http://127.0.0.1:8124"}
 	retractGate, err := Publish(gate)
 	require.NoError(t, err)
 	retractPlane, err := Publish(Endpoint{Name: "t-a-plane", URL: "http://localhost:9/query"})
@@ -20,12 +20,10 @@ func TestPublishLookupRetract(t *testing.T) {
 	require.True(t, ok)
 	assert.Equal(t, gate, got)
 	assert.Equal(t, "Gate", got.Label())
-	got, ok = ByURL("http://localhost:9/query")
+	got, ok = Lookup("t-a-plane")
 	require.True(t, ok)
 	assert.Equal(t, "t-a-plane", got.Label(), "an endpoint without a display name shows its name")
-	_, ok = ByURL("")
-	assert.False(t, ok)
-	_, ok = ByURL("http://127.0.0.1:8124/other")
+	_, ok = Lookup("t-nowhere")
 	assert.False(t, ok)
 
 	var names []string

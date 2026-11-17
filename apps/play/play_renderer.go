@@ -2617,9 +2617,8 @@ func (inst *PlayApp) renderEndpointSwitcher() {
 	}
 
 	base := inst.client.URL()
-	user, _ := inst.client.credentialFor(base)
-	label := fmt.Sprintf("%s  as %s", truncateRunes(base, 40), user)
-	full := fmt.Sprintf("%s  as %s", base, user)
+	label := fmt.Sprintf("%s  as %s", truncateRunes(base, 40), inst.client.cfg.User)
+	full := fmt.Sprintf("%s  as %s", base, inst.client.cfg.User)
 	// What the server said about this user's readonly level (play_readonly.go):
 	// a degraded run is visible here rather than only in query_log.
 	note := inst.client.ReadonlyNote(base)
@@ -2679,8 +2678,7 @@ func (inst *PlayApp) renderEndpointSwitcher() {
 			}
 		}
 		// The other query endpoints this process serves (ADR-0377), each
-		// under its own stable id. A run pinned to one carries the credential
-		// its entry holds, not the configured user's.
+		// under its own stable id.
 		for _, e := range queryendpoint.All() {
 			if e.Name == queryendpoint.NameIntrospection {
 				continue
