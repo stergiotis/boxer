@@ -89,7 +89,10 @@ The pane states which reading is on screen: stored, with the seal's state,
 or live, with the time of the run. Where no endpoint answers, a notebook
 that has stored results shows them and says they are stored.
 
-A run is repeated by a gesture. Nothing runs on a timer.
+A run is repeated by a gesture. Nothing runs on a timer. A gesture also
+returns to the stored reading, which lets the live one go: one reading is
+held at a time. A text that changes drops the live reading, since its
+records were computed from statements the text no longer holds.
 
 ### SD5 — One pane, built by one constructor, drawn by three hosts
 
@@ -104,7 +107,9 @@ is to an applet and `chat.NewEmbedded` to a chat. Three hosts draw it:
   face.
 
 So what the launcher opens, what an app embeds and what the notebook window
-shows are one thing under one set of rules. When a run first starts is the
+shows are one thing under one set of rules. A document whose records do
+not classify read is refused when an embedded pane is built, not when it
+is first run: no host is handed a pane that can never run. When a run first starts is the
 host's: a notebooklet on open, the notebook window by the person's gesture.
 
 An embedded pane follows the rules an embedded applet and an embedded
@@ -136,7 +141,8 @@ walks every registered book and requires that each notebook reads, composes
 its buffer and classifies *read*.
 
 Its window is the pane and nothing else: no Records face, no collection, no
-store. It offers the document to the notebook window by that app's launch
+store. The pane is that window's own, so its runs are attributed to the
+minted id alone. It offers the document to the notebook window by that app's launch
 kind, as an applet offers its buffer to play
 ([ADR-0135](./0135-app-launch-requests.md)).
 
@@ -263,12 +269,12 @@ did, and `Collect` returns what it returned.
 
 ## Milestones
 
-- **M1 — The computing step.** `Collect` split, with the bound of SD3.
-- **M2 — The pane.** The constructor, the class gate, the run as a task and
+- **M1 — The computing step** ✓. `Collect` split, with the bound of SD3.
+- **M2 — The pane** ✓. The constructor, the class gate, the run as a task and
   the two readings, drawn by the notebook window (SD2–SD5).
-- **M3 — Notebooklets.** The kind, the book seam, the minter and the corpus
+- **M3 — Notebooklets** ✓. The kind, the book seam, the minter and the corpus
   test (SD6).
-- **M4 — A first embedder.** A demo host that draws a pane beside content
+- **M4 — A first embedder** ✓. A demo host that draws a pane beside content
   of its own (SD5).
 
 ## Open questions

@@ -883,6 +883,29 @@ Accepted 2026-11-15.
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers (Tier 1 in-place / Tier 2 dated `## Updates` entry / Tier 3 new superseding ADR).
 
+## Updates
+
+### 2026-11-17 — A live reading beside the stored one (SD9, SD10)
+
+[ADR-0380](./0380-live-notebooks-records-computed-when-read-and-shown-as-a-bound-notebook.md)
+(proposed) adds a reading of a notebook beside the stored one: its records
+computed on the server when it is read, held in the process and shown as
+a bound notebook (SD6). Nothing is stored, the reading is not sealed and
+has no pin, and only a notebook whose records classify read is run this
+way.
+
+- **SD9.** "A query run against the server on open" stays out of the text
+  and out of the stored reading: a notebook still reads without a server,
+  and what it stores is what collection computed. The live reading is the
+  exception ADR-0380 makes, outside the text. The rest of SD9 stands:
+  nothing is evaluated where the notebook is read, and nothing reacts.
+- **SD10.** The Read face is drawn by the pane of ADR-0380 §SD5. It shows
+  what is stored until the person runs the records, says which reading is
+  on screen, and returns to the stored one by a gesture; a text that
+  changes drops the live reading. Collection is unchanged and is still the
+  one path that stores. The same pane is a notebooklet's whole window and
+  can be embedded in another app's frame; neither collects.
+
 ## References
 
 - [ADR-0097](./0097-play-reactive-query-graph.md) — the buffer and its

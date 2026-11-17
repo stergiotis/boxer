@@ -155,6 +155,43 @@ from a snapshot, the place its blobs are found beside it
 the text. The widget gallery's notebook demo draws a fixture, and
 `widgets/notebookview` is the widget for any other host.
 
+## 7. Read it live
+
+A notebook can also be read over the data as it stands, without storing
+anything ([ADR-0380](../adr/0380-live-notebooks-records-computed-when-read-and-shown-as-a-bound-notebook.md),
+proposed). **Run live** on the notebook window's Read face computes every
+record on the server the `CLICKHOUSE_*` variables name — the statements
+collection sends, read-only — and shows the notebook over the results. The
+line above the cells says whether the reading is *stored* or *live*, and
+when a live one was computed; **Show stored** returns to what the notebook
+stores.
+
+- Only a notebook whose records classify *read* runs live. One whose
+  records reach outside the server or change it is refused with what
+  forced it, and is collected instead.
+- A record's result is bounded (`notebook.LiveMaxRows`, `LiveMaxBytes`).
+  A record over the bound fails the run; it is not cut short.
+- A run that fails keeps the reading that was on screen and names the
+  record.
+- The records are separate requests, so two cells over a table that is
+  being written to can disagree.
+
+The same reading is available outside the notebook window:
+
+- **A notebooklet.** A notebook in a book registered with
+  `notebooklet.RegisterBook` is listed in the launcher and runs live when
+  it opens. A test requires every notebook of a registered book to
+  classify read.
+- **An embedded pane.** A host draws one in its own frame with
+  `notebook.NewEmbedded(text, cfg)`, or `notebooklet.Embed(slug, cfg)` for
+  a registered notebook, calls the pane's `Mount`, `Frame` and `Unmount`
+  from its own, and declares `notebook.EmbedCaps()`. Its runs are
+  attributed to `<host>#<key>`. The embedded notebook demo
+  (`apps/notebookdemo`) is this, end to end.
+
+A host that already holds the relations needs neither: it binds them, as
+the next section shows.
+
 ## A notebook a programme writes over what it holds
 
 A host that already holds the relations a report shows — the row a person
