@@ -411,10 +411,12 @@ func (inst *App) drain() {
 		return
 	}
 	now := time.Now().UnixMilli()
-	// A landed turn is read from its start: the question at the top of the
-	// view, then the answer — a long answer is not entered at its end.
-	// Unless the person read it as it was written, following it: then the
-	// view stays where they were reading.
+	// A landed turn is read from its answer's first line — a long answer is
+	// not entered at its end, and the turn's tool lines, which can be many,
+	// do not stand between the reader and it. Unless the person read it as
+	// it was written, following it: then the view stays where they were
+	// reading. A turn that got no answer is read from the question, where
+	// its failure is drawn.
 	asked := ordinalOf(inst.conv.lastUser(), inst.looked.mark)
 	if res, _, ok := inst.turn.TakeResult(); ok {
 		inst.stats.addTurn(inst.conv.id, p.req.Turn, p.started, now, res, nil)
@@ -423,7 +425,7 @@ func (inst *App) drain() {
 		inst.turnEnded("the turn ended")
 		inst.landStops(res)
 		if !p.live.seen || !inst.view.Follow() {
-			inst.view.ScrollToStart(asked)
+			inst.view.ScrollToStart(inst.answerStart(asked))
 		}
 		inst.maybeTitle()
 		return
@@ -539,6 +541,16 @@ func (inst *App) syncWake() {
 func (inst *App) wakeReady() bool {
 	coord := inst.coord
 	return inst.cli != nil && coord != nil && inst.pending == nil && inst.editing == nil && !inst.conv.stranded && inst.conv.ended == "" && inst.deleting != inst.conv.id && coord.wakeDue()
+}
+
+// answerStart is the ordinal a landed turn is read from: its answer, the
+// last entry when the model wrote it, else asked.
+func (inst *App) answerStart(asked int32) int32 {
+	es := inst.conv.entries
+	if n := len(es); n > 0 && es[n-1].speaker == speakerModel && !es[n-1].failed {
+		return ordinalOf(n-1, inst.looked.mark)
+	}
+	return asked
 }
 
 // launchTurn starts req's turn on the coordinator.

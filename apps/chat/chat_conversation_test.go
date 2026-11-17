@@ -521,3 +521,19 @@ func TestARegisteredCoordinatorStartsWithAppsOn(t *testing.T) {
 	agent.CoordinatorsEnv.SetForTest(t, string(ManifestId))
 	assert.True(t, newApp().apps)
 }
+
+// A landed turn is read from its answer, past its tool lines; a turn that
+// got no answer from its question.
+func TestALandedTurnIsReadFromItsAnswer(t *testing.T) {
+	inst := newApp()
+	inst.looked.mark = -1
+	inst.conv.entries = []entry{{speaker: speakerUser, text: "q"}, {speaker: speakerTool, text: "a call"}, {speaker: speakerTool, text: "another"}, {speaker: speakerModel, text: "the answer"}}
+	assert.Equal(t, int32(3), inst.answerStart(0))
+	inst.conv.entries = inst.conv.entries[:3]
+	assert.Equal(t, int32(0), inst.answerStart(0), "no answer: the question")
+	inst.conv.entries = append(inst.conv.entries, entry{speaker: speakerModel, failed: true})
+	assert.Equal(t, int32(0), inst.answerStart(0))
+	inst.conv.entries = []entry{{speaker: speakerUser}, {speaker: speakerModel, text: "a"}}
+	inst.looked.mark = 1
+	assert.Equal(t, int32(2), inst.answerStart(0), "the marker row before it counts")
+}

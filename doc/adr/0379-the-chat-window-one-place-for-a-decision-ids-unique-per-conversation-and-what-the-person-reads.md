@@ -115,6 +115,9 @@ here for the reader who finds the window changed:
   folded under Settings' **Harness** header.
 - **Tab titles.** The tab titles carry a glyph or a count rather than a
   word, so the column's titles fit its default width.
+- **Landed turns.** A landed turn is read from its answer's first line, not
+  from the question: after a long turn the question sat at the top of the
+  view with the tool lines under it, and the answer below the fold.
 
 Kept as they were, by the person's choice on 2026-11-17: the full bar is the
 plain chat's default (the Simple view of ADR-0364 SD6 stays opt-in), and
