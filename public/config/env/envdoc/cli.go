@@ -114,8 +114,7 @@ func NewGenEnvFileCommand() (cmd *cli.Command) {
 			},
 			&cli.StringFlag{
 				Name:  "generator",
-				Usage: "how the file's header names the command that rendered it; a downstream host names its own",
-				Value: "public/app env gen-envfile",
+				Usage: "the command the file's header names as the one that rendered it; empty names none",
 			},
 		},
 		Action: runGenEnvFile,
