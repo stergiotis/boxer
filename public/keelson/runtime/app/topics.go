@@ -116,6 +116,10 @@ const (
 	// host opens the windows its document lists. Stamped by the minter,
 	// never hand-written.
 	KindWorkstatelet KindE = 4
+	// KindDashboardlet is an app minted from a committed dashboardlet
+	// document (ADR-0378): one dashboard, opened in an adopter's dashboard
+	// viewer. Stamped by the minter, never hand-written.
+	KindDashboardlet KindE = 5
 )
 
 var AllKinds = []KindE{
@@ -124,6 +128,7 @@ var AllKinds = []KindE{
 	KindDemo,
 	KindChatlet,
 	KindWorkstatelet,
+	KindDashboardlet,
 }
 
 // String renders the kind as its wire/display token.
@@ -137,6 +142,8 @@ func (inst KindE) String() (s string) {
 		s = "chatlet"
 	case KindWorkstatelet:
 		s = "workstatelet"
+	case KindDashboardlet:
+		s = "dashboardlet"
 	default:
 		s = "app"
 	}
@@ -147,6 +154,6 @@ func (inst KindE) String() (s string) {
 // value is valid — an app that declares no kind is an ordinary app, which is
 // the common case and should not need a line in every manifest.
 func (inst KindE) IsValid() (ok bool) {
-	ok = inst == KindApp || inst == KindApplet || inst == KindDemo || inst == KindChatlet || inst == KindWorkstatelet
+	ok = inst == KindApp || inst == KindApplet || inst == KindDemo || inst == KindChatlet || inst == KindWorkstatelet || inst == KindDashboardlet
 	return
 }

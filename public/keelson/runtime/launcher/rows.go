@@ -408,6 +408,12 @@ func (inst *Inst) renderRowBadges(ids *c.WidgetIdStack, m app.Manifest, isOpen b
 			Size(badge.SizeSm).
 			Tooltip("opens the windows a document lists, in the layout it names").
 			Send()
+	case app.KindDashboardlet:
+		badge.New(ids.PrepareStr(key("kind")), "dashboardlet").
+			Tone(badge.ToneInfo).
+			Size(badge.SizeSm).
+			Tooltip("one dashboard from a committed document, in the dashboard viewer").
+			Send()
 	case app.KindDemo:
 		badge.New(ids.PrepareStr(key("kind")), "demo").
 			Tone(badge.ToneNeutral).

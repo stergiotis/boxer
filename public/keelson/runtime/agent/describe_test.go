@@ -51,6 +51,9 @@ func registry(t *testing.T) *app.Registry {
 		// A minted applet serves a catalog of its own.
 		Operations: notesSet().Catalog()}
 	require.NoError(t, r.RegisterFactory(applet, func() (app.AppI, error) { return nil, nil }))
+	dashboardlet := app.Manifest{Id: "github.com/x/apps/dashboardlet/fleet", Display: "Fleet", Summary: "the fleet at a glance",
+		Kind: app.KindDashboardlet, Keywords: []string{"fleet"}, Surface: app.SurfaceWindowed, Topics: []app.TopicT{app.AllTopics[0]}}
+	require.NoError(t, r.RegisterFactory(dashboardlet, func() (app.AppI, error) { return nil, nil }))
 	return r
 }
 
@@ -83,6 +86,11 @@ func TestDescribeListsAgentOperationsWithoutSchemas(t *testing.T) {
 	found, err = cli.Describe(context.Background(), DescribeRequest{App: "github.com/x/apps/sqlapplet/slow-queries"})
 	require.NoError(t, err)
 	require.Len(t, found, 1, "naming it finds it")
+	// A dashboardlet likewise: each carries its viewer's catalog.
+	found, err = cli.Describe(context.Background(), DescribeRequest{Search: "fleet"})
+	require.NoError(t, err)
+	require.Len(t, found, 1, "a keyword finds a dashboardlet")
+	assert.Equal(t, "Fleet", found[0].Display)
 	require.Len(t, apps[0].Operations, 1, "debug_dump is not exposed to agents")
 	op := apps[0].Operations[0]
 	assert.Equal(t, "set_note", op.Name)
