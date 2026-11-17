@@ -100,6 +100,7 @@ import (
 	_ "github.com/stergiotis/boxer/apps/jackstay"
 	_ "github.com/stergiotis/boxer/apps/mdedit"
 	_ "github.com/stergiotis/boxer/apps/notebook"
+	_ "github.com/stergiotis/boxer/apps/notebookdemo"
 	_ "github.com/stergiotis/boxer/apps/opsdemo"
 	_ "github.com/stergiotis/boxer/apps/play"
 	_ "github.com/stergiotis/boxer/apps/servicedemo"
