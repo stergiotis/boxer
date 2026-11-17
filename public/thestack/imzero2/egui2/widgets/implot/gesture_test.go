@@ -264,3 +264,71 @@ func TestRangeGestureFitAndNonGestures(t *testing.T) {
 		t.Error("a nil plot reports a gesture")
 	}
 }
+
+// A selection covers the drag on the axes it selects, held to the plot
+// area; a selected side of 5 px or under is a click and selects nothing.
+func TestSelectRanges(t *testing.T) {
+	pr := barsTransform() // [0,10]² onto 100×100 px; px y = 100 − 10·v
+	rx, _, okX, okY := selectRanges(pr, SelectX, [2]float32{70, 50}, [2]float32{20, 52})
+	if !okX || okY || rx != (Range{2, 7}) {
+		t.Errorf("SelectX = %v (%v,%v), want x{2 7} only — a short y side does not matter", rx, okX, okY)
+	}
+	_, ry, okX, okY := selectRanges(pr, SelectY, [2]float32{50, 20}, [2]float32{50, 60})
+	if okX || !okY || ry != (Range{4, 8}) {
+		t.Errorf("SelectY = %v (%v,%v), want y{4 8} only", ry, okX, okY)
+	}
+	rx, ry, okX, okY = selectRanges(pr, SelectXY, [2]float32{-30, 20}, [2]float32{20, 160})
+	if !okX || !okY || rx != (Range{0, 2}) || ry != (Range{0, 8}) {
+		t.Errorf("SelectXY past the area = x%v y%v (%v,%v), want x{0 2} y{0 8}", rx, ry, okX, okY)
+	}
+	if _, _, okX, okY = selectRanges(pr, SelectXY, [2]float32{20, 20}, [2]float32{60, 24}); okX || okY {
+		t.Errorf("a 4 px tall SelectXY box selected (%v,%v)", okX, okY)
+	}
+	if _, _, okX, _ = selectRanges(pr, SelectX, [2]float32{-40, 20}, [2]float32{-10, 60}); okX {
+		t.Error("a drag wholly left of the area selected a range")
+	}
+}
+
+// Under DragSelects a plain drag reports a selection of the range under it,
+// once, and leaves the view where it was; Shift+drag still box-zooms, and
+// without the mode the same drag pans.
+func TestRangeGestureSelect(t *testing.T) {
+	mode := SelectX
+	r := newGestureRig(t, func(p *Plot) {
+		p.DragSelects(mode)
+		p.SetupAxisLimits(AxisX1, 0, 10, CondOnce).SetupAxisLimits(AxisY1, 0, 10, CondOnce)
+		p.Line("l", []float64{0, 10}, []float64{0, 10})
+	})
+	drag := func(x0, y0, x1, y1 float64, shift bool) *Plot {
+		r.frame(func() { r.at(x0, y0, c.DragStartedResponseFlags, shift) })
+		r.frame(func() { r.at(x1, y1, c.DraggedResponseFlags, shift) })
+		r.frame(func() { r.at(x1, y1, c.DragStoppedResponseFlags, shift) })
+		return r.frame(nil)
+	}
+	r.frame(nil)
+
+	p := drag(2, 3, 6, 8, false)
+	if vmin, vmax, kind, ok := p.RangeGesture(AxisX1); !ok || kind != GestureSelect || math.Abs(vmin-2) > 0.05 || math.Abs(vmax-6) > 0.05 {
+		t.Errorf("x reports (%v,%v,%v,%v), want a selection of [2,6]", vmin, vmax, kind, ok)
+	}
+	if _, _, k, ok := p.RangeGesture(AxisY1); ok {
+		t.Errorf("SelectX reported %v on y", k)
+	}
+	for _, a := range []AxisE{AxisX1, AxisY1} {
+		if lo, hi, _ := p.AxisLimits(a); lo != 0 || hi != 10 {
+			t.Errorf("a selection moved axis %d to [%v,%v]", a, lo, hi)
+		}
+	}
+	requireNoGesture(t, r.frame(nil), "the frame after the selection's report")
+
+	if _, _, kind, ok := drag(2, 3, 6, 8, true).RangeGesture(AxisX1); !ok || kind != GestureBoxZoom {
+		t.Errorf("Shift+drag under DragSelects reports (%v,%v), want a box zoom", kind, ok)
+	}
+
+	mode = SelectNone
+	r.frame(nil)
+	r.frame(nil)
+	if _, _, kind, ok := drag(2, 3, 6, 8, false).RangeGesture(AxisX1); !ok || kind != GesturePan {
+		t.Errorf("a plain drag without DragSelects reports (%v,%v), want a pan", kind, ok)
+	}
+}

@@ -66,13 +66,17 @@ type plotState struct {
 	// prevWheelScrollsPane is WheelScrollsPane as the previous frame's
 	// canvas was emitted under: whether it left the plain wheel to the pane.
 	prevWheelScrollsPane bool
-	dragging             bool
-	dragBox              bool
-	boxStart             [2]float32
-	boxCur               [2]float32
-	lastDrag             [2]float32
-	hoverPos             [2]float32
-	hoverOk              bool
+	// prevDragSelects is DragSelects as the previous frame declared it; a
+	// drag starting now takes it into dragSelect for its whole length.
+	prevDragSelects SelectE
+	dragging        bool
+	dragBox         bool
+	dragSelect      SelectE
+	boxStart        [2]float32
+	boxCur          [2]float32
+	lastDrag        [2]float32
+	hoverPos        [2]float32
+	hoverOk         bool
 
 	// Legend state: per-label visibility toggles (clicks) and the label
 	// hovered last frame (series highlight). Same-label items share one
@@ -173,6 +177,8 @@ type Plot struct {
 	noLegend      bool
 	// wheelScrollsPane leaves the plain wheel to the surrounding pane.
 	wheelScrollsPane bool
+	// dragSelects makes a plain drag select instead of pan (gesture.go).
+	dragSelects SelectE
 	// Per-series hover readout and crosshair link (seriesreadout.go).
 	hoverSeries bool
 	noSeriesBox bool
@@ -370,8 +376,9 @@ func (g gestureLocks) requestFit(x *axisState, y *axisState, wantX bool, wantY b
 }
 
 // applyInteractions interprets last frame's gesture registers against last
-// frame's transform: drag pan, Shift+drag box-zoom, anchored wheel zoom,
-// double-click fit. One-frame lag by design (see doc.go).
+// frame's transform: drag pan (a selection under DragSelects), Shift+drag
+// box-zoom, anchored wheel zoom, double-click fit. One-frame lag by design
+// (see doc.go).
 func (p *Plot) applyInteractions() {
 	st := p.st
 	sm := c.CurrentApplicationState.StateManager
@@ -440,6 +447,10 @@ func (p *Plot) applyInteractions() {
 		st.dragging = true
 		gs.panMoved = [2]bool{}
 		st.dragBox = boxMod
+		st.dragSelect = SelectNone
+		if !boxMod {
+			st.dragSelect = st.prevDragSelects
+		}
 		st.boxStart = [2]float32{posX, posY}
 		st.boxCur = st.boxStart
 		st.lastDrag = st.boxStart
@@ -459,7 +470,7 @@ func (p *Plot) applyInteractions() {
 	movedX, movedY := false, false
 
 	if st.dragging && flags.HasDragged() && posOk {
-		if st.dragBox {
+		if st.dragBox || st.dragSelect != SelectNone {
 			st.boxCur = [2]float32{posX, posY}
 		} else {
 			mx, my := locks.pan(&w, posX-st.lastDrag[0], posY-st.lastDrag[1])
@@ -485,11 +496,21 @@ func (p *Plot) applyInteractions() {
 				st.y.touched = true
 				gs.finish(AxisY1, GestureBoxZoom, ry)
 			}
+		} else if st.dragSelect != SelectNone {
+			// A selection reports the range under it and moves nothing.
+			rx, ry, okX, okY := selectRanges(pr, st.dragSelect, st.boxStart, st.boxCur)
+			if okX {
+				gs.finish(AxisX1, GestureSelect, rx)
+			}
+			if okY {
+				gs.finish(AxisY1, GestureSelect, ry)
+			}
 		} else {
 			panEnded = true
 		}
 		st.dragging = false
 		st.dragBox = false
+		st.dragSelect = SelectNone
 	}
 	if flags.HasDoubleClicked() {
 		// The range is the one End fits to; settle fills it in.

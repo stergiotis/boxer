@@ -22,6 +22,9 @@ const (
 	// GestureFit is a double-click on the plot area, which fits the axis to
 	// the data.
 	GestureFit
+	// GestureSelect is a plain drag released under DragSelects: the range
+	// under it, with the view left where it was.
+	GestureSelect
 )
 
 // String names the gesture for logs and readouts.
@@ -35,6 +38,8 @@ func (inst GestureE) String() string {
 		return "pan"
 	case GestureFit:
 		return "fit"
+	case GestureSelect:
+		return "select"
 	}
 	return "none"
 }
@@ -126,6 +131,11 @@ func (inst *gestureTrack) settle(x *axisState, y *axisState) {
 			continue
 		case GestureFit:
 			g.rng = ax.rng
+		case GestureSelect:
+			// A selection lies inside the view it was made on; the
+			// constraints govern where the view may go, not what part of
+			// it the person marked.
+			g.rng = sanitizeScaled(g.rng, ax.scale)
 		default:
 			g.rng = ax.constrainRange(sanitizeScaled(g.rng, ax.scale))
 		}
@@ -152,9 +162,65 @@ func boxZoomRanges(pr transform, start [2]float32, cur [2]float32, locks gesture
 	return
 }
 
+// SelectE names the axes a plain drag selects on under [Plot.DragSelects].
+type SelectE uint8
+
+const (
+	// SelectNone leaves the plain drag to pan, the default.
+	SelectNone SelectE = iota
+	// SelectX selects a range of x: a band across the plot's full height.
+	SelectX
+	// SelectY selects a range of y: a band across the plot's full width.
+	SelectY
+	// SelectXY selects a rectangle, a range on each axis.
+	SelectXY
+)
+
+func (inst SelectE) onX() bool { return inst == SelectX || inst == SelectXY }
+func (inst SelectE) onY() bool { return inst == SelectY || inst == SelectXY }
+
+// DragSelects makes a plain drag select a range instead of panning, for the
+// frame: the selection is drawn while the drag lasts and reported on release
+// by [Plot.RangeGesture] as GestureSelect, and the view does not move. What
+// selecting means is the caller's — a dashboard sets its time range from it,
+// as Grafana does on a plain drag. Shift+drag still box-zooms and a
+// double-click still fits; there is no pan. A house extension standing in
+// for upstream's query rectangle, which upstream later replaced with
+// DragRect: the selection here is not kept after the release, and cannot be
+// moved or resized. The axis locks (NoPan, NoZoom) do not apply, since the
+// range does not change. Callable any time before End; a drag takes the mode
+// in force on the frame it starts.
+func (p *Plot) DragSelects(axes SelectE) *Plot {
+	if axes > SelectXY {
+		axes = SelectNone
+	}
+	p.dragSelects = axes
+	return p
+}
+
+// selectRanges is the range a released selection covers on each selected
+// axis, through last frame's transform, with the drag held to the plot area:
+// none at all when a selected side is 5 px or under (a click, not a drag).
+func selectRanges(pr transform, mode SelectE, start [2]float32, cur [2]float32) (rx Range, ry Range, okX bool, okY bool) {
+	x0, x1 := clamp32(start[0], float32(pr.px0), float32(pr.px0+pr.plotW)), clamp32(cur[0], float32(pr.px0), float32(pr.px0+pr.plotW))
+	y0, y1 := clamp32(start[1], float32(pr.py0), float32(pr.py0+pr.plotH)), clamp32(cur[1], float32(pr.py0), float32(pr.py0+pr.plotH))
+	if (mode.onX() && abs32(x1-x0) <= 5) || (mode.onY() && abs32(y1-y0) <= 5) {
+		return
+	}
+	if mode.onX() {
+		a, b := pr.plotX(x0), pr.plotX(x1)
+		rx, okX = Range{math.Min(a, b), math.Max(a, b)}, true
+	}
+	if mode.onY() {
+		a, b := pr.plotY(y0), pr.plotY(y1)
+		ry, okY = Range{math.Min(a, b), math.Max(a, b)}, true
+	}
+	return
+}
+
 // RangeGesture reports a range gesture the person finished on axis — a box
-// zoom, a run of wheel steps, a pan, or a double-click fit — with the range
-// it asked for. A house extension, for an app whose data depends on the
+// zoom, a run of wheel steps, a pan, a double-click fit, or a selection
+// under DragSelects — with the range it asked for. A house extension, for an app whose data depends on the
 // range: it learns that the person chose one, as distinct from a range that
 // moved because of an auto-fit, a link to another plot or the app's own
 // SetupAxisLimits, none of which report here.
@@ -162,7 +228,7 @@ func boxZoomRanges(pr transform, start [2]float32, cur [2]float32, locks gesture
 // Each gesture is reported once, by the handle of the frame after the one
 // it settled in, from Begin to End — one frame later than the range itself,
 // like every register read. A box zoom moves both axes and so reports on
-// each; a NoZoom axis reports no box or wheel zoom, a NoPan axis no pan. The
+// each, a selection on the axes it selects; a NoZoom axis reports no box or wheel zoom, a NoPan axis no pan. The
 // wheel reports after it has rested for 300 ms, with the range of its last
 // step.
 //

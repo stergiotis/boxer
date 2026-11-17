@@ -228,7 +228,7 @@ func init() {
 		Stage:       [2]float32{660, 680},
 		Flags:       registry.DemoFlagNeedsLargeArea,
 		Kind:        registry.DemoKindMixed,
-		Description: "ADR-0149 M3 axis scales, three plots in one frame (the per-id R24 register at work): two Unix-seconds time axes with boundary-snapped ticks, sharing their range and a crosshair — hover either and both mark each series' value at that instant; Shift+drag reports the range gesture under them — and a log10 y axis with decade ticks turning exponentials into straight lines.",
+		Description: "ADR-0149 M3 axis scales, three plots in one frame (the per-id R24 register at work): two Unix-seconds time axes with boundary-snapped ticks, sharing their range and a crosshair — hover either and both mark each series' value at that instant; a plain drag selects a time range and leaves the view alone, as a dashboard panel's does, Shift+drag box-zooms, and the last range gesture shows under them — and a log10 y axis with decade ticks turning exponentials into straight lines.",
 		Init: func(_ *c.WidgetIdStack) (state any) {
 			st := &implotM3State{}
 			// Fixed epoch keeps the tour capture deterministic.
@@ -255,6 +255,7 @@ func init() {
 				p.SetupAxisLinks(implot.AxisX1, &st.tMin, &st.tMax)
 				p.SetupCrosshair(&st.cross)
 				p.HoverSeries()
+				p.DragSelects(implot.SelectX)
 			}
 			for p := range implot.Scoped(ids, "requests over 48 h", 620, 170) {
 				timePlot(p, "rate")

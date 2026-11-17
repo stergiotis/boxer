@@ -49,7 +49,8 @@
 // than 0, so two series around one base draw diverging bars — a tornado),
 // IncludeX/IncludeY, TimeTicksLocal and TimeTicksIn (another zone),
 // AxisFlagsFollow, Clicked/HoverPlotPos, NewDetached, RangeGesture (what
-// the person did to the range, as distinct from a fit or a link moving it),
+// the person did to the range, as distinct from a fit or a link moving it)
+// with DragSelects (a drag that selects instead of panning),
 // SeriesHidden/SetSeriesHidden (the legend's hidden set), SetupLegend's
 // outside placements (upstream has them, with more locations),
 // SetupAxisTimeZone, HoverSeries/SeriesReadout (each series' value at the
@@ -93,10 +94,11 @@
 //   - The legend goes inside at the top left, outside to the right, or
 //     below as a wrapping row; upstream's other locations, and a legend
 //     drawn as a table with a value column per series, are deferred.
-//   - Upstream's query rectangle — select a range without zooming — is not
-//     ported (upstream itself replaced it with DragRect, which is not
-//     ported either); RangeGesture reports box zooms, wheel runs, pans and
-//     fits.
+//   - Upstream's query rectangle is replaced by DragSelects: a plain drag
+//     selects an x range, a y range or a rectangle, reported once by
+//     RangeGesture with the view left alone. The selection is gone on
+//     release and cannot be moved or resized; upstream's own successor,
+//     DragRect, is not ported.
 //   - Digital channels use fixed bit-height/gap constants (there is no
 //     style system to override upstream's defaults).
 //   - Image takes caller-owned RGBA pixels plus a content version (the

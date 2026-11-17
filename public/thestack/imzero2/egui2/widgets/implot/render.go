@@ -179,7 +179,7 @@ func (p *Plot) End() {
 		p.emitSeries(s, tr, areaX, areaY, areaW, areaH, colHex, weight)
 	}
 	p.emitting = false
-	if st.dragging && st.dragBox {
+	if st.dragging && (st.dragBox || st.dragSelect != SelectNone) {
 		x0, y0 := st.boxStart[0], st.boxStart[1]
 		x1, y1 := st.boxCur[0], st.boxCur[1]
 		if x1 < x0 {
@@ -187,6 +187,18 @@ func (p *Plot) End() {
 		}
 		if y1 < y0 {
 			y0, y1 = y1, y0
+		}
+		if st.dragSelect != SelectNone {
+			// A selection is held to the plot area, and a one-axis
+			// selection spans the other axis whole.
+			x0, x1 = clamp32(x0, areaX, areaX+areaW), clamp32(x1, areaX, areaX+areaW)
+			y0, y1 = clamp32(y0, areaY, areaY+areaH), clamp32(y1, areaY, areaY+areaH)
+			if !st.dragSelect.onY() {
+				y0, y1 = areaY, areaY+areaH
+			}
+			if !st.dragSelect.onX() {
+				x0, x1 = areaX, areaX+areaW
+			}
 		}
 		c.PaintRectFilled(x0, y0, x1, y1, 0, color.Hex(colBoxFill)).Send()
 		c.PaintRectStroke(x0, y0, x1, y1, 0, color.Hex(colBoxStroke), styletokens.StrokeHair).Send()
@@ -263,6 +275,7 @@ func (p *Plot) End() {
 	st.prev = tr
 	st.prevOk = tr.valid()
 	st.prevWheelScrollsPane = p.wheelScrollsPane
+	st.prevDragSelects = p.dragSelects
 
 	p.emitContextMenu()
 }
