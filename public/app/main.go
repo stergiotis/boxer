@@ -127,7 +127,7 @@ func mainC() (exitCode int) {
 			dev.NewCliCommand(
 				viewerfixture.NewCliCommand(),
 			),
-			env.NewCliCommand(envdoc.NewGenDocsCommand()),
+			env.NewCliCommand(envdoc.NewGenDocsCommand(), envdoc.NewGenEnvFileCommand()),
 			gov.NewCliCommand(),
 			finddivisions.NewCliCommand(),
 			code.NewCliCommand(genbuildertest.NewCliCommand()),
