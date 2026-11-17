@@ -985,3 +985,29 @@ second reads as empty, so a hovered plot that stops being drawn does not
 leave its line in the others. *Rejected:* a group registry inside the
 package (it would need its own lifetime rules, where a caller-held value
 has the caller's).
+
+## Update 2026-11-17 — a drag that selects instead of panning
+
+The same downstream viewer's second ask, left out of the 2026-11-15 update:
+a selection that does not zoom. A Grafana time series panel takes a plain
+drag as "set the dashboard's time range to this"; the port's only way there
+was the Shift+drag box zoom, which also magnified the panel's own view for a
+frame before the new data arrived.
+
+`DragSelects(SelectX | SelectY | SelectXY)` makes a plain drag select for the
+frame. The band or rectangle is drawn while the drag lasts, held to the plot
+area, and on release `RangeGesture` reports it once as `GestureSelect`, on the
+axes it selects. The view does not move, so the axis locks do not apply, and
+the range is not held to the viewport constraints: it lies inside a view
+that already is. Shift+drag still box-zooms and a double-click still fits;
+there is no pan under the mode. A drag takes the mode in force on the frame
+it starts, so a caller that turns the mode off mid-drag does not turn a
+selection into a pan.
+
+*Rejected:* a modifier that selects in every plot (Alt+drag) — the
+selection is a choice of the app, which knows whether a range means
+anything, and a gesture that means nothing in most plots is one people
+learn not to trust; a selection kept after the release, movable and
+resizable — that is upstream's `DragRect`, a tool the caller owns, and
+nothing here needs one yet. *Deferred:* `DragRect`, until a caller needs
+a selection that stays.
