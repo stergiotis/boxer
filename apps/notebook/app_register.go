@@ -5,6 +5,11 @@
 // the buffer back writes the statements into the text and leaves prose and
 // presentation cells as they are.
 //
+// The Read face is a pane (notebook_live.go) that also reads the notebook
+// live (ADR-0380): its records computed on the server, read-only, and shown
+// as a bound notebook, with nothing stored. Another app embeds the same
+// pane by NewEmbedded (notebook_embed.go).
+//
 // A notebook is opened from a lading snapshot, where its blobs lie beside
 // it, or from the samples of package mdnotebook/samples.
 //
@@ -58,7 +63,7 @@ var manifest = app.Manifest{
 	Summary:  "Read a sealed notebook and work on its records in play",
 	Icon:     icons.PhNotebook,
 	Topics:   []app.TopicT{app.TopicData},
-	Keywords: []string{"notebook", "report", "sealed", "records", "markdown", "adr-0371"},
+	Keywords: []string{"notebook", "report", "sealed", "live", "records", "markdown", "adr-0371", "adr-0380"},
 	Surface:  app.SurfaceWindowed,
 	Maturity: app.MaturityIncubating,
 	// LaunchKind takes a notebook another app hands over (launchcfg).
@@ -79,7 +84,7 @@ var manifest = app.Manifest{
 		app.SubjectFilter{Pattern: "ch.server.read.lading", Direction: app.CapDirectionPub,
 			Reason: "notebook: open a notebook and the stored results beside it from a lading snapshot"},
 		app.SubjectFilter{Pattern: "ch.server.read.records", Direction: app.CapDirectionPub,
-			Reason: "notebook: collection runs each record's statement once on the server the environment names (ADR-0371 §SD10)"},
+			Reason: "notebook: collection runs each record's statement once on the server the environment names (ADR-0371 §SD10), and a live reading runs them read-only (ADR-0380 §SD3)"},
 	),
 	SurfaceHints: app.SurfaceHints{
 		PreferredWidth:  1280,

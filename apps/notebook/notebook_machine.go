@@ -24,9 +24,11 @@ const (
 	phaseStale                    // a record was edited since collection; what is stored is shown
 	phaseUnsealed                 // a problem, or a cell with no answer
 	phaseCollecting               // the records run and the snapshot is published
+	phaseRunning                  // the records are computed for a live reading (ADR-0380)
+	phaseLive                     // the notebook is shown over records computed when it was run
 )
 
-var allPhases = []phaseE{phaseEmpty, phaseOpening, phaseUnreadable, phaseReading, phaseSealed, phaseStale, phaseUnsealed, phaseCollecting}
+var allPhases = []phaseE{phaseEmpty, phaseOpening, phaseUnreadable, phaseReading, phaseSealed, phaseStale, phaseUnsealed, phaseCollecting, phaseRunning, phaseLive}
 
 func (inst phaseE) String() (s string) {
 	switch inst {
@@ -46,6 +48,10 @@ func (inst phaseE) String() (s string) {
 		return "not sealed"
 	case phaseCollecting:
 		return "collecting"
+	case phaseRunning:
+		return "running live"
+	case phaseLive:
+		return "live"
 	}
 	return "?"
 }
@@ -58,12 +64,16 @@ func (inst *App) observePhase() (ph phaseE) {
 	switch {
 	case inst.collect.job.Running():
 		return phaseCollecting
+	case inst.pane.job.Running():
+		return phaseRunning
 	case inst.opening != nil:
 		return phaseOpening
 	case inst.doc == nil:
 		return phaseEmpty
 	case inst.nb == nil:
 		return phaseUnreadable
+	case inst.pane.shown == readingLive:
+		return phaseLive
 	case !inst.checked:
 		return phaseReading
 	case inst.check.Sealed():
@@ -103,10 +113,12 @@ func newPhaseMachine() (m *fsmview.Machine[phaseE]) {
 		AddRule(phaseOpening, phaseEmpty, phaseReading, phaseUnreadable, phaseSealed, phaseStale, phaseUnsealed).
 		AddRule(phaseReading, phaseSealed, phaseStale, phaseUnsealed, phaseOpening).
 		AddRule(phaseUnreadable, phaseReading, phaseOpening).
-		AddRule(phaseSealed, phaseReading, phaseUnreadable, phaseOpening, phaseCollecting).
-		AddRule(phaseStale, phaseReading, phaseUnreadable, phaseOpening, phaseCollecting).
-		AddRule(phaseUnsealed, phaseReading, phaseUnreadable, phaseOpening, phaseCollecting).
-		AddRule(phaseCollecting, phaseOpening, phaseSealed, phaseStale, phaseUnsealed, phaseReading).
+		AddRule(phaseSealed, phaseReading, phaseUnreadable, phaseOpening, phaseCollecting, phaseRunning).
+		AddRule(phaseStale, phaseReading, phaseUnreadable, phaseOpening, phaseCollecting, phaseRunning).
+		AddRule(phaseUnsealed, phaseReading, phaseUnreadable, phaseOpening, phaseCollecting, phaseRunning).
+		AddRule(phaseCollecting, phaseOpening, phaseSealed, phaseStale, phaseUnsealed, phaseReading, phaseLive).
+		AddRule(phaseRunning, phaseLive, phaseSealed, phaseStale, phaseUnsealed, phaseReading, phaseOpening).
+		AddRule(phaseLive, phaseRunning, phaseReading, phaseSealed, phaseStale, phaseUnsealed, phaseOpening, phaseCollecting, phaseUnreadable).
 		EdgeLabel(phaseEmpty, phaseOpening, "Open…, or a hand-over with a snapshot").
 		EdgeLabel(phaseEmpty, phaseReading, "Open sample, or a hand-over of a text").
 		EdgeLabel(phaseOpening, phaseEmpty, "could not be opened").
@@ -124,15 +136,22 @@ func newPhaseMachine() (m *fsmview.Machine[phaseE]) {
 	}
 	for _, ph := range []phaseE{phaseSealed, phaseStale, phaseUnsealed} {
 		m.EdgeLabel(ph, phaseReading, "Take the buffer back, or an editor's save").
-			EdgeLabel(ph, phaseCollecting, "Collect and publish")
+			EdgeLabel(ph, phaseCollecting, "Collect and publish").
+			EdgeLabel(ph, phaseRunning, "Run live").
+			EdgeLabel(phaseRunning, ph, "the run did not answer, or was cancelled")
 	}
+	m.EdgeLabel(phaseRunning, phaseLive, "every record answered").
+		EdgeLabel(phaseLive, phaseRunning, "Run again").
+		EdgeLabel(phaseLive, phaseReading, "Show stored, or the text changed").
+		EdgeLabel(phaseLive, phaseCollecting, "Collect and publish").
+		EdgeLabel(phaseLive, phaseOpening, "Open…")
 	m.EdgeLabel(phaseUnreadable, phaseReading, "an editor's save")
 	return
 }
 
 func phaseColor(ph phaseE, _ bool) styletokens.RGBA8 {
 	switch ph {
-	case phaseOpening, phaseReading, phaseCollecting:
+	case phaseOpening, phaseReading, phaseCollecting, phaseRunning, phaseLive:
 		return styletokens.AccentDefault
 	case phaseSealed:
 		return styletokens.SuccessDefault
@@ -146,7 +165,7 @@ func phaseColor(ph phaseE, _ bool) styletokens.RGBA8 {
 
 func phaseTone(ph phaseE) badge.ToneE {
 	switch ph {
-	case phaseOpening, phaseReading, phaseCollecting:
+	case phaseOpening, phaseReading, phaseCollecting, phaseRunning, phaseLive:
 		return badge.TonePrimary
 	case phaseSealed:
 		return badge.ToneSuccess

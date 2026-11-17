@@ -32,7 +32,8 @@ one cell per renderer.
 
 ## The two faces
 
-- **Read** draws the notebook from what it stores. No server is asked. A
+- **Read** draws the notebook from what it stores, until it is run live
+  (below). No server is asked for the stored reading. A
   record is a line that unfolds to its statement, a presentation cell is
   its picture, and a figure in a sentence is the stored value. The
   **statements** choice above it draws each cell's statement (*shown*, the
@@ -58,6 +59,33 @@ buffer adds becomes a record cell after the one before it. A buffer that
 drops one of the notebook's records, or orders two of them the other way
 round, is refused and the status row says which record: both are edits of
 the text around the statements.
+
+## Reading it live
+
+**Run live**, on the Read face, computes every record on the server the
+`CLICKHOUSE_*` variables name — the statements collection sends, read-only
+— and shows the notebook over the results. Nothing is stored and nothing
+is published. The line above the cells says which reading is on screen:
+**stored**, with whether it is sealed, or **live**, with when it was
+computed. A live reading is not sealed and has no pin; a figure in a
+sentence shows the value the run computed.
+
+What is on screen is replaced only when every record answered. A run that
+fails or is cancelled leaves the earlier reading in place, and the line
+names the record and its error. **Run again** repeats a run; nothing runs
+on a timer. **Show stored** returns to what the notebook stores, and lets
+the live reading go. A text that changes — a buffer taken back, an
+editor's save, another notebook opened — drops the live reading too: its
+records were computed from statements the text no longer holds.
+
+Only a notebook whose records read runs live. One whose records reach
+outside the server (`url(…)`, `file(…)`, `remote(…)`) or change it is
+refused, and **Run live** says what forced it; such a notebook is collected.
+One record's result is bounded at 1,048,576 rows and 256 MiB; a record
+over either fails the run rather than being cut short.
+
+The records are separate requests, each over the tables as it finds them,
+so two cells over a table that is being written to can disagree.
 
 ## Editing the text
 
@@ -112,7 +140,8 @@ snapshot, **reading** the stored results, **sealed** when the notebook
 shows what it stores, **stale** when a record was edited since collection
 and nothing else is wrong, **not sealed** for a problem or a cell with no
 answer, **not a notebook** for a text that cannot be read as one, and
-**collecting**. A click on it opens
+**collecting**, **running live** while a run computes the records, and
+**live** while the Read face shows what a run computed. A click on it opens
 the phases and the gesture behind each move. The line beside it counts the records, the problems, the stale records and the
 presentation cells with no answer. **edited** says a buffer was taken back
 since the notebook was opened.
@@ -132,6 +161,9 @@ over a buffer are play's, in a play window.
 | `check_notebook` | query | whether the notebook is sealed, and what is not: problems, stale records, records that read a stale one, presentation cells with no answer | no notebook is open; the text is not a notebook; the stored results are still being read |
 | `set_records` | command, document | writes a play buffer into the record cells by name; the buffer's own `SELECT` is the last record, or the one `Sink` names | no notebook is open; the buffer is not a notebook's (a parameter, a `SET`, a `WITH` expression); it drops or reorders a record |
 | `collect_notebook` | command, consequential, async | runs every record once on the server and publishes the notebook with its stored results as a new snapshot under the `Tier` the caller states; settles with the snapshot, and the person confirms an agent's call | no notebook is open; a collection is running; the tier is not one of the five; a record reads sealed data; the window has no bus; the store refuses the tree |
+| `run_live` | command, run, async | computes every record on the server, read-only, and shows the notebook over the results on the Read face; nothing is stored. Settles with the reading | no notebook is open; a run is under way; the records do not classify read; a record fails or is over its bound (the earlier reading stays) |
+| `show_stored` | command, view | shows what the notebook stores again and lets the live reading go | no notebook is open |
+| `get_reading` | query | which reading the Read face shows, when a live one was computed, how the last run ended, the records' class and why a notebook may not run live | no notebook is open |
 | `show_face` | command, view | shows the read face or the records face | the face is neither |
 | `open_snapshot` | command, document | opens a notebook of a lading snapshot, named as `<mount, hex>@<snapshot, unix nanoseconds>:<path>`; the read lands in a later frame | the name is not of that form |
 | `notebook_state` | query | the notebook's current phase, the edges out of it and the last 16 transitions | never |
@@ -142,7 +174,8 @@ To work on a notebook's statements: read the text with `get_document`,
 hand it to a play window with play's `set_notebook`, change and run the
 buffer there, read it with play's `get_state`, and write it back here with
 `set_records`. Then `check_notebook` says which records are stale, and
-`collect_notebook` cures them. State the tier of the most confidential
+`collect_notebook` cures them. To see the report over the data as it
+stands without storing anything, `run_live`, then `get_reading`. State the tier of the most confidential
 table the records read; when that is not known, ask the person.
 
 What a presentation cell may hold, and what each renderer reads, is in

@@ -23,6 +23,7 @@ import (
 	"github.com/stergiotis/boxer/apps/notebook/launchcfg"
 	"github.com/stergiotis/boxer/public/fs/lading"
 	"github.com/stergiotis/boxer/public/fs/lading/ladingschema"
+	"github.com/stergiotis/boxer/public/keelson/data/chclient"
 	"github.com/stergiotis/boxer/public/keelson/data/storeexec"
 	"github.com/stergiotis/boxer/public/keelson/runtime/agentrun"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
@@ -254,4 +255,32 @@ func TestCollectAgainstAServerAndTheLadingStore(t *testing.T) {
 	assert.Equal(t, []string{"p99_by_hour"}, back.check.Stale)
 	assert.Empty(t, back.check.Problems, "the stored results are found beside the snapshot's text")
 	require.NoError(t, back.Unmount(nil))
+}
+
+// A live run against a server of the test's own, through the path a window
+// takes: readonly and the stamp ride the request and the server takes them,
+// the report sample is shown over what the server computed, and a record
+// that would write is refused by the server, not only by the class gate.
+func TestRunLiveAgainstAServer(t *testing.T) {
+	url := scratchServer(t)
+	t.Cleanup(scenetest.Install())
+	inst := newApp()
+	h := inst.Operations()
+	inst.run = serverRun(chclient.Config{URL: url, User: "default"}, string(AppId), "run-live", 1, LiveMaxBytes)
+	require.NoError(t, command(t, h, opOpenSample, OpenSampleArgs{Name: "report"}))
+	read(t, inst)
+	require.NoError(t, command(t, h, opRunLive, struct{}{}))
+	ran(t, inst)
+	require.Empty(t, inst.pane.lastErr)
+	st, err := query[LiveState](t, h, opGetReading)
+	require.NoError(t, err)
+	assert.Equal(t, readingNameLive, st.Reading)
+	assert.Equal(t, 5, st.Records)
+	assert.Empty(t, st.Problems)
+	assert.Empty(t, st.Refused)
+
+	// The gate is the class; readonly is what holds behind it.
+	_, err = inst.run(context.Background(), "CREATE TABLE t (x UInt8) ENGINE = Memory")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "readonly")
 }

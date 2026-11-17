@@ -114,12 +114,11 @@ type App struct {
 	opening *snapshotRef
 	store   *storeConn
 
-	// read is the lane the text is read and answered on. given is the
-	// reading the view was last handed, check its report and checked
-	// whether one has landed for the text on screen.
-	view    *notebookview.View
-	read    bgjob.Keyed[*reading]
-	given   *reading
+	// pane is the Read face: the cell stack over the stored reading or a
+	// live one (notebook_live.go). check is the stored reading's check and
+	// checked whether one has landed for the text on screen, mirrored from
+	// the pane each frame.
+	pane    *Pane
 	check   notebookview.Check
 	checked bool
 
@@ -169,8 +168,6 @@ type App struct {
 	// built at Mount, nil in a window that was not mounted.
 	player *nowplaying.Player
 
-	// statements is how the Read face shows a cell's statement.
-	statements notebookview.StatementsE
 	// touched says the person did something in the window: what makes its
 	// workingset worth keeping (ADR-0148 §SD4).
 	touched bool
@@ -186,8 +183,10 @@ var _ app.OperationsAppI = (*App)(nil)
 var _ app.WorkingsetComposerI = (*App)(nil)
 
 func newApp() (inst *App) {
-	inst = &App{ids: c.NewWidgetIdStack(), phaseMachine: newPhaseMachine(), statements: notebookview.StatementsShown}
+	inst = &App{ids: c.NewWidgetIdStack(), phaseMachine: newPhaseMachine()}
 	inst.collect.tier = defaultTier()
+	inst.pane = newPane(paneConfig{identity: string(AppId), scopeKey: "notebook", catalog: true,
+		run: func() mdnotebook.RunFunc { return inst.run }})
 	return
 }
 
@@ -210,6 +209,8 @@ func (inst *App) Mount(ctx app.MountContextI) (err error) {
 		inst.scope, inst.ownScope = lifetime.New(nil), true
 	}
 	inst.player = nowplaying.New(inst.bus, inst.scope.Go)
+	inst.pane.mount(ctx)
+	inst.pane.recordings = inst.recordings()
 	// A caller's launch config wins over the seeds, and a seed over a
 	// restored workingset (ADR-0135 §SD7, ADR-0148 §SD5).
 	seeded := SampleSeed.Get() != "" || SnapshotSeed.Get() != ""
@@ -239,11 +240,7 @@ func (inst *App) Unmount(ctx app.MountContextI) (err error) {
 	inst.collect.job.Cancel()
 	inst.browse.list.Close()
 	inst.open.Close()
-	inst.read.Close()
-	if inst.view != nil {
-		inst.view.Close()
-		inst.view = nil
-	}
+	inst.pane.close()
 	if inst.inner != nil {
 		inst.inner.Close()
 		inst.inner = nil
@@ -314,9 +311,11 @@ func (inst *App) setDocument(doc *document) {
 	nb, err := mdnotebook.Read(doc.text)
 	if err != nil {
 		inst.docErr = err.Error()
+		inst.pane.setDocument(nil, nil, inst.textKey)
 		return
 	}
 	inst.nb = nb
+	inst.pane.setDocument(nb, doc.fsys, inst.textKey)
 }
 
 // setRecords writes a play buffer into the document's record cells
@@ -431,28 +430,9 @@ func (inst *App) poll() (busy bool) {
 			}
 		}
 	}
-	if inst.nb == nil {
-		return false
-	}
-	nb, fsys := inst.nb, inst.doc.fsys
-	r, done, err, reading := inst.read.Demand(inst.textKey, func(context.Context) (*reading, error) {
-		p := notebookview.Prepare(nb, fsys)
-		return &reading{prepared: p, check: p.Check()}, nil
-	})
-	if reading || !done || err != nil || r == nil {
-		return reading || !done
-	}
-	if inst.view == nil {
-		inst.view = notebookview.New(inst.ids, "notebook", notebookview.Options{Statements: inst.statements, Recordings: inst.recordings()})
-	}
-	if inst.given != r {
-		// The view takes the prepared notebook and releases it; the lane's
-		// dispose must not release it a second time.
-		inst.view.Set(r.prepared)
-		inst.given = r
-		inst.check, inst.checked = r.check, true
-	}
-	return false
+	busy = inst.pane.poll()
+	inst.check, inst.checked = inst.pane.storedCheck, inst.pane.storedChecked
+	return busy
 }
 
 const (
@@ -490,7 +470,8 @@ func (inst *App) Frame(ctx app.FrameContextI) (err error) {
 	case inst.face == faceRecords:
 		err = inst.renderRecords(ctx)
 	default:
-		inst.renderRead()
+		inst.pane.renderLine(ctx)
+		inst.pane.renderBody()
 	}
 	return
 }
@@ -749,35 +730,6 @@ func (inst *App) renderEmpty(ctx app.FrameContextI) {
 				}
 			}
 		}
-	}
-}
-
-func (inst *App) renderRead() {
-	if inst.view == nil || inst.given == nil {
-		c.Label("Reading the notebook's stored results…").Send()
-		return
-	}
-	for range c.HorizontalTop().KeepIter() {
-		c.Label("statements").Send()
-		for i, mode := range statementModes {
-			for range c.IdScope(inst.ids.PrepareSeq(uint64(i))) {
-				if c.RadioButton(inst.ids.PrepareStr("statements"), c.Atoms().Text(mode.label).Keep(), inst.statements == mode.value).SendRespVal(&inst.clicked).HasPrimaryClicked() {
-					inst.statements = mode.value
-				}
-			}
-		}
-		if c.Button(inst.ids.PrepareStr("foldAll"), c.Atoms().Text("Fold all").Keep()).SendResp().HasPrimaryClicked() {
-			inst.view.FoldAll(true)
-		}
-		if c.Button(inst.ids.PrepareStr("unfoldAll"), c.Atoms().Text("Unfold all").Keep()).SendResp().HasPrimaryClicked() {
-			inst.view.FoldAll(false)
-		}
-	}
-	inst.view.Opts.Statements = inst.statements
-	// The view draws into the Ui it is given and scrolls by it; the scroll
-	// area is the host's to provide.
-	for range c.ScrollArea().Vscroll(true).AutoShrink(false, false).KeepIter() {
-		inst.view.Render()
 	}
 }
 

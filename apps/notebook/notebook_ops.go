@@ -18,6 +18,7 @@ import (
 const (
 	resDocument = "document"
 	resFace     = "face"
+	resReading  = "reading"
 
 	opGetDocument   = "get_document"
 	opCheckNotebook = "check_notebook"
@@ -28,6 +29,10 @@ const (
 	// opCollectNotebook writes outside the window, to the lading store:
 	// consequential, so the person confirms an agent's call every time.
 	opCollectNotebook = "collect_notebook"
+	// The live reading (ADR-0380): computed on the server, stored nowhere.
+	opRunLive    = "run_live"
+	opShowStored = "show_stored"
+	opGetReading = "get_reading"
 )
 
 // documentMaxBytes bounds get_document's text.
@@ -49,6 +54,11 @@ type snap struct {
 	revision string
 	// collecting says a collection is running.
 	collecting bool
+	// live is the Read face's reading and its last run; runSeq and runDone
+	// count the runs started and ended.
+	live    LiveState
+	runSeq  uint64
+	runDone uint64
 }
 
 // Document is get_document's result.
@@ -112,6 +122,7 @@ var ops = func() (s *appops.Set[*App, snap]) {
 	s = appops.NewSet(func(inst *App) (sn snap) {
 		sn.face = inst.face.String()
 		sn.docErr = inst.docErr
+		sn.live, sn.runSeq, sn.runDone = inst.pane.State(), inst.pane.runSeq, inst.pane.runDone
 		if inst.doc == nil {
 			return
 		}
@@ -137,6 +148,9 @@ var ops = func() (s *appops.Set[*App, snap]) {
 		return mdnotebook.BlobHash(inst.doc.text)
 	})
 	s.Resource(resFace, "which face the window shows", func(inst *App) any { return inst.face.String() })
+	s.Resource(resReading, "which reading the Read face shows, and the run that computed a live one", func(inst *App) any {
+		return inst.pane.shown.String() + "\x00" + itoa(inst.pane.runSeq) + "\x00" + itoa(inst.pane.runDone)
+	})
 
 	// Untrusted: the text is whatever its author wrote.
 	appops.Query(s, app.OperationSpec{Name: opGetDocument, Version: 1,
@@ -245,6 +259,53 @@ var ops = func() (s *appops.Set[*App, snap]) {
 		}
 		return CollectOutcome{Snapshot: cs.last.ref.String(), Records: cs.last.records, Files: cs.last.files, Bytes: cs.last.bytes, KeptUntil: cs.last.expires}, true, nil
 	})
+	appops.Query(s, app.OperationSpec{Name: opGetReading, Version: 1,
+		Summary: "which reading the Read face shows — stored, or live with when it was computed — how the last run ended, and whether the notebook may run live",
+		Reads:   []string{resReading, resDocument}, Agents: true,
+		Follows: []string{"run_live computes the records now and shows them; show_stored returns to what the notebook stores"}},
+		func(sn snap, in appops.None) (out LiveState, err error) {
+			if !sn.open || !sn.isNb {
+				return out, app.RefuseOperation("no notebook is open; open_sample opens one of the samples")
+			}
+			return sn.live, nil
+		})
+	// A run reads the server and stores nothing; it settles when every
+	// record answered or the run ended without them (ADR-0380 §SD4).
+	appops.Command(s, app.OperationSpec{Name: opRunLive, Version: 1,
+		Summary: "compute every record on the server now, read-only, and show the notebook over the results on the Read face; nothing is stored. Settles with the reading",
+		Effect:  app.OperationEffectRun, Reads: []string{resDocument}, Writes: []string{resReading}, Agents: true, Async: true,
+		Gesture: "Run live, on the Read face",
+		Follows: []string{"only a notebook whose records classify read runs live; get_reading says why another is refused, and collect_notebook is the way for it",
+			"a run that fails leaves the earlier reading on screen and names the record"}},
+		func(inst *App, call app.OperationCall, in appops.None) (appops.None, error) {
+			return appops.None{}, inst.pane.startRun()
+		})
+	appops.Settles(s, opRunLive, func(inst *App, call app.OperationCall) (out LiveState, settled bool, err error) {
+		p := inst.pane
+		if p.runDone < p.runSeq {
+			return
+		}
+		st := p.State()
+		if st.Reading != readingNameLive || st.LastErr != "" {
+			return out, true, app.RefuseOperation("the run did not answer: " + st.LastErr)
+		}
+		return st, true, nil
+	})
+	s.Available(opRunLive, func(sn snap) (ok bool, reason string) {
+		switch {
+		case sn.live.Running:
+			return false, "a run is under way; wait for it to end"
+		case sn.live.Refusal != "":
+			return false, sn.live.Refusal
+		}
+		return true, ""
+	})
+	appops.Command(s, app.OperationSpec{Name: opShowStored, Version: 1,
+		Summary: "show what the notebook stores on the Read face again; the live reading is let go",
+		Effect:  app.OperationEffectView, Writes: []string{resReading}, Agents: true, Gesture: "Show stored, on the Read face"},
+		func(inst *App, call app.OperationCall, in appops.None) (appops.None, error) {
+			return appops.None{}, inst.pane.showStored()
+		})
 	s.Available(opCollectNotebook, func(sn snap) (ok bool, reason string) {
 		if sn.collecting {
 			return false, "a collection is running; wait for it to end"
