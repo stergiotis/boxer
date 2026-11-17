@@ -43,9 +43,9 @@ Tagged slow, since it waits out those ten seconds.
 {"do":"click","contains":"your turn","role":"button"}
 {"do":"click","contains":"Next","role":"button","comment":"its card, non-modal"}
 {"do":"wait","valueContains":"asks to call set_sql","role":"label","nth":0,"comment":"the write is held as a widening"}
-{"do":"wait","valueContains":"waiting for you","role":"label"}
+{"do":"wait","valueContains":"waiting for you","role":"label","nth":1,"comment":"the step line; the roster repeats this window's turn line, first in the tree"}
 {"do":"sleep","settleMs":12000,"comment":"the person is away past the chat's ten seconds"}
-{"do":"wait","valueContains":"waiting for you","role":"label","comment":"still waiting, not answered input_required"}
+{"do":"wait","valueContains":"waiting for you","role":"label","nth":1,"comment":"still waiting, not answered input_required"}
 {"do":"capture","text":"chat-afk-held-widening-waiting"}
 {"do":"click","name":"Approve","role":"button","comment":"the person comes back"}
 {"do":"wait","name":"rendered","role":"radio_button","comment":"the model read the write's outcome"}

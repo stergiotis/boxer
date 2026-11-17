@@ -56,6 +56,6 @@ chat's mount tag; they expire with their 30-day class.
 {"do":"wait","valueContains":"and opened it in mdedit","role":"label","settleMs":500}
 {"do":"wait","valueContains":"loaded ","role":"label","settleMs":1500,"comment":"mdedit read the document from the snapshot"}
 {"do":"click","contains":"rclone","role":"button","comment":"copy the command that mounts the snapshot"}
-{"do":"wait","valueContains":"copied to clipboard","role":"label"}
+{"do":"wait","valueContains":"copied the mount command","role":"label","comment":"mdedit names what it copied"}
 {"do":"capture","text":"chat-artefact-export-mdedit","settleMs":1500}
 ```

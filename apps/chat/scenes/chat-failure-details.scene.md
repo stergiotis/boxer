@@ -35,6 +35,6 @@ call's row of `keelson('llm_calls')` (ADR-0254, 2026-10-03 update).
 {"do":"wait","valueContains":"copied the failure's details","role":"label"}
 {"do":"click","contains":"Open call in play","role":"button"}
 {"do":"wait","valueContains":"opened the call record in play","role":"label"}
-{"do":"wait","valueContains":"1 rows","role":"label","settleMs":1500,"comment":"play reads the call's row"}
+{"do":"wait","valueContains":"1 rows · ","role":"label","settleMs":1500,"comment":"play reads the call's row: its status line, as play also shows the count alone"}
 {"do":"capture","text":"chat-failure-details-play"}
 ```
