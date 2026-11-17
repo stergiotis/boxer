@@ -46,7 +46,26 @@ type EmbedConfig struct {
 	// LiveMaxRows and LiveMaxBytes.
 	MaxRows  int64
 	MaxBytes int64
+	// OwnWindow says the host is the notebook's own window, a notebooklet
+	// (ADR-0380 §SD6): runs are attributed to Host alone, not to
+	// `<host>#<key>`.
+	OwnWindow bool
+	// Catalog says the host's catalog serves OperationRunLive and
+	// OperationShowStored, so the pane's buttons go through it as the
+	// person's gestures (ADR-0269 §SD8). Without it they act directly.
+	Catalog bool
 }
+
+// The operations a host that sets EmbedConfig.Catalog serves under these
+// names, as the notebook window does.
+const (
+	// OperationRunLive starts a run; the pane's Run live and Run again.
+	OperationRunLive = opRunLive
+	// OperationShowStored shows the stored reading; the pane's Show stored.
+	OperationShowStored = opShowStored
+	// OperationGetReading reads the pane's LiveState.
+	OperationGetReading = opGetReading
+)
 
 // EmbeddedPane is a notebook's pane in a host's window. The host calls
 // Mount from its own Mount, Frame from its frame wherever the pane is to be
@@ -75,8 +94,12 @@ func NewEmbedded(text []byte, cfg EmbedConfig) (pane *EmbeddedPane, err error) {
 		return nil, eb.Build().Str("host", string(cfg.Host)).Str("key", cfg.Key).Errorf("read the notebook: %w", err)
 	}
 	identity := string(cfg.Host) + "#" + cfg.Key
+	if cfg.OwnWindow {
+		identity = string(cfg.Host)
+	}
 	run := cfg.Run
-	p := newPane(paneConfig{identity: identity, scopeKey: "notebook-" + cfg.Key, run: func() mdnotebook.RunFunc { return run }, maxRows: cfg.MaxRows, maxBytes: cfg.MaxBytes})
+	p := newPane(paneConfig{identity: identity, scopeKey: "notebook-" + cfg.Key, run: func() mdnotebook.RunFunc { return run },
+		maxRows: cfg.MaxRows, maxBytes: cfg.MaxBytes, catalog: cfg.Catalog})
 	p.setDocument(nb, cfg.Files, identity+"\x00"+mdnotebook.BlobHash(text))
 	if p.refusal != "" {
 		return nil, eb.Build().Str("host", string(cfg.Host)).Str("key", cfg.Key).Str("class", p.class.String()).Errorf("not embedded: %s", p.refusal)
@@ -106,8 +129,8 @@ func validEmbedKey(key string) bool {
 	return true
 }
 
-// Identity is the pane's composed identity, `<host>#<key>`: what its runs
-// are attributed to in the server's query log.
+// Identity is what the pane's runs are attributed to in the server's query
+// log: `<host>#<key>`, or the host alone for its own window.
 func (inst *EmbeddedPane) Identity() string { return inst.pane.cfg.identity }
 
 // Mount takes the host's context: its ids, tasks and run identity. A pane
@@ -142,6 +165,21 @@ func (inst *EmbeddedPane) Run() (err error) { return inst.pane.startRun() }
 
 // State is what the pane shows and how its last run ended.
 func (inst *EmbeddedPane) State() LiveState { return inst.pane.State() }
+
+// ShowStored returns the pane to what the notebook stores, as its Show
+// stored does; the live reading is let go.
+func (inst *EmbeddedPane) ShowStored() (err error) { return inst.pane.showStored() }
+
+// Runs counts the runs started and the runs that ended, answered or not:
+// a run the host started has settled when ended reaches started.
+func (inst *EmbeddedPane) Runs() (started uint64, ended uint64) {
+	return inst.pane.runSeq, inst.pane.runDone
+}
+
+// Poll lands a run that ended and the stored reading, as Frame does, on the
+// render goroutine: for a test, which has no frame. busy says work is under
+// way.
+func (inst *EmbeddedPane) Poll() (busy bool) { return inst.pane.poll() }
 
 // SetRecordings gives the pane what plays its recordings; nil draws them
 // silent.
