@@ -43,6 +43,10 @@ func (inst *Service) display(id app.AppIdT) (s string) {
 type windowTask struct {
 	t    *task
 	mode ModeE
+	// effective is mode under the task's ceiling: what the task may do here
+	// now, which the badge shows (ADR-0280). mode is what the grant holds,
+	// which the menu sets.
+	effective ModeE
 }
 
 // RenderWindowChrome draws the badge of window key: what works in it, and
@@ -56,7 +60,7 @@ func (inst *Chrome) RenderWindowChrome(key uint64, ids *c.WidgetIdStack) {
 			continue
 		}
 		if e := t.entries[key]; e != nil {
-			here = append(here, windowTask{t: t, mode: e.mode})
+			here = append(here, windowTask{t: t, mode: e.mode, effective: t.modeOf(e)})
 		}
 	}
 	proposed := len(svc.proposals(key, false))
@@ -76,7 +80,7 @@ func (inst *Chrome) RenderWindowChrome(key uint64, ids *c.WidgetIdStack) {
 		return
 	}
 	slices.SortFunc(here, func(a, b windowTask) int { return a.t.created.Compare(b.t.created) })
-	label := icons.PhRobot + " agent · " + here[0].mode.String()
+	label := icons.PhRobot + " agent · " + here[0].effective.String()
 	if len(here) > 1 {
 		label = icons.PhRobot + " " + strconv.Itoa(len(here)) + " agents"
 	}
@@ -111,6 +115,11 @@ func (inst *Chrome) renderTaskMenu(key uint64, wt windowTask, ids *c.WidgetIdSta
 		}
 	}
 	busy := svc.busyFor(key, t)
+	if wt.effective < wt.mode {
+		for rt := range c.RichTextLabel("The grant holds " + wt.mode.String() + "; the coordinator's settings allow at most " + wt.effective.String() + " now.") {
+			rt.Weak()
+		}
+	}
 	for range c.HorizontalTop().KeepIter() {
 		c.Label("Mode").Send()
 		for _, m := range AllModes {

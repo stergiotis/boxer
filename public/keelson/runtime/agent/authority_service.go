@@ -184,6 +184,13 @@ func (inst *Service) authorityOf(t *task) (a Authority) {
 	for _, d := range t.destinations {
 		g.Reach = max(g.Reach, min(ReachOf(d), a.Ceiling.Reach))
 	}
+	if g.Mode == ModeUnspecified && (len(t.destinations) > 0 || t.desktop >= ModeObserve) {
+		// A task that holds no window but the desktop or destinations reads
+		// them — the window list, this host's tables — which is reading,
+		// not talking: scored as talk, the scale said "now talk only" beside
+		// a live task.
+		g.Mode = min(ModeObserve, a.Ceiling.Mode)
+	}
 	if g.Mode != ModeUnspecified && g.Effect < app.OperationEffectNone {
 		g.Effect = app.OperationEffectNone
 	}

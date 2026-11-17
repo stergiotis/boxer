@@ -216,3 +216,22 @@ func TestPaceSpacesVisibleChanges(t *testing.T) {
 	r.call(g, "w4", "set_text", `{"text":"d"}`)
 	assert.Less(t, time.Since(start), pace, "unpaced: the changes land as they are made")
 }
+
+// A task that holds the desktop and destinations and no window reads them: its grant is on
+// the read rung, not talk, so the scale does not say "talk only" beside a
+// live task.
+func TestADestinationOnlyGrantReads(t *testing.T) {
+	r := newRigWith(t, func(cfg *Config) { cfg.TestGrants = true })
+	ctx := context.Background()
+	ceil := Ceiling{Mode: ModeAct, Effect: app.OperationEffectRun, Reach: ReachHost, Desktop: true}
+	g, err := r.cli.Request(ctx, GrantRequest{Plan: "read the desktop", Ceiling: &ceil, Desktop: ModeObserve, Destinations: []string{"keelson:windows"}})
+	require.NoError(t, err)
+	a, err := r.cli.Authority(ctx, g.Handle, nil)
+	require.NoError(t, err)
+	assert.Equal(t, LevelRead, a.Granted.Level())
+
+	none := Ceiling{}
+	a, err = r.cli.Authority(ctx, g.Handle, &none)
+	require.NoError(t, err)
+	assert.Equal(t, LevelTalk, a.Granted.Level(), "under a talk-only ceiling it reads nothing")
+}
