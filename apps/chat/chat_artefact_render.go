@@ -150,14 +150,17 @@ func (inst *App) renderArtefact() {
 				inst.copyCited("the artefact", text, text+citationFoot(text, inst.conv.citationIndex()))
 			}
 			inst.renderEndorse(n, text)
-			for range c.HoverText(tipArtExport).KeepIter() {
-				if c.Button(inst.ids.PrepareStr("art-export"), atomsArtExport).Small().SendResp().HasPrimaryClicked() {
-					inst.planExport(false)
+			exportable := inst.exportable()
+			if exportable {
+				for range c.HoverText(tipArtExport).KeepIter() {
+					if c.Button(inst.ids.PrepareStr("art-export"), atomsArtExport).Small().SendResp().HasPrimaryClicked() {
+						inst.planExport(false)
+					}
 				}
 			}
 			for range c.HoverText(tipArtMdedit).KeepIter() {
 				if c.Button(inst.ids.PrepareStr("art-mdedit"), atomsArtMdedit).Small().SendResp().HasPrimaryClicked() {
-					if hasLiveImages(set) {
+					if hasLiveImages(set) && exportable {
 						inst.planExport(true)
 					} else {
 						inst.openArtefactInMdedit(text)
@@ -173,6 +176,9 @@ func (inst *App) renderArtefact() {
 		if inst.renderCiteHold("art-mdedit", "open the artefact in mdedit", text) {
 			inst.openArtefactInMdedit(text)
 		}
+	}
+	if text != "" && !inst.exportable() {
+		weak("This window's artefact does not export: the store's mount tag is the plain chat's alone (ADR-0341 §SD2). Open in mdedit takes the text without its screenshots.")
 	}
 	switch p := art.policyNow(); {
 	case !p.write:

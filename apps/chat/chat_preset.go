@@ -12,6 +12,7 @@ import (
 	"github.com/stergiotis/boxer/public/db/clickhouse/clickhouseenv"
 	"github.com/stergiotis/boxer/public/keelson/runtime/agent"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
+	"github.com/stergiotis/boxer/public/keelson/runtime/ladingpublish"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/markdown"
 )
@@ -110,10 +111,11 @@ const presetWindowWidth = chatWindowWidth + 10
 
 // BaseManifest is the chat's manifest for a preset to build on: the
 // capabilities, the operations and the help are the chat's, so a preset
-// cannot widen what the host's review of the chat saw.
+// cannot widen what the host's review of the chat saw — less the artefact
+// store's mount tag (sharedCaps).
 func BaseManifest() (m app.Manifest) {
 	m = manifest
-	m.Caps = slices.Clone(manifest.Caps)
+	m.Caps = sharedCaps()
 	m.Topics = slices.Clone(manifest.Topics)
 	m.Keywords = slices.Clone(manifest.Keywords)
 	m.PersistedKeys = slices.Clone(manifest.PersistedKeys)
@@ -309,4 +311,26 @@ func (inst *coordinator) ownerApp() string {
 		return inst.owner
 	}
 	return string(ManifestId)
+}
+
+// sharedCaps are the chat's capabilities as another app takes them on — a
+// chatlet's manifest, a host that embeds a pane — without the publish
+// subject of the artefact store's mount tag. A tag two apps declare is owned
+// by neither (ADR-0341 §SD2): copied, it took the plain chat's export with
+// it as soon as one chatlet was registered. A window of such an app does
+// not export its artefact (exportable).
+func sharedCaps() (caps []app.SubjectFilter) {
+	export := ladingpublish.Subject(exportMountTag)
+	for _, cp := range manifest.Caps {
+		if cp.Pattern != export {
+			caps = append(caps, cp)
+		}
+	}
+	return
+}
+
+// exportable says this window's app owns the artefact store's mount tag:
+// the plain chat does; a chatlet and an embedded pane do not (sharedCaps).
+func (inst *App) exportable() bool {
+	return inst.preset == nil && inst.embed == nil
 }

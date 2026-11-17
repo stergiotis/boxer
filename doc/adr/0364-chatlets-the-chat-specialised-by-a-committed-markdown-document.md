@@ -268,6 +268,21 @@ person cannot remove them, which is SD2's direction: a stop can only narrow.
 Like the greeting, they are not the model's to read and are outside the run's
 fingerprint. A document whose stop does not construct is refused.
 
+### 2026-11-18 — A chatlet's artefact does not export
+
+A chatlet's manifest took the chat's capabilities whole, the publish
+subject of the artefact store's mount tag among them. A tag two apps declare
+is owned by neither
+([ADR-0341](./0341-lading-publish-a-write-only-capability-with-the-placement-check-at-the-door.md)
+§SD2), so with one chatlet registered no window could export its artefact,
+the plain chat's included. The chat's caps as another app takes them on —
+`BaseManifest` and `EmbedCaps` — now leave that subject out. The plain chat
+exports again. A chatlet's window, or a pane embedded in another app,
+says that its artefact does not export, and Open in mdedit takes the text
+without its screenshots. Deferred: a mount tag a chatlet owns, which needs
+either a tag per minted app or a rule that lets a family of apps share one.
+Trigger: a chatlet whose report someone wants kept in the lading store.
+
 ## Status
 
 Accepted 2026-11-09.

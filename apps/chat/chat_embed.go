@@ -2,7 +2,6 @@ package chat
 
 import (
 	"encoding/json"
-	"slices"
 
 	"github.com/zeebo/xxh3"
 
@@ -160,9 +159,10 @@ func (inst *Pane) Unmount(ctx app.MountContextI) (err error) {
 }
 
 // EmbedCaps is what a host adds to its manifest to embed a chat: the
-// chat's own capabilities. A preset widens none of them, and a host that
+// chat's own capabilities, less the artefact store's mount tag
+// (sharedCaps). A preset widens none of them, and a host that
 // declares fewer has the calls it left out refused at its bus.
-func EmbedCaps() (caps []app.SubjectFilter) { return slices.Clone(manifest.Caps) }
+func EmbedCaps() (caps []app.SubjectFilter) { return sharedCaps() }
 
 // EmbedPersistedKeys is what a host adds to its manifest's PersistedKeys
 // for a pane under key, so the host injects the persist cap: the roster's

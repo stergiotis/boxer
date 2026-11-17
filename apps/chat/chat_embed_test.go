@@ -2,6 +2,7 @@ package chat
 
 import (
 	"context"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -13,6 +14,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/agentrun"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/inprocbus"
+	"github.com/stergiotis/boxer/public/keelson/runtime/ladingpublish"
 	"github.com/stergiotis/boxer/public/keelson/runtime/llm"
 	"github.com/stergiotis/boxer/public/llm/openaichat"
 )
@@ -154,9 +156,18 @@ func TestEmbedded_storageAndPeersAreUnderThePanesKey(t *testing.T) {
 	assert.Equal(t, "7#notes", peerKeyOf("7", "notes"))
 }
 
-func TestEmbedCaps_areTheChatsAndACopy(t *testing.T) {
+// What another app takes on is the chat's capabilities, a copy, less the
+// artefact store's mount tag: a tag two apps declare is owned by neither
+// (ADR-0341 §SD2), and a copied one took the plain chat's export with it.
+func TestEmbedCaps_areTheChatsLessTheMountTag(t *testing.T) {
 	caps := EmbedCaps()
-	assert.Equal(t, manifest.Caps, caps)
+	export := ladingpublish.Subject(exportMountTag)
+	assert.Len(t, caps, len(manifest.Caps)-1)
+	for _, cp := range caps {
+		assert.NotEqual(t, export, cp.Pattern)
+	}
+	assert.True(t, slices.ContainsFunc(manifest.Caps, func(cp app.SubjectFilter) bool { return cp.Pattern == export }), "the chat keeps it")
+	assert.Equal(t, caps, BaseManifest().Caps, "a chatlet takes the same")
 	caps[0].Reason = "changed"
 	assert.NotEqual(t, "changed", manifest.Caps[0].Reason)
 }
