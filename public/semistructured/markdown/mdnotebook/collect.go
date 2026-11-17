@@ -7,6 +7,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/array"
@@ -182,35 +183,133 @@ type Collected struct {
 // server streamed it in. A frontmatter entry with no cell — a relation
 // stored by other means — is kept as it is.
 func Collect(ctx context.Context, nb *Notebook, blobDir string, run RunFunc) (out *Collected, err error) {
-	sts, err := recordStatements(nb)
+	records, err := Compute(ctx, nb, run, ComputeOptions{})
 	if err != nil {
 		return nil, err
 	}
-	records := make(map[string]arrow.RecordBatch)
 	defer func() {
 		for _, r := range records {
 			r.Release()
 		}
 	}()
-	for i, st := range sts {
-		var sql string
-		sql, err = passes.SetFormat("ArrowStream").Run(compose(sts, i))
+	return Seal(nb, records, blobDir, nil)
+}
+
+// ComputeOptions are how [Compute] sends a notebook's records. The zero
+// value is collection's: one request after another, and no bound.
+type ComputeOptions struct {
+	// Parallel is how many records are asked for at once; below 2 is one
+	// after another, in document order.
+	Parallel int
+	// MaxRows and MaxBytes bound one record's result, zero for no bound. A
+	// record over either fails: it is not cut short, because a truncated
+	// record would differ from the stored one in more than its time
+	// (ADR-0380 §SD3). MaxBytes counts the body the server answered with.
+	MaxRows  int64
+	MaxBytes int64
+	// Done, when not nil, is called once per record that was computed, from
+	// the goroutine that computed it.
+	Done func(record string)
+}
+
+// RecordError is the record [Compute] failed on, and why.
+type RecordError struct {
+	Record string
+	Err    error
+}
+
+func (inst *RecordError) Error() string {
+	return "the record " + inst.Record + ": " + inst.Err.Error()
+}
+
+func (inst *RecordError) Unwrap() error { return inst.Err }
+
+// Compute computes every record of nb on the server and returns the
+// results by record name: the half of [Collect] that needs a server, for a
+// reader that shows the records without storing them (ADR-0380 §SD1). The
+// caller releases them.
+//
+// A record's statement carries the records before it as WITH queries, so no
+// request depends on another's answer and opts.Parallel may send several at
+// once. Each result is one batch, whatever the server streamed it in. The
+// first failure ends the others and is returned as a [RecordError]; nothing
+// is returned beside it.
+func Compute(ctx context.Context, nb *Notebook, run RunFunc, opts ComputeOptions) (records map[string]arrow.RecordBatch, err error) {
+	sts, err := recordStatements(nb)
+	if err != nil {
+		return nil, err
+	}
+	one := func(ctx context.Context, i int) (rec arrow.RecordBatch, err error) {
+		sql, err := passes.SetFormat("ArrowStream").Run(compose(sts, i))
 		if err != nil {
-			return nil, eb.Build().Str("record", st.name).Errorf("compose the record's statement: %w", err)
+			return nil, eh.Errorf("compose the record's statement: %w", err)
 		}
-		var stream []byte
-		stream, err = run(ctx, sql)
+		stream, err := run(ctx, sql)
 		if err != nil {
-			return nil, eb.Build().Str("record", st.name).Errorf("collect the record: %w", err)
+			return nil, eh.Errorf("collect the record: %w", err)
 		}
-		var rec arrow.RecordBatch
+		if opts.MaxBytes > 0 && int64(len(stream)) > opts.MaxBytes {
+			return nil, eh.Errorf("the result is %d bytes, over the bound of %d; it is not cut short", len(stream), opts.MaxBytes)
+		}
 		rec, err = oneBatch(stream)
 		if err != nil {
-			return nil, eb.Build().Str("record", st.name).Errorf("read the record's result: %w", err)
+			return nil, eh.Errorf("read the record's result: %w", err)
 		}
-		records[st.name] = rec
+		if opts.MaxRows > 0 && rec.NumRows() > opts.MaxRows {
+			n := rec.NumRows()
+			rec.Release()
+			return nil, eh.Errorf("the result is %d rows, over the bound of %d; it is not cut short", n, opts.MaxRows)
+		}
+		return rec, nil
 	}
-	return Seal(nb, records, blobDir, nil)
+
+	parallel := max(opts.Parallel, 1)
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	var (
+		mu    sync.Mutex
+		wg    sync.WaitGroup
+		first error
+		slots = make(chan struct{}, parallel)
+	)
+	records = make(map[string]arrow.RecordBatch, len(sts))
+	for i := range sts {
+		slots <- struct{}{}
+		mu.Lock()
+		failed := first != nil
+		mu.Unlock()
+		if failed {
+			<-slots
+			break
+		}
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			defer func() { <-slots }()
+			rec, oErr := one(ctx, i)
+			mu.Lock()
+			defer mu.Unlock()
+			if oErr != nil {
+				if first == nil {
+					first = &RecordError{Record: sts[i].name, Err: oErr}
+					cancel()
+				}
+				return
+			}
+			records[sts[i].name] = rec
+			if opts.Done != nil {
+				opts.Done(sts[i].name)
+			}
+		}()
+	}
+	wg.Wait()
+	if first != nil {
+		for _, r := range records {
+			r.Release()
+		}
+		return nil, first
+	}
+	return records, nil
 }
 
 // Seal is nb sealed over records: the half of [Collect] that stores, for

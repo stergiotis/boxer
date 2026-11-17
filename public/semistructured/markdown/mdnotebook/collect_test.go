@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"strings"
+	"sync"
 	"testing"
 	"testing/fstest"
 
@@ -233,4 +234,80 @@ func TestCollectFailsOnAFigureItCannotRead(t *testing.T) {
 	var asked []string
 	_, err = mdnotebook.Collect(context.Background(), nb, "b", draftServer(t, &asked))
 	assert.ErrorContains(t, err, "one row")
+}
+
+// Compute is collection's computing half: the same statements, the records
+// by name, and nothing stored (ADR-0380 §SD1).
+func TestComputeAnswersTheRecordsCollectionStores(t *testing.T) {
+	nb, err := mdnotebook.Read([]byte(draft))
+	require.NoError(t, err)
+	var collected, computed []string
+	_, err = mdnotebook.Collect(context.Background(), nb, "t.blobs", draftServer(t, &collected))
+	require.NoError(t, err)
+	var done []string
+	records, err := mdnotebook.Compute(context.Background(), nb, draftServer(t, &computed), mdnotebook.ComputeOptions{
+		Done: func(record string) { done = append(done, record) },
+	})
+	require.NoError(t, err)
+	defer func() {
+		for _, r := range records {
+			r.Release()
+		}
+	}()
+	assert.Equal(t, collected, computed, "a live reading sends what collection sends")
+	assert.Equal(t, []string{"by_key", "total"}, done)
+	require.Len(t, records, 2)
+	assert.EqualValues(t, 3, records["by_key"].NumRows(), "a stream of several batches is one record")
+	assert.EqualValues(t, 1, records["total"].NumRows())
+}
+
+// A record over the bound fails by name and nothing is returned: a result
+// is not cut short.
+func TestComputeFailsARecordOverItsBound(t *testing.T) {
+	nb, err := mdnotebook.Read([]byte(draft))
+	require.NoError(t, err)
+	for name, opts := range map[string]mdnotebook.ComputeOptions{
+		"rows":           {MaxRows: 2},
+		"bytes":          {MaxBytes: 16},
+		"rows, parallel": {MaxRows: 2, Parallel: 4},
+	} {
+		t.Run(name, func(t *testing.T) {
+			var mu sync.Mutex
+			var asked []string
+			server := draftServer(t, &asked)
+			records, err := mdnotebook.Compute(context.Background(), nb, func(ctx context.Context, statement string) ([]byte, error) {
+				mu.Lock()
+				defer mu.Unlock()
+				return server(ctx, statement)
+			}, opts)
+			assert.Nil(t, records)
+			var rErr *mdnotebook.RecordError
+			require.ErrorAs(t, err, &rErr)
+			assert.Equal(t, "by_key", rErr.Record)
+			assert.ErrorContains(t, err, "not cut short")
+		})
+	}
+}
+
+// Sent several at once, the records are the ones sent one after another.
+func TestComputeInParallelAnswersTheSameRecords(t *testing.T) {
+	nb, err := mdnotebook.Read([]byte(draft))
+	require.NoError(t, err)
+	var mu sync.Mutex
+	var asked []string
+	server := draftServer(t, &asked)
+	records, err := mdnotebook.Compute(context.Background(), nb, func(ctx context.Context, statement string) ([]byte, error) {
+		mu.Lock()
+		defer mu.Unlock()
+		return server(ctx, statement)
+	}, mdnotebook.ComputeOptions{Parallel: 4})
+	require.NoError(t, err)
+	defer func() {
+		for _, r := range records {
+			r.Release()
+		}
+	}()
+	assert.Len(t, asked, 2)
+	assert.EqualValues(t, 3, records["by_key"].NumRows())
+	assert.EqualValues(t, 1, records["total"].NumRows())
 }

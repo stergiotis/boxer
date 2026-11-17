@@ -116,3 +116,39 @@ func TestSamplesAreWhatCollectionWrites(t *testing.T) {
 		})
 	}
 }
+
+// A sample computed for a live reading has, row for row, the records it
+// stores (ADR-0380 §SD1): a live result and a stored one differ only in
+// when they were computed. The records are sent several at once.
+func TestSamplesComputedLiveAreWhatTheyStore(t *testing.T) {
+	if _, err := exec.LookPath("clickhouse-local"); err != nil {
+		t.Skip("clickhouse-local is not installed")
+	}
+	files, err := filepath.Glob(filepath.Join(samplesDir, "*.md"))
+	require.NoError(t, err)
+	require.NotEmpty(t, files)
+	for _, file := range files {
+		stem := strings.TrimSuffix(filepath.Base(file), ".md")
+		t.Run(stem, func(t *testing.T) {
+			src, rErr := os.ReadFile(file)
+			require.NoError(t, rErr)
+			nb, rErr := mdnotebook.Read(src)
+			require.NoError(t, rErr)
+			live, cErr := mdnotebook.Compute(context.Background(), nb, clickhouseLocal(""), mdnotebook.ComputeOptions{Parallel: 4, MaxRows: 1 << 20, MaxBytes: 64 << 20})
+			require.NoError(t, cErr)
+			defer func() {
+				for _, r := range live {
+					r.Release()
+				}
+			}()
+			stored := mdnotebook.Load(nb, os.DirFS(samplesDir))
+			defer stored.Release()
+			require.Len(t, live, len(stored.Records))
+			for name, want := range stored.Records {
+				got := live[name]
+				require.NotNil(t, got, name)
+				sameRows(t, name, want, got)
+			}
+		})
+	}
+}
