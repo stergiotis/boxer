@@ -33,6 +33,15 @@ tags="$(cat ./tags | tr -d "\n")"
 # because its payload is fenced SQL and the prose around it really is
 # documentation.
 #
+# The same holds for the chat's transforms and the chatlet presets
+# (`apps/chat/transforms/`, `apps/chatlet/book/`): their front matter is the
+# preset's settings and their body is the prompt.
+#
+# `--exclude 'mdnotebook/samples/'` and `'mdnotebook/fixture/'` withhold sealed
+# notebooks (ADR-0371). A notebook's front matter carries its records and its
+# `val:` links are references into them, which DL001 and DL007 would read as a
+# malformed stanza and as missing files.
+#
 # `--exclude 'doc/competences/'` withholds the competence vault (ADR-0337
 # §SD5). Its notes are Obsidian-shaped and carry the vault's front matter, not
 # the doc standard's, and the vault has a lint of its own: `boxer capmap parse`
@@ -50,6 +59,10 @@ if out=$(./boxer.sh gov gate \
         --entry-points-baseline scripts/ci/entry-points-baseline.txt \
         --naming-baseline scripts/ci/naming-baseline.txt \
         --exclude 'prompts/' \
+        --exclude 'apps/chat/transforms/' \
+        --exclude 'apps/chatlet/book/' \
+        --exclude 'mdnotebook/samples/' \
+        --exclude 'mdnotebook/fixture/' \
         --exclude 'doc/competences/' \
         --tab-pkg ./public/thestack/cmd/imzero2tab \
         --tab-pkg ./public/thestack/cmd/imzero2tabdemo \
