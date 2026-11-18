@@ -157,6 +157,36 @@ func TestSample_SecondCallRatesComputed(t *testing.T) {
 	assert.Equal(t, uint8(50), bd.BusyPercent)
 }
 
+// A counter that steps backwards (a device reset) reads as no activity, not
+// as a rollover of a 64-bit counter.
+func TestSample_BackwardStepClampsToZero(t *testing.T) {
+	root := newRootTree(t, mountsFixture, filesystemsFixture, map[string]string{
+		"sda1": sda1Stat,
+	})
+
+	now := time.Unix(0, 0)
+	c, _ := disk.New(disk.Options{
+		Proc:           procfs.New(filepath.Join(root, "proc")),
+		Sys:            sysfs.New(filepath.Join(root, "sys")),
+		StatfsFunc:     stubStatfs,
+		DeviceResolver: deviceBasename,
+		NowFunc:        func() time.Time { return now },
+	})
+	_, err := c.Sample(context.Background())
+	require.NoError(t, err)
+
+	now = now.Add(time.Second)
+	rewriteBlockStat(t, root, "sda1", "1 0 10 0 1 0 5 0 0 2 0\n")
+
+	snap, err := c.Sample(context.Background())
+	require.NoError(t, err)
+	require.Len(t, snap.BlockDevices, 1)
+	bd := snap.BlockDevices[0]
+	assert.Equal(t, uint64(0), bd.ReadBytesPerSec)
+	assert.Equal(t, uint64(0), bd.WriteBytesPerSec)
+	assert.Equal(t, uint8(0), bd.BusyPercent)
+}
+
 func TestSample_BlockDevices_AreUnique(t *testing.T) {
 	// Same /dev/sda1 mounted twice (e.g. bind mount). BlockDevices must
 	// deduplicate by name.

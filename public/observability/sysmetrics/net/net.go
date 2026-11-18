@@ -14,6 +14,7 @@ import (
 
 	"github.com/stergiotis/boxer/public/observability/eh"
 
+	"github.com/stergiotis/boxer/public/observability/sysmetrics/internal/deltaclock"
 	"github.com/stergiotis/boxer/public/observability/sysmetrics/internal/sysfs"
 	"github.com/stergiotis/boxer/public/observability/sysmetrics/sysmsnap"
 )
@@ -73,9 +74,8 @@ type Collector struct {
 }
 
 type ifaceTick struct {
-	at      time.Time
-	rxBytes uint64
-	txBytes uint64
+	rx deltaclock.Tick
+	tx deltaclock.Tick
 }
 
 // New returns a network Collector configured by opts. The returned
@@ -171,15 +171,21 @@ func (inst *Collector) Sample(ctx context.Context) (snap sysmsnap.NetSnapshot, e
 		entry.RxBytes = inst.readByteCounter(ifc.Name, "rx_bytes")
 		entry.TxBytes = inst.readByteCounter(ifc.Name, "tx_bytes")
 
-		// Rate computation against prior tick.
-		if prev, ok := inst.prev[ifc.Name]; ok {
-			elapsed := now.Sub(prev.at)
-			if elapsed > 0 {
-				entry.RxBytesPerSec = perSecond(prev.rxBytes, entry.RxBytes, inst.rolloverMax, elapsed)
-				entry.TxBytesPerSec = perSecond(prev.txBytes, entry.TxBytes, inst.rolloverMax, elapsed)
-			}
+		// Rate computation against prior tick. The kernel's rx/tx byte
+		// counters may be 32-bit; a backward step is a rollover at
+		// rolloverMax (matches btop_collect.cpp:2760-2767), or clamps to 0
+		// when rolloverMax is 0.
+		cur := ifaceTick{
+			rx: deltaclock.Tick{At: now, Value: entry.RxBytes},
+			tx: deltaclock.Tick{At: now, Value: entry.TxBytes},
 		}
-		inst.prev[ifc.Name] = ifaceTick{at: now, rxBytes: entry.RxBytes, txBytes: entry.TxBytes}
+		if prev, ok := inst.prev[ifc.Name]; ok {
+			rx, elapsed := deltaclock.Diff(prev.rx, cur.rx, inst.rolloverMax)
+			tx, _ := deltaclock.Diff(prev.tx, cur.tx, inst.rolloverMax)
+			entry.RxBytesPerSec = uint64(deltaclock.RatePerSecond(rx, elapsed))
+			entry.TxBytesPerSec = uint64(deltaclock.RatePerSecond(tx, elapsed))
+		}
+		inst.prev[ifc.Name] = cur
 
 		snap.Interfaces = append(snap.Interfaces, entry)
 	}
@@ -211,26 +217,6 @@ func (inst *Collector) readByteCounter(name, leaf string) (n uint64) {
 		return 0
 	}
 	return v
-}
-
-// perSecond computes a per-second rate from prev/now byte counters. When
-// now < prev, a counter rollover at rolloverMax is assumed (matches
-// btop_collect.cpp:2760-2767). When rolloverMax is 0, backward steps
-// clamp to zero rate.
-func perSecond(prev, now, rolloverMax uint64, elapsed time.Duration) (rate uint64) {
-	var delta uint64
-	if now >= prev {
-		delta = now - prev
-	} else if rolloverMax > 0 && prev <= rolloverMax {
-		delta = (rolloverMax - prev) + now + 1
-	} else {
-		return 0
-	}
-	secs := elapsed.Seconds()
-	if secs <= 0 {
-		return 0
-	}
-	return uint64(float64(delta) / secs)
 }
 
 func extractIP(addr stdnet.Addr) (ip stdnet.IP) {

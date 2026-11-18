@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/sysmetrics/internal/deltaclock"
 	"github.com/stergiotis/boxer/public/observability/sysmetrics/internal/procfs"
 	"github.com/stergiotis/boxer/public/observability/sysmetrics/internal/sysfs"
 	"github.com/stergiotis/boxer/public/observability/sysmetrics/sysmsnap"
@@ -90,10 +91,9 @@ type Collector struct {
 }
 
 type ioTick struct {
-	at             time.Time
-	sectorsRead    uint64
-	sectorsWritten uint64
-	ioTicksMs      uint64
+	sectorsRead    deltaclock.Tick
+	sectorsWritten deltaclock.Tick
+	ioTicksMs      deltaclock.Tick
 }
 
 // New returns a disk Collector configured by opts. The returned error
@@ -270,30 +270,24 @@ func (inst *Collector) sampleBlock(now time.Time, name string) (bd sysmsnap.Bloc
 
 	bd.Name = name
 
+	// The block-layer counters are 64-bit: a backward step (device reset)
+	// clamps to 0 rather than being read as a rollover.
+	cur := ioTick{
+		sectorsRead:    deltaclock.Tick{At: now, Value: sectorsRead},
+		sectorsWritten: deltaclock.Tick{At: now, Value: sectorsWritten},
+		ioTicksMs:      deltaclock.Tick{At: now, Value: ioTicksMs},
+	}
 	if prev, primed := inst.prev[name]; primed {
-		elapsed := now.Sub(prev.at)
-		if elapsed > 0 {
-			secs := elapsed.Seconds()
-			elapsedMs := elapsed.Milliseconds()
-			if sectorsRead > prev.sectorsRead {
-				bd.ReadBytesPerSec = uint64(float64((sectorsRead-prev.sectorsRead)*SectorSize) / secs)
-			}
-			if sectorsWritten > prev.sectorsWritten {
-				bd.WriteBytesPerSec = uint64(float64((sectorsWritten-prev.sectorsWritten)*SectorSize) / secs)
-			}
-			if ioTicksMs > prev.ioTicksMs && elapsedMs > 0 {
-				busy := max(min(int64(ioTicksMs-prev.ioTicksMs)*100/elapsedMs, 100), 0)
-				bd.BusyPercent = uint8(busy)
-			}
+		read, elapsed := deltaclock.Diff(prev.sectorsRead, cur.sectorsRead, 0)
+		written, _ := deltaclock.Diff(prev.sectorsWritten, cur.sectorsWritten, 0)
+		busyMs, _ := deltaclock.Diff(prev.ioTicksMs, cur.ioTicksMs, 0)
+		bd.ReadBytesPerSec = uint64(deltaclock.RatePerSecond(read*SectorSize, elapsed))
+		bd.WriteBytesPerSec = uint64(deltaclock.RatePerSecond(written*SectorSize, elapsed))
+		if elapsedMs := elapsed.Milliseconds(); busyMs > 0 && elapsedMs > 0 {
+			bd.BusyPercent = uint8(max(min(int64(busyMs)*100/elapsedMs, 100), 0))
 		}
 	}
-
-	inst.prev[name] = ioTick{
-		at:             now,
-		sectorsRead:    sectorsRead,
-		sectorsWritten: sectorsWritten,
-		ioTicksMs:      ioTicksMs,
-	}
+	inst.prev[name] = cur
 	ok = true
 	return
 }

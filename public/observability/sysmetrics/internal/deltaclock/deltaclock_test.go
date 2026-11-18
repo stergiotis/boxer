@@ -39,6 +39,14 @@ func TestDiff_RolloverU32(t *testing.T) {
 	assert.Equal(t, uint64(110), dv)
 }
 
+func TestDiff_PrevAboveRolloverClamps(t *testing.T) {
+	t0 := time.Unix(1_000_000, 0)
+	prev := deltaclock.Tick{At: t0, Value: math.MaxUint32 + 10}
+	now := deltaclock.Tick{At: t0.Add(time.Second), Value: 100}
+	dv, _ := deltaclock.Diff(prev, now, math.MaxUint32)
+	assert.Equal(t, uint64(0), dv, "a prev beyond the declared width is not a rollover of that width")
+}
+
 func TestRatePerSecond(t *testing.T) {
 	assert.InDelta(t, 50.0, deltaclock.RatePerSecond(100, 2*time.Second), 0.0001)
 	assert.Equal(t, 0.0, deltaclock.RatePerSecond(100, 0))

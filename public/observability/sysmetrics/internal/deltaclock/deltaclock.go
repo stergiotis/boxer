@@ -11,18 +11,20 @@ type Tick struct {
 // Diff returns the delta value and elapsed duration between prev and now.
 //
 // When now.Value < prev.Value:
-//   - if rolloverMax > 0, a counter rollover at rolloverMax is assumed and
-//     the delta is computed as (rolloverMax - prev.Value) + now.Value + 1.
+//   - if rolloverMax > 0 and prev.Value <= rolloverMax, a counter rollover
+//     at rolloverMax is assumed and the delta is computed as
+//     (rolloverMax - prev.Value) + now.Value + 1.
 //   - otherwise the function returns deltaValue = 0 (the conservative
-//     default — the counter went backwards, but no rollover hint was
-//     declared, so we clamp rather than fabricate a delta).
+//     default — the counter went backwards, and either no rollover hint was
+//     declared or prev already exceeds it, so the counter is not the width
+//     declared; we clamp rather than fabricate a delta).
 func Diff(prev, now Tick, rolloverMax uint64) (deltaValue uint64, elapsed time.Duration) {
 	elapsed = now.At.Sub(prev.At)
 	if now.Value >= prev.Value {
 		deltaValue = now.Value - prev.Value
 		return
 	}
-	if rolloverMax > 0 {
+	if rolloverMax > 0 && prev.Value <= rolloverMax {
 		deltaValue = (rolloverMax - prev.Value) + now.Value + 1
 		return
 	}
