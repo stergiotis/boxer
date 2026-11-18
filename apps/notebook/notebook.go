@@ -511,11 +511,11 @@ func (inst *App) renderToolbar(ctx app.FrameContextI) {
 		// save replaces it, unless it was changed here meanwhile. Drawn
 		// only where the host registers one editor app (ADR-0365).
 		if _, ok := externaledit.Editor(); ok && inst.doc != nil && inst.bus != nil {
-			if text, replace := editexternally.Render(editexternally.Input{
+			if r := editexternally.Render(editexternally.Input{
 				Ids: inst.ids, ScopeKey: "editExternally", Editing: &inst.externalEdit, Bus: inst.bus,
 				Name: inst.doc.name, Text: string(inst.doc.text), Disabled: inst.collect.job.Running(),
-			}); replace {
-				if inst.setText([]byte(text)) {
+			}); r.Replace {
+				if inst.setText([]byte(r.Text)) {
 					inst.note = "the editor's save is the notebook's text; what it changed is not stored until the notebook is collected"
 				}
 			}

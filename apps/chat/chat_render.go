@@ -607,11 +607,11 @@ func (inst *App) renderComposer() {
 	// runs.
 	if _, ok := externaledit.Editor(); ok && inst.bus != nil && (!inst.simple || inst.detailsOpen || inst.externalEdit.Active()) {
 		for range c.HorizontalTop().KeepIter() {
-			if text, replace := editexternally.Render(editexternally.Input{
+			if r := editexternally.Render(editexternally.Input{
 				Ids: inst.ids, ScopeKey: "draft-external", Editing: &inst.externalEdit, Bus: inst.bus,
 				Name: "message.md", Text: inst.draft, Small: true,
-			}); replace {
-				inst.draft = text
+			}); r.Replace {
+				inst.draft = r.Text
 				c.CurrentApplicationState.StateManager.OverrideDatabindingSPtr(&inst.draft)
 			}
 		}

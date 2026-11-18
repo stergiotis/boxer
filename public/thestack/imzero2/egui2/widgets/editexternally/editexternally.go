@@ -34,11 +34,18 @@ type Input struct {
 	Small bool
 }
 
-// Render draws the gesture in the caller's current row and answers the
-// text to put in place of Input.Text when a save is taken; a caller whose
-// text is bound to an input overrides the binding with it. It draws nothing
+// Result is what one frame of the gesture answers.
+type Result struct {
+	// Replace is set in the frame a save is taken, and Text is then the
+	// text to put in place of Input.Text; a caller whose text is bound to
+	// an input overrides the binding with it.
+	Text    string
+	Replace bool
+}
+
+// Render draws the gesture in the caller's current row. It draws nothing
 // where the host has no single editor app or the window no bus.
-func Render(in Input) (text string, replace bool) {
+func Render(in Input) (r Result) {
 	if in.Editing == nil || in.Bus == nil || in.Ids == nil {
 		return
 	}
@@ -51,10 +58,10 @@ func Render(in Input) (text string, replace bool) {
 		scope = "editexternally"
 	}
 	ed := in.Editing
-	text, replace = ed.Poll(in.Text)
+	r.Text, r.Replace = ed.Poll(in.Text)
 	current := in.Text
-	if replace {
-		current = text
+	if r.Replace {
+		current = r.Text
 	}
 	if ed.Busy() {
 		c.RequestRepaintAfter(0.5)
@@ -78,7 +85,7 @@ func Render(in Input) (text string, replace bool) {
 		}
 		if ed.Conflict() {
 			if button("take", "Take "+editor+"'s save") {
-				text, replace = ed.Take()
+				r.Text, r.Replace = ed.Take()
 			}
 			if button("keep", "Keep mine") {
 				ed.Keep(current)

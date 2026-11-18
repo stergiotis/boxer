@@ -2560,11 +2560,11 @@ func (inst *PlayApp) renderTopBar(schema *arrow.Schema) {
 			if inst.pendingSnippetReplace != "" {
 				current = inst.pendingSnippetReplace
 			}
-			if text, replace := editexternally.Render(editexternally.Input{
+			if r := editexternally.Render(editexternally.Input{
 				Ids: ids, ScopeKey: "editExternally", Editing: &inst.externalEdit, Bus: inst.bus,
 				Name: "query.sql", Text: current,
-			}); replace {
-				inst.ReplaceSql(text)
+			}); r.Replace {
+				inst.ReplaceSql(r.Text)
 			}
 		}
 
