@@ -1,4 +1,6 @@
-// Package goserver generates Go-side server stubs for FFFI2 IDL procedures.
-// Mirrors goclient on the receiving end — typed parameter unmarshalling and
-// return-value marshalling tied to a registered handler.
+// Package goserver generates the Go side that writes the FFFI2 wire format:
+// typed factories, builder methods, procedures and fetchers that marshal
+// their arguments into the stream and read fetcher replies back. egui2's
+// driver uses it for the imzero2 bindings. rustclient generates the Rust
+// interpreter that reads what this side writes.
 package goserver
