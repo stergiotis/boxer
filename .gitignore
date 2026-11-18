@@ -13,6 +13,10 @@
 # so identically-named subdirs/packages are unaffected).
 /app
 /boxer
+/imzero2tab
+/imzero2tabdemo
+/svgserver
+/wasmspike
 /envgen
 /imzero2
 /licensegate
