@@ -45,6 +45,26 @@ pub const ROUND_WINDOW: u8 = 12;
 /// a third of the box so the corner still reads as a corner.
 pub const ROUND_CHECKBOX: u8 = 4;
 
+/// How far a hovered control grows on each side, in px. Integer, with an
+/// integer ring, or egui's margin rounding lets the hovered widget allocate
+/// a pixel more than the resting one (`tokens::apply_stroke`).
+pub const HOVER_LIFT: f32 = 1.0;
+
+/// The hovered radius: the resting one plus the lift, so both outlines
+/// share their corner centres.
+fn lifted_round() -> CornerRadius {
+    CornerRadius::same(ROUND_WIDGET + HOVER_LIFT as u8)
+}
+
+/// A checkbox's radius per widget state, in `style::set_widget_radius`
+/// order (noninteractive, inactive, hovered, active, open): the hovered box
+/// is lifted like any control, so its corner grows with it.
+pub fn checkbox_radii() -> [CornerRadius; 5] {
+    let rest = CornerRadius::same(ROUND_CHECKBOX);
+    let lifted = CornerRadius::same(ROUND_CHECKBOX + HOVER_LIFT as u8);
+    [rest, rest, lifted, rest, rest]
+}
+
 /// The hard shadow's offset, in px, right and down.
 pub const SHADOW_OFFSET: i8 = 4;
 
@@ -152,25 +172,33 @@ fn apply_widgets(w: &mut Widgets) {
         corner_radius: round,
         expansion: 0.0,
     };
+    // Hover lifts the control by `HOVER_LIFT` on every side and tints it;
+    // the ring stays a hairline, as at rest. Two things keep the lifted
+    // outline clean: the radius grows by the lift, so the hovered outline
+    // is concentric with the resting one rather than a tighter corner on a
+    // bigger box; and the ring is one pixel, because egui's anti-aliased
+    // 2 px stroke thins across the diagonal of an 8 px corner and reads as
+    // a lumpy ring.
     w.hovered = WidgetVisuals {
         bg_fill: p::ACCENT_SUBTLE,
         weak_bg_fill: p::ACCENT_SUBTLE,
-        bg_stroke: Stroke::new(s::STRONG, p::ACCENT_DEFAULT),
+        bg_stroke: Stroke::new(s::HAIR, p::ACCENT_DEFAULT),
         fg_stroke: Stroke::new(s::HAIR, p::NEUTRAL_TEXT_EXTREME),
-        corner_radius: round,
-        expansion: 1.0,
+        corner_radius: lifted_round(),
+        expansion: HOVER_LIFT,
     };
     // egui reads `active.fg_stroke.color` as `strong_text_color()` — every
     // `RichText::strong()` heading, not just a pressed button's label — so
     // it must stay ink (module doc). The pressed fill is therefore a deeper
-    // accent tint that ink still reads on, not the accent itself.
+    // accent tint that ink still reads on, not the accent itself. A press
+    // settles the lift: the control drops back to its resting outline.
     w.active = WidgetVisuals {
         bg_fill: pressed_fill(),
-        weak_bg_fill: p::ACCENT_SUBTLE,
-        bg_stroke: Stroke::new(s::STRONG, p::ACCENT_STRONG),
+        weak_bg_fill: pressed_fill(),
+        bg_stroke: Stroke::new(s::HAIR, p::ACCENT_STRONG),
         fg_stroke: Stroke::new(s::HAIR, p::NEUTRAL_TEXT_EXTREME),
         corner_radius: round,
-        expansion: 1.0,
+        expansion: 0.0,
     };
     w.open = WidgetVisuals {
         bg_fill: p::NEUTRAL_BG_FAINT,
@@ -252,13 +280,38 @@ mod tests {
     }
 
     #[test]
-    fn hover_and_active_strokes_stay_integer_wide() {
-        // `tokens::apply_stroke` documents why: a fractional hovered stroke
-        // with expansion 1.0 makes egui allocate +1 px on hover.
+    fn hover_lifts_a_concentric_hairline_outline() {
         let v = applied();
-        assert_eq!(v.widgets.hovered.bg_stroke.width.fract(), 0.0);
-        assert_eq!(v.widgets.active.bg_stroke.width.fract(), 0.0);
-        assert_eq!(v.widgets.hovered.expansion, 1.0);
+        let (rest, hover, press) = (v.widgets.inactive, v.widgets.hovered, v.widgets.active);
+        // A hairline ring in every state: a 2 px one goes lumpy on the corner.
+        for w in [rest, hover, press] {
+            assert_eq!(w.bg_stroke.width, s::HAIR);
+        }
+        // The lifted outline shares its corner centres with the resting one.
+        assert_eq!(hover.expansion, HOVER_LIFT);
+        assert_eq!(
+            f32::from(hover.corner_radius.nw),
+            f32::from(rest.corner_radius.nw) + hover.expansion
+        );
+        // A press settles back onto the resting outline.
+        assert_eq!(press.expansion, rest.expansion);
+        assert_eq!(press.corner_radius, rest.corner_radius);
+        // The press is told by its fill, which is what a button paints.
+        assert_ne!(press.weak_bg_fill, hover.weak_bg_fill);
+    }
+
+    #[test]
+    fn a_button_frame_has_the_same_margin_in_every_state() {
+        // `tokens::apply_stroke` documents why: egui rounds the margins
+        // `button_padding + expansion - stroke` and `-expansion` apart, so a
+        // state whose sum differs allocates a different size on hover.
+        let mut style = Style::default();
+        apply(&mut style, Density::Standard);
+        let classes = egui::widget_style::Classes::default();
+        let margin = |state| style.button_style(&classes, state).frame.total_margin();
+        let rest = margin(egui::widget_style::WidgetState::Inactive);
+        assert_eq!(margin(egui::widget_style::WidgetState::Hovered), rest);
+        assert_eq!(margin(egui::widget_style::WidgetState::Active), rest);
     }
 
     #[test]

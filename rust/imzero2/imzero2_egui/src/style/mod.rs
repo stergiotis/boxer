@@ -144,11 +144,11 @@ pub fn slider_rail() -> egui::Color32 {
 /// that rounds its buttons generously rounds the checkbox's box into a
 /// circle. The dark theme's radius is small enough that `add` runs as is.
 pub fn with_checkbox_radius<R>(ui: &mut egui::Ui, add: impl FnOnce(&mut egui::Ui) -> R) -> R {
-    let radius = match tokens::theme::active() {
-        tokens::Theme::Fresh => egui::CornerRadius::same(fresh::ROUND_CHECKBOX),
+    let radii = match tokens::theme::active() {
+        tokens::Theme::Fresh => fresh::checkbox_radii(),
         tokens::Theme::Dark => return add(ui),
     };
-    let saved = set_widget_radius(&mut ui.style_mut().visuals.widgets, [radius; 5]);
+    let saved = set_widget_radius(&mut ui.style_mut().visuals.widgets, radii);
     let r = add(ui);
     set_widget_radius(&mut ui.style_mut().visuals.widgets, saved);
     r

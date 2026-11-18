@@ -178,9 +178,17 @@ fn dark(kind: u8) -> Option<[Paint; 3]> {
 fn fresh(kind: u8) -> Option<[Paint; 3]> {
     let ring = f::NEUTRAL_TEXT_EXTREME;
     Some(match kind {
+        // The theme's hover ring is a hairline, too faint on a filled
+        // button to say "hovered" by itself, so hover deepens the fill a
+        // step past `strong` — the way danger steps from `default` to
+        // `strong` — and the ring takes the fill's colour.
         KIND_PRIMARY => [
             all(f::ACCENT_STRONG, f::ACCENT_STRONG, f::NEUTRAL_BG_EXTREME),
-            all(f::ACCENT_STRONG, f::ACCENT_DEFAULT, f::NEUTRAL_BG_EXTREME),
+            all(
+                fresh_primary_hover(),
+                fresh_primary_hover(),
+                f::NEUTRAL_BG_EXTREME,
+            ),
             all(f::ACCENT_STRONG, ring, f::NEUTRAL_BG_EXTREME),
         ],
         KIND_DANGER => [
@@ -210,9 +218,25 @@ fn fresh(kind: u8) -> Option<[Paint; 3]> {
     })
 }
 
+/// The fresh primary button's hover fill: `accent.strong` a fifth of the way
+/// to ink. The palette has no emphasis past `strong`.
+fn fresh_primary_hover() -> Color32 {
+    f::ACCENT_STRONG.lerp_to_gamma(f::NEUTRAL_TEXT_EXTREME, 0.2)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A filled kind's hover must be visible without its ring: under the
+    /// fresh theme the ring is a hairline.
+    #[test]
+    fn a_fresh_filled_kind_changes_its_fill_on_hover() {
+        for kind in [KIND_PRIMARY, KIND_DANGER] {
+            let [rest, hover, _] = fresh(kind).unwrap();
+            assert_ne!(rest.fill, hover.fill, "kind {kind}");
+        }
+    }
 
     fn luminance(c: Color32) -> f32 {
         let lin = |v: u8| {
