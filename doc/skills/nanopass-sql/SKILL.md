@@ -890,6 +890,14 @@ has become worth its cost. If you add a new parse seam, route it through
     `tok.GetTokenType() == antlr.TokenEOF` (`-1`) when iterating.
 12. **`go doc`/build need the repo build tags** (`GOFLAGS=-tags="$(cat ./tags)"`)
     or symbols read as "undefined".
+13. **`SETTINGS` values are not `columnExpr`.** They parse as `settingValue`,
+    with their own node types (`SettingTupleContext`, `SettingArrayContext`,
+    `SettingFunctionContext`, `SettingLiteralContext`). A pass that rewrites
+    tuple or array syntax in expressions does not reach settings unless it
+    matches those types too.
+14. **`FORMAT` hangs off `QueryStmtContext`**, after the query and before EOF —
+    not inside `SelectStmtContext`. Look for it there when adding, replacing or
+    removing a format.
 
 ## Grammar Modifications
 
