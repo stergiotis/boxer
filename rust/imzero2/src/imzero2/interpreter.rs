@@ -6508,15 +6508,14 @@ egui::Grid::new(i);
                 if u.is_some() {
                     let ui = u.as_mut().unwrap();
                     let out = w.show(ui);
-                    let clicked = out.clicked.map(|k| k as u64).unwrap_or(u64::MAX);
                     if let Some(k) = out.clicked {
                         if link_open.get(k).copied().unwrap_or(0) != 0 {
                             if let Some(url) = link_urls.get(k) {
                                 ui.ctx().open_url(egui::OpenUrl::new_tab(url));
                             }
                         }
+                        self.r9_u64_push(i.value(), k as u64);
                     }
-                    self.r9_u64_push(i.value(), clicked);
                     if let Ok(mut zones) = self.link_zones.lock() {
                         for (k, rect) in out.zones {
                             if let Some(url) = link_urls.get(k) {

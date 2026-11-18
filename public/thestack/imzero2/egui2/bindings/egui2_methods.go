@@ -64,10 +64,12 @@ func (inst CheckboxFluid) SendRespVal(val *bool) ResponseFlagsE {
 
 // SendRespVal flushes a labelAtomsLinked and binds `clicked` to its r9_u64
 // readout: the index of the link clicked in the frame the label was
-// interpreted, or ^uint64(0) when none. The readout lands when that
-// frame's responses arrive, so `clicked` must outlive the frame — a field
-// of the retained state the label renders from, not a local. Returns the
-// response flags, as every SendRespVal does.
+// interpreted. A frame without a click writes nothing, so the caller sets
+// `clicked` to a no-link value (the markdown renderer uses ^uint64(0)) and
+// resets it after each read. The readout lands when that frame's responses
+// arrive, so `clicked` must outlive the frame — a field of the retained
+// state the label renders from, not a local. Returns the response flags, as
+// every SendRespVal does.
 func (inst LabelAtomsLinkedFluid) SendRespVal(clicked *uint64) ResponseFlagsE {
 	inst.Send()
 	s := CurrentApplicationState.StateManager

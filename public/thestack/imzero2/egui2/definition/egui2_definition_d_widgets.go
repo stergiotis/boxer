@@ -365,9 +365,10 @@ func definitionsWidget() (widgets []*ir.BuilderFactoryNode) {
 		// widgets (imzero2_egui::style::linked). `linkAtoms` names the
 		// atoms that are links, in link order; `linkUrls` their targets;
 		// `linkOpen[k]` nonzero asks the host to open link k's url in a new
-		// tab when it is clicked. Every click on a link is reported through
-		// r9_u64 as the link's index (u64::MAX when none), so the caller
-		// can act on the links it claims. Link zones go to the SVG exporter
+		// tab when it is clicked. A click on a link is reported through
+		// r9_u64 as the link's index, so the caller can act on the links it
+		// claims; a frame without one pushes nothing and leaves the bound
+		// value as the caller set it. Link zones go to the SVG exporter
 		// as a hyperlink's do.
 		idl.NewBuilderFactoryNode("labelAtomsLinked").
 			WithIdentityId(true).
@@ -440,15 +441,14 @@ func definitionsWidget() (widgets []*ir.BuilderFactoryNode) {
 if {{EguiUiOptionalOuter}}.is_some() {
 	let ui = {{EguiUiOptionalOuter}}.as_mut().unwrap();
 	let out = {{Instance}}.show(ui);
-	let clicked = out.clicked.map(|k| k as u64).unwrap_or(u64::MAX);
 	if let Some(k) = out.clicked {
 		if link_open.get(k).copied().unwrap_or(0) != 0 {
 			if let Some(url) = link_urls.get(k) {
 				ui.ctx().open_url(egui::OpenUrl::new_tab(url));
 			}
 		}
+		self.r9_u64_push({{Id}}.value(), k as u64);
 	}
-	self.r9_u64_push({{Id}}.value(), clicked);
 	if let Ok(mut zones) = self.link_zones.lock() {
 		for (k, rect) in out.zones {
 			if let Some(url) = link_urls.get(k) {
