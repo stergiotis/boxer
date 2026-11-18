@@ -96,7 +96,7 @@ When the L1 cache is full of "Pinned" items (Working Set > L1 Capacity), items a
         readmission of bouncing victims). Measured about even with the
         others on a Zipf workload (see caching_policy_study_test.go) —
         worth trying when victim-bounce traffic dominates.
-    *   `PogrebStash`/`PebbleStash`: Disk-backed. Good for datasets exceeding
+    *   `PebbleStash`: Disk-backed. Good for datasets exceeding
         RAM. Best-effort by contract: storage or codec errors degrade into
         misses or dropped writes, never into failures of the cache itself.
 *   **Eviction:** The Stash implements a round-robin or random eviction policy when full, bounding L2 size.
@@ -249,8 +249,7 @@ The `processItem` function:
 *   **`WithStash(backend)`**: Swap L2 storage. Built-in options:
     `NewSliceStash` (memory-dense, O(n) scan; good for small L2s),
     `NewMapStash` (O(1), heavier per entry; good for large in-RAM L2s),
-    and the disk-backed `diskbacked.NewPogrebStash` /
-    `diskbacked.NewPebbleStash` (CBOR-encoded, optional soft cap; good
+    and the disk-backed `diskbacked.NewPebbleStash` (CBOR-encoded, optional soft cap; good
     when the working set spills beyond RAM).
 *   **`WithMetrics(collector)`**: Inject Prometheus/StatsD hooks.
 *   **`WithErrorBackoff(duration)`**: Circuit-breaker recovery window

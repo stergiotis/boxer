@@ -66,7 +66,7 @@ Conventions this ADR follows (verified in-repo): interface names `*I`,
 sentinel errors with `errors.Is` (established in `public/caching`,
 `public/gov`), `eh`/`eb` error wrapping with no package-name message
 prefixes, seam-with-multiple-impls precedent in `public/caching/`
-(`StashBackendI` + pebble/pogreb under `caching/diskbacked/`).
+(`StashBackendI` with in-memory backends and pebble under `caching/diskbacked/`).
 
 ## Design space (QOC)
 

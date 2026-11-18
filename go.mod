@@ -7,7 +7,6 @@ require (
 	github.com/Jeffail/checkpoint v1.1.0
 	github.com/Jeffail/shutdown v1.1.0
 	github.com/RoaringBitmap/roaring v1.9.4
-	github.com/akrylysov/pogreb v0.10.2
 	github.com/antlr4-go/antlr/v4 v4.13.1
 	github.com/apache/arrow-go/v18 v18.8.0
 	github.com/bufbuild/protocompile v0.14.1

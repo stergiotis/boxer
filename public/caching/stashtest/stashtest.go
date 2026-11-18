@@ -1,6 +1,6 @@
 // Package stashtest is a conformance suite for caching.StashBackendI
 // implementations. Backends in this repository (SliceStash, MapStash,
-// diskbacked.PogrebStash, diskbacked.PebbleStash) and external ones run the
+// diskbacked.PebbleStash) and external ones run the
 // same contract checks: update-in-place Add, entry-state round-trips (the
 // stale flag, the monotonic version, and the freshness stamp must survive
 // the tier boundary intact), removing GetAndRemove, idempotent Delete,
