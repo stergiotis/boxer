@@ -140,9 +140,16 @@ pub fn apply_typography(style: &mut Style, density: Density) {
 /// when `expansion` and `bg_stroke.width` are both integer-valued; with
 /// `expansion=1.0` and `stroke=REGULAR=1.5` the rounding errors fail to
 /// cancel and hovered widgets allocate +1 px per axis vs. inactive — visible
-/// as layout jitter on hover-in / hover-out. Pinning hovered to `STRONG`
-/// (2.0) keeps the math integer-clean; hover vs. active distinction now
-/// rests on the `bg_stroke` color (`ACCENT_DEFAULT` vs. `ACCENT_STRONG`).
+/// as layout jitter on hover-in / hover-out. Any whole width keeps the math
+/// integer-clean: here hovered is pinned to `STRONG` (2.0) and the hover vs.
+/// active distinction rests on the `bg_stroke` color (`ACCENT_DEFAULT` vs.
+/// `ACCENT_STRONG`); the fresh theme, which replaces this function, uses a
+/// `HAIR` (1.0) ring.
+///
+/// The same arithmetic means a hovered frame is drawn `expansion` past the
+/// rectangle the widget allocates: the size stays put and the outline grows
+/// outward. A container that clips at a widget's edge cuts that outline, so
+/// a tight clip around buttons needs `expansion` of slack.
 pub fn apply_stroke(visuals: &mut Visuals) {
     visuals.window_stroke.width = self::stroke::REGULAR;
     visuals.widgets.noninteractive.bg_stroke.width = self::stroke::HAIR;
