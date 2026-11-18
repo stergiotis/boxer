@@ -150,7 +150,7 @@ func demoImageBench(ids *c.WidgetIdStack, st *imageBenchState) {
 	case still:
 		// Nothing in this arm's chrome may change between the click on "flip"
 		// and the swap: the swap is the only difference between two frames.
-		c.Label("still arm: one upload, and a second one a fixed number of frames after flip").Send()
+		c.Label("Still arm: one upload, and a second one a fixed number of frames after flip").Send()
 	case st.summary[0] != "":
 		for _, s := range st.summary {
 			c.Label(s).Send()

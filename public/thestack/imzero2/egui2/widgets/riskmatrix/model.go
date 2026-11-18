@@ -73,22 +73,22 @@ func (inst *Model) Validate() (err error) {
 	}
 	for _, s := range [][]float64{inst.PLo, inst.PHi, inst.ImpactLo, inst.ImpactHi} {
 		if len(s) != n {
-			return eh.Errorf("riskmatrix: a residual column has %d entries for %d risks", len(s), n)
+			return eh.Errorf("riskmatrix: a residual column has %d entries for %d risks", len(s), n) //boxer:lint disable=CS013 reason="Render draws this message verbatim as the widget's error label; a field the person cannot see would drop the value"
 		}
 	}
 	if inst.Names != nil && len(inst.Names) != n {
-		return eh.Errorf("riskmatrix: Names has %d entries for %d risks", len(inst.Names), n)
+		return eh.Errorf("riskmatrix: Names has %d entries for %d risks", len(inst.Names), n) //boxer:lint disable=CS013 reason="Render draws this message verbatim as the widget's error label; a field the person cannot see would drop the value"
 	}
 	inh := [][]float64{inst.InherentPLo, inst.InherentPHi, inst.InherentImpactLo, inst.InherentImpactHi}
 	for _, s := range inh {
 		if (s == nil) != (inh[0] == nil) || (s != nil && len(s) != n) {
-			return eh.Errorf("riskmatrix: the inherent columns must be all absent or all of length %d", n)
+			return eh.Errorf("riskmatrix: the inherent columns must be all absent or all of length %d", n) //boxer:lint disable=CS013 reason="Render draws this message verbatim as the widget's error label; a field the person cannot see would drop the value"
 		}
 	}
 	for i := range n {
 		for _, v := range []float64{inst.PLo[i], inst.PHi[i], inst.ImpactLo[i], inst.ImpactHi[i]} {
 			if !positive(v) {
-				return eh.Errorf("riskmatrix: risk %q has a residual value %v; likelihood and impact must be positive", inst.Ids[i], v)
+				return eh.Errorf("riskmatrix: risk %q has a residual value %v; likelihood and impact must be positive", inst.Ids[i], v) //boxer:lint disable=CS013 reason="Render draws this message verbatim as the widget's error label; a field the person cannot see would drop the value"
 			}
 		}
 	}
@@ -205,7 +205,7 @@ func (inst Bands) resolved() (b Bands, err error) {
 	for _, e := range [][]float64{b.LikelihoodEdges, b.ImpactEdges, b.ShadeEdges} {
 		for i, v := range e {
 			if !positive(v) || (i > 0 && v <= e[i-1]) {
-				return b, eh.Errorf("riskmatrix: band edges must be positive and ascending, got %v", e)
+				return b, eh.Errorf("riskmatrix: band edges must be positive and ascending, got %v", e) //boxer:lint disable=CS013 reason="Render draws this message verbatim as the widget's error label; a field the person cannot see would drop the value"
 			}
 		}
 	}

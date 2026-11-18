@@ -71,7 +71,7 @@ func (inst *notebookSamplesState) load() {
 
 func demoNotebookSamples(ids *c.WidgetIdStack, st *notebookSamplesState) {
 	for range c.HorizontalTop().KeepIter() {
-		c.Label("sample").Send()
+		c.Label("Sample").Send()
 		for i, name := range samples.Names() {
 			for range c.IdScope(ids.PrepareSeq(uint64(i))) {
 				label := "sample " + strings.TrimSuffix(name, ".md")

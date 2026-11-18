@@ -27,3 +27,30 @@ var PageBase = env.NewString(env.Spec{
 	Description: "the URL of the directory a browser tab's page is served from, set by the tab's worker (ADR-0299); a tab binary's prepare step resolves paths against it, and Services.NoEgress lets its origin through",
 	Category:    env.CategoryDev,
 })
+
+// MainFont, MonoFont, PhosphorFont and FallbackFont pin the faces `bundle`
+// ships when no --fonts directory is given; the imzero2 launchers
+// (rust/imzero2/font-resolve.sh) read the same variables.
+var MainFont = env.NewPath(env.Spec{
+	Name:        "MAIN_FONT",
+	Description: "TTF a browser tab's `bundle` ships as its main text face when no --fonts directory is given (the imzero2 launchers pass it as --mainFontTTF); unset is the face fontconfig finds",
+	Category:    env.CategoryDev,
+})
+
+var MonoFont = env.NewPath(env.Spec{
+	Name:        "MONO_FONT",
+	Description: "TTF a browser tab's `bundle` ships as its monospace face when no --fonts directory is given (the imzero2 launchers pass it as --monoFontTTF); unset is the face fontconfig finds",
+	Category:    env.CategoryDev,
+})
+
+var PhosphorFont = env.NewPath(env.Spec{
+	Name:        "PHOSPHOR_FONT",
+	Description: "TTF a browser tab's `bundle` ships as its icon face when no --fonts directory is given (the imzero2 launchers pass it as --phosphorFontTTF); unset is the Phosphor font vendored under rust/imzero2/assets/fonts",
+	Category:    env.CategoryDev,
+})
+
+var FallbackFont = env.NewPath(env.Spec{
+	Name:        "FALLBACK_FONT",
+	Description: "TTF a browser tab's `bundle` ships as its fallback face when no --fonts directory is given (the imzero2 launchers pass it as --fallbackFontTTF); unset is the face fontconfig finds",
+	Category:    env.CategoryDev,
+})

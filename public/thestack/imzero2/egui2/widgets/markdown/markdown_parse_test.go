@@ -562,23 +562,6 @@ func TestDropped_EmptyDocumentDropsNothing(t *testing.T) {
 
 // ---------------- Task lists (GFM) ----------------------------------------
 
-// emittedInlineText lowers one inline node with a fresh builder and
-// returns the text it wrote.
-//
-// It reads the builder's PENDING buffer rather than the finished runs on
-// purpose: a finished run is an opaque retained FFFI blob with no way to
-// read the text back, so this is the only seam in the package that can
-// see what the lowering actually emitted. It therefore only works for a
-// single node whose text lands in one style bucket — which is exactly
-// what a checkbox glyph is.
-func emittedInlineText(n ast.Node, src []byte) (s string) {
-	ctx := &lowerCtx{src: src, resolver: resolver.NoopResolver{}}
-	b := newInlineBuilder(0, ctx.resolver)
-	emitInline(ctx, n, &b, styleNone)
-	s = b.pendingText.String()
-	return
-}
-
 func TestEmitInline_TaskCheckBox_EmitsItsGlyph(t *testing.T) {
 	// C1 in the rendering review: goldmark's task-list parser eats the
 	// whole `[x] ` marker into this node, so with no case in emitInline

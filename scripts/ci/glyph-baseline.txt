@@ -67,3 +67,13 @@ U+062F	public/thestack/imzero2/egui2/demo/apps/widgets/egui2_hl_rtl_demo.go
 U+0631	public/thestack/imzero2/egui2/demo/apps/widgets/egui2_hl_rtl_demo.go
 U+0639	public/thestack/imzero2/egui2/demo/apps/widgets/egui2_hl_rtl_demo.go
 U+0645	public/thestack/imzero2/egui2/demo/apps/widgets/egui2_hl_rtl_demo.go
+
+# --- terminal cell-width probe ---
+# The console demo's banner line exercises the VT core's cell widths: double-
+# width CJK, an emoji with a skin-tone modifier, a regional-indicator flag and
+# combining marks. What it shows is the grid keeping its columns, not whether
+# a face draws the emoji; replacing them would delete the probe.
+U+1F1E8	public/thestack/imzero2/egui2/demo/apps/widgets/egui2_hl_console_demo.go
+U+1F1ED	public/thestack/imzero2/egui2/demo/apps/widgets/egui2_hl_console_demo.go
+U+1F3FD	public/thestack/imzero2/egui2/demo/apps/widgets/egui2_hl_console_demo.go
+U+1F44D	public/thestack/imzero2/egui2/demo/apps/widgets/egui2_hl_console_demo.go

@@ -716,7 +716,6 @@ type paragraphRun struct {
 	kind  runKindE
 	atoms typed.RetainedFffiHolderTyped[c.AtomsS]
 	label string
-	url   string
 	tip   string
 
 	// runKindAtoms fields: the links the run carries, in text order, and

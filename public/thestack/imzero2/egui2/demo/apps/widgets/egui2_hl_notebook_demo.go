@@ -103,7 +103,7 @@ func demoNotebook(ids *c.WidgetIdStack, st *notebookDemoState) {
 		return
 	}
 	for range c.HorizontalTop().KeepIter() {
-		c.Label("statements").Send()
+		c.Label("Statements").Send()
 		for i, mode := range notebookStatementModes {
 			for range c.IdScope(ids.PrepareSeq(uint64(i))) {
 				if c.RadioButton(ids.PrepareStr("mode"), c.Atoms().Text(mode.label).Keep(), st.statements == mode.value).SendRespVal(&st.modeClicked).HasPrimaryClicked() {

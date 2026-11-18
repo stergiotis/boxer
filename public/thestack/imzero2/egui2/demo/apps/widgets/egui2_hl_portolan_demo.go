@@ -186,9 +186,9 @@ var (
 		lat, lng float64
 		col      color.Color
 	}{
-		{"Market Square", 51.1100, 17.0320, color.Hex(0xff4444ff)},
-		{"University", 51.1089, 17.0300, color.Hex(0x44ccffff)},
-		{"Zoo", 51.1045, 17.0752, color.Hex(0x44ff66ff)},
+		{"Market Square", 51.1100, 17.0320, color.Hex(0xff4444ff)}, // designlint:ignore=L16 (data: each marker's colour tells the three POIs apart)
+		{"University", 51.1089, 17.0300, color.Hex(0x44ccffff)},    // designlint:ignore=L16 (data: each marker's colour tells the three POIs apart)
+		{"Zoo", 51.1045, 17.0752, color.Hex(0x44ff66ff)},           // designlint:ignore=L16 (data: each marker's colour tells the three POIs apart)
 	}
 	demoRouteLats = []float64{51.1100, 51.1080, 51.1050, 51.1045}
 	demoRouteLngs = []float64{17.0320, 17.0400, 17.0550, 17.0752}
@@ -283,19 +283,19 @@ func (st *portolanDemoState) overlays(p portolan.Projector) {
 		if cells := getDemoRegionCells(); len(cells) > 0 {
 			// Translucent fill per cell, the dissolved outline stroked, a
 			// label at its centroid — the former h3Region overlay.
-			if err := st.region.Draw(ctx, p, h3Handle, cells, color.Hex(0x3388ff44), color.Hex(0x3388ffff), styletokens.StrokeStrong, "ROI", color.Hex(0x3388ffff), 14); err != nil {
+			if err := st.region.Draw(ctx, p, h3Handle, cells, color.Hex(0x3388ff44), color.Hex(0x3388ffff), styletokens.StrokeStrong, "ROI", color.Hex(0x3388ffff), 14); err != nil { // designlint:ignore=L16 (data: the ROI overlay drawn over the tiles, in Leaflet's default path blue)
 				log.Warn().Err(err).Msg("region overlay")
 			}
 		}
 	}
 	if st.showPolyline {
-		p.Polyline(demoRouteLats, demoRouteLngs, color.Hex(0xffaa00ff), styletokens.StrokeStrong)
+		p.Polyline(demoRouteLats, demoRouteLngs, color.Hex(0xffaa00ff), styletokens.StrokeStrong) // designlint:ignore=L16 (data: the route overlay drawn over the tiles)
 	}
 	if st.showMarkers {
 		for _, poi := range demoPOIs {
 			ll := portolan.LL(poi.lat, poi.lng)
 			p.Marker(ll, 7, poi.col)
-			p.Label(ll, 10, 0, 0, 1, poi.name, 13, color.Hex(0x202020ff))
+			p.Label(ll, 10, 0, 0, 1, poi.name, 13, color.Hex(0x202020ff)) // designlint:ignore=L16 (the POI label sits on light map tiles, which do not follow the theme)
 		}
 	}
 }
@@ -429,7 +429,7 @@ func (st *portolanDemoState) choropleth(ids *c.WidgetIdStack) {
 		}
 		ctx := context.Background()
 		st.choro.Render(portolanDemoW, choroplethDemoH, func(p portolan.Projector) {
-			if err := st.cells.Cells(ctx, p, h3Handle, cells, fills, color.Hex(0x20202080), 0.5); err != nil {
+			if err := st.cells.Cells(ctx, p, h3Handle, cells, fills, color.Hex(0x20202080), 0.5); err != nil { // designlint:ignore=L16 (cell outline over the data fills and the tiles, neither of which follows the theme)
 				log.Warn().Err(err).Msg("choropleth cells")
 			}
 		})

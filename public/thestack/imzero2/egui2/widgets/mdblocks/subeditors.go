@@ -338,7 +338,7 @@ var (
 func (e *Editor) renderSub(f int) {
 	blk := e.blocks[f]
 	e.editorId = 0
-	fr := c.Frame(e.ids.PrepareStr("sub")).Fill(subFill).Stroke(1, subStroke).InnerMargin(6).OuterMargin(0)
+	fr := c.Frame(e.ids.PrepareStr("sub")).Fill(subFill).Stroke(styletokens.StrokeHair, subStroke).InnerMargin(styletokens.PaddingTight(styletokens.ActiveDensity())).OuterMargin(0)
 	for range fr.KeepIter() {
 		c.UiSetMinWidthAvailable()
 		switch e.sub.kind {

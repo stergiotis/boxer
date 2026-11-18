@@ -45,7 +45,7 @@ func (e *Editor) moveBlocks(a, b, d int) bool {
 	x := e.src[first.start:first.stop]
 	gap := e.src[first.stop:second.start]
 	y := e.src[second.start:second.stop]
-	caret := e.caret
+	var caret int
 	if d < 0 {
 		caret = first.start + (e.caret - second.start)
 	} else {

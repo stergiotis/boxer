@@ -705,8 +705,8 @@ func (m *Map) frame(w, h float32, overlay func(Projector)) {
 		overlay(Projector{view: m.view, m: m})
 	}
 	if r, ok := m.box.rect(); ok {
-		c.PaintRectFilled(float32(r.Min.X), float32(r.Min.Y), float32(r.Max.X), float32(r.Max.Y), 0, color.Hex(0xffffff40)).Send()
-		c.PaintRectStroke(float32(r.Min.X), float32(r.Min.Y), float32(r.Max.X), float32(r.Max.Y), 0, color.Hex(0x3388ffff), styletokens.StrokeStrong).Send()
+		c.PaintRectFilled(float32(r.Min.X), float32(r.Min.Y), float32(r.Max.X), float32(r.Max.Y), 0, color.Hex(styletokens.AccentDefault.AsHex()&^0xff|0x40)).Send()
+		c.PaintRectStroke(float32(r.Min.X), float32(r.Min.Y), float32(r.Max.X), float32(r.Max.Y), 0, color.Hex(styletokens.AccentDefault.AsHex()), styletokens.StrokeStrong).Send()
 	}
 	if !m.opts.HideAttribution && !m.opts.NoTiles && m.opts.Source.Attribution != "" {
 		m.paintAttribution(w, h)
@@ -739,8 +739,8 @@ func (m *Map) paintAttribution(w, h float32) {
 	const fontSize = 10.0
 	text := m.opts.Source.Attribution
 	approxW := float32(len(text))*fontSize*0.55 + 8
-	c.PaintRectFilled(w-approxW, h-fontSize-6, w, h, 0, color.Hex(0xffffffb0)).Send()
-	c.PaintText(w-4, h-3, 2, 2, text, fontSize, color.Hex(0x333333ff)).Send()
+	c.PaintRectFilled(w-approxW, h-fontSize-6, w, h, 0, color.Hex(styletokens.NeutralBgSurface.AsHex()&^0xff|0xb0)).Send()
+	c.PaintText(w-4, h-3, 2, 2, text, fontSize, color.Hex(styletokens.NeutralTextPrimary.AsHex())).Send()
 }
 
 // handleInput feeds last frame's registers to the handlers: the drag or a

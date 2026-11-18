@@ -32,7 +32,7 @@ const envTmpDir = "TMPDIR"
 var overridden bool
 
 func init() {
-	if _, set := os.LookupEnv(envTmpDir); set {
+	if _, set := os.LookupEnv(envTmpDir); set { //boxer:lint disable=CS011 reason="TMPDIR is the OS's and os.TempDir's variable, not a boxer setting; importing the env registry would also break the init order this package depends on"
 		return
 	}
 	base, err := os.UserCacheDir()

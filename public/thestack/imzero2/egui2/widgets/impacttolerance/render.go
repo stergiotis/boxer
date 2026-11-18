@@ -121,7 +121,7 @@ func Render(in Input) (res Result) {
 		res.Err = in.Model.Validate()
 	}
 	if res.Err == nil && (in.MinHours < 0 || in.MaxHours < 0 || (in.MaxHours > 0 && in.MaxHours <= in.MinHours)) {
-		res.Err = eh.Errorf("impacttolerance: MinHours %v / MaxHours %v is not a range", in.MinHours, in.MaxHours)
+		res.Err = eh.Errorf("impacttolerance: MinHours %v / MaxHours %v is not a range", in.MinHours, in.MaxHours) //boxer:lint disable=CS013 reason="Render draws this message verbatim as the widget's error label; a field the person cannot see would drop the value"
 	}
 	if res.Err != nil {
 		for rt := range c.RichTextLabel(res.Err.Error()) {
@@ -362,12 +362,12 @@ func (f *frame) paint(hovered Point) {
 			}
 			here := Point{Service: s, Scenario: k}
 			if here == sel {
-				c.PaintCircleStroke(pt.x, pt.y, pointR+4, p.ink, 2).Send()
+				c.PaintCircleStroke(pt.x, pt.y, pointR+4, p.ink, styletokens.StrokeStrong).Send()
 			} else if here == hovered {
-				c.PaintCircleStroke(pt.x, pt.y, pointR+3, p.ink2, 1.5).Send()
+				c.PaintCircleStroke(pt.x, pt.y, pointR+3, p.ink2, styletokens.StrokeRegular).Send()
 			}
 			c.PaintCircleFilled(pt.x, pt.y, pointR, p.scenario[k]).Send()
-			c.PaintCircleStroke(pt.x, pt.y, pointR, p.bg, 2).Send()
+			c.PaintCircleStroke(pt.x, pt.y, pointR, p.bg, styletokens.StrokeStrong).Send()
 		}
 	}
 }

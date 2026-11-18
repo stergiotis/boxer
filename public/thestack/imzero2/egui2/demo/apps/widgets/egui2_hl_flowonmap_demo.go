@@ -175,7 +175,7 @@ func demoFlowOnMap(ids *c.WidgetIdStack, st *flowOnMapState) {
 		// Call order is paint order: the land, the flow over it, the graph on top.
 		ls := landoverlay.DefaultStyle()
 		if !st.tiles {
-			ls.Land, ls.Border = color.Hex(0x262d36ff), color.Hex(0x4a5563ff)
+			ls.Land, ls.Border = color.Hex(0x262d36ff), color.Hex(0x4a5563ff) // designlint:ignore=L16 (the untiled basemap matches the fixed dark sea in Background so the light flow trails read; theme neutrals turn light under fresh)
 		}
 		st.land.Paint(p, st.atlas, ls)
 		layer.Paint(p)
@@ -188,7 +188,7 @@ func demoFlowOnMap(ids *c.WidgetIdStack, st *flowOnMapState) {
 				st.nodes = append(st.nodes, graphview.NodeSpec{
 					Id: s.id, Label: s.label, Radius: graphOnMapNodePx / max(cam.Zoom, 1e-6),
 					Pinned: true, PinX: float32(at.X - st.origin.X), PinY: float32(at.Y - st.origin.Y),
-					Color: color.Hex(0xf2f2f2ff),
+					Color: color.Hex(0xf2f2f2ff), // designlint:ignore=L16 (light nodes against the fixed dark basemap, like the flow trails)
 				})
 			}
 			st.gv.HostedPaint(st.nodes, st.edges)

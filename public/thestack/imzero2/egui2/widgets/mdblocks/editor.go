@@ -423,29 +423,30 @@ func (e *Editor) applyEditorKeys() {
 		return
 	}
 	keys := c.CurrentApplicationState.StateManager.GetCapturedKeys(widgethandle.Make(e.editorId))
-	for _, k := range keys {
-		cb := clampInt(e.caret-e.bufStart, 0, len(e.buf))
-		if e.applySlashKey(k) {
-			return
-		}
-		switch {
-		case k.Command():
-			e.applyChord(k.Code)
-		case k.Code == keycodes.Enter:
-			e.applyEnter(cb, k.Shift())
-		case k.Code == keycodes.Tab:
-			e.applyLine(mdline.Tab(e.buf, cb, k.Shift()))
-		case k.Code == keycodes.Backspace:
-			e.applyBackspaceAtStart()
-		case k.Code == keycodes.ArrowUp:
-			e.moveToNeighbour(-1)
-		case k.Code == keycodes.ArrowDown:
-			e.moveToNeighbour(+1)
-		case k.Code == keycodes.Escape:
-			e.selectCurrent()
-		}
-		// One gesture per frame: the next acts on a moved caret.
+	// One gesture per frame: the next acts on a moved caret.
+	if len(keys) == 0 {
 		return
+	}
+	k := keys[0]
+	cb := clampInt(e.caret-e.bufStart, 0, len(e.buf))
+	if e.applySlashKey(k) {
+		return
+	}
+	switch {
+	case k.Command():
+		e.applyChord(k.Code)
+	case k.Code == keycodes.Enter:
+		e.applyEnter(cb, k.Shift())
+	case k.Code == keycodes.Tab:
+		e.applyLine(mdline.Tab(e.buf, cb, k.Shift()))
+	case k.Code == keycodes.Backspace:
+		e.applyBackspaceAtStart()
+	case k.Code == keycodes.ArrowUp:
+		e.moveToNeighbour(-1)
+	case k.Code == keycodes.ArrowDown:
+		e.moveToNeighbour(+1)
+	case k.Code == keycodes.Escape:
+		e.selectCurrent()
 	}
 }
 
@@ -456,51 +457,53 @@ func (e *Editor) applyFrameKeys() {
 		return
 	}
 	keys := c.CurrentApplicationState.StateManager.GetCapturedKeys(widgethandle.Make(e.frameId))
-	for _, k := range keys {
-		switch {
-		case k.Command() && k.Code == keycodes.KeyZ:
-			e.Undo()
-		case k.Command() && k.Code == keycodes.KeyY:
-			e.Redo()
-		case k.Command() && k.Code == keycodes.KeyC:
-			if e.selMode {
-				a, b := e.selRange()
-				e.copyRequest = e.src[e.blocks[a].start:e.blocks[b].stop]
-			}
-		case k.Command() && (k.Code == keycodes.ArrowUp || k.Code == keycodes.ArrowDown):
-			if e.selMode {
-				a, b := e.selRange()
-				d := -1
-				if k.Code == keycodes.ArrowDown {
-					d = 1
-				}
-				e.moveBlocks(a, b, d)
-			}
-		case k.Command() && k.Code == keycodes.KeyD:
-			if e.selMode {
-				a, b := e.selRange()
-				e.duplicateBlocks(a, b)
-			}
-		case !e.selMode:
-			// Nothing selected: the frame holds focus only between modes.
-		case k.Code == keycodes.Escape:
-			e.selMode = false
-		case k.Code == keycodes.Enter:
-			_, b := e.selRange()
-			e.openBlock(b, e.blocks[b].stop)
-		case k.Code == keycodes.ArrowUp || k.Code == keycodes.ArrowDown:
+	// One gesture per frame, as for the editor's keys.
+	if len(keys) == 0 {
+		return
+	}
+	k := keys[0]
+	switch {
+	case k.Command() && k.Code == keycodes.KeyZ:
+		e.Undo()
+	case k.Command() && k.Code == keycodes.KeyY:
+		e.Redo()
+	case k.Command() && k.Code == keycodes.KeyC:
+		if e.selMode {
+			a, b := e.selRange()
+			e.copyRequest = e.src[e.blocks[a].start:e.blocks[b].stop]
+		}
+	case k.Command() && (k.Code == keycodes.ArrowUp || k.Code == keycodes.ArrowDown):
+		if e.selMode {
+			a, b := e.selRange()
 			d := -1
 			if k.Code == keycodes.ArrowDown {
 				d = 1
 			}
-			e.selB = clampInt(e.selB+d, 0, len(e.blocks)-1)
-			if !k.Shift() {
-				e.selA = e.selB
-			}
-		case k.Code == keycodes.Delete || k.Code == keycodes.Backspace:
-			e.deleteSelection()
+			e.moveBlocks(a, b, d)
 		}
-		return
+	case k.Command() && k.Code == keycodes.KeyD:
+		if e.selMode {
+			a, b := e.selRange()
+			e.duplicateBlocks(a, b)
+		}
+	case !e.selMode:
+		// Nothing selected: the frame holds focus only between modes.
+	case k.Code == keycodes.Escape:
+		e.selMode = false
+	case k.Code == keycodes.Enter:
+		_, b := e.selRange()
+		e.openBlock(b, e.blocks[b].stop)
+	case k.Code == keycodes.ArrowUp || k.Code == keycodes.ArrowDown:
+		d := -1
+		if k.Code == keycodes.ArrowDown {
+			d = 1
+		}
+		e.selB = clampInt(e.selB+d, 0, len(e.blocks)-1)
+		if !k.Shift() {
+			e.selA = e.selB
+		}
+	case k.Code == keycodes.Delete || k.Code == keycodes.Backspace:
+		e.deleteSelection()
 	}
 }
 
@@ -749,11 +752,9 @@ func (e *Editor) deleteSelection() {
 		return
 	}
 	start := e.blocks[a].start
-	end := e.blocks[b].stop
+	end := len(e.src)
 	if next := b + 1; next < len(e.blocks) {
 		end = e.blocks[next].start
-	} else {
-		end = len(e.src)
 	}
 	e.splice(start, e.src[start:end], "", start, true)
 	e.selMode = false
@@ -879,7 +880,7 @@ func (e *Editor) renderBlock(i int, selected bool) (links []markdown.LinkClick, 
 		// TextEdit takes that focus over on the next frame.
 		fr = c.Frame(e.ids.PrepareStr("hit")).
 			Fill(fill).Stroke(strokeW, stroke).
-			InnerMargin(2).OuterMargin(0).
+			InnerMargin(styletokens.PaddingHair(styletokens.ActiveDensity())).OuterMargin(0).
 			SenseClick().Focusable().HoverCursorPointer()
 		for range fr.KeepIter() {
 			c.UiSetMinWidthAvailable()
@@ -891,9 +892,7 @@ func (e *Editor) renderBlock(i int, selected bool) (links []markdown.LinkClick, 
 			default:
 				res := markdown.RenderBlock(markdown.Input{Ids: e.ids, ScopeKey: "block", Doc: e.doc, LinkClaims: e.opts.LinkClaims}, blk.docIndex)
 				links = res.Links
-				for _, t := range res.Tasks {
-					e.pendingTasks = append(e.pendingTasks, t)
-				}
+				e.pendingTasks = append(e.pendingTasks, res.Tasks...)
 			}
 		}
 	}
@@ -910,7 +909,7 @@ func (e *Editor) renderTail(gap float32, drawnEditor bool) {
 	}
 	c.AddSpace(gap)
 	fr := c.Frame(e.ids.PrepareStr("tail")).
-		Fill(clearFill).InnerMargin(4).OuterMargin(0).
+		Fill(clearFill).InnerMargin(styletokens.PaddingInner(styletokens.ActiveDensity())).OuterMargin(0).
 		SenseClick().Focusable().HoverCursorPointer()
 	for range fr.KeepIter() {
 		c.UiSetMinWidthAvailable()

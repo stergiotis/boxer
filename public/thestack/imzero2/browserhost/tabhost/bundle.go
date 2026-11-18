@@ -16,6 +16,7 @@ import (
 	"github.com/rs/zerolog/log"
 	"github.com/urfave/cli/v3"
 
+	"github.com/stergiotis/boxer/public/config/env"
 	"github.com/stergiotis/boxer/public/extbin"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
@@ -45,7 +46,7 @@ var goBuildEnv = []string{"CGO_ENABLED=0"}
 // fontSlotVars are the variables that pin each.
 var (
 	fontSlots    = []string{"main", "mono", "phosphor", "fallback"}
-	fontSlotVars = []string{"MAIN_FONT", "MONO_FONT", "PHOSPHOR_FONT", "FALLBACK_FONT"}
+	fontSlotVars = []*env.PathVar{MainFont, MonoFont, PhosphorFont, FallbackFont}
 )
 
 func bundleCommand() (cmd *cli.Command) {
@@ -324,7 +325,7 @@ func placeFonts(dir string, boxerDir string, dst string) {
 		found, _ := fontresolve.Resolver{Fontconfig: fontresolve.Fontconfig{}}.Resolve()
 		resolved := []string{found.Main, found.Mono, filepath.Join(boxerDir, "rust", "imzero2", "assets", "fonts", "phosphor", "Phosphor.ttf"), found.Fallback}
 		for i, v := range fontSlotVars {
-			if paths[i] = os.Getenv(v); paths[i] == "" {
+			if paths[i] = v.Get(); paths[i] == "" {
 				paths[i] = resolved[i]
 			}
 		}

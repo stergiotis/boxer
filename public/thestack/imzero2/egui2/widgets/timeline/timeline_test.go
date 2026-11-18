@@ -353,7 +353,7 @@ func TestIntervalColors_Option(t *testing.T) {
 // TestIntervalFill_Fade: the palette ignores intensity unless asked, and when
 // asked keeps the hue and scales only the alpha.
 func TestIntervalFill_Fade(t *testing.T) {
-	palette := []color.Color{color.Hex(0x11223344), color.RGB(0xaa, 0xbb, 0xcc)}
+	palette := []color.Color{color.Hex(0x11223344), color.RGB(0xaa, 0xbb, 0xcc)} // designlint:ignore=L2 (test fixture: the assertions compare these exact channel values)
 	ev := &layout.IntervalEvent{KindID: 1, Intensity: 0.5}
 
 	plain := newTestTimeline(t, nil, withIntervalColors(palette))

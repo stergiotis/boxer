@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/dustin/go-humanize"
+	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/demo/apps/registry"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/timeline"
@@ -315,9 +316,9 @@ func makeTimelineFixture() (events []*layout.IntervalEvent) {
 // intersect it; no slice is materialised.
 // =============================================================================
 
-const (
-	weekendBandColor     uint32 = 0x1f202450 // muted dark-gray, low alpha
-	officeHoursBandColor uint32 = 0xf0c97014 // warm tint, very low alpha
+var (
+	weekendBandColor     = styletokens.NeutralSubtle.AsHex()&^0xff | 0x50  // muted neutral, low alpha
+	officeHoursBandColor = styletokens.WarningDefault.AsHex()&^0xff | 0x14 // warm tint, very low alpha
 )
 
 // weekendBands shades every Saturday + Sunday across the visible window.

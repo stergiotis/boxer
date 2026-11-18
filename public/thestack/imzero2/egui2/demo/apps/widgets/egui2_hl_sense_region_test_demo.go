@@ -77,16 +77,16 @@ func demoSenseRegionTest(ids *c.WidgetIdStack, st *senseRegionTestDemoState) {
 	sm := c.CurrentApplicationState.StateManager
 
 	// Description text painted into the canvas.
-	descColor := uint32(0xccccddff)
-	dimColor := uint32(0x888899ff)
-	c.PaintText(4, 4, 0, 0, "PaintSenseRegion hit-test verification", 14.0, color.Hex(0xffffffff)).Send()
+	descColor := styletokens.NeutralTextSecondary.AsHex()
+	dimColor := styletokens.NeutralTextDisabled.AsHex()
+	c.PaintText(4, 4, 0, 0, "PaintSenseRegion hit-test verification", 14.0, color.Hex(styletokens.NeutralTextPrimary.AsHex())).Send()
 	c.PaintText(4, 24, 0, 0, "Expected: hover a cell -> white border + status below", 11.0, color.Hex(descColor)).Send()
 	c.PaintText(4, 38, 0, 0, "Expected: left-click a cell -> click counter increments", 11.0, color.Hex(descColor)).Send()
 	c.PaintText(4, 52, 0, 0, "Expected: right-click a cell -> SECONDARY_CLICKED in status", 11.0, color.Hex(descColor)).Send()
 	c.PaintText(4, 66, 0, 0, "Expected: hover gap between cells -> no cell highlighted", 11.0, color.Hex(descColor)).Send()
 	c.PaintText(4, 80, 0, 0, "Expected: click cell A -> only A counter increments, not B", 11.0, color.Hex(dimColor)).Send()
 
-	c.PaintLine(4, srTestHeaderH-6, srTestCanvasW-4, srTestHeaderH-6, color.Hex(0x555566ff), 0.5).Send()
+	c.PaintLine(4, srTestHeaderH-6, srTestCanvasW-4, srTestHeaderH-6, color.Hex(styletokens.NeutralBorderFaint.AsHex()), 0.5).Send()
 
 	// Phase 1: emit cells + sense regions. Previous-frame responses drive
 	// the hover border so it renders into this frame's canvas.
@@ -99,13 +99,13 @@ func demoSenseRegionTest(ids *c.WidgetIdStack, st *senseRegionTestDemoState) {
 			c.PaintRectFilled(x, y, x+srTestCellW, y+srTestCellH, 6.0, color.Hex(srTestCellColors[idx])).Send()
 
 			label := fmt.Sprintf("%s (%d)", srTestCellNames[idx], st.clickCounts[idx])
-			c.PaintText(x+srTestCellW/2, y+srTestCellH/2, 1, 1, label, 14.0, color.Hex(0xffffffff)).Send()
+			c.PaintText(x+srTestCellW/2, y+srTestCellH/2, 1, 1, label, 14.0, color.Hex(0xffffffff)).Send() // designlint:ignore=L16 (white on the fixed mid-tone cell swatches, which do not follow the theme)
 
 			senseAbsId := c.MakeAbsoluteIdHighEntropy(srTestIdBase + uint64(idx))
 			c.PaintSenseRegion(senseAbsId, x, y, srTestCellW, srTestCellH).Send()
 
 			if sm.GetResponse(widgethandle.Make(senseAbsId.Derive())).HasHovered() {
-				c.PaintRectStroke(x-1, y-1, x+srTestCellW+1, y+srTestCellH+1, 6.0, color.Hex(0xffffffcc), styletokens.StrokeStrong).Send()
+				c.PaintRectStroke(x-1, y-1, x+srTestCellW+1, y+srTestCellH+1, 6.0, color.Hex(0xffffffcc), styletokens.StrokeStrong).Send() // designlint:ignore=L16 (the white hover border the description promises, on the fixed cell swatches)
 			}
 		}
 	}
@@ -113,7 +113,7 @@ func demoSenseRegionTest(ids *c.WidgetIdStack, st *senseRegionTestDemoState) {
 	// Phase 2: drain into the canvas. Rust-side ui.interact on each sense
 	// region populates r7 keyed by the region's id.
 	c.PaintCanvas(ids.PrepareStr("sr-test-canvas"), srTestCanvasW, srTestCanvasH).
-		Background(color.Hex(0x121218ff)).
+		Background(color.Hex(styletokens.NeutralBgFaint.AsHex())).
 		Send()
 
 	// Phase 3: read previous-frame r7 flags and build status / counters.

@@ -104,7 +104,7 @@ const (
 // sequences (cursor keys, the terminal's replies) are skipped.
 func (inst *consoleDemoState) answer(in []byte) {
 	var out strings.Builder
-	for _, b := range []rune(string(in)) {
+	for _, b := range string(in) {
 		switch inst.esc {
 		case escStart:
 			switch b {

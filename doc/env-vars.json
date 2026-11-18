@@ -2510,6 +2510,17 @@
       }
     },
     {
+      "name": "FALLBACK_FONT",
+      "type": "path",
+      "description": "TTF a browser tab's `bundle` ships as its fallback face when no --fonts directory is given (the imzero2 launchers pass it as --fallbackFontTTF); unset is the face fontconfig finds",
+      "category": "dev",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/thestack/imzero2/browserhost/tabhost"
+      }
+    },
+    {
       "name": "GEMINI_API_KEY",
       "type": "string",
       "description": "Google AI Studio / Gemini API key",
@@ -3403,6 +3414,28 @@
       }
     },
     {
+      "name": "MAIN_FONT",
+      "type": "path",
+      "description": "TTF a browser tab's `bundle` ships as its main text face when no --fonts directory is given (the imzero2 launchers pass it as --mainFontTTF); unset is the face fontconfig finds",
+      "category": "dev",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/thestack/imzero2/browserhost/tabhost"
+      }
+    },
+    {
+      "name": "MONO_FONT",
+      "type": "path",
+      "description": "TTF a browser tab's `bundle` ships as its monospace face when no --fonts directory is given (the imzero2 launchers pass it as --monoFontTTF); unset is the face fontconfig finds",
+      "category": "dev",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/thestack/imzero2/browserhost/tabhost"
+      }
+    },
+    {
       "name": "PEBBLE_MAX_HAMMING_DIST_PER_BYTE_INCL",
       "type": "int64",
       "default": "3",
@@ -3426,6 +3459,17 @@
       "origin": {
         "module": "github.com/stergiotis/boxer",
         "package": "github.com/stergiotis/boxer/public/app/commands/findAnchor"
+      }
+    },
+    {
+      "name": "PHOSPHOR_FONT",
+      "type": "path",
+      "description": "TTF a browser tab's `bundle` ships as its icon face when no --fonts directory is given (the imzero2 launchers pass it as --phosphorFontTTF); unset is the Phosphor font vendored under rust/imzero2/assets/fonts",
+      "category": "dev",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/thestack/imzero2/browserhost/tabhost"
       }
     },
     {

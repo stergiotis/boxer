@@ -382,7 +382,7 @@ func (inst *ColorScale) renderHorizontal() {
 		if hx > inst.width {
 			hx = inst.width
 		}
-		c.PaintLine(hx, 0, hx, gradientH+tickMarkH+2, color.Hex(0xffffffff), 2.0).Send()
+		c.PaintLine(hx, 0, hx, gradientH+tickMarkH+2, color.Hex(styletokens.NeutralTextExtreme.AsHex()), 2.0).Send()
 	}
 
 	// Flush the frame's accumulated paint commands into an egui-allocated
@@ -481,7 +481,7 @@ func (inst *ColorScale) renderVertical() {
 		if hy > inst.height {
 			hy = inst.height
 		}
-		c.PaintLine(0, hy, tickX1, hy, color.Hex(0xffffffff), 2.0).Send()
+		c.PaintLine(0, hy, tickX1, hy, color.Hex(styletokens.NeutralTextExtreme.AsHex()), 2.0).Send()
 	}
 
 	// Flush the accumulated paint into an egui-allocated canvas (see

@@ -36,19 +36,19 @@ func (inst *Model) Validate() (err error) {
 	}
 	ns, nk := len(inst.Services), len(inst.Scenarios)
 	if len(inst.ToleranceHours) != ns {
-		return eh.Errorf("impacttolerance: ToleranceHours has %d entries for %d services", len(inst.ToleranceHours), ns)
+		return eh.Errorf("impacttolerance: ToleranceHours has %d entries for %d services", len(inst.ToleranceHours), ns) //boxer:lint disable=CS013 reason="Render draws this message verbatim as the widget's error label; a field the person cannot see would drop the value"
 	}
 	if len(inst.RecoveryHours) != ns*nk {
-		return eh.Errorf("impacttolerance: RecoveryHours has %d entries for %d services × %d scenarios", len(inst.RecoveryHours), ns, nk)
+		return eh.Errorf("impacttolerance: RecoveryHours has %d entries for %d services × %d scenarios", len(inst.RecoveryHours), ns, nk) //boxer:lint disable=CS013 reason="Render draws this message verbatim as the widget's error label; a field the person cannot see would drop the value"
 	}
 	for s, t := range inst.ToleranceHours {
 		if !positive(t) {
-			return eh.Errorf("impacttolerance: service %q has tolerance %v; it must be a positive number of hours", inst.Services[s], t)
+			return eh.Errorf("impacttolerance: service %q has tolerance %v; it must be a positive number of hours", inst.Services[s], t) //boxer:lint disable=CS013 reason="Render draws this message verbatim as the widget's error label; a field the person cannot see would drop the value"
 		}
 	}
 	for i, v := range inst.RecoveryHours {
 		if !math.IsNaN(v) && !positive(v) {
-			return eh.Errorf("impacttolerance: service %q under %q has recovery %v; it must be a positive number of hours",
+			return eh.Errorf("impacttolerance: service %q under %q has recovery %v; it must be a positive number of hours", //boxer:lint disable=CS013 reason="Render draws this message verbatim as the widget's error label; a field the person cannot see would drop the value"
 				inst.Services[i/nk], inst.Scenarios[i%nk], v)
 		}
 	}

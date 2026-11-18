@@ -462,7 +462,7 @@ func (f *frame) paintContinuous() {
 		bx0, bx1 := f.px(m.ImpactLo[i]), f.px(m.ImpactHi[i])
 		by0, by1 := f.py(m.PHi[i]), f.py(m.PLo[i])
 		c.PaintRectFilled(bx0, by0, bx1, by1, 2, p.markFill).Send()
-		c.PaintRectStroke(bx0, by0, bx1, by1, 2, p.markStroke, 1).Send()
+		c.PaintRectStroke(bx0, by0, bx1, by1, 2, p.markStroke, styletokens.StrokeHair).Send()
 	}
 	c.PaintClipPop().Send()
 	for _, e := range isos {
@@ -516,7 +516,7 @@ func (f *frame) paintRisks(hovered int) {
 			c.PaintCircleFilled(a[0], a[1], 5, p.bg).Send()
 			// The mark's ink, which selectRamp keeps 3:1 from every class; the
 			// secondary ink has no such floor and sinks into the high classes.
-			c.PaintCircleStroke(a[0], a[1], 5, p.mark, 1.5).Send()
+			c.PaintCircleStroke(a[0], a[1], 5, p.mark, styletokens.StrokeRegular).Send()
 			if d > 14 {
 				paintArrow(a[0], a[1], r[0], r[1], d, p.mark)
 			}
@@ -541,12 +541,12 @@ func (f *frame) paintRisks(hovered int) {
 	for i := range m.Len() {
 		x, y := f.res[i][0], f.res[i][1]
 		if i == sel {
-			c.PaintCircleStroke(x, y, dotR+4, p.ink, 2).Send()
+			c.PaintCircleStroke(x, y, dotR+4, p.ink, styletokens.StrokeStrong).Send()
 		} else if i == hovered {
-			c.PaintCircleStroke(x, y, dotR+3, p.ink2, 1.5).Send()
+			c.PaintCircleStroke(x, y, dotR+3, p.ink2, styletokens.StrokeRegular).Send()
 		}
 		c.PaintCircleFilled(x, y, dotR, p.mark).Send()
-		c.PaintCircleStroke(x, y, dotR, p.bg, 2).Send()
+		c.PaintCircleStroke(x, y, dotR, p.bg, styletokens.StrokeStrong).Send()
 	}
 	for i, l := range labels {
 		mono(l.x, l.y, l.ah, l.av, m.Ids[i], p.ink)
@@ -672,7 +672,7 @@ func (f *frame) paintKey() {
 	for i, l := range f.bands.shadeLabels(f.format) {
 		yy := y0 + 46 + float32(i)*18
 		c.PaintRectFilled(kx, yy, kx+14, yy+12, 2, p.ramp[i]).Send()
-		c.PaintRectStroke(kx, yy, kx+14, yy+12, 2, p.border, 1).Send()
+		c.PaintRectStroke(kx, yy, kx+14, yy+12, 2, p.border, styletokens.StrokeHair).Send()
 		mono(kx+22, yy+6, anchorStart, anchorCenter, l, p.ink2)
 	}
 }
