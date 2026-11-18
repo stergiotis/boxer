@@ -103,3 +103,10 @@ first in byte order. A link that matches nothing is unresolved.
 
 - Attachments are not nodes. A consumer that wants them can add a node
   kind later without changing the note and tag rules.
+
+## Status
+
+Accepted 2026-11-01.
+
+Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
+See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers (Tier 1 in-place / Tier 2 dated `## Updates` entry / Tier 3 new superseding ADR).

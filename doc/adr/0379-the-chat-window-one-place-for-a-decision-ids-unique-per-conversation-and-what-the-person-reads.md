@@ -4,6 +4,8 @@ status: proposed
 date: 2026-11-17
 ---
 
+> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
+
 # ADR-0379: The chat window — one place for a decision, assertion ids unique per conversation, and what the person reads
 
 ## Context

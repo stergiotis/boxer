@@ -4,6 +4,8 @@ status: proposed
 date: 2026-11-18
 ---
 
+> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
+
 # ADR-0381: What one approval covers — a window's endpoint, host tables by class, launch counts and standing permissions
 
 ## Context

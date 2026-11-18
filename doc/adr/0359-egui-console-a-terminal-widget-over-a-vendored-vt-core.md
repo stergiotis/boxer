@@ -169,6 +169,13 @@ commit under `rust/imzero2/vendor/fux-vt`.
 - The screen state lives in the client, so Go reads it only through a
   fetch, one frame late (deferred, SD9).
 
+## Status
+
+Proposed 2026-11-06.
+
+Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
+See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers (Tier 1 in-place / Tier 2 dated `## Updates` entry / Tier 3 new superseding ADR).
+
 ## Updates
 
 ### 2026-11-06 — §SD9, §SD3: the screen comes back as a row

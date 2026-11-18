@@ -6,6 +6,8 @@ status: draft
 # reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to stable
 ---
 
+> **Status: draft — pre-human-review.** Not verified; do not cite as authoritative.
+
 > **Provenance.** Compiled 2026-11-07. Nothing here is a decision. The
 > in-tree rows were placed by reading the ADR each row names and the code it
 > points at, on that date. The outside rows come from public product

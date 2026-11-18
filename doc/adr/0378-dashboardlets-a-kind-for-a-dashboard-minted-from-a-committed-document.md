@@ -4,6 +4,8 @@ status: proposed
 date: 2026-11-17
 ---
 
+> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
+
 # ADR-0378: Dashboardlets — a kind for a dashboard minted from a committed document
 
 ## Context
