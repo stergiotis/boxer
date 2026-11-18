@@ -10,6 +10,10 @@
 // a renamed or dropped column fails here rather than in a scoring run.
 // Scoring a task's content (an answer key, planted defects) is the task
 // suite's, beside this row, not part of it.
+//
+// No Go code in this module imports the package: a downstream benchmark kit
+// reads scorecard.sql by its path in a boxer checkout and sends it to a
+// server itself. Moving or renaming the file breaks that reader.
 package agentscore
 
 import (
