@@ -45,30 +45,6 @@ func definitionsSpecial() (specials []ir.NodeI) {
 	specials = append(specials,
 		idl.NewProceduralNode("memoryResetAreas").WithEffect(ir.EffectLocal).
 			WithApplyCodeClientRust(rustClientCode("{{EguiContext}}.memory_mut(|mem| mem.reset_areas());")).Build())
-	// captureAvailableSize — snapshots ui.available_size() into r18 fields
-	// so a Go-side widget can read the parent panel's available width/height
-	// next frame via fetchR18AvailableSize and auto-fit. NaN sentinels when
-	// no Ui is in scope (caller must invoke inside a panel / window body).
-	//
-	// SUPERSEDED by captureUiAvailableRect. r18 is one process-wide scalar and
-	// the frame's LAST capture wins, so two panels using it size each other,
-	// and no discipline at a single call site can prevent it — the convention
-	// that one designated widget "owns" the register decays the moment a panel
-	// is added. The seq-keyed op below reports the same rect's size per caller.
-	// Kept because the opcode is wire-visible.
-	specials = append(specials,
-		idl.NewProceduralNode("captureAvailableSize").WithEffect(ir.EffectLocal).
-			WithApplyCodeClientRust(rustClientCode(`
-if {{EguiUiOptionalOuter}}.is_some() {
-    let ui = {{EguiUiOptionalOuter}}.as_mut().unwrap();
-    let s = ui.available_size();
-    self.r18_avail_w = s.x;
-    self.r18_avail_h = s.y;
-} else {
-    self.r18_avail_w = f32::NAN;
-    self.r18_avail_h = f32::NAN;
-}
-`)).Build())
 	// setIdsDensity re-applies the IDS style overlay at a new density preset
 	// (0=Tight, 1=Standard, 2=Roomy) — the runtime counterpart to the
 	// startup-time IMZERO2_DENSITY read in apphost::init_common. Fonts are
@@ -468,13 +444,11 @@ if {{EguiUiOptionalOuter}}.is_some() {
 	// snapshots ui.available_rect_before_wrap() into the same r21 vectors,
 	// keyed by seq, so one drain (fetchR21UiRects) carries both kinds.
 	//
-	// This is the per-caller replacement for captureAvailableSize, whose r18
-	// register is a single scalar that the LAST capture of a frame wins — two
-	// panels reading it end up sizing each other, which is a bug that reads as
-	// one pane inexplicably tracking another's width. The rect's SIZE is
-	// exactly ui.available_size() (egui defines that as this rect's size), so
-	// a caller porting off r18 reads the same number and also learns where it
-	// is.
+	// It replaced captureAvailableSize, a single r18 register that the LAST
+	// capture of a frame won — two panels reading it ended up sizing each
+	// other, a bug that reads as one pane inexplicably tracking another's
+	// width. The rect's SIZE is exactly ui.available_size() (egui defines that
+	// as this rect's size), and the caller also learns where it is.
 	//
 	// Caveats:
 	//   - It is the space left for the NEXT widget — from the layout cursor to

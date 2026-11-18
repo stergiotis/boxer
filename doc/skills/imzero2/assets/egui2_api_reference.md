@@ -26,7 +26,6 @@ status: draft
 | Announce | Procedural | No | 2 | 0 | - | - |
 | Atoms | BuilderFactory | No | 0 | 0 | 21 | Retained |
 | Button | BuilderFactory | Yes | 0 | 1 | 9 | Immediate, Retained |
-| CaptureAvailableSize | Procedural | No | 0 | 0 | - | - |
 | CaptureReplay | Procedural | No | 3 | 0 | - | - |
 | CaptureUiAvailableRect | Procedural | No | 1 | 0 | - | - |
 | CaptureUiRect | Procedural | No | 1 | 0 | - | - |
@@ -68,7 +67,6 @@ status: draft
 | FetchR10 | Fetcher | No | 0 | 0 | - | - |
 | FetchR16ScrollDelta | Fetcher | No | 0 | 0 | - | - |
 | FetchR17Modifiers | Fetcher | No | 0 | 0 | - | - |
-| FetchR18AvailableSize | Fetcher | No | 0 | 0 | - | - |
 | FetchR19ZoomDelta | Fetcher | No | 0 | 0 | - | - |
 | FetchR20Pointer | Fetcher | No | 0 | 0 | - | - |
 | FetchR21UiRects | Fetcher | No | 0 | 0 | - | - |
@@ -2879,13 +2877,6 @@ Block
 
 ---
 
-### CaptureAvailableSize
-
-- **Type:** Procedural
-- **Identity:** No
-
----
-
 ### CaptureReplay
 
 - **Type:** Procedural
@@ -3540,19 +3531,6 @@ Block
 | shift | b |
 | macCmd | b |
 | command | b |
-
----
-
-### FetchR18AvailableSize
-
-- **Type:** Fetcher
-
-#### Return Values
-
-| Name | Type |
-|------|------|
-| w | f32 |
-| h | f32 |
 
 ---
 

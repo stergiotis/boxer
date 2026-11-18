@@ -140,13 +140,6 @@ func Button(i WidgetIdCreatorI, atoms typed.RetainedFffiHolderTyped[AtomsS]) (in
 	return
 }
 
-func CaptureAvailableSize() {
-	r := typed.NewRetainedFffiBuilder()
-	r.WriteUint32(uint32(FuncProcIdCaptureAvailableSize))
-
-	r.SendIntermediate()
-}
-
 func CaptureReplay(requestId uint64, format uint8, stream []uint8) {
 	r := typed.NewRetainedFffiBuilder()
 	r.WriteUint32(uint32(FuncProcIdCaptureReplay))

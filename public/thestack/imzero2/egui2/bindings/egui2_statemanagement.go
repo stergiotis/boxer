@@ -169,14 +169,6 @@ type ModifiersValue struct {
 	Command bool
 }
 
-// AvailableSizeValue is the cached payload of the R18 available-size
-// drain. Last captured ui.available_size from a captureAvailableSize op.
-// W and H are NaN until the first capture lands inside a Ui scope.
-type AvailableSizeValue struct {
-	W float32
-	H float32
-}
-
 // ZoomDeltaValue is the cached payload of the R19 zoom-delta drain.
 // Multiplicative zoom factor from egui's combined gesture detection
 // (Ctrl+scroll, touchpad pinch, +/- keyboard). 1.0 = no change,
@@ -247,14 +239,13 @@ type StateManager struct {
 	// "fetchers run only at frame end" convention and deadlocked when
 	// the render scope was inside a deferred-block capture (e.g. a
 	// dock.Tab body).
-	r16ScrollDelta   ScrollDeltaValue
-	r17Modifiers     ModifiersValue
-	r18AvailableSize AvailableSizeValue
-	r19ZoomDelta     ZoomDeltaValue
-	r20Pointer       PointerValue
-	r21UiRects       map[uint64]UiRectValue
-	r27Windows       map[uint64]WindowGeomValue
-	r27WorkArea      UiRectValue
+	r16ScrollDelta ScrollDeltaValue
+	r17Modifiers   ModifiersValue
+	r19ZoomDelta   ZoomDeltaValue
+	r20Pointer     PointerValue
+	r21UiRects     map[uint64]UiRectValue
+	r27Windows     map[uint64]WindowGeomValue
+	r27WorkArea    UiRectValue
 	// captureWanted issues fetchCaptureResult at the next Sync; the reply
 	// waits in captureResult for TakeCaptureResult (ADR-0281 §SD5).
 	captureWanted   bool
@@ -361,20 +352,6 @@ func (inst *StateManager) GetScrollDelta() ScrollDeltaValue {
 // to Cmd on macOS, Ctrl elsewhere).
 func (inst *StateManager) GetModifiers() ModifiersValue {
 	return inst.r17Modifiers
-}
-
-// GetAvailableSize returns last frame's R18 captured ui.available_size.
-// W and H are NaN until a captureAvailableSize op has been emitted from
-// inside a Ui scope at least once. One-frame lag: the value reflects the
-// previous frame's capture.
-//
-// Deprecated: r18 is a SINGLE process-wide scalar that the frame's LAST
-// capture wins, so two panels using it size each other — the reader has no way
-// to tell whose pane it is holding. Use [CapturePaneSize], whose r21 slot is
-// per-caller. Every layout consumer in this repo has moved; nothing reads this
-// today, and a new reader is a bug in waiting.
-func (inst *StateManager) GetAvailableSize() AvailableSizeValue {
-	return inst.r18AvailableSize
 }
 
 // GetZoomDelta returns last frame's R19 multiplicative zoom factor from
@@ -805,7 +782,6 @@ func (inst *StateManager) Sync() {
 	fetcher.IssueFetchR25EtColWidths()
 	fetcher.IssueFetchR16ScrollDelta()
 	fetcher.IssueFetchR17Modifiers()
-	fetcher.IssueFetchR18AvailableSize()
 	fetcher.IssueFetchR19ZoomDelta()
 	fetcher.IssueFetchR20Pointer()
 	fetcher.IssueFetchF1KeyPressed()
@@ -900,10 +876,6 @@ func (inst *StateManager) Sync() {
 			Alt: alt, Ctrl: ctrl, Shift: shift,
 			MacCmd: macCmd, Command: command,
 		}
-	}
-	{
-		w, h := fetcher.CollectFetchR18AvailableSize()
-		inst.r18AvailableSize = AvailableSizeValue{W: w, H: h}
 	}
 	{
 		z := fetcher.CollectFetchR19ZoomDelta()

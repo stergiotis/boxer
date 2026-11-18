@@ -901,15 +901,6 @@ pub struct ImZeroFffi<'a, R: std::io::BufRead, W: std::io::Write> {
     // Edge byte per captured event (ADR-0279 §SD1): bit 0 down, bit 1 repeat.
     r26_key_capture_edges: Vec<u8>,
 
-    // Ui::available_size snapshot — set by the captureAvailableSize
-    // procedural op when called inside a Ui scope, read by Go via
-    // fetchR18AvailableSize. One-frame lag (capture this frame, read
-    // next frame) — same pattern as r14 canvas-pointer. NaN sentinels
-    // mean no capture has occurred yet or the most recent capture ran
-    // outside any Ui.
-    pub r18_avail_w: f32,
-    pub r18_avail_h: f32,
-
     // Per-frame ui.min_rect() snapshots stamped by the captureUiRect
     // procedural op, drained by fetchR21UiRects. Parallel arrays of
     // equal length — one row per capture in registration order. Used
@@ -1188,8 +1179,6 @@ impl<R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'_, R, W> {
             r26_key_capture_codes: Vec::with_capacity(8),
             r26_key_capture_mods: Vec::with_capacity(8),
             r26_key_capture_edges: Vec::with_capacity(8),
-            r18_avail_w: f32::NAN,
-            r18_avail_h: f32::NAN,
             r21_ui_rect_seqs: Vec::with_capacity(8),
             r21_ui_rect_min_x: Vec::with_capacity(8),
             r21_ui_rect_min_y: Vec::with_capacity(8),
@@ -2646,26 +2635,6 @@ impl<R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'_, R, W> {
                     f,
                     Some(i),
                 );
-            }
-            FuncProcId::CaptureAvailableSize => {
-                #[cfg(feature = "puffin")]
-                puffin::profile_scope!("match FuncProcId::CaptureAvailableSize");
-                // arguments
-                if d == 0 {
-                    self.end_consume_message()?;
-                }
-                // apply
-                // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
-
-                if u.is_some() {
-                    let ui = u.as_mut().unwrap();
-                    let s = ui.available_size();
-                    self.r18_avail_w = s.x;
-                    self.r18_avail_h = s.y;
-                } else {
-                    self.r18_avail_w = f32::NAN;
-                    self.r18_avail_h = f32::NAN;
-                }
             }
             FuncProcId::CaptureReplay => {
                 #[cfg(feature = "puffin")]
@@ -4954,21 +4923,6 @@ self.apply_widget(w,u,f,Some(i));
                     self.io.write_plain_b(m.shift)?;
                     self.io.write_plain_b(m.mac_cmd)?;
                     self.io.write_plain_b(m.command)?;
-                    self.io.flush()?;
-                }
-            }
-            FuncProcId::FetchR18AvailableSize => {
-                #[cfg(feature = "puffin")]
-                puffin::profile_scope!("match FuncProcId::FetchR18AvailableSize");
-                if d == 0 {
-                    self.end_consume_message()?;
-                }
-                // apply
-                if !self.capture_replay {
-                    // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
-
-                    self.io.write_plain_f32(self.r18_avail_w)?;
-                    self.io.write_plain_f32(self.r18_avail_h)?;
                     self.io.flush()?;
                 }
             }

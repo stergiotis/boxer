@@ -172,20 +172,6 @@ func (inst *Fetcher) CollectFetchR17Modifiers() (alt bool, ctrl bool, shift bool
 	command = inst.readB()
 	return
 }
-func (inst *Fetcher) FetchR18AvailableSize() (w float32, h float32) {
-	inst.invoke(FuncProcIdFetchR18AvailableSize)
-	w = inst.readF32()
-	h = inst.readF32()
-	return
-}
-func (inst *Fetcher) IssueFetchR18AvailableSize() {
-	inst.invoke(FuncProcIdFetchR18AvailableSize)
-}
-func (inst *Fetcher) CollectFetchR18AvailableSize() (w float32, h float32) {
-	w = inst.readF32()
-	h = inst.readF32()
-	return
-}
 func (inst *Fetcher) FetchR19ZoomDelta() (zoom float32) {
 	inst.invoke(FuncProcIdFetchR19ZoomDelta)
 	zoom = inst.readF32()

@@ -212,20 +212,6 @@ self.io.write_plain_b(m.command)?;
 		AddReturnValue("command", ctabb.B).
 		Build())
 
-	// Last captured ui.available_size — written by the captureAvailableSize
-	// procedural op when called inside a Ui scope. One-frame lag relative
-	// to the capture call (same pattern as r14 canvas-pointer). NaN means
-	// no capture has occurred yet or the capture ran outside any Ui.
-	fetchers = append(fetchers, idl.NewFetcherNode("fetchR18AvailableSize").
-		WithApplyCodeClientRust(rustClientCode(`
-self.io.write_plain_f32(self.r18_avail_w)?;
-self.io.write_plain_f32(self.r18_avail_h)?;
-{{SendMessage}}
-`)).
-		AddReturnValue("w", ctabb.F32).
-		AddReturnValue("h", ctabb.F32).
-		Build())
-
 	// Multiplicative zoom factor for the current frame — egui intercepts
 	// Ctrl+scroll AND touchpad pinch AND keyboard +/- and exposes them
 	// uniformly here. 1.0 = no zoom; >1.0 = zoom in; <1.0 = zoom out.

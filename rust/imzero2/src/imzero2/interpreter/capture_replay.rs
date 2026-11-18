@@ -107,8 +107,6 @@ struct SavedLiveState<'a> {
     r27_work_rect: egui::Rect,
     r11_color32: egui::Color32,
     r8_response_flags_filter: ResponseFlags,
-    r18_avail_w: f32,
-    r18_avail_h: f32,
     last_good_func_proc_id_raw: Option<u32>,
     last_good_msg_len: Option<u32>,
     last_good_byte_offset: Option<usize>,
@@ -240,8 +238,6 @@ impl<'a, R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'a, R, W> {
             r27_work_rect: self.r27_work_rect,
             r11_color32: self.r11_color32,
             r8_response_flags_filter: self.r8_response_flags_filter,
-            r18_avail_w: self.r18_avail_w,
-            r18_avail_h: self.r18_avail_h,
             last_good_func_proc_id_raw: self.last_good_func_proc_id_raw,
             last_good_msg_len: self.last_good_msg_len,
             last_good_byte_offset: self.last_good_byte_offset,
@@ -347,8 +343,6 @@ impl<'a, R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'a, R, W> {
         self.r27_work_rect = s.r27_work_rect;
         self.r11_color32 = s.r11_color32;
         self.r8_response_flags_filter = s.r8_response_flags_filter;
-        self.r18_avail_w = s.r18_avail_w;
-        self.r18_avail_h = s.r18_avail_h;
         self.last_good_func_proc_id_raw = s.last_good_func_proc_id_raw;
         self.last_good_msg_len = s.last_good_msg_len;
         self.last_good_byte_offset = s.last_good_byte_offset;

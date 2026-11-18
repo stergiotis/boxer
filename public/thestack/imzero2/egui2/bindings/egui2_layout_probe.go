@@ -5,9 +5,9 @@ import "hash/fnv"
 // Layout probes answer "how much room do I have here?" for a caller that
 // intends to size something to its pane.
 //
-// Use these, not [CaptureAvailableSize]. That op writes r18, a SINGLE
-// process-wide scalar that the frame's LAST capture wins, so two panels reading
-// it size each other — a bug that presents as one pane inexplicably tracking
+// They replaced CaptureAvailableSize, whose r18 register was a SINGLE
+// process-wide scalar that the frame's LAST capture won, so two panels reading
+// it sized each other — a bug that presents as one pane inexplicably tracking
 // another's width, and that no amount of care at one call site can prevent.
 // The seq-keyed form below has one slot per caller and cannot be taken over.
 //
