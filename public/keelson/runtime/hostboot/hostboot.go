@@ -205,11 +205,6 @@ type SeedWindow struct {
 	Config []byte
 }
 
-// SeedService is one launch config delivered to a service at boot
-// (ADR-0352 §SD1): servicehost.Seed, named here beside
-// SeedWindow.
-type SeedService = servicehost.Seed
-
 // Options configures Boot. The zero value is a usable minimal host over
 // app.DefaultRegistry with no optional services and no seeded windows.
 type Options struct {
@@ -251,7 +246,7 @@ type Options struct {
 	// that does not fit its app is a boot error; one naming a service the
 	// predicate did not select is logged and skipped. Ignored in screenshot
 	// mode.
-	SeedServices []SeedService
+	SeedServices []servicehost.Seed
 	// NoWindowHost boots a process without a window host and without the
 	// imzero2 client (ADR-0352 §SD6): identity, facts, bus,
 	// services and the service host, nothing drawn. Such a process hosts

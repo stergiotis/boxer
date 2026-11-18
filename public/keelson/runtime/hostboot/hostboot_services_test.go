@@ -156,7 +156,7 @@ func TestBoot_ServicesPredicateSelectsAndCloseReaps(t *testing.T) {
 	t.Cleanup(launchlimit.Where.ClearOverride)
 	reg, svc := registryWithService(t)
 	opts := chlocalOptions(t, reg)
-	opts.SeedServices = []SeedService{{AppId: headlessId, Kind: testCfgKind, Config: testCfgBytes}}
+	opts.SeedServices = []servicehost.Seed{{AppId: headlessId, Kind: testCfgKind, Config: testCfgBytes}}
 	facts := factsstore.NewInMemoryFactsStore()
 	opts.Facts = facts
 	ctx, cancel := context.WithCancel(context.Background())
@@ -205,7 +205,7 @@ func TestBoot_BadServiceSeedIsAnError(t *testing.T) {
 	t.Cleanup(launchlimit.Where.ClearOverride)
 	reg, _ := registryWithService(t)
 	opts := chlocalOptions(t, reg)
-	opts.SeedServices = []SeedService{{AppId: headlessId, Kind: testCfgKind, Config: []byte("not the payload")}}
+	opts.SeedServices = []servicehost.Seed{{AppId: headlessId, Kind: testCfgKind, Config: []byte("not the payload")}}
 	rt, err := Boot(context.Background(), opts)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "services")
