@@ -330,7 +330,10 @@ mod tests {
         // checkbox would read as a radio button.
         let icon = Style::default().spacing.icon_width;
         assert!(f32::from(ROUND_CHECKBOX) * 3.0 <= icon + 2.0);
-        assert!(f32::from(ROUND_WIDGET) * 2.0 >= icon, "the override is still needed");
+        assert!(
+            f32::from(ROUND_WIDGET) * 2.0 >= icon,
+            "the override is still needed"
+        );
     }
 
     #[test]

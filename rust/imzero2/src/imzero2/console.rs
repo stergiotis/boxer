@@ -540,7 +540,10 @@ impl ConsoleCache {
                 room.min(f32::from(n + 1) * cell).max(cell)
             }
         };
-        let area = Vec2::new(side(args.grid.0, avail.x, cols, cell.x), side(args.grid.1, avail.y, rows, cell.y));
+        let area = Vec2::new(
+            side(args.grid.0, avail.x, cols, cell.x),
+            side(args.grid.1, avail.y, rows, cell.y),
+        );
         let history = if args.history_bytes > 0 {
             args.history_bytes
         } else {

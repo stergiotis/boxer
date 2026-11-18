@@ -95,10 +95,7 @@ pub fn progress_fill() -> egui::Color32 {
 /// theme. egui paints the label in `override_text_color`, else in
 /// `selection.stroke.color`: on the dark palette body text, near-white on a
 /// light accent fill; on `fresh` the strong accent, purple on purple.
-pub fn with_progress_bar_label<R>(
-    ui: &mut egui::Ui,
-    add: impl FnOnce(&mut egui::Ui) -> R,
-) -> R {
+pub fn with_progress_bar_label<R>(ui: &mut egui::Ui, add: impl FnOnce(&mut egui::Ui) -> R) -> R {
     let label = match tokens::theme::active() {
         tokens::Theme::Fresh => fresh::PROGRESS_LABEL,
         tokens::Theme::Dark => progress::LABEL,

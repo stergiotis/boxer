@@ -41,12 +41,12 @@ pub mod interpreter;
 /// ADR-0177 key vocabulary — generated from the Go table, see keycodes.rs.
 pub mod keychord;
 pub mod keycodes;
-pub mod shellchords;
 #[cfg(any(feature = "headless", feature = "browser"))]
 pub mod meshlane;
 #[cfg(feature = "headless")]
 pub mod nutreader;
 pub mod scrolling_texture;
+pub mod shellchords;
 #[cfg(feature = "headless_soft")]
 pub mod softraster;
 pub mod svgexport;
