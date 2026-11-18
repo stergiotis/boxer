@@ -20,4 +20,4 @@ go test -race -json -short -cover -tags "$tags" \
   ./public/observability/logging/... \
   ./public/keelson/runtime/logbridge/... \
   ./public/thestack/imzero2/egui2/demo/apps/logdemo/... \
-  | go tool tparse -progress -trimpath -slow 20
+  | go tool tparse -progress -trimpath auto -slow 20
