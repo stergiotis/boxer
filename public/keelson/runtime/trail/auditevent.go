@@ -8,13 +8,13 @@ import "github.com/stergiotis/boxer/public/storage/recordstore/evidence/audit"
 // component type unqualified in this package while the DTO lives in the
 // audit package; the alias goes when the generator emits a qualified type
 // for a component from another package.
-type AuditEvent = audit.AuditEvent
+type AuditEvent = audit.AuditEvent //boxer:lint disable=CS008 reason="the generated store names its component type unqualified in this package; the alias goes when the generator emits a qualified type for a component from another package"
 
 // Origin is who a trail row came from (ADR-0277 §SD1): the audit
 // package's origin component, an alias for the reason AuditEvent is one.
 // On every verb but Event the host stamps it — the run from the process,
 // app and window from the bus envelope — so an app cannot claim another's.
-type Origin = audit.Origin
+type Origin = audit.Origin //boxer:lint disable=CS008 reason="the generated store names its component type unqualified in this package; the alias goes when the generator emits a qualified type for a component from another package"
 
 const (
 	OutcomeOk      = audit.OutcomeOk

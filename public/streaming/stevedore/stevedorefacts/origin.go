@@ -10,4 +10,4 @@ import "github.com/stergiotis/boxer/public/storage/recordstore/evidence/audit"
 // [DeadLetter.Origin], which is the stevedore envelope's source name. An
 // alias, against CS008, for the reason trail.Origin is one: the generated
 // store names its component type unqualified in this package.
-type Origin = audit.Origin
+type Origin = audit.Origin //boxer:lint disable=CS008 reason="the generated store names its component type unqualified in this package; the alias goes when the generator emits a qualified type for a component from another package"
