@@ -99,7 +99,7 @@ func TestAwayLog(t *testing.T) {
 	svc.Flood.Admit("conv-a", t0.Add(6*time.Minute))
 	ok, _ := svc.Flood.Admit("conv-a", t0.Add(6*time.Minute))
 	require.False(t, ok)
-	svc.Levels.Set(AuthorPerson, "", "conv-b", Key{Kind: "turn"}, LevelHighlight)
+	require.NoError(t, svc.Levels.Set(AuthorPerson, "", "conv-b", Key{Kind: "turn"}, LevelHighlight))
 	svc.Notices.Notify("app", 7, Notice{Conversation: "conv-b", Kind: "turn", Text: "the turn ended"}, t0.Add(7*time.Minute))
 
 	_, shown := svc.Presence.Returned()

@@ -180,26 +180,23 @@ func (inst *Scene) freeHueLocked() (hue int) {
 
 func checkTargets(op OpE, targets []Anchor) (err error) {
 	n := len(targets)
-	want := ""
 	switch op {
 	case OpHighlight, OpSpotlight:
 		if n < 1 || n > MaxTargets {
-			want = "one or more targets"
+			err = eb.Build().Str("op", op.String()).Int("targets", n).Errorf("inscribe: the op takes one or more targets")
 		}
 	case OpCallout, OpStep:
 		if n != 1 {
-			want = "one target"
+			err = eb.Build().Str("op", op.String()).Int("targets", n).Errorf("inscribe: the op takes one target")
 		}
 	case OpArrow:
 		if n != 2 {
-			want = "two targets, from and to"
+			err = eb.Build().Str("op", op.String()).Int("targets", n).Errorf("inscribe: the op takes two targets, from and to")
 		}
 	default:
 		err = eh.Errorf("inscribe: no such op")
-		return
 	}
-	if want != "" {
-		err = eb.Build().Str("op", op.String()).Int("targets", n).Errorf("inscribe: the op takes %s", want)
+	if err != nil {
 		return
 	}
 	for _, t := range targets {

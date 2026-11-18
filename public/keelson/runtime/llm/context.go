@@ -84,7 +84,7 @@ func ProbeContextTokens(ctx context.Context, hc *http.Client, endpoint string, a
 		err = eh.Errorf("llm: model list: %w", err)
 		return
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
 		err = eb.Build().Int("status", resp.StatusCode).Errorf("llm: model list: the endpoint did not answer 200")
 		return
@@ -153,7 +153,7 @@ func probeLlamaProps(ctx context.Context, hc *http.Client, endpoint string, apiK
 	if err != nil {
 		return
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
 		return
 	}

@@ -86,7 +86,11 @@ func TestDrain_TheDeadlineAbandonsTheScope(t *testing.T) {
 	h.Close(k, "")
 	h.reapClosed()
 	select {
-	case <-made.tailErr:
+	case err := <-made.tailErr:
+		// The tail's publish races the bus closing; only its arrival is asserted.
+		if err != nil {
+			t.Logf("the abandoned tail's publish: %v", err)
+		}
 	case <-time.After(2 * time.Second):
 		t.Fatal("the abandoned tail was not told to stop")
 	}
@@ -110,5 +114,9 @@ func TestDrain_ReapAllWaitsWithinTheShutdownBudget(t *testing.T) {
 	h2.ReapAll("shutdown")
 	assert.Less(t, time.Since(start), time.Second, "the budget bounds the wait")
 	assert.Empty(t, bus2.Subscriptions())
-	<-made2.tailErr
+	// The abandoned tail's publish races the bus closing; only its arrival is
+	// awaited.
+	if err := <-made2.tailErr; err != nil {
+		t.Logf("the abandoned tail's publish: %v", err)
+	}
 }

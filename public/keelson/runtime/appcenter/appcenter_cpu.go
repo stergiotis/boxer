@@ -97,7 +97,7 @@ func (inst *App) measureCpu(seconds int) (err error) {
 		seconds = cpuDefaultSeconds
 	}
 	if seconds > cpuMaxSeconds {
-		err = eh.Errorf("a measurement lasts at most %d seconds", cpuMaxSeconds)
+		err = eh.Errorf("a measurement lasts at most %d seconds", cpuMaxSeconds) //boxer:lint disable=CS013 reason="measure_cpu refuses with err.Error() as the operation's text; the bound is what the caller corrects"
 		return
 	}
 	snap := inst.snapshot()

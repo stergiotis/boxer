@@ -472,8 +472,7 @@ func rowCount(n uint64) string {
 // one per series the strip can show.
 func detailColors() (cs []color.Color) {
 	for i := range stripKeys + 1 {
-		rgba := styletokens.QualitativeCycle(i)
-		cs = append(cs, color.RGBA(rgba.R, rgba.G, rgba.B, rgba.A))
+		cs = append(cs, color.Hex(styletokens.QualitativeCycle(i).AsHex()))
 	}
 	return
 }

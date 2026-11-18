@@ -59,17 +59,17 @@ func TestKeyedRunsOncePerKeyAndSupersedes(t *testing.T) {
 	if _, done, _, busy := k.Demand("a", slow); done || !busy {
 		t.Errorf("first demand: done %v busy %v", done, busy)
 	}
-	k.Demand("a", slow)
+	_, _, _, _ = k.Demand("a", slow)
 	eventually(t, "one run for a", func() bool { return runs.Load() == 1 })
 	if runs.Load() != 1 {
 		t.Error("the same key does not start a second run")
 	}
 	// A new key supersedes: the old result never lands.
-	k.Demand("b", slow)
+	_, _, _, _ = k.Demand("b", slow)
 	if v, err := settled(t, &k, "b"); err != nil || v != 7 {
 		t.Errorf("b: %v, %v", v, err)
 	}
-	k.Demand("b", slow)
+	_, _, _, _ = k.Demand("b", slow)
 	if runs.Load() != 2 {
 		t.Errorf("runs: got %d, want 2 — a done key is a cache hit", runs.Load())
 	}
@@ -77,7 +77,7 @@ func TestKeyedRunsOncePerKeyAndSupersedes(t *testing.T) {
 		t.Errorf("state: got %v, want done", st)
 	}
 	k.Invalidate()
-	k.Demand("b", slow)
+	_, _, _, _ = k.Demand("b", slow)
 	eventually(t, "Invalidate runs the key again", func() bool { return runs.Load() == 3 })
 }
 
@@ -96,12 +96,14 @@ func TestKeyedReleasesWhatItOwns(t *testing.T) {
 		return append([]string(nil), released...)
 	}
 	gate := make(chan struct{})
-	k.Demand("slow", func(ctx context.Context) (string, error) {
+	_, _, _, _ = k.Demand("slow", func(ctx context.Context) (string, error) {
 		<-gate
 		return "superseded", nil
 	})
-	k.Demand("fast", func(context.Context) (string, error) { return "held", nil })
-	settled(t, &k, "fast")
+	_, _, _, _ = k.Demand("fast", func(context.Context) (string, error) { return "held", nil })
+	if _, err := settled(t, &k, "fast"); err != nil {
+		t.Fatalf("fast: %v", err)
+	}
 	close(gate)
 	eventually(t, "a superseded run's value is released", func() bool {
 		return len(got()) == 1 && got()[0] == "superseded"
@@ -120,7 +122,7 @@ func TestKeyedCancelIsAnAnswer(t *testing.T) {
 		<-ctx.Done()
 		return 0, ctx.Err()
 	}
-	k.Demand("q", blocked)
+	_, _, _, _ = k.Demand("q", blocked)
 	eventually(t, "running", func() bool { return runs.Load() == 1 })
 	k.Cancel()
 	if _, err := settled(t, &k, "q"); !errors.Is(err, ErrCancelled) {
@@ -129,13 +131,13 @@ func TestKeyedCancelIsAnAnswer(t *testing.T) {
 	if snap := k.Snapshot(); snap.State != StateFailed || !errors.Is(snap.Err, ErrCancelled) {
 		t.Errorf("snapshot: %+v", snap)
 	}
-	k.Demand("q", blocked)
+	_, _, _, _ = k.Demand("q", blocked)
 	time.Sleep(10 * time.Millisecond)
 	if runs.Load() != 1 {
 		t.Error("a cancelled key is not started again by the next demand")
 	}
 	k.Invalidate()
-	k.Demand("q", blocked)
+	_, _, _, _ = k.Demand("q", blocked)
 	eventually(t, "Invalidate lets it run again", func() bool { return runs.Load() == 2 })
 	k.Close()
 }
@@ -143,7 +145,7 @@ func TestKeyedCancelIsAnAnswer(t *testing.T) {
 func TestKeyedReportingDrivesSnapshot(t *testing.T) {
 	var k Keyed[int]
 	step := make(chan struct{})
-	k.DemandReporting("p", func(ctx context.Context, report Reporter) (int, error) {
+	_, _, _, _ = k.DemandReporting("p", func(ctx context.Context, report Reporter) (int, error) {
 		report(0, 0, "asking")
 		<-step
 		report(5, 10, "half")
@@ -160,7 +162,9 @@ func TestKeyedReportingDrivesSnapshot(t *testing.T) {
 		return s.Fraction == 0.5 && s.Note == "half"
 	})
 	step <- struct{}{}
-	settled(t, &k, "p")
+	if _, err := settled(t, &k, "p"); err != nil {
+		t.Fatalf("p: %v", err)
+	}
 }
 
 // createdObserver records the tasks it sees created.
@@ -201,7 +205,7 @@ func TestKeyedRunIsATaskTheBusCanCancel(t *testing.T) {
 
 	var k Keyed[int]
 	k.Configure(api, "test-find", "find in the store")
-	k.Demand("q", func(ctx context.Context) (int, error) {
+	_, _, _, _ = k.Demand("q", func(ctx context.Context) (int, error) {
 		<-ctx.Done()
 		return 0, ctx.Err()
 	})
@@ -257,7 +261,7 @@ func TestKeyedFinishesTheTaskBeforeCancellingItsParent(t *testing.T) {
 	api := &parentWatchingApi{}
 	var k Keyed[int]
 	k.Configure(api, "test-ok", "succeeds")
-	k.Demand("q", func(context.Context) (int, error) { return 3, nil })
+	_, _, _, _ = k.Demand("q", func(context.Context) (int, error) { return 3, nil })
 	if v, err := settled(t, &k, "q"); v != 3 || err != nil {
 		t.Fatalf("settled: %v %v", v, err)
 	}

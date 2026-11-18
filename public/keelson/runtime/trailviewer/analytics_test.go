@@ -401,7 +401,7 @@ func TestASavedViewRoundTrips(t *testing.T) {
 	}
 	settle(inst)
 	assert.Empty(t, inst.views.list)
-	inst.saveView("  my task ")
+	require.NoError(t, inst.saveView("  my task "))
 	settle(inst)
 	require.NoError(t, inst.views.err)
 	assert.Equal(t, []string{"my task"}, inst.views.names())
@@ -413,7 +413,7 @@ func TestASavedViewRoundTrips(t *testing.T) {
 
 	// Saving under the same name replaces it.
 	inst.applyTab(TabSeries)
-	inst.saveView("my task")
+	require.NoError(t, inst.saveView("my task"))
 	settle(inst)
 	stored, _ = loadViews(st)
 	require.Len(t, stored, 1)
@@ -431,7 +431,7 @@ func TestASavedViewRoundTrips(t *testing.T) {
 	assert.Equal(t, TabSeries, other.tab)
 	assert.Equal(t, "anchor_now - INTERVAL 6 HOUR", other.picker.fromExpr)
 
-	inst.writeViews(withoutView(inst.views.list, "my task"), "deleted")
+	require.NoError(t, inst.writeViews(withoutView(inst.views.list, "my task"), "deleted"))
 	settle(inst)
 	stored, _ = loadViews(st)
 	assert.Empty(t, stored)

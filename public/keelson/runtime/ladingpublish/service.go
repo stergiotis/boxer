@@ -28,6 +28,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/runinfo"
 	"github.com/stergiotis/boxer/public/keelson/runtime/trail"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/storage/recordstore"
 )
 
@@ -360,7 +361,7 @@ func (inst *Service) write(ctx context.Context, by app.AppIdT, instance uint64, 
 		return
 	}
 	if out.Stored != uint64(len(req.Files)) || out.Errors != 0 {
-		err = eh.Errorf("the snapshot holds %d of %d files whole, with %d errors", out.Stored, len(req.Files), out.Errors)
+		err = eb.Build().Uint64("stored", out.Stored).Int("files", len(req.Files)).Uint64("errors", out.Errors).Errorf("the snapshot holds %d of %d files whole, with %d errors", out.Stored, len(req.Files), out.Errors) //boxer:lint disable=CS013 reason="the failure crosses the bus as the reply's Reason text and lands in the audit row; the counts are what the publisher reads"
 	}
 	return
 }

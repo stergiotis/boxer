@@ -92,7 +92,7 @@ func (inst *App) sendToPlayGesture() {
 // window host for a play window reading it.
 func publishToPlay(bus app.BusI, pub *adhocdata.Publisher, rec arrow.RecordBatch) (note string, err error) {
 	if _, err = pub.PublishRecord(bus, rec); err != nil {
-		return "", eh.Errorf("publish %s: %w", datasetRows, err)
+		return "", eh.Errorf("publish "+datasetRows+": %w", err)
 	}
 	// The default endpoint, not the introspection one: play routes a statement
 	// naming only keelson tables to the host and one naming plain tables to

@@ -76,7 +76,7 @@ var osPrincipal = sync.OnceValue(func() string {
 		name = u.Username
 	}
 	if name == "" {
-		name = os.Getenv("USER")
+		name = os.Getenv("USER") //boxer:lint disable=CS011 reason="USER is the operating system's login name, not a boxer config var; read only as the fallback when user.Current has no name"
 	}
 	host, _ := os.Hostname()
 	h := sha256.New()

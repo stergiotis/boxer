@@ -76,7 +76,7 @@ func Evaluate(ctx context.Context, bus *inprocbus.Inst, reg *app.Registry, where
 func EvaluateAs(ctx context.Context, bus *inprocbus.Inst, reg *app.Registry, as app.AppIdT, name string, where string, log zerolog.Logger) (ids []app.AppIdT, err error) {
 	body, err := QueryAs(ctx, bus, reg, as, name, "SELECT id FROM apps WHERE ("+where+") ORDER BY id", "TSVRaw", log)
 	if err != nil {
-		err = eb.Build().Str("where", where).Errorf("%s: evaluate the predicate: %w", name, err)
+		err = eb.Build().Str("name", name).Str("where", where).Errorf("evaluate the predicate: %w", err)
 		return
 	}
 	sc := bufio.NewScanner(bytes.NewReader(body))

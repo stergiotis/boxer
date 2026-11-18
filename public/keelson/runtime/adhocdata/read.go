@@ -157,7 +157,7 @@ func (inst *Service) read(alias string) (res ReadResult, err error) {
 			alias = sole
 			best, err = inst.newest(alias)
 		case len(several) > 0:
-			return res, eb.Build().Str("bundle", alias).Errorf("the bundle holds several datasets; name one of %s", strings.Join(several, ", "))
+			return res, eb.Build().Str("bundle", alias).Strs("datasets", several).Errorf("the bundle holds several datasets; name one of %s", strings.Join(several, ", ")) //boxer:lint disable=CS013 reason="the refusal crosses the bus as text; the dataset names are what the reader picks from"
 		}
 	}
 	if err != nil {

@@ -25,7 +25,7 @@ const rangeTimeout = 5 * time.Second
 func (inst *rangeRunner) start(from, to, tzName string) (err error) {
 	ev, err := evaluator.NewEvaluator(inst.bus, timerangepicker.PoolName)
 	if err != nil {
-		return eh.Errorf("the time range %q to %q needs the expression evaluator, which this window cannot reach: %w", from, to, err)
+		return eh.Errorf("the time range %q to %q needs the expression evaluator, which this window cannot reach: %w", from, to, err) //boxer:lint disable=CS013 reason="the window shows the picker error's Error() to the person; the typed range is what they correct"
 	}
 	tzId, err := timerangepicker.LookupTz(tzName)
 	if err != nil {
@@ -44,7 +44,7 @@ func (inst *rangeRunner) start(from, to, tzName string) (err error) {
 			}
 			w := Window{From: time.UnixMilli(fromMs).UTC(), To: time.UnixMilli(toMs).UTC()}
 			if err = w.validate(); err != nil {
-				return nil, eh.Errorf("the time range evaluates to %s – %s: %w", w.From, w.To, err)
+				return nil, eh.Errorf("the time range evaluates to %s – %s: %w", w.From, w.To, err) //boxer:lint disable=CS013 reason="the window shows the picker error's Error() to the person; the evaluated bounds are what they correct"
 			}
 			return &w, nil
 		})

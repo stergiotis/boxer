@@ -12,6 +12,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/bgjob"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 )
 
@@ -66,7 +67,7 @@ func decodeViews(b []byte) (views []SavedView, err error) {
 		return nil, eh.Errorf("trailviewer: the saved views do not read: %w", err)
 	}
 	if doc.Version != viewsVersion {
-		return nil, eh.Errorf("trailviewer: the saved views are of revision %d, this build reads %d", doc.Version, viewsVersion)
+		return nil, eb.Build().Int("revision", doc.Version).Int("reads", viewsVersion).Errorf("the saved views are of a revision this build does not read")
 	}
 	return doc.Views, nil
 }
@@ -231,7 +232,7 @@ func (inst *App) tickViews() {
 		if _, ok := findView(vs.list, name); ok {
 			inst.openViewGesture(name)
 		} else {
-			vs.err = eh.Errorf("the launch config names the view %q, which is not saved", name)
+			vs.err = eh.Errorf("the launch config names the view %q, which is not saved", name) //boxer:lint disable=CS013 reason="the window shows the views error's Error() to the person; the view name is what they correct"
 		}
 	}
 }

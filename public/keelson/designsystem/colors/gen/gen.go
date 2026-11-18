@@ -253,8 +253,8 @@ func Run(ctx context.Context, cfg Config) (res Result, err error) {
 	// Enforcing, before anything is written: a palette whose status colour
 	// lands on the first series colour is not emitted (ADR-0029 §SD4).
 	if len(crossGating) > 0 {
-		err = eb.Build().Strs("findings", crossGating).
-			Errorf("cross-palette gate: a semantic Default is within ΔE %.0f of the qualitative cycle's slot 0 (ADR-0029 §SD4, ADR-0156)", CrossPaletteGateFloor)
+		err = eb.Build().Strs("findings", crossGating).Float64("floor", CrossPaletteGateFloor).
+			Errorf("cross-palette gate: a semantic Default is within the ΔE floor of the qualitative cycle's slot 0 (ADR-0029 §SD4, ADR-0156)")
 		return
 	}
 

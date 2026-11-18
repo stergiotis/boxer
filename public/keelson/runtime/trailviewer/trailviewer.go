@@ -37,6 +37,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/appops"
 	"github.com/stergiotis/boxer/public/keelson/runtime/appops/opwire"
+	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
 	"github.com/stergiotis/boxer/public/keelson/runtime/trail"
 	"github.com/stergiotis/boxer/public/keelson/runtime/trailviewer/verdict"
 	"github.com/stergiotis/boxer/public/keelson/runtime/widgethandle"
@@ -493,7 +494,7 @@ func (inst *App) renderViewBar() {
 		}
 		switch {
 		case inst.send.runner.Running():
-			c.Label("sending…").Send()
+			c.Label("Sending…").Send()
 		case inst.send.note != "":
 			c.LabelAtoms(c.Atoms().BeginRichTextColored(detailMutedFg, detailBgClear, inst.send.note).Small().End().Keep()).Send()
 		}
@@ -1500,7 +1501,7 @@ func (inst *App) renderContext() {
 		line := func(x *Row, self bool) {
 			text := inst.picker.format(x.Ts(), "15:04:05.000") + "  " + x.Kind + "  " + x.Headline
 			if self {
-				c.LabelAtoms(c.Atoms().BeginRichText("▸ " + text).Strong().End().Keep()).Send()
+				c.LabelAtoms(c.Atoms().BeginRichText(icons.PhCaretRight + " " + text).Strong().End().Keep()).Send()
 				return
 			}
 			if c.Button(inst.ids.PrepareSeq(n), c.Atoms().Text(text).Keep()).Frame(false).SendResp().HasPrimaryClicked() {

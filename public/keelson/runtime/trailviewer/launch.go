@@ -57,10 +57,10 @@ func seedOf(raw []byte) (s launchSeed, err error) {
 	if cfg.Tab != "" {
 		t, ok := ParseTab(cfg.Tab)
 		if !ok {
-			return launchSeed{}, eh.Errorf("the launch config's tab %q is not one of %s", cfg.Tab, tabNameList())
+			return launchSeed{}, eh.Errorf("the launch config's tab %q is not one of %s", cfg.Tab, tabNameList()) //boxer:lint disable=CS013 reason="the window shows launchErr.Error() to the person; the tab and the tab names are what they correct"
 		}
 		if s.hasCase && !t.availableFor(s.c.Kind) {
-			return launchSeed{}, eh.Errorf("the launch config's tab %q is drawn for a task or a conversation case only", cfg.Tab)
+			return launchSeed{}, eh.Errorf("the launch config's tab %q is drawn for a task or a conversation case only", cfg.Tab) //boxer:lint disable=CS013 reason="the window shows launchErr.Error() to the person; the tab is what they correct"
 		}
 		s.tab, s.hasTab = t, true
 	}

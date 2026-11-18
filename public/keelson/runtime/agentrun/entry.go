@@ -366,7 +366,7 @@ func ArgumentsDigest(args string) (digest string, err error) {
 		return "", eh.Errorf("arguments digest: %w", err)
 	}
 	if len(rows) != 1 {
-		return "", eh.Errorf("arguments digest: the arguments make %d vault rows, not one", len(rows))
+		return "", eb.Build().Int("rows", len(rows)).Errorf("arguments digest: the arguments do not make exactly one vault row")
 	}
 	item, err := scratch.Vault.CanonicalItem(rows[0])
 	if err != nil {

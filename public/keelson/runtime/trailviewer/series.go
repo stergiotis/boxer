@@ -266,7 +266,7 @@ func (inst *App) renderSeries() {
 	pick := an.series.pick
 	for range c.HorizontalTop().KeepIter() {
 		m := MeasureE(inst.pickCombo("sr-measure", "measure", measureNames[:], int(pick.Measure)))
-		st := pick.Stat
+		var st StatE
 		if m == MeasureRows {
 			c.LabelAtoms(c.Atoms().BeginRichTextColored(detailMutedFg, detailBgClear, "the count per bucket").Small().End().Keep()).Send()
 			st = StatSum

@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsstore"
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
@@ -195,11 +196,11 @@ func (inst *Inst) renderPaused(w *window, ids *c.WidgetIdStack, now time.Time) {
 		w.pauseMinH += w.pauseH - h
 	}
 	c.UiSetMinHeight(w.pauseMinH)
-	c.AddSpace(12)
+	c.AddSpace(styletokens.PaddingOuter(inst.density))
 	for rt := range c.RichTextLabel(icons.PhPause + " Paused " + pausedFor(now.Sub(w.pausedSince))) {
 		rt.Heading()
 	}
-	c.AddSpace(6)
+	c.AddSpace(styletokens.GapInline(inst.density))
 	note := "The app keeps its state. Its background work continues: the app does not stop it while paused."
 	if _, ok := w.appInst.(app.PausableAppI); ok {
 		note = "The app keeps its state and stops its background work until it is resumed."
@@ -207,7 +208,7 @@ func (inst *Inst) renderPaused(w *window, ids *c.WidgetIdStack, now time.Time) {
 	for rt := range c.RichTextLabel(note + " Commands to it are refused meanwhile.") {
 		rt.Weak()
 	}
-	c.AddSpace(6)
+	c.AddSpace(styletokens.GapInline(inst.density))
 	if c.Button(ids.PrepareStr("windowhost-resume-"+strconv.FormatUint(uint64(w.key), 10)),
 		c.Atoms().Text(icons.PhPlay+" Resume").Keep()).SendResp().HasPrimaryClicked() {
 		inst.Resume(w.key, PauseFromWindow)

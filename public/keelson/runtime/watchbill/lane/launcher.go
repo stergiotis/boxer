@@ -9,7 +9,6 @@ import (
 	"os/exec"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/rs/zerolog"
@@ -118,7 +117,6 @@ type execChild struct {
 	jobId string
 	done  chan struct{}
 	err   error
-	ended sync.Once
 }
 
 func (inst *execChild) wait() {

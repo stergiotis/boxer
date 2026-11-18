@@ -439,7 +439,7 @@ func (inst *Inst) OpsLayout(layout string, ratio float32, count int) (err error)
 	if layout != "" {
 		l, ok := ParseLayout(layout)
 		if !ok {
-			err = eb.Build().Str("layout", layout).Errorf("windowhost: unknown layout; one of %v", LayoutIdents())
+			err = eb.Build().Str("layout", layout).Errorf("windowhost: unknown layout; one of %v", LayoutIdents()) //boxer:lint disable=CS013 reason="the agent service replies with err.Error() as text; the layout idents are what the caller picks from"
 			return
 		}
 		if err = inst.SetLayout(l); err != nil {

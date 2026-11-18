@@ -151,7 +151,7 @@ type App struct {
 	// load must not leave a section empty until the person presses Refresh.
 	wantGlobal  bool
 	retryGlobal bool
-	snap       snapshot
+	snap        snapshot
 }
 
 var _ app.AppI = (*App)(nil)

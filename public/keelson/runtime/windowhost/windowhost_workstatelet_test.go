@@ -144,7 +144,7 @@ func TestWorkstatelet_OpenDispatchesAndALaunchRequestIsRefused(t *testing.T) {
 	id := fx.mint(t, "desk", workstatelet.Desktop{},
 		workstatelet.Window{App: "test.plain"}, workstatelet.Window{App: "test.cfg"})
 
-	fx.h.SetLayout(LayoutColumns)
+	require.NoError(t, fx.h.SetLayout(LayoutColumns))
 	key, err := fx.h.Open(id)
 	require.NoError(t, err)
 	assert.Equal(t, 2, fx.h.Len())

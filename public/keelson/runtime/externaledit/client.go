@@ -35,7 +35,7 @@ func Give(bus app.BusI, name string, text []byte) (id string, err error) {
 		return
 	}
 	if r.Reason != "" {
-		return "", eb.Build().Str("reason", r.Reason).Errorf("externaledit: refused: %s", r.Reason)
+		return "", eb.Build().Str("reason", r.Reason).Errorf("externaledit: refused: %s", r.Reason) //boxer:lint disable=CS013 reason="Editing.Status shows err.Error() to the person; the service\'s reason is the message"
 	}
 	return r.Id, nil
 }
@@ -59,7 +59,7 @@ func Next(bus app.BusI, id string, after uint64, d time.Duration) (rev Revision,
 	}
 	rev, err = call[Wait, Revision](bus, SubjectWait, Wait{Id: id, After: after, WaitMs: uint32(d / time.Millisecond)}, d+5*time.Second)
 	if err == nil && rev.Reason != "" && !rev.Closed {
-		err = eb.Build().Str("reason", rev.Reason).Errorf("externaledit: refused: %s", rev.Reason)
+		err = eb.Build().Str("reason", rev.Reason).Errorf("externaledit: refused: %s", rev.Reason) //boxer:lint disable=CS013 reason="Editing.Status shows err.Error() to the person; the service\'s reason is the message"
 	}
 	return
 }
@@ -68,7 +68,7 @@ func Next(bus app.BusI, id string, after uint64, d time.Duration) (rev Revision,
 func End(bus app.BusI, id string) (err error) {
 	r, err := call[CloseRequest, Closed](bus, SubjectClose, CloseRequest{Id: id}, 10*time.Second)
 	if err == nil && r.Reason != "" {
-		err = eb.Build().Str("reason", r.Reason).Errorf("externaledit: refused: %s", r.Reason)
+		err = eb.Build().Str("reason", r.Reason).Errorf("externaledit: refused: %s", r.Reason) //boxer:lint disable=CS013 reason="Editing.Status shows err.Error() to the person; the service\'s reason is the message"
 	}
 	return
 }
@@ -81,7 +81,7 @@ func Locate(bus app.BusI, id string, session string, agent bool) (dir string, fi
 		return
 	}
 	if r.Reason != "" {
-		return "", "", eb.Build().Str("reason", r.Reason).Errorf("externaledit: refused: %s", r.Reason)
+		return "", "", eb.Build().Str("reason", r.Reason).Errorf("externaledit: refused: %s", r.Reason) //boxer:lint disable=CS013 reason="Editing.Status shows err.Error() to the person; the service\'s reason is the message"
 	}
 	return r.Dir, r.File, nil
 }

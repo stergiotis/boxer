@@ -552,13 +552,14 @@ func TestCancelIsScopedToTheSender(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, other.Publish(SubjectCancel, stop))
 	select {
-	case <-p.ended:
-		t.Fatal("another sender stopped the call")
+	case err := <-p.ended:
+		t.Fatalf("another sender stopped the call: %v", err)
 	case <-time.After(100 * time.Millisecond):
 	}
 	require.NoError(t, owner.Publish(SubjectCancel, stop))
 	select {
-	case <-p.ended:
+	case err := <-p.ended:
+		require.Error(t, err, "the owner's stop ends the call through its context")
 	case <-time.After(5 * time.Second):
 		t.Fatal("the owner could not stop its call")
 	}

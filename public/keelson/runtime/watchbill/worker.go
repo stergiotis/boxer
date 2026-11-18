@@ -188,7 +188,7 @@ func (inst *Worker) RunJob(ctx context.Context, id string, onClaim ...func(job w
 	now := inst.now().UTC()
 	job, won, err := inst.cfg.Store.Claim(ctx, id, inst.cfg.RunId, now)
 	if err != nil {
-		return false, eh.Errorf("claim %s: %w", id, err)
+		return false, eb.Build().Str("id", id).Errorf("claim: %w", err)
 	}
 	for _, f := range onClaim {
 		if f != nil {

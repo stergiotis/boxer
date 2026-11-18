@@ -22,7 +22,7 @@ import (
 const SubjectOpen = "audio.out.open"
 
 // ServiceAppId is the synthetic AppId the service registers under.
-const ServiceAppId app.AppIdT = "runtime.audio"
+const ServiceAppId app.AppIdT = "runtime.audio" // designlint:ignore=L12 (the audio service's bus identity, a runtime service in the dotted NATS-aligned form; renaming changes a wire id)
 
 // openTimeout bounds [Open]'s wait for the service. A service in this
 // process answers within the call; where nothing serves the subject the

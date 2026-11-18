@@ -34,7 +34,7 @@ import (
 )
 
 // AppId is the coordinator's identity on the bus.
-const AppId app.AppIdT = "runtime.watchbill.lane"
+const AppId app.AppIdT = "runtime.watchbill.lane" // designlint:ignore=L12 (a runtime service named in the dotted NATS-aligned form, beside runtime.watchbill; its bus identity, so renaming changes a wire id)
 
 // Caps is the coordinator's bus capability set: hear the changed
 // announcements (an enqueue onto the lane is one), announce the rows it
@@ -344,7 +344,7 @@ func (inst *Coordinator) Tick(ctx context.Context) (err error) {
 		}
 		job, found, gerr := inst.cfg.Store.Get(ctx, id)
 		if gerr != nil {
-			return eh.Errorf("lane row %s: %w", id, gerr)
+			return eb.Build().Str("job", id).Errorf("lane row: %w", gerr)
 		}
 		if !found || job.State != watchbillstore.StateQueued {
 			continue
@@ -519,13 +519,13 @@ func (inst *Coordinator) settleTask(h task.HandleI, row watchbillstore.Job, exit
 		_ = h.Error(exitErr, reason)
 	case watchbillstore.StateQueued:
 		// A lost claim, or a failed attempt already requeued.
-		_ = h.Error(eh.Errorf("job requeued: %s", row.LastError), "requeued")
+		_ = h.Error(eh.Errorf("job requeued: %s", row.LastError), "requeued") //boxer:lint disable=CS013 reason="the child's last error arrives as row text and the task row shows the error's Error(); it is the message"
 	default:
 		msg := row.LastError
 		if msg == "" {
 			msg = row.State
 		}
-		_ = h.Error(eb.Build().Str("state", row.State).Errorf("%s", msg), row.State)
+		_ = h.Error(eb.Build().Str("state", row.State).Errorf("%s", msg), row.State) //boxer:lint disable=CS013 reason="the child's last error arrives as row text and the task row shows the error's Error(); it is the message"
 	}
 }
 

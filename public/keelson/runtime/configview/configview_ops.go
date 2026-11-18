@@ -162,15 +162,6 @@ func (inst *App) opsSnapshot() (sn opsSnap) {
 	return
 }
 
-// specsOf is the snapshot's specs, for the pure filter.
-func (inst opsSnap) specsOf() (specs []env.Spec) {
-	specs = make([]env.Spec, 0, len(inst.rows))
-	for _, r := range inst.rows {
-		specs = append(specs, r.spec)
-	}
-	return
-}
-
 func (inst opsSnap) row(name string) (r varRow, ok bool) {
 	for _, c := range inst.rows {
 		if c.spec.Name == name {
@@ -462,7 +453,7 @@ var ops = func() (s *appops.Set[*App, opsSnap]) {
 		Effect:  app.OperationEffectView, Writes: []string{resFilter}, Agents: true,
 		Gesture: "the search box, the Only set checkbox", Rebuild: app.OperationRebuildVolatile},
 		func(inst *App, _ app.OperationCall, in SetFilterArgs) (out appops.None, err error) {
-			inst.applyFilter(filterState{Query: in.Query, OnlySet: in.OnlySet})
+			inst.applyFilter(filterState(in))
 			return
 		})
 
@@ -511,7 +502,7 @@ func gestureOr[In any](inst *App, op string, in In, direct func()) {
 func (inst *App) setOnlySetGesture(onlySet bool) {
 	f := inst.filterValue()
 	f.OnlySet = onlySet
-	gestureOr(inst, opSetFilter, SetFilterArgs{Query: f.Query, OnlySet: f.OnlySet}, func() { inst.applyFilter(f) })
+	gestureOr(inst, opSetFilter, SetFilterArgs(f), func() { inst.applyFilter(f) })
 }
 
 func (inst *App) selectVarGesture(name string) {

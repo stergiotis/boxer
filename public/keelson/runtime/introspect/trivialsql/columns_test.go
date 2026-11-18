@@ -249,16 +249,6 @@ var tableCases = []struct {
 	{"SELECT nope FROM t", bothError},
 }
 
-// boundAsWith is sql with the bound table t written before it as a WITH
-// query: the statement ReadTables claims to answer as ClickHouse would.
-func boundAsWith(sql string) string {
-	const t = "t AS (SELECT * FROM " + t3 + ")"
-	if len(sql) > 5 && sql[:5] == "WITH " {
-		return "WITH " + t + ", " + sql[5:]
-	}
-	return "WITH " + t + " " + sql
-}
-
 func boundTables(t *testing.T) map[string]arrow.RecordBatch {
 	t.Helper()
 	batch, _, err := Read(reg(t), "SELECT * FROM "+t3, nil)
