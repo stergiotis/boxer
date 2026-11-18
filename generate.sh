@@ -73,15 +73,12 @@ run runtimecodegen all
 #    phosphor-icons.json and emits phosphor{,_lookup}.out.go.
 ./public/keelson/runtime/icons/generate.sh
 
-# 6. Leeway information_schema codegen — test-driven regen of the facts /
-#    vcsmanaged DML wrappers (mirrors the anchor step below). Reconstructs the
-#    upstream `ddl table mappings informationschema <name> --format cbor |
-#    dml table generate go` pipeline, whose CBOR producer subcommand was not
-#    ported to boxer; the gen tests feed mapping.NewInformationSchema*Mapping()
-#    straight into the dml driver.
+# 6. Leeway information_schema DML goldens — the facts / vcsmanaged mappings
+#    run through the dml driver, kept as testdata goldens (nothing in this
+#    module imports the generated classes).
 go test -tags "$tags" \
-    -run '^(TestFactsInfoSchemaDmlGeneration|TestVcsManagedInfoSchemaDmlGeneration)$' \
-    ./public/semistructured/leeway/schema/...
+    -run '^TestInformationSchemaDmlMatchesGolden$' \
+    ./public/semistructured/leeway/dml/ -update
 
 # 7. canonicaltypes abbreviations table.
 ./public/semistructured/leeway/canonicaltypes/ctabb/generate.sh

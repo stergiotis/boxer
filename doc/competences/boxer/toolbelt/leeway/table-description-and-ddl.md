@@ -8,7 +8,7 @@ catalog: boxer
 realised_by:
   - adr:0066
   - pkg:public/semistructured/leeway/ddl
-  - pkg:public/semistructured/leeway/schema
+  - pkg:public/semistructured/leeway/mapping
   - explanation:leeway-column-names
 assessment:
   - dimension: readiness
