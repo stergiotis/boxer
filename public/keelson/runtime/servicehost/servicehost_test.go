@@ -3,6 +3,7 @@ package servicehost
 import (
 	"context"
 	"errors"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -48,10 +49,13 @@ type recorder struct {
 	mounted         chan struct{}
 	cancelledBefore bool
 	publishErr      error
-	unmountCalls    int
-	cfgSeen         []byte
-	reasonSeen      app.LaunchReasonE
-	keySeen         uint64
+	// unmountCalls is counted last in Unmount, atomically: ReapAll runs
+	// Unmount on its own goroutine, and a test that sees the count also
+	// sees the fields Unmount set before it.
+	unmountCalls atomic.Int32
+	cfgSeen      []byte
+	reasonSeen   app.LaunchReasonE
+	keySeen      uint64
 }
 
 var _ app.AppI = (*recorder)(nil)
@@ -77,7 +81,6 @@ func (inst *recorder) Mount(ctx app.MountContextI) (err error) {
 }
 func (inst *recorder) Frame(ctx app.FrameContextI) (err error) { panic("Frame on a service") }
 func (inst *recorder) Unmount(ctx app.MountContextI) (err error) {
-	inst.unmountCalls++
 	select {
 	case <-ctx.Cancel():
 		inst.cancelledBefore = true
@@ -85,6 +88,7 @@ func (inst *recorder) Unmount(ctx app.MountContextI) (err error) {
 	}
 	inst.publishErr = ctx.Bus().Publish("t.bye", nil)
 	err = inst.unmountErr
+	inst.unmountCalls.Add(1)
 	return
 }
 
@@ -171,7 +175,7 @@ func TestReapAll_LeaveUnmountDrainUnload(t *testing.T) {
 	go func() { h.ReapAll(StopReasonShutdown); close(done) }()
 	// Unmount ran, after leave; the bus still answered inside it; the
 	// client is not closed while the tail runs.
-	require.Eventually(t, func() bool { return a.unmountCalls == 1 }, time.Second, 5*time.Millisecond)
+	require.Eventually(t, func() bool { return a.unmountCalls.Load() == 1 }, time.Second, 5*time.Millisecond)
 	assert.True(t, a.cancelledBefore, "Cancel() fired before Unmount")
 	assert.NoError(t, a.publishErr, "the bus was live inside Unmount")
 	select {
@@ -225,7 +229,7 @@ func TestMountError_IsRecordedAndReleased(t *testing.T) {
 	require.Eventually(t, func() bool { return len(f.facts.Lifecycles()) == 2 }, time.Second, 5*time.Millisecond)
 	assert.Equal(t, StopReasonMountError, f.facts.Lifecycles()[1].StopReason)
 	h.ReapAll(StopReasonShutdown)
-	assert.Equal(t, 0, a.unmountCalls, "a failed Mount is not unmounted")
+	assert.Equal(t, int32(0), a.unmountCalls.Load(), "a failed Mount is not unmounted")
 	assert.Len(t, f.facts.Lifecycles(), 2)
 }
 
@@ -251,7 +255,7 @@ func TestReapAll_WhileStartingWaitsForMountThenUnmounts(t *testing.T) {
 	<-a.mounted
 	assert.Equal(t, StateStarting, rowOf(t, h, "test.a").State)
 	h.ReapAll(StopReasonShutdown)
-	assert.Equal(t, 1, a.unmountCalls, "leave let Mount return, then Unmount ran")
+	assert.Equal(t, int32(1), a.unmountCalls.Load(), "leave let Mount return, then Unmount ran")
 	assert.Equal(t, StateStopped, rowOf(t, h, "test.a").State)
 }
 

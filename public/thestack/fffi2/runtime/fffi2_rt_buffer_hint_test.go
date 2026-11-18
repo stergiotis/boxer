@@ -69,11 +69,26 @@ func TestBufferHintRecyclesCapacity(t *testing.T) {
 	buf := bh.Acquire()
 	require.GreaterOrEqual(t, buf.Cap(), detachedBufferFloor,
 		"a cold buffer starts at the floor at least")
-	buf.Write(make([]byte, 64*1024))
+	body := make([]byte, 64*1024)
+	buf.Write(body)
 	grown := buf.Cap()
-	bh.Release(buf)
 
-	next := bh.Acquire()
+	// sync.Pool may drop a Put — the race detector drops one in four on
+	// purpose, and a collection empties the pool — so the property is that a
+	// released buffer can come back, not that one release always does.
+	// Release the same grown buffer, refilled so the hint stays where the
+	// body put it, until the pool hands it back.
+	var next *bytes.Buffer
+	for range 64 {
+		bh.Release(buf)
+		next = bh.Acquire()
+		if next == buf {
+			break
+		}
+		buf.Reset()
+		buf.Write(body)
+	}
+	require.Same(t, buf, next, "the pool never handed the released buffer back")
 	require.Zero(t, next.Len(), "a recycled buffer is handed back empty")
 	require.EqualValues(t, grown, next.Cap(), "...but keeps the capacity it grew to")
 	bh.Release(next)
