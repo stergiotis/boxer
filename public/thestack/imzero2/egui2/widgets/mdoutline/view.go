@@ -89,9 +89,9 @@ type View struct {
 
 // Input is one frame's render request.
 type Input struct {
-	// Ids is the host's widget id stack. The tree opens its own scope under
-	// it keyed by ScopeKey; the bar's buttons and the pane probe derive
-	// from ScopeKey too, so two outlines under one host differ by it alone.
+	// Ids is the host's widget id stack. The outline opens one scope under
+	// it keyed by ScopeKey, holding the bar's buttons, the pane probe and
+	// the tree, so two outlines under one host differ by it alone.
 	Ids *c.WidgetIdStack
 	// ScopeKey names this outline within the host's id space; empty uses
 	// "outline".
@@ -253,44 +253,49 @@ func (v *View) Render(in Input) (res Result) {
 		c.Label(empty).Send()
 		return
 	}
-	v.renderControls(in, scope)
+	// One scope holds the bar, the probe and the tree, so two outlines under
+	// one host differ by ScopeKey alone and the children take literal keys.
+	var tr tree.Result
+	for range c.IdScope(in.Ids.PrepareStr(scope)) {
+		v.renderControls(in)
 
-	// Probed after the control row, so what is measured is the space left
-	// for the tree. Held across frames: a frame in which the probe does not
-	// answer reuses the last known size instead of collapsing to the
-	// fallback.
-	if w, h, ok := c.CapturePaneSize(in.Ids.PrepareStr(scope + "-pane").Derive()); ok && w > 0 {
-		v.paneW, v.paneH = w, h
-	}
-	maxH := in.MaxHeight
-	if maxH <= 0 {
-		maxH = v.paneH
-	}
-	if maxH <= 0 {
-		maxH = FallbackPaneH
-	}
+		// Probed after the control row, so what is measured is the space
+		// left for the tree. Held across frames: a frame in which the probe
+		// does not answer reuses the last known size instead of collapsing
+		// to the fallback.
+		if w, h, ok := c.CapturePaneSize(in.Ids.PrepareStr("pane").Derive()); ok && w > 0 {
+			v.paneW, v.paneH = w, h
+		}
+		maxH := in.MaxHeight
+		if maxH <= 0 {
+			maxH = v.paneH
+		}
+		if maxH <= 0 {
+			maxH = FallbackPaneH
+		}
 
-	// Reveal before select: opening the current section's ancestors is a
-	// write to the same map select reads, and the widget's flatten has to
-	// see the result.
-	v.Reveal(in.CurrentSlug)
-	v.Select(in.CurrentSlug)
+		// Reveal before select: opening the current section's ancestors is
+		// a write to the same map select reads, and the widget's flatten has
+		// to see the result.
+		v.Reveal(in.CurrentSlug)
+		v.Select(in.CurrentSlug)
 
-	tr := tree.Render(tree.Input{
-		Ids:      in.Ids,
-		ScopeKey: scope,
-		Tree:     v.Model.Tree(),
-		State:    &v.State,
-		Outline: tree.Column{
-			Width: v.ColWidth(),
-			Cell:  v.headingCell,
-		},
-		Columns: []tree.Column{
-			{Width: CountWidthPx, Cell: v.countCell},
-		},
-		Indent:    IndentPx,
-		MaxHeight: maxH,
-	})
+		tr = tree.Render(tree.Input{
+			Ids:      in.Ids,
+			ScopeKey: "tree",
+			Tree:     v.Model.Tree(),
+			State:    &v.State,
+			Outline: tree.Column{
+				Width: v.ColWidth(),
+				Cell:  v.headingCell,
+			},
+			Columns: []tree.Column{
+				{Width: CountWidthPx, Cell: v.countCell},
+			},
+			Indent:    IndentPx,
+			MaxHeight: maxH,
+		})
+	}
 	// A result describes the previous frame's geometry, and a reparse
 	// between the two can have shortened the outline; an out-of-range node
 	// is dropped.
@@ -304,15 +309,15 @@ func (v *View) Render(in Input) (res Result) {
 // renderControls draws the expand and collapse pair, then the host's own
 // controls. The pair exists because collapsing does: reopening a document
 // folded down to its top level is one click per section otherwise.
-func (v *View) renderControls(in Input, scope string) {
+func (v *View) renderControls(in Input) {
 	for range c.Horizontal().KeepIter() {
 		expand, collapse := false, false
 		for range c.HoverText(tipExpandAll).KeepIter() {
-			expand = c.Button(in.Ids.PrepareStr(scope+"-expand"), atomsExpand).
+			expand = c.Button(in.Ids.PrepareStr("expand"), atomsExpand).
 				Small().SendResp().HasPrimaryClicked()
 		}
 		for range c.HoverText(tipCollapseAll).KeepIter() {
-			collapse = c.Button(in.Ids.PrepareStr(scope+"-collapse"), atomsCollapse).
+			collapse = c.Button(in.Ids.PrepareStr("collapse"), atomsCollapse).
 				Small().SendResp().HasPrimaryClicked()
 		}
 		switch {
