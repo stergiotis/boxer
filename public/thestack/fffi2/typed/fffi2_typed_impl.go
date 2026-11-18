@@ -225,7 +225,7 @@ func (inst *RetainedFffiBuilder) BuildRetained() *RetainedFffiHolder {
 	raw := inst.builder.buf.Bytes()
 	id := RetainedElementId(xxh3.Hash(raw))
 	handle := unique.Make(string(raw)) // interns content; copies into a deduplicated string
-	content := unsafeperf.UnsafeStringToByte(handle.Value())
+	content := unsafeperf.UnsafeStringToBytes(handle.Value())
 
 	woff := inst.widgetIdOffset
 	hasWid := inst.hasWidgetId

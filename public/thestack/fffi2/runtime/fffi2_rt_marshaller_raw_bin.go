@@ -129,7 +129,7 @@ func (inst *Marshaller) handleError(err error) {
 
 func (inst *Marshaller) WriteString(v string) {
 	inst.WriteSliceLength(len(v))
-	n, err := inst.w.Write(unsafeperf.UnsafeStringToByte(v))
+	n, err := inst.w.Write(unsafeperf.UnsafeStringToBytes(v))
 	inst.written += n
 	inst.handleError(err)
 }
