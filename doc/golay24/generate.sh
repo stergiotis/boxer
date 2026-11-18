@@ -1,15 +1,12 @@
 #!/bin/bash
+# Regenerate the Golay(24,12) lookup tables in public/fec/code/golay24.
+# The C programs print Go source; gofmt brings it to the checked-in form.
 set -e
 here=$(dirname "$(readlink -f "$BASH_SOURCE")")
-cd "$here"
-rm -f encoding
-rm -f decoding
-rm -f encodingTable.go
-rm -f decodingTable.go
-gcc -o encoding encoding.c
-gcc -o decoding decoding.c
-./decoding > decodingTable.go
-./encoding > encodingTable.go
-rm -f encoding
-rm -f decoding
-mv -v *.go ../../public/fec/code/golay24/
+out="$here/../../public/fec/code/golay24"
+work=$(mktemp -d)
+trap 'rm -rf -- "$work"' EXIT
+gcc -o "$work/encoding" "$here/encoding.c"
+gcc -o "$work/decoding" "$here/decoding.c"
+"$work/encoding" | gofmt > "$out/encoding_table.go"
+"$work/decoding" | gofmt > "$out/decoding_table.go"
