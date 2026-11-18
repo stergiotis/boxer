@@ -9,6 +9,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/attention"
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/pager"
 )
 
 // The person's status in host chrome (ADR-0328): the control
@@ -86,19 +87,84 @@ func awayWhat(e attention.AwayEntry) string {
 	return e.What.String()
 }
 
+// awayPageSize is the lines of the away card one page shows: past it the card
+// pages rather than growing with what happened. A quarter of the log's bound,
+// so the pager has at most four page buttons and stays within cardWidth.
+const awayPageSize = attention.MaxAwayLog / 4
+
+// awayLine is one line of the away card: the entries that differ only in
+// their time and queue key, counted, with their first and last time.
+type awayLine struct {
+	attention.AwayEntry
+	// Last is the time of the latest entry, Count how many there are.
+	Last  time.Time
+	Count int
+	// Keys are the entries' queue keys in the log's order, which is the
+	// order they arrived in, for Open.
+	Keys []string
+}
+
+type awayLineKey struct {
+	what         attention.AwayKindE
+	why          string
+	kind         string
+	app          string
+	instance     uint64
+	conversation string
+	summary      string
+	level        attention.LevelE
+}
+
+// awayLines folds entries alike but for their time and key into one line,
+// ordered by level then by the first one's time.
+func awayLines(entries []attention.AwayEntry) (lines []awayLine) {
+	at := make(map[awayLineKey]int, len(entries))
+	for _, e := range entries {
+		k := awayLineKey{what: e.What, why: e.Why, kind: e.Kind, app: string(e.App), instance: e.Instance,
+			conversation: e.Conversation, summary: e.Summary, level: e.Level}
+		i, ok := at[k]
+		if !ok {
+			i = len(lines)
+			at[k] = i
+			lines = append(lines, awayLine{AwayEntry: e, Last: e.At})
+		}
+		l := &lines[i]
+		l.Count++
+		if e.At.Before(l.At) {
+			l.At = e.At
+		}
+		if e.At.After(l.Last) {
+			l.Last = e.At
+		}
+		if e.Key != "" {
+			l.Keys = append(l.Keys, e.Key)
+		}
+	}
+	slices.SortStableFunc(lines, func(a, b awayLine) int {
+		if r := cmp.Compare(b.Level, a.Level); r != 0 {
+			return r
+		}
+		return a.At.Compare(b.At)
+	})
+	return
+}
+
 // renderAwayLog draws the away log's card while there is one to show.
 func (inst *Chrome) renderAwayLog(now time.Time, ids *c.WidgetIdStack) {
 	l, ok := inst.svc.Presence.Returned()
 	if !ok {
 		return
 	}
-	entries := slices.Clone(l.Entries)
-	slices.SortStableFunc(entries, func(a, b attention.AwayEntry) int {
-		if r := cmp.Compare(b.Level, a.Level); r != 0 {
-			return r
-		}
-		return a.At.Compare(b.At)
-	})
+	lines := awayLines(l.Entries)
+	if inst.awayPager == nil || inst.awayPagerIds != ids {
+		inst.awayPager = pager.New(ids, "attention-away-pager", pager.Options{PageSize: awayPageSize, Unit: "lines", HideSizeCombo: true})
+		inst.awayPagerIds = ids
+	}
+	if !l.From.Equal(inst.awayFrom) {
+		inst.awayFrom = l.From
+		inst.awayPager.Reset()
+	}
+	inst.awayPager.Configure(int64(len(lines)))
 	wf := c.Window(ids.PrepareStr("attention-away-log"), c.WidgetText().Text("While you were away").Keep()).
 		AlwaysOnTop(true).
 		Collapsible(false).
@@ -110,19 +176,27 @@ func (inst *Chrome) renderAwayLog(now time.Time, ids *c.WidgetIdStack) {
 	for range wf.KeepIter() {
 		c.UiSetMinWidth(cardWidth)
 		c.UiSetMaxWidth(cardWidth)
-		for rt := range c.RichTextLabel("away " + l.From.Local().Format("15:04") + " – " + l.To.Local().Format("15:04") + " · " + age(l.To.Sub(l.From))) {
+		head := "away " + l.From.Local().Format("15:04") + " – " + l.To.Local().Format("15:04") + " · " + age(l.To.Sub(l.From))
+		if n := len(l.Entries); n > len(lines) {
+			head += " · " + strconv.Itoa(n) + " entries in " + strconv.Itoa(len(lines)) + " lines"
+		}
+		for rt := range c.RichTextLabel(head) {
 			rt.Small().Weak()
 		}
-		if len(entries) == 0 {
+		if len(lines) == 0 {
 			c.Label("Nothing happened.").Send()
 		}
-		for i, e := range entries {
-			inst.renderAwayEntry(i, e, ids)
+		start, end := inst.awayPager.Range()
+		for i := start; i < end; i++ {
+			inst.renderAwayLine(int(i), lines[i], ids)
 		}
 		if l.Dropped > 0 {
 			for rt := range c.RichTextLabel("and " + strconv.Itoa(l.Dropped) + " more, not kept") {
 				rt.Small().Weak()
 			}
+		}
+		if len(lines) > awayPageSize {
+			inst.awayPager.Render()
 		}
 		c.Separator().Send()
 		if c.Button(ids.PrepareStr("attention-away-dismiss"), c.Atoms().Text("Dismiss").Keep()).SendResp().HasPrimaryClicked() {
@@ -134,19 +208,47 @@ func (inst *Chrome) renderAwayLog(now time.Time, ids *c.WidgetIdStack) {
 	}
 }
 
-func (inst *Chrome) renderAwayEntry(i int, e attention.AwayEntry, ids *c.WidgetIdStack) {
+// awayWhen is a line's time, or its span when its entries' times differ.
+func awayWhen(e awayLine) string {
+	s := e.At.Local().Format("15:04")
+	if last := e.Last.Local().Format("15:04"); last != s {
+		s += "–" + last
+	}
+	return s
+}
+
+func (inst *Chrome) renderAwayLine(i int, e awayLine, ids *c.WidgetIdStack) {
 	for range c.HorizontalTop().KeepIter() {
-		c.Label(e.At.Local().Format("15:04")).Send()
+		c.Label(awayWhen(e)).Send()
 		swatch(e.Conversation)
-		for rt := range c.RichTextLabel(awayWhat(e)) {
+		what := awayWhat(e.AwayEntry)
+		if e.Count > 1 {
+			what += " ×" + strconv.Itoa(e.Count)
+		}
+		for rt := range c.RichTextLabel(what) {
 			rt.Small()
 		}
 		c.Label(e.Summary).Send()
 		switch {
 		case e.What == attention.AwayArrived:
-			if _, waiting := inst.find(e.Key); waiting {
+			// Open the first that still waits.
+			key, waits := "", 0
+			for _, k := range e.Keys {
+				if _, ok := inst.find(k); ok {
+					if waits == 0 {
+						key = k
+					}
+					waits++
+				}
+			}
+			if waits > 0 {
+				if e.Count > 1 {
+					for rt := range c.RichTextLabel(strconv.Itoa(waits) + " still wait") {
+						rt.Weak().Small()
+					}
+				}
 				if c.Button(ids.PrepareStr("attention-away-open-"+strconv.Itoa(i)), c.Atoms().Text("Open").Keep()).Small().SendResp().HasPrimaryClicked() {
-					inst.openCard(e.Key)
+					inst.openCard(key)
 				}
 			} else {
 				for rt := range c.RichTextLabel("no longer waits") {

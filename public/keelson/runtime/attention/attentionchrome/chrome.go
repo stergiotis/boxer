@@ -16,6 +16,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/color"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/pager"
 )
 
 // CardSourceI is a source that draws the body of its items' cards.
@@ -68,6 +69,11 @@ type Chrome struct {
 	// urgencySeen are the urgency requests already considered for opening
 	// at once.
 	urgencySeen map[string]bool
+	// awayPager pages the away card's lines; awayFrom is the start of the
+	// log it last paged, so a new log starts on its first page.
+	awayPager    *pager.Pager
+	awayPagerIds *c.WidgetIdStack
+	awayFrom     time.Time
 }
 
 // Options are what the chrome needs from the host: an app's display name,

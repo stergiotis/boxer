@@ -225,6 +225,20 @@ O1, O3 and O4 lost on the QOC above. Further:
 - **Gap.** Whether 10 minutes suits as a default is a guess until it has
   been used.
 
+## Updates
+
+### 2026-11-18 — The away card folds alike entries and pages
+
+With `MaxAwayLog` entries the card grew taller than the screen. Entries
+that differ only in their time and queue key now make one line, which
+carries the count and the span from first to last; the lines keep SD3's
+order, by level and then by the first entry's time. Past a quarter of
+`MaxAwayLog` lines the card pages, with the pager the play table uses.
+Because the page size is a quarter of the bound, the card never has more
+than four pages and the pager fits the card's width. A folded line of items
+that arrived opens the first one that still waits, and says how many still
+wait. The log itself is unchanged; only the card folds and pages.
+
 ## Status
 
 Accepted 2026-10-12. Answers ADR-0324 §SD8's first deferral and the
