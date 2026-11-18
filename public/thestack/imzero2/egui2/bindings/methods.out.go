@@ -3246,6 +3246,14 @@ func (inst ScrollAreaFluid) MaxHeight(height float32) ScrollAreaFluid {
 	return inst
 }
 
+func (inst ScrollAreaFluid) MinScrolledHeight(height float32) ScrollAreaFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(ScrollAreaMethodIdMinScrolledHeight))
+	r.WriteFloat32(height)
+
+	return inst
+}
+
 func (inst ScrollAreaFluid) Send() {
 	r := inst.r
 	r.WriteOpCode(uint32(ScrollAreaMethodIdBuild))

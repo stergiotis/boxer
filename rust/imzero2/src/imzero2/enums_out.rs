@@ -208,7 +208,7 @@ pub enum FuncProcId {
 /// The IDL this client was generated from, as ir.Fingerprint digests it; the
 /// Go server's generated enums carry the same value from the same generation
 /// (ADR-0278 SD6).
-pub const IDL_FINGERPRINT: u64 = 0xe2cb7f6a235d8952;
+pub const IDL_FINGERPRINT: u64 = 0xd1368138b9ba6f98;
 #[derive(strum::FromRepr, Debug, PartialEq, Eq)]
 #[repr(u32)]
 pub enum AccessibleListBuilderMethodId {
@@ -1018,6 +1018,7 @@ pub enum ScrollAreaBuilderMethodId {
     Animated = 3,
     AutoShrink = 4,
     MaxHeight = 5,
+    MinScrolledHeight = 6,
 }
 
 #[derive(strum::FromRepr, Debug, PartialEq, Eq)]

@@ -207,7 +207,7 @@ const (
 // IdlFingerprint is the IDL these bindings were generated from, as
 // ir.Fingerprint digests it; the Rust client's generated enums carry the same
 // value from the same generation (ADR-0278 SD6).
-const IdlFingerprint uint64 = 0xe2cb7f6a235d8952
+const IdlFingerprint uint64 = 0xd1368138b9ba6f98
 const (
 	AtomsMethodIdBuild AtomsMethodIdE = 0
 
@@ -685,11 +685,12 @@ const (
 const (
 	ScrollAreaMethodIdBuild ScrollAreaMethodIdE = 0
 
-	ScrollAreaMethodIdHscroll    ScrollAreaMethodIdE = 1
-	ScrollAreaMethodIdVscroll    ScrollAreaMethodIdE = 2
-	ScrollAreaMethodIdAnimated   ScrollAreaMethodIdE = 3
-	ScrollAreaMethodIdAutoShrink ScrollAreaMethodIdE = 4
-	ScrollAreaMethodIdMaxHeight  ScrollAreaMethodIdE = 5
+	ScrollAreaMethodIdHscroll           ScrollAreaMethodIdE = 1
+	ScrollAreaMethodIdVscroll           ScrollAreaMethodIdE = 2
+	ScrollAreaMethodIdAnimated          ScrollAreaMethodIdE = 3
+	ScrollAreaMethodIdAutoShrink        ScrollAreaMethodIdE = 4
+	ScrollAreaMethodIdMaxHeight         ScrollAreaMethodIdE = 5
+	ScrollAreaMethodIdMinScrolledHeight ScrollAreaMethodIdE = 6
 )
 
 const (

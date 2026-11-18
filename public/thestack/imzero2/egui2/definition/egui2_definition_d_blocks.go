@@ -544,6 +544,15 @@ func definitionsBlock() (blocks []*ir.BuilderFactoryNode) {
 				BeginMethod("maxHeight").Arg("height", ctabb.F32).
 				CodeClientRust(rustClientCode("{{Instance}} = {{Instance}}.max_height(height);\n")).
 				EndMethod().
+				// minScrolledHeight mirrors egui::ScrollArea::min_scrolled_height:
+				// the least a vertically scrolling viewport is made tall, 64 by
+				// default. egui applies it after maxHeight and after what the
+				// parent has left, so in a space shorter than it the area
+				// allocates more than it was given and pushes what follows.
+				// Zero keeps the area inside a fixed-size cell.
+				BeginMethod("minScrolledHeight").Arg("height", ctabb.F32).
+				CodeClientRust(rustClientCode("{{Instance}} = {{Instance}}.min_scrolled_height(height);\n")).
+				EndMethod().
 				Build()...).
 		WithSettingImmediate(true).
 		WithSettingBlockIterator(true).
