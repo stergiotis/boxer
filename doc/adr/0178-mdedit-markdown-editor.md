@@ -869,7 +869,7 @@ so the scenes under `apps/mdedit/scenes` never touch the person's draft.
 
 The heading outline moved out of this app into
 `public/thestack/imzero2/egui2/widgets/mdoutline`, so a second reader of
-markdown (Code Scope in hackathon_2026, which reads a module's documents
+markdown (a downstream code browser, which reads a module's documents
 beside its Go) draws the same outline without a copy. The package keeps the
 split the 2026-08-09 update made: `Model` is the pure hierarchy (nesting by
 level, keys of `slug#ord` so a fold survives a reparse, descendant counts)

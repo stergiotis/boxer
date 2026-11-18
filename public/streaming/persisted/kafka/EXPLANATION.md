@@ -129,7 +129,7 @@ Producers follow the same shape with `Write(ctx, records...)` in the middle slot
 
 The upstream code is shaped against `github.com/redpanda-data/benthos/v4/public/service`. The mapping for code archaeologists:
 
-| Upstream                 | Pebble2impl                              |
+| Benthos                  | This package                             |
 |--------------------------|------------------------------------------|
 | `service.Input`          | [`ConsumerI`](types.go)                  |
 | `service.Output`         | [`ProducerI`](types.go)                  |

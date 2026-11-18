@@ -22,7 +22,7 @@ import (
 
 // Test-integration env vars for the ClickHouse EXPLAIN SYNTAX suite.
 // Names match the ClickHouse client tooling convention (not BOXER_*-
-// prefixed) because they are shared with pebble2impl and external
+// prefixed) because they are shared with downstream repositories and external
 // tooling.
 var (
 	clickhouseUser = env.NewString(env.Spec{

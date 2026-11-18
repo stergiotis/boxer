@@ -493,8 +493,8 @@ name `query` beside `describe_result` and `sample_rows`.
 ### 2026-11-04 — A check rests on a result the window has run past
 
 SD9 deferred "a check against a result the window no longer holds, from
-the history". Benchmark takes of the SECO data-quality report (the
-hackathon_2026 repository's agent benchmark plan, milestone M3) made it the
+the history". Benchmark takes of the SECO data-quality report (a
+downstream repository's agent benchmark plan, milestone M3) made it the
 largest friction left: a model cites in one `cite` call the figures of
 several queries it ran one after another, and every assertion resting on
 an earlier query's result came back from SD3's conflict, "another result

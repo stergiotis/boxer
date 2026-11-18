@@ -11,7 +11,7 @@ reviewed-date: 2026-11-12
 ## Context
 
 Three consumers of boxer carry their own copy of the same small body of
-geodesy. shadow-boxer's aircraft Doppler geolocation (its ADR-0022) converts
+geodesy. A downstream repository's aircraft Doppler geolocation converts
 ADS-B positions to Earth-centred, Earth-fixed metres, lays a lattice in a
 local east-north-up frame and reads ground velocities in the frame at the
 aircraft; its router and gazetteer each have a haversine; boxer's own
@@ -42,7 +42,7 @@ erroring. A shared package can state the convention once, in the type.
 We will add `public/science/geo/geodesy`: the WGS84 datum, Cartesian
 vectors, geodetic positions with ellipsoidal heights, the conversions
 between geodetic and ECEF, and local east-north-up tangent frames as rigid
-motions of ECEF. shadow-boxer's foghorn moves onto it in the same change;
+motions of ECEF. That repository's `foghorn` package moves onto it in the same change;
 the other copies are candidates, not obligations.
 
 ### Subsidiary design decisions
@@ -90,7 +90,7 @@ the other copies are candidates, not obligations.
 | Surface | Change | Moves with it |
 | --- | --- | --- |
 | Exported Go API under `public/` | added: `public/science/geo/geodesy` | the package-props table (ADR-0080): the package compiles for every WASM target |
-| shadow-boxer's foghorn package (its ADR-0022) | its geodesy file is deleted and its callers import this package | shadow-boxer's pin on boxer, bumped past this commit once it is pushed |
+| the downstream `foghorn` package | its geodesy file is deleted and its callers import this package | that repository's pin on boxer, bumped past this commit once it is pushed |
 
 ## Alternatives
 
@@ -133,7 +133,7 @@ the other copies are candidates, not obligations.
 
 ## Migration — Tier 1
 
-- **Breaks.** Nothing in boxer. In shadow-boxer, `foghorn.Vec3`,
+- **Breaks.** Nothing in boxer. Downstream, `foghorn.Vec3`,
   `foghorn.Geodetic`, `foghorn.Frame`, `foghorn.NewFrame`,
   `foghorn.GeodeticToEcef`, `foghorn.EcefToGeodetic`,
   `foghorn.GroundVelocityEnu` and `foghorn.MinMetresPerDegreeLat` are
@@ -184,4 +184,4 @@ YYYY-MM-DD. Remove this HTML comment when the section first gains a real entry.
   package under `public/` joins.
 - [ADR-0244](./0244-swisstopo-coordinate-udfs.md) — the Swiss frames, which
   keep their own WGS84 constants for now.
-- shadow-boxer ADR-0022 — the first consumer, whose geodesy this package is.
+- The downstream `foghorn` package — the first consumer, whose geodesy this package is.

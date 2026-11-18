@@ -20,7 +20,7 @@
 //     datemath (`now-5m`, `now/d`, etc.) to ClickHouse SQL expressions
 //     operating against an injected `anchor_now` DateTime64(3, 'UTC')
 //     scalar. Labels and semantic intent are Grafana-derived; the
-//     concrete SQL bodies are pebble2impl-authored.
+//     concrete SQL bodies are boxer-authored.
 //   - Refactored to the boxer coding standards: receiver `inst`,
 //     interface suffix `I`, named return values, compile-time
 //     interface assertion.
@@ -93,7 +93,7 @@ func (inst *Registry) Len() (n int) {
 // DefaultGrafana75 returns a registry pre-populated with the time
 // range presets shipped by Grafana 7.5. Labels and semantic intent
 // are Grafana-derived (Apache-2.0; see ../NOTICE); the concrete SQL
-// bodies are pebble2impl-authored, evaluating against an injected
+// bodies are boxer-authored, evaluating against an injected
 // `anchor_now` DateTime64(3, 'UTC') scalar.
 func DefaultGrafana75() (r *Registry) {
 	r = NewRegistry()

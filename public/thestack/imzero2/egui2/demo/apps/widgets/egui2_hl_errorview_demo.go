@@ -270,7 +270,7 @@ func buildEvStructuredFixture() (out errorview.Context) {
 				{Source: "card/commit.go", Line: "187", Function: "Commit",
 					Id: 2, ParentId: 1},
 				{Msg: "schema mismatch", Id: 3, ParentId: 1,
-					DataDiag: `{"expected_version": 7, "got_version": 5, "schema_id": "card-v1", "client_build": "pebble2impl@a3f12de"}`},
+					DataDiag: `{"expected_version": 7, "got_version": 5, "schema_id": "card-v1", "client_build": "example@a3f12de"}`},
 			}},
 		},
 	}

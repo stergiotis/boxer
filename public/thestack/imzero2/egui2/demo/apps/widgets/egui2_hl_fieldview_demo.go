@@ -165,7 +165,7 @@ func buildFvNestedFixture() (out []fieldview.Field) {
 				{Name: "auth", Kind: fieldview.KindBytes,
 					Bytes: []byte{0xff, 0x00, 0xab, 0xcd, 0xef, 0x12, 0x34, 0x56}},
 				{Name: "user_agent", Kind: fieldview.KindString,
-					Str: "pebble2impl/0.1 (linux; x86_64)"},
+					Str: "example/0.1 (linux; x86_64)"},
 			}},
 			{Name: "body", Kind: fieldview.KindObject, Children: []fieldview.Field{
 				{Name: "title", Kind: fieldview.KindString, Str: "card #42"},

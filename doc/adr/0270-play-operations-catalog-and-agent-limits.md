@@ -1241,8 +1241,8 @@ answers.
 ### 2026-11-05 — `query`: set the buffer, run it and read the first rows in one call
 
 A model reads data through three calls: `set_sql`, `run`, then
-`sample_rows`. In benchmark takes of the SECO data-quality tasks (the
-hackathon_2026 repository's agent benchmark plan, milestone M5) those
+`sample_rows`. In benchmark takes of the SECO data-quality tasks (a
+downstream repository's agent benchmark plan, milestone M5) those
 three made up most of a turn: 37 of 48 calls in one attempt, 89 of 112 in
 another, and a turn that ran out of rounds before it wrote anything.
 

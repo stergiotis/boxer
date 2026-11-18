@@ -8,7 +8,7 @@
 //
 // A third table, striple, pins the facts11'-shaped four-channel section
 // (lv single | lr carded | mvhp single | hv carded, list values) — the exact
-// combination hackathon_2026's facts11' relocation declares (its ADR-0027).
+// combination a downstream facts11' relocation declares.
 package singledecl
 
 import (

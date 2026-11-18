@@ -1065,7 +1065,7 @@ airgap_preflight_render_head() {
             # solvable situation and an apparent dead end on an isolated host.
             if [ -n "$ffsrc" ] && [ -d "$ffsrc" ]; then
                 airgap_warn "  BUT this bundle carries the sources, so you can build one here:"
-                airgap_warn "    <bundle>/hackathon_2026/scripts/dev/airgap-augment.sh <bundle-root>"
+                airgap_warn "    <bundle>/<downstream-repo>/scripts/dev/airgap-augment.sh <bundle-root>"
                 airgap_warn "  (needs a C/C++ toolchain on this host, no network). Otherwise:"
             else
                 airgap_warn "  The environment must supply it:"

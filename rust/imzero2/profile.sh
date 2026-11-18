@@ -20,8 +20,8 @@
 # APP selects the demo appCode passed to `--launch` (default 0).
 # VSYNC defaults to on — set off to remove the frame-rate cap.
 #
-# Ported from pebble2impl/scripts/profile_{play,etable}.sh and generalised to
-# any demo appCode (the pebble2impl-specific spinnaker SQL env was dropped).
+# Ported from the upstream repository's profile_{play,etable}.sh and generalised
+# to any demo appCode (the upstream-specific spinnaker SQL env was dropped).
 # =============================================================================
 set -e
 set -o pipefail

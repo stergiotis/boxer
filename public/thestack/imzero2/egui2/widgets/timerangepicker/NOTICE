@@ -38,7 +38,7 @@ The Grafana-derived contents of this package are limited to:
   * The default preset list (labels and semantic intent) shipped
     by Grafana 7.5: "Last 5 minutes" through "This year". Labels
     and semantic intent are Grafana-derived; concrete SQL bodies
-    are pebble2impl-authored.
+    are boxer-authored.
 
 The relative-expression grammar of Grafana's datemath (`now-5m`,
 `now/d`, etc.) is NOT ported. Expressions in this package are
@@ -60,7 +60,7 @@ MODIFICATIONS APPLIED DURING PORT
 
   * Translated the default preset list to ClickHouse SQL bodies.
     Labels and semantic intent are Grafana-derived; the SQL bodies
-    are pebble2impl-authored.
+    are boxer-authored.
 
   * Refactored to the boxer coding standards (see CODINGSTANDARDS.md
     in github.com/stergiotis/boxer): receiver naming convention,
@@ -76,7 +76,7 @@ MODIFICATIONS APPLIED DURING PORT
 Per Apache-2.0 §4.b, files in this package that contain Grafana-
 derived material (the presets registry's default labels, primarily)
 carry a "Modifications applied during port" line in their header
-referencing this NOTICE. Files that are pebble2impl-authored from
+referencing this NOTICE. Files that are boxer-authored from
 scratch (the evaluator subprocess wrapper, the validator, the IDL
 definitions, the widget glue) carry no upstream attribution because
 they contain no upstream material.

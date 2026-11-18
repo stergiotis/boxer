@@ -135,7 +135,7 @@ func mainC() (exitCode int) {
 			finddivisions.NewCliCommand(),
 			code.NewCliCommand(genbuildertest.NewCliCommand()),
 			badgercli.NewCliCommandBadger(),
-			// Ported from pebble2impl app/commands (P9). cbor/leeway/observability/
+			// Ported from the upstream repository's app/commands (P9). cbor/leeway/observability/
 			// dev/env(=envgen)/gov are intentionally omitted as boxer wires them
 			// from their home packages above; adversarialreview/clarityrate are
 			// dropped (depended on the absent cmd/adversarial-review tree).

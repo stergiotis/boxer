@@ -634,7 +634,7 @@ person's**.
 A conversation with Apps opened the same way every time: `list_windows`,
 refused for want of a task; `describe_app` with no arguments; then
 `request_access`, `open_window` and a read of the window. In benchmark takes
-of the SECO data-quality tasks (the hackathon_2026 repository's agent
+of the SECO data-quality tasks (a downstream repository's agent
 benchmark plan) six to twenty-one calls came before the first that did any
 work, 30–80 % of a short task's calls. `describe_app` with no arguments
 answers with every app and every operation, 165 091 characters on that host:

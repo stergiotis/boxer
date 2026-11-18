@@ -1,15 +1,15 @@
 #!/bin/bash
 # Regenerate every checked-in code-generation artefact in boxer.
 #
-# Recreated from ../pebble2impl/generate.sh after the keelson / imzero2 /
-# egui2 / fffi2 import. Two adaptations vs. the pebble2impl original:
+# Recreated from the upstream repository's generate.sh after the keelson /
+# imzero2 / egui2 / fffi2 import. Two adaptations vs. that original:
 #   - flatter layout: src/go/public/… -> public/…, src/rust/… -> rust/…,
 #     boxerstaging/leeway/… -> semistructured/leeway/…
 #   - the standalone cmd/{egui2gen,keelsoncodec,iconsgen,runtimecodegen}
 #     mains are now ./public/app subcommands (entry-point standard), so
 #     `go run ./cmd/X` and `./egui2gen.sh` become `app X …`.
 #
-# Omitted vs. pebble2impl: spinnaker codegen (that package is not imported
+# Omitted vs. the original: spinnaker codegen (that package is not imported
 # into boxer) and the antlr canonicaltypes/grammar regen (needs a
 # hand-provisioned antlr jar; run it manually when the .g4 grammar changes).
 set -ev
@@ -75,7 +75,7 @@ run runtimecodegen all
 
 # 6. Leeway information_schema codegen — test-driven regen of the facts /
 #    vcsmanaged DML wrappers (mirrors the anchor step below). Reconstructs the
-#    pebble2impl `ddl table mappings informationschema <name> --format cbor |
+#    upstream `ddl table mappings informationschema <name> --format cbor |
 #    dml table generate go` pipeline, whose CBOR producer subcommand was not
 #    ported to boxer; the gen tests feed mapping.NewInformationSchema*Mapping()
 #    straight into the dml driver.

@@ -19,7 +19,7 @@ import (
 // repo-root generate.sh (step 6) via `go test -run`, mirroring the
 // anchor/card_anchor_gen_test.go convention.
 //
-// This replaces the pebble2impl pipeline
+// This replaces the upstream pipeline
 //
 //	leeway ddl table mappings informationschema vcsmanaged --format cbor \
 //	  | leeway dml table generate go --packageName vcsmanaged --tableName vcsmanaged

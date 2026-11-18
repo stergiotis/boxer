@@ -25,8 +25,8 @@ confidence band.
 import (
     "slices"
 
-    c "github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/bindings"
-    "github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/widgets/ecdf"
+    c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
+    "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/ecdf"
 )
 
 sample := []float64{ /* …iid observations… */ }
@@ -114,8 +114,8 @@ hover register each frame, computes the lookups, and emits one
 
 ```go
 import (
-    c "github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/bindings"
-    "github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/widgets/ecdf"
+    c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
+    "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/ecdf"
 )
 
 // Construct the plot id ONCE as an AbsoluteWidgetId. ids.PrepareStr

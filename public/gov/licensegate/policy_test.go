@@ -146,7 +146,7 @@ func TestSelfModuleFilter(t *testing.T) {
 		{"pkg:golang/github.com/stergiotis/boxer?goarch=amd64&goos=linux&type=module", true},
 		// Sibling repositories owned by the same author are *not* filtered (see ADR-0004 SD6).
 		{"pkg:golang/github.com/stergiotis/capmap?type=module", false},
-		{"pkg:golang/github.com/stergiotis/pebble2impl@v0.1.0?type=module", false},
+		{"pkg:golang/github.com/stergiotis/sibling@v0.1.0?type=module", false},
 		{"pkg:golang/github.com/google/go-cmp@v0.6.0?type=module", false},
 		{"", false},
 	}

@@ -13,7 +13,7 @@ keelson runtime layer (boxer.facts producers and consumers, the
 forthcoming Go↔leeway codec generator, and any keelson-side fact-kind
 that needs a stable membership identity).
 
-Pattern mirrors pebble2impl's spinnaker `vdd/` registry. Memberships
+Pattern mirrors the upstream repository's spinnaker `vdd/` registry. Memberships
 are declared as `Memb*` package-level vars built through
 `KeelsonHrNkRegistry.MustBegin(...).End()`; their `TaggedId` is stable
 across rebuilds and survives in RowBinary/Arrow wire payloads.

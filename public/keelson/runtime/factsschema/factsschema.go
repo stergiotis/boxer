@@ -1,7 +1,7 @@
 // Package factsschema defines the boxer.facts leeway table per ADR-0026
 // §SD6. Modelled after spinnaker.facts, whose schema lives in the
 // boxerstaging tree that was not migrated into this repo (see
-// doc/migration/2026-05-pebble2impl-import.md) — the resemblance is
+// doc/migration/2026-05-upstream-import.md) — the resemblance is
 // provenance, not something readable from here:
 // plain-value identity columns + per-canonical-type tagged-value sections
 // in a single "data" streaming group, with foreignKey for cross-fact

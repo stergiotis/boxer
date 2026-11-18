@@ -72,7 +72,7 @@ var WeightBytes Weight = func(f *SccFile) float64 { return float64(f.Bytes) }
 //   - scc's own --gen heuristic: SccFile.Generated == true. scc inspects
 //     leading bytes for canonical "do not edit" markers and similar.
 //   - The project's filename / path conventions: `.gen.go` / `.out.go`
-//     suffixes (boxer/pebble2impl convention for generated Go sources),
+//     suffixes (boxer convention for generated Go sources),
 //     and any path under a `golay24` subtree (the vendored generator
 //     output the not-match regex used to mask).
 //

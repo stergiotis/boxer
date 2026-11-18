@@ -1,4 +1,4 @@
-// Package runinfo captures the identity of a single pebble2impl process
+// Package runinfo captures the identity of a single process
 // boot — a "run" — and makes it discoverable to every app launched
 // inside that run via two channels: the BOXER_RUN_ID environment
 // variable, and a zerolog field on the base logger that app loggers

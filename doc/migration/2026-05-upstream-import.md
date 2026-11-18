@@ -6,9 +6,10 @@ reviewed-by: "p@stergiotis"
 reviewed-date: 2026-05-28
 ---
 
-# Migration: `pebble2impl` → `boxer`
+# Migration: upstream repository → `boxer`
 
-Tracking doc for importing the curated `pebble2impl_oss` snapshot into boxer.
+Tracking doc for importing a curated snapshot of the upstream repository into
+boxer.
 
 ## Scope
 
@@ -21,11 +22,11 @@ in-scope here.
 - **Commit strategy:** fresh import (the snapshot has no `.git`), clean
   per-package commits in boxer's conventional style
   (`feat(<scope>): …`, `refactor(<scope>): …`, `chore(<scope>): …`).
-- **Source:** `../pebble2impl_oss`, module `github.com/stergiotis/pebble2impl`
+- **Source:** the curated snapshot of the upstream module
   (~887 Go files / ~220k LOC under `src/go/`, plus `apps/`, `src/rust/`, `doc/`).
 - **`email/` was deleted** from the snapshot → out of scope (former P4).
 
-## P1–P3 status (2026-05-28, branch `import/pebble2impl-p1-p3`)
+## P1–P3 status (2026-05-28, on an import branch)
 
 Landed (9 fresh-import commits, no AI-attribution trailer):
 - `parsing/antlr4utils` — antlr→cbor converter + s-expr serializer.
@@ -67,10 +68,10 @@ Deferred out of P1–P3: `external/tools` (missing `codegen/fluidcli`),
 ## Mechanical transforms (per package)
 
 1. **Import rewrite** (apply specific moves before the general rule):
-   - `…/pebble2impl/src/go/public/swisstopo` → `…/boxer/public/science/geo/swisstopo`
-   - `…/pebble2impl/src/go/public/boxerstaging/storage` → `…/boxer/public/storage`
-   - `…/pebble2impl/src/go/public/boxerstaging/leeway` → `…/boxer/public/semistructured/leeway`
-   - `…/pebble2impl/src/go/public/` → `…/boxer/public/`
+   - `…/<upstream>/src/go/public/swisstopo` → `…/boxer/public/science/geo/swisstopo`
+   - `…/<upstream>/src/go/public/boxerstaging/storage` → `…/boxer/public/storage`
+   - `…/<upstream>/src/go/public/boxerstaging/leeway` → `…/boxer/public/semistructured/leeway`
+   - `…/<upstream>/src/go/public/` → `…/boxer/public/`
 2. **File naming** → `LowerSnakeCase` (boxer `gov filename` lint; ADR-0048).
    Leave `.out.go` / `.gen.go` generated files as-is.
 3. **Build tags** preserved (`llm_generated_opus47/46`, `gemini3pro`; already in

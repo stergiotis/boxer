@@ -8,8 +8,8 @@ import "stub"
 // on these (no expectation markers below).
 var legacyCodeToId = map[uint64]stub.AppIdT{
 	1: "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/demo/apps/widgets",
-	5: "github.com/stergiotis/pebble2impl/apps/play",
-	7: "github.com/stergiotis/pebble2impl/apps/imztop",
+	5: "github.com/example/downstream/apps/play",
+	7: "github.com/example/downstream/apps/imztop",
 }
 
 // Slice of AppIdTs — same logic; this isn't "my Id" assertion.

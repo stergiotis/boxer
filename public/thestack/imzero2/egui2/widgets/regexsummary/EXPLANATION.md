@@ -24,7 +24,7 @@ expression at two levels of detail in the same cell of UI:
   key-value row.
 - **Level 2 (pinned inspector window)** — a draggable `c.Window`
   hosting the full
-  [`github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/demo/apps/regex_explorer`](../../demo/apps/regex_explorer/)
+  [`github.com/stergiotis/boxer/public/thestack/imzero2/egui2/demo/apps/regex_explorer`](../../demo/apps/regex_explorer/)
   body: the cheatsheet panel, the pattern / haystack / multi-pattern inputs,
   the Test / List / Replace tabs, and the bottom status bar. The
   same widget the standalone `regex_explorer` AppI presents — not a

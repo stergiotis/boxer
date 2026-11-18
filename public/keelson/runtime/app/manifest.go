@@ -37,7 +37,7 @@ type AppIdT string
 //
 // Examples:
 //
-//	"github.com/stergiotis/pebble2impl/.../apps/play" -> "play"
+//	"github.com/example/downstream/.../apps/play"  -> "play"
 //	"github.com/.../apps/widgets/table"               -> "table"
 //	"runtime.broker"                                  -> "runtime_broker"
 //

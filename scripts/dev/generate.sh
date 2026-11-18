@@ -1,9 +1,9 @@
 #!/bin/bash
 # Regenerate every derived source tree in boxer from its generator of record.
 #
-# Ported from ../pebble2impl/generate.sh, remapped to boxer's layout:
+# Ported from the upstream repository's generate.sh, remapped to boxer's layout:
 #
-#   pebble2impl                          boxer
+#   upstream                             boxer
 #   --------------------------------------------------------------------
 #   src/go/public/...                    public/...
 #   src/rust/src/imzero2/                rust/imzero2/src/imzero2/

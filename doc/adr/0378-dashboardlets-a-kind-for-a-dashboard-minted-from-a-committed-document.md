@@ -16,7 +16,7 @@ and a workstatelet
 Each kind gets a badge in the launcher, a launcher filter and a value in
 `keelson('apps').kind`.
 
-An adopter (`hackathon_2026`, its ADR-0091) mints one more family: a
+A downstream adopter mints one more family: a
 Grafana dashboard JSON document, committed beside a short markdown
 descriptor, opened in its dashboard viewer and nothing else. Its minted
 entries are no more ordinary apps than an applet is. Without a kind of

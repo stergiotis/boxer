@@ -172,7 +172,7 @@ func TestTypeShortLabelAndTone(t *testing.T) {
 }
 
 func TestCategoryIconCoversKnownCategories(t *testing.T) {
-	// All boxer-declared categories + the three pebble2impl-local
+	// All boxer-declared categories + the three downstream-declared
 	// ones land on a stable Phosphor glyph. Unknown categories fall
 	// back to PhCircle.
 	cases := map[env.CategoryE]string{

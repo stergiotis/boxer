@@ -14,7 +14,7 @@ status: draft
 boxenplot. It is the pure-math layer between any quantile oracle —
 [`tdigest.TDigest`](../tdigest/), an exact sort-backed table, a
 ClickHouse pushdown helper — and a rendering layer such as the
-`boxenplot` widget in pebble2impl.
+`boxenplot` widget in a downstream repository.
 
 ## Background
 

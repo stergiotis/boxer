@@ -145,7 +145,7 @@ type Review struct {
 ## Alternatives
 
 - **Rebuild the `adversarial-review` driver tree.** Rejected: its
-  `cmd/adversarial-review` tree was never imported from pebble2impl (the
+  `cmd/adversarial-review` tree was never imported from the upstream repository (the
   dependent command is dropped at `public/app/main.go:95`), and `/code-review` +
   `ultra` already cover the engine. Provider abstraction can be revisited if a
   local-model path is wanted later.

@@ -3,7 +3,7 @@
 //
 //   - boxer's `env gen-docs` subcommand (cli.go in this package)
 //     renders the boxer-side catalogue.
-//   - pebble2impl/src/go/cmd/envgen renders the pebble2impl-side
+//   - a downstream module's own envgen command renders that module's
 //     catalogue.
 //
 // Both bind their own side-effect imports of the owner packages whose
@@ -26,7 +26,7 @@ type Options struct {
 	// GeneratorPath is recorded in the YAML front-matter "generator"
 	// field and in the leading HTML comment so readers can find the
 	// binary that produced the file (e.g. "public/app env gen-docs"
-	// for boxer, "src/go/cmd/envgen" for pebble2impl).
+	// for boxer, "src/go/cmd/envgen" for a downstream module).
 	GeneratorPath string
 
 	// RegenerateHint is the literal command shown under the page

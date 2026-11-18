@@ -576,8 +576,8 @@ func typeTone(t env.TypeE) (out badge.ToneE) {
 	return
 }
 
-// categoryIcon maps the boxer-declared and pebble2impl-declared
-// categories to Phosphor glyphs. Unknown categories fall back to
+// categoryIcon maps the boxer-declared categories, and a few declared
+// by downstream modules, to Phosphor glyphs. Unknown categories fall back to
 // PhCircle so the layout column width stays consistent.
 func categoryIcon(cat env.CategoryE) (glyph string) {
 	switch cat {
@@ -596,7 +596,7 @@ func categoryIcon(cat env.CategoryE) (glyph string) {
 	case env.CategoryTestIntegration:
 		glyph = icons.PhTestTube
 	default:
-		// pebble2impl-local categories declared outside boxer.
+		// Categories declared by downstream modules, outside boxer.
 		switch string(cat) {
 		case "anchor":
 			glyph = icons.PhAnchor

@@ -16,7 +16,7 @@ import (
 // `multiMatchIndexAny`, returning ControlFlow{PassDiscardOutput} so the
 // pass leaves the call alone in the output but the discard mechanism
 // short-circuits any downstream rewriting. Models the analytical-pass
-// shape pebble2impl will use for SQL function affordances.
+// shape a downstream consumer would use for SQL function affordances.
 func observerEvaluator(t *testing.T, sentinel uuid.UUID, sink *[]nanopass.Observation) *passes.FunctionEvaluator {
 	t.Helper()
 	eval := passes.NewFunctionEvaluator()

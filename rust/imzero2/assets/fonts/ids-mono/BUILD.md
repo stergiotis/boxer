@@ -16,7 +16,7 @@ Amendment](../../../../../doc/adr/0034-imzero2-design-system-typography-m0.md),
 the IDS Mono build was moved to a dedicated repo,
 [`stergiotis/ids-fonts`](https://github.com/stergiotis/ids-fonts).
 CI there handles the build on every tagged release — no Docker, no
-Node.js, no font toolchain installs on pebble2impl contributor machines.
+Node.js, no font toolchain installs on contributor machines.
 
 Most contributors never need to do anything. The `.ttf` bytes in this
 directory are committed under SHA pinning;

@@ -20,7 +20,7 @@
 #
 # NO firewall port is opened here, on purpose. The server stays on loopback; the
 # default user's empty password is safe ONLY because of that. The Hetzner cloud
-# firewall (pebble2impl provisioning) is likewise left untouched.
+# firewall (provisioned outside this repository) is likewise left untouched.
 
 - name: ClickHouse RPM repo + signing key (needed by either toggle)
   when: imzero2_install_clickhouse_server or imzero2_install_clickhouse_local
