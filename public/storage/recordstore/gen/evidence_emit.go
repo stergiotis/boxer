@@ -194,7 +194,7 @@ func (inst Input) emitEvidenceDTOs() (paths []string, err error) {
 	for _, in := range inst.ComponentPaths {
 		base := filepath.Base(in)
 		if base == evidenceChainFile || base == evidenceWrittenByFile || base == evidenceSealFile {
-			err = eh.Errorf("ComponentPaths names %s, which the evidence profile emits itself", base)
+			err = eb.Build().Str("file", base).Errorf("ComponentPaths names a file the evidence profile emits itself")
 			return
 		}
 	}

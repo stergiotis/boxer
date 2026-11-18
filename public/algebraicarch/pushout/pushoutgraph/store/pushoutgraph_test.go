@@ -10,6 +10,7 @@ import (
 	"github.com/stergiotis/boxer/public/algebraicarch/pushout/pushoutgraph/algo"
 	"github.com/stergiotis/boxer/public/algebraicarch/pushout/pushoutgraph/patch"
 	t "github.com/stergiotis/boxer/public/algebraicarch/pushout/pushoutgraph/types"
+	"github.com/stretchr/testify/require"
 )
 
 // --- Basic PushoutGraph Operations ---
@@ -47,7 +48,7 @@ func TestAddNode(tt *testing.T) {
 func TestAddNodeDuplicate(tt *testing.T) {
 	g := New()
 	id := nid("p1", 0)
-	g.AddNode(id, []byte("a"), ph("p1"), []t.NodeID{t.RootNodeID}, nil)
+	require.NoError(tt, g.AddNode(id, []byte("a"), ph("p1"), []t.NodeID{t.RootNodeID}, nil))
 	err := g.AddNode(id, []byte("b"), ph("p1"), []t.NodeID{t.RootNodeID}, nil)
 	if err == nil {
 		tt.Fatal("expected error for duplicate node")
@@ -57,7 +58,7 @@ func TestAddNodeDuplicate(tt *testing.T) {
 func TestDeleteNode(tt *testing.T) {
 	g := New()
 	id := nid("p1", 0)
-	g.AddNode(id, []byte("hello\n"), ph("p1"), []t.NodeID{t.RootNodeID}, nil)
+	require.NoError(tt, g.AddNode(id, []byte("hello\n"), ph("p1"), []t.NodeID{t.RootNodeID}, nil))
 	err := g.DeleteNode(id, testDeleter)
 	if err != nil {
 		tt.Fatal(err)
@@ -81,8 +82,8 @@ func TestDeleteRootFails(tt *testing.T) {
 func TestUndeleteNode(tt *testing.T) {
 	g := New()
 	id := nid("p1", 0)
-	g.AddNode(id, []byte("hello\n"), ph("p1"), []t.NodeID{t.RootNodeID}, nil)
-	g.DeleteNode(id, testDeleter)
+	require.NoError(tt, g.AddNode(id, []byte("hello\n"), ph("p1"), []t.NodeID{t.RootNodeID}, nil))
+	require.NoError(tt, g.DeleteNode(id, testDeleter))
 	err := g.UndeleteNode(id, testDeleter)
 	if err != nil {
 		tt.Fatal(err)
@@ -103,13 +104,13 @@ func TestClone_DeepCopy(tt *testing.T) {
 		{Kind: patch.ChangeKindNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 0}, Content: []byte("first\n"), UpContext: []t.NodeID{t.RootNodeID}},
 		{Kind: patch.ChangeKindNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 1}, Content: []byte("second\n"), UpContext: []t.NodeID{{Patch: t.PlaceholderHash, Index: 0}}},
 	})
-	p.Apply(g)
+	require.NoError(tt, p.Apply(g))
 
 	clone := g.Clone()
 
 	// Mutate original: delete a node.
 	nodeID := t.NodeID{Patch: p.Hash, Index: 0}
-	g.DeleteNode(nodeID, testDeleter)
+	require.NoError(tt, g.DeleteNode(nodeID, testDeleter))
 	g.ResolvePseudoEdges()
 
 	// Clone should be unaffected.
@@ -132,12 +133,12 @@ func TestClone_PreservesEdges(tt *testing.T) {
 	a := nid("clone_edge", 0)
 	b := nid("clone_edge", 1)
 	c := nid("clone_edge", 2)
-	g.AddNode(a, []byte("a\n"), ph("clone_edge"), []t.NodeID{t.RootNodeID}, nil)
-	g.AddNode(b, []byte("b\n"), ph("clone_edge"), []t.NodeID{a}, nil)
-	g.AddNode(c, []byte("c\n"), ph("clone_edge"), []t.NodeID{b}, nil)
+	require.NoError(tt, g.AddNode(a, []byte("a\n"), ph("clone_edge"), []t.NodeID{t.RootNodeID}, nil))
+	require.NoError(tt, g.AddNode(b, []byte("b\n"), ph("clone_edge"), []t.NodeID{a}, nil))
+	require.NoError(tt, g.AddNode(c, []byte("c\n"), ph("clone_edge"), []t.NodeID{b}, nil))
 
 	// Delete middle to create pseudo-edges.
-	g.DeleteNode(b, testDeleter)
+	require.NoError(tt, g.DeleteNode(b, testDeleter))
 	g.ResolvePseudoEdges()
 
 	clone := g.Clone()
@@ -161,8 +162,8 @@ func TestClone_PreservesEdges(tt *testing.T) {
 func TestClone_PreservesDeletedNodes(tt *testing.T) {
 	g := New()
 	a := nid("clone_del", 0)
-	g.AddNode(a, []byte("a\n"), ph("clone_del"), []t.NodeID{t.RootNodeID}, nil)
-	g.DeleteNode(a, testDeleter)
+	require.NoError(tt, g.AddNode(a, []byte("a\n"), ph("clone_del"), []t.NodeID{t.RootNodeID}, nil))
+	require.NoError(tt, g.DeleteNode(a, testDeleter))
 
 	clone := g.Clone()
 	if !clone.IsDeleted(a) {
@@ -187,7 +188,7 @@ func TestClone_EmptyPushoutGraph(tt *testing.T) {
 func TestClone_ContentIsolation(tt *testing.T) {
 	g := New()
 	a := nid("clone_iso", 0)
-	g.AddNode(a, []byte("original\n"), ph("clone_iso"), []t.NodeID{t.RootNodeID}, nil)
+	require.NoError(tt, g.AddNode(a, []byte("original\n"), ph("clone_iso"), []t.NodeID{t.RootNodeID}, nil))
 
 	clone := g.Clone()
 
@@ -207,9 +208,9 @@ func TestLinearOrder_Simple(tt *testing.T) {
 	a := nid("p1", 0)
 	b := nid("p1", 1)
 	c := nid("p1", 2)
-	g.AddNode(a, []byte("a\n"), ph("p1"), []t.NodeID{t.RootNodeID}, nil)
-	g.AddNode(b, []byte("b\n"), ph("p1"), []t.NodeID{a}, nil)
-	g.AddNode(c, []byte("c\n"), ph("p1"), []t.NodeID{b}, nil)
+	require.NoError(tt, g.AddNode(a, []byte("a\n"), ph("p1"), []t.NodeID{t.RootNodeID}, nil))
+	require.NoError(tt, g.AddNode(b, []byte("b\n"), ph("p1"), []t.NodeID{a}, nil))
+	require.NoError(tt, g.AddNode(c, []byte("c\n"), ph("p1"), []t.NodeID{b}, nil))
 
 	order := algo.LinearOrder(g)
 	if order == nil {
@@ -235,11 +236,11 @@ func TestPseudoEdge_DeleteMiddle(tt *testing.T) {
 	a := nid("p1", 0)
 	b := nid("p1", 1)
 	c := nid("p1", 2)
-	g.AddNode(a, []byte("a\n"), ph("p1"), []t.NodeID{t.RootNodeID}, nil)
-	g.AddNode(b, []byte("b\n"), ph("p1"), []t.NodeID{a}, nil)
-	g.AddNode(c, []byte("c\n"), ph("p1"), []t.NodeID{b}, nil)
+	require.NoError(tt, g.AddNode(a, []byte("a\n"), ph("p1"), []t.NodeID{t.RootNodeID}, nil))
+	require.NoError(tt, g.AddNode(b, []byte("b\n"), ph("p1"), []t.NodeID{a}, nil))
+	require.NoError(tt, g.AddNode(c, []byte("c\n"), ph("p1"), []t.NodeID{b}, nil))
 
-	g.DeleteNode(b, testDeleter)
+	require.NoError(tt, g.DeleteNode(b, testDeleter))
 	g.ResolvePseudoEdges()
 
 	// Check that a has a child c (via pseudo-edge).
@@ -268,15 +269,15 @@ func TestPseudoEdge_DeleteLongMiddle(tt *testing.T) {
 	c := nid("p1", 2)
 	d := nid("p1", 3)
 	e := nid("p1", 4)
-	g.AddNode(a, []byte("a\n"), ph("p1"), []t.NodeID{t.RootNodeID}, nil)
-	g.AddNode(b, []byte("b\n"), ph("p1"), []t.NodeID{a}, nil)
-	g.AddNode(c, []byte("c\n"), ph("p1"), []t.NodeID{b}, nil)
-	g.AddNode(d, []byte("d\n"), ph("p1"), []t.NodeID{c}, nil)
-	g.AddNode(e, []byte("e\n"), ph("p1"), []t.NodeID{d}, nil)
+	require.NoError(tt, g.AddNode(a, []byte("a\n"), ph("p1"), []t.NodeID{t.RootNodeID}, nil))
+	require.NoError(tt, g.AddNode(b, []byte("b\n"), ph("p1"), []t.NodeID{a}, nil))
+	require.NoError(tt, g.AddNode(c, []byte("c\n"), ph("p1"), []t.NodeID{b}, nil))
+	require.NoError(tt, g.AddNode(d, []byte("d\n"), ph("p1"), []t.NodeID{c}, nil))
+	require.NoError(tt, g.AddNode(e, []byte("e\n"), ph("p1"), []t.NodeID{d}, nil))
 
-	g.DeleteNode(b, testDeleter)
-	g.DeleteNode(c, testDeleter)
-	g.DeleteNode(d, testDeleter)
+	require.NoError(tt, g.DeleteNode(b, testDeleter))
+	require.NoError(tt, g.DeleteNode(c, testDeleter))
+	require.NoError(tt, g.DeleteNode(d, testDeleter))
 	g.ResolvePseudoEdges()
 
 	order := algo.LinearOrder(g)
@@ -298,13 +299,13 @@ func TestPseudoEdge_UndeleteRemovesPseudo(tt *testing.T) {
 	a := nid("p1", 0)
 	b := nid("p1", 1)
 	c := nid("p1", 2)
-	g.AddNode(a, []byte("a\n"), ph("p1"), []t.NodeID{t.RootNodeID}, nil)
-	g.AddNode(b, []byte("b\n"), ph("p1"), []t.NodeID{a}, nil)
-	g.AddNode(c, []byte("c\n"), ph("p1"), []t.NodeID{b}, nil)
+	require.NoError(tt, g.AddNode(a, []byte("a\n"), ph("p1"), []t.NodeID{t.RootNodeID}, nil))
+	require.NoError(tt, g.AddNode(b, []byte("b\n"), ph("p1"), []t.NodeID{a}, nil))
+	require.NoError(tt, g.AddNode(c, []byte("c\n"), ph("p1"), []t.NodeID{b}, nil))
 
-	g.DeleteNode(b, testDeleter)
+	require.NoError(tt, g.DeleteNode(b, testDeleter))
 	g.ResolvePseudoEdges()
-	g.UndeleteNode(b, testDeleter)
+	require.NoError(tt, g.UndeleteNode(b, testDeleter))
 	g.ResolvePseudoEdges()
 
 	order := algo.LinearOrder(g)
@@ -350,7 +351,7 @@ func TestPatchUnapply(tt *testing.T) {
 		{Kind: patch.ChangeKindNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 1}, Content: []byte("second\n"), UpContext: []t.NodeID{{Patch: t.PlaceholderHash, Index: 0}}},
 	})
 
-	p.Apply(g)
+	require.NoError(tt, p.Apply(g))
 	if err := p.Unapply(g); err != nil {
 		tt.Fatal(err)
 	}
@@ -368,14 +369,14 @@ func TestPatchApplyDelete(tt *testing.T) {
 		{Kind: patch.ChangeKindNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 1}, Content: []byte("b\n"), UpContext: []t.NodeID{{Patch: t.PlaceholderHash, Index: 0}}},
 		{Kind: patch.ChangeKindNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 2}, Content: []byte("c\n"), UpContext: []t.NodeID{{Patch: t.PlaceholderHash, Index: 1}}},
 	})
-	p1.Apply(g)
+	require.NoError(tt, p1.Apply(g))
 
 	// Second patch: delete middle line.
 	lineB := t.NodeID{Patch: p1.Hash, Index: 1}
 	p2 := patch.NewPatch("test", "delete b", []t.PatchHash{p1.Hash}, []patch.Change{
 		{Kind: patch.ChangeKindDeleteNode, NodeID: lineB},
 	})
-	p2.Apply(g)
+	require.NoError(tt, p2.Apply(g))
 
 	rendered := string(g.Render())
 	if rendered != "a\nc\n" {
@@ -395,7 +396,7 @@ func TestMerge_NoConflict(tt *testing.T) {
 		{Kind: patch.ChangeKindNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 0}, Content: []byte("a\n"), UpContext: []t.NodeID{t.RootNodeID}},
 		{Kind: patch.ChangeKindNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 1}, Content: []byte("c\n"), UpContext: []t.NodeID{{Patch: t.PlaceholderHash, Index: 0}}},
 	})
-	base.Apply(g)
+	require.NoError(tt, base.Apply(g))
 
 	lineA := t.NodeID{Patch: base.Hash, Index: 0}
 	lineC := t.NodeID{Patch: base.Hash, Index: 1}
@@ -435,7 +436,7 @@ func TestMerge_OrderConflict(tt *testing.T) {
 		{Kind: patch.ChangeKindNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 0}, Content: []byte("a\n"), UpContext: []t.NodeID{t.RootNodeID}},
 		{Kind: patch.ChangeKindNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 1}, Content: []byte("c\n"), UpContext: []t.NodeID{{Patch: t.PlaceholderHash, Index: 0}}},
 	})
-	base.Apply(g)
+	require.NoError(tt, base.Apply(g))
 
 	lineA := t.NodeID{Patch: base.Hash, Index: 0}
 	lineC := t.NodeID{Patch: base.Hash, Index: 1}
@@ -449,8 +450,8 @@ func TestMerge_OrderConflict(tt *testing.T) {
 			UpContext: []t.NodeID{lineA}, DownContext: []t.NodeID{lineC}},
 	})
 
-	p1.Apply(g)
-	p2.Apply(g)
+	require.NoError(tt, p1.Apply(g))
+	require.NoError(tt, p2.Apply(g))
 
 	if !algo.HasConflicts(g) {
 		tt.Fatal("should have order conflict")
@@ -481,7 +482,7 @@ func TestMerge_DeleteVsEdit_Zombie(tt *testing.T) {
 		{Kind: patch.ChangeKindNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 1}, Content: []byte("b\n"), UpContext: []t.NodeID{{Patch: t.PlaceholderHash, Index: 0}}},
 		{Kind: patch.ChangeKindNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 2}, Content: []byte("c\n"), UpContext: []t.NodeID{{Patch: t.PlaceholderHash, Index: 1}}},
 	})
-	base.Apply(g)
+	require.NoError(tt, base.Apply(g))
 
 	lineB := t.NodeID{Patch: base.Hash, Index: 1}
 	lineC := t.NodeID{Patch: base.Hash, Index: 2}
@@ -497,8 +498,8 @@ func TestMerge_DeleteVsEdit_Zombie(tt *testing.T) {
 			UpContext: []t.NodeID{lineB}, DownContext: []t.NodeID{lineC}},
 	})
 
-	p1.Apply(g)
-	p2.Apply(g)
+	require.NoError(tt, p1.Apply(g))
+	require.NoError(tt, p2.Apply(g))
 
 	// X should still appear in the output (its context b is deleted, but X itself is live).
 	rendered := string(g.Render())
@@ -518,7 +519,7 @@ func TestMerge_Commutativity(tt *testing.T) {
 			{Kind: patch.ChangeKindNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 0}, Content: []byte("a\n"), UpContext: []t.NodeID{t.RootNodeID}},
 			{Kind: patch.ChangeKindNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 1}, Content: []byte("c\n"), UpContext: []t.NodeID{{Patch: t.PlaceholderHash, Index: 0}}},
 		})
-		base.Apply(g)
+		require.NoError(tt, base.Apply(g))
 		return g, base
 	}
 
@@ -536,14 +537,14 @@ func TestMerge_Commutativity(tt *testing.T) {
 	})
 
 	// Order 1: p1 then p2.
-	p1.Apply(g1)
-	p2.Apply(g1)
+	require.NoError(tt, p1.Apply(g1))
+	require.NoError(tt, p2.Apply(g1))
 	r1 := g1.Render()
 
 	// Order 2: p2 then p1.
 	g2, _ := makeBase()
-	p2.Apply(g2)
-	p1.Apply(g2)
+	require.NoError(tt, p2.Apply(g2))
+	require.NoError(tt, p1.Apply(g2))
 	r2 := g2.Render()
 
 	if !bytes.Equal(r1, r2) {
@@ -561,7 +562,7 @@ func TestMerge_ConflictCommutativity(tt *testing.T) {
 			{Kind: patch.ChangeKindNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 0}, Content: []byte("a\n"), UpContext: []t.NodeID{t.RootNodeID}},
 			{Kind: patch.ChangeKindNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 1}, Content: []byte("c\n"), UpContext: []t.NodeID{{Patch: t.PlaceholderHash, Index: 0}}},
 		})
-		base.Apply(g)
+		require.NoError(tt, base.Apply(g))
 		return g, base
 	}
 
@@ -578,12 +579,12 @@ func TestMerge_ConflictCommutativity(tt *testing.T) {
 			UpContext: []t.NodeID{lineA}, DownContext: []t.NodeID{lineC}},
 	})
 
-	p1.Apply(g1)
-	p2.Apply(g1)
+	require.NoError(tt, p1.Apply(g1))
+	require.NoError(tt, p2.Apply(g1))
 
 	g2, _ := makeBase()
-	p2.Apply(g2)
-	p1.Apply(g2)
+	require.NoError(tt, p2.Apply(g2))
+	require.NoError(tt, p1.Apply(g2))
 
 	// Both should have conflicts.
 	if !algo.HasConflicts(g1) || !algo.HasConflicts(g2) {
@@ -616,7 +617,7 @@ func TestConflictResolution(tt *testing.T) {
 		{Kind: patch.ChangeKindNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 0}, Content: []byte("a\n"), UpContext: []t.NodeID{t.RootNodeID}},
 		{Kind: patch.ChangeKindNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 1}, Content: []byte("c\n"), UpContext: []t.NodeID{{Patch: t.PlaceholderHash, Index: 0}}},
 	})
-	base.Apply(g)
+	require.NoError(tt, base.Apply(g))
 
 	lineA := t.NodeID{Patch: base.Hash, Index: 0}
 	lineC := t.NodeID{Patch: base.Hash, Index: 1}
@@ -630,8 +631,8 @@ func TestConflictResolution(tt *testing.T) {
 			UpContext: []t.NodeID{lineA}, DownContext: []t.NodeID{lineC}},
 	})
 
-	p1.Apply(g)
-	p2.Apply(g)
+	require.NoError(tt, p1.Apply(g))
+	require.NoError(tt, p2.Apply(g))
 
 	if !algo.HasConflicts(g) {
 		tt.Fatal("should have conflict before resolution")
@@ -644,7 +645,7 @@ func TestConflictResolution(tt *testing.T) {
 	resolution := patch.NewPatch("resolver", "resolve X before Y", []t.PatchHash{p1.Hash, p2.Hash}, []patch.Change{
 		{Kind: patch.ChangeKindNewEdge, Src: lineX, Dest: lineY},
 	})
-	resolution.Apply(g)
+	require.NoError(tt, resolution.Apply(g))
 
 	if algo.HasConflicts(g) {
 		tt.Fatal("should not have conflict after resolution")
@@ -727,8 +728,8 @@ func TestTarjan_Linear(tt *testing.T) {
 	g := New()
 	a := nid("p1", 0)
 	b := nid("p1", 1)
-	g.AddNode(a, []byte("a\n"), ph("p1"), []t.NodeID{t.RootNodeID}, nil)
-	g.AddNode(b, []byte("b\n"), ph("p1"), []t.NodeID{a}, nil)
+	require.NoError(tt, g.AddNode(a, []byte("a\n"), ph("p1"), []t.NodeID{t.RootNodeID}, nil))
+	require.NoError(tt, g.AddNode(b, []byte("b\n"), ph("p1"), []t.NodeID{a}, nil))
 
 	sccs := algo.Tarjan(g)
 	// Should have 3 SCCs (root, a, b), each of size 1.
@@ -750,7 +751,7 @@ func TestMerge_Associativity(tt *testing.T) {
 			{Kind: patch.ChangeKindNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 0}, Content: []byte("start\n"), UpContext: []t.NodeID{t.RootNodeID}},
 			{Kind: patch.ChangeKindNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 1}, Content: []byte("end\n"), UpContext: []t.NodeID{{Patch: t.PlaceholderHash, Index: 0}}},
 		})
-		base.Apply(g)
+		require.NoError(tt, base.Apply(g))
 		return g, base
 	}
 
@@ -776,21 +777,21 @@ func TestMerge_Associativity(tt *testing.T) {
 
 	// Order 1: (p1, p2, p3)
 	g1, _ := makeBase()
-	p1.Apply(g1)
-	p2.Apply(g1)
-	p3.Apply(g1)
+	require.NoError(tt, p1.Apply(g1))
+	require.NoError(tt, p2.Apply(g1))
+	require.NoError(tt, p3.Apply(g1))
 
 	// Order 2: (p2, p3, p1)
 	g2, _ := makeBase()
-	p2.Apply(g2)
-	p3.Apply(g2)
-	p1.Apply(g2)
+	require.NoError(tt, p2.Apply(g2))
+	require.NoError(tt, p3.Apply(g2))
+	require.NoError(tt, p1.Apply(g2))
 
 	// Order 3: (p3, p1, p2)
 	g3, _ := makeBase()
-	p3.Apply(g3)
-	p1.Apply(g3)
-	p2.Apply(g3)
+	require.NoError(tt, p3.Apply(g3))
+	require.NoError(tt, p1.Apply(g3))
+	require.NoError(tt, p2.Apply(g3))
 
 	// All should have the same set of live nodes.
 	nodes1 := slices.Collect(g1.AllLiveNodes())
@@ -827,7 +828,7 @@ func TestCherryPick_NoConflict(tt *testing.T) {
 		{Kind: patch.ChangeKindNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 0}, Content: []byte("a\n"), UpContext: []t.NodeID{t.RootNodeID}},
 		{Kind: patch.ChangeKindNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 1}, Content: []byte("b\n"), UpContext: []t.NodeID{{Patch: t.PlaceholderHash, Index: 0}}},
 	})
-	base.Apply(g)
+	require.NoError(tt, base.Apply(g))
 
 	lineA := t.NodeID{Patch: base.Hash, Index: 0}
 	lineB := t.NodeID{Patch: base.Hash, Index: 1}
@@ -840,11 +841,11 @@ func TestCherryPick_NoConflict(tt *testing.T) {
 
 	// Branch 1: apply pX.
 	g1 := g.Clone()
-	pX.Apply(g1)
+	require.NoError(tt, pX.Apply(g1))
 
 	// Branch 2: also apply pX (cherry-pick).
 	g2 := g.Clone()
-	pX.Apply(g2)
+	require.NoError(tt, pX.Apply(g2))
 
 	// Now "merge" by applying any extra patches from g1 to g2.
 	// Since pX is already applied to both, there's nothing to do.

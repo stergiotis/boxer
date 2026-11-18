@@ -133,7 +133,7 @@ func (moneyGloss) Bind(params map[string]string) (InstanceI, error) {
 		if upper := strings.ToUpper(code); upper != code && IsCurrencyCode(upper) {
 			msg += "; the codes are upper case: " + upper
 		}
-		return nil, eb.Build().Str("mediaType", MediaTypeMoney).Errorf("%s", msg)
+		return nil, eb.Build().Str("mediaType", MediaTypeMoney).Errorf("%s", msg) //boxer:lint disable=CS013 reason="Bind's message becomes Diagnostic.Reason, which catalog.go renders; it carries the upper-case code the reader copies"
 	}
 	return &moneyInstance{params: params, code: code}, nil
 }

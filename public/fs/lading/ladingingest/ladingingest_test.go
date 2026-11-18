@@ -328,9 +328,10 @@ func TestAbortedWalkLeavesNoCompleteSnapshot(t *testing.T) {
 	require.ErrorIs(t, err, context.Canceled)
 
 	commits := 0
-	for range h.meta.ScanLadingSnapshot(context.Background(), recordstore.ScanOpts{
+	for _, serr := range h.meta.ScanLadingSnapshot(context.Background(), recordstore.ScanOpts{
 		ExtraPredicate: fmt.Sprintf("%s = %d", plain(t, "id"), testMount.Value()),
 	}) {
+		require.NoError(t, serr)
 		commits++
 	}
 	assert.Zero(t, commits, "no root row, so no snapshot — whatever else was written")

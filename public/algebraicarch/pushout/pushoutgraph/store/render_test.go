@@ -6,6 +6,7 @@ import (
 
 	"github.com/stergiotis/boxer/public/algebraicarch/pushout/pushoutgraph/patch"
 	t "github.com/stergiotis/boxer/public/algebraicarch/pushout/pushoutgraph/types"
+	"github.com/stretchr/testify/require"
 )
 
 func TestRender_EmptyPushoutGraph(tt *testing.T) {
@@ -19,7 +20,7 @@ func TestRender_EmptyPushoutGraph(tt *testing.T) {
 func TestRender_SingleLine(tt *testing.T) {
 	g := New()
 	a := nid("render1", 0)
-	g.AddNode(a, []byte("hello\n"), ph("render1"), []t.NodeID{t.RootNodeID}, nil)
+	require.NoError(tt, g.AddNode(a, []byte("hello\n"), ph("render1"), []t.NodeID{t.RootNodeID}, nil))
 	rendered := string(g.Render())
 	if rendered != "hello\n" {
 		tt.Fatalf("expected 'hello\\n', got %q", rendered)
@@ -33,7 +34,7 @@ func TestRender_MultipleLines(tt *testing.T) {
 		{Kind: patch.ChangeKindNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 1}, Content: []byte("b\n"), UpContext: []t.NodeID{{Patch: t.PlaceholderHash, Index: 0}}},
 		{Kind: patch.ChangeKindNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 2}, Content: []byte("c\n"), UpContext: []t.NodeID{{Patch: t.PlaceholderHash, Index: 1}}},
 	})
-	p.Apply(g)
+	require.NoError(tt, p.Apply(g))
 	rendered := string(g.Render())
 	if rendered != "a\nb\nc\n" {
 		tt.Fatalf("expected 'a\\nb\\nc\\n', got %q", rendered)
@@ -44,8 +45,8 @@ func TestRender_OrderConflictMarkers(tt *testing.T) {
 	g := New()
 	a := nid("render_oc", 0)
 	b := nid("render_oc", 1)
-	g.AddNode(a, []byte("X\n"), ph("render_oc"), []t.NodeID{t.RootNodeID}, nil)
-	g.AddNode(b, []byte("Y\n"), ph("render_oc"), []t.NodeID{t.RootNodeID}, nil)
+	require.NoError(tt, g.AddNode(a, []byte("X\n"), ph("render_oc"), []t.NodeID{t.RootNodeID}, nil))
+	require.NoError(tt, g.AddNode(b, []byte("Y\n"), ph("render_oc"), []t.NodeID{t.RootNodeID}, nil))
 
 	rendered := string(g.Render())
 	if !strings.Contains(rendered, "order conflict") {
@@ -60,9 +61,9 @@ func TestRender_CycleConflictMarkers(tt *testing.T) {
 	g := New()
 	a := nid("render_cc", 0)
 	b := nid("render_cc", 1)
-	g.AddNode(a, []byte("A\n"), ph("render_cc"), []t.NodeID{t.RootNodeID}, nil)
-	g.AddNode(b, []byte("B\n"), ph("render_cc"), []t.NodeID{a}, nil)
-	g.AddEdge(b, a, ph("render_cc_back"))
+	require.NoError(tt, g.AddNode(a, []byte("A\n"), ph("render_cc"), []t.NodeID{t.RootNodeID}, nil))
+	require.NoError(tt, g.AddNode(b, []byte("B\n"), ph("render_cc"), []t.NodeID{a}, nil))
+	require.NoError(tt, g.AddEdge(b, a, ph("render_cc_back")))
 
 	rendered := string(g.Render())
 	if !strings.Contains(rendered, "cycle conflict") {
@@ -78,7 +79,7 @@ func TestRender_ZombieNodeVisible(tt *testing.T) {
 		{Kind: patch.ChangeKindNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 1}, Content: []byte("b\n"), UpContext: []t.NodeID{{Patch: t.PlaceholderHash, Index: 0}}},
 		{Kind: patch.ChangeKindNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 2}, Content: []byte("c\n"), UpContext: []t.NodeID{{Patch: t.PlaceholderHash, Index: 1}}},
 	})
-	base.Apply(g)
+	require.NoError(tt, base.Apply(g))
 
 	lineB := t.NodeID{Patch: base.Hash, Index: 1}
 
@@ -87,13 +88,13 @@ func TestRender_ZombieNodeVisible(tt *testing.T) {
 		{Kind: patch.ChangeKindNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 0}, Content: []byte("X\n"),
 			UpContext: []t.NodeID{lineB}, DownContext: []t.NodeID{{Patch: base.Hash, Index: 2}}},
 	})
-	pInsert.Apply(g)
+	require.NoError(tt, pInsert.Apply(g))
 
 	// Delete b.
 	pDel := patch.NewPatch("user", "delete b", []t.PatchHash{base.Hash}, []patch.Change{
 		{Kind: patch.ChangeKindDeleteNode, NodeID: lineB},
 	})
-	pDel.Apply(g)
+	require.NoError(tt, pDel.Apply(g))
 
 	rendered := string(g.Render())
 	if !strings.Contains(rendered, "X\n") {
@@ -107,7 +108,7 @@ func TestRenderLines_SplitCorrectness(tt *testing.T) {
 		{Kind: patch.ChangeKindNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 0}, Content: []byte("line1\n"), UpContext: []t.NodeID{t.RootNodeID}},
 		{Kind: patch.ChangeKindNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 1}, Content: []byte("line2\n"), UpContext: []t.NodeID{{Patch: t.PlaceholderHash, Index: 0}}},
 	})
-	p.Apply(g)
+	require.NoError(tt, p.Apply(g))
 
 	lines := g.RenderLines()
 	if len(lines) != 2 {

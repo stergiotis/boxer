@@ -73,7 +73,7 @@ func bufferRecords(sql string, sink string) (records []bufferRecord, err error) 
 		return nil, eh.Errorf("the buffer does not parse: %w", pErr)
 	}
 	fail := func(what string) ([]bufferRecord, error) {
-		return nil, eh.Errorf("the buffer is not a notebook's: %s", what)
+		return nil, eh.Errorf("the buffer is not a notebook's: %s", what) //boxer:lint disable=CS013 reason="FromBuffer's error is play's refusal text (app.RefuseOperation(err.Error())); what is the whole reason"
 	}
 	qs, ok := pr.Tree.(*grammar1.QueryStmtContext)
 	if !ok || qs.Query() == nil {

@@ -39,7 +39,7 @@ func readExpectations(t *testing.T) (exp []expectation) {
 	t.Helper()
 	f, err := os.Open(filepath.Join("testdata", "expect.tsv"))
 	require.NoError(t, err)
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	sc := bufio.NewScanner(f)
 	sc.Buffer(make([]byte, 0, 1<<16), 1<<22)
 	require.True(t, sc.Scan())

@@ -7,6 +7,7 @@ import (
 	"github.com/stergiotis/boxer/public/algebraicarch/pushout/pushoutgraph/algo"
 	"github.com/stergiotis/boxer/public/algebraicarch/pushout/pushoutgraph/store"
 	t "github.com/stergiotis/boxer/public/algebraicarch/pushout/pushoutgraph/types"
+	"github.com/stretchr/testify/require"
 )
 
 func TestTopoSort_SingleNode(tt *testing.T) {
@@ -26,9 +27,9 @@ func TestTopoSort_Diamond(tt *testing.T) {
 	a := nid("topo1", 0)
 	b := nid("topo1", 1)
 	c := nid("topo1", 2)
-	g.AddNode(a, []byte("a\n"), ph("topo1"), []t.NodeID{t.RootNodeID}, nil)
-	g.AddNode(b, []byte("b\n"), ph("topo1"), []t.NodeID{t.RootNodeID}, nil)
-	g.AddNode(c, []byte("c\n"), ph("topo1"), []t.NodeID{a, b}, nil)
+	require.NoError(tt, g.AddNode(a, []byte("a\n"), ph("topo1"), []t.NodeID{t.RootNodeID}, nil))
+	require.NoError(tt, g.AddNode(b, []byte("b\n"), ph("topo1"), []t.NodeID{t.RootNodeID}, nil))
+	require.NoError(tt, g.AddNode(c, []byte("c\n"), ph("topo1"), []t.NodeID{a, b}, nil))
 
 	order := algo.TopoSort(g)
 	if order == nil {
@@ -56,11 +57,11 @@ func TestTopoSort_CycleReturnsNil(tt *testing.T) {
 	g := store.New()
 	a := nid("topo_cyc", 0)
 	b := nid("topo_cyc", 1)
-	g.AddNode(a, []byte("a\n"), ph("topo_cyc"), []t.NodeID{t.RootNodeID}, nil)
-	g.AddNode(b, []byte("b\n"), ph("topo_cyc"), []t.NodeID{a}, nil)
+	require.NoError(tt, g.AddNode(a, []byte("a\n"), ph("topo_cyc"), []t.NodeID{t.RootNodeID}, nil))
+	require.NoError(tt, g.AddNode(b, []byte("b\n"), ph("topo_cyc"), []t.NodeID{a}, nil))
 
 	// Add back-edge b -> a to create cycle.
-	g.AddEdge(b, a, ph("topo_cyc_back"))
+	require.NoError(tt, g.AddEdge(b, a, ph("topo_cyc_back")))
 
 	order := algo.TopoSort(g)
 	if order != nil {
@@ -72,11 +73,11 @@ func TestTarjan_Cycle(tt *testing.T) {
 	g := store.New()
 	a := nid("tarj_cyc", 0)
 	b := nid("tarj_cyc", 1)
-	g.AddNode(a, []byte("a\n"), ph("tarj_cyc"), []t.NodeID{t.RootNodeID}, nil)
-	g.AddNode(b, []byte("b\n"), ph("tarj_cyc"), []t.NodeID{a}, nil)
+	require.NoError(tt, g.AddNode(a, []byte("a\n"), ph("tarj_cyc"), []t.NodeID{t.RootNodeID}, nil))
+	require.NoError(tt, g.AddNode(b, []byte("b\n"), ph("tarj_cyc"), []t.NodeID{a}, nil))
 
 	// Create cycle: b -> a.
-	g.AddEdge(b, a, ph("tarj_cyc_back"))
+	require.NoError(tt, g.AddEdge(b, a, ph("tarj_cyc_back")))
 
 	sccs := algo.Tarjan(g)
 
@@ -107,9 +108,9 @@ func TestTarjan_DiamondNoCycle(tt *testing.T) {
 	a := nid("tarj_dia", 0)
 	b := nid("tarj_dia", 1)
 	c := nid("tarj_dia", 2)
-	g.AddNode(a, []byte("a\n"), ph("tarj_dia"), []t.NodeID{t.RootNodeID}, nil)
-	g.AddNode(b, []byte("b\n"), ph("tarj_dia"), []t.NodeID{t.RootNodeID}, nil)
-	g.AddNode(c, []byte("c\n"), ph("tarj_dia"), []t.NodeID{a, b}, nil)
+	require.NoError(tt, g.AddNode(a, []byte("a\n"), ph("tarj_dia"), []t.NodeID{t.RootNodeID}, nil))
+	require.NoError(tt, g.AddNode(b, []byte("b\n"), ph("tarj_dia"), []t.NodeID{t.RootNodeID}, nil))
+	require.NoError(tt, g.AddNode(c, []byte("c\n"), ph("tarj_dia"), []t.NodeID{a, b}, nil))
 
 	sccs := algo.Tarjan(g)
 	for _, scc := range sccs {
@@ -127,15 +128,15 @@ func TestTarjan_MultipleSCCs(tt *testing.T) {
 	c := nid("tarj_multi", 2)
 	d := nid("tarj_multi", 3)
 
-	g.AddNode(a, []byte("a\n"), ph("tarj_multi"), []t.NodeID{t.RootNodeID}, nil)
-	g.AddNode(b, []byte("b\n"), ph("tarj_multi"), []t.NodeID{a}, nil)
-	g.AddNode(c, []byte("c\n"), ph("tarj_multi"), []t.NodeID{b}, nil)
-	g.AddNode(d, []byte("d\n"), ph("tarj_multi"), []t.NodeID{c}, nil)
+	require.NoError(tt, g.AddNode(a, []byte("a\n"), ph("tarj_multi"), []t.NodeID{t.RootNodeID}, nil))
+	require.NoError(tt, g.AddNode(b, []byte("b\n"), ph("tarj_multi"), []t.NodeID{a}, nil))
+	require.NoError(tt, g.AddNode(c, []byte("c\n"), ph("tarj_multi"), []t.NodeID{b}, nil))
+	require.NoError(tt, g.AddNode(d, []byte("d\n"), ph("tarj_multi"), []t.NodeID{c}, nil))
 
 	// Cycle 1: a <-> b
-	g.AddEdge(b, a, ph("back1"))
+	require.NoError(tt, g.AddEdge(b, a, ph("back1")))
 	// Cycle 2: c <-> d
-	g.AddEdge(d, c, ph("back2"))
+	require.NoError(tt, g.AddEdge(d, c, ph("back2")))
 
 	sccs := algo.Tarjan(g)
 	multiVertex := 0
@@ -159,8 +160,8 @@ func TestLinearOrder_Conflict(tt *testing.T) {
 	g := store.New()
 	a := nid("lo_conf", 0)
 	b := nid("lo_conf", 1)
-	g.AddNode(a, []byte("a\n"), ph("lo_conf"), []t.NodeID{t.RootNodeID}, nil)
-	g.AddNode(b, []byte("b\n"), ph("lo_conf"), []t.NodeID{t.RootNodeID}, nil)
+	require.NoError(tt, g.AddNode(a, []byte("a\n"), ph("lo_conf"), []t.NodeID{t.RootNodeID}, nil))
+	require.NoError(tt, g.AddNode(b, []byte("b\n"), ph("lo_conf"), []t.NodeID{t.RootNodeID}, nil))
 
 	order := algo.LinearOrder(g)
 	if order != nil {
@@ -183,8 +184,8 @@ func TestDetectConflicts_OrderConflict(tt *testing.T) {
 	g := store.New()
 	a := nid("dc_order", 0)
 	b := nid("dc_order", 1)
-	g.AddNode(a, []byte("a\n"), ph("dc_order"), []t.NodeID{t.RootNodeID}, nil)
-	g.AddNode(b, []byte("b\n"), ph("dc_order"), []t.NodeID{t.RootNodeID}, nil)
+	require.NoError(tt, g.AddNode(a, []byte("a\n"), ph("dc_order"), []t.NodeID{t.RootNodeID}, nil))
+	require.NoError(tt, g.AddNode(b, []byte("b\n"), ph("dc_order"), []t.NodeID{t.RootNodeID}, nil))
 
 	conflicts := algo.DetectConflicts(g)
 	found := false
@@ -202,9 +203,9 @@ func TestDetectConflicts_CycleConflict(tt *testing.T) {
 	g := store.New()
 	a := nid("dc_cycle", 0)
 	b := nid("dc_cycle", 1)
-	g.AddNode(a, []byte("a\n"), ph("dc_cycle"), []t.NodeID{t.RootNodeID}, nil)
-	g.AddNode(b, []byte("b\n"), ph("dc_cycle"), []t.NodeID{a}, nil)
-	g.AddEdge(b, a, ph("dc_cycle_back"))
+	require.NoError(tt, g.AddNode(a, []byte("a\n"), ph("dc_cycle"), []t.NodeID{t.RootNodeID}, nil))
+	require.NoError(tt, g.AddNode(b, []byte("b\n"), ph("dc_cycle"), []t.NodeID{a}, nil))
+	require.NoError(tt, g.AddEdge(b, a, ph("dc_cycle_back")))
 
 	conflicts := algo.DetectConflicts(g)
 	found := false
@@ -222,8 +223,8 @@ func TestDetectConflicts_NoConflict(tt *testing.T) {
 	g := store.New()
 	a := nid("dc_none", 0)
 	b := nid("dc_none", 1)
-	g.AddNode(a, []byte("a\n"), ph("dc_none"), []t.NodeID{t.RootNodeID}, nil)
-	g.AddNode(b, []byte("b\n"), ph("dc_none"), []t.NodeID{a}, nil)
+	require.NoError(tt, g.AddNode(a, []byte("a\n"), ph("dc_none"), []t.NodeID{t.RootNodeID}, nil))
+	require.NoError(tt, g.AddNode(b, []byte("b\n"), ph("dc_none"), []t.NodeID{a}, nil))
 
 	conflicts := algo.DetectConflicts(g)
 	if len(conflicts) != 0 {
@@ -238,12 +239,12 @@ func TestDetectConflicts_ZombieConflict(tt *testing.T) {
 	a := nid("dc_zomb", 0)
 	b := nid("dc_zomb", 1)
 	c := nid("dc_zomb", 2)
-	g.AddNode(a, []byte("a\n"), ph("dc_zomb"), []t.NodeID{t.RootNodeID}, nil)
-	g.AddNode(b, []byte("b\n"), ph("dc_zomb"), []t.NodeID{a}, nil)
-	g.AddNode(c, []byte("c\n"), ph("dc_zomb"), []t.NodeID{b}, nil)
+	require.NoError(tt, g.AddNode(a, []byte("a\n"), ph("dc_zomb"), []t.NodeID{t.RootNodeID}, nil))
+	require.NoError(tt, g.AddNode(b, []byte("b\n"), ph("dc_zomb"), []t.NodeID{a}, nil))
+	require.NoError(tt, g.AddNode(c, []byte("c\n"), ph("dc_zomb"), []t.NodeID{b}, nil))
 
 	x := nid("dc_zomb_x", 0)
-	g.AddNode(x, []byte("X\n"), ph("dc_zomb_x"), []t.NodeID{b}, []t.NodeID{c})
+	require.NoError(tt, g.AddNode(x, []byte("X\n"), ph("dc_zomb_x"), []t.NodeID{b}, []t.NodeID{c}))
 	if err := g.DeleteNode(b, ph("dc_zomb_del")); err != nil {
 		tt.Fatalf("DeleteNode(b): %v", err)
 	}
@@ -281,11 +282,11 @@ func TestDetectConflicts_NoZombieAfterUndelete(tt *testing.T) {
 	a := nid("dc_zomb_undel", 0)
 	b := nid("dc_zomb_undel", 1)
 	c := nid("dc_zomb_undel", 2)
-	g.AddNode(a, []byte("a\n"), ph("dc_zomb_undel"), []t.NodeID{t.RootNodeID}, nil)
-	g.AddNode(b, []byte("b\n"), ph("dc_zomb_undel"), []t.NodeID{a}, nil)
-	g.AddNode(c, []byte("c\n"), ph("dc_zomb_undel"), []t.NodeID{b}, nil)
+	require.NoError(tt, g.AddNode(a, []byte("a\n"), ph("dc_zomb_undel"), []t.NodeID{t.RootNodeID}, nil))
+	require.NoError(tt, g.AddNode(b, []byte("b\n"), ph("dc_zomb_undel"), []t.NodeID{a}, nil))
+	require.NoError(tt, g.AddNode(c, []byte("c\n"), ph("dc_zomb_undel"), []t.NodeID{b}, nil))
 	x := nid("dc_zomb_undel_x", 0)
-	g.AddNode(x, []byte("X\n"), ph("dc_zomb_undel_x"), []t.NodeID{b}, []t.NodeID{c})
+	require.NoError(tt, g.AddNode(x, []byte("X\n"), ph("dc_zomb_undel_x"), []t.NodeID{b}, []t.NodeID{c}))
 	if err := g.DeleteNode(b, ph("dc_zomb_undel_del")); err != nil {
 		tt.Fatalf("DeleteNode(b): %v", err)
 	}
@@ -305,7 +306,7 @@ func TestDetectConflicts_NoZombieAfterUndelete(tt *testing.T) {
 func TestHasConflicts_Linear(tt *testing.T) {
 	g := store.New()
 	a := nid("hc_lin", 0)
-	g.AddNode(a, []byte("a\n"), ph("hc_lin"), []t.NodeID{t.RootNodeID}, nil)
+	require.NoError(tt, g.AddNode(a, []byte("a\n"), ph("hc_lin"), []t.NodeID{t.RootNodeID}, nil))
 	if algo.HasConflicts(g) {
 		tt.Fatal("linear graph should not have conflicts")
 	}
@@ -315,8 +316,8 @@ func TestHasConflicts_Fork(tt *testing.T) {
 	g := store.New()
 	a := nid("hc_fork", 0)
 	b := nid("hc_fork", 1)
-	g.AddNode(a, []byte("a\n"), ph("hc_fork"), []t.NodeID{t.RootNodeID}, nil)
-	g.AddNode(b, []byte("b\n"), ph("hc_fork"), []t.NodeID{t.RootNodeID}, nil)
+	require.NoError(tt, g.AddNode(a, []byte("a\n"), ph("hc_fork"), []t.NodeID{t.RootNodeID}, nil))
+	require.NoError(tt, g.AddNode(b, []byte("b\n"), ph("hc_fork"), []t.NodeID{t.RootNodeID}, nil))
 	if !algo.HasConflicts(g) {
 		tt.Fatal("fork should have conflicts")
 	}

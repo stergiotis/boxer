@@ -7,6 +7,7 @@ import (
 	"github.com/stergiotis/boxer/public/algebraicarch/pushout/pushoutgraph/qc"
 	"github.com/stergiotis/boxer/public/algebraicarch/pushout/pushoutgraph/store"
 	t "github.com/stergiotis/boxer/public/algebraicarch/pushout/pushoutgraph/types"
+	"github.com/stretchr/testify/require"
 )
 
 func FuzzLineDiff(f *testing.F) {
@@ -81,7 +82,7 @@ func FuzzPatchApplyUnapply(f *testing.F) {
 			{Kind: ChangeKindNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 1}, Content: []byte("b\n"), UpContext: []t.NodeID{{Patch: t.PlaceholderHash, Index: 0}}},
 			{Kind: ChangeKindNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 2}, Content: []byte("c\n"), UpContext: []t.NodeID{{Patch: t.PlaceholderHash, Index: 1}}},
 		})
-		base.Apply(g)
+		require.NoError(tt, base.Apply(g))
 
 		origRender := g.Render()
 

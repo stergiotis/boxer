@@ -59,7 +59,7 @@ func readRecordStatement(c *Cell) (st recordStatement, err error) {
 	text := statementText(c.Body)
 	st = recordStatement{name: c.Name, text: text, withEnd: -1}
 	fail := func(what string) (recordStatement, error) {
-		return st, eb.Build().Str("record", c.Name).Errorf("a record is one SELECT: %s", what)
+		return st, eb.Build().Str("record", c.Name).Errorf("a record is one SELECT: %s", what) //boxer:lint disable=CS013 reason="the refusal reaches the person as text (the notebook app shows Buffer's and Collect's err.Error()); what is the whole reason"
 	}
 	if text == "" {
 		return fail("the fence is empty")
@@ -249,7 +249,7 @@ func Compute(ctx context.Context, nb *Notebook, run RunFunc, opts ComputeOptions
 			return nil, eh.Errorf("collect the record: %w", err)
 		}
 		if opts.MaxBytes > 0 && int64(len(stream)) > opts.MaxBytes {
-			return nil, eh.Errorf("the result is %d bytes, over the bound of %d; it is not cut short", len(stream), opts.MaxBytes)
+			return nil, eh.Errorf("the result is %d bytes, over the bound of %d; it is not cut short", len(stream), opts.MaxBytes) //boxer:lint disable=CS013 reason="the notebook app shows Compute's err.Error() as the reading's failure; the size and the bound are what the reader adjusts"
 		}
 		rec, err = oneBatch(stream)
 		if err != nil {
@@ -258,7 +258,7 @@ func Compute(ctx context.Context, nb *Notebook, run RunFunc, opts ComputeOptions
 		if opts.MaxRows > 0 && rec.NumRows() > opts.MaxRows {
 			n := rec.NumRows()
 			rec.Release()
-			return nil, eh.Errorf("the result is %d rows, over the bound of %d; it is not cut short", n, opts.MaxRows)
+			return nil, eh.Errorf("the result is %d rows, over the bound of %d; it is not cut short", n, opts.MaxRows) //boxer:lint disable=CS013 reason="the notebook app shows Compute's err.Error() as the reading's failure; the size and the bound are what the reader adjusts"
 		}
 		return rec, nil
 	}
@@ -493,7 +493,7 @@ func relabel(nb *Notebook, records map[string]arrow.RecordBatch, cat *gloss.Cata
 				if !strict {
 					continue
 				}
-				return nil, false, eb.Build().Int("cell", i).Errorf("the figure %s.%s: %w", record, column, vErr)
+				return nil, false, eb.Build().Int("cell", i).Errorf("the figure %s.%s: %w", record, column, vErr) //boxer:lint disable=CS013 reason="the notebook app shows Collect's err.Error() as why a notebook was not collected; record.column names the figure to fix"
 			}
 			// An empty label would leave a link the reader no longer finds
 			// (reValLink), so the figure would be lost to every later check.
@@ -501,7 +501,7 @@ func relabel(nb *Notebook, records map[string]arrow.RecordBatch, cat *gloss.Cata
 				if !strict {
 					continue
 				}
-				return nil, false, eb.Build().Int("cell", i).Str("value", v.Face.Text).Errorf("the figure %s.%s reads as text a link's label cannot hold", record, column)
+				return nil, false, eb.Build().Int("cell", i).Str("value", v.Face.Text).Errorf("the figure %s.%s reads as text a link's label cannot hold", record, column) //boxer:lint disable=CS013 reason="the notebook app shows Collect's err.Error() as why a notebook was not collected; record.column names the figure to fix"
 			}
 			changed = changed || v.Face.Text != string(text[m[2]:m[3]])
 			b.Write(nb.Src[at : c.Start+m[2]])

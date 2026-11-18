@@ -10,7 +10,6 @@ import (
 // countingRow counts the item reads a law makes of it.
 type countingRow struct {
 	items, vaults int
-	head          bool
 }
 
 func (r *countingRow) Ordinal() uint64 { return 1 }

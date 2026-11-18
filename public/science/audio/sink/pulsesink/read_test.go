@@ -98,7 +98,7 @@ func TestReadWaitsWhileNotPlayingAndPrimesWithSilence(t *testing.T) {
 	require.Equal(t, 40, r.n)
 	require.Equal(t, float32(0), out[0])
 	require.Equal(t, float32(0), out[39])
-	out, done = read(20)
+	_, done = read(20)
 	r = returns(done)
 	require.Equal(t, 10, r.n, "the five frames still owed")
 	_, done = read(20)

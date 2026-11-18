@@ -46,7 +46,10 @@ func makeBasePushoutGraph(n int, seed string) (*PushoutGraph, *patch.Patch) {
 		}
 	}
 	p := patch.NewPatch("test", seed, nil, changes)
-	p.Apply(g)
+	if err := p.Apply(g); err != nil {
+		// A linear chain on a fresh graph always applies; failing here is a bug in the store.
+		panic(err)
+	}
 	return g, p
 }
 

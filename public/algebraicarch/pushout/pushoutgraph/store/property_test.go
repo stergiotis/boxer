@@ -10,6 +10,7 @@ import (
 	"github.com/stergiotis/boxer/public/algebraicarch/pushout/pushoutgraph/patch"
 	"github.com/stergiotis/boxer/public/algebraicarch/pushout/pushoutgraph/qc"
 	t "github.com/stergiotis/boxer/public/algebraicarch/pushout/pushoutgraph/types"
+	"github.com/stretchr/testify/require"
 )
 
 func liveNodeSet(g *PushoutGraph) map[t.NodeID]struct{} {
@@ -44,12 +45,12 @@ func TestProperty_Commutativity(tt *testing.T) {
 		p2 := randomInsertPatch(base, rng, fmt.Sprintf("u2_s%d", seed), lineCount)
 
 		// Order 1: p1, p2.
-		p1.Apply(g1)
-		p2.Apply(g1)
+		require.NoError(tt, p1.Apply(g1))
+		require.NoError(tt, p2.Apply(g1))
 
 		// Order 2: p2, p1.
-		p2.Apply(g2)
-		p1.Apply(g2)
+		require.NoError(tt, p2.Apply(g2))
+		require.NoError(tt, p1.Apply(g2))
 
 		set1 := liveNodeSet(g1)
 		set2 := liveNodeSet(g2)
@@ -79,7 +80,7 @@ func TestProperty_Associativity(tt *testing.T) {
 		for _, perm := range perms {
 			g, _ := makeBasePushoutGraph(lineCount, baseSeed)
 			for _, idx := range perm {
-				patches[idx].Apply(g)
+				require.NoError(tt, patches[idx].Apply(g))
 			}
 			sets = append(sets, liveNodeSet(g))
 		}
@@ -128,7 +129,7 @@ func TestProperty_PseudoEdgeIdempotent(tt *testing.T) {
 			delIdx = lineCount - 1
 		}
 		nodeID := t.NodeID{Patch: base.Hash, Index: uint64(delIdx)}
-		g.DeleteNode(nodeID, testDeleter)
+		require.NoError(tt, g.DeleteNode(nodeID, testDeleter))
 		g.ResolvePseudoEdges()
 
 		r1 := g.Render()
@@ -324,12 +325,12 @@ func TestProperty_RandomMixedSequence(tt *testing.T) {
 			switch c.Kind {
 			case patch.ChangeKindNewNode:
 				p := patch.NewPatch(fmt.Sprintf("op_%d", op), "insert", nil, []patch.Change{c})
-				p.Apply(g)
+				require.NoError(tt, p.Apply(g))
 			case patch.ChangeKindDeleteNode:
-				g.DeleteNode(c.NodeID, testDeleter)
+				require.NoError(tt, g.DeleteNode(c.NodeID, testDeleter))
 				g.ResolvePseudoEdges()
 			case patch.ChangeKindNewEdge:
-				g.AddEdge(c.Src, c.Dest, ph(fmt.Sprintf("edge_%d_%d", seed, op)))
+				require.NoError(tt, g.AddEdge(c.Src, c.Dest, ph(fmt.Sprintf("edge_%d_%d", seed, op))))
 				g.ResolvePseudoEdges()
 			}
 
@@ -365,14 +366,14 @@ func TestProperty_InsertOnlyPairCommutativity(tt *testing.T) {
 		p1 := randomInsertPatch(base, rng, fmt.Sprintf("mc1_%d", seed), lineCount)
 		p2 := randomInsertPatch(base, rng, fmt.Sprintf("mc2_%d", seed), lineCount)
 
-		p1.Apply(g1)
-		p2.Apply(g1)
+		require.NoError(tt, p1.Apply(g1))
+		require.NoError(tt, p2.Apply(g1))
 		if errs := qc.CheckInvariants(g1); len(errs) > 0 {
 			tt.Fatalf("seed %d order p1,p2: invariant violations: %v", seed, errs)
 		}
 
-		p2.Apply(g2)
-		p1.Apply(g2)
+		require.NoError(tt, p2.Apply(g2))
+		require.NoError(tt, p1.Apply(g2))
 		if errs := qc.CheckInvariants(g2); len(errs) > 0 {
 			tt.Fatalf("seed %d order p2,p1: invariant violations: %v", seed, errs)
 		}
@@ -396,13 +397,13 @@ func TestProperty_ApplyUnapplyReapply(tt *testing.T) {
 		p := randomInsertPatch(base, rng, fmt.Sprintf("ra_%d", seed), lineCount)
 
 		// g1: just apply once.
-		p.Apply(g1)
+		require.NoError(tt, p.Apply(g1))
 		render1 := g1.Render()
 
 		// g2: apply, unapply, reapply.
-		p.Apply(g2)
-		p.Unapply(g2)
-		p.Apply(g2)
+		require.NoError(tt, p.Apply(g2))
+		require.NoError(tt, p.Unapply(g2))
+		require.NoError(tt, p.Apply(g2))
 		render2 := g2.Render()
 
 		if !bytes.Equal(render1, render2) {
@@ -430,7 +431,7 @@ func TestProperty_GhostMonotonicity(tt *testing.T) {
 			delIdx = lineCount - 1
 		}
 		deletedID := t.NodeID{Patch: base.Hash, Index: uint64(delIdx)}
-		g.DeleteNode(deletedID, testDeleter)
+		require.NoError(tt, g.DeleteNode(deletedID, testDeleter))
 		g.ResolvePseudoEdges()
 
 		if !g.IsDeleted(deletedID) {
@@ -439,7 +440,7 @@ func TestProperty_GhostMonotonicity(tt *testing.T) {
 
 		// Apply another insert patch — deleted node should remain deleted.
 		p2 := randomInsertPatch(base, rng, fmt.Sprintf("ghost_add_s%d", seed), lineCount)
-		p2.Apply(g)
+		require.NoError(tt, p2.Apply(g))
 
 		if !g.IsDeleted(deletedID) {
 			tt.Fatalf("seed %d: ghost monotonicity violated — deleted node became live after additional patch", seed)

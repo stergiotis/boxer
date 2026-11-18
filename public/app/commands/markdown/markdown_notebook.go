@@ -106,7 +106,7 @@ func runNotebookCollect(_ context.Context, cmd *cli.Command) (err error) {
 		if rErr != nil {
 			return nil, rErr
 		}
-		defer body.Close()
+		defer func() { _ = body.Close() }()
 		return io.ReadAll(body)
 	}
 	dir := filepath.Dir(file)

@@ -457,7 +457,10 @@ func CheckEnvelopeBatchWith(ctx context.Context, open OpenFunc, location string,
 		return eh.Errorf("batch load yielded %d of %d", i, len(req))
 	}
 	// Empty request: an empty sequence.
-	for range st.LoadEnvelopes(ctx, nil) {
+	for _, lerr := range st.LoadEnvelopes(ctx, nil) {
+		if lerr != nil {
+			return eh.Errorf("batch load of nothing failed: %w", lerr)
+		}
 		return eh.Errorf("batch load of nothing yielded something")
 	}
 	// A missing hash ends the sequence with ErrEnvelopeNotFound, after
@@ -478,7 +481,10 @@ func CheckEnvelopeBatchWith(ctx context.Context, open OpenFunc, location string,
 		return eh.Errorf("batch load with a miss: seen=%d err=%v (want 1, ErrEnvelopeNotFound)", seen, final)
 	}
 	// Early break is allowed.
-	for range st.LoadEnvelopes(ctx, []t.PatchHash{e1.Hash, e2.Hash}) {
+	for _, lerr := range st.LoadEnvelopes(ctx, []t.PatchHash{e1.Hash, e2.Hash}) {
+		if lerr != nil {
+			return eh.Errorf("batch load broken off early failed: %w", lerr)
+		}
 		break
 	}
 	return

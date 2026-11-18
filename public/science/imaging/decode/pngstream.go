@@ -44,7 +44,7 @@ func streamPNG(ctx context.Context, data []byte, info pngInfo, b *tiles.Builder,
 	if err != nil {
 		return eb.Build().Errorf("PNG image data does not start a zlib stream: %w", err)
 	}
-	defer zr.Close()
+	defer func() { _ = zr.Close() }()
 
 	conv, err := newRowConverter(info, model, kind)
 	if err != nil {

@@ -51,7 +51,7 @@ func SetRecords(nb *Notebook, sql string, sink string) (text []byte, err error) 
 	}
 	for _, c := range cells {
 		if _, ok := held[c.Name]; !ok {
-			return nil, eh.Errorf("the buffer does not hold the record %s: a record is removed in the text, with what reads it", c.Name)
+			return nil, eh.Errorf("the buffer does not hold the record %s: a record is removed in the text, with what reads it", c.Name) //boxer:lint disable=CS013 reason="SetRecords' error is the notebook's refusal text (app.RefuseOperation(err.Error())); the record name is what the reader acts on"
 		}
 	}
 
@@ -84,7 +84,7 @@ func SetRecords(nb *Notebook, sql string, sink string) (text []byte, err error) 
 			continue
 		}
 		if i < last {
-			return nil, eh.Errorf("the buffer has the record %s after %s, and the notebook has it before: records are reordered in the text", p.name, cells[last].Name)
+			return nil, eh.Errorf("the buffer has the record %s after %s, and the notebook has it before: records are reordered in the text", p.name, cells[last].Name) //boxer:lint disable=CS013 reason="SetRecords' error is the notebook's refusal text (app.RefuseOperation(err.Error())); the record name is what the reader acts on"
 		}
 		last = i
 		c := cells[i]
@@ -120,7 +120,7 @@ func bodyEdit(src []byte, c *Cell, statement string) (from, to int, replacement 
 	cell := string(src[c.Start:c.Stop])
 	open, rest, found := strings.Cut(cell, "\n")
 	if !found || !strings.HasPrefix(rest, c.Body) {
-		return 0, 0, "", eh.Errorf("the record %s: its fence could not be found in the text", c.Name)
+		return 0, 0, "", eh.Errorf("the record %s: its fence could not be found in the text", c.Name) //boxer:lint disable=CS013 reason="SetRecords' error is the notebook's refusal text (app.RefuseOperation(err.Error())); the record name is what the reader acts on"
 	}
 	after := rest[len(c.Body):]
 	closing, _, _ := strings.Cut(after, "\n")
@@ -128,7 +128,7 @@ func bodyEdit(src []byte, c *Cell, statement string) (from, to int, replacement 
 	ch := open[0]
 	n := len(open) - len(strings.TrimLeft(open, string(ch)))
 	if len(closing) < n || strings.Trim(closing, string(ch)) != "" {
-		return 0, 0, "", eh.Errorf("the record %s: its fence is not closed", c.Name)
+		return 0, 0, "", eh.Errorf("the record %s: its fence is not closed", c.Name) //boxer:lint disable=CS013 reason="SetRecords' error is the notebook's refusal text (app.RefuseOperation(err.Error())); the record name is what the reader acts on"
 	}
 	fence := fenceFor(statement, ch, n)
 	from = c.Start

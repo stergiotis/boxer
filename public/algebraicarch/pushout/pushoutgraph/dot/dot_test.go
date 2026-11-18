@@ -10,6 +10,7 @@ import (
 	"github.com/stergiotis/boxer/public/algebraicarch/pushout/pushoutgraph/patch"
 	"github.com/stergiotis/boxer/public/algebraicarch/pushout/pushoutgraph/store"
 	t "github.com/stergiotis/boxer/public/algebraicarch/pushout/pushoutgraph/types"
+	"github.com/stretchr/testify/require"
 )
 
 func TestDot_Simple(tt *testing.T) {
@@ -18,7 +19,7 @@ func TestDot_Simple(tt *testing.T) {
 		{Kind: patch.ChangeKindNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 0}, Content: []byte("hello\n"), UpContext: []t.NodeID{t.RootNodeID}},
 		{Kind: patch.ChangeKindNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 1}, Content: []byte("world\n"), UpContext: []t.NodeID{{Patch: t.PlaceholderHash, Index: 0}}},
 	})
-	p.Apply(g)
+	require.NoError(tt, p.Apply(g))
 
 	d := dot.Dot(g)
 	if !strings.Contains(d, "digraph pushoutgraph") {
@@ -40,11 +41,11 @@ func TestDot_WithDeletedAndPseudo(tt *testing.T) {
 	a := nid("dot1", 0)
 	b := nid("dot1", 1)
 	c := nid("dot1", 2)
-	g.AddNode(a, []byte("a\n"), ph("dot1"), []t.NodeID{t.RootNodeID}, nil)
-	g.AddNode(b, []byte("b\n"), ph("dot1"), []t.NodeID{a}, nil)
-	g.AddNode(c, []byte("c\n"), ph("dot1"), []t.NodeID{b}, nil)
+	require.NoError(tt, g.AddNode(a, []byte("a\n"), ph("dot1"), []t.NodeID{t.RootNodeID}, nil))
+	require.NoError(tt, g.AddNode(b, []byte("b\n"), ph("dot1"), []t.NodeID{a}, nil))
+	require.NoError(tt, g.AddNode(c, []byte("c\n"), ph("dot1"), []t.NodeID{b}, nil))
 
-	g.DeleteNode(b, ph("dot1_del"))
+	require.NoError(tt, g.DeleteNode(b, ph("dot1_del")))
 	g.ResolvePseudoEdges()
 
 	d := dot.Dot(g)
@@ -84,7 +85,7 @@ func TestDot_AllTypesExample(tt *testing.T) {
 		{Kind: patch.ChangeKindNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 2}, Content: []byte("line c\n"), UpContext: []t.NodeID{{Patch: t.PlaceholderHash, Index: 1}}},
 		{Kind: patch.ChangeKindNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 3}, Content: []byte("line d\n"), UpContext: []t.NodeID{{Patch: t.PlaceholderHash, Index: 2}}},
 	})
-	base.Apply(g)
+	require.NoError(tt, base.Apply(g))
 
 	lineB := t.NodeID{Patch: base.Hash, Index: 1}
 	lineC := t.NodeID{Patch: base.Hash, Index: 2}
@@ -94,21 +95,21 @@ func TestDot_AllTypesExample(tt *testing.T) {
 	pDel := patch.NewPatch("bob", "delete b", []t.PatchHash{base.Hash}, []patch.Change{
 		{Kind: patch.ChangeKindDeleteNode, NodeID: lineB},
 	})
-	pDel.Apply(g)
+	require.NoError(tt, pDel.Apply(g))
 
 	// User 2: insert X between c and d.
 	pX := patch.NewPatch("carol", "insert X", []t.PatchHash{base.Hash}, []patch.Change{
 		{Kind: patch.ChangeKindNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 0}, Content: []byte("line X\n"),
 			UpContext: []t.NodeID{lineC}, DownContext: []t.NodeID{lineD}},
 	})
-	pX.Apply(g)
+	require.NoError(tt, pX.Apply(g))
 
 	// User 3: insert Y between c and d (same position -> order conflict with X).
 	pY := patch.NewPatch("dave", "insert Y", []t.PatchHash{base.Hash}, []patch.Change{
 		{Kind: patch.ChangeKindNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 0}, Content: []byte("line Y\n"),
 			UpContext: []t.NodeID{lineC}, DownContext: []t.NodeID{lineD}},
 	})
-	pY.Apply(g)
+	require.NoError(tt, pY.Apply(g))
 
 	d := dot.Dot(g)
 
@@ -148,7 +149,7 @@ func TestDot_Conflict(tt *testing.T) {
 		{Kind: patch.ChangeKindNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 0}, Content: []byte("a\n"), UpContext: []t.NodeID{t.RootNodeID}},
 		{Kind: patch.ChangeKindNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 1}, Content: []byte("c\n"), UpContext: []t.NodeID{{Patch: t.PlaceholderHash, Index: 0}}},
 	})
-	base.Apply(g)
+	require.NoError(tt, base.Apply(g))
 
 	lineA := t.NodeID{Patch: base.Hash, Index: 0}
 	lineC := t.NodeID{Patch: base.Hash, Index: 1}
@@ -161,8 +162,8 @@ func TestDot_Conflict(tt *testing.T) {
 		{Kind: patch.ChangeKindNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 0}, Content: []byte("Y\n"),
 			UpContext: []t.NodeID{lineA}, DownContext: []t.NodeID{lineC}},
 	})
-	p1.Apply(g)
-	p2.Apply(g)
+	require.NoError(tt, p1.Apply(g))
+	require.NoError(tt, p2.Apply(g))
 
 	d := dot.Dot(g)
 	// Both X and Y should appear.

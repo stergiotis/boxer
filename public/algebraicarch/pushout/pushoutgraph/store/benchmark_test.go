@@ -7,6 +7,7 @@ import (
 	"github.com/stergiotis/boxer/public/algebraicarch/pushout/pushoutgraph/algo"
 	"github.com/stergiotis/boxer/public/algebraicarch/pushout/pushoutgraph/patch"
 	t "github.com/stergiotis/boxer/public/algebraicarch/pushout/pushoutgraph/types"
+	"github.com/stretchr/testify/require"
 )
 
 func benchmarkBase(b *testing.B, n int) (*PushoutGraph, *patch.Patch) {
@@ -25,7 +26,7 @@ func benchmarkBase(b *testing.B, n int) (*PushoutGraph, *patch.Patch) {
 	}
 	g := New()
 	p := patch.NewPatch("bench", "base", nil, changes)
-	p.Apply(g)
+	require.NoError(b, p.Apply(g))
 	return g, p
 }
 
@@ -46,7 +47,7 @@ func BenchmarkPatchApply_Insert100(b *testing.B) {
 			}
 		}
 		p := patch.NewPatch("bench", "100 lines", nil, changes)
-		p.Apply(g)
+		require.NoError(b, p.Apply(g))
 	}
 }
 
@@ -67,7 +68,7 @@ func BenchmarkPatchApply_Insert1000(b *testing.B) {
 			}
 		}
 		p := patch.NewPatch("bench", "1000 lines", nil, changes)
-		p.Apply(g)
+		require.NoError(b, p.Apply(g))
 	}
 }
 
@@ -75,7 +76,7 @@ func BenchmarkResolvePseudoEdges_100Deleted(b *testing.B) {
 	// Create 102 nodes, delete the middle 100.
 	g, base := benchmarkBase(b, 102)
 	for i := 1; i <= 100; i++ {
-		g.DeleteNode(t.NodeID{Patch: base.Hash, Index: uint64(i)}, ph("bench_del"))
+		require.NoError(b, g.DeleteNode(t.NodeID{Patch: base.Hash, Index: uint64(i)}, ph("bench_del")))
 	}
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {

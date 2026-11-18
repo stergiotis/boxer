@@ -175,30 +175,30 @@ func (inst AuditEvent) Validate() (err error) {
 	switch inst.Outcome {
 	case OutcomeOk, OutcomeDenied, OutcomeFailed, OutcomeTimeout, OutcomeError:
 	default:
-		return eh.Errorf("outcome %q is not ok, denied, failed, timeout or error", inst.Outcome)
+		return eh.Errorf("outcome %q is not ok, denied, failed, timeout or error", inst.Outcome) //boxer:lint disable=CS013 reason="audit.Invalid stores Validate's Error() as the reason attribute of an audit-invalid row, a text column the trail's reader sees"
 	}
 	switch inst.PrincipalBy {
 	case PrincipalBySystem, PrincipalByEnv, PrincipalByOs:
 		if !inst.Principal.Has {
-			return eh.Errorf("principal-by %q with no principal", inst.PrincipalBy)
+			return eh.Errorf("principal-by %q with no principal", inst.PrincipalBy) //boxer:lint disable=CS013 reason="audit.Invalid stores Validate's Error() as the reason attribute of an audit-invalid row, a text column the trail's reader sees"
 		}
 	case PrincipalByNone:
 		if inst.Principal.Has {
 			return eh.Errorf("principal-by none with a principal")
 		}
 	default:
-		return eh.Errorf("principal-by %q is not system, env, os or none", inst.PrincipalBy)
+		return eh.Errorf("principal-by %q is not system, env, os or none", inst.PrincipalBy) //boxer:lint disable=CS013 reason="audit.Invalid stores Validate's Error() as the reason attribute of an audit-invalid row, a text column the trail's reader sees"
 	}
 	if inst.PrincipalVia.Has {
 		if !inst.Principal.Has {
-			return eh.Errorf("principal-via %q with no principal", inst.PrincipalVia.Val)
+			return eh.Errorf("principal-via %q with no principal", inst.PrincipalVia.Val) //boxer:lint disable=CS013 reason="audit.Invalid stores Validate's Error() as the reason attribute of an audit-invalid row, a text column the trail's reader sees"
 		}
 		if err = CheckName("principal-via", inst.PrincipalVia.Val); err != nil {
 			return
 		}
 	}
 	if _, ok := evidence.ParseOriginBy(inst.OriginBy); !ok {
-		return eh.Errorf("origin-by %q is not self, envelope or host", inst.OriginBy)
+		return eh.Errorf("origin-by %q is not self, envelope or host", inst.OriginBy) //boxer:lint disable=CS013 reason="audit.Invalid stores Validate's Error() as the reason attribute of an audit-invalid row, a text column the trail's reader sees"
 	}
 	if inst.Principal.Has {
 		if err = CheckValue("principal", inst.Principal.Val); err != nil {
@@ -216,10 +216,10 @@ func (inst AuditEvent) Validate() (err error) {
 		}
 	}
 	if len(inst.RefTypes) != len(inst.RefValues) {
-		return eh.Errorf("%d reference types for %d reference values", len(inst.RefTypes), len(inst.RefValues))
+		return eh.Errorf("%d reference types for %d reference values", len(inst.RefTypes), len(inst.RefValues)) //boxer:lint disable=CS013 reason="audit.Invalid stores Validate's Error() as the reason attribute of an audit-invalid row, a text column the trail's reader sees"
 	}
 	if len(inst.RefTypes) > MaxRefs {
-		return eh.Errorf("%d references, more than %d", len(inst.RefTypes), MaxRefs)
+		return eh.Errorf("%d references, more than %d", len(inst.RefTypes), MaxRefs) //boxer:lint disable=CS013 reason="audit.Invalid stores Validate's Error() as the reason attribute of an audit-invalid row, a text column the trail's reader sees"
 	}
 	for i, ty := range inst.RefTypes {
 		if err = CheckName("reference type "+strconv.Itoa(i), ty); err != nil {
@@ -230,10 +230,10 @@ func (inst AuditEvent) Validate() (err error) {
 		}
 	}
 	if len(inst.AttrKeys) != len(inst.AttrValues) {
-		return eh.Errorf("%d attribute keys for %d attribute values", len(inst.AttrKeys), len(inst.AttrValues))
+		return eh.Errorf("%d attribute keys for %d attribute values", len(inst.AttrKeys), len(inst.AttrValues)) //boxer:lint disable=CS013 reason="audit.Invalid stores Validate's Error() as the reason attribute of an audit-invalid row, a text column the trail's reader sees"
 	}
 	if len(inst.AttrKeys) > MaxAttrs {
-		return eh.Errorf("%d attributes, more than %d", len(inst.AttrKeys), MaxAttrs)
+		return eh.Errorf("%d attributes, more than %d", len(inst.AttrKeys), MaxAttrs) //boxer:lint disable=CS013 reason="audit.Invalid stores Validate's Error() as the reason attribute of an audit-invalid row, a text column the trail's reader sees"
 	}
 	for i, k := range inst.AttrKeys {
 		if err = CheckName("attribute key "+strconv.Itoa(i), k); err != nil {
@@ -253,14 +253,14 @@ func CheckName(what string, s string) (err error) {
 		return
 	}
 	if utf8.RuneCountInString(s) > MaxNameRunes {
-		return eh.Errorf("%s %q is longer than %d runes", what, s, MaxNameRunes)
+		return eh.Errorf("%s %q is longer than %d runes", what, s, MaxNameRunes) //boxer:lint disable=CS013 reason="audit.Invalid stores Validate's Error() as the reason attribute of an audit-invalid row, a text column the trail's reader sees"
 	}
 	n := naming.StylableName(s)
 	if verr := naming.ValidateStylableName(n); verr != nil {
-		return eh.Errorf("%s %q is not a stylable name: %w", what, s, verr)
+		return eh.Errorf("%s %q is not a stylable name: %w", what, s, verr) //boxer:lint disable=CS013 reason="audit.Invalid stores Validate's Error() as the reason attribute of an audit-invalid row, a text column the trail's reader sees"
 	}
 	if !n.IsUsingStyle(naming.DefaultNamingStyle) {
-		return eh.Errorf("%s %q is not in %s", what, s, naming.DefaultNamingStyle.String())
+		return eh.Errorf("%s %q is not in %s", what, s, naming.DefaultNamingStyle.String()) //boxer:lint disable=CS013 reason="audit.Invalid stores Validate's Error() as the reason attribute of an audit-invalid row, a text column the trail's reader sees"
 	}
 	return nil
 }
@@ -269,13 +269,13 @@ func CheckName(what string, s string) (err error) {
 // names it in the error.
 func CheckValue(what string, s string) (err error) {
 	if s == "" {
-		return eh.Errorf("%s is empty", what)
+		return eh.Errorf("%s is empty", what) //boxer:lint disable=CS013 reason="audit.Invalid stores Validate's Error() as the reason attribute of an audit-invalid row, a text column the trail's reader sees"
 	}
 	if !utf8.ValidString(s) {
-		return eh.Errorf("%s is not valid UTF-8", what)
+		return eh.Errorf("%s is not valid UTF-8", what) //boxer:lint disable=CS013 reason="audit.Invalid stores Validate's Error() as the reason attribute of an audit-invalid row, a text column the trail's reader sees"
 	}
 	if utf8.RuneCountInString(s) > MaxValueRunes {
-		return eh.Errorf("%s is longer than %d runes", what, MaxValueRunes)
+		return eh.Errorf("%s is longer than %d runes", what, MaxValueRunes) //boxer:lint disable=CS013 reason="audit.Invalid stores Validate's Error() as the reason attribute of an audit-invalid row, a text column the trail's reader sees"
 	}
 	return nil
 }

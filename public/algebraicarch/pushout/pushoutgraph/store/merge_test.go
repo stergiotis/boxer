@@ -7,6 +7,7 @@ import (
 	"github.com/stergiotis/boxer/public/algebraicarch/pushout/pushoutgraph/algo"
 	"github.com/stergiotis/boxer/public/algebraicarch/pushout/pushoutgraph/patch"
 	t "github.com/stergiotis/boxer/public/algebraicarch/pushout/pushoutgraph/types"
+	"github.com/stretchr/testify/require"
 )
 
 // --- Integration: Complex Pseudo-Edge Scenarios ---
@@ -20,12 +21,12 @@ func TestPseudoEdge_BranchingDeletion(tt *testing.T) {
 	c := nid("pe_branch", 2)
 	d := nid("pe_branch", 3)
 
-	g.AddNode(a, []byte("a\n"), ph("pe_branch"), []t.NodeID{t.RootNodeID}, nil)
-	g.AddNode(b, []byte("b\n"), ph("pe_branch"), []t.NodeID{a}, []t.NodeID{})
-	g.AddNode(c, []byte("c\n"), ph("pe_branch"), []t.NodeID{a}, []t.NodeID{})
-	g.AddNode(d, []byte("d\n"), ph("pe_branch"), []t.NodeID{b, c}, nil)
+	require.NoError(tt, g.AddNode(a, []byte("a\n"), ph("pe_branch"), []t.NodeID{t.RootNodeID}, nil))
+	require.NoError(tt, g.AddNode(b, []byte("b\n"), ph("pe_branch"), []t.NodeID{a}, []t.NodeID{}))
+	require.NoError(tt, g.AddNode(c, []byte("c\n"), ph("pe_branch"), []t.NodeID{a}, []t.NodeID{}))
+	require.NoError(tt, g.AddNode(d, []byte("d\n"), ph("pe_branch"), []t.NodeID{b, c}, nil))
 
-	g.DeleteNode(a, testDeleter)
+	require.NoError(tt, g.DeleteNode(a, testDeleter))
 	g.ResolvePseudoEdges()
 
 	// root should now reach b and c.
@@ -46,11 +47,11 @@ func TestPseudoEdge_IdempotentResolve(tt *testing.T) {
 	a := nid("pe_idem", 0)
 	b := nid("pe_idem", 1)
 	c := nid("pe_idem", 2)
-	g.AddNode(a, []byte("a\n"), ph("pe_idem"), []t.NodeID{t.RootNodeID}, nil)
-	g.AddNode(b, []byte("b\n"), ph("pe_idem"), []t.NodeID{a}, nil)
-	g.AddNode(c, []byte("c\n"), ph("pe_idem"), []t.NodeID{b}, nil)
+	require.NoError(tt, g.AddNode(a, []byte("a\n"), ph("pe_idem"), []t.NodeID{t.RootNodeID}, nil))
+	require.NoError(tt, g.AddNode(b, []byte("b\n"), ph("pe_idem"), []t.NodeID{a}, nil))
+	require.NoError(tt, g.AddNode(c, []byte("c\n"), ph("pe_idem"), []t.NodeID{b}, nil))
 
-	g.DeleteNode(b, testDeleter)
+	require.NoError(tt, g.DeleteNode(b, testDeleter))
 	g.ResolvePseudoEdges()
 
 	r1 := string(g.Render())
@@ -73,15 +74,15 @@ func TestPseudoEdge_MultipleUndeletions(tt *testing.T) {
 	c := nid("pe_multi", 2)
 	d := nid("pe_multi", 3)
 	e := nid("pe_multi", 4)
-	g.AddNode(a, []byte("a\n"), ph("pe_multi"), []t.NodeID{t.RootNodeID}, nil)
-	g.AddNode(b, []byte("b\n"), ph("pe_multi"), []t.NodeID{a}, nil)
-	g.AddNode(c, []byte("c\n"), ph("pe_multi"), []t.NodeID{b}, nil)
-	g.AddNode(d, []byte("d\n"), ph("pe_multi"), []t.NodeID{c}, nil)
-	g.AddNode(e, []byte("e\n"), ph("pe_multi"), []t.NodeID{d}, nil)
+	require.NoError(tt, g.AddNode(a, []byte("a\n"), ph("pe_multi"), []t.NodeID{t.RootNodeID}, nil))
+	require.NoError(tt, g.AddNode(b, []byte("b\n"), ph("pe_multi"), []t.NodeID{a}, nil))
+	require.NoError(tt, g.AddNode(c, []byte("c\n"), ph("pe_multi"), []t.NodeID{b}, nil))
+	require.NoError(tt, g.AddNode(d, []byte("d\n"), ph("pe_multi"), []t.NodeID{c}, nil))
+	require.NoError(tt, g.AddNode(e, []byte("e\n"), ph("pe_multi"), []t.NodeID{d}, nil))
 
-	g.DeleteNode(b, testDeleter)
-	g.DeleteNode(c, testDeleter)
-	g.DeleteNode(d, testDeleter)
+	require.NoError(tt, g.DeleteNode(b, testDeleter))
+	require.NoError(tt, g.DeleteNode(c, testDeleter))
+	require.NoError(tt, g.DeleteNode(d, testDeleter))
 	g.ResolvePseudoEdges()
 
 	// Should be root -> a -> e.
@@ -91,7 +92,7 @@ func TestPseudoEdge_MultipleUndeletions(tt *testing.T) {
 	}
 
 	// Undelete c (splits deleted component {b,c,d} into {b} and {d}).
-	g.UndeleteNode(c, testDeleter)
+	require.NoError(tt, g.UndeleteNode(c, testDeleter))
 	g.ResolvePseudoEdges()
 
 	// After undeletion, the live nodes should be: root, a, c, e.
@@ -129,17 +130,17 @@ func TestPseudoEdge_TwoReasons(tt *testing.T) {
 	c := nid("pe_2r", 2)
 	d := nid("pe_2r", 3)
 	e := nid("pe_2r", 4)
-	g.AddNode(a, []byte("a\n"), ph("pe_2r"), []t.NodeID{t.RootNodeID}, nil)
-	g.AddNode(b, []byte("b\n"), ph("pe_2r"), []t.NodeID{a}, nil)
-	g.AddNode(c, []byte("c\n"), ph("pe_2r"), []t.NodeID{b}, nil)
-	g.AddNode(d, []byte("d\n"), ph("pe_2r"), []t.NodeID{c}, nil)
-	g.AddNode(e, []byte("e\n"), ph("pe_2r"), []t.NodeID{d}, nil)
+	require.NoError(tt, g.AddNode(a, []byte("a\n"), ph("pe_2r"), []t.NodeID{t.RootNodeID}, nil))
+	require.NoError(tt, g.AddNode(b, []byte("b\n"), ph("pe_2r"), []t.NodeID{a}, nil))
+	require.NoError(tt, g.AddNode(c, []byte("c\n"), ph("pe_2r"), []t.NodeID{b}, nil))
+	require.NoError(tt, g.AddNode(d, []byte("d\n"), ph("pe_2r"), []t.NodeID{c}, nil))
+	require.NoError(tt, g.AddNode(e, []byte("e\n"), ph("pe_2r"), []t.NodeID{d}, nil))
 
-	g.DeleteNode(b, testDeleter)
+	require.NoError(tt, g.DeleteNode(b, testDeleter))
 	g.ResolvePseudoEdges()
 	assertNoInvariantViolations(tt, g)
 
-	g.DeleteNode(d, testDeleter)
+	require.NoError(tt, g.DeleteNode(d, testDeleter))
 	g.ResolvePseudoEdges()
 	assertNoInvariantViolations(tt, g)
 
@@ -150,7 +151,7 @@ func TestPseudoEdge_TwoReasons(tt *testing.T) {
 	}
 
 	// Now delete c — merges all into one component {b,c,d}.
-	g.DeleteNode(c, testDeleter)
+	require.NoError(tt, g.DeleteNode(c, testDeleter))
 	g.ResolvePseudoEdges()
 	assertNoInvariantViolations(tt, g)
 
@@ -176,16 +177,16 @@ func TestPseudoEdge_DoubleReason(tt *testing.T) {
 	b1 := nid("pe_dr", 1)
 	b2 := nid("pe_dr", 2)
 	c := nid("pe_dr", 3)
-	g.AddNode(a, []byte("a\n"), ph("pe_dr"), []t.NodeID{t.RootNodeID}, nil)
-	g.AddNode(b1, []byte("b1\n"), ph("pe_dr"), []t.NodeID{a}, nil)
-	g.AddNode(b2, []byte("b2\n"), ph("pe_dr"), []t.NodeID{a}, nil)
-	g.AddNode(c, []byte("c\n"), ph("pe_dr"), []t.NodeID{b1, b2}, nil)
+	require.NoError(tt, g.AddNode(a, []byte("a\n"), ph("pe_dr"), []t.NodeID{t.RootNodeID}, nil))
+	require.NoError(tt, g.AddNode(b1, []byte("b1\n"), ph("pe_dr"), []t.NodeID{a}, nil))
+	require.NoError(tt, g.AddNode(b2, []byte("b2\n"), ph("pe_dr"), []t.NodeID{a}, nil))
+	require.NoError(tt, g.AddNode(c, []byte("c\n"), ph("pe_dr"), []t.NodeID{b1, b2}, nil))
 
-	g.DeleteNode(b1, testDeleter)
+	require.NoError(tt, g.DeleteNode(b1, testDeleter))
 	g.ResolvePseudoEdges()
 	assertNoInvariantViolations(tt, g)
 
-	g.DeleteNode(b2, testDeleter)
+	require.NoError(tt, g.DeleteNode(b2, testDeleter))
 	g.ResolvePseudoEdges()
 	assertNoInvariantViolations(tt, g)
 
@@ -200,7 +201,7 @@ func TestPseudoEdge_DoubleReason(tt *testing.T) {
 	}
 
 	// Undelete b1 — pseudo-edge should survive because b2 still justifies it.
-	g.UndeleteNode(b1, testDeleter)
+	require.NoError(tt, g.UndeleteNode(b1, testDeleter))
 	g.ResolvePseudoEdges()
 	assertNoInvariantViolations(tt, g)
 
@@ -216,7 +217,7 @@ func TestPseudoEdge_DoubleReason(tt *testing.T) {
 	}
 
 	// Undelete b2 — now no reason remains, pseudo-edge should be removed.
-	g.UndeleteNode(b2, testDeleter)
+	require.NoError(tt, g.UndeleteNode(b2, testDeleter))
 	g.ResolvePseudoEdges()
 	assertNoInvariantViolations(tt, g)
 
@@ -237,13 +238,13 @@ func TestPseudoEdge_ReasonSurvivesPartialUndelete(tt *testing.T) {
 	x := nid("pe_partial", 1)
 	y := nid("pe_partial", 2)
 	b := nid("pe_partial", 3)
-	g.AddNode(a, []byte("a\n"), ph("pe_partial"), []t.NodeID{t.RootNodeID}, nil)
-	g.AddNode(x, []byte("x\n"), ph("pe_partial"), []t.NodeID{a}, nil)
-	g.AddNode(y, []byte("y\n"), ph("pe_partial"), []t.NodeID{x}, nil)
-	g.AddNode(b, []byte("b\n"), ph("pe_partial"), []t.NodeID{y}, nil)
+	require.NoError(tt, g.AddNode(a, []byte("a\n"), ph("pe_partial"), []t.NodeID{t.RootNodeID}, nil))
+	require.NoError(tt, g.AddNode(x, []byte("x\n"), ph("pe_partial"), []t.NodeID{a}, nil))
+	require.NoError(tt, g.AddNode(y, []byte("y\n"), ph("pe_partial"), []t.NodeID{x}, nil))
+	require.NoError(tt, g.AddNode(b, []byte("b\n"), ph("pe_partial"), []t.NodeID{y}, nil))
 
-	g.DeleteNode(x, testDeleter)
-	g.DeleteNode(y, testDeleter)
+	require.NoError(tt, g.DeleteNode(x, testDeleter))
+	require.NoError(tt, g.DeleteNode(y, testDeleter))
 	g.ResolvePseudoEdges()
 	assertNoInvariantViolations(tt, g)
 
@@ -254,7 +255,7 @@ func TestPseudoEdge_ReasonSurvivesPartialUndelete(tt *testing.T) {
 	}
 
 	// Undelete x.
-	g.UndeleteNode(x, testDeleter)
+	require.NoError(tt, g.UndeleteNode(x, testDeleter))
 	g.ResolvePseudoEdges()
 
 	// Now live nodes: root, a, x, b. Deleted: {y}.
@@ -276,7 +277,7 @@ func TestRoundtrip_DiffApplyRender(tt *testing.T) {
 		{Kind: patch.ChangeKindNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 0}, Content: []byte("hello\n"), UpContext: []t.NodeID{t.RootNodeID}},
 		{Kind: patch.ChangeKindNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 1}, Content: []byte("world\n"), UpContext: []t.NodeID{{Patch: t.PlaceholderHash, Index: 0}}},
 	})
-	base.Apply(g)
+	require.NoError(tt, base.Apply(g))
 
 	// Current state.
 	oldIDs := []t.NodeID{
@@ -304,7 +305,7 @@ func TestRoundtrip_DiffApplyUnapply(tt *testing.T) {
 		{Kind: patch.ChangeKindNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 0}, Content: []byte("a\n"), UpContext: []t.NodeID{t.RootNodeID}},
 		{Kind: patch.ChangeKindNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 1}, Content: []byte("b\n"), UpContext: []t.NodeID{{Patch: t.PlaceholderHash, Index: 0}}},
 	})
-	base.Apply(g)
+	require.NoError(tt, base.Apply(g))
 
 	originalRender := string(g.Render())
 
@@ -317,7 +318,7 @@ func TestRoundtrip_DiffApplyUnapply(tt *testing.T) {
 
 	diff := mustLineDiff(tt, oldIDs, oldContents, newLines)
 	p := patch.NewPatch("test", "insert X", []t.PatchHash{base.Hash}, diff.Changes)
-	p.Apply(g)
+	require.NoError(tt, p.Apply(g))
 
 	// Verify change applied.
 	if string(g.Render()) == originalRender {

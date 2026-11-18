@@ -52,7 +52,7 @@ func newIndexCommand() (cmd *cli.Command) {
 			if err != nil {
 				return
 			}
-			defer f.Close()
+			defer func() { _ = f.Close() }()
 			st, err := f.Stat()
 			if err != nil {
 				return
@@ -128,7 +128,7 @@ func lsFile(ctx context.Context, cmd *cli.Command, path string) (err error) {
 		err = eb.Build().Str("path", path).Errorf("open: %w", err)
 		return
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	st, err := f.Stat()
 	if err != nil {
 		return

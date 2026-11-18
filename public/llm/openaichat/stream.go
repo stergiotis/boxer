@@ -259,7 +259,7 @@ func (inst *Client) readStream(r io.Reader, onDelta func(Delta)) (resp Completio
 			return
 		}
 		if chunk.Error != nil && chunk.Error.Message != "" {
-			ferr = eb.Build().Str("type", chunk.Error.Type).Errorf("openaichat: the stream reported an error: %s", chunk.Error.Message)
+			ferr = eb.Build().Str("type", chunk.Error.Type).Errorf("openaichat: the stream reported an error: %s", chunk.Error.Message) //boxer:lint disable=CS013 reason="the provider's message is what a chat transcript shows of the failure, as text; HTTPError keeps it in the text for the same reason"
 			return
 		}
 		if chunk.Id != "" {

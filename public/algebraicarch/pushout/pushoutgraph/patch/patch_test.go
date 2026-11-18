@@ -6,6 +6,7 @@ import (
 
 	"github.com/stergiotis/boxer/public/algebraicarch/pushout/pushoutgraph/store"
 	t "github.com/stergiotis/boxer/public/algebraicarch/pushout/pushoutgraph/types"
+	"github.com/stretchr/testify/require"
 )
 
 // --- ComputeDependencies ---
@@ -175,7 +176,7 @@ func TestPatchApply_DuplicateNode(tt *testing.T) {
 	p1 := NewPatch("test", "add node", nil, []Change{
 		{Kind: ChangeKindNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 0}, Content: []byte("x\n"), UpContext: []t.NodeID{t.RootNodeID}},
 	})
-	p1.Apply(g)
+	require.NoError(tt, p1.Apply(g))
 
 	// Second patch tries to add a node with the same ID as one in p1.
 	// We need to use p1's actual hash.
@@ -194,7 +195,7 @@ func TestPatchApply_DeleteAlreadyDeleted(tt *testing.T) {
 	p1 := NewPatch("test", "add", nil, []Change{
 		{Kind: ChangeKindNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 0}, Content: []byte("x\n"), UpContext: []t.NodeID{t.RootNodeID}},
 	})
-	p1.Apply(g)
+	require.NoError(tt, p1.Apply(g))
 
 	nodeID := t.NodeID{Patch: p1.Hash, Index: 0}
 	if err := g.DeleteNode(nodeID, ph("p1_deleter")); err != nil {
@@ -227,7 +228,7 @@ func TestPatchUnapply_UndeleteNonDeleted(tt *testing.T) {
 	p1 := NewPatch("test", "add", nil, []Change{
 		{Kind: ChangeKindNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 0}, Content: []byte("x\n"), UpContext: []t.NodeID{t.RootNodeID}},
 	})
-	p1.Apply(g)
+	require.NoError(tt, p1.Apply(g))
 
 	// A patch that "deletes" the node — but we don't apply it, we try to unapply it
 	// (which would try to undelete a node that was never deleted).
