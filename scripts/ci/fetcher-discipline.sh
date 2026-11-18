@@ -6,7 +6,7 @@
 # a widget render body works at top scope but deadlocks the render
 # loop the moment that body is wrapped in a deferred-block capture
 # (a dock.Tab body, an etable row body, …). See
-# doc/skills/imzero2-fetchers/SKILLS.md for the full explanation.
+# doc/skills/imzero2-fetchers/SKILL.md for the full explanation.
 #
 # This script greps the imzero2 Go tree for `.Fetch[A-Z]` references
 # that are not in the allowlist below, and exits non-zero if any are
@@ -39,7 +39,7 @@ scope="public/thestack/imzero2"
 # - definition/              : codegen IDL sources that name fetchers.
 # - *_test.go                : tests are exempt; they may exercise
 #                              fetchers directly for fixture purposes.
-# - EXPLANATION.md, SKILLS.md: doc strings naming the fetchers.
+# - EXPLANATION.md, SKILL.md : doc strings naming the fetchers.
 # - videooutput.go           : ADR-0088 status-bar codec indicator.
 #                              ShowStatus refreshes the capability /
 #                              stream model with a per-frame fetch, but
@@ -56,7 +56,7 @@ scope="public/thestack/imzero2"
 # The default answer when the lint trips is "move the call into
 # StateManager.Sync and read from the cache", not "extend the
 # allowlist".
-allowlist_pattern='egui2_statemanagement\.go|fetchers\.out\.go|egui2_globals\.go|definition/|_test\.go|EXPLANATION\.md|SKILLS\.md|videooutput\.go'
+allowlist_pattern='egui2_statemanagement\.go|fetchers\.out\.go|egui2_globals\.go|definition/|_test\.go|EXPLANATION\.md|SKILL\.md|videooutput\.go'
 
 echo "fetcher-discipline: scanning imzero2 tree for inline Fetch* calls..."
 
@@ -81,7 +81,7 @@ if [ -n "$findings" ]; then
     echo "" >&2
     echo "Each match calls a Fetcher.Fetch* method from a render body."
     echo "Migrate the call into StateManager.Sync and expose a Get* getter"
-    echo "on the StateManager — see doc/skills/imzero2-fetchers/SKILLS.md."
+    echo "on the StateManager — see doc/skills/imzero2-fetchers/SKILL.md."
     echo ""
     echo "If a new site genuinely needs to bypass the rule, add the file"
     echo "to the allowlist in this script and justify the exception in"
