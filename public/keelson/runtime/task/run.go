@@ -2,10 +2,11 @@ package task
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/rs/zerolog/log"
 
-	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 // Run runs work on the calling goroutine as a task of api, for the work
@@ -27,9 +28,9 @@ import (
 // A nil api, or a spawn the bus or the lifetime refuses, runs work untracked
 // under parent. Either way the calling goroutine takes the profiler labels
 // of api's owner (LabelGoroutine).
-func Run(api TaskApiI, parent context.Context, opts SpawnOpts, work func(ctx context.Context) error) (err error) {
+func Run(parent context.Context, api TaskApiI, opts SpawnOpts, work func(ctx context.Context) error) (err error) {
 	LabelGoroutine(api)
-	h := spawnFor(api, parent, opts)
+	h := spawnFor(parent, api, opts)
 	if h == nil {
 		return work(parent)
 	}
@@ -54,7 +55,7 @@ func Run(api TaskApiI, parent context.Context, opts SpawnOpts, work func(ctx con
 func RunToCompletion(api TaskApiI, opts SpawnOpts, work func() error) (err error) {
 	LabelGoroutine(api)
 	opts.Cancellable = false
-	h := spawnFor(api, context.Background(), opts)
+	h := spawnFor(context.Background(), api, opts)
 	if h == nil {
 		return work()
 	}
@@ -69,7 +70,7 @@ func RunToCompletion(api TaskApiI, opts SpawnOpts, work func() error) (err error
 }
 
 // spawnFor is api.Spawn, or nil when there is no api or it refused.
-func spawnFor(api TaskApiI, parent context.Context, opts SpawnOpts) (h HandleI) {
+func spawnFor(parent context.Context, api TaskApiI, opts SpawnOpts) (h HandleI) {
 	if api == nil {
 		return nil
 	}
@@ -86,7 +87,7 @@ func spawnFor(api TaskApiI, parent context.Context, opts SpawnOpts) (h HandleI) 
 // endOnPanic publishes a panicking work's Error and re-raises the panic.
 func endOnPanic(h HandleI, opts SpawnOpts) {
 	if r := recover(); r != nil {
-		_ = h.Error(eh.Errorf("task: work panicked: %v", r), opts.Kind+" panicked")
+		_ = h.Error(eb.Build().Str("panic", fmt.Sprint(r)).Errorf("work panicked"), opts.Kind+" panicked")
 		panic(r)
 	}
 }

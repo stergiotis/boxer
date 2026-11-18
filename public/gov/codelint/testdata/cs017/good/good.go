@@ -59,7 +59,7 @@ func taskLiteral(api task.TaskApiI) {
 type poller struct{ api task.TaskApiI }
 
 func (inst *poller) poll(ctx context.Context) {
-	_ = task.Run(inst.api, ctx, task.SpawnOpts{Kind: "k"}, func(context.Context) error { return nil })
+	_ = task.Run(ctx, inst.api, task.SpawnOpts{Kind: "k"}, func(context.Context) error { return nil })
 }
 
 func (inst *poller) start() {

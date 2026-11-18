@@ -357,7 +357,7 @@ func (inst *vectorFieldGuest) Ensure(rel sqlfield.Relation, params map[string]st
 	queryer := newVectorFieldQueryer(inst.client, params, &inst.progress)
 	go func() {
 		var src *sqlfield.Source
-		err := task.Run(inst.client.Tasks(), ctx, task.SpawnOpts{Kind: "play.vectorfield", Title: "describe the vector field", Cancellable: true}, func(ctx context.Context) (err error) {
+		err := task.Run(ctx, inst.client.Tasks(), task.SpawnOpts{Kind: "play.vectorfield", Title: "describe the vector field", Cancellable: true}, func(ctx context.Context) (err error) {
 			src, err = sqlfield.NewSource(ctx, queryer, rel, sqlfield.Options{Shape: &shape})
 			return
 		})

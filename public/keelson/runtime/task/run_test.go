@@ -55,10 +55,13 @@ func (inst *runFixture) until(t *testing.T, terminal string) (got []string) {
 	return
 }
 
+// parentKey marks the parent context so a test can tell it arrived.
+type parentKey struct{}
+
 func TestRunWithoutApiRunsUntracked(t *testing.T) {
-	parent := context.WithValue(context.Background(), struct{}{}, 1)
+	parent := context.WithValue(context.Background(), parentKey{}, 1)
 	boom := errors.New("boom")
-	err := Run(nil, parent, SpawnOpts{Kind: "k"}, func(ctx context.Context) error {
+	err := Run(parent, nil, SpawnOpts{Kind: "k"}, func(ctx context.Context) error {
 		assert.Equal(t, parent, ctx)
 		return boom
 	})
@@ -72,7 +75,7 @@ func TestRunRefusedSpawnRunsUntracked(t *testing.T) {
 	mc := app.NewStaticMountContext("test.app", zerolog.Nop(), nil, busInst.NewClient("test.app", nil), nil)
 	parent := context.Background()
 	ran := false
-	require.NoError(t, Run(ForApp(mc), parent, SpawnOpts{Kind: "k"}, func(ctx context.Context) error {
+	require.NoError(t, Run(parent, ForApp(mc), SpawnOpts{Kind: "k"}, func(ctx context.Context) error {
 		assert.Equal(t, parent, ctx)
 		ran = true
 		return nil
@@ -82,11 +85,11 @@ func TestRunRefusedSpawnRunsUntracked(t *testing.T) {
 
 func TestRunPublishesDoneOrError(t *testing.T) {
 	f := newRunFixture(t)
-	require.NoError(t, Run(f.api, context.Background(), SpawnOpts{Kind: "k"}, func(context.Context) error { return nil }))
+	require.NoError(t, Run(context.Background(), f.api, SpawnOpts{Kind: "k"}, func(context.Context) error { return nil }))
 	assert.Equal(t, []string{VerbCreated, VerbDone}, f.until(t, VerbDone))
 
 	boom := errors.New("boom")
-	assert.ErrorIs(t, Run(f.api, context.Background(), SpawnOpts{Kind: "k"}, func(context.Context) error { return boom }), boom)
+	assert.ErrorIs(t, Run(context.Background(), f.api, SpawnOpts{Kind: "k"}, func(context.Context) error { return boom }), boom)
 	assert.Equal(t, []string{VerbCreated, VerbError}, f.until(t, VerbError))
 }
 
@@ -95,7 +98,7 @@ func TestRunPublishesDoneOrError(t *testing.T) {
 func TestRunEndsACancelledRunAsDone(t *testing.T) {
 	f := newRunFixture(t)
 	parent, cancel := context.WithCancel(context.Background())
-	err := Run(f.api, parent, SpawnOpts{Kind: "k"}, func(ctx context.Context) error {
+	err := Run(parent, f.api, SpawnOpts{Kind: "k"}, func(ctx context.Context) error {
 		cancel()
 		<-ctx.Done()
 		return io.ErrUnexpectedEOF
@@ -141,7 +144,7 @@ func TestRunToCompletionOutlivesTheClose(t *testing.T) {
 func TestRunPublishesAPanicAndReraisesIt(t *testing.T) {
 	f := newRunFixture(t)
 	assert.PanicsWithValue(t, "boom", func() {
-		_ = Run(f.api, context.Background(), SpawnOpts{Kind: "k"}, func(context.Context) error { panic("boom") })
+		_ = Run(context.Background(), f.api, SpawnOpts{Kind: "k"}, func(context.Context) error { panic("boom") })
 	})
 	assert.Equal(t, []string{VerbCreated, VerbError}, f.until(t, VerbError))
 }

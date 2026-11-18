@@ -248,7 +248,7 @@ func (inst *QueryStore) Execute(sql string, signals map[string]string, sourceBuf
 
 		// The run is a keelson task. It ends before cancel runs, which would
 		// otherwise be announced on it as a cancel.
-		_ = task.Run(inst.client.Tasks(), ctx, task.SpawnOpts{Kind: "play.query", Title: "run the query", Cancellable: true}, func(ctx context.Context) (runErr error) {
+		_ = task.Run(ctx, inst.client.Tasks(), task.SpawnOpts{Kind: "play.query", Title: "run the query", Cancellable: true}, func(ctx context.Context) (runErr error) {
 			// Per-run options copy carrying the live-progress sink (ADR-0115
 			// plane A): ticks land under mu while this run is loading; the
 			// isLoading gate above means no second run can be in flight, so
