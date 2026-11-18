@@ -48,6 +48,13 @@ type Opts struct {
 	// way to drag a 100000pt column back.
 	MinPoints float64
 	MaxPoints float64
+	// InstanceOnly keeps a width to the table it was dragged in: captures
+	// are written to the instance tier alone, and only that tier is read.
+	// For an app whose tables are separately authored views — dashboard
+	// panels — where a column name recurring in two of them says nothing
+	// about how wide either should be. False shares a dragged column's
+	// width with every table of the app that shows that column.
+	InstanceOnly bool
 }
 
 // entry is one override held in memory.
@@ -165,6 +172,9 @@ func (inst *Resolver) Load() (err error) {
 	}
 	for _, row := range rows {
 		k := row.Key()
+		if inst.opts.InstanceOnly && k.Tier != statestore.ColWidthTierInstance {
+			continue
+		}
 		if e, ok := inst.byKey[k]; ok && e.dirty {
 			continue
 		}
@@ -244,11 +254,15 @@ func (inst *Resolver) Resolve(tableTag string, cols []Column, fontSize float64, 
 
 // lookup walks the tiers most-specific-first.
 func (inst *Resolver) lookup(tableTag, shape, columnKey string, fontSize float64) (points float64, ok bool) {
-	for _, k := range []statestore.ColumnWidthKey{
+	keys := []statestore.ColumnWidthKey{
 		{Tier: statestore.ColWidthTierInstance, Scope: tableTag, ColumnKey: columnKey},
 		{Tier: statestore.ColWidthTierShape, Scope: shape, ColumnKey: columnKey},
 		{Tier: statestore.ColWidthTierColumn, ColumnKey: columnKey},
-	} {
+	}
+	if inst.opts.InstanceOnly {
+		keys = keys[:1]
+	}
+	for _, k := range keys {
 		e, found := inst.byKey[k]
 		if !found {
 			continue
@@ -361,15 +375,12 @@ func (inst *Resolver) Observe(tableTag string, cols []Column, fetched []float64,
 	}
 }
 
-// capture records a pending override on the instance and column tiers. The
+// capture records a pending override on the tiers writtenKeys names. The
 // shape tier is read-only in v1 (§SD1): it exists so a table under a new
 // tag can inherit widths, and writing it from a single table's drag would
 // claim more than the user expressed.
 func (inst *Resolver) capture(tableTag, columnKey string, points, fontSize float64, now time.Time) {
-	for _, k := range []statestore.ColumnWidthKey{
-		{Tier: statestore.ColWidthTierInstance, Scope: tableTag, ColumnKey: columnKey},
-		{Tier: statestore.ColWidthTierColumn, ColumnKey: columnKey},
-	} {
+	for _, k := range inst.writtenKeys(tableTag, columnKey) {
 		e, ok := inst.byKey[k]
 		if !ok {
 			e = &entry{}
@@ -417,7 +428,7 @@ func (inst *Resolver) Flush(now time.Time) (written int, err error) {
 	return
 }
 
-// Clear removes the instance- and column-tier overrides for one column and
+// Clear removes the overrides a capture writes for one column (writtenKeys) and
 // returns it to defaults (§SD5's "clear override" affordance). The next
 // Resolve for the table sees different widths and bumps its epoch, so the
 // crate is re-seeded without the caller doing anything.
@@ -427,10 +438,7 @@ func (inst *Resolver) Flush(now time.Time) (written int, err error) {
 // write it back a moment later.
 func (inst *Resolver) Clear(tableTag string, col Column) (err error) {
 	key := col.Key()
-	for _, k := range []statestore.ColumnWidthKey{
-		{Tier: statestore.ColWidthTierInstance, Scope: tableTag, ColumnKey: key},
-		{Tier: statestore.ColWidthTierColumn, ColumnKey: key},
-	} {
+	for _, k := range inst.writtenKeys(tableTag, key) {
 		delete(inst.byKey, k)
 		if derr := inst.store.DeleteColumnWidth(inst.opts.AppId, k.Tier, k.Scope, k.ColumnKey); derr != nil {
 			err = eb.Build().Str("tier", k.Tier).Str("columnKey", k.ColumnKey).Errorf("colwidth: clear failed: %w", derr)
@@ -480,6 +488,20 @@ func (inst *Resolver) PendingCount() (n int) {
 // Len reports the number of overrides held in memory.
 func (inst *Resolver) Len() (n int) {
 	n = len(inst.byKey)
+	return
+}
+
+// writtenKeys is where a capture of one column lands, and so what a clear
+// removes: the instance and column tiers, or the instance tier alone under
+// Opts.InstanceOnly.
+func (inst *Resolver) writtenKeys(tableTag, columnKey string) (keys []statestore.ColumnWidthKey) {
+	keys = []statestore.ColumnWidthKey{
+		{Tier: statestore.ColWidthTierInstance, Scope: tableTag, ColumnKey: columnKey},
+		{Tier: statestore.ColWidthTierColumn, ColumnKey: columnKey},
+	}
+	if inst.opts.InstanceOnly {
+		keys = keys[:1]
+	}
 	return
 }
 

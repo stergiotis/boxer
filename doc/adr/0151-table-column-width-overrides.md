@@ -815,6 +815,26 @@ a tuned column goes back to its estimator once — the cost ADR-0105's entry
 names. The live durability tests were rerun against the new backend on this
 date.
 
+## Update — 2026-11-18: an app whose tables are not ad-hoc results opts out of the shared tiers
+
+The column tier carries a dragged width to every table of the app that shows
+a column of that name and type (§SD1). That is right for play, whose grids
+are ad-hoc query results where a recurring column means the same thing. It
+is wrong for a dashboard viewer: its tables are panels someone authored, a
+`value` or `time` column turns up in most of them, and a drag in one panel
+moved the columns of every other panel showing that name — across dashboards,
+live during the drag, since the capture is in memory before the debounce
+writes it. The instance tag the viewer passed per panel did not help; it
+scopes only the instance tier.
+
+`colwidth.Opts.InstanceOnly` now keeps a width to its table: a capture is
+written to the instance tier alone, `Resolve` reads only that tier, `Load`
+skips rows of the other two, and `Clear` removes only what a capture would
+have written. It is a per-resolver choice, not per table, because whether
+column names carry meaning across tables is a property of the app. The
+default is unchanged. Column-tier rows an app wrote before opting in stay
+stored and are no longer read.
+
 ## Status
 
 Accepted 2026-07-30. The fact kind and M1–M6 are all implemented (Updates

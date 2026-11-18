@@ -698,3 +698,23 @@ func TestObserve_DroppedReportDoesNotSpendTheSettleWindow(t *testing.T) {
 
 	assert.Zero(t, r.PendingCount(), "none of that is a user gesture")
 }
+
+// Under InstanceOnly a drag stays in its table: another table showing the
+// same column keeps its default, and nothing is written to the column tier.
+func TestInstanceOnly_ADragDoesNotReachAnotherTable(t *testing.T) {
+	store := statestore.NewMemory()
+	r, err := New(store, Opts{AppId: "play", InstanceOnly: true})
+	require.NoError(t, err)
+	cols := []Column{colA}
+	settled(t, r, "one", cols, []float64{50})
+	settled(t, r, "two", cols, []float64{50})
+
+	r.Observe("one", cols, []float64{140}, 12, false, t0)
+	assert.Equal(t, 1, r.PendingCount(), "only the instance tier is written")
+	assert.Equal(t, 140.0, r.Resolve("one", cols, 12, []float64{50})[0])
+	assert.Equal(t, 50.0, r.Resolve("two", cols, 12, []float64{50})[0])
+
+	require.NoError(t, store.WriteColumnWidth(statestore.ColumnWidthRow{AppId: "play", Tier: statestore.ColWidthTierColumn, ColumnKey: colA.Key(), Points: 99}))
+	require.NoError(t, r.Load())
+	assert.Equal(t, 50.0, r.Resolve("two", cols, 12, []float64{50})[0], "a stored column-tier row is not read")
+}
