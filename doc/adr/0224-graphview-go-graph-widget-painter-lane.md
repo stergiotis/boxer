@@ -652,6 +652,28 @@ the picture drops the pinned rings, then the arrow heads, then draws a stable
 1-in-k sample of the edges, and `PaintStats` says what went. Mesh edges and
 heads are not feathered, where the per-shape paint was.
 
+### 2026-11-18 — a node that swings has its step shortened
+
+SD2 ported the crate's integrator as it was: every node moves by its
+displacement times `Dt·Damping`, clamped to `MaxStep`, with no cooling. That
+step is fixed, so a node stiffer than the step allows — a hub of a few dozen
+edges, or the nodes of a dense clique, under the defaults — overshoots its
+equilibrium by more than it closed the gap. The clamp then holds the
+overshoot at `MaxStep`, and the node jumps between two positions
+indefinitely. The average step stays near `MaxStep`, so the layout never
+reports settled and `PauseOnSettle` never takes hold.
+
+The integrator now keeps a gain per node. It halves when the node's
+displacement points against the node's previous step, and grows back by a
+factor of 1.2 per step, up to 1, while it does not. This is ForceAtlas2's
+per-node swing speed reduced to a sign test. A node that approaches its
+rest without overshooting keeps gain 1 and takes the step it took before;
+a swinging one shortens its step until the cycle decays. The gain resets
+when the slots are renumbered and on `ResetLayout`. `Dt`, `Damping` and
+`MaxStep` keep their meaning as upper bounds on the step. A layout whose
+nodes reversed on the way to rest takes a different path there. Both force models share the integrator, so the neighbour-embedding model
+gets the same damping.
+
 ## References
 
 - [ADR-0069](./0069-imzero2-layeredgraph-widget.md) — the first graph widget

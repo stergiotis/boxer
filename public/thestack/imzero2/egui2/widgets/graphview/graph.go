@@ -80,6 +80,9 @@ type graph struct {
 	// topology hash does not cover — a pull, an edge length or strength —
 	// so a PauseOnSettle hold wakes for them.
 	forceVer uint32
+	// slotGen counts the slot renumberings (relayout), so state the force
+	// step keeps per slot knows when it no longer belongs to the same nodes.
+	slotGen uint32
 
 	// rowSlot maps each row of this frame's declaration to its slot, valid
 	// until the next reconcile; the aura table is built from it.
@@ -279,6 +282,7 @@ func (g *graph) relayout(ids []uint64) {
 		g.pull[s] = Pull{}
 	}
 	g.posVer++
+	g.slotGen++
 }
 
 // setNode copies row i's attributes into slot s.

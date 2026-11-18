@@ -19,7 +19,28 @@ type forceState struct {
 	zi          []float32 // per-node partial of the repulsion normaliser Z
 	lastExag    float32   // the exaggeration the last step used
 	annealSteps uint64    // the schedule length the last step ran under
+	// Swing damping: per slot, the step last applied and the gain on the
+	// next one (see applyDisplacements). Valid for the slot assignment
+	// numbered swingGen; a relayout renumbers the slots and resets them.
+	prevX, prevY []float32
+	gain         []float32
+	swingGen     uint32
 }
+
+// Swing damping (ADR-0224 Update 2026-11-18). A node whose step reverses
+// direction is jumping across its equilibrium: the step is too long for the
+// local stiffness — a hub of a few dozen edges under the defaults — and the
+// fixed-step integrator turns that into a two-position cycle at MaxStep
+// amplitude that never settles. Its gain halves on each reversal and grows
+// back by swingGrow per step that does not reverse, to 1, so a node that
+// moves steadily takes the plain step and a swinging one shrinks its step
+// until the cycle decays — the per-node speed of ForceAtlas2 (Jacomy et al.
+// 2014) reduced to a sign test.
+const (
+	swingShrink  = 0.5
+	swingGrow    = 1.2
+	swingMinGain = 1.0 / 1024
+)
 
 // parallelMinNodes is the node count from which the repulsion pass splits
 // across goroutines. Below it the fork/join costs more than the rows.
@@ -87,8 +108,32 @@ func (fs *forceState) step(g *graph, w, h float32, p ForceParams, centerGravity 
 			}
 		}
 	}
-	fs.lastDisp = applyDisplacements(g, fs.dx, fs.dy, p.Dt, p.Damping, p.MaxStep)
+	fs.prepareSwing(g)
+	fs.lastDisp = fs.applyDisplacements(g, p.Dt, p.Damping, p.MaxStep)
 	fs.steps++
+}
+
+// prepareSwing sizes the swing state to the graph and resets it when the
+// slots were renumbered since it was last written: every node starts at
+// full gain with no previous step.
+func (fs *forceState) prepareSwing(g *graph) {
+	n := g.n()
+	if len(fs.gain) == n && fs.swingGen == g.slotGen {
+		return
+	}
+	fs.prevX = growTo(fs.prevX, n)
+	fs.prevY = growTo(fs.prevY, n)
+	fs.gain = growTo(fs.gain, n)
+	fs.resetSwing()
+	fs.swingGen = g.slotGen
+}
+
+func (fs *forceState) resetSwing() {
+	clear(fs.prevX)
+	clear(fs.prevY)
+	for i := range fs.gain {
+		fs.gain[i] = 1
+	}
 }
 
 // forcesFR accumulates the Fruchterman–Reingold displacements.
@@ -327,19 +372,31 @@ func attraction(g *graph, dx, dy []float32, k, eps, cAttract float32) {
 	}
 }
 
-// applyDisplacements moves every node that is not fixed by disp · dt · damping,
-// clamped to maxStep, and returns the average clamped step length — the
-// settle metric, 0 when nothing could move. Non-finite results leave the
-// node where it was.
-func applyDisplacements(g *graph, dx, dy []float32, dt, damping, maxStep float32) float32 {
+// applyDisplacements moves every node that is not fixed by
+// disp · dt · damping · gain, clamped to maxStep, and returns the average
+// clamped step length — the settle metric, 0 when nothing could move.
+// Non-finite results leave the node where it was. gain is the node's swing
+// gain, updated first: halved when the displacement points against the
+// node's previous step, grown toward 1 otherwise. A fixed node forgets its
+// previous step, so a drag's release starts it afresh.
+func (fs *forceState) applyDisplacements(g *graph, dt, damping, maxStep float32) float32 {
+	dx, dy := fs.dx, fs.dy
 	var sum float32
 	count := 0
 	scale := dt * damping
 	for i := range g.ids {
 		if g.fixed[i] {
+			fs.prevX[i], fs.prevY[i] = 0, 0
 			continue
 		}
-		sx, sy := dx[i]*scale, dy[i]*scale
+		gn := fs.gain[i]
+		if dx[i]*fs.prevX[i]+dy[i]*fs.prevY[i] < 0 {
+			gn = max(gn*swingShrink, swingMinGain)
+		} else {
+			gn = min(gn*swingGrow, 1)
+		}
+		fs.gain[i] = gn
+		sx, sy := dx[i]*scale*gn, dy[i]*scale*gn
 		l := float32(math.Sqrt(float64(sx*sx + sy*sy)))
 		if l > maxStep {
 			s := maxStep / l
@@ -349,9 +406,11 @@ func applyDisplacements(g *graph, dx, dy []float32, dt, damping, maxStep float32
 		}
 		nx, ny := g.x[i]+sx, g.y[i]+sy
 		if math.IsNaN(float64(nx)) || math.IsInf(float64(nx), 0) || math.IsNaN(float64(ny)) || math.IsInf(float64(ny), 0) {
+			fs.prevX[i], fs.prevY[i] = 0, 0
 			continue
 		}
 		g.x[i], g.y[i] = nx, ny
+		fs.prevX[i], fs.prevY[i] = sx, sy
 		sum += l
 		count++
 	}
@@ -375,4 +434,5 @@ func (fs *forceState) reset() {
 	fs.lastDisp = nan32
 	fs.lastExag = 0
 	fs.annealSteps = 0
+	fs.resetSwing()
 }
