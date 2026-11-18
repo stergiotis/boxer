@@ -483,6 +483,14 @@ language or hot reload; no cross-process backpressure or lease. A need
 past that line is the framework's. The dead-letter store moved into its
 own package with this, shared by the lander and the driver.
 
+### 2026-11-18 — the chunk package is removed
+
+The reassembler kept in the chunk package for "a process that holds the whole
+set itself" never gained that process, and the package had no importer, so
+`public/storage/blob/chunked` was deleted. The Surfaces row that says it
+"gains its consumer" records the plan as written; neither side of the chunk
+protocol survives in the tree.
+
 ## References
 
 - [ADR-0005](./0005-streaming-persisted-kafka-from-connect.md) — the Kafka

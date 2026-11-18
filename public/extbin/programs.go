@@ -101,17 +101,6 @@ var (
 		OverrideEnv: ClickHouseLocalBin.Spec().Name,
 		InstallHint: "https://clickhouse.com/docs/en/install",
 	})
-
-	// ClickHouseFormat pretty-prints, hilites or obfuscates SQL for
-	// db/clickhouse/cli.Formater. A distinct subcommand of the same binary, so a
-	// distinct declaration — the flags it takes (--hilite, --obfuscate,
-	// --oneline) are not `clickhouse local` flags.
-	ClickHouseFormat = Declare(Program{
-		Name:        "clickhouse format",
-		Argv:        []string{"clickhouse", "format"},
-		Kind:        Host,
-		InstallHint: "https://clickhouse.com/docs/en/install",
-	})
 )
 
 // Media.

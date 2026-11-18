@@ -215,6 +215,14 @@ the symlinks, so the fallback would guard nothing while making `Opts.Path`
 ambiguous about whether the prefix applies.
 
 
+### 2026-11-18 — `clickhouse format` and its one caller are removed
+
+`public/db/clickhouse/cli`, the `Formater` that was the only caller of the
+`clickhouse format` declaration, had no importer and was deleted; the
+declaration went with it. The `Argv` mechanism above is unchanged and still
+carries `clickhouse local`. The spawning inventory in §Decision names the
+package as it stood when written.
+
 ## Deferred
 
 - `OverrideEnv` is populated for `clickhouse-local` (`BOXER_CLICKHOUSE_LOCAL`, a
