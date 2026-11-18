@@ -1,9 +1,9 @@
-// Demo-registry enrollment for splashscreen (ADR-0057). This replaces the
-// former per-app screenshot tour: instead of a settle/capture/advance state
-// machine driven by a screenshot-mode SeededFuncApp, each tab (splash / about /
-// notice) registers as its own Demo whose body is the splash App rendered into
-// the host Ui scope. The central TestDriver (widgets) captures one PNG per tab,
-// and they appear in the widget gallery via registry.Embed.
+// Demo-registry enrollment for splashscreen (ADR-0057). Each scene below
+// registers as its own Demo whose body is the splash App rendered into the
+// host Ui scope, pinned to one tab. The central TestDriver (widgets)
+// captures one PNG per scene, and they appear in the widget gallery via
+// registry.Embed. The scenes show boxer's tabs; a program registered by the
+// binary running the gallery adds a tab, but the scenes stay on boxer's.
 
 package splashscreen
 
@@ -13,24 +13,26 @@ import (
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/demo/apps/registry"
 )
 
-// splashScenes is one entry per registered Demo. Each pins a tab; the shared
-// Init/RenderStateful pair builds an App fixed to that tab and renders it.
+// splashScenes is one entry per registered Demo. Each pins a first-row
+// selection and a page; the shared Init/RenderStateful pair builds an App
+// fixed to them and renders it.
 var splashScenes = []struct {
 	name   string
-	tab    tabE
+	sel    string
+	page   pageE
 	title  string
 	desc   string
 	source any
 }{
-	{"splashscreen-splash", tabSplash, icons.PhSparkle + " Boxer splash",
-		"The boxer splash pane — bundled portrait artwork scaled to fit via the imzero2 Image widget (a placeholder line when the git-ignored asset is absent).",
+	{"splashscreen-splash", boxerKey, pageSplash, icons.PhSparkle + " Boxer splash",
+		"boxer's Splash page — the bundled portrait artwork scaled to fit via the imzero2 Image widget (a placeholder line when the asset is absent).",
 		(*App).renderSplash},
-	{"splashscreen-about", tabAbout, icons.PhInfo + " About boxer",
-		"The About tab — app identity, version, copyright/VCS provenance, and the license line.",
+	{"splashscreen-about", boxerKey, pageAbout, icons.PhInfo + " About boxer",
+		"boxer's About page — its copyright, licence and NOTICE, in a scroll area.",
 		(*App).renderAbout},
-	{"splashscreen-notice", tabNotice, icons.PhScroll + " NOTICE",
-		"The NOTICE tab — the bundled project NOTICE text in a scroll area.",
-		(*App).renderNotice},
+	{"splashscreen-build", buildKey, pageSplash, icons.PhWrench + " Build",
+		"The Build tab — the running binary's revision, module and run identity.",
+		(*App).renderBuild},
 }
 
 func init() {
@@ -43,23 +45,25 @@ func init() {
 			Flags:          registry.DemoFlagNeedsLargeArea,
 			Kind:           registry.DemoKindUX,
 			Description:    sc.desc,
-			Init:           makeTourInit(sc.tab),
+			Init:           makeTourInit(sc.sel, sc.page),
 			RenderStateful: tourRenderStateful,
 			SourceFunc:     sc.source,
 		})
 	}
 }
 
-// makeTourInit returns an Init that builds a splash App fixed to tab. Mount
-// normally loads the bundled artwork/NOTICE, but the gallery and tour build
-// instances without Mount, so the (idempotent, sync.Once) loadAssets runs
-// here. The App is bound to the tour-provided id stack (inst.ids), onto
-// which the host/tour pushes a window-unique salt before each frame.
-func makeTourInit(tab tabE) func(ids *c.WidgetIdStack) (state any) {
+// makeTourInit returns an Init that builds a splash App fixed to sel and
+// page. Mount normally loads the bundled artwork and NOTICE, but the
+// gallery and tour build instances without Mount, so the (idempotent,
+// sync.Once) loadAssets runs here. The App is bound to the tour-provided id
+// stack (inst.ids), onto which the host/tour pushes a window-unique salt
+// before each frame.
+func makeTourInit(sel string, page pageE) func(ids *c.WidgetIdStack) (state any) {
 	return func(ids *c.WidgetIdStack) (state any) {
 		loadAssets()
 		inst := newApp()
-		inst.tab = tab
+		inst.sel = sel
+		inst.page = page
 		inst.ids = ids
 		state = inst
 		return

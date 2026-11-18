@@ -25,24 +25,23 @@ func TestManifestRegistered(t *testing.T) {
 // TestNoticeEmbedded checks the committed NOTICE copy embeds and loads.
 func TestNoticeEmbedded(t *testing.T) {
 	loadAssets()
-	if !strings.Contains(noticeText, "boxer") {
-		t.Errorf("NOTICE does not look like the project NOTICE; first line = %q", firstLine(noticeText))
+	if !strings.Contains(boxerNotice, "boxer") {
+		t.Errorf("NOTICE does not look like the project NOTICE; first line = %q", firstLine(boxerNotice))
 	}
 }
 
-// TestSplashImageDecodesWhenPresent exercises the decode/pack path. The
-// artwork is git-ignored, so on a checkout without it (CI, fresh clone)
-// splashErr is set and the test skips — running without the asset is a
-// supported, deliberately-degraded mode.
+// TestSplashImageDecodesWhenPresent exercises the decode/pack path. On a
+// build without the artwork boxerArtErr is set and the test skips —
+// running without the asset is a supported, deliberately-degraded mode.
 func TestSplashImageDecodesWhenPresent(t *testing.T) {
-	loadAssets()
-	if splashErr != nil {
-		t.Skipf("splash artwork not bundled in this checkout: %v", splashErr)
+	img, err := boxerImage()
+	if err != nil {
+		t.Skipf("splash artwork not bundled in this checkout: %v", err)
 	}
-	if splashW == 0 || splashH == 0 {
-		t.Fatalf("decoded dims = %dx%d, want non-zero", splashW, splashH)
+	if img.w == 0 || img.h == 0 {
+		t.Fatalf("decoded dims = %dx%d, want non-zero", img.w, img.h)
 	}
-	if got, want := len(splashPixels), int(splashW)*int(splashH); got != want {
+	if got, want := len(img.pixels), int(img.w)*int(img.h); got != want {
 		t.Fatalf("pixel count = %d, want %d (w*h)", got, want)
 	}
 }

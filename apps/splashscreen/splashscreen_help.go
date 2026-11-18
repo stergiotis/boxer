@@ -8,19 +8,16 @@ import (
 	"time"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/help"
-	"github.com/stergiotis/boxer/public/keelson/runtime/runinfo"
-	"github.com/stergiotis/boxer/public/observability/vcs"
 )
 
-// The help book (ADR-0047, keelson-app A4): one page, the About tab as
-// prose. The static part is help/overview.md; the values the About tab
-// reads from the running process — version, provenance, run identity —
-// and the NOTICE text are appended when the page is opened, so the page
-// says what the tab says rather than a copy that goes stale. Only the
-// overview is rendered this way; every other name is the embedded
-// directory's.
+// The help book (ADR-0047, keelson-app A4): one page, the window's tabs as
+// prose. The static part is help/overview.md; each credited party's
+// identity, licence and NOTICE, and the Build fields, are appended when the
+// page is opened, so the page says what the tabs say rather than a copy
+// that goes stale. Only the overview is rendered this way; every other name
+// is the embedded directory's.
 
-// helpOverview is the page the About content is appended to.
+// helpOverview is the page the tabs' content is appended to.
 const helpOverview = "overview.md"
 
 // aboutHelpFS serves the embedded help directory, with the overview
@@ -42,57 +39,35 @@ func (inst aboutHelpFS) Open(name string) (f fs.File, err error) {
 	if err != nil {
 		return
 	}
-	return fstest.MapFS{helpOverview: &fstest.MapFile{Data: renderAbout(src), ModTime: time.Now()}}.Open(helpOverview)
+	return fstest.MapFS{helpOverview: &fstest.MapFile{Data: helpPage(src), ModTime: time.Now()}}.Open(helpOverview)
 }
 
-// renderAbout appends the About tab's content to the static page: the
-// identity and licence lines the tab draws, the Build section's fields,
-// and the NOTICE in a fenced block so its file paths stay verbatim.
-func renderAbout(static []byte) (page []byte) {
-	loadAssets()
+// helpPage appends the tabs' content to the static page: one section per
+// party, in tab order, with the identity lines its About page draws and its
+// NOTICE in a fenced block so file paths stay verbatim; then the Build
+// fields.
+func helpPage(static []byte) (page []byte) {
 	var b strings.Builder
 	b.Write(static)
 	if !strings.HasSuffix(b.String(), "\n") {
 		b.WriteByte('\n')
 	}
-	b.WriteString("\n## Identity\n\n")
-	fmt.Fprintf(&b, "- %s · version %s\n", manifest.Display, manifest.Version)
-	fmt.Fprintf(&b, "- %s\n", vcs.CopyrightInfo())
-	b.WriteString("- Licensed under the MIT License (see the NOTICE below).\n")
+	for _, p := range parties() {
+		fmt.Fprintf(&b, "\n## %s\n\n", p.name)
+		for _, line := range p.identityLines() {
+			fmt.Fprintf(&b, "- %s\n", line)
+		}
+		if p.notice != "" {
+			fmt.Fprintf(&b, "\n### NOTICE of %s\n\n```text\n", p.name)
+			b.WriteString(strings.TrimRight(p.notice, "\n"))
+			b.WriteString("\n```\n")
+		}
+	}
 	b.WriteString("\n## Build\n\n")
 	for _, kv := range buildInfo() {
 		fmt.Fprintf(&b, "- **%s**: `%s`\n", kv[0], kv[1])
 	}
-	b.WriteString("\n## NOTICE\n\n```text\n")
-	b.WriteString(strings.TrimRight(noticeText, "\n"))
-	b.WriteString("\n```\n")
 	return []byte(b.String())
-}
-
-// buildInfo is the Build section as key-value pairs, the same fields in
-// the same order renderBuildInfo draws them.
-func buildInfo() (kvs [][2]string) {
-	rev, modified, revErr := vcs.GetVcsRevision()
-	switch {
-	case revErr != nil || rev == "":
-		kvs = append(kvs, [2]string{"Revision", vcs.NoBuildInfo})
-	case modified:
-		kvs = append(kvs, [2]string{"Revision", rev + " (modified)"})
-	default:
-		kvs = append(kvs, [2]string{"Revision", rev + " (clean)"})
-	}
-	kvs = append(kvs, [2]string{"Module", vcs.ModuleInfo()})
-	if ri, err := runinfo.Get(); err == nil {
-		kvs = append(kvs,
-			[2]string{"Go", ri.GoVersion},
-			[2]string{"Host", ri.Hostname},
-			[2]string{"PID", fmt.Sprintf("%d", ri.Pid)},
-			[2]string{"Run ID", ri.RunId},
-			[2]string{"Started", ri.StartedAt.Format(time.RFC3339)})
-	} else {
-		kvs = append(kvs, [2]string{"Run", "metadata unavailable (runinfo not initialised)"})
-	}
-	return
 }
 
 // newHelpFS roots the embedded help directory and wraps it.

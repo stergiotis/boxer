@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/help"
+	"github.com/stergiotis/boxer/public/observability/vcs"
 	"github.com/stretchr/testify/require"
 )
 
@@ -52,16 +53,20 @@ func TestHelpCorpusDropsNothing(t *testing.T) {
 	}
 }
 
-// TestHelpOverviewCarriesTheAboutContent: the page is the About tab's
-// content, read from the process when opened — the identity line the tab
-// draws, the Build fields in the tab's order, and the NOTICE.
+// TestHelpOverviewCarriesTheAboutContent: the page is the tabs' content,
+// read from the process when opened — boxer's identity, licence and
+// NOTICE, and the Build fields in the tab's order.
 func TestHelpOverviewCarriesTheAboutContent(t *testing.T) {
+	t.Cleanup(ClearProgram)
+	ClearProgram()
 	loadAssets()
-	page := string(renderAbout([]byte("# About boxer\n")))
-	require.Contains(t, page, manifest.Display+" · version "+manifest.Version)
+	page := string(helpPage([]byte("# About boxer\n")))
+	require.Contains(t, page, "## boxer")
+	require.Contains(t, page, "- "+vcs.CopyrightInfo()+"\n")
+	require.Contains(t, page, "- "+boxerLicense+"\n")
+	require.Contains(t, page, "```text\n"+strings.TrimRight(boxerNotice, "\n")+"\n```")
 	require.Contains(t, page, "## Build")
 	require.Contains(t, page, "**Revision**")
 	require.Contains(t, page, "**Module**")
-	require.Contains(t, page, "```text\n"+strings.TrimRight(noticeText, "\n")+"\n```")
 	require.Len(t, buildInfo()[0], 2)
 }

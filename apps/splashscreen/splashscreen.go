@@ -1,123 +1,34 @@
 package splashscreen
 
 import (
-	"bytes"
 	"fmt"
-	"image"
-	_ "image/png" // register the PNG decoder for the embedded splash asset
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
 	"github.com/stergiotis/boxer/public/keelson/runtime/runinfo"
-	"github.com/stergiotis/boxer/public/observability/eh"
-	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/observability/vcs"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/selector"
 )
 
-// tabE selects which of the three panes the body renders.
-type tabE uint8
+// The window has two rows of tabs. The first names each credited party —
+// the program, when one is registered, then boxer — and Build, the running
+// binary's provenance. The second, under a party, picks its page: Splash,
+// its artwork, and About, its identity, licence and NOTICE.
+
+// buildKey is the first-row entry of the Build tab.
+const buildKey = "build"
+
+// pageE selects a party's page.
+type pageE uint8
 
 const (
-	tabSplash tabE = iota
-	tabAbout
-	tabNotice
+	pageSplash pageE = iota
+	pageAbout
 )
-
-// splashImgKey is both the widget-id key and the version-tracker key for the
-// splash texture; the two must stay 1:1 (see ImageVersionTracker docs).
-const splashImgKey = "splash-img"
-
-const (
-	splashAssetPath = "assets/splash.png"
-	noticeAssetPath = "assets/NOTICE"
-)
-
-// Assets are loaded once, lazily on first Mount, into package-level state
-// shared read-only across every instance: the data is immutable and each
-// window's Image widget carries its own id, so sharing the upload source
-// avoids re-decoding ~0.5 MB per window. Loading lazily (rather than in init)
-// keeps the cost off the startup path for the common case where the user never
-// opens this app.
-//
-// A read/decode failure of the splash image is recorded in splashErr and
-// surfaced as a degraded pane rather than a hard error. Both assets are
-// committed, so either missing is a build that went wrong.
-var (
-	assetsOnce   sync.Once
-	splashPixels []uint32
-	splashW      uint32
-	splashH      uint32
-	splashErr    error
-	noticeText   string
-)
-
-func loadAssets() {
-	assetsOnce.Do(func() {
-		if data, err := assetsFS.ReadFile(noticeAssetPath); err == nil {
-			noticeText = string(data)
-		} else {
-			noticeText = "NOTICE asset is missing from this build."
-		}
-
-		data, err := assetsFS.ReadFile(splashAssetPath)
-		if err != nil {
-			splashErr = eh.Errorf("read splash asset: %w", err)
-			return
-		}
-		img, _, decErr := image.Decode(bytes.NewReader(data))
-		if decErr != nil {
-			splashErr = eh.Errorf("decode splash png: %w", decErr)
-			return
-		}
-		b := img.Bounds()
-		w := b.Dx()
-		h := b.Dy()
-		if w <= 0 || h <= 0 {
-			splashErr = eb.Build().Int("width", w).Int("height", h).Errorf("splash png has empty bounds")
-			return
-		}
-		// Map luminance through an IDS sequential palette via a 256-entry LUT.
-		// Default: the design-system grayscale ramp (Crameri grayC, which runs
-		// t=0→white … t=1→black, so invert luminance to keep the artwork's
-		// tonality — dark stays dark). When the KEELSON_EASTEREGG toggle is on,
-		// colourise with viridis instead (t runs dark→bright, no inversion).
-		// Output is packed 0xRRGGBBAA row-major — the imzero2 Image widget's
-		// pixel contract; alpha is carried through per pixel.
-		egg := app.EasterEgg.Get()
-		var paletteLUT [256]uint32
-		for n := range paletteLUT {
-			var c8 styletokens.RGBA8
-			if egg {
-				c8 = styletokens.Sequential(styletokens.SequentialViridis, float32(n)/255.0)
-			} else {
-				c8 = styletokens.Sequential(styletokens.SequentialGrayC, 1.0-float32(n)/255.0)
-			}
-			paletteLUT[n] = uint32(c8.R)<<24 | uint32(c8.G)<<16 | uint32(c8.B)<<8
-		}
-		px := make([]uint32, w*h)
-		i := 0
-		for y := b.Min.Y; y < b.Max.Y; y++ {
-			for x := b.Min.X; x < b.Max.X; x++ {
-				r, g, bl, a := img.At(x, y).RGBA()
-				// Rec.601 luma (weights sum to 256). Equals the gray value for
-				// our grayscale asset, but stays correct if a colour image is
-				// ever swapped in.
-				lum := (77*(r>>8) + 150*(g>>8) + 29*(bl>>8)) >> 8
-				px[i] = paletteLUT[lum] | uint32(a>>8)
-				i++
-			}
-		}
-		splashPixels = px
-		splashW = uint32(w)
-		splashH = uint32(h)
-	})
-}
 
 // App is the per-window splashscreen instance.
 type App struct {
@@ -129,22 +40,30 @@ type App struct {
 	ids *c.WidgetIdStack
 
 	density styletokens.DensityE
-	tab     tabE
-	// imgTracker gates the splash texture upload: full pixels on the first
-	// render, an empty slice ("use cached") thereafter. Per-instance because
-	// the widget id — and thus the Rust-side GPU cache key — is scoped by
-	// the host-salted inst.ids stack.
+	// sel is the first-row selection: a party's key or buildKey.
+	sel  string
+	page pageE
+	// imgTracker gates each party's texture upload: full pixels on the
+	// first render, an empty slice ("use cached") thereafter.
+	// Per-instance because the widget id — and thus the Rust-side GPU
+	// cache key — is scoped by the host-salted inst.ids stack.
 	imgTracker *c.ImageVersionTracker[string]
 }
 
 var _ app.AppI = (*App)(nil)
 
+// newApp opens on the program's splash when a program is registered,
+// otherwise on boxer's.
 func newApp() (inst *App) {
 	inst = &App{
 		ids:        c.NewWidgetIdStack(),
 		density:    styletokens.ActiveDensity(),
-		tab:        tabSplash,
+		sel:        boxerKey,
+		page:       pageSplash,
 		imgTracker: c.NewImageVersionTracker[string](),
+	}
+	if programRegistered() {
+		inst.sel = programKey
 	}
 	return
 }
@@ -154,12 +73,12 @@ func (inst *App) Manifest() (m app.Manifest) { m = manifest; return }
 func (inst *App) Mount(ctx app.MountContextI) (err error) {
 	inst.ids = ctx.Ids()
 	loadAssets()
-	if splashErr != nil {
-		// Expected when the git-ignored artwork is absent (e.g. a fresh
-		// checkout): the splash pane shows a one-line notice and the other
-		// tabs are unaffected. Logged at info — it is not a fault.
+	if boxerArtErr != nil {
+		// A build without the artwork: the Splash page shows a one-line
+		// notice and the other pages are unaffected. Logged at info — it is
+		// not a fault.
 		logger := ctx.Log()
-		logger.Info().Err(splashErr).Msg("splashscreen: splash image not bundled; showing placeholder")
+		logger.Info().Err(boxerArtErr).Msg("splashscreen: splash image not bundled; showing placeholder")
 	}
 	return
 }
@@ -183,47 +102,72 @@ func (inst *App) Frame(ctx app.FrameContextI) (err error) {
 }
 
 func (inst *App) renderBody() {
+	ps := parties()
 	for range c.PanelTopInside(inst.ids.PrepareStr("tabs")).Resizable(false).KeepIter() {
-		inst.renderTabBar()
+		inst.renderTabBar(ps)
 	}
 	for range c.PanelCentralInside().KeepIter() {
-		switch inst.tab {
-		case tabAbout:
-			inst.renderAbout()
-		case tabNotice:
-			inst.renderNotice()
-		default:
-			inst.renderSplash()
+		if p, ok := lookupParty(ps, inst.sel); ok {
+			switch inst.page {
+			case pageAbout:
+				inst.renderAbout(p)
+			default:
+				inst.renderSplash(p)
+			}
+		} else {
+			inst.renderBuild()
 		}
 	}
 }
 
-// renderTabBar draws the three selectable tab labels across the top.
-func (inst *App) renderTabBar() {
-	changed := selector.Segmented(inst.ids, "splash-tabs", &inst.tab).
-		Style(selector.StyleSelectable).
-		Option(tabSplash, icons.PhSparkle+" Splash").
-		Option(tabAbout, icons.PhInfo+" About").
-		Option(tabNotice, icons.PhScroll+" NOTICE").
-		SendResp()
-	if changed && inst.tab == tabSplash {
-		// Force one re-upload on re-entry: while another tab was shown the Image
-		// widget did not render, so the Rust-side texture may have been evicted.
-		// Forgetting the tracked version makes the next renderSplash ship full
-		// pixels again. (The change edge fires only on transition *into* Splash,
-		// which is exactly "re-entry".)
-		inst.imgTracker.Forget(splashImgKey)
+// renderTabBar draws the party row and, under a party, its page row. A
+// selection that no longer exists — the program cleared, a party without
+// artwork — falls back to the first party or to About.
+func (inst *App) renderTabBar(ps []party) {
+	if _, ok := lookupParty(ps, inst.sel); !ok && inst.sel != buildKey {
+		inst.sel = ps[0].key
+	}
+	row := selector.Segmented(inst.ids, "splash-parties", &inst.sel).
+		Style(selector.StyleSelectable)
+	for _, p := range ps {
+		row = row.Option(p.key, p.label())
+	}
+	changed := row.Option(buildKey, icons.PhWrench+" Build").SendResp()
+
+	p, ok := lookupParty(ps, inst.sel)
+	if !ok {
+		return
+	}
+	if p.image == nil && inst.page == pageSplash {
+		inst.page = pageAbout
+	}
+	pages := selector.Segmented(inst.ids, "splash-pages", &inst.page).
+		Style(selector.StyleSelectable)
+	if p.image != nil {
+		pages = pages.Option(pageSplash, icons.PhImage+" Splash")
+	}
+	if pages.Option(pageAbout, icons.PhInfo+" About").SendResp() {
+		changed = true
+	}
+	if changed && inst.page == pageSplash {
+		// Force one re-upload on re-entry: while another page was shown the
+		// Image widget did not render, so the Rust-side texture may have
+		// been evicted. Forgetting the tracked version makes the next
+		// render ship full pixels again.
+		inst.imgTracker.Forget(p.imgKey())
 	}
 }
 
-// renderSplash centers the artwork and scales it to the pane, preserving the
-// portrait aspect.
-func (inst *App) renderSplash() {
-	if splashErr != nil || len(splashPixels) == 0 {
+// renderSplash centers the party's artwork and scales it to the pane,
+// preserving its aspect.
+func (inst *App) renderSplash(p party) {
+	img, err := p.image()
+	if err != nil || len(img.pixels) == 0 {
 		c.Label("Splash image unavailable.").Send()
 		return
 	}
-	pixels := inst.imgTracker.PixelsToSend(splashImgKey, 1, splashPixels)
+	key := p.imgKey()
+	pixels := inst.imgTracker.PixelsToSend(key, img.version, img.pixels)
 	// VerticalCentered — not HorizontalCentered — is what centers content on
 	// the *horizontal* axis in egui: it lays widgets out vertically and
 	// centers them left-to-right. horizontal_centered centers on the vertical
@@ -236,71 +180,83 @@ func (inst *App) renderSplash() {
 	// so when another app renders in the same frame it clobbers the value and
 	// the image shrinks to whatever box that other window left behind.
 	for range c.VerticalCentered().KeepIter() {
-		c.Image(inst.ids.PrepareStr(splashImgKey), splashW, splashH, 1,
+		c.Image(inst.ids.PrepareStr(key), img.w, img.h, 1,
 			uint8(c.FitAspectMaxE), 0, 0,
 			uint8(c.FilterLinearE), c.TintNoneRgba, pixels).
 			Send()
 	}
 }
 
-// renderAbout shows identity, copyright and build provenance.
-func (inst *App) renderAbout() {
+// renderAbout shows the party's identity and licence, then its NOTICE
+// verbatim, one source line per label. Rendering line by line (rather than
+// through the markdown widget) keeps file paths like h3o_wasm intact —
+// markdown would read the underscores as emphasis.
+func (inst *App) renderAbout(p party) {
 	for range c.ScrollArea().Vscroll(true).AutoShrink(false, false).KeepIter() {
-		heading("boxer")
-		c.Label(manifest.Display + " · version " + manifest.Version).Send()
-		c.Label(vcs.CopyrightInfo()).Send()
-		c.Label("Licensed under the MIT License (see the NOTICE tab).").Send()
-		c.AddSpace(styletokens.GapItems(inst.density))
-		c.Label("This window shows the splash artwork, the build provenance of the running binary, and the project NOTICE.").Send()
-		c.AddSpace(styletokens.PaddingOuter(inst.density))
-		c.Separator().Horizontal().Send()
-		c.AddSpace(styletokens.GapItems(inst.density))
-		heading("Build")
-		renderBuildInfo()
+		heading(p.name)
+		for _, line := range p.identityLines() {
+			c.Label(line).Send()
+		}
+		if p.notice != "" {
+			c.AddSpace(styletokens.PaddingOuter(inst.density))
+			c.Separator().Horizontal().Send()
+			c.AddSpace(styletokens.GapItems(inst.density))
+			heading("NOTICE")
+			c.AddSpace(styletokens.GapItems(inst.density))
+			inst.renderVerbatim(p.notice)
+		}
 	}
 }
 
-// renderBuildInfo lists VCS/run metadata. VCS fields come straight from the
-// embedded build info (no init needed); run identity is read from runinfo
-// when the process initialised it (the carousel does at startup).
-func renderBuildInfo() {
+// renderVerbatim draws text one source line per label, an empty line as a
+// gap.
+func (inst *App) renderVerbatim(text string) {
+	for line := range strings.SplitSeq(strings.TrimRight(text, "\n"), "\n") {
+		if line == "" {
+			c.AddSpace(styletokens.GapItems(inst.density))
+			continue
+		}
+		c.Label(line).Send()
+	}
+}
+
+// renderBuild shows the running binary's provenance.
+func (inst *App) renderBuild() {
+	for range c.ScrollArea().Vscroll(true).AutoShrink(false, false).KeepIter() {
+		heading("Build")
+		c.Label("The running binary, as built.").Send()
+		c.AddSpace(styletokens.GapItems(inst.density))
+		for _, f := range buildInfo() {
+			kv(f[0], f[1])
+		}
+	}
+}
+
+// buildInfo is the Build tab as key-value pairs. VCS fields come straight
+// from the embedded build info (no init needed); run identity is read from
+// runinfo when the process initialised it (the carousel does at startup).
+func buildInfo() (kvs [][2]string) {
 	rev, modified, revErr := vcs.GetVcsRevision()
 	switch {
 	case revErr != nil || rev == "":
-		kv("Revision", vcs.NoBuildInfo)
+		kvs = append(kvs, [2]string{"Revision", vcs.NoBuildInfo})
 	case modified:
-		kv("Revision", rev+" (modified)")
+		kvs = append(kvs, [2]string{"Revision", rev + " (modified)"})
 	default:
-		kv("Revision", rev+" (clean)")
+		kvs = append(kvs, [2]string{"Revision", rev + " (clean)"})
 	}
-	kv("Module", vcs.ModuleInfo())
+	kvs = append(kvs, [2]string{"Module", vcs.ModuleInfo()})
 	if ri, err := runinfo.Get(); err == nil {
-		kv("Go", ri.GoVersion)
-		kv("Host", ri.Hostname)
-		kv("PID", fmt.Sprintf("%d", ri.Pid))
-		kv("Run ID", ri.RunId)
-		kv("Started", ri.StartedAt.Format(time.RFC3339))
+		kvs = append(kvs,
+			[2]string{"Go", ri.GoVersion},
+			[2]string{"Host", ri.Hostname},
+			[2]string{"PID", fmt.Sprintf("%d", ri.Pid)},
+			[2]string{"Run ID", ri.RunId},
+			[2]string{"Started", ri.StartedAt.Format(time.RFC3339)})
 	} else {
-		kv("Run", "metadata unavailable (runinfo not initialised)")
+		kvs = append(kvs, [2]string{"Run", "metadata unavailable (runinfo not initialised)"})
 	}
-}
-
-// renderNotice shows the embedded NOTICE verbatim, one source line per label.
-// Rendering line-by-line (rather than through the markdown widget) keeps file
-// paths like h3o_wasm intact — markdown would read the underscores as
-// emphasis.
-func (inst *App) renderNotice() {
-	for range c.ScrollArea().Vscroll(true).AutoShrink(false, false).KeepIter() {
-		heading("NOTICE")
-		c.AddSpace(styletokens.GapItems(inst.density))
-		for line := range strings.SplitSeq(strings.TrimRight(noticeText, "\n"), "\n") {
-			if line == "" {
-				c.AddSpace(styletokens.GapItems(inst.density))
-				continue
-			}
-			c.Label(line).Send()
-		}
-	}
+	return
 }
 
 // heading emits a heading-styled label. Mirrors the helper in capinspector:
