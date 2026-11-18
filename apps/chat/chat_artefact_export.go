@@ -43,8 +43,15 @@ import (
 // export.
 const exportMountTag identifier.TagValue = 2178323
 
-// The claim keeps another claimant in the link set off the tag value.
-var _ = tagmint.MustClaim("chatArtefactMount", exportMountTag, 1<<24)
+// The claim keeps another claimant in the link set off the tag value;
+// testdata/idstream-claims.golden pins it, since a moved value orphans every
+// mount already minted under it. The declared cardinality is the one the
+// value's class serves (2^31, width 32); the value is kept as it was first
+// minted rather than moved into the class 2^24 would advise.
+var exportMountClaim = tagmint.MustClaim("chatArtefactMount", exportMountTag, 1<<31)
+
+// idStreams lists the streams this package claims, for the golden.
+var idStreams = []tagmint.ClaimedTagValue{exportMountClaim}
 
 const (
 	// exportTtlDays is how long an export is kept.

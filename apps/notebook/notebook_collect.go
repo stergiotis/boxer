@@ -36,8 +36,15 @@ import (
 // service at its first collection.
 const mountTag identifier.TagValue = 2178324
 
-// The claim keeps another claimant in the link set off the tag value.
-var _ = tagmint.MustClaim("notebookMount", mountTag, 1<<24)
+// The claim keeps another claimant in the link set off the tag value;
+// testdata/idstream-claims.golden pins it, since a moved value orphans every
+// mount already minted under it. The declared cardinality is the one the
+// value's class serves (2^31, width 32); the value is kept as it was first
+// minted rather than moved into the class 2^24 would advise.
+var mountClaim = tagmint.MustClaim("notebookMount", mountTag, 1<<31)
+
+// idStreams lists the streams this package claims, for the golden.
+var idStreams = []tagmint.ClaimedTagValue{mountClaim}
 
 // blobDirSuffix follows a notebook's stem to name the folder of its blobs.
 const blobDirSuffix = ".blobs"
