@@ -721,7 +721,7 @@ shapes in use: a function-typed field with a setter and the default body
 exported so the override can delegate (`PlayApp.SetDetailContent`,
 [play-pluggable-detail](../../howto/play-pluggable-detail.md)); a small
 interface the host type-asserts off the context, costing hosts without it
-nothing ([ADR-0155](../../adr/0155-app-embed-seam.md) §SD1); a `Register*`
+nothing ([ADR-0382](../../adr/0382-embedding-is-by-role-a-pane-under-its-host-and-no-host-mediated-embed.md) §SD4); a `Register*`
 function that validates and refuses duplicates (`RegisterSnippetLibrary`,
 `sqlapplet.RegisterBook`); a registry built once with composition declared
 per seam ([ADR-0310](../../adr/0310-harness-profile-and-registry-composition-declared-per-seam.md)).

@@ -64,7 +64,7 @@ the render pass underneath is unexported so a re-host cannot drop the context
 and silently lose both capabilities at once — which is what every re-host did
 while it was exported. `ctx` carries **your** app's id, so width overrides key
 on your app and never touch the stock playground's
-([ADR-0155](../adr/0155-app-embed-seam.md) §SD3). A host that offers neither
+([ADR-0382](../adr/0382-embedding-is-by-role-a-pane-under-its-host-and-no-host-mediated-embed.md) §SD5). A host that offers neither
 capability costs you nothing: widths come from defaults, the chord is
 ungated, and everything else renders unchanged.
 

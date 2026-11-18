@@ -311,7 +311,7 @@ func (inst *App) Frame(ctx app.FrameContextI) (err error) {
 }
 
 // ensureWidths acquires the column-width resolver once, on the first frame:
-// the capability rides the frame context (ADR-0155 §SD1), so it cannot be
+// the capability rides the frame context (ADR-0382 §SD4), so it cannot be
 // picked up in Mount. A host without it leaves the resolver nil, and the
 // list renders its defaults with every drag still usable, none kept.
 func (inst *App) ensureWidths(ctx app.FrameContextI) {

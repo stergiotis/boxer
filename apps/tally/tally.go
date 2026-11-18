@@ -316,7 +316,7 @@ func (inst *App) Frame(ctx app.FrameContextI) (err error) {
 }
 
 // ensureColWidths acquires the column-width store once, on a frame — it is a
-// frame-context capability (ADR-0155 §SD1), not a mount-time one — and
+// frame-context capability (ADR-0382 §SD4), not a mount-time one — and
 // builds the resolver with the bounds the widget drags against, so a stored
 // width and a dragged one agree (ADR-0151, its 2026-08-16 updates).
 func (inst *App) ensureColWidths(ctx app.FrameContextI) {

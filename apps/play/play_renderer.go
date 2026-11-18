@@ -1528,7 +1528,7 @@ func (inst *PlayApp) MainSQL() string {
 // ctx. It is the entry point for every host: the launcher below, and equally
 // any library that builds a PlayApp of its own and re-hosts it.
 //
-// Two capabilities arrive this way, both in the ADR-0155 §SD1 shape — an
+// Two capabilities arrive this way, both in the ADR-0382 §SD4 shape — an
 // optional interface type-asserted off the context, so a host that cannot
 // offer one owes nothing and nothing errors:
 //

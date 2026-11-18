@@ -156,6 +156,17 @@ Accepted 2026-11-12.
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers.
 
+## Updates
+
+### 2026-11-18 — The pane contract and the identity rule are stated in ADR-0382
+
+[ADR-0382](./0382-embedding-is-by-role-a-pane-under-its-host-and-no-host-mediated-embed.md) states the contract this record's pane follows — the
+host's id and a key, the host driving its lifecycle, capabilities joined
+into the host's manifest — as the one shape of an embed (§SD3), and
+supersedes ADR-0155. Its §SD5 reconciles SD3 here with ADR-0155 §SD3: the
+`chat-<key>-` storage prefix subdivides the host's own state and is not a
+second keying identity. Nothing here changes.
+
 ## References
 
 - [ADR-0364](./0364-chatlets-the-chat-specialised-by-a-committed-markdown-document.md) — chatlets, the preset.

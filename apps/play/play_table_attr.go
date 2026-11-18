@@ -784,7 +784,7 @@ func (inst *PlayApp) routeAttrGroupGestures(res recordtable.Result) {
 const attrTableTag = "attr-results"
 
 // ensureColWidthRes acquires the column-width resolver once, on the first
-// Frame. The capability rides the frame context (ADR-0155 §SD1), so it
+// Frame. The capability rides the frame context (ADR-0382 §SD4), so it
 // cannot be picked up in Mount.
 //
 // A host without the capability, or a construction failure, leaves the
@@ -805,9 +805,8 @@ func (inst *PlayApp) ensureColWidthRes(ctx app.FrameContextI) {
 		return
 	}
 	res, err := colwidth.New(store, colwidth.Opts{
-		// The mount context's id, never a composed one: ADR-0155 §SD3 makes
-		// this the keying identity, so a column dragged in an embedded
-		// instance follows the content to a windowed one.
+		// The mount context's id, never a composed one: ADR-0382 §SD5 makes
+		// this the keying identity, the app whose window the person sees.
 		AppId: ctx.AppId(),
 		// Which window did the dragging (ADR-0191 §SD4). Provenance on the
 		// trail only — the override itself stays keyed by app, so this does

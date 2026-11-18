@@ -212,8 +212,10 @@ focus seam; (c) **caps** — v1 doctrine exists (caps ride the embedder;
 hygiene-not-security), it just needs restating at the general seam.
 
 **Risks / lessons.** The compound-document systems of the 1990s (OpenDoc,
-OLE, later KParts/Bonobo — §9) died partly of contract weight: embedding
+OLE, later Bonobo — §9) died partly of contract weight: embedding
 dragged in negotiation protocols, in-place activation, storage models.
+KParts is the exception that survived, in-process and role-shaped
+(ADR-0382 (proposed) has the account).
 The existing contract is already minimal (four methods, host-prepared
 context); the risk to manage is *growth pressure* on it, not its absence.
 
@@ -368,8 +370,11 @@ verified.
   structuring principle — everything is a box, boxes nest, what you see is
   the thing itself ("naive realism"). The strongest philosophical precedent
   for embedding + zoom as one idea.
-- *OpenDoc / OLE / KParts*: compound documents; died of contract weight and
-  platform politics — the lesson is minimal embedding contracts (§4).
+- *OpenDoc / OLE / KParts*: compound documents. OpenDoc and GNOME's Bonobo
+  died of contract weight and platform politics; KParts survived as an
+  in-process, role-shaped component model (correction 2026-11-18: this
+  entry first said all of them died). The lesson is minimal embedding
+  contracts (§4).
 - *JSON Canvas* (verified: jsoncanvas.org, MIT, 2024): the modern consensus
   minimum for canvas documents — typed nodes + edges + groups.
 - Ink & Switch's *Muse* (spatial thinking) and especially *Embark* (2023):

@@ -49,7 +49,7 @@ const (
 )
 
 // RegisterAppTrail registers the three tables into r. The reader is
-// asserted off facts (the ADR-0155 §SD1 optional-capability pattern), so an
+// asserted off facts (the ADR-0382 §SD4 optional-capability pattern), so an
 // in-memory store or a nil one answers with empty tables rather than absent
 // ones, as keelson('runtime_events') does.
 func RegisterAppTrail(r *introspect.Registry, facts factsstore.FactsStoreI) (err error) {

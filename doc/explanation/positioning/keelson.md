@@ -98,8 +98,7 @@ every call, and an address scheme the runtime must keep stable.
   built ([ADR-0105](../../adr/0105-keelson-adopts-generated-record-stores.md)
   D3b). The "one facts table" clause holds; "generated end to end" would not.
 - Accepted and unbuilt, so absent from the clauses: the streaming reply
-  channel ([ADR-0143](../../adr/0143-bus-streaming-reply-channel.md)), the
-  embed interface ([ADR-0155](../../adr/0155-app-embed-seam.md)), the SQL console
+  channel ([ADR-0143](../../adr/0143-bus-streaming-reply-channel.md)), the SQL console
   ([ADR-0094 §SD6](../../adr/0094-keelson-introspection-tables.md)),
   lifecycle subjects and CLI unification.
 - Model inference as a capability ([ADR-0254](../../adr/0254-model-inference-as-a-keelson-capability.md))

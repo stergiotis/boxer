@@ -233,7 +233,7 @@ func (inst *App) Frame(ctx app.FrameContextI) (err error) {
 		return
 	}
 	// This app's own frame context, which is the one it holds: the view's
-	// embedded play draws under this app's identity — and per ADR-0155 §SD3
+	// embedded play draws under this app's identity — and per ADR-0382 §SD5
 	// that identity is exactly what column-width state keys on.
 	return view.Frame(ctx)
 }

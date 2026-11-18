@@ -392,7 +392,7 @@ type RunEventFilter struct {
 // It is deliberately NOT part of FactsStoreI. Every writer must implement
 // that interface, and a reader that only the ClickHouse-backed store can
 // answer would force the in-memory store and every test fake to carry a
-// method they cannot serve. Consumers type-assert, the ADR-0155 §SD1
+// method they cannot serve. Consumers type-assert, the ADR-0382 §SD4
 // optional-capability pattern, and treat absence as an empty trail.
 type RunEventReaderI interface {
 	ListRunEvents(filter RunEventFilter) (rows []RunEventRow, err error)

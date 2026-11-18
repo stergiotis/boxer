@@ -1,10 +1,17 @@
 ---
 type: adr
-status: accepted
+status: superseded
+superseded-by: ADR-0382
+superseded-date: 2026-11-18
 date: 2026-07-31
 reviewed-by: "p@stergiotis"
 reviewed-date: 2026-07-31
 ---
+
+> **Superseded by [ADR-0382](./0382-embedding-is-by-role-a-pane-under-its-host-and-no-host-mediated-embed.md) (2026-11-18).**
+> The host-mediated embed decided here was not built and is withdrawn;
+> embedding is by role, a pane under its host. §SD1's optional-capability
+> pattern and §SD3's identity rule carry forward as ADR-0382 §SD4 and §SD5.
 
 # ADR-0155: App embed seam — hosting a registered app's body inside another app
 
@@ -232,7 +239,7 @@ panel-using app inside a constrained region before the canvas host
 
 ## Status
 
-Accepted (2026-07-31). Forks settled in the design dialogue the same
+Superseded by ADR-0382 (2026-11-18). Accepted (2026-07-31). Forks settled in the design dialogue the same
 day; SD3 was verified against ADR-0151's implemented identity scheme
 pre-acceptance.
 

@@ -422,6 +422,18 @@ Accepted 2026-11-08.
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers (Tier 1 in-place / Tier 2 dated `## Updates` entry / Tier 3 new superseding ADR).
 
+## Updates
+
+### 2026-11-18 — The embed SD6 waited on is withdrawn
+
+[ADR-0382](./0382-embedding-is-by-role-a-pane-under-its-host-and-no-host-mediated-embed.md) supersedes ADR-0155: the host-mediated embed this record's
+SD6 and its deferred role-level embed waited on will not be built. The
+trigger for a role-level embed is now ADR-0382 §SD1's: a concrete case that
+needs a registered app drawn inside another app under its own identity,
+which a pane cannot serve. Until then a playground that wants to be
+embeddable exports a pane under ADR-0382 §SD3, as play's applets already
+are. SD6's decision — the embed stays play's — is unchanged.
+
 ## References
 
 - [keelson-app skill](../skills/keelson-app/SKILL.md) — §0 (the principle and the three coupling shapes), D3, D4, X2, X3, X5, §12.

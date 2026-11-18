@@ -94,7 +94,7 @@ type StoreI interface {
 
 // HostI is the optional frame-context capability a host with a state store
 // provides so an app can persist column widths. It takes the shape
-// [ADR-0155] §SD1 settled for reaching host-held collaborators: an optional
+// ADR-0382 §SD4 settled for reaching host-held collaborators: an optional
 // capability type-asserted off the context, exactly as [app.WindowFocusI]
 // is, so the four-method app contract stays frozen and hosts without a
 // state store owe nothing.
@@ -115,9 +115,9 @@ type StoreI interface {
 //	}
 //
 // Construct with the mount context's AppId, never one the app composes:
-// ADR-0155 §SD3 makes that the keying identity for embedded and windowed
-// instances alike, so a column dragged in one follows the content to the
-// other.
+// ADR-0382 §SD5 makes that the keying identity — the app whose window the
+// person sees, which a pane drawn in another app's window shares with its
+// host.
 type HostI interface {
 	ColumnWidthStore() (store StoreI)
 }

@@ -54,7 +54,7 @@ func openAndFrameCtx(t *testing.T, h *Inst, id app.AppIdT) (ctx app.FrameContext
 }
 
 // With a state store wired, the host offers the column-width capability
-// and hands back a usable store (ADR-0151 M4 over ADR-0155 §SD1).
+// and hands back a usable store (ADR-0151 M4 over ADR-0382 §SD4).
 func TestColumnWidth_CapabilityPresentWithState(t *testing.T) {
 	a := mkColWidthApp()
 	reg := app.NewRegistry()
@@ -110,5 +110,5 @@ func TestColumnWidth_WrapperPreservesWindowFocus(t *testing.T) {
 	require.True(t, ok, "embedding must keep WindowFocusI reachable")
 	_ = f.WindowFocused()
 	assert.Equal(t, app.AppIdT("test.colwidth"), ctx.AppId(),
-		"the wrapper must present the target's identity (ADR-0155 SD3)")
+		"the wrapper must present the target's identity (ADR-0382 §SD5)")
 }

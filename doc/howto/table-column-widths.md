@@ -207,7 +207,7 @@ from a per-frame counter will drift.
 ## Reaching a store
 
 The store arrives as an optional frame-context capability, the shape
-[ADR-0155](../adr/0155-app-embed-seam.md) §SD1 settled for host-held
+[ADR-0382](../adr/0382-embedding-is-by-role-a-pane-under-its-host-and-no-host-mediated-embed.md) §SD4 settled for host-held
 collaborators. Acquire it once, on a frame:
 
 ```go
@@ -227,10 +227,10 @@ its own widths, hand it your frame context rather than calling its render pass
 — an app that never sees a context is indistinguishable from one whose host
 has no store, and the symptom is simply that nothing is ever saved.
 
-Construct with `ctx.AppId()`, never an identity you compose: ADR-0155 §SD3
-makes it the keying identity for embedded and windowed instances alike, so a
-column dragged in one follows the content to the other. A composed identity
-would fork the rows per embedder.
+Construct with `ctx.AppId()`, never an identity you compose: ADR-0382 §SD5
+makes it the keying identity — the app whose window the person sees. A pane
+drawn inside another app's window is under that host's id. A composed
+`<host>#<key>` identity is attribution and would fork the rows per pane.
 
 ## A table that is the host's, not an app's
 
@@ -254,6 +254,7 @@ its user, and a layout per caller is not what they dragged.
   the storage choice follows.
 - [`egui2/colwidth`](../../public/thestack/imzero2/egui2/colwidth) — the
   resolver; its package doc covers the apply/capture state machine.
-- [ADR-0155](../adr/0155-app-embed-seam.md) — §SD1's optional-capability
-  shape, which is how the store reaches an app, and §SD3 on why the keying
-  identity is the mount context's.
+- [ADR-0382](../adr/0382-embedding-is-by-role-a-pane-under-its-host-and-no-host-mediated-embed.md) — §SD4's optional-capability
+  shape, which is how the store reaches an app, and §SD5 on why the keying
+  identity is the one the context presents. It supersedes ADR-0155, where
+  both were first decided.

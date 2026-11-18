@@ -782,7 +782,7 @@ func (inst *Inst) OpenWithConfig(appId app.AppIdT, kind string, cfg []byte) (key
 	// request under inst.mu, which the render loop does not hold across an
 	// app's Frame, and the window is reaped at the end of the frame.
 	frameCtx.SetWindowClose(func(reason string) { inst.Close(key, selfCloseReason(reason)) })
-	// Column-width capability (ADR-0151 M4) in the ADR-0155 §SD1 shape: an
+	// Column-width capability (ADR-0151 M4) in the ADR-0382 §SD4 shape: an
 	// optional capability on the frame context, not a contract method. Only
 	// wrapped when a state store exists, because absence of the capability
 	// is how an app learns there is nowhere durable to put widths — wrapping
