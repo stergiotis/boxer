@@ -72,3 +72,13 @@ func TestOverrideManifests_KeepsTheLaunchLimit(t *testing.T) {
 	assert.Equal(t, "Renamed", ms[0].Display)
 	assert.False(t, reg.Launchable("test.a"))
 }
+
+func TestOverrideManifests_SurfaceHints(t *testing.T) {
+	reg := overrideFixture(t)
+	hints := SurfaceHints{PreferredWidth: 620, PreferredHeight: 480}
+	require.NoError(t, reg.OverrideManifests(map[AppIdT]ManifestOverride{"test.a": {SurfaceHints: &hints}}))
+	m, ok := reg.LookupManifest("test.a")
+	require.True(t, ok)
+	assert.Equal(t, hints, m.SurfaceHints)
+	assert.Equal(t, []string{"surface_hints"}, reg.Overridden("test.a"))
+}

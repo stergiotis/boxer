@@ -57,7 +57,7 @@ type programState struct {
 var program programState
 
 // SetProgram registers the program. Windows opened after the call credit
-// it; call it from init so every window does.
+// it and are sized to its artwork; call it from init so every window does.
 func SetProgram(p Program) (err error) {
 	if p.Name == "" {
 		err = eh.Errorf("program needs a name")
@@ -68,10 +68,11 @@ func SetProgram(p Program) (err error) {
 		return
 	}
 	program.mu.Lock()
-	defer program.mu.Unlock()
 	program.p = &p
 	program.version++
 	program.resetDecoded()
+	program.mu.Unlock()
+	applyWindowHints()
 	return
 }
 
@@ -79,9 +80,10 @@ func SetProgram(p Program) (err error) {
 // only.
 func ClearProgram() {
 	program.mu.Lock()
-	defer program.mu.Unlock()
 	program.p = nil
 	program.resetDecoded()
+	program.mu.Unlock()
+	applyWindowHints()
 }
 
 // resetDecoded drops the decoded artwork; the caller holds mu.

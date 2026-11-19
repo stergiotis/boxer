@@ -18,6 +18,10 @@ type ManifestOverride struct {
 	Topics   *[]TopicT
 	Keywords *[]string
 	Maturity *MaturityE
+	// SurfaceHints restates the initial window size; an app whose content
+	// decides its shape at run time (a splash screen sized to its artwork)
+	// sets it for itself. Not a keelson.apps column a SQL override writes.
+	SurfaceHints *SurfaceHints
 }
 
 // Overridden column names, as keelson.apps names them.
@@ -28,6 +32,8 @@ const (
 	OverriddenTopics   = "topics"
 	OverriddenKeywords = "keywords"
 	OverriddenMaturity = "maturity"
+	// OverriddenSurfaceHints names a restated initial window size.
+	OverriddenSurfaceHints = "surface_hints"
 )
 
 // apply returns m with the override's fields set, and the column names of
@@ -57,6 +63,10 @@ func (inst ManifestOverride) apply(m Manifest) (out Manifest, changed []string) 
 	if inst.Maturity != nil && *inst.Maturity != m.Maturity {
 		out.Maturity = *inst.Maturity
 		changed = append(changed, OverriddenMaturity)
+	}
+	if inst.SurfaceHints != nil && *inst.SurfaceHints != m.SurfaceHints {
+		out.SurfaceHints = *inst.SurfaceHints
+		changed = append(changed, OverriddenSurfaceHints)
 	}
 	return
 }

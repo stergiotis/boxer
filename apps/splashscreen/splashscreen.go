@@ -68,7 +68,13 @@ func newApp() (inst *App) {
 	return
 }
 
-func (inst *App) Manifest() (m app.Manifest) { m = manifest; return }
+// Manifest is the declared manifest with the window sized to the program's
+// artwork, as the registry holds it.
+func (inst *App) Manifest() (m app.Manifest) {
+	m = manifest
+	m.SurfaceHints = windowHints()
+	return
+}
 
 func (inst *App) Mount(ctx app.MountContextI) (err error) {
 	inst.ids = ctx.Ids()
