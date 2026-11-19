@@ -42,6 +42,32 @@ var DebugRender = env.NewString(env.Spec{
 	Category:    env.CategoryDev,
 })
 
+// WindowSvgButton and WindowPauseButton show or hide the "SVG" and "Pause"
+// buttons in the row the host draws above every window's body. Both are
+// read once at init into windowSvgButton / windowPauseButton, so a frame
+// pays one branch per window per button. Hiding a button removes only the
+// affordance: a paused window still offers Resume in its body, and the
+// pause and capture verbs stay reachable through their other routes.
+var (
+	WindowSvgButton = env.NewBool(env.Spec{
+		Name:        "KEELSON_WINDOW_SVG_BUTTON",
+		Default:     "true",
+		Description: "show the per-window \"SVG\" save button above each window's body; false hides it",
+		Category:    env.CategoryE("keelson"),
+	})
+	WindowPauseButton = env.NewBool(env.Spec{
+		Name:        "KEELSON_WINDOW_PAUSE_BUTTON",
+		Default:     "true",
+		Description: "show the per-window \"Pause\" / \"Resume\" button above each window's body; false hides it",
+		Category:    env.CategoryE("keelson"),
+	})
+)
+
+var (
+	windowSvgButton   = WindowSvgButton.Get()
+	windowPauseButton = WindowPauseButton.Get()
+)
+
 // WindowKeyT identifies one open window. Stable for the lifetime of
 // the window; never reused. Encoded as a uint64 because egui's
 // per-widget Memory state keys are u64-hashes — keeping the key
@@ -1413,18 +1439,27 @@ func (inst *Inst) Frame(ids *c.WidgetIdStack) (err error) {
 			// label) so the visual cost is bounded. Per-window keying
 			// avoids id collisions across windows on the shared ids
 			// stack.
-			for range c.HorizontalTop().KeepIter() {
-				saveBtnId := ids.PrepareStr("windowhost-save-svg-" +
-					strconv.FormatUint(uint64(w.key), 10))
-				if c.Button(saveBtnId,
-					c.Atoms().Text(icons.IconSaveAs+" SVG").Keep()).
-					SendResp().HasPrimaryClicked() {
-					inst.pendingExportKey = w.key
-					inst.saveDialog(ids).Show()
-				}
-				inst.renderPauseButton(w, ids)
-				if inst.agentChrome != nil {
-					inst.agentChrome.RenderWindowChrome(uint64(w.key), ids)
+			// The row is skipped whole when it would be empty, so hiding
+			// every button gives the space back rather than leaving an
+			// empty layout row.
+			if windowSvgButton || windowPauseButton || inst.agentChrome != nil {
+				for range c.HorizontalTop().KeepIter() {
+					if windowSvgButton {
+						saveBtnId := ids.PrepareStr("windowhost-save-svg-" +
+							strconv.FormatUint(uint64(w.key), 10))
+						if c.Button(saveBtnId,
+							c.Atoms().Text(icons.IconSaveAs+" SVG").Keep()).
+							SendResp().HasPrimaryClicked() {
+							inst.pendingExportKey = w.key
+							inst.saveDialog(ids).Show()
+						}
+					}
+					if windowPauseButton {
+						inst.renderPauseButton(w, ids)
+					}
+					if inst.agentChrome != nil {
+						inst.agentChrome.RenderWindowChrome(uint64(w.key), ids)
+					}
 				}
 			}
 			if !w.pausedSince.IsZero() {
