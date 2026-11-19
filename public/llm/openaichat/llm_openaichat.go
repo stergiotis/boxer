@@ -308,6 +308,9 @@ var _ ClientI = (*Client)(nil)
 
 const defaultMaxResponseBytes = 32 << 20 // 32 MiB
 
+// contentTypeJSON labels a completion's request body.
+const contentTypeJSON = "application/json"
+
 // Option configures a Client at construction.
 type Option func(*Client)
 
@@ -590,7 +593,7 @@ func (inst *Client) Complete(ctx context.Context, req CompletionRequest) (resp C
 		}()
 	}
 
-	status, rawBody, attempts, err = inst.sendRetrying(ctx, http.MethodPost, url, body)
+	status, rawBody, attempts, err = inst.sendRetrying(ctx, http.MethodPost, url, contentTypeJSON, body)
 	if err != nil {
 		return
 	}
@@ -654,7 +657,7 @@ func (inst *Client) ListModels(ctx context.Context) (models []string, err error)
 
 	var status int
 	var rawBody []byte
-	status, rawBody, _, err = inst.sendRetrying(ctx, http.MethodGet, url, nil)
+	status, rawBody, _, err = inst.sendRetrying(ctx, http.MethodGet, url, "", nil)
 	if err != nil {
 		return
 	}
@@ -685,12 +688,12 @@ func (inst *Client) ListModels(ctx context.Context) (models []string, err error)
 // sendRetrying performs send() up to RetryPolicy.MaxAttempts times, backing off
 // between retryable failures. It returns the last attempt's status / body and
 // the number of attempts made.
-func (inst *Client) sendRetrying(ctx context.Context, method, url string, body []byte) (status int, raw []byte, attempts int, err error) {
+func (inst *Client) sendRetrying(ctx context.Context, method, url string, contentType string, body []byte) (status int, raw []byte, attempts int, err error) {
 	maxAttempts := max(inst.retry.MaxAttempts, 1)
 	for attempt := 1; ; attempt++ {
 		attempts = attempt
 		var retryAfter time.Duration
-		status, raw, retryAfter, err = inst.send(ctx, method, url, body)
+		status, raw, retryAfter, err = inst.send(ctx, method, url, contentType, body)
 
 		if attempt >= maxAttempts || !retryable(status, err) {
 			return
@@ -710,10 +713,11 @@ func (inst *Client) sendRetrying(ctx context.Context, method, url string, body [
 }
 
 // send performs a single round-trip: build the request, set headers, execute,
-// and read (up to maxResponseBytes) the body. A non-2xx status is returned in
+// and read (up to maxResponseBytes) the body. contentType labels a non-nil
+// body: JSON for a completion, multipart for a transcription. A non-2xx status is returned in
 // status with err == nil; err is set only for transport / read failures.
 // retryAfter carries the parsed Retry-After header when present.
-func (inst *Client) send(ctx context.Context, method, url string, body []byte) (status int, raw []byte, retryAfter time.Duration, err error) {
+func (inst *Client) send(ctx context.Context, method, url string, contentType string, body []byte) (status int, raw []byte, retryAfter time.Duration, err error) {
 	var reqBody io.Reader
 	if body != nil {
 		reqBody = bytes.NewReader(body)
@@ -725,7 +729,7 @@ func (inst *Client) send(ctx context.Context, method, url string, body []byte) (
 		return
 	}
 	if body != nil {
-		httpReq.Header.Set("Content-Type", "application/json")
+		httpReq.Header.Set("Content-Type", contentType)
 	}
 	httpReq.Header.Set("Accept", "application/json")
 	if inst.apiKey != "" {

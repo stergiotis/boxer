@@ -101,7 +101,7 @@ func (inst *Client) CompleteStream(ctx context.Context, req CompletionRequest, o
 	}
 	var httpResp *http.Response
 	var rawBody []byte
-	status, httpResp, rawBody, attempts, err = inst.openRetrying(ctx, url, body)
+	status, httpResp, rawBody, attempts, err = inst.openRetrying(ctx, url, contentTypeJSON, body)
 	if err != nil {
 		return
 	}
@@ -161,12 +161,12 @@ func refusesStreaming(status int, raw []byte) bool {
 // transport failure before the stream begins is retried, and once the
 // stream has begun nothing is. A 2xx returns the open response; a non-2xx
 // returns its status and body, read, with resp nil.
-func (inst *Client) openRetrying(ctx context.Context, url string, body []byte) (status int, resp *http.Response, raw []byte, attempts int, err error) {
+func (inst *Client) openRetrying(ctx context.Context, url string, contentType string, body []byte) (status int, resp *http.Response, raw []byte, attempts int, err error) {
 	maxAttempts := max(inst.retry.MaxAttempts, 1)
 	for attempt := 1; ; attempt++ {
 		attempts = attempt
 		var retryAfter time.Duration
-		status, resp, raw, retryAfter, err = inst.open(ctx, url, body)
+		status, resp, raw, retryAfter, err = inst.open(ctx, url, contentType, body)
 		if resp != nil {
 			return
 		}
@@ -188,13 +188,13 @@ func (inst *Client) openRetrying(ctx context.Context, url string, body []byte) (
 
 // open is one attempt: on a 2xx the response is returned open for the
 // stream reader; otherwise its body is read and returned as send does.
-func (inst *Client) open(ctx context.Context, url string, body []byte) (status int, resp *http.Response, raw []byte, retryAfter time.Duration, err error) {
+func (inst *Client) open(ctx context.Context, url string, contentType string, body []byte) (status int, resp *http.Response, raw []byte, retryAfter time.Duration, err error) {
 	httpReq, rerr := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
 	if rerr != nil {
 		err = eh.Errorf("new request: %w: %w", errRequestBuild, rerr)
 		return
 	}
-	httpReq.Header.Set("Content-Type", "application/json")
+	httpReq.Header.Set("Content-Type", contentType)
 	httpReq.Header.Set("Accept", "text/event-stream")
 	if inst.apiKey != "" {
 		httpReq.Header.Set("Authorization", "Bearer "+inst.apiKey)
@@ -232,27 +232,11 @@ type streamToolCall struct {
 // the route's reasoning split runs once, over the whole; the deltas hand
 // the raw pieces on as they come.
 func (inst *Client) readStream(r io.Reader, onDelta func(Delta)) (resp CompletionResponse, err error) {
-	if inst.maxResponseBytes > 0 {
-		r = io.LimitReader(r, inst.maxResponseBytes+1)
-	}
-	sc := bufio.NewScanner(r)
-	sc.Buffer(make([]byte, 64<<10), maxSSELine)
 	var content, reasoningContent, reasoning strings.Builder
 	var calls []*streamToolCall
 	var usage *wireUsage
 	var finish, id, model string
-	var data bytes.Buffer
-	var read int64
-	done := false
-	flush := func() (stop bool, ferr error) {
-		if data.Len() == 0 {
-			return
-		}
-		payload := bytes.TrimSpace(data.Bytes())
-		data.Reset()
-		if bytes.Equal(payload, []byte("[DONE]")) {
-			return true, nil
-		}
+	err = inst.readSSE(r, func(payload []byte) (ferr error) {
 		var chunk wireStreamChunk
 		if ferr = json.Unmarshal(payload, &chunk); ferr != nil {
 			ferr = eb.Build().Str("rawSnippet", snippet(string(payload), 256)).Errorf("decode stream chunk: %w", ferr)
@@ -307,6 +291,60 @@ func (inst *Client) readStream(r io.Reader, onDelta func(Delta)) (resp Completio
 			}
 		}
 		return
+	})
+	if err != nil {
+		return
+	}
+	if finish == "" && content.Len() == 0 && reasoningContent.Len() == 0 && reasoning.Len() == 0 && len(calls) == 0 {
+		err = eh.Errorf("openaichat: the stream carried no choices")
+		return
+	}
+	cleanContent, thought := inst.route.reasoningOf(content.String(), reasoningContent.String(), reasoning.String())
+	resp = CompletionResponse{Content: cleanContent, Reasoning: thought, FinishReason: finish, Id: id, Model: model}
+	for _, c := range calls {
+		resp.ToolCalls = append(resp.ToolCalls, ToolCall{Id: c.id, Name: c.name, Arguments: c.args.String()})
+	}
+	if usage != nil {
+		resp.InputTokens, resp.OutputTokens = usage.PromptTokens, usage.CompletionTokens
+		if d := usage.PromptTokensDetails; d != nil && d.CachedTokens != nil {
+			resp.CachedInputTokens = option.Some(*d.CachedTokens)
+		}
+		if d := usage.CompletionTokensDetails; d != nil && d.ReasoningTokens != nil {
+			resp.ReasoningTokens = option.Some(*d.ReasoningTokens)
+		}
+	}
+	if finish == "" {
+		// A stream that closed mid-answer: the answer is what arrived,
+		// and it did not finish normally.
+		resp.FinishReason = "length"
+	}
+	return
+}
+
+// readSSE reads server-sent events from r and hands each event's data to
+// onData, until the DONE sentinel, the end of the body or an error. Comments and the
+// event, id and retry fields are skipped; a body past maxResponseBytes is
+// ErrResponseTooLarge. A stream that ends without the sentinel still hands
+// over its last event.
+func (inst *Client) readSSE(r io.Reader, onData func(payload []byte) error) (err error) {
+	if inst.maxResponseBytes > 0 {
+		r = io.LimitReader(r, inst.maxResponseBytes+1)
+	}
+	sc := bufio.NewScanner(r)
+	sc.Buffer(make([]byte, 64<<10), maxSSELine)
+	var data bytes.Buffer
+	var read int64
+	done := false
+	flush := func() (stop bool, ferr error) {
+		if data.Len() == 0 {
+			return
+		}
+		payload := bytes.TrimSpace(data.Bytes())
+		data.Reset()
+		if bytes.Equal(payload, []byte("[DONE]")) {
+			return true, nil
+		}
+		return false, onData(payload)
 	}
 	for sc.Scan() {
 		line := sc.Bytes()
@@ -332,7 +370,8 @@ func (inst *Client) readStream(r io.Reader, onDelta func(Delta)) (resp Completio
 			data.Write(bytes.TrimPrefix(bytes.TrimPrefix(line, []byte("data:")), []byte(" ")))
 			continue
 		default:
-			// event:, id:, retry: — the completions stream uses none.
+			// event:, id:, retry: — the event type, where a server sends
+			// one, is also in the data.
 			continue
 		}
 		break
@@ -350,29 +389,6 @@ func (inst *Client) readStream(r io.Reader, onDelta func(Delta)) (resp Completio
 		if _, err = flush(); err != nil {
 			return
 		}
-	}
-	if finish == "" && content.Len() == 0 && reasoningContent.Len() == 0 && reasoning.Len() == 0 && len(calls) == 0 {
-		err = eh.Errorf("openaichat: the stream carried no choices")
-		return
-	}
-	cleanContent, thought := inst.route.reasoningOf(content.String(), reasoningContent.String(), reasoning.String())
-	resp = CompletionResponse{Content: cleanContent, Reasoning: thought, FinishReason: finish, Id: id, Model: model}
-	for _, c := range calls {
-		resp.ToolCalls = append(resp.ToolCalls, ToolCall{Id: c.id, Name: c.name, Arguments: c.args.String()})
-	}
-	if usage != nil {
-		resp.InputTokens, resp.OutputTokens = usage.PromptTokens, usage.CompletionTokens
-		if d := usage.PromptTokensDetails; d != nil && d.CachedTokens != nil {
-			resp.CachedInputTokens = option.Some(*d.CachedTokens)
-		}
-		if d := usage.CompletionTokensDetails; d != nil && d.ReasoningTokens != nil {
-			resp.ReasoningTokens = option.Some(*d.ReasoningTokens)
-		}
-	}
-	if finish == "" {
-		// A stream that closed mid-answer: the answer is what arrived,
-		// and it did not finish normally.
-		resp.FinishReason = "length"
 	}
 	return
 }
