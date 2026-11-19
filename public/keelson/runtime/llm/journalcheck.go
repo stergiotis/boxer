@@ -144,12 +144,16 @@ func (inst Request) ContentDigest() (digest string, err error) {
 
 // verifyJournal says whether the entry the request names covers it, and
 // returns the entry's id for the call's row.
-func (inst *Service) verifyJournal(run uint64, key string, digest string, sender app.AppIdT) (entryId uint64, err error) {
+func (inst *Service) verifyJournal(run uint64, key string, digestOf func() (string, error), sender app.AppIdT) (entryId uint64, err error) {
 	if inst.cfg.Journal == nil {
 		inst.journalUnwired.Do(func() {
 			inst.log.Error().Msg("llm: no run journal is wired to the model service; every completion is refused")
 		})
 		return 0, eh.Errorf("no run journal is wired to the model service")
+	}
+	digest, err := digestOf()
+	if err != nil {
+		return 0, err
 	}
 	ctx, cancel := context.WithTimeout(inst.base, approvalWait)
 	defer cancel()

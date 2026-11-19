@@ -11,12 +11,20 @@ import (
 // OpenAI models answer json only, while both give segments with times.
 // A transcript without segments renders as nothing.
 
-// RenderSRT is the transcript as SubRip cues, one per segment, numbered
-// from 1; a diarized segment's text is led by its speaker label.
+// RenderSRT is the transcript as SubRip cues, one per segment with text,
+// numbered from 1; a diarized segment's text is led by its speaker label.
+// An arrow in the text is shortened, since it reads as a timing line.
 func RenderSRT(t Transcript) (s string) {
 	var b strings.Builder
-	for i, seg := range t.Segments {
-		b.WriteString(strconv.Itoa(i + 1))
+	n := 0
+	for _, seg := range t.Segments {
+		text := strings.ReplaceAll(cueText(seg.Text), "-->", "->")
+		if text == "" {
+			// An empty cue would end at its timing line.
+			continue
+		}
+		n++
+		b.WriteString(strconv.Itoa(n))
 		b.WriteByte('\n')
 		b.WriteString(cueTime(seg.Start, ','))
 		b.WriteString(" --> ")
@@ -26,18 +34,22 @@ func RenderSRT(t Transcript) (s string) {
 			b.WriteString(seg.Speaker)
 			b.WriteString(": ")
 		}
-		b.WriteString(cueText(seg.Text))
+		b.WriteString(text)
 		b.WriteString("\n\n")
 	}
 	return b.String()
 }
 
-// RenderWebVTT is the transcript as a WebVTT file; a diarized segment
-// carries its speaker as a voice span.
+// RenderWebVTT is the transcript as a WebVTT file, one cue per segment
+// with text; a diarized segment carries its speaker as a voice span. The
+// text is escaped, so an arrow in it cannot read as a timing line.
 func RenderWebVTT(t Transcript) (s string) {
 	var b strings.Builder
 	b.WriteString("WEBVTT\n\n")
 	for _, seg := range t.Segments {
+		if cueText(seg.Text) == "" {
+			continue
+		}
 		b.WriteString(cueTime(seg.Start, '.'))
 		b.WriteString(" --> ")
 		b.WriteString(cueTime(seg.End, '.'))

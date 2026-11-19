@@ -18,6 +18,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/inprocbus"
 	"github.com/stergiotis/boxer/public/keelson/runtime/llm/ration"
 	"github.com/stergiotis/boxer/public/keelson/runtime/queryengine"
+	"github.com/stergiotis/boxer/public/keelson/runtime/trail"
 	"github.com/stergiotis/boxer/public/llm/openaichat"
 )
 
@@ -28,9 +29,14 @@ type fakeTranscriber struct {
 	err    error
 	seen   []openaichat.TranscriptionRequest
 	deltas []openaichat.TranscriptDelta
+	// during, when set, runs while the provider "answers".
+	during func()
 }
 
 func (f *fakeTranscriber) Transcribe(_ context.Context, req openaichat.TranscriptionRequest) (openaichat.Transcript, error) {
+	if f.during != nil {
+		f.during()
+	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.seen = append(f.seen, req)
@@ -367,4 +373,94 @@ func TestTheClientGrantCoversTranscribe(t *testing.T) {
 	require.Error(t, err)
 	var refused *RefusedError
 	assert.False(t, errors.As(err, &refused), "the bus refused it, not the service")
+}
+
+// The request is on the trail before the recording leaves (ADR-0277
+// §SD3): its message row is inserted before the provider is called, and a
+// transcription whose write-ahead failed is not durable, as a completion's
+// is not. A refusal after admission charges no bytes.
+func TestATranscriptionIsWrittenAhead(t *testing.T) {
+	exec := &downOnce{}
+	var insertsAtCall []int
+	f := &fakeTranscriber{resp: openaichat.Transcript{Text: "x"}}
+	f.during = func() {
+		exec.mu.Lock()
+		insertsAtCall = append(insertsAtCall, exec.tries)
+		exec.mu.Unlock()
+	}
+	cfg := speechCfg(f)
+	cfg.Trail = trail.NewRecorder(exec, "run-test", zerolog.Nop())
+	t.Cleanup(cfg.Trail.Close)
+	cli, svc, _ := serve(t, cfg)
+	tries := func() int {
+		exec.mu.Lock()
+		defer exec.mu.Unlock()
+		return exec.tries
+	}
+	_, err := cli.Transcribe(context.Background(), TranscriptionRequest{Audio: wav, MediaType: "audio/wav"})
+	require.NoError(t, err, "unrequired, the call proceeds")
+	afterFirst := tries()
+	_, err = cli.Transcribe(context.Background(), TranscriptionRequest{Audio: wav, MediaType: "audio/wav"})
+	require.NoError(t, err)
+	require.Len(t, insertsAtCall, 2)
+	assert.Equal(t, 1, insertsAtCall[0], "the first request's rows were tried before it left, and failed")
+	assert.Greater(t, insertsAtCall[1], afterFirst, "the second request's rows were inserted before it left")
+	calls := svc.Calls()
+	require.Len(t, calls, 2)
+	assert.False(t, calls[0].Durable, "its request was not on the trail when it left")
+	assert.True(t, calls[1].Durable)
+	assert.Equal(t, 1, calls[1].Messages)
+
+	trail.RequiredEnv.SetForTest(t, "true")
+	required := trail.NewRecorder(nil, "run-test", zerolog.Nop())
+	t.Cleanup(required.Close)
+	g := &fakeTranscriber{resp: openaichat.Transcript{Text: "x"}}
+	rcfg := Config{Trail: required, Transcribe: TranscribeConfig{Endpoint: "https://api.example.net/v1", Model: "whisper", Client: g}}
+	rcli, rsvc, _ := serve(t, rcfg)
+	_, err = rcli.Transcribe(context.Background(), TranscriptionRequest{Audio: wav})
+	var refused *RefusedError
+	require.True(t, errors.As(err, &refused), "%v", err)
+	assert.Contains(t, refused.Reason, "audit trail")
+	assert.Zero(t, g.calls())
+	for _, a := range rsvc.Ledger().Accounts() {
+		assert.Zero(t, a.Totals[ration.QuantityBytesSent], "nothing left the cell")
+	}
+}
+
+// The ceiling counts the request as it leaves: a small recording with a
+// large speaker clip is refused before anything is sent.
+func TestTheCeilingCountsTheSpeakerClips(t *testing.T) {
+	f := &fakeTranscriber{resp: openaichat.Transcript{Text: "x"}}
+	cfg := speechCfg(f)
+	cfg.Transcribe.MaxBytes = 4096
+	cli, _, _ := serve(t, cfg)
+	_, err := cli.Transcribe(context.Background(), TranscriptionRequest{Audio: wav, Diarize: true})
+	require.NoError(t, err)
+	_, err = cli.Transcribe(context.Background(), TranscriptionRequest{Audio: wav, Diarize: true,
+		KnownSpeakers: []openaichat.KnownSpeaker{{Name: "ann", Clip: make([]byte, 4096)}}})
+	var refused *RefusedError
+	require.True(t, errors.As(err, &refused), "%v", err)
+	assert.Contains(t, refused.Reason, "speaker clips")
+	assert.Equal(t, 1, f.calls())
+}
+
+// A provider failure's reply keeps how admission decided the call.
+func TestATranscriptionFailureKeepsItsAdmission(t *testing.T) {
+	f := &fakeTranscriber{err: openaichat.ErrServer}
+	cli, _, _ := serve(t, speechCfg(f))
+	raw, err := cli.bus.RequestWithTimeout(SubjectTranscribe, mustEncode(t, wireTranscribeRequest{V: wireVersion, Audio: wav}), 5*time.Second)
+	require.NoError(t, err)
+	w, err := decode[wireTranscribeReply](raw)
+	require.NoError(t, err)
+	assert.False(t, w.Ok)
+	assert.Equal(t, errKindServer, w.ErrorKind)
+	assert.Equal(t, "admitted", w.Admission)
+	assert.NotEmpty(t, w.CallId)
+}
+
+func mustEncode[T any](t *testing.T, v T) []byte {
+	t.Helper()
+	b, err := encode(v)
+	require.NoError(t, err)
+	return b
 }

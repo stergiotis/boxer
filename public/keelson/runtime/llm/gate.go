@@ -36,10 +36,10 @@ type exitRoute struct {
 type gateIn struct {
 	route exitRoute
 	// The journal entry the call names, and the content digest that entry
-	// must record (ADR-0357 §SD1).
+	// must record (ADR-0357 §SD1), taken only once a journal is wired.
 	run        uint64
 	journalKey string
-	digest     string
+	digestOf   func() (string, error)
 	approval   string
 	// The agent task the call's work is, empty for the app's own.
 	onBehalfTask  string
@@ -80,13 +80,14 @@ type passage struct {
 	cleanup  []func()
 }
 
-// settle charges what the call used, and the bytes that left the cell.
+// settle charges what the call used, and the bytes that left the cell —
+// only once they did: a call refused after admission sent nothing.
 func (inst *passage) settle(used ration.Usage) {
 	if inst.settled || inst.ticket == nil {
 		return
 	}
 	inst.settled = true
-	if inst.bytesOut > 0 {
+	if inst.bytesOut > 0 && inst.left {
 		if used == nil {
 			used = ration.Usage{}
 		}
@@ -127,7 +128,7 @@ func (inst *Service) gate(msg *app.Msg, in gateIn, rec *CallRecord, t *turn) (p 
 	var err error
 	// Before any wall or admission: a call the journal does not know of goes
 	// no further, and its refusal is on the trail (ADR-0357 §SD1).
-	if rec.RequestEntry, err = inst.verifyJournal(in.run, in.journalKey, in.digest, msg.Sender); err != nil {
+	if rec.RequestEntry, err = inst.verifyJournal(in.run, in.journalKey, in.digestOf, msg.Sender); err != nil {
 		inst.refuse(msg, "the journal does not cover the call: "+err.Error(), *rec, t)
 		return nil
 	}

@@ -436,13 +436,13 @@ func (inst *Service) handleCancel(msg *app.Msg) {
 func (inst *Service) handleComplete(msg *app.Msg, retained bool) {
 	req, err := decode[wireRequest](msg.Payload)
 	if err != nil {
-		inst.refuse(msg, "malformed request: "+err.Error(), CallRecord{}, nil)
+		inst.refuse(msg, "malformed request: "+err.Error(), CallRecord{Verb: VerbComplete}, nil)
 		return
 	}
 	var extra map[string]any
 	if len(req.Extra) > 0 {
 		if err = json.Unmarshal(req.Extra, &extra); err != nil {
-			inst.refuse(msg, "malformed request: extra: "+err.Error(), CallRecord{}, nil)
+			inst.refuse(msg, "malformed request: extra: "+err.Error(), CallRecord{Verb: VerbComplete}, nil)
 			return
 		}
 	}
@@ -504,13 +504,8 @@ func (inst *Service) handleComplete(msg *app.Msg, retained bool) {
 		inst.refuse(msg, "the request carries no messages", rec, t)
 		return
 	}
-	digest, derr := req.content().digest()
-	if derr != nil {
-		inst.refuse(msg, "the journal does not cover the call: "+derr.Error(), rec, t)
-		return
-	}
 	p := inst.gate(msg, gateIn{
-		route: inst.chatRoute(), run: req.Run, journalKey: req.Journal, digest: digest, approval: req.Approval,
+		route: inst.chatRoute(), run: req.Run, journalKey: req.Journal, digestOf: req.content().digest, approval: req.Approval,
 		onBehalfTask: req.OnBehalfTask, onBehalfEpoch: req.OnBehalfEpoch, onBehalfCall: req.OnBehalfCall,
 		body: body, leaks: leakSurface(body, creq),
 		cancelKey: req.CancelKey, deadline: req.DeadlineUnixNanos, timeout: inst.cfg.Timeout,

@@ -6,11 +6,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/agentrun"
 	"github.com/stergiotis/boxer/public/keelson/runtime/llm/ration"
+	"github.com/stergiotis/boxer/public/keelson/runtime/trail"
 	"github.com/stergiotis/boxer/public/llm/openaichat"
 )
 
@@ -78,4 +80,23 @@ func TestTheCallersDeadlineBoundsTheProviderCall(t *testing.T) {
 	_, err = cli.Complete(ctx2, Request{Messages: userMessage()})
 	require.NoError(t, err)
 	assert.WithinDuration(t, time.Now().Add(time.Hour), p.deadline, 5*time.Second, "the service's bound is the tighter one")
+}
+
+// A call refused after admission — here by the write-ahead, a required
+// trail on a host without a durable backend — sent nothing, and the exit
+// budget is charged nothing for it.
+func TestARefusalAfterAdmissionChargesNoBytes(t *testing.T) {
+	trail.RequiredEnv.SetForTest(t, "true")
+	rec := trail.NewRecorder(nil, "run-test", zerolog.Nop())
+	t.Cleanup(rec.Close)
+	remote := &fakeProvider{resp: openaichat.CompletionResponse{Content: "x"}}
+	cli, svc, _ := serve(t, Config{Endpoint: "https://api.example.net/v1", Model: "m", Client: remote, Trail: rec})
+	_, err := cli.Complete(context.Background(), Request{Messages: userMessage()})
+	var refused *RefusedError
+	require.True(t, errors.As(err, &refused), "%v", err)
+	assert.Contains(t, refused.Reason, "audit trail")
+	assert.Zero(t, remote.calls.Load())
+	for _, a := range svc.Ledger().Accounts() {
+		assert.Zero(t, a.Totals[ration.QuantityBytesSent], "account %s/%s: nothing left the cell", a.Account.Kind, a.Account.Key)
+	}
 }

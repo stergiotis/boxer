@@ -136,17 +136,36 @@ func (inst TranscriptionRequest) Validate() (err error) {
 		err = eb.Build().Int("speakers", len(inst.KnownSpeakers)).Int("max", MaxKnownSpeakers).Errorf("too many known speakers")
 	case inst.Timestamps > TimestampsWord:
 		err = eb.Build().Uint8("timestamps", uint8(inst.Timestamps)).Errorf("unknown timestamp granularity")
+	case hasControl(inst.FileName) || hasControl(inst.MediaType):
+		// They go into the file part's headers: a line break there would
+		// add a header of the caller's.
+		err = eh.Errorf("the file name and media type may not hold control characters")
 	}
 	if err != nil {
 		return
 	}
 	for i, s := range inst.KnownSpeakers {
-		if s.Name == "" || len(s.Clip) == 0 {
+		switch {
+		case s.Name == "" || len(s.Clip) == 0:
 			err = eb.Build().Int("index", i).Errorf("a known speaker needs a name and a clip")
+		case hasControl(s.MediaType):
+			err = eb.Build().Int("index", i).Errorf("a known speaker's media type may not hold control characters")
+		}
+		if err != nil {
 			return
 		}
 	}
 	return
+}
+
+// hasControl says s holds an ASCII control character or DEL.
+func hasControl(s string) bool {
+	for i := 0; i < len(s); i++ {
+		if c := s[i]; c < 0x20 || c == 0x7f {
+			return true
+		}
+	}
+	return false
 }
 
 // fileNameOf is the request's file name, or one derived from its media
@@ -708,8 +727,12 @@ func (inst *Client) readTranscriptStream(resp *http.Response, onDelta func(Trans
 	if final != nil {
 		t.Text = *final
 	}
-	if len(segments) > 0 {
+	// As on a whole answer: only speaker labels make it diarized.
+	switch {
+	case t.Diarized():
 		t.Format = transcriptFormatDiarized
+	case len(segments) > 0:
+		t.Format = transcriptFormatVerbose
 	}
 	return
 }

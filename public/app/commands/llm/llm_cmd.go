@@ -66,9 +66,6 @@ func transcribe(ctx context.Context, cmd *cli.Command) (err error) {
 	if err != nil {
 		return eb.Build().Str("path", path).Errorf("read the recording: %w", err)
 	}
-	if tc.MaxBytes > 0 && int64(len(audio)) > tc.MaxBytes {
-		return eb.Build().Int("bytes", len(audio)).Int64("max", tc.MaxBytes).Errorf("the recording is above BOXER_LLM_TRANSCRIBE_MAXBYTES")
-	}
 	req := openaichat.TranscriptionRequest{ModelId: tc.Model, Audio: audio, FileName: filepath.Base(path), MediaType: mediaTypeOf(path),
 		Language: cmd.String("language"), Prompt: cmd.String("prompt"), Diarize: cmd.Bool("diarize")}
 	if req.Diarize {
@@ -107,12 +104,28 @@ func transcribe(ctx context.Context, cmd *cli.Command) (err error) {
 		// Subtitles need segments with times.
 		req.Timestamps = openaichat.TimestampsSegment
 	}
+	// The ceiling over the request as it leaves, as the service counts it.
+	maxBytes := tc.MaxBytes
+	if maxBytes <= 0 {
+		maxBytes = llm.DefaultTranscribeMaxBytes
+	}
+	_, body, err := openaichat.EncodeTranscription(req, false)
+	if err != nil {
+		return eh.Errorf("form the request: %w", err)
+	}
+	if int64(len(body)) > maxBytes {
+		return eb.Build().Int("bytes", len(body)).Int64("max", maxBytes).Errorf("the request is above BOXER_LLM_TRANSCRIBE_MAXBYTES")
+	}
+	timeout := tc.Timeout
+	if timeout <= 0 {
+		timeout = llm.DefaultTranscribeTimeout
+	}
 	client, err := openaichat.NewClient(tc.Endpoint, tc.ApiKey)
 	if err != nil {
 		return err
 	}
 	defer func() { _ = client.Close() }()
-	ctx, cancel := context.WithTimeout(ctx, tc.Timeout)
+	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	var t openaichat.Transcript
 	if cmd.Bool("stream") {
@@ -133,7 +146,7 @@ func transcribe(ctx context.Context, cmd *cli.Command) (err error) {
 	case formatVtt:
 		out = openaichat.RenderWebVTT(t)
 	case formatJson:
-		b, merr := json.Marshal(t)
+		b, merr := json.Marshal(jsonOf(t))
 		if merr != nil {
 			return eh.Errorf("encode the transcript: %w", merr)
 		}
@@ -145,10 +158,80 @@ func transcribe(ctx context.Context, cmd *cli.Command) (err error) {
 	return nil
 }
 
+// jsonTranscript is the transcript as `--format json` writes it: the
+// answer's own member names, an unreported quantity left out.
+type jsonTranscript struct {
+	Text     string        `json:"text"`
+	Language string        `json:"language,omitempty"`
+	Duration *float64      `json:"duration,omitempty"`
+	Format   string        `json:"format"`
+	Segments []jsonSegment `json:"segments,omitempty"`
+	Words    []jsonWord    `json:"words,omitempty"`
+	Usage    jsonUsage     `json:"usage"`
+}
+
+type jsonSegment struct {
+	Id      string  `json:"id"`
+	Start   float64 `json:"start"`
+	End     float64 `json:"end"`
+	Speaker string  `json:"speaker,omitempty"`
+	Text    string  `json:"text"`
+}
+
+type jsonWord struct {
+	Word  string  `json:"word"`
+	Start float64 `json:"start"`
+	End   float64 `json:"end"`
+}
+
+type jsonUsage struct {
+	InputTokens  *int32   `json:"input_tokens,omitempty"`
+	OutputTokens *int32   `json:"output_tokens,omitempty"`
+	AudioTokens  *int32   `json:"audio_tokens,omitempty"`
+	Seconds      *float64 `json:"seconds,omitempty"`
+}
+
+func jsonOf(t openaichat.Transcript) (j jsonTranscript) {
+	j = jsonTranscript{Text: t.Text, Language: t.Language, Format: t.Format}
+	if t.Duration.Has {
+		j.Duration = &t.Duration.Val
+	}
+	for _, s := range t.Segments {
+		j.Segments = append(j.Segments, jsonSegment(s))
+	}
+	for _, w := range t.Words {
+		j.Words = append(j.Words, jsonWord(w))
+	}
+	if t.Usage.InputTokens.Has {
+		j.Usage.InputTokens = &t.Usage.InputTokens.Val
+	}
+	if t.Usage.OutputTokens.Has {
+		j.Usage.OutputTokens = &t.Usage.OutputTokens.Val
+	}
+	if t.Usage.AudioTokens.Has {
+		j.Usage.AudioTokens = &t.Usage.AudioTokens.Val
+	}
+	if t.Usage.Seconds.Has {
+		j.Usage.Seconds = &t.Usage.Seconds.Val
+	}
+	return
+}
+
+// audioTypes are the containers the endpoint takes, by extension: Go's
+// own table has none of them, and the system's varies by machine.
+var audioTypes = map[string]string{
+	".flac": "audio/flac", ".m4a": "audio/mp4", ".mp3": "audio/mpeg", ".mp4": "video/mp4", ".mpeg": "audio/mpeg",
+	".mpga": "audio/mpeg", ".oga": "audio/ogg", ".ogg": "audio/ogg", ".wav": "audio/wav", ".webm": "audio/webm",
+}
+
 // mediaTypeOf is a file's media type by its extension, empty when unknown;
 // the server reads the container from the file name either way.
 func mediaTypeOf(path string) string {
-	mt := mime.TypeByExtension(strings.ToLower(filepath.Ext(path)))
+	ext := strings.ToLower(filepath.Ext(path))
+	if mt, ok := audioTypes[ext]; ok {
+		return mt
+	}
+	mt := mime.TypeByExtension(ext)
 	mt, _, _ = strings.Cut(mt, ";")
 	return mt
 }

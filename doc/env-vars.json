@@ -1325,7 +1325,7 @@
       "name": "BOXER_LLM_TRANSCRIBE_MAXBYTES",
       "type": "int64",
       "default": "26214400",
-      "description": "most bytes of audio one llm.transcribe may carry; larger recordings are refused before anything leaves (OpenAI and vLLM's default both take 25 MiB)",
+      "description": "most bytes one llm.transcribe request may carry as it leaves, the recording and any known-speaker clips together; larger requests are refused before anything leaves (OpenAI and vLLM's default both take 25 MiB)",
       "category": "llm",
       "sensitive": false,
       "origin": {
@@ -3478,30 +3478,6 @@
       "origin": {
         "module": "github.com/stergiotis/boxer",
         "package": "github.com/stergiotis/boxer/public/keelson/runtime/watchbill"
-      }
-    },
-    {
-      "name": "KEELSON_WINDOW_PAUSE_BUTTON",
-      "type": "bool",
-      "default": "true",
-      "description": "show the per-window \"Pause\" / \"Resume\" button above each window's body; false hides it",
-      "category": "keelson",
-      "sensitive": false,
-      "origin": {
-        "module": "github.com/stergiotis/boxer",
-        "package": "github.com/stergiotis/boxer/public/keelson/runtime/windowhost"
-      }
-    },
-    {
-      "name": "KEELSON_WINDOW_SVG_BUTTON",
-      "type": "bool",
-      "default": "true",
-      "description": "show the per-window \"SVG\" save button above each window's body; false hides it",
-      "category": "keelson",
-      "sensitive": false,
-      "origin": {
-        "module": "github.com/stergiotis/boxer",
-        "package": "github.com/stergiotis/boxer/public/keelson/runtime/windowhost"
       }
     },
     {

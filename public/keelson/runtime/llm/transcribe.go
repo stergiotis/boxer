@@ -77,7 +77,7 @@ var (
 	TranscribeMaxBytes = env.NewInt(env.Spec{
 		Name:        "BOXER_LLM_TRANSCRIBE_MAXBYTES",
 		Default:     strconv.Itoa(DefaultTranscribeMaxBytes),
-		Description: "most bytes of audio one llm.transcribe may carry; larger recordings are refused before anything leaves (OpenAI and vLLM's default both take 25 MiB)",
+		Description: "most bytes one llm.transcribe request may carry as it leaves, the recording and any known-speaker clips together; larger requests are refused before anything leaves (OpenAI and vLLM's default both take 25 MiB)",
 		Category:    env.CategoryLLM,
 	})
 )
@@ -463,6 +463,31 @@ func (inst *Service) describeTranscription() (d TranscriptionDescription) {
 		Local: inst.speech.local, Trusted: inst.speech.trusted, MaxBytes: tc.MaxBytes, Timeout: tc.Timeout}
 }
 
+// transcriptionDescriptor is the request's message row content: what was
+// sent and to which model, by type, size and digest. The row records its
+// own size and digest over this text; the audio's are in it.
+func transcriptionDescriptor(req wireTranscribeRequest, model string, audioDigest string) string {
+	var b strings.Builder
+	b.WriteString("transcribe with ")
+	b.WriteString(model)
+	b.WriteString(": ")
+	mt := req.MediaType
+	if mt == "" {
+		mt = "audio of unnamed type"
+	}
+	b.WriteString(mt)
+	b.WriteString(", ")
+	b.WriteString(strconv.Itoa(len(req.Audio)))
+	b.WriteString(" bytes, ")
+	b.WriteString(audioDigest)
+	if req.Diarize {
+		b.WriteString(", diarized with ")
+		b.WriteString(strconv.Itoa(len(req.KnownSpeakers)))
+		b.WriteString(" known speakers")
+	}
+	return b.String()
+}
+
 // transcriptionLeaks is the text of a transcription the canaries read: its
 // text fields. The audio cannot be read for a planted token (ADR-0383,
 // Consequences).
@@ -497,17 +522,18 @@ func (inst *Service) handleTranscribe(msg *app.Msg) {
 		CallId: inst.mintCallId(), At: time.Now().UTC(), Sender: msg.Sender, SenderInstance: msg.SenderInstance,
 		Purpose: req.Purpose, Sensitivity: queryengine.SensitivityE(req.Sensitivity), Model: model, EndpointHost: inst.speech.host,
 		Tier: req.Tier, Verb: VerbTranscribe, AudioMediaType: req.MediaType, AudioDigest: agentrun.ContentDigest(string(req.Audio)),
+		Messages: 1,
 	}
+	// The request on the trail (ADR-0277 §SD3): one message row naming the
+	// recording — its type, size and digest, never its bytes — written
+	// before it leaves, and the transcript as the reply's row after.
+	t := &turn{messages: []openaichat.Message{{Role: openaichat.ChatRoleUser, Content: transcriptionDescriptor(req, model, rec.AudioDigest)}}}
 	if !tc.Configured() {
-		inst.refuse(msg, inst.describeTranscription().Reason, rec, nil)
+		inst.refuse(msg, inst.describeTranscription().Reason, rec, t)
 		return
 	}
 	if req.Diarize && tc.DiarizeModel == "" {
-		inst.refuse(msg, "the request asks for speakers and no diarizing model is configured on this host (BOXER_LLM_TRANSCRIBE_DIARIZE_MODEL)", rec, nil)
-		return
-	}
-	if tc.MaxBytes > 0 && int64(len(req.Audio)) > tc.MaxBytes {
-		inst.refuse(msg, "the recording is "+strconv.Itoa(len(req.Audio))+" bytes, above this host's ceiling of "+strconv.FormatInt(tc.MaxBytes, 10)+" (BOXER_LLM_TRANSCRIBE_MAXBYTES)", rec, nil)
+		inst.refuse(msg, "the request asks for speakers and no diarizing model is configured on this host (BOXER_LLM_TRANSCRIBE_DIARIZE_MODEL)", rec, t)
 		return
 	}
 	treq := openaichat.TranscriptionRequest{ModelId: model, Audio: req.Audio, FileName: req.FileName, MediaType: req.MediaType,
@@ -519,24 +545,25 @@ func (inst *Service) handleTranscribe(msg *app.Msg) {
 	// resend whether or not either streams.
 	_, body, berr := openaichat.EncodeTranscription(treq, false)
 	if berr != nil {
-		inst.refuse(msg, "malformed request: "+berr.Error(), rec, nil)
+		inst.refuse(msg, "malformed request: "+berr.Error(), rec, t)
 		return
 	}
 	rec.PromptBytes = len(body)
+	// The ceiling is over the body as it leaves — the audio and the known
+	// speakers' clips — which is what a server's upload limit counts.
+	if tc.MaxBytes > 0 && int64(len(body)) > tc.MaxBytes {
+		inst.refuse(msg, "the request is "+strconv.Itoa(len(body))+" bytes with its recording and speaker clips, above this host's ceiling of "+strconv.FormatInt(tc.MaxBytes, 10)+" (BOXER_LLM_TRANSCRIBE_MAXBYTES)", rec, t)
+		return
+	}
 	if inst.cfg.Retain.atLeast(RetainRing) {
 		rec.Prompt = req.Prompt
 	}
-	digest, derr := req.content().digest()
-	if derr != nil {
-		inst.refuse(msg, "the journal does not cover the call: "+derr.Error(), rec, nil)
-		return
-	}
 	p := inst.gate(msg, gateIn{
-		route: inst.transcribeRoute(), run: req.Run, journalKey: req.Journal, digest: digest, approval: req.Approval,
+		route: inst.transcribeRoute(), run: req.Run, journalKey: req.Journal, digestOf: req.content().digest, approval: req.Approval,
 		onBehalfTask: req.OnBehalfTask, onBehalfEpoch: req.OnBehalfEpoch, onBehalfCall: req.OnBehalfCall,
 		body: body, leaks: transcriptionLeaks(req),
 		cancelKey: req.CancelKey, deadline: req.DeadlineUnixNanos, timeout: tc.Timeout,
-	}, &rec, nil)
+	}, &rec, t)
 	if p == nil {
 		return
 	}
@@ -563,13 +590,17 @@ func (inst *Service) handleTranscribe(msg *app.Msg) {
 		rec.Completion = tr.Text
 	}
 	rep := wireOfTranscript(tr)
-	rep.V, rep.Ok, rep.Model, rep.ElapsedNs, rep.CallId = wireVersion, true, model, int64(rec.Elapsed), rec.CallId
-	rep.Admission, rep.Rule, rep.QueuedNs, rep.Remaining = p.decision.Outcome.String(), p.decision.Rule, int64(p.decision.Queued), wireOfRemaining(p.decision.Remaining)
 	if cerr != nil {
-		rep = wireTranscribeReply{wireReply: wireReply{V: wireVersion, Reason: cerr.Error(), ErrorKind: kindOf(cerr), CallId: rec.CallId, ElapsedNs: int64(rec.Elapsed)}}
+		rep = wireTranscribeReply{wireReply: wireReply{Reason: cerr.Error(), ErrorKind: kindOf(cerr)}}
 		rec.Error = rep.Reason
+	} else {
+		rep.Ok = true
+		t.reply = option.Some(openaichat.Message{Role: openaichat.ChatRoleAssistant, Content: tr.Text})
 	}
-	inst.record(rec, nil)
+	// The admission travels on a failure too, as on a completion's.
+	rep.V, rep.Model, rep.ElapsedNs, rep.CallId = wireVersion, model, int64(rec.Elapsed), rec.CallId
+	rep.Admission, rep.Rule, rep.QueuedNs, rep.Remaining = p.decision.Outcome.String(), p.decision.Rule, int64(p.decision.Queued), wireOfRemaining(p.decision.Remaining)
+	inst.record(rec, t)
 	inst.publishCall(rec, p.chain, p.class, p.decision, used)
 	lg := inst.log.Debug()
 	if !rep.Ok {

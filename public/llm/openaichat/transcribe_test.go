@@ -132,7 +132,13 @@ func TestEncodeTranscriptionRefuses(t *testing.T) {
 			r.Diarize = true
 			r.KnownSpeakers = []KnownSpeaker{{Name: "a"}}
 		},
-		"unknown granularity": func(r *TranscriptionRequest) { r.Timestamps = TimestampsWord + 1 },
+		"unknown granularity":            func(r *TranscriptionRequest) { r.Timestamps = TimestampsWord + 1 },
+		"a line break in the file name":  func(r *TranscriptionRequest) { r.FileName = "a.wav\r\nX-Injected: 1" },
+		"a line break in the media type": func(r *TranscriptionRequest) { r.MediaType = "audio/wav\nX: 1" },
+		"a line break in a clip's type": func(r *TranscriptionRequest) {
+			r.Diarize = true
+			r.KnownSpeakers = []KnownSpeaker{{Name: "a", MediaType: "audio/wav\r", Clip: []byte("x")}}
+		},
 	}
 	for name, mutate := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -396,6 +402,9 @@ func TestRenderSubtitles(t *testing.T) {
 	assert.Equal(t, "1\n00:00:00,000 --> 00:00:01,500\nHello\n\n2\n01:01:01,001 --> 01:01:02,250\nA: a < b\nnext\n\n", RenderSRT(tr))
 	assert.Equal(t, "WEBVTT\n\n00:00:00.000 --> 00:00:01.500\nHello\n\n01:01:01.001 --> 01:01:02.250\n<v A>a &lt; b\nnext\n\n", RenderWebVTT(tr))
 	assert.Equal(t, "", RenderSRT(Transcript{Text: "no segments"}))
+	gaps := Transcript{Segments: []TranscriptSegment{{Start: 0, End: 1, Text: "  "}, {Start: 1, End: 2, Text: "a --> b"}}}
+	assert.Equal(t, "1\n00:00:01,000 --> 00:00:02,000\na -> b\n\n", RenderSRT(gaps), "an empty segment is no cue, and the arrow is not a timing line")
+	assert.Equal(t, "WEBVTT\n\n00:00:01.000 --> 00:00:02.000\na --&gt; b\n\n", RenderWebVTT(gaps))
 	assert.True(t, strings.HasPrefix(RenderWebVTT(Transcript{}), "WEBVTT"))
 	assert.Equal(t, "00:00:00.000", cueTime(-3, '.'))
 }
