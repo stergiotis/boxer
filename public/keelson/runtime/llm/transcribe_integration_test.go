@@ -75,9 +75,12 @@ func TestTranscribeAgainstALiveRoute(t *testing.T) {
 		t.Logf("segments: %d duration=%v", len(res.Transcript.Segments), res.Transcript.Duration)
 	}
 
+	// The number of deltas is not asserted: whisper-1 ignores stream and
+	// answers whole, and a silent tone may carry no text to stream. What
+	// must hold is that a streamed request is answered, completely.
 	var deltas int
 	res, err = cli.TranscribeStreaming(ctx, TranscriptionRequest{Audio: audio, MediaType: "audio/wav", Language: "en"}, func(d Delta) { deltas++ })
-	require.NoError(t, err)
+	require.NoError(t, err, "a stream that ended early is an error, not a transcript")
 	t.Logf("streamed: %q in %d deltas", res.Transcript.Text, deltas)
 
 	if tc.DiarizeModel != "" {
