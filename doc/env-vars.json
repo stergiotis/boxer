@@ -3481,6 +3481,30 @@
       }
     },
     {
+      "name": "KEELSON_WINDOW_PAUSE_BUTTON",
+      "type": "bool",
+      "default": "true",
+      "description": "show the per-window \"Pause\" / \"Resume\" button above each window's body; false hides it",
+      "category": "keelson",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/keelson/runtime/windowhost"
+      }
+    },
+    {
+      "name": "KEELSON_WINDOW_SVG_BUTTON",
+      "type": "bool",
+      "default": "true",
+      "description": "show the per-window \"SVG\" save button above each window's body; false hides it",
+      "category": "keelson",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/keelson/runtime/windowhost"
+      }
+    },
+    {
       "name": "LLM_API_KEY",
       "type": "string",
       "description": "API key for non-Gemini LLM providers (LM Studio, generic OpenAI-compatible); prefer the variable to --llm-apikey, which exposes the secret in process argv",
