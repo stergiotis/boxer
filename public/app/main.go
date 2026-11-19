@@ -22,6 +22,7 @@ import (
 	"github.com/stergiotis/boxer/public/app/commands/keelsonddl"
 	"github.com/stergiotis/boxer/public/app/commands/key"
 	"github.com/stergiotis/boxer/public/app/commands/ladingfs"
+	llmcmd "github.com/stergiotis/boxer/public/app/commands/llm"
 	"github.com/stergiotis/boxer/public/app/commands/markdown"
 	"github.com/stergiotis/boxer/public/app/commands/protogen"
 	"github.com/stergiotis/boxer/public/app/commands/queryrunsd"
@@ -151,6 +152,7 @@ func mainC() (exitCode int) {
 			findAnchor.NewCliCommand(),
 			http.NewCliCommand(),
 			key.NewCliCommand(),
+			llmcmd.NewCliCommand(),
 			queryrunsd.NewCliCommand(),
 			watchbillcli.NewCliCommand(),
 			runtimecodegen.NewCliCommand(),

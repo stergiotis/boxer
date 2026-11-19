@@ -41,6 +41,7 @@ func usageTable(rows []ration.AccountUsage) (t *introspect.Table) {
 		Int64("cached_input_tokens", total(ration.QuantityCachedInputTokens)).
 		Int64("reasoning_tokens", total(ration.QuantityReasoningTokens)).
 		Int64("wall_ms", total(ration.QuantityWallMs)).
+		Int64("audio_ms", total(ration.QuantityAudioMs)).
 		Int64("inflight", func(i int) int64 { return rows[i].Inflight }).
 		Int64("waiting", func(i int) int64 { return int64(rows[i].Waiting) }).
 		Int64("reserved_output_tokens", func(i int) int64 { return rows[i].Reserved[ration.QuantityOutputTokens] }).

@@ -31,6 +31,8 @@ type Client struct {
 	// serviceTimeout is the service's completion bound as the last
 	// describe reported it, in nanoseconds; 0 is not yet known.
 	serviceTimeout atomic.Int64
+	// transcribeTimeout is its transcription bound, the same way.
+	transcribeTimeout atomic.Int64
 }
 
 // ReplyMargin is how much longer than the service's completion bound a
@@ -73,6 +75,10 @@ type Description struct {
 	// Timeout is the service's bound on one completion
 	// (BOXER_LLM_TIMEOUT); 0 from a service that does not report it.
 	Timeout time.Duration
+	// Transcription is the transcription route (ADR-0383 §SD2), offered
+	// apart from the chat model: either may be configured without the
+	// other.
+	Transcription TranscriptionDescription
 }
 
 // Request is one completion as a Go value: the caller's declaration of
@@ -302,8 +308,14 @@ func (inst *Client) Describe(ctx context.Context) (d Description, err error) {
 	d = Description{Configured: w.Configured, Model: w.Model, EndpointHost: w.EndpointHost, Local: w.Local, Trusted: w.Trusted,
 		MaxTokens: w.MaxTokens, ContextTokens: w.ContextTokens, ContextSource: w.ContextSource, Reason: w.Reason,
 		Timeout: time.Duration(w.TimeoutNs)}
+	d.Transcription = TranscriptionDescription{Configured: w.TranscribeConfigured, Model: w.TranscribeModel, DiarizeModel: w.TranscribeDiarizeModel,
+		EndpointHost: w.TranscribeEndpointHost, Local: w.TranscribeLocal, Trusted: w.TranscribeTrusted, MaxBytes: w.TranscribeMaxBytes,
+		Timeout: time.Duration(w.TranscribeTimeoutNs), Reason: w.TranscribeReason}
 	if d.Timeout > 0 {
 		inst.serviceTimeout.Store(int64(d.Timeout))
+	}
+	if d.Transcription.Timeout > 0 {
+		inst.transcribeTimeout.Store(int64(d.Transcription.Timeout))
 	}
 	return
 }
@@ -375,7 +387,7 @@ func (inst *Client) complete(ctx context.Context, r Request, onDelta func(Delta)
 	if err != nil {
 		return
 	}
-	raw, err := inst.request(ctx, subject, payload, req.CancelKey)
+	raw, err := inst.request(ctx, subject, payload, req.CancelKey, inst.completionWait(ctx))
 	if err != nil {
 		return res, eb.Build().Str("purpose", r.Purpose).Errorf("llm.complete request: %w", err)
 	}
@@ -406,13 +418,13 @@ func (inst *Client) complete(ctx context.Context, r Request, onDelta func(Delta)
 // comes first. On cancellation it publishes llm.cancel with key so the
 // service stops the provider call rather than finishing it for no one;
 // the abandoned request's goroutine ends when the reply or its wait does.
-func (inst *Client) request(ctx context.Context, subject string, payload []byte, key string) (raw []byte, err error) {
+func (inst *Client) request(ctx context.Context, subject string, payload []byte, key string, callWait time.Duration) (raw []byte, err error) {
 	type result struct {
 		raw []byte
 		err error
 	}
 	done := make(chan result, 1)
-	wait := inst.wait(ctx, inst.completionWait(ctx))
+	wait := inst.wait(ctx, callWait)
 	go func() {
 		r, e := inst.bus.RequestWithTimeout(subject, payload, wait)
 		done <- result{raw: r, err: e}

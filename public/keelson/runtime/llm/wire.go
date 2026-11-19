@@ -103,6 +103,16 @@ type wireDescribe struct {
 	// TimeoutNs is the service's bound on one completion
 	// (BOXER_LLM_TIMEOUT), the wait a client takes when it names none.
 	TimeoutNs int64 `json:"timeout_ns,omitempty"`
+	// The transcription route (ADR-0383 §SD2).
+	TranscribeConfigured   bool   `json:"transcribe_configured,omitempty"`
+	TranscribeModel        string `json:"transcribe_model,omitempty"`
+	TranscribeDiarizeModel string `json:"transcribe_diarize_model,omitempty"`
+	TranscribeEndpointHost string `json:"transcribe_endpoint_host,omitempty"`
+	TranscribeLocal        bool   `json:"transcribe_local,omitempty"`
+	TranscribeTrusted      bool   `json:"transcribe_trusted,omitempty"`
+	TranscribeMaxBytes     int64  `json:"transcribe_max_bytes,omitempty"`
+	TranscribeTimeoutNs    int64  `json:"transcribe_timeout_ns,omitempty"`
+	TranscribeReason       string `json:"transcribe_reason,omitempty"`
 }
 
 // wireDelta is one coalesced advance of a streamed answer, published to
@@ -120,6 +130,9 @@ type wireDelta struct {
 	ReasoningOffset uint32   `json:"reasoning_offset,omitempty"`
 	Reasoning       string   `json:"reasoning,omitempty"`
 	Tools           []string `json:"tools,omitempty"`
+	// Segments are the finished segments of a diarized transcription
+	// (ADR-0383 §SD6); a reader that does not know them reads the text.
+	Segments []wireSegment `json:"segments,omitempty"`
 }
 
 // wireReply is the reply on llm.complete. Ok false carries the reason and

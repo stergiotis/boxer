@@ -121,13 +121,17 @@ const (
 	// only when the route is outside the cell, so a budget on it bounds
 	// what a task can move out.
 	QuantityBytesSent QuantityE = "bytes.sent"
+	// QuantityAudioMs is the length of the audio a transcription carried,
+	// in milliseconds, as the answer reported it (ADR-0383 §SD5); a call
+	// whose answer did not say is not charged it.
+	QuantityAudioMs QuantityE = "audio_ms"
 )
 
 // KnownQuantities lists the quantities the model service charges, in the
 // order tables show them.
 var KnownQuantities = []QuantityE{
 	QuantityCalls, QuantityInputTokens, QuantityOutputTokens, QuantityTotalTokens,
-	QuantityCachedInputTokens, QuantityReasoningTokens, QuantityWallMs, QuantityBytesSent,
+	QuantityCachedInputTokens, QuantityReasoningTokens, QuantityWallMs, QuantityBytesSent, QuantityAudioMs,
 }
 
 // Usage is what a call used, by quantity. A quantity the provider did not

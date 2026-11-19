@@ -843,6 +843,15 @@ var (
 	MembRunDriverJob     = NkRegistry.MustBegin("runtimeRunDriverJob", 559).End()
 	MembRunDriverAttempt = NkRegistry.MustBegin("runtimeRunDriverAttempt", 560).End()
 	MembRunDriverJobKind = NkRegistry.MustBegin("runtimeRunDriverJobKind", 561).End()
+
+	// What a transcription adds to the model call row (ADR-0383 §SD5): the
+	// verb, the audio's media type, digest and length, and how many
+	// speakers a diarized answer labelled. The audio itself is never kept.
+	MembLlmCallVerb           = NkRegistry.MustBegin("llmCallVerb", 563).End()
+	MembLlmCallAudioMediaType = NkRegistry.MustBegin("llmCallAudioMediaType", 564).End()
+	MembLlmCallAudioDigest    = NkRegistry.MustBegin("llmCallAudioDigest", 565).End()
+	MembLlmCallAudioMs        = NkRegistry.MustBegin("llmCallAudioMs", 566).End()
+	MembLlmCallSpeakers       = NkRegistry.MustBegin("llmCallSpeakers", 567).End()
 )
 
 // AllMembs is the enumerated set of registered runtime memberships. Tests
@@ -980,4 +989,5 @@ var AllMembs = []registry.RegisteredNaturalKey{
 	MembCoverageAgentApplyChanged, MembCoverageAgentApplyFuncs, MembCoverageAgentApplyOperation,
 	MembCoverageAgentApplyPhase, MembCoverageAgentApplyCostUs,
 	MembRunDriver, MembRunDriverJob, MembRunDriverAttempt, MembRunDriverJobKind,
+	MembLlmCallVerb, MembLlmCallAudioMediaType, MembLlmCallAudioDigest, MembLlmCallAudioMs, MembLlmCallSpeakers,
 }

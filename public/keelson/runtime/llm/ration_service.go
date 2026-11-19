@@ -135,6 +135,9 @@ func usageOfRecord(rec CallRecord) (u ration.Usage) {
 	if rec.ReasoningTokens.Has {
 		u[ration.QuantityReasoningTokens] = int64(rec.ReasoningTokens.Val)
 	}
+	if rec.AudioMs.Has {
+		u[ration.QuantityAudioMs] = rec.AudioMs.Val
+	}
 	return
 }
 

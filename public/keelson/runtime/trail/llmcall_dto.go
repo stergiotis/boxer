@@ -83,4 +83,15 @@ type LlmCall struct {
 	Route    option.Option[string] `lw:"llmCallRoute,symbol"`
 	Tier     uint32                `lw:"llmCallTier,u32Array,unit"`
 	Approval option.Option[uint64] `lw:"llmCallApproval,foreignKey"`
+	// Verb is the call's verb, "complete" or "transcribe" (ADR-0383 §SD5);
+	// absent on rows written before transcription existed, which are
+	// completions. A transcription's row carries its audio's media type,
+	// the digest of its bytes and its length in milliseconds as the answer
+	// reported it, and on a diarized request how many speakers the answer
+	// labelled. PromptBytes is the multipart body that left.
+	Verb           option.Option[string] `lw:"llmCallVerb,symbol"`
+	AudioMediaType option.Option[string] `lw:"llmCallAudioMediaType,symbol"`
+	AudioDigest    option.Option[string] `lw:"llmCallAudioDigest,stringArray,unit"`
+	AudioMs        option.Option[uint64] `lw:"llmCallAudioMs,u64Array,unit"`
+	Speakers       option.Option[uint32] `lw:"llmCallSpeakers,u32Array,unit"`
 }

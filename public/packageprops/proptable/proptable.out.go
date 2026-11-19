@@ -72,6 +72,7 @@ var Table = packageprops.Table{
 	{ImportPath: "github.com/stergiotis/boxer/public/app/commands/keelsonddl", Props: packageprops.Props{WASMWASI: packageprops.WASMUnknown, WASMJS: packageprops.WASMUnknown, WASMFreestanding: packageprops.WASMUnknown}},
 	{ImportPath: "github.com/stergiotis/boxer/public/app/commands/key", Props: packageprops.Props{WASMWASI: packageprops.WASMCompiles, WASMJS: packageprops.WASMCompiles, WASMFreestanding: packageprops.WASMCompiles}},
 	{ImportPath: "github.com/stergiotis/boxer/public/app/commands/ladingfs", Props: packageprops.Props{WASMWASI: packageprops.WASMUnknown, WASMJS: packageprops.WASMUnknown, WASMFreestanding: packageprops.WASMUnknown}},
+	{ImportPath: "github.com/stergiotis/boxer/public/app/commands/llm", Props: packageprops.Props{WASMWASI: packageprops.WASMBlocked, WASMJS: packageprops.WASMBlocked, WASMFreestanding: packageprops.WASMBlocked}},
 	{ImportPath: "github.com/stergiotis/boxer/public/app/commands/protogen", Props: packageprops.Props{WASMWASI: packageprops.WASMBlocked, WASMJS: packageprops.WASMBlocked, WASMFreestanding: packageprops.WASMBlocked}},
 	{ImportPath: "github.com/stergiotis/boxer/public/app/commands/runtimecodegen", Props: packageprops.Props{WASMWASI: packageprops.WASMUnknown, WASMJS: packageprops.WASMUnknown, WASMFreestanding: packageprops.WASMUnknown}},
 	{ImportPath: "github.com/stergiotis/boxer/public/app/commands/sample", Props: packageprops.Props{WASMWASI: packageprops.WASMUnknown, WASMJS: packageprops.WASMUnknown, WASMFreestanding: packageprops.WASMUnknown}},

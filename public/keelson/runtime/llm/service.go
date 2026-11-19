@@ -90,6 +90,9 @@ type Config struct {
 	// refuses every completion; a test of what lies behind the check names
 	// AcceptAnyJournal.
 	Journal JournalCheckerI
+	// Transcribe is the transcription route (ADR-0383 §SD2), configured
+	// apart from the chat route; the zero value offers none.
+	Transcribe TranscribeConfig
 }
 
 // ConfigFromEnv resolves the config from the ADR-0009 registry.
@@ -99,6 +102,7 @@ func ConfigFromEnv() (cfg Config) {
 		MaxTokens: int32(MaxTokens.Get()), ReasoningEffort: ReasoningEffort.Get(), ContextTokens: int32(ContextTokens.Get()), Timeout: Timeout.Get(), Retain: RetainE(Retain.Get()),
 		TrustedHosts: ParseTrustedHosts(TrustedHosts.Get()),
 		Moderators:   ParseTrustedHosts(Moderators.Get()), Unruled: UnruledE(Unruled.Get()),
+		Transcribe: TranscribeConfigFromEnv(),
 	}
 	decl := cell.FromEnv(cfg.TrustedHosts)
 	cfg.Cell = &decl
@@ -116,6 +120,7 @@ func (inst *Service) cellOf() (d cell.Declaration) {
 		d.TrustedHosts = inst.cfg.TrustedHosts
 	}
 	d.ModelHost, d.ModelLocal = inst.host, inst.local
+	d.TranscribeHost, d.TranscribeLocal = inst.speech.host, inst.speech.local
 	return
 }
 
@@ -156,8 +161,12 @@ type Service struct {
 	ledger *ration.Ledger
 	cfg    Config
 	client openaichat.ClientI
-	host   string
-	local  bool
+	// transcriber and speech are the transcription route's client and
+	// place (ADR-0383 §SD2); nil and zero when none is configured.
+	transcriber openaichat.TranscriberI
+	speech      exitRoute
+	host        string
+	local       bool
 	// trusted says local holds by TrustedHosts, not loopback.
 	trusted bool
 	// context is the model's context size and where it came from, set
@@ -250,6 +259,24 @@ func NewService(bus *inprocbus.Inst, log zerolog.Logger, cfg Config) (s *Service
 			}
 		}
 	}
+	if cfg.Transcribe.Timeout <= 0 {
+		cfg.Transcribe.Timeout = DefaultTranscribeTimeout
+	}
+	if cfg.Transcribe.MaxBytes <= 0 {
+		cfg.Transcribe.MaxBytes = DefaultTranscribeMaxBytes
+	}
+	s.cfg.Transcribe = cfg.Transcribe
+	if tc := cfg.Transcribe; tc.Configured() {
+		s.speech = exitRoute{endpoint: tc.Endpoint, host: EndpointHost(tc.Endpoint), local: isLocalEndpoint(tc.Endpoint)}
+		if !s.speech.local && isTrustedEndpoint(tc.Endpoint, cfg.TrustedHosts) {
+			s.speech.local, s.speech.trusted = true, true
+			s.log.Warn().Str("host", s.speech.host).
+				Msg("llm: the transcription endpoint is not loopback but BOXER_LLM_TRUSTED_HOSTS lists it; confined recordings may be sent to it")
+		}
+		if s.transcriber, err = newTranscriber(tc); err != nil {
+			return nil, err
+		}
+	}
 	if cfg.Configured() {
 		switch {
 		case cfg.Route.ContextTokens > 0:
@@ -301,6 +328,10 @@ func (inst *Service) Close() {
 		_ = inst.client.Close()
 		inst.client = nil
 	}
+	if inst.transcriber != nil {
+		closeTranscriber(inst.transcriber)
+		inst.transcriber = nil
+	}
 }
 
 // Durable says the calls land on boxer.facts as well as in the record.
@@ -310,6 +341,7 @@ func (inst *Service) Durable() (yes bool) {
 
 // Describe is the describe reply as a Go value, for the host's own use.
 func (inst *Service) Describe() (d Description) {
+	defer func() { d.Transcription = inst.describeTranscription() }()
 	if !inst.cfg.Configured() {
 		d.Reason = "no model is configured on this host (BOXER_LLM_ENDPOINT and BOXER_LLM_MODEL)"
 		d.Timeout = inst.cfg.Timeout
@@ -335,11 +367,17 @@ func (inst *Service) handleRequest(msg *app.Msg) {
 	switch msg.Subject {
 	case SubjectDescribe:
 		d := inst.Describe()
+		tr := d.Transcription
 		inst.reply(msg.Reply, wireDescribe{Configured: d.Configured, Model: d.Model, EndpointHost: d.EndpointHost, Local: d.Local,
 			Trusted: d.Trusted, MaxTokens: d.MaxTokens, ContextTokens: d.ContextTokens, ContextSource: d.ContextSource, Reason: d.Reason,
-			TimeoutNs: int64(d.Timeout)})
+			TimeoutNs:            int64(d.Timeout),
+			TranscribeConfigured: tr.Configured, TranscribeModel: tr.Model, TranscribeDiarizeModel: tr.DiarizeModel,
+			TranscribeEndpointHost: tr.EndpointHost, TranscribeLocal: tr.Local, TranscribeTrusted: tr.Trusted,
+			TranscribeMaxBytes: tr.MaxBytes, TranscribeTimeoutNs: int64(tr.Timeout), TranscribeReason: tr.Reason})
 	case SubjectComplete, SubjectRetainComplete:
 		inst.startComplete(msg, msg.Subject == SubjectRetainComplete)
+	case SubjectTranscribe:
+		inst.start(msg, inst.handleTranscribe)
 	default:
 		inst.reply(msg.Reply, wireReply{ErrorKind: errKindRefused, Reason: "unknown verb " + strings.TrimPrefix(msg.Subject, SubjectPrefix)})
 	}
@@ -351,6 +389,12 @@ func (inst *Service) handleRequest(msg *app.Msg) {
 // requester's own wait (Client.Timeout, its context) would never take
 // effect. msg is the bus's and is not retained, so it is copied first.
 func (inst *Service) startComplete(msg *app.Msg, retained bool) {
+	inst.start(msg, func(m *app.Msg) { inst.handleComplete(m, retained) })
+}
+
+// start answers a call off the requester's goroutine, for startComplete's
+// reason.
+func (inst *Service) start(msg *app.Msg, handle func(m *app.Msg)) {
 	m := *msg
 	m.Payload = bytes.Clone(msg.Payload)
 	inst.mu.Lock()
@@ -362,7 +406,7 @@ func (inst *Service) startComplete(msg *app.Msg, retained bool) {
 	inst.mu.Unlock()
 	go func() {
 		defer inst.inflight.Done()
-		inst.handleComplete(&m, retained)
+		handle(&m)
 	}()
 }
 
@@ -409,7 +453,7 @@ func (inst *Service) handleComplete(msg *app.Msg, retained bool) {
 		ToolsDigest:  toolsDigest(req.Tools),
 		Conversation: req.Conversation, Turn: req.Turn, Round: int(req.Round), ParentCallId: req.ParentCallId,
 		OmitFrom: int(req.OmitFrom), OmitTo: int(req.OmitTo), RetainAsked: retained,
-		Profile: req.Profile, Route: req.Route, Tier: req.Tier,
+		Profile: req.Profile, Route: req.Route, Tier: req.Tier, Verb: VerbComplete,
 	}
 	if rec.Route == "" {
 		rec.Route = inst.cfg.Route.Id

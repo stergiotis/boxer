@@ -1289,6 +1289,85 @@
       }
     },
     {
+      "name": "BOXER_LLM_TRANSCRIBE_APIKEY",
+      "type": "string",
+      "description": "API key the host's llm service sends to the transcription endpoint; empty for local endpoints that take none",
+      "category": "llm",
+      "sensitive": true,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/keelson/runtime/llm"
+      }
+    },
+    {
+      "name": "BOXER_LLM_TRANSCRIBE_DIARIZE_MODEL",
+      "type": "string",
+      "description": "model id a diarized llm.transcribe uses (e.g. gpt-4o-transcribe-diarize, or a diarizing model a vLLM serves); unset refuses requests that ask for speakers",
+      "category": "llm",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/keelson/runtime/llm"
+      }
+    },
+    {
+      "name": "BOXER_LLM_TRANSCRIBE_ENDPOINT",
+      "type": "string",
+      "description": "OpenAI-compatible base URL (OpenAI, vLLM) the host's llm service sends llm.transcribe to, e.g. http://localhost:8000/v1; unset means no transcription is offered to apps",
+      "category": "llm",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/keelson/runtime/llm"
+      }
+    },
+    {
+      "name": "BOXER_LLM_TRANSCRIBE_MAXBYTES",
+      "type": "int64",
+      "default": "26214400",
+      "description": "most bytes of audio one llm.transcribe may carry; larger recordings are refused before anything leaves (OpenAI and vLLM's default both take 25 MiB)",
+      "category": "llm",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/keelson/runtime/llm"
+      }
+    },
+    {
+      "name": "BOXER_LLM_TRANSCRIBE_MODEL",
+      "type": "string",
+      "description": "speech-to-text model id llm.transcribe uses (e.g. whisper-1, gpt-4o-transcribe, or the Whisper model a vLLM serves); unset means no transcription is offered even with the endpoint set",
+      "category": "llm",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/keelson/runtime/llm"
+      }
+    },
+    {
+      "name": "BOXER_LLM_TRANSCRIBE_SCRIPT",
+      "type": "string",
+      "description": "path to a scripted transcriber (JSON lines, each an answer body as OpenAI or vLLM sends it: json, verbose_json or diarized_json) the llm service answers llm.transcribe from, in order, instead of an endpoint; honoured only on the headless host, for scenes",
+      "category": "llm",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/keelson/runtime/llm"
+      }
+    },
+    {
+      "name": "BOXER_LLM_TRANSCRIBE_TIMEOUT",
+      "type": "duration",
+      "default": "300s",
+      "description": "wall-clock bound on one llm.transcribe; the service cancels the provider call at it, and app clients that name no timeout of their own wait that long plus a few seconds for the reply",
+      "category": "llm",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/keelson/runtime/llm"
+      }
+    },
+    {
       "name": "BOXER_LLM_TRUSTED_HOSTS",
       "type": "string",
       "description": "comma-separated endpoint host names or IPs, without port, that the llm service treats like loopback: confined (sealed) content may be sent to them; list only machines under your own control, and prefer an https endpoint",

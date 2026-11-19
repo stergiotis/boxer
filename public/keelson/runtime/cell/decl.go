@@ -98,8 +98,12 @@ type Declaration struct {
 	TrustedHosts []string
 	ModelHost    string
 	ModelLocal   bool
-	Egress       []EgressDestination
-	Peers        []Peer
+	// TranscribeHost and TranscribeLocal are the transcription route's
+	// (ADR-0383 §SD2), a second model route that may sit elsewhere.
+	TranscribeHost  string
+	TranscribeLocal bool
+	Egress          []EgressDestination
+	Peers           []Peer
 	// Managed says the organisation manages the host (ADR-0307 §SD6).
 	Managed bool
 	// ConfinedTier is the tier the compile-date confined bit maps to: the
@@ -300,6 +304,9 @@ func (inst Declaration) EgressClearance(local bool) agentrun.TierE {
 func (inst Declaration) Sinks() (sinks []Sink) {
 	if inst.ModelHost != "" && !inst.ModelLocal && !inst.InsideCell(inst.ModelHost) {
 		sinks = append(sinks, Sink{Kind: SinkKindModelRoute, Edge: inst.ModelHost, Clearance: inst.Clearances.ModelRoute, Check: "llm sensitivity wall (ADR-0254 §SD3)"})
+	}
+	if h := inst.TranscribeHost; h != "" && !inst.TranscribeLocal && !inst.InsideCell(h) && !strings.EqualFold(h, inst.ModelHost) {
+		sinks = append(sinks, Sink{Kind: SinkKindModelRoute, Edge: h, Clearance: inst.Clearances.ModelRoute, Check: "llm sensitivity wall, transcription route (ADR-0254 §SD3, ADR-0383)"})
 	}
 	for _, d := range inst.Egress {
 		if d.Local {

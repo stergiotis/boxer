@@ -50,6 +50,11 @@ const (
 	kindLlmCallRoute             uint64 = 9223372049739678054
 	kindLlmCallTier              uint64 = 9223372049739678055
 	kindLlmCallApproval          uint64 = 9223372049739678056
+	kindLlmCallVerb              uint64 = 9223372049739678259
+	kindLlmCallAudioMediaType    uint64 = 9223372049739678260
+	kindLlmCallAudioDigest       uint64 = 9223372049739678261
+	kindLlmCallAudioMs           uint64 = 9223372049739678262
+	kindLlmCallSpeakers          uint64 = 9223372049739678263
 )
 
 // llmCallSymbolAttrI is the InAttr-side view of the symbol section. P-variants only —
@@ -229,6 +234,16 @@ func llmCallEmitSectionSymbol[
 		symbolSecAttr_Route.AddMembershipLowCardRefP(kindLlmCallRoute)
 		symbolSecAttr_Route.EndAttributeP()
 	}
+	if row.Verb.Has {
+		symbolSecAttr_Verb := symbolSec.BeginAttribute(row.Verb.Val)
+		symbolSecAttr_Verb.AddMembershipLowCardRefP(kindLlmCallVerb)
+		symbolSecAttr_Verb.EndAttributeP()
+	}
+	if row.AudioMediaType.Has {
+		symbolSecAttr_AudioMediaType := symbolSec.BeginAttribute(row.AudioMediaType.Val)
+		symbolSecAttr_AudioMediaType.AddMembershipLowCardRefP(kindLlmCallAudioMediaType)
+		symbolSecAttr_AudioMediaType.EndAttributeP()
+	}
 	return
 }
 
@@ -262,6 +277,11 @@ func llmCallEmitSectionStringArray[
 	stringArraySecAttr_HistoryHash := stringArraySec.BeginAttributeSingle(row.HistoryHash)
 	stringArraySecAttr_HistoryHash.AddMembershipLowCardRefP(kindLlmCallHistoryHash)
 	stringArraySecAttr_HistoryHash.EndAttributeP()
+	if row.AudioDigest.Has {
+		stringArraySecAttr_AudioDigest := stringArraySec.BeginAttributeSingle(row.AudioDigest.Val)
+		stringArraySecAttr_AudioDigest.AddMembershipLowCardRefP(kindLlmCallAudioDigest)
+		stringArraySecAttr_AudioDigest.EndAttributeP()
+	}
 	if len(row.Error) > 0 {
 		stringArraySecAttr_Error := stringArraySec.BeginAttribute()
 		for _, v := range row.Error {
@@ -326,6 +346,11 @@ func llmCallEmitSectionU32Array[
 	u32ArraySecAttr_Tier := u32ArraySec.BeginAttributeSingle(row.Tier)
 	u32ArraySecAttr_Tier.AddMembershipLowCardRefP(kindLlmCallTier)
 	u32ArraySecAttr_Tier.EndAttributeP()
+	if row.Speakers.Has {
+		u32ArraySecAttr_Speakers := u32ArraySec.BeginAttributeSingle(row.Speakers.Val)
+		u32ArraySecAttr_Speakers.AddMembershipLowCardRefP(kindLlmCallSpeakers)
+		u32ArraySecAttr_Speakers.EndAttributeP()
+	}
 	return
 }
 
@@ -351,6 +376,11 @@ func llmCallEmitSectionU64Array[
 		u64ArraySecAttr_QueuedMs := u64ArraySec.BeginAttributeSingle(row.QueuedMs.Val)
 		u64ArraySecAttr_QueuedMs.AddMembershipLowCardRefP(kindLlmCallQueuedMs)
 		u64ArraySecAttr_QueuedMs.EndAttributeP()
+	}
+	if row.AudioMs.Has {
+		u64ArraySecAttr_AudioMs := u64ArraySec.BeginAttributeSingle(row.AudioMs.Val)
+		u64ArraySecAttr_AudioMs.AddMembershipLowCardRefP(kindLlmCallAudioMs)
+		u64ArraySecAttr_AudioMs.EndAttributeP()
 	}
 	return
 }
@@ -602,6 +632,12 @@ func llmCallReadRow[
 	var symbolRouteVal string
 	var symbolRouteCount int
 	var symbolRouteLastAttr int64
+	var symbolVerbVal string
+	var symbolVerbCount int
+	var symbolVerbLastAttr int64
+	var symbolAudioMediaTypeVal string
+	var symbolAudioMediaTypeCount int
+	var symbolAudioMediaTypeLastAttr int64
 	nsymbol := symbolAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 	for attrJ := int64(0); attrJ < nsymbol; attrJ++ {
 		for membID := range symbolMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
@@ -690,6 +726,20 @@ func llmCallReadRow[
 				}
 				val := symbolAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 				symbolRouteVal = val
+			case kindLlmCallVerb:
+				if symbolVerbLastAttr != attrJ+1 {
+					symbolVerbLastAttr = attrJ + 1
+					symbolVerbCount++
+				}
+				val := symbolAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				symbolVerbVal = val
+			case kindLlmCallAudioMediaType:
+				if symbolAudioMediaTypeLastAttr != attrJ+1 {
+					symbolAudioMediaTypeLastAttr = attrJ + 1
+					symbolAudioMediaTypeCount++
+				}
+				val := symbolAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				symbolAudioMediaTypeVal = val
 			}
 		}
 	}
@@ -794,6 +844,24 @@ func llmCallReadRow[
 		row.Route.Has = true
 		present = true
 	}
+	if symbolVerbCount > 1 {
+		err = eb.Build().Int("row", i).Str("section", "symbol").Str("membership", "llmCallVerb").Int("got", symbolVerbCount).Errorf("slot symbol@llmCallVerb (field Verb) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", symbolVerbCount)
+		return
+	}
+	if symbolVerbCount == 1 {
+		row.Verb.Val = symbolVerbVal
+		row.Verb.Has = true
+		present = true
+	}
+	if symbolAudioMediaTypeCount > 1 {
+		err = eb.Build().Int("row", i).Str("section", "symbol").Str("membership", "llmCallAudioMediaType").Int("got", symbolAudioMediaTypeCount).Errorf("slot symbol@llmCallAudioMediaType (field AudioMediaType) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", symbolAudioMediaTypeCount)
+		return
+	}
+	if symbolAudioMediaTypeCount == 1 {
+		row.AudioMediaType.Val = symbolAudioMediaTypeVal
+		row.AudioMediaType.Has = true
+		present = true
+	}
 	// --- stringArray. ---
 	var stringArrayCallIdVal string
 	var stringArrayCallIdCount int
@@ -810,6 +878,9 @@ func llmCallReadRow[
 	var stringArrayHistoryHashVal string
 	var stringArrayHistoryHashCount int
 	var stringArrayHistoryHashLastAttr int64
+	var stringArrayAudioDigestVal string
+	var stringArrayAudioDigestCount int
+	var stringArrayAudioDigestLastAttr int64
 	var stringArrayErrorSlice []string
 	var stringArrayErrorCount int
 	var stringArrayErrorLastAttr int64
@@ -872,6 +943,17 @@ func llmCallReadRow[
 					return
 				}
 				stringArrayHistoryHashVal = val
+			case kindLlmCallAudioDigest:
+				if stringArrayAudioDigestLastAttr != attrJ+1 {
+					stringArrayAudioDigestLastAttr = attrJ + 1
+					stringArrayAudioDigestCount++
+				}
+				val, valErr := stringArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				if valErr != nil {
+					err = eb.Build().Int("row", i).Str("section", "stringArray").Str("membership", "llmCallAudioDigest").Str("field", "AudioDigest").Errorf("slot stringArray@llmCallAudioDigest (field AudioDigest) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+					return
+				}
+				stringArrayAudioDigestVal = val
 			case kindLlmCallError:
 				if stringArrayErrorLastAttr != attrJ+1 {
 					stringArrayErrorLastAttr = attrJ + 1
@@ -926,6 +1008,15 @@ func llmCallReadRow[
 		row.HistoryHash = stringArrayHistoryHashVal
 		present = true
 	}
+	if stringArrayAudioDigestCount > 1 {
+		err = eb.Build().Int("row", i).Str("section", "stringArray").Str("membership", "llmCallAudioDigest").Int("got", stringArrayAudioDigestCount).Errorf("slot stringArray@llmCallAudioDigest (field AudioDigest) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", stringArrayAudioDigestCount)
+		return
+	}
+	if stringArrayAudioDigestCount == 1 {
+		row.AudioDigest.Val = stringArrayAudioDigestVal
+		row.AudioDigest.Has = true
+		present = true
+	}
 	if stringArrayErrorCount > 1 {
 		err = eb.Build().Int("row", i).Str("section", "stringArray").Str("membership", "llmCallError").Int("got", stringArrayErrorCount).Errorf("slot stringArray@llmCallError (field Error) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", stringArrayErrorCount)
 		return
@@ -971,6 +1062,9 @@ func llmCallReadRow[
 	var u32ArrayTierVal uint32
 	var u32ArrayTierCount int
 	var u32ArrayTierLastAttr int64
+	var u32ArraySpeakersVal uint32
+	var u32ArraySpeakersCount int
+	var u32ArraySpeakersLastAttr int64
 	nu32Array := u32ArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 	for attrJ := int64(0); attrJ < nu32Array; attrJ++ {
 		for membID := range u32ArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
@@ -1107,6 +1201,17 @@ func llmCallReadRow[
 					return
 				}
 				u32ArrayTierVal = val
+			case kindLlmCallSpeakers:
+				if u32ArraySpeakersLastAttr != attrJ+1 {
+					u32ArraySpeakersLastAttr = attrJ + 1
+					u32ArraySpeakersCount++
+				}
+				val, valErr := u32ArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				if valErr != nil {
+					err = eb.Build().Int("row", i).Str("section", "u32Array").Str("membership", "llmCallSpeakers").Str("field", "Speakers").Errorf("slot u32Array@llmCallSpeakers (field Speakers) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+					return
+				}
+				u32ArraySpeakersVal = val
 			}
 		}
 	}
@@ -1210,6 +1315,15 @@ func llmCallReadRow[
 		row.Tier = u32ArrayTierVal
 		present = true
 	}
+	if u32ArraySpeakersCount > 1 {
+		err = eb.Build().Int("row", i).Str("section", "u32Array").Str("membership", "llmCallSpeakers").Int("got", u32ArraySpeakersCount).Errorf("slot u32Array@llmCallSpeakers (field Speakers) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", u32ArraySpeakersCount)
+		return
+	}
+	if u32ArraySpeakersCount == 1 {
+		row.Speakers.Val = u32ArraySpeakersVal
+		row.Speakers.Has = true
+		present = true
+	}
 	// --- u64Array. ---
 	var u64ArrayPromptBytesVal uint64
 	var u64ArrayPromptBytesCount int
@@ -1223,6 +1337,9 @@ func llmCallReadRow[
 	var u64ArrayQueuedMsVal uint64
 	var u64ArrayQueuedMsCount int
 	var u64ArrayQueuedMsLastAttr int64
+	var u64ArrayAudioMsVal uint64
+	var u64ArrayAudioMsCount int
+	var u64ArrayAudioMsLastAttr int64
 	nu64Array := u64ArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 	for attrJ := int64(0); attrJ < nu64Array; attrJ++ {
 		for membID := range u64ArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
@@ -1271,6 +1388,17 @@ func llmCallReadRow[
 					return
 				}
 				u64ArrayQueuedMsVal = val
+			case kindLlmCallAudioMs:
+				if u64ArrayAudioMsLastAttr != attrJ+1 {
+					u64ArrayAudioMsLastAttr = attrJ + 1
+					u64ArrayAudioMsCount++
+				}
+				val, valErr := u64ArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				if valErr != nil {
+					err = eb.Build().Int("row", i).Str("section", "u64Array").Str("membership", "llmCallAudioMs").Str("field", "AudioMs").Errorf("slot u64Array@llmCallAudioMs (field AudioMs) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+					return
+				}
+				u64ArrayAudioMsVal = val
 			}
 		}
 	}
@@ -1305,6 +1433,15 @@ func llmCallReadRow[
 	if u64ArrayQueuedMsCount == 1 {
 		row.QueuedMs.Val = u64ArrayQueuedMsVal
 		row.QueuedMs.Has = true
+		present = true
+	}
+	if u64ArrayAudioMsCount > 1 {
+		err = eb.Build().Int("row", i).Str("section", "u64Array").Str("membership", "llmCallAudioMs").Int("got", u64ArrayAudioMsCount).Errorf("slot u64Array@llmCallAudioMs (field AudioMs) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", u64ArrayAudioMsCount)
+		return
+	}
+	if u64ArrayAudioMsCount == 1 {
+		row.AudioMs.Val = u64ArrayAudioMsVal
+		row.AudioMs.Has = true
 		present = true
 	}
 	// --- bool. ---

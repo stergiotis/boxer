@@ -1,6 +1,7 @@
 package llm
 
 import (
+	"math"
 	"time"
 
 	"github.com/stergiotis/boxer/public/functional/option"
@@ -53,5 +54,13 @@ func RecordOf(ent *trail.TrailEntity) (rec CallRecord) {
 	rec.Admission, rec.AdmissionRule = row.Admission.Val, row.AdmissionRule.Val
 	rec.Queued = time.Duration(row.QueuedMs.Val) * time.Millisecond
 	rec.Profile, rec.Route, rec.Tier, rec.ApprovalEntry = row.Profile.Val, row.Route.Val, uint8(min(row.Tier, 255)), row.Approval.Val
+	rec.Verb = row.Verb.Val
+	rec.AudioMediaType, rec.AudioDigest = row.AudioMediaType.Val, row.AudioDigest.Val
+	if row.AudioMs.Has {
+		rec.AudioMs = option.Some(int64(min(row.AudioMs.Val, math.MaxInt64)))
+	}
+	if row.Speakers.Has {
+		rec.Speakers = option.Some(int32(min(row.Speakers.Val, math.MaxInt32)))
+	}
 	return
 }

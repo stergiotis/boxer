@@ -38,7 +38,10 @@ type deltaStream struct {
 	contentAt   uint32
 	reasoningAt uint32
 	tools       []string
-	last        time.Time
+	// segments are the finished segments of a diarized transcription
+	// since the last delta (ADR-0383 §SD6).
+	segments []wireSegment
+	last     time.Time
 	// timer is the armed flush and gen its number: a tick that waited for
 	// mu while its timer was stopped and another armed does nothing.
 	timer  *time.Timer
@@ -75,6 +78,17 @@ func (inst *deltaStream) add(d openaichat.Delta) {
 	}
 }
 
+// addTranscript takes one advance of a streamed transcript: its text as
+// content, a finished segment beside it.
+func (inst *deltaStream) addTranscript(d openaichat.TranscriptDelta) {
+	inst.mu.Lock()
+	if d.Segment.Has && !inst.closed {
+		inst.segments = append(inst.segments, wireOfSegment(d.Segment.Val))
+	}
+	inst.mu.Unlock()
+	inst.add(openaichat.Delta{Content: d.Text})
+}
+
 func (inst *deltaStream) tick(gen uint64) {
 	inst.mu.Lock()
 	defer inst.mu.Unlock()
@@ -96,18 +110,19 @@ func (inst *deltaStream) stopTimerLocked() {
 // ends the stream: the reply still comes.
 func (inst *deltaStream) flushLocked() {
 	inst.stopTimerLocked()
-	if inst.content.Len() == 0 && inst.reasoning.Len() == 0 && len(inst.tools) == 0 {
+	if inst.content.Len() == 0 && inst.reasoning.Len() == 0 && len(inst.tools) == 0 && len(inst.segments) == 0 {
 		return
 	}
 	d := wireDelta{V: wireVersion, CallKey: inst.key, Seq: inst.seq,
 		ContentOffset: inst.contentAt, Content: inst.content.String(),
-		ReasoningOffset: inst.reasoningAt, Reasoning: inst.reasoning.String(), Tools: inst.tools}
+		ReasoningOffset: inst.reasoningAt, Reasoning: inst.reasoning.String(), Tools: inst.tools, Segments: inst.segments}
 	inst.seq++
 	inst.contentAt += uint32(len(d.Content))
 	inst.reasoningAt += uint32(len(d.Reasoning))
 	inst.content.Reset()
 	inst.reasoning.Reset()
 	inst.tools = nil
+	inst.segments = nil
 	inst.last = time.Now()
 	payload, err := encode(d)
 	if err == nil {
@@ -138,10 +153,14 @@ func (inst *deltaStream) close(flush bool) {
 // hands it on: text to append to the answer and to the reasoning so far,
 // and the names of tool calls that began. The pieces are contiguous; once
 // one goes missing, no more are handed on and the reply is the answer.
+//
+// On a transcription, Content is the transcript's text and Segments the
+// segments a diarized stream finished since the last delta.
 type Delta struct {
 	Content   string
 	Reasoning string
 	Tools     []string
+	Segments  []openaichat.TranscriptSegment
 }
 
 // deltaReceiver is the client side of one streamed call: the bus handler
@@ -216,7 +235,7 @@ func (inst *deltaReceiver) drain() {
 		inst.seq++
 		inst.contentAt += uint32(len(d.Content))
 		inst.reasoningAt += uint32(len(d.Reasoning))
-		inst.onDelta(Delta{Content: d.Content, Reasoning: d.Reasoning, Tools: d.Tools})
+		inst.onDelta(Delta{Content: d.Content, Reasoning: d.Reasoning, Tools: d.Tools, Segments: segmentsOfWire(d.Segments)})
 	}
 }
 

@@ -706,6 +706,9 @@ func (rt *Runtime) bootServices(ctx context.Context, factsCfg chstore.Config) {
 		decl.Egress = append(decl.Egress, cell.EgressDestination{Name: d.Name, Local: d.Local})
 	}
 	decl.ModelHost, decl.ModelLocal = llm.EndpointHost(llm.Endpoint.Get()), false
+	if ep := llm.TranscribeEndpoint.Get(); ep != "" {
+		decl.TranscribeHost = llm.EndpointHost(ep)
+	}
 	rt.Cell = &decl
 	if svc.LLM {
 		// Durable where the trail is (ADR-0254 §SD4); the in-memory fallback
@@ -736,6 +739,21 @@ func (rt *Runtime) bootServices(ctx context.Context, factsCfg chstore.Config) {
 				logger.Warn().Msg("llm: BOXER_LLM_SCRIPT is honoured only on the headless host; refused here")
 			}
 		}
+		if path := llm.TranscribeScriptEnv.Get(); path != "" {
+			// A scripted transcriber, for scenes (ADR-0383 §SD8): on the
+			// headless host only, as the scripted model.
+			if headlessOnly(true, imzero2env.HeadlessListen.Get() != "") {
+				scripted, sErr := llm.LoadTranscribeScript(path)
+				if sErr != nil {
+					logger.Warn().Err(sErr).Msg("llm: BOXER_LLM_TRANSCRIBE_SCRIPT does not load; no scripted transcriber")
+				} else {
+					llmCfg.Transcribe.Client, llmCfg.Transcribe.Endpoint = scripted, llm.ScriptedTranscribeEndpoint
+					llmCfg.Transcribe.Model, llmCfg.Transcribe.DiarizeModel = "scripted", "scripted"
+				}
+			} else {
+				logger.Warn().Msg("llm: BOXER_LLM_TRANSCRIBE_SCRIPT is honoured only on the headless host; refused here")
+			}
+		}
 		llmSvc, lErr := llm.NewService(rt.Bus, logger, llmCfg)
 		if lErr != nil {
 			logger.Warn().Err(lErr).Msg("llm: service start failed; llm.* will be unbound")
@@ -745,6 +763,10 @@ func (rt *Runtime) bootServices(ctx context.Context, factsCfg chstore.Config) {
 			d := llmSvc.Describe()
 			logger.Info().Bool("configured", d.Configured).Str("model", d.Model).Str("endpointHost", d.EndpointHost).
 				Bool("local", d.Local).Bool("durable", llmSvc.Durable()).Msg("llm: service listening on llm.*")
+			if tr := d.Transcription; tr.Configured {
+				logger.Info().Str("model", tr.Model).Str("diarizeModel", tr.DiarizeModel).Str("endpointHost", tr.EndpointHost).
+					Bool("local", tr.Local).Msg("llm: transcription route offered on llm.transcribe")
+			}
 		}
 	}
 	if svc.HTTP {

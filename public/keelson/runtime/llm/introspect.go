@@ -98,6 +98,32 @@ type CallRecord struct {
 	// (ADR-0357 §SD6), zero for a call refused before its entry verified.
 	RequestEntry uint64
 	Queued       time.Duration
+	// Verb is VerbComplete or VerbTranscribe (ADR-0383 §SD5). A
+	// transcription's record carries its audio's media type, the digest of
+	// its bytes and its length as the answer reported it, and on a diarized
+	// request how many speakers the answer labelled; the audio is never
+	// kept.
+	Verb           string
+	AudioMediaType string
+	AudioDigest    string
+	AudioMs        option.Option[int64]
+	Speakers       option.Option[int32]
+}
+
+// The verbs a call record names.
+const (
+	// VerbComplete is a chat completion, llm.complete.
+	VerbComplete = "complete"
+	// VerbTranscribe is a transcription, llm.transcribe.
+	VerbTranscribe = "transcribe"
+)
+
+// verbOf is a record's verb, a completion when it names none.
+func verbOf(v string) string {
+	if v == "" {
+		return VerbComplete
+	}
+	return v
 }
 
 // contextOf is the trail context of a call: its origin, and the
@@ -300,6 +326,13 @@ func RowOf(rec CallRecord, kept bool) (row trail.LlmCall) {
 	if rec.ApprovalEntry != 0 {
 		row.Approval = option.Some(rec.ApprovalEntry)
 	}
+	row.Verb, row.AudioMediaType, row.AudioDigest = some(rec.Verb), some(rec.AudioMediaType), some(rec.AudioDigest)
+	if rec.AudioMs.Has {
+		row.AudioMs = option.Some(uint64(max(rec.AudioMs.Val, 0)))
+	}
+	if rec.Speakers.Has {
+		row.Speakers = option.Some(uint32(max(rec.Speakers.Val, 0)))
+	}
 	return
 }
 
@@ -397,7 +430,17 @@ func callsTable(rows []CallRecord) *introspect.Table {
 		String("route", func(i int) string { return rows[i].Route }).
 		Uint64("tier", func(i int) uint64 { return uint64(rows[i].Tier) }).
 		Uint64("approval_entry", func(i int) uint64 { return rows[i].ApprovalEntry }).
-		Uint64("request_entry", func(i int) uint64 { return rows[i].RequestEntry })
+		Uint64("request_entry", func(i int) uint64 { return rows[i].RequestEntry }).
+		String("verb", func(i int) string { return verbOf(rows[i].Verb) }).
+		String("audio_media_type", func(i int) string { return rows[i].AudioMediaType }).
+		String("audio_digest", func(i int) string { return rows[i].AudioDigest }).
+		Int64("audio_ms", func(i int) int64 {
+			if !rows[i].AudioMs.Has {
+				return -1
+			}
+			return rows[i].AudioMs.Val
+		}).
+		Int64("speakers", func(i int) int64 { return optionalCount(rows[i].Speakers) })
 }
 
 // optionalCount is a count a provider may not report, -1 when it did not.
