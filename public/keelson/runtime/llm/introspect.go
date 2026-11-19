@@ -238,7 +238,9 @@ func (inst *Service) record(rec CallRecord, t *turn) (retention uint8, reason st
 	}
 	inst.mu.Lock()
 	defer inst.mu.Unlock()
-	if rec.Durable && t != nil {
+	// A transcription has no successor to plan against, so it takes no
+	// slot a conversation's next turn may need (ADR-0264 §SD3).
+	if rec.Durable && t != nil && rec.Verb != VerbTranscribe {
 		inst.remember(rec.CallId, seen{conversation: t.conversation, hashes: t.logical()})
 	}
 	inst.next++

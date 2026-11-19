@@ -59,6 +59,11 @@ func newDeltaStream(key string, publish func(payload []byte) error) (inst *delta
 func (inst *deltaStream) add(d openaichat.Delta) {
 	inst.mu.Lock()
 	defer inst.mu.Unlock()
+	inst.addLocked(d)
+}
+
+// addLocked is add with the mutex held.
+func (inst *deltaStream) addLocked(d openaichat.Delta) {
 	if inst.closed {
 		return
 	}
@@ -80,13 +85,15 @@ func (inst *deltaStream) add(d openaichat.Delta) {
 
 // addTranscript takes one advance of a streamed transcript: its text as
 // content, a finished segment beside it.
+// Both go in under one lock, so no delta carries a segment without the
+// text that came with it.
 func (inst *deltaStream) addTranscript(d openaichat.TranscriptDelta) {
 	inst.mu.Lock()
+	defer inst.mu.Unlock()
 	if d.Segment.Has && !inst.closed {
 		inst.segments = append(inst.segments, wireOfSegment(d.Segment.Val))
 	}
-	inst.mu.Unlock()
-	inst.add(openaichat.Delta{Content: d.Text})
+	inst.addLocked(openaichat.Delta{Content: d.Text})
 }
 
 func (inst *deltaStream) tick(gen uint64) {

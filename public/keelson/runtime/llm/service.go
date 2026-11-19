@@ -165,8 +165,11 @@ type Service struct {
 	// place (ADR-0383 §SD2); nil and zero when none is configured.
 	transcriber openaichat.TranscriberI
 	speech      exitRoute
-	host        string
-	local       bool
+	// transcribeBroken is why a configured transcription route is not
+	// offered; empty when it is.
+	transcribeBroken string
+	host             string
+	local            bool
 	// trusted says local holds by TrustedHosts, not loopback.
 	trusted bool
 	// context is the model's context size and where it came from, set
@@ -273,8 +276,11 @@ func NewService(bus *inprocbus.Inst, log zerolog.Logger, cfg Config) (s *Service
 			s.log.Warn().Str("host", s.speech.host).
 				Msg("llm: the transcription endpoint is not loopback but BOXER_LLM_TRUSTED_HOSTS lists it; confined recordings may be sent to it")
 		}
-		if s.transcriber, err = newTranscriber(tc); err != nil {
-			return nil, err
+		var terr error
+		if s.transcriber, terr = newTranscriber(tc); terr != nil {
+			// The chat route stands without it: describe says why.
+			s.transcribeBroken = "the transcription route could not be built: " + terr.Error()
+			s.log.Warn().Err(terr).Msg("llm: transcription route not offered")
 		}
 	}
 	if cfg.Configured() {
@@ -505,7 +511,8 @@ func (inst *Service) handleComplete(msg *app.Msg, retained bool) {
 		return
 	}
 	p := inst.gate(msg, gateIn{
-		route: inst.chatRoute(), run: req.Run, journalKey: req.Journal, digestOf: req.content().digest, approval: req.Approval,
+		route: inst.chatRoute(), run: req.Run, journalKey: req.Journal, approval: req.Approval,
+		digestOf:     func() (string, error) { return req.content().digest() },
 		onBehalfTask: req.OnBehalfTask, onBehalfEpoch: req.OnBehalfEpoch, onBehalfCall: req.OnBehalfCall,
 		body: body, leaks: leakSurface(body, creq),
 		cancelKey: req.CancelKey, deadline: req.DeadlineUnixNanos, timeout: inst.cfg.Timeout,

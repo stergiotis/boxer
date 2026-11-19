@@ -193,8 +193,8 @@ func (inst transcriptionContent) digest() (d string, err error) {
 	return agentrun.ContentDigest(string(b)), nil
 }
 
-func contentOfTranscription(audio []byte, fileName, mediaType, language, prompt string, temperature *float32, diarize bool, speakers []wireKnownSpeaker, timestamps uint8) (c transcriptionContent) {
-	c = transcriptionContent{AudioDigest: agentrun.ContentDigest(string(audio)), FileName: fileName, MediaType: mediaType,
+func contentOfTranscription(audioDigest string, fileName, mediaType, language, prompt string, temperature *float32, diarize bool, speakers []wireKnownSpeaker, timestamps uint8) (c transcriptionContent) {
+	c = transcriptionContent{AudioDigest: audioDigest, FileName: fileName, MediaType: mediaType,
 		Language: language, Prompt: prompt, Temperature: temperature, Diarize: diarize, Timestamps: timestamps}
 	for _, s := range speakers {
 		c.KnownSpeakers = append(c.KnownSpeakers, transcriptionSpeaker{Name: s.Name, MediaType: s.MediaType, ClipDigest: agentrun.ContentDigest(string(s.Clip))})
@@ -206,13 +206,40 @@ func contentOfTranscription(audio []byte, fileName, mediaType, language, prompt 
 // (ADR-0357 §SD3) for this transcription: the audio's digest and every
 // option, taken from the request as it will be sent.
 func (inst TranscriptionRequest) ContentDigest() (digest string, err error) {
-	return contentOfTranscription(inst.Audio, inst.FileName, inst.MediaType, inst.Language, inst.Prompt, inst.Temperature,
+	return contentOfTranscription(agentrun.ContentDigest(string(inst.Audio)), inst.FileName, inst.MediaType, inst.Language, inst.Prompt, inst.Temperature,
 		inst.Diarize, wireOfSpeakers(inst.KnownSpeakers), uint8(inst.Timestamps)).digest()
 }
 
-func (inst wireTranscribeRequest) content() transcriptionContent {
-	return contentOfTranscription(inst.Audio, inst.FileName, inst.MediaType, inst.Language, inst.Prompt, inst.Temperature,
+// content is the request's content, its audio counted by the digest the
+// service already took.
+func (inst wireTranscribeRequest) content(audioDigest string) transcriptionContent {
+	return contentOfTranscription(audioDigest, inst.FileName, inst.MediaType, inst.Language, inst.Prompt, inst.Temperature,
 		inst.Diarize, inst.KnownSpeakers, inst.Timestamps)
+}
+
+// rawSize is the recording's and the clips' bytes before encoding: what a
+// request far over the ceiling is refused on before anything is copied
+// or hashed.
+func (inst wireTranscribeRequest) rawSize() (n int64) {
+	n = int64(len(inst.Audio))
+	for _, s := range inst.KnownSpeakers {
+		n += int64(len(s.Clip))
+	}
+	return
+}
+
+// maxAudioSeconds bounds a reported audio length: past it, or below zero,
+// the provider's figure is not taken.
+const maxAudioSeconds = 1e9
+
+// audioMsOf is the audio's length the answer reported, in milliseconds,
+// when it is a length: what the record carries and the ledger charges,
+// the one value for both.
+func audioMsOf(t openaichat.Transcript) (ms option.Option[int64]) {
+	if s := t.AudioSeconds(); s.Has && s.Val >= 0 && s.Val < maxAudioSeconds {
+		ms = option.Some(int64(s.Val * 1000))
+	}
+	return
 }
 
 // Transcribe sends one recording through the host's transcription route.
@@ -454,8 +481,11 @@ func (inst *Service) transcribeRoute() exitRoute { return inst.speech }
 // describeTranscription is the describe reply's transcription block.
 func (inst *Service) describeTranscription() (d TranscriptionDescription) {
 	tc := inst.cfg.Transcribe
-	if !tc.Configured() {
+	if !tc.Configured() || inst.transcribeBroken != "" {
 		d.Reason = "no transcription model is configured on this host (BOXER_LLM_TRANSCRIBE_ENDPOINT and BOXER_LLM_TRANSCRIBE_MODEL)"
+		if inst.transcribeBroken != "" {
+			d.Reason = inst.transcribeBroken
+		}
 		d.Timeout = tc.Timeout
 		return
 	}
@@ -518,6 +548,11 @@ func (inst *Service) handleTranscribe(msg *app.Msg) {
 	if req.Diarize {
 		model = tc.DiarizeModel
 	}
+	if tc.MaxBytes > 0 && req.rawSize() > tc.MaxBytes {
+		inst.refuse(msg, "the request carries "+strconv.FormatInt(req.rawSize(), 10)+" bytes of recording and speaker clips, above this host's ceiling of "+strconv.FormatInt(tc.MaxBytes, 10)+" (BOXER_LLM_TRANSCRIBE_MAXBYTES)",
+			CallRecord{Verb: VerbTranscribe, Model: model, EndpointHost: inst.speech.host, Purpose: req.Purpose, AudioMediaType: req.MediaType}, nil)
+		return
+	}
 	rec := CallRecord{
 		CallId: inst.mintCallId(), At: time.Now().UTC(), Sender: msg.Sender, SenderInstance: msg.SenderInstance,
 		Purpose: req.Purpose, Sensitivity: queryengine.SensitivityE(req.Sensitivity), Model: model, EndpointHost: inst.speech.host,
@@ -528,7 +563,7 @@ func (inst *Service) handleTranscribe(msg *app.Msg) {
 	// recording — its type, size and digest, never its bytes — written
 	// before it leaves, and the transcript as the reply's row after.
 	t := &turn{messages: []openaichat.Message{{Role: openaichat.ChatRoleUser, Content: transcriptionDescriptor(req, model, rec.AudioDigest)}}}
-	if !tc.Configured() {
+	if !tc.Configured() || inst.transcriber == nil {
 		inst.refuse(msg, inst.describeTranscription().Reason, rec, t)
 		return
 	}
@@ -559,7 +594,8 @@ func (inst *Service) handleTranscribe(msg *app.Msg) {
 		rec.Prompt = req.Prompt
 	}
 	p := inst.gate(msg, gateIn{
-		route: inst.transcribeRoute(), run: req.Run, journalKey: req.Journal, digestOf: req.content().digest, approval: req.Approval,
+		route: inst.transcribeRoute(), run: req.Run, journalKey: req.Journal, approval: req.Approval,
+		digestOf:     func() (string, error) { return req.content(rec.AudioDigest).digest() },
 		onBehalfTask: req.OnBehalfTask, onBehalfEpoch: req.OnBehalfEpoch, onBehalfCall: req.OnBehalfCall,
 		body: body, leaks: transcriptionLeaks(req),
 		cancelKey: req.CancelKey, deadline: req.DeadlineUnixNanos, timeout: tc.Timeout,
@@ -579,9 +615,7 @@ func (inst *Service) handleTranscribe(msg *app.Msg) {
 	if tr.Usage.OutputTokens.Has {
 		rec.OutputTokens = tr.Usage.OutputTokens.Val
 	}
-	if s := tr.AudioSeconds(); s.Has {
-		rec.AudioMs = option.Some(int64(s.Val * 1000))
-	}
+	rec.AudioMs = audioMsOf(tr)
 	if req.Diarize && cerr == nil {
 		rec.Speakers = option.Some(int32(tr.Speakers()))
 	}
@@ -641,8 +675,8 @@ func usageOfTranscript(t openaichat.Transcript, elapsed time.Duration) (u ration
 	if t.Usage.OutputTokens.Has {
 		u[ration.QuantityOutputTokens] = int64(t.Usage.OutputTokens.Val)
 	}
-	if s := t.AudioSeconds(); s.Has {
-		u[ration.QuantityAudioMs] = int64(s.Val * 1000)
+	if ms := audioMsOf(t); ms.Has {
+		u[ration.QuantityAudioMs] = ms.Val
 	}
 	return u.WithTotal()
 }

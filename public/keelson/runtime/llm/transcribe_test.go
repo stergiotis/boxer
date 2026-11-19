@@ -344,7 +344,6 @@ func TestTheLedgerChargesAudioLength(t *testing.T) {
 	assert.EqualValues(t, 15, app.Totals[ration.QuantityTotalTokens])
 	c := svc.Calls()[0]
 	assert.EqualValues(t, 12, c.InputTokens)
-	assert.EqualValues(t, ration.QuantityAudioMs, "audio_ms")
 	assert.Equal(t, usageOfTranscript(f.resp, c.Elapsed)[ration.QuantityAudioMs], usageOfRecord(c)[ration.QuantityAudioMs], "the rebuilt ledger charges what the call did")
 
 	_, err = cli.Transcribe(context.Background(), TranscriptionRequest{Audio: wav})
@@ -463,4 +462,52 @@ func mustEncode[T any](t *testing.T, v T) []byte {
 	b, err := encode(v)
 	require.NoError(t, err)
 	return b
+}
+
+// A reported length that is not one — negative, or past any recording —
+// is neither recorded nor charged: one value serves both, so the ledger
+// rebuilt from the rows agrees with the one charged live.
+func TestAnImplausibleAudioLengthIsNotTaken(t *testing.T) {
+	for _, d := range []float64{-30, 1e300} {
+		f := &fakeTranscriber{resp: openaichat.Transcript{Text: "x", Duration: option.Some(d)}}
+		cli, svc, _ := serve(t, speechCfg(f))
+		_, err := cli.Transcribe(context.Background(), TranscriptionRequest{Audio: wav})
+		require.NoError(t, err)
+		assert.False(t, svc.Calls()[0].AudioMs.Has, "duration %v", d)
+		for _, a := range svc.Ledger().Accounts() {
+			assert.Zero(t, a.Totals[ration.QuantityAudioMs], "duration %v", d)
+		}
+	}
+}
+
+// A request far over the ceiling is refused on its raw size, before it is
+// hashed or encoded, and is on the record as a transcription.
+func TestARequestFarOverTheCeilingIsRefusedFirst(t *testing.T) {
+	f := &fakeTranscriber{}
+	cfg := speechCfg(f)
+	cfg.Transcribe.MaxBytes = 16
+	cli, svc, _ := serve(t, cfg)
+	_, err := cli.Transcribe(context.Background(), TranscriptionRequest{Audio: make([]byte, 64)})
+	var refused *RefusedError
+	require.True(t, errors.As(err, &refused), "%v", err)
+	assert.Contains(t, refused.Reason, "64 bytes of recording")
+	c := svc.Calls()[0]
+	assert.Equal(t, VerbTranscribe, c.Verb)
+	assert.Empty(t, c.AudioDigest, "nothing was hashed")
+}
+
+// A transcription has no successor, so it takes no slot in what the
+// service remembers for a conversation's next turn.
+func TestATranscriptionTakesNoContinuationSlot(t *testing.T) {
+	cfg := speechCfg(&fakeTranscriber{resp: openaichat.Transcript{Text: "x"}})
+	cfg.Trail = trail.NewRecorder(&downOnce{tries: 1}, "run-test", zerolog.Nop())
+	t.Cleanup(cfg.Trail.Close)
+	cli, svc, _ := serve(t, cfg)
+	_, err := cli.Transcribe(context.Background(), TranscriptionRequest{Audio: wav})
+	require.NoError(t, err)
+	require.True(t, svc.Calls()[0].Durable)
+	svc.mu.Lock()
+	n := len(svc.seen)
+	svc.mu.Unlock()
+	assert.Zero(t, n)
 }
