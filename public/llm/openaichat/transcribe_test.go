@@ -8,7 +8,9 @@ import (
 	"mime"
 	"mime/multipart"
 	"net/http"
+	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -135,6 +137,10 @@ func TestEncodeTranscriptionRefuses(t *testing.T) {
 		"unknown granularity":            func(r *TranscriptionRequest) { r.Timestamps = TimestampsWord + 1 },
 		"a line break in the file name":  func(r *TranscriptionRequest) { r.FileName = "a.wav\r\nX-Injected: 1" },
 		"a line break in the media type": func(r *TranscriptionRequest) { r.MediaType = "audio/wav\nX: 1" },
+		"a line break in a speaker's name": func(r *TranscriptionRequest) {
+			r.Diarize = true
+			r.KnownSpeakers = []KnownSpeaker{{Name: "a\nb", Clip: []byte("x")}}
+		},
 		"a line break in a clip's type": func(r *TranscriptionRequest) {
 			r.Diarize = true
 			r.KnownSpeakers = []KnownSpeaker{{Name: "a", MediaType: "audio/wav\r", Clip: []byte("x")}}
@@ -407,4 +413,138 @@ func TestRenderSubtitles(t *testing.T) {
 	assert.Equal(t, "WEBVTT\n\n00:00:01.000 --> 00:00:02.000\na --&gt; b\n\n", RenderWebVTT(gaps))
 	assert.True(t, strings.HasPrefix(RenderWebVTT(Transcript{}), "WEBVTT"))
 	assert.Equal(t, "00:00:00.000", cueTime(-3, '.'))
+}
+
+// A stream that ends before it says it is done is what arrived, not the
+// transcript: no done event and no [DONE], or a vLLM chunk that stopped on
+// the length, is incomplete. The text that came is still handed back.
+func TestATruncatedTranscriptStreamIsIncomplete(t *testing.T) {
+	cut := newServerClient(t, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = w.Write([]byte("data: {\"type\":\"transcript.text.delta\",\"delta\":\"Hello\"}\n\n"))
+	})
+	tr, err := cut.TranscribeStream(context.Background(), audioReq(), nil)
+	require.ErrorIs(t, err, ErrIncompleteCompletion)
+	assert.Equal(t, "Hello", tr.Text)
+
+	length := newServerClient(t, func(w http.ResponseWriter, r *http.Request) {
+		sseEvents(w, `{"object":"transcription.chunk","choices":[{"delta":{"content":"Hel"},"finish_reason":"length"}]}`)
+	})
+	_, err = length.TranscribeStream(context.Background(), audioReq(), nil)
+	require.ErrorIs(t, err, ErrIncompleteCompletion)
+}
+
+// A transcription stream the server refuses is not sent again whole: the
+// recording would leave twice.
+func TestARefusedTranscriptStreamIsNotResent(t *testing.T) {
+	var posts atomic.Int32
+	c := newServerClient(t, func(w http.ResponseWriter, r *http.Request) {
+		posts.Add(1)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = w.Write([]byte(`{"error":{"message":"stream is not supported","type":"BadRequestError"}}`))
+	})
+	_, err := c.TranscribeStream(context.Background(), audioReq(), nil)
+	require.ErrorIs(t, err, ErrBadRequest)
+	assert.EqualValues(t, 1, posts.Load())
+}
+
+// The observer hears a call once, also when a chat stream falls back to
+// the plain call.
+func TestTheObserverHearsAFallbackOnce(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		w.Header().Set("Content-Type", "application/json")
+		if bytes.Contains(body, []byte(`"stream":true`)) {
+			w.WriteHeader(http.StatusBadRequest)
+			_, _ = w.Write([]byte(`{"error":{"message":"stream not supported"}}`))
+			return
+		}
+		_, _ = w.Write([]byte(`{"choices":[{"message":{"content":"x"},"finish_reason":"stop"}],"usage":{"prompt_tokens":1,"completion_tokens":1}}`))
+	}))
+	t.Cleanup(srv.Close)
+	var stats []RequestStat
+	c, err := NewClient(srv.URL+"/", "", WithObserver(func(s RequestStat) { stats = append(stats, s) }))
+	require.NoError(t, err)
+	_, err = c.CompleteStream(context.Background(), userReq("m"), nil)
+	require.NoError(t, err)
+	require.Len(t, stats, 1)
+	assert.Equal(t, http.StatusOK, stats[0].Status)
+}
+
+// Event lines may end at a bare CR, as the format allows.
+func TestEventLinesMayEndAtABareCR(t *testing.T) {
+	c := newServerClient(t, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = w.Write([]byte("data: {\"type\":\"transcript.text.delta\",\"delta\":\"a\"}\r\rdata: {\"type\":\"transcript.text.done\",\"text\":\"a\"}\r\r"))
+	})
+	tr, err := c.TranscribeStream(context.Background(), audioReq(), nil)
+	require.NoError(t, err)
+	assert.Equal(t, "a", tr.Text)
+}
+
+// OpenAI's newest model reports languages as a list; the first is the
+// transcript's language.
+func TestTheLanguageListFillsTheLanguage(t *testing.T) {
+	tr, err := DecodeTranscript([]byte(`{"text":"hallo","languages":[{"code":"de"}]}`))
+	require.NoError(t, err)
+	assert.Equal(t, "de", tr.Language)
+}
+
+// A label with a line break stays on its cue's line, and a time far past
+// any recording does not overflow.
+func TestSubtitlesKeepLabelsOnOneLine(t *testing.T) {
+	tr := Transcript{Segments: []TranscriptSegment{{Start: 0, End: 1e17, Speaker: "A\n\nB", Text: "x"}}}
+	srt := RenderSRT(tr)
+	assert.Contains(t, srt, "A B: x")
+	assert.Contains(t, srt, "--> 277777777:46:40,000", "clamped, not overflowed")
+	assert.Contains(t, RenderWebVTT(tr), "<v A B>x")
+}
+
+// A boundary that occurs in the body is passed over for the next salt:
+// the content-derived boundary is never one the audio or a field holds.
+func TestTheBoundaryStepsAroundOneTheBodyHolds(t *testing.T) {
+	seed := []byte("seed")
+	first := pickBoundary(seed, func(string) bool { return false })
+	second := pickBoundary(seed, func(b string) bool { return b == first })
+	assert.NotEqual(t, first, second)
+	assert.Regexp(t, `^boxer-[0-9a-f]{40}$`, second)
+	assert.Equal(t, first, pickBoundary(seed, func(string) bool { return false }), "deterministic")
+}
+
+// Any control character is refused in a header value, not only line
+// breaks; a quote in a file name is escaped and reads back.
+func TestHeaderValuesAreSafe(t *testing.T) {
+	req := audioReq()
+	req.FileName = "a\x00.wav"
+	_, _, err := EncodeTranscription(req, false)
+	require.Error(t, err)
+	req.FileName = `the "best" take.wav`
+	ct, body, err := EncodeTranscription(req, false)
+	require.NoError(t, err)
+	assert.Equal(t, `the "best" take.wav`, parseForm(t, ct, body).fileName)
+}
+
+// A stream with no events is an error, not an empty transcript; the done
+// event's language is the transcript's.
+func TestTranscriptStreamEdges(t *testing.T) {
+	empty := newServerClient(t, func(w http.ResponseWriter, r *http.Request) { sseEvents(w) })
+	_, err := empty.TranscribeStream(context.Background(), audioReq(), nil)
+	require.Error(t, err)
+	lang := newServerClient(t, func(w http.ResponseWriter, r *http.Request) {
+		sseEvents(w, `{"type":"transcript.text.done","text":"hallo","languages":[{"code":"de"}]}`)
+	})
+	tr, err := lang.TranscribeStream(context.Background(), audioReq(), nil)
+	require.NoError(t, err)
+	assert.Equal(t, "de", tr.Language)
+}
+
+// An answer with words or a duration and no segments is verbose_json all
+// the same.
+func TestWordsOrDurationAloneAreVerbose(t *testing.T) {
+	for _, body := range []string{`{"text":"a","words":[{"word":"a","start":0,"end":0.2}]}`, `{"text":"a","duration":0.2}`} {
+		tr, err := DecodeTranscript([]byte(body))
+		require.NoError(t, err)
+		assert.Equal(t, "verbose_json", tr.Format, body)
+	}
 }

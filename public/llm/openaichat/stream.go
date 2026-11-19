@@ -93,8 +93,14 @@ func (inst *Client) CompleteStream(ctx context.Context, req CompletionRequest, o
 	url := inst.baseUrl + "chat/completions"
 	t0 := time.Now()
 	var status, attempts int
+	// delegated is a call handed to Complete, which observes it itself:
+	// RequestStat is once per call.
+	delegated := false
 	if inst.observer != nil {
 		defer func() {
+			if delegated {
+				return
+			}
 			inst.observer(RequestStat{Model: req.ModelId, FinishReason: resp.FinishReason, Status: status, Attempts: attempts,
 				Elapsed: time.Since(t0), InputTokens: resp.InputTokens, OutputTokens: resp.OutputTokens, Err: err})
 		}()
@@ -110,6 +116,7 @@ func (inst *Client) CompleteStream(ctx context.Context, req CompletionRequest, o
 		// stream says so with a 4xx naming the field; it is asked once
 		// more for the plain call (SD1).
 		if refusesStreaming(status, rawBody) {
+			delegated = true
 			return inst.Complete(ctx, req)
 		}
 		err = inst.classifyHttpError(ctx, url, status, rawBody)
@@ -236,7 +243,7 @@ func (inst *Client) readStream(r io.Reader, onDelta func(Delta)) (resp Completio
 	var calls []*streamToolCall
 	var usage *wireUsage
 	var finish, id, model string
-	err = inst.readSSE(r, func(payload []byte) (ferr error) {
+	_, err = inst.readSSE(r, func(payload []byte) (ferr error) {
 		var chunk wireStreamChunk
 		if ferr = json.Unmarshal(payload, &chunk); ferr != nil {
 			ferr = eb.Build().Str("rawSnippet", snippet(string(payload), 256)).Errorf("decode stream chunk: %w", ferr)
@@ -322,19 +329,20 @@ func (inst *Client) readStream(r io.Reader, onDelta func(Delta)) (resp Completio
 }
 
 // readSSE reads server-sent events from r and hands each event's data to
-// onData, until the DONE sentinel, the end of the body or an error. Comments and the
+// onData, until the DONE sentinel, the end of the body or an error. Lines
+// end at CRLF, LF or a bare CR, as the format allows. Comments and the
 // event, id and retry fields are skipped; a body past maxResponseBytes is
 // ErrResponseTooLarge. A stream that ends without the sentinel still hands
-// over its last event.
-func (inst *Client) readSSE(r io.Reader, onData func(payload []byte) error) (err error) {
+// over its last event; done says whether the sentinel came.
+func (inst *Client) readSSE(r io.Reader, onData func(payload []byte) error) (done bool, err error) {
 	if inst.maxResponseBytes > 0 {
 		r = io.LimitReader(r, inst.maxResponseBytes+1)
 	}
 	sc := bufio.NewScanner(r)
 	sc.Buffer(make([]byte, 64<<10), maxSSELine)
+	sc.Split(scanSSELines)
 	var data bytes.Buffer
 	var read int64
-	done := false
 	flush := func() (stop bool, ferr error) {
 		if data.Len() == 0 {
 			return
@@ -391,4 +399,32 @@ func (inst *Client) readSSE(r io.Reader, onData func(payload []byte) error) (err
 		}
 	}
 	return
+}
+
+// scanSSELines is bufio.ScanLines with a bare CR also ending a line: an
+// event stream's lines end at CRLF, LF or CR.
+func scanSSELines(data []byte, atEOF bool) (advance int, token []byte, err error) {
+	if atEOF && len(data) == 0 {
+		return 0, nil, nil
+	}
+	if i := bytes.IndexAny(data, "\r\n"); i >= 0 {
+		if data[i] == '\n' {
+			return i + 1, data[:i], nil
+		}
+		// A CR: one more byte says whether an LF belongs to it.
+		if i+1 < len(data) {
+			if data[i+1] == '\n' {
+				return i + 2, data[:i], nil
+			}
+			return i + 1, data[:i], nil
+		}
+		if atEOF {
+			return i + 1, data[:i], nil
+		}
+		return 0, nil, nil
+	}
+	if atEOF {
+		return len(data), data, nil
+	}
+	return 0, nil, nil
 }

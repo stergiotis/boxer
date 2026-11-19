@@ -81,7 +81,7 @@ type TranscriptionRequest struct {
 	// detect it.
 	Language string
 	// Prompt is text the model continues from: spellings, a previous
-	// segment. The diarizing model refuses one.
+	// segment. OpenAI's diarizing model refuses one; the server decides.
 	Prompt      string
 	Temperature *float32
 	// Diarize asks for segments labelled by speaker, in diarized_json, with
@@ -148,6 +148,8 @@ func (inst TranscriptionRequest) Validate() (err error) {
 		switch {
 		case s.Name == "" || len(s.Clip) == 0:
 			err = eb.Build().Int("index", i).Errorf("a known speaker needs a name and a clip")
+		case hasControl(s.Name):
+			err = eb.Build().Int("index", i).Errorf("a known speaker's name may not hold control characters")
 		case hasControl(s.MediaType):
 			err = eb.Build().Int("index", i).Errorf("a known speaker's media type may not hold control characters")
 		}
@@ -255,15 +257,9 @@ func EncodeTranscription(req TranscriptionRequest, stream bool) (contentType str
 	h.Write([]byte(mediaType))
 	h.Write([]byte{0})
 	h.Write(req.Audio)
-	seed := h.Sum(nil)
-	var boundary string
-	for salt := 0; ; salt++ {
-		s := blake3.Sum256(append(seed, byte(salt), byte(salt>>8)))
-		boundary = "boxer-" + hex.EncodeToString(s[:20])
-		if !bytes.Contains(req.Audio, []byte(boundary)) && !fieldsContain(fields, boundary) {
-			break
-		}
-	}
+	boundary := pickBoundary(h.Sum(nil), func(b string) bool {
+		return bytes.Contains(req.Audio, []byte(b)) || fieldsContain(fields, b)
+	})
 
 	var buf bytes.Buffer
 	buf.Grow(len(req.Audio) + 1024)
@@ -296,6 +292,18 @@ func EncodeTranscription(req TranscriptionRequest, stream bool) (contentType str
 	}
 	contentType, body = w.FormDataContentType(), buf.Bytes()
 	return
+}
+
+// pickBoundary is the first boundary derived from seed, salted in turn,
+// that clash does not report as occurring in the body.
+func pickBoundary(seed []byte, clash func(boundary string) bool) (boundary string) {
+	for salt := 0; ; salt++ {
+		s := blake3.Sum256(append(seed, byte(salt), byte(salt>>8)))
+		boundary = "boxer-" + hex.EncodeToString(s[:20])
+		if !clash(boundary) {
+			return
+		}
+	}
 }
 
 // formField is one text field of a multipart body.
@@ -425,12 +433,15 @@ var _ StreamingTranscriberI = (*Client)(nil)
 // diarized_json are one struct, and the usage one struct over both of
 // OpenAI's variants and the chat-style tokens vLLM's stream sends.
 type wireTranscript struct {
-	Text     string                  `json:"text"`
-	Language string                  `json:"language"`
-	Duration *float64                `json:"duration"`
-	Segments []wireTranscriptSegment `json:"segments"`
-	Words    []wireTranscriptWord    `json:"words"`
-	Usage    *wireTranscriptUsage    `json:"usage"`
+	Text     string `json:"text"`
+	Language string `json:"language"`
+	// Languages is what OpenAI's newest model reports instead of
+	// Language: the languages detected, an empty list for none.
+	Languages []wireLanguage          `json:"languages"`
+	Duration  *float64                `json:"duration"`
+	Segments  []wireTranscriptSegment `json:"segments"`
+	Words     []wireTranscriptWord    `json:"words"`
+	Usage     *wireTranscriptUsage    `json:"usage"`
 }
 
 type wireTranscriptSegment struct {
@@ -484,6 +495,24 @@ func (inst *wireTranscriptUsage) usage() (u TranscriptionUsage) {
 	return
 }
 
+type wireLanguage struct {
+	Code string `json:"code"`
+}
+
+// languageOf is the answer's language: the single member when it is
+// there, else the first of the list.
+func languageOf(language string, languages []wireLanguage) string {
+	if language != "" {
+		return language
+	}
+	for _, l := range languages {
+		if l.Code != "" {
+			return l.Code
+		}
+	}
+	return ""
+}
+
 func segmentId(raw jsontext.Value) (id string) {
 	raw = bytes.TrimSpace(raw)
 	if len(raw) == 0 || bytes.Equal(raw, []byte("null")) {
@@ -517,7 +546,7 @@ func DecodeTranscript(raw []byte) (t Transcript, err error) {
 }
 
 func transcriptOf(w wireTranscript) (t Transcript) {
-	t = Transcript{Text: w.Text, Language: w.Language, Usage: w.Usage.usage(), Format: transcriptFormatJson}
+	t = Transcript{Text: w.Text, Language: languageOf(w.Language, w.Languages), Usage: w.Usage.usage(), Format: transcriptFormatJson}
 	if w.Duration != nil {
 		t.Duration = option.Some(*w.Duration)
 	}
@@ -610,9 +639,9 @@ func (inst *Client) TranscribeStream(ctx context.Context, req TranscriptionReque
 		return
 	}
 	if httpResp == nil {
-		if refusesStreaming(status, raw) {
-			return inst.Transcribe(ctx, req)
-		}
+		// No second attempt without the stream: neither target refuses
+		// it (whisper-1 ignores it and answers whole, read below), and a
+		// resend would upload the recording twice.
 		err = inst.classifyHttpError(ctx, url, status, raw)
 		return
 	}
@@ -656,11 +685,13 @@ type wireTranscriptEvent struct {
 	Speaker   string               `json:"speaker"`
 	Text      *string              `json:"text"`
 	Language  string               `json:"language"`
+	Languages []wireLanguage       `json:"languages"`
 	Usage     *wireTranscriptUsage `json:"usage"`
 	Choices   []struct {
 		Delta struct {
 			Content string `json:"content"`
 		} `json:"delta"`
+		FinishReason *string `json:"finish_reason"`
 	} `json:"choices"`
 	Error *wireErrorBlock `json:"error"`
 }
@@ -670,9 +701,9 @@ func (inst *Client) readTranscriptStream(resp *http.Response, onDelta func(Trans
 	var final *string
 	var usage TranscriptionUsage
 	var segments []TranscriptSegment
-	var language string
+	var language, finish string
 	events := 0
-	err = inst.readSSE(resp.Body, func(payload []byte) (ferr error) {
+	sentinel, err := inst.readSSE(resp.Body, func(payload []byte) (ferr error) {
 		var ev wireTranscriptEvent
 		if ferr = json.Unmarshal(payload, &ev); ferr != nil {
 			return eb.Build().Str("rawSnippet", snippet(string(payload), 256)).Errorf("decode a transcript event: %w", ferr)
@@ -699,8 +730,8 @@ func (inst *Client) readTranscriptStream(resp *http.Response, onDelta func(Trans
 			onDelta(TranscriptDelta{SegmentId: s.Id, Segment: option.Some(s)})
 		case "transcript.text.done":
 			final = ev.Text
-			if ev.Language != "" {
-				language = ev.Language
+			if l := languageOf(ev.Language, ev.Languages); l != "" {
+				language = l
 			}
 		case "":
 			// vLLM's chat-completion-style chunk.
@@ -711,6 +742,9 @@ func (inst *Client) readTranscriptStream(resp *http.Response, onDelta func(Trans
 				if c := ch.Delta.Content; c != "" {
 					text.WriteString(c)
 					onDelta(TranscriptDelta{Text: c})
+				}
+				if ch.FinishReason != nil && *ch.FinishReason != "" {
+					finish = *ch.FinishReason
 				}
 			}
 		}
@@ -726,6 +760,15 @@ func (inst *Client) readTranscriptStream(resp *http.Response, onDelta func(Trans
 	t = Transcript{Text: text.String(), Language: language, Segments: segments, Usage: usage, Format: transcriptFormatJson}
 	if final != nil {
 		t.Text = *final
+	}
+	// Both targets end a stream they finished: OpenAI with its done
+	// event, vLLM with [DONE] and a stop. A stream that ended otherwise
+	// is what arrived, not the transcript.
+	switch {
+	case final == nil && !sentinel:
+		err = eh.Errorf("the transcription stream ended before it said it was done: %w", ErrIncompleteCompletion)
+	case finish != "" && finish != "stop":
+		err = eb.Build().Str("finishReason", finish).Errorf("the transcription stream stopped early: %w", ErrIncompleteCompletion)
 	}
 	// As on a whole answer: only speaker labels make it diarized.
 	switch {

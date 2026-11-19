@@ -8,8 +8,9 @@ import (
 
 // Subtitles are rendered from a transcript's segments rather than asked of
 // the server (ADR-0383 §SD3): vLLM refuses srt and vtt, and the newer
-// OpenAI models answer json only, while both give segments with times.
-// A transcript without segments renders as nothing.
+// OpenAI models answer json only. Segments with times come from a
+// verbose_json answer (whisper-1, a Whisper-style vLLM model) or a
+// diarized one; a transcript without segments renders as nothing.
 
 // RenderSRT is the transcript as SubRip cues, one per segment with text,
 // numbered from 1; a diarized segment's text is led by its speaker label.
@@ -30,8 +31,8 @@ func RenderSRT(t Transcript) (s string) {
 		b.WriteString(" --> ")
 		b.WriteString(cueTime(seg.End, ','))
 		b.WriteByte('\n')
-		if seg.Speaker != "" {
-			b.WriteString(seg.Speaker)
+		if l := cueLabel(seg.Speaker); l != "" {
+			b.WriteString(l)
 			b.WriteString(": ")
 		}
 		b.WriteString(text)
@@ -54,9 +55,9 @@ func RenderWebVTT(t Transcript) (s string) {
 		b.WriteString(" --> ")
 		b.WriteString(cueTime(seg.End, '.'))
 		b.WriteByte('\n')
-		if seg.Speaker != "" {
+		if l := cueLabel(seg.Speaker); l != "" {
 			b.WriteString("<v ")
-			b.WriteString(vttEscape(seg.Speaker))
+			b.WriteString(vttEscape(l))
 			b.WriteString(">")
 		}
 		b.WriteString(vttEscape(cueText(seg.Text)))
@@ -65,14 +66,18 @@ func RenderWebVTT(t Transcript) (s string) {
 	return b.String()
 }
 
+// maxCueSeconds bounds a cue time, far past any recording, so the
+// millisecond count stays inside an int64.
+const maxCueSeconds = 1e12
+
 // cueTime is seconds as hh:mm:ss<sep>mmm, negative and non-finite times
-// clamped to zero.
+// clamped to zero and huge ones to maxCueSeconds.
 func cueTime(sec float64, sep byte) string {
-	if math.IsNaN(sec) || sec < 0 {
+	if math.IsNaN(sec) || sec < 0 || math.IsInf(sec, 1) {
 		sec = 0
 	}
-	if math.IsInf(sec, 1) {
-		sec = 0
+	if sec > maxCueSeconds {
+		sec = maxCueSeconds
 	}
 	ms := int64(math.Round(sec * 1000))
 	h := ms / 3_600_000
@@ -108,6 +113,12 @@ func cueText(s string) string {
 		s = strings.ReplaceAll(s, "\n\n", "\n")
 	}
 	return s
+}
+
+// cueLabel is a speaker label on one line: the server's labels are its
+// own, and a line break in one would end the cue.
+func cueLabel(s string) string {
+	return strings.Join(strings.Fields(s), " ")
 }
 
 func vttEscape(s string) string {
