@@ -1,6 +1,6 @@
 ---
 name: keelson-app
-description: "Use when designing or writing an app under apps/ — what makes an app idiomatic in boxer on the keelson runtime: data kept as Arrow and handed to play, an explicit state machine the person and agents can read, work on tasks and watchbill with the standard progress row, an operations catalog and a help book as the agent surface, regex batteries and SQL instead of ad-hoc search, honest analysis, IDS look, progressive disclosure, and the immediate-mode cost model. For how to draw widgets see the imzero2 skill; this skill is about the shape of the app around them."
+description: "Use when designing or writing an app under apps/ — what makes an app idiomatic in boxer on the keelson runtime: data kept as Arrow and handed to play, an explicit state machine the person and agents can read, work on tasks and watchbill with the standard progress row, an operations catalog and a help book as the agent surface, regex batteries and SQL instead of ad-hoc search, honest analysis, IDS look, progressive disclosure, the immediate-mode cost model, and which code belongs in the app package and which in a shared library for downstream consumers. For how to draw widgets see the imzero2 skill; this skill is about the shape of the app around them."
 type: reference
 audience: contributor or agent writing or reviewing an app under apps/
 status: stable
@@ -91,7 +91,7 @@ one of them before it is written:
 **S1 — A new app is a design dialogue first.** Apps are Tier 2 surfaces in
 [CODINGSTANDARDS § What triggers an ADR](../../../CODINGSTANDARDS.md#what-triggers-an-adr):
 an app of a new *shape* gets an ADR; another instance of an established
-shape is code. Agree on the five decisions below before the first widget,
+shape is code. Agree on the six decisions below before the first widget,
 in a page or in the ADR; each has its section here.
 
 1. **Data.** What tables the app shows, which of them are Arrow records,
@@ -105,6 +105,9 @@ in a page or in the ADR; each has its section here.
    what the help book has to say for the agent to use them (§5).
 5. **Method.** For an analytical app, the method, its assumptions and how
    the window states them (§6).
+6. **Placement.** Who consumes the app's code besides the app, what each
+   consumer must be able to change, and so which code is the app's and
+   which is a library's (§9, B1).
 
 **S2 — Descope the heavy periphery, record the deferral.** Ship the light
 cut; a `// deferred:` note or an ADR *Deferred* entry with a trigger ("the
@@ -703,10 +706,97 @@ into a string; a prefix joined to a stable key
 that must survive an edit above it is keyed on content. A mismatched stack
 compiles and panics at render ([imzero2 skill §3 and §21](../imzero2/SKILL.md)).
 
-## 9. Extension seams for consumers
+## 9. Consumers: where the code lives, and the seams it offers
 
 Boxer is a library a downstream module composes
 ([adopting boxer downstream](../../howto/adopting-boxer-downstream.md)).
+Two questions follow for every app: which of its code a consumer can
+import, and how the app itself is extended. The first is settled when the
+app is designed (S1, decision 6); the second waits for a witness.
+
+### Where the code lives: the app package or a library
+
+The stack is isomorphic: the window, the engine under it and the services
+it calls are all Go, linked into one binary and run in one process. Nothing
+forces a boundary between them: there is no wire format between a front
+end and a back end, no client bundle, no API that has to be versioned
+before the window can call it. The package boundary is the only boundary,
+and the import graph is its only enforcement. That cuts both ways. Putting
+everything in `apps/<app>` works, and nothing reports it. Moving code out
+later is a refactor inside one module with no protocol to rewrite, until
+someone outside the module imports what was moved. So the line is not drawn
+between GUI and backend, which here are the same kind of code. It is drawn
+by who else will call the code.
+
+**B1 — Name the consumers and what each must be able to change.** Before
+the code is laid out, list who will use it besides the app: another app in
+the tree, an agent through the catalog, a downstream module. For each, say
+how far it needs to depart from what the app does. The answer is a rung on
+this ladder, and each rung puts the code in a different place:
+
+| The consumer needs to | It gets | Where the code lives |
+| --- | --- | --- |
+| open the app on something | a launch config (S4) | the app's leaf package (X5) |
+| hand the app its data | a published dataset and a launch ([ADR-0382](../../adr/0382-embedding-is-by-role-a-pane-under-its-host-and-no-host-mediated-embed.md) §SD2) | nothing new |
+| change one part of the app's behaviour | a typed seam (X2) | the app package, with the default exported |
+| draw the app's body inside its own window | a pane and its caps (ADR-0382 §SD3) | the app package, or a package without its registration (B4) |
+| build a different window over the same domain: another layout, another catalog, its own data and governance | the domain types, the method, the engine and the widget | libraries: `public/<domain>`, `widgets/<name>`, `public/keelson/runtime/<service>` |
+
+**B2 — A highly malleable app is a thin consumer of its own libraries.**
+When the design says consumers will remake the app rather than adjust it,
+the last rung, factor out everything that means something without the
+window: the domain types, the readers and decoders, the method and the
+numbers it produces, the widget that draws the domain type, the runtime
+service the window talks to. What stays in `apps/<app>` is what belongs to
+the window: the manifest and factory, `Mount`, `Frame` and `Unmount`, the
+snapshot and the layout, this window's phase machine, the catalog's
+declarations, the help book, scenes, tour entries and seed variables. The
+catalog's handlers are thin over library functions, so a consumer's own
+catalog calls the same functions (A3's argument, across packages). The app
+is then one composition of the libraries: the reference composition, which
+a consumer reads and then composes differently. imagescope has this shape:
+samples, display recipes and tiles live under `public/science/imaging`, the
+viewer under `widgets/imageview`
+([ADR-0373](../../adr/0373-an-image-viewer-samples-apart-from-presentation-mapped-in-go-shipped-as-tiles.md),
+[ADR-0374](../../adr/0374-imageview-shows-a-tile-source-and-the-decoder-streams-into-one.md)),
+and the app adds the broker open, the catalog and the handover. The rules
+of §2–§8 are applied in the app. A library offers what those rules need (an
+Arrow record, a function that names its n, a caps helper) and does not
+apply them on the consumer's behalf.
+
+**B3 — Test the split by remaking, not by reading.** The check is whether
+a consumer could build a different window over the same domain by
+importing alone, without copying a function out of `apps/<app>`. A copied
+method is a fork: a fix no longer reaches it, and its name no longer names
+one algorithm (F5). A helper the window needs and nothing else does stays
+in the app, because promoting it to a library makes it an API someone pins.
+
+**B4 — A library does not register, hold window state, read the
+environment or enforce.** Library code has no registering `init()` and no
+manifest, keeps no per-window state in package variables (S3), and reads no
+environment variable to choose what it does (X2). It exports what a
+consumer declares, such as a `*Caps` helper, effects and argument types,
+and leaves the declaring to the consumer (X4). It does not import an app
+package. The host and boot wiring that compose the registry are a
+composition root, not a library. Importing an app package links the app's
+registration with it. chatlet imports `chat.Preset` and notebooklet imports
+notebook's pane, which is acceptable because both ship in the same registry
+anyway. A consumer that wants the piece without the app cannot have it, and
+that is the trigger to move the piece out.
+
+**B5 — The requirement is the witness; without one, keep the code in the
+app.** Factoring out has a cost. A library's exported names are a contract
+a downstream module pins, its tests run without a window (Go tests, not
+scenes), and its doc comments carry what the app's help book used to. X1
+applies: a library waits for a consumer. A malleability requirement stated
+in the design (S1) counts as that consumer, as a documented plan, so the
+factoring is part of the first cut rather than a later extraction. An app
+with no such requirement keeps its code in `apps/<app>` and moves a piece
+out when a second consumer arrives. Inside the module that move is cheap,
+for the reason given above.
+
+### Extension seams
+
 An app is extended the way the tree already extends things, and only when
 there is a witness.
 
@@ -809,14 +899,17 @@ lines are the minter's and the rest are each minted window's.
       states, one fold for advanced controls (L1–L5)
 - [ ] Heavy bodies measured and gated, memos keyed, no inline fetchers,
       ids scoped (P2–P6)
+- [ ] Consumers named, each with what it must change; for a malleable app
+      the domain, method, engine and widget are libraries that neither
+      register nor enforce, and the app consumes them (B1–B5)
 - [ ] Any new seam has a witness and is a typed Go slot (X1–X2)
 - [ ] The app declares and never enforces: no allowlist, prompt, audit
       row or budget of its own; the playground is opened through its leaf, from one file (§0, X4)
 
 ## 11. Where to copy from
 
-Observed 2026-11-07; the tree moves, so check the app still does what the
-row says before copying.
+Observed 2026-11-07, the two placement rows 2026-11-19; the tree moves, so
+check the app still does what the row says before copying.
 
 | For | Copy | Not |
 | --- | --- | --- |
@@ -838,6 +931,8 @@ row says before copying.
 | scene that ends on F1 | `apps/capinspector/scenes` (its one coordinate click is a recorded deferral in `archgraph.go`) | scenes with coordinate clicks |
 | attention question | `apps/chat/chat_attention.go` | |
 | labelled clipboard copy | `apps/chat/chat_actions.go` | a raw `SubjectWrite` request (CS015) |
+| domain, method and widget apart from the window, the app a thin consumer | `apps/imagescope` over `public/science/imaging` and `widgets/imageview` | a method reachable only through `apps/<app>` |
+| a pane a host embeds, with its caps | `apps/notebook/notebook_embed.go` | |
 
 ## 12. What this skill does not decide
 
