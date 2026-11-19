@@ -19,8 +19,8 @@ ADR recorded speech recognition as decided or deferred.
 defers microphone capture; recordings on disk are readable through
 `public/science/audio` ([ADR-0208](./0208-audio-waveform-player-widget.md)).
 
-There is no consumer in this repository. The capability is wanted ahead
-of one, so the cut is the verb, the route, the transcript shape and the
+When this was decided, on 2026-11-19, the repository held no consumer.
+The capability is wanted ahead of one, so the cut is the verb, the route, the transcript shape and the
 ways to exercise them without an app.
 
 The endpoint is `POST /v1/audio/transcriptions`. Many servers claim it;
@@ -37,7 +37,8 @@ on the decision:
 - **OpenAI and vLLM agree on most of it**: the same form fields, the same
   `json`, `verbose_json` and `diarized_json` bodies, diarization selected
   by a diarizing model, and vLLM ignores the OpenAI fields it does not
-  implement rather than refusing them. Where they differ — vLLM's plain
+  implement rather than refusing them — read from vLLM's source, not
+  tested against a running server. Where they differ — vLLM's plain
   stream is chat-completion-style chunks, its seconds are integers, it
   gives no word times — the difference is small and known.
 - **The transcription model is rarely the chat model, and often not on
@@ -112,14 +113,19 @@ every quantity optional.
 A request for times is answered whole: vLLM refuses `verbose_json` with
 `stream`. Subtitle files (SRT, WebVTT) are rendered from segments by the
 client, not requested from the server — vLLM refuses them and the newer
-OpenAI models answer `json` only. A body that is not JSON is read as the
-text and marked so, rather than failing.
+OpenAI models answer `json` only. They exist where an answer has
+segments: whisper-1 and Whisper-style vLLM models with times, or a
+diarized answer; asked of a model that gives none, the command line says
+so rather than writing an empty file. A body that is not JSON is read as
+the text and marked so, rather than failing.
 
 ### SD4 — Diarization by its own model
 
 OpenAI and vLLM both diarize with a model of its own and
 `diarized_json`. A diarized request goes to the configured diarizing
-model; a host without one refuses it with the variable to set. Known
+model; a host without one refuses it with the variable to set. A prompt
+on a diarized request is passed on and left to the server: OpenAI's
+diarizing model refuses one, a vLLM model may not. Known
 speakers travel as OpenAI's `known_speaker_names[]` and
 `known_speaker_references[]`, the clips as data URLs, at most four; the
 client checks the count and leaves clip length to the server. A diarized
@@ -152,9 +158,9 @@ What each check reads of a transcription:
   boundary is derived from the content — so an approval of a refused
   recording covers the same recording resent, and no other. A streamed
   request leaves with one more field and a boundary of its own; it is
-  approved and counted as its whole form, and when a server refuses to
-  stream and the client sends it again whole, the body leaves twice and
-  is counted once.
+  approved and counted as its whole form. A stream the server refuses is
+  not sent again whole: the refusal is the answer, rather than the
+  recording leaving twice.
 - **The canaries** read the text fields: prompt, language, file name,
   media type, speaker names. The audio cannot be read for a planted token
   (Consequences).
@@ -175,9 +181,10 @@ the answer's duration or, failing that, the seconds its usage was billed
 in. Tokens are charged where the answer reported them. A quantity the
 answer did not report charges nothing, so a rule on audio length is
 honest about the calls it could not count. A streamed vLLM transcription
-is one of them: its stream reports no audio length, only chat-style
-tokens and only when asked, so a budget on audio length counts it as
-nothing while the same request answered whole is charged. A call
+is one of them: its stream reports no audio length, and tokens only when
+asked, which the client does not, so it is charged neither while the same
+request answered whole is charged its length. A reported length that is
+negative or past any recording is not taken. A call
 refused after admission sent nothing and is charged no bytes.
 
 ### SD6 — Streaming through the existing inbox
@@ -187,7 +194,9 @@ transcript's text as it arrives, and on a diarized stream each segment as
 it completes; the reply is still the whole transcript. The client reads
 OpenAI's typed `transcript.text.*` events and the chat-completion-style
 chunks of a plain vLLM stream, and accepts a whole JSON answer from a
-server that did not stream. The delta message gains a segments member; a
+server that did not stream. A stream that ends without saying it is done
+— no done event, no `[DONE]` — or that stopped on its length is an
+incomplete answer, not a transcript. The delta message gains a segments member; a
 reader that does not know it reads the text as before.
 
 ### SD7 — The client beside `Complete`
@@ -195,7 +204,7 @@ reader that does not know it reads the text as before.
 The transcription client lives in `public/llm/openaichat`, as methods of
 the same client: it shares the transport, the retry policy, the response
 ceiling, the observer, the error classification and the server-sent-event
-reader, which the chat stream and the transcription stream now both use.
+reader, which the chat stream and the transcription stream both use.
 Of the optional form fields, a request sends only those the caller set;
 `response_format`, and `chunking_strategy` on a diarized request, are the
 client's own.
@@ -300,7 +309,8 @@ deadline).
   the extraction; the transcription tests hold the walls, the approval's
   binding to the recording, the journal digest, the record and the meter.
 - The `openaichat` tests pin the request fields per mode, the
-  deterministic encoding (a property test, boundary-like audio included),
+  deterministic encoding (a property test, and the boundary stepping past
+  one the body holds),
   each answer shape, both stream shapes and the subtitle rendering.
 - The vocabulary golden goes red on a re-pointed membership id.
 - The integration lane runs a live transcription when a route is
