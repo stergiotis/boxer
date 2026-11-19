@@ -44,7 +44,7 @@ func NewCliCommand() *cli.Command {
 					&cli.StringFlag{Name: "timestamps", Value: "none", Usage: "none, segment or word; word times come from OpenAI's whisper-1 only"},
 					&cli.StringFlag{Name: "language", Usage: "spoken language as ISO-639-1; empty detects it"},
 					&cli.StringFlag{Name: "prompt", Usage: "text the model continues from: spellings, a previous segment"},
-					&cli.StringFlag{Name: "format", Value: formatText, Usage: "text, json, srt or vtt; srt and vtt are rendered from the segments"},
+					&cli.StringFlag{Name: "format", Value: formatText, Usage: "text, json, srt or vtt; srt and vtt are rendered from the segments, which OpenAI's whisper-1, a Whisper-style vLLM model or --diarize give"},
 					&cli.BoolFlag{Name: "stream", Usage: "write the text to stderr as it arrives"},
 				},
 				Action: transcribe,
@@ -109,7 +109,7 @@ func transcribe(ctx context.Context, cmd *cli.Command) (err error) {
 	if maxBytes <= 0 {
 		maxBytes = llm.DefaultTranscribeMaxBytes
 	}
-	_, body, err := openaichat.EncodeTranscription(req, false)
+	_, body, err := openaichat.EncodeTranscription(req, cmd.Bool("stream") && req.Streams())
 	if err != nil {
 		return eh.Errorf("form the request: %w", err)
 	}
@@ -136,6 +136,10 @@ func transcribe(ctx context.Context, cmd *cli.Command) (err error) {
 	}
 	if err != nil {
 		return eh.Errorf("transcribe: %w", err)
+	}
+	if (format == formatSrt || format == formatVtt) && len(t.Segments) == 0 {
+		return eb.Build().Str("model", req.ModelId).Str("answer", t.Format).
+			Errorf("the answer carries no segments to make subtitles from: use a model that gives segment times (whisper-1, a Whisper-style vLLM model) or --diarize")
 	}
 	var out string
 	switch format {
