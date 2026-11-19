@@ -271,6 +271,11 @@ go build $BOXER_GO_FLAGS -tags "$BOXER_GO_TAGS" -o /dev/null ./public/app   # re
   vendoring ([ENGINEERING_PRACTICES §6](../ENGINEERING_PRACTICES.md)); the
   `vendor/` and `rust/vendor/` trees live only inside the bundle and are not
   committed.
+- **A module that joins a vendored workspace must pin what it vendors.** Each
+  `require` has to name a version `vendor/modules.txt` marks explicit, and
+  `go mod tidy` cannot run offline. When a re-pack moves those versions,
+  [offline-go-mod-tidy.md](./offline-go-mod-tidy.md) brings the module's
+  `go.mod` and `go.sum` back in line without a network.
 - **Toolchains are dynamically linked.** The shipped `rustc` (and the `go` tool)
   expect a compatible glibc and the same CPU architecture as the build host.
   Across distro families, prefer `go-only` (Go binaries are static) or run the
