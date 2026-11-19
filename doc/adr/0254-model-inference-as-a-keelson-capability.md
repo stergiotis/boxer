@@ -544,9 +544,8 @@ service publishes advisory deltas to, and the one reply stays the answer.
 ### 2026-11-19 — a third verb, `llm.transcribe`, on a route of its own
 
 The family gains speech to text,
-[ADR-0383](./0383-speech-to-text-as-an-llm-verb-a-transcription-route-of-its-own-the-openai-and-vllm-shape-one-transcript.md)
-(proposed): a transcription route configured apart from SD2's one
-provider, under the same `llm.*` grant. SD3's policy point is now one
+[ADR-0383](./0383-speech-to-text-as-an-llm-verb-a-transcription-route-of-its-own-the-openai-and-vllm-shape-one-transcript.md):
+a transcription route configured apart from SD2's one provider, under the same `llm.*` grant. SD3's policy point is now one
 function both verbs call rather than code inline in the completion's
 handler, so "the only such function in the tree" holds for both.
 

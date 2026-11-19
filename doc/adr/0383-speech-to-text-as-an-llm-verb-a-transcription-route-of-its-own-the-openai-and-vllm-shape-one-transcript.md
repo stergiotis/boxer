@@ -1,10 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-11-19
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-11-19
 ---
-
-> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
 
 # ADR-0383: Speech to text as an `llm` verb — a transcription route of its own, the OpenAI and vLLM shape, one transcript
 
@@ -72,8 +72,9 @@ wants the two apart has ADR-0254 §SD7's per-purpose grants to take up.
 
 The bytes travel inline in the request. The bus is in-process and the
 file broker already moves whole files as one message; the service
-refuses a recording above the route's byte ceiling before anything
-leaves.
+refuses a request above the route's byte ceiling before anything leaves.
+The ceiling counts the request as it leaves — the recording and any
+known speakers' clips — which is what a server's upload limit counts.
 
 `llm.describe` reports the transcription route beside the chat route,
 each configured or not on its own: model, diarizing model, host, whether
@@ -147,14 +148,22 @@ What each check reads of a transcription:
 - **The content digest** the journal entry records covers every option,
   the audio's digest and each known speaker's clip digest.
 - **The bytes an approval binds to and the exit budget counts** are the
-  multipart body as sent whole, encoded deterministically — its boundary
-  is derived from the content — so an approval of a refused recording
-  covers the same recording resent, and no other.
+  multipart body as it is sent whole, encoded deterministically — its
+  boundary is derived from the content — so an approval of a refused
+  recording covers the same recording resent, and no other. A streamed
+  request leaves with one more field and a boundary of its own; it is
+  approved and counted as its whole form, and when a server refuses to
+  stream and the client sends it again whole, the body leaves twice and
+  is counted once.
 - **The canaries** read the text fields: prompt, language, file name,
   media type, speaker names. The audio cannot be read for a planted token
   (Consequences).
 
-Every transcription is a row on the call record and the trail beside
+The write-ahead holds for a transcription as for a completion: before
+the recording leaves, the trail gets one message row naming it — the
+model, the media type, the size and the digest of the audio, never its
+bytes — and after the answer the transcript is the reply's row. Every
+transcription is a row on the call record and the trail beside
 completions: the verb, the audio's media type and digest, its length in
 milliseconds as the answer reported it, and on a diarized request the
 number of speakers labelled. The audio is never kept, at any retention
@@ -165,7 +174,11 @@ The ration ledger gains one quantity, audio milliseconds, charged from
 the answer's duration or, failing that, the seconds its usage was billed
 in. Tokens are charged where the answer reported them. A quantity the
 answer did not report charges nothing, so a rule on audio length is
-honest about the calls it could not count.
+honest about the calls it could not count. A streamed vLLM transcription
+is one of them: its stream reports no audio length, only chat-style
+tokens and only when asked, so a budget on audio length counts it as
+nothing while the same request answered whole is charged. A call
+refused after admission sent nothing and is charged no bytes.
 
 ### SD6 — Streaming through the existing inbox
 
@@ -183,7 +196,9 @@ The transcription client lives in `public/llm/openaichat`, as methods of
 the same client: it shares the transport, the retry policy, the response
 ceiling, the observer, the error classification and the server-sent-event
 reader, which the chat stream and the transcription stream now both use.
-A request sends only the fields the caller set.
+Of the optional form fields, a request sends only those the caller set;
+`response_format`, and `chunking_strategy` on a diarized request, are the
+client's own.
 
 ### SD8 — Exercised without a consumer
 
@@ -305,8 +320,7 @@ deadline).
 
 ## Status
 
-Proposed 2026-11-19. Implemented the same day, uncommitted; awaiting
-review.
+Accepted 2026-11-19.
 
 ## References
 

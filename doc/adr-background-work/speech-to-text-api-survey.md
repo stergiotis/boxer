@@ -16,7 +16,7 @@ status: draft
 
 # Speech to text over the OpenAI-compatible endpoint: what servers do
 
-The background to ADR-0383 (proposed). The question it answers: what a
+The background to ADR-0383. The question it answers: what a
 client of `POST /v1/audio/transcriptions` can rely on across servers that
 claim compatibility, and where it has to be told rather than guess.
 
@@ -137,8 +137,10 @@ both absorbs:
    chat-completion-style chunks (`choices[0].delta.content`) and `[DONE]`.
    A diarized vLLM stream uses OpenAI's typed events.
 2. **Usage.** OpenAI's newer models report tokens, whisper-1 reports
-   seconds; vLLM reports integer seconds, rounded up, and tokens in chat
-   style on a stream only when asked.
+   seconds; vLLM reports integer seconds, rounded up, on a whole answer,
+   and on a plain stream only chat-style tokens, and only when asked
+   (`stream_include_usage`). A streamed vLLM answer therefore says nothing
+   of the audio's length.
 3. **Times.** Word times come from OpenAI's whisper-1 only; the newer
    OpenAI models and vLLM models without segment timestamps refuse
    `verbose_json` with a 400.
