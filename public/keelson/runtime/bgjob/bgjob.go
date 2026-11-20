@@ -14,6 +14,8 @@
 //     result instead of clobbering a newer run's state.
 //   - Results are handed to the render thread consume-once via TakeResult,
 //     so render code always reads a stable value.
+//   - A panic in the compute callback is the run's error: the run ends
+//     Failed and its task as an error, and the process goes on.
 //
 // [Runner] is a job somebody starts; [Keyed] is a value a frame demands every
 // frame and that is computed when the demand changes, under the same
@@ -27,6 +29,7 @@ import (
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/task"
 	"github.com/stergiotis/boxer/public/keelson/runtime/task/estimator"
+	"github.com/stergiotis/boxer/public/observability/ph"
 )
 
 // StateE is the lifecycle state of a Runner.
@@ -252,7 +255,7 @@ func (r *Runner[T]) run(ctx context.Context, tasks task.TaskApiI, token uint64, 
 			return
 		}
 	}
-	result, err := compute(ctx)
+	result, err := guarded(func() (*T, error) { return compute(ctx) })
 	if total > 0 && !stage(total) {
 		r.finishCancelled(token)
 		return
@@ -284,7 +287,7 @@ func (r *Runner[T]) runReporting(ctx context.Context, tasks task.TaskApiI, token
 		r.mu.Unlock()
 	})
 
-	result, err := compute(ctx, report)
+	result, err := guarded(func() (*T, error) { return compute(ctx, report) })
 	// Without trailing pacing stages the cancel signal must be checked
 	// explicitly: a cancelled run resets to idle instead of surfacing the
 	// compute's wrapped context error as a failure.
@@ -293,6 +296,17 @@ func (r *Runner[T]) runReporting(ctx context.Context, tasks task.TaskApiI, token
 		return
 	}
 	r.finish(token, spec, result, err, h)
+}
+
+// guarded calls a run's compute and turns a panic in it into the run's
+// error, so the run ends Failed and its task as an error instead of the
+// panic ending the process (ADR-0386).
+func guarded[T any](compute func() (T, error)) (v T, err error) {
+	err = ph.Guard(func() (e error) {
+		v, e = compute()
+		return
+	})
+	return
 }
 
 // newReporter builds the Reporter for one run, the part [Runner] and [Keyed]

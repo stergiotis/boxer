@@ -196,7 +196,7 @@ func (k *Keyed[T]) start(key string, run func(ctx context.Context, report Report
 			}
 			k.mu.Unlock()
 		})
-		v, err := run(ctx, report)
+		v, err := guarded(func() (T, error) { return run(ctx, report) })
 
 		k.mu.Lock()
 		if k.gen != gen {
