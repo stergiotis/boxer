@@ -176,3 +176,25 @@ func TestEncoderSmoke(t *testing.T) {
 		return enc.EncodeIpAddr(netip.MustParseAddr("127.0.0.1"))
 	})
 }
+
+// Bytes buffered for the previous hasher do not leak into the next one: the
+// hash after SetHasher is the hash of what was written after it.
+func TestSetHasherStartsAfresh(t *testing.T) {
+	var sink bytes.Buffer
+	enc := NewEncoder(&sink, xxh3.New())
+	_, err := enc.EncodeBool(true) // one byte, still in the hash buffer
+	require.NoError(t, err)
+	enc.SetHasher(xxh3.New())
+	_, err = enc.EncodeBool(false)
+	require.NoError(t, err)
+	got, err := enc.Hash(nil)
+	require.NoError(t, err)
+
+	var sink2 bytes.Buffer
+	fresh := NewEncoder(&sink2, xxh3.New())
+	_, err = fresh.EncodeBool(false)
+	require.NoError(t, err)
+	want, err := fresh.Hash(nil)
+	require.NoError(t, err)
+	require.Equal(t, want, got)
+}

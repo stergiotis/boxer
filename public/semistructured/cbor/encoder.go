@@ -61,9 +61,13 @@ func (inst *Encoder) Reset() {
 		inst.hasher.Reset()
 	}
 }
+// SetHasher starts hashing afresh with hasher. Bytes the previous hasher had
+// buffered but not yet taken belong to the previous hash and are dropped,
+// not carried into the new one.
 func (inst *Encoder) SetHasher(hasher hash.Hash) {
 	inst.hasher = hasher
 	inst.hasher.Reset()
+	inst.hashBuffer.Reset()
 	inst.flushLimit = hasher.BlockSize()
 }
 func (inst *Encoder) SetWriter(w EncoderWriterI) {
