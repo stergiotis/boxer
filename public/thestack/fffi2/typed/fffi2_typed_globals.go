@@ -31,9 +31,11 @@ func ResetErrors() {
 	errs = errs[:0]
 }
 
+// SetCurrentFffiVar installs the channel generated code sends through. A nil
+// fffi is a programming error and panics.
 func SetCurrentFffiVar(fffi *runtime.Fffi2[*runtime.Unmarshaller]) {
 	if fffi == nil {
-		log.Fatal().Msg("fffi is nil")
+		panic("SetCurrentFffiVar called with a nil Fffi2 — install the channel the application established")
 	}
 	currentFffiVar = fffi
 }
@@ -42,9 +44,11 @@ func GetCurrentFffiVar() (fffi *runtime.Fffi2[*runtime.Unmarshaller]) {
 	return
 }
 
+// SetCurrentFffiErrorHandler replaces the handler runtime errors go to. A nil
+// handler is a programming error and panics.
 func SetCurrentFffiErrorHandler(handler func(err error)) {
 	if handler == nil {
-		log.Fatal().Msg("handler is nil")
+		panic("SetCurrentFffiErrorHandler called with a nil handler")
 	}
 	currentFffiErrorHandler = handler
 }
