@@ -518,6 +518,48 @@ func TestCS012_PassesGoodFile(t *testing.T) {
 	}
 }
 
+func TestCS018_FlagsDirectListeners(t *testing.T) {
+	root, err := filepath.Abs("./testdata/cs018/bad")
+	require.NoError(t, err)
+
+	pkgs, err := codelint.LoadPackages(codelint.LoadConfig{}, root)
+	require.NoError(t, err)
+	require.NotEmpty(t, pkgs)
+
+	linter := codelint.NewLinter()
+	linter.Register(codelint.NewRuleCS018())
+
+	var findings []codelint.Finding
+	for f, runErr := range linter.Run(pkgs) {
+		require.NoError(t, runErr)
+		findings = append(findings, f)
+	}
+
+	require.Len(t, findings, 4, "expected 4 CS018 findings (net.Listen, ListenConfig.Listen, http.ListenAndServe, Server.ListenAndServe)")
+	for _, f := range findings {
+		assert.Equal(t, "CS018", f.RuleId)
+		assert.Equal(t, codelint.FindingSeverityError, f.Severity)
+		assert.Contains(t, f.Path, "bad.go")
+	}
+}
+
+func TestCS018_PassesServeAndDirective(t *testing.T) {
+	root, err := filepath.Abs("./testdata/cs018/good")
+	require.NoError(t, err)
+
+	pkgs, err := codelint.LoadPackages(codelint.LoadConfig{}, root)
+	require.NoError(t, err)
+	require.NotEmpty(t, pkgs)
+
+	linter := codelint.NewLinter()
+	linter.Register(codelint.NewRuleCS018())
+
+	for f, runErr := range linter.Run(pkgs) {
+		require.NoError(t, runErr)
+		t.Fatalf("unexpected finding: %+v", f)
+	}
+}
+
 func TestCS013_FlagsNonWrapVerbs(t *testing.T) {
 	root, err := filepath.Abs("./testdata/cs013/bad")
 	require.NoError(t, err)

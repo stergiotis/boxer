@@ -206,6 +206,10 @@ Choices for review:
 - The gate requires every address the name resolves to be loopback, and binds
   exactly the addresses it checked.
 
+### 2026-11-20 — Every Go listener binds through one gate; codelint CS018
+
+The derived practice — bind-address gates as the default for every listener — had been applied by hand to two Go listeners (introspecthttp, queryrunsd) while others bound whatever address they were given, `:port` included. It is now one helper, `loopback.Gate`: a loopback host proceeds; any other bind is refused unless the listener names an opt-in (a flag or a registered variable) and the operator sets it; a failed bind is returned, not logged and dropped. Listeners that serve only loopback (introspecthttp, queryrunsd, port probes) name no opt-in and refuse unconditionally. The opt-in only lifts the refusal: a listener exposed with it is still unauthenticated unless it brings its own token and TLS, which is what SD1 requires of the carrier. Codelint CS018 (error) reports `net.Listen`, `net.ListenTCP`, `net.ListenConfig.Listen` and `http.ListenAndServe*` outside the helper's package; tests are exempt and any other direct bind needs a suppression directive with a reason. The Rust carrier is outside this rule and keeps its own SD1 gate.
+
 ## References
 
 - [ADR-0024 — ImZero2 remote access via headless render + ffmpeg + browser viewer](./0024-imzero2-remote-access-browser-viewer.md) — the parent; this ADR is its promised auth / multi-tenancy follow-up. SD3 (no mid-stream IDR), SD4/SD6 (wire framing), the per-connection encoder + SD9 mailbox, SD11 (deferral list) are load-bearing here.
