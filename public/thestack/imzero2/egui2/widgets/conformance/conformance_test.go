@@ -688,3 +688,79 @@ func hasOffsetBase(e ast.Expr) (found bool) {
 	})
 	return
 }
+
+// TestRetainedIdMapsHaveAnEvictionPath checks every package under widgets/,
+// the exempt ones included: a package-level map keyed by uint64 — retained
+// state keyed by a widget or scope id — is deleted from somewhere in its
+// package. Without that path, a host whose widgets come and go grows the map
+// for as long as the process runs (imzero2 skill §21, retained state).
+func TestRetainedIdMapsHaveAnEvictionPath(t *testing.T) {
+	root, err := filepath.Abs("..")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, p := range loadPackages(t, root) {
+		maps := map[string]ast.Node{}
+		deleted := map[string]bool{}
+		for _, f := range p.files {
+			for _, d := range f.Decls {
+				gd, ok := d.(*ast.GenDecl)
+				if !ok || gd.Tok != token.VAR {
+					continue
+				}
+				for _, s := range gd.Specs {
+					vs := s.(*ast.ValueSpec)
+					for i, name := range vs.Names {
+						var val ast.Expr
+						if i < len(vs.Values) {
+							val = vs.Values[i]
+						}
+						if isUint64KeyedMap(vs.Type) || isUint64KeyedMap(mapTypeOf(val)) {
+							maps[name.Name] = name
+						}
+					}
+				}
+			}
+			ast.Inspect(f, func(n ast.Node) bool {
+				call, ok := n.(*ast.CallExpr)
+				if !ok || len(call.Args) == 0 {
+					return true
+				}
+				if fn, ok := call.Fun.(*ast.Ident); ok && fn.Name == "delete" {
+					if id, ok := call.Args[0].(*ast.Ident); ok {
+						deleted[id.Name] = true
+					}
+				}
+				return true
+			})
+		}
+		for name, at := range maps {
+			if !deleted[name] {
+				t.Errorf("%s: package-level map %s is keyed by uint64 and nothing in %s deletes from it", p.at(at), name, p.rel)
+			}
+		}
+	}
+}
+
+// mapTypeOf is the map type a var's initialiser builds: make(map[...]...)
+// or a map composite literal; nil for anything else.
+func mapTypeOf(e ast.Expr) (t ast.Expr) {
+	switch v := e.(type) {
+	case *ast.CallExpr:
+		if fn, ok := v.Fun.(*ast.Ident); ok && fn.Name == "make" && len(v.Args) > 0 {
+			return v.Args[0]
+		}
+	case *ast.CompositeLit:
+		return v.Type
+	}
+	return nil
+}
+
+func isUint64KeyedMap(t ast.Expr) (keyed bool) {
+	mt, ok := t.(*ast.MapType)
+	if !ok {
+		return false
+	}
+	id, ok := mt.Key.(*ast.Ident)
+	return ok && id.Name == "uint64"
+}

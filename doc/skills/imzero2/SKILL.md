@@ -2055,6 +2055,15 @@ its knobs as a `Style` embedded in its `Input` (`boxenplot`, `ecdf`,
   `*State`, kept at one address) or inside the SR object with getters and
   idempotent setters. Never a package-level map. A table swap resets what
   indexed into it (`schemaview`).
+- **Retained state keyed by an id** is the exception the plotting lane and
+  the bindings make (`implot`'s per-scope state, `U64Edit`'s drafts): a
+  package-level map keyed by a widget or scope id. Each entry records the
+  frame it was last touched (`metrics.Current.FrameCounter`), and a cheap
+  sweep, at most every few thousand frames, drops entries no frame has
+  touched for long; an entry dropped and drawn again starts afresh.
+  Without that path a host whose widgets come and go grows the map for the
+  life of the process. `widgets/conformance` fails a package-level
+  `map[uint64]…` nothing in its package deletes from.
 - **Bound values** (`TextEdit`, `DragValue`) live in `State` or the object;
   programmatic writes go through `OverrideDatabinding*`.
 - **Options are a struct.** IM: fields on `Input`. SR: `Options` at `New`,
