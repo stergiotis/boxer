@@ -13,7 +13,7 @@ status: draft
 # Harness: what is left after the impediment work
 
 Last revised 2026-10-25. The impediments and their mitigations are in
-[plan002](../../plan002.md) (store and bodies), ADR-0319 (ids), ADR-0320
+[plan002](./plan002-journal-store.md) (store and bodies), ADR-0319 (ids), ADR-0320
 (vault), ADR-0322 (lifetime scope), and the two problem notes beside this
 file. Everything below is open.
 
