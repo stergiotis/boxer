@@ -54,55 +54,9 @@ git -C "$repo" rev-parse --verify --quiet "$base_ref^{commit}" >/dev/null ||
     { echo "gate: base $base_ref does not resolve; pass --base REF" >&2; exit 2; }
 base=$(git -C "$repo" merge-base "$sha" "$base_ref")
 
-common=$(readlink -f "$(git -C "$repo" rev-parse --git-common-dir)")
-key=$(printf '%s' "$common" | sha256sum | cut -c1-12)
-state="${TMPDIR:-/tmp}/boxer-gate-$(id -u)-$key"
-wt="$state/tree"
-marker="$state/created-by-gate"
-mkdir -p "$state"
-
-exec 9>"$state/lock"
-if ! flock -n 9; then
-    echo "gate: another gate run holds $state/lock; waiting"
-    flock 9
-fi
-
-registered() {
-    git -C "$repo" worktree list --porcelain | grep -qxF "worktree $wt"
-}
-
-remove_tree() {
-    cd "$repo"
-    if [ -f "$marker" ]; then
-        if registered; then
-            git -C "$repo" worktree remove --force "$wt" || true
-        elif [ -d "$wt" ]; then
-            rm -rf -- "$wt"
-        fi
-    fi
-    if registered; then
-        echo "gate: could not remove the worktree at $wt; remove it with: git worktree remove --force $wt" >&2
-        return 0
-    fi
-    rm -f "$marker"
-}
-
-if [ -e "$wt" ] || registered; then
-    if [ -f "$marker" ]; then
-        echo "gate: removing the worktree an interrupted run left at $wt"
-        remove_tree
-    fi
-    if [ -e "$wt" ] || registered; then
-        echo "gate: $wt exists and this script did not create it; remove it, then rerun" >&2
-        exit 2
-    fi
-fi
-
-trap remove_tree EXIT
-trap 'exit 130' INT TERM
-: >"$marker"
-git -C "$repo" worktree add --quiet --detach "$wt" "$sha"
-cd "$wt"
+# shellcheck source=commit_worktree.sh
+source "$here/commit_worktree.sh"
+enter_commit_worktree gate "$sha"
 tags="$(tr -d '\n' <tags)"
 
 echo "gate: $(git log -1 --format='%h %s' "$sha")"
