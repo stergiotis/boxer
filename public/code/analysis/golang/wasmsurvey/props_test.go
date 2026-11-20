@@ -83,7 +83,7 @@ func TestPropsRenderParseRoundTrip(t *testing.T) {
 			{Target: TargetWasmUnknown, Static: TierUnknown},
 		},
 	}
-	src, err := renderPropsFile(pr, packageprops.KindUnspecified)
+	src, err := renderPropsFile(pr, packageprops.KindUnspecified, packageprops.StabilityUnspecified)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -153,7 +153,7 @@ func TestRenderPropsFileKind(t *testing.T) {
 		Name:       "foo",
 		Targets:    []TargetVerdict{{Target: TargetWASI, Static: TierGreen}},
 	}
-	src, err := renderPropsFile(pr, packageprops.KindExample)
+	src, err := renderPropsFile(pr, packageprops.KindExample, packageprops.StabilityUnspecified)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -196,5 +196,74 @@ func TestRenderHarvestGoKind(t *testing.T) {
 		if strings.Contains(line, `"example.com/plain"`) && strings.Contains(line, "Kind:") {
 			t.Errorf("unspecified row must not emit Kind:\n%s", line)
 		}
+	}
+}
+
+// TestRenderPropsFileStability round-trips a declared tier through render and
+// parse, and checks harvest emits Stability only when set (ADR-0389).
+func TestRenderPropsFileStability(t *testing.T) {
+	pr := PackageReport{ImportPath: "example.com/foo", Name: "foo"}
+	src, err := renderPropsFile(pr, packageprops.KindTestSupport, packageprops.StabilityStable)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	path := filepath.Join(dir, propsFileName)
+	if err = os.WriteFile(path, src, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	fields, err := parsePropsFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := parseStabilityToken(fields["Stability"]); got != packageprops.StabilityStable {
+		t.Errorf("harvested Stability = %v, want stable", got)
+	}
+	if got := parseKindToken(fields["Kind"]); got != packageprops.KindTestSupport {
+		t.Errorf("harvested Kind = %v, want test-support", got)
+	}
+	for _, st := range packageprops.AllStabilities {
+		if got := parseStabilityToken(stabilityToken(st)); got != st {
+			t.Errorf("stability token round trip: %v -> %q -> %v", st, stabilityToken(st), got)
+		}
+	}
+
+	rows := []HarvestRow{
+		{ImportPath: "example.com/plain"},
+		{ImportPath: "example.com/st", Stability: packageprops.StabilityExperimental},
+	}
+	out, err := renderHarvestGo(rows, "proptable")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for line := range strings.SplitSeq(string(out), "\n") {
+		if strings.Contains(line, `"example.com/plain"`) && strings.Contains(line, "Stability:") {
+			t.Errorf("unspecified row must not emit Stability:\n%s", line)
+		}
+		if strings.Contains(line, `"example.com/st"`) && !strings.Contains(line, "Stability: packageprops.StabilityExperimental") {
+			t.Errorf("tiered row must carry its Stability:\n%s", line)
+		}
+	}
+}
+
+func TestPackageSynopsis(t *testing.T) {
+	dir := t.TempDir()
+	write := func(name string, body string) {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write("a.go", "package foo\n")
+	if got := packageSynopsis(dir); got != "" {
+		t.Errorf("no doc comment: synopsis = %q, want empty", got)
+	}
+	write("a_test.go", "// Package foo is documented only in a test file.\npackage foo\n")
+	if got := packageSynopsis(dir); got != "" {
+		t.Errorf("a test file's doc must not count: synopsis = %q", got)
+	}
+	write("b.go", "// Package foo does b. More text.\npackage foo\n")
+	write("doc.go", "// Package foo does things. A second sentence.\npackage foo\n")
+	if got := packageSynopsis(dir); got != "Package foo does things." {
+		t.Errorf("synopsis = %q, want the first sentence of doc.go", got)
 	}
 }

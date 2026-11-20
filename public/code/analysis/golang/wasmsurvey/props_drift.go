@@ -110,13 +110,7 @@ func HarvestTracked(ctx context.Context, root string, rootModule string) (rows [
 		if dir != "." {
 			importPath += "/" + dir
 		}
-		rows = append(rows, HarvestRow{
-			ImportPath:       importPath,
-			WASMWASI:         parseStateToken(fields["WASMWASI"]),
-			WASMJS:           parseStateToken(fields["WASMJS"]),
-			WASMFreestanding: parseStateToken(fields["WASMFreestanding"]),
-			Kind:             parseKindToken(fields["Kind"]),
-		})
+		rows = append(rows, harvestRow(importPath, filepath.Join(root, rel), fields))
 	}
 	sort.Slice(rows, func(i, j int) bool { return rows[i].ImportPath < rows[j].ImportPath })
 	return

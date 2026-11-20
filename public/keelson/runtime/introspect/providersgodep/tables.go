@@ -204,8 +204,11 @@ func packagePropsTable() *introspect.Table {
 		// How many of the three targets compile — the summary godepview sorts
 		// its WASM column by.
 		Int64("wasm_compiles", func(i int) int64 { return countCompiles(rows[i].Props) }).
-		// unspecified | demo | example | integration-test.
-		String("kind", func(i int) string { return rows[i].Props.Kind.String() })
+		// unspecified | demo | example | integration-test | test-support | tool.
+		String("kind", func(i int) string { return rows[i].Props.Kind.String() }).
+		// unspecified | stable | experimental | internal — the package's tier
+		// in the compatibility promise (ADR-0389).
+		String("stability", func(i int) string { return rows[i].Props.Stability.String() })
 }
 
 func countCompiles(p packageprops.Props) (n int64) {

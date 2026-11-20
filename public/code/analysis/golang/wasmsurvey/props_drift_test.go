@@ -76,3 +76,14 @@ func TestDriftAgainstTable_OrdersByImportPath(t *testing.T) {
 	assert.Equal(t, "a", got[0].ImportPath)
 	assert.Equal(t, "z", got[1].ImportPath)
 }
+
+// Stability, like Kind, has no oracle and is caught going stale in the table
+// only by the whole-Props comparison (ADR-0389).
+func TestDriftAgainstTable_CatchesStabilityOnly(t *testing.T) {
+	tbl := packageprops.Table{entry("a", packageprops.WASMCompiles)}
+	src := row("a", packageprops.WASMCompiles)
+	src.Stability = packageprops.StabilityStable
+	got := DriftAgainstTable(tbl, []HarvestRow{src})
+	require.Len(t, got, 1)
+	assert.Equal(t, DriftChanged, got[0].Kind)
+}

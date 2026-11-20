@@ -75,6 +75,10 @@ func kindToken(k packageprops.Kind) (tok string) {
 		return "KindExample"
 	case packageprops.KindIntegrationTest:
 		return "KindIntegrationTest"
+	case packageprops.KindTestSupport:
+		return "KindTestSupport"
+	case packageprops.KindTool:
+		return "KindTool"
 	default:
 		return "KindUnspecified"
 	}
@@ -89,8 +93,41 @@ func parseKindToken(tok string) (k packageprops.Kind) {
 		return packageprops.KindExample
 	case "KindIntegrationTest":
 		return packageprops.KindIntegrationTest
+	case "KindTestSupport":
+		return packageprops.KindTestSupport
+	case "KindTool":
+		return packageprops.KindTool
 	default:
 		return packageprops.KindUnspecified
+	}
+}
+
+// stabilityToken is the packageprops identifier for a stability tier, used in
+// generated source and to compare against harvested tokens (mirrors kindToken).
+func stabilityToken(st packageprops.StabilityE) (tok string) {
+	switch st {
+	case packageprops.StabilityStable:
+		return "StabilityStable"
+	case packageprops.StabilityExperimental:
+		return "StabilityExperimental"
+	case packageprops.StabilityInternal:
+		return "StabilityInternal"
+	default:
+		return "StabilityUnspecified"
+	}
+}
+
+// parseStabilityToken is the inverse of stabilityToken.
+func parseStabilityToken(tok string) (st packageprops.StabilityE) {
+	switch tok {
+	case "StabilityStable":
+		return packageprops.StabilityStable
+	case "StabilityExperimental":
+		return packageprops.StabilityExperimental
+	case "StabilityInternal":
+		return packageprops.StabilityInternal
+	default:
+		return packageprops.StabilityUnspecified
 	}
 }
 
@@ -183,20 +220,24 @@ func GenerateProps(ctx context.Context, opts Options, overwrite bool) (res Gener
 			res.Skipped++
 			continue // never clobber a curated declaration
 		}
-		// Kind is human-owned, not survey-computable: preserve a curated value
-		// across a re-seed, and only fall back to the directory-name heuristic
-		// when nothing is declared yet (ADR-0080 §SD3 hybrid lifecycle).
+		// Kind and Stability are human-owned, not survey-computable: preserve
+		// curated values across a re-seed, and only fall back to the
+		// directory-name heuristic for Kind when nothing is declared yet
+		// (ADR-0080 §SD3 hybrid lifecycle). Stability has no heuristic: a
+		// promise is never seeded (ADR-0389).
 		kind := packageprops.KindUnspecified
+		stability := packageprops.StabilityUnspecified
 		if exists {
 			if fields, e := parsePropsFile(path); e == nil {
 				kind = parseKindToken(fields["Kind"])
+				stability = parseStabilityToken(fields["Stability"])
 			}
 		}
 		if kind == packageprops.KindUnspecified {
 			kind = heuristicKind(pr)
 		}
 		var src []byte
-		src, err = renderPropsFile(pr, kind)
+		src, err = renderPropsFile(pr, kind, stability)
 		if err != nil {
 			return
 		}
@@ -217,8 +258,8 @@ func GenerateProps(ctx context.Context, opts Options, overwrite bool) (res Gener
 // renderPropsFile emits the gofmt-clean source of a package's props file. kind
 // is the package's declared role (KindUnspecified for ordinary code, in which
 // case no Kind field is emitted so the common case stays terse and the zero
-// value keeps asserting nothing).
-func renderPropsFile(pr PackageReport, kind packageprops.Kind) (src []byte, err error) {
+// value keeps asserting nothing); stability is emitted on the same terms.
+func renderPropsFile(pr PackageReport, kind packageprops.Kind, stability packageprops.StabilityE) (src []byte, err error) {
 	var b strings.Builder
 	fmt.Fprintf(&b, "package %s\n\n", pr.Name)
 	fmt.Fprintf(&b, "import %q\n\n", propsImportPath)
@@ -235,6 +276,9 @@ func renderPropsFile(pr PackageReport, kind packageprops.Kind) (src []byte, err 
 	fmt.Fprintf(&b, "WASMFreestanding: packageprops.%s,\n", stateToken(stateFor(pr, TargetWasmUnknown)))
 	if kind != packageprops.KindUnspecified {
 		fmt.Fprintf(&b, "Kind: packageprops.%s,\n", kindToken(kind))
+	}
+	if stability != packageprops.StabilityUnspecified {
+		fmt.Fprintf(&b, "Stability: packageprops.%s,\n", stabilityToken(stability))
 	}
 	b.WriteString("}\n\n")
 	// Self-register from init so packageprops.All() enumerates this package
@@ -269,6 +313,9 @@ func renderHarvestGo(rows []HarvestRow, pkgName string) (src []byte, err error) 
 		if r.Kind != packageprops.KindUnspecified {
 			props += fmt.Sprintf(", Kind: packageprops.%s", kindToken(r.Kind))
 		}
+		if r.Stability != packageprops.StabilityUnspecified {
+			props += fmt.Sprintf(", Stability: packageprops.%s", stabilityToken(r.Stability))
+		}
 		fmt.Fprintf(&b, "{ImportPath: %q, Props: packageprops.Props{%s}},\n", r.ImportPath, props)
 	}
 	b.WriteString("}\n")
@@ -286,6 +333,11 @@ type HarvestRow struct {
 	WASMJS           packageprops.WASMState
 	WASMFreestanding packageprops.WASMState
 	Kind             packageprops.Kind
+	Stability        packageprops.StabilityE
+	// Synopsis is the first sentence of the package's doc comment, empty when
+	// the package has none. It is read beside the declaration so the surface
+	// document and the Stable-needs-a-doc rule share one parse (ADR-0389).
+	Synopsis string
 }
 
 // Props is the row's declaration as the vocabulary type, so a harvested row
@@ -298,6 +350,21 @@ func (inst HarvestRow) Props() (p packageprops.Props) {
 		WASMJS:           inst.WASMJS,
 		WASMFreestanding: inst.WASMFreestanding,
 		Kind:             inst.Kind,
+		Stability:        inst.Stability,
+	}
+}
+
+// harvestRow builds a row from a parsed declaration and reads the package's
+// doc synopsis from the declaration's directory.
+func harvestRow(importPath string, propsPath string, fields map[string]string) (r HarvestRow) {
+	return HarvestRow{
+		ImportPath:       importPath,
+		WASMWASI:         parseStateToken(fields["WASMWASI"]),
+		WASMJS:           parseStateToken(fields["WASMJS"]),
+		WASMFreestanding: parseStateToken(fields["WASMFreestanding"]),
+		Kind:             parseKindToken(fields["Kind"]),
+		Stability:        parseStabilityToken(fields["Stability"]),
+		Synopsis:         packageSynopsis(filepath.Dir(propsPath)),
 	}
 }
 
@@ -326,13 +393,7 @@ func HarvestProps(root string, rootModule string) (rows []HarvestRow, err error)
 		if e != nil {
 			return nil
 		}
-		rows = append(rows, HarvestRow{
-			ImportPath:       rootModule + "/" + filepath.ToSlash(rel),
-			WASMWASI:         parseStateToken(fields["WASMWASI"]),
-			WASMJS:           parseStateToken(fields["WASMJS"]),
-			WASMFreestanding: parseStateToken(fields["WASMFreestanding"]),
-			Kind:             parseKindToken(fields["Kind"]),
-		})
+		rows = append(rows, harvestRow(rootModule+"/"+filepath.ToSlash(rel), path, fields))
 		return nil
 	})
 	if err != nil {

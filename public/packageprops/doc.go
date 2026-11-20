@@ -20,12 +20,20 @@
 // table by `props harvest`.
 //
 // Props grows over time (ADR-0080 SD4). Besides the WASM* verdicts it carries a
-// Kind classifying the package's primary role — KindDemo, KindExample, or
-// KindIntegrationTest — for the packages that are not ordinary library code;
-// the zero KindUnspecified asserts nothing. Kind is purely human-curated (no
-// survey computes it), so `props verify` does not reconcile it,
-// though `props generate` seeds the obvious demo/example cases from directory
-// name.
+// Kind classifying the package's primary role — KindDemo, KindExample,
+// KindIntegrationTest, KindTestSupport or KindTool — for the packages that are
+// not ordinary library code; the zero KindUnspecified asserts nothing. Kind is
+// purely human-curated (no survey computes it), so `props verify` does not
+// reconcile it, though `props generate` seeds the obvious demo/example cases
+// from directory name.
+//
+// Stability is the package's tier in the compatibility promise (ADR-0389,
+// VERSIONING.md): Stable, Experimental or Internal, with the zero
+// StabilityUnspecified outside the promise. It is curated intent too; `props
+// verify` holds a Stable package to its side of the promise (no import of a
+// less stable or non-library package of this module, a package doc comment).
+// This package cannot carry a declaration of its own (it would import itself),
+// so its tier is stated in ADR-0389 instead.
 //
 // The tooling is the `props` group of the wasmsurvey command, four levels down
 // the CLI:

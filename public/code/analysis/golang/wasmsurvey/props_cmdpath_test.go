@@ -22,7 +22,7 @@ const cmdPathPrefix = "boxer code analysis golang wasmsurvey"
 // because the command is four levels down. The comment is the only actionable
 // line in a seeded file, so a short form there is worse than no form.
 func TestSeededCommentNamesAReachablePath(t *testing.T) {
-	src, err := renderPropsFile(PackageReport{Name: "x", ImportPath: "example.com/x"}, packageprops.KindUnspecified)
+	src, err := renderPropsFile(PackageReport{Name: "x", ImportPath: "example.com/x"}, packageprops.KindUnspecified, packageprops.StabilityUnspecified)
 	if err != nil {
 		t.Fatalf("render: %v", err)
 	}
