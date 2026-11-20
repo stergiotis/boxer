@@ -238,4 +238,10 @@ func TestToGoCodeCorpusParseable(t *testing.T) {
 		})
 	}
 	t.Logf("corpus GoCode: %d parseable, %d skipped (of %d)", passed, skipped, len(entries))
+	// Skips pass, so a regression that rejected every corpus entry would pass
+	// too. The ceiling is the count when it was pinned; it only goes down.
+	const maxSkipped = 0
+	if skipped > maxSkipped {
+		t.Errorf("%d corpus entries skipped, above the pinned %d: a skip here is an entry the canonicalization, ParseCanonical or ConvertCSTToAST rejected", skipped, maxSkipped)
+	}
 }

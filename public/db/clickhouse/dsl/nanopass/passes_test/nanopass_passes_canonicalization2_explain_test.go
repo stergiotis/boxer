@@ -330,6 +330,15 @@ func TestExplainSyntaxCorpus(t *testing.T) {
 	}
 
 	t.Logf("EXPLAIN corpus: %d passed, %d skipped, %d failed (of %d)", passed, skipped, failed, len(entries))
+	// Skips pass, so a regression that rejected every corpus entry would pass
+	// too. The ceiling is the count when it was pinned; it only goes down.
+	// The one skip is 053_set_param_slots, a SET followed by a SELECT, which
+	// EXPLAIN SYNTAX does not take as one statement (counted with clickhouse
+	// local 26.9 over the schema setupTestSchema creates).
+	const maxSkipped = 1
+	if skipped > maxSkipped {
+		t.Errorf("%d corpus entries skipped, above the pinned %d: a skip here is an entry the server could not EXPLAIN as written, or one the pipeline rejected", skipped, maxSkipped)
+	}
 }
 
 // ============================================================================

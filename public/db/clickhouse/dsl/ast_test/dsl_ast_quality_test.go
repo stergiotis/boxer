@@ -390,6 +390,12 @@ func TestCorpusRoundTrip(t *testing.T) {
 		})
 	}
 	t.Logf("corpus round-trip: %d passed, %d skipped (of %d)", passed, skipped, len(entries))
+	// Skips pass, so a regression that rejected every corpus entry would pass
+	// too. The ceiling is the count when it was pinned; it only goes down.
+	const maxSkipped = 0
+	if skipped > maxSkipped {
+		t.Errorf("%d corpus entries skipped, above the pinned %d: a skip here is an entry the pipeline rejected", skipped, maxSkipped)
+	}
 }
 
 // ============================================================================
