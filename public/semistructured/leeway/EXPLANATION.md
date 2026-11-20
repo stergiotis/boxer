@@ -292,6 +292,8 @@ read access and complete table-level DDL clauses are still partial.
   [`github.com/stergiotis/boxer/public/semistructured/leeway/mappingplan`](mappingplan/),
   [`github.com/stergiotis/boxer/public/semistructured/leeway/marshall/go/marshallgen`](marshall/go/marshallgen/),
   [`github.com/stergiotis/boxer/public/semistructured/leeway/marshall/clickhouse/readback`](marshall/clickhouse/readback/)
+- A first table end to end, in a module of your own:
+  [the leeway first-table tutorial](../../../doc/tutorials/leeway-first-table.md)
 - Decisions:
   [ADR-0042: Keelson leeway codec SoA generator](../../../doc/adr/0042-keelson-leeway-codec-soa-generator.md),
   [ADR-0066: leeway DQL ClickHouse read-back generator](../../../doc/adr/0066-leeway-dql-clickhouse-readback-generator.md),
