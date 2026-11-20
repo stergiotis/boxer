@@ -912,9 +912,9 @@ A notebook carries `notebook: <n>` in its frontmatter
 (`mdnotebook.FormatKey`, `mdnotebook.FormatVersion`, 1). Collection writes
 it first in the block when absent; a notebook without it reads as format 1,
 so every notebook sealed before this reads unchanged. `mdnotebook.Read`
-refuses a format above the one it reads, saying "written by a newer boxer
-(format N; this build reads up to M)", rather than reading the text by
-rules it was not written under. A non-numeric value is refused as well.
+refuses a format above the one it reads — "written by a newer boxer", with
+the notebook's format and the newest this build reads as the error's
+fields — rather than reading the text by rules it was not written under. A non-numeric value is refused as well.
 
 The format moves only when an older reader would misread a newer text — a
 key it would ignore while that key changes what the text means. A key an

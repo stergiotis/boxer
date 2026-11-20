@@ -227,7 +227,7 @@ func checkFormat(front []byte) (err error) {
 	}
 	if n > FormatVersion {
 		return eb.Build().Int("format", n).Int("reads", FormatVersion).
-			Errorf("the document was written by a newer boxer (format %d; this build reads up to %d)", n, FormatVersion)
+			Errorf("the document was written by a newer boxer, in a format this build does not read")
 	}
 	return
 }

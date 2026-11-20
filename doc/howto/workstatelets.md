@@ -110,8 +110,8 @@ from the menu.
   **Cause:** it was captured while showing an ad-hoc dataset, which lasts as
   long as the window that published it.
   **Fix:** capture windows that read durable data, or republish the dataset.
-- **Symptom:** "written by a newer boxer (format N; this build reads up to
-  M)".
+- **Symptom:** "the document was written by a newer boxer", with `format`
+  and `reads` in the logged error.
   **Cause:** the document's `workstatelet` key names a format this build does
   not read. A saved document carries `workstatelet: 1`; a document without
   the key is format 1.

@@ -484,7 +484,7 @@ func probeLambdaSupport(ctx context.Context, conn Conn) (err error) {
 	// install replaces it.
 	_ = conn.Exec(ctx, "DROP FUNCTION IF EXISTS "+featureProbeName)
 	if e != nil {
-		err = eb.Build().Str("floor", chversion.Floor).Errorf("server lacks lambda-parameter SQL UDF support (boxer needs ClickHouse %s or later): %w", chversion.Floor, e)
+		err = eb.Build().Str("floor", chversion.Floor).Errorf("server lacks lambda-parameter SQL UDF support, which the ClickHouse floor boxer runs against provides: %w", e)
 	}
 	return
 }

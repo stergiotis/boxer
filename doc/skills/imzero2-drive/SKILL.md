@@ -179,7 +179,7 @@ type: reference
 audience: contributor
 status: draft
 scene:
-  format: 1                    # optional; absent is 1, a newer one is refused with both numbers
+  format: 1                    # optional; absent is 1, a newer one is refused
   launch: play                 # the app alias
   size: 1600x1000
   env: {BOXER_PLAY_FOCUS_TABLE: "1", BOXER_PLAY_AUTORUN: "1"}

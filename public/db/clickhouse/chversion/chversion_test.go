@@ -40,7 +40,6 @@ func TestCheck(t *testing.T) {
 	require.NoError(t, chversion.Check("server", "26.8.1.1"))
 	require.NoError(t, chversion.Check("server", "27.1"))
 	err := chversion.Check("server", "26.7.3.4")
-	require.ErrorContains(t, err, chversion.Floor)
-	require.ErrorContains(t, err, "X-ClickHouse-Format")
+	require.ErrorContains(t, err, "below the floor")
 	require.Error(t, chversion.Check("server", "garbage"))
 }

@@ -456,7 +456,7 @@ func checkMinVersion(p *Program, out string) (version string, err error) {
 	version = joinDotted(got)
 	if compareDotted(got, firstDottedVersion(p.MinVersion)) < 0 {
 		err = eb.Build().Str("name", p.Name).Str("version", version).Str("floor", p.MinVersion).Str("needs", p.MinVersionNeeds).
-			Errorf("extbin: %s %s is below the floor boxer runs against (%s): %s", p.Name, version, p.MinVersion, p.MinVersionNeeds)
+			Errorf("extbin: the program's version is below the floor boxer runs against")
 	}
 	return
 }

@@ -8,7 +8,6 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/stergiotis/boxer/public/db/clickhouse/chversion"
 	"github.com/stergiotis/boxer/public/keelson/data/chclient"
 )
 
@@ -35,5 +34,5 @@ func TestConnect_RefusesAServerBelowTheFloor(t *testing.T) {
 	defer srv.Close()
 	_, err := Connect(context.Background(), chclient.Config{URL: srv.URL + "/"})
 	require.Error(t, err)
-	require.Contains(t, err.Error(), chversion.Floor)
+	require.Contains(t, err.Error(), "below the floor")
 }

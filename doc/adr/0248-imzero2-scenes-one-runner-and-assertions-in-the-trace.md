@@ -392,8 +392,9 @@ No decision changes.
 The `scene:` spec takes an optional `format` (`scene.FormatVersion`, 1);
 absent reads as 1, so no committed scene changes. The format is read on its
 own before the strict decode of the spec, so a scene written for a newer
-build is refused with "written for a newer boxer (format N; this build reads
-up to M)" rather than with "field not found" on its first new key. The
+build is refused with "written for a newer boxer", carrying both format
+numbers as the error's fields, rather than with "field not found" on its
+first new key. The
 format moves when a scene written for a newer build would not run, or would
 run differently, under an older one; a key added inside the spec is such a
 change, because the strict decode refuses it.

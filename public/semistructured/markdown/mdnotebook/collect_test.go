@@ -331,7 +331,7 @@ func TestReadRefusesANewerFormat(t *testing.T) {
 	_, err = mdnotebook.Read([]byte("---\ntitle: no key is format 1\n---\n\n# T\n"))
 	require.NoError(t, err)
 	_, err = mdnotebook.Read([]byte("---\nnotebook: 2\n---\n\n# T\n"))
-	require.ErrorContains(t, err, "written by a newer boxer (format 2; this build reads up to 1)")
+	require.ErrorContains(t, err, "written by a newer boxer")
 	_, err = mdnotebook.Read([]byte("---\nnotebook: two\n---\n\n# T\n"))
 	require.Error(t, err)
 }

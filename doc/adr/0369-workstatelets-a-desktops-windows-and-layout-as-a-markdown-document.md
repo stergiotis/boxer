@@ -260,7 +260,8 @@ A document carries `workstatelet: <n>` (`workstatelet.FormatKey`,
 `FormatVersion`, 1); `Compose` writes it first and a document without it is
 format 1. Parsing stays strict, but the format is read on its own before the
 strict decode, so a document from a newer build is refused with "written by
-a newer boxer (format N; this build reads up to M)" instead of the decoder's
+a newer boxer", carrying both format numbers as the error's fields, instead
+of the decoder's
 "field not found" on whichever new key it meets first. The format moves when
 a newer document would not read, or would read wrongly, under an older
 build.

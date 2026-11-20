@@ -125,8 +125,8 @@ func Check(what string, reported string) (err error) {
 		return
 	}
 	if v.Compare(FloorVersion()) < 0 {
-		err = eb.Build().Str("source", what).Str("version", v.String()).Str("floor", Floor).
-			Errorf("ClickHouse %s is below the floor boxer runs against (%s): %s", v.String(), Floor, FloorFeature)
+		err = eb.Build().Str("source", what).Str("version", v.String()).Str("floor", Floor).Str("needs", FloorFeature).
+			Errorf("the ClickHouse release is below the floor boxer runs against")
 	}
 	return
 }

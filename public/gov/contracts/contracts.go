@@ -39,7 +39,6 @@ import (
 	cli "github.com/urfave/cli/v3"
 
 	"github.com/stergiotis/boxer/public/config/env"
-	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/lwsqlsurface"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
@@ -210,7 +209,7 @@ func collectVersionConsts(path string, dir string, snap Snapshot) (err error) {
 	fset := token.NewFileSet()
 	f, err := parser.ParseFile(fset, path, src, parser.SkipObjectResolution)
 	if err != nil {
-		return eh.Errorf("parse %s: %w", path, err)
+		return eb.Build().Str("path", path).Errorf("parse: %w", err)
 	}
 	for _, decl := range f.Decls {
 		gd, ok := decl.(*ast.GenDecl)

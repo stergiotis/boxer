@@ -113,7 +113,7 @@ func TestParseDocFormat(t *testing.T) {
 	assert.Equal(t, 1, doc.Spec.Format)
 
 	_, err = ParseDoc("x/10_table.scene.md", with("  format: 2\n  rewind: true\n"))
-	require.ErrorContains(t, err, "written for a newer boxer (format 2; this build reads up to 1)")
+	require.ErrorContains(t, err, "written for a newer boxer")
 
 	_, err = ParseDoc("x/10_table.scene.md", with("  format: two\n"))
 	require.Error(t, err)

@@ -284,7 +284,7 @@ func TestParseFormat(t *testing.T) {
 
 	newer := strings.Replace(sampleDoc, "---\n", "---\nworkstatelet: 2\nlaunch: play\n", 1)
 	_, err = Parse("trail-review", []byte(newer), nil)
-	require.ErrorContains(t, err, "written by a newer boxer (format 2; this build reads up to 1)")
+	require.ErrorContains(t, err, "written by a newer boxer")
 
 	_, err = Parse("trail-review", []byte(strings.Replace(sampleDoc, "---\n", "---\nworkstatelet: x\n", 1)), nil)
 	require.Error(t, err)
