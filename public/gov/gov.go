@@ -7,6 +7,7 @@ import (
 	"github.com/stergiotis/boxer/public/gov/changelogindex"
 	"github.com/stergiotis/boxer/public/gov/codelint"
 	"github.com/stergiotis/boxer/public/gov/commitdigest"
+	"github.com/stergiotis/boxer/public/gov/contracts"
 	"github.com/stergiotis/boxer/public/gov/doclint"
 	"github.com/stergiotis/boxer/public/gov/filename"
 	"github.com/stergiotis/boxer/public/gov/gate"
@@ -37,6 +38,7 @@ func NewCliCommand() *cli.Command {
 			llmtag.NewCliCommand(),
 			licensegate.NewCliCommand(),
 			cargolicenses.NewCliCommand(),
+			contracts.NewCliCommand(),
 		),
 	}
 }
