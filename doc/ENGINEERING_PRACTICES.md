@@ -26,14 +26,17 @@ GitHub Actions workflows live under
 [.github/workflows](../.github/workflows). Each workflow handles one concern;
 none combine multiple gates.
 
-**Nothing runs on an ordinary push or a pull request.** Every workflow runs on
-manual dispatch; most also run on a `v*` tag, and the Trigger column records
-what each adds to dispatch. Local runs of the entry-point scripts are therefore
-the working gate, the nightly run is the gate on `main`, and the tag-triggered
-workflows with [scripts/ci/release.sh](../scripts/ci/release.sh) are the gate at
-a release. That follows from the AI-assisted, direct-to-`main` workflow §10
-records, and it is the assumption to revisit first if the repo ever takes
-external contributions.
+**Nothing runs on an ordinary push or a pull request, and no new recurring work
+runs on a hosted runner.** Every workflow runs on manual dispatch; most also run
+on a `v*` tag, and the Trigger column records what each adds to dispatch. The
+recurring checks are scripts on the workstation instead
+([ADR-0390](./adr/0390-a-gate-that-tests-the-commit-and-a-ref-that-names-the-last-green-main.md)):
+the local gate before a push, a nightly run of `main` and a weekly fuzz run,
+scheduled by user timer units, plus
+[scripts/ci/release.sh](../scripts/ci/release.sh) beside the tag-triggered
+workflows at a release. That follows from the AI-assisted, direct-to-`main`
+workflow §10 records and from keeping runner cost low; it is the assumption to
+revisit first if the repo ever takes external contributions.
 
 **The local gate tests a commit, not the working tree**
 ([ADR-0390](./adr/0390-a-gate-that-tests-the-commit-and-a-ref-that-names-the-last-green-main.md)).
@@ -55,17 +58,46 @@ push, once a clone opts in:
 git config core.hooksPath scripts/dev/hooks   # git push --no-verify skips it once
 ```
 
-**`refs/heads/last-green` names the newest `main` commit the nightly run passed.**
-The nightly workflow moves it forward only — through the refs API with
-`force=false` — and only when every job passed, so a consumer that wants a
-commit something has tested can pin it.
+**The nightly run is a local script, and so is `last-green`.**
+[scripts/ci/nightly.sh](../scripts/ci/nightly.sh) fetches and tests
+`origin/main` (or a given ref with `--no-fetch`) in a worktree of the commit:
+the module checks, the default lane with the drift check and a cross-package
+coverage profile and table, the `binary_log` lane, the Go lint steps with
+`idl-check`, the integration lane against a ClickHouse server, `gobench.sh
+smoke`, and the viewer and watermark crates. `--only` runs a subset. A step that
+fails, reports a skipped part, or cannot start fails the run; the integration
+lane uses a server already answering on `127.0.0.1:8123` and starts the pinned
+throwaway one only under `--start-clickhouse`, so without either it is a
+failure. On a full green run the script fast-forwards the local
+`refs/heads/last-green` to the tested commit — never forced, never backwards —
+and prints `git push origin last-green`; publishing it is a person's step. Each
+run writes its summary, logs and coverage table under
+`${XDG_STATE_HOME:-~/.local/state}/boxer/nightly/` and exits non-zero on
+failure. [scripts/ci/fuzz_weekly.sh](../scripts/ci/fuzz_weekly.sh) runs every
+fuzz target for a bounded time in the same way and copies failing inputs there.
+
+[scripts/dev/systemd/](../scripts/dev/systemd/) holds example user units for
+both, at the lowest CPU and I/O priority with `GOMAXPROCS` bounded, so a
+workstation in use stays usable. After setting the checkout path in the two
+`.service` files and copying the four files to `~/.config/systemd/user/`:
+
+```sh
+systemctl --user daemon-reload
+systemctl --user enable --now boxer-nightly.timer boxer-fuzz.timer
+loginctl enable-linger   # only if the timers should fire while logged out
+```
+
+The crontab equivalent, from the checkout:
+
+```cron
+17 2 * * *  cd "$HOME/src/boxer" && nice -n 19 ionice -c 3 bash -lc ./scripts/ci/nightly.sh
+23 4 * * 6  cd "$HOME/src/boxer" && nice -n 19 ionice -c 3 bash -lc ./scripts/ci/fuzz_weekly.sh
+```
 
 | Workflow | Trigger adds | Entry point | Purpose |
 |---|---|---|---|
 | [lint.yaml](../.github/workflows/lint.yaml) | `v*` tag | [scripts/ci/lint.sh](../scripts/ci/lint.sh) | `gofmt`, `go vet`, staticcheck, errcheck, doclint, the IDL check, h3 wasm parity |
 | [test.yaml](../.github/workflows/test.yaml) | `v*` tag | [scripts/ci/gotest.sh](../scripts/ci/gotest.sh) `--check-drift` | race + cover + JSON tests, tparse-formatted; post-test drift gate (generator tests rewrite in place, so the tree must end clean) |
-| [nightly.yaml](../.github/workflows/nightly.yaml) | daily cron (02:17 UTC), no tag | the test, lint, integration and bench scripts | the default lane with a cross-package coverage profile (artifact + per-package table), the `binary_log` lane, the Go lint steps, the default and integration lanes against a pinned ClickHouse server, `gobench.sh smoke`, the viewer and watermark crates; advances `last-green` |
-| [fuzz.yaml](../.github/workflows/fuzz.yaml) | weekly cron (Sat 04:23 UTC), no tag | [scripts/ci/gofuzz.sh](../scripts/ci/gofuzz.sh) | every fuzz target for a bounded time; uploads failing inputs and logs |
 | [vuln.yaml](../.github/workflows/vuln.yaml) | `v*` tag | [scripts/ci/govuln.sh](../scripts/ci/govuln.sh) | `govulncheck -show verbose ./...`; OSV check of the Rust lockfiles |
 | [licenses.yaml](../.github/workflows/licenses.yaml) | `v*` tag | [scripts/ci/license_gate.sh](../scripts/ci/license_gate.sh) | CycloneDX SBOM → in-tree policy gate |
 | [codestat.yaml](../.github/workflows/codestat.yaml) | `v*` tag, weekly cron (Mon 06:00 UTC) | inline | `scc` line counts split human vs. LLM, dependency inventory, authorship attribution |
@@ -222,7 +254,7 @@ go test -race -json -short -cover -tags "$tags" ./... \
 place, so a dirty tree is committed generated code that drifted from its
 generator. It is only meaningful on a clean checkout. `--coverprofile FILE`
 swaps `-cover` for `-coverpkg=./... -coverprofile=FILE`, one profile across
-packages; the nightly run uploads it with a per-package table from
+packages; the nightly run keeps it with a per-package table from
 [scripts/ci/cover_table.sh](../scripts/ci/cover_table.sh).
 
 - Generated code is compared with its generator by tests, so the drift shows up
@@ -250,12 +282,14 @@ packages; the nightly run uploads it with a per-package table from
     | go tool tparse -progress -trimpath auto -slow 20
   ```
 
-  The nightly workflow runs it, and the default lane a second time, against a
-  throwaway ClickHouse server from
+  The nightly run and `release.sh` run it, and the default lane a second time,
+  against the ClickHouse server answering on `127.0.0.1:8123` — the
+  workstation's own, which the probe-and-skip tests of the default lane reach
+  in any case — or, when none answers and the caller allows it, a throwaway
+  one from
   [scripts/ci/clickhouse_server.sh](../scripts/ci/clickhouse_server.sh): the
-  26.8 LTS static build, pinned by version and SHA-256, on `127.0.0.1:8123`
-  with `query_log` on and a passwordless default user. The same binary serves
-  `clickhouse local`.
+  26.8 LTS static build, pinned by version and SHA-256, with `query_log` on and
+  a passwordless default user. The same binary serves `clickhouse local`.
 
   The default `go test ./...` neither compiles nor runs them. A test belongs in
   the lane for either of two reasons:
@@ -299,9 +333,9 @@ packages; the nightly run uploads it with a per-package table from
   package and one target per invocation) for `BOXER_FUZZ_TIME` each, and
   narrows by package pattern or `BOXER_FUZZ_MATCH`. A failing input is left in
   the package's `testdata/fuzz/` and listed at the end, so it becomes a
-  permanent regression seed when committed with the fix. The weekly
-  [fuzz workflow](../.github/workflows/fuzz.yaml) runs it at 30 s per target and
-  uploads failing inputs as an artifact.
+  permanent regression seed when committed with the fix. The weekly local run,
+  [scripts/ci/fuzz_weekly.sh](../scripts/ci/fuzz_weekly.sh), runs it at 30 s
+  per target in a worktree and copies failing inputs to its state directory.
 
   A fuzz oracle has to hold on every input the fuzzer can reach, which a
   tolerance chosen for friendly table data usually does not: state the input
@@ -549,19 +583,23 @@ into this repository's CI:
   [lint.sh](../scripts/ci/lint.sh)'s step list: the step itself,
   [scripts/ci/lint/nilaway.sh](../scripts/ci/lint/nilaway.sh), runs, and the
   `dev/` script preserves the wider local runner over `./...`.
-- No CI on push or pull request. The nightly run tests `main` once a day and
-  the local gate is opt-in, so a broken commit can sit on `main` until the next
-  nightly run reports it; `last-green` is what a consumer pins to avoid one.
+- No CI on push or pull request, and no scheduled workflow added for tests,
+  lint, integration, coverage, benchmarks or fuzzing: those run on the
+  workstation, where runner cost is nil. The nightly run tests `main` once a
+  day only when a workstation runs the timer, and the local gate is opt-in, so
+  a broken commit can sit on `main` until the next nightly run reports it;
+  `last-green`, pushed by hand after a green run, is what a consumer pins to
+  avoid one. Nothing on GitHub checks that it was pushed.
 - No `CODEOWNERS`, PR template, or branch-protection automation. The
   documentation standard records an explicit "AI-assisted, direct-to-`main`"
   workflow assumption
   ([§4 of DOCUMENTATION_STANDARD.md](./DOCUMENTATION_STANDARD.md#front-matter-and-document-state-markdown-only)).
 - No release automation (`goreleaser` or equivalent) and no container build
   pipeline: `release.sh` checks a candidate, and a person tags it.
-- Fuzzing is scheduled weekly at a short budget per target; much of the parser
-  and codec surface has no fuzz target.
-- Coverage is uploaded as a workflow artifact, not to a coverage service
-  (Codecov, Coveralls, etc.).
+- Fuzzing runs weekly on the workstation at a short budget per target; much of
+  the parser and codec surface has no fuzz target.
+- Coverage is kept in the nightly run's local state directory, not uploaded
+  anywhere (Codecov, Coveralls, or a workflow artifact).
 
 ## 11. Summary
 
