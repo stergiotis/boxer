@@ -88,13 +88,35 @@ const PREFIX_VIDEO = 0x01, PREFIX_INPUT = 0x02, PREFIX_SESSION = 0x03, PREFIX_ME
 // (A prefix mount must serve the page with a trailing slash — the web's
 // standard for a directory — so the relative `ws` resolves as its sibling;
 // this is why proxies redirect /app to /app/.) A `?ws=` query parameter still
-// overrides the endpoint outright for unusual deployments.
+// overrides the endpoint, within this page's own origin (see sameOriginParam).
 function defaultWsUrl() {
   const u = new URL("ws", location.href); // sibling of the page; drops any query
   u.protocol = location.protocol === "https:" ? "wss:" : "ws:";
   return u.href;
 }
-const WS_URL = new URLSearchParams(location.search).get("ws") || defaultWsUrl();
+// `?ws=` and `?worker=` may only name this page's own origin. The socket
+// carries input and a worker runs with this page's authority, so a link that
+// pointed either at another site would hand that site the session, or this
+// page. A relative value resolves against the page; one that lands on
+// another host is refused, the reason shown in the status bar, and the page
+// does not connect. `ws` maps a page-relative http(s) URL to ws(s).
+let paramRefusal = "";
+function sameOriginParam(name, isWs) {
+  const raw = new URLSearchParams(location.search).get(name);
+  if (raw === null || raw === "") return null;
+  let u = null;
+  try { u = new URL(raw, location.href); } catch (_) { u = null; }
+  if (u && isWs && (u.protocol === "http:" || u.protocol === "https:")) {
+    u.protocol = u.protocol === "https:" ? "wss:" : "ws:";
+  }
+  const schemeOk = u && (isWs ? (u.protocol === "ws:" || u.protocol === "wss:") : u.protocol === location.protocol);
+  if (!schemeOk || u.host !== location.host) {
+    paramRefusal = "refusing ?" + name + "=" + raw + " — it must name this page's own origin (" + location.host + ")";
+    return null;
+  }
+  return u.href;
+}
+const WS_URL = sameOriginParam("ws", true) || defaultWsUrl();
 // ?worker=<module url>: the mesh comes from a Web Worker on this page instead
 // of a socket — the worker runs the Go application and the Rust host as wasm
 // modules (ADR-0077; the keelson-wasm-frame-cost trial's M2 demonstrator)
@@ -102,7 +124,7 @@ const WS_URL = new URLSearchParams(location.search).get("ws") || defaultWsUrl();
 // painter, the hello and the input path are the same; the roster is this
 // one viewer. Input reaches the worker between its ticks, so it must yield
 // (the reactor build does; a module that loops in main never does).
-const WORKER_URL = new URLSearchParams(location.search).get("worker");
+const WORKER_URL = sameOriginParam("worker", false);
 
 const statusBar = document.getElementById("status");
 const statusEl = document.getElementById("statusmsg");
@@ -1435,7 +1457,9 @@ function resetCursor() {
 
 const HAS_WEBCODECS = "VideoDecoder" in window;
 const HAS_GL2 = (() => { try { return !!document.createElement("canvas").getContext("webgl2"); } catch (_) { return false; } })();
-if (!HAS_WEBCODECS && !HAS_GL2) {
+if (paramRefusal) {
+  statusEl.textContent = paramRefusal;
+} else if (!HAS_WEBCODECS && !HAS_GL2) {
   statusEl.textContent = "neither WebCodecs nor WebGL2 is available in this browser (need Chromium, Safari 16.4+, or Firefox 130+)";
 } else {
   connect();
