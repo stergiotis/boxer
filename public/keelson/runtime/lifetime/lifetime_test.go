@@ -142,10 +142,7 @@ func TestAPanicInGoOrAHookDoesNotStopTheDrain(t *testing.T) {
 	var hooks atomic.Int32
 	s.OnDrained(func(context.Context) { panic("first hook") })
 	s.OnDrained(func(context.Context) { hooks.Add(1) })
-	require.True(t, s.Go(func(context.Context) {
-		var m map[string]int
-		m["x"] = 1
-	}))
+	require.True(t, s.Go(func(context.Context) { panic("work") }))
 	require.NoError(t, s.Drain(contextWithTimeout(t)))
 	assert.Equal(t, int32(1), hooks.Load(), "the hook after the panicking one ran")
 }
