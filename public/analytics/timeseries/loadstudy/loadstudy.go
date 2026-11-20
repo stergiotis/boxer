@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/stergiotis/boxer/public/config/env"
 	"github.com/stergiotis/boxer/public/db/clickhouse/clickhouseenv"
 	"github.com/stergiotis/boxer/public/db/fairlead"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
@@ -54,7 +55,7 @@ func (inst *Client) QueryTSV(ctx context.Context, sql string) (rows []string, er
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, inst.Endpoint, strings.NewReader(sql))
 	if err != nil {
-		err = eb.Build().Str("endpoint", inst.Endpoint).Errorf("build request: %w", err)
+		err = eb.Build().Str("endpoint", env.RedactURL(inst.Endpoint)).Errorf("build request: %w", err)
 		return
 	}
 	if inst.User != "" {
@@ -66,7 +67,7 @@ func (inst *Client) QueryTSV(ctx context.Context, sql string) (rows []string, er
 
 	resp, err := inst.HTTP.Do(req)
 	if err != nil {
-		err = eb.Build().Str("endpoint", inst.Endpoint).Errorf("query: %w", err)
+		err = eb.Build().Str("endpoint", env.RedactURL(inst.Endpoint)).Errorf("query: %w", err)
 		return
 	}
 	defer func() { _ = resp.Body.Close() }()

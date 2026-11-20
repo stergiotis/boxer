@@ -476,6 +476,10 @@ func maskValue(s env.Spec, raw string, set bool, reveal bool) (out string) {
 		return
 	}
 	out = raw
+	if !reveal {
+		// A URL-valued setting may carry a password (env.RedactURL).
+		out = env.RedactURL(raw)
+	}
 	return
 }
 

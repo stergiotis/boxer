@@ -65,14 +65,14 @@ func loadOriginApplet(ctx context.Context, reg *app.Registry, client *http.Clien
 		return
 	}
 	if def == nil {
-		err = eb.Build().Str("url", target.String()).Errorf("sqlapplet: the document carries no sql fence — not an applet")
+		err = eb.Build().Str("url", env.RedactURL(target.String())).Errorf("sqlapplet: the document carries no sql fence — not an applet")
 		return
 	}
 	// §SD3: no review stands behind this document, so the runtime's gate for
 	// an unreviewed document decides: read-class only, and no slug a
 	// committed applet holds.
 	if err = appletstore.AdmitUnreviewed(reg, storeDefinition(def, src)); err != nil {
-		err = eb.Build().Str("url", target.String()).Errorf("sqlapplet: the origin document is refused: %w", err)
+		err = eb.Build().Str("url", env.RedactURL(target.String())).Errorf("sqlapplet: the origin document is refused: %w", err)
 		return
 	}
 	// ADR-0158 §SD7: a document outside any book inherits the store's default
@@ -143,21 +143,21 @@ func fetchOriginDoc(ctx context.Context, client *http.Client, target *url.URL) (
 	}
 	resp, err := client.Do(req)
 	if err != nil {
-		err = eb.Build().Str("url", target.String()).Errorf("sqlapplet: fetch the origin document: %w", err)
+		err = eb.Build().Str("url", env.RedactURL(target.String())).Errorf("sqlapplet: fetch the origin document: %w", err)
 		return
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		err = eb.Build().Str("url", target.String()).Int("status", resp.StatusCode).Errorf("sqlapplet: the origin document was not served")
+		err = eb.Build().Str("url", env.RedactURL(target.String())).Int("status", resp.StatusCode).Errorf("sqlapplet: the origin document was not served")
 		return
 	}
 	src, err = io.ReadAll(io.LimitReader(resp.Body, maxOriginDocBytes+1))
 	if err != nil {
-		err = eb.Build().Str("url", target.String()).Errorf("sqlapplet: read the origin document: %w", err)
+		err = eb.Build().Str("url", env.RedactURL(target.String())).Errorf("sqlapplet: read the origin document: %w", err)
 		return
 	}
 	if len(src) > maxOriginDocBytes {
-		err = eb.Build().Str("url", target.String()).Int("limit", maxOriginDocBytes).Errorf("sqlapplet: the origin document exceeds the size limit")
+		err = eb.Build().Str("url", env.RedactURL(target.String())).Int("limit", maxOriginDocBytes).Errorf("sqlapplet: the origin document exceeds the size limit")
 		src = nil
 	}
 	return

@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/rs/zerolog/log"
+	"github.com/stergiotis/boxer/public/config/env"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect"
 	"github.com/stergiotis/boxer/public/keelson/runtime/queryengine"
 	"github.com/stergiotis/boxer/public/keelson/runtime/queryengine/chserver"
@@ -170,7 +171,7 @@ func (inst *reachProver) prove(ctx context.Context, endpoint string, run runnerF
 		return
 	}
 	if runErr != nil {
-		log.Debug().Err(runErr).Str("endpoint", endpoint).
+		log.Debug().Err(runErr).Str("endpoint", env.RedactURL(endpoint)).
 			Msg("play: reachability probe statement failed; endpoint stays unproven")
 	}
 	return
@@ -207,12 +208,12 @@ func (inst *Client) proveReachInBackground(endpoint string) {
 		proven, err := inst.reach.prove(ctx, endpoint, inst.runProbeStatement)
 		switch {
 		case err != nil:
-			log.Debug().Err(err).Str("endpoint", endpoint).Msg("play: reachability probe unavailable")
+			log.Debug().Err(err).Str("endpoint", env.RedactURL(endpoint)).Msg("play: reachability probe unavailable")
 		case proven:
-			log.Info().Str("endpoint", endpoint).
+			log.Info().Str("endpoint", env.RedactURL(endpoint)).
 				Msg("play: endpoint demonstrated it can reach this process's introspection plane")
 		default:
-			log.Debug().Str("endpoint", endpoint).
+			log.Debug().Str("endpoint", env.RedactURL(endpoint)).
 				Msg("play: endpoint did not fetch the probe; confined runs stay refused")
 		}
 	})

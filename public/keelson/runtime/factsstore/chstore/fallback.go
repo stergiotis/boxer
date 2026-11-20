@@ -6,6 +6,7 @@ import (
 
 	"github.com/rs/zerolog"
 
+	"github.com/stergiotis/boxer/public/config/env"
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsstore"
 )
 
@@ -40,7 +41,7 @@ func NewWithFallback(cfg Config, logger zerolog.Logger, pingTimeout time.Duratio
 	ch, err := New(cfg)
 	if err != nil {
 		logger.Warn().Err(err).
-			Str("url", cfg.URL).
+			Str("url", env.RedactURL(cfg.URL)).
 			Msg("factsstore: chstore construction failed; falling back to in-memory")
 		store = factsstore.NewInMemoryFactsStore()
 		return
@@ -50,7 +51,7 @@ func NewWithFallback(cfg Config, logger zerolog.Logger, pingTimeout time.Duratio
 	pingErr := ch.Ping(ctx)
 	if pingErr != nil {
 		logger.Warn().Err(pingErr).
-			Str("url", cfg.URL).
+			Str("url", env.RedactURL(cfg.URL)).
 			Dur("timeout", pingTimeout).
 			Msg("factsstore: ClickHouse unreachable; falling back to in-memory")
 		store = factsstore.NewInMemoryFactsStore()
@@ -64,14 +65,14 @@ func NewWithFallback(cfg Config, logger zerolog.Logger, pingTimeout time.Duratio
 	setupErr := ch.SetupTable(setupCtx, "")
 	if setupErr != nil {
 		logger.Warn().Err(setupErr).
-			Str("url", cfg.URL).
+			Str("url", env.RedactURL(cfg.URL)).
 			Str("user", cfg.User).
 			Msg("factsstore: ClickHouse reachable but setup failed (table DDL or the leeway SQL read surface); falling back to in-memory")
 		store = factsstore.NewInMemoryFactsStore()
 		return
 	}
 	logger.Info().
-		Str("url", cfg.URL).
+		Str("url", env.RedactURL(cfg.URL)).
 		Str("user", cfg.User).
 		Str("db", cfg.Database).
 		Str("table", cfg.Table).

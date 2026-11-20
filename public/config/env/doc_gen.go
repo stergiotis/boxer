@@ -14,13 +14,14 @@ func Snapshot() (out []Spec) {
 }
 
 // FormatValue returns the display form of value, redacting per
-// Spec.Sensitive. Used by both the doc generator and the runtime "env
-// list" subcommand so redaction policy is shared.
+// Spec.Sensitive and, for any other value, the credentials a URL may carry
+// (RedactURL). Used by both the doc generator and the runtime "env list"
+// subcommand so redaction policy is shared.
 func FormatValue(spec Spec, value string) (out string) {
 	if spec.Sensitive {
 		return "<redacted>"
 	}
-	return value
+	return RedactURL(value)
 }
 
 // The go:generate directive runs `boxer env gen-docs` with the boxer

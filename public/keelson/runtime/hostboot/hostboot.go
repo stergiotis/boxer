@@ -15,6 +15,7 @@ import (
 	"github.com/rs/zerolog"
 
 	watchbilllaunch "github.com/stergiotis/boxer/apps/watchbill/launchcfg"
+	"github.com/stergiotis/boxer/public/config/env"
 	"github.com/stergiotis/boxer/public/identity/identgen/leased/rowalloc"
 	"github.com/stergiotis/boxer/public/keelson/data/chclient"
 	"github.com/stergiotis/boxer/public/keelson/data/chlocalbroker"
@@ -1145,7 +1146,7 @@ func (rt *Runtime) bootSysmetrics() {
 	if natsURL := sysmetricsbus.NatsURL.Get(); natsURL != "" {
 		natsClient, nerr := natsbus.Connect(natsbus.Options{URL: natsURL, AppId: sysmetricsbus.ServiceAppId})
 		if nerr != nil {
-			logger.Warn().Err(nerr).Str("url", natsURL).Msg("hostboot: sysmetrics NATS bridge connect failed; metric panels will be empty")
+			logger.Warn().Err(nerr).Str("url", env.RedactURL(natsURL)).Msg("hostboot: sysmetrics NATS bridge connect failed; metric panels will be empty")
 			return
 		}
 		if _, berr := sysmetricsbus.Bridge(natsClient, metricPub, sysmetricsbus.BundleSubjectWildcard()); berr != nil {
@@ -1153,7 +1154,7 @@ func (rt *Runtime) bootSysmetrics() {
 			_ = natsClient.Close()
 			return
 		}
-		logger.Info().Str("url", natsURL).Msg("hostboot: bridging system metrics from NATS onto the host bus")
+		logger.Info().Str("url", env.RedactURL(natsURL)).Msg("hostboot: bridging system metrics from NATS onto the host bus")
 		return
 	}
 	subject := sysmetricsbus.BundleSubject(sysmetricsbus.DefaultHostToken())

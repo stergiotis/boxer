@@ -6,6 +6,7 @@ import (
 
 	"github.com/rs/zerolog"
 
+	"github.com/stergiotis/boxer/public/config/env"
 	"github.com/stergiotis/boxer/public/keelson/data/chclient"
 	"github.com/stergiotis/boxer/public/keelson/data/storeexec"
 	"github.com/stergiotis/boxer/public/keelson/runtime/headstore"
@@ -27,16 +28,16 @@ func orgAnchorStore(ctx context.Context, runId string, logger zerolog.Logger) (s
 	}
 	exec, err := storeexec.New(chclient.New(chclient.Config{URL: url, User: headstore.OrgStoreUser.Get(), Password: headstore.OrgStorePassword.Get()}, nil), nil)
 	if err != nil {
-		logger.Warn().Err(err).Str("url", url).Msg("anchor: the organisation's store cannot be reached; heads are anchored in memory, not durably")
+		logger.Warn().Err(err).Str("url", env.RedactURL(url)).Msg("anchor: the organisation's store cannot be reached; heads are anchored in memory, not durably")
 		return anchor.NewMemStore()
 	}
 	org := anchorsql.New(exec, headstore.OrgStoreTable.Get(), runId)
 	pctx, cancel := context.WithTimeout(ctx, anchorStoreTimeout)
 	defer cancel()
 	if err = org.Provision(pctx); err != nil {
-		logger.Warn().Err(err).Str("url", url).Msg("anchor: the organisation's store refused its table; heads are anchored in memory, not durably")
+		logger.Warn().Err(err).Str("url", env.RedactURL(url)).Msg("anchor: the organisation's store refused its table; heads are anchored in memory, not durably")
 		return anchor.NewMemStore()
 	}
-	logger.Info().Str("url", url).Str("table", headstore.OrgStoreTable.Get()).Msg("anchor: heads are anchored in the organisation's store")
+	logger.Info().Str("url", env.RedactURL(url)).Str("table", headstore.OrgStoreTable.Get()).Msg("anchor: heads are anchored in the organisation's store")
 	return org
 }

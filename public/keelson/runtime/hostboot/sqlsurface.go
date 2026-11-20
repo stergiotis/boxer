@@ -6,6 +6,7 @@ import (
 
 	"github.com/rs/zerolog"
 
+	"github.com/stergiotis/boxer/public/config/env"
 	"github.com/stergiotis/boxer/public/keelson/data/chclient"
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsstore/chstore"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/lwsqlsurface"
@@ -40,9 +41,9 @@ func installSQLSurface(cfg chstore.Config, logger zerolog.Logger) {
 		client := chclient.New(chclient.Config{URL: cfg.URL, User: cfg.User, Password: cfg.Password}, nil)
 		installed, err := lwsqlsurface.InstallIfDrifted(ctx, client)
 		if err != nil {
-			logger.Warn().Err(err).Str("url", cfg.URL).Msg("hostboot: leeway SQL surface install failed; the trail views may be missing or stale on this server")
+			logger.Warn().Err(err).Str("url", env.RedactURL(cfg.URL)).Msg("hostboot: leeway SQL surface install failed; the trail views may be missing or stale on this server")
 			return
 		}
-		logger.Info().Str("url", cfg.URL).Int("version", lwsqlsurface.Version).Bool("installed", installed).Msg("hostboot: leeway SQL surface and its dependent views reconciled")
+		logger.Info().Str("url", env.RedactURL(cfg.URL)).Int("version", lwsqlsurface.Version).Bool("installed", installed).Msg("hostboot: leeway SQL surface and its dependent views reconciled")
 	}()
 }

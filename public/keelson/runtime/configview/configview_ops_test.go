@@ -328,3 +328,11 @@ func TestTheEngineAttributesEachWriter(t *testing.T) {
 	w.frame(func() { w.inst.filter.RevealSensitive = true })
 	assert.Empty(t, w.eng.LogSince(seq), "revealing to the person is invisible to the catalog")
 }
+
+// A URL-valued setting may carry a password; a caller of the catalog sees
+// the user and the host but never the password.
+func TestSummarizeRedactsURLCredentials(t *testing.T) {
+	s := summarize(varRow{spec: env.Spec{Name: "X_URL"}, raw: "http://alice:s3cret@ch.example:8123/", set: true})
+	assert.NotContains(t, s.Value, "s3cret")
+	assert.Contains(t, s.Value, "alice:xxxxx@ch.example")
+}

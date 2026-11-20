@@ -21,6 +21,7 @@ import (
 	"sync"
 
 	"github.com/stergiotis/boxer/apps/play"
+	"github.com/stergiotis/boxer/public/config/env"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/analysis"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
@@ -524,7 +525,7 @@ func parseEndpoint(bookID string, path string, v any) (ep EndpointE, err error) 
 	case "introspection":
 		ep = EndpointIntrospection
 	default:
-		err = eb.Build().Str("bookID", bookID).Str("path", path).Str("endpoint", s).Errorf("sqlapplet: unknown endpoint (known: default, introspection)")
+		err = eb.Build().Str("bookID", bookID).Str("path", path).Str("endpoint", env.RedactURL(s)).Errorf("sqlapplet: unknown endpoint (known: default, introspection)")
 	}
 	return
 }

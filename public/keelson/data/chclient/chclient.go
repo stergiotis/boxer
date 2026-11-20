@@ -25,6 +25,7 @@ import (
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/ipc"
 	"github.com/rs/zerolog/log"
+	"github.com/stergiotis/boxer/public/config/env"
 	"github.com/stergiotis/boxer/public/db/clickhouse/clickhouseenv"
 	"github.com/stergiotis/boxer/public/db/fairlead"
 	"github.com/stergiotis/boxer/public/observability/eh"
@@ -168,7 +169,7 @@ func (inst *Client) Ping(ctx context.Context) (err error) {
 	var resp *http.Response
 	resp, err = inst.http.Do(req)
 	if err != nil {
-		err = eb.Build().Str("url", pingURL).Errorf("chclient ping: do: %w", err)
+		err = eb.Build().Str("url", env.RedactURL(pingURL)).Errorf("chclient ping: do: %w", err)
 		return
 	}
 	defer func() { _ = resp.Body.Close() }()
@@ -312,7 +313,7 @@ func (inst *Client) InsertArrowSettings(ctx context.Context, table string, recor
 	if err != nil {
 		// cfg.URL, not fullURL: the latter carries the settings, and a stamp
 		// names a principal that has no place in a log line.
-		err = eb.Build().Str("url", inst.cfg.URL).Str("table", table).Errorf("chclient insertArrow: do: %w", err)
+		err = eb.Build().Str("url", env.RedactURL(inst.cfg.URL)).Str("table", table).Errorf("chclient insertArrow: do: %w", err)
 		return
 	}
 	defer func() { _ = resp.Body.Close() }()
@@ -362,7 +363,7 @@ func (inst *Client) doStream(req *http.Request) (resp *http.Response, err error)
 	inst.injectHeaders(req)
 	resp, err = inst.http.Do(req)
 	if err != nil {
-		err = eb.Build().Str("url", inst.cfg.URL).Errorf("chclient stream: do: %w", err)
+		err = eb.Build().Str("url", env.RedactURL(inst.cfg.URL)).Errorf("chclient stream: do: %w", err)
 		return
 	}
 	if resp.StatusCode != http.StatusOK {
@@ -503,7 +504,7 @@ func (inst *Client) postSQL(ctx context.Context, sql string, params map[string]s
 	if err != nil {
 		// cfg.URL, not reqURL: the latter carries the bound parameter values,
 		// which are caller data (search terms, ids) and must not land in logs.
-		err = eb.Build().Str("url", inst.cfg.URL).Errorf("chclient post: do: %w", err)
+		err = eb.Build().Str("url", env.RedactURL(inst.cfg.URL)).Errorf("chclient post: do: %w", err)
 		return
 	}
 	if resp.StatusCode != http.StatusOK {

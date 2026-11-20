@@ -18,6 +18,7 @@ import (
 
 	"github.com/rs/zerolog"
 
+	"github.com/stergiotis/boxer/public/config/env"
 	"github.com/stergiotis/boxer/public/keelson/runtime/loopback"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
@@ -65,7 +66,7 @@ func Serve(ctx context.Context, cfg ServeConfig, logger zerolog.Logger) (err err
 	}
 	target, err := url.Parse(cfg.ChURL)
 	if err != nil || target.Host == "" {
-		return eb.Build().Str("chURL", cfg.ChURL).Errorf("browserhost: serve: ClickHouse endpoint is not an absolute URL")
+		return eb.Build().Str("chURL", env.RedactURL(cfg.ChURL)).Errorf("browserhost: serve: ClickHouse endpoint is not an absolute URL")
 	}
 	gate := loopback.Gate{Name: "imzero2tab serve", OptIn: "--allowNonLoopback", AllowNonLoopback: cfg.AllowNonLoopback}
 	ln, err := gate.Listen(ctx, cfg.Listen)
@@ -113,7 +114,7 @@ func Serve(ctx context.Context, cfg ServeConfig, logger zerolog.Logger) (err err
 		}
 	})
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		logger.Debug().Str("method", r.Method).Str("url", r.URL.String()).Msg("tab: request")
+		logger.Debug().Str("method", r.Method).Str("url", env.RedactURL(r.URL.String())).Msg("tab: request")
 		w.Header().Set("Cache-Control", "no-store")
 		// The viewer page is opened as /index.html?worker=…; the file
 		// server would answer that with a redirect to "/", which a page
@@ -139,7 +140,7 @@ func Serve(ctx context.Context, cfg ServeConfig, logger zerolog.Logger) (err err
 	if cfg.OnListen != nil {
 		cfg.OnListen(ln.Addr())
 	}
-	logger.Info().Str("addr", ln.Addr().String()).Str("dir", cfg.Dir).Str("clickhouse", cfg.ChURL).Msg("tab: serving")
+	logger.Info().Str("addr", ln.Addr().String()).Str("dir", cfg.Dir).Str("clickhouse", env.RedactURL(cfg.ChURL)).Msg("tab: serving")
 	done := make(chan error, 1)
 	go func() { done <- srv.Serve(ln) }()
 	select {

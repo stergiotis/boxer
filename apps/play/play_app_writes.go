@@ -9,6 +9,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/stergiotis/boxer/public/config/env"
 	"github.com/stergiotis/boxer/public/db/fairlead"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect"
@@ -54,7 +55,7 @@ func (inst *Client) appStatement(ctx context.Context, sql string, body io.Reader
 		return
 	}
 	if (label.confined || dec.sensitivity == queryengine.SensitivityConfined) && !inst.servesConfined(target) {
-		err = eb.Build().Str("endpoint", target).Errorf("play: refusing to write confined data to an endpoint not declared as allowed to see sealed data")
+		err = eb.Build().Str("endpoint", env.RedactURL(target)).Errorf("play: refusing to write confined data to an endpoint not declared as allowed to see sealed data")
 		return
 	}
 	if label.agent != nil && dec.class != dispatchClassIntrospection {

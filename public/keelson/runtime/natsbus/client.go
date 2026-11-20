@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/nats-io/nats.go"
+	"github.com/stergiotis/boxer/public/config/env"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
@@ -56,7 +57,7 @@ func Connect(opts Options) (inst *Client, err error) {
 	natsOpts = append(natsOpts, opts.ConnectOptions...)
 	nc, cerr := nats.Connect(opts.URL, natsOpts...)
 	if cerr != nil {
-		err = eb.Build().Str("url", opts.URL).Errorf("natsbus: connect: %w", cerr)
+		err = eb.Build().Str("url", env.RedactURL(opts.URL)).Errorf("natsbus: connect: %w", cerr)
 		return
 	}
 	inst = &Client{nc: nc, requestTimeout: opts.RequestTimeout}

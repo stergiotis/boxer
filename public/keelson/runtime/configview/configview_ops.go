@@ -301,10 +301,11 @@ func summarize(r varRow) (s VarSummary) {
 		s.Withheld = r.set || spec.Default != ""
 		return
 	}
+	// A URL-valued setting may carry a password; a caller never sees it.
 	if r.set {
-		s.Value = appops.CutText(r.raw, opsMaxValueLen)
+		s.Value = appops.CutText(env.RedactURL(r.raw), opsMaxValueLen)
 	}
-	s.Default = appops.CutText(spec.Default, opsMaxValueLen)
+	s.Default = appops.CutText(env.RedactURL(spec.Default), opsMaxValueLen)
 	return
 }
 

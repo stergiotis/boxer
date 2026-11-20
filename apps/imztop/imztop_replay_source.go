@@ -8,6 +8,7 @@ import (
 
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
+	"github.com/stergiotis/boxer/public/config/env"
 	"github.com/stergiotis/boxer/public/keelson/data/chclient"
 	"github.com/stergiotis/boxer/public/keelson/data/storeexec"
 	"github.com/stergiotis/boxer/public/keelson/runtime/sysmetricsbus"
@@ -89,7 +90,7 @@ func NewStoreSource(ctx context.Context, opts StoreSourceOptions) (inst *StoreSo
 	store := sysmfacts.NewSysmetricsStore(exec, nil, sysmfacts.SysmetricsStoreConfig{})
 	if verr := store.VerifySchema(ctx); verr != nil {
 		store.Close()
-		err = eb.Build().Str("url", cfg.URL).Errorf("imztop: no stored metric history — "+
+		err = eb.Build().Str("url", env.RedactURL(cfg.URL)).Errorf("imztop: no stored metric history — "+
 			sysmfacts.SysmetricsTableName+" does not match the store, "+
 			"which is what an installation that has never run `sysmetricsd --tee` looks like: %w",
 			verr)

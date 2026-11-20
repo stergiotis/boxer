@@ -33,6 +33,7 @@ import (
 
 	"github.com/rs/zerolog/log"
 
+	"github.com/stergiotis/boxer/public/config/env"
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsstore"
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsstore/chstore"
 	"github.com/stergiotis/boxer/public/keelson/runtime/logbridge"
@@ -276,7 +277,7 @@ func openFactsStore(ctx context.Context, runId string) (store *chstore.Store, cf
 		return
 	}
 	if perr := chStore.Ping(ctx); perr != nil {
-		log.Warn().Err(perr).Str("url", cfg.URL).Msg("logbridge: ClickHouse unreachable — log lines are not persisted")
+		log.Warn().Err(perr).Str("url", env.RedactURL(cfg.URL)).Msg("logbridge: ClickHouse unreachable — log lines are not persisted")
 		why = name + " is set but ClickHouse at " + cfg.URL + " did not answer; the status line says whether the audit trail is durable"
 		return
 	}

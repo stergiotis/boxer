@@ -109,7 +109,7 @@ func newDiscoverCommand() *cli.Command {
 func discover(ctx context.Context, role string, cfg chclient.Config) (inv jk.Inventory, err error) {
 	inv, err = jk.Discover(ctx, chclient.New(cfg, nil))
 	if err != nil {
-		err = eb.Build().Str("role", role).Str("url", cfg.URL).Errorf("unable to discover server: %w", err)
+		err = eb.Build().Str("role", role).Str("url", env.RedactURL(cfg.URL)).Errorf("unable to discover server: %w", err)
 	}
 	return
 }

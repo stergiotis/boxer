@@ -7,6 +7,7 @@ import (
 
 	"github.com/rs/zerolog"
 
+	"github.com/stergiotis/boxer/public/config/env"
 	"github.com/stergiotis/boxer/public/keelson/data/chclient"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/lwsqlsurface"
 
@@ -65,10 +66,10 @@ func installSQLSurface(url, user, password string, logger zerolog.Logger) {
 			client := chclient.New(chclient.Config{URL: url, User: user, Password: password}, nil)
 			installed, err := lwsqlsurface.InstallIfDrifted(ctx, client)
 			if err != nil {
-				logger.Warn().Err(err).Str("url", url).Msg("play: leeway SQL surface install failed; part of the surface is missing on this server")
+				logger.Warn().Err(err).Str("url", env.RedactURL(url)).Msg("play: leeway SQL surface install failed; part of the surface is missing on this server")
 				return
 			}
-			logger.Info().Str("url", url).Int("version", lwsqlsurface.Version).Bool("installed", installed).Msg("play: leeway SQL surface reconciled")
+			logger.Info().Str("url", env.RedactURL(url)).Int("version", lwsqlsurface.Version).Bool("installed", installed).Msg("play: leeway SQL surface reconciled")
 		}()
 	})
 }

@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/stergiotis/boxer/public/config/env"
 	"github.com/stergiotis/boxer/public/db/clickhouse/clickhouseenv"
 	"github.com/stergiotis/boxer/public/extbin"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
@@ -55,7 +56,7 @@ func CheckRequire(name string) (unmet string, err error) {
 	switch {
 	case name == RequireClickHouse:
 		if _, e := clickhouseQuery("SELECT 1"); e != nil {
-			return "no ClickHouse at " + clickhouseenv.URL.Get(), nil
+			return "no ClickHouse at " + env.RedactURL(clickhouseenv.URL.Get()), nil
 		}
 		return "", nil
 	case strings.HasPrefix(name, RequireTablePrefix):
@@ -79,7 +80,7 @@ func CheckRequire(name string) (unmet string, err error) {
 		}
 		out, e := clickhouseQuery("EXISTS TABLE " + table)
 		if e != nil {
-			return "no ClickHouse at " + clickhouseenv.URL.Get(), nil
+			return "no ClickHouse at " + env.RedactURL(clickhouseenv.URL.Get()), nil
 		}
 		if out != "1" {
 			return "table " + table + " does not exist", nil

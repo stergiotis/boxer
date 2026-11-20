@@ -128,7 +128,7 @@ func formatCurrent(s Spec) (out string) {
 	if len(s.Allowed) > 0 && !slices.Contains(s.Allowed, raw) {
 		return fmt.Sprintf("%s [invalid; using %s]", raw, s.Default)
 	}
-	return raw
+	return RedactURL(raw)
 }
 
 // displayValue replaces empty values with a single-character placeholder

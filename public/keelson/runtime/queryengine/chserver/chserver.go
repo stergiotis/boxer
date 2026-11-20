@@ -34,6 +34,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/stergiotis/boxer/public/config/env"
 	"github.com/stergiotis/boxer/public/db/clickhouse/chhttp"
 	"github.com/stergiotis/boxer/public/db/fairlead"
 	"github.com/stergiotis/boxer/public/keelson/runtime/queryengine"
@@ -144,7 +145,7 @@ func (inst *Engine) Deliver(ctx context.Context, req queryengine.Request) (st qu
 		// The backstop of ADR-0145 §SD4. Whatever placed this run, this
 		// engine was not told it may see sealed plaintext, so it does not
 		// execute — and says which of the two facts is missing.
-		err = eb.Build().Str("endpoint", inst.endpoint).Errorf("chserver: refusing a confined run: this endpoint is not declared as allowed to see sealed data")
+		err = eb.Build().Str("endpoint", env.RedactURL(inst.endpoint)).Errorf("chserver: refusing a confined run: this endpoint is not declared as allowed to see sealed data")
 		return
 	}
 	if len(req.Inputs) > 0 {
