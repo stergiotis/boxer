@@ -351,13 +351,17 @@ func (inst *FranzReaderUnordered) Connect(ctx context.Context) (err error) {
 
 	batchChan := make(chan batchWithAckFn)
 
+	// live is the client the ack path marks commits on: set once the
+	// client exists, cleared by the poll loop before it closes the client.
+	// The ack path runs on the consumer's goroutines, so it must not read
+	// the exported Client field the poll loop writes.
+	live := &atomic.Pointer[kgo.Client]{}
 	commitFn := func(*kgo.Record) {}
 	if inst.opts.ConsumerGroup != "" {
 		commitFn = func(r *kgo.Record) {
-			if inst.Client == nil {
-				return
+			if cl := live.Load(); cl != nil {
+				cl.MarkCommitRecords(r)
 			}
-			inst.Client.MarkCommitRecords(r)
 		}
 	}
 	checkpoints := newCheckpointTracker(batchChan, commitFn)
@@ -397,7 +401,8 @@ func (inst *FranzReaderUnordered) Connect(ctx context.Context) (err error) {
 	connErrBackOff.MaxInterval = time.Second
 	connErrBackOff.MaxElapsedTime = 0
 
-	go inst.runPollLoop(inst.Client, batchChan, checkpoints, connErrBackOff)
+	live.Store(inst.Client)
+	go inst.runPollLoop(inst.Client, live, batchChan, checkpoints, connErrBackOff)
 
 	inst.storeBatchChan(batchChan)
 	return
@@ -406,8 +411,9 @@ func (inst *FranzReaderUnordered) Connect(ctx context.Context) (err error) {
 // runPollLoop is the long-lived consumer loop. It polls fetches,
 // routes records into per-partition trackers (which fan out to
 // batchChan), and drives back-pressure pause/resume.
-func (inst *FranzReaderUnordered) runPollLoop(cl *kgo.Client, batchChan chan batchWithAckFn, checkpoints *checkpointTracker, connErrBackOff backoff.BackOff) {
+func (inst *FranzReaderUnordered) runPollLoop(cl *kgo.Client, live *atomic.Pointer[kgo.Client], batchChan chan batchWithAckFn, checkpoints *checkpointTracker, connErrBackOff backoff.BackOff) {
 	defer func() {
+		live.Store(nil)
 		cl.Close()
 		inst.Client = nil
 		checkpoints.close()

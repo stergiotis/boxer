@@ -67,6 +67,7 @@ package kafka
 import (
 	"context"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/Jeffail/checkpoint"
@@ -457,13 +458,16 @@ func (inst *FranzReaderOrdered) Connect(ctx context.Context) (err error) {
 		return
 	}
 
+	// live is the client the ack path marks commits on: set once the
+	// client exists, cleared by the poll loop before it closes the client,
+	// so an ack that arrives after the close marks nothing.
+	live := &atomic.Pointer[kgo.Client]{}
 	commitFn := func(*kgo.Record) {}
 	if inst.opts.ConsumerGroup != "" {
 		commitFn = func(r *kgo.Record) {
-			if inst.Client == nil {
-				return
+			if cl := live.Load(); cl != nil {
+				cl.MarkCommitRecords(r)
 			}
-			inst.Client.MarkCommitRecords(r)
 		}
 	}
 
@@ -510,7 +514,8 @@ func (inst *FranzReaderOrdered) Connect(ctx context.Context) (err error) {
 	connErrBackOff.MaxInterval = time.Second
 	connErrBackOff.MaxElapsedTime = 0
 
-	go inst.runPollLoop(checkpoints, noActivePartitionsBackOff, connErrBackOff)
+	live.Store(inst.Client)
+	go inst.runPollLoop(live, checkpoints, noActivePartitionsBackOff, connErrBackOff)
 
 	inst.partState = checkpoints
 	return
@@ -519,8 +524,9 @@ func (inst *FranzReaderOrdered) Connect(ctx context.Context) (err error) {
 // runPollLoop is the long-lived consumer loop spawned by Connect. It
 // polls fetches, distributes records to per-partition caches, and
 // drives the back-pressure pause/resume cycle. Exits on shutSig.
-func (inst *FranzReaderOrdered) runPollLoop(checkpoints *partitionState, noActivePartitionsBackOff, connErrBackOff backoff.BackOff) {
+func (inst *FranzReaderOrdered) runPollLoop(live *atomic.Pointer[kgo.Client], checkpoints *partitionState, noActivePartitionsBackOff, connErrBackOff backoff.BackOff) {
 	defer func() {
+		live.Store(nil)
 		inst.Client.Close()
 		if inst.shutSig.IsSoftStopSignalled() {
 			inst.shutSig.TriggerHasStopped()
