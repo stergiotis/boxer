@@ -10,10 +10,12 @@ import (
 
 func NewCliCommandCanonicalTypes() *cli.Command {
 	return &cli.Command{
-		Name: "ct",
+		Name:  "ct",
+		Usage: "canonical type tools",
 		Commands: []*cli.Command{
 			{
-				Name: "abbrevs",
+				Name:  "abbrevs",
+				Usage: "write Go source declaring every primitive canonical type as a named value (the ctabb package) to stdout",
 				Flags: []cli.Flag{
 					&cli.StringFlag{
 						Name:  "packageName",

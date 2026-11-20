@@ -48,10 +48,12 @@ func NewCliCommandCanonWire() *cli.Command {
 		Usage: "generate the canonical-wire codecs for a table, inspect its slot table, and verify wire bytes (ADR-0210)",
 		Commands: []*cli.Command{
 			{
-				Name: "table",
+				Name:  "table",
+				Usage: "operations on a table description read as CBOR from stdin",
 				Commands: []*cli.Command{
 					{
-						Name: "generate",
+						Name:  "generate",
+						Usage: "generate the table's canonical-wire codec",
 						Commands: []*cli.Command{
 							{
 								Name:  "go",

@@ -27,13 +27,16 @@ type TestCase struct {
 
 func NewCliCommand() *cli.Command {
 	return &cli.Command{
-		Name: "numerical",
+		Name:  "numerical",
+		Usage: "numerical tools",
 		Commands: []*cli.Command{
 			{
-				Name: "find-divisions",
+				Name:  "find-divisions",
+				Usage: "axis tick placement",
 				Commands: []*cli.Command{
 					{
-						Name: "generate",
+						Name:  "generate",
+						Usage: "compute tick positions and labels for an axis range and write them to stdout as an Arrow IPC file",
 						Flags: []cli.Flag{
 							&cli.Float64Flag{
 								Name:     "fontSize",

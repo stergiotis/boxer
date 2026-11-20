@@ -7,6 +7,7 @@ import (
 func NewCliCommand() *cli.Command {
 	return &cli.Command{
 		Name:     "datasource",
+		Usage:    "placeholder group; it has no subcommands",
 		Commands: []*cli.Command{},
 	}
 }

@@ -15,6 +15,7 @@ func NewCliCommand(extraSubcommands ...*cli.Command) *cli.Command {
 	subs = append(subs, extraSubcommands...)
 	return &cli.Command{
 		Name:     "code",
+		Usage:    "code analysis and code-generation checks",
 		Commands: subs,
 	}
 }

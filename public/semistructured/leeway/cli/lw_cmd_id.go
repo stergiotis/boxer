@@ -28,7 +28,8 @@ func NewCliCommandId() *cli.Command {
 	}
 	universalFlags := universal.ToCliFlags()
 	return &cli.Command{
-		Name: "id",
+		Name:  "id",
+		Usage: "tagged-id tools (ADR-0106)",
 		Commands: []*cli.Command{
 			{
 				Name:  "udf",
@@ -44,10 +45,12 @@ func NewCliCommandId() *cli.Command {
 				},
 			},
 			{
-				Name: "tagvalue",
+				Name:  "tagvalue",
+				Usage: "tag-value tools",
 				Commands: []*cli.Command{
 					{
-						Name: "leadingzero",
+						Name:  "leadingzero",
+						Usage: "list the tag values of a tag width whose tags start with at least the given number of zero bits",
 						Flags: slices.Concat([]cli.Flag{
 							&cli.UintFlag{
 								Name:  "tagWidth",

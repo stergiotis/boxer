@@ -41,13 +41,16 @@ func NewCliCommand() *cli.Command {
 		},
 	}, rndFlags, universal.ToCliFlags())
 	return &cli.Command{
-		Name: "sample",
+		Name:  "sample",
+		Usage: "generate random samples of leeway types and tables, for testing",
 		Commands: []*cli.Command{
 			{
-				Name: "canonicaltype",
+				Name:  "canonicaltype",
+				Usage: "random canonical types",
 				Commands: []*cli.Command{
 					{
 						Name:  "machineNumeric",
+						Usage: "random machine-numeric canonical types",
 						Flags: flags,
 						Action: func(ctx context.Context, cmd *cli.Command) error {
 							return universal.FormatValue(ctx, cmd, sample.GenerateSampleMachineNumericType(getNumber(ctx, cmd, rndFunc)))
@@ -55,6 +58,7 @@ func NewCliCommand() *cli.Command {
 					},
 					{
 						Name:  "string",
+						Usage: "random string-like canonical types",
 						Flags: flags,
 						Action: func(ctx context.Context, cmd *cli.Command) error {
 							return universal.FormatValue(ctx, cmd, sample.GenerateSampleStringType(getNumber(ctx, cmd, rndFunc)))
@@ -62,6 +66,7 @@ func NewCliCommand() *cli.Command {
 					},
 					{
 						Name:  "temporal",
+						Usage: "random temporal canonical types",
 						Flags: flags,
 						Action: func(ctx context.Context, cmd *cli.Command) error {
 							return universal.FormatValue(ctx, cmd, sample.GenerateSampleTemporalType(getNumber(ctx, cmd, rndFunc)))
@@ -70,7 +75,8 @@ func NewCliCommand() *cli.Command {
 				},
 			},
 			{
-				Name: "table",
+				Name:  "table",
+				Usage: "random table descriptions",
 				Flags: slices.Concat(flags, []cli.Flag{
 					&cli.BoolFlag{
 						Name:  "clickHouseCompatible",

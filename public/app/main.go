@@ -99,12 +99,13 @@ import (
 	_ "github.com/stergiotis/boxer/public/thestack/imzero2/browserhost/tabhost"
 )
 
-func mainC() (exitCode int) {
-	defer ph.PanicHandler(2, nil, nil)
-	app := cli.Command{
-		Name:                  vcs.ModuleInfo(),
+// newApp builds the boxer command tree. It is separate from mainC so a test
+// can walk the tree without running it.
+func newApp() (app *cli.Command) {
+	app = &cli.Command{
+		Name:                  "boxer",
 		Copyright:             vcs.CopyrightInfo(),
-		Usage:                 "",
+		Usage:                 "code generation, governance, data tools and services for the boxer repository",
 		UsageText:             "",
 		ArgsUsage:             "",
 		Version:               vcs.BuildVersionInfo(),
@@ -178,7 +179,12 @@ func mainC() (exitCode int) {
 			return nil
 		},
 	}
-	err := app.Run(context.Background(), os.Args)
+	return
+}
+
+func mainC() (exitCode int) {
+	defer ph.PanicHandler(2, nil, nil)
+	err := newApp().Run(context.Background(), os.Args)
 	if err != nil {
 		exitCode = 1
 		log.Error().Stack().Err(err).Msg("an error occurred")

@@ -8,7 +8,8 @@ import (
 
 func NewCliCommand() *cli.Command {
 	return &cli.Command{
-		Name: "golang",
+		Name:  "golang",
+		Usage: "analyses of the Go module",
 		Commands: []*cli.Command{
 			vendortidy.NewCliCommand(),
 			wasmsurvey.NewCliCommand(),

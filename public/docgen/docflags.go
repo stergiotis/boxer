@@ -90,10 +90,12 @@ func NewDocCli() *cli.Command {
 		md.SyntaxHighlightMermaid,
 	}, md.SyntaxHighlightNone, "syntaxHighlight")
 	return &cli.Command{
-		Name: "doc",
+		Name:  "doc",
+		Usage: "documentation helpers",
 		Commands: []*cli.Command{
 			{
-				Name: "markdown",
+				Name:  "markdown",
+				Usage: "markdown helpers",
 				Commands: []*cli.Command{
 					{
 						Name:  "codeblock",

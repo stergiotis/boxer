@@ -17,7 +17,8 @@ func NewCliCommand(extraSubcommands ...*cli.Command) *cli.Command {
 	subs := make([]*cli.Command, 0, 2+len(extraSubcommands))
 	subs = append(subs,
 		&cli.Command{
-			Name: "panic",
+			Name:  "panic",
+			Usage: "panic with a structured log record, to see how a panic is reported",
 			Flags: []cli.Flag{
 				&cli.StringFlag{
 					Name:  "message",
@@ -33,6 +34,7 @@ func NewCliCommand(extraSubcommands ...*cli.Command) *cli.Command {
 	subs = append(subs, extraSubcommands...)
 	return &cli.Command{
 		Name:     "dev",
+		Usage:    "development helpers called by the scripts under scripts/",
 		Commands: subs,
 	}
 }

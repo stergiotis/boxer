@@ -12,10 +12,12 @@ import (
 
 func NewCliCommand() *cli.Command {
 	return &cli.Command{
-		Name: "generate",
+		Name:  "generate",
+		Usage: "generate the egui2 bindings from the IDL under definition/",
 		Commands: []*cli.Command{
 			{
-				Name: "go",
+				Name:  "go",
+				Usage: "write the Go side of the bindings",
 				Flags: []cli.Flag{
 					&cli.StringFlag{
 						Name:     "goOutputBasePath",
@@ -38,7 +40,8 @@ func NewCliCommand() *cli.Command {
 				},
 			},
 			{
-				Name: "rust",
+				Name:  "rust",
+				Usage: "write the Rust side of the bindings",
 				Flags: []cli.Flag{
 					&cli.StringFlag{
 						Name:     "rustOutputBasePath",
@@ -52,7 +55,8 @@ func NewCliCommand() *cli.Command {
 				},
 			},
 			{
-				Name: "doc",
+				Name:  "doc",
+				Usage: "write the bindings reference as markdown",
 				Flags: []cli.Flag{
 					&cli.StringFlag{
 						Name:     "docOutputPath",

@@ -14,10 +14,12 @@ import (
 
 func NewCliCommandBadger() *cli.Command {
 	return &cli.Command{
-		Name: "badger",
+		Name:  "badger",
+		Usage: "Badger key-value store tools",
 		Commands: []*cli.Command{
 			{
-				Name: "dump",
+				Name:  "dump",
+				Usage: "print every key and value of the store at --path",
 				Flags: []cli.Flag{
 					&cli.StringFlag{
 						Name:      "path",

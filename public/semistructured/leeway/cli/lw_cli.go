@@ -49,10 +49,12 @@ type aspectI interface {
 func newAspectCliCommands[E aspectI](name string, allAspects []E, f *cli2.UniversalCliFormatter) []*cli.Command {
 	return []*cli.Command{
 		{
-			Name: name,
+			Name:  name,
+			Usage: "the " + name + " vocabulary",
 			Commands: []*cli.Command{
 				{
 					Name:  "list",
+					Usage: "print every member of the vocabulary with its value",
 					Flags: f.ToCliFlags(),
 					Action: func(ctx context.Context, cmd *cli.Command) error {
 						strs := make([]string, 0, len(allAspects))
@@ -78,7 +80,8 @@ func NewCliCommand() *cli.Command {
 		log.Panic().Err(err).Msg("unable to create cli universal formatter")
 	}
 	return &cli.Command{
-		Name: "leeway",
+		Name:  "leeway",
+		Usage: "leeway schema tools: canonical types, aspects, DDL, DML, read access, ids and the SQL surface",
 		Commands: slices.Concat([]*cli.Command{
 			NewCliCommandCanonicalTypes(),
 		},

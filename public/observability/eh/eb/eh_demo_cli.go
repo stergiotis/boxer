@@ -10,9 +10,11 @@ import (
 
 func NewCliCommand() *cli.Command {
 	return &cli.Command{
-		Name: "error",
+		Name:  "error",
+		Usage: "error-handling helpers",
 		Commands: []*cli.Command{
 			{Name: "demo",
+				Usage: "return a nested structured error, to see how the logger renders one",
 				Action: func(ctx context.Context, cmd *cli.Command) error {
 					err1 := Build().Uint64("aLargeUint64", math.MaxUint64/2).Str("myString", "this is a string value").Type("myType", struct {
 						FieldA string

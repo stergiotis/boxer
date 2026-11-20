@@ -205,6 +205,7 @@ func NewCommand() *cli.Command {
 	}
 	return &cli.Command{
 		Name:  "serve",
+		Usage: "accept HTTP request bodies on --listen and write each to a file in --outputDirectory",
 		Flags: cfg.ToCliFlags(config.IdentityNameTransf, config.IdentityNameTransf),
 		Action: func(ctx context.Context, cmd *cli.Command) error {
 			nMessages := cfg.FromContext(ctx, config.IdentityNameTransf, cmd)

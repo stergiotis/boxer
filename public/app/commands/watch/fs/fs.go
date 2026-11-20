@@ -27,7 +27,8 @@ func NewCommand() *cli.Command {
 	}
 	universalFlags := universal.ToCliFlags()
 	return &cli.Command{
-		Name: "fs",
+		Name:  "fs",
+		Usage: "print file-system events below --dir for files ending in --suffix",
 		Flags: slices.Concat([]cli.Flag{
 			&cli.StringFlag{
 				Name:  "dir",

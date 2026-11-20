@@ -15,7 +15,8 @@ import (
 
 func NewCommand() *cli.Command {
 	return &cli.Command{
-		Name: "cbor",
+		Name:  "cbor",
+		Usage: "CBOR tools",
 		Commands: []*cli.Command{
 			diagCommand(),
 		},

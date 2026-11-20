@@ -16,9 +16,11 @@ import (
 	"github.com/urfave/cli/v3"
 )
 
-// NewCliCommand returns the `gov llmtag` subcommand that annotates Go
-// source files with //go:build llm_generated_<model> based on git blame
-// attribution of Co-Authored-By trailers.
+// NewCliCommand returns the `gov llmtag` subcommand that attributes the lines
+// of each Go source file to LLM Co-Authored-By trailers through git blame.
+// The //go:build llm_generated_<model> markers it can write were retired by
+// ADR-0083; --apply is kept so that retirement stays reversible, and a dry
+// run is the per-file attribution report.
 func NewCliCommand() *cli.Command {
 	f, err := cli2.NewUniversalCliFormatter(config.IdentityNameTransf)
 	if err != nil {
@@ -64,7 +66,7 @@ func NewCliCommand() *cli.Command {
 
 	return &cli.Command{
 		Name:  "llmtag",
-		Usage: "Apply //go:build llm_generated_<model> build tags based on git Co-Authored-By trailers",
+		Usage: "report per Go file the share of lines git blame attributes to commits with an LLM Co-Authored-By trailer; --apply restores the llm_generated_* build tags ADR-0083 retired",
 		Flags: slices.Concat(baseFlags, fmtFlags),
 		Action: func(ctx context.Context, cmd *cli.Command) (err error) {
 			if cmd.Bool("diff") && cmd.Bool("apply") {

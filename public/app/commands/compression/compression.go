@@ -6,7 +6,8 @@ import (
 
 func NewCliCommand() *cli.Command {
 	return &cli.Command{
-		Name: "compression",
+		Name:  "compression",
+		Usage: "compression experiments",
 		Commands: []*cli.Command{
 			NewDictCommand(),
 		},

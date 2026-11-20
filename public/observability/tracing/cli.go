@@ -29,10 +29,12 @@ func NewCliCommands() []*cli.Command {
 	universalFlags := universal.ToCliFlags()
 	return []*cli.Command{
 		{
-			Name: "tracing",
+			Name:  "tracing",
+			Usage: "tracing tools",
 			Commands: []*cli.Command{
 				{
-					Name: "codelocations",
+					Name:  "codelocations",
+					Usage: "read text from stdin and list the distinct file:line code locations it mentions",
 					Flags: slices.Concat(universalFlags, []cli.Flag{
 						&cli.BoolFlag{
 							Name: "sort",

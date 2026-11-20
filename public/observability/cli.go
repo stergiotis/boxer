@@ -9,7 +9,8 @@ import (
 
 func NewCliCommand() *cli.Command {
 	return &cli.Command{
-		Name: "observability",
+		Name:  "observability",
+		Usage: "observability tools",
 		Commands: slices.Concat(
 			tracing.NewCliCommands(),
 		),

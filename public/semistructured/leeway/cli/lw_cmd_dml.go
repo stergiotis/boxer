@@ -17,14 +17,18 @@ import (
 
 func NewCliCommandDml() *cli.Command {
 	return &cli.Command{
-		Name: "dml",
+		Name:  "dml",
+		Usage: "generate the write side of a table",
 		Commands: []*cli.Command{
 			{Name: "table",
+				Usage: "operations on a table description read as CBOR from stdin",
 				Commands: []*cli.Command{
 					{
-						Name: "generate",
+						Name:  "generate",
+						Usage: "generate the table's write side",
 						Commands: []*cli.Command{
 							{Name: "go",
+								Usage: "write the table's Go DML classes to stdout",
 								Flags: []cli.Flag{
 									&cli.StringFlag{
 										Name:     "tableName",

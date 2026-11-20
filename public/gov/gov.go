@@ -22,7 +22,8 @@ import (
 
 func NewCliCommand() *cli.Command {
 	return &cli.Command{
-		Name: "gov",
+		Name:  "gov",
+		Usage: "governance: documentation and code lint, the gate, the repository skeleton, licenses and history reports",
 		Commands: cli2.CommandsNilRemoved(
 			doclint.NewCliCommand(),
 			codelint.NewCliCommand(),

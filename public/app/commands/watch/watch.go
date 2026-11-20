@@ -8,7 +8,8 @@ import (
 
 func NewCliCommand() *cli.Command {
 	return &cli.Command{
-		Name: "watch",
+		Name:  "watch",
+		Usage: "watch for changes",
 		Commands: []*cli.Command{
 			fs.NewCommand(),
 		},

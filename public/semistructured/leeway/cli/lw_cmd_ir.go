@@ -41,10 +41,12 @@ func NewCliCommandIr() *cli.Command {
 		techIds = append(techIds, t.GetTechnology().Id)
 	}
 	return &cli.Command{
-		Name: "ir",
+		Name:  "ir",
+		Usage: "intermediate table representation tools",
 		Commands: []*cli.Command{
 			{
-				Name: "load",
+				Name:  "load",
+				Usage: "load a CBOR table description from stdin into the intermediate representation and print its columns",
 				Flags: slices.Concat([]cli.Flag{
 					&cli.StringFlag{
 						Name:  "technology",

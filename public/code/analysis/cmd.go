@@ -8,7 +8,8 @@ import (
 
 func NewCliCommand() *cli.Command {
 	return &cli.Command{
-		Name: "analysis",
+		Name:  "analysis",
+		Usage: "analyses of the source tree",
 		Commands: []*cli.Command{
 			golang.NewCliCommand(),
 			sccapplet.NewCliCommand(),

@@ -215,7 +215,8 @@ var _ sort.Interface = (*NGramHist)(nil)
 
 func NewDictCommand() *cli.Command {
 	return &cli.Command{
-		Name: "dict",
+		Name:  "dict",
+		Usage: "read one word per line from stdin and report n-gram statistics for building a compression dictionary",
 		Flags: []cli.Flag{
 			&cli.UintFlag{
 				Name:  "nGramN",

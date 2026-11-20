@@ -8,7 +8,8 @@ import (
 
 func NewCliCommand() *cli.Command {
 	return &cli.Command{
-		Name: "http",
+		Name:  "http",
+		Usage: "HTTP tools",
 		Commands: []*cli.Command{
 			serve.NewCommand(),
 		},

@@ -49,14 +49,17 @@ func NewCliCommandDdl() *cli.Command {
 	}
 	tableRowConfigFlag, tableRowConfigGetter := cli2.BuildEnumStringFlag(common.AllTableRowConfigs, common.TableRowConfigMultiAttributesPerRow, "tableRowConfig")
 	return &cli.Command{
-		Name: "ddl",
+		Name:  "ddl",
+		Usage: "generate and check table DDL from a leeway table description",
 		Commands: []*cli.Command{
 			newCliCommandDdlCompose(),
 			{
-				Name: "table",
+				Name:  "table",
+				Usage: "operations on a table description read as CBOR from stdin",
 				Commands: []*cli.Command{
 					{
-						Name: "generate",
+						Name:  "generate",
+						Usage: "write the column definitions of the table for the chosen technology to stdout",
 						Flags: []cli.Flag{
 							&cli.StringFlag{
 								Name:  "separator",
@@ -123,6 +126,7 @@ func NewCliCommandDdl() *cli.Command {
 					},
 					{
 						Name:  "normalize",
+						Usage: "convert names to the naming style and sort columns into canonical order, and print the result",
 						Flags: slices.Concat([]cli.Flag{namingStyleFlag}, universalFlags),
 						Action: func(ctx context.Context, cmd *cli.Command) error {
 							namingStyle := namingStyleFunc(ctx, cmd)
@@ -149,7 +153,8 @@ func NewCliCommandDdl() *cli.Command {
 						},
 					},
 					{
-						Name: "scramble",
+						Name:  "scramble",
+						Usage: "shuffle column order and names at random (seeded), for testing normalize",
 						Flags: slices.Concat([]cli.Flag{
 							namingStyleFlag,
 						},
@@ -176,7 +181,8 @@ func NewCliCommandDdl() *cli.Command {
 						},
 					},
 					{
-						Name: "validate",
+						Name:  "validate",
+						Usage: "run the table validator and fail on the first violation",
 						Action: func(ctx context.Context, cmd *cli.Command) error {
 							var table common.TableDesc
 							err = marshaller.DecodeTableCbor(os.Stdin, &table)
