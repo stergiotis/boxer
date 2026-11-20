@@ -318,9 +318,9 @@ type CaptureStatus struct {
 // GoroutineId returns the id of the calling goroutine, read from the
 // header runtime.Stack writes ("goroutine N [...]"); 0 if it cannot be
 // parsed. The window host records the render goroutine's id with it, and the
-// dispatcher refuses a request made on that goroutine: an in-process bus
-// handler runs on its requester's goroutine, so a request from a Frame
-// would wait on the frame it blocks (ADR-0269 §SD3).
+// dispatcher refuses a request made on that goroutine, which the in-process
+// bus names on the message (app.Msg.RequesterGoroutine): a request from a
+// Frame would wait on the frame it blocks (ADR-0269 §SD3).
 func GoroutineId() (id uint64) {
 	var buf [64]byte
 	n := runtime.Stack(buf[:], false)

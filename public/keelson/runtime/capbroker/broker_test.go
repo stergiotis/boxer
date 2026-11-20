@@ -35,7 +35,7 @@ func TestNewBroker_NilInstRejected(t *testing.T) {
 
 func TestNewBroker_NilPolicyDefaultsToDenyAll(t *testing.T) {
 	inst := newBus(t)
-	inst.SetRequestTimeout(50 * time.Millisecond)
+	inst.SetRequestTimeout(2 * time.Second)
 	broker, err := NewBroker(inst, zerolog.Nop(), nil)
 	require.NoError(t, err)
 	defer broker.Close()
@@ -56,7 +56,7 @@ func TestNewBroker_NilPolicyDefaultsToDenyAll(t *testing.T) {
 
 func TestBroker_AutoApprove_GrantsAndExtendsCaps(t *testing.T) {
 	inst := newBus(t)
-	inst.SetRequestTimeout(50 * time.Millisecond)
+	inst.SetRequestTimeout(2 * time.Second)
 	broker, err := NewBroker(inst, zerolog.Nop(), &AutoApprovePolicy{})
 	require.NoError(t, err)
 	defer broker.Close()
@@ -96,7 +96,7 @@ func TestBroker_AutoApprove_GrantsAndExtendsCaps(t *testing.T) {
 
 func TestBroker_DenyAll_ReplyCarriesReason(t *testing.T) {
 	inst := newBus(t)
-	inst.SetRequestTimeout(50 * time.Millisecond)
+	inst.SetRequestTimeout(2 * time.Second)
 	broker, err := NewBroker(inst, zerolog.Nop(), &DenyAllPolicy{})
 	require.NoError(t, err)
 	defer broker.Close()
@@ -117,7 +117,7 @@ func TestBroker_DenyAll_ReplyCarriesReason(t *testing.T) {
 
 func TestBroker_FuncPolicy_PerRequestDecision(t *testing.T) {
 	inst := newBus(t)
-	inst.SetRequestTimeout(50 * time.Millisecond)
+	inst.SetRequestTimeout(2 * time.Second)
 	policy := FuncPolicy(func(req GrantRequest) (d GrantDecision) {
 		if req.SubjectFilter.Pattern == "ch.query.boxer" {
 			d = GrantDecision{Granted: true, Reason: "CH query allowed"}
@@ -157,7 +157,7 @@ func TestBroker_FuncPolicy_PerRequestDecision(t *testing.T) {
 
 func TestBroker_UnknownApp_ErrorReply(t *testing.T) {
 	inst := newBus(t)
-	inst.SetRequestTimeout(50 * time.Millisecond)
+	inst.SetRequestTimeout(2 * time.Second)
 	broker, err := NewBroker(inst, zerolog.Nop(), &AutoApprovePolicy{})
 	require.NoError(t, err)
 	defer broker.Close()
@@ -178,7 +178,7 @@ func TestBroker_UnknownApp_ErrorReply(t *testing.T) {
 
 func TestBroker_MalformedPayload_ErrorReply(t *testing.T) {
 	inst := newBus(t)
-	inst.SetRequestTimeout(50 * time.Millisecond)
+	inst.SetRequestTimeout(2 * time.Second)
 	broker, err := NewBroker(inst, zerolog.Nop(), &AutoApprovePolicy{})
 	require.NoError(t, err)
 	defer broker.Close()
@@ -193,7 +193,7 @@ func TestBroker_MalformedPayload_ErrorReply(t *testing.T) {
 
 func TestBroker_SetPolicy_AppliesToNextRequest(t *testing.T) {
 	inst := newBus(t)
-	inst.SetRequestTimeout(50 * time.Millisecond)
+	inst.SetRequestTimeout(2 * time.Second)
 	broker, err := NewBroker(inst, zerolog.Nop(), &DenyAllPolicy{})
 	require.NoError(t, err)
 	defer broker.Close()
@@ -222,7 +222,7 @@ func TestBroker_SetPolicy_AppliesToNextRequest(t *testing.T) {
 
 func TestBroker_WithFactsStore_PersistsGrantRow(t *testing.T) {
 	inst := newBus(t)
-	inst.SetRequestTimeout(50 * time.Millisecond)
+	inst.SetRequestTimeout(2 * time.Second)
 	broker, err := NewBroker(inst, zerolog.Nop(), &AutoApprovePolicy{})
 	require.NoError(t, err)
 	defer broker.Close()
@@ -251,7 +251,7 @@ func TestBroker_WithFactsStore_PersistsGrantRow(t *testing.T) {
 
 func TestBroker_WithFactsStore_DenyDoesNotPersist(t *testing.T) {
 	inst := newBus(t)
-	inst.SetRequestTimeout(50 * time.Millisecond)
+	inst.SetRequestTimeout(2 * time.Second)
 	broker, err := NewBroker(inst, zerolog.Nop(), &DenyAllPolicy{})
 	require.NoError(t, err)
 	defer broker.Close()
@@ -272,7 +272,7 @@ func TestBroker_WithFactsStore_DenyDoesNotPersist(t *testing.T) {
 
 func TestBroker_GrantRecordPopulated(t *testing.T) {
 	inst := newBus(t)
-	inst.SetRequestTimeout(50 * time.Millisecond)
+	inst.SetRequestTimeout(2 * time.Second)
 	broker, err := NewBroker(inst, zerolog.Nop(), &AutoApprovePolicy{})
 	require.NoError(t, err)
 	defer broker.Close()

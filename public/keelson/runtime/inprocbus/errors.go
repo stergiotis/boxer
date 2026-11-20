@@ -18,3 +18,8 @@ var ErrTimeout = errors.New("request timeout")
 // fails loudly here instead of acting under the instance's authority.
 // Shaped to match nats.ErrConnectionClosed in role.
 var ErrClosed = errors.New("client closed")
+
+// ErrNoResponders is returned by a Request whose subject no subscription
+// matches: nothing could answer, so the request fails at once instead of
+// waiting out its timeout (ADR-0386). Shaped to match nats.ErrNoResponders.
+var ErrNoResponders = errors.New("no responders available for request")

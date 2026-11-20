@@ -246,11 +246,26 @@ func TestInst_AuditSink_RecordsRequestTimeout(t *testing.T) {
 	inst.SetAuditSink(sink)
 
 	bus := inst.NewClient("test.app", fullCaps())
-	_, err := bus.Request("nobody.here", nil)
+	_, err := bus.Subscribe("silent.here", func(*app.Msg) {})
+	require.NoError(t, err)
+	_, err = bus.Request("silent.here", nil)
 	require.Error(t, err)
 
 	require.Equal(t, 1, sink.Len())
 	assert.Equal(t, audit.AuditResultTimeout, sink.Records()[0].Result)
+}
+
+func TestInst_AuditSink_RecordsNoRespondersAsAnError(t *testing.T) {
+	inst := newInst(t)
+	sink := audit.NewInMemoryAuditSink()
+	inst.SetAuditSink(sink)
+
+	bus := inst.NewClient("test.app", fullCaps())
+	_, err := bus.Request("nobody.here", nil)
+	require.ErrorIs(t, err, ErrNoResponders)
+
+	require.Equal(t, 1, sink.Len())
+	assert.Equal(t, audit.AuditResultError, sink.Records()[0].Result)
 }
 
 func TestInst_AuditSink_NilDoesNotPanic(t *testing.T) {

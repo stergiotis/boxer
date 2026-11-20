@@ -18,7 +18,7 @@ import (
 func newSetup(t *testing.T) (inst *inprocbus.Inst, svc *Service, appBus *inprocbus.Client, mem *MemoryBackend) {
 	t.Helper()
 	inst = inprocbus.NewInst(zerolog.Nop())
-	inst.SetRequestTimeout(100 * time.Millisecond)
+	inst.SetRequestTimeout(2 * time.Second)
 	mem = NewMemoryBackend()
 	svc, err := NewService(inst, zerolog.Nop(), mem)
 	require.NoError(t, err)
@@ -204,7 +204,7 @@ func (inst *refRecorder) Delete(ref StorageRef, key string) (err error) {
 func newRecorderSetup(t *testing.T) (inst *inprocbus.Inst, svc *Service, rec *refRecorder) {
 	t.Helper()
 	inst = inprocbus.NewInst(zerolog.Nop())
-	inst.SetRequestTimeout(100 * time.Millisecond)
+	inst.SetRequestTimeout(2 * time.Second)
 	rec = &refRecorder{}
 	svc, err := NewService(inst, zerolog.Nop(), rec)
 	require.NoError(t, err)

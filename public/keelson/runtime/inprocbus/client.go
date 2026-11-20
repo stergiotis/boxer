@@ -1,8 +1,10 @@
 package inprocbus
 
 import (
+	"context"
 	"errors"
 	"math/rand/v2"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -301,7 +303,38 @@ func (inst *Client) Request(subject string, payload []byte) (reply []byte, err e
 
 // RequestWithTimeout waits d rather than the Inst's configured default. A
 // non-positive d means "the default", which is what Request passes.
+//
+// What a requester may rely on (ADR-0386):
+//
+//   - A subject no subscription matches fails at once with ErrNoResponders.
+//   - The wait is bounded by d. The subscribers run on a goroutine of the
+//     request's own, in subscription order, so a handler that blocks holds
+//     that goroutine and not the requester; at d the requester gets
+//     ErrTimeout and a later reply is dropped.
+//   - When every handler returns within d, Request returns after they all
+//     have, as a publish does: a handler's effects before it returned are
+//     visible to the requester. A reply a handler sends later, from a
+//     goroutine of its own, is still waited for until d.
+//
+// What a handler must not do inline: block on I/O whose bound is not well
+// under the requester's d. It answers from a goroutine of its own instead,
+// or the requester sees ErrTimeout while the handler runs on.
 func (inst *Client) RequestWithTimeout(subject string, payload []byte, d time.Duration) (reply []byte, err error) {
+	return inst.request(context.Background(), subject, payload, d)
+}
+
+// RequestCtx is Request bounded by ctx as well as by the Inst's default
+// timeout: whichever ends first ends the wait. A ctx that ends first fails
+// the request with ctx's cause.
+//
+// deferred: app.BusI gains a context on Request with the change that puts
+// context.Context on the bus and store interfaces; until then this method
+// is on the concrete client only.
+func (inst *Client) RequestCtx(ctx context.Context, subject string, payload []byte) (reply []byte, err error) {
+	return inst.request(ctx, subject, payload, 0)
+}
+
+func (inst *Client) request(ctx context.Context, subject string, payload []byte, d time.Duration) (reply []byte, err error) {
 	if d <= 0 {
 		d = inst.inst.currentRequestTimeout()
 	}
@@ -316,7 +349,7 @@ func (inst *Client) RequestWithTimeout(subject string, payload []byte, d time.Du
 			switch {
 			case errors.Is(err, ErrPermissionViolation):
 				result = audit.AuditResultDenied
-			case errors.Is(err, ErrTimeout):
+			case errors.Is(err, ErrTimeout), errors.Is(err, context.DeadlineExceeded):
 				result = audit.AuditResultTimeout
 			default:
 				result = audit.AuditResultError
@@ -343,6 +376,16 @@ func (inst *Client) RequestWithTimeout(subject string, payload []byte, d time.Du
 			Errorf("bus request denied: %w", ErrPermissionViolation)
 		return
 	}
+	err = ValidateSubject(subject)
+	if err != nil {
+		err = eh.Errorf("bus request: publish: %w", err)
+		return
+	}
+	matched := inst.inst.matching(subject)
+	if len(matched) == 0 {
+		err = eb.Build().Str("subject", subject).Errorf("bus request: %w", ErrNoResponders)
+		return
+	}
 	inbox := inst.allocateInbox()
 	replyCh := make(chan []byte, 1)
 	var inboxId uint64
@@ -357,18 +400,64 @@ func (inst *Client) RequestWithTimeout(subject string, payload []byte, d time.Du
 		return
 	}
 	defer inst.inst.unsubscribe(inboxId)
-	_, err = inst.inst.publish(inst.appId, inst.instanceKey.Load(), subject, inbox, payload)
-	if err != nil {
-		err = eh.Errorf("bus request: publish: %w", err)
-		return
+	timer := time.NewTimer(d)
+	defer timer.Stop()
+	dispatched := make(chan struct{})
+	msg := newMsg(inst.appId, inst.instanceKey.Load(), subject, inbox, payload)
+	msg.RequesterGoroutine = goroutineId()
+	go func() {
+		defer close(dispatched)
+		inst.inst.dispatch(matched, msg)
+	}()
+	// First the handlers return, so a requester sees what they did before
+	// they returned; then a reply sent later still has until d.
+	select {
+	case <-dispatched:
+	case <-timer.C:
+		return inst.lateReply(replyCh, subject)
+	case <-ctx.Done():
+		return inst.cancelledRequest(ctx, subject)
 	}
 	select {
 	case reply = <-replyCh:
 		return
-	case <-time.After(d):
-		err = eb.Build().Str("subject", subject).Errorf("bus request: %w", ErrTimeout)
+	case <-timer.C:
+		return inst.lateReply(replyCh, subject)
+	case <-ctx.Done():
+		return inst.cancelledRequest(ctx, subject)
+	}
+}
+
+// lateReply takes a reply that arrived as the wait ran out, or answers
+// ErrTimeout.
+func (inst *Client) lateReply(replyCh <-chan []byte, subject string) (reply []byte, err error) {
+	select {
+	case reply = <-replyCh:
+		return
+	default:
+	}
+	err = eb.Build().Str("subject", subject).Errorf("bus request: %w", ErrTimeout)
+	return
+}
+
+func (inst *Client) cancelledRequest(ctx context.Context, subject string) (reply []byte, err error) {
+	err = eb.Build().Str("subject", subject).Errorf("bus request: %w", context.Cause(ctx))
+	return
+}
+
+// goroutineId is the calling goroutine's id, read from the header
+// runtime.Stack writes ("goroutine N [...]"); 0 if it cannot be parsed.
+func goroutineId() (id uint64) {
+	var buf [64]byte
+	n := runtime.Stack(buf[:], false)
+	s, ok := strings.CutPrefix(string(buf[:n]), "goroutine ")
+	if !ok {
 		return
 	}
+	if i := strings.IndexByte(s, ' '); i > 0 {
+		id, _ = strconv.ParseUint(s[:i], 10, 64)
+	}
+	return
 }
 
 func (inst *Client) allocateInbox() (inbox string) {

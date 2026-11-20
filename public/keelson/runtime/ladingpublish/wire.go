@@ -143,7 +143,7 @@ func request(bus app.BusI, tag identifier.TagValue, req Request, d time.Duration
 		return
 	}
 	reply, err := bus.RequestWithTimeout(Subject(tag), b, d)
-	if errors.Is(err, inprocbus.ErrTimeout) {
+	if errors.Is(err, inprocbus.ErrNoResponders) || errors.Is(err, inprocbus.ErrTimeout) {
 		err = eb.Build().Uint64("tag", uint64(tag)).Errorf("lading publish: no answer from the publish service; does this host run it? %w", err)
 		return
 	}

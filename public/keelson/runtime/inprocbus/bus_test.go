@@ -145,13 +145,27 @@ func TestInst_RequestReply_RoundTrip(t *testing.T) {
 	assert.Equal(t, "ok:SELECT 1", string(reply))
 }
 
-func TestInst_Request_TimesOutWhenNoResponder(t *testing.T) {
+func TestInst_Request_FailsAtOnceWhenNoResponder(t *testing.T) {
+	inst := newInst(t)
+	inst.SetRequestTimeout(time.Minute)
+	bus := inst.NewClient("test.app", fullCaps())
+
+	t0 := time.Now()
+	_, err := bus.Request("nobody.listening", []byte("?"))
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrNoResponders)
+	assert.Less(t, time.Since(t0), 5*time.Second, "no responder costs no wait")
+}
+
+// A subscriber that never answers costs the requester its timeout, no more.
+func TestInst_Request_TimesOutWhenTheSubscriberDoesNotAnswer(t *testing.T) {
 	inst := newInst(t)
 	inst.SetRequestTimeout(50 * time.Millisecond)
 	bus := inst.NewClient("test.app", fullCaps())
+	_, err := bus.Subscribe("silent.one", func(*app.Msg) {})
+	require.NoError(t, err)
 
-	_, err := bus.Request("nobody.listening", []byte("?"))
-	require.Error(t, err)
+	_, err = bus.Request("silent.one", []byte("?"))
 	assert.ErrorIs(t, err, ErrTimeout)
 }
 

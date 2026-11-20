@@ -326,12 +326,20 @@ type MsgHandlerFunc func(msg *Msg)
 // It is deliberately not part of any request payload. The bus stamps it, so
 // a caller cannot claim to be a window it is not — the same reason ADR-0135
 // attributes a launch's caller from the envelope rather than the request.
+//
+// RequesterGoroutine is, on the in-process bus, the id of the goroutine a
+// Request was made on. The handlers of a request run on a goroutine of the
+// request's own (ADR-0386), so a handler that must refuse a caller's
+// goroutine — the render goroutine, which a handler waiting on the next
+// frame would block — reads it here. Zero for a publish, whose handlers run
+// on the publisher's goroutine, and on transports that do not carry it.
 type Msg struct {
-	Subject        string
-	Reply          string
-	Sender         AppIdT
-	SenderInstance uint64
-	Payload        []byte
+	Subject            string
+	Reply              string
+	Sender             AppIdT
+	SenderInstance     uint64
+	Payload            []byte
+	RequesterGoroutine uint64
 }
 
 // StorageI is the forward declaration of the CH+leeway-backed cold-state

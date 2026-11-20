@@ -146,7 +146,7 @@ func TestACheckWithoutTheServiceSaysSo(t *testing.T) {
 	checkTimeout = 50 * time.Millisecond
 	t.Cleanup(func() { checkTimeout = prior })
 	err := Check(client, tagA, Request{Files: oneFile()})
-	assert.ErrorIs(t, err, inprocbus.ErrTimeout)
+	assert.ErrorIs(t, err, inprocbus.ErrNoResponders)
 	assert.ErrorContains(t, err, "does this host run it")
 }
 

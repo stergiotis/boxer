@@ -203,11 +203,16 @@ func (inst *Service) handleRequest(msg *app.Msg) {
 	if msg.Reply == "" {
 		return
 	}
-	// An in-process handler runs on its requester's goroutine; a request
-	// from the render goroutine would wait on the frame it blocks (ADR-0269
-	// §SD3).
+	// A request from the render goroutine would wait on the frame it blocks
+	// (ADR-0269 §SD3). The in-process bus names the requester's goroutine on
+	// the message, since a request's handlers run on one of their own
+	// (ADR-0386); a publish's run on the publisher's.
 	if inst.cfg.Host != nil {
-		if rg := inst.cfg.Host.OpsRenderGoroutine(); rg != 0 && rg == opwire.GoroutineId() {
+		requester := msg.RequesterGoroutine
+		if requester == 0 {
+			requester = opwire.GoroutineId()
+		}
+		if rg := inst.cfg.Host.OpsRenderGoroutine(); rg != 0 && rg == requester {
 			inst.reply(msg.Reply, wireAck{V: wireVersion, Reason: "requested from the render goroutine; call from a goroutine of your own"})
 			return
 		}
