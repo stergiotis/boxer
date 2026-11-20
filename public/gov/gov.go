@@ -1,6 +1,7 @@
 package gov
 
 import (
+	"github.com/stergiotis/boxer/public/gov/adrindex"
 	"github.com/stergiotis/boxer/public/gov/buildtags"
 	"github.com/stergiotis/boxer/public/gov/callsites"
 	"github.com/stergiotis/boxer/public/gov/cargolicenses"
@@ -36,6 +37,8 @@ func NewCliCommand() *cli.Command {
 			commitdigest.NewCliCommand(),
 			changelogindex.NewCliCommand(),
 			releasenotes.NewCliCommand(),
+
+			adrindex.NewCliCommand(),
 			llmtag.NewCliCommand(),
 			licensegate.NewCliCommand(),
 			cargolicenses.NewCliCommand(),

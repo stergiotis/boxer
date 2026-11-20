@@ -27,7 +27,7 @@ the linked document wins.
 | Write Go in the house style | [CODINGSTANDARDS.md](./CODINGSTANDARDS.md) |
 | Understand the toolchain (CI, lint, governance, supply-chain) | [doc/ENGINEERING_PRACTICES.md](./doc/ENGINEERING_PRACTICES.md) |
 | Write or edit a doc / ADR | [doc/DOCUMENTATION_STANDARD.md](./doc/DOCUMENTATION_STANDARD.md) |
-| See *why* the architecture is the way it is | [doc/adr/](./doc/adr/) |
+| See *why* the architecture is the way it is | [doc/adr/](./doc/adr/) — [INDEX.md](./doc/adr/INDEX.md) lists every ADR with its status |
 | Read the analysis behind a decision — surveys, measurements, costed options | [doc/adr-background-work/](./doc/adr-background-work/) |
 | Run a trial — a reproducible measurement protocol repeated across builds | [doc/trials/](./doc/trials/) |
 | **Quote a performance number from a trial** | that trial's README **§0**, never a table under `runs/` — see [doc/trials § Citing a trial](./doc/trials/README.md#citing-a-trial) |

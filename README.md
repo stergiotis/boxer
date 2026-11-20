@@ -123,7 +123,7 @@ Shipped binaries are built one way, from a sourced environment file rather than 
 Boxer follows the [Diátaxis](https://diataxis.fr/) framework (ADR-0001). Docs live next to the code they describe:
 
 * **Architecture overview** — [`doc/ARCHITECTURE.md`](doc/ARCHITECTURE.md) draws how the pieces fit: the operation modes (desktop, headless, appliance images) and the data architecture (the two ClickHouse engines, the `boxer.*` tables, ad-hoc datasets, the filesystem snapshot store and its rclone seam).
-* **Architecture decisions** — [`doc/adr/`](doc/adr/) records the *why* behind cross-cutting choices (nanopass discipline, h3 WASM bridge, license gate, Kafka port, leeway membership-role classifier, …).
+* **Architecture decisions** — [`doc/adr/`](doc/adr/) records the *why* behind cross-cutting choices (nanopass discipline, h3 WASM bridge, license gate, Kafka port, leeway membership-role classifier, …); [`INDEX.md`](doc/adr/INDEX.md) is a generated table of every ADR with its status and date.
 * **Changelog** — [`doc/changelog/`](doc/changelog/) compiles window-bounded change summaries, one entry per two-to-four-week window, each opening with a hash-free *window in brief*; [`INDEX.md`](doc/changelog/INDEX.md) is a generated table of contents over the entries.
 * **Tutorials** — [`doc/tutorials/`](doc/tutorials/) take a newcomer from an empty directory to a running app, and to a first leeway table.
 * **Per-package docs** — larger subsystems co-locate `HOWTO.md` / `EXPLANATION.md` / reference docs with their source (e.g. [`public/db/clickhouse/dsl/EXPLANATION.md`](public/db/clickhouse/dsl/EXPLANATION.md)).
