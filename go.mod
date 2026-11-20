@@ -240,6 +240,7 @@ tool (
 	github.com/mfridman/tparse
 	github.com/nats-io/nats-server/v2
 	go.uber.org/nilaway/cmd/nilaway
+	golang.org/x/exp/cmd/apidiff
 	golang.org/x/perf/cmd/benchstat
 	golang.org/x/vuln/cmd/govulncheck
 	honnef.co/go/tools/cmd/staticcheck
