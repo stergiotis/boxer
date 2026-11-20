@@ -103,7 +103,8 @@ SELECT DISTINCT path FROM walk ORDER BY path`))
 	// what an applet's WHERE clause is written against.
 	assert.Equal(t, "1", query(`
 SELECT count() = countIf(wasm_wasi IN ('unknown', 'compiles', 'blocked'))
-   AND countIf(kind IN ('unspecified', 'demo', 'example', 'integration-test')) = count()
+   AND countIf(kind IN ('unspecified', 'demo', 'example', 'integration-test', 'test-support', 'tool')) = count()
+   AND countIf(stability IN ('unspecified', 'stable', 'experimental', 'internal')) = count()
    AND count() > 0
 FROM keelson('go_package_props')`))
 }
