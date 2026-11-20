@@ -1,0 +1,774 @@
+boxer
+boxer --coverageTrapDir
+boxer --flightRecorder
+boxer --flightRecorderFlushOnSignal
+boxer --flightRecorderOutputFile
+boxer --logCaller
+boxer --logColor
+boxer --logCorrelationId
+boxer --logFile
+boxer --logFormat
+boxer --logLevel
+boxer --logModuleInfoOnStart
+boxer --logOsArgsOnStart
+boxer --logOsHostOnStart
+boxer --logOsPidOnStart
+boxer --logVcsRevisionOnStart
+boxer --markdownEcho
+boxer --pprofCpuOutputFile
+boxer --pprofHttpListenAddress
+boxer --stderrToFile
+boxer --stdinFromFile
+boxer --stdoutToFile
+boxer --version
+boxer --waitForDebugger
+boxer adr
+boxer adr build
+boxer adr build --adr-dir
+boxer adr build --out
+boxer adr build --root
+boxer adr overview
+boxer adr overview --adr-dir
+boxer adr overview --root
+boxer adr query
+boxer adr query --adr-dir
+boxer adr query --format
+boxer adr query --root
+boxer badger
+boxer badger dump
+boxer badger dump --path
+boxer badger dump --prefetchSize
+boxer capmap
+boxer capmap dump
+boxer capmap dump --clickhouse-url
+boxer capmap dump --database
+boxer capmap dump --force
+boxer capmap dump --out
+boxer capmap dump --password
+boxer capmap dump --table
+boxer capmap dump --user
+boxer capmap load
+boxer capmap load --clickhouse-url
+boxer capmap load --database
+boxer capmap load --engine
+boxer capmap load --password
+boxer capmap load --setup-table
+boxer capmap load --table
+boxer capmap load --user
+boxer capmap load --vault
+boxer capmap parse
+boxer capmap parse --vault
+boxer capmap similar
+boxer capmap similar --cross
+boxer capmap similar --dry-run
+boxer capmap similar --out
+boxer capmap similar --threshold
+boxer capmap similar --top
+boxer capmap similar --vault
+boxer capmap similar --workers
+boxer capslock
+boxer capslock --root
+boxer capslock --tags
+boxer cbor
+boxer cbor diagnostics
+boxer cbor diagnostics --pretty
+boxer cbor diagnostics --width
+boxer code
+boxer code analysis
+boxer code analysis golang
+boxer code analysis golang vendortidy
+boxer code analysis golang vendortidy --check
+boxer code analysis golang vendortidy --goroot
+boxer code analysis golang vendortidy --work
+boxer code analysis golang wasmsurvey
+boxer code analysis golang wasmsurvey --assume-clean
+boxer code analysis golang wasmsurvey --dir
+boxer code analysis golang wasmsurvey --include-external
+boxer code analysis golang wasmsurvey --jobs
+boxer code analysis golang wasmsurvey --json
+boxer code analysis golang wasmsurvey --mode
+boxer code analysis golang wasmsurvey --patterns
+boxer code analysis golang wasmsurvey --show-green
+boxer code analysis golang wasmsurvey --tags
+boxer code analysis golang wasmsurvey --target
+boxer code analysis golang wasmsurvey --timeout
+boxer code analysis golang wasmsurvey props
+boxer code analysis golang wasmsurvey props drift
+boxer code analysis golang wasmsurvey props drift --dir
+boxer code analysis golang wasmsurvey props generate
+boxer code analysis golang wasmsurvey props generate --assume-clean
+boxer code analysis golang wasmsurvey props generate --dir
+boxer code analysis golang wasmsurvey props generate --include-external
+boxer code analysis golang wasmsurvey props generate --jobs
+boxer code analysis golang wasmsurvey props generate --mode
+boxer code analysis golang wasmsurvey props generate --overwrite
+boxer code analysis golang wasmsurvey props generate --patterns
+boxer code analysis golang wasmsurvey props generate --tags
+boxer code analysis golang wasmsurvey props generate --target
+boxer code analysis golang wasmsurvey props generate --timeout
+boxer code analysis golang wasmsurvey props harvest
+boxer code analysis golang wasmsurvey props harvest --dir
+boxer code analysis golang wasmsurvey props harvest --emit
+boxer code analysis golang wasmsurvey props harvest --out
+boxer code analysis golang wasmsurvey props harvest --package
+boxer code analysis golang wasmsurvey props harvest --patterns
+boxer code analysis golang wasmsurvey props harvest --tracked
+boxer code analysis golang wasmsurvey props verify
+boxer code analysis golang wasmsurvey props verify --assume-clean
+boxer code analysis golang wasmsurvey props verify --dir
+boxer code analysis golang wasmsurvey props verify --include-external
+boxer code analysis golang wasmsurvey props verify --jobs
+boxer code analysis golang wasmsurvey props verify --mode
+boxer code analysis golang wasmsurvey props verify --patterns
+boxer code analysis golang wasmsurvey props verify --show-unjudged
+boxer code analysis golang wasmsurvey props verify --tags
+boxer code analysis golang wasmsurvey props verify --target
+boxer code analysis golang wasmsurvey props verify --timeout
+boxer code analysis sccapplet
+boxer code analysis sccapplet --depth
+boxer code analysis sccapplet --dir
+boxer code analysis sccapplet --out
+boxer code analysis sccapplet --revision
+boxer code gen-builder-tests
+boxer code gen-builder-tests --out
+boxer code gen-builder-tests --pkg
+boxer compression
+boxer compression dict
+boxer compression dict --encoding
+boxer compression dict --lowercase
+boxer compression dict --nGramN
+boxer compression dict --output
+boxer datacatalog
+boxer datacatalog ddl
+boxer datacatalog refresh
+boxer datacatalog refresh --database
+boxer datacatalog refresh --dry-run
+boxer datacatalog refresh --password
+boxer datacatalog refresh --url
+boxer datacatalog refresh --user
+boxer datacatalog shapes
+boxer datasource
+boxer designsystem
+boxer designsystem colors
+boxer designsystem colors gen
+boxer designsystem colors gen --verify
+boxer designsystem colors vendor
+boxer designsystem review
+boxer designsystem review ssim
+boxer designsystem review ssim --quiet
+boxer designsystem review ssim --threshold
+boxer designsystem review ssim --window
+boxer designsystem review tour
+boxer designsystem review tour --gate-below
+boxer designsystem review tour --quiet
+boxer designsystem review tour --threshold
+boxer designsystem review tour --window
+boxer dev
+boxer dev entry-points
+boxer dev entry-points --baseline
+boxer dev entry-points --root
+boxer dev entry-points --strict
+boxer dev entry-points --tags
+boxer dev panic
+boxer dev panic --message
+boxer dev viewer-fixture
+boxer dev viewer-fixture bmp-check
+boxer dev viewer-fixture bmp-check --min-distinct-bytes
+boxer dev viewer-fixture ivf-extract
+boxer doc
+boxer doc markdown
+boxer doc markdown codeblock
+boxer doc markdown codeblock --syntaxHighlight
+boxer egui2gen
+boxer egui2gen generate
+boxer egui2gen generate doc
+boxer egui2gen generate doc --docOutputPath
+boxer egui2gen generate go
+boxer egui2gen generate go --goOutputBasePath
+boxer egui2gen generate rust
+boxer egui2gen generate rust --rustOutputBasePath
+boxer env
+boxer env gen-docs
+boxer env gen-docs --envfile-command
+boxer env gen-docs --generator
+boxer env gen-docs --json
+boxer env gen-docs --known
+boxer env gen-docs --out
+boxer env gen-docs --regenerate-hint
+boxer env gen-envfile
+boxer env gen-envfile --category
+boxer env gen-envfile --current
+boxer env gen-envfile --export
+boxer env gen-envfile --force
+boxer env gen-envfile --generator
+boxer env gen-envfile --origin
+boxer env gen-envfile --out
+boxer env gen-envfile --prefix
+boxer env list
+boxer env list --category
+boxer env list --origin
+boxer env list --prefix
+boxer error
+boxer error demo
+boxer fairlead
+boxer fairlead report
+boxer fairlead report --
+boxer findAnchor
+boxer findAnchor --maxHammingDistPerByteIncl
+boxer findAnchor --nAnchorBytes
+boxer fs
+boxer fs purge
+boxer fs purge --database
+boxer fs purge --mount
+boxer fs sftp-stdio
+boxer fs sftp-stdio --all-mounts
+boxer fs sftp-stdio --database
+boxer fs sftp-stdio --mount
+boxer fs sftp-stdio --s
+boxer fs snapshot
+boxer fs snapshot --database
+boxer fs snapshot --inline-max
+boxer fs snapshot --meta-only
+boxer fs snapshot --mount
+boxer fs snapshot --name
+boxer fs snapshot --no-provision
+boxer fs snapshot --profile
+boxer fs snapshot --rclone-arg
+boxer fs snapshot --remote
+boxer fs snapshot --skip-ref-hash
+boxer fs snapshot --store
+boxer fs snapshot --text-rule
+boxer fs snapshot --ttl-days
+boxer gov
+boxer gov buildtags
+boxer gov buildtags --file
+boxer gov buildtags --list
+boxer gov buildtags --print-env
+boxer gov callsites
+boxer gov callsites --adjudicate
+boxer gov callsites --fail-on
+boxer gov callsites --format
+boxer gov callsites --include-tests
+boxer gov callsites --markdown
+boxer gov callsites --tags
+boxer gov cargo-licenses
+boxer gov cargo-licenses --metadata
+boxer gov cargo-licenses --out
+boxer gov changelogindex
+boxer gov changelogindex --check
+boxer gov changelogindex --dir
+boxer gov changelogindex --out
+boxer gov codelint
+boxer gov codelint --format
+boxer gov codelint --min-severity
+boxer gov codelint --tags
+boxer gov commitdigest
+boxer gov commitdigest extract
+boxer gov commitdigest extract --author
+boxer gov commitdigest extract --correction
+boxer gov commitdigest extract --detect-crossings
+boxer gov commitdigest extract --encoding
+boxer gov commitdigest extract --hotspot-top
+boxer gov commitdigest extract --no-stat
+boxer gov commitdigest extract --reserved-tokens
+boxer gov commitdigest extract --reset-cursor
+boxer gov commitdigest extract --resume-dir
+boxer gov commitdigest extract --since
+boxer gov commitdigest extract --token-budget
+boxer gov commitdigest mine-trends
+boxer gov commitdigest mine-trends --clickhouse-binary
+boxer gov commitdigest summarize
+boxer gov commitdigest summarize --dry-run
+boxer gov commitdigest summarize --gemini-api-key
+boxer gov commitdigest summarize --llm-apikey
+boxer gov commitdigest summarize --llm-endpoint
+boxer gov commitdigest summarize --llm-model
+boxer gov commitdigest summarize --llm-timeout
+boxer gov commitdigest summarize --num-ctx
+boxer gov commitdigest summarize --summaries-dir
+boxer gov commitdigest summarize --system-prompt
+boxer gov commitdigest summarize --thread-registry
+boxer gov commitdigest summarize --window-size
+boxer gov commitdigest synthesize-threads
+boxer gov commitdigest synthesize-threads --dry-run
+boxer gov commitdigest synthesize-threads --gemini-api-key
+boxer gov commitdigest synthesize-threads --llm-apikey
+boxer gov commitdigest synthesize-threads --llm-endpoint
+boxer gov commitdigest synthesize-threads --llm-model
+boxer gov commitdigest synthesize-threads --llm-timeout
+boxer gov commitdigest synthesize-threads --num-ctx
+boxer gov contracts
+boxer gov contracts diff
+boxer gov contracts diff --migrations
+boxer gov contracts diff --root
+boxer gov contracts snapshot
+boxer gov contracts snapshot --out
+boxer gov contracts snapshot --root
+boxer gov doclint
+boxer gov doclint --exclude
+boxer gov doclint --format
+boxer gov doclint --min-severity
+boxer gov filenames
+boxer gov filenames --dry-run
+boxer gov filenames --root
+boxer gov gate
+boxer gov gate --code-pattern
+boxer gov gate --doc-root
+boxer gov gate --entry-points-baseline
+boxer gov gate --exclude
+boxer gov gate --list-steps
+boxer gov gate --naming-baseline
+boxer gov gate --naming-root
+boxer gov gate --root
+boxer gov gate --step
+boxer gov gate --tab-pkg
+boxer gov gate --tags
+boxer gov gate --tags-file
+boxer gov license-gate
+boxer gov license-gate --cargo-metadata
+boxer gov license-gate --csv
+boxer gov license-gate --sbom
+boxer gov llmtag
+boxer gov llmtag --apply
+boxer gov llmtag --diff
+boxer gov llmtag --format
+boxer gov llmtag --markdown
+boxer gov llmtag --min-lines
+boxer gov llmtag --repo
+boxer gov llmtag --root
+boxer gov llmtag --threshold
+boxer gov llmtag --trailer-cutoff
+boxer gov repo
+boxer gov repo authorship
+boxer gov repo authorship --format
+boxer gov repo authorship --markdown
+boxer gov repo authorship --repo
+boxer gov repo authorship --since
+boxer gov repo authorship --top
+boxer gov repo authorship --until
+boxer gov repo bughotspots
+boxer gov repo bughotspots --format
+boxer gov repo bughotspots --markdown
+boxer gov repo bughotspots --pattern
+boxer gov repo bughotspots --repo
+boxer gov repo bughotspots --since
+boxer gov repo bughotspots --top
+boxer gov repo bughotspots --until
+boxer gov repo churn
+boxer gov repo churn --format
+boxer gov repo churn --markdown
+boxer gov repo churn --repo
+boxer gov repo churn --since
+boxer gov repo churn --top
+boxer gov repo churn --until
+boxer gov repo contributors
+boxer gov repo contributors --bus-factor
+boxer gov repo contributors --format
+boxer gov repo contributors --markdown
+boxer gov repo contributors --repo
+boxer gov repo contributors --since
+boxer gov repo contributors --top
+boxer gov repo contributors --until
+boxer gov repo firefighting
+boxer gov repo firefighting --emergency-pattern
+boxer gov repo firefighting --format
+boxer gov repo firefighting --hotfix-pattern
+boxer gov repo firefighting --markdown
+boxer gov repo firefighting --repo
+boxer gov repo firefighting --revert-pattern
+boxer gov repo firefighting --since
+boxer gov repo firefighting --top
+boxer gov repo firefighting --until
+boxer gov repo ownership
+boxer gov repo ownership --commits
+boxer gov repo ownership --format
+boxer gov repo ownership --markdown
+boxer gov repo ownership --parallelism
+boxer gov repo ownership --repo
+boxer gov repo ownership --summary
+boxer gov repo report
+boxer gov repo report --repo
+boxer gov repo report --since
+boxer gov repo report --top
+boxer gov repo report --until
+boxer gov repo velocity
+boxer gov repo velocity --format
+boxer gov repo velocity --markdown
+boxer gov repo velocity --repo
+boxer gov repo velocity --since
+boxer gov repo velocity --top
+boxer gov repo velocity --until
+boxer gov skeleton
+boxer gov skeleton --app-package
+boxer gov skeleton --list
+boxer gov skeleton --module
+boxer gov skeleton --name
+boxer gov skeleton --root
+boxer gov skeleton --write
+boxer grib
+boxer grib dump
+boxer grib dump --field
+boxer grib dump --points
+boxer grib dump --values
+boxer grib index
+boxer grib ls
+boxer grib tables
+boxer grib tables --cct
+boxer grib tables --grib2
+boxer grib tables --out
+boxer grib tables --version
+boxer http
+boxer http serve
+boxer http serve --filePattern
+boxer http serve --listen
+boxer http serve --outputDirectory
+boxer iconsgen
+boxer iconsgen generate
+boxer iconsgen generate --constsOut
+boxer iconsgen generate --iconsJson
+boxer iconsgen generate --lookupOut
+boxer iconsgen generate --package
+boxer jackstay
+boxer jackstay apply-ddl
+boxer jackstay apply-ddl --confirm
+boxer jackstay apply-ddl --plan
+boxer jackstay diff
+boxer jackstay diff --final
+boxer jackstay diff --pair-budget
+boxer jackstay diff --pair-threshold
+boxer jackstay diff --plan
+boxer jackstay diff --table
+boxer jackstay discover
+boxer jackstay discover --source
+boxer jackstay discover --source-user
+boxer jackstay discover --target
+boxer jackstay discover --target-user
+boxer jackstay export
+boxer jackstay export --compression
+boxer jackstay export --database
+boxer jackstay export --filter
+boxer jackstay export --leeway-only
+boxer jackstay export --pack
+boxer jackstay export --restart
+boxer jackstay export --sample
+boxer jackstay export --source
+boxer jackstay export --source-user
+boxer jackstay status
+boxer jackstay status --disk
+boxer jackstay status --plan
+boxer jackstay structure
+boxer jackstay structure --database
+boxer jackstay structure --filter
+boxer jackstay structure --leeway-only
+boxer jackstay structure --map
+boxer jackstay structure --pack
+boxer jackstay structure --plan
+boxer jackstay structure --source
+boxer jackstay structure --source-user
+boxer jackstay structure --target
+boxer jackstay structure --target-user
+boxer jackstay sync
+boxer jackstay sync --compression
+boxer jackstay sync --dry-run
+boxer jackstay sync --existing
+boxer jackstay sync --headroom
+boxer jackstay sync --min-free-bytes
+boxer jackstay sync --min-free-fraction
+boxer jackstay sync --mode
+boxer jackstay sync --plan
+boxer jackstay sync --restart
+boxer jackstay sync --sample
+boxer jackstay sync --table
+boxer keelsoncodec
+boxer keelsoncodec --target
+boxer keelsonddl
+boxer keelsonddl --database
+boxer keelsonddl --engine
+boxer keelsonddl --table
+boxer keelsonddl --trail-views
+boxer keelsonddl --with-surface
+boxer key
+boxer key random
+boxer key random --length
+boxer leeway
+boxer leeway canonwire
+boxer leeway canonwire table
+boxer leeway canonwire table generate
+boxer leeway canonwire table generate go
+boxer leeway canonwire table generate go --packageName
+boxer leeway canonwire table generate go --tableName
+boxer leeway canonwire table slots
+boxer leeway canonwire table slots --format
+boxer leeway canonwire table slots --markdown
+boxer leeway canonwire table slots --tableName
+boxer leeway canonwire verify
+boxer leeway canonwire verify --file
+boxer leeway canonwire verify --format
+boxer leeway canonwire verify --markdown
+boxer leeway canonwire verify --sequence
+boxer leeway ct
+boxer leeway ct abbrevs
+boxer leeway ct abbrevs --astPackage
+boxer leeway ct abbrevs --import
+boxer leeway ct abbrevs --packageName
+boxer leeway ddl
+boxer leeway ddl compose
+boxer leeway ddl compose --co-group
+boxer leeway ddl compose --engine
+boxer leeway ddl compose --if-not-exists
+boxer leeway ddl compose --memb
+boxer leeway ddl compose --order-by
+boxer leeway ddl compose --partition-by
+boxer leeway ddl compose --plain
+boxer leeway ddl compose --settings
+boxer leeway ddl compose --skip-indexes
+boxer leeway ddl compose --stream-group
+boxer leeway ddl compose --table
+boxer leeway ddl compose --tableRowConfig
+boxer leeway ddl compose --tv
+boxer leeway ddl table
+boxer leeway ddl table generate
+boxer leeway ddl table generate --separator
+boxer leeway ddl table generate --tableRowConfig
+boxer leeway ddl table generate --technology
+boxer leeway ddl table normalize
+boxer leeway ddl table normalize --format
+boxer leeway ddl table normalize --markdown
+boxer leeway ddl table normalize --namingStyle
+boxer leeway ddl table scramble
+boxer leeway ddl table scramble --format
+boxer leeway ddl table scramble --markdown
+boxer leeway ddl table scramble --namingStyle
+boxer leeway ddl table scramble --seed1
+boxer leeway ddl table scramble --seed2
+boxer leeway ddl table validate
+boxer leeway dml
+boxer leeway dml table
+boxer leeway dml table generate
+boxer leeway dml table generate go
+boxer leeway dml table generate go --packageName
+boxer leeway dml table generate go --tableName
+boxer leeway encodinghints
+boxer leeway encodinghints list
+boxer leeway encodinghints list --format
+boxer leeway encodinghints list --markdown
+boxer leeway id
+boxer leeway id tagvalue
+boxer leeway id tagvalue leadingzero
+boxer leeway id tagvalue leadingzero --format
+boxer leeway id tagvalue leadingzero --leadingZeros
+boxer leeway id tagvalue leadingzero --markdown
+boxer leeway id tagvalue leadingzero --tagWidth
+boxer leeway id udf
+boxer leeway ir
+boxer leeway ir load
+boxer leeway ir load --format
+boxer leeway ir load --markdown
+boxer leeway ir load --technology
+boxer leeway sqlsurface
+boxer leeway sqlsurface drop-undeclared
+boxer leeway sqlsurface drop-undeclared --confirm
+boxer leeway sqlsurface drop-undeclared --password
+boxer leeway sqlsurface drop-undeclared --timeout
+boxer leeway sqlsurface drop-undeclared --url
+boxer leeway sqlsurface drop-undeclared --user
+boxer leeway sqlsurface install
+boxer leeway sqlsurface install --password
+boxer leeway sqlsurface install --timeout
+boxer leeway sqlsurface install --url
+boxer leeway sqlsurface install --user
+boxer leeway sqlsurface install --views-database
+boxer leeway sqlsurface print
+boxer leeway sqlsurface print --views-database
+boxer leeway sqlsurface status
+boxer leeway sqlsurface status --fail-on-drift
+boxer leeway sqlsurface status --password
+boxer leeway sqlsurface status --timeout
+boxer leeway sqlsurface status --url
+boxer leeway sqlsurface status --user
+boxer leeway sqlsurface status --views-database
+boxer leeway useaspects
+boxer leeway useaspects list
+boxer leeway useaspects list --format
+boxer leeway useaspects list --markdown
+boxer leeway valuesemantics
+boxer leeway valuesemantics list
+boxer leeway valuesemantics list --format
+boxer leeway valuesemantics list --markdown
+boxer llm
+boxer llm transcribe
+boxer llm transcribe --diarize
+boxer llm transcribe --format
+boxer llm transcribe --language
+boxer llm transcribe --prompt
+boxer llm transcribe --speaker
+boxer llm transcribe --stream
+boxer llm transcribe --timestamps
+boxer markdown
+boxer markdown extract
+boxer markdown ingest
+boxer markdown ingest --batch
+boxer markdown ingest --dry-run
+boxer markdown ingest --timeout
+boxer markdown notebook
+boxer markdown notebook buffer
+boxer markdown notebook check
+boxer markdown notebook collect
+boxer markdown notebook collect --timeout
+boxer numerical
+boxer numerical find-divisions
+boxer numerical find-divisions generate
+boxer numerical find-divisions generate --axisWidth
+boxer numerical find-divisions generate --canvasWidth
+boxer numerical find-divisions generate --desiredTicks
+boxer numerical find-divisions generate --dpi
+boxer numerical find-divisions generate --fastMode
+boxer numerical find-divisions generate --fontSize
+boxer numerical find-divisions generate --log
+boxer numerical find-divisions generate --max
+boxer numerical find-divisions generate --measurerCacheSize
+boxer numerical find-divisions generate --min
+boxer numerical find-divisions generate --nonuniformDecimals
+boxer numerical find-divisions generate --onlyLoose
+boxer numerical find-divisions generate --rowHeight
+boxer observability
+boxer observability tracing
+boxer observability tracing codelocations
+boxer observability tracing codelocations --estimatedLOC
+boxer observability tracing codelocations --format
+boxer observability tracing codelocations --markdown
+boxer observability tracing codelocations --relativePath
+boxer observability tracing codelocations --relativePathBase
+boxer observability tracing codelocations --sort
+boxer protogen
+boxer protogen --goPackage
+boxer protogen --out
+boxer protogen --protoFile
+boxer protogen --protoRoot
+boxer queryrunsd
+boxer queryrunsd --backfill
+boxer queryrunsd --cadence
+boxer queryrunsd --ch-url
+boxer queryrunsd --listen
+boxer queryrunsd --scope
+boxer runtimecodegen
+boxer runtimecodegen all
+boxer runtimecodegen canonwire
+boxer runtimecodegen canonwire --out
+boxer runtimecodegen ddl
+boxer runtimecodegen ddl --out
+boxer runtimecodegen dml
+boxer runtimecodegen dml --out
+boxer runtimecodegen dml-cbor
+boxer runtimecodegen dml-cbor --out
+boxer runtimecodegen readaccess
+boxer runtimecodegen readaccess --out
+boxer sample
+boxer sample canonicaltype
+boxer sample canonicaltype machineNumeric
+boxer sample canonicaltype machineNumeric --format
+boxer sample canonicaltype machineNumeric --markdown
+boxer sample canonicaltype machineNumeric --n
+boxer sample canonicaltype machineNumeric --random
+boxer sample canonicaltype machineNumeric --seed1
+boxer sample canonicaltype machineNumeric --seed2
+boxer sample canonicaltype string
+boxer sample canonicaltype string --format
+boxer sample canonicaltype string --markdown
+boxer sample canonicaltype string --n
+boxer sample canonicaltype string --random
+boxer sample canonicaltype string --seed1
+boxer sample canonicaltype string --seed2
+boxer sample canonicaltype temporal
+boxer sample canonicaltype temporal --format
+boxer sample canonicaltype temporal --markdown
+boxer sample canonicaltype temporal --n
+boxer sample canonicaltype temporal --random
+boxer sample canonicaltype temporal --seed1
+boxer sample canonicaltype temporal --seed2
+boxer sample table
+boxer sample table --clickHouseCompatible
+boxer sample table --format
+boxer sample table --markdown
+boxer sample table --n
+boxer sample table --random
+boxer sample table --seed1
+boxer sample table --seed2
+boxer stevedoredemo
+boxer stevedoredemo land
+boxer stevedoredemo land --brokers
+boxer stevedoredemo land --database
+boxer stevedoredemo land --dead-letters
+boxer stevedoredemo land --group
+boxer stevedoredemo land --topic
+boxer stevedoredemo process
+boxer stevedoredemo process --bare-body
+boxer stevedoredemo process --codec
+boxer stevedoredemo process --deadline
+boxer stevedoredemo process --log-file
+boxer stevedoredemo process --log-level
+boxer stevedoredemo process --max-body
+boxer stevedoredemo process --max-frame
+boxer stevedoredemo process --reply
+boxer stevedoredemo run
+boxer stevedoredemo run --database
+boxer stevedoredemo run --dead-letters
+boxer stevedoredemo run --deadline
+boxer stevedoredemo run --flush-every
+boxer stevedoredemo run --max-body
+boxer stevedoredemo run --skip
+boxer stevedoredemo run --workers
+boxer swisstopo
+boxer swisstopo line-of-sight
+boxer swisstopo line-of-sight --csv
+boxer swisstopo line-of-sight --from-height
+boxer swisstopo line-of-sight --from-lat
+boxer swisstopo line-of-sight --from-lon
+boxer swisstopo line-of-sight --step
+boxer swisstopo line-of-sight --tiles-dir
+boxer swisstopo line-of-sight --to-height
+boxer swisstopo line-of-sight --to-lat
+boxer swisstopo line-of-sight --to-lon
+boxer swisstopo mirror
+boxer swisstopo mirror --dest
+boxer swisstopo mirror --dry-run
+boxer swisstopo mirror --verify-existing
+boxer swisstopo mirror --workers
+boxer sysmetricsd
+boxer sysmetricsd --host
+boxer sysmetricsd --interval
+boxer sysmetricsd --tee
+boxer sysmetricsd --tee-flush-interval
+boxer sysmetricsd --tee-proc-cmd
+boxer sysmetricsd --url
+boxer watch
+boxer watch fs
+boxer watch fs --dir
+boxer watch fs --format
+boxer watch fs --markdown
+boxer watch fs --suffix
+boxer watchbill
+boxer watchbill --database
+boxer watchbill add
+boxer watchbill add --after
+boxer watchbill add --backoff
+boxer watchbill add --backoff-base
+boxer watchbill add --max-attempts
+boxer watchbill add --priority
+boxer watchbill add --queue
+boxer watchbill add --timeout
+boxer watchbill cancel
+boxer watchbill cancel --note
+boxer watchbill list
+boxer watchbill list --kind
+boxer watchbill list --limit
+boxer watchbill list --owner
+boxer watchbill list --queue
+boxer watchbill list --state
+boxer watchbill retry
+boxer watchbill retry --note
+boxer watchbill run
+boxer watchbill run --job
+boxer watchbill run --max-workers
+boxer watchbill run --poll
+boxer watchbill run --queue

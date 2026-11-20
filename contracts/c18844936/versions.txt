@@ -1,0 +1,16 @@
+public/db/clickhouse/jackstay.PlanFormatVersion = 1
+public/keelson/data/chlocalbroker.wireVersion = 1
+public/keelson/runtime/agent.wireVersion = 1
+public/keelson/runtime/agentrun.wireVersion = 3
+public/keelson/runtime/appletstore.wireVersion = 1
+public/keelson/runtime/appops/opwire.WireVersion = 1
+public/keelson/runtime/attention.wireVersion = 1
+public/keelson/runtime/capture.TreeVersion = 1
+public/keelson/runtime/headstore.wireVersion = 2
+public/keelson/runtime/httpegress.wireVersion = 1
+public/keelson/runtime/llm.wireVersion = 2
+public/keelson/runtime/moderator.wireVersion = 1
+public/keelson/runtime/workstatelet.FormatVersion = 1
+public/semistructured/leeway/canonwire/runtime.Version = 1
+public/semistructured/markdown/mdnotebook.FormatVersion = 1
+public/thestack/imzero2/scene.FormatVersion = 1

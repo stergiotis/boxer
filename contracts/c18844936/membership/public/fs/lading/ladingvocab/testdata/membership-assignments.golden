@@ -1,0 +1,32 @@
+# ordinal	name	id
+# The committed assignment table (ADR-0183 D1). A changed line here
+# re-points rows already stored under the old id; a new line does not.
+# Regenerate with BOXER_VOCAB_GOLDEN_REGEN=1 go test ./<the vocabulary package>/...
+0	lading-kind-entry	10376293554346524672
+1	lading-kind-snapshot	10376293554346524673
+2	lading-kind-block	10376293554346524674
+3	lading-kind-mount	10376293554346524675
+4	lading-node-kind	10376293554346524676
+5	lading-content	10376293554346524677
+6	lading-mode	10376293554346524678
+7	lading-size	10376293554346524679
+8	lading-mtime	10376293554346524680
+9	lading-link-target	10376293554346524681
+10	lading-content-hash	10376293554346524682
+11	lading-block-size	10376293554346524683
+12	lading-blocks	10376293554346524684
+13	lading-text	10376293554346524685
+14	lading-err	10376293554346524686
+15	lading-snap-entries	10376293554346524687
+16	lading-snap-bytes	10376293554346524688
+17	lading-ttl-class	10376293554346524689
+18	lading-text-rule	10376293554346524690
+19	lading-inline-max	10376293554346524691
+20	lading-data	10376293554346524692
+21	lading-block-hash	10376293554346524693
+22	lading-line0	10376293554346524694
+23	lading-mount-name	10376293554346524695
+24	lading-mount-store	10376293554346524696
+25	lading-mount-ttl-class	10376293554346524697
+26	lading-mount-text-rule	10376293554346524698
+27	lading-mount-inline-max	10376293554346524699
