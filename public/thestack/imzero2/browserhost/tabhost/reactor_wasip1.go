@@ -11,7 +11,12 @@ import (
 // main, so the worker's setup export runs the program on the arguments it
 // wrote (ADR-0263 SD1).
 func registerReactor(inst *Program) {
-	browserhost.SetMain(inst.run)
+	browserhost.SetMain(func(args []string) (step func() int32) {
+		// The environment is the page link's: admit what a link may set
+		// before anything reads it (ADR-0391).
+		inst.admitLinkEnvironment()
+		return inst.run(args)
+	})
 }
 
 // idlFingerprint is the IDL the bindings were generated from; the worker

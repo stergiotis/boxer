@@ -9,18 +9,22 @@
 // Query parameters of this module's URL:
 //   app=<id>            the registered app to mount (the module's default otherwise)
 //   module=<file>       the Go module (default imzero2tab.wasm); host=<file> the
-//                       Rust host (default imzero2_browser.wasm)
+//                       Rust host (default imzero2_browser.wasm); both on this
+//                       worker's origin, or refused
 //   arg=<flag>          extra module arguments, repeatable
-//   env=NAME=value      the module's environment, repeatable; CLICKHOUSE_URL
-//                       defaults to <origin>/ch/, which `imzero2tab serve` proxies;
-//                       BOXER_TAB_BASE defaults to the URL of this worker's
-//                       directory, which is the page's;
+//   env=NAME=value      the module's environment, repeatable; the module keeps
+//                       only what a link may set (ADR-0391, tabhost's
+//                       admitLinkEnv). CLICKHOUSE_URL defaults to <origin>/ch/,
+//                       which `imzero2tab serve` proxies; BOXER_TAB_BASE is
+//                       always the URL of this worker's directory, which is
+//                       the page's, whatever the link says;
 //                       IMZERO2_THEME also reaches the Rust host
 //   stage=WxH           the initial viewport in points (the page's resize
 //                       takes over)
 //   fps=, idle=, cadence=continuous   the cadence, see below
 //   <slot>Font=<url>    a font slot (main, mono, phosphor, fallback); default
-//                       ./fonts/<slot>.ttf, a failed fetch leaves egui's face
+//                       ./fonts/<slot>.ttf, a failed fetch leaves egui's face;
+//                       a URL on another origin is refused and the default used
 //   log=1               forward the module's stderr to the server (POST ./log)
 //
 // The cadence is reactive (ADR-0077 SD6): after each frame the worker asks
@@ -45,12 +49,36 @@ const PREFIX_INPUT = 0x02, PREFIX_SESSION = 0x03, PREFIX_AUDIO = 0x05;
 // The audio lane message with which the page's device announces itself.
 const AUDIO_KIND_DEVICE = 0x81;
 
+// A link decides what to show, never where code comes from (ADR-0391): the
+// modules and the fonts a link names are resolved against this worker's URL
+// and must stay on its origin, which is the page's.
+const onThisOrigin = (raw) => {
+  let u;
+  try { u = new URL(raw, self.location.href); } catch { return null; }
+  return u.origin === self.location.origin ? u.href : null;
+};
+const sameOriginOrRefuse = (raw, what) => {
+  const href = onThisOrigin(raw);
+  if (href === null) throw new Error(`refused: the link names ${what} on another origin (${raw}); a tab loads code only from its own origin (ADR-0391)`);
+  return href;
+};
+
 try {
-  const fontBytes = (slot) => fetch(q.get(`${slot}Font`) || `./fonts/${slot}.ttf`)
+  const fontURL = (slot) => {
+    const named = q.get(`${slot}Font`);
+    if (named && onThisOrigin(named) === null) {
+      log(`worker — refused: the ${slot} font is on another origin (${named}); using ./fonts/${slot}.ttf (ADR-0391)`);
+      return `./fonts/${slot}.ttf`;
+    }
+    return named || `./fonts/${slot}.ttf`;
+  };
+  const fontBytes = (slot) => fetch(fontURL(slot))
     .then((r) => (r.ok ? r.arrayBuffer() : null)).catch(() => null);
+  const hostURL = sameOriginOrRefuse(q.get('host') || './imzero2_browser.wasm', 'the browser host');
+  const moduleURL = sameOriginOrRefuse(q.get('module') || './imzero2tab.wasm', 'the Go module');
   const [hostBytes, goBytes, ...fontList] = await Promise.all([
-    fetch(q.get('host') || './imzero2_browser.wasm').then((r) => r.arrayBuffer()),
-    fetch(q.get('module') || './imzero2tab.wasm').then((r) => r.arrayBuffer()),
+    fetch(hostURL).then((r) => r.arrayBuffer()),
+    fetch(moduleURL).then((r) => r.arrayBuffer()),
     ...FONT_SLOTS.map(fontBytes),
   ]);
   const fonts = Object.fromEntries(FONT_SLOTS.map((slot, i) => [slot, fontList[i]]));
@@ -94,13 +122,15 @@ try {
   // The module's environment: every `env=NAME=value` parameter, plus the
   // page's origin as the ClickHouse endpoint unless one is given — the
   // server behind the page proxies /ch/ to ClickHouse (`imzero2tab serve`), which is
-  // how the data plane stays same-origin (ADR-0077 SD9).
-  const env = q.getAll('env');
+  // how the data plane stays same-origin (ADR-0077 SD9). The module drops
+  // what a link may not set (ADR-0391); BOXER_TAB_BASE, which that decision
+  // reads the page's origin from, is the worker's alone.
+  const env = q.getAll('env').filter((e) => !e.startsWith('BOXER_TAB_BASE='));
   if (!env.some((e) => e.startsWith('CLICKHOUSE_URL='))) env.push(`CLICKHOUSE_URL=${self.location.origin}/ch/`);
   // The directory the page is served from, which the module resolves paths
   // against (ADR-0299): an applet document named by
   // BOXER_SQLAPPLET_TAB_DOC. The worker sits beside the page in a bundle.
-  if (!env.some((e) => e.startsWith('BOXER_TAB_BASE='))) env.push(`BOXER_TAB_BASE=${new URL('./', self.location.href).href}`);
+  env.push(`BOXER_TAB_BASE=${new URL('./', self.location.href).href}`);
   const r = await startReactor({ goBytes, stub, argv, env, log: (l) => { tee(l); if (!l.startsWith('{')) log(l); } });
   log('worker — running the application');
   // Lane messages toward the device are wire messages like the mesh's, and

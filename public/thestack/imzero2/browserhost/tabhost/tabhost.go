@@ -156,6 +156,11 @@ type Options struct {
 	// A non-empty id replaces -app; an error is drawn in place of the app
 	// (ADR-0299 §SD1).
 	Prepare func(ctx context.Context, base string) (id app.AppIdT, err error)
+	// LinkEnv names further variables a page link may set in the module's
+	// environment, beside the reviewed list (ADR-0391): a binary's own
+	// display or seed variables. Never a write switch, a credential or an
+	// endpoint.
+	LinkEnv []string
 }
 
 // Program is one tab binary: its options, its root cli.Command, and the per-tick

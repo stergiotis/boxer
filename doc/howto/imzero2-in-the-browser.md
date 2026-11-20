@@ -73,7 +73,10 @@ trial, not this page.
 2. **Serve it.** The same binary, built natively, serves the directory and
    proxies `/ch/` to ClickHouse, so the data plane stays same-origin;
    `--chURL` points it elsewhere and `--listen` moves it. It is a
-   development server: no auth, no TLS. The page, worker and shim are
+   development server: no auth, no TLS, so `--listen` must be a loopback
+   address unless `--allowNonLoopback` is passed, and a wide bind hands the
+   `/ch/` proxy to anyone who reaches the port. It sends a
+   Content-Security-Policy and `nosniff` on every response. The page, worker and shim are
    embedded in the binary and served from there when the directory lacks
    them; a file in the directory wins, which is how a harness brings its
    own page.
@@ -100,6 +103,17 @@ trial, not this page.
    server's output. play's own seed variables (`BOXER_PLAY_SQL`,
    `BOXER_PLAY_AUTORUN`, the `BOXER_PLAY_FOCUS_*` family,
    [doc/env-vars.md](../env-vars.md)) go through `env=`.
+
+   A link is something anyone can write, so it decides only what the tab
+   shows ([ADR-0391](../adr/0391-what-a-tab-link-may-decide.md)). The
+   modules and fonts it names must be on the page's origin. The module keeps
+   only the `env=` names on the list in `tabhost` (display, theme, layout,
+   focus and seed variables), and logs and drops the rest — a write switch
+   such as `BOXER_PLAY_ALLOW_WRITES` or a credential never takes effect from a
+   link. `CLICKHOUSE_URL` is kept when its host is under `.invalid` (the
+   in-process endpoint) or it is on the page's origin. `BOXER_PLAY_AUTORUN`
+   is kept only when the seeded SQL is a read. A tab binary admits further
+   names of its own through `tabhost.Options.LinkEnv`.
 
    A remote server works the same way: `--chURL` points `/ch/` at it and
    `env=CLICKHOUSE_USER=<user>` names the user. Checked on 2026-10-03 against
