@@ -16,7 +16,7 @@ A reading of the boxer repository's premises, paradigms, methods, and standing c
 | --- | --- |
 | repo | github.com/stergiotis/boxer @ main (7d0870b8) |
 | assessed | 2026-08-24 |
-| corrected | 2026-09-14 — fn4's read-side figures did not survive checking against the trials they cited, so Performance efficiency × P3 moved from counteracting to neutral (Σ +42 → +43); fn1's trial tier and §b's data-tier sweep were corrected for a tier that was descoped. Every other figure was re-verified at 7d0870b8 and stands. |
+| corrected | 2026-09-14 — fn4's read-side figures did not survive checking against the trials they cited, so Performance efficiency × P3 moved from counteracting to neutral (Σ +42 → +43); fn1's trial tier and §b's data-tier sweep were corrected for a tier that was descoped. Every other figure was re-verified at 7d0870b8 and stands. 2026-11-20 — three statements corrected against `a04226707`: tag signing, the non-loopback bind, and the share of packages without tests (see Assessments). |
 | standard | ISO/IEC 25010:2023 product quality model |
 | sources | [README](../../README.md), [why-boxer](./why-boxer.md), [ARCHITECTURE](../ARCHITECTURE.md), [CODINGSTANDARDS](../../CODINGSTANDARDS.md), [ENGINEERING_PRACTICES](../ENGINEERING_PRACTICES.md), 199 ADRs, [doc/trials](../trials/README.md), `scripts/ci`, code survey |
 | companion | [iso25010-temperament.md](./iso25010-temperament.md) — the timeless reading: dispositions and tendencies, no figures; this page holds the dated evidence |
@@ -29,6 +29,7 @@ One row per reading. A figure here never outlives the row that produced it.
 | --- | --- | --- |
 | 2026-08-24 | `7d0870b8` | Initial assessment: the fourteen-practice × nine-characteristic matrix, the footnotes, and the section-d marginals. |
 | 2026-09-14 | `7d0870b8` (re-read) | Every figure re-checked against the tree at the assessed commit. Three did not survive: fn 4's read-side ratios, fn 1's trial tier, and the data-tier sweep in §b — all three leaning on a tier the trials had descoped. Performance efficiency × P3 moved from counteracting to neutral (Σ +42 → +43). The other ~32 checkable figures stand. |
+| 2026-11-20 | `a04226707` (three statements) | Three statements checked against the tree and corrected in place. **Signed tags:** all 23 tags are lightweight, so none carries a signature, and no script or workflow verifies a tag before building; signing is decided (ADR-0085) but not practised. **Non-loopback bind:** two Go listeners refuse one — the introspection HTTP server and the query-run transform endpoint — and the headless launcher refuses one in its shell script; the pprof listener, `boxer http serve`, the browser-tab server and svgserver bind the address they are given. **Packages without tests:** 144 of the 786 directories holding non-test Go files (18.3%; testdata and vendored trees excluded) have no `_test.go`, and 67 of those have at least 100 lines outside generated files and `package_props.go`; the ~33% figure did not hold. No grade changed: P1 × Security and ENF × Security stay facilitating on the mechanisms that remain, and fn 12's compensations were already graded as detective. |
 
 ## a — The grading matrix
 
@@ -36,7 +37,7 @@ Rows are the nine top-level characteristics of ISO/IEC 25010:2023 (the revision 
 
 ### The practices
 
-- **P1 · Dependency sovereignty** — Vendor, port, or reimplement every load-bearing dependency; airgapped builds; SBOM + license gate; the `extbin` chokepoint; signed tags.
+- **P1 · Dependency sovereignty** — Vendor, port, or reimplement every load-bearing dependency; airgapped builds; SBOM + license gate; the `extbin` chokepoint; signed tags (decided in ADR-0085; not practised at `a04226707`, see Assessments).
 - **P2 · Description languages & codegen** — Small problem-oriented languages (leeway plans, fffi2 IDL, nanopass passes); ~28% of the Go tree generated, checked in, drift-gated. Codegen over reflection.
 - **P3 · One data spine** — Everything durable lands facts-shaped in ClickHouse; a new fact kind is a DTO plus vocabulary, never a schema migration; the model is machine-readable at runtime.
 - **P4 · Dogfooding & self-measurement** — The toolkit observes itself; metrics, profiles, review findings, provenance, and ADR implementation-degree land as queryable data.
@@ -150,7 +151,7 @@ One line per graded cell that carries a reason; a cell with no line was graded w
 | P6 | −¹¹ | A bus factor of one, mitigated but not removed by the records. |
 | SC1/2 | + | Memory safety removes whole crash classes; the one large unsafe component is quarantined out-of-process. |
 | SC3 | ○ | One interpreter body across hosts prevents divergence; a mismatched id stack still compiles clean and panics at render. |
-| ENF | + | Default-deny by construction: a missing terminal frame reads as incomplete; a non-loopback bind fails closed and loud. |
+| ENF | + | Default-deny by construction: a missing terminal frame reads as incomplete; the introspection and query-run listeners refuse a non-loopback bind, loudly (other listeners do not; see Assessments, 2026-11-20). |
 | TRI | + | Bounded-workload rules for live-server tests; behaviour under load is measured, not assumed. |
 | TBD | − | Nothing gates an ordinary push; staticcheck and errcheck are warn-only; a red main is possible by design. |
 
@@ -160,7 +161,7 @@ One line per graded cell that carries a reason; a cell with no line was graded w
 
 | practice | | rationale |
 | --- | :-: | --- |
-| P1 | + | A minimized, audited trust surface: SBOM + license gate, the extbin chokepoint, signed tags, airgapped builds. |
+| P1 | + | A minimized, audited trust surface: SBOM + license gate, the extbin chokepoint, airgapped builds. Tag signing is decided but not practised (Assessments, 2026-11-20). |
 | P3 | + | Accountability by architecture: grants, audit, and lifecycle land in one queryable, append-only fact trail. |
 | P4 | + | The audit trail is the same machinery the product ships; provenance is queryable from history. |
 | P5 | ○ | A small amount of unsafe, performance-motivated code exists and must carry its justification. |
@@ -240,7 +241,7 @@ One line per graded cell that carries a reason; a cell with no line was graded w
 
 11. **Reliability × P6.** The premise names its own failure mode: "P6 fails with its bus factor; the written record and the machine mesh are the mitigation, and a mitigation is not an absence." This grades maintenance availability, not runtime availability.
 
-12. **Security × TBD.** No branch protection, no second reviewer, direct-to-main — one compromised credential or workstation writes to trunk. Compensations are detective, not preventive: signed release tags with verify-before-build, provenance trailers, weekly Scorecard/CodeQL. Accountability is strong; access control is thin.
+12. **Security × TBD.** No branch protection, no second reviewer, direct-to-main — one compromised credential or workstation writes to trunk. Compensations are detective, not preventive: provenance trailers and weekly Scorecard/CodeQL; signed release tags with verify-before-build are decided (ADR-0085) but not practised (Assessments, 2026-11-20). Accountability is strong; access control is thin.
 
 13. **Maintainability × P1.** Facilitating for the ISO sub-characteristics (everything is analysable and modifiable from source, in one tree); the offsetting cost is economic, not structural: "reimplementation and maintenance burden mainstream projects amortize across an ecosystem; fewer external hands exercising the same code paths."
 
@@ -256,11 +257,11 @@ Every column except two grades neutral-or-facilitating on the maintainability ro
 
 ### Security: strong by construction, thin at one process seam
 
-The sovereignty premise is, at bottom, a security premise — authenticity and supply-chain integrity via SBOM + license gate, signed tags with verify-before-build, the `extbin` chokepoint for every external binary, and airgapped builds. Accountability and non-repudiation fall out of the data spine: grants, audits, and lifecycle events land in one append-only fact trail, and authorship provenance lives in git trailers. Confidentiality mechanisms are unusually literal — ad-hoc datasets are AEAD-sealed with keys that never touch disk, "ephemeral by cryptography" even across a crash. Just as valuable for an assessor: the claims are scoped, not inflated ("hygiene, not security" for capabilities; ADR-0087's refusal to claim compositor isolation). The genuine counteraction sits in process, not architecture: direct-to-main with no branch protection or second reviewer concentrates write authority in one credential (fn 12) — and some decided security (carrier auth/TLS, ADR-0082) is candidly labelled built-nowhere-yet.
+The sovereignty premise is, at bottom, a security premise — authenticity and supply-chain integrity via SBOM + license gate, the `extbin` chokepoint for every external binary, and airgapped builds, with signed tags and verify-before-build decided but not practised (Assessments, 2026-11-20). Accountability and non-repudiation fall out of the data spine: grants, audits, and lifecycle events land in one append-only fact trail, and authorship provenance lives in git trailers. Confidentiality mechanisms are unusually literal — ad-hoc datasets are AEAD-sealed with keys that never touch disk, "ephemeral by cryptography" even across a crash. Just as valuable for an assessor: the claims are scoped, not inflated ("hygiene, not security" for capabilities; ADR-0087's refusal to claim compositor isolation). The genuine counteraction sits in process, not architecture: direct-to-main with no branch protection or second reviewer concentrates write authority in one credential (fn 12) — and some decided security (carrier auth/TLS, ADR-0082) is candidly labelled built-nowhere-yet.
 
 ### Reliability and functional correctness: facilitated by construction, counteracted by process
 
-The default-deny pattern recurs independently in three places — a query result without a terminal frame reads as *incomplete*, a non-loopback bind fails closed and loud, confinement is derived from a registry rather than sniffed from SQL text — and that is precisely what ISO means by fault tolerance: nothing has to go right for a failure to be visible. Recoverability is architectural (append-only facts; a snapshot is complete exactly when its root row exists). Functional correctness is guarded by drift gates, golden files, and cross-engine oracles rather than by reviewers. The counteracting column is the same in both rows: CI is a release gate, not a merge gate — nothing runs on an ordinary push, staticcheck and errcheck are warn-only, staticcheck additionally skips a named list of packages, and nilaway is commented out (fn 2). The project declares this openly (ENGINEERING_PRACTICES §10's register of deliberate absences) and names it "the assumption to revisit first if the repo ever takes external contributions"; declared or not, it is the widest gap between the quality the practices could enforce and the quality they do enforce. A second, quieter counteraction: ~33% of packages carry no test file, and fuzz targets exist with no scheduled fuzz lane — faultlessness coverage is uneven beneath a strong headline apparatus.
+The default-deny pattern recurs independently in three places — a query result without a terminal frame reads as *incomplete*, the introspection and query-run listeners refuse a non-loopback bind (others bind what they are given), confinement is derived from a registry rather than sniffed from SQL text — and that is precisely what ISO means by fault tolerance: nothing has to go right for a failure to be visible. Recoverability is architectural (append-only facts; a snapshot is complete exactly when its root row exists). Functional correctness is guarded by drift gates, golden files, and cross-engine oracles rather than by reviewers. The counteracting column is the same in both rows: CI is a release gate, not a merge gate — nothing runs on an ordinary push, staticcheck and errcheck are warn-only, staticcheck additionally skips a named list of packages, and nilaway is commented out (fn 2). The project declares this openly (ENGINEERING_PRACTICES §10's register of deliberate absences) and names it "the assumption to revisit first if the repo ever takes external contributions"; declared or not, it is the widest gap between the quality the practices could enforce and the quality they do enforce. A second, quieter counteraction: about one package in five carries no test file (18.3% at `a04226707`), and fuzz targets exist with no scheduled fuzz lane — faultlessness coverage is uneven beneath a strong headline apparatus.
 
 ### Performance efficiency: a method that measures, a bet that prices itself
 
@@ -430,19 +431,19 @@ The single strongest quality in the repository. Six columns converge on it: the 
 
 *6 converging practices · enforced · measured*
 
-8,808 test functions and — more telling — the bespoke apparatus: golden corpora that must decode bit-identically across Go and SQL (ADR-0106), byte-reproducible WASM parity, the stateful-widget gate that fails `go test` before a rendering bug can surface (ADR-0013), frame-hash deterministic screenshot capture (ADR-0057), a headless accessibility-tree driver that tests the GUI without a compositor (ADR-0154), property-based testing, and Tier-1 ADRs that must name "the lane that goes red". The mirror caveat from the fine-grained analysis stands: the apparatus is deep where it exists, and ~33% of packages carry no test file.
+8,808 test functions and — more telling — the bespoke apparatus: golden corpora that must decode bit-identically across Go and SQL (ADR-0106), byte-reproducible WASM parity, the stateful-widget gate that fails `go test` before a rendering bug can surface (ADR-0013), frame-hash deterministic screenshot capture (ADR-0057), a headless accessibility-tree driver that tests the GUI without a compositor (ADR-0154), property-based testing, and Tier-1 ADRs that must name "the lane that goes red". The mirror caveat from the fine-grained analysis stands: the apparatus is deep where it exists, and about one package in five carries no test file (18.3% at `a04226707`).
 
 #### 3. Integrity & authenticity of the supply chain — Security
 
 *4 converging practices · enforced · measured*
 
-The sovereignty premise operationalized end to end: CycloneDX SBOM feeding an in-tree license gate, SSH-signed release tags with verify-before-build refusal (ADR-0085), every external binary resolved through the audited `extbin` chokepoint (codelint CS012 at Error), SHA256-pinned fonts and assets, pinned toolchains with Dependabot cooldowns, and airgapped build bundles whose non-vendorable residue is named rather than hidden. The xz-utils class of attack is the explicitly cited adversary, and the whole chain is mechanized, not policy prose.
+The sovereignty premise operationalized end to end: CycloneDX SBOM feeding an in-tree license gate, SSH-signed release tags with verify-before-build refusal decided in ADR-0085 but not practised (Assessments, 2026-11-20), every external binary resolved through the audited `extbin` chokepoint (codelint CS012 at Error), SHA256-pinned fonts and assets, pinned toolchains with Dependabot cooldowns, and airgapped build bundles whose non-vendorable residue is named rather than hidden. The xz-utils class of attack is the explicitly cited adversary, and the whole chain is mechanized, not policy prose.
 
 #### 4. Fault tolerance — Reliability
 
 *4 converging practices · enforced by construction*
 
-Default-deny recurs independently in three subsystems — a query result without its terminal frame reads as *incomplete*, never complete (ADR-0142); a non-loopback bind refuses to start, failing closed and loud (ADR-0082); confinement of sealed data derives from a registry lookup, never a heuristic over SQL text (ADR-0145). Around that: memory safety removes whole crash classes, the one large unsafe component runs quarantined out-of-process, and commit protocols make partial state unrepresentable ("a snapshot is complete exactly when its root row exists"). The failing party is never required to report its own failure.
+Default-deny recurs independently in three subsystems — a query result without its terminal frame reads as *incomplete*, never complete (ADR-0142); the introspection and query-run listeners refuse a non-loopback bind and fail loudly (ADR-0082; other listeners bind what they are given, Assessments 2026-11-20); confinement of sealed data derives from a registry lookup, never a heuristic over SQL text (ADR-0145). Around that: memory safety removes whole crash classes, the one large unsafe component runs quarantined out-of-process, and commit protocols make partial state unrepresentable ("a snapshot is complete exactly when its root row exists"). The failing party is never required to report its own failure.
 
 #### 5. Installability — Flexibility
 
