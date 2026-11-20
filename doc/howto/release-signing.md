@@ -16,6 +16,11 @@ build an unsigned tag ([ADR-0085](../adr/0085-imzero2-demo-pull-build-atomic-dep
 SD8: `deploy.go verifyTag` → `git verify-tag`); the same recipe applies to
 anything a machine builds or deploys from a tag automatically.
 
+The tags cut before this recipe was adopted, `v0.0.1` to `v0.0.23`, are
+lightweight and unsigned, so a consumer that verifies cannot use them; the
+recipe applies from the next tag. [scripts/ci/release.sh](../../scripts/ci/release.sh)
+checks a candidate commit and prints the tag commands of step 1 for it.
+
 ## When to use this recipe
 
 You cut a boxer release tag that something downstream acts on automatically, and

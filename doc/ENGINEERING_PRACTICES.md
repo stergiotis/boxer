@@ -26,23 +26,52 @@ GitHub Actions workflows live under
 [.github/workflows](../.github/workflows). Each workflow handles one concern;
 none combine multiple gates.
 
-**Every workflow runs on manual dispatch and on a `v*` tag, and nothing runs on
-an ordinary push or a pull request.** The Trigger column below records only what
-each adds to that baseline. Local runs of the same entry-point scripts are
-therefore the working gate; CI is the gate at a release. That follows from the
-AI-assisted, direct-to-`main` workflow §10 records, and it is the assumption to
-revisit first if the repo ever takes external contributions.
+**Nothing runs on an ordinary push or a pull request.** Every workflow runs on
+manual dispatch; most also run on a `v*` tag, and the Trigger column records
+what each adds to dispatch. Local runs of the entry-point scripts are therefore
+the working gate, the nightly run is the gate on `main`, and the tag-triggered
+workflows with [scripts/ci/release.sh](../scripts/ci/release.sh) are the gate at
+a release. That follows from the AI-assisted, direct-to-`main` workflow §10
+records, and it is the assumption to revisit first if the repo ever takes
+external contributions.
+
+**The local gate tests a commit, not the working tree**
+([ADR-0390](./adr/0390-a-gate-that-tests-the-commit-and-a-ref-that-names-the-last-green-main.md)).
+The working tree is often shared by concurrent sessions and rarely clean, so a
+test run in it tests whatever is lying there.
+[scripts/ci/gate.sh](../scripts/ci/gate.sh) `[<rev>]` checks the revision out
+into a detached worktree under `$TMPDIR` and runs, there: `go mod tidy --diff`,
+`go mod verify`, the build, gofmt over the changed Go files, `go vet` and
+`go test -race -short` over the packages changed since the merge-base with
+`origin/main` plus their direct importers (test imports count), and the drift
+check; when the range touches the egui2 IDL, its bindings or `rust/imzero2`,
+also the IDL check, the Rust crate check and the browser host digest. It drops
+`-race` above a package cap and says so. The worktree has a stable path per
+repository and user, so the Go build cache, which keys on the package
+directory, carries over between runs. A committed hook runs the gate before a
+push, once a clone opts in:
+
+```sh
+git config core.hooksPath scripts/dev/hooks   # git push --no-verify skips it once
+```
+
+**`refs/heads/last-green` names the newest `main` commit the nightly run passed.**
+The nightly workflow moves it forward only — through the refs API with
+`force=false` — and only when every job passed, so a consumer that wants a
+commit something has tested can pin it.
 
 | Workflow | Trigger adds | Entry point | Purpose |
 |---|---|---|---|
-| [lint.yaml](../.github/workflows/lint.yaml) | — | [scripts/ci/lint.sh](../scripts/ci/lint.sh) | `gofmt`, `go vet`, staticcheck, errcheck, doclint, h3 wasm parity |
-| [test.yaml](../.github/workflows/test.yaml) | — | [scripts/ci/gotest.sh](../scripts/ci/gotest.sh) | race + cover + JSON tests, tparse-formatted; post-test drift gate (generator tests rewrite in place, so the tree must end clean) |
-| [vuln.yaml](../.github/workflows/vuln.yaml) | — | [scripts/ci/govuln.sh](../scripts/ci/govuln.sh) | `govulncheck -show verbose ./...`; OSV check of the Rust lockfiles |
-| [licenses.yaml](../.github/workflows/licenses.yaml) | — | [scripts/ci/license_gate.sh](../scripts/ci/license_gate.sh) | CycloneDX SBOM → in-tree policy gate |
-| [codestat.yaml](../.github/workflows/codestat.yaml) | weekly cron (Mon 06:00 UTC) | inline | `scc` line counts split human vs. LLM, dependency inventory, authorship attribution |
-| [codeql.yaml](../.github/workflows/codeql.yaml) | weekly cron (Tue 05:37 UTC) | GitHub CodeQL action | CodeQL security scan of the Go tree, built with the repo's build tags |
-| [scorecard.yaml](../.github/workflows/scorecard.yaml) | weekly cron (Tue 07:20 UTC), branch-protection changes | OSSF `scorecard-action` | supply-chain posture score, uploaded as SARIF to code scanning |
-| [formal-pushout.yaml](../.github/workflows/formal-pushout.yaml) | — | `npm run check` + `npm run findings` in [verification/formal/algebraicarch/pushout](../verification/formal/algebraicarch/pushout/README.md) | Quint typecheck + witness runs, Apalache bounded verifies, TLC liveness and the expected-violation counterexamples for the pushout protocol specs; ~15 min |
+| [lint.yaml](../.github/workflows/lint.yaml) | `v*` tag | [scripts/ci/lint.sh](../scripts/ci/lint.sh) | `gofmt`, `go vet`, staticcheck, errcheck, doclint, the IDL check, h3 wasm parity |
+| [test.yaml](../.github/workflows/test.yaml) | `v*` tag | [scripts/ci/gotest.sh](../scripts/ci/gotest.sh) `--check-drift` | race + cover + JSON tests, tparse-formatted; post-test drift gate (generator tests rewrite in place, so the tree must end clean) |
+| [nightly.yaml](../.github/workflows/nightly.yaml) | daily cron (02:17 UTC), no tag | the test, lint, integration and bench scripts | the default lane with a cross-package coverage profile (artifact + per-package table), the `binary_log` lane, the Go lint steps, the default and integration lanes against a pinned ClickHouse server, `gobench.sh smoke`, the viewer and watermark crates; advances `last-green` |
+| [fuzz.yaml](../.github/workflows/fuzz.yaml) | weekly cron (Sat 04:23 UTC), no tag | [scripts/ci/gofuzz.sh](../scripts/ci/gofuzz.sh) | every fuzz target for a bounded time; uploads failing inputs and logs |
+| [vuln.yaml](../.github/workflows/vuln.yaml) | `v*` tag | [scripts/ci/govuln.sh](../scripts/ci/govuln.sh) | `govulncheck -show verbose ./...`; OSV check of the Rust lockfiles |
+| [licenses.yaml](../.github/workflows/licenses.yaml) | `v*` tag | [scripts/ci/license_gate.sh](../scripts/ci/license_gate.sh) | CycloneDX SBOM → in-tree policy gate |
+| [codestat.yaml](../.github/workflows/codestat.yaml) | `v*` tag, weekly cron (Mon 06:00 UTC) | inline | `scc` line counts split human vs. LLM, dependency inventory, authorship attribution |
+| [codeql.yaml](../.github/workflows/codeql.yaml) | `v*` tag, weekly cron (Tue 05:37 UTC) | GitHub CodeQL action | CodeQL security scan of the Go tree, built with the repo's build tags |
+| [scorecard.yaml](../.github/workflows/scorecard.yaml) | `v*` tag, weekly cron (Tue 07:20 UTC), branch-protection changes | OSSF `scorecard-action` | supply-chain posture score, uploaded as SARIF to code scanning |
+| [formal-pushout.yaml](../.github/workflows/formal-pushout.yaml) | `v*` tag | `npm run check` + `npm run findings` in [verification/formal/algebraicarch/pushout](../verification/formal/algebraicarch/pushout/README.md) | Quint typecheck + witness runs, Apalache bounded verifies, TLC liveness and the expected-violation counterexamples for the pushout protocol specs; ~15 min |
 
 Splitting CI per concern is the convention in larger Go projects
 (Kubernetes, etcd, Cockroach). Smaller Go projects more often consolidate
@@ -72,12 +101,26 @@ in one file; `--list` names the steps and the scripts behind them.
 | Tool | Invocation | Status |
 |---|---|---|
 | `gofmt` | `-l` over the tree, generated files skipped by their header | error on drift |
-| `go vet` | direct, with build tags | error on findings |
-| [honnef.co/go/tools/cmd/staticcheck](https://pkg.go.dev/honnef.co/go/tools/cmd/staticcheck) | `-checks "all,-ST1000,-ST1003,..."` (style checks suppressed), one package withheld | warn — see below |
-| [github.com/kisielk/errcheck](https://pkg.go.dev/github.com/kisielk/errcheck) | exclusions for `fmt.Fprintf` / `strings.Builder` writers | warn |
+| `go vet` | `./...`, with build tags | error on findings |
+| [honnef.co/go/tools/cmd/staticcheck](https://pkg.go.dev/honnef.co/go/tools/cmd/staticcheck) | `./...`, `-checks "all,-ST1000,-ST1003,..."` (style checks suppressed), one package withheld | error on a finding outside the baseline; warn on stale baseline entries and while the skip list is non-empty — see below |
+| [github.com/kisielk/errcheck](https://pkg.go.dev/github.com/kisielk/errcheck) | `./...`, exclusions for `fmt.Fprintf` / `strings.Builder` writers | error on a finding outside the baseline; warn on stale baseline entries |
+| `boxer-idl-check.sh --force` | the egui2 IDL regenerated into a scratch copy and compared with both sides' committed code; skips without rust/imzero2's toolchain | error on drift |
 | [go.uber.org/nilaway](https://pkg.go.dev/go.uber.org/nilaway) | available, currently disabled in CI; runnable via [scripts/dev/nilaway.sh](../scripts/dev/nilaway.sh) | (disabled) |
 | [github.com/dkorunic/betteralign](https://pkg.go.dev/github.com/dkorunic/betteralign) | dev-only via [scripts/dev/betteralign.sh](../scripts/dev/betteralign.sh) | dev |
 | [github.com/incu6us/goimports-reviser/v3](https://pkg.go.dev/github.com/incu6us/goimports-reviser/v3) | dev-only via [scripts/dev/goimports.sh](../scripts/dev/goimports.sh) | dev |
+
+**staticcheck and errcheck are held to a baseline, not to zero**
+([ADR-0390](./adr/0390-a-gate-that-tests-the-commit-and-a-ref-that-names-the-last-green-main.md)).
+Each step compares its findings with a committed file —
+[staticcheck-baseline.txt](../scripts/ci/staticcheck-baseline.txt),
+[errcheck-baseline.txt](../scripts/ci/errcheck-baseline.txt) — keyed by file and
+message without line numbers, so an edit elsewhere in a file does not move an
+entry. A finding outside the baseline fails the step; an entry that no longer
+occurs is reported as a warning, to be deleted, so the files only shrink.
+`--update-baseline` on either step rewrites its file; a new entry is a decision
+for review, not a way past the gate. The baselines were generated with the
+pinned `go tool` versions when the steps widened from `./public/...` to the
+whole module, which is where most entries come from.
 
 **staticcheck withholds one package under Go 1.27 (2026-08-21).** The pin is
 `v0.8.0`; `v0.7.0` cannot read 1.27 export data at all, failing every package
@@ -92,7 +135,8 @@ every other package's analysis, with it. `-checks` cannot dodge it, since
 staticcheck runs every analyzer and filters diagnostics afterwards.
 The [staticcheck step](../scripts/ci/lint/staticcheck.sh) therefore carries a
 named skip list, prints what it withheld, and stays `warn` while the list is non-empty; the `DID NOT RUN`
-branch remains as the backstop for a package the list does not name yet. The
+branch remains as the backstop for a package the list does not name yet, and
+fails the step. The
 mis-attribution is silent elsewhere, so treat a fact-carrying finding (`U1000`)
 naming a method of `marshallreflect.SectionReaders` or `ecsdemo/stage2.FatRow`
 with suspicion. The measurements are in
@@ -169,9 +213,30 @@ The CI test runner is [scripts/ci/gotest.sh](../scripts/ci/gotest.sh):
 
 ```sh
 go test -race -json -short -cover -tags "$tags" ./... \
-  | go tool tparse -progress -trimpath -slow 20
+  | go tool tparse -progress -trimpath auto -slow 20
 ```
 
+`--check-drift` makes it fail when the run left the tree dirty
+([scripts/ci/check_drift.sh](../scripts/ci/check_drift.sh), which the workflows,
+`gate.sh` and `release.sh` share): generator tests rewrite their output in
+place, so a dirty tree is committed generated code that drifted from its
+generator. It is only meaningful on a clean checkout. `--coverprofile FILE`
+swaps `-cover` for `-coverpkg=./... -coverprofile=FILE`, one profile across
+packages; the nightly run uploads it with a per-package table from
+[scripts/ci/cover_table.sh](../scripts/ci/cover_table.sh).
+
+- Generated code is compared with its generator by tests, so the drift shows up
+  in the default lane: every keelsoncodec DTO has a
+  `TestGeneratorMatchesCheckedInOutput`, and the runtime facts-schema outputs
+  and the phosphor icon tables each have a test that regenerates into memory or
+  a temporary directory. The egui2 bindings are compared by the `idl-check`
+  lint step. [scripts/dev/generate.sh](../scripts/dev/generate.sh) is the one
+  script that regenerates everything (the root `generate.sh` execs it); it
+  discovers the keelsoncodec sources from the committed `.out.go` files instead
+  of listing them.
+- A corpus test that counts the entries its pipeline rejects as skips fails
+  above a pinned ceiling, which only goes down: a skip passes, so without the
+  ceiling a regression rejecting every entry would pass too.
 - [github.com/mfridman/tparse](https://pkg.go.dev/github.com/mfridman/tparse)
   surfaces progress and the 20 slowest tests.
 - Coverage HTML is produced locally via
@@ -182,8 +247,15 @@ go test -race -json -short -cover -tags "$tags" ./... \
 
   ```sh
   go test -race -json -count=1 -p 1 -tags "$tags,integration" ./... \
-    | go tool tparse -progress -trimpath -slow 20
+    | go tool tparse -progress -trimpath auto -slow 20
   ```
+
+  The nightly workflow runs it, and the default lane a second time, against a
+  throwaway ClickHouse server from
+  [scripts/ci/clickhouse_server.sh](../scripts/ci/clickhouse_server.sh): the
+  26.8 LTS static build, pinned by version and SHA-256, on `127.0.0.1:8123`
+  with `query_log` on and a passwordless default user. The same binary serves
+  `clickhouse local`.
 
   The default `go test ./...` neither compiles nor runs them. A test belongs in
   the lane for either of two reasons:
@@ -227,7 +299,9 @@ go test -race -json -short -cover -tags "$tags" ./... \
   package and one target per invocation) for `BOXER_FUZZ_TIME` each, and
   narrows by package pattern or `BOXER_FUZZ_MATCH`. A failing input is left in
   the package's `testdata/fuzz/` and listed at the end, so it becomes a
-  permanent regression seed when committed with the fix.
+  permanent regression seed when committed with the fix. The weekly
+  [fuzz workflow](../.github/workflows/fuzz.yaml) runs it at 30 s per target and
+  uploads failing inputs as an artifact.
 
   A fuzz oracle has to hold on every input the fuzzer can reach, which a
   tolerance chosen for friendly table data usually does not: state the input
@@ -236,7 +310,7 @@ go test -race -json -short -cover -tags "$tags" ./... \
 - Benchmarks are compiled by the default runner and executed only by
   [scripts/ci/gobench.sh](../scripts/ci/gobench.sh). Its `smoke` mode runs
   every benchmark once (`-benchtime 1x`, `-short`) and lists the ones that
-  skipped, since a skip passes without running. Its `compare` mode builds each
+  skipped, since a skip passes without running; the nightly run includes it. Its `compare` mode builds each
   named package's test binary from a base ref (a detached worktree) and from
   the working tree, runs the two alternately for `BOXER_BENCH_COUNT` rounds,
   and summarises with
@@ -330,13 +404,24 @@ since been retired in favour of trailer-based attribution.
   classifications surface as advisories, not failures, so detector gaps do
   not block CI.
 - No vendoring; [go.mod](../go.mod) is authoritative. The
-  [test workflow](../.github/workflows/test.yaml) contains a (currently
-  commented-out) `go mod tidy --diff` drift check.
-- **Release signing.** Release tags are SSH-signed; anything that builds or
-  deploys from a tag verifies the signature against a trusted public key first
-  (`git verify-tag`). The imzero2 on-box deploy enforces it — it refuses to build
-  an unsigned tag ([ADR-0085](./adr/0085-imzero2-demo-pull-build-atomic-deploy.md)
-  SD8). Recipe: [How to sign and verify boxer releases](./howto/release-signing.md).
+  [test workflow](../.github/workflows/test.yaml), the nightly run, `gate.sh`
+  and `release.sh` each run `go mod tidy --diff` and `go mod verify`.
+- **Release check.** [scripts/ci/release.sh](../scripts/ci/release.sh) checks a
+  candidate in a worktree of its own: the module checks, both test lanes with
+  the drift check, the integration lane against a ClickHouse server, `lint.sh`
+  with the baselines, the viewer and watermark crates, govulncheck, cargo
+  advisories, the license gate, the IDL check, the host digest, one fuzz pass,
+  `scripts/ci/apidiff.sh` and a clean-tree check. As in `updatedeps.sh`, a step
+  that reports a skipped part counts as a failure. It prints the signed-tag
+  commands and runs none of them.
+- **Release signing.** The tags cut so far (`v0.0.1` to `v0.0.23`) are
+  lightweight and unsigned. The documented procedure — an SSH-signed annotated
+  tag that whatever builds or deploys from it verifies first (`git verify-tag`)
+  — applies from the next tag. The imzero2 on-box deploy enforces it and refuses
+  to build an unsigned tag
+  ([ADR-0085](./adr/0085-imzero2-demo-pull-build-atomic-deploy.md) SD8), so it
+  cannot deploy any existing tag. Recipe:
+  [How to sign and verify boxer releases](./howto/release-signing.md).
 
 CycloneDX SBOMs are increasingly standard for SLSA / supply-chain conscious
 projects (Kubernetes, OpenTelemetry, GitHub itself). Many repos delegate
@@ -464,17 +549,19 @@ into this repository's CI:
   [lint.sh](../scripts/ci/lint.sh)'s step list: the step itself,
   [scripts/ci/lint/nilaway.sh](../scripts/ci/lint/nilaway.sh), runs, and the
   `dev/` script preserves the wider local runner over `./...`.
+- No CI on push or pull request. The nightly run tests `main` once a day and
+  the local gate is opt-in, so a broken commit can sit on `main` until the next
+  nightly run reports it; `last-green` is what a consumer pins to avoid one.
 - No `CODEOWNERS`, PR template, or branch-protection automation. The
   documentation standard records an explicit "AI-assisted, direct-to-`main`"
   workflow assumption
   ([§4 of DOCUMENTATION_STANDARD.md](./DOCUMENTATION_STANDARD.md#front-matter-and-document-state-markdown-only)).
 - No release automation (`goreleaser` or equivalent) and no container build
-  pipeline.
-- No scheduled fuzzing: [scripts/ci/gofuzz.sh](../scripts/ci/gofuzz.sh) is a
-  local lane with no workflow behind it, and much of the parser and codec
-  surface has no fuzz target.
-- Coverage is computed but not uploaded to a coverage service (Codecov,
-  Coveralls, etc.).
+  pipeline: `release.sh` checks a candidate, and a person tags it.
+- Fuzzing is scheduled weekly at a short budget per target; much of the parser
+  and codec surface has no fuzz target.
+- Coverage is uploaded as a workflow artifact, not to a coverage service
+  (Codecov, Coveralls, etc.).
 
 ## 11. Summary
 
