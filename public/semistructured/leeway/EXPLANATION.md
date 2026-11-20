@@ -56,138 +56,191 @@ package layout under
 Describe   →   IR   →   Map   →   DDL   →   Marshal   →   Query
 ```
 
+The central choice is that values are **shredded by canonical type, not by
+field**. A table does not get one column per logical field (`user.geo`,
+`event`, …); it gets one *section* per value type, and each value in a
+section carries a *membership* — the label that says which logical attribute
+it is. `event` and `user.geo` are both strings, so both land in the same
+string section, told apart by their memberships. A new string field next week
+is a new membership, not a new column.
+
+Every code block below is copied from an `Example` function that `go test`
+compiles and runs; the example named under each block is the one to read
+when the two disagree.
+
 ### 1. Describe
 
 You describe the physical table with a `TableManipulator` in
 [`github.com/stergiotis/boxer/public/semistructured/leeway/common`](common/).
-The description declares which values are plain (present on every row) and
-which are tagged (optional or nested):
+Plain columns are present on every row; tagged-value sections hold the
+labelled values (`ExampleTableManipulator` in
+[common/example_test.go](common/example_test.go)):
 
 ```go
-tm := common.NewTableManipulator().
-  WithName("events").
-  WithMembershipChannel(common.MembershipChannelFacts).
-  AddPlain("ts", canonicaltypes.MustParse("timestamp")).
-  AddPlain("event", canonicaltypes.MustParse("text")).
-  AddTagged("user", canonicaltypes.MustParse("group(id:uint64, geo:text)")).
-  AddTagged("cart", canonicaltypes.MustParse("list(group(sku:text, price:float64, qty:uint32))")).
-  AddTagged("flags", canonicaltypes.MustParse("list(text)"))
+manip, err := common.NewTableManipulator()
+if err != nil {
+	panic(err)
+}
+manip.SetTableName("events")
+manip.PlainValueColumn(common.PlainItemTypeEntityId, "id", ctabb.U64)
+manip.PlainValueColumn(common.PlainItemTypeEntityTimestamp, "ts", ctabb.Z64)
+manip.TaggedValueSection("symbol").
+	AddSectionMembership(common.MembershipSpecLowCardVerbatim).
+	TaggedValueColumn("value", ctabb.S)
+manip.TaggedValueSection("f64").
+	AddSectionMembership(common.MembershipSpecLowCardVerbatim).
+	TaggedValueColumn("value", ctabb.F64)
+
+tbl, err := manip.BuildTableDesc()
 ```
 
-`ts` and `event` are **plain values** — backbone columns. `user`, `cart`, and
-`flags` are **tagged values**: their payload is shredded into typed sections and
-membership is encoded separately in a bitmask so missing sections cost one bit,
-not a null column family.
+`ctabb` holds the canonical types as Go values (`U64`, `Z64` for a 64-bit
+timestamp, `S` for a string, `F64`); the same types are written `u64`, `z64`,
+`s`, `f64` in their string form (see the canonicaltypes skill). The
+membership spec chooses how a membership is stored: `LowCardVerbatim` stores
+the label itself as text; the `Ref` channels store a numeric id that a
+registry resolves.
 
 ### 2. IR
 
-The manipulator produces an `IntermediateTableRepresentation`. This is the
-target-agnostic contract: which sections exist, what canonical type each
-section carries, and how memberships are organized. Consumers of the IR do not
-need to know whether the eventual target is ClickHouse, Arrow, or generated Go
-structs.
+`BuildTableDesc` returns a `TableDesc`; loading it into an
+`IntermediateTableRepresentation` makes every physical column explicit,
+including the support columns a membership channel costs on a given target
+(`ExampleIntermediateTableRepresentation_LoadFromTable`):
+
+```go
+ir := common.NewIntermediateTableRepresentation()
+err = ir.LoadFromTable(&tbl, clickhouse.NewTechnologySpecificCodeGenerator())
+```
+
+The IR is what the DDL, DML and read-access generators consume. It is
+target-agnostic in shape; the technology passed to `LoadFromTable` only
+decides which support columns a membership spec needs.
 
 ### 3. Map
 
 [`github.com/stergiotis/boxer/public/semistructured/leeway/mappingplan`](mappingplan/)
-models the logical shape of the incoming DTO. A `Plan` says how input fields
-land in the physical table:
+models the logical shape of a DTO. A `Plan` is not written by hand: it is
+derived from `lw:` struct tags, either by reflection
+([`github.com/stergiotis/boxer/public/semistructured/leeway/marshall/go/marshallreflect`](marshall/go/marshallreflect/)) or by code generation
+([`github.com/stergiotis/boxer/public/semistructured/leeway/marshall/go/marshallgen`](marshall/go/marshallgen/))
+(`ExamplePlanFor` in
+[marshall/go/marshallreflect/example_plan_test.go](marshall/go/marshallreflect/example_plan_test.go)):
 
 ```go
-p := mappingplan.NewPlan().
-  Plain("ts").FromField("ts").
-  Plain("event").FromField("event").
-  Tagged("user").FromField("user").
-  Tagged("cart").FromField("cart").
-  Tagged("flags").FromField("flags")
+type checkout struct {
+	_     struct{}  `kind:"checkout"`
+	Id    uint64    `lw:",id"`
+	Ts    time.Time `lw:",ts"`
+	Event string    `lw:"event,symbol,verbatim"`
+	Geo   string    `lw:"user.geo,symbol,verbatim"`
+	Total float64   `lw:"cart.total,f64,verbatim"`
+}
 ```
 
-The plan is deliberately not the physical schema. The same logical shape can map
-to multiple physical layouts, and the mapping can be revised while the stored
-columns remain addressable because the column names carry their own schema
-metadata.
+```go
+plan, err := marshallreflect.PlanFor[checkout]()
+```
+
+A tag reads `membership,section,flags`; an empty membership marks a plain
+column. The plan names sections and memberships, never physical columns, so
+the same DTO can be marshalled into any table that has those sections, and
+several DTOs (kinds) can share one table.
 
 ### 4. DDL
 
 [`github.com/stergiotis/boxer/public/semistructured/leeway/ddl/clickhouse`](ddl/clickhouse/)
-consumes the `TableDesc` and emits the ClickHouse table. The physical column
-names encode the structure:
-
-```sql
-CREATE TABLE events (
-    ts DateTime64(9),
-    event LowCardinality(String),
-    user_p_present UInt8,
-    user_v_id Nullable(UInt64),
-    user_v_geo Nullable(String),
-    cart_p_present UInt8,
-    cart_vlen UInt32,
-    cart_v_sku Array(String),
-    cart_v_price Array(Float64),
-    cart_v_qty Array(UInt32),
-    flags_p_present UInt8,
-    flags_vlen UInt32,
-    flags_v Array(String)
-) ENGINE = MergeTree()
-ORDER BY ts
-```
-
-- `_p_present` is the **membership** flag: does this row carry the section?
-- `_v_*` are the shredded payload columns.
-- `_vlen` carries list cardinality.
-
-Because the column names are self-describing, the table can be read back even
-when the code that wrote it has moved on.
-
-### 5. Marshal
-
-A producer such as Keelson uses a generated struct-of-arrays codec from
-[`github.com/stergiotis/boxer/public/semistructured/leeway/marshall/go/marshallgen`](marshall/go/marshallgen/),
-or the reflection-based runtime codec in
-[`github.com/stergiotis/boxer/public/semistructured/leeway/marshall/go/marshallreflect`](marshall/go/marshallreflect/).
-The write side flattens the logical event into the physical column arrays:
+renders the ClickHouse table from the IR. Table-level clauses refer to
+columns by their leeway coordinates (`ExampleComposeCreateTable` in
+[ddl/clickhouse/example_test.go](ddl/clickhouse/example_test.go)):
 
 ```go
-batch := events.NewBatch()
-batch.Ts = append(batch.Ts, ts)
-batch.Event = append(batch.Event, "checkout")
-batch.User.Append(present, id, geo)
-batch.Cart.AppendItems(skus, prices, quantities)
-batch.Flags.Append(flags)
-```
-
-The result is an Arrow record or RowBinary block that matches the DDL exactly.
-`dml/runtime` handles nullability, length alignment, and membership bookkeeping.
-
-### 6. Query
-
-Rather than hand-writing SQL, read-back uses
-[`github.com/stergiotis/boxer/public/semistructured/leeway/marshall/clickhouse/readback`](marshall/clickhouse/readback/)
-to generate SQL from the plan and the physical `TableDesc`:
-
-```go
-sql, err := readback.Generate(p, plan, readback.Options{
-    Projection: []string{"ts", "user.id", "cart.sku", "flags"},
-    Validator:  readback.Exact,
+sql, err := clickhouse.ComposeCreateTable("events", ir, common.TableRowConfigMultiAttributesPerRow, conv, clickhouse.TableOptions{
+	Engine:  "MergeTree()",
+	OrderBy: []clickhouse.ColumnRef{{Plain: "ts"}, {Plain: "id"}},
 })
 ```
 
-The generated query might look like:
+which produces:
 
 ```sql
-SELECT
-    ts,
-    user_v_id AS "user.id",
-    cart_v_sku AS "cart.sku",
-    flags_v AS "flags"
-FROM events
-WHERE has(user_p_present, 0)
+CREATE TABLE events (
+	"id:id:u64:::0:" UInt64,
+	"ts:ts:z64:::0:" DateTime64(9,'UTC'),
+	"tv:symbol:value:val:s::::0::" Array(String),
+	"tv:symbol:lv:lv:y:124:::0::" Array(LowCardinality(String)) CODEC(ZSTD(3)),
+	"tv:symbol:lvcard:lvcard:u64:4E:::0::" Array(UInt64) CODEC(T64,ZSTD(3)),
+	"tv:f64:value:val:f64::::0::" Array(Float64),
+	"tv:f64:lv:lv:y:124:::0::" Array(LowCardinality(String)) CODEC(ZSTD(3)),
+	"tv:f64:lvcard:lvcard:u64:4E:::0::" Array(UInt64) CODEC(T64,ZSTD(3))
+) ENGINE = MergeTree()
+ORDER BY ("ts:ts:z64:::0:", "id:id:u64:::0:")
 ```
 
-The generator knows which physical columns implement each projected path, which
-membership checks are needed, and how to validate that rows satisfy the query
-shape. A query that asks for `user.id` cannot silently return default values on
-rows that never carried `user`; it filters them out.
+- Each section is a group of parallel arrays: one element per attribute the
+  row carries in that section.
+- `value` holds the values; `lv` holds the verbatim membership labels;
+  `lvcard` says how many memberships each attribute has (an attribute may
+  carry more than one).
+- The physical names encode section, role, canonical type and encoding
+  hints, separated by the naming convention's separator (`:` here). They are
+  generated; code never spells them by hand.
+
+### 5. Marshal
+
+A schema's write side and read side are generated Go code: the DML driver
+([`github.com/stergiotis/boxer/public/semistructured/leeway/dml`](dml/)) emits a table builder, the read-access driver
+([`github.com/stergiotis/boxer/public/semistructured/leeway/readaccess`](readaccess/)) emits typed readers. The reflection codec then
+moves DTOs through them. Writing produces an Arrow record whose columns match
+the DDL (`Example` in
+[tutorial/firsttable/example_test.go](tutorial/firsttable/example_test.go),
+where `NewInEntityEvents` is generated):
+
+```go
+table := firsttable.NewInEntityEvents(memory.NewGoAllocator(), len(rows))
+err := marshallreflect.Marshal(table, rows, marshallreflect.NoLookup{})
+if err != nil {
+	panic(err)
+}
+recs, err := table.TransferRecords(nil)
+```
+
+`NoLookup` suffices because every membership in the DTO is verbatim; a `Ref`
+channel needs a lookup that maps each membership name to its id.
+
+### 6. Query
+
+There are two read paths. In Go, the generated readers load a record and
+`Unmarshal` rebuilds the DTOs (same example):
+
+```go
+readers := marshallreflect.NewSectionReaders(ra.GetNumberOfEntities()).
+	PlainColumn("id", ra.EntityId.ValueId).
+	PlainColumn("ts", ra.EntityTimestamp.ValueTs).
+	Section("symbol", ra.Symbol.GetAttributes(), ra.Symbol.GetMemberships()).
+	Section("f64", ra.F64.GetAttributes(), ra.F64.GetMemberships())
+var got []Checkout
+err = marshallreflect.Unmarshal(readers, &got, marshallreflect.NoLookup{})
+```
+
+In SQL,
+[`github.com/stergiotis/boxer/public/semistructured/leeway/marshall/clickhouse/readback`](marshall/clickhouse/readback/)
+joins a plan against the physical table and generates the presence test,
+the projection and a validator for that kind (`ExampleGenerator_Generate` in
+[marshall/clickhouse/readback/example_test.go](marshall/clickhouse/readback/example_test.go)).
+The filter for the `checkout` DTO is:
+
+```sql
+hasAll("tv:symbol:lv:lv:y:124:::0::", ['event', 'user.geo']) AND has("tv:f64:lv:lv:y:124:::0::", 'cart.total') AND countEqual("tv:symbol:lv:lv:y:124:::0::", 'event') = 1 AND countEqual("tv:symbol:lv:lv:y:124:::0::", 'user.geo') = 1 AND countEqual("tv:f64:lv:lv:y:124:::0::", 'cart.total') = 1
+```
+
+The `has` / `hasAll` terms select rows that carry the memberships at all, and
+are the ones a skip index can prune on; the `countEqual … = 1` terms check
+that each mandatory field occurs exactly once. A query that asks for
+`user.geo` therefore does not return a default value on rows that never
+carried it. For hand-written SQL over leeway tables, start at
+[the SQL read surface](../../../doc/explanation/leeway-sql-read-surface.md)
+rather than at the physical names.
 
 ## Invariants
 
@@ -195,9 +248,9 @@ rows that never carried `user`; it filters them out.
   generated codecs, and read-back all consume it.
 - Physical column names are self-describing. The mapping from column name back to
   section and type is deterministic.
-- Missing sections are encoded by the membership bitmask, not by nullable
-  families. The bit is cheap; the payload columns are written only for rows that
-  carry them.
+- An attribute a row does not carry has no element in that row's section
+  arrays. There is no nullable column per logical field, and a new field is a
+  new membership, not a schema change.
 - Plain values are row metadata; tagged values are shredded payload. Consumers
   must not mix the two representations.
 
@@ -209,6 +262,10 @@ rows that never carried `user`; it filters them out.
 - **Self-describing column names.** The names are long and carry metadata that a
   pure schema registry would hide, but they let code read tables independently
   of the registry that created them.
+- **Sections by type, not by field.** One string section serves every string
+  field, so the column count does not grow with the number of fields; the cost
+  is that reading one field means locating its membership inside an array
+  rather than naming a column.
 - **Plan separate from `TableDesc`.** This decouples logical DTOs from physical
   storage, but it means there are two objects to keep aligned.
 
