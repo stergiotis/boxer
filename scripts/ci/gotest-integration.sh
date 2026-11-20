@@ -33,4 +33,4 @@ here=$(dirname "$(readlink -f "$BASH_SOURCE")")
 cd "$here/../.."
 tags="$(cat "$here/../../tags" | tr -d "\n"),integration"
 go test -race -json -count=1 -p 1 -tags "$tags" "${@:-./...}" \
-  | go tool tparse -progress -trimpath -slow 20
+  | go tool tparse -progress -trimpath auto -slow 20
