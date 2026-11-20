@@ -242,6 +242,18 @@ var (
 		Category:    env.CategoryDev,
 	})
 
+	// HeadlessInsecureExpose is the opt-in to a non-loopback
+	// HeadlessListen (ADR-0082 SD1). The carrier has no authentication or
+	// TLS of its own, so without it the Rust client refuses to start on any
+	// address that is not loopback; with it, whoever reaches the port
+	// controls the session. Read by the Rust client (wscarrier.rs) and by
+	// hmi_headless.sh, which applies the same rule before building.
+	HeadlessInsecureExpose = env.NewBool(env.Spec{
+		Name:        "IMZERO2_HEADLESS_INSECURE_EXPOSE",
+		Description: "truthy lets the headless carrier bind a non-loopback IMZERO2_HEADLESS_LISTEN; it has no auth or TLS, so anyone who reaches the port controls the session. Unset, such a bind refuses to start",
+		Category:    env.CategoryDev,
+	})
+
 	// HeadlessIgnoreClose, when truthy, makes a viewport-close request (an
 	// app-emitted ViewportCommand::Close, e.g. a "Quit" menu item) a no-op
 	// instead of a host shutdown — so one viewer of a served deployment cannot

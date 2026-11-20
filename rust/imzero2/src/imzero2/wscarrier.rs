@@ -93,6 +93,43 @@ const AUDIO_KIND_DEVICE: u8 = 0x81;
 /// at [`WsCarrier::start`]; this is the fallback.
 const DEFAULT_MAX_CONNECTIONS: usize = 8;
 
+/// The variable that names the carrier's bind address.
+pub const LISTEN_ENV: &str = "IMZERO2_HEADLESS_LISTEN";
+
+/// Opt-in to a bind address that is not loopback (ADR-0082 SD1). The carrier
+/// has no authentication and no TLS of its own, and the socket that carries
+/// the stream also carries input, so whoever reaches a non-loopback bind
+/// controls the session. `hmi_headless.sh` checks the same variable first.
+pub const INSECURE_EXPOSE_ENV: &str = "IMZERO2_HEADLESS_INSECURE_EXPOSE";
+
+/// The env truthy spellings the headless host accepts elsewhere.
+fn env_truthy(name: &str) -> bool {
+    std::env::var(name).is_ok_and(|v| {
+        matches!(
+            v.trim().to_ascii_lowercase().as_str(),
+            "1" | "true" | "yes" | "on"
+        )
+    })
+}
+
+/// Decide whether the carrier may bind `addrs`, what `listen` resolved to
+/// (ADR-0082 SD1). Loopback addresses always may; any other needs the
+/// explicit opt-in, and is then logged as a warning at start.
+fn check_bind(listen: &str, addrs: &[std::net::SocketAddr], expose: bool) -> Result<(), String> {
+    if addrs.is_empty() {
+        return Err(format!("{LISTEN_ENV}={listen} resolves to no address"));
+    }
+    if expose || addrs.iter().all(|a| a.ip().is_loopback()) {
+        return Ok(());
+    }
+    Err(format!(
+        "refusing {LISTEN_ENV}={listen}: it is not a loopback address, and the carrier has no \
+         authentication or TLS (ADR-0082) — whoever reaches the port gets the stream and full \
+         input control. Bind 127.0.0.1 and front it with an authenticating TLS reverse proxy or \
+         an SSH tunnel, or set {INSECURE_EXPOSE_ENV}=1 to accept that on a trusted network"
+    ))
+}
+
 /// Liveness keepalive. A viewer that stops draining its socket — a backgrounded
 /// or frozen tab, or a half-open connection left behind by a browser
 /// decode-error reconnect — would otherwise park its session task on a pending
@@ -595,6 +632,20 @@ impl WsCarrier {
         lane: CodecLane,
         waker: std::sync::mpsc::Sender<()>,
     ) -> std::io::Result<Self> {
+        // The bind gate (ADR-0082 SD1), before anything listens: a refused
+        // address is a startup error naming the variable, not a warning.
+        let expose = env_truthy(INSECURE_EXPOSE_ENV);
+        let addrs: Vec<std::net::SocketAddr> =
+            std::net::ToSocketAddrs::to_socket_addrs(listen)?.collect();
+        check_bind(listen, &addrs, expose)
+            .map_err(|msg| std::io::Error::new(std::io::ErrorKind::PermissionDenied, msg))?;
+        if !addrs.iter().all(|a| a.ip().is_loopback()) {
+            tracing::warn!(
+                listen,
+                "{INSECURE_EXPOSE_ENV} is set: the carrier binds a non-loopback address with no \
+                 authentication or TLS; anyone who reaches the port gets the stream and input control"
+            );
+        }
         let max = std::env::var("IMZERO2_HEADLESS_MAX_CONNECTIONS")
             .ok()
             .and_then(|s| s.parse::<usize>().ok())
@@ -643,7 +694,7 @@ impl WsCarrier {
         }
         // Bind synchronously so startup errors (port in use) fail fast in
         // the caller instead of asynchronously on the carrier thread.
-        let ws_listener = std::net::TcpListener::bind(listen)?;
+        let ws_listener = std::net::TcpListener::bind(addrs.as_slice())?;
         ws_listener.set_nonblocking(true)?;
         let ws_addr = ws_listener.local_addr()?;
         let page_addr = std::net::SocketAddr::new(ws_addr.ip(), ws_addr.port().wrapping_add(1));
@@ -1963,6 +2014,36 @@ fn handle_client_message(data: &[u8], inner: &Inner, id: u64) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn addrs(s: &str) -> Vec<std::net::SocketAddr> {
+        std::net::ToSocketAddrs::to_socket_addrs(s).unwrap().collect()
+    }
+
+    /// ADR-0082 SD1: loopback binds pass; any other address is refused,
+    /// naming the variable, unless the opt-in is set.
+    #[test]
+    fn bind_gate_refuses_non_loopback_without_the_opt_in() {
+        for ok in ["127.0.0.1:8089", "[::1]:8089", "127.1.2.3:0"] {
+            assert!(
+                check_bind(ok, &addrs(ok), false).is_ok(),
+                "{ok} is loopback"
+            );
+        }
+        for exposed in ["0.0.0.0:8089", "[::]:8089", "192.0.2.7:8089"] {
+            let err = check_bind(exposed, &addrs(exposed), false).unwrap_err();
+            assert!(err.contains(LISTEN_ENV), "{err}");
+            assert!(err.contains(INSECURE_EXPOSE_ENV), "{err}");
+            assert!(check_bind(exposed, &addrs(exposed), true).is_ok());
+        }
+        // A name that resolves to a loopback and a routable address is not
+        // loopback.
+        let mixed: Vec<std::net::SocketAddr> = vec![
+            "127.0.0.1:1".parse().unwrap(),
+            "192.0.2.7:1".parse().unwrap(),
+        ];
+        assert!(check_bind("mixed:1", &mixed, false).is_err());
+        assert!(check_bind("nowhere:1", &[], true).is_err());
+    }
 
     fn carrier_for_test(lane: CodecLane) -> WsCarrier {
         WsCarrier {

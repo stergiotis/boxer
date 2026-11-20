@@ -5,7 +5,7 @@
 #
 #   ./hmi_headless.sh                          # widgets demo on 127.0.0.1:8089
 #   ./hmi_headless.sh --launch play            # any demo selector
-#   IMZERO2_HEADLESS_LISTEN=0.0.0.0:8089 ...   # off-loopback bind is REFUSED (host has no auth/TLS yet,
+#   IMZERO2_HEADLESS_LISTEN=0.0.0.0:8089 ...   # off-loopback bind is REFUSED (host has no auth/TLS,
 #                                              # ADR-0082): front it with an authenticating TLS reverse
 #                                              # proxy, or set IMZERO2_HEADLESS_INSECURE_EXPOSE=1 to
 #                                              # override on a trusted / air-gapped network
@@ -60,15 +60,19 @@ export IMZERO2_HEADLESS_FPS="${IMZERO2_HEADLESS_FPS:-30}"
 WINDOW_W="${WINDOW_W:-1280}"
 WINDOW_H="${WINDOW_H:-800}"
 
-# Bind-address gate (ADR-0082). The headless carrier has no authentication or TLS
-# yet — ADR-0082 is accepted but not implemented in wscarrier.rs — so an
-# off-loopback bind serves an unauthenticated, unencrypted stream, and because the
-# same WebSocket carries input, anyone who can reach it gets full remote control.
-# Fail closed: refuse a non-loopback IMZERO2_HEADLESS_LISTEN unless the operator
-# explicitly accepts the risk (trusted/air-gapped LAN, or behind an authenticating
-# TLS-terminating reverse proxy). Drop this gate once the carrier enforces token +
-# TLS itself.
+# Bind-address gate (ADR-0082 SD1). The headless carrier has no authentication or
+# TLS of its own, so an off-loopback bind serves an unauthenticated, unencrypted
+# stream, and because the same WebSocket carries input, anyone who can reach it
+# gets full remote control. The carrier itself refuses such a bind
+# (wscarrier.rs check_bind) unless IMZERO2_HEADLESS_INSECURE_EXPOSE is truthy;
+# this check is the same rule, run before the build so the refusal comes first.
+# Keep the two in step: loopback always passes, and the opt-in accepts
+# 1/true/yes/on as the binary does.
 listen_addr="$IMZERO2_HEADLESS_LISTEN"
+case "${IMZERO2_HEADLESS_INSECURE_EXPOSE,,}" in
+	1|true|yes|on) insecure_expose=1 ;;
+	*) insecure_expose=0 ;;
+esac
 if [[ "$listen_addr" == \[*\]:* ]]; then
 	bind_host="${listen_addr#\[}"; bind_host="${bind_host%%\]*}"   # [ipv6]:port
 else
@@ -77,11 +81,11 @@ fi
 case "$bind_host" in
 	127.*|::1|localhost) ;;                                        # loopback — always allowed
 	*)
-		if [[ "$IMZERO2_HEADLESS_INSECURE_EXPOSE" == 1 ]]; then
-			echo "hmi_headless.sh: WARNING — binding non-loopback '${bind_host:-<all interfaces>}' with NO auth/TLS (ADR-0082 unimplemented);" >&2
+		if [[ "$insecure_expose" == 1 ]]; then
+			echo "hmi_headless.sh: WARNING — binding non-loopback '${bind_host:-<all interfaces>}' with NO auth/TLS (ADR-0082 SD2/SD4 unbuilt);" >&2
 			echo "hmi_headless.sh:           the stream AND its input channel are exposed to anyone who can reach this address." >&2
 		else
-			echo "hmi_headless.sh: refusing non-loopback bind '${bind_host:-<all interfaces>}' — the headless host has no auth/TLS yet (ADR-0082)." >&2
+			echo "hmi_headless.sh: refusing non-loopback bind '${bind_host:-<all interfaces>}' — the headless host has no auth/TLS (ADR-0082)." >&2
 			echo "hmi_headless.sh: an off-loopback stream is unauthenticated and grants remote input control. Front it with an" >&2
 			echo "hmi_headless.sh: authenticating TLS reverse proxy, or set IMZERO2_HEADLESS_INSECURE_EXPOSE=1 to override on a trusted network." >&2
 			exit 1

@@ -38,11 +38,13 @@ COPY entrypoint.sh    /app/entrypoint.sh
 RUN chmod +x /app/main_go /app/imzero2 /app/entrypoint.sh
 
 # Force software rendering; bind the container interface so the Caddy sidecar
-# can reach the carrier. NOTE: v1 has no in-app auth/TLS (ADR-0082 is proposed,
-# not built) — TLS + the password live in Caddy, and this port is never
-# published to the host directly. Do not expose 8089/8090 publicly.
+# can reach the carrier. The carrier has no in-app auth/TLS (ADR-0082 SD2/SD4
+# are unbuilt) and refuses a non-loopback bind unless INSECURE_EXPOSE opts in
+# (SD1) — TLS + the password live in Caddy, and this port is never published
+# to the host directly. Do not expose 8089/8090 publicly.
 ENV LIBGL_ALWAYS_SOFTWARE=1 \
     IMZERO2_HEADLESS_LISTEN=0.0.0.0:8089 \
+    IMZERO2_HEADLESS_INSECURE_EXPOSE=1 \
     IMZERO2_HEADLESS_FPS=30 \
     IMZERO2_HEADLESS_ENCODER_ARGS="-c:v libx264 -preset veryfast -tune zerolatency -bf 0 -g 100000"
 # LAUNCH intentionally unset → interactive carousel (no clickhouse needed).

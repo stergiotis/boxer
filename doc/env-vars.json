@@ -3099,6 +3099,17 @@
       }
     },
     {
+      "name": "IMZERO2_HEADLESS_INSECURE_EXPOSE",
+      "type": "bool",
+      "description": "truthy lets the headless carrier bind a non-loopback IMZERO2_HEADLESS_LISTEN; it has no auth or TLS, so anyone who reaches the port controls the session. Unset, such a bind refuses to start",
+      "category": "dev",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/thestack/imzero2/imzero2env"
+      }
+    },
+    {
       "name": "IMZERO2_HEADLESS_LISTEN",
       "type": "string",
       "description": "headless carrier bind address host:port (port and port+1 both serve page + WebSocket); empty disables remote access",

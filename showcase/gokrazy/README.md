@@ -154,20 +154,19 @@ widget demo never draws. A demo that needs them stages a third font in
 
 ## The bind address is not safe by default
 
-Both images set `IMZERO2_HEADLESS_LISTEN=0.0.0.0:8089`, because a QEMU port
-forward cannot reach a guest that binds loopback.
+The images set `IMZERO2_HEADLESS_LISTEN=0.0.0.0:8089`, because a QEMU port
+forward cannot reach a guest that binds loopback, and with it
+`IMZERO2_HEADLESS_INSECURE_EXPOSE=1`, because the Rust host refuses a
+non-loopback bind without that opt-in (ADR-0082 SD1).
 
-The headless carrier has **no authentication and no TLS** — ADR-0082 is
-accepted but unimplemented — and the same WebSocket carries input. Anyone who
-can reach that port gets full remote control of the app. `hmi_headless.sh`
-refuses a non-loopback bind for this reason, but that gate lives in the shell
-script; neither the Go nor the Rust side enforces it, so setting the variable
-here bypasses nothing that would otherwise protect you.
+What the opt-in accepts: the headless carrier has **no authentication and no
+TLS** (ADR-0082 SD2 and SD4 are unbuilt), and the same WebSocket carries
+input. Anyone who can reach that port controls the session.
 
 This is acceptable **only** because `gok vm run` uses QEMU user-mode
 networking, which is host-local NAT and not reachable from the LAN. An image
-put on real hardware needs ADR-0082, or an authenticating TLS reverse proxy in
-front, before that port is exposed.
+put on real hardware must not expose that port as it is: bind loopback, drop
+the opt-in, and front the host with an authenticating TLS reverse proxy.
 
 ## `gok vm run` rebuilds the Go program every time
 

@@ -30,6 +30,7 @@
             },
             "Environment": [
                 "IMZERO2_HEADLESS_LISTEN=0.0.0.0:8089",
+                "IMZERO2_HEADLESS_INSECURE_EXPOSE=1",
                 "IMZERO2_HEADLESS_FPS=30",
                 "LD_LIBRARY_PATH=/lib64",
                 "XDG_CACHE_HOME=/tmp/.cache",
