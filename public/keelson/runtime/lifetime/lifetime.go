@@ -25,8 +25,11 @@
 //
 // Hooks run on a goroutine of their own and tails on whichever goroutine
 // entered the work, both concurrently with the scope's owner: what they
-// touch must be safe to share. A panicking hook takes the process down.
-// Only work that entered is waited for; a goroutine started without Enter
+// touch must be safe to share. A panic in a function run by [Scope.Go] or in
+// a hook is recovered, logged at Error level with the panic site's stack, and
+// counted as that work having returned: the scope still drains and the
+// process goes on (ADR-0386). Work entered with [Scope.Enter] runs on its
+// caller's goroutine, under the caller's boundary. Only work that entered is waited for; a goroutine started without Enter
 // or Go is invisible to the drain.
 package lifetime
 
@@ -35,7 +38,10 @@ import (
 	"sync"
 	"time"
 
+	"github.com/rs/zerolog/log"
+
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/ph"
 )
 
 // Scope is a group of work retired as one. Construct with [New]; the
@@ -145,7 +151,8 @@ func (inst *Scope) leave() {
 }
 
 // Go runs f under the work context as one piece of work, unless the scope
-// retired. started says whether f runs.
+// retired. started says whether f runs. A panic in f is recovered and logged
+// at Error level, and f counts as returned.
 func (inst *Scope) Go(f func(ctx context.Context)) (started bool) {
 	leave, ok := inst.Enter()
 	if !ok {
@@ -153,9 +160,21 @@ func (inst *Scope) Go(f func(ctx context.Context)) (started bool) {
 	}
 	go func() {
 		defer leave()
-		f(inst.work)
+		runGuarded("lifetime: a goroutine of the scope panicked", func() { f(inst.work) })
 	}()
 	return true
+}
+
+// runGuarded calls f and logs a panic in it as an error with the panic
+// site's stack instead of letting it end the process.
+func runGuarded(msg string, f func()) {
+	err := ph.Guard(func() error {
+		f()
+		return nil
+	})
+	if err != nil {
+		log.Error().Err(err).Msg(msg)
+	}
 }
 
 // OnDrained registers f to run once the scope is retired and its work has
@@ -263,7 +282,7 @@ func (inst *Scope) drain() {
 	}
 	go func() {
 		for _, f := range hooks {
-			f(inst.tail)
+			runGuarded("lifetime: a drain hook panicked", func() { f(inst.tail) })
 		}
 		inst.finish()
 	}()

@@ -134,3 +134,24 @@ func TestDrainAbandonsAtTheDeadline(t *testing.T) {
 	require.True(t, quick.Go(func(ctx context.Context) { <-ctx.Done() }))
 	assert.NoError(t, quick.Drain(context.Background()), "work that honours the work context drains")
 }
+
+// A panic in a goroutine of the scope or in a hook is recovered: the scope
+// still drains, the other hooks run, and the process goes on.
+func TestAPanicInGoOrAHookDoesNotStopTheDrain(t *testing.T) {
+	s := New(nil)
+	var hooks atomic.Int32
+	s.OnDrained(func(context.Context) { panic("first hook") })
+	s.OnDrained(func(context.Context) { hooks.Add(1) })
+	require.True(t, s.Go(func(context.Context) {
+		var m map[string]int
+		m["x"] = 1
+	}))
+	require.NoError(t, s.Drain(contextWithTimeout(t)))
+	assert.Equal(t, int32(1), hooks.Load(), "the hook after the panicking one ran")
+}
+
+func contextWithTimeout(t *testing.T) context.Context {
+	ctx, cancel := context.WithTimeout(context.Background(), wait)
+	t.Cleanup(cancel)
+	return ctx
+}
