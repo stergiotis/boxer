@@ -277,3 +277,40 @@ func TestArgvPrefixIsPrepended(t *testing.T) {
 		t.Errorf("Argv mutated to %q", p.Argv)
 	}
 }
+
+func TestCheckMinVersion(t *testing.T) {
+	p := &Program{Name: "probe-test", MinVersion: "26.8", MinVersionNeeds: "a feature"}
+	v, err := checkMinVersion(p, "ClickHouse local version 26.9.13.15 (official build).\n")
+	if err != nil || v != "26.9.13.15" {
+		t.Fatalf("got %q, %v", v, err)
+	}
+	if _, err = checkMinVersion(p, "26.8"); err != nil {
+		t.Fatalf("the floor itself passes: %v", err)
+	}
+	if _, err = checkMinVersion(p, "version 26.7.9"); err == nil || !strings.Contains(err.Error(), "26.8") || !strings.Contains(err.Error(), "a feature") {
+		t.Fatalf("below the floor must be refused naming it: %v", err)
+	}
+	if _, err = checkMinVersion(p, "no version here"); err == nil {
+		t.Fatal("an output without a version must be refused")
+	}
+}
+
+func TestCheckVersionWithoutProbePasses(t *testing.T) {
+	p := &Program{Name: "no-probe", Kind: Local}
+	if _, err := p.CheckVersion(t.Context(), Opts{}); err != nil {
+		t.Fatalf("a program without a probe is not checked: %v", err)
+	}
+}
+
+func TestClickHouseLocalMeetsTheFloor(t *testing.T) {
+	if _, ok := ClickHouseLocal.Resolve(); !ok {
+		t.Skip("clickhouse not on PATH")
+	}
+	v, err := ClickHouseLocal.CheckVersion(t.Context(), Opts{})
+	if err != nil {
+		t.Fatalf("clickhouse local on PATH: %v", err)
+	}
+	if v == "" {
+		t.Fatal("the probe reported no version")
+	}
+}

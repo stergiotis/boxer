@@ -2,7 +2,9 @@ package storeexec
 
 import (
 	"context"
+	"io"
 
+	"github.com/stergiotis/boxer/public/db/clickhouse/chversion"
 	"github.com/stergiotis/boxer/public/keelson/data/chclient"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
@@ -15,11 +17,26 @@ import (
 //
 // A caller that needs the client as well (a second use of the connection, a
 // custom HTTP client) builds it and calls [New].
+//
+// The check is a round trip that reads the server's release, and a server
+// below the ClickHouse floor is refused there ([chversion.Check]) rather
+// than on the first statement that needs a newer one.
 func Connect(ctx context.Context, cfg chclient.Config) (inst *Executor, err error) {
 	client := chclient.New(cfg, nil)
-	err = client.Ping(ctx)
+	body, err := client.Query(ctx, "SELECT "+chversion.SelectVersion)
 	if err != nil {
 		err = eb.Build().Str("url", cfg.URL).Errorf("storeexec: ClickHouse not reachable: %w", err)
+		return
+	}
+	raw, err := io.ReadAll(body)
+	_ = body.Close()
+	if err != nil {
+		err = eb.Build().Str("url", cfg.URL).Errorf("storeexec: read the server's version: %w", err)
+		return
+	}
+	err = chversion.Check("server", string(raw))
+	if err != nil {
+		err = eb.Build().Str("url", cfg.URL).Errorf("storeexec: %w", err)
 		return
 	}
 	return New(client, nil)

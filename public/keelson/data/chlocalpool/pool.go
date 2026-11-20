@@ -23,6 +23,7 @@ import (
 	"os"
 
 	"github.com/rs/zerolog"
+	"github.com/stergiotis/boxer/public/extbin"
 	"github.com/stergiotis/boxer/public/keelson/runtime/procpool"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
@@ -35,8 +36,9 @@ type Pool struct {
 	inner *procpool.Pool[*Worker]
 }
 
-// New constructs a Pool, validates cfg, probes the binary, and
-// starts filling MinIdle workers.
+// New constructs a Pool, validates cfg, probes the binary — present, and
+// at or above the ClickHouse release floor — and starts filling MinIdle
+// workers.
 func New(cfg Config, logger zerolog.Logger) (p *Pool, err error) {
 	if cfg.BinaryPath == "" {
 		cfg.BinaryPath = resolveBinaryPath()
@@ -47,6 +49,14 @@ func New(cfg Config, logger zerolog.Logger) (p *Pool, err error) {
 	}
 	if _, statErr := os.Stat(cfg.BinaryPath); statErr != nil {
 		err = eb.Build().Str("binaryPath", cfg.BinaryPath).Errorf("chlocalpool: binary: %w", statErr)
+		return
+	}
+	// The release floor, asked of the binary once per path before the first
+	// worker (chversion; the answer is kept for the process).
+	probeCtx, cancel := context.WithTimeout(context.Background(), cfg.SpawnTimeout)
+	_, err = extbin.ClickHouseLocal.CheckVersion(probeCtx, extbin.Opts{Path: cfg.BinaryPath})
+	cancel()
+	if err != nil {
 		return
 	}
 	inner, err := procpool.New(procpool.Config{

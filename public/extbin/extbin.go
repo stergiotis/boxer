@@ -22,6 +22,7 @@ import (
 	"context"
 	"os/exec"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -102,6 +103,16 @@ type Program struct {
 	// InstallHint is appended to the not-found error, telling an operator how
 	// to satisfy the dependency.
 	InstallHint string
+	// VersionProbe, when non-empty, are the arguments that make the program
+	// print its version on stdout (`--version`). The first dotted-numeric
+	// token of the output is the version [Program.CheckVersion] reads.
+	VersionProbe []string
+	// MinVersion is the oldest dotted version boxer runs against; empty
+	// accepts any. Compared numerically part by part, missing parts zero.
+	MinVersion string
+	// MinVersionNeeds names one behaviour that needs MinVersion, for the
+	// refusal.
+	MinVersionNeeds string
 }
 
 // Opts configures a single invocation.
@@ -396,4 +407,112 @@ func runCapture(cmd *exec.Cmd, combined bool) (out []byte, err error) {
 	}
 	out = stdout.Bytes()
 	return
+}
+
+var versionChecks sync.Map // name + "\x00" + resolved path → versionCheck
+
+type versionCheck struct {
+	version string
+	err     error
+}
+
+// CheckVersion runs p's VersionProbe under o and refuses a version below
+// MinVersion, naming the floor and MinVersionNeeds. A program without a
+// probe or a floor passes without running. The result is kept per resolved
+// executable for the life of the process: a binary does not change version
+// under a running host, and a pool spawning workers asks once.
+func (p *Program) CheckVersion(ctx context.Context, o Opts) (version string, err error) {
+	if len(p.VersionProbe) == 0 || p.MinVersion == "" {
+		return
+	}
+	name, _, err := p.resolve(o)
+	if err != nil {
+		return
+	}
+	key := p.Name + "\x00" + name
+	if c, ok := versionChecks.Load(key); ok {
+		vc := c.(versionCheck)
+		return vc.version, vc.err
+	}
+	out, err := p.Output(ctx, o, p.VersionProbe...)
+	if err != nil {
+		// A failed run is not cached: it may be the context, not the binary.
+		err = eb.Build().Str("name", p.Name).Errorf("extbin: version probe: %w", err)
+		return
+	}
+	version, err = checkMinVersion(p, string(out))
+	versionChecks.Store(key, versionCheck{version: version, err: err})
+	return
+}
+
+// checkMinVersion reads the version out of a probe's output and compares it
+// to the program's floor.
+func checkMinVersion(p *Program, out string) (version string, err error) {
+	got := firstDottedVersion(out)
+	if got == nil {
+		err = eb.Build().Str("name", p.Name).Str("output", strings.TrimSpace(out)).Errorf("extbin: no version in the probe's output")
+		return
+	}
+	version = joinDotted(got)
+	if compareDotted(got, firstDottedVersion(p.MinVersion)) < 0 {
+		err = eb.Build().Str("name", p.Name).Str("version", version).Str("floor", p.MinVersion).Str("needs", p.MinVersionNeeds).
+			Errorf("extbin: %s %s is below the floor boxer runs against (%s): %s", p.Name, version, p.MinVersion, p.MinVersionNeeds)
+	}
+	return
+}
+
+// firstDottedVersion is the first run of digits joined by single dots, with
+// at least one dot, as numbers; nil when the text holds none.
+func firstDottedVersion(s string) (parts []int) {
+	for i := 0; i < len(s); i++ {
+		if s[i] < '0' || s[i] > '9' {
+			continue
+		}
+		j := i
+		for j < len(s) && (s[j] == '.' || (s[j] >= '0' && s[j] <= '9')) {
+			j++
+		}
+		tok := strings.Trim(s[i:j], ".")
+		if strings.Contains(tok, ".") && !strings.Contains(tok, "..") {
+			for f := range strings.SplitSeq(tok, ".") {
+				n := 0
+				for _, c := range f {
+					n = n*10 + int(c-'0')
+				}
+				parts = append(parts, n)
+			}
+			return
+		}
+		i = j
+	}
+	return nil
+}
+
+// compareDotted orders two numeric part lists, a missing part reading as
+// zero.
+func compareDotted(a []int, b []int) (c int) {
+	for i := 0; i < max(len(a), len(b)); i++ {
+		var x, y int
+		if i < len(a) {
+			x = a[i]
+		}
+		if i < len(b) {
+			y = b[i]
+		}
+		if x != y {
+			return x - y
+		}
+	}
+	return 0
+}
+
+func joinDotted(parts []int) (s string) {
+	var b strings.Builder
+	for i, n := range parts {
+		if i > 0 {
+			b.WriteByte('.')
+		}
+		b.WriteString(strconv.Itoa(n))
+	}
+	return b.String()
 }

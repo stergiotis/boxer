@@ -11,7 +11,10 @@ package extbin
 // without touching call sites. Each override variable is declared here
 // through the env registry (ADR-0009), beside the program that honours it.
 
-import "github.com/stergiotis/boxer/public/config/env"
+import (
+	"github.com/stergiotis/boxer/public/config/env"
+	"github.com/stergiotis/boxer/public/db/clickhouse/chversion"
+)
 
 // The path overrides of the programs below: empty keeps the PATH lookup.
 var (
@@ -100,6 +103,10 @@ var (
 		Kind:        Host,
 		OverrideEnv: ClickHouseLocalBin.Spec().Name,
 		InstallHint: "https://clickhouse.com/docs/en/install",
+		// `clickhouse local --version` prints a banner around the release.
+		VersionProbe:    []string{"--version"},
+		MinVersion:      chversion.Floor,
+		MinVersionNeeds: chversion.FloorFeature,
 	})
 )
 

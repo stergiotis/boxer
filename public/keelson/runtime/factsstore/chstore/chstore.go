@@ -21,6 +21,7 @@ import (
 	"github.com/apache/arrow-go/v18/arrow/memory"
 	"lukechampine.com/blake3"
 
+	"github.com/stergiotis/boxer/public/db/clickhouse/chversion"
 	"github.com/stergiotis/boxer/public/keelson/data/chclient"
 	"github.com/stergiotis/boxer/public/keelson/data/storeexec"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
@@ -261,16 +262,36 @@ func (inst *Store) SetupTable(ctx context.Context, engineClause string) (err err
 // that the server still declares every function this build calls. Anything
 // else — no stamp, an older generation, other bodies — is a full install,
 // on the order of a hundred statements (ADR-0171, update of 2026-11-20).
+//
+// The same round trip reads the server's release, and a server below the
+// ClickHouse floor is refused before anything is installed (chversion). A
+// server without the stamp functions fails that query; the release is then
+// read on its own, ahead of the install.
 func (inst *Store) EnsureReadSurface(ctx context.Context) (err error) {
 	stamp := lwsqlsurface.ServerStamp{Generation: -1}
-	body, qerr := inst.cli.Query(ctx, "SELECT "+lwsqlsurface.StampSelect)
+	release := ""
+	body, qerr := inst.cli.Query(ctx, "SELECT "+chversion.SelectVersion+", "+lwsqlsurface.StampSelect)
 	if qerr == nil {
 		raw, rerr := io.ReadAll(body)
 		_ = body.Close()
 		if rerr == nil {
-			generation, digest, _ := strings.Cut(strings.TrimSpace(string(raw)), "\t")
-			stamp = lwsqlsurface.ParseStamp(generation, digest)
+			fields := strings.Split(strings.TrimSpace(string(raw)), "\t")
+			if len(fields) == 3 {
+				release = fields[0]
+				stamp = lwsqlsurface.ParseStamp(fields[1], fields[2])
+			}
 		}
+	}
+	if release == "" {
+		release, err = inst.serverRelease(ctx)
+		if err != nil {
+			return
+		}
+	}
+	err = chversion.Check("server", release)
+	if err != nil {
+		err = eh.Errorf("chstore: setup: %w", err)
+		return
 	}
 	switch lwsqlsurface.Decide(stamp) {
 	case lwsqlsurface.ActionNone:
@@ -286,6 +307,23 @@ func (inst *Store) EnsureReadSurface(ctx context.Context) (err error) {
 	if err != nil {
 		err = eh.Errorf("chstore: setup: install the leeway SQL read surface: %w", err)
 	}
+	return
+}
+
+// serverRelease reads version() alone.
+func (inst *Store) serverRelease(ctx context.Context) (release string, err error) {
+	body, err := inst.cli.Query(ctx, "SELECT "+chversion.SelectVersion)
+	if err != nil {
+		err = eh.Errorf("chstore: setup: read the server's version: %w", err)
+		return
+	}
+	raw, err := io.ReadAll(body)
+	_ = body.Close()
+	if err != nil {
+		err = eh.Errorf("chstore: setup: read the server's version: %w", err)
+		return
+	}
+	release = strings.TrimSpace(string(raw))
 	return
 }
 
