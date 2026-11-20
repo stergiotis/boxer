@@ -2,7 +2,7 @@
 
 [![Go Reference](https://pkg.go.dev/badge/github.com/stergiotis/boxer.svg)](https://pkg.go.dev/github.com/stergiotis/boxer)
 
-Working in this tree, human or agent? [`AGENTS.md`](AGENTS.md) is the router: it carries the few repo-specific things that are easy to miss and points at the authoritative document for everything else.
+Using boxer from a repository of your own? [`doc/README.md`](doc/README.md) is the reading order: the tutorials, then the guides for adopting it. Working in this tree, human or agent? [`AGENTS.md`](AGENTS.md) is the router: it carries the few repo-specific things that are easy to miss and points at the authoritative document for everything else.
 
 <a href="https://stergiotis.github.io/boxer/demo/index.html?worker=worker.mjs%3Fapp%3Dgithub.com%2Fstergiotis%2Fboxer%2Fapps%2Fplay%26env%3DCLICKHOUSE_URL%3Dhttp%253A%252F%252Fkeelson.invalid%252Fquery%26env%3DBOXER_PLAY_SQL%3DWITH%250A%2520%2520%2520%2520vector_field%2520AS%2520%2528SELECT%2520%252A%2520FROM%2520keelson%2528%2527gfs_wind%2527%2529%2529%252C%250A%2520%2520%2520%2520vector_field_opts%2520AS%2520%2528SELECT%2520%252A%2520FROM%2520keelson%2528%2527gfs_wind_opts%2527%2529%2529%250ASELECT%2520%252A%250AFROM%2520vector_field%250ALIMIT%25201000%26env%3DBOXER_PLAY_AUTORUN%3D1%26env%3DBOXER_PLAY_FOCUS_VECTORFIELD%3D1%26env%3DBOXER_PLAY_DOCK_SPLITS%3Deditor%253D0.16%26env%3DBOXER_PLAY_TAB_ZONES%3D%252A%253Dbody%252Ceditor%253Deditor%252Chistory%253Deditor"><picture>
   <source media="(prefers-color-scheme: dark)" srcset="doc/images/demo-wind-in-play-dark.png">
@@ -51,15 +51,31 @@ The oldest versions boxer supports. Nothing older is tested; below a floor, expe
 Each browser row names the feature the viewer has to support. No browser version is tested.
 
 ## Installation
+`main` moves quickly and tags are cut rarely, so a tag can lag `main` by months and lack packages this README names; `go get github.com/stergiotis/boxer` without a version resolves to that tag. Only `main` receives fixes ([`SECURITY.md`](SECURITY.md)). Pin a commit of `main` instead:
+
 ```
-go get github.com/stergiotis/boxer
+go get github.com/stergiotis/boxer@<commit>
 ```
+
+What may change between commits, and how a change is announced, is in [`VERSIONING.md`](VERSIONING.md).
+
+## Run an app
+The desktop host is a Go process and a Rust client that draws its window. [`rust/imzero2/hmi.sh`](rust/imzero2/hmi.sh) builds both and opens an app by its alias:
+
+```
+CLICKHOUSE_URL=http://localhost:8123/ rust/imzero2/hmi.sh --launch play
+```
+
+`CLICKHOUSE_URL` names the ClickHouse server the apps query and persist to; without a reachable server they fall back to in-memory state, and apps that query `clickhouse local` need the `clickhouse` binary on `PATH`. `rust/imzero2/hmi.sh --list` lists the aliases. Building the client needs rustup (the toolchain is pinned in the crate), a C compiler, `pkg-config` and the Wayland and X11 development headers ([airgapped-build](doc/howto/airgapped-build.md) lists the residue); running it needs a Vulkan loader (`libvulkan.so.1`) with a GPU driver, and fontconfig. Profiling, the flight recorder and coverage output are off unless `HMI_PPROF_ADDR`, `HMI_FLIGHT_RECORDER` or `HMI_GOCOVERDIR` is set (see the script's header).
+
+Nothing to install: the [demo page](https://stergiotis.github.io/boxer/) runs several apps in a browser tab. To write an app of your own, start with [the first-app tutorial](doc/tutorials/first-app.md).
 
 ## What's inside
 Boxer is a collection of packages under `public/`. The larger subsystems:
 
 * `algebraicarch/pushout` — patch-based merge of line graphs: an ojo-style graph with tombstones over a content-addressed patch log, where a merge is the set union of applied patches and conflicts are detected after the fact (the pushout vocabulary is Mimram & Di Giusto's; no pushout object is computed): `pushoutgraph/store` for the line-graph data structure, `pushoutgraph/patch` for the patch DAG, `envelope` for transmittable patches; the line-graph (upstream: *graggle*) and pseudo-edge constructs follow Joe Neeman's [ojo](https://github.com/jneem/ojo) design (see [`pushout/pushoutgraph/NOTICE`](public/algebraicarch/pushout/pushoutgraph/NOTICE)); Includes a `BackendI`/`RepoI` seam under `algebraicarch/pushout/pijul` with two realisations — a native pushout backend (no external binary) and a text backend that shells out to `pijul`.
 * `semistructured/leeway` — code-driven entity-attribute-value data model with a staged codegen pipeline (DDL / DML / read-access / streaming read-access / marshalling).
+* `storage/recordstore` — the runtime under generated leeway record stores: ingest, create, batched retrieve and persist over one fact table, with the batching cache and a ClickHouse executor (ADR-0100).
 * `semistructured/markdown/obsidian` — goldmark-based parser for Obsidian-flavored markdown (callouts, wikilinks, embeds, tags, highlights, frontmatter).
 * `db/clickhouse/dsl` — typed ClickHouse SQL DSL with an AST, marshalling, and nanopass rewrite passes (ADR-0002, ADR-0006).
 * `streaming/persisted/kafka` — embedded Kafka producer/consumer derived from Redpanda Connect's franz-go integration (ADR-0005).
@@ -70,6 +86,15 @@ Boxer is a collection of packages under `public/`. The larger subsystems:
 * `thestack/imzero2` — ImZero v2: an egui-based immediate-mode UI stack (egui2 FFI bindings, widgets, the IDS design system, demo apps), rendered by the Rust backend under `rust/imzero2`.
 * `thestack/fffi2` — Framed Foreign Function Interface: the typed FFI / IR layer imzero2 builds on (ADR-0049).
 * `keelson` — application runtime for imzero2 apps: an `AppI` registry with dock/CLI hosts, an in-process bus, a bus-codec, a facts store, background-task supervision, and a help system.
+* `keelson/runtime/watchbill` — durable work as job rows on the facts table: claimed by a conditional update, leased by the runtime heartbeat, with the bus as a doorbell (ADR-0223).
+* `keelson/runtime/agent` and `apps/chat` — the agentic layer: apps declare operations an agent may call, the host grants and journals each call, and the chat app runs a model's tool loop over them ([agentic-layer](doc/explanation/agentic-layer.md)).
+* `streaming/stevedore` — routing, failure and state handling around an ingestion processor a streaming framework drives as an external process (ADR-0252).
+* `db/fairlead` — the one opening every SQL statement passes on its way out of the process (ADR-0367).
+* `db/clickhouse/jackstay` — guided sync of tables from one ClickHouse server to another, every step written into one plan document (ADR-0259).
+* `analytics/graph/rutter` — road-network routing: a customizable contraction hierarchy over a graph of arcs, many-to-many queries, and snapping a point to the nearest polyline (ADR-0256).
+* `semistructured/markdown/mdnotebook` — sealed notebooks: a markdown document of typed cells that holds its own records, read without running a query (ADR-0371).
+* `science/imaging` — an image as measured samples apart from any way of showing it: 16-bit and float planes, display recipes, region statistics (ADR-0373).
+* `science/audio` and `keelson/runtime/audioout` — decoding, PCM and peaks, and the runtime's audio output an app asks the host for (ADR-0372).
 * `fs/lading` — filesystem snapshot store: an `io/fs` tree landed into three facts-shaped ClickHouse tables addressed by `(mount, snapshot, path)`, with per-mount content policy, declarative retention, and read paths via `io/fs`, SQL macros and an SFTP head (ADR-0198). `apps/tally` browses it.
 * `observability/sysmetrics` — Linux system-metrics collectors (cpu, mem, disk, net, proc, sensors, battery, container, opt-in GPU backends) (ADR-0019).
 * `science/geo/swisstopo` — Swiss LV95 / LV03 ⇄ WGS84 coordinate transforms, in Go and as a ClickHouse UDF family (ADR-0244), GeoTIFF elevation sampling, and line-of-sight queries.
@@ -100,7 +125,8 @@ Boxer follows the [Diátaxis](https://diataxis.fr/) framework (ADR-0001). Docs l
 * **Architecture overview** — [`doc/ARCHITECTURE.md`](doc/ARCHITECTURE.md) draws how the pieces fit: the operation modes (desktop, headless, appliance images) and the data architecture (the two ClickHouse engines, the `boxer.*` tables, ad-hoc datasets, the filesystem snapshot store and its rclone seam).
 * **Architecture decisions** — [`doc/adr/`](doc/adr/) records the *why* behind cross-cutting choices (nanopass discipline, h3 WASM bridge, license gate, Kafka port, leeway membership-role classifier, …).
 * **Changelog** — [`doc/changelog/`](doc/changelog/) compiles window-bounded change summaries, one entry per two-to-four-week window, each opening with a hash-free *window in brief*; [`INDEX.md`](doc/changelog/INDEX.md) is a generated table of contents over the entries.
-* **Per-package docs** — larger subsystems co-locate `TUTORIAL.md` / `HOWTO.md` / `EXPLANATION.md` / reference docs with their source (e.g. [`public/db/clickhouse/dsl/EXPLANATION.md`](public/db/clickhouse/dsl/EXPLANATION.md)).
+* **Tutorials** — [`doc/tutorials/`](doc/tutorials/) take a newcomer from an empty directory to a running app, and to a first leeway table.
+* **Per-package docs** — larger subsystems co-locate `HOWTO.md` / `EXPLANATION.md` / reference docs with their source (e.g. [`public/db/clickhouse/dsl/EXPLANATION.md`](public/db/clickhouse/dsl/EXPLANATION.md)).
 * **How-to guides** — [`doc/howto/`](doc/howto/) carries task recipes: ingest a markdown vault and query its graph, snapshot a file tree into ClickHouse, launch apps headlessly, diagnose render jank, adopt boxer's standards downstream.
 * **Trials** — [`doc/trials/`](doc/trials/) holds reproducible measurement protocols in the sea-trials sense: standardized runs repeated against later builds. Each trial's README §0 states the one claim its numbers carry and the condition that claim holds under; the tables under `runs/` are per-arm evidence, not citable figures.
 * **Standards** — [`CODINGSTANDARDS.md`](CODINGSTANDARDS.md) and [`doc/DOCUMENTATION_STANDARD.md`](doc/DOCUMENTATION_STANDARD.md).

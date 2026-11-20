@@ -267,12 +267,15 @@ relative path.
 
 ## Keeping up
 
-On every boxer bump:
+On every boxer bump, name the commit of boxer's `main` to move to:
 
 ```sh
-go get -u github.com/stergiotis/boxer
+go get github.com/stergiotis/boxer@<commit>
 scripts/ci/lint.sh
 ```
+
+`go get -u` is not the bump: it moves to the latest tag, which is older than
+a pin on a recent commit of `main` and so leaves the pin where it is.
 
 Step two is the point of all of this. It fails on a retired build tag, on a
 generated file that has drifted, and on any rule the bump introduced — at your
