@@ -1,0 +1,171 @@
+// Package schemaplan derives the statements that bring a stored table to
+// the columns its store was generated for, when the change is mechanical
+// (ADR-0387): generated columns the table lacks are added, columns present
+// under an aspect-only variant of their name (ADR-0182) are renamed and
+// given the generated codec, a plain MergeTree table without an insert
+// deduplication window gets one, and the table is stamped with the
+// generating schema. Anything else is refused with the reason; doc/migration
+// holds the recipes for those.
+//
+// It only derives. `boxer schema plan` prints a plan and `boxer schema
+// apply` executes one; no host applies a plan on its own.
+package schemaplan
+
+import (
+	"context"
+	"strconv"
+	"strings"
+
+	"github.com/stergiotis/boxer/public/db/clickhouse/jackstay"
+	"github.com/stergiotis/boxer/public/gov/datacatalog"
+	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/storage/recordstore"
+)
+
+// MigrationDocs is where a refused plan points.
+const MigrationDocs = "doc/migration/README.md"
+
+// Plan is the outcome for one table.
+type Plan struct {
+	Verdict recordstore.SchemaVerdict `json:"verdict"`
+	// Statements bring the table in line, in order; empty when nothing is
+	// to do or the plan is refused.
+	Statements []string `json:"statements,omitempty"`
+	// Refused says why no statements are offered for a shape change;
+	// statements that only add the window or the stamp may still be.
+	Refused []string `json:"refused,omitempty"`
+}
+
+// IsRefused reports whether the plan declines a change the table needs.
+func (inst Plan) IsRefused() bool { return len(inst.Refused) > 0 }
+
+// Derive plans c's table from facts.
+func Derive(c recordstore.TableContract, facts recordstore.TableFacts) (p Plan) {
+	p.Verdict = recordstore.JudgeFacts(c, facts)
+	v := p.Verdict
+	switch v.Verdict {
+	case recordstore.SchemaVerdictAbsent:
+		p.Refused = append(p.Refused, "the table does not exist; the store that owns it creates it when it starts")
+		return
+	case recordstore.SchemaVerdictUnchecked:
+		p.Refused = append(p.Refused, v.Reasons...)
+		return
+	case recordstore.SchemaVerdictIncompatible:
+		for _, r := range v.Reasons {
+			p.Refused = append(p.Refused, r+" — not a mechanical change; see "+MigrationDocs)
+		}
+		return
+	}
+	ref := quoteRef(c.Table)
+	byName := make(map[string]recordstore.ColumnSpec, len(c.Columns))
+	for _, col := range c.Columns {
+		byName[col.Name] = col
+	}
+	for _, r := range v.Renames {
+		if referencedElsewhere(facts.CreateQuery, r.From) {
+			p.Refused = append(p.Refused, "column "+r.From+" would be renamed to "+r.To+", but a key, index, TTL or another column's expression names it, and ClickHouse renames no such column; see "+MigrationDocs)
+			continue
+		}
+		col := byName[r.To]
+		p.Statements = append(p.Statements, "ALTER TABLE "+ref+" RENAME COLUMN "+jackstay.QuoteIdent(r.From)+" TO "+jackstay.QuoteIdent(r.To))
+		if col.Codec != "" {
+			p.Statements = append(p.Statements, "ALTER TABLE "+ref+" MODIFY COLUMN "+jackstay.QuoteIdent(r.To)+" "+col.Type+" CODEC("+col.Codec+")"+typeSettings(col.Type))
+		}
+	}
+	if p.IsRefused() {
+		p.Statements = nil
+		return
+	}
+	missing := make(map[string]bool, len(v.Missing))
+	for _, m := range v.Missing {
+		missing[m] = true
+	}
+	prev := ""
+	for _, col := range c.Columns {
+		if missing[col.Name] {
+			p.Statements = append(p.Statements, addColumn(c.Table, col, prev)+typeSettings(col.Type))
+		}
+		prev = col.Name
+	}
+	if recordstore.IsPlainMergeTree(facts.Engine) && !v.DedupWindow {
+		p.Statements = append(p.Statements, "ALTER TABLE "+ref+" MODIFY SETTING "+recordstore.DedupWindowSetting+" = "+strconv.Itoa(recordstore.DedupWindowBlocks))
+	}
+	if c.Stamp != "" && facts.Comment != c.Stamp {
+		if _, stamped := recordstore.ParseTableStamp(facts.Comment); stamped || strings.TrimSpace(facts.Comment) == "" {
+			p.Statements = append(p.Statements, "ALTER TABLE "+ref+" MODIFY COMMENT "+jackstay.QuoteString(c.Stamp))
+		} else {
+			p.Verdict.Notes = append(p.Verdict.Notes, "the table carries a comment no store wrote; it is left as it is, and the table stays unstamped")
+		}
+	}
+	return
+}
+
+// PlanTable reads c's table through exec and derives its plan.
+func PlanTable(ctx context.Context, exec recordstore.ExecutorI, c recordstore.TableContract) (p Plan) {
+	facts, err := recordstore.ReadTableFacts(ctx, exec, c.Table)
+	if err != nil {
+		p.Verdict = recordstore.SchemaVerdict{Kind: c.Kind, Table: c.Table, Verdict: recordstore.SchemaVerdictUnchecked, Reasons: []string{err.Error()}}
+		p.Refused = append(p.Refused, err.Error())
+		return
+	}
+	return Derive(c, facts)
+}
+
+// Apply executes a plan's statements in order and stops at the first that
+// fails. A refused plan's statements are not run.
+func Apply(ctx context.Context, exec recordstore.ExecutorI, p Plan) (applied int, err error) {
+	if p.IsRefused() {
+		return
+	}
+	for _, stmt := range p.Statements {
+		if err = exec.Exec(ctx, stmt); err != nil {
+			err = eh.Errorf("schema apply on %s, statement %d: %w", p.Verdict.Table, applied+1, err)
+			return
+		}
+		applied++
+	}
+	return
+}
+
+// addColumn renders one ADD COLUMN through jackstay's renderer, placed
+// after the generated column before it, or first.
+func addColumn(table string, col recordstore.ColumnSpec, after string) string {
+	info := jackstay.ColumnInfo{Name: col.Name, Type: col.Type}
+	if col.Codec != "" {
+		info.CompressionCodec = "CODEC(" + col.Codec + ")"
+	}
+	db, name := recordstore.SplitTableRef(table)
+	if db == "" {
+		// jackstay always qualifies; a bare reference stays bare.
+		sql := jackstay.AddColumnDDL(datacatalog.TableRef{Database: "_", Name: name}, info, after)
+		return strings.Replace(sql, jackstay.QuoteRef(datacatalog.TableRef{Database: "_", Name: name}), jackstay.QuoteIdent(name), 1)
+	}
+	return jackstay.AddColumnDDL(datacatalog.TableRef{Database: db, Name: name}, info, after)
+}
+
+func quoteRef(table string) string {
+	db, name := recordstore.SplitTableRef(table)
+	if db == "" {
+		return jackstay.QuoteIdent(name)
+	}
+	return jackstay.QuoteRef(datacatalog.TableRef{Database: db, Name: name})
+}
+
+// typeSettings is the statement-level setting a column of typ needs: the
+// generated tables carry LowCardinality over numbers, which ClickHouse
+// creates only when asked, and a table's own setting does not reach an
+// ALTER.
+func typeSettings(typ string) string {
+	if strings.Contains(typ, "LowCardinality(") {
+		return " SETTINGS allow_suspicious_low_cardinality_types = 1"
+	}
+	return ""
+}
+
+// referencedElsewhere reports whether the CREATE statement names column
+// beyond its own definition: in a sorting, primary or partition key, a
+// skip index, a projection, a TTL or another column's expression.
+func referencedElsewhere(createQuery string, column string) bool {
+	n := strings.Count(createQuery, "`"+column+"`") + strings.Count(createQuery, `"`+column+`"`)
+	return n > 1
+}
