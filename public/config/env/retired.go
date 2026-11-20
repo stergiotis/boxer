@@ -1,6 +1,7 @@
 package env
 
 import (
+	"os"
 	"slices"
 	"strings"
 	"sync"
@@ -150,11 +151,13 @@ func watched(name string) bool {
 
 var checkOnce sync.Once
 
-// CheckEnvironOnce is CheckEnviron the first time it is called in a process
-// and nil after, for a start-up hook that may run more than once.
-func CheckEnvironOnce(environ []string) (findings []EnvFinding) {
+// CheckProcessEnvironOnce is CheckEnviron over this process's environment
+// the first time it is called and nil after, for a start-up hook that may
+// run more than once. It reads the environment here, the one package
+// allowed to enumerate it (codelint CS011).
+func CheckProcessEnvironOnce() (findings []EnvFinding) {
 	checkOnce.Do(func() {
-		findings = CheckEnviron(environ)
+		findings = CheckEnviron(os.Environ())
 	})
 	return
 }

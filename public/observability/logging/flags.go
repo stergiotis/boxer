@@ -503,7 +503,7 @@ func Apply(ctx context.Context, cmd *cli.Command) (ctxOut context.Context, err e
 	if err = emitStartupRecord(ctx, cmd); err != nil {
 		return
 	}
-	warnEnviron(os.Environ())
+	warnEnviron()
 	return
 }
 
@@ -512,8 +512,8 @@ func Apply(ctx context.Context, cmd *cli.Command) (ctxOut context.Context, err e
 // boxer namespace that nothing declares (env.CheckEnviron). Apply is the
 // hook every binary's root command runs, after the writer is in place, which
 // is why the check lives here rather than in the registry.
-func warnEnviron(environ []string) {
-	for _, f := range env.CheckEnvironOnce(environ) {
+func warnEnviron() {
+	for _, f := range env.CheckProcessEnvironOnce() {
 		switch f.Kind {
 		case env.EnvFindingRetired:
 			ev := log.Warn().Str("variable", f.Name).Str("since", f.Retired.Since)
