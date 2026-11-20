@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"io"
+	"net"
 	"net/http"
 	"testing"
 
@@ -91,4 +92,49 @@ func TestServer_SealedDatasetOpens(t *testing.T) {
 	assert.Equal(t, http.StatusPartialContent, resp2.StatusCode)
 	tail, _ := io.ReadAll(resp2.Body)
 	assert.Equal(t, plaintext[10:], tail)
+}
+
+// A sealed dataset's handle is what /table opens it by, so the listing
+// every local process can read leaves it out.
+func TestServer_TablesListingOmitsSealed(t *testing.T) {
+	r := introspect.NewRegistry()
+	require.NoError(t, r.Register(&sealedStub{name: "adhoc_secret", revision: 1}))
+	s := New(Config{Registry: r}, zerolog.Nop())
+	require.NoError(t, s.Start())
+	t.Cleanup(func() { _ = s.Stop(context.Background()) })
+
+	resp, err := http.Get(s.BaseURL() + "/tables")
+	require.NoError(t, err)
+	defer func() { _ = resp.Body.Close() }()
+	body, err := io.ReadAll(resp.Body)
+	require.NoError(t, err)
+	assert.NotContains(t, string(body), "adhoc_secret")
+}
+
+// A request naming another host — a page's own name re-pointed at
+// 127.0.0.1 — or another port is refused before any route runs; the bound
+// address and localhost on the bound port are served.
+func TestServer_RefusesAForeignHostHeader(t *testing.T) {
+	r := introspect.NewRegistry()
+	require.NoError(t, r.Register(&sealedStub{name: "adhoc_secret", revision: 1, plaintext: []byte("x")}))
+	s := New(Config{Registry: r}, zerolog.Nop())
+	require.NoError(t, s.Start())
+	t.Cleanup(func() { _ = s.Stop(context.Background()) })
+	_, port, err := net.SplitHostPort(s.Addr())
+	require.NoError(t, err)
+
+	status := func(host string) int {
+		req, reqErr := http.NewRequest(http.MethodGet, s.BaseURL()+"/table/adhoc_secret", nil)
+		require.NoError(t, reqErr)
+		req.Host = host
+		resp, doErr := http.DefaultClient.Do(req)
+		require.NoError(t, doErr)
+		_ = resp.Body.Close()
+		return resp.StatusCode
+	}
+	assert.Equal(t, http.StatusMisdirectedRequest, status("attacker.example:"+port))
+	assert.Equal(t, http.StatusMisdirectedRequest, status("attacker.example"))
+	assert.Equal(t, http.StatusMisdirectedRequest, status("127.0.0.1:1"))
+	assert.Equal(t, http.StatusOK, status("localhost:"+port))
+	assert.Equal(t, http.StatusOK, status(s.Addr()))
 }

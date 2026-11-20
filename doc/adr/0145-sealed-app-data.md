@@ -446,6 +446,40 @@ reversed: no operation resolves a key by name at all. The client-side alias
 rewrite now covers a bare relation as well as the `keelson('…')` call, so
 an alias reaches the wall under neither spelling.
 
+### 2026-11-20 — what "sealed" protects against, stated plainly; a Host check and a shorter listing
+
+§SD6 understates the local exposure. The introspection plane is an
+unauthenticated loopback HTTP listener, and a loopback port has no user
+boundary: **any process on the machine, under any account**, that reaches
+the port can read a live sealed dataset — `GET /table/<handle>` streams the
+plaintext, and `POST /query` resolves `keelson('<handle>')` and reads
+`keelson('adhoc')`, whose rows carry the handles. No privilege is needed.
+What "sealed" does protect: the files at rest (ciphertext whose key exists
+only in the owning process's memory), and placement — a statement naming a
+sealed dataset is not sent to an engine off this host (§SD3–§SD5). It is not
+confidentiality against other local users while the owning process runs.
+
+Two changes narrow the browser-borne and the casual path, and neither
+closes the local one:
+
+- The listener refuses a request whose `Host` header is not a loopback host
+  with its own port (421). A web page in a local browser can re-point a
+  name it controls at 127.0.0.1, and the browser then sends that name as
+  the Host; ClickHouse's `url()` and in-tree clients name the bound address
+  and pass. The in-process handler a browser tab mounts has no such check.
+- `GET /tables` leaves sealed names out. The `keelson('adhoc')` catalog
+  keeps its `handle` column: the app center reads it, and hiding it would
+  change nothing while `/query` answers anyone on the port.
+
+Deferred: a per-process bearer token on `/table`, `/query` and `/probe`.
+`/query` is published to co-resident clients as a URL that receives the
+environment's ClickHouse credential (ADR-0377), so a token needs a field on
+the endpoint record and every client to send it; `/table` alone would not
+help while `/query` reads the same datasets. `url()` can carry
+`headers('Authorization'=…)`, but the token would then sit in the statement
+text a clickhouse-local child is handed, which needs checking on each
+transport before it is relied on.
+
 ## References
 
 - [ADR-0134](./0134-adhoc-datasets.md) — ad-hoc datasets; §SD1–SD3 and the 2026-07-20 query-path revision this ADR completes.

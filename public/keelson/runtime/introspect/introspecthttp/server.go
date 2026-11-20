@@ -12,6 +12,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -42,6 +43,7 @@ type Server struct {
 	runner QueryRunner
 	passes *passreg.Registry
 	srv    *http.Server
+	routes http.Handler
 	ln     net.Listener
 	// probes holds the outstanding E6 reachability nonces (probe.go). The
 	// zero value is ready to use.
@@ -136,7 +138,8 @@ func New(cfg Config, log zerolog.Logger) (s *Server) {
 		ps = passreg.Default
 	}
 	s = &Server{reg: reg, log: log, addr: addr, runner: cfg.Runner, passes: ps}
-	s.srv = &http.Server{Handler: s.handler(), ReadHeaderTimeout: 5 * time.Second}
+	s.routes = s.handler()
+	s.srv = &http.Server{Handler: s.hostGuard(s.routes), ReadHeaderTimeout: 5 * time.Second}
 	return
 }
 
@@ -173,8 +176,43 @@ func (s *Server) BaseURL() string { return "http://" + s.Addr() }
 func (s *Server) Stop(ctx context.Context) error { return s.srv.Shutdown(ctx) }
 
 // Handler is the server's routes, for serving them without a listener — in
-// process, as a browser tab does through [InProcess] (ADR-0290 §SD4).
-func (s *Server) Handler() http.Handler { return s.srv.Handler }
+// process, as a browser tab does through [InProcess] (ADR-0290 §SD4). It
+// carries no Host check: an in-process caller names its own origin.
+func (s *Server) Handler() http.Handler { return s.routes }
+
+// hostGuard refuses a request whose Host header is not a loopback host with
+// the port this server is bound to. A loopback bind keeps other machines
+// out, but not a web page in a local browser: a name the page's site
+// controls can be re-pointed at 127.0.0.1 (DNS rebinding), and the browser
+// then sends that name as the Host. ClickHouse's url() and every in-tree
+// client name the server by the address it is bound to, so they pass.
+func (s *Server) hostGuard(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !s.hostAllowed(r.Host) {
+			s.log.Warn().Str("host", r.Host).Str("path", r.URL.Path).Msg("introspecthttp: refusing a request for a host other than this loopback listener")
+			http.Error(w, "misdirected request: the Host is not this loopback listener", http.StatusMisdirectedRequest)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+// hostAllowed says host (a Host header, host[:port]) names this listener.
+func (s *Server) hostAllowed(host string) (ok bool) {
+	if s.ln == nil {
+		return false
+	}
+	tcp, isTCP := s.ln.Addr().(*net.TCPAddr)
+	if !isTCP {
+		return false
+	}
+	h, port, err := net.SplitHostPort(host)
+	if err != nil {
+		// No port: the client's default, 80.
+		h, port = host, "80"
+	}
+	return loopback.IsHost(h) && port == strconv.Itoa(tcp.Port)
+}
 
 func (s *Server) handler() http.Handler {
 	mux := http.NewServeMux()
@@ -190,10 +228,15 @@ func (s *Server) handler() http.Handler {
 }
 
 // handleTables lists the registered table names, one per line — a cheap
-// discovery endpoint for humans and tooling.
+// discovery endpoint for humans and tooling. A sealed dataset is left out:
+// its handle is what /table opens it by, and a listing open to every local
+// process is no place to hand it out (ADR-0145).
 func (s *Server) handleTables(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	for _, n := range s.reg.Names() {
+		if s.reg.IsSealed(n) {
+			continue
+		}
 		_, _ = w.Write([]byte(n + "\n"))
 	}
 }
