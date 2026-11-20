@@ -307,6 +307,15 @@ stay deferred.
 reaches the turns before the head. An export's screenshots carry into the
 later revisions. Writes inside a turn still do not come back.
 
+### 2026-11-20 — the upload is decided
+
+[ADR-0385](./0385-images-the-person-adds-to-the-chats-artefact-and-sends-with-a-message.md)
+decides the upload SD7 left open: the person adds a PNG or JPEG file to the
+set through the host's file dialog, as a revision of their own. An upload
+alone does not taint the conversation, since the chat names it and keeps
+nothing of the file but its pixels; a message that carries it does. A pasted
+image stays deferred, there.
+
 None.
 
 ## References

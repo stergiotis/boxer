@@ -261,6 +261,16 @@ and carrying the images along with Copy and Open in mdedit.
 (proposed) takes up the durable storage §SD6 deferred, as an export the person
 confirms. It ends §SD1's guarantee for what is exported, and only for that.
 
+### 2026-11-20 — the set takes uploads, and JPEG
+
+[ADR-0385](./0385-images-the-person-adds-to-the-chats-artefact-and-sends-with-a-message.md)
+adds a source to SD1, `upload`: an image file the person adds in the Images
+tab. With it the set takes JPEG beside PNG, a name may end in `.jpg`, and a
+crop of either is a PNG. An upload is held as a re-encoding of the file's
+pixels without its metadata, under a name the chat picks. The budget and the
+pixel ceiling of SD4 apply to it as to a capture. Captures the person starts
+stay deferred.
+
 ## References
 
 - [ADR-0282](./0282-chat-artefact-one-markdown-document-per-conversation.md) §SD1, §SD2, §SD3, §SD7 — the artefact, its tools, the ceiling, images deferred.

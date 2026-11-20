@@ -362,6 +362,26 @@ request leaves (ADR-0277 §SD3), and that call's `llmMessage` row names the
 digest. A turn stopped between the decision and that call leaves a `shown`
 row that no message row names.
 
+### 2026-11-20 — the person sends, uploads ask once, and Pixels holds without Apps
+
+[ADR-0385](./0385-images-the-person-adds-to-the-chats-artefact-and-sends-with-a-message.md)
+changes four things here.
+
+- **A send by the person.** Above Metadata only, the person may send any
+  image of the set with their next message. It is one `shown` row decided by
+  the person, with the turn and no model call that asked; under Ask once per
+  image and above it is also that content's consent. The image travels in
+  the person's message for the turn and leaves a placeholder, as SD5 has it.
+- **SD1's This chat's captures does not cover an upload**, which no grant
+  covers: a view of one, or of a copy or crop of one, asks once per content.
+- **SD2's condition loses Apps.** The setting and `artefact_view_image` hold
+  whenever Artefact is on, since an upload needs no window.
+- **SD6's source gains `upload`.**
+
+Of SD7, the images the person attaches are taken up. A level that shows
+every image of the set without asking, and captures the person starts, stay
+deferred.
+
 ## References
 
 - [ADR-0284](./0284-chat-artefact-screenshots-sealed-under-a-budget.md) §SD3, §SD5, §SD6 — the screenshots, their tools, showing them deferred.
