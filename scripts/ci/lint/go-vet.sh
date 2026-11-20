@@ -1,5 +1,5 @@
 #!/bin/bash
-# go vet over ./public/..., with generated files filtered out of the findings.
+# go vet over the whole module, with generated files filtered out of the findings.
 #
 # One lint step. Runnable on its own; scripts/ci/lint.sh runs it with the
 # others and documents the exit-status contract every step obeys — here a
@@ -21,7 +21,7 @@ tags="$(cat ./tags | tr -d "\n")"
 # about the contributor's install reads as a code defect. Nothing real is
 # hidden: findings carry a file:line:col prefix, and a package that fails to
 # build arrives as `# pkg` or `vet: ...`, none of which start with "warning: ".
-vet_out=$(go vet -tags "$tags" ./public/... 2>&1 |
+vet_out=$(go vet -tags "$tags" ./... 2>&1 |
     grep -v '\.out\.go:' | grep -v '\.gen\.go:' | grep -v '^warning: ' || true)
 if [ -n "$vet_out" ]; then
     printf '%s\n' "$vet_out"
