@@ -76,3 +76,22 @@ func ProvisionIn(ctx context.Context, exec recordstore.ExecutorI, layout Layout)
 	}
 	return
 }
+
+// SchemaContracts are the job and event tables' contracts under the
+// layout, for a process-wide schema check (ADR-0387).
+func (inst Layout) SchemaContracts() []recordstore.TableContract {
+	return []recordstore.TableContract{JobSchemaContract(inst.JobTable()), EventSchemaContract(inst.EventTable())}
+}
+
+// VerifyIn judges both tables and fails unless each verdict is ok. It is
+// what a worker runs after ProvisionIn: CREATE TABLE IF NOT EXISTS leaves
+// an older table as it is, and a worker polling a table that lacks a
+// column it reads fails every poll.
+func VerifyIn(ctx context.Context, exec recordstore.ExecutorI, layout Layout) (err error) {
+	for _, c := range layout.SchemaContracts() {
+		if err = recordstore.JudgeTable(ctx, exec, c).Err(); err != nil {
+			return
+		}
+	}
+	return
+}

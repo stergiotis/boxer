@@ -107,3 +107,13 @@ func ProvisionIn(ctx context.Context, exec recordstore.ExecutorI, layout Layout)
 	}
 	return
 }
+
+// SchemaContracts are the run table's, the ledger's and the vault's
+// contracts under the layout, for a process-wide schema check (ADR-0387).
+func (inst Layout) SchemaContracts() []recordstore.TableContract {
+	return []recordstore.TableContract{
+		RunSchemaContract(inst.RunTable()),
+		EntrySchemaContract(inst.EntryTable()),
+		EntryVaultSchemaContract(inst.EntryVaultTable()),
+	}
+}
