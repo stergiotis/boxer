@@ -53,6 +53,16 @@ func newPropsCommand() *cli.Command {
 				Action: runPropsDrift,
 			},
 			{
+				Name:  "surface",
+				Usage: "Render doc/SURFACE.md — every declared package by stability tier (ADR-0389) — from the git-tracked declarations; --check fails on drift",
+				Flags: []cli.Flag{
+					&cli.StringFlag{Name: "dir", Usage: "module dir; empty resolves nearest go.mod above wd"},
+					&cli.StringFlag{Name: "out", Usage: "output path, relative to the module dir", Value: "doc/SURFACE.md"},
+					&cli.BoolFlag{Name: "check", Usage: "compare the committed document instead of writing; non-zero exit on any difference"},
+				},
+				Action: runPropsSurface,
+			},
+			{
 				Name:  "verify",
 				Usage: "Reconcile declared PackageProps against the freshly computed verdict and apply the stability rules (ADR-0389); non-zero exit on a wasm regression or a stability violation",
 				Flags: append(verifyFlags(), &cli.BoolFlag{
@@ -161,6 +171,45 @@ func runPropsHarvest(ctx context.Context, cmd *cli.Command) (err error) {
 	default:
 		return eb.Build().Str("emit", cmd.String("emit")).Errorf("unknown --emit (want table|go)")
 	}
+}
+
+// runPropsSurface renders or checks the surface document. It reads the
+// git-tracked declarations, the scope `props drift` uses, so the document and
+// the table agree on which packages exist.
+func runPropsSurface(ctx context.Context, cmd *cli.Command) (err error) {
+	root := cmd.String("dir")
+	if root == "" {
+		wd, e := os.Getwd()
+		if e != nil {
+			return eh.Errorf("props surface: working dir: %w", e)
+		}
+		if r, ok := godepcollect.ModuleRoot(wd); ok {
+			root = r
+		} else {
+			root = wd
+		}
+	}
+	modPath, err := readModulePath(root)
+	if err != nil {
+		return err
+	}
+	rows, err := HarvestTracked(ctx, root, modPath)
+	if err != nil {
+		return err
+	}
+	out := cmd.String("out")
+	if !filepath.IsAbs(out) {
+		out = filepath.Join(root, out)
+	}
+	if err = WriteSurface(rows, modPath, out, cmd.Bool("check")); err != nil {
+		return err
+	}
+	if cmd.Bool("check") {
+		fmt.Fprintf(os.Stdout, "props surface: %s matches %d tracked declaration(s)\n", cmd.String("out"), len(rows))
+	} else {
+		fmt.Fprintf(os.Stdout, "wrote %s (%d packages)\n", cmd.String("out"), len(rows))
+	}
+	return nil
 }
 
 // runPropsDrift gates the generated table against the tracked declarations.

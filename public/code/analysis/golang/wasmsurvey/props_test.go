@@ -267,3 +267,35 @@ func TestPackageSynopsis(t *testing.T) {
 		t.Errorf("synopsis = %q, want the first sentence of doc.go", got)
 	}
 }
+
+// TestRenderSurface checks every row lands in exactly one section, under its
+// area, with its synopsis, and that rendering is deterministic.
+func TestRenderSurface(t *testing.T) {
+	const mod = "example.com/m"
+	rows := []HarvestRow{
+		{ImportPath: mod + "/public/a/x", Stability: packageprops.StabilityStable, Synopsis: "Package x does x."},
+		{ImportPath: mod + "/public/b/y", Stability: packageprops.StabilityExperimental},
+		{ImportPath: mod + "/public/a/xtest", Kind: packageprops.KindTestSupport, Stability: packageprops.StabilityStable},
+		{ImportPath: mod + "/public/c/tool", Kind: packageprops.KindTool},
+		{ImportPath: mod + "/apps/z", Kind: packageprops.KindUnspecified},
+	}
+	src := string(RenderSurface(rows, mod))
+	for _, want := range []string{
+		"## Stable\n", "### a\n", "- `public/a/x` — Package x does x.\n",
+		"- `public/a/xtest` (test-support)\n",
+		"## Experimental\n", "- `public/b/y`\n",
+		"## Tools\n", "- `public/c/tool`\n",
+		"## Unclassified\n", "### apps\n", "- `apps/z`\n",
+		"| [Stable](#stable) | 2 |",
+	} {
+		if !strings.Contains(src, want) {
+			t.Errorf("surface document lacks %q:\n%s", want, src)
+		}
+	}
+	if strings.Count(src, "`public/c/tool`") != 1 {
+		t.Errorf("a row must appear in exactly one section:\n%s", src)
+	}
+	if again := string(RenderSurface(rows, mod)); again != src {
+		t.Error("rendering is not deterministic")
+	}
+}

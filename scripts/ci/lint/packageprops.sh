@@ -11,9 +11,10 @@ set -o pipefail
 here=$(dirname "$(readlink -f "$BASH_SOURCE")")
 cd "$here/../../.."
 
-# Two ADR-0080 gates, one step. Both are boxer-specific (they are about this
-# repo's own generated table and declarations), so they stay out of the
-# `gov gate` composite, which publishes to consuming repositories.
+# Two ADR-0080 gates and the ADR-0389 surface check, one step. All are
+# boxer-specific (they are about this repo's own generated table, document and
+# declarations), so they stay out of the `gov gate` composite, which publishes
+# to consuming repositories.
 #
 #   props drift  — the committed proptable.out.go agrees with the git-tracked
 #                  package_props.go declarations. Needs no survey and no
@@ -35,10 +36,15 @@ cd "$here/../../.."
 # repo's toolchain. The flag is not defended by this comment — `props verify`
 # has no mode default and refuses to run without one, so dropping it here fails
 # in a second rather than turning the lint step into a TinyGo sweep.
+#   props surface --check — doc/SURFACE.md agrees with the same tracked
+#                  declarations and package doc comments (ADR-0389). Like
+#                  drift, it parses and compares; a declaration change that
+#                  forgets the document fails here.
 if out=$(./boxer.sh code analysis golang wasmsurvey props drift 2>&1) &&
+   out3=$(./boxer.sh code analysis golang wasmsurvey props surface --check 2>&1) &&
    out2=$(./boxer.sh code analysis golang wasmsurvey props verify --mode static 2>&1); then
-    printf '%s\n%s\n' "$out" "$out2"
+    printf '%s\n%s\n%s\n' "$out" "$out3" "$out2"
     exit 0
 fi
-printf '%s\n%s\n' "$out" "${out2:-}"
+printf '%s\n%s\n%s\n' "$out" "${out3:-}" "${out2:-}"
 exit 1
