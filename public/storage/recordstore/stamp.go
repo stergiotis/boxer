@@ -86,10 +86,10 @@ func ParseTableStamp(comment string) (s TableStamp, ok bool) {
 func ColumnsDigest(cols []ColumnSpec) string {
 	h := blake3.New(32, nil)
 	for _, c := range cols {
-		h.Write([]byte(c.Name))
-		h.Write([]byte{0x1f})
-		h.Write([]byte(NormalizeType(c.Type)))
-		h.Write([]byte{'\n'})
+		_, _ = h.Write([]byte(c.Name))
+		_, _ = h.Write([]byte{0x1f})
+		_, _ = h.Write([]byte(NormalizeType(c.Type)))
+		_, _ = h.Write([]byte{'\n'})
 	}
 	return hex.EncodeToString(h.Sum(nil))[:16]
 }
@@ -113,7 +113,7 @@ func VocabDigest(ids map[string]map[string]uint64) string {
 		}
 		slices.Sort(names)
 		for _, n := range names {
-			h.Write([]byte(k + "\x1f" + n + "\x1f" + strconv.FormatUint(ids[k][n], 10) + "\n"))
+			_, _ = h.Write([]byte(k + "\x1f" + n + "\x1f" + strconv.FormatUint(ids[k][n], 10) + "\n"))
 		}
 	}
 	return hex.EncodeToString(h.Sum(nil))[:16]
