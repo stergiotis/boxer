@@ -1,7 +1,7 @@
 package browserhost
 
 import (
-	"crypto/sha256"
+	"crypto/sha256" //boxer:lint disable=CS009 reason="a CSP source hash is SHA-256, -384 or -512 by specification"
 	"encoding/base64"
 	"fmt"
 	"net/http"

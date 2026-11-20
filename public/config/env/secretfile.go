@@ -1,6 +1,7 @@
 package env
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -16,6 +17,10 @@ const SecretFileSuffix = "_FILE"
 
 // maxSecretFileBytes bounds what a secret file may hold.
 const maxSecretFileBytes = 64 << 10
+
+// errSecretFileTooLarge: the file holds more than maxSecretFileBytes. env
+// sits below eh in the import graph, so it uses a plain error.
+var errSecretFileTooLarge = errors.New("env: secret file larger than 64 KiB")
 
 // secretFile is the NAME_FILE companion of one Sensitive variable.
 type secretFile struct {
@@ -72,7 +77,7 @@ func readBounded(path string) (b []byte, err error) {
 	defer func() { _ = f.Close() }()
 	b, err = io.ReadAll(io.LimitReader(f, maxSecretFileBytes+1))
 	if err == nil && len(b) > maxSecretFileBytes {
-		err = fmt.Errorf("larger than %d bytes", maxSecretFileBytes)
+		err = errSecretFileTooLarge
 	}
 	return
 }
