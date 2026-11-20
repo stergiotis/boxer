@@ -15,6 +15,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/inprocbus"
 	"github.com/stergiotis/boxer/public/keelson/runtime/lifetime"
+	"github.com/stergiotis/boxer/public/observability/ph"
 )
 
 // runFixture is a window's task API on an in-proc bus, with the lifecycle
@@ -141,10 +142,24 @@ func TestRunToCompletionOutlivesTheClose(t *testing.T) {
 	}, 2*time.Second, time.Millisecond)
 }
 
-func TestRunPublishesAPanicAndReraisesIt(t *testing.T) {
+func TestRunPublishesAPanicAndReturnsIt(t *testing.T) {
 	f := newRunFixture(t)
-	assert.PanicsWithValue(t, "boom", func() {
-		_ = Run(context.Background(), f.api, SpawnOpts{Kind: "k"}, func(context.Context) error { panic("boom") })
+	var err error
+	assert.NotPanics(t, func() {
+		err = Run(context.Background(), f.api, SpawnOpts{Kind: "k"}, func(context.Context) error { panic("boom") })
 	})
+	assert.ErrorIs(t, err, ph.ErrPanic)
 	assert.Equal(t, []string{VerbCreated, VerbError}, f.until(t, VerbError))
+}
+
+func TestRunToCompletionReturnsAPanic(t *testing.T) {
+	f := newRunFixture(t)
+	err := RunToCompletion(f.api, SpawnOpts{Kind: "k"}, func() error { panic("boom") })
+	assert.ErrorIs(t, err, ph.ErrPanic)
+	assert.Equal(t, []string{VerbCreated, VerbError}, f.until(t, VerbError))
+}
+
+func TestRunUntrackedReturnsAPanic(t *testing.T) {
+	err := Run(context.Background(), nil, SpawnOpts{Kind: "k"}, func(context.Context) error { panic("boom") })
+	assert.ErrorIs(t, err, ph.ErrPanic)
 }

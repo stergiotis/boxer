@@ -2,11 +2,11 @@ package task
 
 import (
 	"context"
-	"fmt"
+	"errors"
 
 	"github.com/rs/zerolog/log"
 
-	"github.com/stergiotis/boxer/public/observability/eh/eb"
+	"github.com/stergiotis/boxer/public/observability/ph"
 )
 
 // Run runs work on the calling goroutine as a task of api, for the work
@@ -21,7 +21,8 @@ import (
 // that context ended, whatever the error: a cancelled run is not a failed
 // one, and a cancelled stream does not always fail with context.Canceled.
 // Otherwise it publishes Error. A panic in work is published as Error and
-// re-raised. Until work returns, a task from ForApp holds the instance's
+// returned as err, carrying the panic site's stack; it is not re-raised
+// (ADR-0386), tracked or not. Until work returns, a task from ForApp holds the instance's
 // lifetime, so the window's drain waits for it (ADR-0322). Cancel parent
 // only after Run returned: a cancel before it is announced on the task.
 //
@@ -32,11 +33,14 @@ func Run(parent context.Context, api TaskApiI, opts SpawnOpts, work func(ctx con
 	LabelGoroutine(api)
 	h := spawnFor(parent, api, opts)
 	if h == nil {
-		return work(parent)
+		return ph.Guard(func() error { return work(parent) })
 	}
 	ctx := h.Ctx()
-	defer endOnPanic(h, opts)
-	err = work(ctx)
+	err = ph.Guard(func() error { return work(ctx) })
+	if isPanic(err) {
+		_ = h.Error(err, opts.Kind+" panicked")
+		return
+	}
 	if err != nil && ctx.Err() == nil {
 		_ = h.Error(err, opts.Kind+" failed")
 		return
@@ -51,16 +55,20 @@ func Run(parent context.Context, api TaskApiI, opts SpawnOpts, work func(ctx con
 // is called from the goroutine the work runs on, and a task from ForApp holds
 // the instance's lifetime until work returns. A window closed meanwhile still
 // announces a cancel on the task before its Done or Error, since the window
-// asked; the audit trail carries both.
+// asked; the audit trail carries both. A panic in work is returned as err,
+// as Run does.
 func RunToCompletion(api TaskApiI, opts SpawnOpts, work func() error) (err error) {
 	LabelGoroutine(api)
 	opts.Cancellable = false
 	h := spawnFor(context.Background(), api, opts)
 	if h == nil {
-		return work()
+		return ph.Guard(work)
 	}
-	defer endOnPanic(h, opts)
-	err = work()
+	err = ph.Guard(work)
+	if isPanic(err) {
+		_ = h.Error(err, opts.Kind+" panicked")
+		return
+	}
 	if err != nil {
 		_ = h.Error(err, opts.Kind+" failed")
 		return
@@ -84,10 +92,8 @@ func spawnFor(parent context.Context, api TaskApiI, opts SpawnOpts) (h HandleI) 
 	return h
 }
 
-// endOnPanic publishes a panicking work's Error and re-raises the panic.
-func endOnPanic(h HandleI, opts SpawnOpts) {
-	if r := recover(); r != nil {
-		_ = h.Error(eb.Build().Str("panic", fmt.Sprint(r)).Errorf("work panicked"), opts.Kind+" panicked")
-		panic(r)
-	}
+// isPanic says whether err is a panic ph.Guard recovered, rather than an
+// error work returned.
+func isPanic(err error) (panicked bool) {
+	return errors.Is(err, ph.ErrPanic)
 }
