@@ -2421,6 +2421,17 @@
       }
     },
     {
+      "name": "BOXER_SCHEMA_STRICT",
+      "type": "bool",
+      "description": "when true, a stored table whose schema verdict is not ok (missing columns, an incompatible type, an absent or unreadable table) fails the process's boot; unset, the verdict is logged and shown in keelson('schema_tables') and the process starts as before",
+      "category": "database",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/keelson/runtime/schemacheck"
+      }
+    },
+    {
       "name": "BOXER_SQLAPPLETCREATOR_DRAFT",
       "type": "string",
       "description": "a draft for a new SQL applet creator window, as JSON with Sql and Endpoint (as the launch config carries them) and Slug, Title, Summary and Icon; a caller's launch config wins over it; for scenes and demos",

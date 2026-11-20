@@ -400,6 +400,7 @@ withdrawn, deferred — is described in the
 | [0384](./0384-offline-go-mod-tidy-against-a-vendored-workspace.md) | Offline `go mod tidy` against a vendored Go workspace | proposed | 2026-11-19 |  |
 | [0385](./0385-images-the-person-adds-to-the-chats-artefact-and-sends-with-a-message.md) | Images the person adds to the chat's artefact, and sends with a message | accepted | 2026-11-20 |  |
 | [0386](./0386-panic-boundaries-at-runtime-owned-entry-points-and-what-the-in-process-bus-promises-a-requester.md) | Panic boundaries at runtime-owned entry points, and what the in-process bus promises a requester | proposed | 2026-11-20 |  |
+| [0387](./0387-what-a-binary-does-when-a-stored-table-is-older-or-newer-than-its-schema.md) | What a binary does when a stored table is older or newer than its schema | proposed | 2026-11-20 |  |
 | [0388](./0388-contract-snapshots-what-is-compared-against-the-last-release.md) | Contract snapshots — what is compared against the last release | proposed | 2026-11-20 |  |
 | [0389](./0389-stability-tiers-per-package-and-what-a-version-number-promises.md) | Stability tiers per package, and what a version number promises | proposed | 2026-11-20 |  |
 | [0390](./0390-a-gate-that-tests-the-commit-and-a-ref-that-names-the-last-green-main.md) | A gate that tests the commit, and a ref that names the last green main | proposed | 2026-11-20 |  |

@@ -28,7 +28,7 @@ itself; ADR-0389 states its tier.
 | [Test support](#test-support) | 14 |
 | [Tools](#tools) | 87 |
 | [Demos and examples](#demos-and-examples) | 40 |
-| [Unclassified](#unclassified) | 219 |
+| [Unclassified](#unclassified) | 222 |
 
 ## Stable
 
@@ -744,6 +744,10 @@ Illustrative and demonstration code. Outside the promise.
 
 Packages that declare no tier. Outside the promise; an app package under `apps/` is here unless its declaration says otherwise.
 
+### app
+
+- `public/app/commands/schema` — Package schema is `boxer schema`: the stored boxer tables judged against the columns this build was generated for, and the mechanical part of bringing them in line (ADR-0387).
+
 ### apps
 
 - `apps/appstate` — Package appstate is the app-state manager window (ADR-0185 §SD6): what each app keeps across restarts — persisted values, saved workingsets, column-width overrides — read from keelson('app_state'), with a delete per entry and a forget per app through the runtime.appstate seam.
@@ -902,6 +906,7 @@ Packages that declare no tier. Outside the promise; an app package under `apps/`
 - `public/keelson/runtime/queryrunfacts` — Package queryrunfacts is the pure library of the queryrunsd capture pipeline (ADR-0115 S1): it turns terminal system.query_log events into boxer.facts entities of kind QueryRun.
 - `public/keelson/runtime/queryrunsvc` — Package queryrunsvc is the query-run capture service (ADR-0115 S1): a stateless, idempotent, loopback-only HTTP endpoint that a ClickHouse-owned refreshable materialized view pulls.
 - `public/keelson/runtime/runinfo` — Package runinfo captures the identity of a single process boot — a "run" — and makes it discoverable to every app launched inside that run via two channels: the BOXER_RUN_ID environment variable, and a zerolog field on the base logger that app loggers derive from.
+- `public/keelson/runtime/schemacheck` — Package schemacheck is the one schema check a process runs over the stored tables it uses (ADR-0387): each table's live columns and stamp are judged against the columns the binary was generated for, the verdicts are kept on a board an operator reads as keelson('schema_tables'), and every table whose verdict is not ok gets one log line.
 - `public/keelson/runtime/statestore` — Package statestore is the typed surface of the two state kinds that are not persist values: saved workingsets (ADR-0148) and table column-width overrides (ADR-0151).
 - `public/keelson/runtime/task/estimator` — Package estimator is the throughput + humanized-form computation that gates emission inside a task.Handle.
 - `public/keelson/runtime/task/supervisor` — Package supervisor is the ADR-0038 M3 audit + heartbeat layer for the task primitive.
@@ -971,6 +976,7 @@ Packages that declare no tier. Outside the promise; an app package under `apps/`
 - `public/storage/recordstore/evidence/anchor/anchorsql` — Package anchorsql is a durable anchor store (ADR-0314 §SD2, by scope since ADR-0327 §SD7): the anchor.StoreI contract over one append-only ClickHouse table, for an organisation that runs its anchor store on a ClickHouse server outside any person's control (ADR-0314, update of 2026-10-13).
 - `public/storage/recordstore/evidence/audit/auditrec` — Package auditrec is the recorder of audit events below the keelson runtime (ADR-0330): a sealed, buffered writer over a store a consumer generates with recordstore/gen, reached through a thin adapter ([StoreI], [BatchI]).
 - `public/storage/recordstore/pushoutstore` — Package pushoutstore adapts a generated recordstore to the pushout repo.StorageI persistence seam (ADR-0100 S3, ADR-0079, ADR-0221): envelopes, the applied log, the snapshot and the retention ledger persist as append-only rows of one ClickHouse fact table keyed by a string namespace ("env/<hex>", "log", "snapshot", "retention").
+- `public/storage/recordstore/schemaplan` — Package schemaplan derives the statements that bring a stored table to the columns its store was generated for, when the change is mechanical (ADR-0387): generated columns the table lacks are added, columns present under an aspect-only variant of their name (ADR-0182) are renamed and given the generated codec, a plain MergeTree table without an insert deduplication window gets one, and the table is stamped with the generating schema.
 
 ### thestack
 
