@@ -112,7 +112,10 @@ names it.
     better written concretely.
 *   **No compatibility shims.** No build-tag-gated fallbacks, hand-written
     copies of stdlib functions, no vendored polyfills. A shape a dependency's
-    interface forces is fixed, not chosen, and is exempt.
+    interface forces is fixed, not chosen, and is exempt. One exception: the
+    deprecation window of a Stable package ([VERSIONING.md](./VERSIONING.md),
+    ADR-0389), where a forwarding wrapper marked `// Deprecated:` keeps the old
+    form working for exactly one MINOR version.
 
 ## Packages to Use
 * Use `lukechampine.com/blake3` as cryptographic hash function.
@@ -221,7 +224,11 @@ error to *mention* something.
     ```go
     type MyEnumE uint8
     ```
-*   **No Aliases:** Do not use type aliases (`type X = Y`).
+*   **No Aliases:** Do not use type aliases (`type X = Y`). One exception: in
+    a Stable package's deprecation window ([VERSIONING.md](./VERSIONING.md),
+    ADR-0389), a forwarding alias marked `// Deprecated:` may keep a moved or
+    renamed type reachable for exactly one MINOR version, and is deleted in
+    the next.
 *   **Interface Compliance:** Add compile-time checks for non-standard interfaces.
     ```go
     var _ InterfaceName = (*Type)(nil)

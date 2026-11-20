@@ -14,6 +14,9 @@ A NOAA GFS 10 m wind forecast as example dataset, read with `SELECT * FROM keels
 
 ## Maturity
 Alpha, incomplete test coverage, unstable, API may still change heavily.
+[VERSIONING.md](./VERSIONING.md) drafts what a version number will promise,
+and [doc/SURFACE.md](./doc/SURFACE.md) lists each package's stability tier;
+most packages are outside the promise.
 
 ## Why
 For a small but ambitious data team ready to bet on the compounding of a composable stack it owns — and needing air-gapped operability and auditability from source — boxer is a sovereign, data-centric data-engineering toolkit and app stack over ClickHouse (the query engine and database): one Go host process carrying the apps, the bus and the data paths, a Rust client beside it that only renders, and ClickHouse as the one place anything durable lives.

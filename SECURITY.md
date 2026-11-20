@@ -10,8 +10,9 @@ reviewed-date: 2026-05-18
 
 ## Supported versions
 
-Only the current `main` branch is actively supported. There are no backport
-branches; published tags do not receive fixes.
+Only `main` and the latest tag are supported. A fix lands on `main` and ships
+in the next tag; older tags receive no fixes, and there are no backport
+branches. [VERSIONING.md](./VERSIONING.md) states what a tag promises.
 
 ## Reporting a vulnerability
 

@@ -329,3 +329,15 @@ own code still tells a reader nothing about its verdict — only the verdict it
 led to turned out to be unfounded rather than wrong-by-omission. Comments in
 the affected files keep their blame edge and drop the claim that arrow-go
 does not compile.
+
+### 2026-11-20 — `Stability` field and two more Kinds proposed (ADR-0389)
+
+[ADR-0389](./0389-stability-tiers-per-package-and-what-a-version-number-promises.md)
+*(proposed)* adds the stability field SD4 named: `Stability` (unspecified,
+stable, experimental, internal), curated and never seeded, plus
+`KindTestSupport` and `KindTool`. Unlike `Kind`, it is checked: `props verify`
+fails when a Stable package imports a weaker-tier or non-library package of
+the module, or has no package doc comment. Harvest also reads each package's
+doc synopsis, which `props surface` renders into `doc/SURFACE.md`; `props
+surface --check` joins `props drift` in the lint step. This entry is a
+signpost — the decision and its review list are in ADR-0389.
