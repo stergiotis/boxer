@@ -35,8 +35,10 @@ func init() {
 type recorder struct {
 	manifest app.Manifest
 
-	mountErr   error
-	unmountErr error
+	mountErr      error
+	unmountErr    error
+	mountPanics   bool
+	unmountPanics bool
 	// mountBlocks keeps Mount from returning until Cancel() fires, for the
 	// "reaped while starting" case.
 	mountBlocks bool
@@ -76,6 +78,9 @@ func (inst *recorder) Mount(ctx app.MountContextI) (err error) {
 	if inst.mountBlocks {
 		<-ctx.Cancel()
 	}
+	if inst.mountPanics {
+		panic("mount boom")
+	}
 	err = inst.mountErr
 	return
 }
@@ -87,6 +92,9 @@ func (inst *recorder) Unmount(ctx app.MountContextI) (err error) {
 	default:
 	}
 	inst.publishErr = ctx.Bus().Publish("t.bye", nil)
+	if inst.unmountPanics {
+		panic("unmount boom")
+	}
 	err = inst.unmountErr
 	inst.unmountCalls.Add(1)
 	return
@@ -245,6 +253,26 @@ func TestUnmountError_IsFailedWithItsReason(t *testing.T) {
 	assert.Equal(t, StopReasonUnmountError, row.StopReason)
 	assert.Contains(t, row.LastError, "leak")
 	assert.Equal(t, StopReasonUnmountError, f.facts.Lifecycles()[1].StopReason)
+}
+
+// A panic in Mount is a failed Mount, and a panic in Unmount a failed
+// Unmount: the other service still mounts and stops, and the process goes on.
+func TestPanics_AreFailuresOfTheirService(t *testing.T) {
+	a := &recorder{manifest: headless("test.a"), mountPanics: true}
+	b := &recorder{manifest: headless("test.b"), unmountPanics: true}
+	c := &recorder{manifest: headless("test.c")}
+	f := newFixture(t, a, b, c)
+	h := f.host(t)
+	require.NoError(t, h.Start(context.Background(), []app.AppIdT{"test.a", "test.b", "test.c"}, nil))
+	require.NoError(t, h.Wait(context.Background()))
+	require.Eventually(t, func() bool { return rowOf(t, h, "test.a").State == StateFailed }, time.Second, 5*time.Millisecond)
+	assert.Equal(t, StopReasonMountError, rowOf(t, h, "test.a").StopReason)
+	assert.Contains(t, rowOf(t, h, "test.a").LastError, "panic")
+	h.ReapAll(StopReasonShutdown)
+	assert.Equal(t, StateFailed, rowOf(t, h, "test.b").State)
+	assert.Equal(t, StopReasonUnmountError, rowOf(t, h, "test.b").StopReason)
+	assert.Equal(t, StateStopped, rowOf(t, h, "test.c").State)
+	assert.Equal(t, int32(1), c.unmountCalls.Load())
 }
 
 func TestReapAll_WhileStartingWaitsForMountThenUnmounts(t *testing.T) {

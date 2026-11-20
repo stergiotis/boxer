@@ -18,6 +18,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/persist"
 	"github.com/stergiotis/boxer/public/keelson/runtime/task"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
+	"github.com/stergiotis/boxer/public/observability/ph"
 )
 
 const (
@@ -335,7 +336,9 @@ func (inst *Inst) mount(s *service, sd Seed) (err error) {
 
 	go func() {
 		pprof.SetGoroutineLabels(s.labels)
-		mErr := a.Mount(mc)
+		// A panic in Mount is a failed Mount: the service is left out and
+		// the process goes on (ADR-0386).
+		mErr := ph.Guard(func() error { return a.Mount(mc) })
 		inst.mu.Lock()
 		s.mountErr = mErr
 		if mErr == nil && s.row.State == StateStarting {
@@ -479,7 +482,7 @@ func (inst *Inst) ReapAll(reason string) {
 		}
 		stopReason := reason
 		pprof.SetGoroutineLabels(s.labels)
-		umErr := s.appInst.Unmount(s.mountCtx)
+		umErr := ph.Guard(func() error { return s.appInst.Unmount(s.mountCtx) })
 		pprof.SetGoroutineLabels(context.Background())
 		if umErr != nil {
 			inst.cfg.Log.Warn().Err(umErr).Str("id", string(s.manifest.Id)).Msg("servicehost: Unmount failed")
