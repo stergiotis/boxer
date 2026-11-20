@@ -1132,11 +1132,13 @@ type ledgerChainRow struct {
 }
 
 var _ evidence.HeadRowI = (*ledgerChainRow)(nil)
+var _ evidence.SchemedRowI = (*ledgerChainRow)(nil)
 
 func (inst *ledgerChainRow) chain() EvidenceChain           { return inst.ent.EvidenceChain.Val }
 func (inst *ledgerChainRow) Ordinal() uint64                { return inst.ent.Ord }
 func (inst *ledgerChainRow) Prev() uint64                   { return inst.chain().Prev }
 func (inst *ledgerChainRow) Digest() string                 { return inst.chain().Digest }
+func (inst *ledgerChainRow) SchemeName() string             { return inst.chain().Scheme }
 func (inst *ledgerChainRow) CanonicalItem() ([]byte, error) { return inst.store.chainItem(inst.ent) }
 func (inst *ledgerChainRow) Mark() evidence.Mark {
 	ch := inst.chain()

@@ -112,10 +112,13 @@ names it.
     better written concretely.
 *   **No compatibility shims.** No build-tag-gated fallbacks, hand-written
     copies of stdlib functions, no vendored polyfills. A shape a dependency's
-    interface forces is fixed, not chosen, and is exempt. One exception: the
+    interface forces is fixed, not chosen, and is exempt. Two exceptions. The
     deprecation window of a Stable package ([VERSIONING.md](./VERSIONING.md),
-    ADR-0389), where a forwarding wrapper marked `// Deprecated:` keeps the old
-    form working for exactly one MINOR version.
+    ADR-0389): a forwarding wrapper marked `// Deprecated:` keeps the old
+    form working for exactly one MINOR version. And tamper-evidence
+    verification: a retired evidence scheme stays as verify-only code
+    (`evidence.Retired`) for as long as rows recorded under it may exist,
+    because removing it turns every such row into a reported tamper.
 
 ## Packages to Use
 * Use `lukechampine.com/blake3` as cryptographic hash function.

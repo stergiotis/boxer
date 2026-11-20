@@ -1891,11 +1891,13 @@ type entryChainRow struct {
 }
 
 var _ evidence.HeadRowI = (*entryChainRow)(nil)
+var _ evidence.SchemedRowI = (*entryChainRow)(nil)
 
 func (inst *entryChainRow) chain() EvidenceChain           { return inst.ent.EvidenceChain.Val }
 func (inst *entryChainRow) Ordinal() uint64                { return inst.ent.Ord }
 func (inst *entryChainRow) Prev() uint64                   { return inst.chain().Prev }
 func (inst *entryChainRow) Digest() string                 { return inst.chain().Digest }
+func (inst *entryChainRow) SchemeName() string             { return inst.chain().Scheme }
 func (inst *entryChainRow) CanonicalItem() ([]byte, error) { return inst.store.chainItem(inst.ent) }
 func (inst *entryChainRow) Mark() evidence.Mark {
 	ch := inst.chain()

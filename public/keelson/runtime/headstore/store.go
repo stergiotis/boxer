@@ -5,6 +5,7 @@ import (
 	"slices"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/agentrun"
+	"github.com/stergiotis/boxer/public/keelson/runtime/agentrun/agentrunstore"
 	"github.com/stergiotis/boxer/public/storage/recordstore/evidence"
 	"github.com/stergiotis/boxer/public/storage/recordstore/evidence/anchor"
 )
@@ -43,10 +44,11 @@ func anchorHead(h Head) anchor.Head {
 }
 
 // journalHeads are the journal's heads among a scope's anchored rows: the
-// rows under the journal's scheme.
+// rows under any scheme of the journal's lineage, so heads shipped before
+// the journal moved to a new scheme still count (agentrunstore.ChainLineage).
 func journalHeads(rows []anchor.Anchored) (heads []Anchored) {
 	for _, a := range rows {
-		if a.Scheme != agentrun.ChainScheme.Name() {
+		if !agentrunstore.ChainLineage.Knows(a.Scheme) {
 			continue
 		}
 		heads = append(heads, Anchored{Head: Head{Cell: a.Cell, Run: a.Scope, Ordinal: uint32(a.Ordinal), Digest: a.Digest}, Receipt: a.Receipt})

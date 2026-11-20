@@ -65,9 +65,12 @@ const (
 	BreakAfterDeleted
 	// BreakOrdinal is a row out of order or repeating an ordinal.
 	BreakOrdinal
+	// BreakScheme is a row recording a scheme the verifier's lineage does
+	// not know.
+	BreakScheme
 )
 
-var breakNames = []string{"none", "form", "prev", "digest", "commitment", "unexplained", "after-deleted", "ordinal"}
+var breakNames = []string{"none", "form", "prev", "digest", "commitment", "unexplained", "after-deleted", "ordinal", "scheme"}
 
 func (inst BreakE) String() (s string) {
 	if int(inst) < len(breakNames) {
@@ -85,7 +88,18 @@ func (inst BreakE) String() (s string) {
 // a live scope breaks the chain too; nothing follows a deleted mark. err
 // is set when a canonical item could not be computed, with broken naming
 // the row.
+//
+// Each row is read under the scheme it records (SchemedRowI): scheme is the
+// current one, and a row recording another is looked up in the lineage
+// registered for scheme (RegisterLineage), so rows written before a store
+// moved to a new scheme still verify. A row recording a scheme the lineage
+// does not know breaks with BreakScheme.
 func Verify(scheme Scheme, seed string, rows []RowI) (broken uint64, why BreakE, err error) {
+	return VerifyLineage(LineageOf(scheme), seed, rows)
+}
+
+// VerifyLineage is Verify under an explicit lineage.
+func VerifyLineage(lineage Lineage, seed string, rows []RowI) (broken uint64, why BreakE, err error) {
 	if len(rows) == 0 {
 		return
 	}
@@ -101,7 +115,10 @@ func Verify(scheme Scheme, seed string, rows []RowI) (broken uint64, why BreakE,
 		if i > 0 && rows[i-1].Mark().Mark == MarkDeleted {
 			return ord, BreakAfterDeleted, nil
 		}
-		item, ferr := r.CanonicalItem()
+		scheme, item, known, ferr := lineage.resolve(r)
+		if !known {
+			return ord, BreakScheme, nil
+		}
 		if ferr != nil {
 			return ord, BreakForm, eb.Build().Uint64("ordinal", ord).Errorf("canonical item: %w", ferr)
 		}

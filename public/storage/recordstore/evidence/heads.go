@@ -26,8 +26,14 @@ type AnchoredHead struct {
 // breaks the ordinal. It returns the ordinals that break it, each once,
 // in order: a head row's own ordinal, or the ordinal an anchored head
 // covers when no head row stands for it. A row the chain itself breaks at
-// (law L31) breaks every head past it.
+// (law L31) breaks every head past it. Rows are read under the scheme
+// each records, as Verify reads them.
 func VerifyHeads(scheme Scheme, seed string, rows []RowI, anchored []AnchoredHead) (broken []uint64) {
+	return VerifyHeadsLineage(LineageOf(scheme), seed, rows, anchored)
+}
+
+// VerifyHeadsLineage is VerifyHeads under an explicit lineage.
+func VerifyHeadsLineage(lineage Lineage, seed string, rows []RowI, anchored []AnchoredHead) (broken []uint64) {
 	sorted := slices.Clone(rows)
 	slices.SortFunc(sorted, func(a, b RowI) int {
 		switch {
@@ -42,7 +48,7 @@ func VerifyHeads(scheme Scheme, seed string, rows []RowI, anchored []AnchoredHea
 	recomputed := make(map[uint64]string, len(sorted)+1)
 	recomputed[0] = seed
 	chainBrokenAt := uint64(0)
-	if b, _, _ := Verify(scheme, seed, sorted); b != 0 {
+	if b, _, _ := VerifyLineage(lineage, seed, sorted); b != 0 {
 		chainBrokenAt = b
 	}
 	prevDigest := seed
@@ -50,8 +56,8 @@ func VerifyHeads(scheme Scheme, seed string, rows []RowI, anchored []AnchoredHea
 		if chainBrokenAt != 0 && r.Ordinal() >= chainBrokenAt {
 			break
 		}
-		item, err := r.CanonicalItem()
-		if err != nil {
+		scheme, item, known, err := lineage.resolve(r)
+		if !known || err != nil {
 			break
 		}
 		d := scheme.ChainDigest(prevDigest, item)

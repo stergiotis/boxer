@@ -58,3 +58,14 @@ func (inst *memoRow) Head() (ordinal uint64, digest string, ok bool) {
 	}
 	return
 }
+
+// SchemeName answers as the row does; empty when the row records none.
+func (inst *memoRow) SchemeName() string {
+	if s, is := inst.RowI.(SchemedRowI); is {
+		return s.SchemeName()
+	}
+	return ""
+}
+
+// Unwrap is the row memoised, which a retired scheme's item builder reads.
+func (inst *memoRow) Unwrap() RowI { return inst.RowI }

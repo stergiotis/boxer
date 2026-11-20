@@ -45,6 +45,23 @@ const TableNameEntryVault = TableNameEntry + "vault"
 // item, and the scheme is a parameter (ADR-0327 §SD9).
 var ChainScheme = evidence.NewScheme("agentrun-chain/v4")
 
+// ChainLineage is the schemes a journal row may record and still verify:
+// v4, which it writes under, and no retired one. The verifiers dispatch on
+// the scheme each row records (evidence.Verify), so the next version adds
+// v4 here as evidence.Retired and older journals keep verifying.
+//
+// v1–v3 are not on it: they predate the evidence profile, their rows lived
+// in the ledger's pre-profile layout, their commitments were under a
+// per-entry key the profile replaced, and their canonical item was that
+// layout's canonical wire — verifying them would mean carrying the whole
+// pre-profile codec as verify-only code. A journal written before v4
+// verifies as broken at its first row, with evidence.BreakScheme.
+var ChainLineage = evidence.NewLineage(ChainScheme)
+
+func init() {
+	evidence.RegisterLineage(ChainLineage)
+}
+
 // VaultDDLTail is what the vault table's CREATE TABLE gains after the
 // composed settings: a deletion that rewrites a part leaves the part it
 // replaced on disk as an outdated part until the server's cleanup

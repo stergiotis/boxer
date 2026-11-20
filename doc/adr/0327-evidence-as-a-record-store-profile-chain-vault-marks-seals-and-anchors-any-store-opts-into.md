@@ -645,6 +645,41 @@ reader that judges the journal's laws on a cadence, as the relation's
 SQL readers may, still pays it per run and per cycle; verifying from the
 last judged head is the next step if one does, and is not taken here.
 
+### 2026-11-20 — a verifier dispatches on the scheme each row records
+
+A scheme's name was recorded on every row and every anchor, but
+`evidence.Verify` and `VerifyHeads` read every row under the one scheme
+they were handed, so the first scheme change after this would have
+reported every older chain as tampered.
+
+- **A lineage per store.** `evidence.Lineage` is the scheme a store writes
+  under and the retired ones it still verifies (`evidence.Retired`, with
+  an optional builder for a canonical item the current build no longer
+  computes). `RegisterLineage` makes it the one `Verify` and
+  `VerifyHeads` use when handed the current scheme; `VerifyLineage` and
+  `VerifyHeadsLineage` take one explicitly.
+- **Rows say their scheme.** The generated chain row implements
+  `evidence.SchemedRowI` from the chain component's `Scheme`; a row that
+  records nothing is read under the current scheme, and one recording a
+  scheme the lineage does not know breaks with `BreakScheme`.
+- **Writes stay single-scheme.** `CheckChained` still refuses a row under
+  any scheme but the store's current one: it gates a row about to be
+  written, and nothing is written under a retired scheme.
+- **The journal.** `agentrunstore.ChainLineage` is v4 alone and the
+  anchor store's journal heads are read for any scheme in it. v1–v3
+  predate the profile — another ledger layout, a per-entry commitment key,
+  and that layout's canonical wire as the item — and are not registered: a
+  pre-v4 journal verifies as broken at its first row, with `BreakScheme`.
+- **The exception is written down.** Retired schemes are verify-only code
+  kept as long as their rows may exist; `CODINGSTANDARDS.md` states it
+  beside the rule against compatibility shims.
+
+**What goes red if violated:** `TestRetiredSchemeStillVerifies` (a chain
+crossing a scheme change, heads included, against a test-only retired
+scheme with its own item form) and `TestMemoisedRowsKeepTheirScheme`.
+
+**Not covered:** `VerifySeals` and the seal anchors still read one scheme.
+
 ## References
 
 - [ADR-0100](./0100-recordstore-generated-leeway-clickhouse-store.md) — generated record stores, roles, the state view.
