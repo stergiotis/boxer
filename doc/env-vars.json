@@ -2636,7 +2636,7 @@
     {
       "name": "GOROOT",
       "type": "path",
-      "description": "Go installation root; empty means consult `go env GOROOT`",
+      "description": "Go installation root, used to shorten standard-library paths in error stacks; empty means read it from the binary's own frames",
       "category": "system",
       "sensitive": false,
       "origin": {

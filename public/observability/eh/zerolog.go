@@ -3,7 +3,8 @@ package eh
 import (
 	"fmt"
 	"os"
-	"os/exec"
+	"reflect"
+	"runtime"
 	"strings"
 	"sync"
 
@@ -14,20 +15,32 @@ import (
 )
 
 var detectedGoRoot = sync.OnceValue(func() string {
-	// Prefer the env var so users can override without invoking go.
+	// Prefer the env var so users can override the binary's own answer.
 	r := env.GoRoot.Get()
 	if r != "" {
 		return r
 	}
-	// runtime.GOROOT was deprecated in Go 1.24: the build-time value can be
-	// wrong when the binary is copied across machines. Query the installed
-	// go tool once instead — empty result is fine (path just isn't shortened).
-	out, err := exec.Command("go", "env", "GOROOT").Output()
-	if err != nil {
-		return ""
-	}
-	return strings.TrimSpace(string(out))
+	return goRootOfThisBinary()
 })
+
+// goRootOfThisBinary reads the GOROOT the binary's standard library was
+// compiled from out of the binary itself: a runtime function's file is
+// <GOROOT>/src/runtime/<file>. Under -trimpath that path is relative, and
+// the answer is empty: the frames then carry no GOROOT to shorten.
+// runtime.GOROOT is deprecated, and asking the go tool would run an
+// external program at error-formatting time.
+func goRootOfThisBinary() (root string) {
+	f := runtime.FuncForPC(reflect.ValueOf(runtime.Gosched).Pointer())
+	if f == nil {
+		return
+	}
+	file, _ := f.FileLine(f.Entry())
+	const marker = "/src/runtime/"
+	if i := strings.LastIndex(file, marker); i > 0 {
+		root = file[:i]
+	}
+	return
+}
 
 type FrameTypeE uint8
 
@@ -233,6 +246,7 @@ type gatherFactsAndStacks struct {
 	stackRepresentations [] /*stackIndex*/ []byte
 	nextId               uint64
 	materialized         bool
+	droppedStacks        bool
 }
 
 func (inst *gatherFactsAndStacks) hasStacks() bool {
@@ -271,16 +285,23 @@ func (inst *gatherFactsAndStacks) MarshalZerologArray(a *zerolog.Array) {
 			name:  "no-stack",
 		})
 	}
-	for i, perPositionFacts := range inst.perStackFacts[1:] {
-		facts2 := perPositionFacts
-		inst.validateFrames(facts2)
+	n := 0
+	for _, perPositionFacts := range inst.perStackFacts[1:] {
+		if !validFrames(perPositionFacts) {
+			continue
+		}
 		a.Object(&errorFactsLogger{
-			facts2: facts2,
-			name:   fmt.Sprintf("stack-%d", i),
+			facts2: perPositionFacts,
+			name:   fmt.Sprintf("stack-%d", n),
 		})
+		n++
 	}
 }
-func (inst *gatherFactsAndStacks) validateFrames(facts2 [][]*errorFact) {
+
+// validFrames says whether every fact at one stack position names the same
+// frame. A stack that fails it is inconsistent: its facts are logged without
+// it, in the stackless stream, and the error carries StackDroppedFieldName.
+func validFrames(facts2 [][]*errorFact) (valid bool) {
 	for _, facts := range facts2 {
 		var s uintptr
 		for _, fact := range facts {
@@ -289,15 +310,24 @@ func (inst *gatherFactsAndStacks) validateFrames(facts2 [][]*errorFact) {
 				if s == 0 {
 					s = f
 				} else if s != f {
-					log.Fatal().Interface("facts", facts2).Msg("found different frames within the same facts2 slice")
+					return false
 				}
 			}
 		}
 	}
+	return true
 }
+
+// StackDroppedFieldName marks an error logged without a stack it carried,
+// because that stack's frames were inconsistent. The error's messages and
+// data are still there, in the stackless stream.
+var StackDroppedFieldName = "stackDropped"
 
 func (inst *gatherFactsAndStacks) MarshalZerologObject(e *zerolog.Event) {
 	inst.materialize()
+	if inst.droppedStacks {
+		e.Bool(StackDroppedFieldName, true)
+	}
 	e.Array("streams", inst)
 }
 
@@ -329,6 +359,19 @@ func (inst *gatherFactsAndStacks) materialize() {
 	}
 
 	inst.materialized = true
+	for _, perPositionFacts := range inst.perStackFacts[1:] {
+		if validFrames(perPositionFacts) {
+			continue
+		}
+		inst.droppedStacks = true
+		for _, facts := range perPositionFacts {
+			for _, fact := range facts {
+				if fact.Frame == nil {
+					inst.perStackFacts[0][0] = append(inst.perStackFacts[0][0], fact)
+				}
+			}
+		}
+	}
 }
 
 func (inst *gatherFactsAndStacks) addError(err error, parentId uint64) error {

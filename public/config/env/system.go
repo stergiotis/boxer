@@ -24,11 +24,11 @@ var (
 	})
 
 	// GoRoot is $GOROOT, the Go installation root. Empty means the
-	// toolchain's built-in default; consumers that need an explicit path
-	// must fall back via `go env GOROOT`.
+	// toolchain's built-in default; eh then reads the root from the
+	// binary's own frames rather than running the go tool.
 	GoRoot = NewPath(Spec{
 		Name:        "GOROOT",
-		Description: "Go installation root; empty means consult `go env GOROOT`",
+		Description: "Go installation root, used to shorten standard-library paths in error stacks; empty means read it from the binary's own frames",
 		Category:    CategorySystem,
 	})
 

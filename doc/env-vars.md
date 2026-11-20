@@ -4,7 +4,7 @@ audience: contributor
 status: draft
 generated: true
 generator: public/app env gen-docs
-generated-at: 2026-11-20T23:22:14Z
+generated-at: 2026-11-20T23:26:29Z
 ---
 
 > **Status: draft — pre-human-review.** Machine-generated registry snapshot;
@@ -413,7 +413,7 @@ generated-at: 2026-11-20T23:22:14Z
 | `BOXER_RCLONE` | path | — | — |  | explicit path to the rclone binary the lading store's SFTP seam spawns; empty uses the PATH lookup |
 | `BOXER_TINYGO` | path | — | — |  | explicit path to the tinygo binary the WASM survey probes are compiled with; the airgap bundle points it at its pinned distribution; empty uses the PATH lookup |
 | `GOPATH` | path | — | — |  | Go workspace root; empty means $HOME/go applied by the Go toolchain |
-| `GOROOT` | path | — | — |  | Go installation root; empty means consult `go env GOROOT` |
+| `GOROOT` | path | — | — |  | Go installation root, used to shorten standard-library paths in error stacks; empty means read it from the binary's own frames |
 | `GOWORK` | string | — | — |  | Go workspace file path; "off" disables workspace mode |
 | `HOME` | path | — | — |  | user home directory; supplied by the OS or shell |
 | `IMZERO2_AUDIO_LANE_FROM_DEVICE` | string | — | — |  | set by the host for its client: FIFO the client writes what the active viewer's audio device announces and reports to |
