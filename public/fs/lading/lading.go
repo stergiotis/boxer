@@ -24,8 +24,7 @@
 // no generator writes them — the read surface records that gap), a CHECK
 // constraint, and a materialised view. All three are ALTERs after the fact,
 // all three are idempotent, and none of them changes what the store decodes:
-// ClickHouse keeps MATERIALIZED columns out of `SELECT *`, which is what the
-// positional decode reads.
+// the store selects its generated columns by name, and reads past any other.
 package lading
 
 import (
@@ -140,18 +139,17 @@ func ProvisionIn(ctx context.Context, exec recordstore.ExecutorI, layout ladings
 // to run at start after [Provision].
 //
 // It checks more than the two generated VerifySchema verbs, because those
-// check less than this store needs. They compare the physical columns a
-// positional decode reads, which is exactly the half [Provision] does not add:
-// the tree columns are MATERIALIZED and so are hidden from `SELECT *` (which
-// is what VerifySchema now skips), `fssnap` is a table no generated store
-// creates, and the view that fills it is not a column at all. A store missing
+// check less than this store needs. They judge the generated columns the
+// store reads, which is exactly the half [Provision] does not add: the tree
+// columns are MATERIALIZED and beside the generated ones (a verdict reports
+// them as extra), `fssnap` is a table no generated store creates, and the
+// view that fills it is not a column at all. A store missing
 // any of them decodes every row correctly and then fails on the first ReadDir
 // — over a pipe rclone has already mounted, in the `sftp-stdio` case, which
 // runs Verify precisely so that it does not create anything.
 //
 // EnsureTable cannot do this either: IF NOT EXISTS succeeds against any older
-// shape, and the decode is positional — so drift fails late, or for a
-// same-typed column swap, silently.
+// shape, so drift would otherwise fail at the first read.
 func Verify(ctx context.Context, exec recordstore.ExecutorI) (err error) {
 	return VerifyIn(ctx, exec, ladingschema.Layout{})
 }

@@ -48,8 +48,9 @@ server, or `chexec.NewLocalExecutor` for a test. Provision creates
 `boxer.fsmeta`, `boxer.fsdata` and `boxer.fssnap`, adds the materialised tree
 columns, the path constraint and the directory skip index, and installs the
 view that fills the snapshot index. `Verify` is not optional in a long-running
-process: `CREATE TABLE IF NOT EXISTS` succeeds against any older shape, and the
-store decodes positionally.
+process: `CREATE TABLE IF NOT EXISTS` succeeds against any older shape, and a
+table lacking a column the store reads fails every read until it is migrated
+(`boxer schema plan` lists the statements).
 
 **The profile is fixed at creation.** `ProfileCorpus` (few mounts, large files:
 one block per mark, 1 MiB blocks, per-block digests) and `ProfileFleet` (very

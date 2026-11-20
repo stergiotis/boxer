@@ -10,6 +10,11 @@ status: draft
 
 # How to migrate boxer.persiststate for run and window provenance
 
+A build that carries
+[ADR-0387](../adr/0387-what-a-binary-does-when-a-stored-table-is-older-or-newer-than-its-schema.md)
+derives the statements below with `boxer schema plan` and reads the table by
+name; the positional reasoning on this page holds for the builds before it.
+
 [ADR-0191](../adr/0191-runtime-instance-attribution.md) §SD5 adds two sections
 to the persist-state store — `stateRunId` and `stateInstanceKey` — so a
 persist write records which process and which window made it. This recipe is

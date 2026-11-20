@@ -53,10 +53,14 @@ rows must survive.
 The three new sections are declared after every existing one, in the DTO
 and in the schema builder, so their columns are the last thirty of the
 generated layout. `ADD COLUMN` appends, which reproduces that layout
-exactly; the generated store reads columns by name, so the order matters
-only to the eye. This is the same property
-[ADR-0191](../adr/0191-runtime-instance-attribution.md)'s persist-state
-recipe relied on.
+exactly. The generated store of this change decoded by position — `SELECT *`
+read at the generated column indices — so appending in the generated order is
+what kept every column where the decode expected it. This is the same
+property [ADR-0191](../adr/0191-runtime-instance-attribution.md)'s
+persist-state recipe relied on. Stores generated under
+[ADR-0387](../adr/0387-what-a-binary-does-when-a-stored-table-is-older-or-newer-than-its-schema.md)
+read by name, and `boxer schema plan` derives these statements from the
+generated DDL.
 
 ## The statements
 

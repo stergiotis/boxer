@@ -208,10 +208,14 @@ a second copy of all three.
   DDL author for this table, so a facts-bound store carries no `EnsureTable`,
   no embedded DDL string and no DDL tail — not a discouraged method, an absent
   one ([ADR-0184](../adr/0184-sysmetrics-persistence-tee.md) §SD2).
-  The `.sql` file is still written: it is the physical schema the store decodes
-  positionally, and reviewing it is how you see what the store expects.
-  `VerifySchema` matters more here than elsewhere for the same reason — nothing
-  in the store guarantees the live table's shape.
+  The `.sql` file is still written: it is the physical schema the store reads,
+  and reviewing it is how you see what the store expects. Reads select those
+  columns by name and bind the decoders to the result by name
+  ([ADR-0387](../adr/0387-what-a-binary-does-when-a-stored-table-is-older-or-newer-than-its-schema.md)),
+  so a facts table carrying columns another store added reads fine, and one
+  lacking a column this store reads fails naming it. `VerifySchema` (the
+  verdict of `JudgeSchema`, as an error) matters more here than elsewhere for
+  the same reason — nothing in the store guarantees the live table's shape.
 
 ## Two regeneration lanes, one schema
 
