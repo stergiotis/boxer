@@ -135,33 +135,19 @@ inspector session entirely. Closing and reopening preserves them.
 
 ## Id stack contract
 
-`Render` takes a `c.WidgetIdCreatorI` and consumes **exactly one**
-prepared id via `idGen.Derive()`. The derived `uint64` is combined
-with the developer-supplied `idPrefix` into a per-call scope string
-(`idPrefix#<hex>`), and every stable id this widget needs is
-derived from that scope via `c.MakeAbsoluteIdStr`:
-
-- the anchor toggle's widget id
-- the inspector window's widget id (also the OpenBound databinding key)
-- the `AnchorTether`'s two R21 rect-capture seqs
-- the lazy `EmbeddedApp`'s salt (`uint64(c.MakeAbsoluteIdStr(scope+"-embedded"))`)
-
-`AbsoluteWidgetId`s (rather than stack-prepared ones) are required
-for the toggle and window because their response-by-id lookups need
-to match across frames; a stack-prepared id XORs the surrounding
-stack top in and would silently miss the previous-frame slot.
-
-The per-call scope is what lets the same `Renderer` be `.Render`-ed
-multiple times in one frame (e.g. once per row of a list of regex
-rules) without colliding on toggle / window / embedded-explorer
-state. The `idGen` value is the disambiguator.
+`Render` opens one `c.IdScope` under `Input.Ids`, keyed by
+`Input.ScopeKey`, and derives every id this widget needs inside it:
+the anchor toggle, the inspector window (also the OpenBound
+databinding key), the `AnchorTether`'s rect-capture seqs and the
+lazy `EmbeddedApp`'s salt. Two summaries in one host need only
+different `ScopeKey`s; in a list, each row's own scope
+(`ids.PrepareSeq(i)` around the call) keeps rows apart.
 
 What the widget deliberately does **not** do:
 
-- It does not call `ids.PrepareStr` itself on the caller's stack.
-  Doing so on top of the caller's already-`Prepared` state would
-  re-enter the state machine and panic. The single `Derive` at the
-  top of `Render` is the only consumption.
+- It does not prepare ids on the caller's stack outside its own
+  scope, so it cannot leave the caller's `WidgetIdStack` in the
+  `Prepared` state.
 - It does not invoke any FFFI2 *fetcher* outside the inspector
   window's body. The level-1 row is pure opcode emission — no
   fetchers, no deferred-block-capture re-entry risk. Inside the
@@ -170,45 +156,33 @@ What the widget deliberately does **not** do:
 
 ## Per-instance state
 
-State lives in a package-level `sync.Map` keyed by per-call scope.
-Each entry carries:
+State lives in a `regexsummary.State` the host owns and passes by
+pointer in `Input.State`; it must stay at one address across frames,
+because the window's close box is a databinding onto it. It carries:
 
-- `pinned bool` — the toggle / window open flag, also bound to
-  egui's title-bar X via `OpenBound` + R10 databinding so closing
-  through the window's native chrome flips the same flag the toggle
-  click would.
-- `embedded *regex_explorer.EmbeddedApp` — lazily allocated on the
-  first `false → true` transition. Renderers that are never pinned
-  pay no allocation cost. Once allocated, the embedded state
+- `Pinned` — the toggle / window open flag, also bound to egui's
+  title-bar X via `OpenBound` + R10 databinding so closing through
+  the window's native chrome flips the same flag the toggle click
+  would. Exported, so a host can persist it or open the inspector
+  from code.
+- the embedded `regex_explorer.EmbeddedApp` — lazily allocated on
+  the first `false → true` transition. A summary that is never
+  pinned pays no allocation cost. Once allocated, the embedded state
   (pattern, haystack, flags, query results, tripwire) persists
-  across close/reopen cycles within the same widget instance.
-- `lastSeededPat string` — the host pattern at the most recent
-  seeding event. Compared against the current host pattern to
-  decide whether a new seeding is needed on the current frame's
-  open transition.
-- `seededAtLeast1 bool` — guards the first-ever seeding so a
-  widget instance opened then closed before the host pattern was
-  ever set still gets re-seeded the next time it opens.
+  across close/reopen cycles for as long as the host keeps the
+  `State`.
+- the last seeded pattern and a first-seeding guard, which decide
+  whether the current open transition copies the host pattern in.
 
-Entries are never reclaimed. Acceptable for typical app shapes
-(dozens to hundreds of unique regexsummary instances over a
-session); apps that dynamically mount / unmount short-lived
-regexsummary instances with one-shot `idPrefix`es leak `O(mounts)`
-memory. Document but don't engineer for that yet — mirrors the same
-posture as `distsummary` and `fieldview`.
+There is no package-level instance map; dropping the `State` drops
+the instance.
 
 ## Invariants
 
-- **One `Derive` per Render.** The caller's `Prepared` state must
-  be drained exactly once per `Render` call. The `Derive` at the
-  top of `Render` is the only consumption; all downstream ids
-  derive from `MakeAbsoluteIdStr` over the per-call scope, which
-  does not touch the caller's stack.
-- **Stable scope across frames.** For a given call site, the scope
-  string is deterministic — `idGen.Derive()` is stable for the
-  same prepared id under the same surrounding `c.IdScope`. This is
-  what makes the toggle / window / embedded-app state survive
-  across frames.
+- **Stable scope across frames.** For a given call site the scope
+  is deterministic — the same `ScopeKey` under the same surrounding
+  `c.IdScope` — which is what makes the toggle, window and tether
+  ids match from one frame to the next.
 - **Pattern propagation is read-only host → inspector.** Edits
   inside the inspector never write back to the host's pattern.
   Hosts can rely on this when reasoning about their own state.
@@ -257,11 +231,9 @@ posture as `distsummary` and `fieldview`.
   `compileCache` for the multi-pattern path because *that* code
   compiles the patternList line-by-line on every keystroke; the
   level-1 row does not.
-- **No bidirectional pattern propagation (yet).** See the Pattern
-  propagation section. The API surface (`Render(idGen, pattern)`)
-  was chosen so that adding a `Pattern(*string)` overload later —
-  or wiring a sink through `inspector.Provenance` — is purely
-  additive.
+- **No bidirectional pattern propagation.** See the Pattern
+  propagation section. `Input` carries the pattern by value, so a
+  write-back sink would be a new `Input` field — an additive change.
 - **No re-styled `regex_explorer`.** The embedded body uses the
   same panels, tabs, and inputs the standalone AppI uses. If a
   caller wants a different shape, the right move is to fork
@@ -276,22 +248,27 @@ posture as `distsummary` and `fieldview`.
 ```go
 // The host app declares regexsummary.ChLocalCapPattern in its
 // Manifest.Caps; without it the bus is wired and the broker refuses.
-r := regexsummary.New("user-search-regex").
-    Bus(ctx.Bus()).                          // optional — enables CH-backed tabs
-    Provenance(inspector.Provenance{
-        Subject:   "app.spinnaker.event.rules.user-search",
-        SourceApp: "spinnaker",
-        SampledAt: now,
-    })
-for _, rule := range searchRules {
+// searchRules is the host's own data; each rule owns a
+// regexsummary.State that lives as long as the rule.
+for i, rule := range searchRules {
     for range c.Horizontal().KeepIter() {
         c.Label(rule.Name).Send()
-        r.Render(ids.PrepareSeq(rule.RowID), rule.Pattern)
+        for range c.IdScope(ids.PrepareSeq(uint64(i))) {
+            regexsummary.Render(regexsummary.Input{
+                Ids: ids, ScopeKey: "rule", Pattern: rule.Pattern, State: &rule.State,
+                Bus: ctx.Bus(), // optional — enables the ClickHouse-backed tabs
+                Provenance: inspector.Provenance{
+                    Subject:   "app.spinnaker.event.rules.user-search",
+                    SourceApp: "spinnaker",
+                    SampledAt: now,
+                },
+            })
+        }
     }
 }
 ```
 
-One `Renderer` per visual style; the `Render` call is the per-row
+The `Render` call is the per-row
 cost. Allocations inside `Render` are bounded by one `regexp.Compile`
 plus a `[]rune(pattern)` for truncation; the embedded explorer is
 lazy and costs zero until first open.

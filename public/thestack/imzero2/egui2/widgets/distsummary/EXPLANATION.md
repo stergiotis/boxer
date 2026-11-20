@@ -27,8 +27,8 @@ distribution at two levels of detail in the same cell of UI:
   window's native title-bar X. The body is a two-tab surface:
     - **ECDF tab (default)** — empirical CDF plus a finite-sample
       exact simultaneous confidence band (Berk-Jones default; DKW /
-      equal-precision / higher-criticism selectable via
-      `.Ecdf(...)`), drawn by [`widgets/ecdf`](../ecdf/) over a grid
+      equal-precision / higher-criticism selectable through
+      `Input.Ecdf`), drawn by [`widgets/ecdf`](../ecdf/) over a grid
       built from the digest by
       [`widgets/ecdfdigest`](../ecdfdigest/).
     - **Boxenplot tab** — the scientifically correct letter-value
@@ -102,7 +102,7 @@ that ADR's shared-source-of-truth rule (see
   band is an O(n²) Moscovich-Nadler inversion that runs into minutes
   past a few thousand points and so must never block the render
   thread:
-    - **Preview (always).** `ecdf.Renderer.RenderGridPreview` draws the
+    - **Preview (always).** The ECDF tab first draws the
       closed-form DKW-Massart band (`ecdfbands.DkwBandForGrid`,
       ε = √(ln(2/α)/(2n)), no inversion — microseconds at any n)
       immediately, so the inspector never opens to an empty or frozen
@@ -113,15 +113,15 @@ that ADR's shared-source-of-truth rule (see
       `Method`, Berk-Jones by default) is requested automatically when
       its solve is cheap (effective n ≤ `exactBandAutoMaxN` = 500) and
       otherwise behind a "Compute exact band" button. Once requested,
-      `ecdf.Renderer.EnsureBandJob(scope, tasks, nExact)` warms it on a
+      `ecdf.EnsureBandJob(key, tasks, nExact, style)` warms it on a
       background keelson job (ADR-0038) while a `widgets/jobprogress`
       readout shows progress + ETA + a **Cancel** button; a later frame
       finds the `ecdfbands` cache warm (keyed by `(n, α, method)`,
-      `boxer/public/analytics/stats/ecdfbands/invert.go:19`) and
-      `RenderGrid` swaps in the exact band. Cancel drops back to the
+      [`github.com/stergiotis/boxer/public/analytics/stats/ecdfbands`](../../../../../analytics/stats/ecdfbands/)) and
+      the next paint swaps in the exact band. Cancel drops back to the
       preview + Compute affordance without respawning the solve.
     - **Tractability.** `nExact = min(n, exactBandMaxN)` (see
-      `Renderer.ExactBandMaxN`; 0 = uncapped, the demos cap it at 2000)
+      `Input.ExactBandMaxN`; 0 = uncapped, the demos cap it at 2000)
       bounds the opt-in solve's cost so it stays a cancellable
       ~seconds-to-tens-of-seconds job at large n, at the price of a
       slightly conservative (capped-n) exact band; the preview is
@@ -132,7 +132,7 @@ that ADR's shared-source-of-truth rule (see
       one-frame-lagged Cancel/Compute clicks land promptly even under
       reactive render cadence.
 - Closing the inspector (title-bar X) or retracting it (anchor
-  handle) — both land on `instanceState.pinned == false` — calls
+  handle) — both land on `State.Pinned() == false` — calls
   `ecdf.CancelBandJob(scope)`, aborting an in-flight exact-band solve
   so it never outlives its window, and resets the per-open
   `exactRequested`/`exactInit` seed. The warm-up is keyed by the
@@ -144,16 +144,16 @@ that ADR's shared-source-of-truth rule (see
 - Boxenplot tab (`renderBoxenplotBody`) calls
   `letterval.RecommendedLevels(digest)` (bounded by
   `RecommendedDepth(n)`, typically ~7 levels) and forwards the
-  resulting ladder to `boxenplot.Renderer.Render`.
+  resulting ladder to `boxenplot.Paint`.
 - Only the active tab body runs per frame; `renderLevel2Body`
-  dispatches on `instanceState.tab` and the inactive branch is
+  dispatches on the `State`'s tab and the inactive branch is
   skipped entirely.
 
 If the ECDF cannot render (digest is `nil`, `Count() == 0`, or the
 support has collapsed to a single value), `renderEcdfBody` returns
 `false` and the dispatcher falls back to the boxenplot body for
 that single frame. The user's tab choice is preserved in
-`instanceState.tab` so the ECDF returns automatically once the
+the `State`'s tab so the ECDF returns automatically once the
 digest broadens again.
 
 ## Composition
@@ -170,18 +170,17 @@ This widget owns no math and no rendering primitives. It is glue:
   `ecdfdigest`) — the simultaneous-band families (Berk-Jones,
   DKW-Massart, equal-precision Stepanova-Wang, higher-criticism
   Donoho-Jin) plus the cached Moscovich-Nadler inversion.
-- **`widgets/ecdf.Renderer`** — held by value inside the distsummary
-  `Renderer`; defaults are taken from `ecdf.New()`, and callers can
-  swap a fully-configured `ecdf.Renderer` via `.Ecdf(r)` to override
-  band family, alpha, or stroke styling.
+- **`widgets/ecdf`** — `Paint` draws the curve and band from an
+  `ecdf.Style`; `Input.Ecdf` overrides band family, alpha or stroke
+  styling, and zero fields take `ecdf.DefaultStyle()`.
 - **`widgets/ecdfdigest`** — the one-call bridge from
   `*tdigest.TDigest` to the explicit `(xs, fnAt, n)` grid the
-  `ecdf.Renderer` consumes via `RenderGrid`. Keeps the `ecdf`
+  ECDF tab paints. Keeps the `ecdf`
   widget free of any tdigest import.
-- **`widgets/boxenplot.Renderer`** — held by value inside the
-  distsummary `Renderer`; defaults from `boxenplot.New`. Callers
-  swap via `.Boxenplot(bp)` to override palette, outlier mode, box
-  width, etc.
+- **`widgets/boxenplot`** — `Paint` draws the letter-value plot from a
+  `boxenplot.Style`; `Input.Boxen` overrides palette, outlier mode,
+  box width and the rest, and zero fields take
+  `boxenplot.DefaultStyle()`.
 - **`widgets/inspector`** — `AnchorToggle` (level-1 disclosure
   affordance), `AnchorTether` (bezier connector from toggle to
   window), `ProvenanceChip` (`↳ subject · Xs ago · schema · from
@@ -190,13 +189,12 @@ This widget owns no math and no rendering primitives. It is glue:
   the expandability affordance in level 1 (ADR-0044 iconography).
 - **`c.Window`** — egui's draggable window block with `OpenBound`
   wired through an R10 databinding so closing via the native
-  title-bar X flips the same `instanceState.pinned` flag the
+  title-bar X flips the same `State` open flag the
   anchor toggle drives (per ADR-0026 amendment
   `feedback_egui_native_affordances`).
 - **`c.SelectableLabel`** — egui's tab-row primitive; one per tab,
-  each carrying a stable `AbsoluteWidgetId` derived from the call's
-  scope so two `.Render(...)` invocations on the same `Renderer`
-  drive independent tab state.
+  under the summary's id scope, with the selected tab kept in the
+  host-owned `State`.
 
 ## Interaction model
 
@@ -213,8 +211,8 @@ Alternatives considered and rejected:
   site) breaks the row's height invariant — the surrounding
   vertical flow would ripple-resize when the plot opens. Acceptable
   in a dedicated detail pane; wrong for table cells. A separate
-  widget can be built on the same `boxenplot.Renderer` /
-  `ecdf.Renderer` if needed.
+  widget can be built on the same `boxenplot.Paint` /
+  `ecdf.Paint` if needed.
 - **Inline-pinned popup** (egui's `popup_below_widget` etc.) ties
   the popup geometry to the anchor's parent layout, which fights
   the multi-pane comparison use case. The free-floating `c.Window`
@@ -225,53 +223,34 @@ Alternatives considered and rejected:
 
 ## Per-instance state
 
-`distsummary` carries per-instance state in a package-level
-`sync.Map` keyed by `idPrefix#<hex>` (the per-call scope), holding
-one `instanceState{pinned, tab}` per logical instance. The widget
-itself remains value-receiver / fluent-builder so the call shape
-stays consistent with other inspectors (fsmview is pointer-
-receiver for its own reasons; that's the exception, not the rule).
+The state that must survive between frames — whether the inspector is
+open, which tab is selected, whether the exact band was requested — is
+a `distsummary.State` the host owns and passes by pointer in
+`Input.State`. The widget keeps no package-level map of instances, so
+nothing leaks when a host mounts and drops summaries, and a host can
+persist `State` or open the inspector from code (`State.SetPinned`).
 
-The `instanceState.tab` zero value is `tabECDF`, so a freshly opened
-window honours the documented "ECDF is default" contract without an
-explicit initialiser.
-
-The state map is never garbage-collected — acceptable for typical
-app shapes (dozens of unique `distsummary` surfaces); apps that
-dynamically mount / unmount short-lived instances with one-shot
-`idPrefix`es leak `O(mounts)` memory. Document but don't engineer
-for it yet.
+The zero `State` lands on the ECDF tab, so a freshly opened window
+honours the "ECDF is default" contract without an initialiser.
 
 ## Id stack contract
 
-`Render` takes a `c.WidgetIdCreatorI` and consumes **exactly one**
-prepared id via `idGen.Derive()` at the top of the body. The
-derived value is also the per-call-site scope disambiguator (see
-`callScope`), so two `.Render(...)` invocations from the same
-`Renderer` (sccmap's size + color, imztop's cores + history) see
-distinct scopes — independent toggle ids, window ids, tab states,
-and bezier rect-capture seqs.
+`Render` opens one `c.IdScope` under `Input.Ids`, keyed by
+`Input.ScopeKey`, and derives every id inside that scope. Two summaries
+in one host therefore need only different `ScopeKey`s — or, in a list,
+each row's own scope (`ids.PrepareSeq(i)` around the call). The
+inspector window's id is the one absolute id, derived from the scope,
+because a window's identity must match across frames regardless of the
+surrounding stack.
 
 What the widget deliberately does **not** do:
 
-- It does not call `ids.PrepareStr` recursively on top of the
-  caller's already-`Prepared` state. Doing so would re-enter the
-  `WidgetIdStack` state machine (`Initial → Prepared` while
-  currently `Prepared`) and panic. The level-2 plot ids, toggle
-  id, window id, tab-selector ids, and tether seqs are all
-  `c.MakeAbsoluteIdStr(scope + "-<suffix>")` — absolute ids
-  derived from the call scope, not the prepared id — because the
-  r15 hover register match requires a stable bit pattern
-  independent of surrounding `WidgetIdStack` context
-  (`feedback_plot_id_for_hover_match`).
-- It does not invoke any FFFI2 *fetcher* outside the documented
-  set (the boxenplot / ecdf hover-register reads via `.At(...)` /
-  `.AtGrid(...)`, all driven by the `StateManager`'s post-Sync
-  cache, never inline pipe reads).
-
-The `n == 0` branch explicitly calls `idGen.Derive()` (one hop) and
-returns, so the "one Prepare in, one Derive out" invariant holds in
-every branch.
+- It does not prepare ids on the caller's stack outside its own scope,
+  so it cannot leave the caller's `WidgetIdStack` in the `Prepared`
+  state.
+- It does not invoke any FFFI2 *fetcher* outside the documented set
+  (the boxenplot / ecdf hover reads via `At`, all driven by the
+  `StateManager`'s post-Sync cache, never inline pipe reads).
 
 ## What this widget deliberately does not do
 
@@ -279,34 +258,42 @@ every branch.
   widget never `Push`es into it. (Per ADR-0046 §Updates 2026-05-25
   shared-sketch rule.)
 - **No private sketch / cache / accumulator.** Both ECDF and
-  boxenplot read from the same caller-owned digest. `instanceState`
-  holds `(pinned, tab)` only — no statistical state.
+  boxenplot read from the same caller-owned digest. `State` holds
+  the open flag, the tab and the exact-band request — no statistical
+  state.
 - **No re-styled boxenplot or ECDF.** Both renderers' defaults
   (Batlow palette + Auto outlier mode for boxenplot; Berk-Jones +
   α=0.05 + AccentDefault soft fill for ECDF) propagate unchanged.
-  Override via `.Boxenplot(bp)` / `.Ecdf(r)`.
+  Override via `Input.Boxen` / `Input.Ecdf`.
 - **No grid-resolution magic.** ECDF's grid resolution defaults to
-  `defaultEcdfGridN` (128); override via `.GridN(n)`. Values below
+  `defaultEcdfGridN` (128); override via `Input.GridN`. Values below
   2 are clamped back to the default so a typo at the call site
   cannot produce a degenerate two-point grid.
 
 ## Composition example
 
 ```go
-r := distsummary.New("latency-cluster").Provenance(inspector.Provenance{
-    Subject:   "app.gateway.event.latency-bucket",
-    SourceApp: "gateway",
-    SampledAt: time.Now(),
-})
-for _, row := range latencyClusters {
+// latencyClusters is the host's own data; each row owns a digest and a
+// distsummary.State that live as long as the row.
+for i, row := range latencyClusters {
     for range c.Horizontal().KeepIter() {
         c.Label(row.Name).Send()
-        r.Render(ids.PrepareSeq(row.RowID), row.Digest, row.Extremes)
+        for range c.IdScope(ids.PrepareSeq(uint64(i))) {
+            distsummary.Render(distsummary.Input{
+                Ids: ids, ScopeKey: "latency", Digest: row.Digest, Extremes: row.Extremes,
+                State: &row.State, Title: row.Name,
+                Provenance: inspector.Provenance{
+                    Subject:   "app.gateway.event.latency-bucket",
+                    SourceApp: "gateway",
+                    SampledAt: time.Now(),
+                },
+            })
+        }
     }
 }
 ```
 
-One `Renderer` per visual style; the `Render` call is the per-row
+The `Render` call is the per-row
 cost. Allocations inside `Render` are bounded by:
 
 - Level 1: one `Quantiles` call (single buffer flush), one label

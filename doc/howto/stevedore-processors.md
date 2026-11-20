@@ -162,7 +162,9 @@ application places by database; a transient one is retried, then stops the
 lander with nothing acknowledged, so the restart redelivers.
 
 ```go
-l := lander.New(lander.Config{}, reader, &mySink{store}, &lander.StoreDeadLetters{Store: deadStore})
+// deadStore is a *stevedorefacts.StevedoreStore; deadletter.Log is the
+// choice for a process with no store at hand.
+l := lander.New(lander.Config{}, reader, &mySink{store}, &deadletter.Store{Store: deadStore})
 err := l.Run(ctx)
 ```
 

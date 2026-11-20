@@ -162,19 +162,18 @@ var _ SinkI = (*MySink)(nil)
 
 Per boxer ADR-0007, sinks that produce attribute-centric output (JSON, data contracts, anything with a "primary key + annotations" shape) consume a `membershiprole.ClassifierI` to decide whether each `AddMembership*` call delivers a primary or secondary tag.
 
-The classifier interface lives in boxer at `github.com/stergiotis/boxer/public/semistructured/leeway/membershiprole`. It takes a `MembershipValue` (which mirrors the `AddMembership*` payload shapes) plus a `SectionContext` (section name + `useaspects.AspectSet`) and returns `(MembershipRoleE, ParamTreatmentE)`.
+The classifier interface lives in boxer at `github.com/stergiotis/boxer/public/semistructured/leeway/membershiprole`. It takes a `membership.MembershipValue` (from `github.com/stergiotis/boxer/public/semistructured/leeway/membership`, which mirrors the `AddMembership*` payload shapes) plus a `SectionContext` (section name + `useaspects.AspectSet`) and returns `(MembershipRoleE, ParamTreatmentE)`.
 
 ### Sink-side adapter pattern
 
 A classifier-aware sink wraps each `AddMembership*` call:
 
 ```go
-func (inst *MySink) AddMembershipVerbatim(lowCard bool, verbatim, humanReadable string) {
-    mv := membershiprole.MembershipValue{
-        Kind:               membershiprole.MembershipKindVerbatim,
-        LowCard:            lowCard,
-        Verbatim:           verbatim,
-        HumanReadableValue: humanReadable,
+func (inst *MySink) AddMembershipVerbatim(lowCard bool, verbatim string) {
+    mv := membership.MembershipValue{
+        Kind:     membership.IdentityVerbatim,
+        LowCard:  lowCard,
+        Verbatim: verbatim,
     }
     role, _ := inst.classifier.Classify(inst.currentSectionCtx, mv)
     if role == membershiprole.MembershipRolePrimary {
@@ -185,7 +184,7 @@ func (inst *MySink) AddMembershipVerbatim(lowCard bool, verbatim, humanReadable 
 }
 ```
 
-The five `AddMembership*` shapes map onto the five `MembershipKindE` values one-to-one. `SectionContext` is populated at `BeginSection` and `BeginPlainSection` from the section's `UseAspects` field, which carries `useaspects.AspectSectionMembershipsAllPrimary` / `useaspects.AspectSectionMembershipsAllSecondary` when the application sets them.
+The five `AddMembership*` shapes map onto the five non-`None` `membership.IdentityEncoding` values one-to-one. `SectionContext` is populated at `BeginSection` and `BeginPlainSection` from the section's `UseAspects` field, which carries `useaspects.AspectSectionMembershipsAllPrimary` / `useaspects.AspectSectionMembershipsAllSecondary` when the application sets them.
 
 `PathPrefixClassifier` covers the common case (path-prefix verbatim → primary, plain identifier → secondary, ref-shaped → primary). Applications with different conventions implement `ClassifierI` directly.
 

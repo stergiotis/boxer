@@ -671,10 +671,10 @@ func RenderDemoWindow() {
 
 		if c.Button(ids.PrepareSeq(0x33333), c.Atoms().Text("set to true").Keep()).SendResp().HasPrimaryClicked() {
 			checkboxVal = true
-			statemanager.OverrideDatabindingWidget(0x343af)
+			statemanager.OverrideDatabindingBPtr(&checkboxVal)
 		}
 		if c.Button(ids.PrepareSeq(0x33334), c.Atoms().Text("set to false").Keep()).SendResp().HasPrimaryClicked() {
-			statemanager.OverrideDatabindingWidget(0x343af)
+			statemanager.OverrideDatabindingBPtr(&checkboxVal)
 			checkboxVal = false
 		}
 		{
@@ -1569,7 +1569,7 @@ Treat it as the canonical recipe for "rounded, padded, coloured text pill" — a
 | `Tone(badge.ToneE)`          | Semantic colour family — Neutral / Primary / Success / Warning / Error / Info |
 | `Variant(badge.VariantE)`    | Solid (filled) / Soft (translucent) / Outline (border) / Ghost (text-only). `Send` draws Solid and Outline as Soft: they share a button's colours, so they are for clickable badges ([ADR-0273](../../adr/0273-imzero2-ids-button-kinds.md) SD5). |
 | `Size(badge.SizeE)`          | Sm (default) / Md / Lg — adjusts inner padding, corner radius, font scale |
-| `Icon(string)`               | Prefixes label with a glyph (typically a `nf.*` NerdFont rune) |
+| `Icon(string)`               | Prefixes label with a glyph (typically an `icons.Icon*` affordance glyph) |
 | `Selected(bool)`             | Forces "pressed" look (Solid + tone stroke) regardless of Variant — `SendResp` only, for filter chips; `Send` ignores it |
 | `Strong()` / `Monospace()`   | Bold / monospace label. Monospace is recommended for numeric counts. |
 | `Pill()`                     | Forces full-rounding (corner = 100 px, egui clamps to half-height). Use for notification dots / status pills. |
@@ -1583,7 +1583,7 @@ Dismissible chips (`go ×`) are **not** a built-in. Compose them as two adjacent
 ```go
 for range c.IdScope(ids.PrepareSeq(uint64(i))) {
     badge.New(ids.PrepareStr("tag"),  tag).Tone(badge.TonePrimary).Variant(badge.VariantSoft).Size(badge.SizeSm).Send()
-    if badge.New(ids.PrepareStr("close"), nf.CodClose).
+    if badge.New(ids.PrepareStr("close"), icons.IconClose).
         Tone(badge.TonePrimary).Variant(badge.VariantGhost).Size(badge.SizeSm).
         SendResp().HasPrimaryClicked() {
         removeAt = i
