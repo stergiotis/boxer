@@ -4,12 +4,19 @@
 // default codec is CBOR (fxamacker/cbor with canonical encoding); a
 // CodecI seam allows swapping for replay or debug builds.
 //
-// Field tags: the default CBOR codec (fxamacker/cbor) honours `cbor:` tags
-// and otherwise uses the Go field name — it does NOT read `json:` tags.
-// Encode/Decode are symmetric through a single codec, so this is internally
-// consistent; the `json:` tags several DTOs carry only take effect under the
-// opt-in jsonCodec (NewJSON, for human-readable replay) and do not change the
-// CBOR wire. Do not assume a `json:`-named key appears on the CBOR wire.
+// Field tags: the default CBOR codec (fxamacker/cbor) names a field's key
+// by its `cbor:` tag, else by its `json:` tag, else by the Go field name. A
+// `json:` tag on a DTO is therefore the CBOR key as well as the jsonCodec
+// key (NewJSON, for human-readable replay): renaming one, or adding one to a
+// field that had none, changes the CBOR wire. A `cbor:` tag decouples the
+// two. TestCBORWireFixture pins this behaviour in bytes.
+//
+// Which payloads cross a process boundary: the bus is in-process
+// (inprocbus) except for the system-metrics plane, which sysmetricsd
+// publishes over NATS through its own codec (sysmetricsbus.CBORCodec, whose
+// wire fixture pins the bundle). Watchbill's job children talk to the host
+// through arguments, log lines and the facts store, not through bus
+// payloads.
 //
 // Versioning: this package does NOT impose envelope versioning on the
 // wire. Per-message versioning is a payload concern — brokers that need

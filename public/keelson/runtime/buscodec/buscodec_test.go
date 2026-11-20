@@ -1,6 +1,7 @@
 package buscodec
 
 import (
+	"encoding/hex"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -8,8 +9,8 @@ import (
 )
 
 // roundtripPayload exercises the json: tag fallback path — fxamacker/cbor
-// reads cbor: tags first and falls back to json:, so existing payload
-// types migrate without retagging.
+// reads cbor: tags first and falls back to json:, so a json-tagged payload
+// type keeps its json keys on the CBOR wire.
 type roundtripPayload struct {
 	Name  string `json:"name"`
 	Count int32  `json:"count"`
@@ -221,4 +222,37 @@ func TestReplyHonoursPerTypeRegistration(t *testing.T) {
 	assert.Equal(t, "subj", pub.subject)
 	assert.Equal(t, []byte{0xab, 0xcd}, pub.payload)
 	assert.Equal(t, 1, rc.encodeN)
+}
+
+// wirePayload has one field per way a key is named: a `cbor:` tag, a
+// `json:` tag alone, both (the `cbor:` one wins), and neither (the Go
+// name). The map shows the canonical key order.
+type wirePayload struct {
+	Tagged   string         `cbor:"t"`
+	JsonOnly int32          `json:"jsonOnly"`
+	Both     bool           `cbor:"b" json:"notThis"`
+	Plain    uint8
+	Counts   map[string]int `json:"counts"`
+}
+
+// wireFixtureHex is wirePayload's value below as the default codec writes
+// it: keys "b", "t", "Plain", "counts", "jsonOnly" in canonical (length,
+// then bytewise) order, the map's keys likewise. "jsonOnly" is the `json:`
+// tag on the wire; "notThis" is absent.
+const wireFixtureHex = "a56162f56174617865506c61696e0366636f756e7473a261610162626202686a736f6e4f6e6c7907"
+
+// TestCBORWireFixture pins the default codec's wire in bytes: encode must
+// reproduce them and decode must read them back. A json-tag rename on a bus
+// DTO changes the key exactly as this fixture's would.
+func TestCBORWireFixture(t *testing.T) {
+	in := wirePayload{Tagged: "x", JsonOnly: 7, Both: true, Plain: 3, Counts: map[string]int{"bb": 2, "a": 1}}
+	b, err := NewCBOR().Encode(in)
+	require.NoError(t, err)
+	assert.Equal(t, wireFixtureHex, hex.EncodeToString(b))
+
+	raw, err := hex.DecodeString(wireFixtureHex)
+	require.NoError(t, err)
+	var out wirePayload
+	require.NoError(t, NewCBOR().Decode(raw, &out))
+	assert.Equal(t, in, out)
 }
