@@ -33,7 +33,8 @@ func TestRequest_ASlowHandlerDoesNotHoldTheRequester(t *testing.T) {
 
 	close(release)
 	select {
-	case <-replied:
+	case perr := <-replied:
+		assert.NoError(t, perr, "a reply to a gone inbox is dropped, not refused")
 	case <-time.After(5 * time.Second):
 		t.Fatal("the handler never finished")
 	}
