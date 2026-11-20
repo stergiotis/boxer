@@ -3,6 +3,8 @@ package bindings
 import (
 	"strconv"
 	"strings"
+
+	"github.com/stergiotis/boxer/public/thestack/imzero2/metrics"
 )
 
 // U64Edit is a hand-written, exact 64-bit unsigned-integer input built as a
@@ -54,15 +56,36 @@ type u64EditState struct {
 	draft    string
 	reflects uint64
 	init     bool
+	// lastSeen is the frame (metrics.Current.FrameCounter) the field was
+	// last drawn in, which sweepU64EditStates ages the entry by.
+	lastSeen uint64
 }
 
 // u64EditStates holds draft state per effective widget id. The c.* API is
 // strictly single-threaded (main render thread only — see the "Framework Data
-// Race" pitfall), so a plain map needs no locking. Entries are retained for the
-// process lifetime; for the bounded set of ids a UI declares this is
-// negligible, matching the existing seenIds book-keeping. deferred: eviction of
-// ids not seen for N frames if an app ever churns U64Edit ids unboundedly.
+// Race" pitfall), so a plain map needs no locking. An entry no frame has drawn
+// for u64EditRetainFrames is dropped at a sweep; drawn again, the field
+// re-seeds from the value it is given, losing only an unparsed draft.
 var u64EditStates = map[uint64]*u64EditState{}
+
+const (
+	u64EditRetainFrames = 36_000
+	u64EditSweepEvery   = u64EditRetainFrames / 8
+)
+
+var u64EditLastSweep uint64
+
+func sweepU64EditStates(now uint64) {
+	if now < u64EditLastSweep+u64EditSweepEvery {
+		return
+	}
+	u64EditLastSweep = now
+	for k, st := range u64EditStates {
+		if now-st.lastSeen > u64EditRetainFrames {
+			delete(u64EditStates, k)
+		}
+	}
+}
 
 // U64Edit begins an exact uint64 editor bound to the widget identified by id.
 // val is the current value to display. The id creator is derived immediately
@@ -124,11 +147,14 @@ func (inst U64EditFluid) SendRespVal(val *uint64) ResponseFlagsE {
 	// hand it; key the draft state (and thus every databinding lookup) by that
 	// same value so they all agree.
 	key := ensureNotZeroId(inst.eid)
+	now := metrics.Current.FrameCounter()
+	sweepU64EditStates(now)
 	st := u64EditStates[key]
 	if st == nil {
 		st = &u64EditState{}
 		u64EditStates[key] = st
 	}
+	st.lastSeen = now
 
 	reseeded := false
 	if !st.init || st.reflects != inst.val {

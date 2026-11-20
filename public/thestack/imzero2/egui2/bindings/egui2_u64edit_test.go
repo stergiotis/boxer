@@ -100,3 +100,26 @@ func TestU64Edit_FormatShape(t *testing.T) {
 		}
 	}
 }
+
+// A draft no frame has drawn for u64EditRetainFrames is dropped at the next
+// sweep; a recent one stays.
+func TestU64Edit_SweepDropsStaleDrafts(t *testing.T) {
+	const stale, fresh = uint64(0x5eed_2001), uint64(0x5eed_2002)
+	prev := u64EditLastSweep
+	t.Cleanup(func() {
+		delete(u64EditStates, stale)
+		delete(u64EditStates, fresh)
+		u64EditLastSweep = prev
+	})
+	u64EditLastSweep = 0
+	now := uint64(u64EditRetainFrames + u64EditSweepEvery + 1)
+	u64EditStates[stale] = &u64EditState{lastSeen: 0}
+	u64EditStates[fresh] = &u64EditState{lastSeen: now}
+	sweepU64EditStates(now)
+	if _, ok := u64EditStates[stale]; ok {
+		t.Error("a stale draft is still retained")
+	}
+	if _, ok := u64EditStates[fresh]; !ok {
+		t.Error("a recent draft was dropped")
+	}
+}
