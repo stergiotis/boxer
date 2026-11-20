@@ -726,9 +726,9 @@ func (rt *Runtime) bootServices(ctx context.Context, factsCfg chstore.Config) {
 		}
 		llmCfg = withModerator(llmCfg)
 		if path := llm.ScriptEnv.Get(); path != "" {
-			// A scripted model, for scenes (ADR-0269 M6): on the headless
-			// host only, where no person reads its answers as a model's.
-			if headlessOnly(true, imzero2env.HeadlessListen.Get() != "") {
+			// A scripted model, for scenes (ADR-0269 M6): on a host a scene
+			// launched only, where no person reads its answers as a model's.
+			if testLaneOnly(true, sceneLaunched()) {
 				scripted, sErr := llm.LoadScript(path)
 				if sErr != nil {
 					logger.Warn().Err(sErr).Msg("llm: BOXER_LLM_SCRIPT does not load; no scripted model")
@@ -736,13 +736,13 @@ func (rt *Runtime) bootServices(ctx context.Context, factsCfg chstore.Config) {
 					llmCfg.Client, llmCfg.Endpoint, llmCfg.Model = scripted, llm.ScriptedEndpoint, "scripted"
 				}
 			} else {
-				logger.Warn().Msg("llm: BOXER_LLM_SCRIPT is honoured only on the headless host; refused here")
+				logger.Warn().Msg("llm: BOXER_LLM_SCRIPT is honoured only on a host a scene launched; refused here")
 			}
 		}
 		if path := llm.TranscribeScriptEnv.Get(); path != "" {
-			// A scripted transcriber, for scenes (ADR-0383 §SD8): on the
-			// headless host only, as the scripted model.
-			if headlessOnly(true, imzero2env.HeadlessListen.Get() != "") {
+			// A scripted transcriber, for scenes (ADR-0383 §SD8): on a host
+			// a scene launched only, as the scripted model.
+			if testLaneOnly(true, sceneLaunched()) {
 				scripted, sErr := llm.LoadTranscribeScript(path)
 				if sErr != nil {
 					logger.Warn().Err(sErr).Msg("llm: BOXER_LLM_TRANSCRIBE_SCRIPT does not load; no scripted transcriber")
@@ -751,7 +751,7 @@ func (rt *Runtime) bootServices(ctx context.Context, factsCfg chstore.Config) {
 					llmCfg.Transcribe.Model, llmCfg.Transcribe.DiarizeModel = "scripted", "scripted"
 				}
 			} else {
-				logger.Warn().Msg("llm: BOXER_LLM_TRANSCRIBE_SCRIPT is honoured only on the headless host; refused here")
+				logger.Warn().Msg("llm: BOXER_LLM_TRANSCRIBE_SCRIPT is honoured only on a host a scene launched; refused here")
 			}
 		}
 		llmSvc, lErr := llm.NewService(rt.Bus, logger, llmCfg)
@@ -1178,8 +1178,8 @@ func (rt *Runtime) bootAgent() {
 	}
 	logger := rt.opts.Log
 	// Durable where the trail is (ADR-0269 §SD9), as for llm_calls.
-	headless := imzero2env.HeadlessListen.Get() != ""
-	cfg := agent.Config{TestGrants: headlessOnly(agent.TestGrantsEnv.Get(), headless),
+	scene := sceneLaunched()
+	cfg := agent.Config{TestGrants: testLaneOnly(agent.TestGrantsEnv.Get(), scene),
 		Trail: rt.Trail, Coordinators: rt.coordinators, Deadline: agent.DeadlineEnv.Get(),
 		RequestTimeout: agent.RequestTimeoutEnv.Get(),
 		Pace:           agent.PaceEnv.Get(), CallsMin: int(agent.CallsMinEnv.Get()), CallsMax: int(agent.CallsMaxEnv.Get())}
@@ -1200,10 +1200,10 @@ func (rt *Runtime) bootAgent() {
 		cfg.ModelLocal = func() bool { return llmSvc.Describe().Local }
 	}
 	if agent.TestGrantsEnv.Get() && !cfg.TestGrants {
-		logger.Warn().Msg("agent: BOXER_AGENT_TEST_GRANTS is honoured only on the headless host; refused here")
+		logger.Warn().Msg("agent: BOXER_AGENT_TEST_GRANTS is honoured only on a host a scene launched; refused here")
 	}
 	if path := agent.ActionsFileEnv.Get(); path != "" {
-		if headlessOnly(true, headless) {
+		if testLaneOnly(true, scene) {
 			f, fErr := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
 			if fErr != nil {
 				logger.Warn().Err(fErr).Str("path", path).Msg("agent: BOXER_AGENT_ACTIONS_FILE does not open; no action file")
@@ -1212,7 +1212,7 @@ func (rt *Runtime) bootAgent() {
 				rt.cleanups = append(rt.cleanups, func() { _ = f.Close() })
 			}
 		} else {
-			logger.Warn().Msg("agent: BOXER_AGENT_ACTIONS_FILE is honoured only on the headless host; refused here")
+			logger.Warn().Msg("agent: BOXER_AGENT_ACTIONS_FILE is honoured only on a host a scene launched; refused here")
 		}
 	}
 	if rt.Host != nil {
@@ -1369,14 +1369,22 @@ func unattendedStatus(on bool) (st runtimestatus.UnattendedE) {
 	return runtimestatus.UnattendedOff
 }
 
-// headlessOnly decides whether a test-lane knob takes effect: only when
-// asked for, and only on the headless host. The desktop host is where a
-// person's windows are: a grant there needs the person (ADR-0269 §SD6), a
-// script's answers would read as a model's, and the action record has its
-// own home (§SD9). It gates BOXER_AGENT_TEST_GRANTS, BOXER_LLM_SCRIPT and
-// BOXER_AGENT_ACTIONS_FILE.
-func headlessOnly(requested bool, headless bool) (on bool) {
-	return requested && headless
+// testLaneOnly decides whether a test-lane knob takes effect: only when
+// asked for, and only on a host a scene launched. Every other host has a
+// person behind it — the desktop, and a headless host served to a viewer
+// (an appliance, a showcase): a grant there needs the person (ADR-0269
+// §SD6), a script's answers would read as a model's, and the action record
+// has its own home (§SD9). It gates BOXER_AGENT_TEST_GRANTS,
+// BOXER_LLM_SCRIPT, BOXER_LLM_TRANSCRIBE_SCRIPT and BOXER_AGENT_ACTIONS_FILE.
+func testLaneOnly(requested bool, scene bool) (on bool) {
+	return requested && scene
+}
+
+// sceneLaunched says this host is one scene.Launch started: headless, and
+// under a scene-* component mark. Being headless alone is not the test: a
+// served appliance is headless too.
+func sceneLaunched() (yes bool) {
+	return imzero2env.HeadlessListen.Get() != "" && strings.HasPrefix(topo.Self(), sceneComponentPrefix)
 }
 
 // bootIntrospect starts the introspection HTTP host when the service is on;

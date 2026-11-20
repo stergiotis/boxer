@@ -4,7 +4,7 @@ audience: contributor
 status: draft
 generated: true
 generator: public/app env gen-docs
-generated-at: 2026-11-20T23:26:29Z
+generated-at: 2026-11-20T23:27:04Z
 ---
 
 > **Status: draft — pre-human-review.** Machine-generated registry snapshot;
@@ -232,13 +232,13 @@ generated-at: 2026-11-20T23:26:29Z
 |------|------|---------|----------|-----------|-------------|
 | `BOXER_ADR_DIR` | path | — | — |  | ADR markdown directory to read as the corpus; empty finds the nearest doc/adr at or above the working directory |
 | `BOXER_ADR_ROOT` | path | — | — |  | source tree to scan for ADR code citations; empty derives the checkout containing the ADR directory, and an unresolvable root just omits the code evidence |
-| `BOXER_AGENT_ACTIONS_FILE` | string | — | — |  | file the headless host appends every runtime.agent action record to, as JSON lines, for trials (ADR-0269); honoured only on the headless host |
+| `BOXER_AGENT_ACTIONS_FILE` | string | — | — |  | file the headless host appends every runtime.agent action record to, as JSON lines, for trials (ADR-0269); honoured only on a host a scene launched (headless, under a scene-* BOXER_COMPONENT mark) |
 | `BOXER_AGENT_CALLS_MAX` | int64 | `1000` | — |  | the largest call budget the person can give a new runtime.agent task in the host's approval dialog; a budget a coordinator asks for above it is lowered to it |
 | `BOXER_AGENT_CALLS_MIN` | int64 | `20` | — |  | the least call budget the person can give a new runtime.agent task in the host's approval dialog; a budget a coordinator asks for below it is raised to it |
 | `BOXER_AGENT_DEADLINE` | duration | `30m` | — |  | how long a runtime.agent task runs before its calls wait for the person to give it more time, and how much more an approval gives |
 | `BOXER_AGENT_PACE` | duration | `750ms` | — |  | the least time between two visible changes — a change to a window, a window opened, an arrangement — of a runtime.agent task whose coordinator's ceiling does not let the model work unpaced |
 | `BOXER_AGENT_REQUEST_TIMEOUT` | duration | `30m` | — |  | how long a runtime.agent grant request or widening waits in the person's dialog before it expires; the coordinator's call waits as long |
-| `BOXER_AGENT_TEST_GRANTS` | bool | `false` | — |  | issue runtime.agent task grants without the person's approval, for scenes and tests (ADR-0269); honoured only on the headless host |
+| `BOXER_AGENT_TEST_GRANTS` | bool | `false` | — |  | issue runtime.agent task grants without the person's approval, for scenes and tests (ADR-0269); honoured only on a host a scene launched (headless, under a scene-* BOXER_COMPONENT mark) |
 | `BOXER_AGENT_UNATTENDED` | bool | `false` | — |  | turn on the unattended mode (ADR-0298): the host approves runtime.agent grant requests and widenings and accepts suggest-mode proposals in the person's place, within the coordinator's ceiling, BOXER_AGENT_CALLS_MAX and BOXER_AGENT_DEADLINE; a spent budget, a passed deadline and a consequential command still wait for the person; honoured only by a binary built with the boxer_unattended tag |
 | `BOXER_ATTENTION_AWAY_IDLE` | duration | `10m` | — |  | how long the host waits without the person's input before it sets them Away: cards stop opening on their own and an away log is kept, shown when Away ends — at the next input; 0 never |
 | `BOXER_ATTENTION_ESCALATE` | duration | `5m` | — |  | how long a decision waits in the person's queue unacknowledged before its card opens on its own; an item this close to its expiry is marked; 0 never escalates |
@@ -323,14 +323,14 @@ generated-at: 2026-11-20T23:26:29Z
 | `BOXER_LLM_RATION_UNRULED` | categorial-string | `allow` | — |  | what the llm service does when its usage ledger could not be rebuilt from boxer.facts at start: allow (serve, counting from zero) or refuse (refuse every model call until restart)<br>**Allowed:** `allow` \| `refuse` |
 | `BOXER_LLM_REASONING_EFFORT` | categorial-string | — | — |  | reasoning level sent as reasoning_effort on every llm.complete whose request does not set one in its provider-specific extra; unset sends none and leaves the provider's default; each model accepts only some of the values, and a server that does not know the member may reject the call; reasoning tokens count against BOXER_LLM_MAXTOKENS<br>**Allowed:** `none` \| `minimal` \| `low` \| `medium` \| `high` \| `xhigh` \| `max` |
 | `BOXER_LLM_RETAIN` | categorial-string | `off` | — |  | ceiling on keeping model message text: off (sizes and counts only), ring (text on this process's keelson('llm_calls') rows), durable (ring, plus the messages of llm.retain.* requests on boxer.facts, kept until removed by hand)<br>**Allowed:** `off` \| `ring` \| `durable` |
-| `BOXER_LLM_SCRIPT` | string | — | — |  | path to a scripted model (JSON lines, one reply each; "$name" in an argument takes the last value a tool result gave name) the llm service answers from instead of an endpoint; honoured only on the headless host, for scenes |
+| `BOXER_LLM_SCRIPT` | string | — | — |  | path to a scripted model (JSON lines, one reply each; "$name" in an argument takes the last value a tool result gave name) the llm service answers from instead of an endpoint; honoured only on a host a scene launched (headless, under a scene-* BOXER_COMPONENT mark) |
 | `BOXER_LLM_TIMEOUT` | duration | `120s` | — |  | wall-clock bound on one llm.complete; the service cancels the provider call at it, and app clients that name no timeout of their own wait that long plus a few seconds for the reply |
 | `BOXER_LLM_TRANSCRIBE_APIKEY` | string | — | — | yes | API key the host's llm service sends to the transcription endpoint; empty for local endpoints that take none |
 | `BOXER_LLM_TRANSCRIBE_DIARIZE_MODEL` | string | — | — |  | model id a diarized llm.transcribe uses (e.g. gpt-4o-transcribe-diarize, or a diarizing model a vLLM serves); unset refuses requests that ask for speakers |
 | `BOXER_LLM_TRANSCRIBE_ENDPOINT` | string | — | — |  | OpenAI-compatible base URL (OpenAI, vLLM) the host's llm service sends llm.transcribe to, e.g. http://localhost:8000/v1; unset means no transcription is offered to apps |
 | `BOXER_LLM_TRANSCRIBE_MAXBYTES` | int64 | `26214400` | — |  | most bytes one llm.transcribe request may carry as it leaves, the recording and any known-speaker clips together; larger requests are refused before anything leaves (OpenAI and vLLM's default both take 25 MiB) |
 | `BOXER_LLM_TRANSCRIBE_MODEL` | string | — | — |  | speech-to-text model id llm.transcribe uses (e.g. whisper-1, gpt-4o-transcribe, or the Whisper model a vLLM serves); unset means no transcription is offered even with the endpoint set |
-| `BOXER_LLM_TRANSCRIBE_SCRIPT` | string | — | — |  | path to a scripted transcriber (JSON lines, each an answer body as OpenAI or vLLM sends it: json, verbose_json or diarized_json) the llm service answers llm.transcribe from, in order, instead of an endpoint; honoured only on the headless host, for scenes |
+| `BOXER_LLM_TRANSCRIBE_SCRIPT` | string | — | — |  | path to a scripted transcriber (JSON lines, each an answer body as OpenAI or vLLM sends it: json, verbose_json or diarized_json) the llm service answers llm.transcribe from, in order, instead of an endpoint; honoured only on a host a scene launched (headless, under a scene-* BOXER_COMPONENT mark) |
 | `BOXER_LLM_TRANSCRIBE_TIMEOUT` | duration | `300s` | — |  | wall-clock bound on one llm.transcribe; the service cancels the provider call at it, and app clients that name no timeout of their own wait that long plus a few seconds for the reply |
 | `BOXER_LLM_TRUSTED_HOSTS` | string | — | — |  | comma-separated endpoint host names or IPs, without port, that the llm service treats like loopback: confined (sealed) content may be sent to them; list only machines under your own control, and prefer an https endpoint |
 | `BOXER_MODERATOR` | bool | `false` | — |  | run the host's built-in moderator (ADR-0302): it watches model calls and agent actions for loops and slows, then stops, the windows that loop; true also lists it in BOXER_LLM_MODERATORS |

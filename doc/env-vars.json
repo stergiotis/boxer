@@ -48,7 +48,7 @@
     {
       "name": "BOXER_AGENT_ACTIONS_FILE",
       "type": "string",
-      "description": "file the headless host appends every runtime.agent action record to, as JSON lines, for trials (ADR-0269); honoured only on the headless host",
+      "description": "file the headless host appends every runtime.agent action record to, as JSON lines, for trials (ADR-0269); honoured only on a host a scene launched (headless, under a scene-* BOXER_COMPONENT mark)",
       "category": "dev",
       "sensitive": false,
       "origin": {
@@ -142,7 +142,7 @@
       "name": "BOXER_AGENT_TEST_GRANTS",
       "type": "bool",
       "default": "false",
-      "description": "issue runtime.agent task grants without the person's approval, for scenes and tests (ADR-0269); honoured only on the headless host",
+      "description": "issue runtime.agent task grants without the person's approval, for scenes and tests (ADR-0269); honoured only on a host a scene launched (headless, under a scene-* BOXER_COMPONENT mark)",
       "category": "dev",
       "sensitive": false,
       "origin": {
@@ -1280,7 +1280,7 @@
     {
       "name": "BOXER_LLM_SCRIPT",
       "type": "string",
-      "description": "path to a scripted model (JSON lines, one reply each; \"$name\" in an argument takes the last value a tool result gave name) the llm service answers from instead of an endpoint; honoured only on the headless host, for scenes",
+      "description": "path to a scripted model (JSON lines, one reply each; \"$name\" in an argument takes the last value a tool result gave name) the llm service answers from instead of an endpoint; honoured only on a host a scene launched (headless, under a scene-* BOXER_COMPONENT mark)",
       "category": "llm",
       "sensitive": false,
       "origin": {
@@ -1359,7 +1359,7 @@
     {
       "name": "BOXER_LLM_TRANSCRIBE_SCRIPT",
       "type": "string",
-      "description": "path to a scripted transcriber (JSON lines, each an answer body as OpenAI or vLLM sends it: json, verbose_json or diarized_json) the llm service answers llm.transcribe from, in order, instead of an endpoint; honoured only on the headless host, for scenes",
+      "description": "path to a scripted transcriber (JSON lines, each an answer body as OpenAI or vLLM sends it: json, verbose_json or diarized_json) the llm service answers llm.transcribe from, in order, instead of an endpoint; honoured only on a host a scene launched (headless, under a scene-* BOXER_COMPONENT mark)",
       "category": "llm",
       "sensitive": false,
       "origin": {

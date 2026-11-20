@@ -7,8 +7,8 @@
 //
 // A grant needs the person's approval in host chrome, and the console must be
 // registered as a coordinator (BOXER_AGENT_COORDINATORS=agentconsole). On
-// the headless host, BOXER_AGENT_TEST_GRANTS issues grants without the
-// person, for scenes.
+// a host a scene launched, BOXER_AGENT_TEST_GRANTS issues grants without the
+// person.
 package agentconsole
 
 import (

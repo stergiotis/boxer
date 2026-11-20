@@ -20,11 +20,11 @@ import (
 )
 
 // ScriptEnv names a scripted model for scenes (ADR-0269 M6): the service
-// answers from the script instead of an endpoint. Honoured only on the
-// headless host, like the agent's test grants.
+// answers from the script instead of an endpoint. Honoured only on a host
+// a scene launched, like the agent's test grants.
 var ScriptEnv = env.NewString(env.Spec{
 	Name:        "BOXER_LLM_SCRIPT",
-	Description: "path to a scripted model (JSON lines, one reply each; \"$name\" in an argument takes the last value a tool result gave name) the llm service answers from instead of an endpoint; honoured only on the headless host, for scenes",
+	Description: "path to a scripted model (JSON lines, one reply each; \"$name\" in an argument takes the last value a tool result gave name) the llm service answers from instead of an endpoint; honoured only on a host a scene launched (headless, under a scene-* BOXER_COMPONENT mark)",
 	Category:    env.CategoryLLM,
 })
 

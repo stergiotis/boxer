@@ -183,6 +183,7 @@ For scenes and demos a new window takes its starting state from the
 environment (ADR-0009): `BOXER_CHAT_DRAFT` puts text in the composer,
 `BOXER_CHAT_APPS`, `BOXER_CHAT_QUESTIONS`, `BOXER_CHAT_ARTEFACT` and
 `BOXER_CHAT_ADVANCED` turn the options on. A chat listed in
-`BOXER_AGENT_COORDINATORS` starts with Apps on anyway. A scripted model
-answers from a file under `BOXER_LLM_SCRIPT`; the maintained scenes are
+`BOXER_AGENT_COORDINATORS` starts with Apps on anyway. On a host a scene
+launched, a scripted model answers from a file under `BOXER_LLM_SCRIPT`; the
+maintained scenes are
 under `apps/chat/scenes`.

@@ -19,8 +19,9 @@ model does through the same services under the same checks.
 
 The console must be registered as a coordinator for the host to answer it
 (`BOXER_AGENT_COORDINATORS=agentconsole`); a grant then needs the person's
-approval in host chrome. On the headless host, `BOXER_AGENT_TEST_GRANTS`
-issues grants without the person, for scenes.
+approval in host chrome. On a host a scene launched (headless, under a
+`scene-*` component mark), `BOXER_AGENT_TEST_GRANTS` issues grants without
+the person; any other host refuses it.
 `BOXER_AGENTCONSOLE_DESTINATIONS` seeds the destinations field of a new
 window, since a headless scene cannot focus an empty unnamed input.
 
