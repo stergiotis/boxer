@@ -3,6 +3,8 @@ package recordstore
 import (
 	"context"
 
+	"github.com/apache/arrow-go/v18/arrow"
+
 	gonanoid "github.com/matoous/go-nanoid/v2"
 
 	"github.com/stergiotis/boxer/public/db/clickhouse/logcomment"
@@ -45,4 +47,23 @@ func LogComment(ctx context.Context) (s string) {
 	batch, _ := BatchIdFrom(ctx)
 	s = logcomment.Marshal(logcomment.FromCallIdentity(ci, string(batch)))
 	return
+}
+
+// PendingBatch is one insert a generated store's Flush attempted and the
+// server did not acknowledge: the records, the batch id of the attempt —
+// which a retry sends again as its deduplication token (ADR-0387) — the
+// rows it carries, and how many of the write observer's kept rows are its.
+// A store retries its pending batches in order, each alone.
+type PendingBatch struct {
+	Records []arrow.RecordBatch
+	Batch   BatchIdT
+	Rows    int
+	Written int
+}
+
+// Release releases the batch's records.
+func (inst PendingBatch) Release() {
+	for _, rec := range inst.Records {
+		rec.Release()
+	}
 }
