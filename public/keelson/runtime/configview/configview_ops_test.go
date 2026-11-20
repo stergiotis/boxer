@@ -101,9 +101,11 @@ func TestListVarsReadsItsOwnArgumentsNotTheView(t *testing.T) {
 
 	out, err := query[ListVarsArgs, ListVarsResult](t, inst, opListVars, ListVarsArgs{Category: fixtureCategory, Query: "configview_ops_test"})
 	require.NoError(t, err)
-	assert.Equal(t, 2, out.Matched, "the window's filter is not the query's")
-	assert.GreaterOrEqual(t, out.Registered, 2)
-	require.Len(t, out.Rows, 2)
+	// The plain fixture, the sensitive one, and the sensitive one's
+	// NAME_FILE companion (env.SecretFileSuffix).
+	assert.Equal(t, 3, out.Matched, "the window's filter is not the query's")
+	assert.GreaterOrEqual(t, out.Registered, 3)
+	require.Len(t, out.Rows, 3)
 	assert.Equal(t, testPlain.Spec().Name, out.Rows[0].Name, "by name within the category")
 	plain := out.Rows[0]
 	assert.Equal(t, VarSummary{Name: testPlain.Spec().Name, Category: fixtureCategory, Type: "string", Set: true,
