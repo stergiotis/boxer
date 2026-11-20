@@ -30,6 +30,10 @@ func NewGenDocsCommand() (cmd *cli.Command) {
 				Usage: "also write the machine-readable snapshot (RenderJSON) to this file ('-' for stdout)",
 			},
 			&cli.StringFlag{
+				Name:  "known",
+				Usage: "also write the env package's generated name list (RenderKnownNames) to this file",
+			},
+			&cli.StringFlag{
 				Name:  "generator",
 				Usage: "how the markdown names the command that rendered it; a downstream host names its own",
 				Value: "public/app env gen-docs",
@@ -60,6 +64,12 @@ func runGenDocs(ctx context.Context, cmd *cli.Command) (err error) {
 	err = writeOutput(outPath, []byte(body))
 	if err != nil {
 		return
+	}
+	if knownPath := cmd.String("known"); knownPath != "" {
+		err = writeOutput(knownPath, RenderKnownNames())
+		if err != nil {
+			return
+		}
 	}
 	jsonPath := cmd.String("json")
 	if jsonPath == "" {

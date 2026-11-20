@@ -148,6 +148,21 @@ func renderSpecs(specs []env.Spec, opts Options) (out string) {
 		b.WriteString("\n")
 	}
 
+	if r := env.RetiredVars(); len(r) > 0 {
+		b.WriteString("## Retired\n\n")
+		b.WriteString("Names the registry no longer declares. A process that finds one set warns once at start, naming the replacement.\n\n")
+		b.WriteString("| Name | Replaced by | Since |\n")
+		b.WriteString("|------|-------------|-------|\n")
+		for _, x := range r {
+			repl := "—"
+			if x.ReplacedBy != "" {
+				repl = "`" + x.ReplacedBy + "`"
+			}
+			fmt.Fprintf(&b, "| `%s` | %s | %s |\n", x.Name, repl, x.Since)
+		}
+		b.WriteString("\n")
+	}
+
 	b.WriteString("## Origins\n\n")
 	b.WriteString("| Name | Module | Package |\n")
 	b.WriteString("|------|--------|---------|\n")

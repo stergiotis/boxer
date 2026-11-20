@@ -3643,5 +3643,178 @@
         "package": "github.com/stergiotis/boxer/public/keelson/runtime/windowhost"
       }
     }
+  ],
+  "retired": [
+    {
+      "name": "BOXER_JACKSTAY_PLAN_DIR",
+      "replacedBy": "BOXER_FS_APPDATA_DIR",
+      "since": "2026-09-28"
+    },
+    {
+      "name": "BOXER_LLM_KEEP_MESSAGES",
+      "replacedBy": "BOXER_LLM_RETAIN",
+      "since": "2026-09-27"
+    },
+    {
+      "name": "BOXER_MDEDIT_LLM_APIKEY",
+      "replacedBy": "BOXER_LLM_APIKEY",
+      "since": "2026-09-23"
+    },
+    {
+      "name": "BOXER_MDEDIT_LLM_ENDPOINT",
+      "replacedBy": "BOXER_LLM_ENDPOINT",
+      "since": "2026-09-23"
+    },
+    {
+      "name": "BOXER_MDEDIT_LLM_MAXTOKENS",
+      "replacedBy": "BOXER_LLM_MAXTOKENS",
+      "since": "2026-09-23"
+    },
+    {
+      "name": "BOXER_MDEDIT_LLM_MODEL",
+      "replacedBy": "BOXER_LLM_MODEL",
+      "since": "2026-09-23"
+    },
+    {
+      "name": "BOXER_MDEDIT_LLM_TIMEOUT",
+      "replacedBy": "BOXER_LLM_TIMEOUT",
+      "since": "2026-09-23"
+    },
+    {
+      "name": "BOXER_PLAY_EXPERIMENTS",
+      "since": "2026-10-07"
+    },
+    {
+      "name": "BOXER_PLAY_FOCUS_EXPERIMENTS",
+      "since": "2026-10-07"
+    },
+    {
+      "name": "BOXER_PLAY_FOCUS_MODEL",
+      "since": "2026-10-08"
+    },
+    {
+      "name": "BOXER_TAB_ORIGIN",
+      "replacedBy": "BOXER_TAB_BASE",
+      "since": "2026-10-09"
+    },
+    {
+      "name": "GODEPVIEW_ROOT",
+      "replacedBy": "BOXER_GODEP_ROOT",
+      "since": "2026-08-01"
+    },
+    {
+      "name": "GODEPVIEW_TAGS",
+      "replacedBy": "BOXER_GODEP_TAGS",
+      "since": "2026-08-01"
+    },
+    {
+      "name": "GOOGLE_API_KEY",
+      "replacedBy": "GEMINI_API_KEY",
+      "since": "2026-06-23"
+    },
+    {
+      "name": "HN_EXPLORER_CLICKHOUSE_URL",
+      "since": "2026-06-21"
+    },
+    {
+      "name": "IMZERO2_QUERYRUNS_CH_URL",
+      "replacedBy": "CLICKHOUSE_URL",
+      "since": "2026-10-08"
+    },
+    {
+      "name": "PEBBLE2_RUN_ID",
+      "replacedBy": "BOXER_RUN_ID",
+      "since": "2026-11-09"
+    },
+    {
+      "name": "SPINNAKER_PLAY_AUTORUN",
+      "replacedBy": "BOXER_PLAY_AUTORUN",
+      "since": "2026-07-12"
+    },
+    {
+      "name": "SPINNAKER_PLAY_EXIT_ON_SHOT",
+      "replacedBy": "BOXER_PLAY_EXIT_ON_SHOT",
+      "since": "2026-07-12"
+    },
+    {
+      "name": "SPINNAKER_PLAY_FOCUS_DIAGNOSTICS",
+      "replacedBy": "BOXER_PLAY_FOCUS_DIAGNOSTICS",
+      "since": "2026-07-12"
+    },
+    {
+      "name": "SPINNAKER_PLAY_FOCUS_GRAPH",
+      "replacedBy": "BOXER_PLAY_FOCUS_GRAPH",
+      "since": "2026-07-12"
+    },
+    {
+      "name": "SPINNAKER_PLAY_FOCUS_MAP",
+      "replacedBy": "BOXER_PLAY_FOCUS_MAP",
+      "since": "2026-07-12"
+    },
+    {
+      "name": "SPINNAKER_PLAY_FOCUS_SCHEMA",
+      "replacedBy": "BOXER_PLAY_FOCUS_SCHEMA",
+      "since": "2026-07-12"
+    },
+    {
+      "name": "SPINNAKER_PLAY_FOCUS_TIMELINE",
+      "replacedBy": "BOXER_PLAY_FOCUS_TIMELINE",
+      "since": "2026-07-12"
+    },
+    {
+      "name": "SPINNAKER_PLAY_FOCUS_WORLD",
+      "replacedBy": "BOXER_PLAY_FOCUS_WORLD",
+      "since": "2026-07-12"
+    },
+    {
+      "name": "SPINNAKER_PLAY_MAP_CENTER",
+      "replacedBy": "BOXER_PLAY_MAP_CENTER",
+      "since": "2026-07-12"
+    },
+    {
+      "name": "SPINNAKER_PLAY_MAP_SIZE",
+      "replacedBy": "BOXER_PLAY_MAP_SIZE",
+      "since": "2026-07-12"
+    },
+    {
+      "name": "SPINNAKER_PLAY_MAP_TABLE",
+      "replacedBy": "BOXER_PLAY_MAP_TABLE",
+      "since": "2026-07-12"
+    },
+    {
+      "name": "SPINNAKER_PLAY_MAP_ZOOM",
+      "replacedBy": "BOXER_PLAY_MAP_ZOOM",
+      "since": "2026-07-12"
+    },
+    {
+      "name": "SPINNAKER_PLAY_OBSERVE",
+      "replacedBy": "BOXER_PLAY_OBSERVE",
+      "since": "2026-07-12"
+    },
+    {
+      "name": "SPINNAKER_PLAY_PREVIEW_AS_SENT",
+      "replacedBy": "BOXER_PLAY_PREVIEW_AS_SENT",
+      "since": "2026-07-12"
+    },
+    {
+      "name": "SPINNAKER_PLAY_SCREENSHOT",
+      "replacedBy": "BOXER_PLAY_SCREENSHOT",
+      "since": "2026-07-12"
+    },
+    {
+      "name": "SPINNAKER_PLAY_SHOT_SETTLE",
+      "replacedBy": "BOXER_PLAY_SHOT_SETTLE",
+      "since": "2026-07-12"
+    },
+    {
+      "name": "SPINNAKER_PLAY_SQL",
+      "replacedBy": "BOXER_PLAY_SQL",
+      "since": "2026-07-12"
+    },
+    {
+      "name": "SPINNAKER_PLAY_TIMELINE_BANDS_SQL",
+      "replacedBy": "BOXER_PLAY_TIMELINE_BANDS_SQL",
+      "since": "2026-07-12"
+    }
   ]
 }

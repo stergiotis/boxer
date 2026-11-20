@@ -25,10 +25,12 @@ func FormatValue(spec Spec, value string) (out string) {
 
 // The go:generate directive runs `boxer env gen-docs` with the boxer
 // build tags loaded from ../../../tags, writing the markdown reference
-// and its machine-readable twin doc/env-vars.json (envdoc.RenderJSON);
-// a test in public/app pins the latter to the linked registry. The
+// and its machine-readable twin doc/env-vars.json (envdoc.RenderJSON),
+// and the repository-wide name list known_names.out.go
+// (envdoc.RenderKnownNames); a test in public/app pins both to the linked
+// registry. The
 // blank-import set that loads every Spec-declaring package lives in
 // public/app/main.go (the rule in CODINGSTANDARDS.md "Entry Points"
 // forbids the previous standalone internal/cmd/envgen main).
 //
-//go:generate sh -c "go run -tags=\"$(cat ../../../tags)\" github.com/stergiotis/boxer/public/app env gen-docs --out ../../../doc/env-vars.md --json ../../../doc/env-vars.json"
+//go:generate sh -c "go run -tags=\"$(cat ../../../tags)\" github.com/stergiotis/boxer/public/app env gen-docs --out ../../../doc/env-vars.md --json ../../../doc/env-vars.json --known known_names.out.go"

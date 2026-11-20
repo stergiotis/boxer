@@ -31,9 +31,18 @@ type jsonVariable struct {
 	Origin      jsonOrigin    `json:"origin"`
 }
 
+type jsonRetired struct {
+	Name       string `json:"name"`
+	ReplacedBy string `json:"replacedBy,omitempty"`
+	Since      string `json:"since"`
+}
+
 type jsonDocument struct {
 	Schema    string         `json:"schema"`
 	Variables []jsonVariable `json:"variables"`
+	// Retired are the names the registry no longer declares
+	// (env.RetiredVars); additive to the schema, so it keeps its name.
+	Retired []jsonRetired `json:"retired"`
 }
 
 // RenderJSON renders env.Snapshot() as the machine-readable form of the
@@ -63,6 +72,9 @@ func RenderJSON() (out []byte, err error) {
 				Package: s.Origin.Package,
 			},
 		})
+	}
+	for _, r := range env.RetiredVars() {
+		doc.Retired = append(doc.Retired, jsonRetired{Name: r.Name, ReplacedBy: r.ReplacedBy, Since: r.Since})
 	}
 	var buf bytes.Buffer
 	enc := jsontext.NewEncoder(&buf,

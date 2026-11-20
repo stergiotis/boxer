@@ -503,7 +503,29 @@ func Apply(ctx context.Context, cmd *cli.Command) (ctxOut context.Context, err e
 	if err = emitStartupRecord(ctx, cmd); err != nil {
 		return
 	}
+	warnEnviron(os.Environ())
 	return
+}
+
+// warnEnviron warns, once per process, about each set variable the env
+// registry retired — naming its replacement — and each set variable in a
+// boxer namespace that nothing declares (env.CheckEnviron). Apply is the
+// hook every binary's root command runs, after the writer is in place, which
+// is why the check lives here rather than in the registry.
+func warnEnviron(environ []string) {
+	for _, f := range env.CheckEnvironOnce(environ) {
+		switch f.Kind {
+		case env.EnvFindingRetired:
+			ev := log.Warn().Str("variable", f.Name).Str("since", f.Retired.Since)
+			if f.Retired.ReplacedBy != "" {
+				ev.Str("replacedBy", f.Retired.ReplacedBy).Msg("a retired environment variable is set and is ignored; set its replacement instead")
+			} else {
+				ev.Msg("a retired environment variable is set and is ignored; nothing replaces it")
+			}
+		case env.EnvFindingUnregistered:
+			log.Warn().Str("variable", f.Name).Msg("an environment variable in a boxer namespace is set that no package declares; it is ignored (doc/env-vars.md lists the declared ones)")
+		}
+	}
 }
 
 func applyWriter(ctx context.Context, cmd *cli.Command) (err error) {
