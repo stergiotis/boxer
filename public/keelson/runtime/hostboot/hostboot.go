@@ -1085,8 +1085,23 @@ func (rt *Runtime) bootWindowHost() (err error) {
 	var bridgeIds *c.WidgetIdStack
 	var fsBridge *pickerbridge.Bridge
 	if rt.Fs != nil {
-		fsBridge = pickerbridge.NewBridge(rt.Fs, logger, pickerbridge.Config{ColumnWidths: dialogWidths, Tasks: dialogTasks})
-		bridgeIds = c.NewWidgetIdStack()
+		pickerCfg := pickerbridge.Config{ColumnWidths: dialogWidths, Tasks: dialogTasks}
+		if imzero2env.HeadlessListen.Get() != "" {
+			// A served host's viewer is remote: root the picker at a data
+			// directory, never at "/" (ADR-0026 fs Powerbox).
+			root, rootErr := fsbroker.ServedRoot()
+			if rootErr != nil {
+				// An empty temporary directory, or no picker at all: still
+				// never "/".
+				root, _ = os.MkdirTemp("", "boxer-picker-")
+				logger.Warn().Err(rootErr).Str("root", root).Msg("hostboot: no served picker root; the picker is rooted at an empty temporary directory")
+			}
+			pickerCfg.FsRoot = root
+		}
+		if pickerCfg.FsRoot != "" || imzero2env.HeadlessListen.Get() == "" {
+			fsBridge = pickerbridge.NewBridge(rt.Fs, logger, pickerCfg)
+			bridgeIds = c.NewWidgetIdStack()
+		}
 	}
 	clip := rt.Clipboard
 	inner := func() (err error) {

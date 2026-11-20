@@ -865,6 +865,17 @@
       }
     },
     {
+      "name": "BOXER_FS_PICKER_SERVED_ROOT",
+      "type": "path",
+      "description": "fs broker: directory the file picker is rooted at on a host served over the headless carrier (IMZERO2_HEADLESS_LISTEN set); empty uses <user config dir>/boxer/picker, created 0700. The desktop host roots the picker at /",
+      "category": "system",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/keelson/runtime/fsbroker"
+      }
+    },
+    {
       "name": "BOXER_GODEP_ROOT",
       "type": "path",
       "description": "module directory the keelson go_packages/go_imports tables collect from; empty resolves the nearest go.mod above the working directory",
