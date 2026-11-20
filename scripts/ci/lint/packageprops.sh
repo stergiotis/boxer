@@ -24,7 +24,10 @@ cd "$here/../../.."
 #   props verify — declarations agree with the freshly computed verdict.
 #                  Static mode only proves red, which is sound (ADR-0078), so
 #                  this fails on regressions and stays quiet about what it
-#                  cannot judge. It is ~10s.
+#                  cannot judge. It is ~10s. It also applies the ADR-0389
+#                  stability rules: a Stable package imports no Experimental,
+#                  Internal or non-library package of this module and carries
+#                  a package doc comment.
 #
 # `--mode static` is load-bearing, not decoration: the empirical mode shells
 # out to `tinygo build` once per candidate package (minutes), and its verdict

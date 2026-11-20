@@ -54,10 +54,13 @@ func newPropsCommand() *cli.Command {
 			},
 			{
 				Name:  "verify",
-				Usage: "Reconcile declared PackageProps against the freshly computed verdict; non-zero exit on a regression",
+				Usage: "Reconcile declared PackageProps against the freshly computed verdict and apply the stability rules (ADR-0389); non-zero exit on a wasm regression or a stability violation",
 				Flags: append(verifyFlags(), &cli.BoolFlag{
 					Name:  "show-unjudged",
 					Usage: "also list packages the survey left unjudged (computed=unknown), which without TinyGo is most of them",
+				}, &cli.BoolFlag{
+					Name:  "show-advisory",
+					Usage: "also list advisory stability findings: Stable packages importing a package of this module that declares no tier",
 				}),
 				Action: runPropsVerify,
 			},
@@ -244,6 +247,59 @@ func runPropsVerify(ctx context.Context, cmd *cli.Command) (err error) {
 	if mismatches, err = VerifyProps(ctx, opts, opts.Dir); err != nil {
 		return err
 	}
+	wasmErr := reportWASMMismatches(mismatches, cmd.Bool("show-unjudged"))
+	stabilityErr := verifyStability(ctx, opts, cmd.Bool("show-advisory"))
+	if wasmErr != nil {
+		return wasmErr
+	}
+	return stabilityErr
+}
+
+// verifyStability applies the ADR-0389 stability rules to the working-tree
+// declarations and prints the findings; it fails on any non-advisory one.
+func verifyStability(ctx context.Context, opts Options, showAdvisory bool) (err error) {
+	var imports map[string][]string
+	var rootModule string
+	if imports, rootModule, err = LoadModuleImports(ctx, opts.Dir, opts.Patterns, opts.Tags); err != nil {
+		return err
+	}
+	var rows []HarvestRow
+	if rows, err = HarvestProps(opts.Dir, rootModule); err != nil {
+		return err
+	}
+	stable := 0
+	for _, r := range rows {
+		if r.Stability == packageprops.StabilityStable {
+			stable++
+		}
+	}
+	violations, advisory := 0, 0
+	for _, f := range CheckStability(rows, imports, rootModule) {
+		if f.Rule.Advisory() {
+			advisory++
+			if !showAdvisory {
+				continue
+			}
+		} else {
+			violations++
+		}
+		line := fmt.Sprintf("stability  %s [%s]", strings.TrimPrefix(f.ImportPath, rootModule+"/"), f.Rule)
+		if f.Imported != "" {
+			line += fmt.Sprintf(" -> %s (kind=%s stability=%s)", strings.TrimPrefix(f.Imported, rootModule+"/"),
+				f.ImportedProps.Kind, f.ImportedProps.Stability)
+		}
+		fmt.Fprintln(os.Stdout, line)
+	}
+	fmt.Fprintf(os.Stdout, "props verify: %d stable package(s), %d stability violation(s), %d advisory\n", stable, violations, advisory)
+	if violations > 0 {
+		return eb.Build().Int("violations", violations).Errorf("props verify failed: Stable package(s) break the stability rules (ADR-0389); demote the package or fix the edge")
+	}
+	return nil
+}
+
+// reportWASMMismatches prints the wasm declared-vs-computed mismatches and
+// fails on a regression.
+func reportWASMMismatches(mismatches []Mismatch, showUnjudged bool) (err error) {
 	if len(mismatches) == 0 {
 		fmt.Fprintln(os.Stdout, "props verify: all declarations match the computed verdict")
 		return nil
@@ -256,7 +312,6 @@ func runPropsVerify(ctx context.Context, cmd *cli.Command) (err error) {
 	// abstentions and 12 were the regressions that mattered. They are counted
 	// here and listed only on request, because a gate whose output is mostly
 	// noise is a gate that gets tuned out.
-	showUnjudged := cmd.Bool("show-unjudged")
 	regressions, drifts, unjudged := 0, 0, 0
 	for _, m := range mismatches {
 		tag := "drift"
