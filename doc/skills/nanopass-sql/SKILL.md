@@ -497,6 +497,7 @@ Build the corpus from the shared `testdata` and feed it to every pass. For a
 `NeedsFixedPoint` pass, the corpus must contain at least one entry that does
 *not* converge in a single `Apply`, or the flag is rejected as unjustified.
 
+<!-- boxer:lint disable=DL013 reason="MyPass is the reader's own pass" -->
 ```go
 import (
     "github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
@@ -523,6 +524,7 @@ nested-forms corpus for the `NeedsFixedPoint` passes.)
 
 ### 2. Explicit input/output pairs
 
+<!-- boxer:lint disable=DL013 reason="MyPass is the reader's own pass" -->
 ```go
 func TestMyPass(t *testing.T) {
     tests := []struct{ name, input, expected string }{

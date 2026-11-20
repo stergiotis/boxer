@@ -77,7 +77,16 @@ func (inst *RuleDL013) Id() (id string) {
 }
 
 func (inst *RuleDL013) Check(roots []string) iter.Seq2[Finding, error] {
-	return runMarkdownCheck("DL013", roots, inst.checkOne)
+	return runMarkdownCheckScoped("DL013", roots, isInScopeForDL013, inst.checkOne)
+}
+
+// isInScopeForDL013 is every Markdown file outside fixtures and generated
+// output: unlike the front-matter rules it reads skills, the CLAUDE.md shim
+// and the landing README, since what it checks is the code they show.
+func isInScopeForDL013(path string, base string) (in bool) {
+	sep := string(filepath.Separator)
+	in = !strings.HasSuffix(base, ".gen.md") && !strings.Contains(path, sep+"testdata"+sep) && !strings.Contains(path, sep+"changelog"+sep)
+	return
 }
 
 var dl013Directive = regexp.MustCompile(`^<!--\s*boxer:lint\s+disable=([A-Z]+\d+(?:\s*,\s*[A-Z]+\d+)*)\s+reason="[^"]+"\s*-->$`)
@@ -392,11 +401,15 @@ func buildGoSymbolIndex(top string) (idx *goSymbolIndex) {
 		}
 		name := d.Name()
 		if d.IsDir() {
-			if path != top && (shouldSkipDir(name) || strings.HasPrefix(name, ".") || strings.HasPrefix(name, "_") || isGitIgnored(ignored, path)) {
+			// testdata is walked: a package under it is importable by its
+			// full path, and a fence that imports one is checked against it.
+			if path != top && name != "testdata" && (shouldSkipDir(name) || strings.HasPrefix(name, ".") || strings.HasPrefix(name, "_") || isGitIgnored(ignored, path)) {
 				return filepath.SkipDir
 			}
 			return nil
 		}
+		sep := string(filepath.Separator)
+		underTestdata := strings.Contains(path, sep+"testdata"+sep)
 		if !strings.HasSuffix(name, ".go") || isGitIgnored(ignored, path) {
 			return nil
 		}
@@ -404,7 +417,7 @@ func buildGoSymbolIndex(top string) (idx *goSymbolIndex) {
 		if strings.HasSuffix(name, "_test.go") {
 			// Test files declare nothing a document can import, but how
 			// they import still shows which names are taken from outside.
-			if file, parseErr := parser.ParseFile(fset, path, nil, parser.ImportsOnly); parseErr == nil {
+			if file, parseErr := parser.ParseFile(fset, path, nil, parser.ImportsOnly); parseErr == nil && !underTestdata {
 				idx.noteForeignImports(file)
 			}
 			return nil
@@ -413,17 +426,23 @@ func buildGoSymbolIndex(top string) (idx *goSymbolIndex) {
 		if parseErr != nil {
 			return nil
 		}
-		idx.noteForeignImports(file)
+		if !underTestdata {
+			idx.noteForeignImports(file)
+		}
 		if file.Name.Name == "main" {
 			return nil
 		}
-		pkg := file.Name.Name
-		sink := idx.byName[pkg]
-		if sink == nil {
-			sink = make(map[string]struct{})
-			idx.byName[pkg] = sink
+		// A fixture package is reachable by import path only; its name
+		// would otherwise make an unrelated qualifier look checkable.
+		if !underTestdata {
+			pkg := file.Name.Name
+			sink := idx.byName[pkg]
+			if sink == nil {
+				sink = make(map[string]struct{})
+				idx.byName[pkg] = sink
+			}
+			collectExportedSymbolsDL008(file, sink)
 		}
-		collectExportedSymbolsDL008(file, sink)
 		if idx.modulePath != "" {
 			rel, relErr := filepath.Rel(top, filepath.Dir(path))
 			if relErr == nil {

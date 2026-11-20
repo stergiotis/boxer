@@ -114,6 +114,7 @@ The generated Go code provides a highly ergonomic API that masks the underlying 
 *   `.KeepIter()` leverages Go 1.23 `iter.Seq` to simulate closures.
 
 **Illustrative Code: Using the generated API**
+<!-- boxer:lint disable=DL013 reason="engine is the hypothetical API the example IDL generates" -->
 ```go
 // Render Loop
 for {

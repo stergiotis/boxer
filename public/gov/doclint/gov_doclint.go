@@ -295,6 +295,18 @@ func runMarkdownCheck(
 	roots []string,
 	checkOne func(path string, ignored map[string]struct{}, yield func(Finding, error) bool) (cont bool, err error),
 ) iter.Seq2[Finding, error] {
+	return runMarkdownCheckScoped(ruleID, roots, IsInScopeForDL001, checkOne)
+}
+
+// runMarkdownCheckScoped is runMarkdownCheck with the file scope supplied:
+// a rule about what a document's code says (DL013) reads skills and the
+// landing README too, which carry code and no front matter.
+func runMarkdownCheckScoped(
+	ruleID string,
+	roots []string,
+	inScope func(path string, base string) bool,
+	checkOne func(path string, ignored map[string]struct{}, yield func(Finding, error) bool) (cont bool, err error),
+) iter.Seq2[Finding, error] {
 	return func(yield func(Finding, error) bool) {
 		for _, root := range roots {
 			ignored := gitIgnoredSet(root)
@@ -315,7 +327,7 @@ func runMarkdownCheck(
 				if isGitIgnored(ignored, path) {
 					return nil
 				}
-				if !IsInScopeForDL001(path, base) {
+				if !inScope(path, base) {
 					return nil
 				}
 				cont, fErr := checkOne(path, ignored, yield)
