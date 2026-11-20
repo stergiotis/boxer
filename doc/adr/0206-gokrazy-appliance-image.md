@@ -305,6 +305,18 @@ M4 is the one open milestone.
 
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 
+## Updates
+
+### 2026-11-20 — the bind gate moved into the host, so the images opt in
+
+SD5's "neither the Go nor the Rust side enforces it" no longer holds: the
+carrier refuses a non-loopback bind unless `IMZERO2_HEADLESS_INSECURE_EXPOSE`
+is set ([ADR-0082](./0082-imzero2-remote-session-auth-tls.md), 2026-11-20
+entry). The three images set it beside `IMZERO2_HEADLESS_LISTEN=0.0.0.0:8089`,
+so they behave as before, and the opt-in makes SD5's posture visible in their
+configuration. The rest of SD5 stands: no authentication, no TLS, QEMU
+user-mode networking only.
+
 ## References
 
 - [ADR-0128](./0128-imzero2-mesh-draw-stream-codec-lane.md) — the appliance force, the mesh lane, and the M3 deferral this ADR discharges.
