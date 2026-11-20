@@ -94,6 +94,7 @@ import (
 	_ "github.com/stergiotis/boxer/apps/capinspector"
 	_ "github.com/stergiotis/boxer/apps/chat"
 	_ "github.com/stergiotis/boxer/apps/fibscope"
+	_ "github.com/stergiotis/boxer/apps/hello"
 	_ "github.com/stergiotis/boxer/apps/imagescope"
 	_ "github.com/stergiotis/boxer/apps/imzrt"
 	_ "github.com/stergiotis/boxer/apps/imztop"
