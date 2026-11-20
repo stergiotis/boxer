@@ -158,9 +158,10 @@ token is not sent.
 - Every read carries the projection list, a few kilobytes of SQL for the
   widest tables.
 - A table with a deduplication window drops an insert whose blocks it has
-  seen within the window even without a token; for these stores every
-  insert carries one, but other writers inserting identical blocks into
-  the same table would be deduplicated.
+  seen within the window even without a token; a store over an in-tree
+  executor sends one with every insert, but another writer inserting
+  identical blocks into the same table — or a store over an executor
+  without the per-insert settings seam — would be deduplicated.
 - Asynchronous inserts deduplicate under their own setting; a store
   configured for them does not get SD6.
 
