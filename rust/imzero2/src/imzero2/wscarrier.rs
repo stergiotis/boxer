@@ -1555,17 +1555,54 @@ async fn sniff_websocket(stream: &tokio::net::TcpStream) -> bool {
     false
 }
 
+/// The `Host` header of a request head, when it is one a CSP source can
+/// carry verbatim: a host name or address and an optional port, nothing else.
+fn request_host(head: &[u8]) -> Option<&str> {
+    let head = std::str::from_utf8(head).ok()?;
+    let value = head.split("\r\n").skip(1).find_map(|line| {
+        let (name, value) = line.split_once(':')?;
+        name.trim().eq_ignore_ascii_case("host").then(|| value.trim())
+    })?;
+    let ok = !value.is_empty()
+        && value.bytes().all(|b| b.is_ascii_alphanumeric() || b".-:[]".contains(&b));
+    ok.then_some(value)
+}
+
+/// The response headers of the viewer page (ADR-0082). The policy allows what
+/// the page does and nothing else: its inline script and style, a socket back
+/// to the host it was loaded from (`'self'` covers `ws:`/`wss:` in CSP 3; the
+/// explicit sources cover browsers that predate that), a same-origin module
+/// worker for `?worker=`, and no framing — a page that can be framed can be
+/// clicked through by the framing site. `host` is the request's `Host`, when
+/// usable ([`request_host`]).
+fn page_security_headers(host: Option<&str>) -> String {
+    let connect = match host {
+        Some(h) => format!("'self' ws://{h} wss://{h}"),
+        None => "'self'".to_owned(),
+    };
+    format!(
+        "Content-Security-Policy: default-src 'none'; script-src 'self' 'unsafe-inline'; \
+         style-src 'unsafe-inline'; connect-src {connect}; worker-src 'self'; img-src 'self' data:; \
+         base-uri 'none'; form-action 'none'; frame-ancestors 'none'\r\n\
+         X-Frame-Options: DENY\r\n\
+         X-Content-Type-Options: nosniff\r\n\
+         Referrer-Policy: no-referrer\r\n"
+    )
+}
+
 async fn serve_page(mut stream: tokio::net::TcpStream, page: &str) {
     use tokio::io::{AsyncReadExt as _, AsyncWriteExt as _};
     // Consume whatever fits of the request and answer unconditionally; a
-    // single-page server has no routing worth parsing.
+    // single-page server has no routing worth parsing. Only `Host` is read,
+    // for the page's connect-src.
     let mut buf = [0u8; 4096];
-    let _ = stream.read(&mut buf).await;
+    let n = stream.read(&mut buf).await.unwrap_or(0);
+    let headers = page_security_headers(request_host(buf.get(..n).unwrap_or_default()));
     // no-store: the page is embedded in the binary and tiny; a browser
     // heuristically caching yesterday's viewer against today's server is
     // the only thing caching could buy here.
     let response = format!(
-        "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: {}\r\nCache-Control: no-store\r\nConnection: close\r\n\r\n{}",
+        "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: {}\r\nCache-Control: no-store\r\n{headers}Connection: close\r\n\r\n{}",
         page.len(),
         page
     );
@@ -2189,6 +2226,36 @@ mod tests {
     fn absent_origin_is_permitted() {
         assert!(origin_permitted(None, Some("127.0.0.1:8089"), &[]));
         assert!(origin_permitted(None, None, &[]));
+    }
+
+    /// The page's policy names the host the browser asked for in
+    /// connect-src, and only a `Host` value a CSP source can carry verbatim.
+    #[test]
+    fn page_headers_carry_the_request_host() {
+        let head = b"GET / HTTP/1.1\r\nUser-Agent: x\r\nhost: 127.0.0.1:8090\r\n\r\n";
+        assert_eq!(request_host(head), Some("127.0.0.1:8090"));
+        let h = page_security_headers(request_host(head));
+        assert!(
+            h.contains("connect-src 'self' ws://127.0.0.1:8090 wss://127.0.0.1:8090;"),
+            "{h}"
+        );
+        assert!(h.contains("frame-ancestors 'none'"), "{h}");
+        assert!(h.contains("X-Frame-Options: DENY\r\n"), "{h}");
+        assert!(h.contains("X-Content-Type-Options: nosniff\r\n"), "{h}");
+        for bad in [
+            &b"GET / HTTP/1.1\r\nHost: a; script-src *\r\n\r\n"[..],
+            b"GET / HTTP/1.1\r\nHost: \r\n\r\n",
+            b"GET / HTTP/1.1\r\n\r\n",
+            b"Host: first-line-is-not-a-header\r\n\r\n",
+        ] {
+            assert_eq!(
+                request_host(bad),
+                None,
+                "{:?}",
+                String::from_utf8_lossy(bad)
+            );
+        }
+        assert!(page_security_headers(None).contains("connect-src 'self';"));
     }
 
     /// A proxy that rewrites `Host` names its public origin in the allowlist.
