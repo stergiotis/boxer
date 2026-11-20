@@ -12,19 +12,26 @@ import (
 type StringVar struct {
 	spec Spec
 	res  resolved[string]
+	// file is the NAME_FILE companion of a Sensitive variable; nil
+	// otherwise.
+	file *secretFile
 }
 
 var _ VarI = (*StringVar)(nil)
 
 // NewString registers spec and returns a *StringVar. Intended for
 // package-level var declarations; calling twice with the same Spec.Name
-// panics.
+// panics. A Sensitive spec also registers NAME_FILE (SecretFileSuffix),
+// read when NAME is unset.
 func NewString(spec Spec) (v *StringVar) {
 	mustValidate(spec)
 	spec.Origin = callerOrigin(2)
 	spec.Type = TypeString
 	v = &StringVar{spec: spec}
 	register(v)
+	if spec.Sensitive {
+		v.file = newSecretFile(spec)
+	}
 	return
 }
 
@@ -33,8 +40,10 @@ func (inst *StringVar) Spec() (out Spec) {
 }
 
 // Get returns the resolved value: an Override, else the value the flag
-// Action cached, else the env var when set and non-empty, else Spec.Default
-// (the tiers of ValueSourceE). The environment read is cached on first call.
+// Action cached, else the env var when set and non-empty, else — for a
+// Sensitive variable — the contents of the file NAME_FILE names, else
+// Spec.Default (the tiers of ValueSourceE). The environment read is cached
+// on first call.
 func (inst *StringVar) Get() (out string) {
 	out, _ = inst.res.get(inst.resolveEnv)
 	return
@@ -42,10 +51,13 @@ func (inst *StringVar) Get() (out string) {
 
 func (inst *StringVar) resolveEnv() (out string, src ValueSourceE) {
 	raw, ok := os.LookupEnv(inst.spec.Name)
-	if !ok || raw == "" {
-		return inst.spec.Default, ValueSourceDefault
+	if ok && raw != "" {
+		return raw, ValueSourceEnv
 	}
-	return raw, ValueSourceEnv
+	if v, fromFile := inst.file.read(); fromFile {
+		return v, ValueSourceFile
+	}
+	return inst.spec.Default, ValueSourceDefault
 }
 
 // Lookup returns the raw env var value and whether it is set and non-empty.

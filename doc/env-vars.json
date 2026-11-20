@@ -174,6 +174,17 @@
       }
     },
     {
+      "name": "BOXER_ANCHOR_STORE_PASSWORD_FILE",
+      "type": "path",
+      "description": "path of a file whose contents are BOXER_ANCHOR_STORE_PASSWORD's value (one trailing newline is dropped); read when BOXER_ANCHOR_STORE_PASSWORD is unset, so the secret stays out of the environment children inherit",
+      "category": "database",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/keelson/runtime/headstore"
+      }
+    },
+    {
       "name": "BOXER_ANCHOR_STORE_TABLE",
       "type": "string",
       "default": "boxer.anchorhead",
@@ -954,6 +965,17 @@
       }
     },
     {
+      "name": "BOXER_JACKSTAY_TARGET_PASSWORD_FILE",
+      "type": "path",
+      "description": "path of a file whose contents are BOXER_JACKSTAY_TARGET_PASSWORD's value (one trailing newline is dropped); read when BOXER_JACKSTAY_TARGET_PASSWORD is unset, so the secret stays out of the environment children inherit",
+      "category": "database",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/db/clickhouse/jackstay"
+      }
+    },
+    {
       "name": "BOXER_JACKSTAY_TARGET_USER",
       "type": "string",
       "default": "default",
@@ -1016,12 +1038,34 @@
       }
     },
     {
+      "name": "BOXER_KAFKA_SASL_PASSWORD_FILE",
+      "type": "path",
+      "description": "path of a file whose contents are BOXER_KAFKA_SASL_PASSWORD's value (one trailing newline is dropped); read when BOXER_KAFKA_SASL_PASSWORD is unset, so the secret stays out of the environment children inherit",
+      "category": "streaming",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/streaming/persisted/kafka/cli"
+      }
+    },
+    {
       "name": "BOXER_KAFKA_SASL_TOKEN",
       "type": "string",
       "description": "static OAUTHBEARER token (only for --sasl-mechanism=OAUTHBEARER)",
       "category": "streaming",
       "sensitive": true,
       "cliFlagName": "sasl-token",
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/streaming/persisted/kafka/cli"
+      }
+    },
+    {
+      "name": "BOXER_KAFKA_SASL_TOKEN_FILE",
+      "type": "path",
+      "description": "path of a file whose contents are BOXER_KAFKA_SASL_TOKEN's value (one trailing newline is dropped); read when BOXER_KAFKA_SASL_TOKEN is unset, so the secret stays out of the environment children inherit",
+      "category": "streaming",
+      "sensitive": false,
       "origin": {
         "module": "github.com/stergiotis/boxer",
         "package": "github.com/stergiotis/boxer/public/streaming/persisted/kafka/cli"
@@ -1168,6 +1212,17 @@
       }
     },
     {
+      "name": "BOXER_LLM_APIKEY_FILE",
+      "type": "path",
+      "description": "path of a file whose contents are BOXER_LLM_APIKEY's value (one trailing newline is dropped); read when BOXER_LLM_APIKEY is unset, so the secret stays out of the environment children inherit",
+      "category": "llm",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/keelson/runtime/llm"
+      }
+    },
+    {
       "name": "BOXER_LLM_CONTEXT_TOKENS",
       "type": "int64",
       "default": "0",
@@ -1306,6 +1361,17 @@
       "description": "API key the host's llm service sends to the transcription endpoint; empty for local endpoints that take none",
       "category": "llm",
       "sensitive": true,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/keelson/runtime/llm"
+      }
+    },
+    {
+      "name": "BOXER_LLM_TRANSCRIBE_APIKEY_FILE",
+      "type": "path",
+      "description": "path of a file whose contents are BOXER_LLM_TRANSCRIBE_APIKEY's value (one trailing newline is dropped); read when BOXER_LLM_TRANSCRIBE_APIKEY is unset, so the secret stays out of the environment children inherit",
+      "category": "llm",
+      "sensitive": false,
       "origin": {
         "module": "github.com/stergiotis/boxer",
         "package": "github.com/stergiotis/boxer/public/keelson/runtime/llm"
@@ -2577,6 +2643,17 @@
       }
     },
     {
+      "name": "CLICKHOUSE_PASSWORD_FILE",
+      "type": "path",
+      "description": "path of a file whose contents are CLICKHOUSE_PASSWORD's value (one trailing newline is dropped); read when CLICKHOUSE_PASSWORD is unset, so the secret stays out of the environment children inherit",
+      "category": "database",
+      "sensitive": false,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/db/clickhouse/clickhouseenv"
+      }
+    },
+    {
       "name": "CLICKHOUSE_URL",
       "type": "string",
       "default": "http://localhost:8123/",
@@ -2617,6 +2694,17 @@
       "description": "Google AI Studio / Gemini API key",
       "category": "llm",
       "sensitive": true,
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/llm/openaichat"
+      }
+    },
+    {
+      "name": "GEMINI_API_KEY_FILE",
+      "type": "path",
+      "description": "path of a file whose contents are GEMINI_API_KEY's value (one trailing newline is dropped); read when GEMINI_API_KEY is unset, so the secret stays out of the environment children inherit",
+      "category": "llm",
+      "sensitive": false,
       "origin": {
         "module": "github.com/stergiotis/boxer",
         "package": "github.com/stergiotis/boxer/public/llm/openaichat"
@@ -3545,6 +3633,17 @@
       "category": "dev",
       "sensitive": true,
       "cliFlagName": "llm-apikey",
+      "origin": {
+        "module": "github.com/stergiotis/boxer",
+        "package": "github.com/stergiotis/boxer/public/gov/commitdigest"
+      }
+    },
+    {
+      "name": "LLM_API_KEY_FILE",
+      "type": "path",
+      "description": "path of a file whose contents are LLM_API_KEY's value (one trailing newline is dropped); read when LLM_API_KEY is unset, so the secret stays out of the environment children inherit",
+      "category": "dev",
+      "sensitive": false,
       "origin": {
         "module": "github.com/stergiotis/boxer",
         "package": "github.com/stergiotis/boxer/public/gov/commitdigest"

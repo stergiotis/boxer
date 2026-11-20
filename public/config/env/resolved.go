@@ -20,6 +20,10 @@ const (
 	ValueSourceFlag
 	// ValueSourceOverride: Override was called in this process.
 	ValueSourceOverride
+	// ValueSourceFile: a Sensitive variable was unset and the file its
+	// NAME_FILE companion names supplied the value. It ranks with
+	// ValueSourceEnv, just below it.
+	ValueSourceFile
 )
 
 func (inst ValueSourceE) String() (s string) {
@@ -32,6 +36,8 @@ func (inst ValueSourceE) String() (s string) {
 		return "flag"
 	case ValueSourceOverride:
 		return "override"
+	case ValueSourceFile:
+		return "file"
 	default:
 		return "unknown"
 	}
