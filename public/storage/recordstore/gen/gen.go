@@ -504,6 +504,21 @@ func (inst Input) Generate() (err error) {
 		ddlSql = "CREATE DATABASE IF NOT EXISTS " + inst.Database + ";\n\n" + ddlSql
 	}
 	err = inst.write(inst.TableName+"_ddl_clickhouse.out.sql", []byte(ddlSql))
+	if err != nil {
+		return
+	}
+	// 6b. The column list, read back out of the composed DDL, for the
+	// schema check and the reconciler (ADR-0387).
+	cols, err := recordstore.ParseCreateTableColumns(ddlSql)
+	if err != nil {
+		err = eh.Errorf("read the composed DDL's columns: %w", err)
+		return
+	}
+	schemaCode, err := inst.emitSchema(cols, "")
+	if err != nil {
+		return
+	}
+	err = inst.write(strings.ToLower(inst.StoreName)+"_schema.out.go", schemaCode)
 	if err != nil || !inst.evidenceVault() {
 		return
 	}
