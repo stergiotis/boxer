@@ -8,10 +8,7 @@ import (
 )
 
 // extbinPkgPath is the one package allowed to call os/exec directly — it is
-// boxer's sanctioned external-process chokepoint. ehPkgPath is exempt too: eh
-// sits below extbin in the import graph (extbin imports eh), so eh's own
-// os/exec use (go env GOROOT for stack-trace shortening) cannot route through
-// extbin without a cycle.
+// boxer's sanctioned external-process chokepoint.
 const extbinPkgPath = "github.com/stergiotis/boxer/public/extbin"
 
 // execBannedFuncs are the os/exec entry points that resolve or spawn an
@@ -59,8 +56,7 @@ func (inst *RuleCS012) Analyzer() (a *analysis.Analyzer) {
 func (inst *RuleCS012) run(pass *analysis.Pass) (res any, err error) {
 	if pass.Pkg != nil {
 		path := pass.Pkg.Path()
-		if path == extbinPkgPath || strings.HasPrefix(path, extbinPkgPath+"/") ||
-			path == ehPkgPath || strings.HasPrefix(path, ehPkgPath+"/") {
+		if path == extbinPkgPath || strings.HasPrefix(path, extbinPkgPath+"/") {
 			return
 		}
 	}
