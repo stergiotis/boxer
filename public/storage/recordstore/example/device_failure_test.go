@@ -250,9 +250,10 @@ func TestDeviceStoreVerifySchemaDetectsDrift(t *testing.T) {
 	require.Equal(t, []string{"drift"}, v.Extra)
 
 	require.NoError(t, local.Exec(ctx, "ALTER TABLE "+DeviceTableName+" MODIFY COLUMN "+DeviceColLifecycle+" UInt16"))
-	err = st.VerifySchema(ctx)
-	require.ErrorContains(t, err, "incompatible")
-	require.ErrorContains(t, err, "lc:lifecycle:u8:4::0:")
+	require.Error(t, st.VerifySchema(ctx))
+	v = st.JudgeSchema(ctx)
+	require.Equal(t, recordstore.SchemaVerdictIncompatible, v.Verdict)
+	require.Contains(t, v.Summary(), "lc:lifecycle:u8:4::0:")
 }
 
 // TestDeviceStoreCloseReleases: under a checked allocator the store's

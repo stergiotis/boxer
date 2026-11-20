@@ -1,11 +1,12 @@
 package recordstore
 
 import (
-	"crypto/sha256"
 	"encoding/hex"
 	"slices"
 	"strconv"
 	"strings"
+
+	"lukechampine.com/blake3"
 )
 
 // TableStampPrefix opens every table stamp, so a COMMENT an operator wrote
@@ -83,7 +84,7 @@ func ParseTableStamp(comment string) (s TableStamp, ok bool) {
 // renames the column (ADR-0182), and one that does not changes nothing a
 // reader sees.
 func ColumnsDigest(cols []ColumnSpec) string {
-	h := sha256.New()
+	h := blake3.New(32, nil)
 	for _, c := range cols {
 		h.Write([]byte(c.Name))
 		h.Write([]byte{0x1f})
@@ -104,7 +105,7 @@ func VocabDigest(ids map[string]map[string]uint64) string {
 		kinds = append(kinds, k)
 	}
 	slices.Sort(kinds)
-	h := sha256.New()
+	h := blake3.New(32, nil)
 	for _, k := range kinds {
 		names := make([]string, 0, len(ids[k]))
 		for n := range ids[k] {

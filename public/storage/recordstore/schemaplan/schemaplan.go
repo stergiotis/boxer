@@ -18,7 +18,7 @@ import (
 
 	"github.com/stergiotis/boxer/public/db/clickhouse/jackstay"
 	"github.com/stergiotis/boxer/public/gov/datacatalog"
-	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/storage/recordstore"
 )
 
@@ -119,7 +119,7 @@ func Apply(ctx context.Context, exec recordstore.ExecutorI, p Plan) (applied int
 	}
 	for _, stmt := range p.Statements {
 		if err = exec.Exec(ctx, stmt); err != nil {
-			err = eh.Errorf("schema apply on %s, statement %d: %w", p.Verdict.Table, applied+1, err)
+			err = eb.Build().Str("table", p.Verdict.Table).Int("statement", applied+1).Str("sql", stmt).Errorf("schema apply: %w", err)
 			return
 		}
 		applied++

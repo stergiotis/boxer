@@ -13,8 +13,6 @@ package schemacheck
 import (
 	"context"
 	"slices"
-	"strconv"
-	"strings"
 	"sync"
 
 	"github.com/rs/zerolog"
@@ -107,14 +105,7 @@ func Report(vs []recordstore.SchemaVerdict, log zerolog.Logger, strict bool) (er
 		bad = append(bad, v.Table+" ("+v.Verdict.String()+")")
 	}
 	if strict && len(bad) > 0 {
-		err = eb.Build().Strs("tables", bad).Errorf("schema: %s not ok and %s is set: %s", plural(len(bad)), Strict.Spec().Name, strings.Join(bad, ", "))
+		err = eb.Build().Strs("tables", bad).Errorf("schema: stored tables are not ok and BOXER_SCHEMA_STRICT is set")
 	}
 	return
-}
-
-func plural(n int) string {
-	if n == 1 {
-		return "1 table is"
-	}
-	return strconv.Itoa(n) + " tables are"
 }

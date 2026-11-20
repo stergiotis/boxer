@@ -42,8 +42,7 @@ func TestReportLogsOneLinePerTableNotOkAndFailsOnlyWhenStrict(t *testing.T) {
 
 	err := Report(vs, zerolog.Nop(), true)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "2 tables are not ok")
-	assert.Contains(t, err.Error(), "db.b (migratable)")
+	assert.Contains(t, err.Error(), "BOXER_SCHEMA_STRICT")
 	require.NoError(t, Report(vs[:1], zerolog.Nop(), true))
 }
 

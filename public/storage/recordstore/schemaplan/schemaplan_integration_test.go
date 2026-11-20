@@ -40,7 +40,7 @@ func TestApplyBringsAnOlderTableInLine(t *testing.T) {
 
 	v := recordstore.JudgeTable(ctx, exec, c)
 	require.Equal(t, recordstore.SchemaVerdictOk, v.Verdict, v.Summary())
-	require.Equal(t, recordstore.StampSame, v.Age)
+	require.Equal(t, recordstore.StampAgeSame, v.Age)
 	require.True(t, v.DedupWindow)
 	require.Empty(t, PlanTable(ctx, exec, c).Statements, "a second plan has nothing to do")
 }

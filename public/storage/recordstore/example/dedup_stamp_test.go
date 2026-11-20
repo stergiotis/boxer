@@ -47,7 +47,7 @@ func TestRetryOfALandedInsertIsDeduplicated(t *testing.T) {
 
 	v := st.JudgeSchema(ctx)
 	require.Equal(t, recordstore.SchemaVerdictOk, v.Verdict, v.Summary())
-	require.Equal(t, recordstore.StampSame, v.Age, "the table carries the stamp of the schema that created it")
+	require.Equal(t, recordstore.StampAgeSame, v.Age, "the table carries the stamp of the schema that created it")
 	require.True(t, v.DedupWindow)
 	require.Empty(t, v.Notes)
 

@@ -95,6 +95,6 @@ func TestDeviceStoreOpenRefusesDrift(t *testing.T) {
 
 	st, err := OpenDeviceStore(ctx, exec, nil, DeviceStoreConfig{Table: table})
 	require.Error(t, err)
-	require.ErrorContains(t, err, "migratable")
+	require.ErrorContains(t, err, "verdict is not ok")
 	require.Nil(t, st)
 }

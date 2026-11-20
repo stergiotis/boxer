@@ -57,31 +57,31 @@ func (inst SchemaVerdictE) String() string {
 type StampAgeE uint8
 
 const (
-	// StampUnstamped: no stamp; the table is judged by its columns alone.
-	StampUnstamped StampAgeE = iota
-	// StampSame: the stamp's column digest is this build's.
-	StampSame
-	// StampOlder: another digest, and the table lacks columns this build
+	// StampAgeUnstamped: no stamp; the table is judged by its columns alone.
+	StampAgeUnstamped StampAgeE = iota
+	// StampAgeSame: the stamp's column digest is this build's.
+	StampAgeSame
+	// StampAgeOlder: another digest, and the table lacks columns this build
 	// declares — written by an older schema.
-	StampOlder
-	// StampNewer: another digest, and the table carries columns this build
+	StampAgeOlder
+	// StampAgeNewer: another digest, and the table carries columns this build
 	// does not declare and lacks none — written by a newer schema.
-	StampNewer
-	// StampOther: another digest that neither direction explains.
-	StampOther
+	StampAgeNewer
+	// StampAgeOther: another digest that neither direction explains.
+	StampAgeOther
 )
 
 func (inst StampAgeE) String() string {
 	switch inst {
-	case StampUnstamped:
+	case StampAgeUnstamped:
 		return "unstamped"
-	case StampSame:
+	case StampAgeSame:
 		return "same"
-	case StampOlder:
+	case StampAgeOlder:
 		return "older"
-	case StampNewer:
+	case StampAgeNewer:
 		return "newer"
-	case StampOther:
+	case StampAgeOther:
 		return "other"
 	}
 	return "invalid"
@@ -183,11 +183,11 @@ func (inst SchemaVerdict) Summary() string {
 		}
 	}
 	switch inst.Age {
-	case StampOlder:
+	case StampAgeOlder:
 		b.WriteString(" (written by an older schema)")
-	case StampNewer:
+	case StampAgeNewer:
 		b.WriteString(" (written by a newer schema)")
-	case StampOther:
+	case StampAgeOther:
 		b.WriteString(" (stamped by another schema)")
 	}
 	return b.String()
@@ -198,11 +198,14 @@ func (inst SchemaVerdict) Err() (err error) {
 	if inst.IsOk() {
 		return
 	}
-	b := eb.Build().Str("table", inst.Table).Stringer("verdict", inst.Verdict)
+	b := eb.Build().Str("table", inst.Table).Stringer("verdict", inst.Verdict).Str("summary", inst.Summary())
 	if len(inst.Missing) > 0 {
 		b = b.Strs("missing", inst.Missing)
 	}
-	err = b.Errorf("schema: %s", inst.Summary())
+	if len(inst.Reasons) > 0 {
+		b = b.Strs("reasons", inst.Reasons)
+	}
+	err = b.Errorf("schema: the table's verdict is not ok; `boxer schema plan` shows it and what is mechanical")
 	return
 }
 
@@ -337,18 +340,18 @@ func JudgeFacts(c TableContract, facts TableFacts) (v SchemaVerdict) {
 func stampAge(c TableContract, comment string, v SchemaVerdict) StampAgeE {
 	live, ok := ParseTableStamp(comment)
 	if !ok {
-		return StampUnstamped
+		return StampAgeUnstamped
 	}
 	if live.Columns == ColumnsDigest(c.Columns) {
-		return StampSame
+		return StampAgeSame
 	}
 	switch {
 	case len(v.Missing) > 0 || len(v.Renames) > 0:
-		return StampOlder
+		return StampAgeOlder
 	case len(v.Extra) > 0:
-		return StampNewer
+		return StampAgeNewer
 	}
-	return StampOther
+	return StampAgeOther
 }
 
 // IsPlainMergeTree reports a non-replicated engine of the MergeTree family,

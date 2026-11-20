@@ -149,23 +149,23 @@ func TestJudgeFactsStampAndWindow(t *testing.T) {
 
 	v := JudgeFacts(c, TableFacts{Exists: true, Engine: "MergeTree", Comment: stamp, CreateQuery: "… SETTINGS non_replicated_deduplication_window = 1000", Columns: cols})
 	assert.Equal(t, SchemaVerdictOk, v.Verdict)
-	assert.Equal(t, StampSame, v.Age)
+	assert.Equal(t, StampAgeSame, v.Age)
 	assert.True(t, v.DedupWindow)
 	assert.Empty(t, v.Notes)
 
 	older := TableStamp{Kind: "t", Columns: "0000", Naming: LeewayNamingVersion}.String()
 	v = JudgeFacts(c, TableFacts{Exists: true, Engine: "MergeTree", Comment: older, Columns: cols[:1]})
 	assert.Equal(t, SchemaVerdictMigratable, v.Verdict)
-	assert.Equal(t, StampOlder, v.Age)
+	assert.Equal(t, StampAgeOlder, v.Age)
 	assert.False(t, v.DedupWindow)
 	assert.Contains(t, v.Summary(), "older schema")
 	assert.Len(t, v.Notes, 1, "the missing window is noted")
 
 	v = JudgeFacts(c, TableFacts{Exists: true, Engine: "MergeTree", Comment: older, Columns: append(cols, LiveColumn{Name: "c", Type: "UInt8"})})
-	assert.Equal(t, StampNewer, v.Age)
+	assert.Equal(t, StampAgeNewer, v.Age)
 
 	v = JudgeFacts(c, TableFacts{Exists: true, Engine: "ReplicatedMergeTree", Comment: "hand-written", Columns: cols})
-	assert.Equal(t, StampUnstamped, v.Age)
+	assert.Equal(t, StampAgeUnstamped, v.Age)
 	assert.Empty(t, v.Notes, "a replicated table deduplicates by its own window")
 
 	assert.Equal(t, SchemaVerdictAbsent, JudgeFacts(c, TableFacts{}).Verdict)
@@ -211,7 +211,6 @@ func TestBindColumnsByName(t *testing.T) {
 	short := arrow.NewSchema([]arrow.Field{field("a")}, nil)
 	err := BindColumnsByName(want, short, &fakeIndexReader{idx: []uint32{0}}, &fakeIndexReader{idx: []uint32{1, 2}})
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "b, c")
 }
 
 func TestSelectList(t *testing.T) {

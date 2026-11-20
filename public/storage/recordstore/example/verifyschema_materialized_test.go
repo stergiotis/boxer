@@ -75,5 +75,6 @@ func TestReadsFailNamingAColumnTheTableLacks(t *testing.T) {
 
 	_, _, err = st.Latest(ctx, 1)
 	require.Error(t, err)
-	require.ErrorContains(t, v.Err(), gone)
+	require.Error(t, v.Err())
+	require.Contains(t, v.Summary(), gone)
 }

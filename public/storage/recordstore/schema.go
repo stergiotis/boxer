@@ -105,7 +105,7 @@ func BindColumnsByName(want *arrow.Schema, got *arrow.Schema, readers ...ColumnI
 		}
 	}
 	if len(missing) > 0 {
-		err = eb.Build().Strs("columns", missing).Errorf("the result lacks %d column(s) this store reads (%s); the table is older than the store — `boxer schema plan` lists the statements that add them", len(missing), strings.Join(missing, ", "))
+		err = eb.Build().Strs("columns", missing).Errorf("the result lacks columns this store reads; the table is older than the store — `boxer schema plan` lists the statements that add them")
 	}
 	return
 }

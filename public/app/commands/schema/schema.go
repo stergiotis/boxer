@@ -97,7 +97,7 @@ func selected(cmd *cli.Command) (cs []recordstore.TableContract, err error) {
 	}
 	for _, t := range only {
 		if !slices.ContainsFunc(cs, func(c recordstore.TableContract) bool { return c.Table == t }) {
-			err = eb.Build().Str("table", t).Errorf("schema: no stored table of this build is named %s", t)
+			err = eb.Build().Str("table", t).Errorf("schema: no stored table of this build has that name")
 			return
 		}
 	}
@@ -130,7 +130,7 @@ func runPlan(ctx context.Context, cmd *cli.Command) (err error) {
 
 func runApply(ctx context.Context, cmd *cli.Command) (err error) {
 	if !cmd.Bool(flagYes) {
-		return eh.Errorf("schema apply changes the tables; pass --%s to run it, or run `schema plan` to see what it would do", flagYes)
+		return eh.Errorf("schema apply changes the tables; pass --yes to run it, or run `schema plan` to see what it would do")
 	}
 	exec, ps, err := plans(ctx, cmd)
 	if err != nil {
