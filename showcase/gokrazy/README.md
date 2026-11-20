@@ -161,7 +161,10 @@ non-loopback bind without that opt-in (ADR-0082 SD1).
 
 What the opt-in accepts: the headless carrier has **no authentication and no
 TLS** (ADR-0082 SD2 and SD4 are unbuilt), and the same WebSocket carries
-input. Anyone who can reach that port controls the session.
+input. Anyone who can reach that port controls the session. The carrier does
+refuse a WebSocket upgrade from a page on another site (an `Origin` that names
+another host), which keeps a web page the operator visits from driving the
+session; it does nothing against a client that connects directly.
 
 This is acceptable **only** because `gok vm run` uses QEMU user-mode
 networking, which is host-local NAT and not reachable from the LAN. An image

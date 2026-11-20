@@ -254,6 +254,19 @@ var (
 		Category:    env.CategoryDev,
 	})
 
+	// HeadlessAllowedOrigins lists the origins, besides the request's own
+	// host, whose pages may open the carrier's WebSocket. The carrier refuses
+	// an upgrade whose Origin names another host than its Host header, so a
+	// page on another site cannot drive the session from a visitor's
+	// browser; a reverse proxy that rewrites Host names its public origin
+	// here. A client that sends no Origin (not a browser page) is unaffected.
+	// Read by the Rust client (wscarrier.rs).
+	HeadlessAllowedOrigins = env.NewString(env.Spec{
+		Name:        "IMZERO2_HEADLESS_ALLOWED_ORIGINS",
+		Description: "comma-separated origins (scheme://host[:port], as a browser sends Origin) whose pages may open the headless carrier's WebSocket besides the request's own host; for a reverse proxy that rewrites Host",
+		Category:    env.CategoryDev,
+	})
+
 	// HeadlessIgnoreClose, when truthy, makes a viewport-close request (an
 	// app-emitted ViewportCommand::Close, e.g. a "Quit" menu item) a no-op
 	// instead of a host shutdown — so one viewer of a served deployment cannot

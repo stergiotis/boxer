@@ -15,6 +15,13 @@
 //! carrier configuration — the client carries the prefix, both listeners
 //! answer regardless of it.
 //!
+//! What the carrier does check (ADR-0082): it refuses to bind a non-loopback
+//! address without an explicit opt-in ([`INSECURE_EXPOSE_ENV`]), and it
+//! refuses a WebSocket upgrade whose `Origin` names another host than the
+//! request's `Host` ([`ALLOWED_ORIGINS_ENV`] lists exceptions), so a page on
+//! another site cannot drive the session from a visitor's browser. It has no
+//! authentication and no TLS of its own.
+//!
 //! A single binary WebSocket carries everything with a one-byte type
 //! prefix (SD6): 0x01 video chunks server→client, 0x02 protobuf input
 //! events client→server, 0x03 session control both ways, 0x04 draw-stream
@@ -102,6 +109,11 @@ pub const LISTEN_ENV: &str = "IMZERO2_HEADLESS_LISTEN";
 /// controls the session. `hmi_headless.sh` checks the same variable first.
 pub const INSECURE_EXPOSE_ENV: &str = "IMZERO2_HEADLESS_INSECURE_EXPOSE";
 
+/// Origins, besides the request's own host, whose pages may open the
+/// WebSocket: comma-separated, each `scheme://host[:port]` exactly as a
+/// browser sends it in `Origin`. For a reverse proxy that rewrites `Host`.
+pub const ALLOWED_ORIGINS_ENV: &str = "IMZERO2_HEADLESS_ALLOWED_ORIGINS";
+
 /// The env truthy spellings the headless host accepts elsewhere.
 fn env_truthy(name: &str) -> bool {
     std::env::var(name).is_ok_and(|v| {
@@ -128,6 +140,60 @@ fn check_bind(listen: &str, addrs: &[std::net::SocketAddr], expose: bool) -> Res
          input control. Bind 127.0.0.1 and front it with an authenticating TLS reverse proxy or \
          an SSH tunnel, or set {INSECURE_EXPOSE_ENV}=1 to accept that on a trusted network"
     ))
+}
+
+/// The authority (`host[:port]`, lower-case, default port dropped) of an
+/// `Origin` value, or `None` when it is not a `http`/`https` origin.
+fn origin_authority(origin: &str) -> Option<(String, &'static str)> {
+    let lower = origin.trim().to_ascii_lowercase();
+    let (rest, default_port) = if let Some(r) = lower.strip_prefix("http://") {
+        (r.to_owned(), "80")
+    } else if let Some(r) = lower.strip_prefix("https://") {
+        (r.to_owned(), "443")
+    } else {
+        return None;
+    };
+    if rest.is_empty() || rest.contains('/') {
+        return None;
+    }
+    Some((strip_default_port(&rest, default_port), default_port))
+}
+
+/// `host:port` without `:port` when it is `default_port`. Bracketed IPv6
+/// literals keep their brackets.
+fn strip_default_port(authority: &str, default_port: &str) -> String {
+    match authority.rsplit_once(':') {
+        Some((host, port)) if port == default_port => host.to_owned(),
+        _ => authority.to_owned(),
+    }
+}
+
+/// Decide whether a WebSocket upgrade may proceed, from its `Origin` and
+/// `Host` headers. A client that sends no `Origin` is not a browser page —
+/// the native viewer, `imzero2 drive`, a probe — and may. A browser page may
+/// when its origin names the host it asked (the viewer page served by this
+/// carrier, directly or through a proxy that keeps `Host`), or when its
+/// origin is in `allowed`. Anything else is a page on another site trying to
+/// drive the session from the visitor's browser, and is refused.
+fn origin_permitted(origin: Option<&str>, host: Option<&str>, allowed: &[String]) -> bool {
+    let Some(origin) = origin else {
+        return true;
+    };
+    let o = origin.trim();
+    if allowed.iter().any(|a| a.trim().eq_ignore_ascii_case(o)) {
+        return true;
+    }
+    let (Some((authority, default_port)), Some(host)) = (origin_authority(o), host) else {
+        return false;
+    };
+    strip_default_port(&host.trim().to_ascii_lowercase(), default_port) == authority
+}
+
+/// The allowlist from [`ALLOWED_ORIGINS_ENV`].
+fn allowed_origins_from_env() -> Vec<String> {
+    std::env::var(ALLOWED_ORIGINS_ENV)
+        .map(|v| v.split(',').map(str::trim).filter(|s| !s.is_empty()).map(str::to_owned).collect())
+        .unwrap_or_default()
 }
 
 /// Liveness keepalive. A viewer that stops draining its socket — a backgrounded
@@ -580,6 +646,9 @@ struct Inner {
     /// render thread. Latest-wins for the same reason `resize` is: a second
     /// request before the first is served asks about a newer frame.
     capture_request: std::sync::Mutex<Option<pb::CaptureRequest>>,
+    /// Origins besides the request's own host whose pages may open the
+    /// WebSocket ([`ALLOWED_ORIGINS_ENV`]), read once at start.
+    allowed_origins: Vec<String>,
 }
 
 pub struct WsCarrier {
@@ -679,6 +748,7 @@ impl WsCarrier {
             frames_decoded: std::sync::atomic::AtomicU64::new(0),
             tree_wanted: std::sync::atomic::AtomicBool::new(false),
             capture_request: std::sync::Mutex::new(None),
+            allowed_origins: allowed_origins_from_env(),
         });
         // The audio lane (ADR-0372 SD4), when the Go host named one: what it
         // sends goes to the active connection's audio device, what that
@@ -1566,7 +1636,33 @@ async fn handle_session(
     peer: std::net::SocketAddr,
     inner: std::sync::Arc<Inner>,
 ) -> Result<(), tokio_tungstenite::tungstenite::Error> {
-    let ws = tokio_tungstenite::accept_async(stream).await?;
+    // Refuse an upgrade a page on another site asked for (ADR-0082): a
+    // browser lets any page open a WebSocket to 127.0.0.1, and this socket
+    // carries input. The check runs in the handshake, before admission.
+    let check_origin = |req: &tokio_tungstenite::tungstenite::handshake::server::Request,
+                        resp: tokio_tungstenite::tungstenite::handshake::server::Response|
+     -> Result<
+        tokio_tungstenite::tungstenite::handshake::server::Response,
+        tokio_tungstenite::tungstenite::handshake::server::ErrorResponse,
+    > {
+        let header = |name: &str| req.headers().get(name).and_then(|v| v.to_str().ok());
+        let origin = header("origin");
+        if origin_permitted(origin, header("host"), &inner.allowed_origins) {
+            return Ok(resp);
+        }
+        tracing::warn!(
+            %peer,
+            origin = origin.unwrap_or_default(),
+            host = header("host").unwrap_or_default(),
+            "refusing a WebSocket upgrade from another origin; a proxy that rewrites Host needs {ALLOWED_ORIGINS_ENV}"
+        );
+        let mut refusal = tokio_tungstenite::tungstenite::handshake::server::ErrorResponse::new(
+            Some("cross-origin WebSocket upgrade refused\n".to_owned()),
+        );
+        *refusal.status_mut() = tokio_tungstenite::tungstenite::http::StatusCode::FORBIDDEN;
+        Err(refusal)
+    };
+    let ws = tokio_tungstenite::accept_hdr_async(stream, check_origin).await?;
     let (mut ws_tx, mut ws_rx) = ws.split();
 
     let (tx, mut rx) = tokio::sync::mpsc::channel::<Vec<u8>>(VIDEO_CHANNEL_CAP);
@@ -2045,6 +2141,77 @@ mod tests {
         assert!(check_bind("nowhere:1", &[], true).is_err());
     }
 
+    /// The viewer page served by this carrier opens the socket from its own
+    /// origin, directly or through a proxy that keeps `Host`.
+    #[test]
+    fn origin_same_as_host_is_permitted() {
+        let none: &[String] = &[];
+        for (origin, host) in [
+            ("http://127.0.0.1:8089", "127.0.0.1:8089"),
+            ("http://127.0.0.1:8090", "127.0.0.1:8090"),
+            ("http://[::1]:8089", "[::1]:8089"),
+            ("https://viewer.example.org", "viewer.example.org"),
+            ("https://viewer.example.org", "viewer.example.org:443"),
+            ("http://Viewer.Example.org", "viewer.example.org:80"),
+        ] {
+            assert!(
+                origin_permitted(Some(origin), Some(host), none),
+                "{origin} → {host}"
+            );
+        }
+    }
+
+    /// A page on another site — or on the same host's other port — may not
+    /// drive the session from the visitor's browser.
+    #[test]
+    fn cross_origin_is_refused() {
+        let none: &[String] = &[];
+        for (origin, host) in [
+            ("https://evil.example", "127.0.0.1:8089"),
+            ("http://127.0.0.1:9999", "127.0.0.1:8089"),
+            ("http://localhost:8089", "127.0.0.1:8089"),
+            ("https://viewer.example.org", "viewer.example.org:80"),
+            ("null", "127.0.0.1:8089"),
+            ("file://", "127.0.0.1:8089"),
+            ("http://127.0.0.1:8089/path", "127.0.0.1:8089"),
+        ] {
+            assert!(
+                !origin_permitted(Some(origin), Some(host), none),
+                "{origin} → {host}"
+            );
+        }
+        assert!(!origin_permitted(Some("http://127.0.0.1:8089"), None, none));
+    }
+
+    /// No `Origin` is a client that is not a browser page: the native viewer,
+    /// `imzero2 drive`, `ws_probe`.
+    #[test]
+    fn absent_origin_is_permitted() {
+        assert!(origin_permitted(None, Some("127.0.0.1:8089"), &[]));
+        assert!(origin_permitted(None, None, &[]));
+    }
+
+    /// A proxy that rewrites `Host` names its public origin in the allowlist.
+    #[test]
+    fn allowlisted_origin_is_permitted() {
+        let allowed = vec!["https://viewer.example.org".to_owned(), "null".to_owned()];
+        assert!(origin_permitted(
+            Some("https://viewer.example.org"),
+            Some("127.0.0.1:8089"),
+            &allowed
+        ));
+        assert!(origin_permitted(
+            Some("null"),
+            Some("127.0.0.1:8089"),
+            &allowed
+        ));
+        assert!(!origin_permitted(
+            Some("https://other.example.org"),
+            Some("127.0.0.1:8089"),
+            &allowed
+        ));
+    }
+
     fn carrier_for_test(lane: CodecLane) -> WsCarrier {
         WsCarrier {
             inner: std::sync::Arc::new(mk_inner()),
@@ -2318,6 +2485,7 @@ mod tests {
             frames_decoded: std::sync::atomic::AtomicU64::new(0),
             tree_wanted: std::sync::atomic::AtomicBool::new(false),
             capture_request: std::sync::Mutex::new(None),
+            allowed_origins: Vec::new(),
         }
     }
 

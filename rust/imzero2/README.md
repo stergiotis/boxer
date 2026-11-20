@@ -125,6 +125,7 @@ surface in [`doc/env-vars.md`](../../doc/env-vars.md):
 | Variable | Default | Effect |
 |---|---|---|
 | `IMZERO2_HEADLESS_LISTEN` | unset | Carrier bind address (e.g. `127.0.0.1:8089`); this port and port+1 each serve both the viewer page and the WebSocket. Unset = no remote access. `hmi_headless.sh` sets `127.0.0.1:8089`. A non-loopback address refuses to start without `IMZERO2_HEADLESS_INSECURE_EXPOSE`. |
+| `IMZERO2_HEADLESS_ALLOWED_ORIGINS` | unset | Comma-separated origins (`https://viewer.example.org`) whose pages may open the WebSocket besides the request's own host. The carrier refuses an upgrade whose `Origin` names another host than `Host`; set this behind a proxy that rewrites `Host`. |
 | `IMZERO2_HEADLESS_INSECURE_EXPOSE` | unset | `1` lets the carrier bind a non-loopback address. It has no authentication or TLS, so whoever reaches the port controls the session (ADR-0082 SD1). |
 | `IMZERO2_HEADLESS_FPS` | `60` | Render tick in Hz (`hmi_headless.sh` sets 30). Paces the FFFI2 loop in place of vsync. |
 | `IMZERO2_HEADLESS_ENCODER_ARGS` | VAAPI per SD3 | Whitespace-split ffmpeg args between rawvideo input and `-f h264` output. |
