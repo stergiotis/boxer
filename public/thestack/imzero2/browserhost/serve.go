@@ -95,8 +95,14 @@ func Serve(ctx context.Context, cfg ServeConfig, logger zerolog.Logger) (err err
 
 	files := http.FileServer(http.Dir(cfg.Dir))
 	mux := http.NewServeMux()
-	mux.HandleFunc("/ch/", func(w http.ResponseWriter, r *http.Request) { proxy.ServeHTTP(w, r) })
-	mux.HandleFunc("/ch", func(w http.ResponseWriter, r *http.Request) { proxy.ServeHTTP(w, r) })
+	mux.HandleFunc("/ch/", func(w http.ResponseWriter, r *http.Request) {
+		setSecurityHeaders(w.Header(), nil)
+		proxy.ServeHTTP(w, r)
+	})
+	mux.HandleFunc("/ch", func(w http.ResponseWriter, r *http.Request) {
+		setSecurityHeaders(w.Header(), nil)
+		proxy.ServeHTTP(w, r)
+	})
 	mux.HandleFunc("POST /log", func(w http.ResponseWriter, r *http.Request) {
 		b, _ := io.ReadAll(io.LimitReader(r.Body, 1<<20))
 		logger.Info().Str("module", strings.TrimSpace(string(b))).Msg("tab")
@@ -129,9 +135,11 @@ func Serve(ctx context.Context, cfg ServeConfig, logger zerolog.Logger) (err err
 			w.Header().Set("Content-Type", "text/javascript")
 		}
 		if name, b, ok := assetFor(cfg, r.URL.Path); ok {
+			setSecurityHeaders(w.Header(), pageBytes(name, b))
 			http.ServeContent(w, r, name, time.Time{}, bytes.NewReader(b))
 			return
 		}
+		setSecurityHeaders(w.Header(), dirPage(cfg.Dir, r.URL.Path))
 		files.ServeHTTP(w, r)
 	})
 
@@ -153,6 +161,32 @@ func Serve(ctx context.Context, cfg ServeConfig, logger zerolog.Logger) (err err
 	_ = srv.Shutdown(shutdownCtx)
 	if errors.Is(err, http.ErrServerClosed) {
 		err = nil
+	}
+	return
+}
+
+// pageBytes is b when name is an HTML document, nil otherwise: the policy
+// names a page's inline blocks by digest.
+func pageBytes(name string, b []byte) (page []byte) {
+	if path.Ext(name) == ".html" {
+		page = b
+	}
+	return
+}
+
+// dirPage reads the HTML document a request names from the bundle
+// directory ("/" names index.html), nil when it names none.
+func dirPage(dir string, urlPath string) (page []byte) {
+	name := strings.TrimPrefix(path.Clean("/"+urlPath), "/")
+	if name == "" {
+		name = "index.html"
+	}
+	if path.Ext(name) != ".html" {
+		return
+	}
+	b, err := os.ReadFile(filepath.Join(dir, filepath.FromSlash(name)))
+	if err == nil {
+		page = b
 	}
 	return
 }

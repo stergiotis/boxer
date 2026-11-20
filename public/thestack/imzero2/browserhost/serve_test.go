@@ -154,3 +154,35 @@ func TestServeReportEndsWhenAsked(t *testing.T) {
 		t.Fatal("serve did not end after the report")
 	}
 }
+
+// Every response carries nosniff and a policy; the page's names its inline
+// blocks by digest and refuses framing by another site.
+func TestServeSendsSecurityHeaders(t *testing.T) {
+	page := []byte("<!doctype html><style>b{}</style><script>let a=1;</script><script src=\"x.js\"></script>")
+	base, _, _ := startServeWith(t, false, map[string][]byte{"page.html": page})
+	resp, err := http.Get(base + "/page.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = resp.Body.Close()
+	csp := resp.Header.Get("Content-Security-Policy")
+	for _, want := range []string{"frame-ancestors 'self'", "worker-src 'self'", "'wasm-unsafe-eval'", cspHash([]byte("let a=1;")), cspHash([]byte("b{}"))} {
+		if !strings.Contains(csp, want) {
+			t.Errorf("policy lacks %q: %s", want, csp)
+		}
+	}
+	if strings.Contains(csp, "unsafe-inline") {
+		t.Errorf("policy allows inline code: %s", csp)
+	}
+	if got := resp.Header.Get("X-Content-Type-Options"); got != "nosniff" {
+		t.Errorf("nosniff missing: %q", got)
+	}
+	resp, err = http.Get(base + "/m.wasm")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = resp.Body.Close()
+	if resp.Header.Get("X-Content-Type-Options") != "nosniff" || resp.Header.Get("Content-Security-Policy") == "" {
+		t.Errorf("a file lacks the headers: %v", resp.Header)
+	}
+}
