@@ -5,6 +5,7 @@ import (
 	"iter"
 
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/metrics"
 )
 
 // SetupAxisLinks links this axis to caller-held min/max values — the
@@ -67,6 +68,9 @@ type subplotState struct {
 	allX, allY [2]float64
 	rows, cols [][2]float64
 	inited     bool
+	// lastSeen is the frame of the last Subplots call, which sweepPools
+	// ages the state by.
+	lastSeen uint64
 }
 
 var subplotPool = make(map[uint64]*subplotState, 4)
@@ -131,6 +135,7 @@ func Subplots(ids *c.WidgetIdStack, title string, rows int, cols int, w float32,
 		}
 		subplotPool[scopeId] = st
 	}
+	st.lastSeen = metrics.Current.FrameCounter()
 	if len(st.rows) != rows || len(st.cols) != cols {
 		st.rows = make([][2]float64, rows)
 		st.cols = make([][2]float64, cols)

@@ -360,6 +360,13 @@ type Snapshot struct {
 	PaintSkipped  uint32
 }
 
+// FrameCounter is the number of frames completed so far. Retained widget
+// state ages by it: an entry not touched for some number of frames is
+// dropped at a sweep (imzero2 skill §21). Read it on the render goroutine.
+func (inst *FrameMetrics) FrameCounter() (n uint64) {
+	return inst.frameCounter
+}
+
 func (inst *FrameMetrics) Snapshot() (s Snapshot) {
 	s.FrameCounter = inst.frameCounter
 	s.RenderNs = int64(inst.EmaRenderNs)

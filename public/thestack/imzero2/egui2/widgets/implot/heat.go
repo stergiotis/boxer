@@ -30,6 +30,35 @@ type heatTex struct {
 	hash        uint64
 	version     uint64
 	sentVersion uint64
+	// drawnAt is the plot's Begin count when the texture was last drawn.
+	drawnAt uint64
+}
+
+// maxHeatTextures bounds a plot's heatmap texture cache, which is keyed by
+// label: past it, a new label drops the textures this frame did not draw, so
+// a heatmap whose label changes from frame to frame does not grow the cache
+// without end. The textures of one frame are all kept.
+const maxHeatTextures = 8
+
+// heatTexFor is the cached texture for label, made when there is none.
+func (st *plotState) heatTexFor(label string) (ht *heatTex) {
+	if st.heatCache == nil {
+		st.heatCache = make(map[string]*heatTex, 2)
+	}
+	ht = st.heatCache[label]
+	if ht == nil {
+		if len(st.heatCache) >= maxHeatTextures {
+			for l, old := range st.heatCache {
+				if old.drawnAt != st.begins {
+					delete(st.heatCache, l)
+				}
+			}
+		}
+		ht = &heatTex{}
+		st.heatCache[label] = ht
+	}
+	ht.drawnAt = st.begins
+	return
 }
 
 // Heatmap declares a rows×cols grid of values, row-major with row 0 at the
@@ -221,14 +250,7 @@ func (p *Plot) emitHeatmap(s *seriesFrame, tr transform) {
 	// Texture route: colorize into the retained per-label buffer only when
 	// the content signature moves; ship pixels only on a version change or
 	// when the host reports the texture starved (hidden-tab discard, LRU).
-	if p.st.heatCache == nil {
-		p.st.heatCache = make(map[string]*heatTex, 2)
-	}
-	ht := p.st.heatCache[s.label]
-	if ht == nil {
-		ht = &heatTex{}
-		p.st.heatCache[s.label] = ht
-	}
+	ht := p.st.heatTexFor(s.label)
 	hash := hashF64s(h.values[:n])
 	if hash != ht.hash || len(ht.pix) != n {
 		if cap(ht.pix) < n {

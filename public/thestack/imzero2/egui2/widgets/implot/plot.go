@@ -10,6 +10,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/widgethandle"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/legend"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/metrics"
 )
 
 // Typography and tick geometry — palette-independent (the chrome colors
@@ -87,6 +88,12 @@ type plotState struct {
 	heatCache   map[string]*heatTex
 	imgSent     map[string]uint64
 
+	// lastSeen is the frame (metrics.Current.FrameCounter) of the last
+	// Begin, which sweepPools ages the state by; begins counts the Begins,
+	// which the heatmap texture cache ages its entries by.
+	lastSeen uint64
+	begins   uint64
+
 	// Range gestures the person made, finished, settled and handed to the
 	// next frame's handle (gesture.go).
 	gestures gestureTrack
@@ -116,6 +123,39 @@ type plotState struct {
 }
 
 var pool = make(map[uint64]*plotState, 8)
+
+// retainFrames is how many frames a plot's retained state outlives the last
+// frame that drew it. A plot whose state is gone starts afresh, at its
+// default ranges, when it is drawn again; a plot not drawn for that long —
+// a closed notebook cell, a window long gone — no longer holds its scratch
+// buffers and texture pixels for the rest of the process.
+const retainFrames = 36_000
+
+// sweepEvery spaces the sweeps over the pools, so the cost of one is spread
+// over many frames.
+const sweepEvery = retainFrames / 8
+
+// lastSweep is the frame of the last sweep over pool and subplotPool.
+var lastSweep uint64
+
+// sweepPools drops the plot and subplot states no frame has touched for
+// retainFrames, at most once every sweepEvery frames.
+func sweepPools(now uint64) {
+	if now < lastSweep+sweepEvery {
+		return
+	}
+	lastSweep = now
+	for id, st := range pool {
+		if now-st.lastSeen > retainFrames {
+			delete(pool, id)
+		}
+	}
+	for id, st := range subplotPool {
+		if now-st.lastSeen > retainFrames {
+			delete(subplotPool, id)
+		}
+	}
+}
 
 // seriesFrame is one item call, held until End so auto-fit sees the whole
 // frame's data before the ranges freeze. Fields beyond xs/ys apply per
@@ -212,11 +252,15 @@ type Plot struct {
 func Begin(ids *c.WidgetIdStack, title string, w float32, h float32) *Plot {
 	scope := ids.PrepareStr(title)
 	scopeId := scope.DeriveStacked()
+	now := metrics.Current.FrameCounter()
+	sweepPools(now)
 	st, ok := pool[scopeId]
 	if !ok {
 		st = &plotState{hidden: make(map[string]bool, 4)}
 		pool[scopeId] = st
 	}
+	st.lastSeen = now
+	st.begins++
 	st.beginFrame()
 	shown, _, _ := strings.Cut(title, "##")
 	p := &Plot{ids: ids, st: st, scopeId: scopeId, w: w, h: h, title: title, titleShown: shown,
@@ -268,15 +312,16 @@ func Scoped(ids *c.WidgetIdStack, title string, w float32, h float32) iter.Seq[*
 }
 
 // ScopeId is the id Begin derived for this plot, under which its retained
-// state lives until [Release].
+// state lives until [Release], or until no frame has drawn the plot for a
+// long while.
 func (p *Plot) ScopeId() uint64 { return p.scopeId }
 
 // Release drops the retained state — ranges, gesture history, legend
 // visibility — of the plot whose [Plot.ScopeId] is scopeId. The state of a
 // plot outlives its last frame, so a caller whose plots come and go, such as
 // a notebook's cells, releases each one it will not draw again; a plot drawn
-// after its release starts afresh. Call it from the frame goroutine, like
-// Begin.
+// after its release starts afresh. A state no frame has drawn for a long
+// while is dropped without it. Call it from the frame goroutine, like Begin.
 func Release(scopeId uint64) { delete(pool, scopeId) }
 
 // NewDetached returns a plot handle bound to no canvas and no frame,
