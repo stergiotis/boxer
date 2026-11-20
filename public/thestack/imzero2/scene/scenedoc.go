@@ -18,10 +18,20 @@ import (
 // scenes beside ordinary documents.
 const DocSuffix = ".scene.md"
 
+// FormatVersion is the scene format this build reads up to, recorded as
+// `format` inside the `scene:` key. A spec without it is format 1. Bump it
+// when a scene written for a newer build would not run, or would run
+// differently, under an older one.
+const FormatVersion = 1
+
 // Spec is a scene's launch: what the frontmatter's `scene:` key holds
 // (ADR-0248 §SD3). The document's other frontmatter keys are the repository's
 // own (type, audience, status) and are not this package's to read.
 type Spec struct {
+	// Format is the scene format the document is written in; 0 (absent)
+	// reads as 1. Checked before the strict decode, so a scene from a newer
+	// build is refused for its format rather than for its first new key.
+	Format int `yaml:"format"`
 	// Launch is the app alias handed to `imzero2 demo --launch`.
 	Launch string `yaml:"launch"`
 	// Size is the viewport, "WxH" in logical points. Empty means DefaultSize.
@@ -182,6 +192,33 @@ func SplitDoc(src []byte) (front []byte, fences []Fence, prose string) {
 	return front, fences, strings.TrimSpace(strings.Join(text, "\n"))
 }
 
+// checkFormat refuses a spec in a format this build does not read. It reads
+// `format` alone, without strictness.
+func checkFormat(spec *yaml.Node) (err error) {
+	var f struct {
+		Format any `yaml:"format"`
+	}
+	if err = spec.Decode(&f); err != nil {
+		return
+	}
+	n := 1
+	switch t := f.Format.(type) {
+	case nil:
+	case int:
+		n = t
+	default:
+		return eh.Errorf("the scene's format is not a whole number")
+	}
+	if n < 1 {
+		return eb.Build().Int("format", n).Errorf("the scene's format is not a positive number")
+	}
+	if n > FormatVersion {
+		return eb.Build().Int("format", n).Int("reads", FormatVersion).
+			Errorf("the scene was written for a newer boxer (format %d; this build reads up to %d)", n, FormatVersion)
+	}
+	return
+}
+
 // ParseDoc parses one scene document.
 func ParseDoc(path string, src []byte) (doc *Doc, err error) {
 	base := filepath.Base(path)
@@ -212,6 +249,9 @@ func ParseDoc(path string, src []byte) (doc *Doc, err error) {
 	}
 	if err != nil {
 		return nil, eh.Errorf("unable to re-encode the scene spec: %w", err)
+	}
+	if err = checkFormat(&fm.Scene); err != nil {
+		return nil, eb.Build().Str("path", path).Errorf("scene spec: %w", err)
 	}
 	dec := yaml.NewDecoder(&raw)
 	dec.KnownFields(true)

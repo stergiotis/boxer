@@ -1,6 +1,7 @@
 package scene
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -99,4 +100,21 @@ func TestCaptureFilesListsSidecars(t *testing.T) {
 		{PNG: "plain.png"},
 		{PNG: "measured.png", Sidecars: []string{"measured.svg", "measured.tree.jsonl"}},
 	}, doc.CaptureFiles())
+}
+
+// TestParseDocFormat: no format is 1, a newer one is refused with both
+// numbers even when it carries a key this build does not know.
+func TestParseDocFormat(t *testing.T) {
+	with := func(lines string) []byte {
+		return []byte(strings.Replace(sampleDoc, "scene:\n", "scene:\n"+lines, 1))
+	}
+	doc, err := ParseDoc("x/10_table.scene.md", with("  format: 1\n"))
+	require.NoError(t, err)
+	assert.Equal(t, 1, doc.Spec.Format)
+
+	_, err = ParseDoc("x/10_table.scene.md", with("  format: 2\n  rewind: true\n"))
+	require.ErrorContains(t, err, "written for a newer boxer (format 2; this build reads up to 1)")
+
+	_, err = ParseDoc("x/10_table.scene.md", with("  format: two\n"))
+	require.Error(t, err)
 }
