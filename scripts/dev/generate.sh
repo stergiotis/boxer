@@ -15,7 +15,8 @@
 #   - boxerstaging/spinnaker/generate.sh
 #   - boxerstaging/leeway/schema/generate.sh
 #
-# Everything else regenerates from here. Generators reached by an explicit
+# This is the one generate script; the generate.sh at the repository root
+# execs it. Everything else regenerates from here. Generators reached by an explicit
 # invocation below are the ones taking a repo-wide argument list; anything whose
 # regeneration is package-local carries a `//go:generate` directive next to the
 # artifact and is swept by the `go generate ./...` at the end. That includes the
@@ -51,31 +52,19 @@ boxer egui2gen generate rust --rustOutputBasePath=./rust/imzero2/src/imzero2/
 boxer egui2gen generate go   --goOutputBasePath=./public/thestack/imzero2/egui2/bindings
 boxer egui2gen generate doc  --docOutputPath=./doc/skills/imzero2/assets/egui2_api_reference.md
 
-# Keelson codec generator (ADR-0042). For each DTO under
-# public/keelson/runtime/codec/<kind>/<kind>.go produce a sibling
-# <kind>.out.go with the SoA Columns + Append + Marshal + ColumnList +
-# ChlocalStructure surface.
-boxer keelsoncodec \
-    public/keelson/runtime/codec/m1fixture/fixture.go \
-    public/keelson/runtime/codec/capabilitygrant/capabilitygrant.go \
-    public/keelson/runtime/codec/errkind/errkind.go \
-    public/keelson/runtime/codec/taskprogress/taskprogress.go \
-    public/keelson/runtime/codec/taskcreated/taskcreated.go \
-    public/keelson/runtime/codec/taskcancel/taskcancel.go \
-    public/keelson/runtime/codec/taskerror/taskerror.go \
-    public/keelson/runtime/codec/taskdone/taskdone.go \
-    public/keelson/runtime/codec/grantrequest/grantrequest.go \
-    public/keelson/runtime/codec/grantreply/grantreply.go \
-    public/keelson/runtime/codec/dialogreply/dialogreply.go \
-    public/keelson/runtime/codec/watchrequest/watchrequest.go \
-    public/keelson/runtime/codec/watchreply/watchreply.go \
-    public/keelson/runtime/codec/watchevent/watchevent.go \
-    public/keelson/runtime/codec/persistreply/persistreply.go \
-    public/keelson/runtime/codec/inflightsnapshotreply/inflightsnapshotreply.go \
-    public/keelson/runtime/codec/launchrequest/launchrequest.go \
-    public/keelson/runtime/codec/launchreply/launchreply.go \
-    public/keelson/runtime/codec/keelsonqueryrequest/keelsonqueryrequest.go \
-    public/keelson/runtime/codec/keelsonqueryreply/keelsonqueryreply.go
+# Keelson codec generator (ADR-0042). Every DTO under
+# public/keelson/runtime/codec/<kind>/ is the source of a sibling <name>.out.go
+# with the SoA Columns + Append + Marshal + ColumnList + ChlocalStructure
+# surface, so the list is discovered from the .out.go files rather than kept by
+# hand: a new codec package is regenerated as soon as its first output is
+# committed. (factswrapper and kindcheck are libraries and have none.) Each
+# package's TestGeneratorMatchesCheckedInOutput holds the same pair.
+mapfile -t codec_sources < <(
+    for out in public/keelson/runtime/codec/*/*.out.go; do
+        printf '%s\n' "${out%.out.go}.go"
+    done | LC_ALL=C sort
+)
+boxer keelsoncodec "${codec_sources[@]}"
 
 # runtime/factsschema codegen (ADR-0026). Emits DDL / DML (Arrow and sparse
 # CBOR) / read-access wrappers for the runtime facts schema. Driven from here
@@ -87,6 +76,23 @@ boxer runtimecodegen all
 # Phosphor icon catalogue (ADR-0044 §SD3). SHA-verifies the vendored
 # phosphor-icons.json and emits phosphor{,_lookup,_affordances}.out.go.
 ./public/keelson/runtime/icons/generate.sh
+
+# canonicaltypes abbreviations table.
+./public/semistructured/leeway/canonicaltypes/ctabb/generate.sh
+
+# Leeway information_schema DML goldens — the facts / vcsmanaged mappings run
+# through the dml driver, kept as testdata goldens (nothing in this module
+# imports the generated classes).
+go test -tags "$tags" -count=1 \
+    -run '^TestInformationSchemaDmlMatchesGolden$' \
+    ./public/semistructured/leeway/dml/ -update
+
+# Leeway anchor table — test-driven regeneration of DDL / DML / read-access
+# (.out.go + .out.sql). Filtered to the three generator tests so the package's
+# ClickHouse tests do not run here.
+go test -tags "$tags" -count=1 \
+    -run '^(TestReadAccessGoClassBuilderGeneration|TestDmlGeneration|TestDdlClickHouseGeneration)$' \
+    ./public/semistructured/leeway/anchor/
 
 # Sweep //go:generate directives: envgen (doc/env-vars.md) and the
 # leewaywidgets fixture_dml.out.go regen test. Tags pass-through so the
