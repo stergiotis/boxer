@@ -254,8 +254,8 @@ func (inst *Store) LogRows(ctx context.Context, filter factsstore.LogRowsFilter)
 	rows = []factsstore.LogRowRead{}
 	var ferr error
 	b := binds{}
-	err = inst.readRows(ctx, "log rows", composeLogRowsSql(inst.qualifiedTable(), filter, b), b, 11, func(r row) {
-		out := factsstore.LogRowRead{RunId: r.str(2), Row: factsstore.LogRow{
+	err = inst.readRows(ctx, "log rows", composeLogRowsSql(inst.qualifiedTable(), filter, b), b, 12, func(r row) {
+		out := factsstore.LogRowRead{RunId: r.str(2), Id: r.u64(11), Row: factsstore.LogRow{
 			Ts: time.Unix(0, r.i64(0)).UTC(), AppId: app.AppIdT(r.str(1)), InstanceKey: r.u64(3),
 			Level: r.str(4), Caller: r.str(5), Service: r.str(6),
 			Message: r.str(7), Error: r.str(8), Stack: r.str(9),
@@ -383,7 +383,8 @@ SELECT
   %s AS message,
   %s AS err,
   %s AS stack,
-  %s AS fields
+  %s AS fields,
+  %s AS id
 FROM %s
 WHERE %s
 ORDER BY %s DESC, %s DESC
@@ -399,6 +400,7 @@ LIMIT %d`,
 		str(vocab.MembLogError),
 		text(vocab.MembLogStack),
 		logFieldsExpr(),
+		hId,
 		table,
 		strings.Join(where, " AND "),
 		hTs, hId,

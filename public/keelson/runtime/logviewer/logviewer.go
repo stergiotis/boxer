@@ -133,7 +133,7 @@ type LogViewerApp struct {
 	// Stored by value (not by pointer into the cache) so it survives a
 	// refresh — the detail pane keeps showing the chosen event even if
 	// the next read no longer holds it.
-	selected    factsstore.LogRow
+	selected    Entry
 	hasSelected bool
 
 	// Operations state (logviewer_ops.go, ADR-0345). frameCtx is the
@@ -597,8 +597,9 @@ func (inst *LogViewerApp) renderTailTable(newest []Entry) {
 	// screen it is a screenful around the followed tail (VisibleRows).
 	lo, hi := et.VisibleRows(uint64(n), c.EtScreenfulRows(0, rowHeight), int64(scrollTo))
 	for i := int(lo); i < int(hi); i++ {
-		r := rows.at(i)
-		isSelected := selectedKey != "" && rowKey(r) == selectedKey
+		e := rows.at(i)
+		r := e.Row
+		isSelected := selectedKey != "" && rowKey(e) == selectedKey
 		tint, hasTint := rowTint(r.Level)
 
 		// One row block owns the whole row's backdrop, outline and click
@@ -659,7 +660,7 @@ func (inst *LogViewerApp) renderTailTable(newest []Entry) {
 		if clicked {
 			// A click on the selected row clears it; the gesture carries
 			// the next state, so the command sets and never toggles.
-			inst.selectGesture(r, !isSelected)
+			inst.selectGesture(e, !isSelected)
 		}
 	}
 	// No Striped(true): the etable's zebra is painted per cell, in cell_ui,
@@ -751,7 +752,7 @@ func (inst *LogViewerApp) cellPad(row, col int, body func()) {
 // tagged-union list. Empty optional fields are omitted so the pane
 // stays compact for the common case.
 func (inst *LogViewerApp) renderDetailPane() {
-	r := inst.selected
+	r := inst.selected.Row
 
 	// Header row stays outside the ScrollArea so the level badge,
 	// timestamp and Clear-selection button are always reachable
@@ -795,7 +796,7 @@ func (inst *LogViewerApp) renderDetailPane() {
 			if c.Button(inst.ids.PrepareStr("d-clear"),
 				c.Atoms().Text("Clear selection").Keep()).
 				SendResp().HasPrimaryClicked() {
-				inst.selectGesture(factsstore.LogRow{}, false)
+				inst.selectGesture(Entry{}, false)
 			}
 		}
 	}
@@ -1040,12 +1041,16 @@ func rowTint(level string) (tint color.Color, ok bool) {
 // it survives a refresh; we still need a way to highlight the same
 // row in the next read, hence the key.
 //
-// Ts.UnixNano gives nanosecond resolution which is unique in practice
-// for events emitted from the same process; Caller and Message are
-// added to disambiguate the (rare) coincident-Ts case where two log
-// lines land in the same nanosecond.
-func rowKey(r factsstore.LogRow) (s string) {
-	s = fmt.Sprintf("%d|%s|%s", r.Ts.UnixNano(), r.Caller, r.Message)
+// Timestamp, caller and message do not name an event on their own: the
+// stored timestamp is only as fine as the writer made it (a CBOR float
+// under binary_log, about a quarter of a microsecond at today's epoch;
+// milliseconds for the task supervisor), so a burst of one log line
+// yields rows equal in all three. The store id separates those; it
+// restarts in every process, which is why it is added to the three
+// rather than replacing them.
+func rowKey(e Entry) (s string) {
+	r := e.Row
+	s = fmt.Sprintf("%d|%d|%s|%s", r.Ts.UnixNano(), e.Id, r.Caller, r.Message)
 	return
 }
 
@@ -1181,4 +1186,4 @@ type chronological struct {
 
 func (inst chronological) len() int { return len(inst.newest) }
 
-func (inst chronological) at(i int) factsstore.LogRow { return inst.newest[len(inst.newest)-1-i].Row }
+func (inst chronological) at(i int) Entry { return inst.newest[len(inst.newest)-1-i] }

@@ -85,30 +85,33 @@ func (inst *LogViewerApp) selectionKey() (key string) {
 	return
 }
 
-func (inst *LogViewerApp) applySelection(r factsstore.LogRow, has bool) {
-	inst.selected, inst.hasSelected = r, has
+func (inst *LogViewerApp) applySelection(e Entry, has bool) {
+	inst.selected, inst.hasSelected = e, has
 	if !has {
-		inst.selected = factsstore.LogRow{}
+		inst.selected = Entry{}
 	}
 }
 
-// opsRowKey names a row for a caller: its timestamp and a digest of its
-// caller and message, the same three the window's rowKey compares, in a
-// form short enough to pass back. Fact ids restart in every process, so
-// the row's id in boxer.facts would not name it across runs.
-func opsRowKey(r factsstore.LogRow) (key string) {
+// opsRowKey names a row for a caller: its timestamp, a digest of its
+// caller and message, and its id in boxer.facts — the four the window's
+// rowKey compares, in a form short enough to pass back. Fact ids restart in
+// every process, so the id alone would not name a row across runs; the
+// first three alone do not separate a burst of one log line (rowKey).
+func opsRowKey(e Entry) (key string) {
+	r := e.Row
 	h := fnv.New32a()
 	_, _ = h.Write([]byte(r.Caller))
 	_, _ = h.Write([]byte{0})
 	_, _ = h.Write([]byte(r.Message))
-	key = strconv.FormatInt(r.Ts.UnixNano(), 10) + "-" + strconv.FormatUint(uint64(h.Sum32()), 16)
+	key = strconv.FormatInt(r.Ts.UnixNano(), 10) + "-" + strconv.FormatUint(uint64(h.Sum32()), 16) +
+		"-" + strconv.FormatUint(e.Id, 16)
 	return
 }
 
 // findRow returns the entry key names among rows.
 func findRow(rows []Entry, key string) (e Entry, ok bool) {
 	for i := range rows {
-		if opsRowKey(rows[i].Row) == key {
+		if opsRowKey(rows[i]) == key {
 			e, ok = rows[i], true
 			return
 		}
@@ -351,8 +354,9 @@ func parseLevelArg(s string) (lvl zerolog.Level, err error) {
 	return
 }
 
-func summarizeRow(r factsstore.LogRow) (s RowSummary) {
-	s = RowSummary{Key: opsRowKey(r), Ts: r.Ts, Level: r.Level, App: string(r.AppId), Caller: r.Caller,
+func summarizeRow(e Entry) (s RowSummary) {
+	r := e.Row
+	s = RowSummary{Key: opsRowKey(e), Ts: r.Ts, Level: r.Level, App: string(r.AppId), Caller: r.Caller,
 		Message: appops.CutText(r.Message, opsMaxMessageLen), HasError: r.Error != "" || r.ErrorContext != nil, Fields: len(r.Fields)}
 	return
 }
@@ -445,12 +449,12 @@ var ops = func() (s *appops.Set[*LogViewerApp, opsSnap]) {
 			return false
 		}
 		if key == "" {
-			inst.applySelection(factsstore.LogRow{}, false)
+			inst.applySelection(Entry{}, false)
 			return true
 		}
 		e, found := findRow(inst.cache.rows, key)
 		if found {
-			inst.applySelection(e.Row, true)
+			inst.applySelection(e, true)
 		}
 		return found
 	})
@@ -511,7 +515,7 @@ var ops = func() (s *appops.Set[*LogViewerApp, opsSnap]) {
 			}
 			out.Rows = make([]RowSummary, 0, len(rows))
 			for i := len(rows) - 1; i >= 0; i-- {
-				out.Rows = append(out.Rows, summarizeRow(rows[i].Row))
+				out.Rows = append(out.Rows, summarizeRow(rows[i]))
 			}
 			return
 		})
@@ -572,7 +576,7 @@ var ops = func() (s *appops.Set[*LogViewerApp, opsSnap]) {
 		Gesture: "a row click, the Clear selection button", Rebuild: app.OperationRebuildVolatile},
 		func(inst *LogViewerApp, _ app.OperationCall, in SelectRowArgs) (out appops.None, err error) {
 			if in.Key == "" {
-				inst.applySelection(factsstore.LogRow{}, false)
+				inst.applySelection(Entry{}, false)
 				return
 			}
 			if src := sourceRef.Load(); !src.persisted() {
@@ -584,7 +588,7 @@ var ops = func() (s *appops.Set[*LogViewerApp, opsSnap]) {
 				err = app.RefuseOperation(rowGoneReason)
 				return
 			}
-			inst.applySelection(e.Row, true)
+			inst.applySelection(e, true)
 			return
 		})
 
@@ -638,10 +642,10 @@ func (inst *LogViewerApp) setFollowGesture(follow bool) {
 // selectGesture selects r, or clears the selection when has is false. A
 // row click computes the next state — a click on the selected row clears
 // it — so the command itself sets and never toggles.
-func (inst *LogViewerApp) selectGesture(r factsstore.LogRow, has bool) {
+func (inst *LogViewerApp) selectGesture(e Entry, has bool) {
 	key := ""
 	if has {
-		key = opsRowKey(r)
+		key = opsRowKey(e)
 	}
-	gestureOr(inst, opSelectRow, SelectRowArgs{Key: key}, func() { inst.applySelection(r, has) })
+	gestureOr(inst, opSelectRow, SelectRowArgs{Key: key}, func() { inst.applySelection(e, has) })
 }

@@ -536,10 +536,17 @@ type LogRowsFilter struct {
 // LogRowRead is one log row as [LogReaderI.LogRows] reads it back: the row
 // the writer was handed, less the structured error chain, which the writer
 // does not persist (only its flat summary in Error), plus the run the row
-// was stamped with.
+// was stamped with and the row's id in the store.
+//
+// Id restarts in every writing process, so it names a row only together
+// with the rest of it. It is what tells apart two events of one process
+// that agree on timestamp, caller and message: the timestamp is no finer
+// than the writer made it (a CBOR float under binary_log, milliseconds for
+// some writers), so such pairs are not rare.
 type LogRowRead struct {
 	Row   LogRow
 	RunId string
+	Id    uint64
 }
 
 // LogReaderI is the optional capability behind the log viewer: log rows read

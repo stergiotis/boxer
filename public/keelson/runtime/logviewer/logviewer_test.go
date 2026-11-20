@@ -148,21 +148,26 @@ func TestRowTint(t *testing.T) {
 }
 
 // TestRowKey is stable across two snapshots that contain the same
-// row, and distinct for rows that share a Ts but differ in Caller or
-// Message. The selection-highlight comparison hangs off this — a
-// flaky key would make the highlight blink frame to frame.
+// row, and distinct for rows that share a Ts but differ in Caller,
+// Message or store id. The selection-highlight comparison hangs off
+// this — a flaky key would make the highlight blink frame to frame, and
+// a shared one lights up every row of a burst of one log line.
 func TestRowKey(t *testing.T) {
 	t0 := time.Date(2026, 5, 14, 12, 0, 0, 12345, time.UTC)
-	r := factsstore.LogRow{Ts: t0, Caller: "x.go:1", Message: "hello"}
-	assert.Equal(t, rowKey(r), rowKey(r), "key must be stable for equal rows")
+	e := Entry{Id: 7, Row: factsstore.LogRow{Ts: t0, Caller: "x.go:1", Message: "hello"}}
+	assert.Equal(t, rowKey(e), rowKey(e), "key must be stable for equal rows")
 
-	rDifferentCaller := r
-	rDifferentCaller.Caller = "x.go:2"
-	assert.NotEqual(t, rowKey(r), rowKey(rDifferentCaller), "caller must distinguish coincident-Ts rows")
+	eDifferentCaller := e
+	eDifferentCaller.Row.Caller = "x.go:2"
+	assert.NotEqual(t, rowKey(e), rowKey(eDifferentCaller), "caller must distinguish coincident-Ts rows")
 
-	rDifferentMsg := r
-	rDifferentMsg.Message = "world"
-	assert.NotEqual(t, rowKey(r), rowKey(rDifferentMsg), "message must distinguish coincident-Ts rows")
+	eDifferentMsg := e
+	eDifferentMsg.Row.Message = "world"
+	assert.NotEqual(t, rowKey(e), rowKey(eDifferentMsg), "message must distinguish coincident-Ts rows")
+
+	eNextEvent := e
+	eNextEvent.Id = 8
+	assert.NotEqual(t, rowKey(e), rowKey(eNextEvent), "the store id must distinguish two events of one log line")
 }
 
 // TestToFieldviewKind: the adapter that bridges the factsstore enum
@@ -317,7 +322,7 @@ func TestInstancesAreDistinct(t *testing.T) {
 	// Selection state must be independent — clicking a row in tile 1
 	// must not light up the same row in tile 2.
 	lv1.hasSelected = true
-	lv1.selected = factsstore.LogRow{Message: "in-tile-1"}
+	lv1.selected = Entry{Row: factsstore.LogRow{Message: "in-tile-1"}}
 	assert.False(t, lv2.hasSelected, "selection must not leak between instances")
 }
 
@@ -329,7 +334,7 @@ func TestSelectionSurvivesARefresh(t *testing.T) {
 	rows := sampleRows()
 	app := &LogViewerApp{}
 	app.hasSelected = true
-	app.selected = rows[2] // the warn row
+	app.selected = Entry{Row: rows[2]} // the warn row
 	originalKey := rowKey(app.selected)
 
 	// Drop the rows — a refresh does this when the next read no longer
@@ -340,7 +345,7 @@ func TestSelectionSurvivesARefresh(t *testing.T) {
 	// Selection must still resolve to the same key.
 	assert.Equal(t, originalKey, rowKey(app.selected))
 	assert.True(t, app.hasSelected)
-	assert.Equal(t, "high cpu", app.selected.Message)
+	assert.Equal(t, "high cpu", app.selected.Row.Message)
 }
 
 // TestHelpCorpusDropsNothing is the ADR-0180 M2 zero-drops gate over the log

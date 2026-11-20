@@ -269,6 +269,12 @@ The owner decided that the log viewer reads the host's log rows from `boxer.fact
 
 SD6 says an app wanting a command with an effect other than `view` needs a record of its own. The trail viewer's `mark_row` is that command, and [ADR-0350](./0350-a-trail-viewer-one-system-app-over-the-marts-a-case-a-window-a-verdict-and-review-marks.md) §SD7 is its record: it writes a review mark to the trail as an audit event, which is outside the window, so its effect is `consequential`; it is not offered to agents, and its handler refuses a call an agent's task makes, since review is the person's act. The viewer's other commands stay `view`. ADR-0350 is proposed, and this choice is one of the two its Status section flags for the owner's review.
 
+### 2026-11-20 — a row's key carries its id in `boxer.facts`
+
+The row key the decision gives — timestamp plus a digest of caller and message — does not name an event. The stored timestamp is only as fine as the writer made it: under the `binary_log` build zerolog encodes a sub-second time as a CBOR float of epoch seconds, about a quarter of a microsecond at today's epoch, and the task supervisor stamps its audit rows to the millisecond. A burst of one log line therefore yields distinct rows equal in all three, and the window treated them as one: selecting one highlighted every row of the burst, and `get_row` / `select_row` resolved the key to whichever came first.
+
+`LogRows` now returns each row's `id` beside it (`factsstore.LogRowRead.Id`), and both the window's highlight key and the catalog's key add it. The id restarts in every writing process, so it is added to the three rather than replacing them; a collision would need two processes to write the same line within one timestamp step under the same id. Keys stay valid while the row is in the cache, as before; their text changed, which matters only to a caller holding a key across this change. The store's natural key for a log row hashes app, level, message and timestamp and shares the same blind spot; it was left as it is.
+
 ## References
 
 - [ADR-0269](./0269-app-operations-a-command-query-contract-agents-drive-under-a-task-grant.md) — the operations contract.

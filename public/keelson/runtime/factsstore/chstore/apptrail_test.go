@@ -219,7 +219,7 @@ func TestStore_LogRows_RoundTripAndFilters_LiveCH(t *testing.T) {
 			{Name: "y", Kind: factsstore.LogFieldKindBytes, Bytes: []byte{0, 1, 255}},
 			{Name: "t", Kind: factsstore.LogFieldKindTime, Time: at},
 		}}
-	_, err = s.WriteLogs([]factsstore.LogRow{
+	ids, err := s.WriteLogs([]factsstore.LogRow{
 		{AppId: "github.com/example/play", Level: "debug", Message: "starting", Ts: t0},
 		{AppId: "github.com/example/imztop", Level: "warn", Message: "high cpu", Ts: t0.Add(time.Second), InstanceKey: 3},
 		{Message: "level-less", Ts: t0.Add(2 * time.Second)},
@@ -233,6 +233,7 @@ func TestStore_LogRows_RoundTripAndFilters_LiveCH(t *testing.T) {
 	assert.Equal(t, "level-less", rows[1].Row.Message, "newest first")
 	got := rows[0]
 	assert.Equal(t, "run-a", got.RunId)
+	assert.Equal(t, ids[3], got.Id, "the row's id in the store comes back with it")
 	assert.True(t, full.Ts.Equal(got.Row.Ts), "nanoseconds survive: %v", got.Row.Ts)
 	assert.Equal(t, full.AppId, got.Row.AppId)
 	assert.EqualValues(t, 7, got.Row.InstanceKey)

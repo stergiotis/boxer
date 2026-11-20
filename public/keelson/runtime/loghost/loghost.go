@@ -195,7 +195,7 @@ func readerOf(store factsstore.LogReaderI) logviewer.ReadFunc {
 		}
 		rows = make([]logviewer.Entry, len(read))
 		for i, r := range read {
-			rows[i] = logviewer.Entry{Row: r.Row, RunId: r.RunId}
+			rows[i] = logviewer.Entry{Row: r.Row, RunId: r.RunId, Id: r.Id}
 		}
 		return
 	}

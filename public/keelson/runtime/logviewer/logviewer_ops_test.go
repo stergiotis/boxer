@@ -87,14 +87,15 @@ func opsFixture(t *testing.T) (store *fakeStore, sink *logbridge.Sink) {
 	const play, imztop = "github.com/example/play", "github.com/example/imztop"
 	t0 := time.Now().UTC().Add(-time.Minute)
 	store = &fakeStore{rows: []Entry{
-		{RunId: fixtureRun, Row: factsstore.LogRow{AppId: play, Level: "error", Message: "connection refused",
+		{RunId: fixtureRun, Id: 4, Row: factsstore.LogRow{AppId: play, Level: "error", Message: "connection refused",
 			Error: "dial tcp: connection refused", InstanceKey: 4, Ts: t0.Add(3 * time.Second),
 			Fields: []factsstore.LogField{{Name: "host", Kind: factsstore.LogFieldKindString, Str: "db"}}}},
-		{RunId: fixtureRun, Row: factsstore.LogRow{AppId: imztop, Level: "warn", Message: "high cpu", Ts: t0.Add(2 * time.Second)}},
-		{RunId: fixtureRun, Row: factsstore.LogRow{AppId: play, Level: "info", Message: "query ok", Ts: t0.Add(time.Second),
+		{RunId: fixtureRun, Id: 3, Row: factsstore.LogRow{AppId: imztop, Level: "warn", Message: "high cpu", Ts: t0.Add(2 * time.Second)}},
+		{RunId: fixtureRun, Id: 2, Row: factsstore.LogRow{AppId: play, Level: "info", Message: "query ok", Ts: t0.Add(time.Second),
 			Fields: []factsstore.LogField{{Name: "rows", Kind: factsstore.LogFieldKindInt, Int: 3}}}},
-		{RunId: fixtureRun, Row: factsstore.LogRow{AppId: play, Level: "debug", Message: "starting", Ts: t0}},
-		{RunId: "run-before", Row: factsstore.LogRow{AppId: play, Level: "info", Message: "yesterday", Ts: t0.Add(-time.Hour)}},
+		{RunId: fixtureRun, Id: 1, Row: factsstore.LogRow{AppId: play, Level: "debug", Message: "starting", Ts: t0}},
+		// Ids restart in every process: an earlier run's rows reuse them.
+		{RunId: "run-before", Id: 1, Row: factsstore.LogRow{AppId: play, Level: "info", Message: "yesterday", Ts: t0.Add(-time.Hour)}},
 	}}
 	prev := sourceRef.Load()
 	Register(&Source{Sink: sink, Read: store.read, Run: func() string { return fixtureRun }})
@@ -407,7 +408,7 @@ func TestViewCommandsSetAndNeverToggle(t *testing.T) {
 	for range 2 {
 		require.NoError(t, command(t, inst, opSelectRow, SelectRowArgs{Key: key}))
 		assert.True(t, inst.hasSelected)
-		assert.Equal(t, "high cpu", inst.selected.Message)
+		assert.Equal(t, "high cpu", inst.selected.Row.Message)
 	}
 	assert.Equal(t, key, inst.Operations().ResourceValue(resSelection))
 
@@ -435,7 +436,7 @@ func TestUndoRestoresTheViewWhileTheRowIsInTheCache(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.True(t, h.Restore(resSelection, list.Rows[1].Key))
-	assert.Equal(t, "query ok", inst.selected.Message)
+	assert.Equal(t, "query ok", inst.selected.Row.Message)
 	assert.False(t, h.Restore(resSelection, "1-deadbeef"), "a row the cache does not hold cannot come back")
 	assert.True(t, h.Restore(resSelection, ""))
 	assert.False(t, inst.hasSelected)
@@ -505,12 +506,21 @@ func TestCountersReadTheSinkAndTheCache(t *testing.T) {
 
 func TestRowKeysFollowTheRow(t *testing.T) {
 	ts := time.Date(2026, 5, 12, 12, 0, 0, 0, time.UTC)
-	a := factsstore.LogRow{Ts: ts, Caller: "a.go:1", Message: "m"}
-	b := factsstore.LogRow{Ts: ts, Caller: "a.go:1", Message: "n"}
+	a := Entry{Id: 1, Row: factsstore.LogRow{Ts: ts, Caller: "a.go:1", Message: "m"}}
+	b := Entry{Id: 2, Row: factsstore.LogRow{Ts: ts, Caller: "a.go:1", Message: "n"}}
 	assert.Equal(t, opsRowKey(a), opsRowKey(a))
 	assert.NotEqual(t, opsRowKey(a), opsRowKey(b), "coincident timestamps are told apart by caller and message")
-	_, ok := findRow([]Entry{{Row: a}, {Row: b}}, opsRowKey(b))
+	_, ok := findRow([]Entry{a, b}, opsRowKey(b))
 	assert.True(t, ok)
+
+	// A burst of one log line: the stored timestamp is no finer than the
+	// writer made it, so two events agree on all three and only the store
+	// id tells them apart. Each key finds its own row.
+	b2 := Entry{Id: 3, Row: b.Row}
+	assert.NotEqual(t, opsRowKey(b), opsRowKey(b2))
+	got, ok := findRow([]Entry{b, b2}, opsRowKey(b2))
+	require.True(t, ok)
+	assert.Equal(t, uint64(3), got.Id)
 }
 
 // engineWindow is a window served by a host engine, with the gesture path
@@ -606,10 +616,10 @@ func TestTheEngineAttributesEachWriter(t *testing.T) {
 
 	// A row click selects through the command; a second click on the same
 	// row clears, as the next state the click computed.
-	warn := w.inst.cache.rows[1].Row
+	warn := w.inst.cache.rows[1]
 	w.frame(func() { w.inst.selectGesture(warn, true) })
 	assert.Equal(t, opwire.WriterPerson, w.eng.Writer(resSelection))
-	assert.Equal(t, "high cpu", w.inst.selected.Message)
+	assert.Equal(t, "high cpu", w.inst.selected.Row.Message)
 	w.frame(func() { w.inst.selectGesture(warn, false) })
 	assert.False(t, w.inst.hasSelected)
 	assert.Equal(t, "", w.inst.Operations().ResourceValue(resSelection))
@@ -623,8 +633,8 @@ func TestTheTableShowsTheCacheOldestFirst(t *testing.T) {
 	fill(t, inst)
 	rows := chronological{newest: inst.shownRows()}
 	require.Equal(t, 4, rows.len())
-	assert.Equal(t, "starting", rows.at(0).Message)
-	assert.Equal(t, "connection refused", rows.at(3).Message)
+	assert.Equal(t, "starting", rows.at(0).Row.Message)
+	assert.Equal(t, "connection refused", rows.at(3).Row.Message)
 	inst.filterMessage = "cpu"
 	require.Len(t, inst.shownRows(), 1)
 	assert.Equal(t, "high cpu", inst.shownRows()[0].Row.Message)
