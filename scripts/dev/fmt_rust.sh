@@ -1,12 +1,9 @@
 #!/bin/bash
 # Format every Rust crate under ./rust with its OWN pinned toolchain.
 #
-# Each crate carries a rust-toolchain{,.toml} file (rust/imzero2 pins 1.96 ->
-# rustfmt 1.9.0; rust/watermark pins 1.92 -> rustfmt 1.8.0; rust/h3bridge pins
-# stable — so a checkout needs BOTH pinned toolchains installed to format the
-# whole tree, and the two rustfmt versions agree on the committed source today).
-# Running `cargo fmt` from
-# *inside* the crate directory makes the rustup proxy resolve that crate's pin,
+# Each crate carries a rust-toolchain{,.toml} file; every crate pins the same
+# patch release, so one installed toolchain formats the whole tree. Running
+# `cargo fmt` from *inside* the crate directory makes the rustup proxy resolve that crate's pin,
 # so the committed Rust stays byte-stable regardless of which rustfmt happens to
 # be the machine's default toolchain.
 #
@@ -25,10 +22,6 @@
 # a crate's pinned toolchain can't be resolved: a toolchain-less checkout still
 # goes green locally, while CI (with the toolchains installed) is the enforcer.
 # Wired into scripts/ci/lint.sh via `--check`.
-#
-# NOTE: rust/h3bridge pins the rolling `stable` channel, so its formatting is
-# only reproducible until the next stable release; the version-pinned crates are
-# fully reproducible.
 
 set -e
 set -o pipefail
