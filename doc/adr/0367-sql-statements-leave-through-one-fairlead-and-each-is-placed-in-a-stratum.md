@@ -404,6 +404,19 @@ and the chat window re-read its agent surface on a timer through a running
 turn; it now re-reads when a tool call starts or ends. Both were found by
 reading the journal, which is the use §SD4 intends for it.
 
+### 2026-11-20 — a pass that refuses an agent's non-read statement is deferred
+
+A host-installed pass that refuses any statement not classified `read` when
+an agent's task caused it was considered as the process-wide barrier behind
+the per-app checks. It needs the statement to arrive at the fairlead with
+that task, and it does not: an app's run is delivered to the query engine
+over the bus, and the context at the engine's exit point is the engine's,
+and the fairlead's `Statement` has no identity field. Carrying the task from
+the run request to the exit
+is a change to the query request and to what the fairlead promises, so it is
+left for its own decision; [agentic-layer](../explanation/agentic-layer.md)
+gives the server-side bound that holds meanwhile.
+
 ## References
 
 - [ADR-0117](0117-passthrough-table-classifier.md) — passthrough tables.

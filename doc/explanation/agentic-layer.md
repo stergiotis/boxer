@@ -296,6 +296,42 @@ Identifiers for runs and entries come from tagged id streams leased from
 the one server
 ([ADR-0319](../adr/0319-tagged-id-streams-leased-through-one-row-on-the-one-clickhouse-server.md)).
 
+## What bounds a model's SQL at the server
+
+A run an agent's work causes is sent with `readonly=2`, and play and the
+other windows that run SQL for an agent classify the statement first
+(`analysis.ClassifyQuerySecurity`) and refuse a write or an egress. Both are
+checks in the client. `readonly=2` stops writes and DDL; it is not relied on
+to stop table functions — `url()`, `s3()`, `remote()`, `file()` — which read
+from, and send to, places the person did not name. The fairlead
+([ADR-0367](../adr/0367-sql-statements-leave-through-one-fairlead-and-each-is-placed-in-a-stratum.md))
+is where a process-wide refusal would go, but the statement reaches it
+without the task that caused it: a run is delivered to the query engine over
+the bus, and the engine's context does not say on whose behalf. Carrying
+that identity to the exit is a design step of its own and is not taken.
+
+The barrier that does not depend on the client is the server's. Run the
+host whose agent work should be bounded under a ClickHouse user that holds
+no source privileges and reads only what it is granted. The statements
+follow ClickHouse's documented grammar and were not run for this page; check
+them against the server's version:
+
+```sql
+CREATE SETTINGS PROFILE boxer_agent_profile SETTINGS readonly = 2 CONST;
+CREATE USER boxer_agent IDENTIFIED WITH sha256_password BY '<secret>'
+    SETTINGS PROFILE boxer_agent_profile;
+GRANT SELECT ON analytics.* TO boxer_agent;   -- the tables agent work may read
+-- Grant nothing else: no SOURCES (FILE, URL, REMOTE, S3, …), which is what
+-- the table functions need; no CREATE TEMPORARY TABLE; no access to
+-- databases the agent should not read.
+```
+
+Point the host at it with `CLICKHOUSE_USER` and `CLICKHOUSE_PASSWORD_FILE`.
+A host has one ClickHouse identity, so the person's own runs on that host
+are bounded the same way; a deployment that wants the person unbounded and
+the agent bounded runs them on separate hosts until runs carry their task to
+the exit.
+
 ## What is deliberately not there
 
 The design study lists these as sketched, not designed; each needs its own
