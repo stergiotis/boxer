@@ -54,22 +54,33 @@ func TestPackageChanges(t *testing.T) {
 	before := PackageDirs([]string{
 		"public/a/a.go", "public/a/a_test.go",
 		"public/b/b.go",
-		"public/c/c.go", "public/c/d.go",
+		"public/c/c.go", "public/c/d.go", "public/c/package_props.go",
+		"public/f/f.go", "public/f/g.go", "public/f/h.go",
 		"public/x/internal/y/y.go",
 		"public/onlytests/t_test.go",
 		"doc/thing.go",
 	})
-	assert.Equal(t, map[string]struct{}{"public/a": {}, "public/b": {}, "public/c": {}}, before)
-	after := PackageDirs([]string{"public/a/a.go", "public/c2/c.go", "public/c2/d.go", "public/e/c.go"})
-	changes := PackageChanges(before, after, map[string]string{
-		"public/c/c.go": "public/c2/c.go",
-		"public/c/d.go": "public/c2/d.go",
-		"public/b/b.go": "public/gone/b.go", // destination not a package at the end: still a removal
-	})
+	assert.Equal(t, map[string]int{"public/a": 1, "public/b": 1, "public/c": 2, "public/f": 3}, before)
+	after := PackageDirs([]string{"public/a/a.go", "public/c2/c.go", "public/c2/d.go", "public/e/c.go", "public/g/f.go", "public/z/package_props.go"})
+	renames := ParseRenames("R100\tpublic/c/c.go\tpublic/c2/c.go\n" +
+		"R090\tpublic/c/d.go\tpublic/c2/d.go\n" +
+		"R100\tpublic/c/package_props.go\tpublic/z/package_props.go\n" + // props files look alike: never evidence
+		"R100\tpublic/b/b.go\tpublic/gone/b.go\n" + // destination is not a package at the end
+		"R100\tpublic/f/f.go\tpublic/g/f.go\n" + // one of three files: not a move of the package
+		"R040\tpublic/a/a.go\tpublic/e/c.go\n" + // below the similarity floor
+		"M\tpublic/a/a.go\n")
+	assert.Equal(t, map[string]string{
+		"public/c/c.go":             "public/c2/c.go",
+		"public/c/d.go":             "public/c2/d.go",
+		"public/c/package_props.go": "public/z/package_props.go",
+		"public/b/b.go":             "public/gone/b.go",
+		"public/f/f.go":             "public/g/f.go",
+	}, renames)
 	assert.Equal(t, []PackageChange{
 		{Dir: "public/b", Kind: PackageChangeKindRemoved},
 		{Dir: "public/c", Kind: PackageChangeKindRenamed, To: "public/c2"},
-	}, changes)
+		{Dir: "public/f", Kind: PackageChangeKindRemoved},
+	}, PackageChanges(before, after, renames))
 }
 
 func TestModuleChanges(t *testing.T) {

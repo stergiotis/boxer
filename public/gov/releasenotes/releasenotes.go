@@ -16,6 +16,7 @@ import (
 	"context"
 	"path"
 	"sort"
+	"strconv"
 	"strings"
 
 	"golang.org/x/mod/modfile"
@@ -154,11 +155,17 @@ func BreakingCommits(commits []Commit) (out []BreakingCommit) {
 	return
 }
 
+// propsFile is the per-package declaration (ADR-0080). Every one looks alike,
+// so git pairs them as renames across unrelated packages; rename detection
+// ignores them.
+const propsFile = "package_props.go"
+
 // PackageDirs returns the importable package directories among tracked file
-// paths: directories under public/ or apps/ holding a non-test .go file,
-// excluding internal and testdata trees, which no consumer can import.
-func PackageDirs(files []string) (dirs map[string]struct{}) {
-	dirs = make(map[string]struct{})
+// paths — directories under public/ or apps/ holding a non-test .go file,
+// excluding internal and testdata trees, which no consumer can import — with
+// the number of their non-test .go files other than the props declaration.
+func PackageDirs(files []string) (dirs map[string]int) {
+	dirs = make(map[string]int)
 	for _, f := range files {
 		if !strings.HasSuffix(f, ".go") || strings.HasSuffix(f, "_test.go") {
 			continue
@@ -170,7 +177,11 @@ func PackageDirs(files []string) (dirs map[string]struct{}) {
 		if hasElem(d, "internal") || hasElem(d, "testdata") {
 			continue
 		}
-		dirs[d] = struct{}{}
+		n := dirs[d] // registers the directory even when it holds only the declaration
+		if path.Base(f) != propsFile {
+			n++
+		}
+		dirs[d] = n
 	}
 	return
 }
@@ -184,15 +195,15 @@ func hasElem(p string, elem string) (b bool) {
 	return false
 }
 
-// PackageChanges lists the packages of before that are gone from after. A
-// gone package whose files git reports renamed into one package of after
-// (renames: old file → new file) is a rename; the destination with the most
-// renamed files wins.
-func PackageChanges(before map[string]struct{}, after map[string]struct{}, renames map[string]string) (changes []PackageChange) {
+// PackageChanges lists the packages of before (directory → file count, as
+// [PackageDirs] returns) that are gone from after. A gone package is a rename
+// when at least half of its files moved into one package of after (renames:
+// old file → new file, as git reports them); otherwise it is a removal.
+func PackageChanges(before map[string]int, after map[string]int, renames map[string]string) (changes []PackageChange) {
 	moved := make(map[string]map[string]int)
 	for from, to := range renames {
 		fd, td := path.Dir(from), path.Dir(to)
-		if fd == td {
+		if fd == td || path.Base(from) == propsFile {
 			continue
 		}
 		if moved[fd] == nil {
@@ -213,13 +224,36 @@ func PackageChanges(before map[string]struct{}, after map[string]struct{}, renam
 				best, bestN = td, n
 			}
 		}
-		if best != "" {
+		if best != "" && 2*bestN >= before[d] {
 			changes = append(changes, PackageChange{Dir: d, Kind: PackageChangeKindRenamed, To: best})
 		} else {
 			changes = append(changes, PackageChange{Dir: d, Kind: PackageChangeKindRemoved})
 		}
 	}
 	sort.Slice(changes, func(i, j int) bool { return changes[i].Dir < changes[j].Dir })
+	return
+}
+
+// renameMinScore is the similarity below which a git rename is not taken as
+// evidence that a package moved: across a long range, small files that merely
+// look alike pair up.
+const renameMinScore = 75
+
+// ParseRenames reads `git diff --name-status -M` rename lines (`R<score>\told\tnew`)
+// of at least renameMinScore similarity into old → new.
+func ParseRenames(nameStatus string) (renames map[string]string) {
+	renames = make(map[string]string)
+	for line := range strings.SplitSeq(nameStatus, "\n") {
+		f := strings.Split(line, "\t")
+		if len(f) != 3 || !strings.HasPrefix(f[0], "R") {
+			continue
+		}
+		score, err := strconv.Atoi(strings.TrimPrefix(f[0], "R"))
+		if err != nil || score < renameMinScore {
+			continue
+		}
+		renames[f[1]] = f[2]
+	}
 	return
 }
 
@@ -310,13 +344,7 @@ func Collect(ctx context.Context, dir string, from string, to string) (n Notes, 
 	if renamed, err = git(ctx, dir, "diff", "--no-color", "--name-status", "-M", "--diff-filter=R", from, to, "--", "*.go"); err != nil {
 		return
 	}
-	renames := make(map[string]string)
-	for line := range strings.SplitSeq(renamed, "\n") {
-		f := strings.Split(line, "\t")
-		if len(f) == 3 && strings.HasPrefix(f[0], "R") {
-			renames[f[1]] = f[2]
-		}
-	}
+	renames := ParseRenames(renamed)
 	n.Packages = PackageChanges(PackageDirs(strings.Split(filesFrom, "\n")), PackageDirs(strings.Split(filesTo, "\n")), renames)
 
 	var modFrom, modTo string
