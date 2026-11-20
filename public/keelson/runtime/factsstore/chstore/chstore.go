@@ -873,11 +873,23 @@ func (inst *Store) commitAndShip(ctx context.Context, ent *dml.InEntityFacts) (e
 	return
 }
 
+// WriteTimeout bounds one insert. The writes run during the host's shutdown
+// drain as well — the heartbeat's last tick, the log bridge's final drain —
+// so a server that stopped answering must cost each write a bounded wait,
+// below the window host's shutdown drain, rather than hold the process
+// past its grace. A write cut short fails as any failed insert does.
+//
+// deferred: the write verbs take a context once the store interfaces carry
+// one; this bound is the stopgap until then.
+const WriteTimeout = 3 * time.Second
+
 // shipRecords TransferRecords, InsertArrows, and releases the records.
 // Entities must already be committed (commitAndShip commits the single-row
 // case; WriteLogs commits each row before calling this). Returns the first
-// error encountered.
+// error encountered. The insert is bounded by WriteTimeout.
 func (inst *Store) shipRecords(ctx context.Context, ent *dml.InEntityFacts) (err error) {
+	ctx, cancel := context.WithTimeout(ctx, WriteTimeout)
+	defer cancel()
 	var records []arrow.RecordBatch
 	records, err = ent.TransferRecords(nil)
 	if err != nil {
