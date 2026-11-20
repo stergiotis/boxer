@@ -40,6 +40,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/llm/promptbook"
 	"github.com/stergiotis/boxer/public/keelson/runtime/moderator"
 	"github.com/stergiotis/boxer/public/keelson/runtime/queryendpoint"
+	"github.com/stergiotis/boxer/public/keelson/runtime/schemacheck"
 	"github.com/stergiotis/boxer/public/keelson/runtime/statestore"
 	"github.com/stergiotis/boxer/public/keelson/runtime/sysmetricsbus"
 	"github.com/stergiotis/boxer/public/keelson/runtime/task/supervisor"
@@ -152,6 +153,9 @@ type Deps struct {
 	// read-only store on it, so a scan never contends with the writer's
 	// pending buffer.
 	PersistExec recordstore.ExecutorI
+	// Schemas holds the stored tables' schema verdicts (ADR-0387), served
+	// as keelson('schema_tables'); nil leaves the table empty.
+	Schemas *schemacheck.Board
 	// Watchbill is the read side of the job table, backing
 	// keelson.watchbill and keelson.watchbill_event (ADR-0223 §SD7). nil
 	// is allowed and leaves both empty rather than absent.
@@ -266,6 +270,12 @@ func Start(deps Deps) (stop func(context.Context) error, err error) {
 	}
 	if e := introspectproviders.RegisterAppState(reg, deps.PersistExec); e != nil {
 		deps.Log.Warn().Err(e).Msg("introspecthost: app_state provider registration failed")
+	}
+	// ADR-0387: the schema verdicts of the stored tables. Registered
+	// unconditionally — a host that checked nothing answers with an empty
+	// table.
+	if e := schemacheck.RegisterIntrospect(reg, deps.Schemas); e != nil {
+		deps.Log.Warn().Err(e).Msg("introspecthost: schema_tables provider registration failed")
 	}
 	// ADR-0223 §SD7: the job table and its transitions. Registered
 	// unconditionally — a host with no worker answers with empty tables.

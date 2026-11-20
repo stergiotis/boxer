@@ -60,6 +60,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/natsbus"
 	"github.com/stergiotis/boxer/public/keelson/runtime/persist"
 	"github.com/stergiotis/boxer/public/keelson/runtime/runinfo"
+	"github.com/stergiotis/boxer/public/keelson/runtime/schemacheck"
 	"github.com/stergiotis/boxer/public/keelson/runtime/servicehost"
 	"github.com/stergiotis/boxer/public/keelson/runtime/statestore"
 	"github.com/stergiotis/boxer/public/keelson/runtime/sysmetricsbus"
@@ -375,6 +376,9 @@ type Runtime struct {
 	// Introspect is the shared introspection registry (populated whether or
 	// not the HTTP host serves it).
 	Introspect *introspect.Registry
+	// Schemas holds the schema verdicts of the stored tables this host
+	// uses (ADR-0387), served as keelson('schema_tables').
+	Schemas *schemacheck.Board
 	// KeelsonQuery reports whether the keelson.query bus service
 	// (ADR-0253) started with the introspection host.
 	KeelsonQuery bool
@@ -506,6 +510,10 @@ func Boot(ctx context.Context, opts Options) (rt *Runtime, err error) {
 	rt.Bus = inprocbus.NewInst(logger)
 
 	rt.bootServices(ctx, factsCfg)
+	if err = rt.checkSchemas(ctx, factsCfg); err != nil {
+		err = eh.Errorf("hostboot: %w", err)
+		return
+	}
 
 	taskSupBus := rt.Bus.NewClient(tasksupervisor.AppId, tasksupervisor.Caps())
 	taskSup := tasksupervisor.New(taskSupBus, rt.Facts, logger, tasksupervisor.Opts{})
@@ -1419,6 +1427,7 @@ func (rt *Runtime) bootIntrospect() {
 		Registry:         rt.Introspect,
 		Facts:            rt.Facts,
 		PersistExec:      rt.PersistExec,
+		Schemas:          rt.Schemas,
 		Workstatelets:    rt.workstatelets(),
 		Log:              logger,
 	}
@@ -1721,9 +1730,13 @@ func (rt *Runtime) bootWatchbill(ctx context.Context) {
 	layout := watchbillstore.Layout{}
 	pctx, cancel := context.WithTimeout(ctx, persistOpenTimeout)
 	err := watchbillstore.ProvisionIn(pctx, rt.PersistExec, layout)
+	if err == nil {
+		// A table IF NOT EXISTS left older fails every poll; refuse it here.
+		err = watchbillstore.VerifyIn(pctx, rt.PersistExec, layout)
+	}
 	cancel()
 	if err != nil {
-		logger.Warn().Err(err).Msg("watchbill: provisioning failed; the worker is not started")
+		logger.Warn().Err(err).Msg("watchbill: provisioning or the schema check failed; the worker is not started")
 		return
 	}
 	store := watchbill.NewSqlStore(rt.PersistExec, layout)
@@ -1832,8 +1845,8 @@ func selectPersistBackend(ctx context.Context, cfg chstore.Config, isChStore boo
 				return
 			}
 		}
-		logger.Warn().Err(err).
-			Msg("persist: store backend construction failed; falling back to in-memory (app state will not survive restart)")
+		logger.Error().Err(err).
+			Msg("persist: store backend construction failed; falling back to in-memory (app state will not survive restart); keelson('schema_tables') shows the state table's verdict")
 	}
 	backend = persist.NewMemoryBackend()
 	label = "mem"
