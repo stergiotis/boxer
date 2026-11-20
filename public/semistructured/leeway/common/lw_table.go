@@ -132,7 +132,14 @@ func (inst *TableDesc) GetPlainItemValueSemantics(itemType PlainItemTypeE, in []
 	out = inst.copyPlainItemValueSemantics(itemType, in)
 	return
 }
+// LoadTo writes the table description into dto. Every type is checked
+// before dto is touched, so an error leaves dto as it was rather than with
+// its co-arrays out of step.
 func (inst *TableDesc) LoadTo(dto *TableDescDto) (err error) {
+	err = inst.checkTypes()
+	if err != nil {
+		return
+	}
 	dto.DictionaryEntry = inst.DictionaryEntry
 	dto.OpaqueColumnStreamingGroup = inst.OpaqueStreamingGroup
 	tmp := make([]string, 0, 10)
@@ -154,7 +161,8 @@ func (inst *TableDesc) LoadTo(dto *TableDescDto) (err error) {
 
 		tmp, err = inst.serializeAndCopyStructuredTypes(t, tmp[:0])
 		if err != nil {
-			// FIXME will render dto object invalid (destroy co-array structure)
+			// checkTypes ran first: not reached unless the table changed
+			// underneath.
 			err = eb.Build().Stringer("plainItemType", t).Errorf("unable to copy types: %w", err)
 			return
 		}
@@ -185,6 +193,31 @@ func (inst *TableDesc) LoadTo(dto *TableDescDto) (err error) {
 	}
 	return
 }
+// checkTypes reports the first invalid canonical type among the plain
+// items and the tagged-value sections.
+func (inst *TableDesc) checkTypes() (err error) {
+	for _, t := range AllPlainItemTypes {
+		if t == PlainItemTypeNone {
+			continue
+		}
+		for _, ct := range co.CoIterateFilter(inst.PlainValuesItemTypes, t, inst.PlainValuesTypes) {
+			if !ct.IsValid() {
+				err = eb.Build().Stringer("plainItemType", t).Errorf("unable to copy types: %w", ErrInvalidType)
+				return
+			}
+		}
+	}
+	for _, sec := range inst.TaggedValuesSections {
+		for _, ct := range sec.ValueColumnTypes {
+			if !ct.IsValid() {
+				err = eb.Build().Stringer("section", sec.Name).Errorf("encountered invalid canonical type")
+				return
+			}
+		}
+	}
+	return
+}
+
 func (inst *TableDesc) serializeAndCopyStructuredTypes(itemType PlainItemTypeE, in []string) (out []string, err error) {
 	out = in
 	for _, t := range co.CoIterateFilter(inst.PlainValuesItemTypes, itemType, inst.PlainValuesTypes) {
