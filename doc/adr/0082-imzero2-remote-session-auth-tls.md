@@ -161,6 +161,51 @@ The first implementation (loopback-first, **no auth/TLS yet** — Phases 1–3 o
 
 The Context's "the carrier is already proxy-ready" given noted the viewer "connects same-origin to `/ws`" — which was literally *root-absolute*: `viewer/index.html` built the socket URL as `ws(s)://${location.host}/ws`. A viewer served under a reverse-proxy **path prefix** (`https://host/app/`) therefore still requested `wss://host/ws`, dropping the prefix that a subpath-mounted proxy has no route for — so SD4's documented proxy production path worked only at an origin root, not under a subpath. Fixed by resolving the socket **relative to the page's own URL** (`new URL("ws", location.href)`, scheme forced to `ws`/`wss`): the page at `…/app/` now reaches `…/app/ws`, carrying whatever prefix it was served under. Root mounts, loopback, the SSH-tunnel path, and the `:port+1` page port resolve identically to before, and the `?ws=` override is kept. No carrier change was needed — `wscarrier.rs` never parses the request path (both listeners serve the page and accept the upgrade on any path via the upgrade-header sniff), so a prefix mount needs no server configuration whether the proxy strips the prefix (backend sees `/ws`) or preserves it (backend sees `/app/ws`). One operational caveat, documented in the viewer page and the imzero2 `README.md`: the mount must serve the page with a **trailing slash** (the form proxies redirect to), so the relative `ws` resolves as the page's sibling. Verified end-to-end through Caddy on both a prefix-stripping and a prefix-preserving route (page served HTTP 200; `ws_probe` streamed H.264 access units, hellos, and a viewport-resize round-trip through the prefix; ffprobe-clean), with a root-`/ws`-through-a-subpath-only-proxy negative control reproducing the prior breakage. Only the client's URL construction changes; no decision here is revised, and the "same-origin / proxy-ready" posture (Context; SD4) now holds under a subpath as well as at the root.
 
+### 2026-11-20 — SD1's bind gate and a same-origin check are enforced by the carrier; token and TLS remain unbuilt
+
+What the carrier enforces itself, in `wscarrier.rs`:
+
+- **Bind gate (SD1, partly).** A non-loopback `IMZERO2_HEADLESS_LISTEN` refuses
+  to start, naming the variable, unless `IMZERO2_HEADLESS_INSECURE_EXPOSE` is
+  truthy; with it the carrier starts and logs a warning. `hmi_headless.sh`
+  applies the same rule first, with the same spelling of the opt-in, and the
+  gokrazy images and the showcase container, which bind `0.0.0.0` on purpose,
+  set it explicitly. This is not SD1 as decided: SD1 asks for a token and TLS
+  before a non-loopback bind, and neither exists, so the opt-in accepts an
+  unauthenticated, unencrypted session. `IMZERO2_HEADLESS_TRUST_PROXY` is not
+  built either; a proxy fronts a loopback bind without needing it.
+- **Origin check on the upgrade.** A browser lets any page open a WebSocket to
+  `127.0.0.1`, so a site the operator visited could take the session. The
+  handshake (`accept_hdr_async`, the hook SD2 names) refuses an upgrade whose
+  `Origin` names another host than the request's `Host`, with a 403. A client
+  that sends no `Origin` — the native viewer, `imzero2 drive`, `ws_probe` — is
+  not a browser page and is let through. A proxy that rewrites `Host` names its
+  public origin in `IMZERO2_HEADLESS_ALLOWED_ORIGINS`.
+- **The viewer page's headers.** The page is served with a content security
+  policy that allows its inline script and style, a socket to the host it was
+  loaded from and a same-origin worker, and forbids framing
+  (`frame-ancestors 'none'`, `X-Frame-Options: DENY`), with `nosniff`. Inline
+  script is allowed by `'unsafe-inline'` rather than a hash.
+- **The page's own parameters.** `?ws=` and `?worker=` (the 2026-07-21 entry
+  kept `?ws=`) must resolve to the page's own origin; another one is refused in
+  the status bar and the page does not connect.
+
+**Unbuilt:** the bearer token (SD2), the paste-the-token page (SD3), in-process
+TLS (SD4), the per-IP rate limit and audit record, and the secret-bearing
+variables of SD7. A non-loopback deployment still depends on an authenticating
+TLS proxy in front, and anyone who reaches an exposed port controls the
+session; the origin check does nothing against a client that connects
+directly.
+
+Choices for review:
+
+- The opt-in reuses `hmi_headless.sh`'s `IMZERO2_HEADLESS_INSECURE_EXPOSE`
+  rather than SD1's `TRUST_PROXY`, whose meaning (the wire is encrypted
+  upstream) the carrier cannot check.
+- An absent `Origin` is allowed; the allowlist is exact origins, no wildcard.
+- The gate requires every address the name resolves to be loopback, and binds
+  exactly the addresses it checked.
+
 ## References
 
 - [ADR-0024 — ImZero2 remote access via headless render + ffmpeg + browser viewer](./0024-imzero2-remote-access-browser-viewer.md) — the parent; this ADR is its promised auth / multi-tenancy follow-up. SD3 (no mid-stream IDR), SD4/SD6 (wire framing), the per-connection encoder + SD9 mailbox, SD11 (deferral list) are load-bearing here.

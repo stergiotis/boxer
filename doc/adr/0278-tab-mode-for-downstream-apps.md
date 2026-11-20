@@ -439,6 +439,30 @@ not part of this entry.
 A binary built this way, linking one app the carousel does not, ran that
 app's scene document through its own `imzero2 scene` (2026-11-01).
 
+### 2026-11-20 — the native pairing checks the fingerprint too
+
+SD6's check ran only in the tab's worker. A Go side and a native host — the
+desktop host or a headless one — built from different trees still decoded
+each other's frames as the wrong calls, without an error that names the
+cause. The same fingerprint now guards that pairing. `application.Launch`, through which every
+Go process starts its native host, passes `-idlFingerprint` with the bindings'
+`IdlFingerprint` in hex, and the host compares it with its
+`enums_out::IDL_FINGERPRINT` before the first frame. A mismatch is a startup
+error naming both values and saying the two must be built from one tree.
+
+Unlike the worker, the native host refuses an absent value instead of letting
+it through: every Go launcher passes one, so its absence is a Go side older
+than the host or a launch by hand, and in the other direction a host older
+than the flag refuses it as an argument it does not know. A host started by
+hand passes the flag itself; the error names the value it expects.
+
+Choices for review:
+
+- A command-line flag rather than an environment variable, because an older
+  host rejects an unknown flag, so the mismatch is caught in both directions;
+  an inherited variable would also reach processes the host starts.
+- No escape hatch for running a host against a Go side of another IDL.
+
 ## References
 
 - [ADR-0263](./0263-imzero2-browser-both-modules-in-one-worker-mesh-to-the-painter.md) — the tab this makes reusable.

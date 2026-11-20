@@ -273,10 +273,11 @@ hardware-encode recipe is
   in the 14–18 ms per frame class at 1280×800 @ 30 fps (2026-07-18,
   [ADR-0128 §Context](./adr/0128-imzero2-mesh-draw-stream-codec-lane.md));
   **authentication and TLS are decided but unbuilt** —
-  [ADR-0082](./adr/0082-imzero2-remote-session-auth-tls.md) is accepted, the
-  carrier today has neither, and the non-loopback refusal lives in a shell
-  script ([ADR-0206 §SD5](./adr/0206-gokrazy-appliance-image.md)),
-  so a reverse proxy supplies both.
+  [ADR-0082](./adr/0082-imzero2-remote-session-auth-tls.md) is accepted and
+  the carrier has neither; what it enforces is SD1's bind gate (a
+  non-loopback bind refuses to start without an explicit opt-in) and a
+  same-origin check on the WebSocket upgrade, so a reverse proxy supplies
+  authentication and TLS.
 - **Status:** shipped; [`rust/imzero2/hmi_headless.sh`](../rust/imzero2/hmi_headless.sh),
   recipe in [doc/howto/launch-apps-non-interactively.md](./howto/launch-apps-non-interactively.md).
 
@@ -367,7 +368,9 @@ appliance returned 95,826 rows in 591 ms (M3, 2026-08-22); the glibc closure
 widened from four files to seven on its own, which is why `build.sh` reads it
 from the binaries rather than listing it. A self-contained appliance would
 need a ClickHouse server in the image — a different decision, not taken. All
-three bind `0.0.0.0:8089` with no authentication and no TLS, which §SD5
+three bind `0.0.0.0:8089` with no authentication and no TLS — through the
+explicit `IMZERO2_HEADLESS_INSECURE_EXPOSE` opt-in, without which the host
+refuses a non-loopback bind (ADR-0082 SD1) — which §SD5
 records as acceptable **only** under QEMU user-mode networking; real hardware
 needs ADR-0082 or an authenticating proxy first. The images do not supersede ADR-P-0001 — a deployment-substrate
 decision recorded outside this repository — whose NixOS flake runs the
@@ -488,7 +491,7 @@ feeds the encoder pipeline of §2.2, and the carrier advertises H.264.
 | host cost / frame, before encode (dated) | — | 1.32 ms on a GPU · 102.6 ms on lavapipe (2026-08-22) | 1.22–1.58 ms (2026-08-22) | ≈0.5 ms, nothing to encode (2026-07-18) | 1.1 ms (2026-08-22) |
 | wire, idle → busy | — | constant, encoder-paced | constant, encoder-paced | 20 kbit/s → 1–2 Mbit/s, bursts to 34 Mbit/s | constant, encoder-paced |
 | several viewers | no | 1 active + N passive | same | same carrier | same |
-| auth / TLS | n/a | decided (ADR-0082), unbuilt | same | same, QEMU-only posture | same |
+| auth / TLS | n/a | decided (ADR-0082), unbuilt; bind gate built | same | same, QEMU-only posture | same |
 | decision record | ADR-0024 baseline | ADR-0024 / 0088 / 0086 accepted | ADR-0205 accepted | ADR-0128 + 0206 accepted | ADR-0206 accepted |
 
 The choice follows the axes: a seat → desktop; a server with a GPU and a
