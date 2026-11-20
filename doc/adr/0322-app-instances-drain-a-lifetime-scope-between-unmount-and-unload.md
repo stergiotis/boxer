@@ -317,6 +317,18 @@ Deferred, each with its trigger:
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers.
 
+## Updates
+
+### 2026-11-20 — a panicking hook or goroutine of the scope is logged, not fatal
+
+SD6 recorded that a hook that panics takes the process down. A panic in a
+drain hook, or in a function run by `Scope.Go`, is now recovered and logged at
+Error level with the panic site's stack; the work counts as returned and the
+drain completes, so the other instances' unmounts and state saves still run
+(ADR-0386, proposed).
+Work entered with `Enter` runs on its caller's goroutine, under the caller's
+boundary.
+
 ## References
 
 - [ADR-0026](./0026-app-runtime-and-capability-subjects.md) — the app contract and `Manifest`

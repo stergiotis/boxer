@@ -1209,6 +1209,16 @@ later call. The exclusion now applies before an app's operations are read,
 whatever they are; a search or the app's id still finds an applet and its
 operations.
 
+### 2026-11-20 — a request's handlers no longer run on the requester's goroutine
+
+The in-process bus runs a request's handlers on a goroutine of the request's
+own, so the requester's wait is bounded by its timeout
+(ADR-0386, proposed).
+The services still refuse a request made from a render goroutine; they read
+the requester's goroutine from `app.Msg.RequesterGoroutine`, which the bus
+stamps, instead of the goroutine the handler runs on. A publish's handlers
+still run on the publisher's goroutine.
+
 ## References
 
 - [ADR-0026](./0026-app-runtime-and-capability-subjects.md) — the subject taxonomy SD3 extends; the threat model SD6 keeps.
