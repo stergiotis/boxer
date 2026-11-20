@@ -19,6 +19,6 @@ var ProvenanceColumns = []recordstore.ColumnSpec{
 	{Name: "tv:symbolArray:lrcard:lrcard:u64:4E:::0::data", Type: "Array(UInt64)", Codec: "T64,ZSTD(3)"},
 }
 
-// ProvenanceTableStamp is the COMMENT the store's CREATE TABLE writes; empty
-// when the store does not create its table.
-const ProvenanceTableStamp = ""
+// ProvenanceTableStamp is the COMMENT the store's CREATE TABLE writes: the
+// schema that created a table, as a schema check reads it back.
+const ProvenanceTableStamp = "boxer-table/1 kind=provenance columns=d3630566b71d957c naming=2 vocab=f7757cde8b5576b3"

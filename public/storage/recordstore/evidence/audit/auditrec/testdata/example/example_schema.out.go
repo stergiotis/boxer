@@ -39,6 +39,6 @@ var ExampleColumns = []recordstore.ColumnSpec{
 	{Name: "tv:u64Array:lmrcard:lmrcard:u64:4E:::0::data", Type: "Array(UInt64)", Codec: "T64,ZSTD(3)"},
 }
 
-// ExampleTableStamp is the COMMENT the store's CREATE TABLE writes; empty
-// when the store does not create its table.
-const ExampleTableStamp = ""
+// ExampleTableStamp is the COMMENT the store's CREATE TABLE writes: the
+// schema that created a table, as a schema check reads it back.
+const ExampleTableStamp = "boxer-table/1 kind=auditexample columns=418cb837249ae4d5 naming=2 vocab=c8deba28cfefed9b"

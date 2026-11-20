@@ -15,6 +15,6 @@ var AssetColumns = []recordstore.ColumnSpec{
 	{Name: "tv:symbol:lrcard:lrcard:u64:4E:::0::data", Type: "Array(UInt64)", Codec: "T64,ZSTD(3)"},
 }
 
-// AssetTableStamp is the COMMENT the store's CREATE TABLE writes; empty
-// when the store does not create its table.
-const AssetTableStamp = ""
+// AssetTableStamp is the COMMENT the store's CREATE TABLE writes: the
+// schema that created a table, as a schema check reads it back.
+const AssetTableStamp = "boxer-table/1 kind=asset columns=8033c950ae18f2c4 naming=2 vocab=13371b089802eec8"

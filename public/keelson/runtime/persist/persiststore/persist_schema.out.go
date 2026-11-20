@@ -63,6 +63,6 @@ var PersistColumns = []recordstore.ColumnSpec{
 	{Name: "tv:f64:lmrcard:lmrcard:u64:4E:::0::data", Type: "Array(UInt64)", Codec: "T64,ZSTD(3)"},
 }
 
-// PersistTableStamp is the COMMENT the store's CREATE TABLE writes; empty
-// when the store does not create its table.
-const PersistTableStamp = ""
+// PersistTableStamp is the COMMENT the store's CREATE TABLE writes: the
+// schema that created a table, as a schema check reads it back.
+const PersistTableStamp = "boxer-table/1 kind=persiststate columns=5188114eda79b506 naming=2 vocab=dcf685984675866d"

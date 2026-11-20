@@ -49,4 +49,5 @@ CREATE TABLE IF NOT EXISTS device (
 	INDEX idx_section_symbol_role_lr "tv:symbol:lr:lr:u64:1247:::0::data" TYPE bloom_filter GRANULARITY 4
 ) ENGINE = MergeTree()
 ORDER BY ("id:id:u64:47::0:", "ts:ts:z64:47::0:")
-SETTINGS allow_suspicious_low_cardinality_types=1
+SETTINGS allow_suspicious_low_cardinality_types=1, non_replicated_deduplication_window=1000
+COMMENT 'boxer-table/1 kind=device columns=13a76b382c0ea57c naming=2 vocab=9384081701e28ff8'

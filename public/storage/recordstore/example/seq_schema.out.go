@@ -15,6 +15,6 @@ var SeqColumns = []recordstore.ColumnSpec{
 	{Name: "tv:measure:lvcard:lvcard:u64:4E:::0::data", Type: "Array(UInt64)", Codec: "T64,ZSTD(3)"},
 }
 
-// SeqTableStamp is the COMMENT the store's CREATE TABLE writes; empty
-// when the store does not create its table.
-const SeqTableStamp = ""
+// SeqTableStamp is the COMMENT the store's CREATE TABLE writes: the
+// schema that created a table, as a schema check reads it back.
+const SeqTableStamp = "boxer-table/1 kind=seq columns=d662a6f0db556a67 naming=2"

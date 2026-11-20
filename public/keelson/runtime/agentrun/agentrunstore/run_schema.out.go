@@ -253,6 +253,6 @@ var RunColumns = []recordstore.ColumnSpec{
 	{Name: "tv:runEpoch:lmrcard:lmrcard:u64:4E:::0::data", Type: "Array(UInt64)", Codec: "T64,ZSTD(3)"},
 }
 
-// RunTableStamp is the COMMENT the store's CREATE TABLE writes; empty
-// when the store does not create its table.
-const RunTableStamp = ""
+// RunTableStamp is the COMMENT the store's CREATE TABLE writes: the
+// schema that created a table, as a schema check reads it back.
+const RunTableStamp = "boxer-table/1 kind=agentrun columns=68011e3bc34e2e3c naming=2 vocab=0c478444bacc1265"

@@ -98,6 +98,6 @@ var PushoutColumns = []recordstore.ColumnSpec{
 	{Name: "tv:retOp:lmrcard:lmrcard:u64:4E:::0::data", Type: "Array(UInt64)", Codec: "T64,ZSTD(3)"},
 }
 
-// PushoutTableStamp is the COMMENT the store's CREATE TABLE writes; empty
-// when the store does not create its table.
-const PushoutTableStamp = ""
+// PushoutTableStamp is the COMMENT the store's CREATE TABLE writes: the
+// schema that created a table, as a schema check reads it back.
+const PushoutTableStamp = "boxer-table/1 kind=pushout columns=a107f50e887c7754 naming=2 vocab=e1f48596b4668736"

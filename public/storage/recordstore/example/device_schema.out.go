@@ -57,6 +57,6 @@ var DeviceColumns = []recordstore.ColumnSpec{
 	{Name: "tv:geoPoint:lmrcard:lmrcard:u64:4E:::0::data", Type: "Array(UInt64)", Codec: "T64,ZSTD(3)"},
 }
 
-// DeviceTableStamp is the COMMENT the store's CREATE TABLE writes; empty
-// when the store does not create its table.
-const DeviceTableStamp = ""
+// DeviceTableStamp is the COMMENT the store's CREATE TABLE writes: the
+// schema that created a table, as a schema check reads it back.
+const DeviceTableStamp = "boxer-table/1 kind=device columns=13a76b382c0ea57c naming=2 vocab=9384081701e28ff8"

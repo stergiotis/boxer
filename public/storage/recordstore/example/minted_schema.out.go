@@ -15,6 +15,6 @@ var MintedColumns = []recordstore.ColumnSpec{
 	{Name: "tv:label:lvcard:lvcard:u64:4E:::0::data", Type: "Array(UInt64)", Codec: "T64,ZSTD(3)"},
 }
 
-// MintedTableStamp is the COMMENT the store's CREATE TABLE writes; empty
-// when the store does not create its table.
-const MintedTableStamp = ""
+// MintedTableStamp is the COMMENT the store's CREATE TABLE writes: the
+// schema that created a table, as a schema check reads it back.
+const MintedTableStamp = "boxer-table/1 kind=minted columns=ca6fb9e6b1ff9ef3 naming=2"

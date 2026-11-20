@@ -60,6 +60,6 @@ var WidgetColumns = []recordstore.ColumnSpec{
 	{Name: "tv:geoPoint:lmrcard:lmrcard:u64:4E:::0::data", Type: "Array(UInt64)", Codec: "T64,ZSTD(3)"},
 }
 
-// WidgetTableStamp is the COMMENT the store's CREATE TABLE writes; empty
-// when the store does not create its table.
-const WidgetTableStamp = ""
+// WidgetTableStamp is the COMMENT the store's CREATE TABLE writes: the
+// schema that created a table, as a schema check reads it back.
+const WidgetTableStamp = "boxer-table/1 kind=widget columns=07426504f890b3f7 naming=2"

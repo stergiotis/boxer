@@ -246,4 +246,5 @@ CREATE TABLE IF NOT EXISTS boxer.agentrun (
 	"tv:runEpoch:lmrcard:lmrcard:u64:4E:::0::data" Array(UInt64) CODEC(T64,ZSTD(3))
 ) ENGINE = MergeTree()
 ORDER BY ("id:id:u64:4::0:", "ts:ts:z64:47::0:")
-SETTINGS allow_suspicious_low_cardinality_types=1, enable_block_number_column=1, enable_block_offset_column=1
+SETTINGS allow_suspicious_low_cardinality_types=1, enable_block_number_column=1, enable_block_offset_column=1, non_replicated_deduplication_window=1000
+COMMENT 'boxer-table/1 kind=agentrun columns=68011e3bc34e2e3c naming=2 vocab=0c478444bacc1265'

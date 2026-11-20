@@ -96,6 +96,6 @@ var LedgerColumns = []recordstore.ColumnSpec{
 	{Name: "tv:snapAsOf:lmrcard:lmrcard:u64:4E:::0::data", Type: "Array(UInt64)", Codec: "T64,ZSTD(3)"},
 }
 
-// LedgerTableStamp is the COMMENT the store's CREATE TABLE writes; empty
-// when the store does not create its table.
-const LedgerTableStamp = ""
+// LedgerTableStamp is the COMMENT the store's CREATE TABLE writes: the
+// schema that created a table, as a schema check reads it back.
+const LedgerTableStamp = "boxer-table/1 kind=ledger columns=f44f04a9a775783e naming=2 vocab=ccc4beef2ad46ad7"

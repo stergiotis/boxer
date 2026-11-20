@@ -62,6 +62,6 @@ var EventColumns = []recordstore.ColumnSpec{
 	{Name: "tv:eventNote:lmrcard:lmrcard:u64:4E:::0::data", Type: "Array(UInt64)", Codec: "T64,ZSTD(3)"},
 }
 
-// EventTableStamp is the COMMENT the store's CREATE TABLE writes; empty
-// when the store does not create its table.
-const EventTableStamp = ""
+// EventTableStamp is the COMMENT the store's CREATE TABLE writes: the
+// schema that created a table, as a schema check reads it back.
+const EventTableStamp = "boxer-table/1 kind=watchbillevent columns=2fb0f8f8c9034d33 naming=2 vocab=38fadcf303968dec"

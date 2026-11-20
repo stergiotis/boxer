@@ -222,6 +222,6 @@ var JobColumns = []recordstore.ColumnSpec{
 	{Name: "tv:jobCall:lmrcard:lmrcard:u64:4E:::0::data", Type: "Array(UInt64)", Codec: "T64,ZSTD(3)"},
 }
 
-// JobTableStamp is the COMMENT the store's CREATE TABLE writes; empty
-// when the store does not create its table.
-const JobTableStamp = ""
+// JobTableStamp is the COMMENT the store's CREATE TABLE writes: the
+// schema that created a table, as a schema check reads it back.
+const JobTableStamp = "boxer-table/1 kind=watchbill columns=0f5f0d40827d465c naming=2 vocab=0de01e7a3d1abff2"

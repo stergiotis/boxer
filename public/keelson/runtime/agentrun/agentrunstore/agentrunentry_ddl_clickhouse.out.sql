@@ -274,4 +274,5 @@ CREATE TABLE IF NOT EXISTS boxer.agentrunentry (
 	"tv:emptyArray:lmvcard:lmvcard:u64:4E:::0::data" Array(UInt64) CODEC(T64,ZSTD(3))
 ) ENGINE = MergeTree()
 ORDER BY ("id:id:u64:4::0:", "id:ordinal:u64:47::0:", "lc:revision:u32:4::0:")
-SETTINGS allow_suspicious_low_cardinality_types=1
+SETTINGS allow_suspicious_low_cardinality_types=1, non_replicated_deduplication_window=1000
+COMMENT 'boxer-table/1 kind=agentrunentry columns=294f08ce307d9b45 naming=2 vocab=4dba45bb23c0daa0'

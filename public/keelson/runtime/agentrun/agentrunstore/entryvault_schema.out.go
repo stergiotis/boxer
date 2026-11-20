@@ -282,6 +282,6 @@ var EntryVaultColumns = []recordstore.ColumnSpec{
 	{Name: "tv:emptyArray:lmvcard:lmvcard:u64:4E:::0::data", Type: "Array(UInt64)", Codec: "T64,ZSTD(3)"},
 }
 
-// EntryVaultTableStamp is the COMMENT the store's CREATE TABLE writes; empty
-// when the store does not create its table.
-const EntryVaultTableStamp = ""
+// EntryVaultTableStamp is the COMMENT the store's CREATE TABLE writes: the
+// schema that created a table, as a schema check reads it back.
+const EntryVaultTableStamp = "boxer-table/1 kind=agentrunentryvault columns=f87f4ca4631ff22e naming=2 vocab=bdc4302216ad2f52"

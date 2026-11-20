@@ -18,6 +18,7 @@ import (
 
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/memory"
+	"github.com/rs/zerolog/log"
 	"github.com/stergiotis/boxer/public/caching"
 	"github.com/stergiotis/boxer/public/functional"
 	"github.com/stergiotis/boxer/public/identity/callident"
@@ -214,9 +215,11 @@ type WidgetStore struct {
 	cfg      WidgetStoreConfig
 	dml      *lowlevel.InEntityWidgetTable
 	buffered int
-	// pending holds transferred-but-uninserted records after a failed
-	// Flush; the next Flush ships them (DiscardPending drops them).
-	pending []arrow.RecordBatch
+	// pending holds the transferred inserts the server has not
+	// acknowledged, oldest first; Flush ships them in order, each alone
+	// and under the batch id it was first attempted with, which rides as
+	// the insert's deduplication token (DiscardPending drops them).
+	pending []recordstore.PendingBatch
 	// dirty tracks locally-written keys between Commit/Delete and the
 	// next successful Flush (or DiscardPending). Attached cache views
 	// pin these keys until the flush lands (eviction cannot expose the
@@ -224,6 +227,9 @@ type WidgetStore struct {
 	// remaining guard for writes the views could not materialize (Raw
 	// commits) and for InvalidateAll inside a dirty window.
 	dirty map[uint64]struct{}
+	// insertSettingsUnapplied latches the one warning a store logs when
+	// its executor cannot carry the per-insert settings.
+	insertSettingsUnapplied bool
 	// onWrite/onFlush hold the write-through hooks of attached cache
 	// views (NewWidgetCache registers one pair per view): onWrite populates
 	// and pins the committed entity (nil = not materializable or a
@@ -342,8 +348,17 @@ func (inst *WidgetStore) noteCommitted(w recordstore.WrittenKey[uint64, time.Tim
 // callback lands in a fresh buffer, reported with a later flush, and a
 // panicking observer cannot have the same rows reported twice.
 func (inst *WidgetStore) takeWritten() iter.Seq[recordstore.WrittenKey[uint64, time.Time]] {
-	written := inst.written
-	inst.written = nil
+	return inst.takeWrittenN(len(inst.written))
+}
+
+// takeWrittenN is takeWritten over the first n rows kept: those of a
+// retained batch, ahead of rows committed after it.
+func (inst *WidgetStore) takeWrittenN(n int) iter.Seq[recordstore.WrittenKey[uint64, time.Time]] {
+	written := inst.written[:n:n]
+	inst.written = inst.written[n:]
+	if len(inst.written) == 0 {
+		inst.written = nil
+	}
 	return func(yield func(recordstore.WrittenKey[uint64, time.Time]) bool) {
 		for _, w := range written {
 			if !yield(w) {
@@ -367,9 +382,9 @@ func (inst *WidgetStore) EnsureTable(ctx context.Context) (err error) {
 		err = eh.Errorf("ensure table %s: %w", inst.writeTable(), err)
 		return
 	}
-	if inst.cfg.DDLTail != "" {
-		stmts[len(stmts)-1] += " " + inst.cfg.DDLTail
-	}
+	// The tail goes in ahead of the stamp's COMMENT clause, which
+	// ClickHouse wants last.
+	stmts[len(stmts)-1] = recordstore.AppendDDLTail(stmts[len(stmts)-1], inst.cfg.DDLTail)
 	for _, sql := range stmts {
 		err = inst.exec.Exec(ctx, sql)
 		if err != nil {
@@ -567,7 +582,13 @@ func (inst *WidgetStore) Buffered() int { return inst.buffered }
 // durable when Flush returns, engine permitting. On
 // insert failure the transferred records are retained and the next
 // Flush ships them — Flush is retryable; DiscardPending drops them
-// instead. An open (uncommitted) entity frame makes Flush error.
+// instead. Each insert is retried alone, ahead of rows buffered since,
+// under the batch id of its first attempt, sent as the insert's
+// deduplication token: on a table keeping a deduplication window, an
+// attempt that landed although it reported failure is not written
+// twice (ADR-0387). n counts the rows that landed, also when err is set;
+// the write observer is told each insert's rows under its batch id.
+// An open (uncommitted) entity frame makes Flush error.
 func (inst *WidgetStore) Flush(ctx context.Context) (n int, err error) {
 	// Ordered flush: make the dimension facts this batch
 	// references durable before the payload insert, so a referencing row is
@@ -595,31 +616,58 @@ func (inst *WidgetStore) Flush(ctx context.Context) (n int, err error) {
 		err = eh.Errorf("transfer records: %w", err)
 		return
 	}
-	records = append(inst.pending, records...)
-	inst.pending = nil
-	// One batch id per insert attempt: the executor stamps
-	// it, an observing executor reports it, the write observer is told it.
-	batch := recordstore.NewBatchId()
-	bctx := recordstore.WithBatchId(ctx, batch)
 	if len(records) > 0 {
-		err = inst.exec.InsertArrow(bctx, inst.writeTable(), records)
+		// One batch id per insert: the executor stamps it, an observing
+		// executor reports it, the write observer is told it, and the
+		// table deduplicates a retry by it.
+		pb := recordstore.PendingBatch{Records: records, Batch: recordstore.NewBatchId(), Rows: inst.buffered, Written: len(inst.written)}
+		for _, q := range inst.pending {
+			pb.Rows -= q.Rows
+			pb.Written -= q.Written
+		}
+		inst.pending = append(inst.pending, pb)
+	}
+	for len(inst.pending) > 0 {
+		pb := inst.pending[0]
+		bctx := recordstore.WithBatchId(ctx, pb.Batch)
+		err = inst.insertRecords(bctx, pb.Records, pb.Batch)
 		if err != nil {
-			inst.pending = records
 			err = eh.Errorf("insert into %s: %w", inst.writeTable(), err)
 			return
 		}
+		pb.Release()
+		inst.pending = inst.pending[1:]
+		n += pb.Rows
+		inst.buffered -= pb.Rows
+		if pb.Written > 0 {
+			inst.cfg.WriteObserver.Durable(bctx, pb.Batch, inst.takeWrittenN(pb.Written))
+		}
 	}
-	for _, rec := range records {
-		rec.Release()
-	}
-	n = inst.buffered
+	inst.pending = nil
+	n += inst.buffered
 	inst.buffered = 0
 	for k := range inst.dirty {
 		inst.notifyFlush(k) // durable now — release the views' dirty-window pins
 	}
 	clear(inst.dirty) // flushed — ClickHouse now serves the written state
 	if len(inst.written) > 0 {
-		inst.cfg.WriteObserver.Durable(bctx, batch, inst.takeWritten())
+		// Rows that transferred no records still reach the observer once.
+		batch := recordstore.NewBatchId()
+		inst.cfg.WriteObserver.Durable(recordstore.WithBatchId(ctx, batch), batch, inst.takeWritten())
+	}
+	return
+}
+
+// insertRecords inserts records under batch's deduplication token and
+// the store's insert settings. An executor that cannot carry settings
+// inserts plainly — without the token, so a retry is not deduplicated —
+// and the store says so once.
+func (inst *WidgetStore) insertRecords(ctx context.Context, records []arrow.RecordBatch, batch recordstore.BatchIdT) (err error) {
+	settings := recordstore.InsertSettings{DeduplicationToken: string(batch)}
+	applied, err := recordstore.InsertArrowWith(ctx, inst.exec, inst.writeTable(), records, settings)
+	if err == nil && !applied && !inst.insertSettingsUnapplied {
+		inst.insertSettingsUnapplied = true
+		log.Warn().Str("table", inst.writeTable()).Msg("the executor carries no per-insert settings: this store's inserts run under the session's settings and without a deduplication token, so a retried insert that had landed is written twice")
 	}
 	return
 }
@@ -652,8 +700,8 @@ func (inst *WidgetStore) DiscardPending() {
 			rec.Release()
 		}
 	}
-	for _, rec := range inst.pending {
-		rec.Release()
+	for _, pb := range inst.pending {
+		pb.Release()
 	}
 	inst.pending = nil
 	inst.buffered = 0

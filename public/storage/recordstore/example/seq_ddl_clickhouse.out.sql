@@ -6,4 +6,5 @@ CREATE TABLE IF NOT EXISTS seq (
 	"tv:measure:lvcard:lvcard:u64:4E:::0::data" Array(UInt64) CODEC(T64,ZSTD(3))
 ) ENGINE = MergeTree()
 ORDER BY ("id:id:u64:47::0:", "id:eid:u64:47::0:")
-SETTINGS allow_suspicious_low_cardinality_types=1
+SETTINGS allow_suspicious_low_cardinality_types=1, non_replicated_deduplication_window=1000
+COMMENT 'boxer-table/1 kind=seq columns=d662a6f0db556a67 naming=2'

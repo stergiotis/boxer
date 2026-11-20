@@ -24,6 +24,13 @@ import (
 type insertRecorder struct {
 	failFirst int
 	batchIds  []recordstore.BatchIdT
+	tokens    []recordstore.BatchIdT
+}
+
+// InsertArrowWith records the deduplication token the store sent.
+func (inst *insertRecorder) InsertArrowWith(ctx context.Context, table string, records []arrow.RecordBatch, settings recordstore.InsertSettings) (bool, error) {
+	inst.tokens = append(inst.tokens, recordstore.BatchIdT(settings.DeduplicationToken))
+	return true, inst.InsertArrow(ctx, table, records)
 }
 
 func (inst *insertRecorder) Exec(context.Context, string) error { return nil }
@@ -137,7 +144,9 @@ func TestWriteObserverOneFlushOneBatch(t *testing.T) {
 }
 
 // A failed Flush reports nothing; the retry that lands reports every key
-// once, under its own batch id — including a row committed in between.
+// once. The failed insert is retried alone under the batch id of its first
+// attempt — sent as its deduplication token — and a row committed in
+// between goes in an insert of its own, reported under its own id.
 func TestWriteObserverFailedFlushRetryReportsOnce(t *testing.T) {
 	exec := &insertRecorder{failFirst: 1}
 	log := &writeLog{}
@@ -151,18 +160,25 @@ func TestWriteObserverFailedFlushRetryReportsOnce(t *testing.T) {
 	assert.Empty(t, log.durable)
 
 	require.NoError(t, st.Begin(3, t1).AddBattery(Battery{ID: 3}).Commit())
-	_, err = st.Flush(context.Background())
+	n, err := st.Flush(context.Background())
 	require.NoError(t, err)
+	assert.Equal(t, 3, n)
 
-	require.Len(t, exec.batchIds, 2)
-	assert.NotEqual(t, exec.batchIds[0], exec.batchIds[1], "each insert attempt is its own batch")
-	require.Len(t, log.durable, 1)
-	assert.Equal(t, exec.batchIds[1], log.durable[0].batch)
-	keys := make([]uint64, 0, 3)
-	for _, w := range log.durable[0].keys {
-		keys = append(keys, w.Key)
+	require.Len(t, exec.batchIds, 3)
+	assert.Equal(t, exec.batchIds[0], exec.batchIds[1], "the retry keeps its first attempt's batch id")
+	assert.NotEqual(t, exec.batchIds[1], exec.batchIds[2], "rows buffered since go in an insert of their own")
+	assert.Equal(t, exec.batchIds, exec.tokens, "the batch id rides as the deduplication token")
+	require.Len(t, log.durable, 2)
+	keysOf := func(d durableBatch) (keys []uint64) {
+		for _, w := range d.keys {
+			keys = append(keys, w.Key)
+		}
+		return
 	}
-	assert.Equal(t, []uint64{1, 2, 3}, keys)
+	assert.Equal(t, exec.batchIds[1], log.durable[0].batch)
+	assert.Equal(t, []uint64{1, 2}, keysOf(log.durable[0]))
+	assert.Equal(t, exec.batchIds[2], log.durable[1].batch)
+	assert.Equal(t, []uint64{3}, keysOf(log.durable[1]))
 }
 
 // DiscardPending tells the observer which keys will never be durable, and a

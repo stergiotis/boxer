@@ -15,6 +15,6 @@ var ActorColumns = []recordstore.ColumnSpec{
 	{Name: "tv:symbol:lrcard:lrcard:u64:4E:::0::data", Type: "Array(UInt64)", Codec: "T64,ZSTD(3)"},
 }
 
-// ActorTableStamp is the COMMENT the store's CREATE TABLE writes; empty
-// when the store does not create its table.
-const ActorTableStamp = ""
+// ActorTableStamp is the COMMENT the store's CREATE TABLE writes: the
+// schema that created a table, as a schema check reads it back.
+const ActorTableStamp = "boxer-table/1 kind=actor columns=85be6114cfaa75cf naming=2 vocab=c0d5826d55478ee9"

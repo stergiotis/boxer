@@ -10,4 +10,5 @@ CREATE TABLE IF NOT EXISTS provenance (
 	"tv:symbolArray:lrcard:lrcard:u64:4E:::0::data" Array(UInt64) CODEC(T64,ZSTD(3))
 ) ENGINE = MergeTree()
 ORDER BY ("id:id:u64:4::0:", "ts:ts:z64:47::0:")
-SETTINGS allow_suspicious_low_cardinality_types=1
+SETTINGS allow_suspicious_low_cardinality_types=1, non_replicated_deduplication_window=1000
+COMMENT 'boxer-table/1 kind=provenance columns=d3630566b71d957c naming=2 vocab=f7757cde8b5576b3'
