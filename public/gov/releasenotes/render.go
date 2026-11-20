@@ -61,11 +61,13 @@ generator: boxer gov releasenotes
 	if len(n.Packages) == 0 {
 		b.WriteString("None.\n")
 	}
+	// A gone directory is printed bare, not as a code span: doclint resolves
+	// backticked paths against the tree, where these no longer exist.
 	for _, p := range n.Packages {
 		if p.Kind == PackageChangeKindRenamed {
-			fmt.Fprintf(&b, "- `%s` → `%s`\n", p.Dir, p.To)
+			fmt.Fprintf(&b, "- %s → `%s`\n", p.Dir, p.To)
 		} else {
-			fmt.Fprintf(&b, "- `%s` (removed)\n", p.Dir)
+			fmt.Fprintf(&b, "- %s (removed)\n", p.Dir)
 		}
 	}
 
