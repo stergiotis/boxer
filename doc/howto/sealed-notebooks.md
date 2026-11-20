@@ -213,7 +213,7 @@ if places != nil {
     w.Cell(notebookcells.RendererPoints, "SELECT latitude AS lat, longitude AS lon, name AS label FROM places")
 }
 nb, err := mdnotebook.Read(w.Bytes())
-view.Set(notebookview.PrepareFrom(nb, notebookview.Source{Records: records, Glosses: catalog}))
+inst.view.Set(notebookview.PrepareFrom(nb, notebookview.Source{Records: records, Glosses: catalog}))
 ```
 
 - **Data goes in the relations, not in the text.** `Writer.Paragraph` and

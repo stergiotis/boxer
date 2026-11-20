@@ -419,7 +419,7 @@ positional contract (DTO field order == schema column order == arg order) that
 the flat path documented but the compiler only caught when types differed:
 
 ```go
-sec := dml.GetSectionText()
+sec := table.GetSectionText() // table is the generated *InEntityTestTable
 a := sec.Add(InEntityTestTableSectionTextAttr{ // schema-generated attr — named value sub-columns
     Text:       "hello world",
     WordLength: []uint32{5, 5},                // parallel co-containers, zipped

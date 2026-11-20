@@ -214,6 +214,13 @@ There are two read paths. In Go, the generated readers load a record and
 `Unmarshal` rebuilds the DTOs (same example):
 
 ```go
+ra := firsttable.NewReadAccessEvents()
+defer ra.Release()
+ra.SetColumnIndices(ra.GetColumnIndices())
+err = ra.LoadFromRecord(rec)
+if err != nil {
+	panic(err)
+}
 readers := marshallreflect.NewSectionReaders(ra.GetNumberOfEntities()).
 	PlainColumn("id", ra.EntityId.ValueId).
 	PlainColumn("ts", ra.EntityTimestamp.ValueTs).

@@ -10,46 +10,51 @@ status: draft
 
 # How to plot an ECDF with confidence band
 
-Three recipes covering the common use cases of the `ecdf` widget.
-All snippets assume the caller is already inside an imzero2 render
-loop with a valid `*c.WidgetIdStack` and intends to wrap the
-emission in a `c.Plot(id).Send()` call.
+Four recipes covering the common use cases of the `ecdf` widget. The
+widget paints into a plot the host opens with
+[`implot.Begin`](../implot/) and closes with `End`; every snippet
+assumes the caller is inside an imzero2 render loop with a valid
+`ids *c.WidgetIdStack`.
 
 ## Recipe 1 — Sorted iid sample
 
 The default workflow: a complete sample is held in memory, sorted,
-and rendered as a step ECDF with a 95% simultaneous Berk-Jones
-confidence band.
+and painted as a step ECDF with a 95% simultaneous Berk-Jones
+confidence band (the zero `Style`).
 
 ```go
 import (
     "slices"
 
-    c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
     "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/ecdf"
+    "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/implot"
 )
 
-sample := []float64{ /* …iid observations… */ }
+sample := []float64{ /* iid observations */ }
 slices.Sort(sample)
 
-r := ecdf.New().SeriesName("p99-latency")
-_ = r.Render(sample)
-
-c.Plot(ids.PrepareStr("ecdf-p99")).
-    Width(600).Height(300).
-    XAxisLabel("latency (ms)").YAxisLabel("F(x)").
-    Legend().IncludeY(0).IncludeY(1).
-    Send()
+p := implot.Begin(ids, "##ecdf-p99", 600, 300)
+p.SetupAxes("latency (ms)", "F(x)", implot.AxisFlagsNone, implot.AxisFlagsNone)
+p.IncludeY(0)
+p.IncludeY(1)
+res := ecdf.Paint(p, ecdf.Input{
+    Style:  ecdf.Style{SeriesName: "p99-latency"},
+    Sorted: sample,
+    Band:   ecdf.BandExact,
+})
+p.End()
 ```
 
-The `Render` call enqueues the band rectangles and the ECDF
-polyline; the subsequent `c.Plot(…).Send()` drains them and
-renders inside a single egui_plot block.
+`Paint` declares the band first (it sits under the curve), then the
+step polyline. `res.Err` carries the band library's rejection of the
+input, such as an unsorted sample; the curve is still drawn where it
+can be.
 
 ## Recipe 2 — Streaming sketch (t-digest)
 
-When the sample size is too large to keep in memory, evaluate F_n
-at a fixed grid via a sketch and use `RenderGrid`.
+When the sample is too large to keep in memory, evaluate F_n at a
+fixed grid from a sketch and pass the grid with the total count. The
+band's calibration depends on `N`, not on the grid resolution.
 
 ```go
 const n = 5_000_000
@@ -67,22 +72,32 @@ for i := range xs {
     fn[i] = digest.CDF(xs[i])
 }
 
-r := ecdf.New().Method(ecdfbands.BandMethodBerkJones).Alpha(0.01)
-_ = r.RenderGrid(xs, fn, n)
+st := ecdf.Style{Method: ecdfbands.BandMethodBerkJones, Alpha: 0.01}
+band := ecdf.BandPreview
+if ecdf.BandReady(st, n) {
+    band = ecdf.BandExact
+} else {
+    _ = ecdf.EnsureBandJob(ecdf.BandJobKey(ids.ProbeSeq("band-job")), nil, n, st)
+}
 
-c.Plot(ids.PrepareStr("ecdf-streaming")).
-    Width(800).Height(400).
-    Legend().IncludeY(0).IncludeY(1).
-    Send()
+p := implot.Begin(ids, "##ecdf-streaming", 800, 400)
+p.IncludeY(0)
+p.IncludeY(1)
+_ = ecdf.Paint(p, ecdf.Input{Style: st, Xs: xs, FnAt: fn, N: n, Band: band})
+p.End()
 ```
 
-The band's calibration depends on `n` (the total observations the
-sketch consumed), not on the grid resolution.
+The exact band at large `N` is an O(n²) inversion. `BandExact`
+blocks on it unless it is cached, so a frame that cannot wait paints
+`BandPreview` — the closed-form DKW band, wider and instant — while
+`EnsureBandJob` warms the exact one in the background. The returned
+snapshot carries progress for a progress row; `CancelBandJob` stops
+a warm-up whose window closed.
 
 ## Recipe 3 — Comparing band methods on the same sample
 
 For visual comparison of how different families shape the band,
-render each in its own subpanel.
+paint each into its own plot.
 
 ```go
 methods := []ecdfbands.BandMethodE{
@@ -93,12 +108,13 @@ methods := []ecdfbands.BandMethodE{
 }
 
 for _, m := range methods {
-    r := ecdf.New().Method(m).Alpha(0.05).
-        SeriesName(fmt.Sprintf("method=%d", m))
-    _ = r.Render(sample)
-    c.Plot(ids.PrepareSeq(uint64(0xECDF + uint64(m)))).
-        Width(400).Height(300).
-        Send()
+    p := implot.Begin(ids, fmt.Sprintf("##ecdf-method-%d", m), 400, 300)
+    _ = ecdf.Paint(p, ecdf.Input{
+        Style:  ecdf.Style{Method: m, Alpha: 0.05, SeriesName: fmt.Sprintf("method=%d", m)},
+        Sorted: sample,
+        Band:   ecdf.BandExact,
+    })
+    p.End()
 }
 ```
 
@@ -108,45 +124,23 @@ Wire a hover-driven vertical crosshair on the plot plus a verbose,
 plain-language readout beneath it that describes the cursor's reading
 — `F_n(x)`, the nearest observation (or grid point), and the
 confidence interval with its provenance (exact family + calibration n,
-or the conservative DKW preview). The widget reads the cached r15 plot
-hover register each frame, computes the lookups, and emits one
-`PlotVLine` plus a fixed-height stack of `LabelAtoms` rows.
+or the conservative DKW preview).
 
 ```go
-import (
-    c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
-    "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/ecdf"
-)
+in := ecdf.Input{Style: ecdf.Style{SeriesName: "p99-latency"}, Sorted: sample, Band: ecdf.BandExact}
 
-// Construct the plot id ONCE as an AbsoluteWidgetId. ids.PrepareStr
-// is not interchangeable here — it XORs the surrounding stack-top
-// into the derived id, and the renderer's hover-id match would fail
-// silently. See EXPLANATION.md §"Plot-id filter".
-plotID := c.MakeAbsoluteIdStr("ecdf-p99")
+p := implot.Begin(ids, "##ecdf-p99", 600, 300)
+ch := ecdf.At(p, in)                    // reads the hover, computes F_n / band / nearest
+_ = ecdf.Paint(p, in)                   // band + ECDF polyline
+ecdf.PaintCrosshair(p, in.Style, ch)    // vertical crosshair; no-op when !ch.Valid
+p.End()
 
-r := ecdf.New().SeriesName("p99-latency")
-ch := r.At(plotID, sample)   // reads cached hover, computes F_n/band/nearest
-_ = r.Render(sample)          // band rectangles + ECDF polyline
-r.PaintCrosshair(ch)          // vertical crosshair (no-op when !ch.Valid)
-
-c.Plot(plotID).
-    Width(600).Height(300).
-    XAxisLabel("latency (ms)").YAxisLabel("F(x)").
-    Legend().IncludeY(0).IncludeY(1).
-    Send()
-
-c.AddSpace(styletokens.PaddingDefault(styletokens.DensityStandard))
-ecdf.WriteStatusLine(ch)      // verbose readout: "Cursor at value x = …" /
-                              // "Empirical CDF F_n(x) = … — an estimated …% …" /
-                              // "Nearest observation X_(i) = …" /
-                              // "Simultaneous 95% confidence band (exact, Berk-Jones, n=…): F(x) ∈ […]"
+ecdf.WriteStatusLine(ch)                // the verbose readout below the plot
 ```
 
-The grid path is symmetric: swap `r.At(plotID, sample)` for
-`r.AtGrid(plotID, xs, fnAt, n)` after `r.RenderGrid(xs, fnAt, n)`.
-Order of `At` / `Render` / `PaintCrosshair` is free as long as
-everything lands before `c.Plot(plotID).Send()` drains the
-registers.
+The grid path is the same with `Xs`, `FnAt` and `N` set instead of
+`Sorted`. `At`, `Paint` and `PaintCrosshair` all go between `Begin`
+and `End`.
 
 For an inline placement where the multi-line paragraph is too tall (a
 status bar, a dense table row), use `ecdf.WriteStatusLineTerse(ch)`
@@ -154,64 +148,38 @@ instead — one compact line in standard notation, no-op when `!ch.Valid`.
 (`boxenplot` mirrors this the other way: terse `WriteStatusLine`, with
 `WriteStatusLineVerbose` the explaining paragraph.)
 
-`Crosshair.Valid` is false when the cursor is outside the plot,
-when the hover refers to a different plot id, or when no plot has
-rendered yet this session. `PaintCrosshair` no-ops on `!ch.Valid`;
-`WriteStatusLine` does *not* — it emits a one-line hover hint
-("Hover over the curve to read F(x) and its confidence interval.")
-padded to the same `ecdf.ReadoutLineCount` height as the full readout,
-so the status area never reflows as the cursor enters and leaves the
-curve. (If you build your own readout, the pure `formatReadout` is not
-exported; reproduce the hint yourself on the `!ch.Valid` branch.)
-
-To name the band in an always-visible line of your own (independent of
-hover) — e.g. while the cursor is off the curve — read
-`r.BandMethod()` for the configured exact family.
+`Crosshair.Valid` is false when the cursor is outside the plot or no
+plot has rendered yet this session. `PaintCrosshair` no-ops on
+`!ch.Valid`; `WriteStatusLine` does *not* — it emits a one-line hover
+hint padded to the same `ecdf.ReadoutLineCount` height as the full
+readout, so the status area never reflows as the cursor enters and
+leaves the curve.
 
 ## Verification
 
-The widget is covered by the carousel screenshot tour:
-
-```bash
-./scripts/dev/hmi_screenshots.sh
-```
-
-look for `ecdf.png` under `doc/screenshots/tour/`. A correct
-render shows a solid translucent fill behind a crisp step curve.
-The carousel's `ecdf` demo also lets you toggle live between band
-methods and α levels to inspect the geometric differences.
+The widget gallery's `ecdf` demo
+([egui2_hl_ecdf_demo.go](../../demo/apps/widgets/egui2_hl_ecdf_demo.go))
+paints a sample with the crosshair and lets you switch band methods
+and α levels live. A correct render shows a translucent band behind a
+step curve. To capture it as an image, use the demo registry's
+screenshot driver (`IMZERO2_SCREENSHOT_DIR`; see the Screenshots
+section of [AGENTS.md](../../../../../../AGENTS.md)).
 
 ## Troubleshooting
 
-- **Symptom:** band renders as dense diagonal hatching across the
-  plot.
-  **Cause:** the underlying `PlotPolygon` primitive was invoked
-  with a non-convex single polygon — egui_plot's tessellator can't
-  fill it cleanly.
-  **Fix:** ensure you are calling `Render` or `RenderGrid` on this
-  widget rather than constructing your own band polygon — the
-  widget already emits one convex rectangle per ECDF plateau to
-  bypass this case.
+- **Symptom:** `Paint` returns an error naming an unsorted sample.
+  **Cause:** `Sorted` is not non-decreasing.
+  **Fix:** `slices.Sort(sample)` before painting. The widget does
+  not sort in place, to keep the contract predictable.
 
-- **Symptom:** `Render` returns `sample not sorted at i=…`.
-  **Cause:** input slice is not non-decreasing.
-  **Fix:** `slices.Sort(sample)` before calling. The widget does
-  not sort in place to keep the contract predictable.
-
-- **Symptom:** `RenderGrid` returns `xs and fnAt length mismatch`.
-  **Cause:** the two grid slices are different lengths — usually
-  forgotten to size `fn` to `len(xs)` after building the x-grid.
+- **Symptom:** the error names a grid length mismatch.
+  **Cause:** `Xs` and `FnAt` have different lengths — usually `fn`
+  was not sized to `len(xs)` after building the x-grid.
   **Fix:** allocate both as `make([]float64, gridN)` together.
 
-- **Symptom:** the crosshair never appears while hovering and
-  `WriteStatusLine` stays absent, even though `c.Plot.Send()` is
-  clearly being called.
-  **Cause:** the plot id was constructed via `ids.PrepareStr(...)`
-  instead of `c.MakeAbsoluteIdStr(...)`. `PrepareStr → Derive` XORs
-  the surrounding `WidgetIdStack` top into the hash, so the id
-  flowing into the plot block (and stored on hover) doesn't equal
-  what `plotID.Derive()` returns inside `Renderer.At`.
-  **Fix:** `plotID := c.MakeAbsoluteIdStr("…")` once at frame top;
-  pass the same `plotID` to both `r.At(plotID, …)` and
-  `c.Plot(plotID).Send()`. AbsoluteWidgetId's `Derive()` is the
-  identity (modulo non-zero check), so the round-trip is stable.
+- **Symptom:** the frame stalls when the plot first shows a large
+  sample.
+  **Cause:** `BandExact` blocks on the O(n²) inversion while its
+  `(n, α, method)` band is not cached.
+  **Fix:** the Recipe 2 pattern — `BandReady`, `BandPreview` meanwhile,
+  `EnsureBandJob` in the background.
