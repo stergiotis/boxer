@@ -21,6 +21,7 @@ import (
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/thestack/fffi2/runtime"
 	"github.com/stergiotis/boxer/public/thestack/fffi2/typed"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/fontresolve"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/hostwake"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/imzero2env"
@@ -108,44 +109,7 @@ func (inst *Application[U]) Launch() (err error) {
 		if cfg.DiscoverFonts {
 			cfg.fillFonts(fontresolve.Resolver{Fontconfig: fontresolve.Fontconfig{}})
 		}
-		args := make([]string, 0, 32)
-		args = append(args, "imzero2")
-		if cfg.MainFontTTF != "" {
-			args = append(args, "-mainFontTTF", cfg.MainFontTTF)
-		}
-		if cfg.MonoFontTTF != "" {
-			args = append(args, "-monoFontTTF", cfg.MonoFontTTF)
-		}
-		if cfg.PhosphorFontTTF != "" {
-			args = append(args, "-phosphorFontTTF", cfg.PhosphorFontTTF)
-		}
-		if cfg.FallbackFontTTF != "" {
-			args = append(args, "-fallbackFontTTF", cfg.FallbackFontTTF)
-		}
-		if cfg.BoldFontTTF != "" {
-			args = append(args, "-boldFontTTF", cfg.BoldFontTTF)
-		}
-		if cfg.MainFontSizeInPixels > 0 {
-			args = append(args, "-mainFontSizeInPixels", fmt.Sprintf("%g", cfg.MainFontSizeInPixels))
-		}
-		addTweak := func(prefix string, tw FontTweakConfig) {
-			if tw.Scale != 0 && tw.Scale != 1.0 {
-				args = append(args, "-"+prefix+"Scale", fmt.Sprintf("%g", tw.Scale))
-			}
-			if tw.YOffsetFactor != 0 {
-				args = append(args, "-"+prefix+"YOffsetFactor", fmt.Sprintf("%g", tw.YOffsetFactor))
-			}
-			if tw.YOffset != 0 {
-				args = append(args, "-"+prefix+"YOffset", fmt.Sprintf("%g", tw.YOffset))
-			}
-		}
-		addTweak("mainFont", cfg.MainFontTweak)
-		addTweak("monoFont", cfg.MonoFontTweak)
-		addTweak("phosphorFont", cfg.PhosphorFontTweak)
-		addTweak("fallbackFont", cfg.FallbackFontTweak)
-		if inst.Config.ImZeroSkiaClientConfig != nil {
-			args = inst.Config.ImZeroSkiaClientConfig.PassthroughArgs(args)
-		}
+		args := clientArgs(cfg)
 		log.Info().Strs("args", args).Str("binary", cfg.ClientBinary).Msg("launching imzero client")
 		var cmd *exec.Cmd
 		debugMode := imzero2env.DebugMode.Get()
@@ -262,6 +226,58 @@ func (inst *Application[U]) Launch() (err error) {
 		inst.handleNonNilError,
 		nil)
 	inst.fffi = runtime.NewFffi2[U](inst.channel)
+	return
+}
+
+// idlFingerprintFlag hands the client the fingerprint of the IDL this side's
+// bindings were generated from. Opcode numbers are positions in a sorted list,
+// so a client built from another tree would mis-decode the stream without
+// failing; the client compares the value with its own before the first frame
+// and refuses to start on a mismatch or on its absence (ADR-0278 SD6). A
+// client older than the flag refuses it as an unknown argument.
+const idlFingerprintFlag = "-idlFingerprint"
+
+// clientArgs is the client's command line after the binary: the imzero2
+// command, the IDL fingerprint and the configured fonts, window and tweaks.
+func clientArgs(cfg *Config) (args []string) {
+	args = make([]string, 0, 32)
+	args = append(args, "imzero2", idlFingerprintFlag, fmt.Sprintf("%016x", bindings.IdlFingerprint))
+	if cfg.MainFontTTF != "" {
+		args = append(args, "-mainFontTTF", cfg.MainFontTTF)
+	}
+	if cfg.MonoFontTTF != "" {
+		args = append(args, "-monoFontTTF", cfg.MonoFontTTF)
+	}
+	if cfg.PhosphorFontTTF != "" {
+		args = append(args, "-phosphorFontTTF", cfg.PhosphorFontTTF)
+	}
+	if cfg.FallbackFontTTF != "" {
+		args = append(args, "-fallbackFontTTF", cfg.FallbackFontTTF)
+	}
+	if cfg.BoldFontTTF != "" {
+		args = append(args, "-boldFontTTF", cfg.BoldFontTTF)
+	}
+	if cfg.MainFontSizeInPixels > 0 {
+		args = append(args, "-mainFontSizeInPixels", fmt.Sprintf("%g", cfg.MainFontSizeInPixels))
+	}
+	addTweak := func(prefix string, tw FontTweakConfig) {
+		if tw.Scale != 0 && tw.Scale != 1.0 {
+			args = append(args, "-"+prefix+"Scale", fmt.Sprintf("%g", tw.Scale))
+		}
+		if tw.YOffsetFactor != 0 {
+			args = append(args, "-"+prefix+"YOffsetFactor", fmt.Sprintf("%g", tw.YOffsetFactor))
+		}
+		if tw.YOffset != 0 {
+			args = append(args, "-"+prefix+"YOffset", fmt.Sprintf("%g", tw.YOffset))
+		}
+	}
+	addTweak("mainFont", cfg.MainFontTweak)
+	addTweak("monoFont", cfg.MonoFontTweak)
+	addTweak("phosphorFont", cfg.PhosphorFontTweak)
+	addTweak("fallbackFont", cfg.FallbackFontTweak)
+	if cfg.ImZeroSkiaClientConfig != nil {
+		args = cfg.ImZeroSkiaClientConfig.PassthroughArgs(args)
+	}
 	return
 }
 

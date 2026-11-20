@@ -206,6 +206,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 cfg.parse(&mut used, rest_args);
             }
             flags::validate_all_args_used(rest_args, rest_args.len() as u32, &used);
+            // Before any frame is exchanged: a Go side generated from another
+            // IDL would be decoded as the wrong calls (ADR-0278 SD6).
+            if let Err(msg) = imzero2::appconfig::check_idl_fingerprint(
+                &cfg.idl_fingerprint,
+                imzero2::imzero2::enums_out::IDL_FINGERPRINT,
+            ) {
+                tracing::error!("refusing to start: {msg}");
+                return Err(msg.into());
+            }
             run_imzero2(cfg)
         }
         "ipc" => {

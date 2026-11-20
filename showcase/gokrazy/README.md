@@ -175,17 +175,17 @@ the opt-in, and front the host with an authenticating TLS reverse proxy.
 
 The Rust host is staged once, into `_stage/`; the Go program is built by
 gokrazy from the checkout on **every** `vm run`. In a working tree where the
-egui2 IDL is being regenerated, the two halves drift apart between boots, and
-the symptom does not name the cause: the carrier accepts viewers and serves
-zero frames, with
+egui2 IDL is being regenerated, the two halves drift apart between boots. The
+host compares the IDL fingerprint the Go side passes with its own before the
+first frame and refuses to start on a difference (ADR-0278 SD6), so the
+program log names both values:
 
 ```
-ERROR headless.rs: interpret error during dispatch
-error=FFFI error: unable to convert from representation
+refusing to start: IDL mismatch: the Go side was generated from IDL …, this host from …
 ```
 
-in the program log. Re-run `build.sh` (without `--no-rust-build`) so both
-halves come from the same tree.
+Re-run `build.sh` (without `--no-rust-build`) so both halves come from the
+same tree.
 
 ## What this does not cover
 

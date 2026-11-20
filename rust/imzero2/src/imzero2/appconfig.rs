@@ -69,6 +69,11 @@ pub struct AppConfig {
     /// fffi interpreter
     pub fffi_interpreter: bool,
 
+    /// The IDL fingerprint the Go side passed (`-idlFingerprint`, hex);
+    /// empty when none was. [`check_idl_fingerprint`] decides on it before
+    /// the first frame (ADR-0278 SD6).
+    pub idl_fingerprint: String,
+
     /// path to main font TTF/OTF file (`FontFamily::Proportional` base)
     pub main_font_ttf: String,
     /// path to monospace font TTF/OTF file (`FontFamily::Monospace` base).
@@ -108,6 +113,7 @@ impl Default for AppConfig {
             vsync: true,
             background_color_rgba: None,
             fffi_interpreter: true,
+            idl_fingerprint: String::new(),
             main_font_ttf: String::new(),
             mono_font_ttf: String::new(),
             phosphor_font_ttf: String::new(),
@@ -166,6 +172,8 @@ impl AppConfig {
             "-fffiInterpreter",
             self.fffi_interpreter,
         );
+        self.idl_fingerprint =
+            flags::find_flag_default(args, used, "-idlFingerprint", self.idl_fingerprint.clone());
 
         self.main_font_ttf =
             flags::find_flag_default(args, used, "-mainFontTTF", self.main_font_ttf.clone());
@@ -309,6 +317,11 @@ impl AppConfig {
             "\t-fffiInterpreter [bool:{}]",
             if self.fffi_interpreter { "on" } else { "off" }
         )?;
+        writeln!(
+            w,
+            "\t-idlFingerprint [hex u64, required; the Go launcher passes it:{}]",
+            self.idl_fingerprint
+        )?;
 
         writeln!(w, "font flags:")?;
         writeln!(w, "\t-mainFontTTF [string:{}]", self.main_font_ttf)?;
@@ -375,6 +388,36 @@ impl AppConfig {
     }
 }
 
+/// Decide whether this host may talk to the Go side that launched it, from
+/// the IDL fingerprint that side passed (`given`, hex, `0x` optional) and the
+/// host's own (`own`, `enums_out::IDL_FINGERPRINT`). Opcode numbers are
+/// positions in a sorted list, so a pair generated from different IDLs
+/// decodes each other's frames as the wrong calls without failing; the check
+/// runs before the first frame and refuses (ADR-0278 SD6). An absent value
+/// refuses too: every Go launcher passes one, so its absence is a Go side
+/// older than this host or a hand-made launch.
+pub fn check_idl_fingerprint(given: &str, own: u64) -> Result<(), String> {
+    let given = given.trim();
+    if given.is_empty() {
+        return Err(format!(
+            "no -idlFingerprint given; this host was built from IDL {own:016x}. The Go side and \
+             the host must be built from one tree: a Go launcher that passes no fingerprint is \
+             older than this host. A host launched by hand needs -idlFingerprint with the value \
+             of the Go side it pairs with"
+        ));
+    }
+    let digits = given.strip_prefix("0x").or_else(|| given.strip_prefix("0X")).unwrap_or(given);
+    let theirs = u64::from_str_radix(digits, 16)
+        .map_err(|e| format!("-idlFingerprint {given:?} is not a hexadecimal u64: {e}"))?;
+    if theirs != own {
+        return Err(format!(
+            "IDL mismatch: the Go side was generated from IDL {theirs:016x}, this host from \
+             {own:016x}. The Go side and the host must be built from one tree"
+        ));
+    }
+    Ok(())
+}
+
 /// Parses `RRGGBB` / `RRGGBBAA` hex (a leading `#` is tolerated) into a
 /// colour. Alpha is read as *straight*, not premultiplied, so `8f8f8fff` is
 /// an opaque grey and `8f8f8f80` is the same grey at half coverage.
@@ -419,6 +462,45 @@ fn parse_monitor(s: &str) -> Option<usize> {
         tracing::warn!(value = s, "ignoring -monitor: not a monitor index");
     }
     parsed
+}
+
+#[cfg(test)]
+mod idl_fingerprint_tests {
+    use super::check_idl_fingerprint as check;
+
+    const OWN: u64 = 0xd136_8138_b9ba_6f98;
+
+    #[test]
+    fn the_same_fingerprint_passes() {
+        for given in [
+            "d1368138b9ba6f98",
+            "0xd1368138b9ba6f98",
+            "D1368138B9BA6F98",
+            " d1368138b9ba6f98 ",
+        ] {
+            assert_eq!(check(given, OWN), Ok(()), "input {given:?}");
+        }
+    }
+
+    /// A Go side from another tree is refused, and the message names both
+    /// values and what to do about them.
+    #[test]
+    fn a_different_fingerprint_is_refused() {
+        let err = check("0000000000000001", OWN).unwrap_err();
+        assert!(err.contains("0000000000000001"), "{err}");
+        assert!(err.contains("d1368138b9ba6f98"), "{err}");
+        assert!(err.contains("must be built from one tree"), "{err}");
+    }
+
+    #[test]
+    fn an_absent_or_malformed_fingerprint_is_refused() {
+        let err = check("", OWN).unwrap_err();
+        assert!(err.contains("d1368138b9ba6f98"), "{err}");
+        assert!(err.contains("must be built from one tree"), "{err}");
+        for given in ["nothex", "0x", "1d1368138b9ba6f98"] {
+            assert!(check(given, OWN).is_err(), "input {given:?}");
+        }
+    }
 }
 
 #[cfg(test)]
