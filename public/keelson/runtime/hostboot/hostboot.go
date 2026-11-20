@@ -2007,6 +2007,20 @@ func (rt *Runtime) Run(cfg *application.Config) (err error) {
 	if grace <= 0 {
 		grace = DefaultShutdownGrace
 	}
+	// A panic out of the loop, such as a Frame that stopped midway
+	// (ADR-0386), reaps every window before it ends the process, and a reap
+	// that hangs is cut at the grace, as after a signal.
+	defer func() {
+		if r := recover(); r != nil {
+			forced := time.AfterFunc(grace, func() {
+				logger.Error().Dur("grace", grace).Msg("hostboot: the reap after a panic did not complete within the grace period, forcing exit")
+				os.Exit(2)
+			})
+			rt.Close()
+			forced.Stop()
+			panic(r)
+		}
+	}()
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 	defer signal.Stop(sigCh)
