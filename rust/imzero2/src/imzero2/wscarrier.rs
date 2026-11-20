@@ -1676,6 +1676,9 @@ async fn handle_session(
     // Refuse an upgrade a page on another site asked for (ADR-0082): a
     // browser lets any page open a WebSocket to 127.0.0.1, and this socket
     // carries input. The check runs in the handshake, before admission.
+    // The signature is tungstenite's handshake callback, so its large `Err`
+    // variant (an HTTP response) is not this code's to box.
+    #[allow(clippy::result_large_err)]
     let check_origin = |req: &tokio_tungstenite::tungstenite::handshake::server::Request,
                         resp: tokio_tungstenite::tungstenite::handshake::server::Response|
      -> Result<
@@ -2822,11 +2825,7 @@ mod tests {
 
         // Only what a device sends is taken: short, and of a device's kind.
         handle_client_message(&lane(&[0x01, 7, 0, 0, 0]), &inner, a);
-        handle_client_message(
-            &lane(&vec![0x82u8; AUDIO_DEVICE_MESSAGE_MAX + 1]),
-            &inner,
-            a,
-        );
+        handle_client_message(&lane(&[0x82u8; AUDIO_DEVICE_MESSAGE_MAX + 1]), &inner, a);
         handle_client_message(&lane(&[]), &inner, a);
         assert!(
             host.try_recv().is_err(),

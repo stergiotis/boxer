@@ -90,15 +90,21 @@ for features in \
 done
 run_step "check desktop (default features)" cargo check --locked --quiet --target-dir "$target" --all-targets
 
-# Clippy, on the default feature set. The crate reached zero findings under the
-# curated lint list in Cargo.toml (the deliberately-off block there says which
-# lints were dropped and why), and a gate is what keeps it there — the findings
-# came back in the hundreds the moment nobody was looking. The default set is
-# gated rather than the whole matrix because clippy's findings are almost all
-# feature-independent and a second full build is not worth the CI minutes;
-# rust/imzero2/check.sh runs the --all-features form locally.
+# Clippy, on every feature set the matrix above checks. The crate reached zero
+# findings under the curated lint list in Cargo.toml (the deliberately-off
+# block there says which lints were dropped and why), and a gate is what keeps
+# it there — the findings came back in the hundreds the moment nobody was
+# looking. Most findings are feature-independent, but the carrier, the FFFI
+# reader's headless paths and the browser host compile only under their own
+# features, so a default-only gate never saw them. The runs share the target
+# dir with the checks above, so each costs little beyond the lint pass itself.
 run_step "clippy (default features)" \
     cargo clippy --locked --quiet --target-dir "$target" --all-targets -- -D warnings -W clippy::all
+for features in headless headless_svg headless_wgpu headless_soft browser; do
+    run_step "clippy --features $features" \
+        cargo clippy --locked --quiet --no-default-features --features "$features" \
+        --target-dir "$target" --all-targets -- -D warnings -W clippy::all
+done
 
 # Tests run once, under the feature set that has them. The CPU rasterizer's
 # own tests plus the crate's existing ~106.
