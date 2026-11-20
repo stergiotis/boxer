@@ -1,6 +1,7 @@
 package inprocbus
 
 import (
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -166,4 +167,20 @@ func TestInst_Subscribe_NilHandlerRejected(t *testing.T) {
 	bus := inst.NewClient("test.app", fullCaps())
 	_, err := bus.Subscribe("a.b", nil)
 	require.Error(t, err)
+}
+
+// A panicking handler is logged and the handlers after it still run; the
+// publisher is not taken down.
+func TestInst_APanickingHandlerDoesNotStopTheOthers(t *testing.T) {
+	var logged strings.Builder
+	inst := NewInst(zerolog.New(&logged))
+	bus := inst.NewClient("test.app", fullCaps())
+	var after atomic.Int32
+	_, err := bus.Subscribe("a.b", func(*app.Msg) { panic("boom") })
+	require.NoError(t, err)
+	_, err = bus.Subscribe("a.b", func(*app.Msg) { after.Add(1) })
+	require.NoError(t, err)
+	assert.NotPanics(t, func() { require.NoError(t, bus.Publish("a.b", nil)) })
+	assert.Equal(t, int32(1), after.Load())
+	assert.Contains(t, logged.String(), "a handler panicked")
 }

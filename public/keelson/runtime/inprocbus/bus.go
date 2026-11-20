@@ -9,6 +9,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/audit"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/ph"
 )
 
 // DefaultRequestTimeout is the wait Request applies before returning
@@ -214,35 +215,62 @@ func (inst *Inst) ClientByInstance(appId app.AppIdT, key uint64) (c *Client, ok 
 	return
 }
 
-// publish dispatches a message to all matching subscriptions. n is the
-// number of handlers invoked; sender and senderInstance are recorded on the
-// Msg so handlers can identify the originating app — and, since ADR-0191
-// §SD2, the originating window — without inspecting payload.
+// publish dispatches a message to all matching subscriptions, on the
+// caller's goroutine and in subscription order. n is the number of handlers
+// invoked; sender and senderInstance are recorded on the Msg so handlers can
+// identify the originating app — and, since ADR-0191 §SD2, the originating
+// window — without inspecting payload.
 func (inst *Inst) publish(sender app.AppIdT, senderInstance uint64, subject, reply string, payload []byte) (n int, err error) {
 	err = ValidateSubject(subject)
 	if err != nil {
 		return
 	}
+	matched := inst.matching(subject)
+	inst.dispatch(matched, newMsg(sender, senderInstance, subject, reply, payload))
+	n = len(matched)
+	return
+}
+
+// matching is a snapshot of the subscriptions subject reaches.
+func (inst *Inst) matching(subject string) (matched []*subscription) {
 	inst.mu.RLock()
-	var matched []*subscription
+	defer inst.mu.RUnlock()
 	for _, s := range inst.subs {
 		if Match(s.pattern, subject) {
 			matched = append(matched, s)
 		}
 	}
-	inst.mu.RUnlock()
-	msg := &app.Msg{
+	return
+}
+
+func newMsg(sender app.AppIdT, senderInstance uint64, subject, reply string, payload []byte) (msg *app.Msg) {
+	return &app.Msg{
 		Subject:        subject,
 		Reply:          reply,
 		Sender:         sender,
 		SenderInstance: senderInstance,
 		Payload:        payload,
 	}
+}
+
+// dispatch runs each handler in turn. A panicking handler is logged at Error
+// level with the panic site's stack, and the handlers after it still run:
+// one subscriber's bug does not end the publisher or the process (ADR-0386).
+func (inst *Inst) dispatch(matched []*subscription, msg *app.Msg) {
 	for _, s := range matched {
-		s.handler(msg)
+		inst.callHandler(s, msg)
 	}
-	n = len(matched)
-	return
+}
+
+func (inst *Inst) callHandler(s *subscription, msg *app.Msg) {
+	defer func() {
+		if r := recover(); r != nil {
+			inst.log.Error().Err(ph.ConvertPanicToError(r)).
+				Str("subject", msg.Subject).Str("pattern", s.pattern).Str("app", string(s.appId)).
+				Msg("inprocbus: a handler panicked")
+		}
+	}()
+	s.handler(msg)
 }
 
 func (inst *Inst) subscribe(appId app.AppIdT, instanceKey uint64, pattern string, handler app.MsgHandlerFunc) (id uint64, err error) {
