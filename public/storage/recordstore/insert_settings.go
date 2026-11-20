@@ -21,11 +21,22 @@ const (
 type InsertSettings struct {
 	AsyncInsert        ToggleE
 	WaitForAsyncInsert ToggleE
+	// DeduplicationToken, when set, is sent as insert_deduplication_token:
+	// a table keeping a deduplication window drops a later insert carrying
+	// a token it has seen, so a retry of an insert that landed is not
+	// written twice (ADR-0387). A table without the window ignores it.
+	DeduplicationToken string
 }
 
 // IsZero reports whether the settings set nothing.
 func (inst InsertSettings) IsZero() bool {
-	return inst.AsyncInsert == ToggleUnset && inst.WaitForAsyncInsert == ToggleUnset
+	return inst.AsyncInsert == ToggleUnset && inst.WaitForAsyncInsert == ToggleUnset && inst.DeduplicationToken == ""
+}
+
+// WithDeduplicationToken is the settings with the token set.
+func (inst InsertSettings) WithDeduplicationToken(token string) InsertSettings {
+	inst.DeduplicationToken = token
+	return inst
 }
 
 // Map is the settings as name → value, in a fixed order of names; nil when
@@ -33,7 +44,7 @@ func (inst InsertSettings) IsZero() bool {
 func (inst InsertSettings) Map() (m map[string]string) {
 	for _, s := range inst.pairs() {
 		if m == nil {
-			m = make(map[string]string, 2)
+			m = make(map[string]string, 3)
 		}
 		m[s[0]] = s[1]
 	}
@@ -49,6 +60,10 @@ func (inst InsertSettings) SQL() (clause string) {
 	}
 	parts := make([]string, 0, len(pairs))
 	for _, p := range pairs {
+		if p[0] == "insert_deduplication_token" {
+			parts = append(parts, p[0]+"="+quoteLiteral(p[1]))
+			continue
+		}
 		parts = append(parts, p[0]+"="+p[1])
 	}
 	return " SETTINGS " + strings.Join(parts, ", ")
@@ -65,6 +80,9 @@ func (inst InsertSettings) pairs() (pairs [][2]string) {
 	}
 	add("async_insert", inst.AsyncInsert)
 	add("wait_for_async_insert", inst.WaitForAsyncInsert)
+	if inst.DeduplicationToken != "" {
+		pairs = append(pairs, [2]string{"insert_deduplication_token", inst.DeduplicationToken})
+	}
 	return
 }
 
