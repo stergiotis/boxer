@@ -197,7 +197,7 @@ var MetaColumns = []recordstore.ColumnSpec{
 
 // MetaTableStamp is the COMMENT the store's CREATE TABLE writes: the
 // schema that created a table, as a schema check reads it back.
-const MetaTableStamp = "boxer-table/1 kind=fsmeta columns=b9f169be98d23fa6 naming=2 vocab=90637cf4c6ee366b"
+const MetaTableStamp = "boxer-table/1 kind=fsmeta columns=c6904140adc8ae04 naming=2 vocab=6a4e3cefae2c9b7b"
 
 // MetaSchemaContract is the contract of a MetaStore bound to table (""
 // binds MetaTableName): what a schema check needs, without a store.

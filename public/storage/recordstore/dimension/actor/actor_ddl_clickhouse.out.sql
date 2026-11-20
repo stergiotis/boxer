@@ -7,4 +7,4 @@ CREATE TABLE IF NOT EXISTS actor (
 ) ENGINE = MergeTree()
 ORDER BY ("id:id:u64:4::0:", "ts:ts:z64:47::0:")
 SETTINGS allow_suspicious_low_cardinality_types=1, non_replicated_deduplication_window=1000
-COMMENT 'boxer-table/1 kind=actor columns=85be6114cfaa75cf naming=2 vocab=c0d5826d55478ee9'
+COMMENT 'boxer-table/1 kind=actor columns=d7460acf7cbb2148 naming=2 vocab=ff37cba619d090b0'

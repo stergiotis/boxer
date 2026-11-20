@@ -17,7 +17,7 @@ var ActorColumns = []recordstore.ColumnSpec{
 
 // ActorTableStamp is the COMMENT the store's CREATE TABLE writes: the
 // schema that created a table, as a schema check reads it back.
-const ActorTableStamp = "boxer-table/1 kind=actor columns=85be6114cfaa75cf naming=2 vocab=c0d5826d55478ee9"
+const ActorTableStamp = "boxer-table/1 kind=actor columns=d7460acf7cbb2148 naming=2 vocab=ff37cba619d090b0"
 
 // ActorSchemaContract is the contract of a ActorStore bound to table (""
 // binds ActorTableName): what a schema check needs, without a store.

@@ -8,4 +8,4 @@ CREATE TABLE IF NOT EXISTS rev (
 ) ENGINE = MergeTree()
 ORDER BY ("id:id:s:4::0:", "id:ord:u64:47::0:", "lc:rev:u32:4::0:")
 SETTINGS allow_suspicious_low_cardinality_types=1, non_replicated_deduplication_window=1000
-COMMENT 'boxer-table/1 kind=rev columns=fcd770fb14af8dcc naming=2'
+COMMENT 'boxer-table/1 kind=rev columns=f7e2dcaac2756a4e naming=2'

@@ -62,7 +62,7 @@ var WidgetColumns = []recordstore.ColumnSpec{
 
 // WidgetTableStamp is the COMMENT the store's CREATE TABLE writes: the
 // schema that created a table, as a schema check reads it back.
-const WidgetTableStamp = "boxer-table/1 kind=widget columns=07426504f890b3f7 naming=2"
+const WidgetTableStamp = "boxer-table/1 kind=widget columns=5cf79f2ab9f7c8ae naming=2"
 
 // WidgetSchemaContract is the contract of a WidgetStore bound to table (""
 // binds WidgetTableName): what a schema check needs, without a store.

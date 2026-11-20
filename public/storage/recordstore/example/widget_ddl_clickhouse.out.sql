@@ -52,4 +52,4 @@ CREATE TABLE IF NOT EXISTS widget (
 ) ENGINE = MergeTree()
 ORDER BY ("id:id:u64:47::0:", "ts:ts:z64:47::0:")
 SETTINGS allow_suspicious_low_cardinality_types=1, non_replicated_deduplication_window=1000
-COMMENT 'boxer-table/1 kind=widget columns=07426504f890b3f7 naming=2'
+COMMENT 'boxer-table/1 kind=widget columns=5cf79f2ab9f7c8ae naming=2'

@@ -65,7 +65,7 @@ var PersistColumns = []recordstore.ColumnSpec{
 
 // PersistTableStamp is the COMMENT the store's CREATE TABLE writes: the
 // schema that created a table, as a schema check reads it back.
-const PersistTableStamp = "boxer-table/1 kind=persiststate columns=5188114eda79b506 naming=2 vocab=dcf685984675866d"
+const PersistTableStamp = "boxer-table/1 kind=persiststate columns=36be90b8901a2f1d naming=2 vocab=9076c8cb096a7ff4"
 
 // PersistSchemaContract is the contract of a PersistStore bound to table (""
 // binds PersistTableName): what a schema check needs, without a store.

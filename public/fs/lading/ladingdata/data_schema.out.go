@@ -197,7 +197,7 @@ var DataColumns = []recordstore.ColumnSpec{
 
 // DataTableStamp is the COMMENT the store's CREATE TABLE writes: the
 // schema that created a table, as a schema check reads it back.
-const DataTableStamp = "boxer-table/1 kind=fsdata columns=b9f169be98d23fa6 naming=2 vocab=b68f38848ef11770"
+const DataTableStamp = "boxer-table/1 kind=fsdata columns=c6904140adc8ae04 naming=2 vocab=4dc0725b6712358f"
 
 // DataSchemaContract is the contract of a DataStore bound to table (""
 // binds DataTableName): what a schema check needs, without a store.

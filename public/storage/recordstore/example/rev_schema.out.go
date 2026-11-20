@@ -18,7 +18,7 @@ var RevColumns = []recordstore.ColumnSpec{
 
 // RevTableStamp is the COMMENT the store's CREATE TABLE writes: the
 // schema that created a table, as a schema check reads it back.
-const RevTableStamp = "boxer-table/1 kind=rev columns=fcd770fb14af8dcc naming=2"
+const RevTableStamp = "boxer-table/1 kind=rev columns=f7e2dcaac2756a4e naming=2"
 
 // RevSchemaContract is the contract of a RevStore bound to table (""
 // binds RevTableName): what a schema check needs, without a store.

@@ -197,7 +197,7 @@ var PolicyColumns = []recordstore.ColumnSpec{
 
 // PolicyTableStamp is the COMMENT the store's CREATE TABLE writes: the
 // schema that created a table, as a schema check reads it back.
-const PolicyTableStamp = "boxer-table/1 kind=facts columns=b9f169be98d23fa6 naming=2 vocab=8e09daaa050cf900"
+const PolicyTableStamp = "boxer-table/1 kind=facts columns=c6904140adc8ae04 naming=2 vocab=3c526c35a9ce4a40"
 
 // PolicySchemaContract is the contract of a PolicyStore bound to table (""
 // binds PolicyTableName): what a schema check needs, without a store.

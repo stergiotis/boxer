@@ -191,4 +191,4 @@ PARTITION BY toYYYYMMDD("lc:expiresAt:z64:4::0:")
 ORDER BY ("id:id:u64:47::0:", "ts:ts:z64:47::0:", "id:naturalKey:y:4::0:")
 TTL "lc:expiresAt:z64:4::0:"
 SETTINGS index_granularity = 1, ttl_only_drop_parts = 1, allow_suspicious_low_cardinality_types = 1, non_replicated_deduplication_window=1000
-COMMENT 'boxer-table/1 kind=fsdata columns=b9f169be98d23fa6 naming=2 vocab=b68f38848ef11770'
+COMMENT 'boxer-table/1 kind=fsdata columns=c6904140adc8ae04 naming=2 vocab=4dc0725b6712358f'

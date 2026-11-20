@@ -216,4 +216,4 @@ CREATE TABLE IF NOT EXISTS boxer.watchbill (
 ) ENGINE = MergeTree()
 ORDER BY ("id:id:s:4::0:", "ts:ts:z64:47::0:")
 SETTINGS allow_suspicious_low_cardinality_types=1, enable_block_number_column=1, enable_block_offset_column=1, non_replicated_deduplication_window=1000
-COMMENT 'boxer-table/1 kind=watchbill columns=0f5f0d40827d465c naming=2 vocab=0de01e7a3d1abff2'
+COMMENT 'boxer-table/1 kind=watchbill columns=56b3e48b88e06f80 naming=2 vocab=6bbc3555ff6d2a0e'

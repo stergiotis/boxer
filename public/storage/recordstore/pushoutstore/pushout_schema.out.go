@@ -100,7 +100,7 @@ var PushoutColumns = []recordstore.ColumnSpec{
 
 // PushoutTableStamp is the COMMENT the store's CREATE TABLE writes: the
 // schema that created a table, as a schema check reads it back.
-const PushoutTableStamp = "boxer-table/1 kind=pushout columns=a107f50e887c7754 naming=2 vocab=e1f48596b4668736"
+const PushoutTableStamp = "boxer-table/1 kind=pushout columns=8e32ca66258f01bb naming=2 vocab=5a08d10e078c9f5b"
 
 // PushoutSchemaContract is the contract of a PushoutStore bound to table (""
 // binds PushoutTableName): what a schema check needs, without a store.

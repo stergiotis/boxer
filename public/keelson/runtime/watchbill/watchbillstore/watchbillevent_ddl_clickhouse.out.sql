@@ -56,4 +56,4 @@ CREATE TABLE IF NOT EXISTS boxer.watchbillevent (
 ) ENGINE = MergeTree()
 ORDER BY ("id:id:s:4::0:", "ts:ts:z64:47::0:")
 SETTINGS allow_suspicious_low_cardinality_types=1, non_replicated_deduplication_window=1000
-COMMENT 'boxer-table/1 kind=watchbillevent columns=2fb0f8f8c9034d33 naming=2 vocab=38fadcf303968dec'
+COMMENT 'boxer-table/1 kind=watchbillevent columns=0dfc05f731e92367 naming=2 vocab=c0966cbac9522b2d'

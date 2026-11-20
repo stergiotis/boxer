@@ -41,7 +41,7 @@ var ExampleColumns = []recordstore.ColumnSpec{
 
 // ExampleTableStamp is the COMMENT the store's CREATE TABLE writes: the
 // schema that created a table, as a schema check reads it back.
-const ExampleTableStamp = "boxer-table/1 kind=auditexample columns=418cb837249ae4d5 naming=2 vocab=c8deba28cfefed9b"
+const ExampleTableStamp = "boxer-table/1 kind=auditexample columns=26bc36275088c7f0 naming=2 vocab=5c65122f69fbcfc0"
 
 // ExampleSchemaContract is the contract of a ExampleStore bound to table (""
 // binds ExampleTableName): what a schema check needs, without a store.

@@ -21,7 +21,7 @@ var ProvenanceColumns = []recordstore.ColumnSpec{
 
 // ProvenanceTableStamp is the COMMENT the store's CREATE TABLE writes: the
 // schema that created a table, as a schema check reads it back.
-const ProvenanceTableStamp = "boxer-table/1 kind=provenance columns=d3630566b71d957c naming=2 vocab=f7757cde8b5576b3"
+const ProvenanceTableStamp = "boxer-table/1 kind=provenance columns=67222e31e1907501 naming=2 vocab=73ef2e809dc20a72"
 
 // ProvenanceSchemaContract is the contract of a ProvenanceStore bound to table (""
 // binds ProvenanceTableName): what a schema check needs, without a store.

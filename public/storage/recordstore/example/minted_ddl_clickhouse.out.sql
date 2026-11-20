@@ -7,4 +7,4 @@ CREATE TABLE IF NOT EXISTS minted (
 ) ENGINE = MergeTree()
 ORDER BY ("id:id:u64:47::0:", "ts:ts:z64:47::0:")
 SETTINGS allow_suspicious_low_cardinality_types=1, non_replicated_deduplication_window=1000
-COMMENT 'boxer-table/1 kind=minted columns=ca6fb9e6b1ff9ef3 naming=2'
+COMMENT 'boxer-table/1 kind=minted columns=bc0ad03806a0e94d naming=2'

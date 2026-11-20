@@ -7,4 +7,4 @@ CREATE TABLE IF NOT EXISTS asset (
 ) ENGINE = MergeTree()
 ORDER BY ("id:id:u64:::0:", "ts:ts:z64:::0:")
 SETTINGS allow_suspicious_low_cardinality_types=1, non_replicated_deduplication_window=1000
-COMMENT 'boxer-table/1 kind=asset columns=8033c950ae18f2c4 naming=2 vocab=13371b089802eec8'
+COMMENT 'boxer-table/1 kind=asset columns=ec89300cffeb0701 naming=2 vocab=2769d732fcffa0dc'

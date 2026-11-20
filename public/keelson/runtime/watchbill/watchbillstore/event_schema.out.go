@@ -64,7 +64,7 @@ var EventColumns = []recordstore.ColumnSpec{
 
 // EventTableStamp is the COMMENT the store's CREATE TABLE writes: the
 // schema that created a table, as a schema check reads it back.
-const EventTableStamp = "boxer-table/1 kind=watchbillevent columns=2fb0f8f8c9034d33 naming=2 vocab=38fadcf303968dec"
+const EventTableStamp = "boxer-table/1 kind=watchbillevent columns=0dfc05f731e92367 naming=2 vocab=c0966cbac9522b2d"
 
 // EventSchemaContract is the contract of a EventStore bound to table (""
 // binds EventTableName): what a schema check needs, without a store.

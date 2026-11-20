@@ -105,4 +105,4 @@ CREATE TABLE IF NOT EXISTS ledgervault (
 ) ENGINE = MergeTree()
 ORDER BY ("id:id:u64:47::0:", "id:ordinal:u64:47::0:")
 SETTINGS allow_suspicious_low_cardinality_types=1, non_replicated_deduplication_window=1000
-COMMENT 'boxer-table/1 kind=ledgervault columns=30072cc46d9d298f naming=2 vocab=79adef0c67bccf99'
+COMMENT 'boxer-table/1 kind=ledgervault columns=a92f2b264c7a2f6f naming=2 vocab=53639b90ef4777c7'

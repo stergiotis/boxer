@@ -33,4 +33,4 @@ CREATE TABLE IF NOT EXISTS auditrec.auditexample (
 ) ENGINE = MergeTree()
 ORDER BY ("id:id:u64:47::0:", "ts:ts:z64:47::0:")
 SETTINGS allow_suspicious_low_cardinality_types=1, non_replicated_deduplication_window=1000
-COMMENT 'boxer-table/1 kind=auditexample columns=418cb837249ae4d5 naming=2 vocab=c8deba28cfefed9b'
+COMMENT 'boxer-table/1 kind=auditexample columns=26bc36275088c7f0 naming=2 vocab=5c65122f69fbcfc0'

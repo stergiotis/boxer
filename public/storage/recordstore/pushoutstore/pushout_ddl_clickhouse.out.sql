@@ -90,4 +90,4 @@ CREATE TABLE IF NOT EXISTS pushout (
 ) ENGINE = MergeTree()
 ORDER BY ("id:id:s:4::0:", "ts:ts:z64:47::0:")
 SETTINGS allow_suspicious_low_cardinality_types=1, non_replicated_deduplication_window=1000
-COMMENT 'boxer-table/1 kind=pushout columns=a107f50e887c7754 naming=2 vocab=e1f48596b4668736'
+COMMENT 'boxer-table/1 kind=pushout columns=8e32ca66258f01bb naming=2 vocab=5a08d10e078c9f5b'

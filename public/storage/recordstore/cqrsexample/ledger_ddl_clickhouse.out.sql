@@ -88,4 +88,4 @@ CREATE TABLE IF NOT EXISTS ledger (
 ) ENGINE = MergeTree()
 ORDER BY ("id:id:s:4::0:", "ts:ts:z64:47::0:")
 SETTINGS allow_suspicious_low_cardinality_types=1, non_replicated_deduplication_window=1000
-COMMENT 'boxer-table/1 kind=ledger columns=f44f04a9a775783e naming=2 vocab=ccc4beef2ad46ad7'
+COMMENT 'boxer-table/1 kind=ledger columns=30a96c6ab6585279 naming=2 vocab=8fe66dcb217a2532'

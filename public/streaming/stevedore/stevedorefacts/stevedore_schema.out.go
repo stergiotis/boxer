@@ -197,7 +197,7 @@ var StevedoreColumns = []recordstore.ColumnSpec{
 
 // StevedoreTableStamp is the COMMENT the store's CREATE TABLE writes: the
 // schema that created a table, as a schema check reads it back.
-const StevedoreTableStamp = "boxer-table/1 kind=facts columns=b9f169be98d23fa6 naming=2 vocab=b38fcd3b97654c96"
+const StevedoreTableStamp = "boxer-table/1 kind=facts columns=c6904140adc8ae04 naming=2 vocab=71d088edde6c1da2"
 
 // StevedoreSchemaContract is the contract of a StevedoreStore bound to table (""
 // binds StevedoreTableName): what a schema check needs, without a store.

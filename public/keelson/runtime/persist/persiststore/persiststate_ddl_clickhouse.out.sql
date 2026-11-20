@@ -57,4 +57,4 @@ CREATE TABLE IF NOT EXISTS boxer.persiststate (
 ) ENGINE = MergeTree()
 ORDER BY ("id:id:s:4::0:", "ts:ts:z64:47::0:")
 SETTINGS allow_suspicious_low_cardinality_types=1, non_replicated_deduplication_window=1000
-COMMENT 'boxer-table/1 kind=persiststate columns=5188114eda79b506 naming=2 vocab=dcf685984675866d'
+COMMENT 'boxer-table/1 kind=persiststate columns=36be90b8901a2f1d naming=2 vocab=9076c8cb096a7ff4'

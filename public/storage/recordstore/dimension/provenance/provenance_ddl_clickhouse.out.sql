@@ -11,4 +11,4 @@ CREATE TABLE IF NOT EXISTS provenance (
 ) ENGINE = MergeTree()
 ORDER BY ("id:id:u64:4::0:", "ts:ts:z64:47::0:")
 SETTINGS allow_suspicious_low_cardinality_types=1, non_replicated_deduplication_window=1000
-COMMENT 'boxer-table/1 kind=provenance columns=d3630566b71d957c naming=2 vocab=f7757cde8b5576b3'
+COMMENT 'boxer-table/1 kind=provenance columns=67222e31e1907501 naming=2 vocab=73ef2e809dc20a72'

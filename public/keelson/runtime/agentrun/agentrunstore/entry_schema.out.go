@@ -283,7 +283,7 @@ var EntryColumns = []recordstore.ColumnSpec{
 
 // EntryTableStamp is the COMMENT the store's CREATE TABLE writes: the
 // schema that created a table, as a schema check reads it back.
-const EntryTableStamp = "boxer-table/1 kind=agentrunentry columns=294f08ce307d9b45 naming=2 vocab=4dba45bb23c0daa0"
+const EntryTableStamp = "boxer-table/1 kind=agentrunentry columns=8edfd0d3f6649c05 naming=2 vocab=b630689c62d055cc"
 
 // EntrySchemaContract is the contract of a EntryStore bound to table (""
 // binds EntryTableName): what a schema check needs, without a store.

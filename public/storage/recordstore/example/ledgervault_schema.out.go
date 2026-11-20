@@ -115,7 +115,7 @@ var LedgerVaultColumns = []recordstore.ColumnSpec{
 
 // LedgerVaultTableStamp is the COMMENT the store's CREATE TABLE writes: the
 // schema that created a table, as a schema check reads it back.
-const LedgerVaultTableStamp = "boxer-table/1 kind=ledgervault columns=30072cc46d9d298f naming=2 vocab=79adef0c67bccf99"
+const LedgerVaultTableStamp = "boxer-table/1 kind=ledgervault columns=a92f2b264c7a2f6f naming=2 vocab=53639b90ef4777c7"
 
 // LedgerVaultSchemaContract is the contract of a LedgerVaultStore bound to table (""
 // binds LedgerVaultTableName): what a schema check needs, without a store.

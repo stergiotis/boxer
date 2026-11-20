@@ -17,7 +17,7 @@ var AssetColumns = []recordstore.ColumnSpec{
 
 // AssetTableStamp is the COMMENT the store's CREATE TABLE writes: the
 // schema that created a table, as a schema check reads it back.
-const AssetTableStamp = "boxer-table/1 kind=asset columns=8033c950ae18f2c4 naming=2 vocab=13371b089802eec8"
+const AssetTableStamp = "boxer-table/1 kind=asset columns=ec89300cffeb0701 naming=2 vocab=2769d732fcffa0dc"
 
 // AssetSchemaContract is the contract of a AssetStore bound to table (""
 // binds AssetTableName): what a schema check needs, without a store.

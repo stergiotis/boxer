@@ -189,4 +189,4 @@ CREATE TABLE IF NOT EXISTS boxer.facts (
 ) ENGINE = MergeTree()
 ORDER BY ("id:id:u64:47::0:", "ts:ts:z64:47::0:")
 SETTINGS allow_suspicious_low_cardinality_types=1, non_replicated_deduplication_window=1000
-COMMENT 'boxer-table/1 kind=facts columns=b9f169be98d23fa6 naming=2 vocab=957830f0f0484df4'
+COMMENT 'boxer-table/1 kind=facts columns=c6904140adc8ae04 naming=2 vocab=e0f92e108dc0213a'

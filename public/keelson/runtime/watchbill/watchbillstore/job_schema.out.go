@@ -224,7 +224,7 @@ var JobColumns = []recordstore.ColumnSpec{
 
 // JobTableStamp is the COMMENT the store's CREATE TABLE writes: the
 // schema that created a table, as a schema check reads it back.
-const JobTableStamp = "boxer-table/1 kind=watchbill columns=0f5f0d40827d465c naming=2 vocab=0de01e7a3d1abff2"
+const JobTableStamp = "boxer-table/1 kind=watchbill columns=56b3e48b88e06f80 naming=2 vocab=6bbc3555ff6d2a0e"
 
 // JobSchemaContract is the contract of a JobStore bound to table (""
 // binds JobTableName): what a schema check needs, without a store.
