@@ -3,6 +3,7 @@
 package ph
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"runtime/debug"
@@ -11,6 +12,11 @@ import (
 	"github.com/rs/zerolog/log"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
+
+// ErrPanic is what every error from ConvertPanicToError wraps, so a caller
+// can tell a recovered panic from an error the code returned:
+// errors.Is(err, ErrPanic).
+var ErrPanic = errors.New("panic")
 
 // ConvertPanicToError turns a value returned by recover into an error. Call
 // it from the deferred function that recovered: the error's stack is taken
@@ -23,9 +29,9 @@ func ConvertPanicToError(panicErr any) error {
 	e, ok := panicErr.(error)
 	trace := strings.Split(string(debug.Stack()), "\n")
 	if ok {
-		return eb.Build().Strs("stacktrace", trace).Errorf("recovering from panic: %w", e)
+		return eb.Build().Strs("stacktrace", trace).Errorf("recovering from %w: %w", ErrPanic, e)
 	} else {
-		return eb.Build().Strs("stacktrace", trace).Str("panic", fmt.Sprintf("%+v", panicErr)).Errorf("recovering from panic")
+		return eb.Build().Strs("stacktrace", trace).Str("panic", fmt.Sprintf("%+v", panicErr)).Errorf("recovering from %w", ErrPanic)
 	}
 }
 

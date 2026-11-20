@@ -42,6 +42,10 @@ func TestGuardCarriesThePanicSiteStack(t *testing.T) {
 func TestGuardWrapsAnErrorPanicValue(t *testing.T) {
 	err := Guard(func() error { panic(errSentinel) })
 	assert.ErrorIs(t, err, errSentinel)
+	assert.ErrorIs(t, err, ErrPanic)
+	assert.Equal(t, "recovering from panic: sentinel", err.Error())
 	err = Guard(func() error { panic("boom") })
-	assert.Error(t, err)
+	assert.ErrorIs(t, err, ErrPanic)
+	assert.Equal(t, "recovering from panic", err.Error())
+	assert.NotErrorIs(t, Guard(func() error { return errSentinel }), ErrPanic)
 }
