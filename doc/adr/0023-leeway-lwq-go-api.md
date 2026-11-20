@@ -596,6 +596,7 @@ rows, err := lwq.Collect(ctx,
 
 **Aspect-driven vector search:**
 
+<!-- boxer:lint disable=DL013 reason="the query API of a withdrawn proposal" -->
 ```go
 type DistResult struct {
     Entity string

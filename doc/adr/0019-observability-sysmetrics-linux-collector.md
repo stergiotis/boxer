@@ -99,6 +99,7 @@ The implementation is staged across six independently-shippable milestones (M1â€
 
 Illustrative only â€” not the implementation contract; the REFERENCE doc seeded in M1 will pin field-level shapes.
 
+<!-- boxer:lint disable=DL013 reason="the snapshot shape proposed at decision time" -->
 ```go
 // public/observability/sysmetrics/cpu/cpu.go
 package cpu

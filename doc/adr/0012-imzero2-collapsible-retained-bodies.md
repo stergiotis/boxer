@@ -363,6 +363,7 @@ Milestones, sized to land on the same review-per-milestone cadence as Phase 1/2:
 
   **Config surface.** Per CLAUDE.md the env knob is registered via `public/config/env`, not read directly:
 
+  <!-- boxer:lint disable=DL013 reason="the configuration shape proposed at decision time" -->
   ```go
   // imzero2env package:
   var RetainKeepCache = env.NewBoolVar(env.Spec{
