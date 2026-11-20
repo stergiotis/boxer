@@ -16,6 +16,8 @@ type SliceStash[K comparable, V any] struct {
 	capacity int
 }
 
+// NewSliceStash builds a stash holding up to capacity entries. A capacity below 1
+// is a programming error and panics.
 func NewSliceStash[K comparable, V any](capacity int) *SliceStash[K, V] {
 	if capacity < 1 {
 		log.Panic().Int("capacity", capacity).Msg("caching: NewSliceStash requires capacity >= 1")

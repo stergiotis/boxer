@@ -79,6 +79,8 @@ func stillBlocked[K comparable](m map[K]time.Time, k K, now time.Time) bool {
 //   - criteria: The batching thresholds (Min/Max keys, partitions, etc.).
 //   - opts: Optional configuration (WithStash, WithMetrics,
 //     WithErrorBackoff, WithNegativeCaching).
+//
+// A capacity below 1 or a nil fetcher is a programming error and panics.
 func NewReadThroughCache[K comparable, V any, W comparable](
 	capacity int,
 	fetcher ItemFetcherI[K, V],
@@ -677,7 +679,8 @@ func (inst *ReadThroughCache[K, V, W]) compactOrder() {
 	inst.hand = 0
 }
 
-// AddItemSlice inserts parallel key/value slices; the lengths must match.
+// AddItemSlice inserts parallel key/value slices; the lengths must match,
+// and slices of different lengths are a programming error that panics.
 func (inst *ReadThroughCache[K, V, W]) AddItemSlice(k []K, v []V) {
 	if len(k) != len(v) {
 		log.Panic().Int("keys", len(k)).Int("values", len(v)).Msg("caching: AddItemSlice length mismatch")

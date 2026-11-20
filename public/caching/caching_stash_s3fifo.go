@@ -72,6 +72,8 @@ func (l *s3List[K, V]) unlink(nd *s3Node[K, V]) {
 	l.n--
 }
 
+// NewS3FIFOStash builds a stash holding up to capacity entries. A capacity below 1
+// is a programming error and panics.
 func NewS3FIFOStash[K comparable, V any](capacity int) *S3FIFOStash[K, V] {
 	if capacity < 1 {
 		log.Panic().Int("capacity", capacity).Msg("caching: NewS3FIFOStash requires capacity >= 1")

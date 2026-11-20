@@ -13,6 +13,8 @@ type MapStash[K comparable, V any] struct {
 	capacity int
 }
 
+// NewMapStash builds a stash holding up to capacity entries. A capacity below 1
+// is a programming error and panics.
 func NewMapStash[K comparable, V any](capacity int) *MapStash[K, V] {
 	if capacity < 1 {
 		log.Panic().Int("capacity", capacity).Msg("caching: NewMapStash requires capacity >= 1")
