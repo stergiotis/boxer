@@ -170,8 +170,9 @@ suspects on the demo are `PrivateDevices` and `SystemCallFilter` — drop them f
 `…/imzero2-demo.service.d/20-hardening.conf` (or set
 `imzero2_systemd_hardening: false`) and re-test. See what systemd actually
 applied with `systemd-analyze security imzero2-demo.service`. (The canonical
-`onbox/imzero2-demo.service` keeps only light hardening pending this check; once
-verified under the sandbox, these drop-ins can be folded upstream.)
+`onbox/imzero2-demo.service` carries `ProtectSystem=strict` and `ProtectHome`
+itself, so `imzero2_systemd_hardening: false` no longer lifts those two; the
+rest of the drop-in can be folded upstream once verified under the sandbox.)
 
 ## Re-running / convergence
 

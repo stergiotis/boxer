@@ -27,10 +27,15 @@ ExecStart=/opt/imzero2/run-current.sh
 # still parks a genuine crash-loop (e.g. a broken release) instead of spinning.
 Restart=always
 RestartSec=2
-# Light hardening (the carrier needs no privilege). Tighten further
-# (ProtectSystem=strict, etc.) once the FFFI2 shm path is confirmed.
+# Baseline sandbox (the carrier needs no privilege). The demo reads the
+# release under /opt/imzero2 and fonts, and writes only to its private /tmp:
+# no ReadWritePaths. Its file picker is rooted at a directory of its own
+# (BOXER_FS_PICKER_SERVED_ROOT), which under ProtectHome falls back to an
+# empty directory in that /tmp. The 20-hardening.conf drop-in adds the rest.
 NoNewPrivileges=true
 PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=yes
 
 [Install]
 WantedBy=multi-user.target

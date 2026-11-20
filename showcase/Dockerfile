@@ -17,7 +17,7 @@ FROM fedora:44
 RUN dnf -y install \
         mesa-vulkan-drivers mesa-dri-drivers vulkan-loader \
         google-noto-sans-fonts google-noto-sans-cjk-fonts fontconfig \
-        tini curl xz \
+        tini curl xz shadow-utils \
     && dnf clean all && rm -rf /var/cache/dnf
 
 # Static ffmpeg (GPL build → includes libx264). Avoids Fedora's codec-repo
@@ -36,6 +36,11 @@ COPY _stage/imzero2   /app/imzero2
 COPY _stage/assets    /app/assets
 COPY entrypoint.sh    /app/entrypoint.sh
 RUN chmod +x /app/main_go /app/imzero2 /app/entrypoint.sh
+
+# Run unprivileged. The binaries under /app stay root-owned and read-only to
+# the process; it writes only under its own home (app state, caches) and /tmp.
+RUN useradd --system --create-home --home-dir /home/imzero2 --shell /sbin/nologin imzero2
+USER imzero2
 
 # Force software rendering; bind the container interface so the Caddy sidecar
 # can reach the carrier. The carrier has no in-app auth/TLS (ADR-0082 SD2/SD4
