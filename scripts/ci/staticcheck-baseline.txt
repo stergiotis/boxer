@@ -1,0 +1,24 @@
+# staticcheck findings the lint step tolerates (ADR-0390). One per line,
+# "path: message (check)", no line numbers. The step fails on a finding not
+# listed here and warns about a line that no longer occurs: delete such lines,
+# so this file only shrinks. Rewrite with
+# scripts/ci/lint/staticcheck.sh --update-baseline, and review the diff.
+apps/chat/chat_ask.go: func (*asker).ask is unused (U1000)
+apps/chat/chat_ask.go: func askTool is unused (U1000)
+apps/chat/chat_endorse_test.go: func jsonUnmarshal is unused (U1000)
+apps/chat/chat_preserve_test.go: field mu is unused (U1000)
+apps/chat/chat_seams.go: const stopVerdictContinue is unused (U1000)
+apps/imagescope/imagescope.go: const tipMethod is unused (U1000)
+apps/jsonbench/jsonbench_shred.go: field path is unused (U1000)
+apps/mdedit/mdedit_keys.go: the surrounding loop is unconditionally terminated (SA4004)
+apps/play/play_graph.go: error should be returned as the last argument (ST1008)
+apps/play/play_renderer.go: error should be returned as the last argument (ST1008)
+apps/play/play_renderer.go: error should be returned as the last argument (ST1008)
+apps/play/play_renderer.go: field tableChrome is unused (U1000)
+apps/play/play_runs_history.go: error should be returned as the last argument (ST1008)
+apps/play/play_store.go: error should be returned as the last argument (ST1008)
+apps/play/play_table_chrome.go: func (*PlayApp).chrome is unused (U1000)
+apps/play/play_table_chrome.go: func (*PlayApp).headerCell is unused (U1000)
+apps/play/play_table_chrome.go: func (*PlayApp).selectableCell is unused (U1000)
+apps/play/play_table_leeway.go: const attrHdrIdOffset is unused (U1000)
+apps/terrainscope/terrainscope_machine.go: func (*App).phaseLine is unused (U1000)

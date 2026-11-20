@@ -1,11 +1,16 @@
 #!/bin/bash
-# staticcheck over ./public/..., minus the style checks and minus the packages
-# in the skip list below.
+# staticcheck over the whole module, minus the style checks and minus the
+# packages in the skip list below, held to a committed baseline.
+#
+#   scripts/ci/lint/staticcheck.sh                     check
+#   scripts/ci/lint/staticcheck.sh --update-baseline   rewrite the baseline
 #
 # One lint step. Runnable on its own; scripts/ci/lint.sh runs it with the
-# others and documents the exit-status contract every step obeys. Findings here
-# do not block: this step exits 2, which the `warn` marker on its line in that
-# script's step list turns into a warning rather than a failure.
+# others and documents the exit-status contract every step obeys. A finding
+# that is not in scripts/ci/staticcheck-baseline.txt fails the step, and so
+# does a run that aborted; baseline entries that no longer occur, and a
+# non-empty skip list, exit 2, which the `warn` marker on this step's line in
+# lint.sh turns into a warning. scripts/ci/lint/ratchet.sh holds the comparison.
 
 set -e
 set -o pipefail
@@ -52,7 +57,14 @@ tags="$(cat ./tags | tr -d "\n")"
 # ecsdemo/stage2.FatRow — so treat findings that name their methods with
 # suspicion until upstream numbers them consistently.
 sc_skip='github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/componentview'
-mapfile -t sc_pkgs < <(go list -tags "$tags" ./public/... | grep -vxF "$sc_skip")
+baseline=$(readlink -f "$here/../staticcheck-baseline.txt")
+update=0
+case "${1:-}" in
+    --update-baseline) update=1 ;;
+    "") ;;
+    *) echo "staticcheck.sh: unknown argument $1" >&2; exit 2 ;;
+esac
+mapfile -t sc_pkgs < <(go list -tags "$tags" ./... | grep -vxF "$sc_skip")
 if [ -n "$sc_skip" ]; then
     echo "skipped, NOT analysed (see the note at the top of $0):"
     printf '%s\n' "$sc_skip" | sed 's/^/  /'
@@ -64,12 +76,21 @@ if printf '%s' "$sc_out" | grep -q '^panic:'; then
     echo "DID NOT RUN — staticcheck aborted, no analysis was performed:"
     printf '%s' "$sc_out" | grep -m1 '^panic:' | sed 's/^/  /'
     echo "  (a package outside the skip list now trips it — see the note at the top of $0)"
-    exit 2
-elif [ -n "$sc_out" ]; then
-    printf '%s\n' "$sc_out"
-    exit 2
-elif [ -n "$sc_skip" ]; then
-    echo "no findings, but the skip list is non-empty"
-    exit 2
+    exit 1
 fi
-echo "passed"
+# "path:line:col: message (check)" -> "path: message (check)": the baseline
+# keys a finding by file and text, so unrelated edits do not move it.
+findings=$(mktemp)
+trap 'rm -f -- "$findings"' EXIT
+printf '%s\n' "$sc_out" | sed -E 's/^([^:]+):[0-9]+:[0-9]+: /\1: /' >"$findings"
+if [ "$update" = 1 ]; then
+    "$here/ratchet.sh" --update "$baseline" "$findings"
+    exit 0
+fi
+rc=0
+"$here/ratchet.sh" "$baseline" "$findings" || rc=$?
+if [ "$rc" -eq 0 ] && [ -n "$sc_skip" ]; then
+    echo "the skip list is non-empty"
+    rc=2
+fi
+exit "$rc"

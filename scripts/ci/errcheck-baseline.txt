@@ -1,0 +1,26 @@
+# errcheck findings the lint step tolerates (ADR-0390). One per line,
+# "path: unchecked call", no line numbers. The step fails on a finding not
+# listed here and warns about a line that no longer occurs: delete such lines,
+# so this file only shrinks. Rewrite with
+# scripts/ci/lint/errcheck.sh --update-baseline, and review the diff.
+apps/chat/chat_pixels.go: inst.disclose(context.WithoutCancel(ctx), o, d)
+apps/chat/chat_pixels.go: inst.disclose(ctx, o, d)
+apps/chat/chat_pixels.go: inst.disclose(ctx, o, d)
+apps/mdedit/mdedit_images.go: s.job.Demand(s.jobKey, func(ctx context.Context) (map[string]decodedImage, error) {
+apps/notebook/notebook_collect.go: defer body.Close()
+apps/notebook/notebook_live.go: defer body.Close()
+apps/play/play_detail_timeline_test.go: b.Append(arrow.Timestamp(v))
+apps/play/play_map_live_test.go: defer f.Close()
+apps/play/play_notebook_buffer_test.go: defer src.Close()
+apps/sqlapplet/sqlapplet_origin.go: defer resp.Body.Close()
+apps/writingstylescope/writingstylescope_test.go: inst.requestHandover()
+public/keelson/runtime/llm/transcribe_coverage_test.go: <-errc
+public/llm/openaichat/transcribe.go: h.Write([]byte(f.name))
+public/llm/openaichat/transcribe.go: h.Write([]byte(f.value))
+public/llm/openaichat/transcribe.go: h.Write([]byte(fileName))
+public/llm/openaichat/transcribe.go: h.Write([]byte(mediaType))
+public/llm/openaichat/transcribe.go: h.Write([]byte{0})
+public/llm/openaichat/transcribe.go: h.Write([]byte{0})
+public/llm/openaichat/transcribe.go: h.Write([]byte{0})
+public/llm/openaichat/transcribe.go: h.Write([]byte{0})
+public/llm/openaichat/transcribe.go: h.Write(req.Audio)
