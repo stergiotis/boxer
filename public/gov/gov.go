@@ -12,6 +12,7 @@ import (
 	"github.com/stergiotis/boxer/public/gov/gate"
 	"github.com/stergiotis/boxer/public/gov/licensegate"
 	"github.com/stergiotis/boxer/public/gov/llmtag"
+	"github.com/stergiotis/boxer/public/gov/releasenotes"
 	"github.com/stergiotis/boxer/public/gov/repo"
 	"github.com/stergiotis/boxer/public/gov/skeleton"
 	cli2 "github.com/stergiotis/boxer/public/hmi/cli"
@@ -32,6 +33,7 @@ func NewCliCommand() *cli.Command {
 			repo.NewCliCommand(),
 			commitdigest.NewCliCommand(),
 			changelogindex.NewCliCommand(),
+			releasenotes.NewCliCommand(),
 			llmtag.NewCliCommand(),
 			licensegate.NewCliCommand(),
 			cargolicenses.NewCliCommand(),

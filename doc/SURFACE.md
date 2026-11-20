@@ -26,7 +26,7 @@ itself; ADR-0389 states its tier.
 | [Experimental](#experimental) | 278 |
 | [Internal](#internal) | 16 |
 | [Test support](#test-support) | 14 |
-| [Tools](#tools) | 86 |
+| [Tools](#tools) | 87 |
 | [Demos and examples](#demos-and-examples) | 38 |
 | [Unclassified](#unclassified) | 216 |
 
@@ -636,6 +636,7 @@ Command and governance packages of this repository's tooling. Their Go API is ou
 - `public/gov/licensegate`
 - `public/gov/llmtag` — Package llmtag applies //go:build llm_generated_* markers to Go source files whose git-blame attribution points to commits authored with an LLM Co-Authored-By trailer.
 - `public/gov/pathfilter` — Package pathfilter matches repository-relative paths against exclusion patterns, for the governance checks a consuming repository configures (ADR-0179).
+- `public/gov/releasenotes` — Package releasenotes compiles the release notes of a commit range: the breaking commits with their `Breaks:` paragraphs, packages removed or renamed, the toolchain and dependency floors that moved, changed contract snapshots, and the migration notes added (ADR-0389).
 - `public/gov/repo`
 - `public/gov/skeleton` — Package skeleton emits and reconciles the repository mechanics a boxer consumer would otherwise copy by hand (ADR-0179).
 
