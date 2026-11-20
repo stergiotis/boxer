@@ -110,5 +110,12 @@ from the menu.
   **Cause:** it was captured while showing an ad-hoc dataset, which lasts as
   long as the window that published it.
   **Fix:** capture windows that read durable data, or republish the dataset.
+- **Symptom:** "written by a newer boxer (format N; this build reads up to
+  M)".
+  **Cause:** the document's `workstatelet` key names a format this build does
+  not read. A saved document carries `workstatelet: 1`; a document without
+  the key is format 1.
+  **Fix:** open it with the newer build, or save the desktop again with this
+  one.
 - **Symptom:** an agent or another app cannot open a workstatelet.
   **Cause:** by design; only the launcher and `--launch` open one.

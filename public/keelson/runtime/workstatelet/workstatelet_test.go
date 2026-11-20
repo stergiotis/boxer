@@ -273,3 +273,24 @@ func TestStoreCommittedSlugWins(t *testing.T) {
 	doc, _ := cat.Lookup(AppIdOf("desk"))
 	assert.Equal(t, "Committed desk", doc.Title)
 }
+
+// TestParseFormat: a document without the key is format 1, one in a newer
+// format is refused with both numbers — before the strict decode, so a
+// newer document's keys this build does not know do not hide why — and
+// Compose writes the key.
+func TestParseFormat(t *testing.T) {
+	_, err := Parse("trail-review", []byte(strings.Replace(sampleDoc, "---\n", "---\nworkstatelet: 1\n", 1)), nil)
+	require.NoError(t, err)
+
+	newer := strings.Replace(sampleDoc, "---\n", "---\nworkstatelet: 2\nlaunch: play\n", 1)
+	_, err = Parse("trail-review", []byte(newer), nil)
+	require.ErrorContains(t, err, "written by a newer boxer (format 2; this build reads up to 1)")
+
+	_, err = Parse("trail-review", []byte(strings.Replace(sampleDoc, "---\n", "---\nworkstatelet: x\n", 1)), nil)
+	require.Error(t, err)
+
+	composed, err := Compose(Doc{Slug: "one", Title: "One", Summary: "One window", Topics: []app.TopicT{app.TopicRuntime},
+		Windows: []Window{{App: "trailviewer"}}})
+	require.NoError(t, err)
+	require.True(t, strings.HasPrefix(string(composed.Source), "---\nworkstatelet: 1\n"), string(composed.Source))
+}

@@ -29,6 +29,14 @@ const (
 	WindowFenceRole = "window"
 	// configLineWidth is where the writer wraps a config's base64.
 	configLineWidth = 76
+	// FormatVersion is the document format this build writes and the
+	// newest it reads, recorded as the frontmatter's FormatKey. A document
+	// without the key is format 1. Bump it when an older reader would
+	// misread a newer document; a key the strict decoder refuses is already
+	// refused, and with the bump the refusal says why.
+	FormatVersion = 1
+	// FormatKey is the frontmatter key that carries the format.
+	FormatKey = "workstatelet"
 )
 
 // SlugPattern is the shape of a document's slug: the file's base name in a
@@ -103,6 +111,9 @@ type desktopYaml struct {
 // carries as an applet document does; they are read so a strict decode
 // accepts them and are otherwise not this package's. A capture writes none.
 type frontYaml struct {
+	// Format leads, so a reader meets it first; absent is 1.
+	Format int `yaml:"workstatelet,omitempty"`
+
 	Type         string `yaml:"type,omitempty"`
 	Audience     string `yaml:"audience,omitempty"`
 	Status       string `yaml:"status,omitempty"`
@@ -190,6 +201,37 @@ func splitDoc(src []byte) (front []byte, fences []fence, err error) {
 	return
 }
 
+// formatYaml reads the format key alone, without strictness: a newer
+// document's other keys are what the strict decode would refuse, and the
+// format is what says why.
+type formatYaml struct {
+	Format any `yaml:"workstatelet"`
+}
+
+// checkFormat refuses a document in a format this build does not read.
+func checkFormat(front []byte) (err error) {
+	var fy formatYaml
+	if err = yaml.Unmarshal(front, &fy); err != nil {
+		return
+	}
+	n := 1
+	switch t := fy.Format.(type) {
+	case nil:
+	case int:
+		n = t
+	default:
+		return eb.Build().Str("key", FormatKey).Errorf("the document's format is not a whole number")
+	}
+	if n < 1 {
+		return eb.Build().Str("key", FormatKey).Int("format", n).Errorf("the document's format is not a positive number")
+	}
+	if n > FormatVersion {
+		return eb.Build().Int("format", n).Int("reads", FormatVersion).
+			Errorf("the document was written by a newer boxer (format %d; this build reads up to %d)", n, FormatVersion)
+	}
+	return
+}
+
 func strictYaml(src []byte, into any) (err error) {
 	dec := yaml.NewDecoder(bytes.NewReader(src))
 	dec.KnownFields(true)
@@ -208,6 +250,10 @@ func Parse(slug string, src []byte, defaultTopics []app.TopicT) (doc Doc, err er
 	front, fences, err := splitDoc(src)
 	if err != nil {
 		err = eb.Build().Str("slug", slug).Errorf("split document: %w", err)
+		return
+	}
+	if err = checkFormat(front); err != nil {
+		err = eb.Build().Str("slug", slug).Errorf("frontmatter: %w", err)
 		return
 	}
 	var fy frontYaml
@@ -369,7 +415,7 @@ func Compose(doc Doc) (out Doc, err error) {
 		err = eh.Errorf("compose: %w", err)
 		return
 	}
-	fy := frontYaml{Title: doc.Title, Summary: doc.Summary, Icon: doc.Icon, Keywords: doc.Keywords}
+	fy := frontYaml{Format: FormatVersion, Title: doc.Title, Summary: doc.Summary, Icon: doc.Icon, Keywords: doc.Keywords}
 	for _, t := range doc.Topics {
 		fy.Topics = append(fy.Topics, string(t))
 	}

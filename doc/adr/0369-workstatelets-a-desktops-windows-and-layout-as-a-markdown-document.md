@@ -252,6 +252,19 @@ Accepted 2026-11-12.
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers.
 
+## Updates
+
+### 2026-11-20 — The frontmatter names the format
+
+A document carries `workstatelet: <n>` (`workstatelet.FormatKey`,
+`FormatVersion`, 1); `Compose` writes it first and a document without it is
+format 1. Parsing stays strict, but the format is read on its own before the
+strict decode, so a document from a newer build is refused with "written by
+a newer boxer (format N; this build reads up to M)" instead of the decoder's
+"field not found" on whichever new key it meets first. The format moves when
+a newer document would not read, or would read wrongly, under an older
+build.
+
 ## References
 
 - [ADR-0135](./0135-app-launch-requests.md), [ADR-0148](./0148-app-workingsets.md) — the launch config and the record composed from a window.
