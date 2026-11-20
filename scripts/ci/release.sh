@@ -5,11 +5,11 @@
 #   scripts/ci/release.sh [--version vX.Y.Z] [--fuzztime D] [<rev>]
 #
 # Checks out <rev> (default HEAD) into a detached worktree of its own and runs
-# every gate in it, each to completion, in the order below. Modelled on
-# scripts/dev/updatedeps.sh's gate(): a gate prints its output only when it
+# every gate in it, each to completion, in the order below, through the gate()
+# wrapper of scripts/ci/gate_lib.sh: a gate prints its output only when it
 # fails, and a gate whose output says a part of it was skipped — the Rust and
 # font steps exit 0 with a "skipped" line when a toolchain is missing — counts
-# as a failure here, since a release is where every check has to have run.
+# as a failure, since a release is where every check has to have run.
 #
 #   module          go mod tidy --diff, go mod verify, go build ./...
 #   tests           gotest.sh, gotest_binary_log.sh (both with --check-drift)
@@ -62,34 +62,9 @@ mkdir -p "$logdir"
 echo "release: candidate $(git log -1 --format='%h %s' "$sha")"
 echo "release: full logs in $logdir"
 
-failed=()
-
-# gate LABEL CMD...: run CMD, keep its output in $logdir, print it only on
-# failure. Output reporting a skipped part fails the gate.
-gate() {
-    local label="$1" log t0 code=0
-    shift
-    log="$logdir/$(tr -c 'A-Za-z0-9._-' '_' <<<"$label").log"
-    t0=$SECONDS
-    "$@" >"$log" 2>&1 || code=$?
-    if [ "$code" -ne 0 ]; then
-        printf 'gate %-28s FAILED (%ds)\n' "$label" $((SECONDS - t0))
-        tail -n 60 "$log" | sed 's/^/    /'
-        failed+=("$label")
-    elif grep -qE 'skipped( \(|:)' "$log"; then
-        printf 'gate %-28s SKIPPED, counts as failure (%ds)\n' "$label" $((SECONDS - t0))
-        grep -E 'skipped( \(|:)' "$log" | sed 's/^/    /'
-        failed+=("$label")
-    else
-        printf 'gate %-28s ok (%ds)\n' "$label" $((SECONDS - t0))
-    fi
-}
-
-# not_run LABEL REASON: a gate that cannot start counts as a failure too.
-not_run() {
-    printf 'gate %-28s NOT RUN, counts as failure: %s\n' "$1" "$2"
-    failed+=("$1")
-}
+# shellcheck source=gate_lib.sh
+source "$here/gate_lib.sh"
+gate_logdir="$logdir"
 
 # ---- module, tests ------------------------------------------------------------
 gate "go mod tidy --diff" go mod tidy --diff
@@ -99,27 +74,12 @@ gate "gotest" scripts/ci/gotest.sh --check-drift
 gate "gotest binary_log" scripts/ci/gotest_binary_log.sh --check-drift
 
 # ---- integration ---------------------------------------------------------------
-ch_dir=""
-if curl -fsS http://127.0.0.1:8123/ping >/dev/null 2>&1; then
-    echo "release: using the ClickHouse server on 127.0.0.1:8123"
-else
-    ch_dir="$(dirname "$wt")/clickhouse"
-    if scripts/ci/clickhouse_server.sh install "$ch_dir" >"$logdir/clickhouse.log" 2>&1 &&
-        scripts/ci/clickhouse_server.sh start "$ch_dir" >>"$logdir/clickhouse.log" 2>&1; then
-        echo "release: started the pinned throwaway ClickHouse server"
-        export PATH="$ch_dir:$PATH"
-    else
-        ch_dir=""
-    fi
-fi
-if curl -fsS http://127.0.0.1:8123/ping >/dev/null 2>&1; then
+if ensure_clickhouse 1 "$(dirname "$wt")/clickhouse"; then
     gate "integration lane" scripts/ci/gotest-integration.sh
 else
     not_run "integration lane" "no ClickHouse server on 127.0.0.1:8123 (see $logdir/clickhouse.log)"
 fi
-if [ -n "$ch_dir" ]; then
-    scripts/ci/clickhouse_server.sh stop "$ch_dir" >/dev/null 2>&1 || true
-fi
+gate_stop_clickhouse
 
 # ---- lint, Rust crates -----------------------------------------------------------
 gate "lint" scripts/ci/lint.sh
@@ -155,8 +115,8 @@ fi
 gate "clean tree" scripts/ci/check_drift.sh
 
 echo
-if [ ${#failed[@]} -gt 0 ]; then
-    echo "release: NOT releasable — ${#failed[@]} gate(s) failed: ${failed[*]}"
+if [ ${#gate_failed[@]} -gt 0 ]; then
+    echo "release: NOT releasable — ${#gate_failed[@]} gate(s) failed: ${gate_failed[*]}"
     exit 1
 fi
 v="${version:-vX.Y.Z}"
