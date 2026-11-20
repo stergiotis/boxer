@@ -16,6 +16,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/rs/zerolog/log"
+
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 )
 
@@ -101,8 +103,10 @@ func (inst MultiSink) Record(rec AuditRecord) {
 // every audited Request. Record enqueues into
 // a bounded buffer and returns immediately; a background goroutine forwards
 // to the inner sink. On overflow the record is dropped (the audit trail is
-// best-effort, matching logbridge) and Dropped() is bumped. Close drains the
-// buffer and stops the goroutine.
+// best-effort, matching logbridge) and Dropped() is bumped; the forwarder
+// logs a Warn with the count once per DropReportInterval in which it moved,
+// and at Close, so the drops reach the log the operator reads. Close drains
+// the buffer and stops the goroutine.
 type AsyncSink struct {
 	inner   AuditSinkI
 	ch      chan AuditRecord
@@ -110,7 +114,15 @@ type AsyncSink struct {
 	stop    chan struct{}
 	done    chan struct{}
 	closed  atomic.Bool
+
+	// reported is the Dropped count the last Warn named; the forwarder
+	// goroutine's alone.
+	reported uint64
 }
+
+// DropReportInterval spaces the Warn an AsyncSink logs while it drops
+// records: one per interval in which the count moved, not one per record.
+const DropReportInterval = 30 * time.Second
 
 var _ AuditSinkI = (*AsyncSink)(nil)
 
@@ -152,12 +164,17 @@ func (inst *AsyncSink) Record(rec AuditRecord) {
 
 func (inst *AsyncSink) loop() {
 	defer close(inst.done)
+	defer inst.reportDrops()
+	ticker := time.NewTicker(DropReportInterval)
+	defer ticker.Stop()
 	for {
 		select {
 		case rec := <-inst.ch:
 			if inst.inner != nil {
 				inst.inner.Record(rec)
 			}
+		case <-ticker.C:
+			inst.reportDrops()
 		case <-inst.stop:
 			// Drain whatever is buffered, then exit.
 			for {
@@ -182,6 +199,17 @@ func (inst *AsyncSink) Close() {
 	}
 	close(inst.stop)
 	<-inst.done
+}
+
+// reportDrops logs a Warn when records were dropped since the last report.
+func (inst *AsyncSink) reportDrops() {
+	n := inst.dropped.Load()
+	if n == inst.reported {
+		return
+	}
+	log.Warn().Uint64("dropped", n-inst.reported).Uint64("droppedTotal", n).
+		Msg("audit: the request audit buffer was full; records were dropped, as the inner sink does not keep up")
+	inst.reported = n
 }
 
 // Dropped returns the number of records discarded because the buffer was
