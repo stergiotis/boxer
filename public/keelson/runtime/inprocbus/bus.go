@@ -1,6 +1,7 @@
 package inprocbus
 
 import (
+	"slices"
 	"sync"
 	"time"
 
@@ -76,9 +77,13 @@ func (inst *Inst) SetRequestTimeout(d time.Duration) {
 // closed. Close removes a client from the registry (ADR-0188 §SD1).
 func (inst *Inst) NewClient(appId app.AppIdT, caps []app.SubjectFilter) (c *Client) {
 	c = &Client{
-		inst:   inst,
-		appId:  appId,
-		caps:   caps,
+		inst:  inst,
+		appId: appId,
+		// A copy: AddCap and RemoveCap change the list in place, and the
+		// caller's slice is usually an app's manifest, which every window
+		// of that app is handed. Shared, one window's grant would be
+		// written where another's is read, under two different locks.
+		caps:   slices.Clone(caps),
 		subIds: make(map[uint64]struct{}),
 	}
 	inst.mu.Lock()
