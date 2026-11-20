@@ -1,0 +1,12 @@
+# Starts boxer-nightly.service once a day; see that file for installing both.
+[Unit]
+Description=boxer nightly run, daily
+
+[Timer]
+OnCalendar=*-*-* 02:17
+RandomizedDelaySec=15m
+# A run missed while the machine was off starts at the next boot.
+Persistent=true
+
+[Install]
+WantedBy=timers.target

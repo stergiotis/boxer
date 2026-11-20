@@ -1,0 +1,32 @@
+# The nightly run (scripts/ci/nightly.sh, ADR-0390) as a systemd user service.
+# An example: copy it and its timer to ~/.config/systemd/user/, set the
+# checkout path below, then
+#
+#   systemctl --user daemon-reload
+#   systemctl --user enable --now boxer-nightly.timer
+#
+# `systemctl --user status boxer-nightly` shows the last verdict; the run's
+# summary is in ${XDG_STATE_HOME:-~/.local/state}/boxer/nightly/latest/.
+# Add --start-clickhouse to ExecStart if no ClickHouse server runs on this
+# machine. For the timer to fire while you are logged out:
+# loginctl enable-linger.
+[Unit]
+Description=boxer nightly run: tests origin/main and advances the local last-green ref
+
+[Service]
+Type=oneshot
+# The checkout to test from; %h is your home directory.
+WorkingDirectory=%h/src/boxer
+# A login shell, so go, cargo and the rest are on the PATH they have in a
+# terminal.
+ExecStart=/bin/bash -lc 'exec ./scripts/ci/nightly.sh'
+TimeoutStartSec=6h
+# Stay out of the way of a workstation in use: lowest CPU and I/O priority,
+# a small CPU weight, and a bounded number of Go threads per process.
+Nice=19
+CPUSchedulingPolicy=batch
+IOSchedulingClass=idle
+CPUWeight=20
+Environment=GOMAXPROCS=8
+# A hard ceiling as well, if the weight is not enough (800% = eight cores):
+#CPUQuota=800%

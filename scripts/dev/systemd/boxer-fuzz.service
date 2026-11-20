@@ -1,0 +1,25 @@
+# The weekly fuzz run (scripts/ci/fuzz_weekly.sh, ADR-0390) as a systemd user
+# service. An example: copy it and its timer to ~/.config/systemd/user/, set
+# the checkout path below, then
+#
+#   systemctl --user daemon-reload
+#   systemctl --user enable --now boxer-fuzz.timer
+#
+# Failing inputs land under ${XDG_STATE_HOME:-~/.local/state}/boxer/nightly/latest-fuzz/.
+[Unit]
+Description=boxer weekly fuzz run over origin/main
+
+[Service]
+Type=oneshot
+# The checkout to fuzz from; %h is your home directory.
+WorkingDirectory=%h/src/boxer
+ExecStart=/bin/bash -lc 'exec ./scripts/ci/fuzz_weekly.sh --fuzztime 30s'
+TimeoutStartSec=4h
+Nice=19
+CPUSchedulingPolicy=batch
+IOSchedulingClass=idle
+CPUWeight=20
+# Fuzzing uses one worker per GOMAXPROCS; bound it.
+Environment=GOMAXPROCS=8
+Environment=BOXER_FUZZ_PARALLEL=8
+#CPUQuota=800%

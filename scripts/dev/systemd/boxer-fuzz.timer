@@ -1,0 +1,11 @@
+# Starts boxer-fuzz.service once a week; see that file for installing both.
+[Unit]
+Description=boxer fuzz run, weekly
+
+[Timer]
+OnCalendar=Sat *-*-* 04:23
+RandomizedDelaySec=15m
+Persistent=true
+
+[Install]
+WantedBy=timers.target
