@@ -228,9 +228,9 @@ func TestReplyHonoursPerTypeRegistration(t *testing.T) {
 // `json:` tag alone, both (the `cbor:` one wins), and neither (the Go
 // name). The map shows the canonical key order.
 type wirePayload struct {
-	Tagged   string         `cbor:"t"`
-	JsonOnly int32          `json:"jsonOnly"`
-	Both     bool           `cbor:"b" json:"notThis"`
+	Tagged   string `cbor:"t"`
+	JsonOnly int32  `json:"jsonOnly"`
+	Both     bool   `cbor:"b" json:"notThis"`
 	Plain    uint8
 	Counts   map[string]int `json:"counts"`
 }

@@ -132,6 +132,7 @@ func (inst *TableDesc) GetPlainItemValueSemantics(itemType PlainItemTypeE, in []
 	out = inst.copyPlainItemValueSemantics(itemType, in)
 	return
 }
+
 // LoadTo writes the table description into dto. Every type is checked
 // before dto is touched, so an error leaves dto as it was rather than with
 // its co-arrays out of step.
@@ -193,6 +194,7 @@ func (inst *TableDesc) LoadTo(dto *TableDescDto) (err error) {
 	}
 	return
 }
+
 // checkTypes reports the first invalid canonical type among the plain
 // items and the tagged-value sections.
 func (inst *TableDesc) checkTypes() (err error) {

@@ -61,6 +61,7 @@ func (inst *Encoder) Reset() {
 		inst.hasher.Reset()
 	}
 }
+
 // SetHasher starts hashing afresh with hasher. Bytes the previous hasher had
 // buffered but not yet taken belong to the previous hash and are dropped,
 // not carried into the new one.

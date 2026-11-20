@@ -28,7 +28,7 @@ func TestWidelyImportedPackagesHaveAPackageDoc(t *testing.T) {
 	modulePath := readModulePath(t, filepath.Join(root, "go.mod"))
 
 	importers := make(map[string]map[string]struct{}) // import path -> importing dirs
-	hasDoc := make(map[string]bool)                     // import path -> has a package doc
+	hasDoc := make(map[string]bool)                   // import path -> has a package doc
 	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return walkErr
