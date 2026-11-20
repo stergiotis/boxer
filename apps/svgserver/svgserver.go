@@ -31,6 +31,7 @@ import (
 
 	"github.com/rs/zerolog/log"
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
+	"github.com/stergiotis/boxer/public/keelson/runtime/loopback"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/observability/logging"
@@ -290,8 +291,12 @@ func main() {
 			[]cli.Flag{
 				&cli.StringFlag{
 					Name:  "addr",
-					Value: ":8087",
-					Usage: "HTTP listen address",
+					Value: "127.0.0.1:8087",
+					Usage: "HTTP listen address; a loopback host unless --allowNonLoopback",
+				},
+				&cli.BoolFlag{
+					Name:  "allowNonLoopback",
+					Usage: "allow --addr to bind a non-loopback address; the server is unauthenticated",
 				},
 				&cli.StringFlag{
 					Name:  "clientBinary",
@@ -373,13 +378,21 @@ func runServer(ctx context.Context, cmd *cli.Command) (err error) {
 
 	// HTTP server on its own goroutine; the render loop owns the main goroutine
 	// (app.Run blocks). The jobs channel is the only bridge between them.
+	// The listener is bound before the client launches, so a refused or
+	// failed bind ends the command instead of a render loop with no server.
 	addr := cmd.String("addr")
+	gate := loopback.Gate{Name: "svgserver", OptIn: "--allowNonLoopback", AllowNonLoopback: cmd.Bool("allowNonLoopback")}
+	ln, err := gate.Listen(ctx, addr)
+	if err != nil {
+		return
+	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("/svg", srv.handleSVG)
 	mux.HandleFunc("/", srv.handleIndex)
+	httpSrv := &http.Server{Handler: mux, ReadHeaderTimeout: 10 * time.Second}
 	go func() {
-		log.Info().Str("addr", addr).Msg("svgserver http listening")
-		if serveErr := http.ListenAndServe(addr, mux); serveErr != nil {
+		log.Info().Str("addr", ln.Addr().String()).Msg("svgserver http listening")
+		if serveErr := httpSrv.Serve(ln); serveErr != nil {
 			log.Fatal().Err(serveErr).Msg("http server failed")
 		}
 	}()

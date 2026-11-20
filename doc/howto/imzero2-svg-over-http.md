@@ -37,12 +37,16 @@ installed fonts.
 
 ```sh
 /tmp/svgserver \
-  -addr :8087 \
+  -addr 127.0.0.1:8087 \
   -clientBinary rust/imzero2/target/headless_svg/dist/imzero2 \
   -mainFontTTF rust/imzero2/assets/fonts/iosevka-aile/IosevkaAile-Regular.ttf \
   -monoFontTTF rust/imzero2/assets/fonts/ids-mono/IDSMono-Regular.ttf \
   -phosphorFontTTF rust/imzero2/assets/fonts/phosphor/Phosphor.ttf
 ```
+
+The server has no authentication, so `-addr` must name a loopback host; a
+non-loopback address is refused at startup unless `-allowNonLoopback` is also
+passed.
 
 Open `http://localhost:8087/` for a demo page, or request an SVG directly:
 

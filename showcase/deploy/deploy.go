@@ -31,6 +31,7 @@ import (
 
 	"github.com/rs/zerolog"
 	"github.com/stergiotis/boxer/public/extbin"
+	"github.com/stergiotis/boxer/public/keelson/runtime/loopback"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/fontresolve"
@@ -824,7 +825,7 @@ func step(ctx context.Context, lg zerolog.Logger, what string, prog *extbin.Prog
 // uses it to refuse probing a scratch port something else already holds (see the
 // caller) — a held port means the candidate isn't the listener ws_probe reaches.
 func portFree(port int) bool {
-	l, err := net.Listen("tcp", net.JoinHostPort("127.0.0.1", strconv.Itoa(port)))
+	l, err := loopback.Gate{Name: "deploy port probe"}.Listen(context.Background(), net.JoinHostPort("127.0.0.1", strconv.Itoa(port)))
 	if err != nil {
 		return false
 	}

@@ -18,6 +18,7 @@ import (
 
 	"github.com/rs/zerolog"
 
+	"github.com/stergiotis/boxer/public/keelson/runtime/loopback"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
@@ -29,8 +30,13 @@ type ServeConfig struct {
 	Dir string
 	// Listen is the bind address; a port of 0 picks one, and Serve prints
 	// the chosen address as `PORT <n>` on stdout either way, which is how
-	// the trial's measurement script finds it.
+	// the trial's measurement script finds it. It must be a loopback host
+	// unless AllowNonLoopback is set.
 	Listen string
+	// AllowNonLoopback lets Listen name a non-loopback address. The server
+	// has no authentication and proxies /ch/ to ClickHouse, so a wide bind
+	// hands that endpoint to anyone who can reach the port.
+	AllowNonLoopback bool
 	// ChURL is the ClickHouse HTTP endpoint that `/ch/` proxies to, so the
 	// page's data plane stays same-origin (ADR-0077 SD9).
 	ChURL string
@@ -61,9 +67,10 @@ func Serve(ctx context.Context, cfg ServeConfig, logger zerolog.Logger) (err err
 	if err != nil || target.Host == "" {
 		return eb.Build().Str("chURL", cfg.ChURL).Errorf("browserhost: serve: ClickHouse endpoint is not an absolute URL")
 	}
-	ln, err := net.Listen("tcp", cfg.Listen)
+	gate := loopback.Gate{Name: "imzero2tab serve", OptIn: "--allowNonLoopback", AllowNonLoopback: cfg.AllowNonLoopback}
+	ln, err := gate.Listen(ctx, cfg.Listen)
 	if err != nil {
-		return eh.Errorf("browserhost: serve: listen: %w", err)
+		return
 	}
 	reported := make(chan struct{}, 1)
 

@@ -23,7 +23,6 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect/keelsonsql"
 	"github.com/stergiotis/boxer/public/keelson/runtime/loopback"
-	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 // ListenAddr is the default bind address for the table source (ADR-0094
@@ -144,16 +143,10 @@ func New(cfg Config, log zerolog.Logger) (s *Server) {
 // Start binds the listener and serves in a background goroutine. It
 // refuses a non-loopback bind (ADR-0082 §SD1 bind-gate).
 func (s *Server) Start() (err error) {
-	host, _, splitErr := net.SplitHostPort(s.addr)
-	if splitErr != nil {
-		return eb.Build().Str("addr", s.addr).Errorf("introspecthttp: bad listen addr: %w", splitErr)
-	}
-	if !loopback.IsHost(host) {
-		return eb.Build().Str("addr", s.addr).Errorf("introspecthttp: refusing non-loopback bind; remote exposure (token+TLS) is deferred to ADR-0082 §SD1")
-	}
-	ln, lnErr := net.Listen("tcp", s.addr)
+	// No opt-in: remote exposure (token+TLS) is deferred to ADR-0082 §SD1.
+	ln, lnErr := loopback.Gate{Name: "introspecthttp"}.Listen(context.Background(), s.addr)
 	if lnErr != nil {
-		return eb.Build().Str("addr", s.addr).Errorf("introspecthttp: listen: %w", lnErr)
+		return lnErr
 	}
 	s.ln = ln
 	go func() {

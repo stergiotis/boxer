@@ -272,18 +272,11 @@ func (s *Service) Start(ctx context.Context) (err error) {
 		err = eb.Build().Str("chURL", s.cfg.ChURL).Errorf("queryrunsvc: refusing a ClickHouse endpoint off this host; the materialized view reaches /pull over loopback")
 		return
 	}
-	host, _, splitErr := net.SplitHostPort(s.cfg.Listen)
-	if splitErr != nil {
-		err = eb.Build().Str("listen", s.cfg.Listen).Errorf("queryrunsvc: bad listen addr: %w", splitErr)
-		return
-	}
-	if !loopback.IsHost(host) {
-		err = eb.Build().Str("listen", s.cfg.Listen).Errorf("queryrunsvc: refusing non-loopback bind; remote exposure (token+TLS) is deferred to ADR-0082 §SD1")
-		return
-	}
-	ln, lnErr := net.Listen("tcp", s.cfg.Listen)
+	// No opt-in: the refreshable MV reaches /pull over loopback, and remote
+	// exposure (token+TLS) is deferred to ADR-0082 §SD1.
+	ln, lnErr := loopback.Gate{Name: "queryrunsvc"}.Listen(ctx, s.cfg.Listen)
 	if lnErr != nil {
-		err = eb.Build().Str("listen", s.cfg.Listen).Errorf("queryrunsvc: listen: %w", lnErr)
+		err = lnErr
 		return
 	}
 	s.ln = ln

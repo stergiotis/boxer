@@ -14,6 +14,7 @@ import (
 
 	"github.com/rs/zerolog"
 	"github.com/stergiotis/boxer/public/extbin"
+	"github.com/stergiotis/boxer/public/keelson/runtime/loopback"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/carrierclient"
@@ -84,13 +85,14 @@ type Session struct {
 // freePortPair finds p with p and p+1 both free: the carrier takes the
 // WebSocket on one and the viewer page on the next.
 func freePortPair() (port int, err error) {
+	gate := loopback.Gate{Name: "scene port probe"}
 	for attempt := 0; attempt < 32; attempt++ {
 		var l net.Listener
-		if l, err = net.Listen("tcp", "127.0.0.1:0"); err != nil {
+		if l, err = gate.Listen(context.Background(), "127.0.0.1:0"); err != nil {
 			return 0, eh.Errorf("unable to allocate a port: %w", err)
 		}
 		port = l.Addr().(*net.TCPAddr).Port
-		l2, e2 := net.Listen("tcp", "127.0.0.1:"+strconv.Itoa(port+1))
+		l2, e2 := gate.Listen(context.Background(), "127.0.0.1:"+strconv.Itoa(port+1))
 		_ = l.Close()
 		if e2 == nil {
 			_ = l2.Close()

@@ -1,8 +1,7 @@
 // Package loopback answers whether a host names this machine's loopback
 // interface — the one predicate behind the loopback-contained surfaces:
-// the introspecthttp and queryrunsd bind gates (ADR-0082 §SD1), the llm
-// service's local endpoint, and httpegress's local destinations
-// (ADR-0262 §SD4).
+// every Go listener's bind gate ([Gate], ADR-0082 §SD1), the llm service's
+// local endpoint, and httpegress's local destinations (ADR-0262 §SD4).
 //
 // The answer is literal, never resolved: "localhost" in any case, or an IP
 // literal that is loopback. A name that resolves to loopback through a
