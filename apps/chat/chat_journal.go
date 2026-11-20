@@ -429,7 +429,8 @@ func liveMessages(entries []agentrun.Entry) (live []agentrun.Entry) {
 	return
 }
 
-// livePixels are the shown-screenshot entries still carrying their pixels.
+// livePixels are the entries still carrying pixels: the screenshots a view
+// showed, and the images a message of the person's took with it.
 func livePixels(entries []agentrun.Entry) (live []agentrun.Entry) {
 	edited := map[uint32]agentrun.Entry{}
 	for _, e := range entries {
@@ -438,7 +439,7 @@ func livePixels(entries []agentrun.Entry) (live []agentrun.Entry) {
 		}
 	}
 	for _, e := range entries {
-		if e.Kind != agentrun.KindUser || e.Form != formPixels {
+		if e.Kind != agentrun.KindUser || e.Form != formPixels && e.Form != formSent {
 			continue
 		}
 		if ed, ok := edited[e.Ordinal]; ok && ed.Attachments == "" {
@@ -463,8 +464,13 @@ func (inst *coordinator) stripPixelsJournal(ctx context.Context, w *agentrun.Wri
 func stripPixelEntries(ctx context.Context, w *agentrun.Writer) (stripped bool, err error) {
 	var edits []agentrun.Entry
 	for _, e := range livePixels(w.Entries()) {
+		body := pixelsPlaceholder(openaichat.Message{Content: e.Body}).Content
+		if e.Form == formSent {
+			// The person's text stays; what went with it is named.
+			body = sentPlaceholder(e.Body)
+		}
 		edits = append(edits, agentrun.Entry{Kind: agentrun.KindEdit, Target: e.Ordinal, Form: "placeholder", Turn: e.Turn,
-			Body: pixelsPlaceholder(openaichat.Message{Content: e.Body}).Content, Label: harnessLabel()})
+			Body: body, Label: harnessLabel()})
 	}
 	if len(edits) == 0 {
 		return

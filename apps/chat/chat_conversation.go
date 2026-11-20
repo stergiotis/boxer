@@ -40,6 +40,9 @@ type entry struct {
 	// edited marks a message sent again after Edit, in place of the turn it
 	// replaced.
 	edited bool
+	// sent are the images that went with a message of the person's
+	// (ADR-0385 §SD3), named under it and chosen again by Edit.
+	sent []sentRef
 	// woken marks the place of a user message in a turn finished work
 	// started: nobody said it (ADR-0358 §SD5). It reads as a line of the
 	// host's, and cannot be edited or sent again.
@@ -277,6 +280,14 @@ func (inst *conversation) lastUser() (i int) {
 		}
 	}
 	return -1
+}
+
+// lastSent are the images that went with the last message of the person's.
+func (inst *conversation) lastSent() []sentRef {
+	if i := inst.lastUser(); i >= 0 {
+		return inst.entries[i].sent
+	}
+	return nil
 }
 
 // canRewind says the last turn was answered and can be taken back.

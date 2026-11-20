@@ -53,7 +53,7 @@ const (
 	tipPast     = "This window holds one conversation for as long as it is open. A kept conversation is read afterwards in play, over SQL on boxer.facts: the llmMessage rows, whose text is their llmMessageBody."
 	tipApps     = "The model may ask you to share windows with it and work in them through their operations. Fixed at the first send. The host answers only a chat listed in BOXER_AGENT_COORDINATORS."
 	tipNoApps   = "This conversation was started without Apps: its model has no tools and cannot open, read or drive windows, and will say so if asked. Apps is chosen before the first message — New conversation, turn Apps on in Settings, and ask again."
-	tipTainted  = "Text from outside your messages — a window's title, an app's content or error — reached the model, and may have steered what it wrote since. Grant dialogs say so, and every action records it, for as long as the conversation lasts."
+	tipTainted  = "Content from outside your own words — a window's title, an app's content or error, what an image shows — reached the model, and may have steered what it wrote since. Grant dialogs say so, and every action records it, for as long as the conversation lasts."
 	tipConfined = "A result derived from sealed data. Every later model call of this conversation is labelled confined, and the host sends it only to a loopback or trusted endpoint; elsewhere the call is refused. Its artefact cannot be exported to the lading store."
 	hintDraft   = "Message the model — Ctrl+Enter sends"
 
@@ -601,6 +601,7 @@ func (inst *App) renderComposer() {
 	if !inst.simple || inst.detailsOpen {
 		inst.renderTransformPicker()
 	}
+	inst.renderSendRow()
 	// The draft handed to the host's editor app, each save taking its place
 	// unless it was edited here meanwhile; drawn only where the host
 	// registers one editor app, and in the simple view only while an edit
@@ -821,6 +822,7 @@ func (inst *App) renderEntry(i int, e *entry) {
 			inst.openSqlInPlay(a.Text)
 		}
 	}
+	inst.renderSent(e)
 	if e.failed {
 		inst.renderFailure(e)
 	}
@@ -1027,13 +1029,17 @@ func (inst *App) openAsk() (o *openAsk) {
 
 // renderTask is the coordinator's row (ADR-0269) while it holds a task:
 // the task, whether its conversation read untrusted content and holds
-// confined content, and Stop.
+// confined content, and Stop. A conversation that read untrusted content
+// without a task — an image the person sent (ADR-0385 §SD5) — says so too.
 func (inst *App) renderTask() {
 	if inst.coord == nil {
 		return
 	}
 	task, tainted, confined := inst.coord.state()
 	if task == "" {
+		if tainted {
+			badge.New(inst.ids.PrepareStr("tainted"), "read untrusted content").Tone(badge.ToneWarning).Variant(badge.VariantSoft).Size(badge.SizeSm).Tooltip(tipTainted).Send()
+		}
 		return
 	}
 	for range c.HorizontalTop().KeepIter() {

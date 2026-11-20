@@ -88,7 +88,7 @@ func TestImageStoreRefusesPixelsBeforeDecoding(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "more than the 100")
 	_, _, _, err = s.put([]byte("not a png"))
-	assert.ErrorContains(t, err, "not a PNG")
+	assert.ErrorContains(t, err, "neither a PNG nor a JPEG")
 }
 
 func TestImageStoreRetainPinPurge(t *testing.T) {
@@ -111,7 +111,7 @@ func TestImageStoreRetainPinPurge(t *testing.T) {
 
 func TestCropPNG(t *testing.T) {
 	data := testPNG(t, 40, 30, 7)
-	out, err := cropPNG(data, [4]int{5, 6, 10, 8}, 1<<20)
+	out, err := cropImage(data, [4]int{5, 6, 10, 8}, 1<<20)
 	require.NoError(t, err)
 	img, err := png.Decode(bytes.NewReader(out))
 	require.NoError(t, err)
@@ -120,20 +120,20 @@ func TestCropPNG(t *testing.T) {
 	assert.Equal(t, color.NRGBAModel.Convert(src.At(5, 6)), color.NRGBAModel.Convert(img.At(0, 0)))
 
 	for _, r := range [][4]int{{35, 0, 10, 5}, {-1, 0, 5, 5}, {0, 0, 0, 5}, {0, 25, 5, 6}} {
-		_, err = cropPNG(data, r, 1<<20)
+		_, err = cropImage(data, r, 1<<20)
 		assert.ErrorContains(t, err, "not inside", r)
 	}
 }
 
 func TestImageName(t *testing.T) {
 	set := []artImage{{name: "screenshot-1.png"}, {name: "a.png"}}
-	n, reason := imageName("", set)
+	n, reason := imageName("", set, stemScreenshot, extPNG)
 	require.Empty(t, reason)
 	assert.Equal(t, "screenshot-2.png", n)
-	_, reason = imageName("a.png", set)
+	_, reason = imageName("a.png", set, stemScreenshot, extPNG)
 	assert.Contains(t, reason, "taken")
 	for _, bad := range []string{"A.png", "a b.png", "a.jpg", "../a.png", ".png"} {
-		_, reason = imageName(bad, set)
+		_, reason = imageName(bad, set, stemScreenshot, extPNG)
 		assert.NotEmpty(t, reason, bad)
 	}
 }

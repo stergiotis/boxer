@@ -485,6 +485,17 @@ func runTurn(ctx context.Context, cli completerI, coord *coordinator, req llm.Re
 		return
 	}
 	defer leave()
+	// The images the person sends with this message are reported before
+	// anything of the turn is written: a send the host does not record
+	// leaves no entry (ADR-0385 §SD4).
+	var sent *agentrun.Entry
+	if names := coord.takeOutgoing(req.Turn); len(names) > 0 && len(req.Messages) > 0 {
+		e, serr := coord.sentEntry(ctx, req.Turn, req.Messages[len(req.Messages)-1].Content, names)
+		if serr != nil {
+			return out, serr
+		}
+		sent = &e
+	}
 	w, err := coord.openJournal(jctx, req.Retain)
 	if err != nil {
 		return
@@ -503,7 +514,11 @@ func runTurn(ctx context.Context, cli completerI, coord *coordinator, req llm.Re
 	if len(req.Messages) > 0 {
 		// A turn a completion started has no message of the person's
 		// (ADR-0358 §SD5): the note the first round writes is its input.
-		entries = append(entries, agentrun.Entry{Kind: agentrun.KindUser, Role: projection.RoleUser, Body: text, Turn: req.Turn, Label: harnessLabel()})
+		user := agentrun.Entry{Kind: agentrun.KindUser, Role: projection.RoleUser, Body: text, Turn: req.Turn, Label: harnessLabel()}
+		if sent != nil {
+			user = *sent
+		}
+		entries = append(entries, user)
 	}
 	if _, err = coord.append(jctx, w, entries...); err != nil {
 		return

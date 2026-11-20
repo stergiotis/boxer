@@ -153,7 +153,7 @@ func (inst *toolSpec) tool() openaichat.Tool {
 const (
 	baseRevisionProperty = `"base_revision":{"type":"integer","minimum":0,"description":"the revision you read"}`
 	headingProperty      = `"heading":{"type":"array","items":{"type":"string"},"minItems":1,"description":"heading path, outermost first; the last element names the heading, the ones before its nearest ancestors"}`
-	imageNameProperty    = `"name":{"type":"string","description":"lower-case letters, digits, '.', '-' and '_', ending in .png; omitted, the chat picks screenshot-<n>.png; the artefact's text shows the image where it embeds ![[name]]"}`
+	imageNameProperty    = `"name":{"type":"string","description":"lower-case letters, digits, '.', '-' and '_', ending in .png, or in .jpg for a copy of a .jpg; omitted, the chat picks a name; the artefact's text shows the image where it embeds ![[name]]"}`
 )
 
 // maxTreeBytes bounds the outline read_window_tree hands the model; a busy
@@ -231,7 +231,7 @@ var coordinatorTools = []toolSpec{
 		schema:      `{"type":"object","properties":{` + baseRevisionProperty + `,"set":{"type":"object"},"delete":{"type":"array","items":{"type":"string"}}},"required":["base_revision"],"additionalProperties":false}`,
 		exec:        artefactExec},
 	{name: "artefact_images", group: toolGroupImageRead, parallelSafe: true,
-		description: "List the artefact's screenshots: name, size, where each came from, whether its bytes were purged, and the budget's use.",
+		description: "List the artefact's images — your screenshots, and files the person added (source upload): name, size, where each came from, whether its bytes were purged, and the budget's use.",
 		schema:      `{"type":"object","properties":{},"additionalProperties":false}`,
 		exec:        imageExec},
 	{name: "artefact_capture", group: toolGroupImageCapture,
@@ -251,8 +251,8 @@ var coordinatorTools = []toolSpec{
 		schema:      `{"type":"object","properties":{` + baseRevisionProperty + `,"name":{"type":"string"},"purge":{"type":"boolean"}},"required":["base_revision","name"],"additionalProperties":false}`,
 		exec:        imageExec},
 	{name: "artefact_view_image", group: toolGroupView,
-		description: "Look at one of the artefact's screenshots: the chat attaches its pixels in a message after this round's tool results, for the rest of this turn. Depending on the person's settings it waits for them to allow it.",
-		schema:      `{"type":"object","properties":{"name":{"type":"string","description":"the screenshot's name, as artefact_images lists it"}},"required":["name"],"additionalProperties":false}`,
+		description: "Look at one of the artefact's images: the chat attaches its pixels in a message after this round's tool results, for the rest of this turn. Depending on the person's settings it waits for them to allow it.",
+		schema:      `{"type":"object","properties":{"name":{"type":"string","description":"the image's name, as artefact_images lists it"}},"required":["name"],"additionalProperties":false}`,
 		exec:        imageExec},
 	{name: "recall", group: toolGroupRecall, parallelSafe: true, budget: recallBudget,
 		description: "Read back a tool result that was elided from this conversation's history, by the ordinal its stub names.",

@@ -14,6 +14,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/attention"
 	"github.com/stergiotis/boxer/public/keelson/runtime/clipboardbroker"
 	"github.com/stergiotis/boxer/public/keelson/runtime/externaledit"
+	"github.com/stergiotis/boxer/public/keelson/runtime/fsbroker"
 	"github.com/stergiotis/boxer/public/keelson/runtime/headstore"
 	"github.com/stergiotis/boxer/public/keelson/runtime/help"
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
@@ -102,6 +103,8 @@ var manifest = app.Manifest{
 				Reason: "chat: the roster's Raise brings the chat window that holds a conversation to the front"},
 			{Pattern: clipboardbroker.SubjectWrite, Direction: app.CapDirectionPub,
 				Reason: "chat: copy a message, a code block or a failure's details to the clipboard"},
+			{Pattern: fsbroker.SubjectDialogRead, Direction: app.CapDirectionPub,
+				Reason: "chat: Add image — the system file picker chooses one PNG or JPEG file, which is read once through the handle the reply carries, into the artefact's images (ADR-0385)"},
 			{Pattern: ladingpublish.Subject(exportMountTag), Direction: app.CapDirectionPub,
 				Reason: "chat: export the artefact and its screenshots to the lading store, under the chat's mount tag (ADR-0342)"},
 		},

@@ -137,7 +137,7 @@ type pixelPolicy struct {
 	level     agent.PixelsE
 	localOnly bool
 	// chosen is the level the person set, which level lowers to none
-	// while apps or the artefact are off; the run row keeps it.
+	// while the artefact is off; the run row keeps it.
 	chosen agent.PixelsE
 	// modelLocal says the host sends confined content to this
 	// conversation's model (llm.Description.Local).
@@ -174,6 +174,9 @@ type pixelAsk struct {
 	origin   string
 	endpoint string
 	level    agent.PixelsE
+	// uploaded says the image is a file the person added, or descends from
+	// one: This chat's captures does not let it through unasked.
+	uploaded bool
 	preview  imagedecode.Thumbnail
 	reply    chan pixelVerdictE
 	once     sync.Once
@@ -209,6 +212,10 @@ type pixelState struct {
 	// hash attached or pending in the running turn.
 	pending    []shownImage
 	turnHashes map[string]bool
+	// outgoing are the names the person chose for outgoingTurn's message,
+	// from the frame to the turn's goroutine (chat_send.go).
+	outgoing     []string
+	outgoingTurn string
 }
 
 // setPixels takes the setting; it binds at once (ADR-0287 §SD1): a view
@@ -229,7 +236,7 @@ func (inst *coordinator) setPixels(p pixelPolicy) {
 	case ask == nil:
 	case !p.reaches():
 		ask.decide(pixelRefused)
-	case p.level == agent.PixelsCaptures:
+	case p.level == agent.PixelsCaptures && !ask.uploaded:
 		ask.decide(pixelAllowedBySetting)
 	}
 }
@@ -276,7 +283,7 @@ func (inst *coordinator) pixelsNote() (note string) {
 	case p.level == agent.PixelsAskOnce:
 		note = "artefact_view_image shows you a screenshot after the person allows it once; viewing it again does not ask."
 	default:
-		note = "artefact_view_image shows you any screenshot of this conversation without asking the person."
+		note = "artefact_view_image shows you any screenshot you captured in this conversation without asking the person, and a file the person added after they allow it once."
 	}
 	return note + " A shown screenshot is in your context for the rest of this turn only; ask for what you need to see, not every screenshot."
 }
@@ -331,8 +338,10 @@ func (inst *coordinator) viewImage(ctx context.Context, o toolOrigin, args toolA
 	if e.purged {
 		return fail(e.name + " was purged: its bytes are gone")
 	}
-	// Every screenshot of the set is a capture of this conversation's task,
-	// or a copy or crop of one: This chat's captures reaches all of them.
+	// An image of the set is a capture of this conversation's task, a file
+	// the person added, or a copy or crop of either. This chat's captures
+	// reaches the first without asking; no grant covers the second, which
+	// asks once per content there too (ADR-0385 §SD4).
 	inst.mu.Lock()
 	again := inst.pix.turnHashes[e.hash]
 	inst.mu.Unlock()
@@ -348,9 +357,11 @@ func (inst *coordinator) viewImage(ctx context.Context, o toolOrigin, args toolA
 		return fail(err.Error())
 	}
 	how, by := "allowed by the person's setting: this chat's captures", agent.DecidedBySetting
+	// once says a consent to the content decides.
+	once := p.level == agent.PixelsAskOnce || p.level == agent.PixelsCaptures && e.uploaded
 	inst.mu.Lock()
-	ask := p.level == agent.PixelsAskEach || p.level == agent.PixelsAskOnce && !inst.pix.consented[e.hash]
-	if p.level == agent.PixelsAskOnce && !ask {
+	ask := p.level == agent.PixelsAskEach || once && !inst.pix.consented[e.hash]
+	if once && !ask {
 		how, by = "allowed by the person once before", agent.DecidedByConsent
 	}
 	inst.mu.Unlock()
@@ -379,7 +390,9 @@ func (inst *coordinator) viewImage(ctx context.Context, o toolOrigin, args toolA
 		if verdict == pixelAllowedBySetting {
 			how, by = "allowed by the person's setting: this chat's captures", agent.DecidedBySetting
 		}
-		if p = inst.pixelsNow(); p.level == agent.PixelsAskOnce {
+		// The person's allowing is a consent to the content from Ask once
+		// per image up; a setting that let it through consented to nothing.
+		if p = inst.pixelsNow(); p.level >= agent.PixelsAskOnce && verdict == pixelAllowed {
 			inst.mu.Lock()
 			if inst.pix.consented == nil {
 				inst.pix.consented = make(map[string]bool)
@@ -397,6 +410,9 @@ func (inst *coordinator) viewImage(ctx context.Context, o toolOrigin, args toolA
 		inst.refuse(reason)
 		return "error: " + reason, name + ": not recorded, not shown"
 	}
+	// A capture tainted the conversation when it was read; a file the
+	// person added does when its pixels reach the model (ADR-0385 §SD5).
+	inst.markTainted()
 	inst.mu.Lock()
 	inst.pix.pending = append(inst.pix.pending, shownImage{name: e.name, hash: e.hash, w: e.w, h: e.h, data: data, how: how})
 	if inst.pix.turnHashes == nil {
@@ -428,7 +444,7 @@ func (inst *coordinator) disclose(ctx context.Context, o toolOrigin, d agent.Dis
 // setting to move, or the turn to end; reason is set when it could not ask.
 func (inst *coordinator) askPixels(ctx context.Context, e artImage, data []byte, p pixelPolicy) (v pixelVerdictE, reason string) {
 	a := &pixelAsk{name: e.name, hash: e.hash, w: e.w, h: e.h, origin: imageOrigin(e), endpoint: p.endpoint, level: p.level,
-		reply: make(chan pixelVerdictE, 1)}
+		uploaded: e.uploaded, reply: make(chan pixelVerdictE, 1)}
 	if t, err := imagedecode.DecodeThumbnailRGBA8(data, e.w*e.h, pixelsPreviewSide); err == nil {
 		a.preview = t
 	}
@@ -480,7 +496,7 @@ func (inst *coordinator) takeShownEntry(turn string) (e agentrun.Entry, ok bool)
 			b.WriteString("; ")
 		}
 		b.WriteString(s.name + " (" + strconv.Itoa(s.w) + "×" + strconv.Itoa(s.h) + ", " + s.how + ")")
-		atts = append(atts, agentrun.Attachment{MediaType: "image/png", Digest: s.hash})
+		atts = append(atts, agentrun.Attachment{MediaType: imageMediaType(s.data), Digest: s.hash})
 	}
 	e = agentrun.Entry{Kind: agentrun.KindUser, Role: projection.RoleUser, Form: formPixels, Body: b.String(), Attachments: projection.AttachmentsBody(atts),
 		Turn: turn, Label: agentrun.Label{Level: agentrun.LevelExternal}}

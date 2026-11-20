@@ -75,6 +75,14 @@ func transcriptMarkdown(conv *conversation, meta transcriptMeta) (md string) {
 		}
 		b.WriteString(head + "\n\n")
 		b.WriteString(strings.TrimRight(e.shown(), "\n") + "\n")
+		if len(e.sent) > 0 {
+			// The names, never the pixels (ADR-0287 §SD5).
+			names := make([]string, 0, len(e.sent))
+			for _, s := range e.sent {
+				names = append(names, "`"+s.name+"`")
+			}
+			b.WriteString("\n*Sent with this message: " + strings.Join(names, ", ") + "*\n")
+		}
 		if e.failed {
 			b.WriteString("\n> [!failure] Not answered: " + oneLine(e.reason) + "\n")
 			for _, l := range failureLines(&e) {

@@ -153,7 +153,15 @@ func (inst *coordinator) imageCall(ctx context.Context, o toolOrigin, name strin
 		if len(set) >= art.store.limits.count {
 			return fail(errImageBudget{what: "names", used: int64(len(set) + 1), limit: int64(art.store.limits.count)}.Error())
 		}
-		nm, reason := imageName(args.str("name"), set)
+		// A copy keeps its source's bytes, so its name ends as the source's
+		// does; a capture and a crop are PNGs.
+		ext := extPNG
+		if name == "artefact_copy_image" {
+			if i := findImage(set, args.str("from")); i >= 0 {
+				ext = imageExt(set[i].name)
+			}
+		}
+		nm, reason := imageName(args.str("name"), set, stemScreenshot, ext)
 		if reason != "" {
 			return fail(reason)
 		}
@@ -264,7 +272,7 @@ func (inst *coordinator) newImage(ctx context.Context, o toolOrigin, name string
 			return e, nil, src.name + "'s bytes are gone"
 		}
 		unpin = art.store.pin(src.hash)
-		e = artImage{hash: src.hash, w: src.w, h: src.h, bytes: src.bytes, source: imageSourceCopy, from: src.name, root: src.rootHash()}
+		e = artImage{hash: src.hash, w: src.w, h: src.h, bytes: src.bytes, source: imageSourceCopy, from: src.name, root: src.rootHash(), uploaded: src.uploaded}
 	case "artefact_crop_image":
 		src, reason := from()
 		if reason != "" {
@@ -278,14 +286,14 @@ func (inst *coordinator) newImage(ctx context.Context, o toolOrigin, name string
 		if err != nil {
 			return e, nil, err.Error()
 		}
-		out, err := cropPNG(data, [4]int{x, y, w, h}, art.store.limits.pixels)
+		out, err := cropImage(data, [4]int{x, y, w, h}, art.store.limits.pixels)
 		if err != nil {
 			return e, nil, err.Error()
 		}
 		if reason = put(out); reason != "" {
 			return e, nil, reason
 		}
-		e.source, e.from, e.rect, e.root = imageSourceCrop, src.name, [4]int{x, y, w, h}, src.rootHash()
+		e.source, e.from, e.rect, e.root, e.uploaded = imageSourceCrop, src.name, [4]int{x, y, w, h}, src.rootHash(), src.uploaded
 	default:
 		return e, nil, "no tool " + name
 	}

@@ -145,6 +145,11 @@ type App struct {
 	editing    *rewound
 	editedNext bool
 	action     bgjob.Runner[string]
+	// adding runs Add image: the host's file dialog, then the file into
+	// the artefact's set. sendNames are the images chosen for the next
+	// message, by name (ADR-0385).
+	adding    bgjob.Runner[string]
+	sendNames []string
 	// afterAction runs on the render thread once the action lands well;
 	// deleting is the run a delete in flight is tombstoning, which no turn
 	// starts over.
@@ -272,6 +277,12 @@ func newApp() (inst *App) {
 	inst = &App{turnMachine: newTurnMachine(), log: zerolog.Nop(), ids: c.NewWidgetIdStack(), keep: true, draft: DraftSeed.Get(), conv: newConversation(), apps: AppsSeed.Get() || registeredCoordinator(),
 		questions: QuestionsSeed.Get(), artefact: ArtefactSeed.Get(), advanced: AdvancedSeed.Get(), pubs: newStatsPublishers(), perms: defaultPermissions().withPixels(pixelsSeed(), PixelsLocalSeed.Get()),
 		opTools: OperationToolsSeed.Get(), rounds: float64(clampRounds(0)), thinking: true, confinedTier: fallbackConfinedTier()}
+	if inst.artefact && SampleImageSeed.Get() {
+		// A scene's image; one that cannot be sealed is a scene that says so.
+		if _, _, err := inst.conv.art.addUpload(sampleImage(), "sample.png"); err != nil {
+			inst.note = status{text: "the sample image was not added: " + err.Error(), failed: true, at: time.Now()}
+		}
+	}
 	if inst.artefact {
 		// A window seeded with the artefact opens on its tab, as it opened
 		// on its panel.
@@ -354,6 +365,7 @@ func (inst *App) Unmount(ctx app.MountContextI) (err error) {
 	inst.runsJob.Cancel()
 	inst.resumeJob.Cancel()
 	inst.action.Cancel()
+	inst.adding.Cancel()
 	inst.titleJob.Cancel()
 	inst.authJob.Cancel()
 	inst.conv.art.close()
@@ -386,6 +398,7 @@ func (inst *App) Frame(ctx app.FrameContextI) (err error) {
 func (inst *App) drain() {
 	inst.drainHandover()
 	inst.drainAction()
+	inst.drainAdding()
 	inst.drainTitle()
 	inst.drainResume()
 	inst.syncAuthority()
@@ -446,6 +459,17 @@ func (inst *App) drain() {
 		inst.conv.land(p.req, nil, err, now)
 		inst.pending = nil
 		inst.turnEnded("the turn failed")
+		// A message whose images were not sent left nothing behind: the
+		// draft comes back with its images chosen (ADR-0385 §SD4).
+		var notSent errNotSent
+		if errors.As(err, &notSent) {
+			sent := inst.conv.lastSent()
+			if text, ok := inst.conv.dropFailed(); ok {
+				inst.setDraft(text)
+				inst.chooseSent(sent)
+				inst.setNote(notSent.reason, true)
+			}
+		}
 	case bgjob.StateIdle:
 		// A cancelled run resets to idle without a result or an error
 		// (bgjob's contract), so idle with a turn pending is the cancel.
@@ -467,22 +491,46 @@ func (inst *App) answeredSoFar() (res *turnResult) {
 	return &turnResult{calls: inst.coord.answeredCalls()}
 }
 
-// send starts a turn for the draft and clears the composer.
+// send starts a turn for the draft, with the images chosen for it, and
+// clears the composer.
 func (inst *App) send() {
-	if inst.startTurn(inst.draft) {
+	if inst.startTurnWith(inst.draft, inst.sendChoice()) {
 		// A sent draft is done with: its edit elsewhere ends.
 		inst.externalEdit.End()
-		inst.draft = ""
+		inst.draft, inst.sendNames = "", nil
 		c.CurrentApplicationState.StateManager.OverrideDatabindingSPtr(&inst.draft)
 	}
 }
 
-// startTurn sends text as the next turn, unless one is in flight. The
-// request is built here, on the render thread; the job touches only its
-// copy. The first send fixes the conversation's Keep.
-func (inst *App) startTurn(text string) (started bool) {
+// startTurn sends text as the next turn, with no image.
+func (inst *App) startTurn(text string) (started bool) { return inst.startTurnWith(text, nil) }
+
+// resend sends text again with the images that went with it then, those
+// the artefact still holds.
+func (inst *App) resend(text string, sent []sentRef) (started bool) {
+	inst.chooseSent(sent)
+	started = inst.startTurnWith(text, inst.sendChoice())
+	if started {
+		inst.sendNames = nil
+	}
+	return
+}
+
+// startTurnWith sends text as the next turn, unless one is in flight, with
+// images of the artefact's set (ADR-0385 §SD3). The request is built here,
+// on the render thread; the job touches only its copy. The first send fixes
+// the conversation's Keep.
+func (inst *App) startTurnWith(text string, images []artImage) (started bool) {
 	if inst.cli == nil || inst.pending != nil || strings.TrimSpace(text) == "" {
 		return false
+	}
+	if len(images) > 0 {
+		// The turn checks again, where the records are written; refusing
+		// here keeps the draft from leaving the composer for nothing.
+		if why := inst.sendOffer(); why != "" {
+			inst.setNote("not sent: "+why+" Take the images out to send the text alone.", true)
+			return false
+		}
 	}
 	if inst.conv.stranded {
 		inst.setNote("this conversation is read-only: it resumed under another prompt, tool set, host limits or confined tier, or was deleted; New conversation starts over", true)
@@ -505,7 +553,13 @@ func (inst *App) startTurn(text string) (started bool) {
 		return false
 	}
 	req := conv.request(text)
+	names := make([]string, 0, len(images))
+	for _, e := range images {
+		names = append(names, e.name)
+	}
+	coord.setOutgoing(req.Turn, names)
 	if !inst.launchTurn(req, coord) {
+		coord.takeOutgoing(req.Turn)
 		return false
 	}
 	if !conv.started && inst.preset != nil && inst.preset.Watch {
@@ -513,6 +567,9 @@ func (inst *App) startTurn(text string) (started bool) {
 	}
 	coord.personSpoke()
 	conv.begin(text, time.Now().UnixMilli(), inst.editedNext)
+	if i := conv.lastUser(); i >= 0 {
+		conv.entries[i].sent = sentRefs(images, names)
+	}
 	inst.pending = &pendingTurn{req: req, started: time.Now()}
 	inst.editing, inst.editedNext = nil, false
 	// The waiting bubble is at the end: follow it.

@@ -155,10 +155,11 @@ func (inst permissions) artCeiling() (ceil agent.Ceiling) {
 	return
 }
 
-// pixelsIn is the Pixels level in force for a conversation: screenshots
-// live in the artefact and come from captures, which need Apps.
-func (inst permissions) pixelsIn(artefact bool, apps bool) (p agent.PixelsE) {
-	if !artefact || !apps {
+// pixelsIn is the Pixels level in force for a conversation: images live in
+// the artefact. They need no Apps, since the person adds files to the set
+// too (ADR-0385 §SD4).
+func (inst permissions) pixelsIn(artefact bool) (p agent.PixelsE) {
+	if !artefact {
 		return agent.PixelsNone
 	}
 	return inst.pixels
@@ -219,11 +220,12 @@ const (
 	tipArtefact = "Give this conversation one markdown document the model reads and edits through tools, shown in the Artefact tab. At most and Changes above decide whether it may write and whether each change waits for you."
 	tipScore    = "may is what these settings allow, now what the running task was granted, each 0–100: the level picks the band, and what else is allowed — listed below — moves it within the band."
 	tipRounds   = "How many model calls one turn may make before it must answer: each round is a model call and the tool calls it asks for, and the last round offers no tools. A change applies from the next turn."
-	tipPixels   = "Which of the artefact's screenshots the model may see as pixels, sent to the model with the turn.\n" +
+	tipPixels   = "Which of the artefact's images the model may see as pixels, sent to the model with the turn.\n" +
 		"Metadata only: names, sizes and where each came from; you see the pixels, the model does not.\n" +
 		"Ask each time: each view waits in the Artefact tab, showing the image and the model it would go to, until you allow or decline it.\n" +
 		"Ask once per image: as above, and an image you allowed is shown again without asking; a crop or a new capture asks.\n" +
-		"This chat's captures: any screenshot of this conversation, without asking — the windows were shared with the task.\n" +
+		"This chat's captures: any screenshot the model captured in this conversation, without asking — the windows were shared with the task. A file you added asks once, as above.\n" +
+		"Above Metadata only you can also send any image with your next message, from the Artefact tab's Images.\n" +
 		"A shown image stays in the model's context for its turn only. What was sent cannot be called back; lowering this binds from the next request on."
 	tipPixelsLocal = "Send screenshots only to a model on this machine, or one this host trusts with sealed data: every request carrying pixels is labelled confined, and the host refuses it elsewhere."
 	tipSimple      = "Fold the bar under Details, bring the artefact forward when the model first writes it, and describe a running turn in plain words. Remembered for the next window."
@@ -313,7 +315,7 @@ func (inst *App) syncAuthority() {
 // pixelPolicy is the Pixels setting as the coordinator applies it.
 func (inst *App) pixelPolicy() (p pixelPolicy) {
 	perms := inst.perms.pixelsCapped()
-	p = pixelPolicy{level: perms.pixelsIn(inst.artefactOn(), inst.appsOn()), localOnly: perms.pixelsLocal, chosen: perms.pixels}
+	p = pixelPolicy{level: perms.pixelsIn(inst.artefactOn()), localOnly: perms.pixelsLocal, chosen: perms.pixels}
 	if inst.answered && inst.model.Configured {
 		m := inst.model
 		p.modelLocal = m.Local
@@ -534,8 +536,8 @@ func (inst *App) renderMaySection() {
 	inst.perms = inst.perms.pixelsCapped()
 	switch p := inst.pixelPolicy(); {
 	case inst.perms.pixels == agent.PixelsNone:
-	case !inst.artefactOn() || !inst.appsOn():
-		weak("Screenshots are the artefact's, captured with Apps: this conversation has none to show.")
+	case !inst.artefactOn():
+		weak("Images are the artefact's: this conversation has none to show.")
 	case !inst.answered || !inst.model.Configured:
 	case !p.reaches():
 		weak("This conversation's model is off this machine and not trusted with sealed data: it sees no pixels.")

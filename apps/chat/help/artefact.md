@@ -57,7 +57,7 @@ shows under the buttons, with **Anyway**.
 | `artefact_read`, `artefact_outline`, `artefact_find`, `artefact_inspect`, `artefact_lint` | read: the text by numbered lines, the headings, matches of a text or RE2 pattern, the parsed structure, the lint findings |
 | `artefact_write`, `artefact_edit`, `artefact_insert`, `artefact_replace_section`, `artefact_set_frontmatter` | write: the whole text, one unique occurrence, lines at a place, a section's body, top-level properties |
 | `artefact_images`, `artefact_capture`, `artefact_copy_image`, `artefact_crop_image`, `artefact_remove_image` | the screenshot set: list, capture windows of the task, name a copy, crop, remove or purge |
-| `artefact_view_image` | look at a screenshot, as Pixels allows |
+| `artefact_view_image` | look at an image of the set, as Pixels allows |
 
 Every write names the `base_revision` it was made against; a write against
 a revision that is no longer the head is refused with "the artefact is at
@@ -73,6 +73,30 @@ conversation they are bounded by `BOXER_CHAT_IMAGE_BYTES` and
 that would pass a ceiling is refused with the use and the ceiling. Removing
 and purging in the **Images** sub-tab is the way out of a full budget, and
 is a revision like the model's.
+
+## Adding an image, and sending one
+
+**Add image**, in the **Images** sub-tab, opens the host's file dialog and
+reads the one PNG or JPEG file you choose into the set (ADR-0385). The set
+keeps the file's pixels, turned upright, and nothing else of it: no
+location, time or device, no comment, and not its name, which only the
+sub-tab shows you. The chat names the image `upload-<n>`. Adding is a
+revision of yours, under the same budget; a file that is neither format, or
+past a ceiling, is refused and changes nothing. The dialog lists the files
+of the machine the host runs on.
+
+**Attach to next message**, on any image of the set, puts it into your next
+message. The composer names what is chosen, and each name there takes it
+out again. The model gets the image with your text for that turn;
+afterwards the message keeps your text and the image's name, and the model
+can look again with `artefact_view_image`. Sending is offered above
+Metadata only, where Pixels lets pixels reach the model, and each image sent
+is recorded as shown by you. When the host cannot record it, nothing is
+sent and the draft comes back with the reason. A message that carried an
+image marks the conversation as having read untrusted content.
+
+Under This chat's captures the model views its own screenshots without
+asking; an image you added, or a copy or crop of one, asks once.
 
 ## Endorse
 

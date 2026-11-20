@@ -100,6 +100,10 @@ type exportRecord struct {
 type exportImage struct {
 	Name string `json:"name"`
 	Hash string `json:"hash"`
+	// Upload says the image is a file the person added, or a copy or crop
+	// of one, so a resume brings it back as one (ADR-0385 §SD5). A record
+	// written before uploads has none.
+	Upload bool `json:"upload,omitempty"`
 }
 
 // exportRefusalRecord is the body of a refused export's journal entry: the
@@ -372,7 +376,7 @@ func (inst *App) exportNow(ctx context.Context, p *exportPlan, name string) (not
 			return "", eb.Build().Str("image", e.name).Errorf("read the screenshot: %w", err)
 		}
 		req.Files = append(req.Files, ladingpublish.File{Path: e.name, Data: data})
-		rec.Images = append(rec.Images, exportImage{Name: e.name, Hash: e.hash})
+		rec.Images = append(rec.Images, exportImage{Name: e.name, Hash: e.hash, Upload: e.uploaded})
 	}
 	if coord != nil {
 		req.Mount = coord.exportMount()
@@ -460,7 +464,7 @@ func restoreFrom(v fs.FS, rec exportRecord, art *artefact) (err error) {
 		if perr != nil {
 			return eb.Build().Str("image", img.Name).Errorf("restore the screenshot: %w", perr)
 		}
-		set = append(set, artImage{name: img.Name, hash: hash, w: w, h: h, bytes: int64(len(data)), source: imageSourceRestored, root: hash})
+		set = append(set, artImage{name: img.Name, hash: hash, w: w, h: h, bytes: int64(len(data)), source: imageSourceRestored, root: hash, uploaded: img.Upload})
 	}
 	art.mu.Lock()
 	art.lastN = max(rec.Revision-1, 0)

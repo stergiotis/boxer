@@ -1,7 +1,8 @@
 package chat
 
-// Screenshots beside the artefact (ADR-0284): a set of PNGs the model
-// collects, copies and crops, carried by the artefact's revisions. The
+// Screenshots beside the artefact (ADR-0284): a set of images the model
+// collects, copies and crops, and the person adds files to (ADR-0385),
+// carried by the artefact's revisions. The
 // entries are small and live in the revisions; the bytes live in an
 // imageStore, one sealed file per content hash — an unnamed inode under a
 // key that exists only in this process, as ad-hoc datasets keep theirs
@@ -10,17 +11,20 @@ package chat
 //
 // The store is bounded per conversation by bytes on disk and by the number
 // of names, and every decode is bounded by its pixel count, checked from the
-// PNG header before the pixels are touched.
+// image's header before the pixels are touched.
 
 import (
 	"bytes"
 	"encoding/hex"
 	"image"
 	"image/draw"
+	// The set takes JPEG beside PNG (ADR-0385 §SD2).
+	_ "image/jpeg"
 	"image/png"
 	"io"
 	"regexp"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -78,6 +82,9 @@ const (
 	// imageSourceRestored is a screenshot read back from the artefact's
 	// export when the conversation resumed (ADR-0342 §SD7).
 	imageSourceRestored
+	// imageSourceUpload is a file the person added in the panel
+	// (ADR-0385 §SD1).
+	imageSourceUpload
 )
 
 func (inst imageSourceE) String() string {
@@ -88,6 +95,8 @@ func (inst imageSourceE) String() string {
 		return "crop"
 	case imageSourceRestored:
 		return "restored"
+	case imageSourceUpload:
+		return "upload"
 	}
 	return "capture"
 }
@@ -115,6 +124,13 @@ type artImage struct {
 	// crops — its own for a capture — which a disclosure names, so the trail
 	// joins a view to the capture's row (ADR-0287 §SD6).
 	root string
+	// uploaded marks an upload and what descends from one by copies and
+	// crops: no grant covers its pixels (ADR-0385 §SD4).
+	uploaded bool
+	// fileName is the name of the file an upload was read from, for the
+	// person in the panel. It goes no further: not to the model, the journal
+	// or an export (ADR-0385 §SD2).
+	fileName string
 }
 
 // rootHash is the hash of the capture e descends from.
@@ -228,26 +244,60 @@ func imageHash(data []byte) string {
 	return hex.EncodeToString(sum[:])
 }
 
-// pngSize reads a PNG's size from its header and refuses one past the pixel
-// ceiling, before anything is decoded.
-func pngSize(data []byte, maxPixels int64) (w, h int, err error) {
-	cfg, err := png.DecodeConfig(bytes.NewReader(data))
+// The extensions a name of the set ends in, one per format it takes.
+const (
+	extPNG  = ".png"
+	extJPEG = ".jpg"
+)
+
+// imageSize reads an image's size and format from its header — ext is the
+// extension its name ends in — and refuses what is neither a PNG nor a
+// JPEG, and one past the pixel ceiling, before anything is decoded.
+func imageSize(data []byte, maxPixels int64) (w, h int, ext string, err error) {
+	cfg, format, err := image.DecodeConfig(bytes.NewReader(data))
 	if err != nil {
-		return 0, 0, eb.Build().Errorf("not a PNG: %w", err)
+		return 0, 0, "", eb.Build().Errorf("neither a PNG nor a JPEG: %w", err)
+	}
+	switch format {
+	case "png":
+		ext = extPNG
+	case "jpeg":
+		ext = extJPEG
+	default:
+		return 0, 0, "", eb.Build().Str("format", format).Errorf("neither a PNG nor a JPEG")
 	}
 	if cfg.Width <= 0 || cfg.Height <= 0 {
-		return 0, 0, eb.Build().Errorf("the PNG is empty")
+		return 0, 0, "", eb.Build().Errorf("the image is empty")
 	}
 	if px := int64(cfg.Width) * int64(cfg.Height); px > maxPixels {
-		return 0, 0, errImagePixels{w: cfg.Width, h: cfg.Height, limit: maxPixels}
+		return 0, 0, "", errImagePixels{w: cfg.Width, h: cfg.Height, limit: maxPixels}
 	}
-	return cfg.Width, cfg.Height, nil
+	return cfg.Width, cfg.Height, ext, nil
 }
 
-// put seals a PNG into the store and returns its hash and size. Bytes
-// already there by hash cost nothing again.
+// imageMediaType is the media type of an image of the set, read from its
+// first bytes: what a request names it as.
+func imageMediaType(data []byte) string {
+	if len(data) >= 2 && data[0] == 0xff && data[1] == 0xd8 {
+		return "image/jpeg"
+	}
+	return "image/png"
+}
+
+// imageExt is the extension a name of the set ends in, "" for neither.
+func imageExt(name string) string {
+	for _, ext := range []string{extPNG, extJPEG} {
+		if strings.HasSuffix(name, ext) {
+			return ext
+		}
+	}
+	return ""
+}
+
+// put seals a PNG or JPEG into the store and returns its hash and size.
+// Bytes already there by hash cost nothing again.
 func (inst *imageStore) put(data []byte) (hash string, w, h int, err error) {
-	if w, h, err = pngSize(data, inst.limits.pixels); err != nil {
+	if w, h, _, err = imageSize(data, inst.limits.pixels); err != nil {
 		return
 	}
 	hash = imageHash(data)
@@ -313,7 +363,7 @@ func (inst *imageStore) seal(data []byte) (f *sealed.File, err error) {
 	return
 }
 
-// read is a hash's PNG bytes.
+// read is a hash's bytes, as put took them.
 func (inst *imageStore) read(hash string) (data []byte, err error) {
 	inst.mu.Lock()
 	s, has := inst.files[hash]
@@ -394,10 +444,11 @@ func (inst *imageStore) close() {
 	}
 }
 
-// cropPNG cuts rect (x, y, w, h in pixels) out of a PNG, as a PNG. The
-// source's size is checked from its header before it is decoded.
-func cropPNG(data []byte, rect [4]int, maxPixels int64) (out []byte, err error) {
-	w, h, err := pngSize(data, maxPixels)
+// cropImage cuts rect (x, y, w, h in pixels) out of an image of the set, as
+// a PNG whichever format the source is (ADR-0385 §SD2). The source's size
+// is checked from its header before it is decoded.
+func cropImage(data []byte, rect [4]int, maxPixels int64) (out []byte, err error) {
+	w, h, _, err := imageSize(data, maxPixels)
 	if err != nil {
 		return
 	}
@@ -405,7 +456,7 @@ func cropPNG(data []byte, rect [4]int, maxPixels int64) (out []byte, err error) 
 	if cw <= 0 || ch <= 0 || x < 0 || y < 0 || x+cw > w || y+ch > h {
 		return nil, errCropOutside{rect: rect, w: w, h: h}
 	}
-	src, err := png.Decode(bytes.NewReader(data))
+	src, _, err := image.Decode(bytes.NewReader(data))
 	if err != nil {
 		return nil, eb.Build().Errorf("decode: %w", err)
 	}
@@ -420,12 +471,19 @@ func cropPNG(data []byte, rect [4]int, maxPixels int64) (out []byte, err error) 
 }
 
 // imageNameRe is what a name in the set may be: what a wikilink embed can
-// name without escaping, ending in .png.
-var imageNameRe = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]{0,94}\.png$`)
+// name without escaping, ending in the extension of its format.
+var imageNameRe = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]{0,94}\.(png|jpg)$`)
 
-// imageName checks a name the model gave, or picks the next free
-// screenshot-<n>.png.
-func imageName(given string, set []artImage) (name string, reason string) {
+// The stems of the names the chat picks: a screenshot of the model's, and a
+// file of the person's.
+const (
+	stemScreenshot = "screenshot-"
+	stemUpload     = "upload-"
+)
+
+// imageName checks a name the model gave for an image whose bytes are ext's
+// format, or picks the next free <stem><n><ext>.
+func imageName(given string, set []artImage, stem string, ext string) (name string, reason string) {
 	taken := func(n string) bool {
 		for _, e := range set {
 			if e.name == n {
@@ -435,17 +493,19 @@ func imageName(given string, set []artImage) (name string, reason string) {
 		return false
 	}
 	if given != "" {
-		if !imageNameRe.MatchString(given) {
-			return "", "the name " + strconv.Quote(given) + " is not lower-case letters, digits, '.', '-' and '_' ending in .png"
+		if !imageNameRe.MatchString(given) || !strings.HasSuffix(given, ext) {
+			return "", "the name " + strconv.Quote(given) + " is not lower-case letters, digits, '.', '-' and '_' ending in " + ext + ", which this image's format needs"
 		}
 		if taken(given) {
 			return "", "the name " + strconv.Quote(given) + " is taken; artefact_images lists the names"
 		}
 		return given, ""
 	}
+	// The number is free under either extension, so no two names of the
+	// set differ by their extension alone.
 	for k := 1; ; k++ {
-		if n := "screenshot-" + strconv.Itoa(k) + ".png"; !taken(n) {
-			return n, ""
+		if n := stem + strconv.Itoa(k); !taken(n+extPNG) && !taken(n+extJPEG) {
+			return n + ext, ""
 		}
 	}
 }

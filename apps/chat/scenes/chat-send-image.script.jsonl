@@ -1,0 +1,4 @@
+# The scripted model of chat-send-image.scene.md (ADR-0385): one reply per
+# line, picked by the conversation's position.
+# Turn 1: the person's message came with an image; answer.
+{"content":"Four bands of colour, each darker toward the bottom."}

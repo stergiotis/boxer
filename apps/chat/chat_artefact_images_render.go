@@ -9,6 +9,7 @@ package chat
 // update of 2026-10-26).
 
 import (
+	"slices"
 	"strconv"
 	"strings"
 
@@ -47,12 +48,23 @@ var (
 // renderImages is the Images tab.
 func (inst *App) renderImages(art *artefact) {
 	b := art.budget()
-	weak("screenshots " + strconv.Itoa(b.Names) + " of " + strconv.Itoa(b.NamesLimit) + " · " +
+	weak("images " + strconv.Itoa(b.Names) + " of " + strconv.Itoa(b.NamesLimit) + " · " +
 		humanBytes(b.Bytes) + " of " + humanBytes(b.BytesLimit) + " sealed on disk")
+	for range c.HoverText(tipImageAdd).KeepIter() {
+		if c.Button(inst.ids.PrepareStr("add-image"), atomsImageAdd).Small().SendResp().HasPrimaryClicked() {
+			inst.addImage(art)
+		}
+	}
 	set := art.headImages()
 	if len(set) == 0 {
-		weak("None. With Apps, the model adds screenshots of its windows with artefact_capture.")
+		weak("None. Add an image file here; with Apps, the model adds screenshots of its windows with artefact_capture.")
 		return
+	}
+	// Any image of the set can go with the next message, where the Pixels
+	// setting lets pixels reach the model (ADR-0385 §SD3, §SD4).
+	notOffered := inst.sendOffer()
+	if notOffered != "" {
+		weak(notOffered)
 	}
 	for i, e := range set {
 		for range c.IdScope(inst.ids.PrepareStr("image-" + e.name)) {
@@ -72,6 +84,17 @@ func (inst *App) renderImages(art *artefact) {
 					for range c.HoverText(tipImagePurge).KeepIter() {
 						if c.Button(inst.ids.PrepareStr("purge"), atomsImagePurge).Small().SendResp().HasPrimaryClicked() {
 							inst.removeImage(art, e.name, true)
+						}
+					}
+				}
+				if !e.purged && notOffered == "" {
+					chosen, atoms, tip := slices.Contains(inst.sendNames, e.name), atomsImageSend, tipImageSend
+					if chosen {
+						atoms, tip = atomsImageUnsend, tipImageUnsend
+					}
+					for range c.HoverText(tip).KeepIter() {
+						if c.Button(inst.ids.PrepareStr("send"), atoms).Small().SendResp().HasPrimaryClicked() {
+							inst.toggleSend(e.name)
 						}
 					}
 				}
@@ -188,6 +211,12 @@ func imageOrigin(e artImage) string {
 	switch e.source {
 	case imageSourceRestored:
 		return "restored from the artefact's export when the conversation resumed"
+	case imageSourceUpload:
+		// The file's name is the person's to read, here and nowhere else.
+		if e.fileName == "" {
+			return "a file you added"
+		}
+		return "a file you added: " + e.fileName
 	case imageSourceCopy:
 		return "a copy of " + e.from
 	case imageSourceCrop:

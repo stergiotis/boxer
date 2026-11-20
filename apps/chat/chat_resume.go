@@ -551,7 +551,8 @@ func transcriptOf(entries []agentrun.Entry) (out []entry) {
 	}
 	for _, e := range entries {
 		if e.Kind == agentrun.KindUser && e.Form != formPixels && unanswered[e.Ordinal] {
-			out = append(out, entry{speaker: speakerUser, text: e.Body, atMs: e.At.UnixMilli(), failed: true, reason: "the host stopped before the turn was answered"})
+			text, sent := sentOf(e)
+			out = append(out, entry{speaker: speakerUser, text: text, sent: sent, atMs: e.At.UnixMilli(), failed: true, reason: "the host stopped before the turn was answered"})
 		}
 	}
 	for _, e := range liveMessages(entries) {
@@ -561,7 +562,8 @@ func transcriptOf(entries []agentrun.Entry) (out []entry) {
 			if e.Form == formPixels {
 				continue
 			}
-			out = append(out, entry{speaker: speakerUser, text: e.Body, atMs: at})
+			text, sent := sentOf(e)
+			out = append(out, entry{speaker: speakerUser, text: text, sent: sent, atMs: at})
 		case agentrun.KindReply:
 			if e.Body == "" || replies[e.Key] {
 				continue

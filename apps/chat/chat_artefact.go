@@ -35,7 +35,8 @@ const (
 	revSourceModel revSourceE = iota
 	// revSourceRevert is the person making an earlier revision current.
 	revSourceRevert
-	// revSourcePerson is the person removing a screenshot in the panel.
+	// revSourcePerson is the person changing the set in the panel: removing
+	// an image, or adding a file (ADR-0385 §SD1).
 	revSourcePerson
 	// revSourceResume is the head a resume read back from the journal
 	// (chat_artefact_journal.go).

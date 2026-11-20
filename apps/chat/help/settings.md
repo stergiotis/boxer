@@ -43,9 +43,10 @@ this. A chatlet's document sets its view, so its Settings do not offer this.
 - **Open windows**, **Arrange the desktop** — whether a grant may let the
   model open windows and arrange them.
 - **Pixels** — none, ask, ask-once, captures: which of the artefact's
-  screenshots the model may see, and with whose consent (ADR-0287); **Only
-  to a local model** keeps them to a model on this machine or one the host
-  trusts with sealed data.
+  images the model may see, and with whose consent (ADR-0287), and whether
+  you can send one with a message (ADR-0385); **Only to a local model**
+  keeps them to a model on this machine or one the host trusts with sealed
+  data.
 
 The **Harness** header, folded, holds the tuning a person rarely moves:
 
@@ -70,6 +71,7 @@ the person moves most of them in Settings afterwards.
 | `BOXER_CHAT_IMAGE_BYTES`, `BOXER_CHAT_IMAGE_COUNT`, `BOXER_CHAT_IMAGE_PIXELS` | the artefact's screenshot budget per conversation (ADR-0284 §SD4) |
 | `BOXER_CHAT_OPERATION_TOOLS` | **A tool per operation** |
 | `BOXER_CHAT_APPS`, `BOXER_CHAT_QUESTIONS`, `BOXER_CHAT_ARTEFACT`, `BOXER_CHAT_ADVANCED`, `BOXER_CHAT_DRAFT` | the options and the composer's text of a new window, for scenes |
+| `BOXER_CHAT_SAMPLE_IMAGE` | a generated image in a new window's artefact, as a file you added would be, for scenes (ADR-0385) |
 | `BOXER_CHAT_PROFILE`, `BOXER_CHAT_CALL_WAIT`, `BOXER_CHAT_PENDING_MAX`, `BOXER_CHAT_WAKES_MAX` | the harness profile and the asynchronous call's waits (ADR-0358) |
 
 The host's own variables shape what the chat can ask for:

@@ -316,10 +316,49 @@ export written before this decision, read as they did.
 
 ## Status
 
-Accepted 2026-11-20. Nothing here is implemented.
+Accepted 2026-11-20, built. The verification plan holds in the tests of
+`apps/chat` and in the scene
+[chat-send-image](../../apps/chat/scenes/chat-send-image.scene.md), with
+the departures the entry of 2026-11-20 records. Not verified: the desktop
+host's dialog with a person at it, a real model reading an image, what a
+remote endpoint does with a large photo, and a disclosure row of a send
+read back from a host's durable trail.
 
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers.
+
+## Updates
+
+### 2026-11-20 — what was built, and where it departs
+
+- **The scene seeds its image.** The host's file dialog starts in the home
+  directory and takes no typed path, so a scene cannot reach a fixture
+  through it. `BOXER_CHAT_SAMPLE_IMAGE` adds a generated image to a new
+  window's artefact as a file the person added would be (ADR-0009). The
+  dialog's path — the request, the handle read once and closed, a dialog the
+  person closes — is a test against the file broker under the manifest's
+  capability, not a scene.
+- **The draft comes back** (§SD4). The records are written off the frame,
+  in the turn. A send the host does not record ends that turn before
+  anything of it is written, and the window then puts the message back in
+  the composer with its images chosen and the reason on the status line;
+  for a moment the transcript shows the message as waiting.
+- **The option is labelled Attach to next message**, apart from the
+  composer's Send.
+- **The untrusted-content badge shows without a task** (§SD5). It was drawn
+  in the task's row only, and a conversation that sends an image may hold
+  no task. It now also stays after a task ends.
+- **A view of an upload taints too**, when its pixels reach the model, as
+  a send does.
+- **The export marks uploads** (§SD5): an image that is an upload, or a
+  copy or crop of one, carries a flag in the export's record, which a
+  resume reads back. The restored image's source reads restored, as every
+  restored image's does.
+- **A resent message takes its images again.** Retry and Regenerate send
+  what went with the message then, those the set still holds, each as a
+  new row.
+- **Numbers are unique across extensions**: the set never holds
+  `upload-1.png` beside `upload-1.jpg`.
 
 ## References
 

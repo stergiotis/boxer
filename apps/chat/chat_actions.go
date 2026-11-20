@@ -72,7 +72,8 @@ func (inst *App) retry() {
 		inst.busyNote()
 		return
 	}
-	if text, ok := inst.conv.dropFailed(); ok && !inst.startTurn(text) {
+	sent := inst.conv.lastSent()
+	if text, ok := inst.conv.dropFailed(); ok && !inst.resend(text, sent) {
 		inst.setDraft(text)
 	}
 }
@@ -84,12 +85,13 @@ func (inst *App) regenerate() {
 		inst.busyNote()
 		return
 	}
+	sent := inst.conv.lastSent()
 	text, _, ok := inst.conv.rewind()
 	if !ok {
 		inst.rewindRefused()
 		return
 	}
-	if !inst.startTurn(text) {
+	if !inst.resend(text, sent) {
 		inst.setDraft(text)
 	}
 }
@@ -111,8 +113,11 @@ func (inst *App) edit() {
 		inst.busyNote()
 		return
 	}
+	// The message comes back with its images chosen again.
+	sent := inst.conv.lastSent()
 	if text, ok := inst.conv.dropFailed(); ok {
 		inst.setDraft(text)
+		inst.chooseSent(sent)
 		inst.editedNext = true
 		return
 	}
@@ -122,13 +127,14 @@ func (inst *App) edit() {
 		return
 	}
 	inst.setDraft(text)
+	inst.chooseSent(sent)
 	inst.editing, inst.editedNext = undo, true
 }
 
 // cancelEdit puts back the turn edit took, and clears the composer.
 func (inst *App) cancelEdit() {
 	if inst.conv.restore(inst.editing) {
-		inst.draft = ""
+		inst.draft, inst.sendNames = "", nil
 		c.CurrentApplicationState.StateManager.OverrideDatabindingSPtr(&inst.draft)
 	}
 	inst.editing, inst.editedNext = nil, false
