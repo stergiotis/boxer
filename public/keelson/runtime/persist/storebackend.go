@@ -56,7 +56,16 @@ import (
 // A generated store is single-goroutine (ADR-0100) and StorageBackendI
 // promises concurrent safety, so one mutex serializes every method —
 // the mutex-guarded wrapper ADR-0105 D4 names as the alternative to a
-// single owner goroutine.
+// single owner goroutine. The mutex is held across the round trip, so one
+// slow call holds every app's persist calls behind it; CallTimeout bounds
+// how long.
+//
+// deferred: taking the round trip out of the mutex. The store's buffers
+// and its write-through cache are what the mutex guards, and both belong
+// to the one generated store, so it needs a store per call in flight with
+// per-key ordering kept outside them, or an owner goroutine. Until then
+// CallTimeout is the stopgap; the verbs take a context once the store
+// interfaces carry one.
 type StoreBackend struct {
 	mu sync.Mutex
 	st *persiststore.PersistStore
@@ -122,6 +131,14 @@ func OpenStoreBackendAt(ctx context.Context, exec recordstore.ExecutorI, alloc m
 	return
 }
 
+// CallTimeout bounds one round trip of Get, Set or Delete. It stays below
+// the window host's shutdown drain (windowhost.DefaultShutdownDrain), so an
+// Unmount that saves state against a server that stopped answering fails
+// within the drain instead of holding the shutdown, and below the bus's
+// default request timeout, so the requester gets the store's error rather
+// than a timeout of its own.
+const CallTimeout = 3 * time.Second
+
 // stateKey is the entity key: the app identity and the app's own key,
 // under the persist-state kind prefix (persiststore.StateKey). The app id
 // rather than the alias, so a key survives an alias change, matching what
@@ -142,7 +159,9 @@ func stateKey(ref StorageRef, key string) (id string) {
 func (inst *StoreBackend) Get(ref StorageRef, key string) (value []byte, found bool, err error) {
 	inst.mu.Lock()
 	defer inst.mu.Unlock()
-	ent, found, err := inst.pc.GetFetch(context.Background(), stateKey(ref, key))
+	ctx, cancel := context.WithTimeout(context.Background(), CallTimeout)
+	defer cancel()
+	ent, found, err := inst.pc.GetFetch(ctx, stateKey(ref, key))
 	if err != nil {
 		err = eb.Build().Str("alias", ref.Alias).Str("key", key).Errorf("persist: store get failed: %w", err)
 		found = false
@@ -223,7 +242,9 @@ func (inst *StoreBackend) Delete(ref StorageRef, key string) (err error) {
 // cache is invalidated on that path too: its write-through entry is
 // pinned on a row that will never exist.
 func (inst *StoreBackend) flushLocked() (err error) {
-	_, err = inst.st.Flush(context.Background())
+	ctx, cancel := context.WithTimeout(context.Background(), CallTimeout)
+	defer cancel()
+	_, err = inst.st.Flush(ctx)
 	if err != nil {
 		inst.st.DiscardPending()
 		inst.pc.InvalidateAll()

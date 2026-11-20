@@ -55,7 +55,9 @@ func (inst *StoreBackend) LiveEntries(appId app.AppIdT) (entries []StateEntry, e
 func (inst *StoreBackend) EntryAt(entityId string) (e StateEntry, found bool, err error) {
 	inst.mu.Lock()
 	defer inst.mu.Unlock()
-	ent, found, err := inst.pc.GetFetch(context.Background(), entityId)
+	ctx, cancel := context.WithTimeout(context.Background(), CallTimeout)
+	defer cancel()
+	ent, found, err := inst.pc.GetFetch(ctx, entityId)
 	if err != nil {
 		err = eb.Build().Str("entityId", entityId).Errorf("persist: entry at: %w", err)
 		found = false

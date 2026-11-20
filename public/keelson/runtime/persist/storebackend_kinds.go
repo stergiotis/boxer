@@ -77,7 +77,9 @@ func (inst *StoreBackend) WriteWorkingset(row statestore.WorkingsetRow) (err err
 func (inst *StoreBackend) LatestWorkingset(appId app.AppIdT, name string) (cfg []byte, kind string, found bool, err error) {
 	inst.mu.Lock()
 	defer inst.mu.Unlock()
-	ent, found, err := inst.pc.GetFetch(context.Background(), persiststore.WorkingsetKey(string(appId), name))
+	ctx, cancel := context.WithTimeout(context.Background(), CallTimeout)
+	defer cancel()
+	ent, found, err := inst.pc.GetFetch(ctx, persiststore.WorkingsetKey(string(appId), name))
 	if err != nil {
 		err = eb.Build().Str("appId", string(appId)).Str("name", name).Errorf("persist: latest workingset: %w", err)
 		found = false
