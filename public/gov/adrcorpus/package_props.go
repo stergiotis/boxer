@@ -9,6 +9,7 @@ var PackageProps = packageprops.Props{
 	WASMWASI:         packageprops.WASMBlocked,
 	WASMJS:           packageprops.WASMBlocked,
 	WASMFreestanding: packageprops.WASMBlocked,
+	Kind:             packageprops.KindTool,
 }
 
 func init() { packageprops.Register("github.com/stergiotis/boxer/public/gov/adrcorpus", PackageProps) }

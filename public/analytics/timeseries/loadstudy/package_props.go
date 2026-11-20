@@ -9,7 +9,8 @@ import "github.com/stergiotis/boxer/public/packageprops"
 // asserting Blocked without having run the survey would be a claim rather than a
 // verdict. The zero value asserts nothing, which is the honest state.
 var PackageProps = packageprops.Props{
-	Kind: packageprops.KindIntegrationTest,
+	Kind:      packageprops.KindIntegrationTest,
+	Stability: packageprops.StabilityExperimental,
 }
 
 func init() {

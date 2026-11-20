@@ -8,7 +8,9 @@ import "github.com/stergiotis/boxer/public/packageprops"
 //
 // The WASM fields are left unasserted: the survey has not been run against
 // this package, and the zero value states that rather than guessing a verdict.
-var PackageProps = packageprops.Props{}
+var PackageProps = packageprops.Props{
+	Stability: packageprops.StabilityStable,
+}
 
 func init() {
 	packageprops.Register("github.com/stergiotis/boxer/public/semistructured/leeway/marshall/clickhouse/componentsql", PackageProps)

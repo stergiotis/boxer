@@ -9,6 +9,7 @@ var PackageProps = packageprops.Props{
 	WASMWASI:         packageprops.WASMCompiles,
 	WASMJS:           packageprops.WASMBlocked,
 	WASMFreestanding: packageprops.WASMCompiles,
+	Kind:             packageprops.KindTestSupport,
 }
 
 func init() { packageprops.Register("github.com/stergiotis/boxer/public/unittest", PackageProps) }

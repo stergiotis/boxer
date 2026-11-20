@@ -9,6 +9,7 @@ var PackageProps = packageprops.Props{
 	WASMWASI:         packageprops.WASMUnknown,
 	WASMJS:           packageprops.WASMUnknown,
 	WASMFreestanding: packageprops.WASMUnknown,
+	Stability:        packageprops.StabilityStable,
 }
 
 func init() {

@@ -9,6 +9,7 @@ var PackageProps = packageprops.Props{
 	WASMWASI:         packageprops.WASMCompiles,
 	WASMJS:           packageprops.WASMCompiles,
 	WASMFreestanding: packageprops.WASMCompiles,
+	Stability:        packageprops.StabilityExperimental,
 }
 
 func init() { packageprops.Register("github.com/stergiotis/boxer/public/science/units", PackageProps) }

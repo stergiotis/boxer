@@ -18,6 +18,7 @@ var PackageProps = packageprops.Props{
 	WASMWASI:         packageprops.WASMUnknown,
 	WASMJS:           packageprops.WASMUnknown,
 	WASMFreestanding: packageprops.WASMUnknown,
+	Kind:             packageprops.KindTool,
 }
 
 func init() {

@@ -6,10 +6,10 @@ import "github.com/stergiotis/boxer/public/packageprops"
 // Seeded by `boxer code analysis golang wasmsurvey props generate`; curate by
 // hand. The same group's `props verify` reconciles it.
 var PackageProps = packageprops.Props{
-	Kind:             packageprops.KindExample,
 	WASMWASI:         packageprops.WASMBlocked,
 	WASMJS:           packageprops.WASMBlocked,
 	WASMFreestanding: packageprops.WASMBlocked,
+	Kind:             packageprops.KindExample,
 }
 
 func init() {

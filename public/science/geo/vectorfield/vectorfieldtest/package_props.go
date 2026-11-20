@@ -3,7 +3,9 @@ package vectorfieldtest
 import "github.com/stergiotis/boxer/public/packageprops"
 
 // PackageProps records this package's curated properties (ADR-0080).
-var PackageProps = packageprops.Props{}
+var PackageProps = packageprops.Props{
+	Kind: packageprops.KindTestSupport,
+}
 
 func init() {
 	packageprops.Register("github.com/stergiotis/boxer/public/science/geo/vectorfield/vectorfieldtest", PackageProps)

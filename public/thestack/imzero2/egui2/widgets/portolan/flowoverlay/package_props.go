@@ -3,7 +3,9 @@ package flowoverlay
 import "github.com/stergiotis/boxer/public/packageprops"
 
 // PackageProps records this package's curated properties (ADR-0080).
-var PackageProps = packageprops.Props{}
+var PackageProps = packageprops.Props{
+	Stability: packageprops.StabilityExperimental,
+}
 
 func init() {
 	packageprops.Register("github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/portolan/flowoverlay", PackageProps)

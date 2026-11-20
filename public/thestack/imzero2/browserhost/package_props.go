@@ -13,6 +13,7 @@ var PackageProps = packageprops.Props{
 	WASMWASI:         packageprops.WASMBlocked,
 	WASMJS:           packageprops.WASMBlocked,
 	WASMFreestanding: packageprops.WASMUnknown,
+	Stability:        packageprops.StabilityExperimental,
 }
 
 func init() {
