@@ -12,6 +12,8 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/stergiotis/boxer/public/observability/eh"
@@ -477,7 +479,7 @@ func (inst Input) Generate() (err error) {
 			return
 		}
 	}
-	storeCode, err := inst.emitStore(ir, conv, plans, vaultPlans)
+	storeCode, vocab, err := inst.emitStore(ir, conv, plans, vaultPlans)
 	if err != nil {
 		err = eh.Errorf("emit store: %w", err)
 		return
@@ -490,7 +492,7 @@ func (inst Input) Generate() (err error) {
 	// 6. DDL — the complete CREATE TABLE through the ADR-0102 table-clause
 	// seam: derived clause defaults (roles → ORDER BY, resolved to
 	// physical names) merged with Input.DDL overrides.
-	ddlSql, err := clickhouse.ComposeCreateTable(inst.qualifiedTableName(), ir, inst.RowConfig, conv, inst.tableOptions())
+	ddlSql, err := clickhouse.ComposeCreateTable(inst.qualifiedTableName(), ir, inst.RowConfig, conv, withDedupWindow(inst.tableOptions()))
 	if err != nil {
 		err = eh.Errorf("generate ddl: %w", err)
 		return
@@ -503,10 +505,6 @@ func (inst Input) Generate() (err error) {
 		// per Exec, which the HTTP executor requires.
 		ddlSql = "CREATE DATABASE IF NOT EXISTS " + inst.Database + ";\n\n" + ddlSql
 	}
-	err = inst.write(inst.TableName+"_ddl_clickhouse.out.sql", []byte(ddlSql))
-	if err != nil {
-		return
-	}
 	// 6b. The column list, read back out of the composed DDL, for the
 	// schema check and the reconciler (ADR-0387).
 	cols, err := recordstore.ParseCreateTableColumns(ddlSql)
@@ -514,7 +512,16 @@ func (inst Input) Generate() (err error) {
 		err = eh.Errorf("read the composed DDL's columns: %w", err)
 		return
 	}
-	schemaCode, err := inst.emitSchema(cols, "")
+	// The stamp names the schema that created the table; it goes on a
+	// line of its own after every other clause.
+	stamp := recordstore.TableStamp{Kind: inst.TableName, Columns: recordstore.ColumnsDigest(cols),
+		Naming: recordstore.LeewayNamingVersion, Vocab: recordstore.VocabDigest(vocab)}.String()
+	ddlSql = strings.TrimRight(ddlSql, " \t\n;") + recordstore.CommentClause(stamp)
+	err = inst.write(inst.TableName+"_ddl_clickhouse.out.sql", []byte(ddlSql))
+	if err != nil {
+		return
+	}
+	schemaCode, err := inst.emitSchema(cols, stamp)
 	if err != nil {
 		return
 	}
@@ -593,6 +600,27 @@ func (inst Input) tableOptions() (opts clickhouse.TableOptions) {
 	opts.Indexes = o.Indexes
 	opts.SkipIndexes = o.SkipIndexes
 	return
+}
+
+// withDedupWindow adds the non-replicated deduplication window to a
+// plain MergeTree-family table that does not set one, so the token a
+// retried insert carries is honoured (ADR-0387). Replicated engines keep
+// their own window; other engines have none.
+func withDedupWindow(opts clickhouse.TableOptions) clickhouse.TableOptions {
+	engine := strings.TrimSpace(opts.Engine)
+	if i := strings.IndexByte(engine, '('); i >= 0 {
+		engine = engine[:i]
+	}
+	if !recordstore.IsPlainMergeTree(engine) {
+		return opts
+	}
+	for _, s := range opts.Settings {
+		if strings.Contains(s, recordstore.DedupWindowSetting) {
+			return opts
+		}
+	}
+	opts.Settings = append(slices.Clip(opts.Settings), recordstore.DedupWindowSetting+"="+strconv.Itoa(recordstore.DedupWindowBlocks))
+	return opts
 }
 
 // insertSettings is the settings the store bakes: InsertSettings, with

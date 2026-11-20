@@ -188,7 +188,10 @@ type envelopeCol struct {
 // 2026-07-04 that deferred them is superseded). Component decode coverage
 // is gated by marshallgen.ReadRowSupported (carrier channels and
 // tuple / nested sections remain uncovered).
-func (inst Input) emitStore(ir *common.IntermediateTableRepresentation, conv common.NamingConventionI, plans []*mappingplan.Plan, vaultPlans []*mappingplan.Plan) (code []byte, err error) {
+//
+// vocab is the membership-id assignment the store bakes (kind → membership
+// → id), the one <Store>MembershipIds publishes; the table stamp digests it.
+func (inst Input) emitStore(ir *common.IntermediateTableRepresentation, conv common.NamingConventionI, plans []*mappingplan.Plan, vaultPlans []*mappingplan.Plan) (code []byte, vocab map[string]map[string]uint64, err error) {
 	info := readback.NewInformationRetrieval(conv)
 	err = info.LoadTable(ir, inst.RowConfig)
 	if err != nil {
@@ -386,6 +389,15 @@ func (inst Input) emitStore(ir *common.IntermediateTableRepresentation, conv com
 		if err != nil {
 			return
 		}
+	}
+	for _, sc := range comps {
+		if len(sc.ids) == 0 {
+			continue
+		}
+		if vocab == nil {
+			vocab = make(map[string]map[string]uint64, len(comps))
+		}
+		vocab[sc.Kind] = sc.ids
 	}
 	em := emitter{Input: inst, keyGoType: model.key.goType, orderGoType: model.order.goType, cas: cas,
 		model: model, hasComps: len(comps) > 0,
@@ -808,9 +820,10 @@ func (inst emitter) emitMembershipIds(sb *strings.Builder, comps []storeComponen
 	}
 	p("// both the component codecs and this store's Scan filters. Nothing on the")
 	p("// wire records which assignment wrote a row, so rows written under a")
-	p("// different one decode as ABSENT rather than failing — VerifySchema")
-	p("// cannot see it. Compare this map against the writer's before pointing a")
-	p("// regenerated store at existing rows.")
+	p("// different one decode as ABSENT rather than failing. The schema check")
+	p("// sees it only through the vocabulary digest of a table's stamp, which a")
+	p("// table this store did not create may lack. Compare this map against the")
+	p("// writer's before pointing a regenerated store at existing rows.")
 	p("var %sMembershipIds = map[string]map[string]uint64{", inst.StoreName)
 	for _, c := range comps {
 		ids := c.ids
@@ -1067,9 +1080,7 @@ func (inst emitter) emitStoreHeader(sb *strings.Builder, key, order, lifecycle e
 	p("")
 	p("\t%q", "github.com/apache/arrow-go/v18/arrow")
 	p("\t%q", "github.com/apache/arrow-go/v18/arrow/memory")
-	if !inst.insertSettings().IsZero() {
-		p("\t%q", "github.com/rs/zerolog/log")
-	}
+	p("\t%q", "github.com/rs/zerolog/log")
 	p("\t%q", "github.com/stergiotis/boxer/public/caching")
 	if inst.keyGoType == "string" || casNeedsMarshalling(inst.cas) {
 		p("\t%q", "github.com/stergiotis/boxer/public/db/clickhouse/dsl/marshalling")
@@ -1376,9 +1387,11 @@ func (inst emitter) emitStoreType(sb *strings.Builder) {
 	p("\tcfg %sStoreConfig", inst.StoreName)
 	p("\tdml *%s%s", inst.lowQ(), inst.dmlType())
 	p("\tbuffered int")
-	p("\t// pending holds transferred-but-uninserted records after a failed")
-	p("\t// Flush; the next Flush ships them (DiscardPending drops them).")
-	p("\tpending []arrow.RecordBatch")
+	p("\t// pending holds the transferred inserts the server has not")
+	p("\t// acknowledged, oldest first; Flush ships them in order, each alone")
+	p("\t// and under the batch id it was first attempted with, which rides as")
+	p("\t// the insert's deduplication token (DiscardPending drops them).")
+	p("\tpending []recordstore.PendingBatch")
 	p("\t// dirty tracks locally-written keys between Commit/Delete and the")
 	p("\t// next successful Flush (or DiscardPending). Attached cache views")
 	p("\t// pin these keys until the flush lands (eviction cannot expose the")
@@ -1386,11 +1399,9 @@ func (inst emitter) emitStoreType(sb *strings.Builder) {
 	p("\t// remaining guard for writes the views could not materialize (Raw")
 	p("\t// commits) and for InvalidateAll inside a dirty window.")
 	p("\tdirty map[%s]struct{}", inst.keyGoType)
-	if !inst.insertSettings().IsZero() {
-		p("\t// insertSettingsUnapplied latches the one warning a store logs when")
-		p("\t// its executor cannot carry the per-insert settings.")
-		p("\tinsertSettingsUnapplied bool")
-	}
+	p("\t// insertSettingsUnapplied latches the one warning a store logs when")
+	p("\t// its executor cannot carry the per-insert settings.")
+	p("\tinsertSettingsUnapplied bool")
 	p("\t// onWrite/onFlush hold the write-through hooks of attached cache")
 	p("\t// views (New%s registers one pair per view): onWrite populates", inst.cacheType())
 	p("\t// and pins the committed entity (nil = not materializable or a")
@@ -1555,8 +1566,17 @@ func (inst emitter) emitStoreType(sb *strings.Builder) {
 	p("// callback lands in a fresh buffer, reported with a later flush, and a")
 	p("// panicking observer cannot have the same rows reported twice.")
 	p("func (inst *%s) takeWritten() iter.Seq[recordstore.WrittenKey[%s, %s]] {", inst.storeType(), inst.keyGoType, inst.orderGoType)
-	p("\twritten := inst.written")
-	p("\tinst.written = nil")
+	p("\treturn inst.takeWrittenN(len(inst.written))")
+	p("}")
+	p("")
+	p("// takeWrittenN is takeWritten over the first n rows kept: those of a")
+	p("// retained batch, ahead of rows committed after it.")
+	p("func (inst *%s) takeWrittenN(n int) iter.Seq[recordstore.WrittenKey[%s, %s]] {", inst.storeType(), inst.keyGoType, inst.orderGoType)
+	p("\twritten := inst.written[:n:n]")
+	p("\tinst.written = inst.written[n:]")
+	p("\tif len(inst.written) == 0 {")
+	p("\t\tinst.written = nil")
+	p("\t}")
 	p("\treturn func(yield func(recordstore.WrittenKey[%s, %s]) bool) {", inst.keyGoType, inst.orderGoType)
 	p("\t\tfor _, w := range written {")
 	p("\t\t\tif !yield(w) {")
@@ -1581,9 +1601,9 @@ func (inst emitter) emitStoreType(sb *strings.Builder) {
 		p("\t\terr = eh.Errorf(\"ensure table %%s: %%w\", inst.writeTable(), err)")
 		p("\t\treturn")
 		p("\t}")
-		p("\tif inst.cfg.DDLTail != \"\" {")
-		p("\t\tstmts[len(stmts)-1] += \" \" + inst.cfg.DDLTail")
-		p("\t}")
+		p("\t// The tail goes in ahead of the stamp's COMMENT clause, which")
+		p("\t// ClickHouse wants last.")
+		p("\tstmts[len(stmts)-1] = recordstore.AppendDDLTail(stmts[len(stmts)-1], inst.cfg.DDLTail)")
 		if inst.Cas {
 			p("\t// A table created before the block-position settings gains them;")
 			p("\t// MODIFY SETTING is idempotent and the one ALTER a compare-and-set")
@@ -2022,7 +2042,13 @@ func (inst emitter) emitFlush(sb *strings.Builder) {
 	p("// durable when Flush returns, engine permitting. On")
 	p("// insert failure the transferred records are retained and the next")
 	p("// Flush ships them — Flush is retryable; DiscardPending drops them")
-	p("// instead. An open (uncommitted) entity frame makes Flush error.")
+	p("// instead. Each insert is retried alone, ahead of rows buffered since,")
+	p("// under the batch id of its first attempt, sent as the insert's")
+	p("// deduplication token: on a table keeping a deduplication window, an")
+	p("// attempt that landed although it reported failure is not written")
+	p("// twice (ADR-0387). n counts the rows that landed, also when err is set;")
+	p("// the write observer is told each insert's rows under its batch id.")
+	p("// An open (uncommitted) entity frame makes Flush error.")
 	p("func (inst *%s) Flush(ctx context.Context) (n int, err error) {", inst.storeType())
 	p("\t// Ordered flush: make the dimension facts this batch")
 	p("\t// references durable before the payload insert, so a referencing row is")
@@ -2050,40 +2076,62 @@ func (inst emitter) emitFlush(sb *strings.Builder) {
 	p("\t\terr = eh.Errorf(\"transfer records: %%w\", err)")
 	p("\t\treturn")
 	p("\t}")
-	p("\trecords = append(inst.pending, records...)")
-	p("\tinst.pending = nil")
-	p("\t// One batch id per insert attempt: the executor stamps")
-	p("\t// it, an observing executor reports it, the write observer is told it.")
-	p("\tbatch := recordstore.NewBatchId()")
-	p("\tbctx := recordstore.WithBatchId(ctx, batch)")
 	p("\tif len(records) > 0 {")
-	if s := inst.insertSettings(); !s.IsZero() {
-		p("\t\tvar applied bool")
-		p("\t\tapplied, err = recordstore.InsertArrowWith(bctx, inst.exec, inst.writeTable(), records, %sInsertSettings)", inst.TableName)
-		p("\t\tif err == nil && !applied && !inst.insertSettingsUnapplied {")
-		p("\t\t\tinst.insertSettingsUnapplied = true")
-		p("\t\t\tlog.Warn().Str(\"table\", inst.writeTable()).Msg(\"deferred: the executor carries no per-insert settings, so this store's inserts run under the session's\")")
-		p("\t\t}")
-	} else {
-		p("\t\terr = inst.exec.InsertArrow(bctx, inst.writeTable(), records)")
-	}
+	p("\t\t// One batch id per insert: the executor stamps it, an observing")
+	p("\t\t// executor reports it, the write observer is told it, and the")
+	p("\t\t// table deduplicates a retry by it.")
+	p("\t\tpb := recordstore.PendingBatch{Records: records, Batch: recordstore.NewBatchId(), Rows: inst.buffered, Written: len(inst.written)}")
+	p("\t\tfor _, q := range inst.pending {")
+	p("\t\t\tpb.Rows -= q.Rows")
+	p("\t\t\tpb.Written -= q.Written")
+	p("\t\t}")
+	p("\t\tinst.pending = append(inst.pending, pb)")
+	p("\t}")
+	p("\tfor len(inst.pending) > 0 {")
+	p("\t\tpb := inst.pending[0]")
+	p("\t\tbctx := recordstore.WithBatchId(ctx, pb.Batch)")
+	p("\t\terr = inst.insertRecords(bctx, pb.Records, pb.Batch)")
 	p("\t\tif err != nil {")
-	p("\t\t\tinst.pending = records")
 	p("\t\t\terr = eh.Errorf(\"insert into %%s: %%w\", inst.writeTable(), err)")
 	p("\t\t\treturn")
 	p("\t\t}")
+	p("\t\tpb.Release()")
+	p("\t\tinst.pending = inst.pending[1:]")
+	p("\t\tn += pb.Rows")
+	p("\t\tinst.buffered -= pb.Rows")
+	p("\t\tif pb.Written > 0 {")
+	p("\t\t\tinst.cfg.WriteObserver.Durable(bctx, pb.Batch, inst.takeWrittenN(pb.Written))")
+	p("\t\t}")
 	p("\t}")
-	p("\tfor _, rec := range records {")
-	p("\t\trec.Release()")
-	p("\t}")
-	p("\tn = inst.buffered")
+	p("\tinst.pending = nil")
+	p("\tn += inst.buffered")
 	p("\tinst.buffered = 0")
 	p("\tfor k := range inst.dirty {")
 	p("\t\tinst.notifyFlush(k) // durable now — release the views' dirty-window pins")
 	p("\t}")
 	p("\tclear(inst.dirty) // flushed — ClickHouse now serves the written state")
 	p("\tif len(inst.written) > 0 {")
-	p("\t\tinst.cfg.WriteObserver.Durable(bctx, batch, inst.takeWritten())")
+	p("\t\t// Rows that transferred no records still reach the observer once.")
+	p("\t\tbatch := recordstore.NewBatchId()")
+	p("\t\tinst.cfg.WriteObserver.Durable(recordstore.WithBatchId(ctx, batch), batch, inst.takeWritten())")
+	p("\t}")
+	p("\treturn")
+	p("}")
+	p("")
+	p("// insertRecords inserts records under batch's deduplication token and")
+	p("// the store's insert settings. An executor that cannot carry settings")
+	p("// inserts plainly — without the token, so a retry is not deduplicated —")
+	p("// and the store says so once.")
+	p("func (inst *%s) insertRecords(ctx context.Context, records []arrow.RecordBatch, batch recordstore.BatchIdT) (err error) {", inst.storeType())
+	if st := inst.insertSettings(); !st.IsZero() {
+		p("\tsettings := %sInsertSettings.WithDeduplicationToken(string(batch))", inst.TableName)
+	} else {
+		p("\tsettings := recordstore.InsertSettings{DeduplicationToken: string(batch)}")
+	}
+	p("\tapplied, err := recordstore.InsertArrowWith(ctx, inst.exec, inst.writeTable(), records, settings)")
+	p("\tif err == nil && !applied && !inst.insertSettingsUnapplied {")
+	p("\t\tinst.insertSettingsUnapplied = true")
+	p("\t\tlog.Warn().Str(\"table\", inst.writeTable()).Msg(\"the executor carries no per-insert settings: this store's inserts run under the session's settings and without a deduplication token, so a retried insert that had landed is written twice\")")
 	p("\t}")
 	p("\treturn")
 	p("}")
@@ -2123,8 +2171,8 @@ func (inst emitter) emitFlush(sb *strings.Builder) {
 	p("\t\t\trec.Release()")
 	p("\t\t}")
 	p("\t}")
-	p("\tfor _, rec := range inst.pending {")
-	p("\t\trec.Release()")
+	p("\tfor _, pb := range inst.pending {")
+	p("\t\tpb.Release()")
 	p("\t}")
 	p("\tinst.pending = nil")
 	p("\tinst.buffered = 0")
@@ -3091,7 +3139,11 @@ func (inst emitter) emitDrainCanonical(p func(string, ...any)) {
 	p("\t\terr = eh.Errorf(\"transfer records: %%w\", err)")
 	p("\t\treturn")
 	p("\t}")
-	p("\trecords = append(inst.pending, records...)")
+	p("\tvar retained []arrow.RecordBatch")
+	p("\tfor _, pb := range inst.pending {")
+	p("\t\tretained = append(retained, pb.Records...)")
+	p("\t}")
+	p("\trecords = append(retained, records...)")
 	p("\tinst.pending = nil")
 	p("\tdefer func() {")
 	p("\t\tfor _, rec := range records {")

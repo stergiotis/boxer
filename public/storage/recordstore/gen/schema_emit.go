@@ -31,8 +31,8 @@ func (inst Input) emitSchema(cols []recordstore.ColumnSpec, stamp string) (code 
 	}
 	p("}")
 	p("")
-	p("// %sTableStamp is the COMMENT the store's CREATE TABLE writes; empty", inst.StoreName)
-	p("// when the store does not create its table.")
+	p("// %sTableStamp is the COMMENT the store's CREATE TABLE writes: the", inst.StoreName)
+	p("// schema that created a table, as a schema check reads it back.")
 	p("const %sTableStamp = %q", inst.StoreName, stamp)
 	raw := []byte(sb.String())
 	code, err = format.Source(raw)
