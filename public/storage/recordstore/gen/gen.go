@@ -242,9 +242,10 @@ type Input struct {
 
 	// InsertSettings are the settings every insert of the store carries
 	// (ADR-0309 §SD4: async_insert = 0 on journal inserts). Flush sends
-	// them through an executor that implements recordstore.InsertSettingsI
-	// and falls back to a plain insert otherwise, logging a deferred
-	// warning once per store. A Cas table always inserts with
+	// them, with the insert's deduplication token, through an executor that
+	// implements recordstore.InsertSettingsI — every in-tree executor does —
+	// and falls back to a plain insert otherwise, logging once per store
+	// that the settings and the token were not sent. A Cas table always inserts with
 	// async_insert = 0, whatever this says: async_insert never sits on the
 	// claim path (rowcas).
 	InsertSettings recordstore.InsertSettings
