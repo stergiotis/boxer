@@ -208,6 +208,9 @@ func TestRoundtrip_Bytes(t *testing.T) {
 
 func TestRoundtrip_SliceLength(t *testing.T) {
 	m, u, _ := newTestPair()
+	// The encoding carries any length; the field bound is the decoder's
+	// policy, raised here to reach the largest one.
+	u.SetMaxFieldLength(math.MaxInt32)
 	m.WriteSliceLength(0)
 	m.WriteSliceLength(100)
 	m.WriteSliceLength(math.MaxInt32)

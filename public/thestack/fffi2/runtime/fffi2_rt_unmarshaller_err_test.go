@@ -207,3 +207,45 @@ func TestUnmarshallReaderInterfaceExposesErr(t *testing.T) {
 	_ = reader.ReadUInt64()
 	require.Error(t, reader.Err())
 }
+
+// A desynchronised stream decodes a length of up to 4 GiB; past the bound it
+// fails the read, sticky, before anything is allocated.
+func TestUnmarshallerRefusesAnOversizedLength(t *testing.T) {
+	huge := []byte{0xfe, 0xff, 0xff, 0xff} // 4 GiB - 2, little-endian
+	for name, read := range map[string]func(u *Unmarshaller){
+		"bytes":  func(u *Unmarshaller) { assert.Nil(t, u.ReadBytes()) },
+		"string": func(u *Unmarshaller) { assert.Empty(t, u.ReadStringMostLikelyEmpty()) },
+		"slice": func(u *Unmarshaller) {
+			l, isNil := u.ReadSliceLength()
+			assert.Zero(t, l)
+			assert.False(t, isNil)
+		},
+	} {
+		allocated := false
+		u, seen := collectingUnmarshaller(bytes.NewReader(huge))
+		u.SetAllocateBufferFunc(func(l uint32) []byte { allocated = true; return make([]byte, l) })
+		read(u)
+		require.ErrorIs(t, u.Err(), ErrFieldTooLong, name)
+		assert.Len(t, *seen, 1, name)
+		assert.False(t, allocated, name)
+		assert.Zero(t, u.ReadUInt8(), "%s: the failure is sticky", name)
+	}
+}
+
+func TestUnmarshallerBoundIsOverridable(t *testing.T) {
+	var buf bytes.Buffer
+	buf.Write([]byte{5, 0, 0, 0})
+	buf.WriteString("hello")
+	u, _ := collectingUnmarshaller(&buf)
+	u.SetMaxFieldLength(4)
+	assert.Nil(t, u.ReadBytes())
+	assert.ErrorIs(t, u.Err(), ErrFieldTooLong)
+
+	buf.Reset()
+	buf.Write([]byte{5, 0, 0, 0})
+	buf.WriteString("hello")
+	u.SetInput(&buf)
+	u.SetMaxFieldLength(5)
+	assert.Equal(t, "hello", string(u.ReadBytes()))
+	assert.NoError(t, u.Err())
+}

@@ -7,8 +7,22 @@ import (
 	"math"
 
 	"github.com/rs/zerolog/log"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/unsafeperf"
 )
+
+// DefaultMaxFieldLength bounds one length-prefixed field an Unmarshaller
+// decodes: the bytes of a byte slice or string, the element count of a
+// slice. A length past it is taken as a desynchronised stream, not as a
+// value, and fails the read before anything is allocated; without it, a
+// stream that lost its place decodes a length of up to 4 GiB and the
+// allocation ends the process. A slice of 8-byte elements may still reach
+// eight times the bound. A caller that legitimately sends more raises it
+// with SetMaxFieldLength.
+const DefaultMaxFieldLength = 256 << 20
+
+// ErrFieldTooLong is the sticky failure for a length past the bound.
+var ErrFieldTooLong = errors.New("field length exceeds the unmarshaller's bound")
 
 type Unmarshaller struct {
 	r              io.Reader
@@ -17,6 +31,9 @@ type Unmarshaller struct {
 	allocateBuffer func(l uint32) []byte
 	buf            []byte
 	read           int
+	// maxFieldLength bounds a length-prefixed field; zero means
+	// DefaultMaxFieldLength.
+	maxFieldLength uint32
 	// err is the first read failure since the last SetInput or ClearErr.
 	// The Read* methods cannot report failure through their results — they
 	// return a zero value, which no caller can tell apart from a zero the
@@ -97,6 +114,25 @@ func (inst *Unmarshaller) SetErrorHandler(f func(err error)) {
 }
 func (inst *Unmarshaller) SetAllocateBufferFunc(f func(l uint32) []byte) {
 	inst.allocateBuffer = f
+}
+
+// SetMaxFieldLength replaces DefaultMaxFieldLength as the bound on one
+// length-prefixed field; zero restores the default.
+func (inst *Unmarshaller) SetMaxFieldLength(n uint32) {
+	inst.maxFieldLength = n
+}
+
+// withinBound fails the stream when a decoded length is past the bound.
+func (inst *Unmarshaller) withinBound(l uint32) (ok bool) {
+	limit := inst.maxFieldLength
+	if limit == 0 {
+		limit = DefaultMaxFieldLength
+	}
+	if l <= limit {
+		return true
+	}
+	inst.fail(eb.Build().Uint32("len", l).Uint32("max", limit).Errorf("decode: %w", ErrFieldTooLong))
+	return false
 }
 
 func (inst *Unmarshaller) ReadUInt8() (v uint8) {
@@ -231,6 +267,9 @@ func (inst *Unmarshaller) readBytesNonEmpty(l uint32) (v []byte) {
 	if inst.err != nil {
 		return
 	}
+	if !inst.withinBound(l) {
+		return nil
+	}
 	v = inst.allocateBuffer(l)
 	if len(v) != int(l) {
 		inst.fail(ErrStringAllocation)
@@ -272,11 +311,15 @@ func (inst *Unmarshaller) ReadBool() (v bool) {
 // ReadSliceLength returns the element count, or isNil for the nil-slice
 // sentinel. A failed read yields (0, false) — an empty, non-nil slice —
 // which is a perfectly ordinary answer, so callers that must distinguish
-// "the peer sent nothing" from "the stream died" have to consult Err.
+// "the peer sent nothing" from "the stream died" have to consult Err. A
+// count past the field bound is such a failure.
 func (inst *Unmarshaller) ReadSliceLength() (l int, isNil bool) {
 	v := inst.ReadUInt32()
 	if v == math.MaxUint32 {
 		return 0, true
+	}
+	if inst.err != nil || !inst.withinBound(v) {
+		return 0, false
 	}
 	return int(v), false
 }
