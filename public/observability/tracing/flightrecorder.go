@@ -17,6 +17,8 @@ import (
 	"github.com/urfave/cli/v3"
 )
 
+const flightRecorderExitOnSignalFlag = "flightRecorderExitOnSignal"
+
 var flightRecorder *trace.FlightRecorder
 var flightRecorderOutputMtx sync.Mutex
 
@@ -52,13 +54,14 @@ var TracingFlags = []cli.Flag{
 		flightRecorder = trace.NewFlightRecorder(cfg)
 		err := flightRecorder.Start()
 		if err != nil {
-			return eh.Errorf("unable to start flight recorder")
+			return eh.Errorf("unable to start flight recorder: %w", err)
 		}
 		log.Info().Msg("started golang flight recorder")
 		return nil
 	})),
 	&cli.StringSliceFlag{
-		Name: "flightRecorderFlushOnSignal",
+		Name:  "flightRecorderFlushOnSignal",
+		Usage: "write the flight recorder's trace when one of these signals arrives (SIGUSR1, SIGUSR2, SIGCHLD, SIGTERM, SIGINT, SIGPIPE); the signal is then left to the command's own handling",
 		Action: func(ctx context.Context, cmd *cli.Command, signalNames []string) error {
 			if len(signalNames) == 0 {
 				return nil
@@ -76,21 +79,32 @@ var TracingFlags = []cli.Flag{
 			}
 			signal.Notify(sigChan, signals...)
 
+			exitOnSignal := cmd.Bool(flightRecorderExitOnSignalFlag)
+			// lifetime: the process's signal listener, for as long as the
+			// process runs.
 			go func() {
 				for {
 					sig := <-sigChan
 					writeFlightRecorderTrace(FlightRecorderOutputFile.Get())
-					// see https://stackoverflow.com/questions/61487783/how-can-you-avoid-races-in-overriding-gos-default-signal-handlers
-					// for a discussion
+					// A command that handles SIGINT or SIGTERM itself — a
+					// host draining its windows — must not be cut short
+					// here; exiting is opt-in. See
+					// https://stackoverflow.com/questions/61487783/how-can-you-avoid-races-in-overriding-gos-default-signal-handlers
 					switch sig {
 					case syscall.SIGINT, syscall.SIGTERM, syscall.SIGPIPE:
-						log.Info().Str("signal", sig.String()).Msg("caught signal, exiting with exit code 1")
-						os.Exit(1)
+						if exitOnSignal {
+							log.Info().Str("signal", sig.String()).Msg("caught signal, exiting with exit code 1")
+							os.Exit(1)
+						}
 					}
 				}
 			}()
 			return nil
 		},
+	},
+	&cli.BoolFlag{
+		Name:  flightRecorderExitOnSignalFlag,
+		Usage: "exit with code 1 after writing the trace on SIGINT, SIGTERM or SIGPIPE; for a command with no handler of its own for them, which would otherwise not stop on the first",
 	},
 	FlightRecorderOutputFile.AsCliFlag(),
 }
