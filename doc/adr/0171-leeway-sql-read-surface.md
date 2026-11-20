@@ -680,3 +680,51 @@ the name/id duality it narrows is §SD4's. Nothing about the registry, the
 table, or the resolution order moves. The one case it adds — a bare number
 against a verbatim channel, which carries names — is refused rather than
 folded into a name, so the forgiving-spelling property above is unaffected.
+
+## Update 2026-11-20 — the marker is a generation and a digest; installs are monotonic
+
+§SD2's marker answered "is this server current" with a hand-bumped integer.
+A body change without a bump left an upgraded build reading "current" and
+skipping the install, so the server kept the old bodies. And because the
+functions are server-global, two builds of different generations sharing a
+server took turns re-installing, the older one putting its bodies back under
+the newer host and the newer one dropping names the older still called.
+
+- **The stamp is two functions.** `LW_SURFACE_VERSION` keeps reporting the
+  integer, now read as a *generation*; `LW_SURFACE_DIGEST` reports a sha256
+  over every statement the surface installs except the two stamp functions
+  (`lwsqlsurface.Digest`). Two functions rather than a second value in the
+  marker, because every existing reader parses the marker as a bare integer.
+  The marker stays the last statement; the digest function precedes it.
+  The views' `COMMENT` stamp and the dependents' digests both include the
+  surface digest, so a body change refreshes them too.
+- **The decision is `lwsqlsurface.Decide`.** No marker, an unreadable one, an
+  older generation, or this generation with another digest: install. This
+  generation and digest: nothing. A *higher* generation: leave it — verify
+  the server still declares every name this build calls (`VerifyServes`;
+  refused by name when it does not) and install and drop nothing.
+  `InstallIfDrifted` and `chstore.Store.EnsureReadSurface` both go through
+  it. The explicit `Install` (and `leeway sqlsurface install`) still
+  installs whatever the server carries.
+- **A body change needs a generation bump.** `TestSurfaceDigestPinned` holds
+  the digest of the current generation as a literal and fails when the
+  bodies move without one. Without it, two builds of one generation with
+  different bodies would still take turns.
+- **Retired names are dropped one generation late.** `chpack.Retired` records
+  the generation whose roster first went without each name; a build at
+  generation G drops only names retired before G. `Reconcile` reports the
+  kept ones as `RetiredPending`, outside the in-sync verdict. Every name
+  retired so far records generation 1.
+
+Generation 3 is the first with a digest. A generation-2 build that meets a
+generation-3 server re-installs as before; monotonicity holds from
+generation 3 onward.
+
+**What goes red if violated:** `TestSurfaceDigestPinned` (bodies moved,
+no bump); `TestDecide` and `TestNewerServerIsLeftInPlace` (a newer server
+overwritten or stripped).
+
+**Not covered:** `chstore.SetupStatements`, which runs every surface
+statement unconditionally through a caller's own client, does not decide;
+nor do the read-side checks in `queryrunfacts` and `capmapfacts`, which
+still refuse any generation other than their own.

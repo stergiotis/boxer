@@ -162,11 +162,14 @@ func dependentMarkerName(name string) (marker string) {
 	return sb.String()
 }
 
-// dependentDigest covers the statements and the surface revision they are
-// expanded against.
+// dependentDigest covers the statements and the surface they are expanded
+// against — its generation and its content digest, so a body change
+// re-creates the dependents too.
 func dependentDigest(stmts []string) (digest string) {
 	h := sha256.New()
 	_, _ = h.Write([]byte(strconv.Itoa(Version)))
+	_, _ = h.Write([]byte{0})
+	_, _ = h.Write([]byte(Digest()))
 	for _, stmt := range stmts {
 		_, _ = h.Write([]byte{0})
 		_, _ = h.Write([]byte(stmt))

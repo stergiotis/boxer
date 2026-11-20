@@ -236,8 +236,16 @@ func formatSurfaceStatus(rep lwsqlsurface.Report, url string) (out string) {
 		b.WriteString("version:  no surface marker — provisioned by a pre-surface build; `install` moves it forward\n")
 	case rep.ServerVersion < 0:
 		b.WriteString("version:  no surface marker (this build: v" + strconv.Itoa(lwsqlsurface.Version) + ")\n")
-	case rep.ServerVersion == lwsqlsurface.Version:
+	case rep.ServerVersion == lwsqlsurface.Version && rep.ServerDigest == lwsqlsurface.Digest():
 		b.WriteString("version:  v" + strconv.Itoa(rep.ServerVersion) + " — matches this build\n")
+	case rep.ServerVersion == lwsqlsurface.Version:
+		// Same generation, other bodies: a build that predates the digest,
+		// or a body changed without a generation bump.
+		b.WriteString("version:  v" + strconv.Itoa(rep.ServerVersion) + " with other bodies (digest " + shortDigest(rep.ServerDigest) +
+			", this build " + shortDigest(lwsqlsurface.Digest()) + ") — `install` replaces them\n")
+	case rep.ServerVersion > lwsqlsurface.Version:
+		b.WriteString("version:  v" + strconv.Itoa(rep.ServerVersion) + " (this build: v" +
+			strconv.Itoa(lwsqlsurface.Version) + ") — newer than this build; unattended starts leave it in place\n")
 	default:
 		b.WriteString("version:  v" + strconv.Itoa(rep.ServerVersion) + " (this build: v" +
 			strconv.Itoa(lwsqlsurface.Version) + ") — names may resolve to older definitions\n")
@@ -270,6 +278,13 @@ func formatSurfaceStatus(rep lwsqlsurface.Report, url string) (out string) {
 			b.WriteString("          " + n + "\n")
 		}
 	}
+	if len(rep.RetiredPending) > 0 {
+		b.WriteString("pending:  " + strconv.Itoa(len(rep.RetiredPending)) +
+			" spelling(s) this generation withdrew, kept for the previous one — the next generation drops them\n")
+		for _, n := range rep.RetiredPending {
+			b.WriteString("          " + n + "\n")
+		}
+	}
 	if len(rep.Undeclared) > 0 {
 		// Listed, but NOT part of the in-sync verdict: somebody else's
 		// function on a shared server is not this build being wrong, and
@@ -286,5 +301,19 @@ func formatSurfaceStatus(rep lwsqlsurface.Report, url string) (out string) {
 			" function(s) and " + strconv.Itoa(len(chviews.AllViewNames())) + " view(s) declared, all present\n")
 	}
 	out = b.String()
+	return
+}
+
+// shortDigest renders a digest for a status line; "none" when the server
+// carries no digest function.
+func shortDigest(d string) (s string) {
+	switch {
+	case d == "":
+		s = "none"
+	case len(d) > 16:
+		s = d[:16]
+	default:
+		s = d
+	}
 	return
 }

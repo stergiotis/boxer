@@ -20,9 +20,20 @@ const testEndpoint = "http://example.invalid:8123/"
 // broken one looking fine.
 func TestFormatSurfaceStatusVersionCases(t *testing.T) {
 	t.Run("matches", func(t *testing.T) {
-		out := formatSurfaceStatus(lwsqlsurface.Report{ServerVersion: lwsqlsurface.Version}, testEndpoint)
+		out := formatSurfaceStatus(lwsqlsurface.Report{ServerVersion: lwsqlsurface.Version, ServerDigest: lwsqlsurface.Digest()}, testEndpoint)
 		require.Contains(t, out, "matches this build")
 		require.Contains(t, out, testEndpoint)
+	})
+
+	t.Run("same generation, other bodies", func(t *testing.T) {
+		out := formatSurfaceStatus(lwsqlsurface.Report{ServerVersion: lwsqlsurface.Version}, testEndpoint)
+		require.Contains(t, out, "other bodies")
+		require.NotContains(t, out, "matches this build")
+	})
+
+	t.Run("newer generation", func(t *testing.T) {
+		out := formatSurfaceStatus(lwsqlsurface.Report{ServerVersion: lwsqlsurface.Version + 1}, testEndpoint)
+		require.Contains(t, out, "newer than this build")
 	})
 
 	t.Run("older revision", func(t *testing.T) {
@@ -57,6 +68,7 @@ func TestFormatSurfaceStatusVersionCases(t *testing.T) {
 func TestFormatSurfaceStatusSeparatesLeftovers(t *testing.T) {
 	out := formatSurfaceStatus(lwsqlsurface.Report{
 		ServerVersion: lwsqlsurface.Version,
+		ServerDigest:  lwsqlsurface.Digest(),
 		Missing:       []string{"LW_CO_GATHER"},
 		Retired:       []string{"LW_PACK_VERSION"},
 		Undeclared:    []string{"LW_THEIR_HELPER"},
@@ -74,7 +86,7 @@ func TestFormatSurfaceStatusSeparatesLeftovers(t *testing.T) {
 // TestFormatSurfaceStatusInSync pins the quiet case: no lists, one line
 // saying how much was checked.
 func TestFormatSurfaceStatusInSync(t *testing.T) {
-	out := formatSurfaceStatus(lwsqlsurface.Report{ServerVersion: lwsqlsurface.Version}, testEndpoint)
+	out := formatSurfaceStatus(lwsqlsurface.Report{ServerVersion: lwsqlsurface.Version, ServerDigest: lwsqlsurface.Digest()}, testEndpoint)
 	require.Contains(t, out, "in sync")
 	require.Contains(t, out, strconv.Itoa(len(lwsqlsurface.DeclaredFunctions())))
 }
@@ -145,6 +157,7 @@ func TestFormatSurfaceStatusUnreadableMarker(t *testing.T) {
 func TestUndeclaredIsNotDrift(t *testing.T) {
 	rep := lwsqlsurface.Report{
 		ServerVersion: lwsqlsurface.Version,
+		ServerDigest:  lwsqlsurface.Digest(),
 		Undeclared:    []string{"LW_THEIR_HELPER"},
 	}
 	require.True(t, rep.InSync(), "somebody else's function is not this build's drift")

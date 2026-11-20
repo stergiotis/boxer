@@ -9,6 +9,7 @@ import (
 
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/chpack"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/chviews"
 )
 
@@ -39,8 +40,10 @@ const featureProbeName = "leewaySurfaceFeatureProbe"
 //  2. collision check — no declared name may resolve to a non-UDF server
 //     function (e.g. a builtin arriving with a server upgrade),
 //  3. CREATE OR REPLACE the three function families in dependency order,
-//  4. verify LW_SURFACE_VERSION() reports this build's Version,
-//  5. drop the names this repository has retired (RetiredNames),
+//  4. verify the stamp — LW_SURFACE_VERSION() and LW_SURFACE_DIGEST() —
+//     reports this build's Version and Digest,
+//  5. drop the names this repository retired before this generation
+//     (RetiredNames; one generation late, see dropRetired),
 //  6. CREATE OR REPLACE the views, which expand the families just installed,
 //  7. re-create the registered dependents — view families defined outside
 //     leeway that inline the surface too (RegisterDependent).
@@ -69,6 +72,11 @@ const featureProbeName = "leewaySurfaceFeatureProbe"
 // Installing all the families together is what makes the marker mean what the
 // package doc says it means. A caller that wants one family provisions it
 // from that family's own SQL and does not get a marker.
+//
+// Install is the explicit form and installs whatever the server carries,
+// including over a newer generation. An unattended caller decides first
+// ([Decide], [InstallIfDrifted]) so an older build does not downgrade a
+// shared server.
 func Install(ctx context.Context, conn Conn) (err error) {
 	return InstallInto(ctx, conn, "")
 }
@@ -95,14 +103,14 @@ func InstallInto(ctx context.Context, conn Conn, target chviews.TargetDatabase) 
 			return
 		}
 	}
-	got, qErr := queryTrimmed(ctx, conn, "SELECT "+VersionFunctionName+"()")
+	got, qErr := queryTrimmed(ctx, conn, "SELECT "+StampSelect)
 	if qErr != nil {
 		err = eh.Errorf("post-install verify: %w", qErr)
 		return
 	}
-	want := strconv.Itoa(Version)
+	want := strconv.Itoa(Version) + "\t" + Digest()
 	if got != want {
-		err = eb.Build().Str("got", got).Str("want", want).Errorf("version marker mismatch after install")
+		err = eb.Build().Str("got", got).Str("want", want).Errorf("surface stamp mismatch after install")
 		return
 	}
 	dropRetired(ctx, conn)
@@ -146,12 +154,20 @@ type Report struct {
 	// tell them apart either nags about the fixable case or offers to
 	// delete the unknown one. Sorted by name.
 	//
+	// Only names this generation drops are here; a name retired by this
+	// very generation is in RetiredPending.
+	//
 	// Only the namespaced generations appear here: this listing asks the
 	// server for `LW\_%`, so the pre-namespace spellings (`coLookup`,
 	// `CO_GATHER`) are invisible to it. Install drops those anyway — it
 	// issues an unconditional DROP per retired name rather than diffing a
 	// listing — so they are removed without ever being reported.
 	Retired []string
+	// RetiredPending are retired names on the server that this generation
+	// keeps: they were withdrawn by this generation, and the one before it
+	// may still be running against this server and calling them. The next
+	// generation drops them. Not part of the verdict. Sorted by name.
+	RetiredPending []string
 	// Missing are declared functions the server does not carry. Sorted by
 	// name. This is the trial's failure in one field: three functions
 	// absent, and nothing detecting it.
@@ -164,6 +180,10 @@ type Report struct {
 	// marker existed reports -1 while being perfectly functional — read
 	// PreSurfaceVersionFunctionName to tell that case from an empty server.
 	ServerVersion int
+	// ServerDigest is what the server's LW_SURFACE_DIGEST reports, empty
+	// when it carries none — a surface installed by a build that predates
+	// the digest.
+	ServerDigest string
 	// MissingViews are declared views the server does not carry, qualified
 	// with their target database and sorted. A server whose role cannot
 	// create that database reports all of them, which is the one shape this
@@ -192,8 +212,8 @@ type Report struct {
 }
 
 // InSync reports whether the server carries what this build declares:
-// nothing missing, no spelling this repository withdrew, and the marker at
-// this Version.
+// nothing missing, no spelling this repository withdrew, and the stamp at
+// this Version and Digest.
 //
 // Undeclared is deliberately NOT part of the verdict. A name nobody here
 // declared is somebody else's — that is the whole basis for reporting it
@@ -204,7 +224,13 @@ type Report struct {
 func (inst Report) InSync() (ok bool) {
 	ok = len(inst.Retired) == 0 && len(inst.Missing) == 0 &&
 		len(inst.MissingViews) == 0 && len(inst.StaleViews) == 0 &&
-		inst.ServerVersion == Version && !inst.MarkerUnreadable
+		inst.ServerVersion == Version && inst.ServerDigest == Digest() && !inst.MarkerUnreadable
+	return
+}
+
+// Stamp is the report's view of the server's stamp, for [Decide].
+func (inst Report) Stamp() (stamp ServerStamp) {
+	stamp = ServerStamp{Generation: inst.ServerVersion, Digest: inst.ServerDigest, Unreadable: inst.MarkerUnreadable}
 	return
 }
 
@@ -251,29 +277,29 @@ func ReconcileInto(ctx context.Context, conn Conn, target chviews.TargetDatabase
 		return
 	}
 	declared := DeclaredNames()
-	retired := make(map[string]struct{}, 64)
-	for _, name := range RetiredNames() {
-		retired[name] = struct{}{}
+	retired := make(map[string]bool, 64)
+	for _, r := range chpack.Retired() {
+		retired[r.Name] = retired[r.Name] || retiredDue(r)
 	}
 
 	for name := range installed {
 		if _, ok := declared[name]; ok {
 			continue
 		}
-		if _, wasOurs := retired[name]; wasOurs {
-			rep.Retired = append(rep.Retired, name)
+		if due, wasOurs := retired[name]; wasOurs {
+			if due {
+				rep.Retired = append(rep.Retired, name)
+			} else {
+				rep.RetiredPending = append(rep.RetiredPending, name)
+			}
 			continue
 		}
 		rep.Undeclared = append(rep.Undeclared, name)
 	}
-	for name := range declared {
-		if _, ok := installed[name]; !ok {
-			rep.Missing = append(rep.Missing, name)
-		}
-	}
+	rep.Missing = missingFrom(installed)
 	slices.Sort(rep.Undeclared)
 	slices.Sort(rep.Retired)
-	slices.Sort(rep.Missing)
+	slices.Sort(rep.RetiredPending)
 
 	rep.MissingViews, rep.StaleViews, err = viewDrift(ctx, conn, target)
 	if err != nil {
@@ -295,6 +321,14 @@ func ReconcileInto(ctx context.Context, conn Conn, target chviews.TargetDatabase
 			// the opposite of what was found.
 			rep.MarkerUnreadable = true
 		}
+	}
+	if _, ok := installed[DigestFunctionName]; ok {
+		got, qErr := queryTrimmed(ctx, conn, "SELECT "+DigestFunctionName+"()")
+		if qErr != nil {
+			err = eh.Errorf("reconcile: read digest: %w", qErr)
+			return
+		}
+		rep.ServerDigest = got
 	}
 
 	if mode != ReconcileDrop {
@@ -414,17 +448,21 @@ func viewDrift(ctx context.Context, conn Conn, target chviews.TargetDatabase) (m
 // an install nor taking a working endpoint down over. A caller that needs
 // the drop to have happened asks the server, or calls Reconcile.
 //
+// Only names retired before this generation are dropped. A name this
+// generation withdrew is still called by the generation before it, which may
+// be running against the same server; the next generation drops it.
+//
 // A retired name that is also a current name is never dropped. Nothing
 // re-uses a name today (ADR-0162 §SD5 forbids repurposing one), but the list
 // is append-only and read by a future roster, so the guard is what keeps a
 // re-introduced spelling from deleting itself right after installation.
 func dropRetired(ctx context.Context, conn Conn) {
 	current := DeclaredNames()
-	for _, name := range RetiredNames() {
-		if _, live := current[name]; live {
+	for _, r := range chpack.Retired() {
+		if _, live := current[r.Name]; live || !retiredDue(r) {
 			continue
 		}
-		_ = conn.Exec(ctx, "DROP FUNCTION IF EXISTS "+name)
+		_ = conn.Exec(ctx, "DROP FUNCTION IF EXISTS "+r.Name)
 	}
 }
 
@@ -506,18 +544,29 @@ func firstLine(s string) (out string) {
 // the server does not carry what this build declares, and otherwise only the
 // registered dependents whose statements changed.
 //
-// The surface's own functions and views are keyed by the revision marker, so
-// a server that reports in sync has nothing of them to replace, and
-// re-creating all of it per boot was most of what a host sent a server. The
-// dependents carry no revision — their definitions can change in a build
-// that leaves the marker alone — so each is keyed by a digest of its
+// The surface's own functions and views are keyed by the stamp — generation
+// and digest — so a server that reports in sync has nothing of them to
+// replace, and re-creating all of it per boot was most of what a host sent a
+// server. The dependents carry no revision — their definitions can change in
+// a build that leaves the stamp alone — so each is keyed by a digest of its
 // statements instead (installDriftedDependents).
+//
+// A server carrying a newer generation is left as it is, dependents
+// included: it is checked to declare every name this build calls
+// ([VerifyServes] over the report), and nothing is installed or dropped.
 //
 // installed reports whether anything was replaced: the full install ran, or
 // a dependent was re-created. A report that cannot be read is treated as
 // drift.
 func InstallIfDrifted(ctx context.Context, conn Conn) (installed bool, err error) {
 	rep, rerr := Reconcile(ctx, conn, ReconcileReport)
+	if rerr == nil && Decide(rep.Stamp()) == ActionKeepNewer {
+		if len(rep.Missing) > 0 {
+			err = eb.Build().Strs("missing", rep.Missing).Int("serverGeneration", rep.ServerVersion).Int("buildGeneration", Version).
+				Errorf("the server carries a newer leeway SQL surface that lacks functions this build calls; install this build's surface explicitly or upgrade")
+		}
+		return
+	}
 	if rerr != nil || !rep.InSync() {
 		installed = true
 		err = Install(ctx, conn)

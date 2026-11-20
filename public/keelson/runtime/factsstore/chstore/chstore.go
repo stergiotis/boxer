@@ -13,7 +13,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"strconv"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -255,18 +254,33 @@ func (inst *Store) SetupTable(ctx context.Context, engineClause string) (err err
 // every read of this store expands into its functions, so a store whose
 // server lacks them can write and cannot read.
 //
-// A server already at the build's revision costs one round trip. Anything
-// else — no marker, or another revision — is a full install, which is on the
-// order of a hundred statements and replaces what another build installed;
-// two builds of different revisions sharing a server take turns.
+// A server already carrying the build's surface — its generation and digest
+// — costs one round trip. A server carrying a newer generation is left as it
+// is: installs are monotonic, so an older build sharing a server with a newer
+// one does not put older bodies back (lwsqlsurface.Decide); it only checks
+// that the server still declares every function this build calls. Anything
+// else — no stamp, an older generation, other bodies — is a full install,
+// on the order of a hundred statements (ADR-0171, update of 2026-11-20).
 func (inst *Store) EnsureReadSurface(ctx context.Context) (err error) {
-	body, qerr := inst.cli.Query(ctx, "SELECT "+lwsqlsurface.VersionFunctionName+"()")
+	stamp := lwsqlsurface.ServerStamp{Generation: -1}
+	body, qerr := inst.cli.Query(ctx, "SELECT "+lwsqlsurface.StampSelect)
 	if qerr == nil {
 		raw, rerr := io.ReadAll(body)
 		_ = body.Close()
-		if rerr == nil && strings.TrimSpace(string(raw)) == strconv.Itoa(lwsqlsurface.Version) {
-			return
+		if rerr == nil {
+			generation, digest, _ := strings.Cut(strings.TrimSpace(string(raw)), "\t")
+			stamp = lwsqlsurface.ParseStamp(generation, digest)
 		}
+	}
+	switch lwsqlsurface.Decide(stamp) {
+	case lwsqlsurface.ActionNone:
+		return
+	case lwsqlsurface.ActionKeepNewer:
+		err = lwsqlsurface.VerifyServes(ctx, inst.cli)
+		if err != nil {
+			err = eh.Errorf("chstore: setup: %w", err)
+		}
+		return
 	}
 	err = lwsqlsurface.Install(ctx, inst.cli)
 	if err != nil {

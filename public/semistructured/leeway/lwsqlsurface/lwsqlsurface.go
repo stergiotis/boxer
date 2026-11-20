@@ -40,11 +40,13 @@ import (
 	"github.com/stergiotis/boxer/public/semistructured/leeway/marshall/clickhouse/readback"
 )
 
-// Version is the surface revision reported by LW_SURFACE_VERSION().
+// Version is the surface generation reported by LW_SURFACE_VERSION().
 //
-// Bump on any change to any family's roster: one marker covers all three, so
-// a pack function added without a bump leaves servers reporting current
-// while carrying less than the build declares.
+// Bump on any change to any family's roster or bodies: one marker covers all
+// three, and a higher generation is what a server reports as newer — an
+// older build leaves a newer surface in place (Decide). Whether a server
+// carries this generation's exact bodies is the digest's question, not this
+// constant's ([Digest], ADR-0171 update of 2026-11-20).
 //
 // TestDeclaredSetPinned is what puts that under an author's nose. It holds
 // the declared names as a literal list, so a roster change fails until
@@ -58,7 +60,12 @@ import (
 //
 //	LW_ASPECT_DECODABLE, the guard they sanitize their input with
 //	(ADR-0226 §SD4).
-const Version = 2
+//
+// 3 — the surface carries a content digest (LW_SURFACE_DIGEST), installs
+//
+//	are monotonic, and retired names are dropped one generation late
+//	(ADR-0171, update of 2026-11-20).
+const Version = 3
 
 // VersionFunctionName is the zero-argument marker that makes client/server
 // surface skew a query.
@@ -134,7 +141,7 @@ func DeclaredFunctions() (fns []Function) {
 	helpers := readback.HelperFunctions()
 	ids := identsql.Functions()
 
-	fns = make([]Function, 0, len(pack)+len(helpers)+len(ids)+1)
+	fns = make([]Function, 0, len(pack)+len(helpers)+len(ids)+2)
 	for _, f := range pack {
 		fns = append(fns, Function{Name: f.Name, Params: f.Params, Doc: f.Doc, Family: FamilyPack})
 	}
@@ -144,6 +151,12 @@ func DeclaredFunctions() (fns []Function) {
 	for _, f := range ids {
 		fns = append(fns, Function{Name: f.Name, Params: f.Params, Doc: f.Doc, Family: FamilyIdentity})
 	}
+	fns = append(fns, Function{
+		Name:   DigestFunctionName,
+		Params: nil,
+		Doc:    "surface content digest; with the marker, tells a server carrying this generation's exact bodies from one that does not",
+		Family: FamilySurface,
+	})
 	fns = append(fns, Function{
 		Name:   VersionFunctionName,
 		Params: nil,
@@ -171,28 +184,42 @@ func MarkerStatement() (sql string) {
 // The views are not here: they need a target database, and they must be
 // created after the marker verifies rather than alongside it. AllStatements
 // is the whole surface.
+//
+// The digest function precedes the marker: the marker stays the statement
+// whose success means the ones before it succeeded.
 func Statements() (stmts []string) {
-	pack := chpack.Statements()
-	helpers := readback.FamilyStatements()
-	ids := identsql.UdfDdlStatements()
-
-	stmts = make([]string, 0, len(pack)+len(helpers)+len(ids)+1)
-	stmts = append(stmts, pack...)
-	stmts = append(stmts, helpers...)
-	stmts = append(stmts, ids...)
+	fams := familyStatements()
+	stmts = make([]string, 0, len(fams)+2)
+	stmts = append(stmts, fams...)
+	stmts = append(stmts, DigestStatement())
 	stmts = append(stmts, MarkerStatement())
 	return
 }
 
+// familyStatements renders the three function families without the stamp —
+// what Digest hashes.
+func familyStatements() (stmts []string) {
+	pack := chpack.Statements()
+	helpers := readback.FamilyStatements()
+	ids := identsql.UdfDdlStatements()
+
+	stmts = make([]string, 0, len(pack)+len(helpers)+len(ids))
+	stmts = append(stmts, pack...)
+	stmts = append(stmts, helpers...)
+	stmts = append(stmts, ids...)
+	return
+}
+
 // ViewStamp is what every installed view records in its COMMENT: the surface
-// revision whose function bodies are inlined in it.
+// generation and digest whose function bodies are inlined in it. The digest
+// is shortened to sixteen hex digits; the comment is read by people too.
 //
 // It is not a second marker. LW_SURFACE_VERSION stays the one thing a server
 // reports; this is how a VIEW says which revision it was built from, which
 // the marker cannot say on its own — an install can put the marker at N and
 // leave a view that was expanded at N-1 still answering (ADR-0226 §SD4).
 func ViewStamp() (stamp chviews.Stamp) {
-	return chviews.Stamp("leeway SQL read surface v" + strconv.Itoa(Version))
+	return chviews.Stamp("leeway SQL read surface v" + strconv.Itoa(Version) + " " + Digest()[:16])
 }
 
 // ViewStatements renders the schema-decode views and the database they live

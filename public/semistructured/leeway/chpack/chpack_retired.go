@@ -26,7 +26,48 @@ package chpack
 // list is the complement — names this repository itself shipped and
 // withdrew, which it may therefore delete without asking, and which
 // lwsqlsurface.Install drops automatically after each install verifies.
+//
+// RetiredNames is Retired without the generations.
 func RetiredNames() (names []string) {
+	retired := Retired()
+	names = make([]string, 0, len(retired))
+	for _, r := range retired {
+		names = append(names, r.Name)
+	}
+	return
+}
+
+// RetiredName is one withdrawn spelling and the read-surface generation
+// (lwsqlsurface.Version) whose roster first went without it.
+//
+// The generation is what lets an install drop a name one generation late: a
+// build at generation G drops only names retired before G, so a host of the
+// generation that still calls a name keeps working while a newer build
+// shares its server (ADR-0171, update of 2026-11-20).
+type RetiredName struct {
+	Name       string
+	Generation int
+}
+
+// retiredBeforeSurface is the generation recorded for every name withdrawn
+// before the surface marker existed, and for the pack marker it replaced.
+// The surface's first generation is the earliest one a build can compare
+// against.
+const retiredBeforeSurface = 1
+
+// Retired lists the withdrawn names with their generations, in the order
+// they were withdrawn. A name added here records the generation of the
+// build that stops declaring it.
+func Retired() (names []RetiredName) {
+	for _, n := range retiredGeneration1() {
+		names = append(names, RetiredName{Name: n, Generation: retiredBeforeSurface})
+	}
+	return
+}
+
+// retiredGeneration1 holds every name withdrawn up to and including the
+// surface's first generation.
+func retiredGeneration1() (names []string) {
 	names = []string{
 		// v1 roster, camelCase (retired 2026-08-06).
 		"coLookup", "coLookupNull", "coGather", "coArgSort", "coArgMax", "coExistsEq2",

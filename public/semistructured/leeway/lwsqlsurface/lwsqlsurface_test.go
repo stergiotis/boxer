@@ -40,8 +40,8 @@ func TestDeclaredSetIsTheUnion(t *testing.T) {
 		want = append(want, f.Name)
 		wantFamily = append(wantFamily, lwsqlsurface.FamilyIdentity)
 	}
-	want = append(want, lwsqlsurface.VersionFunctionName)
-	wantFamily = append(wantFamily, lwsqlsurface.FamilySurface)
+	want = append(want, lwsqlsurface.DigestFunctionName, lwsqlsurface.VersionFunctionName)
+	wantFamily = append(wantFamily, lwsqlsurface.FamilySurface, lwsqlsurface.FamilySurface)
 
 	got := lwsqlsurface.DeclaredFunctions()
 	require.Len(t, got, len(want))
@@ -168,7 +168,7 @@ var declaredSetGolden = []string{
 	"LW_VALUE_BY_TAG_EQUAL", "LW_LIST_BY_TAG_EQUAL",
 	"LW_ID_IS_VALID", "LW_ID_TAG_WIDTH", "LW_ID_TAG_BITS", "LW_ID_BODY",
 	"LW_ID_TAG_VALUE", "LW_ID_HAS_TAG",
-	"LW_SURFACE_VERSION",
+	"LW_SURFACE_DIGEST", "LW_SURFACE_VERSION",
 }
 
 // TestDeclaredSetPinned is the guard Version's doc promises: a roster change
