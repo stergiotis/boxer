@@ -2,13 +2,17 @@ package auditrec_test
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
+	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/stergiotis/boxer/public/storage/recordstore"
+	"github.com/stergiotis/boxer/public/storage/recordstore/chexec"
 	"github.com/stergiotis/boxer/public/storage/recordstore/evidence"
 	"github.com/stergiotis/boxer/public/storage/recordstore/evidence/anchor"
 	"github.com/stergiotis/boxer/public/storage/recordstore/evidence/audit"
@@ -99,4 +103,45 @@ func TestNodeScopesReadsAndBackstop(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, reached.Equal(at.Add(time.Hour)))
 	assert.Equal(t, 1, n)
+}
+
+// tokenGate is gateExec with the per-insert settings seam, so the store's
+// deduplication token reaches the server.
+type tokenGate struct {
+	*gateExec
+	inner *chexec.LocalExecutor
+}
+
+func (inst *tokenGate) InsertArrowWith(ctx context.Context, table string, records []arrow.RecordBatch, settings recordstore.InsertSettings) (bool, error) {
+	inst.mu.Lock()
+	defer inst.mu.Unlock()
+	if _, err := inst.inner.InsertArrowWith(ctx, table, records, settings); err != nil {
+		return true, err
+	}
+	if inst.lostAcks > 0 {
+		inst.lostAcks--
+		return true, errors.New("acknowledgement lost")
+	}
+	return true, nil
+}
+
+// A batch whose acknowledgement was lost is retried with the token of its
+// first attempt, so a table keeping a deduplication window stores it once.
+func TestRetriedBatchIsStoredOnce(t *testing.T) {
+	inner := localExec(t)
+	exec := &tokenGate{gateExec: &gateExec{open: true, lostAcks: 1}, inner: inner}
+	rec := newRecorder(t, exec)
+	defer rec.Close()
+	ctx := context.Background()
+	at := time.Date(2026, 10, 13, 10, 0, 0, 0, time.UTC)
+	require.NoError(t, rec.Event(ctx, at, auditrectest.FullEvent(7)))
+	require.Error(t, rec.Flush(ctx), "the acknowledgement is lost")
+	require.NoError(t, rec.Flush(ctx), "the retry lands")
+	n := 0
+	for r, err := range inner.QueryArrow(ctx, "SELECT 1 FROM "+example.ExampleTableName) {
+		require.NoError(t, err)
+		n += int(r.NumRows())
+		r.Release()
+	}
+	assert.Equal(t, 2, n, "the event and its seal, once")
 }
