@@ -166,17 +166,31 @@ func resolveMembershipIDs(plan *mappingplan.Plan, lookup LookupI) (membIDs map[s
 }
 
 // checkCoverage reports, in one error, every plain column and section the Plan
-// declares that has no registered reader (or a nil one) — turning a forgotten
-// reader into an up-front failure instead of a nil dereference at row i.
+// declares that has no registered reader (or a nil one), and every plain
+// column whose Arrow array is not the concrete type its field's Go type maps
+// to (goplan.PlainArrowArrayType) — turning a forgotten reader or a caller's
+// mistyped column into an up-front failure instead of a nil dereference or
+// a failed type assertion at row i.
 func (r *SectionReaders) checkCoverage(plan *mappingplan.Plan, groups []goplan.SectionGroup) (err error) {
-	var missing []string
+	var missing, mistyped []string
 	for _, role := range [...]string{"id", "naturalKey", "ts", "expiresAt"} {
-		if goplan.FindPlainCol(plan, role) == nil {
+		p := goplan.FindPlainCol(plan, role)
+		if p == nil {
 			continue
 		}
-		if v, ok := r.plainCols[role]; !ok || v == nil {
+		v, ok := r.plainCols[role]
+		if !ok || v == nil {
 			missing = append(missing, "plain column "+role)
+			continue
 		}
+		if want, known := goplan.PlainArrowArrayType(p.GoType()); known {
+			if got := reflect.TypeOf(v).String(); got != "*"+want {
+				mistyped = append(mistyped, "plain column "+role+": want *"+want+", got "+got)
+			}
+		}
+	}
+	if len(mistyped) > 0 {
+		return eb.Build().Str("kind", plan.KindName).Strs("mistyped", mistyped).Strs("missing", missing).Errorf("SectionReaders has plain columns of the wrong Arrow type")
 	}
 	for _, g := range groups {
 		sr, ok := r.sections[g.Section]

@@ -4,6 +4,9 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/apache/arrow-go/v18/arrow"
+	"github.com/apache/arrow-go/v18/arrow/array"
+	"github.com/apache/arrow-go/v18/arrow/memory"
 	"github.com/stretchr/testify/require"
 
 	"github.com/stergiotis/boxer/public/observability/eh/eb/ebtest"
@@ -35,4 +38,30 @@ func TestSectionReaders_MissingCoverageReported(t *testing.T) {
 func fieldList(t *testing.T, err error, key string) (s string) {
 	t.Helper()
 	return fmt.Sprint(ebtest.Fields(t, err)[key])
+}
+
+// TestSectionReaders_MistypedPlainColumnReported confirms a plain column of
+// the wrong concrete Arrow type is an error before any row is read, not a
+// failed type assertion at row 0.
+func TestSectionReaders_MistypedPlainColumnReported(t *testing.T) {
+	mem := memory.NewGoAllocator()
+	idB := array.NewInt64Builder(mem) // the DTO's id is uint64
+	idB.Append(1)
+	idArr := idB.NewArray()
+	defer idArr.Release()
+	nkB := array.NewBinaryBuilder(mem, arrow.BinaryTypes.Binary)
+	nkB.Append([]byte("k1"))
+	nkArr := nkB.NewArray()
+	defer nkArr.Release()
+
+	args := marshallreflect.NewSectionReaders(1).
+		PlainColumn("id", idArr).
+		PlainColumn("naturalKey", nkArr).
+		Section("symbol", mvAttrsMock{vals: []string{"alpha"}}, mvMembsMock{names: [][]byte{[]byte("n")}, params: [][]byte{[]byte("p")}})
+	var got []mixedVerbatimDrone
+	var err error
+	require.NotPanics(t, func() { err = marshallreflect.Unmarshal(args, &got, marshallreflect.NoLookup{}) })
+	require.Error(t, err)
+	require.Contains(t, fieldList(t, err, "mistyped"), "*array.Int64")
+	require.Empty(t, got)
 }
