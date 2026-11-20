@@ -1,6 +1,6 @@
 ---
 type: explanation
-audience: the session that closes the recordstore generator gaps the agent-run journal worked around by hand, and then moves the journal's bodies from JSON strings to leeway attributes — a self-contained brief, read before touching `public/storage/recordstore/gen`, `public/keelson/runtime/agentrun/` or `agentrunstore`
+audience: maintainer reading the decisions this brief fed (ADR-0319, ADR-0320, ADR-0325, ADR-0326, ADR-0327), or a code comment that cites one of its steps ("plan002 B0")
 status: draft
 # reviewed-by: "@<handle>"     # fill in and uncomment when flipping to stable
 # reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to stable
@@ -8,9 +8,9 @@ status: draft
 
 > **Status: draft — pre-human-review.** A working brief, not a decision.
 > Written 2026-10-11 after the agent harness landed (ADR-0308, ADR-0309,
-> ADR-0314, ADR-0316). Part B changes the entry canonical form, so it ends
-> in dated Updates on accepted ADRs or a short ADR of its own; the brief says
-> which at each step.
+> ADR-0314, ADR-0316). Every step has landed, and the ADRs named in the
+> progress tables are authoritative; this page is the snapshot of the plan
+> they were taken from, kept because code comments cite its step markers.
 
 # plan002: the journal store, finished in the generator and made data-centric
 

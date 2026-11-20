@@ -22,7 +22,7 @@ Grafana's "time range picker" is the load-bearing time control across the entire
 
 Replacing dashboards without a working time range picker is a non-starter. Three sub-decisions need to be settled together so the parts compose: (a) what we derive from upstream and under what license, (b) how relative expressions are evaluated, (c) the FFFI2 wire format upgrade.
 
-The Apache-2.0 obligations on a derivative work distribution are §4.a (provide license), §4.b (mark modified files), §4.c (retain attribution), §4.d (carry NOTICE) — same shape as [ADR-0005][adr-0015], which establishes the pattern this ADR mirrors. Grafana's license history matters here: the project switched from Apache-2.0 to AGPL-3.0 with the v8.0 release on 2021-06-08. The final Apache-2.0 line is the v7.5 series, ending at v7.5.17 (2022-04-12). Anything pinned past that is AGPL.
+The Apache-2.0 obligations on a derivative work distribution are §4.a (provide license), §4.b (mark modified files), §4.c (retain attribution), §4.d (carry NOTICE) — same shape as [ADR-0005][adr-0005], which establishes the pattern this ADR mirrors. Grafana's license history matters here: the project switched from Apache-2.0 to AGPL-3.0 with the v8.0 release on 2021-06-08. The final Apache-2.0 line is the v7.5 series, ending at v7.5.17 (2022-04-12). Anything pinned past that is AGPL.
 
 ## Design space (QOC)
 
@@ -106,7 +106,7 @@ We will:
    - `public/thestack/imzero2/egui2/widgets/timerangepicker/` (Go side — multiple files justify a sub-package over the single-file convention used for the legacy date picker).
    - `rust/imzero2/src/imzero2/time_range_picker.rs` (Rust side, sibling to existing `date_picker_button.rs`).
 
-   Per-file Apache-2.0 headers (upstream copyright + downstream modification copyright + §4.b modification line), a package-level `NOTICE`, and an entry in `doc/legal/third_party.md` mirror the [ADR-0005][adr-0015] pattern.
+   Per-file Apache-2.0 headers (upstream copyright + downstream modification copyright + §4.b modification line), a package-level `NOTICE`, and an entry in `doc/legal/third_party.md` mirror the [ADR-0005][adr-0005] pattern.
 
 2. **Expression engine (B3).** ClickHouse SQL is the expression language. The picker injects a stable per-Apply `anchor_now`, validates expressions in-process via the dsl ANTLR parser, and evaluates via a long-running `clickhouse-local` subprocess on Apply / focus-out:
 
@@ -215,4 +215,4 @@ keep their meaning. Regression: `TestEvalNonUTCZoneKeepsAnchorInstant`.
 [ch-local-docs]: https://clickhouse.com/docs/en/operations/utilities/clickhouse-local
 [ch-datetime-fns]: https://clickhouse.com/docs/en/sql-reference/functions/date-time-functions
 [adr-0013]: 0013-imzero2-stateful-widget-contract.md
-[adr-0015]: 0015-streaming-persisted-kafka-from-connect.md
+[adr-0005]: 0005-streaming-persisted-kafka-from-connect.md
