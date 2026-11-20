@@ -1,4 +1,5 @@
 ---
+notebook: 1
 title: A notebook in two records
 records:
   readings: {blob: minimal.blobs/de4accb4a1f37c7882ebe8e009f05b23.arrow, of: 10969865b18c939f58bad38ef64e1ee9}

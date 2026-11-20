@@ -1,4 +1,5 @@
 ---
+notebook: 1
 title: One cell per renderer
 records:
   readings: {blob: renderers.blobs/9ba02b64606a2edcc8f72b2d350c6447.arrow, of: df43464a463301658a6b0fe576013fe4}

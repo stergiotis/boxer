@@ -125,7 +125,10 @@ notebook holds neither.
 runs each record once on the server the `CLICKHOUSE_*` variables name,
 writes each result into `report.blobs/` under the hash of its bytes, lists
 the blobs in the notebook's frontmatter and rewrites every figure's label to
-its stored value. The notebook is then **sealed**: the file and the folder
+its stored value. It also writes `notebook: 1` at the top of the
+frontmatter: the format the text is in. A notebook without the key reads as
+format 1, and a build refuses a notebook in a format newer than it reads
+rather than misreading it. The notebook is then **sealed**: the file and the folder
 are the whole report. A notebook in the lading store is collected in the
 notebook window instead, which publishes a new snapshot; its help says
 how. Collecting again after an edit replaces what changed;

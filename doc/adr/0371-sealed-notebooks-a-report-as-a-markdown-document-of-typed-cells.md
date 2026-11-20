@@ -906,6 +906,21 @@ way.
   one path that stores. The same pane is a notebooklet's whole window and
   can be embedded in another app's frame; neither collects.
 
+### 2026-11-20 — The frontmatter names the format
+
+A notebook carries `notebook: <n>` in its frontmatter
+(`mdnotebook.FormatKey`, `mdnotebook.FormatVersion`, 1). Collection writes
+it first in the block when absent; a notebook without it reads as format 1,
+so every notebook sealed before this reads unchanged. `mdnotebook.Read`
+refuses a format above the one it reads, saying "written by a newer boxer
+(format N; this build reads up to M)", rather than reading the text by
+rules it was not written under. A non-numeric value is refused as well.
+
+The format moves only when an older reader would misread a newer text — a
+key it would ignore while that key changes what the text means. A key an
+older reader may safely skip needs no bump. The samples and the fixture
+carry the key.
+
 ## References
 
 - [ADR-0097](./0097-play-reactive-query-graph.md) — the buffer and its

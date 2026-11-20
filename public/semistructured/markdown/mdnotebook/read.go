@@ -2,6 +2,7 @@ package mdnotebook
 
 import (
 	"bytes"
+	"fmt"
 	"path"
 	"regexp"
 	"sort"
@@ -9,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/semistructured/markdown/obsidian"
 )
 
@@ -49,8 +51,21 @@ type line struct {
 	start, stop int
 }
 
-// Read takes a notebook's text apart. It fails only on frontmatter that is
-// not YAML; everything else it can say about the text is a [Problem].
+// FormatVersion is the notebook format this build writes and the newest it
+// reads, recorded as the frontmatter's `notebook` key. A notebook without
+// the key is format 1.
+//
+// Bump it when a notebook written by this build would be misread by an
+// older one — a new key the older reader would ignore while it changes what
+// the text means. A key an older reader may safely ignore needs no bump.
+const FormatVersion = 1
+
+// FormatKey is the frontmatter key that carries the format.
+const FormatKey = "notebook"
+
+// Read takes a notebook's text apart. It fails on frontmatter that is not
+// YAML, and on a notebook written in a newer format than this build reads;
+// everything else it can say about the text is a [Problem].
 func Read(src []byte) (nb *Notebook, err error) {
 	nb = &Notebook{Src: src}
 	meta, found, err := obsidian.ParseFrontmatter(src)
@@ -58,12 +73,40 @@ func Read(src []byte) (nb *Notebook, err error) {
 		return nil, eh.Errorf("read notebook frontmatter: %w", err)
 	}
 	if found {
+		err = checkFormat(meta[FormatKey])
+		if err != nil {
+			return nil, err
+		}
 		nb.BodyStart = frontmatterEnd(src)
 		nb.readMeta(meta)
 	}
 	nb.scan()
 	nb.check()
 	return nb, nil
+}
+
+// checkFormat refuses a format this build does not read. Absent is 1.
+func checkFormat(v any) (err error) {
+	n := 1
+	switch t := v.(type) {
+	case nil:
+	case int:
+		n = t
+	case int64:
+		n = int(t)
+	case uint64:
+		n = int(t)
+	default:
+		return eb.Build().Str("key", FormatKey).Str("value", fmt.Sprint(v)).Errorf("the notebook's format is not a whole number")
+	}
+	if n < 1 {
+		return eb.Build().Str("key", FormatKey).Int("format", n).Errorf("the notebook's format is not a positive number")
+	}
+	if n > FormatVersion {
+		return eb.Build().Int("format", n).Int("reads", FormatVersion).
+			Errorf("the notebook was written by a newer boxer (format %d; this build reads up to %d)", n, FormatVersion)
+	}
+	return
 }
 
 // frontmatterEnd is the offset after the closing separator line.

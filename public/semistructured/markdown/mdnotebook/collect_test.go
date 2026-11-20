@@ -75,7 +75,7 @@ func TestCollectSealsADraft(t *testing.T) {
 		asked[1], "the records before it lead the record's own WITH list, and the record stays the outermost SELECT")
 
 	text := string(out.Text)
-	assert.True(t, strings.HasPrefix(text, "---\ntitle: T\ntags: [a, b]\nrecords:\n  by_key: {blob: t.blobs/"), "the other keys are kept:\n%s", text)
+	assert.True(t, strings.HasPrefix(text, "---\nnotebook: 1\ntitle: T\ntags: [a, b]\nrecords:\n  by_key: {blob: t.blobs/"), "the format key leads and the other keys are kept:\n%s", text)
 	assert.Contains(t, text, "Total [2](val:total.n), mean [2.5 ms](val:total.mean \"gloss/duration;unit=ms\").")
 	assert.Len(t, out.Blobs, 2)
 
@@ -182,7 +182,7 @@ func TestCollectWritesFrontmatterWhereThereIsNone(t *testing.T) {
 	var asked []string
 	out, err := mdnotebook.Collect(context.Background(), nb, "b", draftServer(t, &asked))
 	require.NoError(t, err)
-	assert.True(t, strings.HasPrefix(string(out.Text), "---\nrecords:\n  by_key: {blob: b/"), string(out.Text))
+	assert.True(t, strings.HasPrefix(string(out.Text), "---\nnotebook: 1\nrecords:\n  by_key: {blob: b/"), string(out.Text))
 	assert.True(t, strings.HasSuffix(string(out.Text), "---\n\n# T\n\n```sql\nSELECT k, v FROM src\n```\n\n^by-key\n"), string(out.Text))
 }
 
@@ -310,4 +310,28 @@ func TestComputeInParallelAnswersTheSameRecords(t *testing.T) {
 	assert.Len(t, asked, 2)
 	assert.EqualValues(t, 3, records["by_key"].NumRows())
 	assert.EqualValues(t, 1, records["total"].NumRows())
+}
+
+// TestCollectKeepsAFormatKeyItFinds: a notebook that names its format is
+// not given a second key.
+func TestCollectKeepsAFormatKeyItFinds(t *testing.T) {
+	nb, err := mdnotebook.Read([]byte("---\nnotebook: 1\ntitle: T\n---\n\n```sql\nSELECT k, v FROM src\n```\n\n^by-key\n"))
+	require.NoError(t, err)
+	var asked []string
+	out, err := mdnotebook.Collect(context.Background(), nb, "b", draftServer(t, &asked))
+	require.NoError(t, err)
+	assert.Equal(t, 1, strings.Count(string(out.Text), "notebook:"), string(out.Text))
+}
+
+// TestReadRefusesANewerFormat: a notebook written in a format this build
+// does not know is refused with both numbers, not misread.
+func TestReadRefusesANewerFormat(t *testing.T) {
+	_, err := mdnotebook.Read([]byte("---\nnotebook: 1\n---\n\n# T\n"))
+	require.NoError(t, err)
+	_, err = mdnotebook.Read([]byte("---\ntitle: no key is format 1\n---\n\n# T\n"))
+	require.NoError(t, err)
+	_, err = mdnotebook.Read([]byte("---\nnotebook: 2\n---\n\n# T\n"))
+	require.ErrorContains(t, err, "written by a newer boxer (format 2; this build reads up to 1)")
+	_, err = mdnotebook.Read([]byte("---\nnotebook: two\n---\n\n# T\n"))
+	require.Error(t, err)
 }

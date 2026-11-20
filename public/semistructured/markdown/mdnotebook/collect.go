@@ -529,8 +529,9 @@ func yamlScalar(s string) (text string) {
 }
 
 // writeFrontmatter is the frontmatter block head with its `records` entry
-// replaced by records, in the order given. head is empty for a notebook
-// that has none.
+// replaced by records, in the order given, and the format key
+// (FormatKey) put first when the block has none. head is empty for a
+// notebook that has none.
 func writeFrontmatter(head []byte, records []RecordRef) (out []byte) {
 	var entry bytes.Buffer
 	entry.WriteString("records:\n")
@@ -541,14 +542,26 @@ func writeFrontmatter(head []byte, records []RecordRef) (out []byte) {
 		}
 		entry.WriteString("}\n")
 	}
+	format := FormatKey + ": " + strconv.Itoa(FormatVersion) + "\n"
 	if len(head) == 0 {
-		return append([]byte("---\n"+entry.String()+"---\n"), '\n')
+		return append([]byte("---\n"+format+entry.String()+"---\n"), '\n')
 	}
 	lines := bytes.SplitAfter(head, []byte("\n"))
+	hasFormat := false
+	for _, l := range lines[1:] {
+		if bytes.HasPrefix(l, []byte(FormatKey+":")) {
+			hasFormat = true
+			break
+		}
+	}
 	var b bytes.Buffer
 	written := false
 	for i := 0; i < len(lines); i++ {
 		l := lines[i]
+		if i == 1 && !hasFormat {
+			// The format key leads, so an older reader meets it first.
+			b.WriteString(format)
+		}
 		closing := i > 0 && len(bytes.TrimSpace(l)) > 0 && len(bytes.Trim(bytes.TrimSpace(l), "-")) == 0
 		switch {
 		case bytes.HasPrefix(l, []byte("records:")):

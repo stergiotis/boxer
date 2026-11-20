@@ -1,4 +1,5 @@
 ---
+notebook: 1
 title: Ingest lag, week 45
 records:
   p99_by_hour: {blob: report.blobs/e0d96558806a6208bcfabf5bab4c1184.arrow, of: 86634fdcd341e2110f295f3089e96734}
