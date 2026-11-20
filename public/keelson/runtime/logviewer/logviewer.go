@@ -62,6 +62,11 @@ var levelOptions = []zerolog.Level{
 // sections doesn't ripple up to the wrapping Window.
 const detailPanelMinHeight = 220.0
 
+// filterBoxWidth is the App and Message boxes' width. egui's default
+// (280) put the filter row past the window's right edge at the manifest's
+// preferred width, which clipped the Follow checkbox.
+const filterBoxWidth = 200.0
+
 // Row-tint and selection colors are sourced from the IDS semantic palette
 // (ADR-0031 §SD2):
 //
@@ -426,41 +431,57 @@ func (inst *LogViewerApp) freshness(now time.Time) (label string, tone badge.Ton
 // Spacing budget: 6px between each label and its input (so "Level:"
 // doesn't kiss the dropdown), 24px between filter groups (so the
 // eye reads them as separate units rather than one long row).
+//
+// The row wraps rather than running past the window's right edge, and
+// each label sits in one Horizontal with its control so a group moves to
+// the next line whole. The text boxes take filterBoxWidth instead of
+// egui's default, which is what lets the row fit on one line at the
+// manifest's preferred width.
 func (inst *LogViewerApp) renderFilterRow() {
 	c.AddSpace(styletokens.PaddingHair(inst.density))
-	for range c.Horizontal().KeepIter() {
-		c.Label("Level:").Send()
-		c.AddSpace(styletokens.GapInline(inst.density))
-		current := inst.filterLevel.String()
-		for range c.ComboBox(inst.ids.PrepareStr("level-cb"),
-			c.WidgetText().Text("level").Keep(),
-			c.WidgetText().Text(current).Keep()).KeepIter() {
-			for _, lvl := range levelOptions {
-				selected := lvl == inst.filterLevel
-				if c.Button(inst.ids.PrepareStr("lvl-"+lvl.String()),
-					c.Atoms().Text(lvl.String()).Keep()).
-					Selected(selected).
-					FrameWhenInactive(!selected).
-					Frame(true).
-					SendResp().HasPrimaryClicked() && lvl != inst.filterLevel {
-					inst.setLevelGesture(lvl)
+	for range c.HorizontalWrapped().KeepIter() {
+		for range c.Horizontal().KeepIter() {
+			c.Label("Level:").Send()
+			c.AddSpace(styletokens.GapInline(inst.density))
+			current := inst.filterLevel.String()
+			// No label of its own: egui draws a ComboBox's label to the
+			// right of the button, which repeated "Level:" after it.
+			for range c.ComboBox(inst.ids.PrepareStr("level-cb"),
+				c.WidgetText().Text("").Keep(),
+				c.WidgetText().Text(current).Keep()).KeepIter() {
+				for _, lvl := range levelOptions {
+					selected := lvl == inst.filterLevel
+					if c.Button(inst.ids.PrepareStr("lvl-"+lvl.String()),
+						c.Atoms().Text(lvl.String()).Keep()).
+						Selected(selected).
+						FrameWhenInactive(!selected).
+						Frame(true).
+						SendResp().HasPrimaryClicked() && lvl != inst.filterLevel {
+						inst.setLevelGesture(lvl)
+					}
 				}
 			}
 		}
 
 		c.AddSpace(styletokens.GapPanels(inst.density))
-		c.Label("App:").Send()
-		c.AddSpace(styletokens.GapInline(inst.density))
-		inst.appFilterH = widgethandle.Make(inst.ids.PrepareStr("app-filter").Derive())
-		c.TextEdit(inst.ids.PrepareStr("app-filter"), inst.filterAppId, false).
-			SendRespVal(&inst.filterAppId)
+		for range c.Horizontal().KeepIter() {
+			c.Label("App:").Send()
+			c.AddSpace(styletokens.GapInline(inst.density))
+			inst.appFilterH = widgethandle.Make(inst.ids.PrepareStr("app-filter").Derive())
+			c.TextEdit(inst.ids.PrepareStr("app-filter"), inst.filterAppId, false).
+				DesiredWidth(filterBoxWidth).
+				SendRespVal(&inst.filterAppId)
+		}
 
 		c.AddSpace(styletokens.GapPanels(inst.density))
-		c.Label("Message:").Send()
-		c.AddSpace(styletokens.GapInline(inst.density))
-		inst.msgFilterH = widgethandle.Make(inst.ids.PrepareStr("msg-filter").Derive())
-		c.TextEdit(inst.ids.PrepareStr("msg-filter"), inst.filterMessage, false).
-			SendRespVal(&inst.filterMessage)
+		for range c.Horizontal().KeepIter() {
+			c.Label("Message:").Send()
+			c.AddSpace(styletokens.GapInline(inst.density))
+			inst.msgFilterH = widgethandle.Make(inst.ids.PrepareStr("msg-filter").Derive())
+			c.TextEdit(inst.ids.PrepareStr("msg-filter"), inst.filterMessage, false).
+				DesiredWidth(filterBoxWidth).
+				SendRespVal(&inst.filterMessage)
+		}
 
 		c.AddSpace(styletokens.GapPanels(inst.density))
 		// This process's run, or every run in the look-back.
