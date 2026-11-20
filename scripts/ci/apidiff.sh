@@ -19,8 +19,7 @@
 #
 # The promise starts at the first tag cut after the tiers exist
 # (VERSIONING.md): against an older base no package was Stable there, so only
-# HEAD's tiers select what is compared and the report is information, not a
-# broken promise.
+# HEAD's tiers select what is compared, and the run reports without failing.
 #
 # Uses golang.org/x/exp/cmd/apidiff from go.mod's tool block. The base tree is
 # unpacked with `git archive` into a temporary directory, so no worktree is
@@ -109,6 +108,10 @@ done < "$work/stable"
 
 printf '\napidiff %s..HEAD: %d stable package(s) compared, %d compatible, %d incompatible and acknowledged, %d incompatible and not acknowledged; %d new since the base\n' \
     "$base" "$compared" "$compatible" "$acknowledged" "$unowned" "$added"
+if [ ! -s "$work/stable.base" ]; then
+    printf 'apidiff: %s declares no Stable package, so no promise was made at it; reporting only\n' "$base"
+    exit 0
+fi
 if [ "$unowned" -gt 0 ]; then
     exit 1
 fi
