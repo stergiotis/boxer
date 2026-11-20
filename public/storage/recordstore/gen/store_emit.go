@@ -1626,7 +1626,7 @@ func (inst emitter) emitStoreType(sb *strings.Builder) {
 	p("// the generated columns and the stamp its CREATE TABLE writes, bound to")
 	p("// the configured read table. A schema check needs nothing else.")
 	p("func (inst *%s) SchemaContract() recordstore.TableContract {", inst.storeType())
-	p("\treturn recordstore.TableContract{Kind: %q, Table: inst.readTable(), Columns: %sColumns, Stamp: %sTableStamp}", inst.TableName, inst.StoreName, inst.StoreName)
+	p("\treturn %sSchemaContract(inst.readTable())", inst.StoreName)
 	p("}")
 	p("")
 	p("// JudgeSchema reads the live table's columns and stamp and judges them")
