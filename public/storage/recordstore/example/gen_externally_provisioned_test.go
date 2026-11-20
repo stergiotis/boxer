@@ -94,16 +94,16 @@ func TestGenerateProvisioningSwitchIsLocal(t *testing.T) {
 
 	// Strip the four DDL-bearing regions from the self-provisioning store;
 	// what remains must be exactly the ExternallyProvisioned emission apart
-	// from VerifySchema's own doc paragraph (which states which regime it is
+	// from JudgeSchema's own doc paragraph (which states which regime it is
 	// guarding) and OpenValcheckStore, whose startup sequence is the regime:
 	// EnsureTable then VerifySchema, or VerifySchema alone.
 	stripped := self
 	stripped = cutRegion(t, stripped, "\t_ \"embed\"\n", "")
 	stripped = cutRegion(t, stripped, "// The complete CREATE TABLE composed", "// ValcheckTableName is")
 	stripped = cutRegion(t, stripped, "\t// DDLTail is a raw suffix", "\t// Stampers are consulted")
-	stripped = cutRegion(t, stripped, "// EnsureTable applies", "// VerifySchema compares")
+	stripped = cutRegion(t, stripped, "// EnsureTable applies", "// SchemaContract is what")
 
-	require.Equal(t, dropOpen(t, dropVerifySchemaDoc(t, external)), dropOpen(t, dropVerifySchemaDoc(t, stripped)))
+	require.Equal(t, dropOpen(t, dropJudgeSchemaDoc(t, external)), dropOpen(t, dropJudgeSchemaDoc(t, stripped)))
 }
 
 // TestGenerateOpenFollowsProvisioning: Open<Store> runs the startup sequence
@@ -144,9 +144,9 @@ func dropOpen(t *testing.T, src string) string {
 	return cutRegion(t, src, "// OpenValcheckStore is NewValcheckStore plus", "\tinst = st\n")
 }
 
-// dropVerifySchemaDoc removes VerifySchema's leading doc paragraph — the one
+// dropJudgeSchemaDoc removes JudgeSchema's leading doc paragraph — the one
 // text that legitimately differs between the two regimes.
-func dropVerifySchemaDoc(t *testing.T, src string) string {
+func dropJudgeSchemaDoc(t *testing.T, src string) string {
 	t.Helper()
-	return cutRegion(t, src, "// VerifySchema compares", "//\n// It checks the COLUMN contract only.")
+	return cutRegion(t, src, "// JudgeSchema reads the live", "//\n// It checks the COLUMN contract only.")
 }

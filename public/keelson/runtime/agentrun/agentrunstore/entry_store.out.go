@@ -19,7 +19,6 @@ import (
 	"time"
 
 	"github.com/apache/arrow-go/v18/arrow"
-	"github.com/apache/arrow-go/v18/arrow/array"
 	"github.com/apache/arrow-go/v18/arrow/memory"
 	"github.com/rs/zerolog/log"
 	"github.com/stergiotis/boxer/public/caching"
@@ -61,6 +60,16 @@ var agentrunentryInsertSettings = recordstore.InsertSettings{AsyncInsert: record
 
 // Arrow output shape the read-access classes expect.
 const agentrunentryArrowOutputSettings = " SETTINGS output_format_arrow_string_as_string=1, output_format_arrow_low_cardinality_as_dictionary=0"
+
+// agentrunentryReadSchema is the generated Arrow schema the read-access readers
+// were built against; their default column indices are positions in it.
+var agentrunentryReadSchema = lowlevel.CreateSchemaAgentrunentryTable()
+
+// agentrunentrySelectList is the explicit projection every read selects: the
+// generated columns by name, so a table carrying columns this store does
+// not know is read all the same, and one lacking a column it reads
+// fails naming it.
+var agentrunentrySelectList = recordstore.SelectList(agentrunentryReadSchema)
 
 // agentrunentryKeyLiteral renders a Key value as a ClickHouse SQL literal.
 func agentrunentryKeyLiteral(k uint64) string { return strconv.FormatUint(k, 10) }
@@ -517,62 +526,39 @@ func (inst *EntryStore) EnsureTable(ctx context.Context) (err error) {
 	return
 }
 
-// VerifySchema compares the live table's columns — names and order —
-// against the generated schema. EnsureTable alone cannot detect drift
-// on an existing table (IF NOT EXISTS succeeds against any old shape),
-// and the decode is positional, so drift fails late or, for same-typed
-// column swaps, silently: run VerifySchema at startup after
-// EnsureTable.
+// SchemaContract is what this store declares about the table it reads:
+// the generated columns and the stamp its CREATE TABLE writes, bound to
+// the configured read table. A schema check needs nothing else.
+func (inst *EntryStore) SchemaContract() recordstore.TableContract {
+	return recordstore.TableContract{Kind: "agentrunentry", Table: inst.readTable(), Columns: EntryColumns, Stamp: EntryTableStamp}
+}
+
+// JudgeSchema reads the live table's columns and stamp and judges them
+// against the generated ones (recordstore.SchemaVerdict): ok when every
+// generated column is present by name with its type — columns this
+// store does not know are reported and read past —, migratable when
+// some are missing or carry an older aspect spelling, incompatible on a
+// type change. It does not fail; an unreadable table is unchecked.
 //
 // It checks the COLUMN contract only. The membership-id contract is not
 // checked and cannot be from the schema alone: the ids live in the
 // membership columns as ordinary values, and a FAT table legitimately
 // carries other kinds' ids beside this store's. Rows written under a
-// different id assignment therefore pass VerifySchema and then match
-// nothing — every component decodes absent, with no error. Compare
-// EntryMembershipIds against the writer's assignment when pointing this
-// store at rows it did not write.
-//
-// What it describes is the reader's own projection — DESCRIBE over
-// `SELECT *`, not over the table — because that is what the positional
-// decode consumes. DESCRIBE TABLE lists columns SELECT * does not return
-// (MATERIALIZED, ALIAS, EPHEMERAL), so a table legitimately carrying one
-// beside the generated shape — a derived column added by ALTER after
-// EnsureTable, which is how a store gets a skip index over a value its
-// leeway attributes only encode — would fail a check whose contract still
-// held. Describing the projection also follows the asterisk_include_*
-// settings, which decide what SELECT * returns and which nothing here
-// pins: under those, a derived column IS in the decode, and this notices
-// where a column-kind filter would have blessed the mis-decode.
+// different id assignment therefore pass and then match nothing — every
+// component decodes absent, with no error. Compare EntryMembershipIds
+// against the writer's assignment when pointing this store at rows it
+// did not write.
+func (inst *EntryStore) JudgeSchema(ctx context.Context) (v recordstore.SchemaVerdict) {
+	return recordstore.JudgeTable(ctx, inst.exec, inst.SchemaContract())
+}
+
+// VerifySchema is JudgeSchema as an error: nil when the verdict is ok,
+// an error naming what is missing or mismatched otherwise. EnsureTable
+// alone cannot detect drift on an existing table (IF NOT EXISTS succeeds
+// against any old shape): run it at startup. Reads go by name, so a
+// table with columns this store does not know passes.
 func (inst *EntryStore) VerifySchema(ctx context.Context) (err error) {
-	live := make([]string, 0, 64)
-	for rec, rerr := range inst.exec.QueryArrow(ctx, "DESCRIBE (SELECT * FROM "+inst.readTable()+")"+agentrunentryArrowOutputSettings) {
-		if rerr != nil {
-			err = eh.Errorf("describe table %s: %w", inst.readTable(), rerr)
-			return
-		}
-		names, ok := rec.Column(0).(*array.String)
-		if !ok {
-			err = eh.Errorf("describe table %s: name column is %s, not a string", inst.readTable(), rec.Column(0).DataType())
-			rec.Release()
-			return
-		}
-		for i := range int(rec.NumRows()) {
-			live = append(live, names.Value(i))
-		}
-		rec.Release()
-	}
-	want := lowlevel.CreateSchemaAgentrunentryTable().Fields()
-	if len(live) != len(want) {
-		err = eh.Errorf("schema drift on %s: table has %d columns, the generated schema expects %d — regenerated code against an old table (or vice versa); migrate or regenerate", inst.readTable(), len(live), len(want))
-		return
-	}
-	for i, f := range want {
-		if live[i] != f.Name {
-			err = eh.Errorf("schema drift on %s: column %d is %q, the generated schema expects %q — the decode is positional; migrate or regenerate", inst.readTable(), i, live[i], f.Name)
-			return
-		}
-	}
+	err = inst.JudgeSchema(ctx).Err()
 	return
 }
 
@@ -583,7 +569,7 @@ func (inst *EntryStore) VerifySchema(ctx context.Context) (err error) {
 // On failure the store is closed and nil is returned. It takes an
 // executor, not a client — which executor reaches the server is the
 // caller's layer. NewEntryStore panics on a malformed config
-// and so does this. A caller that cannot afford the DESCRIBE at startup
+// and so does this. A caller that cannot afford the schema read at startup
 // keeps using NewEntryStore.
 func OpenEntryStore(ctx context.Context, exec recordstore.ExecutorI, alloc memory.Allocator, cfg EntryStoreConfig) (inst *EntryStore, err error) {
 	st := NewEntryStore(exec, alloc, cfg)
@@ -2626,7 +2612,7 @@ func (inst *EntryCache[W]) InvalidateAll() {
 // by the cache fetcher and GetFetch.
 func (inst *EntryStore) fetchLatestSQL(keys []uint64) string {
 	var sb strings.Builder
-	sb.WriteString("SELECT * FROM ")
+	sb.WriteString("SELECT " + agentrunentrySelectList + " FROM ")
 	sb.WriteString(inst.readTable())
 	sb.WriteString(" WHERE " + EntryColKey + " IN (")
 	for i, k := range keys {
@@ -2720,7 +2706,7 @@ func (inst *EntryStore) ScanEntry(ctx context.Context, opts recordstore.ScanOpts
 	if opts.ExtraPredicate != "" {
 		inner = append(inner, "("+opts.ExtraPredicate+")")
 	}
-	src := "SELECT * FROM " + inst.readTable()
+	src := "SELECT " + agentrunentrySelectList + " FROM " + inst.readTable()
 	if len(inner) > 0 {
 		src += " WHERE " + strings.Join(inner, " AND ")
 	}
@@ -2762,7 +2748,7 @@ func (inst *EntryStore) ScanRequestMeta(ctx context.Context, opts recordstore.Sc
 	if opts.ExtraPredicate != "" {
 		inner = append(inner, "("+opts.ExtraPredicate+")")
 	}
-	src := "SELECT * FROM " + inst.readTable()
+	src := "SELECT " + agentrunentrySelectList + " FROM " + inst.readTable()
 	if len(inner) > 0 {
 		src += " WHERE " + strings.Join(inner, " AND ")
 	}
@@ -2804,7 +2790,7 @@ func (inst *EntryStore) ScanReplyMeta(ctx context.Context, opts recordstore.Scan
 	if opts.ExtraPredicate != "" {
 		inner = append(inner, "("+opts.ExtraPredicate+")")
 	}
-	src := "SELECT * FROM " + inst.readTable()
+	src := "SELECT " + agentrunentrySelectList + " FROM " + inst.readTable()
 	if len(inner) > 0 {
 		src += " WHERE " + strings.Join(inner, " AND ")
 	}
@@ -2846,7 +2832,7 @@ func (inst *EntryStore) ScanCompactIntent(ctx context.Context, opts recordstore.
 	if opts.ExtraPredicate != "" {
 		inner = append(inner, "("+opts.ExtraPredicate+")")
 	}
-	src := "SELECT * FROM " + inst.readTable()
+	src := "SELECT " + agentrunentrySelectList + " FROM " + inst.readTable()
 	if len(inner) > 0 {
 		src += " WHERE " + strings.Join(inner, " AND ")
 	}
@@ -2888,7 +2874,7 @@ func (inst *EntryStore) ScanApprovalDecision(ctx context.Context, opts recordsto
 	if opts.ExtraPredicate != "" {
 		inner = append(inner, "("+opts.ExtraPredicate+")")
 	}
-	src := "SELECT * FROM " + inst.readTable()
+	src := "SELECT " + agentrunentrySelectList + " FROM " + inst.readTable()
 	if len(inner) > 0 {
 		src += " WHERE " + strings.Join(inner, " AND ")
 	}
@@ -2930,7 +2916,7 @@ func (inst *EntryStore) ScanHeadRecord(ctx context.Context, opts recordstore.Sca
 	if opts.ExtraPredicate != "" {
 		inner = append(inner, "("+opts.ExtraPredicate+")")
 	}
-	src := "SELECT * FROM " + inst.readTable()
+	src := "SELECT " + agentrunentrySelectList + " FROM " + inst.readTable()
 	if len(inner) > 0 {
 		src += " WHERE " + strings.Join(inner, " AND ")
 	}
@@ -2972,7 +2958,7 @@ func (inst *EntryStore) ScanProfileRecord(ctx context.Context, opts recordstore.
 	if opts.ExtraPredicate != "" {
 		inner = append(inner, "("+opts.ExtraPredicate+")")
 	}
-	src := "SELECT * FROM " + inst.readTable()
+	src := "SELECT " + agentrunentrySelectList + " FROM " + inst.readTable()
 	if len(inner) > 0 {
 		src += " WHERE " + strings.Join(inner, " AND ")
 	}
@@ -3014,7 +3000,7 @@ func (inst *EntryStore) ScanTurnState(ctx context.Context, opts recordstore.Scan
 	if opts.ExtraPredicate != "" {
 		inner = append(inner, "("+opts.ExtraPredicate+")")
 	}
-	src := "SELECT * FROM " + inst.readTable()
+	src := "SELECT " + agentrunentrySelectList + " FROM " + inst.readTable()
 	if len(inner) > 0 {
 		src += " WHERE " + strings.Join(inner, " AND ")
 	}
@@ -3056,7 +3042,7 @@ func (inst *EntryStore) ScanToolCatalog(ctx context.Context, opts recordstore.Sc
 	if opts.ExtraPredicate != "" {
 		inner = append(inner, "("+opts.ExtraPredicate+")")
 	}
-	src := "SELECT * FROM " + inst.readTable()
+	src := "SELECT " + agentrunentrySelectList + " FROM " + inst.readTable()
 	if len(inner) > 0 {
 		src += " WHERE " + strings.Join(inner, " AND ")
 	}
@@ -3098,7 +3084,7 @@ func (inst *EntryStore) ScanVerdictRecord(ctx context.Context, opts recordstore.
 	if opts.ExtraPredicate != "" {
 		inner = append(inner, "("+opts.ExtraPredicate+")")
 	}
-	src := "SELECT * FROM " + inst.readTable()
+	src := "SELECT " + agentrunentrySelectList + " FROM " + inst.readTable()
 	if len(inner) > 0 {
 		src += " WHERE " + strings.Join(inner, " AND ")
 	}
@@ -3140,7 +3126,7 @@ func (inst *EntryStore) ScanEvidenceChain(ctx context.Context, opts recordstore.
 	if opts.ExtraPredicate != "" {
 		inner = append(inner, "("+opts.ExtraPredicate+")")
 	}
-	src := "SELECT * FROM " + inst.readTable()
+	src := "SELECT " + agentrunentrySelectList + " FROM " + inst.readTable()
 	if len(inner) > 0 {
 		src += " WHERE " + strings.Join(inner, " AND ")
 	}
@@ -3182,7 +3168,7 @@ func (inst *EntryStore) ScanEvidenceWrittenBy(ctx context.Context, opts recordst
 	if opts.ExtraPredicate != "" {
 		inner = append(inner, "("+opts.ExtraPredicate+")")
 	}
-	src := "SELECT * FROM " + inst.readTable()
+	src := "SELECT " + agentrunentrySelectList + " FROM " + inst.readTable()
 	if len(inner) > 0 {
 		src += " WHERE " + strings.Join(inner, " AND ")
 	}
@@ -3200,7 +3186,7 @@ func (inst *EntryStore) ScanEvidenceWrittenBy(ctx context.Context, opts recordst
 // row; GetLive is the interpreted state-view read). Reads see only
 // flushed rows.
 func (inst *EntryStore) Latest(ctx context.Context, key uint64) (ent *EntryEntity, found bool, err error) {
-	sql := "SELECT * FROM " + inst.readTable() +
+	sql := "SELECT " + agentrunentrySelectList + " FROM " + inst.readTable() +
 		" WHERE " + EntryColKey + " = " + agentrunentryKeyLiteral(key) +
 		" ORDER BY " + EntryColOrder + " DESC, " + EntryColRevision + " DESC LIMIT 1" + agentrunentryArrowOutputSettings
 	ents, err := inst.queryEntities(ctx, sql)
@@ -3223,7 +3209,7 @@ func (inst *EntryStore) Latest(ctx context.Context, key uint64) (ent *EntryEntit
 // streaming executor changes nothing visible); an error ends the
 // sequence as a final (nil, err) pair. Reads see only flushed rows.
 func (inst *EntryStore) Replay(ctx context.Context, key uint64, fromOrder uint64, opts recordstore.ReplayOptsU64) iter.Seq2[*EntryEntity, error] {
-	sql := "SELECT * FROM " + inst.readTable() +
+	sql := "SELECT " + agentrunentrySelectList + " FROM " + inst.readTable() +
 		" WHERE " + EntryColKey + " = " + agentrunentryKeyLiteral(key)
 	if fromOrder > 0 {
 		sql += " AND " + EntryColOrder + " >= " + strconv.FormatUint(fromOrder, 10)
@@ -3335,9 +3321,10 @@ var EntryComponentSQL = componentsql.Set{
 // --- decode (Arrow → entity bags). ---
 
 // agentrunentrySectionReaderI is the uniform slice of the generated read-access
-// readers. Column indices stay at their constructor defaults — the
-// schema order a SELECT * returns.
+// readers. Their column indices start as positions in agentrunentryReadSchema
+// and are rebound by name to each fetched record before it is loaded.
 type agentrunentrySectionReaderI interface {
+	recordstore.ColumnIndexI
 	LoadFromRecord(raruntime.RecordI) error
 	Release()
 }
@@ -3394,6 +3381,15 @@ func decodeEntryRecord(rec arrow.RecordBatch) (ents []*EntryEntity, err error) {
 	symbolArrayR := lowlevel.NewReadAccessAgentrunentryTableTaggedSymbolArray()
 	boolR := lowlevel.NewReadAccessAgentrunentryTableTaggedBool()
 	readers := []agentrunentrySectionReaderI{idR, lcR, timeArrayR, symbolR, stringArrayR, u64ArrayR, u32ArrayR, u8ArrayR, symbolArrayR, boolR}
+	bind := make([]recordstore.ColumnIndexI, len(readers))
+	for i, r := range readers {
+		bind[i] = r
+	}
+	err = recordstore.BindColumnsByName(agentrunentryReadSchema, rec.Schema(), bind...)
+	if err != nil {
+		err = eh.Errorf("bind agentrunentry readers by name: %w", err)
+		return
+	}
 	for _, r := range readers {
 		err = r.LoadFromRecord(rec)
 		if err != nil {

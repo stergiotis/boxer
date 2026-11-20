@@ -19,7 +19,6 @@ import (
 	"time"
 
 	"github.com/apache/arrow-go/v18/arrow"
-	"github.com/apache/arrow-go/v18/arrow/array"
 	"github.com/apache/arrow-go/v18/arrow/memory"
 	"github.com/stergiotis/boxer/public/caching"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/marshalling"
@@ -56,6 +55,16 @@ const (
 
 // Arrow output shape the read-access classes expect.
 const revArrowOutputSettings = " SETTINGS output_format_arrow_string_as_string=1, output_format_arrow_low_cardinality_as_dictionary=0"
+
+// revReadSchema is the generated Arrow schema the read-access readers
+// were built against; their default column indices are positions in it.
+var revReadSchema = lowlevel.CreateSchemaRevTable()
+
+// revSelectList is the explicit projection every read selects: the
+// generated columns by name, so a table carrying columns this store does
+// not know is read all the same, and one lacking a column it reads
+// fails naming it.
+var revSelectList = recordstore.SelectList(revReadSchema)
 
 // revKeyLiteral renders a Key value as a ClickHouse SQL literal.
 func revKeyLiteral(k string) string { return marshalling.EscapeString(k) }
@@ -372,62 +381,39 @@ func (inst *RevStore) EnsureTable(ctx context.Context) (err error) {
 	return
 }
 
-// VerifySchema compares the live table's columns — names and order —
-// against the generated schema. EnsureTable alone cannot detect drift
-// on an existing table (IF NOT EXISTS succeeds against any old shape),
-// and the decode is positional, so drift fails late or, for same-typed
-// column swaps, silently: run VerifySchema at startup after
-// EnsureTable.
+// SchemaContract is what this store declares about the table it reads:
+// the generated columns and the stamp its CREATE TABLE writes, bound to
+// the configured read table. A schema check needs nothing else.
+func (inst *RevStore) SchemaContract() recordstore.TableContract {
+	return recordstore.TableContract{Kind: "rev", Table: inst.readTable(), Columns: RevColumns, Stamp: RevTableStamp}
+}
+
+// JudgeSchema reads the live table's columns and stamp and judges them
+// against the generated ones (recordstore.SchemaVerdict): ok when every
+// generated column is present by name with its type — columns this
+// store does not know are reported and read past —, migratable when
+// some are missing or carry an older aspect spelling, incompatible on a
+// type change. It does not fail; an unreadable table is unchecked.
 //
 // It checks the COLUMN contract only. The membership-id contract is not
 // checked and cannot be from the schema alone: the ids live in the
 // membership columns as ordinary values, and a FAT table legitimately
 // carries other kinds' ids beside this store's. Rows written under a
-// different id assignment therefore pass VerifySchema and then match
-// nothing — every component decodes absent, with no error. Compare
-// RevMembershipIds against the writer's assignment when pointing this
-// store at rows it did not write.
-//
-// What it describes is the reader's own projection — DESCRIBE over
-// `SELECT *`, not over the table — because that is what the positional
-// decode consumes. DESCRIBE TABLE lists columns SELECT * does not return
-// (MATERIALIZED, ALIAS, EPHEMERAL), so a table legitimately carrying one
-// beside the generated shape — a derived column added by ALTER after
-// EnsureTable, which is how a store gets a skip index over a value its
-// leeway attributes only encode — would fail a check whose contract still
-// held. Describing the projection also follows the asterisk_include_*
-// settings, which decide what SELECT * returns and which nothing here
-// pins: under those, a derived column IS in the decode, and this notices
-// where a column-kind filter would have blessed the mis-decode.
+// different id assignment therefore pass and then match nothing — every
+// component decodes absent, with no error. Compare RevMembershipIds
+// against the writer's assignment when pointing this store at rows it
+// did not write.
+func (inst *RevStore) JudgeSchema(ctx context.Context) (v recordstore.SchemaVerdict) {
+	return recordstore.JudgeTable(ctx, inst.exec, inst.SchemaContract())
+}
+
+// VerifySchema is JudgeSchema as an error: nil when the verdict is ok,
+// an error naming what is missing or mismatched otherwise. EnsureTable
+// alone cannot detect drift on an existing table (IF NOT EXISTS succeeds
+// against any old shape): run it at startup. Reads go by name, so a
+// table with columns this store does not know passes.
 func (inst *RevStore) VerifySchema(ctx context.Context) (err error) {
-	live := make([]string, 0, 64)
-	for rec, rerr := range inst.exec.QueryArrow(ctx, "DESCRIBE (SELECT * FROM "+inst.readTable()+")"+revArrowOutputSettings) {
-		if rerr != nil {
-			err = eh.Errorf("describe table %s: %w", inst.readTable(), rerr)
-			return
-		}
-		names, ok := rec.Column(0).(*array.String)
-		if !ok {
-			err = eh.Errorf("describe table %s: name column is %s, not a string", inst.readTable(), rec.Column(0).DataType())
-			rec.Release()
-			return
-		}
-		for i := range int(rec.NumRows()) {
-			live = append(live, names.Value(i))
-		}
-		rec.Release()
-	}
-	want := lowlevel.CreateSchemaRevTable().Fields()
-	if len(live) != len(want) {
-		err = eh.Errorf("schema drift on %s: table has %d columns, the generated schema expects %d — regenerated code against an old table (or vice versa); migrate or regenerate", inst.readTable(), len(live), len(want))
-		return
-	}
-	for i, f := range want {
-		if live[i] != f.Name {
-			err = eh.Errorf("schema drift on %s: column %d is %q, the generated schema expects %q — the decode is positional; migrate or regenerate", inst.readTable(), i, live[i], f.Name)
-			return
-		}
-	}
+	err = inst.JudgeSchema(ctx).Err()
 	return
 }
 
@@ -438,7 +424,7 @@ func (inst *RevStore) VerifySchema(ctx context.Context) (err error) {
 // On failure the store is closed and nil is returned. It takes an
 // executor, not a client — which executor reaches the server is the
 // caller's layer. NewRevStore panics on a malformed config
-// and so does this. A caller that cannot afford the DESCRIBE at startup
+// and so does this. A caller that cannot afford the schema read at startup
 // keeps using NewRevStore.
 func OpenRevStore(ctx context.Context, exec recordstore.ExecutorI, alloc memory.Allocator, cfg RevStoreConfig) (inst *RevStore, err error) {
 	st := NewRevStore(exec, alloc, cfg)
@@ -1056,7 +1042,7 @@ func (inst *RevCache[W]) InvalidateAll() {
 // by the cache fetcher and GetFetch.
 func (inst *RevStore) fetchLatestSQL(keys []string) string {
 	var sb strings.Builder
-	sb.WriteString("SELECT * FROM ")
+	sb.WriteString("SELECT " + revSelectList + " FROM ")
 	sb.WriteString(inst.readTable())
 	sb.WriteString(" WHERE " + RevColKey + " IN (")
 	for i, k := range keys {
@@ -1139,7 +1125,7 @@ func (inst *RevStore) ScanRevNote(ctx context.Context, opts recordstore.ScanOpts
 	if opts.ExtraPredicate != "" {
 		inner = append(inner, "("+opts.ExtraPredicate+")")
 	}
-	src := "SELECT * FROM " + inst.readTable()
+	src := "SELECT " + revSelectList + " FROM " + inst.readTable()
 	if len(inner) > 0 {
 		src += " WHERE " + strings.Join(inner, " AND ")
 	}
@@ -1157,7 +1143,7 @@ func (inst *RevStore) ScanRevNote(ctx context.Context, opts recordstore.ScanOpts
 // row; GetLive is the interpreted state-view read). Reads see only
 // flushed rows.
 func (inst *RevStore) Latest(ctx context.Context, key string) (ent *RevEntity, found bool, err error) {
-	sql := "SELECT * FROM " + inst.readTable() +
+	sql := "SELECT " + revSelectList + " FROM " + inst.readTable() +
 		" WHERE " + RevColKey + " = " + revKeyLiteral(key) +
 		" ORDER BY " + RevColOrder + " DESC, " + RevColRevision + " DESC LIMIT 1" + revArrowOutputSettings
 	ents, err := inst.queryEntities(ctx, sql)
@@ -1180,7 +1166,7 @@ func (inst *RevStore) Latest(ctx context.Context, key string) (ent *RevEntity, f
 // streaming executor changes nothing visible); an error ends the
 // sequence as a final (nil, err) pair. Reads see only flushed rows.
 func (inst *RevStore) Replay(ctx context.Context, key string, fromOrder uint64, opts recordstore.ReplayOptsU64) iter.Seq2[*RevEntity, error] {
-	sql := "SELECT * FROM " + inst.readTable() +
+	sql := "SELECT " + revSelectList + " FROM " + inst.readTable() +
 		" WHERE " + RevColKey + " = " + revKeyLiteral(key)
 	if fromOrder > 0 {
 		sql += " AND " + RevColOrder + " >= " + strconv.FormatUint(fromOrder, 10)
@@ -1226,9 +1212,10 @@ var RevComponentSQL = componentsql.Set{
 // --- decode (Arrow → entity bags). ---
 
 // revSectionReaderI is the uniform slice of the generated read-access
-// readers. Column indices stay at their constructor defaults — the
-// schema order a SELECT * returns.
+// readers. Their column indices start as positions in revReadSchema
+// and are rebound by name to each fetched record before it is loaded.
 type revSectionReaderI interface {
+	recordstore.ColumnIndexI
 	LoadFromRecord(raruntime.RecordI) error
 	Release()
 }
@@ -1278,6 +1265,15 @@ func decodeRevRecord(rec arrow.RecordBatch) (ents []*RevEntity, err error) {
 	lcR := lowlevel.NewReadAccessRevTablePlainEntityLifecycleAttributes()
 	noteR := lowlevel.NewReadAccessRevTableTaggedNote()
 	readers := []revSectionReaderI{idR, lcR, noteR}
+	bind := make([]recordstore.ColumnIndexI, len(readers))
+	for i, r := range readers {
+		bind[i] = r
+	}
+	err = recordstore.BindColumnsByName(revReadSchema, rec.Schema(), bind...)
+	if err != nil {
+		err = eh.Errorf("bind rev readers by name: %w", err)
+		return
+	}
 	for _, r := range readers {
 		err = r.LoadFromRecord(rec)
 		if err != nil {

@@ -228,9 +228,11 @@ func TestDeviceStoreIngestRejectsDuplicateKeys(t *testing.T) {
 	st.DiscardPending()
 }
 
-// TestDeviceStoreVerifySchemaDetectsDrift: EnsureTable is IF NOT EXISTS
-// and the decode is positional, so drift between regenerated code and a
-// live table must be caught explicitly — VerifySchema is that gate.
+// TestDeviceStoreVerifySchemaDetectsDrift: EnsureTable is IF NOT EXISTS,
+// so drift between regenerated code and a live table must be caught
+// explicitly — VerifySchema is that gate. Reads go by name: a column the
+// store does not know passes and is reported; a column it reads that the
+// table lacks, or one of another type, fails naming it.
 func TestDeviceStoreVerifySchemaDetectsDrift(t *testing.T) {
 	local, err := chexec.NewLocalExecutor(t.TempDir(), nil)
 	if err != nil {
@@ -243,7 +245,14 @@ func TestDeviceStoreVerifySchemaDetectsDrift(t *testing.T) {
 	require.NoError(t, st.VerifySchema(ctx))
 
 	require.NoError(t, local.Exec(ctx, "ALTER TABLE "+DeviceTableName+" ADD COLUMN drift UInt8"))
-	require.ErrorContains(t, st.VerifySchema(ctx), "schema drift")
+	v := st.JudgeSchema(ctx)
+	require.Equal(t, recordstore.SchemaVerdictOk, v.Verdict)
+	require.Equal(t, []string{"drift"}, v.Extra)
+
+	require.NoError(t, local.Exec(ctx, "ALTER TABLE "+DeviceTableName+" MODIFY COLUMN "+DeviceColLifecycle+" UInt16"))
+	err = st.VerifySchema(ctx)
+	require.ErrorContains(t, err, "incompatible")
+	require.ErrorContains(t, err, "lc:lifecycle:u8:4::0:")
 }
 
 // TestDeviceStoreCloseReleases: under a checked allocator the store's

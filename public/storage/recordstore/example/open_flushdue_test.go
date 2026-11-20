@@ -82,8 +82,8 @@ func TestDeviceStoreFlushIfDueZeroIsNoOp(t *testing.T) {
 }
 
 // TestDeviceStoreOpenRefusesDrift: Open over a table of another shape fails
-// with the schema-drift error instead of handing back a store whose
-// positional decode would misread it.
+// with the schema verdict instead of handing back a store whose reads would
+// fail on the first query.
 func TestDeviceStoreOpenRefusesDrift(t *testing.T) {
 	exec, err := chexec.NewLocalExecutor(t.TempDir(), nil)
 	if err != nil {
@@ -95,6 +95,6 @@ func TestDeviceStoreOpenRefusesDrift(t *testing.T) {
 
 	st, err := OpenDeviceStore(ctx, exec, nil, DeviceStoreConfig{Table: table})
 	require.Error(t, err)
-	require.ErrorContains(t, err, "schema drift")
+	require.ErrorContains(t, err, "migratable")
 	require.Nil(t, st)
 }

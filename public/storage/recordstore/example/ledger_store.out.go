@@ -19,7 +19,6 @@ import (
 	"time"
 
 	"github.com/apache/arrow-go/v18/arrow"
-	"github.com/apache/arrow-go/v18/arrow/array"
 	"github.com/apache/arrow-go/v18/arrow/memory"
 	"github.com/stergiotis/boxer/public/caching"
 	"github.com/stergiotis/boxer/public/functional"
@@ -55,6 +54,16 @@ const (
 
 // Arrow output shape the read-access classes expect.
 const ledgerArrowOutputSettings = " SETTINGS output_format_arrow_string_as_string=1, output_format_arrow_low_cardinality_as_dictionary=0"
+
+// ledgerReadSchema is the generated Arrow schema the read-access readers
+// were built against; their default column indices are positions in it.
+var ledgerReadSchema = lowlevel.CreateSchemaLedgerTable()
+
+// ledgerSelectList is the explicit projection every read selects: the
+// generated columns by name, so a table carrying columns this store does
+// not know is read all the same, and one lacking a column it reads
+// fails naming it.
+var ledgerSelectList = recordstore.SelectList(ledgerReadSchema)
 
 // ledgerKeyLiteral renders a Key value as a ClickHouse SQL literal.
 func ledgerKeyLiteral(k uint64) string { return strconv.FormatUint(k, 10) }
@@ -385,62 +394,39 @@ func (inst *LedgerStore) EnsureTable(ctx context.Context) (err error) {
 	return
 }
 
-// VerifySchema compares the live table's columns — names and order —
-// against the generated schema. EnsureTable alone cannot detect drift
-// on an existing table (IF NOT EXISTS succeeds against any old shape),
-// and the decode is positional, so drift fails late or, for same-typed
-// column swaps, silently: run VerifySchema at startup after
-// EnsureTable.
+// SchemaContract is what this store declares about the table it reads:
+// the generated columns and the stamp its CREATE TABLE writes, bound to
+// the configured read table. A schema check needs nothing else.
+func (inst *LedgerStore) SchemaContract() recordstore.TableContract {
+	return recordstore.TableContract{Kind: "ledger", Table: inst.readTable(), Columns: LedgerColumns, Stamp: LedgerTableStamp}
+}
+
+// JudgeSchema reads the live table's columns and stamp and judges them
+// against the generated ones (recordstore.SchemaVerdict): ok when every
+// generated column is present by name with its type — columns this
+// store does not know are reported and read past —, migratable when
+// some are missing or carry an older aspect spelling, incompatible on a
+// type change. It does not fail; an unreadable table is unchecked.
 //
 // It checks the COLUMN contract only. The membership-id contract is not
 // checked and cannot be from the schema alone: the ids live in the
 // membership columns as ordinary values, and a FAT table legitimately
 // carries other kinds' ids beside this store's. Rows written under a
-// different id assignment therefore pass VerifySchema and then match
-// nothing — every component decodes absent, with no error. Compare
-// LedgerMembershipIds against the writer's assignment when pointing this
-// store at rows it did not write.
-//
-// What it describes is the reader's own projection — DESCRIBE over
-// `SELECT *`, not over the table — because that is what the positional
-// decode consumes. DESCRIBE TABLE lists columns SELECT * does not return
-// (MATERIALIZED, ALIAS, EPHEMERAL), so a table legitimately carrying one
-// beside the generated shape — a derived column added by ALTER after
-// EnsureTable, which is how a store gets a skip index over a value its
-// leeway attributes only encode — would fail a check whose contract still
-// held. Describing the projection also follows the asterisk_include_*
-// settings, which decide what SELECT * returns and which nothing here
-// pins: under those, a derived column IS in the decode, and this notices
-// where a column-kind filter would have blessed the mis-decode.
+// different id assignment therefore pass and then match nothing — every
+// component decodes absent, with no error. Compare LedgerMembershipIds
+// against the writer's assignment when pointing this store at rows it
+// did not write.
+func (inst *LedgerStore) JudgeSchema(ctx context.Context) (v recordstore.SchemaVerdict) {
+	return recordstore.JudgeTable(ctx, inst.exec, inst.SchemaContract())
+}
+
+// VerifySchema is JudgeSchema as an error: nil when the verdict is ok,
+// an error naming what is missing or mismatched otherwise. EnsureTable
+// alone cannot detect drift on an existing table (IF NOT EXISTS succeeds
+// against any old shape): run it at startup. Reads go by name, so a
+// table with columns this store does not know passes.
 func (inst *LedgerStore) VerifySchema(ctx context.Context) (err error) {
-	live := make([]string, 0, 64)
-	for rec, rerr := range inst.exec.QueryArrow(ctx, "DESCRIBE (SELECT * FROM "+inst.readTable()+")"+ledgerArrowOutputSettings) {
-		if rerr != nil {
-			err = eh.Errorf("describe table %s: %w", inst.readTable(), rerr)
-			return
-		}
-		names, ok := rec.Column(0).(*array.String)
-		if !ok {
-			err = eh.Errorf("describe table %s: name column is %s, not a string", inst.readTable(), rec.Column(0).DataType())
-			rec.Release()
-			return
-		}
-		for i := range int(rec.NumRows()) {
-			live = append(live, names.Value(i))
-		}
-		rec.Release()
-	}
-	want := lowlevel.CreateSchemaLedgerTable().Fields()
-	if len(live) != len(want) {
-		err = eh.Errorf("schema drift on %s: table has %d columns, the generated schema expects %d — regenerated code against an old table (or vice versa); migrate or regenerate", inst.readTable(), len(live), len(want))
-		return
-	}
-	for i, f := range want {
-		if live[i] != f.Name {
-			err = eh.Errorf("schema drift on %s: column %d is %q, the generated schema expects %q — the decode is positional; migrate or regenerate", inst.readTable(), i, live[i], f.Name)
-			return
-		}
-	}
+	err = inst.JudgeSchema(ctx).Err()
 	return
 }
 
@@ -451,7 +437,7 @@ func (inst *LedgerStore) VerifySchema(ctx context.Context) (err error) {
 // On failure the store is closed and nil is returned. It takes an
 // executor, not a client — which executor reaches the server is the
 // caller's layer. NewLedgerStore panics on a malformed config
-// and so does this. A caller that cannot afford the DESCRIBE at startup
+// and so does this. A caller that cannot afford the schema read at startup
 // keeps using NewLedgerStore.
 func OpenLedgerStore(ctx context.Context, exec recordstore.ExecutorI, alloc memory.Allocator, cfg LedgerStoreConfig) (inst *LedgerStore, err error) {
 	st := NewLedgerStore(exec, alloc, cfg)
@@ -1765,7 +1751,7 @@ func (inst *LedgerCache[W]) InvalidateAll() {
 // by the cache fetcher and GetFetch.
 func (inst *LedgerStore) fetchLatestSQL(keys []uint64) string {
 	var sb strings.Builder
-	sb.WriteString("SELECT * FROM ")
+	sb.WriteString("SELECT " + ledgerSelectList + " FROM ")
 	sb.WriteString(inst.readTable())
 	sb.WriteString(" WHERE " + LedgerColKey + " IN (")
 	for i, k := range keys {
@@ -1850,7 +1836,7 @@ func (inst *LedgerStore) ScanLedgerMeta(ctx context.Context, opts recordstore.Sc
 	if opts.ExtraPredicate != "" {
 		where = "(" + where + ") AND (" + opts.ExtraPredicate + ")"
 	}
-	sql := "SELECT * FROM " + inst.readTable() +
+	sql := "SELECT " + ledgerSelectList + " FROM " + inst.readTable() +
 		" WHERE " + where + order
 	if opts.Limit > 0 {
 		sql += " LIMIT " + strconv.Itoa(opts.Limit)
@@ -1888,7 +1874,7 @@ func (inst *LedgerStore) ScanEvidenceChain(ctx context.Context, opts recordstore
 	if opts.ExtraPredicate != "" {
 		where = "(" + where + ") AND (" + opts.ExtraPredicate + ")"
 	}
-	sql := "SELECT * FROM " + inst.readTable() +
+	sql := "SELECT " + ledgerSelectList + " FROM " + inst.readTable() +
 		" WHERE " + where + order
 	if opts.Limit > 0 {
 		sql += " LIMIT " + strconv.Itoa(opts.Limit)
@@ -1926,7 +1912,7 @@ func (inst *LedgerStore) ScanEvidenceWrittenBy(ctx context.Context, opts records
 	if opts.ExtraPredicate != "" {
 		where = "(" + where + ") AND (" + opts.ExtraPredicate + ")"
 	}
-	sql := "SELECT * FROM " + inst.readTable() +
+	sql := "SELECT " + ledgerSelectList + " FROM " + inst.readTable() +
 		" WHERE " + where + order
 	if opts.Limit > 0 {
 		sql += " LIMIT " + strconv.Itoa(opts.Limit)
@@ -1940,7 +1926,7 @@ func (inst *LedgerStore) ScanEvidenceWrittenBy(ctx context.Context, opts records
 // row; GetLive is the interpreted state-view read). Reads see only
 // flushed rows.
 func (inst *LedgerStore) Latest(ctx context.Context, key uint64) (ent *LedgerEntity, found bool, err error) {
-	sql := "SELECT * FROM " + inst.readTable() +
+	sql := "SELECT " + ledgerSelectList + " FROM " + inst.readTable() +
 		" WHERE " + LedgerColKey + " = " + ledgerKeyLiteral(key) +
 		" ORDER BY " + LedgerColOrder + " DESC LIMIT 1" + ledgerArrowOutputSettings
 	ents, err := inst.queryEntities(ctx, sql)
@@ -1963,7 +1949,7 @@ func (inst *LedgerStore) Latest(ctx context.Context, key uint64) (ent *LedgerEnt
 // streaming executor changes nothing visible); an error ends the
 // sequence as a final (nil, err) pair. Reads see only flushed rows.
 func (inst *LedgerStore) Replay(ctx context.Context, key uint64, fromOrder uint64, opts recordstore.ReplayOptsU64) iter.Seq2[*LedgerEntity, error] {
-	sql := "SELECT * FROM " + inst.readTable() +
+	sql := "SELECT " + ledgerSelectList + " FROM " + inst.readTable() +
 		" WHERE " + LedgerColKey + " = " + ledgerKeyLiteral(key)
 	if fromOrder > 0 {
 		sql += " AND " + LedgerColOrder + " >= " + strconv.FormatUint(fromOrder, 10)
@@ -2020,9 +2006,10 @@ var LedgerComponentSQL = componentsql.Set{
 // --- decode (Arrow → entity bags). ---
 
 // ledgerSectionReaderI is the uniform slice of the generated read-access
-// readers. Column indices stay at their constructor defaults — the
-// schema order a SELECT * returns.
+// readers. Their column indices start as positions in ledgerReadSchema
+// and are rebound by name to each fetched record before it is loaded.
 type ledgerSectionReaderI interface {
+	recordstore.ColumnIndexI
 	LoadFromRecord(raruntime.RecordI) error
 	Release()
 }
@@ -2073,6 +2060,15 @@ func decodeLedgerRecord(rec arrow.RecordBatch) (ents []*LedgerEntity, err error)
 	u64ArrayR := lowlevel.NewReadAccessLedgerTableTaggedU64Array()
 	stringArrayR := lowlevel.NewReadAccessLedgerTableTaggedStringArray()
 	readers := []ledgerSectionReaderI{idR, symbolR, u64ArrayR, stringArrayR}
+	bind := make([]recordstore.ColumnIndexI, len(readers))
+	for i, r := range readers {
+		bind[i] = r
+	}
+	err = recordstore.BindColumnsByName(ledgerReadSchema, rec.Schema(), bind...)
+	if err != nil {
+		err = eh.Errorf("bind ledger readers by name: %w", err)
+		return
+	}
 	for _, r := range readers {
 		err = r.LoadFromRecord(rec)
 		if err != nil {

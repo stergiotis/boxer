@@ -16,7 +16,6 @@ import (
 	"time"
 
 	"github.com/apache/arrow-go/v18/arrow"
-	"github.com/apache/arrow-go/v18/arrow/array"
 	"github.com/apache/arrow-go/v18/arrow/memory"
 	"github.com/stergiotis/boxer/public/caching"
 	"github.com/stergiotis/boxer/public/functional"
@@ -51,6 +50,16 @@ const (
 
 // Arrow output shape the read-access classes expect.
 const provenanceArrowOutputSettings = " SETTINGS output_format_arrow_string_as_string=1, output_format_arrow_low_cardinality_as_dictionary=0"
+
+// provenanceReadSchema is the generated Arrow schema the read-access readers
+// were built against; their default column indices are positions in it.
+var provenanceReadSchema = lowlevel.CreateSchemaProvenanceTable()
+
+// provenanceSelectList is the explicit projection every read selects: the
+// generated columns by name, so a table carrying columns this store does
+// not know is read all the same, and one lacking a column it reads
+// fails naming it.
+var provenanceSelectList = recordstore.SelectList(provenanceReadSchema)
 
 // provenanceKeyLiteral renders a Key value as a ClickHouse SQL literal.
 func provenanceKeyLiteral(k uint64) string { return strconv.FormatUint(k, 10) }
@@ -336,62 +345,39 @@ func (inst *ProvenanceStore) EnsureTable(ctx context.Context) (err error) {
 	return
 }
 
-// VerifySchema compares the live table's columns — names and order —
-// against the generated schema. EnsureTable alone cannot detect drift
-// on an existing table (IF NOT EXISTS succeeds against any old shape),
-// and the decode is positional, so drift fails late or, for same-typed
-// column swaps, silently: run VerifySchema at startup after
-// EnsureTable.
+// SchemaContract is what this store declares about the table it reads:
+// the generated columns and the stamp its CREATE TABLE writes, bound to
+// the configured read table. A schema check needs nothing else.
+func (inst *ProvenanceStore) SchemaContract() recordstore.TableContract {
+	return recordstore.TableContract{Kind: "provenance", Table: inst.readTable(), Columns: ProvenanceColumns, Stamp: ProvenanceTableStamp}
+}
+
+// JudgeSchema reads the live table's columns and stamp and judges them
+// against the generated ones (recordstore.SchemaVerdict): ok when every
+// generated column is present by name with its type — columns this
+// store does not know are reported and read past —, migratable when
+// some are missing or carry an older aspect spelling, incompatible on a
+// type change. It does not fail; an unreadable table is unchecked.
 //
 // It checks the COLUMN contract only. The membership-id contract is not
 // checked and cannot be from the schema alone: the ids live in the
 // membership columns as ordinary values, and a FAT table legitimately
 // carries other kinds' ids beside this store's. Rows written under a
-// different id assignment therefore pass VerifySchema and then match
-// nothing — every component decodes absent, with no error. Compare
-// ProvenanceMembershipIds against the writer's assignment when pointing this
-// store at rows it did not write.
-//
-// What it describes is the reader's own projection — DESCRIBE over
-// `SELECT *`, not over the table — because that is what the positional
-// decode consumes. DESCRIBE TABLE lists columns SELECT * does not return
-// (MATERIALIZED, ALIAS, EPHEMERAL), so a table legitimately carrying one
-// beside the generated shape — a derived column added by ALTER after
-// EnsureTable, which is how a store gets a skip index over a value its
-// leeway attributes only encode — would fail a check whose contract still
-// held. Describing the projection also follows the asterisk_include_*
-// settings, which decide what SELECT * returns and which nothing here
-// pins: under those, a derived column IS in the decode, and this notices
-// where a column-kind filter would have blessed the mis-decode.
+// different id assignment therefore pass and then match nothing — every
+// component decodes absent, with no error. Compare ProvenanceMembershipIds
+// against the writer's assignment when pointing this store at rows it
+// did not write.
+func (inst *ProvenanceStore) JudgeSchema(ctx context.Context) (v recordstore.SchemaVerdict) {
+	return recordstore.JudgeTable(ctx, inst.exec, inst.SchemaContract())
+}
+
+// VerifySchema is JudgeSchema as an error: nil when the verdict is ok,
+// an error naming what is missing or mismatched otherwise. EnsureTable
+// alone cannot detect drift on an existing table (IF NOT EXISTS succeeds
+// against any old shape): run it at startup. Reads go by name, so a
+// table with columns this store does not know passes.
 func (inst *ProvenanceStore) VerifySchema(ctx context.Context) (err error) {
-	live := make([]string, 0, 64)
-	for rec, rerr := range inst.exec.QueryArrow(ctx, "DESCRIBE (SELECT * FROM "+inst.readTable()+")"+provenanceArrowOutputSettings) {
-		if rerr != nil {
-			err = eh.Errorf("describe table %s: %w", inst.readTable(), rerr)
-			return
-		}
-		names, ok := rec.Column(0).(*array.String)
-		if !ok {
-			err = eh.Errorf("describe table %s: name column is %s, not a string", inst.readTable(), rec.Column(0).DataType())
-			rec.Release()
-			return
-		}
-		for i := range int(rec.NumRows()) {
-			live = append(live, names.Value(i))
-		}
-		rec.Release()
-	}
-	want := lowlevel.CreateSchemaProvenanceTable().Fields()
-	if len(live) != len(want) {
-		err = eh.Errorf("schema drift on %s: table has %d columns, the generated schema expects %d — regenerated code against an old table (or vice versa); migrate or regenerate", inst.readTable(), len(live), len(want))
-		return
-	}
-	for i, f := range want {
-		if live[i] != f.Name {
-			err = eh.Errorf("schema drift on %s: column %d is %q, the generated schema expects %q — the decode is positional; migrate or regenerate", inst.readTable(), i, live[i], f.Name)
-			return
-		}
-	}
+	err = inst.JudgeSchema(ctx).Err()
 	return
 }
 
@@ -402,7 +388,7 @@ func (inst *ProvenanceStore) VerifySchema(ctx context.Context) (err error) {
 // On failure the store is closed and nil is returned. It takes an
 // executor, not a client — which executor reaches the server is the
 // caller's layer. NewProvenanceStore panics on a malformed config
-// and so does this. A caller that cannot afford the DESCRIBE at startup
+// and so does this. A caller that cannot afford the schema read at startup
 // keeps using NewProvenanceStore.
 func OpenProvenanceStore(ctx context.Context, exec recordstore.ExecutorI, alloc memory.Allocator, cfg ProvenanceStoreConfig) (inst *ProvenanceStore, err error) {
 	st := NewProvenanceStore(exec, alloc, cfg)
@@ -898,7 +884,7 @@ func (inst *ProvenanceCache[W]) InvalidateAll() {
 // by the cache fetcher and GetFetch.
 func (inst *ProvenanceStore) fetchLatestSQL(keys []uint64) string {
 	var sb strings.Builder
-	sb.WriteString("SELECT * FROM ")
+	sb.WriteString("SELECT " + provenanceSelectList + " FROM ")
 	sb.WriteString(inst.readTable())
 	sb.WriteString(" WHERE " + ProvenanceColKey + " IN (")
 	for i, k := range keys {
@@ -981,7 +967,7 @@ func (inst *ProvenanceStore) ScanProvenance(ctx context.Context, opts recordstor
 	if opts.ExtraPredicate != "" {
 		where = "(" + where + ") AND (" + opts.ExtraPredicate + ")"
 	}
-	sql := "SELECT * FROM " + inst.readTable() +
+	sql := "SELECT " + provenanceSelectList + " FROM " + inst.readTable() +
 		" WHERE " + where + order
 	if opts.Limit > 0 {
 		sql += " LIMIT " + strconv.Itoa(opts.Limit)
@@ -995,7 +981,7 @@ func (inst *ProvenanceStore) ScanProvenance(ctx context.Context, opts recordstor
 // row; GetLive is the interpreted state-view read). Reads see only
 // flushed rows.
 func (inst *ProvenanceStore) Latest(ctx context.Context, key uint64) (ent *ProvenanceEntity, found bool, err error) {
-	sql := "SELECT * FROM " + inst.readTable() +
+	sql := "SELECT " + provenanceSelectList + " FROM " + inst.readTable() +
 		" WHERE " + ProvenanceColKey + " = " + provenanceKeyLiteral(key) +
 		" ORDER BY " + ProvenanceColOrder + " DESC LIMIT 1" + provenanceArrowOutputSettings
 	ents, err := inst.queryEntities(ctx, sql)
@@ -1018,7 +1004,7 @@ func (inst *ProvenanceStore) Latest(ctx context.Context, key uint64) (ent *Prove
 // streaming executor changes nothing visible); an error ends the
 // sequence as a final (nil, err) pair. Reads see only flushed rows.
 func (inst *ProvenanceStore) Replay(ctx context.Context, key uint64, fromOrder time.Time, opts recordstore.ReplayOpts) iter.Seq2[*ProvenanceEntity, error] {
-	sql := "SELECT * FROM " + inst.readTable() +
+	sql := "SELECT " + provenanceSelectList + " FROM " + inst.readTable() +
 		" WHERE " + ProvenanceColKey + " = " + provenanceKeyLiteral(key)
 	if !fromOrder.IsZero() {
 		sql += " AND " + ProvenanceColOrder + " >= fromUnixTimestamp64Nano(" + strconv.FormatInt(fromOrder.UnixNano(), 10) + ")"
@@ -1063,9 +1049,10 @@ var ProvenanceComponentSQL = componentsql.Set{
 // --- decode (Arrow → entity bags). ---
 
 // provenanceSectionReaderI is the uniform slice of the generated read-access
-// readers. Column indices stay at their constructor defaults — the
-// schema order a SELECT * returns.
+// readers. Their column indices start as positions in provenanceReadSchema
+// and are rebound by name to each fetched record before it is loaded.
 type provenanceSectionReaderI interface {
+	recordstore.ColumnIndexI
 	LoadFromRecord(raruntime.RecordI) error
 	Release()
 }
@@ -1116,6 +1103,15 @@ func decodeProvenanceRecord(rec arrow.RecordBatch) (ents []*ProvenanceEntity, er
 	symbolR := lowlevel.NewReadAccessProvenanceTableTaggedSymbol()
 	symbolArrayR := lowlevel.NewReadAccessProvenanceTableTaggedSymbolArray()
 	readers := []provenanceSectionReaderI{idR, tsR, symbolR, symbolArrayR}
+	bind := make([]recordstore.ColumnIndexI, len(readers))
+	for i, r := range readers {
+		bind[i] = r
+	}
+	err = recordstore.BindColumnsByName(provenanceReadSchema, rec.Schema(), bind...)
+	if err != nil {
+		err = eh.Errorf("bind provenance readers by name: %w", err)
+		return
+	}
 	for _, r := range readers {
 		err = r.LoadFromRecord(rec)
 		if err != nil {
