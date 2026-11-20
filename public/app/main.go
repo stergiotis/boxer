@@ -28,6 +28,7 @@ import (
 	"github.com/stergiotis/boxer/public/app/commands/queryrunsd"
 	"github.com/stergiotis/boxer/public/app/commands/runtimecodegen"
 	"github.com/stergiotis/boxer/public/app/commands/sample"
+	schemacli "github.com/stergiotis/boxer/public/app/commands/schema"
 	"github.com/stergiotis/boxer/public/app/commands/stevedoredemo"
 	"github.com/stergiotis/boxer/public/app/commands/swisstopo"
 	"github.com/stergiotis/boxer/public/app/commands/sysmetricsd"
@@ -165,6 +166,7 @@ func newApp() (app *cli.Command) {
 			swisstopo.NewCliCommand(),
 			grib.NewCliCommand(),
 			sysmetricsd.NewCliCommand(),
+			schemacli.NewCliCommand(),
 			watch.NewCliCommand(),
 			// Codegen tools folded from cmd/* mains (entry-point standard).
 			egui2gen.NewCliCommand(),
