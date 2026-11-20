@@ -40,7 +40,9 @@ and Rust is patiently waiting for them.
 ## Prerequisites
 
 - The Go process was launched with `--pprofHttpListenAddress
-  localhost:6060` (hmi.sh sets this by default).
+  localhost:6060` — for the desktop host, start it as
+  `HMI_PPROF_ADDR=localhost:6060 rust/imzero2/hmi.sh`. The listener has to
+  be up before the hang; it cannot be added afterwards.
 - Bash, `curl`, `awk`, and `go tool pprof` available.
 - Read access to `/proc/<pid>/{maps,task,wchan}` (the running user's
   own processes — no extra privileges needed).

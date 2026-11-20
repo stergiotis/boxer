@@ -13,7 +13,9 @@
 #                                         # uninstrumented packages run at
 #                                         # baseline speed
 #
-# Knobs at runtime: IMZERO2_COVERAGE_INTERVAL (default 5s; 0 disables).
+# Knobs at runtime: IMZERO2_COVERAGE_INTERVAL (default 5s; 0 disables), and
+# HMI_GOCOVERDIR, where the counters land (default /tmp/spinnakercover,
+# emptied at launch).
 # Expect ~3x Go frame time under full-tree instrumentation (measured in
 # ADR-0169's fps gate) — a diagnosis lane, not a daily driver. See
 # doc/howto/continuous-coverage.md.
@@ -28,4 +30,4 @@ fi
 rm -f main_go
 export CGO_ENABLED=0
 go build -tags "$build_tags" "${cover_flags[@]}" -o main_go ../../public/thestack/cmd/imzero2/
-HMI_BUILD=0 exec ./hmi.sh "$@"
+HMI_BUILD=0 HMI_GOCOVERDIR="${HMI_GOCOVERDIR:-/tmp/spinnakercover}" exec ./hmi.sh "$@"

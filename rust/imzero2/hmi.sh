@@ -86,11 +86,33 @@ export BOXER_LOG_OS_HOST_ON_START="true"
 export BOXER_LOG_VCS_REVISION_ON_START="true"
 export BOXER_LOG_MODULE_INFO_IN_START="true"
 #export BOXER_LOG_CORRELATION_ID=""
-export GOCOVERDIR="/tmp/spinnakercover"
-rm -rf "$GOCOVERDIR"
-mkdir -p "$GOCOVERDIR/legacy"
-flightRecord="$here/flightRecorder.trace"
-rm -f "$flightRecord"
+# Diagnostics are opt-in, each through its own variable, so a plain launch
+# binds no port, writes no trace and deletes nothing:
+#   HMI_PPROF_ADDR=localhost:6060  serve net/http/pprof on that address
+#                                   (scripts/dev/profile_*.sh and the hang
+#                                   triage recipe read localhost:6060)
+#   HMI_FLIGHT_RECORDER=1           keep the Go flight recorder and dump it to
+#                                   flightRecorder.trace beside this script
+#                                   on SIGTERM / SIGINT
+#   HMI_GOCOVERDIR=<dir>            export GOCOVERDIR=<dir>, emptied first, for
+#                                   a -cover build (hmi_coverage.sh sets it)
+diag_args=()
+if [[ -n "${HMI_PPROF_ADDR:-}" ]]; then
+	diag_args+=(--pprofHttpListenAddress "$HMI_PPROF_ADDR")
+fi
+case "${HMI_FLIGHT_RECORDER,,}" in
+	""|0|false) : ;;
+	*)
+		flightRecord="$here/flightRecorder.trace"
+		rm -f "$flightRecord"
+		diag_args+=(--flightRecorder --flightRecorderOutputFile="$flightRecord" --flightRecorderFlushOnSignal=SIGTERM,SIGINT)
+		;;
+esac
+if [[ -n "${HMI_GOCOVERDIR:-}" ]]; then
+	export GOCOVERDIR="$HMI_GOCOVERDIR"
+	rm -rf "$GOCOVERDIR"
+	mkdir -p "$GOCOVERDIR/legacy"
+fi
 	#--waitForDebugger \
 #export BOXER_IMZERO_DEBUG_MODE="flamegraph"
 # regex_explorer uses `clickhouse local` via subprocess — no server
@@ -128,8 +150,7 @@ cd "$projectRoot"
 export BOXER_COMPONENT="${BOXER_COMPONENT:-imzero2-demo}"
 "$here/main_go" --logFormat=console \
 	--logLevel=info \
-       	--pprofHttpListenAddress "localhost:6060" \
-       	--flightRecorder --flightRecorderOutputFile="$flightRecord" --flightRecorderFlushOnSignal=SIGTERM,SIGINT \
+	"${diag_args[@]}" \
        	imzero2 demo --clientBinary "$rust_bin" \
                       --clientType "egui" \
                       --clientVsync $VSYNC \
