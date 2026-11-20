@@ -4,6 +4,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/codec/kindcheck"
 	"github.com/stergiotis/boxer/public/keelson/runtime/statestore"
+	"github.com/stergiotis/boxer/public/observability/ph"
 )
 
 // windowhost_workingset.go is the host half of ADR-0148: pulling a
@@ -114,7 +115,12 @@ func (inst *Inst) saveWorkingset(w *window, reason string) {
 		inst.warnMissingComposer(w.manifest.Id)
 		return
 	}
-	cfg, dirty, err := composer.ComposeWorkingset()
+	var cfg []byte
+	var dirty bool
+	err := ph.Guard(func() (e error) {
+		cfg, dirty, e = composer.ComposeWorkingset()
+		return
+	})
 	if err != nil {
 		inst.logger.Warn().Err(err).
 			Str("id", string(w.manifest.Id)).

@@ -27,6 +27,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/workstatelet"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
+	"github.com/stergiotis/boxer/public/observability/ph"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/colwidth"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/filepicker"
@@ -1051,7 +1052,9 @@ func (inst *Inst) reapWindow(w *window, reason string, unmountMsg string) (cl cl
 	// unmount, under the window's profiler labels
 	w.setLabels()
 	inst.saveWorkingset(w, reason)
-	umErr := w.appInst.Unmount(uc)
+	// A panic in one app's Unmount is that app's failed Unmount: the reap
+	// goes on to the other windows (ADR-0386).
+	umErr := ph.Guard(func() error { return w.appInst.Unmount(uc) })
 	pprof.SetGoroutineLabels(context.Background())
 	if umErr != nil {
 		inst.logger.Warn().Err(umErr).
@@ -1728,7 +1731,7 @@ func renderWindowBody(w *window, closeReq bool, logger zerolog.Logger, ft *frame
 	// first window's mountCtx so the eventual Unmount uses the same context.
 	if !w.mount.mounted && w.mount.mountErr == nil {
 		mountStart := time.Now()
-		mErr := w.appInst.Mount(w.mountCtx)
+		mErr := mountGuarded(w, logger)
 		ft.recordMount(w, time.Since(mountStart))
 		if mErr != nil {
 			w.mount.mountErr = mErr
@@ -1757,13 +1760,61 @@ func renderWindowBody(w *window, closeReq bool, logger zerolog.Logger, ft *frame
 	for range c.IdScope(w.appIds.PrepareHighEntropy(windowhostInstanceSalt(w.key))) {
 		msgs := frameMessages()
 		start := time.Now()
-		fErr := w.appInst.Frame(w.frameCtxApp)
+		fErr := frameReraising(w, logger)
 		ft.recordFrame(w, time.Since(start), frameMessages()-msgs)
 		if fErr != nil {
 			c.Label("windowhost: frame error: " + fErr.Error()).Send()
 		}
 	}
 	w.endOps()
+}
+
+// mountGuarded runs the window's Mount. A panic in it is a failed Mount, and
+// the window shows the mount error, when Mount sent nothing to the client:
+// the frame stream is then as balanced as it was before the call. A Mount
+// that panicked after drawing has left the stream unbalanced, and its panic
+// is re-raised as frameReraising's is (ADR-0386).
+func mountGuarded(w *window, logger zerolog.Logger) (err error) {
+	msgs := frameMessages()
+	defer func() {
+		r := recover()
+		if r == nil {
+			return
+		}
+		err = ph.ConvertPanicToError(r)
+		if frameMessages() != msgs {
+			logPanickedWindow(w, logger, err, "windowhost: Mount panicked after drawing; the frame cannot go on")
+			panic(r)
+		}
+		logPanickedWindow(w, logger, err, "windowhost: Mount panicked; the window shows it as a failed mount")
+	}()
+	err = w.appInst.Mount(w.mountCtx)
+	return
+}
+
+// frameReraising runs the window's Frame. A panic in it is logged at Error
+// level with the window's app and the panic site's stack, then re-raised: a
+// Frame that stopped midway has left the immediate-mode stream unbalanced —
+// containers opened on the client and not closed, the id and capture stacks
+// mid-push — and no frame drawn after it would be sound. The re-raised panic
+// unwinds into the host's Run, which reaps every window (Unmount, the
+// workingset save, the drain) before the process exits (ADR-0386).
+func frameReraising(w *window, logger zerolog.Logger) (err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			logPanickedWindow(w, logger, ph.ConvertPanicToError(r), "windowhost: Frame panicked; the host shuts down")
+			panic(r)
+		}
+	}()
+	err = w.appInst.Frame(w.frameCtxApp)
+	return
+}
+
+func logPanickedWindow(w *window, logger zerolog.Logger, err error, msg string) {
+	logger.Error().Err(err).
+		Str("id", string(w.manifest.Id)).
+		Uint64("windowKey", uint64(w.key)).
+		Msg(msg)
 }
 
 // RenderAppsMenu draws the shell's top-bar "Apps ▾" menu.
