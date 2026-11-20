@@ -29,19 +29,11 @@ jobs:
         run: go mod tidy --diff
       - name: Verify module checksums
         run: go mod verify
+      # --check-drift: generator tests regenerate *.out.* files in place, so
+      # a dirty tree after the run means committed generated code drifted from
+      # its generators (scripts/ci/check_drift.sh).
       - name: Run Tests
-        run: ./scripts/ci/gotest.sh
-      # Generator tests regenerate *.out.* files in place; a dirty tree here
-      # means the committed generated code has drifted from its generators.
-      - name: Check generated code is drift-free
-        run: |
-          status="$(git status --porcelain)"
-          if [ -n "$status" ]; then
-            echo "$status"
-            git diff
-            echo "::error::The test run left the tree dirty — committed generated code drifted from its generators (or a test wrote into the tree). Regenerate locally and commit the result."
-            exit 1
-          fi
+        run: ./scripts/ci/gotest.sh --check-drift
 
   viewer:
     name: viewer
@@ -87,13 +79,4 @@ jobs:
       - name: Setup
         run: ./scripts/ci/install.sh
       - name: Run binary_log Tests
-        run: ./scripts/ci/gotest_binary_log.sh
-      - name: Check generated code is drift-free
-        run: |
-          status="$(git status --porcelain)"
-          if [ -n "$status" ]; then
-            echo "$status"
-            git diff
-            echo "::error::The test run left the tree dirty — committed generated code drifted from its generators (or a test wrote into the tree). Regenerate locally and commit the result."
-            exit 1
-          fi
+        run: ./scripts/ci/gotest_binary_log.sh --check-drift

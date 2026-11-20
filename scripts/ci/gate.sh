@@ -227,18 +227,7 @@ else
 fi
 
 # ---- drift --------------------------------------------------------------------
-drift() {
-    local status
-    status=$(git status --porcelain)
-    if [ -n "$status" ]; then
-        printf '%s\n' "$status"
-        git --no-pager diff --stat
-        echo "the steps above left the tree dirty: committed generated code drifted from its generator, or a test wrote into the tree"
-        return 1
-    fi
-    echo "clean"
-}
-step "drift" drift
+step "drift" scripts/ci/check_drift.sh
 
 # ---- egui2 IDL, bindings and the Rust host -----------------------------------
 touches_idl=0
